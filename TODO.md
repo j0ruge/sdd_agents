@@ -16,7 +16,7 @@ Achados sobre **repos-alvo** vão para o `TODO.md` daquele repo. Este arquivo é
 - [ ] Confirmar comportamento de `claude -p` com slash command literal (`/qa-report`, `/goal`) em
   headless — `agents/sdd-qa.md`, `agents/sdd-reviewer.md` — as skills `qa-report`/`qa-execution`
   têm `disable-model-invocation: true`, então o boot depende do slash pegar; fallback é
-  `--append-system-prompt-file`. — descoberto por `humano` no planejamento (2026-08-14)
+  `--append-system-prompt`. — descoberto por `humano` no planejamento (2026-08-14)
 - [ ] Multi-missão concorrente exigiria `git worktree` por missão — hoje é 1 missão por branch por
   vez (YAGNI declarado no plano). Reavaliar se aparecer demanda real. — descoberto por `humano` no
   planejamento (2026-08-14)
@@ -27,3 +27,7 @@ Achados sobre **repos-alvo** vão para o `TODO.md` daquele repo. Este arquivo é
 
 - [x] Re-link do shim quebrado do `agent-browser` (I0) — resolvido em 2026-08-14, com sensor
   permanente no `sdd preflight`.
+- [x] `claude -p --agent <nome>` funciona headless — verificado em 2026-08-14 num repo-fixture:
+  a sessão encarnou o `sdd-executor` e recitou a primeira instrução do arquivo do agente. O
+  fallback `--append-system-prompt` fica sem uso. `--setting-sources user,project,local` é
+  passado explicitamente pelo runner para garantir que `.claude/agents/` do alvo carregue.

@@ -399,6 +399,165 @@ current_phase() {
 }
 
 # ---------------------------------------------------------------------------
+# Invocação de fase
+# ---------------------------------------------------------------------------
+
+# Modelo configurado para a fase.
+phase_model() {
+  case "$1" in
+    EXEC)   printf '%s\n' "$MODEL_EXEC" ;;
+    QA)     printf '%s\n' "$MODEL_QA" ;;
+    REVIEW) printf '%s\n' "$MODEL_REVIEW" ;;
+    DOCS)   printf '%s\n' "$MODEL_DOCS" ;;
+    PR)     printf '%s\n' "$MODEL_PUBLISH" ;;
+    TICKET) printf '%s\n' "$MODEL_TICKET" ;;
+    *)      printf '%s\n' "$MODEL_EXEC" ;;
+  esac
+}
+
+# Agente responsável pela fase.
+phase_agent() {
+  case "$1" in
+    EXEC)   printf '%s\n' "sdd-executor" ;;
+    QA)     printf '%s\n' "sdd-qa" ;;
+    REVIEW) printf '%s\n' "sdd-reviewer" ;;
+    DOCS)   printf '%s\n' "sdd-docs" ;;
+    PR)     printf '%s\n' "sdd-publisher" ;;
+    TICKET) printf '%s\n' "sdd-publisher" ;;
+    *)      printf '%s\n' "" ;;
+  esac
+}
+
+phase_task() {
+  case "$1" in
+    EXEC)   printf '%s\n' "executar o PRÓXIMO incremento pendente do checkpoint, em TDD, e commitar" ;;
+    QA)     printf '%s\n' "planejar e executar o QA da missão (relatório datado + specs e2e dos achados confirmados)" ;;
+    REVIEW) printf '%s\n' "revisar e corrigir até todos os critérios ficarem Grade A" ;;
+    DOCS)   printf '%s\n' "sincronizar a documentação viva do repo com o que esta missão mudou" ;;
+    PR)     printf '%s\n' "fazer push e abrir o PR com as evidências das fases anteriores" ;;
+    TICKET) printf '%s\n' "abrir a issue da missão no JIRA, já na sprint ativa" ;;
+    *)      printf '%s\n' "" ;;
+  esac
+}
+
+# Protocolo de boot — fixo, curto, e sempre o mesmo. Tudo que a sessão precisa saber está
+# em disco; este prompt só diz ONDE olhar e que não houve conversa anterior.
+boot_prompt() {
+  local phase="$1"
+  cat <<EOF
+Você é o agente $(phase_agent "$phase") na fase $phase da missão \`$MISSION\` do projeto \`$PROJECT_NAME\`.
+
+Todo o seu estado vem do disco. NÃO houve conversa anterior — nada foi "combinado" antes.
+Leia, nesta ordem, antes de qualquer outra coisa:
+  1. $HANDOFF_DIR/$MISSION/00-missao.md   (a intenção e a métrica)
+  2. $HANDOFF_DIR/$MISSION/01-plano.md    (o como, e o contexto já verificado — confie nele)
+  3. $HANDOFF_DIR/$MISSION/checkpoint.md  (a tabela de incrementos)
+  4. o handoff mais recente de $HANDOFF_DIR/$MISSION/ (o que já aconteceu)
+  5. .sdd/config.sh (TEST_CMD="$TEST_CMD"${E2E_CMD:+, E2E_CMD=\"$E2E_CMD\"})
+
+Sua tarefa nesta sessão: $(phase_task "$phase").
+
+Escreva os artefatos no disco e commite. O runner reavalia o gate por fora — roda os testes,
+confere os hashes no git log, lê os arquivos. Sua resposta em texto não prova nada e não
+satisfaz gate nenhum. Achado que não cabe nesta missão vai para o $TODO_FILE, nunca para o diff.
+EOF
+}
+
+PIPELINE_LOG=""
+DRY_RUN=0
+
+pipeline_log_line() {
+  [ -n "$PIPELINE_LOG" ] || return 0
+  mkdir -p "$(dirname "$PIPELINE_LOG")"
+  printf '%s\n' "$*" >> "$PIPELINE_LOG"
+}
+
+# Roda uma fase numa sessão headless nova. Devolve 0 se o claude saiu 0 (o que NÃO significa
+# que o gate passou — quem julga isso é o gate, sempre depois).
+run_phase() {
+  local phase="$1" resume_sid="${2:-}"
+  local model agent sid prompt logfile started ended cost
+  model="$(phase_model "$phase")"
+  agent="$(phase_agent "$phase")"
+  sid="$(uuidgen)"
+  prompt="$(boot_prompt "$phase")"
+  if [ -n "$resume_sid" ]; then
+    prompt="O gate da fase $phase falhou: ${GATE_WHY}
+
+Corrija exatamente isso. Não recomece a fase: leia o que já está no disco, complete o que falta
+e escreva os artefatos. O gate será reavaliado."
+  fi
+
+  local -a cmd=(claude -p "$prompt"
+    --model "$model"
+    --permission-mode "$PERMISSION_MODE"
+    --output-format json
+    --setting-sources "user,project,local"
+    --max-budget-usd "$BUDGET_PER_PHASE_USD")
+  if [ -n "$agent" ]; then cmd+=(--agent "$agent"); fi
+  if [ -n "$resume_sid" ]; then cmd+=(--resume "$resume_sid" --fork-session)
+  else cmd+=(--session-id "$sid"); fi
+
+  if [ "$DRY_RUN" = "1" ]; then
+    info ""
+    printf '%s--- DRY RUN: fase %s ---%s\n' "$C_BOLD" "$phase" "$C_RESET"
+    printf '%scwd:%s   %s\n' "$C_DIM" "$C_RESET" "$REPO_ROOT"
+    printf '%smodelo:%s %s   %sagente:%s %s   %ssessão:%s %s\n' \
+      "$C_DIM" "$C_RESET" "$model" "$C_DIM" "$C_RESET" "${agent:-<nenhum>}" \
+      "$C_DIM" "$C_RESET" "${resume_sid:-$sid}"
+    printf '%scomando:%s\n' "$C_DIM" "$C_RESET"
+    printf '  %q' "${cmd[@]}"; printf '\n'
+    printf '%sprompt de boot:%s\n' "$C_DIM" "$C_RESET"
+    printf '%s\n' "$prompt" | sed 's/^/  │ /'
+    LAST_PHASE_SID="$sid"
+    return 0
+  fi
+
+  logfile="$(log_dir)/${phase}-$(date +%Y%m%d-%H%M%S).json"
+  mkdir -p "$(dirname "$logfile")"
+  started="$(date +%s)"
+  step "fase $phase — $agent ($model) — sessão ${resume_sid:-$sid}"
+
+  local rc=0
+  ( cd "$REPO_ROOT" && "${cmd[@]}" ) > "$logfile" 2>"${logfile%.json}.err" || rc=$?
+  ended="$(date +%s)"
+
+  cost="$(jq -r '.total_cost_usd // .cost_usd // "?"' "$logfile" 2>/dev/null || echo "?")"
+  local dur=$((ended - started))
+  pipeline_log_line "$(date -Iseconds)  $phase  agente=$agent  modelo=$model  sessao=${resume_sid:-$sid}  rc=$rc  dur=${dur}s  custo_usd=$cost  log=$logfile"
+
+  if [ "$rc" -ne 0 ]; then
+    warn "claude saiu com $rc na fase $phase (ver $logfile e ${logfile%.json}.err)"
+  else
+    dim "  sessão encerrada em ${dur}s, custo $cost USD"
+  fi
+  LAST_PHASE_SID="$sid"
+  invalidate_checks
+  return 0
+}
+LAST_PHASE_SID=""
+
+# Impressão digital do estado da missão. Serve para responder "essa sessão fez ALGUMA coisa?"
+# quando o gate ainda não passou — o caso normal da fase EXEC, que roda um incremento por vez.
+state_fingerprint() {
+  local head files
+  head="$( cd "$REPO_ROOT" && git rev-parse HEAD 2>/dev/null || echo "-" )"
+  files="$( ls -1 "$MISSION_DIR" 2>/dev/null | sort | tr '\n' ',' )"
+  printf '%s|%s|%s\n' "$head" "$files" \
+    "$( cat "$MISSION_DIR/checkpoint.md" 2>/dev/null | md5sum 2>/dev/null | cut -d' ' -f1 )"
+}
+
+# Quantas sessões uma fase pode consumir antes de virar BLOCKED.
+phase_budget() {
+  case "$1" in
+    EXEC)   printf '%s\n' "$(( $(checkpoint_rows | wc -l) + EXEC_MAX_RETRY + 2 ))" ;;
+    QA)     printf '%s\n' "$QA_MAX_ITER" ;;
+    REVIEW) printf '%s\n' "$REVIEW_MAX_ITER" ;;
+    *)      printf '%s\n' "$(( EXEC_MAX_RETRY + 1 ))" ;;
+  esac
+}
+
+# ---------------------------------------------------------------------------
 # Comandos
 # ---------------------------------------------------------------------------
 
@@ -622,6 +781,130 @@ cmd_why() {
   printf '%s: %s\n' "$ph" "$GATE_WHY"
 }
 
+cmd_run() {
+  local mission_arg="" force_phase="" max_phases=0
+  while [ $# -gt 0 ]; do
+    case "$1" in
+      --dry-run)     DRY_RUN=1 ;;
+      --phase)       force_phase="${2:-}"; shift ;;
+      --max-phases)  max_phases="${2:-0}"; shift ;;
+      -*)            die "opção desconhecida de run: $1" ;;
+      *)             mission_arg="$1" ;;
+    esac
+    shift
+  done
+
+  load_config
+  resolve_mission "$mission_arg"
+  PIPELINE_LOG="$MISSION_DIR/pipeline.log"
+
+  step "missão $MISSION — $PROJECT_NAME${DRY_RUN:+}"
+  [ "$DRY_RUN" = "1" ] && dim "  (dry-run: nada será executado)"
+
+  local -A attempts=()
+  local phases_run=0 phase before after budget
+
+  while :; do
+    if [ -n "$force_phase" ]; then phase="$force_phase"; else phase="$(current_phase)"; fi
+
+    if [ -z "$phase" ]; then
+      info ""
+      printf '%s✓ pipeline completo — falta só o merge (o único gate humano)%s\n' \
+        "$C_GREEN$C_BOLD" "$C_RESET"
+      local prurl; prurl="$(frontmatter "$MISSION_DIR/50-pr.md" pr_url)"
+      [ -n "$prurl" ] && info "  $prurl"
+      return 0
+    fi
+
+    # PLAN é interativo por design: o humano participa do grill. O runner não boota o planner.
+    if [ "$phase" = "PLAN" ]; then
+      gate_PLAN || true
+      info ""
+      warn "fase PLAN não é headless: $GATE_WHY"
+      dim "  O planejamento é a participação humana. Abra uma sessão interativa com o agente"
+      dim "  sdd-planner (modelo Fable) e produza 00-missao.md, 01-plano.md e checkpoint.md."
+      dim "  Quando o gate PLAN-AUTO fechar limpo, 'sdd run $MISSION' segue sozinho até o PR."
+      return 2
+    fi
+
+    budget="$(phase_budget "$phase")"
+    attempts["$phase"]="$(( ${attempts[$phase]:-0} + 1 ))"
+    if [ "${attempts[$phase]}" -gt "$budget" ]; then
+      gate_"$phase" || true
+      info ""
+      bad "BLOCKED em $phase — ${attempts[$phase]} sessões sem satisfazer o gate"
+      bad "  motivo atual: $GATE_WHY"
+      dim "  'sdd status $MISSION' mostra o estado completo; 'sdd why $MISSION $phase' o motivo."
+      if [ "$phase" = "REVIEW" ] && [ "$PUBLISH_ON_REVIEW_BLOCKED" = "draft" ]; then
+        warn "PUBLISH_ON_REVIEW_BLOCKED=draft — seguindo para PR em modo draft"
+        force_phase="PR"; continue
+      fi
+      pipeline_log_line "$(date -Iseconds)  BLOCKED  $phase  $GATE_WHY"
+      return 3
+    fi
+
+    before="$(state_fingerprint)"
+    run_phase "$phase"
+    after="$(state_fingerprint)"
+
+    if [ "$DRY_RUN" = "1" ]; then
+      [ -n "$force_phase" ] && return 0
+      dim "  (dry-run: parando após imprimir a primeira fase)"
+      return 0
+    fi
+
+    phases_run=$((phases_run + 1))
+    if [ "$max_phases" -gt 0 ] && [ "$phases_run" -ge "$max_phases" ]; then
+      info ""; dim "  --max-phases=$max_phases atingido"; return 0
+    fi
+
+    if gate_"$phase"; then
+      ok "gate $phase: $GATE_WHY"
+      force_phase=""
+      continue
+    fi
+
+    # Gate não passou. Houve progresso? Fase EXEC roda um incremento por vez — não ter
+    # satisfeito o gate é o caso NORMAL enquanto sobram incrementos.
+    if [ "$before" != "$after" ]; then
+      dim "  gate $phase ainda não: $GATE_WHY (mas a sessão avançou — seguindo)"
+      force_phase=""
+      continue
+    fi
+
+    # Nada mudou no disco: a sessão não fez nada. Uma retentativa com o motivo em mãos.
+    warn "gate $phase falhou e a sessão não mudou nada: $GATE_WHY"
+    warn "  retentando uma vez com o motivo do gate no prompt"
+    run_phase "$phase" "$LAST_PHASE_SID"
+    if gate_"$phase"; then
+      ok "gate $phase (na retentativa): $GATE_WHY"
+      force_phase=""
+      continue
+    fi
+    if [ "$(state_fingerprint)" = "$after" ]; then
+      info ""
+      bad "BLOCKED em $phase — duas sessões sem mover o disco: $GATE_WHY"
+      pipeline_log_line "$(date -Iseconds)  BLOCKED  $phase  $GATE_WHY"
+      return 3
+    fi
+    force_phase=""
+  done
+}
+
+cmd_retry() {
+  load_config
+  resolve_mission "${1:-}"
+  PIPELINE_LOG="$MISSION_DIR/pipeline.log"
+  local phase; phase="$(current_phase)"
+  [ -n "$phase" ] || { info "pipeline completo — nada a re-tentar"; return 0; }
+  [ "$phase" = "PLAN" ] && die "PLAN é interativo — não há o que re-tentar headless"
+  step "re-tentando $phase com sessão NOVA"
+  run_phase "$phase"
+  if gate_"$phase"; then ok "gate $phase: $GATE_WHY"; return 0; fi
+  bad "gate $phase ainda não: $GATE_WHY"
+  return 3
+}
+
 cmd_version() { info "sdd $SDD_VERSION ($SDD_HOME)"; }
 
 cmd_help() {
@@ -655,9 +938,9 @@ EOF
 
 # ---------------------------------------------------------------------------
 main() {
-  local cmd="${1:-help}"
+  local subcmd="${1:-help}"
   shift || true
-  case "$cmd" in
+  case "$subcmd" in
     install)   cmd_install "$@" ;;
     preflight) cmd_preflight "$@" ;;
     status)    cmd_status "$@" ;;
@@ -668,13 +951,11 @@ main() {
     close)     cmd_close "$@" ;;
     version|--version|-v) cmd_version ;;
     help|--help|-h) cmd_help ;;
-    *) die "comando desconhecido: $cmd (veja 'sdd help')" ;;
+    *) die "comando desconhecido: $subcmd (veja 'sdd help')" ;;
   esac
 }
 
 # Comandos ainda não implementados (chegam nos próximos incrementos).
-cmd_run()   { die "'sdd run' chega no incremento I5"; }
-cmd_retry() { die "'sdd retry' chega no incremento I5"; }
 cmd_close() { die "'sdd close' chega no incremento I9b"; }
 
 main "$@"
