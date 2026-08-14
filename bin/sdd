@@ -844,7 +844,9 @@ cmd_preflight() {
     [ -f "$REPO_ROOT/.claude/agents/$(basename "$a")" ] \
       || _fail "agente $(basename "$a") não instalado — rode 'sdd install'"
   done
-  if [ "$n" -gt 0 ]; then ok "$n agente(s) do kit conferidos"; fi
+  # Só afirma "conferidos" se nenhum agente falhou — dizer isso logo depois de seis linhas
+  # de falha é a saída se contradizendo, que é o tipo de mentira que o kit proíbe nos gates.
+  if [ "$n" -gt 0 ] && [ "$fails" -eq 0 ]; then ok "$n agente(s) do kit conferidos"; fi
 
   # --- estado do git ---
   local branch; branch="$( cd "$REPO_ROOT" && git branch --show-current )"
