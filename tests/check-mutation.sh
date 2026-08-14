@@ -37,16 +37,104 @@ trap 'rm -rf "$WORK"' EXIT
 # usa esse prefixo para cobrar uma mutação por gate — mudar a convenção cega o health.
 # ---------------------------------------------------------------------------
 
-mut_PLAN_aprovacao_vazia() {  # gate_PLAN passa a aceitar `aprovacao:` vazia
+mut_PLAN_aprovacao_vazia() {  # aceita `aprovacao:` vazia — plano não aprovado vira executável
   sed -i 's/^    auto)          : ;;/    auto)          : ;;\n    "")            : ;;/' "$1"
 }
 
-CATALOGO=(PLAN_aprovacao_vazia)
+mut_TICKET_sem_sprint() {     # para de exigir `sprint:` — card no backlog é trabalho invisível
+  sed -i "s|.*if ! grep -qiE '\^sprint:.*|  if false; then|" "$1"
+}
+
+mut_EXEC_done_sem_commit() {  # aceita incremento 'done' com commit '—' — rótulo vira artefato
+  sed -i 's|.*\[ "\$commit" = "—" \].*|        if false; then|' "$1"
+}
+
+mut_EXEC_commit_orfao() {     # volta ao `cat-file -e`: objeto solto passa por commit da história
+  sed -i 's|.*git merge-base --is-ancestor.*|        if false; then|' "$1"
+}
+
+mut_EXEC_ignora_TEST_CMD() {  # descarta o rc da suíte — o gate deixa de medir o TEST_CMD
+  sed -i 's|.*run_check_cmd "\$TEST_CMD" "gate-exec-test".*|  if false; then|' "$1"
+}
+
+# Bug histórico 1 (piloto SQ-97, ~US$ 15/volta): a skill emite
+# `- **Started:** <ts> · **Status:** in-progress`, e o gate exigia `**Status:**` ABRINDO a
+# linha. Nunca casava; o runner re-rodava qa-execution para sempre.
+mut_QA_status_inicio_linha() {
+  sed -i "s|.*grep -qE '\^\[\[:space:\]\]\*-\.\*\\\\\*\\\\\*Status.*|  grep -qE '^\\\\*\\\\*Status:\\\\*\\\\*[[:space:]]*closed' \"\$report\"|" "$1"
+}
+
+# Enum frouxo: o `closed` tem que vir logo depois de `**Status:**`. Com `.*closed` a legenda
+# do template (`<!-- in-progress | closed -->`) casa, e um relatório EM ANDAMENTO passa.
+mut_QA_status_enum_frouxo() {
+  sed -i "s|.*grep -qE '\^\[\[:space:\]\]\*-\.\*\\\\\*\\\\\*Status.*|  grep -qE '\\\\*\\\\*Status:\\\\*\\\\*.*closed' \"\$report\"|" "$1"
+}
+
+# Mesma família, no registry de bugs: com `.*open` a legenda
+# `<!-- open | fixed | verified | wont-fix | invalid -->` casa, e um bug `wont-fix` (decisão
+# humana, não bloqueia) passa a bloquear a fase.
+mut_QA_bug_enum_frouxo() {
+  sed -i "s|\[\[:space:\]\]+open'|.*open'|" "$1"
+}
+
+mut_QA_matriz_pending() {     # ignora linha 'Pending' na matriz — jornada não andada passa
+  sed -i 's|.*Pending\[\[:space:\]\]\*.*|    if false; then|' "$1"
+}
+
+mut_QA_bug_open() {           # ignora bug com Status: open no registry
+  sed -i 's|.*\[ "\$openbugs" -gt 0 \].*|  if false; then|' "$1"
+}
+
+# Bug histórico 3 (piloto SQ-97, ~US$ 10): o parser saía só em `###`, seguia engolindo as
+# tabelas seguintes do relatório e reprovava um review todo Grade A por achar a coluna `Commit`.
+mut_REVIEW_para_so_em_heading3() {
+  sed -i 's|.*inside && /\^#{1,6}\[\[:space:\]\]/ { exit }.*|      inside \&\& /^###[[:space:]]/ { exit }|' "$1"
+}
+
+mut_REVIEW_aceita_B() {       # qualquer nota passa — o gate para de exigir Grade A
+  sed -i 's|if (grade != "A")|if (grade == "ZZZ")|' "$1"
+}
+
+mut_DOCS_status_pendente() {  # aceita área com Status '✗' no checklist de drift
+  sed -i 's|.*\[ -n "\$pendente" \].*|  if false; then|' "$1"
+}
+
+mut_PR_sem_artefato() {       # 50-pr.md ausente deixa de reprovar — missão "completa" sem PR
+  sed -i 's|GATE_WHY="falta 50-pr.md"; return 1|GATE_WHY="falta 50-pr.md"; return 0|' "$1"
+}
+
+# Não-gate, e o único bug de asserção decorativa que aconteceu de verdade (TODO.md): a guarda
+# invertida faz a PROJEÇÃO (`--dry-run`) escrever no diário e o caminho real ficar mudo —
+# comando de leitura sujando o working tree, e trilha de auditoria mentindo nas duas direções.
+mut_RUN_diario_invertido() {
+  sed -i 's|\[ "\$DRY_RUN" = "1" \] && return 0|[ "$DRY_RUN" = "0" ] \&\& return 0|' "$1"
+}
+
+CATALOGO=(
+  PLAN_aprovacao_vazia
+  TICKET_sem_sprint
+  EXEC_done_sem_commit
+  EXEC_commit_orfao
+  EXEC_ignora_TEST_CMD
+  QA_status_inicio_linha
+  QA_status_enum_frouxo
+  QA_bug_enum_frouxo
+  QA_matriz_pending
+  QA_bug_open
+  REVIEW_para_so_em_heading3
+  REVIEW_aceita_B
+  DOCS_status_pendente
+  PR_sem_artefato
+  RUN_diario_invertido
+)
 
 # Mutações que HOJE não são pegas, cada uma com o incremento que a fecha. Catraca nas duas
 # direções: não-pega fora da lista reprova, e lacuna listada que PASSOU a ser pega também
 # reprova (a lista tem que encolher, nunca virar desculpa permanente).
-LACUNAS_ESPERADAS=()
+LACUNAS_ESPERADAS=(
+  EXEC_ignora_TEST_CMD   # fecha no I13.2.3: o fixture roda TEST_CMD="true", que nunca falha
+  QA_bug_enum_frouxo     # fecha no I13.2.4: o fixture de bug não tem a legenda do enum
+)
 
 # ---------------------------------------------------------------------------
 pass()  { printf '  ok    %s\n' "$1"; }
