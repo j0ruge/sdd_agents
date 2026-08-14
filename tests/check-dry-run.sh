@@ -48,7 +48,24 @@ tree_snapshot() {
 
 # ---------------------------------------------------------------------------
 echo "== fixture em $FIX =="
-cd "$FIX"
+# `|| exit`: `set -e` está fora (precisamos de `rc=$?` depois dos comandos que falham de
+# propósito), então um `cd` que falha seguiria rodando `git init`, `sed -i` e `git commit` no
+# repo REAL de quem rodou o teste. Falhar aqui é barato; corromper o repo do dev não é.
+cd "$FIX" || exit 1
+
+# Nenhum teste pode gastar token nem rede. O caminho "execução real" abaixo depende de o Jidoka
+# de `blocked` escapar ANTES de qualquer `run_phase` — se essa ordem quebrar, o runner chamaria
+# o `claude` de verdade. Este stub torna isso impossível por construção: em vez de uma sessão
+# paga (ou de um hang em CI), o teste falha alto e barato.
+mkdir -p "$FIX/.stub"
+cat > "$FIX/.stub/claude" <<'STUB'
+#!/usr/bin/env bash
+echo "ERRO: o teste invocou o claude de verdade — o caminho de escalação não escapou antes da sessão" >&2
+exit 97
+STUB
+chmod +x "$FIX/.stub/claude"
+PATH="$FIX/.stub:$PATH"
+
 git init -q -b main
 git config user.email "fixture@example.com"
 git config user.name "Fixture"
@@ -163,6 +180,16 @@ after_b="$(tree_snapshot)"
 # Escalar é o comportamento certo e honesto: "se você rodar isto, a linha para". Guarda de
 # regressão — isto já passava antes do achado.
 assert_eq "dry-run de missão blocked escala com exit 3" "3" "$rc3"
+# O código de saída sozinho não prova que o usuário foi INFORMADO do motivo. Sem esta asserção,
+# quebrar a mensagem de escalação passava batido aqui (verificado por mutação: trocar o texto de
+# `bad "BLOCKED em EXEC — …"` deixava este arquivo inteiro verde) — e é justamente a mensagem
+# que responde "o que acontece se eu rodar isto?", a pergunta que o dry-run existe para responder.
+if printf '%s\n' "$out3" | grep -q 'BLOCKED em EXEC'; then
+  pass "a projeção EXPLICA a escalação (mensagem 'BLOCKED em EXEC')"
+else
+  fail "mensagem de escalação do dry-run" "saída contendo 'BLOCKED em EXEC'" \
+    "$(printf '%s\n' "$out3" | tail -3 | tr '\n' ' ')"
+fi
 # O Red do achado: a projeção não pode deixar rastro no disco, nem no caminho de escalação.
 # O diário mora em `.sdd/logs/<missão>/` (mudou de lugar em 53cf63a — antes era `$MDIR`, dentro
 # da árvore commitada, onde sujava o `git status` e derrubava `gate_REVIEW`). Esta asserção
@@ -171,7 +198,12 @@ assert_eq "dry-run de missão blocked escala com exit 3" "3" "$rc3"
 assert_eq "projeção blocked não escreve o pipeline.log" "" \
   "$( [ -e "$PIPELINE_LOG" ] && echo "pipeline.log criado" || true )"
 assert_eq "árvore idêntica antes e depois (caminho blocked)" "$before_b" "$after_b"
-assert_eq "working tree continua limpo (caminho blocked)" "" "$(git status --porcelain)"
+# ATENÇÃO ao ler esta linha: ela NÃO é o discriminador do F1. `.sdd/logs/` está no `.gitignore`
+# que o `sdd install` escreve, então `git status --porcelain` é cego ao `pipeline.log` — com o
+# bug do F1 reintroduzido ela continua verde (verificado por mutação). Quem pega o F1 são as
+# duas asserções acima. Esta guarda uma coisa diferente e complementar: que a projeção não sujou
+# nenhum caminho RASTREADO, que é o que derrubaria `gate_REVIEW` e o `sdd preflight`.
+assert_eq "projeção não sujou nenhum arquivo rastreado (caminho blocked)" "" "$(git status --porcelain)"
 
 # --- o outro lado da guarda: o caminho REAL ainda escreve --------------------
 # Toda asserção acima afirma que a projeção NÃO escreve. Nenhuma afirmava que uma execução de
@@ -206,6 +238,21 @@ md5_after="$(md5sum "$PIPELINE_LOG" | cut -d' ' -f1)"
 assert_eq "projeção não ALTERA um pipeline.log preexistente" "$md5_before" "$md5_after"
 
 sed -i 's/| blocked |/| pending |/' "$MDIR/checkpoint.md"
+
+# --- higiene de escopo: nenhuma função lê a `local` do chamador ---------------
+# `pstep` é `local` de `run_phase`. Escopo dinâmico do bash faz com que TODA função chamada por
+# ela enxergue essa local — então uma outra função referenciar `$pstep` "funciona", mas só por
+# coincidência de quem a chama. Sob `set -u`, chamada de qualquer outro lugar, a expansão falha
+# DENTRO de um `$( )`: a variável vira vazia, a função retorna 0 e a fase roda sem agente — sem
+# erro visível, exatamente o modo de falha silenciosa que este kit existe para impedir.
+# Nem `bash -n` nem `shellcheck` pegam isto (o nome ESTÁ atribuído no arquivo, em run_phase),
+# por isso o sensor é aqui.
+echo "== higiene de escopo do runner =="
+offenders="$(awk '
+  /^[a-zA-Z_][a-zA-Z0-9_]*\(\)[[:space:]]*\{/ { fn = substr($1, 1, index($1, "(") - 1) }
+  /pstep/ && fn != "run_phase" { print fn "():" NR }
+' "$ROOT/bin/sdd")"
+assert_eq "só run_phase referencia \$pstep (a local do chamador não vaza)" "" "$offenders"
 
 # ---------------------------------------------------------------------------
 echo

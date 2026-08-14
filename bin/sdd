@@ -549,7 +549,7 @@ EOF
 boot_prompt() {
   local step="$1" slash agent
   slash="$(phase_slash "$step")"
-  agent="$(phase_agent "$pstep")"
+  agent="$(phase_agent "$step")"
   [ -n "$slash" ] && printf '%s\n\n' "$slash"
   cat <<EOF
 Você está na fase $step da missão \`$MISSION\` do projeto \`$PROJECT_NAME\`${agent:+, como o agente $agent}.
