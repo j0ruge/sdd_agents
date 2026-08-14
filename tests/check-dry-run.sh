@@ -141,6 +141,34 @@ else
 fi
 sed -i 's|^E2E_CMD="true"|E2E_CMD=""|' .sdd/config.sh
 
+# --- a projeção não pode escrever no diário da missão ----------------------
+# Achado da fase QA da missão 20260814-dry-run-completo: com um incremento `blocked`, o
+# dry-run escapa pelo Jidoka de `cmd_run` ANTES de chegar ao bloco DRY_RUN, e aquele caminho
+# chama `pipeline_log_line` sem guarda. Resultado: uma projeção — comando de leitura, que o
+# usuário roda justamente para NÃO mexer em nada — grava no `pipeline.log` da missão um evento
+# BLOCKED que nunca aconteceu, mentindo na trilha de auditoria. Pior num repo-alvo recém
+# instalado: o `sdd install` só põe `.sdd/logs/` no `.gitignore`, então o `pipeline.log` fica
+# como untracked e suja o working tree — e tree sujo reprova `gate_REVIEW` e o `sdd preflight`.
+# Um comando de projeção não pode derrubar gate de outra fase.
+echo "== projeção não escreve no diário da missão (incremento blocked) =="
+sed -i 's/| pending |/| blocked |/' "$MDIR/checkpoint.md"
+git add -A && git commit -qm "fixture: incremento blocked"
+
+before_b="$(tree_snapshot)"
+out3="$( "$SDD" run "$MISSION" --dry-run 2>&1 )"; rc3=$?
+after_b="$(tree_snapshot)"
+
+# Escalar é o comportamento certo e honesto: "se você rodar isto, a linha para". Guarda de
+# regressão — isto já passava antes do achado.
+assert_eq "dry-run de missão blocked escala com exit 3" "3" "$rc3"
+# O Red do achado: a projeção não pode deixar rastro no disco, nem no caminho de escalação.
+assert_eq "projeção blocked não cria pipeline.log" "" \
+  "$( [ -e "$MDIR/pipeline.log" ] && echo "pipeline.log criado" || true )"
+assert_eq "árvore idêntica antes e depois (caminho blocked)" "$before_b" "$after_b"
+assert_eq "working tree continua limpo (caminho blocked)" "" "$(git status --porcelain)"
+
+sed -i 's/| blocked |/| pending |/' "$MDIR/checkpoint.md"
+
 # ---------------------------------------------------------------------------
 echo
 if [ "$fails" -eq 0 ]; then

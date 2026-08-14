@@ -50,8 +50,20 @@ atualizado: 2026-08-14 04:20
   função nova `next_pending_phase()`, e **nunca** re-chama `current_phase()`. O segundo cursor
   foi necessário porque reaproveitar `force_phase` colidiria com `--phase <FASE>`, que deve
   continuar imprimindo uma fase só — há asserção explícita disso no sensor.
+- 2026-08-14 · — · **QA abriu `F1`.** Origem: `BUG-dryrun-pipelinelog` (registrado no
+  `30-handoff-qa.md`, não há árvore `docs/qa/` neste repo — projeto sem interface, `qa_substep`
+  vai direto ao `sdd-qa`). Andando a jornada `sdd run <m> --dry-run` contra uma missão com
+  incremento `blocked`, a projeção **escreve** `docs/handoffs/<m>/pipeline.log` com um evento
+  `BLOCKED` que nunca aconteceu. Causa: em `cmd_run` o Jidoka de `blocked` chama
+  `pipeline_log_line` e retorna 3 **antes** do bloco `DRY_RUN` — o único `pipeline_log_line`
+  alcançável em dry-run (o de `run_phase` está atrás da guarda). Não conserte aqui: o sensor
+  `tests/check-dry-run.sh` já está commitado **vermelho** (3 asserções), que é o Red do F1.
 
 ## Incrementos de fix (QA)
 
 > Escritos pelo `sdd-qa` quando um bug sanável é reprovado, com ID `F<n>` e Check incluindo
 > regression test + re-walk da jornada impactada.
+
+| ID | Incremento | Check (comando → esperado) | Status | Commit |
+|---|---|---|---|---|
+| F1 | dry-run não escreve no `pipeline.log` no caminho `blocked` | `tests/run-all.sh` → exit 0 (as 3 asserções novas de `check-dry-run.sh` verdes) E re-walk: numa missão com incremento `blocked`, `sdd run <m> --dry-run` sai 3 e deixa `git status --porcelain` vazio | pending | — |
