@@ -13,6 +13,11 @@ Achados sobre **repos-alvo** vão para o `TODO.md` daquele repo. Este arquivo é
 
 ## Aberto
 
+> Um item cujo corpo traz **RESOLVIDO por `<hash>`** já está fechado: fica nesta seção, com a
+> caixa ainda desmarcada, só até o PR da missão que o fechou ser mergeado — é dali que o PR cita
+> a evidência. Depois do merge ele desce para "Feito". Ler a caixa sem ler o corpo dá falso
+> positivo; o corpo é a fonte da verdade.
+
 - [ ] **BLOQUEANTE — a sessão de fase headless não tem permissão para rodar `TEST_CMD`** —
   `bin/sdd:491-499` — `run_phase()` invoca `claude -p … --permission-mode "$PERMISSION_MODE"`
   (`acceptEdits`) sem `--allowedTools`; `acceptEdits` auto-aprova **edição de arquivo**, não
@@ -119,6 +124,33 @@ Achados sobre **repos-alvo** vão para o `TODO.md` daquele repo. Este arquivo é
   que a suíte fica **vermelha** em cada uma — sensor do sensor (se a suíte não morre quando o
   código é sabotado, ela não está medindo nada). — descoberto por `sdd-qa` na missão
   `20260814-dry-run-completo` (2026-08-14)
+- [ ] **`config/schema.md` promete quatro comportamentos que o runner não tem** —
+  `config/schema.md:24-25,32-34` vs `bin/sdd:81-82` — `LINT_CMD` e `BUILD_CMD` estão
+  documentados como "roda no gate de REVIEW quando definido", e `DEV_UP_CMD`/`DEV_READY_CMD`/
+  `DEV_READY_TIMEOUT` como "sobe o ambiente antes do QA / o runner faz poll por até N segundos".
+  Nenhum dos cinco é lido em lugar nenhum: `load_config()` atribui o default e o nome nunca mais
+  aparece — `gate_REVIEW` (`bin/sdd:347-385`) roda só `TEST_CMD` e `git status`. Um `.sdd/config.sh`
+  com `LINT_CMD` preenchido dá ao usuário a impressão de que o lint está sendo cobrado no gate,
+  e não está: é um sensor que ele acha que tem e não tem — pior do que não ter. Direção: ou
+  implementar (`gate_REVIEW` roda `LINT_CMD`/`BUILD_CMD` quando definidos; a fase QA sobe o
+  ambiente), ou tirar a promessa do schema e marcar as chaves como reservadas. **Pré-existente
+  — já estava em `main`, não foi introduzido por esta missão.** — descoberto por `sdd-reviewer`
+  na missão `20260814-dry-run-completo` (2026-08-14)
+- [ ] `latest_matching` ordena lexicograficamente e quebra a partir da 10ª rodada —
+  `bin/sdd:205-211` — `ls -1d $pattern | sort | tail -1` escolhe o "mais recente" por ordem de
+  string: com `40-review-r10.md` presente, `sort` põe `r10` **antes** de `r2`, e o `tail -1`
+  devolve `40-review-r9.md` como se fosse o último. `gate_REVIEW` e `gate_QA` passariam a medir
+  um relatório velho — gate verde apontando para artefato obsoleto, a classe de falha que o kit
+  existe para impedir. Não morde hoje porque `REVIEW_MAX_ITER`/`QA_MAX_ITER` são 3, mas o valor
+  é configurável e nada avisa quem o subir para 10+. Direção: `sort -V` (version sort), ou
+  zero-padding no nome do artefato. Sensor junto: caso com `r1`, `r2` e `r10` afirmando que o
+  escolhido é `r10`. — descoberto por `sdd-reviewer` na missão `20260814-dry-run-completo`
+  (2026-08-14)
+- [ ] `bad_rows` é escrito e nunca lido — `bin/sdd:262,276` — o contador é incrementado no mesmo
+  comando que dá `return 1`, então o valor final nunca é inspecionado; lido de fora, sugere um
+  "conte quantas linhas estão ruins" que não existe. Ou entra no `GATE_WHY` (útil: "3 linhas do
+  checkpoint malformadas" diz mais do que a primeira), ou sai. Pré-existente. — descoberto por
+  `sdd-reviewer` na missão `20260814-dry-run-completo` (2026-08-14)
 - [ ] O `sdd-planner` ainda não foi exercitado numa missão real — as missões planejadas até aqui
   tiveram plano escrito à mão. Primeira missão planejada por ele deve conferir se o gate PLAN-AUTO
   é preenchido com evidência de verdade. — descoberto por `humano` na implementação (2026-08-14)
