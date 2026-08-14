@@ -59,13 +59,13 @@ nunca silenciosa** (kaizen K3). Valores: qualquer alias aceito por `claude --mod
 
 | Chave | Default | O que é |
 |---|---|---|
-| `QA_MAX_ITER` | `3` | Voltas no loop QA⇄EXEC antes de `BLOCKED`. Protege contra "fix quebra outra jornada" infinito. |
+| `QA_MAX_ITER` | `3` | Voltas no loop QA⇄EXEC antes de `BLOCKED`. Protege contra "fix quebra outra jornada" infinito. Cuidado ao subir: uma volta são **até 3 sessões** (um sub-passo cada), então o teto de sessões da fase é `QA_MAX_ITER × 3` — 9 no default. |
 | `REVIEW_MAX_ITER` | `3` | Sessões de review no total antes de `BLOCKED`. |
 | `EXEC_MAX_RETRY` | `1` | Retentativas por incremento antes de `BLOCKED`. |
 | `BUDGET_PER_PHASE_USD` | `15` | Vai em `--max-budget-usd` por sessão. Teto de dano, não orçamento. |
 | `PUBLISH_ON_REVIEW_BLOCKED` | `off` | `draft` ⇒ review estourado abre PR **draft** com a grade atual e as pendências, em vez de parar seco. |
 | `PERMISSION_MODE` | `acceptEdits` | Teto. `bypassPermissions` **nunca** é default do kit. |
-| `ALLOWED_TOOLS` | `Bash` | Vai em `--allowedTools`. **Obrigatório na prática**: `acceptEdits` auto-aprova edição de arquivo, mas **não** `Bash` — sem esta chave a sessão de fase não roda a suíte nem consegue commitar, e a fase EXEC fica insatisfazível. Verificado na missão-fixture `20260814-dry-run-completo`. |
+| `ALLOWED_TOOLS` | `Bash` | Vai em `--allowedTools`, como **um único argumento**. **Obrigatório na prática**: `acceptEdits` auto-aprova edição de arquivo, mas **não** `Bash` — sem esta chave a sessão de fase não roda a suíte nem consegue commitar, e a fase EXEC fica insatisfazível. Verificado na missão-fixture `20260814-dry-run-completo`. O kit só exercitou o default; se precisar de mais de uma ferramenta, confira o formato que o seu `claude` aceita antes de confiar no gate. |
 
 ## JIRA
 

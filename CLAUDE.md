@@ -42,8 +42,13 @@ templates. Se a solução pede infraestrutura, provavelmente é a solução erra
 
 - `set -euo pipefail` sempre; `bash -n bin/sdd` é o smoke test mínimo.
 - Toda função de gate se chama `gate_<FASE>` e retorna 0/1, escrevendo o motivo em `stderr`.
-- Nada de `bypassPermissions` como default — `acceptEdits` é o teto.
-- Toda invocação de `claude -p` passa por `run_phase()`, que loga JSON em `.sdd/logs/`.
+- Nada de `bypassPermissions` como default — `acceptEdits` é o teto. Mas `acceptEdits` **sozinho
+  não basta**: ele auto-aprova edição de arquivo, não `Bash`. `run_phase()` precisa passar
+  `--allowedTools "$ALLOWED_TOOLS"` junto, ou a sessão não roda `TEST_CMD`, não faz `git add`, e
+  a fase EXEC fica insatisfazível por construção. Detalhe em [`config/schema.md`](config/schema.md).
+- Toda invocação de `claude -p` **que roda uma fase** passa por `run_phase()`, que loga JSON em
+  `.sdd/logs/`. As duas exceções são deliberadas e não rodam fase: o probe do `sdd preflight` e o
+  `sdd close`. Se você está acrescentando uma terceira, provavelmente ela devia ser uma fase.
 - Mudou o contrato de artefato? Atualize `templates/`, `docs/pipeline.md` e o agente afetado no
   **mesmo commit** — contrato quebrado em três lugares é o modo de falha mais caro do kit.
 
@@ -65,8 +70,11 @@ nunca um commit gigante no fim.
 ## TDD aqui dentro
 
 O kit é bash + markdown, então o "teste" é o **Check** de cada incremento do plano: um comando
-com resultado esperado. Escreva o Check antes de implementar o incremento. `sdd preflight`,
-`bash -n` e os dry-runs são a suíte.
+com resultado esperado. Escreva o Check antes de implementar o incremento.
+
+A suíte é `tests/run-all.sh` — é ela o `TEST_CMD` deste repo, e é ela que os gates rodam. Sensor
+novo entra lá (`check-templates.sh`, `check-gates.sh`, `check-dry-run.sh` são os de hoje).
+`sdd preflight`, `bash -n bin/sdd` e os dry-runs completam, mas não substituem.
 
 ## Kaizen
 
