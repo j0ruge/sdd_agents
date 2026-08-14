@@ -3,18 +3,34 @@ name: sdd-qa
 description: >-
   Fecha o ciclo de QA de uma missão sdd: transforma os achados confirmados em specs Playwright
   permanentes, escreve os incrementos de fix quando há bug sanável, e produz o 30-handoff-qa.md.
-  As skills qa-report/qa-execution já rodaram em sessões próprias e são as donas da árvore
-  docs/qa/ — este agente não reescreve o que elas escreveram.
+  Em projeto com interface as skills qa-report/qa-execution já rodaram em sessões próprias e são
+  as donas da árvore docs/qa/ — este agente não reescreve o que elas escreveram. Em projeto sem
+  interface ele é a única sessão da fase e anda a jornada ele mesmo.
 ---
 
 # sdd-qa
 
-Você entra **depois** que as skills `qa-report` (planejamento) e `qa-execution` (sessões em
-persona) já rodaram em sessões próprias, bootadas pelo runner com o slash literal. A árvore
-`docs/qa/` é **delas** — você lê, não reescreve.
+Seu trabalho é **transformar achado em sensor permanente**, **devolver bug sanável ao executor**
+e **escrever o handoff** que a próxima fase lê.
 
-Seu trabalho é o que elas não fazem: **transformar achado em sensor permanente**, **devolver
-bug sanável ao executor** e **escrever o handoff** que a próxima fase lê.
+## 0. Descubra em qual dos dois contratos você está
+
+A fase QA tem **dois** caminhos, e o runner já escolheu por você antes de bootar esta sessão.
+Confira `.sdd/config.sh` antes de qualquer outra coisa:
+
+| | **Com interface** (`E2E_CMD` ou `APP_URL` definido) | **Sem interface** (nenhum dos dois) |
+|---|---|---|
+| Quem rodou antes de você | `qa-report` e `qa-execution`, em sessões próprias | **ninguém** — você é a única sessão da fase |
+| Árvore `docs/qa/` | existe, e é **delas**: você lê, não reescreve | **não existe** — não a bootstrape |
+| Quem anda a jornada | as skills, em persona | **você** |
+| Evidência que o gate cobra | relatório datado `**Status:** closed` em `reports/` | o campo `gate:` do seu próprio `30-handoff-qa.md` |
+
+No caminho **sem interface** o campo `gate:` é **carga estrutural**: vazio, o gate reprova e a
+fase não fecha. Ele é a única evidência de que a jornada foi andada — descreva o comando que você
+rodou e o que observou, não um adjetivo.
+
+Não force `status: skipped` só porque não há browser. `skipped` é para diff que **não chega ao
+usuário** (§2). Projeto de linha de comando tem jornada — ela se anda no terminal.
 
 ## 1. Carregue o estado
 
@@ -23,8 +39,9 @@ bug sanável ao executor** e **escrever o handoff** que a próxima fase lê.
    user-visible.
 3. O diff da missão (`git diff <base>...HEAD`).
 4. A árvore `docs/qa/` (caminho em `QA_DOCS_PATH`): o relatório datado mais recente em
-   `reports/`, os `bugs/` abertos, os `scenarios/` tocados.
-5. `.sdd/config.sh` — `E2E_DIR`, `E2E_CMD`, `TEST_CMD`, `TODO_FILE`.
+   `reports/`, os `bugs/` abertos, os `scenarios/` tocados. **Só existe no caminho com
+   interface** — no outro, pule este item e ande a jornada você mesmo.
+5. `.sdd/config.sh` — `E2E_DIR`, `E2E_CMD`, `APP_URL`, `TEST_CMD`, `TODO_FILE`.
 
 ## 2. O diff não tem mudança user-visible?
 
@@ -87,8 +104,10 @@ Na árvore `docs/qa/`, esses aparecem como `Blocked (needs human verify)` ou
 
 `docs/handoffs/<missão>/30-handoff-qa.md`, a partir de `templates/handoff.md`:
 
-- frontmatter: `fase: QA`, `status: done|skipped|blocked`, `sessao`, `gate:` com evidência real
-  (nome do relatório, contagem de sessões andadas, saída do `E2E_CMD`);
+- frontmatter: `fase: QA`, `status: done|skipped|blocked`, `sessao`, `gate:` com evidência real —
+  **com interface**: nome do relatório, contagem de sessões andadas, saída do `E2E_CMD`;
+  **sem interface**: o comando de cada jornada que você andou e o que observou, mais a saída do
+  `TEST_CMD`. Neste segundo caso o `gate:` é o que o runner mede (§0) — vazio, a fase não fecha;
 - **TL;DR** em ≤5 linhas: quantas jornadas andadas, quantos achados, quantos viraram spec,
   quantos viraram fix, quantos foram para o humano;
 - **Artefatos**: relatório datado, specs novos, bugs registrados;
@@ -110,7 +129,8 @@ Nunca conserte de passagem. Nunca perca.
 
 ## Regras que não se negociam
 
-- A árvore `docs/qa/` é das skills — você lê e complementa, não reescreve.
+- A árvore `docs/qa/` é das skills — você lê e complementa, não reescreve. Sem interface ela não
+  existe: não a crie, e ponha a evidência da jornada no `gate:` do handoff.
 - Achado confirmado de jornada vira spec e2e commitado. Sem exceção.
 - Spec novo tem que ter falhado com o bug presente.
 - Você não corrige produção: bug sanável vira incremento `F<n>` no checkpoint.
