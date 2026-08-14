@@ -97,7 +97,7 @@ assert_eq "dry-run sai 0" "0" "$rc"
 
 want="$(printf '%s\n' \
   "EXEC=sdd-executor" \
-  "QA:plan=<nenhum>" \
+  "QA:close=sdd-qa" \
   "REVIEW=sdd-reviewer" \
   "DOCS=sdd-docs" \
   "PR=sdd-publisher")"
@@ -119,10 +119,27 @@ assert_eq "working tree continua limpo" "" "$(git status --porcelain)"
 # --- --phase continua imprimindo só a fase pedida --------------------------
 echo "== --phase <FASE> =="
 out1="$( "$SDD" run "$MISSION" --dry-run --phase QA 2>&1 )"
-# QA são três sessões derivadas dos artefatos (planejar → andar → fechar). Sem charters na
-# árvore docs/qa/, o sub-passo é `plan`, e quem dirige é a skill qa-report pelo slash literal —
-# por isso o agente é <nenhum>: dois system prompts disputando a sessão seria ruído.
-assert_eq "--phase QA imprime só o sub-passo corrente" "QA:plan=<nenhum>" "$(printf '%s\n' "$out1" | projected)"
+# QA são três sessões derivadas dos artefatos (planejar → andar → fechar). Este fixture não tem
+# interface para andar (E2E_CMD e APP_URL vazios), então o sub-passo é `close`: o sdd-qa julga se
+# o diff é user-visible e, não sendo, escreve `qa: skipped`.
+assert_eq "--phase QA imprime só o sub-passo corrente" "QA:close=sdd-qa" "$(printf '%s\n' "$out1" | projected)"
+
+# --- o sub-passo de QA muda com a existência de interface ------------------
+echo "== sub-passo de QA derivado dos artefatos =="
+# Com E2E_CMD definido e nenhum charter na árvore, o ciclo começa pelo planejamento — dirigido
+# pela skill qa-report via slash literal, por isso sem agente do kit.
+sed -i 's|^E2E_CMD=""|E2E_CMD="true"|' .sdd/config.sh
+out2="$( "$SDD" run "$MISSION" --dry-run --phase QA 2>&1 )"
+assert_eq "projeto COM interface e sem charters começa em QA:plan (skill qa-report)" \
+  "QA:plan=<nenhum>" "$(printf '%s\n' "$out2" | projected)"
+# O dry-run imprime o prompt com o prefixo "  │ ", então a âncora inclui a primeira linha do
+# bloco — é ali que o slash precisa estar para expandir em headless.
+if printf '%s\n' "$out2" | grep -q '│ /qa-report docs/qa'; then
+  pass "o prompt de boot começa com o slash literal /qa-report"
+else
+  fail "boot de QA:plan" "prompt começando com /qa-report" "$(printf '%s\n' "$out2" | grep -m1 '│' || echo vazio)"
+fi
+sed -i 's|^E2E_CMD="true"|E2E_CMD=""|' .sdd/config.sh
 
 # ---------------------------------------------------------------------------
 echo

@@ -437,6 +437,11 @@ phase_model() {
 # em 2026-08-14: o slash expande em headless e a skill carrega). O sdd-qa fecha o ciclo depois.
 qa_substep() {
   local qa="$REPO_ROOT/$QA_DOCS_PATH" report
+  # Projeto sem interface para andar (sem E2E_CMD e sem APP_URL): as skills de dogfooding em
+  # persona não têm o que fazer. Vai direto ao sdd-qa, que julga se o diff é user-visible e,
+  # não sendo, escreve `qa: skipped` com a justificativa. Bootstrapar uma árvore de jornadas
+  # de browser num projeto sem browser é a burocracia que o `skipped` existe para evitar.
+  if [ -z "$E2E_CMD" ] && [ -z "$APP_URL" ]; then printf 'close\n'; return 0; fi
   [ -n "$(latest_matching "$qa/charters/*.md")" ] || { printf 'plan\n'; return 0; }
   report="$(latest_matching "$qa/reports/*.md")"
   if [ -z "$report" ] || ! grep -qE '^\-[[:space:]]+\*\*Status:\*\*[[:space:]]+closed' "$report"; then
