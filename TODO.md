@@ -45,6 +45,13 @@ Achados sobre **repos-alvo** vão para o `TODO.md` daquele repo. Este arquivo é
   entende "a sessão avançou — seguindo", rebootando EXEC até estourar `phase_budget` (aqui,
   4 sessões). `blocked` é decisão deliberada de parar a linha: deveria dar `return 3` imediato.
   — descoberto por `sdd-executor` na missão `20260814-dry-run-completo` (2026-08-14)
+  **RESOLVIDO por `2083680`**: `cmd_run` passou a checar o checkpoint por `blocked` **antes** de
+  gastar sessão e escalar na hora com `return 3` — exatamente o `return 3` imediato que este item
+  pedia. Endurecido depois por `1807d75`: o teste usava `… | grep -qx`, que sob `pipefail` devolve
+  **141** quando o `grep` fecha o pipe cedo, e o runner leria "não há blocked" **havendo** blocked
+  — um Jidoka que dependia de corrida. O status sai para uma variável antes do `grep`. Documentado
+  em `docs/failure-modes.md` ("Incremento `blocked`") e `docs/pipeline.md` (gate EXEC, Jidoka).
+  — `sdd-docs`, mesma missão (2026-08-14)
 - [ ] **`gate_QA` com `status: done` é insatisfazível em projeto sem interface** — `bin/sdd:303`
   + `bin/sdd:444` — `qa_substep` manda projeto sem `E2E_CMD`/`APP_URL` direto para `QA:close`,
   pulando as skills `qa-report`/`qa-execution` que são as donas de `docs/qa/` — logo a árvore
@@ -124,7 +131,7 @@ Achados sobre **repos-alvo** vão para o `TODO.md` daquele repo. Este arquivo é
   que a suíte fica **vermelha** em cada uma — sensor do sensor (se a suíte não morre quando o
   código é sabotado, ela não está medindo nada). — descoberto por `sdd-qa` na missão
   `20260814-dry-run-completo` (2026-08-14)
-- [ ] **`config/schema.md` promete quatro comportamentos que o runner não tem** —
+- [ ] **`config/schema.md` promete cinco comportamentos que o runner não tem** —
   `config/schema.md:24-25,32-34` vs `bin/sdd:81-82` — `LINT_CMD` e `BUILD_CMD` estão
   documentados como "roda no gate de REVIEW quando definido", e `DEV_UP_CMD`/`DEV_READY_CMD`/
   `DEV_READY_TIMEOUT` como "sobe o ambiente antes do QA / o runner faz poll por até N segundos".
@@ -165,6 +172,41 @@ Achados sobre **repos-alvo** vão para o `TODO.md` daquele repo. Este arquivo é
   "conte quantas linhas estão ruins" que não existe. Ou entra no `GATE_WHY` (útil: "3 linhas do
   checkpoint malformadas" diz mais do que a primeira), ou sai. Pré-existente. — descoberto por
   `sdd-reviewer` na missão `20260814-dry-run-completo` (2026-08-14)
+- [ ] **O `## Uso` do README documenta metade da superfície do CLI** — `README.md:42-48` vs
+  `bin/sdd:1085-1096` — o bloco lista `run`, `status`, `retry`, `close` e `--dry-run`. Ficam de
+  fora, existindo e funcionando: `sdd why <missão> [FASE]` (o comando que o próprio
+  `docs/failure-modes.md:5` manda rodar **primeiro** em qualquer diagnóstico), `sdd phase`,
+  `--phase <FASE>` e `--max-phases <N>`. Quem lê só o README não descobre a ferramenta de
+  diagnóstico que o resto da documentação pressupõe. **Pré-existente** — os quatro já estavam em
+  `main`, nenhum foi introduzido por esta missão; por isso registrado e não corrigido aqui.
+  Direção: uma linha por comando no bloco `## Uso`, mantendo a profundidade em `docs/pipeline.md`
+  (o README roteia, não aprofunda). — descoberto por `sdd-docs` na missão
+  `20260814-dry-run-completo` (2026-08-14)
+- [ ] **`sdd preflight` gasta uma sessão paga e o README não avisa** — `README.md:35` vs
+  `bin/sdd:768-774` — o README apresenta o preflight como "sensor de ambiente: claude, gh,
+  agent-browser, plugins, tree limpo", que soa como checagem local e barata. Ele dispara um
+  `claude -p` real (teto `--max-budget-usd 1`) para provar que a sessão headless **consegue
+  executar** um comando — que é justamente o que o torna valioso, e o que o torna pago. Quem roda
+  preflight em laço (CI, script de bootstrap) paga sem saber. `docs/pipeline.md` (Permissões) e
+  `docs/failure-modes.md` descrevem o probe corretamente; o buraco é só no índice. Pré-existente:
+  o probe já estava em `main`. Direção: meia linha no README (`sdd preflight # …; dispara uma
+  sessão real, custa ≤ US$ 1`). — descoberto por `sdd-docs` na missão
+  `20260814-dry-run-completo` (2026-08-14)
+- [ ] **O kit não tem `CHANGELOG.md`, e a fase DOCS cobra um** — `agents/sdd-docs.md` (tabela "O
+  que atualizar") manda atualizar o `CHANGELOG.md` "quando a missão entrega algo visível ao
+  usuário". Este repo não tem esse arquivo: o registro durável é `KAIZEN_LOG.md` (melhoria com
+  número) + os handoffs commitados + o corpo do PR — e nenhum dos três é um changelog por versão.
+  Resultado: toda missão do kit que muda comportamento do `sdd` cai num `n/a` que é honesto mas
+  repetido, e quem instala o kit num repo-alvo não tem onde ler "o que mudou entre duas versões
+  do runner" (há `SDD_VERSION="0.1.0"` em `bin/sdd:5`, sem nada que o acompanhe). Decidir **um**
+  dos dois, e o que for decidido vale para os repos-alvo também: (a) criar `CHANGELOG.md` no kit,
+  com política de versionamento amarrada ao `SDD_VERSION`, ou (b) tirar a linha do
+  `agents/sdd-docs.md` e assumir que o par KAIZEN_LOG+handoffs é o registro. Hoje o agente cobra
+  um artefato que a constituição do repo não prevê — a mesma classe de defeito do
+  `config/schema.md` prometendo chave não implementada. Não corrigido aqui: criar changelog do
+  zero é decisão de convenção do repo inteiro e retroagiria a toda a história, o que é escopo de
+  missão própria, não de uma fase DOCS. — descoberto por `sdd-docs` na missão
+  `20260814-dry-run-completo` (2026-08-14)
 - [ ] O `sdd-planner` ainda não foi exercitado numa missão real — as missões planejadas até aqui
   tiveram plano escrito à mão. Primeira missão planejada por ele deve conferir se o gate PLAN-AUTO
   é preenchido com evidência de verdade. — descoberto por `humano` na implementação (2026-08-14)
@@ -184,7 +226,7 @@ Achados sobre **repos-alvo** vão para o `TODO.md` daquele repo. Este arquivo é
   puras de `bin/sdd` para um arquivo sourceável, ou dar ao runner um modo `--self-test` que
   exercite `pipeline_log_line` com os dois valores de `DRY_RUN`. — descoberto por `sdd-executor`
   na missão `20260814-dry-run-completo` (2026-08-14)
-  **RESOLVIDO na volta 2 da QA** — sem precisar de `--self-test` nem de extrair funções: o
+  **RESOLVIDO por `85dfc9f`** (volta 2 da QA) — sem precisar de `--self-test` nem de extrair funções: o
   caminho de escalação `blocked` **loga e retorna 3 antes de qualquer `run_phase`**, então dá
   para exercitar o caminho real sem gastar token nem rede. Virou a seção "o caminho real
   (não-dry) ainda escreve no diário" em `tests/check-dry-run.sh`. O modo de falha exato que este
