@@ -1,0 +1,32 @@
+---
+missao: <YYYYMMDD>-<slug>
+atualizado: <YYYY-MM-DD HH:MM>
+---
+
+# Checkpoint — <título da missão>
+
+> **Este arquivo é lido por máquina.** O runner faz parse da tabela abaixo para decidir a
+> próxima fase. Não mude as colunas, não mude os tokens de status, não quebre linhas dentro de
+> uma célula. Detalhe narrativo vai no `01-plano.md`, não aqui.
+>
+> Atualizar o checkpoint é o **último ato** de cada incremento — depois do commit, nunca antes.
+> Status válidos: `pending` · `doing` · `done` · `blocked`.
+
+| ID | Incremento | Check (comando → esperado) | Status | Commit |
+|---|---|---|---|---|
+| I1 | <título curto> | `<comando>` → `<esperado>` | pending | — |
+| I2 | <título curto> | `<comando>` → `<esperado>` | pending | — |
+
+## Notas de execução
+
+> Uma linha por evento relevante: bloqueio, decisão tomada, desvio do plano com justificativa.
+> É o que a próxima sessão lê para não repetir um erro que já custou caro.
+
+- <YYYY-MM-DD HH:MM> · `<ID>` · <o que aconteceu>
+
+## Incrementos de fix (QA)
+
+> Escritos pelo `sdd-qa` quando um bug sanável é reprovado. Entram na mesma tabela acima com ID
+> `F<n>`, e o Check obrigatoriamente inclui **regression test passa** + **re-walk da jornada
+> impactada verde**. Bug que exige julgamento humano NÃO vira fix — vai para
+> "Decisions for a Human" no handoff de QA.
