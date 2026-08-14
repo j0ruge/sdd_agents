@@ -66,11 +66,31 @@ do gate no prompt e, se ainda assim não mover, vira `BLOCKED`.
 
 ### QA — três sub-passos, uma fase
 
+A fase são **três sessões**, e o sub-passo corrente é **derivado dos artefatos** (`qa_substep`),
+nunca de um contador:
+
+| Sub-passo | Quem dirige | Quando | Entrega |
+|---|---|---|---|
+| `QA:plan` | skill `/qa-report` (sem agente do kit) | não há charter em `<QA_DOCS_PATH>/charters/` | charters, personas, jornadas |
+| `QA:exec` | skill `/qa-execution` (sem agente do kit) | há charter, mas nenhum relatório `closed` | relatório datado + registry de bugs |
+| `QA:close` | agente `sdd-qa` | relatório `closed` — ou projeto sem interface | specs e2e, incrementos de fix, `30-handoff-qa.md` |
+
+As duas skills são as **donas** de `docs/qa/`; o `sdd-qa` não reescreve o que elas produziram.
+Projeto **sem interface** (sem `E2E_CMD` e sem `APP_URL`) vai direto a `QA:close`: bootstrapar
+jornada de browser num projeto sem browser é a burocracia que o `skipped` existe para evitar.
+
 **Passa quando:** existe `30-handoff-qa.md` e (`status: skipped` **ou** todas as condições):
 
-- o relatório mais recente em `<QA_DOCS_PATH>/reports/` está `**Status:** closed`;
-- nenhuma linha da matriz de sessões continua `Pending`;
-- nenhum arquivo em `<QA_DOCS_PATH>/bugs/` tem `**Status:** open`;
+- **a evidência da jornada andada**, que tem duas formas conforme o projeto:
+  - **com interface** (`E2E_CMD` ou `APP_URL` definido) — o relatório mais recente em
+    `<QA_DOCS_PATH>/reports/` está `**Status:** closed` e nenhuma linha da matriz de sessões
+    continua `Pending`;
+  - **sem interface** (nem `E2E_CMD` nem `APP_URL`) — o campo `gate:` do próprio
+    `30-handoff-qa.md` está preenchido. Aqui as skills `qa-report`/`qa-execution` nunca rodaram,
+    então a árvore `docs/qa/` não existe: cobrar o relatório datado delas seria exigir um
+    artefato que ninguém produz, e o gate ficaria insatisfazível justamente no caso em que a QA
+    fez o trabalho e **achou** coisa;
+- nenhum arquivo em `<QA_DOCS_PATH>/bugs/` tem `**Status:** open` (vale nos dois casos);
 - `TEST_CMD` sai 0 e `E2E_CMD` sai 0 (quando definido).
 
 `wont-fix` e `invalid` **não** bloqueiam: são decisão humana registrada, não defeito pendente.
@@ -126,6 +146,9 @@ que ela **execute** um comando. "O claude responde" não cobre este modo de falh
 
 ## Custos e logs
 
-Cada sessão vira uma linha em `<missão>/pipeline.log` (fase, agente, modelo, session-id, exit
-code, duração, custo em USD) e um JSON completo em `.sdd/logs/<missão>/`. `--max-budget-usd` por
-sessão é teto de dano, não orçamento.
+Cada sessão vira uma linha em `.sdd/logs/<missão>/pipeline.log` (fase, agente, modelo,
+session-id, exit code, duração, custo em USD) e um JSON completo ao lado, no mesmo
+`.sdd/logs/<missão>/`. O diário é **efêmero por contrato**: `.sdd/logs/` está no `.gitignore` que
+o `sdd install` escreve, e o registro durável do que aconteceu são os handoffs commitados. Se ele
+voltasse para dentro da árvore commitada sujaria o `git status` — e tree sujo reprova
+`gate_REVIEW` e o `sdd preflight`. `--max-budget-usd` por sessão é teto de dano, não orçamento.

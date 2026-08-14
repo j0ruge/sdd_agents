@@ -148,7 +148,7 @@ mudar:
 
 ## Custo maior que o esperado
 
-**Você faz:** `<missão>/pipeline.log` tem uma linha por sessão com custo e duração.
+**Você faz:** `.sdd/logs/<missão>/pipeline.log` tem uma linha por sessão com custo e duração.
 `BUDGET_PER_PHASE_USD` é teto por sessão (dano máximo), não orçamento da missão. Se uma fase
 está cara de forma recorrente, o problema costuma ser plano mal fatiado — sessões grandes
 re-explorando o que o "Contexto verificado" deveria ter entregue pronto.

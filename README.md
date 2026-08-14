@@ -14,7 +14,8 @@ O humano participa de duas coisas: **planejar** e **fazer merge**. O resto (exec
                                         [você] ──▶ merge
 ```
 
-Cada fase é uma **sessão nova** do `claude -p` (anti-estouro de contexto). O estado vive em disco,
+Cada fase é ao menos uma **sessão nova** do `claude -p` (anti-estouro de contexto) — a QA são
+três, uma por sub-passo. O estado vive em disco,
 em `docs/handoffs/<missão>/` do repo-alvo. Não há arquivo de estado: o runner **deriva** a fase
 atual dos artefatos e roda a primeira cujo gate não está satisfeito — morreu no meio, `sdd run`
 de novo continua do ponto exato.
@@ -68,10 +69,13 @@ pelo diretório `docs/handoffs/<YYYYMMDD>-<slug>/`.
 |---|---|---|---|
 | `sdd-planner` | plano | Fable (interativo) | `00-missao.md`, `01-plano.md`, `checkpoint.md` |
 | `sdd-executor` | execução TDD, 1 sessão por incremento | Opus | commits + `checkpoint.md` atualizado |
-| `sdd-qa` | QA exploratório + specs Playwright | Opus | `docs/qa/`, specs e2e, `30-handoff-qa.md` |
+| `sdd-qa` | fecha o ciclo de QA (sub-passo `QA:close`) | Opus | specs e2e, incrementos de fix, `30-handoff-qa.md` |
 | `sdd-reviewer` | code review até Grade A | Opus | `40-review-r<N>.md` + correções |
 | `sdd-docs` | documentação viva | Opus | docs do alvo sincronizados + `45-docs.md` |
-| `sdd-publisher` | push + PR | Sonnet | PR aberto + `50-pr.md` |
+| `sdd-publisher` | TICKET (abre a issue) e PR (push + abre o PR) | Sonnet | `10-ticket.md`, PR aberto + `50-pr.md` |
+
+A árvore `docs/qa/` **não** é entrega do `sdd-qa`: quem a escreve são as skills `qa-report` e
+`qa-execution`, nos sub-passos `QA:plan` e `QA:exec` — duas sessões próprias, sem agente do kit.
 
 ## Requisitos
 
