@@ -574,8 +574,11 @@ PIPELINE_LOG=""
 DRY_RUN=0
 
 pipeline_log_line() {
-  # Projeção não escreve no diário: `--dry-run` é comando de leitura — o usuário o roda
-  # justamente para não mexer em nada. Registrar aqui um evento que só foi PROJETADO mente na
+  # Projeção não escreve no diário. Precisão importa aqui, porque a frase fácil ("dry-run não
+  # mexe em nada") é falsa: os gates rodam `TEST_CMD`/`E2E_CMD` de verdade durante a projeção e
+  # escrevem `.sdd/logs/<missão>/gate-*-test-*.log` — decisão explícita do plano. O que o
+  # `--dry-run` garante é mais estreito e é isto: nenhuma sessão do `claude` é gasta e nenhum
+  # artefato da missão é tocado. Registrar aqui um evento que só foi PROJETADO mente na
   # trilha de auditoria, e num repo-alvo recém instalado (onde o `sdd install` só ignora
   # `.sdd/logs/`) o `pipeline.log` fica untracked e suja o working tree — tree sujo reprova
   # `gate_REVIEW` e o `sdd preflight`, ou seja: uma projeção derrubaria o gate de outra fase.
@@ -966,7 +969,13 @@ cmd_run() {
     # Jidoka de verdade: incremento `blocked` escala NA HORA. Sem isto o runner via a mudança
     # no checkpoint como "progresso" e rebootava EXEC até estourar o orçamento de fase — três
     # sessões contra a mesma parede. Achado da própria missão-fixture 20260814-dry-run-completo.
-    if [ "$phase" = "EXEC" ] && checkpoint_rows | cut -f4 | grep -qx "blocked"; then
+    # O status sai para uma variável ANTES do `grep`: sob `pipefail`, `grep -q` fecha o pipe
+    # assim que acha o match, o estágio de cima morre de SIGPIPE e o pipeline inteiro devolve
+    # 141 — o `if` leria "não há blocked" **existindo** blocked. Com o checkpoint pequeno a
+    # corrida quase nunca acontece, mas "quase nunca" não é garantia que se dê a um Jidoka:
+    # o falso-negativo aqui é justamente o runner batendo na parede que ele já sabia existir.
+    local ckstatus; ckstatus="$(checkpoint_rows | cut -f4)"
+    if [ "$phase" = "EXEC" ] && printf '%s\n' "$ckstatus" | grep -qx "blocked"; then
       gate_EXEC || true
       info ""
       bad "BLOCKED em EXEC — $GATE_WHY"
@@ -1081,7 +1090,8 @@ PARA SCRIPT
   sdd why <missão> [FASE]    imprime por que o gate daquela fase não passou
 
 OPÇÕES DE `run`
-  --dry-run                  imprime os prompts de boot e sai, sem gastar token
+  --dry-run                  imprime os prompts de boot e sai, sem gastar token e sem tocar
+                             nos artefatos da missão (os gates rodam TEST_CMD de verdade)
   --phase <FASE>             força uma fase específica (PLAN|TICKET|EXEC|QA|REVIEW|DOCS|PR)
   --max-phases <N>           para depois de N fases (default: sem limite)
 
