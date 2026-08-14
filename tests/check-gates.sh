@@ -302,13 +302,15 @@ assert_phase "último review todo A, suíte verde, tree limpo" "DOCS"
 
 # --- DOCS ------------------------------------------------------------------
 echo "== fase DOCS =="
-printf '# Docs\n\n| Área | Doc | Status |\n|---|---|---|\n| runner | README | ✗ |\n\nchecklist de drift\n' \
+# O gate le a COLUNA Status da tabela, nao a palavra solta: um 45-docs.md que cite o TODO.md
+# pelo nome — o que o sdd-docs e OBRIGADO a fazer — nao pode reprovar por isso.
+printf '# Docs\n\nchecklist de drift\n\n| Área | Doc | Status | Evidência |\n|---|---|---|---|\n| runner | README | ✗ | pendente |\n\nAchados registrados no TODO.md desta missão.\n' \
   > "$MDIR/45-docs.md"
 git add -A && git commit -qm "chore: docs parcial"
 assert_phase "checklist de drift com item ✗" "DOCS"
-assert_why   "DOCS acusa item pendente" "DOCS" "pendente"
+assert_why   "DOCS acusa a área com Status pendente, citando o valor" "DOCS" "Status '✗'"
 
-printf '# Docs\n\n| Área | Doc | Status |\n|---|---|---|\n| runner | README | ✅ |\n\nchecklist de drift\n' \
+printf '# Docs\n\nchecklist de drift\n\n| Área | Doc | Status | Evidência |\n|---|---|---|---|\n| runner | README | ✅ | commit abc1234 |\n| libs | — | n/a | refactor interno |\n\nAchados registrados no TODO.md desta missão.\n' \
   > "$MDIR/45-docs.md"
 git add -A && git commit -qm "chore: docs"
 assert_phase "checklist de drift completo" "PR"

@@ -410,9 +410,34 @@ gate_DOCS() {
   if ! grep -qiE 'drift' "$d"; then
     GATE_WHY="45-docs.md sem checklist de drift"; return 1
   fi
-  # Toda área tocada precisa estar ✅ ou n/a justificado — um ✗ pendente reprova.
-  if grep -qE '✗|\bTODO\b|<preencher>' "$d"; then
-    GATE_WHY="45-docs.md com item pendente (✗/TODO) no checklist de drift"; return 1
+  # Toda área tocada precisa estar ✅ ou n/a justificado — um item pendente reprova.
+  #
+  # Lê a COLUNA `Status` da tabela de drift, achando-a pela posição do cabeçalho. A versão
+  # anterior fazia grep pela palavra `TODO` no arquivo inteiro e reprovava todo `45-docs.md` que
+  # citasse o `TODO.md` pelo nome — que é justamente o que o `sdd-docs` é obrigado a fazer
+  # (conferir as entradas de TODO da missão está nas instruções dele). O gate contradizia o
+  # agente. Medido no piloto SQ-97: 0 itens `✗` no arquivo e reprovação mesmo assim.
+  local pendente
+  pendente="$(awk -F'|' '
+      # acha o cabeçalho e guarda em que coluna mora o Status
+      !col && /^[ \t]*\|/ {
+        for (i = 2; i < NF; i++) {
+          cell = $i; gsub(/^[ \t]+|[ \t]+$/, "", cell)
+          if (cell == "Status") { col = i; next_is_sep = 1 }
+        }
+        if (col) next
+      }
+      col && /^[ \t]*\|/ {
+        cell = $col; gsub(/^[ \t]+|[ \t]+$/, "", cell)
+        if (cell ~ /^-+$/ || cell == "") next
+        if (cell == "✅" || cell == "n/a" || cell == "N/A") next
+        print cell; exit
+      }
+      col && !/^[ \t]*\|/ { exit }   # a tabela acabou
+    ' "$d")"
+  if [ -n "$pendente" ]; then
+    GATE_WHY="45-docs.md tem área com Status '$pendente' no checklist de drift — cada linha precisa de ✅ (com hash) ou n/a justificado"
+    return 1
   fi
   GATE_WHY="checklist de drift completo"
   return 0
