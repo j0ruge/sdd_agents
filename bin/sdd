@@ -555,6 +555,16 @@ PIPELINE_LOG=""
 DRY_RUN=0
 
 pipeline_log_line() {
+  # Projeção não escreve no diário: `--dry-run` é comando de leitura — o usuário o roda
+  # justamente para não mexer em nada. Registrar aqui um evento que só foi PROJETADO mente na
+  # trilha de auditoria, e num repo-alvo recém instalado (onde o `sdd install` só ignora
+  # `.sdd/logs/`) o `pipeline.log` fica untracked e suja o working tree — tree sujo reprova
+  # `gate_REVIEW` e o `sdd preflight`, ou seja: uma projeção derrubaria o gate de outra fase.
+  # A guarda mora aqui, e não nos chamadores, para valer para TODOS eles: os caminhos de
+  # escalação (`blocked` do checkpoint, orçamento estourado, duas sessões sem progresso) são
+  # três, e um quarto adicionado amanhã nasceria com o mesmo defeito. Achado da fase QA da
+  # missão 20260814-dry-run-completo (F1).
+  [ "$DRY_RUN" = "1" ] && return 0
   [ -n "$PIPELINE_LOG" ] || return 0
   mkdir -p "$(dirname "$PIPELINE_LOG")"
   printf '%s\n' "$*" >> "$PIPELINE_LOG"
