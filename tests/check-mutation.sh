@@ -132,7 +132,6 @@ CATALOGO=(
 # direções: não-pega fora da lista reprova, e lacuna listada que PASSOU a ser pega também
 # reprova (a lista tem que encolher, nunca virar desculpa permanente).
 LACUNAS_ESPERADAS=(
-  EXEC_ignora_TEST_CMD   # fecha no I13.2.3: o fixture roda TEST_CMD="true", que nunca falha
   QA_bug_enum_frouxo     # fecha no I13.2.4: o fixture de bug não tem a legenda do enum
 )
 

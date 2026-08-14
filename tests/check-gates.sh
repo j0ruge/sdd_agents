@@ -163,6 +163,16 @@ printf -- '---\nfase: EXEC\nstatus: done\n---\n' > "$MDIR/20-handoff-exec.md"
 git add -A && git commit -qm "chore: handoff"
 assert_phase "handoff escrito, suíte verde" "QA"
 
+# Suíte VERMELHA reprova o gate. Parece óbvio demais para testar, e era justamente por isso
+# que ninguém testava: o fixture roda `TEST_CMD="true"`, que não tem como falhar, então um
+# gate que descartasse o rc da suíte passaria despercebido para sempre. Medido pela mutação
+# `EXEC_ignora_TEST_CMD`, que sobrevivia verde antes desta asserção existir.
+sed -i 's|^TEST_CMD="true"|TEST_CMD="false"|' .sdd/config.sh
+assert_phase "TEST_CMD vermelho reprova o gate de EXEC" "EXEC"
+assert_why   "EXEC acusa a suíte vermelha" "EXEC" "TEST_CMD falhou"
+sed -i 's|^TEST_CMD="false"|TEST_CMD="true"|' .sdd/config.sh
+assert_phase "TEST_CMD verde de novo devolve a missão para QA" "QA"
+
 # Jidoka: incremento `blocked` escala NA HORA, sem queimar sessão.
 # `sdd run` decide isso antes de invocar o claude, então este teste não gasta token.
 cp "$MDIR/checkpoint.md" "$MDIR/checkpoint.jidoka.bak"
