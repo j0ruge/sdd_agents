@@ -291,22 +291,37 @@ gate_EXEC() {
 }
 
 gate_QA() {
-  local h="$MISSION_DIR/30-handoff-qa.md"
+  local h="$MISSION_DIR/30-handoff-qa.md" report=""
   [ -f "$h" ] || { GATE_WHY="falta 30-handoff-qa.md"; return 1; }
 
   local st; st="$(frontmatter "$h" status)"
   if [ "$st" = "skipped" ]; then GATE_WHY="qa: skipped (diff sem mudança user-visible)"; return 0; fi
   if [ "$st" = "blocked" ]; then GATE_WHY="30-handoff-qa.md com status: blocked"; return 1; fi
 
-  # Âncora 1: o relatório datado da skill qa-execution.
-  local report; report="$(latest_matching "$REPO_ROOT/$QA_DOCS_PATH/reports/*.md")"
-  [ -n "$report" ] || { GATE_WHY="nenhum relatório em $QA_DOCS_PATH/reports/"; return 1; }
-  if ! grep -qE '^\-[[:space:]]+\*\*Status:\*\*[[:space:]]+closed' "$report"; then
-    GATE_WHY="relatório $(basename "$report") não está 'closed'"; return 1
-  fi
-  # Âncora 2: nenhuma linha da matriz pode continuar Pending.
-  if grep -qE '\|[[:space:]]*Pending[[:space:]]*\|' "$report"; then
-    GATE_WHY="relatório $(basename "$report") ainda tem linha(s) 'Pending' na matriz"; return 1
+  # Projeto sem interface: as skills qa-report/qa-execution nunca rodaram (qa_substep manda
+  # direto para o sdd-qa), então a árvore docs/qa/ não existe. Exigir o relatório datado delas
+  # seria cobrar um artefato que ninguém produz — o gate ficaria insatisfazível justamente no
+  # caso em que a QA fez o trabalho e ACHOU coisa. A evidência da jornada andada mora no campo
+  # `gate:` do próprio handoff, que é o artefato que existe aqui.
+  # (Achado pelo sdd-qa na missão 20260814-dry-run-completo: `skipped` mentiria, `done` batia
+  # na Âncora 1 e `blocked` reprova por definição — não havia status honesto E satisfazível.)
+  if [ -z "$E2E_CMD" ] && [ -z "$APP_URL" ]; then
+    local evidencia; evidencia="$(frontmatter "$h" gate)"
+    if [ -z "$evidencia" ]; then
+      GATE_WHY="projeto sem interface: 30-handoff-qa.md precisa de 'gate:' com a evidência da jornada andada"
+      return 1
+    fi
+  else
+    # Âncora 1: o relatório datado da skill qa-execution.
+    report="$(latest_matching "$REPO_ROOT/$QA_DOCS_PATH/reports/*.md")"
+    [ -n "$report" ] || { GATE_WHY="nenhum relatório em $QA_DOCS_PATH/reports/"; return 1; }
+    if ! grep -qE '^\-[[:space:]]+\*\*Status:\*\*[[:space:]]+closed' "$report"; then
+      GATE_WHY="relatório $(basename "$report") não está 'closed'"; return 1
+    fi
+    # Âncora 2: nenhuma linha da matriz pode continuar Pending.
+    if grep -qE '\|[[:space:]]*Pending[[:space:]]*\|' "$report"; then
+      GATE_WHY="relatório $(basename "$report") ainda tem linha(s) 'Pending' na matriz"; return 1
+    fi
   fi
   # Âncora 3: registry sem bug aberto. 'wont-fix'/'invalid' são decisão humana, não bloqueiam.
   local openbugs; openbugs="$( { grep -rlE '^\-[[:space:]]+\*\*Status:\*\*[[:space:]]+open' \
@@ -321,7 +336,11 @@ gate_QA() {
   if [ -n "$E2E_CMD" ] && ! run_check_cmd "$E2E_CMD" "gate-qa-e2e"; then
     GATE_WHY="E2E_CMD falhou ($E2E_CMD) — ver $LAST_CHECK_LOG"; return 1
   fi
-  GATE_WHY="relatório $(basename "$report") fechado, registry limpo, suítes verdes"
+  if [ -n "${report:-}" ]; then
+    GATE_WHY="relatório $(basename "$report") fechado, registry limpo, suítes verdes"
+  else
+    GATE_WHY="jornada andada sem interface de browser (evidência no handoff), suíte verde"
+  fi
   return 0
 }
 
@@ -910,7 +929,7 @@ cmd_run() {
 
   load_config
   resolve_mission "$mission_arg"
-  PIPELINE_LOG="$MISSION_DIR/pipeline.log"
+  PIPELINE_LOG="$(log_dir)/pipeline.log"
 
   step "missão $MISSION — $PROJECT_NAME${DRY_RUN:+}"
   [ "$DRY_RUN" = "1" ] && dim "  (dry-run: nada será executado)"
@@ -1031,7 +1050,7 @@ cmd_run() {
 cmd_retry() {
   load_config
   resolve_mission "${1:-}"
-  PIPELINE_LOG="$MISSION_DIR/pipeline.log"
+  PIPELINE_LOG="$(log_dir)/pipeline.log"
   local phase; phase="$(current_phase)"
   [ -n "$phase" ] || { info "pipeline completo — nada a re-tentar"; return 0; }
   [ "$phase" = "PLAN" ] && die "PLAN é interativo — não há o que re-tentar headless"
@@ -1097,7 +1116,7 @@ main() {
 cmd_close() {
   load_config
   resolve_mission "${1:-}"
-  PIPELINE_LOG="$MISSION_DIR/pipeline.log"
+  PIPELINE_LOG="$(log_dir)/pipeline.log"
 
   [ "$JIRA_ENABLED" = "true" ] || { info "JIRA_ENABLED=false — nada a fechar"; return 0; }
   local issue; issue="$(frontmatter "$MISSION_DIR/10-ticket.md" issue)"

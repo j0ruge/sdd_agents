@@ -89,6 +89,25 @@ assert_phase "JIRA_ENABLED=true sem 'versao:' no 00-missao" "PLAN"
 assert_why   "PLAN explica a versão faltando" "PLAN" "versao"
 sed -i 's/^JIRA_ENABLED=true/JIRA_ENABLED=false/' .sdd/config.sh
 
+# --- TICKET ----------------------------------------------------------------
+echo "== fase TICKET =="
+sed -i 's/^JIRA_ENABLED=false/JIRA_ENABLED=true/' .sdd/config.sh
+sed -i 's/^aprovacao: auto/aprovacao: auto\nversao: 0.1.0/' "$MDIR/00-missao.md"
+printf 'PROJECT=FX\nBOARD=1\n' > .jira-project
+assert_phase "JIRA ligado e sem 10-ticket.md" "TICKET"
+assert_why   "TICKET acusa o arquivo faltando" "TICKET" "10-ticket.md"
+
+printf -- '---\nfase: TICKET\nstatus: done\nissue: FX-1\n---\n' > "$MDIR/10-ticket.md"
+assert_phase "issue sem sprint não passa (card no backlog é trabalho invisível)" "TICKET"
+assert_why   "TICKET acusa a sprint faltando" "TICKET" "SPRINT ATIVA|sprint"
+
+printf -- '---\nfase: TICKET\nstatus: done\nissue: FX-1\nsprint: Sprint 1\n---\n' > "$MDIR/10-ticket.md"
+assert_phase "issue na sprint ativa passa" "EXEC"
+
+# volta ao estado sem JIRA para o resto do teste
+sed -i 's/^JIRA_ENABLED=true/JIRA_ENABLED=false/' .sdd/config.sh
+rm -f .jira-project "$MDIR/10-ticket.md"
+
 # --- EXEC ------------------------------------------------------------------
 echo "== fase EXEC =="
 sed -i 's/| I1 | fatia um | `true` → 0 | pending | — |/| I1 | fatia um | `true` → 0 | done | — |/' \
@@ -135,7 +154,14 @@ assert_why   "EXEC acusa status inválido" "EXEC" "status inválido"
 mv "$MDIR/checkpoint.bak" "$MDIR/checkpoint.md"
 
 # --- QA --------------------------------------------------------------------
-echo "== fase QA =="
+# O gate de QA tem DOIS contratos, porque há dois tipos de projeto.
+#
+# Projeto COM interface: as skills qa-report/qa-execution rodam e a prova é o relatório datado
+# delas. Projeto SEM interface: essas skills nem são chamadas (`qa_substep` vai direto ao
+# sdd-qa), então cobrar o relatório delas deixaria o gate insatisfazível justamente quando a QA
+# fez o trabalho e achou algo — ali a prova é o campo `gate:` do próprio handoff.
+echo "== fase QA — projeto COM interface =="
+sed -i 's|^E2E_CMD=""|E2E_CMD="true"\nAPP_URL="http://exemplo.invalido"|' .sdd/config.sh
 printf -- '---\nfase: QA\nstatus: done\n---\n' > "$MDIR/30-handoff-qa.md"
 assert_phase "handoff de QA sem relatório em docs/qa/reports/" "QA"
 assert_why   "QA acusa relatório ausente" "QA" "nenhum relatório"
@@ -164,6 +190,18 @@ assert_why   "QA acusa bug aberto" "QA" "Status: open|bug\(s\) com Status"
 
 sed -i 's/\*\*Status:\*\* open/**Status:** wont-fix/' "$FIX/docs/qa/bugs/BUG-20260101-teste.md"
 assert_phase "wont-fix é decisão humana, não bloqueia" "REVIEW"
+
+echo "== fase QA — projeto SEM interface =="
+# Sem E2E_CMD e sem APP_URL a árvore docs/qa/ nunca é criada por ninguém. Aqui o gate mede o
+# handoff: `status: done` só passa acompanhado da evidência da jornada andada.
+sed -i 's|^E2E_CMD="true"|E2E_CMD=""|; s|^APP_URL=.*||' .sdd/config.sh
+printf -- '---\nfase: QA\nstatus: done\n---\n' > "$MDIR/30-handoff-qa.md"
+assert_phase "sem interface, 'done' sem evidência não passa" "QA"
+assert_why   "QA pede a evidência da jornada" "QA" "evidência da jornada|sem interface"
+
+printf -- '---\nfase: QA\nstatus: done\ngate: "1 jornada andada no CLI; 1 achado virou F1"\n---\n' \
+  > "$MDIR/30-handoff-qa.md"
+assert_phase "sem interface, 'done' COM evidência passa" "REVIEW"
 
 # skipped curto-circuita tudo
 cp "$MDIR/30-handoff-qa.md" "$MDIR/30.bak"
