@@ -268,7 +268,16 @@ gate_EXEC() {
           GATE_WHY="incremento $id está 'done' sem commit — rótulo não é artefato"; return 1
         fi
         if ! ( cd "$REPO_ROOT" && git cat-file -e "${commit}^{commit}" 2>/dev/null ); then
-          GATE_WHY="incremento $id aponta commit '$commit' que não existe no git log"; return 1
+          GATE_WHY="incremento $id aponta commit '$commit' que não existe no repositório"; return 1
+        fi
+        # `cat-file -e` só diz que o OBJETO existe no banco — não que ele está na história da
+        # branch. Depois de um amend/rebase/reset, um checkpoint citando o hash antigo passaria
+        # apontando para fora da história, e o commit ainda pode sumir no gc com o gate verde.
+        # Isso é exatamente o "rótulo, não artefato" que o kit existe para impedir, dentro do
+        # próprio gate. Medido pelo sdd-qa na missão 20260814-dry-run-completo, com um amend real.
+        if ! ( cd "$REPO_ROOT" && git merge-base --is-ancestor "$commit" HEAD 2>/dev/null ); then
+          GATE_WHY="incremento $id aponta commit '$commit' que existe mas NÃO está na história de HEAD (amend/rebase/reset?) — o gate cobra artefato alcançável, não objeto solto"
+          return 1
         fi
         ;;
       pending|doing) pending=$((pending + 1)) ;;

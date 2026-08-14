@@ -133,12 +133,29 @@ assert_why   "EXEC acusa rótulo sem artefato" "EXEC" "sem commit|não é artefa
 sed -i 's/| I1 | fatia um | `true` → 0 | done | — |/| I1 | fatia um | `true` → 0 | done | deadbeef |/' \
   "$MDIR/checkpoint.md"
 assert_phase "incremento 'done' com commit inexistente não passa" "EXEC"
-assert_why   "EXEC acusa commit fantasma" "EXEC" "não existe no git log"
+assert_why   "EXEC acusa commit fantasma" "EXEC" "não existe no repositório"
 
 echo "mudança" >> arquivo.txt
 git add -A && git commit -qm "feat: fatia um"
+
+# Commit ORFAO: existe no banco de objetos, mas saiu da historia depois de um amend. É o caso
+# que `git cat-file -e` deixa passar — ele so pergunta se o objeto existe. Sem checar
+# alcancabilidade, um checkpoint citando o hash pre-amend satisfaz o gate apontando para fora
+# da historia, e o commit ainda pode sumir no gc com o gate verde. Medido pelo sdd-qa na missão
+# 20260814-dry-run-completo, com um amend de verdade.
+ORPHAN_HASH="$(git rev-parse --short HEAD)"
+git commit -q --amend -m "feat: fatia um (amendado)"
 REAL_HASH="$(git rev-parse --short HEAD)"
-sed -i "s/deadbeef/$REAL_HASH/" "$MDIR/checkpoint.md"
+sed -i "s/deadbeef/$ORPHAN_HASH/" "$MDIR/checkpoint.md"
+if git cat-file -e "${ORPHAN_HASH}^{commit}" 2>/dev/null; then
+  pass "fixture: o commit órfão AINDA existe no banco de objetos (é o que engana o gate ingênuo)"
+else
+  fail "fixture do commit órfão" "objeto ainda no banco" "objeto já coletado"
+fi
+assert_phase "commit órfão (existe mas fora da história) não passa" "EXEC"
+assert_why   "EXEC acusa commit fora da história" "EXEC" "NÃO está na história|alcançável"
+
+sed -i "s/$ORPHAN_HASH/$REAL_HASH/" "$MDIR/checkpoint.md"
 assert_phase "commit real mas sem 20-handoff-exec.md" "EXEC"
 assert_why   "EXEC acusa handoff faltando" "EXEC" "20-handoff-exec"
 
