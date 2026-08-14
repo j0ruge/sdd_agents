@@ -120,13 +120,67 @@ justificativa concreta.
 **Passa quando:** existe `50-pr.md` com `pr_url:` **e** `gh pr view <url>` confirma que o PR
 existe. Arquivo que afirma um PR inexistente reprova — e é bom que reprove.
 
+## Dry-run — a projeção
+
+`sdd run <missão> --dry-run` responde *"o que acontece se eu rodar isto?"* antes de gastar token.
+Ele percorre a ordem canônica e imprime **todas** as fases cujo gate está insatisfeito, cada uma
+com modelo, agente, session-id, o comando `claude` completo e o prompt de boot.
+
+**Projeta o presente, não simula o futuro.** A projeção lista os gates insatisfeitos **hoje**. Ela
+não tenta adivinhar que a fase EXEC satisfaria o próprio gate e destravaria a QA. É uma escolha
+deliberada: informação honesta vale mais do que informação completa e potencialmente errada — e
+uma simulação de pipeline que erra é pior do que não ter simulação.
+
+Por isso a projeção **não** pode usar `current_phase()`. Como o dry-run não muda nada no disco, o
+gate insatisfeito continua insatisfeito e `current_phase()` devolveria a mesma fase para sempre —
+laço infinito. Ela avança por um cursor próprio sobre a lista `$PHASES` (`next_pending_phase()`).
+
+Três casos em que a projeção para cedo, e é para parar mesmo:
+
+| Situação | O que sai | Exit |
+|---|---|---|
+| `PLAN` pendente | a instrução interativa para o humano; nenhuma fase projetada | 2 |
+| incremento `blocked` no checkpoint | o Jidoka, com o motivo; nenhuma fase projetada | 3 |
+| `--phase <FASE>` | só a fase pedida — `--phase` força, não projeta | 0 |
+
+Um detalhe de vocabulário que confunde: a projeção imprime o **sub-passo** (`QA:close`), enquanto
+`--phase` aceita o nome da **fase** (`QA`). Copiar `QA:close` para dentro de `--phase` não
+funciona — o sub-passo é derivado dos artefatos, nunca escolhido na linha de comando.
+
+### O que o dry-run mexe, e o que não
+
+A frase fácil — "o dry-run não mexe em nada" — é falsa, e o `--help` não a usa. A garantia real é
+mais estreita e é esta:
+
+- **não gasta sessão:** nenhum `claude` é invocado;
+- **não toca nos artefatos da missão:** nada é escrito em `docs/handoffs/<missão>/`;
+- **não escreve no diário:** a guarda vive dentro do `pipeline_log_line()`, não nos chamadores.
+  São três os caminhos que logam antes de qualquer sessão (checkpoint `blocked`, orçamento
+  estourado, duas sessões sem progresso) e um quarto adicionado amanhã nasceria com o defeito de
+  novo; guarda única torna "a projeção não escreve no diário" verdadeiro por construção;
+- **mas os gates rodam de verdade:** para saber quais fases estão pendentes é preciso avaliar os
+  gates, e `gate_EXEC`/`gate_QA`/`gate_REVIEW` rodam `TEST_CMD`. Isso escreve
+  `.sdd/logs/<missão>/gate-*-test-<ts>.log` — gitignored, memoizado por processo em
+  `run_check_cmd`, mas real. Quem espera custo zero em repo com suíte lenta precisa saber disto.
+
 ## Depois do PR
 
 O **merge é humano** e é o único gate humano incondicional do pipeline. As "Decisions for a
 Human" acumuladas pelas fases chegam como seção do PR: elas informam a decisão de merge, sem
 nunca terem travado a automação.
 
-Pós-merge, `sdd close <missão>` fecha a issue do JIRA com resumo automático.
+Pós-merge, `sdd close <missão>` fecha a issue do JIRA com resumo automático (skill `/ticket
+close`, modelo `MODEL_TICKET`). Ele se recusa a rodar fora do lugar certo, e cada recusa é
+deliberada:
+
+| Condição | O que acontece |
+|---|---|
+| `JIRA_ENABLED=false` | não é erro — informa "nada a fechar" e sai 0 |
+| sem `issue:` no `10-ticket.md` | erro: a fase TICKET não rodou, não há o que fechar |
+| `50-pr.md` com `pr_url:` cujo PR não está `MERGED` | erro: `sdd close` é **pós-merge**, e fechar a issue antes do merge é mentir para o board |
+
+O `sdd close` é a única invocação do `claude` fora de `run_phase()` além do probe do
+`sdd preflight` — as duas não rodam fase.
 
 ## Modelos por fase
 

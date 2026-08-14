@@ -14,8 +14,8 @@ O humano participa de duas coisas: **planejar** e **fazer merge**. O resto (exec
                                         [você] ──▶ merge
 ```
 
-Cada fase é ao menos uma **sessão nova** do `claude -p` (anti-estouro de contexto) — a QA são
-três, uma por sub-passo. O estado vive em disco,
+Cada fase é ao menos uma **sessão nova** do `claude -p` (anti-estouro de contexto) — a QA são até
+três, uma por sub-passo (num projeto sem interface, uma só). O estado vive em disco,
 em `docs/handoffs/<missão>/` do repo-alvo. Não há arquivo de estado: o runner **deriva** a fase
 atual dos artefatos e roda a primeira cujo gate não está satisfeito — morreu no meio, `sdd run`
 de novo continua do ponto exato.
@@ -44,8 +44,14 @@ sdd run <missão>       # executa a partir do primeiro gate não satisfeito, at�
 sdd status <missão>    # onde está, o que falta, por que travou
 sdd retry <missão>     # re-tenta a fase corrente com sessão nova
 sdd close <missão>     # pós-merge: fecha a issue do JIRA
-sdd run <missão> --dry-run   # imprime os prompts de boot sem gastar token
+sdd run <missão> --dry-run   # projeta o pipeline inteiro sem gastar token
 ```
+
+O `--dry-run` responde *"o que acontece se eu rodar isto?"*: imprime **todas** as fases que a
+missão percorreria a partir do estado de hoje — na ordem, cada uma com agente, modelo e prompt de
+boot — sem abrir sessão nenhuma. Ele projeta o estado **atual**, não simula o futuro; os detalhes
+e o que ele mexe (e não mexe) no disco estão em
+[`docs/pipeline.md`](docs/pipeline.md#dry-run--a-projeção).
 
 A missão nasce no planejamento (`sdd-planner`, interativo, com você presente) e é identificada
 pelo diretório `docs/handoffs/<YYYYMMDD>-<slug>/`.
