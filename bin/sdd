@@ -370,7 +370,11 @@ gate_REVIEW() {
   local offending
   offending="$(awk '
       /^###[[:space:]]+Overall Grade/ { inside = 1; next }
-      inside && /^###/ { exit }
+      # Sai em QUALQUER heading, não só `###`. Saindo só no `###`, uma seção seguinte de nível
+      # SUPERIOR (`## Correções desta rodada`) não encerrava a leitura, e o parser seguia
+      # engolindo tabelas posteriores do relatório — reprovando um relatório todo Grade A porque
+      # achou uma coluna `Commit` numa tabela de commits. Medido no piloto SQ-97.
+      inside && /^#{1,6}[[:space:]]/ { exit }
       inside && /^[ \t]*\|/ {
         n = split($0, f, "|")
         if (n < 4) next

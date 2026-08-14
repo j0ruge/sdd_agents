@@ -267,6 +267,9 @@ cat > "$MDIR/40-review-r2.md" <<'EOF'
 EOF
 assert_phase "critério '—' (não analisado) também reprova" "REVIEW"
 
+# Relatório real tem seções DEPOIS da tabela de grade, e em nível SUPERIOR (`##`). O parser
+# parava só em `###`, seguia lendo as tabelas seguintes e reprovava um relatório todo A ao achar
+# uma coluna `Commit`. O fixture reproduz essa forma de propósito.
 cat > "$MDIR/40-review-r3.md" <<'EOF'
 # Review r3
 ### Overall Grade
@@ -276,6 +279,20 @@ cat > "$MDIR/40-review-r3.md" <<'EOF'
 | Code Quality (Zen) | A | clean |
 | Security | A | clean |
 | **Overall** | **A** | |
+
+---
+
+## Correções desta rodada
+
+| Commit | O que |
+|---|---|
+| abc1234 | corrige o teste |
+
+## Achados registrados no TODO
+
+| ID | Severidade | Destino |
+|---|---|---|
+| R1-03 | MEDIUM | TODO.md |
 EOF
 assert_phase "review sem a seção Overall Grade num r<N> anterior não importa: vale o último" "REVIEW"
 assert_why   "REVIEW acusa tree sujo antes de aprovar" "REVIEW" "tree sujo|working tree"
