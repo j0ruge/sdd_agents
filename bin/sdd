@@ -1,0 +1,680 @@
+#!/usr/bin/env bash
+#
+# sdd — runner do pipeline de agentes autônomos de desenvolvimento.
+#
+# Princípio central: NÃO existe arquivo de estado. A fase corrente é DERIVADA dos artefatos
+# em disco. Isso dá resume de graça depois de qualquer morte de sessão e elimina a classe de
+# bug "o estado mente sobre o disco".
+#
+# Princípio nº 2: sucesso nunca é a resposta do modelo. Todo gate é reavaliado aqui — rodando
+# os testes, fazendo grep no checkpoint, consultando o git log, chamando o gh.
+#
+# Uso: sdd <comando> [missão] [opções]   ·   `sdd help` para a lista.
+
+set -euo pipefail
+
+readonly SDD_VERSION="0.1.0"
+
+# Arrays associativos (cache de sensores) exigem bash 4. macOS entrega bash 3.2 como /bin/bash;
+# falhar aqui é melhor do que falhar com "bad substitution" no meio de uma fase.
+if [ "${BASH_VERSINFO[0]:-0}" -lt 4 ]; then
+  printf 'erro: sdd exige bash 4+ (encontrado: %s). No macOS: brew install bash\n' \
+    "${BASH_VERSION:-desconhecido}" >&2
+  exit 1
+fi
+
+# ---------------------------------------------------------------------------
+# Resolução do SDD_HOME (aguenta ser chamado por symlink em ~/.local/bin)
+# ---------------------------------------------------------------------------
+_resolve_self() {
+  local src="${BASH_SOURCE[0]}" dir
+  while [ -L "$src" ]; do
+    dir="$(cd -P "$(dirname "$src")" && pwd)"
+    src="$(readlink "$src")"
+    if [[ $src != /* ]]; then src="$dir/$src"; fi
+  done
+  cd -P "$(dirname "$src")/.." && pwd
+}
+SDD_HOME="$(_resolve_self)"
+readonly SDD_HOME
+
+# ---------------------------------------------------------------------------
+# Saída
+# ---------------------------------------------------------------------------
+if [ -t 1 ] && [ -z "${NO_COLOR:-}" ]; then
+  C_RESET=$'\033[0m'; C_DIM=$'\033[2m'; C_BOLD=$'\033[1m'
+  C_RED=$'\033[31m'; C_GREEN=$'\033[32m'; C_YELLOW=$'\033[33m'; C_BLUE=$'\033[34m'
+else
+  C_RESET=''; C_DIM=''; C_BOLD=''; C_RED=''; C_GREEN=''; C_YELLOW=''; C_BLUE=''
+fi
+
+info() { printf '%s\n' "$*"; }
+step() { printf '%s▸%s %s\n' "$C_BLUE" "$C_RESET" "$*"; }
+ok()   { printf '%s  ok%s   %s\n' "$C_GREEN" "$C_RESET" "$*"; }
+warn() { printf '%s  aviso%s %s\n' "$C_YELLOW" "$C_RESET" "$*" >&2; }
+bad()  { printf '%s  falha%s %s\n' "$C_RED" "$C_RESET" "$*" >&2; }
+dim()  { printf '%s%s%s\n' "$C_DIM" "$*" "$C_RESET"; }
+die()  { printf '%serro:%s %s\n' "$C_RED" "$C_RESET" "$*" >&2; exit 1; }
+
+# ---------------------------------------------------------------------------
+# Repo-alvo e configuração
+# ---------------------------------------------------------------------------
+REPO_ROOT=""
+CONFIG_FILE=""
+
+resolve_repo_root() {
+  REPO_ROOT="$(git rev-parse --show-toplevel 2>/dev/null)" \
+    || die "não estou dentro de um repositório git (cwd: $PWD)"
+  CONFIG_FILE="$REPO_ROOT/.sdd/config.sh"
+}
+
+# Defaults + validação. Chave obrigatória vazia falha AQUI, antes de gastar sessão.
+load_config() {
+  resolve_repo_root
+  [ -f "$CONFIG_FILE" ] \
+    || die "$CONFIG_FILE não existe. Rode 'sdd install' na raiz do repo-alvo."
+  bash -n "$CONFIG_FILE" || die "$CONFIG_FILE tem erro de sintaxe bash"
+  # shellcheck disable=SC1090
+  source "$CONFIG_FILE"
+
+  : "${PROJECT_NAME:=}"; : "${DEFAULT_BRANCH:=}"; : "${TEST_CMD:=}"
+  : "${E2E_CMD:=}"; : "${E2E_DIR:=e2e}"; : "${LINT_CMD:=}"; : "${BUILD_CMD:=}"
+  : "${APP_URL:=}"; : "${DEV_UP_CMD:=}"; : "${DEV_READY_CMD:=}"; : "${DEV_READY_TIMEOUT:=90}"
+  : "${HANDOFF_DIR:=docs/handoffs}"; : "${QA_DOCS_PATH:=docs/qa}"; : "${TODO_FILE:=TODO.md}"
+  : "${MODEL_EXEC:=opus}"; : "${MODEL_QA:=opus}"; : "${MODEL_REVIEW:=opus}"
+  : "${MODEL_DOCS:=opus}"; : "${MODEL_PUBLISH:=sonnet}"; : "${MODEL_TICKET:=sonnet}"
+  : "${QA_MAX_ITER:=3}"; : "${REVIEW_MAX_ITER:=3}"; : "${EXEC_MAX_RETRY:=1}"
+  : "${BUDGET_PER_PHASE_USD:=15}"; : "${PUBLISH_ON_REVIEW_BLOCKED:=off}"
+  : "${PERMISSION_MODE:=acceptEdits}"; : "${JIRA_ENABLED:=false}"
+
+  [ -n "$PROJECT_NAME" ]   || die "PROJECT_NAME vazio em $CONFIG_FILE"
+  [ -n "$DEFAULT_BRANCH" ] || die "DEFAULT_BRANCH vazio em $CONFIG_FILE"
+  [ -n "$TEST_CMD" ]       || die "TEST_CMD vazio em $CONFIG_FILE (é o gate de EXEC)"
+  case "$PERMISSION_MODE" in
+    bypassPermissions) die "PERMISSION_MODE=bypassPermissions não é aceito pelo kit" ;;
+  esac
+}
+
+# ---------------------------------------------------------------------------
+# Missão
+# ---------------------------------------------------------------------------
+MISSION=""
+MISSION_DIR=""
+
+# Aceita o nome completo (20260814-spinner) ou um prefixo/slug único.
+resolve_mission() {
+  local want="${1:-}" base="$REPO_ROOT/$HANDOFF_DIR" matches=()
+  [ -n "$want" ] || die "falta o nome da missão (ex.: sdd status 20260814-spinner)"
+  [ -d "$base" ] || die "$HANDOFF_DIR/ não existe no repo-alvo — nenhuma missão planejada ainda"
+
+  if [ -d "$base/$want" ]; then
+    MISSION="$want"
+  else
+    local d
+    while IFS= read -r d; do matches+=("$(basename "$d")"); done \
+      < <(find "$base" -mindepth 1 -maxdepth 1 -type d -name "*${want}*" | sort)
+    case "${#matches[@]}" in
+      0) die "missão '$want' não encontrada em $HANDOFF_DIR/" ;;
+      1) MISSION="${matches[0]}" ;;
+      *) die "'$want' é ambíguo: ${matches[*]}" ;;
+    esac
+  fi
+  MISSION_DIR="$base/$MISSION"
+}
+
+# ---------------------------------------------------------------------------
+# Leitura de artefatos
+# ---------------------------------------------------------------------------
+
+# frontmatter <arquivo> <chave> → valor (vazio se ausente)
+frontmatter() {
+  local file="$1" key="$2"
+  [ -f "$file" ] || return 0
+  awk -v k="$key" '
+    NR==1 && $0=="---" { inside=1; next }
+    inside && $0=="---" { exit }
+    inside {
+      idx = index($0, ":")
+      if (idx == 0) next
+      name = substr($0, 1, idx-1)
+      gsub(/^[ \t]+|[ \t]+$/, "", name)
+      if (name == k) {
+        val = substr($0, idx+1)
+        gsub(/^[ \t]+|[ \t]+$/, "", val)
+        gsub(/^["'\'']|["'\'']$/, "", val)
+        print val
+        exit
+      }
+    }' "$file"
+}
+
+# Linhas da tabela do checkpoint como "ID<TAB>título<TAB>check<TAB>status<TAB>commit".
+# Ignora cabeçalho, separador e qualquer linha que não tenha as 5 colunas.
+checkpoint_rows() {
+  local file="$MISSION_DIR/checkpoint.md"
+  [ -f "$file" ] || return 0
+  awk -F'|' '
+    /^[ \t]*\|/ {
+      if (NF < 6) next
+      for (i = 2; i <= 6; i++) { gsub(/^[ \t]+|[ \t]+$/, "", $i) }
+      if ($2 == "ID" || $2 ~ /^-+$/ || $2 == "") next
+      if ($5 == "Status") next
+      printf "%s\t%s\t%s\t%s\t%s\n", $2, $3, $4, $5, $6
+    }' "$file"
+}
+
+# Roda um comando do config na raiz do repo-alvo; devolve o exit code.
+# Saída vai para o log da missão (quando há missão) — nunca polui o stdout do runner.
+#
+# Memoizado por processo: `sdd status` avalia sete gates e três deles rodam TEST_CMD.
+# Sem cache, olhar o estado custaria três suítes. O cache morre com o processo, então
+# `sdd run` sempre reavalia depois de uma fase ter mexido no código.
+declare -A _CHECK_RC=()
+declare -A _CHECK_LOG=()
+LAST_CHECK_LOG=""
+
+run_check_cmd() {
+  local cmd="$1" label="${2:-check}" logfile rc=0
+  [ -n "$cmd" ] || return 0
+  if [ -n "${_CHECK_RC[$cmd]+x}" ]; then
+    LAST_CHECK_LOG="${_CHECK_LOG[$cmd]}"
+    return "${_CHECK_RC[$cmd]}"
+  fi
+  logfile="$(log_dir)/${label}-$(date +%H%M%S).log"
+  mkdir -p "$(dirname "$logfile")"
+  ( cd "$REPO_ROOT" && eval "$cmd" ) >"$logfile" 2>&1 || rc=$?
+  _CHECK_RC[$cmd]="$rc"
+  _CHECK_LOG[$cmd]="$logfile"
+  LAST_CHECK_LOG="$logfile"
+  return "$rc"
+}
+
+# Invalida o cache de sensores — chamado depois de qualquer fase que mexeu no repo.
+invalidate_checks() { _CHECK_RC=(); _CHECK_LOG=(); }
+
+log_dir() {
+  if [ -n "$MISSION" ]; then printf '%s\n' "$REPO_ROOT/.sdd/logs/$MISSION"
+  else printf '%s\n' "$REPO_ROOT/.sdd/logs/_geral"; fi
+}
+
+# Último arquivo de um glob (por ordem de nome — os nomes são datados). Vazio se nenhum.
+latest_matching() {
+  local pattern="$1"
+  # `|| true`: sem match, o `ls` falha e o `pipefail` propagaria o erro para a atribuição
+  # de quem chamou — dentro de um gate isso viraria falha silenciosa em vez de "não existe".
+  # shellcheck disable=SC2012,SC2086
+  ls -1d $pattern 2>/dev/null | sort | tail -1 || true
+}
+
+# ---------------------------------------------------------------------------
+# Gates — cada um retorna 0 (satisfeito) ou 1, escrevendo o motivo em GATE_WHY.
+# ATENÇÃO: nenhum gate pode ser satisfeito por texto do modelo. Só artefato.
+# ---------------------------------------------------------------------------
+GATE_WHY=""
+
+gate_PLAN() {
+  local m="$MISSION_DIR/00-missao.md" p="$MISSION_DIR/01-plano.md" c="$MISSION_DIR/checkpoint.md"
+  local f
+  for f in "$m" "$p" "$c"; do
+    [ -f "$f" ] || { GATE_WHY="falta $(basename "$f") — fase de planejamento é interativa: rode o sdd-planner"; return 1; }
+  done
+  local aprov; aprov="$(frontmatter "$m" aprovacao)"
+  case "$aprov" in
+    auto)          : ;;
+    humano-*)      : ;;
+    *) GATE_WHY="00-missao.md tem 'aprovacao: ${aprov:-<vazio>}' — precisa ser 'auto' (PLAN-AUTO todo ✅) ou 'humano-YYYY-MM-DD'"; return 1 ;;
+  esac
+  if [ "$JIRA_ENABLED" = "true" ]; then
+    local v; v="$(frontmatter "$m" versao)"
+    if [ -z "$v" ] || [[ $v == \<* ]]; then
+      GATE_WHY="JIRA_ENABLED=true exige 'versao:' preenchida em 00-missao.md (decisão humana, nunca headless)"
+      return 1
+    fi
+  fi
+  local n; n="$(checkpoint_rows | wc -l)"
+  [ "$n" -gt 0 ] || { GATE_WHY="checkpoint.md não tem nenhuma linha de incremento parseável"; return 1; }
+  GATE_WHY="plano aprovado ($aprov), $n incremento(s)"
+  return 0
+}
+
+gate_TICKET() {
+  if [ "$JIRA_ENABLED" != "true" ]; then GATE_WHY="JIRA_ENABLED=false — fase pulada"; return 0; fi
+  local t="$MISSION_DIR/10-ticket.md"
+  [ -f "$t" ] || { GATE_WHY="falta 10-ticket.md"; return 1; }
+  local issue; issue="$(frontmatter "$t" issue)"
+  [ -n "$issue" ] || { GATE_WHY="10-ticket.md sem 'issue:' no frontmatter"; return 1; }
+  if ! grep -qiE '^sprint:[[:space:]]*\S' "$t"; then
+    GATE_WHY="10-ticket.md sem 'sprint:' — a issue precisa estar NA SPRINT ATIVA, não no backlog"
+    return 1
+  fi
+  GATE_WHY="issue $issue na sprint"
+  return 0
+}
+
+gate_EXEC() {
+  local rows; rows="$(checkpoint_rows)"
+  [ -n "$rows" ] || { GATE_WHY="checkpoint.md vazio"; return 1; }
+
+  local id status commit bad_rows=0 pending=0 blocked=0 total=0
+  while IFS=$'\t' read -r id _ _ status commit; do
+    total=$((total + 1))
+    case "$status" in
+      done)
+        if [ -z "$commit" ] || [ "$commit" = "—" ] || [ "$commit" = "-" ]; then
+          GATE_WHY="incremento $id está 'done' sem commit — rótulo não é artefato"; return 1
+        fi
+        if ! ( cd "$REPO_ROOT" && git cat-file -e "${commit}^{commit}" 2>/dev/null ); then
+          GATE_WHY="incremento $id aponta commit '$commit' que não existe no git log"; return 1
+        fi
+        ;;
+      pending|doing) pending=$((pending + 1)) ;;
+      blocked)       blocked=$((blocked + 1)) ;;
+      *) bad_rows=$((bad_rows + 1)); GATE_WHY="incremento $id com status inválido '$status' (use pending|doing|done|blocked)"; return 1 ;;
+    esac
+  done <<< "$rows"
+
+  if [ "$blocked" -gt 0 ]; then GATE_WHY="$blocked incremento(s) 'blocked' — Jidoka: a linha para"; return 1; fi
+  if [ "$pending" -gt 0 ]; then GATE_WHY="$pending de $total incremento(s) ainda por executar"; return 1; fi
+
+  if ! run_check_cmd "$TEST_CMD" "gate-exec-test"; then
+    GATE_WHY="TEST_CMD falhou ($TEST_CMD) — ver $LAST_CHECK_LOG"; return 1
+  fi
+  [ -f "$MISSION_DIR/20-handoff-exec.md" ] \
+    || { GATE_WHY="todos os incrementos done e suíte verde, mas falta 20-handoff-exec.md"; return 1; }
+
+  GATE_WHY="$total incremento(s) done, suíte verde, handoff escrito"
+  return 0
+}
+
+gate_QA() {
+  local h="$MISSION_DIR/30-handoff-qa.md"
+  [ -f "$h" ] || { GATE_WHY="falta 30-handoff-qa.md"; return 1; }
+
+  local st; st="$(frontmatter "$h" status)"
+  if [ "$st" = "skipped" ]; then GATE_WHY="qa: skipped (diff sem mudança user-visible)"; return 0; fi
+  if [ "$st" = "blocked" ]; then GATE_WHY="30-handoff-qa.md com status: blocked"; return 1; fi
+
+  # Âncora 1: o relatório datado da skill qa-execution.
+  local report; report="$(latest_matching "$REPO_ROOT/$QA_DOCS_PATH/reports/*.md")"
+  [ -n "$report" ] || { GATE_WHY="nenhum relatório em $QA_DOCS_PATH/reports/"; return 1; }
+  if ! grep -qE '^\-[[:space:]]+\*\*Status:\*\*[[:space:]]+closed' "$report"; then
+    GATE_WHY="relatório $(basename "$report") não está 'closed'"; return 1
+  fi
+  # Âncora 2: nenhuma linha da matriz pode continuar Pending.
+  if grep -qE '\|[[:space:]]*Pending[[:space:]]*\|' "$report"; then
+    GATE_WHY="relatório $(basename "$report") ainda tem linha(s) 'Pending' na matriz"; return 1
+  fi
+  # Âncora 3: registry sem bug aberto. 'wont-fix'/'invalid' são decisão humana, não bloqueiam.
+  local openbugs; openbugs="$( { grep -rlE '^\-[[:space:]]+\*\*Status:\*\*[[:space:]]+open' \
+      "$REPO_ROOT/$QA_DOCS_PATH/bugs/" 2>/dev/null || true; } | wc -l )"
+  if [ "$openbugs" -gt 0 ]; then
+    GATE_WHY="$openbugs bug(s) com Status: open no registry — viram incrementos de fix (loop QA⇄EXEC)"
+    return 1
+  fi
+  if ! run_check_cmd "$TEST_CMD" "gate-qa-test"; then
+    GATE_WHY="TEST_CMD falhou ($TEST_CMD) — ver $LAST_CHECK_LOG"; return 1
+  fi
+  if [ -n "$E2E_CMD" ] && ! run_check_cmd "$E2E_CMD" "gate-qa-e2e"; then
+    GATE_WHY="E2E_CMD falhou ($E2E_CMD) — ver $LAST_CHECK_LOG"; return 1
+  fi
+  GATE_WHY="relatório $(basename "$report") fechado, registry limpo, suítes verdes"
+  return 0
+}
+
+gate_REVIEW() {
+  local last; last="$(latest_matching "$MISSION_DIR/40-review-r*.md")"
+  [ -n "$last" ] || { GATE_WHY="nenhum 40-review-r<N>.md"; return 1; }
+
+  # Âncora documentada: a seção "### Overall Grade" da skill codereview (contrato v1.13.0+),
+  # tabela | Criterion | Grade | Rationale | com escala A–F. O gate exige A em TODA linha —
+  # "—" (não analisado) também reprova: review parcial não é review.
+  local offending
+  offending="$(awk '
+      /^###[[:space:]]+Overall Grade/ { inside = 1; next }
+      inside && /^###/ { exit }
+      inside && /^[ \t]*\|/ {
+        n = split($0, f, "|")
+        if (n < 4) next
+        crit = f[2]; grade = f[3]
+        gsub(/\*/, "", crit);  gsub(/^[ \t]+|[ \t]+$/, "", crit)
+        gsub(/\*/, "", grade); gsub(/^[ \t]+|[ \t]+$/, "", grade)
+        if (crit == "Criterion" || crit ~ /^-+$/ || crit == "") next
+        rows++
+        if (grade != "A") { print crit " = " (grade == "" ? "<vazio>" : grade); exit }
+      }
+      END { if (rows == 0) print "SEM-TABELA" }
+    ' "$last")"
+  if [ "$offending" = "SEM-TABELA" ]; then
+    GATE_WHY="$(basename "$last") não tem a seção '### Overall Grade' — o gate não tem o que medir"
+    return 1
+  fi
+  if [ -n "$offending" ]; then
+    GATE_WHY="$(basename "$last"): $offending — o gate exige Grade A em todos os critérios"; return 1
+  fi
+  if ! run_check_cmd "$TEST_CMD" "gate-review-test"; then
+    GATE_WHY="TEST_CMD falhou ($TEST_CMD) — ver $LAST_CHECK_LOG"; return 1
+  fi
+  if [ -n "$(cd "$REPO_ROOT" && git status --porcelain)" ]; then
+    GATE_WHY="working tree sujo depois do review — correções precisam estar commitadas"; return 1
+  fi
+  GATE_WHY="$(basename "$last") todo Grade A, suíte verde, tree limpo"
+  return 0
+}
+
+gate_DOCS() {
+  local d="$MISSION_DIR/45-docs.md"
+  [ -f "$d" ] || { GATE_WHY="falta 45-docs.md"; return 1; }
+  if ! grep -qiE 'drift' "$d"; then
+    GATE_WHY="45-docs.md sem checklist de drift"; return 1
+  fi
+  # Toda área tocada precisa estar ✅ ou n/a justificado — um ✗ pendente reprova.
+  if grep -qE '✗|\bTODO\b|<preencher>' "$d"; then
+    GATE_WHY="45-docs.md com item pendente (✗/TODO) no checklist de drift"; return 1
+  fi
+  GATE_WHY="checklist de drift completo"
+  return 0
+}
+
+gate_PR() {
+  local p="$MISSION_DIR/50-pr.md"
+  [ -f "$p" ] || { GATE_WHY="falta 50-pr.md"; return 1; }
+  local url; url="$(frontmatter "$p" pr_url)"
+  [ -n "$url" ] || { GATE_WHY="50-pr.md sem 'pr_url:' no frontmatter"; return 1; }
+  local live
+  live="$( cd "$REPO_ROOT" && gh pr view "$url" --json url --jq .url 2>/dev/null )" || true
+  [ -n "$live" ] || { GATE_WHY="gh não confirma o PR $url — 50-pr.md pode estar mentindo"; return 1; }
+  GATE_WHY="PR aberto: $live"
+  return 0
+}
+
+readonly PHASES="PLAN TICKET EXEC QA REVIEW DOCS PR"
+
+# Primeira fase cujo gate não está satisfeito. Vazio ⇒ missão completa.
+current_phase() {
+  local ph
+  for ph in $PHASES; do
+    if ! "gate_$ph"; then printf '%s\n' "$ph"; return 0; fi
+  done
+  printf '%s\n' ""
+}
+
+# ---------------------------------------------------------------------------
+# Comandos
+# ---------------------------------------------------------------------------
+
+cmd_install() {
+  local force=0
+  if [ "${1:-}" = "--force" ]; then force=1; fi
+  resolve_repo_root
+  step "instalando o sdd em $REPO_ROOT"
+
+  mkdir -p "$REPO_ROOT/.sdd" "$REPO_ROOT/.claude/agents"
+
+  if [ -f "$CONFIG_FILE" ]; then
+    ok ".sdd/config.sh já existe (preservado)"
+  else
+    local branch test_cmd project
+    project="$(basename "$REPO_ROOT")"
+    # `|| true` obrigatório: repo sem remote não tem origin/HEAD, o git falha e o pipefail
+    # derrubaria o install inteiro em silêncio.
+    branch="$( cd "$REPO_ROOT" \
+      && git symbolic-ref --quiet --short refs/remotes/origin/HEAD 2>/dev/null \
+      | sed 's|^origin/||' || true )"
+    [ -n "$branch" ] || branch="$( cd "$REPO_ROOT" && git branch --show-current )"
+    test_cmd="TODO"
+    if [ -f "$REPO_ROOT/package.json" ];   then test_cmd="npm test"; fi
+    if [ -f "$REPO_ROOT/pyproject.toml" ]; then test_cmd="pytest -q"; fi
+    if [ -f "$REPO_ROOT/Cargo.toml" ];     then test_cmd="cargo test"; fi
+    if [ -f "$REPO_ROOT/go.mod" ];         then test_cmd="go test ./..."; fi
+    sed -e "s|<PROJECT_NAME>|$project|g" \
+        -e "s|<DEFAULT_BRANCH>|$branch|g" \
+        -e "s|<TEST_CMD>|$test_cmd|g" \
+        -e "s|<SDD_HOME>|$SDD_HOME|g" \
+        "$SDD_HOME/config/starter.conf" > "$CONFIG_FILE"
+    ok ".sdd/config.sh criado (branch base detectada: $branch — confirme)"
+  fi
+
+  local a name target changed=0
+  for a in "$SDD_HOME"/agents/sdd-*.md; do
+    [ -e "$a" ] || continue
+    name="$(basename "$a")"
+    target="$REPO_ROOT/.claude/agents/$name"
+    if [ ! -f "$target" ]; then
+      cp "$a" "$target"; ok "agente $name copiado"
+    elif cmp -s "$a" "$target"; then
+      ok "agente $name idêntico"
+    elif [ "$force" = "1" ]; then
+      cp "$a" "$target"; ok "agente $name atualizado (--force)"
+    else
+      changed=$((changed + 1))
+      warn "agente $name difere da versão do kit:"
+      diff -u "$target" "$a" | sed 's/^/      /' >&2 || true
+    fi
+  done
+  if [ "$changed" -gt 0 ]; then warn "rode 'sdd install --force' para adotar a versão do kit"; fi
+
+  local gitignore="$REPO_ROOT/.gitignore"
+  if ! grep -qxF '.sdd/logs/' "$gitignore" 2>/dev/null; then
+    printf '\n# logs efêmeros do runner sdd (o estado durável vive em %s/, commitado)\n.sdd/logs/\n' \
+      "${HANDOFF_DIR:-docs/handoffs}" >> "$gitignore"
+    ok ".sdd/logs/ adicionado ao .gitignore"
+  else
+    ok ".sdd/logs/ já no .gitignore"
+  fi
+
+  info ""
+  dim "próximo: edite .sdd/config.sh e rode 'sdd preflight'"
+}
+
+cmd_preflight() {
+  load_config
+  step "preflight — $PROJECT_NAME ($REPO_ROOT)"
+  local fails=0
+  _fail() { bad "$1"; fails=$((fails + 1)); }
+
+  # --- ferramentas ---
+  if command -v claude >/dev/null 2>&1; then ok "claude $(claude --version 2>&1 | head -1)"
+  else _fail "claude CLI não encontrado no PATH"; fi
+
+  local t
+  for t in git gh jq uuidgen; do
+    if command -v "$t" >/dev/null 2>&1; then ok "$t presente"
+    else _fail "$t não encontrado no PATH"; fi
+  done
+
+  # --- autenticação ---
+  if command -v claude >/dev/null 2>&1; then
+    if claude -p "responda apenas: ok" --model haiku >/dev/null 2>&1; then
+      ok "OAuth do claude respondendo"
+    else
+      _fail "claude -p não respondeu — sessão expirada? rode 'claude login'"
+    fi
+  fi
+  if gh auth status >/dev/null 2>&1; then ok "gh autenticado"
+  else _fail "gh não autenticado — rode 'gh auth login'"; fi
+
+  # --- browser (só importa se há e2e/QA de UI) ---
+  if [ -n "$E2E_CMD" ] || [ -n "$APP_URL" ]; then
+    if command -v agent-browser >/dev/null 2>&1; then
+      ok "$(agent-browser --version 2>&1 | head -1)"
+    else
+      _fail "agent-browser ausente/quebrado — a fase QA exploratória depende dele.
+        Sintoma conhecido: shim em ~/.nvm/versions/node/*/bin/agent-browser apontando para
+        ~/.hermes/... (inexistente). Fix: ln -sf ../lib/node_modules/agent-browser/bin/agent-browser.js <shim>"
+    fi
+  else
+    dim "  ---  agent-browser não checado (E2E_CMD e APP_URL vazios)"
+  fi
+
+  # --- config ---
+  bash -n "$CONFIG_FILE" && ok "config com sintaxe válida"
+  case "$TEST_CMD" in
+    TODO|"") _fail "TEST_CMD não configurado em .sdd/config.sh" ;;
+    *) ok "TEST_CMD=$TEST_CMD" ;;
+  esac
+  if [ "$JIRA_ENABLED" = "true" ]; then
+    if [ -f "$REPO_ROOT/.jira-project" ]; then ok "JIRA habilitado, .jira-project presente"
+    else _fail "JIRA_ENABLED=true mas não há .jira-project no repo (a skill ticket precisa dele)"; fi
+  else
+    dim "  ---  JIRA_ENABLED=false — fase TICKET será pulada"
+  fi
+
+  # --- plugins do repo-alvo ---
+  local settings="$REPO_ROOT/.claude/settings.json"
+  if [ -f "$settings" ]; then
+    local p missing=""
+    for p in ddd kaizen-software; do
+      grep -q "\"$p@" "$settings" || missing="$missing $p"
+    done
+    if [ -z "$missing" ]; then ok "plugins ddd + kaizen-software habilitados"
+    else warn "plugins não habilitados em .claude/settings.json:$missing (o planner os invoca)"; fi
+  else
+    warn ".claude/settings.json ausente — plugins ddd/kaizen não habilitados no repo"
+  fi
+
+  # --- agentes instalados ---
+  local a n=0
+  for a in "$SDD_HOME"/agents/sdd-*.md; do
+    [ -e "$a" ] || continue
+    n=$((n + 1))
+    [ -f "$REPO_ROOT/.claude/agents/$(basename "$a")" ] \
+      || _fail "agente $(basename "$a") não instalado — rode 'sdd install'"
+  done
+  if [ "$n" -gt 0 ]; then ok "$n agente(s) do kit conferidos"; fi
+
+  # --- estado do git ---
+  local branch; branch="$( cd "$REPO_ROOT" && git branch --show-current )"
+  ok "branch atual: $branch"
+  if [ "$branch" = "$DEFAULT_BRANCH" ]; then
+    warn "você está na branch base ($DEFAULT_BRANCH) — o pipeline commita direto aqui se rodar assim"
+  fi
+  if [ -n "$( cd "$REPO_ROOT" && git status --porcelain )" ]; then
+    _fail "working tree sujo — o pipeline precisa de base limpa para atribuir commits aos incrementos"
+  else
+    ok "working tree limpo"
+  fi
+
+  info ""
+  if [ "$fails" -eq 0 ]; then
+    printf '%spreflight ok%s\n' "$C_GREEN$C_BOLD" "$C_RESET"; return 0
+  fi
+  printf '%s%d verificação(ões) falharam%s\n' "$C_RED$C_BOLD" "$fails" "$C_RESET" >&2
+  return 1
+}
+
+cmd_status() {
+  load_config
+  resolve_mission "${1:-}"
+  step "missão $MISSION — $PROJECT_NAME"
+  info ""
+
+  local ph state why
+  for ph in $PHASES; do
+    if "gate_$ph"; then state="${C_GREEN}✓${C_RESET}"; else state="${C_YELLOW}·${C_RESET}"; fi
+    why="$GATE_WHY"
+    printf '  %b %-7s %s%s%s\n' "$state" "$ph" "$C_DIM" "$why" "$C_RESET"
+  done
+
+  info ""
+  local rows; rows="$(checkpoint_rows)"
+  if [ -n "$rows" ]; then
+    info "  incrementos:"
+    local id title _c st commit mark
+    while IFS=$'\t' read -r id title _c st commit; do
+      case "$st" in
+        done)    mark="${C_GREEN}✓${C_RESET}" ;;
+        blocked) mark="${C_RED}✗${C_RESET}" ;;
+        doing)   mark="${C_YELLOW}▸${C_RESET}" ;;
+        *)       mark="${C_DIM}·${C_RESET}" ;;
+      esac
+      printf '    %b %-4s %-46s %s%s%s\n' "$mark" "$id" "${title:0:46}" "$C_DIM" "${commit:0:8}" "$C_RESET"
+    done <<< "$rows"
+  fi
+
+  info ""
+  local next; next="$(current_phase)"
+  if [ -z "$next" ]; then
+    printf '  %spipeline completo — falta só o merge (gate humano)%s\n' "$C_GREEN$C_BOLD" "$C_RESET"
+  else
+    "gate_$next" || true
+    printf '  próxima fase: %s%s%s — %s\n' "$C_BOLD" "$next" "$C_RESET" "$GATE_WHY"
+    printf '  %srode: sdd run %s%s\n' "$C_DIM" "$MISSION" "$C_RESET"
+  fi
+}
+
+# Imprime só o nome da fase corrente (ou DONE). Existe para script e para os testes do kit —
+# `sdd status` é para humano, este é para máquina.
+cmd_phase() {
+  load_config
+  resolve_mission "${1:-}"
+  local next; next="$(current_phase)"
+  printf '%s\n' "${next:-DONE}"
+}
+
+# Imprime o motivo pelo qual o gate de uma fase específica não passou.
+cmd_why() {
+  load_config
+  resolve_mission "${1:-}"
+  local ph="${2:-}"
+  [ -n "$ph" ] || ph="$(current_phase)"
+  [ -n "$ph" ] || { info "pipeline completo"; return 0; }
+  "gate_$ph" || true
+  printf '%s: %s\n' "$ph" "$GATE_WHY"
+}
+
+cmd_version() { info "sdd $SDD_VERSION ($SDD_HOME)"; }
+
+cmd_help() {
+  cat <<'EOF'
+sdd — runner do pipeline de agentes autônomos de desenvolvimento
+
+USO
+  sdd install [--force]      instala o kit no repo-alvo (.sdd/config.sh + .claude/agents/)
+  sdd preflight              sensor de ambiente: ferramentas, auth, config, plugins, git
+  sdd status <missão>        onde a missão está, gate a gate, e o que falta
+  sdd run <missão>           executa da primeira fase não satisfeita até o PR
+  sdd retry <missão>         re-tenta a fase corrente com sessão nova
+  sdd close <missão>         pós-merge: fecha a issue do JIRA
+  sdd help | sdd version
+
+PARA SCRIPT
+  sdd phase <missão>         imprime só a fase corrente (ou DONE)
+  sdd why <missão> [FASE]    imprime por que o gate daquela fase não passou
+
+OPÇÕES DE `run`
+  --dry-run                  imprime os prompts de boot e sai, sem gastar token
+  --phase <FASE>             força uma fase específica (PLAN|TICKET|EXEC|QA|REVIEW|DOCS|PR)
+  --max-phases <N>           para depois de N fases (default: sem limite)
+
+COMO O ESTADO FUNCIONA
+  Não há arquivo de estado. A fase corrente é derivada dos artefatos em
+  docs/handoffs/<missão>/. Sessão morreu? `sdd run` de novo continua do ponto exato.
+  Nenhum gate é satisfeito por texto do modelo — o runner roda os testes e lê o disco.
+EOF
+}
+
+# ---------------------------------------------------------------------------
+main() {
+  local cmd="${1:-help}"
+  shift || true
+  case "$cmd" in
+    install)   cmd_install "$@" ;;
+    preflight) cmd_preflight "$@" ;;
+    status)    cmd_status "$@" ;;
+    phase)     cmd_phase "$@" ;;
+    why)       cmd_why "$@" ;;
+    run)       cmd_run "$@" ;;
+    retry)     cmd_retry "$@" ;;
+    close)     cmd_close "$@" ;;
+    version|--version|-v) cmd_version ;;
+    help|--help|-h) cmd_help ;;
+    *) die "comando desconhecido: $cmd (veja 'sdd help')" ;;
+  esac
+}
+
+# Comandos ainda não implementados (chegam nos próximos incrementos).
+cmd_run()   { die "'sdd run' chega no incremento I5"; }
+cmd_retry() { die "'sdd retry' chega no incremento I5"; }
+cmd_close() { die "'sdd close' chega no incremento I9b"; }
+
+main "$@"
