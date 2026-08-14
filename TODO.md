@@ -223,6 +223,17 @@ Achados sobre **repos-alvo** vão para o `TODO.md` daquele repo. Este arquivo é
   zero é decisão de convenção do repo inteiro e retroagiria a toda a história, o que é escopo de
   missão própria, não de uma fase DOCS. — descoberto por `sdd-docs` na missão
   `20260814-dry-run-completo` (2026-08-14)
+- [ ] **O kit fala PT-BR na prosa, e isso o tranca a um idioma** — `agents/*.md`, `bin/sdd`
+  (mensagens e comentários), `docs/`, `README.md` — o **contrato** já é inglês (`pending`, `doing`,
+  `done`, `blocked`, `auto`, `skipped`, todas as chaves de config); o que está em PT-BR é a prosa.
+  Para o kit ser usável por quem não fala português, a forma certa **não** é traduzir tudo e
+  perder os artefatos em PT-BR: é **o kit falar inglês e o idioma de saída virar config**
+  (`OUTPUT_LANG` no `.sdd/config.sh`), de modo que os agentes escrevam handoffs, commits e PR no
+  idioma do repo-alvo. Sensor: nenhuma string PT-BR fora de `templates/` e `config/examples/`.
+  Zero mudança de comportamento. ⚠️ **Dívida de tradução**: todo incremento escrito antes disto
+  precisa ser re-traduzido depois — por isso a ordem importa mais que o tamanho. — decidido por
+  `humano` em 2026-08-14
+
 - [ ] O `sdd-planner` ainda não foi exercitado numa missão real — as missões planejadas até aqui
   tiveram plano escrito à mão. Primeira missão planejada por ele deve conferir se o gate PLAN-AUTO
   é preenchido com evidência de verdade. — descoberto por `humano` na implementação (2026-08-14)

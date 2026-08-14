@@ -158,6 +158,26 @@ if printf '%s\n' "$out2" | grep -q '│ /qa-report docs/qa'; then
 else
   fail "boot de QA:plan" "prompt começando com /qa-report" "$(printf '%s\n' "$out2" | grep -m1 '│' || echo vazio)"
 fi
+# Com charter E relatório fechado, o ciclo avança para o fechamento (sdd-qa). Esta asserção
+# existe porque a âncora do "relatório fechado" vivia duplicada no gate e no sub-passo: corrigida
+# num lugar só, o gate aceitava e o sub-passo continuava mandando executar — o runner re-rodava
+# qa-execution indefinidamente, a US$ 15 por volta. Medido no piloto SQ-97.
+mkdir -p docs/qa/charters docs/qa/reports
+printf '# CH-um\n' > docs/qa/charters/CH-um.md
+printf -- '# QA Run Report\n- **Started:** 2026-01-01T10:00:00Z · **Status:** closed <!-- in-progress | closed -->\n' \
+  > docs/qa/reports/2026-01-01-fixture.md
+out3="$( "$SDD" run "$MISSION" --dry-run --phase QA 2>&1 )"
+assert_eq "com charter e relatório fechado, o sub-passo é close (não re-executa)" \
+  "QA:close=sdd-qa" "$(printf '%s\n' "$out3" | projected)"
+
+# E o relatório ainda ABERTO tem que voltar a mandar executar — senão a asserção acima passaria
+# por vacuidade, aprovando qualquer coisa.
+sed -i 's/\*\*Status:\*\* closed/**Status:** in-progress/' docs/qa/reports/2026-01-01-fixture.md
+out4="$( "$SDD" run "$MISSION" --dry-run --phase QA 2>&1 )"
+assert_eq "relatório em andamento volta ao sub-passo exec" \
+  "QA:exec=<nenhum>" "$(printf '%s\n' "$out4" | projected)"
+rm -rf docs/qa/charters docs/qa/reports
+
 sed -i 's|^E2E_CMD="true"|E2E_CMD=""|' .sdd/config.sh
 
 # --- a projeção não pode escrever no diário da missão ----------------------

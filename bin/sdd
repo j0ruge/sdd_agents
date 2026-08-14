@@ -324,8 +324,15 @@ gate_QA() {
     # Âncora 1: o relatório datado da skill qa-execution.
     report="$(latest_matching "$REPO_ROOT/$QA_DOCS_PATH/reports/*.md")"
     [ -n "$report" ] || { GATE_WHY="nenhum relatório em $QA_DOCS_PATH/reports/"; return 1; }
-    if ! grep -qE '^\-[[:space:]]+\*\*Status:\*\*[[:space:]]+closed' "$report"; then
-      GATE_WHY="relatório $(basename "$report") não está 'closed'"; return 1
+    # Âncora do relatório da skill qa-execution. O `**Status:**` NÃO começa a linha: o template
+    # dela é `- **Started:** <ts> · **Status:** in-progress <!-- in-progress | closed -->`.
+    # Exigir início de linha fazia o gate nunca casar, e o runner re-rodava qa-execution para
+    # sempre — US$ 15 por volta. Medido no piloto SQ-97.
+    # O `closed` tem que vir logo depois de `**Status:**`: o comentário do template contém a
+    # palavra `closed` na legenda do enum, e um `.*closed` casaria com a linha `in-progress`.
+    if ! report_closed "$report"; then
+      GATE_WHY="relatório $(basename "$report") não está 'closed' (o enum é da skill: in-progress|closed, não traduzir)"
+      return 1
     fi
     # Âncora 2: nenhuma linha da matriz pode continuar Pending.
     if grep -qE '\|[[:space:]]*Pending[[:space:]]*\|' "$report"; then
@@ -463,6 +470,23 @@ phase_model() {
 # A fase QA são três sessões: as skills qa-report/qa-execution têm `disable-model-invocation`,
 # então cada uma precisa entrar pelo slash literal como prompt inicial da SUA sessão (verificado
 # em 2026-08-14: o slash expande em headless e a skill carrega). O sdd-qa fecha o ciclo depois.
+# O relatório datado da skill qa-execution está fechado?
+#
+# UMA função, usada pelo gate E pelo sub-passo. A âncora vivia duplicada nos dois; ao corrigi-la
+# num lugar só, o `gate_QA` passou a aceitar o relatório enquanto o `qa_substep` continuava
+# achando que faltava executar — e o runner re-rodou qa-execution a US$ 15 por volta. Contrato
+# duplicado é contrato que diverge; a duplicação era o bug, não a regex.
+#
+# Detalhes da âncora: `**Status:**` NÃO começa a linha (o template é
+# `- **Started:** <ts> · **Status:** in-progress <!-- in-progress | closed -->`), e o `closed`
+# tem que vir logo depois de `**Status:**` — um `.*closed` casaria com a legenda do enum no
+# comentário, aprovando um relatório ainda em andamento.
+report_closed() {
+  local report="${1:-}"
+  [ -n "$report" ] || return 1
+  grep -qE '^[[:space:]]*-.*\*\*Status:\*\*[[:space:]]*closed' "$report"
+}
+
 qa_substep() {
   local qa="$REPO_ROOT/$QA_DOCS_PATH" report
   # Projeto sem interface para andar (sem E2E_CMD e sem APP_URL): as skills de dogfooding em
@@ -472,9 +496,7 @@ qa_substep() {
   if [ -z "$E2E_CMD" ] && [ -z "$APP_URL" ]; then printf 'close\n'; return 0; fi
   [ -n "$(latest_matching "$qa/charters/*.md")" ] || { printf 'plan\n'; return 0; }
   report="$(latest_matching "$qa/reports/*.md")"
-  if [ -z "$report" ] || ! grep -qE '^\-[[:space:]]+\*\*Status:\*\*[[:space:]]+closed' "$report"; then
-    printf 'exec\n'; return 0
-  fi
+  if ! report_closed "$report"; then printf 'exec\n'; return 0; fi
   printf 'close\n'
 }
 

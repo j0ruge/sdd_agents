@@ -199,7 +199,7 @@ assert_why   "QA acusa relatório ausente" "QA" "nenhum relatório"
 
 cat > "$FIX/docs/qa/reports/2026-01-01-fixture.md" <<'EOF'
 # QA Run Report — 2026-01-01 — fixture
-- **Status:** in-progress
+- **Started:** 2026-01-01T10:00:00Z · **Status:** in-progress <!-- in-progress | closed -->
 | # | Charter | Status |
 |---|---|---|
 | 1 | CH-um | Pending |
