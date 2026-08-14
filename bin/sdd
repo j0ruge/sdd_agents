@@ -919,6 +919,199 @@ cmd_preflight() {
   return 1
 }
 
+# ---------------------------------------------------------------------------
+# Sensor do KIT (≠ preflight, que é do ambiente do repo-alvo).
+#
+# Lê tudo de $SDD_HOME, então funciona rodando de dentro de qualquer repo-alvo e NÃO exige
+# .sdd/config.sh. Responde a uma pergunta só: "o kit ainda mede o que ele diz que mede?"
+#
+# ATENÇÃO ao mexer aqui: este arquivo roda com `set -o pipefail`, e `printf ... | grep -q`
+# devolve 141 quando o grep ACHA e sai antes de o printf terminar de escrever (SIGPIPE) —
+# a lógica fica silenciosamente invertida para entradas grandes e correta para pequenas, que
+# é o pior dos dois mundos. Por isso todas as buscas abaixo usam herestring (`<<<`).
+# ---------------------------------------------------------------------------
+HEALTH_FAILS=0
+HEALTH_ACHADOS=""
+
+health_bad() { bad "$*"; HEALTH_FAILS=$((HEALTH_FAILS + 1)); }
+
+# Registra um achado de drift para a catraca julgar no fim.
+health_achado() { HEALTH_ACHADOS="${HEALTH_ACHADOS}${1}"$'\n'; }
+
+# Chaves com default em load_config(). O bloco é delimitado pelos comentários âncora, e não
+# por número de linha, para não apodrecer no primeiro refactor.
+health_chaves_default() {
+  awk '/^load_config\(\) \{/ { inside = 1 } inside && /^\}/ { exit } inside' "$SDD_HOME/bin/sdd" \
+    | grep -oE '\$\{[A-Z0-9_]+:=' | tr -d '${:=' | sort -u
+}
+
+cmd_health() {
+  local kit="$SDD_HOME" out rc k n
+
+  step "sdd health — sensor do kit em $kit"
+
+  # --- 1. a suíte, que já inclui bash -n e a mutação -------------------------
+  out="$( cd "$kit" && tests/run-all.sh 2>&1 )"; rc=$?
+  if [ "$rc" -eq 0 ]; then ok "suíte verde"; else
+    health_bad "suíte vermelha (rc $rc) — rode tests/run-all.sh para ver"
+    printf '%s\n' "$out" | tail -15 >&2
+  fi
+
+  # --- 2. mutation score, lido da MESMA rodada ------------------------------
+  # A ausência da linha reprova: se o formato do placar mudar, esta checagem ficaria cega e
+  # passaria em silêncio — que é a vacuidade que o próprio check-mutation.sh existe para caçar.
+  local placar
+  placar="$(grep -m1 '^score: ' <<< "$out")"
+  if [ -z "$placar" ]; then
+    health_bad "a suíte não imprimiu a linha 'score:' — o health ficou cego para a mutação"
+  elif grep -qE '^score: [0-9]+ pegas, 0 lacunas' <<< "$placar"; then
+    ok "mutação: $placar"
+  else
+    health_bad "mutação com lacuna aberta — $placar"
+  fi
+
+  # --- 3. todo gate tem mutação --------------------------------------------
+  # Piso explícito: zero gates encontrados passaria por vacuidade (rename, indentação).
+  local gates; gates="$(grep -oE '^gate_[A-Z]+' "$kit/bin/sdd" | sed 's/^gate_//' | sort -u)"
+  n="$(grep -c . <<< "$gates")"
+  if [ "$n" -ne 7 ]; then
+    health_bad "achei $n gates em bin/sdd, esperava 7 — gate novo/renomeado: atualize o piso aqui"
+  else
+    local sem_mutacao=""
+    for k in $gates; do
+      grep -qE "^mut_${k}_" "$kit/tests/check-mutation.sh" || sem_mutacao="$sem_mutacao $k"
+    done
+    if [ -n "$sem_mutacao" ]; then
+      health_bad "gate(s) sem mutação no catálogo:$sem_mutacao — gate que ninguém sabota não é medido"
+    else
+      ok "os 7 gates têm mutação no catálogo"
+    fi
+  fi
+
+  # --- 4. drift load_config() ↔ config/schema.md ----------------------------
+  local documentadas; documentadas="$(grep -oE '^\| `[A-Z0-9_]+`' "$kit/config/schema.md" | tr -d '|` ' | sort -u)"
+  local chaves; chaves="$(health_chaves_default)"
+  for k in $chaves; do
+    grep -qxF "$k" <<< "$documentadas" || health_achado "chave-sem-doc $k"
+  done
+  for k in $documentadas; do
+    grep -qxF "$k" <<< "$chaves" || health_achado "doc-sem-chave $k"
+  done
+
+  # --- 5. subcomando fora do --help ----------------------------------------
+  local subcmds; subcmds="$(awk '/^main\(\) \{/ { inside = 1 } inside && /^\}/ { exit }
+      inside && match($0, /^ +[a-z|+-]+\)/) {
+        rotulo = substr($0, RSTART, RLENGTH); gsub(/[ )]/, "", rotulo); print rotulo
+      }' "$kit/bin/sdd" | tr '|' '\n' | grep -vE '^-' | sort -u)"
+  local ajuda; ajuda="$( "$kit/bin/sdd" help 2>&1 )"
+  for k in $subcmds; do
+    # Basta aparecer como `sdd <cmd>` em qualquer lugar do help: alguns dividem linha
+    # (`sdd help | sdd version`), e exigir coluna fixa reprovaria comando documentado.
+    grep -qE "\bsdd $k\b" <<< "$ajuda" || health_achado "cmd-fora-do-help $k"
+  done
+
+  # --- 6. variável com default e nunca lida --------------------------------
+  # Palavra NUA, não `$K`: QA_MAX_ITER e EXEC_MAX_RETRY vivem em contexto aritmético
+  # (`$(( QA_MAX_ITER * 3 ))`), e um detector que procurasse `$K` os daria como mortos.
+  # Escopo: só bin/sdd. Varrer o kit inteiro faria a chave "aparecer" no schema.md e no
+  # starter.conf — o sensor passaria a medir a documentação da dívida em vez da dívida.
+  # Linha de comentário também não conta como leitura, pelo mesmo motivo: citar a chave numa
+  # explicação a tornaria "viva" e esconderia justamente o que ela representa.
+  local corpo; corpo="$(awk '/^load_config\(\) \{/ { inside = 1 }
+      inside && /^\}/ { inside = 0; next } !inside && !/^[[:space:]]*#/' "$kit/bin/sdd")"
+  for k in $chaves; do
+    grep -qE "\b${k}\b" <<< "$corpo" || health_achado "var-nunca-lida $k"
+  done
+
+  # --- 7. proveniência dos fixtures ----------------------------------------
+  health_proveniencia
+
+  # --- catraca --------------------------------------------------------------
+  health_catraca
+
+  echo
+  if [ "$HEALTH_FAILS" -eq 0 ]; then ok "kit saudável"; return 0; fi
+  bad "$HEALTH_FAILS checagem(ns) reprovaram"
+  return 1
+}
+
+# O fixture tem que casar com o que a skill EMITE. É a contramedida do bug que custou mais
+# caro no kit, e a única checagem que depende da máquina — por isso mora aqui e não na suíte,
+# que precisa continuar hermética. Skill ausente ⇒ pulado, como o shellcheck.
+health_proveniencia() {
+  local gates="$SDD_HOME/tests/check-gates.sh" tpl linha fix pulados=0 conferidos=0
+
+  # relatório da qa-execution: a linha do Status, com o timestamp concretizado no fixture
+  tpl="$HOME/.claude/skills/qa-execution/assets/report-template.md"
+  if [ -f "$tpl" ]; then
+    linha="$(grep -m1 -- '- \*\*Started:\*\*' "$tpl")"
+    fix="$(grep -m1 -- '- \*\*Started:\*\*' "$gates" | sed 's/2026-01-01T10:00:00Z/<ISO timestamp>/')"
+    if [ "$linha" = "$fix" ]; then conferidos=$((conferidos + 1))
+    else health_bad "fixture do relatório divergiu da skill:
+         skill:   $linha
+         fixture: $fix"; fi
+  else pulados=$((pulados + 1)); fi
+
+  # bug do registry: a linha do Status com a legenda do enum
+  tpl="$HOME/.claude/skills/qa-report/assets/bug-template.md"
+  if [ -f "$tpl" ]; then
+    linha="$(grep -m1 -- '- \*\*Status:\*\*' "$tpl")"
+    fix="$(grep -m1 -- '- \*\*Status:\*\* open' "$gates")"
+    if [ "$linha" = "$fix" ]; then conferidos=$((conferidos + 1))
+    else health_bad "fixture do bug divergiu da skill:
+         skill:   $linha
+         fixture: $fix"; fi
+  else pulados=$((pulados + 1)); fi
+
+  # tabela de grade da codereview: todo critério da skill precisa existir no fixture.
+  # `sort -V` na versão do plugin — `sort` lexicográfico poria 1.9 depois de 1.17 (é o bug
+  # que o latest_matching() do runner ainda tem, registrado no TODO; não herdar aqui).
+  tpl="$(find "$HOME/.claude/plugins/cache" -path '*/codereview/*/references/report-template.md' \
+         2>/dev/null | sort -V | tail -1)"
+  if [ -n "$tpl" ] && [ -f "$tpl" ]; then
+    local faltando=""
+    while IFS= read -r k; do
+      [ -n "$k" ] || continue
+      grep -qF "| $k |" "$gates" || faltando="$faltando '$k'"
+    done < <(awk -F'|' '/^\| Criterion \| Grade/ { t = 1; next }
+        t && /^\|-/ { next }
+        t && /^\|/ { c = $2; gsub(/^[ \t]+|[ \t]+$/, "", c); if (c !~ /^\*\*/) print c; next }
+        t { exit }' "$tpl")
+    if [ -n "$faltando" ]; then
+      health_bad "a tabela de grade da skill tem critério que o fixture não cobre:$faltando"
+    else conferidos=$((conferidos + 1)); fi
+  else pulados=$((pulados + 1)); fi
+
+  if [ "$pulados" -gt 0 ]; then
+    ok "proveniência: $conferidos fixture(s) conferido(s), $pulados pulado(s) (skill não instalada)"
+  else
+    ok "proveniência: os 3 fixtures batem com as skills instaladas"
+  fi
+}
+
+# Achado novo reprova; linha da baseline que deixou de ser achado também. As duas direções
+# importam: sem a primeira a dívida cresce sozinha, sem a segunda a lista vira folclore.
+health_catraca() {
+  local bl="$SDD_HOME/tests/health-baseline.txt" conhecidos novos=0 mortas=0 linha
+  conhecidos="$(grep -vE '^[[:space:]]*(#|$)' "$bl" | sed 's/[[:space:]]*#.*//' \
+                | sed 's/[[:space:]]*$//')"
+
+  while IFS= read -r linha; do
+    [ -n "$linha" ] || continue
+    grep -qxF "$linha" <<< "$conhecidos" \
+      || { health_bad "achado fora da baseline: $linha"; novos=$((novos + 1)); }
+  done <<< "$HEALTH_ACHADOS"
+
+  while IFS= read -r linha; do
+    [ -n "$linha" ] || continue
+    grep -qxF "$linha" <<< "$HEALTH_ACHADOS" \
+      || { health_bad "baseline obsoleta: '$linha' não é mais achado — apague a linha"; mortas=$((mortas + 1)); }
+  done <<< "$conhecidos"
+
+  [ "$novos" -eq 0 ] && [ "$mortas" -eq 0 ] \
+    && ok "catraca: $(grep -c . <<< "$conhecidos") dívida(s) conhecida(s), nenhuma nova"
+}
+
 cmd_status() {
   load_config
   resolve_mission "${1:-}"
@@ -1144,6 +1337,7 @@ sdd — runner do pipeline de agentes autônomos de desenvolvimento
 USO
   sdd install [--force]      instala o kit no repo-alvo (.sdd/config.sh + .claude/agents/)
   sdd preflight              sensor de ambiente: ferramentas, auth, config, plugins, git
+  sdd health                 sensor do KIT: suíte, mutação, drift de doc e de config
   sdd status <missão>        onde a missão está, gate a gate, e o que falta
   sdd run <missão>           executa da primeira fase não satisfeita até o PR
   sdd retry <missão>         re-tenta a fase corrente com sessão nova
@@ -1174,6 +1368,7 @@ main() {
   case "$subcmd" in
     install)   cmd_install "$@" ;;
     preflight) cmd_preflight "$@" ;;
+    health)    cmd_health "$@" ;;
     status)    cmd_status "$@" ;;
     phase)     cmd_phase "$@" ;;
     why)       cmd_why "$@" ;;

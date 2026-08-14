@@ -1,0 +1,15 @@
+# Catraca do `sdd health` — dívida conhecida, congelada.
+#
+# Achado que NÃO está aqui reprova: a dívida não pode crescer em silêncio.
+# Linha daqui que DEIXOU de ser achado também reprova: baseline obsoleta é rótulo, não
+# artefato, e uma lista que descreve um mundo que não existe mais é pior do que lista nenhuma.
+# Cada linha precisa de dono — a entrada do TODO.md que vai pagá-la.
+#
+# formato: <check-id> <alvo>   # <dono>        (linhas em branco e iniciadas por # são ignoradas)
+
+var-nunca-lida LINT_CMD           # TODO.md: "config/schema.md promete cinco comportamentos que o runner não tem"
+var-nunca-lida BUILD_CMD          # idem
+var-nunca-lida DEV_UP_CMD         # idem
+var-nunca-lida DEV_READY_CMD      # idem
+var-nunca-lida DEV_READY_TIMEOUT  # idem
+var-nunca-lida E2E_DIR            # TODO.md: "E2E_DIR é lida só pelo agente, nunca pelo runner" (achado desta missão)
