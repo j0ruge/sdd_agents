@@ -26,7 +26,7 @@ faz grep no checkpoint, olha o `git log`). Rótulo ≠ artefato.
 ## Instalação num repo-alvo
 
 ```bash
-# o kit ainda vive só em disco — não há repositório remoto publicado
+# git clone https://github.com/j0ruge/sdd_agents.git   # repositório PRIVADO
 export PATH="$HOME/repos/sdd_agents/bin:$PATH"     # ou ln -s .../bin/sdd ~/.local/bin/sdd
 
 cd ~/repos/meu-projeto
