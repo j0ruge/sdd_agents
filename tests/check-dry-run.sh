@@ -6,7 +6,8 @@
 # não fica sabendo que depois viriam QA, REVIEW, DOCS e PR, nem com que agente cada uma roda.
 #
 # Este teste monta um repo-fixture parado em EXEC e afirma que o dry-run projeta a sequência
-# inteira de fases pendentes, na ordem, cada uma com o agente certo — e que nada no disco muda.
+# inteira de fases pendentes, na ordem, cada uma com o agente certo (ou <nenhum>, quando quem
+# dirige a sessão é uma skill de terceiro pelo slash literal) — e que nada no disco muda.
 #
 # Uso: tests/check-dry-run.sh   (exit 0 = projeção correta)
 
@@ -96,7 +97,7 @@ assert_eq "dry-run sai 0" "0" "$rc"
 
 want="$(printf '%s\n' \
   "EXEC=sdd-executor" \
-  "QA=sdd-qa" \
+  "QA:plan=<nenhum>" \
   "REVIEW=sdd-reviewer" \
   "DOCS=sdd-docs" \
   "PR=sdd-publisher")"
@@ -118,7 +119,10 @@ assert_eq "working tree continua limpo" "" "$(git status --porcelain)"
 # --- --phase continua imprimindo só a fase pedida --------------------------
 echo "== --phase <FASE> =="
 out1="$( "$SDD" run "$MISSION" --dry-run --phase QA 2>&1 )"
-assert_eq "--phase QA imprime só QA" "QA=sdd-qa" "$(printf '%s\n' "$out1" | projected)"
+# QA são três sessões derivadas dos artefatos (planejar → andar → fechar). Sem charters na
+# árvore docs/qa/, o sub-passo é `plan`, e quem dirige é a skill qa-report pelo slash literal —
+# por isso o agente é <nenhum>: dois system prompts disputando a sessão seria ruído.
+assert_eq "--phase QA imprime só o sub-passo corrente" "QA:plan=<nenhum>" "$(printf '%s\n' "$out1" | projected)"
 
 # ---------------------------------------------------------------------------
 echo

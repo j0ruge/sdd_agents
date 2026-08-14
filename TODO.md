@@ -40,10 +40,9 @@ Achados sobre **repos-alvo** vão para o `TODO.md` daquele repo. Este arquivo é
   entende "a sessão avançou — seguindo", rebootando EXEC até estourar `phase_budget` (aqui,
   4 sessões). `blocked` é decisão deliberada de parar a linha: deveria dar `return 3` imediato.
   — descoberto por `sdd-executor` na missão `20260814-dry-run-completo` (2026-08-14)
-- [ ] Confirmar comportamento de `claude -p` com slash command literal (`/qa-report`, `/goal`) em
-  headless — `agents/sdd-qa.md`, `agents/sdd-reviewer.md` — as skills `qa-report`/`qa-execution`
-  têm `disable-model-invocation: true`, então o boot depende do slash pegar; fallback é
-  `--append-system-prompt`. — descoberto por `humano` no planejamento (2026-08-14)
+- [ ] O `sdd-planner` ainda não foi exercitado numa missão real — as missões planejadas até aqui
+  tiveram plano escrito à mão. Primeira missão planejada por ele deve conferir se o gate PLAN-AUTO
+  é preenchido com evidência de verdade. — descoberto por `humano` na implementação (2026-08-14)
 - [ ] Multi-missão concorrente exigiria `git worktree` por missão — hoje é 1 missão por branch por
   vez (YAGNI declarado no plano). Reavaliar se aparecer demanda real. — descoberto por `humano` no
   planejamento (2026-08-14)
@@ -54,6 +53,15 @@ Achados sobre **repos-alvo** vão para o `TODO.md` daquele repo. Este arquivo é
 
 - [x] Re-link do shim quebrado do `agent-browser` (I0) — resolvido em 2026-08-14, com sensor
   permanente no `sdd preflight`.
+- [x] **Boot por slash literal funciona headless** — verificado em 2026-08-14: `claude -p
+  "/qa-report docs/qa …"` carrega as instruções da skill mesmo com `disable-model-invocation:
+  true` (a sessão citou o Step 1 dela de volta). O fallback `--append-system-prompt` fica sem uso.
+  A fase QA passou a ser três sessões — `/qa-report`, `/qa-execution`, `sdd-qa` — com o sub-passo
+  **derivado dos artefatos** (`qa_substep`), não de um contador.
+- [x] **`/goal` NÃO existe neste ambiente** — verificado em 2026-08-14 (`~/.claude/commands/`
+  vazio, nada no cache de plugins). O padrão `/goal /codereview:codereview até Grade A` do
+  template do usuário não é reproduzível headless; o `sdd-reviewer` conduz o laço por instrução
+  própria, que era o fallback previsto no plano.
 - [x] `claude -p --agent <nome>` funciona headless — verificado em 2026-08-14 num repo-fixture:
   a sessão encarnou o `sdd-executor` e recitou a primeira instrução do arquivo do agente. O
   fallback `--append-system-prompt` fica sem uso. `--setting-sources user,project,local` é

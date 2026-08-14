@@ -431,37 +431,104 @@ phase_model() {
   esac
 }
 
-# Agente responsável pela fase.
+# Sub-passo da fase QA, DERIVADO dos artefatos — mesma filosofia dos gates, nenhum estado extra.
+# A fase QA são três sessões: as skills qa-report/qa-execution têm `disable-model-invocation`,
+# então cada uma precisa entrar pelo slash literal como prompt inicial da SUA sessão (verificado
+# em 2026-08-14: o slash expande em headless e a skill carrega). O sdd-qa fecha o ciclo depois.
+qa_substep() {
+  local qa="$REPO_ROOT/$QA_DOCS_PATH" report
+  [ -n "$(latest_matching "$qa/charters/*.md")" ] || { printf 'plan\n'; return 0; }
+  report="$(latest_matching "$qa/reports/*.md")"
+  if [ -z "$report" ] || ! grep -qE '^\-[[:space:]]+\*\*Status:\*\*[[:space:]]+closed' "$report"; then
+    printf 'exec\n'; return 0
+  fi
+  printf 'close\n'
+}
+
+# Identificador do passo: a fase, ou `QA:<sub-passo>`.
+phase_step() {
+  case "$1" in
+    QA) printf 'QA:%s\n' "$(qa_substep)" ;;
+    *)  printf '%s\n' "$1" ;;
+  esac
+}
+
+# Agente responsável pelo passo. Vazio ⇒ quem dirige é a skill do slash, não um agente do kit
+# (dois system prompts disputando a sessão é ruído, não reforço).
 phase_agent() {
   case "$1" in
-    EXEC)   printf '%s\n' "sdd-executor" ;;
-    QA)     printf '%s\n' "sdd-qa" ;;
-    REVIEW) printf '%s\n' "sdd-reviewer" ;;
-    DOCS)   printf '%s\n' "sdd-docs" ;;
-    PR)     printf '%s\n' "sdd-publisher" ;;
-    TICKET) printf '%s\n' "sdd-publisher" ;;
-    *)      printf '%s\n' "" ;;
+    EXEC)      printf '%s\n' "sdd-executor" ;;
+    QA:plan)   printf '%s\n' "" ;;
+    QA:exec)   printf '%s\n' "" ;;
+    QA:close|QA) printf '%s\n' "sdd-qa" ;;
+    REVIEW)    printf '%s\n' "sdd-reviewer" ;;
+    DOCS)      printf '%s\n' "sdd-docs" ;;
+    PR)        printf '%s\n' "sdd-publisher" ;;
+    TICKET)    printf '%s\n' "sdd-publisher" ;;
+    *)         printf '%s\n' "" ;;
+  esac
+}
+
+# Slash literal que abre a sessão, quando a fase é dirigida por uma skill de terceiro.
+phase_slash() {
+  case "$1" in
+    QA:plan) printf '/qa-report %s\n' "$QA_DOCS_PATH" ;;
+    QA:exec) printf '/qa-execution %s\n' "$QA_DOCS_PATH" ;;
+    TICKET)  printf '/ticket open %s\n' "$(frontmatter "$MISSION_DIR/00-missao.md" titulo)" ;;
+    *)       printf '%s\n' "" ;;
   esac
 }
 
 phase_task() {
   case "$1" in
-    EXEC)   printf '%s\n' "executar o PRÓXIMO incremento pendente do checkpoint, em TDD, e commitar" ;;
-    QA)     printf '%s\n' "planejar e executar o QA da missão (relatório datado + specs e2e dos achados confirmados)" ;;
-    REVIEW) printf '%s\n' "revisar e corrigir até todos os critérios ficarem Grade A" ;;
-    DOCS)   printf '%s\n' "sincronizar a documentação viva do repo com o que esta missão mudou" ;;
-    PR)     printf '%s\n' "fazer push e abrir o PR com as evidências das fases anteriores" ;;
-    TICKET) printf '%s\n' "abrir a issue da missão no JIRA, já na sprint ativa" ;;
-    *)      printf '%s\n' "" ;;
+    EXEC)     printf '%s\n' "executar o PRÓXIMO incremento pendente do checkpoint, em TDD, e commitar" ;;
+    QA:plan)  printf '%s\n' "planejar o ciclo de QA desta missão: personas, jornadas, cenários e charters" ;;
+    QA:exec)  printf '%s\n' "andar as jornadas em persona e escrever o relatório datado + o registry de bugs" ;;
+    QA:close|QA) printf '%s\n' "fechar o ciclo de QA: achado confirmado vira spec e2e, bug sanável vira incremento de fix, e escrever o 30-handoff-qa.md" ;;
+    REVIEW)   printf '%s\n' "revisar e corrigir, DENTRO desta sessão, até todos os critérios ficarem Grade A" ;;
+    DOCS)     printf '%s\n' "sincronizar a documentação viva do repo com o que esta missão mudou" ;;
+    PR)       printf '%s\n' "fazer push e abrir o PR com as evidências das fases anteriores" ;;
+    TICKET)   printf '%s\n' "abrir a issue da missão no JIRA, já na sprint ativa, e registrar o 10-ticket.md" ;;
+    *)        printf '%s\n' "" ;;
+  esac
+}
+
+# Instrução extra por fase, quando a fase tem um laço próprio a conduzir.
+phase_extra() {
+  case "$1" in
+    REVIEW) cat <<'EOF'
+
+Conduza o laço revisar → corrigir → re-revisar DENTRO desta sessão, com o relatório de QA em
+mãos, até a tabela "### Overall Grade" fechar com A em TODOS os critérios. (O comando `/goal`
+NÃO existe neste ambiente — verificado; o laço é seu.) Correções vão commitadas: o gate exige
+working tree limpo. Se a sessão terminar sem fechar, escreva o 40-review-r<N>.md com a grade
+REAL — o runner abre uma sessão nova continuando. Grade inflada para passar no gate desliga o
+único sensor de qualidade da missão.
+EOF
+    ;;
+    QA:plan|QA:exec) cat <<'EOF'
+
+A skill acima é a dona da árvore docs/qa/ — siga as instruções dela. Ao terminar, commite o que
+ela escreveu. Não escreva handoff nem toque no checkpoint: isso é do passo seguinte.
+EOF
+    ;;
+    *) printf '' ;;
   esac
 }
 
 # Protocolo de boot — fixo, curto, e sempre o mesmo. Tudo que a sessão precisa saber está
 # em disco; este prompt só diz ONDE olhar e que não houve conversa anterior.
+#
+# Quando a fase é dirigida por skill de terceiro, o slash literal precisa ser a PRIMEIRA linha
+# do prompt: é assim que ele expande em headless (as skills de QA têm disable-model-invocation,
+# então não há outro caminho).
 boot_prompt() {
-  local phase="$1"
+  local step="$1" slash agent
+  slash="$(phase_slash "$step")"
+  agent="$(phase_agent "$pstep")"
+  [ -n "$slash" ] && printf '%s\n\n' "$slash"
   cat <<EOF
-Você é o agente $(phase_agent "$phase") na fase $phase da missão \`$MISSION\` do projeto \`$PROJECT_NAME\`.
+Você está na fase $step da missão \`$MISSION\` do projeto \`$PROJECT_NAME\`${agent:+, como o agente $agent}.
 
 Todo o seu estado vem do disco. NÃO houve conversa anterior — nada foi "combinado" antes.
 Leia, nesta ordem, antes de qualquer outra coisa:
@@ -471,8 +538,8 @@ Leia, nesta ordem, antes de qualquer outra coisa:
   4. o handoff mais recente de $HANDOFF_DIR/$MISSION/ (o que já aconteceu)
   5. .sdd/config.sh (TEST_CMD="$TEST_CMD"${E2E_CMD:+, E2E_CMD=\"$E2E_CMD\"})
 
-Sua tarefa nesta sessão: $(phase_task "$phase").
-
+Sua tarefa nesta sessão: $(phase_task "$step").
+$(phase_extra "$step")
 Escreva os artefatos no disco e commite. O runner reavalia o gate por fora — roda os testes,
 confere os hashes no git log, lê os arquivos. Sua resposta em texto não prova nada e não
 satisfaz gate nenhum. Achado que não cabe nesta missão vai para o $TODO_FILE, nunca para o diff.
@@ -492,11 +559,13 @@ pipeline_log_line() {
 # que o gate passou — quem julga isso é o gate, sempre depois).
 run_phase() {
   local phase="$1" resume_sid="${2:-}"
-  local model agent sid prompt logfile started ended cost
+  local pstep model agent sid prompt logfile started ended cost
+  # QA são três sessões (planejar, andar, fechar); o passo sai dos artefatos, não de um contador.
+  pstep="$(phase_step "$phase")"
   model="$(phase_model "$phase")"
-  agent="$(phase_agent "$phase")"
+  agent="$(phase_agent "$pstep")"
   sid="$(uuidgen)"
-  prompt="$(boot_prompt "$phase")"
+  prompt="$(boot_prompt "$pstep")"
   if [ -n "$resume_sid" ]; then
     prompt="O gate da fase $phase falhou: ${GATE_WHY}
 
@@ -517,7 +586,7 @@ e escreva os artefatos. O gate será reavaliado."
 
   if [ "$DRY_RUN" = "1" ]; then
     info ""
-    printf '%s--- DRY RUN: fase %s ---%s\n' "$C_BOLD" "$phase" "$C_RESET"
+    printf '%s--- DRY RUN: fase %s ---%s\n' "$C_BOLD" "$pstep" "$C_RESET"
     printf '%scwd:%s   %s\n' "$C_DIM" "$C_RESET" "$REPO_ROOT"
     printf '%smodelo:%s %s   %sagente:%s %s   %ssessão:%s %s\n' \
       "$C_DIM" "$C_RESET" "$model" "$C_DIM" "$C_RESET" "${agent:-<nenhum>}" \
@@ -533,7 +602,7 @@ e escreva os artefatos. O gate será reavaliado."
   logfile="$(log_dir)/${phase}-$(date +%Y%m%d-%H%M%S).json"
   mkdir -p "$(dirname "$logfile")"
   started="$(date +%s)"
-  step "fase $phase — $agent ($model) — sessão ${resume_sid:-$sid}"
+  step "fase $pstep — ${agent:-skill} ($model) — sessão ${resume_sid:-$sid}"
 
   local rc=0
   ( cd "$REPO_ROOT" && "${cmd[@]}" ) > "$logfile" 2>"${logfile%.json}.err" || rc=$?
@@ -568,7 +637,7 @@ state_fingerprint() {
 phase_budget() {
   case "$1" in
     EXEC)   printf '%s\n' "$(( $(checkpoint_rows | wc -l) + EXEC_MAX_RETRY + 2 ))" ;;
-    QA)     printf '%s\n' "$QA_MAX_ITER" ;;
+    QA)     printf '%s\n' "$(( QA_MAX_ITER * 3 ))" ;;   # 3 sub-passos por volta
     REVIEW) printf '%s\n' "$REVIEW_MAX_ITER" ;;
     *)      printf '%s\n' "$(( EXEC_MAX_RETRY + 1 ))" ;;
   esac
@@ -1008,7 +1077,38 @@ main() {
   esac
 }
 
-# Comandos ainda não implementados (chegam nos próximos incrementos).
-cmd_close() { die "'sdd close' chega no incremento I9b"; }
+# Pós-merge: fecha a issue do JIRA. Disparado pelo humano depois do merge — é a única coisa
+# que acontece DEPOIS do gate humano, e por isso não faz parte de `sdd run`.
+cmd_close() {
+  load_config
+  resolve_mission "${1:-}"
+  PIPELINE_LOG="$MISSION_DIR/pipeline.log"
+
+  [ "$JIRA_ENABLED" = "true" ] || { info "JIRA_ENABLED=false — nada a fechar"; return 0; }
+  local issue; issue="$(frontmatter "$MISSION_DIR/10-ticket.md" issue)"
+  [ -n "$issue" ] || die "não achei 'issue:' em 10-ticket.md — a fase TICKET rodou?"
+
+  local prurl; prurl="$(frontmatter "$MISSION_DIR/50-pr.md" pr_url)"
+  if [ -n "$prurl" ]; then
+    local merged
+    merged="$( cd "$REPO_ROOT" && gh pr view "$prurl" --json state --jq .state 2>/dev/null || true )"
+    if [ "$merged" != "MERGED" ]; then
+      die "o PR $prurl está '$merged', não MERGED — 'sdd close' é pós-merge"
+    fi
+  fi
+
+  step "fechando $issue"
+  local sid logfile rc=0
+  sid="$(uuidgen)"
+  logfile="$(log_dir)/CLOSE-$(date +%Y%m%d-%H%M%S).json"
+  mkdir -p "$(dirname "$logfile")"
+  ( cd "$REPO_ROOT" && claude -p "/ticket close $issue" \
+      --model "$MODEL_TICKET" --permission-mode "$PERMISSION_MODE" --output-format json \
+      --setting-sources "user,project,local" --allowedTools "$ALLOWED_TOOLS" \
+      --session-id "$sid" --max-budget-usd "$BUDGET_PER_PHASE_USD" ) > "$logfile" 2>&1 || rc=$?
+  pipeline_log_line "$(date -Iseconds)  CLOSE  issue=$issue  sessao=$sid  rc=$rc  log=$logfile"
+  [ "$rc" -eq 0 ] && ok "$issue fechada" || bad "falha ao fechar $issue — ver $logfile"
+  return "$rc"
+}
 
 main "$@"
