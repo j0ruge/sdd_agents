@@ -223,6 +223,25 @@ Achados sobre **repos-alvo** vão para o `TODO.md` daquele repo. Este arquivo é
   zero é decisão de convenção do repo inteiro e retroagiria a toda a história, o que é escopo de
   missão própria, não de uma fase DOCS. — descoberto por `sdd-docs` na missão
   `20260814-dry-run-completo` (2026-08-14)
+- [ ] **`BUDGET_PER_PHASE_USD` é global, mas o custo por fase não é** — `config/schema.md`,
+  `bin/sdd` (`run_phase`) — o teto único de US$ 15/sessão foi calibrado por palpite. Medido em
+  duas missões: as fases de julgamento encostam nele e as mecânicas ficam longe. Piloto SQ-97:
+  TICKET 2,56 · EXEC 7,37 · QA:plan 6,90 · **QA:exec 14,84** · QA:close 9,08; missão do kit:
+  **REVIEW 14,76**. Duas fases a menos de 2% do teto significa que a próxima sessão um pouco
+  mais pesada morre por dinheiro no meio do trabalho — e o runner interpreta isso como "a sessão
+  não avançou", gastando a retentativa contra a mesma parede. Direção: teto **por fase**
+  (`BUDGET_EXEC_USD`, `BUDGET_QA_USD`, …) com o global de default. Sensor durável: o gate reprovar
+  com motivo explícito quando o custo da sessão ficar a menos de 5% do teto, em vez de tratar
+  como sessão improdutiva. — descoberto por `humano` no piloto SQ-97 (2026-08-14)
+- [ ] **Contexto não é gargalo hoje, e isso deveria estar escrito** — `docs/pipeline.md`,
+  `config/schema.md` — medição das 6 sessões do piloto SQ-97: picos de 184k a **289k tokens**,
+  **zero compactações** em todas (`claude-opus-5`). O anti-estouro do plano funciona por
+  construção — sessão por fase mantém a mais pesada em 289k em vez de somar ~1,4M —, mas isso
+  nunca foi medido nem documentado, então é fé, não evidência. Registrar os números no
+  `docs/pipeline.md` e documentar que `--autocompact` (aceita `auto` ou 100k–1M) é uma alavanca
+  disponível e hoje **não usada** pelo runner, para um repo-alvo maior que estoure. — descoberto
+  por `humano` no piloto SQ-97 (2026-08-14)
+
 - [ ] **O kit fala PT-BR na prosa, e isso o tranca a um idioma** — `agents/*.md`, `bin/sdd`
   (mensagens e comentários), `docs/`, `README.md` — o **contrato** já é inglês (`pending`, `doing`,
   `done`, `blocked`, `auto`, `skipped`, todas as chaves de config); o que está em PT-BR é a prosa.
