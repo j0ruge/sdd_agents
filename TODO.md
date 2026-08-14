@@ -136,6 +136,20 @@ Achados sobre **repos-alvo** vão para o `TODO.md` daquele repo. Este arquivo é
   ambiente), ou tirar a promessa do schema e marcar as chaves como reservadas. **Pré-existente
   — já estava em `main`, não foi introduzido por esta missão.** — descoberto por `sdd-reviewer`
   na missão `20260814-dry-run-completo` (2026-08-14)
+- [ ] **A fase TICKET recebe agente E slash ao mesmo tempo, contra a regra escrita ao lado** —
+  `bin/sdd:491` + `bin/sdd:501` — o comentário sobre `phase_agent()` estabelece o invariante:
+  "vazio ⇒ quem dirige é a skill do slash, não um agente do kit (dois system prompts disputando
+  a sessão é ruído, não reforço)". `QA:plan`/`QA:exec` respeitam — agente vazio onde há slash.
+  `TICKET` não: `phase_agent` devolve `sdd-publisher` **e** `phase_slash` devolve
+  `/ticket open <título>`, então a sessão nasce com `--agent sdd-publisher` e o slash literal
+  prependado ao prompt — exatamente o cenário que o comentário condena, sem nota explicando a
+  exceção. E é redundante: a skill `ticket` não tem `disable-model-invocation` (não precisa do
+  workaround do slash, ao contrário de `qa-report`/`qa-execution`), e o `agents/sdd-publisher.md`
+  já manda o agente invocar `/ticket open` por conta própria. Decidir um dos dois: `phase_agent
+  (TICKET)` vazio, ou tirar `TICKET` do `phase_slash`. **Não corrigido aqui de propósito**: é
+  decisão de contrato de fase, e o `00-missao.md` desta missão põe mudança de agente/gate fora de
+  escopo. Não morde hoje porque `JIRA_ENABLED=false` no kit — o piloto `sales_quote` é onde
+  aparece. — descoberto por `sdd-reviewer` na missão `20260814-dry-run-completo` (2026-08-14)
 - [ ] `latest_matching` ordena lexicograficamente e quebra a partir da 10ª rodada —
   `bin/sdd:205-211` — `ls -1d $pattern | sort | tail -1` escolhe o "mais recente" por ordem de
   string: com `40-review-r10.md` presente, `sort` põe `r10` **antes** de `r2`, e o `tail -1`
