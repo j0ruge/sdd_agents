@@ -56,6 +56,11 @@ Achados sobre **repos-alvo** vão para o `TODO.md` daquele repo. Este arquivo é
   evidência da jornada andada. Sensor durável junto: caso em `tests/check-gates.sh` afirmando
   que um projeto sem interface, com handoff `done`, passa no `gate_QA`. — descoberto por
   `sdd-qa` na missão `20260814-dry-run-completo` (2026-08-14)
+  **RESOLVIDO por `53cf63a`** (decisão humana, exatamente a direção sugerida): sem `E2E_CMD` e
+  sem `APP_URL`, a âncora passa a ser o campo `gate:` do próprio handoff. O sensor pedido veio
+  junto — `tests/check-gates.sh` testa o `gate_QA` nos **dois** contratos. Verificado andando a
+  jornada na volta 2 da QA: `sdd why <m> QA` → `jornada andada sem interface de browser
+  (evidência no handoff), suíte verde`. — `sdd-qa`, mesma missão (2026-08-14)
 - [ ] `sdd install` não ignora o `pipeline.log` das missões — `bin/sdd:706-712` — o install só
   acrescenta `.sdd/logs/` ao `.gitignore` do alvo. O `pipeline_log_line` (`bin/sdd:557`) escreve
   em `$HANDOFF_DIR/<missão>/pipeline.log`, que fica **untracked** em qualquer repo-alvo recém
@@ -65,6 +70,13 @@ Achados sobre **repos-alvo** vão para o `TODO.md` daquele repo. Este arquivo é
   install; o piloto `sales_quote` vai sentir. Decidir se o `pipeline.log` é efêmero (entra no
   ignore do install) ou durável (é commitado como os handoffs) — hoje ele é as duas coisas
   dependendo do repo. — descoberto por `sdd-qa` na missão `20260814-dry-run-completo` (2026-08-14)
+  **RESOLVIDO por `53cf63a`**: decidido **efêmero**. `PIPELINE_LOG` passou a ser
+  `$(log_dir)/pipeline.log` = `.sdd/logs/<missão>/`, que o `sdd install` já ignora; o registro
+  durável do que aconteceu continua sendo os handoffs commitados. A volta 2 da QA andou o
+  caminho real e confirmou: o diário cai em `.sdd/logs/<missão>/pipeline.log`, `git status`
+  fica limpo e não sobra nada em `docs/handoffs/`. Agora com sensor
+  (`tests/check-dry-run.sh`, seção "o caminho real (não-dry) ainda escreve no diário"), que
+  falha se o diário voltar para a árvore commitada. — `sdd-qa`, mesma missão (2026-08-14)
 - [ ] A asserção "dry-run não toca no disco" é mais fraca do que parece —
   `tests/check-dry-run.sh:116` — ela vale sobre um fixture parado em EXEC, cujo `gate_EXEC`
   reprova por incremento pendente **antes** de chegar a rodar `TEST_CMD`. Num fixture que
@@ -74,6 +86,23 @@ Achados sobre **repos-alvo** vão para o `TODO.md` daquele repo. Este arquivo é
   gitignored, então não é bug; mas a asserção sugere uma garantia mais forte do que a que existe.
   Vale renomear para "não toca nos artefatos da missão" ou passar a exercitá-la também num
   fixture que chegue a `gate_REVIEW`. — descoberto por `sdd-qa` na missão
+  `20260814-dry-run-completo` (2026-08-14)
+  **Continua aberto — reconfirmado na volta 2 da QA** com evidência nova, agora no repo real e
+  não em fixture: `bin/sdd run 20260814-dry-run-completo --dry-run` (missão parada em `QA:close`)
+  cria `.sdd/logs/<missão>/gate-exec-test-<ts>.log` a cada invocação. A árvore de arquivos
+  **muda**; o `git status` não, porque é gitignored. Segue não sendo bug (é o `TEST_CMD` que os
+  gates rodam de propósito), mas a asserção continua prometendo mais do que entrega.
+- [ ] **A suíte não tem teste de mutação, e por isso não percebe asserção que virou decoração** —
+  `tests/` — quando `53cf63a` moveu o `pipeline.log` para `.sdd/logs/`, a asserção
+  `projeção blocked não cria pipeline.log` continuou apontando para `$MDIR/pipeline.log`, um
+  caminho onde o runner **não escreve mais em nenhuma circunstância**. Ela seguiu imprimindo
+  `ok` — mas por vacuidade: com o bug do F1 reintroduzido à mão, continuava verde. Nenhum sinal
+  na suíte, porque uma asserção que não pode falhar não se distingue de uma que passa. Só
+  apareceu porque a QA rodou mutação à mão. Foi corrigida, mas a **classe** do problema continua:
+  qualquer refactor que mude um caminho pode esvaziar um sensor em silêncio. Direção: um
+  `tests/check-mutation.sh` que aplique um punhado de mutações conhecidas em `bin/sdd` e afirme
+  que a suíte fica **vermelha** em cada uma — sensor do sensor (se a suíte não morre quando o
+  código é sabotado, ela não está medindo nada). — descoberto por `sdd-qa` na missão
   `20260814-dry-run-completo` (2026-08-14)
 - [ ] O `sdd-planner` ainda não foi exercitado numa missão real — as missões planejadas até aqui
   tiveram plano escrito à mão. Primeira missão planejada por ele deve conferir se o gate PLAN-AUTO
@@ -94,6 +123,12 @@ Achados sobre **repos-alvo** vão para o `TODO.md` daquele repo. Este arquivo é
   puras de `bin/sdd` para um arquivo sourceável, ou dar ao runner um modo `--self-test` que
   exercite `pipeline_log_line` com os dois valores de `DRY_RUN`. — descoberto por `sdd-executor`
   na missão `20260814-dry-run-completo` (2026-08-14)
+  **RESOLVIDO na volta 2 da QA** — sem precisar de `--self-test` nem de extrair funções: o
+  caminho de escalação `blocked` **loga e retorna 3 antes de qualquer `run_phase`**, então dá
+  para exercitar o caminho real sem gastar token nem rede. Virou a seção "o caminho real
+  (não-dry) ainda escreve no diário" em `tests/check-dry-run.sh`. O modo de falha exato que este
+  item descrevia (guarda invertida → diário morto, suíte verde) foi reproduzido por mutação e
+  agora **falha em 4 asserções**. — `sdd-qa`, mesma missão (2026-08-14)
 
 ## Feito
 

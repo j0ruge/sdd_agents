@@ -67,6 +67,8 @@ JIRA_ENABLED=false
 EOF
 
 MDIR="$FIX/docs/handoffs/$MISSION"
+# O diário do runner é efêmero e mora fora da árvore commitada (`log_dir()` em bin/sdd).
+PIPELINE_LOG="$FIX/.sdd/logs/$MISSION/pipeline.log"
 mkdir -p "$MDIR"
 cat > "$MDIR/00-missao.md" <<'EOF'
 ---
@@ -162,10 +164,46 @@ after_b="$(tree_snapshot)"
 # regressão — isto já passava antes do achado.
 assert_eq "dry-run de missão blocked escala com exit 3" "3" "$rc3"
 # O Red do achado: a projeção não pode deixar rastro no disco, nem no caminho de escalação.
-assert_eq "projeção blocked não cria pipeline.log" "" \
-  "$( [ -e "$MDIR/pipeline.log" ] && echo "pipeline.log criado" || true )"
+# O diário mora em `.sdd/logs/<missão>/` (mudou de lugar em 53cf63a — antes era `$MDIR`, dentro
+# da árvore commitada, onde sujava o `git status` e derrubava `gate_REVIEW`). Esta asserção
+# precisa apontar para onde o runner ESCREVE hoje: apontada para o caminho velho ela passa a
+# ser decoração — verificado por mutação, com o bug do F1 reintroduzido ela continuava verde.
+assert_eq "projeção blocked não escreve o pipeline.log" "" \
+  "$( [ -e "$PIPELINE_LOG" ] && echo "pipeline.log criado" || true )"
 assert_eq "árvore idêntica antes e depois (caminho blocked)" "$before_b" "$after_b"
 assert_eq "working tree continua limpo (caminho blocked)" "" "$(git status --porcelain)"
+
+# --- o outro lado da guarda: o caminho REAL ainda escreve --------------------
+# Toda asserção acima afirma que a projeção NÃO escreve. Nenhuma afirmava que uma execução de
+# verdade ESCREVE — então inverter a guarda (`= "1"` virar `!= "1"`) mataria o diário da missão
+# em silêncio, com a suíte verde. Escrever de verdade normalmente exigiria uma `run_phase`, que
+# chamaria o `claude`; o caminho de escalação `blocked` é a exceção: ele loga e retorna 3 ANTES
+# de qualquer sessão, então dá para exercitar o caminho real sem gastar token nem rede.
+echo "== o caminho real (não-dry) ainda escreve no diário =="
+# Apagar antes é o que torna a asserção causal em vez de circunstancial: sem isto, um diário
+# deixado para trás pela projeção (exatamente o que acontece se a guarda for invertida) faria
+# o `[ -e ]` passar pelo motivo errado. Verificado por mutação — foi o que aconteceu na 1ª
+# versão desta seção, que dava "ok" com a guarda invertida.
+rm -f "$PIPELINE_LOG"
+"$SDD" run "$MISSION" >/dev/null 2>&1; rc4=$?
+assert_eq "execução real de missão blocked escala com exit 3" "3" "$rc4"
+assert_eq "o caminho real ESCREVE o pipeline.log em .sdd/logs/<missão>/" "existe" \
+  "$( [ -e "$PIPELINE_LOG" ] && echo existe || echo "ausente" )"
+assert_eq "o evento registrado é o BLOCKED" "1" \
+  "$(grep -c 'BLOCKED' "$PIPELINE_LOG" 2>/dev/null || echo 0)"
+# O diário é efêmero por contrato: `.sdd/logs/` está no `.gitignore` que o `sdd install` escreve.
+# Se ele voltar para dentro da árvore commitada, suja o working tree e derruba `gate_REVIEW`.
+assert_eq "o diário fica FORA da árvore commitada" "" "$(git status --porcelain)"
+assert_eq "nada de pipeline.log em docs/handoffs/" "0" \
+  "$(find docs/handoffs -name 'pipeline.log' 2>/dev/null | wc -l | tr -d ' ')"
+
+# Agora que o diário EXISTE, a asserção do F1 fica mais forte: a projeção não pode nem criar
+# nem ALTERAR o diário. `tree_snapshot` compara nomes, não conteúdo — só o md5 pega a escrita
+# num arquivo que já existia, que é o caso de qualquer missão que já rodou uma vez de verdade.
+md5_before="$(md5sum "$PIPELINE_LOG" | cut -d' ' -f1)"
+"$SDD" run "$MISSION" --dry-run >/dev/null 2>&1
+md5_after="$(md5sum "$PIPELINE_LOG" | cut -d' ' -f1)"
+assert_eq "projeção não ALTERA um pipeline.log preexistente" "$md5_before" "$md5_after"
 
 sed -i 's/| blocked |/| pending |/' "$MDIR/checkpoint.md"
 

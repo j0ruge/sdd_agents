@@ -76,6 +76,17 @@ atualizado: 2026-08-14 04:20
   `&&`-list). Sem isso, o conserto podia ter matado o diário real e a suíte seguiria verde, porque
   nenhum sensor exercita o caminho não-dry. Essa lacuna virou entrada no `TODO.md`.
 
+- 2026-08-14 · — · **QA volta 2 — nenhum `F<n>` novo.** Re-andei as jornadas: J3 (o achado do
+  `BUG-dryrun-pipelinelog`) está **curado** — `pipeline.log` com md5 idêntico antes e depois,
+  árvore idêntica, exit 3 preservado. J1 (exit 0, projeta QA:close→REVIEW→DOCS→PR), J2 (PLAN,
+  exit 2, nada projetado) e `--phase` (uma fase só) verdes. A jornada "pipeline completo", que a
+  volta 1 deixou **inconclusiva** por erro de fixture (hash inventado), foi andada até o fim com
+  `gh` stubado: exit 0 e `pipeline completo — falta só o merge`. Um achado de **sensor**, não de
+  produção: `53cf63a` moveu o `pipeline.log` para `.sdd/logs/` e deixou a asserção
+  `projeção blocked não cria pipeline.log` apontando para o caminho velho — provado por mutação
+  que ela passava com o bug do F1 de volta. Corrigi o sensor (é teste, não produção) e cobri o
+  caminho **real** do diário, que nenhum sensor exercitava. Suíte: 118 asserções, 0 falhas.
+
 ## Incrementos de fix (QA)
 
 > Escritos pelo `sdd-qa` quando um bug sanável é reprovado, com ID `F<n>` e Check incluindo
