@@ -935,7 +935,10 @@ cmd_run() {
   PIPELINE_LOG="$(log_dir)/pipeline.log"
 
   step "missão $MISSION — $PROJECT_NAME${DRY_RUN:+}"
-  [ "$DRY_RUN" = "1" ] && dim "  (dry-run: nada será executado)"
+  # "nada será executado" seria mentira: avaliar quais fases estão pendentes obriga a rodar os
+  # gates, e três deles rodam TEST_CMD. O que o dry-run garante é mais estreito — nenhuma sessão
+  # do claude, nenhum toque nos artefatos da missão. Mesma correção de honestidade do --help.
+  [ "$DRY_RUN" = "1" ] && dim "  (dry-run: nenhuma sessão será aberta — mas os gates rodam TEST_CMD)"
 
   local -A attempts=()
   local phases_run=0 phase before after budget
@@ -1014,7 +1017,7 @@ cmd_run() {
       # honesta vale mais do que informação completa e potencialmente errada.
       dry_next="$(next_pending_phase "$phase")"
       [ -n "$dry_next" ] && continue
-      dim "  (dry-run: fim da projeção — nada foi executado)"
+      dim "  (dry-run: fim da projeção — nenhuma sessão foi aberta)"
       return 0
     fi
 
