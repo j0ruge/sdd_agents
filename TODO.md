@@ -140,7 +140,53 @@ Achados sobre **repos-alvo** vão para o `TODO.md` daquele repo. Este arquivo é
   planejamento — o check tem que tolerar o valor `<criada pela fase TICKET>` antes disso.
   — descoberto por `sdd-publisher` e por `humano` no piloto SQ-97 (2026-08-14)
 
-- [ ] **[I13.2 — PRIORIDADE 1] Teste de mutação: a suíte verde não prova que os gates funcionam** —
+- [ ] **`printf | grep -q` com `pipefail` inverte a lógica em silêncio — duas ocorrências vivas** —
+  `bin/sdd:838` (probe do `sdd preflight`) e `bin/sdd:1229` (escalação Jidoka do `blocked`) —
+  o arquivo roda com `set -o pipefail`. Quando o `grep -q` **acha**, ele sai imediatamente e
+  fecha o pipe; o `printf` que ainda escrevia morre de SIGPIPE (141), e o `pipefail` faz o
+  pipeline inteiro devolver 141. Ou seja: **achou → devolve erro**. Medido nesta missão com o
+  mesmo idioma escrito por engano no `cmd_health`, e reproduzido isoladamente:
+  `printf '%s' "$(cat bin/sdd)" | grep -qE '\bTEST_CMD\b'` → `rc=141`, enquanto
+  `grep -qE '\bTEST_CMD\b' <<< "$corpo"` → `rc=0`.
+
+  **Por que não morde hoje:** as duas entradas são pequenas (a saída do probe e as poucas
+  linhas de `ckstatus`), e o `printf` termina de escrever antes de o `grep` sair — o buffer do
+  pipe (64 KB) absorve tudo. A falha depende do TAMANHO da entrada, então passa nos testes e
+  aparece no repo-alvo grande. A 1229 é a pior das duas: é o Jidoka que escala incremento
+  `blocked` **antes** de gastar sessão; com um `checkpoint.md` grande o suficiente, ele
+  simplesmente para de disparar, e a linha não para quando devia. Direção: herestring
+  (`grep -qx "blocked" <<< "$ckstatus"`), que é o que o `cmd_health` já usa, e uma asserção com
+  checkpoint grande. **Pré-existente — não corrigido aqui de propósito:** é mudança de
+  comportamento em caminho de escalação, fora do escopo do I13.2, que era ferramenta de medição.
+  A convenção já entrou no `CLAUDE.md`. — descoberto por `humano` na missão
+  `20260814-i13.2-mutacao-health` (2026-08-14)
+- [ ] **`E2E_DIR` tem default no runner e é lida só pelo agente** — `bin/sdd:81` vs
+  `agents/sdd-qa.md:44` — `: "${E2E_DIR:=e2e}"` é a única ocorrência da chave no `bin/sdd`:
+  nenhum gate, nenhum prompt de boot e nenhum comando do runner a consultam. Quem usa o valor é
+  o texto do `sdd-qa`, que fala de `e2e/` por conta própria — ou seja, mudar `E2E_DIR` no
+  `.sdd/config.sh` **não muda onde as specs são commitadas**, e o usuário não tem como saber
+  disso. É a mesma família dos cinco comportamentos que o `config/schema.md` promete e o runner
+  não tem, mas com um agravante: aqui a chave parece funcionar porque o default e a convenção
+  do agente coincidem. Direção: ou o runner passa `E2E_DIR` ao prompt da fase QA, ou a chave sai
+  do schema. Está congelada na catraca `tests/health-baseline.txt` até então. — descoberto por
+  `sdd health` na missão `20260814-i13.2-mutacao-health` (2026-08-14)
+- [ ] **`cmd_health` é o único comando do runner sem sensor** — `bin/sdd` (`cmd_health`,
+  `health_proveniencia`, `health_catraca`) — o catálogo de mutação cobre os 7 gates e o diário,
+  e o próprio `sdd health` cobra mutação por gate; mas o `cmd_health` **não é gate**, então
+  ninguém sabota as sete checagens dele. O risco é concreto e já se materializou durante esta
+  missão: duas das checagens nasceram com a lógica invertida pelo `pipefail` e passaram a
+  impressão de estar medindo. Elas foram pegas à mão, não por sensor. Direção: mutações
+  `mut_HEALTH_*` (catraca que não reprova achado novo, proveniência que passa com skill
+  ausente, contagem de gates sem piso) e um fixture de kit sabotado para o health julgar.
+  — descoberto por `humano` na missão `20260814-i13.2-mutacao-health` (2026-08-14)
+- [x] **[I13.2 — FEITO em 935ec39] Teste de mutação: a suíte verde não prova que os gates funcionam** —
+  **Fechado:** `tests/check-mutation.sh` sabota o `bin/sdd` numa cópia com 15 mutações — uma
+  por gate, as três da tabela abaixo e a do diário invertido — e exige a suíte vermelha em
+  cada uma. Score **15/15**. `sdd health` reprova abaixo de 100% e cobra mutação por gate.
+  As duas lacunas que o catálogo revelou foram fechadas com asserção nova (`TEST_CMD`
+  vermelho) e fixture verbatim (legenda do enum do registry de bugs). Suíte: 3,7s → 12,2s.
+  Registro completo no `KAIZEN_LOG.md`.
+  Detalhe histórico preservado abaixo —
   `tests/check-mutation.sh` (novo) + `sdd health` — **evidência acumulada: três bugs de gate da
   MESMA família, todos passando pela suíte verde, todos só descobertos em uso real, cada um
   custando sessão paga:**
@@ -160,7 +206,7 @@ Achados sobre **repos-alvo** vão para o `TODO.md` daquele repo. Este arquivo é
   passam a usar o formato **copiado da skill**, não escrito de memória.
   — descoberto por `sdd-qa` e por `humano` nas missões `20260814-dry-run-completo` e
   `20260814-sq94-spinner-reblur` (2026-08-14)
-- [ ] **A suíte não tem teste de mutação, e por isso não percebe asserção que virou decoração** —
+- [x] **[FEITO em 935ec39] A suíte não tem teste de mutação, e por isso não percebe asserção que virou decoração** —
   `tests/` — quando `53cf63a` moveu o `pipeline.log` para `.sdd/logs/`, a asserção
   `projeção blocked não cria pipeline.log` continuou apontando para `$MDIR/pipeline.log`, um
   caminho onde o runner **não escreve mais em nenhuma circunstância**. Ela seguiu imprimindo

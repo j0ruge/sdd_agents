@@ -27,6 +27,24 @@ pelo runner — rodando os testes, conferindo hash no `git log`, lendo o relató
 PLAN → TICKET → EXEC ⇄ QA → REVIEW → DOCS → PR → (merge: humano)
 ```
 
+## Quem mede os gates
+
+Os gates medem a missão. Quem mede **os gates** é `tests/check-mutation.sh`: ele sabota o
+`bin/sdd` numa cópia — uma sabotagem por gate, mais as três que já custaram sessão paga — e
+exige que a suíte fique **vermelha** em cada uma. Uma asserção que não pode falhar não se
+distingue de uma que passa, e foi assim que três bugs de gate atravessaram a suíte verde.
+
+Duas consequências práticas para quem mexe aqui:
+
+- **gate novo entra com mutação.** `sdd health` reprova gate sem entrada no catálogo — não é
+  cortesia, é a única forma de saber que o gate novo é medido.
+- **fixture que imita skill de terceiro é copiado da fonte**, com o caminho no comentário de
+  proveniência. Fixture escrito de memória concorda com o gate errado para sempre; a mutação
+  provaria só que o gate mede o formato imaginado com rigor.
+
+O `sdd health` roda tudo isso de uma vez e responde "o kit ainda mede o que diz medir?".
+Ele é do **kit**; o `sdd preflight` é do **ambiente do repo-alvo** — não confundir.
+
 ## Os gates
 
 ### PLAN — o único que o runner não executa

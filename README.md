@@ -45,7 +45,15 @@ sdd status <missão>    # onde está, o que falta, por que travou
 sdd retry <missão>     # re-tenta a fase corrente com sessão nova
 sdd close <missão>     # pós-merge: fecha a issue do JIRA
 sdd run <missão> --dry-run   # projeta o pipeline inteiro sem gastar token
+sdd health             # sensor do KIT (≠ preflight, que é do ambiente do alvo)
 ```
+
+O `sdd health` responde *"o kit ainda mede o que ele diz que mede?"* — roda a suíte, exige
+**mutation score 100%**, cobra uma mutação por gate, e acusa drift entre `load_config()` e
+`config/schema.md`, comando fora do `--help`, variável com default e nunca lida, e fixture que
+divergiu da skill que ele imita. Dívida conhecida vive congelada em `tests/health-baseline.txt`,
+com o dono no `TODO.md`: achado novo reprova, e linha da baseline que deixou de ser achado
+também. Não gasta sessão paga e não precisa de `.sdd/config.sh`.
 
 O `--dry-run` responde *"o que acontece se eu rodar isto?"*: imprime **todas** as fases que a
 missão percorreria a partir do estado de hoje — na ordem, cada uma com agente, modelo e prompt de

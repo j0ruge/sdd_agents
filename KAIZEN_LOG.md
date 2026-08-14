@@ -4,6 +4,82 @@ Registro de melhorias com **antes/depois medido**. Sem número, não entra.
 
 ---
 
+## 2026-08-14 — O sensor do sensor: a suíte verde não provava nada (I13.2)
+
+**Problema (Gemba):** três bugs de gate da **mesma família** atravessaram a suíte verde e só
+apareceram em uso real, cada um custando sessão paga — âncora de `**Status:**` no início da
+linha (~US$ 15/volta), a mesma âncora duplicada em dois lugares divergindo ao ser corrigida num
+só (~US$ 15/volta), e o parser da grade parando em `###` quando a seção seguinte é `##`
+(~US$ 10). Somou-se a isso uma asserção que virou decoração ao mudar de caminho num refactor e
+seguiu imprimindo `ok` por **vacuidade**.
+
+### 5 Porquês
+
+- **Sintoma:** o gate reprovava relatório correto (ou aceitava errado) e a suíte não acusava.
+1. Por quê? A âncora do gate não casava com o texto que a skill realmente emite.
+2. Por quê? O fixture usava um formato **escrito de memória**, não o emitido.
+3. Por quê? Nada obrigava a copiar da fonte — gate e fixture têm o mesmo autor e nasceram da
+   mesma suposição.
+4. Por quê? Fixture e gate concordarem entre si é indistinguível de estarem certos: a suíte
+   verde **confirma** a suposição em vez de medi-la.
+5. Por quê (**causa raiz de processo**)? **Não existia sensor do sensor** — nada exigia que a
+   suíte ficasse vermelha quando o runner é sabotado, então asserção vazia passa verde sempre.
+
+**Contramedida (as duas metades, uma não fecha a causa sem a outra):** `tests/check-mutation.sh`
+com 15 sabotagens catalogadas — mede se a asserção é viva; e fixtures **copiados da fonte** com
+comentário de proveniência — mede se a suposição é a certa. Só mutação provaria que o gate mede
+o formato imaginado com rigor.
+
+| | Antes | Depois (medido) |
+|---|---|---|
+| Sabotagens do runner que a suíte pega | **0 de 0** (não havia catálogo) | **15 de 15 (100%)** |
+| Lacunas reveladas pelo catálogo | — | 2 encontradas, 2 fechadas |
+| Gates com mutação | 0 de 7 | **7 de 7**, cobrado pelo `sdd health` |
+| Sensor do kit em 1 comando | nenhum | `sdd health` → exit 0 |
+| Dívida de drift medida e congelada | não medida | 6 itens, cada um com dono no `TODO.md` |
+| Tempo da suíte | 3,7s | 12,2s (mutantes em levas de 4) |
+| Entradas do `TODO.md` | 25 abertas | 23 fechadas + 3 novas = 26 |
+
+**As duas lacunas que o catálogo revelou** (nenhuma delas visível antes de existir mutação):
+o fixture roda `TEST_CMD="true"`, que não pode falhar — então um gate que descartasse o rc da
+suíte passava despercebido; e o fixture de bug do registry não tinha a legenda do enum
+(`<!-- open | fixed | verified | wont-fix | invalid -->`), então afrouxar o grep para
+`Status.*open` sobrevivia verde, bloqueando um `wont-fix` que é decisão humana.
+
+**Padronizado em:** `CLAUDE.md` (§ TDD aqui dentro) — fixture copiado da fonte, gate novo entra
+com mutação, e o aviso do `pipefail`. Conferido no arquivo, não só afirmado aqui.
+Também em `docs/pipeline.md` (§ Quem mede os gates) e `README.md` (§ Uso).
+
+### Desperdícios evitados (cortes conscientes)
+
+- **Superprocessamento:** nada de motor de mutação genérico (mutmut/stryker) — mutante gerado
+  produz centenas de equivalentes e um score que ninguém sabe agir. O catálogo é escrito à mão:
+  uma entrada por bug que aconteceu ou por gate que existe.
+- **Superprodução:** sem `--json`, sem histórico de score em disco (violaria "sem arquivo de
+  estado"), sem mutar `agents/*.md`. Cortada também a checagem `bash -n` do health — a suíte
+  já a roda.
+- **Espera:** mutantes em levas de 4. Seriais seriam ~55s; medido: 12,2s a suíte inteira.
+
+### O que aprendemos
+
+- **`printf | grep -q` com `pipefail` inverte a lógica.** O `grep -q` sai no primeiro match e
+  fecha o pipe; o `printf` morre de SIGPIPE (141) e o `pipefail` propaga — **achou vira erro**.
+  Pior: depende do TAMANHO da entrada (o buffer de 64 KB absorve as pequenas), então passa nos
+  testes e falha no repo-alvo grande. Duas ocorrências pré-existentes ficaram registradas no
+  `TODO.md`, uma delas no Jidoka do `blocked`. Use herestring.
+- **Regex de detector também apodrece.** A primeira medição contou 5 variáveis nunca lidas
+  porque a classe `[A-Z_]+` não casa o dígito de `E2E_DIR`; e contou `QA_MAX_ITER` como morta
+  porque procurava `$K`, e ela vive em contexto aritmético (`$(( QA_MAX_ITER * 3 ))`). Sensor
+  que erra para os dois lados treina a ignorar o sensor.
+- **O harness precisa da própria rede.** Três filtros: corrida de **controle** (a cópia sem
+  sabotagem tem que ficar verde, senão o placar dá 100% por vacuidade), `cmp` (mutação que não
+  aplicou é âncora perdida — erro do catálogo, nunca ponto) e `bash -n`.
+- **Check negativo em trabalho não commitado apaga trabalho.** O Check do `sdd health` usa
+  `git checkout bin/sdd` para desfazer a sabotagem; rodado antes do commit, levou junto a
+  implementação inteira. Commite primeiro, sabote depois.
+
+---
+
 ## 2026-08-14 — Nascimento do kit
 
 **Problema (Gemba):** o fluxo de desenvolvimento documentado em

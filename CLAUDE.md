@@ -73,8 +73,22 @@ O kit é bash + markdown, então o "teste" é o **Check** de cada incremento do 
 com resultado esperado. Escreva o Check antes de implementar o incremento.
 
 A suíte é `tests/run-all.sh` — é ela o `TEST_CMD` deste repo, e é ela que os gates rodam. Sensor
-novo entra lá (`check-templates.sh`, `check-gates.sh`, `check-dry-run.sh` são os de hoje).
-`sdd preflight`, `bash -n bin/sdd` e os dry-runs completam, mas não substituem.
+novo entra lá (`check-templates.sh`, `check-gates.sh`, `check-dry-run.sh`, `check-mutation.sh`
+são os de hoje). `sdd preflight`, `bash -n bin/sdd` e os dry-runs completam, mas não substituem.
+
+**Fixture que imita saída de skill de terceiro é copiado da fonte**, com o caminho no comentário
+de proveniência — nunca escrito de memória. Três bugs de gate nasceram de fixture imaginado:
+gate e fixture tinham o mesmo autor e a mesma suposição, então a suíte verde *confirmava* a
+suposição em vez de medi-la, e fixture errado passa verde para sempre. `sdd health` confere a
+proveniência contra as skills instaladas.
+
+**Gate novo entra com mutação** em `tests/check-mutation.sh` — `sdd health` reprova gate sem
+mutação no catálogo. Sabotar o gate e exigir que a suíte morra é o que prova que a asserção
+mede alguma coisa; sem isso não há como distinguir asserção viva de decoração.
+
+⚠️ Este arquivo roda com `set -o pipefail`: `printf … | grep -q` devolve **141** quando o grep
+ACHA e sai antes de o printf terminar de escrever (SIGPIPE). A lógica fica invertida em entrada
+grande e correta em entrada pequena — o pior dos dois mundos. Use herestring (`<<< "$var"`).
 
 ## Kaizen
 
