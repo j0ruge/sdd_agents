@@ -86,6 +86,10 @@ load_config() {
   : "${QA_MAX_ITER:=3}"; : "${REVIEW_MAX_ITER:=3}"; : "${EXEC_MAX_RETRY:=1}"
   : "${BUDGET_PER_PHASE_USD:=15}"; : "${PUBLISH_ON_REVIEW_BLOCKED:=off}"
   : "${PERMISSION_MODE:=acceptEdits}"; : "${JIRA_ENABLED:=false}"
+  # `acceptEdits` auto-aprova EDIÇÃO DE ARQUIVO, não `Bash`. Sem esta allowlist a sessão de fase
+  # não roda TEST_CMD, não roda `git add`/`git commit` e a fase EXEC fica insatisfazível por
+  # construção. Descoberto pela missão-fixture 20260814-dry-run-completo, que travou nisso.
+  : "${ALLOWED_TOOLS:=Bash}"
 
   [ -n "$PROJECT_NAME" ]   || die "PROJECT_NAME vazio em $CONFIG_FILE"
   [ -n "$DEFAULT_BRANCH" ] || die "DEFAULT_BRANCH vazio em $CONFIG_FILE"
@@ -493,6 +497,7 @@ e escreva os artefatos. O gate será reavaliado."
     --permission-mode "$PERMISSION_MODE"
     --output-format json
     --setting-sources "user,project,local"
+    --allowedTools "$ALLOWED_TOOLS"
     --max-budget-usd "$BUDGET_PER_PHASE_USD")
   if [ -n "$agent" ]; then cmd+=(--agent "$agent"); fi
   if [ -n "$resume_sid" ]; then cmd+=(--resume "$resume_sid" --fork-session)
@@ -642,11 +647,24 @@ cmd_preflight() {
   done
 
   # --- autenticação ---
+  # Sanidade + permissão numa tacada só. "claude -p responde" NÃO cobre o modo de falha que
+  # importa: a sessão de fase precisa EXECUTAR (rodar a suíte, commitar), e `acceptEdits`
+  # sozinho não libera `Bash`. Este check dispara uma sessão headless real com AS MESMAS flags
+  # do run_phase e exige que ela consiga executar um comando.
   if command -v claude >/dev/null 2>&1; then
-    if claude -p "responda apenas: ok" --model haiku >/dev/null 2>&1; then
-      ok "OAuth do claude respondendo"
-    else
+    local probe
+    probe="$( cd "$REPO_ROOT" && claude -p "Rode exatamente: bash -c 'echo sdd-preflight-ok'. Responda somente com a saída do comando." \
+        --model haiku --permission-mode "$PERMISSION_MODE" --output-format json \
+        --setting-sources "user,project,local" --allowedTools "$ALLOWED_TOOLS" \
+        --max-budget-usd 1 2>/dev/null | jq -r '.result // ""' 2>/dev/null || true )"
+    if printf '%s' "$probe" | grep -q 'sdd-preflight-ok'; then
+      ok "sessão headless executa comandos (OAuth + permissão)"
+    elif [ -z "$probe" ]; then
       _fail "claude -p não respondeu — sessão expirada? rode 'claude login'"
+    else
+      _fail "a sessão headless NÃO consegue executar comandos — as fases não vão rodar a suíte
+        nem commitar. Resposta obtida: $(printf '%s' "$probe" | head -c 120)
+        Ajuste ALLOWED_TOOLS em .sdd/config.sh (default: Bash)."
     fi
   fi
   if gh auth status >/dev/null 2>&1; then ok "gh autenticado"
@@ -825,6 +843,20 @@ cmd_run() {
       dim "  sdd-planner (modelo Fable) e produza 00-missao.md, 01-plano.md e checkpoint.md."
       dim "  Quando o gate PLAN-AUTO fechar limpo, 'sdd run $MISSION' segue sozinho até o PR."
       return 2
+    fi
+
+    # Jidoka de verdade: incremento `blocked` escala NA HORA. Sem isto o runner via a mudança
+    # no checkpoint como "progresso" e rebootava EXEC até estourar o orçamento de fase — três
+    # sessões contra a mesma parede. Achado da própria missão-fixture 20260814-dry-run-completo.
+    if [ "$phase" = "EXEC" ] && checkpoint_rows | cut -f4 | grep -qx "blocked"; then
+      gate_EXEC || true
+      info ""
+      bad "BLOCKED em EXEC — $GATE_WHY"
+      dim "  A linha parou de propósito: um incremento foi marcado 'blocked' pelo executor."
+      dim "  Leia as 'Notas de execução' do checkpoint.md — o motivo está escrito lá."
+      dim "  Resolvido o impedimento, volte o incremento para 'pending' e rode 'sdd run' de novo."
+      pipeline_log_line "$(date -Iseconds)  BLOCKED  EXEC  incremento marcado blocked pelo executor"
+      return 3
     fi
 
     budget="$(phase_budget "$phase")"

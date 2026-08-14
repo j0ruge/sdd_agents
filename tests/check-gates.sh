@@ -113,6 +113,20 @@ printf -- '---\nfase: EXEC\nstatus: done\n---\n' > "$MDIR/20-handoff-exec.md"
 git add -A && git commit -qm "chore: handoff"
 assert_phase "handoff escrito, suíte verde" "QA"
 
+# Jidoka: incremento `blocked` escala NA HORA, sem queimar sessão.
+# `sdd run` decide isso antes de invocar o claude, então este teste não gasta token.
+cp "$MDIR/checkpoint.md" "$MDIR/checkpoint.jidoka.bak"
+sed -i "s/| done | $REAL_HASH |/| blocked | — |/" "$MDIR/checkpoint.md"
+rm -f "$MDIR/20-handoff-exec.md"
+run_out="$( cd "$FIX" && "$SDD" run "$MISSION" 2>&1 )"; run_rc=$?
+if [ "$run_rc" -eq 3 ] && printf '%s' "$run_out" | grep -q "BLOCKED em EXEC"; then
+  pass "incremento 'blocked' escala na hora (exit 3, sem gastar sessão)"
+else
+  fail "incremento 'blocked' deve escalar na hora" "exit 3 + 'BLOCKED em EXEC'" "exit $run_rc: $(printf '%s' "$run_out" | tail -3)"
+fi
+mv "$MDIR/checkpoint.jidoka.bak" "$MDIR/checkpoint.md"
+printf -- '---\nfase: EXEC\nstatus: done\n---\n' > "$MDIR/20-handoff-exec.md"
+
 # Status inválido no checkpoint reprova alto, não em silêncio.
 cp "$MDIR/checkpoint.md" "$MDIR/checkpoint.bak"
 sed -i "s/| done | $REAL_HASH |/| concluído | $REAL_HASH |/" "$MDIR/checkpoint.md"

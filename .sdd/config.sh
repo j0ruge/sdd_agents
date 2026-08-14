@@ -26,3 +26,6 @@ PERMISSION_MODE="acceptEdits"
 
 # O kit ainda nao existe como projeto no JIRA — a fase TICKET e exercitada no piloto sales_quote.
 JIRA_ENABLED=false
+
+# acceptEdits nao libera Bash — sem isto a fase EXEC e insatisfazivel (ver KAIZEN_LOG).
+ALLOWED_TOOLS="Bash"

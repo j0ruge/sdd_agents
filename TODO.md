@@ -13,6 +13,28 @@ Achados sobre **repos-alvo** vão para o `TODO.md` daquele repo. Este arquivo é
 
 ## Aberto
 
+- [ ] **BLOQUEANTE — a sessão de fase headless não tem permissão para rodar `TEST_CMD`** —
+  `bin/sdd:491-499` — `run_phase()` invoca `claude -p … --permission-mode "$PERMISSION_MODE"`
+  (`acceptEdits`) sem `--allowedTools`; `acceptEdits` auto-aprova **edição de arquivo**, não
+  `Bash`. Na prática a sessão EXEC só consegue ler (`git`, `ls`, `cat`, `Read`): `tests/run-all.sh`,
+  `bash -n bin/sdd` e até `bash -c 'echo hello'` são negados com "This command requires approval".
+  **`git add` também é negado** (só o `git` de leitura passa), então a sessão não consegue nem
+  commitar — e `gate_EXEC` exige hash real no `git log`. A fase EXEC é, hoje, insatisfazível por
+  construção: o agente não roda a suíte na abertura, não vê o Red, não verifica o Green e não
+  produz o artefato que o gate cobra. Vale igual para QA/REVIEW, cujos gates também rodam
+  `TEST_CMD`, e para PR, que precisa de `git push`/`gh`. Direção: passar `--allowedTools` em
+  `run_phase()` cobrindo `TEST_CMD`/`E2E_CMD`/`LINT_CMD` e o `git` de escrita (ou fazer
+  `sdd install` escrever `permissions.allow` no `.claude/settings.json` do alvo). Sensor durável: um check no `sdd preflight` que dispara uma sessão headless real e
+  afirma que ela **consegue executar** `TEST_CMD` — hoje o preflight só valida `claude -p`
+  respondendo (`bin/sdd:646`), o que não cobre este modo de falha. — descoberto por `sdd-executor`
+  na missão `20260814-dry-run-completo` (2026-08-14)
+- [ ] Incremento `blocked` no checkpoint deveria escalar na hora, não gastar o orçamento de
+  sessões — `bin/sdd:276` + `bin/sdd:830-844` — `gate_EXEC` já sabe dizer "Jidoka: a linha para",
+  mas `cmd_run` só distingue gate-insatisfeito de gate-insatisfeito-e-sem-progresso; como a
+  sessão que marca `blocked` mexe no `checkpoint.md`, o `state_fingerprint` muda e o runner
+  entende "a sessão avançou — seguindo", rebootando EXEC até estourar `phase_budget` (aqui,
+  4 sessões). `blocked` é decisão deliberada de parar a linha: deveria dar `return 3` imediato.
+  — descoberto por `sdd-executor` na missão `20260814-dry-run-completo` (2026-08-14)
 - [ ] Confirmar comportamento de `claude -p` com slash command literal (`/qa-report`, `/goal`) em
   headless — `agents/sdd-qa.md`, `agents/sdd-reviewer.md` — as skills `qa-report`/`qa-execution`
   têm `disable-model-invocation: true`, então o boot depende do slash pegar; fallback é

@@ -65,6 +65,7 @@ nunca silenciosa** (kaizen K3). Valores: qualquer alias aceito por `claude --mod
 | `BUDGET_PER_PHASE_USD` | `15` | Vai em `--max-budget-usd` por sessão. Teto de dano, não orçamento. |
 | `PUBLISH_ON_REVIEW_BLOCKED` | `off` | `draft` ⇒ review estourado abre PR **draft** com a grade atual e as pendências, em vez de parar seco. |
 | `PERMISSION_MODE` | `acceptEdits` | Teto. `bypassPermissions` **nunca** é default do kit. |
+| `ALLOWED_TOOLS` | `Bash` | Vai em `--allowedTools`. **Obrigatório na prática**: `acceptEdits` auto-aprova edição de arquivo, mas **não** `Bash` — sem esta chave a sessão de fase não roda a suíte nem consegue commitar, e a fase EXEC fica insatisfazível. Verificado na missão-fixture `20260814-dry-run-completo`. |
 
 ## JIRA
 
