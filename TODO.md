@@ -83,6 +83,17 @@ Achados sobre **repos-alvo** vão para o `TODO.md` daquele repo. Este arquivo é
   planejamento (2026-08-14)
 - [ ] Destilar handoffs/KAIZEN_LOG para o vault Obsidian continua manual/editorial. Avaliar um
   `sdd digest` que gere o rascunho. — descoberto por `humano` no planejamento (2026-08-14)
+- [ ] A suíte não exercita o caminho **real** (não-dry-run) de `pipeline_log_line` — `bin/sdd:557`
+  — todo sensor que temos afirma que a projeção **não** escreve; nenhum afirma que uma fase de
+  verdade **escreve**. Escrever no `pipeline.log` exige uma `run_phase` real, que chamaria o
+  `claude`, então nenhum fixture chega lá. Consequência: um refactor que quebre a guarda ao
+  contrário (por exemplo trocá-la por um `return 0` incondicional, ou pôr `[ … ] && return 0`
+  como última linha da função, onde o `set -e` do caller morde) mata o diário da missão em
+  silêncio e a suíte segue verde. Nesta sessão a garantia só existiu porque provei o caminho
+  não-dry à mão, num probe descartável — o oposto de sensor durável. Direção: extrair as funções
+  puras de `bin/sdd` para um arquivo sourceável, ou dar ao runner um modo `--self-test` que
+  exercite `pipeline_log_line` com os dois valores de `DRY_RUN`. — descoberto por `sdd-executor`
+  na missão `20260814-dry-run-completo` (2026-08-14)
 
 ## Feito
 

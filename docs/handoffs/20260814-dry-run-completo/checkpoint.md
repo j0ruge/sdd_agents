@@ -58,6 +58,23 @@ atualizado: 2026-08-14 04:20
   `pipeline_log_line` e retorna 3 **antes** do bloco `DRY_RUN` — o único `pipeline_log_line`
   alcançável em dry-run (o de `run_phase` está atrás da guarda). Não conserte aqui: o sensor
   `tests/check-dry-run.sh` já está commitado **vermelho** (3 asserções), que é o Red do F1.
+- 2026-08-14 · `f1c9f3f` · **F1 → `done`.** TDD com **Red herdado**: não escrevi teste novo — rodei
+  `tests/run-all.sh` na abertura e vi as 3 asserções da QA falharem pelo motivo certo (101 verdes,
+  exit 1); só então toquei `bin/sdd`. Depois: exit 0, 104 asserções, zero falhas. Re-walk do Check
+  na missão real (I1 flipado para `blocked` e revertido): exit 3, `pipeline.log` com md5 idêntico,
+  `git status` sem novidade.
+- 2026-08-14 · `f1c9f3f` · Decisão de implementação: a guarda ficou **dentro** de
+  `pipeline_log_line` (`bin/sdd:557`), não no chamador do Jidoka (`bin/sdd:947`) que o handoff de
+  QA chamou de "caminho óbvio". Motivo: os caminhos de escalação que logam são três — checkpoint
+  `blocked`, orçamento estourado, duas sessões sem progresso — e um quarto adicionado amanhã
+  nasceria com o mesmo defeito. Guarda única torna "a projeção não escreve no diário" verdadeiro
+  por construção. É a alternativa que o próprio `30-handoff-qa.md` apontou como melhor ("se você
+  refatorar para uma guarda única, melhor ainda"), e satisfaz as 4 asserções do sensor.
+- 2026-08-14 · `f1c9f3f` · Verificação extra, porque a guarda usa `[ … ] && return 0` sob
+  `set -euo pipefail`: provei num probe descartável que com `DRY_RUN=0` a função **ainda escreve**
+  e a execução segue após a chamada (o `set -e` não morde ali — o comando não é o último do
+  `&&`-list). Sem isso, o conserto podia ter matado o diário real e a suíte seguiria verde, porque
+  nenhum sensor exercita o caminho não-dry. Essa lacuna virou entrada no `TODO.md`.
 
 ## Incrementos de fix (QA)
 
@@ -66,4 +83,4 @@ atualizado: 2026-08-14 04:20
 
 | ID | Incremento | Check (comando → esperado) | Status | Commit |
 |---|---|---|---|---|
-| F1 | dry-run não escreve no `pipeline.log` no caminho `blocked` | `tests/run-all.sh` → exit 0 (as 3 asserções novas de `check-dry-run.sh` verdes) E re-walk: numa missão com incremento `blocked`, `sdd run <m> --dry-run` sai 3 e deixa `git status --porcelain` vazio | pending | — |
+| F1 | dry-run não escreve no `pipeline.log` no caminho `blocked` | `tests/run-all.sh` → exit 0 (as 3 asserções novas de `check-dry-run.sh` verdes) E re-walk: numa missão com incremento `blocked`, `sdd run <m> --dry-run` sai 3 e deixa `git status --porcelain` vazio | done | f1c9f3f |
