@@ -1,6 +1,6 @@
 ---
 missao: 20260814-dry-run-completo
-atualizado: 2026-08-14 03:40
+atualizado: 2026-08-14 04:20
 ---
 
 # Checkpoint — dry-run mostra o pipeline inteiro
@@ -13,7 +13,7 @@ atualizado: 2026-08-14 03:40
 
 | ID | Incremento | Check (comando → esperado) | Status | Commit |
 |---|---|---|---|---|
-| I1 | dry-run projeta todas as fases pendentes | `tests/run-all.sh` → exit 0 (com check-dry-run.sh incluído) | pending | — |
+| I1 | dry-run projeta todas as fases pendentes | `tests/run-all.sh` → exit 0 (com check-dry-run.sh incluído) | done | 357b401 |
 
 ## Notas de execução
 
@@ -40,6 +40,16 @@ atualizado: 2026-08-14 03:40
   o kit) com a direção de correção e o sensor durável proposto (`sdd preflight` afirmando que
   uma sessão headless consegue de fato rodar `TEST_CMD`). **Escalação para o humano: I1 continua
   intacto e volta a `pending` assim que a permissão for corrigida.**
+- 2026-08-14 04:20 · `357b401` · **I1 → `done`.** O impedimento acima foi resolvido por
+  `2083680` (`ALLOWED_TOOLS` + `--allowedTools` em `run_phase`): esta sessão headless rodou
+  `TEST_CMD`, viu o Red, viu o Green e commitou — nada disso era possível na sessão anterior.
+  TDD cumprido: `tests/check-dry-run.sh` foi escrito primeiro e falhou pelo motivo certo
+  (projetou só `EXEC=sdd-executor`, faltando QA/REVIEW/DOCS/PR); só então `bin/sdd` mudou.
+- 2026-08-14 04:20 · `357b401` · Decisão de implementação (dentro do plano; registrada por ser
+  exatamente a armadilha que o plano previu): a projeção usa um cursor próprio `dry_next` mais a
+  função nova `next_pending_phase()`, e **nunca** re-chama `current_phase()`. O segundo cursor
+  foi necessário porque reaproveitar `force_phase` colidiria com `--phase <FASE>`, que deve
+  continuar imprimindo uma fase só — há asserção explícita disso no sensor.
 
 ## Incrementos de fix (QA)
 

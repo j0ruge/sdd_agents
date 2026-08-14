@@ -28,6 +28,11 @@ Achados sobre **repos-alvo** vão para o `TODO.md` daquele repo. Este arquivo é
   afirma que ela **consegue executar** `TEST_CMD` — hoje o preflight só valida `claude -p`
   respondendo (`bin/sdd:646`), o que não cobre este modo de falha. — descoberto por `sdd-executor`
   na missão `20260814-dry-run-completo` (2026-08-14)
+  **Atualização (2026-08-14):** a **causa** foi corrigida por `2083680` (`--allowedTools` em
+  `run_phase()` + `ALLOWED_TOOLS` no config) e a sessão EXEC `357b401` provou o conserto — rodou
+  `tests/run-all.sh`, viu o Red, viu o Green e commitou. Deixa de ser BLOQUEANTE. **Continua
+  aberto pelo que falta: o sensor durável.** Não há nada que impeça a regressão silenciosa —
+  o `sdd preflight` ainda não afirma que uma sessão headless de fato executa `TEST_CMD`.
 - [ ] Incremento `blocked` no checkpoint deveria escalar na hora, não gastar o orçamento de
   sessões — `bin/sdd:276` + `bin/sdd:830-844` — `gate_EXEC` já sabe dizer "Jidoka: a linha para",
   mas `cmd_run` só distingue gate-insatisfeito de gate-insatisfeito-e-sem-progresso; como a
