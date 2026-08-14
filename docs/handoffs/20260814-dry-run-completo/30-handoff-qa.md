@@ -124,7 +124,7 @@ Antes desta sessão, a 2ª e a 3ª mutação **não eram pegas por nada**.
 
 ## O que foi feito
 
-- `d161282` — sensor corrigido e ampliado (`tests/check-dry-run.sh`, +6 asserções),
+- `85dfc9f` — sensor corrigido e ampliado (`tests/check-dry-run.sh`, +6 asserções),
   nota da volta 2 no `checkpoint.md`, 3 entradas do `TODO.md` fechadas e 1 nova aberta, e este
   handoff. **Nenhuma linha de `bin/sdd` foi tocada** — as mutações foram temporárias e revertidas
   (`git diff --name-only bin/sdd` vazio ao fim).
@@ -190,6 +190,11 @@ do próprio handoff. Andei a jornada e confirmei o efeito (J5, e o `sdd why <m> 
 
 > Registrados no `TODO.md` do `sdd_agents` (são melhorias do kit). Aqui fica só o ponteiro.
 
+- **Novo:** `gate_EXEC` (`bin/sdd:270`) verifica o hash do incremento com `git cat-file -e`, que
+  responde "o objeto existe no banco", **não** "está no `git log`" — então um `checkpoint.md` que
+  cite um commit órfão (pós-`amend`/`rebase`/`reset`) passa no gate apontando para fora da
+  história. Caí nisso sem querer ao amendar o commit desta sessão. É o modo de falha que o kit
+  existe para impedir: o artefato some, o gate segue verde. → `TODO.md` (Aberto).
 - **Novo:** a suíte não tem teste de mutação, e por isso não percebe asserção que virou decoração
   — foi assim que o defeito desta volta passou despercebido por um commit inteiro. Direção:
   `tests/check-mutation.sh` afirmando que a suíte fica **vermelha** sob mutações conhecidas.

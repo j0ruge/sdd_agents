@@ -92,6 +92,21 @@ Achados sobre **repos-alvo** vão para o `TODO.md` daquele repo. Este arquivo é
   cria `.sdd/logs/<missão>/gate-exec-test-<ts>.log` a cada invocação. A árvore de arquivos
   **muda**; o `git status` não, porque é gitignored. Segue não sendo bug (é o `TEST_CMD` que os
   gates rodam de propósito), mas a asserção continua prometendo mais do que entrega.
+- [ ] **`gate_EXEC` aceita commit órfão: `git cat-file -e` não é "está no `git log`"** —
+  `bin/sdd:270` — o gate afirma cobrar "hash real no `git log`" (é o `rótulo não é artefato` do
+  incremento `done`), mas verifica com `git cat-file -e "${commit}^{commit}"`, que só pergunta se
+  o **objeto existe no banco** — não se ele está alcançável a partir da branch. Depois de um
+  `git commit --amend`, `rebase` ou `reset`, o hash antigo continua no object database (dangling,
+  vivo até o `gc`), então um `checkpoint.md` que cite o hash pré-amend **passa no gate apontando
+  para um commit que não está na história**. Verificado nesta sessão sem querer: amendei o próprio
+  commit da QA, o handoff ficou citando `d161282`, e `git cat-file -e d161282^{commit}` → 0
+  enquanto `git merge-base --is-ancestor d161282 HEAD` → 1 e `git log` não o lista. O modo de
+  falha é silencioso e exatamente do tipo que o kit existe para impedir: o artefato citado some,
+  o gate continua verde. Direção: trocar por `git merge-base --is-ancestor "$commit" HEAD` (ou
+  `git rev-list HEAD | grep -q`), que responde a pergunta que o gate realmente quer fazer. Sensor
+  durável junto: caso em `tests/check-gates.sh` com um checkpoint citando commit órfão, afirmando
+  que `gate_EXEC` **reprova**. — descoberto por `sdd-qa` na missão `20260814-dry-run-completo`
+  (2026-08-14)
 - [ ] **A suíte não tem teste de mutação, e por isso não percebe asserção que virou decoração** —
   `tests/` — quando `53cf63a` moveu o `pipeline.log` para `.sdd/logs/`, a asserção
   `projeção blocked não cria pipeline.log` continuou apontando para `$MDIR/pipeline.log`, um
