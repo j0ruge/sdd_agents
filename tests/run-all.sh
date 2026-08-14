@@ -21,6 +21,7 @@ else
 fi
 run "contrato dos templates" "$ROOT/tests/check-templates.sh"
 run "máquina de estados dos gates" "$ROOT/tests/check-gates.sh"
+run "projeção do dry-run" "$ROOT/tests/check-dry-run.sh"
 
 printf '\n'
 if [ "$fails" -eq 0 ]; then printf '\033[32m\033[1msuíte verde\033[0m\n'; exit 0; fi

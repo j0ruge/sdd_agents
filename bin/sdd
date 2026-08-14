@@ -402,6 +402,18 @@ current_phase() {
   printf '%s\n' ""
 }
 
+# Primeira fase DEPOIS de <fase> cujo gate não está satisfeito. Vazio ⇒ acabou a lista.
+# Existe só para a projeção do dry-run: como o dry-run não muda nada no disco, re-chamar
+# current_phase() devolveria a mesma fase para sempre — laço infinito.
+next_pending_phase() {
+  local after="$1" ph seen=0
+  for ph in $PHASES; do
+    if [ "$seen" = "1" ] && ! "gate_$ph"; then printf '%s\n' "$ph"; return 0; fi
+    if [ "$ph" = "$after" ]; then seen=1; fi
+  done
+  printf '%s\n' ""
+}
+
 # ---------------------------------------------------------------------------
 # Invocação de fase
 # ---------------------------------------------------------------------------
@@ -821,9 +833,12 @@ cmd_run() {
 
   local -A attempts=()
   local phases_run=0 phase before after budget
+  local dry_next=""   # cursor da projeção do dry-run (distinto de --phase, que imprime uma só)
 
   while :; do
-    if [ -n "$force_phase" ]; then phase="$force_phase"; else phase="$(current_phase)"; fi
+    if [ -n "$dry_next" ]; then phase="$dry_next"
+    elif [ -n "$force_phase" ]; then phase="$force_phase"
+    else phase="$(current_phase)"; fi
 
     if [ -z "$phase" ]; then
       info ""
@@ -880,8 +895,14 @@ cmd_run() {
     after="$(state_fingerprint)"
 
     if [ "$DRY_RUN" = "1" ]; then
+      # --phase <FASE> pede uma fase específica: imprime só ela.
       [ -n "$force_phase" ] && return 0
-      dim "  (dry-run: parando após imprimir a primeira fase)"
+      # Projeção honesta: as fases cujo gate está insatisfeito HOJE, na ordem canônica. Não
+      # simula o efeito das fases (não adivinha que o EXEC destravaria a QA) — informação
+      # honesta vale mais do que informação completa e potencialmente errada.
+      dry_next="$(next_pending_phase "$phase")"
+      [ -n "$dry_next" ] && continue
+      dim "  (dry-run: fim da projeção — nada foi executado)"
       return 0
     fi
 
