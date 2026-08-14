@@ -119,6 +119,26 @@ Achados sobre **repos-alvo** vão para o `TODO.md` daquele repo. Este arquivo é
   durável junto: caso em `tests/check-gates.sh` com um checkpoint citando commit órfão, afirmando
   que `gate_EXEC` **reprova**. — descoberto por `sdd-qa` na missão `20260814-dry-run-completo`
   (2026-08-14)
+- [ ] **[I13.2 — PRIORIDADE 1] Teste de mutação: a suíte verde não prova que os gates funcionam** —
+  `tests/check-mutation.sh` (novo) + `sdd health` — **evidência acumulada: três bugs de gate da
+  MESMA família, todos passando pela suíte verde, todos só descobertos em uso real, cada um
+  custando sessão paga:**
+
+  | # | Bug | Como apareceu | Custo |
+  |---|---|---|---|
+  | 1 | `gate_QA` exigia `**Status:**` no início da linha; o template da skill põe `- **Started:** … · **Status:** …` | relatório nunca casava; runner re-rodou `qa-execution` | ~US$ 15/volta |
+  | 2 | A mesma âncora vivia **duplicada** em `gate_QA` e `qa_substep`; corrigi uma e a outra divergiu | gate aceitava, sub-passo mandava re-executar | ~US$ 15/volta |
+  | 3 | `gate_REVIEW` parava a leitura só em `###`; a seção seguinte real é `##`, então engolia as tabelas posteriores | reprovou relatório com 8 critérios A alegando `Commit = O que` | ~US$ 10 |
+
+  O padrão: **toda âncora de formato de skill de terceiro falhou, e nenhuma falhou na suíte.**
+  Os fixtures testavam o formato que eu *imaginei*, não o que a skill *emite* — e um fixture
+  errado passa verde para sempre. Mutação é o único sensor que pega esta classe: sabotar o gate
+  e exigir que a suíte fique vermelha prova que a asserção mede alguma coisa.
+  Direção: catálogo de mutações conhecidas em `bin/sdd` (uma por gate, no mínimo), score =
+  pegas/aplicadas, e `sdd health` reprovando abaixo de 100%. Complemento obrigatório: os fixtures
+  passam a usar o formato **copiado da skill**, não escrito de memória.
+  — descoberto por `sdd-qa` e por `humano` nas missões `20260814-dry-run-completo` e
+  `20260814-sq94-spinner-reblur` (2026-08-14)
 - [ ] **A suíte não tem teste de mutação, e por isso não percebe asserção que virou decoração** —
   `tests/` — quando `53cf63a` moveu o `pipeline.log` para `.sdd/logs/`, a asserção
   `projeção blocked não cria pipeline.log` continuou apontando para `$MDIR/pipeline.log`, um
