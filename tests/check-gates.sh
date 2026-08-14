@@ -207,6 +207,10 @@ printf -- '---\nfase: QA\nstatus: done\n---\n' > "$MDIR/30-handoff-qa.md"
 assert_phase "handoff de QA sem relatório em docs/qa/reports/" "QA"
 assert_why   "QA acusa relatório ausente" "QA" "nenhum relatório"
 
+# PROVENIÊNCIA: ~/.claude/skills/qa-execution/assets/report-template.md:6, verbatim (só o
+# `<ISO timestamp>` foi concretizado). O `**Status:**` NÃO abre a linha e a legenda do enum
+# vem no comentário — as duas coisas que o gate mede, e as duas que um fixture escrito de
+# memória perde. Foi assim que nasceu o bug 1 (~US$ 15/volta no piloto SQ-97).
 cat > "$FIX/docs/qa/reports/2026-01-01-fixture.md" <<'EOF'
 # QA Run Report — 2026-01-01 — fixture
 - **Started:** 2026-01-01T10:00:00Z · **Status:** in-progress <!-- in-progress | closed -->
@@ -222,9 +226,13 @@ assert_phase "relatório fechado mas com linha Pending na matriz" "QA"
 assert_why   "QA acusa matriz Pending" "QA" "Pending"
 
 sed -i 's/| 1 | CH-um | Pending |/| 1 | CH-um | Pass |/' "$FIX/docs/qa/reports/2026-01-01-fixture.md"
+# PROVENIÊNCIA: ~/.claude/skills/qa-report/assets/bug-template.md:1-3, verbatim. A legenda
+# `<!-- open | fixed | ... -->` é o detalhe que importa: ela contém a palavra `open` mesmo
+# quando o Status é `wont-fix`, então um gate que grepasse `Status.*open` bloquearia uma
+# decisão humana de não corrigir. Sem a legenda no fixture, esse afrouxamento passa verde.
 cat > "$FIX/docs/qa/bugs/BUG-20260101-teste.md" <<'EOF'
 # BUG-20260101-teste: algo quebrou
-- **Status:** open
+- **Status:** open <!-- open | fixed | verified | wont-fix | invalid -->
 EOF
 assert_phase "bug com Status: open no registry" "QA"
 assert_why   "QA acusa bug aberto" "QA" "Status: open|bug\(s\) com Status"
@@ -252,6 +260,10 @@ mv "$MDIR/30.bak" "$MDIR/30-handoff-qa.md"
 
 # --- REVIEW ----------------------------------------------------------------
 echo "== fase REVIEW =="
+# PROVENIÊNCIA das três tabelas abaixo: skills/codereview/references/report-template.md:152-172
+# (plugin chewiesoft-marketplace, contrato v1.13.0+). São os 7 critérios reais mais a linha
+# `**Overall**`, na ordem da skill — não uma amostra inventada. Um fixture de 3 linhas não
+# exercita o parser do jeito que o relatório real exercita.
 cat > "$MDIR/40-review-r1.md" <<'EOF'
 # Review r1
 ### Overall Grade
@@ -259,12 +271,19 @@ cat > "$MDIR/40-review-r1.md" <<'EOF'
 | Criterion | Grade | Rationale |
 |-----------|-------|-----------|
 | Code Quality (Zen) | A | clean |
+| Type Safety | A | clean |
+| Error Handling | A | clean |
 | Security | B | um HIGH |
+| Performance | A | clean |
+| Test Coverage | A | clean |
+| Documentation | A | clean |
 | **Overall** | **B** | |
 EOF
 assert_phase "review com nota B não passa" "REVIEW"
 assert_why   "REVIEW acusa a nota exata" "REVIEW" "Security = B"
 
+# O `—` com "Not analyzed" é o que a skill emite em review de foco (report-template.md:156):
+# review parcial não é review, e o gate reprova. Copiado de lá, incluindo a redação.
 cat > "$MDIR/40-review-r2.md" <<'EOF'
 # Review r2
 ### Overall Grade
@@ -272,7 +291,12 @@ cat > "$MDIR/40-review-r2.md" <<'EOF'
 | Criterion | Grade | Rationale |
 |-----------|-------|-----------|
 | Code Quality (Zen) | A | clean |
-| Security | — | Not analyzed |
+| Type Safety | A | clean |
+| Error Handling | A | clean |
+| Security | — | Not analyzed (focused review on runner) |
+| Performance | A | clean |
+| Test Coverage | A | clean |
+| Documentation | A | clean |
 | **Overall** | **A** | |
 EOF
 assert_phase "critério '—' (não analisado) também reprova" "REVIEW"
@@ -287,8 +311,17 @@ cat > "$MDIR/40-review-r3.md" <<'EOF'
 | Criterion | Grade | Rationale |
 |-----------|-------|-----------|
 | Code Quality (Zen) | A | clean |
+| Type Safety | A | clean |
+| Error Handling | A | clean |
 | Security | A | clean |
+| Performance | A | clean |
+| Test Coverage | A | clean |
+| Documentation | A | clean |
 | **Overall** | **A** | |
+
+## Grading Scale
+
+- **A**: No CRITICAL/HIGH findings; at most minor MEDIUM/LOW items.
 
 ---
 

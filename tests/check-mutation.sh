@@ -131,9 +131,7 @@ CATALOGO=(
 # Mutações que HOJE não são pegas, cada uma com o incremento que a fecha. Catraca nas duas
 # direções: não-pega fora da lista reprova, e lacuna listada que PASSOU a ser pega também
 # reprova (a lista tem que encolher, nunca virar desculpa permanente).
-LACUNAS_ESPERADAS=(
-  QA_bug_enum_frouxo     # fecha no I13.2.4: o fixture de bug não tem a legenda do enum
-)
+LACUNAS_ESPERADAS=()
 
 # ---------------------------------------------------------------------------
 pass()  { printf '  ok    %s\n' "$1"; }
