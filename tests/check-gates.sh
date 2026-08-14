@@ -40,7 +40,22 @@ assert_why() {
 
 # ---------------------------------------------------------------------------
 echo "== fixture em $FIX =="
-cd "$FIX"
+# `|| exit`: sem `set -e`, um `cd` que falha seguiria rodando `git init`, `sed -i` e
+# `git commit` no repo REAL de quem rodou o teste.
+cd "$FIX" || exit 1
+
+# Nenhum teste pode gastar token nem rede. O `sdd run` real logo abaixo só é seguro porque o
+# Jidoka de `blocked` escapa ANTES de qualquer `run_phase`; se essa ordem quebrar, o runner
+# chamaria o `claude` de verdade. O stub torna isso impossível por construção.
+mkdir -p "$FIX/.stub"
+cat > "$FIX/.stub/claude" <<'STUB'
+#!/usr/bin/env bash
+echo "ERRO: o teste invocou o claude de verdade — o caminho de escalação não escapou antes da sessão" >&2
+exit 97
+STUB
+chmod +x "$FIX/.stub/claude"
+PATH="$FIX/.stub:$PATH"
+
 git init -q -b main
 git config user.email "fixture@example.com"
 git config user.name "Fixture"
@@ -127,7 +142,6 @@ sed -i "s/deadbeef/$REAL_HASH/" "$MDIR/checkpoint.md"
 assert_phase "commit real mas sem 20-handoff-exec.md" "EXEC"
 assert_why   "EXEC acusa handoff faltando" "EXEC" "20-handoff-exec"
 
-sed -i 's/| I1 | fatia um |/| I1 | fatia um |/' "$MDIR/checkpoint.md"
 printf -- '---\nfase: EXEC\nstatus: done\n---\n' > "$MDIR/20-handoff-exec.md"
 git add -A && git commit -qm "chore: handoff"
 assert_phase "handoff escrito, suíte verde" "QA"
