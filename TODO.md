@@ -119,6 +119,27 @@ Achados sobre **repos-alvo** vão para o `TODO.md` daquele repo. Este arquivo é
   durável junto: caso em `tests/check-gates.sh` com um checkpoint citando commit órfão, afirmando
   que `gate_EXEC` **reprova**. — descoberto por `sdd-qa` na missão `20260814-dry-run-completo`
   (2026-08-14)
+- [ ] **Nenhum gate confere se a missão ainda está na branch que ela declarou** — `bin/sdd`
+  (todos os `gate_*`) + `templates/missao.md` (campo `branch:`) — o `00-missao.md` declara a
+  branch e **ninguém mais olha para esse campo**. Medido no piloto SQ-97: entre `QA:plan` e
+  `QA:exec` o checkout mudou para a branch de outra frente (`SQ-90_rotacao_senha_it`), e **cinco
+  fases seguidas — QA:exec, QA:close, REVIEW, DOCS e a 1ª PR — commitaram lá**, empilhando 16
+  commits em cima do HEAD de um PR alheio já aberto (#104). Todos os gates passaram: eles medem
+  artefato e suíte, e ambos estavam corretos — só estavam no lugar errado.
+
+  Quem pegou foi o `sdd-publisher`, na última fase, ao conferir a branch antes do push — e
+  recusou publicar duas vezes, refazendo a medição na segunda sessão. **O sensor existia, mas no
+  fim da linha**: o custo de detectar tarde foi ~US$ 45 em fases que precisaram de cirurgia de
+  `rebase --onto` para serem separadas.
+
+  Direção: um check barato no **início** de cada fase — `git branch --show-current` contra o
+  campo `branch:` do `00-missao.md`; divergiu, `BLOCKED` na hora com a instrução de voltar.
+  Custa um comando; teria economizado cinco fases. Sensor durável: caso em `check-gates.sh` com
+  a branch trocada no meio, afirmando que a fase seguinte reprova antes de abrir sessão.
+  ⚠️ Relacionado: o campo `branch:` do `00-missao.md` é preenchido pela fase TICKET **depois** do
+  planejamento — o check tem que tolerar o valor `<criada pela fase TICKET>` antes disso.
+  — descoberto por `sdd-publisher` e por `humano` no piloto SQ-97 (2026-08-14)
+
 - [ ] **[I13.2 — PRIORIDADE 1] Teste de mutação: a suíte verde não prova que os gates funcionam** —
   `tests/check-mutation.sh` (novo) + `sdd health` — **evidência acumulada: três bugs de gate da
   MESMA família, todos passando pela suíte verde, todos só descobertos em uso real, cada um
