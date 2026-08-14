@@ -172,6 +172,22 @@ Achados sobre **repos-alvo** vão para o `TODO.md` daquele repo. Este arquivo é
   "conte quantas linhas estão ruins" que não existe. Ou entra no `GATE_WHY` (útil: "3 linhas do
   checkpoint malformadas" diz mais do que a primeira), ou sai. Pré-existente. — descoberto por
   `sdd-reviewer` na missão `20260814-dry-run-completo` (2026-08-14)
+- [ ] **`gate_DOCS` reprova o `45-docs.md` que menciona o arquivo de achados pelo nome** —
+  `bin/sdd:394` — a sentinela de item pendente é `grep -qE '✗|\bTODO\b|<preencher>'`. O `\b` casa
+  com o ponto, então a string `TODO.md` **reprova o gate**. Pior: `agents/sdd-docs.md:81` manda o
+  agente fechar o artefato com uma seção intitulada *"Entradas de TODO desta missão"* — um título
+  que contém a palavra nua e **reprova o gate por construção**. A instrução do agente colide
+  frontalmente com o gate que a mede: seguir o agente ao pé da letra garante a reprovação. Verificado empiricamente nesta sessão:
+  `ver TODO.md` reprova, `ver TODO_FILE` passa. Consequências: (a) a fase DOCS falha por citar um
+  caminho, o que parece bug do agente e não do gate; (b) quem descobrir vai contornar escrevendo
+  o nome errado, e o contorno vira convenção silenciosa; (c) pior, um `45-docs.md` legitimamente
+  incompleto e um que só cita o arquivo reprovam com a **mesma** mensagem. Direção: ancorar a
+  sentinela na coluna Status da tabela em vez do arquivo inteiro (é lá que `✗`/`TODO` significam
+  "pendente"), ou trocar por um marcador que não seja também um nome de arquivo do repo —
+  `<preencher>` já é dessa família e não tem o problema. Sensor junto: caso em
+  `tests/check-gates.sh` com um `45-docs.md` completo que cita o arquivo de achados, afirmando
+  que `gate_DOCS` **passa**. — descoberto por `sdd-docs` na missão `20260814-dry-run-completo`
+  (2026-08-14)
 - [ ] **O `## Uso` do README documenta metade da superfície do CLI** — `README.md:42-48` vs
   `bin/sdd:1085-1096` — o bloco lista `run`, `status`, `retry`, `close` e `--dry-run`. Ficam de
   fora, existindo e funcionando: `sdd why <missão> [FASE]` (o comando que o próprio
