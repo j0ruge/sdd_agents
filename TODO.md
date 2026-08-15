@@ -389,6 +389,21 @@ Achados sobre **repos-alvo** vão para o `TODO.md` daquele repo. Este arquivo é
   opção mexe no contrato que `check-templates.sh` mede, então vem depois da entrada acima.
   — descoberto por `humano` na missão `20260815-i13.5-kit-em-ingles` (2026-08-15)
 
+- [ ] **O `bin/sdd` promete macOS na mensagem de erro e não roda lá** — `bin/sdd:18-21` vs
+  `state_fingerprint()` e `pipeline_log_line()` — a checagem de versão diz *"On macOS: brew install
+  bash"*, o que promete que resolvido o bash o kit roda. Não roda: o runner usa `md5sum` (3
+  ocorrências) e `date -Iseconds` (5), que **não existem** no macOS de fábrica (é `md5` e o `date`
+  do BSD não tem `-I`). A suíte é pior — `sed -i` sem argumento aparece **43 vezes**, forma que o
+  `sed` do BSD rejeita, e o `tests/check-lang.sh` acrescentou 1 `grep -P` (PCRE, ausente no `grep`
+  do BSD). **Pré-existente, e a nova dependência não muda a classe**: o kit já era GNU-only antes
+  do I13.5 (41 `sed -i`, 3 `md5sum`, 5 `date -Iseconds` em `origin/main`). O defeito é a
+  **mensagem prometendo um mundo que não existe** — a mesma família do `config/schema.md`
+  prometendo chave não implementada. Decidir um dos dois: (a) assumir GNU e trocar a linha 21 por
+  um aviso honesto ("o kit exige coreutils GNU; no macOS: brew install coreutils gnu-sed grep"), ou
+  (b) portar de verdade (`md5` fallback, `date -u +%FT%TZ`, `sed -i ''`, `grep -E` no lugar do
+  `-P`). A (a) custa uma linha e para de mentir; a (b) é missão própria. — descoberto por
+  `/codereview` na missão `20260815-i13.5-kit-em-ingles` (2026-08-15)
+
 - [ ] **Dois arquivos ficam fora do sensor de idioma, e prosa PT-BR pode entrar neles sem ninguém
   ver** — `tests/check-lang.sh` (a função `surface()`) — as exclusões são corretas e estão
   documentadas no arquivo: em `check-templates.sh` as regexes PT-BR **são** o contrato dos
