@@ -770,6 +770,7 @@ autonomy_blocked_row() {   # autonomy_blocked_row <kind> <phase> <gate_why>
 autonomy_session_row() {  # <phase> <attempt> <retry> <moved> <gate> <gate_why>
   autonomy_have_jq || return 0
   local stamp; stamp="$(autonomy_kit_stamp)"
+  # "${6:0:200}" is a CHARACTER slice, same reason as autonomy_blocked_row's "${3:0:200}" above.
   autonomy_append "$( jq -cn \
     --arg ts "$(date -Iseconds)" --arg phase "$1" --arg attempt "$2" \
     --arg retry "$3" --arg moved "$4" --arg gate "$5" \
@@ -835,7 +836,7 @@ missing and write the artifacts. The gate will be re-evaluated."
     printf '  %q' "${cmd[@]}"; printf '\n'
     printf '%sboot prompt:%s\n' "$C_DIM" "$C_RESET"
     printf '%s\n' "$prompt" | sed 's/^/  │ /'
-    LAST_PHASE_SID="$sid"
+    LAST_PHASE_SID="${resume_sid:-$sid}"
     return 0
   fi
 
@@ -866,7 +867,11 @@ missing and write the artifacts. The gate will be re-evaluated."
   else
     dim "  session ended in ${dur}s, cost $cost USD"
   fi
-  LAST_PHASE_SID="$sid"
+  # On a retry, `cmd` was built with `--resume "$resume_sid" --fork-session` and WITHOUT
+  # `--session-id`: the `$sid` generated at the top of this call was never handed to claude, so
+  # recording it here would leave the retry row pointing at a session that identifies nothing —
+  # matches what `pipeline_log_line` above already records for the same session.
+  LAST_PHASE_SID="${resume_sid:-$sid}"
   invalidate_checks
   return 0
 }
@@ -1459,9 +1464,13 @@ cmd_run() {
     run_phase "$phase"
     after="$(state_fingerprint)"
 
-    # The projection branch stays FIRST, exactly where it is today. Moving the gate evaluation
-    # above it would make `--dry-run` run TEST_CMD once more per projected phase — a behaviour
-    # change this increment has no mandate for, and one that check-dry-run.sh measures.
+    # The projection branch stays FIRST, exactly where it is today. This is belt-and-suspenders,
+    # not a cost saver: `run_check_cmd` memoizes and `run_phase`'s own dry-run branch returns
+    # before `invalidate_checks`, so evaluating the gate before this branch would not add a real
+    # TEST_CMD run. Keeping the ledger writer out of the projection path entirely — rather than
+    # relying on `autonomy_append`'s own DRY_RUN guard as the only defense — is the actual reason.
+    # No sensor pins this ordering; what tests/check-autonomy.sh asserts is the outcome, "the
+    # projection writes no ledger at all".
     if [ "$DRY_RUN" = "1" ]; then
       # --phase <PHASE> asks for one specific phase: print only that one.
       [ -n "$force_phase" ] && return 0
