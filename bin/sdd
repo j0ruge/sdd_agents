@@ -765,6 +765,36 @@ autonomy_blocked_row() {   # autonomy_blocked_row <kind> <phase> <gate_why>
       gate_why: $why}' )"
 }
 
+# One row per session, written after the gate has been evaluated — the row carries the gate
+# result, so it cannot be born before it.
+autonomy_session_row() {  # <phase> <attempt> <retry> <moved> <gate> <gate_why>
+  autonomy_have_jq || return 0
+  local stamp; stamp="$(autonomy_kit_stamp)"
+  autonomy_append "$( jq -cn \
+    --arg ts "$(date -Iseconds)" --arg phase "$1" --arg attempt "$2" \
+    --arg retry "$3" --arg moved "$4" --arg gate "$5" \
+    --arg why "${6:0:200}" \
+    --arg run_id "$AUTONOMY_RUN_ID" --arg invocation "$AUTONOMY_INVOCATION" \
+    --arg sha "${stamp%%|*}" --arg dirty "${stamp#*|}" \
+    --arg project "$PROJECT_NAME" --arg repo "$REPO_ROOT" --arg mission "$MISSION" \
+    --arg step "$LAST_PHASE_STEP" --arg agent "$LAST_PHASE_AGENT" \
+    --arg model "$LAST_PHASE_MODEL" --arg session "$LAST_PHASE_SID" \
+    --arg rc "$LAST_PHASE_RC" --arg dur "$LAST_PHASE_DUR" --arg cost "$LAST_PHASE_COST" \
+    '{v: 1, ts: $ts, event: "session",
+      run_id: $run_id, invocation: $invocation,
+      kit_sha: (if $sha == "" then null else $sha end),
+      kit_dirty: (if $dirty == "" then null else ($dirty == "true") end),
+      project: $project, repo: $repo, mission: $mission,
+      phase: $phase, step: $step, agent: $agent, model: $model,
+      attempt: ($attempt | tonumber? // null), retry: ($retry == "true"),
+      session: $session,
+      rc: ($rc | tonumber? // null),
+      dur_s: ($dur | tonumber? // null),
+      cost_usd: ($cost | tonumber? // null),
+      moved: ($moved == "true"),
+      gate: $gate, gate_why: $why}' )"
+}
+
 # Runs a phase in a fresh headless session. Returns 0 when claude exited 0 (which does NOT mean
 # the gate passed — the gate judges that, always afterwards).
 run_phase() {
@@ -822,6 +852,15 @@ missing and write the artifacts. The gate will be re-evaluated."
   local dur=$((ended - started))
   pipeline_log_line "$(date -Iseconds)  $phase  agent=$agent  model=$model  session=${resume_sid:-$sid}  rc=$rc  dur=${dur}s  cost_usd=$cost  log=$logfile"
 
+  # Published for the autonomy ledger, which is written by cmd_run — only there is the gate
+  # result known, and the row carries it.
+  LAST_PHASE_RC="$rc"
+  LAST_PHASE_COST="$cost"
+  LAST_PHASE_DUR="$dur"
+  LAST_PHASE_STEP="$pstep"
+  LAST_PHASE_AGENT="$agent"
+  LAST_PHASE_MODEL="$model"
+
   if [ "$rc" -ne 0 ]; then
     warn "claude exited $rc in phase $phase (see $logfile and ${logfile%.json}.err)"
   else
@@ -832,6 +871,12 @@ missing and write the artifacts. The gate will be re-evaluated."
   return 0
 }
 LAST_PHASE_SID=""
+LAST_PHASE_RC=""
+LAST_PHASE_COST=""
+LAST_PHASE_DUR=""
+LAST_PHASE_STEP=""
+LAST_PHASE_AGENT=""
+LAST_PHASE_MODEL=""
 
 # Fingerprint of the mission state. It answers "did this session do ANYTHING?" when the gate has
 # not passed yet — the normal case for the EXEC phase, which runs one increment at a time.
@@ -1414,6 +1459,9 @@ cmd_run() {
     run_phase "$phase"
     after="$(state_fingerprint)"
 
+    # The projection branch stays FIRST, exactly where it is today. Moving the gate evaluation
+    # above it would make `--dry-run` run TEST_CMD once more per projected phase — a behaviour
+    # change this increment has no mandate for, and one that check-dry-run.sh measures.
     if [ "$DRY_RUN" = "1" ]; then
       # --phase <PHASE> asks for one specific phase: print only that one.
       [ -n "$force_phase" ] && return 0
@@ -1426,35 +1474,50 @@ cmd_run() {
       return 0
     fi
 
+    # Evaluated ONCE into a variable, then branched on. Writing the ledger row inside each of the
+    # four branches would multiply the same defect four times — and gate_ functions run TEST_CMD,
+    # so calling them twice is not free either.
+    local gate_rc=0 moved="false"
+    gate_"$phase" || gate_rc=$?
+    [ "$before" != "$after" ] && moved="true"
+    autonomy_session_row "$phase" "${attempts[$phase]}" "false" "$moved" \
+      "$( [ "$gate_rc" -eq 0 ] && echo pass || echo fail )" "$GATE_WHY"
+
     phases_run=$((phases_run + 1))
     if [ "$max_phases" -gt 0 ] && [ "$phases_run" -ge "$max_phases" ]; then
       info ""; dim "  --max-phases=$max_phases reached"; return 0
     fi
 
-    if gate_"$phase"; then
+    if [ "$gate_rc" -eq 0 ]; then
       ok "gate $phase: $GATE_WHY"
       force_phase=""
       continue
     fi
 
-    # The gate did not pass. Was there progress? The EXEC phase runs one increment at a time —
-    # not having satisfied the gate is the NORMAL case while increments remain.
-    if [ "$before" != "$after" ]; then
+    if [ "$moved" = "true" ]; then
       dim "  gate $phase not yet: $GATE_WHY (but the session moved forward — carrying on)"
       force_phase=""
       continue
     fi
 
-    # Nothing changed on disk: the session did nothing. One retry with the reason in hand.
     warn "gate $phase failed and the session changed nothing: $GATE_WHY"
     warn "  retrying once with the gate reason in the prompt"
     run_phase "$phase" "$LAST_PHASE_SID"
-    if gate_"$phase"; then
+    # The retry gets its own pair of fingerprints. Until now it ran with no measurement at all,
+    # and `moved/total` is precisely the metric that needs it.
+    local after2 moved2="false" gate_rc2=0
+    after2="$(state_fingerprint)"
+    [ "$after" != "$after2" ] && moved2="true"
+    gate_"$phase" || gate_rc2=$?
+    autonomy_session_row "$phase" "${attempts[$phase]}" "true" "$moved2" \
+      "$( [ "$gate_rc2" -eq 0 ] && echo pass || echo fail )" "$GATE_WHY"
+
+    if [ "$gate_rc2" -eq 0 ]; then
       ok "gate $phase (on the retry): $GATE_WHY"
       force_phase=""
       continue
     fi
-    if [ "$(state_fingerprint)" = "$after" ]; then
+    if [ "$moved2" = "false" ]; then
       info ""
       bad "BLOCKED in $phase — two sessions without moving the disk: $GATE_WHY"
       pipeline_log_line "$(date -Iseconds)  BLOCKED  $phase  $GATE_WHY"

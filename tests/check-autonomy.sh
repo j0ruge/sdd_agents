@@ -127,6 +127,42 @@ assert_eq "the interactive PLAN exits 2" "2" "$rc"
 assert_eq "and writes no row" "0" "$(nrows)"
 sed -i 's/^aprovacao:$/aprovacao: auto/' "$MDIR/00-missao.md"
 
+# --- real sessions, still offline -------------------------------------------
+# The stub `claude` exits non-zero, so the session does nothing: the gate fails, the disk did not
+# move, the runner retries once and escalates with `no-progress`. Three real rows, no token.
+echo "== session rows =="
+: > "$LEDGER"
+cat > "$MDIR/checkpoint.md" <<'EOF'
+| ID | Incremento | Check (comando → esperado) | Status | Commit |
+|---|---|---|---|---|
+| I1 | slice one | `true` → 0 | pending | — |
+EOF
+cat > "$FIX/.stub/claude" <<'STUB'
+#!/usr/bin/env bash
+exit 1
+STUB
+git add -A && git commit -qm "chore: pending increment"
+
+"$SDD" run "$MISSION" >/dev/null 2>&1; rc=$?
+assert_eq "two dead sessions escalate with rc 3" "3" "$rc"
+assert_eq "two session rows plus one escalation" "3" "$(nrows)"
+assert_eq "every row is valid JSON" "1" "$(jq -se . "$LEDGER" >/dev/null 2>&1 && echo 1 || echo 0)"
+
+assert_eq "the first row is a session" "session" "$(jq -r -s '.[0].event' "$LEDGER")"
+assert_eq "the first session is not a retry" "false" "$(jq -r -s '.[0].retry' "$LEDGER")"
+assert_eq "the second row is the retry" "true" "$(jq -r -s '.[1].retry' "$LEDGER")"
+# The whole point of the metric: a session that changed nothing on disk is waste, and until now
+# the retry ran with no measurement at all.
+assert_eq "the retry carries its own moved" "false" "$(jq -r -s '.[1].moved' "$LEDGER")"
+assert_eq "the gate result rides with the session" "fail" "$(jq -r -s '.[0].gate' "$LEDGER")"
+assert_eq "claude's rc is recorded" "1" "$(jq -r -s '.[0].rc' "$LEDGER")"
+# The session log has no cost field when claude died: "?" must become null, never a string, or
+# the judge sums text.
+assert_eq "unknown cost is null, not a string" "true" "$(jq -s '.[0].cost_usd == null' "$LEDGER")"
+assert_eq "all three rows share one run_id" "1" \
+  "$(jq -s '[.[].run_id] | unique | length' "$LEDGER")"
+assert_eq "the escalation is no-progress" "no-progress" "$(jq -r -s '.[2].kind' "$LEDGER")"
+
 echo
 if [ "$fails" -eq 0 ]; then printf '  ok    the ledger records facts and stays quiet on projections\n'; exit 0; fi
 printf '%d autonomy check(s) failed\n' "$fails" >&2
