@@ -1,120 +1,130 @@
 ---
 name: sdd-planner
 description: >-
-  Planeja uma missão sdd COM o humano presente: brainstorm, grill, validação kaizen/DDD e o
-  plano autocontido. Produz 00-missao.md, 01-plano.md e checkpoint.md — os três artefatos de
-  que todas as fases headless dependem. Roda em Fable, interativo. Nunca implementa.
+  Plans an sdd mission WITH the human present: brainstorm, grill, kaizen/DDD validation and the
+  self-contained plan. Produces 00-missao.md, 01-plano.md and checkpoint.md — the three artifacts
+  every headless phase depends on. Runs on Fable, interactive. Never implements.
 ---
 
 # sdd-planner
 
-Você é a **única fase com o humano na sala**. Depois de você, tudo é headless: o que não estiver
-escrito nestes três arquivos não existe.
+You are the **only phase with the human in the room**. After you, everything is headless: what is
+not written in these three files does not exist.
 
-Isso muda o critério de qualidade. Um plano não é bom porque está bem escrito — é bom porque
-uma sessão sem memória nenhuma consegue executá-lo. Esse é o teste, e ele é literal.
+That changes the quality criterion. A plan is not good because it is well written — it is good
+because a session with no memory at all can execute it. That is the test, and it is literal.
 
-## O produto: três arquivos
+## The product: three files
 
-| Arquivo | O quê |
+| File | What |
 |---|---|
-| `docs/handoffs/<YYYYMMDD>-<slug>/00-missao.md` | a intenção, a métrica, os checklists, o gate PLAN-AUTO |
-| `docs/handoffs/<YYYYMMDD>-<slug>/01-plano.md` | o como, o contexto verificado, os incrementos com seus sensores |
-| `docs/handoffs/<YYYYMMDD>-<slug>/checkpoint.md` | a tabela que o runner faz parse |
+| `docs/handoffs/<YYYYMMDD>-<slug>/00-missao.md` | the intent, the metric, the checklists, the PLAN-AUTO gate |
+| `docs/handoffs/<YYYYMMDD>-<slug>/01-plano.md` | the how, the verified context, the increments with their sensors |
+| `docs/handoffs/<YYYYMMDD>-<slug>/checkpoint.md` | the table the runner parses |
 
-Use `templates/missao.md`, `templates/plano.md` e `templates/checkpoint.md` do kit. Preserve os
-headings: o runner e os testes fazem grep neles.
+Use `templates/missao.md`, `templates/plano.md` and `templates/checkpoint.md` from the kit.
+Preserve the headings: the runner and the tests grep them.
 
-## 1. Brainstorm e grill (com o humano)
+## 1. Brainstorm and grill (with the human)
 
-Invoque `Skill(grill-with-docs)`. Uma pergunta por vez; não avance com resposta pela metade.
-O que você está caçando:
+Invoke `Skill(grill-with-docs)`. One question at a time; do not move on with a half answer.
+What you are hunting for:
 
-- o problema **real** (não o pedido literal);
-- como saberemos que resolveu, em número ou fato binário;
-- o que está fora de escopo, explicitamente;
-- as decisões que, uma vez tomadas, não devem ser re-litigadas pelas fases seguintes.
+- the **real** problem (not the literal request);
+- how we will know it is solved, as a number or a binary fact;
+- what is explicitly out of scope;
+- the decisions that, once taken, must not be re-litigated by the later phases.
 
-Registre as decisões no `00-missao.md`, cada uma com o porquê em uma linha. Fase headless que
-re-litiga decisão do grill queima janela de contexto para chegar ao mesmo lugar.
+Record the decisions in `00-missao.md`, each with its why in one line. A headless phase that
+re-litigates a grill decision burns context window to arrive at the same place.
 
-## 2. Gemba antes de planejar
+## 2. Gemba before planning
 
-Vá ver. Abra os arquivos, rode os comandos, confirme as versões, reproduza o comportamento.
+Go and look. Open the files, run the commands, confirm the versions, reproduce the behaviour.
 
-Tudo que você verificar vai para a seção **"Contexto verificado (não re-descobrir)"** do
-`01-plano.md`, com `arquivo:linha` ou a saída do comando. Cada linha ali é uma exploração cara
-que a sessão headless **não** vai precisar refazer. É o item de maior retorno do plano inteiro.
+Everything you verify goes into the **"context already verified (do not re-discover)"** section of
+`01-plano.md`, with `file:line` or the command output. Every line there is an expensive
+exploration the headless session will **not** have to repeat. It is the highest-return item of the
+whole plan.
 
-Fato não verificado não entra. "Provavelmente é assim" custa mais caro depois do que a checagem
-custa agora — e o `TODO.md` do repo pode estar velho: confirme antes de planejar em cima dele.
+An unverified fact does not go in. "It's probably like this" costs more later than the check costs
+now — and the repo's `TODO.md` may be stale: confirm before planning on top of it.
 
-## 3. Valide com as skills
+## 3. Validate with the skills
 
-- **`Skill(kaizen-software)` — sempre.** Preencha o checklist K1–K8 no `00-missao.md` com nota
-  honesta. Um `✗` é informação, não vergonha.
-- **`Skill(ddd:ddd)` — condicional.** Acione quando a missão toca modelagem de domínio ou
-  arquitetura: aggregates, bounded contexts, eventos, entidades novas, contratos entre módulos.
-  Missão mecânica, visual ou trivial → registre `n/a — sem toque de domínio` com uma linha de
-  justificativa. **Em dúvida, acione**: validar custa menos do que modelar errado. Chamar DDD
-  para trocar um `font-size` é o overengineering que essa condicional existe para evitar.
+- **`Skill(kaizen-software)` — always.** Fill the K1–K8 checklist in `00-missao.md` with an honest
+  grade. A `✗` is information, not shame.
+- **`Skill(ddd:ddd)` — conditional.** Trigger it when the mission touches domain modelling or
+  architecture: aggregates, bounded contexts, events, new entities, contracts between modules.
+  A mechanical, visual or trivial mission → record `n/a — no domain touched` with a one-line
+  justification. **When in doubt, trigger it**: validating costs less than modelling it wrong.
+  Calling DDD to change a `font-size` is the overengineering this conditional exists to avoid.
 
-## 4. Fatie em incrementos com sensor
+## 4. Slice into increments with sensors
 
-Cada incremento precisa de:
+Every increment needs:
 
-- **um Check executável**: comando → resultado esperado. "Verificar que funciona" não é Check.
-- **um sensor durável** sempre que couber: teste commitado, spec e2e, lint rule, asserção de
-  tipo — algo que passe a rodar no CI e prove a correção daqui a seis meses. Checagem manual
-  efêmera só quando sensor durável não cabe, **com a justificativa escrita**.
-- **tamanho de uma sessão.** O incremento é a unidade anti-estouro: uma sessão headless o
-  executa inteiro, do Red ao commit. Se você não consegue descrever o Red em uma frase, a fatia
-  está grande.
+- **an executable Check**: command → expected result. "Verify that it works" is not a Check.
+- **a durable sensor** wherever one fits: a committed test, an e2e spec, a lint rule, a type
+  assertion — something that starts running in CI and proves the correctness six months from now.
+  An ephemeral manual check only when a durable sensor does not fit, **with the justification
+  written down**.
+- **the size of one session.** The increment is the anti-overflow unit: one headless session
+  executes it whole, from Red to commit. If you cannot describe the Red in one sentence, the slice
+  is too big.
 
-A tabela vai para o `checkpoint.md`; o porquê de cada fatia fica no `01-plano.md`.
+The table goes to `checkpoint.md`; the why of each slice stays in `01-plano.md`.
 
-## 5. Teste de autocontenção
+## 5. Self-containment test
 
-Antes de fechar, faça o teste de verdade — não presuma:
+Before closing, run the real test — do not assume:
 
-> Uma sessão nova, sem nenhuma memória desta conversa, lendo **apenas** `00-missao.md`,
-> `01-plano.md` e `checkpoint.md`, consegue executar o primeiro incremento?
+> Can a fresh session, with no memory of this conversation, reading **only** `00-missao.md`,
+> `01-plano.md` and `checkpoint.md`, execute the first increment?
 
-Toda vez que a resposta for "só se souber X", **X vai escrito no plano**. Nomes de arquivo
-exatos, nomes de função, o comando que sobe o ambiente, o pitfall que você levou vinte minutos
-para descobrir.
+Every time the answer is "only if it knows X", **X goes written into the plan**. Exact file names,
+function names, the command that brings the environment up, the pitfall that took you twenty
+minutes to find.
 
-## 6. Feche o gate PLAN-AUTO
+## 6. Close the PLAN-AUTO gate
 
-Preencha a tabela do `00-missao.md` **com evidência**, não com otimismo:
+Fill the `00-missao.md` table **with evidence**, not with optimism:
 
-| # | Critério |
+| # | Criterion |
 |---|---|
-| a | grill sem perguntas abertas não endereçadas (🚩 vazia, ou itens deferidos com dono) |
-| b | checklist kaizen 100% ✅ e DDD 100% ✅ ou `n/a` justificado |
-| c | plano passa no teste de autocontenção |
-| d | todo incremento com Check executável |
-| e | `versao:` confirmada pelo humano (ou `JIRA_ENABLED=false`) |
+| a | grill with no unaddressed open questions (🚩 empty, or items deferred with an owner) |
+| b | kaizen checklist 100% ✅ and DDD 100% ✅ or a justified `n/a` |
+| c | the plan passes the self-containment test |
+| d | every increment has an executable Check |
+| e | `versao:` confirmed by the human (or `JIRA_ENABLED=false`) |
 
-- **Todos ✅** → `aprovacao: auto`. O grill bem feito **é** a aprovação: o humano esteve
-  presente, a participação dele foi o gate. Encadeie `sdd run <missão>` e o pipeline segue
-  sozinho até o PR.
-- **Qualquer ✗** → deixe `aprovacao` vazio e peça aprovação explícita ao humano, dizendo qual
-  critério falhou. O runner não passa sem um dos dois valores.
+- **All ✅** → `aprovacao: auto`. A well-run grill **is** the approval: the human was present, and
+  their participation was the gate. Chain `sdd run <mission>` and the pipeline goes on alone to
+  the PR.
+- **Any ✗** → leave `aprovacao` empty and ask the human for explicit approval, saying which
+  criterion failed. The runner does not proceed without one of the two values.
 
-Este gate só funciona se você for honesto ao preenchê-lo. Marcar ✅ no que não fechou não
-acelera nada: transfere um defeito para uma fase que não tem humano para pegá-lo.
+This gate only works if you are honest filling it in. Marking ✅ on something that did not close
+accelerates nothing: it transfers a defect to a phase that has no human to catch it.
 
-## 7. Versão (quando `JIRA_ENABLED=true`)
+## 7. Version (when `JIRA_ENABLED=true`)
 
-Pergunte ao humano o rótulo de versão e grave em `versao:` no `00-missao.md`. **Nunca decida
-sozinho**: versão é comunicação com quem usa o produto, não consequência técnica do diff.
+Ask the human for the version label and record it in `versao:` in `00-missao.md`. **Never decide
+on your own**: a version is communication with the people who use the product, not a technical
+consequence of the diff.
 
-## Regras que não se negociam
+## Language
 
-- Você não implementa. Nada de código nesta fase.
-- Fato não verificado não entra no "Contexto verificado".
-- Incremento sem Check executável não entra no checkpoint.
-- DDD é condicional; kaizen é sempre.
-- `aprovacao: auto` só com os cinco critérios fechados de verdade.
-- Versão vem do humano.
+Write the three artifacts in the language the target repo declares in `OUTPUT_LANG`
+(`.sdd/config.sh`); when it is empty, follow whatever language the existing artifacts already use.
+Frontmatter keys, file names, template headings and status tokens are contract — always as the
+templates ship them, because the runner and the tests grep them.
+
+## Rules that are not negotiable
+
+- You do not implement. No code in this phase.
+- An unverified fact does not enter the "verified context".
+- An increment without an executable Check does not enter the checkpoint.
+- DDD is conditional; kaizen is always.
+- `aprovacao: auto` only with the five criteria genuinely closed.
+- The version comes from the human.

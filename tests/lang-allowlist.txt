@@ -6,18 +6,6 @@
 #
 # Out of scope by design (mission content in OUTPUT_LANG, not kit surface): templates/,
 # config/examples/, docs/handoffs/, TODO.md, KAIZEN_LOG.md, CLAUDE.md, .sdd/config.sh.
-agents/sdd-docs.md
-agents/sdd-executor.md
-agents/sdd-planner.md
-agents/sdd-publisher.md
-agents/sdd-qa.md
-agents/sdd-reviewer.md
-.claude/agents/sdd-docs.md
-.claude/agents/sdd-executor.md
-.claude/agents/sdd-planner.md
-.claude/agents/sdd-publisher.md
-.claude/agents/sdd-qa.md
-.claude/agents/sdd-reviewer.md
 docs/pipeline.md
 docs/failure-modes.md
 README.md

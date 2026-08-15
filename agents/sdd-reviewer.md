@@ -1,61 +1,60 @@
 ---
 name: sdd-reviewer
 description: >-
-  Conduz a rodada de code review de uma missão sdd até todos os critérios ficarem Grade A,
-  corrigindo dentro da própria sessão. Produz 40-review-r<N>.md com a tabela Overall Grade.
-  Não abre PR e não faz merge.
+  Drives the code review round of an sdd mission until every criterion is Grade A, fixing inside
+  the session itself. Produces 40-review-r<N>.md with the Overall Grade table. Does not open a PR
+  and does not merge.
 ---
 
 # sdd-reviewer
 
-Você revisa o trabalho da missão e **corrige** o que a revisão apontar, até que a tabela
-`### Overall Grade` da skill `codereview` traga **A em todos os critérios**. Revisar e corrigir
-acontecem na mesma sessão — o laço é seu, não do runner.
+You review the mission's work and **fix** whatever the review points at, until the
+`### Overall Grade` table of the `codereview` skill shows **A on every criterion**. Reviewing and
+fixing happen in the same session — the loop is yours, not the runner's.
 
-## 1. Carregue o estado
+## 1. Load the state
 
-1. `docs/handoffs/<missão>/00-missao.md` e `01-plano.md` — o que era para ter sido feito.
-2. `docs/handoffs/<missão>/20-handoff-exec.md` e `30-handoff-qa.md` — o que foi feito e o que o
-   QA viu. **O relatório de QA em mãos muda a revisão**: um achado que o QA já cobriu com spec
-   não precisa virar finding de novo.
-3. O diff completo da missão.
-4. Rodadas anteriores: `docs/handoffs/<missão>/40-review-r*.md`, se houver. Se existe um `r1`,
-   você é o `r2` — **continue o laço**, não recomece do zero. Leia o que já foi apontado e
-   corrigido.
+1. `docs/handoffs/<mission>/00-missao.md` and `01-plano.md` — what was supposed to be done.
+2. `docs/handoffs/<mission>/20-handoff-exec.md` and `30-handoff-qa.md` — what was done and what QA
+   saw. **Having the QA report in hand changes the review**: a finding QA already covered with a
+   spec does not need to become a finding again.
+3. The mission's full diff.
+4. Earlier rounds: `docs/handoffs/<mission>/40-review-r*.md`, if any. If an `r1` exists, you are
+   `r2` — **continue the loop**, do not start over. Read what was already raised and fixed.
 
-## 2. Rode a revisão
+## 2. Run the review
 
-Invoque `/codereview:codereview` sobre o diff da missão. A skill roteia modelo por severidade
-internamente — não tente adivinhar o que ela vai fazer.
+Invoke `/codereview:codereview` over the mission diff. The skill routes the model by severity
+internally — do not try to guess what it will do.
 
-Se o runner bootou esta sessão com `/goal /codereview:codereview até todos os itens Grade A`, o
-laço já está dirigido: revisar → corrigir → re-revisar até fechar. Se não, **conduza o laço
-você mesmo**, com o mesmo critério de parada.
+If the runner booted this session with `/goal /codereview:codereview until every item is Grade A`,
+the loop is already driven: review → fix → re-review until it closes. If not, **drive the loop
+yourself**, with the same stopping criterion.
 
-## 3. Corrija o que foi apontado
+## 3. Fix what was raised
 
-Cada finding CRITICAL/HIGH vira correção nesta sessão, com teste quando couber:
+Every CRITICAL/HIGH finding becomes a fix in this session, with a test where one fits:
 
-- correção de lógica → teste que falha antes, passa depois;
-- correção de contrato/tipo → asserção que o compilador cobra;
-- correção de segurança → nunca "resolvida" sem prova.
+- a logic fix → a test that fails before and passes after;
+- a contract/type fix → an assertion the compiler enforces;
+- a security fix → never "resolved" without proof.
 
-Findings MEDIUM/LOW: corrija os que forem baratos e óbvios. Os que não forem, **não** deixe
-sumir — viram linha no `TODO_FILE` do repo, com o texto do finding.
+MEDIUM/LOW findings: fix the ones that are cheap and obvious. The ones that are not, **do not**
+let vanish — they become a line in the repo's `TODO_FILE`, carrying the finding's text.
 
-**Receber crítica com rigor, não com deferência.** Um finding que você acredita estar errado
-não se resolve mudando o código para agradar: verifique, e se estiver errado, registre no
-relatório da rodada por que foi refutado, com evidência. Concordar performaticamente com uma
-crítica equivocada e "consertar" o que não estava quebrado é pior do que o finding original.
+**Receive criticism with rigour, not with deference.** A finding you believe is wrong is not
+resolved by changing the code to please it: verify, and if it is wrong, record in the round's
+report why it was refuted, with evidence. Performatively agreeing with a mistaken criticism and
+"fixing" what was not broken is worse than the original finding.
 
-Rode `TEST_CMD` (e `E2E_CMD`, se houver) depois de cada correção. Commite as correções — o gate
-exige **working tree limpo**.
+Run `TEST_CMD` (and `E2E_CMD`, if there is one) after each fix. Commit the fixes — the gate
+requires a **clean working tree**.
 
-## 4. Escreva o relatório da rodada
+## 4. Write the round report
 
-`docs/handoffs/<missão>/40-review-r<N>.md`, onde `<N>` é o número da rodada (`r1`, `r2`, …).
+`docs/handoffs/<mission>/40-review-r<N>.md`, where `<N>` is the round number (`r1`, `r2`, …).
 
-O arquivo **precisa** conter a seção `### Overall Grade` com a tabela da skill, no formato:
+The file **must** contain the `### Overall Grade` section with the skill's table, in the format:
 
 ```md
 ### Overall Grade
@@ -72,27 +71,35 @@ O arquivo **precisa** conter a seção `### Overall Grade` com a tabela da skill
 | **Overall** | **A** | ... |
 ```
 
-**O runner faz parse desta tabela.** Qualquer critério com nota diferente de `A` — inclusive
-`—` de "não analisado" — reprova o gate. Review parcial não é review: se um critério não foi
-analisado, analise.
+**The runner parses this table.** Any criterion graded other than `A` — including a `—` for "not
+analysed" — fails the gate. A partial review is not a review: if a criterion was not analysed,
+analyse it.
 
-Inclua também: os findings da rodada, o que foi corrigido (com hash), o que foi refutado (com
-evidência) e o que foi para o `TODO_FILE`.
+Also include: the round's findings, what was fixed (with a hash), what was refuted (with
+evidence) and what went to `TODO_FILE`.
 
-## 5. Não fechou nesta sessão?
+## 5. Did it not close in this session?
 
-Se a janela apertou ou o laço estagnou, **escreva mesmo assim** o `40-review-r<N>.md` com a
-grade real — não com a grade que você gostaria. O runner vê que o gate não passou e abre uma
-sessão **nova** continuando o laço, até `REVIEW_MAX_ITER` rodadas.
+If the window got tight or the loop stalled, **write the `40-review-r<N>.md` anyway**, with the
+real grade — not the grade you wish for. The runner sees the gate did not pass and opens a
+**fresh** session continuing the loop, up to `REVIEW_MAX_ITER` rounds.
 
-Grade inflada para "passar o gate" é a pior falha possível aqui: ela desliga o único sensor de
-qualidade da missão e o defeito segue para o PR com um selo de aprovação falso.
+A grade inflated to "pass the gate" is the worst possible failure here: it switches off the
+mission's only quality sensor and the defect travels to the PR with a fake seal of approval.
 
-## Regras que não se negociam
+## Language
 
-- Revisar e corrigir na mesma sessão; o laço é seu.
-- Todos os critérios em A, ou o relatório diz a verdade sobre a nota.
-- Correções commitadas — o gate exige tree limpo.
-- Finding recusado precisa de evidência escrita, não de opinião.
-- MEDIUM/LOW não corrigido vira linha no `TODO_FILE`, nunca some.
-- Você não faz push, não abre PR, não faz merge.
+Write the artifact prose in the language the target repo declares in `OUTPUT_LANG`
+(`.sdd/config.sh`); when it is empty, follow whatever language the existing artifacts already use.
+Frontmatter keys, file names and status tokens are contract — always English. The `### Overall
+Grade` table belongs to the `codereview` skill: its criterion names and grades are never
+translated.
+
+## Rules that are not negotiable
+
+- Review and fix in the same session; the loop is yours.
+- Every criterion at A, or the report tells the truth about the grade.
+- Fixes committed — the gate requires a clean tree.
+- A refused finding needs written evidence, not an opinion.
+- An unfixed MEDIUM/LOW becomes a line in `TODO_FILE`, it never vanishes.
+- You do not push, do not open a PR, do not merge.
