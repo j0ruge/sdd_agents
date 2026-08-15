@@ -24,18 +24,26 @@ trap 'rm -rf "$WORK"' EXIT
 # The English surface. templates/ and config/examples/ are absent on purpose: they are content
 # in OUTPUT_LANG, not kit surface. So are TODO.md, KAIZEN_LOG.md, CLAUDE.md and docs/handoffs/.
 #
-# This file excludes ITSELF, and that is not a loophole. It is the one place where Portuguese is
-# DATA rather than prose — the stopword list and the self-test probes have to contain the thing
-# being detected. Scanning it would report the detector for owning its own dictionary, and the
-# only way to silence that would be to weaken the dictionary. Its guard is selftest() below,
-# which exits 90/91/92 the moment detection stops working — a stricter check than a grep for
-# accents, because it measures behaviour instead of spelling.
+# Two files are excluded, and neither is a loophole. They are the only places where Portuguese is
+# DATA rather than prose, so scanning them would force the data to be weakened just to keep the
+# scan quiet:
+#
+#   - check-lang.sh (this file): the stopword list and the self-test probes have to contain the
+#     thing being detected. Its guard is selftest() below, which exits 90/91/92 the moment
+#     detection stops working — a stricter check than grepping for accents, because it measures
+#     behaviour instead of spelling.
+#   - check-templates.sh: its regexes assert the headings of templates/, which are mission content
+#     in this repo's OUTPUT_LANG (pt-BR). Translating them would break the contract they measure.
+#
+# The cost is real and worth naming: Portuguese PROSE could creep into those two files unseen. The
+# fix that would restore coverage is to move the template contract out into a data file, leaving
+# the script pure English logic — recorded in TODO.md, not done here.
 surface() {
   ( cd "$ROOT" && ls -1 bin/sdd agents/sdd-*.md .claude/agents/sdd-*.md \
       docs/pipeline.md docs/failure-modes.md README.md \
       config/schema.md config/starter.conf \
       tests/*.sh tests/health-baseline.txt tests/lang-allowlist.txt 2>/dev/null ) \
-    | grep -vxF 'tests/check-lang.sh'
+    | grep -vxF -e 'tests/check-lang.sh' -e 'tests/check-templates.sh'
 }
 
 # Accent-free Portuguese function words. `todo`/`toda` are deliberately absent: they would match
@@ -80,10 +88,10 @@ files="$(surface)"
 
 # Explicit floor, same reason as the "exactly 7 gates" floor in cmd_health: a glob that stops
 # matching (a renamed directory, a moved file) would leave the loop with nothing to read and the
-# check would report "0 new" — clean by vacuity. 25 paths today; the floor moves only on purpose.
+# check would report "0 new" — clean by vacuity. 24 paths today; the floor moves only on purpose.
 n_surface="$(grep -c . <<< "$files")"
-if [ "$n_surface" -lt 25 ]; then
-  printf '  FAIL  surface shrank to %d path(s), expected at least 25 — did something move?\n' \
+if [ "$n_surface" -lt 24 ]; then
+  printf '  FAIL  surface shrank to %d path(s), expected at least 24 — did something move?\n' \
     "$n_surface" >&2
   exit 93
 fi

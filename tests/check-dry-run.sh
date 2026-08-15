@@ -1,15 +1,15 @@
 #!/usr/bin/env bash
-# Sensor da projeção do dry-run.
+# Sensor for the dry-run projection.
 #
-# `sdd run <missão> --dry-run` existe para responder "o que vai acontecer se eu rodar isto?"
-# ANTES de gastar token. Responder só pela primeira fase é responder pela metade: o usuário
-# não fica sabendo que depois viriam QA, REVIEW, DOCS e PR, nem com que agente cada uma roda.
+# `sdd run <mission> --dry-run` exists to answer "what will happen if I run this?" BEFORE spending
+# tokens. Answering only for the first phase is answering half of it: the user never learns that
+# QA, REVIEW, DOCS and PR would follow, nor which agent runs each one.
 #
-# Este teste monta um repo-fixture parado em EXEC e afirma que o dry-run projeta a sequência
-# inteira de fases pendentes, na ordem, cada uma com o agente certo (ou <none>, quando quem
-# dirige a sessão é uma skill de terceiro pelo slash literal) — e que nada no disco muda.
+# This test builds a fixture repo stalled at EXEC and asserts that the dry-run projects the whole
+# sequence of pending phases, in order, each with the right agent (or <none>, when the session is
+# driven by a third-party skill through the literal slash) — and that nothing on disk changes.
 #
-# Uso: tests/check-dry-run.sh   (exit 0 = projeção correta)
+# Usage: tests/check-dry-run.sh   (exit 0 = projection correct)
 
 set -uo pipefail
 
@@ -21,17 +21,17 @@ fails=0
 trap 'rm -rf "$FIX"' EXIT
 
 pass() { printf '  ok    %s\n' "$1"; }
-fail() { printf '  FALHA %s\n         esperado: %s\n         obtido:   %s\n' "$1" "$2" "$3" >&2
+fail() { printf '  FAIL  %s\n         expected: %s\n         got:      %s\n' "$1" "$2" "$3" >&2
          fails=$((fails + 1)); }
 
-# assert_eq <descrição> <esperado> <obtido>
+# assert_eq <description> <expected> <got>
 assert_eq() {
   if [ "$2" = "$3" ]; then pass "$1"; else fail "$1" "$2" "$3"; fi
 }
 
-# A sequência (fase, agente) que o dry-run imprimiu, uma por linha, na ordem de impressão.
-# Uma única asserção cobre quatro coisas: quais fases aparecem, em que ordem, quantas vezes
-# cada uma, e qual agente foi anunciado em cada bloco.
+# The (phase, agent) sequence the dry-run printed, one per line, in print order.
+# A single assertion covers four things: which phases appear, in what order, how many times each,
+# and which agent was announced in each block.
 projected() {
   awk '
     /^--- DRY RUN: phase .* ---$/ { ph = $5; next }
@@ -41,26 +41,26 @@ projected() {
   '
 }
 
-# Impressão digital de tudo que existe no fixture, exceto o .git. Dry-run não pode mexer aqui.
+# Fingerprint of everything in the fixture except .git. The dry-run must not touch any of it.
 tree_snapshot() {
   ( cd "$FIX" && find . -path ./.git -prune -o -print | LC_ALL=C sort )
 }
 
 # ---------------------------------------------------------------------------
-echo "== fixture em $FIX =="
-# `|| exit`: `set -e` está fora (precisamos de `rc=$?` depois dos comandos que falham de
-# propósito), então um `cd` que falha seguiria rodando `git init`, `sed -i` e `git commit` no
-# repo REAL de quem rodou o teste. Falhar aqui é barato; corromper o repo do dev não é.
+echo "== fixture at $FIX =="
+# `|| exit`: `set -e` is off (we need `rc=$?` after the commands that fail on purpose), so a
+# failing `cd` would go on to run `git init`, `sed -i` and `git commit` in the REAL repo of
+# whoever ran the test. Failing here is cheap; corrupting the dev's repo is not.
 cd "$FIX" || exit 1
 
-# Nenhum teste pode gastar token nem rede. O caminho "execução real" abaixo depende de o Jidoka
-# de `blocked` escapar ANTES de qualquer `run_phase` — se essa ordem quebrar, o runner chamaria
-# o `claude` de verdade. Este stub torna isso impossível por construção: em vez de uma sessão
-# paga (ou de um hang em CI), o teste falha alto e barato.
+# No test may spend tokens or network. The "real execution" path below depends on the `blocked`
+# Jidoka escaping BEFORE any `run_phase` — if that order breaks, the runner would call claude for
+# real. This stub makes that impossible by construction: instead of a paid session (or a hang in
+# CI), the test fails loudly and cheaply.
 mkdir -p "$FIX/.stub"
 cat > "$FIX/.stub/claude" <<'STUB'
 #!/usr/bin/env bash
-echo "ERRO: o teste invocou o claude de verdade — o caminho de escalação não escapou antes da sessão" >&2
+echo "ERROR: the test invoked the real claude — the escalation path did not escape before the session" >&2
 exit 97
 STUB
 chmod +x "$FIX/.stub/claude"
@@ -69,7 +69,7 @@ PATH="$FIX/.stub:$PATH"
 git init -q -b main
 git config user.email "fixture@example.com"
 git config user.name "Fixture"
-echo "conteúdo" > arquivo.txt
+echo "content" > file.txt
 git add -A && git commit -qm "init"
 
 "$SDD" install >/dev/null
@@ -84,35 +84,38 @@ JIRA_ENABLED=false
 EOF
 
 MDIR="$FIX/docs/handoffs/$MISSION"
-# O diário do runner é efêmero e mora fora da árvore commitada (`log_dir()` em bin/sdd).
+# The runner's journal is ephemeral and lives outside the committed tree (`log_dir()` in bin/sdd).
 PIPELINE_LOG="$FIX/.sdd/logs/$MISSION/pipeline.log"
 mkdir -p "$MDIR"
+# Artifact file names, frontmatter keys and the checkpoint header are CONTRACT: they stay exactly
+# as templates/ ships them, because that is what the runner parses.
 cat > "$MDIR/00-missao.md" <<'EOF'
 ---
 missao: 20260101-fixture
 aprovacao: auto
 ---
-# Missão
+# Mission
 EOF
 : > "$MDIR/01-plano.md"
 cat > "$MDIR/checkpoint.md" <<'EOF'
 | ID | Incremento | Check (comando → esperado) | Status | Commit |
 |---|---|---|---|---|
-| I1 | fatia um | `true` → 0 | pending | — |
+| I1 | slice one | `true` → 0 | pending | — |
 EOF
-git add -A && git commit -qm "chore: missão-fixture"
+git add -A && git commit -qm "chore: fixture mission"
 
-# Sanidade: sem isto, um fixture mal montado faria o teste passar/falhar pelo motivo errado.
+# Sanity: without this, a badly built fixture would make the test pass or fail for the wrong
+# reason.
 here="$( "$SDD" phase "$MISSION" 2>&1 )"
-assert_eq "fixture parado na fase EXEC" "EXEC" "$here"
+assert_eq "fixture stalled at the EXEC phase" "EXEC" "$here"
 
-# --- projeção completa -----------------------------------------------------
-echo "== projeção =="
+# --- full projection -------------------------------------------------------
+echo "== projection =="
 before="$(tree_snapshot)"
 out="$( "$SDD" run "$MISSION" --dry-run 2>&1 )"; rc=$?
 after="$(tree_snapshot)"
 
-assert_eq "dry-run sai 0" "0" "$rc"
+assert_eq "dry-run exits 0" "0" "$rc"
 
 want="$(printf '%s\n' \
   "EXEC=sdd-executor" \
@@ -121,188 +124,194 @@ want="$(printf '%s\n' \
   "DOCS=sdd-docs" \
   "PR=sdd-publisher")"
 got="$(printf '%s\n' "$out" | projected)"
-assert_eq "projeta EXEC→QA→REVIEW→DOCS→PR, na ordem, cada uma com seu agente" "$want" "$got"
+assert_eq "projects EXEC→QA→REVIEW→DOCS→PR, in order, each with its agent" "$want" "$got"
 
-# TICKET tem o gate satisfeito (JIRA_ENABLED=false): fase satisfeita não entra na projeção.
+# TICKET has its gate satisfied (JIRA_ENABLED=false): a satisfied phase is not in the projection.
 if printf '%s\n' "$out" | grep -q '^--- DRY RUN: phase TICKET ---$'; then
-  fail "fase com gate satisfeito não aparece na projeção" "sem bloco TICKET" "bloco TICKET impresso"
+  fail "a phase with a satisfied gate does not appear in the projection" "no TICKET block" "TICKET block printed"
 else
-  pass "fase com gate satisfeito (TICKET) não aparece na projeção"
+  pass "a phase with a satisfied gate (TICKET) does not appear in the projection"
 fi
 
-# --- nada é executado, nada muda no disco ----------------------------------
-echo "== dry-run não toca no disco =="
-assert_eq "árvore de arquivos idêntica antes e depois" "$before" "$after"
-assert_eq "working tree continua limpo" "" "$(git status --porcelain)"
+# --- nothing is executed, nothing changes on disk --------------------------
+echo "== the dry-run does not touch the disk =="
+assert_eq "file tree identical before and after" "$before" "$after"
+assert_eq "working tree still clean" "" "$(git status --porcelain)"
 
-# --- OUTPUT_LANG chega ao prompt de boot -----------------------------------
-# Ancorado no VALOR da chave, nunca na prosa do prompt: o texto do runner vira inglês no I13.5.3,
-# e uma asserção presa à prosa morreria junto. Asserção que só sobrevive ao próprio commit não é
-# sensor — é decoração com data de validade.
+# --- OUTPUT_LANG reaches the boot prompt -----------------------------------
+# Anchored on the VALUE of the key, never on the prose of the prompt: the runner text is English
+# and the artifacts may be in any language, and an assertion tied to the prose would die at the
+# first translation. An assertion that only survives its own commit is not a sensor — it is
+# decoration with an expiry date.
 echo "== OUTPUT_LANG =="
-# Reaproveita a projeção de cima: é a MESMA invocação, com a chave ausente do config do fixture.
+# Reuses the projection above: it is the SAME invocation, with the key absent from the fixture
+# config.
 if printf '%s\n' "$out" | grep -q 'pt-BR'; then
-  fail "sem OUTPUT_LANG o prompt não fala de idioma" "nenhuma menção a idioma" "menção a pt-BR"
+  fail "with no OUTPUT_LANG the prompt says nothing about language" "no mention of a language" "pt-BR mentioned"
 else
-  pass "sem OUTPUT_LANG o prompt não fala de idioma (é o estado de todo repo já instalado)"
+  pass "with no OUTPUT_LANG the prompt says nothing about language (the state of every installed repo)"
 fi
 
 echo 'OUTPUT_LANG="pt-BR"' >> .sdd/config.sh
 out_lang="$( "$SDD" run "$MISSION" --dry-run 2>&1 )"
 if printf '%s\n' "$out_lang" | grep -q 'pt-BR'; then
-  pass "com OUTPUT_LANG o prompt de boot carrega o idioma pedido"
+  pass "with OUTPUT_LANG the boot prompt carries the requested language"
 else
-  fail "com OUTPUT_LANG o prompt de boot carrega o idioma pedido" \
-       "prompt citando pt-BR" "prompt sem menção a idioma"
+  fail "with OUTPUT_LANG the boot prompt carries the requested language" \
+       "prompt quoting pt-BR" "prompt with no language mention"
 fi
-# Restaura o fixture byte a byte: as asserções de working tree limpo mais abaixo dependem disso.
+# Restores the fixture byte for byte: the clean-working-tree assertions below depend on it.
 sed -i '/^OUTPUT_LANG=/d' .sdd/config.sh
-assert_eq "o fixture volta limpo depois do teste de idioma" "" "$(git status --porcelain)"
+assert_eq "the fixture comes back clean after the language test" "" "$(git status --porcelain)"
 
-# --- --phase continua imprimindo só a fase pedida --------------------------
-echo "== --phase <FASE> =="
+# --- --phase still prints only the phase asked for -------------------------
+echo "== --phase <PHASE> =="
 out1="$( "$SDD" run "$MISSION" --dry-run --phase QA 2>&1 )"
-# QA são três sessões derivadas dos artefatos (planejar → andar → fechar). Este fixture não tem
-# interface para andar (E2E_CMD e APP_URL vazios), então o sub-passo é `close`: o sdd-qa julga se
-# o diff é user-visible e, não sendo, escreve `qa: skipped`.
-assert_eq "--phase QA imprime só o sub-passo corrente" "QA:close=sdd-qa" "$(printf '%s\n' "$out1" | projected)"
+# QA is three sessions derived from the artifacts (plan → walk → close). This fixture has no
+# interface to walk (E2E_CMD and APP_URL empty), so the sub-step is `close`: sdd-qa judges whether
+# the diff is user-visible and, when it is not, writes `qa: skipped`.
+assert_eq "--phase QA prints only the current sub-step" "QA:close=sdd-qa" "$(printf '%s\n' "$out1" | projected)"
 
-# --- o sub-passo de QA muda com a existência de interface ------------------
-echo "== sub-passo de QA derivado dos artefatos =="
-# Com E2E_CMD definido e nenhum charter na árvore, o ciclo começa pelo planejamento — dirigido
-# pela skill qa-report via slash literal, por isso sem agente do kit.
+# --- the QA sub-step changes with the existence of an interface ------------
+echo "== QA sub-step derived from the artifacts =="
+# With E2E_CMD set and no charter in the tree, the cycle starts at planning — driven by the
+# qa-report skill through the literal slash, hence with no kit agent.
 sed -i 's|^E2E_CMD=""|E2E_CMD="true"|' .sdd/config.sh
 out2="$( "$SDD" run "$MISSION" --dry-run --phase QA 2>&1 )"
-assert_eq "projeto COM interface e sem charters começa em QA:plan (skill qa-report)" \
+assert_eq "a project WITH an interface and no charters starts at QA:plan (qa-report skill)" \
   "QA:plan=<none>" "$(printf '%s\n' "$out2" | projected)"
-# O dry-run imprime o prompt com o prefixo "  │ ", então a âncora inclui a primeira linha do
-# bloco — é ali que o slash precisa estar para expandir em headless.
+# The dry-run prints the prompt with the "  │ " prefix, so the anchor includes the first line of
+# the block — that is where the slash has to be to expand headless.
 if printf '%s\n' "$out2" | grep -q '│ /qa-report docs/qa'; then
-  pass "o prompt de boot começa com o slash literal /qa-report"
+  pass "the boot prompt starts with the literal /qa-report slash"
 else
-  fail "boot de QA:plan" "prompt começando com /qa-report" "$(printf '%s\n' "$out2" | grep -m1 '│' || echo vazio)"
+  fail "QA:plan boot" "prompt starting with /qa-report" "$(printf '%s\n' "$out2" | grep -m1 '│' || echo empty)"
 fi
-# Com charter E relatório fechado, o ciclo avança para o fechamento (sdd-qa). Esta asserção
-# existe porque a âncora do "relatório fechado" vivia duplicada no gate e no sub-passo: corrigida
-# num lugar só, o gate aceitava e o sub-passo continuava mandando executar — o runner re-rodava
-# qa-execution indefinidamente, a US$ 15 por volta. Medido no piloto SQ-97.
+# With a charter AND a closed report, the cycle moves on to closing (sdd-qa). This assertion
+# exists because the "report closed" anchor used to live duplicated in the gate and in the
+# sub-step: fixed in one place only, the gate accepted it while the sub-step kept ordering another
+# execution — the runner re-ran qa-execution indefinitely, at US$ 15 a round. Measured in the
+# SQ-97 pilot.
 mkdir -p docs/qa/charters docs/qa/reports
-printf '# CH-um\n' > docs/qa/charters/CH-um.md
+printf '# CH-one\n' > docs/qa/charters/CH-one.md
 printf -- '# QA Run Report\n- **Started:** 2026-01-01T10:00:00Z · **Status:** closed <!-- in-progress | closed -->\n' \
   > docs/qa/reports/2026-01-01-fixture.md
 out3="$( "$SDD" run "$MISSION" --dry-run --phase QA 2>&1 )"
-assert_eq "com charter e relatório fechado, o sub-passo é close (não re-executa)" \
+assert_eq "with a charter and a closed report the sub-step is close (no re-execution)" \
   "QA:close=sdd-qa" "$(printf '%s\n' "$out3" | projected)"
 
-# E o relatório ainda ABERTO tem que voltar a mandar executar — senão a asserção acima passaria
-# por vacuidade, aprovando qualquer coisa.
+# And a report that is still OPEN has to order execution again — otherwise the assertion above
+# would pass by vacuity, approving anything.
 sed -i 's/\*\*Status:\*\* closed/**Status:** in-progress/' docs/qa/reports/2026-01-01-fixture.md
 out4="$( "$SDD" run "$MISSION" --dry-run --phase QA 2>&1 )"
-assert_eq "relatório em andamento volta ao sub-passo exec" \
+assert_eq "an in-progress report goes back to the exec sub-step" \
   "QA:exec=<none>" "$(printf '%s\n' "$out4" | projected)"
 rm -rf docs/qa/charters docs/qa/reports
 
 sed -i 's|^E2E_CMD="true"|E2E_CMD=""|' .sdd/config.sh
 
-# --- a projeção não pode escrever no diário da missão ----------------------
-# Achado da fase QA da missão 20260814-dry-run-completo: com um incremento `blocked`, o
-# dry-run escapa pelo Jidoka de `cmd_run` ANTES de chegar ao bloco DRY_RUN, e aquele caminho
-# chama `pipeline_log_line` sem guarda. Resultado: uma projeção — comando de leitura, que o
-# usuário roda justamente para NÃO mexer em nada — grava no `pipeline.log` da missão um evento
-# BLOCKED que nunca aconteceu, mentindo na trilha de auditoria. Pior num repo-alvo recém
-# instalado: o `sdd install` só põe `.sdd/logs/` no `.gitignore`, então o `pipeline.log` fica
-# como untracked e suja o working tree — e tree sujo reprova `gate_REVIEW` e o `sdd preflight`.
-# Um comando de projeção não pode derrubar gate de outra fase.
-echo "== projeção não escreve no diário da missão (incremento blocked) =="
+# --- the projection must not write to the mission journal ------------------
+# Found by the QA phase of mission 20260814-dry-run-completo: with a `blocked` increment, the
+# dry-run escapes through the `cmd_run` Jidoka BEFORE reaching the DRY_RUN block, and that path
+# calls `pipeline_log_line` with no guard. Result: a projection — a read command the user runs
+# precisely so as NOT to change anything — records a BLOCKED event that never happened in the
+# mission's `pipeline.log`, lying in the audit trail. Worse in a freshly installed target repo:
+# `sdd install` only puts `.sdd/logs/` in `.gitignore`, so the `pipeline.log` lands as untracked
+# and dirties the working tree — and a dirty tree fails `gate_REVIEW` and `sdd preflight`.
+# A projection command must not be able to knock down another phase's gate.
+echo "== the projection does not write to the mission journal (blocked increment) =="
 sed -i 's/| pending |/| blocked |/' "$MDIR/checkpoint.md"
-git add -A && git commit -qm "fixture: incremento blocked"
+git add -A && git commit -qm "fixture: blocked increment"
 
 before_b="$(tree_snapshot)"
 out3="$( "$SDD" run "$MISSION" --dry-run 2>&1 )"; rc3=$?
 after_b="$(tree_snapshot)"
 
-# Escalar é o comportamento certo e honesto: "se você rodar isto, a linha para". Guarda de
-# regressão — isto já passava antes do achado.
-assert_eq "dry-run de missão blocked escala com exit 3" "3" "$rc3"
-# O código de saída sozinho não prova que o usuário foi INFORMADO do motivo. Sem esta asserção,
-# quebrar a mensagem de escalação passava batido aqui (verificado por mutação: trocar o texto de
-# `bad "BLOCKED em EXEC — …"` deixava este arquivo inteiro verde) — e é justamente a mensagem
-# que responde "o que acontece se eu rodar isto?", a pergunta que o dry-run existe para responder.
+# Escalating is the right and honest behaviour: "run this and the line stops". A regression guard
+# — this already passed before the finding.
+assert_eq "dry-run of a blocked mission escalates with exit 3" "3" "$rc3"
+# The exit code alone does not prove the user was TOLD the reason. Without this assertion,
+# breaking the escalation message went unnoticed here (verified by mutation: changing the text of
+# `bad "BLOCKED in EXEC — …"` left this whole file green) — and that message is exactly what
+# answers "what happens if I run this?", the question the dry-run exists to answer.
 if printf '%s\n' "$out3" | grep -q 'BLOCKED in EXEC'; then
-  pass "a projeção EXPLICA a escalação (mensagem 'BLOCKED em EXEC')"
+  pass "the projection EXPLAINS the escalation (the 'BLOCKED in EXEC' message)"
 else
-  fail "mensagem de escalação do dry-run" "saída contendo 'BLOCKED em EXEC'" \
+  fail "dry-run escalation message" "output containing 'BLOCKED in EXEC'" \
     "$(printf '%s\n' "$out3" | tail -3 | tr '\n' ' ')"
 fi
-# O Red do achado: a projeção não pode deixar rastro no disco, nem no caminho de escalação.
-# O diário mora em `.sdd/logs/<missão>/` (mudou de lugar em 53cf63a — antes era `$MDIR`, dentro
-# da árvore commitada, onde sujava o `git status` e derrubava `gate_REVIEW`). Esta asserção
-# precisa apontar para onde o runner ESCREVE hoje: apontada para o caminho velho ela passa a
-# ser decoração — verificado por mutação, com o bug do F1 reintroduzido ela continuava verde.
-assert_eq "projeção blocked não escreve o pipeline.log" "" \
-  "$( [ -e "$PIPELINE_LOG" ] && echo "pipeline.log criado" || true )"
-assert_eq "árvore idêntica antes e depois (caminho blocked)" "$before_b" "$after_b"
-# ATENÇÃO ao ler esta linha: ela NÃO é o discriminador do F1. `.sdd/logs/` está no `.gitignore`
-# que o `sdd install` escreve, então `git status --porcelain` é cego ao `pipeline.log` — com o
-# bug do F1 reintroduzido ela continua verde (verificado por mutação). Quem pega o F1 são as
-# duas asserções acima. Esta guarda uma coisa diferente e complementar: que a projeção não sujou
-# nenhum caminho RASTREADO, que é o que derrubaria `gate_REVIEW` e o `sdd preflight`.
-assert_eq "projeção não sujou nenhum arquivo rastreado (caminho blocked)" "" "$(git status --porcelain)"
+# The Red of the finding: the projection must leave no trace on disk, not even on the escalation
+# path. The journal lives in `.sdd/logs/<mission>/` (it moved in 53cf63a — it used to be `$MDIR`,
+# inside the committed tree, where it dirtied `git status` and knocked down `gate_REVIEW`). This
+# assertion has to point at where the runner WRITES today: pointed at the old path it becomes
+# decoration — verified by mutation, with the F1 bug reintroduced it stayed green.
+assert_eq "a blocked projection does not write the pipeline.log" "" \
+  "$( [ -e "$PIPELINE_LOG" ] && echo "pipeline.log created" || true )"
+assert_eq "tree identical before and after (blocked path)" "$before_b" "$after_b"
+# CAREFUL reading this line: it is NOT the discriminator for F1. `.sdd/logs/` is in the
+# `.gitignore` that `sdd install` writes, so `git status --porcelain` is blind to the
+# `pipeline.log` — with the F1 bug reintroduced it stays green (verified by mutation). The two
+# assertions above are what catch F1. This one guards something different and complementary: that
+# the projection dirtied no TRACKED path, which is what would knock down `gate_REVIEW` and
+# `sdd preflight`.
+assert_eq "the projection dirtied no tracked file (blocked path)" "" "$(git status --porcelain)"
 
-# --- o outro lado da guarda: o caminho REAL ainda escreve --------------------
-# Toda asserção acima afirma que a projeção NÃO escreve. Nenhuma afirmava que uma execução de
-# verdade ESCREVE — então inverter a guarda (`= "1"` virar `!= "1"`) mataria o diário da missão
-# em silêncio, com a suíte verde. Escrever de verdade normalmente exigiria uma `run_phase`, que
-# chamaria o `claude`; o caminho de escalação `blocked` é a exceção: ele loga e retorna 3 ANTES
-# de qualquer sessão, então dá para exercitar o caminho real sem gastar token nem rede.
-echo "== o caminho real (não-dry) ainda escreve no diário =="
-# Apagar antes é o que torna a asserção causal em vez de circunstancial: sem isto, um diário
-# deixado para trás pela projeção (exatamente o que acontece se a guarda for invertida) faria
-# o `[ -e ]` passar pelo motivo errado. Verificado por mutação — foi o que aconteceu na 1ª
-# versão desta seção, que dava "ok" com a guarda invertida.
+# --- the other side of the guard: the REAL path still writes ---------------
+# Every assertion above states that the projection does NOT write. None stated that a real run
+# DOES — so inverting the guard (`= "1"` becoming `!= "1"`) would kill the mission journal in
+# silence, with the suite green. Writing for real would normally require a `run_phase`, which
+# would call claude; the `blocked` escalation path is the exception: it logs and returns 3 BEFORE
+# any session, so the real path can be exercised without spending tokens or network.
+echo "== the real (non-dry) path still writes to the journal =="
+# Deleting first is what makes the assertion causal instead of circumstantial: without it, a
+# journal left behind by the projection (exactly what happens if the guard is inverted) would make
+# the `[ -e ]` pass for the wrong reason. Verified by mutation — it is what happened in the first
+# version of this section, which reported "ok" with the guard inverted.
 rm -f "$PIPELINE_LOG"
 "$SDD" run "$MISSION" >/dev/null 2>&1; rc4=$?
-assert_eq "execução real de missão blocked escala com exit 3" "3" "$rc4"
-assert_eq "o caminho real ESCREVE o pipeline.log em .sdd/logs/<missão>/" "existe" \
-  "$( [ -e "$PIPELINE_LOG" ] && echo existe || echo "ausente" )"
-assert_eq "o evento registrado é o BLOCKED" "1" \
+assert_eq "a real run of a blocked mission escalates with exit 3" "3" "$rc4"
+assert_eq "the real path WRITES the pipeline.log in .sdd/logs/<mission>/" "exists" \
+  "$( [ -e "$PIPELINE_LOG" ] && echo exists || echo "absent" )"
+assert_eq "the recorded event is the BLOCKED one" "1" \
   "$(grep -c 'BLOCKED' "$PIPELINE_LOG" 2>/dev/null || echo 0)"
-# O diário é efêmero por contrato: `.sdd/logs/` está no `.gitignore` que o `sdd install` escreve.
-# Se ele voltar para dentro da árvore commitada, suja o working tree e derruba `gate_REVIEW`.
-assert_eq "o diário fica FORA da árvore commitada" "" "$(git status --porcelain)"
-assert_eq "nada de pipeline.log em docs/handoffs/" "0" \
+# The journal is ephemeral by contract: `.sdd/logs/` is in the `.gitignore` that `sdd install`
+# writes. If it comes back inside the committed tree, it dirties the working tree and knocks down
+# `gate_REVIEW`.
+assert_eq "the journal stays OUTSIDE the committed tree" "" "$(git status --porcelain)"
+assert_eq "no pipeline.log in docs/handoffs/" "0" \
   "$(find docs/handoffs -name 'pipeline.log' 2>/dev/null | wc -l | tr -d ' ')"
 
-# Agora que o diário EXISTE, a asserção do F1 fica mais forte: a projeção não pode nem criar
-# nem ALTERAR o diário. `tree_snapshot` compara nomes, não conteúdo — só o md5 pega a escrita
-# num arquivo que já existia, que é o caso de qualquer missão que já rodou uma vez de verdade.
+# Now that the journal EXISTS, the F1 assertion gets stronger: the projection must neither create
+# nor MODIFY the journal. `tree_snapshot` compares names, not content — only the md5 catches a
+# write into a file that already existed, which is the case for any mission that has run for real
+# once.
 md5_before="$(md5sum "$PIPELINE_LOG" | cut -d' ' -f1)"
 "$SDD" run "$MISSION" --dry-run >/dev/null 2>&1
 md5_after="$(md5sum "$PIPELINE_LOG" | cut -d' ' -f1)"
-assert_eq "projeção não ALTERA um pipeline.log preexistente" "$md5_before" "$md5_after"
+assert_eq "the projection does not MODIFY a pre-existing pipeline.log" "$md5_before" "$md5_after"
 
 sed -i 's/| blocked |/| pending |/' "$MDIR/checkpoint.md"
 
-# --- higiene de escopo: nenhuma função lê a `local` do chamador ---------------
-# `pstep` é `local` de `run_phase`. Escopo dinâmico do bash faz com que TODA função chamada por
-# ela enxergue essa local — então uma outra função referenciar `$pstep` "funciona", mas só por
-# coincidência de quem a chama. Sob `set -u`, chamada de qualquer outro lugar, a expansão falha
-# DENTRO de um `$( )`: a variável vira vazia, a função retorna 0 e a fase roda sem agente — sem
-# erro visível, exatamente o modo de falha silenciosa que este kit existe para impedir.
-# Nem `bash -n` nem `shellcheck` pegam isto (o nome ESTÁ atribuído no arquivo, em run_phase),
-# por isso o sensor é aqui.
-echo "== higiene de escopo do runner =="
+# --- scope hygiene: no function reads the caller's local --------------------
+# `pstep` is `local` to `run_phase`. Bash dynamic scoping means EVERY function it calls can see
+# that local — so another function referencing `$pstep` "works", but only by coincidence of who
+# calls it. Under `set -u`, called from anywhere else, the expansion fails INSIDE a `$( )`: the
+# variable comes out empty, the function returns 0 and the phase runs with no agent — no visible
+# error, exactly the silent failure mode this kit exists to prevent.
+# Neither `bash -n` nor the linter catches this (the name IS assigned in the file, in run_phase),
+# which is why the sensor is here.
+echo "== runner scope hygiene =="
 offenders="$(awk '
   /^[a-zA-Z_][a-zA-Z0-9_]*\(\)[[:space:]]*\{/ { fn = substr($1, 1, index($1, "(") - 1) }
   /pstep/ && fn != "run_phase" { print fn "():" NR }
 ' "$ROOT/bin/sdd")"
-assert_eq "só run_phase referencia \$pstep (a local do chamador não vaza)" "" "$offenders"
+assert_eq "only run_phase references \$pstep (the caller's local does not leak)" "" "$offenders"
 
 # ---------------------------------------------------------------------------
 echo
 if [ "$fails" -eq 0 ]; then
-  echo "projeção do dry-run correta"
+  echo "dry-run projection correct"
   exit 0
 fi
-echo "$fails asserção(ões) falharam" >&2
+echo "$fails assertion(s) failed" >&2
 exit 1

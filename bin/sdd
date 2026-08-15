@@ -977,14 +977,13 @@ cmd_health() {
   # A missing line fails: if the score format changes, this check would go blind and pass in
   # silence — the very vacuity that check-mutation.sh exists to hunt.
   #
-  # The Portuguese in the regex below is deliberate and temporary: it matches a string emitted
-  # by tests/check-mutation.sh, and the two sides move together or the suite goes red between
-  # commits. Both become English in I13.5.5.
+  # The regex below is one contract across two files: the line is emitted by
+  # tests/check-mutation.sh. Change the wording on either side alone and the suite goes red.
   local score_line
   score_line="$(grep -m1 '^score: ' <<< "$out")"
   if [ -z "$score_line" ]; then
     health_bad "the suite did not print the 'score:' line — health went blind to the mutation"
-  elif grep -qE '^score: [0-9]+ pegas, 0 lacunas' <<< "$score_line"; then
+  elif grep -qE '^score: [0-9]+ caught, 0 known gap' <<< "$score_line"; then
     ok "mutation: $score_line"
   else
     health_bad "mutation with an open gap — $score_line"

@@ -11,8 +11,3 @@ docs/failure-modes.md
 README.md
 config/schema.md
 config/starter.conf
-tests/run-all.sh
-tests/check-templates.sh
-tests/check-gates.sh
-tests/check-dry-run.sh
-tests/check-mutation.sh
