@@ -344,7 +344,7 @@ Depois, uma linha após cada `pipeline_log_line "… BLOCKED …"`:
 bash -n bin/sdd && shellcheck -S warning bin/sdd && tests/check-autonomy.sh
 ```
 
-Esperado: 13 `ok`, rc 0.
+Esperado: **rc 0 e nenhuma linha `FAIL`**. (Não conte `ok` exatos: contagem exata vira dívida a cada asserção nova e não mede nada que o rc já não meça.)
 
 - [ ] **Step 7: Entrar na suíte e mover o piso de idioma**
 
@@ -547,17 +547,9 @@ passa a ser:
     run_phase "$phase"
     after="$(state_fingerprint)"
 
-    # Evaluated ONCE into a variable, then branched on. Writing the ledger row inside each of the
-    # four branches would multiply the same defect four times — and gate_ functions run TEST_CMD,
-    # so calling them twice is not free either.
-    local gate_rc=0 moved="false"
-    gate_"$phase" || gate_rc=$?
-    [ "$before" != "$after" ] && moved="true"
-    if [ "$DRY_RUN" != "1" ]; then
-      autonomy_session_row "$phase" "${attempts[$phase]}" "false" "$moved" \
-        "$( [ "$gate_rc" -eq 0 ] && echo pass || echo fail )" "$GATE_WHY"
-    fi
-
+    # The projection branch stays FIRST, exactly where it is today. Moving the gate evaluation
+    # above it would make `--dry-run` run TEST_CMD once more per projected phase — a behaviour
+    # change this increment has no mandate for, and one that check-dry-run.sh measures.
     if [ "$DRY_RUN" = "1" ]; then
       [ -n "$force_phase" ] && return 0
       dry_next="$(next_pending_phase "$phase")"
@@ -565,6 +557,15 @@ passa a ser:
       dim "  (dry-run: end of the projection — no session was opened)"
       return 0
     fi
+
+    # Evaluated ONCE into a variable, then branched on. Writing the ledger row inside each of the
+    # four branches would multiply the same defect four times — and gate_ functions run TEST_CMD,
+    # so calling them twice is not free either.
+    local gate_rc=0 moved="false"
+    gate_"$phase" || gate_rc=$?
+    [ "$before" != "$after" ] && moved="true"
+    autonomy_session_row "$phase" "${attempts[$phase]}" "false" "$moved" \
+      "$( [ "$gate_rc" -eq 0 ] && echo pass || echo fail )" "$GATE_WHY"
 
     phases_run=$((phases_run + 1))
     if [ "$max_phases" -gt 0 ] && [ "$phases_run" -ge "$max_phases" ]; then
@@ -619,8 +620,9 @@ passa a ser:
 bash -n bin/sdd && shellcheck -S warning bin/sdd && tests/check-autonomy.sh && tests/check-dry-run.sh
 ```
 
-Esperado: `check-autonomy` com 26 `ok`; `check-dry-run` intacto (o refactor não mudou a
-projeção).
+Esperado: **rc 0 e nenhuma linha `FAIL`** nos dois. O `check-dry-run` intacto é a prova de que o
+refactor não mexeu na projeção — o ramo de `--dry-run` continua sendo o primeiro depois do
+`run_phase`.
 
 - [ ] **Step 7: Commitar**
 
@@ -710,7 +712,7 @@ sessão de `sdd run` é o `invocation`, não a contagem.
 bash -n bin/sdd && shellcheck -S warning bin/sdd && tests/check-autonomy.sh
 ```
 
-Esperado: 29 `ok`, rc 0.
+Esperado: **rc 0 e nenhuma linha `FAIL`**.
 
 - [ ] **Step 5: Commitar**
 
@@ -998,7 +1000,11 @@ Esperado: `score: 18 caught, 0 known gap(s), of 18`. Se alguma das duas novas ap
 
 ```bash
 for i in 1 2 3; do /usr/bin/time -f "%e s" tests/run-all.sh >/dev/null; done
-git stash -u && for i in 1 2 3; do /usr/bin/time -f "base %e s" tests/run-all.sh >/dev/null; done; git stash pop
+# A base tem de vir do commit, não da árvore: o trabalho está commitado e `git stash` só mexe
+# no que está sujo — mediria o depois duas vezes.
+BASE_DIR="$(mktemp -d)"; git archive "$(git merge-base main HEAD)" | tar -x -C "$BASE_DIR"
+for i in 1 2 3; do /usr/bin/time -f "base %e s" "$BASE_DIR/tests/run-all.sh" >/dev/null; done
+rm -rf "$BASE_DIR"
 ```
 
 Anote os dois números. O alvo do plano é ≤15s e a suíte já está em ~15,9s nesta máquina — se
