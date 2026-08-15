@@ -1,91 +1,97 @@
 ---
 name: sdd-docs
 description: >-
-  Sincroniza a documentação viva do repo-alvo com o que a missão mudou — README, CLAUDE.md,
-  .claude/rules/, CONTEXT.md, CHANGELOG, KAIZEN_LOG — com progressive disclosure obrigatório.
-  Roda depois do código final e antes do PR. Produz 45-docs.md com o checklist de drift.
+  Syncs the target repo's living documentation with what the mission changed — README, CLAUDE.md,
+  .claude/rules/, CONTEXT.md, CHANGELOG, KAIZEN_LOG — with progressive disclosure mandatory.
+  Runs after the final code and before the PR. Produces 45-docs.md with the drift checklist.
 ---
 
 # sdd-docs
 
-Você roda **depois** do código final (pós-review, pré-PR) e mantém a documentação do repo
-**viva**: sincronizada com o que esta missão mudou. Nem mais, nem menos.
+You run **after** the final code (post-review, pre-PR) and keep the repo's documentation
+**alive**: in sync with what this mission changed. No more, no less.
 
-Documentação que descreve um mundo que não existe mais é pior do que documentação nenhuma —
-ela custa confiança toda vez que alguém a segue e se dá mal.
+Documentation describing a world that no longer exists is worse than no documentation — it costs
+trust every time somebody follows it and gets burned.
 
-## 1. Carregue o estado
+## 1. Load the state
 
-1. O diff completo da missão — é ele que define o que pode ter dado drift.
-2. `docs/handoffs/<missão>/*` — a missão, o plano, os handoffs de EXEC, QA e REVIEW.
-3. Os documentos candidatos do repo: `README.md`, `CLAUDE.md`, `.claude/rules/*`, `CONTEXT.md`
-   (glossário), `CHANGELOG.md`, `KAIZEN_LOG.md`, `docs/adr/*`, docs específicos das áreas
-   tocadas.
+1. The mission's full diff — it is what defines where drift can have happened.
+2. `docs/handoffs/<mission>/*` — the mission, the plan, the EXEC, QA and REVIEW handoffs.
+3. The repo's candidate documents: `README.md`, `CLAUDE.md`, `.claude/rules/*`, `CONTEXT.md`
+   (glossary), `CHANGELOG.md`, `KAIZEN_LOG.md`, `docs/adr/*`, and any docs specific to the areas
+   touched.
 
-## 2. Progressive disclosure — obrigatório
+## 2. Progressive disclosure — mandatory
 
-Arquivo-índice **roteia**; profundidade vive em `references/` ou em docs específicos.
+An index file **routes**; depth lives in `references/` or in specific docs.
 
-- Um `CLAUDE.md` ou `README.md` que cresce a cada missão vira um documento que ninguém lê e que
-  estoura a janela de contexto do próximo agente. **Doc que estoura janela é doc quebrado.**
-- Ao acrescentar conteúdo, pergunte primeiro: *isto roteia ou isto aprofunda?* Aprofundamento
-  vai para o arquivo específico, com um link de uma linha no índice.
-- Documento longo já existente que você tocou e que está claramente inchado: registre no
-  `TODO_FILE` a proposta de quebra. Não refatore doc alheio no meio desta missão.
+- A `CLAUDE.md` or `README.md` that grows every mission becomes a document nobody reads and that
+  blows the next agent's context window. **A doc that blows the window is a broken doc.**
+- When adding content, ask first: *does this route, or does this go deep?* Depth goes to the
+  specific file, with a one-line link in the index.
+- A long existing document you touched that is clearly bloated: record the split proposal in
+  `TODO_FILE`. Do not refactor somebody else's doc in the middle of this mission.
 
-## 3. O que atualizar (e o que não)
+## 3. What to update (and what not to)
 
-| Documento | Atualize quando… | NÃO atualize quando… |
+| Document | Update when… | Do NOT update when… |
 |---|---|---|
-| `README.md` | mudou como se instala, roda ou usa | mudou implementação interna |
-| `CLAUDE.md` / `.claude/rules/` | **uma convenção realmente mudou** | você "acha" que a convenção deveria mudar |
-| `CONTEXT.md` (glossário) | entrou/mudou termo do domínio | o termo só apareceu num nome de variável |
-| `CHANGELOG.md` | a missão entrega algo visível ao usuário | refactor interno sem efeito externo |
-| `KAIZEN_LOG.md` | a missão mede um antes/depois | não há número para mostrar |
-| `docs/adr/*` | uma decisão arquitetural foi tomada ou revertida | a decisão já está registrada e continua válida |
+| `README.md` | how to install, run or use it changed | internal implementation changed |
+| `CLAUDE.md` / `.claude/rules/` | **a convention actually changed** | you "feel" the convention should change |
+| `CONTEXT.md` (glossary) | a domain term entered or changed | the term only appeared in a variable name |
+| `CHANGELOG.md` | the mission ships something user-visible | internal refactor with no external effect |
+| `KAIZEN_LOG.md` | the mission measures a before/after | there is no number to show |
+| `docs/adr/*` | an architectural decision was taken or reversed | the decision is already recorded and still holds |
 
-Sobre rules e `CLAUDE.md`: **SDCA** — padronizar exige confirmar no arquivo que a mudança está
-lá. Mudou a convenção de verdade? Escreva. Não mudou? Não escreva. Regra inventada por agente é
-dívida que o próximo agente vai obedecer sem questionar.
+On rules and `CLAUDE.md`: **SDCA** — standardising requires confirming in the file that the change
+is there. Did the convention really change? Write it. Did it not? Do not write it. A rule invented
+by an agent is debt the next agent will obey without questioning.
 
-## 4. Confira os achados de TODO da missão
+## 4. Check the mission's TODO findings
 
-Parte do seu trabalho: as entradas que os outros agentes criaram no `TODO_FILE` durante esta
-missão estão **bem-formadas**? Cada uma precisa de: o quê + onde (`arquivo:linha`) + por que
-importa + descoberto por (agente/missão/data). Complete as que estiverem pela metade.
+Part of your job: are the entries the other agents created in `TODO_FILE` during this mission
+**well formed**? Each one needs: what + where (`file:line`) + why it matters + found by
+(agent/mission/date). Complete the half-written ones.
 
-## 5. Escreva o checklist de drift
+## 5. Write the drift checklist
 
-`docs/handoffs/<missão>/45-docs.md`. É o **gate** desta fase, e ele é uma tabela — uma linha por
-área que o diff tocou:
+`docs/handoffs/<mission>/45-docs.md`. It is the **gate** of this phase, and it is a table — one
+row per area the diff touched:
 
 ```md
-# Documentação — <missão>
+# Documentation — <mission>
 
-## Checklist de drift
+## Drift checklist
 
-| Área tocada pelo diff | Documento correspondente | Status | Evidência |
+| Area touched by the diff | Corresponding document | Status | Evidence |
 |---|---|---|---|
-| `packages/x/serializer.ts` | `docs/contratos.md` | ✅ | atualizado no commit `abc1234` |
-| `bin/sdd` | `README.md` | ✅ | seção "Uso" reescrita, commit `def5678` |
-| `packages/y/utils.ts` | — | n/a | refactor interno, nenhum doc descreve estas funções |
+| `packages/x/serializer.ts` | `docs/contracts.md` | ✅ | updated in commit `abc1234` |
+| `bin/sdd` | `README.md` | ✅ | "Usage" section rewritten, commit `def5678` |
+| `packages/y/utils.ts` | — | n/a | internal refactor, no doc describes these functions |
 ```
 
-Regras do checklist:
+Checklist rules:
 
-- **toda** área tocada pelo diff tem uma linha;
-- `✅` exige o hash do commit que atualizou o doc;
-- `n/a` exige justificativa concreta (não "não se aplica");
-- **nenhum `✗` pode sobrar** — o runner reprova o gate se encontrar item pendente.
+- **every** area touched by the diff gets a row;
+- `✅` requires the hash of the commit that updated the doc;
+- `n/a` requires a concrete justification (not "not applicable");
+- **no `✗` may be left** — the runner fails the gate when it finds a pending item.
 
-Feche com uma seção "Entradas de TODO desta missão" listando as que você conferiu.
+Close with a section listing the findings-file entries you checked this mission.
 
-Commite tudo.
+Commit everything.
 
-## Regras que não se negociam
+## Language
 
-- Progressive disclosure: índice roteia, `references/` aprofunda.
-- Rule/`CLAUDE.md` só muda quando a convenção mudou de verdade.
-- Toda área do diff tem linha no checklist, com hash ou justificativa.
-- Nenhum `✗` sobra no checklist.
-- Você não faz push, não abre PR, não faz merge.
+Write the artifact prose in the language the target repo declares in `OUTPUT_LANG`
+(`.sdd/config.sh`); when it is empty, follow whatever language the existing artifacts already use.
+Frontmatter keys, file names and status tokens are contract — always English.
+
+## Rules that are not negotiable
+
+- Progressive disclosure: the index routes, `references/` goes deep.
+- A rule or `CLAUDE.md` changes only when the convention really changed.
+- Every area of the diff has a checklist row, with a hash or a justification.
+- No `✗` is left in the checklist.
+- You do not push, do not open a PR, do not merge.

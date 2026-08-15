@@ -1,30 +1,30 @@
 #!/usr/bin/env bash
 #
-# sdd — runner do pipeline de agentes autônomos de desenvolvimento.
+# sdd — runner for the autonomous development agent pipeline.
 #
-# Princípio central: NÃO existe arquivo de estado. A fase corrente é DERIVADA dos artefatos
-# em disco. Isso dá resume de graça depois de qualquer morte de sessão e elimina a classe de
-# bug "o estado mente sobre o disco".
+# Core principle: there is NO state file. The current phase is DERIVED from the artifacts on
+# disk. That gives resume for free after any session death, and eliminates the whole class of
+# bug where "the state lies about the disk".
 #
-# Princípio nº 2: sucesso nunca é a resposta do modelo. Todo gate é reavaliado aqui — rodando
-# os testes, fazendo grep no checkpoint, consultando o git log, chamando o gh.
+# Principle no. 2: success is never the model's answer. Every gate is re-evaluated here — by
+# running the tests, grepping the checkpoint, reading the git log, asking gh.
 #
-# Uso: sdd <comando> [missão] [opções]   ·   `sdd help` para a lista.
+# Usage: sdd <command> [mission] [options]   ·   `sdd help` for the list.
 
 set -euo pipefail
 
 readonly SDD_VERSION="0.1.0"
 
-# Arrays associativos (cache de sensores) exigem bash 4. macOS entrega bash 3.2 como /bin/bash;
-# falhar aqui é melhor do que falhar com "bad substitution" no meio de uma fase.
+# Associative arrays (the sensor cache) need bash 4. macOS ships bash 3.2 as /bin/bash; failing
+# here beats failing with "bad substitution" halfway through a phase.
 if [ "${BASH_VERSINFO[0]:-0}" -lt 4 ]; then
-  printf 'erro: sdd exige bash 4+ (encontrado: %s). No macOS: brew install bash\n' \
-    "${BASH_VERSION:-desconhecido}" >&2
+  printf 'error: sdd needs bash 4+ (found: %s). On macOS: brew install bash\n' \
+    "${BASH_VERSION:-unknown}" >&2
   exit 1
 fi
 
 # ---------------------------------------------------------------------------
-# Resolução do SDD_HOME (aguenta ser chamado por symlink em ~/.local/bin)
+# SDD_HOME resolution (survives being called through a symlink in ~/.local/bin)
 # ---------------------------------------------------------------------------
 _resolve_self() {
   local src="${BASH_SOURCE[0]}" dir
@@ -39,7 +39,7 @@ SDD_HOME="$(_resolve_self)"
 readonly SDD_HOME
 
 # ---------------------------------------------------------------------------
-# Saída
+# Output
 # ---------------------------------------------------------------------------
 if [ -t 1 ] && [ -z "${NO_COLOR:-}" ]; then
   C_RESET=$'\033[0m'; C_DIM=$'\033[2m'; C_BOLD=$'\033[1m'
@@ -51,29 +51,29 @@ fi
 info() { printf '%s\n' "$*"; }
 step() { printf '%s▸%s %s\n' "$C_BLUE" "$C_RESET" "$*"; }
 ok()   { printf '%s  ok%s   %s\n' "$C_GREEN" "$C_RESET" "$*"; }
-warn() { printf '%s  aviso%s %s\n' "$C_YELLOW" "$C_RESET" "$*" >&2; }
-bad()  { printf '%s  falha%s %s\n' "$C_RED" "$C_RESET" "$*" >&2; }
+warn() { printf '%s  warn%s  %s\n' "$C_YELLOW" "$C_RESET" "$*" >&2; }
+bad()  { printf '%s  fail%s  %s\n' "$C_RED" "$C_RESET" "$*" >&2; }
 dim()  { printf '%s%s%s\n' "$C_DIM" "$*" "$C_RESET"; }
-die()  { printf '%serro:%s %s\n' "$C_RED" "$C_RESET" "$*" >&2; exit 1; }
+die()  { printf '%serror:%s %s\n' "$C_RED" "$C_RESET" "$*" >&2; exit 1; }
 
 # ---------------------------------------------------------------------------
-# Repo-alvo e configuração
+# Target repo and configuration
 # ---------------------------------------------------------------------------
 REPO_ROOT=""
 CONFIG_FILE=""
 
 resolve_repo_root() {
   REPO_ROOT="$(git rev-parse --show-toplevel 2>/dev/null)" \
-    || die "não estou dentro de um repositório git (cwd: $PWD)"
+    || die "not inside a git repository (cwd: $PWD)"
   CONFIG_FILE="$REPO_ROOT/.sdd/config.sh"
 }
 
-# Defaults + validação. Chave obrigatória vazia falha AQUI, antes de gastar sessão.
+# Defaults + validation. An empty required key fails HERE, before spending a session.
 load_config() {
   resolve_repo_root
   [ -f "$CONFIG_FILE" ] \
-    || die "$CONFIG_FILE não existe. Rode 'sdd install' na raiz do repo-alvo."
-  bash -n "$CONFIG_FILE" || die "$CONFIG_FILE tem erro de sintaxe bash"
+    || die "$CONFIG_FILE does not exist. Run 'sdd install' at the root of the target repo."
+  bash -n "$CONFIG_FILE" || die "$CONFIG_FILE has a bash syntax error"
   # shellcheck disable=SC1090
   source "$CONFIG_FILE"
 
@@ -86,30 +86,34 @@ load_config() {
   : "${QA_MAX_ITER:=3}"; : "${REVIEW_MAX_ITER:=3}"; : "${EXEC_MAX_RETRY:=1}"
   : "${BUDGET_PER_PHASE_USD:=15}"; : "${PUBLISH_ON_REVIEW_BLOCKED:=off}"
   : "${PERMISSION_MODE:=acceptEdits}"; : "${JIRA_ENABLED:=false}"
-  # `acceptEdits` auto-aprova EDIÇÃO DE ARQUIVO, não `Bash`. Sem esta allowlist a sessão de fase
-  # não roda TEST_CMD, não roda `git add`/`git commit` e a fase EXEC fica insatisfazível por
-  # construção. Descoberto pela missão-fixture 20260814-dry-run-completo, que travou nisso.
+  # `acceptEdits` auto-approves FILE EDITS, not `Bash`. Without this allowlist the phase session
+  # cannot run TEST_CMD, cannot run `git add`/`git commit`, and the EXEC phase is unsatisfiable
+  # by construction. Found by the fixture mission 20260814-dry-run-completo, which stalled on it.
   : "${ALLOWED_TOOLS:=Bash}"
+  # Language of the mission ARTIFACTS (handoffs, checkpoint, commits, PR body) — not of the kit,
+  # which is English. Empty ⇒ the boot prompt says nothing about language, which is exactly the
+  # behaviour of every already-installed repo. Set ("pt-BR", "en", "es") ⇒ one extra paragraph.
+  : "${OUTPUT_LANG:=}"
 
-  [ -n "$PROJECT_NAME" ]   || die "PROJECT_NAME vazio em $CONFIG_FILE"
-  [ -n "$DEFAULT_BRANCH" ] || die "DEFAULT_BRANCH vazio em $CONFIG_FILE"
-  [ -n "$TEST_CMD" ]       || die "TEST_CMD vazio em $CONFIG_FILE (é o gate de EXEC)"
+  [ -n "$PROJECT_NAME" ]   || die "PROJECT_NAME is empty in $CONFIG_FILE"
+  [ -n "$DEFAULT_BRANCH" ] || die "DEFAULT_BRANCH is empty in $CONFIG_FILE"
+  [ -n "$TEST_CMD" ]       || die "TEST_CMD is empty in $CONFIG_FILE (it is the EXEC gate)"
   case "$PERMISSION_MODE" in
-    bypassPermissions) die "PERMISSION_MODE=bypassPermissions não é aceito pelo kit" ;;
+    bypassPermissions) die "PERMISSION_MODE=bypassPermissions is not accepted by the kit" ;;
   esac
 }
 
 # ---------------------------------------------------------------------------
-# Missão
+# Mission
 # ---------------------------------------------------------------------------
 MISSION=""
 MISSION_DIR=""
 
-# Aceita o nome completo (20260814-spinner) ou um prefixo/slug único.
+# Accepts the full name (20260814-spinner) or a unique prefix/slug.
 resolve_mission() {
   local want="${1:-}" base="$REPO_ROOT/$HANDOFF_DIR" matches=()
-  [ -n "$want" ] || die "falta o nome da missão (ex.: sdd status 20260814-spinner)"
-  [ -d "$base" ] || die "$HANDOFF_DIR/ não existe no repo-alvo — nenhuma missão planejada ainda"
+  [ -n "$want" ] || die "missing mission name (e.g. sdd status 20260814-spinner)"
+  [ -d "$base" ] || die "$HANDOFF_DIR/ does not exist in the target repo — no mission planned yet"
 
   if [ -d "$base/$want" ]; then
     MISSION="$want"
@@ -118,19 +122,19 @@ resolve_mission() {
     while IFS= read -r d; do matches+=("$(basename "$d")"); done \
       < <(find "$base" -mindepth 1 -maxdepth 1 -type d -name "*${want}*" | sort)
     case "${#matches[@]}" in
-      0) die "missão '$want' não encontrada em $HANDOFF_DIR/" ;;
+      0) die "mission '$want' not found in $HANDOFF_DIR/" ;;
       1) MISSION="${matches[0]}" ;;
-      *) die "'$want' é ambíguo: ${matches[*]}" ;;
+      *) die "'$want' is ambiguous: ${matches[*]}" ;;
     esac
   fi
   MISSION_DIR="$base/$MISSION"
 }
 
 # ---------------------------------------------------------------------------
-# Leitura de artefatos
+# Reading artifacts
 # ---------------------------------------------------------------------------
 
-# frontmatter <arquivo> <chave> → valor (vazio se ausente)
+# frontmatter <file> <key> → value (empty when absent)
 frontmatter() {
   local file="$1" key="$2"
   [ -f "$file" ] || return 0
@@ -152,8 +156,8 @@ frontmatter() {
     }' "$file"
 }
 
-# Linhas da tabela do checkpoint como "ID<TAB>título<TAB>check<TAB>status<TAB>commit".
-# Ignora cabeçalho, separador e qualquer linha que não tenha as 5 colunas.
+# Checkpoint table rows as "ID<TAB>title<TAB>check<TAB>status<TAB>commit".
+# Skips the header, the separator, and any line that does not have the 5 columns.
 checkpoint_rows() {
   local file="$MISSION_DIR/checkpoint.md"
   [ -f "$file" ] || return 0
@@ -167,12 +171,12 @@ checkpoint_rows() {
     }' "$file"
 }
 
-# Roda um comando do config na raiz do repo-alvo; devolve o exit code.
-# Saída vai para o log da missão (quando há missão) — nunca polui o stdout do runner.
+# Runs a config command at the root of the target repo; returns its exit code.
+# Output goes to the mission log (when there is a mission) — it never pollutes the runner stdout.
 #
-# Memoizado por processo: `sdd status` avalia sete gates e três deles rodam TEST_CMD.
-# Sem cache, olhar o estado custaria três suítes. O cache morre com o processo, então
-# `sdd run` sempre reavalia depois de uma fase ter mexido no código.
+# Memoized per process: `sdd status` evaluates seven gates and three of them run TEST_CMD.
+# Without the cache, looking at the state would cost three suite runs. The cache dies with the
+# process, so `sdd run` always re-evaluates after a phase has touched the code.
 declare -A _CHECK_RC=()
 declare -A _CHECK_LOG=()
 LAST_CHECK_LOG=""
@@ -193,7 +197,7 @@ run_check_cmd() {
   return "$rc"
 }
 
-# Invalida o cache de sensores — chamado depois de qualquer fase que mexeu no repo.
+# Invalidates the sensor cache — called after any phase that touched the repo.
 invalidate_checks() { _CHECK_RC=(); _CHECK_LOG=(); }
 
 log_dir() {
@@ -201,18 +205,18 @@ log_dir() {
   else printf '%s\n' "$REPO_ROOT/.sdd/logs/_geral"; fi
 }
 
-# Último arquivo de um glob (por ordem de nome — os nomes são datados). Vazio se nenhum.
+# Last file of a glob (by name order — the names are dated). Empty when there is none.
 latest_matching() {
   local pattern="$1"
-  # `|| true`: sem match, o `ls` falha e o `pipefail` propagaria o erro para a atribuição
-  # de quem chamou — dentro de um gate isso viraria falha silenciosa em vez de "não existe".
+  # `|| true`: with no match, `ls` fails and `pipefail` would propagate the error into the
+  # caller's assignment — inside a gate that would read as a silent failure instead of "absent".
   # shellcheck disable=SC2012,SC2086
   ls -1d $pattern 2>/dev/null | sort | tail -1 || true
 }
 
 # ---------------------------------------------------------------------------
-# Gates — cada um retorna 0 (satisfeito) ou 1, escrevendo o motivo em GATE_WHY.
-# ATENÇÃO: nenhum gate pode ser satisfeito por texto do modelo. Só artefato.
+# Gates — each returns 0 (satisfied) or 1, writing the reason into GATE_WHY.
+# WARNING: no gate may be satisfied by model text. Artifacts only.
 # ---------------------------------------------------------------------------
 GATE_WHY=""
 
@@ -220,44 +224,44 @@ gate_PLAN() {
   local m="$MISSION_DIR/00-missao.md" p="$MISSION_DIR/01-plano.md" c="$MISSION_DIR/checkpoint.md"
   local f
   for f in "$m" "$p" "$c"; do
-    [ -f "$f" ] || { GATE_WHY="falta $(basename "$f") — fase de planejamento é interativa: rode o sdd-planner"; return 1; }
+    [ -f "$f" ] || { GATE_WHY="missing $(basename "$f") — the planning phase is interactive: run sdd-planner"; return 1; }
   done
-  local aprov; aprov="$(frontmatter "$m" aprovacao)"
-  case "$aprov" in
+  local approval; approval="$(frontmatter "$m" aprovacao)"
+  case "$approval" in
     auto)          : ;;
     humano-*)      : ;;
-    *) GATE_WHY="00-missao.md tem 'aprovacao: ${aprov:-<vazio>}' — precisa ser 'auto' (PLAN-AUTO todo ✅) ou 'humano-YYYY-MM-DD'"; return 1 ;;
+    *) GATE_WHY="00-missao.md has 'aprovacao: ${approval:-<empty>}' — it must be 'auto' (PLAN-AUTO all ✅) or 'humano-YYYY-MM-DD'"; return 1 ;;
   esac
   if [ "$JIRA_ENABLED" = "true" ]; then
     local v; v="$(frontmatter "$m" versao)"
     if [ -z "$v" ] || [[ $v == \<* ]]; then
-      GATE_WHY="JIRA_ENABLED=true exige 'versao:' preenchida em 00-missao.md (decisão humana, nunca headless)"
+      GATE_WHY="JIRA_ENABLED=true requires 'versao:' filled in 00-missao.md (a human decision, never headless)"
       return 1
     fi
   fi
   local n; n="$(checkpoint_rows | wc -l)"
-  [ "$n" -gt 0 ] || { GATE_WHY="checkpoint.md não tem nenhuma linha de incremento parseável"; return 1; }
-  GATE_WHY="plano aprovado ($aprov), $n incremento(s)"
+  [ "$n" -gt 0 ] || { GATE_WHY="checkpoint.md has no parseable increment row"; return 1; }
+  GATE_WHY="plan approved ($approval), $n increment(s)"
   return 0
 }
 
 gate_TICKET() {
-  if [ "$JIRA_ENABLED" != "true" ]; then GATE_WHY="JIRA_ENABLED=false — fase pulada"; return 0; fi
+  if [ "$JIRA_ENABLED" != "true" ]; then GATE_WHY="JIRA_ENABLED=false — phase skipped"; return 0; fi
   local t="$MISSION_DIR/10-ticket.md"
-  [ -f "$t" ] || { GATE_WHY="falta 10-ticket.md"; return 1; }
+  [ -f "$t" ] || { GATE_WHY="missing 10-ticket.md"; return 1; }
   local issue; issue="$(frontmatter "$t" issue)"
-  [ -n "$issue" ] || { GATE_WHY="10-ticket.md sem 'issue:' no frontmatter"; return 1; }
+  [ -n "$issue" ] || { GATE_WHY="10-ticket.md has no 'issue:' in the frontmatter"; return 1; }
   if ! grep -qiE '^sprint:[[:space:]]*\S' "$t"; then
-    GATE_WHY="10-ticket.md sem 'sprint:' — a issue precisa estar NA SPRINT ATIVA, não no backlog"
+    GATE_WHY="10-ticket.md has no 'sprint:' — the issue must be IN THE ACTIVE SPRINT, not in the backlog"
     return 1
   fi
-  GATE_WHY="issue $issue na sprint"
+  GATE_WHY="issue $issue in the sprint"
   return 0
 }
 
 gate_EXEC() {
   local rows; rows="$(checkpoint_rows)"
-  [ -n "$rows" ] || { GATE_WHY="checkpoint.md vazio"; return 1; }
+  [ -n "$rows" ] || { GATE_WHY="checkpoint.md is empty"; return 1; }
 
   local id status commit bad_rows=0 pending=0 blocked=0 total=0
   while IFS=$'\t' read -r id _ _ status commit; do
@@ -265,115 +269,116 @@ gate_EXEC() {
     case "$status" in
       done)
         if [ -z "$commit" ] || [ "$commit" = "—" ] || [ "$commit" = "-" ]; then
-          GATE_WHY="incremento $id está 'done' sem commit — rótulo não é artefato"; return 1
+          GATE_WHY="increment $id is 'done' with no commit — a label is not an artifact"; return 1
         fi
         if ! ( cd "$REPO_ROOT" && git cat-file -e "${commit}^{commit}" 2>/dev/null ); then
-          GATE_WHY="incremento $id aponta commit '$commit' que não existe no repositório"; return 1
+          GATE_WHY="increment $id points at commit '$commit', which does not exist in the repository"; return 1
         fi
-        # `cat-file -e` só diz que o OBJETO existe no banco — não que ele está na história da
-        # branch. Depois de um amend/rebase/reset, um checkpoint citando o hash antigo passaria
-        # apontando para fora da história, e o commit ainda pode sumir no gc com o gate verde.
-        # Isso é exatamente o "rótulo, não artefato" que o kit existe para impedir, dentro do
-        # próprio gate. Medido pelo sdd-qa na missão 20260814-dry-run-completo, com um amend real.
+        # `cat-file -e` only says the OBJECT exists in the database — not that it is in the
+        # branch history. After an amend/rebase/reset, a checkpoint quoting the old hash would
+        # pass while pointing outside the history, and the commit can still vanish at gc with the
+        # gate still green. That is exactly the "label, not artifact" failure the kit exists to
+        # prevent, inside the gate itself. Measured by sdd-qa in mission
+        # 20260814-dry-run-completo, with a real amend.
         if ! ( cd "$REPO_ROOT" && git merge-base --is-ancestor "$commit" HEAD 2>/dev/null ); then
-          GATE_WHY="incremento $id aponta commit '$commit' que existe mas NÃO está na história de HEAD (amend/rebase/reset?) — o gate cobra artefato alcançável, não objeto solto"
+          GATE_WHY="increment $id points at commit '$commit', which exists but is NOT in the history of HEAD (amend/rebase/reset?) — the gate demands a reachable artifact, not a loose object"
           return 1
         fi
         ;;
       pending|doing) pending=$((pending + 1)) ;;
       blocked)       blocked=$((blocked + 1)) ;;
-      *) bad_rows=$((bad_rows + 1)); GATE_WHY="incremento $id com status inválido '$status' (use pending|doing|done|blocked)"; return 1 ;;
+      *) bad_rows=$((bad_rows + 1)); GATE_WHY="increment $id has invalid status '$status' (use pending|doing|done|blocked)"; return 1 ;;
     esac
   done <<< "$rows"
 
-  if [ "$blocked" -gt 0 ]; then GATE_WHY="$blocked incremento(s) 'blocked' — Jidoka: a linha para"; return 1; fi
-  if [ "$pending" -gt 0 ]; then GATE_WHY="$pending de $total incremento(s) ainda por executar"; return 1; fi
+  if [ "$blocked" -gt 0 ]; then GATE_WHY="$blocked increment(s) 'blocked' — Jidoka: the line stops"; return 1; fi
+  if [ "$pending" -gt 0 ]; then GATE_WHY="$pending of $total increment(s) still to execute"; return 1; fi
 
   if ! run_check_cmd "$TEST_CMD" "gate-exec-test"; then
-    GATE_WHY="TEST_CMD falhou ($TEST_CMD) — ver $LAST_CHECK_LOG"; return 1
+    GATE_WHY="TEST_CMD failed ($TEST_CMD) — see $LAST_CHECK_LOG"; return 1
   fi
   [ -f "$MISSION_DIR/20-handoff-exec.md" ] \
-    || { GATE_WHY="todos os incrementos done e suíte verde, mas falta 20-handoff-exec.md"; return 1; }
+    || { GATE_WHY="every increment done and the suite green, but 20-handoff-exec.md is missing"; return 1; }
 
-  GATE_WHY="$total incremento(s) done, suíte verde, handoff escrito"
+  GATE_WHY="$total increment(s) done, suite green, handoff written"
   return 0
 }
 
 gate_QA() {
   local h="$MISSION_DIR/30-handoff-qa.md" report=""
-  [ -f "$h" ] || { GATE_WHY="falta 30-handoff-qa.md"; return 1; }
+  [ -f "$h" ] || { GATE_WHY="missing 30-handoff-qa.md"; return 1; }
 
   local st; st="$(frontmatter "$h" status)"
-  if [ "$st" = "skipped" ]; then GATE_WHY="qa: skipped (diff sem mudança user-visible)"; return 0; fi
-  if [ "$st" = "blocked" ]; then GATE_WHY="30-handoff-qa.md com status: blocked"; return 1; fi
+  if [ "$st" = "skipped" ]; then GATE_WHY="qa: skipped (diff has no user-visible change)"; return 0; fi
+  if [ "$st" = "blocked" ]; then GATE_WHY="30-handoff-qa.md has status: blocked"; return 1; fi
 
-  # Projeto sem interface: as skills qa-report/qa-execution nunca rodaram (qa_substep manda
-  # direto para o sdd-qa), então a árvore docs/qa/ não existe. Exigir o relatório datado delas
-  # seria cobrar um artefato que ninguém produz — o gate ficaria insatisfazível justamente no
-  # caso em que a QA fez o trabalho e ACHOU coisa. A evidência da jornada andada mora no campo
-  # `gate:` do próprio handoff, que é o artefato que existe aqui.
-  # (Achado pelo sdd-qa na missão 20260814-dry-run-completo: `skipped` mentiria, `done` batia
-  # na Âncora 1 e `blocked` reprova por definição — não havia status honesto E satisfazível.)
+  # Project with no interface: the qa-report/qa-execution skills never ran (qa_substep sends it
+  # straight to sdd-qa), so the docs/qa/ tree does not exist. Demanding their dated report would
+  # charge for an artifact nobody produces — the gate would be unsatisfiable precisely in the
+  # case where QA did the work and FOUND something. The evidence of the journey walked lives in
+  # the `gate:` field of the handoff itself, which is the artifact that does exist here.
+  # (Found by sdd-qa in mission 20260814-dry-run-completo: `skipped` would lie, `done` hit
+  # Anchor 1 and `blocked` fails by definition — no status was both honest AND satisfiable.)
   if [ -z "$E2E_CMD" ] && [ -z "$APP_URL" ]; then
-    local evidencia; evidencia="$(frontmatter "$h" gate)"
-    if [ -z "$evidencia" ]; then
-      GATE_WHY="projeto sem interface: 30-handoff-qa.md precisa de 'gate:' com a evidência da jornada andada"
+    local evidence; evidence="$(frontmatter "$h" gate)"
+    if [ -z "$evidence" ]; then
+      GATE_WHY="project with no interface: 30-handoff-qa.md needs 'gate:' carrying the evidence of the journey walked"
       return 1
     fi
   else
-    # Âncora 1: o relatório datado da skill qa-execution.
+    # Anchor 1: the dated report from the qa-execution skill.
     report="$(latest_matching "$REPO_ROOT/$QA_DOCS_PATH/reports/*.md")"
-    [ -n "$report" ] || { GATE_WHY="nenhum relatório em $QA_DOCS_PATH/reports/"; return 1; }
-    # Âncora do relatório da skill qa-execution. O `**Status:**` NÃO começa a linha: o template
-    # dela é `- **Started:** <ts> · **Status:** in-progress <!-- in-progress | closed -->`.
-    # Exigir início de linha fazia o gate nunca casar, e o runner re-rodava qa-execution para
-    # sempre — US$ 15 por volta. Medido no piloto SQ-97.
-    # O `closed` tem que vir logo depois de `**Status:**`: o comentário do template contém a
-    # palavra `closed` na legenda do enum, e um `.*closed` casaria com a linha `in-progress`.
+    [ -n "$report" ] || { GATE_WHY="no report in $QA_DOCS_PATH/reports/"; return 1; }
+    # Anchor on the qa-execution skill's report. The `**Status:**` does NOT start the line: its
+    # template is `- **Started:** <ts> · **Status:** in-progress <!-- in-progress | closed -->`.
+    # Requiring line start made the gate never match, and the runner re-ran qa-execution forever
+    # — US$ 15 a round. Measured in the SQ-97 pilot.
+    # The `closed` must come right after `**Status:**`: the template comment contains the word
+    # `closed` in the enum legend, and a `.*closed` would match the `in-progress` line too.
     if ! report_closed "$report"; then
-      GATE_WHY="relatório $(basename "$report") não está 'closed' (o enum é da skill: in-progress|closed, não traduzir)"
+      GATE_WHY="report $(basename "$report") is not 'closed' (the enum belongs to the skill: in-progress|closed, do not translate)"
       return 1
     fi
-    # Âncora 2: nenhuma linha da matriz pode continuar Pending.
+    # Anchor 2: no row of the matrix may still read Pending.
     if grep -qE '\|[[:space:]]*Pending[[:space:]]*\|' "$report"; then
-      GATE_WHY="relatório $(basename "$report") ainda tem linha(s) 'Pending' na matriz"; return 1
+      GATE_WHY="report $(basename "$report") still has 'Pending' row(s) in the matrix"; return 1
     fi
   fi
-  # Âncora 3: registry sem bug aberto. 'wont-fix'/'invalid' são decisão humana, não bloqueiam.
+  # Anchor 3: registry with no open bug. 'wont-fix'/'invalid' are human calls and do not block.
   local openbugs; openbugs="$( { grep -rlE '^\-[[:space:]]+\*\*Status:\*\*[[:space:]]+open' \
       "$REPO_ROOT/$QA_DOCS_PATH/bugs/" 2>/dev/null || true; } | wc -l )"
   if [ "$openbugs" -gt 0 ]; then
-    GATE_WHY="$openbugs bug(s) com Status: open no registry — viram incrementos de fix (loop QA⇄EXEC)"
+    GATE_WHY="$openbugs bug(s) with Status: open in the registry — they become fix increments (QA⇄EXEC loop)"
     return 1
   fi
   if ! run_check_cmd "$TEST_CMD" "gate-qa-test"; then
-    GATE_WHY="TEST_CMD falhou ($TEST_CMD) — ver $LAST_CHECK_LOG"; return 1
+    GATE_WHY="TEST_CMD failed ($TEST_CMD) — see $LAST_CHECK_LOG"; return 1
   fi
   if [ -n "$E2E_CMD" ] && ! run_check_cmd "$E2E_CMD" "gate-qa-e2e"; then
-    GATE_WHY="E2E_CMD falhou ($E2E_CMD) — ver $LAST_CHECK_LOG"; return 1
+    GATE_WHY="E2E_CMD failed ($E2E_CMD) — see $LAST_CHECK_LOG"; return 1
   fi
   if [ -n "${report:-}" ]; then
-    GATE_WHY="relatório $(basename "$report") fechado, registry limpo, suítes verdes"
+    GATE_WHY="report $(basename "$report") closed, registry clean, suites green"
   else
-    GATE_WHY="jornada andada sem interface de browser (evidência no handoff), suíte verde"
+    GATE_WHY="journey walked without a browser interface (evidence in the handoff), suite green"
   fi
   return 0
 }
 
 gate_REVIEW() {
   local last; last="$(latest_matching "$MISSION_DIR/40-review-r*.md")"
-  [ -n "$last" ] || { GATE_WHY="nenhum 40-review-r<N>.md"; return 1; }
+  [ -n "$last" ] || { GATE_WHY="no 40-review-r<N>.md"; return 1; }
 
-  # Âncora documentada: a seção "### Overall Grade" da skill codereview (contrato v1.13.0+),
-  # tabela | Criterion | Grade | Rationale | com escala A–F. O gate exige A em TODA linha —
-  # "—" (não analisado) também reprova: review parcial não é review.
+  # Documented anchor: the "### Overall Grade" section of the codereview skill (contract
+  # v1.13.0+), table | Criterion | Grade | Rationale | on an A–F scale. The gate requires A on
+  # EVERY row — "—" (not analysed) fails too: a partial review is not a review.
   local offending
   offending="$(awk '
       /^###[[:space:]]+Overall Grade/ { inside = 1; next }
-      # Sai em QUALQUER heading, não só `###`. Saindo só no `###`, uma seção seguinte de nível
-      # SUPERIOR (`## Correções desta rodada`) não encerrava a leitura, e o parser seguia
-      # engolindo tabelas posteriores do relatório — reprovando um relatório todo Grade A porque
-      # achou uma coluna `Commit` numa tabela de commits. Medido no piloto SQ-97.
+      # Exit on ANY heading, not only `###`. Exiting only on `###`, a following section of a
+      # HIGHER level (`## Fixes this round`) did not end the read, and the parser kept swallowing
+      # later tables of the report — failing an all-Grade-A report because it found a `Commit`
+      # column in a table of commits. Measured in the SQ-97 pilot.
       inside && /^#{1,6}[[:space:]]/ { exit }
       inside && /^[ \t]*\|/ {
         n = split($0, f, "|")
@@ -383,43 +388,43 @@ gate_REVIEW() {
         gsub(/\*/, "", grade); gsub(/^[ \t]+|[ \t]+$/, "", grade)
         if (crit == "Criterion" || crit ~ /^-+$/ || crit == "") next
         rows++
-        if (grade != "A") { print crit " = " (grade == "" ? "<vazio>" : grade); exit }
+        if (grade != "A") { print crit " = " (grade == "" ? "<empty>" : grade); exit }
       }
-      END { if (rows == 0) print "SEM-TABELA" }
+      END { if (rows == 0) print "NO-TABLE" }
     ' "$last")"
-  if [ "$offending" = "SEM-TABELA" ]; then
-    GATE_WHY="$(basename "$last") não tem a seção '### Overall Grade' — o gate não tem o que medir"
+  if [ "$offending" = "NO-TABLE" ]; then
+    GATE_WHY="$(basename "$last") has no '### Overall Grade' section — the gate has nothing to measure"
     return 1
   fi
   if [ -n "$offending" ]; then
-    GATE_WHY="$(basename "$last"): $offending — o gate exige Grade A em todos os critérios"; return 1
+    GATE_WHY="$(basename "$last"): $offending — the gate requires Grade A on every criterion"; return 1
   fi
   if ! run_check_cmd "$TEST_CMD" "gate-review-test"; then
-    GATE_WHY="TEST_CMD falhou ($TEST_CMD) — ver $LAST_CHECK_LOG"; return 1
+    GATE_WHY="TEST_CMD failed ($TEST_CMD) — see $LAST_CHECK_LOG"; return 1
   fi
   if [ -n "$(cd "$REPO_ROOT" && git status --porcelain)" ]; then
-    GATE_WHY="working tree sujo depois do review — correções precisam estar commitadas"; return 1
+    GATE_WHY="working tree dirty after the review — fixes must be committed"; return 1
   fi
-  GATE_WHY="$(basename "$last") todo Grade A, suíte verde, tree limpo"
+  GATE_WHY="$(basename "$last") all Grade A, suite green, tree clean"
   return 0
 }
 
 gate_DOCS() {
   local d="$MISSION_DIR/45-docs.md"
-  [ -f "$d" ] || { GATE_WHY="falta 45-docs.md"; return 1; }
+  [ -f "$d" ] || { GATE_WHY="missing 45-docs.md"; return 1; }
   if ! grep -qiE 'drift' "$d"; then
-    GATE_WHY="45-docs.md sem checklist de drift"; return 1
+    GATE_WHY="45-docs.md has no drift checklist"; return 1
   fi
-  # Toda área tocada precisa estar ✅ ou n/a justificado — um item pendente reprova.
+  # Every area touched must be ✅ or a justified n/a — one pending item fails the gate.
   #
-  # Lê a COLUNA `Status` da tabela de drift, achando-a pela posição do cabeçalho. A versão
-  # anterior fazia grep pela palavra `TODO` no arquivo inteiro e reprovava todo `45-docs.md` que
-  # citasse o `TODO.md` pelo nome — que é justamente o que o `sdd-docs` é obrigado a fazer
-  # (conferir as entradas de TODO da missão está nas instruções dele). O gate contradizia o
-  # agente. Medido no piloto SQ-97: 0 itens `✗` no arquivo e reprovação mesmo assim.
-  local pendente
-  pendente="$(awk -F'|' '
-      # acha o cabeçalho e guarda em que coluna mora o Status
+  # Reads the `Status` COLUMN of the drift table, locating it by header position. The previous
+  # version grepped the whole file for the word `TODO` and failed every `45-docs.md` that named
+  # `TODO.md` — which is exactly what `sdd-docs` is required to do (checking the mission's TODO
+  # entries is in its instructions). The gate contradicted the agent. Measured in the SQ-97
+  # pilot: 0 `✗` items in the file and a failure all the same.
+  local pending_cell
+  pending_cell="$(awk -F'|' '
+      # find the header and remember which column holds Status
       !col && /^[ \t]*\|/ {
         for (i = 2; i < NF; i++) {
           cell = $i; gsub(/^[ \t]+|[ \t]+$/, "", cell)
@@ -433,31 +438,31 @@ gate_DOCS() {
         if (cell == "✅" || cell == "n/a" || cell == "N/A") next
         print cell; exit
       }
-      col && !/^[ \t]*\|/ { exit }   # a tabela acabou
+      col && !/^[ \t]*\|/ { exit }   # the table ended
     ' "$d")"
-  if [ -n "$pendente" ]; then
-    GATE_WHY="45-docs.md tem área com Status '$pendente' no checklist de drift — cada linha precisa de ✅ (com hash) ou n/a justificado"
+  if [ -n "$pending_cell" ]; then
+    GATE_WHY="45-docs.md has an area with Status '$pending_cell' in the drift checklist — every row needs ✅ (with a hash) or a justified n/a"
     return 1
   fi
-  GATE_WHY="checklist de drift completo"
+  GATE_WHY="drift checklist complete"
   return 0
 }
 
 gate_PR() {
   local p="$MISSION_DIR/50-pr.md"
-  [ -f "$p" ] || { GATE_WHY="falta 50-pr.md"; return 1; }
+  [ -f "$p" ] || { GATE_WHY="missing 50-pr.md"; return 1; }
   local url; url="$(frontmatter "$p" pr_url)"
-  [ -n "$url" ] || { GATE_WHY="50-pr.md sem 'pr_url:' no frontmatter"; return 1; }
+  [ -n "$url" ] || { GATE_WHY="50-pr.md has no 'pr_url:' in the frontmatter"; return 1; }
   local live
   live="$( cd "$REPO_ROOT" && gh pr view "$url" --json url --jq .url 2>/dev/null )" || true
-  [ -n "$live" ] || { GATE_WHY="gh não confirma o PR $url — 50-pr.md pode estar mentindo"; return 1; }
-  GATE_WHY="PR aberto: $live"
+  [ -n "$live" ] || { GATE_WHY="gh does not confirm PR $url — 50-pr.md may be lying"; return 1; }
+  GATE_WHY="PR open: $live"
   return 0
 }
 
 readonly PHASES="PLAN TICKET EXEC QA REVIEW DOCS PR"
 
-# Primeira fase cujo gate não está satisfeito. Vazio ⇒ missão completa.
+# First phase whose gate is not satisfied. Empty ⇒ mission complete.
 current_phase() {
   local ph
   for ph in $PHASES; do
@@ -466,9 +471,9 @@ current_phase() {
   printf '%s\n' ""
 }
 
-# Primeira fase DEPOIS de <fase> cujo gate não está satisfeito. Vazio ⇒ acabou a lista.
-# Existe só para a projeção do dry-run: como o dry-run não muda nada no disco, re-chamar
-# current_phase() devolveria a mesma fase para sempre — laço infinito.
+# First phase AFTER <phase> whose gate is not satisfied. Empty ⇒ the list ended.
+# It exists only for the dry-run projection: since the dry-run changes nothing on disk, calling
+# current_phase() again would return the same phase forever — an infinite loop.
 next_pending_phase() {
   local after="$1" ph seen=0
   for ph in $PHASES; do
@@ -479,10 +484,10 @@ next_pending_phase() {
 }
 
 # ---------------------------------------------------------------------------
-# Invocação de fase
+# Phase invocation
 # ---------------------------------------------------------------------------
 
-# Modelo configurado para a fase.
+# Model configured for the phase.
 phase_model() {
   case "$1" in
     EXEC)   printf '%s\n' "$MODEL_EXEC" ;;
@@ -495,21 +500,22 @@ phase_model() {
   esac
 }
 
-# Sub-passo da fase QA, DERIVADO dos artefatos — mesma filosofia dos gates, nenhum estado extra.
-# A fase QA são três sessões: as skills qa-report/qa-execution têm `disable-model-invocation`,
-# então cada uma precisa entrar pelo slash literal como prompt inicial da SUA sessão (verificado
-# em 2026-08-14: o slash expande em headless e a skill carrega). O sdd-qa fecha o ciclo depois.
-# O relatório datado da skill qa-execution está fechado?
+# QA sub-step, DERIVED from the artifacts — same philosophy as the gates, no extra state.
+# The QA phase is three sessions: the qa-report/qa-execution skills carry
+# `disable-model-invocation`, so each one has to enter through the literal slash as the opening
+# prompt of ITS OWN session (verified on 2026-08-14: the slash expands headless and the skill
+# loads). sdd-qa closes the cycle afterwards.
+# Is the qa-execution skill's dated report closed?
 #
-# UMA função, usada pelo gate E pelo sub-passo. A âncora vivia duplicada nos dois; ao corrigi-la
-# num lugar só, o `gate_QA` passou a aceitar o relatório enquanto o `qa_substep` continuava
-# achando que faltava executar — e o runner re-rodou qa-execution a US$ 15 por volta. Contrato
-# duplicado é contrato que diverge; a duplicação era o bug, não a regex.
+# ONE function, used by the gate AND by the sub-step. The anchor used to live duplicated in
+# both; fixing it in a single place made `gate_QA` accept the report while `qa_substep` still
+# believed execution was pending — and the runner re-ran qa-execution at US$ 15 a round. A
+# duplicated contract is a contract that diverges; the duplication was the bug, not the regex.
 #
-# Detalhes da âncora: `**Status:**` NÃO começa a linha (o template é
-# `- **Started:** <ts> · **Status:** in-progress <!-- in-progress | closed -->`), e o `closed`
-# tem que vir logo depois de `**Status:**` — um `.*closed` casaria com a legenda do enum no
-# comentário, aprovando um relatório ainda em andamento.
+# Anchor details: `**Status:**` does NOT start the line (the template is
+# `- **Started:** <ts> · **Status:** in-progress <!-- in-progress | closed -->`), and `closed`
+# has to come right after `**Status:**` — a `.*closed` would match the enum legend in the
+# comment, approving a report that is still in progress.
 report_closed() {
   local report="${1:-}"
   [ -n "$report" ] || return 1
@@ -518,10 +524,10 @@ report_closed() {
 
 qa_substep() {
   local qa="$REPO_ROOT/$QA_DOCS_PATH" report
-  # Projeto sem interface para andar (sem E2E_CMD e sem APP_URL): as skills de dogfooding em
-  # persona não têm o que fazer. Vai direto ao sdd-qa, que julga se o diff é user-visible e,
-  # não sendo, escreve `qa: skipped` com a justificativa. Bootstrapar uma árvore de jornadas
-  # de browser num projeto sem browser é a burocracia que o `skipped` existe para evitar.
+  # Project with no interface to walk (no E2E_CMD and no APP_URL): the in-persona dogfooding
+  # skills have nothing to do. Straight to sdd-qa, which judges whether the diff is user-visible
+  # and, when it is not, writes `qa: skipped` with the justification. Bootstrapping a tree of
+  # browser journeys in a project with no browser is the paperwork `skipped` exists to avoid.
   if [ -z "$E2E_CMD" ] && [ -z "$APP_URL" ]; then printf 'close\n'; return 0; fi
   [ -n "$(latest_matching "$qa/charters/*.md")" ] || { printf 'plan\n'; return 0; }
   report="$(latest_matching "$qa/reports/*.md")"
@@ -529,7 +535,7 @@ qa_substep() {
   printf 'close\n'
 }
 
-# Identificador do passo: a fase, ou `QA:<sub-passo>`.
+# Step identifier: the phase, or `QA:<sub-step>`.
 phase_step() {
   case "$1" in
     QA) printf 'QA:%s\n' "$(qa_substep)" ;;
@@ -537,8 +543,8 @@ phase_step() {
   esac
 }
 
-# Agente responsável pelo passo. Vazio ⇒ quem dirige é a skill do slash, não um agente do kit
-# (dois system prompts disputando a sessão é ruído, não reforço).
+# Agent responsible for the step. Empty ⇒ the slash skill drives, not a kit agent
+# (two system prompts fighting over one session is noise, not reinforcement).
 phase_agent() {
   case "$1" in
     EXEC)      printf '%s\n' "sdd-executor" ;;
@@ -553,7 +559,7 @@ phase_agent() {
   esac
 }
 
-# Slash literal que abre a sessão, quando a fase é dirigida por uma skill de terceiro.
+# Literal slash that opens the session, when the phase is driven by a third-party skill.
 phase_slash() {
   case "$1" in
     QA:plan) printf '/qa-report %s\n' "$QA_DOCS_PATH" ;;
@@ -565,68 +571,78 @@ phase_slash() {
 
 phase_task() {
   case "$1" in
-    EXEC)     printf '%s\n' "executar o PRÓXIMO incremento pendente do checkpoint, em TDD, e commitar" ;;
-    QA:plan)  printf '%s\n' "planejar o ciclo de QA desta missão: personas, jornadas, cenários e charters" ;;
-    QA:exec)  printf '%s\n' "andar as jornadas em persona e escrever o relatório datado + o registry de bugs" ;;
-    QA:close|QA) printf '%s\n' "fechar o ciclo de QA: achado confirmado vira spec e2e, bug sanável vira incremento de fix, e escrever o 30-handoff-qa.md" ;;
-    REVIEW)   printf '%s\n' "revisar e corrigir, DENTRO desta sessão, até todos os critérios ficarem Grade A" ;;
-    DOCS)     printf '%s\n' "sincronizar a documentação viva do repo com o que esta missão mudou" ;;
-    PR)       printf '%s\n' "fazer push e abrir o PR com as evidências das fases anteriores" ;;
-    TICKET)   printf '%s\n' "abrir a issue da missão no JIRA, já na sprint ativa, e registrar o 10-ticket.md" ;;
+    EXEC)     printf '%s\n' "execute the NEXT pending increment of the checkpoint, in TDD, and commit" ;;
+    QA:plan)  printf '%s\n' "plan the QA cycle for this mission: personas, journeys, scenarios and charters" ;;
+    QA:exec)  printf '%s\n' "walk the journeys in persona and write the dated report + the bug registry" ;;
+    QA:close|QA) printf '%s\n' "close the QA cycle: a confirmed finding becomes an e2e spec, a fixable bug becomes a fix increment, and write 30-handoff-qa.md" ;;
+    REVIEW)   printf '%s\n' "review and fix, INSIDE this session, until every criterion is Grade A" ;;
+    DOCS)     printf '%s\n' "sync the repo's living documentation with what this mission changed" ;;
+    PR)       printf '%s\n' "push and open the PR carrying the evidence from the earlier phases" ;;
+    TICKET)   printf '%s\n' "open the mission's JIRA issue, already in the active sprint, and record 10-ticket.md" ;;
     *)        printf '%s\n' "" ;;
   esac
 }
 
-# Instrução extra por fase, quando a fase tem um laço próprio a conduzir.
+# Extra per-phase instruction, when the phase has a loop of its own to drive.
 phase_extra() {
   case "$1" in
     REVIEW) cat <<'EOF'
 
-Conduza o laço revisar → corrigir → re-revisar DENTRO desta sessão, com o relatório de QA em
-mãos, até a tabela "### Overall Grade" fechar com A em TODOS os critérios. (O comando `/goal`
-NÃO existe neste ambiente — verificado; o laço é seu.) Correções vão commitadas: o gate exige
-working tree limpo. Se a sessão terminar sem fechar, escreva o 40-review-r<N>.md com a grade
-REAL — o runner abre uma sessão nova continuando. Grade inflada para passar no gate desliga o
-único sensor de qualidade da missão.
+Drive the review → fix → re-review loop INSIDE this session, with the QA report in hand, until
+the "### Overall Grade" table closes with A on EVERY criterion. (The `/goal` command does NOT
+exist in this environment — verified; the loop is yours.) Fixes go committed: the gate requires
+a clean working tree. If the session ends without closing, write 40-review-r<N>.md with the REAL
+grade — the runner opens a fresh session to continue. A grade inflated to pass the gate switches
+off the mission's only quality sensor.
 EOF
     ;;
     QA:plan|QA:exec) cat <<'EOF'
 
-A skill acima é a dona da árvore docs/qa/ — siga as instruções dela. Ao terminar, commite o que
-ela escreveu. Não escreva handoff nem toque no checkpoint: isso é do passo seguinte.
+The skill above owns the docs/qa/ tree — follow its instructions. When you finish, commit what
+it wrote. Do not write a handoff and do not touch the checkpoint: that belongs to the next step.
 EOF
     ;;
     *) printf '' ;;
   esac
 }
 
-# Protocolo de boot — fixo, curto, e sempre o mesmo. Tudo que a sessão precisa saber está
-# em disco; este prompt só diz ONDE olhar e que não houve conversa anterior.
+# Boot protocol — fixed, short, and always the same. Everything the session needs to know is on
+# disk; this prompt only says WHERE to look and that there was no earlier conversation.
 #
-# Quando a fase é dirigida por skill de terceiro, o slash literal precisa ser a PRIMEIRA linha
-# do prompt: é assim que ele expande em headless (as skills de QA têm disable-model-invocation,
-# então não há outro caminho).
+# When the phase is driven by a third-party skill, the literal slash has to be the FIRST line of
+# the prompt: that is how it expands headless (the QA skills carry disable-model-invocation, so
+# there is no other route).
 boot_prompt() {
-  local step="$1" slash agent
+  local step="$1" slash agent lang_line=""
   slash="$(phase_slash "$step")"
   agent="$(phase_agent "$step")"
+  # The kit is English; the ARTIFACT speaks whatever language the target repo declared. Empty ⇒
+  # nothing is said, and the prompt stays byte for byte what it was before this key existed.
+  if [ -n "$OUTPUT_LANG" ]; then
+    lang_line="
+Write EVERY artifact of this mission — handoffs, checkpoint, commit messages and PR body — in:
+$OUTPUT_LANG. Identifiers, config keys and status tokens (pending, done, blocked, auto, skipped)
+stay in English: they are contract, not prose.
+"
+  fi
   [ -n "$slash" ] && printf '%s\n\n' "$slash"
   cat <<EOF
-Você está na fase $step da missão \`$MISSION\` do projeto \`$PROJECT_NAME\`${agent:+, como o agente $agent}.
+You are in phase $step of mission \`$MISSION\` in project \`$PROJECT_NAME\`${agent:+, as the agent $agent}.
 
-Todo o seu estado vem do disco. NÃO houve conversa anterior — nada foi "combinado" antes.
-Leia, nesta ordem, antes de qualquer outra coisa:
-  1. $HANDOFF_DIR/$MISSION/00-missao.md   (a intenção e a métrica)
-  2. $HANDOFF_DIR/$MISSION/01-plano.md    (o como, e o contexto já verificado — confie nele)
-  3. $HANDOFF_DIR/$MISSION/checkpoint.md  (a tabela de incrementos)
-  4. o handoff mais recente de $HANDOFF_DIR/$MISSION/ (o que já aconteceu)
+All of your state comes from disk. There was NO earlier conversation — nothing was "agreed"
+before. Read, in this order, before anything else:
+  1. $HANDOFF_DIR/$MISSION/00-missao.md   (the intent and the metric)
+  2. $HANDOFF_DIR/$MISSION/01-plano.md    (the how, and the context already verified — trust it)
+  3. $HANDOFF_DIR/$MISSION/checkpoint.md  (the increment table)
+  4. the most recent handoff in $HANDOFF_DIR/$MISSION/ (what already happened)
   5. .sdd/config.sh (TEST_CMD="$TEST_CMD"${E2E_CMD:+, E2E_CMD=\"$E2E_CMD\"})
-
-Sua tarefa nesta sessão: $(phase_task "$step").
+$lang_line
+Your task in this session: $(phase_task "$step").
 $(phase_extra "$step")
-Escreva os artefatos no disco e commite. O runner reavalia o gate por fora — roda os testes,
-confere os hashes no git log, lê os arquivos. Sua resposta em texto não prova nada e não
-satisfaz gate nenhum. Achado que não cabe nesta missão vai para o $TODO_FILE, nunca para o diff.
+Write the artifacts to disk and commit. The runner re-evaluates the gate from outside — it runs
+the tests, checks the hashes in the git log, reads the files. Your answer in text proves nothing
+and satisfies no gate. A finding that does not fit this mission goes to $TODO_FILE, never to the
+diff.
 EOF
 }
 
@@ -634,40 +650,40 @@ PIPELINE_LOG=""
 DRY_RUN=0
 
 pipeline_log_line() {
-  # Projeção não escreve no diário. Precisão importa aqui, porque a frase fácil ("dry-run não
-  # mexe em nada") é falsa: os gates rodam `TEST_CMD`/`E2E_CMD` de verdade durante a projeção e
-  # escrevem `.sdd/logs/<missão>/gate-*-test-*.log` — decisão explícita do plano. O que o
-  # `--dry-run` garante é mais estreito e é isto: nenhuma sessão do `claude` é gasta e nenhum
-  # artefato da missão é tocado. Registrar aqui um evento que só foi PROJETADO mente na
-  # trilha de auditoria, e num repo-alvo recém instalado (onde o `sdd install` só ignora
-  # `.sdd/logs/`) o `pipeline.log` fica untracked e suja o working tree — tree sujo reprova
-  # `gate_REVIEW` e o `sdd preflight`, ou seja: uma projeção derrubaria o gate de outra fase.
-  # A guarda mora aqui, e não nos chamadores, para valer para TODOS eles: os caminhos de
-  # escalação (`blocked` do checkpoint, orçamento estourado, duas sessões sem progresso) são
-  # três, e um quarto adicionado amanhã nasceria com o mesmo defeito. Achado da fase QA da
-  # missão 20260814-dry-run-completo (F1).
+  # The projection does not write to the journal. Precision matters here, because the easy
+  # sentence ("dry-run touches nothing") is false: the gates run `TEST_CMD`/`E2E_CMD` for real
+  # during the projection and write `.sdd/logs/<mission>/gate-*-test-*.log` — an explicit
+  # decision of the plan. What `--dry-run` guarantees is narrower, and it is this: no `claude`
+  # session is spent and no mission artifact is touched. Recording here an event that was only
+  # PROJECTED lies in the audit trail, and in a freshly installed target repo (where `sdd
+  # install` only ignores `.sdd/logs/`) the `pipeline.log` stays untracked and dirties the
+  # working tree — a dirty tree fails `gate_REVIEW` and `sdd preflight`, meaning a projection
+  # would knock down another phase's gate. The guard lives here, not in the callers, so it holds
+  # for ALL of them: the escalation paths (checkpoint `blocked`, budget blown, two sessions with
+  # no progress) are three, and a fourth added tomorrow would be born with the same defect.
+  # Found by the QA phase of mission 20260814-dry-run-completo (F1).
   [ "$DRY_RUN" = "1" ] && return 0
   [ -n "$PIPELINE_LOG" ] || return 0
   mkdir -p "$(dirname "$PIPELINE_LOG")"
   printf '%s\n' "$*" >> "$PIPELINE_LOG"
 }
 
-# Roda uma fase numa sessão headless nova. Devolve 0 se o claude saiu 0 (o que NÃO significa
-# que o gate passou — quem julga isso é o gate, sempre depois).
+# Runs a phase in a fresh headless session. Returns 0 when claude exited 0 (which does NOT mean
+# the gate passed — the gate judges that, always afterwards).
 run_phase() {
   local phase="$1" resume_sid="${2:-}"
   local pstep model agent sid prompt logfile started ended cost
-  # QA são três sessões (planejar, andar, fechar); o passo sai dos artefatos, não de um contador.
+  # QA is three sessions (plan, walk, close); the step comes from the artifacts, not a counter.
   pstep="$(phase_step "$phase")"
   model="$(phase_model "$phase")"
   agent="$(phase_agent "$pstep")"
   sid="$(uuidgen)"
   prompt="$(boot_prompt "$pstep")"
   if [ -n "$resume_sid" ]; then
-    prompt="O gate da fase $phase falhou: ${GATE_WHY}
+    prompt="The gate for phase $phase failed: ${GATE_WHY}
 
-Corrija exatamente isso. Não recomece a fase: leia o que já está no disco, complete o que falta
-e escreva os artefatos. O gate será reavaliado."
+Fix exactly that. Do not restart the phase: read what is already on disk, complete what is
+missing and write the artifacts. The gate will be re-evaluated."
   fi
 
   local -a cmd=(claude -p "$prompt"
@@ -683,14 +699,14 @@ e escreva os artefatos. O gate será reavaliado."
 
   if [ "$DRY_RUN" = "1" ]; then
     info ""
-    printf '%s--- DRY RUN: fase %s ---%s\n' "$C_BOLD" "$pstep" "$C_RESET"
+    printf '%s--- DRY RUN: phase %s ---%s\n' "$C_BOLD" "$pstep" "$C_RESET"
     printf '%scwd:%s   %s\n' "$C_DIM" "$C_RESET" "$REPO_ROOT"
-    printf '%smodelo:%s %s   %sagente:%s %s   %ssessão:%s %s\n' \
-      "$C_DIM" "$C_RESET" "$model" "$C_DIM" "$C_RESET" "${agent:-<nenhum>}" \
+    printf '%smodel:%s %s   %sagent:%s %s   %ssession:%s %s\n' \
+      "$C_DIM" "$C_RESET" "$model" "$C_DIM" "$C_RESET" "${agent:-<none>}" \
       "$C_DIM" "$C_RESET" "${resume_sid:-$sid}"
-    printf '%scomando:%s\n' "$C_DIM" "$C_RESET"
+    printf '%scommand:%s\n' "$C_DIM" "$C_RESET"
     printf '  %q' "${cmd[@]}"; printf '\n'
-    printf '%sprompt de boot:%s\n' "$C_DIM" "$C_RESET"
+    printf '%sboot prompt:%s\n' "$C_DIM" "$C_RESET"
     printf '%s\n' "$prompt" | sed 's/^/  │ /'
     LAST_PHASE_SID="$sid"
     return 0
@@ -699,7 +715,7 @@ e escreva os artefatos. O gate será reavaliado."
   logfile="$(log_dir)/${phase}-$(date +%Y%m%d-%H%M%S).json"
   mkdir -p "$(dirname "$logfile")"
   started="$(date +%s)"
-  step "fase $pstep — ${agent:-skill} ($model) — sessão ${resume_sid:-$sid}"
+  step "phase $pstep — ${agent:-skill} ($model) — session ${resume_sid:-$sid}"
 
   local rc=0
   ( cd "$REPO_ROOT" && "${cmd[@]}" ) > "$logfile" 2>"${logfile%.json}.err" || rc=$?
@@ -707,12 +723,12 @@ e escreva os artefatos. O gate será reavaliado."
 
   cost="$(jq -r '.total_cost_usd // .cost_usd // "?"' "$logfile" 2>/dev/null || echo "?")"
   local dur=$((ended - started))
-  pipeline_log_line "$(date -Iseconds)  $phase  agente=$agent  modelo=$model  sessao=${resume_sid:-$sid}  rc=$rc  dur=${dur}s  custo_usd=$cost  log=$logfile"
+  pipeline_log_line "$(date -Iseconds)  $phase  agent=$agent  model=$model  session=${resume_sid:-$sid}  rc=$rc  dur=${dur}s  cost_usd=$cost  log=$logfile"
 
   if [ "$rc" -ne 0 ]; then
-    warn "claude saiu com $rc na fase $phase (ver $logfile e ${logfile%.json}.err)"
+    warn "claude exited $rc in phase $phase (see $logfile and ${logfile%.json}.err)"
   else
-    dim "  sessão encerrada em ${dur}s, custo $cost USD"
+    dim "  session ended in ${dur}s, cost $cost USD"
   fi
   LAST_PHASE_SID="$sid"
   invalidate_checks
@@ -720,8 +736,8 @@ e escreva os artefatos. O gate será reavaliado."
 }
 LAST_PHASE_SID=""
 
-# Impressão digital do estado da missão. Serve para responder "essa sessão fez ALGUMA coisa?"
-# quando o gate ainda não passou — o caso normal da fase EXEC, que roda um incremento por vez.
+# Fingerprint of the mission state. It answers "did this session do ANYTHING?" when the gate has
+# not passed yet — the normal case for the EXEC phase, which runs one increment at a time.
 state_fingerprint() {
   local head files
   head="$( cd "$REPO_ROOT" && git rev-parse HEAD 2>/dev/null || echo "-" )"
@@ -730,35 +746,35 @@ state_fingerprint() {
     "$( cat "$MISSION_DIR/checkpoint.md" 2>/dev/null | md5sum 2>/dev/null | cut -d' ' -f1 )"
 }
 
-# Quantas sessões uma fase pode consumir antes de virar BLOCKED.
+# How many sessions a phase may consume before turning BLOCKED.
 phase_budget() {
   case "$1" in
     EXEC)   printf '%s\n' "$(( $(checkpoint_rows | wc -l) + EXEC_MAX_RETRY + 2 ))" ;;
-    QA)     printf '%s\n' "$(( QA_MAX_ITER * 3 ))" ;;   # 3 sub-passos por volta
+    QA)     printf '%s\n' "$(( QA_MAX_ITER * 3 ))" ;;   # 3 sub-steps per round
     REVIEW) printf '%s\n' "$REVIEW_MAX_ITER" ;;
     *)      printf '%s\n' "$(( EXEC_MAX_RETRY + 1 ))" ;;
   esac
 }
 
 # ---------------------------------------------------------------------------
-# Comandos
+# Commands
 # ---------------------------------------------------------------------------
 
 cmd_install() {
   local force=0
   if [ "${1:-}" = "--force" ]; then force=1; fi
   resolve_repo_root
-  step "instalando o sdd em $REPO_ROOT"
+  step "installing sdd into $REPO_ROOT"
 
   mkdir -p "$REPO_ROOT/.sdd" "$REPO_ROOT/.claude/agents"
 
   if [ -f "$CONFIG_FILE" ]; then
-    ok ".sdd/config.sh já existe (preservado)"
+    ok ".sdd/config.sh already exists (preserved)"
   else
     local branch test_cmd project
     project="$(basename "$REPO_ROOT")"
-    # `|| true` obrigatório: repo sem remote não tem origin/HEAD, o git falha e o pipefail
-    # derrubaria o install inteiro em silêncio.
+    # `|| true` is mandatory: a repo with no remote has no origin/HEAD, git fails, and pipefail
+    # would take the whole install down in silence.
     branch="$( cd "$REPO_ROOT" \
       && git symbolic-ref --quiet --short refs/remotes/origin/HEAD 2>/dev/null \
       | sed 's|^origin/||' || true )"
@@ -773,7 +789,7 @@ cmd_install() {
         -e "s|<TEST_CMD>|$test_cmd|g" \
         -e "s|<SDD_HOME>|$SDD_HOME|g" \
         "$SDD_HOME/config/starter.conf" > "$CONFIG_FILE"
-    ok ".sdd/config.sh criado (branch base detectada: $branch — confirme)"
+    ok ".sdd/config.sh created (base branch detected: $branch — confirm it)"
   fi
 
   local a name target changed=0
@@ -782,30 +798,30 @@ cmd_install() {
     name="$(basename "$a")"
     target="$REPO_ROOT/.claude/agents/$name"
     if [ ! -f "$target" ]; then
-      cp "$a" "$target"; ok "agente $name copiado"
+      cp "$a" "$target"; ok "agent $name copied"
     elif cmp -s "$a" "$target"; then
-      ok "agente $name idêntico"
+      ok "agent $name identical"
     elif [ "$force" = "1" ]; then
-      cp "$a" "$target"; ok "agente $name atualizado (--force)"
+      cp "$a" "$target"; ok "agent $name updated (--force)"
     else
       changed=$((changed + 1))
-      warn "agente $name difere da versão do kit:"
+      warn "agent $name differs from the kit version:"
       diff -u "$target" "$a" | sed 's/^/      /' >&2 || true
     fi
   done
-  if [ "$changed" -gt 0 ]; then warn "rode 'sdd install --force' para adotar a versão do kit"; fi
+  if [ "$changed" -gt 0 ]; then warn "run 'sdd install --force' to adopt the kit version"; fi
 
   local gitignore="$REPO_ROOT/.gitignore"
   if ! grep -qxF '.sdd/logs/' "$gitignore" 2>/dev/null; then
-    printf '\n# logs efêmeros do runner sdd (o estado durável vive em %s/, commitado)\n.sdd/logs/\n' \
+    printf '\n# ephemeral logs of the sdd runner (durable state lives in %s/, committed)\n.sdd/logs/\n' \
       "${HANDOFF_DIR:-docs/handoffs}" >> "$gitignore"
-    ok ".sdd/logs/ adicionado ao .gitignore"
+    ok ".sdd/logs/ added to .gitignore"
   else
-    ok ".sdd/logs/ já no .gitignore"
+    ok ".sdd/logs/ already in .gitignore"
   fi
 
   info ""
-  dim "próximo: edite .sdd/config.sh e rode 'sdd preflight'"
+  dim "next: edit .sdd/config.sh and run 'sdd preflight'"
 }
 
 cmd_preflight() {
@@ -814,133 +830,133 @@ cmd_preflight() {
   local fails=0
   _fail() { bad "$1"; fails=$((fails + 1)); }
 
-  # --- ferramentas ---
+  # --- tools ---
   if command -v claude >/dev/null 2>&1; then ok "claude $(claude --version 2>&1 | head -1)"
-  else _fail "claude CLI não encontrado no PATH"; fi
+  else _fail "claude CLI not found in PATH"; fi
 
   local t
   for t in git gh jq uuidgen; do
-    if command -v "$t" >/dev/null 2>&1; then ok "$t presente"
-    else _fail "$t não encontrado no PATH"; fi
+    if command -v "$t" >/dev/null 2>&1; then ok "$t present"
+    else _fail "$t not found in PATH"; fi
   done
 
-  # --- autenticação ---
-  # Sanidade + permissão numa tacada só. "claude -p responde" NÃO cobre o modo de falha que
-  # importa: a sessão de fase precisa EXECUTAR (rodar a suíte, commitar), e `acceptEdits`
-  # sozinho não libera `Bash`. Este check dispara uma sessão headless real com AS MESMAS flags
-  # do run_phase e exige que ela consiga executar um comando.
+  # --- authentication ---
+  # Sanity + permission in one shot. "claude -p answers" does NOT cover the failure mode that
+  # matters: the phase session has to EXECUTE (run the suite, commit), and `acceptEdits` alone
+  # does not unlock `Bash`. This check fires a real headless session with THE SAME flags as
+  # run_phase and demands that it manage to execute a command.
   if command -v claude >/dev/null 2>&1; then
     local probe
-    probe="$( cd "$REPO_ROOT" && claude -p "Rode exatamente: bash -c 'echo sdd-preflight-ok'. Responda somente com a saída do comando." \
+    probe="$( cd "$REPO_ROOT" && claude -p "Run exactly: bash -c 'echo sdd-preflight-ok'. Answer with the command output only." \
         --model haiku --permission-mode "$PERMISSION_MODE" --output-format json \
         --setting-sources "user,project,local" --allowedTools "$ALLOWED_TOOLS" \
         --max-budget-usd 1 2>/dev/null | jq -r '.result // ""' 2>/dev/null || true )"
     if printf '%s' "$probe" | grep -q 'sdd-preflight-ok'; then
-      ok "sessão headless executa comandos (OAuth + permissão)"
+      ok "headless session executes commands (OAuth + permission)"
     elif [ -z "$probe" ]; then
-      _fail "claude -p não respondeu — sessão expirada? rode 'claude login'"
+      _fail "claude -p did not answer — expired session? run 'claude login'"
     else
-      _fail "a sessão headless NÃO consegue executar comandos — as fases não vão rodar a suíte
-        nem commitar. Resposta obtida: $(printf '%s' "$probe" | head -c 120)
-        Ajuste ALLOWED_TOOLS em .sdd/config.sh (default: Bash)."
+      _fail "the headless session CANNOT execute commands — the phases will not run the suite
+        nor commit. Answer received: $(printf '%s' "$probe" | head -c 120)
+        Adjust ALLOWED_TOOLS in .sdd/config.sh (default: Bash)."
     fi
   fi
-  if gh auth status >/dev/null 2>&1; then ok "gh autenticado"
-  else _fail "gh não autenticado — rode 'gh auth login'"; fi
+  if gh auth status >/dev/null 2>&1; then ok "gh authenticated"
+  else _fail "gh not authenticated — run 'gh auth login'"; fi
 
-  # --- browser (só importa se há e2e/QA de UI) ---
+  # --- browser (only matters when there is e2e/UI QA) ---
   if [ -n "$E2E_CMD" ] || [ -n "$APP_URL" ]; then
     if command -v agent-browser >/dev/null 2>&1; then
       ok "$(agent-browser --version 2>&1 | head -1)"
     else
-      _fail "agent-browser ausente/quebrado — a fase QA exploratória depende dele.
-        Sintoma conhecido: shim em ~/.nvm/versions/node/*/bin/agent-browser apontando para
-        ~/.hermes/... (inexistente). Fix: ln -sf ../lib/node_modules/agent-browser/bin/agent-browser.js <shim>"
+      _fail "agent-browser missing/broken — the exploratory QA phase depends on it.
+        Known symptom: a shim in ~/.nvm/versions/node/*/bin/agent-browser pointing at
+        ~/.hermes/... (nonexistent). Fix: ln -sf ../lib/node_modules/agent-browser/bin/agent-browser.js <shim>"
     fi
   else
-    dim "  ---  agent-browser não checado (E2E_CMD e APP_URL vazios)"
+    dim "  ---  agent-browser not checked (E2E_CMD and APP_URL empty)"
   fi
 
   # --- config ---
-  bash -n "$CONFIG_FILE" && ok "config com sintaxe válida"
+  bash -n "$CONFIG_FILE" && ok "config syntax valid"
   case "$TEST_CMD" in
-    TODO|"") _fail "TEST_CMD não configurado em .sdd/config.sh" ;;
+    TODO|"") _fail "TEST_CMD not configured in .sdd/config.sh" ;;
     *) ok "TEST_CMD=$TEST_CMD" ;;
   esac
   if [ "$JIRA_ENABLED" = "true" ]; then
-    if [ -f "$REPO_ROOT/.jira-project" ]; then ok "JIRA habilitado, .jira-project presente"
-    else _fail "JIRA_ENABLED=true mas não há .jira-project no repo (a skill ticket precisa dele)"; fi
+    if [ -f "$REPO_ROOT/.jira-project" ]; then ok "JIRA enabled, .jira-project present"
+    else _fail "JIRA_ENABLED=true but there is no .jira-project in the repo (the ticket skill needs it)"; fi
   else
-    dim "  ---  JIRA_ENABLED=false — fase TICKET será pulada"
+    dim "  ---  JIRA_ENABLED=false — the TICKET phase will be skipped"
   fi
 
-  # --- plugins do repo-alvo ---
+  # --- target repo plugins ---
   local settings="$REPO_ROOT/.claude/settings.json"
   if [ -f "$settings" ]; then
     local p missing=""
     for p in ddd kaizen-software; do
       grep -q "\"$p@" "$settings" || missing="$missing $p"
     done
-    if [ -z "$missing" ]; then ok "plugins ddd + kaizen-software habilitados"
-    else warn "plugins não habilitados em .claude/settings.json:$missing (o planner os invoca)"; fi
+    if [ -z "$missing" ]; then ok "plugins ddd + kaizen-software enabled"
+    else warn "plugins not enabled in .claude/settings.json:$missing (the planner invokes them)"; fi
   else
-    warn ".claude/settings.json ausente — plugins ddd/kaizen não habilitados no repo"
+    warn ".claude/settings.json missing — ddd/kaizen plugins not enabled in the repo"
   fi
 
-  # --- agentes instalados ---
+  # --- installed agents ---
   local a n=0
   for a in "$SDD_HOME"/agents/sdd-*.md; do
     [ -e "$a" ] || continue
     n=$((n + 1))
     [ -f "$REPO_ROOT/.claude/agents/$(basename "$a")" ] \
-      || _fail "agente $(basename "$a") não instalado — rode 'sdd install'"
+      || _fail "agent $(basename "$a") not installed — run 'sdd install'"
   done
-  # Só afirma "conferidos" se nenhum agente falhou — dizer isso logo depois de seis linhas
-  # de falha é a saída se contradizendo, que é o tipo de mentira que o kit proíbe nos gates.
-  if [ "$n" -gt 0 ] && [ "$fails" -eq 0 ]; then ok "$n agente(s) do kit conferidos"; fi
+  # Only claims "checked" when no agent failed — saying it right after six failure lines is the
+  # output contradicting itself, which is the kind of lie the kit forbids in the gates.
+  if [ "$n" -gt 0 ] && [ "$fails" -eq 0 ]; then ok "$n kit agent(s) checked"; fi
 
-  # --- estado do git ---
+  # --- git state ---
   local branch; branch="$( cd "$REPO_ROOT" && git branch --show-current )"
-  ok "branch atual: $branch"
+  ok "current branch: $branch"
   if [ "$branch" = "$DEFAULT_BRANCH" ]; then
-    warn "você está na branch base ($DEFAULT_BRANCH) — o pipeline commita direto aqui se rodar assim"
+    warn "you are on the base branch ($DEFAULT_BRANCH) — run like this and the pipeline commits straight into it"
   fi
   if [ -n "$( cd "$REPO_ROOT" && git status --porcelain )" ]; then
-    _fail "working tree sujo — o pipeline precisa de base limpa para atribuir commits aos incrementos"
+    _fail "working tree dirty — the pipeline needs a clean base to attribute commits to increments"
   else
-    ok "working tree limpo"
+    ok "working tree clean"
   fi
 
   info ""
   if [ "$fails" -eq 0 ]; then
     printf '%spreflight ok%s\n' "$C_GREEN$C_BOLD" "$C_RESET"; return 0
   fi
-  printf '%s%d verificação(ões) falharam%s\n' "$C_RED$C_BOLD" "$fails" "$C_RESET" >&2
+  printf '%s%d check(s) failed%s\n' "$C_RED$C_BOLD" "$fails" "$C_RESET" >&2
   return 1
 }
 
 # ---------------------------------------------------------------------------
-# Sensor do KIT (≠ preflight, que é do ambiente do repo-alvo).
+# Sensor of the KIT (≠ preflight, which is about the target repo's environment).
 #
-# Lê tudo de $SDD_HOME, então funciona rodando de dentro de qualquer repo-alvo e NÃO exige
-# .sdd/config.sh. Responde a uma pergunta só: "o kit ainda mede o que ele diz que mede?"
+# Reads everything from $SDD_HOME, so it works from inside any target repo and does NOT require
+# .sdd/config.sh. It answers a single question: "does the kit still measure what it claims to?"
 #
-# ATENÇÃO ao mexer aqui: este arquivo roda com `set -o pipefail`, e `printf ... | grep -q`
-# devolve 141 quando o grep ACHA e sai antes de o printf terminar de escrever (SIGPIPE) —
-# a lógica fica silenciosamente invertida para entradas grandes e correta para pequenas, que
-# é o pior dos dois mundos. Por isso todas as buscas abaixo usam herestring (`<<<`).
+# WARNING when touching this: the file runs with `set -o pipefail`, and `printf ... | grep -q`
+# returns 141 when grep FINDS the match and exits before printf finished writing (SIGPIPE) —
+# the logic silently inverts for large inputs and stays correct for small ones, which is the
+# worst of both worlds. That is why every search below uses a herestring (`<<<`).
 # ---------------------------------------------------------------------------
 HEALTH_FAILS=0
-HEALTH_ACHADOS=""
+HEALTH_FINDINGS=""
 
 health_bad() { bad "$*"; HEALTH_FAILS=$((HEALTH_FAILS + 1)); }
 
-# Registra um achado de drift para a catraca julgar no fim.
-health_achado() { HEALTH_ACHADOS="${HEALTH_ACHADOS}${1}"$'\n'; }
+# Records a drift finding for the ratchet to judge at the end.
+health_finding() { HEALTH_FINDINGS="${HEALTH_FINDINGS}${1}"$'\n'; }
 
-# Chaves com default em load_config(). O bloco é delimitado pelos comentários âncora, e não
-# por número de linha, para não apodrecer no primeiro refactor.
-health_chaves_default() {
+# Keys with a default in load_config(). The block is delimited by the anchor comments, not by
+# line number, so it does not rot at the first refactor.
+health_default_keys() {
   awk '/^load_config\(\) \{/ { inside = 1 } inside && /^\}/ { exit } inside' "$SDD_HOME/bin/sdd" \
     | grep -oE '\$\{[A-Z0-9_]+:=' | tr -d '${:=' | sort -u
 }
@@ -948,174 +964,180 @@ health_chaves_default() {
 cmd_health() {
   local kit="$SDD_HOME" out rc k n
 
-  step "sdd health — sensor do kit em $kit"
+  step "sdd health — kit sensor at $kit"
 
-  # --- 1. a suíte, que já inclui bash -n e a mutação -------------------------
+  # --- 1. the suite, which already includes bash -n and the mutation --------
   out="$( cd "$kit" && tests/run-all.sh 2>&1 )"; rc=$?
-  if [ "$rc" -eq 0 ]; then ok "suíte verde"; else
-    health_bad "suíte vermelha (rc $rc) — rode tests/run-all.sh para ver"
+  if [ "$rc" -eq 0 ]; then ok "suite green"; else
+    health_bad "suite red (rc $rc) — run tests/run-all.sh to see it"
     printf '%s\n' "$out" | tail -15 >&2
   fi
 
-  # --- 2. mutation score, lido da MESMA rodada ------------------------------
-  # A ausência da linha reprova: se o formato do placar mudar, esta checagem ficaria cega e
-  # passaria em silêncio — que é a vacuidade que o próprio check-mutation.sh existe para caçar.
-  local placar
-  placar="$(grep -m1 '^score: ' <<< "$out")"
-  if [ -z "$placar" ]; then
-    health_bad "a suíte não imprimiu a linha 'score:' — o health ficou cego para a mutação"
-  elif grep -qE '^score: [0-9]+ pegas, 0 lacunas' <<< "$placar"; then
-    ok "mutação: $placar"
+  # --- 2. mutation score, read from the SAME run ---------------------------
+  # A missing line fails: if the score format changes, this check would go blind and pass in
+  # silence — the very vacuity that check-mutation.sh exists to hunt.
+  #
+  # The regex below is one contract across two files: the line is emitted by
+  # tests/check-mutation.sh. Change the wording on either side alone and the suite goes red.
+  local score_line
+  score_line="$(grep -m1 '^score: ' <<< "$out")"
+  if [ -z "$score_line" ]; then
+    health_bad "the suite did not print the 'score:' line — health went blind to the mutation"
+  elif grep -qE '^score: [0-9]+ caught, 0 known gap' <<< "$score_line"; then
+    ok "mutation: $score_line"
   else
-    health_bad "mutação com lacuna aberta — $placar"
+    health_bad "mutation with an open gap — $score_line"
   fi
 
-  # --- 3. todo gate tem mutação --------------------------------------------
-  # Piso explícito: zero gates encontrados passaria por vacuidade (rename, indentação).
+  # --- 3. every gate has a mutation ----------------------------------------
+  # Explicit floor: zero gates found would pass by vacuity (a rename, an indentation change).
   local gates; gates="$(grep -oE '^gate_[A-Z]+' "$kit/bin/sdd" | sed 's/^gate_//' | sort -u)"
   n="$(grep -c . <<< "$gates")"
   if [ "$n" -ne 7 ]; then
-    health_bad "achei $n gates em bin/sdd, esperava 7 — gate novo/renomeado: atualize o piso aqui"
+    health_bad "found $n gates in bin/sdd, expected 7 — new/renamed gate: update the floor here"
   else
-    local sem_mutacao=""
+    local without_mutation=""
     for k in $gates; do
-      grep -qE "^mut_${k}_" "$kit/tests/check-mutation.sh" || sem_mutacao="$sem_mutacao $k"
+      grep -qE "^mut_${k}_" "$kit/tests/check-mutation.sh" || without_mutation="$without_mutation $k"
     done
-    if [ -n "$sem_mutacao" ]; then
-      health_bad "gate(s) sem mutação no catálogo:$sem_mutacao — gate que ninguém sabota não é medido"
+    if [ -n "$without_mutation" ]; then
+      health_bad "gate(s) with no mutation in the catalogue:$without_mutation — a gate nobody sabotages is not measured"
     else
-      ok "os 7 gates têm mutação no catálogo"
+      ok "all 7 gates have a mutation in the catalogue"
     fi
   fi
 
   # --- 4. drift load_config() ↔ config/schema.md ----------------------------
-  local documentadas; documentadas="$(grep -oE '^\| `[A-Z0-9_]+`' "$kit/config/schema.md" | tr -d '|` ' | sort -u)"
-  local chaves; chaves="$(health_chaves_default)"
-  for k in $chaves; do
-    grep -qxF "$k" <<< "$documentadas" || health_achado "chave-sem-doc $k"
+  local documented; documented="$(grep -oE '^\| `[A-Z0-9_]+`' "$kit/config/schema.md" | tr -d '|` ' | sort -u)"
+  local keys; keys="$(health_default_keys)"
+  for k in $keys; do
+    grep -qxF "$k" <<< "$documented" || health_finding "key-without-doc $k"
   done
-  for k in $documentadas; do
-    grep -qxF "$k" <<< "$chaves" || health_achado "doc-sem-chave $k"
+  for k in $documented; do
+    grep -qxF "$k" <<< "$keys" || health_finding "doc-without-key $k"
   done
 
-  # --- 5. subcomando fora do --help ----------------------------------------
+  # --- 5. subcommand missing from --help -----------------------------------
   local subcmds; subcmds="$(awk '/^main\(\) \{/ { inside = 1 } inside && /^\}/ { exit }
       inside && match($0, /^ +[a-z|+-]+\)/) {
-        rotulo = substr($0, RSTART, RLENGTH); gsub(/[ )]/, "", rotulo); print rotulo
+        label = substr($0, RSTART, RLENGTH); gsub(/[ )]/, "", label); print label
       }' "$kit/bin/sdd" | tr '|' '\n' | grep -vE '^-' | sort -u)"
-  local ajuda; ajuda="$( "$kit/bin/sdd" help 2>&1 )"
+  local help_out; help_out="$( "$kit/bin/sdd" help 2>&1 )"
   for k in $subcmds; do
-    # Basta aparecer como `sdd <cmd>` em qualquer lugar do help: alguns dividem linha
-    # (`sdd help | sdd version`), e exigir coluna fixa reprovaria comando documentado.
-    grep -qE "\bsdd $k\b" <<< "$ajuda" || health_achado "cmd-fora-do-help $k"
+    # Appearing as `sdd <cmd>` anywhere in the help is enough: some share a line
+    # (`sdd help | sdd version`), and demanding a fixed column would fail a documented command.
+    grep -qE "\bsdd $k\b" <<< "$help_out" || health_finding "cmd-not-in-help $k"
   done
 
-  # --- 6. variável com default e nunca lida --------------------------------
-  # Palavra NUA, não `$K`: QA_MAX_ITER e EXEC_MAX_RETRY vivem em contexto aritmético
-  # (`$(( QA_MAX_ITER * 3 ))`), e um detector que procurasse `$K` os daria como mortos.
-  # Escopo: só bin/sdd. Varrer o kit inteiro faria a chave "aparecer" no schema.md e no
-  # starter.conf — o sensor passaria a medir a documentação da dívida em vez da dívida.
-  # Linha de comentário também não conta como leitura, pelo mesmo motivo: citar a chave numa
-  # explicação a tornaria "viva" e esconderia justamente o que ela representa.
-  local corpo; corpo="$(awk '/^load_config\(\) \{/ { inside = 1 }
+  # --- 6. variable with a default and never read ---------------------------
+  # BARE word, not `$K`: QA_MAX_ITER and EXEC_MAX_RETRY live in arithmetic context
+  # (`$(( QA_MAX_ITER * 3 ))`), and a detector looking for `$K` would call them dead.
+  # Scope: bin/sdd only. Sweeping the whole kit would make the key "appear" in schema.md and in
+  # starter.conf — the sensor would start measuring the documentation of the debt instead of the
+  # debt. A comment line does not count as a read either, for the same reason: quoting the key in
+  # an explanation would make it "live" and hide exactly what it represents.
+  local body; body="$(awk '/^load_config\(\) \{/ { inside = 1 }
       inside && /^\}/ { inside = 0; next } !inside && !/^[[:space:]]*#/' "$kit/bin/sdd")"
-  for k in $chaves; do
-    grep -qE "\b${k}\b" <<< "$corpo" || health_achado "var-nunca-lida $k"
+  for k in $keys; do
+    grep -qE "\b${k}\b" <<< "$body" || health_finding "var-never-read $k"
   done
 
-  # --- 7. proveniência dos fixtures ----------------------------------------
-  health_proveniencia
+  # --- 7. fixture provenance -----------------------------------------------
+  health_provenance
 
-  # --- catraca --------------------------------------------------------------
-  health_catraca
+  # --- ratchet --------------------------------------------------------------
+  health_ratchet
 
   echo
-  if [ "$HEALTH_FAILS" -eq 0 ]; then ok "kit saudável"; return 0; fi
-  bad "$HEALTH_FAILS checagem(ns) reprovaram"
+  if [ "$HEALTH_FAILS" -eq 0 ]; then ok "kit healthy"; return 0; fi
+  bad "$HEALTH_FAILS check(s) failed"
   return 1
 }
 
-# O fixture tem que casar com o que a skill EMITE. É a contramedida do bug que custou mais
-# caro no kit, e a única checagem que depende da máquina — por isso mora aqui e não na suíte,
-# que precisa continuar hermética. Skill ausente ⇒ pulado, como o shellcheck.
-health_proveniencia() {
-  local gates="$SDD_HOME/tests/check-gates.sh" tpl linha fix pulados=0 conferidos=0
+# The fixture has to match what the skill EMITS. It is the countermeasure for the most expensive
+# bug in the kit's history, and the only check that depends on the machine — which is why it
+# lives here and not in the suite, which has to stay hermetic. Skill absent ⇒ skipped, exactly
+# the way the linter check is skipped when the linter is not installed.
+# (Do not start a comment line with the linter's name: it would parse as a directive, SC1073.)
+health_provenance() {
+  local gates="$SDD_HOME/tests/check-gates.sh" tpl line fix skipped=0 checked=0
 
-  # relatório da qa-execution: a linha do Status, com o timestamp concretizado no fixture
+  # qa-execution report: the Status line, with the timestamp made concrete in the fixture
   tpl="$HOME/.claude/skills/qa-execution/assets/report-template.md"
   if [ -f "$tpl" ]; then
-    linha="$(grep -m1 -- '- \*\*Started:\*\*' "$tpl")"
+    line="$(grep -m1 -- '- \*\*Started:\*\*' "$tpl")"
     fix="$(grep -m1 -- '- \*\*Started:\*\*' "$gates" | sed 's/2026-01-01T10:00:00Z/<ISO timestamp>/')"
-    if [ "$linha" = "$fix" ]; then conferidos=$((conferidos + 1))
-    else health_bad "fixture do relatório divergiu da skill:
-         skill:   $linha
+    if [ "$line" = "$fix" ]; then checked=$((checked + 1))
+    else health_bad "report fixture diverged from the skill:
+         skill:   $line
          fixture: $fix"; fi
-  else pulados=$((pulados + 1)); fi
+  else skipped=$((skipped + 1)); fi
 
-  # bug do registry: a linha do Status com a legenda do enum
+  # registry bug: the Status line with the enum legend
   tpl="$HOME/.claude/skills/qa-report/assets/bug-template.md"
   if [ -f "$tpl" ]; then
-    linha="$(grep -m1 -- '- \*\*Status:\*\*' "$tpl")"
+    line="$(grep -m1 -- '- \*\*Status:\*\*' "$tpl")"
     fix="$(grep -m1 -- '- \*\*Status:\*\* open' "$gates")"
-    if [ "$linha" = "$fix" ]; then conferidos=$((conferidos + 1))
-    else health_bad "fixture do bug divergiu da skill:
-         skill:   $linha
+    if [ "$line" = "$fix" ]; then checked=$((checked + 1))
+    else health_bad "bug fixture diverged from the skill:
+         skill:   $line
          fixture: $fix"; fi
-  else pulados=$((pulados + 1)); fi
+  else skipped=$((skipped + 1)); fi
 
-  # tabela de grade da codereview: todo critério da skill precisa existir no fixture.
-  # `sort -V` na versão do plugin — `sort` lexicográfico poria 1.9 depois de 1.17 (é o bug
-  # que o latest_matching() do runner ainda tem, registrado no TODO; não herdar aqui).
+  # codereview grade table: every criterion of the skill must exist in the fixture.
+  # `sort -V` on the plugin version — a lexicographic `sort` would put 1.9 after 1.17 (that is
+  # the bug the runner's latest_matching() still has, recorded in the TODO; do not inherit it).
   tpl="$(find "$HOME/.claude/plugins/cache" -path '*/codereview/*/references/report-template.md' \
          2>/dev/null | sort -V | tail -1)"
   if [ -n "$tpl" ] && [ -f "$tpl" ]; then
-    local faltando=""
+    local missing=""
     while IFS= read -r k; do
       [ -n "$k" ] || continue
-      grep -qF "| $k |" "$gates" || faltando="$faltando '$k'"
+      grep -qF "| $k |" "$gates" || missing="$missing '$k'"
     done < <(awk -F'|' '/^\| Criterion \| Grade/ { t = 1; next }
         t && /^\|-/ { next }
         t && /^\|/ { c = $2; gsub(/^[ \t]+|[ \t]+$/, "", c); if (c !~ /^\*\*/) print c; next }
         t { exit }' "$tpl")
-    if [ -n "$faltando" ]; then
-      health_bad "a tabela de grade da skill tem critério que o fixture não cobre:$faltando"
-    else conferidos=$((conferidos + 1)); fi
-  else pulados=$((pulados + 1)); fi
+    if [ -n "$missing" ]; then
+      health_bad "the skill's grade table has a criterion the fixture does not cover:$missing"
+    else checked=$((checked + 1)); fi
+  else skipped=$((skipped + 1)); fi
 
-  if [ "$pulados" -gt 0 ]; then
-    ok "proveniência: $conferidos fixture(s) conferido(s), $pulados pulado(s) (skill não instalada)"
+  if [ "$skipped" -gt 0 ]; then
+    ok "provenance: $checked fixture(s) checked, $skipped skipped (skill not installed)"
   else
-    ok "proveniência: os 3 fixtures batem com as skills instaladas"
+    ok "provenance: all 3 fixtures match the installed skills"
   fi
 }
 
-# Achado novo reprova; linha da baseline que deixou de ser achado também. As duas direções
-# importam: sem a primeira a dívida cresce sozinha, sem a segunda a lista vira folclore.
-health_catraca() {
-  local bl="$SDD_HOME/tests/health-baseline.txt" conhecidos novos=0 mortas=0 linha
-  conhecidos="$(grep -vE '^[[:space:]]*(#|$)' "$bl" | sed 's/[[:space:]]*#.*//' \
-                | sed 's/[[:space:]]*$//')"
+# A new finding fails; a baseline line that stopped being a finding fails too. Both directions
+# matter: without the first the debt grows on its own, without the second the list turns into
+# folklore.
+health_ratchet() {
+  local bl="$SDD_HOME/tests/health-baseline.txt" known new_findings=0 stale=0 line
+  known="$(grep -vE '^[[:space:]]*(#|$)' "$bl" | sed 's/[[:space:]]*#.*//' \
+           | sed 's/[[:space:]]*$//')"
 
-  while IFS= read -r linha; do
-    [ -n "$linha" ] || continue
-    grep -qxF "$linha" <<< "$conhecidos" \
-      || { health_bad "achado fora da baseline: $linha"; novos=$((novos + 1)); }
-  done <<< "$HEALTH_ACHADOS"
+  while IFS= read -r line; do
+    [ -n "$line" ] || continue
+    grep -qxF "$line" <<< "$known" \
+      || { health_bad "finding outside the baseline: $line"; new_findings=$((new_findings + 1)); }
+  done <<< "$HEALTH_FINDINGS"
 
-  while IFS= read -r linha; do
-    [ -n "$linha" ] || continue
-    grep -qxF "$linha" <<< "$HEALTH_ACHADOS" \
-      || { health_bad "baseline obsoleta: '$linha' não é mais achado — apague a linha"; mortas=$((mortas + 1)); }
-  done <<< "$conhecidos"
+  while IFS= read -r line; do
+    [ -n "$line" ] || continue
+    grep -qxF "$line" <<< "$HEALTH_FINDINGS" \
+      || { health_bad "stale baseline: '$line' is no longer a finding — delete the line"; stale=$((stale + 1)); }
+  done <<< "$known"
 
-  [ "$novos" -eq 0 ] && [ "$mortas" -eq 0 ] \
-    && ok "catraca: $(grep -c . <<< "$conhecidos") dívida(s) conhecida(s), nenhuma nova"
+  [ "$new_findings" -eq 0 ] && [ "$stale" -eq 0 ] \
+    && ok "ratchet: $(grep -c . <<< "$known") known debt(s), none new"
 }
 
 cmd_status() {
   load_config
   resolve_mission "${1:-}"
-  step "missão $MISSION — $PROJECT_NAME"
+  step "mission $MISSION — $PROJECT_NAME"
   info ""
 
   local ph state why
@@ -1128,7 +1150,7 @@ cmd_status() {
   info ""
   local rows; rows="$(checkpoint_rows)"
   if [ -n "$rows" ]; then
-    info "  incrementos:"
+    info "  increments:"
     local id title _c st commit mark
     while IFS=$'\t' read -r id title _c st commit; do
       case "$st" in
@@ -1144,16 +1166,16 @@ cmd_status() {
   info ""
   local next; next="$(current_phase)"
   if [ -z "$next" ]; then
-    printf '  %spipeline completo — falta só o merge (gate humano)%s\n' "$C_GREEN$C_BOLD" "$C_RESET"
+    printf '  %spipeline complete — only the merge is left (the human gate)%s\n' "$C_GREEN$C_BOLD" "$C_RESET"
   else
     "gate_$next" || true
-    printf '  próxima fase: %s%s%s — %s\n' "$C_BOLD" "$next" "$C_RESET" "$GATE_WHY"
-    printf '  %srode: sdd run %s%s\n' "$C_DIM" "$MISSION" "$C_RESET"
+    printf '  next phase: %s%s%s — %s\n' "$C_BOLD" "$next" "$C_RESET" "$GATE_WHY"
+    printf '  %srun: sdd run %s%s\n' "$C_DIM" "$MISSION" "$C_RESET"
   fi
 }
 
-# Imprime só o nome da fase corrente (ou DONE). Existe para script e para os testes do kit —
-# `sdd status` é para humano, este é para máquina.
+# Prints only the name of the current phase (or DONE). It exists for scripts and for the kit's
+# own tests — `sdd status` is for humans, this one is for machines.
 cmd_phase() {
   load_config
   resolve_mission "${1:-}"
@@ -1161,13 +1183,13 @@ cmd_phase() {
   printf '%s\n' "${next:-DONE}"
 }
 
-# Imprime o motivo pelo qual o gate de uma fase específica não passou.
+# Prints why the gate of a specific phase did not pass.
 cmd_why() {
   load_config
   resolve_mission "${1:-}"
   local ph="${2:-}"
   [ -n "$ph" ] || ph="$(current_phase)"
-  [ -n "$ph" ] || { info "pipeline completo"; return 0; }
+  [ -n "$ph" ] || { info "pipeline complete"; return 0; }
   "gate_$ph" || true
   printf '%s: %s\n' "$ph" "$GATE_WHY"
 }
@@ -1179,7 +1201,7 @@ cmd_run() {
       --dry-run)     DRY_RUN=1 ;;
       --phase)       force_phase="${2:-}"; shift ;;
       --max-phases)  max_phases="${2:-0}"; shift ;;
-      -*)            die "opção desconhecida de run: $1" ;;
+      -*)            die "unknown run option: $1" ;;
       *)             mission_arg="$1" ;;
     esac
     shift
@@ -1189,15 +1211,15 @@ cmd_run() {
   resolve_mission "$mission_arg"
   PIPELINE_LOG="$(log_dir)/pipeline.log"
 
-  step "missão $MISSION — $PROJECT_NAME${DRY_RUN:+}"
-  # "nada será executado" seria mentira: avaliar quais fases estão pendentes obriga a rodar os
-  # gates, e três deles rodam TEST_CMD. O que o dry-run garante é mais estreito — nenhuma sessão
-  # do claude, nenhum toque nos artefatos da missão. Mesma correção de honestidade do --help.
-  [ "$DRY_RUN" = "1" ] && dim "  (dry-run: nenhuma sessão será aberta — mas os gates rodam TEST_CMD)"
+  step "mission $MISSION — $PROJECT_NAME${DRY_RUN:+}"
+  # "nothing will be executed" would be a lie: working out which phases are pending forces the
+  # gates to run, and three of them run TEST_CMD. What the dry-run guarantees is narrower — no
+  # claude session, no touching of the mission artifacts. Same honesty fix as in --help.
+  [ "$DRY_RUN" = "1" ] && dim "  (dry-run: no session will be opened — but the gates do run TEST_CMD)"
 
   local -A attempts=()
   local phases_run=0 phase before after budget
-  local dry_next=""   # cursor da projeção do dry-run (distinto de --phase, que imprime uma só)
+  local dry_next=""   # dry-run projection cursor (distinct from --phase, which prints just one)
 
   while :; do
     if [ -n "$dry_next" ]; then phase="$dry_next"
@@ -1206,41 +1228,45 @@ cmd_run() {
 
     if [ -z "$phase" ]; then
       info ""
-      printf '%s✓ pipeline completo — falta só o merge (o único gate humano)%s\n' \
+      printf '%s✓ pipeline complete — only the merge is left (the one human gate)%s\n' \
         "$C_GREEN$C_BOLD" "$C_RESET"
       local prurl; prurl="$(frontmatter "$MISSION_DIR/50-pr.md" pr_url)"
       [ -n "$prurl" ] && info "  $prurl"
       return 0
     fi
 
-    # PLAN é interativo por design: o humano participa do grill. O runner não boota o planner.
+    # PLAN is interactive by design: the human takes part in the grill. The runner does not boot
+    # the planner.
     if [ "$phase" = "PLAN" ]; then
       gate_PLAN || true
       info ""
-      warn "fase PLAN não é headless: $GATE_WHY"
-      dim "  O planejamento é a participação humana. Abra uma sessão interativa com o agente"
-      dim "  sdd-planner (modelo Fable) e produza 00-missao.md, 01-plano.md e checkpoint.md."
-      dim "  Quando o gate PLAN-AUTO fechar limpo, 'sdd run $MISSION' segue sozinho até o PR."
+      warn "the PLAN phase is not headless: $GATE_WHY"
+      dim "  Planning is where the human takes part. Open an interactive session with the"
+      dim "  sdd-planner agent (Fable model) and produce 00-missao.md, 01-plano.md, checkpoint.md."
+      dim "  Once the PLAN-AUTO gate closes clean, 'sdd run $MISSION' goes on alone to the PR."
       return 2
     fi
 
-    # Jidoka de verdade: incremento `blocked` escala NA HORA. Sem isto o runner via a mudança
-    # no checkpoint como "progresso" e rebootava EXEC até estourar o orçamento de fase — três
-    # sessões contra a mesma parede. Achado da própria missão-fixture 20260814-dry-run-completo.
-    # O status sai para uma variável ANTES do `grep`: sob `pipefail`, `grep -q` fecha o pipe
-    # assim que acha o match, o estágio de cima morre de SIGPIPE e o pipeline inteiro devolve
-    # 141 — o `if` leria "não há blocked" **existindo** blocked. Com o checkpoint pequeno a
-    # corrida quase nunca acontece, mas "quase nunca" não é garantia que se dê a um Jidoka:
-    # o falso-negativo aqui é justamente o runner batendo na parede que ele já sabia existir.
+    # Real Jidoka: a `blocked` increment escalates ON THE SPOT. Without this the runner read the
+    # checkpoint change as "progress" and rebooted EXEC until the phase budget blew — three
+    # sessions against the same wall. Found by the fixture mission 20260814-dry-run-completo.
+    # The status goes into a variable BEFORE the `grep`: under `pipefail`, `grep -q` closes the
+    # pipe as soon as it matches, the upstream stage dies of SIGPIPE and the whole pipeline
+    # returns 141 — the `if` would read "no blocked" while blocked EXISTS. With a small
+    # checkpoint the race almost never happens, but "almost never" is not a guarantee you hand a
+    # Jidoka: the false negative here is precisely the runner hitting the wall it already knew
+    # was there.
     local ckstatus; ckstatus="$(checkpoint_rows | cut -f4)"
     if [ "$phase" = "EXEC" ] && printf '%s\n' "$ckstatus" | grep -qx "blocked"; then
       gate_EXEC || true
       info ""
-      bad "BLOCKED em EXEC — $GATE_WHY"
-      dim "  A linha parou de propósito: um incremento foi marcado 'blocked' pelo executor."
-      dim "  Leia as 'Notas de execução' do checkpoint.md — o motivo está escrito lá."
-      dim "  Resolvido o impedimento, volte o incremento para 'pending' e rode 'sdd run' de novo."
-      pipeline_log_line "$(date -Iseconds)  BLOCKED  EXEC  incremento marcado blocked pelo executor"
+      bad "BLOCKED in EXEC — $GATE_WHY"
+      dim "  The line stopped on purpose: an increment was marked 'blocked' by the executor."
+      # Names the section by what it IS, not by its literal title: the heading is artifact
+      # content in OUTPUT_LANG, so hardcoding it here would leak one language into the runner.
+      dim "  Read the execution-notes section of checkpoint.md — the reason is written there."
+      dim "  Once the impediment is cleared, set the increment back to 'pending' and 'sdd run'."
+      pipeline_log_line "$(date -Iseconds)  BLOCKED  EXEC  increment marked blocked by the executor"
       return 3
     fi
 
@@ -1249,11 +1275,11 @@ cmd_run() {
     if [ "${attempts[$phase]}" -gt "$budget" ]; then
       gate_"$phase" || true
       info ""
-      bad "BLOCKED em $phase — ${attempts[$phase]} sessões sem satisfazer o gate"
-      bad "  motivo atual: $GATE_WHY"
-      dim "  'sdd status $MISSION' mostra o estado completo; 'sdd why $MISSION $phase' o motivo."
+      bad "BLOCKED in $phase — ${attempts[$phase]} sessions without satisfying the gate"
+      bad "  current reason: $GATE_WHY"
+      dim "  'sdd status $MISSION' shows the full state; 'sdd why $MISSION $phase' the reason."
       if [ "$phase" = "REVIEW" ] && [ "$PUBLISH_ON_REVIEW_BLOCKED" = "draft" ]; then
-        warn "PUBLISH_ON_REVIEW_BLOCKED=draft — seguindo para PR em modo draft"
+        warn "PUBLISH_ON_REVIEW_BLOCKED=draft — moving on to PR in draft mode"
         force_phase="PR"; continue
       fi
       pipeline_log_line "$(date -Iseconds)  BLOCKED  $phase  $GATE_WHY"
@@ -1265,20 +1291,20 @@ cmd_run() {
     after="$(state_fingerprint)"
 
     if [ "$DRY_RUN" = "1" ]; then
-      # --phase <FASE> pede uma fase específica: imprime só ela.
+      # --phase <PHASE> asks for one specific phase: print only that one.
       [ -n "$force_phase" ] && return 0
-      # Projeção honesta: as fases cujo gate está insatisfeito HOJE, na ordem canônica. Não
-      # simula o efeito das fases (não adivinha que o EXEC destravaria a QA) — informação
-      # honesta vale mais do que informação completa e potencialmente errada.
+      # Honest projection: the phases whose gate is unsatisfied TODAY, in canonical order. It
+      # does not simulate the effect of the phases (it does not guess that EXEC would unblock
+      # QA) — honest information is worth more than complete but possibly wrong information.
       dry_next="$(next_pending_phase "$phase")"
       [ -n "$dry_next" ] && continue
-      dim "  (dry-run: fim da projeção — nenhuma sessão foi aberta)"
+      dim "  (dry-run: end of the projection — no session was opened)"
       return 0
     fi
 
     phases_run=$((phases_run + 1))
     if [ "$max_phases" -gt 0 ] && [ "$phases_run" -ge "$max_phases" ]; then
-      info ""; dim "  --max-phases=$max_phases atingido"; return 0
+      info ""; dim "  --max-phases=$max_phases reached"; return 0
     fi
 
     if gate_"$phase"; then
@@ -1287,26 +1313,26 @@ cmd_run() {
       continue
     fi
 
-    # Gate não passou. Houve progresso? Fase EXEC roda um incremento por vez — não ter
-    # satisfeito o gate é o caso NORMAL enquanto sobram incrementos.
+    # The gate did not pass. Was there progress? The EXEC phase runs one increment at a time —
+    # not having satisfied the gate is the NORMAL case while increments remain.
     if [ "$before" != "$after" ]; then
-      dim "  gate $phase ainda não: $GATE_WHY (mas a sessão avançou — seguindo)"
+      dim "  gate $phase not yet: $GATE_WHY (but the session moved forward — carrying on)"
       force_phase=""
       continue
     fi
 
-    # Nada mudou no disco: a sessão não fez nada. Uma retentativa com o motivo em mãos.
-    warn "gate $phase falhou e a sessão não mudou nada: $GATE_WHY"
-    warn "  retentando uma vez com o motivo do gate no prompt"
+    # Nothing changed on disk: the session did nothing. One retry with the reason in hand.
+    warn "gate $phase failed and the session changed nothing: $GATE_WHY"
+    warn "  retrying once with the gate reason in the prompt"
     run_phase "$phase" "$LAST_PHASE_SID"
     if gate_"$phase"; then
-      ok "gate $phase (na retentativa): $GATE_WHY"
+      ok "gate $phase (on the retry): $GATE_WHY"
       force_phase=""
       continue
     fi
     if [ "$(state_fingerprint)" = "$after" ]; then
       info ""
-      bad "BLOCKED em $phase — duas sessões sem mover o disco: $GATE_WHY"
+      bad "BLOCKED in $phase — two sessions without moving the disk: $GATE_WHY"
       pipeline_log_line "$(date -Iseconds)  BLOCKED  $phase  $GATE_WHY"
       return 3
     fi
@@ -1319,12 +1345,12 @@ cmd_retry() {
   resolve_mission "${1:-}"
   PIPELINE_LOG="$(log_dir)/pipeline.log"
   local phase; phase="$(current_phase)"
-  [ -n "$phase" ] || { info "pipeline completo — nada a re-tentar"; return 0; }
-  [ "$phase" = "PLAN" ] && die "PLAN é interativo — não há o que re-tentar headless"
-  step "re-tentando $phase com sessão NOVA"
+  [ -n "$phase" ] || { info "pipeline complete — nothing to retry"; return 0; }
+  [ "$phase" = "PLAN" ] && die "PLAN is interactive — there is nothing to retry headless"
+  step "retrying $phase with a FRESH session"
   run_phase "$phase"
   if gate_"$phase"; then ok "gate $phase: $GATE_WHY"; return 0; fi
-  bad "gate $phase ainda não: $GATE_WHY"
+  bad "gate $phase not yet: $GATE_WHY"
   return 3
 }
 
@@ -1332,32 +1358,32 @@ cmd_version() { info "sdd $SDD_VERSION ($SDD_HOME)"; }
 
 cmd_help() {
   cat <<'EOF'
-sdd — runner do pipeline de agentes autônomos de desenvolvimento
+sdd — runner for the autonomous development agent pipeline
 
-USO
-  sdd install [--force]      instala o kit no repo-alvo (.sdd/config.sh + .claude/agents/)
-  sdd preflight              sensor de ambiente: ferramentas, auth, config, plugins, git
-  sdd health                 sensor do KIT: suíte, mutação, drift de doc e de config
-  sdd status <missão>        onde a missão está, gate a gate, e o que falta
-  sdd run <missão>           executa da primeira fase não satisfeita até o PR
-  sdd retry <missão>         re-tenta a fase corrente com sessão nova
-  sdd close <missão>         pós-merge: fecha a issue do JIRA
+USAGE
+  sdd install [--force]      install the kit into the target repo (.sdd/config.sh + .claude/agents/)
+  sdd preflight              environment sensor: tools, auth, config, plugins, git
+  sdd health                 KIT sensor: suite, mutation, doc and config drift
+  sdd status <mission>       where the mission stands, gate by gate, and what is missing
+  sdd run <mission>          run from the first unsatisfied phase through to the PR
+  sdd retry <mission>        retry the current phase with a fresh session
+  sdd close <mission>        post-merge: close the JIRA issue
   sdd help | sdd version
 
-PARA SCRIPT
-  sdd phase <missão>         imprime só a fase corrente (ou DONE)
-  sdd why <missão> [FASE]    imprime por que o gate daquela fase não passou
+FOR SCRIPTS
+  sdd phase <mission>        print only the current phase (or DONE)
+  sdd why <mission> [PHASE]  print why that phase's gate did not pass
 
-OPÇÕES DE `run`
-  --dry-run                  imprime os prompts de boot e sai, sem gastar token e sem tocar
-                             nos artefatos da missão (os gates rodam TEST_CMD de verdade)
-  --phase <FASE>             força uma fase específica (PLAN|TICKET|EXEC|QA|REVIEW|DOCS|PR)
-  --max-phases <N>           para depois de N fases (default: sem limite)
+`run` OPTIONS
+  --dry-run                  print the boot prompts and exit, spending no tokens and touching
+                             no mission artifact (the gates do run TEST_CMD for real)
+  --phase <PHASE>            force one specific phase (PLAN|TICKET|EXEC|QA|REVIEW|DOCS|PR)
+  --max-phases <N>           stop after N phases (default: no limit)
 
-COMO O ESTADO FUNCIONA
-  Não há arquivo de estado. A fase corrente é derivada dos artefatos em
-  docs/handoffs/<missão>/. Sessão morreu? `sdd run` de novo continua do ponto exato.
-  Nenhum gate é satisfeito por texto do modelo — o runner roda os testes e lê o disco.
+HOW THE STATE WORKS
+  There is no state file. The current phase is derived from the artifacts in
+  docs/handoffs/<mission>/. Session died? `sdd run` again resumes at the exact point.
+  No gate is satisfied by model text — the runner runs the tests and reads the disk.
 EOF
 }
 
@@ -1377,31 +1403,31 @@ main() {
     close)     cmd_close "$@" ;;
     version|--version|-v) cmd_version ;;
     help|--help|-h) cmd_help ;;
-    *) die "comando desconhecido: $subcmd (veja 'sdd help')" ;;
+    *) die "unknown command: $subcmd (see 'sdd help')" ;;
   esac
 }
 
-# Pós-merge: fecha a issue do JIRA. Disparado pelo humano depois do merge — é a única coisa
-# que acontece DEPOIS do gate humano, e por isso não faz parte de `sdd run`.
+# Post-merge: closes the JIRA issue. Fired by the human after the merge — it is the only thing
+# that happens AFTER the human gate, which is why it is not part of `sdd run`.
 cmd_close() {
   load_config
   resolve_mission "${1:-}"
   PIPELINE_LOG="$(log_dir)/pipeline.log"
 
-  [ "$JIRA_ENABLED" = "true" ] || { info "JIRA_ENABLED=false — nada a fechar"; return 0; }
+  [ "$JIRA_ENABLED" = "true" ] || { info "JIRA_ENABLED=false — nothing to close"; return 0; }
   local issue; issue="$(frontmatter "$MISSION_DIR/10-ticket.md" issue)"
-  [ -n "$issue" ] || die "não achei 'issue:' em 10-ticket.md — a fase TICKET rodou?"
+  [ -n "$issue" ] || die "no 'issue:' found in 10-ticket.md — did the TICKET phase run?"
 
   local prurl; prurl="$(frontmatter "$MISSION_DIR/50-pr.md" pr_url)"
   if [ -n "$prurl" ]; then
     local merged
     merged="$( cd "$REPO_ROOT" && gh pr view "$prurl" --json state --jq .state 2>/dev/null || true )"
     if [ "$merged" != "MERGED" ]; then
-      die "o PR $prurl está '$merged', não MERGED — 'sdd close' é pós-merge"
+      die "PR $prurl is '$merged', not MERGED — 'sdd close' is post-merge"
     fi
   fi
 
-  step "fechando $issue"
+  step "closing $issue"
   local sid logfile rc=0
   sid="$(uuidgen)"
   logfile="$(log_dir)/CLOSE-$(date +%Y%m%d-%H%M%S).json"
@@ -1410,8 +1436,8 @@ cmd_close() {
       --model "$MODEL_TICKET" --permission-mode "$PERMISSION_MODE" --output-format json \
       --setting-sources "user,project,local" --allowedTools "$ALLOWED_TOOLS" \
       --session-id "$sid" --max-budget-usd "$BUDGET_PER_PHASE_USD" ) > "$logfile" 2>&1 || rc=$?
-  pipeline_log_line "$(date -Iseconds)  CLOSE  issue=$issue  sessao=$sid  rc=$rc  log=$logfile"
-  [ "$rc" -eq 0 ] && ok "$issue fechada" || bad "falha ao fechar $issue — ver $logfile"
+  pipeline_log_line "$(date -Iseconds)  CLOSE  issue=$issue  session=$sid  rc=$rc  log=$logfile"
+  [ "$rc" -eq 0 ] && ok "$issue closed" || bad "failed to close $issue — see $logfile"
   return "$rc"
 }
 

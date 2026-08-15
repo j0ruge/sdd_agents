@@ -1,97 +1,112 @@
 # sdd_agents
 
-Kit de **agentes autônomos de desenvolvimento**: do plano aprovado ao **PR aberto**, sem intervenção humana no meio.
+A kit of **autonomous development agents**: from an approved plan to an **open PR**, with no human intervention in between.
 
-O humano participa de duas coisas: **planejar** e **fazer merge**. O resto (execução TDD, QA, review, documentação, PR) roda em sessões headless encadeadas pelo runner `bin/sdd`.
+The human takes part in two things: **planning** and **merging**. Everything else (TDD execution, QA, review, documentation, PR) runs in headless sessions chained by the `bin/sdd` runner.
 
-## Como funciona (30 segundos)
+## How it works (30 seconds)
 
 ```
-[você] ──aprova plano──▶ sdd-planner ──▶ bin/sdd run <missão>
+[you] ──approve plan──▶ sdd-planner ──▶ bin/sdd run <mission>
                                              │
              TICKET → EXEC → QA ⇄ EXEC → REVIEW → DOCS → PR
                                              │
-                                        [você] ──▶ merge
+                                        [you] ──▶ merge
 ```
 
-Cada fase é ao menos uma **sessão nova** do `claude -p` (anti-estouro de contexto) — a QA são até
-três, uma por sub-passo (num projeto sem interface, uma só). O estado vive em disco,
-em `docs/handoffs/<missão>/` do repo-alvo. Não há arquivo de estado: o runner **deriva** a fase
-atual dos artefatos e roda a primeira cujo gate não está satisfeito — morreu no meio, `sdd run`
-de novo continua do ponto exato.
+Every phase is at least one **fresh session** of `claude -p` (context-overflow protection) — QA is
+up to three, one per sub-step (in a project with no interface, just one). The state lives on disk,
+in `docs/handoffs/<mission>/` of the target repo. There is no state file: the runner **derives**
+the current phase from the artifacts and runs the first one whose gate is not satisfied — if it
+died halfway, `sdd run` again resumes at the exact point.
 
-**Sucesso nunca é a resposta do modelo.** Cada gate é reavaliado pelo runner (roda os testes,
-faz grep no checkpoint, olha o `git log`). Rótulo ≠ artefato.
+**Success is never the model's answer.** Every gate is re-evaluated by the runner (it runs the
+tests, greps the checkpoint, reads the `git log`). A label is not an artifact.
 
-## Instalação num repo-alvo
+## Installing into a target repo
 
 ```bash
-# git clone https://github.com/j0ruge/sdd_agents.git   # repositório PRIVADO
-export PATH="$HOME/repos/sdd_agents/bin:$PATH"     # ou ln -s .../bin/sdd ~/.local/bin/sdd
+# git clone https://github.com/j0ruge/sdd_agents.git   # PRIVATE repository
+export PATH="$HOME/repos/sdd_agents/bin:$PATH"     # or ln -s .../bin/sdd ~/.local/bin/sdd
 
-cd ~/repos/meu-projeto
-sdd install            # cria .sdd/config.sh e copia .claude/agents/sdd-*.md
-$EDITOR .sdd/config.sh # ajuste TEST_CMD, E2E_CMD, APP_URL, JIRA_ENABLED...
-sdd preflight          # sensor de ambiente: claude, gh, agent-browser, plugins, tree limpo
+cd ~/repos/my-project
+sdd install            # creates .sdd/config.sh and copies .claude/agents/sdd-*.md
+$EDITOR .sdd/config.sh # set TEST_CMD, E2E_CMD, APP_URL, OUTPUT_LANG, JIRA_ENABLED...
+sdd preflight          # environment sensor: claude, gh, agent-browser, plugins, clean tree
 ```
 
-`sdd install` é idempotente: rodar de novo mostra o diff dos agentes em vez de sobrescrever.
+`sdd install` is idempotent: running it again shows the agent diff instead of overwriting.
 
-## Uso
+⚠️ `sdd preflight` fires a **real headless session** (capped at US$ 1) to prove the phase sessions
+can actually execute a command — that is what makes it valuable, and what makes it cost money.
+Do not run it in a loop.
+
+The kit is English. The **artifacts** of a mission — handoffs, checkpoint, commit messages, PR
+body — are written in whatever the target repo declares in `OUTPUT_LANG`; leave it empty and the
+runner says nothing about language, and each session follows whatever the existing artifacts use.
+
+## Usage
 
 ```bash
-sdd run <missão>       # executa a partir do primeiro gate não satisfeito, até o PR
-sdd status <missão>    # onde está, o que falta, por que travou
-sdd retry <missão>     # re-tenta a fase corrente com sessão nova
-sdd close <missão>     # pós-merge: fecha a issue do JIRA
-sdd run <missão> --dry-run   # projeta o pipeline inteiro sem gastar token
-sdd health             # sensor do KIT (≠ preflight, que é do ambiente do alvo)
+sdd run <mission>            # run from the first unsatisfied gate through to the PR
+sdd status <mission>         # where it stands, what is missing, why it stalled
+sdd why <mission> [PHASE]    # why that phase's gate did not pass — start any diagnosis here
+sdd phase <mission>          # print only the current phase (or DONE) — for scripts
+sdd retry <mission>          # retry the current phase with a fresh session
+sdd close <mission>          # post-merge: close the JIRA issue
+sdd health                   # KIT sensor (≠ preflight, which is about the target's environment)
+
+sdd run <mission> --dry-run         # project the whole pipeline without spending tokens
+sdd run <mission> --phase EXEC      # force one specific phase
+sdd run <mission> --max-phases 2    # stop after N phases
 ```
 
-O `sdd health` responde *"o kit ainda mede o que ele diz que mede?"* — roda a suíte, exige
-**mutation score 100%**, cobra uma mutação por gate, e acusa drift entre `load_config()` e
-`config/schema.md`, comando fora do `--help`, variável com default e nunca lida, e fixture que
-divergiu da skill que ele imita. Dívida conhecida vive congelada em `tests/health-baseline.txt`,
-com o dono no `TODO.md`: achado novo reprova, e linha da baseline que deixou de ser achado
-também. Não gasta sessão paga e não precisa de `.sdd/config.sh`.
+`sdd health` answers *"does the kit still measure what it claims to?"* — it runs the suite,
+requires a **100% mutation score**, demands one mutation per gate, and reports drift between
+`load_config()` and `config/schema.md`, a command missing from `--help`, a variable with a default
+that is never read, and a fixture that diverged from the skill it imitates. Known debt lives
+frozen in `tests/health-baseline.txt`, each line owned by a `TODO.md` entry: a new finding fails,
+and so does a baseline line that stopped being a finding. It spends no paid session and does not
+need `.sdd/config.sh`.
 
-O `--dry-run` responde *"o que acontece se eu rodar isto?"*: imprime **todas** as fases que a
-missão percorreria a partir do estado de hoje — na ordem, cada uma com agente, modelo e prompt de
-boot — sem abrir sessão nenhuma. Ele projeta o estado **atual**, não simula o futuro; os detalhes
-e o que ele mexe (e não mexe) no disco estão em
-[`docs/pipeline.md`](docs/pipeline.md#dry-run--a-projeção).
+`--dry-run` answers *"what happens if I run this?"*: it prints **every** phase the mission would
+go through from today's state — in order, each with its agent, model and boot prompt — without
+opening a single session. It projects the **current** state, it does not simulate the future; the
+details, and what it does (and does not) touch on disk, are in
+[`docs/pipeline.md`](docs/pipeline.md#dry-run--the-projection).
 
-A missão nasce no planejamento (`sdd-planner`, interativo, com você presente) e é identificada
-pelo diretório `docs/handoffs/<YYYYMMDD>-<slug>/`.
+A mission is born in planning (`sdd-planner`, interactive, with you present) and is identified by
+the directory `docs/handoffs/<YYYYMMDD>-<slug>/`.
 
-## Documentação
+## Documentation
 
-| Onde | O que tem |
+| Where | What is in it |
 |---|---|
-| [`docs/pipeline.md`](docs/pipeline.md) | máquina de estados, gates por fase, o que cada agente lê e escreve |
-| [`docs/failure-modes.md`](docs/failure-modes.md) | o que quebra, como o kit reage, como destravar |
-| [`config/schema.md`](config/schema.md) | cada chave de `.sdd/config.sh`, com default e porquê |
-| [`agents/`](agents/) | os 6 agentes (markdown aberto — portável para outros harnesses) |
-| [`templates/`](templates/) | missão, plano, handoff, checkpoint, corpo do PR |
-| [`CLAUDE.md`](CLAUDE.md) | convenções para quem (humano ou agente) mexe **neste** kit |
-| [`KAIZEN_LOG.md`](KAIZEN_LOG.md) | histórico de melhorias com antes/depois medido |
-| [`TODO.md`](TODO.md) | achados sobre o próprio kit, registrados por qualquer agente |
+| [`docs/pipeline.md`](docs/pipeline.md) | state machine, gates per phase, what each agent reads and writes |
+| [`docs/failure-modes.md`](docs/failure-modes.md) | what breaks, how the kit reacts, how to get unstuck |
+| [`config/schema.md`](config/schema.md) | every `.sdd/config.sh` key, with its default and why |
+| [`agents/`](agents/) | the 6 agents (open markdown — portable to other harnesses) |
+| [`templates/`](templates/) | mission, plan, handoff, checkpoint, PR body |
+| [`CLAUDE.md`](CLAUDE.md) | conventions for whoever (human or agent) works on **this** kit |
+| [`KAIZEN_LOG.md`](KAIZEN_LOG.md) | history of improvements with a measured before/after |
+| [`TODO.md`](TODO.md) | findings about the kit itself, recorded by any agent |
 
-## Os 6 agentes
+## The 6 agents
 
-| Agente | Fase | Modelo | Entrega |
+| Agent | Phase | Model | Delivers |
 |---|---|---|---|
-| `sdd-planner` | plano | Fable (interativo) | `00-missao.md`, `01-plano.md`, `checkpoint.md` |
-| `sdd-executor` | execução TDD, 1 sessão por incremento | Opus | commits + `checkpoint.md` atualizado |
-| `sdd-qa` | fecha o ciclo de QA (sub-passo `QA:close`) | Opus | specs e2e, incrementos de fix, `30-handoff-qa.md` |
-| `sdd-reviewer` | code review até Grade A | Opus | `40-review-r<N>.md` + correções |
-| `sdd-docs` | documentação viva | Opus | docs do alvo sincronizados + `45-docs.md` |
-| `sdd-publisher` | TICKET (abre a issue) e PR (push + abre o PR) | Sonnet | `10-ticket.md`, PR aberto + `50-pr.md` |
+| `sdd-planner` | plan | Fable (interactive) | `00-missao.md`, `01-plano.md`, `checkpoint.md` |
+| `sdd-executor` | TDD execution, 1 session per increment | Opus | commits + updated `checkpoint.md` |
+| `sdd-qa` | closes the QA cycle (sub-step `QA:close`) | Opus | e2e specs, fix increments, `30-handoff-qa.md` |
+| `sdd-reviewer` | code review until Grade A | Opus | `40-review-r<N>.md` + fixes |
+| `sdd-docs` | living documentation | Opus | target docs synced + `45-docs.md` |
+| `sdd-publisher` | TICKET (opens the issue) and PR (push + opens the PR) | Sonnet | `10-ticket.md`, open PR + `50-pr.md` |
 
-A árvore `docs/qa/` **não** é entrega do `sdd-qa`: quem a escreve são as skills `qa-report` e
-`qa-execution`, nos sub-passos `QA:plan` e `QA:exec` — duas sessões próprias, sem agente do kit.
+The `docs/qa/` tree is **not** delivered by `sdd-qa`: it is written by the `qa-report` and
+`qa-execution` skills, in the `QA:plan` and `QA:exec` sub-steps — two sessions of their own, with
+no kit agent.
 
-## Requisitos
+## Requirements
 
-`claude` CLI autenticado · `gh` autenticado · `bash` 4+ · `git` · `uuidgen` (util-linux) ·
-`jq` · `agent-browser` (só para a fase QA de projetos com UI).
+authenticated `claude` CLI · authenticated `gh` · `bash` 4+ · `git` · `uuidgen` (util-linux) ·
+`jq` · `agent-browser` (only for the QA phase of projects with a UI).

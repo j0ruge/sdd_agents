@@ -5,8 +5,29 @@ repos-alvo, veja [`docs/pipeline.md`](docs/pipeline.md).
 
 ## Idioma
 
-PT-BR em tudo que é lido por humano: README, docs, mensagens de commit, prompts dos agentes,
-saída do runner. Identificadores de código (funções, variáveis, chaves de config) em inglês.
+Duas audiências, duas regras. A regra antiga ("PT-BR em tudo que é lido por humano") misturava as
+duas e por isso trancava o kit num idioma só — quem não fala português não conseguia usar nada.
+
+**A superfície do kit é inglês:** `bin/sdd`, `agents/`, `docs/`, `README.md`, `config/schema.md`,
+`config/starter.conf`, `tests/`. Vale para prosa, comentários, mensagens ao usuário, nomes de
+teste e identificadores locais. O sensor é `tests/check-lang.sh`, com catraca bidirecional em
+`tests/lang-allowlist.txt`: arquivo sujo fora da lista reprova, arquivo já limpo dentro dela
+também. Duas exceções, ambas documentadas no cabeçalho do sensor, porque nelas o português é
+**dado** e não prosa — `check-templates.sh` (as regexes são os headings dos templates) e
+`check-lang.sh` (o dicionário e os probes).
+
+**O artefato de missão fala `OUTPUT_LANG`:** handoffs, checkpoint, mensagens de commit e corpo do
+PR seguem a chave do `.sdd/config.sh` do repo-alvo, que o runner injeta no prompt de boot de toda
+fase. Vazio ⇒ o runner não diz nada e a sessão segue o idioma dos artefatos que já existem.
+Aqui a chave é `pt-BR`, e é por isso que `TODO.md`, `KAIZEN_LOG.md`, este arquivo,
+`docs/handoffs/`, `templates/` e `config/examples/` continuam em português — não são exceção, são
+conteúdo no idioma declarado.
+
+**O contrato é sempre inglês:** chaves de config, tokens de status (`pending`, `doing`, `done`,
+`blocked`, `auto`, `skipped`), os enums das skills de terceiro e identificadores de código.
+⚠️ Três chaves de frontmatter (`aprovacao`, `versao`, `titulo`) e dois nomes de artefato
+(`00-missao.md`, `01-plano.md`) ainda são PT-BR por herança — estão no `TODO.md`, e renomeá-los
+quebra missão em voo.
 
 ## Princípios não-negociáveis
 
@@ -73,8 +94,14 @@ O kit é bash + markdown, então o "teste" é o **Check** de cada incremento do 
 com resultado esperado. Escreva o Check antes de implementar o incremento.
 
 A suíte é `tests/run-all.sh` — é ela o `TEST_CMD` deste repo, e é ela que os gates rodam. Sensor
-novo entra lá (`check-templates.sh`, `check-gates.sh`, `check-dry-run.sh`, `check-mutation.sh`
-são os de hoje). `sdd preflight`, `bash -n bin/sdd` e os dry-runs completam, mas não substituem.
+novo entra lá (`check-templates.sh`, `check-gates.sh`, `check-dry-run.sh`, `check-mutation.sh` e
+`check-lang.sh` são os de hoje). `sdd preflight`, `bash -n bin/sdd` e os dry-runs completam, mas
+não substituem.
+
+**Sensor que se auto-exclui carrega um auto-teste.** `check-lang.sh` não pode se escanear (o
+dicionário dele É português), então quem o mede é um `selftest()` com probes e rc próprios — 90,
+91, 92 — mais um piso de caminhos na superfície (93). Sem isso, regex quebrada reporta "tudo
+limpo" para sempre. A regra vale para qualquer sensor futuro que precise se excluir do que mede.
 
 **Fixture que imita saída de skill de terceiro é copiado da fonte**, com o caminho no comentário
 de proveniência — nunca escrito de memória. Três bugs de gate nasceram de fixture imaginado:

@@ -285,6 +285,11 @@ Achados sobre **repos-alvo** vão para o `TODO.md` daquele repo. Este arquivo é
   Direção: uma linha por comando no bloco `## Uso`, mantendo a profundidade em `docs/pipeline.md`
   (o README roteia, não aprofunda). — descoberto por `sdd-docs` na missão
   `20260814-dry-run-completo` (2026-08-14)
+  **RESOLVIDO por `be63c8b`**: os quatro entraram (`sdd why`, `sdd phase`, `--phase`,
+  `--max-phases`), exatamente na direção sugerida — uma linha cada, profundidade nos docs. Fechou
+  de carona no I13.5.6: o bloco estava sendo reescrito para inglês de qualquer forma, e reescrevê-lo
+  duas vezes (uma para traduzir, outra para completar) seria o retrabalho que o kaizen chama de
+  desperdício. — `humano` na missão `20260815-i13.5-kit-em-ingles` (2026-08-15)
 - [ ] **`sdd preflight` gasta uma sessão paga e o README não avisa** — `README.md:35` vs
   `bin/sdd:768-774` — o README apresenta o preflight como "sensor de ambiente: claude, gh,
   agent-browser, plugins, tree limpo", que soa como checagem local e barata. Ele dispara um
@@ -295,6 +300,11 @@ Achados sobre **repos-alvo** vão para o `TODO.md` daquele repo. Este arquivo é
   o probe já estava em `main`. Direção: meia linha no README (`sdd preflight # …; dispara uma
   sessão real, custa ≤ US$ 1`). — descoberto por `sdd-docs` na missão
   `20260814-dry-run-completo` (2026-08-14)
+  **RESOLVIDO por `be63c8b`**: virou um aviso de três linhas logo abaixo do bloco de instalação,
+  dizendo o que o probe prova, quanto custa e para não rodar em laço. Ficou maior que a meia linha
+  sugerida de propósito — o que torna o preflight caro é justamente o que o torna valioso, e essa
+  parte precisava caber na mesma frase. — `humano` na missão `20260815-i13.5-kit-em-ingles`
+  (2026-08-15)
 - [ ] **O kit não tem `CHANGELOG.md`, e a fase DOCS cobra um** — `agents/sdd-docs.md` (tabela "O
   que atualizar") manda atualizar o `CHANGELOG.md` "quando a missão entrega algo visível ao
   usuário". Este repo não tem esse arquivo: o registro durável é `KAIZEN_LOG.md` (melhoria com
@@ -339,6 +349,49 @@ Achados sobre **repos-alvo** vão para o `TODO.md` daquele repo. Este arquivo é
   Zero mudança de comportamento. ⚠️ **Dívida de tradução**: todo incremento escrito antes disto
   precisa ser re-traduzido depois — por isso a ordem importa mais que o tamanho. — decidido por
   `humano` em 2026-08-14
+  **RESOLVIDO por `be63c8b`** (I13.5, 6 commits): a superfície do kit — `bin/sdd`, os 6 agentes
+  (mais as cópias em `.claude/agents/`), `docs/`, `README.md`, `config/schema.md`,
+  `config/starter.conf` e `tests/` — passou de **1.517 linhas acentuadas em 24 arquivos para 0**.
+  `OUTPUT_LANG` entrou em `load_config()` e no `boot_prompt()` com default **vazio**, então repo
+  já instalado produz prompt byte a byte igual ao de antes; a mutação 16 (`RUN_ignores_output_lang`)
+  prova que o runner não engole o pedido em silêncio. O sensor pedido virou `tests/check-lang.sh`
+  com catraca bidirecional, e o escopo dele ficou mais estreito do que esta entrada supunha (ver
+  as duas entradas novas abaixo): `templates/`, `config/examples/`, `TODO.md`, `KAIZEN_LOG.md`,
+  `CLAUDE.md` e `docs/handoffs/` são **conteúdo em `OUTPUT_LANG`**, não superfície — este repo
+  declara `pt-BR` e por isso eles continuam em português por decisão, não por dívida.
+  — `humano` na missão `20260815-i13.5-kit-em-ingles` (2026-08-15)
+
+- [ ] **O contrato de artefato ainda é PT-BR em cinco pontos** — `bin/sdd` (as chamadas de
+  `frontmatter`), `templates/missao.md`, `agents/*.md`, `tests/` — o I13.5 traduziu a superfície,
+  mas sobraram 3 chaves de frontmatter (`aprovacao`, `versao`, `titulo` — 45 referências) e 2 nomes
+  de artefato (`00-missao.md`, `01-plano.md` — 72 referências). É o único lugar onde um repo-alvo
+  anglófono ainda vê português **obrigatório**, e o `OUTPUT_LANG` não resolve: isso é contrato, não
+  prosa. ⚠️ A entrada do I13.5 afirmava que "o contrato já é inglês" — **estava errada**, medido
+  nesta missão. Deixado fora do escopo de propósito: renomear quebra toda missão em voo (o
+  `sales_quote` tem uma) e toda instalação existente, o que é missão própria com janela de
+  migração. Direção: `approval`/`version`/`title` + `00-mission.md`/`01-plan.md`, com o runner
+  aceitando os dois nomes por um período. — descoberto por `humano` na missão
+  `20260815-i13.5-kit-em-ingles` (2026-08-15)
+
+- [ ] **`templates/` é single-language, e o kit não tem como servir dois idiomas** —
+  `templates/*.md` — os templates são conteúdo em `OUTPUT_LANG`, mas moram no kit numa cópia só,
+  em PT-BR. Um repo-alvo com `OUTPUT_LANG="en"` recebe o prompt de boot certo e um template em
+  português, e o `sdd install` nem os copia: o `sdd-planner` os lê direto de `$SDD_HOME`. Não morde
+  hoje porque todo repo-alvo é PT-BR. Direção: ou `templates/<lang>/` com fallback, ou templates
+  com estrutura inglesa e prosa-guia curta que o agente reescreve em `OUTPUT_LANG` — a segunda
+  opção mexe no contrato que `check-templates.sh` mede, então vem depois da entrada acima.
+  — descoberto por `humano` na missão `20260815-i13.5-kit-em-ingles` (2026-08-15)
+
+- [ ] **Dois arquivos ficam fora do sensor de idioma, e prosa PT-BR pode entrar neles sem ninguém
+  ver** — `tests/check-lang.sh` (a função `surface()`) — as exclusões são corretas e estão
+  documentadas no arquivo: em `check-templates.sh` as regexes PT-BR **são** o contrato dos
+  templates, e em `check-lang.sh` o dicionário e os probes precisam conter o que detectam. Mas o
+  custo é real: nesses dois arquivos, prosa em português passa despercebida. Direção que devolve a
+  cobertura sem enfraquecer nenhum dos dois: mover o contrato dos templates para um arquivo de
+  dados (`tests/template-contract.txt`, colunas arquivo/regex/descrição), deixando o
+  `check-templates.sh` como lógica inglesa pura; só o arquivo de dados fica fora da superfície.
+  Sobra `check-lang.sh`, que é irredutível e por isso tem o `selftest()`. — descoberto por
+  `sdd health`/`check-lang` na missão `20260815-i13.5-kit-em-ingles` (2026-08-15)
 
 - [ ] O `sdd-planner` ainda não foi exercitado numa missão real — as missões planejadas até aqui
   tiveram plano escrito à mão. Primeira missão planejada por ele deve conferir se o gate PLAN-AUTO

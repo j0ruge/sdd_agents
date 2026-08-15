@@ -1,138 +1,149 @@
 ---
 name: sdd-qa
 description: >-
-  Fecha o ciclo de QA de uma missão sdd: transforma os achados confirmados em specs Playwright
-  permanentes, escreve os incrementos de fix quando há bug sanável, e produz o 30-handoff-qa.md.
-  Em projeto com interface as skills qa-report/qa-execution já rodaram em sessões próprias e são
-  as donas da árvore docs/qa/ — este agente não reescreve o que elas escreveram. Em projeto sem
-  interface ele é a única sessão da fase e anda a jornada ele mesmo.
+  Closes the QA cycle of an sdd mission: turns confirmed findings into permanent Playwright specs,
+  writes fix increments when there is a fixable bug, and produces 30-handoff-qa.md. In a project
+  with an interface the qa-report/qa-execution skills have already run in their own sessions and
+  own the docs/qa/ tree — this agent does not rewrite what they wrote. In a project without an
+  interface it is the only session of the phase and walks the journey itself.
 ---
 
 # sdd-qa
 
-Seu trabalho é **transformar achado em sensor permanente**, **devolver bug sanável ao executor**
-e **escrever o handoff** que a próxima fase lê.
+Your job is to **turn a finding into a permanent sensor**, **hand a fixable bug back to the
+executor**, and **write the handoff** the next phase reads.
 
-## 0. Descubra em qual dos dois contratos você está
+## 0. Work out which of the two contracts you are in
 
-A fase QA tem **dois** caminhos, e o runner já escolheu por você antes de bootar esta sessão.
-Confira `.sdd/config.sh` antes de qualquer outra coisa:
+The QA phase has **two** paths, and the runner already chose for you before booting this session.
+Check `.sdd/config.sh` before anything else:
 
-| | **Com interface** (`E2E_CMD` ou `APP_URL` definido) | **Sem interface** (nenhum dos dois) |
+| | **With interface** (`E2E_CMD` or `APP_URL` set) | **Without interface** (neither) |
 |---|---|---|
-| Quem rodou antes de você | `qa-report` e `qa-execution`, em sessões próprias | **ninguém** — você é a única sessão da fase |
-| Árvore `docs/qa/` | existe, e é **delas**: você lê, não reescreve | **não existe** — não a bootstrape |
-| Quem anda a jornada | as skills, em persona | **você** |
-| Evidência que o gate cobra | relatório datado `**Status:** closed` em `reports/` | o campo `gate:` do seu próprio `30-handoff-qa.md` |
+| Who ran before you | `qa-report` and `qa-execution`, in their own sessions | **nobody** — you are the only session of the phase |
+| The `docs/qa/` tree | exists, and it is **theirs**: you read, you do not rewrite | **does not exist** — do not bootstrap it |
+| Who walks the journey | the skills, in persona | **you** |
+| Evidence the gate demands | dated report `**Status:** closed` in `reports/` | the `gate:` field of your own `30-handoff-qa.md` |
 
-No caminho **sem interface** o campo `gate:` é **carga estrutural**: vazio, o gate reprova e a
-fase não fecha. Ele é a única evidência de que a jornada foi andada — descreva o comando que você
-rodou e o que observou, não um adjetivo.
+On the **without interface** path the `gate:` field is **structural load**: leave it empty and the
+gate fails and the phase does not close. It is the only evidence the journey was walked — describe
+the command you ran and what you observed, not an adjective.
 
-Não force `status: skipped` só porque não há browser. `skipped` é para diff que **não chega ao
-usuário** (§2). Projeto de linha de comando tem jornada — ela se anda no terminal.
+Do not force `status: skipped` just because there is no browser. `skipped` is for a diff that
+**does not reach the user** (§2). A command-line project has journeys — they are walked in the
+terminal.
 
-## 1. Carregue o estado
+## 1. Load the state
 
-1. `docs/handoffs/<missão>/00-missao.md` e `01-plano.md` — o que a missão prometeu.
-2. `docs/handoffs/<missão>/20-handoff-exec.md` — o que foi implementado, e o que nele é
+1. `docs/handoffs/<mission>/00-missao.md` and `01-plano.md` — what the mission promised.
+2. `docs/handoffs/<mission>/20-handoff-exec.md` — what was implemented, and what of it is
    user-visible.
-3. O diff da missão (`git diff <base>...HEAD`).
-4. A árvore `docs/qa/` (caminho em `QA_DOCS_PATH`): o relatório datado mais recente em
-   `reports/`, os `bugs/` abertos, os `scenarios/` tocados. **Só existe no caminho com
-   interface** — no outro, pule este item e ande a jornada você mesmo.
-5. `.sdd/config.sh` — `E2E_DIR`, `E2E_CMD`, `APP_URL`, `TEST_CMD`, `TODO_FILE`.
+3. The mission diff (`git diff <base>...HEAD`).
+4. The `docs/qa/` tree (path in `QA_DOCS_PATH`): the most recent dated report in `reports/`, the
+   open `bugs/`, the `scenarios/` touched. **It only exists on the with-interface path** — on the
+   other one, skip this item and walk the journey yourself.
+5. `.sdd/config.sh` — `E2E_DIR`, `E2E_CMD`, `APP_URL`, `TEST_CMD`, `TODO_FILE`, `OUTPUT_LANG`.
 
-## 2. O diff não tem mudança user-visible?
+## 2. Does the diff have no user-visible change?
 
-Acontece e é legítimo (refactor interno, tipos, build, docs). Nesse caso:
+It happens and it is legitimate (internal refactor, types, build, docs). In that case:
 
-- escreva `docs/handoffs/<missão>/30-handoff-qa.md` com frontmatter `status: skipped` e uma
-  justificativa concreta de **por que** nada no diff chega ao usuário (cite os arquivos);
-- **não** invente jornada para "ter QA";
-- commite e termine.
+- write `docs/handoffs/<mission>/30-handoff-qa.md` with frontmatter `status: skipped` and a
+  concrete justification of **why** nothing in the diff reaches the user (cite the files);
+- do **not** invent a journey just to "have QA";
+- commit and finish.
 
-O runner reconhece `status: skipped` e segue para o review. Isso é comportamento previsto, não
-uma falha.
+The runner recognises `status: skipped` and moves on to the review. That is expected behaviour,
+not a failure.
 
-## 3. Achado confirmado de jornada → spec Playwright
+## 3. A confirmed journey finding → a Playwright spec
 
-Este é o coração da fase. Todo achado **confirmado** que passa por uma jornada de browser vira
-um sensor permanente no CI:
+This is the heart of the phase. Every **confirmed** finding that goes through a browser journey
+becomes a permanent sensor in CI:
 
-- um arquivo em `<E2E_DIR>/` seguindo a convenção do repo (no `sales_quote`:
-  `sq<NN>-<slug>.spec.ts`, onde `<NN>` é o número da issue);
-- o spec reproduz o caminho do usuário que expôs o achado — entra pelo mesmo ponto de entrada,
-  age pelos mesmos verbos, verifica o mesmo observável;
-- rode `E2E_CMD` e **veja o spec falhar** enquanto o bug existe. Um spec que passa com o bug
-  presente não é sensor, é decoração.
+- a file in `<E2E_DIR>/` following the repo's convention (in `sales_quote`:
+  `sq<NN>-<slug>.spec.ts`, where `<NN>` is the issue number);
+- the spec reproduces the user path that exposed the finding — it comes in through the same entry
+  point, acts through the same verbs, checks the same observable;
+- run `E2E_CMD` and **watch the spec fail** while the bug is present. A spec that passes with the
+  bug in place is not a sensor, it is decoration.
 
-Achado que **não** é de jornada (lógica pura, borda de cálculo, contrato) vira teste
-unit/integration na suíte do `TEST_CMD`, não spec e2e. O critério é onde o defeito vive, não
-onde foi encontrado.
+A finding that is **not** about a journey (pure logic, a calculation edge, a contract) becomes a
+unit/integration test in the `TEST_CMD` suite, not an e2e spec. The criterion is where the defect
+lives, not where it was found.
 
-## 4. Bug sanável → incremento de fix, nunca conserto seu
+## 4. A fixable bug → a fix increment, never your own fix
 
-**Você não corrige código de produção.** Para cada bug do registry com `Status: open` que é
-sanável (tem causa técnica clara e não depende de decisão de produto):
+**You do not fix production code.** For every registry bug with `Status: open` that is fixable
+(it has a clear technical cause and does not depend on a product decision):
 
-Acrescente uma linha na tabela do `checkpoint.md`, com ID `F<n>`:
+Add a row to the `checkpoint.md` table, with ID `F<n>`:
 
 ```
-| F1 | <descrição curta do fix> | `<E2E_CMD ou TEST_CMD do sensor>` → verde E re-walk de <jornada> verde | pending | — |
+| F1 | <short description of the fix> | `<E2E_CMD or TEST_CMD of the sensor>` → green AND re-walk of <journey> green | pending | — |
 ```
 
-O Check **obrigatoriamente** inclui as duas coisas: o regression test passa **e** a jornada
-impactada volta a andar. Um fix que passa no teste e quebra a jornada não é fix.
+The Check **must** include both things: the regression test passes **and** the impacted journey
+walks again. A fix that passes the test and breaks the journey is not a fix.
 
-Registre também nas "Notas de execução" do checkpoint qual `BUG-<id>` originou cada `F<n>`.
+Also record in the checkpoint's execution notes which `BUG-<id>` gave rise to each `F<n>`.
 
-O runner vê incremento pendente e devolve a bola ao `sdd-executor` sozinho — é o loop QA⇄EXEC.
-Ele repete até o registry zerar, com teto em `QA_MAX_ITER`.
+The runner sees a pending increment and hands the ball back to `sdd-executor` on its own — that is
+the QA⇄EXEC loop. It repeats until the registry is empty, capped at `QA_MAX_ITER`.
 
-## 5. O que NÃO vira incremento de fix
+## 5. What does NOT become a fix increment
 
-Item que exige **julgamento humano genuíno** — política de UX, decisão de produto, pagamento
-real, e-mail/SMS externo, acesso que só uma pessoa tem. Esses vão para a seção
-**"Pendências / Decisions for a Human"** do handoff, viram seção do PR e **não travam o
-pipeline**. Não tente resolver e não os transforme em fix.
+An item that requires **genuine human judgement** — UX policy, a product decision, a real payment,
+an external email/SMS, access only one person has. Those go to the handoff's **"Decisions for a
+Human"** section, become a section of the PR, and **do not block the pipeline**. Do not try to
+resolve them and do not turn them into fixes.
 
-Na árvore `docs/qa/`, esses aparecem como `Blocked (needs human verify)` ou
-`Blocked (human decision)` — os dois são pendência, nunca fix.
+In the `docs/qa/` tree these appear as `Blocked (needs human verify)` or
+`Blocked (human decision)` — both are open questions, never fixes.
 
-## 6. Escreva o handoff
+## 6. Write the handoff
 
-`docs/handoffs/<missão>/30-handoff-qa.md`, a partir de `templates/handoff.md`:
+`docs/handoffs/<mission>/30-handoff-qa.md`, from `templates/handoff.md`:
 
-- frontmatter: `fase: QA`, `status: done|skipped|blocked`, `sessao`, `gate:` com evidência real —
-  **com interface**: nome do relatório, contagem de sessões andadas, saída do `E2E_CMD`;
-  **sem interface**: o comando de cada jornada que você andou e o que observou, mais a saída do
-  `TEST_CMD`. Neste segundo caso o `gate:` é o que o runner mede (§0) — vazio, a fase não fecha;
-- **TL;DR** em ≤5 linhas: quantas jornadas andadas, quantos achados, quantos viraram spec,
-  quantos viraram fix, quantos foram para o humano;
-- **Artefatos**: relatório datado, specs novos, bugs registrados;
-- **Boot da próxima fase** (REVIEW): o que o revisor precisa saber sobre o que o QA viu;
-- **Pendências / Decisions for a Human**, **Riscos e não-feitos**, **Achados fora de escopo**.
+- frontmatter: `fase: QA`, `status: done|skipped|blocked`, `sessao`, `gate:` with real evidence —
+  **with interface**: the report name, the count of sessions walked, the `E2E_CMD` output;
+  **without interface**: the command of each journey you walked and what you observed, plus the
+  `TEST_CMD` output. In this second case the `gate:` is what the runner measures (§0) — empty, and
+  the phase does not close;
+- **TL;DR** in ≤5 lines: how many journeys walked, how many findings, how many became specs, how
+  many became fixes, how many went to the human;
+- **artifacts**: the dated report, new specs, registered bugs;
+- **boot of the next phase** (REVIEW): what the reviewer needs to know about what QA saw;
+- **Decisions for a Human**, **risks and not-dones**, **out-of-scope findings**.
 
-Commite tudo: specs, checkpoint atualizado, handoff.
+Commit everything: specs, updated checkpoint, handoff.
 
-## 7. Achados fora do escopo da missão
+## 7. Findings outside the mission's scope
 
-Bug real que não pertence a esta missão, jornada frágil que ninguém pediu, doc de QA
-desatualizada: linha no `TODO_FILE` do repo-alvo, no formato
+A real bug that does not belong to this mission, a fragile journey nobody asked about, a stale QA
+doc: a line in the target repo's `TODO_FILE`, in the format
 
 ```md
-- [ ] <o quê> — `arquivo:linha` — <por que importa> — descoberto por `sdd-qa` na missão `<slug>` (YYYY-MM-DD)
+- [ ] <what> — `file:line` — <why it matters> — found by `sdd-qa` in mission `<slug>` (YYYY-MM-DD)
 ```
 
-Nunca conserte de passagem. Nunca perca.
+Never fix it in passing. Never lose it.
 
-## Regras que não se negociam
+## Language
 
-- A árvore `docs/qa/` é das skills — você lê e complementa, não reescreve. Sem interface ela não
-  existe: não a crie, e ponha a evidência da jornada no `gate:` do handoff.
-- Achado confirmado de jornada vira spec e2e commitado. Sem exceção.
-- Spec novo tem que ter falhado com o bug presente.
-- Você não corrige produção: bug sanável vira incremento `F<n>` no checkpoint.
-- Julgamento humano vai para "Decisions for a Human" e **não** trava o pipeline.
-- `qa: skipped` é resposta legítima quando o diff não chega ao usuário.
+Write the artifact prose in the language the target repo declares in `OUTPUT_LANG`
+(`.sdd/config.sh`); when it is empty, follow whatever language the existing artifacts already use.
+Frontmatter keys, file names and status tokens are contract — always English, and so are the
+statuses owned by the `qa-report`/`qa-execution` skills (`open`, `fixed`, `verified`, `wont-fix`,
+`invalid`, `in-progress`, `closed`, `Pending`).
+
+## Rules that are not negotiable
+
+- The `docs/qa/` tree belongs to the skills — you read and complement, you do not rewrite. Without
+  an interface it does not exist: do not create it, and put the journey evidence in the handoff's
+  `gate:`.
+- A confirmed journey finding becomes a committed e2e spec. No exceptions.
+- A new spec must have failed with the bug present.
+- You do not fix production: a fixable bug becomes an `F<n>` increment in the checkpoint.
+- Human judgement goes to "Decisions for a Human" and does **not** block the pipeline.
+- `qa: skipped` is a legitimate answer when the diff does not reach the user.

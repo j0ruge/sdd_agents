@@ -4,6 +4,76 @@ Registro de melhorias com **antes/depois medido**. Sem número, não entra.
 
 ---
 
+## 2026-08-15 — Idioma era convenção, virou configuração (I13.5)
+
+**Problema (Gemba):** o kit era utilizável só por quem lê português, embora nada no mecanismo
+dependesse disso — **1.517 linhas acentuadas em 24 arquivos** da superfície (runner, agentes,
+docs, README, config, testes), medidas por comando antes de começar. E não havia alavanca nenhuma
+para um repo-alvo pedir artefatos noutro idioma.
+
+### 5 Porquês
+
+- **Sintoma:** o kit fala um idioma só, e não é escolha de ninguém — é herança.
+1. Por quê? Toda a prosa foi escrita em PT-BR.
+2. Por quê? O `CLAUDE.md` mandava: "PT-BR em tudo que é lido por humano".
+3. Por quê? A regra nasceu quando o único leitor humano era o autor e o único repo-alvo era
+   brasileiro — na época, uma simplificação correta.
+4. Por quê? A regra não separou **duas audiências**: quem usa o kit (superfície) e quem lê os
+   artefatos de uma missão (o time do repo-alvo). Uma regra só para as duas obriga a escolher um
+   idioma para ambas.
+5. Por quê (**causa raiz de processo**)? **Idioma foi tratado como convenção, não como
+   configuração.** Convenção não tem chave, não tem default e não tem sensor — então não havia
+   onde declarar o idioma, nem o que percebesse a regra sendo violada.
+
+**Contramedida (as duas metades, uma não fecha a causa sem a outra):** `OUTPUT_LANG` dá à
+audiência 2 uma chave, injetada pelo `boot_prompt()` em toda fase; `tests/check-lang.sh` dá à
+audiência 1 um sensor. Traduzir sem a chave só trocaria a prisão de idioma; a chave sem o sensor
+apodreceria no primeiro commit em português.
+
+| | Antes (medido) | Depois (medido) |
+|---|---|---|
+| Linhas acentuadas na superfície | **1.517** em 24 arquivos | **0** |
+| Arquivos da superfície com prosa PT-BR | 24 de 24 | 0 de 24 (2 exceções documentadas: contrato e dicionário) |
+| Sensor que reprova PT-BR novo | **nenhum** | `check-lang.sh` na suíte, com catraca bidirecional e auto-teste |
+| Chave para o idioma dos artefatos | **nenhuma** | `OUTPUT_LANG`, default vazio = comportamento idêntico |
+| Mutações no catálogo | 15 | **16** (`RUN_ignores_output_lang`) |
+| Catraca de tradução | — | 24 → **0** entradas |
+| Tempo da suíte | 12,81s | ~14,0s (mediana de 3; o `check-lang` custa ~1,2s) |
+| `sdd health` | rc 0, 6 dívidas | rc 0, **as mesmas 6** — nenhuma dívida nova |
+
+**O sensor pegou três coisas que eu não teria pego**, e as três valem mais do que a tradução:
+
+1. **Ele reprovou a si mesmo.** O dicionário de stopwords e os probes do auto-teste *são*
+   português — escaneá-lo é acusar o detector de conter aquilo que detecta. Virou exclusão
+   documentada, com o `selftest()` (rc 90/91/92) e um piso de caminhos (rc 93) como guarda no
+   lugar do grep.
+2. **Ele reprovou o `check-templates.sh`**, cujas regexes são os headings de `templates/` — ou
+   seja, contrato de conteúdo em `OUTPUT_LANG`. Segunda exclusão, mesma categoria: português como
+   **dado**, não como prosa. O custo (prosa PT-BR poderia entrar nesses dois arquivos sem ninguém
+   ver) está escrito no arquivo e virou entrada de `TODO.md` com a direção que devolve a cobertura.
+3. **Ele achou um bug nele mesmo:** `[\x{00C0}-\x{00FF}]` inclui `×` (00D7) e `÷` (00F7), que não
+   são letras, e reprovou `QA_MAX_ITER × 3` no `schema.md` como se fosse português. A tentação era
+   reescrever o doc até o detector calar — **enfraquecer o conteúdo para agradar um instrumento
+   quebrado**. O conserto foi a classe, e o probe de inglês do auto-teste passou a carregar `×` e
+   `÷`: sabotar a classe de volta agora reprova com rc 92.
+
+**Correção de fato:** a entrada do `TODO.md` que originou esta missão afirmava que "o contrato já
+é inglês". Medido: **não é** — sobraram 3 chaves de frontmatter (`aprovacao`, `versao`, `titulo`,
+45 referências) e 2 nomes de artefato (`00-missao.md`, `01-plano.md`, 72 referências). Ficaram
+fora de propósito, porque renomeá-las quebra missão em voo e toda instalação existente. Entrada
+nova aberta.
+
+**Não reivindicado:** "o kit agora é usável por quem não fala português". É métrica retardatária —
+só o primeiro usuário estrangeiro mede. Revisar em missões futuras.
+
+**Padronizado em:** `CLAUDE.md`, seção "Idioma" (três audiências: superfície inglesa com sensor,
+artefato em `OUTPUT_LANG`, contrato inglês) e seção "TDD aqui dentro" (sensor que se auto-exclui
+carrega auto-teste). Confirmado abrindo o arquivo depois de escrever.
+
+**Custo:** 6 commits, 27 arquivos, +2.584/−2.196 linhas. Fecha 3 entradas do `TODO.md`, abre 3.
+
+---
+
 ## 2026-08-14 — O sensor do sensor: a suíte verde não provava nada (I13.2)
 
 **Problema (Gemba):** três bugs de gate da **mesma família** atravessaram a suíte verde e só
