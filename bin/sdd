@@ -767,13 +767,13 @@ autonomy_blocked_row() {   # autonomy_blocked_row <kind> <phase> <gate_why>
 
 # One row per session, written after the gate has been evaluated — the row carries the gate
 # result, so it cannot be born before it.
-autonomy_session_row() {  # <phase> <attempt> <retry> <moved> <gate> <gate_why>
+autonomy_session_row() {  # <phase> <attempt> <auto_retry> <moved> <gate> <gate_why>
   autonomy_have_jq || return 0
   local stamp; stamp="$(autonomy_kit_stamp)"
   # "${6:0:200}" is a CHARACTER slice, same reason as autonomy_blocked_row's "${3:0:200}" above.
   autonomy_append "$( jq -cn \
     --arg ts "$(date -Iseconds)" --arg phase "$1" --arg attempt "$2" \
-    --arg retry "$3" --arg moved "$4" --arg gate "$5" \
+    --arg auto_retry "$3" --arg moved "$4" --arg gate "$5" \
     --arg why "${6:0:200}" \
     --arg run_id "$AUTONOMY_RUN_ID" --arg invocation "$AUTONOMY_INVOCATION" \
     --arg sha "${stamp%%|*}" --arg dirty "${stamp#*|}" \
@@ -787,7 +787,7 @@ autonomy_session_row() {  # <phase> <attempt> <retry> <moved> <gate> <gate_why>
       kit_dirty: (if $dirty == "" then null else ($dirty == "true") end),
       project: $project, repo: $repo, mission: $mission,
       phase: $phase, step: $step, agent: $agent, model: $model,
-      attempt: ($attempt | tonumber? // null), retry: ($retry == "true"),
+      attempt: ($attempt | tonumber? // null), auto_retry: ($auto_retry == "true"),
       session: $session,
       rc: ($rc | tonumber? // null),
       dur_s: ($dur | tonumber? // null),
