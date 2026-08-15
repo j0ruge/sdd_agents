@@ -467,6 +467,152 @@ Achados sobre **repos-alvo** vão para o `TODO.md` daquele repo. Este arquivo é
   item descrevia (guarda invertida → diário morto, suíte verde) foi reproduzido por mutação e
   agora **falha em 4 asserções**. — `sdd-qa`, mesma missão (2026-08-14)
 
+- [ ] **`${var:0:200}` só corta por caractere se o locale do processo for multibyte** —
+  `bin/sdd:756` (`autonomy_blocked_row`) e `bin/sdd:777` (`autonomy_session_row`) — o comentário
+  nas duas funções (`bin/sdd:750-751` e `:773`) promete "character slice", mas isso é verdade só
+  sob um locale UTF-8; em `C`/`POSIX` o bash volta a contar **byte**, e nem `bin/sdd` nem
+  `tests/run-all.sh` fixam `LC_ALL`/`LANG`. Não é regressão — é igual ou melhor que o `head -c`
+  que havia antes — mas a promessa escrita é maior do que a entrega: depende do ambiente de quem
+  roda, e ninguém declara isso. Direção: ou fixar o locale no topo de `bin/sdd`, ou trocar o
+  comentário por algo que não prometa mais do que garante. — descoberto por `sdd-reviewer` na
+  missão `20260815-i13.1-autonomy-log` (2026-08-15)
+- [ ] **O corte UTF-8 de `${var:0:200}` não tem asserção que o cubra** — `bin/sdd:756,777` —
+  o guarda natural seria uma mutação em `tests/check-mutation.sh` que restaurasse `head -c 200`
+  (a forma antiga, que corta byte a byte). Não entrou: alcançar um `gate_why` longo o bastante e
+  multibyte pelo caminho real exige um fixture com ID de incremento gigante, e no jq 1.7 instalado
+  o byte inválido resultante vira U+FFFD e sobrevive — o risco degrada em vez de quebrar alto.
+  Pode não valer o custo do fixture para o risco que cobre. — descoberto por `sdd-reviewer` na
+  missão `20260815-i13.1-autonomy-log` (2026-08-15)
+- [ ] **O fallback `"?"` de `cost_usd` nunca é exercitado por teste nenhum** — `bin/sdd:852`
+  (`cost="$(jq -r '.total_cost_usd // .cost_usd // "?"' "$logfile" ...)"`) vs `bin/sdd:794`
+  (`cost_usd: ($cost | tonumber? // null)` no construtor do ledger) — todo stub `claude` de
+  `tests/check-autonomy.sh` escreve um log de sessão **vazio** (`exit 1` sem stdout, ou `echo
+  '{}'`), então o campo chega **vazio** (`""`) para o `jq`, não a string `"?"` que o fallback
+  produziria se `total_cost_usd`/`cost_usd` estivessem simplesmente ausentes de um JSON válido.
+  O caminho que o fallback existe para cobrir — uma sessão que respondeu, mas sem custo no JSON —
+  segue sem sensor. Direção: um stub que emita `{"other_field": 1}` (JSON válido, sem custo) e
+  afirme `cost_usd == null` no ledger. — descoberto por `sdd-reviewer` na missão
+  `20260815-i13.1-autonomy-log` (2026-08-15)
+- [ ] **`--max-phases` custa uma avaliação de gate a mais, e nenhum teste do repo o exercita** —
+  `bin/sdd:1489-1498` vs `bin/sdd:1369` — a ordem ficou: `gate_"$phase"` roda (`:1490`) e escreve a
+  linha do ledger **antes** de checar `$phases_run -ge $max_phases` (`:1496`), de propósito — é o
+  que garante que a última fase projetada ainda ganhe registro no ledger. O custo é um `TEST_CMD`
+  a mais rodando na última iteração de um `sdd run --max-phases N`, que ninguém mediu porque
+  `--max-phases` não aparece em `tests/check-dry-run.sh`, `tests/check-gates.sh` nem
+  `tests/check-autonomy.sh` — a flag existe desde antes do I13.1 e segue sem sensor próprio.
+  Direção: um caso em `check-dry-run.sh` ou `check-autonomy.sh` com `--max-phases 1`, afirmando
+  que só uma linha de ledger é escrita e que a mensagem "reached" aparece. — descoberto por
+  `sdd-reviewer` na missão `20260815-i13.1-autonomy-log` (2026-08-15)
+- [ ] **`current_phase()`/`next_pending_phase()` dependem inteiramente da memoização do
+  `run_check_cmd` para serem baratas, e isso não tem sensor** — `bin/sdd:475-492`
+  (`current_phase`, `next_pending_phase`) vs `bin/sdd:193-210` (`run_check_cmd`,
+  `invalidate_checks`) — as duas reavaliam o gate de **toda** fase a cada chamada (um `for ph in
+  $PHASES` completo), e isso só é barato porque `run_check_cmd` cacheia por `$cmd` em
+  `_CHECK_RC`/`_CHECK_LOG` e `invalidate_checks` só é chamado depois de um `run_phase` de verdade.
+  Quem mexer em **quando** `invalidate_checks` roda (por exemplo, chamá-lo também numa iteração de
+  dry-run) reintroduz N execuções de `TEST_CMD` por projeção, em silêncio — nenhum teste do repo
+  conta quantas vezes `run_check_cmd` de fato executa `eval "$cmd"` versus quantas vezes serve do
+  cache. Direção: um sensor que conte invocações reais do `TEST_CMD` (por exemplo, um `TEST_CMD`
+  que incrementa um contador em arquivo) num dry-run com várias fases pendentes, afirmando que o
+  número não cresce com o número de fases. — descoberto por `sdd-reviewer` na missão
+  `20260815-i13.1-autonomy-log` (2026-08-15)
+- [ ] **`sdd autonomy` imprime `US$ 2` em vez de `US$ 2.00` para somas em dólar fechado** —
+  `bin/sdd:1617` — a expressão `\($cost | . * 100 | round / 100)` do `jq` arredonda certo, mas o
+  `jq` imprime número, não string formatada: um total de `2.0` vira `2` na saída, derrubando o
+  `.00`. Cosmético — o número está certo — mas quebra o alinhamento de uma tabela que existe
+  para ser lida rápido, e um leitor apressado pode ler `2` como "sem casas decimais calculadas"
+  em vez de "duas sessões de um dólar". Direção: `printf` no lugar da interpolação do `jq`, ou
+  `\($cost * 100 | round / 100 | tostring | if test("\\.") then . else . + ".00" end)`. —
+  descoberto por `sdd-reviewer` na missão `20260815-i13.1-autonomy-log` (2026-08-15)
+- [ ] **`cmd_autonomy` usa a mesma mensagem de `die` para dois defeitos diferentes** —
+  `bin/sdd:1583` e `bin/sdd:1626` — as duas chamadas escrevem exatamente `"malformed row in $file
+  — the ledger is not readable"`: uma cobre JSON **sintaticamente inválido** (`jq -se .` falha) e
+  a outra cobre JSON **válido mas de shape errada** (um array em vez de um objeto — indexar `.event`
+  nele é erro de runtime do `jq`, não uma comparação falsa). São causas distintas com correções
+  distintas (uma pede editar a linha à mão; a outra pede entender por que o produtor do ledger
+  escreveu um valor não-objeto), e quem lê a mensagem não tem como saber qual das duas aconteceu.
+  Direção: duas mensagens, ou uma mensagem só com o detalhe do `jq` anexado. — descoberto por
+  `sdd-reviewer` na missão `20260815-i13.1-autonomy-log` (2026-08-15)
+- [ ] **A suíte estourou o alvo de ≤15s do plano do I13.1** — `tests/run-all.sh` +
+  `tests/check-mutation.sh` (`SDD_MUTATION_JOBS`) — medido nesta missão, mesma máquina, 3 rodadas
+  de cada lado: merge-base pré-I13.1 (`c8bb535`, mutação 16/16) em 13,88s/13,98s/14,11s (mediana
+  13,98s) contra a árvore completa do I13.1 (mutação 19/19) em 22,08s/22,34s/22,35s (mediana
+  22,34s) — um aumento de ~8,3s (~60%). A maior parte é o catálogo de mutação: 19 mutantes contra
+  16, cada um rodando a suíte inteira num sandbox isolado. `SDD_MUTATION_JOBS` default é 4 e a
+  máquina tem 20 núcleos — subir o paralelismo é uma alavanca não usada que poderia absorver boa
+  parte do aumento sem cortar cobertura. Decisão fica para o humano: subir o alvo do plano, subir
+  o default de `SDD_MUTATION_JOBS`, ou aceitar o custo como o preço de medir a própria autonomia.
+  Não "consertado" cortando mutação ou asserção — isso violaria o próprio princípio que motivou a
+  missão. — descoberto por `sdd-executor` na missão `20260815-i13.1-autonomy-log` (2026-08-15)
+  **Atualização (2026-08-15 — fix wave da revisão final):** medido o `SDD_MUTATION_JOBS` como
+  alavanca, mesma máquina de 20 núcleos: **`SDD_MUTATION_JOBS=10` → 14,70s hoje** contra 22,34s no
+  default de 4 — ou seja, o custo já é evitável **por opção** hoje mesmo, sem mudar nada em
+  `bin/sdd`. A pergunta em aberto encolheu: não é mais "dá para pagar o alvo?", é só "qual deve
+  ser o DEFAULT?". **Não mudei o default**: `nproc` é GNU-only e aprofunda a dívida que este
+  `TODO.md` já registra (entrada "o `bin/sdd` promete macOS…", `06c96bc`); um runner de 2 núcleos
+  ganharia um default PIOR que o 4 de hoje; e trocar o default invalidaria o 22,34s que o
+  `KAIZEN_LOG.md` acabou de registrar como medido para o default atual. A decisão sobre o default
+  continua sendo do humano.
+  Junto, uma dívida menor da mesma revisão: as duas asserções novas do item 5 do fix wave
+  (`tests/check-autonomy.sh` — "the two session rows share one session id (the retry has no fork
+  id of its own)" e "sdd retry that changed the disk records moved:true") **não têm mutação
+  catalogada** em `tests/check-mutation.sh` segurando-as. A revisora verificou à mão que as duas
+  discriminam (reproduzido nesta missão: reverter `LAST_PHASE_SID="${resume_sid:-$sid}"` para
+  `"$sid"` derruba a primeira; trocar a cópia de `cmd_retry` de
+  `[ "$before" != "$after" ] && moved="true"` por um no-op derruba a segunda), mas nenhuma das
+  duas sabotagens está no catálogo — a regra "gate novo entra com mutação" do `CLAUDE.md` é sobre
+  gate, não sobre toda asserção nova da suíte, então isso fica registrado em vez de virar mutação
+  agora. — descoberto por `/codereview` (revisão final do branch) na missão
+  `20260815-i13.1-autonomy-log` (2026-08-15)
+
+- [ ] **A asserção "the retry carries its own moved" não consegue falhar pela propriedade que o
+  nome promete** — `tests/check-autonomy.sh:208` — no fixture usado, `moved` sai `false` qualquer
+  que seja a baseline usada como `before`/`after` do retry: o caminho de retry só é alcançado
+  quando `before == after` (a sessão anterior não mexeu em nada), então a asserção nunca observa,
+  pelo caminho real, um `moved:true` genuíno no retry — ela testa contra uma condição que o
+  próprio setup do teste torna impossível de inverter. Ainda pega bug real (campo ausente, ou um
+  `moved` sempre-`true` por engano), só o nome discrimina menos do que promete. — descoberto por
+  `/codereview` (revisão final do branch) na missão `20260815-i13.1-autonomy-log` (2026-08-15)
+
+- [ ] **`after2` passou a ser amostrado ANTES do gate do retry, e a mudança não ficou registrada**
+  — `bin/sdd:1533-1537` (`cmd_run`) — antes desta missão o `after` do retry era lido depois de
+  avaliar `gate_"$phase"`; agora é lido antes. Benigno e possivelmente mais honesto —
+  `state_fingerprint` lê o HEAD do git, a listagem do diretório da missão e o md5 do checkpoint, e
+  nenhum gate toca em nenhum dos três —, mas é mudança de comportamento em caminho raro (o retry
+  em loop) que ninguém decidiu explicitamente nem documentou como decisão. — descoberto por
+  `/codereview` (revisão final do branch) na missão `20260815-i13.1-autonomy-log` (2026-08-15)
+
+- [ ] **`sdd autonomy` imprime duas linhas em branco em vez de uma quando não há escaladas e há
+  linha não reconhecida** — `bin/sdd:1649-1652` (`cmd_autonomy`, filtro jq) — cosmético, confirmado
+  por reprodução: nenhuma contagem some, é só espaçamento a mais entre o bloco "no comparable
+  sessions" e a linha "(N unrecognized row(s) excluded…)". — descoberto por `/codereview` (revisão
+  final do branch) na missão `20260815-i13.1-autonomy-log` (2026-08-15)
+
+- [ ] **A degradação `PUBLISH_ON_REVIEW_BLOCKED=draft` não escreve linha nenhuma no ledger** —
+  `bin/sdd:1471-1476` (`cmd_run`) — o ramo `if [ "$phase" = "REVIEW" ] && [ "$PUBLISH_ON_REVIEW_BLOCKED"
+  = "draft" ]` dá `continue` ANTES de `pipeline_log_line` e de `autonomy_blocked_row`. REVIEW
+  estourou o orçamento e o kit se degradou sozinho para um PR em draft — o evento de autonomia
+  mais interessante que uma missão pode produzir —, e a série registra só uma sequência de sessões
+  de REVIEW falhas seguida de uma fase PR, sem nenhum sinal do porquê. O próprio comentário de
+  quem escreveu o escritor previu exatamente isto ("há três caminhos de escalada, e um quarto
+  acrescentado amanhã nasceria com o defeito"). O conserto não é uma linha: `event:"blocked"`
+  seria mentira para um run que CONTINUA — precisa de uma decisão de vocabulário (um
+  `event:"degraded"`, ou um `kind` novo dentro de `event:"session"`), e vocabulário novo sem o
+  juiz (I13.3) existir ainda é especulação. Por isso registrado, não consertado. — descoberto por
+  `/codereview` (revisão final do branch) na missão `20260815-i13.1-autonomy-log` (2026-08-15)
+
+- [ ] **As escaladas perdem o eixo antes/depois: `sdd autonomy` agrupa `blocked` por `.kind` no
+  arquivo inteiro, nunca por `kit_sha`** — `bin/sdd:1635` (sessões: `group_by(.kit_sha)`) vs
+  `bin/sdd:1649` (escaladas: `group_by(.kind)`, sem filtro nem agrupamento por versão do kit) — a
+  versão do kit é o eixo inteiro da tabela (é o antes/depois que o ledger existe para medir), e o
+  bloco de escaladas é a única parte que não pode ser atribuída a uma versão: uma escalada com
+  `kit_dirty:true` entra somada com escaladas de kit limpo, sem marca nenhuma. Direção provável:
+  agrupar por `(kit_sha, kind)` como as sessões já fazem por `kit_sha`, excluindo (e contando) as
+  não-comparáveis do mesmo jeito. Não é o item de maior valor da revisão (a própria revisora não o
+  pôs no topo da lista ordenada por valor), por isso fica registrado em vez de consertado agora. —
+  descoberto por `/codereview` (revisão final do branch) na missão `20260815-i13.1-autonomy-log`
+  (2026-08-15)
+
 ## Feito
 
 - [x] Re-link do shim quebrado do `agent-browser` (I0) — resolvido em 2026-08-14, com sensor

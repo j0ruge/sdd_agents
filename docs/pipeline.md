@@ -247,3 +247,59 @@ id, exit code, duration, cost in USD) and a full JSON alongside it, in the same
 handoffs. If it moved back into the committed tree it would dirty `git status` — and a dirty tree
 fails `gate_REVIEW` and `sdd preflight`. `--max-budget-usd` per session is a damage cap, not a
 budget.
+
+## The autonomy ledger
+
+Two records, different jobs. `.sdd/logs/<mission>/pipeline.log` is the **journal of one mission**,
+ephemeral and local. `${SDD_STATE_DIR:-$HOME/.sdd}/autonomy-log.jsonl` is the **series across all
+missions and all projects**, and it exists for one reader: the kaizen judge (`sdd-kaizen`, I13.3),
+which answers "did the last change to the kit improve autonomy or hurt it?".
+
+It is global, not per-repo, for two reasons. Maturity across projects cannot be measured in a
+file that lives inside one project. And a file the runner writes BETWEEN phases inside the target
+repo would sit untracked and fail `gate_REVIEW` and `sdd preflight` — the `pipeline.log` defect,
+which was fixed by making that journal ephemeral, a way out this ledger does not have.
+
+It records **facts, never a score**: phase, attempt, whether the session moved the disk, rc, cost,
+the gate result and its reason. `ok|leve|refez` is a label, and a runner that labels its own work
+is the "label instead of artifact" every gate here exists to forbid. The judge derives the label,
+and can change its yardstick later without rewriting the past.
+
+Every row carries `kit_sha` and `kit_dirty`. That is the before/after axis: without it a change
+in the numbers gets attributed to the calendar instead of to the kit change that caused it, and
+the judge cannot count missions per kit version to answer "not enough data yet".
+
+### Field reference
+
+This is the whole interface the judge (I13.3, not built yet) is written against — every field a
+row can carry, one row per field. `event:"blocked"` rows carry only the columns marked so in
+"absent when"; everything else is present on both row shapes.
+
+| Field | Type | Absent when | Meaning |
+|---|---|---|---|
+| `v` | integer | never | Schema version of the row, `1` today. Lets the reader tell "old shape" from "malformed" when a future field is added. |
+| `ts` | string | never | `date -Iseconds` timestamp of when the row was written. |
+| `event` | string enum: `session` \| `blocked` | never | A spent session versus a no-session escalation — the two row shapes. |
+| `kind` | string enum: `increment-blocked` \| `budget-exhausted` \| `no-progress` | on `event:"session"` rows | Which of the three escalation paths fired. `increment-blocked` is a deliberate Jidoka (can be a *good* sign); the other two are pure friction. |
+| `run_id` | string (uuid) | never | One per `cmd_run`/`cmd_retry` invocation. Groups every row a single command call produced — "this mission needed N runs" is a `run_id` count. |
+| `invocation` | string enum: `run` \| `retry` | never | Which command opened the session: `sdd run` or `sdd retry`. Answers "who opened the session", not "was this an in-loop retry" — that is `auto_retry`. |
+| `kit_sha` | string \| `null` | never absent, but `null` | `null` when `$SDD_HOME` is not a git checkout. Short SHA of the kit's own HEAD when the row was written — the before/after axis the whole ledger exists for. |
+| `kit_dirty` | boolean \| `null` | never absent, but `null` | `null` exactly when `kit_sha` is `null` (paired). `true` means the kit's own working tree had uncommitted changes — the row is real but not comparable across versions. |
+| `project` | string | never | `PROJECT_NAME` from the target repo's `.sdd/config.sh`. |
+| `repo` | string | never | Absolute path of the target repo — can carry client-identifying paths, which is why the ledger stays in `$HOME` and is never committed. |
+| `mission` | string | never | The mission slug. |
+| `phase` | string | never | The pipeline phase (`EXEC`, `QA`, …). `PLAN` never appears — the interactive phase spends no session. |
+| `step` | string | on `event:"blocked"` rows | The sub-step actually run (`QA:plan`, `QA:exec`, `QA:close`); equal to `phase` outside QA. |
+| `agent` | string | on `event:"blocked"` rows | The kit agent that drove the session. Empty string (not absent) when a third-party skill drove it through the literal slash instead. |
+| `model` | string | on `event:"blocked"` rows | The model configured for the phase. |
+| `attempt` | integer \| `null` | on `event:"blocked"` rows | ⚠️ Not a session counter: `cmd_run`'s in-loop retry row carries the SAME `attempt` as the row right before it, so `(mission, phase, attempt)` is not a key. And `cmd_retry` always writes `1`, no matter how many times the human has already pushed the phase by hand. |
+| `auto_retry` | boolean | on `event:"blocked"` rows | Whether this row is the runner's own automatic second attempt at the phase, inside one `sdd run` loop — never about which command opened the session (that is `invocation`). Renamed from `retry`: the old name next to `invocation:"retry"` read as its own negation, and both the obvious `jq` filters on the old name (`select(.retry==true)`, `select(.invocation=="retry")`) silently missed the other kind of retry. |
+| `session` | string (uuid) | on `event:"blocked"` rows | ⚠️ On an in-loop retry row this is the PARENT session's id, not the fork's: `run_phase` builds the retry with `--resume … --fork-session` and without `--session-id`, so the runner never learns the fork's own id. Two consecutive rows can therefore share one `session` value. |
+| `rc` | integer \| `null` | on `event:"blocked"` rows | The `claude` process's exit code. `null` when the session log carried none. |
+| `dur_s` | integer \| `null` | on `event:"blocked"` rows | Wall-clock seconds the session took. |
+| `cost_usd` | number \| `null` | on `event:"blocked"` rows | The session's cost in USD, `null` (never the string `"?"`) when the session's JSON log carried no cost field. |
+| `moved` | boolean | on `event:"blocked"` rows | ⚠️ The whole waste metric: `state_fingerprint` before ≠ after, and `state_fingerprint` is git HEAD + the mission directory listing + the checkpoint file's md5. `moved:false` is exactly what `sdd autonomy` counts as a stalled session. |
+| `gate` | string enum: `pass` \| `fail` | on `event:"blocked"` rows | The gate's verdict, evaluated right after the session ended — the row is born after the gate, never before it. |
+| `gate_why` | string, truncated to 200 characters | never | The gate's stated reason (or the escalation's reason, on a `blocked` row). |
+
+`sdd autonomy` prints the human view. The judge reads the JSONL with `jq` — never that table.

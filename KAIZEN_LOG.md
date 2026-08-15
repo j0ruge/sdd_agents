@@ -4,6 +4,52 @@ Registro de melhorias com **antes/depois medido**. Sem número, não entra.
 
 ---
 
+## 2026-08-15 — O runner passou a observar a si mesmo (I13.1)
+
+**Problema medido:** o kit tinha 6 fases por missão e **zero** observabilidade sobre a própria
+autonomia. A pergunta "a última mudança melhorou ou piorou?" só tinha resposta por memória
+humana, e o piloto SQ-97 já mostrara que memória humana perde o dado: as 6 sessões foram
+reconstruídas à mão, depois, a partir de logs.
+
+**Antes → depois**
+
+| | antes | depois |
+|---|---|---|
+| linhas de série histórica | 0 | 1 por sessão + 1 por escalada |
+| sessões de retry medidas | 0 (rodavam sem `state_fingerprint`) | todas |
+| mutação | 16/16 | 19/19 |
+| suíte | 13,98s (mediana de 3, merge-base pré-I13.1) | 22,34s (mediana de 3) |
+| pontos de escrita com guarda própria | 3 (diário) | 6, todos por uma função só |
+
+**O que mudou de verdade:** o gate passou a ser avaliado **uma vez** por sessão em vez de até
+quatro vezes nos ramos do `cmd_run` — menos `TEST_CMD` rodando por fase, e a linha do ledger
+nasce depois do gate porque carrega o resultado dele.
+
+**O ramo `moved="true"` não tinha sensor nenhum, e o revisor da Task 2 mediu isso:** até esta
+task, todo stub `claude` do repositório era morto (`rc 1`) ou nunca chegava a rodar (dry-run) —
+nenhuma sessão de teste jamais mudou o disco de verdade, então a atribuição
+`[ "$before" != "$after" ] && moved="true"` podia virar um `true` (no-op) sem que a suíte
+notasse. Isso importa porque `moved` é o numerador do desperdício que `sdd autonomy` relata: uma
+regressão ali tanto escala BLOCKED em fases que estavam progredindo de verdade quanto registra
+toda sessão como desperdício, com a suíte verde. `tests/check-autonomy.sh` ganhou um stub com
+marcador em ARQUIVO — o stub é um processo novo a cada invocação, então uma variável de shell não
+sobrevive entre chamadas — que commita de verdade na primeira invocação e nada faz depois. A
+mutação `RUN_moved_never_true` prova que o sensor pega o mesmo no-op que o revisor tinha usado à
+mão: catálogo 16 → 19, as duas do brief (`RUN_autonomy_ignores_dry_run`,
+`RUN_autonomy_null_moved_as_zero`) mais esta.
+
+**Custo da suíte, sem disfarce:** de ~14,0s (merge-base `c8bb535`, pré-I13.1, medido nesta
+mesma máquina) para ~22,3s — acima do alvo de ≤15s do plano. A maior parte do aumento é o
+catálogo de mutação: 19 mutantes contra 16, cada um rodando a suíte inteira num sandbox isolado
+(`SDD_MUTATION_JOBS=4` por padrão, e a máquina tem 20 núcleos — paralelismo é uma alavanca não
+usada). Decisão sobre subir o alvo do plano ou o `SDD_MUTATION_JOBS` default é humana; registrada
+em `TODO.md` com o número medido, como o próprio plano manda.
+
+**O que não mudou de propósito:** nenhum score. O runner grava fato; quem julga é o `sdd-kaizen`
+do I13.3, que nasce com série histórica em vez de opinião.
+
+---
+
 ## 2026-08-15 — Idioma era convenção, virou configuração (I13.5)
 
 **Problema (Gemba):** o kit era utilizável só por quem lê português, embora nada no mecanismo

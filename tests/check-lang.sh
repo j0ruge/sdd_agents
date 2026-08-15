@@ -113,11 +113,12 @@ files="$(surface)"
 
 # Explicit floor, same reason as the "exactly 7 gates" floor in cmd_health: a glob that stops
 # matching (a renamed directory, a moved file) would leave the loop with nothing to read and the
-# check would report "0 new" — clean by vacuity. 25 paths today; the floor moves only on purpose,
-# and it moved once already: tests/check-preflight.sh took it from 24 to 25.
+# check would report "0 new" — clean by vacuity. 26 paths today; the floor moves only on purpose,
+# and it moved twice already: tests/check-preflight.sh took it from 24 to 25, and
+# tests/check-autonomy.sh from 25 to 26.
 n_surface="$(grep -c . <<< "$files")"
-if [ "$n_surface" -lt 25 ]; then
-  printf '  FAIL  surface shrank to %d path(s), expected at least 25 — did something move?\n' \
+if [ "$n_surface" -lt 26 ]; then
+  printf '  FAIL  surface shrank to %d path(s), expected at least 26 — did something move?\n' \
     "$n_surface" >&2
   exit 93
 fi

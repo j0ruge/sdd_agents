@@ -46,13 +46,21 @@ Toda linha carrega `"v":1` (versão do esquema) e `event`. Dois tipos de linha:
  "kit_sha":"60d4e41","kit_dirty":false,
  "project":"sales_quote","repo":"/home/joruge/repos/sales_quote",
  "mission":"20260814-sq94-spinner-reblur","phase":"EXEC","step":"EXEC",
- "agent":"sdd-executor","model":"opus","attempt":1,"retry":false,"session":"8f3c…",
+ "agent":"sdd-executor","model":"opus","attempt":1,"auto_retry":false,"session":"8f3c…",
  "rc":0,"dur_s":412,"cost_usd":3.87,"moved":true,
  "gate":"fail","gate_why":"2 of 5 increment(s) still to execute"}
 ```
 
+⚠️ **Renomeado na revisão final do branch:** o campo nasceu `retry` e virou `auto_retry` antes da
+primeira missão real gravar uma linha (ledger com zero linhas — o único momento em que renomear é
+grátis). Motivo: `invocation:"retry"` junto com `retry:false` lê como a própria negação — um autor
+de juiz que escreva `select(.retry == true)` perde em silêncio todo `sdd retry` humano, e um que
+escreva `select(.invocation == "retry")` perde em silêncio todo retry automático do laço. O campo
+responde "isto foi a segunda tentativa automática do `cmd_run` dentro do mesmo laço?" — nunca teve
+nada a ver com qual comando abriu a sessão, que é o que `invocation` já responde.
+
 **`event:"blocked"`** — escrita nas escaladas, que acontecem **sem** sessão. Os campos de sessão
-(`rc`, `cost_usd`, `dur_s`, `moved`, `session`, `agent`, `model`, `attempt`, `retry`, `gate`)
+(`rc`, `cost_usd`, `dur_s`, `moved`, `session`, `agent`, `model`, `attempt`, `auto_retry`, `gate`)
 ficam **ausentes**, nunca falsamente zerados. Um enum distingue os três caminhos — o `gate_why`
 também distingue, mas por prosa, e juiz que parseia prosa quebra quando a prosa melhora:
 

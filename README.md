@@ -55,6 +55,7 @@ sdd phase <mission>          # print only the current phase (or DONE) — for sc
 sdd retry <mission>          # retry the current phase with a fresh session
 sdd close <mission>          # post-merge: close the JIRA issue
 sdd health                   # KIT sensor (≠ preflight, which is about the target's environment)
+sdd autonomy                 # waste per kit version, from the global ledger (~/.sdd/autonomy-log.jsonl)
 
 sdd run <mission> --dry-run         # project the whole pipeline without spending tokens
 sdd run <mission> --phase EXEC      # force one specific phase
