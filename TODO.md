@@ -403,6 +403,21 @@ Achados sobre **repos-alvo** vão para o `TODO.md` daquele repo. Este arquivo é
   (b) portar de verdade (`md5` fallback, `date -u +%FT%TZ`, `sed -i ''`, `grep -E` no lugar do
   `-P`). A (a) custa uma linha e para de mentir; a (b) é missão própria. — descoberto por
   `/codereview` na missão `20260815-i13.5-kit-em-ingles` (2026-08-15)
+  **RESOLVIDO por `fc2fa50`** — escolhida a (a) (decisão humana), com uma correção de rota: parar
+  de mentir por mensagem é fraco, então a suposição passou a ser **medida**. Três mudanças:
+  (1) a mensagem da linha 21 declara bash 4+ **e** a userland GNU, com o `gnubin` no `PATH`
+  (`brew install coreutils` instala como `gmd5sum`/`gdate`, e o kit chama `md5sum`/`date` —
+  detalhe que a direção original não previa); (2) `sdd preflight` ganhou um probe **por
+  comportamento**, não por presença: `md5sum </dev/null`, `date -Iseconds`, `sort -V </dev/null`
+  — presença passaria num mac com o `gnubin` fora do `PATH` e o kit quebraria mesmo assim;
+  (3) `tests/check-preflight.sh` (novo, na suíte) prova o probe com shims que respondem como o
+  BSD responde. Provado por sabotagem: **probe removido → 3 asserções morrem**; **`command -v`
+  no lugar do probe comportamental → 1 asserção morre**. Custo: +0,2s na suíte (medido; o total
+  ficou em 15,9s contra 16,1s do HEAD sem a mudança — dentro do ruído da máquina). Escopo do
+  probe é o que o **runner** precisa; `sed -i` e `grep -P` são do `TEST_CMD` deste repo, e uma
+  suíte vermelha já grita sozinha. Segue **GNU-only por decisão declarada** — a (b) continua
+  sendo missão própria, agora sem urgência: o ambiente errado é detectado antes da primeira fase.
+  — `humano` (2026-08-15)
 
 - [ ] **Dois arquivos ficam fora do sensor de idioma, e prosa PT-BR pode entrar neles sem ninguém
   ver** — `tests/check-lang.sh` (a função `surface()`) — as exclusões são corretas e estão
@@ -415,6 +430,17 @@ Achados sobre **repos-alvo** vão para o `TODO.md` daquele repo. Este arquivo é
   Sobra `check-lang.sh`, que é irredutível e por isso tem o `selftest()`. — descoberto por
   `sdd health`/`check-lang` na missão `20260815-i13.5-kit-em-ingles` (2026-08-15)
 
+- [ ] **A suíte linta só o `bin/sdd`; `tests/*.sh` ninguém linta** — `tests/run-all.sh:23` — o
+  passo "runner lint" roda `shellcheck -S warning` **apenas** no runner. Rodando à mão sobre
+  `tests/*.sh` aparece 1 achado real: `tests/check-mutation.sh:164` (`local slug="$1"
+  box="$WORK/$slug"` — SC2318). Medido: `local a=1 b=$a` expande `$a` **antes** de o `local`
+  rodar, então o `$slug` que vale ali é a variável **global** do laço `for slug in "${CATALOG[@]}"`
+  (`:196`), que por coincidência tem o mesmo valor. Funciona hoje; renomeie a variável do laço e
+  todo mutante passa a escrever em `$WORK/.rc`, os 16 compartilham um sandbox e correm um por cima
+  do outro. Não é vacuidade — o laço de resultados lê `$WORK/<slug>.rc`, não acha, e reprova alto
+  com "produced no result" —, mas é armadilha: duas variáveis acopladas por nome através de
+  escopos. Direção: `local slug="$1"; local box="$WORK/$slug"` (duas linhas) e estender o passo de
+  lint da suíte a `tests/*.sh`. — descoberto por `humano` fechando o achado GNU-only (2026-08-15)
 - [ ] O `sdd-planner` ainda não foi exercitado numa missão real — as missões planejadas até aqui
   tiveram plano escrito à mão. Primeira missão planejada por ele deve conferir se o gate PLAN-AUTO
   é preenchido com evidência de verdade. — descoberto por `humano` na implementação (2026-08-14)
