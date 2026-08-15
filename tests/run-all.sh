@@ -26,6 +26,12 @@ if [ -z "${SDD_MUTANT:-}" ]; then
   fi
 fi
 
+# check-lang lê caminhos (docs/, README.md, agents/) que o sandbox da mutação não copia — dentro
+# de um mutante ele falharia por arquivo ausente, não por idioma, e o mutante contaria ponto pelo
+# motivo errado. Mesma guarda do shellcheck, pela mesma razão.
+[ -n "${SDD_MUTANT:-}" ] || run "idioma: nenhuma prosa PT-BR na superfície do kit" \
+  "$ROOT/tests/check-lang.sh"
+
 run "contrato dos templates" "$ROOT/tests/check-templates.sh"
 run "máquina de estados dos gates" "$ROOT/tests/check-gates.sh"
 run "projeção do dry-run" "$ROOT/tests/check-dry-run.sh"

@@ -1,0 +1,32 @@
+# Kit-surface files not translated yet. Emptying this list is the definition of done for I13.5.
+#
+# A file OUTSIDE this list containing Portuguese fails tests/check-lang.sh; a file INSIDE it that
+# is already clean ALSO fails ("translated — drop the line"). Both directions matter: the first
+# stops the debt from growing, the second stops the list from turning into folklore.
+#
+# Out of scope by design (mission content in OUTPUT_LANG, not kit surface): templates/,
+# config/examples/, docs/handoffs/, TODO.md, KAIZEN_LOG.md, CLAUDE.md, .sdd/config.sh.
+bin/sdd
+agents/sdd-docs.md
+agents/sdd-executor.md
+agents/sdd-planner.md
+agents/sdd-publisher.md
+agents/sdd-qa.md
+agents/sdd-reviewer.md
+.claude/agents/sdd-docs.md
+.claude/agents/sdd-executor.md
+.claude/agents/sdd-planner.md
+.claude/agents/sdd-publisher.md
+.claude/agents/sdd-qa.md
+.claude/agents/sdd-reviewer.md
+docs/pipeline.md
+docs/failure-modes.md
+README.md
+config/schema.md
+config/starter.conf
+tests/run-all.sh
+tests/check-templates.sh
+tests/check-gates.sh
+tests/check-dry-run.sh
+tests/check-mutation.sh
+tests/health-baseline.txt
