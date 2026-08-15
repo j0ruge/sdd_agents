@@ -1,15 +1,18 @@
-# Catraca do `sdd health` — dívida conhecida, congelada.
+# `sdd health` ratchet — known debt, frozen.
 #
-# Achado que NÃO está aqui reprova: a dívida não pode crescer em silêncio.
-# Linha daqui que DEIXOU de ser achado também reprova: baseline obsoleta é rótulo, não
-# artefato, e uma lista que descreve um mundo que não existe mais é pior do que lista nenhuma.
-# Cada linha precisa de dono — a entrada do TODO.md que vai pagá-la.
+# A finding that is NOT here fails: the debt may not grow in silence.
+# A line here that STOPPED being a finding fails too: a stale baseline is a label, not an
+# artifact, and a list describing a world that no longer exists is worse than no list at all.
+# Every line needs an owner — the TODO.md entry that will pay it off.
 #
-# formato: <check-id> <alvo>   # <dono>        (linhas em branco e iniciadas por # são ignoradas)
+# format: <check-id> <target>   # <owner>        (blank lines and lines starting with # ignored)
 
-var-nunca-lida LINT_CMD           # TODO.md: "config/schema.md promete cinco comportamentos que o runner não tem"
-var-nunca-lida BUILD_CMD          # idem
-var-nunca-lida DEV_UP_CMD         # idem
-var-nunca-lida DEV_READY_CMD      # idem
-var-nunca-lida DEV_READY_TIMEOUT  # idem
-var-nunca-lida E2E_DIR            # TODO.md: "E2E_DIR é lida só pelo agente, nunca pelo runner" (achado desta missão)
+# The owners live in TODO.md, which is written in this repo's OUTPUT_LANG (pt-BR). Pointed at
+# by subject rather than quoted verbatim, so the pointer survives the artifact being in another
+# language: search TODO.md for the word in backticks.
+var-never-read LINT_CMD           # TODO.md `config/schema.md`: schema promises five behaviours the runner does not have
+var-never-read BUILD_CMD          # idem
+var-never-read DEV_UP_CMD         # idem
+var-never-read DEV_READY_CMD      # idem
+var-never-read DEV_READY_TIMEOUT  # idem
+var-never-read E2E_DIR            # TODO.md `E2E_DIR`: read only by the agent, never by the runner

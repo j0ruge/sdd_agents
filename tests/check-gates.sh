@@ -114,7 +114,7 @@ assert_why   "TICKET acusa o arquivo faltando" "TICKET" "10-ticket.md"
 
 printf -- '---\nfase: TICKET\nstatus: done\nissue: FX-1\n---\n' > "$MDIR/10-ticket.md"
 assert_phase "issue sem sprint não passa (card no backlog é trabalho invisível)" "TICKET"
-assert_why   "TICKET acusa a sprint faltando" "TICKET" "SPRINT ATIVA|sprint"
+assert_why   "TICKET acusa a sprint faltando" "TICKET" "ACTIVE SPRINT|sprint"
 
 printf -- '---\nfase: TICKET\nstatus: done\nissue: FX-1\nsprint: Sprint 1\n---\n' > "$MDIR/10-ticket.md"
 assert_phase "issue na sprint ativa passa" "EXEC"
@@ -128,12 +128,12 @@ echo "== fase EXEC =="
 sed -i 's/| I1 | fatia um | `true` → 0 | pending | — |/| I1 | fatia um | `true` → 0 | done | — |/' \
   "$MDIR/checkpoint.md"
 assert_phase "incremento 'done' SEM commit não passa" "EXEC"
-assert_why   "EXEC acusa rótulo sem artefato" "EXEC" "sem commit|não é artefato|rótulo"
+assert_why   "EXEC acusa rótulo sem artefato" "EXEC" "with no commit|not an artifact|label"
 
 sed -i 's/| I1 | fatia um | `true` → 0 | done | — |/| I1 | fatia um | `true` → 0 | done | deadbeef |/' \
   "$MDIR/checkpoint.md"
 assert_phase "incremento 'done' com commit inexistente não passa" "EXEC"
-assert_why   "EXEC acusa commit fantasma" "EXEC" "não existe no repositório"
+assert_why   "EXEC acusa commit fantasma" "EXEC" "does not exist in the repository"
 
 echo "mudança" >> arquivo.txt
 git add -A && git commit -qm "feat: fatia um"
@@ -153,7 +153,7 @@ else
   fail "fixture do commit órfão" "objeto ainda no banco" "objeto já coletado"
 fi
 assert_phase "commit órfão (existe mas fora da história) não passa" "EXEC"
-assert_why   "EXEC acusa commit fora da história" "EXEC" "NÃO está na história|alcançável"
+assert_why   "EXEC acusa commit fora da história" "EXEC" "NOT in the history|reachable"
 
 sed -i "s/$ORPHAN_HASH/$REAL_HASH/" "$MDIR/checkpoint.md"
 assert_phase "commit real mas sem 20-handoff-exec.md" "EXEC"
@@ -169,7 +169,7 @@ assert_phase "handoff escrito, suíte verde" "QA"
 # `EXEC_ignora_TEST_CMD`, que sobrevivia verde antes desta asserção existir.
 sed -i 's|^TEST_CMD="true"|TEST_CMD="false"|' .sdd/config.sh
 assert_phase "TEST_CMD vermelho reprova o gate de EXEC" "EXEC"
-assert_why   "EXEC acusa a suíte vermelha" "EXEC" "TEST_CMD falhou"
+assert_why   "EXEC acusa a suíte vermelha" "EXEC" "TEST_CMD failed"
 sed -i 's|^TEST_CMD="false"|TEST_CMD="true"|' .sdd/config.sh
 assert_phase "TEST_CMD verde de novo devolve a missão para QA" "QA"
 
@@ -179,10 +179,10 @@ cp "$MDIR/checkpoint.md" "$MDIR/checkpoint.jidoka.bak"
 sed -i "s/| done | $REAL_HASH |/| blocked | — |/" "$MDIR/checkpoint.md"
 rm -f "$MDIR/20-handoff-exec.md"
 run_out="$( cd "$FIX" && "$SDD" run "$MISSION" 2>&1 )"; run_rc=$?
-if [ "$run_rc" -eq 3 ] && printf '%s' "$run_out" | grep -q "BLOCKED em EXEC"; then
+if [ "$run_rc" -eq 3 ] && printf '%s' "$run_out" | grep -q "BLOCKED in EXEC"; then
   pass "incremento 'blocked' escala na hora (exit 3, sem gastar sessão)"
 else
-  fail "incremento 'blocked' deve escalar na hora" "exit 3 + 'BLOCKED em EXEC'" "exit $run_rc: $(printf '%s' "$run_out" | tail -3)"
+  fail "incremento 'blocked' deve escalar na hora" "exit 3 + 'BLOCKED in EXEC'" "exit $run_rc: $(printf '%s' "$run_out" | tail -3)"
 fi
 mv "$MDIR/checkpoint.jidoka.bak" "$MDIR/checkpoint.md"
 printf -- '---\nfase: EXEC\nstatus: done\n---\n' > "$MDIR/20-handoff-exec.md"
@@ -191,7 +191,7 @@ printf -- '---\nfase: EXEC\nstatus: done\n---\n' > "$MDIR/20-handoff-exec.md"
 cp "$MDIR/checkpoint.md" "$MDIR/checkpoint.bak"
 sed -i "s/| done | $REAL_HASH |/| concluído | $REAL_HASH |/" "$MDIR/checkpoint.md"
 assert_phase "status fora do enum reprova" "EXEC"
-assert_why   "EXEC acusa status inválido" "EXEC" "status inválido"
+assert_why   "EXEC acusa status inválido" "EXEC" "invalid status"
 mv "$MDIR/checkpoint.bak" "$MDIR/checkpoint.md"
 
 # --- QA --------------------------------------------------------------------
@@ -205,7 +205,7 @@ echo "== fase QA — projeto COM interface =="
 sed -i 's|^E2E_CMD=""|E2E_CMD="true"\nAPP_URL="http://exemplo.invalido"|' .sdd/config.sh
 printf -- '---\nfase: QA\nstatus: done\n---\n' > "$MDIR/30-handoff-qa.md"
 assert_phase "handoff de QA sem relatório em docs/qa/reports/" "QA"
-assert_why   "QA acusa relatório ausente" "QA" "nenhum relatório"
+assert_why   "QA acusa relatório ausente" "QA" "no report in"
 
 # PROVENIÊNCIA: ~/.claude/skills/qa-execution/assets/report-template.md:6, verbatim (só o
 # `<ISO timestamp>` foi concretizado). O `**Status:**` NÃO abre a linha e a legenda do enum
@@ -235,7 +235,7 @@ cat > "$FIX/docs/qa/bugs/BUG-20260101-teste.md" <<'EOF'
 - **Status:** open <!-- open | fixed | verified | wont-fix | invalid -->
 EOF
 assert_phase "bug com Status: open no registry" "QA"
-assert_why   "QA acusa bug aberto" "QA" "Status: open|bug\(s\) com Status"
+assert_why   "QA acusa bug aberto" "QA" "Status: open|bug\(s\) with Status"
 
 sed -i 's/\*\*Status:\*\* open/**Status:** wont-fix/' "$FIX/docs/qa/bugs/BUG-20260101-teste.md"
 assert_phase "wont-fix é decisão humana, não bloqueia" "REVIEW"
@@ -246,7 +246,7 @@ echo "== fase QA — projeto SEM interface =="
 sed -i 's|^E2E_CMD="true"|E2E_CMD=""|; s|^APP_URL=.*||' .sdd/config.sh
 printf -- '---\nfase: QA\nstatus: done\n---\n' > "$MDIR/30-handoff-qa.md"
 assert_phase "sem interface, 'done' sem evidência não passa" "QA"
-assert_why   "QA pede a evidência da jornada" "QA" "evidência da jornada|sem interface"
+assert_why   "QA pede a evidência da jornada" "QA" "evidence of the journey|no interface"
 
 printf -- '---\nfase: QA\nstatus: done\ngate: "1 jornada andada no CLI; 1 achado virou F1"\n---\n' \
   > "$MDIR/30-handoff-qa.md"
@@ -338,7 +338,7 @@ cat > "$MDIR/40-review-r3.md" <<'EOF'
 | R1-03 | MEDIUM | TODO.md |
 EOF
 assert_phase "review sem a seção Overall Grade num r<N> anterior não importa: vale o último" "REVIEW"
-assert_why   "REVIEW acusa tree sujo antes de aprovar" "REVIEW" "tree sujo|working tree"
+assert_why   "REVIEW acusa tree sujo antes de aprovar" "REVIEW" "tree dirty|working tree"
 
 git add -A && git commit -qm "chore: review"
 assert_phase "último review todo A, suíte verde, tree limpo" "DOCS"

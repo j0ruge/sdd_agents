@@ -6,7 +6,7 @@
 # não fica sabendo que depois viriam QA, REVIEW, DOCS e PR, nem com que agente cada uma roda.
 #
 # Este teste monta um repo-fixture parado em EXEC e afirma que o dry-run projeta a sequência
-# inteira de fases pendentes, na ordem, cada uma com o agente certo (ou <nenhum>, quando quem
+# inteira de fases pendentes, na ordem, cada uma com o agente certo (ou <none>, quando quem
 # dirige a sessão é uma skill de terceiro pelo slash literal) — e que nada no disco muda.
 #
 # Uso: tests/check-dry-run.sh   (exit 0 = projeção correta)
@@ -34,9 +34,9 @@ assert_eq() {
 # cada uma, e qual agente foi anunciado em cada bloco.
 projected() {
   awk '
-    /^--- DRY RUN: fase .* ---$/ { ph = $5; next }
-    ph != "" && /agente:/ {
-      for (i = 1; i <= NF; i++) if ($i == "agente:") { printf "%s=%s\n", ph, $(i + 1); ph = "" }
+    /^--- DRY RUN: phase .* ---$/ { ph = $5; next }
+    ph != "" && /agent:/ {
+      for (i = 1; i <= NF; i++) if ($i == "agent:") { printf "%s=%s\n", ph, $(i + 1); ph = "" }
     }
   '
 }
@@ -124,7 +124,7 @@ got="$(printf '%s\n' "$out" | projected)"
 assert_eq "projeta EXEC→QA→REVIEW→DOCS→PR, na ordem, cada uma com seu agente" "$want" "$got"
 
 # TICKET tem o gate satisfeito (JIRA_ENABLED=false): fase satisfeita não entra na projeção.
-if printf '%s\n' "$out" | grep -q '^--- DRY RUN: fase TICKET ---$'; then
+if printf '%s\n' "$out" | grep -q '^--- DRY RUN: phase TICKET ---$'; then
   fail "fase com gate satisfeito não aparece na projeção" "sem bloco TICKET" "bloco TICKET impresso"
 else
   pass "fase com gate satisfeito (TICKET) não aparece na projeção"
@@ -174,7 +174,7 @@ echo "== sub-passo de QA derivado dos artefatos =="
 sed -i 's|^E2E_CMD=""|E2E_CMD="true"|' .sdd/config.sh
 out2="$( "$SDD" run "$MISSION" --dry-run --phase QA 2>&1 )"
 assert_eq "projeto COM interface e sem charters começa em QA:plan (skill qa-report)" \
-  "QA:plan=<nenhum>" "$(printf '%s\n' "$out2" | projected)"
+  "QA:plan=<none>" "$(printf '%s\n' "$out2" | projected)"
 # O dry-run imprime o prompt com o prefixo "  │ ", então a âncora inclui a primeira linha do
 # bloco — é ali que o slash precisa estar para expandir em headless.
 if printf '%s\n' "$out2" | grep -q '│ /qa-report docs/qa'; then
@@ -199,7 +199,7 @@ assert_eq "com charter e relatório fechado, o sub-passo é close (não re-execu
 sed -i 's/\*\*Status:\*\* closed/**Status:** in-progress/' docs/qa/reports/2026-01-01-fixture.md
 out4="$( "$SDD" run "$MISSION" --dry-run --phase QA 2>&1 )"
 assert_eq "relatório em andamento volta ao sub-passo exec" \
-  "QA:exec=<nenhum>" "$(printf '%s\n' "$out4" | projected)"
+  "QA:exec=<none>" "$(printf '%s\n' "$out4" | projected)"
 rm -rf docs/qa/charters docs/qa/reports
 
 sed -i 's|^E2E_CMD="true"|E2E_CMD=""|' .sdd/config.sh
@@ -228,7 +228,7 @@ assert_eq "dry-run de missão blocked escala com exit 3" "3" "$rc3"
 # quebrar a mensagem de escalação passava batido aqui (verificado por mutação: trocar o texto de
 # `bad "BLOCKED em EXEC — …"` deixava este arquivo inteiro verde) — e é justamente a mensagem
 # que responde "o que acontece se eu rodar isto?", a pergunta que o dry-run existe para responder.
-if printf '%s\n' "$out3" | grep -q 'BLOCKED em EXEC'; then
+if printf '%s\n' "$out3" | grep -q 'BLOCKED in EXEC'; then
   pass "a projeção EXPLICA a escalação (mensagem 'BLOCKED em EXEC')"
 else
   fail "mensagem de escalação do dry-run" "saída contendo 'BLOCKED em EXEC'" \

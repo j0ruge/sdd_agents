@@ -96,11 +96,11 @@ mut_REVIEW_aceita_B() {       # qualquer nota passa — o gate para de exigir Gr
 }
 
 mut_DOCS_status_pendente() {  # aceita área com Status '✗' no checklist de drift
-  sed -i 's|.*\[ -n "\$pendente" \].*|  if false; then|' "$1"
+  sed -i 's|.*\[ -n "\$pending_cell" \].*|  if false; then|' "$1"
 }
 
 mut_PR_sem_artefato() {       # 50-pr.md ausente deixa de reprovar — missão "completa" sem PR
-  sed -i 's|GATE_WHY="falta 50-pr.md"; return 1|GATE_WHY="falta 50-pr.md"; return 0|' "$1"
+  sed -i 's|GATE_WHY="missing 50-pr.md"; return 1|GATE_WHY="missing 50-pr.md"; return 0|' "$1"
 }
 
 # Não-gate, e o único bug de asserção decorativa que aconteceu de verdade (TODO.md): a guarda

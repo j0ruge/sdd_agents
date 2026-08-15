@@ -6,7 +6,6 @@
 #
 # Out of scope by design (mission content in OUTPUT_LANG, not kit surface): templates/,
 # config/examples/, docs/handoffs/, TODO.md, KAIZEN_LOG.md, CLAUDE.md, .sdd/config.sh.
-bin/sdd
 agents/sdd-docs.md
 agents/sdd-executor.md
 agents/sdd-planner.md
@@ -29,4 +28,3 @@ tests/check-templates.sh
 tests/check-gates.sh
 tests/check-dry-run.sh
 tests/check-mutation.sh
-tests/health-baseline.txt
