@@ -693,6 +693,10 @@ pipeline_log_line() {
 AUTONOMY_RUN_ID=""
 AUTONOMY_INVOCATION=""
 AUTONOMY_WARNED=0
+# Own one-shot flag, deliberately separate from AUTONOMY_WARNED (jq-missing): the two causes are
+# unrelated, and one warning must not suppress the other — a repo with jq installed but the kit
+# copied without .git still needs to hear about kit_sha:null, and vice versa.
+AUTONOMY_SHA_WARNED=0
 
 autonomy_log_path() { printf '%s/autonomy-log.jsonl' "${SDD_STATE_DIR:-$HOME/.sdd}"; }
 
@@ -702,7 +706,16 @@ autonomy_log_path() { printf '%s/autonomy-log.jsonl' "${SDD_STATE_DIR:-$HOME/.sd
 autonomy_kit_stamp() {
   local sha
   sha="$( git -C "$SDD_HOME" rev-parse --short HEAD 2>/dev/null || true )"
-  [ -n "$sha" ] || { printf '|'; return 0; }
+  if [ -z "$sha" ]; then
+    # Someone installed the kit as a plain copy, not a git checkout: every row born from here
+    # gets kit_sha:null and is permanently EXCLUDED from the judge's comparable-sessions count —
+    # not a crash, just months of silently non-comparable data. One-shot per process so it does
+    # not repeat on every row of a long-running `sdd run`.
+    [ "$AUTONOMY_SHA_WARNED" = "1" ] \
+      || warn "$SDD_HOME is not a git checkout — autonomy rows get kit_sha:null and stay non-comparable forever"
+    AUTONOMY_SHA_WARNED=1
+    printf '|'; return 0
+  fi
   if [ -n "$( git -C "$SDD_HOME" status --porcelain 2>/dev/null )" ]
   then printf '%s|true' "$sha"
   else printf '%s|false' "$sha"; fi
@@ -719,7 +732,11 @@ autonomy_append() {   # autonomy_append <one json object, already built>
   # reusing that text here would make the mutation sabotage two guards at once and stop measuring
   # what it claims to.
   if [ "$DRY_RUN" = "1" ]; then return 0; fi
-  [ -n "${1:-}" ] || return 0
+  # Every caller builds its argument with `jq -cn` inside a command substitution. A jq failure
+  # there yields an empty string, and swallowing it here in silence would leave a gap in the
+  # ledger that JSONL gives no way to detect afterwards — the mission goes on, same as the
+  # unwritable-file guard right below, so it gets the same warn.
+  [ -n "${1:-}" ] || { warn "autonomy ledger row came out empty (jq failed to build it?) — the mission goes on, the row is lost"; return 0; }
   local file; file="$(autonomy_log_path)"
   mkdir -p "$(dirname "$file")" 2>/dev/null || true
   # A ledger the mission dies for is worse than a gap in the ledger: ~/.sdd unwritable or a full
