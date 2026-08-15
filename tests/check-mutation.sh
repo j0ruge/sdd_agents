@@ -118,6 +118,29 @@ mut_RUN_ignores_output_lang() {
   sed -i 's|.*if \[ -n "\$OUTPUT_LANG" \]; then.*|  if false; then|' "$1"
 }
 
+# Not a gate: the ledger the kaizen judge reads. The projection starts writing, and rows for
+# sessions that never happened enter the arithmetic that decides whether the kit graduates.
+mut_RUN_autonomy_ignores_dry_run() {
+  sed -i 's|  if \[ "\$DRY_RUN" = "1" \]; then return 0; fi|  if false; then return 0; fi|' "$1"
+}
+
+# The reader treats a row with no `moved` field (an older schema) as "did not move" instead of
+# excluding it. Old history gets its waste inflated, and every later change looks like progress —
+# the failure mode is a judge that congratulates the kit for nothing.
+mut_RUN_autonomy_null_moved_as_zero() {
+  sed -i 's|and (has("moved"))|and true|' "$1"
+}
+
+# Task 2 review measured this one by hand (Minor 6): up to check-autonomy.sh's moved-sensor
+# scenario, no test in the repo ever made a session actually change the disk — every `claude`
+# stub was dead (rc 1) or dry, so `moved` was always "false" and this exact no-op scored a point
+# for nothing. It matters now because waste is defined as sessions that did NOT move the disk: a
+# regression here both escalates BLOCKED on phases that were genuinely progressing and records
+# every session as waste, with the suite green throughout.
+mut_RUN_moved_never_true() {
+  sed -i 's|    \[ "\$before" != "\$after" \] && moved="true"|    true|' "$1"
+}
+
 CATALOG=(
   PLAN_empty_approval
   TICKET_no_sprint
@@ -135,6 +158,9 @@ CATALOG=(
   PR_no_artifact
   RUN_inverted_journal
   RUN_ignores_output_lang
+  RUN_autonomy_ignores_dry_run
+  RUN_autonomy_null_moved_as_zero
+  RUN_moved_never_true
 )
 
 # Mutations that are NOT caught today, each with the increment that closes it. Ratchet in both
