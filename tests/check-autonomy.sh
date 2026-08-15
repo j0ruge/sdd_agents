@@ -5,9 +5,10 @@
 # that should not exist (a projection, a fixture) poisons a metric that decides whether the kit
 # graduates. So the assertions here are mostly about what must NOT be written.
 #
-# Hermetic: `claude` and `gh` are stubbed, SDD_STATE_DIR points inside the fixture. Runs INSIDE
-# mutants (unlike check-preflight), because the mutations that sabotage the writer have to kill
-# the sandbox suite — guarded, they would score a point for nothing.
+# Hermetic: `claude` is stubbed and SDD_STATE_DIR points inside the fixture — `gh` is never called
+# on the paths this test exercises. Runs INSIDE mutants (unlike check-preflight), because the
+# mutations that sabotage the writer have to kill the sandbox suite — guarded, they would score a
+# point for nothing.
 #
 # Usage: tests/check-autonomy.sh   (exit 0 = the ledger tells the truth)
 
