@@ -5,10 +5,10 @@
 # that should not exist (a projection, a fixture) poisons a metric that decides whether the kit
 # graduates. So the assertions here are mostly about what must NOT be written.
 #
-# Hermetic: `claude` is stubbed and SDD_STATE_DIR points inside the fixture — `gh` is never called
-# on the paths this test exercises. Runs INSIDE mutants (unlike check-preflight), because the
-# mutations that sabotage the writer have to kill the sandbox suite — guarded, they would score a
-# point for nothing.
+# Hermetic: `claude` is stubbed and SDD_STATE_DIR points at a scratch directory of this test's own
+# — `gh` is never called on the paths this test exercises. Runs INSIDE mutants (unlike
+# check-preflight), because the mutations that sabotage the writer have to kill the sandbox suite —
+# guarded, they would score a point for nothing.
 #
 # Usage: tests/check-autonomy.sh   (exit 0 = the ledger tells the truth)
 
@@ -19,7 +19,18 @@ SDD="$ROOT/bin/sdd"
 FIX="$(mktemp -d "${TMPDIR:-/tmp}/sdd-autonomy-XXXXXX")"
 MISSION="20260101-fixture"
 fails=0
-trap 'rm -rf "$FIX"' EXIT
+
+# Everything this file writes that is NOT part of the target repo lives here, deliberately OUTSIDE
+# $FIX — which becomes the fixture's git working tree below. The instrument must not end up inside
+# the thing it measures: the moving stub further down runs `git add -A`, so a state directory under
+# $FIX would get the ledger COMMITTED into the repo under test, `state_fingerprint` (git HEAD +
+# mission dir + checkpoint md5) could then move because the LEDGER was written rather than because
+# the session did anything, and the tree this file asserts about would end dirty. It is also the
+# exact configuration the ledger's own design forbids (see the comment above autonomy_log_path in
+# bin/sdd, and `SDD_STATE_DIR` in config/schema.md). Same choice, same reason, as check-gates.sh
+# and check-dry-run.sh — which is why the two assertions at the end of this file pin it.
+OUTSIDE="$(mktemp -d "${TMPDIR:-/tmp}/sdd-autonomy-outside-XXXXXX")"
+trap 'rm -rf "$FIX" "$OUTSIDE"' EXIT
 
 pass() { printf '  ok    %s\n' "$1"; }
 fail() { printf '  FAIL  %s\n         expected: %s\n         got:      %s\n' "$1" "$2" "$3" >&2
@@ -73,7 +84,7 @@ assert_bucket_sum() {
 
 # The ledger under test. Never the real one: the export in run-all.sh already redirects every
 # test, and this makes THIS file independent of that export holding.
-export SDD_STATE_DIR="$FIX/state"
+export SDD_STATE_DIR="$OUTSIDE/state"
 LEDGER="$SDD_STATE_DIR/autonomy-log.jsonl"
 
 # rows <jq-filter> — applies the filter to every row and prints one result per line.
@@ -89,14 +100,14 @@ cd "$FIX" || exit 1
 
 # No test spends tokens or network. In this task nothing should reach claude at all: the blocked
 # escalation returns before any session. The stub makes that a loud failure instead of a bill.
-mkdir -p "$FIX/.stub"
-cat > "$FIX/.stub/claude" <<'STUB'
+mkdir -p "$OUTSIDE/stub"
+cat > "$OUTSIDE/stub/claude" <<'STUB'
 #!/usr/bin/env bash
 echo "ERROR: the test invoked the real claude" >&2
 exit 97
 STUB
-chmod +x "$FIX/.stub/claude"
-PATH="$FIX/.stub:$PATH"
+chmod +x "$OUTSIDE/stub/claude"
+PATH="$OUTSIDE/stub:$PATH"
 
 git init -q -b main
 git config user.email "fixture@example.com"
@@ -182,7 +193,7 @@ cat > "$MDIR/checkpoint.md" <<'EOF'
 |---|---|---|---|---|
 | I1 | slice one | `true` → 0 | pending | — |
 EOF
-cat > "$FIX/.stub/claude" <<'STUB'
+cat > "$OUTSIDE/stub/claude" <<'STUB'
 #!/usr/bin/env bash
 exit 1
 STUB
@@ -242,7 +253,7 @@ echo "== moved: true on a real change, false once nothing changes =="
 : > "$LEDGER"
 MOVE_MARKER="$FIX/.moved-once"
 rm -f "$MOVE_MARKER"
-cat > "$FIX/.stub/claude" <<STUB
+cat > "$OUTSIDE/stub/claude" <<STUB
 #!/usr/bin/env bash
 if [ ! -e "$MOVE_MARKER" ]; then
   : > "$MOVE_MARKER"
@@ -252,7 +263,7 @@ fi
 echo '{}'
 exit 0
 STUB
-chmod +x "$FIX/.stub/claude"
+chmod +x "$OUTSIDE/stub/claude"
 
 "$SDD" run "$MISSION" >/dev/null 2>&1; rc=$?
 assert_eq "the checkpoint never reaches done, so it still escalates no-progress" "3" "$rc"
@@ -284,19 +295,49 @@ git -C "$FIX" commit -qm "chore: reset move marker for the sdd-retry scenario"
 "$SDD" retry "$MISSION" >/dev/null 2>&1
 assert_eq "sdd retry that changed the disk records moved:true" "true" "$(rows '.moved')"
 
+# --- a kit without .git warns ONCE, not once per row ------------------------
+# `autonomy_kit_stamp` used to be read as `stamp="$(autonomy_kit_stamp)"`, so the whole body ran in
+# a subshell: its `AUTONOMY_SHA_WARNED=1` died with the command substitution, the flag was back to 0
+# on the next call, and the warning its own comment calls "one-shot per process" fired once per
+# ledger row. Nothing in the repo measured it, which is exactly why it survived review — the fix is
+# publishing AUTONOMY_KIT_STAMP as a global instead of printing it.
+#
+# A kit copy WITHOUT .git is the only way to reach that branch at all: the real kit is a checkout.
+# The copy takes the same set as check-mutation.sh's sandbox() — everything `sdd run` reads from
+# $SDD_HOME and nothing more — and it lives in $OUTSIDE, since a kit copy under $FIX would be one
+# more instrument inside the repo under test.
+echo "== a kit that is not a git checkout warns once, not once per row =="
+: > "$LEDGER"
+KIT="$OUTSIDE/kit"
+mkdir -p "$KIT"
+cp -r "$ROOT/bin" "$ROOT/templates" "$ROOT/config" "$KIT/"
+# Back to the dead stub: two sessions that change nothing, so the run writes three rows (two
+# sessions plus the no-progress escalation) and the warning gets three chances to repeat.
+cat > "$OUTSIDE/stub/claude" <<'STUB'
+#!/usr/bin/env bash
+exit 1
+STUB
+# stderr only: `2>&1 >/dev/null` dups stderr onto the capture pipe FIRST, then sends stdout away.
+err="$( "$KIT/bin/sdd" run "$MISSION" 2>&1 >/dev/null )"
+assert_eq "three rows were written, so the warning had three chances" "3" "$(nrows)"
+assert_eq "a kit with no .git yields kit_sha:null on every row" "true" \
+  "$(jq -s 'all(.kit_sha == null)' "$LEDGER")"
+assert_eq "and the warning appeared exactly once" "1" \
+  "$(grep -c 'is not a git checkout' <<< "$err")"
+
 # --- the reader ------------------------------------------------------------
 # Fixture ledger written by hand: this is OUR format, so there is no third-party source to copy
 # from (the provenance rule covers skill output). Every row here exists to prove one refusal.
 echo "== reader =="
-mkdir -p "$FIX/read"
-cat > "$FIX/read/autonomy-log.jsonl" <<'EOF'
+mkdir -p "$OUTSIDE/read"
+cat > "$OUTSIDE/read/autonomy-log.jsonl" <<'EOF'
 {"v":1,"ts":"2026-08-15T10:00:00-03:00","event":"session","run_id":"r1","invocation":"run","kit_sha":"aaaaaaa","kit_dirty":false,"project":"p1","repo":"/p1","mission":"m1","phase":"EXEC","step":"EXEC","agent":"sdd-executor","model":"opus","attempt":1,"auto_retry":false,"session":"s1","rc":0,"dur_s":10,"cost_usd":1.0,"moved":true,"gate":"fail","gate_why":"x"}
 {"v":1,"ts":"2026-08-15T10:01:00-03:00","event":"session","run_id":"r1","invocation":"run","kit_sha":"aaaaaaa","kit_dirty":false,"project":"p1","repo":"/p1","mission":"m1","phase":"EXEC","step":"EXEC","agent":"sdd-executor","model":"opus","attempt":2,"auto_retry":false,"session":"s2","rc":0,"dur_s":10,"cost_usd":1.0,"moved":false,"gate":"fail","gate_why":"x"}
 {"v":1,"ts":"2026-08-15T10:02:00-03:00","event":"session","run_id":"r1","invocation":"run","kit_sha":"aaaaaaa","kit_dirty":true,"project":"p1","repo":"/p1","mission":"m1","phase":"EXEC","step":"EXEC","agent":"sdd-executor","model":"opus","attempt":3,"auto_retry":false,"session":"s3","rc":0,"dur_s":10,"cost_usd":1.0,"moved":false,"gate":"fail","gate_why":"x"}
 {"v":1,"ts":"2026-08-15T10:03:00-03:00","event":"session","run_id":"r1","invocation":"run","kit_sha":"aaaaaaa","kit_dirty":false,"project":"p1","repo":"/p1","mission":"m1","phase":"EXEC","step":"EXEC","agent":"sdd-executor","model":"opus","attempt":4,"auto_retry":false,"session":"s4","rc":0,"dur_s":10,"cost_usd":1.0,"gate":"fail","gate_why":"old schema, no moved"}
 {"v":1,"ts":"2026-08-15T10:04:00-03:00","event":"blocked","kind":"no-progress","run_id":"r1","invocation":"run","kit_sha":"aaaaaaa","kit_dirty":false,"project":"p1","repo":"/p1","mission":"m1","phase":"EXEC","gate_why":"x"}
 EOF
-out="$( SDD_STATE_DIR="$FIX/read" "$SDD" autonomy 2>&1 )"; rc=$?
+out="$( SDD_STATE_DIR="$OUTSIDE/read" "$SDD" autonomy 2>&1 )"; rc=$?
 
 assert_eq "the reader exits 0 with data" "0" "$rc"
 # 2 comparable sessions (rows 1 and 2), 1 of them stalled => 50%.
@@ -321,12 +362,12 @@ assert_bucket_sum "the four buckets sum to the header total (mixed ledger)" "$ou
 # Only escalations, zero comparable sessions: the table must not go blank. Blank reads as "checked,
 # found nothing" — the same vacuity as the empty-ledger case below, just one layer deeper.
 echo "== reader: only escalations, no comparable sessions =="
-mkdir -p "$FIX/onlyesc"
-cat > "$FIX/onlyesc/autonomy-log.jsonl" <<'EOF'
+mkdir -p "$OUTSIDE/onlyesc"
+cat > "$OUTSIDE/onlyesc/autonomy-log.jsonl" <<'EOF'
 {"v":1,"ts":"2026-08-15T10:00:00-03:00","event":"blocked","kind":"no-progress","run_id":"r1","invocation":"run","kit_sha":"aaaaaaa","kit_dirty":false,"project":"p1","repo":"/p1","mission":"m1","phase":"EXEC","gate_why":"x"}
 {"v":1,"ts":"2026-08-15T10:01:00-03:00","event":"blocked","kind":"increment-blocked","run_id":"r1","invocation":"run","kit_sha":"aaaaaaa","kit_dirty":false,"project":"p1","repo":"/p1","mission":"m1","phase":"EXEC","gate_why":"x"}
 EOF
-out="$( SDD_STATE_DIR="$FIX/onlyesc" "$SDD" autonomy 2>&1 )"; rc=$?
+out="$( SDD_STATE_DIR="$OUTSIDE/onlyesc" "$SDD" autonomy 2>&1 )"; rc=$?
 assert_eq "exits 0 (escalations are still data)" "0" "$rc"
 assert_eq "says there are no comparable sessions, in place of the table" "1" \
   "$(grep -c 'no comparable sessions' <<< "$out")"
@@ -339,9 +380,9 @@ assert_bucket_sum "the four buckets sum to the header total (escalations only)" 
 # A row with no `event` at all, or an event nobody recognizes yet: the reviewer's exact repro. It
 # must be counted, not merely fail to crash.
 echo "== reader: unrecognized row =="
-mkdir -p "$FIX/stray"
-printf '{"v":1,"ts":"2026-08-15T10:00:00-03:00"}\n' > "$FIX/stray/autonomy-log.jsonl"
-out="$( SDD_STATE_DIR="$FIX/stray" "$SDD" autonomy 2>&1 )"; rc=$?
+mkdir -p "$OUTSIDE/stray"
+printf '{"v":1,"ts":"2026-08-15T10:00:00-03:00"}\n' > "$OUTSIDE/stray/autonomy-log.jsonl"
+out="$( SDD_STATE_DIR="$OUTSIDE/stray" "$SDD" autonomy 2>&1 )"; rc=$?
 assert_eq "exits 0 (an unrecognized row is not a malformed one)" "0" "$rc"
 assert_eq "says there are no comparable sessions" "1" "$(grep -c 'no comparable sessions' <<< "$out")"
 assert_eq "and says how many rows it could not classify" "1" \
@@ -353,27 +394,39 @@ assert_bucket_sum "the four buckets sum to the header total (one unrecognized ro
 # this leaked jq's own exit code (the reviewer saw rc 5); now it dies through the same rc-1
 # convention as every other refusal in this command.
 echo "== reader: valid JSON, wrong shape =="
-mkdir -p "$FIX/shape"
-printf '[1,2,3]\n' > "$FIX/shape/autonomy-log.jsonl"
-out="$( SDD_STATE_DIR="$FIX/shape" "$SDD" autonomy 2>&1 )"; rc=$?
+mkdir -p "$OUTSIDE/shape"
+printf '[1,2,3]\n' > "$OUTSIDE/shape/autonomy-log.jsonl"
+out="$( SDD_STATE_DIR="$OUTSIDE/shape" "$SDD" autonomy 2>&1 )"; rc=$?
 assert_eq "a shape error dies with rc 1, not jq's own exit code" "1" "$rc"
 assert_eq "and the die message names the file" "1" \
-  "$(grep -c "error:.*$FIX/shape/autonomy-log.jsonl" <<< "$out")"
+  "$(grep -c "error:.*$OUTSIDE/shape/autonomy-log.jsonl" <<< "$out")"
 
 # An empty ledger is NOT 0% waste. Zeros that look like excellence are the vacuity the whole kit
 # exists to kill.
-mkdir -p "$FIX/empty"
-out="$( SDD_STATE_DIR="$FIX/empty" "$SDD" autonomy 2>&1 )"; rc=$?
+mkdir -p "$OUTSIDE/empty"
+out="$( SDD_STATE_DIR="$OUTSIDE/empty" "$SDD" autonomy 2>&1 )"; rc=$?
 assert_eq "no ledger yet exits 1" "1" "$rc"
 assert_eq "and says 'no data' instead of printing zeros" "1" "$(grep -c 'no data' <<< "$out")"
 assert_eq "and never prints a percentage" "0" "$(grep -c '%' <<< "$out")"
 
 # A malformed row dies loudly: skipping it in silence is how the judge ends up reading a subset
 # and calling it the whole history.
-mkdir -p "$FIX/bad"
-printf '{"v":1,"event":"session"\n' > "$FIX/bad/autonomy-log.jsonl"
-out="$( SDD_STATE_DIR="$FIX/bad" "$SDD" autonomy 2>&1 )"; rc=$?
+mkdir -p "$OUTSIDE/bad"
+printf '{"v":1,"event":"session"\n' > "$OUTSIDE/bad/autonomy-log.jsonl"
+out="$( SDD_STATE_DIR="$OUTSIDE/bad" "$SDD" autonomy 2>&1 )"; rc=$?
 assert_eq "a malformed row fails loudly" "1" "$rc"
+
+# --- the instrument never lands inside the thing it measures ----------------
+# Pins the $OUTSIDE decision at the top of this file. If the ledger, a reader fixture or the kit
+# copy ever moves back under $FIX, the moving stub's `git add -A` commits it into the repo under
+# test: `state_fingerprint` reads git HEAD, so the LEDGER being written could move the fingerprint
+# by itself and the waste metric would start measuring its own instrument. The second assertion is
+# the general form — any stray file this test leaves in the target repo fails it, including ones
+# nobody has thought of yet.
+assert_eq "the ledger is never tracked by the repo under test" "0" \
+  "$(git -C "$FIX" ls-files | grep -c 'autonomy-log\.jsonl')"
+assert_eq "the repo under test ends with a clean tree" "" \
+  "$(git -C "$FIX" status --porcelain)"
 
 # sdd health check 5 fails on a subcommand missing from the help — assert it here too, so the
 # reason is visible at the point of change instead of three files away.

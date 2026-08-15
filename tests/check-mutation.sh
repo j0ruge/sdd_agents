@@ -141,6 +141,16 @@ mut_RUN_moved_never_true() {
   sed -i 's|    \[ "\$before" != "\$after" \] && moved="true"|    true|' "$1"
 }
 
+# Not a gate: the one-shot guard on the "kit is not a git checkout" warning. It reads cosmetic and
+# is not — the flag only holds because `autonomy_kit_stamp` publishes AUTONOMY_KIT_STAMP as a
+# global instead of being read through `$( )`, which ran the whole body, and its assignment, in a
+# SUBSHELL that reset the flag on every call. This mutation restores that exact behaviour by other
+# means: the warning goes back to firing once per ledger row, and a guard nobody can see failing is
+# the decorative assertion this file exists to hunt.
+mut_RUN_autonomy_sha_warn_repeats() {
+  sed -i 's|    AUTONOMY_SHA_WARNED=1|    AUTONOMY_SHA_WARNED=0|' "$1"
+}
+
 CATALOG=(
   PLAN_empty_approval
   TICKET_no_sprint
@@ -161,6 +171,7 @@ CATALOG=(
   RUN_autonomy_ignores_dry_run
   RUN_autonomy_null_moved_as_zero
   RUN_moved_never_true
+  RUN_autonomy_sha_warn_repeats
 )
 
 # Mutations that are NOT caught today, each with the increment that closes it. Ratchet in both
