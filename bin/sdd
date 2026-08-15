@@ -1541,12 +1541,21 @@ cmd_retry() {
   load_config
   resolve_mission "${1:-}"
   PIPELINE_LOG="$(log_dir)/pipeline.log"
+  AUTONOMY_RUN_ID="$(uuidgen)"
+  AUTONOMY_INVOCATION="retry"
   local phase; phase="$(current_phase)"
   [ -n "$phase" ] || { info "pipeline complete — nothing to retry"; return 0; }
   [ "$phase" = "PLAN" ] && die "PLAN is interactive — there is nothing to retry headless"
   step "retrying $phase with a FRESH session"
+  local before after moved="false" gate_rc=0
+  before="$(state_fingerprint)"
   run_phase "$phase"
-  if gate_"$phase"; then ok "gate $phase: $GATE_WHY"; return 0; fi
+  after="$(state_fingerprint)"
+  [ "$before" != "$after" ] && moved="true"
+  gate_"$phase" || gate_rc=$?
+  autonomy_session_row "$phase" "1" "false" "$moved" \
+    "$( [ "$gate_rc" -eq 0 ] && echo pass || echo fail )" "$GATE_WHY"
+  if [ "$gate_rc" -eq 0 ]; then ok "gate $phase: $GATE_WHY"; return 0; fi
   bad "gate $phase not yet: $GATE_WHY"
   return 3
 }

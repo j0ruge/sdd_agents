@@ -163,6 +163,16 @@ assert_eq "all three rows share one run_id" "1" \
   "$(jq -s '[.[].run_id] | unique | length' "$LEDGER")"
 assert_eq "the escalation is no-progress" "no-progress" "$(jq -r -s '.[2].kind' "$LEDGER")"
 
+# --- sdd retry is a human-forced session, and that is a first-class signal ---
+# It is literally the rubric's "refez": the human looked at the result and pushed the phase
+# again. Leaving it out of the ledger would hide the strongest friction signal there is.
+echo "== retry invocation =="
+: > "$LEDGER"
+"$SDD" retry "$MISSION" >/dev/null 2>&1
+assert_eq "sdd retry writes one session row" "1" "$(nrows)"
+assert_eq "and marks itself as a retry invocation" "retry" "$(rows '.invocation')"
+assert_eq "with its own run_id" "true" "$(rows '(.run_id | length) > 0')"
+
 echo
 if [ "$fails" -eq 0 ]; then printf '  ok    the ledger records facts and stays quiet on projections\n'; exit 0; fi
 printf '%d autonomy check(s) failed\n' "$fails" >&2
