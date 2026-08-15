@@ -32,7 +32,7 @@ export PATH="$HOME/repos/sdd_agents/bin:$PATH"     # or ln -s .../bin/sdd ~/.loc
 cd ~/repos/my-project
 sdd install            # creates .sdd/config.sh and copies .claude/agents/sdd-*.md
 $EDITOR .sdd/config.sh # set TEST_CMD, E2E_CMD, APP_URL, OUTPUT_LANG, JIRA_ENABLED...
-sdd preflight          # environment sensor: claude, gh, agent-browser, plugins, clean tree
+sdd preflight          # environment sensor: claude, gh, GNU userland, agent-browser, clean tree
 ```
 
 `sdd install` is idempotent: running it again shows the agent diff instead of overwriting.
@@ -110,3 +110,9 @@ no kit agent.
 
 authenticated `claude` CLI · authenticated `gh` · `bash` 4+ · `git` · `uuidgen` (util-linux) ·
 `jq` · `agent-browser` (only for the QA phase of projects with a UI).
+
+**Linux, or a macOS with the GNU userland in front.** The kit calls `md5sum`, `date -Iseconds`
+and `sort -V`, and its own suite calls `sed -i` with no argument and `grep -P` — the BSD tools
+macOS ships reject every one of them. On macOS: `brew install bash coreutils gnu-sed grep`, and
+put the `gnubin` directories first in `PATH` (brew names them `gmd5sum`/`gdate`; the kit calls
+`md5sum`/`date`). `sdd preflight` measures this instead of trusting it.

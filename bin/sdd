@@ -17,9 +17,18 @@ readonly SDD_VERSION="0.1.0"
 
 # Associative arrays (the sensor cache) need bash 4. macOS ships bash 3.2 as /bin/bash; failing
 # here beats failing with "bad substitution" halfway through a phase.
+#
+# Bash 4 is necessary and NOT sufficient, and the old message ("On macOS: brew install bash")
+# promised otherwise. The kit assumes the GNU userland: `md5sum` and `date -Iseconds` and
+# `sort -V` in this file, `sed -i` with no argument (43x) and `grep -P` (1x) across the suite —
+# every one of them rejected by the BSD tools macOS ships. Telling someone that fixing bash is
+# enough is a message that promises a world which does not exist, which is the same defect the
+# gates exist to forbid. So this one stops at what it can honestly claim, and `sdd preflight`
+# measures the userland instead of assuming it.
 if [ "${BASH_VERSINFO[0]:-0}" -lt 4 ]; then
-  printf 'error: sdd needs bash 4+ (found: %s). On macOS: brew install bash\n' \
-    "${BASH_VERSION:-unknown}" >&2
+  printf 'error: sdd needs bash 4+ (found: %s) and the GNU userland.\n' "${BASH_VERSION:-unknown}" >&2
+  printf '  macOS: brew install bash coreutils gnu-sed grep, then put the gnubin dirs first in\n' >&2
+  printf '  PATH — brew names them gmd5sum/gdate, and the kit calls md5sum/date.\n' >&2
   exit 1
 fi
 
@@ -839,6 +848,25 @@ cmd_preflight() {
     if command -v "$t" >/dev/null 2>&1; then ok "$t present"
     else _fail "$t not found in PATH"; fi
   done
+
+  # The GNU userland, probed by BEHAVIOUR and not by presence. `command -v date` passes on macOS
+  # and `date -Iseconds` still fails; brew installs GNU coreutils as gmd5sum/gdate unless the
+  # gnubin dir comes first in PATH, so the name being there proves nothing. The version check at
+  # the top of this file can only speak for bash — this is where the rest of the assumption gets
+  # measured. Scope is what the RUNNER needs: the suite's `sed -i`/`grep -P` belong to this
+  # repo's TEST_CMD, not to every target repo, and a red suite says so out loud anyway.
+  local gnu=""
+  md5sum </dev/null >/dev/null 2>&1  || gnu="$gnu md5sum"
+  date -Iseconds >/dev/null 2>&1     || gnu="$gnu 'date -Iseconds'"
+  sort -V </dev/null >/dev/null 2>&1 || gnu="$gnu 'sort -V'"
+  if [ -z "$gnu" ]; then
+    ok "GNU userland (md5sum, date -Iseconds, sort -V)"
+  else
+    _fail "the kit assumes the GNU userland, and these do not answer:$gnu
+        macOS: brew install coreutils gnu-sed grep, with the gnubin dirs first in PATH.
+        Without md5sum the state fingerprint is empty, every session looks identical to the
+        previous one, and the runner escalates phases that were in fact making progress."
+  fi
 
   # --- authentication ---
   # Sanity + permission in one shot. "claude -p answers" does NOT cover the failure mode that

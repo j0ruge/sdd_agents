@@ -36,6 +36,13 @@ run "template contract" "$ROOT/tests/check-templates.sh"
 run "gate state machine" "$ROOT/tests/check-gates.sh"
 run "dry-run projection" "$ROOT/tests/check-dry-run.sh"
 
+# Guarded for the same family of reason as the two above, and it is worth naming which: preflight
+# is not a gate, so this sensor can never score a point inside a mutant — it would only add its
+# runtime to all 17 sandbox runs. It also calls `sdd install`, which reads agents/, a directory
+# the sandbox does not copy.
+[ -n "${SDD_MUTANT:-}" ] || run "preflight measures the GNU userland" \
+  "$ROOT/tests/check-preflight.sh"
+
 # Sensor of the sensor. Outside the guard this would be infinite recursion: every mutant runs this
 # same suite. check-mutation.sh has the twin guard and dies if it is born with SDD_MUTANT set.
 [ -n "${SDD_MUTANT:-}" ] || run "mutation: the suite dies when the runner is sabotaged" \

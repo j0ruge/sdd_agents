@@ -64,6 +64,28 @@ mission: it is another scope, and the kit has a place for it.
 
 ---
 
+## A BSD userland (macOS without GNU tools)
+
+**Symptom:** the runner starts and behaves strangely instead of stopping. Phases get escalated
+for "no progress" even though the session committed; the mission journal has empty timestamps.
+
+**Cause:** the kit calls `md5sum`, `date -Iseconds` and `sort -V`, and its own suite calls
+`sed -i` with no argument and `grep -P`. The BSD tools macOS ships reject all of them. The
+failure is quiet where it hurts most: `state_fingerprint()` pipes through `md5sum` with stderr
+discarded, so a missing `md5sum` yields an EMPTY fingerprint — every session then looks identical
+to the previous one, and the runner escalates work that was in fact advancing.
+
+**How the kit reacts:** the bash-4 check at the top of `bin/sdd` speaks only for bash, and used to
+imply that `brew install bash` was enough — it is not. `sdd preflight` now probes the three tools
+by behaviour (not by presence: brew installs them as `gmd5sum`/`gdate` unless `gnubin` comes first
+in `PATH`, so the name existing proves nothing).
+
+**What you do:** `brew install bash coreutils gnu-sed grep`, then put the `gnubin` directories
+first in `PATH`. The kit is developed and measured on Linux; macOS is supported only in that
+configuration, and `tests/check-preflight.sh` is what keeps the probe honest.
+
+---
+
 ## `agent-browser` missing or hung
 
 **Symptom:** `agent-browser: command not found`, or the QA phase hangs.

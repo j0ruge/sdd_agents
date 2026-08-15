@@ -99,11 +99,11 @@ echo "  ok    self-test: the sensor detects Portuguese and clears English"
 # An unreadable allowlist must not degrade into "empty allowlist" either: `grep ... || true` on a
 # missing file yields an empty `known`, and with the surface clean that reads as "no debt".
 #
-# Precisely how bad that is, measured rather than assumed: today the floor below catches it at
-# rc 93, because the allowlist is itself one of the 24 surface paths and losing it drops the count
-# under the floor. So it fails loudly — by coincidence of the boundary. Add one file to the
-# surface and the count stays at 24 without the allowlist, the floor passes, and the silence
-# becomes real. This check makes the failure independent of that coincidence.
+# Precisely how bad that is, measured rather than assumed: the floor below would also catch it at
+# rc 93, because the allowlist is itself one of the surface paths and losing it drops the count
+# under the floor. So it would fail loudly — but by coincidence of the boundary, and only while
+# nobody forgets to move the floor when the surface grows. This check makes the failure
+# independent of that coincidence.
 if [ ! -f "$ALLOWLIST" ]; then
   printf '  FAIL  allowlist missing: %s — cannot tell "no debt" from "no list"\n' "$ALLOWLIST" >&2
   exit 94
@@ -113,10 +113,11 @@ files="$(surface)"
 
 # Explicit floor, same reason as the "exactly 7 gates" floor in cmd_health: a glob that stops
 # matching (a renamed directory, a moved file) would leave the loop with nothing to read and the
-# check would report "0 new" — clean by vacuity. 24 paths today; the floor moves only on purpose.
+# check would report "0 new" — clean by vacuity. 25 paths today; the floor moves only on purpose,
+# and it moved once already: tests/check-preflight.sh took it from 24 to 25.
 n_surface="$(grep -c . <<< "$files")"
-if [ "$n_surface" -lt 24 ]; then
-  printf '  FAIL  surface shrank to %d path(s), expected at least 24 — did something move?\n' \
+if [ "$n_surface" -lt 25 ]; then
+  printf '  FAIL  surface shrank to %d path(s), expected at least 25 — did something move?\n' \
     "$n_surface" >&2
   exit 93
 fi
