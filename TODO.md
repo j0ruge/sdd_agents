@@ -544,6 +544,74 @@ Achados sobre **repos-alvo** vão para o `TODO.md` daquele repo. Este arquivo é
   o default de `SDD_MUTATION_JOBS`, ou aceitar o custo como o preço de medir a própria autonomia.
   Não "consertado" cortando mutação ou asserção — isso violaria o próprio princípio que motivou a
   missão. — descoberto por `sdd-executor` na missão `20260815-i13.1-autonomy-log` (2026-08-15)
+  **Atualização (2026-08-15 — fix wave da revisão final):** medido o `SDD_MUTATION_JOBS` como
+  alavanca, mesma máquina de 20 núcleos: **`SDD_MUTATION_JOBS=10` → 14,70s hoje** contra 22,34s no
+  default de 4 — ou seja, o custo já é evitável **por opção** hoje mesmo, sem mudar nada em
+  `bin/sdd`. A pergunta em aberto encolheu: não é mais "dá para pagar o alvo?", é só "qual deve
+  ser o DEFAULT?". **Não mudei o default**: `nproc` é GNU-only e aprofunda a dívida que este
+  `TODO.md` já registra (entrada "o `bin/sdd` promete macOS…", `06c96bc`); um runner de 2 núcleos
+  ganharia um default PIOR que o 4 de hoje; e trocar o default invalidaria o 22,34s que o
+  `KAIZEN_LOG.md` acabou de registrar como medido para o default atual. A decisão sobre o default
+  continua sendo do humano.
+  Junto, uma dívida menor da mesma revisão: as duas asserções novas do item 5 do fix wave
+  (`tests/check-autonomy.sh` — "the two session rows share one session id (the retry has no fork
+  id of its own)" e "sdd retry that changed the disk records moved:true") **não têm mutação
+  catalogada** em `tests/check-mutation.sh` segurando-as. A revisora verificou à mão que as duas
+  discriminam (reproduzido nesta missão: reverter `LAST_PHASE_SID="${resume_sid:-$sid}"` para
+  `"$sid"` derruba a primeira; trocar a cópia de `cmd_retry` de
+  `[ "$before" != "$after" ] && moved="true"` por um no-op derruba a segunda), mas nenhuma das
+  duas sabotagens está no catálogo — a regra "gate novo entra com mutação" do `CLAUDE.md` é sobre
+  gate, não sobre toda asserção nova da suíte, então isso fica registrado em vez de virar mutação
+  agora. — descoberto por `/codereview` (revisão final do branch) na missão
+  `20260815-i13.1-autonomy-log` (2026-08-15)
+
+- [ ] **A asserção "the retry carries its own moved" não consegue falhar pela propriedade que o
+  nome promete** — `tests/check-autonomy.sh:208` — no fixture usado, `moved` sai `false` qualquer
+  que seja a baseline usada como `before`/`after` do retry: o caminho de retry só é alcançado
+  quando `before == after` (a sessão anterior não mexeu em nada), então a asserção nunca observa,
+  pelo caminho real, um `moved:true` genuíno no retry — ela testa contra uma condição que o
+  próprio setup do teste torna impossível de inverter. Ainda pega bug real (campo ausente, ou um
+  `moved` sempre-`true` por engano), só o nome discrimina menos do que promete. — descoberto por
+  `/codereview` (revisão final do branch) na missão `20260815-i13.1-autonomy-log` (2026-08-15)
+
+- [ ] **`after2` passou a ser amostrado ANTES do gate do retry, e a mudança não ficou registrada**
+  — `bin/sdd:1533-1537` (`cmd_run`) — antes desta missão o `after` do retry era lido depois de
+  avaliar `gate_"$phase"`; agora é lido antes. Benigno e possivelmente mais honesto —
+  `state_fingerprint` lê o HEAD do git, a listagem do diretório da missão e o md5 do checkpoint, e
+  nenhum gate toca em nenhum dos três —, mas é mudança de comportamento em caminho raro (o retry
+  em loop) que ninguém decidiu explicitamente nem documentou como decisão. — descoberto por
+  `/codereview` (revisão final do branch) na missão `20260815-i13.1-autonomy-log` (2026-08-15)
+
+- [ ] **`sdd autonomy` imprime duas linhas em branco em vez de uma quando não há escaladas e há
+  linha não reconhecida** — `bin/sdd:1649-1652` (`cmd_autonomy`, filtro jq) — cosmético, confirmado
+  por reprodução: nenhuma contagem some, é só espaçamento a mais entre o bloco "no comparable
+  sessions" e a linha "(N unrecognized row(s) excluded…)". — descoberto por `/codereview` (revisão
+  final do branch) na missão `20260815-i13.1-autonomy-log` (2026-08-15)
+
+- [ ] **A degradação `PUBLISH_ON_REVIEW_BLOCKED=draft` não escreve linha nenhuma no ledger** —
+  `bin/sdd:1471-1476` (`cmd_run`) — o ramo `if [ "$phase" = "REVIEW" ] && [ "$PUBLISH_ON_REVIEW_BLOCKED"
+  = "draft" ]` dá `continue` ANTES de `pipeline_log_line` e de `autonomy_blocked_row`. REVIEW
+  estourou o orçamento e o kit se degradou sozinho para um PR em draft — o evento de autonomia
+  mais interessante que uma missão pode produzir —, e a série registra só uma sequência de sessões
+  de REVIEW falhas seguida de uma fase PR, sem nenhum sinal do porquê. O próprio comentário de
+  quem escreveu o escritor previu exatamente isto ("há três caminhos de escalada, e um quarto
+  acrescentado amanhã nasceria com o defeito"). O conserto não é uma linha: `event:"blocked"`
+  seria mentira para um run que CONTINUA — precisa de uma decisão de vocabulário (um
+  `event:"degraded"`, ou um `kind` novo dentro de `event:"session"`), e vocabulário novo sem o
+  juiz (I13.3) existir ainda é especulação. Por isso registrado, não consertado. — descoberto por
+  `/codereview` (revisão final do branch) na missão `20260815-i13.1-autonomy-log` (2026-08-15)
+
+- [ ] **As escaladas perdem o eixo antes/depois: `sdd autonomy` agrupa `blocked` por `.kind` no
+  arquivo inteiro, nunca por `kit_sha`** — `bin/sdd:1635` (sessões: `group_by(.kit_sha)`) vs
+  `bin/sdd:1649` (escaladas: `group_by(.kind)`, sem filtro nem agrupamento por versão do kit) — a
+  versão do kit é o eixo inteiro da tabela (é o antes/depois que o ledger existe para medir), e o
+  bloco de escaladas é a única parte que não pode ser atribuída a uma versão: uma escalada com
+  `kit_dirty:true` entra somada com escaladas de kit limpo, sem marca nenhuma. Direção provável:
+  agrupar por `(kit_sha, kind)` como as sessões já fazem por `kit_sha`, excluindo (e contando) as
+  não-comparáveis do mesmo jeito. Não é o item de maior valor da revisão (a própria revisora não o
+  pôs no topo da lista ordenada por valor), por isso fica registrado em vez de consertado agora. —
+  descoberto por `/codereview` (revisão final do branch) na missão `20260815-i13.1-autonomy-log`
+  (2026-08-15)
 
 ## Feito
 
