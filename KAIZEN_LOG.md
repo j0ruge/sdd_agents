@@ -4,6 +4,61 @@ Registro de melhorias com **antes/depois medido**. Sem número, não entra.
 
 ---
 
+## 2026-08-15 — Duas guardas que não podiam falhar (revisão do merge do I13.1)
+
+**Problema medido:** o `/codereview` sobre o merge `6f2b59e` achou dois defeitos que a suíte de 19
+mutações e 63 asserções não via, e os dois são da mesma família — **guarda que lê como medida e
+não é**.
+
+1. `AUTONOMY_SHA_WARNED` prometia, no próprio comentário, "one-shot per process so it does not
+   repeat on every row". Não repetia por linha: repetia **sempre**. `autonomy_kit_stamp` só era
+   lida como `stamp="$(autonomy_kit_stamp)"`, então o corpo inteiro — inclusive
+   `AUTONOMY_SHA_WARNED=1` — rodava num **subshell** que morria com a substituição de comando. O
+   flag voltava a `0` a cada chamada e o ramo `[ "$AUTONOMY_SHA_WARNED" = "1" ]` era inalcançável.
+   Reproduzido isolado: **5 avisos em 5 chamadas, flag final `0`**. O gêmeo `AUTONOMY_WARNED`
+   (jq ausente) funciona — `autonomy_have_jq` é chamada direto —, e foi a assimetria que entregou
+   o defeito.
+2. `tests/check-autonomy.sh` apontava `SDD_STATE_DIR` para **dentro da árvore git do fixture**,
+   exatamente a configuração que o design do ledger declara proibida e que `check-gates.sh` e
+   `check-dry-run.sh` evitam de propósito, cada uma com o comentário explicando por quê. O stub que
+   commita roda `git add -A`: o ledger entrava **rastreado e commitado no repo sob teste**.
+
+**Antes → depois**
+
+| | antes | depois |
+|---|---|---|
+| avisos "kit sem `.git`" por `sdd run` de 3 linhas | 3 (um por linha) | 1 |
+| mutação | 19/19 | 20/20 |
+| asserções em `check-autonomy.sh` | 63 | 68 |
+| instrumentos rastreados pelo repo sob teste | 2 (`state/autonomy-log.jsonl`, `.stub/claude`) | 0 |
+| caminhos sujos na árvore do fixture ao fim | 6 | 0 |
+| suíte | 24,54s (mediana de 3, `HEAD` em worktree) | 23,26s (mediana de 3) |
+
+**Sobre o tempo:** neutro, e de propósito. O 20º mutante cabe na 5ª leva de 4 que já existia
+(`SDD_MUTATION_JOBS=4`), então não há leva nova para pagar. A linha da suíte foi **remedida dos dois
+lados hoje**, na mesma sessão, em vez de comparar com os 22,34s que o log registra para o I13.1: a
+máquina não está no mesmo estado, e comparar contra número guardado teria transformado ruído de
+ambiente em regressão inventada.
+
+**O conserto ataca a causa, não o sintoma:** `autonomy_kit_stamp` publica `AUTONOMY_KIT_STAMP` como
+global em vez de imprimir — o mesmo padrão que `run_phase` já usa para `LAST_PHASE_*`, e pelo mesmo
+motivo. Some o subshell, e a guarda que o comentário descreve passa a existir de fato.
+
+**O sensor que faltava, e o que ele achou sozinho:** a asserção nova precisa de um kit **sem
+`.git`** para alcançar o ramo (o kit real é um checkout), então `check-autonomy.sh` copia
+`bin/ templates/ config/` — o mesmo conjunto do `sandbox()` da mutação — para fora do repo sob
+teste e conta os avisos de um `sdd run` que escreve 3 linhas. A mutação `RUN_autonomy_sha_warn_repeats`
+prova que a asserção mede: sabotar o flag para `0` mata a suíte. E a asserção genérica de higiene
+("a árvore do repo sob teste termina limpa") pegou, na primeira execução, um instrumento que
+ninguém tinha listado: o próprio stub `claude`, que morava em `$FIX/.stub` e vinha sendo commitado
+junto. Foi para fora também.
+
+**Onde a linha ficou:** o marcador `.moved-once` **continua dentro** do repo sob teste. Ele é o
+produto de trabalho simulado da sessão — é o que faz `state_fingerprint` andar —, não instrumento.
+Instrumento (ledger, stub, fixtures do leitor, cópia do kit) fica fora; trabalho fica dentro.
+
+---
+
 ## 2026-08-15 — O runner passou a observar a si mesmo (I13.1)
 
 **Problema medido:** o kit tinha 6 fases por missão e **zero** observabilidade sobre a própria

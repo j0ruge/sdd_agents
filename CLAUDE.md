@@ -121,6 +121,14 @@ grande e correta em entrada pequena — o pior dos dois mundos. Use herestring (
 silêncio, e `bash -n` não acusa — achado escrevendo os construtores `jq -cn \` do ledger de
 autonomia (I13.1). Comente antes do bloco `\`-continuado ou depois dele, nunca no meio.
 
+⚠️ Mesma família de novo: **função lida como `x="$(f)"` roda num subshell**, então qualquer
+atribuição a global que ela faça morre com a substituição de comando — e `bash -n` também não
+acusa. Custou a guarda one-shot de `autonomy_kit_stamp`, que avisava a cada linha do ledger
+enquanto o comentário jurava "one-shot per process". Função que tem efeito colateral em global
+**publica** o resultado num global (como `run_phase` faz com `LAST_PHASE_*`) e é **chamada**, nunca
+substituída. Se você precisa dos dois — valor de retorno e efeito —, é sinal de que são duas
+funções.
+
 ## Kaizen
 
 Melhoria com antes/depois **medido** vai para o [`KAIZEN_LOG.md`](KAIZEN_LOG.md). Sem número,

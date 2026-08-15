@@ -613,6 +613,16 @@ Achados sobre **repos-alvo** vão para o `TODO.md` daquele repo. Este arquivo é
   descoberto por `/codereview` (revisão final do branch) na missão `20260815-i13.1-autonomy-log`
   (2026-08-15)
 
+- [ ] **`cmd_autonomy` repete o bloco "no data" literalmente, em dois pontos** — `bin/sdd:1603-1605`
+  (arquivo ausente ou vazio) e `bin/sdd:1620-1622` (arquivo só com linhas em branco, `total == 0`) —
+  as mesmas três linhas (`warn` + `dim` + `return 1`), palavra por palavra. Não é bug: as duas
+  guardas são necessárias e checam coisas diferentes (`-s` no arquivo antes de gastar `jq`, e a
+  contagem real de linhas depois). É dívida de manutenção — quem reescrever a mensagem num ponto e
+  não no outro passa a ter duas vozes para a mesma recusa, e é justamente essa mensagem que separa
+  "ledger vazio" de "ledger corrompido". Direção: um helper local (`no_data() { warn …; dim …; }`)
+  chamado dos dois pontos, mantendo as duas guardas onde estão. — descoberto por `/codereview`
+  (revisão do merge do I13.1) em 2026-08-15
+
 ## Feito
 
 - [x] Re-link do shim quebrado do `agent-browser` (I0) — resolvido em 2026-08-14, com sensor
