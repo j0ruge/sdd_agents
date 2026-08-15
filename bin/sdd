@@ -90,6 +90,10 @@ load_config() {
   # não roda TEST_CMD, não roda `git add`/`git commit` e a fase EXEC fica insatisfazível por
   # construção. Descoberto pela missão-fixture 20260814-dry-run-completo, que travou nisso.
   : "${ALLOWED_TOOLS:=Bash}"
+  # Idioma dos ARTEFATOS da missão (handoffs, checkpoint, commits, corpo do PR) — não do kit,
+  # que é inglês. Vazio ⇒ o prompt de boot não diz nada sobre idioma, que é exatamente o
+  # comportamento de todo repo já instalado. Preenchido ("pt-BR", "en", "es") ⇒ uma linha a mais.
+  : "${OUTPUT_LANG:=}"
 
   [ -n "$PROJECT_NAME" ]   || die "PROJECT_NAME vazio em $CONFIG_FILE"
   [ -n "$DEFAULT_BRANCH" ] || die "DEFAULT_BRANCH vazio em $CONFIG_FILE"
@@ -607,9 +611,18 @@ EOF
 # do prompt: é assim que ele expande em headless (as skills de QA têm disable-model-invocation,
 # então não há outro caminho).
 boot_prompt() {
-  local step="$1" slash agent
+  local step="$1" slash agent lang_line=""
   slash="$(phase_slash "$step")"
   agent="$(phase_agent "$step")"
+  # O kit é inglês; o ARTEFATO fala o idioma que o repo-alvo declarou. Vazio ⇒ nada é dito, e o
+  # prompt fica byte a byte igual ao de antes desta chave existir.
+  if [ -n "$OUTPUT_LANG" ]; then
+    lang_line="
+Escreva TODOS os artefatos desta missão — handoffs, checkpoint, mensagens de commit e corpo do
+PR — em: $OUTPUT_LANG. Identificadores, chaves de config e tokens de status (pending, done,
+blocked, auto, skipped) continuam em inglês: são contrato, não prosa.
+"
+  fi
   [ -n "$slash" ] && printf '%s\n\n' "$slash"
   cat <<EOF
 Você está na fase $step da missão \`$MISSION\` do projeto \`$PROJECT_NAME\`${agent:+, como o agente $agent}.
@@ -621,7 +634,7 @@ Leia, nesta ordem, antes de qualquer outra coisa:
   3. $HANDOFF_DIR/$MISSION/checkpoint.md  (a tabela de incrementos)
   4. o handoff mais recente de $HANDOFF_DIR/$MISSION/ (o que já aconteceu)
   5. .sdd/config.sh (TEST_CMD="$TEST_CMD"${E2E_CMD:+, E2E_CMD=\"$E2E_CMD\"})
-
+$lang_line
 Sua tarefa nesta sessão: $(phase_task "$step").
 $(phase_extra "$step")
 Escreva os artefatos no disco e commite. O runner reavalia o gate por fora — roda os testes,

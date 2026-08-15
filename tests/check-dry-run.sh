@@ -135,6 +135,30 @@ echo "== dry-run não toca no disco =="
 assert_eq "árvore de arquivos idêntica antes e depois" "$before" "$after"
 assert_eq "working tree continua limpo" "" "$(git status --porcelain)"
 
+# --- OUTPUT_LANG chega ao prompt de boot -----------------------------------
+# Ancorado no VALOR da chave, nunca na prosa do prompt: o texto do runner vira inglês no I13.5.3,
+# e uma asserção presa à prosa morreria junto. Asserção que só sobrevive ao próprio commit não é
+# sensor — é decoração com data de validade.
+echo "== OUTPUT_LANG =="
+# Reaproveita a projeção de cima: é a MESMA invocação, com a chave ausente do config do fixture.
+if printf '%s\n' "$out" | grep -q 'pt-BR'; then
+  fail "sem OUTPUT_LANG o prompt não fala de idioma" "nenhuma menção a idioma" "menção a pt-BR"
+else
+  pass "sem OUTPUT_LANG o prompt não fala de idioma (é o estado de todo repo já instalado)"
+fi
+
+echo 'OUTPUT_LANG="pt-BR"' >> .sdd/config.sh
+out_lang="$( "$SDD" run "$MISSION" --dry-run 2>&1 )"
+if printf '%s\n' "$out_lang" | grep -q 'pt-BR'; then
+  pass "com OUTPUT_LANG o prompt de boot carrega o idioma pedido"
+else
+  fail "com OUTPUT_LANG o prompt de boot carrega o idioma pedido" \
+       "prompt citando pt-BR" "prompt sem menção a idioma"
+fi
+# Restaura o fixture byte a byte: as asserções de working tree limpo mais abaixo dependem disso.
+sed -i '/^OUTPUT_LANG=/d' .sdd/config.sh
+assert_eq "o fixture volta limpo depois do teste de idioma" "" "$(git status --porcelain)"
+
 # --- --phase continua imprimindo só a fase pedida --------------------------
 echo "== --phase <FASE> =="
 out1="$( "$SDD" run "$MISSION" --dry-run --phase QA 2>&1 )"

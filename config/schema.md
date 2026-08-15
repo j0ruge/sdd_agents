@@ -11,6 +11,7 @@ Regra: se uma chave obrigatória estiver vazia, `sdd preflight` falha **antes** 
 |---|---|---|---|
 | `PROJECT_NAME` | sim | — | Nome curto do repo-alvo. Aparece nos logs e no corpo do PR. |
 | `DEFAULT_BRANCH` | sim | — | Branch **base das PRs**. ⚠️ Nem sempre é `main`: no `sales_quote` o fluxo é `develop → staging → main`, então é `develop`. Confira `git symbolic-ref refs/remotes/origin/HEAD` em vez de supor. |
+| `OUTPUT_LANG` | não | vazio | Idioma dos **artefatos** da missão — handoffs, checkpoint, mensagens de commit, corpo do PR —, passado ao prompt de boot de toda fase. Vazio ⇒ o runner não diz nada sobre idioma e cada sessão segue o que os artefatos existentes já usam (o comportamento de antes desta chave). Não afeta o kit, que é inglês, nem o contrato (chaves e tokens de status são sempre inglês). Ex.: `pt-BR`, `en`, `es`. |
 
 ## Comandos de verificação (os sensores do runner)
 

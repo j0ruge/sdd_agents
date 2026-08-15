@@ -29,3 +29,6 @@ JIRA_ENABLED=false
 
 # acceptEdits nao libera Bash — sem isto a fase EXEC e insatisfazivel (ver KAIZEN_LOG).
 ALLOWED_TOOLS="Bash"
+
+# Os artefatos deste repo sao PT-BR; a superficie do kit e ingles. Ver CLAUDE.md, secao Idioma.
+OUTPUT_LANG="pt-BR"

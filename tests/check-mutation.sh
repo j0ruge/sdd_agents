@@ -110,6 +110,14 @@ mut_RUN_diario_invertido() {
   sed -i 's|\[ "\$DRY_RUN" = "1" \] && return 0|[ "$DRY_RUN" = "0" ] \&\& return 0|' "$1"
 }
 
+# Não-gate: o repo-alvo declara OUTPUT_LANG e o runner engole o pedido em silêncio. É o modo de
+# falha típico de chave de config — a chave existe, o schema a promete, e ninguém a lê (a família
+# de LINT_CMD/BUILD_CMD/DEV_UP_CMD, congelada na health-baseline). Âncora em código, não em prosa:
+# precisa sobreviver ao commit que traduz o bin/sdd.
+mut_RUN_ignores_output_lang() {
+  sed -i 's|.*if \[ -n "\$OUTPUT_LANG" \]; then.*|  if false; then|' "$1"
+}
+
 CATALOGO=(
   PLAN_aprovacao_vazia
   TICKET_sem_sprint
@@ -126,6 +134,7 @@ CATALOGO=(
   DOCS_status_pendente
   PR_sem_artefato
   RUN_diario_invertido
+  RUN_ignores_output_lang
 )
 
 # Mutações que HOJE não são pegas, cada uma com o incremento que a fecha. Catraca nas duas
