@@ -1582,7 +1582,19 @@ cmd_autonomy() {
   # calling it the whole history.
   jq -se . "$file" >/dev/null 2>&1 || die "malformed row in $file — the ledger is not readable"
 
-  local total; total="$(grep -c . "$file")"
+  # A REAL row count, not a line count. `grep -c .` counted LINES: a single pretty-printed JSON
+  # row made the header say "9 row(s)" while the table correctly said "1 session(s)" — two
+  # different units that only ever agreed by coincidence (and that `assert_bucket_sum` pins
+  # jq-derived bucket counts against). Worse, `grep -c .` FAILS (rc 1, no match) on a ledger of
+  # blank lines, which under `set -e` aborted this whole command with no output on either stream
+  # and rc 1 — the SAME rc as the deliberate "no data" case below, making a corrupt ledger
+  # indistinguishable from an empty one in a command whose whole thesis is dying loudly.
+  local total; total="$(jq -s 'length' "$file")"
+  if [ "$total" -eq 0 ]; then
+    warn "no data: the ledger at $file does not exist yet (or has no rows)"
+    dim "  It is written by 'sdd run' and 'sdd retry'. Nothing has been recorded on this machine."
+    return 1
+  fi
   step "sdd autonomy — $file · $total row(s)"
 
   # Every row lands in exactly ONE of four buckets, and the buckets are exhaustive: comparable
