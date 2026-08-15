@@ -194,8 +194,15 @@ assert_eq "two session rows plus one escalation" "3" "$(nrows)"
 assert_eq "every row is valid JSON" "1" "$(jq -se . "$LEDGER" >/dev/null 2>&1 && echo 1 || echo 0)"
 
 assert_eq "the first row is a session" "session" "$(jq -r -s '.[0].event' "$LEDGER")"
-assert_eq "the first session is not a retry" "false" "$(jq -r -s '.[0].retry' "$LEDGER")"
-assert_eq "the second row is the retry" "true" "$(jq -r -s '.[1].retry' "$LEDGER")"
+assert_eq "the first session is not a retry" "false" "$(jq -r -s '.[0].auto_retry' "$LEDGER")"
+assert_eq "the second row is the retry" "true" "$(jq -r -s '.[1].auto_retry' "$LEDGER")"
+# On an in-loop retry, `run_phase` is called with `--resume … --fork-session` and WITHOUT
+# `--session-id`: the runner never learns the fork's own id, so the retry row has to carry the
+# PARENT session's id — the two rows share one `session` value. Reverting
+# `LAST_PHASE_SID="${resume_sid:-$sid}"` to `"$sid"` (the ghost-UUID bug fixed in `032c09c`) makes
+# the retry row invent an id nobody ever gave `claude`, and leaves the suite green without this.
+assert_eq "the two session rows share one session id (the retry has no fork id of its own)" \
+  "true" "$(jq -s '.[1].session == .[0].session' "$LEDGER")"
 # The whole point of the metric: a session that changed nothing on disk is waste, and until now
 # the retry ran with no measurement at all.
 assert_eq "the retry carries its own moved" "false" "$(jq -r -s '.[1].moved' "$LEDGER")"
@@ -258,16 +265,35 @@ assert_eq "the inline retry (same iteration) also records moved:false" "false" \
 assert_eq "escalates no-progress once the disk stops moving" "no-progress" \
   "$(jq -r -s '.[3].kind' "$LEDGER")"
 
+# --- sdd retry, when it DOES move the disk, records moved:true -------------
+# The "== retry invocation ==" block above ran against the DEAD stub (rc 1, never touches the
+# fixture repo), so it never exercised `moved` for `cmd_retry` at all. Reusing the moving stub and
+# marker file from the scenario above and resetting the marker makes the stub commit again on
+# this next invocation — the mutation this catches: replacing `cmd_retry`'s own
+# `[ "$before" != "$after" ] && moved="true"` with a no-op leaves the suite green today.
+#
+# The reset has to be COMMITTED, not just deleted from disk: the marker is already a tracked file
+# from the section above, and an uncommitted `rm` followed by the stub recreating it with the same
+# (empty) content is a no-op diff from HEAD — `git commit` finds nothing to commit, HEAD does not
+# move, and the assertion would fail for a reason that has nothing to do with `cmd_retry`.
+echo "== sdd retry that moves the disk records moved:true =="
+: > "$LEDGER"
+rm -f "$MOVE_MARKER"
+git -C "$FIX" add -A
+git -C "$FIX" commit -qm "chore: reset move marker for the sdd-retry scenario"
+"$SDD" retry "$MISSION" >/dev/null 2>&1
+assert_eq "sdd retry that changed the disk records moved:true" "true" "$(rows '.moved')"
+
 # --- the reader ------------------------------------------------------------
 # Fixture ledger written by hand: this is OUR format, so there is no third-party source to copy
 # from (the provenance rule covers skill output). Every row here exists to prove one refusal.
 echo "== reader =="
 mkdir -p "$FIX/read"
 cat > "$FIX/read/autonomy-log.jsonl" <<'EOF'
-{"v":1,"ts":"2026-08-15T10:00:00-03:00","event":"session","run_id":"r1","invocation":"run","kit_sha":"aaaaaaa","kit_dirty":false,"project":"p1","repo":"/p1","mission":"m1","phase":"EXEC","step":"EXEC","agent":"sdd-executor","model":"opus","attempt":1,"retry":false,"session":"s1","rc":0,"dur_s":10,"cost_usd":1.0,"moved":true,"gate":"fail","gate_why":"x"}
-{"v":1,"ts":"2026-08-15T10:01:00-03:00","event":"session","run_id":"r1","invocation":"run","kit_sha":"aaaaaaa","kit_dirty":false,"project":"p1","repo":"/p1","mission":"m1","phase":"EXEC","step":"EXEC","agent":"sdd-executor","model":"opus","attempt":2,"retry":false,"session":"s2","rc":0,"dur_s":10,"cost_usd":1.0,"moved":false,"gate":"fail","gate_why":"x"}
-{"v":1,"ts":"2026-08-15T10:02:00-03:00","event":"session","run_id":"r1","invocation":"run","kit_sha":"aaaaaaa","kit_dirty":true,"project":"p1","repo":"/p1","mission":"m1","phase":"EXEC","step":"EXEC","agent":"sdd-executor","model":"opus","attempt":3,"retry":false,"session":"s3","rc":0,"dur_s":10,"cost_usd":1.0,"moved":false,"gate":"fail","gate_why":"x"}
-{"v":1,"ts":"2026-08-15T10:03:00-03:00","event":"session","run_id":"r1","invocation":"run","kit_sha":"aaaaaaa","kit_dirty":false,"project":"p1","repo":"/p1","mission":"m1","phase":"EXEC","step":"EXEC","agent":"sdd-executor","model":"opus","attempt":4,"retry":false,"session":"s4","rc":0,"dur_s":10,"cost_usd":1.0,"gate":"fail","gate_why":"old schema, no moved"}
+{"v":1,"ts":"2026-08-15T10:00:00-03:00","event":"session","run_id":"r1","invocation":"run","kit_sha":"aaaaaaa","kit_dirty":false,"project":"p1","repo":"/p1","mission":"m1","phase":"EXEC","step":"EXEC","agent":"sdd-executor","model":"opus","attempt":1,"auto_retry":false,"session":"s1","rc":0,"dur_s":10,"cost_usd":1.0,"moved":true,"gate":"fail","gate_why":"x"}
+{"v":1,"ts":"2026-08-15T10:01:00-03:00","event":"session","run_id":"r1","invocation":"run","kit_sha":"aaaaaaa","kit_dirty":false,"project":"p1","repo":"/p1","mission":"m1","phase":"EXEC","step":"EXEC","agent":"sdd-executor","model":"opus","attempt":2,"auto_retry":false,"session":"s2","rc":0,"dur_s":10,"cost_usd":1.0,"moved":false,"gate":"fail","gate_why":"x"}
+{"v":1,"ts":"2026-08-15T10:02:00-03:00","event":"session","run_id":"r1","invocation":"run","kit_sha":"aaaaaaa","kit_dirty":true,"project":"p1","repo":"/p1","mission":"m1","phase":"EXEC","step":"EXEC","agent":"sdd-executor","model":"opus","attempt":3,"auto_retry":false,"session":"s3","rc":0,"dur_s":10,"cost_usd":1.0,"moved":false,"gate":"fail","gate_why":"x"}
+{"v":1,"ts":"2026-08-15T10:03:00-03:00","event":"session","run_id":"r1","invocation":"run","kit_sha":"aaaaaaa","kit_dirty":false,"project":"p1","repo":"/p1","mission":"m1","phase":"EXEC","step":"EXEC","agent":"sdd-executor","model":"opus","attempt":4,"auto_retry":false,"session":"s4","rc":0,"dur_s":10,"cost_usd":1.0,"gate":"fail","gate_why":"old schema, no moved"}
 {"v":1,"ts":"2026-08-15T10:04:00-03:00","event":"blocked","kind":"no-progress","run_id":"r1","invocation":"run","kit_sha":"aaaaaaa","kit_dirty":false,"project":"p1","repo":"/p1","mission":"m1","phase":"EXEC","gate_why":"x"}
 EOF
 out="$( SDD_STATE_DIR="$FIX/read" "$SDD" autonomy 2>&1 )"; rc=$?
