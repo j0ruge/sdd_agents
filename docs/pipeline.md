@@ -1,226 +1,249 @@
-# Pipeline — máquina de estados e gates
+# Pipeline — state machine and gates
 
-Como o `sdd` decide o que rodar, e o que cada fase precisa entregar para a próxima.
+How `sdd` decides what to run, and what each phase has to deliver to the next.
 
-## A ideia central: não existe arquivo de estado
+## The core idea: there is no state file
 
-A fase corrente é **derivada** dos artefatos em disco. `sdd run <missão>` percorre os gates na
-ordem canônica e executa **a primeira fase cujo gate não está satisfeito**.
+The current phase is **derived** from the artifacts on disk. `sdd run <mission>` walks the gates in
+canonical order and executes **the first phase whose gate is not satisfied**.
 
-Três consequências que valem o design inteiro:
+Three consequences that justify the whole design:
 
-1. **Resume de graça.** Sessão morreu por rede, OOM ou estouro de janela? `sdd run` de novo
-   continua do ponto exato — não há estado para reconciliar.
-2. **Impossível o estado mentir.** Não existe arquivo dizendo "fase QA concluída" que possa
-   discordar do disco. O disco é a fase.
-3. **O loop QA⇄EXEC sai sozinho.** Quando o `sdd-qa` escreve incrementos de fix no
-   `checkpoint.md`, o gate de EXEC volta a reprovar, e como EXEC vem antes de QA na ordem, a
-   próxima volta do laço cai nele. Nenhum código de laço foi escrito para isso.
+1. **Resume for free.** Session died from the network, an OOM or a context overflow? `sdd run`
+   again resumes at the exact point — there is no state to reconcile.
+2. **The state cannot lie.** There is no file saying "QA phase complete" that could disagree with
+   the disk. The disk is the phase.
+3. **The QA⇄EXEC loop falls out for free.** When `sdd-qa` writes fix increments into
+   `checkpoint.md`, the EXEC gate goes back to failing, and since EXEC comes before QA in the
+   order, the next turn of the loop lands there. No loop code was written for this.
 
-E a regra que sustenta tudo: **sucesso nunca é a resposta do modelo.** Todo gate é reavaliado
-pelo runner — rodando os testes, conferindo hash no `git log`, lendo o relatório, chamando o
-`gh`. O texto que a sessão devolve não satisfaz gate nenhum.
+And the rule that holds it all up: **success is never the model's answer.** Every gate is
+re-evaluated by the runner — running the tests, checking the hash in the `git log`, reading the
+report, calling `gh`. The text the session returns satisfies no gate.
 
-## Ordem canônica
+## Canonical order
 
 ```
-PLAN → TICKET → EXEC ⇄ QA → REVIEW → DOCS → PR → (merge: humano)
+PLAN → TICKET → EXEC ⇄ QA → REVIEW → DOCS → PR → (merge: human)
 ```
 
-## Quem mede os gates
+## Who measures the gates
 
-Os gates medem a missão. Quem mede **os gates** é `tests/check-mutation.sh`: ele sabota o
-`bin/sdd` numa cópia — uma sabotagem por gate, mais as três que já custaram sessão paga — e
-exige que a suíte fique **vermelha** em cada uma. Uma asserção que não pode falhar não se
-distingue de uma que passa, e foi assim que três bugs de gate atravessaram a suíte verde.
+The gates measure the mission. What measures **the gates** is `tests/check-mutation.sh`: it
+sabotages `bin/sdd` in a copy — one sabotage per gate, plus the three that already cost paid
+sessions — and demands the suite go **red** on each one. An assertion that cannot fail is
+indistinguishable from one that passes, and that is how three gate bugs crossed a green suite.
 
-Duas consequências práticas para quem mexe aqui:
+Two practical consequences for anyone working here:
 
-- **gate novo entra com mutação.** `sdd health` reprova gate sem entrada no catálogo — não é
-  cortesia, é a única forma de saber que o gate novo é medido.
-- **fixture que imita skill de terceiro é copiado da fonte**, com o caminho no comentário de
-  proveniência. Fixture escrito de memória concorda com o gate errado para sempre; a mutação
-  provaria só que o gate mede o formato imaginado com rigor.
+- **a new gate arrives with a mutation.** `sdd health` fails a gate with no entry in the catalogue
+  — not out of courtesy, but because it is the only way to know the new gate is measured.
+- **a fixture imitating a third-party skill is copied from the source**, with the path in a
+  provenance comment. A fixture written from memory agrees with the wrong gate forever; the
+  mutation alone would only prove the gate measures the imagined format rigorously.
 
-O `sdd health` roda tudo isso de uma vez e responde "o kit ainda mede o que diz medir?".
-Ele é do **kit**; o `sdd preflight` é do **ambiente do repo-alvo** — não confundir.
+`sdd health` runs all of that in one go and answers "does the kit still measure what it says it
+measures?". It belongs to the **kit**; `sdd preflight` belongs to the **target repo's
+environment** — do not confuse them.
 
-## Os gates
+## The gates
 
-### PLAN — o único que o runner não executa
+### PLAN — the only one the runner does not execute
 
-O planejamento é interativo por design: é a participação humana. O runner só verifica e instrui.
+Planning is interactive by design: it is where the human takes part. The runner only checks and
+instructs.
 
-**Passa quando:** existem `00-missao.md`, `01-plano.md` e `checkpoint.md`; o frontmatter da
-missão traz `aprovacao: auto` ou `aprovacao: humano-<data>`; com `JIRA_ENABLED=true`, `versao:`
-está preenchida; e o `checkpoint.md` tem ao menos uma linha parseável.
+**Passes when:** `00-missao.md`, `01-plano.md` and `checkpoint.md` exist; the mission frontmatter
+carries `aprovacao: auto` or `aprovacao: humano-<date>`; with `JIRA_ENABLED=true`, `versao:` is
+filled in; and `checkpoint.md` has at least one parseable row.
 
-**PLAN-AUTO:** `aprovacao: auto` significa que o `sdd-planner` fechou os cinco critérios (grill
-sem pendência, checklists, autocontenção, Check por incremento, versão) **com evidência**. O
-grill bem feito é a aprovação — o humano esteve presente. Qualquer critério aberto e o planner
-deixa `aprovacao` vazio, e o runner para pedindo aprovação explícita.
+**PLAN-AUTO:** `aprovacao: auto` means `sdd-planner` closed the five criteria (grill with nothing
+open, checklists, self-containment, a Check per increment, the version) **with evidence**. A
+well-run grill is the approval — the human was present. Any criterion left open and the planner
+leaves `aprovacao` empty, and the runner stops asking for explicit approval.
 
-### TICKET — pulado quando não há JIRA
+### TICKET — skipped when there is no JIRA
 
-**Passa quando:** `JIRA_ENABLED=false` (skip registrado), ou existe `10-ticket.md` com `issue:`
-**e** `sprint:` no frontmatter.
+**Passes when:** `JIRA_ENABLED=false` (skip recorded), or `10-ticket.md` exists with `issue:`
+**and** `sprint:` in the frontmatter.
 
-Exigir `sprint:` é deliberado: card criado no backlog é trabalho invisível para o time. A skill
-`ticket` cria já na sprint ativa e confirma que saiu do backlog.
+Requiring `sprint:` is deliberate: a card created in the backlog is invisible work for the team.
+The `ticket` skill creates it straight into the active sprint and confirms it left the backlog.
 
-### EXEC — uma sessão por incremento
+### EXEC — one session per increment
 
-**Passa quando:** toda linha do `checkpoint.md` está `done`; cada `done` tem um hash que existe
-de verdade no `git log`; `TEST_CMD` sai 0; e `20-handoff-exec.md` existe.
+**Passes when:** every row of `checkpoint.md` is `done`; each `done` has a hash that really exists
+in the `git log` and is reachable from HEAD; `TEST_CMD` exits 0; and `20-handoff-exec.md` exists.
 
-**Jidoka:** qualquer incremento `blocked` escala **na hora** — sem retentativa, sem consumir o
-orçamento de sessões da fase. O executor marca `blocked` quando a suíte está vermelha por causa
-de um incremento anterior. O motivo está nas "Notas de execução" do checkpoint.
+**Jidoka:** any `blocked` increment escalates **on the spot** — no retry, no consuming the phase's
+session budget. The executor marks `blocked` when the suite is red because of an earlier
+increment. The reason is in the checkpoint's execution notes.
 
-**Progresso ≠ gate.** Enquanto sobram incrementos, o gate reprovar é o caso **normal**. O runner
-distingue os dois por impressão digital do estado (HEAD + artefatos + hash do checkpoint): mudou
-⇒ a sessão avançou, segue; não mudou ⇒ a sessão não fez nada, ganha uma retentativa com o motivo
-do gate no prompt e, se ainda assim não mover, vira `BLOCKED`.
+**Progress ≠ gate.** While increments remain, the gate failing is the **normal** case. The runner
+tells the two apart by a state fingerprint (HEAD + artifacts + checkpoint hash): it changed ⇒ the
+session moved forward, carry on; it did not change ⇒ the session did nothing, gets one retry with
+the gate reason in the prompt and, if it still does not move, becomes `BLOCKED`.
 
-### QA — três sub-passos, uma fase
+### QA — three sub-steps, one phase
 
-A fase são **três sessões**, e o sub-passo corrente é **derivado dos artefatos** (`qa_substep`),
-nunca de um contador:
+The phase is **three sessions**, and the current sub-step is **derived from the artifacts**
+(`qa_substep`), never from a counter:
 
-| Sub-passo | Quem dirige | Quando | Entrega |
+| Sub-step | Who drives | When | Delivers |
 |---|---|---|---|
-| `QA:plan` | skill `/qa-report` (sem agente do kit) | não há charter em `<QA_DOCS_PATH>/charters/` | charters, personas, jornadas |
-| `QA:exec` | skill `/qa-execution` (sem agente do kit) | há charter, mas nenhum relatório `closed` | relatório datado + registry de bugs |
-| `QA:close` | agente `sdd-qa` | relatório `closed` — ou projeto sem interface | specs e2e, incrementos de fix, `30-handoff-qa.md` |
+| `QA:plan` | `/qa-report` skill (no kit agent) | there is no charter in `<QA_DOCS_PATH>/charters/` | charters, personas, journeys |
+| `QA:exec` | `/qa-execution` skill (no kit agent) | there is a charter, but no `closed` report | dated report + bug registry |
+| `QA:close` | `sdd-qa` agent | report `closed` — or a project with no interface | e2e specs, fix increments, `30-handoff-qa.md` |
 
-As duas skills são as **donas** de `docs/qa/`; o `sdd-qa` não reescreve o que elas produziram.
-Projeto **sem interface** (sem `E2E_CMD` e sem `APP_URL`) vai direto a `QA:close`: bootstrapar
-jornada de browser num projeto sem browser é a burocracia que o `skipped` existe para evitar.
+The two skills **own** `docs/qa/`; `sdd-qa` does not rewrite what they produced. A project **with
+no interface** (no `E2E_CMD` and no `APP_URL`) goes straight to `QA:close`: bootstrapping browser
+journeys in a project with no browser is the paperwork `skipped` exists to avoid.
 
-**Passa quando:** existe `30-handoff-qa.md` e (`status: skipped` **ou** todas as condições):
+**Passes when:** `30-handoff-qa.md` exists and (`status: skipped` **or** all of the conditions):
 
-- **a evidência da jornada andada**, que tem duas formas conforme o projeto:
-  - **com interface** (`E2E_CMD` ou `APP_URL` definido) — o relatório mais recente em
-    `<QA_DOCS_PATH>/reports/` está `**Status:** closed` e nenhuma linha da matriz de sessões
-    continua `Pending`;
-  - **sem interface** (nem `E2E_CMD` nem `APP_URL`) — o campo `gate:` do próprio
-    `30-handoff-qa.md` está preenchido. Aqui as skills `qa-report`/`qa-execution` nunca rodaram,
-    então a árvore `docs/qa/` não existe: cobrar o relatório datado delas seria exigir um
-    artefato que ninguém produz, e o gate ficaria insatisfazível justamente no caso em que a QA
-    fez o trabalho e **achou** coisa;
-- nenhum arquivo em `<QA_DOCS_PATH>/bugs/` tem `**Status:** open` (vale nos dois casos);
-- `TEST_CMD` sai 0 e `E2E_CMD` sai 0 (quando definido).
+- **the evidence of the journey walked**, which takes two forms depending on the project:
+  - **with an interface** (`E2E_CMD` or `APP_URL` set) — the most recent report in
+    `<QA_DOCS_PATH>/reports/` is `**Status:** closed` and no row of the session matrix is still
+    `Pending`;
+  - **without an interface** (neither `E2E_CMD` nor `APP_URL`) — the `gate:` field of
+    `30-handoff-qa.md` itself is filled in. Here the `qa-report`/`qa-execution` skills never ran,
+    so the `docs/qa/` tree does not exist: demanding their dated report would require an artifact
+    nobody produces, and the gate would be unsatisfiable precisely in the case where QA did the
+    work and **found** something;
+- no file in `<QA_DOCS_PATH>/bugs/` has `**Status:** open` (true in both cases);
+- `TEST_CMD` exits 0 and `E2E_CMD` exits 0 (when set).
 
-`wont-fix` e `invalid` **não** bloqueiam: são decisão humana registrada, não defeito pendente.
+`wont-fix` and `invalid` do **not** block: they are a recorded human decision, not a pending
+defect.
 
-`qa: skipped` é resposta legítima e prevista: diff sem mudança user-visible (refactor, tipos,
-build, docs) não tem jornada para andar. Inventar jornada para "ter QA" é desperdício.
+`qa: skipped` is a legitimate and expected answer: a diff with no user-visible change (refactor,
+types, build, docs) has no journey to walk. Inventing a journey just to "have QA" is waste.
 
-### REVIEW — Grade A em todos os critérios
+### REVIEW — Grade A on every criterion
 
-**Passa quando:** o `40-review-r<N>.md` mais recente traz a seção `### Overall Grade` com **A em
-toda linha**; `TEST_CMD` sai 0; e o working tree está limpo.
+**Passes when:** the most recent `40-review-r<N>.md` carries the `### Overall Grade` section with
+**A on every row**; `TEST_CMD` exits 0; and the working tree is clean.
 
-Um critério com `—` (não analisado) também reprova: review parcial não é review.
+A criterion graded `—` (not analysed) fails too: a partial review is not a review.
 
-O laço revisar→corrigir→re-revisar acontece **dentro** da sessão. Se ela termina sem fechar, o
-runner abre uma sessão nova continuando, até `REVIEW_MAX_ITER` no total. Estourou →
-`BLOCKED`, ou PR draft se `PUBLISH_ON_REVIEW_BLOCKED=draft`.
+The review→fix→re-review loop happens **inside** the session. If it ends without closing, the
+runner opens a fresh session to continue, up to `REVIEW_MAX_ITER` in total. Blown →
+`BLOCKED`, or a draft PR when `PUBLISH_ON_REVIEW_BLOCKED=draft`.
 
-### DOCS — checklist de drift
+### DOCS — drift checklist
 
-**Passa quando:** existe `45-docs.md` com o checklist de drift e **nenhum item pendente** (`✗`,
-`TODO`, `<preencher>`). Cada área tocada pelo diff tem `✅` com hash de commit ou `n/a` com
-justificativa concreta.
+**Passes when:** `45-docs.md` exists with the drift checklist and **no pending item** in it. The
+gate reads the `Status` COLUMN of the table, locating it by header position: every row must be
+`✅` or `n/a`, and anything else fails, quoted verbatim in the reason. Every area touched by the
+diff gets `✅` with a commit hash or `n/a` with a concrete justification.
 
-### PR — confirmado pelo `gh`, não pelo arquivo
+Reading the column, and not the whole file, is deliberate: an earlier version grepped the file for
+the word `TODO` and failed every `45-docs.md` that named `TODO.md` — which is exactly what
+`sdd-docs` is required to do.
 
-**Passa quando:** existe `50-pr.md` com `pr_url:` **e** `gh pr view <url>` confirma que o PR
-existe. Arquivo que afirma um PR inexistente reprova — e é bom que reprove.
+### PR — confirmed by `gh`, not by the file
 
-## Dry-run — a projeção
+**Passes when:** `50-pr.md` exists with `pr_url:` **and** `gh pr view <url>` confirms the PR
+exists. A file claiming a PR that does not exist fails — and it is good that it does.
 
-`sdd run <missão> --dry-run` responde *"o que acontece se eu rodar isto?"* antes de gastar token.
-Ele percorre a ordem canônica e imprime **todas** as fases cujo gate está insatisfeito, cada uma
-com modelo, agente, session-id, o comando `claude` completo e o prompt de boot.
+## Dry-run — the projection
 
-**Projeta o presente, não simula o futuro.** A projeção lista os gates insatisfeitos **hoje**. Ela
-não tenta adivinhar que a fase EXEC satisfaria o próprio gate e destravaria a QA. É uma escolha
-deliberada: informação honesta vale mais do que informação completa e potencialmente errada — e
-uma simulação de pipeline que erra é pior do que não ter simulação.
+`sdd run <mission> --dry-run` answers *"what happens if I run this?"* before spending tokens. It
+walks the canonical order and prints **every** phase whose gate is unsatisfied, each with its
+model, agent, session id, the full `claude` command and the boot prompt.
 
-Por isso a projeção **não** pode usar `current_phase()`. Como o dry-run não muda nada no disco, o
-gate insatisfeito continua insatisfeito e `current_phase()` devolveria a mesma fase para sempre —
-laço infinito. Ela avança por um cursor próprio sobre a lista `$PHASES` (`next_pending_phase()`).
+**It projects the present, it does not simulate the future.** The projection lists the gates
+unsatisfied **today**. It does not try to guess that the EXEC phase would satisfy its own gate and
+unblock QA. That is a deliberate choice: honest information is worth more than complete but
+possibly wrong information — and a pipeline simulation that gets it wrong is worse than no
+simulation.
 
-Três casos em que a projeção para cedo, e é para parar mesmo:
+That is why the projection **cannot** use `current_phase()`. Since the dry-run changes nothing on
+disk, the unsatisfied gate stays unsatisfied and `current_phase()` would return the same phase
+forever — an infinite loop. It advances through a cursor of its own over the `$PHASES` list
+(`next_pending_phase()`).
 
-| Situação | O que sai | Exit |
+Three cases where the projection stops early, and is meant to:
+
+| Situation | What comes out | Exit |
 |---|---|---|
-| `PLAN` pendente | a instrução interativa para o humano; nenhuma fase projetada | 2 |
-| incremento `blocked` no checkpoint | o Jidoka, com o motivo; nenhuma fase projetada | 3 |
-| `--phase <FASE>` | só a fase pedida — `--phase` força, não projeta | 0 |
+| `PLAN` pending | the interactive instruction for the human; no phase projected | 2 |
+| a `blocked` increment in the checkpoint | the Jidoka, with the reason; no phase projected | 3 |
+| `--phase <PHASE>` | only the phase asked for — `--phase` forces, it does not project | 0 |
 
-Um detalhe de vocabulário que confunde: a projeção imprime o **sub-passo** (`QA:close`), enquanto
-`--phase` aceita o nome da **fase** (`QA`). Copiar `QA:close` para dentro de `--phase` não
-funciona — o sub-passo é derivado dos artefatos, nunca escolhido na linha de comando.
+A confusing detail of vocabulary: the projection prints the **sub-step** (`QA:close`), while
+`--phase` takes the name of the **phase** (`QA`). Copying `QA:close` into `--phase` does not work —
+the sub-step is derived from the artifacts, never chosen on the command line.
 
-### O que o dry-run mexe, e o que não
+### What the dry-run touches, and what it does not
 
-A frase fácil — "o dry-run não mexe em nada" — é falsa, e o `--help` não a usa. A garantia real é
-mais estreita e é esta:
+The easy sentence — "the dry-run touches nothing" — is false, and `--help` does not use it. The
+real guarantee is narrower, and it is this:
 
-- **não gasta sessão:** nenhum `claude` é invocado;
-- **não toca nos artefatos da missão:** nada é escrito em `docs/handoffs/<missão>/`;
-- **não escreve no diário:** a guarda vive dentro do `pipeline_log_line()`, não nos chamadores.
-  São três os caminhos que logam antes de qualquer sessão (checkpoint `blocked`, orçamento
-  estourado, duas sessões sem progresso) e um quarto adicionado amanhã nasceria com o defeito de
-  novo; guarda única torna "a projeção não escreve no diário" verdadeiro por construção;
-- **mas os gates rodam de verdade:** para saber quais fases estão pendentes é preciso avaliar os
-  gates, e `gate_EXEC`/`gate_QA`/`gate_REVIEW` rodam `TEST_CMD`. Isso escreve
-  `.sdd/logs/<missão>/gate-*-test-<ts>.log` — gitignored, memoizado por processo em
-  `run_check_cmd`, mas real. Quem espera custo zero em repo com suíte lenta precisa saber disto.
+- **it spends no session:** no `claude` is invoked;
+- **it does not touch the mission artifacts:** nothing is written to `docs/handoffs/<mission>/`;
+- **it does not write to the journal:** the guard lives inside `pipeline_log_line()`, not in the
+  callers. Three paths log before any session (checkpoint `blocked`, budget blown, two sessions
+  with no progress) and a fourth added tomorrow would be born with the defect again; a single
+  guard makes "the projection does not write to the journal" true by construction;
+- **but the gates do run for real:** working out which phases are pending requires evaluating the
+  gates, and `gate_EXEC`/`gate_QA`/`gate_REVIEW` run `TEST_CMD`. That writes
+  `.sdd/logs/<mission>/gate-*-test-<ts>.log` — gitignored, memoized per process in
+  `run_check_cmd`, but real. Anyone expecting zero cost in a repo with a slow suite needs to know
+  this.
 
-## Depois do PR
+## After the PR
 
-O **merge é humano** e é o único gate humano incondicional do pipeline. As "Decisions for a
-Human" acumuladas pelas fases chegam como seção do PR: elas informam a decisão de merge, sem
-nunca terem travado a automação.
+The **merge is human**, and it is the pipeline's only unconditional human gate. The "Decisions for
+a Human" accumulated by the phases arrive as a section of the PR: they inform the merge decision,
+without ever having blocked the automation.
 
-Pós-merge, `sdd close <missão>` fecha a issue do JIRA com resumo automático (skill `/ticket
-close`, modelo `MODEL_TICKET`). Ele se recusa a rodar fora do lugar certo, e cada recusa é
-deliberada:
+Post-merge, `sdd close <mission>` closes the JIRA issue with an automatic summary (the
+`/ticket close` skill, model `MODEL_TICKET`). It refuses to run outside the right place, and each
+refusal is deliberate:
 
-| Condição | O que acontece |
+| Condition | What happens |
 |---|---|
-| `JIRA_ENABLED=false` | não é erro — informa "nada a fechar" e sai 0 |
-| sem `issue:` no `10-ticket.md` | erro: a fase TICKET não rodou, não há o que fechar |
-| `50-pr.md` com `pr_url:` cujo PR não está `MERGED` | erro: `sdd close` é **pós-merge**, e fechar a issue antes do merge é mentir para o board |
+| `JIRA_ENABLED=false` | not an error — reports "nothing to close" and exits 0 |
+| no `issue:` in `10-ticket.md` | error: the TICKET phase did not run, there is nothing to close |
+| `50-pr.md` with a `pr_url:` whose PR is not `MERGED` | error: `sdd close` is **post-merge**, and closing the issue before the merge lies to the board |
 
-O `sdd close` é a única invocação do `claude` fora de `run_phase()` além do probe do
-`sdd preflight` — as duas não rodam fase.
+`sdd close` is the only invocation of `claude` outside `run_phase()` besides the `sdd preflight`
+probe — neither of them runs a phase.
 
-## Modelos por fase
+## Models per phase
 
-Opus onde há julgamento (EXEC, QA, REVIEW, DOCS), Sonnet onde a tarefa é mecânica (PR, TICKET),
-Fable no planejamento interativo. A exceção de custo é **explícita na config**, nunca silenciosa
-— `MODEL_PUBLISH="sonnet"` está lá para ser lido e contestado.
+Opus where there is judgement (EXEC, QA, REVIEW, DOCS), Sonnet where the task is mechanical (PR,
+TICKET), Fable in interactive planning. The cost exception is **explicit in the config**, never
+silent — `MODEL_PUBLISH="sonnet"` is there to be read and challenged.
 
-## Permissões
+## Language
 
-O runner passa `--permission-mode acceptEdits` **e** `--allowedTools "$ALLOWED_TOOLS"` (default
-`Bash`). As duas coisas são necessárias: `acceptEdits` auto-aprova edição de arquivo, mas **não**
-`Bash` — sem a allowlist a sessão não roda a suíte nem consegue commitar, e a fase EXEC fica
-insatisfazível por construção. `bypassPermissions` nunca é default do kit.
+The kit is English. The **artifacts** of a mission follow `OUTPUT_LANG` from the target repo's
+`.sdd/config.sh`, which the runner passes into the boot prompt of every phase; empty, and the
+runner says nothing about language and each session follows what the existing artifacts use.
 
-O `sdd preflight` prova isso disparando uma sessão headless real com as mesmas flags e exigindo
-que ela **execute** um comando. "O claude responde" não cobre este modo de falha.
+The contract never moves: file names, frontmatter keys, status tokens
+(`pending|doing|done|blocked|auto|skipped`), the enums owned by the `qa-report`/`qa-execution`
+skills, and the `### Overall Grade` criteria of `codereview` are English in every repo, because
+the runner greps them. The kit's own surface is guarded by `tests/check-lang.sh`.
 
-## Custos e logs
+## Permissions
 
-Cada sessão vira uma linha em `.sdd/logs/<missão>/pipeline.log` (fase, agente, modelo,
-session-id, exit code, duração, custo em USD) e um JSON completo ao lado, no mesmo
-`.sdd/logs/<missão>/`. O diário é **efêmero por contrato**: `.sdd/logs/` está no `.gitignore` que
-o `sdd install` escreve, e o registro durável do que aconteceu são os handoffs commitados. Se ele
-voltasse para dentro da árvore commitada sujaria o `git status` — e tree sujo reprova
-`gate_REVIEW` e o `sdd preflight`. `--max-budget-usd` por sessão é teto de dano, não orçamento.
+The runner passes `--permission-mode acceptEdits` **and** `--allowedTools "$ALLOWED_TOOLS"`
+(default `Bash`). Both are necessary: `acceptEdits` auto-approves file edits, but **not** `Bash` —
+without the allowlist the session cannot run the suite nor commit, and the EXEC phase becomes
+unsatisfiable by construction. `bypassPermissions` is never the kit's default.
+
+`sdd preflight` proves this by firing a real headless session with the same flags and demanding it
+**execute** a command. "claude answers" does not cover this failure mode.
+
+## Costs and logs
+
+Every session becomes a line in `.sdd/logs/<mission>/pipeline.log` (phase, agent, model, session
+id, exit code, duration, cost in USD) and a full JSON alongside it, in the same
+`.sdd/logs/<mission>/`. The journal is **ephemeral by contract**: `.sdd/logs/` is in the
+`.gitignore` that `sdd install` writes, and the durable record of what happened is the committed
+handoffs. If it moved back into the committed tree it would dirty `git status` — and a dirty tree
+fails `gate_REVIEW` and `sdd preflight`. `--max-budget-usd` per session is a damage cap, not a
+budget.

@@ -1,154 +1,158 @@
-# Modos de falha
+# Failure modes
 
-O que quebra, como o kit reage, e o que **você** faz. Ordenado por frequência esperada.
+What breaks, how the kit reacts, and what **you** do. Ordered by expected frequency.
 
-Regra geral antes de qualquer diagnóstico: rode `sdd status <missão>` e `sdd why <missão>`.
-O runner sabe dizer em que gate parou e por quê — não adivinhe.
-
----
-
-## A sessão não consegue executar comandos
-
-**Sintoma:** a fase EXEC não commita nada; o log da sessão diz *"This command requires approval"*
-ou *"comando bloqueado"*. O gate reprova com "1 de N incrementos ainda por executar" para sempre.
-
-**Causa:** `--permission-mode acceptEdits` auto-aprova **edição de arquivo**, não `Bash`. Sem
-`--allowedTools`, a sessão lê mas não roda a suíte e não faz `git add`.
-
-**Reação do kit:** `sdd preflight` pega isso antes de qualquer missão — ele dispara uma sessão
-headless real com as mesmas flags e exige que ela execute um comando.
-
-**Você faz:** confira `ALLOWED_TOOLS` no `.sdd/config.sh` (default `Bash`). Este foi o primeiro
-defeito estrutural que o kit encontrou em si mesmo, na missão-fixture `20260814-dry-run-completo`.
+General rule before any diagnosis: run `sdd status <mission>` and `sdd why <mission>`.
+The runner can tell you which gate it stopped at and why — do not guess.
 
 ---
 
-## Incremento `blocked`
+## The session cannot execute commands
 
-**Sintoma:** `sdd run` sai com código 3 e "BLOCKED em EXEC" logo de cara, sem abrir sessão.
+**Symptom:** the EXEC phase commits nothing; the session log says *"This command requires
+approval"* or *"command blocked"*. The gate fails with "1 of N increments still to execute"
+forever.
 
-**Causa:** o executor encontrou a suíte vermelha por causa de um incremento **anterior** e parou.
-É Jidoka funcionando: sensor vermelho para a linha.
+**Cause:** `--permission-mode acceptEdits` auto-approves **file edits**, not `Bash`. Without
+`--allowedTools`, the session reads but does not run the suite and does not `git add`.
 
-**Você faz:** leia as "Notas de execução" do `checkpoint.md` — o motivo está escrito lá. Resolva
-o impedimento, volte o incremento para `pending`, rode `sdd run` de novo.
+**How the kit reacts:** `sdd preflight` catches this before any mission — it fires a real headless
+session with the same flags and demands it execute a command.
 
-**Não faça:** marcar `done` para destravar. O gate confere o hash no `git log` e a suíte de
-verdade; você só perde a sessão seguinte.
-
----
-
-## Estouro de janela de contexto no meio de um incremento
-
-**Sintoma:** a sessão morre ou devolve resposta truncada; o checkpoint não avançou.
-
-**Reação do kit:** o estado vive em disco. `sdd run` de novo boota uma sessão **nova** a partir
-do checkpoint — não há nada a recuperar.
-
-**Se repetir no mesmo incremento:** a fatia está grande demais. Volte ao `sdd-planner` e
-re-fatie. Retentativa infinita contra uma fatia mal dimensionada é desperdício, não persistência.
+**What you do:** check `ALLOWED_TOOLS` in `.sdd/config.sh` (default `Bash`). This was the first
+structural defect the kit found in itself, in the fixture mission `20260814-dry-run-completo`.
 
 ---
 
-## Teste flaky
+## A `blocked` increment
 
-**Sintoma:** o gate reprova, você roda o comando à mão e passa.
+**Symptom:** `sdd run` exits with code 3 and "BLOCKED in EXEC" straight away, without opening a
+session.
 
-**Reação do kit:** os gates memoizam por processo, então uma execução do runner mede uma vez.
+**Cause:** the executor found the suite red because of an **earlier** increment and stopped. That
+is Jidoka working: a red sensor stops the line.
 
-**Você faz:** confirme a intermitência (rode 3×). Flaky confirmado vira linha no `TODO.md` do
-repo-alvo **e** nota no handoff da missão. Não "conserte" o flaky dentro da missão: é outro
-escopo, e o kit tem um lugar para ele.
+**What you do:** read the execution notes in `checkpoint.md` — the reason is written there. Clear
+the impediment, set the increment back to `pending`, run `sdd run` again.
+
+**Do not:** mark it `done` to get unstuck. The gate checks the hash in the `git log` and the real
+suite; you would only lose the next session.
 
 ---
 
-## `agent-browser` ausente ou travado
+## A context window overflow in the middle of an increment
 
-**Sintoma:** `agent-browser: command not found`, ou a fase QA fica pendurada.
+**Symptom:** the session dies or returns a truncated answer; the checkpoint did not advance.
 
-**Causa conhecida:** shim em `~/.nvm/versions/node/*/bin/agent-browser` apontando para
-`~/.hermes/hermes-agent/node_modules/...`, que não existe.
+**How the kit reacts:** the state lives on disk. `sdd run` again boots a **fresh** session from the
+checkpoint — there is nothing to recover.
 
-**Reação do kit:** `sdd preflight` checa `agent-browser --version` sempre que `E2E_CMD` ou
-`APP_URL` estão definidos.
+**If it repeats on the same increment:** the slice is too big. Go back to `sdd-planner` and
+re-slice. Retrying forever against a badly sized slice is waste, not persistence.
 
-**Você faz:**
+---
+
+## A flaky test
+
+**Symptom:** the gate fails, you run the command by hand and it passes.
+
+**How the kit reacts:** the gates memoize per process, so one runner execution measures once.
+
+**What you do:** confirm the intermittency (run it 3×). A confirmed flaky becomes a line in the
+target repo's `TODO.md` **and** a note in the mission handoff. Do not "fix" the flaky inside the
+mission: it is another scope, and the kit has a place for it.
+
+---
+
+## `agent-browser` missing or hung
+
+**Symptom:** `agent-browser: command not found`, or the QA phase hangs.
+
+**Known cause:** a shim in `~/.nvm/versions/node/*/bin/agent-browser` pointing at
+`~/.hermes/hermes-agent/node_modules/...`, which does not exist.
+
+**How the kit reacts:** `sdd preflight` checks `agent-browser --version` whenever `E2E_CMD` or
+`APP_URL` is set.
+
+**What you do:**
 ```bash
 ln -sf ../lib/node_modules/agent-browser/bin/agent-browser.js \
-  ~/.nvm/versions/node/<versão>/bin/agent-browser
+  ~/.nvm/versions/node/<version>/bin/agent-browser
 ```
 
 ---
 
-## Loop QA⇄EXEC não converge
+## The QA⇄EXEC loop does not converge
 
-**Sintoma:** `BLOCKED em QA` depois de `QA_MAX_ITER` voltas; o registry de bugs não zera.
+**Symptom:** `BLOCKED in QA` after `QA_MAX_ITER` rounds; the bug registry does not empty.
 
-**Causa típica:** cada fix quebra outra jornada — sinal de que o defeito é mais fundo do que os
-sintomas registrados.
+**Typical cause:** each fix breaks another journey — a sign the defect is deeper than the recorded
+symptoms.
 
-**Você faz:** leia os `30-handoff-qa.md` das voltas. Se os bugs mudam de lugar a cada rodada, o
-problema é de design e volta ao planejamento, não ao executor.
-
----
-
-## Review não fecha em Grade A
-
-**Sintoma:** `BLOCKED em REVIEW` após `REVIEW_MAX_ITER` sessões.
-
-**Você faz:** leia o último `40-review-r<N>.md` — a grade real está lá. Se os findings forem
-legítimos e grandes, a missão foi mal fatiada. Se você quer o PR mesmo assim, configure
-`PUBLISH_ON_REVIEW_BLOCKED="draft"`: sai um PR **draft** com a grade atual e as pendências
-visíveis, em vez de esconder o problema.
-
-**Nunca:** editar o relatório para colocar A. Isso desliga o único sensor de qualidade da missão.
+**What you do:** read the `30-handoff-qa.md` of each round. If the bugs move around every round,
+the problem is one of design and belongs back in planning, not with the executor.
 
 ---
 
-## `sdd install` mostra diff nos agentes
+## The review does not close at Grade A
 
-**Sintoma:** avisos "agente X difere da versão do kit" com um diff.
+**Symptom:** `BLOCKED in REVIEW` after `REVIEW_MAX_ITER` sessions.
 
-**Causa:** o repo-alvo tem uma versão customizada (ou antiga) do agente. É informação, não erro.
+**What you do:** read the last `40-review-r<N>.md` — the real grade is there. If the findings are
+legitimate and large, the mission was badly sliced. If you want the PR anyway, set
+`PUBLISH_ON_REVIEW_BLOCKED="draft"`: out comes a **draft** PR with the current grade and the open
+items visible, instead of hiding the problem.
 
-**Você faz:** `sdd install --force` adota a versão do kit. Se a customização era proposital,
-mantenha — e registre no `TODO.md` do kit por que ela existe: customização recorrente é sinal de
-que o agente do kit precisa mudar.
-
----
-
-## Conflito com a branch base no push
-
-**Sintoma:** `50-pr.md` com `status: blocked` e o motivo do conflito.
-
-**Por quê:** o `sdd-publisher` **não resolve conflito**, por design. Resolver conflito é decidir
-qual das duas intenções vence — julgamento humano. Rebase automático aqui é a forma mais barata
-de perder trabalho alheio.
-
-**Você faz:** resolva o conflito à mão, depois `sdd run <missão>` para a fase PR seguir.
+**Never:** edit the report to put an A there. That switches off the mission's only quality sensor.
 
 ---
 
-## Drift de skill upstream
+## `sdd install` shows a diff in the agents
 
-**Sintoma:** um gate reprova mesmo com o artefato aparentemente correto.
+**Symptom:** warnings "agent X differs from the kit version" with a diff.
 
-**Causa:** o kit ancora em **poucos** pontos de formato de skills de terceiros, e eles podem
-mudar:
+**Cause:** the target repo has a customised (or old) version of the agent. That is information,
+not an error.
 
-| Gate | Âncora | Skill |
+**What you do:** `sdd install --force` adopts the kit version. If the customisation was
+deliberate, keep it — and record in the kit's `TODO.md` why it exists: a recurring customisation
+is a sign the kit's agent needs to change.
+
+---
+
+## A conflict with the base branch on push
+
+**Symptom:** `50-pr.md` with `status: blocked` and the reason for the conflict.
+
+**Why:** `sdd-publisher` **does not resolve conflicts**, by design. Resolving a conflict is
+deciding which of two intents wins — human judgement. An automatic rebase here is the cheapest way
+to lose somebody else's work.
+
+**What you do:** resolve the conflict by hand, then `sdd run <mission>` for the PR phase to carry
+on.
+
+---
+
+## Upstream skill drift
+
+**Symptom:** a gate fails even though the artifact looks correct.
+
+**Cause:** the kit anchors on **few** format points of third-party skills, and those can change:
+
+| Gate | Anchor | Skill |
 |---|---|---|
-| QA | `**Status:** closed` no relatório; linhas `Pending` na matriz; `**Status:** open` nos bugs | `qa-execution` / `qa-report` |
-| REVIEW | seção `### Overall Grade` e a coluna `Grade` | `codereview` |
+| QA | `**Status:** closed` in the report; `Pending` rows in the matrix; `**Status:** open` in the bugs | `qa-execution` / `qa-report` |
+| REVIEW | the `### Overall Grade` section and the `Grade` column | `codereview` |
 
-**Você faz:** confira o formato atual da skill e ajuste a âncora em `bin/sdd` — e atualize
-`tests/check-gates.sh` no mesmo commit, para o sensor pegar o próximo drift.
+**What you do:** check the skill's current format and adjust the anchor in `bin/sdd` — and update
+`tests/check-gates.sh` in the same commit, so the sensor catches the next drift. `sdd health`
+compares the fixtures against the installed skills and reports the divergence on its own.
 
 ---
 
-## Custo maior que o esperado
+## Cost higher than expected
 
-**Você faz:** `.sdd/logs/<missão>/pipeline.log` tem uma linha por sessão com custo e duração.
-`BUDGET_PER_PHASE_USD` é teto por sessão (dano máximo), não orçamento da missão. Se uma fase
-está cara de forma recorrente, o problema costuma ser plano mal fatiado — sessões grandes
-re-explorando o que o "Contexto verificado" deveria ter entregue pronto.
+**What you do:** `.sdd/logs/<mission>/pipeline.log` has one line per session with cost and
+duration. `BUDGET_PER_PHASE_USD` is a per-session cap (maximum damage), not a mission budget. If a
+phase is expensive over and over, the problem is usually a badly sliced plan — big sessions
+re-exploring what the "verified context" should have handed over ready.

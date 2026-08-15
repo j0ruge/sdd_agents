@@ -53,12 +53,18 @@ STOPWORDS='falta|sem|para|pelo|pela|quando|onde|nada|este|esta|isso|pois|cada|ap
 # has_portuguese <file> — prints the offending lines, returns 0 when it found any.
 #
 # Two proxies, because either alone is blind: the accent class misses "falta o handoff", the word
-# list misses "sessão". The accent class is Latin-1 letters only — a blanket non-ASCII test would
+# list misses "sessão". The accent class is Latin-1 LETTERS only — a blanket non-ASCII test would
 # fire on ✅ ✗ → ⇒ ▸ · │ ⚠️ —, which the kit uses on nearly every page.
+#
+# The two holes punched in the range are × (00D7) and ÷ (00F7): they sit inside the Latin-1 letter
+# block without being letters, and the first version of this check flagged `QA_MAX_ITER × 3` in
+# config/schema.md as Portuguese. Worth naming because of how the mistake would have been fixed:
+# the tempting move is to reword the doc until the detector goes quiet, which is weakening the
+# content to please a broken instrument.
 has_portuguese() {
   local f="$1" hits
   [ -f "$f" ] || return 1
-  hits="$( { grep -nP '[\x{00C0}-\x{00FF}]' "$f" || true
+  hits="$( { grep -nP '[\x{00C0}-\x{00D6}\x{00D8}-\x{00F6}\x{00F8}-\x{00FF}]' "$f" || true
              grep -nwiE "$STOPWORDS" "$f" || true; } | sort -t: -k1,1n -u )"
   [ -n "$hits" ] || return 1
   printf '%s\n' "$hits"
@@ -75,7 +81,9 @@ selftest() {
   printf 'falta o handoff, sem commit\n' > "$t"
   has_portuguese "$t" >/dev/null || {
     echo "SENSOR-BROKEN: accent-free Portuguese not detected" >&2; exit 91; }
-  printf 'The session is not an artifact - see the checklist.\n' > "$t"
+  # English with the symbols the kit really uses, including the two Latin-1 non-letters that a
+  # naive range would catch. This probe is the regression guard for that exact mistake.
+  printf 'The session is not an artifact — see ✅ ✗ → ⇒ ▸ · │ ⚠️ and QA_MAX_ITER × 3 ÷ 1.\n' > "$t"
   if has_portuguese "$t" >/dev/null; then
     echo "SENSOR-BROKEN: clean English flagged as Portuguese" >&2; exit 92
   fi

@@ -1,90 +1,90 @@
-# Schema de `.sdd/config.sh`
+# Schema for `.sdd/config.sh`
 
-O arquivo é **bash puro** — o runner faz `source` nele. Sem lógica: só atribuições.
-Criado por `sdd install` a partir de [`examples/sales_quote.conf`](examples/sales_quote.conf).
+The file is **pure bash** — the runner sources it. No logic: assignments only.
+Created by `sdd install` from [`examples/sales_quote.conf`](examples/sales_quote.conf).
 
-Regra: se uma chave obrigatória estiver vazia, `sdd preflight` falha **antes** de gastar sessão.
+Rule: if a required key is empty, `sdd preflight` fails **before** spending a session.
 
-## Identidade do projeto
+## Project identity
 
-| Chave | Obrigatória | Default | O que é |
+| Key | Required | Default | What it is |
 |---|---|---|---|
-| `PROJECT_NAME` | sim | — | Nome curto do repo-alvo. Aparece nos logs e no corpo do PR. |
-| `DEFAULT_BRANCH` | sim | — | Branch **base das PRs**. ⚠️ Nem sempre é `main`: no `sales_quote` o fluxo é `develop → staging → main`, então é `develop`. Confira `git symbolic-ref refs/remotes/origin/HEAD` em vez de supor. |
-| `OUTPUT_LANG` | não | vazio | Idioma dos **artefatos** da missão — handoffs, checkpoint, mensagens de commit, corpo do PR —, passado ao prompt de boot de toda fase. Vazio ⇒ o runner não diz nada sobre idioma e cada sessão segue o que os artefatos existentes já usam (o comportamento de antes desta chave). Não afeta o kit, que é inglês, nem o contrato (chaves e tokens de status são sempre inglês). Ex.: `pt-BR`, `en`, `es`. |
+| `PROJECT_NAME` | yes | — | Short name of the target repo. Appears in the logs and in the PR body. |
+| `DEFAULT_BRANCH` | yes | — | **Base branch for PRs**. ⚠️ Not always `main`: in `sales_quote` the flow is `develop → staging → main`, so it is `develop`. Check `git symbolic-ref refs/remotes/origin/HEAD` instead of assuming. |
+| `OUTPUT_LANG` | no | empty | Language of the mission **artifacts** — handoffs, checkpoint, commit messages, PR body — passed into the boot prompt of every phase. Empty ⇒ the runner says nothing about language and each session follows whatever the existing artifacts use. It does not affect the kit, which is English, nor the contract (config keys and status tokens are always English). E.g. `pt-BR`, `en`, `es`. |
 
-## Comandos de verificação (os sensores do runner)
+## Verification commands (the runner's sensors)
 
-Todos rodam com cwd na raiz do repo-alvo. O runner só olha o **exit code**.
+They all run with cwd at the root of the target repo. The runner only looks at the **exit code**.
 
-| Chave | Obrigatória | Default | O que é |
+| Key | Required | Default | What it is |
 |---|---|---|---|
-| `TEST_CMD` | sim | — | Suíte unit/integration. É o gate de EXEC e parte do gate de REVIEW. Deve ser rápida o bastante para rodar a cada incremento. |
-| `E2E_CMD` | não | vazio | Suíte end-to-end. Vazio ⇒ o gate de QA ignora e2e (projeto sem UI). |
-| `E2E_DIR` | não | `e2e` | Onde o `sdd-qa` commita specs novas. |
-| `LINT_CMD` | não | vazio | Roda no gate de REVIEW quando definido. |
-| `BUILD_CMD` | não | vazio | Roda no gate de REVIEW quando definido. |
+| `TEST_CMD` | yes | — | Unit/integration suite. It is the EXEC gate and part of the REVIEW gate. It must be fast enough to run on every increment. |
+| `E2E_CMD` | no | empty | End-to-end suite. Empty ⇒ the QA gate ignores e2e (a project with no UI). |
+| `E2E_DIR` | no | `e2e` | Where `sdd-qa` commits new specs. |
+| `LINT_CMD` | no | empty | Runs in the REVIEW gate when set. |
+| `BUILD_CMD` | no | empty | Runs in the REVIEW gate when set. |
 
-## Aplicação rodando (fase QA)
+## Running application (QA phase)
 
-| Chave | Obrigatória | Default | O que é |
+| Key | Required | Default | What it is |
 |---|---|---|---|
-| `APP_URL` | só com `E2E_CMD` | vazio | URL que o `agent-browser` abre nas sessões exploratórias. |
-| `DEV_UP_CMD` | não | vazio | Sobe o ambiente antes do QA (ex.: `docker compose up -d`). Vazio ⇒ o runner assume que já está de pé e avisa se `APP_URL` não responder. |
-| `DEV_READY_CMD` | não | vazio | Comando que retorna 0 quando a app está pronta (ex.: `curl -sf $APP_URL`). O runner faz poll por até `DEV_READY_TIMEOUT` segundos. |
-| `DEV_READY_TIMEOUT` | não | `90` | Segundos de espera pelo `DEV_READY_CMD`. |
+| `APP_URL` | only with `E2E_CMD` | empty | URL `agent-browser` opens in the exploratory sessions. |
+| `DEV_UP_CMD` | no | empty | Brings the environment up before QA (e.g. `docker compose up -d`). Empty ⇒ the runner assumes it is already up and warns if `APP_URL` does not answer. |
+| `DEV_READY_CMD` | no | empty | Command returning 0 when the app is ready (e.g. `curl -sf $APP_URL`). The runner polls for up to `DEV_READY_TIMEOUT` seconds. |
+| `DEV_READY_TIMEOUT` | no | `90` | Seconds to wait for `DEV_READY_CMD`. |
 
-## Caminhos de artefato
+## Artifact paths
 
-| Chave | Obrigatória | Default | O que é |
+| Key | Required | Default | What it is |
 |---|---|---|---|
-| `HANDOFF_DIR` | não | `docs/handoffs` | Raiz do estado durável. Cada missão vira `<HANDOFF_DIR>/<YYYYMMDD>-<slug>/`. **Commitado.** |
-| `QA_DOCS_PATH` | não | `docs/qa` | Onde as skills `qa-report`/`qa-execution` escrevem. O runner não escreve aqui — as skills são as donas. |
-| `TODO_FILE` | não | `TODO.md` | Destino dos achados fora de escopo. |
+| `HANDOFF_DIR` | no | `docs/handoffs` | Root of the durable state. Each mission becomes `<HANDOFF_DIR>/<YYYYMMDD>-<slug>/`. **Committed.** |
+| `QA_DOCS_PATH` | no | `docs/qa` | Where the `qa-report`/`qa-execution` skills write. The runner does not write here — the skills own it. |
+| `TODO_FILE` | no | `TODO.md` | Destination for out-of-scope findings. |
 
-## Modelos por fase
+## Models per phase
 
-Opus por default nas fases de julgamento; Sonnet onde Opus é desperdício — **exceção explícita,
-nunca silenciosa** (kaizen K3). Valores: qualquer alias aceito por `claude --model`.
+Opus by default in the judgement phases; Sonnet where Opus would be waste — an **explicit
+exception, never a silent one** (kaizen K3). Values: any alias `claude --model` accepts.
 
-| Chave | Default | Por quê |
+| Key | Default | Why |
 |---|---|---|
-| `MODEL_EXEC` | `opus` | TDD e decisão de implementação. |
-| `MODEL_QA` | `opus` | Julgamento exploratório é a parte cara do QA. |
-| `MODEL_REVIEW` | `opus` | A skill `codereview` roteia internamente por severidade. |
-| `MODEL_DOCS` | `opus` | Escrever doc que não mente exige modelo. |
-| `MODEL_PUBLISH` | `sonnet` | Montar corpo de PR a partir de handoffs prontos é mecânico. |
-| `MODEL_TICKET` | `sonnet` | Chamar `acli` com campos já decididos é mecânico. |
+| `MODEL_EXEC` | `opus` | TDD and implementation decisions. |
+| `MODEL_QA` | `opus` | Exploratory judgement is the expensive part of QA. |
+| `MODEL_REVIEW` | `opus` | The `codereview` skill routes internally by severity. |
+| `MODEL_DOCS` | `opus` | Writing documentation that does not lie takes a model. |
+| `MODEL_PUBLISH` | `sonnet` | Assembling a PR body from finished handoffs is mechanical. |
+| `MODEL_TICKET` | `sonnet` | Calling `acli` with fields already decided is mechanical. |
 
-## Limites e política
+## Limits and policy
 
-| Chave | Default | O que é |
+| Key | Default | What it is |
 |---|---|---|
-| `QA_MAX_ITER` | `3` | Voltas no loop QA⇄EXEC antes de `BLOCKED`. Protege contra "fix quebra outra jornada" infinito. Cuidado ao subir: uma volta são **até 3 sessões** (um sub-passo cada), então o teto de sessões da fase é `QA_MAX_ITER × 3` — 9 no default. |
-| `REVIEW_MAX_ITER` | `3` | Sessões de review no total antes de `BLOCKED`. |
-| `EXEC_MAX_RETRY` | `1` | Retentativas por incremento antes de `BLOCKED`. |
-| `BUDGET_PER_PHASE_USD` | `15` | Vai em `--max-budget-usd` por sessão. Teto de dano, não orçamento. |
-| `PUBLISH_ON_REVIEW_BLOCKED` | `off` | `draft` ⇒ review estourado abre PR **draft** com a grade atual e as pendências, em vez de parar seco. |
-| `PERMISSION_MODE` | `acceptEdits` | Teto. `bypassPermissions` **nunca** é default do kit. |
-| `ALLOWED_TOOLS` | `Bash` | Vai em `--allowedTools`, como **um único argumento**. **Obrigatório na prática**: `acceptEdits` auto-aprova edição de arquivo, mas **não** `Bash` — sem esta chave a sessão de fase não roda a suíte nem consegue commitar, e a fase EXEC fica insatisfazível. Verificado na missão-fixture `20260814-dry-run-completo`. O kit só exercitou o default; se precisar de mais de uma ferramenta, confira o formato que o seu `claude` aceita antes de confiar no gate. |
+| `QA_MAX_ITER` | `3` | Rounds of the QA⇄EXEC loop before `BLOCKED`. Protects against an endless "the fix breaks another journey". Careful raising it: one round is **up to 3 sessions** (one per sub-step), so the phase session cap is `QA_MAX_ITER × 3` — 9 by default. |
+| `REVIEW_MAX_ITER` | `3` | Review sessions in total before `BLOCKED`. |
+| `EXEC_MAX_RETRY` | `1` | Retries per increment before `BLOCKED`. |
+| `BUDGET_PER_PHASE_USD` | `15` | Goes into `--max-budget-usd` per session. A damage cap, not a budget. |
+| `PUBLISH_ON_REVIEW_BLOCKED` | `off` | `draft` ⇒ a blown review opens a **draft** PR with the current grade and the open items, instead of stopping dead. |
+| `PERMISSION_MODE` | `acceptEdits` | The ceiling. `bypassPermissions` is **never** the kit's default. |
+| `ALLOWED_TOOLS` | `Bash` | Goes into `--allowedTools`, as a **single argument**. **Required in practice**: `acceptEdits` auto-approves file edits, but **not** `Bash` — without this key the phase session cannot run the suite nor commit, and the EXEC phase becomes unsatisfiable. Verified in the fixture mission `20260814-dry-run-completo`. The kit has only exercised the default; if you need more than one tool, check the format your `claude` accepts before trusting the gate. |
 
 ## JIRA
 
-| Chave | Default | O que é |
+| Key | Default | What it is |
 |---|---|---|
-| `JIRA_ENABLED` | `false` | `true` ⇒ a fase TICKET roda (`/ticket open`) e `sdd close` fecha a issue pós-merge. Exige `.jira-project` no repo-alvo (lido pela skill `ticket`). |
+| `JIRA_ENABLED` | `false` | `true` ⇒ the TICKET phase runs (`/ticket open`) and `sdd close` closes the issue post-merge. Requires `.jira-project` in the target repo (read by the `ticket` skill). |
 
-Quando `JIRA_ENABLED=true`, `00-missao.md` **precisa** ter `versao:` preenchida — o rótulo de
-versão é decisão humana, nunca headless. O gate PLAN-AUTO (critério `e`) verifica isso.
+When `JIRA_ENABLED=true`, `00-missao.md` **must** have `versao:` filled in — the version label is a
+human decision, never headless. The PLAN-AUTO gate (criterion `e`) checks this.
 
-## Exemplo mínimo (projeto sem UI e sem JIRA)
+## Minimal example (project with no UI and no JIRA)
 
 ```bash
-PROJECT_NAME="meu-lib"
+PROJECT_NAME="my-lib"
 DEFAULT_BRANCH="main"
 TEST_CMD="pytest -q"
 JIRA_ENABLED=false
 ```
 
-Tudo o mais cai no default. O gate de QA vira `qa: skipped` automaticamente quando não há
-`E2E_CMD` e o diff não toca nada user-visible.
+Everything else falls back to the default. The QA gate becomes `qa: skipped` automatically when
+there is no `E2E_CMD` and the diff touches nothing user-visible.
