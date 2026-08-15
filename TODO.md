@@ -367,11 +367,18 @@ Achados sobre **repos-alvo** vão para o `TODO.md` daquele repo. Este arquivo é
   de artefato (`00-missao.md`, `01-plano.md` — 72 referências). É o único lugar onde um repo-alvo
   anglófono ainda vê português **obrigatório**, e o `OUTPUT_LANG` não resolve: isso é contrato, não
   prosa. ⚠️ A entrada do I13.5 afirmava que "o contrato já é inglês" — **estava errada**, medido
-  nesta missão. Deixado fora do escopo de propósito: renomear quebra toda missão em voo (o
-  `sales_quote` tem uma) e toda instalação existente, o que é missão própria com janela de
-  migração. Direção: `approval`/`version`/`title` + `00-mission.md`/`01-plan.md`, com o runner
-  aceitando os dois nomes por um período. — descoberto por `humano` na missão
-  `20260815-i13.5-kit-em-ingles` (2026-08-15)
+  nesta missão. Deixado fora do escopo de propósito, mas **o motivo que escrevi primeiro estava
+  errado e vale corrigir**: eu disse "renomear quebra toda missão em voo (o `sales_quote` tem
+  uma)" e fui conferir — o **PR #105 foi mergeado em 2026-08-14**, e a única missão que resta lá
+  (`20260814-sq94-spinner-reblur`) deriva `EXEC` por estado **pós-merge**, não por trabalho
+  pendente: `sdd why` responde que o commit `5048fe5` do checkpoint existe mas não é alcançável a
+  partir do HEAD atual (o checkout está noutra branch e o merge reescreveu o hash). Não há missão
+  em voo. O que sobra de custo real são as 117 referências e os diretórios de missão **já
+  encerrados**, que só quebrariam num `sdd status` sobre história antiga. Continua sendo missão
+  própria pelo **tamanho**, não por risco de perder trabalho — o que sobe a prioridade dela.
+  Direção: `approval`/`version`/`title` + `00-mission.md`/`01-plan.md`, com o runner aceitando os
+  dois nomes por uma janela. — descoberto por `humano` na missão `20260815-i13.5-kit-em-ingles`
+  (2026-08-15)
 
 - [ ] **`templates/` é single-language, e o kit não tem como servir dois idiomas** —
   `templates/*.md` — os templates são conteúdo em `OUTPUT_LANG`, mas moram no kit numa cópia só,
