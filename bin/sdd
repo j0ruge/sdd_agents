@@ -677,6 +677,89 @@ pipeline_log_line() {
   printf '%s\n' "$*" >> "$PIPELINE_LOG"
 }
 
+# ---------------------------------------------------------------------------
+# Autonomy ledger — the series the kaizen judge (I13.3) reads.
+#
+# It records FACTS only: attempts, whether the session moved the disk, rc, cost, the gate reason.
+# No score. `ok|leve|refez` is a LABEL, and a runner that labels its own sessions is exactly the
+# "label instead of artifact" every gate here exists to forbid — the judge derives the label from
+# these facts, and can change its yardstick later without rewriting the past.
+#
+# Global on purpose (~/.sdd, not the target repo): "maturity across projects" cannot be measured
+# in a per-repo file, and a file the runner writes BETWEEN phases inside the target repo would sit
+# untracked and knock down gate_REVIEW and sdd preflight — the pipeline.log defect, fixed in
+# 53cf63a by making that one ephemeral, a way out this ledger does not have because its whole
+# point is to last.
+AUTONOMY_RUN_ID=""
+AUTONOMY_INVOCATION=""
+AUTONOMY_WARNED=0
+
+autonomy_log_path() { printf '%s/autonomy-log.jsonl' "${SDD_STATE_DIR:-$HOME/.sdd}"; }
+
+# "<sha>|<true|false>", or "|" when SDD_HOME is not a git checkout. This is the judge's
+# before/after axis: without it, a change in the numbers gets attributed to the calendar instead
+# of to the kit change that caused it.
+autonomy_kit_stamp() {
+  local sha
+  sha="$( git -C "$SDD_HOME" rev-parse --short HEAD 2>/dev/null || true )"
+  [ -n "$sha" ] || { printf '|'; return 0; }
+  if [ -n "$( git -C "$SDD_HOME" status --porcelain 2>/dev/null )" ]
+  then printf '%s|true' "$sha"
+  else printf '%s|false' "$sha"; fi
+}
+
+# EVERY row goes through here, so every guard holds for every caller. The guards do NOT live in
+# the callers: the journal already paid that lesson — there are three escalation paths, and a
+# fourth added tomorrow would be born with the defect.
+autonomy_append() {   # autonomy_append <one json object, already built>
+  # The projection must not write. Worse here than in the journal: a projected row does not just
+  # lie in an audit trail, it enters the judge's arithmetic and shifts the metric forever.
+  # NOTE: written as an `if` on purpose. `[ "$DRY_RUN" = "1" ] && return 0` is the unique anchor
+  # of mut_RUN_inverted_journal in the mutation catalogue; sharing the text would make that
+  # mutation sabotage two guards at once and stop measuring what it claims to.
+  if [ "$DRY_RUN" = "1" ]; then return 0; fi
+  [ -n "${1:-}" ] || return 0
+  local file; file="$(autonomy_log_path)"
+  mkdir -p "$(dirname "$file")" 2>/dev/null || true
+  # A ledger the mission dies for is worse than a gap in the ledger: ~/.sdd unwritable or a full
+  # disk warns and lets the phase carry on. Under `set -e` a failing `>>` would abort the runner.
+  # One printf = one write(2) on an O_APPEND fd, which is what keeps two repos running at once
+  # from interleaving. jq never writes to the file directly: its stdio may split the output.
+  printf '%s\n' "$1" >> "$file" 2>/dev/null || {
+    warn "could not write the autonomy ledger at $file — the mission goes on, the row is lost"
+    return 0
+  }
+}
+
+# Never a malformed row: broken JSONL is the one way the judge reads garbage believing it is data.
+# jq is a hard dependency (preflight fails without it), so absence here is an anomaly, not a mode.
+autonomy_have_jq() {
+  command -v jq >/dev/null 2>&1 && return 0
+  [ "$AUTONOMY_WARNED" = "1" ] || warn "jq not found — the autonomy ledger is not being written"
+  AUTONOMY_WARNED=1
+  return 1
+}
+
+# An escalation spends no session, so the session fields are ABSENT rather than zeroed. `kind` is
+# an enum and not prose because the judge must not parse sentences: they get rewritten, and the
+# three escalations mean different things — a deliberate Jidoka is not the same as burnt budget.
+autonomy_blocked_row() {   # autonomy_blocked_row <kind> <phase> <gate_why>
+  autonomy_have_jq || return 0
+  local stamp; stamp="$(autonomy_kit_stamp)"
+  autonomy_append "$( jq -cn \
+    --arg ts "$(date -Iseconds)" --arg kind "$1" --arg phase "$2" \
+    --arg why "$(printf '%s' "$3" | head -c 200)" \
+    --arg run_id "$AUTONOMY_RUN_ID" --arg invocation "$AUTONOMY_INVOCATION" \
+    --arg sha "${stamp%%|*}" --arg dirty "${stamp#*|}" \
+    --arg project "$PROJECT_NAME" --arg repo "$REPO_ROOT" --arg mission "$MISSION" \
+    '{v: 1, ts: $ts, event: "blocked", kind: $kind,
+      run_id: $run_id, invocation: $invocation,
+      kit_sha: (if $sha == "" then null else $sha end),
+      kit_dirty: (if $dirty == "" then null else ($dirty == "true") end),
+      project: $project, repo: $repo, mission: $mission, phase: $phase,
+      gate_why: $why}' )"
+}
+
 # Runs a phase in a fresh headless session. Returns 0 when claude exited 0 (which does NOT mean
 # the gate passed — the gate judges that, always afterwards).
 run_phase() {
@@ -1239,6 +1322,12 @@ cmd_run() {
   resolve_mission "$mission_arg"
   PIPELINE_LOG="$(log_dir)/pipeline.log"
 
+  # One id per `sdd run` invocation. Without it a resumed mission produces two indistinguishable
+  # `attempt:1` rows for the same phase; with it, "this mission needed N runs" becomes countable —
+  # a better friction signal than the session count.
+  AUTONOMY_RUN_ID="$(uuidgen)"
+  AUTONOMY_INVOCATION="run"
+
   step "mission $MISSION — $PROJECT_NAME${DRY_RUN:+}"
   # "nothing will be executed" would be a lie: working out which phases are pending forces the
   # gates to run, and three of them run TEST_CMD. What the dry-run guarantees is narrower — no
@@ -1295,6 +1384,7 @@ cmd_run() {
       dim "  Read the execution-notes section of checkpoint.md — the reason is written there."
       dim "  Once the impediment is cleared, set the increment back to 'pending' and 'sdd run'."
       pipeline_log_line "$(date -Iseconds)  BLOCKED  EXEC  increment marked blocked by the executor"
+      autonomy_blocked_row "increment-blocked" "EXEC" "$GATE_WHY"
       return 3
     fi
 
@@ -1311,6 +1401,7 @@ cmd_run() {
         force_phase="PR"; continue
       fi
       pipeline_log_line "$(date -Iseconds)  BLOCKED  $phase  $GATE_WHY"
+      autonomy_blocked_row "budget-exhausted" "$phase" "$GATE_WHY"
       return 3
     fi
 
@@ -1362,6 +1453,7 @@ cmd_run() {
       info ""
       bad "BLOCKED in $phase — two sessions without moving the disk: $GATE_WHY"
       pipeline_log_line "$(date -Iseconds)  BLOCKED  $phase  $GATE_WHY"
+      autonomy_blocked_row "no-progress" "$phase" "$GATE_WHY"
       return 3
     fi
     force_phase=""

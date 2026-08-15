@@ -5,6 +5,15 @@
 # Usage: tests/run-all.sh
 
 set -uo pipefail
+
+# Every test that runs bin/sdd could write to the autonomy ledger — check-dry-run already
+# exercises the real escalation path. Without this, each suite run would inject fixture rows into
+# the developer's ~/.sdd/autonomy-log.jsonl, and the judge would read fixtures as missions. The
+# export lives here, at the top, so it holds for tests that do not exist yet.
+SDD_TEST_STATE="$(mktemp -d "${TMPDIR:-/tmp}/sdd-suite-state-XXXXXX")"
+export SDD_STATE_DIR="$SDD_TEST_STATE"
+trap 'rm -rf "$SDD_TEST_STATE"' EXIT
+
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 fails=0
 
@@ -35,6 +44,7 @@ fi
 run "template contract" "$ROOT/tests/check-templates.sh"
 run "gate state machine" "$ROOT/tests/check-gates.sh"
 run "dry-run projection" "$ROOT/tests/check-dry-run.sh"
+run "autonomy ledger" "$ROOT/tests/check-autonomy.sh"
 
 # Guarded for the same family of reason as the two above, and it is worth naming which: preflight
 # is not a gate, so this sensor can never score a point inside a mutant — it would only add its

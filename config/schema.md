@@ -77,6 +77,13 @@ exception, never a silent one** (kaizen K3). Values: any alias `claude --model` 
 When `JIRA_ENABLED=true`, `00-missao.md` **must** have `versao:` filled in — the version label is a
 human decision, never headless. The PLAN-AUTO gate (criterion `e`) checks this.
 
+### Not a config key: `SDD_STATE_DIR`
+
+The autonomy ledger is **global**, not per-repo: `${SDD_STATE_DIR:-$HOME/.sdd}/autonomy-log.jsonl`.
+It is an environment variable and deliberately not a `.sdd/config.sh` key — a per-repo key would
+suggest a per-repo file, and "maturity across projects" cannot be measured in one. The suite
+exports it to a temporary directory so no test can touch the real ledger.
+
 ## Minimal example (project with no UI and no JIRA)
 
 ```bash
