@@ -96,9 +96,14 @@ echo "  ok    self-test: the sensor detects Portuguese and clears English"
 # so a missing file trips the floor first and reports "did something move?" — loud, but the wrong
 # diagnosis. The specific cause beats the generic one when both are true.
 #
-# An unreadable allowlist must not degrade into "empty allowlist" either: with the list empty and
-# the surface clean, a missing file would pass in silence — the vacuity this whole script argues
-# against.
+# An unreadable allowlist must not degrade into "empty allowlist" either: `grep ... || true` on a
+# missing file yields an empty `known`, and with the surface clean that reads as "no debt".
+#
+# Precisely how bad that is, measured rather than assumed: today the floor below catches it at
+# rc 93, because the allowlist is itself one of the 24 surface paths and losing it drops the count
+# under the floor. So it fails loudly — by coincidence of the boundary. Add one file to the
+# surface and the count stays at 24 without the allowlist, the floor passes, and the silence
+# becomes real. This check makes the failure independent of that coincidence.
 if [ ! -f "$ALLOWLIST" ]; then
   printf '  FAIL  allowlist missing: %s — cannot tell "no debt" from "no list"\n' "$ALLOWLIST" >&2
   exit 94
