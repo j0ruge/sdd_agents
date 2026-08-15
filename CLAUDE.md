@@ -117,6 +117,10 @@ mede alguma coisa; sem isso não há como distinguir asserção viva de decoraç
 ACHA e sai antes de o printf terminar de escrever (SIGPIPE). A lógica fica invertida em entrada
 grande e correta em entrada pequena — o pior dos dois mundos. Use herestring (`<<< "$var"`).
 
+⚠️ Mesma família: um comentário `#` **dentro** de um bloco continuado por `\` quebra o comando em
+silêncio, e `bash -n` não acusa — achado escrevendo os construtores `jq -cn \` do ledger de
+autonomia (I13.1). Comente antes do bloco `\`-continuado ou depois dele, nunca no meio.
+
 ## Kaizen
 
 Melhoria com antes/depois **medido** vai para o [`KAIZEN_LOG.md`](KAIZEN_LOG.md). Sem número,
