@@ -92,6 +92,18 @@ selftest() {
 selftest
 echo "  ok    self-test: the sensor detects Portuguese and clears English"
 
+# Checked before the surface floor below, and not after: the allowlist is itself a surface path,
+# so a missing file trips the floor first and reports "did something move?" — loud, but the wrong
+# diagnosis. The specific cause beats the generic one when both are true.
+#
+# An unreadable allowlist must not degrade into "empty allowlist" either: with the list empty and
+# the surface clean, a missing file would pass in silence — the vacuity this whole script argues
+# against.
+if [ ! -f "$ALLOWLIST" ]; then
+  printf '  FAIL  allowlist missing: %s — cannot tell "no debt" from "no list"\n' "$ALLOWLIST" >&2
+  exit 94
+fi
+
 files="$(surface)"
 
 # Explicit floor, same reason as the "exactly 7 gates" floor in cmd_health: a glob that stops
@@ -115,9 +127,9 @@ while IFS= read -r f; do
       printf '  FAIL  stale allowlist entry: %s is already clean — drop the line\n' "$f" >&2
       stale=$((stale + 1))
     fi
-  elif has_portuguese "$ROOT/$f" > "$WORK/hits"; then
+  elif hits="$(has_portuguese "$ROOT/$f")"; then
     printf '  FAIL  Portuguese outside the allowlist: %s\n' "$f" >&2
-    head -5 "$WORK/hits" | sed 's/^/          /' >&2
+    head -5 <<< "$hits" | sed 's/^/          /' >&2
     new=$((new + 1))
   fi
 done <<< "$files"
