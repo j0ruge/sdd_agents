@@ -17,7 +17,18 @@ FIX="$(mktemp -d "${TMPDIR:-/tmp}/sdd-gates-XXXXXX")"
 MISSION="20260101-fixture"
 MDIR=""
 fails=0
-trap 'rm -rf "$FIX"' EXIT
+
+# The Jidoka assertion below runs a REAL (non-dry) `sdd run`, which writes an autonomy ledger row
+# on the blocked-increment path. run-all.sh already exports SDD_STATE_DIR for every test it runs,
+# but a standalone `tests/check-gates.sh` does not inherit that. Belt and braces, same reason
+# check-autonomy.sh does not depend on run-all.sh's export holding.
+#
+# A directory OF ITS OWN, not "$FIX/state": $FIX becomes the git working tree below (`cd "$FIX" &&
+# git init`), and a state/ subdirectory living inside it would be untracked noise in a fixture
+# whose whole point is to model a clean, gate-passing repo.
+SDD_STATE_FIX="$(mktemp -d "${TMPDIR:-/tmp}/sdd-gates-state-XXXXXX")"
+export SDD_STATE_DIR="$SDD_STATE_FIX"
+trap 'rm -rf "$FIX" "$SDD_STATE_FIX"' EXIT
 
 pass() { printf '  ok    %s\n' "$1"; }
 fail() { printf '  FAIL  %s\n         expected: %s\n         got:      %s\n' "$1" "$2" "$3" >&2

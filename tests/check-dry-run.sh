@@ -18,7 +18,21 @@ SDD="$ROOT/bin/sdd"
 FIX="$(mktemp -d "${TMPDIR:-/tmp}/sdd-dryrun-XXXXXX")"
 MISSION="20260101-fixture"
 fails=0
-trap 'rm -rf "$FIX"' EXIT
+
+# This file exercises the REAL (non-dry) blocked-escalation path below, which writes an autonomy
+# ledger row. run-all.sh already exports SDD_STATE_DIR for every test it runs, but a standalone
+# `tests/check-dry-run.sh` does not inherit that — and standalone is exactly how this file gets
+# run during manual verification. Without its own export here, that run injects fixture rows into
+# the developer's real ~/.sdd/autonomy-log.jsonl. Belt and braces, same reason check-autonomy.sh
+# does not depend on run-all.sh's export holding.
+#
+# A directory OF ITS OWN, not "$FIX/state": $FIX itself becomes the git working tree below (`cd
+# "$FIX" && git init`), and this file asserts a CLEAN `git status --porcelain` at several points —
+# a state/ subdirectory living inside that tree would show up as an untracked path and fail those
+# assertions on its own.
+SDD_STATE_FIX="$(mktemp -d "${TMPDIR:-/tmp}/sdd-dryrun-state-XXXXXX")"
+export SDD_STATE_DIR="$SDD_STATE_FIX"
+trap 'rm -rf "$FIX" "$SDD_STATE_FIX"' EXIT
 
 pass() { printf '  ok    %s\n' "$1"; }
 fail() { printf '  FAIL  %s\n         expected: %s\n         got:      %s\n' "$1" "$2" "$3" >&2

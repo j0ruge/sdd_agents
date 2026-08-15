@@ -26,6 +26,51 @@ fail() { printf '  FAIL  %s\n         expected: %s\n         got:      %s\n' "$1
          fails=$((fails + 1)); }
 assert_eq() { if [ "$2" = "$3" ]; then pass "$1"; else fail "$1" "$2" "$3"; fi }
 
+# num_before <text> <literal-that-follows-the-number, as an ERE> -> the integer, or "" if absent.
+# One `grep -m1 -oE`, nothing piped after it: the match is trimmed with bash's own `${m%% *}`
+# instead of a second process. That sidesteps the pipefail/SIGPIPE trap this repo warns about
+# (`printf | grep -q` returns 141 when grep finds a match and closes the pipe before the writer is
+# done) — there is no writer here for a downstream reader to cut off.
+num_before() {
+  local m; m="$(grep -m1 -oE "[0-9]+ $2" <<< "$1")"
+  printf '%s' "${m%% *}"
+}
+
+# sum_sessions <reader output> -> total of every "N session(s)" occurrence (one per kit_sha row).
+# A single awk process reading the whole herestring, same reason as num_before: no pipe, no
+# early-exiting reader on the other end of one.
+sum_sessions() {
+  awk '{ while (match($0, /[0-9]+ session\(s\)/)) {
+           s += substr($0, RSTART, RLENGTH) + 0
+           $0 = substr($0, RSTART + RLENGTH)
+         } }
+       END { print s + 0 }' <<< "$1"
+}
+
+# sum_escalations <reader output> -> total of every "  <kind>: N" line. That exact shape (two
+# leading spaces, a bare word, ": ", digits, end of line) is unique to escalation lines — the
+# per-kit_sha table lines use "·" separators and never end in a bare number.
+sum_escalations() {
+  awk '/^  [A-Za-z][A-Za-z0-9_-]*: [0-9]+$/ { split($0, a, ": "); s += a[2] } END { print s + 0 }' \
+    <<< "$1"
+}
+
+# assert_bucket_sum <description> <reader output>
+# Every row lands in exactly one of four buckets: comparable session, non-comparable session,
+# escalation, unrecognized. If the filter drops a row (finding 3) or double-counts one, this sum
+# drifts from the header total — an anti-vacuity check a broken filter cannot pass by accident,
+# unlike any single count in isolation.
+assert_bucket_sum() {
+  local desc="$1" out="$2" total comparable noncomp escal stray sum
+  total="$(num_before "$out" 'row\(s\)')"; total="${total:-0}"
+  comparable="$(sum_sessions "$out")"
+  noncomp="$(num_before "$out" 'non-comparable')"; noncomp="${noncomp:-0}"
+  escal="$(sum_escalations "$out")"
+  stray="$(num_before "$out" 'unrecognized')"; stray="${stray:-0}"
+  sum=$((comparable + noncomp + escal + stray))
+  assert_eq "$desc" "$total" "$sum"
+}
+
 # The ledger under test. Never the real one: the export in run-all.sh already redirects every
 # test, and this makes THIS file independent of that export holding.
 export SDD_STATE_DIR="$FIX/state"
@@ -198,6 +243,56 @@ assert_eq "escalations are counted apart from sessions" "1" \
 # Anti-vacuity floor, same family as the surface floor in check-lang: a broken jq filter would
 # report "0 sessions, all good" forever.
 assert_eq "the header states how many rows it read" "1" "$(grep -c '5 row(s)' <<< "$out")"
+# The four buckets (2 comparable, 2 non-comparable, 1 escalation, 0 unrecognized) must sum to the
+# 5 rows the header says it read.
+assert_bucket_sum "the four buckets sum to the header total (mixed ledger)" "$out"
+
+# --- the reader gives a full accounting, never a silent gap --------------------------------------
+# Two findings from review, one root cause: a bucket the reader does not name is a bucket that can
+# vanish with no trace (finding 3 — the reviewer's ledger with no `event` key printed nothing and
+# exited 0). The fix makes every row land in one of four buckets and names each non-empty one.
+
+# Only escalations, zero comparable sessions: the table must not go blank. Blank reads as "checked,
+# found nothing" — the same vacuity as the empty-ledger case below, just one layer deeper.
+echo "== reader: only escalations, no comparable sessions =="
+mkdir -p "$FIX/onlyesc"
+cat > "$FIX/onlyesc/autonomy-log.jsonl" <<'EOF'
+{"v":1,"ts":"2026-08-15T10:00:00-03:00","event":"blocked","kind":"no-progress","run_id":"r1","invocation":"run","kit_sha":"aaaaaaa","kit_dirty":false,"project":"p1","repo":"/p1","mission":"m1","phase":"EXEC","gate_why":"x"}
+{"v":1,"ts":"2026-08-15T10:01:00-03:00","event":"blocked","kind":"increment-blocked","run_id":"r1","invocation":"run","kit_sha":"aaaaaaa","kit_dirty":false,"project":"p1","repo":"/p1","mission":"m1","phase":"EXEC","gate_why":"x"}
+EOF
+out="$( SDD_STATE_DIR="$FIX/onlyesc" "$SDD" autonomy 2>&1 )"; rc=$?
+assert_eq "exits 0 (escalations are still data)" "0" "$rc"
+assert_eq "says there are no comparable sessions, in place of the table" "1" \
+  "$(grep -c 'no comparable sessions' <<< "$out")"
+assert_eq "and never prints a percentage when there is nothing to compute one over" "0" \
+  "$(grep -c '%' <<< "$out")"
+assert_eq "the escalations are still both named" "1" "$(grep -c 'no-progress: 1' <<< "$out")"
+assert_eq "the second kind too" "1" "$(grep -c 'increment-blocked: 1' <<< "$out")"
+assert_bucket_sum "the four buckets sum to the header total (escalations only)" "$out"
+
+# A row with no `event` at all, or an event nobody recognizes yet: the reviewer's exact repro. It
+# must be counted, not merely fail to crash.
+echo "== reader: unrecognized row =="
+mkdir -p "$FIX/stray"
+printf '{"v":1,"ts":"2026-08-15T10:00:00-03:00"}\n' > "$FIX/stray/autonomy-log.jsonl"
+out="$( SDD_STATE_DIR="$FIX/stray" "$SDD" autonomy 2>&1 )"; rc=$?
+assert_eq "exits 0 (an unrecognized row is not a malformed one)" "0" "$rc"
+assert_eq "says there are no comparable sessions" "1" "$(grep -c 'no comparable sessions' <<< "$out")"
+assert_eq "and says how many rows it could not classify" "1" \
+  "$(grep -c '1 unrecognized' <<< "$out")"
+assert_bucket_sum "the four buckets sum to the header total (one unrecognized row)" "$out"
+
+# A row that is syntactically valid JSON but the wrong SHAPE (a bare array, not an object) cannot
+# be classified either — indexing it is a jq runtime error, not a false comparison. Before the fix
+# this leaked jq's own exit code (the reviewer saw rc 5); now it dies through the same rc-1
+# convention as every other refusal in this command.
+echo "== reader: valid JSON, wrong shape =="
+mkdir -p "$FIX/shape"
+printf '[1,2,3]\n' > "$FIX/shape/autonomy-log.jsonl"
+out="$( SDD_STATE_DIR="$FIX/shape" "$SDD" autonomy 2>&1 )"; rc=$?
+assert_eq "a shape error dies with rc 1, not jq's own exit code" "1" "$rc"
+assert_eq "and the die message names the file" "1" \
+  "$(grep -c "error:.*$FIX/shape/autonomy-log.jsonl" <<< "$out")"
 
 # An empty ledger is NOT 0% waste. Zeros that look like excellence are the vacuity the whole kit
 # exists to kill.

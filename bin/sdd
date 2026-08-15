@@ -1585,23 +1585,47 @@ cmd_autonomy() {
   local total; total="$(grep -c . "$file")"
   step "sdd autonomy — $file · $total row(s)"
 
-  jq -rs '
+  # Every row lands in exactly ONE of four buckets, and the buckets are exhaustive: comparable
+  # session, non-comparable session, escalation, or unrecognized (event missing, or a value that
+  # is neither "session" nor "blocked" — a future third event type, a hand edit, a partial write).
+  # A row that fit none of them used to vanish with no trace; tests/check-autonomy.sh now asserts
+  # the four counts sum to the header total, so a filter that drops a row again fails loudly.
+  #
+  # A row whose JSON is syntactically valid but the wrong SHAPE (a bare array, say) cannot be
+  # classified at all — indexing it with .event is a jq runtime error, not a false comparison — so
+  # that failure is caught below and re-raised through die(), same rc 1 as every other refusal in
+  # this command instead of leaking jq's own exit code.
+  local out jq_rc=0
+  out="$(jq -rs '
     def comparable: .event == "session" and .kit_dirty == false
                     and (.kit_sha != null) and (has("moved"));
-    (map(select(.event == "session" and (comparable | not))) | length) as $skipped
-    | (map(select(comparable)) | group_by(.kit_sha)) as $groups
-    | ($groups | map(
-        (.[0].kit_sha) as $sha
-        | (length) as $n
-        | (map(select(.moved == false)) | length) as $stalled
-        | (map(.mission) | unique | length) as $missions
-        | (map(.cost_usd // 0) | add) as $cost
-        | "  \($sha)  \($n) session(s) · \($stalled) stalled · \(($stalled * 100 / $n) | floor)% waste · \($missions) mission(s) · US$ \($cost | . * 100 | round / 100)"
-      ) | join("\n"))
-    , (map(select(.event == "blocked")) | group_by(.kind)
+    def is_session: .event == "session";
+    def is_escalation: .event == "blocked";
+    def is_unrecognized: (is_session or is_escalation) | not;
+    (map(select(is_session and (comparable | not))) | length) as $skipped
+    | (map(select(is_session and comparable)) | group_by(.kit_sha)) as $groups
+    | (map(select(is_unrecognized)) | length) as $stray
+    | (if ($groups | length) == 0 then
+        "  no comparable sessions in this ledger"
+      else
+        ($groups | map(
+            (.[0].kit_sha) as $sha
+            | (length) as $n
+            | (map(select(.moved == false)) | length) as $stalled
+            | (map(.mission) | unique | length) as $missions
+            | (map(.cost_usd // 0) | add) as $cost
+            | "  \($sha)  \($n) session(s) · \($stalled) stalled · \(($stalled * 100 / $n) | floor)% waste · \($missions) mission(s) · US$ \($cost | . * 100 | round / 100)"
+          ) | join("\n"))
+      end)
+    , (map(select(is_escalation)) | group_by(.kind)
        | map("  \(.[0].kind): \(length)") | join("\n") | select(length > 0) | "\nescalations\n" + .)
     , (if $skipped > 0 then "\n  (\($skipped) non-comparable row(s) excluded: dirty kit, no kit_sha, or no moved field)" else "" end)
-  ' "$file"
+    , (if $stray > 0 then "\n  (\($stray) unrecognized row(s) excluded: event missing or not one of session/blocked)" else "" end)
+  ' "$file" 2>/dev/null)" || jq_rc=$?
+  if [ "$jq_rc" -ne 0 ]; then
+    die "malformed row in $file — the ledger is not readable"
+  fi
+  printf '%s\n' "$out"
 }
 
 cmd_version() { info "sdd $SDD_VERSION ($SDD_HOME)"; }
