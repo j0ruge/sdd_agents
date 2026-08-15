@@ -1560,6 +1560,50 @@ cmd_retry() {
   return 3
 }
 
+# ---------------------------------------------------------------------------
+# Reader for the autonomy ledger. It prints NUMBERS and never a verdict: whether the kit improved
+# is the judge's answer (sdd-kaizen, I13.3), and a reader that opines today becomes the yardstick
+# that judge would have to contradict tomorrow.
+#
+# This command is the human's window; the JUDGE reads the JSONL with jq. Coupling I13.3 to this
+# text would freeze a table nobody promised to keep.
+cmd_autonomy() {
+  local file; file="$(autonomy_log_path)"
+  command -v jq >/dev/null 2>&1 || die "jq not found — it is required to read the ledger"
+
+  # Absent or empty is NOT zero waste. Zeros that look like excellence are exactly the vacuity the
+  # floors in check-lang and cmd_health exist to kill.
+  if [ ! -s "$file" ]; then
+    warn "no data: the ledger at $file does not exist yet (or has no rows)"
+    dim "  It is written by 'sdd run' and 'sdd retry'. Nothing has been recorded on this machine."
+    return 1
+  fi
+  # A malformed row dies loudly. Skipping it quietly is how a judge ends up reading a subset and
+  # calling it the whole history.
+  jq -se . "$file" >/dev/null 2>&1 || die "malformed row in $file — the ledger is not readable"
+
+  local total; total="$(grep -c . "$file")"
+  step "sdd autonomy — $file · $total row(s)"
+
+  jq -rs '
+    def comparable: .event == "session" and .kit_dirty == false
+                    and (.kit_sha != null) and (has("moved"));
+    (map(select(.event == "session" and (comparable | not))) | length) as $skipped
+    | (map(select(comparable)) | group_by(.kit_sha)) as $groups
+    | ($groups | map(
+        (.[0].kit_sha) as $sha
+        | (length) as $n
+        | (map(select(.moved == false)) | length) as $stalled
+        | (map(.mission) | unique | length) as $missions
+        | (map(.cost_usd // 0) | add) as $cost
+        | "  \($sha)  \($n) session(s) · \($stalled) stalled · \(($stalled * 100 / $n) | floor)% waste · \($missions) mission(s) · US$ \($cost | . * 100 | round / 100)"
+      ) | join("\n"))
+    , (map(select(.event == "blocked")) | group_by(.kind)
+       | map("  \(.[0].kind): \(length)") | join("\n") | select(length > 0) | "\nescalations\n" + .)
+    , (if $skipped > 0 then "\n  (\($skipped) non-comparable row(s) excluded: dirty kit, no kit_sha, or no moved field)" else "" end)
+  ' "$file"
+}
+
 cmd_version() { info "sdd $SDD_VERSION ($SDD_HOME)"; }
 
 cmd_help() {
@@ -1574,6 +1618,7 @@ USAGE
   sdd run <mission>          run from the first unsatisfied phase through to the PR
   sdd retry <mission>        retry the current phase with a fresh session
   sdd close <mission>        post-merge: close the JIRA issue
+  sdd autonomy               waste per kit version, read from the global autonomy ledger
   sdd help | sdd version
 
 FOR SCRIPTS
@@ -1607,6 +1652,7 @@ main() {
     run)       cmd_run "$@" ;;
     retry)     cmd_retry "$@" ;;
     close)     cmd_close "$@" ;;
+    autonomy)  cmd_autonomy "$@" ;;
     version|--version|-v) cmd_version ;;
     help|--help|-h) cmd_help ;;
     *) die "unknown command: $subcmd (see 'sdd help')" ;;

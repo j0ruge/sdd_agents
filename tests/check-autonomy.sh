@@ -173,6 +173,51 @@ assert_eq "sdd retry writes one session row" "1" "$(nrows)"
 assert_eq "and marks itself as a retry invocation" "retry" "$(rows '.invocation')"
 assert_eq "with its own run_id" "true" "$(rows '(.run_id | length) > 0')"
 
+# --- the reader ------------------------------------------------------------
+# Fixture ledger written by hand: this is OUR format, so there is no third-party source to copy
+# from (the provenance rule covers skill output). Every row here exists to prove one refusal.
+echo "== reader =="
+mkdir -p "$FIX/read"
+cat > "$FIX/read/autonomy-log.jsonl" <<'EOF'
+{"v":1,"ts":"2026-08-15T10:00:00-03:00","event":"session","run_id":"r1","invocation":"run","kit_sha":"aaaaaaa","kit_dirty":false,"project":"p1","repo":"/p1","mission":"m1","phase":"EXEC","step":"EXEC","agent":"sdd-executor","model":"opus","attempt":1,"retry":false,"session":"s1","rc":0,"dur_s":10,"cost_usd":1.0,"moved":true,"gate":"fail","gate_why":"x"}
+{"v":1,"ts":"2026-08-15T10:01:00-03:00","event":"session","run_id":"r1","invocation":"run","kit_sha":"aaaaaaa","kit_dirty":false,"project":"p1","repo":"/p1","mission":"m1","phase":"EXEC","step":"EXEC","agent":"sdd-executor","model":"opus","attempt":2,"retry":false,"session":"s2","rc":0,"dur_s":10,"cost_usd":1.0,"moved":false,"gate":"fail","gate_why":"x"}
+{"v":1,"ts":"2026-08-15T10:02:00-03:00","event":"session","run_id":"r1","invocation":"run","kit_sha":"aaaaaaa","kit_dirty":true,"project":"p1","repo":"/p1","mission":"m1","phase":"EXEC","step":"EXEC","agent":"sdd-executor","model":"opus","attempt":3,"retry":false,"session":"s3","rc":0,"dur_s":10,"cost_usd":1.0,"moved":false,"gate":"fail","gate_why":"x"}
+{"v":1,"ts":"2026-08-15T10:03:00-03:00","event":"session","run_id":"r1","invocation":"run","kit_sha":"aaaaaaa","kit_dirty":false,"project":"p1","repo":"/p1","mission":"m1","phase":"EXEC","step":"EXEC","agent":"sdd-executor","model":"opus","attempt":4,"retry":false,"session":"s4","rc":0,"dur_s":10,"cost_usd":1.0,"gate":"fail","gate_why":"old schema, no moved"}
+{"v":1,"ts":"2026-08-15T10:04:00-03:00","event":"blocked","kind":"no-progress","run_id":"r1","invocation":"run","kit_sha":"aaaaaaa","kit_dirty":false,"project":"p1","repo":"/p1","mission":"m1","phase":"EXEC","gate_why":"x"}
+EOF
+out="$( SDD_STATE_DIR="$FIX/read" "$SDD" autonomy 2>&1 )"; rc=$?
+
+assert_eq "the reader exits 0 with data" "0" "$rc"
+# 2 comparable sessions (rows 1 and 2), 1 of them stalled => 50%.
+assert_eq "waste is computed over comparable sessions only" "1" \
+  "$(grep -c '50% waste' <<< "$out")"
+assert_eq "it says how many rows it excluded, and why" "1" \
+  "$(grep -c '2 non-comparable' <<< "$out")"
+assert_eq "escalations are counted apart from sessions" "1" \
+  "$(grep -c 'no-progress: 1' <<< "$out")"
+# Anti-vacuity floor, same family as the surface floor in check-lang: a broken jq filter would
+# report "0 sessions, all good" forever.
+assert_eq "the header states how many rows it read" "1" "$(grep -c '5 row(s)' <<< "$out")"
+
+# An empty ledger is NOT 0% waste. Zeros that look like excellence are the vacuity the whole kit
+# exists to kill.
+mkdir -p "$FIX/empty"
+out="$( SDD_STATE_DIR="$FIX/empty" "$SDD" autonomy 2>&1 )"; rc=$?
+assert_eq "no ledger yet exits 1" "1" "$rc"
+assert_eq "and says 'no data' instead of printing zeros" "1" "$(grep -c 'no data' <<< "$out")"
+assert_eq "and never prints a percentage" "0" "$(grep -c '%' <<< "$out")"
+
+# A malformed row dies loudly: skipping it in silence is how the judge ends up reading a subset
+# and calling it the whole history.
+mkdir -p "$FIX/bad"
+printf '{"v":1,"event":"session"\n' > "$FIX/bad/autonomy-log.jsonl"
+out="$( SDD_STATE_DIR="$FIX/bad" "$SDD" autonomy 2>&1 )"; rc=$?
+assert_eq "a malformed row fails loudly" "1" "$rc"
+
+# sdd health check 5 fails on a subcommand missing from the help — assert it here too, so the
+# reason is visible at the point of change instead of three files away.
+assert_eq "the subcommand is in sdd help" "1" "$( "$SDD" help 2>&1 | grep -c 'sdd autonomy' )"
+
 echo
 if [ "$fails" -eq 0 ]; then printf '  ok    the ledger records facts and stays quiet on projections\n'; exit 0; fi
 printf '%d autonomy check(s) failed\n' "$fails" >&2

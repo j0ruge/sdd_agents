@@ -247,3 +247,33 @@ id, exit code, duration, cost in USD) and a full JSON alongside it, in the same
 handoffs. If it moved back into the committed tree it would dirty `git status` — and a dirty tree
 fails `gate_REVIEW` and `sdd preflight`. `--max-budget-usd` per session is a damage cap, not a
 budget.
+
+## The autonomy ledger
+
+Two records, different jobs. `.sdd/logs/<mission>/pipeline.log` is the **journal of one mission**,
+ephemeral and local. `${SDD_STATE_DIR:-$HOME/.sdd}/autonomy-log.jsonl` is the **series across all
+missions and all projects**, and it exists for one reader: the kaizen judge (`sdd-kaizen`, I13.3),
+which answers "did the last change to the kit improve autonomy or hurt it?".
+
+It is global, not per-repo, for two reasons. Maturity across projects cannot be measured in a
+file that lives inside one project. And a file the runner writes BETWEEN phases inside the target
+repo would sit untracked and fail `gate_REVIEW` and `sdd preflight` — the `pipeline.log` defect,
+which was fixed by making that journal ephemeral, a way out this ledger does not have.
+
+It records **facts, never a score**: phase, attempt, whether the session moved the disk, rc, cost,
+the gate result and its reason. `ok|leve|refez` is a label, and a runner that labels its own work
+is the "label instead of artifact" every gate here exists to forbid. The judge derives the label,
+and can change its yardstick later without rewriting the past.
+
+Every row carries `kit_sha` and `kit_dirty`. That is the before/after axis: without it a change
+in the numbers gets attributed to the calendar instead of to the kit change that caused it, and
+the judge cannot count missions per kit version to answer "not enough data yet".
+
+`sdd autonomy` prints the human view. The judge reads the JSONL with `jq` — never that table.
+
+A row can carry `invocation: "retry"` together with `retry: false`, and that is not a
+contradiction — the two fields answer different questions. `invocation` records which command
+opened the session, `sdd run` or `sdd retry`. `retry` records whether this session was the
+runner's own second attempt at the same phase inside one `sdd run` loop. A human who runs
+`sdd retry` by hand is therefore logged as `invocation: "retry"`, `retry: false`: a human-forced
+retry, not the runner's automatic one.
