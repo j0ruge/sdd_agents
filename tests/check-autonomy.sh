@@ -218,6 +218,46 @@ assert_eq "sdd retry writes one session row" "1" "$(nrows)"
 assert_eq "and marks itself as a retry invocation" "retry" "$(rows '.invocation')"
 assert_eq "with its own run_id" "true" "$(rows '(.run_id | length) > 0')"
 
+# --- moved: true on a real change, false once nothing changes --------------
+# Task 2 review measured this by hand: mutating `[ "$before" != "$after" ] && moved="true"` into a
+# no-op left the whole suite GREEN, because every `claude` stub above is dead (rc 1) or dry — none
+# of them ever touches the fixture repo, so `moved` was always "false" and nothing distinguished
+# it from the mutant. `moved` is the headline number of the metric now (waste = sessions that did
+# NOT move the disk), so this hole matters: a regression here both escalates BLOCKED on phases
+# that are genuinely progressing and records every session as waste, with the suite still green.
+#
+# The stub is a SEPARATE PROCESS on every invocation of `claude`, so a shell variable set inside it
+# would not survive to the next call — a marker FILE in the fixture counts invocations instead. On
+# the first call it makes a real change (a new file) and commits it, which moves `git rev-parse
+# HEAD` and therefore `state_fingerprint()`; on every later call it does nothing. No token, no
+# network: the stub never shells out to the real `claude`.
+echo "== moved: true on a real change, false once nothing changes =="
+: > "$LEDGER"
+MOVE_MARKER="$FIX/.moved-once"
+rm -f "$MOVE_MARKER"
+cat > "$FIX/.stub/claude" <<STUB
+#!/usr/bin/env bash
+if [ ! -e "$MOVE_MARKER" ]; then
+  : > "$MOVE_MARKER"
+  git -C "$FIX" add -A
+  git -C "$FIX" commit -qm "chore: session made a real change"
+fi
+echo '{}'
+exit 0
+STUB
+chmod +x "$FIX/.stub/claude"
+
+"$SDD" run "$MISSION" >/dev/null 2>&1; rc=$?
+assert_eq "the checkpoint never reaches done, so it still escalates no-progress" "3" "$rc"
+assert_eq "three session rows plus one escalation" "4" "$(nrows)"
+assert_eq "the first session actually moved the disk" "true" "$(jq -r -s '.[0].moved' "$LEDGER")"
+assert_eq "the second session, with nothing left to change, records moved:false" "false" \
+  "$(jq -r -s '.[1].moved' "$LEDGER")"
+assert_eq "the inline retry (same iteration) also records moved:false" "false" \
+  "$(jq -r -s '.[2].moved' "$LEDGER")"
+assert_eq "escalates no-progress once the disk stops moving" "no-progress" \
+  "$(jq -r -s '.[3].kind' "$LEDGER")"
+
 # --- the reader ------------------------------------------------------------
 # Fixture ledger written by hand: this is OUR format, so there is no third-party source to copy
 # from (the provenance rule covers skill output). Every row here exists to prove one refusal.
