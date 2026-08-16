@@ -36,7 +36,7 @@ Achados sobre **repos-alvo** vão para o `TODO.md` daquele repo. Este arquivo é
   do limpo, e o runner leu Status=`` `grep -c '…'` `` e Commit=`pending`. `gate_EXEC` reprova com
   "invalid status", e `sdd status` imprime `pending` na coluna Commit — plausível e errado. O
   gatilho é Check que canaliza sensor para `grep`; nem o template nem checkpoint anterior o tinha.
-  Direção: tratar `\|` antes do split, com asserção. — descoberto por `humano` na missão
+  Direção: tratar `\|` antes do split, com asserção. — descoberto por `sdd status` na missão
   `20260816-kit-como-alvo` (2026-08-16)
 
 - [ ] **Nada compara `agents/*.md` com a cópia instalada em `.claude/agents/`** — `bin/sdd:1247` —
@@ -142,12 +142,12 @@ Achados sobre **repos-alvo** vão para o `TODO.md` daquele repo. Este arquivo é
 
 - [ ] **Nenhum gate confere a branch declarada, e ninguém faz o checkout** — todos os `gate_*` +
   `templates/missao.md` (campo `branch:`) — no SQ-97 o checkout mudou entre `QA:plan` e `QA:exec`
-  e **cinco fases commitaram na branch errada** com todos os gates verdes, a ~US$ 45 de
-  `rebase --onto`; hoje repetiu um passo antes — plano nascido declarando
-  `missao/20260816-kit-como-alvo` e o humano trocando à mão. Direção (humano, 2026-08-16): o
-  runner **troca**, não só confere — existe ⇒ checkout; não existe ⇒ cria da branch ATUAL, onde o
-  commit do plano vive (de `main` o perderia); `<criada pela fase TICKET>` ⇒ no-op. Sensor em
-  `check-gates.sh`. — descoberto por `sdd-publisher` e `humano` no piloto SQ-97 (2026-08-14)
+  e **cinco fases commitaram na branch errada**: 16 commits sobre um PR alheio, todos os gates
+  verdes, pego só pelo `sdd-publisher` no fim da linha, a ~US$ 45 de `rebase --onto`. Repetiu um
+  passo antes hoje: plano declarando `missao/20260816-kit-como-alvo`, humano trocando à mão.
+  Direção (humano, 2026-08-16): o runner **troca**, não só confere — existe ⇒ checkout; não
+  existe ⇒ cria da ATUAL, onde o commit do plano vive; `<criada pela fase TICKET>` ⇒ no-op.
+  — descoberto por `sdd-publisher` e `humano` no piloto SQ-97 (2026-08-14)
 
 - [ ] **A regra da âncora é satisfeita por código inline no título** — `tests/check-todo.sh` (regra
   3) — ela pede crase não-vazia antes do último ` — `, e o título entra nesse trecho: medido, **45
