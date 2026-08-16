@@ -93,13 +93,13 @@ que, sem `set -e`, cai fora do `if` — o run terminava em `ok 0 finding(s)`, rc
 cerca ``` sem fechamento travava o latch do parser e pulava **todas** as regras até o fim do
 arquivo, também verde. Nos dois casos o sensor dizia "medi e está limpo" sobre o que não mediu.
 
-| | Auto | 1ª | 2ª | 3ª | 4ª | 5ª |
-|---|---|---|---|---|---|---|
-| Defeitos achados / fechados | 0 | 17/17 | 9/9 | 11/11 | 11/11 | 11/11 |
-| Probes do selftest | 14 (à mão) | 20 | 30 | 37 | 45 | **49** |
-| Sabotagens que matam o selftest | 4 de 8 | 13/14 | 15/17 | 17/18 | 11/11 | **19 de 21** |
-| Caminhos que falhavam abertos | 2 | 0 | 1 (novo) | 2 (novos) | 2 (novos) | **0** |
-| Regras/estados removidos por não pagarem | 0 | 2 | 2 | 3 | 4 | **6** |
+| | Auto | 1ª | 2ª | 3ª | 4ª | 5ª | 6ª |
+|---|---|---|---|---|---|---|---|
+| Defeitos achados / fechados | 0 | 17/17 | 9/9 | 11/11 | 11/11 | 11/11 | 11/11 |
+| Probes do selftest | 14 (à mão) | 20 | 30 | 37 | 45 | 49 | **48** |
+| Linhas do parser `awk` | 47 | 62 | 71 | 84 | 107 | 107 | **75** |
+| Caminhos que falhavam abertos | 2 | 0 | 1 | 2 | 2 | 0 | **0** |
+| Regras/estados removidos por não pagarem | 0 | 2 | 2 | 3 | 4 | 6 | **7** |
 
 **O número que mais ensina não é nenhum defeito: é que cada rodada achou um defeito criado pela
 anterior — três vezes seguidas.** A 1ª consertou a âncora com uma classe negada de travessão, e a
@@ -120,10 +120,25 @@ fechado e nomeando a causa raiz. Junto, caixa marcada virou regra **por linha** 
 item, que é o que finalmente cobriu todas as formas que o GitHub renderiza marcadas. O parser
 `awk` encolheu para 107 linhas e a família de defeitos foi embora com o estado que a hospedava.
 
-**A lição, e ela é de projeto, não de bash:** cinco rodadas foram gastas defendendo uma capacidade
-— bloco de código dentro de item — que **nenhum dado real usava e que o próprio formato proibia**.
-YAGNI não é só sobre o que custa escrever; é sobre o que custa *manter correto*. Uma feature sem
-uso paga aluguel em defeito.
+**A 6ª rodada mostrou que nem isso bastava**, e o diagnóstico final é mais amplo: **este arquivo
+tinha virado um parser CommonMark escrito em awk.** Cerca de 4 espaços que o CommonMark chama de
+bloco de código, fechador com info string, delimitador `1)`, tab no lugar do espaço, blockquote —
+uma enumeração exaustiva de 117.649 documentos de 6 linhas achou 24 fail-opens, **100% deles na
+lógica de cerca**. Markdown é genuinamente difícil, e cada rodada acertava um caso de borda
+criando outro.
+
+Então o rastreamento de cerca saiu inteiro. A seção de achados não tem cerca nenhuma — a única do
+arquivo é o exemplo de formato, no cabeçalho —, então o parser **pula o cabeçalho** e **proíbe
+cerca depois dele**. Não sobrou estado para dessincronizar. Parser de **107 → 75 linhas**, e a
+regra da caixa marcada, agora independente de cerca, cobre as dez formas que o GitHub renderiza
+marcadas em vez das cinco de que eu tinha partido.
+
+**As duas lições, e nenhuma é sobre bash.** A primeira: YAGNI não é só sobre o que custa escrever,
+é sobre o que custa *manter correto* — cinco rodadas foram gastas defendendo bloco de código
+dentro de item, que nenhum dos 46 achados usa e que o teto de ~6 linhas já proíbe. A segunda, mais
+geral: **um sensor deve RECUSAR o que não sabe interpretar com segurança, não adivinhar.** Ser
+mais estrito que o formato de entrada é uma decisão de projeto legítima e barata; tentar
+interpretar tudo é o que custou seis gerações de defeito.
 
 Duas consequências para o processo, e são elas que ficam. **Revisão adversarial é laço, não
 etapa**: o critério de parada não pode ser "consertei os achados", tem de ser uma rodada que não
