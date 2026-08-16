@@ -191,6 +191,16 @@ mut_KAIZEN_guard_ignored() {
   sed -i 's|if \[ "\$sufficient" != "true" \] && \[ "\$verdict" != "indeterminado" \]; then|if false; then|' "$1"
 }
 
+# Not a gate, and the most expensive false negative the runner can produce: the Jidoka goes back
+# to a PIPE. Under `pipefail` `grep -q` exits on the match, `printf` dies of SIGPIPE and the
+# pipeline returns 141, so the `if` reads "no blocked" while a blocked increment EXISTS — and the
+# runner burns the whole phase budget against the wall it already knew was there. Note this is the
+# sabotage that a SMALL fixture cannot see: the race is decided by the size of the text, which is
+# why check-gates.sh asserts it on a 20000-row checkpoint.
+mut_RUN_jidoka_pipefail() {
+  sed -i 's@grep -qx "blocked" <<< "$ckstatus"@printf "%s\\n" "$ckstatus" | grep -qx "blocked"@' "$1"
+}
+
 CATALOG=(
   PLAN_empty_approval
   TICKET_no_sprint
@@ -212,6 +222,7 @@ CATALOG=(
   RUN_autonomy_null_moved_as_zero
   RUN_moved_never_true
   RUN_autonomy_sha_warn_repeats
+  RUN_jidoka_pipefail
   KAIZEN_gate_blind
   KAIZEN_jidoka_dead
   KAIZEN_guard_ignored

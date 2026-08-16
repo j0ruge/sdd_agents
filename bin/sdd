@@ -1081,7 +1081,9 @@ cmd_preflight() {
         --model haiku --permission-mode "$PERMISSION_MODE" --output-format json \
         --setting-sources "user,project,local" --allowedTools "$ALLOWED_TOOLS" \
         --max-budget-usd 1 2>/dev/null | jq -r '.result // ""' 2>/dev/null || true )"
-    if printf '%s' "$probe" | grep -q 'sdd-preflight-ok'; then
+    # Herestring for the same reason as the Jidoka in cmd_run: `printf | grep -q` returns 141
+    # under `pipefail` when the grep MATCHES, so the success branch is the one that loses the race.
+    if grep -q 'sdd-preflight-ok' <<< "$probe"; then
       ok "headless session executes commands (OAuth + permission)"
     elif [ -z "$probe" ]; then
       _fail "claude -p did not answer — expired session? run 'claude login'"
@@ -1487,14 +1489,17 @@ cmd_run() {
     # Real Jidoka: a `blocked` increment escalates ON THE SPOT. Without this the runner read the
     # checkpoint change as "progress" and rebooted EXEC until the phase budget blew — three
     # sessions against the same wall. Found by the fixture mission 20260814-dry-run-completo.
-    # The status goes into a variable BEFORE the `grep`: under `pipefail`, `grep -q` closes the
-    # pipe as soon as it matches, the upstream stage dies of SIGPIPE and the whole pipeline
-    # returns 141 — the `if` would read "no blocked" while blocked EXISTS. With a small
-    # checkpoint the race almost never happens, but "almost never" is not a guarantee you hand a
-    # Jidoka: the false negative here is precisely the runner hitting the wall it already knew
-    # was there.
+    # HERESTRING, not a pipe. Under `pipefail`, `grep -q` closes the pipe as soon as it matches,
+    # the upstream `printf` dies of SIGPIPE and the whole pipeline returns 141 — the `if` reads
+    # "no blocked" while blocked EXISTS. Putting the status in a variable first was NOT enough:
+    # the pipe was still there, and the race is decided by the size of the text, not by where it
+    # came from. Measured on a fixture checkpoint: the miss starts around 5000 rows, and the
+    # runner then spends the whole phase budget against the wall it already knew was there —
+    # exactly the false negative a Jidoka must never have. tests/check-gates.sh pins it with a
+    # 20000-row checkpoint; the RUN_jidoka_pipefail mutation puts the pipe back and the suite
+    # has to die.
     local ckstatus; ckstatus="$(checkpoint_rows | cut -f4)"
-    if [ "$phase" = "EXEC" ] && printf '%s\n' "$ckstatus" | grep -qx "blocked"; then
+    if [ "$phase" = "EXEC" ] && grep -qx "blocked" <<< "$ckstatus"; then
       gate_EXEC || true
       info ""
       bad "BLOCKED in EXEC — $GATE_WHY"
