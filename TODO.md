@@ -363,14 +363,13 @@ Achados sobre **repos-alvo** vão para o `TODO.md` daquele repo. Este arquivo é
 
 ### Custo e escala
 
-- [ ] **A suíte cresce com o catálogo e passou dos dois alvos que os planos fixaram** —
-  `tests/run-all.sh` + `SDD_MUTATION_JOBS` — série na mesma máquina: 13,98 s/16 mutantes
-  (pré-I13.1) → 22,34/19 → 47,9/25 → **66,3/30**; ~2,2 s por mutante na média, 3,7 s na margem.
-  Estourados o "≤15 s" do I13.1 e o "<30 s" da D7 do I13.3 — no default, 30 s comporta ~13
-  mutantes. `SDD_MUTATION_JOBS=10` derruba o tempo, mas o default não muda por decisão (`nproc`
-  é GNU-only; máquina de 2 núcleos pioraria). Três saídas, todas do humano: subir o alvo, subir
-  o default, ou aceitar o custo. — medido por `sdd-executor`, `sdd-kaizen` e `sdd-docs` nas
-  missões `20260815-i13.1-autonomy-log` e `20260815-ledger-sem-ponto-cego` (2026-08-16)
+- [ ] **A suíte segue acima do alvo "<30 s" da D7, mesmo depois do paralelismo** —
+  `tests/run-all.sh` — a saída "subir o default" foi tomada e executada (pool + `min(núcleos, 8)`,
+  ver KAIZEN_LOG de 2026-08-16): mediana 54,13 s → **32,87 s** na mesma sessão, score 30/30
+  intacto. Restam as duas saídas de régua, ambas do humano: subir o alvo da D7 (o "≤15 s" do
+  I13.1 já é história) ou aceitar os ~3 s de estouro, que crescem com o catálogo. — medido por
+  `sdd-executor` e `humano` nas missões `20260815-ledger-sem-ponto-cego` e no kaizen do
+  paralelismo (2026-08-16)
 
 ### Adiados por YAGNI
 
