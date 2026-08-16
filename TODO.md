@@ -314,11 +314,12 @@ Achados sobre **repos-alvo** vão para o `TODO.md` daquele repo. Este arquivo é
 
 - [ ] **O espelho `.claude/agents/sdd-kaizen.md` ficou atrás do fonte** —
   `.claude/agents/sdd-kaizen.md` contra `agents/sdd-kaizen.md:68` — a fase DOCS ensinou ao juiz o
-  vocabulário `degraded`/`review-to-draft` mas a sessão headless rodou com **escrita bloqueada
-  sob `.claude/`**: `cp`, `Edit` e `Write` no espelho foram recusados. Nada quebra hoje, mas uma
-  fase KAIZEN **neste repo** lê o espelho e roda com o agente velho. Conserto:
-  `./bin/sdd install --force` numa sessão sem o bloqueio. ⚠️ Vale para toda fase DOCS que toque
-  em agente. — descoberto por `sdd-docs` na missão `20260815-ledger-sem-ponto-cego` (2026-08-16)
+  vocabulário `degraded`/`review-to-draft`, mas a sessão headless rodou com **escrita bloqueada
+  sob `.claude/`** e uma fase KAIZEN **neste repo** lê o espelho, não o fonte. ⚠️ Vale para toda
+  fase DOCS futura que toque em agente. — descoberto por `sdd-docs` na missão
+  `20260815-ledger-sem-ponto-cego` (2026-08-16)
+  **RESOLVIDO por `3030262`**: espelho re-copiado numa sessão sem o bloqueio, os 7 agentes
+  conferidos par a par. — `humano` (2026-08-16)
 
 ### Idioma
 

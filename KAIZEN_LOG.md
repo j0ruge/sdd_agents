@@ -4,6 +4,67 @@ Registro de melhorias com **antes/depois medido**. Sem número, não entra.
 
 ---
 
+## 2026-08-16 — O arquivo de achados para de crescer (5S no `TODO.md`)
+
+**Problema medido:** o `TODO.md` chegou a **861 linhas / 75.331 bytes**, e o custo não era só de
+leitura humana — o prompt de boot da fase KAIZEN (`bin/sdd:655`) manda a sessão paga de triagem
+**ler o arquivo inteiro**. Duas causas, ambas de processo e não de conteúdo. (1) O contrato
+mandava o item com `RESOLVIDO por <hash>` descer para "Feito" depois do merge do PR que o cita, e
+ninguém executava a descida: **14 itens fechados** ocupavam a seção Aberto, incluindo cinco numa
+**segunda convenção de fechamento não documentada** (`- [x]` com `[FEITO em <hash>]` no título) —
+invisível para a triagem do kaizen, que procura `RESOLVIDO por` no corpo. (2) O formato prescrevia
+uma linha por achado desde sempre; a prática eram corpos de até 31 linhas com análise completa,
+reproduções e blocos "Atualização (data)" — profundidade que já existe no handoff que cada item
+cita.
+
+| | Antes (`fc304bf`) | Depois (`3030262`) |
+|---|---|---|
+| Linhas / bytes do `TODO.md` | 861 / 75.331 | **361 / 26.569** (−58% / −65%) |
+| Itens fechados parados na seção Aberto | 14 | **0** |
+| Convenções de fechamento | 2 (uma não documentada) | **1** |
+| Mediana / máximo de linhas por item | 10 / 31 | **6 / 8** |
+| Achados abertos | 47 | 46 (2 fusões, 1 split) |
+| Sensor sustentando a forma | 0 | **1** (`check-todo.sh`, 7 probes de selftest) |
+| Suíte no default | 66,02 s | 67,08 s (o sensor custa **23 ms**; o resto é ruído de carga) |
+
+Todas as linhas medidas na mesma máquina e na mesma sessão, `fc304bf` num worktree descartável
+contra o `HEAD`, `./tests/run-all.sh` verde nos dois lados (mutação 30/30).
+
+**A causa raiz não era o tamanho, era não haver dono do apagar.** A regra existia — em um lugar
+só, um blockquote no meio do próprio arquivo — e dependia de alguém lembrar dela depois de um
+merge, que é exatamente o momento em que a atenção está no PR seguinte. Por isso o conserto tem
+duas metades, e a segunda é a que importa: a regra mudou de "desce para Feito" para **"é
+apagado"** (a memória durável já existe em `git log -S`, `KAIZEN_LOG.md` e nos handoffs, e o item
+cita o hash que o fecha), e a **triagem do `sdd-kaizen` virou o gatilho recorrente** — ela já lia
+o arquivo corpo a corpo para não replanejar o que está fechado; agora também confere
+`git merge-base --is-ancestor <hash> main` e lista os resolvidos a apagar no plano nascido. Sem
+gatilho, um sweep manual seria pico isolado; com ele, o arquivo encolhe a cada volta do laço.
+
+**Apagar prova por artefato, nunca por rótulo.** Os 14 hashes foram confirmados ancestrais de
+`main` antes de qualquer remoção, e os identificadores ficaram anotados no corpo do commit
+`c0193a7` — a rede de segurança mais barata que existe, e que só serve se for escrita antes.
+
+**Padronizado em** (confirmado abrindo cada arquivo): `CLAUDE.md` § princípio 5 (teto de ~6
+linhas, fechado é apagado, `- [x]` proibido), `agents/sdd-kaizen.md` § 5 e o espelho
+`.claude/agents/sdd-kaizen.md`, `CONTEXT.md` (glossário "Triagem kaizen"), `.claude/napkin.md`
+(item 1) e o cabeçalho do próprio `TODO.md`.
+
+**O que o sensor ensinou sobre si mesmo.** Duas decisões saíram diferentes do plano, as duas por
+medição e não por gosto. A primeira: todas as regras do `check-todo.sh` são **estruturais**
+(pontuação, crase, data `(YYYY-MM-DD)`), nunca uma palavra em português — um sensor amarrado a
+"descoberto por" quebraria num repo-alvo com `OUTPUT_LANG="en"` e alargaria o buraco de cobertura
+que o próprio `TODO.md` registra contra a `surface()` do `check-lang`. Com isso o arquivo novo
+**não** precisou de entrada na `lang-allowlist` nem de exclusão da superfície, ao contrário do que
+o plano previa. A segunda: o `check-lang` reprovou a primeira versão deste sensor por **duas
+citações em português nos meus próprios comentários** — o sensor de idioma pegou o autor do
+sensor de forma, que é o laço funcionando.
+
+⚠️ **O alvo de 300 linhas não foi atingido: são 361.** As sete seções `###` custaram ~46 linhas e
+ficaram porque agrupar por natureza (sensores, contrato, runner, saída humana, comentário, custo,
+YAGNI) é o que torna 46 itens navegáveis. Registrado como número, não como sucesso.
+
+---
+
 ## 2026-08-16 — O ledger e o Jidoka param de mentir (missão `20260815-ledger-sem-ponto-cego`)
 
 **Problema medido:** a primeira missão **planejada pelo próprio kit** (Marco 2) atacou o
