@@ -48,16 +48,57 @@
 # NOT measured either: an append that lands while bash sits INSIDE main. The offset only matters
 # once main returns, so the guard covers it, but nothing here proves that.
 #
-# An adversarial pass degraded every parser rule on its own and demanded a red selftest for each —
-# ten sabotages, eight died on the probe that names the exact rule (comment skip, blank skip, the
-# missing final newline, FIRST instead of LAST, the empty-parse check, the equality loosened to a
-# substring, and each half of the trim). The two that SURVIVED are named rather than hidden:
-#   - lowering the probe floor on its own, which hides nothing while the probe bodies are intact
+# An adversarial pass degraded every parser rule on its own and demanded a red selftest for each:
+# comment skip, blank skip, the missing final newline, FIRST instead of LAST, the empty-parse
+# check, each half of the trim, and each direction of the equality loosened to a substring. Every
+# one of those dies on the probe that names the exact rule.
+#
+# ⚠️ Three of those did NOT die when this file was first written, and the review round that found
+# them measured all three rather than reasoning about them. They are recorded because the shape
+# repeats: in all three the PARSER was probed and the path from "the parser said no" to "the suite
+# goes red" was not.
+#   - the equality loosened to `*"$GUARDED_FORM"*` passed all ten probes green, and accepted a file
+#     whose last executable line is `note='{ main "$@"; exit $?; }'` — a line that contains the
+#     guard, is not the guard, and falls straight back into the file. Probes 11 and 12 close it:
+#     one carries the form as a strict PREFIX, the other as a strict SUFFIX, so no direction of the
+#     loosening survives. The embedded-string case above is not written as a third probe because
+#     probe 11 already kills every sabotage it would kill — a probe no sabotage needs is decoration
+#   - deleting `FAILS=$((FAILS + 1)); fail_rc 91` from either branch of probe() changed nothing on
+#     its own and went fail-OPEN beside any second defect: five SENSOR-BROKEN lines on stderr and
+#     rc 0, printed under the ok line claiming the parser measures what it claims. harness_selfcheck
+#     drives probe() with a deliberately wrong expectation and demands the failure was BOOKED
+#   - deleting `differential` from the top-level composition left every assertion green and the
+#     file exited 0 having never run the differential at all. probe_composition drives the whole
+#     file with one stage forced to fail and demands rc 93 — once per stage
+#
+# The pass that closed those three ran 25 degradations, 20 of which die here. What SURVIVES is
+# listed in full, because a survivor nobody wrote down is indistinguishable from one nobody looked
+# for. In three groups, by what actually bounds each:
+#
+#   Not a rule — the rc is unchanged, so there is nothing to catch:
+#   - dropping the `break` in the composition loop. First-failure-wins already fixed the verdict;
+#     the break only decides how much runs after it was decided
+#   - dropping the `FAILS -ne 0 → SELFTEST_RC=92` line. That is the deliberate redundancy described
+#     at its own site: `fail_rc 91` still carries the failure out. Removing BOTH is what
+#     harness_selfcheck catches
+#
+#   Floors and cross-checks, which hide nothing while the bodies they backstop are intact:
+#   - lowering either probe floor, dropping the stage floor, disabling the witness cross-check
+#
+#   Genuinely fail-open here, and caught one layer out:
+#   - neutering the composition's rc propagation, or stage()'s real branch. Either one means
+#     check_runner's verdict never reaches the caller. Nothing inside this file can see that — the
+#     last line of any sensor is the line it cannot assert on. `mut_RUN_entrypoint_unguarded`
+#     closes it from outside: with bin/sdd sabotaged AND this composition neutered, the suite stays
+#     green, which is exactly the rc the mutation driver reports as "NOT caught". Measured, both
+#     ways round
 #   - neutering the differential's own comparison, which no probe can reach. What bounds it is
 #     that the two counts are PRINTED in the ok line ("2 vs 1"), so a neutered comparison reads
 #     as "1 vs 1" in the suite output rather than as silence
-# Neutering probe()'s body used to be a third, and a one-edit one: it made all ten assertions pass
-# at once. The cross-check at the end of selftest() is what turned it into two edits.
+#
+# Neutering probe()'s body used to be a one-edit sabotage that made every assertion pass at once.
+# It now needs to beat two independent things: the witness cross-check (no child was ever spawned)
+# and harness_selfcheck (a failure that should have been booked was not).
 #
 # Usage: tests/check-entrypoint.sh              (probes, then the runner — what run-all calls)
 #        tests/check-entrypoint.sh --selftest   (probes only)
@@ -69,14 +110,27 @@
 # Exit codes, one per cause:
 #   0  the entry point is guarded              1  it is not
 #   90 the differential probe stopped reproducing (read the message — it is not a green)
-#   91 a form probe failed                     92 probe floor, or no temp dir
+#   91 a form probe failed                     92 a floor, a harness probe, or no temp dir
+#   93 a stage forced to fail by SDD_EP_FORCE_FAIL (internal — probe_composition only)
 #   94 the file named on --check is missing or unreadable
 #   96 unknown option
 
 set -uo pipefail
 
-ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
-SELF_PATH="$ROOT/tests/check-entrypoint.sh"
+# `${BASH_SOURCE[0]}` and not a hardcoded name: the probes re-invoke THIS file, and a copy running
+# under another name has to probe itself, not whatever still sits at the old path.
+SELF_PATH="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)/$(basename -- "${BASH_SOURCE[0]}")"
+ROOT="$(cd "$(dirname "$SELF_PATH")/.." && pwd)"
+
+# Every normal path below removes its own temp dir; the trap is for the abnormal ones (a signal, or
+# `set -u` tripping over something a future edit forgot to set).
+BOXES=()
+cleanup_boxes() {
+  local b
+  for b in ${BOXES+"${BOXES[@]}"}; do [ -n "$b" ] && rm -rf "$b"; done
+  return 0
+}
+trap cleanup_boxes EXIT
 
 # The one spelling. Written once and read by the check, the messages and the probes — the house
 # rule about an enum read in more than one place. Two copies and the sabotage moves one of them.
@@ -169,6 +223,7 @@ differential() {
   local box unguarded guarded rc=0
   box="$(mktemp -d "${TMPDIR:-/tmp}/sdd-entrypoint-XXXXXX")" || {
     printf 'SENSOR-BROKEN: no temp dir — the differential never ran\n' >&2; return 92; }
+  BOXES+=("$box")
 
   write_toy "$box/unguarded.sh" 'main "$@"'
   write_toy "$box/guarded.sh" "$GUARDED_FORM"
@@ -224,10 +279,73 @@ probe() {
   fi
 }
 
+COMPOSITION_PROBES=0
+
+# harness_selfcheck <scratch-file> <scratch-err> — measures the PROBE, not the parser.
+#
+# Both arms drive probe() with an expectation that is deliberately wrong, then demand the failure
+# was BOOKED and not merely printed. probe() has two accounting sites (the rc branch and the text
+# branch) and each arm reaches exactly one, so a sabotage of either is caught by itself.
+#
+# Deleting `FAILS=$((FAILS + 1)); fail_rc 91` used to be invisible: latent on its own, because with
+# a healthy parser no probe ever diverges, and fail-OPEN next to any second defect. Measured before
+# this existed — five SENSOR-BROKEN lines on stderr and rc 0, printed under the ok line that says
+# the parser measures what it claims. run-all.sh reads only the rc, so that is green in the suite.
+harness_selfcheck() {
+  local t="$1" err="$2" saved_fails="$FAILS" saved_rc="$SELFTEST_RC" broke=0
+  printf '%s\n' '#!/usr/bin/env bash' 'main() { :; }' 'main "$@"' > "$t"
+
+  # Arm 1 — the rc branch. `--check` answers 1 on this file; ask for 0.
+  FAILS=0; SELFTEST_RC=0
+  probe 'harness arm 1 — this divergence is EXPECTED' 0 '-' "$t" 2>"$err"
+  if [ "$FAILS" -ne 1 ] || [ "$SELFTEST_RC" -ne 91 ]; then
+    printf 'SENSOR-BROKEN: probe() met a wrong rc and booked FAILS=%s SELFTEST_RC=%s, wanted 1 and\n' \
+      "$FAILS" "$SELFTEST_RC" >&2
+    printf '  91 — a diverging probe would be printed and then forgotten\n' >&2
+    broke=1
+  fi
+  if ! grep -q 'SENSOR-BROKEN' "$err"; then
+    printf 'SENSOR-BROKEN: probe() booked the rc divergence without saying anything about it\n' >&2
+    broke=1
+  fi
+
+  # Arm 2 — the text branch, booked at its own site. The rc is right, the message is not.
+  FAILS=0; SELFTEST_RC=0
+  probe 'harness arm 2 — this divergence is EXPECTED' 1 'a phrase this sensor never prints' "$t" 2>"$err"
+  if [ "$FAILS" -ne 1 ] || [ "$SELFTEST_RC" -ne 91 ]; then
+    printf 'SENSOR-BROKEN: probe() met the wrong MESSAGE and booked FAILS=%s SELFTEST_RC=%s,\n' \
+      "$FAILS" "$SELFTEST_RC" >&2
+    printf '  wanted 1 and 91 — a probe could then assert any text at all\n' >&2
+    broke=1
+  fi
+
+  FAILS="$saved_fails"; SELFTEST_RC="$saved_rc"
+  if [ "$broke" -ne 0 ]; then FAILS=$((FAILS + 1)); fail_rc 92; fi
+}
+
+# probe_composition <stage> — measures the top-level dispatch, the only path no probe reached.
+#
+# It runs the WHOLE file with one stage forced to fail and demands rc 93 come back out. Deleting
+# `differential` from the composition left all ten probes green and the file exited 0 having never
+# run it — measured. SDD_EP_FORCE_FAIL stubs every OTHER stage to a no-op, so the child does no real
+# work and cannot recurse into this function.
+probe_composition() {
+  local st="$1" out rc
+  COMPOSITION_PROBES=$((COMPOSITION_PROBES + 1))
+  out="$( SDD_EP_FORCE_FAIL="$st" "$SELF_PATH" 2>&1 )"; rc=$?
+  if [ "$rc" -ne 93 ]; then
+    printf 'SENSOR-BROKEN: stage `%s` was forced to fail and the file exited %s, not 93 — the\n' \
+      "$st" "$rc" >&2
+    printf '  composition either never runs that stage or swallows its rc\n%s\n' "$out" >&2
+    FAILS=$((FAILS + 1)); fail_rc 92
+  fi
+}
+
 selftest() {
   local box t
   box="$(mktemp -d "${TMPDIR:-/tmp}/sdd-entrypoint-selftest-XXXXXX")" || {
     printf 'SENSOR-BROKEN: no temp dir — the probes never ran\n' >&2; return 92; }
+  BOXES+=("$box")
   t="$box/probe.sh"
   WITNESS="$box/witness"; : > "$WITNESS"
 
@@ -275,6 +393,28 @@ selftest() {
   # 10: the missing path must not read as clean.
   probe 'a missing file is not silently guarded' 94 'missing or unreadable' "$box/does-not-exist.sh"
 
+  # 11 and 12: the equality is an EQUALITY, in both directions. Loosening it to a substring test
+  # passed probes 1-10 green — measured, not supposed — because every non-guarded fixture above is
+  # SHORTER than the guard and none can contain it. These two are longer and contain it.
+  #
+  # 11 carries the form as a strict prefix, and is the dangerous one: `&` backgrounds the group, so
+  # the parent returns to the read loop with the file possibly grown. It kills `"$FORM"*` and
+  # `*"$FORM"*`.
+  printf '%s\n' '#!/usr/bin/env bash' 'main() { :; }' "$GUARDED_FORM &" > "$t"
+  probe 'the guard backgrounded is not the guard' 1 'the entry point is' "$t"
+
+  # 12 carries it as a strict suffix, which `*"$FORM"` would accept. This spelling is SAFE — it
+  # does exit — and is refused anyway, for the same one-spelling reason as probe 7.
+  printf '%s\n' '#!/usr/bin/env bash' 'main() { :; }' "true && $GUARDED_FORM" > "$t"
+  probe 'the guard behind another command is not the guard' 1 'it has to be' "$t"
+
+  # The harness and the composition: two paths that carry a failure from here to the suite, and
+  # neither had a probe. See harness_selfcheck and probe_composition for what each one measured.
+  harness_selfcheck "$t" "$box/harness.err"
+  probe_composition selftest
+  probe_composition differential
+  probe_composition check_runner
+
   # Cross-check on the HARNESS itself. Replacing probe()'s body with `out="$want_txt";
   # rc="$want_rc"` makes all ten assertions above pass at once and none of them can notice — in
   # the adversarial pass it was the one sabotage that survived, and it cost a single edit.
@@ -295,17 +435,26 @@ selftest() {
 
   rm -rf "$box"
 
-  # Floor on the probe COUNT: neutering every assertion body leaves a selftest that ran nothing,
-  # and a selftest that ran nothing reads exactly like one that passed.
-  if [ "$PROBES" -lt 10 ]; then
-    printf 'SENSOR-BROKEN: only %d probe(s) ran, expected at least 10\n' "$PROBES" >&2
+  # Floors on the probe COUNTS: neutering every assertion body leaves a selftest that ran nothing,
+  # and a selftest that ran nothing reads exactly like one that passed. 12 form probes plus the two
+  # harness arms; the composition probes are counted apart because they drive a different path.
+  if [ "$PROBES" -lt 14 ]; then
+    printf 'SENSOR-BROKEN: only %d probe(s) ran, expected at least 14\n' "$PROBES" >&2
     FAILS=$((FAILS + 1)); fail_rc 92
   fi
-  # Direct assignment, deliberately NOT through fail_rc: two independent paths from "a probe
-  # failed" to "the selftest fails".
+  if [ "$COMPOSITION_PROBES" -lt 3 ]; then
+    printf 'SENSOR-BROKEN: only %d composition probe(s) ran, expected one per stage (3)\n' \
+      "$COMPOSITION_PROBES" >&2
+    FAILS=$((FAILS + 1)); fail_rc 92
+  fi
+  # Direct assignment, deliberately NOT through fail_rc. The two are independent against a sabotage
+  # of EITHER accounting site: drop `fail_rc 91` and FAILS still lands here; drop the FAILS counter
+  # and fail_rc still carries the 91 out. Dropping BOTH — which is one edit, and was the hole this
+  # comment used to paper over — is what harness_selfcheck exists to catch.
   if [ "$FAILS" -ne 0 ] && [ "$SELFTEST_RC" -eq 0 ]; then SELFTEST_RC=92; fi
   [ "$SELFTEST_RC" -eq 0 ] && \
-    printf '  ok    selftest: %d probe(s), the entry-point parser measures what it claims\n' "$PROBES"
+    printf '  ok    selftest: %d probe(s) + %d composition probe(s), the entry-point parser and the\n        two paths that report on it measure what they claim\n' \
+      "$PROBES" "$COMPOSITION_PROBES"
   return "$SELFTEST_RC"
 }
 
@@ -317,6 +466,25 @@ check_runner() {
   return 0
 }
 
+# stage <name> — one member of the composition, or its stub while probe_composition drives.
+#
+# The stub exists only so the composition itself can be measured: without it, the loop below is
+# three names nobody probes, and dropping one of them is a silent green. SDD_EP_FORCE_FAIL is never
+# set by anything but probe_composition, so every real run takes the first branch.
+#
+# The counter is the half probe_composition cannot reach. probe_composition lives INSIDE selftest,
+# so dropping `selftest` from the list also drops the probes that would have noticed — measured, it
+# survived as a clean rc 0. The counter is read after the loop, outside every stage.
+STAGES_RUN=0
+stage() {
+  STAGES_RUN=$((STAGES_RUN + 1))
+  case "${SDD_EP_FORCE_FAIL:-}" in
+    '')   "$1"; return $? ;;
+    "$1") printf 'SENSOR-BROKEN: stage %s forced to fail (composition probe)\n' "$1" >&2; return 93 ;;
+    *)    return 0 ;;
+  esac
+}
+
 case "${1:-}" in
   --selftest) selftest; exit $? ;;
   # `${2-}` and not `${2:-}`: an EMPTY argument is a caller passing an unset variable, and it must
@@ -326,8 +494,24 @@ case "${1:-}" in
   # this is a no-op.
   --check)    [ -z "${SDD_EP_WITNESS:-}" ] || printf 'check\n' >> "$SDD_EP_WITNESS"
               check_file "${2-}" "$(basename -- "${2-<none>}")"; exit $? ;;
-  '')         selftest || exit $?
-              differential || exit $?
-              check_runner; exit $? ;;
+  # The three stages, composed through `stage` so that probe_composition can drive this very loop.
+  # Written as a list and not as three lines because a list is what a probe can count: dropping a
+  # name here turns exactly one composition probe red, naming the stage that went missing.
+  '')         SUITE_RC=0
+              for _stage in selftest differential check_runner; do
+                stage "$_stage"; _stage_rc=$?
+                [ "$SUITE_RC" -ne 0 ] || SUITE_RC="$_stage_rc"   # first failure wins
+                # Fail-fast is behaviour, not an assertion: with the line above intact, removing
+                # this one changes only how much runs after the verdict is already decided.
+                [ "$SUITE_RC" -eq 0 ] || break
+              done
+              # Composition floor, read outside every stage. See stage() for why probe_composition
+              # cannot cover the case where `selftest` itself is the name that went missing.
+              if [ "$SUITE_RC" -eq 0 ] && [ "$STAGES_RUN" -ne 3 ]; then
+                printf 'SENSOR-BROKEN: %d of 3 stages ran and the file still answered ok\n' \
+                  "$STAGES_RUN" >&2
+                SUITE_RC=92
+              fi
+              exit "$SUITE_RC" ;;
   *)          printf '  FAIL  unknown option: %s (see the usage header)\n' "$1" >&2; exit 96 ;;
 esac
