@@ -417,6 +417,46 @@ assert_eq "the .json summary is still exactly the result object the old format p
 assert_eq "the ledger reads the cost out of the streamed session, to the last digit" \
   "0.0362104" "$(jq -r -s '.[0].cost_usd' "$LEDGER")"
 
+# --- a session cut off mid-write does not take the whole run down with it ---
+# The distillation above reads the stream with jq, and jq exits 5 the instant it meets a line it
+# cannot parse — having already printed every well-formed object before it. A session killed while
+# writing leaves exactly that shape: the whole events, the terminal `result` among them, and then
+# a last line that starts and never ends. Under the runner's `set -euo pipefail` that 5 used to
+# escape `stream_summary` and abort the bare call in `run_phase`. Measured on the un-fixed runner:
+# rc **5**, terminal silent after the phase banner, `pipeline.log` without the phase line, and the
+# ledger with **zero** rows — while `<PHASE>-<ts>.json` sat on disk holding the correct summary.
+# The runner simply never lived to read what it had just written, and the session most worth
+# recording is the one that produces this stream.
+#
+# The two assertions are ONE rule and its consequence, and the split is deliberate: the compound
+# below dies to any degradation that lets the status escape, while the cost has an owner of its
+# own — a "fix" that answers `{}` or `null` instead of the object jq did recover keeps the run
+# alive and still empties the judge's money column. What is NOT here, for honesty: asserting that
+# `<PHASE>-<ts>.json` still holds the result object would be born green, since the un-fixed runner
+# writes that file correctly and only then dies.
+echo "== a stream truncated by a killed session does not abort the run =="
+: > "$LEDGER"
+rm -f "$LOGDIR"/*.json "$LOGDIR"/*.jsonl "$LOGDIR"/*.err
+cat > "$OUTSIDE/stub/claude" <<STUB
+#!/usr/bin/env bash
+cat "$STREAM_SAMPLE"
+# The kill, in one line: an object that starts and never closes, and no trailing newline after it.
+printf '{"type":"assistant","message":{"content":[{"type":"tex'
+exit 0
+STUB
+chmod +x "$OUTSIDE/stub/claude"
+
+"$SDD" run "$MISSION" >/dev/null 2>&1; rc=$?
+# ONE assertion for the pair. The rc alone is a label and this repo does not grade labels; the row
+# count alone would also read 0 in a world where jq is simply absent (`autonomy_have_jq` returns
+# early and the run still ends 3). Together they are the artifact AND the verdict: the run reached
+# its own no-progress escalation — two dead sessions plus the escalation — instead of dying on
+# somebody else's exit status.
+assert_eq "the run ends on its OWN verdict with the sessions in the ledger, not on jq's rc" \
+  "3 3" "$rc $(nrows)"
+assert_eq "and the cost is still distilled out of the truncated stream, to the last digit" \
+  "0.0362104" "$(jq -r -s '.[0].cost_usd' "$LEDGER")"
+
 # --- a kit without .git warns ONCE, not once per row ------------------------
 # `autonomy_kit_stamp` used to be read as `stamp="$(autonomy_kit_stamp)"`, so the whole body ran in
 # a subshell: its `AUTONOMY_SHA_WARNED=1` died with the command substitution, the flag was back to 0

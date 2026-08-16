@@ -253,7 +253,9 @@ id, exit code, duration, cost in USD) and two files alongside it, in the same
   `stream-json` under `--print` without `--verbose`.
 - `<PHASE>-<ts>.json` — the terminal `result` object of that stream, distilled at the end. It is
   byte for byte what the older `--output-format json` used to print, and it is what the runner
-  reads the session's cost out of.
+  reads the session's cost out of. A session killed mid-write leaves a half-finished last line in
+  the stream; the distillation keeps every object that DID close, so the summary and the cost
+  still land. The run is never taken down by its own log being ragged.
 
 Plus `<PHASE>-<ts>.err` for the session's stderr. The journal is **ephemeral by contract**: `.sdd/logs/` is in the
 `.gitignore` that `sdd install` writes, and the durable record of what happened is the committed

@@ -893,8 +893,20 @@ autonomy_session_row() {  # <phase> <attempt> <auto_retry> <moved> <gate> <gate_
 # hold a partial line that jq drops here rather than propagate as garbage downstream. Silent on a
 # stream with no result — the callers already treat an unreadable summary as an unknown cost, the
 # same answer the old single-blob format gave for a session that died before printing.
+#
+# `|| true` is load-bearing, and the same decision latest_matching() makes one screen up. jq exits
+# 5 on the FIRST unparseable line — and a stream cut off by a killed session ends in exactly one of
+# those — having already PRINTED every well-formed object before it, the terminal `result`
+# included. Under this file's `set -euo pipefail` that 5 leaves the pipeline, leaves the function,
+# and aborts the bare call in run_phase: measured, the whole run died with rc 5 having printed not
+# one word, no journal line, no ledger row, and no gate ever evaluated — for a session whose
+# summary had in fact been distilled correctly onto disk. The line above claims jq "drops" the
+# partial line, and swallowing the exit status is what makes that claim true instead of half true.
+# The OUTPUT is this function's contract, never the status: nothing on stdout already means
+# "unknown cost" to every caller, and the corrupt stream itself stays on disk beside the `.err`
+# for whoever reads the mangled session.
 stream_summary() { # stream_summary <stream.jsonl>
-  jq -c 'select(.type == "result")' "$1" 2>/dev/null | tail -1
+  jq -c 'select(.type == "result")' "$1" 2>/dev/null | tail -1 || true
 }
 
 # Runs a phase in a fresh headless session. Returns 0 when claude exited 0 (which does NOT mean

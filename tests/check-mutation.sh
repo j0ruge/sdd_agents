@@ -390,6 +390,20 @@ mut_RUN_stream_summary_unfiltered() {
   sed -i 's@stream_summary "$streamfile" > "$logfile"@cp "$streamfile" "$logfile"@' "$1"
 }
 
+# Not a gate, and the third of the streaming trio: the `|| true` that keeps jq's exit status inside
+# stream_summary comes off. jq answers 5 on the first unparseable line, a session killed mid-write
+# ends in exactly one, and under `set -euo pipefail` that 5 walks out of the function and aborts the
+# bare call in run_phase — the entire run gone with rc 5, no journal line, no ledger row, no gate,
+# and nothing printed. Sabotaging the `|| true` and not the `2>/dev/null` beside it is the point:
+# the stderr redirect only hides jq's complaint, while the status is what kills.
+#
+# Anchored on the whole jq line and NOT on the bare `| tail -1 || true`: latest_matching() ends in
+# those same five tokens for its own reason (`ls` failing on no match), so the short anchor would
+# sabotage two unrelated functions in one mutant and the point it scored would name neither.
+mut_RUN_stream_summary_fatal() {
+  sed -i "s@jq -c 'select(.type == \"result\")' \"\$1\" 2>/dev/null | tail -1 || true@jq -c 'select(.type == \"result\")' \"\$1\" 2>/dev/null | tail -1@" "$1"
+}
+
 CATALOG=(
   PLAN_empty_approval
   TICKET_no_sprint
@@ -428,6 +442,7 @@ CATALOG=(
   RUN_degraded_spins
   RUN_stream_no_verbose
   RUN_stream_summary_unfiltered
+  RUN_stream_summary_fatal
 )
 
 # Mutations that are NOT caught today, each with the increment that closes it. Ratchet in both
