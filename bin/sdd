@@ -1223,8 +1223,8 @@ cmd_health() {
   # Explicit floor: zero gates found would pass by vacuity (a rename, an indentation change).
   local gates; gates="$(grep -oE '^gate_[A-Z]+' "$kit/bin/sdd" | sed 's/^gate_//' | sort -u)"
   n="$(grep -c . <<< "$gates")"
-  if [ "$n" -ne 7 ]; then
-    health_bad "found $n gates in bin/sdd, expected 7 — new/renamed gate: update the floor here"
+  if [ "$n" -ne 8 ]; then
+    health_bad "found $n gates in bin/sdd, expected 8 — new/renamed gate: update the floor here"
   else
     local without_mutation=""
     for k in $gates; do
@@ -1233,7 +1233,7 @@ cmd_health() {
     if [ -n "$without_mutation" ]; then
       health_bad "gate(s) with no mutation in the catalogue:$without_mutation — a gate nobody sabotages is not measured"
     else
-      ok "all 7 gates have a mutation in the catalogue"
+      ok "all 8 gates have a mutation in the catalogue"
     fi
   fi
 

@@ -40,7 +40,7 @@ trap 'rm -rf "$WORK"' EXIT
 # the script pure English logic — recorded in TODO.md, not done here.
 surface() {
   ( cd "$ROOT" && ls -1 bin/sdd agents/sdd-*.md .claude/agents/sdd-*.md \
-      docs/pipeline.md docs/failure-modes.md README.md \
+      docs/pipeline.md docs/failure-modes.md docs/adr/*.md README.md \
       config/schema.md config/starter.conf \
       tests/*.sh tests/health-baseline.txt tests/lang-allowlist.txt 2>/dev/null ) \
     | grep -vxF -e 'tests/check-lang.sh' -e 'tests/check-templates.sh'
@@ -111,14 +111,15 @@ fi
 
 files="$(surface)"
 
-# Explicit floor, same reason as the "exactly 7 gates" floor in cmd_health: a glob that stops
+# Explicit floor, same reason as the "exactly 8 gates" floor in cmd_health: a glob that stops
 # matching (a renamed directory, a moved file) would leave the loop with nothing to read and the
-# check would report "0 new" — clean by vacuity. 26 paths today; the floor moves only on purpose,
-# and it moved twice already: tests/check-preflight.sh took it from 24 to 25, and
-# tests/check-autonomy.sh from 25 to 26.
+# check would report "0 new" — clean by vacuity. 31 paths today; the floor moves only on purpose,
+# and it moved three times already: tests/check-preflight.sh took it from 24 to 25,
+# tests/check-autonomy.sh from 25 to 26, and I13.3 from 26 to 31 (check-kaizen.sh, the two
+# sdd-kaizen.md copies, and the docs/adr/*.md glob with its two ADRs).
 n_surface="$(grep -c . <<< "$files")"
-if [ "$n_surface" -lt 26 ]; then
-  printf '  FAIL  surface shrank to %d path(s), expected at least 26 — did something move?\n' \
+if [ "$n_surface" -lt 31 ]; then
+  printf '  FAIL  surface shrank to %d path(s), expected at least 31 — did something move?\n' \
     "$n_surface" >&2
   exit 93
 fi

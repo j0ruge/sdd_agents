@@ -151,6 +151,28 @@ mut_RUN_autonomy_sha_warn_repeats() {
   sed -i 's|    AUTONOMY_SHA_WARNED=1|    AUTONOMY_SHA_WARNED=0|' "$1"
 }
 
+# The KAIZEN gate goes blind to WHICH kit sha a verdict judged: any verdict file satisfies it.
+# check-kaizen.sh plants a stale verdict for an older sha with a complete born plan beside it —
+# under this sabotage the pending-verdict scenario returns 0 ("already judged") instead of
+# escalating, and an old judgement silently covers every future kit change.
+mut_KAIZEN_gate_blind() {
+  sed -i 's|if \[ "\$(frontmatter "\$f" kit_sha_judged)" = "\$expected" \]|if [ -f "$f" ]|' "$1"
+}
+
+# The Jidoka dies: `verdict: piorou` no longer stops the line. The outcome falls through to the
+# born-plan branch and exits 0 — a kit change that made autonomy WORSE reads as a green light,
+# which is the exact failure ADR 0002 exists to forbid.
+mut_KAIZEN_jidoka_dead() {
+  sed -i 's|if \[ "\$GATE_KAIZEN_VERDICT" = "piorou" \]; then|if false; then|' "$1"
+}
+
+# The rubric's strongest signal is dropped: phases with an escalation, a human retry or a failing
+# last gate label as "ok". The judge would congratulate the kit precisely on the missions where
+# the human had to push the work again.
+mut_SERIES_refez_dropped() {
+  sed -i 's|then "refez"|then "ok"|' "$1"
+}
+
 CATALOG=(
   PLAN_empty_approval
   TICKET_no_sprint
@@ -172,6 +194,9 @@ CATALOG=(
   RUN_autonomy_null_moved_as_zero
   RUN_moved_never_true
   RUN_autonomy_sha_warn_repeats
+  KAIZEN_gate_blind
+  KAIZEN_jidoka_dead
+  SERIES_refez_dropped
 )
 
 # Mutations that are NOT caught today, each with the increment that closes it. Ratchet in both
