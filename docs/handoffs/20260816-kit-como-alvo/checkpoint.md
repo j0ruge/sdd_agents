@@ -1,6 +1,6 @@
 ---
 missao: 20260816-kit-como-alvo
-atualizado: 2026-08-16 00:00
+atualizado: 2026-08-16 16:20
 ---
 
 # Checkpoint — quando o kit é o próprio alvo, quatro instrumentos param de afirmar o que nunca mediram
@@ -14,7 +14,7 @@ atualizado: 2026-08-16 00:00
 
 | ID | Incremento | Check (comando → esperado) | Status | Commit |
 |---|---|---|---|---|
-| I1 | entry point com guarda + sensor diferencial | `bash tests/check-entrypoint.sh >/dev/null 2>&1; echo $?` → `0` | pending | — |
+| I1 | entry point com guarda + sensor diferencial | `bash tests/check-entrypoint.sh >/dev/null 2>&1; echo $?` → `0` | done | bb373b5 |
 | I2 | os três leitores do ledger filtram por repo | `o=$(bash tests/check-kaizen.sh 2>&1); grep -c 'a row from another repo never enters the series' <<< "$o"` → `1` | pending | — |
 | I3 | preflight compara conteúdo do agente, não presença | `o=$(bash tests/check-preflight.sh 2>&1); grep -c 'a drifted agent copy fails the preflight' <<< "$o"` → `1` | pending | — |
 | I4 | aviso de branch base alcança run e kaizen | `o=$(bash tests/check-gates.sh 2>&1); grep -c 'the base branch warning reaches sdd run' <<< "$o"` → `1` | pending | — |
@@ -49,6 +49,34 @@ atualizado: 2026-08-16 00:00
 - 2026-08-16 00:00 · `plano` · I1 tem Jidoka declarado: se a repro de reexecução não for
   determinística com ≥128 KB, **não commite repro flaky** — degrade para a asserção de forma,
   registre a degradação aqui e no handoff, e mantenha a mutação.
+- 2026-08-16 · `I1` · **O Jidoka do I1 não precisou ser acionado, e o motivo interessa para I2-I4.**
+  A repro do fall-through é determinística em *todos* os tamanhos medidos — 538 B, 4,5 KB, 20 KB,
+  129 KB, 196 KB — sempre 2 entradas na versão sem guarda contra 1 na guardada (bash 5.2.21). O
+  "≥128 KB" do plano era uma suposição sobre o buffer de leitura, e ela estava errada por excesso,
+  não por falta: **nenhuma degradação foi declarada**. O enchimento ficou em ~128 KB mesmo assim,
+  porque o tamanho em que um bash qualquer para de segurar o script inteiro é detalhe de
+  implementação; o header do sensor registra os cinco números.
+- 2026-08-16 · `I1` · **A âncora do `mut_RUN_entrypoint_unguarded` usa `|` como delimitador do
+  `sed`, não o `@` que todos os outros 40 mutantes usam** — o texto ancorado contém `"$@"`, então
+  um delimitador `@` fecha a expressão no meio do entry point e o `sed` morre com "unterminated
+  `s' command". O sintoma seria **rc 90** ("a âncora apodreceu"), que é a leitura errada.
+- 2026-08-16 · `I1` · Dois pisos anti-vacuidade que contam arquivos subiram junto com o sensor
+  novo: `LINT_FLOOR` 12 → 13 (`tests/run-all.sh`) e o piso de superfície do `check-pipefail.sh`
+  11 → 12, este último com a árvore-fixture do probe "a full clean surface passes" indo de 10 para
+  11 arquivos. Nenhum dos dois reprovaria se ficasse parado — os dois passariam **descrevendo uma
+  superfície menor do que a que leem**, que é a forma exata que esta missão está caçando. Se I2-I4
+  acrescentarem arquivo em `tests/`, mexa nos dois de novo.
+- 2026-08-16 · `I1` · **As âncoras de I2/I3/I4 no `01-plano.md` continuam válidas.** O I1 mexeu
+  numa linha só do `bin/sdd`, a última, e acrescentou 7 linhas de comentário ali mesmo (2365 →
+  2372). Tudo que I2-I4 citam — `:1283`, `:1294`, `:1817`, `:1937`, `:2039` — está *antes* desse
+  ponto e não se deslocou. Ainda assim: `grep` pelo texto antes de editar por número.
+- 2026-08-16 · `I1` · A passada de sabotagem adversarial do sensor novo matou 8 das 10 regras do
+  parser. Das duas sobreviventes, "neutralizar o corpo do `probe()`" era buraco de **uma** edição
+  (fazia as dez asserções passarem de uma vez) e foi fechado por uma testemunha que o próprio
+  `--check` escreve. ⚠️ A primeira tentativa de fechá-lo — rodar `--check` direto num arquivo ruim
+  — era **redundante** com os probes 1-10 e, por ser redundante, nenhuma sabotagem a deixava
+  vermelha: foi removida em vez de ganhar probe, pela regra do `CLAUDE.md`. Os dois sobreviventes
+  finais estão nomeados no header do sensor.
 
 ## Incrementos de fix (QA)
 
