@@ -163,10 +163,16 @@ autonomy ledger — visible in `sdd autonomy` and in the judge's `escalations`. 
 `40-review-r<N>.md` for the real grade, then choose: merge the draft with the open items visible, or
 hand the mission back to REVIEW with more rounds.
 
-**Reading the count:** the `warn` prints once per lap of the REVIEW→PR→REVIEW loop that follows,
-while both **records** are written once per run. That gap is deliberate: the runner lowered its bar
-once and then spun, and the spinning is a separate open defect in the kit's `TODO.md`. So
-`review-to-draft: 3` in either reader means three runs — never one run that degraded three times.
+**Reading the count:** all three trails are written **once per run**, so `review-to-draft: 3` in
+either reader means three runs — never one run that degraded three times.
+
+**If the draft PR does not close either:** the run ends there, with `BLOCKED in REVIEW` and a
+`blocked` / `budget-exhausted` row naming **REVIEW**. The draft was the one chance, and the phase
+named is the one whose ceiling was actually blown. The runner used to hand REVIEW back instead and
+go round again — REVIEW→PR→REVIEW with the budget still blown — until PR ran out of its own budget
+and the escalation came out blaming **PR**, a phase that was never over budget. If you are reading
+an old ledger and a `budget-exhausted` in PR follows a `review-to-draft`, that is what you are
+looking at.
 
 **Do not:** silence it by setting `PUBLISH_ON_REVIEW_BLOCKED="off"` and re-running until the review
 passes. Off is the default precisely because a stop is louder than a draft; switching it on and then
@@ -184,6 +190,26 @@ not an error.
 **What you do:** `sdd install --force` adopts the kit version. If the customisation was
 deliberate, keep it — and record in the kit's `TODO.md` why it exists: a recurring customisation
 is a sign the kit's agent needs to change.
+
+---
+
+## `sdd install` refuses to run: the kit has no `config/starter.conf`
+
+**Symptom:** `error: the kit at <path> has no config/starter.conf …`, rc 1, and **no**
+`.sdd/config.sh` in the target repo.
+
+**Cause:** the kit checkout is incomplete — a partial copy, a clone that lost a file, a `$PATH`
+pointing at a `bin/sdd` whose `config/` was left behind. `sdd install` builds `.sdd/config.sh`
+out of that template.
+
+**What you do:** re-copy or re-clone the kit, then run `sdd install` again. The guard fires
+**before** the file is written, so there is nothing to clean up on the target side.
+
+⚠️ **Reading an older target.** Before this guard existed the redirect ran anyway and left a
+**0-byte** `.sdd/config.sh` behind. The damage is not the first run — it is the *second*: the
+next `sdd install` finds the file, prints `ok … already exists (preserved)` with rc 0, and the
+repo carries on with no `TEST_CMD` at all. A target whose gates behave as if every key were
+empty is worth one `wc -c .sdd/config.sh`; on `0`, delete it and install again.
 
 ---
 
@@ -220,6 +246,9 @@ compares the fixtures against the installed skills and reports the divergence on
 ## Cost higher than expected
 
 **What you do:** `.sdd/logs/<mission>/pipeline.log` has one line per session with cost and
-duration. `BUDGET_PER_PHASE_USD` is a per-session cap (maximum damage), not a mission budget. If a
+duration; `<PHASE>-<ts>.stream.jsonl` beside it has that session's whole event stream, so an
+expensive phase can be read turn by turn instead of guessed at — and `tail -f` on it answers
+"what is it doing right now?" while the phase is still running.
+`BUDGET_PER_PHASE_USD` is a per-session cap (maximum damage), not a mission budget. If a
 phase is expensive over and over, the problem is usually a badly sliced plan — big sessions
 re-exploring what the "verified context" should have handed over ready.

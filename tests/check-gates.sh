@@ -50,8 +50,28 @@ assert_phase() {
 assert_why() {
   local desc="$1" ph="$2" re="$3" got
   got="$( cd "$FIX" && "$SDD" why "$MISSION" "$ph" 2>&1 )"
-  if printf '%s' "$got" | grep -qE "$re"; then pass "$desc"
+  # Herestring, never `printf | grep -q` — see the note on assert_why_absent below, and
+  # tests/check-pipefail.sh, which is what stops the pipe form from coming back.
+  if grep -qE "$re" <<< "$got"; then pass "$desc"
   else fail "$desc" "reason matching /$re/" "$got"; fi
+}
+
+# assert_why_absent <description> <phase> <regex that must NOT appear in the reason>
+#
+# The other half of assert_why, and the reason it exists: when two branches of the runner produce
+# DIFFERENT reasons for the same phase, asserting only the expected text leaves the assertion
+# unable to say WHICH branch ran — it just fails silently on the other one. Demanding the absence
+# of the wrong branch's marker is what makes the pair distinguish them (house rule: the text of
+# the right branch AND the absence of the other's marker).
+#
+# Herestring, never `printf | grep -q`: under `pipefail` the pipe returns 141 when grep FINDS and
+# exits before printf finishes writing, so a negative assertion over a long reason would read
+# "absent" for the very input that contains it.
+assert_why_absent() {
+  local desc="$1" ph="$2" re="$3" got
+  got="$( cd "$FIX" && "$SDD" why "$MISSION" "$ph" 2>&1 )"
+  if grep -qE "$re" <<< "$got"; then fail "$desc" "reason WITHOUT /$re/" "$got"
+  else pass "$desc"; fi
 }
 
 # ---------------------------------------------------------------------------
@@ -290,6 +310,42 @@ assert_why   "QA reports the open bug" "QA" "Status: open|bug\(s\) with Status"
 sed -i 's/\*\*Status:\*\* open/**Status:** wont-fix/' "$FIX/docs/qa/bugs/BUG-20260101-test.md"
 assert_phase "wont-fix is a human decision and does not block" "REVIEW"
 
+# The QA site of latest_matching(), which the r10 fixture below does NOT cover: that one pins the
+# REVIEW glob (`40-review-r*.md`), and for three rounds the runner comment claimed on top of it
+# that "version order keeps the dated names in the order plain sort gave them, so the qa call sites
+# are unaffected". That is a "X answers the same as Y" claim, which this repo requires to be a
+# DIFFERENTIAL assertion — and the claim was simply false. Measured on two same-day reports:
+#
+#   plain sort | tail -1  ->  2026-01-01-fixture.md
+#   sort -V    | tail -1  ->  2026-01-01-fixture-final.md
+#
+# because filevercmp special-cases the `.md` suffix and compares the stems, where plain sort
+# compares `-` (0x2D) against `.` (0x2E) and puts `-final` FIRST. Drop the suffix and the two
+# orders agree again, which is exactly why reading the code convinced three sessions in a row.
+# The QA reports are named `<YYYY-MM-DD>-<scope>.md` by the qa-execution skill, so a same-day pair
+# is the ordinary multi-round shape, not a corner case.
+#
+# The fixture is the smallest one that separates the two orders at THIS call site: the older name
+# is the closed/Pass report, the version-ordered pick is a second one still in-progress. A
+# lexicographic runner reads the green report and advances to REVIEW; the version-ordering runner
+# stays in QA naming the report that actually is not done.
+cat > "$FIX/docs/qa/reports/2026-01-01-fixture-final.md" <<'EOF'
+# QA Run Report — 2026-01-01 — fixture final round
+- **Started:** 2026-01-01T18:00:00Z · **Status:** in-progress <!-- in-progress | closed -->
+| # | Charter | Status |
+|---|---|---|
+| 1 | CH-one | Pending |
+EOF
+assert_phase "two reports the same day: the pick is by version, not by alphabet" "QA"
+assert_why   "QA quotes the version-ordered report" "QA" "2026-01-01-fixture-final\.md"
+# `2026-01-01-fixture\.md` and not a looser stem: the version-ordered name is
+# `2026-01-01-fixture-final.md`, which does NOT contain `2026-01-01-fixture.md`, so this pattern
+# fires on the lexicographic pick and only on it. The first draft anchored on `…fixture\.md is`
+# and stayed green under the broken runner — an absence assertion that distinguishes nothing.
+assert_why_absent "the lexicographic pick is not the file the gate read" "QA" "2026-01-01-fixture\.md"
+rm -f "$FIX/docs/qa/reports/2026-01-01-fixture-final.md"
+assert_phase "with the later report gone the gate advances again" "REVIEW"
+
 echo "== QA phase — project WITHOUT an interface =="
 # With no E2E_CMD and no APP_URL the docs/qa/ tree is never created by anyone. Here the gate
 # measures the handoff: `status: done` only passes together with the evidence of the journey.
@@ -393,6 +449,41 @@ EOF
 assert_phase "an earlier r<N> without the Overall Grade section does not matter: the last one counts" "REVIEW"
 assert_why   "REVIEW reports a dirty tree before approving" "REVIEW" "tree dirty|working tree"
 
+# The round the gate reads is the LATEST BY VERSION, not the last name in the alphabet. With a
+# lexicographic order `r10` sorts between `r1` and `r2`, so from the tenth round on the gate would
+# read `r3` — an old review, already approved — and let the mission through while the round that
+# actually ran sits on disk unread. REVIEW_MAX_ITER is 3 today, which is exactly why this has to
+# be a sensor and not a comment: the day someone raises the ceiling the bug arrives silently.
+#
+# The fixture is the smallest one that separates the two orders: r10 is the ONLY failing report
+# among r1/r2/r3/r10, so a lexicographic runner picks r3, finds it all-A and advances to DOCS,
+# while a version-ordering runner stays in REVIEW naming r10. Grade C, not the B of r1: the reason
+# has to name a grade no other fixture in this file can produce.
+cat > "$MDIR/40-review-r10.md" <<'EOF'
+# Review r10
+### Overall Grade
+
+| Criterion | Grade | Rationale |
+|-----------|-------|-----------|
+| Code Quality (Zen) | A | clean |
+| Type Safety | A | clean |
+| Error Handling | A | clean |
+| Security | C | injection left open |
+| Performance | A | clean |
+| Test Coverage | A | clean |
+| Documentation | A | clean |
+| **Overall** | **C** | |
+EOF
+git add -A && git commit -qm "chore: review r10"
+assert_phase "the tenth round counts, not the third: r10 > r3 by version" "REVIEW"
+assert_why   "REVIEW quotes the grade of the version-ordered pick" "REVIEW" "40-review-r10\.md: Security = C"
+assert_why_absent "the lexicographic pick (r3) is not the file the gate read" "REVIEW" "40-review-r3\.md"
+
+# r10 turns green and the phase advances — proving the gate advances BECAUSE of r10, not despite
+# it. Without this second half the assertion above would also pass on a runner that simply never
+# leaves REVIEW.
+sed -i 's/^| Security | C |.*/| Security | A | clean |/;s/^| \*\*Overall\*\* | \*\*C\*\* |/| **Overall** | **A** |/' \
+  "$MDIR/40-review-r10.md"
 git add -A && git commit -qm "chore: review"
 assert_phase "last review all Grade A, suite green, clean tree" "DOCS"
 

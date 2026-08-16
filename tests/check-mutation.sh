@@ -122,13 +122,13 @@ mut_EXEC_ignores_TEST_CMD() { # discards the suite's rc — the gate stops measu
 # `- **Started:** <ts> · **Status:** in-progress`, and the gate required `**Status:**` to OPEN the
 # line. It never matched; the runner re-ran qa-execution forever.
 mut_QA_status_line_start() {
-  sed -i "s|.*grep -qE '\^\[\[:space:\]\]\*-\.\*\\\\\*\\\\\*Status.*|  grep -qE '^\\\\*\\\\*Status:\\\\*\\\\*[[:space:]]*closed' \"\$report\"|" "$1"
+  sed -i "s|.*grep -qE '\^\[\[:space:\]\]\*-\.\*\\\\\*\\\\\*Status.*|  grep -qE '^\\\\*\\\\*Status:\\\\*\\\\*[[:space:]]*closed' \"\$report\"|" "$1"  # sdd-pipefail-waiver: sed s|…|…| delimiter, not a pipe
 }
 
 # Loose enum: the `closed` has to come right after `**Status:**`. With `.*closed` the template
 # legend (`<!-- in-progress | closed -->`) matches, and a report still IN PROGRESS passes.
 mut_QA_status_enum_loose() {
-  sed -i "s|.*grep -qE '\^\[\[:space:\]\]\*-\.\*\\\\\*\\\\\*Status.*|  grep -qE '\\\\*\\\\*Status:\\\\*\\\\*.*closed' \"\$report\"|" "$1"
+  sed -i "s|.*grep -qE '\^\[\[:space:\]\]\*-\.\*\\\\\*\\\\\*Status.*|  grep -qE '\\\\*\\\\*Status:\\\\*\\\\*.*closed' \"\$report\"|" "$1"  # sdd-pipefail-waiver: sed s|…|…| delimiter, not a pipe
 }
 
 # Same family, in the bug registry: with `.*open` the legend
@@ -243,6 +243,15 @@ mut_RUN_refez_dropped() {
   sed -i 's|then "refez"|then "ok"|' "$1"
 }
 
+# The guard floor goes back to counting every mission on the axis, escalations included: three
+# missions that stopped the line without spending a single session free the judge to rule
+# `melhorou` on a kit version it observed nothing of. Same RUN_ prefix and same reason as the
+# mutation above — the floor lives in kaizen_series, a helper; KAIZEN_guard_ignored is the one
+# that sabotages the gate that READS it, and the pair covers producer and consumer.
+mut_RUN_guard_counts_escalations() {
+  sed -i 's@missions_with_session: (\$sess @missions_with_session: (\$rows @' "$1"
+}
+
 # The guard stops guarding: gate_KAIZEN accepts `melhorou`/`piorou` written over an insufficient
 # series. The whole point of the runner-owned guard (boot prompt: "the guard belongs to the
 # runner") dies silently — a verdict label alone starts satisfying the gate, which is the
@@ -258,7 +267,7 @@ mut_KAIZEN_guard_ignored() {
 # sabotage that a SMALL fixture cannot see: the race is decided by the size of the text, which is
 # why check-gates.sh asserts it on a 20000-row checkpoint.
 mut_RUN_jidoka_pipefail() {
-  sed -i 's@grep -qx "blocked" <<< "$ckstatus"@printf "%s\\n" "$ckstatus" | grep -qx "blocked"@' "$1"
+  sed -i 's@grep -qx "blocked" <<< "$ckstatus"@printf "%s\\n" "$ckstatus" | grep -qx "blocked"@' "$1"  # sdd-pipefail-waiver: this payload IS the bug, deliberately
 }
 
 # Not a gate, and the exact bug I2 closed: `force_phase="PR"; continue` sat ABOVE both writers, so
@@ -309,6 +318,92 @@ mut_RUN_degraded_label_blind() {
   sed -i 's@if (map(select(is_escalation)) | length) > 0@if (map(select(.event == "blocked")) | length) > 0@' "$1"
 }
 
+# Not a gate (RUN_ per the naming rule above — latest_matching is a helper): the file picker goes
+# back to a lexicographic `sort`, and `r10` sorts between `r1` and `r2`. From the tenth review
+# round on, gate_REVIEW stops reading the round that just ran and reads `r3` — a review that was
+# already all-A when it was approved, so the gate PASSES and the mission walks past a report
+# nobody read. It is the sabotage that fails OPEN, and the one a fixture of three rounds cannot
+# see: with REVIEW_MAX_ITER at 3 the two orders agree, which is exactly why check-gates.sh has to
+# spend a fourth fixture on `r10`. The `sort -V` of health_skills (bin/sdd:1339) is left ALONE —
+# the sed anchors on `ls -1d $pattern` — so what dies is the picker and nothing else.
+mut_RUN_sort_lexi() {
+  sed -i 's@ls -1d $pattern 2>/dev/null | sort -V@ls -1d $pattern 2>/dev/null | sort@' "$1"
+}
+
+# Turns the existence guard into a tautology, so `sdd install` walks into the sed again with a
+# half-copied kit: 0-byte .sdd/config.sh on disk, and the next install reporting it as preserved.
+# It is a sabotage that fails OPEN in the half that matters — rc stays non-zero either way,
+# because sed's own rc is what killed the install before the guard existed. Only the assertions
+# that read the branch's own text and the ABSENCE of the file can see it, which is the whole point
+# of spending a mutation here. Anchors on `-f ` + the path: the `sed` line below feeds the same
+# path with no `-f`, and is deliberately left alone.
+mut_RUN_install_no_guard() {
+  sed -i 's@-f "$SDD_HOME/config/starter.conf"@-n "always-there"@' "$1"
+}
+
+# Not a gate: the ledger readers go back to asking "can this row be attributed to a kit version?"
+# in two spellings — `.kit_dirty == false` for sessions, `.kit_dirty != true` for escalations and
+# for the judge. This is the EXACT pre-fix text, and it is why the mutant needs two edits: reverting
+# `on_axis` alone would drag `comparable` lax with it (a wrong single definition), which is a
+# different defect from the fork. What dies here is the differential assertion in check-autonomy —
+# the twin rows with kit_dirty:null and a sha filled, where the escalation table grants a version
+# the session table denies. Every row the runner writes today satisfies both spellings, so no
+# fixture in the ordinary regime can tell this mutant from the fix.
+mut_RUN_on_axis_forked() {
+  sed -i \
+    -e 's@def on_axis: .kit_dirty == false and .kit_sha != null;@def on_axis: .kit_dirty != true and .kit_sha != null;@' \
+    -e 's@def comparable: .event == "session" and on_axis and (has("moved"));@def comparable: .event == "session" and .kit_dirty == false and (.kit_sha != null) and (has("moved"));@' \
+    "$1"
+}
+
+# Not a gate: the LOOP half of the self-degradation, the other half of the pair whose RECORD half
+# RUN_degraded_repeats owns. Puts the bare `force_phase="PR"; continue` back on the second entry,
+# so the runner goes REVIEW→PR→REVIEW again with the REVIEW budget still blown — and, the part that
+# actually misinforms, finally escalates as `budget-exhausted` in **PR**, a phase that was never
+# over budget. The one-shot guard is left ALONE, so the ledger still shows exactly one `degraded`
+# row and this mutant cannot be confused with RUN_degraded_repeats (which sabotages the guard and
+# leaves the ending intact): what dies here is the number of laps, the number of PR sessions and
+# the phase the run blames, and nothing else. Anchors on the second-entry warn — the first-entry
+# one lives inside the guard and says something different, so the sed cannot hit both.
+mut_RUN_degraded_spins() {
+  sed -i 's@warn "  the draft PR did not satisfy its gate either — the run ends here"@force_phase="PR"; continue@' "$1"
+}
+
+# Not a gate: the streaming session. `--output-format stream-json` WITHOUT `--verbose` is refused
+# by the CLI at argument validation ("When using --print, --output-format=stream-json requires
+# --verbose") — rc 1, empty stdout, no model ever reached. It is the rarest kind of sabotage in
+# this catalogue: no stub in the suite can see it, because a stub ignores its flags and answers
+# anyway, so every behavioural fixture stays green while every REAL mission dies on its first
+# phase. What kills it is the dry-run projection, the one place the suite reads the true argv.
+mut_RUN_stream_no_verbose() {
+  sed -i 's@--output-format stream-json --verbose@--output-format stream-json@' "$1"
+}
+
+# Not a gate either, and the other half of the pair: the stream is written but never distilled, so
+# $logfile holds the WHOLE session instead of its terminal `result` object. jq then answers once
+# per line, `tonumber?` refuses the multi-line string, and every session's cost lands in the ledger
+# as null — the judge summing money it can no longer see, with the suite green. Anchors on the call
+# site rather than on stream_summary's body: the body is one jq filter whose plausible degradations
+# (`select(true)`, `head -1`) are indistinguishable from the fix on a one-result stream, so
+# sabotaging it there would score a point no assertion could ever have earned.
+mut_RUN_stream_summary_unfiltered() {
+  sed -i 's@stream_summary "$streamfile" > "$logfile"@cp "$streamfile" "$logfile"@' "$1"
+}
+
+# Not a gate, and the third of the streaming trio: the `|| true` that keeps jq's exit status inside
+# stream_summary comes off. jq answers 5 on the first unparseable line, a session killed mid-write
+# ends in exactly one, and under `set -euo pipefail` that 5 walks out of the function and aborts the
+# bare call in run_phase — the entire run gone with rc 5, no journal line, no ledger row, no gate,
+# and nothing printed. Sabotaging the `|| true` and not the `2>/dev/null` beside it is the point:
+# the stderr redirect only hides jq's complaint, while the status is what kills.
+#
+# Anchored on the whole jq line and NOT on the bare `| tail -1 || true`: latest_matching() ends in
+# those same five tokens for its own reason (`ls` failing on no match), so the short anchor would
+# sabotage two unrelated functions in one mutant and the point it scored would name neither.
+mut_RUN_stream_summary_fatal() {
+  sed -i "s@jq -c 'select(.type == \"result\")' \"\$1\" 2>/dev/null | tail -1 || true@jq -c 'select(.type == \"result\")' \"\$1\" 2>/dev/null | tail -1@" "$1"
+}
+
 CATALOG=(
   PLAN_empty_approval
   TICKET_no_sprint
@@ -335,11 +430,19 @@ CATALOG=(
   RUN_degraded_repeats
   RUN_escalations_no_axis
   RUN_degraded_label_blind
+  RUN_sort_lexi
+  RUN_install_no_guard
+  RUN_on_axis_forked
   KAIZEN_gate_blind
   KAIZEN_jidoka_dead
   KAIZEN_guard_ignored
   KAIZEN_approved_bailout_dead
   RUN_refez_dropped
+  RUN_guard_counts_escalations
+  RUN_degraded_spins
+  RUN_stream_no_verbose
+  RUN_stream_summary_unfiltered
+  RUN_stream_summary_fatal
 )
 
 # Mutations that are NOT caught today, each with the increment that closes it. Ratchet in both
@@ -366,7 +469,12 @@ sandbox() { # sandbox <target-dir> — the whole kit the suite needs, and nothin
 
 # run_mutant <slug> — writes $WORK/<slug>.rc and $WORK/<slug>.log
 run_mutant() {
-  local slug="$1" box="$WORK/$slug"
+  # Two `local`s on purpose (SC2318): collapsed into one, the `$slug` on the right expands BEFORE
+  # this line's own assignment lands, so it reads the caller's global — correct today only by the
+  # coincidence that the loop variable happens to share the name. Rename the loop variable and
+  # every mutant silently shares `$WORK/`, one box for all of them.
+  local slug="$1"
+  local box="$WORK/$slug"
   sandbox "$box"
   "mut_$slug" "$box/bin/sdd"
   if cmp -s "$ROOT/bin/sdd" "$box/bin/sdd"; then

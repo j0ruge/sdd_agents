@@ -215,13 +215,35 @@ log_dir() {
   else printf '%s\n' "$REPO_ROOT/.sdd/logs/_geral"; fi
 }
 
-# Last file of a glob (by name order — the names are dated). Empty when there is none.
+# Last file of a glob. Empty when there is none.
+#
+# `sort -V`, never plain `sort`: the names this is called with carry a COUNTER (`40-review-r<N>`),
+# and lexicographically `r10` lands between `r1` and `r2` — so from the tenth round on the gate
+# would read `r3`, an old and already-approved review, while the round that actually ran sits
+# unread. Asserted in tests/check-gates.sh with the r1/r2/r3/r10 fixture.
+#
+# This comment used to end "version order also keeps the dated names (`YYYY-MM-DD-*`) in the order
+# plain `sort` gave them, so the qa call sites are unaffected", citing that same fixture. Both
+# halves were wrong, and the citation was the worse half: r1/r2/r3/r10 exercises the REVIEW glob
+# and says nothing whatsoever about the dated one. Measured on two same-day reports —
+#
+#   plain sort | tail -1  ->  2026-01-01-fixture.md
+#   sort -V    | tail -1  ->  2026-01-01-fixture-final.md
+#
+# — because filevercmp special-cases the `.md` suffix and compares the stems, while plain `sort`
+# compares `-` (0x2D) against `.` (0x2E) and puts `-final` first. Drop the suffix and the two
+# orders agree, which is why reading the code convinced three sessions in a row.
+#
+# So the qa call sites (`:346`, `:550`) DID change behaviour, and for the better: among same-day
+# reports the later-named round now wins instead of losing to the shorter stem. That is no longer
+# a claim — it is pinned by its own differential fixture in tests/check-gates.sh, next to this
+# one, which goes red the moment either ordering changes under it.
 latest_matching() {
   local pattern="$1"
   # `|| true`: with no match, `ls` fails and `pipefail` would propagate the error into the
   # caller's assignment — inside a gate that would read as a silent failure instead of "absent".
   # shellcheck disable=SC2012,SC2086
-  ls -1d $pattern 2>/dev/null | sort | tail -1 || true
+  ls -1d $pattern 2>/dev/null | sort -V | tail -1 || true
 }
 
 # ---------------------------------------------------------------------------
@@ -273,7 +295,7 @@ gate_EXEC() {
   local rows; rows="$(checkpoint_rows)"
   [ -n "$rows" ] || { GATE_WHY="checkpoint.md is empty"; return 1; }
 
-  local id status commit bad_rows=0 pending=0 blocked=0 total=0
+  local id status commit pending=0 blocked=0 total=0
   while IFS=$'\t' read -r id _ _ status commit; do
     total=$((total + 1))
     case "$status" in
@@ -297,7 +319,7 @@ gate_EXEC() {
         ;;
       pending|doing) pending=$((pending + 1)) ;;
       blocked)       blocked=$((blocked + 1)) ;;
-      *) bad_rows=$((bad_rows + 1)); GATE_WHY="increment $id has invalid status '$status' (use pending|doing|done|blocked)"; return 1 ;;
+      *) GATE_WHY="increment $id has invalid status '$status' (use pending|doing|done|blocked)"; return 1 ;;
     esac
   done <<< "$rows"
 
@@ -813,15 +835,23 @@ autonomy_have_jq() {
 # Reusing `blocked` for the second would have been cheaper — it inherits the kit_sha axis and the
 # aggregation with no jq to touch — but it would record "stopped" for a run that went on, and the
 # ledger exists to record fact. Everything ELSE about the two rows is one decision (the kit stamp,
-# the character slice, the absent session fields), so it lives here once and cannot drift apart.
+# the gate_why cap, the absent session fields), so it lives here once and cannot drift apart.
 autonomy_escalation_row() {   # autonomy_escalation_row <event> <kind> <phase> <gate_why>
   autonomy_have_jq || return 0
   # Called, never substituted: `$(autonomy_kit_stamp)` would reset its one-shot warning flag.
   autonomy_kit_stamp; local stamp="$AUTONOMY_KIT_STAMP"
-  # "${4:0:200}" is a CHARACTER slice, not a byte slice: gate reasons are full of em-dashes and
-  # other multi-byte UTF-8, and `head -c 200` can cut a codepoint in half, which some jq builds
-  # then reject outright — an empty --arg, dropped silently by autonomy_append's emptiness guard.
-  # A record that lies is worse than a gap; the character slice never produces one.
+  # "${4:0:200}" caps gate_why, and WHAT it counts is the locale's call — this comment used to
+  # claim it counted characters unconditionally, true in only one of the two regimes.
+  # Measured here (bash + glibc): under pt_BR.UTF-8 it yields 200 characters (400 bytes) and
+  # never halves a codepoint; under LC_ALL=C it yields 200 BYTES — exactly the `head -c 200` it
+  # replaced, half codepoint included. Neither the runner nor the suite pins LC_ALL, so both
+  # regimes are reachable, and the honest claim is the weaker one: never WORSE than the head -c
+  # it replaced, better whenever the locale is multibyte. That is why the fix here is the comment
+  # and not a global LC_ALL — pinning the locale would move `sort` and `printf` across the whole
+  # runner, a blast radius this gain does not pay for.
+  # The damage when it DOES cut mid-codepoint is also smaller than the old text claimed: jq 1.7
+  # here substitutes U+FFFD and exits 0 (measured) instead of rejecting the --arg, so the row
+  # survives with a mangled last character rather than vanishing through the emptiness guard.
   autonomy_append "$( jq -cn \
     --arg ts "$(date -Iseconds)" --arg event "$1" --arg kind "$2" --arg phase "$3" \
     --arg why "${4:0:200}" \
@@ -847,7 +877,8 @@ autonomy_session_row() {  # <phase> <attempt> <auto_retry> <moved> <gate> <gate_
   autonomy_have_jq || return 0
   # Called, never substituted: `$(autonomy_kit_stamp)` would reset its one-shot warning flag.
   autonomy_kit_stamp; local stamp="$AUTONOMY_KIT_STAMP"
-  # "${6:0:200}" is a CHARACTER slice, same reason as autonomy_escalation_row's "${4:0:200}" above.
+  # "${6:0:200}" caps gate_why under the same locale caveat as autonomy_escalation_row's
+  # "${4:0:200}" above — characters when the locale is multibyte, bytes under C/POSIX.
   autonomy_append "$( jq -cn \
     --arg ts "$(date -Iseconds)" --arg phase "$1" --arg attempt "$2" \
     --arg auto_retry "$3" --arg moved "$4" --arg gate "$5" \
@@ -873,11 +904,32 @@ autonomy_session_row() {  # <phase> <attempt> <auto_retry> <moved> <gate> <gate_
       gate: $gate, gate_why: $why}' )"
 }
 
+# The one `result` object of a stream-json session, or nothing. `tail -1` and not `head -1`: the
+# terminal summary is the LAST one by definition, and a stream truncated by a killed session can
+# hold a partial line that jq drops here rather than propagate as garbage downstream. Silent on a
+# stream with no result — the callers already treat an unreadable summary as an unknown cost, the
+# same answer the old single-blob format gave for a session that died before printing.
+#
+# `|| true` is load-bearing, and the same decision latest_matching() makes one screen up. jq exits
+# 5 on the FIRST unparseable line — and a stream cut off by a killed session ends in exactly one of
+# those — having already PRINTED every well-formed object before it, the terminal `result`
+# included. Under this file's `set -euo pipefail` that 5 leaves the pipeline, leaves the function,
+# and aborts the bare call in run_phase: measured, the whole run died with rc 5 having printed not
+# one word, no journal line, no ledger row, and no gate ever evaluated — for a session whose
+# summary had in fact been distilled correctly onto disk. The line above claims jq "drops" the
+# partial line, and swallowing the exit status is what makes that claim true instead of half true.
+# The OUTPUT is this function's contract, never the status: nothing on stdout already means
+# "unknown cost" to every caller, and the corrupt stream itself stays on disk beside the `.err`
+# for whoever reads the mangled session.
+stream_summary() { # stream_summary <stream.jsonl>
+  jq -c 'select(.type == "result")' "$1" 2>/dev/null | tail -1 || true
+}
+
 # Runs a phase in a fresh headless session. Returns 0 when claude exited 0 (which does NOT mean
 # the gate passed — the gate judges that, always afterwards).
 run_phase() {
   local phase="$1" resume_sid="${2:-}"
-  local pstep model agent sid prompt logfile started ended cost
+  local pstep model agent sid prompt logfile streamfile started ended cost
   # QA is three sessions (plan, walk, close); the step comes from the artifacts, not a counter.
   pstep="$(phase_step "$phase")"
   model="$(phase_model "$phase")"
@@ -894,7 +946,7 @@ missing and write the artifacts. The gate will be re-evaluated."
   local -a cmd=(claude -p "$prompt"
     --model "$model"
     --permission-mode "$PERMISSION_MODE"
-    --output-format json
+    --output-format stream-json --verbose
     --setting-sources "user,project,local"
     --allowedTools "$ALLOWED_TOOLS"
     --max-budget-usd "$BUDGET_PER_PHASE_USD")
@@ -918,15 +970,40 @@ missing and write the artifacts. The gate will be re-evaluated."
   fi
 
   logfile="$(log_dir)/${phase}-$(date +%Y%m%d-%H%M%S).json"
+  streamfile="${logfile%.json}.stream.jsonl"
   mkdir -p "$(dirname "$logfile")"
   started="$(date +%s)"
   step "phase $pstep — ${agent:-skill} ($model) — session ${resume_sid:-$sid}"
 
   local rc=0
-  ( cd "$REPO_ROOT" && "${cmd[@]}" ) > "$logfile" 2>"${logfile%.json}.err" || rc=$?
+  # The session writes STRAIGHT to the stream file, one JSON event per line, as it happens. Under
+  # the old `--output-format json` this file was a single blob printed at exit: it sat at 0 bytes
+  # for the ten minutes a phase takes, so a run in flight was unobservable and a session killed
+  # halfway left nothing behind saying how far it got. `tail -f` on the stream now answers both.
+  #
+  # A plain redirect, not the `tee` the plan sketched: the redirect already gives the live file,
+  # and a pipeline would put `tee`'s exit status where claude's has to be — recoverable only via
+  # PIPESTATUS, for no second consumer to feed.
+  ( cd "$REPO_ROOT" && "${cmd[@]}" ) > "$streamfile" 2>"${logfile%.json}.err" || rc=$?
   ended="$(date +%s)"
 
+  # The summary every other reader here already knows. `--output-format json` printed exactly the
+  # terminal `result` object and nothing else, so distilling that one line back into $logfile
+  # leaves the cost below, the `.err` sibling and the journal's `log=` untouched by the change.
+  # Reading the raw stream instead would hand jq one answer PER LINE and `tonumber?` would refuse
+  # the multi-line string — the ledger going quiet about money with nothing going red.
+  stream_summary "$streamfile" > "$logfile"
+
+  # The `|| echo "?"` covers a jq that FAILS; it does not cover a jq that succeeds silently, and
+  # that is the case stream_summary() produces most: over an EMPTY $logfile — a session killed
+  # before its `result`, or the truncated stream the comment above describes — jq exits 0 having
+  # printed nothing, so the fallback never fires and `cost` becomes the empty string. Measured: the
+  # journal line came out `cost_usd=  log=…`, an unlabelled hole where every other row says `?`.
+  # No data was ever corrupted (`($cost | tonumber? // null)` maps "" and "?" to the same ledger
+  # null), but stream_summary()'s contract says in so many words that empty stdout "already means
+  # unknown cost to every caller", and this is the caller that has to make that sentence true.
   cost="$(jq -r '.total_cost_usd // .cost_usd // "?"' "$logfile" 2>/dev/null || echo "?")"
+  [ -n "$cost" ] || cost="?"
   local dur=$((ended - started))
   pipeline_log_line "$(date -Iseconds)  $phase  agent=$agent  model=$model  session=${resume_sid:-$sid}  rc=$rc  dur=${dur}s  cost_usd=$cost  log=$logfile"
 
@@ -1008,6 +1085,15 @@ cmd_install() {
     if [ -f "$REPO_ROOT/pyproject.toml" ]; then test_cmd="pytest -q"; fi
     if [ -f "$REPO_ROOT/Cargo.toml" ];     then test_cmd="cargo test"; fi
     if [ -f "$REPO_ROOT/go.mod" ];         then test_cmd="go test ./..."; fi
+    # The redirect below creates $CONFIG_FILE BEFORE sed runs, so a half-copied kit used to leave
+    # a 0-byte config on disk and only then die on sed's rc. rc was already non-zero, which is why
+    # this looked harmless: the damage was the ARTIFACT. The next `sdd install` found the file,
+    # printed "already exists (preserved)" over it, and the target repo went on without a
+    # TEST_CMD — the runner asserting an artifact it never wrote, one level down from the gates.
+    # Guard first, and in the kit's own voice: sed's stderr is locale-dependent and says nothing
+    # about the consequence.
+    [ -f "$SDD_HOME/config/starter.conf" ] \
+      || die "the kit at $SDD_HOME has no config/starter.conf — .sdd/config.sh would be created empty, and the next 'sdd install' would report it as already existing. Re-copy or re-clone the kit."
     sed -e "s|<PROJECT_NAME>|$project|g" \
         -e "s|<DEFAULT_BRANCH>|$branch|g" \
         -e "s|<TEST_CMD>|$test_cmd|g" \
@@ -1330,8 +1416,9 @@ health_provenance() {
   else skipped=$((skipped + 1)); fi
 
   # codereview grade table: every criterion of the skill must exist in the fixture.
-  # `sort -V` on the plugin version — a lexicographic `sort` would put 1.9 after 1.17 (that is
-  # the bug the runner's latest_matching() still has, recorded in the TODO; do not inherit it).
+  # `sort -V` on the plugin version — a lexicographic `sort` would put 1.9 after 1.17. This was
+  # once the only version-ordered pick in the file; latest_matching() carried the lexicographic
+  # bug and this comment recorded it. It no longer does — both sort by version now.
   tpl="$(find "$HOME/.claude/plugins/cache" -path '*/codereview/*/references/report-template.md' \
          2>/dev/null | sort -V | tail -1)"
   if [ -n "$tpl" ] && [ -f "$tpl" ]; then
@@ -1540,30 +1627,38 @@ cmd_run() {
       bad "  current reason: $GATE_WHY"
       dim "  'sdd status $MISSION' shows the full state; 'sdd why $MISSION $phase' the reason."
       if [ "$phase" = "REVIEW" ] && [ "$PUBLISH_ON_REVIEW_BLOCKED" = "draft" ]; then
-        # The warn stays OUTSIDE the guard below: on this lap the runner really is jumping to PR,
-        # and saying so is honest terminal output, not a record. It is also what check-autonomy.sh
-        # counts to prove its fixture is in the repeating regime — a witness that survives any
-        # sabotage of the writers is the only kind worth having.
-        warn "PUBLISH_ON_REVIEW_BLOCKED=draft — moving on to PR in draft mode"
         # The two writers come BEFORE the `continue`, and that order is the whole I2 increment. The
-        # jump used to be here, above both, so the single most interesting autonomy event a
-        # mission can produce — the runner lowering its own bar, alone — left no trace anywhere:
-        # the journal showed a PR phase after some failing REVIEW sessions, and the series showed
-        # the same, with nothing saying why. `degraded`, not `blocked`: the run went ON.
+        # jump used to be above both, so the single most interesting autonomy event a mission can
+        # produce — the runner lowering its own bar, alone — left no trace anywhere: the journal
+        # showed a PR phase after some failing REVIEW sessions, and the series showed the same,
+        # with nothing saying why. `degraded`, not `blocked`: the run went ON.
         #
-        # ONCE PER RUN (F1). `force_phase="PR"` does not end the loop: PR runs, its gate fails, and
-        # `current_phase` hands REVIEW straight back with the budget still blown — so the branch is
-        # re-entered every lap and used to write a row every lap. Measured on the QA walk: one
-        # degradation, THREE rows, in both readers, against the "exactly one" of the mission's
-        # metric 3. Two instruments agreeing on a wrong number is worse than one being wrong, and
-        # the runner did NOT lower its bar three times: it lowered it once and then spun.
-        # The spinning itself is a separate defect — the loop half — and it lives in TODO.md.
+        # ONE CHANCE, AND ONLY ONE (F1 wrote the row once; I9 made the JUMP happen once). The
+        # branch used to end in a bare `force_phase="PR"; continue`, which does not end the run:
+        # PR ran, its own gate failed, `current_phase` handed REVIEW straight back with the budget
+        # still blown, and the branch was re-entered lap after lap. Measured on the QA walk: warn
+        # 3×, two PR sessions, and — the part that actually misinformed — the run finally escalated
+        # as `budget-exhausted` in **PR**, blaming the phase that was never over budget for a
+        # ceiling REVIEW had blown three laps earlier. F1 stopped the ledger from repeating the
+        # `degraded` row; the spin underneath it stayed, and this closes it.
         if [ "$degraded_logged" = "0" ]; then
           degraded_logged=1
+          # Inside the guard since I9: on the second entry the runner is NOT moving on to PR, so
+          # saying so would be the terminal lying about what it is about to do. It used to sit
+          # outside as check-autonomy.sh's witness that the fixture kept re-entering the branch —
+          # a role the `budget-exhausted`-in-REVIEW row below now holds, and holds better, because
+          # only a second entry can produce it.
+          warn "PUBLISH_ON_REVIEW_BLOCKED=draft — moving on to PR in draft mode"
           pipeline_log_line "$(date -Iseconds)  DEGRADED  $phase  PUBLISH_ON_REVIEW_BLOCKED=draft, PR in draft mode — $GATE_WHY"
           autonomy_degraded_row "review-to-draft" "$phase" "$GATE_WHY"
+          force_phase="PR"; continue
         fi
-        force_phase="PR"; continue
+        # Second entry: the draft PR ran and its gate failed too. Falling through to the blocked
+        # pair below ends the run on REVIEW — the phase whose budget is actually blown — reusing
+        # the `blocked`/`budget-exhausted` pair that already sat there. Deliberately NOT a new
+        # event kind: three readers share one `is_escalation` definition, and an event none of them
+        # learned would be filed as unrecognized by all three.
+        warn "  the draft PR did not satisfy its gate either — the run ends here"
       fi
       pipeline_log_line "$(date -Iseconds)  BLOCKED  $phase  $GATE_WHY"
       autonomy_blocked_row "budget-exhausted" "$phase" "$GATE_WHY"
@@ -1732,14 +1827,22 @@ cmd_autonomy() {
   # this command instead of leaking jq's own exit code.
   local out jq_rc=0
   out="$(jq -rs '
-    def comparable: .event == "session" and .kit_dirty == false
-                    and (.kit_sha != null) and (has("moved"));
+    # ONE definition of "attributable to a kit version" for the whole program, exactly as
+    # is_escalation is one definition of the escalation pair — and for the same reason. This was
+    # written twice, `.kit_dirty == false` for sessions and `.kit_dirty != true` for escalations,
+    # two spellings of one question that agree on every row the runner writes (the stamp emits
+    # kit_dirty:null only alongside kit_sha:null, and a null sha already fails both) and disagree on
+    # the one row it does not: kit_dirty:null WITH a sha. There the table counted an escalation
+    # under a version while refusing the session next to it — attribution granted and denied in the
+    # same output. `== false` is the spelling that survives: unknown dirtiness is not clean, and a
+    # row nobody can attribute belongs in the non-comparable bucket, out loud. kaizen_series holds
+    # the same definition for its own jq program; tests/check-autonomy.sh compares the readers to
+    # each other so neither can be "improved" alone.
+    def on_axis: .kit_dirty == false and .kit_sha != null;
+    def comparable: .event == "session" and on_axis and (has("moved"));
     def is_session: .event == "session";
     def is_escalation: .event == "blocked" or .event == "degraded";
     def is_unrecognized: (is_session or is_escalation) | not;
-    # The series calls a row non-comparable on exactly this predicate. Same test, same words, so
-    # the two readers cannot drift apart by one of them being "improved" alone.
-    def on_axis: .kit_dirty != true and .kit_sha != null;
     (map(select((is_session and (comparable | not))
                 or (is_escalation and (on_axis | not)))) | length) as $skipped
     | (map(select(is_session and comparable)) | group_by(.kit_sha)) as $groups
@@ -1793,7 +1896,10 @@ kaizen_series() {
   local file; file="$(autonomy_log_path)"
   command -v jq >/dev/null 2>&1 || die "jq not found — it is required to read the ledger"
   if [ ! -s "$file" ]; then
-    printf '%s\n' '{"v":1,"latest":null,"previous":null,"guard":{"missions_after_change":0,"sufficient":false},"excluded":{"non_comparable":0,"unrecognized":0,"meta":0}}'
+    # Second producer of the same shape, and it cannot share the jq above (there is no input to
+    # run it on), so the key set is kept in step by hand and check-kaizen.sh compares the two as
+    # key sets. A consumer reading `null` where the real series gives a number is the drift.
+    printf '%s\n' '{"v":1,"latest":null,"previous":null,"guard":{"missions_after_change":0,"missions_with_session":0,"sessions":0,"sufficient":false},"excluded":{"non_comparable":0,"unrecognized":0,"meta":0}}'
     return 0
   fi
   jq -n '
@@ -1806,6 +1912,15 @@ kaizen_series() {
     # REVIEW passes made the one mission that degraded read `ok`. An escalation outlives the
     # session that provoked it; that is why `blocked` was in the clause to begin with.
     def is_escalation: .event == "blocked" or .event == "degraded";
+
+    # ONE definition of the kit_sha axis for this program too — the third hand-written copy of the
+    # same question lived here, as the complementary pair `.kit_dirty == true or .kit_sha == null`
+    # / `.kit_dirty != true and .kit_sha != null`. Same words as cmd_autonomy on purpose: the judge
+    # and the window the human reads take the SAME file, so a row one of them attributes to a
+    # version and the other does not is the divergence the ledger exists to prevent, merely moved
+    # from inside one command to between two. (No apostrophes in here: this jq program is a
+    # single-quoted shell string, and one would end it mid-comment.)
+    def on_axis: .kit_dirty == false and .kit_sha != null;
 
     def phase_label:
       if (map(select(is_escalation)) | length) > 0
@@ -1826,6 +1941,13 @@ kaizen_series() {
                       cost_usd: (map(.cost_usd // 0) | add)})) as $detail
       | {kit_sha: $rows[0].kit_sha,
          missions: ($rows | map(.mission) | unique | length),
+         # The floor of the guard, and NOT the same number as `missions` above: that one counts
+         # every mission on the axis, escalations included, which is right for the display and
+         # wrong for the floor. A mission that stopped the line without spending a session left
+         # the judge nothing to read about this kit version, and three of them used to clear a
+         # floor meant to mean "enough observation". Derived from $sess, the one place this
+         # program already calls a row a session.
+         missions_with_session: ($sess | map(.mission) | unique | length),
          sessions: ($sess | length),
          moved_rate: (if ($sess | length) == 0 then null
                       else (($sess | map(select(.moved == true)) | length) / ($sess | length) * 100 | round / 100) end),
@@ -1842,16 +1964,23 @@ kaizen_series() {
     | ($all | map(select(.phase == "KAIZEN"))) as $meta
     | ($all | map(select(.phase != "KAIZEN"))) as $rows
     | (($raw | length) - ($all | length)) as $unrec
-    | ($rows | map(select(.kit_dirty == true or .kit_sha == null))) as $noncomp
-    | ($rows | map(select(.kit_dirty != true and .kit_sha != null))) as $ok
+    | ($rows | map(select(on_axis | not))) as $noncomp
+    | ($rows | map(select(on_axis))) as $ok
     | ($ok | map(.kit_sha) | reduce .[] as $s ([]; if index($s) then . else . + [$s] end)) as $shas
     | (if ($shas | length) >= 1 then ($ok | map(select(.kit_sha == $shas[-1])) | group_summary) else null end) as $latest
     | (if ($shas | length) >= 2 then ($ok | map(select(.kit_sha == $shas[-2])) | group_summary) else null end) as $previous
+    # ONE binding for the number the floor reads, so the exposed field and the verdict of the
+    # guard cannot drift apart: written twice, an edit to one of them would leave the series
+    # PRINTING a count it did not gate on, which is the same class of divergence I7 closed one
+    # field over. Everything the guard says about itself comes from here.
+    | (($latest.missions_with_session) // 0) as $observed
     | {v: 1,
        latest: $latest,
        previous: $previous,
        guard: {missions_after_change: ($latest.missions // 0),
-               sufficient: (($latest.missions // 0) >= 3)},   # guard floor: 3 distinct missions (D4); I13.4 revisits
+               missions_with_session: $observed,
+               sessions: ($latest.sessions // 0),
+               sufficient: ($observed >= 3)},   # guard floor: 3 missions WITH a session (D4); I13.4 revisits
        excluded: {non_comparable: ($noncomp | length), unrecognized: $unrec,
                   meta: ($meta | length)}}
   ' < "$file"
@@ -1889,8 +2018,9 @@ kaizen_reminder() {
 # Satisfied means: a verdict exists for the kit sha the series calls latest, and — unless the
 # verdict is `piorou`, which dispenses the plan (ADR 0002) — the born plan sits beside it with an
 # EMPTY `aprovacao:`. The verdict is found by CONTENT (`kit_sha_judged == expected`), never by
-# "newest file": latest_matching sorts lexically (bug r10 in TODO.md), and an old verdict must
-# never satisfy a new sha.
+# "newest file" — and that stays true now that latest_matching() sorts by version: file order,
+# however correct, does not know which sha a verdict judged, and an old verdict must never
+# satisfy a new sha.
 #
 # On `piorou` the gate PASSES (the judge did its job) and publishes GATE_KAIZEN_VERDICT so
 # cmd_kaizen can stop the line — the gate itself never kills the process, and the global survives

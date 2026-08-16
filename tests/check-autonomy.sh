@@ -112,6 +112,25 @@ STUB
 chmod +x "$OUTSIDE/stub/claude"
 PATH="$OUTSIDE/stub:$PATH"
 
+# One session's worth of `stream-json`, replayed by every stub in this file that answers at all.
+# ONE copy, deliberately: three stubs pasting their own idea of the format is three chances for
+# one of them to drift into a shape the CLI never emits, and the drifted one would still pass.
+#
+# PROVENANCE: captured from a REAL session on 2026-08-16 with
+#     claude -p 'Reply with exactly: OK' --model haiku --output-format stream-json --verbose
+# on Claude Code 2.1.233, and pasted VERBATIM — no field invented, none renamed. These are lines
+# 1, 2 and 37 of that capture: two `system` events and the terminal `result` object. The 34
+# omitted lines are the `init` blob, the hook events and the assistant turns, none of which the
+# runner reads. Writing this shape from memory is the mistake the provenance rule exists to stop —
+# stub and parser would share one author and one wrong assumption, and the suite would go on
+# confirming it forever. Re-capture with the command above when the CLI major changes.
+STREAM_SAMPLE="$OUTSIDE/stream-sample.jsonl"
+cat > "$STREAM_SAMPLE" <<'EOF'
+{"type":"system","subtype":"thinking_tokens","estimated_tokens":5,"estimated_tokens_delta":5,"uuid":"b53d314f-e6ef-41b2-9227-bf8375d962bd","session_id":"3b628c65-6068-442e-aedb-bc76c2e508b1"}
+{"type":"system","subtype":"thinking_tokens","estimated_tokens":10,"estimated_tokens_delta":5,"uuid":"41cba195-10ef-4421-b806-4e3fde0069f2","session_id":"3b628c65-6068-442e-aedb-bc76c2e508b1"}
+{"is_error":false,"duration_api_ms":14208,"num_turns":1,"stop_reason":"end_turn","session_id":"3b628c65-6068-442e-aedb-bc76c2e508b1","total_cost_usd":0.0362104,"usage":{"input_tokens":10,"cache_creation_input_tokens":15451,"cache_read_input_tokens":18134,"output_tokens":697,"output_tokens_details":{"thinking_tokens":690},"server_tool_use":{"web_search_requests":0,"web_fetch_requests":0},"service_tier":"standard","cache_creation":{"ephemeral_1h_input_tokens":15451,"ephemeral_5m_input_tokens":0},"inference_geo":"not_available","iterations":[{"input_tokens":10,"output_tokens":697,"cache_read_input_tokens":18134,"cache_creation_input_tokens":15451,"cache_creation":{"ephemeral_5m_input_tokens":0,"ephemeral_1h_input_tokens":15451},"type":"message"}],"speed":"standard"},"modelUsage":{"claude-haiku-4-5-20251001":{"inputTokens":10,"outputTokens":697,"cacheReadInputTokens":18134,"cacheCreationInputTokens":15451,"webSearchRequests":0,"costUSD":0.0362104,"contextWindow":200000,"maxOutputTokens":32000,"canonicalModel":"claude-haiku-4-5","provider":"firstParty"}},"permission_denials":[],"terminal_reason":"completed","fast_mode_state":"off","fast_mode_disabled_reason":"sdk_opt_in_required","subtype":"success","api_error_status":null,"result":"OK","ttft_ms":14187,"ttft_stream_ms":1324,"time_to_request_ms":28,"type":"result","duration_ms":14238,"uuid":"09a7a31e-9833-426b-8fdd-293522a57a35"}
+EOF
+
 git init -q -b main
 git config user.email "fixture@example.com"
 git config user.name "Fixture"
@@ -263,7 +282,7 @@ if [ ! -e "$MOVE_MARKER" ]; then
   git -C "$FIX" add -A
   git -C "$FIX" commit -qm "chore: session made a real change"
 fi
-echo '{}'
+cat "$STREAM_SAMPLE"
 exit 0
 STUB
 chmod +x "$OUTSIDE/stub/claude"
@@ -297,6 +316,146 @@ git -C "$FIX" add -A
 git -C "$FIX" commit -qm "chore: reset move marker for the sdd-retry scenario"
 "$SDD" retry "$MISSION" >/dev/null 2>&1
 assert_eq "sdd retry that changed the disk records moved:true" "true" "$(rows '.moved')"
+
+# --- the phase session stops being a blind spot while it runs ---------------
+# `--output-format json` prints ONE blob, and only once the session is already over: the log file
+# sits at 0 bytes for the ten minutes the phase takes, so a human watching a headless run has
+# nothing to watch and a crashed session leaves no trace of how far it got. The runner now asks
+# for `stream-json` and keeps the event stream in `<PHASE>-<ts>.stream.jsonl`, beside the
+# `<PHASE>-<ts>.json` summary every other reader already knows. The replayed capture and its
+# provenance are at the top of this file.
+#
+# Sabotage matrix (10 degradations of bin/sdd, control green, judged by the NAME of the assertion
+# that falls — the I7 correction). Sole catchers, one per row:
+#   buffered  — the session collected into a variable and written at exit → THE witness below
+#   nostream  — the stream deleted once distilled                        → the whole-session shape
+#   cost_field— the summary read for a field it no longer carries        → the cost parity
+#   (in check-dry-run.sh: no_verbose → the --verbose count; both_formats → the absence half)
+# Overlap, kept for the diagnosis and not for the coverage: `the .json summary is still exactly
+# the result object` dies alongside the cost in all three sabotages that reach it, and never
+# alone — it is what says WHY the cost went null instead of only that it did.
+# Two survivors, named rather than hidden, and neither is reachable by any honest fixture: `head -1`
+# for `tail -1`, and `select(true)` for `select(.type == "result")`. A real stream carries exactly
+# one `result` object, so both are the SAME program on every input the CLI can produce — which is
+# why mut_RUN_stream_summary_unfiltered anchors on the call site instead of on that body.
+echo "== the phase session streams to disk while it runs =="
+: > "$LEDGER"
+# Hermetic: earlier blocks left their own phase logs here, written by stubs that answer nothing.
+# `pipeline.log` is deliberately spared — a later block counts DEGRADED lines in it.
+LOGDIR="$FIX/.sdd/logs/$MISSION"
+rm -f "$LOGDIR"/*.json "$LOGDIR"/*.jsonl "$LOGDIR"/*.err
+
+# The witness of the whole increment, and the only way a test can tell "streamed" from
+# "buffered": the stub replays the capture in TWO writes and, BETWEEN them, reads back the file
+# its own stdout is pointing at. It records the file NAME and how many lines were already on disk
+# mid-session. A bare line count would not separate the two worlds — the old runner also has a
+# file under its stdout, so it would also answer 2. The NAME is what separates them: `.json`
+# under the old format, `.stream.jsonl` under the new one.
+STREAM_WITNESS="$OUTSIDE/stream-witness"
+rm -f "$STREAM_WITNESS"
+cat > "$OUTSIDE/stub/claude" <<STUB
+#!/usr/bin/env bash
+head -2 "$STREAM_SAMPLE"
+# /proc/\$\$/fd/1, never /proc/self/fd/1: command substitution runs in a forked subshell whose
+# fd 1 is the capture PIPE, so \`self\` would resolve to \`pipe:[…]\` and the witness would report
+# "no file under stdout" under BOTH runners — red, but for the mechanism instead of the defect.
+# \$\$ keeps the stub's own pid inside the substitution, and that fd 1 is still the runner's file.
+target="\$(readlink "/proc/\$\$/fd/1" 2>/dev/null)"
+if [ -n "\$target" ] && [ -f "\$target" ]; then
+  printf '%s %s\n' "\$(basename "\$target")" "\$(wc -l < "\$target")" > "$STREAM_WITNESS"
+else
+  printf 'no-file-under-stdout -1\n' > "$STREAM_WITNESS"
+fi
+tail -1 "$STREAM_SAMPLE"
+exit 0
+STUB
+chmod +x "$OUTSIDE/stub/claude"
+
+"$SDD" run "$MISSION" >/dev/null 2>&1
+
+witness="$(cat "$STREAM_WITNESS" 2>/dev/null || echo 'no-witness -1')"
+# `EXEC-20260816-120000.stream.jsonl 2` → suffix `stream.jsonl`, count `2`.
+witness_suffix="${witness%% *}"; witness_suffix="${witness_suffix#*.}"
+# ONE assertion for the pair, not two. The adversarial pass tried both halves separately and no
+# sabotage separated them: the count alone caught nothing the suffix did not, because buffering the
+# session puts a PIPE under stdout and both halves go at once. Two rules where the sabotage finds
+# one is the duplication the I5 waiver collapse already paid for once in this mission.
+assert_eq "mid-session the runner's stdout was ALREADY the stream file, with what it wrote on disk" \
+  "stream.jsonl 2" "$witness_suffix ${witness##* }"
+
+streams=(); for f in "$LOGDIR"/*.stream.jsonl; do [ -f "$f" ] && streams+=("$f"); done
+# Whole session, not only its summary. Reported as "the first file that disagrees, named" instead
+# of a boolean, so a red says WHICH phase lost its stream. The empty-set guard is not decoration:
+# a `for` over zero files runs the body zero times and answers "ok", which is the vacuity this
+# whole block exists to refuse — with no runner change at all it would have been born green.
+stream_shape="ok"
+[ "${#streams[@]}" -ge 1 ] || stream_shape="no stream file was written at all"
+for f in "${streams[@]}"; do
+  n="$(grep -c . "$f")"
+  [ "$n" = 3 ] || { stream_shape="$(basename "$f") has $n line(s), expected 3"; break; }
+done
+assert_eq "each session left a stream holding the WHOLE session — the events AND the result" \
+  "ok" "$stream_shape"
+
+# Parity, the half that protects every existing reader. `--output-format json` printed exactly
+# the terminal `result` object and nothing else, so the summary file has to keep holding exactly
+# that: one line, `type == "result"`. Everything downstream (the cost below, the `.err` sibling,
+# the journal's `log=`) was written against that shape and is untouched by the format change.
+summary_shape="no summary file was written at all"   # same empty-set guard, same reason
+for f in "$LOGDIR"/*.json; do
+  [ -f "$f" ] || continue
+  summary_shape="ok"
+  n="$(grep -c . "$f")"
+  t="$(jq -r '.type' "$f" 2>/dev/null)"
+  [ "$n" = 1 ] && [ "$t" = "result" ] || { summary_shape="$(basename "$f"): $n line(s), type=$t"; break; }
+done
+assert_eq "the .json summary is still exactly the result object the old format printed" \
+  "ok" "$summary_shape"
+# The headline of the parity: the number the judge sums. Reading the stream as if it were one blob
+# yields one jq answer PER LINE, `tonumber?` refuses the multi-line string, and the cost silently
+# becomes null — the ledger going quiet about money with the suite still green.
+assert_eq "the ledger reads the cost out of the streamed session, to the last digit" \
+  "0.0362104" "$(jq -r -s '.[0].cost_usd' "$LEDGER")"
+
+# --- a session cut off mid-write does not take the whole run down with it ---
+# The distillation above reads the stream with jq, and jq exits 5 the instant it meets a line it
+# cannot parse — having already printed every well-formed object before it. A session killed while
+# writing leaves exactly that shape: the whole events, the terminal `result` among them, and then
+# a last line that starts and never ends. Under the runner's `set -euo pipefail` that 5 used to
+# escape `stream_summary` and abort the bare call in `run_phase`. Measured on the un-fixed runner:
+# rc **5**, terminal silent after the phase banner, `pipeline.log` without the phase line, and the
+# ledger with **zero** rows — while `<PHASE>-<ts>.json` sat on disk holding the correct summary.
+# The runner simply never lived to read what it had just written, and the session most worth
+# recording is the one that produces this stream.
+#
+# The two assertions are ONE rule and its consequence, and the split is deliberate: the compound
+# below dies to any degradation that lets the status escape, while the cost has an owner of its
+# own — a "fix" that answers `{}` or `null` instead of the object jq did recover keeps the run
+# alive and still empties the judge's money column. What is NOT here, for honesty: asserting that
+# `<PHASE>-<ts>.json` still holds the result object would be born green, since the un-fixed runner
+# writes that file correctly and only then dies.
+echo "== a stream truncated by a killed session does not abort the run =="
+: > "$LEDGER"
+rm -f "$LOGDIR"/*.json "$LOGDIR"/*.jsonl "$LOGDIR"/*.err
+cat > "$OUTSIDE/stub/claude" <<STUB
+#!/usr/bin/env bash
+cat "$STREAM_SAMPLE"
+# The kill, in one line: an object that starts and never closes, and no trailing newline after it.
+printf '{"type":"assistant","message":{"content":[{"type":"tex'
+exit 0
+STUB
+chmod +x "$OUTSIDE/stub/claude"
+
+"$SDD" run "$MISSION" >/dev/null 2>&1; rc=$?
+# ONE assertion for the pair. The rc alone is a label and this repo does not grade labels; the row
+# count alone would also read 0 in a world where jq is simply absent (`autonomy_have_jq` returns
+# early and the run still ends 3). Together they are the artifact AND the verdict: the run reached
+# its own no-progress escalation — two dead sessions plus the escalation — instead of dying on
+# somebody else's exit status.
+assert_eq "the run ends on its OWN verdict with the sessions in the ledger, not on jq's rc" \
+  "3 3" "$rc $(nrows)"
+assert_eq "and the cost is still distilled out of the truncated stream, to the last digit" \
+  "0.0362104" "$(jq -r -s '.[0].cost_usd' "$LEDGER")"
 
 # --- a kit without .git warns ONCE, not once per row ------------------------
 # `autonomy_kit_stamp` used to be read as `stamp="$(autonomy_kit_stamp)"`, so the whole body ran in
@@ -375,7 +534,7 @@ echo x >> "$DRAFT_LAPS"
 wc -l < "$DRAFT_LAPS" > "$FIX/churn.txt"
 git -C "$FIX" add -A
 git -C "$FIX" commit -qm "chore: the session changed something"
-echo '{}'
+cat "$STREAM_SAMPLE"
 exit 0
 STUB
 chmod +x "$OUTSIDE/stub/claude"
@@ -386,19 +545,56 @@ chmod +x "$OUTSIDE/stub/claude"
 # to PR on this lap, and an assertion over the writers must not be its own witness.
 err="$( "$SDD" run "$MISSION" 2>&1 >/dev/null )"; rc=$?
 assert_eq "the run still ends in an escalation, whichever path took it there" "3" "$rc"
-# ANTI-VACUITY OF THE REGIME: without this, a future change that quiets the loop back down to one
-# lap would make the cardinality assertion below pass for the old reason — the fixture — and the
-# F1 sensor would silently stop measuring anything, exactly like the assertion it replaces.
+# I9 — THE LOOP HALF. `force_phase="PR"` never ended the run: PR ran, its own gate failed, and
+# `current_phase` handed REVIEW straight back with the budget still blown, so the runner re-entered
+# the branch lap after lap (measured before the fix: warn 3×, PR sessions 3). F1 closed the RECORD
+# half — one row per run — and left the spin itself in TODO.md. This closes the spin: the draft PR
+# gets ONE chance, and if its gate fails too the run ends on the `blocked`/`budget-exhausted` pair
+# that already sat below the branch. No new event entered the ledger's enum.
+#
+# The five assertions below were put through a sabotage pass, and the matrix is worth writing down
+# because it is NOT the obvious one. The announcement count no longer witnesses the loop at all:
+# the warn moved inside the one-shot guard, so `degraded_logged` pins it and restoring the spin
+# leaves it at 1. What it is the SOLE catcher of is the warn moving back OUTSIDE that guard, where
+# the terminal announces "moving on to PR" on the very lap the run ends. The spin itself is caught
+# by the session count and the phase; see each assertion for its own owner.
 laps="$(grep -c 'moving on to PR in draft mode' <<< "$err")"
-assert_eq "the fixture is in the repeating regime: the draft branch was entered more than once" \
-  "true" "$( [ "${laps:-0}" -ge 2 ] && echo true || echo false )"
-# ANTI-VACUITY, and the lesson I1 paid for: rc 3 is shared by all three escalation paths, so `rc 3`
-# alone would keep this whole block green on a fixture that never reached the draft branch at all.
-# A PR session with the REVIEW gate still failing can only exist BECAUSE the runner degraded —
-# `current_phase` would hand back REVIEW forever otherwise. This assertion is what says the
-# assertions below are pointed at the right branch, and it holds with or without the writer.
-assert_eq "the fixture really did reach the draft branch: a PR session with REVIEW still failing" \
-  "true" "$(jq -s '[.[] | select(.event == "session" and .phase == "PR")] | length > 0' "$LEDGER")"
+assert_eq "the draft jump is announced once, because it now happens once" "1" "${laps:-0}"
+# Sole catcher of the spin's session cost, and the assertion that dies loudest if the branch stops
+# being reached at all.
+assert_eq "and the draft PR got exactly the one session it was promised" "1" \
+  "$(jq -s '[.[] | select(.event == "session" and .phase == "PR")] | length' "$LEDGER")"
+# ANTI-VACUITY OF THE REGIME, in its I9 form — and the assertion this increment could most easily
+# have got wrong. The old witness was "the branch was entered >= 2 times", which is the very number
+# the fix drives down to 1: kept as-is it would fail on the fix, and simply flipped to "== 1" it
+# would go green on a fixture that never reached the branch a SECOND time at all — the fixture
+# standing in for the property again, the vacuity this block already paid for once.
+#
+# So the witness moves to the only row a second entry can produce. The FIRST entry `continue`s past
+# the blocked pair below; the only way to reach it in phase REVIEW is to come back with the budget
+# still blown — which is exactly the lap the pre-I9 runner spent spinning. `budget-exhausted` in
+# REVIEW therefore proves both halves at once: the fixture is still in the repeating regime, AND
+# the runner stopped instead of taking another lap.
+#
+# It is also the assertion that measured the defect most sharply: against the pre-I9 runner this
+# read **PR**, not REVIEW. The spin did not merely waste laps — it handed the escalation to the
+# phase that was never over budget, so the ledger blamed PR for a ceiling REVIEW had blown three
+# laps earlier, and every reader downstream inherited that.
+assert_eq "the run came BACK to the blown REVIEW budget — the lap the old runner spun on" "REVIEW" \
+  "$(jq -r -s '[.[] | select(.event == "blocked")][0].phase' "$LEDGER")"
+# THESE TWO WERE BORN GREEN, and they stay — the I3 precedent in this mission. Against the pre-I9
+# runner the ending already carried `budget-exhausted` and already happened once, just in the wrong
+# phase, so neither measured the defect. The sabotage pass is what earned them their place: each is
+# the SOLE catcher of one way the fix could be got wrong later — inventing a `draft-exhausted` kind
+# instead of reusing the pair (which all three `is_escalation` readers would file as unrecognized),
+# and writing the row on the fall-through as well as in the branch.
+assert_eq "and it ends on the pair that already existed, with no new event in the enum" \
+  "budget-exhausted" "$(jq -r -s '[.[] | select(.event == "blocked")][0].kind' "$LEDGER")"
+assert_eq "exactly one blocked row: a run ends once" "1" \
+  "$(jq -s '[.[] | select(.event == "blocked")] | length' "$LEDGER")"
+# Kept from F1: a PR session with the REVIEW gate still failing can only exist BECAUSE the runner
+# degraded — `current_phase` would hand back REVIEW forever otherwise. It is what says every
+# assertion in this block is pointed at the right branch, and it holds with or without the writer.
 assert_eq "and no REVIEW gate ever passed, so nothing but the degradation could have moved it" \
   "0" "$(jq -s '[.[] | select(.phase == "REVIEW" and .gate == "pass")] | length' "$LEDGER")"
 # THE METRIC OF F1, and now a property of the code rather than of the stub: the runner lowered its
@@ -568,6 +764,72 @@ series_esc="$(jq -r '.latest.escalations | to_entries | sort_by(.key)
 reader_esc="$(awk -v sha="$latest_sha" '$1 == sha && $3 ~ /^[0-9]+$/ { print $2, $3 }' <<< "$out" | sort)"
 assert_eq "the human reader and the judge count the latest version's escalations alike" \
   "$series_esc" "$reader_esc"
+
+# --- one test of comparability, not three that agree by luck -----------------
+# "Can this row be attributed to a kit version?" was asked in three places with two different sets
+# of words: `.kit_dirty == false` in the session table, `.kit_dirty != true` in the escalation
+# table, and `.kit_dirty != true` again inside `kaizen_series`. On every row the runner writes the
+# spellings agree — the stamp emits `kit_dirty:null` only together with `kit_sha:null`, and a null
+# sha already fails all three — which is precisely why they could sit there disagreeing unseen.
+# `kit_dirty:null` WITH a sha filled (a hand edit, a partial write, a future stamp that learns the
+# sha before the dirtiness) is the one input that separates them, and on it the human's own table
+# counted an escalation under a version while refusing the session standing right next to it.
+#
+# The assertions below are DIFFERENTIAL on purpose: the readers are compared TO EACH OTHER over
+# twin rows, never to a constant, so no fixture regime satisfies them by accident and whichever
+# side is "improved" alone is the side that fails. The known-clean control is what stops a reader
+# that excludes everything from passing them all.
+echo "== reader: the three comparability tests are one =="
+
+# How many lines each reader printed for one version. The session line ends in "US$ <n>"; the
+# escalation line is "<sha>  <kind>: <n>" — the numeric tail keeps the two patterns disjoint.
+axis_sessions()    { grep -cE "^  $2  [0-9]+ session\(s\)" <<< "$1"; }
+axis_escalations() { grep -cE "^  $2  [A-Za-z][A-Za-z0-9_-]*: [0-9]+$" <<< "$1"; }
+
+mkdir -p "$OUTSIDE/axisnull" "$OUTSIDE/axisclean"
+# Twin rows — one session, one escalation, same version, dirtiness UNKNOWN.
+cat > "$OUTSIDE/axisnull/autonomy-log.jsonl" <<'EOF'
+{"v":1,"ts":"2026-08-15T10:00:00-03:00","event":"session","run_id":"r1","invocation":"run","kit_sha":"ccccccc","kit_dirty":null,"project":"p1","repo":"/p1","mission":"m1","phase":"EXEC","step":"EXEC","agent":"sdd-executor","model":"opus","attempt":1,"auto_retry":false,"session":"s1","rc":0,"dur_s":10,"cost_usd":1.0,"moved":true,"gate":"pass","gate_why":"x"}
+{"v":1,"ts":"2026-08-15T10:01:00-03:00","event":"blocked","kind":"no-progress","run_id":"r1","invocation":"run","kit_sha":"ccccccc","kit_dirty":null,"project":"p1","repo":"/p1","mission":"m1","phase":"EXEC","gate_why":"x"}
+EOF
+# The same twins with the dirtiness KNOWN-clean: the control that keeps the agreement above from
+# being satisfied by a reader which simply drops everything.
+cat > "$OUTSIDE/axisclean/autonomy-log.jsonl" <<'EOF'
+{"v":1,"ts":"2026-08-15T10:00:00-03:00","event":"session","run_id":"r1","invocation":"run","kit_sha":"ccccccc","kit_dirty":false,"project":"p1","repo":"/p1","mission":"m1","phase":"EXEC","step":"EXEC","agent":"sdd-executor","model":"opus","attempt":1,"auto_retry":false,"session":"s1","rc":0,"dur_s":10,"cost_usd":1.0,"moved":true,"gate":"pass","gate_why":"x"}
+{"v":1,"ts":"2026-08-15T10:01:00-03:00","event":"blocked","kind":"no-progress","run_id":"r1","invocation":"run","kit_sha":"ccccccc","kit_dirty":false,"project":"p1","repo":"/p1","mission":"m1","phase":"EXEC","gate_why":"x"}
+EOF
+out_null="$( SDD_STATE_DIR="$OUTSIDE/axisnull" "$SDD" autonomy 2>&1 )"
+out_clean="$( SDD_STATE_DIR="$OUTSIDE/axisclean" "$SDD" autonomy 2>&1 )"
+
+assert_eq "unknown dirtiness: the session table and the escalation table give the same verdict" \
+  "$(axis_sessions "$out_null" ccccccc)" "$(axis_escalations "$out_null" ccccccc)"
+assert_eq "known-clean: the two tables give the same verdict there too" \
+  "$(axis_sessions "$out_clean" ccccccc)" "$(axis_escalations "$out_clean" ccccccc)"
+# ...and they do not agree merely by both being empty: the control has to COUNT its twins.
+assert_eq "the control is not vacuous — a known-clean pair is counted by both readers" \
+  "1 1" "$(axis_sessions "$out_clean" ccccccc) $(axis_escalations "$out_clean" ccccccc)"
+# Direction, not just agreement: unknown is never read as clean. A row nobody can attribute to a
+# version is excluded OUT LOUD, the same refusal the dirty kit and the null sha already get.
+assert_eq "unknown dirtiness is non-comparable, never assumed clean" "1" \
+  "$(grep -c '2 non-comparable' <<< "$out_null")"
+assert_bucket_sum "the four buckets sum to the header total (unknown dirtiness)" "$out_null"
+assert_bucket_sum "the four buckets sum to the header total (known-clean twins)" "$out_clean"
+
+# The judge reads the SAME file through its own jq program, where the predicate was spelled a third
+# time. Fixing only `sdd autonomy` would not remove the divergence — it would move it from inside
+# one command to between two commands, which is the harder one to notice.
+series_null="$( SDD_STATE_DIR="$OUTSIDE/axisnull" "$SDD" kaizen --series 2>/dev/null )"
+# The `:-0` matters: the reader PRINTS NO LINE when it excludes nothing, so num_before gives "" and
+# jq gives "0". Left raw, this assertion would go red on a reader that excludes nothing — red for a
+# formatting difference instead of for the divergence it exists to measure, and the direction
+# assertion above would stop being the thing that catches that case.
+human_noncomp="$(num_before "$out_null" 'non-comparable')"; human_noncomp="${human_noncomp:-0}"
+assert_eq "the judge excludes exactly the rows the human's reader excludes" \
+  "$human_noncomp" "$(jq -r '.excluded.non_comparable' <<< "$series_null")"
+series_clean="$( SDD_STATE_DIR="$OUTSIDE/axisclean" "$SDD" kaizen --series 2>/dev/null )"
+assert_eq "and admits exactly the ones it admits — the control again, so neither side can just refuse everything" \
+  "0 ccccccc" \
+  "$(jq -r '.excluded.non_comparable' <<< "$series_clean") $(jq -r '.latest.kit_sha' <<< "$series_clean")"
 
 # A row with no `event` at all, or an event nobody recognizes yet: the reviewer's exact repro. It
 # must be counted, not merely fail to crash.

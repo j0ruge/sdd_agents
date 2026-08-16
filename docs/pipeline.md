@@ -243,8 +243,21 @@ unsatisfiable by construction. `bypassPermissions` is never the kit's default.
 ## Costs and logs
 
 Every session becomes a line in `.sdd/logs/<mission>/pipeline.log` (phase, agent, model, session
-id, exit code, duration, cost in USD) and a full JSON alongside it, in the same
-`.sdd/logs/<mission>/`. The journal is **ephemeral by contract**: `.sdd/logs/` is in the
+id, exit code, duration, cost in USD) and two files alongside it, in the same
+`.sdd/logs/<mission>/`:
+
+- `<PHASE>-<ts>.stream.jsonl` — the session's whole event stream, one JSON object per line,
+  written **as it happens**. This is what you `tail -f` to watch a headless phase that is still
+  running, and what is left behind by one that was killed halfway. The runner asks the CLI for
+  `--output-format stream-json --verbose`; the two flags are one flag, since the CLI refuses
+  `stream-json` under `--print` without `--verbose`.
+- `<PHASE>-<ts>.json` — the terminal `result` object of that stream, distilled at the end. It is
+  byte for byte what the older `--output-format json` used to print, and it is what the runner
+  reads the session's cost out of. A session killed mid-write leaves a half-finished last line in
+  the stream; the distillation keeps every object that DID close, so the summary and the cost
+  still land. The run is never taken down by its own log being ragged.
+
+Plus `<PHASE>-<ts>.err` for the session's stderr. The journal is **ephemeral by contract**: `.sdd/logs/` is in the
 `.gitignore` that `sdd install` writes, and the durable record of what happened is the committed
 handoffs. If it moved back into the committed tree it would dirty `git status` — and a dirty tree
 fails `gate_REVIEW` and `sdd preflight`. `--max-budget-usd` per session is a damage cap, not a
@@ -287,7 +300,7 @@ present on both shapes.
 | `v` | integer | never | Schema version of the row, `1` today. Lets the reader tell "old shape" from "malformed" when a future field is added. |
 | `ts` | string | never | `date -Iseconds` timestamp of when the row was written. |
 | `event` | string enum: `session` \| `blocked` \| `degraded` | never | A spent session versus a no-session escalation. `blocked` means the line **stopped** (the runner returns 3 and a human has to act); `degraded` means the runner lowered its own bar and **carried on**. They are kept apart on purpose: reusing `blocked` for a degradation would have been cheaper — it inherits the `kit_sha` axis and the aggregation with no `jq` to touch — but it records "stopped" for a run that continued, and the ledger exists to record fact. |
-| `kind` | string enum: `increment-blocked` \| `budget-exhausted` \| `no-progress` \| `review-to-draft` | on `event:"session"` rows | Which escalation path fired. `increment-blocked` is a deliberate Jidoka (can be a *good* sign); `budget-exhausted` and `no-progress` are pure friction. `review-to-draft` is the only `degraded` kind today: `PUBLISH_ON_REVIEW_BLOCKED=draft` and the review out of rounds, so the runner publishes a draft PR by itself instead of stopping. **At most one `review-to-draft` row per `run_id`** — the branch is re-entered on every lap of the REVIEW→PR→REVIEW loop that follows (the PR gate fails, `current_phase` hands REVIEW back with the budget still blown), but the runner lowered its bar *once*. A row per lap made both readers agree on a wrong number, which is worse than one of them being wrong. |
+| `kind` | string enum: `increment-blocked` \| `budget-exhausted` \| `no-progress` \| `review-to-draft` | on `event:"session"` rows | Which escalation path fired. `increment-blocked` is a deliberate Jidoka (can be a *good* sign); `budget-exhausted` and `no-progress` are pure friction. `review-to-draft` is the only `degraded` kind today: `PUBLISH_ON_REVIEW_BLOCKED=draft` and the review out of rounds, so the runner publishes a draft PR by itself instead of stopping. **At most one `review-to-draft` row per `run_id`**, and now at most one *jump*: the draft PR gets a single chance, and if its own gate fails the run ends on `blocked` / `budget-exhausted` in REVIEW rather than looping REVIEW→PR→REVIEW with the budget still blown. Before that, the branch was re-entered every lap and wrote a row every lap — both readers agreeing on a wrong number, which is worse than one of them being wrong. |
 | `run_id` | string (uuid) | never | One per `cmd_run`/`cmd_retry` invocation. Groups every row a single command call produced — "this mission needed N runs" is a `run_id` count. |
 | `invocation` | string enum: `run` \| `retry` | never | Which command opened the session: `sdd run` or `sdd retry`. Answers "who opened the session", not "was this an in-loop retry" — that is `auto_retry`. |
 | `kit_sha` | string \| `null` | never absent, but `null` | `null` when `$SDD_HOME` is not a git checkout. Short SHA of the kit's own HEAD when the row was written — the before/after axis the whole ledger exists for. |
@@ -341,15 +354,19 @@ The judge is split in two (ADR 0001):
 **The runner derives the numbers.** `sdd kaizen --series` prints a versioned JSON (`v: 1`),
 readable from any repo since the ledger is global: `latest` and `previous` kit versions (by
 **file order** of first appearance, never by sort — and a reappearing old sha rejoins its old
-group), each with missions, sessions, `moved_rate`, cost, escalations by kind, a per
-mission×phase `detail`, and a label per group:
+group), each with missions, `missions_with_session` (the subset that bought an observation — the
+guard below counts these, not the raw mission tally), sessions, `moved_rate`, cost, escalations
+by kind, a per mission×phase `detail`, and a label per group:
 
 - `refez` — an escalation, a human `sdd retry`, or the phase's last session still failing its
   gate: the work was pushed again.
 - `leve` — an in-loop auto retry, or a session that did not move the disk: friction, absorbed.
 - `ok` — none of the above.
 
-Plus a `guard` (`missions_after_change`, `sufficient: >= 3`) and an `excluded` accounting
+Plus a `guard` (`missions_after_change`, `missions_with_session`, `sessions`,
+`sufficient: missions_with_session >= 3` — a mission that only escalated ran, and is counted as
+one, but bought the judge no observation and so does not raise the floor) and an `excluded`
+accounting
 (dirty-kit rows, unrecognized rows, and the `meta` rows the kaizen sessions themselves write —
 the loop never lets its own sessions shift the axis it is judged on).
 

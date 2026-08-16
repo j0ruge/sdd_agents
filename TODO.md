@@ -30,12 +30,98 @@ Achados sobre **repos-alvo** vão para o `TODO.md` daquele repo. Este arquivo é
 
 ### Sensores que faltam
 
+- [ ] **Nada compara `agents/*.md` com a cópia instalada em `.claude/agents/`** — `bin/sdd:1247` —
+  o preflight só checa **existência** (`[ -f ... ] || _fail "not installed"`) e então imprime
+  "N kit agent(s) checked": rótulo sobre uma comparação que nunca aconteceu. A cópia é o que o
+  harness de fato carrega, então a fonte pode ser corrigida e o agente seguir rodando o texto
+  velho. Aconteceu nesta missão: `2132cf5` editou `agents/sdd-kaizen.md` e a cópia ficou para trás,
+  verde em tudo. Direção: comparar conteúdo, não presença. — descoberto por `sdd-reviewer` na
+  missão `20260816-runner-sem-dividas` (2026-08-16)
+
+- [ ] **O `check-todo.sh` mede a FORMA da âncora, nunca se ela ainda aponta o que o item diz** —
+  `tests/check-todo.sh:1` — a regra exige `arquivo:linha` e o sensor confere que existe e está bem
+  escrito; nada re-deriva o alvo. Medido na fase DOCS desta missão: **15 âncoras em 11 itens**
+  apontavam linha errada — a maioria apodreceu (o `bin/sdd` foi de 2287 para 2324 linhas na própria
+  missão que as escreveu), três nasceram erradas. É "rótulo, não artefato" dentro do arquivo que
+  cataloga essa família. Direção: resolver cada âncora e cobrar que a linha contenha um termo do
+  título. — descoberto por `sdd-docs` na missão `20260816-runner-sem-dividas` (2026-08-16)
+
+- [ ] **`main "$@"` sem guarda, e o kit edita o próprio runner em voo** — `bin/sdd:2324` — é a
+  última linha, então ao retornar dela o bash lê o arquivo a partir do offset salvo. A fase EXEC
+  edita `bin/sdd` durante o `sdd run` que a executa (10× nesta missão, +7647 bytes). Reproduzido
+  em script de 114 KB: edição in-place fez o bash **re-executar o entry point** e rodar um
+  fragmento, com **rc 0**. Não mordeu aqui só porque o editor troca o inode (`fd/255` do PID vivo
+  diz `(deleted)`, `pos: 107313`) — invariante de ferramenta alheia que ninguém mede. Direção:
+  `{ main "$@"; exit $?; }`. — descoberto por `sdd-qa` na missão `20260816-runner-sem-dividas` (2026-08-16)
+
+- [ ] **O ledger de autonomia é global e nenhum leitor filtra por repo** — `bin/sdd:761` — o
+  caminho é `$HOME/.sdd/autonomy-log.jsonl` para qualquer repo, e `sdd autonomy`/`kaizen --series`
+  leem todas as linhas. Um `sdd run` de fixture (jornada de QA, sandbox em `/tmp`) escreveu 3
+  linhas no ledger de produção e o juiz passou a ler `66% waste · 2 mission(s)` para o kit_sha
+  corrente, onde o verdadeiro é `0% · 1` — medido e revertido nesta sessão. Direção: filtrar por
+  `repo` na leitura. — descoberto por `sdd-qa` na missão `20260816-runner-sem-dividas` (2026-08-16)
+
+- [ ] **O fixture de `stream-json` não tem checagem de proveniência** — `tests/check-autonomy.sh:127`
+  — as três linhas replayadas pelos stubs foram copiadas de sessão real (CLI 2.1.233) e o comentário
+  registra o comando, mas `health_provenance` (`bin/sdd:1393`) só confere as 3 fixtures de skill
+  contra arquivo instalado. Se o CLI renomear `type`/`total_cost_usd`, o stub segue verde e o
+  runner quebra só em missão real — o modo de falha que a regra de proveniência existe para matar.
+  Direção: probe que rode o CLI de verdade, ou capturar o schema num arquivo versionado.
+  — descoberto por `sdd-executor` na missão `20260816-runner-sem-dividas` (2026-08-16)
+
+- [ ] **`.sdd/logs/` não tem poda e agora guarda o stream inteiro** — `bin/sdd:213` — desde o I10
+  cada sessão deixa três arquivos, e o `.stream.jsonl` é a sessão toda (a de teste, trivial, deu
+  ~40 KB; uma fase real de 10 min é ordens de grandeza maior). Nada apaga nada: o diretório cresce
+  por missão para sempre, e é justamente o que o humano vai querer abrir. Não é urgente — é
+  gitignored e local. Direção: reter as N sessões mais recentes por missão, ou comprimir o stream
+  ao fim da fase. — descoberto por `sdd-executor` na missão `20260816-runner-sem-dividas` (2026-08-16)
+
 - [ ] **O `sdd preflight` não prova que a sessão headless executa `TEST_CMD`** — `bin/sdd:646` —
   a causa original (falta de `--allowedTools`) foi corrigida em `2083680` e provada pela sessão
   EXEC `357b401`, mas nada impede a regressão silenciosa: o preflight só valida que o `claude -p`
   responde, não que ele **roda comando**. Sem isso, a fase EXEC volta a ser insatisfazível por
   construção sem nenhum sensor gritar. Direção: probe headless real que execute `TEST_CMD`.
   — descoberto por `sdd-executor` na missão `20260814-dry-run-completo` (2026-08-14)
+
+- [ ] **Sensor pulado por `SDD_MUTANT` vira ponto cego sem aviso** — `tests/run-all.sh:103,112,119` —
+  três sensores são pulados dentro do mutante (dois por "não é gate, nunca pontua"; o do I5,
+  `check-pipefail.sh`, por motivo próprio). É aposta que vence sozinha: no I3 o `check-preflight.sh`
+  ganhou asserção de comportamento do runner, e a linha que o pulava virou a escondedora da única
+  sensora de `RUN_install_no_guard`. O sintoma chega como "mutação não capturada", e o conserto
+  tentador é `KNOWN_GAPS`. Direção: reprovar guarda de `SDD_MUTANT` em arquivo que invoca `bin/sdd`.
+  — descoberto por `sdd-executor` na missão `20260816-runner-sem-dividas` (2026-08-16)
+
+- [ ] **`check-autonomy.sh` é vermelho intermitente, causa desconhecida** — `bin/sdd:972` —
+  ⚠️ **A causa registrada foi REFUTADA; o sintoma segue aberto.** Era "colisão de nome de log em
+  repo que versiona `.sdd/logs/`", e não se sustenta: `check-autonomy.sh:140` chama
+  `sdd install` ANTES de existir log, e `bin/sdd:1125` já põe `.sdd/logs/` no `.gitignore` —
+  `git ls-files` no fixture lista só `.sdd/config.sh`. Colisão é a norma (8 sessões EXEC no mesmo
+  segundo num run) e a árvore fecha limpa. Não reproduziu em **152 runs**. Direção: `%N` é no-op;
+  medir de novo antes de consertar. — refutado por `sdd-reviewer` (r2), descoberto por
+  `sdd-executor` na missão `20260816-runner-sem-dividas` (2026-08-16)
+
+- [ ] **`grep -m<N>` é a mesma corrida do `grep -q`, e nenhum sensor a vê** —
+  `tests/check-dry-run.sh:234` — `-m1` também sai no primeiro casamento e mata o escritor com
+  SIGPIPE, então sob `pipefail` o pipeline devolve 141 igual. A ocorrência de hoje é inofensiva
+  (está no ramo de `fail`, capturada em substituição, não em condição), mas o
+  `tests/check-pipefail.sh` do I5 declara a lacuna em vez de fechá-la. Direção: estender a regex
+  para o par `-m`/`--max-count` e converter as ocorrências no mesmo commit.
+  — descoberto por `sdd-executor` na missão `20260816-runner-sem-dividas` (2026-08-16)
+
+- [ ] **O gate PLAN-AUTO aceita Check que já nasce verde** — `templates/missao.md:44` — o critério
+  `d` cobra "Check executável (comando → esperado)", não "Check que
+  reprova o HEAD de hoje". Medido: o Check do I1 desta missão era `grep -c 'gate_DOCS reprova'
+  TODO.md` → `0`, mas o título no `TODO.md` traz crases (`` `gate_DOCS` reprova ``), então o
+  comando já devolvia `0` **antes** da remoção — verde por construção, exatamente o que a casa
+  proíbe em teste. Direção: o planner roda cada Check contra o HEAD e registra o vermelho.
+  — descoberto por `sdd-executor` na missão `20260816-runner-sem-dividas` (2026-08-16)
+
+- [ ] **Check de ausência (`grep -c X` → `0`) reprova o conserto que precisa citar o defeito** —
+  `docs/handoffs/20260816-runner-sem-dividas/checkpoint.md:20` — o comentário honesto que
+  **desmente** a promessa "CHARACTER slice" precisa nomeá-la, e o Check literal deu `1`, não `0`.
+  Distinto do item acima: rodar o Check contra o HEAD dá vermelho de verdade e a armadilha fica.
+  Direção: Check de ausência mira o código, nunca a prosa. — descoberto por `sdd-executor` na
+  missão `20260816-runner-sem-dividas` (2026-08-16)
 
 - [ ] **A asserção "dry-run não toca no disco" promete mais do que entrega** —
   `tests/check-dry-run.sh:116` — ela roda sobre fixture parado em EXEC, cujo gate reprova antes de
@@ -146,6 +232,14 @@ Achados sobre **repos-alvo** vão para o `TODO.md` daquele repo. Este arquivo é
   quando houver folga de régua. — descoberto por `sdd-executor` na missão
   `20260815-ledger-sem-ponto-cego` (2026-08-16)
 
+- [ ] **O schema da série não tem sensor de drift contra a prosa que o descreve** — `bin/sdd:1976`
+  vs `docs/pipeline.md:366` e `agents/sdd-kaizen.md:30` — o objeto que o juiz é mandado citar é
+  produzido em dois lugares (o `jq` e o literal do ledger vazio, `:1902`) e descrito em dois
+  outros; o `sdd health` mede drift de doc/config e gate-sem-mutação, mas nada casa os campos do
+  `guard` com quem os promete. Campo novo esquecido passa verde. Direção: extrair os campos do
+  `jq` e cobrá-los na doc. — descoberto por `sdd-executor` na missão
+  `20260816-runner-sem-dividas` (2026-08-16)
+
 ### Contrato e configuração
 
 - [ ] **`config/schema.md` promete cinco comportamentos que o runner não tem** —
@@ -202,88 +296,14 @@ Achados sobre **repos-alvo** vão para o `TODO.md` daquele repo. Este arquivo é
   `check-templates.sh` mede, então vem depois da entrada acima. — descoberto por `humano` na
   missão `20260815-i13.5-kit-em-ingles` (2026-08-15)
 
-### Runner — defeitos e dívidas
-
-- [ ] **A suíte ainda carrega o `printf | grep -q` que o runner perdeu** —
-  `tests/check-gates.sh:53` (`assert_why`) e `tests/check-dry-run.sh:144,163,171,199,251` — sob
-  `pipefail` o pipeline devolve 141 quando o `grep` **acha**, então a asserção reprova exatamente
-  quando deveria aprovar. Não morde porque as saídas são pequenas — que é literalmente o
-  argumento que manteve o defeito do Jidoka vivo por duas missões. Direção: herestring, como o
-  `assert_jidoka` já usa. — descoberto por `sdd-executor` na missão
-  `20260815-ledger-sem-ponto-cego` (2026-08-16)
-
-- [ ] **O `LINT_CMD` olha só o `bin/sdd`; os 2400 linhas de `tests/*.sh` ninguém linta** —
-  `tests/run-all.sh:23` + `tests/check-mutation.sh:246` — `shellcheck -S warning tests/` reprova
-  com SC2318 (`local slug="$1" box="$WORK/$slug"`: o `$slug` da direita é a **global** do laço,
-  que hoje coincide). Renomeie a variável do laço e os mutantes passam a compartilhar um sandbox.
-  Direção: separar em duas linhas e estender o passo de lint a `tests/*.sh`. — descoberto por
-  `sdd-executor` na missão `20260815-ledger-sem-ponto-cego` (2026-08-16)
-
-- [ ] **`latest_matching` ordena lexicograficamente e quebra na 10ª rodada** — `bin/sdd:205-211`
-  — `ls -1d $pattern | sort | tail -1` põe `r10` antes de `r2`, então `gate_REVIEW`/`gate_QA`
-  passariam a medir um relatório velho: gate verde apontando para artefato obsoleto. Não morde
-  com `*_MAX_ITER=3`, mas o valor é configurável e nada avisa quem o subir. Direção: `sort -V` ou
-  zero-padding, com caso `r1`/`r2`/`r10` afirmando que o escolhido é `r10`. — descoberto por
-  `sdd-reviewer` na missão `20260814-dry-run-completo` (2026-08-14)
-
-- [ ] **`bad_rows` é escrito e nunca lido** — `bin/sdd:262,276` — o contador é incrementado no
-  mesmo comando que dá `return 1`, então o valor final nunca é inspecionado; de fora sugere um
-  "conte quantas linhas estão ruins" que não existe. Ou entra no `GATE_WHY` ("3 linhas do
-  checkpoint malformadas" diz mais que a primeira), ou sai. Pré-existente. — descoberto por
-  `sdd-reviewer` na missão `20260814-dry-run-completo` (2026-08-14)
-
-- [ ] **`gate_DOCS` reprova o `45-docs.md` que menciona o arquivo de achados pelo nome** —
-  `bin/sdd:394` — a sentinela `grep -qE '✗|\bTODO\b|<preencher>'` casa com o ponto, então a
-  string `TODO.md` reprova o gate; e `agents/sdd-docs.md:81` manda fechar o artefato com uma
-  seção que contém a palavra nua — o agente colide com o gate por construção. Pior: incompleto
-  legítimo e menção inocente reprovam com a **mesma** mensagem. Direção: ancorar na coluna Status
-  da tabela. — descoberto por `sdd-docs` na missão `20260814-dry-run-completo` (2026-08-14)
-
-- [ ] **`${var:0:200}` só corta por caractere se o locale for multibyte** — `bin/sdd:756,777` —
-  o comentário promete "character slice", verdade só sob UTF-8; em `C`/`POSIX` o bash volta a
-  contar byte, e nem o runner nem `tests/run-all.sh` fixam `LC_ALL`/`LANG`. Não é regressão (é
-  igual ou melhor que o `head -c` anterior), mas a promessa escrita depende do ambiente de quem
-  roda. Direção: fixar o locale no topo do runner, ou o comentário parar de prometer.
-  — descoberto por `sdd-reviewer` na missão `20260815-i13.1-autonomy-log` (2026-08-15)
-
-- [ ] **`sdd install` diz "config criada" sobre um arquivo vazio** — `bin/sdd:1015` — o
-  `sed … "$SDD_HOME/config/starter.conf" > "$CONFIG_FILE"` não tem guarda de existência: faltando
-  o `starter.conf` (kit copiado pela metade), o `sed` erra em `stderr`, o redirect **cria o
-  arquivo vazio** e a linha seguinte imprime `ok` com rc 0. É rótulo sobre não-artefato dentro do
-  instalador, e o alvo nasce sem `TEST_CMD`. Direção: `[ -f … ] || die`, como `autonomy_append`
-  já faz. — descoberto por `sdd-executor` na missão `20260815-ledger-sem-ponto-cego` (2026-08-16)
-
-- [ ] **O runner se auto-degrada em laço, mesmo registrando uma vez só** — `bin/sdd:1546` —
-  depois do `force_phase="PR"`, se a fase PR mexer no disco e não satisfizer o gate, o laço volta
-  a REVIEW com o orçamento ainda estourado e o ramo `draft` dispara de novo. O `F1` fechou a
-  metade de **registro** (uma linha por `run_id`); o que sobra é o giro REVIEW→PR→REVIEW até o
-  `no-progress` do PR encerrar — medido: ramo entrado 3×, `warn` 3×, ledger 1×. — descoberto por
-  `sdd-executor`, estreitado por `sdd-qa` na missão `20260815-ledger-sem-ponto-cego` (2026-08-16)
-
-- [ ] **Duas definições de comparabilidade dentro do mesmo `jq`** — `bin/sdd:1715`
-  (`comparable`, sessões: `.kit_dirty == false`) contra `:1722` (`on_axis`, escaladas:
-  `.kit_dirty != true`) — hoje não diverge porque `autonomy_kit_stamp` só produz `kit_dirty:
-  null` junto com `kit_sha: null`, e o `on_axis` já reprova pelo sha. Mas são dois testes para a
-  mesma pergunta no mesmo programa — a família que o I3 fechou entre os dois leitores, um nível
-  abaixo. — descoberto por `sdd-executor` na missão `20260815-ledger-sem-ponto-cego` (2026-08-16)
-
-- [ ] **Missão que só produziu escalada conta para `guard.sufficient`** — `bin/sdd:1846` —
-  `missions` conta `map(.mission) | unique` sobre **todas** as linhas admitidas, escaladas
-  incluídas: três missões que escalaram sem gastar sessão devolvem `sufficient: true` com
-  `sessions: 0`, e o juiz é liberado a julgar uma versão da qual não observou sessão nenhuma.
-  Reproduzido em fixture na revisão r1; não é regressão (o `blocked` já tinha a propriedade).
-  Direção: contar só missões com sessão comparável, ou expor `sessions` junto de `sufficient`.
-  — descoberto por `sdd-reviewer` na missão `20260815-ledger-sem-ponto-cego` (2026-08-16)
-
-- [ ] **A sessão de fase é um ponto cego enquanto roda** — `bin/sdd:897` — `--output-format json`
-  emite um blob único no fim, então `.sdd/logs/<missão>/<FASE>-*.json` fica com **0 bytes**
-  durante os ~10 min da sessão e não há como acompanhar o agente de dentro do kit (o transcript
-  ao vivo existe fora dele, em `~/.claude/projects/<projeto>/<session-id>.jsonl`). Direção:
-  `--output-format stream-json` com `tee` para um `.stream.jsonl` ao lado, preservando o resumo
-  final que `run_phase` parseia. — descoberto por revisão `humano` acompanhando a missão
-  `20260815-ledger-sem-ponto-cego` (2026-08-16)
-
 ### Saída humana e cosmética
+
+- [ ] **`BLOCKED in <FASE> — N sessions` conta voltas do laço, não sessões** — `bin/sdd:1626` —
+  `attempts[$phase]` sobe em toda volta que chega ao topo com a fase, inclusive as que não abrem
+  sessão nenhuma. Medido no fixture do I9: REVIEW imprime `3 sessions without satisfying the gate`
+  com **1** sessão de REVIEW no ledger, e desde o I9 essa é a última linha que o humano lê quando
+  o run encerra. Direção: contar sessões, ou dizer `attempts`. — descoberto por `sdd-executor` na
+  missão `20260816-runner-sem-dividas` (2026-08-16)
 
 - [ ] **`sdd autonomy` imprime `US$ 2` em vez de `US$ 2.00`** — `bin/sdd:1617` — o `jq` imprime
   número, não string formatada: um total de `2.0` vira `2` e derruba o alinhamento de uma tabela
@@ -311,14 +331,22 @@ Achados sobre **repos-alvo** vão para o `TODO.md` daquele repo. Este arquivo é
   vazio" de "ledger corrompido". Direção: um helper local chamado dos dois pontos. — descoberto
   por `/codereview` na missão `20260815-i13.1-autonomy-log` (2026-08-15)
 
-- [ ] **A tabela do `sdd autonomy` ordena versões lexicograficamente** — `bin/sdd:1725` faz
+- [ ] **A tabela do `sdd autonomy` ordena versões lexicograficamente** — `bin/sdd:1848` faz
   `group_by(.kit_sha)` (o jq ordena pela chave) enquanto `kaizen_series` deriva
-  `latest`/`previous` por primeira aparição no arquivo (`:1818`). Quem ler a última linha da
+  `latest`/`previous` por primeira aparição no arquivo (`:1969`). Quem ler a última linha da
   tabela como "a versão mais recente" pode ler a errada. É ordem de saída humana, não contagem —
-  o I3 alinhou o eixo, não a ordem. Mesma família do `latest_matching` acima. — descoberto por
+  o I3 alinhou o eixo, não a ordem. Família do `latest_matching`, já fechado. — descoberto por
   `sdd-executor` na missão `20260815-ledger-sem-ponto-cego` (2026-08-16)
 
 ### Comentário e registro
+
+- [ ] **O `.claude/napkin.md` é rastreado, cita números da suíte e nenhuma fase pode editá-lo** —
+  `.claude/napkin.md:18` — o item 3 diz "~33s no default, mutação 30/30" e "alvo <30s estourado
+  por ~3s"; o real desta missão é 44,55 s, 38/38 e ~15 s. Runbook lido toda sessão que afirma um
+  ratchet vencido convida a aceitar score menor. A fase DOCS tentou consertar e o harness barrou
+  `.claude/` como arquivo sensível, então a drift só é corrigível por sessão com humano presente.
+  Direção: decidir se o napkin entra na superfície que o DOCS mantém ou sai do versionamento.
+  — descoberto por `sdd-docs` na missão `20260816-runner-sem-dividas` (2026-08-16)
 
 - [ ] **O que arma a corrida do Jidoka é a POSIÇÃO da linha `blocked`, não o tamanho do
   checkpoint** — `tests/check-gates.sh:229-232` — a grandeza real é quantos bytes sobram para o
