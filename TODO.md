@@ -37,13 +37,20 @@ Achados sobre **repos-alvo** vão para o `TODO.md` daquele repo. Este arquivo é
   contador de agentes impresso fora da guarda de `fails`.
   — descoberto por `sdd-executor` na missão `20260816-kit-como-alvo` (2026-08-16)
 
+- [ ] **A guarda de read-back do `sdd approve` é regra sem probe** — `bin/sdd:1766` — o comando
+  relê o `aprovacao:` pelo mesmo parser do gate antes de commitar, para o caso de a chave não
+  existir no frontmatter (aí o `frontmatter_write` é no-op e o commit aprovaria nada). Sabotar a
+  guarda deixa as 3 asserções verdes: nenhum fixture tem missão sem a chave. Direção: um quarto
+  fixture, junto de rever o Check que fixa a contagem em 3.
+  — descoberto por `sdd-executor` na missão `20260816-portas-do-humano` (2026-08-16)
+
 - [ ] **Aprovar plano é editar frontmatter à mão — o gate humano é a única interação sem
   comando** — `bin/sdd` (não existe `cmd_approve`) vs `gate_PLAN` (`:261`) — destravar a fase
   PLAN exige abrir o `00-missao.md` e digitar `aprovacao: humano-YYYY-MM-DD` no formato exato.
   Sem apresentação do que se aprova, sem data automática, sem commit: convida a errar o formato
-  ou a delegar à sessão, que é justamente quem não pode decidir. Direção: `sdd approve <missão>`
-  imprimindo título, PLAN-AUTO, incrementos e riscos, pedindo confirmação e escrevendo com
-  `date +%F`. — descoberto por `humano` na missão `20260816-kit-como-alvo` (2026-08-16)
+  ou a delegar à sessão, que é justamente quem não pode decidir. RESOLVIDO por `96a1f68`:
+  `sdd approve <missão>` imprime, pergunta `[y/N]`, escreve com `date +%F` e commita só o
+  `00-missao.md`. — descoberto por `humano` na missão `20260816-kit-como-alvo` (2026-08-16)
 
 - [ ] **Duas regras conflitantes sobre `aprovacao:`, e só um comando aplica a restrição** —
   `agents/sdd-planner.md:111` ("all ✅ → `aprovacao: auto`") vs `agents/sdd-kaizen.md:113`
