@@ -20,7 +20,10 @@
 # still points at real code. Both are human judgement on the diff. This one stops the regression,
 # which is the half that rots on its own.
 #
-# And what it deliberately REFUSES: any fenced or indented code block in the findings section.
+# And what it deliberately REFUSES in the findings section: fenced blocks, bare list markers,
+# lazy column-0 continuations, and every task-item shape that is not `- [ ] **<title>**` at
+# column 0. (Indented code blocks are NOT detected — an earlier version of this line claimed they
+# were. Inside an item they are absorbed as content; the ~6-line cap is what bounds them.)
 # That is stricter than CommonMark on purpose. Six adversarial rounds proved that a sensor which
 # tries to decide what is code and what is a finding will get it wrong in a new way every time —
 # every fail-open this file ever had lived in that decision. Forbidding the construct is one rule
@@ -41,11 +44,14 @@
 # ── Known limits, stated so nobody re-discovers them as surprises ──────────────────────────────
 # The selftest is this file's own harness, and a harness cannot fully test itself. Three one-line
 # edits make every failure green: `return "$SELFTEST_RC"` -> `return 0`, dropping the `|| exit $?`
-# from the default dispatch, and neutering an assertion body. That is not a hole to be plugged
-# from the inside — it is the reason the kit has `tests/check-mutation.sh` at the runner level,
-# and the reason `tests/run-all.sh` calls this file rather than trusting it to call itself.
-# What the selftest DOES defend is every rule above it: 48 probes, each asserting its own message,
-# with a floor on the probe count and a FAILS counter independent of `fail_rc`.
+# from the default dispatch, and neutering an assertion body. That is not a hole this file can
+# plug from the inside, and NOTHING OUTSIDE COVERS IT EITHER: `tests/check-mutation.sh` catalogues
+# sabotages of `bin/sdd` only, and `tests/run-all.sh` skips this sensor under `SDD_MUTANT`. An
+# earlier version of this comment claimed that catalogue as a safety net; it is not one, and
+# saying so was the same label-instead-of-artifact failure the kit forbids everywhere else.
+# What the selftest DOES defend is the rules that carry a probe — most of them, not all. Each
+# probe asserts its own message; there is a floor on the probe count and a FAILS counter
+# independent of `fail_rc`. Rules known to be unprobed are listed in TODO.md, not papered over.
 #
 # Not measured, on purpose: whether an anchor still points at real code, whether the prose is any
 # good, and whether a finding is worth keeping. All three are human judgement on the diff.
@@ -96,7 +102,9 @@ todo_awk() {
   # A bare path shaped like `name=value` is eaten by awk as a variable ASSIGNMENT, and awk then
   # reads stdin instead of the file — the sensor would happily lint whatever it was handed and
   # report "ok". mawk has no `--` for operands, so the fix is to make the path un-assignable.
-  case "$f" in [A-Za-z_]*=*) f="./$f" ;; esac
+  # `name=value` is a variable ASSIGNMENT to awk and `-` is stdin to both grep and awk; either way
+  # the file is never opened and the sensor reports about something else entirely.
+  case "$f" in [A-Za-z_]*=* | -) f="./$f" ;; esac
   # The heading is located here rather than in awk because awk cannot look ahead, and starting
   # from "the findings begin" is what lets the header keep its example fence without the parser
   # having to understand fences. Absent (a probe fixture), the whole file is the findings section.
@@ -136,6 +144,18 @@ todo_awk() {
       initem = 0
     }
     { sub(/\r$/, "") }        # CRLF: a trailing \r used to defeat the end-of-line alternations
+    { wasblank = prevblank; prevblank = (NF == 0) }
+    # ── The ticked-box rule runs over the WHOLE file, header included ──────────────────────────
+    # It is the one rule that must not respect the header skip. "The header" is not a fixed
+    # preamble — it is everything above a heading an editor can move, so a section of archived
+    # findings parked above `## Aberto` switched this rule off and the file passed green. That is
+    # precisely what the sensor exists to stop. A ticked box is never legitimate anywhere here:
+    # the format example in the header uses `- [ ]`.
+    /^[ \t>]*([-*+]|[0-9]+[.)])[ \t]+\[[xX]\]([ \t]|$)/ {
+      if (mode == "lint")
+        print "  line " NR ": ticked box — a closed finding is deleted after its PR merges, never [x]"
+      flush(); next
+    }
     NR <= from                { next }
     # No fenced block belongs in the findings section, and saying so is the whole fence policy.
     # It replaces every rule that used to track markers, lengths, indents and info strings — and
@@ -144,25 +164,33 @@ todo_awk() {
       if (mode == "lint") print "  line " NR ": a fenced block in the findings section"
       flush(); next
     }
-    # Ticked boxes are judged PER LINE and the pattern is deliberately WIDE: every shape GitHub
-    # renders as a checked box is a closed finding that should have been deleted. Bullet `-`, `*`
-    # or `+`; ordered `1.` or `1)`; any run of spaces or a tab as the gap; any indent; inside a
-    # block quote. The trailing `([ \t]|$)` is what keeps a `[x](link)` from matching, and the
-    # leading anchor is what keeps an inline `- [x]` in prose from matching.
-    /^[ \t>]*([-*+]|[0-9]+[.)])[ \t]+\[[xX]\]([ \t]|$)/ {
-      if (mode == "lint")
-        print "  line " NR ": ticked box — a closed finding is deleted after its PR merges, never [x]"
+    # A list marker alone on its line, with the box on the NEXT line, is one rendered task item —
+    # GitHub ticks it — and no per-line rule can see the pair. Refused instead of parsed.
+    /^[ \t>]*([-*+]|[0-9]+[.)])[ \t]*$/ {
+      if (mode == "lint") print "  line " NR ": a bare list marker — a finding is one line-start"
       flush(); next
     }
-    /^[-*+] \[ \]/ {
+    /^- \[ \]/ {
       flush(); initem = 1; start = NR
       first = $0; body = $0; last = $0; nlines = 1; next
     }
+    # Every OTHER shape GitHub renders as an unchecked task item. The ticked rule was wide and this
+    # one was `^[-*+] \[ \]` — column 0, one space — so the same line was "a closed finding" when
+    # ticked and nothing at all when open: 195 of 270 open shapes skipped every rule and the count.
+    /^[ \t>]*([-*+]|[0-9]+[.)])[ \t]+\[ \]/ {
+      if (mode == "lint")
+        print "  line " NR ": a finding must open with `- [ ] **<title>**` at column 0"
+      flush(); next
+    }
     initem && NF && /^[ \t]/  { body = body " " $0; last = $0; nlines++; next }
-    # A column-0 line closes the item. Without this the item stays open across the blank line and
-    # swallows the INDENTED continuation of whatever follows: the second line of a footnote then
-    # becomes the last line of the item, and the date rule blames the finding above it.
-    initem && NF              { flush(); next }
+    # A column-0 line closes the item — but only across a BLANK line. Without the blank it is a
+    # lazy continuation, which markdown folds into the item and the sensor counted as zero: a
+    # 41-line finding written that way reported "within 8 lines".
+    initem && NF {
+      if (mode == "lint" && !wasblank)
+        print "  line " start ": a lazy continuation at column 0 — continuation lines are indented"
+      flush(); next
+    }
     END { flush(); if (mode == "count") print items + 0 }
   ' "$f"
 }
@@ -322,6 +350,83 @@ EOF
   { printf -- '- [x](https://example.com/spec) see the linked spec\n\n'
     printf -- '- [ ] **Good** — `bin/sdd:1` — why. — found by `x` (2026-08-16)\n'; } > "$box/link.md"
   assert_clean "$box/link.md" 8 "a markdown link whose text is x"
+
+  # A ticked box ABOVE `## Aberto`. The header skip exists to spare the format example, and it
+  # made the file's most important rule depend on where an editor puts a heading: a section of
+  # archived findings parked above it switched rule 2 off entirely, with the run green.
+  { printf '## Resolvido\n'
+    printf -- '- [x] **closed A** — `f:1` — w. — by `x` (2026-08-16)\n'
+    printf -- '- [x] **closed B**\n\n## Aberto\n\n'
+    printf -- '- [ ] **Open** — `bin/sdd:42` — w. — by `x` (2026-08-16)\n'; } > "$box/archived.md"
+  assert_says "$box/archived.md" 8 'ticked box' "a ticked box in a section above ## Aberto"
+
+  # A list marker alone on its line with the box below it is one rendered, ticked item that no
+  # per-line rule can see. Refused rather than parsed.
+  { printf '## Aberto\n\n'
+    printf -- '- [ ] **Good** — `f:1` — w. — by `x` (2026-08-16)\n\n-\n  [x] **closed, split marker**\n'; } \
+    > "$box/splitmarker.md"
+  assert_says "$box/splitmarker.md" 8 'bare list marker' "a list marker with its box on the next line"
+
+  # The open shapes. The ticked rule was wide and the item-start rule was narrow, so the same line
+  # was "a closed finding" when ticked and nothing at all when open.
+  { printf '## Aberto\n\n'
+    printf -- '- [ ] **Good** — `f:1` — w. — by `x` (2026-08-16)\n'
+    printf -- '1. [ ] a vague wish\n-  [ ] another, two spaces\n> - [ ] one in a quote\n'; } \
+    > "$box/openshapes.md"
+  PROBES=$((PROBES + 1))
+  if [ "$(lint_todo "$box/openshapes.md" 8 | grep -c 'must open with')" != "3" ]; then
+    printf '  SELFTEST FAIL  the three off-pattern open shapes are not all reported: %s\n' \
+      "$(lint_todo "$box/openshapes.md" 8 | grep -c 'must open with')" >&2
+    FAILS=$((FAILS + 1)); fail_rc 91
+  fi
+
+  # A lazy continuation folds into the item in markdown and used to count as zero lines, so a
+  # 41-line finding written that way reported "within 8 lines".
+  { printf '## Aberto\n\n'
+    printf -- '- [ ] **Good** — `f:1` — w. — by `x` (2026-08-16)\n'
+    printf 'a lazy continuation at column 0\n'; } > "$box/lazy.md"
+  assert_says "$box/lazy.md" 8 'lazy continuation' "a column-0 continuation with no blank line"
+
+  # And the legitimate shape it must not be confused with: a footnote AFTER a blank line.
+  { printf '## Aberto\n\n'
+    printf -- '- [ ] **Good** — `f:1` — w. — by `x` (2026-08-16)\n\n'
+    printf 'A closing note.\n  and its indented continuation.\n'; } > "$box/footnote2.md"
+  assert_clean "$box/footnote2.md" 8 "a column-0 footnote after a blank line"
+
+  assert_rc 93 "--check with an empty argument must not fall back to TODO.md" \
+    bash "$SELF" --check ''
+
+  # `+8` passes bash's `[ -gt 0 ]` but explodes in `$((10#+8))`; `08` passes both and then dies in
+  # `printf %d` as an invalid octal, announcing a cap it never enforced. The digit class and the
+  # base-10 normalisation are each the only thing standing between those and a broken run.
+  PROBES=$((PROBES + 1))
+  if valid_cap '+8' || valid_cap '8 ' || valid_cap ' 8'; then
+    printf '  SELFTEST FAIL  valid_cap accepts a signed or space-padded value\n' >&2
+    FAILS=$((FAILS + 1)); fail_rc 92
+  fi
+  PROBES=$((PROBES + 1))
+  if [ "$(SDD_TODO_CAP=08 bash "$SELF" --check "$box/good.md" 2>&1 | grep -oE 'within [0-9]+ lines')" \
+       != "within 8 lines" ]; then
+    printf '  SELFTEST FAIL  a leading-zero cap is not normalised to base 10\n' >&2
+    FAILS=$((FAILS + 1)); fail_rc 92
+  fi
+
+  # A file literally named `-` is stdin to both grep and awk: the file is never opened and the
+  # sensor reports about whatever it was handed.
+  PROBES=$((PROBES + 1))
+  printf -- '- [x] **closed**\n' > "$box/-"
+  printf -- '- [ ] **A** — `f:1` — w. — by `x` (2026-08-16)\n' > "$box/innocent.md"
+  ( cd "$box" && bash "$SELF" --check - < innocent.md >/dev/null 2>&1 )
+  if [ "$?" -ne 1 ]; then
+    printf '  SELFTEST FAIL  a file named - was read from stdin instead of opened\n' >&2
+    FAILS=$((FAILS + 1)); fail_rc 92
+  fi
+
+  # Which message an off-pattern bullet gets is a decision, so it is asserted: `* [ ] **T**` is
+  # not an item that opens badly, it is a line that is not a finding opener at all.
+  printf -- '* [ ] **A title with the wrong bullet** — `f:1` — w. — by `x` (2026-08-16)\n' \
+    > "$box/starbullet.md"
+  assert_says "$box/starbullet.md" 8 'must open with' "an item opened with a * bullet"
 
   # A path shaped like `name=value` is a variable ASSIGNMENT to awk, which then reads stdin — the
   # sensor would lint whatever it was handed and report "ok" about a file it never opened.
@@ -510,8 +615,8 @@ EOF
   # Floor on the probe COUNT, for the same reason every other floor here exists: neutering all the
   # assert_* call sites made the summary print "0 probe(s)" and exit 0 — a selftest that ran
   # nothing reads exactly like a selftest that passed. The number moves only on purpose.
-  if [ "$((PROBES + PROBES_SKIPPED))" -lt 48 ]; then
-    printf '  SELFTEST FAIL  only %d probe(s) accounted for (%d ran, %d skipped), expected 48\n' \
+  if [ "$((PROBES + PROBES_SKIPPED))" -lt 58 ]; then
+    printf '  SELFTEST FAIL  only %d probe(s) accounted for (%d ran, %d skipped), expected 58\n' \
       "$((PROBES + PROBES_SKIPPED))" "$PROBES" "$PROBES_SKIPPED" >&2
     FAILS=$((FAILS + 1)); fail_rc 92
   fi
@@ -557,7 +662,7 @@ check_file() {
   # when the parser knows the precise cause and has it ready to print.
   violations="$(lint_todo "$file" "$cap")"
   if [ -n "$violations" ]; then
-    printf '  FAIL  %s does not hold its shape:\n' "$(basename "$file")" >&2
+    printf '  FAIL  %s does not hold its shape:\n' "$(basename -- "$file")" >&2
     printf '%s\n' "$violations" >&2
     printf '\n%d shape violation(s)\n' "$(grep -c . <<< "$violations")" >&2
     return 1
@@ -587,7 +692,9 @@ CAP=$((10#$CAP))
 
 case "${1:-}" in
   --selftest) selftest; exit $? ;;
-  --check)    check_file "${2:-$TODO}" "$CAP"; exit $? ;;
+  # `${2-$TODO}` and not `${2:-$TODO}`: an EMPTY argument is a caller passing an unset variable,
+  # and defaulting it to TODO.md answered "ok" about a file the caller never named.
+  --check)    check_file "${2-$TODO}" "$CAP"; exit $? ;;
   '')         selftest || exit $?; check_file "$TODO" "$CAP"; exit $? ;;
   *)          printf '  FAIL  unknown option: %s (see the usage header)\n' "$1" >&2; exit 96 ;;
 esac
