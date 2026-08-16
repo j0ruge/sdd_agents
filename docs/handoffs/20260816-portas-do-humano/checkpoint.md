@@ -28,7 +28,7 @@ atualizado: 2026-08-16 21:15
 
 | ID | Incremento | Check (comando → esperado) | Status | Commit |
 |---|---|---|---|---|
-| I1 | `sdd approve`: o gate humano ganha comando | `o=$(bash tests/check-gates.sh 2>&1); grep -c '^  ok    sdd approve' <<< "$o"` → `3` | pending | — |
+| I1 | `sdd approve`: o gate humano ganha comando | `o=$(bash tests/check-gates.sh 2>&1); grep -c '^  ok    sdd approve' <<< "$o"` → `3` | done | 96a1f68 |
 | I2 | o runner troca para a branch declarada | `o=$(bash tests/check-gates.sh 2>&1); grep -c '^  ok    branch ' <<< "$o"` → `3` | pending | — |
 | I3 | `sdd retry` vira a quarta porta com aviso | `o=$(bash tests/check-gates.sh 2>&1); grep -c '^  ok    retry ' <<< "$o"` → `2` | pending | — |
 | I4 | plano kaizen-born nunca se auto-aprova | `o=$(bash tests/check-gates.sh 2>&1); grep -c '^  ok    kaizen-born' <<< "$o"` → `3` | pending | — |
@@ -42,6 +42,21 @@ atualizado: 2026-08-16 21:15
   (vermelhos), `tests/check-gates.sh` verde (rc 0) — nenhum Check nasce verde.
 - 2026-08-16 21:15 · `PLAN` · prefixos de asserção são contrato com os Checks: `sdd approve `,
   `branch `, `retry `, `kaizen-born` — nomear exatamente assim em `tests/check-gates.sh`.
+- 2026-08-16 · `I1` · **desvio da decisão 2 do grill, deliberado:** o assunto do commit do
+  `sdd approve` é `chore(missao): plan <missão> approved by the human` (inglês, escopo `missao`
+  mantido), não a frase pt-BR do `00-missao.md`. O runner é superfície do kit e roda em repo de
+  qualquer `OUTPUT_LANG`, e aqui é o único escritor — não há sessão para escrever no idioma alvo.
+  Além disso `pelo` está na lista de stopwords do `tests/check-lang.sh`, que mede o `bin/sdd`: a
+  frase original é insatisfazível ali. Quem depender do assunto exato (I2/I3/I4, DOCS, PR) leia
+  esta linha antes de "corrigir".
+- 2026-08-16 · `I1` · o comando imprime o **corpo inteiro** da missão, não seção por seção: os
+  headings (`## Pendências para o humano`) são conteúdo em `OUTPUT_LANG`, e um runner que os
+  grepasse funcionaria só em repo pt-BR. O fixture do sensor, por isso, não precisa dos headings
+  pt-BR — quem guarda esse contrato é o `tests/check-templates.sh`.
+- 2026-08-16 · `I1` · passada de sabotagem adversarial: **11 degradações, 10 vermelhas** pela
+  asserção pretendida (resposta ignorada, commit varrendo a árvore, sem idempotência, `sed` no
+  arquivo inteiro, corpo/incrementos/`titulo:` não impressos, gate ignorando `humano-*`, sem
+  `git add`). A 11ª — remover a guarda de read-back — sobrevive verde e está no `TODO.md`.
 
 ## Incrementos de fix (QA)
 
