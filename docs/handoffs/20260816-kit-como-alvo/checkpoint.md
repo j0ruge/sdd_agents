@@ -1,6 +1,6 @@
 ---
 missao: 20260816-kit-como-alvo
-atualizado: 2026-08-16 17:40
+atualizado: 2026-08-16 19:05
 ---
 
 # Checkpoint — quando o kit é o próprio alvo, quatro instrumentos param de afirmar o que nunca mediram
@@ -18,7 +18,7 @@ atualizado: 2026-08-16 17:40
 | I2 | os três leitores do ledger filtram por repo | `o=$(bash tests/check-kaizen.sh 2>&1); grep -c '^  ok    a row from another repo never enters the series' <<< "$o"` → `1` | done | d99a7fc |
 | I3 | preflight compara conteúdo do agente, não presença | `o=$(bash tests/check-preflight.sh 2>&1); grep -c '^  ok    a drifted agent copy fails the preflight' <<< "$o"` → `1` | done | ab64d2e |
 | I4 | aviso de branch base alcança run e kaizen | `o=$(bash tests/check-gates.sh 2>&1); grep -c '^  ok    the base branch warning reaches sdd run' <<< "$o"` → `1` | done | daa8687 |
-| F1 | os Checks de I2/I3/I4 param de ler asserção vermelha como verde (âncora `^  ok    `), e o template + o `sdd-planner` aprendem a regra | `l=$(mktemp); bash tests/run-all.sh >"$l" 2>&1; rc=$?; a=$(grep -c '^  ok    no checkpoint Check reads a red assertion as green' "$l"); printf '%s%s\n' "$rc" "$a"` → `01` | pending | — |
+| F1 | os Checks de I2/I3/I4 param de ler asserção vermelha como verde (âncora `^  ok    `), e o template + o `sdd-planner` aprendem a regra | `l=$(mktemp); bash tests/run-all.sh >"$l" 2>&1; rc=$?; a=$(grep -c '^  ok    no checkpoint Check reads a red assertion as green' "$l"); printf '%s%s\n' "$rc" "$a"` → `01` | done | a981fd9 |
 
 ## Notas de execução
 
@@ -186,6 +186,46 @@ atualizado: 2026-08-16 17:40
 - 2026-08-16 · `QA` · **O parser aceita `F1`:** `checkpoint_rows` (`bin/sdd`) descarta só `ID`,
   linha de traços e célula vazia — o prefixo do ID não é lido em lugar nenhum. E a célula do Check
   de `F1` **não tem pipe** (conferido), pela regra de 2026-08-16 15:08 acima.
+
+- 2026-08-16 · `F1` · **O sensor novo (`tests/check-checkpoint.sh`) mede a regra em TODO checkpoint
+  do repo, não só no desta missão** — 23 linhas em 5 arquivos, e o `templates/checkpoint.md` entra
+  na varredura como qualquer outro. A regra é condicional e é isso que a torna barata: só se
+  aplica à célula que faz `2>&1` **E** grepa. Hoje são 4 células (I2, I3, I4 e o próprio F1);
+  nenhuma missão anterior tinha uma.
+- 2026-08-16 · `F1` · ⚠️ **A pré-condição da regra é também o seu ponto cego, e por isso tem piso
+  próprio.** Quebre o `2>&1` ou o `grep` da pré-condição e o arquivo passa verde sobre uma regra
+  que nunca rodou — vacuidade, a forma exata que esta missão caça. `RULED_FLOOR=4` é o que impede;
+  ele é o mais importante dos quatro pisos, e tem probe.
+- 2026-08-16 · `F1` · **O achado mais caro da sabotagem adversarial: fixture derivado da regra
+  afrouxa junto com ela.** Abrir `OK_ANCHOR` de `^  ok    ` para `ok` deixava o selftest **verde**,
+  porque os probes constroem os seus fixtures a partir de `OK_ANCHOR` — regra e evidência se moviam
+  em bloco. A saída não foi um probe a mais e sim uma **testemunha independente**: `calibrate()`
+  deriva o prefixo das linhas `pass()` dos sensores reais e compara com o âncora. Se você escrever
+  um sensor cujo fixture nasce do valor sob teste, ele tem esse buraco — procure a segunda fonte.
+- 2026-08-16 · `F1` · **Dois sobreviventes eram o mesmo buraco: `--check` cobria a regra, `--scan`
+  não.** Todas as violações de célula eram exercitadas só pelo modo `--check`, então `if true; then
+  pass` em `scan()` — a fiação entre os contadores e o veredito — sobrevivia a tudo. Fechado com
+  dois probes de `--scan` sobre a árvore completa. Regra medida num modo não é regra medida no modo
+  que o `run-all.sh` chama.
+- 2026-08-16 · `F1` · Sabotagem adversarial: **44 degradações em 4 rodadas**, 4 sobreviventes, os 4
+  viraram probe. O único que resta é o par "esvaziar os corpos dos probes **e** baixar
+  `PROBE_FLOOR`", e as três quase-falhas foram **medidas** em par com uma sabotagem real em vez de
+  presumidas: neutralizar só o `rc` de `probe()` morre pela metade da mensagem (91), só a mensagem
+  morre pelo `rc` (90), só o `fail_rc` morre pela contra-checagem de `FAILS` (92).
+- 2026-08-16 · `F1` · **Arquivo novo em `tests/` ⇒ os dois pisos que contam arquivo subiram**, como
+  a nota do I1 avisava: `LINT_FLOOR` 13 → 14 (`tests/run-all.sh`) e o piso de superfície do
+  `check-pipefail.sh` 12 → 13, este com a árvore-fixture do probe "a full clean surface passes"
+  indo de 11 para 12. Catálogo de mutação segue em **44** (o sensor mede markdown, e sabotagem do
+  `bin/sdd` não o mataria — pendurá-lo no catálogo seria ponto pelo motivo errado). `sdd health`
+  verde.
+- 2026-08-16 · `F1` · ⚠️ **`.claude/agents/` não é editável por esta sessão** (permissão negada em
+  `cp` e no editor). Quem sincronizou a cópia do `sdd-planner` foi o próprio runner:
+  `bash bin/sdd install --force`. Depois do I3 a cópia velha reprova o `sdd preflight`, então isso
+  **tem** de ser feito no mesmo commit — e o caminho que funciona é o comando do kit, não o `cp`.
+- 2026-08-16 · `F1` · `CLAUDE.md` aprendeu no mesmo commit (regra do contrato em três lugares): a
+  lista de sensores foi de "os dez" para **os doze** — ela também não tinha aprendido o
+  `check-entrypoint.sh` do I1 —, e a rubrica "sensor que a mutação não alcança carrega auto-teste"
+  passou de três para **quatro** sensores.
 
 ## Incrementos de fix (QA)
 
