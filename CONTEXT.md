@@ -12,6 +12,8 @@
 | **Rótulo** | `ok \| leve \| refez` por fase/sessão, derivado **depois** a partir dos fatos do ledger — nunca gravado pelo runner. Vem da rubrica de maturidade do usuário (`~/.claude/skills/release-notes/references/autonomy-rubric.md`). |
 | **Veredito** | A resposta "a última mudança do kit **melhorou, piorou ou indeterminado**?", dada por mudança de versão do kit (eixo `kit_sha`). |
 | **Série** | Os agregados comparados por grupo de `kit_sha`: desperdício (`moved:false`/total), escaladas por `kind`, custo, retentativas. `sdd autonomy` já imprime a visão humana disso. |
+| **Escalada** | Guarda-chuva: qualquer linha do ledger que **não gastou sessão**. Duas hoje — `event:"blocked"` (a linha parou, o runner devolve rc 3) e `event:"degraded"` (o runner baixou a própria régua e **seguiu**). Predicado único por programa (`is_escalation`): escrever o par à mão em três pontos foi como eles divergiram. |
+| **Degradação (`review-to-draft`)** | O único `degraded` de hoje: `PUBLISH_ON_REVIEW_BLOCKED=draft` + review sem rodadas ⇒ PR em draft em vez de parada. **No máximo uma linha por `run_id`** — o ramo é reentrado a cada volta do laço REVIEW→PR→REVIEW, mas a régua baixou uma vez. Logo, `review-to-draft: 3` são três runs, nunca um run que degradou três vezes. |
 | **Juiz** | O papel que produz rótulos + veredito. Pela **D1**, é dividido: a parte mecânica é sensor do runner; a interpretação final é do agente. |
 | **Triagem kaizen** | Escolher do `TODO.md` do kit o próximo lote de trabalho que vira missão — sem desviar escopo, sem perder achado. ⚠️ Caixa desmarcada com "RESOLVIDO por `<hash>`" no corpo já está fechada. |
 | **Guarda das 3 missões** | O juiz responde `indeterminado` quando há menos de 3 missões observadas depois da mudança julgada (decisão do design de 2026-08-14). |
@@ -32,8 +34,18 @@
 | D7 | Métrica de sucesso do I13.3? | **Sensores sintéticos + rodada real como Check de fecho (C)** — (1) rodada real produz veredito + plano nascido passando `gate_KAIZEN`; (2) mutação 20 → ≥23 (gate_KAIZEN, Jidoka "piorou", derivação de rótulo), score 100%; (3) `sdd health` cobrando as novas; (4) suíte < 30s no default. | Padrão consagrado no repo (preflight `fc2fa50`, dry-run): sensor durável na suíte + prova no caminho real. A sessão paga do fecho é a primeira volta produtiva do laço — dela saem o veredito real do I13.1 e o plano candidato da missão seguinte. | — |
 | D9 | `docs/adr/` entra na `surface()` do `check-lang`? | **Sim, no I13.3.5** — glob `docs/adr/*.md` na lista enumerada; piso recontado 26 → 31 (sensor novo + 2 cópias do agente + 2 ADRs), com o histórico no comentário do piso. | ADR é superfície do kit (inglês), não artefato de missão; deixar fora abriria a porta que a catraca existe para fechar. | — |
 | D10 | A sessão kaizen ganha linha no ledger? Com qual `mission`? | **Sim, uma linha por sessão**, com a pseudo-missão `<YYYYMMDD>-kaizen` (`cmd_kaizen` a seta só para logs/prompt; o diretório nunca é criado pelo runner). A série exclui `phase == "KAIZEN"` dos grupos e a conta em `excluded.meta` — asserção própria no `check-kaizen.sh`. | O custo/fricção do próprio laço fica medido sem deslocar o eixo que ele julga: o juiz nunca vê a própria sessão inflar a guarda do próprio veredito. | — |
+| D11 | Degradação: `event` novo ou reusar `blocked` com um `kind` novo? | **`event: "degraded"` próprio** (`kind: "review-to-draft"`), com `blocked` reservado para o run que de fato **para** (rc 3). Os dois compartilham um `is_escalation` por programa, então respondem igual à rubrica de rótulo e ao eixo de `kit_sha` sem serem o mesmo evento. | Reusar `blocked` era mais barato — herdava eixo e agregação sem tocar em `jq` nenhum —, mas gravaria "parou" para um run que **continuou**, e o ledger existe para gravar fato. A revisão r1 fortaleceu o argumento em vez de enfraquecê-lo: a rubrica agrupa por `(mission, phase)` sobre a fatia inteira de `kit_sha`, então ensinar os dois eventos ao mesmo predicado era obrigatório de qualquer jeito. ⚠️ Confirmação humana pendente (🚩 abaixo). | — |
 
 ## 🚩 Perguntas abertas
 
-_Nenhuma — as duas abertas no grill (D9, D10) foram resolvidas na execução do I13.3 e movidas
-para a tabela acima._
+- **D11 espera confirmação humana.** O código já foi escrito com `event: "degraded"`; a alternativa
+  barata continua a um valor de campo e às asserções correspondentes de distância.
+- **O critério (4) da D7 — "suíte < 30 s no default" — segue não atingido e piorando de
+  propósito.** Medido na fase DOCS da missão `20260815-ledger-sem-ponto-cego`, mesma máquina e
+  mesma sessão: **47,9 s** com 25 mutantes (`fdf8708`) → **66,3 s** com 30 (`HEAD`). Cortar mutação
+  para ganhar tempo violaria o princípio que motivou o I13.2, então as saídas são subir o alvo,
+  subir `SDD_MUTATION_JOBS` (⚠️ `nproc` é GNU-only) ou aceitar o custo. Decisão do humano; a
+  medição completa e o histórico moram no `TODO.md`.
+
+_As duas perguntas abertas no grill (D9, D10) foram resolvidas na execução do I13.3 e movidas para
+a tabela acima._
