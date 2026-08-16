@@ -480,6 +480,21 @@ mut_RUN_base_branch_warn_dead() {
   sed -i 's@^  \[ -n "\$branch" \] && \[ -n "\$DEFAULT_BRANCH" \] && \[ "\$branch" = "\$DEFAULT_BRANCH" \] || return 0$@  return 0@' "$1"
 }
 
+# Not a gate: `sdd approve` keeps working, keeps asking, keeps committing — and writes `auto`
+# instead of `humano-<date>`. The gate opens either way, so nothing that reads an rc can see it,
+# and every downstream reader (the handoffs, the kaizen judge, a human doing archaeology on the
+# history) is now told the plan cleared PLAN-AUTO on its own when in fact a human typed y. The
+# expensive shape: not a command that fails, a command that lies in a committed artifact.
+#
+# It sabotages the single definition of the value rather than the write call, and that is what
+# makes it survivable enough to be interesting: the command's own read-back guard compares against
+# the same variable, so the mutant passes its self-check and reaches `git commit`. Splitting the
+# literal across the write and the verify would leave a mutant that merely dies, which measures
+# nothing. What has to die is the assertion demanding `humano-` AND the absence of `auto`.
+mut_RUN_approve_writes_auto() {
+  sed -i 's@^  local approved_as; approved_as="humano-\$(date +%F)"$@  local approved_as; approved_as="auto"@' "$1"
+}
+
 CATALOG=(
   PLAN_empty_approval
   TICKET_no_sprint
@@ -525,6 +540,7 @@ CATALOG=(
   RUN_ledger_no_repo_filter
   PRE_agent_presence_only
   RUN_base_branch_warn_dead
+  RUN_approve_writes_auto
 )
 
 # Mutations that are NOT caught today, each with the increment that closes it. Ratchet in both

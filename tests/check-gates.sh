@@ -581,6 +581,168 @@ else
        "the same rc on both branches, and 0" "main=$BASE_RC feature=$FEAT_RC"
 fi
 
+# --- sdd approve -----------------------------------------------------------
+echo "== sdd approve =="
+# Closing the PLAN gate used to mean typing `aprovacao: humano-YYYY-MM-DD` into the frontmatter by
+# hand, in the exact shape gate_PLAN greps. Two failure modes, both cheap to hit: the human gets
+# the format wrong and the gate stays shut with no explanation, or the human delegates the edit to
+# the session — and the session is precisely who may not decide.
+#
+# A SECOND mission, not the fixture walked above: that one is approved (`auto`) and already at PR,
+# and an approve test needs the one state it no longer has — an empty `aprovacao:`. The frontmatter
+# below carries a `/` (in `branch:`) and an `&` (in `titulo:`) on purpose: the write has to be a
+# surgical rewrite of ONE key, and a naive `sed 's/^aprovacao:.*/…/'` over the whole file is one
+# careless replacement away from eating either character.
+#
+# Frontmatter KEYS are contract and stay exactly as templates/missao.md ships them. The section
+# HEADINGS are not: `sdd approve` prints the whole body instead of parsing headings, so the fixture
+# spells them in English — templates/check-templates.sh owns the pt-BR heading contract, and
+# tests/check-lang.sh (which scans this file) owns the rule that kit surface carries no Portuguese.
+# `titulo:` deliberately differs from the body's own heading: grepping it in the output is then
+# proof the frontmatter key was READ, not that the body happened to contain the words.
+AM="20260102-approve"
+AMDIR="$FIX/docs/handoffs/$AM"
+mkdir -p "$AMDIR"
+cat > "$AMDIR/00-missao.md" <<'EOF'
+---
+missao: 20260102-approve
+titulo: portas & barras — a/b
+data: 2026-01-02
+versao:
+branch: missao/20260102-approve
+aprovacao:
+ddd: n/a
+---
+
+# Mission fixture
+
+## Gate PLAN-AUTO
+
+| # | Criterion | Status | Evidence |
+|---|---|---|---|
+| a | grill clean | ✅ | criterio-a-evidencia |
+
+## Open questions for the human
+
+pendencia-fixture-unica
+
+aprovacao: humano-YYYY-MM-DD is the shape gate_PLAN greps, quoted here in the body on purpose
+EOF
+printf '# Plano\n' > "$AMDIR/01-plano.md"
+cat > "$AMDIR/checkpoint.md" <<'EOF'
+| ID | Incremento | Check (comando → esperado) | Status | Commit |
+|---|---|---|---|---|
+| I1 | fatia-de-fixture | `true` → 0 | pending | — |
+EOF
+# The three artifacts are left UNTRACKED on purpose, and it buys two things for free. First, the
+# real first-approval state: nothing says the planner committed, and `git commit -- <path>` refuses
+# a path git has never heard of — the command has to stage it. Second, the two siblings become the
+# control for the commit's blast radius below: they sit right next to 00-missao.md, uncommitted,
+# and a `git add -A` would swallow both.
+
+# --- 1. the preview, and `n` as a real no-op.
+#
+# The refusal runs FIRST and on the SAME fixture the acceptance will run on: that is what makes the
+# pair differential. A command that wrote the approval unconditionally — ignoring the answer — would
+# satisfy every assertion about the written value below and die here, and a command that never
+# wrote anything would die there. Neither half alone can tell the two apart.
+#
+# The preview is asserted in the same breath because refusing is only a decision if the human was
+# shown what they were refusing: the title, the PLAN-AUTO evidence, the increments and the open
+# questions. Approving blind is the manual edit with extra steps.
+#
+# Herestring, never `printf 'n' | sdd approve`: under `pipefail` that pipe returns 141 the moment
+# the command stops reading, which would read as a failing runner. See check-pipefail.sh.
+APPROVE_HEAD_0="$(git rev-parse HEAD)"
+APPROVE_N_OUT="$( cd "$FIX" && "$SDD" approve "$AM" 2>&1 <<< "n" )"; APPROVE_N_RC=$?
+APPROVE_N_PHASE="$( cd "$FIX" && "$SDD" phase "$AM" 2>&1 )"
+if [ "$APPROVE_N_RC" -eq 0 ] \
+   && grep -q 'portas & barras' <<< "$APPROVE_N_OUT" \
+   && grep -q 'criterio-a-evidencia' <<< "$APPROVE_N_OUT" \
+   && grep -q 'fatia-de-fixture' <<< "$APPROVE_N_OUT" \
+   && grep -q 'pendencia-fixture-unica' <<< "$APPROVE_N_OUT" \
+   && grep -qx 'aprovacao:' "$AMDIR/00-missao.md" \
+   && [ "$(git rev-parse HEAD)" = "$APPROVE_HEAD_0" ] \
+   && [ "$APPROVE_N_PHASE" = "PLAN" ]; then
+  pass "sdd approve shows title, PLAN-AUTO, increments and open questions — and 'n' changes nothing"
+else
+  fail "sdd approve shows title, PLAN-AUTO, increments and open questions — and 'n' changes nothing" \
+       "the four sections on screen, rc 0, frontmatter untouched, no commit, still PLAN" \
+       "rc $APPROVE_N_RC, phase $APPROVE_N_PHASE, approval line '$(grep -m1 '^aprovacao:' "$AMDIR/00-missao.md")': $(tail -3 <<< "$APPROVE_N_OUT")"
+fi
+
+# --- 2. `y` writes humano-<today>, never `auto`, and the gate opens.
+#
+# `auto` is asserted ABSENT and not merely "humano- present": the two values share the gate's happy
+# path, so a command that wrote `auto` would close the gate just the same and every rc-reading
+# assertion would stay green — while the artifact now claims the PLAN-AUTO table was all ✅ when a
+# human in fact typed y. House rule: the text of the right branch AND the absence of the other's
+# marker.
+#
+# The unrelated dirty file is planted here and read by assertion 3 — the commit has to carry
+# 00-missao.md and nothing else, and a fixture with a clean tree cannot tell `git commit -- <path>`
+# from `git commit -a`.
+echo "unrelated change" >> file.txt
+# Everything except the FIRST `aprovacao:` line — the one in the frontmatter, the only line the
+# write is allowed to touch. `grep -v '^aprovacao:'` would have been the obvious filter and is the
+# wrong one: it also hides the copy the fixture body carries at column 0, which is precisely what a
+# whole-file `sed 's/^aprovacao:.*/…/'` would rewrite. The filter that hides the defect from the
+# assertion is the filter that makes the assertion decorative.
+approval_stripped() { awk '!seen && /^aprovacao:/ { seen=1; next } { print }' "$1"; }
+APPROVE_FILE_BEFORE="$(approval_stripped "$AMDIR/00-missao.md")"
+APPROVE_DAY_0="$(date +%F)"
+APPROVE_Y_OUT="$( cd "$FIX" && "$SDD" approve "$AM" 2>&1 <<< "y" )"; APPROVE_Y_RC=$?
+APPROVE_DAY_1="$(date +%F)"
+APPROVE_LINE="$(grep -m1 '^aprovacao:' "$AMDIR/00-missao.md")"
+APPROVE_PHASE="$( cd "$FIX" && "$SDD" phase "$AM" 2>&1 )"
+if [ "$APPROVE_Y_RC" -eq 0 ] \
+   && { [ "$APPROVE_LINE" = "aprovacao: humano-$APPROVE_DAY_0" ] \
+        || [ "$APPROVE_LINE" = "aprovacao: humano-$APPROVE_DAY_1" ]; } \
+   && ! grep -q 'aprovacao:.*auto' "$AMDIR/00-missao.md" \
+   && [ "$(approval_stripped "$AMDIR/00-missao.md")" = "$APPROVE_FILE_BEFORE" ] \
+   && [ "$APPROVE_PHASE" != "PLAN" ]; then
+  pass "sdd approve answered 'y' writes humano-<today>, never 'auto', and opens the PLAN gate"
+else
+  fail "sdd approve answered 'y' writes humano-<today>, never 'auto', and opens the PLAN gate" \
+       "aprovacao: humano-$APPROVE_DAY_0, the rest of the file byte-identical, phase off PLAN" \
+       "rc $APPROVE_Y_RC, phase $APPROVE_PHASE, line '$APPROVE_LINE', diff: $(diff <(printf '%s\n' "$APPROVE_FILE_BEFORE") <(approval_stripped "$AMDIR/00-missao.md") | head -4), out: $(tail -2 <<< "$APPROVE_Y_OUT")"
+fi
+
+# --- 3. the commit: one file, the conventional message, and no second one.
+#
+# `sdd approve` is the first thing in the runner that commits, so its blast radius is the assertion:
+# the unrelated edit planted above must still be uncommitted afterwards. And the second call has to
+# be a no-op — a human who runs it twice, or a script that retries, must not stack a second
+# `chore(missao)` commit onto a plan that was already approved.
+#
+# The subject is ENGLISH with the pt-BR `missao` scope kept, and that is a deliberate departure from
+# the pt-BR wording the grill wrote down in 00-missao.md (decision 2). Two reasons, both structural:
+# the runner is kit surface installed into repos declaring any OUTPUT_LANG, and here it is the only
+# writer — there is no session to write the message in the target language. tests/check-lang.sh
+# measures that rule over bin/sdd, and the grill's phrasing carries one of its stopwords, so the
+# original subject cannot be spelled in the runner at all. Recorded in the checkpoint notes.
+APPROVE_SUBJECT="$(git log -1 --format=%s)"
+# Captured into variables and read with herestrings below, never `git … | grep -q`: that pipe
+# returns 141 when grep FINDS the line, and both assertions here are positive ones.
+APPROVE_TOUCHED="$(git show --name-only --format= HEAD)"
+APPROVE_STATUS="$(git status --porcelain)"
+APPROVE_FILES="$(grep -c . <<< "$APPROVE_TOUCHED")"
+APPROVE_HEAD_1="$(git rev-parse HEAD)"
+APPROVE_AGAIN_OUT="$( cd "$FIX" && "$SDD" approve "$AM" 2>&1 <<< "y" )"; APPROVE_AGAIN_RC=$?
+if [ "$APPROVE_SUBJECT" = "chore(missao): plan $AM approved by the human" ] \
+   && [ "$APPROVE_FILES" -eq 1 ] \
+   && grep -qx "docs/handoffs/$AM/00-missao.md" <<< "$APPROVE_TOUCHED" \
+   && grep -q '^ M file.txt' <<< "$APPROVE_STATUS" \
+   && [ "$APPROVE_AGAIN_RC" -eq 0 ] \
+   && [ "$(git rev-parse HEAD)" = "$APPROVE_HEAD_1" ]; then
+  pass "sdd approve commits only 00-missao.md, and approving twice makes no second commit"
+else
+  fail "sdd approve commits only 00-missao.md, and approving twice makes no second commit" \
+       "one file in the commit, the unrelated edit left dirty, HEAD unmoved on the second call" \
+       "subject '$APPROVE_SUBJECT', $APPROVE_FILES file(s), rc2 $APPROVE_AGAIN_RC, status: ${APPROVE_STATUS//$'\n'/ · }, second call: $(tail -2 <<< "$APPROVE_AGAIN_OUT")"
+fi
+git checkout -q -- file.txt
+
 # ---------------------------------------------------------------------------
 echo
 if [ "$fails" -eq 0 ]; then

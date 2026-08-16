@@ -166,6 +166,49 @@ frontmatter() {
     }' "$file"
 }
 
+# frontmatter_write <file> <key> <value> — rewrites ONE key, in place, and nothing else.
+#
+# The counterpart of frontmatter(), which is read-only: closing the PLAN gate by hand was the only
+# way to approve a plan, and a command that does it for the human has to write with the same
+# precision the reader expects.
+#
+# Scoped to the block between the FIRST two `---` lines, never the whole file: a mission body is
+# prose that legitimately quotes its own frontmatter (this repo's 00-missao.md writes
+# "aprovacao: humano-YYYY-MM-DD" inside a sentence), and a file-wide substitution would rewrite the
+# prose too, silently.
+#
+# awk with index(), never sed: the replacement value would go through sed's own syntax, where `&`
+# means "the whole match" and `/` ends the expression — a mission title carrying either character
+# is ordinary, and the corruption would land in a committed artifact. index()/substr() also dodge
+# the mawk trap of the house (a negated class with a multibyte character negates its BYTES).
+#
+# Only the FIRST occurrence of the key is rewritten, and an absent key is left absent — the caller
+# verifies with frontmatter() and decides. Writing through a temporary and moving it into place
+# keeps a failed awk from truncating an artifact that is already committed.
+frontmatter_write() {
+  local file="$1" key="$2" value="$3" tmp
+  [ -f "$file" ] || die "frontmatter_write: $file does not exist"
+  tmp="$(mktemp "${file}.XXXXXX")"
+  awk -v k="$key" -v v="$value" '
+    NR==1 && $0=="---" { inside=1; print; next }
+    inside && $0=="---" { inside=0; print; next }
+    inside && !written {
+      idx = index($0, ":")
+      if (idx > 0) {
+        name = substr($0, 1, idx-1)
+        gsub(/^[ \t]+|[ \t]+$/, "", name)
+        if (name == k) { printf "%s: %s\n", k, v; written=1; next }
+      }
+    }
+    { print }
+  ' "$file" > "$tmp" || { rm -f "$tmp"; die "frontmatter_write: awk failed on $file"; }
+  # mktemp creates 0600; without this the artifact would come out of an approval readable only by
+  # whoever approved it. Git would not show the change (it tracks the exec bit only), which is what
+  # makes it worth a line here instead of a bug report later.
+  chmod --reference="$file" "$tmp" 2>/dev/null || true
+  mv "$tmp" "$file" || { rm -f "$tmp"; die "frontmatter_write: could not replace $file"; }
+}
+
 # Checkpoint table rows as "ID<TAB>title<TAB>check<TAB>status<TAB>commit".
 # Skips the header, the separator, and any line that does not have the 5 columns.
 checkpoint_rows() {
@@ -1633,6 +1676,112 @@ cmd_why() {
   printf '%s: %s\n' "$ph" "$GATE_WHY"
 }
 
+# `sdd approve <mission>` — the human gate of the PLAN phase gets a command.
+#
+# Until this existed, unlocking gate_PLAN meant opening 00-missao.md and typing
+# `aprovacao: humano-YYYY-MM-DD` in the exact shape the gate greps. Two ways that goes wrong, and
+# both were seen: the format comes out slightly off and the gate stays shut with a message about a
+# key the human believes they just wrote, or the edit gets delegated to the session — and the
+# session is precisely the party that may not decide whether the plan is worth building.
+#
+# It is NOT a phase and it never opens a session: approving is the one thing in the pipeline that
+# has to come from outside it. The two deliberate `claude -p` calls outside run_phase() stay two
+# (the preflight probe and `sdd close`); this command reads stdin and writes a file.
+#
+# It prints before it asks. An approval given without the plan on screen is the manual edit with
+# extra steps, so the whole mission body goes to stdout — title, PLAN-AUTO evidence, out of scope,
+# open questions — plus the increment table, which lives in the other file. The body is printed
+# whole rather than section by section on purpose: section headings are mission content in
+# OUTPUT_LANG, and a runner that grepped for them would work in pt-BR repos and go quietly blind
+# everywhere else.
+cmd_approve() {
+  load_config
+  resolve_mission "${1:-}"
+  local m="$MISSION_DIR/00-missao.md"
+
+  # The gate's own diagnosis, taken from the gate: this command exists to satisfy gate_PLAN, and a
+  # human told "missing 01-plano.md" by `sdd status` must not hear something different from the
+  # command that is supposed to fix it. GATE_WHY is read, never re-worded.
+  if ! gate_PLAN && [[ $GATE_WHY == missing\ * ]]; then die "$GATE_WHY"; fi
+
+  local approval; approval="$(frontmatter "$m" aprovacao)"
+  case "$approval" in
+    auto|humano-*)
+      info "plan $MISSION is already approved (aprovacao: $approval) — nothing to do"
+      return 0
+      ;;
+  esac
+
+  step "approve plan — $MISSION"
+  info ""
+  local titulo; titulo="$(frontmatter "$m" titulo)"
+  info "  ${titulo:-<no titulo: in the frontmatter of 00-missao.md>}"
+  info ""
+  # From the line after the closing `---` to the end. Same awk shape as frontmatter(), so a file
+  # with no frontmatter at all prints nothing rather than printing itself twice.
+  awk 'NR==1 && $0=="---" { inside=1; next }
+       inside && $0=="---" { inside=0; body=1; next }
+       body { print "  " $0 }' "$m"
+
+  local rows; rows="$(checkpoint_rows)"
+  info ""
+  if [ -n "$rows" ]; then
+    info "  increments:"
+    local id title _check st _commit
+    while IFS=$'\t' read -r id title _check st _commit; do
+      printf '    %-4s %-46s %s\n' "$id" "${title:0:46}" "$st"
+    done <<< "$rows"
+  else
+    warn "checkpoint.md has no parseable increment row — the PLAN gate will stay shut"
+  fi
+
+  # ONE definition of the value being written, read three times below (the warning, the write, the
+  # read-back). Split into a literal at each site, a mutant that writes `auto` — an approval that
+  # claims the PLAN-AUTO table was all ✅ when a human in fact typed y — would still satisfy the
+  # read-back and reach the commit. Sabotaging this single line is what mut_RUN_approve_writes_auto
+  # does, and the assertion that dies is the one demanding `humano-` AND the absence of `auto`.
+  local approved_as; approved_as="humano-$(date +%F)"
+
+  info ""
+  dim "  approving says: this plan is what you want built. It writes aprovacao: $approved_as"
+  dim "  into 00-missao.md and commits that one file. It does NOT start the pipeline."
+  printf '  approve this plan? [y/N] '
+  # `|| ans=""`: with stdin closed, `read` returns non-zero and `set -e` would abort mid-prompt.
+  # Anything that is not an explicit yes is a no — the default of a [y/N] prompt is the safe side.
+  local ans=""
+  read -r ans || ans=""
+  # The prompt ends without a newline, and a terminal supplies one when the human hits Enter. A
+  # pipe or a closed stdin does not, and the answer would sit glued to the prompt.
+  info ""
+  case "$ans" in
+    y|Y|yes|Yes|YES) : ;;
+    *) info "  not approved — nothing was written"; return 0 ;;
+  esac
+
+  frontmatter_write "$m" aprovacao "$approved_as"
+  # Read back through the same parser the gate uses. An absent `aprovacao:` key leaves
+  # frontmatter_write a no-op by design, and committing that would be an approval that approves
+  # nothing — the artifact has to answer the gate's question before the commit is made.
+  local written; written="$(frontmatter "$m" aprovacao)"
+  [ "$written" = "$approved_as" ] \
+    || die "could not write 'aprovacao: $approved_as' into $m (it reads '${written:-<empty>}') — is the 'aprovacao:' key in the frontmatter?"
+
+  local rel="${m#"$REPO_ROOT/"}"
+  # `-- "$rel"` on the commit, not `git commit -a`: whatever else the tree is carrying is none of
+  # this command's business. `git add` first so the path is known to the index even on the first
+  # commit of a brand-new mission directory.
+  ( cd "$REPO_ROOT" \
+    && git add -- "$rel" \
+    && git commit -q -m "chore(missao): plan $MISSION approved by the human" \
+         -m "Written by 'sdd approve': closing the PLAN gate used to mean editing the frontmatter
+by hand, in the exact shape gate_PLAN greps. Only 00-missao.md enters this commit." \
+         -- "$rel" ) \
+    || die "git refused the approval commit — 'aprovacao: $approved_as' IS written in $rel, commit it by hand"
+
+  ok "approved: aprovacao: $approved_as"
+  dim "  next: sdd run $MISSION"
+}
+
 cmd_run() {
   local mission_arg="" force_phase="" max_phases=0
   while [ $# -gt 0 ]; do
@@ -2399,6 +2548,8 @@ USAGE
   sdd preflight              environment sensor: tools, auth, config, plugins, git
   sdd health                 KIT sensor: suite, mutation, doc and config drift
   sdd status <mission>       where the mission stands, gate by gate, and what is missing
+  sdd approve <mission>      show the plan and, on an explicit y, write the human approval into
+                             00-missao.md and commit it (the PLAN gate — never a session)
   sdd run <mission>          run from the first unsatisfied phase through to the PR
   sdd retry <mission>        retry the current phase with a fresh session
   sdd close <mission>        post-merge: close the JIRA issue
@@ -2435,6 +2586,7 @@ main() {
     preflight) cmd_preflight "$@" ;;
     health)    cmd_health "$@" ;;
     status)    cmd_status "$@" ;;
+    approve)   cmd_approve "$@" ;;
     phase)     cmd_phase "$@" ;;
     why)       cmd_why "$@" ;;
     run)       cmd_run "$@" ;;
