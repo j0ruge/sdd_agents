@@ -1,6 +1,6 @@
 ---
 missao: 20260816-runner-sem-dividas
-atualizado: 2026-08-16 13:05
+atualizado: 2026-08-16 11:58
 ---
 
 # Checkpoint — a seção "Runner — defeitos e dívidas" do TODO.md é eliminada
@@ -111,3 +111,15 @@ atualizado: 2026-08-16 13:05
 > `F<n>`, e o Check obrigatoriamente inclui **regression test passa** + **re-walk da jornada
 > impactada verde**. Bug que exige julgamento humano NÃO vira fix — vai para
 > "Decisions for a Human" no handoff de QA.
+
+**Nenhum. Zero incrementos `F<n>` nesta missão** — as sete jornadas do `gate:` do
+`30-handoff-qa.md` passaram e nenhum defeito foi encontrado no diff. Os dois achados da fase são
+**pré-existentes** e foram para o `TODO.md`, não para esta tabela.
+
+- 2026-08-16 · QA · projeto **sem interface** (`E2E_CMD=""`, sem `APP_URL`): `docs/qa/` não existe e não foi criada — a evidência da jornada é o campo `gate:` do handoff, que é o que o `gate_QA` (`bin/sdd:339`) mede neste caminho
+- 2026-08-16 · QA · os 5 pontos visíveis ao usuário que o `20-handoff-exec.md` listou viraram 5 jornadas de terminal, todas verdes; detalhe comando-a-comando no `gate:`, não duplicado aqui
+- 2026-08-16 · QA · ⚠️ **o risco nº 1 do EXEC foi FECHADO**, não herdado: o argv de `run_phase` rodou contra o `claude` REAL (2.1.233, sem stub) — 14 linhas de stream, `stream_summary` destila exatamente 1 objeto, `total_cost_usd = 0.0216704`. E sem `--verbose`: `rc 1`, stdout 0 bytes, `Error: … requires --verbose`. A metade frágil é frágil pelo motivo que o I10 documentou
+- 2026-08-16 · QA · ⚠️ **para o REVIEW, e é contraintuitivo**: o `sdd run` desta missão executa o `bin/sdd` de `7045e0f` (PID 3568779, iniciado 09:31; o I10 entrou 11:39 e o bash já tinha `run_phase` em memória). Logo `QA-20260816-114530.json` tem **0 bytes** e não há `.stream.jsonl` ao lado — formato ANTIGO. Não é defeito do diff: a J5 provou o formato novo num sandbox rodando o HEAD. Quem conferir os logs desta missão procurando três arquivos não vai achá-los
+- 2026-08-16 · QA · ⚠️ achado de método, caro e não previsto: a primeira jornada de sandbox rodou **sem `SDD_STATE_DIR`** e escreveu 3 linhas de fixture no ledger de PRODUÇÃO — `sdd autonomy` passou a reportar `66% waste · 2 mission(s)` para o kit_sha corrente. Revertido (backup em `~/.sdd/autonomy-log.jsonl.qa-backup`), ledger reconferido em `1 session(s) · 0 stalled · 0% waste · US$ 9.44`. **Quem for andar jornada que invoque `sdd run` exporta `SDD_STATE_DIR` ANTES**, como `tests/check-autonomy.sh:91` faz. A causa (nenhum leitor filtra por `repo`) virou item do `TODO.md`
+- 2026-08-16 · QA · duas hipóteses investigadas e **descartadas por medição**, para ninguém repagar: (a) "stdin não redirecionado custa 3 s por sessão" — o runner herda `/dev/null` e os 8 `.err` de EXEC têm 0 byte; (b) "linha inválida antes do `result` mata o custo" — mecanicamente verdade, mas sem reachability medida é opinião, e o caso que o comentário de `bin/sdd:892` promete (truncagem no fim) foi verificado e **cumpre**
+- 2026-08-16 · QA · baseline no fecho da fase: suíte verde 42,4 s, mutação **37/37**, `sdd health` verde nos 5 checks, `check-todo.sh` com **49** achados (+2 desta fase) e selftest de 75 probes, e `grep -c 'Runner — defeitos e dívidas' TODO.md` → **0**

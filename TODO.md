@@ -30,6 +30,21 @@ Achados sobre **repos-alvo** vão para o `TODO.md` daquele repo. Este arquivo é
 
 ### Sensores que faltam
 
+- [ ] **`main "$@"` sem guarda, e o kit edita o próprio runner em voo** — `bin/sdd:2287` — é a
+  última linha, então ao retornar dela o bash lê o arquivo a partir do offset salvo. A fase EXEC
+  edita `bin/sdd` durante o `sdd run` que a executa (10× nesta missão, +7647 bytes). Reproduzido
+  em script de 114 KB: edição in-place fez o bash **re-executar o entry point** e rodar um
+  fragmento, com **rc 0**. Não mordeu aqui só porque o editor troca o inode (`fd/255` do PID vivo
+  diz `(deleted)`, `pos: 107313`) — invariante de ferramenta alheia que ninguém mede. Direção:
+  `{ main "$@"; exit $?; }`. — descoberto por `sdd-qa` na missão `20260816-runner-sem-dividas` (2026-08-16)
+
+- [ ] **O ledger de autonomia é global e nenhum leitor filtra por repo** — `bin/sdd:745` — o
+  caminho é `$HOME/.sdd/autonomy-log.jsonl` para qualquer repo, e `sdd autonomy`/`kaizen --series`
+  leem todas as linhas. Um `sdd run` de fixture (jornada de QA, sandbox em `/tmp`) escreveu 3
+  linhas no ledger de produção e o juiz passou a ler `66% waste · 2 mission(s)` para o kit_sha
+  corrente, onde o verdadeiro é `0% · 1` — medido e revertido nesta sessão. Direção: filtrar por
+  `repo` na leitura. — descoberto por `sdd-qa` na missão `20260816-runner-sem-dividas` (2026-08-16)
+
 - [ ] **O fixture de `stream-json` não tem checagem de proveniência** — `tests/check-autonomy.sh:127`
   — as três linhas replayadas pelos stubs foram copiadas de sessão real (CLI 2.1.233) e o comentário
   registra o comando, mas `health_provenance` (`bin/sdd:1356`) só confere as 3 fixtures de skill
