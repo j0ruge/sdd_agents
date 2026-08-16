@@ -30,6 +30,13 @@ Achados sobre **repos-alvo** vão para o `TODO.md` daquele repo. Este arquivo é
 
 ### Sensores que faltam
 
+- [ ] **Check de incremento que grepa o texto de uma asserção casa também com a linha `FAIL`** —
+  `docs/handoffs/20260816-kit-como-alvo/checkpoint.md:18` — os Checks de I2/I3/I4 são
+  `grep -c '<texto>'` sobre a saída com `2>&1`, e `fail()` imprime o mesmo texto: o Check devolve
+  `1` com a asserção **vermelha**. O plano prometia "rodou E passou"; quem prova isso é só o
+  `TEST_CMD`. Direção: `grep -c '^  ok    <texto>'` no `templates/` e no `sdd-planner`.
+  — descoberto por `sdd-executor` na missão `20260816-kit-como-alvo` (2026-08-16)
+
 - [ ] **Aprovar plano é editar frontmatter à mão — o gate humano é a única interação sem
   comando** — `bin/sdd` (não existe `cmd_approve`) vs `gate_PLAN` (`:261`) — destravar a fase
   PLAN exige abrir o `00-missao.md` e digitar `aprovacao: humano-YYYY-MM-DD` no formato exato.
@@ -285,6 +292,13 @@ Achados sobre **repos-alvo** vão para o `TODO.md` daquele repo. Este arquivo é
   `20260816-runner-sem-dividas` (2026-08-16)
 
 ### Contrato e configuração
+
+- [ ] **O juiz no repo do kit deixou de enxergar missão de repo-alvo** — `bin/sdd:790`
+  (`ledger_row_is_local`) — a leitura por repo é o conserto certo para contaminação de fixture,
+  mas o ledger existe para medir maturidade **entre** projetos (`docs/pipeline.md:274`) e nenhum
+  leitor consegue mais fazê-lo. Hoje não morde: as 26 linhas reais são todas do kit. Direção: um
+  `--all-repos` explícito, ou o eixo do juiz decidido por ADR (item da guarda, acima).
+  — descoberto por `sdd-executor` na missão `20260816-kit-como-alvo` (2026-08-16)
 
 - [ ] **`config/schema.md` promete cinco comportamentos que o runner não tem** —
   `config/schema.md:24-25,32-34` vs `bin/sdd:81-82` — `LINT_CMD`, `BUILD_CMD`, `DEV_UP_CMD`,

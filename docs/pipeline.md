@@ -276,6 +276,25 @@ file that lives inside one project. And a file the runner writes BETWEEN phases 
 repo would sit untracked and fail `gate_REVIEW` and `sdd preflight` — the `pipeline.log` defect,
 which was fixed by making that journal ephemeral, a way out this ledger does not have.
 
+**The file is global; the READING is per repo.** Every reader — `sdd autonomy`, `sdd kaizen
+--series`, and the reminder printed after a pipeline completes — admits only the rows whose `repo`
+field equals the repo it is standing in, through one predicate (`ledger_row_is_local` in
+`bin/sdd`) spliced into all of them. Without it the ledger was a namespace shared by accident: a
+`sdd run` inside a `/tmp` fixture repo wrote three rows into the real ledger and the judge read
+`66% waste · 2 mission(s)` where the truth was `0% · 1` — its own source of truth, contaminable
+by any test. Three consequences worth knowing:
+
+- what leaves is **counted, never dropped in silence**: `excluded.other_repo` in the series, and
+  one `N row(s) excluded: born in another repo` line in the human table;
+- a row that cannot say where it came from — not an object, or an object with no `repo` key — is
+  **never** excluded by the filter. It reaches the bucket that names it (`unrecognized`, or a loud
+  death naming the file) in whichever repo you are standing in: hiding corruption is the one thing
+  a filter must not do;
+- read from **outside any git repository**, nothing in the ledger is yours: `sdd autonomy` refuses
+  with rc 1 saying the rows exist under another repo, and `sdd kaizen --series` warns and returns
+  the empty series. That is the safe direction — an empty series is `guard.sufficient: false` and
+  supports only `indeterminado`, never somebody else's numbers read as a verdict about this kit.
+
 It records **facts, never a score**: phase, attempt, whether the session moved the disk, rc, cost,
 the gate result and its reason. `ok|leve|refez` is a label, and a runner that labels its own work
 is the "label instead of artifact" every gate here exists to forbid. The judge derives the label,
@@ -306,7 +325,7 @@ present on both shapes.
 | `kit_sha` | string \| `null` | never absent, but `null` | `null` when `$SDD_HOME` is not a git checkout. Short SHA of the kit's own HEAD when the row was written — the before/after axis the whole ledger exists for. |
 | `kit_dirty` | boolean \| `null` | never absent, but `null` | `null` exactly when `kit_sha` is `null` (paired). `true` means the kit's own working tree had uncommitted changes — the row is real but not comparable across versions. |
 | `project` | string | never | `PROJECT_NAME` from the target repo's `.sdd/config.sh`. |
-| `repo` | string | never | Absolute path of the target repo — can carry client-identifying paths, which is why the ledger stays in `$HOME` and is never committed. |
+| `repo` | string | never | Absolute path of the target repo, as `git rev-parse --show-toplevel` returns it — can carry client-identifying paths, which is why the ledger stays in `$HOME` and is never committed. It is also the **only** field the readers filter on before anything else: see "The file is global; the READING is per repo" above. Compared verbatim, with no normalization on either side, so a repo reached through a symlink is a different repo. |
 | `mission` | string | never | The mission slug. |
 | `phase` | string | never | The pipeline phase (`EXEC`, `QA`, …). `PLAN` never appears — the interactive phase spends no session. |
 | `step` | string | on escalation rows | The sub-step actually run (`QA:plan`, `QA:exec`, `QA:close`); equal to `phase` outside QA. |
@@ -366,9 +385,11 @@ by kind, a per mission×phase `detail`, and a label per group:
 Plus a `guard` (`missions_after_change`, `missions_with_session`, `sessions`,
 `sufficient: missions_with_session >= 3` — a mission that only escalated ran, and is counted as
 one, but bought the judge no observation and so does not raise the floor) and an `excluded`
-accounting
-(dirty-kit rows, unrecognized rows, and the `meta` rows the kaizen sessions themselves write —
-the loop never lets its own sessions shift the axis it is judged on).
+accounting with four reasons
+(`non_comparable` dirty-kit rows, `unrecognized` rows, the `meta` rows the kaizen sessions
+themselves write — the loop never lets its own sessions shift the axis it is judged on — and
+`other_repo`, the rows born somewhere else). The empty-ledger branch prints the same key set with
+zeros: a consumer must never read `null` on one branch where the other gives a number.
 
 **The agent gives the verdict.** The `sdd-kaizen` session runs the series as its source of truth
 (citing, never recalculating), interprets the sha axis with `git log`, and writes

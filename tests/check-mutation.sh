@@ -437,6 +437,20 @@ mut_RUN_entrypoint_unguarded() {
   sed -i 's|^{ main "$@"; exit $?; }$|main "$@"|' "$1"
 }
 
+# Not a gate: the ledger goes back to being one namespace shared by accident — every reader sees
+# every repo on the machine, which is how a `sdd run` in a /tmp fixture repo once moved the judge's
+# own numbers to `66% waste · 2 mission(s)` where the truth was `0% · 1`.
+#
+# It sabotages the DEFINITION and not any one call site, and that is the whole point: the predicate
+# is spliced into cmd_autonomy, kaizen_series and (through the series) the post-pipeline reminder.
+# Sabotaging one call would measure one call; sabotaging the definition measures that all of them
+# really go through it. What dies is the pair of differential assertions — the series read from two
+# repos in check-kaizen.sh, the human table read from two repos in check-autonomy.sh — and neither
+# can survive it, because both compare two readings of ONE file against each other.
+mut_RUN_ledger_no_repo_filter() {
+  sed -i 's@def ledger_row_is_local: if (type == "object" and has("repo")) then .repo == $repo else true end;@def ledger_row_is_local: true;@' "$1"
+}
+
 CATALOG=(
   PLAN_empty_approval
   TICKET_no_sprint
@@ -479,6 +493,7 @@ CATALOG=(
   RUN_progress_eats_rc
   RUN_progress_dead
   RUN_entrypoint_unguarded
+  RUN_ledger_no_repo_filter
 )
 
 # Mutations that are NOT caught today, each with the increment that closes it. Ratchet in both

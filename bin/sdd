@@ -760,6 +760,37 @@ AUTONOMY_SHA_WARNED=0
 
 autonomy_log_path() { printf '%s/autonomy-log.jsonl' "${SDD_STATE_DIR:-$HOME/.sdd}"; }
 
+# The repo whose rows a reader is allowed to see. `sdd autonomy` and `sdd kaizen --series` skip
+# load_config on purpose (they answer a question about the LEDGER, not about a mission, and need
+# no target configuration), so REPO_ROOT is still empty when they run and has to be resolved here.
+# Deliberately NOT resolve_repo_root: that one dies, and dying is a worse answer than "nothing in
+# this file is yours" for a command whose whole job is to report what the ledger holds.
+ledger_repo_root() {
+  if [ -n "$REPO_ROOT" ]; then printf '%s' "$REPO_ROOT"; return 0; fi
+  git rev-parse --show-toplevel 2>/dev/null || true
+}
+
+# ONE definition of "this row was born in the repo I am standing in", spliced into every reader's
+# jq program — the same rule that made is_escalation a single definition after the blocked/degraded
+# pair was written out three times and the third copy stayed blind. Emitted as jq TEXT rather than
+# evaluated per row in bash: a shell call per line would fork once per row, and — the reason that
+# actually matters — a single definition is what lets mut_RUN_ledger_no_repo_filter prove that all
+# the readers really go through it. Sabotage a call site and you have measured one call site.
+#
+# The ledger is global ON PURPOSE (one file per machine keeps cross-repo questions answerable); it
+# is the READER that has to ask "mine?". Until it did, a `sdd run` in a /tmp fixture repo wrote
+# three rows into the real ledger and the judge read `66% waste · 2 mission(s)` where the truth was
+# `0% · 1` — the judge's own source of truth, contaminable by any test.
+#
+# A row that does not SAY where it came from — not an object at all, or an object with no `repo`
+# key — is never excluded by this filter. It cannot be attributed to any repo, and a filter that
+# swallowed it would be hiding corruption instead of reporting it: the readers already classify
+# those rows out loud (one counts them `unrecognized`, the other dies naming the file), and that
+# has to keep happening in whichever repo the human is standing in.
+ledger_row_is_local() {
+  printf '%s' 'def ledger_row_is_local: if (type == "object" and has("repo")) then .repo == $repo else true end;'
+}
+
 # Publishes AUTONOMY_KIT_STAMP as "<sha>|<true|false>", or "|" when SDD_HOME is not a git checkout.
 # This is the judge's before/after axis: without it, a change in the numbers gets attributed to the
 # calendar instead of to the kit change that caused it.
@@ -1835,13 +1866,31 @@ cmd_autonomy() {
   # blank lines, which under `set -e` aborted this whole command with no output on either stream
   # and rc 1 — the SAME rc as the deliberate "no data" case below, making a corrupt ledger
   # indistinguishable from an empty one in a command whose whole thesis is dying loudly.
-  local total; total="$(jq -s 'length' "$file")"
+  # Counted AFTER the repo filter, and it has to be: the header total is what assert_bucket_sum
+  # in check-autonomy.sh pins every bucket against, so a total that counted another repo rows
+  # would turn that sum into an accusation against the buckets instead of a measurement.
+  local repo; repo="$(ledger_repo_root)"
+  local def; def="$(ledger_row_is_local)"
+  local total lines
+  lines="$(jq -s 'length' "$file")"
+  total="$(jq -s --arg repo "$repo" "$def"' map(select(ledger_row_is_local)) | length' "$file")"
   if [ "$total" -eq 0 ]; then
-    warn "no data: the ledger at $file does not exist yet (or has no rows)"
-    dim "  It is written by 'sdd run' and 'sdd retry'. Nothing has been recorded on this machine."
+    # Three different silences, named apart: an empty file, a cwd that belongs to no repo, and a
+    # ledger full of somebody else rows. Collapsing them into one "no data" would send the reader
+    # hunting for a runner that never wrote, when the rows are right there under another path.
+    if [ "$lines" -eq 0 ]; then
+      warn "no data: the ledger at $file does not exist yet (or has no rows)"
+      dim "  It is written by 'sdd run' and 'sdd retry'. Nothing has been recorded on this machine."
+    elif [ -z "$repo" ]; then
+      warn "no data: the ledger is read per repo and this is not a git repository (cwd: $PWD)"
+      dim "  $file holds $lines row(s), all of them belonging to some repo. Run this inside one."
+    else
+      warn "no data for $repo: none of the $lines row(s) in $file were born in this repo"
+      dim "  The ledger is global, the reader is not. Run 'sdd autonomy' in the repo you want."
+    fi
     return 1
   fi
-  step "sdd autonomy — $file · $total row(s)"
+  step "sdd autonomy — $file · $total row(s) · $repo"
 
   # Every row lands in exactly ONE of four buckets, and the buckets are exhaustive: comparable
   # session, non-comparable row, escalation on the axis, or unrecognized (event missing, or a value
@@ -1867,7 +1916,7 @@ cmd_autonomy() {
   # that failure is caught below and re-raised through die(), same rc 1 as every other refusal in
   # this command instead of leaking jq's own exit code.
   local out jq_rc=0
-  out="$(jq -rs '
+  out="$(jq -rs --arg repo "$repo" "$def"'
     # ONE definition of "attributable to a kit version" for the whole program, exactly as
     # is_escalation is one definition of the escalation pair — and for the same reason. This was
     # written twice, `.kit_dirty == false` for sessions and `.kit_dirty != true` for escalations,
@@ -1884,7 +1933,12 @@ cmd_autonomy() {
     def is_session: .event == "session";
     def is_escalation: .event == "blocked" or .event == "degraded";
     def is_unrecognized: (is_session or is_escalation) | not;
-    (map(select((is_session and (comparable | not))
+    # The repo filter runs before every bucket, and its own count is kept for the same reason the
+    # other three exclusions are printed: a row that leaves has to say so. Bound BEFORE the pipe
+    # so the buckets below still see a plain array of this repo rows and nothing changes shape.
+    (map(select(ledger_row_is_local | not)) | length) as $foreign
+    | map(select(ledger_row_is_local))
+    | (map(select((is_session and (comparable | not))
                 or (is_escalation and (on_axis | not)))) | length) as $skipped
     | (map(select(is_session and comparable)) | group_by(.kit_sha)) as $groups
     | (map(select(is_unrecognized)) | length) as $stray
@@ -1905,6 +1959,7 @@ cmd_autonomy() {
        | select(length > 0) | "\nescalations\n" + .)
     , (if $skipped > 0 then "\n  (\($skipped) non-comparable row(s) excluded: dirty kit, no kit_sha, or no moved field)" else "" end)
     , (if $stray > 0 then "\n  (\($stray) unrecognized row(s) excluded: event missing or not one of session/blocked/degraded)" else "" end)
+    , (if $foreign > 0 then "\n  (\($foreign) row(s) excluded: born in another repo — the ledger is global, this reader is not)" else "" end)
   ' "$file" 2>/dev/null)" || jq_rc=$?
   if [ "$jq_rc" -ne 0 ]; then
     die "malformed row in $file — the ledger is not readable"
@@ -1936,14 +1991,22 @@ cmd_autonomy() {
 kaizen_series() {
   local file; file="$(autonomy_log_path)"
   command -v jq >/dev/null 2>&1 || die "jq not found — it is required to read the ledger"
+  # Read PER REPO, from the repo this process is standing in. Standing in none, nothing in the
+  # ledger is yours: the series comes back empty, which is the SAFE direction (guard.sufficient
+  # false supports only `indeterminado`) and never another repo's numbers read as a verdict about
+  # this kit. It is said out loud because an empty series that nobody explained is the kind of
+  # zero this file spends the rest of its lines refusing to print.
+  local repo; repo="$(ledger_repo_root)"
+  [ -n "$repo" ] \
+    || warn "not inside a git repository — the ledger is read per repo, so this series comes back empty (cwd: $PWD)"
   if [ ! -s "$file" ]; then
     # Second producer of the same shape, and it cannot share the jq above (there is no input to
     # run it on), so the key set is kept in step by hand and check-kaizen.sh compares the two as
     # key sets. A consumer reading `null` where the real series gives a number is the drift.
-    printf '%s\n' '{"v":1,"latest":null,"previous":null,"guard":{"missions_after_change":0,"missions_with_session":0,"sessions":0,"sufficient":false},"excluded":{"non_comparable":0,"unrecognized":0,"meta":0}}'
+    printf '%s\n' '{"v":1,"latest":null,"previous":null,"guard":{"missions_after_change":0,"missions_with_session":0,"sessions":0,"sufficient":false},"excluded":{"non_comparable":0,"unrecognized":0,"meta":0,"other_repo":0}}'
     return 0
   fi
-  jq -n '
+  jq -n --arg repo "$repo" "$(ledger_row_is_local)"'
     # ONE definition of "escalation" for the whole program, exactly as cmd_autonomy has one. The
     # two events state different facts (`blocked` stopped the line, `degraded` lowered the bar and
     # went on) but they answer this rubric the same way, and writing the pair out three times is
@@ -1999,7 +2062,13 @@ kaizen_series() {
          cost_usd: ($sess | map(.cost_usd // 0) | add // 0 | . * 100 | round / 100),
          detail: $detail};
 
-    [ inputs ] as $raw
+    [ inputs ] as $file_rows
+    # The repo filter runs BEFORE any classification, and its own count is kept: a row born in
+    # another repo is not this repo unrecognized row, it is not this repo row at all — and it is
+    # counted rather than dropped, because a number that moved with nothing explaining why is the
+    # defect this filter exists to remove, not one to introduce one layer down.
+    | ($file_rows | map(select(ledger_row_is_local))) as $raw
+    | (($file_rows | length) - ($raw | length)) as $other_repo
     | ($raw | map(select(type == "object" and .v == 1
                          and (.event == "session" or is_escalation)))) as $all
     | ($all | map(select(.phase == "KAIZEN"))) as $meta
@@ -2023,13 +2092,17 @@ kaizen_series() {
                sessions: ($latest.sessions // 0),
                sufficient: ($observed >= 3)},   # guard floor: 3 missions WITH a session (D4); I13.4 revisits
        excluded: {non_comparable: ($noncomp | length), unrecognized: $unrec,
-                  meta: ($meta | length)}}
+                  meta: ($meta | length), other_repo: $other_repo}}
   ' < "$file"
 }
 
 # One dim line after "pipeline complete": how many missions the CURRENT kit version accumulated
 # without a verdict, and where to go. Pull, not push (D6) — the human is the kanban, so it prints
 # only when there is something to judge and no verdict for it yet, and it never blocks anything.
+# The third reader of the ledger, and it holds no filter of its own on purpose: it reads through
+# kaizen_series, so it inherits ledger_row_is_local along with every number it prints. A repo whose
+# rows all came from somewhere else gets missions_after_change 0 here and stays silent, which is
+# the right silence — there is nothing of THIS repo for the judge to look at.
 # The verdicts live in the KIT repo ($SDD_HOME/docs/handoffs/), readable from any target repo.
 # Every read goes through a variable or a herestring — never `printf | grep`, the pipefail trap.
 kaizen_reminder() {
@@ -2169,7 +2242,10 @@ cmd_kaizen() {
     esac
     shift
   done
-  # The ledger is global (~/.sdd), so the series is readable from ANY cwd — no config, no repo.
+  # The ledger FILE is global (~/.sdd), so no config and no mission are needed to read it — but the
+  # reading is per repo, and kaizen_series resolves that itself. Run from outside a git repository
+  # it warns and comes back empty, which is the safe direction: an empty series is insufficient by
+  # construction and supports only `indeterminado`.
   if [ "$series_only" = "1" ]; then kaizen_series; return 0; fi
 
   load_config
@@ -2283,10 +2359,11 @@ USAGE
   sdd run <mission>          run from the first unsatisfied phase through to the PR
   sdd retry <mission>        retry the current phase with a fresh session
   sdd close <mission>        post-merge: close the JIRA issue
-  sdd autonomy               waste per kit version, read from the global autonomy ledger
+  sdd autonomy               waste per kit version, for THIS repo, from the global ledger
   sdd kaizen [--dry-run]     judge the previous kit change and give birth to the next kit
                              mission plan (kit repo only; exit 3 = the change made it worse)
-  sdd kaizen --series        the deterministic series (JSON) the judge cites — any repo
+  sdd kaizen --series        the deterministic series (JSON) the judge cites, for the repo
+                             it runs in (the ledger file is global, the reading is not)
   sdd help | sdd version
 
 FOR SCRIPTS
