@@ -15,9 +15,9 @@ atualizado: 2026-08-16 17:40
 | ID | Incremento | Check (comando → esperado) | Status | Commit |
 |---|---|---|---|---|
 | I1 | entry point com guarda + sensor diferencial | `bash tests/check-entrypoint.sh >/dev/null 2>&1; echo $?` → `0` | done | bb373b5 |
-| I2 | os três leitores do ledger filtram por repo | `o=$(bash tests/check-kaizen.sh 2>&1); grep -c 'a row from another repo never enters the series' <<< "$o"` → `1` | done | d99a7fc |
-| I3 | preflight compara conteúdo do agente, não presença | `o=$(bash tests/check-preflight.sh 2>&1); grep -c 'a drifted agent copy fails the preflight' <<< "$o"` → `1` | done | ab64d2e |
-| I4 | aviso de branch base alcança run e kaizen | `o=$(bash tests/check-gates.sh 2>&1); grep -c 'the base branch warning reaches sdd run' <<< "$o"` → `1` | done | daa8687 |
+| I2 | os três leitores do ledger filtram por repo | `o=$(bash tests/check-kaizen.sh 2>&1); grep -c '^  ok    a row from another repo never enters the series' <<< "$o"` → `1` | done | d99a7fc |
+| I3 | preflight compara conteúdo do agente, não presença | `o=$(bash tests/check-preflight.sh 2>&1); grep -c '^  ok    a drifted agent copy fails the preflight' <<< "$o"` → `1` | done | ab64d2e |
+| I4 | aviso de branch base alcança run e kaizen | `o=$(bash tests/check-gates.sh 2>&1); grep -c '^  ok    the base branch warning reaches sdd run' <<< "$o"` → `1` | done | daa8687 |
 | F1 | os Checks de I2/I3/I4 param de ler asserção vermelha como verde (âncora `^  ok    `), e o template + o `sdd-planner` aprendem a regra | `l=$(mktemp); bash tests/run-all.sh >"$l" 2>&1; rc=$?; a=$(grep -c '^  ok    no checkpoint Check reads a red assertion as green' "$l"); printf '%s%s\n' "$rc" "$a"` → `01` | pending | — |
 
 ## Notas de execução

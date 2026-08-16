@@ -15,6 +15,14 @@ atualizado: <YYYY-MM-DD HH:MM>
 > `sdd status` imprime algo de aparência saudável — custou uma missão inteira até alguém olhar.
 > Check que precisaria de pipe vira herestring: `` o=$(cmd 2>&1); grep -c 'x' <<< "$o" ``.
 >
+> ⚠️ **Check que lê a saída de um sensor ancora em `^  ok    ` — quatro espaços, com o `^`.**
+> Todo sensor da suíte imprime `  ok    <asserção>` na **stdout** e `  FAIL  <asserção>` na
+> **stderr**, com o *mesmo* `<asserção>`. Um Check que faz `2>&1` e grepa o texto solto devolve o
+> mesmo número com a asserção verde e com ela vermelha: ele responde "a asserção existe", nunca
+> "a asserção passou". Custou uma missão inteira, achado só na fase QA. A forma certa:
+> `` o=$(bash tests/check-x.sh 2>&1); grep -c '^  ok    <asserção>' <<< "$o" `` → `1`.
+> O sensor é `tests/check-checkpoint.sh`.
+>
 > Atualizar o checkpoint é o **último ato** de cada incremento — depois do commit, nunca antes.
 > Status válidos: `pending` · `doing` · `done` · `blocked`.
 

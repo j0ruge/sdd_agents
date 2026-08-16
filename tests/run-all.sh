@@ -38,7 +38,7 @@ run "entry point cannot fall through into itself" "$ROOT/tests/check-entrypoint.
 # The floor is the anti-vacuity guard, same reason as the ones in check-lang.sh and
 # check-pipefail.sh: a glob that stops matching, or a list someone narrows back to bin/sdd, leaves
 # the linter reporting "clean" over files it never read — the failure mode where the sensor claims
-# to have measured what it did not. 12 paths today; the floor moves only on purpose, in a commit
+# to have measured what it did not. 14 paths today; the floor moves only on purpose, in a commit
 # that says why.
 #
 # Mind the wording of any comment here: a line whose first word after `#` is the linter's own name
@@ -58,11 +58,12 @@ run "entry point cannot fall through into itself" "$ROOT/tests/check-entrypoint.
 # certifying a threshold nobody runs at. The risk table of this mission forbade lowering `-S`;
 # this is what makes the ban a sensor instead of a sentence.
 #
-# The floor moved 12 → 13 when tests/check-entrypoint.sh landed. It tracks the real count on
-# purpose: left at 12 it would still pass, and would have gone on describing a surface one file
-# smaller than the one it reads — the label-instead-of-artifact shape this whole mission is about.
+# The floor moved 12 → 13 when tests/check-entrypoint.sh landed, and 13 → 14 for
+# tests/check-checkpoint.sh. It tracks the real count on purpose: left behind it would still pass,
+# and would go on describing a surface one file smaller than the one it reads — the
+# label-instead-of-artifact shape this whole mission is about.
 LINT_SEVERITY=warning
-LINT_FLOOR=13
+LINT_FLOOR=14
 
 lint_surface() {
   local files=("$ROOT/bin/sdd") f
@@ -127,6 +128,14 @@ fi
 # shape, and the mutant would score a point for the wrong reason. It also tests no gate, so it
 # could never score a legitimate one.
 [ -n "${SDD_MUTANT:-}" ] || run "findings file holds its shape" "$ROOT/tests/check-todo.sh"
+
+# Same guard and same two reasons as check-todo above: it reads docs/handoffs/, which the mutation
+# sandbox does not copy, and it tests no gate, so it could never score a legitimate mutant point.
+# What it DOES cover is the Check column of every checkpoint — the increment's own sensor, which
+# the QA phase measured answering "the assertion exists" where the mission's metric promised
+# "the assertion passed".
+[ -n "${SDD_MUTANT:-}" ] || run "checkpoint Checks cannot read a red assertion as green" \
+  "$ROOT/tests/check-checkpoint.sh"
 
 run "template contract" "$ROOT/tests/check-templates.sh"
 run "gate state machine" "$ROOT/tests/check-gates.sh"
