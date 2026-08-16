@@ -93,13 +93,25 @@ que, sem `set -e`, cai fora do `if` — o run terminava em `ok 0 finding(s)`, rc
 cerca ``` sem fechamento travava o latch do parser e pulava **todas** as regras até o fim do
 arquivo, também verde. Nos dois casos o sensor dizia "medi e está limpo" sobre o que não mediu.
 
-| | Auto | 1ª | 2ª | 3ª | 4ª | 5ª | 6ª | 7ª | 8ª | 9ª |
-|---|---|---|---|---|---|---|---|---|---|---|
-| Defeitos achados | 0 | 17 | 9 | 11 | 11 | 11 | 11 | 10 | 5 | **3** |
-| Herdados de rodadas anteriores | — | 17 | 2 | 3 | 5 | 4 | 5 | 5 | 3 | **0** |
-| Probes do selftest | 14 | 20 | 30 | 37 | 45 | 49 | 48 | 58 | 63 | **67** |
-| Linhas do parser `awk` | 47 | 62 | 71 | 84 | 107 | 107 | 75 | 82 | 79 | **74** |
-| Estado de cerca no parser | sim | sim | sim | sim | sim | sim | não | não | sim | **não** |
+| | Auto | 1ª | 2ª | 3ª | 4ª | 5ª | 6ª | 7ª | 8ª | 9ª | 10ª | 11ª | 12ª |
+|---|---|---|---|---|---|---|---|---|---|---|---|---|---|
+| Defeitos achados | 0 | 17 | 9 | 11 | 11 | 11 | 11 | 10 | 5 | 3 | 5 | 7 | **3** |
+| Herdados de rodadas anteriores | — | 17 | 2 | 3 | 5 | 4 | 5 | 5 | 3 | 0 | 1 | 6 | **3** |
+| Probes do selftest | 14 | 20 | 30 | 37 | 45 | 49 | 48 | 58 | 63 | 67 | 69 | 75 | **75** |
+| Linhas do parser `awk` † | 47 | 62 | 71 | 84 | 107 | 107 | 75 | 82 | 79 | 74 | 126 | 132 | **132** |
+| Estado de cerca no parser | sim | sim | sim | sim | sim | sim | não | não | sim | não | não | não | **não** |
+
+Procedência das três colunas novas, porque metade delas é derivada e não medida. **Probes** e
+**linhas** saem do commit de cada rodada (`e339baf`, `0552110`; a 12ª não commitou conserto, então
+repete a 11ª). **Defeitos** e **herdados** das rodadas 10 e 11 são contados do corpo do commit —
+os relatórios daquelas rodadas não foram persistidos, e é por isso que o da 12ª está em
+[`docs/handoffs/20260816-todo-enxuto/`](docs/handoffs/20260816-todo-enxuto/r12-caixa-partida.md).
+
+† A linha de tamanho do parser serve à **tendência, não à comparação coluna a coluna**: as colunas
+Auto–9ª foram medidas ao longo da sessão e não reproduzem do commit sob nenhuma definição única
+(o programa `awk` entre aspas casa a 7ª; o bloco `todo_awk()` inteiro casa a 5ª e a 6ª; as demais,
+nenhuma das duas). As colunas 10ª–12ª usam o bloco `todo_awk()` inteiro, que é o número maior — o
+salto de 74 para 126 é mudança de régua, não crescimento do parser.
 
 **O número que mais ensina não é nenhum defeito: é que cada rodada achou um defeito criado pela
 anterior — três vezes seguidas.** A 1ª consertou a âncora com uma classe negada de travessão, e a
@@ -148,16 +160,32 @@ para pegar isso era código morto inalcançável. **Terceira vez aprendendo a me
 substituto não tem estado: uma contagem de paridade calculada fora do awk, que não pode
 dessincronizar porque não lembra de nada.
 
-**E a curva de convergência é o número que fecha o argumento:** achados herdados de rodadas
-anteriores foram 17 → 2 → 3 → 5 → 4 → 5 → 5 → 3 → **0**. Enquanto o conserto era remendo, o
-herdado não caía; ele só foi a zero depois que a estrutura virou lista-branca sem estado. O laço
-não converge por esforço — converge por simplificação.
+**E a curva de convergência é o número que mais mudou de sinal:** achados herdados de rodadas
+anteriores foram 17 → 2 → 3 → 5 → 4 → 5 → 5 → 3 → 0 → 1 → 6 → **3**. O zero da 9ª parecia fechar o
+argumento — enquanto o conserto era remendo o herdado não caía, e ele só foi a zero depois que a
+estrutura virou lista-branca sem estado. O laço não converge por esforço, converge por
+simplificação; isso continua verdade. **Mas o zero não se sustentou**, e é essa a parte nova: ele
+media a ausência dos defeitos que aquela rodada sabia procurar, não a ausência de defeitos.
 
-Duas consequências para o processo, e são elas que ficam. **Revisão adversarial é laço, não
-etapa**: o critério de parada não pode ser "consertei os achados", tem de ser uma rodada que não
-acha nada. E **quando três rodadas seguidas acham defeitos na mesma vizinhança, o defeito não é
-nenhum deles — é a estrutura que os hospeda**; a saída é parar de remendar e perguntar que estado
-está faltando.
+As três rodadas seguintes mostraram o quê. A **10ª** derrubou a contagem de paridade que a 9ª
+tinha escrito — quarta e última tentativa de modelar cerca, e a quarta a falhar dos dois lados
+(silêncio com marcadores mistos, vermelho em três formas legítimas). A **11ª** achou a regressão
+que a 10ª criou — um predicado alargado de "abre com placeholder" para "contém `<`", que escondia
+288 das 18.720 formas de item no cabeçalho — mais seis regras que a varredura de mutação mostrou
+sem probe, uma delas falhando aberta. E a **12ª** não achou **nada** criado pela 11ª, e ainda
+assim achou três defeitos, todos herdados. Um deles é uma classe nova de fail-open que atravessou
+as onze rodadas anteriores intacta: uma caixa marcada que cai na linha **seguinte** ao marcador
+ainda é renderizada marcada pelo GFM, e a regra 2, que é por linha, não a vê.
+
+Duas consequências para o processo viraram três. **Revisão adversarial é laço, não etapa**: o
+critério de parada não pode ser "consertei os achados". E **quando três rodadas seguidas acham
+defeitos na mesma vizinhança, o defeito não é nenhum deles — é a estrutura que os hospeda**; a
+saída é parar de remendar e perguntar que estado está faltando. A terceira é da 12ª: **"uma rodada
+que não acha nada" também não é critério de parada** — é só evidência sobre o que aquela rodada
+sabia atacar. A 12ª usou um oráculo que nenhuma anterior tinha usado (um parser CommonMark de
+verdade, para comparar o veredito do sensor com o que o GitHub renderiza) e por isso viu o que
+onze leituras não viram. O que faz uma rodada valer não é o esforço nem o número dela — é ela
+trazer um instrumento que as anteriores não tinham.
 
 **A segunda rodada achou um defeito que a primeira rodada CRIOU, e essa é a parte que ensina.** O
 conserto da âncora usava `sub(/ — [^—]*$/, ...)`, e o `awk` desta máquina é o **mawk 1.3.4**, que é
