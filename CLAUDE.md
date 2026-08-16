@@ -126,6 +126,15 @@ morrer. Nos dois casos quem mede o sensor é um `selftest()` com probes e rc pr�
 contagem por um `grep` no chamador passava verde — porque nenhum probe rodava o caminho de
 reporte. A saída foi um modo `--check <arquivo>` que o próprio selftest invoca, sem recursão.
 
+⚠️ **Selftest verde prova as regras que têm probe, e só essas.** Sensor novo ganha uma passada de
+**sabotagem adversarial** antes de ser considerado pronto: degrade cada regra para uma versão mais
+frouxa (a data virando "qualquer parêntese", o título virando "`**` em qualquer lugar", a âncora
+virando "crase em qualquer lugar") e exija que o selftest fique vermelho em cada uma. O que passar
+é regra sem probe. No `check-todo.sh` isso achou 17 defeitos depois de a auto-revisão ter dado
+Grade A, dois deles **falhando abertos** — o pior modo possível num sensor, porque ele afirma ter
+medido o que não mediu. Regra que a sabotagem não consegue quebrar de forma alguma é redundante:
+remova, não escreva probe para ela.
+
 **Fixture que imita saída de skill de terceiro é copiado da fonte**, com o caminho no comentário
 de proveniência — nunca escrito de memória. Três bugs de gate nasceram de fixture imaginado:
 gate e fixture tinham o mesmo autor e a mesma suposição, então a suíte verde *confirmava* a

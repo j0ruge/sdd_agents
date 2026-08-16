@@ -24,7 +24,7 @@ cita.
 | Convenções de fechamento | 2 (uma não documentada) | **1** |
 | Mediana / máximo de linhas por item | 10 / 31 | **6 / 8** |
 | Itens no arquivo | 64 | **45** (14 resolvidos + 4 de "Feito" apagados, 2 fusões, 1 split) |
-| Sensor sustentando a forma | 0 | **1** (`check-todo.sh`, 14 probes de selftest) |
+| Sensor sustentando a forma | 0 | **1** (`check-todo.sh`, 20 probes de selftest) |
 | Suíte no default | 66,02 s | 67,08 s (o sensor custa **23 ms**; o resto é ruído de carga) |
 
 Todas as linhas medidas na mesma máquina e na mesma sessão, `fc304bf` num worktree descartável
@@ -77,6 +77,32 @@ mecanismos respondendo à mesma pergunta, que é a família de defeito que este 
 vezes (os dois leitores do ledger, as duas definições de comparabilidade, e agora o contador).
 Consertado com um parser só em dois modos (`lint`/`count`) e um probe fim-a-fim que reprova se a
 contagem reportada divergir da que o parser vê.
+
+**A lição mais cara da sessão: selftest verde prova as regras que têm probe, e só essas.** Depois
+de a auto-revisão desta sessão dar Grade A ao sensor, uma leitura **adversarial independente**
+achou **17 defeitos** — 2 CRITICAL, 5 HIGH, todos com reprodução. Os dois piores eram da mesma
+espécie e a pior que existe num sensor: **falhar aberto**. Um `TODO.md` existente mas ilegível
+fazia o `awk` imprimir nada, e contagem vazia num teste numérico é erro de sintaxe do `[` (rc 2)
+que, sem `set -e`, cai fora do `if` — o run terminava em `ok 0 finding(s)`, rc 0. E uma única
+cerca ``` sem fechamento travava o latch do parser e pulava **todas** as regras até o fim do
+arquivo, também verde. Nos dois casos o sensor dizia "medi e está limpo" sobre o que não mediu.
+
+| | Auto-revisão | Depois da leitura adversarial |
+|---|---|---|
+| Defeitos conhecidos no sensor | 0 | 17 achados, 17 fechados |
+| Probes do selftest | 14 (número escrito à mão, já defasado) | **20** (contados pelo próprio selftest) |
+| Sabotagens de regra que matam o selftest | 4 de 8 medidas | **13 de 14** (a 14ª é redundância provada) |
+| Caminhos que falhavam abertos | 2 | **0** |
+
+O padrão por trás dos 17: toda regra que **nenhum probe distinguia** podia ser degradada sem que
+nada notasse — a régua da data virava "qualquer parêntese", a do título virava "`**` em qualquer
+lugar", a da âncora virava "crase em qualquer lugar" (satisfeita pela própria atribuição). O
+selftest ficava verde nas três. Sabotagem adversarial é o que encontra a regra sem probe; o
+selftest é o que impede que ela volte. **São instrumentos diferentes e um não substitui o outro** —
+que é a mesma relação entre a suíte e o `check-mutation.sh` que o I13.2 já tinha registrado, um
+nível abaixo. Duas regras, aliás, eram decoração pura e foram **removidas** em vez de ganharem
+probe: o `/^#/` virou redundante quando a regra de coluna 0 entrou, e o piso de 20 itens punia
+exatamente o encolhimento que o sensor existe para causar.
 
 ---
 
