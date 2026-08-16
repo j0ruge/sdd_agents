@@ -4,7 +4,7 @@ titulo: quando o kit é o próprio alvo, quatro instrumentos param de afirmar o 
 data: 2026-08-16
 versao:
 branch: missao/20260816-kit-como-alvo
-aprovacao:
+aprovacao: humano-2026-08-16
 ddd: n/a
 ---
 
