@@ -232,6 +232,15 @@ Achados sobre **repos-alvo** vão para o `TODO.md` daquele repo. Este arquivo é
   quando houver folga de régua. — descoberto por `sdd-executor` na missão
   `20260815-ledger-sem-ponto-cego` (2026-08-16)
 
+- [ ] **A guarda do juiz é insatisfazível quando o kit desenvolve a si mesmo** — `bin/sdd:2024`
+  (`sufficient: ($observed >= 3)`) vs `autonomy_kit_stamp` — o eixo é o `HEAD` do kit no instante
+  de CADA linha, e a fase EXEC commita no `bin/sdd` entre sessões: medido, **24 kit_sha distintos
+  no ledger, todos com exatamente 1 sessão, nenhum com 2**. A guarda pede 3 missões no MESMO sha,
+  então `sufficient` é `false` por construção aqui. Não é bug em alvo (lá o kit não muda na
+  missão) — é o eixo degenerando no repo que o desenvolve, e trava o I13.4. Direção: rodar missão
+  em alvo real, ou carimbar o sha uma vez por missão — decidir qual pergunta o juiz responde.
+  — descoberto por `humano` na missão `20260816-runner-sem-dividas` (2026-08-16)
+
 - [ ] **O schema da série não tem sensor de drift contra a prosa que o descreve** — `bin/sdd:1976`
   vs `docs/pipeline.md:366` e `agents/sdd-kaizen.md:30` — o objeto que o juiz é mandado citar é
   produzido em dois lugares (o `jq` e o literal do ledger vazio, `:1902`) e descrito em dois
@@ -396,11 +405,6 @@ Achados sobre **repos-alvo** vão para o `TODO.md` daquele repo. Este arquivo é
   `CONTEXT.md` adiou até o I13.4 pedir: hoje o veredito vive só no handoff da missão nascida, e
   "vereditos ao longo do tempo" exige varrer `docs/handoffs/*/05-verdict.md`. Criar junto com a
   graduação, nunca antes. — registrado na execução do `i13.3-sdd-kaizen` (2026-08-15)
-
-- [ ] **O `sdd-planner` ainda não foi exercitado numa missão real** — os planos até aqui foram
-  escritos à mão ou pelo `sdd-kaizen`. A primeira missão planejada por ele deve conferir se o
-  gate PLAN-AUTO é preenchido com evidência de verdade. — descoberto por `humano` na
-  implementação (2026-08-14)
 
 - [ ] **Multi-missão concorrente exigiria `git worktree` por missão** — hoje é 1 missão por
   branch por vez (YAGNI declarado no plano). Reavaliar se aparecer demanda real. — descoberto por
