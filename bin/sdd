@@ -1565,30 +1565,38 @@ cmd_run() {
       bad "  current reason: $GATE_WHY"
       dim "  'sdd status $MISSION' shows the full state; 'sdd why $MISSION $phase' the reason."
       if [ "$phase" = "REVIEW" ] && [ "$PUBLISH_ON_REVIEW_BLOCKED" = "draft" ]; then
-        # The warn stays OUTSIDE the guard below: on this lap the runner really is jumping to PR,
-        # and saying so is honest terminal output, not a record. It is also what check-autonomy.sh
-        # counts to prove its fixture is in the repeating regime — a witness that survives any
-        # sabotage of the writers is the only kind worth having.
-        warn "PUBLISH_ON_REVIEW_BLOCKED=draft — moving on to PR in draft mode"
         # The two writers come BEFORE the `continue`, and that order is the whole I2 increment. The
-        # jump used to be here, above both, so the single most interesting autonomy event a
-        # mission can produce — the runner lowering its own bar, alone — left no trace anywhere:
-        # the journal showed a PR phase after some failing REVIEW sessions, and the series showed
-        # the same, with nothing saying why. `degraded`, not `blocked`: the run went ON.
+        # jump used to be above both, so the single most interesting autonomy event a mission can
+        # produce — the runner lowering its own bar, alone — left no trace anywhere: the journal
+        # showed a PR phase after some failing REVIEW sessions, and the series showed the same,
+        # with nothing saying why. `degraded`, not `blocked`: the run went ON.
         #
-        # ONCE PER RUN (F1). `force_phase="PR"` does not end the loop: PR runs, its gate fails, and
-        # `current_phase` hands REVIEW straight back with the budget still blown — so the branch is
-        # re-entered every lap and used to write a row every lap. Measured on the QA walk: one
-        # degradation, THREE rows, in both readers, against the "exactly one" of the mission's
-        # metric 3. Two instruments agreeing on a wrong number is worse than one being wrong, and
-        # the runner did NOT lower its bar three times: it lowered it once and then spun.
-        # The spinning itself is a separate defect — the loop half — and it lives in TODO.md.
+        # ONE CHANCE, AND ONLY ONE (F1 wrote the row once; I9 made the JUMP happen once). The
+        # branch used to end in a bare `force_phase="PR"; continue`, which does not end the run:
+        # PR ran, its own gate failed, `current_phase` handed REVIEW straight back with the budget
+        # still blown, and the branch was re-entered lap after lap. Measured on the QA walk: warn
+        # 3×, two PR sessions, and — the part that actually misinformed — the run finally escalated
+        # as `budget-exhausted` in **PR**, blaming the phase that was never over budget for a
+        # ceiling REVIEW had blown three laps earlier. F1 stopped the ledger from repeating the
+        # `degraded` row; the spin underneath it stayed, and this closes it.
         if [ "$degraded_logged" = "0" ]; then
           degraded_logged=1
+          # Inside the guard since I9: on the second entry the runner is NOT moving on to PR, so
+          # saying so would be the terminal lying about what it is about to do. It used to sit
+          # outside as check-autonomy.sh's witness that the fixture kept re-entering the branch —
+          # a role the `budget-exhausted`-in-REVIEW row below now holds, and holds better, because
+          # only a second entry can produce it.
+          warn "PUBLISH_ON_REVIEW_BLOCKED=draft — moving on to PR in draft mode"
           pipeline_log_line "$(date -Iseconds)  DEGRADED  $phase  PUBLISH_ON_REVIEW_BLOCKED=draft, PR in draft mode — $GATE_WHY"
           autonomy_degraded_row "review-to-draft" "$phase" "$GATE_WHY"
+          force_phase="PR"; continue
         fi
-        force_phase="PR"; continue
+        # Second entry: the draft PR ran and its gate failed too. Falling through to the blocked
+        # pair below ends the run on REVIEW — the phase whose budget is actually blown — reusing
+        # the `blocked`/`budget-exhausted` pair that already sat there. Deliberately NOT a new
+        # event kind: three readers share one `is_escalation` definition, and an event none of them
+        # learned would be filed as unrecognized by all three.
+        warn "  the draft PR did not satisfy its gate either — the run ends here"
       fi
       pipeline_log_line "$(date -Iseconds)  BLOCKED  $phase  $GATE_WHY"
       autonomy_blocked_row "budget-exhausted" "$phase" "$GATE_WHY"

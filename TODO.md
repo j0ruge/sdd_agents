@@ -251,13 +251,6 @@ Achados sobre **repos-alvo** vão para o `TODO.md` daquele repo. Este arquivo é
 
 ### Runner — defeitos e dívidas
 
-- [ ] **O runner se auto-degrada em laço, mesmo registrando uma vez só** — `bin/sdd:1546` —
-  depois do `force_phase="PR"`, se a fase PR mexer no disco e não satisfizer o gate, o laço volta
-  a REVIEW com o orçamento ainda estourado e o ramo `draft` dispara de novo. O `F1` fechou a
-  metade de **registro** (uma linha por `run_id`); o que sobra é o giro REVIEW→PR→REVIEW até o
-  `no-progress` do PR encerrar — medido: ramo entrado 3×, `warn` 3×, ledger 1×. — descoberto por
-  `sdd-executor`, estreitado por `sdd-qa` na missão `20260815-ledger-sem-ponto-cego` (2026-08-16)
-
 - [ ] **A sessão de fase é um ponto cego enquanto roda** — `bin/sdd:897` — `--output-format json`
   emite um blob único no fim, então `.sdd/logs/<missão>/<FASE>-*.json` fica com **0 bytes**
   durante os ~10 min da sessão e não há como acompanhar o agente de dentro do kit (o transcript
@@ -267,6 +260,13 @@ Achados sobre **repos-alvo** vão para o `TODO.md` daquele repo. Este arquivo é
   `20260815-ledger-sem-ponto-cego` (2026-08-16)
 
 ### Saída humana e cosmética
+
+- [ ] **`BLOCKED in <FASE> — N sessions` conta voltas do laço, não sessões** — `bin/sdd:1564` —
+  `attempts[$phase]` sobe em toda volta que chega ao topo com a fase, inclusive as que não abrem
+  sessão nenhuma. Medido no fixture do I9: REVIEW imprime `3 sessions without satisfying the gate`
+  com **1** sessão de REVIEW no ledger, e desde o I9 essa é a última linha que o humano lê quando
+  o run encerra. Direção: contar sessões, ou dizer `attempts`. — descoberto por `sdd-executor` na
+  missão `20260816-runner-sem-dividas` (2026-08-16)
 
 - [ ] **`sdd autonomy` imprime `US$ 2` em vez de `US$ 2.00`** — `bin/sdd:1617` — o `jq` imprime
   número, não string formatada: um total de `2.0` vira `2` e derruba o alinhamento de uma tabela

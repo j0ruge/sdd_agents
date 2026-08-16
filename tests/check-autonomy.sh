@@ -386,19 +386,56 @@ chmod +x "$OUTSIDE/stub/claude"
 # to PR on this lap, and an assertion over the writers must not be its own witness.
 err="$( "$SDD" run "$MISSION" 2>&1 >/dev/null )"; rc=$?
 assert_eq "the run still ends in an escalation, whichever path took it there" "3" "$rc"
-# ANTI-VACUITY OF THE REGIME: without this, a future change that quiets the loop back down to one
-# lap would make the cardinality assertion below pass for the old reason — the fixture — and the
-# F1 sensor would silently stop measuring anything, exactly like the assertion it replaces.
+# I9 — THE LOOP HALF. `force_phase="PR"` never ended the run: PR ran, its own gate failed, and
+# `current_phase` handed REVIEW straight back with the budget still blown, so the runner re-entered
+# the branch lap after lap (measured before the fix: warn 3×, PR sessions 3). F1 closed the RECORD
+# half — one row per run — and left the spin itself in TODO.md. This closes the spin: the draft PR
+# gets ONE chance, and if its gate fails too the run ends on the `blocked`/`budget-exhausted` pair
+# that already sat below the branch. No new event entered the ledger's enum.
+#
+# The five assertions below were put through a sabotage pass, and the matrix is worth writing down
+# because it is NOT the obvious one. The announcement count no longer witnesses the loop at all:
+# the warn moved inside the one-shot guard, so `degraded_logged` pins it and restoring the spin
+# leaves it at 1. What it is the SOLE catcher of is the warn moving back OUTSIDE that guard, where
+# the terminal announces "moving on to PR" on the very lap the run ends. The spin itself is caught
+# by the session count and the phase; see each assertion for its own owner.
 laps="$(grep -c 'moving on to PR in draft mode' <<< "$err")"
-assert_eq "the fixture is in the repeating regime: the draft branch was entered more than once" \
-  "true" "$( [ "${laps:-0}" -ge 2 ] && echo true || echo false )"
-# ANTI-VACUITY, and the lesson I1 paid for: rc 3 is shared by all three escalation paths, so `rc 3`
-# alone would keep this whole block green on a fixture that never reached the draft branch at all.
-# A PR session with the REVIEW gate still failing can only exist BECAUSE the runner degraded —
-# `current_phase` would hand back REVIEW forever otherwise. This assertion is what says the
-# assertions below are pointed at the right branch, and it holds with or without the writer.
-assert_eq "the fixture really did reach the draft branch: a PR session with REVIEW still failing" \
-  "true" "$(jq -s '[.[] | select(.event == "session" and .phase == "PR")] | length > 0' "$LEDGER")"
+assert_eq "the draft jump is announced once, because it now happens once" "1" "${laps:-0}"
+# Sole catcher of the spin's session cost, and the assertion that dies loudest if the branch stops
+# being reached at all.
+assert_eq "and the draft PR got exactly the one session it was promised" "1" \
+  "$(jq -s '[.[] | select(.event == "session" and .phase == "PR")] | length' "$LEDGER")"
+# ANTI-VACUITY OF THE REGIME, in its I9 form — and the assertion this increment could most easily
+# have got wrong. The old witness was "the branch was entered >= 2 times", which is the very number
+# the fix drives down to 1: kept as-is it would fail on the fix, and simply flipped to "== 1" it
+# would go green on a fixture that never reached the branch a SECOND time at all — the fixture
+# standing in for the property again, the vacuity this block already paid for once.
+#
+# So the witness moves to the only row a second entry can produce. The FIRST entry `continue`s past
+# the blocked pair below; the only way to reach it in phase REVIEW is to come back with the budget
+# still blown — which is exactly the lap the pre-I9 runner spent spinning. `budget-exhausted` in
+# REVIEW therefore proves both halves at once: the fixture is still in the repeating regime, AND
+# the runner stopped instead of taking another lap.
+#
+# It is also the assertion that measured the defect most sharply: against the pre-I9 runner this
+# read **PR**, not REVIEW. The spin did not merely waste laps — it handed the escalation to the
+# phase that was never over budget, so the ledger blamed PR for a ceiling REVIEW had blown three
+# laps earlier, and every reader downstream inherited that.
+assert_eq "the run came BACK to the blown REVIEW budget — the lap the old runner spun on" "REVIEW" \
+  "$(jq -r -s '[.[] | select(.event == "blocked")][0].phase' "$LEDGER")"
+# THESE TWO WERE BORN GREEN, and they stay — the I3 precedent in this mission. Against the pre-I9
+# runner the ending already carried `budget-exhausted` and already happened once, just in the wrong
+# phase, so neither measured the defect. The sabotage pass is what earned them their place: each is
+# the SOLE catcher of one way the fix could be got wrong later — inventing a `draft-exhausted` kind
+# instead of reusing the pair (which all three `is_escalation` readers would file as unrecognized),
+# and writing the row on the fall-through as well as in the branch.
+assert_eq "and it ends on the pair that already existed, with no new event in the enum" \
+  "budget-exhausted" "$(jq -r -s '[.[] | select(.event == "blocked")][0].kind' "$LEDGER")"
+assert_eq "exactly one blocked row: a run ends once" "1" \
+  "$(jq -s '[.[] | select(.event == "blocked")] | length' "$LEDGER")"
+# Kept from F1: a PR session with the REVIEW gate still failing can only exist BECAUSE the runner
+# degraded — `current_phase` would hand back REVIEW forever otherwise. It is what says every
+# assertion in this block is pointed at the right branch, and it holds with or without the writer.
 assert_eq "and no REVIEW gate ever passed, so nothing but the degradation could have moved it" \
   "0" "$(jq -s '[.[] | select(.phase == "REVIEW" and .gate == "pass")] | length' "$LEDGER")"
 # THE METRIC OF F1, and now a property of the code rather than of the stub: the runner lowered its

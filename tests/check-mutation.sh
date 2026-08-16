@@ -356,6 +356,19 @@ mut_RUN_on_axis_forked() {
     "$1"
 }
 
+# Not a gate: the LOOP half of the self-degradation, the other half of the pair whose RECORD half
+# RUN_degraded_repeats owns. Puts the bare `force_phase="PR"; continue` back on the second entry,
+# so the runner goes REVIEW→PR→REVIEW again with the REVIEW budget still blown — and, the part that
+# actually misinforms, finally escalates as `budget-exhausted` in **PR**, a phase that was never
+# over budget. The one-shot guard is left ALONE, so the ledger still shows exactly one `degraded`
+# row and this mutant cannot be confused with RUN_degraded_repeats (which sabotages the guard and
+# leaves the ending intact): what dies here is the number of laps, the number of PR sessions and
+# the phase the run blames, and nothing else. Anchors on the second-entry warn — the first-entry
+# one lives inside the guard and says something different, so the sed cannot hit both.
+mut_RUN_degraded_spins() {
+  sed -i 's@warn "  the draft PR did not satisfy its gate either — the run ends here"@force_phase="PR"; continue@' "$1"
+}
+
 CATALOG=(
   PLAN_empty_approval
   TICKET_no_sprint
@@ -391,6 +404,7 @@ CATALOG=(
   KAIZEN_approved_bailout_dead
   RUN_refez_dropped
   RUN_guard_counts_escalations
+  RUN_degraded_spins
 )
 
 # Mutations that are NOT caught today, each with the increment that closes it. Ratchet in both

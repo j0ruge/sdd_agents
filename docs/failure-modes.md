@@ -163,10 +163,16 @@ autonomy ledger — visible in `sdd autonomy` and in the judge's `escalations`. 
 `40-review-r<N>.md` for the real grade, then choose: merge the draft with the open items visible, or
 hand the mission back to REVIEW with more rounds.
 
-**Reading the count:** the `warn` prints once per lap of the REVIEW→PR→REVIEW loop that follows,
-while both **records** are written once per run. That gap is deliberate: the runner lowered its bar
-once and then spun, and the spinning is a separate open defect in the kit's `TODO.md`. So
-`review-to-draft: 3` in either reader means three runs — never one run that degraded three times.
+**Reading the count:** all three trails are written **once per run**, so `review-to-draft: 3` in
+either reader means three runs — never one run that degraded three times.
+
+**If the draft PR does not close either:** the run ends there, with `BLOCKED in REVIEW` and a
+`blocked` / `budget-exhausted` row naming **REVIEW**. The draft was the one chance, and the phase
+named is the one whose ceiling was actually blown. The runner used to hand REVIEW back instead and
+go round again — REVIEW→PR→REVIEW with the budget still blown — until PR ran out of its own budget
+and the escalation came out blaming **PR**, a phase that was never over budget. If you are reading
+an old ledger and a `budget-exhausted` in PR follows a `review-to-draft`, that is what you are
+looking at.
 
 **Do not:** silence it by setting `PUBLISH_ON_REVIEW_BLOCKED="off"` and re-running until the review
 passes. Off is the default precisely because a stop is louder than a draft; switching it on and then
