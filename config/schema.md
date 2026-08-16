@@ -65,7 +65,7 @@ exception, never a silent one** (kaizen K3). Values: any alias `claude --model` 
 | `REVIEW_MAX_ITER` | `3` | Review sessions in total before `BLOCKED`. |
 | `EXEC_MAX_RETRY` | `1` | Retries per increment before `BLOCKED`. |
 | `BUDGET_PER_PHASE_USD` | `15` | Goes into `--max-budget-usd` per session. A damage cap, not a budget. |
-| `PUBLISH_ON_REVIEW_BLOCKED` | `off` | `draft` ⇒ a blown review opens a **draft** PR with the current grade and the open items, instead of stopping dead. |
+| `PUBLISH_ON_REVIEW_BLOCKED` | `off` | `draft` ⇒ a blown review opens a **draft** PR with the current grade and the open items, instead of stopping dead. The runner records that it lowered its own bar, **once per run**: a `DEGRADED` line in the mission's `pipeline.log` and one `event:"degraded"` / `kind:"review-to-draft"` row in the autonomy ledger. |
 | `PERMISSION_MODE` | `acceptEdits` | The ceiling. `bypassPermissions` is **never** the kit's default. |
 | `ALLOWED_TOOLS` | `Bash` | Goes into `--allowedTools`, as a **single argument**. **Required in practice**: `acceptEdits` auto-approves file edits, but **not** `Bash` — without this key the phase session cannot run the suite nor commit, and the EXEC phase becomes unsatisfiable. Verified in the fixture mission `20260814-dry-run-completo`. The kit has only exercised the default; if you need more than one tool, check the format your `claude` accepts before trusting the gate. |
 

@@ -128,7 +128,9 @@ A criterion graded `—` (not analysed) fails too: a partial review is not a rev
 
 The review→fix→re-review loop happens **inside** the session. If it ends without closing, the
 runner opens a fresh session to continue, up to `REVIEW_MAX_ITER` in total. Blown →
-`BLOCKED`, or a draft PR when `PUBLISH_ON_REVIEW_BLOCKED=draft`.
+`BLOCKED`, or a draft PR when `PUBLISH_ON_REVIEW_BLOCKED=draft` — the one place the runner lowers
+its **own** bar instead of stopping, and it records the fact once per run (`event:"degraded"`, in
+the ledger's field reference below).
 
 ### DOCS — drift checklist
 

@@ -148,6 +148,32 @@ items visible, instead of hiding the problem.
 
 ---
 
+## The runner published a draft PR by itself
+
+**Symptom:** the mission ends with a **draft** PR and a review that never reached Grade A.
+
+**Cause:** `PUBLISH_ON_REVIEW_BLOCKED="draft"` plus a review out of `REVIEW_MAX_ITER` rounds. The
+runner lowered its own bar and carried on — by design, and the one autonomy event where it decides
+by itself to ship less.
+
+**What you do:** the decision leaves a trail in three places. `warn "PUBLISH_ON_REVIEW_BLOCKED=draft
+— moving on to PR in draft mode"` on the terminal, a `DEGRADED` line in
+`.sdd/logs/<mission>/pipeline.log`, and one `event:"degraded"` / `kind:"review-to-draft"` row in the
+autonomy ledger — visible in `sdd autonomy` and in the judge's `escalations`. Read the last
+`40-review-r<N>.md` for the real grade, then choose: merge the draft with the open items visible, or
+hand the mission back to REVIEW with more rounds.
+
+**Reading the count:** the `warn` prints once per lap of the REVIEW→PR→REVIEW loop that follows,
+while both **records** are written once per run. That gap is deliberate: the runner lowered its bar
+once and then spun, and the spinning is a separate open defect in the kit's `TODO.md`. So
+`review-to-draft: 3` in either reader means three runs — never one run that degraded three times.
+
+**Do not:** silence it by setting `PUBLISH_ON_REVIEW_BLOCKED="off"` and re-running until the review
+passes. Off is the default precisely because a stop is louder than a draft; switching it on and then
+hiding the record is the worst of the two.
+
+---
+
 ## `sdd install` shows a diff in the agents
 
 **Symptom:** warnings "agent X differs from the kit version" with a diff.
