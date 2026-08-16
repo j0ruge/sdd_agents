@@ -26,9 +26,16 @@
 # and widen the exact coverage hole that TODO.md already records against check-lang's surface().
 #
 # Usage: tests/check-todo.sh                (selftest, then check TODO.md — what run-all.sh calls)
-#        tests/check-todo.sh --selftest     (probes only; 90/91/92 when the sensor stops measuring)
+#        tests/check-todo.sh --selftest     (probes only)
 #        tests/check-todo.sh --check <file> (check one file, no selftest — used BY the selftest to
 #                                            exercise the real reporting path without recursing)
+#
+# Exit codes, one per cause — a shared code would leave the reader unable to tell which failure
+# happened, which is a defect this repo already tracks against cmd_autonomy:
+#    0  clean          1  the file has shape violations
+#   89  no temp dir (the probes never ran)   90/91/92  a selftest probe failed
+#   93  findings file missing                94  fewer items than the floor
+#   95  SDD_TODO_CAP is not an integer       96  unknown option
 
 set -uo pipefail
 
@@ -86,7 +93,7 @@ selftest() {
   # the run would fail as "probe rejected" when the real cause was "no tmpdir".
   box="$(mktemp -d "${TMPDIR:-/tmp}/sdd-todo-selftest-XXXXXX")" && [ -d "$box" ] || {
     printf '  SELFTEST FAIL  could not create a temp dir — the probes never ran\n' >&2
-    return 95
+    return 89
   }
   trap 'rm -rf "$box"' RETURN
   local rc=0
