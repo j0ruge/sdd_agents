@@ -1666,6 +1666,98 @@ cmd_autonomy() {
   printf '%s\n' "$out"
 }
 
+# ---------------------------------------------------------------------------
+# Kaizen — the deterministic half of the judge (ADR 0001). The runner derives labels and numbers;
+# the sdd-kaizen agent gives the verdict CITING them, never recalculating. This function is the
+# contract between the two: `sdd kaizen --series` is what the agent's session runs as its source
+# of truth.
+#
+# PURE on purpose: it prints JSON and touches no global, so reading it through `$( )` is safe —
+# the autonomy_kit_stamp subshell bug cannot happen here because there is no effect to lose.
+#
+# The label rubric, per mission×phase group:
+#   refez — any escalation, any human retry invocation, or the phase's last session still failing
+#           its gate: the work was pushed again, the strongest friction signal there is.
+#   leve  — an in-loop auto retry or a session that did not move the disk: friction, absorbed.
+#   ok    — none of the above.
+# Rows with a dirty kit or no kit_sha are non-comparable (counted, never mixed in), and the
+# KAIZEN meta row is excluded from the axis it would otherwise shift — the judge must never see
+# its own session inflate the guard that gates its verdict.
+#
+# latest/previous follow FILE order, not sort order: jq's group_by sorts by key and would call
+# the lexically-largest sha "latest" — the reduce/index below keeps first-appearance order, and a
+# reappearing old sha joins its old group instead of opening a new one.
+kaizen_series() {
+  local file; file="$(autonomy_log_path)"
+  command -v jq >/dev/null 2>&1 || die "jq not found — it is required to read the ledger"
+  if [ ! -s "$file" ]; then
+    printf '%s\n' '{"v":1,"latest":null,"previous":null,"guard":{"missions_after_change":0,"sufficient":false},"excluded":{"non_comparable":0,"unrecognized":0,"meta":0}}'
+    return 0
+  fi
+  jq -n '
+    def phase_label:
+      if (map(select(.event == "blocked")) | length) > 0
+         or (map(select(.event == "session" and .invocation == "retry")) | length) > 0
+         or ((map(select(.event == "session")) | last | .gate) != "pass")
+      then "refez"
+      elif (map(select(.event == "session" and (.auto_retry == true or .moved == false))) | length) > 0
+      then "leve"
+      else "ok"
+      end;
+
+    def group_summary:
+      . as $rows
+      | ($rows | map(select(.event == "session"))) as $sess
+      | ($rows | group_by(.mission + "|" + .phase)
+               | map({mission: .[0].mission, phase: .[0].phase, label: phase_label,
+                      sessions: (map(select(.event == "session")) | length),
+                      cost_usd: (map(.cost_usd // 0) | add)})) as $detail
+      | {kit_sha: $rows[0].kit_sha,
+         missions: ($rows | map(.mission) | unique | length),
+         sessions: ($sess | length),
+         moved_rate: (if ($sess | length) == 0 then null
+                      else (($sess | map(select(.moved == true)) | length) / ($sess | length) * 100 | round / 100) end),
+         labels: ($detail | reduce .[] as $d ({ok: 0, leve: 0, refez: 0}; .[$d.label] += 1)),
+         escalations: ($rows | map(select(.event == "blocked")) | group_by(.kind)
+                             | map({(.[0].kind): length}) | add // {}),
+         cost_usd: ($sess | map(.cost_usd // 0) | add // 0 | . * 100 | round / 100),
+         detail: $detail};
+
+    [ inputs ] as $raw
+    | ($raw | map(select(type == "object" and .v == 1
+                         and (.event == "session" or .event == "blocked")))) as $all
+    | ($all | map(select(.phase == "KAIZEN"))) as $meta
+    | ($all | map(select(.phase != "KAIZEN"))) as $rows
+    | (($raw | length) - ($all | length)) as $unrec
+    | ($rows | map(select(.kit_dirty == true or .kit_sha == null))) as $noncomp
+    | ($rows | map(select(.kit_dirty != true and .kit_sha != null))) as $ok
+    | ($ok | map(.kit_sha) | reduce .[] as $s ([]; if index($s) then . else . + [$s] end)) as $shas
+    | (if ($shas | length) >= 1 then ($ok | map(select(.kit_sha == $shas[-1])) | group_summary) else null end) as $latest
+    | (if ($shas | length) >= 2 then ($ok | map(select(.kit_sha == $shas[-2])) | group_summary) else null end) as $previous
+    | {v: 1,
+       latest: $latest,
+       previous: $previous,
+       guard: {missions_after_change: ($latest.missions // 0),
+               sufficient: (($latest.missions // 0) >= 3)},
+       excluded: {non_comparable: ($noncomp | length), unrecognized: $unrec,
+                  meta: ($meta | length)}}
+  ' < "$file"
+}
+
+cmd_kaizen() {
+  local series_only=0
+  while [ $# -gt 0 ]; do
+    case "$1" in
+      --series) series_only=1 ;;
+      *)        die "unknown kaizen option: $1" ;;
+    esac
+    shift
+  done
+  # The ledger is global (~/.sdd), so the series is readable from ANY cwd — no config, no repo.
+  if [ "$series_only" = "1" ]; then kaizen_series; return 0; fi
+  die "sdd kaizen without --series is not implemented yet (I13.3.2)"
+}
+
 cmd_version() { info "sdd $SDD_VERSION ($SDD_HOME)"; }
 
 cmd_help() {
@@ -1715,6 +1807,7 @@ main() {
     retry)     cmd_retry "$@" ;;
     close)     cmd_close "$@" ;;
     autonomy)  cmd_autonomy "$@" ;;
+    kaizen)    cmd_kaizen "$@" ;;
     version|--version|-v) cmd_version ;;
     help|--help|-h) cmd_help ;;
     *) die "unknown command: $subcmd (see 'sdd help')" ;;
