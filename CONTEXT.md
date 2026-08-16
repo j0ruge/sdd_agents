@@ -8,10 +8,10 @@
 
 | Termo | Definição |
 |---|---|
-| **Ledger de autonomia** | `~/.sdd/autonomy-log.jsonl` (global, fora dos repos). Uma linha JSON por sessão gasta ou escalada, escrita pelo runner. Grava **fato, nunca rótulo**. Interface completa em `docs/pipeline.md` § "The autonomy ledger". |
+| **Ledger de autonomia** | `~/.sdd/autonomy-log.jsonl` (global, fora dos repos). Uma linha JSON por sessão gasta ou escalada, escrita pelo runner. Grava **fato, nunca rótulo**. ⚠️ O **arquivo** é global; a **leitura** é por repo desde a missão `20260816-kit-como-alvo`: um predicado único (`ledger_row_is_local`) admite só as linhas cujo `repo` é o repo corrente, e os três leitores passam por ele. Enquanto não era assim, o ledger era um espaço de nomes compartilhado por acidente — um `sdd run` de fixture em `/tmp` contaminou a fonte da verdade do juiz. Interface completa em `docs/pipeline.md` § "The autonomy ledger". |
 | **Rótulo** | `ok \| leve \| refez` por fase/sessão, derivado **depois** a partir dos fatos do ledger — nunca gravado pelo runner. Vem da rubrica de maturidade do usuário (`~/.claude/skills/release-notes/references/autonomy-rubric.md`). |
 | **Veredito** | A resposta "a última mudança do kit **melhorou, piorou ou indeterminado**?", dada por mudança de versão do kit (eixo `kit_sha`). |
-| **Série** | Os agregados comparados por grupo de `kit_sha`: desperdício (`moved:false`/total), escaladas por `kind`, custo, retentativas. `sdd autonomy` já imprime a visão humana disso. |
+| **Série** | Os agregados comparados por grupo de `kit_sha`, **do repo em que ela é lida**: desperdício (`moved:false`/total), escaladas por `kind`, custo, retentativas. `sdd autonomy` já imprime a visão humana disso. O que ficou de fora é contado, nunca sumido: `excluded` tem quatro baldes (`non_comparable`, `unrecognized`, `meta`, `other_repo`), e o literal do ramo de ledger vazio carrega os quatro — série que encolheu sem nada nomeando o motivo é o defeito que o contador existe para pegar. |
 | **Escalada** | Guarda-chuva: qualquer linha do ledger que **não gastou sessão**. Duas hoje — `event:"blocked"` (a linha parou, o runner devolve rc 3) e `event:"degraded"` (o runner baixou a própria régua e **seguiu**). Predicado único por programa (`is_escalation`): escrever o par à mão em três pontos foi como eles divergiram. |
 | **Degradação (`review-to-draft`)** | O único `degraded` de hoje: `PUBLISH_ON_REVIEW_BLOCKED=draft` + review sem rodadas ⇒ PR em draft em vez de parada. **No máximo uma linha por `run_id`** — e, desde o I9 da missão `20260816-runner-sem-dividas`, isso deixou de depender de contagem: o laço REVIEW→PR→REVIEW não existe mais. A degradação dá **uma** chance ao PR draft; a segunda entrada no ramo encerra o run com o par `BLOCKED`/`budget-exhausted` que já existia, sem evento novo no enum. Logo, `review-to-draft: 3` são três runs, nunca um run que degradou três vezes. |
 | **Juiz** | O papel que produz rótulos + veredito. Pela **D1**, é dividido: a parte mecânica é sensor do runner; a interpretação final é do agente. |
@@ -40,15 +40,16 @@
 
 - **D11 espera confirmação humana.** O código já foi escrito com `event: "degraded"`; a alternativa
   barata continua a um valor de campo e às asserções correspondentes de distância.
-- **O critério (4) da D7 — "suíte < 30 s no default" — segue não atingido, e o estouro cresceu de
-  ~3 s para ~15 s.** A saída "subir o default" foi tomada em 2026-08-16: `SDD_MUTATION_JOBS`
-  deriva de `min(núcleos, 8)` e o escalonador virou pool — mediana 54,13 s → **32,87 s**, score
-  intacto (KAIZEN_LOG). A missão `20260816-runner-sem-dividas` confirmou a previsão que já estava
-  escrita nesta linha — o estouro **cresce com o catálogo**: 33,95 s → **44,55 s** na mesma
-  máquina e na mesma sessão, com o catálogo indo de 30 para 38 mutantes, e cada mutante é uma
-  suíte inteira. Cortar mutação para ganhar tempo violaria o princípio que motivou o I13.2, então
-  o que resta é subir o alvo ou aceitar o estouro. Decisão do humano; o item vivo mora no
-  `TODO.md`.
+- **O critério (4) da D7 — "suíte < 30 s no default" — segue não atingido, e o estouro deixou de
+  ser marginal.** A saída "subir o default" foi tomada em 2026-08-16: `SDD_MUTATION_JOBS` deriva
+  de `min(núcleos, 8)` e o escalonador virou pool — mediana 54,13 s → **32,87 s**, score intacto
+  (KAIZEN_LOG). Desde então a previsão escrita nesta linha se confirmou **duas vezes**, porque o
+  estouro **cresce com o catálogo** e cada mutante é uma suíte inteira: `20260816-runner-sem-dividas`
+  mediu 33,95 s → 44,55 s (30 → 38 mutantes) e `20260816-kit-como-alvo` mediu **1:17,62 → 1:45,17**
+  (40 → 44 mutantes), as duas na mesma máquina e na mesma sessão, worktree da base contra o HEAD.
+  O alvo está agora **3,5× distante** e ninguém o defende. Cortar mutação para ganhar relógio
+  violaria o princípio que motivou o I13.2, então o que resta é **subir o alvo ou aposentá-lo por
+  escrito** — decisão do humano; o item vivo mora no `TODO.md`.
 
 _As duas perguntas abertas no grill (D9, D10) foram resolvidas na execução do I13.3 e movidas para
 a tabela acima._
