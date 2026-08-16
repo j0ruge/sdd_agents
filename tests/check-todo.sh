@@ -38,6 +38,18 @@
 #        tests/check-todo.sh --check <file> (check one file, no selftest — used BY the selftest to
 #                                            exercise the real reporting path without recursing)
 #
+# ── Known limits, stated so nobody re-discovers them as surprises ──────────────────────────────
+# The selftest is this file's own harness, and a harness cannot fully test itself. Three one-line
+# edits make every failure green: `return "$SELFTEST_RC"` -> `return 0`, dropping the `|| exit $?`
+# from the default dispatch, and neutering an assertion body. That is not a hole to be plugged
+# from the inside — it is the reason the kit has `tests/check-mutation.sh` at the runner level,
+# and the reason `tests/run-all.sh` calls this file rather than trusting it to call itself.
+# What the selftest DOES defend is every rule above it: 48 probes, each asserting its own message,
+# with a floor on the probe count and a FAILS counter independent of `fail_rc`.
+#
+# Not measured, on purpose: whether an anchor still points at real code, whether the prose is any
+# good, and whether a finding is worth keeping. All three are human judgement on the diff.
+#
 # Exit codes, one per cause, FIRST failure wins — a shared or last-write-wins code would leave
 # the reader unable to tell which failure happened:
 #    0  clean          1  the file has shape violations
