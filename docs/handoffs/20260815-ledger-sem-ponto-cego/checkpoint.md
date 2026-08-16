@@ -15,7 +15,7 @@ atualizado: 2026-08-16 00:45
 | ID | Incremento | Check (comando → esperado) | Status | Commit |
 |---|---|---|---|---|
 | I1 | Jidoka do `blocked` com herestring, sem depender do buffer do pipe | `./tests/run-all.sh` → `suite green` com `score: 26 caught, 0 known gap(s), of 26` | done | 3521b9a |
-| I2 | auto-degradação `review-to-draft` escreve no ledger e a série a reconhece | `./tests/run-all.sh` → `suite green` com `score: 27 caught, 0 known gap(s), of 27` | pending | — |
+| I2 | auto-degradação `review-to-draft` escreve no ledger e a série a reconhece | `./tests/run-all.sh` → `suite green` com `score: 27 caught, 0 known gap(s), of 27` | done | 6853796 |
 | I3 | escaladas do `sdd autonomy` agrupadas por `kit_sha`, como a série já faz | `./tests/run-all.sh` → `suite green` com `score: 28 caught, 0 known gap(s), of 28` | pending | — |
 
 ## Notas de execução
@@ -69,6 +69,45 @@ atualizado: 2026-08-16 00:45
   `printf | grep -q` em `check-gates.sh:53` e em cinco pontos do `check-dry-run.sh` — mesma
   família, lado do teste, fora do Check do I1; (b) `shellcheck -S warning tests/` reprova
   (SC2318, pré-existente em `check-mutation.sh:246`) e o `LINT_CMD` do repo só olha `bin/sdd`.
+
+- 2026-08-16 · `I2` · **A lição do I1 se aplicou, e desta vez antes do prejuízo.** O fixture novo
+  termina com `rc 3`, exatamente como os outros dois caminhos de escalada — então `rc 3` sozinho
+  manteria o bloco inteiro verde sobre um fixture que nunca chegou ao ramo `draft`. A guarda
+  anti-vacuidade é **estrutural**, não de prosa: uma sessão de fase **PR** com o gate de REVIEW
+  ainda falhando só pode existir PORQUE o runner degradou — `current_phase()` devolveria REVIEW
+  para sempre. Ela vale verde antes e depois do conserto, e é o que aponta as outras asserções
+  para o ramo certo.
+- 2026-08-16 · `I2` · Chegar ao ramo custou o fixture mais caro da suíte: PLAN+TICKET+EXEC+QA
+  todos satisfeitos, `REVIEW_MAX_ITER=1`, e um stub que **move o disco na primeira chamada só** —
+  com stub morto a escalada `no-progress` dispara na retentativa inline e o ramo de orçamento
+  nunca é alcançado. Um degradação por run, determinístico.
+- 2026-08-16 · `I2` · **Desvio do plano, deliberado:** o plano listava dois pontos a mudar (o
+  escritor e o `select` da série). Foram **quatro**: o `is_escalation` do `cmd_autonomy`
+  (`bin/sdd:1707`) também só aceitava `blocked`, então sem ele o `sdd autonomy` passaria a
+  imprimir "1 unrecognized row" para uma linha que o próprio runner escreveu — o ponto cego
+  mudado do juiz para o humano, que é exatamente o que a missão fecha. O quarto é o
+  `pipeline_log_line`, que o `continue` também saltava.
+- 2026-08-16 · `I2` · **Mutação: 1 no catálogo, 4 metades medidas.** O Check fixa o score em 27,
+  e sabotar várias âncoras num mutante só derrubaria a detecção de "âncora apodreceu" que o
+  cabeçalho do `check-mutation.sh` promete. O catálogo levou `RUN_degraded_row_dropped` (o
+  escritor) por ser também a **guarda de alcance do fixture caro**. As outras três foram
+  sabotadas à mão nesta sessão, uma a uma, e as três mataram a suíte: `select` da série →
+  `check-kaizen.sh` rc 1, 2 FAILs; `pipeline_log_line` → `check-autonomy.sh` rc 1;
+  `is_escalation` → `check-autonomy.sh` rc 1, 2 FAILs. Evidência de sessão não roda no CI —
+  registrado no `TODO.md`.
+- 2026-08-16 · `I2` · Refatoração feita (duplicação real, não estética): `autonomy_blocked_row` e
+  o escritor novo seriam 15 linhas de `jq` idênticas menos um literal. Viraram
+  `autonomy_escalation_row <event> <kind> <phase> <why>` com dois wrappers de uma linha. O
+  carimbo do kit continua **chamado, nunca substituído** (`$( )` mataria a guarda one-shot no
+  subshell) — a lição do `CLAUDE.md` vale para o escritor novo igual.
+- 2026-08-16 · `I2` · Suíte **59,9 s** (contra 53,3 s medidos nesta sessão no `HEAD` `0976fc9`),
+  `sdd health` verde. O fixture novo do `check-autonomy.sh` roda 27 vezes dentro do
+  `check-mutation.sh`, e agora abre 4 sessões de stub por vez em vez de 2.
+- 2026-08-16 · `I2` · Fora de escopo, registrados no `TODO.md`: (a) as três metades sem mutante
+  permanente; (b) o runner **se auto-degrada mais de uma vez no mesmo `sdd run`** — depois do
+  `force_phase="PR"`, se PR mexer no disco e não passar no gate, o laço volta a REVIEW com o
+  orçamento ainda estourado e o ramo dispara de novo, uma linha `degraded` por volta. O fixture
+  só não vê porque a segunda sessão de PR não move o disco. É mudança de laço, não de registro.
 
 ## Incrementos de fix (QA)
 
