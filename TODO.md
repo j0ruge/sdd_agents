@@ -30,6 +30,15 @@ Achados sobre **repos-alvo** vão para o `TODO.md` daquele repo. Este arquivo é
 
 ### Sensores que faltam
 
+- [ ] **O parser do checkpoint não conhece `\|`, o escape padrão de pipe em tabela GFM** —
+  `bin/sdd:174` (`checkpoint_rows`, `awk -F'|'`) — o split é cru, então célula com `\|` vira
+  duas. Medido no checkpoint nascido em `df86387`: 3 dos 4 incrementos deram `NF=8` contra `NF=7`
+  do limpo, e o runner leu Status=`` `grep -c '…'` `` e Commit=`pending`. `gate_EXEC` reprova com
+  "invalid status", e `sdd status` imprime `pending` na coluna Commit — plausível e errado. O
+  gatilho é Check que canaliza sensor para `grep`; nem o template nem checkpoint anterior o tinha.
+  Direção: tratar `\|` antes do split, com asserção. — descoberto por `humano` na missão
+  `20260816-kit-como-alvo` (2026-08-16)
+
 - [ ] **Nada compara `agents/*.md` com a cópia instalada em `.claude/agents/`** — `bin/sdd:1247` —
   o preflight só checa **existência** (`[ -f ... ] || _fail "not installed"`) e então imprime
   "N kit agent(s) checked": rótulo sobre uma comparação que nunca aconteceu. A cópia é o que o
