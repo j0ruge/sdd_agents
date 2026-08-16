@@ -135,6 +135,13 @@ Grade A, dois deles **falhando abertos** — o pior modo possível num sensor, p
 medido o que não mediu. Regra que a sabotagem não consegue quebrar de forma alguma é redundante:
 remova, não escreva probe para ela.
 
+⚠️ **A revisão é laço, e o critério de parada é uma rodada que não acha nada.** No `check-todo.sh`
+foram cinco: 17, 9, 11 e 11 achados, e **três vezes seguidas o conserto de uma rodada criou o
+defeito que a seguinte encontrou**. Quando isso acontece duas vezes na mesma vizinhança, pare de
+remendar e pergunte **que estado está faltando** — ali a resposta era "o parser não sabe quando
+está dentro do bloco de código de um item", e um estado novo fechou de uma vez quatro defeitos que
+pareciam separados. Sintoma consertado individualmente vira o próximo sintoma.
+
 **Fixture que imita saída de skill de terceiro é copiado da fonte**, com o caminho no comentário
 de proveniência — nunca escrito de memória. Três bugs de gate nasceram de fixture imaginado:
 gate e fixture tinham o mesmo autor e a mesma suposição, então a suíte verde *confirmava* a

@@ -93,21 +93,31 @@ que, sem `set -e`, cai fora do `if` — o run terminava em `ok 0 finding(s)`, rc
 cerca ``` sem fechamento travava o latch do parser e pulava **todas** as regras até o fim do
 arquivo, também verde. Nos dois casos o sensor dizia "medi e está limpo" sobre o que não mediu.
 
-| | Auto-revisão | 1ª adversarial | 2ª adversarial | 3ª adversarial |
-|---|---|---|---|---|
-| Defeitos achados / fechados | 0 | 17 / 17 | 9 / 9 | 11 / 11 |
-| Probes do selftest | 14 (à mão, defasado) | 20 | 30 | **37** (com piso próprio) |
-| Sabotagens que matam o selftest | 4 de 8 | 13 de 14 | 15 de 17 | **17 de 18** |
-| Caminhos que falhavam abertos | 2 | 0 | 1 (novo) | **0** |
-| Regras removidas por serem decoração | 0 | 2 | 2 | **3** |
+| | Auto | 1ª | 2ª | 3ª | 4ª |
+|---|---|---|---|---|---|
+| Defeitos achados / fechados | 0 | 17 / 17 | 9 / 9 | 11 / 11 | 11 / 11 |
+| Probes do selftest | 14 (à mão) | 20 | 30 | 37 | **45** |
+| Sabotagens que matam o selftest | 4 de 8 | 13 de 14 | 15 de 17 | 17 de 18 | **11 de 11** |
+| Caminhos que falhavam abertos | 2 | 0 | 1 (novo) | 2 (novos) | **0** |
+| Regras removidas por serem decoração | 0 | 2 | 2 | 3 | **4** |
 
-**O número que mais ensina não é nenhum defeito: é que a 2ª rodada achou um defeito criado pela
-1ª, e a 3ª achou um criado pela 2ª.** Duas vezes seguidas, o conserto de um fail-open abriu outro.
-A rodada 2 partiu uma regra simétrica de cerca em duas — coluna 0 acima do `fence`, indentada
-abaixo — e criou um latch de mão única: cerca indentada abria e nunca fechava, tudo abaixo virava
-silêncio, e uma `- [x]` sem âncora sumia com o run verde. Literalmente o mesmo fail-open que o
-cabeçalho do arquivo já dizia ter consertado. **Revisão adversarial não é etapa, é laço**, e o
-critério de parada não pode ser "consertei os achados" — tem de ser uma rodada que não acha nada.
+**O número que mais ensina não é nenhum defeito: é que cada rodada achou um defeito criado pela
+anterior — três vezes seguidas.** A 1ª consertou a âncora com uma classe negada de travessão, e a
+2ª mostrou que sob mawk isso nega *bytes*. A 2ª partiu a regra de cerca em duas, e a 3ª mostrou
+que isso criou um latch de mão única. A 3ª acrescentou a regra de sub-item marcado, e a 4ª mostrou
+que ela acusava amostras de código — contradizendo o comentário três linhas acima, no mesmo commit.
+
+**O que quebrou o ciclo foi parar de consertar sintoma.** A 4ª rodada achou a causa comum das
+três: o parser não tinha estado para "dentro do bloco de código de um item", e esse buraco
+produzia a forja da âncora, o falso positivo do sub-item e duas variantes do latch — defeitos que
+pareciam separados porque cada rodada só via o sintoma que a anterior deixou exposto. Um estado
+novo (`initem_fence`) fechou os quatro de uma vez.
+
+Duas consequências para o processo, e são elas que ficam. **Revisão adversarial é laço, não
+etapa**: o critério de parada não pode ser "consertei os achados", tem de ser uma rodada que não
+acha nada. E **quando três rodadas seguidas acham defeitos na mesma vizinhança, o defeito não é
+nenhum deles — é a estrutura que os hospeda**; a saída é parar de remendar e perguntar que estado
+está faltando.
 
 **A segunda rodada achou um defeito que a primeira rodada CRIOU, e essa é a parte que ensina.** O
 conserto da âncora usava `sub(/ — [^—]*$/, ...)`, e o `awk` desta máquina é o **mawk 1.3.4**, que é
