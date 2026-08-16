@@ -16,7 +16,8 @@
 #
 # What it measures, per scanned line:
 #   1. a pipe into `grep` carrying a `-q` flag in any spelling — `-q`, `-qE`, `-Eq`, `-E -q`,
-#      `--quiet`
+#      `--quiet`, `--silent`. The list is grep's own: `grep --help` prints the three names on one
+#      line, and a spelling this file does not know is a spelling it certifies as clean
 #   2. unless the line is a WHOLE-LINE comment: the rule is documented in a dozen comments across
 #      the kit (including this header), and a comment executes nothing
 #   3. unless the line carries the waiver marker, which is a RATCHET and not an escape hatch — a
@@ -79,7 +80,13 @@ WAIVER='sdd-pipefail-waiver'
 # and even `-qualifier` all pass `-q` to grep, and a rule keyed on the token would let the next
 # author reintroduce the bug by adding one letter. The trailing `([[:space:]]|$)` keeps the `$`
 # half load-bearing: `| grep -q` is legal at the end of a `\`-continued line.
-PIPE_RE='\|[[:space:]]*grep([[:space:]]+-[[:alnum:]-]+)*[[:space:]]+(-[[:alnum:]]*q[[:alnum:]]*|--quiet)([[:space:]]|$)'
+#
+# `--silent` sits beside `--quiet` because grep's own help prints all three on ONE line —
+# `-q, --quiet, --silent` — and the long forms do not combine, so the cluster half cannot reach
+# them. Measured: `yes | head -200000 | grep --silent x` returns 141 under pipefail exactly as the
+# `-q` spelling does. It was missing from the first draft of this rule, which is the fail-open a
+# sensor must never have: the header promised "any spelling" and knew two of the three.
+PIPE_RE='\|[[:space:]]*grep([[:space:]]+-[[:alnum:]-]+)*[[:space:]]+(-[[:alnum:]]*q[[:alnum:]]*|--quiet|--silent)([[:space:]]|$)'
 
 # is_comment <text> — true when the line is nothing but a comment.
 is_comment() {
@@ -201,8 +208,12 @@ selftest() {
     echo 'SENSOR-BROKEN: no temp dir — the probes never ran' >&2; return 92; }
   t="$box/probe.sh"
 
-  # 1-5: the shapes that ARE the bug. Five spellings, because a regex that only knows `-q ` lets
-  # the next author reintroduce the bug with `-qE` and stay green.
+  # 1-6: the shapes that ARE the bug. Six spellings, because a regex that only knows `-q ` lets
+  # the next author reintroduce the bug with `-qE` and stay green. The set is not invented: the
+  # short ones are the flag clusters grep accepts, and the two long ones are the other two names
+  # grep's own `--help` gives the SAME flag. A probe per spelling is the only thing standing
+  # between "the rule covers any spelling" and a claim nobody measured — the first draft of this
+  # file made that claim while `--silent` walked straight through.
   cat > "$t" <<'EOF'
 if printf '%s\n' "$out" | grep -q 'BLOCKED'; then :; fi
 EOF
@@ -228,7 +239,12 @@ if echo "$v" | grep --quiet 'x'; then :; fi
 EOF
   probe '--quiet detected' 1 'pipe into `grep -q`' "$t"
 
-  # 6: the line number is reported, not just the fact. A sensor that cannot say WHERE sends the
+  cat > "$t" <<'EOF'
+if echo "$v" | grep --silent 'x'; then :; fi
+EOF
+  probe '--silent detected (grep spells this flag three ways)' 1 'pipe into `grep -q`' "$t"
+
+  # 7: the line number is reported, not just the fact. A sensor that cannot say WHERE sends the
   # reader to grep the file by hand, and the report becomes a rumour.
   cat > "$t" <<'EOF'
 : line one
@@ -314,8 +330,8 @@ EOF
 
   # Floor on the probe COUNT: neutering every assertion body leaves a selftest that ran nothing,
   # and a selftest that ran nothing reads exactly like one that passed. Moves only on purpose.
-  if [ "$PROBES" -lt 18 ]; then
-    printf 'SENSOR-BROKEN: only %d probe(s) ran, expected at least 18\n' "$PROBES" >&2
+  if [ "$PROBES" -lt 19 ]; then
+    printf 'SENSOR-BROKEN: only %d probe(s) ran, expected at least 19\n' "$PROBES" >&2
     FAILS=$((FAILS + 1)); fail_rc 92
   fi
   # Direct assignment, deliberately NOT through fail_rc: two independent paths from "a probe
