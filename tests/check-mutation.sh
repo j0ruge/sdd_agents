@@ -369,6 +369,27 @@ mut_RUN_degraded_spins() {
   sed -i 's@warn "  the draft PR did not satisfy its gate either — the run ends here"@force_phase="PR"; continue@' "$1"
 }
 
+# Not a gate: the streaming session. `--output-format stream-json` WITHOUT `--verbose` is refused
+# by the CLI at argument validation ("When using --print, --output-format=stream-json requires
+# --verbose") — rc 1, empty stdout, no model ever reached. It is the rarest kind of sabotage in
+# this catalogue: no stub in the suite can see it, because a stub ignores its flags and answers
+# anyway, so every behavioural fixture stays green while every REAL mission dies on its first
+# phase. What kills it is the dry-run projection, the one place the suite reads the true argv.
+mut_RUN_stream_no_verbose() {
+  sed -i 's@--output-format stream-json --verbose@--output-format stream-json@' "$1"
+}
+
+# Not a gate either, and the other half of the pair: the stream is written but never distilled, so
+# $logfile holds the WHOLE session instead of its terminal `result` object. jq then answers once
+# per line, `tonumber?` refuses the multi-line string, and every session's cost lands in the ledger
+# as null — the judge summing money it can no longer see, with the suite green. Anchors on the call
+# site rather than on stream_summary's body: the body is one jq filter whose plausible degradations
+# (`select(true)`, `head -1`) are indistinguishable from the fix on a one-result stream, so
+# sabotaging it there would score a point no assertion could ever have earned.
+mut_RUN_stream_summary_unfiltered() {
+  sed -i 's@stream_summary "$streamfile" > "$logfile"@cp "$streamfile" "$logfile"@' "$1"
+}
+
 CATALOG=(
   PLAN_empty_approval
   TICKET_no_sprint
@@ -405,6 +426,8 @@ CATALOG=(
   RUN_refez_dropped
   RUN_guard_counts_escalations
   RUN_degraded_spins
+  RUN_stream_no_verbose
+  RUN_stream_summary_unfiltered
 )
 
 # Mutations that are NOT caught today, each with the increment that closes it. Ratchet in both

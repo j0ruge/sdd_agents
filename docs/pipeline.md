@@ -243,8 +243,19 @@ unsatisfiable by construction. `bypassPermissions` is never the kit's default.
 ## Costs and logs
 
 Every session becomes a line in `.sdd/logs/<mission>/pipeline.log` (phase, agent, model, session
-id, exit code, duration, cost in USD) and a full JSON alongside it, in the same
-`.sdd/logs/<mission>/`. The journal is **ephemeral by contract**: `.sdd/logs/` is in the
+id, exit code, duration, cost in USD) and two files alongside it, in the same
+`.sdd/logs/<mission>/`:
+
+- `<PHASE>-<ts>.stream.jsonl` — the session's whole event stream, one JSON object per line,
+  written **as it happens**. This is what you `tail -f` to watch a headless phase that is still
+  running, and what is left behind by one that was killed halfway. The runner asks the CLI for
+  `--output-format stream-json --verbose`; the two flags are one flag, since the CLI refuses
+  `stream-json` under `--print` without `--verbose`.
+- `<PHASE>-<ts>.json` — the terminal `result` object of that stream, distilled at the end. It is
+  byte for byte what the older `--output-format json` used to print, and it is what the runner
+  reads the session's cost out of.
+
+Plus `<PHASE>-<ts>.err` for the session's stderr. The journal is **ephemeral by contract**: `.sdd/logs/` is in the
 `.gitignore` that `sdd install` writes, and the durable record of what happened is the committed
 handoffs. If it moved back into the committed tree it would dirty `git status` — and a dirty tree
 fails `gate_REVIEW` and `sdd preflight`. `--max-budget-usd` per session is a damage cap, not a

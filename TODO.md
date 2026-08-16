@@ -30,6 +30,21 @@ Achados sobre **repos-alvo** vão para o `TODO.md` daquele repo. Este arquivo é
 
 ### Sensores que faltam
 
+- [ ] **O fixture de `stream-json` não tem checagem de proveniência** — `tests/check-autonomy.sh:127`
+  — as três linhas replayadas pelos stubs foram copiadas de sessão real (CLI 2.1.233) e o comentário
+  registra o comando, mas `health_provenance` (`bin/sdd:1356`) só confere as 3 fixtures de skill
+  contra arquivo instalado. Se o CLI renomear `type`/`total_cost_usd`, o stub segue verde e o
+  runner quebra só em missão real — o modo de falha que a regra de proveniência existe para matar.
+  Direção: probe que rode o CLI de verdade, ou capturar o schema num arquivo versionado.
+  — descoberto por `sdd-executor` na missão `20260816-runner-sem-dividas` (2026-08-16)
+
+- [ ] **`.sdd/logs/` não tem poda e agora guarda o stream inteiro** — `bin/sdd:213` — desde o I10
+  cada sessão deixa três arquivos, e o `.stream.jsonl` é a sessão toda (a de teste, trivial, deu
+  ~40 KB; uma fase real de 10 min é ordens de grandeza maior). Nada apaga nada: o diretório cresce
+  por missão para sempre, e é justamente o que o humano vai querer abrir. Não é urgente — é
+  gitignored e local. Direção: reter as N sessões mais recentes por missão, ou comprimir o stream
+  ao fim da fase. — descoberto por `sdd-executor` na missão `20260816-runner-sem-dividas` (2026-08-16)
+
 - [ ] **O `sdd preflight` não prova que a sessão headless executa `TEST_CMD`** — `bin/sdd:646` —
   a causa original (falta de `--allowedTools`) foi corrigida em `2083680` e provada pela sessão
   EXEC `357b401`, mas nada impede a regressão silenciosa: o preflight só valida que o `claude -p`
@@ -248,16 +263,6 @@ Achados sobre **repos-alvo** vão para o `TODO.md` daquele repo. Este arquivo é
   inglesa com prosa-guia que o agente reescreve — a segunda mexe no contrato que
   `check-templates.sh` mede, então vem depois da entrada acima. — descoberto por `humano` na
   missão `20260815-i13.5-kit-em-ingles` (2026-08-15)
-
-### Runner — defeitos e dívidas
-
-- [ ] **A sessão de fase é um ponto cego enquanto roda** — `bin/sdd:897` — `--output-format json`
-  emite um blob único no fim, então `.sdd/logs/<missão>/<FASE>-*.json` fica com **0 bytes**
-  durante os ~10 min da sessão e não há como acompanhar o agente de dentro do kit (o transcript
-  ao vivo existe fora dele, em `~/.claude/projects/<projeto>/<session-id>.jsonl`). Direção:
-  `--output-format stream-json` com `tee` para um `.stream.jsonl` ao lado, preservando o resumo
-  final que `run_phase` parseia. — descoberto por revisão `humano` acompanhando a missão
-  `20260815-ledger-sem-ponto-cego` (2026-08-16)
 
 ### Saída humana e cosmética
 

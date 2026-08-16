@@ -152,6 +152,38 @@ echo "== the dry-run does not touch the disk =="
 assert_eq "file tree identical before and after" "$before" "$after"
 assert_eq "working tree still clean" "" "$(git status --porcelain)"
 
+# --- the phase session is projected as a STREAM ----------------------------
+# `--output-format stream-json` and `--verbose` are ONE flag, not two. Without the second, the
+# streaming format is not a degraded session, it is NO session: the CLI refuses at argument
+# validation with
+#     Error: When using --print, --output-format=stream-json requires --verbose
+# (measured against Claude Code 2.1.233 on 2026-08-16), rc 1 and an empty stdout. Every phase of
+# every mission would die before the model was ever reached, and the ledger would fill with rc-1
+# rows that read as a model which keeps failing.
+#
+# No stub in this suite can see that: a stub ignores the flags it is handed and answers anyway.
+# The dry-run projection is the ONLY place the whole suite reads the real argv, which is why the
+# assertion lives in this file instead of next to the streaming assertions in check-autonomy.sh.
+#
+# `tr -s ' '` first, and it is not cosmetic: the projection prints the argv with `printf '  %q'`,
+# so every element arrives prefixed by TWO spaces. A pattern written with the single spaces a
+# human types matches NOTHING — before the fix and after it alike, which is an assertion frozen
+# red, the mirror image of one frozen green. This very block was written that way and caught by
+# demanding the red name the right cause.
+echo "== the phase session is projected as a stream =="
+argv="$(tr -s ' ' <<< "$out")"
+blocks="$(grep -c -- '^--- DRY RUN: phase ' <<< "$argv")"
+# Anti-vacuity. The next assertion compares two counts, and 0 == 0 would pass on a projection that
+# printed nothing at all — the failure mode where the sensor certifies what it never read.
+assert_eq "the projection has the five phase blocks the assertions below count over" "5" "$blocks"
+assert_eq "every projected phase asks for stream-json WITH --verbose" "$blocks" \
+  "$(grep -c -- '--output-format stream-json --verbose' <<< "$argv")"
+# The other half, the house rule: the text of the right branch AND the absence of the wrong one.
+# A runner that ADDED the streaming flags without removing the old one satisfies the assertion
+# above while handing the CLI two conflicting --output-format values.
+assert_eq "and no phase is left on the single-blob format" "0" \
+  "$(grep -c -- '--output-format json' <<< "$argv")"
+
 # --- OUTPUT_LANG reaches the boot prompt -----------------------------------
 # Anchored on the VALUE of the key, never on the prose of the prompt: the runner text is English
 # and the artifacts may be in any language, and an assertion tied to the prose would die at the

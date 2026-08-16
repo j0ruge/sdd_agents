@@ -888,11 +888,20 @@ autonomy_session_row() {  # <phase> <attempt> <auto_retry> <moved> <gate> <gate_
       gate: $gate, gate_why: $why}' )"
 }
 
+# The one `result` object of a stream-json session, or nothing. `tail -1` and not `head -1`: the
+# terminal summary is the LAST one by definition, and a stream truncated by a killed session can
+# hold a partial line that jq drops here rather than propagate as garbage downstream. Silent on a
+# stream with no result — the callers already treat an unreadable summary as an unknown cost, the
+# same answer the old single-blob format gave for a session that died before printing.
+stream_summary() { # stream_summary <stream.jsonl>
+  jq -c 'select(.type == "result")' "$1" 2>/dev/null | tail -1
+}
+
 # Runs a phase in a fresh headless session. Returns 0 when claude exited 0 (which does NOT mean
 # the gate passed — the gate judges that, always afterwards).
 run_phase() {
   local phase="$1" resume_sid="${2:-}"
-  local pstep model agent sid prompt logfile started ended cost
+  local pstep model agent sid prompt logfile streamfile started ended cost
   # QA is three sessions (plan, walk, close); the step comes from the artifacts, not a counter.
   pstep="$(phase_step "$phase")"
   model="$(phase_model "$phase")"
@@ -909,7 +918,7 @@ missing and write the artifacts. The gate will be re-evaluated."
   local -a cmd=(claude -p "$prompt"
     --model "$model"
     --permission-mode "$PERMISSION_MODE"
-    --output-format json
+    --output-format stream-json --verbose
     --setting-sources "user,project,local"
     --allowedTools "$ALLOWED_TOOLS"
     --max-budget-usd "$BUDGET_PER_PHASE_USD")
@@ -933,13 +942,29 @@ missing and write the artifacts. The gate will be re-evaluated."
   fi
 
   logfile="$(log_dir)/${phase}-$(date +%Y%m%d-%H%M%S).json"
+  streamfile="${logfile%.json}.stream.jsonl"
   mkdir -p "$(dirname "$logfile")"
   started="$(date +%s)"
   step "phase $pstep — ${agent:-skill} ($model) — session ${resume_sid:-$sid}"
 
   local rc=0
-  ( cd "$REPO_ROOT" && "${cmd[@]}" ) > "$logfile" 2>"${logfile%.json}.err" || rc=$?
+  # The session writes STRAIGHT to the stream file, one JSON event per line, as it happens. Under
+  # the old `--output-format json` this file was a single blob printed at exit: it sat at 0 bytes
+  # for the ten minutes a phase takes, so a run in flight was unobservable and a session killed
+  # halfway left nothing behind saying how far it got. `tail -f` on the stream now answers both.
+  #
+  # A plain redirect, not the `tee` the plan sketched: the redirect already gives the live file,
+  # and a pipeline would put `tee`'s exit status where claude's has to be — recoverable only via
+  # PIPESTATUS, for no second consumer to feed.
+  ( cd "$REPO_ROOT" && "${cmd[@]}" ) > "$streamfile" 2>"${logfile%.json}.err" || rc=$?
   ended="$(date +%s)"
+
+  # The summary every other reader here already knows. `--output-format json` printed exactly the
+  # terminal `result` object and nothing else, so distilling that one line back into $logfile
+  # leaves the cost below, the `.err` sibling and the journal's `log=` untouched by the change.
+  # Reading the raw stream instead would hand jq one answer PER LINE and `tonumber?` would refuse
+  # the multi-line string — the ledger going quiet about money with nothing going red.
+  stream_summary "$streamfile" > "$logfile"
 
   cost="$(jq -r '.total_cost_usd // .cost_usd // "?"' "$logfile" 2>/dev/null || echo "?")"
   local dur=$((ended - started))

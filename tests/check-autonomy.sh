@@ -112,6 +112,25 @@ STUB
 chmod +x "$OUTSIDE/stub/claude"
 PATH="$OUTSIDE/stub:$PATH"
 
+# One session's worth of `stream-json`, replayed by every stub in this file that answers at all.
+# ONE copy, deliberately: three stubs pasting their own idea of the format is three chances for
+# one of them to drift into a shape the CLI never emits, and the drifted one would still pass.
+#
+# PROVENANCE: captured from a REAL session on 2026-08-16 with
+#     claude -p 'Reply with exactly: OK' --model haiku --output-format stream-json --verbose
+# on Claude Code 2.1.233, and pasted VERBATIM — no field invented, none renamed. These are lines
+# 1, 2 and 37 of that capture: two `system` events and the terminal `result` object. The 34
+# omitted lines are the `init` blob, the hook events and the assistant turns, none of which the
+# runner reads. Writing this shape from memory is the mistake the provenance rule exists to stop —
+# stub and parser would share one author and one wrong assumption, and the suite would go on
+# confirming it forever. Re-capture with the command above when the CLI major changes.
+STREAM_SAMPLE="$OUTSIDE/stream-sample.jsonl"
+cat > "$STREAM_SAMPLE" <<'EOF'
+{"type":"system","subtype":"thinking_tokens","estimated_tokens":5,"estimated_tokens_delta":5,"uuid":"b53d314f-e6ef-41b2-9227-bf8375d962bd","session_id":"3b628c65-6068-442e-aedb-bc76c2e508b1"}
+{"type":"system","subtype":"thinking_tokens","estimated_tokens":10,"estimated_tokens_delta":5,"uuid":"41cba195-10ef-4421-b806-4e3fde0069f2","session_id":"3b628c65-6068-442e-aedb-bc76c2e508b1"}
+{"is_error":false,"duration_api_ms":14208,"num_turns":1,"stop_reason":"end_turn","session_id":"3b628c65-6068-442e-aedb-bc76c2e508b1","total_cost_usd":0.0362104,"usage":{"input_tokens":10,"cache_creation_input_tokens":15451,"cache_read_input_tokens":18134,"output_tokens":697,"output_tokens_details":{"thinking_tokens":690},"server_tool_use":{"web_search_requests":0,"web_fetch_requests":0},"service_tier":"standard","cache_creation":{"ephemeral_1h_input_tokens":15451,"ephemeral_5m_input_tokens":0},"inference_geo":"not_available","iterations":[{"input_tokens":10,"output_tokens":697,"cache_read_input_tokens":18134,"cache_creation_input_tokens":15451,"cache_creation":{"ephemeral_5m_input_tokens":0,"ephemeral_1h_input_tokens":15451},"type":"message"}],"speed":"standard"},"modelUsage":{"claude-haiku-4-5-20251001":{"inputTokens":10,"outputTokens":697,"cacheReadInputTokens":18134,"cacheCreationInputTokens":15451,"webSearchRequests":0,"costUSD":0.0362104,"contextWindow":200000,"maxOutputTokens":32000,"canonicalModel":"claude-haiku-4-5","provider":"firstParty"}},"permission_denials":[],"terminal_reason":"completed","fast_mode_state":"off","fast_mode_disabled_reason":"sdk_opt_in_required","subtype":"success","api_error_status":null,"result":"OK","ttft_ms":14187,"ttft_stream_ms":1324,"time_to_request_ms":28,"type":"result","duration_ms":14238,"uuid":"09a7a31e-9833-426b-8fdd-293522a57a35"}
+EOF
+
 git init -q -b main
 git config user.email "fixture@example.com"
 git config user.name "Fixture"
@@ -263,7 +282,7 @@ if [ ! -e "$MOVE_MARKER" ]; then
   git -C "$FIX" add -A
   git -C "$FIX" commit -qm "chore: session made a real change"
 fi
-echo '{}'
+cat "$STREAM_SAMPLE"
 exit 0
 STUB
 chmod +x "$OUTSIDE/stub/claude"
@@ -297,6 +316,106 @@ git -C "$FIX" add -A
 git -C "$FIX" commit -qm "chore: reset move marker for the sdd-retry scenario"
 "$SDD" retry "$MISSION" >/dev/null 2>&1
 assert_eq "sdd retry that changed the disk records moved:true" "true" "$(rows '.moved')"
+
+# --- the phase session stops being a blind spot while it runs ---------------
+# `--output-format json` prints ONE blob, and only once the session is already over: the log file
+# sits at 0 bytes for the ten minutes the phase takes, so a human watching a headless run has
+# nothing to watch and a crashed session leaves no trace of how far it got. The runner now asks
+# for `stream-json` and keeps the event stream in `<PHASE>-<ts>.stream.jsonl`, beside the
+# `<PHASE>-<ts>.json` summary every other reader already knows. The replayed capture and its
+# provenance are at the top of this file.
+#
+# Sabotage matrix (10 degradations of bin/sdd, control green, judged by the NAME of the assertion
+# that falls — the I7 correction). Sole catchers, one per row:
+#   buffered  — the session collected into a variable and written at exit → THE witness below
+#   nostream  — the stream deleted once distilled                        → the whole-session shape
+#   cost_field— the summary read for a field it no longer carries        → the cost parity
+#   (in check-dry-run.sh: no_verbose → the --verbose count; both_formats → the absence half)
+# Overlap, kept for the diagnosis and not for the coverage: `the .json summary is still exactly
+# the result object` dies alongside the cost in all three sabotages that reach it, and never
+# alone — it is what says WHY the cost went null instead of only that it did.
+# Two survivors, named rather than hidden, and neither is reachable by any honest fixture: `head -1`
+# for `tail -1`, and `select(true)` for `select(.type == "result")`. A real stream carries exactly
+# one `result` object, so both are the SAME program on every input the CLI can produce — which is
+# why mut_RUN_stream_summary_unfiltered anchors on the call site instead of on that body.
+echo "== the phase session streams to disk while it runs =="
+: > "$LEDGER"
+# Hermetic: earlier blocks left their own phase logs here, written by stubs that answer nothing.
+# `pipeline.log` is deliberately spared — a later block counts DEGRADED lines in it.
+LOGDIR="$FIX/.sdd/logs/$MISSION"
+rm -f "$LOGDIR"/*.json "$LOGDIR"/*.jsonl "$LOGDIR"/*.err
+
+# The witness of the whole increment, and the only way a test can tell "streamed" from
+# "buffered": the stub replays the capture in TWO writes and, BETWEEN them, reads back the file
+# its own stdout is pointing at. It records the file NAME and how many lines were already on disk
+# mid-session. A bare line count would not separate the two worlds — the old runner also has a
+# file under its stdout, so it would also answer 2. The NAME is what separates them: `.json`
+# under the old format, `.stream.jsonl` under the new one.
+STREAM_WITNESS="$OUTSIDE/stream-witness"
+rm -f "$STREAM_WITNESS"
+cat > "$OUTSIDE/stub/claude" <<STUB
+#!/usr/bin/env bash
+head -2 "$STREAM_SAMPLE"
+# /proc/\$\$/fd/1, never /proc/self/fd/1: command substitution runs in a forked subshell whose
+# fd 1 is the capture PIPE, so \`self\` would resolve to \`pipe:[…]\` and the witness would report
+# "no file under stdout" under BOTH runners — red, but for the mechanism instead of the defect.
+# \$\$ keeps the stub's own pid inside the substitution, and that fd 1 is still the runner's file.
+target="\$(readlink "/proc/\$\$/fd/1" 2>/dev/null)"
+if [ -n "\$target" ] && [ -f "\$target" ]; then
+  printf '%s %s\n' "\$(basename "\$target")" "\$(wc -l < "\$target")" > "$STREAM_WITNESS"
+else
+  printf 'no-file-under-stdout -1\n' > "$STREAM_WITNESS"
+fi
+tail -1 "$STREAM_SAMPLE"
+exit 0
+STUB
+chmod +x "$OUTSIDE/stub/claude"
+
+"$SDD" run "$MISSION" >/dev/null 2>&1
+
+witness="$(cat "$STREAM_WITNESS" 2>/dev/null || echo 'no-witness -1')"
+# `EXEC-20260816-120000.stream.jsonl 2` → suffix `stream.jsonl`, count `2`.
+witness_suffix="${witness%% *}"; witness_suffix="${witness_suffix#*.}"
+# ONE assertion for the pair, not two. The adversarial pass tried both halves separately and no
+# sabotage separated them: the count alone caught nothing the suffix did not, because buffering the
+# session puts a PIPE under stdout and both halves go at once. Two rules where the sabotage finds
+# one is the duplication the I5 waiver collapse already paid for once in this mission.
+assert_eq "mid-session the runner's stdout was ALREADY the stream file, with what it wrote on disk" \
+  "stream.jsonl 2" "$witness_suffix ${witness##* }"
+
+streams=(); for f in "$LOGDIR"/*.stream.jsonl; do [ -f "$f" ] && streams+=("$f"); done
+# Whole session, not only its summary. Reported as "the first file that disagrees, named" instead
+# of a boolean, so a red says WHICH phase lost its stream. The empty-set guard is not decoration:
+# a `for` over zero files runs the body zero times and answers "ok", which is the vacuity this
+# whole block exists to refuse — with no runner change at all it would have been born green.
+stream_shape="ok"
+[ "${#streams[@]}" -ge 1 ] || stream_shape="no stream file was written at all"
+for f in "${streams[@]}"; do
+  n="$(grep -c . "$f")"
+  [ "$n" = 3 ] || { stream_shape="$(basename "$f") has $n line(s), expected 3"; break; }
+done
+assert_eq "each session left a stream holding the WHOLE session — the events AND the result" \
+  "ok" "$stream_shape"
+
+# Parity, the half that protects every existing reader. `--output-format json` printed exactly
+# the terminal `result` object and nothing else, so the summary file has to keep holding exactly
+# that: one line, `type == "result"`. Everything downstream (the cost below, the `.err` sibling,
+# the journal's `log=`) was written against that shape and is untouched by the format change.
+summary_shape="no summary file was written at all"   # same empty-set guard, same reason
+for f in "$LOGDIR"/*.json; do
+  [ -f "$f" ] || continue
+  summary_shape="ok"
+  n="$(grep -c . "$f")"
+  t="$(jq -r '.type' "$f" 2>/dev/null)"
+  [ "$n" = 1 ] && [ "$t" = "result" ] || { summary_shape="$(basename "$f"): $n line(s), type=$t"; break; }
+done
+assert_eq "the .json summary is still exactly the result object the old format printed" \
+  "ok" "$summary_shape"
+# The headline of the parity: the number the judge sums. Reading the stream as if it were one blob
+# yields one jq answer PER LINE, `tonumber?` refuses the multi-line string, and the cost silently
+# becomes null — the ledger going quiet about money with the suite still green.
+assert_eq "the ledger reads the cost out of the streamed session, to the last digit" \
+  "0.0362104" "$(jq -r -s '.[0].cost_usd' "$LEDGER")"
 
 # --- a kit without .git warns ONCE, not once per row ------------------------
 # `autonomy_kit_stamp` used to be read as `stamp="$(autonomy_kit_stamp)"`, so the whole body ran in
@@ -375,7 +494,7 @@ echo x >> "$DRAFT_LAPS"
 wc -l < "$DRAFT_LAPS" > "$FIX/churn.txt"
 git -C "$FIX" add -A
 git -C "$FIX" commit -qm "chore: the session changed something"
-echo '{}'
+cat "$STREAM_SAMPLE"
 exit 0
 STUB
 chmod +x "$OUTSIDE/stub/claude"

@@ -226,6 +226,9 @@ compares the fixtures against the installed skills and reports the divergence on
 ## Cost higher than expected
 
 **What you do:** `.sdd/logs/<mission>/pipeline.log` has one line per session with cost and
-duration. `BUDGET_PER_PHASE_USD` is a per-session cap (maximum damage), not a mission budget. If a
+duration; `<PHASE>-<ts>.stream.jsonl` beside it has that session's whole event stream, so an
+expensive phase can be read turn by turn instead of guessed at — and `tail -f` on it answers
+"what is it doing right now?" while the phase is still running.
+`BUDGET_PER_PHASE_USD` is a per-session cap (maximum damage), not a mission budget. If a
 phase is expensive over and over, the problem is usually a badly sliced plan — big sessions
 re-exploring what the "verified context" should have handed over ready.
