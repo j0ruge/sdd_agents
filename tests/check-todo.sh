@@ -56,6 +56,14 @@
 # Not measured, on purpose: whether an anchor still points at real code, whether the prose is any
 # good, and whether a finding is worth keeping. All three are human judgement on the diff.
 #
+# Two measured weaknesses, stated rather than hidden. Rule 3 asks for a backticked token before
+# the last separator, so an item whose TITLE carries inline code satisfies it without an anchor —
+# 45 of the 46 findings would still pass with their `file:line` deleted. Tightening it needs a
+# shape test the real data will not support (`git worktree` and `KAIZEN_LOG` are legitimate
+# anchors). And rule 4 splits on the last ` — `, so an em-dash inside the attribution backticks
+# misreports. Both are in TODO.md; neither can hide a closed finding, which is what rules 2 and
+# the whitelist are for.
+#
 # Exit codes, one per cause, FIRST failure wins — a shared or last-write-wins code would leave
 # the reader unable to tell which failure happened:
 #    0  clean          1  the file has shape violations
@@ -144,22 +152,35 @@ todo_awk() {
       initem = 0
     }
     { sub(/\r$/, "") }        # CRLF: a trailing \r used to defeat the end-of-line alternations
-    { wasblank = prevblank; prevblank = (NF == 0) }
     # ── The ticked-box rule runs over the WHOLE file, header included ──────────────────────────
-    # It is the one rule that must not respect the header skip. "The header" is not a fixed
-    # preamble — it is everything above a heading an editor can move, so a section of archived
-    # findings parked above `## Aberto` switched this rule off and the file passed green. That is
-    # precisely what the sensor exists to stop. A ticked box is never legitimate anywhere here:
-    # the format example in the header uses `- [ ]`.
+    # It is the one rule that must not respect any skip. "The header" is not a fixed preamble — it
+    # is everything above a heading an editor can move, so a section of archived findings parked
+    # above `## Aberto` switched this rule off and the file passed green. A ticked box is never
+    # legitimate anywhere here: the format example in the header uses `- [ ]`.
     /^[ \t>]*([-*+]|[0-9]+[.)])[ \t]+\[[xX]\]([ \t]|$)/ {
       if (mode == "lint")
         print "  line " NR ": ticked box — a closed finding is deleted after its PR merges, never [x]"
       flush(); next
     }
+    # ── Header: only the format example is skipped, and only inside its fence ──────────────────
+    # An earlier version skipped the header WHOLESALE, which hid seven of eight rules and the
+    # count from anything an editor parked above the heading. The fence toggle here is the only
+    # one left in the file and it is bounded: it can never reach past `from`, so a broken header
+    # fence costs a loud complaint about header prose, never silence in the findings section.
+    NR <= from && /^```/      { hfence = !hfence; next }
+    NR <= from && hfence      { next }
+    NR == from && hfence      { if (mode == "lint") print "  line " NR ": the header fence never closes" }
+    NR <= from && /^[ \t>]*([-*+]|[0-9]+[.)])[ \t]+\[ \]/ {
+      if (mode == "lint") print "  line " NR ": a finding above the findings section"
+      next
+    }
     NR <= from                { next }
-    # No fenced block belongs in the findings section, and saying so is the whole fence policy.
-    # It replaces every rule that used to track markers, lengths, indents and info strings — and
-    # with them, all six generations of fail-open that lived in that tracking.
+    # ── Findings section: a WHITELIST. Item, indented continuation, heading, block quote, blank ─
+    # Everything else at column 0 is refused. Seven rounds of fail-open came from trying to decide
+    # what an unfamiliar construct MEANT; this decides only whether it belongs, which is a question
+    # with a short and stable answer. It also closes what the cap could not: a body written at
+    # column 0 is not item content in markdown, so 90 lines of de-indented prose used to report
+    # "all within 8 lines" — the very regression this sensor exists to stop, passing green.
     /^[ \t>]*(```|~~~)/ {
       if (mode == "lint") print "  line " NR ": a fenced block in the findings section"
       flush(); next
@@ -183,12 +204,10 @@ todo_awk() {
       flush(); next
     }
     initem && NF && /^[ \t]/  { body = body " " $0; last = $0; nlines++; next }
-    # A column-0 line closes the item — but only across a BLANK line. Without the blank it is a
-    # lazy continuation, which markdown folds into the item and the sensor counted as zero: a
-    # 41-line finding written that way reported "within 8 lines".
-    initem && NF {
-      if (mode == "lint" && !wasblank)
-        print "  line " start ": a lazy continuation at column 0 — continuation lines are indented"
+    /^#/                      { flush(); next }
+    /^>/                      { flush(); next }
+    NF {
+      if (mode == "lint") print "  line " NR ": prose at column 0 in the findings section"
       flush(); next
     }
     END { flush(); if (mode == "count") print items + 0 }
@@ -286,7 +305,7 @@ EOF
     printf '\nA closing note that belongs to the file, not to any item.\n'
     printf '  and its indented continuation, which is part of no finding.\n'; } \
     > "$box/footnote.md"
-  assert_clean "$box/footnote.md" 8 "a column-0 footnote with an indented continuation"
+  assert_says "$box/footnote.md" 8 'prose at column 0' "a column-0 footnote after the last item"
 
   # --- the item code block: seven probes for the state the parser lacked until round 4 ---
   #
@@ -349,7 +368,7 @@ EOF
   assert_clean "$box/inlinebox.md" 8 "an inline - [x] inside item prose"
   { printf -- '- [x](https://example.com/spec) see the linked spec\n\n'
     printf -- '- [ ] **Good** — `bin/sdd:1` — why. — found by `x` (2026-08-16)\n'; } > "$box/link.md"
-  assert_clean "$box/link.md" 8 "a markdown link whose text is x"
+  assert_says "$box/link.md" 8 'prose at column 0' "a markdown link whose text is x"
 
   # A ticked box ABOVE `## Aberto`. The header skip exists to spare the format example, and it
   # made the file's most important rule depend on where an editor puts a heading: a section of
@@ -359,6 +378,46 @@ EOF
     printf -- '- [x] **closed B**\n\n## Aberto\n\n'
     printf -- '- [ ] **Open** — `bin/sdd:42` — w. — by `x` (2026-08-16)\n'; } > "$box/archived.md"
   assert_says "$box/archived.md" 8 'ticked box' "a ticked box in a section above ## Aberto"
+
+  # And an ITEM above the heading. Round 7 moved only the ticked rule out of the header skip, so
+  # seven other rules and the count still went blind to anything an editor parked above it: the
+  # same anchorless, dateless, 41-line finding was four violations below the heading and silence
+  # above it, with the reported count short by one.
+  { printf '## Triagem\n'
+    printf -- '- [ ] a wish with no title, no anchor and no date\n\n## Aberto\n\n'
+    printf -- '- [ ] **Good** — `f:1` — w. — by `x` (2026-08-16)\n'; } > "$box/aboveitem.md"
+  assert_says "$box/aboveitem.md" 8 'above the findings section' "an item parked above ## Aberto"
+
+  # Free prose at column 0 is refused, and that is what bounds a body written WITHOUT indentation.
+  # Markdown says those paragraphs are not item content, so the cap never saw them: three findings
+  # trailed by 30 de-indented lines each reported "all within 8 lines" — 101 lines passing green,
+  # the exact regression this sensor exists to stop.
+  { printf '## Aberto\n\n'
+    printf -- '- [ ] **I** — `f:1` — w. — by `x` (2026-08-16)\n\n'
+    printf 'a de-indented paragraph that markdown does not fold into the item\n'; } \
+    > "$box/deindented.md"
+  assert_says "$box/deindented.md" 8 'prose at column 0' "a de-indented body paragraph"
+
+  # CommonMark ends a paragraph at a heading, a thematic break, a block quote, an HTML block and a
+  # list start. An earlier rule called all five "a lazy continuation" and named the wrong line, so
+  # deleting one blank line before a `###` section heading turned the suite red on a good file.
+  { printf '## Aberto\n\n'
+    printf -- '- [ ] **Good** — `f:1` — w. — by `x` (2026-08-16)\n'
+    printf '## A heading right after it\n'; } > "$box/interrupt.md"
+  assert_clean "$box/interrupt.md" 8 "a heading interrupting an item with no blank line"
+
+  # The section header of the real file is a 14-line block quote, so `>` has to be on the
+  # whitelist — without it the whole preamble reads as prose at column 0 and every run fails.
+  { printf '## Aberto\n\n> The lifecycle rule, stated where the findings live.\n'
+    printf '> Second line of it.\n\n'
+    printf -- '- [ ] **Good** — `f:1` — w. — by `x` (2026-08-16)\n'; } > "$box/quoted.md"
+  assert_clean "$box/quoted.md" 8 "a block quote in the findings section"
+
+  # The bare-marker rule tolerates the trailing space editors actually leave behind.
+  { printf '## Aberto\n\n'
+    printf -- '- [ ] **Good** — `f:1` — w. — by `x` (2026-08-16)\n\n- \n  [x] **closed**\n'; } \
+    > "$box/markerspace.md"
+  assert_says "$box/markerspace.md" 8 'bare list marker' "a bare marker with a trailing space"
 
   # A list marker alone on its line with the box below it is one rendered, ticked item that no
   # per-line rule can see. Refused rather than parsed.
@@ -385,13 +444,13 @@ EOF
   { printf '## Aberto\n\n'
     printf -- '- [ ] **Good** — `f:1` — w. — by `x` (2026-08-16)\n'
     printf 'a lazy continuation at column 0\n'; } > "$box/lazy.md"
-  assert_says "$box/lazy.md" 8 'lazy continuation' "a column-0 continuation with no blank line"
+  assert_says "$box/lazy.md" 8 'prose at column 0' "a column-0 continuation with no blank line"
 
   # And the legitimate shape it must not be confused with: a footnote AFTER a blank line.
   { printf '## Aberto\n\n'
     printf -- '- [ ] **Good** — `f:1` — w. — by `x` (2026-08-16)\n\n'
     printf 'A closing note.\n  and its indented continuation.\n'; } > "$box/footnote2.md"
-  assert_clean "$box/footnote2.md" 8 "a column-0 footnote after a blank line"
+  assert_says "$box/footnote2.md" 8 'prose at column 0' "a column-0 footnote after a blank line"
 
   assert_rc 93 "--check with an empty argument must not fall back to TODO.md" \
     bash "$SELF" --check ''
@@ -537,8 +596,7 @@ EOF
 
   # A heading after an item must end it. No probe covered this, so deleting the heading rule
   # passed the selftest; the real file only caught it by accident, having headings mid-file.
-  { cat "$box/good.md"; printf '\n## Another section\n\nProse under the heading.\n'; } \
-    > "$box/heading.md"
+  { cat "$box/good.md"; printf '\n## Another section\n'; } > "$box/heading.md"
   assert_clean "$box/heading.md" 8 "a heading after an item"
 
   # --- the knobs ---
@@ -607,7 +665,7 @@ EOF
   assert_rc 96 "an unknown option must exit 96" bash "$SELF" --bogus
   assert_rc 93 "a missing file must exit 93"    bash "$SELF" --check "$box/does-not-exist.md"
   # A file with prose but no items at all trips the floor, not the linter.
-  printf '# Heading\n\nProse, and not one finding.\n' > "$box/noitems.md"
+  printf '# Heading\n\n## Another\n' > "$box/noitems.md"
   assert_rc 94 "a file with no items must exit 94" bash "$SELF" --check "$box/noitems.md"
   # And an unclosed fence above every item must still say WHY, instead of the floor's generic
   # "did the format change?" — the linter runs first for exactly this case.
@@ -615,8 +673,8 @@ EOF
   # Floor on the probe COUNT, for the same reason every other floor here exists: neutering all the
   # assert_* call sites made the summary print "0 probe(s)" and exit 0 — a selftest that ran
   # nothing reads exactly like a selftest that passed. The number moves only on purpose.
-  if [ "$((PROBES + PROBES_SKIPPED))" -lt 58 ]; then
-    printf '  SELFTEST FAIL  only %d probe(s) accounted for (%d ran, %d skipped), expected 58\n' \
+  if [ "$((PROBES + PROBES_SKIPPED))" -lt 63 ]; then
+    printf '  SELFTEST FAIL  only %d probe(s) accounted for (%d ran, %d skipped), expected 63\n' \
       "$((PROBES + PROBES_SKIPPED))" "$PROBES" "$PROBES_SKIPPED" >&2
     FAILS=$((FAILS + 1)); fail_rc 92
   fi
