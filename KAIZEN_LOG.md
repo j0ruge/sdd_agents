@@ -93,13 +93,13 @@ que, sem `set -e`, cai fora do `if` — o run terminava em `ok 0 finding(s)`, rc
 cerca ``` sem fechamento travava o latch do parser e pulava **todas** as regras até o fim do
 arquivo, também verde. Nos dois casos o sensor dizia "medi e está limpo" sobre o que não mediu.
 
-| | Auto | 1ª | 2ª | 3ª | 4ª | 5ª | 6ª |
-|---|---|---|---|---|---|---|---|
-| Defeitos achados / fechados | 0 | 17/17 | 9/9 | 11/11 | 11/11 | 11/11 | 11/11 |
-| Probes do selftest | 14 (à mão) | 20 | 30 | 37 | 45 | 49 | **48** |
-| Linhas do parser `awk` | 47 | 62 | 71 | 84 | 107 | 107 | **75** |
-| Caminhos que falhavam abertos | 2 | 0 | 1 | 2 | 2 | 0 | **0** |
-| Regras/estados removidos por não pagarem | 0 | 2 | 2 | 3 | 4 | 6 | **7** |
+| | Auto | 1ª | 2ª | 3ª | 4ª | 5ª | 6ª | 7ª | 8ª | 9ª |
+|---|---|---|---|---|---|---|---|---|---|---|
+| Defeitos achados | 0 | 17 | 9 | 11 | 11 | 11 | 11 | 10 | 5 | **3** |
+| Herdados de rodadas anteriores | — | 17 | 2 | 3 | 5 | 4 | 5 | 5 | 3 | **0** |
+| Probes do selftest | 14 | 20 | 30 | 37 | 45 | 49 | 48 | 58 | 63 | **67** |
+| Linhas do parser `awk` | 47 | 62 | 71 | 84 | 107 | 107 | 75 | 82 | 79 | **74** |
+| Estado de cerca no parser | sim | sim | sim | sim | sim | sim | não | não | sim | **não** |
 
 **O número que mais ensina não é nenhum defeito: é que cada rodada achou um defeito criado pela
 anterior — três vezes seguidas.** A 1ª consertou a âncora com uma classe negada de travessão, e a
@@ -135,10 +135,23 @@ marcadas em vez das cinco de que eu tinha partido.
 
 **As duas lições, e nenhuma é sobre bash.** A primeira: YAGNI não é só sobre o que custa escrever,
 é sobre o que custa *manter correto* — cinco rodadas foram gastas defendendo bloco de código
-dentro de item, que nenhum dos 46 achados usa e que o teto de ~6 linhas já proíbe. A segunda, mais
+dentro de item, que nenhum dos achados usa e que o teto de ~6 linhas já proíbe. A segunda, mais
 geral: **um sensor deve RECUSAR o que não sabe interpretar com segurança, não adivinhar.** Ser
 mais estrito que o formato de entrada é uma decisão de projeto legítima e barata; tentar
 interpretar tudo é o que custou seis gerações de defeito.
+
+**A linha da tabela que mais ensina é "estado de cerca no parser".** Ele saiu na 6ª rodada e a 7ª
+e a 8ª não acharam nada nessa família. Aí eu o reintroduzi na 8ª — limitado ao cabeçalho, "seguro
+por construção" — e a 9ª achou nele exatamente o mesmo fail-open de sempre: uma cerca solta fazia
+o arquivo inteiro renderizar como código com o run reportando "ok". A guarda que eu tinha escrito
+para pegar isso era código morto inalcançável. **Terceira vez aprendendo a mesma coisa.** O
+substituto não tem estado: uma contagem de paridade calculada fora do awk, que não pode
+dessincronizar porque não lembra de nada.
+
+**E a curva de convergência é o número que fecha o argumento:** achados herdados de rodadas
+anteriores foram 17 → 2 → 3 → 5 → 4 → 5 → 5 → 3 → **0**. Enquanto o conserto era remendo, o
+herdado não caía; ele só foi a zero depois que a estrutura virou lista-branca sem estado. O laço
+não converge por esforço — converge por simplificação.
 
 Duas consequências para o processo, e são elas que ficam. **Revisão adversarial é laço, não
 etapa**: o critério de parada não pode ser "consertei os achados", tem de ser uma rodada que não
