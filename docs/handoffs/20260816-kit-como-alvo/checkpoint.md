@@ -1,6 +1,6 @@
 ---
 missao: 20260816-kit-como-alvo
-atualizado: 2026-08-16 16:38
+atualizado: 2026-08-16 17:40
 ---
 
 # Checkpoint — quando o kit é o próprio alvo, quatro instrumentos param de afirmar o que nunca mediram
@@ -17,7 +17,7 @@ atualizado: 2026-08-16 16:38
 | I1 | entry point com guarda + sensor diferencial | `bash tests/check-entrypoint.sh >/dev/null 2>&1; echo $?` → `0` | done | bb373b5 |
 | I2 | os três leitores do ledger filtram por repo | `o=$(bash tests/check-kaizen.sh 2>&1); grep -c 'a row from another repo never enters the series' <<< "$o"` → `1` | done | d99a7fc |
 | I3 | preflight compara conteúdo do agente, não presença | `o=$(bash tests/check-preflight.sh 2>&1); grep -c 'a drifted agent copy fails the preflight' <<< "$o"` → `1` | done | ab64d2e |
-| I4 | aviso de branch base alcança run e kaizen | `o=$(bash tests/check-gates.sh 2>&1); grep -c 'the base branch warning reaches sdd run' <<< "$o"` → `1` | pending | — |
+| I4 | aviso de branch base alcança run e kaizen | `o=$(bash tests/check-gates.sh 2>&1); grep -c 'the base branch warning reaches sdd run' <<< "$o"` → `1` | done | daa8687 |
 
 ## Notas de execução
 
@@ -139,6 +139,27 @@ atualizado: 2026-08-16 16:38
   novo em `tests/`, então `LINT_FLOOR` e o piso de superfície do `check-pipefail.sh` ficam como
   estão. `bin/sdd` foi de 2449 para **2462** linhas: o aviso de branch base do I4 está agora em
   **`:1338`** (era `:1325`). `grep` pelo texto antes de editar por número.
+
+- 2026-08-16 · `I4` · **Duas sabotagens ficaram verdes e viraram sensor — as duas eram o call site
+  que ninguém re-testa.** (1) Derrubar a chamada em `cmd_preflight` não matava nada: era o lugar
+  ONDE O AVISO JÁ MORAVA, e por isso o único que a extração deixa sem cobertura nova. Fechado com
+  o par diferencial em `check-preflight.sh`. (2) Degradar `warn` → `dim` passava verde nos três,
+  porque todos capturavam `2>&1` e a mensagem continuava lá — sem severidade e fora da stderr. A
+  asserção do `check-gates.sh` passou a ler a **stderr sozinha**, presença e severidade numa
+  asserção só. ⚠️ Sensor que captura `2>&1` não distingue `warn` de `info`: se o que você mede é
+  um aviso, separe os fluxos.
+- 2026-08-16 · `I4` · **As três asserções não são redundantes, e a sabotagem é a prova:** derrubar
+  a chamada em `cmd_run` deixa `check-kaizen.sh` e `check-preflight.sh` verdes; em `cmd_kaizen`, o
+  inverso; em `cmd_preflight`, só o terceiro morre. É por isso que `mut_RUN_base_branch_warn_dead`
+  esvazia a **definição** — só assim ele mede que as três portas passam mesmo por ela.
+- 2026-08-16 · `I4` · A comparação byte-a-byte das duas leituras (`sdd run --dry-run` na base e
+  fora dela) precisou de `no_uuid()`: o `run_phase` imprime um `session: <uuid>` novo por fase
+  projetada. A substituição é ancorada na **forma** do UUID e não em `session:.*` — alargá-la
+  apagaria também uma fase trocando de agente ou de modelo, que é metade do que a comparação mede.
+- 2026-08-16 · `I4` · Nenhum arquivo novo em `tests/` — `LINT_FLOOR` e o piso de superfície do
+  `check-pipefail.sh` ficam como estão. Catálogo 43 → **44**, 100%, 0 known gap; `sdd health`
+  verde. Nenhum doc afirmava que o aviso era exclusivo do preflight (`grep -rn 'base branch'
+  docs/ README.md agents/`), então não houve contrato a atualizar no mesmo commit.
 
 ## Incrementos de fix (QA)
 
