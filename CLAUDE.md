@@ -73,6 +73,10 @@ templates. Se a solução pede infraestrutura, provavelmente é a solução erra
 ## Ao mexer no runner (`bin/sdd`)
 
 - `set -euo pipefail` sempre; `bash -n bin/sdd` é o smoke test mínimo.
+- **A última linha é `{ main "$@"; exit $?; }`, e a forma é contrato.** Sem as chaves e sem o
+  `exit`, o bash volta a ler o arquivo pelo offset salvo ao retornar de `main` — e a fase EXEC
+  edita o `bin/sdd` durante o `sdd run` que a executa. Quem cobra é `tests/check-entrypoint.sh`,
+  com o mutante `RUN_entrypoint_unguarded`.
 - Toda função de gate se chama `gate_<FASE>` e retorna 0/1, escrevendo o motivo em `stderr`.
 - Nada de `bypassPermissions` como default — `acceptEdits` é o teto. Mas `acceptEdits` **sozinho
   não basta**: ele auto-aprova edição de arquivo, não `Bash`. `run_phase()` precisa passar
