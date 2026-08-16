@@ -1,6 +1,6 @@
 ---
 missao: 20260816-kit-como-alvo
-atualizado: 2026-08-16 16:20
+atualizado: 2026-08-16 18:05
 ---
 
 # Checkpoint — quando o kit é o próprio alvo, quatro instrumentos param de afirmar o que nunca mediram
@@ -15,7 +15,7 @@ atualizado: 2026-08-16 16:20
 | ID | Incremento | Check (comando → esperado) | Status | Commit |
 |---|---|---|---|---|
 | I1 | entry point com guarda + sensor diferencial | `bash tests/check-entrypoint.sh >/dev/null 2>&1; echo $?` → `0` | done | bb373b5 |
-| I2 | os três leitores do ledger filtram por repo | `o=$(bash tests/check-kaizen.sh 2>&1); grep -c 'a row from another repo never enters the series' <<< "$o"` → `1` | pending | — |
+| I2 | os três leitores do ledger filtram por repo | `o=$(bash tests/check-kaizen.sh 2>&1); grep -c 'a row from another repo never enters the series' <<< "$o"` → `1` | done | d99a7fc |
 | I3 | preflight compara conteúdo do agente, não presença | `o=$(bash tests/check-preflight.sh 2>&1); grep -c 'a drifted agent copy fails the preflight' <<< "$o"` → `1` | pending | — |
 | I4 | aviso de branch base alcança run e kaizen | `o=$(bash tests/check-gates.sh 2>&1); grep -c 'the base branch warning reaches sdd run' <<< "$o"` → `1` | pending | — |
 
@@ -77,6 +77,45 @@ atualizado: 2026-08-16 16:20
   — era **redundante** com os probes 1-10 e, por ser redundante, nenhuma sabotagem a deixava
   vermelha: foi removida em vez de ganhar probe, pela regra do `CLAUDE.md`. Os dois sobreviventes
   finais estão nomeados no header do sensor.
+
+- 2026-08-16 · `I2` · **O risco "linhas antigas sem o campo `repo`" foi medido, não estimado:**
+  `jq -c 'select(has("repo")|not)' ~/.sdd/autonomy-log.jsonl | wc -l` → `0` em 26 linhas, todas do
+  kit. Mesmo assim a decisão foi tomada **por regra e não pelo dado**: linha que não sabe dizer de
+  onde veio — não é objeto, ou é objeto sem `repo` — **nunca** é excluída pelo filtro. Ela segue
+  chegando ao balde que a nomeia (`unrecognized`, ou a morte alta nomeando o arquivo) no repo em
+  que você estiver. Esconder corrupção é a única coisa que um filtro não pode fazer, e isso é o
+  que preserva os fixtures `stray` e `shape` do `check-autonomy.sh` intactos.
+- 2026-08-16 · `I2` · **Contrato mudado, de propósito: `sdd kaizen --series` não é mais "any cwd".**
+  O cabeçalho do `check-kaizen.sh` afirmava que a série tinha de funcionar de QUALQUER diretório;
+  com a leitura por repo, ler de fora de um repositório git devolve a série vazia (com `warn`) —
+  a direção segura, porque série vazia é `sufficient:false` e só sustenta `indeterminado`. O
+  `sdd help` e o `docs/pipeline.md` aprenderam no mesmo commit; há asserção para o caso.
+- 2026-08-16 · `I2` · **Todo fixture de ledger agora precisa nomear um repo REAL.** Os dois
+  sensores ganharam um `localize()` que reescreve `"repo":"/p1"` para o caminho absoluto do repo
+  sandbox, e as leituras da série saíram de `$OUTSIDE/anywhere` para dentro dele. ⚠️ Linha de
+  fixture nova escrita com `cat >` em vez de `localize >` fica **invisível** para o leitor e o
+  sensor passa medindo um ledger vazio. O caminho vem de `git rev-parse --show-toplevel`, nunca da
+  string que o teste montou: TMPDIR pode ser symlink e o runner resolve exatamente assim.
+- 2026-08-16 · `I2` · `excluded` tem **quatro** chaves agora (`other_repo` entrou) e o literal do
+  ramo de ledger vazio (`bin/sdd:2006`) as carrega todas. A comparação de conjunto de chaves que
+  só existia para `guard` passou a existir para `excluded` também — era metade do contrato entre os
+  dois produtores da mesma shape, e estava sem sensor.
+- 2026-08-16 · `I2` · **A sabotagem adversarial provou que as duas asserções não são redundantes:**
+  desligar o filtro só em `kaizen_series` mata `check-kaizen.sh` e deixa `check-autonomy.sh` verde;
+  desligar só em `cmd_autonomy` faz o inverso. É por isso que o mutante do catálogo sabota a
+  **definição** e não uma chamada — só assim ele mede que os três leitores passam mesmo por ela.
+- 2026-08-16 · `I2` · ⚠️ **O Check desta linha (e os de I3/I4) devolve `1` mesmo com a asserção
+  VERMELHA:** `fail()` imprime o mesmo texto que `pass()`, e o Check captura `2>&1`. Quem prova
+  "rodou E passou" é o `TEST_CMD` verde, não o Check. Não mudei o comando (o runner faz parse desta
+  tabela e a métrica do `00-missao.md` o cita); está no `TODO.md` com a direção — grepar
+  `'^  ok    <texto>'`.
+- 2026-08-16 · `I2` · **Âncoras de I3/I4 re-derivadas depois deste incremento** (`bin/sdd` foi de
+  2372 para 2449 linhas): o `[ -f ... ]` do preflight está em **`:1314`** (era `:1283`), o
+  `ok "$n kit agent(s) checked"` em **`:1319`** e o aviso de branch base em **`:1325`** (era
+  `:1294`). `grep` pelo texto antes de editar por número, sempre.
+- 2026-08-16 · `I2` · Nenhum arquivo novo em `tests/` — os dois pisos que contam arquivos
+  (`LINT_FLOOR` no `run-all.sh`, piso de superfície do `check-pipefail.sh`) ficam como estão.
+  Catálogo de mutação: 41 → **42**, 0 known gap. `sdd health` verde.
 
 ## Incrementos de fix (QA)
 
