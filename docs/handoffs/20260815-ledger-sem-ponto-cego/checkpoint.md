@@ -1,6 +1,6 @@
 ---
 missao: 20260815-ledger-sem-ponto-cego
-atualizado: 2026-08-15 23:40
+atualizado: 2026-08-16 00:45
 ---
 
 # Checkpoint — o ledger e o Jidoka param de mentir
@@ -14,7 +14,7 @@ atualizado: 2026-08-15 23:40
 
 | ID | Incremento | Check (comando → esperado) | Status | Commit |
 |---|---|---|---|---|
-| I1 | Jidoka do `blocked` com herestring, sem depender do buffer do pipe | `./tests/run-all.sh` → `suite green` com `score: 26 caught, 0 known gap(s), of 26` | pending | — |
+| I1 | Jidoka do `blocked` com herestring, sem depender do buffer do pipe | `./tests/run-all.sh` → `suite green` com `score: 26 caught, 0 known gap(s), of 26` | done | 3521b9a |
 | I2 | auto-degradação `review-to-draft` escreve no ledger e a série a reconhece | `./tests/run-all.sh` → `suite green` com `score: 27 caught, 0 known gap(s), of 27` | pending | — |
 | I3 | escaladas do `sdd autonomy` agrupadas por `kit_sha`, como a série já faz | `./tests/run-all.sh` → `suite green` com `score: 28 caught, 0 known gap(s), of 28` | pending | — |
 
@@ -46,6 +46,29 @@ atualizado: 2026-08-15 23:40
   (`fdf8708`); suíte re-medida verde, `score: 25 caught, 0 known gap(s), of 25` (52,6 s sob
   carga). Números defasados pela régua +2 corrigidos no `00-missao.md` (métrica 28/28, K2 25→28)
   e no `01-plano.md` (baseline `of 25`, e2e 25→28). Aprovação: `humano-2026-08-16`.
+
+- 2026-08-16 · `I1` · **O Red que o plano exigia aconteceu, mas só na segunda tentativa da
+  asserção** — e o motivo vale mais que o conserto. Com o checkpoint de 20000 linhas, a primeira
+  versão do teste (`rc 3` + `BLOCKED in EXEC`, herdada da asserção pequena que já existia) nasceu
+  **verde sobre o bug**: o esgotamento de `phase_budget` escala com o **mesmo rc e o mesmo prefixo
+  de mensagem** que o Jidoka. O runner de fato deixava de disparar, abria duas sessões de EXEC
+  contra a parede e só então escalava — e a asserção não sabia distinguir. O fixture estava no
+  regime de falha desde o começo; quem não media era a asserção. Endurecida para exigir o ramo
+  certo (`The line stopped on purpose`) e a **ausência** do marcador do stub do `claude` — que é o
+  que "sem gastar sessão" significa, e que o stub do `check-gates.sh` só reportava sem ninguém
+  afirmar desde que foi plantado. Lição para I2/I3: "a asserção ficou vermelha" não basta; tem de
+  ficar vermelha **pelo motivo certo**, e um `rc` compartilhado com outro ramo é asserção vácua
+  disfarçada.
+- 2026-08-16 · `I1` · Limiar medido no fixture: até ~4000 linhas de `ckstatus` o Jidoka dispara;
+  a partir de ~5000 ele silencia de forma determinística (10/10). O teste usa 20000 linhas por
+  margem, geradas por `awk` no setup (nada de ~1 MB de fixture versionado). Custo: suíte
+  **50,4 s** contra os 48,5 s medidos nesta sessão no `HEAD` `7751ce1` (baseline do plano: 37,4 s
+  em máquina descarregada) — `check-gates.sh` sozinho foi de 2,6 s para 2,9 s, e ele roda 27 vezes
+  dentro do `check-mutation.sh`.
+- 2026-08-16 · `I1` · Fora de escopo, registrados no `TODO.md`: (a) a própria suíte ainda usa
+  `printf | grep -q` em `check-gates.sh:53` e em cinco pontos do `check-dry-run.sh` — mesma
+  família, lado do teste, fora do Check do I1; (b) `shellcheck -S warning tests/` reprova
+  (SC2318, pré-existente em `check-mutation.sh:246`) e o `LINT_CMD` do repo só olha `bin/sdd`.
 
 ## Incrementos de fix (QA)
 

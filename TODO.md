@@ -147,7 +147,7 @@ Achados sobre **repos-alvo** vão para o `TODO.md` daquele repo. Este arquivo é
   planejamento — o check tem que tolerar o valor `<criada pela fase TICKET>` antes disso.
   — descoberto por `sdd-publisher` e por `humano` no piloto SQ-97 (2026-08-14)
 
-- [ ] **`printf | grep -q` com `pipefail` inverte a lógica em silêncio — duas ocorrências vivas** —
+- [x] **[I1 — FEITO em 3521b9a] `printf | grep -q` com `pipefail` inverte a lógica em silêncio — duas ocorrências vivas** —
   `bin/sdd:838` (probe do `sdd preflight`) e `bin/sdd:1229` (escalação Jidoka do `blocked`) —
   o arquivo roda com `set -o pipefail`. Quando o `grep -q` **acha**, ele sai imediatamente e
   fecha o pipe; o `printf` que ainda escrevia morre de SIGPIPE (141), e o `pipefail` faz o
@@ -167,6 +167,31 @@ Achados sobre **repos-alvo** vão para o `TODO.md` daquele repo. Este arquivo é
   comportamento em caminho de escalação, fora do escopo do I13.2, que era ferramenta de medição.
   A convenção já entrou no `CLAUDE.md`. — descoberto por `humano` na missão
   `20260814-i13.2-mutacao-health` (2026-08-14)
+
+  **Fechado no I1 (`3521b9a`)** com as duas ocorrências em herestring, a asserção de checkpoint
+  grande em `check-gates.sh` e a mutação `RUN_jidoka_pipefail`. O que o conserto ensinou e a
+  entrada não previa: o "quase nunca" era pior do que parecia — a partir de ~5000 linhas de
+  `ckstatus` o Jidoka silencia **sempre**, não raramente.
+
+- [ ] **A suíte ainda carrega o `printf | grep -q` que o runner acabou de perder** —
+  `tests/check-gates.sh:53` (`assert_why`) e `tests/check-dry-run.sh:144,163,171,199,251` — mesma
+  família do achado acima, agora só do lado do teste: sob `pipefail` o pipeline devolve 141 quando
+  o `grep` **acha**, então a asserção reprova exatamente quando deveria aprovar. Não morde hoje
+  porque as saídas medidas são pequenas (poucas linhas de `sdd why` / `--dry-run`), que é
+  literalmente o mesmo argumento que manteve o defeito do Jidoka vivo por duas missões — e teste
+  que inverte em silêncio é pior que teste nenhum, porque some junto com o que ele deveria pegar.
+  Direção: herestring, como o `assert_jidoka` já usa. Fora do escopo do I1, cujo Check é
+  `grep -n "printf.*|.*grep -q" bin/sdd` sem linha de código. — descoberto por `sdd-executor` na
+  missão `20260815-ledger-sem-ponto-cego` (2026-08-16)
+
+- [ ] **`shellcheck -S warning tests/` reprova e o `LINT_CMD` não olha** —
+  `tests/check-mutation.sh:246` (`local slug="$1" box="$WORK/$slug"`, SC2318) — o `LINT_CMD` do
+  `.sdd/config.sh` é `shellcheck -S warning bin/sdd`, só o runner; a suíte que prova o runner não
+  passa pelo linter. O achado em si é benigno em bash (a atribuição da esquerda já tomou efeito),
+  mas o buraco não é: os sensores são 2400 linhas de bash sem lint. Direção: estender o `LINT_CMD`
+  a `tests/*.sh` e pagar o que aparecer, ou marcar a exceção explicitamente. — descoberto por
+  `sdd-executor` na missão `20260815-ledger-sem-ponto-cego` (2026-08-16)
+
 - [ ] **`E2E_DIR` tem default no runner e é lida só pelo agente** — `bin/sdd:81` vs
   `agents/sdd-qa.md:44` — `: "${E2E_DIR:=e2e}"` é a única ocorrência da chave no `bin/sdd`:
   nenhum gate, nenhum prompt de boot e nenhum comando do runner a consultam. Quem usa o valor é
