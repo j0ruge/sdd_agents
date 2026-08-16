@@ -198,6 +198,54 @@ assert_eq "and the reason names the sha it is waiting for" "yes" \
 assert_eq "the two dead sessions and the escalation reached the ledger as KAIZEN rows" \
   "4" "$(krows)"
 
+echo "== reminder: pipeline complete points at the judge =="
+# A COMPLETE mission in the fixture kit: every gate satisfied, so cmd_run reaches the
+# "pipeline complete" branch without opening a session. The artifact snippets are the passing
+# forms proven by tests/check-gates.sh against the real gates; gh is stubbed to confirm the PR.
+printf '#!/usr/bin/env bash\nif [ "$1" = "pr" ] && [ "$2" = "view" ]; then printf "%%s\\n" "$3"; exit 0; fi\nexit 1\n' \
+  > "$OUTSIDE/stub/gh"
+chmod +x "$OUTSIDE/stub/gh"
+DONE_SHA="$(git -C "$FIX" rev-parse --short HEAD)"
+DMDIR="$FIX/docs/handoffs/20260102-donemission"
+mkdir -p "$DMDIR"
+cat > "$DMDIR/00-missao.md" <<'EOF'
+---
+missao: 20260102-donemission
+aprovacao: auto
+---
+# Mission
+EOF
+: > "$DMDIR/01-plano.md"
+cat > "$DMDIR/checkpoint.md" <<EOF
+| ID | Incremento | Check (comando → esperado) | Status | Commit |
+|---|---|---|---|---|
+| I1 | slice one | \`true\` → 0 | done | $DONE_SHA |
+EOF
+: > "$DMDIR/20-handoff-exec.md"
+printf -- '---\nstatus: skipped\n---\n# QA\n' > "$DMDIR/30-handoff-qa.md"
+printf '# Review\n\n### Overall Grade\n\n| Criterion | Grade | Rationale |\n|---|---|---|\n| Correctness | A | ok |\n' \
+  > "$DMDIR/40-review-r1.md"
+printf '# Docs\n\ndrift checklist\n\n| Area | Doc | Status | Evidence |\n|---|---|---|---|\n| runner | README | ✅ | commit abc1234 |\n' \
+  > "$DMDIR/45-docs.md"
+printf -- '---\npr_url: https://example.com/pr/1\n---\n# PR\n' > "$DMDIR/50-pr.md"
+git add -A && git commit -qm "chore: a complete mission for the reminder scenario"
+
+# The ledger is the series fixture: latest kit aaa1111 with 1 mission and NO verdict for it yet
+# (the only verdict on disk judges the stale sha) — the reminder must appear, with the numbers.
+out="$( cd "$FIX" && "$KSDD" run 20260102-donemission 2>&1 )"; rc=$?
+assert_eq "the complete mission reaches the human gate (rc 0)" "0" "$rc"
+assert_eq "and reminds: missions accumulated on the current kit without a verdict" "yes" \
+  "$(grep -q "autonomy series: 1 mission(s) on kit aaa1111 without a verdict" <<< "$out" && echo yes || echo no)"
+assert_eq "pointing at sdd kaizen" "yes" \
+  "$(grep -q "run 'sdd kaizen' in the kit repo" <<< "$out" && echo yes || echo no)"
+
+# An empty ledger has nothing to judge: the reminder must stay silent — a nudge computed over
+# no data is the vacuity the whole kit exists to kill.
+out="$( cd "$FIX" && SDD_STATE_DIR="$OUTSIDE/empty" "$KSDD" run 20260102-donemission 2>&1 )"; rc=$?
+assert_eq "with an empty ledger the pipeline still completes (rc 0)" "0" "$rc"
+assert_eq "and the reminder stays silent" "no" \
+  "$(grep -q 'autonomy series:' <<< "$out" && echo yes || echo no)"
+
 echo "== jidoka: verdict piorou stops the line =="
 loud_stub
 VDIR="$FIX/docs/handoffs/20260815-kaizen-verdict"
@@ -254,6 +302,15 @@ out="$( cd "$FIX" && "$KSDD" kaizen 2>&1 )"; rc=$?
 assert_eq "a born plan that approves itself is refused (rc 3)" "3" "$rc"
 assert_eq "naming the self-approval" "yes" \
   "$(grep -q "aprovacao: auto" <<< "$out" && echo yes || echo no)"
+
+echo "== reminder: silenced once the verdict exists =="
+# The verdict for aaa1111 is on disk now (the scenarios above wrote it). Same complete mission,
+# same populated ledger — but the judge already spoke, so nagging would teach people to ignore
+# the reminder. The search is the gate's: by kit_sha_judged content, never by newest file.
+out="$( cd "$FIX" && "$KSDD" run 20260102-donemission 2>&1 )"; rc=$?
+assert_eq "the complete mission still completes (rc 0)" "0" "$rc"
+assert_eq "and the reminder is suppressed by the existing verdict" "no" \
+  "$(grep -q 'autonomy series:' <<< "$out" && echo yes || echo no)"
 
 echo "== dry-run projection =="
 # The gate is failing at this point (the self-approved plan above), so a real run would open a

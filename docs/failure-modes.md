@@ -40,6 +40,25 @@ suite; you would only lose the next session.
 
 ---
 
+## `sdd kaizen` exited 3 (piorou)
+
+**Symptom:** `sdd kaizen` prints "the previous kit change made autonomy WORSE — the line is
+stopped" and exits with code 3, with no plan born.
+
+**Cause:** the judge compared the autonomy series before and after the latest kit change and
+concluded the change hurt. That is the loop's own Jidoka (ADR 0002): planning the next mission on
+top of a regression would compound it, so the verdict is written and the line stops.
+
+**What you do:** read the `05-verdict.md` the message points at — it cites the series' numbers
+(labels, `moved_rate`, escalations, cost) and the hypotheses. Decide: revert the kit change, fix
+it, or overrule the judge with your own reasons. Then run `sdd kaizen` again — a new verdict for
+the new kit sha reopens the loop.
+
+**Do not:** delete or edit the verdict to unblock the loop. The verdict is the series' memory;
+a judged regression that disappears from the record will be re-attempted.
+
+---
+
 ## A context window overflow in the middle of an increment
 
 **Symptom:** the session dies or returns a truncated answer; the checkpoint did not advance.
