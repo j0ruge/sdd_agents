@@ -109,6 +109,9 @@ nunca um commit gigante no fim.
 
 O kit é bash + markdown, então o "teste" é o **Check** de cada incremento do plano: um comando
 com resultado esperado. Escreva o Check antes de implementar o incremento.
+⚠️ Check que lê a saída de um sensor ancora em `^  ok    ` e **nunca** leva `|` na célula — as duas
+regras estão em `templates/checkpoint.md`, com o porquê medido, e quem as cobra é
+`tests/check-checkpoint.sh`.
 
 A suíte é `tests/run-all.sh` — é ela o `TEST_CMD` deste repo, e é ela que os gates rodam. Sensor
 novo entra lá. Os doze de hoje: `check-templates.sh`, `check-gates.sh`, `check-dry-run.sh`,
@@ -135,6 +138,17 @@ situações, é.
 `check-todo.sh`: os probes provavam que o parser pulava blocos cercados, e mesmo assim trocar a
 contagem por um `grep` no chamador passava verde — porque nenhum probe rodava o caminho de
 reporte. A saída foi um modo `--check <arquivo>` que o próprio selftest invoca, sem recursão.
+
+⚠️ **Essa regra escrita não bastou: três fail-open passaram por cima dela** — r2 da missão
+`20260816-kit-como-alvo`, num sensor criado para caçar exatamente isso. Os probes mediam o
+**parser**; o caminho de "existe defeito" até "a suíte fica vermelha" não tinha probe nenhum
+(`probe()` gritava `SENSOR-BROKEN` cinco vezes e saía `0`; apagar as chamadas de topo deixava tudo
+verde). A passada de sabotagem cobre **três** camadas — parser, contabilidade da falha e
+composição —, e a composição só é sondável se as chamadas de topo forem uma **lista**, que é o que
+um probe consegue contar. O que sobra é a última linha do sensor, sobre a qual ele não consegue
+asseverar: essa se prova pelo **catálogo de mutação medido nos dois sentidos** (íntegro
+`44 caught of 44` × neutralizado `43 caught` + rc 1), nunca por comentário. Detalhe no cabeçalho
+do `tests/check-entrypoint.sh`.
 
 ⚠️ **Selftest verde prova as regras que têm probe, e só essas.** Sensor novo ganha uma passada de
 **sabotagem adversarial** antes de ser considerado pronto: degrade cada regra para uma versão mais
