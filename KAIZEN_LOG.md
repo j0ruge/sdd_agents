@@ -23,8 +23,8 @@ cita.
 | Itens fechados parados na seção Aberto | 14 | **0** |
 | Convenções de fechamento | 2 (uma não documentada) | **1** |
 | Mediana / máximo de linhas por item | 10 / 31 | **6 / 8** |
-| Achados abertos | 47 | 46 (2 fusões, 1 split) |
-| Sensor sustentando a forma | 0 | **1** (`check-todo.sh`, 7 probes de selftest) |
+| Itens no arquivo | 64 | **45** (14 resolvidos + 4 de "Feito" apagados, 2 fusões, 1 split) |
+| Sensor sustentando a forma | 0 | **1** (`check-todo.sh`, 14 probes de selftest) |
 | Suíte no default | 66,02 s | 67,08 s (o sensor custa **23 ms**; o resto é ruído de carga) |
 
 Todas as linhas medidas na mesma máquina e na mesma sessão, `fc304bf` num worktree descartável
@@ -61,7 +61,19 @@ sensor de forma, que é o laço funcionando.
 
 ⚠️ **O alvo de 300 linhas não foi atingido: são 361.** As sete seções `###` custaram ~46 linhas e
 ficaram porque agrupar por natureza (sensores, contrato, runner, saída humana, comentário, custo,
-YAGNI) é o que torna 46 itens navegáveis. Registrado como número, não como sucesso.
+YAGNI) é o que torna 45 itens navegáveis. Registrado como número, não como sucesso.
+
+⚠️ **A primeira versão desta tabela trazia "Achados abertos 47 → 46", e os dois números estavam
+errados** — corrigidos para 64 → 45 pela revisão de código. Duas causas somadas, e as duas
+instrutivas. A primeira: o "antes" foi medido no commit do próprio sweep (`c0193a7`), não no
+`fc304bf` que o cabeçalho da tabela promete — baseline errada sob rótulo certo. A segunda: o
+contador era um `grep -cE '^- \[[ x]\] '` que conta também o exemplo de formato dentro do bloco
+cercado do cabeçalho do `TODO.md`, então inflava **os dois** lados em um. O mesmo `grep` estava no
+`check-todo.sh` recém-escrito, ao lado de um parser awk que pula cercas corretamente — dois
+mecanismos respondendo à mesma pergunta, que é a família de defeito que este repo já pagou três
+vezes (os dois leitores do ledger, as duas definições de comparabilidade, e agora o contador).
+Consertado com um parser só em dois modos (`lint`/`count`) e um probe fim-a-fim que reprova se a
+contagem reportada divergir da que o parser vê.
 
 ---
 
