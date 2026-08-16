@@ -620,7 +620,7 @@ Achados sobre **repos-alvo** vão para o `TODO.md` daquele repo. Este arquivo é
   sessions" e a linha "(N unrecognized row(s) excluded…)". — descoberto por `/codereview` (revisão
   final do branch) na missão `20260815-i13.1-autonomy-log` (2026-08-15)
 
-- [ ] **A degradação `PUBLISH_ON_REVIEW_BLOCKED=draft` não escreve linha nenhuma no ledger** —
+- [x] **[I2 + F1 — FEITO em 6853796 e 56b2365] A degradação `PUBLISH_ON_REVIEW_BLOCKED=draft` não escreve linha nenhuma no ledger** —
   `bin/sdd:1471-1476` (`cmd_run`) — o ramo `if [ "$phase" = "REVIEW" ] && [ "$PUBLISH_ON_REVIEW_BLOCKED"
   = "draft" ]` dá `continue` ANTES de `pipeline_log_line` e de `autonomy_blocked_row`. REVIEW
   estourou o orçamento e o kit se degradou sozinho para um PR em draft — o evento de autonomia
@@ -633,7 +633,16 @@ Achados sobre **repos-alvo** vão para o `TODO.md` daquele repo. Este arquivo é
   juiz (I13.3) existir ainda é especulação. Por isso registrado, não consertado. — descoberto por
   `/codereview` (revisão final do branch) na missão `20260815-i13.1-autonomy-log` (2026-08-15)
 
-- [ ] **As escaladas perdem o eixo antes/depois: `sdd autonomy` agrupa `blocked` por `.kind` no
+  **Fechado no I2 (`6853796`) + `F1` (`56b2365`) + review r1 (`e764cd2`)**, com a decisão de
+  vocabulário que a entrada previa: `event: "degraded"` / `kind: "review-to-draft"` (D11 do
+  `CONTEXT.md`), **uma linha por `run_id`**. O conserto foram **quatro** pontos, não dois: o
+  escritor, o `pipeline_log_line`, o `select` de admissão da série e o `is_escalation` do
+  `cmd_autonomy` — e a revisão achou o quinto, `phase_label`, que ficara cego de propósito por uma
+  justificativa falsa. Lição que a entrada não previa: **admitir a linha não basta**; evento novo
+  tem de alcançar todo consumidor do enum, e por isso cada programa passou a ter um
+  `is_escalation` só. Registrado no `CLAUDE.md` § "Ao mexer no runner".
+
+- [x] **[I3 — FEITO em e9a74aa] As escaladas perdem o eixo antes/depois: `sdd autonomy` agrupa `blocked` por `.kind` no
   arquivo inteiro, nunca por `kit_sha`** — `bin/sdd:1635` (sessões: `group_by(.kit_sha)`) vs
   `bin/sdd:1649` (escaladas: `group_by(.kind)`, sem filtro nem agrupamento por versão do kit) — a
   versão do kit é o eixo inteiro da tabela (é o antes/depois que o ledger existe para medir), e o
@@ -652,6 +661,15 @@ Achados sobre **repos-alvo** vão para o `TODO.md` daquele repo. Este arquivo é
   afetado; o que sobra é dois instrumentos sobre o mesmo ledger dando contagens diferentes.
   ⚠️ **Não "consertar" a série junto** — isso recriaria a divergência. Virou o incremento I3 da
   missão `20260815-ledger-sem-ponto-cego`. — `sdd-kaizen` (2026-08-15)
+
+  **Fechado no I3 (`e9a74aa`)**: `group_by(.kit_sha, .kind)` no `cmd_autonomy`, com as
+  não-comparáveis (kit sujo ou sha nulo) caindo no balde já contado em vez de somadas a uma versão
+  que não as produziu. A série ficou intocada, como a entrada exigia. O sensor que importa compara
+  **dado com dado** — as escaladas do `kit_sha` mais recente no `sdd autonomy` contra o mapa
+  `escalations` que a série reporta para o mesmo sha —, então os dois leitores discordarem volta a
+  ser vermelho mesmo que cada lado, sozinho, pareça plausível. Mutante `RUN_escalations_no_axis`.
+  Fica aberto só o que era outra família e virou entrada própria: a **ordem** das versões na tabela
+  do `sdd autonomy` (lexicográfica) contra a da série (ordem de aparição).
 
 - [ ] **`cmd_autonomy` repete o bloco "no data" literalmente, em dois pontos** — `bin/sdd:1603-1605`
   (arquivo ausente ou vazio) e `bin/sdd:1620-1622` (arquivo só com linhas em branco, `total == 0`) —
@@ -682,6 +700,17 @@ Achados sobre **repos-alvo** vão para o `TODO.md` daquele repo. Este arquivo é
   mutações (`KAIZEN_guard_ignored`, `KAIZEN_approved_bailout_dead`), então a projeção da missão
   nascida passa a ser 25 → 28 — a régua do checkpoint dela já foi deslocada. O trade-off e as
   três saídas continuam os mesmos.
+
+  **Medição de fecho (2026-08-16, fase DOCS da `20260815-ledger-sem-ponto-cego`)** — mesma máquina,
+  mesma sessão, `fdf8708` num worktree descartável contra o `HEAD` da missão: **47,9 s com 25
+  mutantes → 66,3 s com 30**. A missão fechou em 30, não nas 28 projetadas: o `F1` da QA e o
+  achado da revisão trouxeram um mutante cada. A série do custo por catálogo fica
+  13,98 s/16 → 22,34/19 → 47,9/25 → 66,3/30: **~2,2 s por mutante na média** e **3,7 s na margem
+  desta missão** (18,4 s / 5 mutantes — a margem é maior porque o fixture da degradação ficou mais
+  caro e roda dentro de cada sandbox). É a aritmética que falta para a decisão sair da impressão:
+  no default, o alvo de 30 s da D7 comporta ~13 mutantes, e o catálogo não vai parar de crescer.
+  As três saídas continuam as mesmas. — medido por `sdd-docs` na missão
+  `20260815-ledger-sem-ponto-cego` (2026-08-16)
 
 - [ ] **`cmd_kaizen` tem partes sem mutação própria além das 5 do catálogo** — `bin/sdd`
   (`kaizen_reminder`, ramo "already judged" idempotente) — as 5 mutações cobrem `gate_KAIZEN`
@@ -777,7 +806,8 @@ Achados sobre **repos-alvo** vão para o `TODO.md` daquele repo. Este arquivo é
   `degraded` só a herda. Direção: contar a guarda sobre missões com pelo menos uma sessão
   comparável, ou expor `sessions` junto de `sufficient` para o `gate_KAIZEN` cruzar. — descoberto
   por `sdd-reviewer` na missão `20260815-ledger-sem-ponto-cego` (2026-08-16)
-- [ ] A sessão de fase é um ponto cego enquanto roda: `run_phase` grava o JSON só no fim —
+
+- [ ] **A sessão de fase é um ponto cego enquanto roda: `run_phase` grava o JSON só no fim** —
   `bin/sdd:897` — `--output-format json` emite um blob único quando a sessão termina, então
   `.sdd/logs/<missão>/<FASE>-*.json` fica com **0 bytes** durante os ~10 min de cada sessão e o
   humano não tem como acompanhar o que o agente está fazendo (o transcript ao vivo até existe,
@@ -796,6 +826,20 @@ Achados sobre **repos-alvo** vão para o `TODO.md` daquele repo. Este arquivo é
   próprio instalador, e o repo-alvo nasce sem `TEST_CMD`. Visto de lado montando o rig do re-walk
   do `F1`. Direção: `[ -f "$SDD_HOME/config/starter.conf" ] || die`, na família das guardas que
   `autonomy_append` já tem. — descoberto por `sdd-executor` na missão
+  `20260815-ledger-sem-ponto-cego` (2026-08-16)
+
+- [ ] **O espelho `.claude/agents/sdd-kaizen.md` ficou um parágrafo atrás do
+  `agents/sdd-kaizen.md`** — `.claude/agents/sdd-kaizen.md` contra `agents/sdd-kaizen.md:68` — a
+  fase DOCS ensinou ao juiz o vocabulário `degraded`/`review-to-draft`, que é o terceiro lugar do
+  contrato que o `CLAUDE.md` manda atualizar no mesmo commit, mas a sessão headless rodou com
+  **escrita bloqueada sob `.claude/`** pelo harness: `cp`, `Edit` e `Write` no espelho foram os
+  três recusados. Nada quebra hoje — o par é gerado por `sdd install --force` e a divergência é o
+  caso já catalogado em `docs/failure-modes.md` ("`sdd install` shows a diff in the agents"), a
+  suíte segue verde e o `check-lang` só varre idioma. O que morde é local e específico: uma fase
+  KAIZEN **neste repo** lê o espelho, não o fonte, então ela roda com o agente velho até alguém
+  sincronizar. Conserto: `./bin/sdd install --force` (ou o `cp` direto) numa sessão sem o bloqueio,
+  commitado junto. ⚠️ Vale para qualquer fase DOCS futura que precise tocar em agente — o kit não
+  tem como saber, de dentro, que a escrita foi negada. — descoberto por `sdd-docs` na missão
   `20260815-ledger-sem-ponto-cego` (2026-08-16)
 
 ## Feito
