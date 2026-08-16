@@ -93,12 +93,21 @@ que, sem `set -e`, cai fora do `if` — o run terminava em `ok 0 finding(s)`, rc
 cerca ``` sem fechamento travava o latch do parser e pulava **todas** as regras até o fim do
 arquivo, também verde. Nos dois casos o sensor dizia "medi e está limpo" sobre o que não mediu.
 
-| | Auto-revisão | 1ª adversarial | 2ª adversarial |
-|---|---|---|---|
-| Defeitos conhecidos no sensor | 0 | 17 achados, 17 fechados | 9 achados, 9 fechados |
-| Probes do selftest | 14 (à mão, já defasado) | 20 (contados) | **30** (contados) |
-| Sabotagens de regra que matam o selftest | 4 de 8 | 13 de 14 | **15 de 17** (as 2 são redundância provada) |
-| Caminhos que falhavam abertos | 2 | 0 | **0** |
+| | Auto-revisão | 1ª adversarial | 2ª adversarial | 3ª adversarial |
+|---|---|---|---|---|
+| Defeitos achados / fechados | 0 | 17 / 17 | 9 / 9 | 11 / 11 |
+| Probes do selftest | 14 (à mão, defasado) | 20 | 30 | **37** (com piso próprio) |
+| Sabotagens que matam o selftest | 4 de 8 | 13 de 14 | 15 de 17 | **17 de 18** |
+| Caminhos que falhavam abertos | 2 | 0 | 1 (novo) | **0** |
+| Regras removidas por serem decoração | 0 | 2 | 2 | **3** |
+
+**O número que mais ensina não é nenhum defeito: é que a 2ª rodada achou um defeito criado pela
+1ª, e a 3ª achou um criado pela 2ª.** Duas vezes seguidas, o conserto de um fail-open abriu outro.
+A rodada 2 partiu uma regra simétrica de cerca em duas — coluna 0 acima do `fence`, indentada
+abaixo — e criou um latch de mão única: cerca indentada abria e nunca fechava, tudo abaixo virava
+silêncio, e uma `- [x]` sem âncora sumia com o run verde. Literalmente o mesmo fail-open que o
+cabeçalho do arquivo já dizia ter consertado. **Revisão adversarial não é etapa, é laço**, e o
+critério de parada não pode ser "consertei os achados" — tem de ser uma rodada que não acha nada.
 
 **A segunda rodada achou um defeito que a primeira rodada CRIOU, e essa é a parte que ensina.** O
 conserto da âncora usava `sub(/ — [^—]*$/, ...)`, e o `awk` desta máquina é o **mawk 1.3.4**, que é
