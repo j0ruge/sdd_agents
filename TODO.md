@@ -69,6 +69,14 @@ Achados sobre **repos-alvo** vão para o `TODO.md` daquele repo. Este arquivo é
   Direção: tratar `\|` antes do split, com asserção. — descoberto por `sdd status` na missão
   `20260816-kit-como-alvo` (2026-08-16)
 
+- [ ] **O `40-review-r<N>.md` é o único artefato com gate e sem template** — `templates/` — os
+  outros cinco têm (`missao`, `plano`, `checkpoint`, `handoff`, `pr-body`), e é justamente o do
+  review que o `gate_REVIEW` lê por regex literal (`^###[[:space:]]+Overall Grade`, `bin/sdd:2196`).
+  Evidência: as rodadas r1 E r2 desta missão escreveram `## Overall Grade` e o gate devolveu
+  `NO-TABLE` — duas sessões independentes derivando igual. Direção: `templates/review.md` com o
+  heading e a tabela, mais a linha no `check-templates.sh`.
+  — descoberto por `sdd-reviewer` na missão `20260816-kit-como-alvo` (2026-08-16)
+
 - [ ] **Os dois ramos de diagnóstico do `differential()` não têm probe** —
   `tests/check-entrypoint.sh:234` — a passada adversarial da r2 matou 20 de 25 degradações, e o
   que sobra sem probe é a comparação do próprio diferencial: neutralizá-la faz o sensor ler "1 vs

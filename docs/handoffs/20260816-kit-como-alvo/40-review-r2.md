@@ -174,13 +174,21 @@ evidência está no `40-review-r1.md`.
 
 ## Registrado no `TODO.md`, fora do diff
 
-Um achado novo desta rodada, real e não consertado aqui porque o conserto pede um gancho de
-contagem falsa dentro do caminho de medição — desenho próprio, não remendo:
+Dois achados novos desta rodada, reais e não consertados aqui porque os dois pedem desenho próprio
+— não remendo:
 
 - **Os dois ramos de diagnóstico do `differential()` não têm probe** (`tests/check-entrypoint.sh:234`).
   Hoje o que os limita é o par de contagens ser IMPRESSO na linha `ok` ("2 vs 1"), então uma
   comparação neutralizada lê "1 vs 1" na saída da suíte em vez de silêncio. Direção anotada: um
   gancho como o `SDD_EP_FORCE_FAIL` da composição, com um probe por ramo.
+- **O `40-review-r<N>.md` é o único artefato com gate e sem template** (`templates/`). Achado ao
+  **rodar o parser do `gate_REVIEW` contra este arquivo** em vez de supor que ele passava: a
+  resposta foi `NO-TABLE`, porque a seção tinha sido escrita como `## Overall Grade` e o gate exige
+  `^###[[:space:]]+Overall Grade` (`bin/sdd:2196`). Corrigido nos dois relatórios — a r1 tinha o
+  mesmo defeito e teria reprovado por "não há tabela" em vez de pela nota `C`, que é reprovar pelo
+  motivo errado. O contrato está certo em toda parte que o declara (`agents/sdd-reviewer.md:57`,
+  `docs/pipeline.md:124`, os fixtures do `check-gates.sh`); o que falta é o template que os outros
+  cinco artefatos têm, e duas sessões independentes derivarem igual é a evidência de que falta.
 
 Os cinco da r1 (lembrete pós-pipeline cego, `sdd retry` como quarta porta, worktree partindo a
 identidade do repo, linha sem `repo` sendo "local" em todo repo, e o `doc_rule` que falta para a
@@ -201,9 +209,10 @@ Todas rodadas contra `cbca483`, depois dos consertos:
 | `shellcheck -S warning` | limpo em `bin/sdd` e em `tests/*.sh` |
 | Sabotagem adversarial do sensor | 25 degradações, 20 morrem, 5 nomeadas no cabeçalho |
 | Cobertura externa dos 2 survivors | `44 caught` intacto × `43 caught` + rc 1 neutralizado |
+| Parser do `gate_REVIEW` contra este arquivo | 8 linhas lidas, nenhuma `offending` |
 | `git status --short` | limpo |
 
-## Overall Grade
+### Overall Grade
 
 | Criterion | Grade | Rationale |
 |-----------|-------|-----------|

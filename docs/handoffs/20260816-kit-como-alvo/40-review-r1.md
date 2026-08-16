@@ -130,7 +130,7 @@ apagar o banner do template e do planner deixa o sensor verde.
   `|` altera o arquivo (não é rc 90), o mutante passa no `bash -n` (não é rc 91) e mata a suíte
   pela asserção pretendida, e só por ela.
 
-## Overall Grade
+### Overall Grade
 
 | Criterion | Grade | Rationale |
 |-----------|-------|-----------|
