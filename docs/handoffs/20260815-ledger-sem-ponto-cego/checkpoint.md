@@ -1,6 +1,6 @@
 ---
 missao: 20260815-ledger-sem-ponto-cego
-atualizado: 2026-08-16 00:45
+atualizado: 2026-08-16 01:20
 ---
 
 # Checkpoint — o ledger e o Jidoka param de mentir
@@ -17,6 +17,7 @@ atualizado: 2026-08-16 00:45
 | I1 | Jidoka do `blocked` com herestring, sem depender do buffer do pipe | `./tests/run-all.sh` → `suite green` com `score: 26 caught, 0 known gap(s), of 26` | done | 3521b9a |
 | I2 | auto-degradação `review-to-draft` escreve no ledger e a série a reconhece | `./tests/run-all.sh` → `suite green` com `score: 27 caught, 0 known gap(s), of 27` | done | 6853796 |
 | I3 | escaladas do `sdd autonomy` agrupadas por `kit_sha`, como a série já faz | `./tests/run-all.sh` → `suite green` com `score: 28 caught, 0 known gap(s), of 28` | done | e9a74aa |
+| F1 | uma degradação por `sdd run` escreve **uma** linha `degraded`, como a métrica 3 exige | `./tests/run-all.sh` → `suite green` com `score: 29 caught, 0 known gap(s), of 29` E re-walk da jornada J2 com stub que move o disco a **cada** sessão → exatamente 1 linha `degraded` e `review-to-draft: 1` nos dois leitores | pending | — |
 
 ## Notas de execução
 
@@ -146,3 +147,34 @@ atualizado: 2026-08-16 00:45
 > `F<n>`, e o Check obrigatoriamente inclui **regression test passa** + **re-walk da jornada
 > impactada verde**. Bug que exige julgamento humano NÃO vira fix — vai para
 > "Decisions for a Human" no handoff de QA.
+
+- 2026-08-16 · `F1` · **De qual bug nasceu:** não há registro `docs/qa/` neste repo (sem interface,
+  `E2E_CMD` vazio) — o achado veio da **jornada J2 andada pelo `sdd-qa` nesta sessão**, e é por isso
+  que ele não tem `BUG-<id>`. A evidência está no `gate:` do `30-handoff-qa.md`.
+- 2026-08-16 · `F1` · **O que foi medido.** Um `sdd run` com `PUBLISH_ON_REVIEW_BLOCKED=draft`,
+  `REVIEW_MAX_ITER=1` e um stub que move o disco a **cada** sessão: sequência de fases
+  `REVIEW PR PR`, o aviso `moving on to PR in draft mode` impresso **3 vezes**, **3** linhas
+  `event: "degraded"` no ledger, e os dois leitores reportando `review-to-draft: 3` — o
+  `sdd autonomy` e o `sdd kaizen --series` de acordo entre si e **errados juntos**. O runner
+  degradou **uma** vez e ficou preso; o instrumento conta 3.
+- 2026-08-16 · `F1` · **Por que isto é I2 e não escopo novo.** A métrica 3 do `00-missao.md` diz,
+  literalmente, "produz **exatamente uma** linha nova no ledger". Ela não está satisfeita no caso
+  geral — só no regime do fixture. A entrada do `TODO.md` que o I2 abriu tratou o caso como
+  "mudança de laço, não de registro" e por isso o deixou fora; a metade de **registro** (escrever
+  uma vez por run) é exatamente o que o I2 define como seu escopo, e é ela que o `F1` fecha. A
+  metade de **laço** (o runner girar REVIEW→PR→REVIEW) continua no `TODO.md`, agora narrowed.
+- 2026-08-16 · `F1` · **A asserção de hoje é vácua fora do fixture** —
+  `tests/check-autonomy.sh:390`, `"the degradation wrote exactly one row"`, afirma uma propriedade
+  universal que só vale porque o stub do fixture move o disco **na primeira chamada só** (o
+  comentário de `tests/check-autonomy.sh:363-365` diz isso com todas as letras). Sob um stub que
+  move sempre, a mesma asserção leria 3. É a **terceira** vez nesta missão que uma asserção passa
+  verde por causa do regime do fixture e não da propriedade — depois do `rc 3` compartilhado do I1
+  e do ramo `draft` nunca alcançado do I2. O sensor do `F1` tem de rodar no regime de repetição,
+  senão troca uma vacuidade por outra.
+- 2026-08-16 · `F1` · **Direção sugerida (não é ordem):** guarda one-shot por run no ramo de
+  degradação, no espírito do `AUTONOMY_SHA_WARNED` que já existe em `bin/sdd:751` — e vale a
+  lição do `CLAUDE.md`: flag global só sobrevive se a função for **chamada**, nunca substituída
+  em `$( )`. Mantém o laço intocado, que é o que o `TODO.md` guarda separado.
+- 2026-08-16 · `F1` · O score do Check sobe para **29** porque o conserto precisa de mutante
+  próprio no catálogo (`tests/check-mutation.sh`): sem ele, quem prova que a asserção nova morre
+  quando sabotada? O `RUN_degraded_row_dropped` de hoje sabota o **escritor**, não a **cardinalidade**.

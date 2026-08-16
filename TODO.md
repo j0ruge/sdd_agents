@@ -717,6 +717,30 @@ Achados sobre **repos-alvo** vão para o `TODO.md` daquele repo. Este arquivo é
   evento, não mudar o laço). — descoberto por `sdd-executor` na missão
   `20260815-ledger-sem-ponto-cego` (2026-08-16)
 
+  ⚠️ **A metade de REGISTRO desta entrada virou o incremento `F1` desta mesma missão**, porque a
+  jornada andada pelo `sdd-qa` mediu o efeito e ele contradiz a métrica 3 do `00-missao.md`
+  ("exatamente uma linha"): um run que degradou **uma vez** escreveu **3** linhas `degraded`, e os
+  dois leitores reportaram `review-to-draft: 3`. O que **permanece aberto aqui** é só a metade de
+  **laço**: o runner continua girando REVIEW→PR→REVIEW com o orçamento estourado até o `no-progress`
+  do PR encerrar. Registrar uma vez não faz o run parar de girar — são dois defeitos, e o `F1`
+  fecha o do instrumento. — narrowed por `sdd-qa` na missão `20260815-ledger-sem-ponto-cego`
+  (2026-08-16)
+
+- [ ] **O que arma a corrida do Jidoka é a POSIÇÃO da linha `blocked`, não o tamanho do
+  checkpoint** — `tests/check-gates.sh:229-232`: o comentário diz "o row count é o botão", e o
+  fixture está certo **por construção** (a linha `blocked` nasce no checkpoint original e as 20000
+  de enchimento são anexadas **depois** dela). Mas a grandeza real é quantos bytes sobram para o
+  `printf` escrever **depois** do casamento do `grep`: numa jornada andada pelo `sdd-qa` com a
+  linha `blocked` no **fim** de um checkpoint de 1,1 MB, o `bin/sdd` **pré-conserto** (`fdf8708`)
+  parou corretamente — o `grep` só casa no último byte, ninguém morre de SIGPIPE. Com a mesma
+  linha no **começo**, o mesmo binário queimou 2 sessões e nunca imprimiu `The line stopped on
+  purpose`. Consequência: uma edição futura inocente ("põe a linha `blocked` no fim da tabela")
+  torna a asserção vácua sem mudar uma palavra do comentário. Hoje quem segura isso é o mutante
+  `RUN_jidoka_pipefail` (com a linha no fim ele deixaria de matar a suíte e o score cairia para
+  27/28), então **não há defeito vivo** — é precisão de comentário sobre uma invariante que existe
+  e não está escrita. Direção: dizer "linhas DEPOIS da `blocked`" no comentário. — descoberto por
+  `sdd-qa` na missão `20260815-ledger-sem-ponto-cego` (2026-08-16)
+
 - [ ] **Duas definições de comparabilidade dentro do mesmo `jq` do `cmd_autonomy`** —
   `bin/sdd:1715` (`comparable`, sessões: `.kit_dirty == false`) contra `bin/sdd:1722` (`on_axis`,
   escaladas: `.kit_dirty != true`, que é o predicado da série em `bin/sdd:1817`). Hoje não diverge
