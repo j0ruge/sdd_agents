@@ -232,6 +232,15 @@ Achados sobre **repos-alvo** vão para o `TODO.md` daquele repo. Este arquivo é
   quando houver folga de régua. — descoberto por `sdd-executor` na missão
   `20260815-ledger-sem-ponto-cego` (2026-08-16)
 
+- [ ] **O aviso de "você está na branch base" mora só no preflight** — `bin/sdd:1293`
+  (`cmd_preflight`) contra `cmd_run` e `cmd_kaizen`, que não o têm — quem chama `sdd kaizen` ou
+  `sdd run` direto nunca o vê, e as duas ABREM SESSÃO QUE COMMITA. O kaizen é o pior dos dois:
+  valida que é o repo do kit e que a árvore está limpa, e então escreve verdict + os três
+  artefatos da missão onde quer que você esteja — `main` inclusive. Mesma família do item sobre
+  gate nenhum conferir a branch declarada, um passo antes: lá a missão sai do trilho, aqui ela
+  nasce fora dele. Direção: mover a checagem para uma função chamada pelos três.
+  — descoberto por `humano` na missão `20260816-runner-sem-dividas` (2026-08-16)
+
 - [ ] **A guarda do juiz é insatisfazível quando o kit desenvolve a si mesmo** — `bin/sdd:2024`
   (`sufficient: ($observed >= 3)`) vs `autonomy_kit_stamp` — o eixo é o `HEAD` do kit no instante
   de CADA linha, e a fase EXEC commita no `bin/sdd` entre sessões: medido, **24 kit_sha distintos
