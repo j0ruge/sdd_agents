@@ -4,6 +4,101 @@ Registro de melhorias com **antes/depois medido**. Sem número, não entra.
 
 ---
 
+## 2026-08-16 — Quatro instrumentos param de afirmar o que nunca mediram (missão `20260816-kit-como-alvo`)
+
+**Problema (Gemba):** o kit foi desenhado para rodar em repo-alvo e passou a rodar em si mesmo.
+Nesse regime — e **só** nele — quatro instrumentos afirmavam ter medido algo que nunca mediram, os
+quatro verificados com âncora e comando antes de virar incremento:
+
+- o ledger é global e **nenhum** dos três leitores filtrava por repo, com o campo `repo` já escrito
+  e ninguém lendo: um `sdd run` de fixture com sandbox em `/tmp` pôs 3 linhas no ledger de produção
+  e o juiz passou a ler `66% waste · 2 mission(s)` onde o verdadeiro era `0% · 1` — a **fonte da
+  verdade do juiz**, contaminável por qualquer teste;
+- o preflight comparava a **existência** do agente instalado e então imprimia `N kit agent(s)
+  checked` por cima — rótulo sobre uma comparação que nunca aconteceu, e o harness carrega a cópia;
+- `main "$@"` era a última linha sem guarda, num runner cuja fase EXEC o edita **em voo** (10× na
+  missão anterior). Reproduzido: edição in-place faz o bash reexecutar o entry point, com rc `0`;
+- o aviso "você está na branch base" morava só no preflight, enquanto `sdd run` e `sdd kaizen`
+  abrem sessão que commita — e o kaizen escreve veredito + três artefatos onde você estiver.
+
+A fase QA achou o **quinto** da mesma família, e era o instrumento com que a própria missão se
+media: o Check do checkpoint grepava o texto solto da asserção sobre `2>&1`, e `fail()` imprime o
+mesmo texto que `pass()` — o comando devolvia `1` com a asserção **vermelha**.
+
+**Contramedida:** quatro consertos dentro do contrato existente, com **predicado único por
+programa** onde havia repetição — `ledger_row_is_local()` para os três leitores,
+`warn_if_on_base_branch()` para as três portas — e o mutante sabotando a **definição**, nunca uma
+chamada: é o que prova que os três passam mesmo por ela (medido: derrubar uma chamada mata um
+sensor e deixa os outros verdes). Mais o incremento `F1`, nascido da QA: os Checks ancoram em
+`^  ok    `, `templates/checkpoint.md` e o `sdd-planner` ensinam a regra, e `tests/check-checkpoint.sh`
+a mede em **todo** checkpoint do repo.
+
+| | Antes (`df18c88` = `main`) | Depois (`bb5333f`) |
+|---|---|---|
+| Os 4 Checks da métrica | `127` · `0` · `0` · `0` | **`0` · `1` · `1` · `1`** |
+| Instrumentos conhecidos que afirmam sem medir | 4 (+1 achado pela QA) | **0** |
+| Score de mutação | 40 caught, 0 gap, of 40 | **44 caught, 0 gap, of 44** |
+| Sensores da suíte | 10 | **12** (`check-entrypoint.sh`, `check-checkpoint.sh`) |
+| Asserções `ok` numa passada verde | 408 | **457** |
+| Suíte, mesma máquina e mesma sessão | 1:17,62 | 1:45,17 (**+35%**) |
+| Achados no `TODO.md` | 52 | **65** (+13 novos, 4 fechados com hash) |
+| `sdd health` | verde | **verde**, 8 gates com mutação |
+
+Os dois tempos foram medidos nesta máquina e nesta sessão, `main` num worktree descartável contra o
+HEAD, suíte verde dos dois lados. O **+35% é catálogo, não desperdício** — 4 mutantes novos são 4
+suítes inteiras a mais. Mas o alvo `<30 s` da D7 está agora **3,5× distante** e ninguém o defende:
+subir o alvo ou aposentá-lo por escrito é decisão do humano, e o item vive no `TODO.md`.
+
+### O sensor criado para caçar fail-open nasceu com três
+
+A lição cara não é nenhum dos quatro consertos — é que `tests/check-entrypoint.sh`, escrito
+**nesta** missão exatamente para matar instrumentos que afirmam o que não mediram, passou pela r1
+com três fail-open dentro, e todos os três eram a mesma propriedade faltando:
+
+> os probes mediam o **parser**; o caminho de "existe defeito" até "a suíte fica vermelha" não
+> tinha probe nenhum.
+
+Medido, não deduzido: com `check_file` sempre devolvendo `0`, o arquivo imprimia cinco
+`SENSOR-BROKEN:` na stderr, o `ok` por cima deles e **rc 0** — que é o que `tests/run-all.sh` lê. E
+apagar as três chamadas de topo deixava tudo verde sem rodar o diferencial. O conserto foi a
+propriedade, não os sintomas: contabilidade de falha com sítio próprio (`harness_selfcheck`) e as
+chamadas de topo viradas **lista**, porque lista é o que um probe consegue contar.
+
+| Passada adversarial do sensor novo | r1 | r2 |
+|---|---|---|
+| Degradações aplicadas | — | 25 |
+| Morrem no próprio sensor | — | **20** |
+| Fail-open reproduzidos e abertos | 3 | **0** |
+| Survivors nomeados no cabeçalho | — | 5 (2 medidos como cobertos pelo catálogo) |
+
+⚠️ E a regra que fecha: **a última linha de um sensor é a linha sobre a qual ele não consegue
+asseverar.** Os dois survivors que são fail-open de verdade foram provados pelo catálogo de
+mutação **nos dois sentidos** — sensor íntegro `44 caught of 44` rc 0, composição neutralizada
+`43 caught` + rc 1 —, nunca por uma esperança escrita no comentário.
+
+**O segundo achado, no `check-checkpoint.sh`:** fixture derivado da regra **afrouxa junto com ela**.
+Abrir o âncora de `^  ok    ` para `ok` deixava o selftest verde, porque os probes constroem os
+fixtures a partir do próprio valor sob teste. A saída não foi mais um probe e sim uma **testemunha
+independente** — `calibrate()`, que deriva o prefixo das linhas `pass()` dos sensores reais e o
+compara com o âncora. 44 degradações em 4 rodadas, 4 sobreviventes, os 4 viraram probe.
+
+**Sensores duráveis:** `tests/check-entrypoint.sh` e `tests/check-checkpoint.sh`, permanentes no
+`run-all.sh`, mais 4 mutantes no catálogo (`RUN_entrypoint_unguarded`, `RUN_ledger_no_repo_filter`,
+`PRE_agent_presence_only`, `RUN_base_branch_warn_dead`), todos sabotando a **definição**. Os quatro
+Checks foram observados vermelhos no `df18c88` antes de qualquer implementação — `127`/`0`/`0`/`0`.
+
+**Padronizado em** (confirmado abrindo cada arquivo): `docs/pipeline.md` (§ "The autonomy ledger"
+ganha "the file is global; the READING is per repo" com as três consequências; `repo` vira o campo
+que os leitores filtram; `excluded` com os quatro baldes nos dois produtores da mesma shape),
+`README.md` (preflight byte a byte; `sdd autonomy` "for THIS repo"), `CLAUDE.md` (doze sensores,
+quatro com auto-teste; a regra do âncora `^  ok    `; a passada de sabotagem cobrindo as três
+camadas), `templates/checkpoint.md` + `agents/sdd-planner.md` (as duas regras da célula do Check),
+`agents/sdd-kaizen.md` (citar `other_repo` como os outros baldes), `CONTEXT.md` (verbetes "Ledger
+de autonomia" e "Série", e o novo número do alvo `<30 s`) e `docs/failure-modes.md` (dois modos
+novos: agente `stale` no preflight, série vazia por leitura em outro repo).
+
+---
+
 ## 2026-08-16 — O kit trabalha no próprio backlog (missão `20260816-runner-sem-dividas`)
 
 **Prova de fogo:** primeira missão em que o `sdd-planner` é exercitado de verdade e o kit anda
