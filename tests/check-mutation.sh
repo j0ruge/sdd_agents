@@ -332,6 +332,21 @@ mut_RUN_install_no_guard() {
   sed -i 's@-f "$SDD_HOME/config/starter.conf"@-n "always-there"@' "$1"
 }
 
+# Not a gate: the ledger readers go back to asking "can this row be attributed to a kit version?"
+# in two spellings — `.kit_dirty == false` for sessions, `.kit_dirty != true` for escalations and
+# for the judge. This is the EXACT pre-fix text, and it is why the mutant needs two edits: reverting
+# `on_axis` alone would drag `comparable` lax with it (a wrong single definition), which is a
+# different defect from the fork. What dies here is the differential assertion in check-autonomy —
+# the twin rows with kit_dirty:null and a sha filled, where the escalation table grants a version
+# the session table denies. Every row the runner writes today satisfies both spellings, so no
+# fixture in the ordinary regime can tell this mutant from the fix.
+mut_RUN_on_axis_forked() {
+  sed -i \
+    -e 's@def on_axis: .kit_dirty == false and .kit_sha != null;@def on_axis: .kit_dirty != true and .kit_sha != null;@' \
+    -e 's@def comparable: .event == "session" and on_axis and (has("moved"));@def comparable: .event == "session" and .kit_dirty == false and (.kit_sha != null) and (has("moved"));@' \
+    "$1"
+}
+
 CATALOG=(
   PLAN_empty_approval
   TICKET_no_sprint
@@ -360,6 +375,7 @@ CATALOG=(
   RUN_degraded_label_blind
   RUN_sort_lexi
   RUN_install_no_guard
+  RUN_on_axis_forked
   KAIZEN_gate_blind
   KAIZEN_jidoka_dead
   KAIZEN_guard_ignored

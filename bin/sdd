@@ -1757,14 +1757,22 @@ cmd_autonomy() {
   # this command instead of leaking jq's own exit code.
   local out jq_rc=0
   out="$(jq -rs '
-    def comparable: .event == "session" and .kit_dirty == false
-                    and (.kit_sha != null) and (has("moved"));
+    # ONE definition of "attributable to a kit version" for the whole program, exactly as
+    # is_escalation is one definition of the escalation pair — and for the same reason. This was
+    # written twice, `.kit_dirty == false` for sessions and `.kit_dirty != true` for escalations,
+    # two spellings of one question that agree on every row the runner writes (the stamp emits
+    # kit_dirty:null only alongside kit_sha:null, and a null sha already fails both) and disagree on
+    # the one row it does not: kit_dirty:null WITH a sha. There the table counted an escalation
+    # under a version while refusing the session next to it — attribution granted and denied in the
+    # same output. `== false` is the spelling that survives: unknown dirtiness is not clean, and a
+    # row nobody can attribute belongs in the non-comparable bucket, out loud. kaizen_series holds
+    # the same definition for its own jq program; tests/check-autonomy.sh compares the readers to
+    # each other so neither can be "improved" alone.
+    def on_axis: .kit_dirty == false and .kit_sha != null;
+    def comparable: .event == "session" and on_axis and (has("moved"));
     def is_session: .event == "session";
     def is_escalation: .event == "blocked" or .event == "degraded";
     def is_unrecognized: (is_session or is_escalation) | not;
-    # The series calls a row non-comparable on exactly this predicate. Same test, same words, so
-    # the two readers cannot drift apart by one of them being "improved" alone.
-    def on_axis: .kit_dirty != true and .kit_sha != null;
     (map(select((is_session and (comparable | not))
                 or (is_escalation and (on_axis | not)))) | length) as $skipped
     | (map(select(is_session and comparable)) | group_by(.kit_sha)) as $groups
@@ -1832,6 +1840,15 @@ kaizen_series() {
     # session that provoked it; that is why `blocked` was in the clause to begin with.
     def is_escalation: .event == "blocked" or .event == "degraded";
 
+    # ONE definition of the kit_sha axis for this program too — the third hand-written copy of the
+    # same question lived here, as the complementary pair `.kit_dirty == true or .kit_sha == null`
+    # / `.kit_dirty != true and .kit_sha != null`. Same words as cmd_autonomy on purpose: the judge
+    # and the window the human reads take the SAME file, so a row one of them attributes to a
+    # version and the other does not is the divergence the ledger exists to prevent, merely moved
+    # from inside one command to between two. (No apostrophes in here: this jq program is a
+    # single-quoted shell string, and one would end it mid-comment.)
+    def on_axis: .kit_dirty == false and .kit_sha != null;
+
     def phase_label:
       if (map(select(is_escalation)) | length) > 0
          or (map(select(.event == "session" and .invocation == "retry")) | length) > 0
@@ -1867,8 +1884,8 @@ kaizen_series() {
     | ($all | map(select(.phase == "KAIZEN"))) as $meta
     | ($all | map(select(.phase != "KAIZEN"))) as $rows
     | (($raw | length) - ($all | length)) as $unrec
-    | ($rows | map(select(.kit_dirty == true or .kit_sha == null))) as $noncomp
-    | ($rows | map(select(.kit_dirty != true and .kit_sha != null))) as $ok
+    | ($rows | map(select(on_axis | not))) as $noncomp
+    | ($rows | map(select(on_axis))) as $ok
     | ($ok | map(.kit_sha) | reduce .[] as $s ([]; if index($s) then . else . + [$s] end)) as $shas
     | (if ($shas | length) >= 1 then ($ok | map(select(.kit_sha == $shas[-1])) | group_summary) else null end) as $latest
     | (if ($shas | length) >= 2 then ($ok | map(select(.kit_sha == $shas[-2])) | group_summary) else null end) as $previous

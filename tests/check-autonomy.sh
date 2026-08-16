@@ -569,6 +569,72 @@ reader_esc="$(awk -v sha="$latest_sha" '$1 == sha && $3 ~ /^[0-9]+$/ { print $2,
 assert_eq "the human reader and the judge count the latest version's escalations alike" \
   "$series_esc" "$reader_esc"
 
+# --- one test of comparability, not three that agree by luck -----------------
+# "Can this row be attributed to a kit version?" was asked in three places with two different sets
+# of words: `.kit_dirty == false` in the session table, `.kit_dirty != true` in the escalation
+# table, and `.kit_dirty != true` again inside `kaizen_series`. On every row the runner writes the
+# spellings agree — the stamp emits `kit_dirty:null` only together with `kit_sha:null`, and a null
+# sha already fails all three — which is precisely why they could sit there disagreeing unseen.
+# `kit_dirty:null` WITH a sha filled (a hand edit, a partial write, a future stamp that learns the
+# sha before the dirtiness) is the one input that separates them, and on it the human's own table
+# counted an escalation under a version while refusing the session standing right next to it.
+#
+# The assertions below are DIFFERENTIAL on purpose: the readers are compared TO EACH OTHER over
+# twin rows, never to a constant, so no fixture regime satisfies them by accident and whichever
+# side is "improved" alone is the side that fails. The known-clean control is what stops a reader
+# that excludes everything from passing them all.
+echo "== reader: the three comparability tests are one =="
+
+# How many lines each reader printed for one version. The session line ends in "US$ <n>"; the
+# escalation line is "<sha>  <kind>: <n>" — the numeric tail keeps the two patterns disjoint.
+axis_sessions()    { grep -cE "^  $2  [0-9]+ session\(s\)" <<< "$1"; }
+axis_escalations() { grep -cE "^  $2  [A-Za-z][A-Za-z0-9_-]*: [0-9]+$" <<< "$1"; }
+
+mkdir -p "$OUTSIDE/axisnull" "$OUTSIDE/axisclean"
+# Twin rows — one session, one escalation, same version, dirtiness UNKNOWN.
+cat > "$OUTSIDE/axisnull/autonomy-log.jsonl" <<'EOF'
+{"v":1,"ts":"2026-08-15T10:00:00-03:00","event":"session","run_id":"r1","invocation":"run","kit_sha":"ccccccc","kit_dirty":null,"project":"p1","repo":"/p1","mission":"m1","phase":"EXEC","step":"EXEC","agent":"sdd-executor","model":"opus","attempt":1,"auto_retry":false,"session":"s1","rc":0,"dur_s":10,"cost_usd":1.0,"moved":true,"gate":"pass","gate_why":"x"}
+{"v":1,"ts":"2026-08-15T10:01:00-03:00","event":"blocked","kind":"no-progress","run_id":"r1","invocation":"run","kit_sha":"ccccccc","kit_dirty":null,"project":"p1","repo":"/p1","mission":"m1","phase":"EXEC","gate_why":"x"}
+EOF
+# The same twins with the dirtiness KNOWN-clean: the control that keeps the agreement above from
+# being satisfied by a reader which simply drops everything.
+cat > "$OUTSIDE/axisclean/autonomy-log.jsonl" <<'EOF'
+{"v":1,"ts":"2026-08-15T10:00:00-03:00","event":"session","run_id":"r1","invocation":"run","kit_sha":"ccccccc","kit_dirty":false,"project":"p1","repo":"/p1","mission":"m1","phase":"EXEC","step":"EXEC","agent":"sdd-executor","model":"opus","attempt":1,"auto_retry":false,"session":"s1","rc":0,"dur_s":10,"cost_usd":1.0,"moved":true,"gate":"pass","gate_why":"x"}
+{"v":1,"ts":"2026-08-15T10:01:00-03:00","event":"blocked","kind":"no-progress","run_id":"r1","invocation":"run","kit_sha":"ccccccc","kit_dirty":false,"project":"p1","repo":"/p1","mission":"m1","phase":"EXEC","gate_why":"x"}
+EOF
+out_null="$( SDD_STATE_DIR="$OUTSIDE/axisnull" "$SDD" autonomy 2>&1 )"
+out_clean="$( SDD_STATE_DIR="$OUTSIDE/axisclean" "$SDD" autonomy 2>&1 )"
+
+assert_eq "unknown dirtiness: the session table and the escalation table give the same verdict" \
+  "$(axis_sessions "$out_null" ccccccc)" "$(axis_escalations "$out_null" ccccccc)"
+assert_eq "known-clean: the two tables give the same verdict there too" \
+  "$(axis_sessions "$out_clean" ccccccc)" "$(axis_escalations "$out_clean" ccccccc)"
+# ...and they do not agree merely by both being empty: the control has to COUNT its twins.
+assert_eq "the control is not vacuous — a known-clean pair is counted by both readers" \
+  "1 1" "$(axis_sessions "$out_clean" ccccccc) $(axis_escalations "$out_clean" ccccccc)"
+# Direction, not just agreement: unknown is never read as clean. A row nobody can attribute to a
+# version is excluded OUT LOUD, the same refusal the dirty kit and the null sha already get.
+assert_eq "unknown dirtiness is non-comparable, never assumed clean" "1" \
+  "$(grep -c '2 non-comparable' <<< "$out_null")"
+assert_bucket_sum "the four buckets sum to the header total (unknown dirtiness)" "$out_null"
+assert_bucket_sum "the four buckets sum to the header total (known-clean twins)" "$out_clean"
+
+# The judge reads the SAME file through its own jq program, where the predicate was spelled a third
+# time. Fixing only `sdd autonomy` would not remove the divergence — it would move it from inside
+# one command to between two commands, which is the harder one to notice.
+series_null="$( SDD_STATE_DIR="$OUTSIDE/axisnull" "$SDD" kaizen --series 2>/dev/null )"
+# The `:-0` matters: the reader PRINTS NO LINE when it excludes nothing, so num_before gives "" and
+# jq gives "0". Left raw, this assertion would go red on a reader that excludes nothing — red for a
+# formatting difference instead of for the divergence it exists to measure, and the direction
+# assertion above would stop being the thing that catches that case.
+human_noncomp="$(num_before "$out_null" 'non-comparable')"; human_noncomp="${human_noncomp:-0}"
+assert_eq "the judge excludes exactly the rows the human's reader excludes" \
+  "$human_noncomp" "$(jq -r '.excluded.non_comparable' <<< "$series_null")"
+series_clean="$( SDD_STATE_DIR="$OUTSIDE/axisclean" "$SDD" kaizen --series 2>/dev/null )"
+assert_eq "and admits exactly the ones it admits — the control again, so neither side can just refuse everything" \
+  "0 ccccccc" \
+  "$(jq -r '.excluded.non_comparable' <<< "$series_clean") $(jq -r '.latest.kit_sha' <<< "$series_clean")"
+
 # A row with no `event` at all, or an event nobody recognizes yet: the reviewer's exact repro. It
 # must be counted, not merely fail to crash.
 echo "== reader: unrecognized row =="

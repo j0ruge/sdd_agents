@@ -45,6 +45,14 @@ Achados sobre **repos-alvo** vão para o `TODO.md` daquele repo. Este arquivo é
   reprovar guarda de `SDD_MUTANT` em arquivo que invoca `bin/sdd`.
   — descoberto por `sdd-executor` na missão `20260816-runner-sem-dividas` (2026-08-16)
 
+- [ ] **`check-autonomy.sh` é vermelho intermitente por colisão de nome de log** — `bin/sdd:935` —
+  o log de fase é `<FASE>-$(date +%Y%m%d-%H%M%S).json`, resolução de **1 segundo**, e o repo-fixture
+  do teste versiona `.sdd/logs/` (o `git add -A` do stub o commita; só `sdd install` põe o caminho
+  no `.gitignore`). Duas fases no mesmo segundo — trivial com stub — reescrevem arquivo rastreado e
+  a asserção final "clean tree" reprova sem relação com o que se mediu. Reproduzido 2× em ~15 runs.
+  Direção: `%N` no nome, ou o fixture ignorar `.sdd/logs/`.
+  — descoberto por `sdd-executor` na missão `20260816-runner-sem-dividas` (2026-08-16)
+
 - [ ] **`grep -m<N>` é a mesma corrida do `grep -q`, e nenhum sensor a vê** —
   `tests/check-dry-run.sh:202` — `-m1` também sai no primeiro casamento e mata o escritor com
   SIGPIPE, então sob `pipefail` o pipeline devolve 141 igual. A ocorrência de hoje é inofensiva
@@ -241,13 +249,6 @@ Achados sobre **repos-alvo** vão para o `TODO.md` daquele repo. Este arquivo é
   metade de **registro** (uma linha por `run_id`); o que sobra é o giro REVIEW→PR→REVIEW até o
   `no-progress` do PR encerrar — medido: ramo entrado 3×, `warn` 3×, ledger 1×. — descoberto por
   `sdd-executor`, estreitado por `sdd-qa` na missão `20260815-ledger-sem-ponto-cego` (2026-08-16)
-
-- [ ] **Duas definições de comparabilidade dentro do mesmo `jq`** — `bin/sdd:1715`
-  (`comparable`, sessões: `.kit_dirty == false`) contra `:1722` (`on_axis`, escaladas:
-  `.kit_dirty != true`) — hoje não diverge porque `autonomy_kit_stamp` só produz `kit_dirty:
-  null` junto com `kit_sha: null`, e o `on_axis` já reprova pelo sha. Mas são dois testes para a
-  mesma pergunta no mesmo programa — a família que o I3 fechou entre os dois leitores, um nível
-  abaixo. — descoberto por `sdd-executor` na missão `20260815-ledger-sem-ponto-cego` (2026-08-16)
 
 - [ ] **Missão que só produziu escalada conta para `guard.sufficient`** — `bin/sdd:1846` —
   `missions` conta `map(.mission) | unique` sobre **todas** as linhas admitidas, escaladas
