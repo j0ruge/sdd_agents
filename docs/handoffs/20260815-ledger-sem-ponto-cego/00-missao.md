@@ -4,7 +4,7 @@ titulo: o ledger e o Jidoka param de mentir — três pontos cegos fechados ante
 data: 2026-08-15
 versao:
 branch: missao/20260815-ledger-sem-ponto-cego
-aprovacao:
+aprovacao: humano-2026-08-16
 ddd: n/a
 ---
 
@@ -68,9 +68,10 @@ e a versão do kit é justamente o eixo que o ledger existe para medir.
 
 Binária e verificável, três asserções:
 
-1. `tests/run-all.sh` verde com o catálogo de mutação em **26/26** (hoje 23/23, medido nesta
-   sessão), com as três mutações novas provando que cada conserto tem sensor que morre quando
-   sabotado.
+1. `tests/run-all.sh` verde com o catálogo de mutação em **28/28** (hoje 25/25 — régua
+   deslocada +2 pelo review pré-merge do I13.3, ver nota de 2026-08-16 no `checkpoint.md`;
+   re-medido verde em 2026-08-16), com as três mutações novas provando que cada conserto tem
+   sensor que morre quando sabotado.
 2. Um `checkpoint.md` com status `blocked` e corpo **maior que 64 KB** faz o Jidoka disparar
    (`rc 3`); hoje o mesmo fixture é a condição que expõe a corrida do `pipefail`.
 3. Uma degradação `PUBLISH_ON_REVIEW_BLOCKED=draft` produz **exatamente uma** linha nova no
@@ -123,7 +124,7 @@ ela vier preenchida. A tabela abaixo existe para o humano decidir, não para lib
 | # | Item | Status | Nota |
 |---|---|---|---|
 | K1 | Gemba — fui ver onde o trabalho acontece | ✅ | Os três defeitos lidos no `bin/sdd` do `HEAD` `90f9ce9`; série e `~/.sdd/` inspecionados |
-| K2 | Problema declarado com métrica | ✅ | Mutação 23→26, Jidoka com checkpoint >64 KB, 1 linha de ledger na degradação |
+| K2 | Problema declarado com métrica | ✅ | Mutação 25→28, Jidoka com checkpoint >64 KB, 1 linha de ledger na degradação |
 | K3 | Desperdícios identificados e cortados | ✅ | Um item da triagem já estava resolvido no código sem marca no `TODO.md` (`4ec9752`); planejá-lo de novo seria retrabalho. Anotado, não replanejado |
 | K4 | Fatiamento incremental, cada fatia verificável | ✅ | I1/I2/I3 independentes; cada um commita com sua mutação |
 | K5 | Check por artefato (rótulo ≠ artefato) | ✅ | Os três Checks rodam comando e leem saída; nenhum aceita "o agente disse que fez" |

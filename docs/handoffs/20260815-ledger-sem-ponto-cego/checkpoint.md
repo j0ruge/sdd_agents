@@ -42,6 +42,11 @@ atualizado: 2026-08-15 23:40
   missão foi deslocada +2 (Checks agora 26 → 27 → 28) e a linha de baseline do `01-plano.md`
   atualizada de 23 para 25 — o número que a sessão EXEC verá de fato na abertura.
 
+- 2026-08-16 · — · Revisão pré-run: os três defeitos re-conferidos vivos no `bin/sdd` de `main`
+  (`fdf8708`); suíte re-medida verde, `score: 25 caught, 0 known gap(s), of 25` (52,6 s sob
+  carga). Números defasados pela régua +2 corrigidos no `00-missao.md` (métrica 28/28, K2 25→28)
+  e no `01-plano.md` (baseline `of 25`, e2e 25→28). Aprovação: `humano-2026-08-16`.
+
 ## Incrementos de fix (QA)
 
 > Escritos pelo `sdd-qa` quando um bug sanável é reprovado. Entram na mesma tabela acima com ID

@@ -16,7 +16,8 @@ Tudo abaixo foi aberto ou executado na sessão kaizen de 2026-08-15, sobre o `HE
 está citado verbatim.
 
 - **Baseline da suíte:** `./tests/run-all.sh` → `suite green`, `score: 25 caught, 0 known gap(s),
-  of 23`, em **37,4 s** (`time`, default de `SDD_MUTATION_JOBS`). O alvo "<30 s" da D7 do
+  of 25`, em **37,4 s** (`time`, default de `SDD_MUTATION_JOBS`; re-medido verde em 2026-08-16,
+  52,6 s sob carga). O alvo "<30 s" da D7 do
   `CONTEXT.md` **já está estourado antes desta missão** — não é regressão dela.
 - **As duas ocorrências vivas de `printf | grep -q`** — `grep -n "printf.*|.*grep -q" bin/sdd`:
   - `bin/sdd:1084` — `if printf '%s' "$probe" | grep -q 'sdd-preflight-ok'; then`
@@ -200,5 +201,5 @@ Com I1, I2 e I3 `done`:
    em `bin/sdd:1174` pode casar).
 4. `./bin/sdd kaizen --series` → JSON válido; num ledger que contenha uma degradação, a escalada
    aparece no `escalations` do grupo do `kit_sha` e `excluded.unrecognized` continua `0`.
-5. Registrar no `KAIZEN_LOG.md` (fase DOCS) o antes/depois medido: mutação **23 → 26** e o tempo
+5. Registrar no `KAIZEN_LOG.md` (fase DOCS) o antes/depois medido: mutação **25 → 28** e o tempo
    de suíte contra os **37,4 s** desta baseline — sem número não é kaizen, é opinião.
