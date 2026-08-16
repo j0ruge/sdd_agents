@@ -50,7 +50,9 @@ assert_phase() {
 assert_why() {
   local desc="$1" ph="$2" re="$3" got
   got="$( cd "$FIX" && "$SDD" why "$MISSION" "$ph" 2>&1 )"
-  if printf '%s' "$got" | grep -qE "$re"; then pass "$desc"
+  # Herestring, never `printf | grep -q` — see the note on assert_why_absent below, and
+  # tests/check-pipefail.sh, which is what stops the pipe form from coming back.
+  if grep -qE "$re" <<< "$got"; then pass "$desc"
   else fail "$desc" "reason matching /$re/" "$got"; fi
 }
 

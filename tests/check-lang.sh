@@ -116,10 +116,11 @@ files="$(surface)"
 # check would report "0 new" — clean by vacuity. 32 paths today; the floor moves only on purpose,
 # and it moved four times already: tests/check-preflight.sh took it from 24 to 25,
 # tests/check-autonomy.sh from 25 to 26, I13.3 from 26 to 31 (check-kaizen.sh, the two
-# sdd-kaizen.md copies, and the docs/adr/*.md glob with its two ADRs), and check-todo.sh to 32.
+# sdd-kaizen.md copies, and the docs/adr/*.md glob with its two ADRs), check-todo.sh to 32, and
+# check-pipefail.sh to 33.
 n_surface="$(grep -c . <<< "$files")"
-if [ "$n_surface" -lt 32 ]; then
-  printf '  FAIL  surface shrank to %d path(s), expected at least 32 — did something move?\n' \
+if [ "$n_surface" -lt 33 ]; then
+  printf '  FAIL  surface shrank to %d path(s), expected at least 33 — did something move?\n' \
     "$n_surface" >&2
   exit 93
 fi

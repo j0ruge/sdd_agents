@@ -45,6 +45,14 @@ Achados sobre **repos-alvo** vão para o `TODO.md` daquele repo. Este arquivo é
   reprovar guarda de `SDD_MUTANT` em arquivo que invoca `bin/sdd`.
   — descoberto por `sdd-executor` na missão `20260816-runner-sem-dividas` (2026-08-16)
 
+- [ ] **`grep -m<N>` é a mesma corrida do `grep -q`, e nenhum sensor a vê** —
+  `tests/check-dry-run.sh:202` — `-m1` também sai no primeiro casamento e mata o escritor com
+  SIGPIPE, então sob `pipefail` o pipeline devolve 141 igual. A ocorrência de hoje é inofensiva
+  (está no ramo de `fail`, capturada em substituição, não em condição), mas o
+  `tests/check-pipefail.sh` do I5 declara a lacuna em vez de fechá-la. Direção: estender a regex
+  para o par `-m`/`--max-count` e converter as ocorrências no mesmo commit.
+  — descoberto por `sdd-executor` na missão `20260816-runner-sem-dividas` (2026-08-16)
+
 - [ ] **O gate PLAN-AUTO aceita Check que já nasce verde** — `bin/sdd:1901` (critério `d` em
   `templates/missao.md`) — ele cobra "Check executável (comando → esperado)", não "Check que
   reprova o HEAD de hoje". Medido: o Check do I1 desta missão era `grep -c 'gate_DOCS reprova'
@@ -226,14 +234,6 @@ Achados sobre **repos-alvo** vão para o `TODO.md` daquele repo. Este arquivo é
   missão `20260815-i13.5-kit-em-ingles` (2026-08-15)
 
 ### Runner — defeitos e dívidas
-
-- [ ] **A suíte ainda carrega o `printf | grep -q` que o runner perdeu** —
-  `tests/check-gates.sh:53` (`assert_why`) e `tests/check-dry-run.sh:144,163,171,199,251` — sob
-  `pipefail` o pipeline devolve 141 quando o `grep` **acha**, então a asserção reprova exatamente
-  quando deveria aprovar. Não morde porque as saídas são pequenas — que é literalmente o
-  argumento que manteve o defeito do Jidoka vivo por duas missões. Direção: herestring, como o
-  `assert_jidoka` já usa. — descoberto por `sdd-executor` na missão
-  `20260815-ledger-sem-ponto-cego` (2026-08-16)
 
 - [ ] **O `LINT_CMD` olha só o `bin/sdd`; os 2400 linhas de `tests/*.sh` ninguém linta** —
   `tests/run-all.sh:23` + `tests/check-mutation.sh:246` — `shellcheck -S warning tests/` reprova

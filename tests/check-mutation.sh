@@ -122,13 +122,13 @@ mut_EXEC_ignores_TEST_CMD() { # discards the suite's rc — the gate stops measu
 # `- **Started:** <ts> · **Status:** in-progress`, and the gate required `**Status:**` to OPEN the
 # line. It never matched; the runner re-ran qa-execution forever.
 mut_QA_status_line_start() {
-  sed -i "s|.*grep -qE '\^\[\[:space:\]\]\*-\.\*\\\\\*\\\\\*Status.*|  grep -qE '^\\\\*\\\\*Status:\\\\*\\\\*[[:space:]]*closed' \"\$report\"|" "$1"
+  sed -i "s|.*grep -qE '\^\[\[:space:\]\]\*-\.\*\\\\\*\\\\\*Status.*|  grep -qE '^\\\\*\\\\*Status:\\\\*\\\\*[[:space:]]*closed' \"\$report\"|" "$1"  # sdd-pipefail-waiver: sed s|…|…| delimiter, not a pipe
 }
 
 # Loose enum: the `closed` has to come right after `**Status:**`. With `.*closed` the template
 # legend (`<!-- in-progress | closed -->`) matches, and a report still IN PROGRESS passes.
 mut_QA_status_enum_loose() {
-  sed -i "s|.*grep -qE '\^\[\[:space:\]\]\*-\.\*\\\\\*\\\\\*Status.*|  grep -qE '\\\\*\\\\*Status:\\\\*\\\\*.*closed' \"\$report\"|" "$1"
+  sed -i "s|.*grep -qE '\^\[\[:space:\]\]\*-\.\*\\\\\*\\\\\*Status.*|  grep -qE '\\\\*\\\\*Status:\\\\*\\\\*.*closed' \"\$report\"|" "$1"  # sdd-pipefail-waiver: sed s|…|…| delimiter, not a pipe
 }
 
 # Same family, in the bug registry: with `.*open` the legend
@@ -258,7 +258,7 @@ mut_KAIZEN_guard_ignored() {
 # sabotage that a SMALL fixture cannot see: the race is decided by the size of the text, which is
 # why check-gates.sh asserts it on a 20000-row checkpoint.
 mut_RUN_jidoka_pipefail() {
-  sed -i 's@grep -qx "blocked" <<< "$ckstatus"@printf "%s\\n" "$ckstatus" | grep -qx "blocked"@' "$1"
+  sed -i 's@grep -qx "blocked" <<< "$ckstatus"@printf "%s\\n" "$ckstatus" | grep -qx "blocked"@' "$1"  # sdd-pipefail-waiver: this payload IS the bug, deliberately
 }
 
 # Not a gate, and the exact bug I2 closed: `force_phase="PR"; continue` sat ABOVE both writers, so

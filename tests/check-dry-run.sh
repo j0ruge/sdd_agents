@@ -141,7 +141,7 @@ got="$(printf '%s\n' "$out" | projected)"
 assert_eq "projects EXEC→QA→REVIEW→DOCS→PR, in order, each with its agent" "$want" "$got"
 
 # TICKET has its gate satisfied (JIRA_ENABLED=false): a satisfied phase is not in the projection.
-if printf '%s\n' "$out" | grep -q '^--- DRY RUN: phase TICKET ---$'; then
+if grep -q '^--- DRY RUN: phase TICKET ---$' <<< "$out"; then
   fail "a phase with a satisfied gate does not appear in the projection" "no TICKET block" "TICKET block printed"
 else
   pass "a phase with a satisfied gate (TICKET) does not appear in the projection"
@@ -160,7 +160,7 @@ assert_eq "working tree still clean" "" "$(git status --porcelain)"
 echo "== OUTPUT_LANG =="
 # Reuses the projection above: it is the SAME invocation, with the key absent from the fixture
 # config.
-if printf '%s\n' "$out" | grep -q 'pt-BR'; then
+if grep -q 'pt-BR' <<< "$out"; then
   fail "with no OUTPUT_LANG the prompt says nothing about language" "no mention of a language" "pt-BR mentioned"
 else
   pass "with no OUTPUT_LANG the prompt says nothing about language (the state of every installed repo)"
@@ -168,7 +168,7 @@ fi
 
 echo 'OUTPUT_LANG="pt-BR"' >> .sdd/config.sh
 out_lang="$( "$SDD" run "$MISSION" --dry-run 2>&1 )"
-if printf '%s\n' "$out_lang" | grep -q 'pt-BR'; then
+if grep -q 'pt-BR' <<< "$out_lang"; then
   pass "with OUTPUT_LANG the boot prompt carries the requested language"
 else
   fail "with OUTPUT_LANG the boot prompt carries the requested language" \
@@ -196,7 +196,7 @@ assert_eq "a project WITH an interface and no charters starts at QA:plan (qa-rep
   "QA:plan=<none>" "$(printf '%s\n' "$out2" | projected)"
 # The dry-run prints the prompt with the "  │ " prefix, so the anchor includes the first line of
 # the block — that is where the slash has to be to expand headless.
-if printf '%s\n' "$out2" | grep -q '│ /qa-report docs/qa'; then
+if grep -q '│ /qa-report docs/qa' <<< "$out2"; then
   pass "the boot prompt starts with the literal /qa-report slash"
 else
   fail "QA:plan boot" "prompt starting with /qa-report" "$(printf '%s\n' "$out2" | grep -m1 '│' || echo empty)"
@@ -248,7 +248,7 @@ assert_eq "dry-run of a blocked mission escalates with exit 3" "3" "$rc3"
 # breaking the escalation message went unnoticed here (verified by mutation: changing the text of
 # `bad "BLOCKED in EXEC — …"` left this whole file green) — and that message is exactly what
 # answers "what happens if I run this?", the question the dry-run exists to answer.
-if printf '%s\n' "$out3" | grep -q 'BLOCKED in EXEC'; then
+if grep -q 'BLOCKED in EXEC' <<< "$out3"; then
   pass "the projection EXPLAINS the escalation (the 'BLOCKED in EXEC' message)"
 else
   fail "dry-run escalation message" "output containing 'BLOCKED in EXEC'" \
