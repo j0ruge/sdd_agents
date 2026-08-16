@@ -13,10 +13,20 @@ Achados sobre **repos-alvo** vão para o `TODO.md` daquele repo. Este arquivo é
 
 ## Aberto
 
-> Um item cujo corpo traz **RESOLVIDO por `<hash>`** já está fechado: fica nesta seção, com a
-> caixa ainda desmarcada, só até o PR da missão que o fechou ser mergeado — é dali que o PR cita
-> a evidência. Depois do merge ele desce para "Feito". Ler a caixa sem ler o corpo dá falso
-> positivo; o corpo é a fonte da verdade.
+> **Ciclo de vida.** Um item cujo corpo traz **RESOLVIDO por `<hash>`** já está fechado: fica
+> aqui, com a caixa ainda desmarcada, só até o PR da missão que o fechou ser mergeado — é dali
+> que o PR cita a evidência. **Depois do merge ele é apagado**, não arquivado: a memória durável
+> é o `git log -S`, o `KAIZEN_LOG.md` e os handoffs, e cada item já cita o hash que o fecha.
+> Ler a caixa sem ler o corpo dá falso positivo; o corpo é a fonte da verdade.
+>
+> **Uma convenção só.** `- [x]` e `[FEITO em <hash>]` no título **não** existem mais neste
+> arquivo — fechado é apagado, e caixa marcada era invisível para a triagem do kaizen, que
+> procura `RESOLVIDO por`. Apagar prova por artefato: `git merge-base --is-ancestor <hash> main`
+> antes de remover, nunca o rótulo do PR.
+>
+> **Teto de tamanho.** Um item cabe em ~6 linhas: o quê + `arquivo:linha` + por que importa +
+> direção + quem descobriu. A análise longa mora no handoff da missão citada. `tests/check-todo.sh`
+> mede a forma e o teto.
 
 - [ ] **BLOQUEANTE — a sessão de fase headless não tem permissão para rodar `TEST_CMD`** —
   `bin/sdd:491-499` — `run_phase()` invoca `claude -p … --permission-mode "$PERMISSION_MODE"`
@@ -38,57 +48,6 @@ Achados sobre **repos-alvo** vão para o `TODO.md` daquele repo. Este arquivo é
   `tests/run-all.sh`, viu o Red, viu o Green e commitou. Deixa de ser BLOQUEANTE. **Continua
   aberto pelo que falta: o sensor durável.** Não há nada que impeça a regressão silenciosa —
   o `sdd preflight` ainda não afirma que uma sessão headless de fato executa `TEST_CMD`.
-- [ ] Incremento `blocked` no checkpoint deveria escalar na hora, não gastar o orçamento de
-  sessões — `bin/sdd:276` + `bin/sdd:830-844` — `gate_EXEC` já sabe dizer "Jidoka: a linha para",
-  mas `cmd_run` só distingue gate-insatisfeito de gate-insatisfeito-e-sem-progresso; como a
-  sessão que marca `blocked` mexe no `checkpoint.md`, o `state_fingerprint` muda e o runner
-  entende "a sessão avançou — seguindo", rebootando EXEC até estourar `phase_budget` (aqui,
-  4 sessões). `blocked` é decisão deliberada de parar a linha: deveria dar `return 3` imediato.
-  — descoberto por `sdd-executor` na missão `20260814-dry-run-completo` (2026-08-14)
-  **RESOLVIDO por `2083680`**: `cmd_run` passou a checar o checkpoint por `blocked` **antes** de
-  gastar sessão e escalar na hora com `return 3` — exatamente o `return 3` imediato que este item
-  pedia. Endurecido depois por `1807d75`: o teste usava `… | grep -qx`, que sob `pipefail` devolve
-  **141** quando o `grep` fecha o pipe cedo, e o runner leria "não há blocked" **havendo** blocked
-  — um Jidoka que dependia de corrida. O status sai para uma variável antes do `grep`. Documentado
-  em `docs/failure-modes.md` ("Incremento `blocked`") e `docs/pipeline.md` (gate EXEC, Jidoka).
-  — `sdd-docs`, mesma missão (2026-08-14)
-- [ ] **`gate_QA` com `status: done` é insatisfazível em projeto sem interface** — `bin/sdd:303`
-  + `bin/sdd:444` — `qa_substep` manda projeto sem `E2E_CMD`/`APP_URL` direto para `QA:close`,
-  pulando as skills `qa-report`/`qa-execution` que são as donas de `docs/qa/` — logo a árvore
-  nunca existe. Mas `gate_QA`, quando o status **não** é `skipped`, exige a Âncora 1: um
-  relatório datado em `$QA_DOCS_PATH/reports/` marcado `closed`. Resultado: num projeto sem
-  browser mas **com** mudança user-visible (o kit é o próprio caso — a jornada é `sdd` no
-  terminal), o `sdd-qa` não tem status que seja ao mesmo tempo honesto e satisfazível:
-  `skipped` mente (o diff chega ao usuário e a QA achou bug de verdade andando a jornada),
-  `done` bate na Âncora 1 e reprova para sempre, `blocked` reprova por definição. A QA roda,
-  encontra defeito real, e mesmo assim não consegue fechar o gate. Direção possível (é **decisão
-  de contrato**, não conserto mecânico — por isso não virou incremento de fix): quando
-  `qa_substep` = `close` por ausência de interface, `gate_QA` aceitar como Âncora 1 alternativa
-  o próprio `30-handoff-qa.md` com `status: done` + campo `gate:` preenchido, já que ali está a
-  evidência da jornada andada. Sensor durável junto: caso em `tests/check-gates.sh` afirmando
-  que um projeto sem interface, com handoff `done`, passa no `gate_QA`. — descoberto por
-  `sdd-qa` na missão `20260814-dry-run-completo` (2026-08-14)
-  **RESOLVIDO por `53cf63a`** (decisão humana, exatamente a direção sugerida): sem `E2E_CMD` e
-  sem `APP_URL`, a âncora passa a ser o campo `gate:` do próprio handoff. O sensor pedido veio
-  junto — `tests/check-gates.sh` testa o `gate_QA` nos **dois** contratos. Verificado andando a
-  jornada na volta 2 da QA: `sdd why <m> QA` → `jornada andada sem interface de browser
-  (evidência no handoff), suíte verde`. — `sdd-qa`, mesma missão (2026-08-14)
-- [ ] `sdd install` não ignora o `pipeline.log` das missões — `bin/sdd:706-712` — o install só
-  acrescenta `.sdd/logs/` ao `.gitignore` do alvo. O `pipeline_log_line` (`bin/sdd:557`) escreve
-  em `$HANDOFF_DIR/<missão>/pipeline.log`, que fica **untracked** em qualquer repo-alvo recém
-  instalado e suja o `git status`. Tree sujo reprova `gate_REVIEW` (`bin/sdd:361`) e o
-  `sdd preflight` (`bin/sdd:814`) — ou seja, o próprio diário do runner pode derrubar o gate de
-  outra fase. Este repo não sente porque o `.gitignore` dele ganhou `*.log` à mão, fora do
-  install; o piloto `sales_quote` vai sentir. Decidir se o `pipeline.log` é efêmero (entra no
-  ignore do install) ou durável (é commitado como os handoffs) — hoje ele é as duas coisas
-  dependendo do repo. — descoberto por `sdd-qa` na missão `20260814-dry-run-completo` (2026-08-14)
-  **RESOLVIDO por `53cf63a`**: decidido **efêmero**. `PIPELINE_LOG` passou a ser
-  `$(log_dir)/pipeline.log` = `.sdd/logs/<missão>/`, que o `sdd install` já ignora; o registro
-  durável do que aconteceu continua sendo os handoffs commitados. A volta 2 da QA andou o
-  caminho real e confirmou: o diário cai em `.sdd/logs/<missão>/pipeline.log`, `git status`
-  fica limpo e não sobra nada em `docs/handoffs/`. Agora com sensor
-  (`tests/check-dry-run.sh`, seção "o caminho real (não-dry) ainda escreve no diário"), que
-  falha se o diário voltar para a árvore commitada. — `sdd-qa`, mesma missão (2026-08-14)
 - [ ] A asserção "dry-run não toca no disco" é mais fraca do que parece —
   `tests/check-dry-run.sh:116` — ela vale sobre um fixture parado em EXEC, cujo `gate_EXEC`
   reprova por incremento pendente **antes** de chegar a rodar `TEST_CMD`. Num fixture que
@@ -104,28 +63,6 @@ Achados sobre **repos-alvo** vão para o `TODO.md` daquele repo. Este arquivo é
   cria `.sdd/logs/<missão>/gate-exec-test-<ts>.log` a cada invocação. A árvore de arquivos
   **muda**; o `git status` não, porque é gitignored. Segue não sendo bug (é o `TEST_CMD` que os
   gates rodam de propósito), mas a asserção continua prometendo mais do que entrega.
-- [ ] **`gate_EXEC` aceita commit órfão: `git cat-file -e` não é "está no `git log`"** —
-  `bin/sdd:270` — o gate afirma cobrar "hash real no `git log`" (é o `rótulo não é artefato` do
-  incremento `done`), mas verifica com `git cat-file -e "${commit}^{commit}"`, que só pergunta se
-  o **objeto existe no banco** — não se ele está alcançável a partir da branch. Depois de um
-  `git commit --amend`, `rebase` ou `reset`, o hash antigo continua no object database (dangling,
-  vivo até o `gc`), então um `checkpoint.md` que cite o hash pré-amend **passa no gate apontando
-  para um commit que não está na história**. Verificado nesta sessão sem querer: amendei o próprio
-  commit da QA, o handoff ficou citando `d161282`, e `git cat-file -e d161282^{commit}` → 0
-  enquanto `git merge-base --is-ancestor d161282 HEAD` → 1 e `git log` não o lista. O modo de
-  falha é silencioso e exatamente do tipo que o kit existe para impedir: o artefato citado some,
-  o gate continua verde. Direção: trocar por `git merge-base --is-ancestor "$commit" HEAD` (ou
-  `git rev-list HEAD | grep -q`), que responde a pergunta que o gate realmente quer fazer. Sensor
-  durável junto: caso em `tests/check-gates.sh` com um checkpoint citando commit órfão, afirmando
-  que `gate_EXEC` **reprova**. — descoberto por `sdd-qa` na missão `20260814-dry-run-completo`
-  (2026-08-14)
-  **RESOLVIDO por `4ec9752`** — exatamente a direção sugerida: `bin/sdd:293` passou a cobrar
-  `git merge-base --is-ancestor "$commit" HEAD`, com o `git cat-file -e` de `bin/sdd:284` mantido
-  antes dele para separar "objeto não existe" de "existe mas não é alcançável". O sensor pedido
-  veio junto e está no catálogo: `mut_EXEC_orphan_commit` (`tests/check-mutation.sh:53`) reverte a
-  checagem e a suíte morre. **A entrada ficou aberta sem marca até hoje** — encontrada pela triagem
-  do laço kaizen conferindo o corpo contra o código, não contra a caixa. Planejá-la de novo teria
-  sido retrabalho. — `sdd-kaizen` na missão `20260815-ledger-sem-ponto-cego` (2026-08-15)
 - [ ] **Nenhum gate confere se a missão ainda está na branch que ela declarou** — `bin/sdd`
   (todos os `gate_*`) + `templates/missao.md` (campo `branch:`) — o `00-missao.md` declara a
   branch e **ninguém mais olha para esse campo**. Medido no piloto SQ-97: entre `QA:plan` e
@@ -146,32 +83,6 @@ Achados sobre **repos-alvo** vão para o `TODO.md` daquele repo. Este arquivo é
   ⚠️ Relacionado: o campo `branch:` do `00-missao.md` é preenchido pela fase TICKET **depois** do
   planejamento — o check tem que tolerar o valor `<criada pela fase TICKET>` antes disso.
   — descoberto por `sdd-publisher` e por `humano` no piloto SQ-97 (2026-08-14)
-
-- [x] **[I1 — FEITO em 3521b9a] `printf | grep -q` com `pipefail` inverte a lógica em silêncio — duas ocorrências vivas** —
-  `bin/sdd:838` (probe do `sdd preflight`) e `bin/sdd:1229` (escalação Jidoka do `blocked`) —
-  o arquivo roda com `set -o pipefail`. Quando o `grep -q` **acha**, ele sai imediatamente e
-  fecha o pipe; o `printf` que ainda escrevia morre de SIGPIPE (141), e o `pipefail` faz o
-  pipeline inteiro devolver 141. Ou seja: **achou → devolve erro**. Medido nesta missão com o
-  mesmo idioma escrito por engano no `cmd_health`, e reproduzido isoladamente:
-  `printf '%s' "$(cat bin/sdd)" | grep -qE '\bTEST_CMD\b'` → `rc=141`, enquanto
-  `grep -qE '\bTEST_CMD\b' <<< "$corpo"` → `rc=0`.
-
-  **Por que não morde hoje:** as duas entradas são pequenas (a saída do probe e as poucas
-  linhas de `ckstatus`), e o `printf` termina de escrever antes de o `grep` sair — o buffer do
-  pipe (64 KB) absorve tudo. A falha depende do TAMANHO da entrada, então passa nos testes e
-  aparece no repo-alvo grande. A 1229 é a pior das duas: é o Jidoka que escala incremento
-  `blocked` **antes** de gastar sessão; com um `checkpoint.md` grande o suficiente, ele
-  simplesmente para de disparar, e a linha não para quando devia. Direção: herestring
-  (`grep -qx "blocked" <<< "$ckstatus"`), que é o que o `cmd_health` já usa, e uma asserção com
-  checkpoint grande. **Pré-existente — não corrigido aqui de propósito:** é mudança de
-  comportamento em caminho de escalação, fora do escopo do I13.2, que era ferramenta de medição.
-  A convenção já entrou no `CLAUDE.md`. — descoberto por `humano` na missão
-  `20260814-i13.2-mutacao-health` (2026-08-14)
-
-  **Fechado no I1 (`3521b9a`)** com as duas ocorrências em herestring, a asserção de checkpoint
-  grande em `check-gates.sh` e a mutação `RUN_jidoka_pipefail`. O que o conserto ensinou e a
-  entrada não previa: o "quase nunca" era pior do que parecia — a partir de ~5000 linhas de
-  `ckstatus` o Jidoka silencia **sempre**, não raramente.
 
 - [ ] **A suíte ainda carrega o `printf | grep -q` que o runner acabou de perder** —
   `tests/check-gates.sh:53` (`assert_why`) e `tests/check-dry-run.sh:144,163,171,199,251` — mesma
@@ -211,45 +122,6 @@ Achados sobre **repos-alvo** vão para o `TODO.md` daquele repo. Este arquivo é
   `mut_HEALTH_*` (catraca que não reprova achado novo, proveniência que passa com skill
   ausente, contagem de gates sem piso) e um fixture de kit sabotado para o health julgar.
   — descoberto por `humano` na missão `20260814-i13.2-mutacao-health` (2026-08-14)
-- [x] **[I13.2 — FEITO em 935ec39] Teste de mutação: a suíte verde não prova que os gates funcionam** —
-  **Fechado:** `tests/check-mutation.sh` sabota o `bin/sdd` numa cópia com 15 mutações — uma
-  por gate, as três da tabela abaixo e a do diário invertido — e exige a suíte vermelha em
-  cada uma. Score **15/15**. `sdd health` reprova abaixo de 100% e cobra mutação por gate.
-  As duas lacunas que o catálogo revelou foram fechadas com asserção nova (`TEST_CMD`
-  vermelho) e fixture verbatim (legenda do enum do registry de bugs). Suíte: 3,7s → 12,2s.
-  Registro completo no `KAIZEN_LOG.md`.
-  Detalhe histórico preservado abaixo —
-  `tests/check-mutation.sh` (novo) + `sdd health` — **evidência acumulada: três bugs de gate da
-  MESMA família, todos passando pela suíte verde, todos só descobertos em uso real, cada um
-  custando sessão paga:**
-
-  | # | Bug | Como apareceu | Custo |
-  |---|---|---|---|
-  | 1 | `gate_QA` exigia `**Status:**` no início da linha; o template da skill põe `- **Started:** … · **Status:** …` | relatório nunca casava; runner re-rodou `qa-execution` | ~US$ 15/volta |
-  | 2 | A mesma âncora vivia **duplicada** em `gate_QA` e `qa_substep`; corrigi uma e a outra divergiu | gate aceitava, sub-passo mandava re-executar | ~US$ 15/volta |
-  | 3 | `gate_REVIEW` parava a leitura só em `###`; a seção seguinte real é `##`, então engolia as tabelas posteriores | reprovou relatório com 8 critérios A alegando `Commit = O que` | ~US$ 10 |
-
-  O padrão: **toda âncora de formato de skill de terceiro falhou, e nenhuma falhou na suíte.**
-  Os fixtures testavam o formato que eu *imaginei*, não o que a skill *emite* — e um fixture
-  errado passa verde para sempre. Mutação é o único sensor que pega esta classe: sabotar o gate
-  e exigir que a suíte fique vermelha prova que a asserção mede alguma coisa.
-  Direção: catálogo de mutações conhecidas em `bin/sdd` (uma por gate, no mínimo), score =
-  pegas/aplicadas, e `sdd health` reprovando abaixo de 100%. Complemento obrigatório: os fixtures
-  passam a usar o formato **copiado da skill**, não escrito de memória.
-  — descoberto por `sdd-qa` e por `humano` nas missões `20260814-dry-run-completo` e
-  `20260814-sq94-spinner-reblur` (2026-08-14)
-- [x] **[FEITO em 935ec39] A suíte não tem teste de mutação, e por isso não percebe asserção que virou decoração** —
-  `tests/` — quando `53cf63a` moveu o `pipeline.log` para `.sdd/logs/`, a asserção
-  `projeção blocked não cria pipeline.log` continuou apontando para `$MDIR/pipeline.log`, um
-  caminho onde o runner **não escreve mais em nenhuma circunstância**. Ela seguiu imprimindo
-  `ok` — mas por vacuidade: com o bug do F1 reintroduzido à mão, continuava verde. Nenhum sinal
-  na suíte, porque uma asserção que não pode falhar não se distingue de uma que passa. Só
-  apareceu porque a QA rodou mutação à mão. Foi corrigida, mas a **classe** do problema continua:
-  qualquer refactor que mude um caminho pode esvaziar um sensor em silêncio. Direção: um
-  `tests/check-mutation.sh` que aplique um punhado de mutações conhecidas em `bin/sdd` e afirme
-  que a suíte fica **vermelha** em cada uma — sensor do sensor (se a suíte não morre quando o
-  código é sabotado, ela não está medindo nada). — descoberto por `sdd-qa` na missão
-  `20260814-dry-run-completo` (2026-08-14)
 - [ ] **`config/schema.md` promete cinco comportamentos que o runner não tem** —
   `config/schema.md:24-25,32-34` vs `bin/sdd:81-82` — `LINT_CMD` e `BUILD_CMD` estão
   documentados como "roda no gate de REVIEW quando definido", e `DEV_UP_CMD`/`DEV_READY_CMD`/
@@ -307,36 +179,6 @@ Achados sobre **repos-alvo** vão para o `TODO.md` daquele repo. Este arquivo é
   `tests/check-gates.sh` com um `45-docs.md` completo que cita o arquivo de achados, afirmando
   que `gate_DOCS` **passa**. — descoberto por `sdd-docs` na missão `20260814-dry-run-completo`
   (2026-08-14)
-- [ ] **O `## Uso` do README documenta metade da superfície do CLI** — `README.md:42-48` vs
-  `bin/sdd:1085-1096` — o bloco lista `run`, `status`, `retry`, `close` e `--dry-run`. Ficam de
-  fora, existindo e funcionando: `sdd why <missão> [FASE]` (o comando que o próprio
-  `docs/failure-modes.md:5` manda rodar **primeiro** em qualquer diagnóstico), `sdd phase`,
-  `--phase <FASE>` e `--max-phases <N>`. Quem lê só o README não descobre a ferramenta de
-  diagnóstico que o resto da documentação pressupõe. **Pré-existente** — os quatro já estavam em
-  `main`, nenhum foi introduzido por esta missão; por isso registrado e não corrigido aqui.
-  Direção: uma linha por comando no bloco `## Uso`, mantendo a profundidade em `docs/pipeline.md`
-  (o README roteia, não aprofunda). — descoberto por `sdd-docs` na missão
-  `20260814-dry-run-completo` (2026-08-14)
-  **RESOLVIDO por `be63c8b`**: os quatro entraram (`sdd why`, `sdd phase`, `--phase`,
-  `--max-phases`), exatamente na direção sugerida — uma linha cada, profundidade nos docs. Fechou
-  de carona no I13.5.6: o bloco estava sendo reescrito para inglês de qualquer forma, e reescrevê-lo
-  duas vezes (uma para traduzir, outra para completar) seria o retrabalho que o kaizen chama de
-  desperdício. — `humano` na missão `20260815-i13.5-kit-em-ingles` (2026-08-15)
-- [ ] **`sdd preflight` gasta uma sessão paga e o README não avisa** — `README.md:35` vs
-  `bin/sdd:768-774` — o README apresenta o preflight como "sensor de ambiente: claude, gh,
-  agent-browser, plugins, tree limpo", que soa como checagem local e barata. Ele dispara um
-  `claude -p` real (teto `--max-budget-usd 1`) para provar que a sessão headless **consegue
-  executar** um comando — que é justamente o que o torna valioso, e o que o torna pago. Quem roda
-  preflight em laço (CI, script de bootstrap) paga sem saber. `docs/pipeline.md` (Permissões) e
-  `docs/failure-modes.md` descrevem o probe corretamente; o buraco é só no índice. Pré-existente:
-  o probe já estava em `main`. Direção: meia linha no README (`sdd preflight # …; dispara uma
-  sessão real, custa ≤ US$ 1`). — descoberto por `sdd-docs` na missão
-  `20260814-dry-run-completo` (2026-08-14)
-  **RESOLVIDO por `be63c8b`**: virou um aviso de três linhas logo abaixo do bloco de instalação,
-  dizendo o que o probe prova, quanto custa e para não rodar em laço. Ficou maior que a meia linha
-  sugerida de propósito — o que torna o preflight caro é justamente o que o torna valioso, e essa
-  parte precisava caber na mesma frase. — `humano` na missão `20260815-i13.5-kit-em-ingles`
-  (2026-08-15)
 - [ ] **O kit não tem `CHANGELOG.md`, e a fase DOCS cobra um** — `agents/sdd-docs.md` (tabela "O
   que atualizar") manda atualizar o `CHANGELOG.md` "quando a missão entrega algo visível ao
   usuário". Este repo não tem esse arquivo: o registro durável é `KAIZEN_LOG.md` (melhoria com
@@ -371,28 +213,6 @@ Achados sobre **repos-alvo** vão para o `TODO.md` daquele repo. Este arquivo é
   disponível e hoje **não usada** pelo runner, para um repo-alvo maior que estoure. — descoberto
   por `humano` no piloto SQ-97 (2026-08-14)
 
-- [ ] **O kit fala PT-BR na prosa, e isso o tranca a um idioma** — `agents/*.md`, `bin/sdd`
-  (mensagens e comentários), `docs/`, `README.md` — o **contrato** já é inglês (`pending`, `doing`,
-  `done`, `blocked`, `auto`, `skipped`, todas as chaves de config); o que está em PT-BR é a prosa.
-  Para o kit ser usável por quem não fala português, a forma certa **não** é traduzir tudo e
-  perder os artefatos em PT-BR: é **o kit falar inglês e o idioma de saída virar config**
-  (`OUTPUT_LANG` no `.sdd/config.sh`), de modo que os agentes escrevam handoffs, commits e PR no
-  idioma do repo-alvo. Sensor: nenhuma string PT-BR fora de `templates/` e `config/examples/`.
-  Zero mudança de comportamento. ⚠️ **Dívida de tradução**: todo incremento escrito antes disto
-  precisa ser re-traduzido depois — por isso a ordem importa mais que o tamanho. — decidido por
-  `humano` em 2026-08-14
-  **RESOLVIDO por `be63c8b`** (I13.5, 6 commits): a superfície do kit — `bin/sdd`, os 6 agentes
-  (mais as cópias em `.claude/agents/`), `docs/`, `README.md`, `config/schema.md`,
-  `config/starter.conf` e `tests/` — passou de **1.517 linhas acentuadas em 24 arquivos para 0**.
-  `OUTPUT_LANG` entrou em `load_config()` e no `boot_prompt()` com default **vazio**, então repo
-  já instalado produz prompt byte a byte igual ao de antes; a mutação 16 (`RUN_ignores_output_lang`)
-  prova que o runner não engole o pedido em silêncio. O sensor pedido virou `tests/check-lang.sh`
-  com catraca bidirecional, e o escopo dele ficou mais estreito do que esta entrada supunha (ver
-  as duas entradas novas abaixo): `templates/`, `config/examples/`, `TODO.md`, `KAIZEN_LOG.md`,
-  `CLAUDE.md` e `docs/handoffs/` são **conteúdo em `OUTPUT_LANG`**, não superfície — este repo
-  declara `pt-BR` e por isso eles continuam em português por decisão, não por dívida.
-  — `humano` na missão `20260815-i13.5-kit-em-ingles` (2026-08-15)
-
 - [ ] **O contrato de artefato ainda é PT-BR em cinco pontos** — `bin/sdd` (as chamadas de
   `frontmatter`), `templates/missao.md`, `agents/*.md`, `tests/` — o I13.5 traduziu a superfície,
   mas sobraram 3 chaves de frontmatter (`aprovacao`, `versao`, `titulo` — 45 referências) e 2 nomes
@@ -420,36 +240,6 @@ Achados sobre **repos-alvo** vão para o `TODO.md` daquele repo. Este arquivo é
   com estrutura inglesa e prosa-guia curta que o agente reescreve em `OUTPUT_LANG` — a segunda
   opção mexe no contrato que `check-templates.sh` mede, então vem depois da entrada acima.
   — descoberto por `humano` na missão `20260815-i13.5-kit-em-ingles` (2026-08-15)
-
-- [ ] **O `bin/sdd` promete macOS na mensagem de erro e não roda lá** — `bin/sdd:18-21` vs
-  `state_fingerprint()` e `pipeline_log_line()` — a checagem de versão diz *"On macOS: brew install
-  bash"*, o que promete que resolvido o bash o kit roda. Não roda: o runner usa `md5sum` (3
-  ocorrências) e `date -Iseconds` (5), que **não existem** no macOS de fábrica (é `md5` e o `date`
-  do BSD não tem `-I`). A suíte é pior — `sed -i` sem argumento aparece **43 vezes**, forma que o
-  `sed` do BSD rejeita, e o `tests/check-lang.sh` acrescentou 1 `grep -P` (PCRE, ausente no `grep`
-  do BSD). **Pré-existente, e a nova dependência não muda a classe**: o kit já era GNU-only antes
-  do I13.5 (41 `sed -i`, 3 `md5sum`, 5 `date -Iseconds` em `origin/main`). O defeito é a
-  **mensagem prometendo um mundo que não existe** — a mesma família do `config/schema.md`
-  prometendo chave não implementada. Decidir um dos dois: (a) assumir GNU e trocar a linha 21 por
-  um aviso honesto ("o kit exige coreutils GNU; no macOS: brew install coreutils gnu-sed grep"), ou
-  (b) portar de verdade (`md5` fallback, `date -u +%FT%TZ`, `sed -i ''`, `grep -E` no lugar do
-  `-P`). A (a) custa uma linha e para de mentir; a (b) é missão própria. — descoberto por
-  `/codereview` na missão `20260815-i13.5-kit-em-ingles` (2026-08-15)
-  **RESOLVIDO por `fc2fa50`** — escolhida a (a) (decisão humana), com uma correção de rota: parar
-  de mentir por mensagem é fraco, então a suposição passou a ser **medida**. Três mudanças:
-  (1) a mensagem da linha 21 declara bash 4+ **e** a userland GNU, com o `gnubin` no `PATH`
-  (`brew install coreutils` instala como `gmd5sum`/`gdate`, e o kit chama `md5sum`/`date` —
-  detalhe que a direção original não previa); (2) `sdd preflight` ganhou um probe **por
-  comportamento**, não por presença: `md5sum </dev/null`, `date -Iseconds`, `sort -V </dev/null`
-  — presença passaria num mac com o `gnubin` fora do `PATH` e o kit quebraria mesmo assim;
-  (3) `tests/check-preflight.sh` (novo, na suíte) prova o probe com shims que respondem como o
-  BSD responde. Provado por sabotagem: **probe removido → 3 asserções morrem**; **`command -v`
-  no lugar do probe comportamental → 1 asserção morre**. Custo: +0,2s na suíte (medido; o total
-  ficou em 15,9s contra 16,1s do HEAD sem a mudança — dentro do ruído da máquina). Escopo do
-  probe é o que o **runner** precisa; `sed -i` e `grep -P` são do `TEST_CMD` deste repo, e uma
-  suíte vermelha já grita sozinha. Segue **GNU-only por decisão declarada** — a (b) continua
-  sendo missão própria, agora sem urgência: o ambiente errado é detectado antes da primeira fase.
-  — `humano` (2026-08-15)
 
 - [ ] **Dois arquivos ficam fora do sensor de idioma, e prosa PT-BR pode entrar neles sem ninguém
   ver** — `tests/check-lang.sh` (a função `surface()`) — as exclusões são corretas e estão
@@ -481,24 +271,6 @@ Achados sobre **repos-alvo** vão para o `TODO.md` daquele repo. Este arquivo é
   planejamento (2026-08-14)
 - [ ] Destilar handoffs/KAIZEN_LOG para o vault Obsidian continua manual/editorial. Avaliar um
   `sdd digest` que gere o rascunho. — descoberto por `humano` no planejamento (2026-08-14)
-- [ ] A suíte não exercita o caminho **real** (não-dry-run) de `pipeline_log_line` — `bin/sdd:557`
-  — todo sensor que temos afirma que a projeção **não** escreve; nenhum afirma que uma fase de
-  verdade **escreve**. Escrever no `pipeline.log` exige uma `run_phase` real, que chamaria o
-  `claude`, então nenhum fixture chega lá. Consequência: um refactor que quebre a guarda ao
-  contrário (por exemplo trocá-la por um `return 0` incondicional, ou pôr `[ … ] && return 0`
-  como última linha da função, onde o `set -e` do caller morde) mata o diário da missão em
-  silêncio e a suíte segue verde. Nesta sessão a garantia só existiu porque provei o caminho
-  não-dry à mão, num probe descartável — o oposto de sensor durável. Direção: extrair as funções
-  puras de `bin/sdd` para um arquivo sourceável, ou dar ao runner um modo `--self-test` que
-  exercite `pipeline_log_line` com os dois valores de `DRY_RUN`. — descoberto por `sdd-executor`
-  na missão `20260814-dry-run-completo` (2026-08-14)
-  **RESOLVIDO por `85dfc9f`** (volta 2 da QA) — sem precisar de `--self-test` nem de extrair funções: o
-  caminho de escalação `blocked` **loga e retorna 3 antes de qualquer `run_phase`**, então dá
-  para exercitar o caminho real sem gastar token nem rede. Virou a seção "o caminho real
-  (não-dry) ainda escreve no diário" em `tests/check-dry-run.sh`. O modo de falha exato que este
-  item descrevia (guarda invertida → diário morto, suíte verde) foi reproduzido por mutação e
-  agora **falha em 4 asserções**. — `sdd-qa`, mesma missão (2026-08-14)
-
 - [ ] **`${var:0:200}` só corta por caractere se o locale do processo for multibyte** —
   `bin/sdd:756` (`autonomy_blocked_row`) e `bin/sdd:777` (`autonomy_session_row`) — o comentário
   nas duas funções (`bin/sdd:750-751` e `:773`) promete "character slice", mas isso é verdade só
@@ -619,57 +391,6 @@ Achados sobre **repos-alvo** vão para o `TODO.md` daquele repo. Este arquivo é
   por reprodução: nenhuma contagem some, é só espaçamento a mais entre o bloco "no comparable
   sessions" e a linha "(N unrecognized row(s) excluded…)". — descoberto por `/codereview` (revisão
   final do branch) na missão `20260815-i13.1-autonomy-log` (2026-08-15)
-
-- [x] **[I2 + F1 — FEITO em 6853796 e 56b2365] A degradação `PUBLISH_ON_REVIEW_BLOCKED=draft` não escreve linha nenhuma no ledger** —
-  `bin/sdd:1471-1476` (`cmd_run`) — o ramo `if [ "$phase" = "REVIEW" ] && [ "$PUBLISH_ON_REVIEW_BLOCKED"
-  = "draft" ]` dá `continue` ANTES de `pipeline_log_line` e de `autonomy_blocked_row`. REVIEW
-  estourou o orçamento e o kit se degradou sozinho para um PR em draft — o evento de autonomia
-  mais interessante que uma missão pode produzir —, e a série registra só uma sequência de sessões
-  de REVIEW falhas seguida de uma fase PR, sem nenhum sinal do porquê. O próprio comentário de
-  quem escreveu o escritor previu exatamente isto ("há três caminhos de escalada, e um quarto
-  acrescentado amanhã nasceria com o defeito"). O conserto não é uma linha: `event:"blocked"`
-  seria mentira para um run que CONTINUA — precisa de uma decisão de vocabulário (um
-  `event:"degraded"`, ou um `kind` novo dentro de `event:"session"`), e vocabulário novo sem o
-  juiz (I13.3) existir ainda é especulação. Por isso registrado, não consertado. — descoberto por
-  `/codereview` (revisão final do branch) na missão `20260815-i13.1-autonomy-log` (2026-08-15)
-
-  **Fechado no I2 (`6853796`) + `F1` (`56b2365`) + review r1 (`e764cd2`)**, com a decisão de
-  vocabulário que a entrada previa: `event: "degraded"` / `kind: "review-to-draft"` (D11 do
-  `CONTEXT.md`), **uma linha por `run_id`**. O conserto foram **quatro** pontos, não dois: o
-  escritor, o `pipeline_log_line`, o `select` de admissão da série e o `is_escalation` do
-  `cmd_autonomy` — e a revisão achou o quinto, `phase_label`, que ficara cego de propósito por uma
-  justificativa falsa. Lição que a entrada não previa: **admitir a linha não basta**; evento novo
-  tem de alcançar todo consumidor do enum, e por isso cada programa passou a ter um
-  `is_escalation` só. Registrado no `CLAUDE.md` § "Ao mexer no runner".
-
-- [x] **[I3 — FEITO em e9a74aa] As escaladas perdem o eixo antes/depois: `sdd autonomy` agrupa `blocked` por `.kind` no
-  arquivo inteiro, nunca por `kit_sha`** — `bin/sdd:1635` (sessões: `group_by(.kit_sha)`) vs
-  `bin/sdd:1649` (escaladas: `group_by(.kind)`, sem filtro nem agrupamento por versão do kit) — a
-  versão do kit é o eixo inteiro da tabela (é o antes/depois que o ledger existe para medir), e o
-  bloco de escaladas é a única parte que não pode ser atribuída a uma versão: uma escalada com
-  `kit_dirty:true` entra somada com escaladas de kit limpo, sem marca nenhuma. Direção provável:
-  agrupar por `(kit_sha, kind)` como as sessões já fazem por `kit_sha`, excluindo (e contando) as
-  não-comparáveis do mesmo jeito. Não é o item de maior valor da revisão (a própria revisora não o
-  pôs no topo da lista ordenada por valor), por isso fica registrado em vez de consertado agora. —
-  descoberto por `/codereview` (revisão final do branch) na missão `20260815-i13.1-autonomy-log`
-  (2026-08-15)
-  **Medido na triagem kaizen (2026-08-15) — o achado vale METADE do que dizia:** a `kaizen_series`
-  (nascida depois desta entrada, no I13.3) **já está correta** — `bin/sdd:1774` fatia
-  `$ok | map(select(.kit_sha == $shas[-1]))` **antes** do `group_by(.kind)` de `bin/sdd:1760`, então
-  a escalada herda o eixo de `kit_sha` e as não-comparáveis já são excluídas e contadas. Quem
-  continua sem eixo é só o `cmd_autonomy` (`bin/sdd:1698`), a visão humana. O juiz, portanto, não é
-  afetado; o que sobra é dois instrumentos sobre o mesmo ledger dando contagens diferentes.
-  ⚠️ **Não "consertar" a série junto** — isso recriaria a divergência. Virou o incremento I3 da
-  missão `20260815-ledger-sem-ponto-cego`. — `sdd-kaizen` (2026-08-15)
-
-  **Fechado no I3 (`e9a74aa`)**: `group_by(.kit_sha, .kind)` no `cmd_autonomy`, com as
-  não-comparáveis (kit sujo ou sha nulo) caindo no balde já contado em vez de somadas a uma versão
-  que não as produziu. A série ficou intocada, como a entrada exigia. O sensor que importa compara
-  **dado com dado** — as escaladas do `kit_sha` mais recente no `sdd autonomy` contra o mapa
-  `escalations` que a série reporta para o mesmo sha —, então os dois leitores discordarem volta a
-  ser vermelho mesmo que cada lado, sozinho, pareça plausível. Mutante `RUN_escalations_no_axis`.
-  Fica aberto só o que era outra família e virou entrada própria: a **ordem** das versões na tabela
-  do `sdd autonomy` (lexicográfica) contra a da série (ordem de aparição).
 
 - [ ] **`cmd_autonomy` repete o bloco "no data" literalmente, em dois pontos** — `bin/sdd:1603-1605`
   (arquivo ausente ou vazio) e `bin/sdd:1620-1622` (arquivo só com linhas em branco, `total == 0`) —
@@ -841,21 +562,3 @@ Achados sobre **repos-alvo** vão para o `TODO.md` daquele repo. Este arquivo é
   commitado junto. ⚠️ Vale para qualquer fase DOCS futura que precise tocar em agente — o kit não
   tem como saber, de dentro, que a escrita foi negada. — descoberto por `sdd-docs` na missão
   `20260815-ledger-sem-ponto-cego` (2026-08-16)
-
-## Feito
-
-- [x] Re-link do shim quebrado do `agent-browser` (I0) — resolvido em 2026-08-14, com sensor
-  permanente no `sdd preflight`.
-- [x] **Boot por slash literal funciona headless** — verificado em 2026-08-14: `claude -p
-  "/qa-report docs/qa …"` carrega as instruções da skill mesmo com `disable-model-invocation:
-  true` (a sessão citou o Step 1 dela de volta). O fallback `--append-system-prompt` fica sem uso.
-  A fase QA passou a ser três sessões — `/qa-report`, `/qa-execution`, `sdd-qa` — com o sub-passo
-  **derivado dos artefatos** (`qa_substep`), não de um contador.
-- [x] **`/goal` NÃO existe neste ambiente** — verificado em 2026-08-14 (`~/.claude/commands/`
-  vazio, nada no cache de plugins). O padrão `/goal /codereview:codereview até Grade A` do
-  template do usuário não é reproduzível headless; o `sdd-reviewer` conduz o laço por instrução
-  própria, que era o fallback previsto no plano.
-- [x] `claude -p --agent <nome>` funciona headless — verificado em 2026-08-14 num repo-fixture:
-  a sessão encarnou o `sdd-executor` e recitou a primeira instrução do arquivo do agente. O
-  fallback `--append-system-prompt` fica sem uso. `--setting-sources user,project,local` é
-  passado explicitamente pelo runner para garantir que `.claude/agents/` do alvo carregue.
