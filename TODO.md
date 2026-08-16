@@ -30,6 +30,22 @@ Achados sobre **repos-alvo** vão para o `TODO.md` daquele repo. Este arquivo é
 
 ### Sensores que faltam
 
+- [ ] **Aprovar plano é editar frontmatter à mão — o gate humano é a única interação sem
+  comando** — `bin/sdd` (não existe `cmd_approve`) vs `gate_PLAN` (`:261`) — destravar a fase
+  PLAN exige abrir o `00-missao.md` e digitar `aprovacao: humano-YYYY-MM-DD` no formato exato.
+  Sem apresentação do que se aprova, sem data automática, sem commit: convida a errar o formato
+  ou a delegar à sessão, que é justamente quem não pode decidir. Direção: `sdd approve <missão>`
+  imprimindo título, PLAN-AUTO, incrementos e riscos, pedindo confirmação e escrevendo com
+  `date +%F`. — descoberto por `humano` na missão `20260816-kit-como-alvo` (2026-08-16)
+
+- [ ] **Duas regras conflitantes sobre `aprovacao:`, e só um comando aplica a restrição** —
+  `agents/sdd-planner.md:101` ("all ✅ → `aprovacao: auto`") vs `agents/sdd-kaizen.md:110`
+  ("EMPTY, always") — plano kaizen-born com PLAN-AUTO toda ✅ dá ao planner licença textual para
+  `auto`, e a premissa que a justifica ("the human was present") é falsa em sessão headless.
+  `gate_PLAN` aceita `auto` e o pipeline vai até o PR; quem reclama é a volta seguinte do
+  `sdd kaizen`, com rc 3 (`bin/sdd:2151`). Direção: o prompt da fase PLAN dizer ao planner que o
+  plano nasceu do kaizen. — descoberto por `humano` na missão `20260816-kit-como-alvo` (2026-08-16)
+
 - [ ] **O parser do checkpoint não conhece `\|`, o escape padrão de pipe em tabela GFM** —
   `bin/sdd:174` (`checkpoint_rows`, `awk -F'|'`) — o split é cru, então célula com `\|` vira
   duas. Medido no checkpoint nascido em `df86387`: 3 dos 4 incrementos deram `NF=8` contra `NF=7`
