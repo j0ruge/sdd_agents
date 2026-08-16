@@ -59,6 +59,31 @@ a judged regression that disappears from the record will be re-attempted.
 
 ---
 
+## The series is empty, or the rows "were born in another repo"
+
+**Symptom:** `sdd kaizen --series` returns `latest: null` with `excluded.other_repo: N`, or
+`sdd autonomy` refuses with rc 1 naming the same count. The ledger file is right there and it is
+not empty.
+
+**Cause:** the file is global, the **reading is per repo** — one predicate admits only the rows
+whose `repo` equals the repo you are standing in. Three ordinary ways to land here: reading from a
+directory that is no git repository at all; reading in the kit repo while every session was spent
+on a target (or the reverse); or reaching the repo through a path the rows do not carry — a symlink
+or a git worktree, which `git rev-parse --show-toplevel` reports as a toplevel of its own.
+
+**What you do:** run the reader **inside** the repo whose missions you want to judge, and compare
+`git rev-parse --show-toplevel` with `jq -r .repo ~/.sdd/autonomy-log.jsonl | sort -u`. The
+comparison is verbatim on both sides by design: a `realpath` invented here would silently merge two
+checkouts the ledger deliberately keeps apart. Full contract in
+[`pipeline.md`](pipeline.md) § "The autonomy ledger".
+
+**Do not:** read this as data loss. What the filter removed is **counted** — `excluded.other_repo`
+in the series, one `N row(s) excluded` line in the human table — and an empty series is
+`guard.sufficient: false`, which supports only `indeterminado`. Somebody else's numbers read as a
+verdict about this kit is exactly what the filter exists to prevent.
+
+---
+
 ## A context window overflow in the middle of an increment
 
 **Symptom:** the session dies or returns a truncated answer; the checkpoint did not advance.
@@ -177,6 +202,26 @@ looking at.
 **Do not:** silence it by setting `PUBLISH_ON_REVIEW_BLOCKED="off"` and re-running until the review
 passes. Off is the default precisely because a stop is louder than a draft; switching it on and then
 hiding the record is the worst of the two.
+
+---
+
+## `sdd preflight` fails: an agent is `stale`
+
+**Symptom:** `agent sdd-<x>.md stale — .claude/agents/sdd-<x>.md no longer matches <kit>/agents/…`,
+and the preflight refuses before any mission starts.
+
+**Cause:** the harness loads the **copy** in `.claude/agents/`, never the kit source. The two
+drifted — usually a kit that moved (`git pull`, a kit mission) with nobody re-installing. Until the
+mission `20260816-kit-como-alvo` the preflight only checked that the copy **existed**, so "source
+corrected" and "agent still running the old text" looked identical: green on both.
+
+**What you do:** `sdd install` to read the diff first, then `sdd install --force` to adopt the kit
+version. If the divergence is a deliberate customisation, keep it and record in the kit's `TODO.md`
+why — but the preflight will keep failing, and that is the point: a target running an agent of its
+own should have to say so out loud.
+
+**Not the same as** the next entry: that one is information at install time, this one is a gate
+refusing to spend a session on an agent that is not the one you think you are running.
 
 ---
 

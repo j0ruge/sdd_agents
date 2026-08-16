@@ -36,6 +36,8 @@ sdd preflight          # environment sensor: claude, gh, GNU userland, agent-bro
 ```
 
 `sdd install` is idempotent: running it again shows the agent diff instead of overwriting.
+`sdd preflight` compares the installed copies with the kit source **byte for byte** and fails on a
+stale one: the harness loads `.claude/agents/`, so a corrected source proves nothing on its own.
 
 ⚠️ `sdd preflight` fires a **real headless session** (capped at US$ 1) to prove the phase sessions
 can actually execute a command — that is what makes it valuable, and what makes it cost money.
@@ -55,7 +57,7 @@ sdd phase <mission>          # print only the current phase (or DONE) — for sc
 sdd retry <mission>          # retry the current phase with a fresh session
 sdd close <mission>          # post-merge: close the JIRA issue
 sdd health                   # KIT sensor (≠ preflight, which is about the target's environment)
-sdd autonomy                 # waste per kit version, from the global ledger (~/.sdd/autonomy-log.jsonl)
+sdd autonomy                 # waste per kit version, for THIS repo, from the global ledger (~/.sdd/autonomy-log.jsonl)
 sdd kaizen                   # judge the previous kit change and plan the next kit mission (kit repo only)
 
 sdd run <mission> --dry-run         # project the whole pipeline without spending tokens

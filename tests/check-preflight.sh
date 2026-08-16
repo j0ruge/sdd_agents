@@ -21,6 +21,12 @@
 # has no `config/starter.conf`. Same family as the GNU probe above — the runner asserting a world
 # it did not measure.
 #
+# THIRD, same family again and the sharpest of the three: preflight used to ask `[ -f <copy> ]` and
+# then print "N kit agent(s) checked" — a label over a comparison that never happened. The harness
+# loads the COPY in .claude/agents/, so the source can be fixed and the agent keeps running the old
+# text; it happened (2132cf5 edited agents/sdd-kaizen.md, the copy stayed behind, green in
+# everything). Asserted differentially, for a reason spelled out at the section itself.
+#
 # Usage: tests/check-preflight.sh   (exit 0 = the probe still fires, and still stays quiet)
 
 set -uo pipefail
@@ -132,6 +138,110 @@ assert_lacks "the ok line is not printed at the same time" "$OK_LINE" "$out"
 # being able to tell a session that moved the disk from one that did not.
 assert_has "the failure says what breaks, not only what is missing" \
   "the state fingerprint is empty" "$out"
+
+# --- an agent copy that drifted from the kit source -------------------------
+# DIFFERENTIAL on purpose, and it has to be. The obvious assertion — "the `N kit agent(s) checked`
+# line is absent" — is VACUOUS in this fixture: that line only prints under `fails -eq 0`, and here
+# claude and gh are stubbed to fail, so it never prints in ANY run, defect fully in place included.
+# What discriminates is the two runs compared against EACH OTHER: same fixture, one byte of
+# difference, exactly one more failed check. No fixture regime satisfies that by accident.
+echo "== an agent copy drifted from the kit source =="
+
+AGENT=".claude/agents/sdd-executor.md"
+
+# failed_count <preflight output> — the N from the closing "N check(s) failed" (stderr, captured).
+# Prints nothing when the line is absent, which is itself a red: `-ne` on an empty string errors.
+failed_count() {
+  local line; line="$(grep -oE '[0-9]+ check\(s\) failed' <<< "$1")"
+  printf '%s' "${line%% *}"
+}
+
+# Adversarial pass, like the starter.conf block below: each assertion here was broken on its own by
+# a distinct sabotage of the agent block, and each names the one it owns exclusively. The two
+# sanity guards are the exception and are marked as such — same rubric as "preflight got as far as
+# the tool checks" in the GNU section, which is also non-exclusive on purpose.
+#
+# SANITY, not exclusive: it names the cause when the kit copy has no agents/ to install from (the
+# mutation sandbox forgot to copy it), instead of leaving five assertions red with no explanation.
+if [ -f "$AGENT" ]; then pass "the fixture installed the kit agents"
+else fail "the fixture installed the kit agents" "$AGENT on disk" "no such file"; fi
+
+out="$( "$SDD" preflight 2>&1 )"
+# SANITY, not exclusive: `current branch:` prints AFTER the agent block, so a preflight that died
+# before reaching the agents cannot produce it. Without it the three "lacks" here would all be
+# satisfied by a fixture that never got that far.
+assert_has "preflight got past the agent block" "current branch:" "$out"
+# Positive control. Owns the sabotage that says "stale" about copies that MATCH — an `else warn`
+# arm, which changes no rc and no failure count, so nothing else in this file sees it.
+assert_lacks "no stale complaint when every copy matches the source" "stale" "$out"
+n_intact="$(failed_count "$out")"
+
+printf '\n<!-- drift: one byte the source does not have -->\n' >> "$AGENT"
+out="$( "$SDD" preflight 2>&1 )"
+n_drift="$(failed_count "$out")"
+
+# The literal text the checkpoint's Check greps. Owns the original defect AND the sabotage that
+# keeps failing but drops the word: `_fail "agent $name differs — ..."` is caught here and nowhere
+# else in this file.
+assert_has "a drifted agent copy fails the preflight" "agent sdd-executor.md stale" "$out"
+# Two different repairs deserve two different words — "not installed" sends the operator to install
+# a file that is right there on disk. Owns the sabotage that keeps the stale branch but reuses the
+# missing branch's wording inside it; rc, count and the "stale" needle all survive that one.
+assert_lacks "a drifted copy is not reported as missing" "sdd-executor.md not installed" "$out"
+# THE differential half, and the only one that survives a `warn` that does not count: the text can
+# be perfect while the check silently passes. Compares the two readings of one fixture.
+if [ -n "$n_intact" ] && [ -n "$n_drift" ] && [ "$n_drift" -eq $((n_intact + 1)) ]; then
+  pass "the drift adds exactly one failed check, no more and no less"
+else
+  fail "the drift adds exactly one failed check, no more and no less" \
+       "$((${n_intact:-0} + 1)) failed check(s)" "intact '$n_intact' → drifted '$n_drift'"
+fi
+
+# --- an agent copy that is absent: a different failure, in different words ---
+# The branch that already worked, kept as the negative control of the one above: without it, a
+# `cmp -s` that swallowed the missing case (cmp on a nonexistent file is also a mismatch, so one
+# careless merge of the two arms does exactly that) would report every absent agent as "stale" and
+# no assertion above would notice.
+rm -f "$AGENT"
+out="$( "$SDD" preflight 2>&1 )"
+n_gone="$(failed_count "$out")"
+
+# Owns the sabotage that reworded this branch ("agent X absent"): the operator loses the string
+# every doc and every past handoff uses.
+assert_has "a missing agent copy still says 'not installed'" \
+  "agent sdd-executor.md not installed" "$out"
+# Owns the mirror of the drift "lacks": the missing message growing a "stale or removed" clause.
+assert_lacks "absent and stale do not collapse into one message" "sdd-executor.md stale" "$out"
+if [ -n "$n_intact" ] && [ -n "$n_gone" ] && [ "$n_gone" -eq $((n_intact + 1)) ]; then
+  pass "the missing copy adds exactly one failed check"
+else
+  fail "the missing copy adds exactly one failed check" \
+       "$((${n_intact:-0} + 1)) failed check(s)" "intact '$n_intact' → missing '$n_gone'"
+fi
+
+# --- the base branch warning, at the door it was born in --------------------
+# The warning is one function now, shared with `sdd run` and `sdd kaizen`, and preflight is the
+# call site it started in — so it is also the one nobody would think to re-test after the
+# extraction. Measured while writing this: deleting the call HERE left check-gates.sh and
+# check-kaizen.sh both green, because each of those files only exercises its own door.
+#
+# DIFFERENTIAL, like its two twins: the fixture was born on `main`, so from a single reading
+# "warns on the base branch" and "always warns" are the same output.
+echo "== base branch warning =="
+out="$( "$SDD" preflight 2>&1 )"
+assert_has "the base branch warning survives in the preflight it was extracted from" \
+  "you are on the base branch (main)" "$out"
+
+git checkout -q -b missao/base-branch-fixture
+out="$( "$SDD" preflight 2>&1 )"
+git checkout -q main
+git branch -q -D missao/base-branch-fixture
+assert_lacks "and it is silent off the base branch" "you are on the base branch" "$out"
+# `current branch:` is the witness that the second reading really reached the git block: without
+# it, a preflight that died earlier would satisfy the `lacks` above by never getting there —
+# absence proved by absence, which is the vacuity this whole mission is about.
+assert_has "and the second reading really reached the git block" \
+  "current branch: missao/base-branch-fixture" "$out"
 
 # --- `sdd install` against a kit copy with no config/starter.conf -----------
 # The redirect creates $CONFIG_FILE BEFORE sed runs, so the missing starter used to leave a 0-byte

@@ -73,6 +73,10 @@ templates. Se a solução pede infraestrutura, provavelmente é a solução erra
 ## Ao mexer no runner (`bin/sdd`)
 
 - `set -euo pipefail` sempre; `bash -n bin/sdd` é o smoke test mínimo.
+- **A última linha é `{ main "$@"; exit $?; }`, e a forma é contrato.** Sem as chaves e sem o
+  `exit`, o bash volta a ler o arquivo pelo offset salvo ao retornar de `main` — e a fase EXEC
+  edita o `bin/sdd` durante o `sdd run` que a executa. Quem cobra é `tests/check-entrypoint.sh`,
+  com o mutante `RUN_entrypoint_unguarded`.
 - Toda função de gate se chama `gate_<FASE>` e retorna 0/1, escrevendo o motivo em `stderr`.
 - Nada de `bypassPermissions` como default — `acceptEdits` é o teto. Mas `acceptEdits` **sozinho
   não basta**: ele auto-aprova edição de arquivo, não `Bash`. `run_phase()` precisa passar
@@ -109,26 +113,46 @@ nunca um commit gigante no fim.
 
 O kit é bash + markdown, então o "teste" é o **Check** de cada incremento do plano: um comando
 com resultado esperado. Escreva o Check antes de implementar o incremento.
+⚠️ Check que lê a saída de um sensor ancora em `^  ok    ` e **nunca** leva `|` na célula — as duas
+regras estão em `templates/checkpoint.md`, com o porquê medido, e quem as cobra é
+`tests/check-checkpoint.sh`.
 
 A suíte é `tests/run-all.sh` — é ela o `TEST_CMD` deste repo, e é ela que os gates rodam. Sensor
-novo entra lá. Os dez de hoje: `check-templates.sh`, `check-gates.sh`, `check-dry-run.sh`,
+novo entra lá. Os doze de hoje: `check-templates.sh`, `check-gates.sh`, `check-dry-run.sh`,
 `check-mutation.sh`, `check-lang.sh`, `check-autonomy.sh`, `check-kaizen.sh`, `check-preflight.sh`,
-`check-todo.sh` e `check-pipefail.sh`. `sdd preflight`, `bash -n bin/sdd` e os dry-runs completam,
-mas não substituem. O passo de lint do `run-all.sh` cobre `bin/sdd` **e** `tests/*.sh` — deixar a
-suíte fora do linter foi o que segurou dois SC2318 reais em `check-mutation.sh` por três missões.
+`check-todo.sh`, `check-pipefail.sh`, `check-entrypoint.sh` e `check-checkpoint.sh`.
+`sdd preflight`, `bash -n bin/sdd` e os dry-runs completam, mas não substituem. O passo de lint do
+`run-all.sh` cobre `bin/sdd` **e** `tests/*.sh` — deixar a suíte fora do linter foi o que segurou
+dois SC2318 reais em `check-mutation.sh` por três missões.
 
 **Sensor que o catálogo de mutação não alcança carrega um auto-teste.** São duas situações, e
-hoje há três sensores nelas. `check-lang.sh` e `check-pipefail.sh` não podem se escanear (o
+hoje há quatro sensores nelas. `check-lang.sh` e `check-pipefail.sh` não podem se escanear (o
 dicionário de um É português; as probes do outro TÊM de conter o que ele detecta). `check-todo.sh`
-mede um markdown, não o `bin/sdd`, então nenhuma sabotagem do runner o faria morrer —
-`check-pipefail.sh` está nas duas situações, porque também mede `tests/`. Nos três casos quem mede
-o sensor é um `selftest()` com probes e rc próprios — 90, 91, 92 — mais um piso contra vacuidade.
-Sem isso, regex quebrada reporta "tudo limpo" para sempre.
+e `check-checkpoint.sh` medem markdown, não o `bin/sdd`, então nenhuma sabotagem do runner os
+faria morrer — `check-pipefail.sh` está nas duas situações, porque também mede `tests/`. Nos
+quatro casos quem mede o sensor é um `selftest()` com probes e rc próprios — 90, 91, 92 — mais um
+piso contra vacuidade. Sem isso, regex quebrada reporta "tudo limpo" para sempre.
+⚠️ A rubrica é "a mutação não alcança", **não** "tem `selftest()`": `grep -l selftest tests/` hoje
+devolve **cinco**, porque o `check-entrypoint.sh` carrega um por escolha própria (o catálogo o
+alcança via `mut_RUN_entrypoint_unguarded`, mas o parser dele é fino demais para depender só
+disso). Sensor a mais com auto-teste nunca é o defeito; sensor **sem** ele, estando nas duas
+situações, é.
 
 ⚠️ **O selftest tem de exercitar o CAMINHO, não só a função.** Achado consertando o
 `check-todo.sh`: os probes provavam que o parser pulava blocos cercados, e mesmo assim trocar a
 contagem por um `grep` no chamador passava verde — porque nenhum probe rodava o caminho de
 reporte. A saída foi um modo `--check <arquivo>` que o próprio selftest invoca, sem recursão.
+
+⚠️ **Essa regra escrita não bastou: três fail-open passaram por cima dela** — r2 da missão
+`20260816-kit-como-alvo`, num sensor criado para caçar exatamente isso. Os probes mediam o
+**parser**; o caminho de "existe defeito" até "a suíte fica vermelha" não tinha probe nenhum
+(`probe()` gritava `SENSOR-BROKEN` cinco vezes e saía `0`; apagar as chamadas de topo deixava tudo
+verde). A passada de sabotagem cobre **três** camadas — parser, contabilidade da falha e
+composição —, e a composição só é sondável se as chamadas de topo forem uma **lista**, que é o que
+um probe consegue contar. O que sobra é a última linha do sensor, sobre a qual ele não consegue
+asseverar: essa se prova pelo **catálogo de mutação medido nos dois sentidos** (íntegro
+`44 caught of 44` × neutralizado `43 caught` + rc 1), nunca por comentário. Detalhe no cabeçalho
+do `tests/check-entrypoint.sh`.
 
 ⚠️ **Selftest verde prova as regras que têm probe, e só essas.** Sensor novo ganha uma passada de
 **sabotagem adversarial** antes de ser considerado pronto: degrade cada regra para uma versão mais

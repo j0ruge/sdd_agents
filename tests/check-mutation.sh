@@ -423,6 +423,63 @@ mut_RUN_progress_dead() {
   sed -i 's@  if progress_wanted; then stream_watch "$streamfile" & watcher=$!; fi@  watcher=""@' "$1"
 }
 
+# Not a gate: the entry point goes back to the bare `main "$@"` it shipped with for its whole life,
+# so bash can return from the last command and ask this file for more input. It is the sabotage
+# that changes NOTHING observable in any ordinary run — every command still works, every rc is
+# still right — and only bites the day something appends to bin/sdd while it is executing, which
+# is precisely what the EXEC phase does to it. No behavioural fixture can see it without editing a
+# running runner, so what has to catch it is the form assertion in check-entrypoint.sh; if that
+# assertion is ever loosened into "the guard appears somewhere", this mutant survives and says so.
+# The delimiter is `|` and not the `@` every other mutation here uses: the anchor CONTAINS `"$@"`,
+# so an `@` delimiter closes the expression in the middle of the entry point and sed dies with
+# "unterminated `s' command". Cheap to write, and it would have read as anchor rot (rc 90).
+mut_RUN_entrypoint_unguarded() {
+  sed -i 's|^{ main "$@"; exit $?; }$|main "$@"|' "$1"
+}
+
+# Not a gate: the ledger goes back to being one namespace shared by accident — every reader sees
+# every repo on the machine, which is how a `sdd run` in a /tmp fixture repo once moved the judge's
+# own numbers to `66% waste · 2 mission(s)` where the truth was `0% · 1`.
+#
+# It sabotages the DEFINITION and not any one call site, and that is the whole point: the predicate
+# is spliced into cmd_autonomy, kaizen_series and (through the series) the post-pipeline reminder.
+# Sabotaging one call would measure one call; sabotaging the definition measures that all of them
+# really go through it. What dies is the pair of differential assertions — the series read from two
+# repos in check-kaizen.sh, the human table read from two repos in check-autonomy.sh — and neither
+# can survive it, because both compare two readings of ONE file against each other.
+mut_RUN_ledger_no_repo_filter() {
+  sed -i 's@def ledger_row_is_local: if (type == "object" and has("repo")) then .repo == $repo else true end;@def ledger_row_is_local: true;@' "$1"
+}
+
+# Not a gate: the preflight goes back to asking whether the agent copy EXISTS, which is what it did
+# for its whole life while printing "N kit agent(s) checked" — a label over a comparison that never
+# happened. The harness loads the copy, so with this in place the kit source can be corrected and
+# every agent keeps running the old text, green in everything (2132cf5 did exactly that).
+#
+# It sabotages the `cmp -s` arm only, leaving the "not installed" arm intact: an absent copy still
+# fails, so any assertion that merely counts preflight failures or reads its rc survives. What dies
+# is the differential pair in check-preflight.sh — one fixture read twice, one byte apart — plus
+# the stale message itself. `elif` → `elif false &&` keeps the branch syntactically alive so the
+# mutant is valid bash and the sabotage is precisely the comparison, nothing else.
+mut_PRE_agent_presence_only() {
+  sed -i 's@elif ! cmp -s "$a" "$copy"; then@elif false \&\& ! cmp -s "$a" "$copy"; then@' "$1"
+}
+
+# Not a gate: the base branch warning goes back to being decoration. The body is emptied while the
+# function keeps existing and keeps returning 0, so every call site stays syntactically valid and
+# nothing else about the runs changes — which is exactly the shape of the defect this closes, a
+# warning that only ever reached cmd_preflight while `sdd run` and `sdd kaizen` opened committing
+# sessions in silence.
+#
+# It sabotages the DEFINITION, for the same reason mut_RUN_ledger_no_repo_filter does: killing the
+# call in cmd_run leaves check-kaizen.sh green and killing the one in cmd_kaizen leaves
+# check-gates.sh green, so a per-call-site sabotage would measure one door. Emptying the body kills
+# the presence half of BOTH differential pairs at once, and only that proves all three doors really
+# go through the one function.
+mut_RUN_base_branch_warn_dead() {
+  sed -i 's@^  \[ -n "\$branch" \] && \[ -n "\$DEFAULT_BRANCH" \] && \[ "\$branch" = "\$DEFAULT_BRANCH" \] || return 0$@  return 0@' "$1"
+}
+
 CATALOG=(
   PLAN_empty_approval
   TICKET_no_sprint
@@ -464,6 +521,10 @@ CATALOG=(
   RUN_stream_summary_fatal
   RUN_progress_eats_rc
   RUN_progress_dead
+  RUN_entrypoint_unguarded
+  RUN_ledger_no_repo_filter
+  PRE_agent_presence_only
+  RUN_base_branch_warn_dead
 )
 
 # Mutations that are NOT caught today, each with the increment that closes it. Ratchet in both
@@ -485,7 +546,12 @@ in_gap_list() { # in_gap_list <slug>
 
 sandbox() { # sandbox <target-dir> — the whole kit the suite needs, and nothing more
   mkdir -p "$1"
-  cp -r "$ROOT/bin" "$ROOT/tests" "$ROOT/templates" "$ROOT/config" "$1/"
+  # `agents/` earned its place here the day check-preflight.sh started asserting that a drifted
+  # .claude/agents/ copy fails: its fixture runs `sdd install`, and with no agents/ to install from
+  # there is no copy to drift — the assertions would pass vacuously in every sandbox while the
+  # control run stayed green. It is NOT copied for check-lang.sh, which reads it too but is guarded
+  # out of the mutants; adding it here does not make that guard removable.
+  cp -r "$ROOT/bin" "$ROOT/tests" "$ROOT/templates" "$ROOT/config" "$ROOT/agents" "$1/"
 }
 
 # run_mutant <slug> — writes $WORK/<slug>.rc and $WORK/<slug>.log

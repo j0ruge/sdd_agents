@@ -24,6 +24,11 @@ run() { # run <name> <command...>
 
 run "runner syntax (bash -n)" bash -n "$ROOT/bin/sdd"
 
+# Beside the syntax check because it measures the same thing — bin/sdd as a FILE — and needs no
+# fixture. Deliberately NOT guarded by SDD_MUTANT: it is the only thing that catches
+# mut_RUN_entrypoint_unguarded, and it reads nothing the mutation sandbox does not copy.
+run "entry point cannot fall through into itself" "$ROOT/tests/check-entrypoint.sh"
+
 # The lint surface: the runner PLUS every suite script. For a long time it was bin/sdd alone,
 # which left ~2400 lines of tests/ unlinted — and the linter was right about them: SC2318 in
 # check-mutation.sh had `local slug="$1" box="$WORK/$slug"` reading the CALLER's global `slug`,
@@ -33,7 +38,7 @@ run "runner syntax (bash -n)" bash -n "$ROOT/bin/sdd"
 # The floor is the anti-vacuity guard, same reason as the ones in check-lang.sh and
 # check-pipefail.sh: a glob that stops matching, or a list someone narrows back to bin/sdd, leaves
 # the linter reporting "clean" over files it never read — the failure mode where the sensor claims
-# to have measured what it did not. 12 paths today; the floor moves only on purpose, in a commit
+# to have measured what it did not. 14 paths today; the floor moves only on purpose, in a commit
 # that says why.
 #
 # Mind the wording of any comment here: a line whose first word after `#` is the linter's own name
@@ -52,8 +57,13 @@ run "runner syntax (bash -n)" bash -n "$ROOT/bin/sdd"
 # SC2318 in the scan while the probe went on asserting `warning` and stayed green: a sensor
 # certifying a threshold nobody runs at. The risk table of this mission forbade lowering `-S`;
 # this is what makes the ban a sensor instead of a sentence.
+#
+# The floor moved 12 → 13 when tests/check-entrypoint.sh landed, and 13 → 14 for
+# tests/check-checkpoint.sh. It tracks the real count on purpose: left behind it would still pass,
+# and would go on describing a surface one file smaller than the one it reads — the
+# label-instead-of-artifact shape this whole mission is about.
 LINT_SEVERITY=warning
-LINT_FLOOR=12
+LINT_FLOOR=14
 
 lint_surface() {
   local files=("$ROOT/bin/sdd") f
@@ -97,7 +107,8 @@ if [ -z "${SDD_MUTANT:-}" ]; then
   fi
 fi
 
-# check-lang reads paths (docs/, README.md, agents/) that the mutation sandbox does not copy —
+# check-lang reads paths (docs/, README.md, .claude/agents/) that the mutation sandbox does not
+# copy —
 # inside a mutant it would fail for a missing file, not for language, and the mutant would score a
 # point for the wrong reason. Same guard as the linter, for the same reason.
 [ -n "${SDD_MUTANT:-}" ] || run "language: no Portuguese prose on the kit surface" \
@@ -118,6 +129,14 @@ fi
 # could never score a legitimate one.
 [ -n "${SDD_MUTANT:-}" ] || run "findings file holds its shape" "$ROOT/tests/check-todo.sh"
 
+# Same guard and same two reasons as check-todo above: it reads docs/handoffs/, which the mutation
+# sandbox does not copy, and it tests no gate, so it could never score a legitimate mutant point.
+# What it DOES cover is the Check column of every checkpoint — the increment's own sensor, which
+# the QA phase measured answering "the assertion exists" where the mission's metric promised
+# "the assertion passed".
+[ -n "${SDD_MUTANT:-}" ] || run "checkpoint Checks cannot read a red assertion as green" \
+  "$ROOT/tests/check-checkpoint.sh"
+
 run "template contract" "$ROOT/tests/check-templates.sh"
 run "gate state machine" "$ROOT/tests/check-gates.sh"
 run "dry-run projection" "$ROOT/tests/check-dry-run.sh"
@@ -129,8 +148,9 @@ run "kaizen series and gate" "$ROOT/tests/check-kaizen.sh"
 # started asserting the `sdd install` starter.conf guard: it now measures RUNNER BEHAVIOUR, and
 # mut_RUN_install_no_guard is caught here or nowhere. The guard was the sensor's own blind spot —
 # it kept the mutant green while the sabotage worked, which is the failure the catalogue exists to
-# find. The second half of the old reason was never true either: `sdd install` iterates agents/
-# with `[ -e ] || continue`, so the sandbox not copying it costs nothing.
+# find. The second half of the old reason was never true either — and has since gone the other way:
+# the file now drifts an installed agent copy on purpose, so the mutation sandbox has to carry
+# `agents/` or this sensor passes vacuously in every mutant. sandbox() copies it, and says why.
 # Cost of letting it in, measured: 0.14 s per run, ~0.6 s of wall clock across the whole pool.
 run "preflight and the install guard" "$ROOT/tests/check-preflight.sh"
 

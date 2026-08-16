@@ -137,6 +137,14 @@ git config user.name "Fixture"
 echo "content" > file.txt
 git add -A && git commit -qm "init"
 
+# The reader filters the ledger by the repo it is standing in, so every hand-written fixture row
+# has to name THIS repo. Ask git for the path rather than reusing $FIX: TMPDIR may be a symlink
+# and the reader resolves it exactly this way. The fixtures keep spelling it `/p1` — a 400-char
+# JSON line is unreadable enough without an absolute temp path in it — and localize() is the one
+# rewrite from that shorthand, applied as each ledger is written.
+FIXROOT="$(git rev-parse --show-toplevel)"
+localize() { sed -e "s|\"repo\":\"/p1\"|\"repo\":\"$FIXROOT\"|g"; }
+
 "$SDD" install >/dev/null
 cat > .sdd/config.sh <<'EOF'
 PROJECT_NAME="fixture"
@@ -712,7 +720,7 @@ assert_eq "with nothing pushed into the unrecognized bucket to get there" "0" \
 # from (the provenance rule covers skill output). Every row here exists to prove one refusal.
 echo "== reader =="
 mkdir -p "$OUTSIDE/read"
-cat > "$OUTSIDE/read/autonomy-log.jsonl" <<'EOF'
+localize > "$OUTSIDE/read/autonomy-log.jsonl" <<'EOF'
 {"v":1,"ts":"2026-08-15T10:00:00-03:00","event":"session","run_id":"r1","invocation":"run","kit_sha":"aaaaaaa","kit_dirty":false,"project":"p1","repo":"/p1","mission":"m1","phase":"EXEC","step":"EXEC","agent":"sdd-executor","model":"opus","attempt":1,"auto_retry":false,"session":"s1","rc":0,"dur_s":10,"cost_usd":1.0,"moved":true,"gate":"fail","gate_why":"x"}
 {"v":1,"ts":"2026-08-15T10:01:00-03:00","event":"session","run_id":"r1","invocation":"run","kit_sha":"aaaaaaa","kit_dirty":false,"project":"p1","repo":"/p1","mission":"m1","phase":"EXEC","step":"EXEC","agent":"sdd-executor","model":"opus","attempt":2,"auto_retry":false,"session":"s2","rc":0,"dur_s":10,"cost_usd":1.0,"moved":false,"gate":"fail","gate_why":"x"}
 {"v":1,"ts":"2026-08-15T10:02:00-03:00","event":"session","run_id":"r1","invocation":"run","kit_sha":"aaaaaaa","kit_dirty":true,"project":"p1","repo":"/p1","mission":"m1","phase":"EXEC","step":"EXEC","agent":"sdd-executor","model":"opus","attempt":3,"auto_retry":false,"session":"s3","rc":0,"dur_s":10,"cost_usd":1.0,"moved":false,"gate":"fail","gate_why":"x"}
@@ -745,7 +753,7 @@ assert_bucket_sum "the four buckets sum to the header total (mixed ledger)" "$ou
 # found nothing" — the same vacuity as the empty-ledger case below, just one layer deeper.
 echo "== reader: only escalations, no comparable sessions =="
 mkdir -p "$OUTSIDE/onlyesc"
-cat > "$OUTSIDE/onlyesc/autonomy-log.jsonl" <<'EOF'
+localize > "$OUTSIDE/onlyesc/autonomy-log.jsonl" <<'EOF'
 {"v":1,"ts":"2026-08-15T10:00:00-03:00","event":"blocked","kind":"no-progress","run_id":"r1","invocation":"run","kit_sha":"aaaaaaa","kit_dirty":false,"project":"p1","repo":"/p1","mission":"m1","phase":"EXEC","gate_why":"x"}
 {"v":1,"ts":"2026-08-15T10:01:00-03:00","event":"blocked","kind":"increment-blocked","run_id":"r1","invocation":"run","kit_sha":"aaaaaaa","kit_dirty":false,"project":"p1","repo":"/p1","mission":"m1","phase":"EXEC","gate_why":"x"}
 EOF
@@ -768,7 +776,7 @@ assert_bucket_sum "the four buckets sum to the header total (escalations only)" 
 # exists to measure, so the divergence corrodes trust in the instrument the whole loop depends on.
 echo "== reader: escalations carry the kit_sha axis =="
 mkdir -p "$OUTSIDE/escaxis"
-cat > "$OUTSIDE/escaxis/autonomy-log.jsonl" <<'EOF'
+localize > "$OUTSIDE/escaxis/autonomy-log.jsonl" <<'EOF'
 {"v":1,"ts":"2026-08-15T10:00:00-03:00","event":"blocked","kind":"no-progress","run_id":"r1","invocation":"run","kit_sha":"aaaaaaa","kit_dirty":false,"project":"p1","repo":"/p1","mission":"m1","phase":"EXEC","gate_why":"x"}
 {"v":1,"ts":"2026-08-15T10:01:00-03:00","event":"blocked","kind":"increment-blocked","run_id":"r1","invocation":"run","kit_sha":"aaaaaaa","kit_dirty":false,"project":"p1","repo":"/p1","mission":"m1","phase":"EXEC","gate_why":"x"}
 {"v":1,"ts":"2026-08-15T10:02:00-03:00","event":"blocked","kind":"no-progress","run_id":"r2","invocation":"run","kit_sha":"bbbbbbb","kit_dirty":false,"project":"p1","repo":"/p1","mission":"m2","phase":"EXEC","gate_why":"x"}
@@ -838,13 +846,13 @@ axis_escalations() { grep -cE "^  $2  [A-Za-z][A-Za-z0-9_-]*: [0-9]+$" <<< "$1";
 
 mkdir -p "$OUTSIDE/axisnull" "$OUTSIDE/axisclean"
 # Twin rows — one session, one escalation, same version, dirtiness UNKNOWN.
-cat > "$OUTSIDE/axisnull/autonomy-log.jsonl" <<'EOF'
+localize > "$OUTSIDE/axisnull/autonomy-log.jsonl" <<'EOF'
 {"v":1,"ts":"2026-08-15T10:00:00-03:00","event":"session","run_id":"r1","invocation":"run","kit_sha":"ccccccc","kit_dirty":null,"project":"p1","repo":"/p1","mission":"m1","phase":"EXEC","step":"EXEC","agent":"sdd-executor","model":"opus","attempt":1,"auto_retry":false,"session":"s1","rc":0,"dur_s":10,"cost_usd":1.0,"moved":true,"gate":"pass","gate_why":"x"}
 {"v":1,"ts":"2026-08-15T10:01:00-03:00","event":"blocked","kind":"no-progress","run_id":"r1","invocation":"run","kit_sha":"ccccccc","kit_dirty":null,"project":"p1","repo":"/p1","mission":"m1","phase":"EXEC","gate_why":"x"}
 EOF
 # The same twins with the dirtiness KNOWN-clean: the control that keeps the agreement above from
 # being satisfied by a reader which simply drops everything.
-cat > "$OUTSIDE/axisclean/autonomy-log.jsonl" <<'EOF'
+localize > "$OUTSIDE/axisclean/autonomy-log.jsonl" <<'EOF'
 {"v":1,"ts":"2026-08-15T10:00:00-03:00","event":"session","run_id":"r1","invocation":"run","kit_sha":"ccccccc","kit_dirty":false,"project":"p1","repo":"/p1","mission":"m1","phase":"EXEC","step":"EXEC","agent":"sdd-executor","model":"opus","attempt":1,"auto_retry":false,"session":"s1","rc":0,"dur_s":10,"cost_usd":1.0,"moved":true,"gate":"pass","gate_why":"x"}
 {"v":1,"ts":"2026-08-15T10:01:00-03:00","event":"blocked","kind":"no-progress","run_id":"r1","invocation":"run","kit_sha":"ccccccc","kit_dirty":false,"project":"p1","repo":"/p1","mission":"m1","phase":"EXEC","gate_why":"x"}
 EOF
@@ -881,8 +889,60 @@ assert_eq "and admits exactly the ones it admits — the control again, so neith
   "0 ccccccc" \
   "$(jq -r '.excluded.non_comparable' <<< "$series_clean") $(jq -r '.latest.kit_sha' <<< "$series_clean")"
 
+# --- the ledger is global, the reader is not ---------------------------------
+# One file per machine, on purpose: cross-repo questions stay answerable. What was missing is the
+# reader asking "mine?" — until this, a `sdd run` in a /tmp fixture repo wrote rows the judge in
+# the kit repo counted as its own. The twin of the series assertion in check-kaizen.sh, over the
+# HUMAN's table: the two instruments read the same file and neither may see what is not its own.
+#
+# DIFFERENTIAL, because one reading cannot tell "filters by repo" from "returns everything": the
+# same ledger read from two repos, two sessions here and three there. No filter prints 5 and 5;
+# a filter that refuses everything prints 0 and 0; only the honest one prints 2 and 3.
+echo "== reader: the ledger is global, the reader is not =="
+mkdir -p "$OUTSIDE/otherrepo" "$OUTSIDE/tworepos" "$OUTSIDE/onlyhere"
+( cd "$OUTSIDE/otherrepo" && git init -q -b main )
+OTHER="$( cd "$OUTSIDE/otherrepo" && git rev-parse --show-toplevel )"
+ledger_row() {   # ledger_row <repo> <mission> — one clean comparable session on kit ccccccc
+  jq -cn --arg repo "$1" --arg mission "$2" \
+    '{v:1, ts:"2026-08-16T14:00:00-03:00", event:"session", run_id:"r", invocation:"run",
+      kit_sha:"ccccccc", kit_dirty:false, project:"p", repo:$repo, mission:$mission,
+      phase:"EXEC", step:"EXEC", agent:"sdd-executor", model:"opus", attempt:1,
+      auto_retry:false, session:"s", rc:0, dur_s:10, cost_usd:1.0, moved:true,
+      gate:"pass", gate_why:"x"}'
+}
+# Interleaved, so no split on file order can pass by accident.
+{ ledger_row "$FIXROOT" h1; ledger_row "$OTHER" t1; ledger_row "$FIXROOT" h2
+  ledger_row "$OTHER" t2;   ledger_row "$OTHER" t3; } > "$OUTSIDE/tworepos/autonomy-log.jsonl"
+{ ledger_row "$FIXROOT" h1; ledger_row "$FIXROOT" h2; } > "$OUTSIDE/onlyhere/autonomy-log.jsonl"
+
+out_here="$(  SDD_STATE_DIR="$OUTSIDE/tworepos" "$SDD" autonomy 2>&1 )"
+out_there="$( cd "$OTHER" && SDD_STATE_DIR="$OUTSIDE/tworepos" "$SDD" autonomy 2>&1 )"
+assert_eq "a row from another repo never enters the human table" "2 3" \
+  "$(sum_sessions "$out_here") $(sum_sessions "$out_there")"
+assert_eq "the header counts the rows of this repo, never the lines of the file" "1" \
+  "$(grep -c '· 2 row(s) ·' <<< "$out_here")"
+# What left has to be NAMED. A filter that drops rows in silence is the same instrument this
+# mission exists to kill: the number would be right and nobody could tell why it moved.
+assert_eq "and what left is counted, never dropped in silence" "1" \
+  "$(grep -c '3 row(s) excluded: born in another repo' <<< "$out_here")"
+assert_eq "symmetrically, read from the other repo" "1" \
+  "$(grep -c '2 row(s) excluded: born in another repo' <<< "$out_there")"
+assert_bucket_sum "the four buckets still sum to the header total, per repo" "$out_here"
+
+# A ledger that holds rows, none of them yours: 'no data' and rc 1, saying WHERE they are. The
+# three silences are named apart on purpose — an empty file sends you looking for a runner that
+# never wrote, which is the wrong hunt when the rows are right there under another path.
+out_none="$( cd "$OTHER" && SDD_STATE_DIR="$OUTSIDE/onlyhere" "$SDD" autonomy 2>&1 )"; rc=$?
+assert_eq "a ledger with no row of yours refuses, same rc as any other refusal" "1" "$rc"
+assert_eq "and says the rows exist, under another repo — not that nothing was recorded" "1" \
+  "$(grep -c 'none of the 2 row(s)' <<< "$out_none")"
+assert_eq "never a percentage computed out of somebody else's sessions" "0" \
+  "$(grep -c '%' <<< "$out_none")"
+
 # A row with no `event` at all, or an event nobody recognizes yet: the reviewer's exact repro. It
-# must be counted, not merely fail to crash.
+# must be counted, not merely fail to crash. It also carries no `repo`, which is deliberate twice
+# over: a row that cannot say where it came from is never excluded by the repo filter — hiding
+# corruption is the one thing a filter must not do — so it still reaches the bucket that names it.
 echo "== reader: unrecognized row =="
 mkdir -p "$OUTSIDE/stray"
 printf '{"v":1,"ts":"2026-08-15T10:00:00-03:00"}\n' > "$OUTSIDE/stray/autonomy-log.jsonl"

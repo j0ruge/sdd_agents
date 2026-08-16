@@ -30,7 +30,10 @@ missions, sessions, `moved_rate`, the label tally (`ok` / `leve` / `refez` per m
 escalations by kind, cost, and the guard (`missions_after_change`, `missions_with_session`,
 `sessions`, `sufficient`). The floor is `missions_with_session`, not `missions_after_change`: a
 mission that stopped the line without spending a session left you nothing to read. It also counts
-what it excluded — dirty-kit rows, unrecognized rows, and the meta rows your own sessions write.
+what it excluded, in **four** buckets — dirty-kit rows, unrecognized rows, the meta rows your own
+sessions write, and `other_repo`, the rows born in another repo (the ledger file is global, this
+reading is not). Cite `other_repo` like the rest: it is the bucket that can empty a series on its
+own, and a series that shrank with nothing naming the reason is the defect the counter exists for.
 
 Every number in your verdict comes from this output. Cite them as they are.
 

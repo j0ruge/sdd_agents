@@ -65,6 +65,16 @@ now — and the repo's `TODO.md` may be stale: confirm before planning on top of
 Every increment needs:
 
 - **an executable Check**: command → expected result. "Verify that it works" is not a Check.
+  ⚠️ A Check that reads a **sensor's** output anchors on `^  ok    ` — four spaces, caret
+  included. Every sensor prints `  ok    <assertion>` on stdout and `  FAIL  <assertion>` on
+  stderr, with the same `<assertion>`; a Check that merges the two with `2>&1` and greps the bare
+  text returns the same number green or red, so it answers "the assertion exists", never "the
+  assertion passed". Write `` o=$(bash tests/check-x.sh 2>&1); grep -c '^  ok    <assertion>' <<< "$o" ``.
+  ⚠️ And **never a `|` in the Check cell** — not even escaped as `\|`. The runner parses the
+  checkpoint table with a raw `awk -F'|'` that does not know the GFM escape: the cell splits in
+  two, the Status the runner reads becomes a fragment of the command and the Commit becomes
+  `pending`, so `gate_EXEC` fails with "invalid status" while `sdd status` prints something that
+  looks healthy. A Check that would need a pipe becomes a herestring, exactly as above.
 - **a durable sensor** wherever one fits: a committed test, an e2e spec, a lint rule, a type
   assertion — something that starts running in CI and proves the correctness six months from now.
   An ephemeral manual check only when a durable sensor does not fit, **with the justification
