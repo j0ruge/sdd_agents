@@ -53,6 +53,19 @@ Achados sobre **repos-alvo** vão para o `TODO.md` daquele repo. Este arquivo é
   de cada fase; tolerar `<criada pela fase TICKET>` antes do TICKET. Sensor em `check-gates.sh`.
   — descoberto por `sdd-publisher` e por `humano` no piloto SQ-97 (2026-08-14)
 
+- [ ] **A regra da âncora é satisfeita por código inline no título** — `tests/check-todo.sh` (regra
+  3) — ela pede crase não-vazia antes do último ` — `, e o título entra nesse trecho: medido, **45
+  dos 46 itens passariam com o `file:line` apagado**. Apertar exige teste de forma que os dados
+  reais não sustentam (`git worktree` e `KAIZEN_LOG` são âncoras legítimas). Não esconde achado
+  fechado — para isso servem a regra 2 e a lista-branca. — descoberto por `revisao-adversarial`
+  na 8ª rodada de revisão do sensor (2026-08-16)
+
+- [ ] **A regra da cauda quebra com travessão dentro das crases de atribuição** —
+  `tests/check-todo.sh` (`last_sep`) — o corte é no último ` — ` e não conhece code span, então
+  `— por \`x\` na missão \`a — b\` (data)` reporta "the last field names no `<agent>`" num item
+  bem formado. Direção: mascarar code spans antes de cortar. — descoberto por
+  `revisao-adversarial` na 8ª rodada de revisão do sensor (2026-08-16)
+
 - [ ] **O formato de achado vale para os repos-alvo, mas o sensor só guarda o arquivo do kit** —
   `tests/check-todo.sh` vs `CLAUDE.md` (princípio 5) — a regra de formato e o ciclo "fechado é
   apagado" são prescritos para o `TODO.md` de **qualquer** repo, e os agentes escrevem nos dois;
