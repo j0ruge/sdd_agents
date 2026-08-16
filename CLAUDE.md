@@ -174,6 +174,16 @@ enquanto o comentário jurava "one-shot per process". Função que tem efeito co
 substituída. Se você precisa dos dois — valor de retorno e efeito —, é sinal de que são duas
 funções.
 
+⚠️ **O `awk` desta máquina é o `mawk`, e ele é orientado a BYTE em qualquer locale.** Uma classe
+negada com caractere multibyte — `[^—]`, `[^á]` — não nega o caractere: nega os **bytes** dele.
+Como toda a faixa U+2000..U+2FFF começa com `0xE2` (aspas curvas, reticências, en-dash, bullet,
+setas), uma aspa curva na entrada faz a classe casar onde não devia e o `sub()` falhar em
+silêncio. Custou o `head_of()` do `check-todo.sh`, que degradou para a regra frouxa e passou a
+**falhar aberto** em pontuação corriqueira. Para separador literal use `index()`/`substr()`, que
+também são byte-based mas consistentemente; classe negada, só com ASCII. `bash -n` não acusa, o
+`shellcheck` não acusa, e o teste passa enquanto a entrada for pura ASCII — que é o pior dos
+mundos, porque a entrada real vira multibyte no dia em que alguém escrever bem.
+
 ## Kaizen
 
 Melhoria com antes/depois **medido** vai para o [`KAIZEN_LOG.md`](KAIZEN_LOG.md). Sem número,

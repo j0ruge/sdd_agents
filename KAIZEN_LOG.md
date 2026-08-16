@@ -93,12 +93,22 @@ que, sem `set -e`, cai fora do `if` — o run terminava em `ok 0 finding(s)`, rc
 cerca ``` sem fechamento travava o latch do parser e pulava **todas** as regras até o fim do
 arquivo, também verde. Nos dois casos o sensor dizia "medi e está limpo" sobre o que não mediu.
 
-| | Auto-revisão | Depois da leitura adversarial |
-|---|---|---|
-| Defeitos conhecidos no sensor | 0 | 17 achados, 17 fechados |
-| Probes do selftest | 14 (número escrito à mão, já defasado) | **20** (contados pelo próprio selftest) |
-| Sabotagens de regra que matam o selftest | 4 de 8 medidas | **13 de 14** (a 14ª é redundância provada) |
-| Caminhos que falhavam abertos | 2 | **0** |
+| | Auto-revisão | 1ª adversarial | 2ª adversarial |
+|---|---|---|---|
+| Defeitos conhecidos no sensor | 0 | 17 achados, 17 fechados | 9 achados, 9 fechados |
+| Probes do selftest | 14 (à mão, já defasado) | 20 (contados) | **30** (contados) |
+| Sabotagens de regra que matam o selftest | 4 de 8 | 13 de 14 | **15 de 17** (as 2 são redundância provada) |
+| Caminhos que falhavam abertos | 2 | 0 | **0** |
+
+**A segunda rodada achou um defeito que a primeira rodada CRIOU, e essa é a parte que ensina.** O
+conserto da âncora usava `sub(/ — [^—]*$/, ...)`, e o `awk` desta máquina é o **mawk 1.3.4**, que é
+orientado a byte em qualquer locale: `[^—]` não nega o caractere, nega os bytes `{0xE2,0x80,0x94}`.
+Como toda a faixa U+2000..U+2FFF começa com `0xE2`, bastava uma aspa curva na cauda do item —
+`the team’s mission` — para o `sub()` falhar, o `head` continuar o item inteiro e a regra degradar
+de volta para "crase em qualquer lugar", que a própria atribuição satisfaz. **Falhando aberto em
+pontuação corriqueira**, com todos os 30 probes verdes, porque todo probe era ASCII puro. Vale como
+regra geral e está no `CLAUDE.md`: classe negada só com ASCII; separador literal se procura com
+`index()`/`substr()`.
 
 O padrão por trás dos 17: toda regra que **nenhum probe distinguia** podia ser degradada sem que
 nada notasse — a régua da data virava "qualquer parêntese", a do título virava "`**` em qualquer
