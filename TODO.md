@@ -84,12 +84,13 @@ Achados sobre **repos-alvo** vão para o `TODO.md` daquele repo. Este arquivo é
   — descoberto por `sdd-executor` na missão `20260816-runner-sem-dividas` (2026-08-16)
 
 - [ ] **`check-autonomy.sh` é vermelho intermitente por colisão de nome de log** — `bin/sdd:935` —
-  o log de fase é `<FASE>-$(date +%Y%m%d-%H%M%S).json`, resolução de **1 segundo**, e o repo-fixture
-  do teste versiona `.sdd/logs/` (o `git add -A` do stub o commita; só `sdd install` põe o caminho
-  no `.gitignore`). Duas fases no mesmo segundo — trivial com stub — reescrevem arquivo rastreado e
-  a asserção final "clean tree" reprova sem relação com o que se mediu. Reproduzido 2× em ~15 runs.
-  Direção: `%N` no nome, ou o fixture ignorar `.sdd/logs/`.
-  — descoberto por `sdd-executor` na missão `20260816-runner-sem-dividas` (2026-08-16)
+  ⚠️ **Causa REFUTADA, sintoma ainda aberto.** A causa registrada (colisão de nome de log em repo
+  que versiona `.sdd/logs/`) foi medida e não se sustenta: `check-autonomy.sh:140` chama
+  `sdd install` ANTES de existir log, e `bin/sdd:1108` já põe `.sdd/logs/` no `.gitignore` —
+  `git ls-files` no fixture lista só `.sdd/config.sh`. Colisão é a norma (8 sessões EXEC no mesmo
+  segundo num run) e a árvore fecha limpa. Não reproduziu em **152 runs**. Direção: `%N` é no-op;
+  medir de novo antes de consertar. — refutado por `sdd-reviewer` (r2), descoberto por
+  `sdd-executor` na missão `20260816-runner-sem-dividas` (2026-08-16)
 
 - [ ] **`grep -m<N>` é a mesma corrida do `grep -q`, e nenhum sensor a vê** —
   `tests/check-dry-run.sh:202` — `-m1` também sai no primeiro casamento e mata o escritor com
