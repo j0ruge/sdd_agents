@@ -37,13 +37,6 @@ Achados sobre **repos-alvo** vão para o `TODO.md` daquele repo. Este arquivo é
   contador de agentes impresso fora da guarda de `fails`.
   — descoberto por `sdd-executor` na missão `20260816-kit-como-alvo` (2026-08-16)
 
-- [ ] **Check de incremento que grepa o texto de uma asserção casa também com a linha `FAIL`** —
-  `docs/handoffs/20260816-kit-como-alvo/checkpoint.md:18` — os Checks de I2/I3/I4 são
-  `grep -c '<texto>'` sobre a saída com `2>&1`, e `fail()` imprime o mesmo texto: o Check devolve
-  `1` com a asserção **vermelha**. RESOLVIDO por `a981fd9`: os três Checks ancoram, o template e o
-  `sdd-planner` ensinam a regra e `tests/check-checkpoint.sh` a mede.
-  — descoberto por `sdd-executor` na missão `20260816-kit-como-alvo` (2026-08-16)
-
 - [ ] **Aprovar plano é editar frontmatter à mão — o gate humano é a única interação sem
   comando** — `bin/sdd` (não existe `cmd_approve`) vs `gate_PLAN` (`:261`) — destravar a fase
   PLAN exige abrir o `00-missao.md` e digitar `aprovacao: humano-YYYY-MM-DD` no formato exato.
@@ -92,14 +85,6 @@ Achados sobre **repos-alvo** vão para o `TODO.md` daquele repo. Este arquivo é
   desconhecida. Direção: um `pipe_rule()` gêmeo, com probe no `selftest()`.
   — descoberto por `sdd-reviewer` na missão `20260816-kit-como-alvo` (2026-08-16)
 
-- [ ] **Nada compara `agents/*.md` com a cópia instalada em `.claude/agents/`** — `bin/sdd:1348` —
-  o preflight só checava **existência** (`[ -f ... ] || _fail "not installed"`) e então imprimia
-  "N kit agent(s) checked": rótulo sobre uma comparação que nunca aconteceu. A cópia é o que o
-  harness carrega, então a fonte podia ser corrigida e o agente seguir rodando o texto velho —
-  `2132cf5` editou `agents/sdd-kaizen.md` e a cópia ficou para trás, verde em tudo. RESOLVIDO por
-  `ab64d2e`: `cmp -s` byte a byte, com "ausente" e "stale" como falhas distintas.
-  — descoberto por `sdd-reviewer` na missão `20260816-runner-sem-dividas` (2026-08-16)
-
 - [ ] **O `check-todo.sh` mede a FORMA da âncora, nunca se ela ainda aponta o que o item diz** —
   `tests/check-todo.sh:1` — a regra exige `arquivo:linha` e o sensor confere que existe e está bem
   escrito; nada re-deriva o alvo. Medido na fase DOCS desta missão: **15 âncoras em 11 itens**
@@ -107,22 +92,6 @@ Achados sobre **repos-alvo** vão para o `TODO.md` daquele repo. Este arquivo é
   missão que as escreveu), três nasceram erradas. É "rótulo, não artefato" dentro do arquivo que
   cataloga essa família. Direção: resolver cada âncora e cobrar que a linha contenha um termo do
   título. — descoberto por `sdd-docs` na missão `20260816-runner-sem-dividas` (2026-08-16)
-
-- [ ] **`main "$@"` sem guarda, e o kit edita o próprio runner em voo** — `bin/sdd:2492` — era a
-  última linha, então ao retornar dela o bash lia o arquivo a partir do offset salvo. A fase EXEC
-  edita `bin/sdd` durante o `sdd run` que a executa (10× naquela missão, +7647 bytes). Reproduzido
-  em script de 114 KB: edição in-place fez o bash **re-executar o entry point** e rodar um
-  fragmento, com **rc 0** — não mordia só porque o editor troca o inode, invariante alheia que
-  ninguém media. RESOLVIDO por `bb373b5`: `{ main "$@"; exit $?; }` mais o sensor diferencial
-  `tests/check-entrypoint.sh`. — descoberto por `sdd-qa` na missão `20260816-runner-sem-dividas` (2026-08-16)
-
-- [ ] **O ledger de autonomia é global e nenhum leitor filtra por repo** — `bin/sdd:790` — o
-  caminho é `$HOME/.sdd/autonomy-log.jsonl` para qualquer repo, e `sdd autonomy`/`kaizen --series`
-  liam todas as linhas. Um `sdd run` de fixture (jornada de QA, sandbox em `/tmp`) escreveu 3
-  linhas no ledger de produção e o juiz passou a ler `66% waste · 2 mission(s)` para o kit_sha
-  corrente, onde o verdadeiro é `0% · 1`. RESOLVIDO por `d99a7fc`: `ledger_row_is_local()`, um
-  predicado para os três leitores, com o que sai contado em `excluded.other_repo`.
-  — descoberto por `sdd-qa` na missão `20260816-runner-sem-dividas` (2026-08-16)
 
 - [ ] **O fixture de `stream-json` não tem checagem de proveniência** — `tests/check-autonomy.sh:127`
   — as três linhas replayadas pelos stubs foram copiadas de sessão real (CLI 2.1.233) e o comentário
@@ -295,14 +264,6 @@ Achados sobre **repos-alvo** vão para o `TODO.md` daquele repo. Este arquivo é
   e as três mataram a suíte, mas evidência de sessão não roda no CI. Vale um mutante para cada
   quando houver folga de régua. — descoberto por `sdd-executor` na missão
   `20260815-ledger-sem-ponto-cego` (2026-08-16)
-
-- [ ] **O aviso de "você está na branch base" mora só no preflight** — `bin/sdd:1226`
-  (`warn_if_on_base_branch`) — quem chamava `sdd kaizen` ou `sdd run` direto nunca o via, e as duas
-  ABREM SESSÃO QUE COMMITA. O kaizen era o pior: valida repo do kit e árvore limpa, e então escreve
-  verdict + os três artefatos onde quer que você esteja, `main` inclusive. RESOLVIDO por `daa8687`:
-  uma função só, chamada pelas três portas, ainda `warn` e nunca `die`. ⚠️ `sdd retry` é a quarta
-  porta e continua sem ela — item próprio em "Contrato e configuração".
-  — descoberto por `humano` na missão `20260816-runner-sem-dividas` (2026-08-16)
 
 - [ ] **A guarda do juiz é insatisfazível quando o kit desenvolve a si mesmo** — `bin/sdd:2024`
   (`sufficient: ($observed >= 3)`) vs `autonomy_kit_stamp` — o eixo é o `HEAD` do kit no instante
