@@ -1,6 +1,6 @@
 ---
 missao: 20260816-runner-sem-dividas
-atualizado: 2026-08-16 14:10
+atualizado: 2026-08-16 15:20
 ---
 
 # Checkpoint — a seção "Runner — defeitos e dívidas" do TODO.md é eliminada
@@ -17,7 +17,7 @@ atualizado: 2026-08-16 14:10
 | I1 | Triagem por artefato: gate_DOCS obsoleto sai | `grep -c 'gate_DOCS reprova' TODO.md` → `0`, commit cita hash provado por merge-base | done | 238497f |
 | I2 | latest_matching ordena por versão | `bash tests/check-gates.sh` → verde com asserção r1/r2/r10 escolhendo r10; mutação RUN_sort_lexi no catálogo | done | 6c7b1df |
 | I3 | sdd install morre alto sem starter | `bash tests/check-preflight.sh` → verde com asserção "sem starter: rc≠0 e config ausente"; mutação RUN_install_no_guard | done | 86607f1 |
-| I4 | bad_rows sai; comentário do slice honesto | `grep -c bad_rows bin/sdd` → `0` e `grep -c 'CHARACTER slice' bin/sdd` → `0`; suíte verde | pending | — |
+| I4 | bad_rows sai; comentário do slice honesto | `grep -c bad_rows bin/sdd` → `0` e `grep -c 'CHARACTER slice' bin/sdd` → `0`; suíte verde | done | 3ef23f4 |
 | I5 | printf-grep-q sai da suíte, sensor impede volta | `bash tests/run-all.sh` → verde; ocorrência reintroduzida em tests/ → passo novo vermelho | pending | — |
 | I6 | lint cobre tests/ | `shellcheck -S warning bin/sdd tests/*.sh` → rc 0; run-all roda o passo estendido | pending | — |
 | I7 | uma definição de comparabilidade | `bash tests/check-autonomy.sh` → verde com asserção diferencial kit_dirty null + sha; mutação RUN_on_axis_forked | pending | — |
@@ -45,6 +45,11 @@ atualizado: 2026-08-16 14:10
 - 2026-08-16 · I3 · o dano real não é o rótulo `ok` na 1ª rodada (o `set -e` mata antes), é o `.sdd/config.sh` de 0 byte que sobra: medido, o `sdd install` SEGUINTE imprime `ok … already exists (preserved)` com rc 0 e o alvo segue sem `TEST_CMD`. O texto do item no TODO.md descrevia a rodada errada
 - 2026-08-16 · I3 · ⚠️ achado que quase virou `KNOWN_GAPS`: a mutação nova rodou e NÃO foi capturada, porque `tests/run-all.sh:60` pulava o `check-preflight.sh` dentro do mutante ("não é gate, nunca pontua"). A justificativa venceu no instante em que o arquivo ganhou asserção de comportamento do runner. Guarda removida (custo medido: 0,14 s/run; suíte 32,2 s → 34,4 s); a 2ª metade da justificativa ("lê agents/") nunca foi verdade — o laço usa `[ -e ] || continue`. O caso geral foi para o TODO.md
 - 2026-08-16 · I3 · para o I6: o SC2318 do `check-mutation.sh` desceu de 382 para **394** (este commit inseriu 12 linhas acima dele). Continua 1× e o único achado de `shellcheck -S warning tests/*.sh`. `check-preflight.sh` e `run-all.sh`, ambos tocados aqui, saem limpos no lint
+- 2026-08-16 · I4 · o "sem sensor novo" do plano foi honrado, mas a não-regressão NÃO ficou por leitura: par de sabotagens em `gate_EXEC`. (A) tirar só o contador, mantendo o `return 1` → check-gates.sh VERDE, logo `bad_rows` não sustentava nada; (B) trocar o ramo `*)` por `: ;;` → 2 asserções morrem (`:261,262`). O par prova as duas metades: a linha editada está sob sensor, o que saiu dela não estava
+- 2026-08-16 · I4 · ⚠️ o Check literal REPROVOU o conserto certo: o comentário honesto citava "CHARACTER slice" para desmenti-la, e `grep -c` deu `1`, não `0`. Reescrito para não reproduzir o termo. É defeito DISTINTO do "Check que já nasce verde" do I1 — contra o HEAD este dava vermelho de verdade, e a armadilha ficava. Entrada própria no TODO.md ("Sensores que faltam"); a Direção do item do I1 não a cobriria
+- 2026-08-16 · I4 · medições que entraram no comentário (não re-medir): `${v:0:200}` sob `pt_BR.UTF-8` → 200 chars/400 bytes; sob `LC_ALL=C` → 200 bytes, igual ao `head -c` (iconv reprova o corte ímpar). E o jq 1.7 daqui **não rejeita** UTF-8 inválido: substitui por U+FFFD e sai 0 — a alegação vizinha do comentário antigo ("some jq builds reject outright" → linha some pela guarda de vazio) era falsa neste build
+- 2026-08-16 · I4 · terceira ocorrência da promessa, ausente do plano: o comentário de bloco de `autonomy_escalation_row` (`bin/sdd:822`) listava "the character slice" entre as decisões compartilhadas. Virou "the gate_why cap" no mesmo commit
+- 2026-08-16 · I4 · baseline para os próximos: suíte verde, mutação **32/32** (I4 não acrescenta mutante — é remoção de código morto e prosa), `sdd health` verde nos 5 checks, ratchet de dívidas conhecidas 8 → 6
 
 ## Incrementos de fix (QA)
 
