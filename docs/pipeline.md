@@ -370,8 +370,9 @@ closure is inventory, not improvement.
 
 The judge is split in two (ADR 0001):
 
-**The runner derives the numbers.** `sdd kaizen --series` prints a versioned JSON (`v: 1`),
-readable from any repo since the ledger is global: `latest` and `previous` kit versions (by
+**The runner derives the numbers.** `sdd kaizen --series` prints a versioned JSON (`v: 1`) about
+the repo it runs in — the file is global, the reading is not, see above: `latest` and `previous`
+kit versions (by
 **file order** of first appearance, never by sort — and a reappearing old sha rejoins its old
 group), each with missions, `missions_with_session` (the subset that bought an observation — the
 guard below counts these, not the raw mission tally), sessions, `moved_rate`, cost, escalations

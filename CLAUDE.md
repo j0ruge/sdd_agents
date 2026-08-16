@@ -113,9 +113,10 @@ com resultado esperado. Escreva o Check antes de implementar o incremento.
 A suíte é `tests/run-all.sh` — é ela o `TEST_CMD` deste repo, e é ela que os gates rodam. Sensor
 novo entra lá. Os doze de hoje: `check-templates.sh`, `check-gates.sh`, `check-dry-run.sh`,
 `check-mutation.sh`, `check-lang.sh`, `check-autonomy.sh`, `check-kaizen.sh`, `check-preflight.sh`,
-`check-todo.sh`, `check-pipefail.sh`, `check-entrypoint.sh` e `check-checkpoint.sh`. `sdd preflight`, `bash -n bin/sdd` e os dry-runs completam,
-mas não substituem. O passo de lint do `run-all.sh` cobre `bin/sdd` **e** `tests/*.sh` — deixar a
-suíte fora do linter foi o que segurou dois SC2318 reais em `check-mutation.sh` por três missões.
+`check-todo.sh`, `check-pipefail.sh`, `check-entrypoint.sh` e `check-checkpoint.sh`.
+`sdd preflight`, `bash -n bin/sdd` e os dry-runs completam, mas não substituem. O passo de lint do
+`run-all.sh` cobre `bin/sdd` **e** `tests/*.sh` — deixar a suíte fora do linter foi o que segurou
+dois SC2318 reais em `check-mutation.sh` por três missões.
 
 **Sensor que o catálogo de mutação não alcança carrega um auto-teste.** São duas situações, e
 hoje há quatro sensores nelas. `check-lang.sh` e `check-pipefail.sh` não podem se escanear (o
@@ -124,6 +125,11 @@ e `check-checkpoint.sh` medem markdown, não o `bin/sdd`, então nenhuma sabotag
 faria morrer — `check-pipefail.sh` está nas duas situações, porque também mede `tests/`. Nos
 quatro casos quem mede o sensor é um `selftest()` com probes e rc próprios — 90, 91, 92 — mais um
 piso contra vacuidade. Sem isso, regex quebrada reporta "tudo limpo" para sempre.
+⚠️ A rubrica é "a mutação não alcança", **não** "tem `selftest()`": `grep -l selftest tests/` hoje
+devolve **cinco**, porque o `check-entrypoint.sh` carrega um por escolha própria (o catálogo o
+alcança via `mut_RUN_entrypoint_unguarded`, mas o parser dele é fino demais para depender só
+disso). Sensor a mais com auto-teste nunca é o defeito; sensor **sem** ele, estando nas duas
+situações, é.
 
 ⚠️ **O selftest tem de exercitar o CAMINHO, não só a função.** Achado consertando o
 `check-todo.sh`: os probes provavam que o parser pulava blocos cercados, e mesmo assim trocar a

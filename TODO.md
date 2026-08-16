@@ -69,6 +69,13 @@ Achados sobre **repos-alvo** vão para o `TODO.md` daquele repo. Este arquivo é
   Direção: tratar `\|` antes do split, com asserção. — descoberto por `sdd status` na missão
   `20260816-kit-como-alvo` (2026-08-16)
 
+- [ ] **A regra do `|` na célula do Check é ensinada em prosa e medida no scan, mas nenhum
+  `doc_rule` a cobra** — `tests/check-checkpoint.sh:239-241` — as duas asserções de documento
+  exigem só o âncora `^  ok    `; apagar o banner do `|` de `templates/checkpoint.md` e do
+  `sdd-planner` deixa o sensor **verde**, e a regra que custou uma missão inteira volta a nascer
+  desconhecida. Direção: um `pipe_rule()` gêmeo, com probe no `selftest()`.
+  — descoberto por `sdd-reviewer` na missão `20260816-kit-como-alvo` (2026-08-16)
+
 - [ ] **Nada compara `agents/*.md` com a cópia instalada em `.claude/agents/`** — `bin/sdd:1247` —
   o preflight só checa **existência** (`[ -f ... ] || _fail "not installed"`) e então imprime
   "N kit agent(s) checked": rótulo sobre uma comparação que nunca aconteceu. A cópia é o que o
@@ -299,6 +306,34 @@ Achados sobre **repos-alvo** vão para o `TODO.md` daquele repo. Este arquivo é
   `20260816-runner-sem-dividas` (2026-08-16)
 
 ### Contrato e configuração
+
+- [ ] **O lembrete pós-pipeline manda o humano a um comando que não enxerga o que ele contou** —
+  `bin/sdd:2141` (`kaizen_reminder`) vs `:2300` (`cmd_kaizen`) — o lembrete roda com
+  `REPO_ROOT` = repo-ALVO e conta as missões dele; o juiz roda no repo do KIT e, com o filtro por
+  repo, lê `latest: null` e `other_repo: N`. Medido em fixture: 3 missões viram "run 'sdd kaizen'
+  in the kit repo", e lá a guarda é `0/0/0`. Direção: silenciar o lembrete fora do kit, ou decidir
+  o eixo (item da guarda). — descoberto por `sdd-reviewer` na missão `20260816-kit-como-alvo` (2026-08-16)
+
+- [ ] **`sdd retry` é a quarta porta que commita e não avisa da branch base** — `bin/sdd:1868`
+  (`cmd_retry` chama `run_phase` sem `warn_if_on_base_branch`) — o comentário da função
+  (`bin/sdd:1209`) declara "as três portas que commitam" e o I4 fechou três; a quarta abre sessão
+  que commita igual. `sdd retry` na `main` commita na `main` em silêncio. Direção: a quarta
+  chamada + asserção diferencial no `check-gates.sh`, como as outras três.
+  — descoberto por `sdd-reviewer` na missão `20260816-kit-como-alvo` (2026-08-16)
+
+- [ ] **Worktree do git parte a identidade do repo no ledger** — `bin/sdd:768`
+  (`ledger_repo_root` usa `--show-toplevel`) — o toplevel é por worktree, então missão rodada num
+  worktree grava `repo: .../wt` e a mesma leitura do checkout principal a devolve como
+  `other_repo` e a série vem vazia. Worktree é fluxo de primeira classe aqui. Direção:
+  `git rev-parse --git-common-dir` como identidade, com asserção diferencial.
+  — descoberto por `sdd-reviewer` na missão `20260816-kit-como-alvo` (2026-08-16)
+
+- [ ] **Linha sem `repo` é "local" em TODO repo, e o comentário afirma o contrário** —
+  `bin/sdd:785` — o comentário diz que os leitores classificam essas linhas em voz alta
+  (`unrecognized`, ou morte alta), mas `is_unrecognized` olha `.event` e não `.repo`: linha de
+  sessão bem-formada sem `repo` é sessão comparável em toda máquina — 3 delas bastaram para virar
+  `guard.sufficient` para `true` em fixture. Hoje são 0 no ledger real. Direção: contar num balde
+  próprio. — descoberto por `sdd-reviewer` na missão `20260816-kit-como-alvo` (2026-08-16)
 
 - [ ] **O juiz no repo do kit deixou de enxergar missão de repo-alvo** — `bin/sdd:790`
   (`ledger_row_is_local`) — a leitura por repo é o conserto certo para contaminação de fixture,
