@@ -423,6 +423,20 @@ mut_RUN_progress_dead() {
   sed -i 's@  if progress_wanted; then stream_watch "$streamfile" & watcher=$!; fi@  watcher=""@' "$1"
 }
 
+# Not a gate: the entry point goes back to the bare `main "$@"` it shipped with for its whole life,
+# so bash can return from the last command and ask this file for more input. It is the sabotage
+# that changes NOTHING observable in any ordinary run — every command still works, every rc is
+# still right — and only bites the day something appends to bin/sdd while it is executing, which
+# is precisely what the EXEC phase does to it. No behavioural fixture can see it without editing a
+# running runner, so what has to catch it is the form assertion in check-entrypoint.sh; if that
+# assertion is ever loosened into "the guard appears somewhere", this mutant survives and says so.
+# The delimiter is `|` and not the `@` every other mutation here uses: the anchor CONTAINS `"$@"`,
+# so an `@` delimiter closes the expression in the middle of the entry point and sed dies with
+# "unterminated `s' command". Cheap to write, and it would have read as anchor rot (rc 90).
+mut_RUN_entrypoint_unguarded() {
+  sed -i 's|^{ main "$@"; exit $?; }$|main "$@"|' "$1"
+}
+
 CATALOG=(
   PLAN_empty_approval
   TICKET_no_sprint
@@ -464,6 +478,7 @@ CATALOG=(
   RUN_stream_summary_fatal
   RUN_progress_eats_rc
   RUN_progress_dead
+  RUN_entrypoint_unguarded
 )
 
 # Mutations that are NOT caught today, each with the increment that closes it. Ratchet in both

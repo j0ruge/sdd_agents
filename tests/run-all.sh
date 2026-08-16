@@ -24,6 +24,11 @@ run() { # run <name> <command...>
 
 run "runner syntax (bash -n)" bash -n "$ROOT/bin/sdd"
 
+# Beside the syntax check because it measures the same thing — bin/sdd as a FILE — and needs no
+# fixture. Deliberately NOT guarded by SDD_MUTANT: it is the only thing that catches
+# mut_RUN_entrypoint_unguarded, and it reads nothing the mutation sandbox does not copy.
+run "entry point cannot fall through into itself" "$ROOT/tests/check-entrypoint.sh"
+
 # The lint surface: the runner PLUS every suite script. For a long time it was bin/sdd alone,
 # which left ~2400 lines of tests/ unlinted — and the linter was right about them: SC2318 in
 # check-mutation.sh had `local slug="$1" box="$WORK/$slug"` reading the CALLER's global `slug`,
@@ -52,8 +57,12 @@ run "runner syntax (bash -n)" bash -n "$ROOT/bin/sdd"
 # SC2318 in the scan while the probe went on asserting `warning` and stayed green: a sensor
 # certifying a threshold nobody runs at. The risk table of this mission forbade lowering `-S`;
 # this is what makes the ban a sensor instead of a sentence.
+#
+# The floor moved 12 → 13 when tests/check-entrypoint.sh landed. It tracks the real count on
+# purpose: left at 12 it would still pass, and would have gone on describing a surface one file
+# smaller than the one it reads — the label-instead-of-artifact shape this whole mission is about.
 LINT_SEVERITY=warning
-LINT_FLOOR=12
+LINT_FLOOR=13
 
 lint_surface() {
   local files=("$ROOT/bin/sdd") f

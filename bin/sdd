@@ -2362,4 +2362,11 @@ cmd_close() {
   return "$rc"
 }
 
-main "$@"
+# The braces and the `exit` are load-bearing, and tests/check-entrypoint.sh is why. bash keeps the
+# file offset in sync with what it has parsed, so returning from a bare `main "$@"` sends it back
+# to the read loop to ask this file for more input — and the EXEC phase edits bin/sdd DURING the
+# `sdd run` executing it. Today the editor writes a new file and renames it, so the running shell
+# keeps reading the old inode; an append (`>> "$0"`, `tee -a`) does not, and the shell would then
+# execute whatever landed past the old end of file, with rc 0. `exit` means the read loop is never
+# reached again, however much the file grew meanwhile.
+{ main "$@"; exit $?; }

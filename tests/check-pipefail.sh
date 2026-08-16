@@ -402,7 +402,7 @@ EOF
   probe 'a shrunken surface fails instead of reporting clean' 93 'surface shrank' "$tree" --scan
 
   tree="$box/full"; mkdir -p "$tree/bin" "$tree/tests"; : > "$tree/bin/sdd"
-  for i in 1 2 3 4 5 6 7 8 9 10; do : > "$tree/tests/check-$i.sh"; done
+  for i in 1 2 3 4 5 6 7 8 9 10 11; do : > "$tree/tests/check-$i.sh"; done
   probe 'a full clean surface passes' 0 '(0 waived)' "$tree" --scan
 
   # The waived COUNT is the only thing that makes the waiver hole visible in a diff, so it is a
@@ -440,10 +440,12 @@ scan_surface() {
   files="$(surface "$root")"
   n_files="$(grep -c . <<< "$files")"
   # Explicit floor, same reason as the one in check-lang.sh: a glob that stops matching leaves the
-  # loop with nothing to read and the sensor reports "0 violations" — clean by vacuity. 11 paths
-  # today (bin/sdd + ten suite scripts, minus this file).
-  if [ "$n_files" -lt 11 ]; then
-    printf '  FAIL  surface shrank to %d path(s), expected at least 11 — did something move?\n' \
+  # loop with nothing to read and the sensor reports "0 violations" — clean by vacuity. 12 paths
+  # today (bin/sdd + eleven suite scripts, minus this file); it was 11 until
+  # tests/check-entrypoint.sh landed, and it tracks the real count rather than staying at a number
+  # that would still pass while describing a smaller surface than the one actually scanned.
+  if [ "$n_files" -lt 12 ]; then
+    printf '  FAIL  surface shrank to %d path(s), expected at least 12 — did something move?\n' \
       "$n_files" >&2
     return 93
   fi
