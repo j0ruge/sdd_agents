@@ -354,8 +354,9 @@ The judge is split in two (ADR 0001):
 **The runner derives the numbers.** `sdd kaizen --series` prints a versioned JSON (`v: 1`),
 readable from any repo since the ledger is global: `latest` and `previous` kit versions (by
 **file order** of first appearance, never by sort — and a reappearing old sha rejoins its old
-group), each with missions, sessions, `moved_rate`, cost, escalations by kind, a per
-mission×phase `detail`, and a label per group:
+group), each with missions, `missions_with_session` (the subset that bought an observation — the
+guard below counts these, not the raw mission tally), sessions, `moved_rate`, cost, escalations
+by kind, a per mission×phase `detail`, and a label per group:
 
 - `refez` — an escalation, a human `sdd retry`, or the phase's last session still failing its
   gate: the work was pushed again.

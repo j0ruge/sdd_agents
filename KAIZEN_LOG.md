@@ -4,6 +4,82 @@ Registro de melhorias com **antes/depois medido**. Sem número, não entra.
 
 ---
 
+## 2026-08-16 — O kit trabalha no próprio backlog (missão `20260816-runner-sem-dividas`)
+
+**Prova de fogo:** primeira missão em que o `sdd-planner` é exercitado de verdade e o kit anda
+sozinho da aprovação do plano ao PR. O alvo era a seção **"Runner — defeitos e dívidas"** do
+`TODO.md` — 11 itens acumulados, cada um uma dívida conhecida do `bin/sdd`.
+
+| | Antes (`7045e0f`) | Depois (fecho da REVIEW r2) |
+|---|---|---|
+| Itens na seção "Runner — defeitos e dívidas" | 11 | **0** — a seção não existe mais |
+| Score de mutação | 30 caught, 0 gap, of 30 | **38 caught, 0 gap, of 38** |
+| Sensores da suíte | 9 | **10** (`check-pipefail.sh` nasce) |
+| Lint | só `bin/sdd` | **`bin/sdd` + `tests/*.sh`** (12 caminhos, piso `LINT_FLOOR`) |
+| `SC2318` reais vivos na suíte | 1 (invisível ao lint) | **0** — e o lint agora o veria |
+| Log de fase enquanto a sessão roda | **0 bytes por ~10 min** | `.stream.jsonl` vivo, `tail -f`-ável |
+| Suíte no default, mesma máquina e sessão | 33,95 s | 44,55 s (**+31%**) |
+| `sdd health` | verde nos 5 checks, ratchet 6 | **idêntico** |
+| Âncoras `arquivo:linha` erradas no `TODO.md` | 15, em 11 itens | **0** (medido e corrigido na fase DOCS) |
+
+Os dois tempos foram medidos nesta máquina e nesta sessão, `7045e0f` num worktree descartável
+contra o `HEAD`, suíte verde dos dois lados. O **+31% é catálogo, não desperdício**: os 8 mutantes
+novos são 8 suítes inteiras a mais, e o alvo `<30 s` segue como item próprio em "Custo e escala".
+Cortar mutação para recuperar relógio é o que o I13.2 existe para proibir.
+
+### O achado que se repetiu três vezes: o item descrevia o sintoma barato
+
+A lição cara desta missão não é nenhum dos 11 consertos — é que **o texto do achado subestimou o
+dano em três dos onze**, e só a asserção escrita para medi-lo revelou o tamanho real:
+
+- **I3 (`sdd install`)** — o item dizia que o defeito era o rótulo `ok` sobre um arquivo vazio. Sob
+  `set -e` o `sed` já matava a primeira rodada; o dano real é o `.sdd/config.sh` de **0 byte** que
+  sobra, porque o `sdd install` **seguinte** o encontra e imprime `ok … already exists (preserved)`
+  com rc 0 — o repo-alvo segue sem `TEST_CMD` e nenhum gate reclama.
+- **I9 (giro pós-degradação)** — o item falava em desperdício de voltas. Medido: o run terminava
+  escalando `budget-exhausted` na fase **PR**, que nunca esteve acima do orçamento, por um teto que
+  REVIEW estourou três voltas antes. Ledger, `sdd autonomy` e o juiz herdavam a **culpa trocada**.
+- **I2 (`sort -V`)** — o comentário afirmava que os sites de QA eram indiferentes à ordenação e
+  citava como prova uma fixture que exercita **outro glob**. As duas metades eram falsas: entre dois
+  relatórios do mesmo dia, `sort` e `sort -V` escolhem arquivos diferentes, e nomear relatório como
+  `<data>-<escopo>.md` é o caso ordinário, não o canto.
+
+Regra que sai daí: **o item do `TODO.md` é hipótese, não medição.** Quem for consertá-lo mede o dano
+antes de escolher o conserto — três vezes aqui o dano real estava numa camada acima do sintoma
+registrado, e duas delas o conserto "óbvio" teria sido um no-op declarado vitorioso.
+
+### O arnês de sabotagem errou três vezes, e sempre para o lado verde
+
+A passada de sabotagem adversarial é a regra da casa, e nesta missão ela cobrou o próprio preço: em
+I6, I7 e I10 o **arnês** estava quebrado e produzia vereditos que eram dele, não da sabotagem —
+range de `sed` terminado em `/^$/` cortando o relatório do `shellcheck`; sandbox copiando só
+`bin`+`tests`, forma em que o `check-autonomy.sh` fica vermelho por conta própria; `/proc/self/fd/1`
+resolvendo para o pipe da substituição em vez do arquivo do runner. Nos três casos o sintoma foi o
+mesmo — **verde (ou vermelho) pelo motivo errado** — e a correção idêntica: julgar pelo **nome da
+asserção que cai**, nunca pelo `rc`, e rodar o controle positivo antes de acreditar em qualquer
+morte. É o espelho exato da regra que a casa já tinha para testes, aplicada ao instrumento que mede
+os testes.
+
+Duas regras menores confirmadas pelo uso: sabotagem que **não consegue** quebrar uma regra é
+detector de duplicata (o I5 e o I10 colapsaram um par cada), e quando o conserto muda o número que a
+testemunha anti-vacuidade lê, **a testemunha muda de grandeza, não de constante** (I9).
+
+### Triagem antes de conserto, fechamento por artefato
+
+Dos 11 itens, **1 já estava resolvido** — o do `gate_DOCS`, fechado por `0f50fad`, provado ancestral
+de `main` com `git merge-base --is-ancestor` e apagado sem uma linha de código. Os outros 10 foram
+re-verificados um a um contra o `HEAD` e **todos seguiam vivos**; nenhum incremento virou no-op. O
+plano previa esse risco e ele não se materializou além do primeiro caso.
+
+**Padronizado em** (confirmado abrindo cada arquivo): `CLAUDE.md` § "TDD aqui dentro" (dez sensores,
+três com auto-teste; o lint cobre `tests/`), `config/schema.md` (`PUBLISH_ON_REVIEW_BLOCKED` — o PR
+draft tem **uma** chance), `docs/pipeline.md` (os dois arquivos de log por sessão; `kind` sem o giro;
+`missions_with_session` na lista de campos do grupo **e** na guarda), `docs/failure-modes.md` (como
+ler um ledger antigo com `budget-exhausted` em PR; o novo modo de falha do `sdd install` sem
+`starter.conf`, com a arqueologia do config de 0 byte), `CONTEXT.md` (verbetes "Degradação" e
+"Guarda das 3 missões", e o número do alvo `<30 s`), `agents/sdd-kaizen.md` + a cópia em
+`.claude/agents/` (shape do `guard`).
+
 ## 2026-08-16 — A mutação para de pagar por barreira e por constante
 
 A suíte inteira roda a cada avaliação de gate (`TEST_CMD`), então cada segundo dela é pago

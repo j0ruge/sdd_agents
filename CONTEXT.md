@@ -16,7 +16,7 @@
 | **Degradação (`review-to-draft`)** | O único `degraded` de hoje: `PUBLISH_ON_REVIEW_BLOCKED=draft` + review sem rodadas ⇒ PR em draft em vez de parada. **No máximo uma linha por `run_id`** — e, desde o I9 da missão `20260816-runner-sem-dividas`, isso deixou de depender de contagem: o laço REVIEW→PR→REVIEW não existe mais. A degradação dá **uma** chance ao PR draft; a segunda entrada no ramo encerra o run com o par `BLOCKED`/`budget-exhausted` que já existia, sem evento novo no enum. Logo, `review-to-draft: 3` são três runs, nunca um run que degradou três vezes. |
 | **Juiz** | O papel que produz rótulos + veredito. Pela **D1**, é dividido: a parte mecânica é sensor do runner; a interpretação final é do agente. |
 | **Triagem kaizen** | Escolher do `TODO.md` do kit o próximo lote de trabalho que vira missão — sem desviar escopo, sem perder achado. ⚠️ Caixa desmarcada com "RESOLVIDO por `<hash>`" no corpo já está fechada; se o hash já alcançou `main`, o item entra na lista de **resolvidos a apagar** do plano nascido (fechado é apagado, nunca arquivado). |
-| **Guarda das 3 missões** | O juiz responde `indeterminado` quando há menos de 3 missões observadas depois da mudança julgada (decisão do design de 2026-08-14). |
+| **Guarda das 3 missões** | O juiz responde `indeterminado` quando há menos de 3 missões **com sessão comparável** depois da mudança julgada (decisão do design de 2026-08-14). Desde o I8 da missão `20260816-runner-sem-dividas` o piso é `missions_with_session`, e **não** `missions_after_change`: missão que só escalou rodou e conta como missão, mas não comprou observação nenhuma — três delas davam `sufficient: true` com `sessions: 0`, que é a guarda respondendo "já dá para julgar" sobre o nada. Os dois números viajam lado a lado na série para que `false` ao lado de `3` seja legível. Shape completa em `docs/pipeline.md` § "The kaizen loop". |
 | **Marco 1 / Marco 2** | M1: kit executa, humano planeja e faz merge. M2: kit **planeja** e executa; humano aprova o plano e faz merge. O I13.3 é a peça que falta para o M2. |
 | **`KAIZEN_AUTO_APPROVE`** | Chave futura (I13.4): plano kaizen nasce aprovado quando a rubrica recomendar graduação. **Fora de escopo no I13.3.** |
 
@@ -40,12 +40,15 @@
 
 - **D11 espera confirmação humana.** O código já foi escrito com `event: "degraded"`; a alternativa
   barata continua a um valor de campo e às asserções correspondentes de distância.
-- **O critério (4) da D7 — "suíte < 30 s no default" — segue não atingido, agora por ~3 s.**
-  A saída "subir o default" foi tomada em 2026-08-16: `SDD_MUTATION_JOBS` deriva de
-  `min(núcleos, 8)` e o escalonador virou pool — mediana 54,13 s → **32,87 s**, score intacto
-  (KAIZEN_LOG). Cortar mutação para ganhar tempo violaria o princípio que motivou o I13.2, então
-  o que resta é subir o alvo ou aceitar o estouro, que cresce com o catálogo. Decisão do humano;
-  o item vivo mora no `TODO.md`.
+- **O critério (4) da D7 — "suíte < 30 s no default" — segue não atingido, e o estouro cresceu de
+  ~3 s para ~15 s.** A saída "subir o default" foi tomada em 2026-08-16: `SDD_MUTATION_JOBS`
+  deriva de `min(núcleos, 8)` e o escalonador virou pool — mediana 54,13 s → **32,87 s**, score
+  intacto (KAIZEN_LOG). A missão `20260816-runner-sem-dividas` confirmou a previsão que já estava
+  escrita nesta linha — o estouro **cresce com o catálogo**: 33,95 s → **44,55 s** na mesma
+  máquina e na mesma sessão, com o catálogo indo de 30 para 38 mutantes, e cada mutante é uma
+  suíte inteira. Cortar mutação para ganhar tempo violaria o princípio que motivou o I13.2, então
+  o que resta é subir o alvo ou aceitar o estouro. Decisão do humano; o item vivo mora no
+  `TODO.md`.
 
 _As duas perguntas abertas no grill (D9, D10) foram resolvidas na execução do I13.3 e movidas para
 a tabela acima._

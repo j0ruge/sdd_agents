@@ -193,6 +193,26 @@ is a sign the kit's agent needs to change.
 
 ---
 
+## `sdd install` refuses to run: the kit has no `config/starter.conf`
+
+**Symptom:** `error: the kit at <path> has no config/starter.conf …`, rc 1, and **no**
+`.sdd/config.sh` in the target repo.
+
+**Cause:** the kit checkout is incomplete — a partial copy, a clone that lost a file, a `$PATH`
+pointing at a `bin/sdd` whose `config/` was left behind. `sdd install` builds `.sdd/config.sh`
+out of that template.
+
+**What you do:** re-copy or re-clone the kit, then run `sdd install` again. The guard fires
+**before** the file is written, so there is nothing to clean up on the target side.
+
+⚠️ **Reading an older target.** Before this guard existed the redirect ran anyway and left a
+**0-byte** `.sdd/config.sh` behind. The damage is not the first run — it is the *second*: the
+next `sdd install` finds the file, prints `ok … already exists (preserved)` with rc 0, and the
+repo carries on with no `TEST_CMD` at all. A target whose gates behave as if every key were
+empty is worth one `wc -c .sdd/config.sh`; on `0`, delete it and install again.
+
+---
+
 ## A conflict with the base branch on push
 
 **Symptom:** `50-pr.md` with `status: blocked` and the reason for the conflict.
