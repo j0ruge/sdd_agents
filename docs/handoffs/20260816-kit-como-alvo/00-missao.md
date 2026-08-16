@@ -61,8 +61,8 @@ Fato binário verificável, por incremento, cada um com o vermelho **medido no H
 - a asserção `the base branch warning reaches sdd run` aparece **e passa** em
   `tests/check-gates.sh` (hoje: 0 ocorrências).
 
-E, no agregado: `tests/run-all.sh` verde com score de mutação **100%** e o catálogo indo de 38
-para **42** mutantes — as quatro sabotagens novas provam que as quatro asserções discriminam.
+E, no agregado: `tests/run-all.sh` verde com score de mutação **100%** e o catálogo indo de 40
+para **44** mutantes — as quatro sabotagens novas provam que as quatro asserções discriminam.
 
 ## Resultado esperado
 
@@ -112,7 +112,7 @@ o laço kaizen não aprova os próprios planos (regra pré-I13.4, cobrada por `g
 | # | Item | Status | Nota |
 |---|---|---|---|
 | K1 | Gemba — fui ver onde o trabalho acontece | ✅ | 9 âncoras lidas no `bin/sdd` e 4 Checks rodados; nenhum achado veio do texto do `TODO.md` sem reconferência — foi assim que a âncora podre `:2324` → `:2365` apareceu |
-| K2 | Problema declarado com métrica | ✅ | § Métrica: 4 fatos binários com o vermelho medido, mais catálogo 38 → 42 a 100% |
+| K2 | Problema declarado com métrica | ✅ | § Métrica: 4 fatos binários com o vermelho medido, mais catálogo 40 → 44 a 100% (medido: `run-all.sh` → `of 40`) |
 | K3 | Desperdícios identificados e cortados | ✅ | Três desperdícios de retrabalho: número de juiz contaminado por teste (correção manual do ledger), agente rodando texto velho (achado só na revisão), commit na branch errada (custou ~US$ 45 de `rebase --onto` no piloto SQ-97) |
 | K4 | Fatiamento incremental, cada fatia verificável | ✅ | 4 incrementos independentes; I1/I3/I4 não se tocam, I2 é o único multi-arquivo. Qualquer um pode ser revertido sozinho |
 | K5 | Check por artefato (rótulo ≠ artefato) | ✅ | Nenhum Check lê rótulo de sessão: 3 grepam a linha `ok` **da saída do sensor** (a asserção rodou E passou), 1 lê `rc`. A missão inteira é sobre esta distinção |

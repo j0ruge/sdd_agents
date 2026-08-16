@@ -43,7 +43,8 @@ Tudo aqui foi confirmado no HEAD `df18c88` (branch `kaizen/20260816`), com o com
 - **Mutante = função `mut_<SLUG>()` em `tests/check-mutation.sh`**, aplicada a uma cópia sandbox
   por `run_mutant` (`tests/check-mutation.sh:492`). ⚠️ Se a sabotagem não alterar o arquivo,
   `run_mutant` devolve **rc 90** com "the mutation did not apply — did the anchor change?" —
-  é assim que âncora podre no catálogo se denuncia. Catálogo hoje: **38** mutantes.
+  é assim que âncora podre no catálogo se denuncia. Catálogo hoje: **40** mutantes
+  (`tests/run-all.sh` → `score: 40 caught, 0 known gap(s), of 40`).
 - **Os 4 Checks deste plano foram rodados contra este HEAD e deram vermelho**: I1 `rc=127`
   (sensor não existe), I2 `0`, I3 `0`, I4 `0` (asserções não existem). Nenhum nasce verde.
 
@@ -181,7 +182,7 @@ a regressão cara aqui não é o aviso sumir, é ele virar erro e trancar o laç
 
 Com os quatro incrementos `done`:
 
-1. `bash tests/run-all.sh` → verde, e a linha de mutação lê **42/42 (100%)** (hoje: 38/38).
+1. `bash tests/run-all.sh` → verde, e a linha de mutação lê **44/44 (100%)** (hoje: 40/40).
 2. Os quatro Checks do `checkpoint.md` rodados em sequência → `0`, `1`, `1`, `1` (hoje: `127`,
    `0`, `0`, `0`). É a métrica do `00-missao.md`, número a número.
 3. `sdd health` → verde, com os quatro mutantes reconhecidos (a regra "gate/asserção nova entra
