@@ -56,7 +56,16 @@
 # Not measured, on purpose: whether an anchor still points at real code, whether the prose is any
 # good, and whether a finding is worth keeping. All three are human judgement on the diff.
 #
-# Two measured weaknesses, stated rather than hidden. Rule 3 asks for a backticked token before
+# THREE measured weaknesses, stated rather than hidden. The first is the header: nothing here
+# models a fence, so a stray or unbalanced fence in the header — which makes GitHub render the
+# whole findings section as a code block — is NOT detected. Four mechanisms tried to catch it and
+# all four were worse than the gap: two failed silent, and the last also failed RED on an inline
+# code span, on a nested example, and on the header showing the very shape rule 1 enforces.
+# Detecting it correctly needs a CommonMark parser, which this file must not be. The blast radius
+# is bounded and visible: the ticked-box rule never depended on fences, so no closed finding can
+# hide behind one, and a file rendering as code is obvious to the first human who opens it.
+#
+# The other two: Rule 3 asks for a backticked token before
 # the last separator, so an item whose TITLE carries inline code satisfies it without an anchor —
 # 45 of the 46 findings would still pass with their `file:line` deleted. Tightening it needs a
 # shape test the real data will not support (`git worktree` and `KAIZEN_LOG` are legitimate
@@ -117,13 +126,7 @@ todo_awk() {
   # from "the findings begin" is what lets the header keep its example fence without the parser
   # having to understand fences. Absent (a probe fixture), the whole file is the findings section.
   from="$(grep -n '^## Aberto' "$f" 2>/dev/null | head -1 | cut -d: -f1)"
-  # Parity of the header fence lines, counted rather than tracked. Backticks and tildes are
-  # counted apart so a mixed pair cannot cancel out.
-  local hb ht hodd
-  hb="$(head -n "${from:-0}" "$f" 2>/dev/null | grep -cE '^ {0,3}```' || true)"
-  ht="$(head -n "${from:-0}" "$f" 2>/dev/null | grep -cE '^ {0,3}~~~' || true)"
-  hodd=$(( (hb % 2) + (ht % 2) ))
-  awk -v cap="$2" -v mode="$3" -v from="${from:-0}" -v hodd="$hodd" '
+  awk -v cap="$2" -v mode="$3" -v from="${from:-0}" '
     # Byte offset of the last " — " separator, 0 when there is none.
     # ⚠️ index()/substr(), never a regex with a negated em-dash class. The awk this repo runs is
     # mawk, BYTE-oriented whatever the locale: `[^—]` is the negated byte set {0xE2,0x80,0x94},
@@ -158,6 +161,14 @@ todo_awk() {
       initem = 0
     }
     { sub(/\r$/, "") }        # CRLF: a trailing \r used to defeat the end-of-line alternations
+    # A BARE CR — one not followed by LF — is a line ending to CommonMark and to GitHub, and not
+    # to awk or grep. Everything after it on the same physical line renders as its own line, so a
+    # closed finding could ride behind one, invisible, with the run green. Refused by name rather
+    # than parsed, like every other construct this file will not model.
+    /\r/ {
+      if (mode == "lint") print "  line " NR ": a bare CR — it is a line ending to the renderer, not to this parser"
+      flush(); next
+    }
     # ── The ticked-box rule runs over the WHOLE file, header included ──────────────────────────
     # It is the one rule that must not respect any skip. "The header" is not a fixed preamble — it
     # is everything above a heading an editor can move, so a section of archived findings parked
@@ -168,20 +179,19 @@ todo_awk() {
         print "  line " NR ": ticked box — a closed finding is deleted after its PR merges, never [x]"
       flush(); next
     }
-    # ── Header: no fence toggle, because every fence toggle this file ever had desynced ────────
-    # The last one lived here, bounded to the header, and it still failed silent: one stray ``` in
-    # the header made the ENTIRE findings section render as a code block on GitHub while the run
-    # reported "ok 48 finding(s)". Its intended guard was unreachable dead code, so the comment
-    # promising "a loud complaint, never silence" was false in both halves.
+    # ── Header: NOTHING here models a fence, and that is the fourth and final answer ───────────
+    # Four mechanisms tried to know where the header example begins and ends — a global toggle, a
+    # bounded toggle, a parity count, and the closer-matching in between. All four failed, and the
+    # last two failed BOTH ways: the parity count went silent on mixed `~~~`/``` markers and went
+    # red on an inline `` ```code``` `` span, on a nested example, and on the header showing the
+    # very shape rule 1 enforces. Counting is not a fence model either; only a CommonMark parser
+    # is, and this file proved at length that it must not be one.
     #
-    # What replaced it cannot desync because it holds no state: `hodd` is a PARITY COUNT of the
-    # header fence lines, computed once outside awk. Odd means the findings section is inside a
-    # code block, which is the only thing about the header that can hurt the reader.
-    # The format example is recognised by CONTENT — an item whose text opens with a `<`
-    # placeholder is a template, and no real finding does — so it needs no fence to be skipped.
-    NR == 1 && hodd           { if (mode == "lint") print "  line 1: the header fences are unbalanced — the findings section renders as code" }
+    # So the header is judged by CONTENT alone: an item-shaped line carrying a `<placeholder>` is
+    # documentation, anything else item-shaped is a finding in the wrong place. No fence knowledge
+    # is needed for that, and the ticked-box rule above never needed any.
     NR <= from && /^[ \t>]*([-*+]|[0-9]+[.)])[ \t]+\[ \]/ {
-      if ($0 !~ /^- \[ \] </ && mode == "lint")
+      if ($0 !~ /</ && mode == "lint")
         print "  line " NR ": a finding above the findings section"
       next
     }
@@ -414,19 +424,36 @@ EOF
     printf -- '- [ ] **Good** — `f:1` — w. — by `x` (2026-08-16)\n'; } > "$box/template.md"
   assert_clean "$box/template.md" 8 "the format example in the header"
 
-  # One stray fence in the header renders the ENTIRE findings section as a code block on GitHub.
-  # The toggle that used to guard this reported "ok" on the real file; a parity count cannot.
+  # A bare CR is a line ending to GitHub and not to awk: a closed finding could ride behind one on
+  # the same physical line, invisible, with the run green. Refused by name.
+  printf -- '## Aberto\n\n- [ ] **Item** — `f:1` — w. — by `x` (2026-08-16)\r- [x] **hidden**\n' \
+    > "$box/barecr.md"
+  assert_says "$box/barecr.md" 8 'a bare CR' "a closed finding hidden behind a bare CR"
+
+  # The header example may be written in the shape rule 1 enforces, nested in an indented fence,
+  # or spelled out as a worked example. Keying the template test to a `<` at byte 7 failed all
+  # three — including the header showing the very format the sensor documents.
   { printf 'Format:\n\n```md\n'
-    printf -- '- [ ] <what> — `file:line` — <why> — by `<agent>` (YYYY-MM-DD)\n'
-    printf '```\n```\n\n## Aberto\n\n'
-    printf -- '- [ ] **Good** — `f:1` — w. — by `x` (2026-08-16)\n'; } > "$box/unbalanced.md"
-  assert_says "$box/unbalanced.md" 8 'unbalanced' "an odd number of header fences"
-  # Tildes are counted apart from backticks: a mixed pair must not cancel out into "balanced".
-  { printf 'Format:\n\n~~~md\n'
-    printf -- '- [ ] <what> — `file:line` — <why> — by `<agent>` (YYYY-MM-DD)\n'
-    printf '~~~\n~~~\n\n## Aberto\n\n'
-    printf -- '- [ ] **Good** — `f:1` — w. — by `x` (2026-08-16)\n'; } > "$box/unbalanced2.md"
-  assert_says "$box/unbalanced2.md" 8 'unbalanced' "an odd number of header tilde fences"
+    printf -- '- [ ] **<what>** — `file:line` — <why> — by `<agent>` (YYYY-MM-DD)\n'
+    printf '```\n\n## Aberto\n\n'
+    printf -- '- [ ] **Good** — `f:1` — w. — by `x` (2026-08-16)\n'; } > "$box/template2.md"
+  assert_clean "$box/template2.md" 8 "a header example written in the enforced shape"
+
+  # `from` is the FIRST `^## Aberto`, anchored at column 0. Taking the last one would put a whole
+  # section of findings back inside the header; matching the word unanchored would let a mention
+  # of the heading in prose move the boundary earlier.
+  # A ticked box would not discriminate here — that rule reads the whole file. A malformed ITEM
+  # does: judged in the section it gets the anchor and date rules, judged as header it gets one
+  # "above the findings section" and its real defects go unreported.
+  { printf '## Aberto\n\n'
+    printf -- '- [ ] **A finding with no anchor and no date**\n\n## Aberto\n\n'
+    printf -- '- [ ] **Good** — `f:1` — w. — by `x` (2026-08-16)\n'; } > "$box/twoheadings.md"
+  assert_says "$box/twoheadings.md" 8 'no non-empty' "a malformed item between two ## Aberto headings"
+  { printf 'Header prose mentioning the Aberto section before it exists.\n\n'
+    printf -- '- [ ] not a finding, just header prose\n\n## Aberto\n\n'
+    printf -- '- [ ] **Good** — `f:1` — w. — by `x` (2026-08-16)\n'; } > "$box/looseheading.md"
+  assert_says "$box/looseheading.md" 8 'above the findings section' "a heading word mentioned in header prose"
+
 
   # An indented line with no finding open is refused like everything off the whitelist, but it is
   # named for what it is: calling it "prose at column 0" sends the reader to the wrong place.
@@ -720,8 +747,8 @@ EOF
   # Floor on the probe COUNT, for the same reason every other floor here exists: neutering all the
   # assert_* call sites made the summary print "0 probe(s)" and exit 0 — a selftest that ran
   # nothing reads exactly like a selftest that passed. The number moves only on purpose.
-  if [ "$((PROBES + PROBES_SKIPPED))" -lt 67 ]; then
-    printf '  SELFTEST FAIL  only %d probe(s) accounted for (%d ran, %d skipped), expected 67\n' \
+  if [ "$((PROBES + PROBES_SKIPPED))" -lt 69 ]; then
+    printf '  SELFTEST FAIL  only %d probe(s) accounted for (%d ran, %d skipped), expected 69\n' \
       "$((PROBES + PROBES_SKIPPED))" "$PROBES" "$PROBES_SKIPPED" >&2
     FAILS=$((FAILS + 1)); fail_rc 92
   fi
