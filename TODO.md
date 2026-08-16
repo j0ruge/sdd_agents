@@ -40,8 +40,8 @@ Achados sobre **repos-alvo** vão para o `TODO.md` daquele repo. Este arquivo é
 - [ ] **Check de incremento que grepa o texto de uma asserção casa também com a linha `FAIL`** —
   `docs/handoffs/20260816-kit-como-alvo/checkpoint.md:18` — os Checks de I2/I3/I4 são
   `grep -c '<texto>'` sobre a saída com `2>&1`, e `fail()` imprime o mesmo texto: o Check devolve
-  `1` com a asserção **vermelha**. O plano prometia "rodou E passou"; quem prova isso é só o
-  `TEST_CMD`. Direção: `grep -c '^  ok    <texto>'` no `templates/` e no `sdd-planner`.
+  `1` com a asserção **vermelha**. RESOLVIDO por `a981fd9`: os três Checks ancoram, o template e o
+  `sdd-planner` ensinam a regra e `tests/check-checkpoint.sh` a mede.
   — descoberto por `sdd-executor` na missão `20260816-kit-como-alvo` (2026-08-16)
 
 - [ ] **Aprovar plano é editar frontmatter à mão — o gate humano é a única interação sem
