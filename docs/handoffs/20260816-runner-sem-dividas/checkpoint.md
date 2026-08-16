@@ -1,6 +1,6 @@
 ---
 missao: 20260816-runner-sem-dividas
-atualizado: 2026-08-16 15:20
+atualizado: 2026-08-16 17:05
 ---
 
 # Checkpoint — a seção "Runner — defeitos e dívidas" do TODO.md é eliminada
@@ -18,7 +18,7 @@ atualizado: 2026-08-16 15:20
 | I2 | latest_matching ordena por versão | `bash tests/check-gates.sh` → verde com asserção r1/r2/r10 escolhendo r10; mutação RUN_sort_lexi no catálogo | done | 6c7b1df |
 | I3 | sdd install morre alto sem starter | `bash tests/check-preflight.sh` → verde com asserção "sem starter: rc≠0 e config ausente"; mutação RUN_install_no_guard | done | 86607f1 |
 | I4 | bad_rows sai; comentário do slice honesto | `grep -c bad_rows bin/sdd` → `0` e `grep -c 'CHARACTER slice' bin/sdd` → `0`; suíte verde | done | 3ef23f4 |
-| I5 | printf-grep-q sai da suíte, sensor impede volta | `bash tests/run-all.sh` → verde; ocorrência reintroduzida em tests/ → passo novo vermelho | pending | — |
+| I5 | printf-grep-q sai da suíte, sensor impede volta | `bash tests/run-all.sh` → verde; ocorrência reintroduzida em tests/ → passo novo vermelho | done | fabd6c6 |
 | I6 | lint cobre tests/ | `shellcheck -S warning bin/sdd tests/*.sh` → rc 0; run-all roda o passo estendido | pending | — |
 | I7 | uma definição de comparabilidade | `bash tests/check-autonomy.sh` → verde com asserção diferencial kit_dirty null + sha; mutação RUN_on_axis_forked | pending | — |
 | I8 | guard.sufficient conta sessão comparável | `bash tests/check-kaizen.sh` → verde: só-escalada dá sufficient false, com-sessão dá true; mutação KAIZEN_guard_counts_escalations | pending | — |
@@ -50,6 +50,15 @@ atualizado: 2026-08-16 15:20
 - 2026-08-16 · I4 · medições que entraram no comentário (não re-medir): `${v:0:200}` sob `pt_BR.UTF-8` → 200 chars/400 bytes; sob `LC_ALL=C` → 200 bytes, igual ao `head -c` (iconv reprova o corte ímpar). E o jq 1.7 daqui **não rejeita** UTF-8 inválido: substitui por U+FFFD e sai 0 — a alegação vizinha do comentário antigo ("some jq builds reject outright" → linha some pela guarda de vazio) era falsa neste build
 - 2026-08-16 · I4 · terceira ocorrência da promessa, ausente do plano: o comentário de bloco de `autonomy_escalation_row` (`bin/sdd:822`) listava "the character slice" entre as decisões compartilhadas. Virou "the gate_why cap" no mesmo commit
 - 2026-08-16 · I4 · baseline para os próximos: suíte verde, mutação **32/32** (I4 não acrescenta mutante — é remoção de código morto e prosa), `sdd health` verde nos 5 checks, ratchet de dívidas conhecidas 8 → 6
+- 2026-08-16 · I5 · vermelho observado e pelo motivo certo: o sensor novo nomeou as 6 ocorrências do plano **mais 3** que o plano não previa, em `check-mutation.sh:125,131,261`. As três são DADO, não código — duas são delimitador de `sed s|…|…|` e a terceira é a carga do `mut_RUN_jidoka_pipefail`. Ganharam marcador de waiver com catraca bidirecional (marcador sem casamento também reprova), não exclusão do arquivo inteiro
+- 2026-08-16 · I5 · desvio do plano (ampliação): a regra é `| grep` com CLUSTER de flags contendo `q`, não o token `-q`. `-qE`/`-Eq`/`--quiet` passam `-q` ao grep — regra presa ao token deixaria reintroduzir o defeito com uma letra a mais. O plano dizia só `printf | grep -q`; a regra ampla custou 3 waivers em vez de 1
+- 2026-08-16 · I5 · ⚠️ a decisão mais afiada, para quem mexer no `run-all.sh`: o passo novo é pulado sob `SDD_MUTANT` **por motivo próprio**, não por herança da guarda do lint. Sem ele o sensor mata o `mut_RUN_jidoka_pipefail` na hora e rouba o ponto do fixture de 20000 linhas do `check-gates.sh` — o único que prova que o runner enxerga um `blocked`. Verificado: `SDD_MUTANT=1 tests/run-all.sh` não imprime o passo; a mutação segue capturada
+- 2026-08-16 · I5 · nenhum mutante alcança o sensor (é pulado no mutante), logo ele carrega auto-teste — 18 probes dirigindo o caminho real por `--check`/`--scan`, com piso de contagem. O piso pegou um erro meu na mesma sessão: eu contei 19 probes onde havia 18
+- 2026-08-16 · I5 · passada adversarial: 26 sabotagens, 3 sobreviventes, todos "o arnês testando a si mesmo" e nenhum alcançável em uma edição só (fail_rc + cross-check de FAILS; checagem de mensagem + mensagem trocada; corpos dos probes + piso). Nomeados no cabeçalho do arquivo
+- 2026-08-16 · I5 · ⚠️ achado de método que vale para o I7: o 4º sobrevivente da sabotagem **não era limite, era duplicata**. O predicado do waiver tinha 2ª cópia no contador que sabotagem nenhuma quebrava. Regra que a sabotagem não quebra é redundante — colapsada em `waiver_lines()`. Sabotagem indestrutível é o detector de cópia, e o I7 vai fechar a MESMA classe no leitor do ledger (3 cópias de comparabilidade)
+- 2026-08-16 · I5 · para o I6 (próximo): o SC2318 do `check-mutation.sh` **continua na linha 394** — os 3 waivers deste commit são comentários no fim de linhas que já existiam, não inserem linhas. Continua 1× e o único achado de `shellcheck -S warning tests/*.sh`; `check-pipefail.sh` nasce limpo no lint. E o `run-all.sh` que o I6 vai editar agora tem 3 passos guardados por `SDD_MUTANT`, não 2
+- 2026-08-16 · I5 · fora de escopo, registrado no TODO.md: `grep -m<N>` é a mesma corrida (sai no 1º casamento, mata o escritor com SIGPIPE) e o sensor **declara a lacuna em vez de fechá-la** — fechar forçaria converter `check-dry-run.sh:202`, que o I5 não escopou. Piso da superfície do `check-lang.sh` 32 → 33 pelo arquivo novo
+- 2026-08-16 · I5 · baseline: suíte verde, mutação **32/32** (o sensor não é gate — não entra no catálogo), `sdd health` verde nos 5 checks, 33,3 s (era 34,4 s no I3), 47 achados no TODO.md
 
 ## Incrementos de fix (QA)
 
