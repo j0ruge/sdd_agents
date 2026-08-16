@@ -1,6 +1,6 @@
 ---
 missao: 20260816-runner-sem-dividas
-atualizado: 2026-08-16 17:05
+atualizado: 2026-08-16 10:39
 ---
 
 # Checkpoint — a seção "Runner — defeitos e dívidas" do TODO.md é eliminada
@@ -19,7 +19,7 @@ atualizado: 2026-08-16 17:05
 | I3 | sdd install morre alto sem starter | `bash tests/check-preflight.sh` → verde com asserção "sem starter: rc≠0 e config ausente"; mutação RUN_install_no_guard | done | 86607f1 |
 | I4 | bad_rows sai; comentário do slice honesto | `grep -c bad_rows bin/sdd` → `0` e `grep -c 'CHARACTER slice' bin/sdd` → `0`; suíte verde | done | 3ef23f4 |
 | I5 | printf-grep-q sai da suíte, sensor impede volta | `bash tests/run-all.sh` → verde; ocorrência reintroduzida em tests/ → passo novo vermelho | done | fabd6c6 |
-| I6 | lint cobre tests/ | `shellcheck -S warning bin/sdd tests/*.sh` → rc 0; run-all roda o passo estendido | pending | — |
+| I6 | lint cobre tests/ | `shellcheck -S warning bin/sdd tests/*.sh` → rc 0; run-all roda o passo estendido | done | 1bbacfb |
 | I7 | uma definição de comparabilidade | `bash tests/check-autonomy.sh` → verde com asserção diferencial kit_dirty null + sha; mutação RUN_on_axis_forked | pending | — |
 | I8 | guard.sufficient conta sessão comparável | `bash tests/check-kaizen.sh` → verde: só-escalada dá sufficient false, com-sessão dá true; mutação KAIZEN_guard_counts_escalations | pending | — |
 | I9 | giro REVIEW-PR-REVIEW pós-degradação acaba | `bash tests/check-autonomy.sh` → verde: ramo 1x, rc 3, 1 degraded + 1 blocked; mutação RUN_degraded_spins | pending | — |
@@ -59,6 +59,15 @@ atualizado: 2026-08-16 17:05
 - 2026-08-16 · I5 · para o I6 (próximo): o SC2318 do `check-mutation.sh` **continua na linha 394** — os 3 waivers deste commit são comentários no fim de linhas que já existiam, não inserem linhas. Continua 1× e o único achado de `shellcheck -S warning tests/*.sh`; `check-pipefail.sh` nasce limpo no lint. E o `run-all.sh` que o I6 vai editar agora tem 3 passos guardados por `SDD_MUTANT`, não 2
 - 2026-08-16 · I5 · fora de escopo, registrado no TODO.md: `grep -m<N>` é a mesma corrida (sai no 1º casamento, mata o escritor com SIGPIPE) e o sensor **declara a lacuna em vez de fechá-la** — fechar forçaria converter `check-dry-run.sh:202`, que o I5 não escopou. Piso da superfície do `check-lang.sh` 32 → 33 pelo arquivo novo
 - 2026-08-16 · I5 · baseline: suíte verde, mutação **32/32** (o sensor não é gate — não entra no catálogo), `sdd health` verde nos 5 checks, 33,3 s (era 34,4 s no I3), 47 achados no TODO.md
+- 2026-08-16 · I6 · vermelho observado e pelo motivo certo: o passo estendido reprovou com **exatamente 1×SC2318** (`check-mutation.sh:394`), o defeito alvo e nada além dele. O split em dois `local` fez passar. Confirmada a leitura do plano: é 1×, não 2× — a nota do I2/I3 sobre o drift da linha estava certa
+- 2026-08-16 · I6 · ⚠️ **para todos os próximos incrementos**: `tests/*.sh` agora é lintado. I7 (check-autonomy.sh), I8 (check-kaizen.sh), I9 (check-autonomy.sh) e I10 (stubs) passam a ter de sair limpos em `shellcheck -S warning` — código de teste novo que hoje seria aceito pode reprovar a suíte. O `LINT_FLOOR=12` é piso (`-lt`), então **acrescentar** arquivo de teste não quebra; **remover** um quebra e é para quebrar mesmo
+- 2026-08-16 · I6 · o sensor é pulado sob `SDD_MUTANT` (mesma razão do lint antigo: mutante pego pelo linter não prova nada sobre gate), logo o catálogo não o alcança e ele carrega guarda própria — piso de 12 caminhos + probe com um SC2318 real. `LINT_SEVERITY` tem UMA definição lida pelo scan E pelo probe: escrita duas vezes, `-S error` calaria o scan com o probe seguindo verde. Nenhum mutante novo no catálogo (segue 32/32) — o passo não é gate
+- 2026-08-16 · I6 · ⚠️ armadilha de linguagem, não de lógica: comentário cuja primeira palavra depois do `#` é `shellcheck` vira **diretiva**, e uma indecifrável é ERRO (SC1073/SC1072). O bloco novo tropeçou nisso ao ser escrito e reprovou por motivo errado. Aviso deixado no próprio arquivo; quem editar comentário em `tests/` esbarra nisto
+- 2026-08-16 · I6 · ⚠️ **achado de método, vale para o I7/I8/I9**: meu primeiro arnês de sabotagem deu VERDE em duas sabotagens que na verdade matavam a suíte. Causa: a saída do `shellcheck` **começa com linha em branco**, e eu extraía a seção com um range `sed` terminado em `/^$/` — o relatório era cortado antes de ser lido. Verde pelo motivo errado, o espelho exato do vermelho pelo motivo errado. Meça o veredito da sabotagem no log INTEIRO (rc do run + marcador `✗ failed` na seção delimitada por cabeçalho `▸`), nunca num range que termina em linha vazia
+- 2026-08-16 · I6 · passada adversarial: 6 sabotagens, 4 morrem (lista estreitada, glob vazio, `-S error`, SC2318 recolocado) e **2 sobrevivem**, nomeadas no cabeçalho do `run-all.sh` — zerar o piso e neutralizar o probe. Nenhuma é de uma edição só: sozinhas não mudam um arquivo sequer que o linter abra, e os dois pares (piso+lista, probe+severidade) foram rodados para confirmar que são precisos DOIS
+- 2026-08-16 · I6 · a armadilha do Check vácuo do I1 repetiu numa busca minha: `grep -n 'LINT_CMD olha só' TODO.md` deu `0` porque o título traz crase entre `LINT_CMD` e `olha`. Não contaminou o incremento (a remoção foi por texto exato), mas é a terceira vez na missão que crase dentro de frase engana um grep — quem for escrever Check em I7-I10 que não ancore em trecho com crase no meio
+- 2026-08-16 · I6 · `.sdd/config.sh` acompanhou (`LINT_CMD` agora nomeia `bin/sdd tests/*.sh`). A chave **continua não sendo lida pelo runner** — isso é item próprio no TODO.md ("schema promete cinco comportamentos"), deliberadamente não tocado aqui; o que mudou foi só parar de declarar menos do que a suíte faz
+- 2026-08-16 · I6 · baseline para o I7: suíte verde, mutação **32/32**, `sdd health` verde nos 5 checks (ratchet 6 dívidas conhecidas), 35,4 s (era 33,3 s no I5 — o custo do lint de 11 arquivos a mais), 46 achados no TODO.md, seção "Runner — defeitos e dívidas" com **4** itens (I7, I8, I9, I10)
 
 ## Incrementos de fix (QA)
 
