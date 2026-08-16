@@ -211,7 +211,21 @@ mut_RUN_jidoka_pipefail() {
 # future change makes that fixture stop arriving there, this mutation stops being caught and the
 # score says so — instead of a whole block of assertions passing over a branch nobody ran.
 mut_RUN_degraded_row_dropped() {
-  sed -i 's|        autonomy_degraded_row "review-to-draft"|        : "review-to-draft"|' "$1"
+  sed -i 's|autonomy_degraded_row "review-to-draft"|: "review-to-draft"|' "$1"
+}
+
+# Not a gate, and the other half of the same writer: the one-shot guard dies and the branch writes
+# a row on EVERY lap. `force_phase="PR"` does not end the run — PR's gate fails, `current_phase`
+# hands REVIEW back with the budget still blown, and the branch is re-entered. One degradation,
+# three rows in both readers, against the "exactly one" of the mission's metric. This is the
+# CARDINALITY of the record, which RUN_degraded_row_dropped (the writer's existence) cannot see:
+# that one stays caught with the guard sabotaged, and this one stays caught with the writer intact.
+#
+# It is also what keeps check-autonomy.sh's degradation fixture in the REPEATING regime. The
+# assertion it kills was green for two commits over a stub that moved the disk once, asserting a
+# property of the fixture and not of the code — the third such vacuity of this mission.
+mut_RUN_degraded_repeats() {
+  sed -i 's|if \[ "\$degraded_logged" = "0" \]; then|if true; then|' "$1"
 }
 
 # Not a gate (RUN_ per the naming rule above — `cmd_autonomy` is a reader, not a gate): the human's
@@ -247,6 +261,7 @@ CATALOG=(
   RUN_autonomy_sha_warn_repeats
   RUN_jidoka_pipefail
   RUN_degraded_row_dropped
+  RUN_degraded_repeats
   RUN_escalations_no_axis
   KAIZEN_gate_blind
   KAIZEN_jidoka_dead

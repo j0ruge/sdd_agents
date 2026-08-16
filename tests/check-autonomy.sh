@@ -359,25 +359,39 @@ cat > "$MDIR/checkpoint.md" <<EOF
 EOF
 git add -A && git commit -qm "chore: the increment is done"
 
-# Moves the disk on the FIRST call only: that first move keeps the REVIEW loop alive long enough
-# to blow REVIEW_MAX_ITER=1 (one degradation, not two), and the later PR sessions then stall and
-# end the run through the ordinary no-progress escalation instead of looping.
-DRAFT_MARKER="$FIX/.degraded-once"
-rm -f "$DRAFT_MARKER"
+# Moves the disk on EVERY call — the REPETITION regime, and the whole reason the F1 increment
+# exists. This stub used to move on the first call only, which held the runner to a single lap of
+# the draft branch; "the degradation wrote exactly one row" below was then a property of the
+# FIXTURE, not of the code. Under a stub that always moves, the run goes REVIEW→PR→REVIEW with the
+# REVIEW budget still blown, re-enters the branch on every lap, and the pre-F1 runner wrote one row
+# per lap: 3 rows for 1 degradation, against the "exactly one" of the mission's metric 3. It is the
+# THIRD vacuity of this mission — after I1's shared rc 3 and I2's never-reached draft branch — and
+# the reason a fixture regime is never allowed to stand in for the property being asserted.
+DRAFT_LAPS="$OUTSIDE/draft-laps"
+: > "$DRAFT_LAPS"
 cat > "$OUTSIDE/stub/claude" <<STUB
 #!/usr/bin/env bash
-if [ ! -e "$DRAFT_MARKER" ]; then
-  : > "$DRAFT_MARKER"
-  git -C "$FIX" add -A
-  git -C "$FIX" commit -qm "chore: the review session changed something"
-fi
+echo x >> "$DRAFT_LAPS"
+wc -l < "$DRAFT_LAPS" > "$FIX/churn.txt"
+git -C "$FIX" add -A
+git -C "$FIX" commit -qm "chore: the session changed something"
 echo '{}'
 exit 0
 STUB
 chmod +x "$OUTSIDE/stub/claude"
 
-"$SDD" run "$MISSION" >/dev/null 2>&1; rc=$?
-assert_eq "the run ends on the no-progress escalation of the PR phase it degraded into" "3" "$rc"
+# stderr only (`2>&1 >/dev/null`), the same idiom the kit-stamp block above uses: the warn line is
+# the runner announcing out loud that it entered the branch, and counting it is what proves the
+# regime. It is deliberately OUTSIDE the one-shot guard in bin/sdd — the runner really is jumping
+# to PR on this lap, and an assertion over the writers must not be its own witness.
+err="$( "$SDD" run "$MISSION" 2>&1 >/dev/null )"; rc=$?
+assert_eq "the run still ends in an escalation, whichever path took it there" "3" "$rc"
+# ANTI-VACUITY OF THE REGIME: without this, a future change that quiets the loop back down to one
+# lap would make the cardinality assertion below pass for the old reason — the fixture — and the
+# F1 sensor would silently stop measuring anything, exactly like the assertion it replaces.
+laps="$(grep -c 'moving on to PR in draft mode' <<< "$err")"
+assert_eq "the fixture is in the repeating regime: the draft branch was entered more than once" \
+  "true" "$( [ "${laps:-0}" -ge 2 ] && echo true || echo false )"
 # ANTI-VACUITY, and the lesson I1 paid for: rc 3 is shared by all three escalation paths, so `rc 3`
 # alone would keep this whole block green on a fixture that never reached the draft branch at all.
 # A PR session with the REVIEW gate still failing can only exist BECAUSE the runner degraded —
@@ -387,7 +401,11 @@ assert_eq "the fixture really did reach the draft branch: a PR session with REVI
   "true" "$(jq -s '[.[] | select(.event == "session" and .phase == "PR")] | length > 0' "$LEDGER")"
 assert_eq "and no REVIEW gate ever passed, so nothing but the degradation could have moved it" \
   "0" "$(jq -s '[.[] | select(.phase == "REVIEW" and .gate == "pass")] | length' "$LEDGER")"
-assert_eq "the degradation wrote exactly one row" "1" \
+# THE METRIC OF F1, and now a property of the code rather than of the stub: the runner lowered its
+# own bar ONCE in this run and the ledger says so once, however many laps the REVIEW→PR→REVIEW loop
+# takes afterwards with the budget still blown. The laps are a defect of their own — the loop half
+# — and it stays in TODO.md; what this asserts is the RECORD half.
+assert_eq "the degradation wrote exactly one row, however many laps the loop took" "1" \
   "$(jq -s '[.[] | select(.event == "degraded")] | length' "$LEDGER")"
 # `degraded` and not `blocked`: `blocked` means the line STOPPED and the runner returns 3. Here
 # the run went ON, to PR. Reusing `blocked` would have been cheaper — it inherits the kit_sha axis
@@ -434,6 +452,14 @@ assert_eq "the human reader does not call it unrecognized" "0" "$(grep -c 'unrec
 assert_eq "it is counted as an escalation, by its kind" "1" \
   "$(grep -c 'review-to-draft: 1' <<< "$out")"
 assert_bucket_sum "the four buckets sum to the header total (a ledger with a degradation)" "$out"
+# The other half of metric 3: the judge has to read the same single degradation the human does.
+# One instrument counting 1 while the other counts 3 is the divergence I3 closed for the axis —
+# cardinality is the same failure one field over, so both readers are asserted, not just one.
+series="$( "$SDD" kaizen --series 2>/dev/null )"
+assert_eq "and the judge counts the same one, not one per lap" "1" \
+  "$(jq -r '.latest.escalations["review-to-draft"] // 0' <<< "$series")"
+assert_eq "with nothing pushed into the unrecognized bucket to get there" "0" \
+  "$(jq -r '.excluded.unrecognized' <<< "$series")"
 
 # --- the reader ------------------------------------------------------------
 # Fixture ledger written by hand: this is OUR format, so there is no third-party source to copy

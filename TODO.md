@@ -726,6 +726,15 @@ Achados sobre **repos-alvo** vão para o `TODO.md` daquele repo. Este arquivo é
   fecha o do instrumento. — narrowed por `sdd-qa` na missão `20260815-ledger-sem-ponto-cego`
   (2026-08-16)
 
+  ✅ **A metade de registro foi fechada pelo `F1`** (guarda one-shot por run, mutante
+  `RUN_degraded_repeats`): re-walk independente da jornada J2 com stub que move o disco a cada
+  sessão → sequência `REVIEW PR PR`, ramo `draft` entrado **3** vezes, e **1** linha `degraded`,
+  **1** `DEGRADED` no diário, `review-to-draft: 1` nos dois leitores. **O que sobra é literalmente
+  o "3" da segunda linha desta medição:** o laço continua girando e o `warn` continua saindo três
+  vezes, de propósito — ele é honesto sobre a volta e é a testemunha anti-vacuidade do sensor
+  (`tests/check-autonomy.sh`). — atualizado por `sdd-executor` na missão
+  `20260815-ledger-sem-ponto-cego` (2026-08-16)
+
 - [ ] **O que arma a corrida do Jidoka é a POSIÇÃO da linha `blocked`, não o tamanho do
   checkpoint** — `tests/check-gates.sh:229-232`: o comentário diz "o row count é o botão", e o
   fixture está certo **por construção** (a linha `blocked` nasce no checkpoint original e as 20000
@@ -765,6 +774,17 @@ Achados sobre **repos-alvo** vão para o `TODO.md` daquele repo. Este arquivo é
   sessão foi observada). Direção: `--output-format stream-json` com `tee` para um `.stream.jsonl`
   ao lado do log atual, preservando o resumo final que `run_phase` já parseia; custo zero de
   sessão, só plumbing. — descoberto por revisão humana acompanhando a missão
+  `20260815-ledger-sem-ponto-cego` (2026-08-16)
+
+- [ ] **`sdd install` diz "config criada" sobre um arquivo vazio quando o próprio kit está
+  incompleto** — `bin/sdd:1015`: o `sed … "$SDD_HOME/config/starter.conf" > "$CONFIG_FILE"` sem
+  guarda de existência. Faltando o `starter.conf` (kit copiado pela metade, `SDD_HOME` resolvido
+  para um diretório sem `config/` — o mesmo cenário de "cópia simples, não checkout" que o carimbo
+  do ledger já antecipa), o `sed` erra em `stderr`, o redirect **cria o arquivo vazio**, e a linha
+  seguinte imprime `ok .sdd/config.sh created` com rc 0. É rótulo sobre não-artefato dentro do
+  próprio instalador, e o repo-alvo nasce sem `TEST_CMD`. Visto de lado montando o rig do re-walk
+  do `F1`. Direção: `[ -f "$SDD_HOME/config/starter.conf" ] || die`, na família das guardas que
+  `autonomy_append` já tem. — descoberto por `sdd-executor` na missão
   `20260815-ledger-sem-ponto-cego` (2026-08-16)
 
 ## Feito

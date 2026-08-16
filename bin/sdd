@@ -1470,6 +1470,11 @@ cmd_run() {
 
   local -A attempts=()
   local phases_run=0 phase before after budget
+  # One-shot per `sdd run`, in the spirit of AUTONOMY_SHA_WARNED above: the runner lowers its own
+  # bar ONCE, and both trails have to say so once. A plain local of cmd_run is enough here — the
+  # degradation branch runs in this very shell, never through `$( )`, so the CLAUDE.md lesson that
+  # killed the kit stamp's guard (a global assigned inside a subshell dies with it) does not bite.
+  local degraded_logged=0
   local dry_next=""   # dry-run projection cursor (distinct from --phase, which prints just one)
 
   while :; do
@@ -1535,14 +1540,29 @@ cmd_run() {
       bad "  current reason: $GATE_WHY"
       dim "  'sdd status $MISSION' shows the full state; 'sdd why $MISSION $phase' the reason."
       if [ "$phase" = "REVIEW" ] && [ "$PUBLISH_ON_REVIEW_BLOCKED" = "draft" ]; then
+        # The warn stays OUTSIDE the guard below: on this lap the runner really is jumping to PR,
+        # and saying so is honest terminal output, not a record. It is also what check-autonomy.sh
+        # counts to prove its fixture is in the repeating regime — a witness that survives any
+        # sabotage of the writers is the only kind worth having.
         warn "PUBLISH_ON_REVIEW_BLOCKED=draft — moving on to PR in draft mode"
-        # The two writers come BEFORE the `continue`, and that order is the whole increment. The
+        # The two writers come BEFORE the `continue`, and that order is the whole I2 increment. The
         # jump used to be here, above both, so the single most interesting autonomy event a
         # mission can produce — the runner lowering its own bar, alone — left no trace anywhere:
         # the journal showed a PR phase after some failing REVIEW sessions, and the series showed
         # the same, with nothing saying why. `degraded`, not `blocked`: the run went ON.
-        pipeline_log_line "$(date -Iseconds)  DEGRADED  $phase  PUBLISH_ON_REVIEW_BLOCKED=draft, PR in draft mode — $GATE_WHY"
-        autonomy_degraded_row "review-to-draft" "$phase" "$GATE_WHY"
+        #
+        # ONCE PER RUN (F1). `force_phase="PR"` does not end the loop: PR runs, its gate fails, and
+        # `current_phase` hands REVIEW straight back with the budget still blown — so the branch is
+        # re-entered every lap and used to write a row every lap. Measured on the QA walk: one
+        # degradation, THREE rows, in both readers, against the "exactly one" of the mission's
+        # metric 3. Two instruments agreeing on a wrong number is worse than one being wrong, and
+        # the runner did NOT lower its bar three times: it lowered it once and then spun.
+        # The spinning itself is a separate defect — the loop half — and it lives in TODO.md.
+        if [ "$degraded_logged" = "0" ]; then
+          degraded_logged=1
+          pipeline_log_line "$(date -Iseconds)  DEGRADED  $phase  PUBLISH_ON_REVIEW_BLOCKED=draft, PR in draft mode — $GATE_WHY"
+          autonomy_degraded_row "review-to-draft" "$phase" "$GATE_WHY"
+        fi
         force_phase="PR"; continue
       fi
       pipeline_log_line "$(date -Iseconds)  BLOCKED  $phase  $GATE_WHY"
