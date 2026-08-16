@@ -711,6 +711,41 @@ assert_eq "sdd kaizen refuses to run outside the kit repo (rc 1)" "1" "$rc"
 assert_eq "and points at the kit repo" "yes" \
   "$(grep -q 'run it in the kit repo' <<< "$out" && echo yes || echo no)"
 
+echo "== the base branch warning reaches the kaizen door =="
+# The kaizen door is the WORSE of the two that open a committing session: it validates the kit repo
+# and warns about a dirty tree, and then writes a verdict plus three artifacts wherever you happen
+# to be standing — `main` included. The warning used to live only in cmd_preflight, which nothing
+# forces you to run.
+#
+# The twin of the assertion in check-gates.sh, and NOT redundant with it: sabotage proves each one
+# is blind to the other's call site (dropping the call in cmd_run leaves this file green, dropping
+# it in cmd_kaizen leaves check-gates.sh green). That is why the catalogue mutation sabotages the
+# DEFINITION — only that measures that both doors really go through it.
+#
+# DIFFERENTIAL for the same reason as its twin: the fixture is born on `main`, so "warns on the
+# base branch" and "always warns" would look identical from one reading. Two readings, one checkout
+# apart. `--dry-run` because the projection returns before any session — the fixture gate is
+# pending here, so a real invocation would spend the stub.
+kz_base="$( cd "$FIX" && "$KSDD" kaizen --dry-run 2>&1 )"; kz_base_rc=$?
+git -C "$FIX" checkout -q -b kaizen/base-branch-fixture
+kz_feat="$( cd "$FIX" && "$KSDD" kaizen --dry-run 2>&1 )"; kz_feat_rc=$?
+git -C "$FIX" checkout -q main
+git -C "$FIX" branch -q -D kaizen/base-branch-fixture
+
+assert_eq "the base branch warning reaches sdd kaizen too" "yes" \
+  "$(grep -q 'you are on the base branch' <<< "$kz_base" && echo yes || echo no)"
+assert_eq "and is silent off the base branch (not a warning that always fires)" "no" \
+  "$(grep -q 'you are on the base branch' <<< "$kz_feat" && echo yes || echo no)"
+# The rc of BOTH sides, compared to each other: turning the warn into a die is the regression that
+# would lock the kaizen loop out of its own repo, and it is invisible to a presence assertion.
+assert_eq "and it is a warn and never a die: the same rc on both branches" \
+  "0/0" "$kz_base_rc/$kz_feat_rc"
+# `--series` opens no session and commits nothing, so it must stay quiet even standing on `main` —
+# a warning fired by a pure read is noise, and noise is what teaches people to ignore warnings.
+assert_eq "but a bare --series read does not warn: it opens no session" "no" \
+  "$(grep -q 'you are on the base branch' \
+       <<< "$( cd "$FIX" && "$KSDD" kaizen --series 2>&1 )" && echo yes || echo no)"
+
 echo "== hygiene =="
 assert_eq "the fixture kit tree ends clean" "" "$(git -C "$FIX" status --porcelain)"
 assert_eq "the ledger is never tracked by the fixture kit" "0" \

@@ -503,6 +503,84 @@ git add -A && git commit -qm "chore: docs"
 assert_phase "drift checklist complete" "PR"
 assert_why   "PR reports the missing 50-pr.md" "PR" "50-pr.md"
 
+# --- the base branch warning -----------------------------------------------
+echo "== base branch warning =="
+# The warning lived in ONE place, cmd_preflight — and preflight is OPTIONAL, while `sdd run` is
+# one of the two doors that open a session which COMMITS. Start the pipeline from `main` and every
+# phase commits straight into the base branch, with nothing on screen saying so.
+#
+# DIFFERENTIAL on purpose. A single fixture standing on `main` cannot tell "warns on the base
+# branch" from "always warns" — both produce the same line, and the second is a warning that means
+# nothing. So the SAME fixture is read twice, one checkout apart, and the two runs are compared to
+# each other: the line present on `main`, absent off it, and everything else byte-identical.
+#
+# The rc is asserted too, and EQUAL on both sides rather than just 0: the expensive regression here
+# is not the warning disappearing, it is the warning becoming a `die` — that would lock the kaizen
+# loop out of its own repo the first time a human forgot to branch.
+#
+# `no_uuid` is what makes the byte comparison possible at all: run_phase prints one fresh
+# `session: <uuid>` per projected phase, so two runs of the same fixture never match literally. The
+# substitution is anchored on the UUID SHAPE and nothing else — widening it to `session:.*` would
+# also erase a phase changing its agent or its model, which is half of what this comparison is for.
+no_uuid() { sed -E 's/[0-9a-f]{8}(-[0-9a-f]{4}){3}-[0-9a-f]{12}/<uuid>/g'; }
+
+# The two streams are captured APART and only then joined, in a fixed order. Not tidiness: it is
+# what lets the assertion below read stderr alone. A `2>&1` capture cannot tell `warn` (stderr,
+# yellow, prefixed) from `dim` (stdout, quiet) — measured, all three sensors of this mission stayed
+# green on that degradation — and a warning nobody sees on the error stream is back to being
+# decoration, which is the exact defect this increment closes.
+BASE_ERR="$SDD_STATE_FIX/base-branch-main.err"
+FEAT_ERR="$SDD_STATE_FIX/base-branch-feature.err"
+BASE_RAW="$( cd "$FIX" && "$SDD" run --dry-run "$MISSION" 2>"$BASE_ERR" )"; BASE_RC=$?
+git checkout -q -b missao/base-branch-fixture
+FEAT_RAW="$( cd "$FIX" && "$SDD" run --dry-run "$MISSION" 2>"$FEAT_ERR" )"; FEAT_RC=$?
+git checkout -q main
+git branch -q -D missao/base-branch-fixture
+# The rc is read from the bare command above, never from a pipeline: `$?` after `cmd | sed` is the
+# pipeline's, and this assertion is about the runner's own exit code.
+BASE_OUT="$(no_uuid <<< "$BASE_RAW"$'\n'"$(cat "$BASE_ERR")")"
+FEAT_OUT="$(no_uuid <<< "$FEAT_RAW"$'\n'"$(cat "$FEAT_ERR")")"
+
+# Herestrings everywhere below, never `printf … | grep -q`: under `pipefail` that form returns 141
+# when grep FINDS the match, which inverts the logic for large inputs only. See check-pipefail.sh.
+FEAT_WARN="$(grep -c 'you are on the base branch' <<< "$FEAT_OUT")"
+
+# Reads the ERROR stream, and that is deliberate: presence and severity in one assertion, so the
+# only way to satisfy it is the `warn` the runner is supposed to print.
+if grep -q 'you are on the base branch' "$BASE_ERR"; then
+  pass "the base branch warning reaches sdd run"
+else
+  fail "the base branch warning reaches sdd run" \
+       "the warning on the STDERR of a dry run standing on main" \
+       "stderr: $(tr '\n' '|' < "$BASE_ERR" | head -c 200)"
+fi
+
+if [ "$FEAT_WARN" -eq 0 ]; then
+  pass "and it is silent off the base branch (not a warning that always fires)"
+else
+  fail "and it is silent off the base branch (not a warning that always fires)" \
+       "no warning on branch missao/base-branch-fixture" "$(tail -5 <<< "$FEAT_OUT")"
+fi
+
+# THE half that separates "the warning was added" from "the warning changed the run": strip the
+# warned line from the base-branch output and the two runs have to be the same text. A `sdd run`
+# that started behaving differently — an extra gate, a phase skipped, an early return — would pass
+# the two assertions above and die here.
+if [ "$(grep -v 'you are on the base branch' <<< "$BASE_OUT")" = "$FEAT_OUT" ]; then
+  pass "and the warning is the ONLY difference between the two runs"
+else
+  fail "and the warning is the ONLY difference between the two runs" \
+       "identical output once the warned line is removed" \
+       "$(diff <(grep -v 'you are on the base branch' <<< "$BASE_OUT") <(printf '%s\n' "$FEAT_OUT") | head -5)"
+fi
+
+if [ "$BASE_RC" = "$FEAT_RC" ] && [ "$BASE_RC" -eq 0 ]; then
+  pass "and it is a warn and never a die: same rc on both branches ($BASE_RC)"
+else
+  fail "the warning does not change the rc of sdd run" \
+       "the same rc on both branches, and 0" "main=$BASE_RC feature=$FEAT_RC"
+fi
+
 # ---------------------------------------------------------------------------
 echo
 if [ "$fails" -eq 0 ]; then

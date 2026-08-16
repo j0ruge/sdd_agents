@@ -1206,6 +1206,30 @@ cmd_install() {
   dim "next: edit .sdd/config.sh and run 'sdd preflight'"
 }
 
+# "you are standing on the base branch" — ONE definition, called by the three doors that can end
+# up committing: cmd_preflight, cmd_run and cmd_kaizen.
+#
+# It used to be four lines inlined in cmd_preflight and nowhere else, and preflight is OPTIONAL:
+# `sdd run` from `main` commits every phase straight into the base branch without a word, and
+# `sdd kaizen` is worse — it checks the kit repo and the dirty tree, then writes a verdict and
+# three artifacts wherever you happen to be. Same rule that gave `is_escalation` a single home
+# after the blocked/degraded pair diverged across three call sites: an enum (or a warning) read in
+# more than one place is defined once, or the call sites drift apart one at a time.
+#
+# It stays a `warn` and is NEVER allowed to become a `die`. Turning it into an error would lock the
+# kaizen loop out of its own repo the first time a human forgot to create the branch, and both
+# sensors assert the rc on BOTH branches precisely to keep that door shut.
+#
+# Silent — returning 0 — when git has no branch name to give (a detached HEAD answers empty) or
+# when DEFAULT_BRANCH is empty: comparing "" with "" would fire the warning on every detached
+# checkout, and a warning that cries wolf is how people learn to skip reading them.
+warn_if_on_base_branch() {
+  local branch
+  branch="$( cd "$REPO_ROOT" && git branch --show-current 2>/dev/null || true )"
+  [ -n "$branch" ] && [ -n "$DEFAULT_BRANCH" ] && [ "$branch" = "$DEFAULT_BRANCH" ] || return 0
+  warn "you are on the base branch ($DEFAULT_BRANCH) — run like this and the pipeline commits straight into it"
+}
+
 cmd_preflight() {
   load_config
   step "preflight — $PROJECT_NAME ($REPO_ROOT)"
@@ -1334,9 +1358,7 @@ cmd_preflight() {
   # --- git state ---
   local branch; branch="$( cd "$REPO_ROOT" && git branch --show-current )"
   ok "current branch: $branch"
-  if [ "$branch" = "$DEFAULT_BRANCH" ]; then
-    warn "you are on the base branch ($DEFAULT_BRANCH) — run like this and the pipeline commits straight into it"
-  fi
+  warn_if_on_base_branch
   if [ -n "$( cd "$REPO_ROOT" && git status --porcelain )" ]; then
     _fail "working tree dirty — the pipeline needs a clean base to attribute commits to increments"
   else
@@ -1639,6 +1661,10 @@ cmd_run() {
   # gates to run, and three of them run TEST_CMD. What the dry-run guarantees is narrower — no
   # claude session, no touching of the mission artifacts. Same honesty fix as in --help.
   [ "$DRY_RUN" = "1" ] && dim "  (dry-run: no session will be opened — but the gates do run TEST_CMD)"
+  # Before the first gate, so it is on screen ahead of anything that could scroll it away. It warns
+  # in a dry run too: the projection is where you look BEFORE spending sessions, which makes it the
+  # cheapest moment to learn you are about to commit into the base branch.
+  warn_if_on_base_branch
 
   local -A attempts=()
   local phases_run=0 phase before after budget
@@ -2277,6 +2303,10 @@ cmd_kaizen() {
   # now carry kit_dirty:true and stay out of the comparable series forever — worth hearing once.
   [ -z "$( git -C "$REPO_ROOT" status --porcelain 2>/dev/null )" ] \
     || warn "the kit tree is dirty — ledger rows born now carry kit_dirty:true and stay non-comparable"
+  # The third door, and the one that most needed it: everything above here validates the kit repo
+  # and the tree, and none of it asks WHICH BRANCH the verdict and the three born artifacts are
+  # about to land on. `--series` already returned above — a pure read warns about nothing.
+  warn_if_on_base_branch
   # Pseudo-mission: logs and the boot prompt need a name, but KAIZEN derives nothing from a
   # mission directory — resolve_mission is NOT called (it requires an existing mission), and this
   # directory is never created by the runner: the agent creates the real handoff directory when

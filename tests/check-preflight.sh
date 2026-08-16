@@ -219,6 +219,30 @@ else
        "$((${n_intact:-0} + 1)) failed check(s)" "intact '$n_intact' → missing '$n_gone'"
 fi
 
+# --- the base branch warning, at the door it was born in --------------------
+# The warning is one function now, shared with `sdd run` and `sdd kaizen`, and preflight is the
+# call site it started in — so it is also the one nobody would think to re-test after the
+# extraction. Measured while writing this: deleting the call HERE left check-gates.sh and
+# check-kaizen.sh both green, because each of those files only exercises its own door.
+#
+# DIFFERENTIAL, like its two twins: the fixture was born on `main`, so from a single reading
+# "warns on the base branch" and "always warns" are the same output.
+echo "== base branch warning =="
+out="$( "$SDD" preflight 2>&1 )"
+assert_has "the base branch warning survives in the preflight it was extracted from" \
+  "you are on the base branch (main)" "$out"
+
+git checkout -q -b missao/base-branch-fixture
+out="$( "$SDD" preflight 2>&1 )"
+git checkout -q main
+git branch -q -D missao/base-branch-fixture
+assert_lacks "and it is silent off the base branch" "you are on the base branch" "$out"
+# `current branch:` is the witness that the second reading really reached the git block: without
+# it, a preflight that died earlier would satisfy the `lacks` above by never getting there —
+# absence proved by absence, which is the vacuity this whole mission is about.
+assert_has "and the second reading really reached the git block" \
+  "current branch: missao/base-branch-fixture" "$out"
+
 # --- `sdd install` against a kit copy with no config/starter.conf -----------
 # The redirect creates $CONFIG_FILE BEFORE sed runs, so the missing starter used to leave a 0-byte
 # `.sdd/config.sh` on disk and `set -e` took the install down only afterwards. rc was ALREADY

@@ -465,6 +465,21 @@ mut_PRE_agent_presence_only() {
   sed -i 's@elif ! cmp -s "$a" "$copy"; then@elif false \&\& ! cmp -s "$a" "$copy"; then@' "$1"
 }
 
+# Not a gate: the base branch warning goes back to being decoration. The body is emptied while the
+# function keeps existing and keeps returning 0, so every call site stays syntactically valid and
+# nothing else about the runs changes — which is exactly the shape of the defect this closes, a
+# warning that only ever reached cmd_preflight while `sdd run` and `sdd kaizen` opened committing
+# sessions in silence.
+#
+# It sabotages the DEFINITION, for the same reason mut_RUN_ledger_no_repo_filter does: killing the
+# call in cmd_run leaves check-kaizen.sh green and killing the one in cmd_kaizen leaves
+# check-gates.sh green, so a per-call-site sabotage would measure one door. Emptying the body kills
+# the presence half of BOTH differential pairs at once, and only that proves all three doors really
+# go through the one function.
+mut_RUN_base_branch_warn_dead() {
+  sed -i 's@^  \[ -n "\$branch" \] && \[ -n "\$DEFAULT_BRANCH" \] && \[ "\$branch" = "\$DEFAULT_BRANCH" \] || return 0$@  return 0@' "$1"
+}
+
 CATALOG=(
   PLAN_empty_approval
   TICKET_no_sprint
@@ -509,6 +524,7 @@ CATALOG=(
   RUN_entrypoint_unguarded
   RUN_ledger_no_repo_filter
   PRE_agent_presence_only
+  RUN_base_branch_warn_dead
 )
 
 # Mutations that are NOT caught today, each with the increment that closes it. Ratchet in both
