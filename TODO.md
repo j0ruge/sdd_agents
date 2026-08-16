@@ -654,6 +654,19 @@ Achados sobre **repos-alvo** vão para o `TODO.md` daquele repo. Este arquivo é
   aceitar o custo como preço de medir a própria autonomia. — descoberto por `sdd-kaizen` na missão
   `20260815-ledger-sem-ponto-cego` (2026-08-15)
 
+- [ ] **`cmd_kaizen` tem partes sem mutação própria além das 3 do catálogo** — `bin/sdd`
+  (`kaizen_reminder`, ramo "already judged" idempotente, a retentativa com `--resume`) — as 3
+  mutações do I13.3.5 cobrem `gate_KAIZEN` cego, Jidoka morto e a régua de rótulos; o lembrete,
+  a idempotência e o caminho de retry têm asserções em `tests/check-kaizen.sh` mas nenhuma
+  sabotagem no catálogo que prove que elas medem algo. É a pergunta que o próprio plano do I13.3
+  mandou registrar. — descoberto na execução do `i13.3-sdd-kaizen` (2026-08-15)
+
+- [ ] **Espelho global de vereditos legível por máquina (JSONL em `~/.sdd/`)** — D3 do
+  `CONTEXT.md` adiou por YAGNI até o I13.4 pedir: hoje o veredito vive só no handoff da missão
+  nascida, e "vereditos ao longo do tempo" exige varrer `docs/handoffs/*/05-verdict.md` do kit.
+  Quando o I13.4 (graduação/`KAIZEN_AUTO_APPROVE`) precisar da série de vereditos, criar o
+  espelho junto — nunca antes. — registrado na execução do `i13.3-sdd-kaizen` (2026-08-15)
+
 ## Feito
 
 - [x] Re-link do shim quebrado do `agent-browser` (I0) — resolvido em 2026-08-14, com sensor

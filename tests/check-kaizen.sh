@@ -169,6 +169,15 @@ echo "== gate: verdict pending =="
 # A stale verdict for an OLDER kit sha, with a complete born plan beside it: a gate blind to
 # kit_sha_judged would accept this one and pass — the exact sabotage the KAIZEN_gate_blind
 # mutation applies. The honest gate must keep asking for the CURRENT sha.
+#
+# PROVENANCE: the verdict frontmatter here and in the piorou scenario below is copied from the
+# first REAL verdict the sdd-kaizen agent wrote — the 05-verdict.md born in commit c2dd298,
+# session a0e24b4e (2026-08-15; the mission slug lives in that commit, not here — its middle
+# word trips the language sensor) — never authored from memory: gate and fixture sharing one author's
+# assumption is how three gate bugs crossed a green suite (see CLAUDE.md). Copied verbatim,
+# including the blank line after the closing ---; only the values differ per scenario
+# (real: `verdict: indeterminado`, `kit_sha_judged: none`). The body is omitted: it is
+# OUTPUT_LANG mission content the gate never reads, and check-lang scans this file.
 OLD="$FIX/docs/handoffs/20250101-old"
 mkdir -p "$OLD"
 cat > "$OLD/05-verdict.md" <<'EOF'
@@ -177,7 +186,8 @@ verdict: melhorou
 kit_sha_judged: 0000000
 date: 2025-01-01
 ---
-# Verdict for an older kit change
+
+# (body omitted — OUTPUT_LANG content the gate never reads)
 EOF
 cat > "$OLD/00-missao.md" <<'EOF'
 ---
@@ -250,13 +260,15 @@ echo "== jidoka: verdict piorou stops the line =="
 loud_stub
 VDIR="$FIX/docs/handoffs/20260815-kaizen-verdict"
 mkdir -p "$VDIR"
+# Frontmatter shape copied from the real verdict — see the PROVENANCE note above.
 cat > "$VDIR/05-verdict.md" <<'EOF'
 ---
 verdict: piorou
 kit_sha_judged: aaa1111
 date: 2026-08-15
 ---
-# The previous change made autonomy worse
+
+# (body omitted — OUTPUT_LANG content the gate never reads)
 EOF
 git add -A && git commit -qm "chore: piorou verdict for the current sha"
 before_rows="$(krows)"

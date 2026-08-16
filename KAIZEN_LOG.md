@@ -4,7 +4,40 @@ Registro de melhorias com **antes/depois medido**. Sem número, não entra.
 
 ---
 
-## 2026-08-15 — Duas guardas que não podiam falhar (revisão do merge do I13.1)
+## 2026-08-15 — I13.3: o laço fecha — o kit julga a própria mudança e planeja a próxima
+
+**Problema medido:** o kit detectava 5× mais do que fechava (20 achados / 4 fechados na missão
+medida do I13.1) porque ninguém julgava a mudança anterior nem planejava a próxima — detecção
+sem fechamento é inventário. O I13.3 constrói o juiz híbrido (ADR 0001) e o planejador headless
+com Jidoka (ADR 0002): `sdd kaizen --series` (série determinística), `gate_KAIZEN` (veredito
+achado por conteúdo, plano nascido com `aprovacao:` vazio), `piorou` ⇒ exit 3, o 7º agente
+`sdd-kaizen`, e o lembrete pós-pipeline (D6/D8).
+
+| | Antes (I13.3.0, `302b9b8`) | Depois (I13.3.7, mesma máquina e sessão) |
+|---|---|---|
+| Mutações no catálogo | 20 (score 100%) | **23** (score 100%, `KNOWN_GAPS` vazio) |
+| Gates com mutação cobrada pelo `sdd health` | 7 | **8** (`gate_KAIZEN` incluso) |
+| Asserções de sensor do laço kaizen | 0 | **51** (`tests/check-kaizen.sh`) |
+| Piso da superfície do `check-lang` | 26 caminhos | **31** (ADRs + sensor + 2× agente) |
+| Suíte no default (`SDD_MUTATION_JOBS=4`) | 26,0 s (1 rodada) | **38,0 s** (mediana de 3: 37,99/37,86/38,05) |
+| Suíte com `SDD_MUTATION_JOBS=10` | — | 27,3 s |
+| Missões do kit planejadas pelo próprio kit | 0 | **1** (`20260815-ledger-sem-ponto-cego`) |
+
+**A primeira volta real** (Check de fecho, D7): sessão `a0e24b4e`, opus, **618 s**,
+**US$ 3,36**, rc 0. Com o ledger real vazio (medido: `~/.sdd/` sem o arquivo), o veredito saiu
+`indeterminado` com `kit_sha_judged: none`, citando a série verbatim e respeitando a guarda;
+a triagem real do `TODO.md` achou 1 item já resolvido sem marca (`4ec9752`) e recalibrou outro
+pela metade; a missão nascida tem 3 incrementos com Check executável e passou o `gate_KAIZEN`
+com `aprovacao:` vazio — **o plano espera o humano** (Marco 2: o gate funcionando). O ledger
+real ganhou 1 linha KAIZEN (`kit_dirty: false`, `gate: pass`), que a própria série exclui como
+`meta`. Idempotência provada: o segundo `sdd kaizen` respondeu "already judged" sem gastar
+sessão. O frontmatter do veredito real virou o fixture do gate no sensor (proveniência
+`c2dd298`), fechando o risco "gate e fixture do mesmo autor".
+
+**Critério D7 não atingido, dito como não atingido:** a meta "(4) suíte < 30 s no default"
+falhou — 38,0 s. O custo cresce com o catálogo (13,98 s/16 mutantes → 22,34/19 → 38,0/23), que
+é exatamente o que deve crescer; a triagem do agente registrou o estouro no `TODO.md` com as
+três saídas conhecidas (subir o alvo, subir o default, aceitar o custo) — decisão do humano.
 
 **Problema medido:** o `/codereview` sobre o merge `6f2b59e` achou dois defeitos que a suíte de 19
 mutações e 63 asserções não via, e os dois são da mesma família — **guarda que lê como medida e
