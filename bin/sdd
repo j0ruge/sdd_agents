@@ -925,6 +925,41 @@ stream_summary() { # stream_summary <stream.jsonl>
   jq -c 'select(.type == "result")' "$1" 2>/dev/null | tail -1 || true
 }
 
+# The stream closed the blind spot for whoever runs `tail -f` on the file; this closes it for the
+# person watching the run. `> "$streamfile"` takes claude's stdout off the terminal, so a phase
+# used to print its banner and then nothing for the ten to thirty minutes it lasts.
+#
+# An observer BESIDE the session, never a `tee` in front of it: a pipeline would put the watcher's
+# exit status where claude's has to be, and the phase rc is what the journal and the ledger record.
+# Everything it writes goes to the runner's own stderr — the session's stderr belongs to its `.err`
+# sibling, and mixing them would file the watcher's chatter as something the session said.
+progress_wanted() { # 0=yes. `auto` (the default) means "a human is looking", i.e. a tty on fd 2
+  case "${SDD_PHASE_PROGRESS:-auto}" in
+    0|off|false) return 1 ;;
+    1|on|true)   return 0 ;;
+    *)           [ -t 2 ] ;;
+  esac
+}
+
+stream_watch() { # stream_watch <stream.jsonl> — background; killed by run_phase when the phase ends
+  local f="$1" seen=0 n tool
+  # Printed BEFORE the polling loop, and that is not decoration: a phase that dies in its first
+  # seconds would otherwise leave the same silence this function exists to end, and no fixture
+  # short enough to run in a suite would ever reach the first tick.
+  printf '  %s⋯ session started%s\n' "$C_DIM" "$C_RESET" >&2
+  while :; do
+    sleep 5
+    [ -f "$f" ] || continue
+    n="$(grep -c . "$f" 2>/dev/null || echo 0)"
+    [ "$n" -gt "$seen" ] 2>/dev/null || continue
+    seen="$n"
+    tool="$(tail -5 "$f" 2>/dev/null \
+      | jq -r 'select(.type == "assistant") | .message.content[]? | select(.type == "tool_use") | .name' 2>/dev/null \
+      | tail -1 || true)"
+    printf '  %s⋯ %s event(s)%s%s\n' "$C_DIM" "$n" "${tool:+ · $tool}" "$C_RESET" >&2
+  done
+}
+
 # Runs a phase in a fresh headless session. Returns 0 when claude exited 0 (which does NOT mean
 # the gate passed — the gate judges that, always afterwards).
 run_phase() {
@@ -984,7 +1019,13 @@ missing and write the artifacts. The gate will be re-evaluated."
   # A plain redirect, not the `tee` the plan sketched: the redirect already gives the live file,
   # and a pipeline would put `tee`'s exit status where claude's has to be — recoverable only via
   # PIPESTATUS, for no second consumer to feed.
+  local watcher=""
+  if progress_wanted; then stream_watch "$streamfile" & watcher=$!; fi
   ( cd "$REPO_ROOT" && "${cmd[@]}" ) > "$streamfile" 2>"${logfile%.json}.err" || rc=$?
+  # Before `ended`, so the watcher cannot print over the phase's own closing lines. `wait` is what
+  # makes that a guarantee instead of a hope, and both are silenced: the watcher is killed by
+  # design, so its death is not news.
+  if [ -n "$watcher" ]; then kill "$watcher" 2>/dev/null || true; wait "$watcher" 2>/dev/null || true; fi
   ended="$(date +%s)"
 
   # The summary every other reader here already knows. `--output-format json` printed exactly the

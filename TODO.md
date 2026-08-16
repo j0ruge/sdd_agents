@@ -61,6 +61,15 @@ Achados sobre **repos-alvo** vão para o `TODO.md` daquele repo. Este arquivo é
   corrente, onde o verdadeiro é `0% · 1` — medido e revertido nesta sessão. Direção: filtrar por
   `repo` na leitura. — descoberto por `sdd-qa` na missão `20260816-runner-sem-dividas` (2026-08-16)
 
+- [ ] **O I10 abriu o stream para o arquivo, não para quem olha o terminal** — `bin/sdd`
+  (`run_phase`, a linha do redirect) — o `> "$streamfile"` tira o stdout do `claude` do terminal,
+  então a fase passa 10-30 min imprimindo só o banner. Medido durante a própria missão: run vivo,
+  stream crescendo 420 KB em 40 s, humano lendo silêncio — o mesmo sintoma que o item original
+  chamava de ponto cego. — descoberto por `humano` na missão `20260816-runner-sem-dividas`
+  (2026-08-16)
+  **RESOLVIDO por `73c771d`**: `stream_watch` em background sobre o `stderr` do runner, guarda
+  `SDD_PHASE_PROGRESS` (auto/tty), 3 asserções e 2 mutações; 38 → 40. — `humano` (2026-08-16)
+
 - [ ] **O fixture de `stream-json` não tem checagem de proveniência** — `tests/check-autonomy.sh:127`
   — as três linhas replayadas pelos stubs foram copiadas de sessão real (CLI 2.1.233) e o comentário
   registra o comando, mas `health_provenance` (`bin/sdd:1393`) só confere as 3 fixtures de skill

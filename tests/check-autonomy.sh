@@ -417,6 +417,56 @@ assert_eq "the .json summary is still exactly the result object the old format p
 assert_eq "the ledger reads the cost out of the streamed session, to the last digit" \
   "0.0362104" "$(jq -r -s '.[0].cost_usd' "$LEDGER")"
 
+# --- and the human at the TERMINAL stops being the blind half -------------------------------
+# The stream above closed the blind spot for whoever runs `tail -f` on the file. It did nothing
+# for the person watching the run: `> "$streamfile"` takes claude's stdout off the terminal, so a
+# phase prints its banner and then nothing for the ten to thirty minutes it lasts. Measured on
+# the mission that introduced the stream: run alive, file growing 420 KB in 40 s, terminal silent.
+# `stream_watch` is a background observer on the runner's OWN stderr — never a `tee`, because a
+# pipeline would put the watcher's status where claude's has to be, which is the very defect the
+# mutation below fixes in place.
+#
+# `SDD_PHASE_PROGRESS=1` forces it on: the guard is `auto` (a tty on fd 2) and no test has one, so
+# without the override this whole behaviour would be unreachable from the suite — unsensored code
+# shipped behind a condition the sensor can never meet.
+echo "== the run says what it is doing while it does it =="
+: > "$LEDGER"
+rm -f "$LOGDIR"/*.json "$LOGDIR"/*.jsonl "$LOGDIR"/*.err
+
+# The stub answers the sample AND exits non-zero: one run feeds both assertions, and the rc is
+# what the second one is about.
+cat > "$OUTSIDE/stub/claude" <<STUB
+#!/usr/bin/env bash
+cat "$STREAM_SAMPLE"
+exit 7
+STUB
+chmod +x "$OUTSIDE/stub/claude"
+
+PROGRESS_ERR="$OUTSIDE/progress.err"
+SDD_PHASE_PROGRESS=1 "$SDD" run "$MISSION" >/dev/null 2>"$PROGRESS_ERR" || true
+
+# RED before the fix: nothing writes progress, so the marker is absent. The marker is asserted by
+# NAME and not merely "stderr is non-empty" — warnings and gate reasons already land there, and a
+# test that accepts any stderr would pass on a runner that only ever complains.
+progress_seen="absent"
+grep -q '⋯ session' "$PROGRESS_ERR" 2>/dev/null && progress_seen="present"
+assert_eq "the phase reports progress on the terminal while the session runs" \
+  "present" "$progress_seen"
+
+# The watcher runs BESIDE the session, never in front of its exit status. Green before the fix by
+# construction — there is no watcher to eat anything yet — and that is exactly what
+# mut_RUN_progress_eats_rc is for: it moves the watcher into claude's pipeline, `rc` becomes the
+# watcher's 0, and this line is the one that dies. Asserted from the JOURNAL and not from the
+# runner's own exit code: the journal is what the kaizen judge reads, and a phase whose failure
+# reaches the operator but not the record is the ledger blind spot all over again.
+assert_eq "the session's own exit status still reaches the journal, not the watcher's" \
+  "rc=7" "$(grep -o 'rc=[0-9]*' "$FIX/.sdd/logs/$MISSION/pipeline.log" | tail -1)"
+
+# The session's stderr keeps going to its own file: progress is the RUNNER talking, and mixing the
+# two would put the watcher's chatter inside the artifact that records what the session said.
+assert_eq "the progress line did not leak into the session's .err sibling" \
+  "" "$(cat "$LOGDIR"/*.err 2>/dev/null)"
+
 # --- a session cut off mid-write does not take the whole run down with it ---
 # The distillation above reads the stream with jq, and jq exits 5 the instant it meets a line it
 # cannot parse — having already printed every well-formed object before it. A session killed while
