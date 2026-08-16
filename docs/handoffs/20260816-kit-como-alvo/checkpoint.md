@@ -33,10 +33,14 @@ atualizado: 2026-08-16 00:00
   (`bin/sdd:174`) faz `awk -F'|'` cru e não conhece `\|`, o escape de pipe do GFM: com pipe na
   célula as três linhas davam `NF=8` contra `NF=7` da limpa, o `gate_EXEC` reprovava com "invalid
   status" e o `sdd status` imprimia `pending` na coluna Commit. Está no `TODO.md` (`2897a94`).
-  (2) O `grep` desta máquina é **ugrep 7.5.0**, não GNU grep, e ele **não imprime o `0`** quando a
-  entrada é process substitution — só com arquivo real, pipe ou herestring. Por isso a forma é
-  `o=$(...); grep -c '…' <<< "$o"`, que é também a que o `CLAUDE.md` já prescreve por causa do
-  SIGPIPE sob `pipefail`. Re-medido nessa forma contra o HEAD: `127`, `0`, `0`, `0` — os mesmos
+  (2) A primeira reescrita tentada — process substitution `grep -c '…' <(cmd)` — foi descartada,
+  mas o motivo **não vale para você**: no shell interativo daquela sessão o `grep` era uma função
+  do snapshot apontando para ugrep 7.5.0, que não imprime o `0` com `<(...)`. Dentro de `bash -c`,
+  como o sensor roda, o `grep` é GNU 3.11 e imprime. Herestring ficou porque não depende de qual
+  `grep` atende e é a forma que o `CLAUDE.md` já prescreve (SIGPIPE sob `pipefail`). ⚠️ O runner
+  usa `grep` 40× e a suíte em 11 arquivos: se algum dia um Check parecer mentir, confira **em que
+  shell** você o rodou antes de acusar o sensor.
+  Re-medido em herestring contra o HEAD: `127`, `0`, `0`, `0` — os mesmos
   quatro números que o plano declara, então a evidência do critério (d) segue válida.
 - 2026-08-16 00:00 · `plano` · O `bin/sdd` tem **2365** linhas neste HEAD. Âncoras do `TODO.md`
   citam offsets da época em que tinha 2324. `grep` pelo texto antes de editar por número.
