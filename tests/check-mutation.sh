@@ -404,6 +404,25 @@ mut_RUN_stream_summary_fatal() {
   sed -i "s@jq -c 'select(.type == \"result\")' \"\$1\" 2>/dev/null | tail -1 || true@jq -c 'select(.type == \"result\")' \"\$1\" 2>/dev/null | tail -1@" "$1"
 }
 
+# The watcher's exit status overwrites the session's. The tempting one-liner — `wait` without the
+# `|| true`, or with its status kept — and the phase then reports how the WATCHER died instead of
+# how the session did: journal and ledger record a green phase for a failed one.
+#
+# Deliberately NOT the `tee` shape the run_phase comment refuses: that one is already killed by
+# the stream witness (a pipe under stdout is not the stream file), so a mutant built on it would
+# score a point for an assertion that predates this fix and prove nothing about the rc rule.
+mut_RUN_progress_eats_rc() {
+  sed -i 's@wait "$watcher" 2>/dev/null || true; fi@wait "$watcher" 2>/dev/null; rc=$?; fi@' "$1"
+}
+
+# The observer never starts, so the terminal goes back to the banner and nothing else — the exact
+# defect this fix exists to end, and one that hides well because every artifact downstream stays
+# correct. Anchored on the call site and not on the `auto` arm of progress_wanted: that arm needs
+# a tty, no test has one, and a mutant nothing can reach scores a permanent free point.
+mut_RUN_progress_dead() {
+  sed -i 's@  if progress_wanted; then stream_watch "$streamfile" & watcher=$!; fi@  watcher=""@' "$1"
+}
+
 CATALOG=(
   PLAN_empty_approval
   TICKET_no_sprint
@@ -443,6 +462,8 @@ CATALOG=(
   RUN_stream_no_verbose
   RUN_stream_summary_unfiltered
   RUN_stream_summary_fatal
+  RUN_progress_eats_rc
+  RUN_progress_dead
 )
 
 # Mutations that are NOT caught today, each with the increment that closes it. Ratchet in both
