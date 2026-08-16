@@ -653,17 +653,18 @@ Achados sobre **repos-alvo** vão para o `TODO.md` daquele repo. Este arquivo é
   motivou o I13.2. Decisão do humano, das três já conhecidas: subir o alvo, subir o default, ou
   aceitar o custo como preço de medir a própria autonomia. — descoberto por `sdd-kaizen` na missão
   `20260815-ledger-sem-ponto-cego` (2026-08-15)
-  **Atualização (2026-08-16, review pré-merge do I13.3):** o review acrescentou a 24ª mutação
-  (`KAIZEN_guard_ignored`), então a projeção da missão nascida passa a ser 24 → 27 — a régua do
-  checkpoint dela já foi deslocada. O trade-off e as três saídas continuam os mesmos.
+  **Atualização (2026-08-16, review pré-merge do I13.3):** o review acrescentou a 24ª e a 25ª
+  mutações (`KAIZEN_guard_ignored`, `KAIZEN_approved_bailout_dead`), então a projeção da missão
+  nascida passa a ser 25 → 28 — a régua do checkpoint dela já foi deslocada. O trade-off e as
+  três saídas continuam os mesmos.
 
-- [ ] **`cmd_kaizen` tem partes sem mutação própria além das 4 do catálogo** — `bin/sdd`
-  (`kaizen_reminder`, ramo "already judged" idempotente, a retentativa com `--resume`, o bailout
-  de plano aprovado) — as 4 mutações cobrem `gate_KAIZEN` cego, Jidoka morto, guarda ignorada
-  (`KAIZEN_guard_ignored`, do review pré-merge) e a régua de rótulos; o lembrete, a idempotência,
-  o retry e o bailout têm asserções em `tests/check-kaizen.sh` mas nenhuma sabotagem no catálogo
-  que prove que elas medem algo. É a pergunta que o próprio plano do I13.3 mandou registrar.
-  — descoberto na execução do `i13.3-sdd-kaizen` (2026-08-15)
+- [ ] **`cmd_kaizen` tem partes sem mutação própria além das 5 do catálogo** — `bin/sdd`
+  (`kaizen_reminder`, ramo "already judged" idempotente) — as 5 mutações cobrem `gate_KAIZEN`
+  cego, Jidoka morto, guarda ignorada, bailout de aprovação morto (as duas últimas do review
+  pré-merge) e a régua de rótulos; o lembrete e a idempotência têm asserções em
+  `tests/check-kaizen.sh` mas nenhuma sabotagem no catálogo que prove que elas medem algo. É a
+  pergunta que o próprio plano do I13.3 mandou registrar. — descoberto na execução do
+  `i13.3-sdd-kaizen` (2026-08-15)
 
 - [ ] **Espelho global de vereditos legível por máquina (JSONL em `~/.sdd/`)** — D3 do
   `CONTEXT.md` adiou por YAGNI até o I13.4 pedir: hoje o veredito vive só no handoff da missão

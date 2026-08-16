@@ -416,6 +416,40 @@ assert_eq "pointing at sdd run, not at another verdict" "yes" \
   "$(grep -q "sdd run" <<< "$out" && echo yes || echo no)"
 assert_eq "again without any session" "$before_rows" "$(krows)"
 
+echo "== an approval written by the RETRY session still bails out =="
+# The retry runs the same generic fix-it prompt the first session did — it can be the one that
+# fills `aprovacao:`. The third gate evaluation must take the same bailout as the other two:
+# without it, the flow falls through to the generic BLOCKED branch, misreporting an approval as
+# a no-progress escalation and writing a spurious blocked row. The discriminating witnesses:
+# the self-approval message, and a ledger delta of exactly 2 (two sessions, NO escalation row).
+sed -i 's/^aprovacao: humano-2026-08-15$/aprovacao:/' "$VDIR/00-missao.md"
+git rm -q "$VDIR/01-plano.md"
+git add -A && git commit -qm "chore: plan artifact missing so the gate is pending again"
+APPROVE_MARKER="$OUTSIDE/approve-once"
+rm -f "$APPROVE_MARKER"
+cat > "$OUTSIDE/stub/claude" <<STUB
+#!/usr/bin/env bash
+if [ -e "$APPROVE_MARKER" ]; then
+  sed -i 's/^aprovacao:\$/aprovacao: auto/' "$VDIR/00-missao.md"
+  git -C "$FIX" add -A
+  git -C "$FIX" commit -qm "chore: the retry session approves the plan"
+else
+  : > "$APPROVE_MARKER"
+fi
+exit 0
+STUB
+chmod +x "$OUTSIDE/stub/claude"
+before_rows="$(krows)"
+out="$( cd "$FIX" && "$KSDD" kaizen 2>&1 )"; rc=$?
+assert_eq "the retry-written self-approval stops the line (rc 3)" "3" "$rc"
+assert_eq "through the self-approval message, not the generic BLOCKED" "yes" \
+  "$(grep -q 'approved ITSELF' <<< "$out" && echo yes || echo no)"
+assert_eq "with two session rows and NO spurious escalation row" \
+  "$((before_rows + 2))" "$(krows)"
+sed -i 's/^aprovacao: auto$/aprovacao:/' "$VDIR/00-missao.md"
+: > "$VDIR/01-plano.md"
+git add -A && git commit -qm "chore: restore the born plan after the retry-approval scenario"
+
 echo "== a kit that is not a git checkout is refused by name =="
 # A plain copy of the kit has no history to judge. The refusal must say THAT — the generic
 # "run it in the kit repo" would send the user hunting for the wrong problem while standing in

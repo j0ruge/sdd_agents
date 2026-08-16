@@ -166,6 +166,15 @@ mut_KAIZEN_jidoka_dead() {
   sed -i 's|if \[ "\$GATE_KAIZEN_VERDICT" = "piorou" \]; then|if false; then|' "$1"
 }
 
+# The approved-plan protection dies EVERYWHERE: this sed hits all three identical bailout guards
+# in cmd_kaizen at once (a deliberate exception to the one-line idiom — the three sites are one
+# mechanism, and sabotaging any subset is caught by the same scenarios). A filled `aprovacao:`
+# then flows into fix-it sessions that can blank a human's approval, and a retry-written approval
+# gets misreported as a no-progress escalation.
+mut_KAIZEN_approved_bailout_dead() {
+  sed -i 's|if \[ -n "\$GATE_KAIZEN_APPROVED" \]; then|if false; then|' "$1"
+}
+
 # The rubric's strongest signal is dropped: phases with an escalation, a human retry or a failing
 # last gate label as "ok". The judge would congratulate the kit precisely on the missions where
 # the human had to push the work again. RUN_ prefix: kaizen_series is a helper, not a gate —
@@ -206,6 +215,7 @@ CATALOG=(
   KAIZEN_gate_blind
   KAIZEN_jidoka_dead
   KAIZEN_guard_ignored
+  KAIZEN_approved_bailout_dead
   RUN_refez_dropped
 )
 

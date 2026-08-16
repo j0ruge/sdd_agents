@@ -2010,6 +2010,12 @@ cmd_kaizen() {
     kaizen_outcome || out_rc=$?
     return "$out_rc"
   fi
+  # Third and last bailout: the RETRY session may be the one that filled `aprovacao:` — falling
+  # through would misreport an approval as a no-progress escalation, with a spurious blocked row.
+  if [ -n "$GATE_KAIZEN_APPROVED" ]; then
+    out_rc=0; kaizen_approved_outcome || out_rc=$?
+    return "$out_rc"
+  fi
 
   info ""
   bad "BLOCKED in KAIZEN — two sessions without satisfying the gate: $GATE_WHY"

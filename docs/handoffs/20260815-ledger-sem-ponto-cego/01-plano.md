@@ -15,7 +15,7 @@ Tudo abaixo foi aberto ou executado na sessão kaizen de 2026-08-15, sobre o `HE
 `90f9ce91aa8f784b3e1c94208c81b6fcca817afa`. Onde há número, ele foi medido; onde há código, ele
 está citado verbatim.
 
-- **Baseline da suíte:** `./tests/run-all.sh` → `suite green`, `score: 24 caught, 0 known gap(s),
+- **Baseline da suíte:** `./tests/run-all.sh` → `suite green`, `score: 25 caught, 0 known gap(s),
   of 23`, em **37,4 s** (`time`, default de `SDD_MUTATION_JOBS`). O alvo "<30 s" da D7 do
   `CONTEXT.md` **já está estourado antes desta missão** — não é regressão dela.
 - **As duas ocorrências vivas de `printf | grep -q`** — `grep -n "printf.*|.*grep -q" bin/sdd`:
@@ -111,7 +111,7 @@ para: significa que o fixture não alcançou o regime de falha (não estourou o 
 ainda não mede nada. Aumentar o fixture, não relaxar a asserção — asserção que não pode falhar é
 exatamente a decoração que o `KAIZEN_LOG.md` registra como dívida.
 
-**Check:** `./tests/run-all.sh` → `suite green` e `score: 25 caught, 0 known gap(s), of 25`
+**Check:** `./tests/run-all.sh` → `suite green` e `score: 26 caught, 0 known gap(s), of 26`
 **Sensor durável:** mutação `RUN_jidoka_pipefail` no catálogo, revertendo o herestring para
 `printf '%s\n' "$ckstatus" | grep -qx "blocked"` — a suíte tem de morrer.
 **Reversível por:** `git revert` do commit; nenhuma mudança de contrato.
@@ -152,7 +152,7 @@ sem tocar no `select`, a linha viraria `unrecognized`.
 ⚠️ O escritor novo chama `autonomy_kit_stamp` **como comando**, nunca como `$( )` —
 `bin/sdd:811` e `bin/sdd:836` documentam por quê (a guarda one-shot morre no subshell).
 
-**Check:** `./tests/run-all.sh` → `suite green` e `score: 26 caught, 0 known gap(s), of 26`
+**Check:** `./tests/run-all.sh` → `suite green` e `score: 27 caught, 0 known gap(s), of 27`
 **Sensor durável:** mutação `RUN_degraded_row_dropped` (devolve o `continue` para antes do
 escritor) e, se couber num mutante só, a variante que remove `degraded` do `select` da série.
 **Reversível por:** `git revert`; o campo é aditivo — ledger antigo continua legível, porque a
@@ -174,7 +174,7 @@ incremento existe para remover.
 diferentes e uma com `kit_dirty: true`; afirmar que a saída do `sdd autonomy` mostra as
 escaladas sob a versão a que pertencem e que a suja é contada como excluída, não somada.
 
-**Check:** `./tests/run-all.sh` → `suite green` e `score: 27 caught, 0 known gap(s), of 27`
+**Check:** `./tests/run-all.sh` → `suite green` e `score: 28 caught, 0 known gap(s), of 28`
 **Sensor durável:** mutação `AUTONOMY_escalations_no_axis`, revertendo para o `group_by(.kind)`
 global.
 **Reversível por:** `git revert`; muda apenas formatação de saída humana.
@@ -194,7 +194,7 @@ global.
 
 Com I1, I2 e I3 `done`:
 
-1. `./tests/run-all.sh` → `suite green` com `score: 27 caught, 0 known gap(s), of 27`.
+1. `./tests/run-all.sh` → `suite green` com `score: 28 caught, 0 known gap(s), of 28`.
 2. `bash -n bin/sdd` → sem saída (rc 0).
 3. `grep -n "printf.*|.*grep -q" bin/sdd` → **nenhuma linha de código** (só o comentário de aviso
    em `bin/sdd:1174` pode casar).

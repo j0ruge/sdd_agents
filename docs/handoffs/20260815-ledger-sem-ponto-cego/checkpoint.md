@@ -14,9 +14,9 @@ atualizado: 2026-08-15 23:40
 
 | ID | Incremento | Check (comando → esperado) | Status | Commit |
 |---|---|---|---|---|
-| I1 | Jidoka do `blocked` com herestring, sem depender do buffer do pipe | `./tests/run-all.sh` → `suite green` com `score: 25 caught, 0 known gap(s), of 25` | pending | — |
-| I2 | auto-degradação `review-to-draft` escreve no ledger e a série a reconhece | `./tests/run-all.sh` → `suite green` com `score: 26 caught, 0 known gap(s), of 26` | pending | — |
-| I3 | escaladas do `sdd autonomy` agrupadas por `kit_sha`, como a série já faz | `./tests/run-all.sh` → `suite green` com `score: 27 caught, 0 known gap(s), of 27` | pending | — |
+| I1 | Jidoka do `blocked` com herestring, sem depender do buffer do pipe | `./tests/run-all.sh` → `suite green` com `score: 26 caught, 0 known gap(s), of 26` | pending | — |
+| I2 | auto-degradação `review-to-draft` escreve no ledger e a série a reconhece | `./tests/run-all.sh` → `suite green` com `score: 27 caught, 0 known gap(s), of 27` | pending | — |
+| I3 | escaladas do `sdd autonomy` agrupadas por `kit_sha`, como a série já faz | `./tests/run-all.sh` → `suite green` com `score: 28 caught, 0 known gap(s), of 28` | pending | — |
 
 ## Notas de execução
 
@@ -35,11 +35,12 @@ atualizado: 2026-08-15 23:40
   ponto cego por outro. Os dois passos vão no mesmo incremento.
 - 2026-08-15 23:40 · `I3` · Não tocar em `kaizen_series`: ela já agrupa escalada dentro da fatia
   de `kit_sha` (`bin/sdd:1774`). Só o `cmd_autonomy` está sem eixo.
-- 2026-08-16 · — · O code review do I13.3 (pré-merge) acrescentou a 24ª mutação
-  (`KAIZEN_guard_ignored` — o gate passou a cruzar `guard.sufficient` com o veredito) e renomeou
+- 2026-08-16 · — · O code review do I13.3 (pré-merge, duas rodadas) acrescentou a 24ª e a 25ª
+  mutações (`KAIZEN_guard_ignored` — o gate cruza `guard.sufficient` com o veredito; e
+  `KAIZEN_approved_bailout_dead` — aprovação preenchida nunca alcança sessão) e renomeou
   `SERIES_refez_dropped` → `RUN_refez_dropped` (contrato de prefixos do catálogo). A régua desta
-  missão foi deslocada +1 (Checks agora 25 → 26 → 27) e a linha de baseline do `01-plano.md`
-  atualizada de 23 para 24 — o número que a sessão EXEC verá de fato na abertura.
+  missão foi deslocada +2 (Checks agora 26 → 27 → 28) e a linha de baseline do `01-plano.md`
+  atualizada de 23 para 25 — o número que a sessão EXEC verá de fato na abertura.
 
 ## Incrementos de fix (QA)
 
