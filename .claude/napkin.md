@@ -15,10 +15,11 @@
 2. **[2026-08-15] Gate/sensor novo não entra sem mutação**
    Do instead: toda asserção nova de gate ganha entrada em `tests/check-mutation.sh`
    e o catálogo do `sdd health`; provar por sabotagem que a suíte morre.
-3. **[2026-08-16] A suíte é `tests/run-all.sh` (~66s no default, mutação 30/30)**
-   Do instead: rodar ela como TEST_CMD; `SDD_MUTATION_JOBS=10` derruba para ~35s
-   nesta máquina de 20 núcleos (medido 2026-08-16; default 4, decisão de default é
-   do humano — o estouro do alvo <30s está no TODO.md com as três saídas).
+3. **[2026-08-16] A suíte é `tests/run-all.sh` (~33s no default, mutação 30/30)**
+   Do instead: rodar ela como TEST_CMD; o default já deriva `min(núcleos, 8)` com
+   pool (`wait -n`) desde 2026-08-16 — mediana 54,13s → 32,87s nesta máquina de 20
+   núcleos. Override explícito vence; lixo no env é recusado. Alvo <30s ainda
+   estourado por ~3s — item vivo no TODO.md (subir o alvo ou aceitar).
 4. **[2026-08-15] Fixture de veredito vem do real, nunca de memória**
    Do instead: o frontmatter dos fixtures de `05-verdict.md` no check-kaizen.sh
    é copiado do veredito real (`c2dd298`) com nota de proveniência; ao mudar o

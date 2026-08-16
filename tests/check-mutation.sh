@@ -22,7 +22,67 @@ if [ -n "${SDD_MUTANT:-}" ]; then
 fi
 
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
-JOBS="${SDD_MUTATION_JOBS:-4}"
+
+# ---------------------------------------------------------------------------
+# JOBS resolution
+#
+# The default derives from the machine instead of being the constant 4 it used to be: a 20-core
+# box was pinned to 4 while a 2-core one was oversubscribed by the same constant. Capped at 8 —
+# each mutant runs a whole copy of the suite, and past that point the copies fight for disk and
+# memory instead of finishing sooner. An explicit SDD_MUTATION_JOBS always wins; garbage in it is
+# refused by name, never silently degraded (0 used to reach `i % JOBS` as a division by zero).
+# ---------------------------------------------------------------------------
+detect_cores() { # behaviour, not presence — the bin/sdd preflight pattern for the GNU userland
+  nproc 2>/dev/null && return
+  getconf _NPROCESSORS_ONLN 2>/dev/null && return
+  sysctl -n hw.ncpu 2>/dev/null && return
+  echo 4
+}
+
+resolve_jobs() { # resolve_jobs <env-value> <cores> — pure; prints JOBS or refuses by name
+  local env_value="$1" cores="$2"
+  if [ -n "$env_value" ]; then
+    # ONE validation arm, deliberately. A first draft paired this case with a `[ -ge 1 ]` check
+    # and the adversarial pass proved them redundant — either alone refuses everything, with the
+    # same message. `0*` covers both the literal 0 and leading zeros ("08" is octal to bash
+    # arithmetic and used to CRASH the old `i % JOBS`, so refusing it by name is the upgrade).
+    case "$env_value" in
+      0*|*[!0-9]*) echo "SDD_MUTATION_JOBS must be an integer >= 1 (got: $env_value)" >&2; return 1 ;;
+    esac
+    echo "$env_value"; return
+  fi
+  case "$cores" in *[!0-9]*|'') cores=4 ;; esac
+  [ "$cores" -ge 1 ] || cores=1
+  [ "$cores" -gt 8 ] && cores=8
+  echo "$cores"
+}
+
+# The catalogue cannot reach this function — it lives in the harness, not in bin/sdd — so it
+# carries its own probes, the CLAUDE.md rule for sensors the mutation cannot kill. Pure-function
+# pairs only; detect_cores is machine-dependent and stays unprobed (the chain is trivial to read).
+jobs_selftest() {
+  local got
+  got="$(resolve_jobs "" 20)"      && [ "$got" = 8 ]  || { echo "  SELFTEST FAIL  cap: 20 cores resolved to '$got', expected 8" >&2; return 1; }
+  got="$(resolve_jobs "" 2)"       && [ "$got" = 2 ]  || { echo "  SELFTEST FAIL  small box: 2 cores resolved to '$got', expected 2" >&2; return 1; }
+  got="$(resolve_jobs "" 0)"       && [ "$got" = 1 ]  || { echo "  SELFTEST FAIL  floor: 0 cores resolved to '$got', expected 1" >&2; return 1; }
+  got="$(resolve_jobs "" bogus)"   && [ "$got" = 4 ]  || { echo "  SELFTEST FAIL  garbage cores resolved to '$got', expected the 4 fallback" >&2; return 1; }
+  got="$(resolve_jobs 1 20)"       && [ "$got" = 1 ]  || { echo "  SELFTEST FAIL  explicit env must win: got '$got', expected 1" >&2; return 1; }
+  got="$(resolve_jobs 32 4)"       && [ "$got" = 32 ] || { echo "  SELFTEST FAIL  explicit env is not capped: got '$got', expected 32" >&2; return 1; }
+  # Assert the MESSAGE, not just the rc: without the case arm, 'abc' is still refused — but by
+  # `[ abc -ge 1 ]` erroring ("integer expression expected"), an accident sharing the same rc.
+  got="$(resolve_jobs abc 20 2>&1)" && { echo "  SELFTEST FAIL  'abc' in the env was accepted" >&2; return 1; }
+  case "$got" in *"must be an integer"*) : ;; *) echo "  SELFTEST FAIL  'abc' was refused by accident, not by name: $got" >&2; return 1 ;; esac
+  resolve_jobs 0 20   >/dev/null 2>&1 && { echo "  SELFTEST FAIL  '0' in the env was accepted — it reaches i % JOBS as a division by zero" >&2; return 1; }
+  resolve_jobs -1 20  >/dev/null 2>&1 && { echo "  SELFTEST FAIL  '-1' in the env was accepted" >&2; return 1; }
+  return 0
+}
+
+if ! jobs_selftest; then
+  echo "the JOBS resolution does not measure what it claims — refusing to schedule mutants with it" >&2
+  exit 1
+fi
+
+JOBS="$(resolve_jobs "${SDD_MUTATION_JOBS:-}" "$(detect_cores)")" || exit 1
 WORK="$(mktemp -d "${TMPDIR:-/tmp}/sdd-mut-XXXXXX")"
 trap 'rm -rf "$WORK"' EXIT
 
@@ -340,13 +400,29 @@ else
 fi
 
 # ---------------------------------------------------------------------------
-echo "== mutants (batches of $JOBS) =="
-i=0
-for slug in "${CATALOG[@]}"; do
-  run_mutant "$slug" &
-  i=$((i + 1))
-  [ $((i % JOBS)) -eq 0 ] && wait
-done
+# A pool, not batches: the old `[ i % JOBS -eq 0 ] && wait` was a barrier every JOBS mutants, so
+# each batch cost its slowest member while the finished slots sat idle. `wait -n` frees a slot as
+# soon as ANY mutant exits. Safe because run_mutant shares nothing — each writes its own
+# $WORK/<slug>.rc/.log and the scoring loop below reads the catalogue in order afterwards.
+# `wait -n` is bash 4.3+; without it, fall back to the barrier and SAY so — a declared
+# degradation, never a silent one.
+if (: & wait -n) 2>/dev/null; then
+  echo "== mutants (pool of $JOBS) =="
+  running=0
+  for slug in "${CATALOG[@]}"; do
+    run_mutant "$slug" &
+    running=$((running + 1))
+    if [ "$running" -ge "$JOBS" ]; then wait -n; running=$((running - 1)); fi
+  done
+else
+  echo "== mutants (batches of $JOBS — this bash has no 'wait -n', falling back to barriers) =="
+  i=0
+  for slug in "${CATALOG[@]}"; do
+    run_mutant "$slug" &
+    i=$((i + 1))
+    [ $((i % JOBS)) -eq 0 ] && wait
+  done
+fi
 wait
 
 caught=0; gaps=0; errors=0

@@ -4,6 +4,36 @@ Registro de melhorias com **antes/depois medido**. Sem número, não entra.
 
 ---
 
+## 2026-08-16 — A mutação para de pagar por barreira e por constante
+
+A suíte inteira roda a cada avaliação de gate (`TEST_CMD`), então cada segundo dela é pago
+dezenas de vezes por missão. Dois desperdícios no `tests/check-mutation.sh`, os dois de
+escalonamento e nenhum de medição:
+
+1. **`JOBS=4` constante** — a máquina tem 20 núcleos; uma de 2 seria oversubscrita pela mesma
+   constante. Agora o default deriva: `min(núcleos, 8)`, piso 1, detecção em cadeia
+   (`nproc` → `getconf` → `sysctl` → 4) por comportamento, o padrão do preflight. Env explícito
+   vence sempre; lixo no env é recusado por nome (`0` chegava ao `i % JOBS` como divisão por
+   zero, `08` estourava a aritmética como octal).
+2. **Barreira a cada leva** (`[ i % JOBS -eq 0 ] && wait`) — cada leva custava o mutante mais
+   lento dela com os slots já livres parados. Agora é pool (`wait -n`, bash 4.3+, com fallback
+   **declarado** para a barreira onde não houver).
+
+| | Antes (`90841cf`) | Depois |
+|---|---|---|
+| Suíte no default, mediana de 3, mesma sessão | 54,13 s (53,60 / 54,13 / 54,58) | **32,87 s** (32,26 / 32,87 / 32,99) — **−39%** |
+| Score | 30 caught, 0 gap, of 30 | **idêntico** (paralelismo mexe no relógio, nunca no veredito) |
+| `SDD_MUTATION_JOBS=4` explícito | levas de 4 | **pool de 4** — o override segue mandando |
+| Alvo D7 (< 30 s) | estourado (54 s) | **ainda estourado** (32,9 s) — o item no `TODO.md` encolhe, não fecha |
+
+A resolução do JOBS não é alcançável pelo catálogo (mora no harness, não no `bin/sdd`), então
+carrega selftest próprio — e a passada de sabotagem adversarial fez o que sempre faz: das 7
+sabotagens, 1 sobreviveu **duas vezes**. Primeiro porque o probe só lia o rc, que é compartilhado
+entre recusa nomeada e recusa por acidente (`[ abc -ge 1 ]` erra sozinho); exigir o texto do ramo
+certo não bastou, porque os **dois** ramos de validação emitiam o mesmo texto — eram redundantes
+entre si. A saída foi a que o CLAUDE.md manda: remover a regra redundante, não escrever probe
+para ela. A validação virou UMA regra, e as 7 sabotagens morrem.
+
 ## 2026-08-16 — O arquivo de achados para de crescer (5S no `TODO.md`)
 
 **Problema medido:** o `TODO.md` chegou a **861 linhas / 75.331 bytes**, e o custo não era só de

@@ -40,12 +40,12 @@
 
 - **D11 espera confirmação humana.** O código já foi escrito com `event: "degraded"`; a alternativa
   barata continua a um valor de campo e às asserções correspondentes de distância.
-- **O critério (4) da D7 — "suíte < 30 s no default" — segue não atingido e piorando de
-  propósito.** Medido na fase DOCS da missão `20260815-ledger-sem-ponto-cego`, mesma máquina e
-  mesma sessão: **47,9 s** com 25 mutantes (`fdf8708`) → **66,3 s** com 30 (`HEAD`). Cortar mutação
-  para ganhar tempo violaria o princípio que motivou o I13.2, então as saídas são subir o alvo,
-  subir `SDD_MUTATION_JOBS` (⚠️ `nproc` é GNU-only) ou aceitar o custo. Decisão do humano; a
-  medição completa e o histórico moram no `TODO.md`.
+- **O critério (4) da D7 — "suíte < 30 s no default" — segue não atingido, agora por ~3 s.**
+  A saída "subir o default" foi tomada em 2026-08-16: `SDD_MUTATION_JOBS` deriva de
+  `min(núcleos, 8)` e o escalonador virou pool — mediana 54,13 s → **32,87 s**, score intacto
+  (KAIZEN_LOG). Cortar mutação para ganhar tempo violaria o princípio que motivou o I13.2, então
+  o que resta é subir o alvo ou aceitar o estouro, que cresce com o catálogo. Decisão do humano;
+  o item vivo mora no `TODO.md`.
 
 _As duas perguntas abertas no grill (D9, D10) foram resolvidas na execução do I13.3 e movidas para
 a tabela acima._
