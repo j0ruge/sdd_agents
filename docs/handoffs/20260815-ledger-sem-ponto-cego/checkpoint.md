@@ -17,7 +17,7 @@ atualizado: 2026-08-16 01:20
 | I1 | Jidoka do `blocked` com herestring, sem depender do buffer do pipe | `./tests/run-all.sh` → `suite green` com `score: 26 caught, 0 known gap(s), of 26` | done | 3521b9a |
 | I2 | auto-degradação `review-to-draft` escreve no ledger e a série a reconhece | `./tests/run-all.sh` → `suite green` com `score: 27 caught, 0 known gap(s), of 27` | done | 6853796 |
 | I3 | escaladas do `sdd autonomy` agrupadas por `kit_sha`, como a série já faz | `./tests/run-all.sh` → `suite green` com `score: 28 caught, 0 known gap(s), of 28` | done | e9a74aa |
-| F1 | uma degradação por `sdd run` escreve **uma** linha `degraded`, como a métrica 3 exige | `./tests/run-all.sh` → `suite green` com `score: 29 caught, 0 known gap(s), of 29` E re-walk da jornada J2 com stub que move o disco a **cada** sessão → exatamente 1 linha `degraded` e `review-to-draft: 1` nos dois leitores | pending | — |
+| F1 | uma degradação por `sdd run` escreve **uma** linha `degraded`, como a métrica 3 exige | `./tests/run-all.sh` → `suite green` com `score: 29 caught, 0 known gap(s), of 29` E re-walk da jornada J2 com stub que move o disco a **cada** sessão → exatamente 1 linha `degraded` e `review-to-draft: 1` nos dois leitores | done | 56b2365 |
 
 ## Notas de execução
 
@@ -178,3 +178,46 @@ atualizado: 2026-08-16 01:20
 - 2026-08-16 · `F1` · O score do Check sobe para **29** porque o conserto precisa de mutante
   próprio no catálogo (`tests/check-mutation.sh`): sem ele, quem prova que a asserção nova morre
   quando sabotada? O `RUN_degraded_row_dropped` de hoje sabota o **escritor**, não a **cardinalidade**.
+- 2026-08-16 · `F1` · **O aviso do QA foi seguido à risca, e ele estava certo.** Em vez de um
+  bloco NOVO ao lado do antigo, o stub do bloco de degradação que já existia passou a mover o
+  disco a **cada** chamada — o regime de repetição. Assim a asserção "escreveu exatamente uma
+  linha" deixa de ser propriedade do fixture e passa a ser do código, no mesmo lugar, sem
+  duplicar o fixture mais caro da suíte (ele roda 29 vezes dentro do `check-mutation.sh`).
+  Red observado e **pelo motivo certo**: 4 asserções vermelhas, todas no bloco da degradação —
+  ledger **3**, diário **3**, `sdd autonomy` sem `review-to-draft: 1`, série **3** — e o resto do
+  arquivo verde.
+- 2026-08-16 · `F1` · **Anti-vacuidade do REGIME, que é a lição das três vezes anteriores.** Uma
+  asserção nova conta quantas vezes o `warn` do ramo saiu em `stderr` e exige **≥2**. Sem ela, uma
+  mudança futura que aquietasse o laço para uma volta só faria a cardinalidade passar pelo motivo
+  velho — o fixture — e o sensor do `F1` pararia de medir em silêncio, exatamente como a asserção
+  que ele substitui. É também por isso que o `warn` ficou **fora** da guarda one-shot no
+  `bin/sdd`: uma testemunha que sobrevive à sabotagem dos dois escritores é a única que serve.
+- 2026-08-16 · `F1` · **Desvio do plano do QA, deliberado (o diário entrou junto).** A direção
+  sugerida falava do ledger; a guarda cobre também o `pipeline_log_line`. Diário dizendo 3 e
+  ledger dizendo 1 seria a divergência entre dois instrumentos sobre o mesmo run — a família de
+  defeito que o I3 fechou, um trilho ao lado. O `warn` é a exceção justamente por não ser
+  registro.
+- 2026-08-16 · `F1` · **Âncora de mutação salva por um fio:** a guarda nova aninha o escritor mais
+  um nível, e o `sed` do `RUN_degraded_row_dropped` casava com **8 espaços** de indentação
+  literais. Ele teria virado "did not apply" — que o `check-mutation.sh` reporta, mas só depois de
+  alguém ler. A âncora perdeu a dependência de indentação. Os dois mutantes seguem medindo metades
+  distintas: `RUN_degraded_row_dropped` mata o escritor (existência) e continua pego com a guarda
+  intacta; `RUN_degraded_repeats` mata a guarda (cardinalidade) e continua pego com o escritor
+  intacto.
+- 2026-08-16 · `F1` · **Re-walk independente da J2, fora da suíte** — repo-fixture próprio, missão
+  própria, `SDD_STATE_DIR` descartável, stub que move o disco a cada sessão, rodado contra o
+  `bin/sdd` de `06af132` (pré-F1) e o do working tree. Pré: `rc 3`, ramo entrado **3** vezes,
+  sequência `REVIEW PR PR`, **3** linhas `degraded`, **3** `DEGRADED` no diário,
+  `review-to-draft: 3` nos dois leitores — os números do `sdd-qa` reproduzidos exatamente. Pós:
+  tudo igual **menos** o registro — **1** linha, **1** `DEGRADED`, `review-to-draft: 1` nos dois
+  leitores, `unrecognized: 0`. Mesmo `rc`, mesma sequência, mesmas 3 entradas no ramo: o laço não
+  foi tocado, que é a fronteira que o `TODO.md` guarda.
+- 2026-08-16 · `F1` · Suíte **68,7 s** e `score: 29 caught, 0 known gap(s), of 29`, contra
+  **55,8 s** medidos nesta sessão na abertura (baseline do plano: 37,4 s em máquina descarregada).
+  O custo é o esperado e foi escolhido: o stub que move sempre faz o fixture caro abrir mais
+  sessões, e ele roda uma vez por mutante. `shellcheck -S warning bin/sdd` limpo, `sdd health`
+  verde nos 5 checks.
+- 2026-08-16 · `F1` · Fora de escopo, registrado no `TODO.md`: `sdd install` (`bin/sdd:1015`)
+  imprime `ok .sdd/config.sh created` com rc 0 depois de o `sed` falhar por `starter.conf`
+  ausente — o redirect cria o arquivo **vazio** e o repo-alvo nasce sem `TEST_CMD`. Visto de lado
+  montando o rig do re-walk.
