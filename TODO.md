@@ -30,7 +30,7 @@ Achados sobre **repos-alvo** vão para o `TODO.md` daquele repo. Este arquivo é
 
 ### Sensores que faltam
 
-- [ ] **A linha `N kit agent(s) checked` não é observável por nenhum fixture** — `bin/sdd:1332` —
+- [ ] **A linha `N kit agent(s) checked` não é observável por nenhum fixture** — `bin/sdd:1356` —
   ela só sai com `fails -eq 0`, e todo fixture offline reprova antes (o probe do `claude` e o
   `gh auth status`). O I3 provou o ramo de falha por diferencial, mas o ramo de sucesso — a frase
   que o operador de fato lê — segue sem sensor. Direção: um `--skip-session` no preflight, ou um
@@ -53,7 +53,7 @@ Achados sobre **repos-alvo** vão para o `TODO.md` daquele repo. Este arquivo é
   `date +%F`. — descoberto por `humano` na missão `20260816-kit-como-alvo` (2026-08-16)
 
 - [ ] **Duas regras conflitantes sobre `aprovacao:`, e só um comando aplica a restrição** —
-  `agents/sdd-planner.md:101` ("all ✅ → `aprovacao: auto`") vs `agents/sdd-kaizen.md:110`
+  `agents/sdd-planner.md:111` ("all ✅ → `aprovacao: auto`") vs `agents/sdd-kaizen.md:113`
   ("EMPTY, always") — plano kaizen-born com PLAN-AUTO toda ✅ dá ao planner licença textual para
   `auto`, e a premissa que a justifica ("the human was present") é falsa em sessão headless.
   `gate_PLAN` aceita `auto` e o pipeline vai até o PR; quem reclama é a volta seguinte do
@@ -71,7 +71,7 @@ Achados sobre **repos-alvo** vão para o `TODO.md` daquele repo. Este arquivo é
 
 - [ ] **O `40-review-r<N>.md` é o único artefato com gate e sem template** — `templates/` — os
   outros cinco têm (`missao`, `plano`, `checkpoint`, `handoff`, `pr-body`), e é justamente o do
-  review que o `gate_REVIEW` lê por regex literal (`^###[[:space:]]+Overall Grade`, `bin/sdd:2196`).
+  review que o `gate_REVIEW` lê por regex literal (`^###[[:space:]]+Overall Grade`, `bin/sdd:409`).
   Evidência: as rodadas r1 E r2 desta missão escreveram `## Overall Grade` e o gate devolveu
   `NO-TABLE` — duas sessões independentes derivando igual. Direção: `templates/review.md` com o
   heading e a tabela, mais a linha no `check-templates.sh`.
@@ -92,13 +92,13 @@ Achados sobre **repos-alvo** vão para o `TODO.md` daquele repo. Este arquivo é
   desconhecida. Direção: um `pipe_rule()` gêmeo, com probe no `selftest()`.
   — descoberto por `sdd-reviewer` na missão `20260816-kit-como-alvo` (2026-08-16)
 
-- [ ] **Nada compara `agents/*.md` com a cópia instalada em `.claude/agents/`** — `bin/sdd:1247` —
-  o preflight só checa **existência** (`[ -f ... ] || _fail "not installed"`) e então imprime
+- [ ] **Nada compara `agents/*.md` com a cópia instalada em `.claude/agents/`** — `bin/sdd:1348` —
+  o preflight só checava **existência** (`[ -f ... ] || _fail "not installed"`) e então imprimia
   "N kit agent(s) checked": rótulo sobre uma comparação que nunca aconteceu. A cópia é o que o
-  harness de fato carrega, então a fonte pode ser corrigida e o agente seguir rodando o texto
-  velho. Aconteceu nesta missão: `2132cf5` editou `agents/sdd-kaizen.md` e a cópia ficou para trás,
-  verde em tudo. Direção: comparar conteúdo, não presença. — descoberto por `sdd-reviewer` na
-  missão `20260816-runner-sem-dividas` (2026-08-16)
+  harness carrega, então a fonte podia ser corrigida e o agente seguir rodando o texto velho —
+  `2132cf5` editou `agents/sdd-kaizen.md` e a cópia ficou para trás, verde em tudo. RESOLVIDO por
+  `ab64d2e`: `cmp -s` byte a byte, com "ausente" e "stale" como falhas distintas.
+  — descoberto por `sdd-reviewer` na missão `20260816-runner-sem-dividas` (2026-08-16)
 
 - [ ] **O `check-todo.sh` mede a FORMA da âncora, nunca se ela ainda aponta o que o item diz** —
   `tests/check-todo.sh:1` — a regra exige `arquivo:linha` e o sensor confere que existe e está bem
@@ -108,20 +108,21 @@ Achados sobre **repos-alvo** vão para o `TODO.md` daquele repo. Este arquivo é
   cataloga essa família. Direção: resolver cada âncora e cobrar que a linha contenha um termo do
   título. — descoberto por `sdd-docs` na missão `20260816-runner-sem-dividas` (2026-08-16)
 
-- [ ] **`main "$@"` sem guarda, e o kit edita o próprio runner em voo** — `bin/sdd:2324` — é a
-  última linha, então ao retornar dela o bash lê o arquivo a partir do offset salvo. A fase EXEC
-  edita `bin/sdd` durante o `sdd run` que a executa (10× nesta missão, +7647 bytes). Reproduzido
+- [ ] **`main "$@"` sem guarda, e o kit edita o próprio runner em voo** — `bin/sdd:2492` — era a
+  última linha, então ao retornar dela o bash lia o arquivo a partir do offset salvo. A fase EXEC
+  edita `bin/sdd` durante o `sdd run` que a executa (10× naquela missão, +7647 bytes). Reproduzido
   em script de 114 KB: edição in-place fez o bash **re-executar o entry point** e rodar um
-  fragmento, com **rc 0**. Não mordeu aqui só porque o editor troca o inode (`fd/255` do PID vivo
-  diz `(deleted)`, `pos: 107313`) — invariante de ferramenta alheia que ninguém mede. Direção:
-  `{ main "$@"; exit $?; }`. — descoberto por `sdd-qa` na missão `20260816-runner-sem-dividas` (2026-08-16)
+  fragmento, com **rc 0** — não mordia só porque o editor troca o inode, invariante alheia que
+  ninguém media. RESOLVIDO por `bb373b5`: `{ main "$@"; exit $?; }` mais o sensor diferencial
+  `tests/check-entrypoint.sh`. — descoberto por `sdd-qa` na missão `20260816-runner-sem-dividas` (2026-08-16)
 
-- [ ] **O ledger de autonomia é global e nenhum leitor filtra por repo** — `bin/sdd:761` — o
+- [ ] **O ledger de autonomia é global e nenhum leitor filtra por repo** — `bin/sdd:790` — o
   caminho é `$HOME/.sdd/autonomy-log.jsonl` para qualquer repo, e `sdd autonomy`/`kaizen --series`
-  leem todas as linhas. Um `sdd run` de fixture (jornada de QA, sandbox em `/tmp`) escreveu 3
+  liam todas as linhas. Um `sdd run` de fixture (jornada de QA, sandbox em `/tmp`) escreveu 3
   linhas no ledger de produção e o juiz passou a ler `66% waste · 2 mission(s)` para o kit_sha
-  corrente, onde o verdadeiro é `0% · 1` — medido e revertido nesta sessão. Direção: filtrar por
-  `repo` na leitura. — descoberto por `sdd-qa` na missão `20260816-runner-sem-dividas` (2026-08-16)
+  corrente, onde o verdadeiro é `0% · 1`. RESOLVIDO por `d99a7fc`: `ledger_row_is_local()`, um
+  predicado para os três leitores, com o que sai contado em `excluded.other_repo`.
+  — descoberto por `sdd-qa` na missão `20260816-runner-sem-dividas` (2026-08-16)
 
 - [ ] **O fixture de `stream-json` não tem checagem de proveniência** — `tests/check-autonomy.sh:127`
   — as três linhas replayadas pelos stubs foram copiadas de sessão real (CLI 2.1.233) e o comentário
@@ -295,13 +296,12 @@ Achados sobre **repos-alvo** vão para o `TODO.md` daquele repo. Este arquivo é
   quando houver folga de régua. — descoberto por `sdd-executor` na missão
   `20260815-ledger-sem-ponto-cego` (2026-08-16)
 
-- [ ] **O aviso de "você está na branch base" mora só no preflight** — `bin/sdd:1293`
-  (`cmd_preflight`) contra `cmd_run` e `cmd_kaizen`, que não o têm — quem chama `sdd kaizen` ou
-  `sdd run` direto nunca o vê, e as duas ABREM SESSÃO QUE COMMITA. O kaizen é o pior dos dois:
-  valida que é o repo do kit e que a árvore está limpa, e então escreve verdict + os três
-  artefatos da missão onde quer que você esteja — `main` inclusive. Mesma família do item sobre
-  gate nenhum conferir a branch declarada, um passo antes: lá a missão sai do trilho, aqui ela
-  nasce fora dele. Direção: mover a checagem para uma função chamada pelos três.
+- [ ] **O aviso de "você está na branch base" mora só no preflight** — `bin/sdd:1226`
+  (`warn_if_on_base_branch`) — quem chamava `sdd kaizen` ou `sdd run` direto nunca o via, e as duas
+  ABREM SESSÃO QUE COMMITA. O kaizen era o pior: valida repo do kit e árvore limpa, e então escreve
+  verdict + os três artefatos onde quer que você esteja, `main` inclusive. RESOLVIDO por `daa8687`:
+  uma função só, chamada pelas três portas, ainda `warn` e nunca `die`. ⚠️ `sdd retry` é a quarta
+  porta e continua sem ela — item próprio em "Contrato e configuração".
   — descoberto por `humano` na missão `20260816-runner-sem-dividas` (2026-08-16)
 
 - [ ] **A guarda do juiz é insatisfazível quando o kit desenvolve a si mesmo** — `bin/sdd:2024`
@@ -324,7 +324,7 @@ Achados sobre **repos-alvo** vão para o `TODO.md` daquele repo. Este arquivo é
 ### Contrato e configuração
 
 - [ ] **O lembrete pós-pipeline manda o humano a um comando que não enxerga o que ele contou** —
-  `bin/sdd:2141` (`kaizen_reminder`) vs `:2300` (`cmd_kaizen`) — o lembrete roda com
+  `bin/sdd:2147` (`kaizen_reminder`) vs `:2300` (`cmd_kaizen`) — o lembrete roda com
   `REPO_ROOT` = repo-ALVO e conta as missões dele; o juiz roda no repo do KIT e, com o filtro por
   repo, lê `latest: null` e `other_repo: N`. Medido em fixture: 3 missões viram "run 'sdd kaizen'
   in the kit repo", e lá a guarda é `0/0/0`. Direção: silenciar o lembrete fora do kit, ou decidir
