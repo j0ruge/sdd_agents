@@ -1,6 +1,6 @@
 ---
 missao: 20260816-runner-sem-dividas
-atualizado: 2026-08-16 09:30
+atualizado: 2026-08-16 10:15
 ---
 
 # Checkpoint — a seção "Runner — defeitos e dívidas" do TODO.md é eliminada
@@ -14,7 +14,7 @@ atualizado: 2026-08-16 09:30
 
 | ID | Incremento | Check (comando → esperado) | Status | Commit |
 |---|---|---|---|---|
-| I1 | Triagem por artefato: gate_DOCS obsoleto sai | `grep -c 'gate_DOCS reprova' TODO.md` → `0`, commit cita hash provado por merge-base | pending | — |
+| I1 | Triagem por artefato: gate_DOCS obsoleto sai | `grep -c 'gate_DOCS reprova' TODO.md` → `0`, commit cita hash provado por merge-base | done | 238497f |
 | I2 | latest_matching ordena por versão | `bash tests/check-gates.sh` → verde com asserção r1/r2/r10 escolhendo r10; mutação RUN_sort_lexi no catálogo | pending | — |
 | I3 | sdd install morre alto sem starter | `bash tests/check-preflight.sh` → verde com asserção "sem starter: rc≠0 e config ausente"; mutação RUN_install_no_guard | pending | — |
 | I4 | bad_rows sai; comentário do slice honesto | `grep -c bad_rows bin/sdd` → `0` e `grep -c 'CHARACTER slice' bin/sdd` → `0`; suíte verde | pending | — |
@@ -31,6 +31,11 @@ atualizado: 2026-08-16 09:30
 > É o que a próxima sessão lê para não repetir um erro que já custou caro.
 
 - 2026-08-16 09:30 · plano · nasce com 10 incrementos; ordem é risco-crescente (triagem → consertos pontuais → suíte → leitores do ledger → laço → observabilidade)
+- 2026-08-16 · I1 · ⚠️ o Check literal do I1 é VÁCUO: o título no TODO.md traz crases entre `gate_DOCS` e `reprova`, então `grep -c 'gate_DOCS reprova'` já dava `0` antes da remoção. Usado o reforçado `grep -c 'gate_DOCS' TODO.md`, observado `1` → `0`. Achado registrado no TODO.md (seção "Sensores que faltam") como defeito do gate PLAN-AUTO, em `caf6e3b`
+- 2026-08-16 · I1 · triagem completa: dos 11 itens, só o do `gate_DOCS` estava resolvido (`0f50fad`, ancestral de `main`, com sensor em check-gates.sh e mutação `DOCS_pending_status`). Os outros 10 re-verificados um a um contra o HEAD — **todos ainda vivos**. Nenhum incremento vira no-op
+- 2026-08-16 · I1 · âncoras reais no HEAD para os próximos incrementos (as do TODO.md driftaram): I2 `bin/sdd:224`; I3 `:1015`; I4 `:276,300` e `:821,850`; I7 `:1735,1742`; I8 `:1854`; I9 `:1566`; I10 `:897`
+- 2026-08-16 · I1 · três desvios do "Contexto verificado" do 01-plano.md, medidos hoje: (a) I6 — `shellcheck -S warning tests/*.sh` reprova com **1×SC2318** em `check-mutation.sh:369`, não 2×; (b) I2 — além de `bin/sdd:1334`, o comentário de `bin/sdd:1892` também cita o defeito como vivo e precisa sair junto; (c) I7 — há uma **terceira** cópia inline do mesmo predicado em `kaizen_series` (`bin/sdd:1846`), que o plano não menciona
+- 2026-08-16 · I1 · I3 nasce com risco de vácuo: sob `set -euo pipefail` o `sed` sem `starter.conf` já aborta, então a metade "rc≠0" pode passar HOJE. A asserção tem de pesar nas outras duas metades (mensagem nomeia o arquivo E `$CONFIG_FILE` ausente) para ser vermelha pelo motivo certo
 
 ## Incrementos de fix (QA)
 
