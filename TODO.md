@@ -131,13 +131,14 @@ Achados sobre **repos-alvo** vão para o `TODO.md` daquele repo. Este arquivo é
   para "não toca nos artefatos da missão" ou exercitar também num fixture que chegue ao REVIEW.
   — descoberto por `sdd-qa` na missão `20260814-dry-run-completo` (2026-08-14)
 
-- [ ] **Nenhum gate confere se a missão ainda está na branch que ela declarou** — todos os
-  `gate_*` + `templates/missao.md` (campo `branch:`) — medido no piloto SQ-97: o checkout mudou
-  entre `QA:plan` e `QA:exec` e **cinco fases commitaram na branch errada** com todos os gates
-  verdes (16 commits sobre um PR alheio); quem pegou foi o `sdd-publisher`, no fim da linha, a
-  ~US$ 45 de `rebase --onto`. Direção: comparar `git branch --show-current` com o campo no início
-  de cada fase; tolerar `<criada pela fase TICKET>` antes do TICKET. Sensor em `check-gates.sh`.
-  — descoberto por `sdd-publisher` e por `humano` no piloto SQ-97 (2026-08-14)
+- [ ] **Nenhum gate confere a branch declarada, e ninguém faz o checkout** — todos os `gate_*` +
+  `templates/missao.md` (campo `branch:`) — no SQ-97 o checkout mudou entre `QA:plan` e `QA:exec`
+  e **cinco fases commitaram na branch errada** com todos os gates verdes, a ~US$ 45 de
+  `rebase --onto`; hoje repetiu um passo antes — plano nascido declarando
+  `missao/20260816-kit-como-alvo` e o humano trocando à mão. Direção (humano, 2026-08-16): o
+  runner **troca**, não só confere — existe ⇒ checkout; não existe ⇒ cria da branch ATUAL, onde o
+  commit do plano vive (de `main` o perderia); `<criada pela fase TICKET>` ⇒ no-op. Sensor em
+  `check-gates.sh`. — descoberto por `sdd-publisher` e `humano` no piloto SQ-97 (2026-08-14)
 
 - [ ] **A regra da âncora é satisfeita por código inline no título** — `tests/check-todo.sh` (regra
   3) — ela pede crase não-vazia antes do último ` — `, e o título entra nesse trecho: medido, **45
