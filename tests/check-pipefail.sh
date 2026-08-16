@@ -16,8 +16,11 @@
 #
 # What it measures, per scanned line:
 #   1. a pipe into `grep` carrying a `-q` flag in any spelling — `-q`, `-qE`, `-Eq`, `-E -q`,
-#      `--quiet`, `--silent`. The list is grep's own: `grep --help` prints the three names on one
-#      line, and a spelling this file does not know is a spelling it certifies as clean
+#      `--quiet`, `--silent` — at ANY position on the command, including after a flag that takes a
+#      separate argument (`-m 1 -q`) and after the pattern operand (`grep pat -q`, which getopt's
+#      permutation makes identical to `grep -q pat`). The spelling list is grep's own: `grep
+#      --help` prints the three names on one line, and a spelling this file does not know is a
+#      spelling it certifies as clean
 #   2. unless the line is a WHOLE-LINE comment: the rule is documented in a dozen comments across
 #      the kit (including this header), and a comment executes nothing
 #   3. unless the line carries the waiver marker, which is a RATCHET and not an escape hatch — a
@@ -32,9 +35,18 @@
 #                                              surface floor and the per-file wiring get probed)
 #
 # ── Known limits, stated so nobody re-discovers them as surprises ──────────────────────────────
-# NOT measured: `grep -m<N>`, which exits early for exactly the same reason. Same family, real
-# gap, and it is in TODO.md rather than here — widening the rule would force conversions this
-# increment did not scope, and a sensor that lands with unconverted violations lands red.
+# NOT measured: `grep -m<N>` with NO quiet flag at all, which exits early for exactly the same
+# reason. Same family, real gap, and it is in TODO.md rather than here — widening the rule to
+# early-exit-without-`-q` would force conversions this increment did not scope, and a sensor that
+# lands with unconverted violations lands red. Note the boundary, because the two are one keystroke
+# apart: `| grep -m 1 -q x` IS measured (a quiet flag is present, it is just late on the line) and
+# was the fail-open this file shipped with; `| grep -m 1 x` is the TODO.md item and still silent.
+#
+# NOT measured either: a quiet flag separated from `grep` by a shell metacharacter, e.g. a pattern
+# containing an unquoted-looking `|` (`| grep "a|b" -q`). The boundary set that kills the false
+# positives above cannot tell a metacharacter inside a quoted operand from a real one without
+# parsing the shell, and this file is a line scanner by design. It errs toward silence there
+# rather than toward flagging every neighbouring command's `-q`.
 #
 # NOT measured either: a pipe into anything BUT a literal `grep` token — `| command grep -q`,
 # `| LC_ALL=C grep -q`, `| xargs grep -q`. None exist in the kit today. The rule stays keyed on
@@ -54,8 +66,12 @@
 # catching it here would steal the point from the behavioural fixture that is supposed to earn it).
 #
 # An adversarial pass degraded every rule above one at a time and demanded a red selftest for each
-# — 26 sabotages, and the three that SURVIVED are worth naming rather than hiding, because all
-# three are the harness testing itself and none is reachable in one edit:
+# — 26 sabotages on the first draft, and 15 more on the PIPE_RE rewrite (each member of the
+# boundary set dropped on its own, the middle put back to flags-only, the trailing anchor widened
+# and narrowed). 14 of those 15 died on the probe that names the exact rule; the survivor was the
+# probe floor lowered on its own, which is survivor #3 below and hides nothing while the probe
+# bodies are intact. The three that SURVIVE are worth naming rather than hiding, because all three
+# are the harness testing itself and none is reachable in one edit:
 #   - neutering fail_rc AND the FAILS cross-check (two independent paths, both must die)
 #   - neutering probe()'s message check AND then changing a message
 #   - neutering the probe bodies AND lowering the probe floor to match
@@ -75,18 +91,42 @@ SELF_PATH="$ROOT/tests/check-pipefail.sh"
 SELF_REL='tests/check-pipefail.sh'
 WAIVER='sdd-pipefail-waiver'
 
-# The pipe, optional whitespace, `grep`, any number of other flags, then a flag CLUSTER containing
-# `q`. A cluster and not the exact token `-q`, because grep's short flags combine: `-qE`, `-Eq`
-# and even `-qualifier` all pass `-q` to grep, and a rule keyed on the token would let the next
-# author reintroduce the bug by adding one letter. The trailing `([[:space:]]|$)` keeps the `$`
-# half load-bearing: `| grep -q` is legal at the end of a `\`-continued line.
+# The pipe, optional whitespace, `grep`, ANY run of argument tokens, then a quiet flag.
 #
-# `--silent` sits beside `--quiet` because grep's own help prints all three on ONE line —
-# `-q, --quiet, --silent` — and the long forms do not combine, so the cluster half cannot reach
-# them. Measured: `yes | head -200000 | grep --silent x` returns 141 under pipefail exactly as the
-# `-q` spelling does. It was missing from the first draft of this rule, which is the fail-open a
-# sensor must never have: the header promised "any spelling" and knew two of the three.
-PIPE_RE='\|[[:space:]]*grep([[:space:]]+-[[:alnum:]-]+)*[[:space:]]+(-[[:alnum:]]*q[[:alnum:]]*|--quiet|--silent)([[:space:]]|$)'
+# The quiet flag itself is a flag CLUSTER containing `q`, not the exact token `-q`, because grep's
+# short flags combine: `-qE`, `-Eq` and even `-qualifier` all pass `-q` to grep, and a rule keyed
+# on the token would let the next author reintroduce the bug by adding one letter. `--silent` sits
+# beside `--quiet` because grep's own help prints all three names on ONE line — `-q, --quiet,
+# --silent` — and the long forms do not combine, so the cluster half cannot reach them. Measured:
+# `yes | head -200000 | grep --silent x` returns 141 under pipefail exactly as `-q` does.
+#
+# ── Why the middle is "any token" and not "any FLAG" ───────────────────────────────────────────
+# The first two drafts wrote the middle as `([[:space:]]+-[[:alnum:]-]+)*`, requiring every token
+# between `grep` and the quiet flag to start with `-`. That is not how a grep command line looks,
+# and it made the sensor FAIL OPEN on two whole families — measured here, each with the real 141
+# beside the sensor's `rc=0`:
+#
+#   * every flag whose argument is SEPARATE — `-m N`, `-A N`, `-B N`, `-C N`, `-e PAT`, `-f FILE`.
+#     The bare argument (`N`, `PAT`, `FILE`) does not start with `-`, so the chain broke there and
+#     the `-q` two tokens later was never reached. `| grep -m 1 -q x` read as CLEAN.
+#   * the GNU PERMUTATION form `| grep pat -q`. getopt_long permutes, so options may follow
+#     operands; `grep x -q` is `grep -q x` and returns 141 all the same.
+#
+# So the middle now accepts any token that is not a shell metacharacter, and the scan simply stops
+# where the grep COMMAND stops. `[^[:space:]|;&()<>`#]` is that boundary set, and each member
+# earns its place by killing a false positive the loose rule would otherwise invent:
+# `| grep bar && baz -q` and `| grep bar; baz -q` (the `-q` belongs to another command),
+# `| grep bar | xargs rm -q` (the next stage of the pipeline), and `| grep bar  # prefer -q`
+# (a TRAILING comment — is_comment only exempts whole-line ones, so without `#` here every comment
+# mentioning the flag would become a phantom violation). `<>()` and the backtick are in the set for
+# the same reason: redirect, subshell and command substitution all end the grep command.
+#
+# The trailing anchor is `([^[:alnum:]-]|$)` rather than `([[:space:]]|$)` because `-q` is very
+# often the LAST thing on the command — `if foo | grep -e pat -q; then` puts a `;` right after it,
+# and the space-only anchor let that shape through too. The `$` half stays load-bearing: `| grep
+# -q` is legal at the end of a `\`-continued line. Excluding alnum is what keeps `--quietish` from
+# reading as `--quiet`.
+PIPE_RE='\|[[:space:]]*grep([[:space:]]+[^[:space:]|;&()<>`#]+)*[[:space:]]+(-[[:alnum:]]*q[[:alnum:]]*|--quiet|--silent)([^[:alnum:]-]|$)'
 
 # is_comment <text> — true when the line is nothing but a comment.
 is_comment() {
@@ -244,7 +284,31 @@ if echo "$v" | grep --silent 'x'; then :; fi
 EOF
   probe '--silent detected (grep spells this flag three ways)' 1 'pipe into `grep -q`' "$t"
 
-  # 7: the line number is reported, not just the fact. A sensor that cannot say WHERE sends the
+  # 7-9: the quiet flag is not always the token right after `grep`, and the two drafts that assumed
+  # it was both FAILED OPEN. One probe per family, each measured against the real 141 before being
+  # written here — see the PIPE_RE comment for the numbers.
+  #
+  # 7: a flag whose argument is SEPARATE. `1` does not start with `-`, which is precisely where the
+  # old "every token is a flag" middle broke.
+  cat > "$t" <<'EOF'
+if foo | grep -m 1 -q x; then :; fi
+EOF
+  probe 'a flag with a separated argument does not hide the -q' 1 'pipe into `grep -q`' "$t"
+
+  # 8: GNU permutation — options may follow operands, so `grep pat -q` IS `grep -q pat`.
+  cat > "$t" <<'EOF'
+if foo | grep pat -q; then :; fi
+EOF
+  probe 'the -q after the pattern operand is still the -q' 1 'pipe into `grep -q`' "$t"
+
+  # 9: the flag ends the command. `;` after `-q` is the single most common real shape, and the
+  # space-only trailing anchor let it through.
+  cat > "$t" <<'EOF'
+if foo | grep -e pat -q; then :; fi
+EOF
+  probe 'a -q ending the command (terminator, not space) is detected' 1 'pipe into `grep -q`' "$t"
+
+  # 10: the line number is reported, not just the fact. A sensor that cannot say WHERE sends the
   # reader to grep the file by hand, and the report becomes a rumour.
   cat > "$t" <<'EOF'
 : line one
@@ -274,6 +338,34 @@ EOF
    # never write printf '%s' "$x" | grep -q y here
 EOF
   probe 'a whole-line comment documenting the bug is accepted' 0 '-' "$t"
+
+  # The boundary set, one probe per reason it exists. Widening the middle to "any token" is what
+  # closed the fail-open; these four are what stop it from flagging every `-q` in the neighbourhood
+  # instead. Each was a live false positive of the loose rule before the boundary set was added.
+  cat > "$t" <<'EOF'
+foo | grep bar && baz -q
+foo | grep bar; baz -q
+EOF
+  probe "a -q on the NEXT command (';' and '&&') is not this grep's" 0 '-' "$t"
+
+  cat > "$t" <<'EOF'
+foo | grep bar | xargs rm -q
+EOF
+  probe 'a -q on the next PIPELINE stage is not this grep either' 0 '-' "$t"
+
+  # is_comment only exempts WHOLE-LINE comments, so without `#` in the boundary set every trailing
+  # comment naming the flag would become a phantom violation on a line that is perfectly fine.
+  cat > "$t" <<'EOF'
+foo | grep bar   # prefer -q here one day
+EOF
+  probe 'a TRAILING comment naming -q does not invent a violation' 0 '-' "$t"
+
+  # The long forms are exact tokens: `--quiet` does not combine, so `--quietish` is a different
+  # flag and not this bug. This is the negative half of the trailing anchor.
+  cat > "$t" <<'EOF'
+echo x | grep --quietish y
+EOF
+  probe '--quietish is not --quiet' 0 '-' "$t"
 
   # 11-12: the waiver, both directions. The ratchet is the whole reason the waiver is tolerable.
   cat > "$t" <<'EOF'
@@ -330,8 +422,8 @@ EOF
 
   # Floor on the probe COUNT: neutering every assertion body leaves a selftest that ran nothing,
   # and a selftest that ran nothing reads exactly like one that passed. Moves only on purpose.
-  if [ "$PROBES" -lt 19 ]; then
-    printf 'SENSOR-BROKEN: only %d probe(s) ran, expected at least 19\n' "$PROBES" >&2
+  if [ "$PROBES" -lt 26 ]; then
+    printf 'SENSOR-BROKEN: only %d probe(s) ran, expected at least 26\n' "$PROBES" >&2
     FAILS=$((FAILS + 1)); fail_rc 92
   fi
   # Direct assignment, deliberately NOT through fail_rc: two independent paths from "a probe
