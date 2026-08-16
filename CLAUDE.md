@@ -56,6 +56,17 @@ o escopo; nunca perder o achado. Formato:
 - [ ] <o quê> — `arquivo:linha` — <por que importa> — descoberto por `<agente>` na missão `<slug>` (YYYY-MM-DD)
 ```
 
+O item **cabe em ~6 linhas** (teto duro de 8, medido por `tests/check-todo.sh`): o quê, a âncora
+em `arquivo:linha`, por que importa, a direção, quem descobriu. A análise longa mora no handoff
+da missão citada — duplicá-la aqui foi o que levou este arquivo a 861 linhas.
+
+Fechado **é apagado**, nunca arquivado: o item com `RESOLVIDO por <hash>` fica na seção Aberto só
+até o PR que cita a evidência ser mergeado, e então sai do arquivo. A memória durável já existe
+em três lugares (`git log -S`, `KAIZEN_LOG.md`, handoffs) e o próprio item cita o hash. Apagar
+prova por artefato — `git merge-base --is-ancestor <hash> main` —, nunca pelo rótulo do PR.
+⚠️ `- [x]` não existe neste arquivo: caixa marcada era uma segunda convenção de fechamento,
+invisível para a triagem do kaizen, que procura `RESOLVIDO por` no corpo.
+
 **6. YAGNI.** Sem daemon, sem UI, sem banco, sem servidor. Um script bash, seis markdowns e
 templates. Se a solução pede infraestrutura, provavelmente é a solução errada.
 

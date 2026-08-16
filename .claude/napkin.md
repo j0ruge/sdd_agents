@@ -7,9 +7,11 @@
 - Each item includes date + "Do instead".
 
 ## Execution & Validation (Highest Priority)
-1. **[2026-08-15] A caixa `- [ ]` do TODO.md mente; o corpo é a verdade**
+1. **[2026-08-16] A caixa `- [ ]` do TODO.md mente; o corpo é a verdade**
    Do instead: antes de planejar sobre um item do TODO.md, ler o corpo — itens com
-   **RESOLVIDO por `<hash>`** já estão fechados mesmo desmarcados.
+   **RESOLVIDO por `<hash>`** já estão fechados mesmo desmarcados. Se o hash já está em
+   `main` (`git merge-base --is-ancestor`), o item **se apaga**, não se arquiva; `- [x]`
+   não existe mais no arquivo e o teto por item é 8 linhas (`tests/check-todo.sh`).
 2. **[2026-08-15] Gate/sensor novo não entra sem mutação**
    Do instead: toda asserção nova de gate ganha entrada em `tests/check-mutation.sh`
    e o catálogo do `sdd health`; provar por sabotagem que a suíte morre.
