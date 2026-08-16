@@ -766,6 +766,17 @@ Achados sobre **repos-alvo** vão para o `TODO.md` daquele repo. Este arquivo é
   recente" pode ler a errada. É ordenação de saída humana, não contagem: o I3 alinhou o eixo, não
   a ordem. Mesma família do `latest_matching` com `sort` já registrado acima. — descoberto por
   `sdd-executor` na missão `20260815-ledger-sem-ponto-cego` (2026-08-16)
+
+- [ ] **Missão que só produziu escalada conta para `guard.sufficient`** — `bin/sdd:1846`
+  (`missions_after_change: ($latest.missions // 0)`): `missions` é `$rows | map(.mission) | unique
+  | length` sobre **todas** as linhas admitidas, inclusive as de escalada. Três missões que
+  escalaram sem gastar uma sessão sequer (Jidoka de `increment-blocked`, por exemplo) devolvem
+  `missions_after_change: 3`, `sufficient: true` e `sessions: 0` — o juiz é liberado a dar veredito
+  sobre uma versão do kit da qual não observou nenhuma sessão. Reproduzido em ledger de fixture na
+  revisão r1. **Não é regressão desta missão:** `blocked` já tinha a propriedade antes do diff e o
+  `degraded` só a herda. Direção: contar a guarda sobre missões com pelo menos uma sessão
+  comparável, ou expor `sessions` junto de `sufficient` para o `gate_KAIZEN` cruzar. — descoberto
+  por `sdd-reviewer` na missão `20260815-ledger-sem-ponto-cego` (2026-08-16)
 - [ ] A sessão de fase é um ponto cego enquanto roda: `run_phase` grava o JSON só no fim —
   `bin/sdd:897` — `--output-format json` emite um blob único quando a sessão termina, então
   `.sdd/logs/<missão>/<FASE>-*.json` fica com **0 bytes** durante os ~10 min de cada sessão e o

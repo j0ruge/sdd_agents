@@ -217,6 +217,16 @@ atualizado: 2026-08-16 01:20
   O custo é o esperado e foi escolhido: o stub que move sempre faz o fixture caro abrir mais
   sessões, e ele roda uma vez por mutante. `shellcheck -S warning bin/sdd` limpo, `sdd health`
   verde nos 5 checks.
+- 2026-08-16 · `REVIEW r1` · **A quinta vacuidade da missão existia, e estava no lugar mais caro:
+  numa asserção que congelava a decisão errada.** `tests/check-kaizen.sh` afirmava "the label was
+  already refez, so nothing had to be taught to phase_label" — verde com ou sem o conserto, porque
+  o fixture tinha uma sessão só. O rótulo do juiz agrupa por `(mission, phase)` sobre a fatia
+  inteira de `kit_sha`, não por run: bastava um `sdd run` posterior passar no gate de REVIEW para a
+  missão que se auto-degradou ler `ok`. Conserto em `e764cd2`: um `is_escalation` só por programa
+  (como o `cmd_autonomy` já tinha), asserção diferencial `degraded` vs `blocked` sobre o mesmo
+  ledger de 4 linhas, e o mutante `RUN_degraded_label_blind`. Régua **29 → 30**. Detalhe em
+  `40-review-r1.md`.
+
 - 2026-08-16 · `F1` · Fora de escopo, registrado no `TODO.md`: `sdd install` (`bin/sdd:1015`)
   imprime `ok .sdd/config.sh created` com rc 0 depois de o `sed` falhar por `starter.conf`
   ausente — o redirect cria o arquivo **vazio** e o repo-alvo nasce sem `TEST_CMD`. Visto de lado
