@@ -93,13 +93,13 @@ que, sem `set -e`, cai fora do `if` — o run terminava em `ok 0 finding(s)`, rc
 cerca ``` sem fechamento travava o latch do parser e pulava **todas** as regras até o fim do
 arquivo, também verde. Nos dois casos o sensor dizia "medi e está limpo" sobre o que não mediu.
 
-| | Auto | 1ª | 2ª | 3ª | 4ª |
-|---|---|---|---|---|---|
-| Defeitos achados / fechados | 0 | 17 / 17 | 9 / 9 | 11 / 11 | 11 / 11 |
-| Probes do selftest | 14 (à mão) | 20 | 30 | 37 | **45** |
-| Sabotagens que matam o selftest | 4 de 8 | 13 de 14 | 15 de 17 | 17 de 18 | **11 de 11** |
-| Caminhos que falhavam abertos | 2 | 0 | 1 (novo) | 2 (novos) | **0** |
-| Regras removidas por serem decoração | 0 | 2 | 2 | 3 | **4** |
+| | Auto | 1ª | 2ª | 3ª | 4ª | 5ª |
+|---|---|---|---|---|---|---|
+| Defeitos achados / fechados | 0 | 17/17 | 9/9 | 11/11 | 11/11 | 11/11 |
+| Probes do selftest | 14 (à mão) | 20 | 30 | 37 | 45 | **49** |
+| Sabotagens que matam o selftest | 4 de 8 | 13/14 | 15/17 | 17/18 | 11/11 | **19 de 21** |
+| Caminhos que falhavam abertos | 2 | 0 | 1 (novo) | 2 (novos) | 2 (novos) | **0** |
+| Regras/estados removidos por não pagarem | 0 | 2 | 2 | 3 | 4 | **6** |
 
 **O número que mais ensina não é nenhum defeito: é que cada rodada achou um defeito criado pela
 anterior — três vezes seguidas.** A 1ª consertou a âncora com uma classe negada de travessão, e a
@@ -107,11 +107,23 @@ anterior — três vezes seguidas.** A 1ª consertou a âncora com uma classe ne
 que isso criou um latch de mão única. A 3ª acrescentou a regra de sub-item marcado, e a 4ª mostrou
 que ela acusava amostras de código — contradizendo o comentário três linhas acima, no mesmo commit.
 
-**O que quebrou o ciclo foi parar de consertar sintoma.** A 4ª rodada achou a causa comum das
-três: o parser não tinha estado para "dentro do bloco de código de um item", e esse buraco
-produzia a forja da âncora, o falso positivo do sub-item e duas variantes do latch — defeitos que
-pareciam separados porque cada rodada só via o sintoma que a anterior deixou exposto. Um estado
-novo (`initem_fence`) fechou os quatro de uma vez.
+**A 4ª rodada achou a causa comum das três** — o parser não tinha estado para "dentro do bloco de
+código de um item" — e acrescentou esse estado. Fechou quatro defeitos e a 5ª rodada achou mais
+quatro **dentro do estado novo**: uma `- [x]` em coluna 0 entre a abertura e o fechamento do bloco
+sumia com o run verde, um span inline abria bloco fantasma, e as formas `+ [x]` / `1. [x]` /
+indentada seguiam invisíveis.
+
+**O que finalmente quebrou o ciclo foi apagar a feature, não consertá-la.** O estado saiu inteiro:
+nenhum dos 46 achados carrega bloco de código e o teto de ~6 linhas não deixa caber, então item
+simplesmente **não pode** carregar cerca — uma linha no lugar de uma máquina de estado, falhando
+fechado e nomeando a causa raiz. Junto, caixa marcada virou regra **por linha** em vez de por
+item, que é o que finalmente cobriu todas as formas que o GitHub renderiza marcadas. O parser
+`awk` encolheu para 107 linhas e a família de defeitos foi embora com o estado que a hospedava.
+
+**A lição, e ela é de projeto, não de bash:** cinco rodadas foram gastas defendendo uma capacidade
+— bloco de código dentro de item — que **nenhum dado real usava e que o próprio formato proibia**.
+YAGNI não é só sobre o que custa escrever; é sobre o que custa *manter correto*. Uma feature sem
+uso paga aluguel em defeito.
 
 Duas consequências para o processo, e são elas que ficam. **Revisão adversarial é laço, não
 etapa**: o critério de parada não pode ser "consertei os achados", tem de ser uma rodada que não
