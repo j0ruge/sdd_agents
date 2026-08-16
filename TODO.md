@@ -37,6 +37,14 @@ Achados sobre **repos-alvo** vão para o `TODO.md` daquele repo. Este arquivo é
   construção sem nenhum sensor gritar. Direção: probe headless real que execute `TEST_CMD`.
   — descoberto por `sdd-executor` na missão `20260814-dry-run-completo` (2026-08-14)
 
+- [ ] **O gate PLAN-AUTO aceita Check que já nasce verde** — `bin/sdd:1901` (critério `d` em
+  `templates/missao.md`) — ele cobra "Check executável (comando → esperado)", não "Check que
+  reprova o HEAD de hoje". Medido: o Check do I1 desta missão era `grep -c 'gate_DOCS reprova'
+  TODO.md` → `0`, mas o título no `TODO.md` traz crases (`` `gate_DOCS` reprova ``), então o
+  comando já devolvia `0` **antes** da remoção — verde por construção, exatamente o que a casa
+  proíbe em teste. Direção: o planner roda cada Check contra o HEAD e registra o vermelho.
+  — descoberto por `sdd-executor` na missão `20260816-runner-sem-dividas` (2026-08-16)
+
 - [ ] **A asserção "dry-run não toca no disco" promete mais do que entrega** —
   `tests/check-dry-run.sh:116` — ela roda sobre fixture parado em EXEC, cujo gate reprova antes de
   chegar ao `TEST_CMD`. Num fixture que alcance `gate_REVIEW`, o dry-run escreve
