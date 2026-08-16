@@ -1,6 +1,6 @@
 ---
 missao: 20260816-runner-sem-dividas
-atualizado: 2026-08-16 12:10
+atualizado: 2026-08-16 13:05
 ---
 
 # Checkpoint — a seção "Runner — defeitos e dívidas" do TODO.md é eliminada
@@ -22,7 +22,7 @@ atualizado: 2026-08-16 12:10
 | I6 | lint cobre tests/ | `shellcheck -S warning bin/sdd tests/*.sh` → rc 0; run-all roda o passo estendido | done | 1bbacfb |
 | I7 | uma definição de comparabilidade | `bash tests/check-autonomy.sh` → verde com asserção diferencial kit_dirty null + sha; mutação RUN_on_axis_forked | done | f3eb013 |
 | I8 | guard.sufficient conta sessão comparável | `bash tests/check-kaizen.sh` → verde: só-escalada dá sufficient false, com-sessão dá true; mutação RUN_guard_counts_escalations | done | 2132cf5 |
-| I9 | giro REVIEW-PR-REVIEW pós-degradação acaba | `bash tests/check-autonomy.sh` → verde: ramo 1x, rc 3, 1 degraded + 1 blocked; mutação RUN_degraded_spins | pending | — |
+| I9 | giro REVIEW-PR-REVIEW pós-degradação acaba | `bash tests/check-autonomy.sh` → verde: ramo 1x, rc 3, 1 degraded + 1 blocked; mutação RUN_degraded_spins | done | 4f98354 |
 | I10 | sessão de fase loga stream | `bash tests/run-all.sh` → verde; run stub produz *.stream.jsonl com ≥2 linhas e ledger com mesmos campos | pending | — |
 
 ## Notas de execução
@@ -85,6 +85,15 @@ atualizado: 2026-08-16 12:10
 - 2026-08-16 · I8 · passada adversarial: 7 sabotagens, 0 sobreviventes, arnês verde na baseline (copiando `bin tests templates config`, a correção do arnês ruim do I7). Nenhuma regra ficou sem probe; nenhuma ficou indestrutível (que seria sinal de duplicata, como o I5 achou)
 - 2026-08-16 · I8 · `agents/sdd-kaizen.md:30` e `docs/pipeline.md:352` descreviam a shape do `guard` e entraram no mesmo commit — contrato de artefato em três lugares é a regra do CLAUDE.md, e o `sdd health` não mede este drift (a ratchet segue 6, doc/config, não schema da série)
 - 2026-08-16 · I8 · baseline para o I9: suíte verde, mutação **34/34**, `sdd health` verde nos 5 checks, **42,3 s** (era 35,4 s no I6 — o 34º mutante roda uma suíte inteira; o alvo de <30 s segue como item próprio em "Custo e escala"), seção "Runner — defeitos e dívidas" com **2** itens (I9, I10)
+- 2026-08-16 · I9 · vermelho observado e pelo motivo certo: 3 das 5 asserções novas falharam sobre o defeito — ramo entrado `3×`, PR com `2` sessões, e a mais afiada, `blocked.phase` = **PR**. As outras 2 nasceram verdes (kind `budget-exhausted` e "exatamente uma linha blocked" já valiam antes, só que na fase errada)
+- 2026-08-16 · I9 · ⚠️ **o dano real é maior que o item do TODO.md dizia**, e só a asserção de fase o revelou: o item falava em desperdício de voltas (`warn` 3×, ledger 1×). Medido: o run terminava escalando `budget-exhausted` na fase **PR**, que nunca esteve acima do orçamento, por um teto que REVIEW estourou 3 voltas antes. Ledger, `sdd autonomy` e juiz herdavam a culpa trocada. Mesmo padrão do I3 (lá o dano era o config de 0 byte, não o rótulo `ok`): o texto do item descrevia o sintoma barato
+- 2026-08-16 · I9 · ⚠️ **a anti-vacuidade do regime teve de TROCAR DE FORMA, e este é o achado de método para o I10**: a testemunha antiga era "o ramo foi entrado ≥ 2×" — exatamente o número que o conserto leva a 1. Mantida, reprovaria o conserto certo; simplesmente invertida para `== 1`, ficaria verde num fixture que nunca chega à segunda entrada (o fixture no lugar da propriedade, a vacuidade que este bloco já pagou uma vez). A saída foi mover a testemunha para a única linha que SÓ a segunda entrada produz — `budget-exhausted` em REVIEW, já que a primeira dá `continue` por cima do par. Regra: quando o conserto muda o número que a testemunha lê, a testemunha muda de grandeza, não de constante
+- 2026-08-16 · I9 · passada adversarial: 7 sabotagens, 0 sobreviventes, controle verde (arnês copiando `bin tests templates config` e julgando pelo NOME da asserção que cai, as duas correções do I6/I7). Matriz escrita no comentário do sensor porque **não é a óbvia**: com o `warn` dentro da guarda, a contagem de anúncios deixa de testemunhar o laço (quem a fixa é `degraded_logged`) — a sabotagem `spin` não a mata. Ela virou a única captura de "o `warn` volta para fora da guarda", que é o terminal mentindo sobre o que vai fazer
+- 2026-08-16 · I9 · as 2 asserções que nasceram verdes ficaram, com o precedente do I3 escrito ao lado: a sabotagem deu dono próprio a cada uma — inventar um kind `draft-exhausted` (que os três leitores de `is_escalation` arquivariam como não reconhecido) e escrever a linha blocked duas vezes. Nenhuma regra ficou sem probe; nenhuma ficou indestrutível
+- 2026-08-16 · I9 · `mut_RUN_degraded_spins` ancora no `warn` da segunda entrada — o que também dá dono a "alguém apaga essa linha": o `cmp` do check-mutation.sh reprova com "did not apply" em vez de pontuar de graça. Distinto do `RUN_degraded_repeats` vizinho por construção: a guarda one-shot ficou intacta, então um sabota o registro e o outro o laço
+- 2026-08-16 · I9 · fora de escopo, registrado no TODO.md ("Saída humana e cosmética"): `BLOCKED in <FASE> — N sessions` conta VOLTAS, não sessões — `attempts[$phase]` sobe em toda volta que chega ao topo, inclusive as que não abrem sessão. Medido: REVIEW imprime `3 sessions` com **1** sessão no ledger. Pré-existente, mas o I9 faz dela a ÚLTIMA linha que o humano lê quando o run encerra
+- 2026-08-16 · I9 · três docs afirmavam o giro como comportamento vivo e entraram no mesmo commit (regra do CLAUDE.md, precedente do I8): `docs/pipeline.md:290`, `docs/failure-modes.md` § "The runner published a draft PR by itself" e `config/schema.md:68`. O `failure-modes.md` ganhou como LER um ledger antigo — `budget-exhausted` em PR logo depois de um `review-to-draft` é o defeito, não um dado
+- 2026-08-16 · I9 · baseline para o I10: suíte verde, mutação **35/35**, `sdd health` verde nos 5 checks (ratchet 6), 46 achados no TODO.md (−1 fechado, +1 novo), seção "Runner — defeitos e dívidas" com **1** item — o I10, o último. Atenção: o I10 mexe nos stubs `claude`, e o fixture de degradação do check-autonomy.sh depende de um stub que **move o disco a cada chamada**; trocar o formato de saída do stub sem preservar isso devolve este bloco à vacuidade
 
 ## Incrementos de fix (QA)
 
