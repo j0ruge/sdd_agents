@@ -69,6 +69,14 @@ Achados sobre **repos-alvo** vão para o `TODO.md` daquele repo. Este arquivo é
   Direção: tratar `\|` antes do split, com asserção. — descoberto por `sdd status` na missão
   `20260816-kit-como-alvo` (2026-08-16)
 
+- [ ] **Os dois ramos de diagnóstico do `differential()` não têm probe** —
+  `tests/check-entrypoint.sh:234` — a passada adversarial da r2 matou 20 de 25 degradações, e o
+  que sobra sem probe é a comparação do próprio diferencial: neutralizá-la faz o sensor ler "1 vs
+  1" e seguir verde, então o dia em que o fall-through parar de reproduzir neste bash passa
+  despercebido. Hoje o limite é o par de contagens ser IMPRESSO na linha `ok`. Direção: um gancho
+  de contagem falsa, como o `SDD_EP_FORCE_FAIL` da composição, com um probe por ramo.
+  — descoberto por `sdd-reviewer` na missão `20260816-kit-como-alvo` (2026-08-16)
+
 - [ ] **A regra do `|` na célula do Check é ensinada em prosa e medida no scan, mas nenhum
   `doc_rule` a cobra** — `tests/check-checkpoint.sh:239-241` — as duas asserções de documento
   exigem só o âncora `^  ok    `; apagar o banner do `|` de `templates/checkpoint.md` e do
