@@ -1,6 +1,6 @@
 ---
 missao: 20260816-runner-sem-dividas
-atualizado: 2026-08-16 10:39
+atualizado: 2026-08-16 12:10
 ---
 
 # Checkpoint — a seção "Runner — defeitos e dívidas" do TODO.md é eliminada
@@ -20,7 +20,7 @@ atualizado: 2026-08-16 10:39
 | I4 | bad_rows sai; comentário do slice honesto | `grep -c bad_rows bin/sdd` → `0` e `grep -c 'CHARACTER slice' bin/sdd` → `0`; suíte verde | done | 3ef23f4 |
 | I5 | printf-grep-q sai da suíte, sensor impede volta | `bash tests/run-all.sh` → verde; ocorrência reintroduzida em tests/ → passo novo vermelho | done | fabd6c6 |
 | I6 | lint cobre tests/ | `shellcheck -S warning bin/sdd tests/*.sh` → rc 0; run-all roda o passo estendido | done | 1bbacfb |
-| I7 | uma definição de comparabilidade | `bash tests/check-autonomy.sh` → verde com asserção diferencial kit_dirty null + sha; mutação RUN_on_axis_forked | pending | — |
+| I7 | uma definição de comparabilidade | `bash tests/check-autonomy.sh` → verde com asserção diferencial kit_dirty null + sha; mutação RUN_on_axis_forked | done | f3eb013 |
 | I8 | guard.sufficient conta sessão comparável | `bash tests/check-kaizen.sh` → verde: só-escalada dá sufficient false, com-sessão dá true; mutação KAIZEN_guard_counts_escalations | pending | — |
 | I9 | giro REVIEW-PR-REVIEW pós-degradação acaba | `bash tests/check-autonomy.sh` → verde: ramo 1x, rc 3, 1 degraded + 1 blocked; mutação RUN_degraded_spins | pending | — |
 | I10 | sessão de fase loga stream | `bash tests/run-all.sh` → verde; run stub produz *.stream.jsonl com ≥2 linhas e ledger com mesmos campos | pending | — |
@@ -68,6 +68,15 @@ atualizado: 2026-08-16 10:39
 - 2026-08-16 · I6 · a armadilha do Check vácuo do I1 repetiu numa busca minha: `grep -n 'LINT_CMD olha só' TODO.md` deu `0` porque o título traz crase entre `LINT_CMD` e `olha`. Não contaminou o incremento (a remoção foi por texto exato), mas é a terceira vez na missão que crase dentro de frase engana um grep — quem for escrever Check em I7-I10 que não ancore em trecho com crase no meio
 - 2026-08-16 · I6 · `.sdd/config.sh` acompanhou (`LINT_CMD` agora nomeia `bin/sdd tests/*.sh`). A chave **continua não sendo lida pelo runner** — isso é item próprio no TODO.md ("schema promete cinco comportamentos"), deliberadamente não tocado aqui; o que mudou foi só parar de declarar menos do que a suíte faz
 - 2026-08-16 · I6 · baseline para o I7: suíte verde, mutação **32/32**, `sdd health` verde nos 5 checks (ratchet 6 dívidas conhecidas), 35,4 s (era 33,3 s no I5 — o custo do lint de 11 arquivos a mais), 46 achados no TODO.md, seção "Runner — defeitos e dívidas" com **4** itens (I7, I8, I9, I10)
+- 2026-08-16 · I7 · vermelho observado e pelo motivo certo: sessão `0` contra escalada `1` na mesma linha gêmea (a divergência literal), o humano dizendo "1 non-comparable" onde devia dizer 2, e o juiz excluindo `0` onde o humano excluía `1`. Os dois controles conhecido-limpo nasceram verdes — o fixture não estava quebrado
+- 2026-08-16 · I7 · desvio do plano (ampliação, não corte): o plano escopava as DUAS definições do `cmd_autonomy`; a terceira cópia no `kaizen_series` (achada pela triagem do I1, `bin/sdd:1870-1871`, o par complementar inline) entrou no mesmo commit. Consertar só o primeiro programa não removeria a divergência — moveria de dentro de um comando para ENTRE dois comandos, que é a mais difícil de notar, e contradiria o comentário de `bin/sdd:1743-1750`, que diz que o `sdd autonomy` se curva à série. Mesma decisão que o I4 tomou com a 3ª ocorrência da promessa do slice
+- 2026-08-16 · I7 · direção escolhida `== false`, não `!= true`: sujeira **desconhecida** não é limpeza. As duas grafias dão "uma definição só"; só uma delas mantém a semântica de que linha inatribuível vai para o balde não-comparável em voz alta
+- 2026-08-16 · I7 · ⚠️ **o achado mais caro da sessão, para o I8/I9/I10**: meu primeiro arnês de sabotagem copiava só `bin`+`tests` para o sandbox, e nessa forma o `check-autonomy.sh` fica vermelho **por conta própria** — então os 5 vereditos "a sabotagem morreu" eram o arnês, não a sabotagem. É a lição do I6 em forma nova (lá o range de `sed` cortava o relatório; aqui o sandbox incompleto). Refeito copiando `bin tests templates config` (o mesmo que `sandbox()` do check-mutation.sh) e julgando pelo **nome da asserção** que cai, não pelo `rc`
+- 2026-08-16 · I7 · passada adversarial refeita com o arnês honesto: 5 sabotagens (direção errada; só o juiz drifta; a tabela de escaladas pula o eixo; `$skipped` ignora escalada; `comparable` perde `has("moved")`), todas morrem com asserção NOVA vermelha. Matriz de remoção: `direction` é a ÚNICA que pega "uma definição, direção errada" e `judge_diff` a ÚNICA que pega "só a cópia do juiz driftou" — as outras quatro são rede local anti-vacuidade, cobertas hoje também por asserções distantes no arquivo (registrado por honestidade: são sobreposição, não regra indestrutível)
+- 2026-08-16 · I7 · uma asserção nasceu vermelha **pelo motivo errado** e foi consertada antes de valer: `num_before` devolve `""` quando o leitor não imprime a linha de exclusão, e o `jq` devolve `0` — a comparação juiz↔humano reprovaria por formatação. Normalizada com `${x:-0}`, e só então a matriz revelou que `direction` era a sole-catcher da sabotagem A
+- 2026-08-16 · I7 · ⚠️ armadilha de linguagem: o programa jq de `kaizen_series` é string entre **aspas simples** do shell, então um apóstrofo em comentário (`the human's window`) fecha a string e o `bash -n` acusa erro 100 linhas adiante. Aviso deixado no próprio comentário; quem editar prosa dentro de `jq -n '…'` esbarra nisto
+- 2026-08-16 · I7 · fora de escopo, registrado no TODO.md ("Sensores que faltam"): o `check-autonomy.sh` é **vermelho intermitente** — `bin/sdd:935` nomeia o log de fase com resolução de 1 s e o repo-fixture versiona `.sdd/logs/`, então duas fases no mesmo segundo reescrevem arquivo rastreado e a asserção "clean tree" reprova sem relação com o que se mediu. Reproduzido 2× em ~15 runs. É esta flakiness que fez o arnês ruim parecer plausível
+- 2026-08-16 · I7 · baseline para o I8: suíte verde, mutação **33/33** (entra `RUN_on_axis_forked`), `sdd health` verde nos 5 checks, ratchet 6, 46 achados no TODO.md (−1 fechado, +1 novo), seção "Runner — defeitos e dívidas" com **3** itens (I8, I9, I10). O I8 mexe no MESMO `kaizen_series` e agora tem `on_axis` nomeado ali para reusar — `$ok` já é "linha comparável", falta só o piso contar missão com **sessão**
 
 ## Incrementos de fix (QA)
 
