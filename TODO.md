@@ -717,6 +717,23 @@ Achados sobre **repos-alvo** vão para o `TODO.md` daquele repo. Este arquivo é
   evento, não mudar o laço). — descoberto por `sdd-executor` na missão
   `20260815-ledger-sem-ponto-cego` (2026-08-16)
 
+- [ ] **Duas definições de comparabilidade dentro do mesmo `jq` do `cmd_autonomy`** —
+  `bin/sdd:1715` (`comparable`, sessões: `.kit_dirty == false`) contra `bin/sdd:1722` (`on_axis`,
+  escaladas: `.kit_dirty != true`, que é o predicado da série em `bin/sdd:1817`). Hoje não diverge
+  porque `autonomy_kit_stamp` só produz `kit_dirty: null` junto com `kit_sha: null`, e o
+  `on_axis` já reprova pelo sha. Mas são dois testes para a mesma pergunta no mesmo programa —
+  exatamente a família de defeito que o I3 fechou entre os dois leitores, um nível abaixo. Unificar
+  vale um incremento com mutante próprio. — descoberto por `sdd-executor` na missão
+  `20260815-ledger-sem-ponto-cego` (2026-08-16)
+
+- [ ] **A tabela do `sdd autonomy` ordena versões lexicograficamente, a série usa ordem de
+  aparição** — `bin/sdd:1725` faz `group_by(.kit_sha)` (jq ordena pela chave), enquanto
+  `kaizen_series` deriva `latest`/`previous` por primeira aparição no arquivo (`bin/sdd:1818`,
+  decisão documentada ali). Um humano que leia a **última linha** da tabela como "a versão mais
+  recente" pode ler a errada. É ordenação de saída humana, não contagem: o I3 alinhou o eixo, não
+  a ordem. Mesma família do `latest_matching` com `sort` já registrado acima. — descoberto por
+  `sdd-executor` na missão `20260815-ledger-sem-ponto-cego` (2026-08-16)
+
 ## Feito
 
 - [x] Re-link do shim quebrado do `agent-browser` (I0) — resolvido em 2026-08-14, com sensor

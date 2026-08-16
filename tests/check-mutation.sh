@@ -214,6 +214,16 @@ mut_RUN_degraded_row_dropped() {
   sed -i 's|        autonomy_degraded_row "review-to-draft"|        : "review-to-draft"|' "$1"
 }
 
+# Not a gate (RUN_ per the naming rule above — `cmd_autonomy` is a reader, not a gate): the human's
+# escalation table loses the kit_sha axis and goes back to counting `.kind` over the whole ledger.
+# The series keeps slicing per version, so the two instruments over the SAME file start reporting
+# different escalation counts for the same period with nothing explaining the divergence — and kit
+# version is the axis the ledger exists to measure. The `on_axis` filter is left ALONE on purpose:
+# a mutant that sabotages both halves would stop distinguishing which one the assertions measure.
+mut_RUN_escalations_no_axis() {
+  sed -i 's|group_by(.kit_sha, .kind)|group_by(.kind)|' "$1"
+}
+
 CATALOG=(
   PLAN_empty_approval
   TICKET_no_sprint
@@ -237,6 +247,7 @@ CATALOG=(
   RUN_autonomy_sha_warn_repeats
   RUN_jidoka_pipefail
   RUN_degraded_row_dropped
+  RUN_escalations_no_axis
   KAIZEN_gate_blind
   KAIZEN_jidoka_dead
   KAIZEN_guard_ignored

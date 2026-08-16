@@ -313,6 +313,11 @@ blind spot for another: `kaizen_series`'s `select` counts anything it does not a
 the runner itself wrote and its own reader files as "unrecognized" is the defect, just moved.
 
 `sdd autonomy` prints the human view. The judge reads the JSONL with `jq` — never that table.
+Both readers group escalations on the **same axis**, `kit_sha`, and both drop a row with a dirty
+kit or no sha into a counted-and-excluded bucket. Two instruments over one file that report
+different counts for the same period corrode the trust the whole loop runs on, and kit version is
+the axis the ledger exists to measure — so a change to one reader's grouping belongs in the same
+commit as the other's.
 
 ## The kaizen loop
 

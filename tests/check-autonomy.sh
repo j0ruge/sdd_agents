@@ -58,11 +58,14 @@ sum_sessions() {
        END { print s + 0 }' <<< "$1"
 }
 
-# sum_escalations <reader output> -> total of every "  <kind>: N" line. That exact shape (two
-# leading spaces, a bare word, ": ", digits, end of line) is unique to escalation lines — the
-# per-kit_sha table lines use "·" separators and never end in a bare number.
+# sum_escalations <reader output> -> total of every "  <kit_sha>  <kind>: N" line. The leading
+# kit_sha is optional in this pattern ON PURPOSE: this helper's job is to COUNT rows for the
+# bucket sum, and pinning the shape belongs to the axis assertions further down — a helper that
+# did both would report "0 escalations" on a shape change and blame the wrong bucket. Either way
+# the pattern stays unique to escalation lines: the per-kit_sha session lines use "·" separators
+# and end in "US$ <n>", never in "<word>: <digits>".
 sum_escalations() {
-  awk '/^  [A-Za-z][A-Za-z0-9_-]*: [0-9]+$/ { split($0, a, ": "); s += a[2] } END { print s + 0 }' \
+  awk '/^  ([^ ]+  )?[A-Za-z][A-Za-z0-9_-]*: [0-9]+$/ { split($0, a, ": "); s += a[2] } END { print s + 0 }' \
     <<< "$1"
 }
 
@@ -417,6 +420,15 @@ assert_eq "the pipeline journal records it too" "1" \
   "$(grep -c 'DEGRADED' "$FIX/.sdd/logs/$MISSION/pipeline.log" 2>/dev/null || echo 0)"
 # The human reader must not file a row the runner itself wrote under "unrecognized": that would
 # just move the blind spot from the judge to the human.
+#
+# The kit stamp is NORMALISED first, and only for the reader assertions below. Since I3 the
+# escalation table lives on the kit_sha axis and drops non-comparable rows, and the stamp these
+# rows carry is whatever the kit checkout happened to be at test time: a dirty working tree (any
+# EXEC session) or the no-.git copy check-mutation.sh sandboxes into make every row here
+# non-comparable, and the block would pass in CI and fail on the developer's machine, or the other
+# way round. The rows stay exactly as the RUNNER wrote them in every other respect — that they
+# carry a stamp at all is asserted above, against the untouched ledger.
+jq -c '.kit_sha = "deadbee" | .kit_dirty = false' "$LEDGER" > "$LEDGER.norm" && mv "$LEDGER.norm" "$LEDGER"
 out="$( "$SDD" autonomy 2>&1 )"
 assert_eq "the human reader does not call it unrecognized" "0" "$(grep -c 'unrecognized' <<< "$out")"
 assert_eq "it is counted as an escalation, by its kind" "1" \
@@ -474,6 +486,62 @@ assert_eq "and never prints a percentage when there is nothing to compute one ov
 assert_eq "the escalations are still both named" "1" "$(grep -c 'no-progress: 1' <<< "$out")"
 assert_eq "the second kind too" "1" "$(grep -c 'increment-blocked: 1' <<< "$out")"
 assert_bucket_sum "the four buckets sum to the header total (escalations only)" "$out"
+
+# --- the two readers of the ledger agree on the axis -------------------------
+# `sdd autonomy` (the human's window) and `sdd kaizen --series` (the judge's source of truth) read
+# the SAME file. The series has always sliced escalations INSIDE a kit_sha group; this reader
+# grouped them by `.kind` over the whole file, with no version axis and no comparability filter.
+# A human reading the table next to a verdict saw different escalation counts for the same period
+# with nothing explaining the divergence — and the kit version is precisely the axis the ledger
+# exists to measure, so the divergence corrodes trust in the instrument the whole loop depends on.
+echo "== reader: escalations carry the kit_sha axis =="
+mkdir -p "$OUTSIDE/escaxis"
+cat > "$OUTSIDE/escaxis/autonomy-log.jsonl" <<'EOF'
+{"v":1,"ts":"2026-08-15T10:00:00-03:00","event":"blocked","kind":"no-progress","run_id":"r1","invocation":"run","kit_sha":"aaaaaaa","kit_dirty":false,"project":"p1","repo":"/p1","mission":"m1","phase":"EXEC","gate_why":"x"}
+{"v":1,"ts":"2026-08-15T10:01:00-03:00","event":"blocked","kind":"increment-blocked","run_id":"r1","invocation":"run","kit_sha":"aaaaaaa","kit_dirty":false,"project":"p1","repo":"/p1","mission":"m1","phase":"EXEC","gate_why":"x"}
+{"v":1,"ts":"2026-08-15T10:02:00-03:00","event":"blocked","kind":"no-progress","run_id":"r2","invocation":"run","kit_sha":"bbbbbbb","kit_dirty":false,"project":"p1","repo":"/p1","mission":"m2","phase":"EXEC","gate_why":"x"}
+{"v":1,"ts":"2026-08-15T10:03:00-03:00","event":"degraded","kind":"review-to-draft","run_id":"r2","invocation":"run","kit_sha":"bbbbbbb","kit_dirty":false,"project":"p1","repo":"/p1","mission":"m2","phase":"REVIEW","gate_why":"x"}
+{"v":1,"ts":"2026-08-15T10:04:00-03:00","event":"blocked","kind":"no-progress","run_id":"r3","invocation":"run","kit_sha":"aaaaaaa","kit_dirty":true,"project":"p1","repo":"/p1","mission":"m3","phase":"EXEC","gate_why":"x"}
+{"v":1,"ts":"2026-08-15T10:05:00-03:00","event":"blocked","kind":"no-progress","run_id":"r4","invocation":"run","kit_sha":null,"kit_dirty":null,"project":"p1","repo":"/p1","mission":"m4","phase":"EXEC","gate_why":"x"}
+EOF
+out="$( SDD_STATE_DIR="$OUTSIDE/escaxis" "$SDD" autonomy 2>&1 )"; rc=$?
+assert_eq "exits 0 (a ledger of escalations across two kit versions is data)" "0" "$rc"
+
+# The same kind under two kit versions is two facts, not one number: summing them is exactly the
+# arithmetic that makes "did the change help?" unanswerable.
+assert_eq "no-progress under the version it happened in" "1" \
+  "$(grep -c '^  aaaaaaa  no-progress: 1$' <<< "$out")"
+assert_eq "and the one under the other version, counted apart" "1" \
+  "$(grep -c '^  bbbbbbb  no-progress: 1$' <<< "$out")"
+assert_eq "a second kind stays with its own version too" "1" \
+  "$(grep -c '^  aaaaaaa  increment-blocked: 1$' <<< "$out")"
+assert_eq "a degradation is an escalation on the axis, like any other" "1" \
+  "$(grep -c '^  bbbbbbb  review-to-draft: 1$' <<< "$out")"
+# Anti-vacuity: an escalation line with no version in front of it IS the old axis-less shape, so
+# asserting its absence is what makes the four assertions above impossible to satisfy by accident.
+assert_eq "no escalation line is printed without a version" "0" \
+  "$(grep -cE '^  [A-Za-z][A-Za-z0-9_-]*: [0-9]+$' <<< "$out")"
+# Non-comparable escalations are excluded and COUNTED, the same refusal the session block already
+# makes: a dirty kit and a null sha cannot be attributed to a version, and a row silently summed
+# into one is worse than a row excluded out loud.
+assert_eq "the dirty kit and the null sha are excluded, not summed into a version" "1" \
+  "$(grep -c '2 non-comparable' <<< "$out")"
+assert_bucket_sum "the buckets sum to the header total (escalations on two versions)" "$out"
+
+# The increment's metric, stated as the two instruments agreeing — compared as DATA, kind by kind,
+# not as prose. Whatever `sdd kaizen --series` reports for the latest kit version, the human table
+# has to report the same. A divergence fails here even when each side looks plausible alone, which
+# is the only way to catch the two readers drifting apart again.
+series="$( SDD_STATE_DIR="$OUTSIDE/escaxis" "$SDD" kaizen --series 2>/dev/null )"
+latest_sha="$(jq -r '.latest.kit_sha' <<< "$series")"
+assert_eq "the series and the reader are talking about the same latest version" "bbbbbbb" "$latest_sha"
+series_esc="$(jq -r '.latest.escalations | to_entries | sort_by(.key)
+                     | map("\(.key): \(.value)") | join("\n")' <<< "$series")"
+# $1 is the sha, $2 the "<kind>:" token and $3 the count; the session table lines have "session(s)"
+# in $3, so the numeric guard keeps them out without a second pattern to maintain.
+reader_esc="$(awk -v sha="$latest_sha" '$1 == sha && $3 ~ /^[0-9]+$/ { print $2, $3 }' <<< "$out" | sort)"
+assert_eq "the human reader and the judge count the latest version's escalations alike" \
+  "$series_esc" "$reader_esc"
 
 # A row with no `event` at all, or an event nobody recognizes yet: the reviewer's exact repro. It
 # must be counted, not merely fail to crash.

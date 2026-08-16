@@ -1688,12 +1688,23 @@ cmd_autonomy() {
   step "sdd autonomy — $file · $total row(s)"
 
   # Every row lands in exactly ONE of four buckets, and the buckets are exhaustive: comparable
-  # session, non-comparable session, escalation, or unrecognized (event missing, or a value none
-  # of session/blocked/degraded — a future event type, a hand edit, a partial write). Every event
-  # the runner itself writes has to be in that list: a row the runner produced and its own reader
-  # files as "unrecognized" is the blind spot merely moved from the judge to the human.
+  # session, non-comparable row, escalation on the axis, or unrecognized (event missing, or a value
+  # none of session/blocked/degraded — a future event type, a hand edit, a partial write). Every
+  # event the runner itself writes has to be in that list: a row the runner produced and its own
+  # reader files as "unrecognized" is the blind spot merely moved from the judge to the human.
   # A row that fit none of them used to vanish with no trace; tests/check-autonomy.sh now asserts
   # the four counts sum to the header total, so a filter that drops a row again fails loudly.
+  #
+  # ESCALATIONS SIT ON THE kit_sha AXIS, exactly as `kaizen_series` has always sliced them
+  # (see the `$ok | map(select(.kit_sha == $shas[-1])) | group_summary` there). This reader used to
+  # `group_by(.kind)` over the WHOLE file, with no version axis and no comparability filter: the
+  # human's table and the judge's series then printed different escalation counts for the same
+  # period with nothing explaining the divergence, and kit version is precisely the axis the ledger
+  # exists to measure. Two instruments over one file that disagree corrode the trust the kaizen
+  # loop runs on, so `sdd autonomy` bends to the series and not the other way round — the series
+  # was already right, and "fixing" both sides would have re-created the divergence it removes.
+  # A dirty kit or a null sha cannot be attributed to any version, so those escalations join the
+  # non-comparable count instead of being summed into a version that did not produce them.
   #
   # A row whose JSON is syntactically valid but the wrong SHAPE (a bare array, say) cannot be
   # classified at all — indexing it with .event is a jq runtime error, not a false comparison — so
@@ -1706,7 +1717,11 @@ cmd_autonomy() {
     def is_session: .event == "session";
     def is_escalation: .event == "blocked" or .event == "degraded";
     def is_unrecognized: (is_session or is_escalation) | not;
-    (map(select(is_session and (comparable | not))) | length) as $skipped
+    # The series calls a row non-comparable on exactly this predicate. Same test, same words, so
+    # the two readers cannot drift apart by one of them being "improved" alone.
+    def on_axis: .kit_dirty != true and .kit_sha != null;
+    (map(select((is_session and (comparable | not))
+                or (is_escalation and (on_axis | not)))) | length) as $skipped
     | (map(select(is_session and comparable)) | group_by(.kit_sha)) as $groups
     | (map(select(is_unrecognized)) | length) as $stray
     | (if ($groups | length) == 0 then
@@ -1721,8 +1736,9 @@ cmd_autonomy() {
             | "  \($sha)  \($n) session(s) · \($stalled) stalled · \(($stalled * 100 / $n) | floor)% waste · \($missions) mission(s) · US$ \($cost | . * 100 | round / 100)"
           ) | join("\n"))
       end)
-    , (map(select(is_escalation)) | group_by(.kind)
-       | map("  \(.[0].kind): \(length)") | join("\n") | select(length > 0) | "\nescalations\n" + .)
+    , (map(select(is_escalation and on_axis)) | group_by(.kit_sha, .kind)
+       | map("  \(.[0].kit_sha)  \(.[0].kind): \(length)") | join("\n")
+       | select(length > 0) | "\nescalations\n" + .)
     , (if $skipped > 0 then "\n  (\($skipped) non-comparable row(s) excluded: dirty kit, no kit_sha, or no moved field)" else "" end)
     , (if $stray > 0 then "\n  (\($stray) unrecognized row(s) excluded: event missing or not one of session/blocked/degraded)" else "" end)
   ' "$file" 2>/dev/null)" || jq_rc=$?
