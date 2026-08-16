@@ -53,6 +53,13 @@ Achados sobre **repos-alvo** vão para o `TODO.md` daquele repo. Este arquivo é
   proíbe em teste. Direção: o planner roda cada Check contra o HEAD e registra o vermelho.
   — descoberto por `sdd-executor` na missão `20260816-runner-sem-dividas` (2026-08-16)
 
+- [ ] **Check de ausência (`grep -c X` → `0`) reprova o conserto que precisa citar o defeito** —
+  `docs/handoffs/20260816-runner-sem-dividas/checkpoint.md:20` — o comentário honesto que
+  **desmente** a promessa "CHARACTER slice" precisa nomeá-la, e o Check literal deu `1`, não `0`.
+  Distinto do item acima: rodar o Check contra o HEAD dá vermelho de verdade e a armadilha fica.
+  Direção: Check de ausência mira o código, nunca a prosa. — descoberto por `sdd-executor` na
+  missão `20260816-runner-sem-dividas` (2026-08-16)
+
 - [ ] **A asserção "dry-run não toca no disco" promete mais do que entrega** —
   `tests/check-dry-run.sh:116` — ela roda sobre fixture parado em EXEC, cujo gate reprova antes de
   chegar ao `TEST_CMD`. Num fixture que alcance `gate_REVIEW`, o dry-run escreve
@@ -234,19 +241,6 @@ Achados sobre **repos-alvo** vão para o `TODO.md` daquele repo. Este arquivo é
   que hoje coincide). Renomeie a variável do laço e os mutantes passam a compartilhar um sandbox.
   Direção: separar em duas linhas e estender o passo de lint a `tests/*.sh`. — descoberto por
   `sdd-executor` na missão `20260815-ledger-sem-ponto-cego` (2026-08-16)
-
-- [ ] **`bad_rows` é escrito e nunca lido** — `bin/sdd:262,276` — o contador é incrementado no
-  mesmo comando que dá `return 1`, então o valor final nunca é inspecionado; de fora sugere um
-  "conte quantas linhas estão ruins" que não existe. Ou entra no `GATE_WHY` ("3 linhas do
-  checkpoint malformadas" diz mais que a primeira), ou sai. Pré-existente. — descoberto por
-  `sdd-reviewer` na missão `20260814-dry-run-completo` (2026-08-14)
-
-- [ ] **`${var:0:200}` só corta por caractere se o locale for multibyte** — `bin/sdd:756,777` —
-  o comentário promete "character slice", verdade só sob UTF-8; em `C`/`POSIX` o bash volta a
-  contar byte, e nem o runner nem `tests/run-all.sh` fixam `LC_ALL`/`LANG`. Não é regressão (é
-  igual ou melhor que o `head -c` anterior), mas a promessa escrita depende do ambiente de quem
-  roda. Direção: fixar o locale no topo do runner, ou o comentário parar de prometer.
-  — descoberto por `sdd-reviewer` na missão `20260815-i13.1-autonomy-log` (2026-08-15)
 
 - [ ] **O runner se auto-degrada em laço, mesmo registrando uma vez só** — `bin/sdd:1546` —
   depois do `force_phase="PR"`, se a fase PR mexer no disco e não satisfizer o gate, o laço volta
