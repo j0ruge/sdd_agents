@@ -55,6 +55,7 @@ exception, never a silent one** (kaizen K3). Values: any alias `claude --model` 
 | `MODEL_DOCS` | `opus` | Writing documentation that does not lie takes a model. |
 | `MODEL_PUBLISH` | `sonnet` | Assembling a PR body from finished handoffs is mechanical. |
 | `MODEL_TICKET` | `sonnet` | Calling `acli` with fields already decided is mechanical. |
+| `MODEL_KAIZEN` | `opus` | Used only by the kit's own kaizen loop (`sdd kaizen`, kit repo): judging the previous kit change and planning the next takes judgement. |
 
 ## Limits and policy
 

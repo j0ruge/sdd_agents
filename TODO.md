@@ -119,6 +119,13 @@ Achados sobre **repos-alvo** vão para o `TODO.md` daquele repo. Este arquivo é
   durável junto: caso em `tests/check-gates.sh` com um checkpoint citando commit órfão, afirmando
   que `gate_EXEC` **reprova**. — descoberto por `sdd-qa` na missão `20260814-dry-run-completo`
   (2026-08-14)
+  **RESOLVIDO por `4ec9752`** — exatamente a direção sugerida: `bin/sdd:293` passou a cobrar
+  `git merge-base --is-ancestor "$commit" HEAD`, com o `git cat-file -e` de `bin/sdd:284` mantido
+  antes dele para separar "objeto não existe" de "existe mas não é alcançável". O sensor pedido
+  veio junto e está no catálogo: `mut_EXEC_orphan_commit` (`tests/check-mutation.sh:53`) reverte a
+  checagem e a suíte morre. **A entrada ficou aberta sem marca até hoje** — encontrada pela triagem
+  do laço kaizen conferindo o corpo contra o código, não contra a caixa. Planejá-la de novo teria
+  sido retrabalho. — `sdd-kaizen` na missão `20260815-ledger-sem-ponto-cego` (2026-08-15)
 - [ ] **Nenhum gate confere se a missão ainda está na branch que ela declarou** — `bin/sdd`
   (todos os `gate_*`) + `templates/missao.md` (campo `branch:`) — o `00-missao.md` declara a
   branch e **ninguém mais olha para esse campo**. Medido no piloto SQ-97: entre `QA:plan` e
@@ -612,6 +619,14 @@ Achados sobre **repos-alvo** vão para o `TODO.md` daquele repo. Este arquivo é
   pôs no topo da lista ordenada por valor), por isso fica registrado em vez de consertado agora. —
   descoberto por `/codereview` (revisão final do branch) na missão `20260815-i13.1-autonomy-log`
   (2026-08-15)
+  **Medido na triagem kaizen (2026-08-15) — o achado vale METADE do que dizia:** a `kaizen_series`
+  (nascida depois desta entrada, no I13.3) **já está correta** — `bin/sdd:1774` fatia
+  `$ok | map(select(.kit_sha == $shas[-1]))` **antes** do `group_by(.kind)` de `bin/sdd:1760`, então
+  a escalada herda o eixo de `kit_sha` e as não-comparáveis já são excluídas e contadas. Quem
+  continua sem eixo é só o `cmd_autonomy` (`bin/sdd:1698`), a visão humana. O juiz, portanto, não é
+  afetado; o que sobra é dois instrumentos sobre o mesmo ledger dando contagens diferentes.
+  ⚠️ **Não "consertar" a série junto** — isso recriaria a divergência. Virou o incremento I3 da
+  missão `20260815-ledger-sem-ponto-cego`. — `sdd-kaizen` (2026-08-15)
 
 - [ ] **`cmd_autonomy` repete o bloco "no data" literalmente, em dois pontos** — `bin/sdd:1603-1605`
   (arquivo ausente ou vazio) e `bin/sdd:1620-1622` (arquivo só com linhas em branco, `total == 0`) —
@@ -622,6 +637,40 @@ Achados sobre **repos-alvo** vão para o `TODO.md` daquele repo. Este arquivo é
   "ledger vazio" de "ledger corrompido". Direção: um helper local (`no_data() { warn …; dim …; }`)
   chamado dos dois pontos, mantendo as duas guardas onde estão. — descoberto por `/codereview`
   (revisão do merge do I13.1) em 2026-08-15
+
+- [ ] **A suíte fechou o I13.3 em 37,4 s, contra o alvo "<30 s" que a própria D7 fixou** —
+  `tests/run-all.sh` + `tests/check-mutation.sh` (`SDD_MUTATION_JOBS`) — medido na primeira volta do
+  laço kaizen sobre o `HEAD` `90f9ce9`: `./tests/run-all.sh` → `suite green`, `score: 23 caught,
+  0 known gap(s), of 23`, **37,4 s** no default (`SDD_MUTATION_JOBS=4`). A D7 do `CONTEXT.md` lista
+  como critério de sucesso do I13.3 "(4) suíte < 30s no default" — **o critério não foi atingido**,
+  e isso não estava registrado em lugar nenhum. É a mesma entrada de "a suíte estourou o alvo de
+  ≤15s do plano do I13.1" acima, um alvo depois: 13,98 s (pré-I13.1, 16 mutantes) → 22,34 s (I13.1,
+  19) → 37,4 s (I13.3, 23). O custo cresce com o catálogo, que é exatamente o que deve crescer.
+  A alavanca já medida (`SDD_MUTATION_JOBS=10` → 14,70 s à época) continua desligada por default, e
+  as razões para não mudá-lo seguem válidas (`nproc` é GNU-only; máquina de 2 núcleos pioraria).
+  ⚠️ A missão `20260815-ledger-sem-ponto-cego` acrescenta **três** mutantes (23 → 26) e portanto
+  **piora** este número de propósito — cortar mutação para ganhar tempo violaria o princípio que
+  motivou o I13.2. Decisão do humano, das três já conhecidas: subir o alvo, subir o default, ou
+  aceitar o custo como preço de medir a própria autonomia. — descoberto por `sdd-kaizen` na missão
+  `20260815-ledger-sem-ponto-cego` (2026-08-15)
+  **Atualização (2026-08-16, review pré-merge do I13.3):** o review acrescentou a 24ª e a 25ª
+  mutações (`KAIZEN_guard_ignored`, `KAIZEN_approved_bailout_dead`), então a projeção da missão
+  nascida passa a ser 25 → 28 — a régua do checkpoint dela já foi deslocada. O trade-off e as
+  três saídas continuam os mesmos.
+
+- [ ] **`cmd_kaizen` tem partes sem mutação própria além das 5 do catálogo** — `bin/sdd`
+  (`kaizen_reminder`, ramo "already judged" idempotente) — as 5 mutações cobrem `gate_KAIZEN`
+  cego, Jidoka morto, guarda ignorada, bailout de aprovação morto (as duas últimas do review
+  pré-merge) e a régua de rótulos; o lembrete e a idempotência têm asserções em
+  `tests/check-kaizen.sh` mas nenhuma sabotagem no catálogo que prove que elas medem algo. É a
+  pergunta que o próprio plano do I13.3 mandou registrar. — descoberto na execução do
+  `i13.3-sdd-kaizen` (2026-08-15)
+
+- [ ] **Espelho global de vereditos legível por máquina (JSONL em `~/.sdd/`)** — D3 do
+  `CONTEXT.md` adiou por YAGNI até o I13.4 pedir: hoje o veredito vive só no handoff da missão
+  nascida, e "vereditos ao longo do tempo" exige varrer `docs/handoffs/*/05-verdict.md` do kit.
+  Quando o I13.4 (graduação/`KAIZEN_AUTO_APPROVE`) precisar da série de vereditos, criar o
+  espelho junto — nunca antes. — registrado na execução do `i13.3-sdd-kaizen` (2026-08-15)
 
 ## Feito
 

@@ -92,6 +92,7 @@ load_config() {
   : "${HANDOFF_DIR:=docs/handoffs}"; : "${QA_DOCS_PATH:=docs/qa}"; : "${TODO_FILE:=TODO.md}"
   : "${MODEL_EXEC:=opus}"; : "${MODEL_QA:=opus}"; : "${MODEL_REVIEW:=opus}"
   : "${MODEL_DOCS:=opus}"; : "${MODEL_PUBLISH:=sonnet}"; : "${MODEL_TICKET:=sonnet}"
+  : "${MODEL_KAIZEN:=opus}"
   : "${QA_MAX_ITER:=3}"; : "${REVIEW_MAX_ITER:=3}"; : "${EXEC_MAX_RETRY:=1}"
   : "${BUDGET_PER_PHASE_USD:=15}"; : "${PUBLISH_ON_REVIEW_BLOCKED:=off}"
   : "${PERMISSION_MODE:=acceptEdits}"; : "${JIRA_ENABLED:=false}"
@@ -505,6 +506,7 @@ phase_model() {
     DOCS)   printf '%s\n' "$MODEL_DOCS" ;;
     PR)     printf '%s\n' "$MODEL_PUBLISH" ;;
     TICKET) printf '%s\n' "$MODEL_TICKET" ;;
+    KAIZEN) printf '%s\n' "$MODEL_KAIZEN" ;;
     *)      printf '%s\n' "$MODEL_EXEC" ;;
   esac
 }
@@ -564,6 +566,7 @@ phase_agent() {
     DOCS)      printf '%s\n' "sdd-docs" ;;
     PR)        printf '%s\n' "sdd-publisher" ;;
     TICKET)    printf '%s\n' "sdd-publisher" ;;
+    KAIZEN)    printf '%s\n' "sdd-kaizen" ;;
     *)         printf '%s\n' "" ;;
   esac
 }
@@ -588,6 +591,7 @@ phase_task() {
     DOCS)     printf '%s\n' "sync the repo's living documentation with what this mission changed" ;;
     PR)       printf '%s\n' "push and open the PR carrying the evidence from the earlier phases" ;;
     TICKET)   printf '%s\n' "open the mission's JIRA issue, already in the active sprint, and record 10-ticket.md" ;;
+    KAIZEN)   printf '%s\n' "judge the previous kit change, triage $TODO_FILE and give birth to the kit's next mission plan" ;;
     *)        printf '%s\n' "" ;;
   esac
 }
@@ -633,6 +637,40 @@ Write EVERY artifact of this mission — handoffs, checkpoint, commit messages a
 $OUTPUT_LANG. Identifiers, config keys and status tokens (pending, done, blocked, auto, skipped)
 stay in English: they are contract, not prose.
 "
+  fi
+  # KAIZEN is the meta-loop, not a mission phase: there is no 00-missao/01-plano/checkpoint to
+  # read — the session's first act is running the deterministic series. An early return keeps the
+  # mission-phase prompt below byte for byte untouched (the RUN_ignores_output_lang mutation
+  # watches part of that; the rest is contract with every already-installed repo).
+  if [ "$step" = "KAIZEN" ]; then
+    cat <<EOF
+You are in phase KAIZEN of the kit \`$PROJECT_NAME\` — the meta-loop that judges the kit itself —
+as the agent sdd-kaizen.
+
+All of your state comes from disk. There was NO earlier conversation — nothing was "agreed"
+before. Before anything else:
+  1. run: "$SDD_HOME/bin/sdd" kaizen --series
+     That JSON is the deterministic series — your SOURCE OF TRUTH. Cite its numbers; NEVER
+     recalculate them from the ledger (recalculating is a contract violation).
+  2. read $TODO_FILE, CONTEXT.md and KAIZEN_LOG.md at the repo root
+  3. read the kit history: git log --oneline -20
+  4. read the artifact templates in $SDD_HOME/templates/
+$lang_line
+Your task in this session: $(phase_task "$step").
+
+Write the verdict to $HANDOFF_DIR/<YYYYMMDD>-<slug>/05-verdict.md — frontmatter keys \`verdict:\`
+(melhorou | piorou | indeterminado), \`kit_sha_judged:\` (the series' latest kit_sha, or "none"),
+\`date:\`. If guard.sufficient is false the verdict IS indeterminado — the guard belongs to the
+runner and you never override it. If the verdict is piorou, STOP after the verdict and its
+escalation section: no plan is born from a regression. Otherwise triage $TODO_FILE and write
+00-missao.md (with \`aprovacao:\` EMPTY — the human approves, never you), 01-plano.md and
+checkpoint.md beside the verdict, from the templates.
+
+Write the artifacts to disk and commit. The runner re-evaluates the gate from outside — it reads
+the files and the frontmatter. Your answer in text proves nothing and satisfies no gate. A
+finding that does not fit this mission goes to $TODO_FILE, never to the diff.
+EOF
+    return 0
   fi
   [ -n "$slash" ] && printf '%s\n\n' "$slash"
   cat <<EOF
@@ -1185,8 +1223,8 @@ cmd_health() {
   # Explicit floor: zero gates found would pass by vacuity (a rename, an indentation change).
   local gates; gates="$(grep -oE '^gate_[A-Z]+' "$kit/bin/sdd" | sed 's/^gate_//' | sort -u)"
   n="$(grep -c . <<< "$gates")"
-  if [ "$n" -ne 7 ]; then
-    health_bad "found $n gates in bin/sdd, expected 7 — new/renamed gate: update the floor here"
+  if [ "$n" -ne 8 ]; then
+    health_bad "found $n gates in bin/sdd, expected 8 — new/renamed gate: update the floor here"
   else
     local without_mutation=""
     for k in $gates; do
@@ -1195,7 +1233,7 @@ cmd_health() {
     if [ -n "$without_mutation" ]; then
       health_bad "gate(s) with no mutation in the catalogue:$without_mutation — a gate nobody sabotages is not measured"
     else
-      ok "all 7 gates have a mutation in the catalogue"
+      ok "all 8 gates have a mutation in the catalogue"
     fi
   fi
 
@@ -1430,6 +1468,7 @@ cmd_run() {
         "$C_GREEN$C_BOLD" "$C_RESET"
       local prurl; prurl="$(frontmatter "$MISSION_DIR/50-pr.md" pr_url)"
       [ -n "$prurl" ] && info "  $prurl"
+      kaizen_reminder
       return 0
     fi
 
@@ -1666,6 +1705,325 @@ cmd_autonomy() {
   printf '%s\n' "$out"
 }
 
+# ---------------------------------------------------------------------------
+# Kaizen — the deterministic half of the judge (ADR 0001). The runner derives labels and numbers;
+# the sdd-kaizen agent gives the verdict CITING them, never recalculating. This function is the
+# contract between the two: `sdd kaizen --series` is what the agent's session runs as its source
+# of truth.
+#
+# PURE on purpose: it prints JSON and touches no global, so reading it through `$( )` is safe —
+# the autonomy_kit_stamp subshell bug cannot happen here because there is no effect to lose.
+#
+# The label rubric, per mission×phase group:
+#   refez — any escalation, any human retry invocation, or the phase's last session still failing
+#           its gate: the work was pushed again, the strongest friction signal there is.
+#   leve  — an in-loop auto retry or a session that did not move the disk: friction, absorbed.
+#   ok    — none of the above.
+# Rows with a dirty kit or no kit_sha are non-comparable (counted, never mixed in), and the
+# KAIZEN meta row is excluded from the axis it would otherwise shift — the judge must never see
+# its own session inflate the guard that gates its verdict.
+#
+# latest/previous follow FILE order, not sort order: jq's group_by sorts by key and would call
+# the lexically-largest sha "latest" — the reduce/index below keeps first-appearance order, and a
+# reappearing old sha joins its old group instead of opening a new one.
+kaizen_series() {
+  local file; file="$(autonomy_log_path)"
+  command -v jq >/dev/null 2>&1 || die "jq not found — it is required to read the ledger"
+  if [ ! -s "$file" ]; then
+    printf '%s\n' '{"v":1,"latest":null,"previous":null,"guard":{"missions_after_change":0,"sufficient":false},"excluded":{"non_comparable":0,"unrecognized":0,"meta":0}}'
+    return 0
+  fi
+  jq -n '
+    def phase_label:
+      if (map(select(.event == "blocked")) | length) > 0
+         or (map(select(.event == "session" and .invocation == "retry")) | length) > 0
+         or ((map(select(.event == "session")) | last | .gate) != "pass")
+      then "refez"
+      elif (map(select(.event == "session" and (.auto_retry == true or .moved == false))) | length) > 0
+      then "leve"
+      else "ok"
+      end;
+
+    def group_summary:
+      . as $rows
+      | ($rows | map(select(.event == "session"))) as $sess
+      | ($rows | group_by(.mission + "|" + .phase)
+               | map({mission: .[0].mission, phase: .[0].phase, label: phase_label,
+                      sessions: (map(select(.event == "session")) | length),
+                      cost_usd: (map(.cost_usd // 0) | add)})) as $detail
+      | {kit_sha: $rows[0].kit_sha,
+         missions: ($rows | map(.mission) | unique | length),
+         sessions: ($sess | length),
+         moved_rate: (if ($sess | length) == 0 then null
+                      else (($sess | map(select(.moved == true)) | length) / ($sess | length) * 100 | round / 100) end),
+         labels: ($detail | reduce .[] as $d ({ok: 0, leve: 0, refez: 0}; .[$d.label] += 1)),
+         escalations: ($rows | map(select(.event == "blocked")) | group_by(.kind)
+                             | map({(.[0].kind): length}) | add // {}),
+         cost_usd: ($sess | map(.cost_usd // 0) | add // 0 | . * 100 | round / 100),
+         detail: $detail};
+
+    [ inputs ] as $raw
+    | ($raw | map(select(type == "object" and .v == 1
+                         and (.event == "session" or .event == "blocked")))) as $all
+    | ($all | map(select(.phase == "KAIZEN"))) as $meta
+    | ($all | map(select(.phase != "KAIZEN"))) as $rows
+    | (($raw | length) - ($all | length)) as $unrec
+    | ($rows | map(select(.kit_dirty == true or .kit_sha == null))) as $noncomp
+    | ($rows | map(select(.kit_dirty != true and .kit_sha != null))) as $ok
+    | ($ok | map(.kit_sha) | reduce .[] as $s ([]; if index($s) then . else . + [$s] end)) as $shas
+    | (if ($shas | length) >= 1 then ($ok | map(select(.kit_sha == $shas[-1])) | group_summary) else null end) as $latest
+    | (if ($shas | length) >= 2 then ($ok | map(select(.kit_sha == $shas[-2])) | group_summary) else null end) as $previous
+    | {v: 1,
+       latest: $latest,
+       previous: $previous,
+       guard: {missions_after_change: ($latest.missions // 0),
+               sufficient: (($latest.missions // 0) >= 3)},   # guard floor: 3 distinct missions (D4); I13.4 revisits
+       excluded: {non_comparable: ($noncomp | length), unrecognized: $unrec,
+                  meta: ($meta | length)}}
+  ' < "$file"
+}
+
+# One dim line after "pipeline complete": how many missions the CURRENT kit version accumulated
+# without a verdict, and where to go. Pull, not push (D6) — the human is the kanban, so it prints
+# only when there is something to judge and no verdict for it yet, and it never blocks anything.
+# The verdicts live in the KIT repo ($SDD_HOME/docs/handoffs/), readable from any target repo.
+# Every read goes through a variable or a herestring — never `printf | grep`, the pipefail trap.
+kaizen_reminder() {
+  # Same one-shot warn as every other jq consumer — a silent return here would be the
+  # "errors pass silently" exception in a file that already fixed this once.
+  autonomy_have_jq || return 0
+  local file; file="$(autonomy_log_path)"
+  [ -s "$file" ] || return 0
+  local series n sha
+  series="$(kaizen_series)" || return 0
+  n="$(jq -r '.guard.missions_after_change' <<< "$series")"
+  [ "$n" != "0" ] || return 0
+  sha="$(jq -r '.latest.kit_sha // empty' <<< "$series")"
+  [ -n "$sha" ] || return 0
+  # Same search as gate_KAIZEN: by kit_sha_judged content, never by newest file.
+  local f
+  for f in "$SDD_HOME"/docs/handoffs/*/05-verdict.md; do
+    [ -f "$f" ] || continue
+    [ "$(frontmatter "$f" kit_sha_judged)" = "$sha" ] && return 0
+  done
+  dim "  autonomy series: $n mission(s) on kit $sha without a verdict — run 'sdd kaizen' in the kit repo ($SDD_HOME) for the next kit mission plan"
+}
+
+# KAIZEN gate — same convention as every gate (0/1, reason in GATE_WHY), but NOT in PHASES:
+# KAIZEN is the meta-loop that judges the kit itself, and cmd_kaizen drives it directly.
+#
+# Satisfied means: a verdict exists for the kit sha the series calls latest, and — unless the
+# verdict is `piorou`, which dispenses the plan (ADR 0002) — the born plan sits beside it with an
+# EMPTY `aprovacao:`. The verdict is found by CONTENT (`kit_sha_judged == expected`), never by
+# "newest file": latest_matching sorts lexically (bug r10 in TODO.md), and an old verdict must
+# never satisfy a new sha.
+#
+# On `piorou` the gate PASSES (the judge did its job) and publishes GATE_KAIZEN_VERDICT so
+# cmd_kaizen can stop the line — the gate itself never kills the process, and the global survives
+# because gate_KAIZEN is CALLED, never read through $( ) (the autonomy_kit_stamp subshell lesson).
+#
+# The verdict LABEL is never trusted on its own (principle 1: gate = artifact, never a label):
+# the value must be one of the three enum tokens, and any verdict other than `indeterminado`
+# demands guard.sufficient from the SAME series the agent was told to cite — the boot prompt's
+# "the guard belongs to the runner" is enforced here, not merely requested there.
+#
+# GATE_KAIZEN_APPROVED carries a non-empty `aprovacao:` out to cmd_kaizen, which must NOT route
+# that failure through the generic fix-it retry session: the value may be a HUMAN's approval, and
+# a session told to "complete what is missing" could blank it — erasing a human decision that
+# `sdd run` may already be acting on.
+GATE_KAIZEN_VERDICT=""
+GATE_KAIZEN_VERDICT_FILE=""
+GATE_KAIZEN_PLAN_DIR=""
+GATE_KAIZEN_APPROVED=""
+gate_KAIZEN() {
+  GATE_KAIZEN_VERDICT=""; GATE_KAIZEN_VERDICT_FILE=""; GATE_KAIZEN_PLAN_DIR=""
+  GATE_KAIZEN_APPROVED=""
+  local series expected f found=""
+  series="$(kaizen_series)"
+  expected="$(jq -r '.latest.kit_sha // "none"' <<< "$series")"
+  for f in "$REPO_ROOT/$HANDOFF_DIR"/*/05-verdict.md; do
+    [ -f "$f" ] || continue
+    if [ "$(frontmatter "$f" kit_sha_judged)" = "$expected" ]; then found="$f"; break; fi
+  done
+  [ -n "$found" ] || { GATE_WHY="no verdict for kit ${expected} yet"; return 1; }
+  GATE_KAIZEN_VERDICT_FILE="$found"
+  local verdict; verdict="$(frontmatter "$found" verdict)"
+  case "$verdict" in
+    melhorou|piorou|indeterminado) : ;;
+    *) GATE_WHY="verdict '${verdict:-<empty>}' at $found is not one of melhorou|piorou|indeterminado"
+       return 1 ;;
+  esac
+  local sufficient; sufficient="$(jq -r '.guard.sufficient' <<< "$series")"
+  if [ "$sufficient" != "true" ] && [ "$verdict" != "indeterminado" ]; then
+    GATE_WHY="verdict '$verdict' at $found but guard.sufficient is false — the guard belongs to the runner and an insufficient series only supports 'indeterminado'"
+    return 1
+  fi
+  if [ "$verdict" = "piorou" ]; then
+    GATE_KAIZEN_VERDICT="piorou"
+    GATE_WHY="verdict piorou at $found — the plan is dispensed, the line must stop"
+    return 0
+  fi
+  local d; d="$(dirname "$found")"
+  [ -f "$d/00-missao.md" ] \
+    || { GATE_WHY="verdict at $found but 00-missao.md is missing beside it"; return 1; }
+  local approval; approval="$(frontmatter "$d/00-missao.md" aprovacao)"
+  if [ -n "$approval" ]; then
+    GATE_KAIZEN_APPROVED="$approval"
+    GATE_WHY="the born plan carries 'aprovacao: $approval' — kaizen never approves itself (pre-I13.4), and a filled value is the human's, never a session's to blank"
+    return 1
+  fi
+  [ -f "$d/01-plano.md" ] \
+    || { GATE_WHY="verdict at $found but 01-plano.md is missing beside it"; return 1; }
+  [ -f "$d/checkpoint.md" ] \
+    || { GATE_WHY="verdict at $found but checkpoint.md is missing beside it"; return 1; }
+  GATE_KAIZEN_PLAN_DIR="$d"
+  GATE_WHY="verdict ${verdict} + born plan with empty aprovacao at $d"
+  return 0
+}
+
+# The two terminal outcomes of a satisfied KAIZEN gate, shared by the idempotent pre-check and
+# the post-session re-evaluations. Returns 3 on `piorou` (Jidoka — same escalation convention as
+# a blocked increment) and 0 when the born plan is waiting for the human.
+kaizen_outcome() {
+  if [ "$GATE_KAIZEN_VERDICT" = "piorou" ]; then
+    info ""
+    bad "the previous kit change made autonomy WORSE — the line is stopped"
+    dim "  Read the verdict, decide, then re-run: $GATE_KAIZEN_VERDICT_FILE"
+    return 3
+  fi
+  ok "gate KAIZEN: $GATE_WHY"
+  dim "  Review the born plan, fill 'aprovacao:', then 'sdd run' the new mission:"
+  dim "  $GATE_KAIZEN_PLAN_DIR"
+  return 0
+}
+
+# Terminal handling of a born plan whose `aprovacao:` is already filled — the one gate failure
+# that must NEVER be handed to a fix-it session, because the generic retry prompt ("complete
+# what is missing and write the artifacts") reads, to a live agent, as an instruction to blank
+# the field. Returns 3 for the loop's own forbidden self-approval, 0 when a human already
+# approved (kaizen's job ended when the plan was born; the next step is sdd run).
+kaizen_approved_outcome() {
+  if [ "$GATE_KAIZEN_APPROVED" = "auto" ]; then
+    info ""
+    bad "the born plan approved ITSELF (aprovacao: auto) — pre-I13.4 the loop never does that"
+    dim "  A human decides: empty the field to hand the plan back, or replace it with your own approval."
+    return 3
+  fi
+  ok "the born plan is already approved (aprovacao: $GATE_KAIZEN_APPROVED)"
+  dim "  Kaizen's work here is done — the next step is 'sdd run' on that mission, not another verdict."
+  return 0
+}
+
+cmd_kaizen() {
+  local series_only=0
+  while [ $# -gt 0 ]; do
+    case "$1" in
+      --series)  series_only=1 ;;
+      --dry-run) DRY_RUN=1 ;;
+      *)         die "unknown kaizen option: $1" ;;
+    esac
+    shift
+  done
+  # The ledger is global (~/.sdd), so the series is readable from ANY cwd — no config, no repo.
+  if [ "$series_only" = "1" ]; then kaizen_series; return 0; fi
+
+  load_config
+  # KAIZEN plans the KIT's next mission, never a target project's. Run from anywhere else it
+  # would judge the kit but give birth to the plan in the wrong repo.
+  local kit_root
+  kit_root="$( cd "$SDD_HOME" && git rev-parse --show-toplevel 2>/dev/null || true )"
+  # Two distinct refusals, named apart: an empty kit_root means the kit itself has no git
+  # history (a plain copy) — blaming the cwd would send the user hunting for the wrong problem,
+  # the same misattribution autonomy_kit_stamp already warns about for ledger rows.
+  [ -n "$kit_root" ] \
+    || die "$SDD_HOME is not a git checkout — the kaizen loop judges kit versions and needs the kit's git history"
+  [ "$kit_root" = "$REPO_ROOT" ] \
+    || die "sdd kaizen plans the KIT's next mission — run it in the kit repo ($SDD_HOME)"
+  # A dirty tree does not block (the judge may be invoked mid-work on purpose), but the rows born
+  # now carry kit_dirty:true and stay out of the comparable series forever — worth hearing once.
+  [ -z "$( git -C "$REPO_ROOT" status --porcelain 2>/dev/null )" ] \
+    || warn "the kit tree is dirty — ledger rows born now carry kit_dirty:true and stay non-comparable"
+  # Pseudo-mission: logs and the boot prompt need a name, but KAIZEN derives nothing from a
+  # mission directory — resolve_mission is NOT called (it requires an existing mission), and this
+  # directory is never created by the runner: the agent creates the real handoff directory when
+  # it writes the verdict.
+  MISSION="$(date +%Y%m%d)-kaizen"
+  MISSION_DIR="$REPO_ROOT/$HANDOFF_DIR/$MISSION"
+  PIPELINE_LOG="$(log_dir)/pipeline.log"
+  AUTONOMY_RUN_ID="$(uuidgen)"
+  AUTONOMY_INVOCATION="run"
+
+  step "kaizen — judging the previous kit change and planning the next kit mission"
+  [ "$DRY_RUN" = "1" ] && dim "  (dry-run: no session will be opened and nothing is written)"
+
+  # Idempotent: already judged ⇒ no session is spent, only the outcome is repeated.
+  local gate_rc=0 out_rc=0
+  gate_KAIZEN || gate_rc=$?
+  if [ "$gate_rc" -eq 0 ]; then
+    dim "  already judged: no session to spend"
+    kaizen_outcome || out_rc=$?
+    return "$out_rc"
+  fi
+  # A filled `aprovacao:` bails out BEFORE any session — see kaizen_approved_outcome.
+  if [ -n "$GATE_KAIZEN_APPROVED" ]; then
+    out_rc=0; kaizen_approved_outcome || out_rc=$?
+    return "$out_rc"
+  fi
+
+  local before after moved="false"
+  before="$(state_fingerprint)"
+  run_phase KAIZEN
+  # The projection stops HERE, before the fingerprint and the ledger writer — same decision, same
+  # reason, as the dry-run branch in cmd_run: the writer stays out of the projection path
+  # entirely instead of leaning on autonomy_append's own guard as the only defense.
+  if [ "$DRY_RUN" = "1" ]; then
+    dim "  (dry-run: end of the projection — no session was opened)"
+    return 0
+  fi
+  after="$(state_fingerprint)"
+  [ "$before" != "$after" ] && moved="true"
+  gate_rc=0; gate_KAIZEN || gate_rc=$?
+  autonomy_session_row "KAIZEN" "1" "false" "$moved" \
+    "$( [ "$gate_rc" -eq 0 ] && echo pass || echo fail )" "$GATE_WHY"
+  if [ "$gate_rc" -eq 0 ]; then
+    kaizen_outcome || out_rc=$?
+    return "$out_rc"
+  fi
+
+  # Same bailout after the session: if the agent filled `aprovacao:` itself, a fix-it retry
+  # would be told to undo it — the value's owner is a human, so the line stops instead.
+  if [ -n "$GATE_KAIZEN_APPROVED" ]; then
+    out_rc=0; kaizen_approved_outcome || out_rc=$?
+    return "$out_rc"
+  fi
+
+  warn "gate KAIZEN failed: $GATE_WHY"
+  warn "  retrying once with the gate reason in the prompt"
+  run_phase KAIZEN "$LAST_PHASE_SID"
+  local after2 moved2="false"
+  after2="$(state_fingerprint)"
+  [ "$after" != "$after2" ] && moved2="true"
+  gate_rc=0; gate_KAIZEN || gate_rc=$?
+  autonomy_session_row "KAIZEN" "1" "true" "$moved2" \
+    "$( [ "$gate_rc" -eq 0 ] && echo pass || echo fail )" "$GATE_WHY"
+  if [ "$gate_rc" -eq 0 ]; then
+    kaizen_outcome || out_rc=$?
+    return "$out_rc"
+  fi
+  # Third and last bailout: the RETRY session may be the one that filled `aprovacao:` — falling
+  # through would misreport an approval as a no-progress escalation, with a spurious blocked row.
+  if [ -n "$GATE_KAIZEN_APPROVED" ]; then
+    out_rc=0; kaizen_approved_outcome || out_rc=$?
+    return "$out_rc"
+  fi
+
+  info ""
+  bad "BLOCKED in KAIZEN — two sessions without satisfying the gate: $GATE_WHY"
+  dim "  The judge's session did not produce the artifacts. Read the logs in $(log_dir)/."
+  autonomy_blocked_row "no-progress" "KAIZEN" "$GATE_WHY"
+  return 3
+}
+
 cmd_version() { info "sdd $SDD_VERSION ($SDD_HOME)"; }
 
 cmd_help() {
@@ -1681,6 +2039,9 @@ USAGE
   sdd retry <mission>        retry the current phase with a fresh session
   sdd close <mission>        post-merge: close the JIRA issue
   sdd autonomy               waste per kit version, read from the global autonomy ledger
+  sdd kaizen [--dry-run]     judge the previous kit change and give birth to the next kit
+                             mission plan (kit repo only; exit 3 = the change made it worse)
+  sdd kaizen --series        the deterministic series (JSON) the judge cites — any repo
   sdd help | sdd version
 
 FOR SCRIPTS
@@ -1715,6 +2076,7 @@ main() {
     retry)     cmd_retry "$@" ;;
     close)     cmd_close "$@" ;;
     autonomy)  cmd_autonomy "$@" ;;
+    kaizen)    cmd_kaizen "$@" ;;
     version|--version|-v) cmd_version ;;
     help|--help|-h) cmd_help ;;
     *) die "unknown command: $subcmd (see 'sdd help')" ;;

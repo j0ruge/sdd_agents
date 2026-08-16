@@ -252,8 +252,9 @@ budget.
 
 Two records, different jobs. `.sdd/logs/<mission>/pipeline.log` is the **journal of one mission**,
 ephemeral and local. `${SDD_STATE_DIR:-$HOME/.sdd}/autonomy-log.jsonl` is the **series across all
-missions and all projects**, and it exists for one reader: the kaizen judge (`sdd-kaizen`, I13.3),
-which answers "did the last change to the kit improve autonomy or hurt it?".
+missions and all projects**, and it exists for one reader: the kaizen judge (`sdd kaizen`, driven
+by the `sdd-kaizen` agent — see "The kaizen loop" below), which answers "did the last change to
+the kit improve autonomy or hurt it?".
 
 It is global, not per-repo, for two reasons. Maturity across projects cannot be measured in a
 file that lives inside one project. And a file the runner writes BETWEEN phases inside the target
@@ -271,7 +272,7 @@ the judge cannot count missions per kit version to answer "not enough data yet".
 
 ### Field reference
 
-This is the whole interface the judge (I13.3, not built yet) is written against — every field a
+This is the whole interface the judge (`sdd kaizen --series`) is written against — every field a
 row can carry, one row per field. `event:"blocked"` rows carry only the columns marked so in
 "absent when"; everything else is present on both row shapes.
 
@@ -303,3 +304,46 @@ row can carry, one row per field. `event:"blocked"` rows carry only the columns 
 | `gate_why` | string, truncated to 200 characters | never | The gate's stated reason (or the escalation's reason, on a `blocked` row). |
 
 `sdd autonomy` prints the human view. The judge reads the JSONL with `jq` — never that table.
+
+## The kaizen loop
+
+The ledger records; `sdd kaizen` closes. Run **in the kit repo** (it refuses anywhere else), it
+judges the previous kit change and gives birth to the kit's next mission plan — detection without
+closure is inventory, not improvement.
+
+The judge is split in two (ADR 0001):
+
+**The runner derives the numbers.** `sdd kaizen --series` prints a versioned JSON (`v: 1`),
+readable from any repo since the ledger is global: `latest` and `previous` kit versions (by
+**file order** of first appearance, never by sort — and a reappearing old sha rejoins its old
+group), each with missions, sessions, `moved_rate`, cost, escalations by kind, a per
+mission×phase `detail`, and a label per group:
+
+- `refez` — an escalation, a human `sdd retry`, or the phase's last session still failing its
+  gate: the work was pushed again.
+- `leve` — an in-loop auto retry, or a session that did not move the disk: friction, absorbed.
+- `ok` — none of the above.
+
+Plus a `guard` (`missions_after_change`, `sufficient: >= 3`) and an `excluded` accounting
+(dirty-kit rows, unrecognized rows, and the `meta` rows the kaizen sessions themselves write —
+the loop never lets its own sessions shift the axis it is judged on).
+
+**The agent gives the verdict.** The `sdd-kaizen` session runs the series as its source of truth
+(citing, never recalculating), interprets the sha axis with `git log`, and writes
+`docs/handoffs/<YYYYMMDD>-<slug>/05-verdict.md` with frontmatter `verdict:`
+(`melhorou` | `piorou` | `indeterminado`), `kit_sha_judged:` and `date:`. When
+`guard.sufficient` is false the verdict **is** `indeterminado` — the guard belongs to the runner.
+Unless the verdict is `piorou`, the same session triages `TODO.md` and writes the born plan
+beside the verdict: `00-missao.md` with `aprovacao:` **empty** (the loop never approves its own
+plans), `01-plano.md`, `checkpoint.md`.
+
+**The gate** (`gate_KAIZEN`, not part of the mission `PHASES`) re-evaluates from outside, like
+every gate: it finds the verdict by `kit_sha_judged` content — never by newest file — and
+requires the born plan with the empty `aprovacao:` beside it.
+
+**The Jidoka:** `verdict: piorou` dispenses the plan and `sdd kaizen` exits 3 — the line stops
+and the human decides (ADR 0002). Same convention as a `blocked` increment.
+
+**The reminder:** when a target repo's pipeline completes, `sdd run` prints one dim line if the
+current kit version has missions without a verdict yet — pull, not push: the human is the
+kanban, and the line disappears once the verdict exists.

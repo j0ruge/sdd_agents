@@ -45,6 +45,7 @@ run "template contract" "$ROOT/tests/check-templates.sh"
 run "gate state machine" "$ROOT/tests/check-gates.sh"
 run "dry-run projection" "$ROOT/tests/check-dry-run.sh"
 run "autonomy ledger" "$ROOT/tests/check-autonomy.sh"
+run "kaizen series and gate" "$ROOT/tests/check-kaizen.sh"
 
 # Guarded for the same family of reason as the two above, and it is worth naming which: preflight
 # is not a gate, so this sensor can never score a point inside a mutant — it would only add its

@@ -151,6 +151,46 @@ mut_RUN_autonomy_sha_warn_repeats() {
   sed -i 's|    AUTONOMY_SHA_WARNED=1|    AUTONOMY_SHA_WARNED=0|' "$1"
 }
 
+# The KAIZEN gate goes blind to WHICH kit sha a verdict judged: any verdict file satisfies it.
+# check-kaizen.sh plants a stale verdict for an older sha with a complete born plan beside it —
+# under this sabotage the pending-verdict scenario returns 0 ("already judged") instead of
+# escalating, and an old judgement silently covers every future kit change.
+mut_KAIZEN_gate_blind() {
+  sed -i 's|if \[ "\$(frontmatter "\$f" kit_sha_judged)" = "\$expected" \]|if [ -f "$f" ]|' "$1"
+}
+
+# The Jidoka dies: `verdict: piorou` no longer stops the line. The outcome falls through to the
+# born-plan branch and exits 0 — a kit change that made autonomy WORSE reads as a green light,
+# which is the exact failure ADR 0002 exists to forbid.
+mut_KAIZEN_jidoka_dead() {
+  sed -i 's|if \[ "\$GATE_KAIZEN_VERDICT" = "piorou" \]; then|if false; then|' "$1"
+}
+
+# The approved-plan protection dies EVERYWHERE: this sed hits all three identical bailout guards
+# in cmd_kaizen at once (a deliberate exception to the one-line idiom — the three sites are one
+# mechanism, and sabotaging any subset is caught by the same scenarios). A filled `aprovacao:`
+# then flows into fix-it sessions that can blank a human's approval, and a retry-written approval
+# gets misreported as a no-progress escalation.
+mut_KAIZEN_approved_bailout_dead() {
+  sed -i 's|if \[ -n "\$GATE_KAIZEN_APPROVED" \]; then|if false; then|' "$1"
+}
+
+# The rubric's strongest signal is dropped: phases with an escalation, a human retry or a failing
+# last gate label as "ok". The judge would congratulate the kit precisely on the missions where
+# the human had to push the work again. RUN_ prefix: kaizen_series is a helper, not a gate —
+# the two-prefix contract in the header comment holds.
+mut_RUN_refez_dropped() {
+  sed -i 's|then "refez"|then "ok"|' "$1"
+}
+
+# The guard stops guarding: gate_KAIZEN accepts `melhorou`/`piorou` written over an insufficient
+# series. The whole point of the runner-owned guard (boot prompt: "the guard belongs to the
+# runner") dies silently — a verdict label alone starts satisfying the gate, which is the
+# label-instead-of-artifact failure principle 1 exists to forbid.
+mut_KAIZEN_guard_ignored() {
+  sed -i 's|if \[ "\$sufficient" != "true" \] && \[ "\$verdict" != "indeterminado" \]; then|if false; then|' "$1"
+}
+
 CATALOG=(
   PLAN_empty_approval
   TICKET_no_sprint
@@ -172,6 +212,11 @@ CATALOG=(
   RUN_autonomy_null_moved_as_zero
   RUN_moved_never_true
   RUN_autonomy_sha_warn_repeats
+  KAIZEN_gate_blind
+  KAIZEN_jidoka_dead
+  KAIZEN_guard_ignored
+  KAIZEN_approved_bailout_dead
+  RUN_refez_dropped
 )
 
 # Mutations that are NOT caught today, each with the increment that closes it. Ratchet in both

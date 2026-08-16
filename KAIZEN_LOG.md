@@ -4,7 +4,55 @@ Registro de melhorias com **antes/depois medido**. Sem número, não entra.
 
 ---
 
-## 2026-08-15 — Duas guardas que não podiam falhar (revisão do merge do I13.1)
+## 2026-08-15 — I13.3: o laço fecha — o kit julga a própria mudança e planeja a próxima
+
+**Problema medido:** o kit detectava 5× mais do que fechava (20 achados / 4 fechados na missão
+medida do I13.1) porque ninguém julgava a mudança anterior nem planejava a próxima — detecção
+sem fechamento é inventário. O I13.3 constrói o juiz híbrido (ADR 0001) e o planejador headless
+com Jidoka (ADR 0002): `sdd kaizen --series` (série determinística), `gate_KAIZEN` (veredito
+achado por conteúdo, plano nascido com `aprovacao:` vazio), `piorou` ⇒ exit 3, o 7º agente
+`sdd-kaizen`, e o lembrete pós-pipeline (D6/D8).
+
+| | Antes (I13.3.0, `302b9b8`) | Depois (fecho + review, mesma máquina e sessão) |
+|---|---|---|
+| Mutações no catálogo | 20 (score 100%) | **25** (score 100%, `KNOWN_GAPS` vazio) |
+| Gates com mutação cobrada pelo `sdd health` | 7 | **8** (`gate_KAIZEN` incluso) |
+| Asserções de sensor do laço kaizen | 0 | **67** (`tests/check-kaizen.sh`) |
+| Piso da superfície do `check-lang` | 26 caminhos | **31** (ADRs + sensor + 2× agente) |
+| Suíte no default (`SDD_MUTATION_JOBS=4`) | 26,0 s (1 rodada) | 38,0 s no fecho (mediana de 3); **52,1 s** pós-review (mediana de 3, 25 mutantes) |
+| Suíte com `SDD_MUTATION_JOBS=10` | — | 27,3 s (23 mutantes, no fecho) |
+| Missões do kit planejadas pelo próprio kit | 0 | **1** (`20260815-ledger-sem-ponto-cego`) |
+
+**A primeira volta real** (Check de fecho, D7): sessão `a0e24b4e`, opus, **618 s**,
+**US$ 3,36**, rc 0. Com o ledger real vazio (medido: `~/.sdd/` sem o arquivo), o veredito saiu
+`indeterminado` com `kit_sha_judged: none`, citando a série verbatim e respeitando a guarda;
+a triagem real do `TODO.md` achou 1 item já resolvido sem marca (`4ec9752`) e recalibrou outro
+pela metade; a missão nascida tem 3 incrementos com Check executável e passou o `gate_KAIZEN`
+com `aprovacao:` vazio — **o plano espera o humano** (Marco 2: o gate funcionando). O ledger
+real ganhou 1 linha KAIZEN (`kit_dirty: false`, `gate: pass`), que a própria série exclui como
+`meta`. Idempotência provada: o segundo `sdd kaizen` respondeu "already judged" sem gastar
+sessão. O frontmatter do veredito real virou o fixture do gate no sensor (proveniência
+`c2dd298`), fechando o risco "gate e fixture do mesmo autor".
+
+**Critério D7 não atingido, dito como não atingido:** a meta "(4) suíte < 30 s no default"
+falhou — 38,0 s. O custo cresce com o catálogo (13,98 s/16 mutantes → 22,34/19 → 38,0/23), que
+é exatamente o que deve crescer; a triagem do agente registrou o estouro no `TODO.md` com as
+três saídas conhecidas (subir o alvo, subir o default, aceitar o custo) — decisão do humano.
+
+**Review pré-merge (2026-08-16), medido dos dois lados:** o `/codereview` sobre o diff da
+branch achou **9 achados (2 HIGH, 2 MEDIUM, 5 LOW)** que 51 asserções e 23 mutações não viam —
+os dois HIGH da mesma família de sempre, rótulo confiado sem verificação: (1) `gate_KAIZEN`
+aceitava `melhorou`/`piorou` sem cruzar com `guard.sufficient` da própria série e sem validar o
+enum; (2) o retry genérico ("fix exactly that") podia instruir uma sessão a **apagar uma
+`aprovacao:` preenchida pelo humano**. A rodada de verificação (r2) confirmou os 9 fixes e achou
+o **10º**: faltava o mesmo bailout depois da retentativa — aprovação escrita pelo retry virava
+escalada `no-progress` espúria. Correções: o gate cruza guarda e enum, aprovação preenchida faz
+bailout **antes** de qualquer sessão nos três pontos (`auto` para a linha com rc 3; valor humano
+⇒ "done, sdd run", rc 0), e as mutações 24 e 25 (`KAIZEN_guard_ignored`,
+`KAIZEN_approved_bailout_dead`) provam por sabotagem que as 16 asserções novas medem. Custo do
+review na suíte: 38,0 s → **52,1 s** (mediana de 3) — 2 mutantes a mais e um sensor mais pesado
+rodando dentro de cada um dos 26 sandboxes; entra na mesma conta do estouro já registrado no
+`TODO.md`.
 
 **Problema medido:** o `/codereview` sobre o merge `6f2b59e` achou dois defeitos que a suíte de 19
 mutações e 63 asserções não via, e os dois são da mesma família — **guarda que lê como medida e
