@@ -116,7 +116,23 @@ todo_awk() {
     function tail_of(text,   last) {
       last = last_sep(text)
       if (last == 0) return ""
-      return substr(text, last + 5)
+      return substr(text, last + length(" — "))
+    }
+    # The fence marker itself (backticks or tildes, with its length), or "" when the line is not a
+    # fence. Length and character both matter: a four-backtick block that quotes a three-backtick
+    # one used to close on the inner marker and desync the whole file.
+    function fence_open(line,   m) {
+      if (match(line, /^[ \t]*(```+|~~~+)/) == 0) return ""
+      m = substr(line, RSTART, RLENGTH)
+      sub(/^[ \t]*/, "", m)
+      return m
+    }
+    # A closer must use the same character and be at least as long as its opener.
+    function fence_closes(line, opener,   m) {
+      m = fence_open(line)
+      if (m == "" || opener == "") return 0
+      if (substr(m, 1, 1) != substr(opener, 1, 1)) return 0
+      return length(m) >= length(opener)
     }
     function flush() {
       if (!initem) return
@@ -139,24 +155,37 @@ todo_awk() {
       }
       initem = 0
     }
-    # ORDER IS THE WHOLE RULE HERE, and getting it wrong twice is what taught it. The document
-    # fence rule must be ONE symmetric pattern sitting ABOVE `fence`, so the same indentation that
-    # can open a fence can also close it. Splitting it into a column-0 rule above `fence` and an
-    # indented rule below produced a one-way latch: an indented fence opened, its indented closer
-    # was eaten by `fence { next }`, and every rule below went silent while the run stayed green —
-    # verbatim the fail-open this file already claimed to have fixed once.
+    # ORDER IS THE WHOLE RULE HERE, and getting it wrong twice is what taught it — each time by
+    # opening a new fail-open while closing the last one. What finally ended it was giving the
+    # parser the state it never had: `initem_fence`, "we are inside the code block OF AN ITEM".
+    # Without that state, a code block was a hole three separate defects crawled through — its
+    # own ``` markers forged the anchor rule (an opener plus a closer is a matching backtick
+    # pair), a `- [x]` in a code sample was reported as a hidden closed finding, and a column-0
+    # line inside the block closed the item and handed the block closer to the document rule as
+    # an OPENER, silently skipping everything after it.
     #
-    # The item-code-block rule goes FIRST because an indented fence inside an open item is that
-    # item content, not a document fence: read the other way, a 43-line item measured 1 line and
-    # slipped under the cap. Its `- [x]` lines stay content too — a ticked box in a code sample is
-    # a code sample. It carries no `!fence` guard: the document-fence rule below calls flush()
-    # before toggling, so `initem` is always 0 while `fence` is 1 and the guard could never be
-    # false. It was there, it was unprobed, and it was removed rather than probed — a condition
-    # that cannot change an outcome is decoration, the same verdict the `/^#/` rule got.
-    initem && /^[ \t]+```/  { body = body " " $0; last = $0; nlines++; next }
-    /^ {0,3}```/               { flush(); if (!fence) fence_line = NR; fence = !fence; next }
+    # Fence markers are compared by character and length, not by "has three backticks": a ````
+    # block containing ``` closes on the inner one otherwise, and CommonMark tilde fences were
+    # invisible entirely.
+    #
+    # `initem_fence` needs no reset in flush(): while it is 1 the rule below consumes every line
+    # with `next`, so no other rule — flush() included — can run until it clears itself. The reset
+    # was there, it was unprobed, and it is gone: a fourth condition that could not change an
+    # outcome, after `/^#/`, the 20-item floor and the `!fence` guard.
+    initem_fence {
+      nlines++
+      if (fence_closes($0, item_marker)) initem_fence = 0
+      next
+    }
+    initem && fence_open($0) != "" && $0 ~ /^[ \t]+/ {
+      initem_fence = 1; item_marker = fence_open($0); nlines++; next
+    }
+    fence && fence_closes($0, doc_marker) { fence = 0; next }
     fence                      { next }
-    /^[-*] \[[ xX]\]/ {
+    !fence && fence_open($0) != "" && $0 ~ /^ {0,3}[`~]/ {
+      flush(); fence = 1; fence_line = NR; doc_marker = fence_open($0); next
+    }
+    /^[-*] \[[ xX]\]([ \t]|$)/ {
       flush(); initem = 1; start = NR
       first = $0; body = $0; last = $0; nlines = 1; next
     }
@@ -166,6 +195,8 @@ todo_awk() {
     # becomes the last line of the item, and the date rule blames the finding above it.
     initem && NF               { flush(); next }
     END {
+      if (mode == "lint" && initem_fence)
+        print "  line " start ": the code block inside this item is never closed"
       flush()
       if (mode == "lint" && fence)
         print "  line " fence_line ": unclosed ``` — every rule below this line was skipped"
@@ -181,8 +212,14 @@ count_items() { todo_awk "$1" 1 count; }
 # Probes are COUNTED, never hand-written into the summary: the previous version carried "14
 # probe(s)" as prose, which had already drifted from the real number by the time it was read.
 PROBES=0
+PROBES_SKIPPED=0
+FAILS=0
 SELFTEST_RC=0
 
+# FAILS is bumped by the assertions THEMSELVES, independently of fail_rc, and cross-checked at the
+# end by direct assignment. fail_rc was a single point of failure: neutering it to `return 0` let
+# the selftest print six failures and then "the sensor measures what it claims", exit 0, and take
+# the whole suite green with it — run-all.sh reads the exit status, not the text.
 fail_rc() { [ "$SELFTEST_RC" -eq 0 ] && SELFTEST_RC="$1"; return 0; }
 
 assert_clean() { # <file> <cap> <label>
@@ -190,7 +227,7 @@ assert_clean() { # <file> <cap> <label>
   local out; out="$(lint_todo "$1" "$2")"
   [ -z "$out" ] && return 0
   printf '  SELFTEST FAIL  %s — expected no violation, got:\n%s\n' "$3" "$out" >&2
-  fail_rc 90
+  FAILS=$((FAILS + 1)); fail_rc 90
 }
 
 # Asserts the SPECIFIC message, not merely "something was printed". Six probes used to assert
@@ -202,7 +239,7 @@ assert_says() { # <file> <cap> <substring> <label>
   case "$out" in *"$3"*) return 0 ;; esac
   printf '  SELFTEST FAIL  %s — expected a violation saying "%s", got: %s\n' \
     "$4" "$3" "${out:-<nothing>}" >&2
-  fail_rc 91
+  FAILS=$((FAILS + 1)); fail_rc 91
 }
 
 selftest() {
@@ -277,6 +314,63 @@ EOF
   { printf -- '- [ ] **Good** — `bin/sdd:1` — why. — found by `x` (2026-08-16)\n\n'
     printf '```md\nexample\n  ```\n'; } > "$box/asymfence.md"
   assert_clean "$box/asymfence.md" 8 "a fence opened at column 0 and closed indented"
+
+  # --- the item code block: seven probes for the state the parser lacked until round 4 ---
+  #
+  # A ticked box in a code SAMPLE is a code sample. Before `initem_fence` existed the block's
+  # content lines went into `body`, so the nested-ticked rule reported the sample as a hidden
+  # closed finding — a rule contradicting the comment written three lines above it.
+  { printf -- '- [ ] **Item documenting the format** — `TODO.md:1` — why.\n'
+    printf '  ```md\n  - [x] a CLOSED example, this is a sample\n  ```\n'
+    printf '  — found by `sdd-qa` (2026-08-16)\n'; } > "$box/sample.md"
+  assert_clean "$box/sample.md" 8 "a ticked box inside an item code sample"
+
+  # And the mirror: the block's own ``` markers used to FORGE the anchor. An opener plus a closer
+  # is a matching backtick pair, so adding a code block flipped an anchorless item green.
+  { printf -- '- [ ] **A wish with no anchor**\n'
+    printf '  ```sh\n  echo hi\n  ```\n'
+    printf '  — found by sdd-qa (2026-08-16)\n'; } > "$box/forged.md"
+  assert_says "$box/forged.md" 8 'anchor before the found-by tail' "an anchor forged by the item fence markers"
+
+  # A column-0 line inside the block used to close the item, which handed the block's closer to
+  # the document rule as an OPENER — everything below vanished with the run green.
+  { printf -- '- [ ] **A** — `bin/sdd:1` — why. — found by `x` (2026-08-16)\n'
+    printf '  ```sh\n  echo hi\ngrep -n foo bar\n  ```\n\n'
+    printf -- '- [x] **HIDDEN closed finding, no anchor, no date**\n\n```\n\n'
+    printf -- '- [ ] **B** — `bin/sdd:2` — why. — found by `x` (2026-08-16)\n'; } > "$box/col0block.md"
+  assert_says "$box/col0block.md" 8 'ticked box' "a column-0 line inside an item code block"
+
+  # Same hole reached by an asymmetric closer.
+  { printf -- '- [ ] **A** — `bin/sdd:1` — why. — found by `x` (2026-08-16)\n'
+    printf '  ```sh\n  echo hi\n```\n\n'
+    printf -- '- [x] **HIDDEN closed finding**\n\n```\n\n'
+    printf -- '- [ ] **B** — `bin/sdd:2` — why. — found by `x` (2026-08-16)\n'; } > "$box/asymclose.md"
+  assert_says "$box/asymclose.md" 8 'ticked box' "a column-0 closer under an indented opener"
+
+  # Fences are compared by character AND length: a four-backtick block quoting a three-backtick
+  # one closed on the inner marker and desynced every rule below it.
+  { printf 'Prose.\n\n````md\n```\n````\n\n'
+    printf -- '- [x] **HIDDEN closed finding**\n\n```\n\n'
+    printf -- '- [ ] **B** — `bin/sdd:2` — why. — found by `x` (2026-08-16)\n'; } > "$box/quad.md"
+  assert_says "$box/quad.md" 8 'ticked box' "a four-backtick fence quoting a three-backtick one"
+
+  # A backtick fence is not closed by a tilde one. Without the character comparison the toggle
+  # flips on the wrong marker and everything after it desyncs.
+  { printf 'Prose.\n\n```md\n~~~\n```\n\n'
+    printf -- '- [x] **HIDDEN closed finding**\n\n```\n\n'
+    printf -- '- [ ] **B** — `bin/sdd:2` — why. — found by `x` (2026-08-16)\n'; } > "$box/mixfence.md"
+  assert_says "$box/mixfence.md" 8 'ticked box' "a backtick fence closed by a tilde marker"
+
+  # Tilde fences are fences too; unrecognised, their contents were linted as findings.
+  { printf 'Prose.\n\n~~~md\n- [ ] an example inside a tilde fence\n~~~\n\n'
+    printf -- '- [ ] **Good** — `bin/sdd:1` — why. — found by `x` (2026-08-16)\n'; } > "$box/tilde.md"
+  assert_clean "$box/tilde.md" 8 "a tilde-fenced example block"
+
+  # A markdown link whose text is `x` is not a ticked box. Requiring a space or line end after the
+  # box is what separates them; dropping that requirement made the sensor report a link.
+  { printf -- '- [x](https://example.com/spec) see the linked spec\n\n'
+    printf -- '- [ ] **Good** — `bin/sdd:1` — why. — found by `x` (2026-08-16)\n'; } > "$box/link.md"
+  assert_clean "$box/link.md" 8 "a markdown link whose text is x"
 
   # The date rule is anchored to the LAST content line, and nothing proved it: a date in the title
   # with none in the tail used to be the difference between this rule and "a date anywhere".
@@ -432,12 +526,18 @@ EOF
   printf 'x\n' > "$box/unreadable.md"
   if chmod 000 "$box/unreadable.md" 2>/dev/null && [ ! -r "$box/unreadable.md" ]; then
     PROBES=$((PROBES + 1))
+    # shellcheck disable=SC2034
     bash "$SELF" --check "$box/unreadable.md" >/dev/null 2>&1
     [ "$?" -eq 93 ] || {
       printf '  SELFTEST FAIL  an unreadable findings file did not exit 93\n' >&2
       fail_rc 92
     }
     chmod 644 "$box/unreadable.md" 2>/dev/null
+  else
+    # As root, or on a filesystem that ignores mode bits, this probe CANNOT run. Counting the skip
+    # keeps the floor honest in both worlds: the earlier floor simply failed the whole suite in a
+    # container, blaming "an assertion stopped firing" for an environment difference.
+    PROBES_SKIPPED=$((PROBES_SKIPPED + 1))
   fi
 
   # Every exit path carries a probe, or the code that names it is decoration: mutating any of
@@ -449,7 +549,7 @@ EOF
     local got=$?
     [ "$got" -eq "$want" ] && return 0
     printf '  SELFTEST FAIL  %s — expected rc %s, got %s\n' "$label" "$want" "$got" >&2
-    fail_rc 92
+    FAILS=$((FAILS + 1)); fail_rc 92
   }
   assert_rc 95 "a non-integer cap must exit 95" env SDD_TODO_CAP=abc bash "$SELF" --check "$box/good.md"
   assert_rc 95 "a zero cap must exit 95"        env SDD_TODO_CAP=0   bash "$SELF" --check "$box/good.md"
@@ -472,11 +572,15 @@ EOF
   # Floor on the probe COUNT, for the same reason every other floor here exists: neutering all the
   # assert_* call sites made the summary print "0 probe(s)" and exit 0 — a selftest that ran
   # nothing reads exactly like a selftest that passed. The number moves only on purpose.
-  if [ "$PROBES" -lt 37 ]; then
-    printf '  SELFTEST FAIL  only %d probe(s) ran, expected at least 37 — did an assertion stop firing?\n' \
-      "$PROBES" >&2
+  if [ "$((PROBES + PROBES_SKIPPED))" -lt 45 ]; then
+    printf '  SELFTEST FAIL  only %d probe(s) accounted for (%d ran, %d skipped), expected 45\n' \
+      "$((PROBES + PROBES_SKIPPED))" "$PROBES" "$PROBES_SKIPPED" >&2
     fail_rc 92
   fi
+
+  # Direct assignment, deliberately NOT through fail_rc: two independent paths from "a probe
+  # failed" to "the exit status is non-zero", so neutering either one alone still reddens the run.
+  if [ "$FAILS" -ne 0 ] && [ "$SELFTEST_RC" -eq 0 ]; then SELFTEST_RC=92; fi
 
   [ "$SELFTEST_RC" -eq 0 ] && printf '  ok    selftest: %d probe(s), the sensor measures what it claims\n' "$PROBES"
   return "$SELFTEST_RC"
