@@ -123,7 +123,7 @@ cada leitura vê só as suas linhas, e o total das duas é o arquivo. Um fixture
 não distingue "filtra" de "sempre devolve tudo". Texto da asserção, literal, porque o Check o
 grepa: `a row from another repo never enters the series`. A gêmea em `check-autonomy.sh` cobre a
 tabela humana.
-**Check:** `bash tests/check-kaizen.sh 2>&1 | grep -c 'a row from another repo never enters the series'` → `1`
+**Check:** `o=$(bash tests/check-kaizen.sh 2>&1); grep -c 'a row from another repo never enters the series' <<< "$o"` → `1`
 *(medido no HEAD: `0`)*
 **Sensor durável:** as duas asserções + `mut_RUN_ledger_no_repo_filter` (remove o filtro do
 predicado). ⚠️ Sabote **o predicado**, não uma das três chamadas: sabotar uma chamada mede uma
@@ -142,7 +142,7 @@ da cópia em `.claude/agents/`: o preflight tem de reprovar, dizer `stale`, e **
 `kit agent(s) checked` (a linha só sai com `fails -eq 0`, então exija o texto certo **e a ausência**
 do outro — asserção que lê só o `rc` não distingue esta falha de qualquer outra do preflight).
 Texto literal da asserção: `a drifted agent copy fails the preflight`.
-**Check:** `bash tests/check-preflight.sh 2>&1 | grep -c 'a drifted agent copy fails the preflight'` → `1`
+**Check:** `o=$(bash tests/check-preflight.sh 2>&1); grep -c 'a drifted agent copy fails the preflight' <<< "$o"` → `1`
 *(medido no HEAD: `0`)*
 **Sensor durável:** a asserção + `mut_PRE_agent_presence_only` (devolve o `cmp` para `[ -f ]`).
 **Reversível por:** uma linha; nenhum outro caminho depende dela.
@@ -158,7 +158,7 @@ segue.
 `sdd run --dry-run` imprime o aviso, e a mesma função é exercitada pela porta do kaizen. Texto
 literal: `the base branch warning reaches sdd run`. ⚠️ Afirme também que o `rc` **não** mudou —
 a regressão cara aqui não é o aviso sumir, é ele virar erro e trancar o laço.
-**Check:** `bash tests/check-gates.sh 2>&1 | grep -c 'the base branch warning reaches sdd run'` → `1`
+**Check:** `o=$(bash tests/check-gates.sh 2>&1); grep -c 'the base branch warning reaches sdd run' <<< "$o"` → `1`
 *(medido no HEAD: `0`)*
 **Sensor durável:** a asserção + `mut_RUN_base_branch_warn_dead` (a função vira no-op).
 **Reversível por:** inlining de volta em `cmd_preflight`; as outras duas chamadas somem.
