@@ -451,6 +451,20 @@ mut_RUN_ledger_no_repo_filter() {
   sed -i 's@def ledger_row_is_local: if (type == "object" and has("repo")) then .repo == $repo else true end;@def ledger_row_is_local: true;@' "$1"
 }
 
+# Not a gate: the preflight goes back to asking whether the agent copy EXISTS, which is what it did
+# for its whole life while printing "N kit agent(s) checked" — a label over a comparison that never
+# happened. The harness loads the copy, so with this in place the kit source can be corrected and
+# every agent keeps running the old text, green in everything (2132cf5 did exactly that).
+#
+# It sabotages the `cmp -s` arm only, leaving the "not installed" arm intact: an absent copy still
+# fails, so any assertion that merely counts preflight failures or reads its rc survives. What dies
+# is the differential pair in check-preflight.sh — one fixture read twice, one byte apart — plus
+# the stale message itself. `elif` → `elif false &&` keeps the branch syntactically alive so the
+# mutant is valid bash and the sabotage is precisely the comparison, nothing else.
+mut_PRE_agent_presence_only() {
+  sed -i 's@elif ! cmp -s "$a" "$copy"; then@elif false \&\& ! cmp -s "$a" "$copy"; then@' "$1"
+}
+
 CATALOG=(
   PLAN_empty_approval
   TICKET_no_sprint
@@ -494,6 +508,7 @@ CATALOG=(
   RUN_progress_dead
   RUN_entrypoint_unguarded
   RUN_ledger_no_repo_filter
+  PRE_agent_presence_only
 )
 
 # Mutations that are NOT caught today, each with the increment that closes it. Ratchet in both
@@ -515,7 +530,12 @@ in_gap_list() { # in_gap_list <slug>
 
 sandbox() { # sandbox <target-dir> — the whole kit the suite needs, and nothing more
   mkdir -p "$1"
-  cp -r "$ROOT/bin" "$ROOT/tests" "$ROOT/templates" "$ROOT/config" "$1/"
+  # `agents/` earned its place here the day check-preflight.sh started asserting that a drifted
+  # .claude/agents/ copy fails: its fixture runs `sdd install`, and with no agents/ to install from
+  # there is no copy to drift — the assertions would pass vacuously in every sandbox while the
+  # control run stayed green. It is NOT copied for check-lang.sh, which reads it too but is guarded
+  # out of the mutants; adding it here does not make that guard removable.
+  cp -r "$ROOT/bin" "$ROOT/tests" "$ROOT/templates" "$ROOT/config" "$ROOT/agents" "$1/"
 }
 
 # run_mutant <slug> — writes $WORK/<slug>.rc and $WORK/<slug>.log

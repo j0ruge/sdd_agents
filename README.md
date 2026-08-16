@@ -36,6 +36,8 @@ sdd preflight          # environment sensor: claude, gh, GNU userland, agent-bro
 ```
 
 `sdd install` is idempotent: running it again shows the agent diff instead of overwriting.
+`sdd preflight` compares the installed copies with the kit source **byte for byte** and fails on a
+stale one: the harness loads `.claude/agents/`, so a corrected source proves nothing on its own.
 
 ⚠️ `sdd preflight` fires a **real headless session** (capped at US$ 1) to prove the phase sessions
 can actually execute a command — that is what makes it valuable, and what makes it cost money.

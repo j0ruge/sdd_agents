@@ -1307,12 +1307,25 @@ cmd_preflight() {
   fi
 
   # --- installed agents ---
-  local a n=0
+  # `cmp -s` and not `[ -f ]`: what the harness loads is the COPY in .claude/agents/, so a source
+  # that was fixed proves nothing about the text the agent will actually run. Presence-only made
+  # the "N kit agent(s) checked" line below a label over a comparison that never happened, and it
+  # bit for real — 2132cf5 edited agents/sdd-kaizen.md, the copy stayed behind, green in
+  # everything. Two failures and not one: absent and stale are different repairs, and telling an
+  # operator to install a file that is right there on disk sends them the wrong way.
+  local a name copy n=0
   for a in "$SDD_HOME"/agents/sdd-*.md; do
     [ -e "$a" ] || continue
     n=$((n + 1))
-    [ -f "$REPO_ROOT/.claude/agents/$(basename "$a")" ] \
-      || _fail "agent $(basename "$a") not installed — run 'sdd install'"
+    name="$(basename "$a")"
+    copy="$REPO_ROOT/.claude/agents/$name"
+    if [ ! -f "$copy" ]; then
+      _fail "agent $name not installed — run 'sdd install'"
+    elif ! cmp -s "$a" "$copy"; then
+      _fail "agent $name stale — .claude/agents/$name no longer matches $a.
+        The harness loads the copy, so this agent keeps running the old text while the kit source
+        looks corrected. Run 'sdd install --force' (or 'sdd install' to see the diff first)."
+    fi
   done
   # Only claims "checked" when no agent failed — saying it right after six failure lines is the
   # output contradicting itself, which is the kind of lie the kit forbids in the gates.

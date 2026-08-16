@@ -106,7 +106,8 @@ if [ -z "${SDD_MUTANT:-}" ]; then
   fi
 fi
 
-# check-lang reads paths (docs/, README.md, agents/) that the mutation sandbox does not copy —
+# check-lang reads paths (docs/, README.md, .claude/agents/) that the mutation sandbox does not
+# copy —
 # inside a mutant it would fail for a missing file, not for language, and the mutant would score a
 # point for the wrong reason. Same guard as the linter, for the same reason.
 [ -n "${SDD_MUTANT:-}" ] || run "language: no Portuguese prose on the kit surface" \
@@ -138,8 +139,9 @@ run "kaizen series and gate" "$ROOT/tests/check-kaizen.sh"
 # started asserting the `sdd install` starter.conf guard: it now measures RUNNER BEHAVIOUR, and
 # mut_RUN_install_no_guard is caught here or nowhere. The guard was the sensor's own blind spot —
 # it kept the mutant green while the sabotage worked, which is the failure the catalogue exists to
-# find. The second half of the old reason was never true either: `sdd install` iterates agents/
-# with `[ -e ] || continue`, so the sandbox not copying it costs nothing.
+# find. The second half of the old reason was never true either — and has since gone the other way:
+# the file now drifts an installed agent copy on purpose, so the mutation sandbox has to carry
+# `agents/` or this sensor passes vacuously in every mutant. sandbox() copies it, and says why.
 # Cost of letting it in, measured: 0.14 s per run, ~0.6 s of wall clock across the whole pool.
 run "preflight and the install guard" "$ROOT/tests/check-preflight.sh"
 

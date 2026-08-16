@@ -30,6 +30,13 @@ Achados sobre **repos-alvo** vão para o `TODO.md` daquele repo. Este arquivo é
 
 ### Sensores que faltam
 
+- [ ] **A linha `N kit agent(s) checked` não é observável por nenhum fixture** — `bin/sdd:1332` —
+  ela só sai com `fails -eq 0`, e todo fixture offline reprova antes (o probe do `claude` e o
+  `gh auth status`). O I3 provou o ramo de falha por diferencial, mas o ramo de sucesso — a frase
+  que o operador de fato lê — segue sem sensor. Direção: um `--skip-session` no preflight, ou um
+  contador de agentes impresso fora da guarda de `fails`.
+  — descoberto por `sdd-executor` na missão `20260816-kit-como-alvo` (2026-08-16)
+
 - [ ] **Check de incremento que grepa o texto de uma asserção casa também com a linha `FAIL`** —
   `docs/handoffs/20260816-kit-como-alvo/checkpoint.md:18` — os Checks de I2/I3/I4 são
   `grep -c '<texto>'` sobre a saída com `2>&1`, e `fail()` imprime o mesmo texto: o Check devolve
