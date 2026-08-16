@@ -321,6 +321,17 @@ mut_RUN_sort_lexi() {
   sed -i 's@ls -1d $pattern 2>/dev/null | sort -V@ls -1d $pattern 2>/dev/null | sort@' "$1"
 }
 
+# Turns the existence guard into a tautology, so `sdd install` walks into the sed again with a
+# half-copied kit: 0-byte .sdd/config.sh on disk, and the next install reporting it as preserved.
+# It is a sabotage that fails OPEN in the half that matters — rc stays non-zero either way,
+# because sed's own rc is what killed the install before the guard existed. Only the assertions
+# that read the branch's own text and the ABSENCE of the file can see it, which is the whole point
+# of spending a mutation here. Anchors on `-f ` + the path: the `sed` line below feeds the same
+# path with no `-f`, and is deliberately left alone.
+mut_RUN_install_no_guard() {
+  sed -i 's@-f "$SDD_HOME/config/starter.conf"@-n "always-there"@' "$1"
+}
+
 CATALOG=(
   PLAN_empty_approval
   TICKET_no_sprint
@@ -348,6 +359,7 @@ CATALOG=(
   RUN_escalations_no_axis
   RUN_degraded_label_blind
   RUN_sort_lexi
+  RUN_install_no_guard
   KAIZEN_gate_blind
   KAIZEN_jidoka_dead
   KAIZEN_guard_ignored

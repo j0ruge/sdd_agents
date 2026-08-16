@@ -37,6 +37,14 @@ Achados sobre **repos-alvo** vão para o `TODO.md` daquele repo. Este arquivo é
   construção sem nenhum sensor gritar. Direção: probe headless real que execute `TEST_CMD`.
   — descoberto por `sdd-executor` na missão `20260814-dry-run-completo` (2026-08-14)
 
+- [ ] **Sensor pulado por `SDD_MUTANT` vira ponto cego sem aviso** — `tests/run-all.sh:41,48` —
+  dois sensores são pulados dentro do mutante com a justificativa "não é gate, nunca pontua". É
+  aposta que vence sozinha: no I3 o `check-preflight.sh` ganhou asserção de comportamento do
+  runner, e a linha que o pulava virou a escondedora da única sensora de `RUN_install_no_guard`.
+  O sintoma chega como "mutação não capturada", e o conserto tentador é `KNOWN_GAPS`. Direção:
+  reprovar guarda de `SDD_MUTANT` em arquivo que invoca `bin/sdd`.
+  — descoberto por `sdd-executor` na missão `20260816-runner-sem-dividas` (2026-08-16)
+
 - [ ] **O gate PLAN-AUTO aceita Check que já nasce verde** — `bin/sdd:1901` (critério `d` em
   `templates/missao.md`) — ele cobra "Check executável (comando → esperado)", não "Check que
   reprova o HEAD de hoje". Medido: o Check do I1 desta missão era `grep -c 'gate_DOCS reprova'
@@ -239,13 +247,6 @@ Achados sobre **repos-alvo** vão para o `TODO.md` daquele repo. Este arquivo é
   igual ou melhor que o `head -c` anterior), mas a promessa escrita depende do ambiente de quem
   roda. Direção: fixar o locale no topo do runner, ou o comentário parar de prometer.
   — descoberto por `sdd-reviewer` na missão `20260815-i13.1-autonomy-log` (2026-08-15)
-
-- [ ] **`sdd install` diz "config criada" sobre um arquivo vazio** — `bin/sdd:1015` — o
-  `sed … "$SDD_HOME/config/starter.conf" > "$CONFIG_FILE"` não tem guarda de existência: faltando
-  o `starter.conf` (kit copiado pela metade), o `sed` erra em `stderr`, o redirect **cria o
-  arquivo vazio** e a linha seguinte imprime `ok` com rc 0. É rótulo sobre não-artefato dentro do
-  instalador, e o alvo nasce sem `TEST_CMD`. Direção: `[ -f … ] || die`, como `autonomy_append`
-  já faz. — descoberto por `sdd-executor` na missão `20260815-ledger-sem-ponto-cego` (2026-08-16)
 
 - [ ] **O runner se auto-degrada em laço, mesmo registrando uma vez só** — `bin/sdd:1546` —
   depois do `force_phase="PR"`, se a fase PR mexer no disco e não satisfizer o gate, o laço volta

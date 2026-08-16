@@ -53,12 +53,15 @@ run "dry-run projection" "$ROOT/tests/check-dry-run.sh"
 run "autonomy ledger" "$ROOT/tests/check-autonomy.sh"
 run "kaizen series and gate" "$ROOT/tests/check-kaizen.sh"
 
-# Guarded for the same family of reason as the two above, and it is worth naming which: preflight
-# is not a gate, so this sensor can never score a point inside a mutant — it would only add its
-# runtime to all 17 sandbox runs. It also calls `sdd install`, which reads agents/, a directory
-# the sandbox does not copy.
-[ -n "${SDD_MUTANT:-}" ] || run "preflight measures the GNU userland" \
-  "$ROOT/tests/check-preflight.sh"
+# This one used to be guarded like the three above, on the reasoning "preflight is not a gate, so
+# it can never score a point inside a mutant". That stopped being true the day the file also
+# started asserting the `sdd install` starter.conf guard: it now measures RUNNER BEHAVIOUR, and
+# mut_RUN_install_no_guard is caught here or nowhere. The guard was the sensor's own blind spot —
+# it kept the mutant green while the sabotage worked, which is the failure the catalogue exists to
+# find. The second half of the old reason was never true either: `sdd install` iterates agents/
+# with `[ -e ] || continue`, so the sandbox not copying it costs nothing.
+# Cost of letting it in, measured: 0.14 s per run, ~0.6 s of wall clock across the whole pool.
+run "preflight and the install guard" "$ROOT/tests/check-preflight.sh"
 
 # Sensor of the sensor. Outside the guard this would be infinite recursion: every mutant runs this
 # same suite. check-mutation.sh has the twin guard and dies if it is born with SDD_MUTANT set.

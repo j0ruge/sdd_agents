@@ -16,6 +16,11 @@
 # fail overall in both runs. The only thing asserted is the GNU line — quiet when the userland is
 # GNU, and naming all three when it is not.
 #
+# SECOND responsibility, and it lives here because the fixture already runs `sdd install`: the
+# guard that stops the installer from leaving a 0-byte `.sdd/config.sh` behind when the kit copy
+# has no `config/starter.conf`. Same family as the GNU probe above — the runner asserting a world
+# it did not measure.
+#
 # Usage: tests/check-preflight.sh   (exit 0 = the probe still fires, and still stays quiet)
 
 set -uo pipefail
@@ -82,7 +87,18 @@ git config user.name "Fixture"
 echo "content" > file.txt
 git add -A && git commit -qm "init"
 
-"$SDD" install >/dev/null
+# This install is fixture setup for preflight AND the POSITIVE control of the starter.conf guard
+# asserted at the bottom of this file. Without it a guard that died unconditionally would satisfy
+# every assertion down there, and the installer would be broken in the opposite direction.
+echo "== sdd install with the real kit (positive control) =="
+install_out="$( "$SDD" install 2>&1 )"
+assert_has "install reports the config created" ".sdd/config.sh created" "$install_out"
+# Asserted BEFORE the heredoc below overwrites it: what the defect produced was a file that
+# existed and was empty, so existence alone is exactly the check that could not see it.
+if [ -s ".sdd/config.sh" ]; then pass "the created config is not empty"
+else fail "the created config is not empty" "a non-zero .sdd/config.sh" \
+       "$(wc -c < .sdd/config.sh 2>/dev/null || echo 'no file') byte(s)"; fi
+
 cat > .sdd/config.sh <<'EOF'
 PROJECT_NAME="fixture"
 DEFAULT_BRANCH="main"
@@ -116,6 +132,57 @@ assert_lacks "the ok line is not printed at the same time" "$OK_LINE" "$out"
 # being able to tell a session that moved the disk from one that did not.
 assert_has "the failure says what breaks, not only what is missing" \
   "the state fingerprint is empty" "$out"
+
+# --- `sdd install` against a kit copy with no config/starter.conf -----------
+# The redirect creates $CONFIG_FILE BEFORE sed runs, so the missing starter used to leave a 0-byte
+# `.sdd/config.sh` on disk and `set -e` took the install down only afterwards. rc was ALREADY
+# non-zero (sed's), so rc measures nothing on its own here — the two branches share it. What the
+# assertions below separate is the branch's own text and, above all, the artifact: the poisoned
+# empty config is what made the NEXT `sdd install` print "already exists (preserved)" over it.
+echo "== sdd install without config/starter.conf =="
+
+KIT="$FIX/.kit-no-starter"
+mkdir -p "$KIT/bin"
+# A real copy, never a symlink: _resolve_self follows symlinks, so a symlinked bin/sdd would
+# resolve SDD_HOME back to the real kit — which HAS the starter, and the fixture would measure
+# nothing. Nothing else is copied on purpose: `config/` absent IS the fixture.
+cp "$SDD" "$KIT/bin/sdd"
+
+mkdir -p "$FIX/target"
+( cd "$FIX/target" \
+  && git init -q -b main \
+  && git config user.email "fixture@example.com" \
+  && git config user.name "Fixture" \
+  && echo content > file.txt \
+  && git add -A && git commit -qm "init" ) >/dev/null 2>&1
+
+out="$( cd "$FIX/target" && "$KIT/bin/sdd" install 2>&1 )"; rc=$?
+
+# Adversarial pass, so none of the five below gets deleted later as decorative — each was broken
+# on its own by a distinct sabotage of the guard, and each names its owner here.
+#
+# This one reads an rc that BOTH branches share, so it is blind to the original defect (it passed
+# green before the guard existed). It is not redundant: it is the only half that sees the guard
+# degrading from `die` to a warning that carries on.
+if [ "$rc" -ne 0 ]; then pass "install fails when the kit has no starter.conf"
+else fail "install fails when the kit has no starter.conf" "rc != 0" "rc $rc"; fi
+
+# The consequence, not only the absence — same rubric as the GNU line above. Owns the sabotage
+# that keeps the guard but drops the "so what" from the message.
+assert_has "the guard says what breaks, not only what is missing" \
+  "would be created empty" "$out"
+# Also blind to the original defect on its own — sed's stderr quotes the same path. Kept because
+# it owns the sabotage that keeps the consequence but stops naming the file the operator must fix.
+assert_has "the guard names the file the kit copy is missing" "config/starter.conf" "$out"
+# THE discriminating half. Both branches exit non-zero and both mention the path, so an assertion
+# that stopped here would pass on the defect. sed only speaks if it ran, and it only runs if the
+# guard did not fire — its prefix is the marker of the WRONG branch, and it is locale-proof
+# (GNU sed prefixes with the program name in every language, and the message body does not).
+assert_lacks "the guard fires before sed does" "sed:" "$out"
+# The artifact half: the label was never the damage, the 0-byte file was.
+if [ ! -e "$FIX/target/.sdd/config.sh" ]; then pass "no empty config is left behind"
+else fail "no empty config is left behind" "no .sdd/config.sh at all" \
+       "$(wc -c < "$FIX/target/.sdd/config.sh") byte(s) on disk"; fi
 
 # ---------------------------------------------------------------------------
 echo

@@ -1014,6 +1014,15 @@ cmd_install() {
     if [ -f "$REPO_ROOT/pyproject.toml" ]; then test_cmd="pytest -q"; fi
     if [ -f "$REPO_ROOT/Cargo.toml" ];     then test_cmd="cargo test"; fi
     if [ -f "$REPO_ROOT/go.mod" ];         then test_cmd="go test ./..."; fi
+    # The redirect below creates $CONFIG_FILE BEFORE sed runs, so a half-copied kit used to leave
+    # a 0-byte config on disk and only then die on sed's rc. rc was already non-zero, which is why
+    # this looked harmless: the damage was the ARTIFACT. The next `sdd install` found the file,
+    # printed "already exists (preserved)" over it, and the target repo went on without a
+    # TEST_CMD — the runner asserting an artifact it never wrote, one level down from the gates.
+    # Guard first, and in the kit's own voice: sed's stderr is locale-dependent and says nothing
+    # about the consequence.
+    [ -f "$SDD_HOME/config/starter.conf" ] \
+      || die "the kit at $SDD_HOME has no config/starter.conf — .sdd/config.sh would be created empty, and the next 'sdd install' would report it as already existing. Re-copy or re-clone the kit."
     sed -e "s|<PROJECT_NAME>|$project|g" \
         -e "s|<DEFAULT_BRANCH>|$branch|g" \
         -e "s|<TEST_CMD>|$test_cmd|g" \
