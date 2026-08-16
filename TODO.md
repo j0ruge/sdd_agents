@@ -30,6 +30,14 @@ Achados sobre **repos-alvo** vão para o `TODO.md` daquele repo. Este arquivo é
 
 ### Sensores que faltam
 
+- [ ] **Nada compara `agents/*.md` com a cópia instalada em `.claude/agents/`** — `bin/sdd:1226` —
+  o preflight só checa **existência** (`[ -f ... ] || _fail "not installed"`) e então imprime
+  "N kit agent(s) checked": rótulo sobre uma comparação que nunca aconteceu. A cópia é o que o
+  harness de fato carrega, então a fonte pode ser corrigida e o agente seguir rodando o texto
+  velho. Aconteceu nesta missão: `2132cf5` editou `agents/sdd-kaizen.md` e a cópia ficou para trás,
+  verde em tudo. Direção: comparar conteúdo, não presença. — descoberto por `sdd-reviewer` na
+  missão `20260816-runner-sem-dividas` (2026-08-16)
+
 - [ ] **`main "$@"` sem guarda, e o kit edita o próprio runner em voo** — `bin/sdd:2287` — é a
   última linha, então ao retornar dela o bash lê o arquivo a partir do offset salvo. A fase EXEC
   edita `bin/sdd` durante o `sdd run` que a executa (10× nesta missão, +7647 bytes). Reproduzido
