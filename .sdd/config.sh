@@ -5,7 +5,7 @@ DEFAULT_BRANCH="main"
 # A suíte do kit: bash -n + shellcheck + contrato dos templates + máquina de estados.
 TEST_CMD="tests/run-all.sh"
 E2E_CMD=""
-LINT_CMD="shellcheck -S warning bin/sdd"
+LINT_CMD="shellcheck -S warning bin/sdd tests/*.sh"
 
 HANDOFF_DIR="docs/handoffs"
 QA_DOCS_PATH="docs/qa"

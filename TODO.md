@@ -235,13 +235,6 @@ Achados sobre **repos-alvo** vão para o `TODO.md` daquele repo. Este arquivo é
 
 ### Runner — defeitos e dívidas
 
-- [ ] **O `LINT_CMD` olha só o `bin/sdd`; os 2400 linhas de `tests/*.sh` ninguém linta** —
-  `tests/run-all.sh:23` + `tests/check-mutation.sh:246` — `shellcheck -S warning tests/` reprova
-  com SC2318 (`local slug="$1" box="$WORK/$slug"`: o `$slug` da direita é a **global** do laço,
-  que hoje coincide). Renomeie a variável do laço e os mutantes passam a compartilhar um sandbox.
-  Direção: separar em duas linhas e estender o passo de lint a `tests/*.sh`. — descoberto por
-  `sdd-executor` na missão `20260815-ledger-sem-ponto-cego` (2026-08-16)
-
 - [ ] **O runner se auto-degrada em laço, mesmo registrando uma vez só** — `bin/sdd:1546` —
   depois do `force_phase="PR"`, se a fase PR mexer no disco e não satisfizer o gate, o laço volta
   a REVIEW com o orçamento ainda estourado e o ramo `draft` dispara de novo. O `F1` fechou a

@@ -391,7 +391,12 @@ sandbox() { # sandbox <target-dir> — the whole kit the suite needs, and nothin
 
 # run_mutant <slug> — writes $WORK/<slug>.rc and $WORK/<slug>.log
 run_mutant() {
-  local slug="$1" box="$WORK/$slug"
+  # Two `local`s on purpose (SC2318): collapsed into one, the `$slug` on the right expands BEFORE
+  # this line's own assignment lands, so it reads the caller's global — correct today only by the
+  # coincidence that the loop variable happens to share the name. Rename the loop variable and
+  # every mutant silently shares `$WORK/`, one box for all of them.
+  local slug="$1"
+  local box="$WORK/$slug"
   sandbox "$box"
   "mut_$slug" "$box/bin/sdd"
   if cmp -s "$ROOT/bin/sdd" "$box/bin/sdd"; then

@@ -24,12 +24,74 @@ run() { # run <name> <command...>
 
 run "runner syntax (bash -n)" bash -n "$ROOT/bin/sdd"
 
+# The lint surface: the runner PLUS every suite script. For a long time it was bin/sdd alone,
+# which left ~2400 lines of tests/ unlinted — and the linter was right about them: SC2318 in
+# check-mutation.sh had `local slug="$1" box="$WORK/$slug"` reading the CALLER's global `slug`,
+# correct only by the coincidence that the loop variable shares the name. Rename the loop variable
+# and every mutant silently shares one sandbox. A sensor that never opens the file cannot see that.
+#
+# The floor is the anti-vacuity guard, same reason as the ones in check-lang.sh and
+# check-pipefail.sh: a glob that stops matching, or a list someone narrows back to bin/sdd, leaves
+# the linter reporting "clean" over files it never read — the failure mode where the sensor claims
+# to have measured what it did not. 12 paths today; the floor moves only on purpose, in a commit
+# that says why.
+#
+# Mind the wording of any comment here: a line whose first word after `#` is the linter's own name
+# is parsed as a DIRECTIVE, and an unparseable one is an ERROR (SC1073/SC1072) — this very block
+# tripped it while being written. Keep that token out of the leading position.
+#
+# An adversarial pass degraded each rule below on its own and demanded a red for each. Dying as
+# they should: the list narrowed to the runner alone, a glob that matches nothing, `-S error`, and
+# the SC2318 itself put back into check-mutation.sh. The two that SURVIVE are named rather than
+# hidden, and neither is a one-edit hole — alone, neither changes a single file the linter opens:
+#   - zeroing LINT_FLOOR (harmless until someone ALSO narrows the list)
+#   - neutering the probe's verdict (harmless until someone ALSO weakens LINT_SEVERITY)
+# Confirmed by running each pair: two edits, and only two, put this step back to sleep.
+# ONE definition of the severity, read by the real scan AND by the probe below — the house rule
+# about an enum read in more than one place. Written twice, raising it to `error` would silence
+# SC2318 in the scan while the probe went on asserting `warning` and stayed green: a sensor
+# certifying a threshold nobody runs at. The risk table of this mission forbade lowering `-S`;
+# this is what makes the ban a sensor instead of a sentence.
+LINT_SEVERITY=warning
+LINT_FLOOR=12
+
+lint_surface() {
+  local files=("$ROOT/bin/sdd") f
+  for f in "$ROOT"/tests/*.sh; do [ -f "$f" ] && files+=("$f"); done
+
+  # Anti-vacuity, half 1 — the LIST. Catches the glob that stops matching and the list narrowed
+  # back to the runner alone.
+  if [ "${#files[@]}" -lt "$LINT_FLOOR" ]; then
+    printf '  lint surface shrank to %d path(s), expected at least %d — did something move?\n' \
+      "${#files[@]}" "$LINT_FLOOR" >&2
+    return 1
+  fi
+
+  # Anti-vacuity, half 2 — the SEVERITY. A full file list linted at a threshold that reports
+  # nothing is the same green as linting nothing at all. The probe carries a real SC2318, the very
+  # defect this extended surface was born to catch, and it is demanded BY CODE rather than by
+  # exit status alone: a probe rejected for a missing shebang would also exit non-zero, and would
+  # prove the linter runs while proving nothing about what it still sees.
+  local box out rc
+  box="$(mktemp -d "${TMPDIR:-/tmp}/sdd-lint-probe-XXXXXX")"
+  printf '%s\n' '#!/usr/bin/env bash' 'f() { local a="$1" b="$a"; echo "$b"; }' > "$box/probe.sh"
+  out="$(shellcheck -S "$LINT_SEVERITY" "$box/probe.sh" 2>&1)"; rc=$?
+  rm -rf "$box"
+  if [ "$rc" -eq 0 ] || ! grep -q 'SC2318' <<< "$out"; then
+    printf '  the linter no longer flags a known SC2318 at -S %s — severity weakened, or the\n  linter is a stub? (rc %d)\n' \
+      "$LINT_SEVERITY" "$rc" >&2
+    return 1
+  fi
+
+  shellcheck -S "$LINT_SEVERITY" "${files[@]}"
+}
+
 # Inside a mutant (SDD_MUTANT=1) only the BEHAVIOURAL sensors run. The linter stays out because a
 # mutant caught by the linter proves nothing about the gates — the assertion the mutation wants is
 # "the gate noticed", not "the linter complained".
 if [ -z "${SDD_MUTANT:-}" ]; then
   if command -v shellcheck >/dev/null 2>&1; then
-    run "runner lint" shellcheck -S warning "$ROOT/bin/sdd"
+    run "lint: the runner and the whole suite" lint_surface
   else
     printf '\n  (linter absent — skipped)\n'
   fi
