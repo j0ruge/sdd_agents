@@ -220,8 +220,24 @@ log_dir() {
 # `sort -V`, never plain `sort`: the names this is called with carry a COUNTER (`40-review-r<N>`),
 # and lexicographically `r10` lands between `r1` and `r2` — so from the tenth round on the gate
 # would read `r3`, an old and already-approved review, while the round that actually ran sits
-# unread. Version order also keeps the dated names (`YYYY-MM-DD-*`) in the order plain `sort` gave
-# them, so the qa call sites are unaffected. Asserted in tests/check-gates.sh (r1/r2/r3/r10).
+# unread. Asserted in tests/check-gates.sh with the r1/r2/r3/r10 fixture.
+#
+# This comment used to end "version order also keeps the dated names (`YYYY-MM-DD-*`) in the order
+# plain `sort` gave them, so the qa call sites are unaffected", citing that same fixture. Both
+# halves were wrong, and the citation was the worse half: r1/r2/r3/r10 exercises the REVIEW glob
+# and says nothing whatsoever about the dated one. Measured on two same-day reports —
+#
+#   plain sort | tail -1  ->  2026-01-01-fixture.md
+#   sort -V    | tail -1  ->  2026-01-01-fixture-final.md
+#
+# — because filevercmp special-cases the `.md` suffix and compares the stems, while plain `sort`
+# compares `-` (0x2D) against `.` (0x2E) and puts `-final` first. Drop the suffix and the two
+# orders agree, which is why reading the code convinced three sessions in a row.
+#
+# So the qa call sites (`:346`, `:550`) DID change behaviour, and for the better: among same-day
+# reports the later-named round now wins instead of losing to the shorter stem. That is no longer
+# a claim — it is pinned by its own differential fixture in tests/check-gates.sh, next to this
+# one, which goes red the moment either ordering changes under it.
 latest_matching() {
   local pattern="$1"
   # `|| true`: with no match, `ls` fails and `pipefail` would propagate the error into the
@@ -978,7 +994,16 @@ missing and write the artifacts. The gate will be re-evaluated."
   # the multi-line string — the ledger going quiet about money with nothing going red.
   stream_summary "$streamfile" > "$logfile"
 
+  # The `|| echo "?"` covers a jq that FAILS; it does not cover a jq that succeeds silently, and
+  # that is the case stream_summary() produces most: over an EMPTY $logfile — a session killed
+  # before its `result`, or the truncated stream the comment above describes — jq exits 0 having
+  # printed nothing, so the fallback never fires and `cost` becomes the empty string. Measured: the
+  # journal line came out `cost_usd=  log=…`, an unlabelled hole where every other row says `?`.
+  # No data was ever corrupted (`($cost | tonumber? // null)` maps "" and "?" to the same ledger
+  # null), but stream_summary()'s contract says in so many words that empty stdout "already means
+  # unknown cost to every caller", and this is the caller that has to make that sentence true.
   cost="$(jq -r '.total_cost_usd // .cost_usd // "?"' "$logfile" 2>/dev/null || echo "?")"
+  [ -n "$cost" ] || cost="?"
   local dur=$((ended - started))
   pipeline_log_line "$(date -Iseconds)  $phase  agent=$agent  model=$model  session=${resume_sid:-$sid}  rc=$rc  dur=${dur}s  cost_usd=$cost  log=$logfile"
 
