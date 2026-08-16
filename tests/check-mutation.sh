@@ -168,9 +168,18 @@ mut_KAIZEN_jidoka_dead() {
 
 # The rubric's strongest signal is dropped: phases with an escalation, a human retry or a failing
 # last gate label as "ok". The judge would congratulate the kit precisely on the missions where
-# the human had to push the work again.
-mut_SERIES_refez_dropped() {
+# the human had to push the work again. RUN_ prefix: kaizen_series is a helper, not a gate —
+# the two-prefix contract in the header comment holds.
+mut_RUN_refez_dropped() {
   sed -i 's|then "refez"|then "ok"|' "$1"
+}
+
+# The guard stops guarding: gate_KAIZEN accepts `melhorou`/`piorou` written over an insufficient
+# series. The whole point of the runner-owned guard (boot prompt: "the guard belongs to the
+# runner") dies silently — a verdict label alone starts satisfying the gate, which is the
+# label-instead-of-artifact failure principle 1 exists to forbid.
+mut_KAIZEN_guard_ignored() {
+  sed -i 's|if \[ "\$sufficient" != "true" \] && \[ "\$verdict" != "indeterminado" \]; then|if false; then|' "$1"
 }
 
 CATALOG=(
@@ -196,7 +205,8 @@ CATALOG=(
   RUN_autonomy_sha_warn_repeats
   KAIZEN_gate_blind
   KAIZEN_jidoka_dead
-  SERIES_refez_dropped
+  KAIZEN_guard_ignored
+  RUN_refez_dropped
 )
 
 # Mutations that are NOT caught today, each with the increment that closes it. Ratchet in both

@@ -159,11 +159,36 @@ loud_stub() {
     > "$OUTSIDE/stub/claude"
   chmod +x "$OUTSIDE/stub/claude"
 }
+# gh answers `gh pr view <url> --json url --jq .url` — the only call gate_PR makes.
+gh_stub_confirms_pr() {
+  printf '#!/usr/bin/env bash\nif [ "$1" = "pr" ] && [ "$2" = "view" ]; then printf "%%s\\n" "$3"; exit 0; fi\nexit 1\n' \
+    > "$OUTSIDE/stub/gh"
+  chmod +x "$OUTSIDE/stub/gh"
+}
 PATH="$OUTSIDE/stub:$PATH"
 
-# KAIZEN rows in the ledger — sessions and escalations the kaizen flow itself wrote. Starts at 1:
-# the series fixture above already carries one meta row.
+# KAIZEN rows in the ledger — sessions and escalations the kaizen flow itself wrote.
 krows() { jq -s '[.[] | select(.phase == "KAIZEN")] | length' "$LEDGER"; }
+
+# The gate section gets its own ledger, SUFFICIENT on purpose (3 distinct missions on the latest
+# sha): the gate now refuses `melhorou`/`piorou` over an insufficient series, so the scenarios
+# that exercise those branches need a guard that admits them. The insufficient case keeps its own
+# ledger in state2 below — same fixture kit, two guards, and the SAME verdict file flips between
+# accepted and refused purely by which series the runner derives.
+cat > "$LEDGER" <<'EOF'
+{"v":1,"ts":"2026-08-15T11:00:00-03:00","event":"session","run_id":"g1","invocation":"run","kit_sha":"fff9999","kit_dirty":false,"project":"p1","repo":"/p1","mission":"m1","phase":"EXEC","step":"EXEC","agent":"sdd-executor","model":"opus","attempt":1,"auto_retry":false,"session":"g1s","rc":0,"dur_s":10,"cost_usd":1.0,"moved":true,"gate":"pass","gate_why":"x"}
+{"v":1,"ts":"2026-08-15T11:01:00-03:00","event":"session","run_id":"g2","invocation":"run","kit_sha":"aaa1111","kit_dirty":false,"project":"p1","repo":"/p1","mission":"m3","phase":"EXEC","step":"EXEC","agent":"sdd-executor","model":"opus","attempt":1,"auto_retry":false,"session":"g2s","rc":0,"dur_s":10,"cost_usd":1.0,"moved":true,"gate":"pass","gate_why":"x"}
+{"v":1,"ts":"2026-08-15T11:02:00-03:00","event":"session","run_id":"g3","invocation":"run","kit_sha":"aaa1111","kit_dirty":false,"project":"p1","repo":"/p1","mission":"m6","phase":"EXEC","step":"EXEC","agent":"sdd-executor","model":"opus","attempt":1,"auto_retry":false,"session":"g3s","rc":0,"dur_s":10,"cost_usd":1.0,"moved":true,"gate":"pass","gate_why":"x"}
+{"v":1,"ts":"2026-08-15T11:03:00-03:00","event":"session","run_id":"g4","invocation":"run","kit_sha":"aaa1111","kit_dirty":false,"project":"p1","repo":"/p1","mission":"m7","phase":"EXEC","step":"EXEC","agent":"sdd-executor","model":"opus","attempt":1,"auto_retry":false,"session":"g4s","rc":0,"dur_s":10,"cost_usd":1.0,"moved":true,"gate":"pass","gate_why":"x"}
+EOF
+
+# The insufficient guard: one mission on the same latest sha. Used per-invocation through
+# SDD_STATE_DIR to prove the gate refuses a non-indeterminado verdict the moment the guard drops.
+mkdir -p "$OUTSIDE/state2"
+cat > "$OUTSIDE/state2/autonomy-log.jsonl" <<'EOF'
+{"v":1,"ts":"2026-08-15T11:00:00-03:00","event":"session","run_id":"h1","invocation":"run","kit_sha":"aaa1111","kit_dirty":false,"project":"p1","repo":"/p1","mission":"m3","phase":"EXEC","step":"EXEC","agent":"sdd-executor","model":"opus","attempt":1,"auto_retry":false,"session":"h1s","rc":0,"dur_s":10,"cost_usd":1.0,"moved":true,"gate":"pass","gate_why":"x"}
+EOF
+state2_rows() { jq -s 'length' "$OUTSIDE/state2/autonomy-log.jsonl"; }
 
 echo "== gate: verdict pending =="
 # A stale verdict for an OLDER kit sha, with a complete born plan beside it: a gate blind to
@@ -201,20 +226,19 @@ EOF
 git add -A && git commit -qm "chore: stale verdict for an older kit sha"
 
 dead_stub
+before_rows="$(krows)"
 out="$( cd "$FIX" && "$KSDD" kaizen 2>&1 )"; rc=$?
 assert_eq "with no verdict for the CURRENT sha the command blocks (rc 3)" "3" "$rc"
 assert_eq "and the reason names the sha it is waiting for" "yes" \
   "$(grep -q 'no verdict for kit aaa1111' <<< "$out" && echo yes || echo no)"
 assert_eq "the two dead sessions and the escalation reached the ledger as KAIZEN rows" \
-  "4" "$(krows)"
+  "$((before_rows + 3))" "$(krows)"
 
 echo "== reminder: pipeline complete points at the judge =="
 # A COMPLETE mission in the fixture kit: every gate satisfied, so cmd_run reaches the
 # "pipeline complete" branch without opening a session. The artifact snippets are the passing
 # forms proven by tests/check-gates.sh against the real gates; gh is stubbed to confirm the PR.
-printf '#!/usr/bin/env bash\nif [ "$1" = "pr" ] && [ "$2" = "view" ]; then printf "%%s\\n" "$3"; exit 0; fi\nexit 1\n' \
-  > "$OUTSIDE/stub/gh"
-chmod +x "$OUTSIDE/stub/gh"
+gh_stub_confirms_pr
 DONE_SHA="$(git -C "$FIX" rev-parse --short HEAD)"
 DMDIR="$FIX/docs/handoffs/20260102-donemission"
 mkdir -p "$DMDIR"
@@ -240,12 +264,12 @@ printf '# Docs\n\ndrift checklist\n\n| Area | Doc | Status | Evidence |\n|---|--
 printf -- '---\npr_url: https://example.com/pr/1\n---\n# PR\n' > "$DMDIR/50-pr.md"
 git add -A && git commit -qm "chore: a complete mission for the reminder scenario"
 
-# The ledger is the series fixture: latest kit aaa1111 with 1 mission and NO verdict for it yet
-# (the only verdict on disk judges the stale sha) — the reminder must appear, with the numbers.
+# The gate-section ledger: latest kit aaa1111 with 3 missions and NO verdict for it yet — the
+# reminder must appear, with the numbers.
 out="$( cd "$FIX" && "$KSDD" run 20260102-donemission 2>&1 )"; rc=$?
 assert_eq "the complete mission reaches the human gate (rc 0)" "0" "$rc"
 assert_eq "and reminds: missions accumulated on the current kit without a verdict" "yes" \
-  "$(grep -q "autonomy series: 1 mission(s) on kit aaa1111 without a verdict" <<< "$out" && echo yes || echo no)"
+  "$(grep -q "autonomy series: 3 mission(s) on kit aaa1111 without a verdict" <<< "$out" && echo yes || echo no)"
 assert_eq "pointing at sdd kaizen" "yes" \
   "$(grep -q "run 'sdd kaizen' in the kit repo" <<< "$out" && echo yes || echo no)"
 
@@ -282,10 +306,13 @@ echo "== gate: verdict without the born plan =="
 sed -i 's/^verdict: piorou$/verdict: melhorou/' "$VDIR/05-verdict.md"
 git add -A && git commit -qm "chore: verdict flips to melhorou"
 dead_stub
+before_rows="$(krows)"
 out="$( cd "$FIX" && "$KSDD" kaizen 2>&1 )"; rc=$?
 assert_eq "a verdict without the born plan beside it blocks (rc 3)" "3" "$rc"
 assert_eq "naming the missing artifact" "yes" \
   "$(grep -q '00-missao\.md is missing' <<< "$out" && echo yes || echo no)"
+assert_eq "and its two dead sessions plus the escalation are on the ledger" \
+  "$((before_rows + 3))" "$(krows)"
 
 echo "== gate: born plan with empty aprovacao passes =="
 loud_stub
@@ -306,14 +333,31 @@ assert_eq "verdict + born plan with empty aprovacao passes (rc 0)" "0" "$rc"
 assert_eq "spending no session (already judged, idempotent)" "$before_rows" "$(krows)"
 assert_eq "and hands the plan to the human" "1" "$(grep -c "fill 'aprovacao:'" <<< "$out")"
 
-echo "== gate: the plan never approves itself =="
+echo "== gate: the verdict enum is closed =="
+# A label outside melhorou|piorou|indeterminado is never trusted — a typo'd verdict that fell
+# into the born-plan path would satisfy the gate on a value nobody defined.
 dead_stub
-sed -i 's/^aprovacao:$/aprovacao: auto/' "$VDIR/00-missao.md"
-git add -A && git commit -qm "chore: the born plan tries to approve itself"
+sed -i 's/^verdict: melhorou$/verdict: bogus/' "$VDIR/05-verdict.md"
+git add -A && git commit -qm "chore: verdict outside the enum"
 out="$( cd "$FIX" && "$KSDD" kaizen 2>&1 )"; rc=$?
-assert_eq "a born plan that approves itself is refused (rc 3)" "3" "$rc"
-assert_eq "naming the self-approval" "yes" \
-  "$(grep -q "aprovacao: auto" <<< "$out" && echo yes || echo no)"
+assert_eq "a verdict outside the enum blocks (rc 3)" "3" "$rc"
+assert_eq "naming the closed enum" "yes" \
+  "$(grep -q 'is not one of melhorou|piorou|indeterminado' <<< "$out" && echo yes || echo no)"
+sed -i 's/^verdict: bogus$/verdict: melhorou/' "$VDIR/05-verdict.md"
+git add -A && git commit -qm "chore: verdict back to melhorou"
+
+echo "== gate: an insufficient guard only supports indeterminado =="
+# The SAME verdict file that passes under the sufficient ledger must be refused the moment the
+# series drops below the guard floor: the guard belongs to the runner (boot prompt), and this is
+# where that sentence is enforced rather than requested. state2 carries 1 mission on aaa1111.
+dead_stub
+before2="$(state2_rows)"
+out="$( cd "$FIX" && SDD_STATE_DIR="$OUTSIDE/state2" "$KSDD" kaizen 2>&1 )"; rc=$?
+assert_eq "melhorou over an insufficient series blocks (rc 3)" "3" "$rc"
+assert_eq "naming the runner's guard" "yes" \
+  "$(grep -q "only supports 'indeterminado'" <<< "$out" && echo yes || echo no)"
+assert_eq "and its sessions landed in the insufficient ledger, not the main one" \
+  "$((before2 + 3))" "$(state2_rows)"
 
 echo "== reminder: silenced once the verdict exists =="
 # The verdict for aaa1111 is on disk now (the scenarios above wrote it). Same complete mission,
@@ -325,12 +369,16 @@ assert_eq "and the reminder is suppressed by the existing verdict" "no" \
   "$(grep -q 'autonomy series:' <<< "$out" && echo yes || echo no)"
 
 echo "== dry-run projection =="
-# The gate is failing at this point (the self-approved plan above), so a real run would open a
-# session — the projection must not: no claude, no mission directory, no ledger row. The loud
-# stub turns any session into a visible ledger row; the row count is the witness.
+# Projected against the insufficient ledger (the gate is pending there on the guard, so
+# run_phase is reached) — the projection must print the prompt while touching nothing: no
+# claude, no mission directory, no row in either ledger. The loud stub turns any real session
+# into a visible ledger row; the row counts are the witness, and the handoff listing replaces
+# the old date-recomputed path check (two `date` calls could straddle midnight).
 loud_stub
 before_rows="$(krows)"
-out="$( cd "$FIX" && "$KSDD" kaizen --dry-run 2>&1 )"; rc=$?
+before2="$(state2_rows)"
+dirs_before="$(ls -1 "$FIX/docs/handoffs" | sort)"
+out="$( cd "$FIX" && SDD_STATE_DIR="$OUTSIDE/state2" "$KSDD" kaizen --dry-run 2>&1 )"; rc=$?
 assert_eq "kaizen --dry-run exits 0" "0" "$rc"
 assert_eq "and prints the KAIZEN boot prompt" "yes" \
   "$(grep -q 'DRY RUN: phase KAIZEN' <<< "$out" && echo yes || echo no)"
@@ -338,9 +386,47 @@ assert_eq "which cites the series command as the source of truth" "yes" \
   "$(grep -q 'kaizen --series' <<< "$out" && echo yes || echo no)"
 assert_eq "driven by the sdd-kaizen agent" "yes" \
   "$(grep -q 'sdd-kaizen' <<< "$out" && echo yes || echo no)"
-assert_eq "the projection creates no mission directory" "no" \
-  "$([ -d "$FIX/docs/handoffs/$(date +%Y%m%d)-kaizen" ] && echo yes || echo no)"
-assert_eq "and writes no ledger row" "$before_rows" "$(krows)"
+assert_eq "the projection creates no mission directory" \
+  "$dirs_before" "$(ls -1 "$FIX/docs/handoffs" | sort)"
+assert_eq "and writes no row to the main ledger" "$before_rows" "$(krows)"
+assert_eq "nor to the insufficient one" "$before2" "$(state2_rows)"
+
+echo "== the approved plan never reaches a session =="
+# Once `aprovacao:` is filled, the generic fix-it retry prompt ("complete what is missing")
+# reads, to a live agent, as an instruction to blank the field — erasing a decision that may be
+# a HUMAN's, with `sdd run` already acting on it. Both directions bail out before any session:
+# the loop's own `auto` stops the line; a human's value is a done state, not a defect.
+loud_stub
+sed -i 's/^aprovacao:$/aprovacao: auto/' "$VDIR/00-missao.md"
+git add -A && git commit -qm "chore: the born plan tries to approve itself"
+before_rows="$(krows)"
+out="$( cd "$FIX" && "$KSDD" kaizen 2>&1 )"; rc=$?
+assert_eq "a born plan that approves itself is refused (rc 3)" "3" "$rc"
+assert_eq "naming the self-approval" "yes" \
+  "$(grep -q "aprovacao: auto" <<< "$out" && echo yes || echo no)"
+assert_eq "without opening any session that could blank the field" \
+  "$before_rows" "$(krows)"
+
+sed -i 's/^aprovacao: auto$/aprovacao: humano-2026-08-15/' "$VDIR/00-missao.md"
+git add -A && git commit -qm "chore: the human approves the born plan"
+before_rows="$(krows)"
+out="$( cd "$FIX" && "$KSDD" kaizen 2>&1 )"; rc=$?
+assert_eq "a human-approved plan is a done state (rc 0)" "0" "$rc"
+assert_eq "pointing at sdd run, not at another verdict" "yes" \
+  "$(grep -q "sdd run" <<< "$out" && echo yes || echo no)"
+assert_eq "again without any session" "$before_rows" "$(krows)"
+
+echo "== a kit that is not a git checkout is refused by name =="
+# A plain copy of the kit has no history to judge. The refusal must say THAT — the generic
+# "run it in the kit repo" would send the user hunting for the wrong problem while standing in
+# the right directory.
+KIT2="$OUTSIDE/kitcopy"
+mkdir -p "$KIT2"
+cp -r "$FIX/bin" "$FIX/templates" "$FIX/config" "$KIT2/"
+out="$( cd "$FIX" && "$KIT2/bin/sdd" kaizen 2>&1 )"; rc=$?
+assert_eq "a kit without .git dies with rc 1" "1" "$rc"
+assert_eq "naming the missing git history, not the cwd" "yes" \
+  "$(grep -q 'is not a git checkout' <<< "$out" && echo yes || echo no)"
 
 echo "== kit-repo guard =="
 # KAIZEN plans the KIT's next mission. Run from a target project it would judge the kit but plan
@@ -360,7 +446,10 @@ HANDOFF_DIR="docs/handoffs"
 QA_DOCS_PATH="docs/qa"
 JIRA_ENABLED=false
 EOF
-out="$( cd "$TGT" && "$SDD" kaizen 2>&1 )"; rc=$?
+# The FIXTURE kit ($KSDD, a real git checkout) run from the target repo: deterministic in both
+# contexts — the real repo's $SDD would fire the not-a-git-checkout refusal instead when this
+# test runs inside the mutation sandbox, whose kit copy has no .git.
+out="$( cd "$TGT" && "$KSDD" kaizen 2>&1 )"; rc=$?
 assert_eq "sdd kaizen refuses to run outside the kit repo (rc 1)" "1" "$rc"
 assert_eq "and points at the kit repo" "yes" \
   "$(grep -q 'run it in the kit repo' <<< "$out" && echo yes || echo no)"

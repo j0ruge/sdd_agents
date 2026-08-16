@@ -13,14 +13,14 @@ com Jidoka (ADR 0002): `sdd kaizen --series` (série determinística), `gate_KAI
 achado por conteúdo, plano nascido com `aprovacao:` vazio), `piorou` ⇒ exit 3, o 7º agente
 `sdd-kaizen`, e o lembrete pós-pipeline (D6/D8).
 
-| | Antes (I13.3.0, `302b9b8`) | Depois (I13.3.7, mesma máquina e sessão) |
+| | Antes (I13.3.0, `302b9b8`) | Depois (fecho + review, mesma máquina e sessão) |
 |---|---|---|
-| Mutações no catálogo | 20 (score 100%) | **23** (score 100%, `KNOWN_GAPS` vazio) |
+| Mutações no catálogo | 20 (score 100%) | **24** (score 100%, `KNOWN_GAPS` vazio) |
 | Gates com mutação cobrada pelo `sdd health` | 7 | **8** (`gate_KAIZEN` incluso) |
-| Asserções de sensor do laço kaizen | 0 | **51** (`tests/check-kaizen.sh`) |
+| Asserções de sensor do laço kaizen | 0 | **64** (`tests/check-kaizen.sh`) |
 | Piso da superfície do `check-lang` | 26 caminhos | **31** (ADRs + sensor + 2× agente) |
-| Suíte no default (`SDD_MUTATION_JOBS=4`) | 26,0 s (1 rodada) | **38,0 s** (mediana de 3: 37,99/37,86/38,05) |
-| Suíte com `SDD_MUTATION_JOBS=10` | — | 27,3 s |
+| Suíte no default (`SDD_MUTATION_JOBS=4`) | 26,0 s (1 rodada) | 38,0 s no fecho (mediana de 3); **39,6 s** pós-review (24 mutantes) |
+| Suíte com `SDD_MUTATION_JOBS=10` | — | 27,3 s (23 mutantes, no fecho) |
 | Missões do kit planejadas pelo próprio kit | 0 | **1** (`20260815-ledger-sem-ponto-cego`) |
 
 **A primeira volta real** (Check de fecho, D7): sessão `a0e24b4e`, opus, **618 s**,
@@ -38,6 +38,16 @@ sessão. O frontmatter do veredito real virou o fixture do gate no sensor (prove
 falhou — 38,0 s. O custo cresce com o catálogo (13,98 s/16 mutantes → 22,34/19 → 38,0/23), que
 é exatamente o que deve crescer; a triagem do agente registrou o estouro no `TODO.md` com as
 três saídas conhecidas (subir o alvo, subir o default, aceitar o custo) — decisão do humano.
+
+**Review pré-merge (2026-08-16), medido dos dois lados:** o `/codereview` sobre o diff da
+branch achou **9 achados (2 HIGH, 2 MEDIUM, 5 LOW)** que 64 asserções e 23 mutações não viam —
+os dois HIGH da mesma família de sempre, rótulo confiado sem verificação: (1) `gate_KAIZEN`
+aceitava `melhorou`/`piorou` sem cruzar com `guard.sufficient` da própria série e sem validar o
+enum; (2) o retry genérico ("fix exactly that") podia instruir uma sessão a **apagar uma
+`aprovacao:` preenchida pelo humano**. Correções: o gate cruza guarda e enum (mutação 24,
+`KAIZEN_guard_ignored`, provada matando a suíte), e plano aprovado faz bailout **antes** de
+qualquer sessão (`auto` para a linha com rc 3; valor humano ⇒ "done, sdd run", rc 0) — 13
+asserções novas cobrem os dois. Custo do review: +1,6 s de suíte (24º mutante).
 
 **Problema medido:** o `/codereview` sobre o merge `6f2b59e` achou dois defeitos que a suíte de 19
 mutações e 63 asserções não via, e os dois são da mesma família — **guarda que lê como medida e

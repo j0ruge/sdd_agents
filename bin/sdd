@@ -1777,7 +1777,7 @@ kaizen_series() {
        latest: $latest,
        previous: $previous,
        guard: {missions_after_change: ($latest.missions // 0),
-               sufficient: (($latest.missions // 0) >= 3)},
+               sufficient: (($latest.missions // 0) >= 3)},   # guard floor: 3 distinct missions (D4); I13.4 revisits
        excluded: {non_comparable: ($noncomp | length), unrecognized: $unrec,
                   meta: ($meta | length)}}
   ' < "$file"
@@ -1789,7 +1789,9 @@ kaizen_series() {
 # The verdicts live in the KIT repo ($SDD_HOME/docs/handoffs/), readable from any target repo.
 # Every read goes through a variable or a herestring — never `printf | grep`, the pipefail trap.
 kaizen_reminder() {
-  command -v jq >/dev/null 2>&1 || return 0
+  # Same one-shot warn as every other jq consumer — a silent return here would be the
+  # "errors pass silently" exception in a file that already fixed this once.
+  autonomy_have_jq || return 0
   local file; file="$(autonomy_log_path)"
   [ -s "$file" ] || return 0
   local series n sha
@@ -1819,11 +1821,23 @@ kaizen_reminder() {
 # On `piorou` the gate PASSES (the judge did its job) and publishes GATE_KAIZEN_VERDICT so
 # cmd_kaizen can stop the line — the gate itself never kills the process, and the global survives
 # because gate_KAIZEN is CALLED, never read through $( ) (the autonomy_kit_stamp subshell lesson).
+#
+# The verdict LABEL is never trusted on its own (principle 1: gate = artifact, never a label):
+# the value must be one of the three enum tokens, and any verdict other than `indeterminado`
+# demands guard.sufficient from the SAME series the agent was told to cite — the boot prompt's
+# "the guard belongs to the runner" is enforced here, not merely requested there.
+#
+# GATE_KAIZEN_APPROVED carries a non-empty `aprovacao:` out to cmd_kaizen, which must NOT route
+# that failure through the generic fix-it retry session: the value may be a HUMAN's approval, and
+# a session told to "complete what is missing" could blank it — erasing a human decision that
+# `sdd run` may already be acting on.
 GATE_KAIZEN_VERDICT=""
 GATE_KAIZEN_VERDICT_FILE=""
 GATE_KAIZEN_PLAN_DIR=""
+GATE_KAIZEN_APPROVED=""
 gate_KAIZEN() {
   GATE_KAIZEN_VERDICT=""; GATE_KAIZEN_VERDICT_FILE=""; GATE_KAIZEN_PLAN_DIR=""
+  GATE_KAIZEN_APPROVED=""
   local series expected f found=""
   series="$(kaizen_series)"
   expected="$(jq -r '.latest.kit_sha // "none"' <<< "$series")"
@@ -1834,6 +1848,16 @@ gate_KAIZEN() {
   [ -n "$found" ] || { GATE_WHY="no verdict for kit ${expected} yet"; return 1; }
   GATE_KAIZEN_VERDICT_FILE="$found"
   local verdict; verdict="$(frontmatter "$found" verdict)"
+  case "$verdict" in
+    melhorou|piorou|indeterminado) : ;;
+    *) GATE_WHY="verdict '${verdict:-<empty>}' at $found is not one of melhorou|piorou|indeterminado"
+       return 1 ;;
+  esac
+  local sufficient; sufficient="$(jq -r '.guard.sufficient' <<< "$series")"
+  if [ "$sufficient" != "true" ] && [ "$verdict" != "indeterminado" ]; then
+    GATE_WHY="verdict '$verdict' at $found but guard.sufficient is false — the guard belongs to the runner and an insufficient series only supports 'indeterminado'"
+    return 1
+  fi
   if [ "$verdict" = "piorou" ]; then
     GATE_KAIZEN_VERDICT="piorou"
     GATE_WHY="verdict piorou at $found — the plan is dispensed, the line must stop"
@@ -1843,13 +1867,17 @@ gate_KAIZEN() {
   [ -f "$d/00-missao.md" ] \
     || { GATE_WHY="verdict at $found but 00-missao.md is missing beside it"; return 1; }
   local approval; approval="$(frontmatter "$d/00-missao.md" aprovacao)"
-  [ -z "$approval" ] || { GATE_WHY="the born plan carries 'aprovacao: $approval' — kaizen never approves itself (pre-I13.4); it must stay empty for the human"; return 1; }
+  if [ -n "$approval" ]; then
+    GATE_KAIZEN_APPROVED="$approval"
+    GATE_WHY="the born plan carries 'aprovacao: $approval' — kaizen never approves itself (pre-I13.4), and a filled value is the human's, never a session's to blank"
+    return 1
+  fi
   [ -f "$d/01-plano.md" ] \
     || { GATE_WHY="verdict at $found but 01-plano.md is missing beside it"; return 1; }
   [ -f "$d/checkpoint.md" ] \
     || { GATE_WHY="verdict at $found but checkpoint.md is missing beside it"; return 1; }
   GATE_KAIZEN_PLAN_DIR="$d"
-  GATE_WHY="verdict ${verdict:-?} + born plan with empty aprovacao at $d"
+  GATE_WHY="verdict ${verdict} + born plan with empty aprovacao at $d"
   return 0
 }
 
@@ -1866,6 +1894,23 @@ kaizen_outcome() {
   ok "gate KAIZEN: $GATE_WHY"
   dim "  Review the born plan, fill 'aprovacao:', then 'sdd run' the new mission:"
   dim "  $GATE_KAIZEN_PLAN_DIR"
+  return 0
+}
+
+# Terminal handling of a born plan whose `aprovacao:` is already filled — the one gate failure
+# that must NEVER be handed to a fix-it session, because the generic retry prompt ("complete
+# what is missing and write the artifacts") reads, to a live agent, as an instruction to blank
+# the field. Returns 3 for the loop's own forbidden self-approval, 0 when a human already
+# approved (kaizen's job ended when the plan was born; the next step is sdd run).
+kaizen_approved_outcome() {
+  if [ "$GATE_KAIZEN_APPROVED" = "auto" ]; then
+    info ""
+    bad "the born plan approved ITSELF (aprovacao: auto) — pre-I13.4 the loop never does that"
+    dim "  A human decides: empty the field to hand the plan back, or replace it with your own approval."
+    return 3
+  fi
+  ok "the born plan is already approved (aprovacao: $GATE_KAIZEN_APPROVED)"
+  dim "  Kaizen's work here is done — the next step is 'sdd run' on that mission, not another verdict."
   return 0
 }
 
@@ -1887,6 +1932,11 @@ cmd_kaizen() {
   # would judge the kit but give birth to the plan in the wrong repo.
   local kit_root
   kit_root="$( cd "$SDD_HOME" && git rev-parse --show-toplevel 2>/dev/null || true )"
+  # Two distinct refusals, named apart: an empty kit_root means the kit itself has no git
+  # history (a plain copy) — blaming the cwd would send the user hunting for the wrong problem,
+  # the same misattribution autonomy_kit_stamp already warns about for ledger rows.
+  [ -n "$kit_root" ] \
+    || die "$SDD_HOME is not a git checkout — the kaizen loop judges kit versions and needs the kit's git history"
   [ "$kit_root" = "$REPO_ROOT" ] \
     || die "sdd kaizen plans the KIT's next mission — run it in the kit repo ($SDD_HOME)"
   # A dirty tree does not block (the judge may be invoked mid-work on purpose), but the rows born
@@ -1914,6 +1964,11 @@ cmd_kaizen() {
     kaizen_outcome || out_rc=$?
     return "$out_rc"
   fi
+  # A filled `aprovacao:` bails out BEFORE any session — see kaizen_approved_outcome.
+  if [ -n "$GATE_KAIZEN_APPROVED" ]; then
+    out_rc=0; kaizen_approved_outcome || out_rc=$?
+    return "$out_rc"
+  fi
 
   local before after moved="false"
   before="$(state_fingerprint)"
@@ -1932,6 +1987,13 @@ cmd_kaizen() {
     "$( [ "$gate_rc" -eq 0 ] && echo pass || echo fail )" "$GATE_WHY"
   if [ "$gate_rc" -eq 0 ]; then
     kaizen_outcome || out_rc=$?
+    return "$out_rc"
+  fi
+
+  # Same bailout after the session: if the agent filled `aprovacao:` itself, a fix-it retry
+  # would be told to undo it — the value's owner is a human, so the line stops instead.
+  if [ -n "$GATE_KAIZEN_APPROVED" ]; then
+    out_rc=0; kaizen_approved_outcome || out_rc=$?
     return "$out_rc"
   fi
 
