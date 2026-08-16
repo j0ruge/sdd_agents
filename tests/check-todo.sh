@@ -41,6 +41,9 @@
 #        tests/check-todo.sh --check <file> (check one file, no selftest — used BY the selftest to
 #                                            exercise the real reporting path without recursing)
 #
+# Env: SDD_TODO_FILE overrides which file the no-arg form checks; SDD_TODO_CAP overrides the
+#      per-item line budget (a positive integer; anything else exits 95).
+#
 # ── Known limits, stated so nobody re-discovers them as surprises ──────────────────────────────
 # The selftest is this file's own harness, and a harness cannot fully test itself. Three one-line
 # edits make every failure green: `return "$SELFTEST_RC"` -> `return 0`, dropping the `|| exit $?`
@@ -187,11 +190,17 @@ todo_awk() {
     # very shape rule 1 enforces. Counting is not a fence model either; only a CommonMark parser
     # is, and this file proved at length that it must not be one.
     #
-    # So the header is judged by CONTENT alone: an item-shaped line carrying a `<placeholder>` is
-    # documentation, anything else item-shaped is a finding in the wrong place. No fence knowledge
-    # is needed for that, and the ticked-box rule above never needed any.
+    # So the header is judged by CONTENT alone: an item-shaped line whose TITLE POSITION opens
+    # with a `<placeholder>` is documentation, anything else item-shaped is a finding in the wrong
+    # place. No fence knowledge is needed for that, and the ticked-box rule never needed any.
+    #
+    # ⚠️ The anchor on that test is the whole rule. Loosened to "carries a `<` anywhere", it hid
+    # every header finding that merely QUOTES a placeholder — measured: 288 of 18720 header shapes
+    # rendered as a task item and went invisible, all 288 carrying a `<`, none without one. The
+    # widening was meant to accept a header example written as `- [ ] **<what>** — …`; anchoring
+    # to the title position accepts that and nothing else.
     NR <= from && /^[ \t>]*([-*+]|[0-9]+[.)])[ \t]+\[ \]/ {
-      if ($0 !~ /</ && mode == "lint")
+      if ($0 !~ /^[ \t>]*([-*+]|[0-9]+[.)])[ \t]+\[ \][ \t]*(\*\*)?</ && mode == "lint")
         print "  line " NR ": a finding above the findings section"
       next
     }
@@ -430,14 +439,74 @@ EOF
     > "$box/barecr.md"
   assert_says "$box/barecr.md" 8 'a bare CR' "a closed finding hidden behind a bare CR"
 
-  # The header example may be written in the shape rule 1 enforces, nested in an indented fence,
-  # or spelled out as a worked example. Keying the template test to a `<` at byte 7 failed all
-  # three — including the header showing the very format the sensor documents.
+  # The header example may be written in the shape rule 1 enforces, or nested in an indented
+  # fence; keying the test to a `<` at byte 7 failed both. A third spelling — a worked example
+  # with concrete values and NO placeholder — is still reported, and that is the convention rather
+  # than a gap: telling documentation from a misplaced finding without modelling fences is exactly
+  # what the placeholder is for. Stated here because the earlier version of this comment claimed
+  # three cases and the code covered two.
   { printf 'Format:\n\n```md\n'
     printf -- '- [ ] **<what>** — `file:line` — <why> — by `<agent>` (YYYY-MM-DD)\n'
     printf '```\n\n## Aberto\n\n'
     printf -- '- [ ] **Good** — `f:1` — w. — by `x` (2026-08-16)\n'; } > "$box/template2.md"
   assert_clean "$box/template2.md" 8 "a header example written in the enforced shape"
+
+  # A finding parked in the header that merely QUOTES a placeholder is still a finding. Loosening
+  # the template test to "carries a `<` anywhere" hid 288 of the 18720 header shapes that render
+  # as a task item — every one of them carrying a `<`, none without.
+  { printf -- '- [ ] **`gate_DOCS` fails when the text quotes `<preencher>`** — `bin/sdd:394` —\n'
+    printf '  the sentinel matches an innocent mention. — by `humano` (2026-08-16)\n\n## Aberto\n\n'
+    printf -- '- [ ] **Good** — `f:1` — w. — by `x` (2026-08-16)\n'; } > "$box/quotesplaceholder.md"
+  assert_says "$box/quotesplaceholder.md" 8 'above the findings section' \
+    "a header finding that quotes a placeholder"
+
+  # The `flush()` on the block-quote branch is load-bearing and was unprobed: the only quote probe
+  # put the quote BEFORE any item, where flushing is a no-op. With an item open, a quote ends it —
+  # CommonMark puts the paragraph after it outside the list — and without the flush the item
+  # swallows that paragraph and its defects go unreported, rc 0.
+  { printf '## Aberto\n\n'
+    printf -- '- [ ] **A finding with no anchor and no date**\n\n'
+    printf '> a note in the section\n\n  — by `x` (2026-08-16)\n'; } > "$box/quoteflush.md"
+  # Asserting the DATE message, not the anchor one: without the flush the indented line below the
+  # quote is absorbed as continuation and carries the date, so the anchor message fires either way
+  # and the probe would prove nothing. Only the date message discriminates.
+  assert_says "$box/quoteflush.md" 8 'no (YYYY-MM-DD)' "a block quote must end the item before it"
+
+  # The tail rule's "non-empty" half had no probe — the head's did. An empty pair must not count
+  # as naming an agent.
+  printf -- '## Aberto\n\n- [ ] **T** — `f:1` — why. — found by `` (2026-08-16)\n' \
+    > "$box/emptytail.md"
+  assert_says "$box/emptytail.md" 8 'last field names no' "an empty backtick pair in the tail"
+
+  # A blank line must NOT close an item: findings are written in multiple paragraphs, and closing
+  # on blank would turn every one of them red.
+  { printf '## Aberto\n\n'
+    printf -- '- [ ] **A multi-paragraph finding** — `f:1` — first paragraph.\n\n'
+    printf '  Second paragraph. — found by `x` (2026-08-16)\n'; } > "$box/multipara.md"
+  assert_clean "$box/multipara.md" 8 "a finding written in two paragraphs"
+
+  # And the `NF` guard on the continuation rule: a whitespace-only line must not become the item's
+  # last line, or the date rule blames a finding that carries its date correctly.
+  { printf '## Aberto\n\n'
+    printf -- '- [ ] **A finding** — `f:1` — why. — found by `x` (2026-08-16)\n'
+    printf '   \n'; } > "$box/wsline.md"
+  assert_clean "$box/wsline.md" 8 "a whitespace-only line after the last item"
+
+  # The violation COUNT in the failure report is asserted, not just the messages: setting it to a
+  # constant used to survive the whole selftest.
+  { printf '## Aberto\n\n'
+    printf -- '- [ ] **Good** — `f:1` — w. — by `x` (2026-08-16)\n'
+    printf -- '1. [ ] one\n-  [ ] two\n> - [ ] three\n'; } > "$box/countable.md"
+  # Herestring, never `| grep -q`: under `pipefail` a matching `grep -q` closes the pipe, the
+  # upstream stage dies of SIGPIPE and the pipeline returns 141 — so the probe would report a
+  # failure exactly when the assertion HOLDS. The trap this repo documents, walked into while
+  # writing the probe that asserts the count.
+  PROBES=$((PROBES + 1))
+  local countout; countout="$(bash "$SELF" --check "$box/countable.md" 2>&1)"
+  if ! grep -q '^3 shape violation(s)' <<< "$countout"; then
+    printf '  SELFTEST FAIL  the reported violation count is not 3\n' >&2
+    FAILS=$((FAILS + 1)); fail_rc 92
+  fi
 
   # `from` is the FIRST `^## Aberto`, anchored at column 0. Taking the last one would put a whole
   # section of findings back inside the header; matching the word unanchored would let a mention
@@ -747,8 +816,8 @@ EOF
   # Floor on the probe COUNT, for the same reason every other floor here exists: neutering all the
   # assert_* call sites made the summary print "0 probe(s)" and exit 0 — a selftest that ran
   # nothing reads exactly like a selftest that passed. The number moves only on purpose.
-  if [ "$((PROBES + PROBES_SKIPPED))" -lt 69 ]; then
-    printf '  SELFTEST FAIL  only %d probe(s) accounted for (%d ran, %d skipped), expected 69\n' \
+  if [ "$((PROBES + PROBES_SKIPPED))" -lt 75 ]; then
+    printf '  SELFTEST FAIL  only %d probe(s) accounted for (%d ran, %d skipped), expected 75\n' \
       "$((PROBES + PROBES_SKIPPED))" "$PROBES" "$PROBES_SKIPPED" >&2
     FAILS=$((FAILS + 1)); fail_rc 92
   fi
