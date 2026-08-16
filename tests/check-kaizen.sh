@@ -255,6 +255,47 @@ assert_eq "a born plan that approves itself is refused (rc 3)" "3" "$rc"
 assert_eq "naming the self-approval" "yes" \
   "$(grep -q "aprovacao: auto" <<< "$out" && echo yes || echo no)"
 
+echo "== dry-run projection =="
+# The gate is failing at this point (the self-approved plan above), so a real run would open a
+# session — the projection must not: no claude, no mission directory, no ledger row. The loud
+# stub turns any session into a visible ledger row; the row count is the witness.
+loud_stub
+before_rows="$(krows)"
+out="$( cd "$FIX" && "$KSDD" kaizen --dry-run 2>&1 )"; rc=$?
+assert_eq "kaizen --dry-run exits 0" "0" "$rc"
+assert_eq "and prints the KAIZEN boot prompt" "yes" \
+  "$(grep -q 'DRY RUN: phase KAIZEN' <<< "$out" && echo yes || echo no)"
+assert_eq "which cites the series command as the source of truth" "yes" \
+  "$(grep -q 'kaizen --series' <<< "$out" && echo yes || echo no)"
+assert_eq "driven by the sdd-kaizen agent" "yes" \
+  "$(grep -q 'sdd-kaizen' <<< "$out" && echo yes || echo no)"
+assert_eq "the projection creates no mission directory" "no" \
+  "$([ -d "$FIX/docs/handoffs/$(date +%Y%m%d)-kaizen" ] && echo yes || echo no)"
+assert_eq "and writes no ledger row" "$before_rows" "$(krows)"
+
+echo "== kit-repo guard =="
+# KAIZEN plans the KIT's next mission. Run from a target project it would judge the kit but plan
+# in the wrong repo — the guard refuses before load-bearing work, naming where to go.
+TGT="$OUTSIDE/target"
+mkdir -p "$TGT"
+( cd "$TGT" && git init -q -b main \
+  && git config user.email "fixture@example.com" && git config user.name "Fixture" \
+  && echo "t" > t.txt && git add -A && git commit -qm "init" \
+  && "$SDD" install >/dev/null 2>&1 )
+cat > "$TGT/.sdd/config.sh" <<'EOF'
+PROJECT_NAME="target"
+DEFAULT_BRANCH="main"
+TEST_CMD="true"
+E2E_CMD=""
+HANDOFF_DIR="docs/handoffs"
+QA_DOCS_PATH="docs/qa"
+JIRA_ENABLED=false
+EOF
+out="$( cd "$TGT" && "$SDD" kaizen 2>&1 )"; rc=$?
+assert_eq "sdd kaizen refuses to run outside the kit repo (rc 1)" "1" "$rc"
+assert_eq "and points at the kit repo" "yes" \
+  "$(grep -q 'run it in the kit repo' <<< "$out" && echo yes || echo no)"
+
 echo "== hygiene =="
 assert_eq "the fixture kit tree ends clean" "" "$(git -C "$FIX" status --porcelain)"
 assert_eq "the ledger is never tracked by the fixture kit" "0" \

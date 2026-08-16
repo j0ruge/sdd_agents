@@ -92,6 +92,7 @@ load_config() {
   : "${HANDOFF_DIR:=docs/handoffs}"; : "${QA_DOCS_PATH:=docs/qa}"; : "${TODO_FILE:=TODO.md}"
   : "${MODEL_EXEC:=opus}"; : "${MODEL_QA:=opus}"; : "${MODEL_REVIEW:=opus}"
   : "${MODEL_DOCS:=opus}"; : "${MODEL_PUBLISH:=sonnet}"; : "${MODEL_TICKET:=sonnet}"
+  : "${MODEL_KAIZEN:=opus}"
   : "${QA_MAX_ITER:=3}"; : "${REVIEW_MAX_ITER:=3}"; : "${EXEC_MAX_RETRY:=1}"
   : "${BUDGET_PER_PHASE_USD:=15}"; : "${PUBLISH_ON_REVIEW_BLOCKED:=off}"
   : "${PERMISSION_MODE:=acceptEdits}"; : "${JIRA_ENABLED:=false}"
@@ -505,6 +506,7 @@ phase_model() {
     DOCS)   printf '%s\n' "$MODEL_DOCS" ;;
     PR)     printf '%s\n' "$MODEL_PUBLISH" ;;
     TICKET) printf '%s\n' "$MODEL_TICKET" ;;
+    KAIZEN) printf '%s\n' "$MODEL_KAIZEN" ;;
     *)      printf '%s\n' "$MODEL_EXEC" ;;
   esac
 }
@@ -564,6 +566,7 @@ phase_agent() {
     DOCS)      printf '%s\n' "sdd-docs" ;;
     PR)        printf '%s\n' "sdd-publisher" ;;
     TICKET)    printf '%s\n' "sdd-publisher" ;;
+    KAIZEN)    printf '%s\n' "sdd-kaizen" ;;
     *)         printf '%s\n' "" ;;
   esac
 }
@@ -588,6 +591,7 @@ phase_task() {
     DOCS)     printf '%s\n' "sync the repo's living documentation with what this mission changed" ;;
     PR)       printf '%s\n' "push and open the PR carrying the evidence from the earlier phases" ;;
     TICKET)   printf '%s\n' "open the mission's JIRA issue, already in the active sprint, and record 10-ticket.md" ;;
+    KAIZEN)   printf '%s\n' "judge the previous kit change, triage $TODO_FILE and give birth to the kit's next mission plan" ;;
     *)        printf '%s\n' "" ;;
   esac
 }
@@ -633,6 +637,40 @@ Write EVERY artifact of this mission — handoffs, checkpoint, commit messages a
 $OUTPUT_LANG. Identifiers, config keys and status tokens (pending, done, blocked, auto, skipped)
 stay in English: they are contract, not prose.
 "
+  fi
+  # KAIZEN is the meta-loop, not a mission phase: there is no 00-missao/01-plano/checkpoint to
+  # read — the session's first act is running the deterministic series. An early return keeps the
+  # mission-phase prompt below byte for byte untouched (the RUN_ignores_output_lang mutation
+  # watches part of that; the rest is contract with every already-installed repo).
+  if [ "$step" = "KAIZEN" ]; then
+    cat <<EOF
+You are in phase KAIZEN of the kit \`$PROJECT_NAME\` — the meta-loop that judges the kit itself —
+as the agent sdd-kaizen.
+
+All of your state comes from disk. There was NO earlier conversation — nothing was "agreed"
+before. Before anything else:
+  1. run: "$SDD_HOME/bin/sdd" kaizen --series
+     That JSON is the deterministic series — your SOURCE OF TRUTH. Cite its numbers; NEVER
+     recalculate them from the ledger (recalculating is a contract violation).
+  2. read $TODO_FILE, CONTEXT.md and KAIZEN_LOG.md at the repo root
+  3. read the kit history: git log --oneline -20
+  4. read the artifact templates in $SDD_HOME/templates/
+$lang_line
+Your task in this session: $(phase_task "$step").
+
+Write the verdict to $HANDOFF_DIR/<YYYYMMDD>-<slug>/05-verdict.md — frontmatter keys \`verdict:\`
+(melhorou | piorou | indeterminado), \`kit_sha_judged:\` (the series' latest kit_sha, or "none"),
+\`date:\`. If guard.sufficient is false the verdict IS indeterminado — the guard belongs to the
+runner and you never override it. If the verdict is piorou, STOP after the verdict and its
+escalation section: no plan is born from a regression. Otherwise triage $TODO_FILE and write
+00-missao.md (with \`aprovacao:\` EMPTY — the human approves, never you), 01-plano.md and
+checkpoint.md beside the verdict, from the templates.
+
+Write the artifacts to disk and commit. The runner re-evaluates the gate from outside — it reads
+the files and the frontmatter. Your answer in text proves nothing and satisfies no gate. A
+finding that does not fit this mission goes to $TODO_FILE, never to the diff.
+EOF
+    return 0
   fi
   [ -n "$slash" ] && printf '%s\n\n' "$slash"
   cat <<EOF
@@ -1810,8 +1848,9 @@ cmd_kaizen() {
   local series_only=0
   while [ $# -gt 0 ]; do
     case "$1" in
-      --series) series_only=1 ;;
-      *)        die "unknown kaizen option: $1" ;;
+      --series)  series_only=1 ;;
+      --dry-run) DRY_RUN=1 ;;
+      *)         die "unknown kaizen option: $1" ;;
     esac
     shift
   done
@@ -1819,6 +1858,16 @@ cmd_kaizen() {
   if [ "$series_only" = "1" ]; then kaizen_series; return 0; fi
 
   load_config
+  # KAIZEN plans the KIT's next mission, never a target project's. Run from anywhere else it
+  # would judge the kit but give birth to the plan in the wrong repo.
+  local kit_root
+  kit_root="$( cd "$SDD_HOME" && git rev-parse --show-toplevel 2>/dev/null || true )"
+  [ "$kit_root" = "$REPO_ROOT" ] \
+    || die "sdd kaizen plans the KIT's next mission — run it in the kit repo ($SDD_HOME)"
+  # A dirty tree does not block (the judge may be invoked mid-work on purpose), but the rows born
+  # now carry kit_dirty:true and stay out of the comparable series forever — worth hearing once.
+  [ -z "$( git -C "$REPO_ROOT" status --porcelain 2>/dev/null )" ] \
+    || warn "the kit tree is dirty — ledger rows born now carry kit_dirty:true and stay non-comparable"
   # Pseudo-mission: logs and the boot prompt need a name, but KAIZEN derives nothing from a
   # mission directory — resolve_mission is NOT called (it requires an existing mission), and this
   # directory is never created by the runner: the agent creates the real handoff directory when
@@ -1830,6 +1879,7 @@ cmd_kaizen() {
   AUTONOMY_INVOCATION="run"
 
   step "kaizen — judging the previous kit change and planning the next kit mission"
+  [ "$DRY_RUN" = "1" ] && dim "  (dry-run: no session will be opened and nothing is written)"
 
   # Idempotent: already judged ⇒ no session is spent, only the outcome is repeated.
   local gate_rc=0 out_rc=0
@@ -1843,6 +1893,13 @@ cmd_kaizen() {
   local before after moved="false"
   before="$(state_fingerprint)"
   run_phase KAIZEN
+  # The projection stops HERE, before the fingerprint and the ledger writer — same decision, same
+  # reason, as the dry-run branch in cmd_run: the writer stays out of the projection path
+  # entirely instead of leaning on autonomy_append's own guard as the only defense.
+  if [ "$DRY_RUN" = "1" ]; then
+    dim "  (dry-run: end of the projection — no session was opened)"
+    return 0
+  fi
   after="$(state_fingerprint)"
   [ "$before" != "$after" ] && moved="true"
   gate_rc=0; gate_KAIZEN || gate_rc=$?
@@ -1889,6 +1946,9 @@ USAGE
   sdd retry <mission>        retry the current phase with a fresh session
   sdd close <mission>        post-merge: close the JIRA issue
   sdd autonomy               waste per kit version, read from the global autonomy ledger
+  sdd kaizen [--dry-run]     judge the previous kit change and give birth to the next kit
+                             mission plan (kit repo only; exit 3 = the change made it worse)
+  sdd kaizen --series        the deterministic series (JSON) the judge cites — any repo
   sdd help | sdd version
 
 FOR SCRIPTS
