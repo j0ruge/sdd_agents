@@ -1,6 +1,6 @@
 ---
 missao: 20260816-runner-sem-dividas
-atualizado: 2026-08-16 12:40
+atualizado: 2026-08-16 14:10
 ---
 
 # Checkpoint — a seção "Runner — defeitos e dívidas" do TODO.md é eliminada
@@ -16,7 +16,7 @@ atualizado: 2026-08-16 12:40
 |---|---|---|---|---|
 | I1 | Triagem por artefato: gate_DOCS obsoleto sai | `grep -c 'gate_DOCS reprova' TODO.md` → `0`, commit cita hash provado por merge-base | done | 238497f |
 | I2 | latest_matching ordena por versão | `bash tests/check-gates.sh` → verde com asserção r1/r2/r10 escolhendo r10; mutação RUN_sort_lexi no catálogo | done | 6c7b1df |
-| I3 | sdd install morre alto sem starter | `bash tests/check-preflight.sh` → verde com asserção "sem starter: rc≠0 e config ausente"; mutação RUN_install_no_guard | pending | — |
+| I3 | sdd install morre alto sem starter | `bash tests/check-preflight.sh` → verde com asserção "sem starter: rc≠0 e config ausente"; mutação RUN_install_no_guard | done | 86607f1 |
 | I4 | bad_rows sai; comentário do slice honesto | `grep -c bad_rows bin/sdd` → `0` e `grep -c 'CHARACTER slice' bin/sdd` → `0`; suíte verde | pending | — |
 | I5 | printf-grep-q sai da suíte, sensor impede volta | `bash tests/run-all.sh` → verde; ocorrência reintroduzida em tests/ → passo novo vermelho | pending | — |
 | I6 | lint cobre tests/ | `shellcheck -S warning bin/sdd tests/*.sh` → rc 0; run-all roda o passo estendido | pending | — |
@@ -41,6 +41,10 @@ atualizado: 2026-08-16 12:40
 - 2026-08-16 · I2 · ⚠️ para o I6: o SC2318 do `check-mutation.sh` **desceu para a linha 382** (era 369) porque este commit inseriu 13 linhas acima dele. Continua sendo 1× e o único achado de `shellcheck -S warning tests/*.sh` neste arquivo
 - 2026-08-16 · I2 · para o I10: `sdd preflight` (`bin/sdd:1082`) já sonda `sort -V` como parte do userland GNU — nenhuma dependência nova entrou com este conserto
 - 2026-08-16 · I1 · I3 nasce com risco de vácuo: sob `set -euo pipefail` o `sed` sem `starter.conf` já aborta, então a metade "rc≠0" pode passar HOJE. A asserção tem de pesar nas outras duas metades (mensagem nomeia o arquivo E `$CONFIG_FILE` ausente) para ser vermelha pelo motivo certo
+- 2026-08-16 · I3 · o aviso de vácuo acima estava certo, e era pior: DUAS das cinco asserções nascem verdes — o rc (≠0 pelo sed) e "a mensagem nomeia o arquivo" (o stderr do sed cita o mesmo caminho). As três que mediram o defeito: texto do ramo certo ("would be created empty"), AUSÊNCIA do prefixo `sed:` e ausência do config no disco. As duas vácuas ficaram, com comentário dizendo que são vácuas — a sabotagem provou que cada uma tem dono próprio (`die`→`warn`+segue; mensagem que para de nomear o arquivo)
+- 2026-08-16 · I3 · o dano real não é o rótulo `ok` na 1ª rodada (o `set -e` mata antes), é o `.sdd/config.sh` de 0 byte que sobra: medido, o `sdd install` SEGUINTE imprime `ok … already exists (preserved)` com rc 0 e o alvo segue sem `TEST_CMD`. O texto do item no TODO.md descrevia a rodada errada
+- 2026-08-16 · I3 · ⚠️ achado que quase virou `KNOWN_GAPS`: a mutação nova rodou e NÃO foi capturada, porque `tests/run-all.sh:60` pulava o `check-preflight.sh` dentro do mutante ("não é gate, nunca pontua"). A justificativa venceu no instante em que o arquivo ganhou asserção de comportamento do runner. Guarda removida (custo medido: 0,14 s/run; suíte 32,2 s → 34,4 s); a 2ª metade da justificativa ("lê agents/") nunca foi verdade — o laço usa `[ -e ] || continue`. O caso geral foi para o TODO.md
+- 2026-08-16 · I3 · para o I6: o SC2318 do `check-mutation.sh` desceu de 382 para **394** (este commit inseriu 12 linhas acima dele). Continua 1× e o único achado de `shellcheck -S warning tests/*.sh`. `check-preflight.sh` e `run-all.sh`, ambos tocados aqui, saem limpos no lint
 
 ## Incrementos de fix (QA)
 
