@@ -1,6 +1,6 @@
 ---
 missao: 20260816-kit-como-alvo
-atualizado: 2026-08-16 18:05
+atualizado: 2026-08-16 16:38
 ---
 
 # Checkpoint — quando o kit é o próprio alvo, quatro instrumentos param de afirmar o que nunca mediram
@@ -16,7 +16,7 @@ atualizado: 2026-08-16 18:05
 |---|---|---|---|---|
 | I1 | entry point com guarda + sensor diferencial | `bash tests/check-entrypoint.sh >/dev/null 2>&1; echo $?` → `0` | done | bb373b5 |
 | I2 | os três leitores do ledger filtram por repo | `o=$(bash tests/check-kaizen.sh 2>&1); grep -c 'a row from another repo never enters the series' <<< "$o"` → `1` | done | d99a7fc |
-| I3 | preflight compara conteúdo do agente, não presença | `o=$(bash tests/check-preflight.sh 2>&1); grep -c 'a drifted agent copy fails the preflight' <<< "$o"` → `1` | pending | — |
+| I3 | preflight compara conteúdo do agente, não presença | `o=$(bash tests/check-preflight.sh 2>&1); grep -c 'a drifted agent copy fails the preflight' <<< "$o"` → `1` | done | ab64d2e |
 | I4 | aviso de branch base alcança run e kaizen | `o=$(bash tests/check-gates.sh 2>&1); grep -c 'the base branch warning reaches sdd run' <<< "$o"` → `1` | pending | — |
 
 ## Notas de execução
@@ -116,6 +116,29 @@ atualizado: 2026-08-16 18:05
 - 2026-08-16 · `I2` · Nenhum arquivo novo em `tests/` — os dois pisos que contam arquivos
   (`LINT_FLOOR` no `run-all.sh`, piso de superfície do `check-pipefail.sh`) ficam como estão.
   Catálogo de mutação: 41 → **42**, 0 known gap. `sdd health` verde.
+
+- 2026-08-16 · `I3` · **A asserção que o plano previa era VÁCUA, e por isso não foi escrita.** O
+  `01-plano.md` pedia "exija o texto certo **e a ausência** de `kit agent(s) checked`". Medido: essa
+  linha só sai com `fails -eq 0` (`bin/sdd:1332`) e o fixture é offline — o probe do `claude` e o
+  `gh auth status` já reprovam —, então ela **não aparece em run nenhum**, com o defeito inteiro no
+  lugar. A ausência dela passaria verde sobre o `[ -f ]`. Trocada por um **diferencial de contagem**:
+  a mesma árvore lida duas vezes, um byte de diferença, `N check(s) failed` exatamente +1. Desvio
+  declarado do plano, na direção mais forte. O ramo de sucesso segue sem sensor — está no `TODO.md`.
+- 2026-08-16 · `I3` · **`sandbox()` do `check-mutation.sh` passa a copiar `agents/`** — sem isso o
+  fixture do `check-preflight.sh` instala zero agentes, não há cópia para divergir, e as asserções
+  passariam **vazias em todos os 43 mutantes** enquanto o control seguia verde. ⚠️ O comentário do
+  `tests/run-all.sh:141` afirmava o oposto ("o sandbox não copiar `agents/` não custa nada"): era
+  verdade e deixou de ser no mesmo commit. Se um sensor novo ler um caminho do kit, confira o
+  `sandbox()` antes de confiar no verde do mutante.
+- 2026-08-16 · `I3` · Sabotagem adversarial: **16 degradações**, e cada uma das **sete** asserções de
+  comportamento morre sozinha em pelo menos uma — mensagem sem a palavra `stale`; `warn` que não
+  conta; os dois ramos trocando de texto; `else warn "stale"` nas cópias que casam. As duas
+  restantes são **sanidade declarada como tal** no próprio arquivo (mesma rubrica de "preflight got
+  as far as the tool checks", que também não é exclusiva), não asserções sem probe.
+- 2026-08-16 · `I3` · Catálogo 42 → **43**, 100%, 0 known gap; `sdd health` verde. Nenhum arquivo
+  novo em `tests/`, então `LINT_FLOOR` e o piso de superfície do `check-pipefail.sh` ficam como
+  estão. `bin/sdd` foi de 2449 para **2462** linhas: o aviso de branch base do I4 está agora em
+  **`:1338`** (era `:1325`). `grep` pelo texto antes de editar por número.
 
 ## Incrementos de fix (QA)
 
