@@ -18,6 +18,7 @@ atualizado: 2026-08-16 17:40
 | I2 | os três leitores do ledger filtram por repo | `o=$(bash tests/check-kaizen.sh 2>&1); grep -c 'a row from another repo never enters the series' <<< "$o"` → `1` | done | d99a7fc |
 | I3 | preflight compara conteúdo do agente, não presença | `o=$(bash tests/check-preflight.sh 2>&1); grep -c 'a drifted agent copy fails the preflight' <<< "$o"` → `1` | done | ab64d2e |
 | I4 | aviso de branch base alcança run e kaizen | `o=$(bash tests/check-gates.sh 2>&1); grep -c 'the base branch warning reaches sdd run' <<< "$o"` → `1` | done | daa8687 |
+| F1 | os Checks de I2/I3/I4 param de ler asserção vermelha como verde (âncora `^  ok    `), e o template + o `sdd-planner` aprendem a regra | `l=$(mktemp); bash tests/run-all.sh >"$l" 2>&1; rc=$?; a=$(grep -c '^  ok    no checkpoint Check reads a red assertion as green' "$l"); printf '%s%s\n' "$rc" "$a"` → `01` | pending | — |
 
 ## Notas de execução
 
@@ -160,6 +161,31 @@ atualizado: 2026-08-16 17:40
   `check-pipefail.sh` ficam como estão. Catálogo 43 → **44**, 100%, 0 known gap; `sdd health`
   verde. Nenhum doc afirmava que o aviso era exclusivo do preflight (`grep -rn 'base branch'
   docs/ README.md agents/`), então não houve contrato a atualizar no mesmo commit.
+
+- 2026-08-16 · `QA` · **`F1` nasce de `BUG-qa-01`: o Check desta tabela é o quinto instrumento da
+  família que a missão foi caçar.** O EXEC já suspeitava (nota do I2) e registrou a direção no
+  `TODO.md`; a fase QA **mediu**. Numa cópia sandbox, com o filtro do I2 sabotado
+  (`ledger_row_is_local` devolvendo `true`), o Check de I2 devolveu **`1` com a asserção
+  imprimindo `FAIL`** — o mesmo `1` que devolve com ela imprimindo `ok`. Causa: `pass()` escreve
+  `  ok    <texto>` na **stdout** e `fail()` escreve `  FAIL  <texto>` na **stderr** com o mesmo
+  `<texto>`, e o Check captura `2>&1` e grepa o texto solto. A `Métrica` do `00-missao.md` diz
+  "a asserção aparece **e passa**"; o comando só sabe dizer "aparece". Conserto: ancorar em
+  `^  ok    `. Medido: `grep -c 'exemplo'` → `2` contra `grep -c '^  ok    exemplo'` → `1`.
+- 2026-08-16 · `QA` · **O Check de `F1` usa a própria forma que ele exige** — ancorado em
+  `^  ok    ` — e por isso não pode mentir sobre si mesmo. Ele lê **duas** coisas: o `rc` do
+  `tests/run-all.sh` (regressão verde **e** o re-walk das quatro jornadas, porque os sensores das
+  quatro moram na suíte) e a asserção nova tendo rodado E passado. Hoje devolve `00`; com o
+  conserto, `01`. ⚠️ `grep -c 'suite green'` **não** serve de testemunha do verde: a string aparece
+  **3×** na saída da suíte (medido). Quem responde é o `rc`.
+- 2026-08-16 · `QA` · ⚠️ **Sensor novo commitado vermelho trancaria a própria fase QA.** `gate_QA`
+  (`bin/sdd`) roda `TEST_CMD` como âncora final, então o par sensor-vermelho + conserto tem de
+  nascer no **mesmo** incremento, em TDD, pela mão do executor — foi por isso que a QA não escreveu
+  o sensor por conta própria. O laço funciona porque `current_phase` devolve a primeira fase com
+  gate insatisfeito e `EXEC` vem antes de `QA`: a linha `F1` `pending` reprova `gate_EXEC` e a bola
+  volta para o `sdd-executor` sozinha.
+- 2026-08-16 · `QA` · **O parser aceita `F1`:** `checkpoint_rows` (`bin/sdd`) descarta só `ID`,
+  linha de traços e célula vazia — o prefixo do ID não é lido em lugar nenhum. E a célula do Check
+  de `F1` **não tem pipe** (conferido), pela regra de 2026-08-16 15:08 acima.
 
 ## Incrementos de fix (QA)
 
