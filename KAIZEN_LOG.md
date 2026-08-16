@@ -19,7 +19,7 @@ cita.
 
 | | Antes (`fc304bf`) | Depois (`3030262`) |
 |---|---|---|
-| Linhas / bytes do `TODO.md` | 861 / 75.331 | **361 / 26.569** (−58% / −65%) |
+| Linhas / bytes do `TODO.md` | 861 / 75.331 | **362 / 26.566** (−58% / −65%) |
 | Itens fechados parados na seção Aberto | 14 | **0** |
 | Convenções de fechamento | 2 (uma não documentada) | **1** |
 | Mediana / máximo de linhas por item | 10 / 31 | **6 / 8** |
@@ -47,7 +47,10 @@ gatilho, um sweep manual seria pico isolado; com ele, o arquivo encolhe a cada v
 **Padronizado em** (confirmado abrindo cada arquivo): `CLAUDE.md` § princípio 5 (teto de ~6
 linhas, fechado é apagado, `- [x]` proibido), `agents/sdd-kaizen.md` § 5 e o espelho
 `.claude/agents/sdd-kaizen.md`, `CONTEXT.md` (glossário "Triagem kaizen"), `.claude/napkin.md`
-(item 1) e o cabeçalho do próprio `TODO.md`.
+(itens 1 e 5), o cabeçalho do próprio `TODO.md` e o `CLAUDE.md` § "TDD aqui dentro" — onde a lista
+de sensores voltou a bater com o disco (5 listados, 9 reais) e a regra do auto-teste passou de
+"sensor que se auto-exclui" para "sensor que o catálogo de mutação não alcança", que é a
+formulação que cobre os dois casos de hoje.
 
 **O que o sensor ensinou sobre si mesmo.** Duas decisões saíram diferentes do plano, as duas por
 medição e não por gosto. A primeira: todas as regras do `check-todo.sh` são **estruturais**
@@ -59,7 +62,7 @@ o plano previa. A segunda: o `check-lang` reprovou a primeira versão deste sens
 citações em português nos meus próprios comentários** — o sensor de idioma pegou o autor do
 sensor de forma, que é o laço funcionando.
 
-⚠️ **O alvo de 300 linhas não foi atingido: são 361.** As sete seções `###` custaram ~46 linhas e
+⚠️ **O alvo de 300 linhas não foi atingido: são 362.** As sete seções `###` custaram ~46 linhas e
 ficaram porque agrupar por natureza (sensores, contrato, runner, saída humana, comentário, custo,
 YAGNI) é o que torna 45 itens navegáveis. Registrado como número, não como sucesso.
 
