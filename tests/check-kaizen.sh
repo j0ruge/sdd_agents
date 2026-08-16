@@ -104,6 +104,77 @@ assert_eq "nor its missions" "1" "$(field '.latest.missions')"
 assert_eq "every excluded row is counted, by reason" \
   '{"non_comparable":2,"unrecognized":1,"meta":1}' "$(jq -c '.excluded' <<< "$SERIES_OUT")"
 
+# --- a degradation is an escalation the series has to SEE --------------------
+# `PUBLISH_ON_REVIEW_BLOCKED=draft` makes the runner give up on reviewing and publish a draft PR
+# by itself. It writes `event: "degraded"`, and the filter above only ever admitted `session` and
+# `blocked`: a row it does not admit is counted in `excluded.unrecognized` and disappears from
+# every number the judge reads — one blind spot traded for another. So the assertion that matters
+# is not "the row exists" (check-autonomy.sh proves that) but "the series did not throw it away".
+#
+# Its own tiny ledger instead of extra rows in the fixture above: the degradation is a COHERENT
+# two-row story (a REVIEW session whose gate failed, then the runner degrading), and splicing it
+# into a fixture built for the label rubric would have meant either an escalation with no session
+# before it or a second reading of the m1/REVIEW group that nobody can tell apart.
+echo "== series: a degradation is seen, and counted as an escalation =="
+mkdir -p "$OUTSIDE/degraded"
+cat > "$OUTSIDE/degraded/autonomy-log.jsonl" <<'EOF'
+{"v":1,"ts":"2026-08-16T10:00:00-03:00","event":"session","run_id":"r1","invocation":"run","kit_sha":"bbb2222","kit_dirty":false,"project":"p1","repo":"/p1","mission":"m9","phase":"REVIEW","step":"REVIEW","agent":"sdd-reviewer","model":"opus","attempt":1,"auto_retry":false,"session":"s1","rc":0,"dur_s":10,"cost_usd":2.0,"moved":true,"gate":"fail","gate_why":"Security = B"}
+{"v":1,"ts":"2026-08-16T10:01:00-03:00","event":"degraded","kind":"review-to-draft","run_id":"r1","invocation":"run","kit_sha":"bbb2222","kit_dirty":false,"project":"p1","repo":"/p1","mission":"m9","phase":"REVIEW","gate_why":"Security = B"}
+EOF
+SERIES_OUT="$( cd "$OUTSIDE/anywhere" && SDD_STATE_DIR="$OUTSIDE/degraded" "$SDD" kaizen --series 2>/dev/null )"
+assert_eq "the degradation is NOT thrown away as unrecognized" "0" \
+  "$(field '.excluded.unrecognized')"
+assert_eq "it is counted as an escalation, by kind" '{"review-to-draft":1}' \
+  "$(jq -c '.latest.escalations' <<< "$SERIES_OUT")"
+# The escalation map lives inside the kit_sha slice, so the axis comes for free — but only if the
+# row carries the stamp AND survives the filter. Reading it back proves both.
+assert_eq "on the axis of the kit version that produced it" "bbb2222" "$(field '.latest.kit_sha')"
+# A degradation spends no session. Counting it as one would deflate moved_rate — the headline
+# number — by inventing a session that never ran.
+assert_eq "it is not counted as a session" "1" "$(field '.latest.sessions')"
+assert_eq "so moved_rate still speaks only of real sessions" "1" "$(field '.latest.moved_rate')"
+# Inside the degraded run itself the failing REVIEW session alone already reads `refez`. Kept,
+# because it is true — but it is NOT evidence that the rubric may stay blind to `degraded`, and
+# it was written as if it were. It is green with or without the fix, so what it measures is this
+# fixture's single run, not phase_label. The block below is the one that measures the rubric.
+assert_eq "inside the degraded run the failing session alone already reads refez" "refez" \
+  "$(field '.latest.detail[] | select(.phase == "REVIEW") | .label')"
+
+# --- and the label still says so after a later run passes --------------------
+# The rubric groups by (mission, phase) over the WHOLE kit_sha slice, never per run. So "the
+# failing session already says refez" holds only INSIDE the degraded run: come back with
+# `sdd run`, let REVIEW pass this time, and `last | .gate` is "pass", no `blocked` row was ever
+# written to this group, and the one mission where the runner lowered its own bar reads `ok`.
+# `blocked` sits in the rubric for exactly that reason — an escalation outlives the session that
+# provoked it — and `degraded` is an escalation. Leaving it out had the two escalation events
+# answering the same question differently, which is this mission's own defect one field over.
+echo "== series: a degradation still colours the label after a later run passes =="
+mkdir -p "$OUTSIDE/degthenok" "$OUTSIDE/degasblocked"
+cat > "$OUTSIDE/degthenok/autonomy-log.jsonl" <<'EOF'
+{"v":1,"ts":"2026-08-16T10:00:00-03:00","event":"session","run_id":"r1","invocation":"run","kit_sha":"ccc3333","kit_dirty":false,"project":"p1","repo":"/p1","mission":"m9","phase":"REVIEW","step":"REVIEW","agent":"sdd-reviewer","model":"opus","attempt":1,"auto_retry":false,"session":"s1","rc":0,"dur_s":10,"cost_usd":2.0,"moved":true,"gate":"fail","gate_why":"Security = B"}
+{"v":1,"ts":"2026-08-16T10:01:00-03:00","event":"degraded","kind":"review-to-draft","run_id":"r1","invocation":"run","kit_sha":"ccc3333","kit_dirty":false,"project":"p1","repo":"/p1","mission":"m9","phase":"REVIEW","gate_why":"Security = B"}
+{"v":1,"ts":"2026-08-16T10:02:00-03:00","event":"session","run_id":"r1","invocation":"run","kit_sha":"ccc3333","kit_dirty":false,"project":"p1","repo":"/p1","mission":"m9","phase":"PR","step":"PR","agent":"sdd-publisher","model":"sonnet","attempt":1,"auto_retry":false,"session":"s2","rc":0,"dur_s":10,"cost_usd":0.5,"moved":true,"gate":"pass","gate_why":"draft PR open"}
+{"v":1,"ts":"2026-08-16T11:00:00-03:00","event":"session","run_id":"r2","invocation":"run","kit_sha":"ccc3333","kit_dirty":false,"project":"p1","repo":"/p1","mission":"m9","phase":"REVIEW","step":"REVIEW","agent":"sdd-reviewer","model":"opus","attempt":1,"auto_retry":false,"session":"s3","rc":0,"dur_s":10,"cost_usd":2.0,"moved":true,"gate":"pass","gate_why":"every criterion A"}
+EOF
+SERIES_OUT="$( cd "$OUTSIDE/anywhere" && SDD_STATE_DIR="$OUTSIDE/degthenok" "$SDD" kaizen --series 2>/dev/null )"
+assert_eq "the REVIEW group of a mission that degraded never reads ok" "refez" \
+  "$(field '.latest.detail[] | select(.phase == "REVIEW") | .label')"
+# The histogram is what the judge is told to cite (agents/sdd-kaizen.md), so it is asserted apart
+# from the per-group label: a rubric that reads refez into a histogram bucket nobody counts would
+# be the same lie one layer out.
+assert_eq "and the histogram carries it, so no verdict can cite ok for a run that degraded" "1" \
+  "$(field '.latest.labels.refez')"
+
+# THE assertion, stated as a differential and therefore impossible to satisfy by fixture: the same
+# four rows with `blocked` in place of `degraded` have ALWAYS read refez. If the two escalation
+# events ever answer the label question differently again, this fails — whichever of them moved.
+sed 's|"event":"degraded","kind":"review-to-draft"|"event":"blocked","kind":"budget-exhausted"|' \
+  "$OUTSIDE/degthenok/autonomy-log.jsonl" > "$OUTSIDE/degasblocked/autonomy-log.jsonl"
+blocked_labels="$( cd "$OUTSIDE/anywhere" && SDD_STATE_DIR="$OUTSIDE/degasblocked" \
+  "$SDD" kaizen --series 2>/dev/null | jq -c '.latest.labels' )"
+assert_eq "an escalation is an escalation: degraded labels exactly as blocked does" \
+  "$blocked_labels" "$(jq -c '.latest.labels' <<< "$SERIES_OUT")"
+
 # No ledger at all: the judge's first real run happens on an empty history, and the series must
 # say so in the same shape — valid JSON, latest null, insufficient — instead of dying or zeroing.
 SERIES_OUT="$( cd "$OUTSIDE/anywhere" && SDD_STATE_DIR="$OUTSIDE/empty" "$SDD" kaizen --series 2>/dev/null )"; rc=$?

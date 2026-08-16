@@ -69,6 +69,14 @@ One nuance that is yours alone: an `increment-blocked` escalation counts as `ref
 label, but a deliberate Jidoka that stopped the line early can be the kit working WELL. When the
 numbers say `refez` and the story says "good stop", write that in the verdict.
 
+Its mirror image is `review-to-draft`, the only `event:"degraded"` kind today: the review ran out
+of rounds and, with `PUBLISH_ON_REVIEW_BLOCKED=draft`, the runner **lowered its own bar and
+carried on** instead of stopping. It labels `refez` like any escalation, and the ledger carries at
+most one row per run — so `review-to-draft: 3` is three runs, never one run that degraded three
+times. Never let it slide past as one more number in the tally: a kit version that shipped by
+lowering its own bar is the most interesting thing the series can tell you, and the verdict has to
+say so. The row's full shape is in `docs/pipeline.md` § "The autonomy ledger".
+
 ## 4. `piorou` stops the line
 
 If the previous change made autonomy worse, write the verdict plus an **escalation section**:

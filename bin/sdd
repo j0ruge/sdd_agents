@@ -805,22 +805,30 @@ autonomy_have_jq() {
 
 # An escalation spends no session, so the session fields are ABSENT rather than zeroed. `kind` is
 # an enum and not prose because the judge must not parse sentences: they get rewritten, and the
-# three escalations mean different things — a deliberate Jidoka is not the same as burnt budget.
-autonomy_blocked_row() {   # autonomy_blocked_row <kind> <phase> <gate_why>
+# escalations mean different things — a deliberate Jidoka is not the same as burnt budget.
+#
+# `event` is a PARAMETER because there are two of them and they state different facts:
+#   blocked  — the line stopped; the runner returns 3 and a human has to act.
+#   degraded — the runner lowered its OWN bar and carried on (PUBLISH_ON_REVIEW_BLOCKED=draft).
+# Reusing `blocked` for the second would have been cheaper — it inherits the kit_sha axis and the
+# aggregation with no jq to touch — but it would record "stopped" for a run that went on, and the
+# ledger exists to record fact. Everything ELSE about the two rows is one decision (the kit stamp,
+# the character slice, the absent session fields), so it lives here once and cannot drift apart.
+autonomy_escalation_row() {   # autonomy_escalation_row <event> <kind> <phase> <gate_why>
   autonomy_have_jq || return 0
   # Called, never substituted: `$(autonomy_kit_stamp)` would reset its one-shot warning flag.
   autonomy_kit_stamp; local stamp="$AUTONOMY_KIT_STAMP"
-  # "${3:0:200}" is a CHARACTER slice, not a byte slice: gate reasons are full of em-dashes and
+  # "${4:0:200}" is a CHARACTER slice, not a byte slice: gate reasons are full of em-dashes and
   # other multi-byte UTF-8, and `head -c 200` can cut a codepoint in half, which some jq builds
   # then reject outright — an empty --arg, dropped silently by autonomy_append's emptiness guard.
   # A record that lies is worse than a gap; the character slice never produces one.
   autonomy_append "$( jq -cn \
-    --arg ts "$(date -Iseconds)" --arg kind "$1" --arg phase "$2" \
-    --arg why "${3:0:200}" \
+    --arg ts "$(date -Iseconds)" --arg event "$1" --arg kind "$2" --arg phase "$3" \
+    --arg why "${4:0:200}" \
     --arg run_id "$AUTONOMY_RUN_ID" --arg invocation "$AUTONOMY_INVOCATION" \
     --arg sha "${stamp%%|*}" --arg dirty "${stamp#*|}" \
     --arg project "$PROJECT_NAME" --arg repo "$REPO_ROOT" --arg mission "$MISSION" \
-    '{v: 1, ts: $ts, event: "blocked", kind: $kind,
+    '{v: 1, ts: $ts, event: $event, kind: $kind,
       run_id: $run_id, invocation: $invocation,
       kit_sha: (if $sha == "" then null else $sha end),
       kit_dirty: (if $dirty == "" then null else ($dirty == "true") end),
@@ -828,13 +836,18 @@ autonomy_blocked_row() {   # autonomy_blocked_row <kind> <phase> <gate_why>
       gate_why: $why}' )"
 }
 
+# Called, never substituted, for the same reason the body above says: the kit stamp's one-shot
+# warning flag is a global, and a subshell would reset it once per row.
+autonomy_blocked_row()  { autonomy_escalation_row "blocked"  "$1" "$2" "$3"; }
+autonomy_degraded_row() { autonomy_escalation_row "degraded" "$1" "$2" "$3"; }
+
 # One row per session, written after the gate has been evaluated — the row carries the gate
 # result, so it cannot be born before it.
 autonomy_session_row() {  # <phase> <attempt> <auto_retry> <moved> <gate> <gate_why>
   autonomy_have_jq || return 0
   # Called, never substituted: `$(autonomy_kit_stamp)` would reset its one-shot warning flag.
   autonomy_kit_stamp; local stamp="$AUTONOMY_KIT_STAMP"
-  # "${6:0:200}" is a CHARACTER slice, same reason as autonomy_blocked_row's "${3:0:200}" above.
+  # "${6:0:200}" is a CHARACTER slice, same reason as autonomy_escalation_row's "${4:0:200}" above.
   autonomy_append "$( jq -cn \
     --arg ts "$(date -Iseconds)" --arg phase "$1" --arg attempt "$2" \
     --arg auto_retry "$3" --arg moved "$4" --arg gate "$5" \
@@ -1081,7 +1094,9 @@ cmd_preflight() {
         --model haiku --permission-mode "$PERMISSION_MODE" --output-format json \
         --setting-sources "user,project,local" --allowedTools "$ALLOWED_TOOLS" \
         --max-budget-usd 1 2>/dev/null | jq -r '.result // ""' 2>/dev/null || true )"
-    if printf '%s' "$probe" | grep -q 'sdd-preflight-ok'; then
+    # Herestring for the same reason as the Jidoka in cmd_run: `printf | grep -q` returns 141
+    # under `pipefail` when the grep MATCHES, so the success branch is the one that loses the race.
+    if grep -q 'sdd-preflight-ok' <<< "$probe"; then
       ok "headless session executes commands (OAuth + permission)"
     elif [ -z "$probe" ]; then
       _fail "claude -p did not answer — expired session? run 'claude login'"
@@ -1455,6 +1470,11 @@ cmd_run() {
 
   local -A attempts=()
   local phases_run=0 phase before after budget
+  # One-shot per `sdd run`, in the spirit of AUTONOMY_SHA_WARNED above: the runner lowers its own
+  # bar ONCE, and both trails have to say so once. A plain local of cmd_run is enough here — the
+  # degradation branch runs in this very shell, never through `$( )`, so the CLAUDE.md lesson that
+  # killed the kit stamp's guard (a global assigned inside a subshell dies with it) does not bite.
+  local degraded_logged=0
   local dry_next=""   # dry-run projection cursor (distinct from --phase, which prints just one)
 
   while :; do
@@ -1487,14 +1507,17 @@ cmd_run() {
     # Real Jidoka: a `blocked` increment escalates ON THE SPOT. Without this the runner read the
     # checkpoint change as "progress" and rebooted EXEC until the phase budget blew — three
     # sessions against the same wall. Found by the fixture mission 20260814-dry-run-completo.
-    # The status goes into a variable BEFORE the `grep`: under `pipefail`, `grep -q` closes the
-    # pipe as soon as it matches, the upstream stage dies of SIGPIPE and the whole pipeline
-    # returns 141 — the `if` would read "no blocked" while blocked EXISTS. With a small
-    # checkpoint the race almost never happens, but "almost never" is not a guarantee you hand a
-    # Jidoka: the false negative here is precisely the runner hitting the wall it already knew
-    # was there.
+    # HERESTRING, not a pipe. Under `pipefail`, `grep -q` closes the pipe as soon as it matches,
+    # the upstream `printf` dies of SIGPIPE and the whole pipeline returns 141 — the `if` reads
+    # "no blocked" while blocked EXISTS. Putting the status in a variable first was NOT enough:
+    # the pipe was still there, and the race is decided by the size of the text, not by where it
+    # came from. Measured on a fixture checkpoint: the miss starts around 5000 rows, and the
+    # runner then spends the whole phase budget against the wall it already knew was there —
+    # exactly the false negative a Jidoka must never have. tests/check-gates.sh pins it with a
+    # 20000-row checkpoint; the RUN_jidoka_pipefail mutation puts the pipe back and the suite
+    # has to die.
     local ckstatus; ckstatus="$(checkpoint_rows | cut -f4)"
-    if [ "$phase" = "EXEC" ] && printf '%s\n' "$ckstatus" | grep -qx "blocked"; then
+    if [ "$phase" = "EXEC" ] && grep -qx "blocked" <<< "$ckstatus"; then
       gate_EXEC || true
       info ""
       bad "BLOCKED in EXEC — $GATE_WHY"
@@ -1517,7 +1540,29 @@ cmd_run() {
       bad "  current reason: $GATE_WHY"
       dim "  'sdd status $MISSION' shows the full state; 'sdd why $MISSION $phase' the reason."
       if [ "$phase" = "REVIEW" ] && [ "$PUBLISH_ON_REVIEW_BLOCKED" = "draft" ]; then
+        # The warn stays OUTSIDE the guard below: on this lap the runner really is jumping to PR,
+        # and saying so is honest terminal output, not a record. It is also what check-autonomy.sh
+        # counts to prove its fixture is in the repeating regime — a witness that survives any
+        # sabotage of the writers is the only kind worth having.
         warn "PUBLISH_ON_REVIEW_BLOCKED=draft — moving on to PR in draft mode"
+        # The two writers come BEFORE the `continue`, and that order is the whole I2 increment. The
+        # jump used to be here, above both, so the single most interesting autonomy event a
+        # mission can produce — the runner lowering its own bar, alone — left no trace anywhere:
+        # the journal showed a PR phase after some failing REVIEW sessions, and the series showed
+        # the same, with nothing saying why. `degraded`, not `blocked`: the run went ON.
+        #
+        # ONCE PER RUN (F1). `force_phase="PR"` does not end the loop: PR runs, its gate fails, and
+        # `current_phase` hands REVIEW straight back with the budget still blown — so the branch is
+        # re-entered every lap and used to write a row every lap. Measured on the QA walk: one
+        # degradation, THREE rows, in both readers, against the "exactly one" of the mission's
+        # metric 3. Two instruments agreeing on a wrong number is worse than one being wrong, and
+        # the runner did NOT lower its bar three times: it lowered it once and then spun.
+        # The spinning itself is a separate defect — the loop half — and it lives in TODO.md.
+        if [ "$degraded_logged" = "0" ]; then
+          degraded_logged=1
+          pipeline_log_line "$(date -Iseconds)  DEGRADED  $phase  PUBLISH_ON_REVIEW_BLOCKED=draft, PR in draft mode — $GATE_WHY"
+          autonomy_degraded_row "review-to-draft" "$phase" "$GATE_WHY"
+        fi
         force_phase="PR"; continue
       fi
       pipeline_log_line "$(date -Iseconds)  BLOCKED  $phase  $GATE_WHY"
@@ -1663,10 +1708,23 @@ cmd_autonomy() {
   step "sdd autonomy — $file · $total row(s)"
 
   # Every row lands in exactly ONE of four buckets, and the buckets are exhaustive: comparable
-  # session, non-comparable session, escalation, or unrecognized (event missing, or a value that
-  # is neither "session" nor "blocked" — a future third event type, a hand edit, a partial write).
+  # session, non-comparable row, escalation on the axis, or unrecognized (event missing, or a value
+  # none of session/blocked/degraded — a future event type, a hand edit, a partial write). Every
+  # event the runner itself writes has to be in that list: a row the runner produced and its own
+  # reader files as "unrecognized" is the blind spot merely moved from the judge to the human.
   # A row that fit none of them used to vanish with no trace; tests/check-autonomy.sh now asserts
   # the four counts sum to the header total, so a filter that drops a row again fails loudly.
+  #
+  # ESCALATIONS SIT ON THE kit_sha AXIS, exactly as `kaizen_series` has always sliced them
+  # (see the `$ok | map(select(.kit_sha == $shas[-1])) | group_summary` there). This reader used to
+  # `group_by(.kind)` over the WHOLE file, with no version axis and no comparability filter: the
+  # human's table and the judge's series then printed different escalation counts for the same
+  # period with nothing explaining the divergence, and kit version is precisely the axis the ledger
+  # exists to measure. Two instruments over one file that disagree corrode the trust the kaizen
+  # loop runs on, so `sdd autonomy` bends to the series and not the other way round — the series
+  # was already right, and "fixing" both sides would have re-created the divergence it removes.
+  # A dirty kit or a null sha cannot be attributed to any version, so those escalations join the
+  # non-comparable count instead of being summed into a version that did not produce them.
   #
   # A row whose JSON is syntactically valid but the wrong SHAPE (a bare array, say) cannot be
   # classified at all — indexing it with .event is a jq runtime error, not a false comparison — so
@@ -1677,9 +1735,13 @@ cmd_autonomy() {
     def comparable: .event == "session" and .kit_dirty == false
                     and (.kit_sha != null) and (has("moved"));
     def is_session: .event == "session";
-    def is_escalation: .event == "blocked";
+    def is_escalation: .event == "blocked" or .event == "degraded";
     def is_unrecognized: (is_session or is_escalation) | not;
-    (map(select(is_session and (comparable | not))) | length) as $skipped
+    # The series calls a row non-comparable on exactly this predicate. Same test, same words, so
+    # the two readers cannot drift apart by one of them being "improved" alone.
+    def on_axis: .kit_dirty != true and .kit_sha != null;
+    (map(select((is_session and (comparable | not))
+                or (is_escalation and (on_axis | not)))) | length) as $skipped
     | (map(select(is_session and comparable)) | group_by(.kit_sha)) as $groups
     | (map(select(is_unrecognized)) | length) as $stray
     | (if ($groups | length) == 0 then
@@ -1694,10 +1756,11 @@ cmd_autonomy() {
             | "  \($sha)  \($n) session(s) · \($stalled) stalled · \(($stalled * 100 / $n) | floor)% waste · \($missions) mission(s) · US$ \($cost | . * 100 | round / 100)"
           ) | join("\n"))
       end)
-    , (map(select(is_escalation)) | group_by(.kind)
-       | map("  \(.[0].kind): \(length)") | join("\n") | select(length > 0) | "\nescalations\n" + .)
+    , (map(select(is_escalation and on_axis)) | group_by(.kit_sha, .kind)
+       | map("  \(.[0].kit_sha)  \(.[0].kind): \(length)") | join("\n")
+       | select(length > 0) | "\nescalations\n" + .)
     , (if $skipped > 0 then "\n  (\($skipped) non-comparable row(s) excluded: dirty kit, no kit_sha, or no moved field)" else "" end)
-    , (if $stray > 0 then "\n  (\($stray) unrecognized row(s) excluded: event missing or not one of session/blocked)" else "" end)
+    , (if $stray > 0 then "\n  (\($stray) unrecognized row(s) excluded: event missing or not one of session/blocked/degraded)" else "" end)
   ' "$file" 2>/dev/null)" || jq_rc=$?
   if [ "$jq_rc" -ne 0 ]; then
     die "malformed row in $file — the ledger is not readable"
@@ -1734,8 +1797,18 @@ kaizen_series() {
     return 0
   fi
   jq -n '
+    # ONE definition of "escalation" for the whole program, exactly as cmd_autonomy has one. The
+    # two events state different facts (`blocked` stopped the line, `degraded` lowered the bar and
+    # went on) but they answer this rubric the same way, and writing the pair out three times is
+    # how they came to disagree: `phase_label` was left knowing only `blocked` on the argument that
+    # a degraded run has a failing REVIEW session anyway. True inside that run — and the rubric
+    # groups by (mission, phase) across the WHOLE kit_sha slice, so one later `sdd run` where
+    # REVIEW passes made the one mission that degraded read `ok`. An escalation outlives the
+    # session that provoked it; that is why `blocked` was in the clause to begin with.
+    def is_escalation: .event == "blocked" or .event == "degraded";
+
     def phase_label:
-      if (map(select(.event == "blocked")) | length) > 0
+      if (map(select(is_escalation)) | length) > 0
          or (map(select(.event == "session" and .invocation == "retry")) | length) > 0
          or ((map(select(.event == "session")) | last | .gate) != "pass")
       then "refez"
@@ -1757,14 +1830,15 @@ kaizen_series() {
          moved_rate: (if ($sess | length) == 0 then null
                       else (($sess | map(select(.moved == true)) | length) / ($sess | length) * 100 | round / 100) end),
          labels: ($detail | reduce .[] as $d ({ok: 0, leve: 0, refez: 0}; .[$d.label] += 1)),
-         escalations: ($rows | map(select(.event == "blocked")) | group_by(.kind)
+         escalations: ($rows | map(select(is_escalation))
+                             | group_by(.kind)
                              | map({(.[0].kind): length}) | add // {}),
          cost_usd: ($sess | map(.cost_usd // 0) | add // 0 | . * 100 | round / 100),
          detail: $detail};
 
     [ inputs ] as $raw
     | ($raw | map(select(type == "object" and .v == 1
-                         and (.event == "session" or .event == "blocked")))) as $all
+                         and (.event == "session" or is_escalation)))) as $all
     | ($all | map(select(.phase == "KAIZEN"))) as $meta
     | ($all | map(select(.phase != "KAIZEN"))) as $rows
     | (($raw | length) - ($all | length)) as $unrec

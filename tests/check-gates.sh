@@ -194,15 +194,46 @@ assert_phase "TEST_CMD green again hands the mission back to QA" "QA"
 
 # Jidoka: a `blocked` increment escalates ON THE SPOT, without burning a session.
 # `sdd run` decides that before invoking claude, so this test spends no tokens.
+#
+# assert_jidoka <description> — one real `sdd run`, demanding the escalation happen ON THE SPOT.
+#
+# `exit 3` + "BLOCKED in EXEC" is NOT enough, and believing it was is what let the bug below hide:
+# budget exhaustion escalates with the very same rc and the very same message prefix. The two
+# discriminators are what make this assertion measure the Jidoka and not its impostor:
+#   - "The line stopped on purpose" comes only from the blocked-increment branch;
+#   - the claude stub's marker must be ABSENT — that is what "no session spent" means, and the
+#     stub planted at the top of this file was only reporting it, never asserted, until now.
+assert_jidoka() {
+  local desc="$1" out rc
+  out="$( cd "$FIX" && "$SDD" run "$MISSION" 2>&1 )"; rc=$?
+  if [ "$rc" -eq 3 ] \
+     && grep -q "The line stopped on purpose" <<< "$out" \
+     && ! grep -q "the test invoked the real claude" <<< "$out"; then
+    pass "$desc"
+  else
+    fail "$desc" "exit 3, the Jidoka branch, and no session spent" \
+         "exit $rc: $(tail -3 <<< "$out")"
+  fi
+}
+
 cp "$MDIR/checkpoint.md" "$MDIR/checkpoint.jidoka.bak"
 sed -i "s/| done | $REAL_HASH |/| blocked | — |/" "$MDIR/checkpoint.md"
 rm -f "$MDIR/20-handoff-exec.md"
-run_out="$( cd "$FIX" && "$SDD" run "$MISSION" 2>&1 )"; run_rc=$?
-if [ "$run_rc" -eq 3 ] && printf '%s' "$run_out" | grep -q "BLOCKED in EXEC"; then
-  pass "a 'blocked' increment escalates on the spot (exit 3, no session spent)"
-else
-  fail "a 'blocked' increment must escalate on the spot" "exit 3 + 'BLOCKED in EXEC'" "exit $run_rc: $(printf '%s' "$run_out" | tail -3)"
-fi
+assert_jidoka "a 'blocked' increment escalates on the spot (exit 3, no session spent)"
+
+# SAME Jidoka, on a checkpoint big enough to reach the failure regime — the assertion above cannot
+# see the bug that matters. The runner reads the statuses into a variable and then tests it; while
+# that test is a PIPE (`printf … | grep -qx`), `grep -q` exits on the match, `printf` dies of
+# SIGPIPE and, under `pipefail`, the pipeline returns 141 — so the `if` reads "no blocked" WHILE
+# blocked exists, and the line does NOT stop. `ckstatus` gets one status line per table row, so the
+# row count is the knob: measured on this fixture the miss starts between 4000 and 5000 rows, and
+# 20000 keeps the assertion deep in the failure regime with margin for a different pipe buffer.
+# The rows are generated here on purpose — versioning ~1 MB of fixture would be paying in the repo
+# for what a loop produces in milliseconds.
+awk 'BEGIN { for (i = 1; i <= 20000; i++) printf "| P%d | filler row | `true` → 0 | pending | — |\n", i }' \
+  >> "$MDIR/checkpoint.md"
+assert_jidoka "a 'blocked' increment escalates in a checkpoint bigger than the pipe buffer"
+
 mv "$MDIR/checkpoint.jidoka.bak" "$MDIR/checkpoint.md"
 printf -- '---\nfase: EXEC\nstatus: done\n---\n' > "$MDIR/20-handoff-exec.md"
 

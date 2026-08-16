@@ -72,6 +72,12 @@ templates. Se a solução pede infraestrutura, provavelmente é a solução erra
   `sdd close`. Se você está acrescentando uma terceira, provavelmente ela devia ser uma fase.
 - Mudou o contrato de artefato? Atualize `templates/`, `docs/pipeline.md` e o agente afetado no
   **mesmo commit** — contrato quebrado em três lugares é o modo de falha mais caro do kit.
+- **Enum lido em mais de um ponto vira UMA definição por programa.** `blocked` e `degraded` são os
+  dois eventos de escalada do ledger, e o par estava escrito à mão em três lugares (admissão da
+  série, mapa de escaladas, rubrica de rótulo). Dois aprenderam o evento novo, o terceiro ficou
+  cego — e a única missão em que o runner baixou a própria régua passou a ler `ok` para o juiz.
+  Hoje cada programa define `is_escalation` uma vez. Evento novo entra pela definição, nunca por
+  um `or` acrescentado a um `select`.
 
 ## Ao mexer nos agentes (`agents/*.md`)
 
@@ -112,6 +118,19 @@ proveniência contra as skills instaladas.
 **Gate novo entra com mutação** em `tests/check-mutation.sh` — `sdd health` reprova gate sem
 mutação no catálogo. Sabotar o gate e exigir que a suíte morra é o que prova que a asserção
 mede alguma coisa; sem isso não há como distinguir asserção viva de decoração.
+
+**Red observado não basta: tem de ser vermelho pelo motivo certo.** A missão
+`20260815-ledger-sem-ponto-cego` achou **cinco** asserções que passavam pelo regime do fixture e
+não pela propriedade — e a quinta *afirmava a decisão errada* em vez de só deixar de medir, que é
+o modo caro. Três perguntas antes de aceitar um verde:
+
+- o `rc` (ou o prefixo da mensagem) que a asserção lê é **compartilhado** com outro ramo? Ela não
+  distingue nada. Exija o texto do ramo certo **e a ausência** do marcador do outro;
+- a propriedade é universal mas o fixture só anda num regime? Ponha o fixture no regime que
+  **repete** e acrescente uma testemunha dele (contar quantas vezes o ramo foi entrado);
+- a alegação é "X responde igual a Y"? Escreva a asserção **diferencial**: dois fixtures, saídas
+  comparadas entre si. O par `degraded`/`blocked` do `tests/check-kaizen.sh` é o exemplo — nenhum
+  regime de fixture a satisfaz por acidente, e ela reprova qualquer que seja o lado que mexeu.
 
 ⚠️ Este arquivo roda com `set -o pipefail`: `printf … | grep -q` devolve **141** quando o grep
 ACHA e sai antes de o printf terminar de escrever (SIGPIPE). A lógica fica invertida em entrada

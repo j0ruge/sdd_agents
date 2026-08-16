@@ -58,11 +58,14 @@ sum_sessions() {
        END { print s + 0 }' <<< "$1"
 }
 
-# sum_escalations <reader output> -> total of every "  <kind>: N" line. That exact shape (two
-# leading spaces, a bare word, ": ", digits, end of line) is unique to escalation lines — the
-# per-kit_sha table lines use "·" separators and never end in a bare number.
+# sum_escalations <reader output> -> total of every "  <kit_sha>  <kind>: N" line. The leading
+# kit_sha is optional in this pattern ON PURPOSE: this helper's job is to COUNT rows for the
+# bucket sum, and pinning the shape belongs to the axis assertions further down — a helper that
+# did both would report "0 escalations" on a shape change and blame the wrong bucket. Either way
+# the pattern stays unique to escalation lines: the per-kit_sha session lines use "·" separators
+# and end in "US$ <n>", never in "<word>: <digits>".
 sum_escalations() {
-  awk '/^  [A-Za-z][A-Za-z0-9_-]*: [0-9]+$/ { split($0, a, ": "); s += a[2] } END { print s + 0 }' \
+  awk '/^  ([^ ]+  )?[A-Za-z][A-Za-z0-9_-]*: [0-9]+$/ { split($0, a, ": "); s += a[2] } END { print s + 0 }' \
     <<< "$1"
 }
 
@@ -325,6 +328,139 @@ assert_eq "a kit with no .git yields kit_sha:null on every row" "true" \
 assert_eq "and the warning appeared exactly once" "1" \
   "$(grep -c 'is not a git checkout' <<< "$err")"
 
+# --- the self-degradation review→draft leaves a trace -----------------------
+# PUBLISH_ON_REVIEW_BLOCKED=draft is the runner deciding, ALONE, to stop reviewing and publish a
+# draft PR anyway — the most interesting autonomy event a mission can produce. Until this
+# assertion existed the branch's `force_phase="PR"; continue` jumped over BOTH writers (the
+# journal and the ledger), so the whole history of the event was a run of failing REVIEW sessions
+# followed by a PR phase, with nothing anywhere saying why. The judge reads the series; this
+# event was invisible to it.
+#
+# Reaching the branch is the expensive part of the fixture: the mission has to actually BE in
+# REVIEW, so PLAN, TICKET, EXEC and QA must all pass first. And the REVIEW session has to MOVE the
+# disk — with a dead stub the no-progress escalation fires on the inline retry and the budget
+# branch is never reached at all.
+echo "== the self-degradation review→draft writes exactly one row =="
+: > "$LEDGER"
+cat >> .sdd/config.sh <<'EOF'
+REVIEW_MAX_ITER=1
+PUBLISH_ON_REVIEW_BLOCKED="draft"
+EOF
+printf -- '---\nfase: EXEC\nstatus: done\n---\n' > "$MDIR/20-handoff-exec.md"
+printf -- '---\nfase: QA\nstatus: skipped\n---\n' > "$MDIR/30-handoff-qa.md"
+git add -A && git commit -qm "chore: exec handoff and a skipped QA"
+# The hash goes into the checkpoint only AFTER its own commit exists, and a second commit follows:
+# gate_EXEC demands the commit be an ANCESTOR of HEAD, not merely an object in the database.
+DONE_HASH="$(git rev-parse --short HEAD)"
+cat > "$MDIR/checkpoint.md" <<EOF
+| ID | Incremento | Check (comando → esperado) | Status | Commit |
+|---|---|---|---|---|
+| I1 | slice one | \`true\` → 0 | done | $DONE_HASH |
+EOF
+git add -A && git commit -qm "chore: the increment is done"
+
+# Moves the disk on EVERY call — the REPETITION regime, and the whole reason the F1 increment
+# exists. This stub used to move on the first call only, which held the runner to a single lap of
+# the draft branch; "the degradation wrote exactly one row" below was then a property of the
+# FIXTURE, not of the code. Under a stub that always moves, the run goes REVIEW→PR→REVIEW with the
+# REVIEW budget still blown, re-enters the branch on every lap, and the pre-F1 runner wrote one row
+# per lap: 3 rows for 1 degradation, against the "exactly one" of the mission's metric 3. It is the
+# THIRD vacuity of this mission — after I1's shared rc 3 and I2's never-reached draft branch — and
+# the reason a fixture regime is never allowed to stand in for the property being asserted.
+DRAFT_LAPS="$OUTSIDE/draft-laps"
+: > "$DRAFT_LAPS"
+cat > "$OUTSIDE/stub/claude" <<STUB
+#!/usr/bin/env bash
+echo x >> "$DRAFT_LAPS"
+wc -l < "$DRAFT_LAPS" > "$FIX/churn.txt"
+git -C "$FIX" add -A
+git -C "$FIX" commit -qm "chore: the session changed something"
+echo '{}'
+exit 0
+STUB
+chmod +x "$OUTSIDE/stub/claude"
+
+# stderr only (`2>&1 >/dev/null`), the same idiom the kit-stamp block above uses: the warn line is
+# the runner announcing out loud that it entered the branch, and counting it is what proves the
+# regime. It is deliberately OUTSIDE the one-shot guard in bin/sdd — the runner really is jumping
+# to PR on this lap, and an assertion over the writers must not be its own witness.
+err="$( "$SDD" run "$MISSION" 2>&1 >/dev/null )"; rc=$?
+assert_eq "the run still ends in an escalation, whichever path took it there" "3" "$rc"
+# ANTI-VACUITY OF THE REGIME: without this, a future change that quiets the loop back down to one
+# lap would make the cardinality assertion below pass for the old reason — the fixture — and the
+# F1 sensor would silently stop measuring anything, exactly like the assertion it replaces.
+laps="$(grep -c 'moving on to PR in draft mode' <<< "$err")"
+assert_eq "the fixture is in the repeating regime: the draft branch was entered more than once" \
+  "true" "$( [ "${laps:-0}" -ge 2 ] && echo true || echo false )"
+# ANTI-VACUITY, and the lesson I1 paid for: rc 3 is shared by all three escalation paths, so `rc 3`
+# alone would keep this whole block green on a fixture that never reached the draft branch at all.
+# A PR session with the REVIEW gate still failing can only exist BECAUSE the runner degraded —
+# `current_phase` would hand back REVIEW forever otherwise. This assertion is what says the
+# assertions below are pointed at the right branch, and it holds with or without the writer.
+assert_eq "the fixture really did reach the draft branch: a PR session with REVIEW still failing" \
+  "true" "$(jq -s '[.[] | select(.event == "session" and .phase == "PR")] | length > 0' "$LEDGER")"
+assert_eq "and no REVIEW gate ever passed, so nothing but the degradation could have moved it" \
+  "0" "$(jq -s '[.[] | select(.phase == "REVIEW" and .gate == "pass")] | length' "$LEDGER")"
+# THE METRIC OF F1, and now a property of the code rather than of the stub: the runner lowered its
+# own bar ONCE in this run and the ledger says so once, however many laps the REVIEW→PR→REVIEW loop
+# takes afterwards with the budget still blown. The laps are a defect of their own — the loop half
+# — and it stays in TODO.md; what this asserts is the RECORD half.
+assert_eq "the degradation wrote exactly one row, however many laps the loop took" "1" \
+  "$(jq -s '[.[] | select(.event == "degraded")] | length' "$LEDGER")"
+# `degraded` and not `blocked`: `blocked` means the line STOPPED and the runner returns 3. Here
+# the run went ON, to PR. Reusing `blocked` would have been cheaper — it inherits the kit_sha axis
+# and the series aggregation for free — but it would record "stopped" for a run that continued,
+# and the ledger exists to record fact.
+assert_eq "the event says the run degraded, not that it stopped" "degraded" \
+  "$(jq -r -s '[.[] | select(.event == "degraded")][0].event' "$LEDGER")"
+assert_eq "kind names the degradation by enum, not by prose" "review-to-draft" \
+  "$(jq -r -s '[.[] | select(.event == "degraded")][0].kind' "$LEDGER")"
+assert_eq "the phase that degraded" "REVIEW" \
+  "$(jq -r -s '[.[] | select(.event == "degraded")][0].phase' "$LEDGER")"
+assert_eq "and the mission it happened in" "$MISSION" \
+  "$(jq -r -s '[.[] | select(.event == "degraded")][0].mission' "$LEDGER")"
+# The kit stamp is what puts the row on the version axis the whole ledger exists to measure. A
+# writer that forgot it would still look fine in `sdd autonomy` and vanish from the series.
+assert_eq "the row carries the kit stamp, so it lands on the version axis" "true" \
+  "$(jq -s '[.[] | select(.event == "degraded")][0] | has("kit_sha") and has("kit_dirty")' "$LEDGER")"
+assert_eq "it shares the run_id of the run that produced it" "true" \
+  "$(jq -s '([.[] | select(.event == "degraded")][0].run_id) == (.[0].run_id)' "$LEDGER")"
+# Same refusal as autonomy_blocked_row: a degradation spends no session of its own, so a 0 in the
+# session fields would enter the judge's arithmetic as if it had.
+assert_eq "no session fields on a degradation" "true" \
+  "$(jq -s '[.[] | select(.event == "degraded")][0]
+            | has("rc") == false and has("cost_usd") == false and has("moved") == false' "$LEDGER")"
+assert_eq "the gate reason that triggered it rides along" "true" \
+  "$(jq -s '([.[] | select(.event == "degraded")][0].gate_why | length) > 0' "$LEDGER")"
+# The journal is the human's trail and the ledger is the judge's; the `continue` skipped BOTH, so
+# both are asserted here.
+assert_eq "the pipeline journal records it too" "1" \
+  "$(grep -c 'DEGRADED' "$FIX/.sdd/logs/$MISSION/pipeline.log" 2>/dev/null || echo 0)"
+# The human reader must not file a row the runner itself wrote under "unrecognized": that would
+# just move the blind spot from the judge to the human.
+#
+# The kit stamp is NORMALISED first, and only for the reader assertions below. Since I3 the
+# escalation table lives on the kit_sha axis and drops non-comparable rows, and the stamp these
+# rows carry is whatever the kit checkout happened to be at test time: a dirty working tree (any
+# EXEC session) or the no-.git copy check-mutation.sh sandboxes into make every row here
+# non-comparable, and the block would pass in CI and fail on the developer's machine, or the other
+# way round. The rows stay exactly as the RUNNER wrote them in every other respect — that they
+# carry a stamp at all is asserted above, against the untouched ledger.
+jq -c '.kit_sha = "deadbee" | .kit_dirty = false' "$LEDGER" > "$LEDGER.norm" && mv "$LEDGER.norm" "$LEDGER"
+out="$( "$SDD" autonomy 2>&1 )"
+assert_eq "the human reader does not call it unrecognized" "0" "$(grep -c 'unrecognized' <<< "$out")"
+assert_eq "it is counted as an escalation, by its kind" "1" \
+  "$(grep -c 'review-to-draft: 1' <<< "$out")"
+assert_bucket_sum "the four buckets sum to the header total (a ledger with a degradation)" "$out"
+# The other half of metric 3: the judge has to read the same single degradation the human does.
+# One instrument counting 1 while the other counts 3 is the divergence I3 closed for the axis —
+# cardinality is the same failure one field over, so both readers are asserted, not just one.
+series="$( "$SDD" kaizen --series 2>/dev/null )"
+assert_eq "and the judge counts the same one, not one per lap" "1" \
+  "$(jq -r '.latest.escalations["review-to-draft"] // 0' <<< "$series")"
+assert_eq "with nothing pushed into the unrecognized bucket to get there" "0" \
+  "$(jq -r '.excluded.unrecognized' <<< "$series")"
+
 # --- the reader ------------------------------------------------------------
 # Fixture ledger written by hand: this is OUR format, so there is no third-party source to copy
 # from (the provenance rule covers skill output). Every row here exists to prove one refusal.
@@ -376,6 +512,62 @@ assert_eq "and never prints a percentage when there is nothing to compute one ov
 assert_eq "the escalations are still both named" "1" "$(grep -c 'no-progress: 1' <<< "$out")"
 assert_eq "the second kind too" "1" "$(grep -c 'increment-blocked: 1' <<< "$out")"
 assert_bucket_sum "the four buckets sum to the header total (escalations only)" "$out"
+
+# --- the two readers of the ledger agree on the axis -------------------------
+# `sdd autonomy` (the human's window) and `sdd kaizen --series` (the judge's source of truth) read
+# the SAME file. The series has always sliced escalations INSIDE a kit_sha group; this reader
+# grouped them by `.kind` over the whole file, with no version axis and no comparability filter.
+# A human reading the table next to a verdict saw different escalation counts for the same period
+# with nothing explaining the divergence — and the kit version is precisely the axis the ledger
+# exists to measure, so the divergence corrodes trust in the instrument the whole loop depends on.
+echo "== reader: escalations carry the kit_sha axis =="
+mkdir -p "$OUTSIDE/escaxis"
+cat > "$OUTSIDE/escaxis/autonomy-log.jsonl" <<'EOF'
+{"v":1,"ts":"2026-08-15T10:00:00-03:00","event":"blocked","kind":"no-progress","run_id":"r1","invocation":"run","kit_sha":"aaaaaaa","kit_dirty":false,"project":"p1","repo":"/p1","mission":"m1","phase":"EXEC","gate_why":"x"}
+{"v":1,"ts":"2026-08-15T10:01:00-03:00","event":"blocked","kind":"increment-blocked","run_id":"r1","invocation":"run","kit_sha":"aaaaaaa","kit_dirty":false,"project":"p1","repo":"/p1","mission":"m1","phase":"EXEC","gate_why":"x"}
+{"v":1,"ts":"2026-08-15T10:02:00-03:00","event":"blocked","kind":"no-progress","run_id":"r2","invocation":"run","kit_sha":"bbbbbbb","kit_dirty":false,"project":"p1","repo":"/p1","mission":"m2","phase":"EXEC","gate_why":"x"}
+{"v":1,"ts":"2026-08-15T10:03:00-03:00","event":"degraded","kind":"review-to-draft","run_id":"r2","invocation":"run","kit_sha":"bbbbbbb","kit_dirty":false,"project":"p1","repo":"/p1","mission":"m2","phase":"REVIEW","gate_why":"x"}
+{"v":1,"ts":"2026-08-15T10:04:00-03:00","event":"blocked","kind":"no-progress","run_id":"r3","invocation":"run","kit_sha":"aaaaaaa","kit_dirty":true,"project":"p1","repo":"/p1","mission":"m3","phase":"EXEC","gate_why":"x"}
+{"v":1,"ts":"2026-08-15T10:05:00-03:00","event":"blocked","kind":"no-progress","run_id":"r4","invocation":"run","kit_sha":null,"kit_dirty":null,"project":"p1","repo":"/p1","mission":"m4","phase":"EXEC","gate_why":"x"}
+EOF
+out="$( SDD_STATE_DIR="$OUTSIDE/escaxis" "$SDD" autonomy 2>&1 )"; rc=$?
+assert_eq "exits 0 (a ledger of escalations across two kit versions is data)" "0" "$rc"
+
+# The same kind under two kit versions is two facts, not one number: summing them is exactly the
+# arithmetic that makes "did the change help?" unanswerable.
+assert_eq "no-progress under the version it happened in" "1" \
+  "$(grep -c '^  aaaaaaa  no-progress: 1$' <<< "$out")"
+assert_eq "and the one under the other version, counted apart" "1" \
+  "$(grep -c '^  bbbbbbb  no-progress: 1$' <<< "$out")"
+assert_eq "a second kind stays with its own version too" "1" \
+  "$(grep -c '^  aaaaaaa  increment-blocked: 1$' <<< "$out")"
+assert_eq "a degradation is an escalation on the axis, like any other" "1" \
+  "$(grep -c '^  bbbbbbb  review-to-draft: 1$' <<< "$out")"
+# Anti-vacuity: an escalation line with no version in front of it IS the old axis-less shape, so
+# asserting its absence is what makes the four assertions above impossible to satisfy by accident.
+assert_eq "no escalation line is printed without a version" "0" \
+  "$(grep -cE '^  [A-Za-z][A-Za-z0-9_-]*: [0-9]+$' <<< "$out")"
+# Non-comparable escalations are excluded and COUNTED, the same refusal the session block already
+# makes: a dirty kit and a null sha cannot be attributed to a version, and a row silently summed
+# into one is worse than a row excluded out loud.
+assert_eq "the dirty kit and the null sha are excluded, not summed into a version" "1" \
+  "$(grep -c '2 non-comparable' <<< "$out")"
+assert_bucket_sum "the buckets sum to the header total (escalations on two versions)" "$out"
+
+# The increment's metric, stated as the two instruments agreeing — compared as DATA, kind by kind,
+# not as prose. Whatever `sdd kaizen --series` reports for the latest kit version, the human table
+# has to report the same. A divergence fails here even when each side looks plausible alone, which
+# is the only way to catch the two readers drifting apart again.
+series="$( SDD_STATE_DIR="$OUTSIDE/escaxis" "$SDD" kaizen --series 2>/dev/null )"
+latest_sha="$(jq -r '.latest.kit_sha' <<< "$series")"
+assert_eq "the series and the reader are talking about the same latest version" "bbbbbbb" "$latest_sha"
+series_esc="$(jq -r '.latest.escalations | to_entries | sort_by(.key)
+                     | map("\(.key): \(.value)") | join("\n")' <<< "$series")"
+# $1 is the sha, $2 the "<kind>:" token and $3 the count; the session table lines have "session(s)"
+# in $3, so the numeric guard keeps them out without a second pattern to maintain.
+reader_esc="$(awk -v sha="$latest_sha" '$1 == sha && $3 ~ /^[0-9]+$/ { print $2, $3 }' <<< "$out" | sort)"
+assert_eq "the human reader and the judge count the latest version's escalations alike" \
+  "$series_esc" "$reader_esc"
 
 # A row with no `event` at all, or an event nobody recognizes yet: the reviewer's exact repro. It
 # must be counted, not merely fail to crash.

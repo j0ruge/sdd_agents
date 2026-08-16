@@ -1,6 +1,6 @@
 ---
 missao: 20260815-ledger-sem-ponto-cego
-atualizado: 2026-08-15 23:40
+atualizado: 2026-08-16 01:20
 ---
 
 # Checkpoint — o ledger e o Jidoka param de mentir
@@ -14,9 +14,10 @@ atualizado: 2026-08-15 23:40
 
 | ID | Incremento | Check (comando → esperado) | Status | Commit |
 |---|---|---|---|---|
-| I1 | Jidoka do `blocked` com herestring, sem depender do buffer do pipe | `./tests/run-all.sh` → `suite green` com `score: 26 caught, 0 known gap(s), of 26` | pending | — |
-| I2 | auto-degradação `review-to-draft` escreve no ledger e a série a reconhece | `./tests/run-all.sh` → `suite green` com `score: 27 caught, 0 known gap(s), of 27` | pending | — |
-| I3 | escaladas do `sdd autonomy` agrupadas por `kit_sha`, como a série já faz | `./tests/run-all.sh` → `suite green` com `score: 28 caught, 0 known gap(s), of 28` | pending | — |
+| I1 | Jidoka do `blocked` com herestring, sem depender do buffer do pipe | `./tests/run-all.sh` → `suite green` com `score: 26 caught, 0 known gap(s), of 26` | done | 3521b9a |
+| I2 | auto-degradação `review-to-draft` escreve no ledger e a série a reconhece | `./tests/run-all.sh` → `suite green` com `score: 27 caught, 0 known gap(s), of 27` | done | 6853796 |
+| I3 | escaladas do `sdd autonomy` agrupadas por `kit_sha`, como a série já faz | `./tests/run-all.sh` → `suite green` com `score: 28 caught, 0 known gap(s), of 28` | done | e9a74aa |
+| F1 | uma degradação por `sdd run` escreve **uma** linha `degraded`, como a métrica 3 exige | `./tests/run-all.sh` → `suite green` com `score: 29 caught, 0 known gap(s), of 29` E re-walk da jornada J2 com stub que move o disco a **cada** sessão → exatamente 1 linha `degraded` e `review-to-draft: 1` nos dois leitores | done | 56b2365 |
 
 ## Notas de execução
 
@@ -42,9 +43,191 @@ atualizado: 2026-08-15 23:40
   missão foi deslocada +2 (Checks agora 26 → 27 → 28) e a linha de baseline do `01-plano.md`
   atualizada de 23 para 25 — o número que a sessão EXEC verá de fato na abertura.
 
+- 2026-08-16 · — · Revisão pré-run: os três defeitos re-conferidos vivos no `bin/sdd` de `main`
+  (`fdf8708`); suíte re-medida verde, `score: 25 caught, 0 known gap(s), of 25` (52,6 s sob
+  carga). Números defasados pela régua +2 corrigidos no `00-missao.md` (métrica 28/28, K2 25→28)
+  e no `01-plano.md` (baseline `of 25`, e2e 25→28). Aprovação: `humano-2026-08-16`.
+
+- 2026-08-16 · `I1` · **O Red que o plano exigia aconteceu, mas só na segunda tentativa da
+  asserção** — e o motivo vale mais que o conserto. Com o checkpoint de 20000 linhas, a primeira
+  versão do teste (`rc 3` + `BLOCKED in EXEC`, herdada da asserção pequena que já existia) nasceu
+  **verde sobre o bug**: o esgotamento de `phase_budget` escala com o **mesmo rc e o mesmo prefixo
+  de mensagem** que o Jidoka. O runner de fato deixava de disparar, abria duas sessões de EXEC
+  contra a parede e só então escalava — e a asserção não sabia distinguir. O fixture estava no
+  regime de falha desde o começo; quem não media era a asserção. Endurecida para exigir o ramo
+  certo (`The line stopped on purpose`) e a **ausência** do marcador do stub do `claude` — que é o
+  que "sem gastar sessão" significa, e que o stub do `check-gates.sh` só reportava sem ninguém
+  afirmar desde que foi plantado. Lição para I2/I3: "a asserção ficou vermelha" não basta; tem de
+  ficar vermelha **pelo motivo certo**, e um `rc` compartilhado com outro ramo é asserção vácua
+  disfarçada.
+- 2026-08-16 · `I1` · Limiar medido no fixture: até ~4000 linhas de `ckstatus` o Jidoka dispara;
+  a partir de ~5000 ele silencia de forma determinística (10/10). O teste usa 20000 linhas por
+  margem, geradas por `awk` no setup (nada de ~1 MB de fixture versionado). Custo: suíte
+  **50,4 s** contra os 48,5 s medidos nesta sessão no `HEAD` `7751ce1` (baseline do plano: 37,4 s
+  em máquina descarregada) — `check-gates.sh` sozinho foi de 2,6 s para 2,9 s, e ele roda 27 vezes
+  dentro do `check-mutation.sh`.
+- 2026-08-16 · `I1` · Fora de escopo, registrados no `TODO.md`: (a) a própria suíte ainda usa
+  `printf | grep -q` em `check-gates.sh:53` e em cinco pontos do `check-dry-run.sh` — mesma
+  família, lado do teste, fora do Check do I1; (b) `shellcheck -S warning tests/` reprova
+  (SC2318, pré-existente em `check-mutation.sh:246`) e o `LINT_CMD` do repo só olha `bin/sdd`.
+
+- 2026-08-16 · `I2` · **A lição do I1 se aplicou, e desta vez antes do prejuízo.** O fixture novo
+  termina com `rc 3`, exatamente como os outros dois caminhos de escalada — então `rc 3` sozinho
+  manteria o bloco inteiro verde sobre um fixture que nunca chegou ao ramo `draft`. A guarda
+  anti-vacuidade é **estrutural**, não de prosa: uma sessão de fase **PR** com o gate de REVIEW
+  ainda falhando só pode existir PORQUE o runner degradou — `current_phase()` devolveria REVIEW
+  para sempre. Ela vale verde antes e depois do conserto, e é o que aponta as outras asserções
+  para o ramo certo.
+- 2026-08-16 · `I2` · Chegar ao ramo custou o fixture mais caro da suíte: PLAN+TICKET+EXEC+QA
+  todos satisfeitos, `REVIEW_MAX_ITER=1`, e um stub que **move o disco na primeira chamada só** —
+  com stub morto a escalada `no-progress` dispara na retentativa inline e o ramo de orçamento
+  nunca é alcançado. Um degradação por run, determinístico.
+- 2026-08-16 · `I2` · **Desvio do plano, deliberado:** o plano listava dois pontos a mudar (o
+  escritor e o `select` da série). Foram **quatro**: o `is_escalation` do `cmd_autonomy`
+  (`bin/sdd:1707`) também só aceitava `blocked`, então sem ele o `sdd autonomy` passaria a
+  imprimir "1 unrecognized row" para uma linha que o próprio runner escreveu — o ponto cego
+  mudado do juiz para o humano, que é exatamente o que a missão fecha. O quarto é o
+  `pipeline_log_line`, que o `continue` também saltava.
+- 2026-08-16 · `I2` · **Mutação: 1 no catálogo, 4 metades medidas.** O Check fixa o score em 27,
+  e sabotar várias âncoras num mutante só derrubaria a detecção de "âncora apodreceu" que o
+  cabeçalho do `check-mutation.sh` promete. O catálogo levou `RUN_degraded_row_dropped` (o
+  escritor) por ser também a **guarda de alcance do fixture caro**. As outras três foram
+  sabotadas à mão nesta sessão, uma a uma, e as três mataram a suíte: `select` da série →
+  `check-kaizen.sh` rc 1, 2 FAILs; `pipeline_log_line` → `check-autonomy.sh` rc 1;
+  `is_escalation` → `check-autonomy.sh` rc 1, 2 FAILs. Evidência de sessão não roda no CI —
+  registrado no `TODO.md`.
+- 2026-08-16 · `I2` · Refatoração feita (duplicação real, não estética): `autonomy_blocked_row` e
+  o escritor novo seriam 15 linhas de `jq` idênticas menos um literal. Viraram
+  `autonomy_escalation_row <event> <kind> <phase> <why>` com dois wrappers de uma linha. O
+  carimbo do kit continua **chamado, nunca substituído** (`$( )` mataria a guarda one-shot no
+  subshell) — a lição do `CLAUDE.md` vale para o escritor novo igual.
+- 2026-08-16 · `I2` · Suíte **59,9 s** (contra 53,3 s medidos nesta sessão no `HEAD` `0976fc9`),
+  `sdd health` verde. O fixture novo do `check-autonomy.sh` roda 27 vezes dentro do
+  `check-mutation.sh`, e agora abre 4 sessões de stub por vez em vez de 2.
+- 2026-08-16 · `I2` · Fora de escopo, registrados no `TODO.md`: (a) as três metades sem mutante
+  permanente; (b) o runner **se auto-degrada mais de uma vez no mesmo `sdd run`** — depois do
+  `force_phase="PR"`, se PR mexer no disco e não passar no gate, o laço volta a REVIEW com o
+  orçamento ainda estourado e o ramo dispara de novo, uma linha `degraded` por volta. O fixture
+  só não vê porque a segunda sessão de PR não move o disco. É mudança de laço, não de registro.
+
+- 2026-08-16 · `I3` · **O Red veio limpo e pelo motivo certo, de primeira** — 7 asserções novas
+  vermelhas, todas no bloco novo, e o resto do arquivo verde. A que mais importa é a anti-vacuidade:
+  `grep -cE '^  [A-Za-z][A-Za-z0-9_-]*: [0-9]+$'` devolveu **3** antes do conserto (linha de
+  escalada sem versão nenhuma na frente) e **0** depois — e a linha `no-progress: 4` que ela pegou
+  provava, num número só, as duas metades do defeito: escaladas de dois `kit_sha` somadas E as
+  linhas de kit sujo / sha nulo somadas junto.
+- 2026-08-16 · `I3` · A asserção que **é** a métrica da missão compara dado com dado, não prosa:
+  extrai do `sdd autonomy` as escaladas do `kit_sha` mais recente e as confronta com o mapa
+  `escalations` que `sdd kaizen --series` reporta para o mesmo sha. Os dois leitores discordarem
+  volta a ser vermelho mesmo que cada lado, sozinho, pareça plausível.
+- 2026-08-16 · `I3` · **Desvio do plano, deliberado (nome do mutante):** o plano pedia
+  `AUTONOMY_escalations_no_axis`; entrou como `RUN_escalations_no_axis`. A regra do catálogo
+  (`tests/check-mutation.sh:37`) é `mut_<GATE>_<slug>` para gate e `mut_RUN_<slug>` para o que não
+  é gate — `cmd_autonomy` é leitor, não gate. É a mesma correção que o review do I13.3 já aplicou
+  em `SERIES_refez_dropped` → `RUN_refez_dropped`.
+- 2026-08-16 · `I3` · **Segundo desvio, forçado pelo próprio conserto:** as asserções de leitor do
+  bloco de degradação passaram a **normalizar o carimbo do kit** no ledger antes de chamar o
+  `sdd autonomy`. Com a tabela agora derrubando linha não-comparável, o carimbo real decide o
+  resultado — e ele é árvore suja em qualquer sessão EXEC e cópia sem `.git` dentro do
+  `check-mutation.sh`. Sem normalizar, o bloco passaria no CI e falharia na máquina de quem
+  desenvolve (ou o inverso). As linhas seguem sendo as que o **runner** escreveu; que elas carregam
+  carimbo é asserção separada, contra o ledger intocado.
+- 2026-08-16 · `I3` · Suíte **59,4 s** e `score: 28 caught, 0 known gap(s), of 28` — contra os
+  59,9 s medidos no I2. O mutante novo não custou tempo mensurável: o fixture do I3 é um ledger de
+  6 linhas escrito à mão, sem sessão de stub.
+- 2026-08-16 · `I3` · Fora de escopo, registrados no `TODO.md`: (a) o mesmo `jq` do `cmd_autonomy`
+  tem **dois** testes de comparabilidade (`comparable` com `.kit_dirty == false`, `on_axis` com
+  `.kit_dirty != true`) — hoje não divergem, mas é a família de defeito do I3 um nível abaixo;
+  (b) a tabela do `sdd autonomy` ordena versões lexicograficamente enquanto a série usa ordem de
+  aparição, então a última linha da tabela pode não ser a versão mais recente.
+
 ## Incrementos de fix (QA)
 
 > Escritos pelo `sdd-qa` quando um bug sanável é reprovado. Entram na mesma tabela acima com ID
 > `F<n>`, e o Check obrigatoriamente inclui **regression test passa** + **re-walk da jornada
 > impactada verde**. Bug que exige julgamento humano NÃO vira fix — vai para
 > "Decisions for a Human" no handoff de QA.
+
+- 2026-08-16 · `F1` · **De qual bug nasceu:** não há registro `docs/qa/` neste repo (sem interface,
+  `E2E_CMD` vazio) — o achado veio da **jornada J2 andada pelo `sdd-qa` nesta sessão**, e é por isso
+  que ele não tem `BUG-<id>`. A evidência está no `gate:` do `30-handoff-qa.md`.
+- 2026-08-16 · `F1` · **O que foi medido.** Um `sdd run` com `PUBLISH_ON_REVIEW_BLOCKED=draft`,
+  `REVIEW_MAX_ITER=1` e um stub que move o disco a **cada** sessão: sequência de fases
+  `REVIEW PR PR`, o aviso `moving on to PR in draft mode` impresso **3 vezes**, **3** linhas
+  `event: "degraded"` no ledger, e os dois leitores reportando `review-to-draft: 3` — o
+  `sdd autonomy` e o `sdd kaizen --series` de acordo entre si e **errados juntos**. O runner
+  degradou **uma** vez e ficou preso; o instrumento conta 3.
+- 2026-08-16 · `F1` · **Por que isto é I2 e não escopo novo.** A métrica 3 do `00-missao.md` diz,
+  literalmente, "produz **exatamente uma** linha nova no ledger". Ela não está satisfeita no caso
+  geral — só no regime do fixture. A entrada do `TODO.md` que o I2 abriu tratou o caso como
+  "mudança de laço, não de registro" e por isso o deixou fora; a metade de **registro** (escrever
+  uma vez por run) é exatamente o que o I2 define como seu escopo, e é ela que o `F1` fecha. A
+  metade de **laço** (o runner girar REVIEW→PR→REVIEW) continua no `TODO.md`, agora narrowed.
+- 2026-08-16 · `F1` · **A asserção de hoje é vácua fora do fixture** —
+  `tests/check-autonomy.sh:390`, `"the degradation wrote exactly one row"`, afirma uma propriedade
+  universal que só vale porque o stub do fixture move o disco **na primeira chamada só** (o
+  comentário de `tests/check-autonomy.sh:363-365` diz isso com todas as letras). Sob um stub que
+  move sempre, a mesma asserção leria 3. É a **terceira** vez nesta missão que uma asserção passa
+  verde por causa do regime do fixture e não da propriedade — depois do `rc 3` compartilhado do I1
+  e do ramo `draft` nunca alcançado do I2. O sensor do `F1` tem de rodar no regime de repetição,
+  senão troca uma vacuidade por outra.
+- 2026-08-16 · `F1` · **Direção sugerida (não é ordem):** guarda one-shot por run no ramo de
+  degradação, no espírito do `AUTONOMY_SHA_WARNED` que já existe em `bin/sdd:751` — e vale a
+  lição do `CLAUDE.md`: flag global só sobrevive se a função for **chamada**, nunca substituída
+  em `$( )`. Mantém o laço intocado, que é o que o `TODO.md` guarda separado.
+- 2026-08-16 · `F1` · O score do Check sobe para **29** porque o conserto precisa de mutante
+  próprio no catálogo (`tests/check-mutation.sh`): sem ele, quem prova que a asserção nova morre
+  quando sabotada? O `RUN_degraded_row_dropped` de hoje sabota o **escritor**, não a **cardinalidade**.
+- 2026-08-16 · `F1` · **O aviso do QA foi seguido à risca, e ele estava certo.** Em vez de um
+  bloco NOVO ao lado do antigo, o stub do bloco de degradação que já existia passou a mover o
+  disco a **cada** chamada — o regime de repetição. Assim a asserção "escreveu exatamente uma
+  linha" deixa de ser propriedade do fixture e passa a ser do código, no mesmo lugar, sem
+  duplicar o fixture mais caro da suíte (ele roda 29 vezes dentro do `check-mutation.sh`).
+  Red observado e **pelo motivo certo**: 4 asserções vermelhas, todas no bloco da degradação —
+  ledger **3**, diário **3**, `sdd autonomy` sem `review-to-draft: 1`, série **3** — e o resto do
+  arquivo verde.
+- 2026-08-16 · `F1` · **Anti-vacuidade do REGIME, que é a lição das três vezes anteriores.** Uma
+  asserção nova conta quantas vezes o `warn` do ramo saiu em `stderr` e exige **≥2**. Sem ela, uma
+  mudança futura que aquietasse o laço para uma volta só faria a cardinalidade passar pelo motivo
+  velho — o fixture — e o sensor do `F1` pararia de medir em silêncio, exatamente como a asserção
+  que ele substitui. É também por isso que o `warn` ficou **fora** da guarda one-shot no
+  `bin/sdd`: uma testemunha que sobrevive à sabotagem dos dois escritores é a única que serve.
+- 2026-08-16 · `F1` · **Desvio do plano do QA, deliberado (o diário entrou junto).** A direção
+  sugerida falava do ledger; a guarda cobre também o `pipeline_log_line`. Diário dizendo 3 e
+  ledger dizendo 1 seria a divergência entre dois instrumentos sobre o mesmo run — a família de
+  defeito que o I3 fechou, um trilho ao lado. O `warn` é a exceção justamente por não ser
+  registro.
+- 2026-08-16 · `F1` · **Âncora de mutação salva por um fio:** a guarda nova aninha o escritor mais
+  um nível, e o `sed` do `RUN_degraded_row_dropped` casava com **8 espaços** de indentação
+  literais. Ele teria virado "did not apply" — que o `check-mutation.sh` reporta, mas só depois de
+  alguém ler. A âncora perdeu a dependência de indentação. Os dois mutantes seguem medindo metades
+  distintas: `RUN_degraded_row_dropped` mata o escritor (existência) e continua pego com a guarda
+  intacta; `RUN_degraded_repeats` mata a guarda (cardinalidade) e continua pego com o escritor
+  intacto.
+- 2026-08-16 · `F1` · **Re-walk independente da J2, fora da suíte** — repo-fixture próprio, missão
+  própria, `SDD_STATE_DIR` descartável, stub que move o disco a cada sessão, rodado contra o
+  `bin/sdd` de `06af132` (pré-F1) e o do working tree. Pré: `rc 3`, ramo entrado **3** vezes,
+  sequência `REVIEW PR PR`, **3** linhas `degraded`, **3** `DEGRADED` no diário,
+  `review-to-draft: 3` nos dois leitores — os números do `sdd-qa` reproduzidos exatamente. Pós:
+  tudo igual **menos** o registro — **1** linha, **1** `DEGRADED`, `review-to-draft: 1` nos dois
+  leitores, `unrecognized: 0`. Mesmo `rc`, mesma sequência, mesmas 3 entradas no ramo: o laço não
+  foi tocado, que é a fronteira que o `TODO.md` guarda.
+- 2026-08-16 · `F1` · Suíte **68,7 s** e `score: 29 caught, 0 known gap(s), of 29`, contra
+  **55,8 s** medidos nesta sessão na abertura (baseline do plano: 37,4 s em máquina descarregada).
+  O custo é o esperado e foi escolhido: o stub que move sempre faz o fixture caro abrir mais
+  sessões, e ele roda uma vez por mutante. `shellcheck -S warning bin/sdd` limpo, `sdd health`
+  verde nos 5 checks.
+- 2026-08-16 · `REVIEW r1` · **A quinta vacuidade da missão existia, e estava no lugar mais caro:
+  numa asserção que congelava a decisão errada.** `tests/check-kaizen.sh` afirmava "the label was
+  already refez, so nothing had to be taught to phase_label" — verde com ou sem o conserto, porque
+  o fixture tinha uma sessão só. O rótulo do juiz agrupa por `(mission, phase)` sobre a fatia
+  inteira de `kit_sha`, não por run: bastava um `sdd run` posterior passar no gate de REVIEW para a
+  missão que se auto-degradou ler `ok`. Conserto em `e764cd2`: um `is_escalation` só por programa
+  (como o `cmd_autonomy` já tinha), asserção diferencial `degraded` vs `blocked` sobre o mesmo
+  ledger de 4 linhas, e o mutante `RUN_degraded_label_blind`. Régua **29 → 30**. Detalhe em
+  `40-review-r1.md`.
+
+- 2026-08-16 · `F1` · Fora de escopo, registrado no `TODO.md`: `sdd install` (`bin/sdd:1015`)
+  imprime `ok .sdd/config.sh created` com rc 0 depois de o `sed` falhar por `starter.conf`
+  ausente — o redirect cria o arquivo **vazio** e o repo-alvo nasce sem `TEST_CMD`. Visto de lado
+  montando o rig do re-walk.

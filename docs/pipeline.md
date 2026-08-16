@@ -128,7 +128,9 @@ A criterion graded `—` (not analysed) fails too: a partial review is not a rev
 
 The review→fix→re-review loop happens **inside** the session. If it ends without closing, the
 runner opens a fresh session to continue, up to `REVIEW_MAX_ITER` in total. Blown →
-`BLOCKED`, or a draft PR when `PUBLISH_ON_REVIEW_BLOCKED=draft`.
+`BLOCKED`, or a draft PR when `PUBLISH_ON_REVIEW_BLOCKED=draft` — the one place the runner lowers
+its **own** bar instead of stopping, and it records the fact once per run (`event:"degraded"`, in
+the ledger's field reference below).
 
 ### DOCS — drift checklist
 
@@ -273,15 +275,19 @@ the judge cannot count missions per kit version to answer "not enough data yet".
 ### Field reference
 
 This is the whole interface the judge (`sdd kaizen --series`) is written against — every field a
-row can carry, one row per field. `event:"blocked"` rows carry only the columns marked so in
-"absent when"; everything else is present on both row shapes.
+row can carry, one row per field.
+
+There are **two row shapes**, not three: a *session* row (`event:"session"`) and an *escalation*
+row, which is any row that spent no session — `event:"blocked"` or `event:"degraded"`. Escalation
+rows carry only the columns marked "on escalation rows" in "absent when"; everything else is
+present on both shapes.
 
 | Field | Type | Absent when | Meaning |
 |---|---|---|---|
 | `v` | integer | never | Schema version of the row, `1` today. Lets the reader tell "old shape" from "malformed" when a future field is added. |
 | `ts` | string | never | `date -Iseconds` timestamp of when the row was written. |
-| `event` | string enum: `session` \| `blocked` | never | A spent session versus a no-session escalation — the two row shapes. |
-| `kind` | string enum: `increment-blocked` \| `budget-exhausted` \| `no-progress` | on `event:"session"` rows | Which of the three escalation paths fired. `increment-blocked` is a deliberate Jidoka (can be a *good* sign); the other two are pure friction. |
+| `event` | string enum: `session` \| `blocked` \| `degraded` | never | A spent session versus a no-session escalation. `blocked` means the line **stopped** (the runner returns 3 and a human has to act); `degraded` means the runner lowered its own bar and **carried on**. They are kept apart on purpose: reusing `blocked` for a degradation would have been cheaper — it inherits the `kit_sha` axis and the aggregation with no `jq` to touch — but it records "stopped" for a run that continued, and the ledger exists to record fact. |
+| `kind` | string enum: `increment-blocked` \| `budget-exhausted` \| `no-progress` \| `review-to-draft` | on `event:"session"` rows | Which escalation path fired. `increment-blocked` is a deliberate Jidoka (can be a *good* sign); `budget-exhausted` and `no-progress` are pure friction. `review-to-draft` is the only `degraded` kind today: `PUBLISH_ON_REVIEW_BLOCKED=draft` and the review out of rounds, so the runner publishes a draft PR by itself instead of stopping. **At most one `review-to-draft` row per `run_id`** — the branch is re-entered on every lap of the REVIEW→PR→REVIEW loop that follows (the PR gate fails, `current_phase` hands REVIEW back with the budget still blown), but the runner lowered its bar *once*. A row per lap made both readers agree on a wrong number, which is worse than one of them being wrong. |
 | `run_id` | string (uuid) | never | One per `cmd_run`/`cmd_retry` invocation. Groups every row a single command call produced — "this mission needed N runs" is a `run_id` count. |
 | `invocation` | string enum: `run` \| `retry` | never | Which command opened the session: `sdd run` or `sdd retry`. Answers "who opened the session", not "was this an in-loop retry" — that is `auto_retry`. |
 | `kit_sha` | string \| `null` | never absent, but `null` | `null` when `$SDD_HOME` is not a git checkout. Short SHA of the kit's own HEAD when the row was written — the before/after axis the whole ledger exists for. |
@@ -290,20 +296,39 @@ row can carry, one row per field. `event:"blocked"` rows carry only the columns 
 | `repo` | string | never | Absolute path of the target repo — can carry client-identifying paths, which is why the ledger stays in `$HOME` and is never committed. |
 | `mission` | string | never | The mission slug. |
 | `phase` | string | never | The pipeline phase (`EXEC`, `QA`, …). `PLAN` never appears — the interactive phase spends no session. |
-| `step` | string | on `event:"blocked"` rows | The sub-step actually run (`QA:plan`, `QA:exec`, `QA:close`); equal to `phase` outside QA. |
-| `agent` | string | on `event:"blocked"` rows | The kit agent that drove the session. Empty string (not absent) when a third-party skill drove it through the literal slash instead. |
-| `model` | string | on `event:"blocked"` rows | The model configured for the phase. |
-| `attempt` | integer \| `null` | on `event:"blocked"` rows | ⚠️ Not a session counter: `cmd_run`'s in-loop retry row carries the SAME `attempt` as the row right before it, so `(mission, phase, attempt)` is not a key. And `cmd_retry` always writes `1`, no matter how many times the human has already pushed the phase by hand. |
-| `auto_retry` | boolean | on `event:"blocked"` rows | Whether this row is the runner's own automatic second attempt at the phase, inside one `sdd run` loop — never about which command opened the session (that is `invocation`). Renamed from `retry`: the old name next to `invocation:"retry"` read as its own negation, and both the obvious `jq` filters on the old name (`select(.retry==true)`, `select(.invocation=="retry")`) silently missed the other kind of retry. |
-| `session` | string (uuid) | on `event:"blocked"` rows | ⚠️ On an in-loop retry row this is the PARENT session's id, not the fork's: `run_phase` builds the retry with `--resume … --fork-session` and without `--session-id`, so the runner never learns the fork's own id. Two consecutive rows can therefore share one `session` value. |
-| `rc` | integer \| `null` | on `event:"blocked"` rows | The `claude` process's exit code. `null` when the session log carried none. |
-| `dur_s` | integer \| `null` | on `event:"blocked"` rows | Wall-clock seconds the session took. |
-| `cost_usd` | number \| `null` | on `event:"blocked"` rows | The session's cost in USD, `null` (never the string `"?"`) when the session's JSON log carried no cost field. |
-| `moved` | boolean | on `event:"blocked"` rows | ⚠️ The whole waste metric: `state_fingerprint` before ≠ after, and `state_fingerprint` is git HEAD + the mission directory listing + the checkpoint file's md5. `moved:false` is exactly what `sdd autonomy` counts as a stalled session. |
-| `gate` | string enum: `pass` \| `fail` | on `event:"blocked"` rows | The gate's verdict, evaluated right after the session ended — the row is born after the gate, never before it. |
-| `gate_why` | string, truncated to 200 characters | never | The gate's stated reason (or the escalation's reason, on a `blocked` row). |
+| `step` | string | on escalation rows | The sub-step actually run (`QA:plan`, `QA:exec`, `QA:close`); equal to `phase` outside QA. |
+| `agent` | string | on escalation rows | The kit agent that drove the session. Empty string (not absent) when a third-party skill drove it through the literal slash instead. |
+| `model` | string | on escalation rows | The model configured for the phase. |
+| `attempt` | integer \| `null` | on escalation rows | ⚠️ Not a session counter: `cmd_run`'s in-loop retry row carries the SAME `attempt` as the row right before it, so `(mission, phase, attempt)` is not a key. And `cmd_retry` always writes `1`, no matter how many times the human has already pushed the phase by hand. |
+| `auto_retry` | boolean | on escalation rows | Whether this row is the runner's own automatic second attempt at the phase, inside one `sdd run` loop — never about which command opened the session (that is `invocation`). Renamed from `retry`: the old name next to `invocation:"retry"` read as its own negation, and both the obvious `jq` filters on the old name (`select(.retry==true)`, `select(.invocation=="retry")`) silently missed the other kind of retry. |
+| `session` | string (uuid) | on escalation rows | ⚠️ On an in-loop retry row this is the PARENT session's id, not the fork's: `run_phase` builds the retry with `--resume … --fork-session` and without `--session-id`, so the runner never learns the fork's own id. Two consecutive rows can therefore share one `session` value. |
+| `rc` | integer \| `null` | on escalation rows | The `claude` process's exit code. `null` when the session log carried none. |
+| `dur_s` | integer \| `null` | on escalation rows | Wall-clock seconds the session took. |
+| `cost_usd` | number \| `null` | on escalation rows | The session's cost in USD, `null` (never the string `"?"`) when the session's JSON log carried no cost field. |
+| `moved` | boolean | on escalation rows | ⚠️ The whole waste metric: `state_fingerprint` before ≠ after, and `state_fingerprint` is git HEAD + the mission directory listing + the checkpoint file's md5. `moved:false` is exactly what `sdd autonomy` counts as a stalled session. |
+| `gate` | string enum: `pass` \| `fail` | on escalation rows | The gate's verdict, evaluated right after the session ended — the row is born after the gate, never before it. |
+| `gate_why` | string, truncated to 200 characters | never | The gate's stated reason (on an escalation row, the reason the phase was not satisfied when the runner gave up on it). |
+
+A **new `event` value has to be taught to both readers in the same commit**, or it trades one
+blind spot for another: `kaizen_series`'s `select` counts anything it does not admit in
+`excluded.unrecognized`, and `cmd_autonomy`'s `is_escalation` does the same for the human. A row
+the runner itself wrote and its own reader files as "unrecognized" is the defect, just moved.
+
+Admitting the row is **not enough** — a new escalation `event` also has to reach `phase_label`,
+the rubric behind the `labels` histogram the judge is told to cite. The rubric groups by
+`(mission, phase)` over the whole `kit_sha` slice, **not per run**: "the failing session in that
+run already reads `refez`" stops being true the moment a later `sdd run` gets the phase past its
+gate. That is why `blocked` is a clause of the rubric rather than being left to the sessions
+around it — an escalation outlives the session that provoked it — and `degraded` is an escalation.
+Both readers now share one `is_escalation` definition per program for exactly this reason: the
+pair written out by hand in three places is how they came to disagree in the first place.
 
 `sdd autonomy` prints the human view. The judge reads the JSONL with `jq` — never that table.
+Both readers group escalations on the **same axis**, `kit_sha`, and both drop a row with a dirty
+kit or no sha into a counted-and-excluded bucket. Two instruments over one file that report
+different counts for the same period corrode the trust the whole loop runs on, and kit version is
+the axis the ledger exists to measure — so a change to one reader's grouping belongs in the same
+commit as the other's.
 
 ## The kaizen loop
 

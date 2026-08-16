@@ -4,6 +4,58 @@ Registro de melhorias com **antes/depois medido**. Sem número, não entra.
 
 ---
 
+## 2026-08-16 — O ledger e o Jidoka param de mentir (missão `20260815-ledger-sem-ponto-cego`)
+
+**Problema medido:** a primeira missão **planejada pelo próprio kit** (Marco 2) atacou o
+instrumento que o laço kaizen lê, enquanto a série ainda estava vazia (`latest: null`) — o único
+momento em que consertar não obriga a reinterpretar histórico. Três pontos cegos verificados no
+`bin/sdd` de `fdf8708`: (1) o Jidoka do incremento `blocked` decidia por `printf | grep -qx` sob
+`pipefail`, então **silenciava** em checkpoint grande e o runner queimava o `phase_budget` inteiro
+contra a parede que já conhecia; (2) a auto-degradação `PUBLISH_ON_REVIEW_BLOCKED=draft` — o evento
+de autonomia mais interessante que uma missão produz — dava `continue` antes do diário e do ledger
+e **não escrevia linha nenhuma**; (3) `sdd autonomy` (humano) e `sdd kaizen --series` (juiz)
+contavam escalada em eixos diferentes e podiam reportar números diferentes para o mesmo período.
+
+| | Antes (`fdf8708`) | Depois (`fba1afa`) |
+|---|---|---|
+| Jidoka do `blocked` com checkpoint de 20000 linhas | **não dispara** (silencia sempre a partir de ~5000 linhas de `ckstatus`; 10/10 medido) | dispara, `rc 3` pelo ramo certo |
+| Linhas no ledger quando o runner se auto-degrada | **0** | **1 por `run_id`** (medido no re-walk: ramo entrado 3×, registro 1×) |
+| Leitores que agrupam escalada por `kit_sha` | 1 de 2 (só a série) | **2 de 2**, com asserção que compara dado com dado |
+| Consumidores do enum de escalada que enxergam o mesmo conjunto | 2 de 3 (`phase_label` ficou cego) | **3 de 3**, por um `is_escalation` único por programa |
+| Mutações no catálogo | 25 (score 100%) | **30** (score 100%, `KNOWN_GAPS` vazio) |
+| Chamadas de asserção em `tests/*.sh` | 219 | **260** |
+| Suíte no default (`SDD_MUTATION_JOBS=4`) | 47,9 s | **66,3 s** |
+
+Todas as linhas medidas na fase DOCS, mesma máquina e mesma sessão: `fdf8708` num worktree
+descartável contra o `HEAD` da missão, `./tests/run-all.sh` verde nos dois lados.
+
+**O achado que vale mais que os três consertos: cinco asserções vácuas numa missão só.** Cada uma
+passava por causa do **regime do fixture**, não da propriedade que o nome prometia — o `rc 3` do I1
+era compartilhado com o esgotamento de orçamento; o ramo `draft` do I2 nunca era alcançado; a
+cardinalidade do `F1` era garantida pelo stub que movia o disco uma vez só. A quinta, achada na
+revisão, é de outra espécie: `"nothing had to be taught to phase_label"` **afirmava a decisão
+errada** — e por causa dela a única missão em que o runner baixou a própria régua lia `ok` para o
+juiz assim que um `sdd run` posterior passasse no gate de REVIEW.
+
+| | Antes | Depois |
+|---|---|---|
+| Asserções vácuas conhecidas nesta missão | 5 (4 achadas em execução, 1 na revisão) | 0 |
+| Técnica contra vacuidade registrada como convenção | nenhuma | 3 perguntas no `CLAUDE.md` § "TDD aqui dentro" |
+| Asserção **diferencial** (dois fixtures comparados entre si) | 0 | 1 (`degraded` vs `blocked`, `tests/check-kaizen.sh`) |
+| Testemunha de **regime** (conta quantas vezes o ramo foi entrado) | 0 | 1 (`tests/check-autonomy.sh`, exige ≥2) |
+
+**Sensor durável:** as 5 mutações novas (`RUN_jidoka_pipefail`, `RUN_degraded_row_dropped`,
+`RUN_escalations_no_axis`, `RUN_degraded_repeats`, `RUN_degraded_label_blind`) — cada conserto tem
+um mutante que o mata, e `sdd health` reprova gate sem mutação. Red observado antes de cada Green.
+
+**Custo dito como custo:** o critério (4) da D7 ("suíte < 30 s no default") continua não atingido e
+esta missão **piora** o número de propósito — 5 mutantes a mais, cada um rodando a suíte inteira
+numa cópia, e o fixture mais caro abrindo mais sessões de stub desde o `F1`. Cortar mutação para
+ganhar tempo violaria o princípio que motivou o I13.2. As três saídas (subir o alvo, subir
+`SDD_MUTATION_JOBS`, aceitar) estão no `TODO.md` com a medição, como decisão do humano.
+
+---
+
 ## 2026-08-15 — I13.3: o laço fecha — o kit julga a própria mudança e planeja a próxima
 
 **Problema medido:** o kit detectava 5× mais do que fechava (20 achados / 4 fechados na missão

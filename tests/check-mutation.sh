@@ -191,6 +191,64 @@ mut_KAIZEN_guard_ignored() {
   sed -i 's|if \[ "\$sufficient" != "true" \] && \[ "\$verdict" != "indeterminado" \]; then|if false; then|' "$1"
 }
 
+# Not a gate, and the most expensive false negative the runner can produce: the Jidoka goes back
+# to a PIPE. Under `pipefail` `grep -q` exits on the match, `printf` dies of SIGPIPE and the
+# pipeline returns 141, so the `if` reads "no blocked" while a blocked increment EXISTS — and the
+# runner burns the whole phase budget against the wall it already knew was there. Note this is the
+# sabotage that a SMALL fixture cannot see: the race is decided by the size of the text, which is
+# why check-gates.sh asserts it on a 20000-row checkpoint.
+mut_RUN_jidoka_pipefail() {
+  sed -i 's@grep -qx "blocked" <<< "$ckstatus"@printf "%s\\n" "$ckstatus" | grep -qx "blocked"@' "$1"
+}
+
+# Not a gate, and the exact bug I2 closed: `force_phase="PR"; continue` sat ABOVE both writers, so
+# the runner lowering its own bar — the single most interesting autonomy event a mission can
+# produce — reached neither the journal nor the ledger. The series showed failing REVIEW sessions
+# followed by a PR phase and nothing saying why, and the judge reads the series.
+#
+# It is also the guard on the reachability of an expensive fixture: check-autonomy.sh has to
+# satisfy PLAN/TICKET/EXEC/QA and keep the disk MOVING to reach the draft branch at all. If a
+# future change makes that fixture stop arriving there, this mutation stops being caught and the
+# score says so — instead of a whole block of assertions passing over a branch nobody ran.
+mut_RUN_degraded_row_dropped() {
+  sed -i 's|autonomy_degraded_row "review-to-draft"|: "review-to-draft"|' "$1"
+}
+
+# Not a gate, and the other half of the same writer: the one-shot guard dies and the branch writes
+# a row on EVERY lap. `force_phase="PR"` does not end the run — PR's gate fails, `current_phase`
+# hands REVIEW back with the budget still blown, and the branch is re-entered. One degradation,
+# three rows in both readers, against the "exactly one" of the mission's metric. This is the
+# CARDINALITY of the record, which RUN_degraded_row_dropped (the writer's existence) cannot see:
+# that one stays caught with the guard sabotaged, and this one stays caught with the writer intact.
+#
+# It is also what keeps check-autonomy.sh's degradation fixture in the REPEATING regime. The
+# assertion it kills was green for two commits over a stub that moved the disk once, asserting a
+# property of the fixture and not of the code — the third such vacuity of this mission.
+mut_RUN_degraded_repeats() {
+  sed -i 's|if \[ "\$degraded_logged" = "0" \]; then|if true; then|' "$1"
+}
+
+# Not a gate (RUN_ per the naming rule above — `cmd_autonomy` is a reader, not a gate): the human's
+# escalation table loses the kit_sha axis and goes back to counting `.kind` over the whole ledger.
+# The series keeps slicing per version, so the two instruments over the SAME file start reporting
+# different escalation counts for the same period with nothing explaining the divergence — and kit
+# version is the axis the ledger exists to measure. The `on_axis` filter is left ALONE on purpose:
+# a mutant that sabotages both halves would stop distinguishing which one the assertions measure.
+mut_RUN_escalations_no_axis() {
+  sed -i 's|group_by(.kit_sha, .kind)|group_by(.kind)|' "$1"
+}
+
+# Not a gate: `phase_label` goes back to knowing only `blocked`, so a mission where the runner
+# lowered its own bar reads `ok` in the judge's label histogram as soon as a later `sdd run` gets
+# REVIEW past its gate — the rubric groups by (mission, phase) over the whole kit_sha slice, not
+# per run. It sabotages ONLY phase_label's use of the shared predicate; the `escalations` map and
+# the admission filter keep theirs, so what dies is the label and nothing else, and this mutant
+# cannot be confused with RUN_degraded_row_dropped (the row's existence) or RUN_refez_dropped
+# (the `refez` value itself, which stays reachable through the other two clauses).
+mut_RUN_degraded_label_blind() {
+  sed -i 's@if (map(select(is_escalation)) | length) > 0@if (map(select(.event == "blocked")) | length) > 0@' "$1"
+}
+
 CATALOG=(
   PLAN_empty_approval
   TICKET_no_sprint
@@ -212,6 +270,11 @@ CATALOG=(
   RUN_autonomy_null_moved_as_zero
   RUN_moved_never_true
   RUN_autonomy_sha_warn_repeats
+  RUN_jidoka_pipefail
+  RUN_degraded_row_dropped
+  RUN_degraded_repeats
+  RUN_escalations_no_axis
+  RUN_degraded_label_blind
   KAIZEN_gate_blind
   KAIZEN_jidoka_dead
   KAIZEN_guard_ignored
