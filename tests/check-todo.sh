@@ -117,7 +117,13 @@ todo_awk() {
   # from "the findings begin" is what lets the header keep its example fence without the parser
   # having to understand fences. Absent (a probe fixture), the whole file is the findings section.
   from="$(grep -n '^## Aberto' "$f" 2>/dev/null | head -1 | cut -d: -f1)"
-  awk -v cap="$2" -v mode="$3" -v from="${from:-0}" '
+  # Parity of the header fence lines, counted rather than tracked. Backticks and tildes are
+  # counted apart so a mixed pair cannot cancel out.
+  local hb ht hodd
+  hb="$(head -n "${from:-0}" "$f" 2>/dev/null | grep -cE '^ {0,3}```' || true)"
+  ht="$(head -n "${from:-0}" "$f" 2>/dev/null | grep -cE '^ {0,3}~~~' || true)"
+  hodd=$(( (hb % 2) + (ht % 2) ))
+  awk -v cap="$2" -v mode="$3" -v from="${from:-0}" -v hodd="$hodd" '
     # Byte offset of the last " — " separator, 0 when there is none.
     # ⚠️ index()/substr(), never a regex with a negated em-dash class. The awk this repo runs is
     # mawk, BYTE-oriented whatever the locale: `[^—]` is the negated byte set {0xE2,0x80,0x94},
@@ -162,16 +168,21 @@ todo_awk() {
         print "  line " NR ": ticked box — a closed finding is deleted after its PR merges, never [x]"
       flush(); next
     }
-    # ── Header: only the format example is skipped, and only inside its fence ──────────────────
-    # An earlier version skipped the header WHOLESALE, which hid seven of eight rules and the
-    # count from anything an editor parked above the heading. The fence toggle here is the only
-    # one left in the file and it is bounded: it can never reach past `from`, so a broken header
-    # fence costs a loud complaint about header prose, never silence in the findings section.
-    NR <= from && /^```/      { hfence = !hfence; next }
-    NR <= from && hfence      { next }
-    NR == from && hfence      { if (mode == "lint") print "  line " NR ": the header fence never closes" }
+    # ── Header: no fence toggle, because every fence toggle this file ever had desynced ────────
+    # The last one lived here, bounded to the header, and it still failed silent: one stray ``` in
+    # the header made the ENTIRE findings section render as a code block on GitHub while the run
+    # reported "ok 48 finding(s)". Its intended guard was unreachable dead code, so the comment
+    # promising "a loud complaint, never silence" was false in both halves.
+    #
+    # What replaced it cannot desync because it holds no state: `hodd` is a PARITY COUNT of the
+    # header fence lines, computed once outside awk. Odd means the findings section is inside a
+    # code block, which is the only thing about the header that can hurt the reader.
+    # The format example is recognised by CONTENT — an item whose text opens with a `<`
+    # placeholder is a template, and no real finding does — so it needs no fence to be skipped.
+    NR == 1 && hodd           { if (mode == "lint") print "  line 1: the header fences are unbalanced — the findings section renders as code" }
     NR <= from && /^[ \t>]*([-*+]|[0-9]+[.)])[ \t]+\[ \]/ {
-      if (mode == "lint") print "  line " NR ": a finding above the findings section"
+      if ($0 !~ /^- \[ \] </ && mode == "lint")
+        print "  line " NR ": a finding above the findings section"
       next
     }
     NR <= from                { next }
@@ -204,6 +215,12 @@ todo_awk() {
       flush(); next
     }
     initem && NF && /^[ \t]/  { body = body " " $0; last = $0; nlines++; next }
+    # Refused like everything else off the whitelist, but named for what it is: calling an
+    # indented line "prose at column 0" sends the reader to look for something that is not there.
+    NF && /^[ \t]/ {
+      if (mode == "lint") print "  line " NR ": an indented line that belongs to no finding"
+      next
+    }
     /^#/                      { flush(); next }
     /^>/                      { flush(); next }
     NF {
@@ -387,6 +404,36 @@ EOF
     printf -- '- [ ] a wish with no title, no anchor and no date\n\n## Aberto\n\n'
     printf -- '- [ ] **Good** — `f:1` — w. — by `x` (2026-08-16)\n'; } > "$box/aboveitem.md"
   assert_says "$box/aboveitem.md" 8 'above the findings section' "an item parked above ## Aberto"
+
+  # ...and the format example, which IS an item-shaped line in the header, must NOT be. It is
+  # recognised by content — a `<placeholder>` where a title belongs — because recognising it by
+  # fence needed a toggle, and every fence toggle this file ever had desynced.
+  { printf 'Format:\n\n```md\n'
+    printf -- '- [ ] <what> — `file:line` — <why> — by `<agent>` (YYYY-MM-DD)\n'
+    printf '```\n\n## Aberto\n\n'
+    printf -- '- [ ] **Good** — `f:1` — w. — by `x` (2026-08-16)\n'; } > "$box/template.md"
+  assert_clean "$box/template.md" 8 "the format example in the header"
+
+  # One stray fence in the header renders the ENTIRE findings section as a code block on GitHub.
+  # The toggle that used to guard this reported "ok" on the real file; a parity count cannot.
+  { printf 'Format:\n\n```md\n'
+    printf -- '- [ ] <what> — `file:line` — <why> — by `<agent>` (YYYY-MM-DD)\n'
+    printf '```\n```\n\n## Aberto\n\n'
+    printf -- '- [ ] **Good** — `f:1` — w. — by `x` (2026-08-16)\n'; } > "$box/unbalanced.md"
+  assert_says "$box/unbalanced.md" 8 'unbalanced' "an odd number of header fences"
+  # Tildes are counted apart from backticks: a mixed pair must not cancel out into "balanced".
+  { printf 'Format:\n\n~~~md\n'
+    printf -- '- [ ] <what> — `file:line` — <why> — by `<agent>` (YYYY-MM-DD)\n'
+    printf '~~~\n~~~\n\n## Aberto\n\n'
+    printf -- '- [ ] **Good** — `f:1` — w. — by `x` (2026-08-16)\n'; } > "$box/unbalanced2.md"
+  assert_says "$box/unbalanced2.md" 8 'unbalanced' "an odd number of header tilde fences"
+
+  # An indented line with no finding open is refused like everything off the whitelist, but it is
+  # named for what it is: calling it "prose at column 0" sends the reader to the wrong place.
+  { printf '## Aberto\n\n'
+    printf -- '- [ ] **Good** — `f:1` — w. — by `x` (2026-08-16)\n\n## Section\n  an orphan indented line\n'; } \
+    > "$box/orphanindent.md"
+  assert_says "$box/orphanindent.md" 8 'belongs to no finding' "an indented line outside any item"
 
   # Free prose at column 0 is refused, and that is what bounds a body written WITHOUT indentation.
   # Markdown says those paragraphs are not item content, so the cap never saw them: three findings
@@ -673,8 +720,8 @@ EOF
   # Floor on the probe COUNT, for the same reason every other floor here exists: neutering all the
   # assert_* call sites made the summary print "0 probe(s)" and exit 0 — a selftest that ran
   # nothing reads exactly like a selftest that passed. The number moves only on purpose.
-  if [ "$((PROBES + PROBES_SKIPPED))" -lt 63 ]; then
-    printf '  SELFTEST FAIL  only %d probe(s) accounted for (%d ran, %d skipped), expected 63\n' \
+  if [ "$((PROBES + PROBES_SKIPPED))" -lt 67 ]; then
+    printf '  SELFTEST FAIL  only %d probe(s) accounted for (%d ran, %d skipped), expected 67\n' \
       "$((PROBES + PROBES_SKIPPED))" "$PROBES" "$PROBES_SKIPPED" >&2
     FAILS=$((FAILS + 1)); fail_rc 92
   fi
