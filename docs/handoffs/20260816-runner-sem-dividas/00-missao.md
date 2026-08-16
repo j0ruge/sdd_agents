@@ -84,24 +84,24 @@ sozinho. Qualquer ✗ → `aprovacao` fica vazio e o runner para pedindo aprova�
 
 | # | Critério | Status | Evidência |
 |---|---|---|---|
-| a | Grill sem perguntas abertas não endereçadas (🚩 vazia ou itens deferidos com dono) | <✅/✗> | <onde ver> |
-| b | Checklist kaizen 100% ✅ e checklist DDD 100% ✅ ou `n/a` justificado | <✅/✗> | <seção abaixo> |
-| c | Plano passa no teste de autocontenção (sessão nova só com 00/01/checkpoint executa) | <✅/✗> | <como foi testado> |
-| d | Todo incremento do `checkpoint.md` tem Check executável (comando → esperado) | <✅/✗> | <contagem> |
-| e | `versao:` confirmada pelo humano (ou `JIRA_ENABLED=false`) | <✅/✗> | n/a — JIRA_ENABLED=false |
+| a | Grill sem perguntas abertas não endereçadas (🚩 vazia ou itens deferidos com dono) | ✅ | Decisões 1-4 (humano) + 5-7 (planner, vetáveis) abaixo; nenhuma 🚩 restante |
+| b | Checklist kaizen 100% ✅ e checklist DDD 100% ✅ ou `n/a` justificado | ✅ | K1-K8 abaixo; DDD n/a com justificativa de 1 linha |
+| c | Plano passa no teste de autocontenção (sessão nova só com 00/01/checkpoint executa) | ✅ | cada incremento nomeia arquivo:linha, o padrão da casa a seguir e o comando verificado; a seção "Contexto verificado" do 01-plano.md carrega os pitfalls (stream-json exige --verbose, drift de linhas do TODO) |
+| d | Todo incremento do `checkpoint.md` tem Check executável (comando → esperado) | ✅ | 10/10 na tabela do checkpoint.md |
+| e | `versao:` confirmada pelo humano (ou `JIRA_ENABLED=false`) | ✅ | n/a — JIRA_ENABLED=false |
 
 ## Checklist kaizen (`kaizen-software`)
 
 | # | Item | Status | Nota |
 |---|---|---|---|
-| K1 | Gemba — fui ver onde o trabalho acontece | <✅/✗> | âncoras re-verificadas em `7045e0f`; re-conferir no HEAD da branch |
-| K2 | Problema declarado com métrica | <✅/✗> | |
-| K3 | Desperdícios identificados e cortados | <✅/✗> | item 5 sugere triagem antes de conserto |
-| K4 | Fatiamento incremental, cada fatia verificável | <✅/✗> | |
-| K5 | Check por artefato (rótulo ≠ artefato) | <✅/✗> | |
-| K6 | Jidoka — o que para a linha está definido | <✅/✗> | itens 1-2 tocam a suíte que os gates rodam |
-| K7 | SDCA — a melhoria vira padrão (doc/rule/teste) | <✅/✗> | |
-| K8 | Registro no KAIZEN_LOG | <✅/✗> | |
+| K1 | Gemba — fui ver onde o trabalho acontece | ✅ | as 11 âncoras re-verificadas em `7045e0f`; o Gemba achou o item obsoleto (I1) e mediu o volume real do lint (2×SC2318) |
+| K2 | Problema declarado com métrica | ✅ | seção Métrica: zero itens na seção, com três destinos válidos e prova por artefato |
+| K3 | Desperdícios identificados e cortados | ✅ | triagem antes de conserto (I1); `bad_rows` removido em vez de embelezado (I4); nenhum evento novo de enum no I9 (reusa o par blocked existente) |
+| K4 | Fatiamento incremental, cada fatia verificável | ✅ | 10 fatias, cada uma do tamanho de uma sessão, ordem risco-crescente |
+| K5 | Check por artefato (rótulo ≠ artefato) | ✅ | todo Check é comando → esperado; I3 exige o texto do ramo certo E a ausência do artefato podre |
+| K6 | Jidoka — o que para a linha está definido | ✅ | suíte vermelha para a linha; I5/I6 tocam a própria suíte — quebra ali É a parada; I9 define onde o run termina |
+| K7 | SDCA — a melhoria vira padrão (doc/rule/teste) | ✅ | I5 deixa sensor contra a volta da família; I6 estende o lint; cada conserto de runner entra no catálogo de mutação |
+| K8 | Registro no KAIZEN_LOG | ✅ | cobrado pela verificação end-to-end do 01-plano.md; a fase DOCS escreve, com antes/depois (baseline: suíte 33 s, mutação 30/30, 11 itens na seção) |
 
 ## Checklist DDD (`ddd`) — condicional
 
@@ -116,6 +116,12 @@ n/a — sem toque de domínio: dívidas de runner bash e de suíte; nenhum contr
 3. Triagem antes de conserto: item cuja Direção o código já implementa fecha por hash, nunca por
    re-implementação (o item 5 é o caso conhecido; procurar outros).
 4. Corte de escopo pelo planner é aceito com justificativa; os cortados permanecem no `TODO.md`.
+5. (planner) Item 6 resolve por honestidade de comentário, não por fixar locale global — mexer em
+   `LC_ALL` do runner inteiro tem raio de efeito (sort, printf) que o ganho não paga.
+6. (planner) Pós-degradação, a SEGUNDA entrada no ramo encerra o run com o par
+   `BLOCKED`/`budget-exhausted` já existente — nenhum evento novo no enum do ledger.
+7. (planner) I10 (stream-json) fica na missão como último incremento, reversível sozinho; se o
+   parse real quebrar, reverte e o item volta ao `TODO.md` com o aprendido.
 
 ## Pendências para o humano
 
