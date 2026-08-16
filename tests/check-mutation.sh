@@ -201,6 +201,19 @@ mut_RUN_jidoka_pipefail() {
   sed -i 's@grep -qx "blocked" <<< "$ckstatus"@printf "%s\\n" "$ckstatus" | grep -qx "blocked"@' "$1"
 }
 
+# Not a gate, and the exact bug I2 closed: `force_phase="PR"; continue` sat ABOVE both writers, so
+# the runner lowering its own bar — the single most interesting autonomy event a mission can
+# produce — reached neither the journal nor the ledger. The series showed failing REVIEW sessions
+# followed by a PR phase and nothing saying why, and the judge reads the series.
+#
+# It is also the guard on the reachability of an expensive fixture: check-autonomy.sh has to
+# satisfy PLAN/TICKET/EXEC/QA and keep the disk MOVING to reach the draft branch at all. If a
+# future change makes that fixture stop arriving there, this mutation stops being caught and the
+# score says so — instead of a whole block of assertions passing over a branch nobody ran.
+mut_RUN_degraded_row_dropped() {
+  sed -i 's|        autonomy_degraded_row "review-to-draft"|        : "review-to-draft"|' "$1"
+}
+
 CATALOG=(
   PLAN_empty_approval
   TICKET_no_sprint
@@ -223,6 +236,7 @@ CATALOG=(
   RUN_moved_never_true
   RUN_autonomy_sha_warn_repeats
   RUN_jidoka_pipefail
+  RUN_degraded_row_dropped
   KAIZEN_gate_blind
   KAIZEN_jidoka_dead
   KAIZEN_guard_ignored

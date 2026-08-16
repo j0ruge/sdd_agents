@@ -325,6 +325,104 @@ assert_eq "a kit with no .git yields kit_sha:null on every row" "true" \
 assert_eq "and the warning appeared exactly once" "1" \
   "$(grep -c 'is not a git checkout' <<< "$err")"
 
+# --- the self-degradation review→draft leaves a trace -----------------------
+# PUBLISH_ON_REVIEW_BLOCKED=draft is the runner deciding, ALONE, to stop reviewing and publish a
+# draft PR anyway — the most interesting autonomy event a mission can produce. Until this
+# assertion existed the branch's `force_phase="PR"; continue` jumped over BOTH writers (the
+# journal and the ledger), so the whole history of the event was a run of failing REVIEW sessions
+# followed by a PR phase, with nothing anywhere saying why. The judge reads the series; this
+# event was invisible to it.
+#
+# Reaching the branch is the expensive part of the fixture: the mission has to actually BE in
+# REVIEW, so PLAN, TICKET, EXEC and QA must all pass first. And the REVIEW session has to MOVE the
+# disk — with a dead stub the no-progress escalation fires on the inline retry and the budget
+# branch is never reached at all.
+echo "== the self-degradation review→draft writes exactly one row =="
+: > "$LEDGER"
+cat >> .sdd/config.sh <<'EOF'
+REVIEW_MAX_ITER=1
+PUBLISH_ON_REVIEW_BLOCKED="draft"
+EOF
+printf -- '---\nfase: EXEC\nstatus: done\n---\n' > "$MDIR/20-handoff-exec.md"
+printf -- '---\nfase: QA\nstatus: skipped\n---\n' > "$MDIR/30-handoff-qa.md"
+git add -A && git commit -qm "chore: exec handoff and a skipped QA"
+# The hash goes into the checkpoint only AFTER its own commit exists, and a second commit follows:
+# gate_EXEC demands the commit be an ANCESTOR of HEAD, not merely an object in the database.
+DONE_HASH="$(git rev-parse --short HEAD)"
+cat > "$MDIR/checkpoint.md" <<EOF
+| ID | Incremento | Check (comando → esperado) | Status | Commit |
+|---|---|---|---|---|
+| I1 | slice one | \`true\` → 0 | done | $DONE_HASH |
+EOF
+git add -A && git commit -qm "chore: the increment is done"
+
+# Moves the disk on the FIRST call only: that first move keeps the REVIEW loop alive long enough
+# to blow REVIEW_MAX_ITER=1 (one degradation, not two), and the later PR sessions then stall and
+# end the run through the ordinary no-progress escalation instead of looping.
+DRAFT_MARKER="$FIX/.degraded-once"
+rm -f "$DRAFT_MARKER"
+cat > "$OUTSIDE/stub/claude" <<STUB
+#!/usr/bin/env bash
+if [ ! -e "$DRAFT_MARKER" ]; then
+  : > "$DRAFT_MARKER"
+  git -C "$FIX" add -A
+  git -C "$FIX" commit -qm "chore: the review session changed something"
+fi
+echo '{}'
+exit 0
+STUB
+chmod +x "$OUTSIDE/stub/claude"
+
+"$SDD" run "$MISSION" >/dev/null 2>&1; rc=$?
+assert_eq "the run ends on the no-progress escalation of the PR phase it degraded into" "3" "$rc"
+# ANTI-VACUITY, and the lesson I1 paid for: rc 3 is shared by all three escalation paths, so `rc 3`
+# alone would keep this whole block green on a fixture that never reached the draft branch at all.
+# A PR session with the REVIEW gate still failing can only exist BECAUSE the runner degraded —
+# `current_phase` would hand back REVIEW forever otherwise. This assertion is what says the
+# assertions below are pointed at the right branch, and it holds with or without the writer.
+assert_eq "the fixture really did reach the draft branch: a PR session with REVIEW still failing" \
+  "true" "$(jq -s '[.[] | select(.event == "session" and .phase == "PR")] | length > 0' "$LEDGER")"
+assert_eq "and no REVIEW gate ever passed, so nothing but the degradation could have moved it" \
+  "0" "$(jq -s '[.[] | select(.phase == "REVIEW" and .gate == "pass")] | length' "$LEDGER")"
+assert_eq "the degradation wrote exactly one row" "1" \
+  "$(jq -s '[.[] | select(.event == "degraded")] | length' "$LEDGER")"
+# `degraded` and not `blocked`: `blocked` means the line STOPPED and the runner returns 3. Here
+# the run went ON, to PR. Reusing `blocked` would have been cheaper — it inherits the kit_sha axis
+# and the series aggregation for free — but it would record "stopped" for a run that continued,
+# and the ledger exists to record fact.
+assert_eq "the event says the run degraded, not that it stopped" "degraded" \
+  "$(jq -r -s '[.[] | select(.event == "degraded")][0].event' "$LEDGER")"
+assert_eq "kind names the degradation by enum, not by prose" "review-to-draft" \
+  "$(jq -r -s '[.[] | select(.event == "degraded")][0].kind' "$LEDGER")"
+assert_eq "the phase that degraded" "REVIEW" \
+  "$(jq -r -s '[.[] | select(.event == "degraded")][0].phase' "$LEDGER")"
+assert_eq "and the mission it happened in" "$MISSION" \
+  "$(jq -r -s '[.[] | select(.event == "degraded")][0].mission' "$LEDGER")"
+# The kit stamp is what puts the row on the version axis the whole ledger exists to measure. A
+# writer that forgot it would still look fine in `sdd autonomy` and vanish from the series.
+assert_eq "the row carries the kit stamp, so it lands on the version axis" "true" \
+  "$(jq -s '[.[] | select(.event == "degraded")][0] | has("kit_sha") and has("kit_dirty")' "$LEDGER")"
+assert_eq "it shares the run_id of the run that produced it" "true" \
+  "$(jq -s '([.[] | select(.event == "degraded")][0].run_id) == (.[0].run_id)' "$LEDGER")"
+# Same refusal as autonomy_blocked_row: a degradation spends no session of its own, so a 0 in the
+# session fields would enter the judge's arithmetic as if it had.
+assert_eq "no session fields on a degradation" "true" \
+  "$(jq -s '[.[] | select(.event == "degraded")][0]
+            | has("rc") == false and has("cost_usd") == false and has("moved") == false' "$LEDGER")"
+assert_eq "the gate reason that triggered it rides along" "true" \
+  "$(jq -s '([.[] | select(.event == "degraded")][0].gate_why | length) > 0' "$LEDGER")"
+# The journal is the human's trail and the ledger is the judge's; the `continue` skipped BOTH, so
+# both are asserted here.
+assert_eq "the pipeline journal records it too" "1" \
+  "$(grep -c 'DEGRADED' "$FIX/.sdd/logs/$MISSION/pipeline.log" 2>/dev/null || echo 0)"
+# The human reader must not file a row the runner itself wrote under "unrecognized": that would
+# just move the blind spot from the judge to the human.
+out="$( "$SDD" autonomy 2>&1 )"
+assert_eq "the human reader does not call it unrecognized" "0" "$(grep -c 'unrecognized' <<< "$out")"
+assert_eq "it is counted as an escalation, by its kind" "1" \
+  "$(grep -c 'review-to-draft: 1' <<< "$out")"
+assert_bucket_sum "the four buckets sum to the header total (a ledger with a degradation)" "$out"
+
 # --- the reader ------------------------------------------------------------
 # Fixture ledger written by hand: this is OUR format, so there is no third-party source to copy
 # from (the provenance rule covers skill output). Every row here exists to prove one refusal.

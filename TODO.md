@@ -697,6 +697,26 @@ Achados sobre **repos-alvo** vão para o `TODO.md` daquele repo. Este arquivo é
   Quando o I13.4 (graduação/`KAIZEN_AUTO_APPROVE`) precisar da série de vereditos, criar o
   espelho junto — nunca antes. — registrado na execução do `i13.3-sdd-kaizen` (2026-08-15)
 
+- [ ] **Três das quatro metades do evento `degraded` não têm mutação no catálogo** —
+  `bin/sdd:1796` (o `select` da série), `bin/sdd:1544` (`pipeline_log_line`) e `bin/sdd:1707`
+  (`is_escalation` do `cmd_autonomy`) — o I2 entrou com **uma** mutação
+  (`RUN_degraded_row_dropped`, o escritor do ledger) porque o Check do incremento fixa o score em
+  27, e sabotar várias âncoras num mutante só derrubaria a detecção de "âncora apodreceu" que o
+  cabeçalho do `check-mutation.sh` promete. As três foram sabotadas **à mão** nesta sessão e as
+  três mataram a suíte (evidência nas notas do `checkpoint.md`), mas evidência de sessão não roda
+  no CI. Vale um mutante para cada quando houver folga de régua. — descoberto por `sdd-executor`
+  na missão `20260815-ledger-sem-ponto-cego` (2026-08-16)
+
+- [ ] **O runner se auto-degrada mais de uma vez no mesmo `sdd run`** — `bin/sdd:1546`: depois do
+  `force_phase="PR"`, se a fase PR mexer no disco e não satisfizer o gate, o laço volta a
+  `current_phase()` → `REVIEW`, o orçamento continua estourado e o ramo `draft` dispara de novo.
+  Cada volta escreve uma linha `degraded` — honesto quanto ao fato, mas infla a contagem de
+  escalada da série com um evento que o humano leria como "degradou N vezes" quando degradou uma
+  vez e ficou preso. O fixture do I2 só não vê isso porque a segunda sessão de PR não move o
+  disco e a escalada `no-progress` encerra o run antes. Fora do escopo do I2 (que é registrar o
+  evento, não mudar o laço). — descoberto por `sdd-executor` na missão
+  `20260815-ledger-sem-ponto-cego` (2026-08-16)
+
 ## Feito
 
 - [x] Re-link do shim quebrado do `agent-browser` (I0) — resolvido em 2026-08-14, com sensor
