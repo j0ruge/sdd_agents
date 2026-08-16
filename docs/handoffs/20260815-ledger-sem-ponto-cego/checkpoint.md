@@ -16,7 +16,7 @@ atualizado: 2026-08-16 00:45
 |---|---|---|---|---|
 | I1 | Jidoka do `blocked` com herestring, sem depender do buffer do pipe | `./tests/run-all.sh` → `suite green` com `score: 26 caught, 0 known gap(s), of 26` | done | 3521b9a |
 | I2 | auto-degradação `review-to-draft` escreve no ledger e a série a reconhece | `./tests/run-all.sh` → `suite green` com `score: 27 caught, 0 known gap(s), of 27` | done | 6853796 |
-| I3 | escaladas do `sdd autonomy` agrupadas por `kit_sha`, como a série já faz | `./tests/run-all.sh` → `suite green` com `score: 28 caught, 0 known gap(s), of 28` | pending | — |
+| I3 | escaladas do `sdd autonomy` agrupadas por `kit_sha`, como a série já faz | `./tests/run-all.sh` → `suite green` com `score: 28 caught, 0 known gap(s), of 28` | done | e9a74aa |
 
 ## Notas de execução
 
@@ -108,6 +108,37 @@ atualizado: 2026-08-16 00:45
   `force_phase="PR"`, se PR mexer no disco e não passar no gate, o laço volta a REVIEW com o
   orçamento ainda estourado e o ramo dispara de novo, uma linha `degraded` por volta. O fixture
   só não vê porque a segunda sessão de PR não move o disco. É mudança de laço, não de registro.
+
+- 2026-08-16 · `I3` · **O Red veio limpo e pelo motivo certo, de primeira** — 7 asserções novas
+  vermelhas, todas no bloco novo, e o resto do arquivo verde. A que mais importa é a anti-vacuidade:
+  `grep -cE '^  [A-Za-z][A-Za-z0-9_-]*: [0-9]+$'` devolveu **3** antes do conserto (linha de
+  escalada sem versão nenhuma na frente) e **0** depois — e a linha `no-progress: 4` que ela pegou
+  provava, num número só, as duas metades do defeito: escaladas de dois `kit_sha` somadas E as
+  linhas de kit sujo / sha nulo somadas junto.
+- 2026-08-16 · `I3` · A asserção que **é** a métrica da missão compara dado com dado, não prosa:
+  extrai do `sdd autonomy` as escaladas do `kit_sha` mais recente e as confronta com o mapa
+  `escalations` que `sdd kaizen --series` reporta para o mesmo sha. Os dois leitores discordarem
+  volta a ser vermelho mesmo que cada lado, sozinho, pareça plausível.
+- 2026-08-16 · `I3` · **Desvio do plano, deliberado (nome do mutante):** o plano pedia
+  `AUTONOMY_escalations_no_axis`; entrou como `RUN_escalations_no_axis`. A regra do catálogo
+  (`tests/check-mutation.sh:37`) é `mut_<GATE>_<slug>` para gate e `mut_RUN_<slug>` para o que não
+  é gate — `cmd_autonomy` é leitor, não gate. É a mesma correção que o review do I13.3 já aplicou
+  em `SERIES_refez_dropped` → `RUN_refez_dropped`.
+- 2026-08-16 · `I3` · **Segundo desvio, forçado pelo próprio conserto:** as asserções de leitor do
+  bloco de degradação passaram a **normalizar o carimbo do kit** no ledger antes de chamar o
+  `sdd autonomy`. Com a tabela agora derrubando linha não-comparável, o carimbo real decide o
+  resultado — e ele é árvore suja em qualquer sessão EXEC e cópia sem `.git` dentro do
+  `check-mutation.sh`. Sem normalizar, o bloco passaria no CI e falharia na máquina de quem
+  desenvolve (ou o inverso). As linhas seguem sendo as que o **runner** escreveu; que elas carregam
+  carimbo é asserção separada, contra o ledger intocado.
+- 2026-08-16 · `I3` · Suíte **59,4 s** e `score: 28 caught, 0 known gap(s), of 28` — contra os
+  59,9 s medidos no I2. O mutante novo não custou tempo mensurável: o fixture do I3 é um ledger de
+  6 linhas escrito à mão, sem sessão de stub.
+- 2026-08-16 · `I3` · Fora de escopo, registrados no `TODO.md`: (a) o mesmo `jq` do `cmd_autonomy`
+  tem **dois** testes de comparabilidade (`comparable` com `.kit_dirty == false`, `on_axis` com
+  `.kit_dirty != true`) — hoje não divergem, mas é a família de defeito do I3 um nível abaixo;
+  (b) a tabela do `sdd autonomy` ordena versões lexicograficamente enquanto a série usa ordem de
+  aparição, então a última linha da tabela pode não ser a versão mais recente.
 
 ## Incrementos de fix (QA)
 

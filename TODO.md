@@ -733,6 +733,15 @@ Achados sobre **repos-alvo** vão para o `TODO.md` daquele repo. Este arquivo é
   recente" pode ler a errada. É ordenação de saída humana, não contagem: o I3 alinhou o eixo, não
   a ordem. Mesma família do `latest_matching` com `sort` já registrado acima. — descoberto por
   `sdd-executor` na missão `20260815-ledger-sem-ponto-cego` (2026-08-16)
+- [ ] A sessão de fase é um ponto cego enquanto roda: `run_phase` grava o JSON só no fim —
+  `bin/sdd:897` — `--output-format json` emite um blob único quando a sessão termina, então
+  `.sdd/logs/<missão>/<FASE>-*.json` fica com **0 bytes** durante os ~10 min de cada sessão e o
+  humano não tem como acompanhar o que o agente está fazendo (o transcript ao vivo até existe,
+  mas fora do kit, em `~/.claude/projects/<projeto>/<session-id>.jsonl` — foi por ele que esta
+  sessão foi observada). Direção: `--output-format stream-json` com `tee` para um `.stream.jsonl`
+  ao lado do log atual, preservando o resumo final que `run_phase` já parseia; custo zero de
+  sessão, só plumbing. — descoberto por revisão humana acompanhando a missão
+  `20260815-ledger-sem-ponto-cego` (2026-08-16)
 
 ## Feito
 
