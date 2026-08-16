@@ -41,6 +41,12 @@ fi
 [ -n "${SDD_MUTANT:-}" ] || run "language: no Portuguese prose on the kit surface" \
   "$ROOT/tests/check-lang.sh"
 
+# Same guard and same reason as check-lang above: the mutation sandbox copies bin/ tests/
+# templates/ config/, never TODO.md — inside a mutant this would fail for a missing file, not for
+# shape, and the mutant would score a point for the wrong reason. It also tests no gate, so it
+# could never score a legitimate one.
+[ -n "${SDD_MUTANT:-}" ] || run "findings file holds its shape" "$ROOT/tests/check-todo.sh"
+
 run "template contract" "$ROOT/tests/check-templates.sh"
 run "gate state machine" "$ROOT/tests/check-gates.sh"
 run "dry-run projection" "$ROOT/tests/check-dry-run.sh"
