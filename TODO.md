@@ -232,13 +232,6 @@ Achados sobre **repos-alvo** vão para o `TODO.md` daquele repo. Este arquivo é
   checkpoint malformadas" diz mais que a primeira), ou sai. Pré-existente. — descoberto por
   `sdd-reviewer` na missão `20260814-dry-run-completo` (2026-08-14)
 
-- [ ] **`gate_DOCS` reprova o `45-docs.md` que menciona o arquivo de achados pelo nome** —
-  `bin/sdd:394` — a sentinela `grep -qE '✗|\bTODO\b|<preencher>'` casa com o ponto, então a
-  string `TODO.md` reprova o gate; e `agents/sdd-docs.md:81` manda fechar o artefato com uma
-  seção que contém a palavra nua — o agente colide com o gate por construção. Pior: incompleto
-  legítimo e menção inocente reprovam com a **mesma** mensagem. Direção: ancorar na coluna Status
-  da tabela. — descoberto por `sdd-docs` na missão `20260814-dry-run-completo` (2026-08-14)
-
 - [ ] **`${var:0:200}` só corta por caractere se o locale for multibyte** — `bin/sdd:756,777` —
   o comentário promete "character slice", verdade só sob UTF-8; em `C`/`POSIX` o bash volta a
   contar byte, e nem o runner nem `tests/run-all.sh` fixam `LC_ALL`/`LANG`. Não é regressão (é
