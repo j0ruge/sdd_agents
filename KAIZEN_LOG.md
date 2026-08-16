@@ -17,7 +17,7 @@ uma linha por achado desde sempre; a prática eram corpos de até 31 linhas com 
 reproduções e blocos "Atualização (data)" — profundidade que já existe no handoff que cada item
 cita.
 
-| | Antes (`fc304bf`) | Depois (`3030262`) |
+| | Antes (`fc304bf`) | Depois (`c5f5beb`, fecho do 5S) |
 |---|---|---|
 | Linhas / bytes do `TODO.md` | 861 / 75.331 | **362 / 26.566** (−58% / −65%) |
 | Itens fechados parados na seção Aberto | 14 | **0** |
@@ -62,9 +62,15 @@ o plano previa. A segunda: o `check-lang` reprovou a primeira versão deste sens
 citações em português nos meus próprios comentários** — o sensor de idioma pegou o autor do
 sensor de forma, que é o laço funcionando.
 
-⚠️ **O alvo de 300 linhas não foi atingido: são 362.** As sete seções `###` custaram ~46 linhas e
-ficaram porque agrupar por natureza (sensores, contrato, runner, saída humana, comentário, custo,
-YAGNI) é o que torna 45 itens navegáveis. Registrado como número, não como sucesso.
+⚠️ **O alvo de 300 linhas não foi atingido: foram 362 no fecho.** As sete seções `###` custaram
+~46 linhas e ficaram porque agrupar por natureza (sensores, contrato, runner, saída humana,
+comentário, custo, YAGNI) é o que torna dezenas de itens navegáveis. Registrado como número, não
+como sucesso.
+
+⚠️ **Toda linha desta tabela é medida NO COMMIT que o cabeçalho nomeia, não "hoje".** O `TODO.md`
+é arquivo vivo: um achado novo entra e o número sobe no mesmo dia — como aconteceu horas depois
+deste fecho. Três correções seguidas desta entrada tiveram a mesma causa raiz (medir num commit e
+rotular outro), então a âncora agora está no cabeçalho e a prosa fala no passado.
 
 ⚠️ **A primeira versão desta tabela trazia "Achados abertos 47 → 46", e os dois números estavam
 errados** — corrigidos para 64 → 45 pela revisão de código. Duas causas somadas, e as duas
