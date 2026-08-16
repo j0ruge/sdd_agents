@@ -65,9 +65,12 @@ valid_cap() {
 #
 # Three parsing rules earn their keep and each was written after a sabotage got past the earlier
 # version: an UNCLOSED fence is reported (one stray ``` used to latch the parser off and blank
-# every rule below it while the run stayed green); fences count up to three leading spaces, as
-# markdown allows; and a column-0 line that is not an item or a fence ENDS the item, so a
-# footnote paragraph after the last finding is no longer absorbed into it.
+# every rule below it while the run stayed green); an indented fence inside an item is that item's
+# code block rather than a document fence; and a column-0 line ENDS the item, so the item does not
+# stay open across a blank line and swallow the INDENTED continuation of the paragraph that
+# follows it. (Precision the earlier comment here lacked: a column-0 line was never absorbed —
+# absorption requires a leading blank — so the rule earns its keep only in that indented case,
+# which is exactly what its probe now exercises.)
 #
 # That last rule subsumes the `/^#/` heading rule this parser used to carry — a heading is a
 # column-0 line — and the redundancy was found the honest way: sabotaging the heading rule left
@@ -81,10 +84,24 @@ todo_awk() {
     # attribution alone and an anchorless wish sails through. Splitting on the separator (which
     # the format already prescribes) works for one-line and multi-line items alike, and stays
     # language-neutral — it never looks at the words.
-    function head_of(text,   head) {
-      head = text
-      sub(/ — [^—]*$/, "", head)
-      return head
+    # ⚠️ index()/substr(), never a regex with a negated em-dash class. The awk this repo runs is
+    # mawk (1.3.4), which is BYTE-oriented whatever the locale: `[^—]` is the negated byte set
+    # {0xE2,0x80,0x94}, so any tail character encoded with 0xE2 — the whole U+2000..U+2FFF block,
+    # which is every curly quote, ellipsis, en-dash, bullet and arrow in ordinary prose —
+    # made the match fail, `head` stayed the whole item, and the rule silently degraded back to
+    # "a backtick anywhere", which the attribution alone satisfies. Failing OPEN on ordinary
+    # punctuation. index() and substr() are byte-based too, but CONSISTENTLY so, which is all
+    # this needs: it looks for a literal separator, never for a class.
+    function head_of(text,   sep, i, p, last) {
+      sep = " — "; last = 0; i = 1
+      while ((p = index(substr(text, i), sep)) > 0) {
+        last = i + p - 1
+        i = last + length(sep)
+      }
+      # No separator at all means no attribution boundary, so there is no region an anchor could
+      # live in — reported as a missing anchor rather than waved through.
+      if (last == 0) return ""
+      return substr(text, 1, last - 1)
     }
     function flush() {
       if (!initem) return
@@ -103,13 +120,22 @@ todo_awk() {
       }
       initem = 0
     }
-    /^ {0,3}```/ { flush(); if (!fence) fence_line = NR; fence = !fence; next }
-    fence        { next }
+    /^```/                     { flush(); if (!fence) fence_line = NR; fence = !fence; next }
+    fence                      { next }
+    # An INDENTED fence while an item is open belongs to that item as a code block, not to the
+    # document.
+    # Treating it as a document fence made the parser flush the item and skip to the close, so a
+    # 43-line item read as 1 line (cap bypassed) and a `- [x]` parked below it was never judged.
+    initem && /^[ \t]+```/     { body = body " " $0; last = $0; nlines++; next }
+    /^ {1,3}```/               { flush(); if (!fence) fence_line = NR; fence = !fence; next }
     /^[-*] \[[ xX]\] / {
       flush(); initem = 1; start = NR
       first = $0; body = $0; last = $0; nlines = 1; next
     }
     initem && NF && /^[ \t]/   { body = body " " $0; last = $0; nlines++; next }
+    # A column-0 line closes the item. Without this the item stays open across the blank line and
+    # swallows the INDENTED continuation of whatever follows: the second line of a footnote then
+    # becomes the last line of the item, and the date rule blames the finding above it.
     initem && NF               { flush(); next }
     END {
       flush()
@@ -147,8 +173,7 @@ assert_says() { # <file> <cap> <substring> <label>
   local out; out="$(lint_todo "$1" "$2")"
   case "$out" in *"$3"*) return 0 ;; esac
   printf '  SELFTEST FAIL  %s — expected a violation saying "%s", got: %s\n' \
-    "$3" "$3" "${out:-<nothing>}" >&2
-  printf '                 (probe: %s)\n' "$4" >&2
+    "$4" "$3" "${out:-<nothing>}" >&2
   fail_rc 91
 }
 
@@ -185,11 +210,23 @@ Format:
 EOF
   assert_clean "$box/fenced.md" 8 "the format example inside a fenced block"
 
-  # A footnote at column 0 ends the item instead of being absorbed into it — otherwise the date
-  # rule fires on unrelated prose and blames the finding above.
-  { cat "$box/good.md"; printf '\nA closing note that belongs to the file, not to any item.\n'; } \
+  # The footnote's INDENTED second line is what makes this probe discriminate: without the
+  # column-0 terminator the item stays open across the blank line, absorbs that line, and the date
+  # rule blames the finding above. A one-line footnote proves nothing — column-0 lines are never
+  # absorbed anyway — and the earlier version of this probe was exactly that, so the rule it was
+  # meant to guard could be deleted with the selftest still green.
+  { cat "$box/good.md"
+    printf '\nA closing note that belongs to the file, not to any item.\n'
+    printf '  and its indented continuation, which is part of no finding.\n'; } \
     > "$box/footnote.md"
-  assert_clean "$box/footnote.md" 8 "a column-0 footnote after the last item"
+  assert_clean "$box/footnote.md" 8 "a column-0 footnote with an indented continuation"
+
+  # An indented fence inside an item is that item's code block. Read as a document fence, it made
+  # the parser skip to the close: a 43-line item measured 1 line and slipped under the cap.
+  { printf -- '- [ ] **Item with a fenced block** — `bin/sdd:1` — why. — found by `x` (2026-08-16)\n'
+    printf '  ```sh\n'; for i in $(seq 1 40); do printf '  filler %s\n' "$i"; done
+    printf '  ```\n'; } > "$box/itemfence.md"
+  assert_says "$box/itemfence.md" 8 'content lines, cap is 8' "an item hiding 40 lines behind an indented fence"
 
   PROBES=$((PROBES + 1))
   if [ "$(count_items "$box/fenced.md")" != "1" ]; then
@@ -216,6 +253,22 @@ EOF
   printf -- '- [ ] **Empty anchor** — `` — why. — found by `sdd-qa` in mission `m` (2026-08-16)\n' \
     > "$box/emptyanchor.md"
   assert_says "$box/emptyanchor.md" 8 'anchor before the found-by tail' "an empty backtick pair"
+
+  # The tail carries a curly quote. Under mawk — the awk this repo actually runs — a regex with a
+  # negated em-dash class is a negated BYTE class, so every character encoded with 0xE2 (’ “ ” …
+  # – • → ★) broke the split and the rule degraded to "a backtick anywhere". Failing open on
+  # ordinary punctuation, and invisible without this probe.
+  # \u2019 written as an escape, not pasted: the character IS the trigger, so spelling it out
+  # keeps the probe honest about what it exercises (and keeps shellcheck's SC1112 quiet).
+  printf -- '- [ ] **No anchor, curly quote in tail** — a wish. — found by `sdd-qa` in the team\u2019s mission (2026-08-16)\n' \
+    > "$box/utf8tail.md"
+  assert_says "$box/utf8tail.md" 8 'anchor before the found-by tail' "a curly quote in the found-by tail"
+
+  # No separator at all means no region an anchor could live in; the attribution alone must not
+  # satisfy the rule.
+  printf -- '- [ ] **A vague wish** with no separator whatsoever, found by `sdd-qa` (2026-08-16)\n' \
+    > "$box/nosep.md"
+  assert_says "$box/nosep.md" 8 'anchor before the found-by tail' 'an item with no em-dash separator'
 
   printf -- '- [ ] **No date tail** — `bin/sdd:1` — why it matters. — found by `x`\n' \
     > "$box/nodate.md"
@@ -297,9 +350,11 @@ EOF
   # An unreadable file must not read as an empty one: awk prints nothing, and an empty count in a
   # numeric test is a `[` syntax error that falls THROUGH, so the run used to end in "ok, 0
   # finding(s)" with rc 0 — the sensor failing open on the file it exists to guard.
-  PROBES=$((PROBES + 1))
+  # PROBES is incremented INSIDE the guard: as root, or on a filesystem that ignores mode bits,
+  # the probe cannot run, and counting it anyway would let the summary claim a probe that did not.
   printf 'x\n' > "$box/unreadable.md"
   if chmod 000 "$box/unreadable.md" 2>/dev/null && [ ! -r "$box/unreadable.md" ]; then
+    PROBES=$((PROBES + 1))
     bash "$SELF" --check "$box/unreadable.md" >/dev/null 2>&1
     [ "$?" -eq 93 ] || {
       printf '  SELFTEST FAIL  an unreadable findings file did not exit 93\n' >&2
@@ -307,6 +362,35 @@ EOF
     }
     chmod 644 "$box/unreadable.md" 2>/dev/null
   fi
+
+  # Every exit path carries a probe, or the code that names it is decoration: mutating any of
+  # these `exit`/`return` values used to survive the whole selftest.
+  assert_rc() { # <expected> <label> <args...>
+    PROBES=$((PROBES + 1))
+    local want="$1" label="$2"; shift 2
+    "$@" >/dev/null 2>&1
+    local got=$?
+    [ "$got" -eq "$want" ] && return 0
+    printf '  SELFTEST FAIL  %s — expected rc %s, got %s\n' "$label" "$want" "$got" >&2
+    fail_rc 92
+  }
+  assert_rc 95 "a non-integer cap must exit 95" env SDD_TODO_CAP=abc bash "$SELF" --check "$box/good.md"
+  assert_rc 95 "a zero cap must exit 95"        env SDD_TODO_CAP=0   bash "$SELF" --check "$box/good.md"
+  assert_rc 96 "an unknown option must exit 96" bash "$SELF" --bogus
+  assert_rc 93 "a missing file must exit 93"    bash "$SELF" --check "$box/does-not-exist.md"
+  # A file with prose but no items at all trips the floor, not the linter.
+  printf '# Heading\n\nProse, and not one finding.\n' > "$box/noitems.md"
+  assert_rc 94 "a file with no items must exit 94" bash "$SELF" --check "$box/noitems.md"
+  # And an unclosed fence above every item must still say WHY, instead of the floor's generic
+  # "did the format change?" — the linter runs first for exactly this case.
+  # Through --check, not lint_todo: what this probe guards is the ORDER inside check_file. Run the
+  # floor first and it answers 94 "did the format change?" while the linter already knows the
+  # precise cause. Asserting rc 1 is what distinguishes the two orderings.
+  { printf '```md\n'
+    printf -- '- [ ] **swallowed** — `f:1` — why. — found by `x` (2026-08-16)\n'; } > "$box/swallow.md"
+  assert_says "$box/swallow.md" 8 'unclosed ```' "an unclosed fence above every item"
+  assert_rc 1 "an unclosed fence must lint before the floor answers" \
+    bash "$SELF" --check "$box/swallow.md"
 
   [ "$SELFTEST_RC" -eq 0 ] && printf '  ok    selftest: %d probe(s), the sensor measures what it claims\n' "$PROBES"
   return "$SELFTEST_RC"
@@ -320,6 +404,14 @@ check_file() {
   # `-r`, not `-f`: an existing but unreadable file made awk print nothing, and "nothing" then
   # sailed through the floor as a `[` syntax error. Readability is checked where it can still be
   # reported honestly.
+  #
+  # This guard and the numeric check below OVERLAP on the unreadable case and each alone is enough
+  # for it — so sabotaging either one alone survives the selftest, while sabotaging BOTH is caught.
+  # That is redundancy, not decoration, and the distinction is worth naming because this file
+  # deleted a rule for being decoration: the two cover different CAUSES that happen to meet here.
+  # `-r` names the permission problem before awk runs; the numeric check catches any other way the
+  # counter can come back non-numeric (awk killed, out of memory, a future parser bug). The probe
+  # asserts the OUTCOME — unreadable file exits 93 — precisely so it does not care which one fires.
   if [ ! -f "$file" ] || [ ! -r "$file" ]; then
     printf '  FAIL  findings file missing or unreadable: %s\n' "$file" >&2
     return 93
@@ -332,6 +424,17 @@ check_file() {
       return 93 ;;
   esac
 
+  # Lint BEFORE the floor, and the order is load-bearing: a stray unclosed fence above the first
+  # item swallows every item, so the floor would fire first and answer "did the format change?"
+  # when the parser knows the precise cause and has it ready to print.
+  violations="$(lint_todo "$file" "$cap")"
+  if [ -n "$violations" ]; then
+    printf '  FAIL  %s does not hold its shape:\n' "$(basename "$file")" >&2
+    printf '%s\n' "$violations" >&2
+    printf '\n%d shape violation(s)\n' "$(grep -c . <<< "$violations")" >&2
+    return 1
+  fi
+
   # Floor against a file that lost its items entirely. It is deliberately 1, not a headcount:
   # this sensor exists to make the file SHRINK, so a floor near today's size would fail the run
   # the day the cleanup finally works. The real defence against a parser that stopped matching is
@@ -339,14 +442,6 @@ check_file() {
   if [ "$n_items" -lt 1 ]; then
     printf '  FAIL  no items parsed from %s — did the format change?\n' "$file" >&2
     return 94
-  fi
-
-  violations="$(lint_todo "$file" "$cap")"
-  if [ -n "$violations" ]; then
-    printf '  FAIL  %s does not hold its shape:\n' "$(basename "$file")" >&2
-    printf '%s\n' "$violations" >&2
-    printf '\n%d shape violation(s)\n' "$(grep -c . <<< "$violations")" >&2
-    return 1
   fi
 
   printf '  ok    %d finding(s), all within %d lines and carrying anchor + date\n' "$n_items" "$cap"
