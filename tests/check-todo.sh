@@ -92,16 +92,31 @@ todo_awk() {
     # "a backtick anywhere", which the attribution alone satisfies. Failing OPEN on ordinary
     # punctuation. index() and substr() are byte-based too, but CONSISTENTLY so, which is all
     # this needs: it looks for a literal separator, never for a class.
-    function head_of(text,   sep, i, p, last) {
+    # Returns the byte offset of the last separator, 0 when there is none.
+    function last_sep(text,   sep, i, p, last) {
       sep = " — "; last = 0; i = 1
       while ((p = index(substr(text, i), sep)) > 0) {
         last = i + p - 1
         i = last + length(sep)
       }
-      # No separator at all means no attribution boundary, so there is no region an anchor could
-      # live in — reported as a missing anchor rather than waved through.
+      return last
+    }
+    # No separator at all means no attribution boundary, so there is no region an anchor could
+    # live in — reported as a missing anchor rather than waved through.
+    function head_of(text,   last) {
+      last = last_sep(text)
       if (last == 0) return ""
       return substr(text, 1, last - 1)
+    }
+    # The attribution tail. Checking it is what closes the bypass the head rule alone could not:
+    # an item whose LAST field is not the attribution (a stray "revisit after the merge (date)"
+    # tacked on) pushed the real attribution into the head, whose backticks then satisfied the
+    # anchor rule — an anchorless wish sailing through the rule built to stop it. Head and tail
+    # are now symmetric: the anchor lives before the last separator, the agent name after it.
+    function tail_of(text,   last) {
+      last = last_sep(text)
+      if (last == 0) return ""
+      return substr(text, last + 5)
     }
     function flush() {
       if (!initem) return
@@ -113,6 +128,10 @@ todo_awk() {
           print "  line " start ": item does not open with `- [ ] **<title>**`"
         if (head_of(body) !~ /`[^`]+`/)
           print "  line " start ": no non-empty `file:line` anchor before the found-by tail"
+        else if (tail_of(body) !~ /`[^`]+`/)
+          print "  line " start ": the last field names no `<agent>` — the found-by must be the tail"
+        if (body ~ /(^|[ \t])[-*] \[[xX]\]/ && first !~ /^[-*] \[[xX]\]/)
+          print "  line " start ": a nested ticked box — a closed finding is deleted, at any depth"
         if (last !~ /\([0-9][0-9][0-9][0-9]-[0-9][0-9]-[0-9][0-9]\)/)
           print "  line " start ": last line carries no (YYYY-MM-DD) — the found-by field is the tail"
         if (nlines > cap)
@@ -120,15 +139,24 @@ todo_awk() {
       }
       initem = 0
     }
-    /^```/                     { flush(); if (!fence) fence_line = NR; fence = !fence; next }
+    # ORDER IS THE WHOLE RULE HERE, and getting it wrong twice is what taught it. The document
+    # fence rule must be ONE symmetric pattern sitting ABOVE `fence`, so the same indentation that
+    # can open a fence can also close it. Splitting it into a column-0 rule above `fence` and an
+    # indented rule below produced a one-way latch: an indented fence opened, its indented closer
+    # was eaten by `fence { next }`, and every rule below went silent while the run stayed green —
+    # verbatim the fail-open this file already claimed to have fixed once.
+    #
+    # The item-code-block rule goes FIRST because an indented fence inside an open item is that
+    # item content, not a document fence: read the other way, a 43-line item measured 1 line and
+    # slipped under the cap. Its `- [x]` lines stay content too — a ticked box in a code sample is
+    # a code sample. It carries no `!fence` guard: the document-fence rule below calls flush()
+    # before toggling, so `initem` is always 0 while `fence` is 1 and the guard could never be
+    # false. It was there, it was unprobed, and it was removed rather than probed — a condition
+    # that cannot change an outcome is decoration, the same verdict the `/^#/` rule got.
+    initem && /^[ \t]+```/  { body = body " " $0; last = $0; nlines++; next }
+    /^ {0,3}```/               { flush(); if (!fence) fence_line = NR; fence = !fence; next }
     fence                      { next }
-    # An INDENTED fence while an item is open belongs to that item as a code block, not to the
-    # document.
-    # Treating it as a document fence made the parser flush the item and skip to the close, so a
-    # 43-line item read as 1 line (cap bypassed) and a `- [x]` parked below it was never judged.
-    initem && /^[ \t]+```/     { body = body " " $0; last = $0; nlines++; next }
-    /^ {1,3}```/               { flush(); if (!fence) fence_line = NR; fence = !fence; next }
-    /^[-*] \[[ xX]\] / {
+    /^[-*] \[[ xX]\]/ {
       flush(); initem = 1; start = NR
       first = $0; body = $0; last = $0; nlines = 1; next
     }
@@ -228,6 +256,40 @@ EOF
     printf '  ```\n'; } > "$box/itemfence.md"
   assert_says "$box/itemfence.md" 8 'content lines, cap is 8' "an item hiding 40 lines behind an indented fence"
 
+  # THE fail-open. An indented fence pair in prose, opened by a rule below `fence` and closed by a
+  # line `fence` eats first, latches the parser off: the ticked box below vanished and a later
+  # column-0 fence rebalanced the toggle, so the run ended green with the item simply absent.
+  # Both earlier versions of this file shipped that hole; only this probe distinguishes them.
+  { printf 'Opening prose.\n\n  ```sh\n  echo hi\n  ```\n\n'
+    printf -- '- [x] **A closed finding that must still be reported** — no anchor, no date\n\n'
+    printf '```\n\n'
+    printf -- '- [ ] **Good** — `bin/sdd:1` — why. — found by `x` (2026-08-16)\n'; } \
+    > "$box/latch.md"
+  assert_says "$box/latch.md" 8 'ticked box' "a ticked box hidden behind an indented fence pair"
+
+  # The mirror image: legal markdown must not be reported. An indented fence pair in prose with no
+  # item open is a document fence and closes normally; and CommonMark lets the closer carry up to
+  # three spaces even when the opener had none.
+  { printf 'Prose.\n\n  ```sh\n  echo hi\n  ```\n\n'
+    printf -- '- [ ] **Good** — `bin/sdd:1` — why. — found by `x` (2026-08-16)\n'; } \
+    > "$box/prosefence.md"
+  assert_clean "$box/prosefence.md" 8 "a closed indented fence in prose"
+  { printf -- '- [ ] **Good** — `bin/sdd:1` — why. — found by `x` (2026-08-16)\n\n'
+    printf '```md\nexample\n  ```\n'; } > "$box/asymfence.md"
+  assert_clean "$box/asymfence.md" 8 "a fence opened at column 0 and closed indented"
+
+  # The date rule is anchored to the LAST content line, and nothing proved it: a date in the title
+  # with none in the tail used to be the difference between this rule and "a date anywhere".
+  { printf -- '- [ ] **Dated title (2026-08-16)** — `bin/sdd:1` — why it matters.\n'
+    printf '  A closing line with no attribution at all.\n'; } > "$box/titledate.md"
+  assert_says "$box/titledate.md" 8 'no (YYYY-MM-DD)' "a date in the title but not in the tail"
+
+  # The line number in every message comes from `start`; zeroing it left every probe green because
+  # no assertion ever read one.
+  { printf 'Filler prose.\n\n'
+    printf -- '- [ ] **No date here** — `bin/sdd:1` — why it matters. — by `x`\n'; } > "$box/lineno.md"
+  assert_says "$box/lineno.md" 8 'line 3:' "the reported line number points at the item"
+
   PROBES=$((PROBES + 1))
   if [ "$(count_items "$box/fenced.md")" != "1" ]; then
     printf '  SELFTEST FAIL  the count saw %s item(s) where the parser sees 1\n' \
@@ -269,6 +331,21 @@ EOF
   printf -- '- [ ] **A vague wish** with no separator whatsoever, found by `sdd-qa` (2026-08-16)\n' \
     > "$box/nosep.md"
   assert_says "$box/nosep.md" 8 'anchor before the found-by tail' 'an item with no em-dash separator'
+
+  # The head rule alone could not see this: a stray field after the attribution pushes the agent
+  # name INTO the head, whose backticks then satisfy the anchor rule. Head and tail must both
+  # carry one — anchor before the last separator, agent after it.
+  { printf -- '- [ ] **A vague wish with no anchor at all**\n'
+    printf '  — found by `sdd-qa` in mission `20260816-probe`\n'
+    printf '  — revisit after the merge (2026-08-16)\n'; } > "$box/tailless.md"
+  assert_says "$box/tailless.md" 8 'last field names no' "an attribution that is not the tail"
+
+  # A closed finding is deleted at ANY depth: written as a nested list item it used to be plain
+  # body text, invisible to the ticked-box rule while GitHub still rendered it checked.
+  { printf -- '- [ ] **Item with a nested closed finding** — `bin/sdd:1` — why.\n'
+    printf '  - [x] **closed, hidden as a child**\n'
+    printf '  — found by `x` (2026-08-16)\n'; } > "$box/nested.md"
+  assert_says "$box/nested.md" 8 'nested ticked box' "a ticked box nested under an open item"
 
   printf -- '- [ ] **No date tail** — `bin/sdd:1` — why it matters. — found by `x`\n' \
     > "$box/nodate.md"
@@ -392,6 +469,15 @@ EOF
   assert_rc 1 "an unclosed fence must lint before the floor answers" \
     bash "$SELF" --check "$box/swallow.md"
 
+  # Floor on the probe COUNT, for the same reason every other floor here exists: neutering all the
+  # assert_* call sites made the summary print "0 probe(s)" and exit 0 — a selftest that ran
+  # nothing reads exactly like a selftest that passed. The number moves only on purpose.
+  if [ "$PROBES" -lt 37 ]; then
+    printf '  SELFTEST FAIL  only %d probe(s) ran, expected at least 37 — did an assertion stop firing?\n' \
+      "$PROBES" >&2
+    fail_rc 92
+  fi
+
   [ "$SELFTEST_RC" -eq 0 ] && printf '  ok    selftest: %d probe(s), the sensor measures what it claims\n' "$PROBES"
   return "$SELFTEST_RC"
 }
@@ -452,6 +538,10 @@ if ! valid_cap "$CAP"; then
   printf '  FAIL  SDD_TODO_CAP must be a positive integer, got: %s\n' "$CAP" >&2
   exit 95
 fi
+# Normalised to base 10 right after validation: `08` is a valid positive integer to valid_cap and
+# to awk, but bash `printf %d` reads a leading zero as octal and dies on the 8 — the sensor then
+# announced a cap it had not enforced and leaked a shell error next to an "ok".
+CAP=$((10#$CAP))
 
 case "${1:-}" in
   --selftest) selftest; exit $? ;;
