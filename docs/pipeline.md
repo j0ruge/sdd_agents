@@ -312,6 +312,15 @@ blind spot for another: `kaizen_series`'s `select` counts anything it does not a
 `excluded.unrecognized`, and `cmd_autonomy`'s `is_escalation` does the same for the human. A row
 the runner itself wrote and its own reader files as "unrecognized" is the defect, just moved.
 
+Admitting the row is **not enough** — a new escalation `event` also has to reach `phase_label`,
+the rubric behind the `labels` histogram the judge is told to cite. The rubric groups by
+`(mission, phase)` over the whole `kit_sha` slice, **not per run**: "the failing session in that
+run already reads `refez`" stops being true the moment a later `sdd run` gets the phase past its
+gate. That is why `blocked` is a clause of the rubric rather than being left to the sessions
+around it — an escalation outlives the session that provoked it — and `degraded` is an escalation.
+Both readers now share one `is_escalation` definition per program for exactly this reason: the
+pair written out by hand in three places is how they came to disagree in the first place.
+
 `sdd autonomy` prints the human view. The judge reads the JSONL with `jq` — never that table.
 Both readers group escalations on the **same axis**, `kit_sha`, and both drop a row with a dirty
 kit or no sha into a counted-and-excluded bucket. Two instruments over one file that report

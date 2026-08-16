@@ -847,7 +847,7 @@ autonomy_session_row() {  # <phase> <attempt> <auto_retry> <moved> <gate> <gate_
   autonomy_have_jq || return 0
   # Called, never substituted: `$(autonomy_kit_stamp)` would reset its one-shot warning flag.
   autonomy_kit_stamp; local stamp="$AUTONOMY_KIT_STAMP"
-  # "${6:0:200}" is a CHARACTER slice, same reason as autonomy_blocked_row's "${3:0:200}" above.
+  # "${6:0:200}" is a CHARACTER slice, same reason as autonomy_escalation_row's "${4:0:200}" above.
   autonomy_append "$( jq -cn \
     --arg ts "$(date -Iseconds)" --arg phase "$1" --arg attempt "$2" \
     --arg auto_retry "$3" --arg moved "$4" --arg gate "$5" \
@@ -1797,8 +1797,18 @@ kaizen_series() {
     return 0
   fi
   jq -n '
+    # ONE definition of "escalation" for the whole program, exactly as cmd_autonomy has one. The
+    # two events state different facts (`blocked` stopped the line, `degraded` lowered the bar and
+    # went on) but they answer this rubric the same way, and writing the pair out three times is
+    # how they came to disagree: `phase_label` was left knowing only `blocked` on the argument that
+    # a degraded run has a failing REVIEW session anyway. True inside that run — and the rubric
+    # groups by (mission, phase) across the WHOLE kit_sha slice, so one later `sdd run` where
+    # REVIEW passes made the one mission that degraded read `ok`. An escalation outlives the
+    # session that provoked it; that is why `blocked` was in the clause to begin with.
+    def is_escalation: .event == "blocked" or .event == "degraded";
+
     def phase_label:
-      if (map(select(.event == "blocked")) | length) > 0
+      if (map(select(is_escalation)) | length) > 0
          or (map(select(.event == "session" and .invocation == "retry")) | length) > 0
          or ((map(select(.event == "session")) | last | .gate) != "pass")
       then "refez"
@@ -1820,7 +1830,7 @@ kaizen_series() {
          moved_rate: (if ($sess | length) == 0 then null
                       else (($sess | map(select(.moved == true)) | length) / ($sess | length) * 100 | round / 100) end),
          labels: ($detail | reduce .[] as $d ({ok: 0, leve: 0, refez: 0}; .[$d.label] += 1)),
-         escalations: ($rows | map(select(.event == "blocked" or .event == "degraded"))
+         escalations: ($rows | map(select(is_escalation))
                              | group_by(.kind)
                              | map({(.[0].kind): length}) | add // {}),
          cost_usd: ($sess | map(.cost_usd // 0) | add // 0 | . * 100 | round / 100),
@@ -1828,8 +1838,7 @@ kaizen_series() {
 
     [ inputs ] as $raw
     | ($raw | map(select(type == "object" and .v == 1
-                         and (.event == "session" or .event == "blocked"
-                              or .event == "degraded")))) as $all
+                         and (.event == "session" or is_escalation)))) as $all
     | ($all | map(select(.phase == "KAIZEN"))) as $meta
     | ($all | map(select(.phase != "KAIZEN"))) as $rows
     | (($raw | length) - ($all | length)) as $unrec

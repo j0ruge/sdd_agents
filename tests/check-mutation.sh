@@ -238,6 +238,17 @@ mut_RUN_escalations_no_axis() {
   sed -i 's|group_by(.kit_sha, .kind)|group_by(.kind)|' "$1"
 }
 
+# Not a gate: `phase_label` goes back to knowing only `blocked`, so a mission where the runner
+# lowered its own bar reads `ok` in the judge's label histogram as soon as a later `sdd run` gets
+# REVIEW past its gate — the rubric groups by (mission, phase) over the whole kit_sha slice, not
+# per run. It sabotages ONLY phase_label's use of the shared predicate; the `escalations` map and
+# the admission filter keep theirs, so what dies is the label and nothing else, and this mutant
+# cannot be confused with RUN_degraded_row_dropped (the row's existence) or RUN_refez_dropped
+# (the `refez` value itself, which stays reachable through the other two clauses).
+mut_RUN_degraded_label_blind() {
+  sed -i 's@if (map(select(is_escalation)) | length) > 0@if (map(select(.event == "blocked")) | length) > 0@' "$1"
+}
+
 CATALOG=(
   PLAN_empty_approval
   TICKET_no_sprint
@@ -263,6 +274,7 @@ CATALOG=(
   RUN_degraded_row_dropped
   RUN_degraded_repeats
   RUN_escalations_no_axis
+  RUN_degraded_label_blind
   KAIZEN_gate_blind
   KAIZEN_jidoka_dead
   KAIZEN_guard_ignored
