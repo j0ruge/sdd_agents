@@ -227,13 +227,6 @@ Achados sobre **repos-alvo** vão para o `TODO.md` daquele repo. Este arquivo é
   Direção: separar em duas linhas e estender o passo de lint a `tests/*.sh`. — descoberto por
   `sdd-executor` na missão `20260815-ledger-sem-ponto-cego` (2026-08-16)
 
-- [ ] **`latest_matching` ordena lexicograficamente e quebra na 10ª rodada** — `bin/sdd:205-211`
-  — `ls -1d $pattern | sort | tail -1` põe `r10` antes de `r2`, então `gate_REVIEW`/`gate_QA`
-  passariam a medir um relatório velho: gate verde apontando para artefato obsoleto. Não morde
-  com `*_MAX_ITER=3`, mas o valor é configurável e nada avisa quem o subir. Direção: `sort -V` ou
-  zero-padding, com caso `r1`/`r2`/`r10` afirmando que o escolhido é `r10`. — descoberto por
-  `sdd-reviewer` na missão `20260814-dry-run-completo` (2026-08-14)
-
 - [ ] **`bad_rows` é escrito e nunca lido** — `bin/sdd:262,276` — o contador é incrementado no
   mesmo comando que dá `return 1`, então o valor final nunca é inspecionado; de fora sugere um
   "conte quantas linhas estão ruins" que não existe. Ou entra no `GATE_WHY` ("3 linhas do
@@ -316,7 +309,7 @@ Achados sobre **repos-alvo** vão para o `TODO.md` daquele repo. Este arquivo é
   `group_by(.kit_sha)` (o jq ordena pela chave) enquanto `kaizen_series` deriva
   `latest`/`previous` por primeira aparição no arquivo (`:1818`). Quem ler a última linha da
   tabela como "a versão mais recente" pode ler a errada. É ordem de saída humana, não contagem —
-  o I3 alinhou o eixo, não a ordem. Mesma família do `latest_matching` acima. — descoberto por
+  o I3 alinhou o eixo, não a ordem. Família do `latest_matching`, já fechado. — descoberto por
   `sdd-executor` na missão `20260815-ledger-sem-ponto-cego` (2026-08-16)
 
 ### Comentário e registro

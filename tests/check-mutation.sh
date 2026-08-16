@@ -309,6 +309,18 @@ mut_RUN_degraded_label_blind() {
   sed -i 's@if (map(select(is_escalation)) | length) > 0@if (map(select(.event == "blocked")) | length) > 0@' "$1"
 }
 
+# Not a gate (RUN_ per the naming rule above — latest_matching is a helper): the file picker goes
+# back to a lexicographic `sort`, and `r10` sorts between `r1` and `r2`. From the tenth review
+# round on, gate_REVIEW stops reading the round that just ran and reads `r3` — a review that was
+# already all-A when it was approved, so the gate PASSES and the mission walks past a report
+# nobody read. It is the sabotage that fails OPEN, and the one a fixture of three rounds cannot
+# see: with REVIEW_MAX_ITER at 3 the two orders agree, which is exactly why check-gates.sh has to
+# spend a fourth fixture on `r10`. The `sort -V` of health_skills (bin/sdd:1339) is left ALONE —
+# the sed anchors on `ls -1d $pattern` — so what dies is the picker and nothing else.
+mut_RUN_sort_lexi() {
+  sed -i 's@ls -1d $pattern 2>/dev/null | sort -V@ls -1d $pattern 2>/dev/null | sort@' "$1"
+}
+
 CATALOG=(
   PLAN_empty_approval
   TICKET_no_sprint
@@ -335,6 +347,7 @@ CATALOG=(
   RUN_degraded_repeats
   RUN_escalations_no_axis
   RUN_degraded_label_blind
+  RUN_sort_lexi
   KAIZEN_gate_blind
   KAIZEN_jidoka_dead
   KAIZEN_guard_ignored

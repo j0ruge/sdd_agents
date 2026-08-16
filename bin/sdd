@@ -215,13 +215,19 @@ log_dir() {
   else printf '%s\n' "$REPO_ROOT/.sdd/logs/_geral"; fi
 }
 
-# Last file of a glob (by name order — the names are dated). Empty when there is none.
+# Last file of a glob. Empty when there is none.
+#
+# `sort -V`, never plain `sort`: the names this is called with carry a COUNTER (`40-review-r<N>`),
+# and lexicographically `r10` lands between `r1` and `r2` — so from the tenth round on the gate
+# would read `r3`, an old and already-approved review, while the round that actually ran sits
+# unread. Version order also keeps the dated names (`YYYY-MM-DD-*`) in the order plain `sort` gave
+# them, so the qa call sites are unaffected. Asserted in tests/check-gates.sh (r1/r2/r3/r10).
 latest_matching() {
   local pattern="$1"
   # `|| true`: with no match, `ls` fails and `pipefail` would propagate the error into the
   # caller's assignment — inside a gate that would read as a silent failure instead of "absent".
   # shellcheck disable=SC2012,SC2086
-  ls -1d $pattern 2>/dev/null | sort | tail -1 || true
+  ls -1d $pattern 2>/dev/null | sort -V | tail -1 || true
 }
 
 # ---------------------------------------------------------------------------
@@ -1330,8 +1336,9 @@ health_provenance() {
   else skipped=$((skipped + 1)); fi
 
   # codereview grade table: every criterion of the skill must exist in the fixture.
-  # `sort -V` on the plugin version — a lexicographic `sort` would put 1.9 after 1.17 (that is
-  # the bug the runner's latest_matching() still has, recorded in the TODO; do not inherit it).
+  # `sort -V` on the plugin version — a lexicographic `sort` would put 1.9 after 1.17. This was
+  # once the only version-ordered pick in the file; latest_matching() carried the lexicographic
+  # bug and this comment recorded it. It no longer does — both sort by version now.
   tpl="$(find "$HOME/.claude/plugins/cache" -path '*/codereview/*/references/report-template.md' \
          2>/dev/null | sort -V | tail -1)"
   if [ -n "$tpl" ] && [ -f "$tpl" ]; then
@@ -1889,8 +1896,9 @@ kaizen_reminder() {
 # Satisfied means: a verdict exists for the kit sha the series calls latest, and — unless the
 # verdict is `piorou`, which dispenses the plan (ADR 0002) — the born plan sits beside it with an
 # EMPTY `aprovacao:`. The verdict is found by CONTENT (`kit_sha_judged == expected`), never by
-# "newest file": latest_matching sorts lexically (bug r10 in TODO.md), and an old verdict must
-# never satisfy a new sha.
+# "newest file" — and that stays true now that latest_matching() sorts by version: file order,
+# however correct, does not know which sha a verdict judged, and an old verdict must never
+# satisfy a new sha.
 #
 # On `piorou` the gate PASSES (the judge did its job) and publishes GATE_KAIZEN_VERDICT so
 # cmd_kaizen can stop the line — the gate itself never kills the process, and the global survives
