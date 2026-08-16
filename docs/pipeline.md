@@ -349,7 +349,10 @@ mission×phase `detail`, and a label per group:
 - `leve` — an in-loop auto retry, or a session that did not move the disk: friction, absorbed.
 - `ok` — none of the above.
 
-Plus a `guard` (`missions_after_change`, `sufficient: >= 3`) and an `excluded` accounting
+Plus a `guard` (`missions_after_change`, `missions_with_session`, `sessions`,
+`sufficient: missions_with_session >= 3` — a mission that only escalated ran, and is counted as
+one, but bought the judge no observation and so does not raise the floor) and an `excluded`
+accounting
 (dirty-kit rows, unrecognized rows, and the `meta` rows the kaizen sessions themselves write —
 the loop never lets its own sessions shift the axis it is judged on).
 

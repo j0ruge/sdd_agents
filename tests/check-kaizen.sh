@@ -184,6 +184,72 @@ assert_eq "and still prints valid JSON" "0" \
 assert_eq "with latest null, not an invented group" "null" "$(field '.latest')"
 assert_eq "and an insufficient guard, never a vacuous pass" "false" \
   "$(field '.guard.sufficient')"
+# The empty ledger is a SECOND producer of the same object (a literal printed before jq ever
+# runs), so it can drift from the real one key by key and nobody would notice until a consumer
+# read `null` where it expected a number. Compared as key sets, not values: the values differ on
+# purpose, the shape must not.
+empty_guard_keys="$(jq -c '.guard | keys' <<< "$SERIES_OUT")"
+
+# --- the guard floor counts missions the judge could OBSERVE -----------------
+# `missions` is `map(.mission) | unique` over every admitted row, escalations included — so three
+# missions that escalated without ever spending a session cleared the floor of 3 and freed the
+# judge to rule on a kit version it observed ZERO sessions of. The three ledgers below differ only
+# in how the sessions are distributed, which is what makes the trio a differential: no fixture
+# regime satisfies all three by accident.
+echo "== series: the guard floor counts missions with a comparable session =="
+mkdir -p "$OUTSIDE/escalonly" "$OUTSIDE/withsessions" "$OUTSIDE/twoofthree"
+
+# A — three missions, three escalations, not one session.
+cat > "$OUTSIDE/escalonly/autonomy-log.jsonl" <<'EOF'
+{"v":1,"ts":"2026-08-16T12:00:00-03:00","event":"blocked","kind":"increment-blocked","run_id":"r1","invocation":"run","kit_sha":"ddd4444","kit_dirty":false,"project":"p1","repo":"/p1","mission":"m10","phase":"EXEC","gate_why":"x"}
+{"v":1,"ts":"2026-08-16T12:01:00-03:00","event":"blocked","kind":"increment-blocked","run_id":"r2","invocation":"run","kit_sha":"ddd4444","kit_dirty":false,"project":"p1","repo":"/p1","mission":"m11","phase":"EXEC","gate_why":"x"}
+{"v":1,"ts":"2026-08-16T12:02:00-03:00","event":"blocked","kind":"increment-blocked","run_id":"r3","invocation":"run","kit_sha":"ddd4444","kit_dirty":false,"project":"p1","repo":"/p1","mission":"m12","phase":"EXEC","gate_why":"x"}
+EOF
+# B — the SAME three escalations plus one session per mission: the control that proves the fix
+# did not simply tighten the floor into never passing.
+cat "$OUTSIDE/escalonly/autonomy-log.jsonl" > "$OUTSIDE/withsessions/autonomy-log.jsonl"
+cat >> "$OUTSIDE/withsessions/autonomy-log.jsonl" <<'EOF'
+{"v":1,"ts":"2026-08-16T12:03:00-03:00","event":"session","run_id":"r4","invocation":"run","kit_sha":"ddd4444","kit_dirty":false,"project":"p1","repo":"/p1","mission":"m10","phase":"EXEC","step":"EXEC","agent":"sdd-executor","model":"opus","attempt":1,"auto_retry":false,"session":"s1","rc":0,"dur_s":10,"cost_usd":1.0,"moved":true,"gate":"pass","gate_why":"x"}
+{"v":1,"ts":"2026-08-16T12:04:00-03:00","event":"session","run_id":"r5","invocation":"run","kit_sha":"ddd4444","kit_dirty":false,"project":"p1","repo":"/p1","mission":"m11","phase":"EXEC","step":"EXEC","agent":"sdd-executor","model":"opus","attempt":1,"auto_retry":false,"session":"s2","rc":0,"dur_s":10,"cost_usd":1.0,"moved":true,"gate":"pass","gate_why":"x"}
+{"v":1,"ts":"2026-08-16T12:05:00-03:00","event":"session","run_id":"r6","invocation":"run","kit_sha":"ddd4444","kit_dirty":false,"project":"p1","repo":"/p1","mission":"m12","phase":"EXEC","step":"EXEC","agent":"sdd-executor","model":"opus","attempt":1,"auto_retry":false,"session":"s3","rc":0,"dur_s":10,"cost_usd":1.0,"moved":true,"gate":"pass","gate_why":"x"}
+EOF
+# C — three missions, FOUR sessions, but only two missions spent them. This is the one that tells
+# "count missions with a session" apart from the two cheaper readings that also pass A and B:
+# "missions >= 3 and sessions > 0" and "sessions >= 3". Both would call this sufficient.
+cat "$OUTSIDE/escalonly/autonomy-log.jsonl" > "$OUTSIDE/twoofthree/autonomy-log.jsonl"
+cat >> "$OUTSIDE/twoofthree/autonomy-log.jsonl" <<'EOF'
+{"v":1,"ts":"2026-08-16T12:03:00-03:00","event":"session","run_id":"r4","invocation":"run","kit_sha":"ddd4444","kit_dirty":false,"project":"p1","repo":"/p1","mission":"m10","phase":"EXEC","step":"EXEC","agent":"sdd-executor","model":"opus","attempt":1,"auto_retry":false,"session":"s1","rc":0,"dur_s":10,"cost_usd":1.0,"moved":true,"gate":"pass","gate_why":"x"}
+{"v":1,"ts":"2026-08-16T12:04:00-03:00","event":"session","run_id":"r5","invocation":"run","kit_sha":"ddd4444","kit_dirty":false,"project":"p1","repo":"/p1","mission":"m10","phase":"QA","step":"QA:close","agent":"sdd-qa","model":"opus","attempt":1,"auto_retry":false,"session":"s2","rc":0,"dur_s":10,"cost_usd":1.0,"moved":true,"gate":"pass","gate_why":"x"}
+{"v":1,"ts":"2026-08-16T12:05:00-03:00","event":"session","run_id":"r6","invocation":"run","kit_sha":"ddd4444","kit_dirty":false,"project":"p1","repo":"/p1","mission":"m10","phase":"REVIEW","step":"REVIEW","agent":"sdd-reviewer","model":"opus","attempt":1,"auto_retry":false,"session":"s3","rc":0,"dur_s":10,"cost_usd":1.0,"moved":true,"gate":"pass","gate_why":"x"}
+{"v":1,"ts":"2026-08-16T12:06:00-03:00","event":"session","run_id":"r7","invocation":"run","kit_sha":"ddd4444","kit_dirty":false,"project":"p1","repo":"/p1","mission":"m11","phase":"EXEC","step":"EXEC","agent":"sdd-executor","model":"opus","attempt":1,"auto_retry":false,"session":"s4","rc":0,"dur_s":10,"cost_usd":1.0,"moved":true,"gate":"pass","gate_why":"x"}
+EOF
+
+SERIES_OUT="$( cd "$OUTSIDE/anywhere" && SDD_STATE_DIR="$OUTSIDE/escalonly" "$SDD" kaizen --series 2>/dev/null )"
+# The display keeps telling the truth: three missions DID run on this kit version. What changes is
+# which number the floor reads — hiding the escalations would trade one lie for another.
+assert_eq "three escalation-only missions are still three missions on the axis" "3" \
+  "$(field '.guard.missions_after_change')"
+assert_eq "but none of them spent a session the judge could read" "0" \
+  "$(field '.guard.sessions')"
+assert_eq "so the floor counts zero missions, not three" "0" \
+  "$(field '.guard.missions_with_session')"
+assert_eq "and a series with no observed session is NOT sufficient" "false" \
+  "$(field '.guard.sufficient')"
+assert_eq "the empty-ledger series carries the same guard keys, never a subset" \
+  "$empty_guard_keys" "$(jq -c '.guard | keys' <<< "$SERIES_OUT")"
+
+SERIES_OUT="$( cd "$OUTSIDE/anywhere" && SDD_STATE_DIR="$OUTSIDE/withsessions" "$SDD" kaizen --series 2>/dev/null )"
+assert_eq "the same three missions, one session each, clear the floor" "true" \
+  "$(field '.guard.sufficient')"
+assert_eq "and the guard says how many sessions bought it" "3" "$(field '.guard.sessions')"
+
+SERIES_OUT="$( cd "$OUTSIDE/anywhere" && SDD_STATE_DIR="$OUTSIDE/twoofthree" "$SDD" kaizen --series 2>/dev/null )"
+assert_eq "four sessions concentrated in two missions do not clear a floor of three" "false" \
+  "$(field '.guard.sufficient')"
+assert_eq "the refusal is not 'no sessions at all': there are four" "4" \
+  "$(field '.guard.sessions')"
+assert_eq "it is that only two missions were observed" "2" \
+  "$(field '.guard.missions_with_session')"
 
 # =============================================================================
 # gate + jidoka — the flow around the verdict artifact

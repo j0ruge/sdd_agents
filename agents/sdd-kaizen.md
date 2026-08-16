@@ -27,7 +27,9 @@ is a kit bug for `TODO.md`, and your verdict says `indeterminado` with the reaso
 
 Run it first. The JSON gives you, per kit version (`kit_sha`, file order, latest and previous):
 missions, sessions, `moved_rate`, the label tally (`ok` / `leve` / `refez` per mission×phase),
-escalations by kind, cost, and the guard (`missions_after_change`, `sufficient`). It also counts
+escalations by kind, cost, and the guard (`missions_after_change`, `missions_with_session`,
+`sessions`, `sufficient`). The floor is `missions_with_session`, not `missions_after_change`: a
+mission that stopped the line without spending a session left you nothing to read. It also counts
 what it excluded — dirty-kit rows, unrecognized rows, and the meta rows your own sessions write.
 
 Every number in your verdict comes from this output. Cite them as they are.

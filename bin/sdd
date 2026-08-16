@@ -1826,7 +1826,10 @@ kaizen_series() {
   local file; file="$(autonomy_log_path)"
   command -v jq >/dev/null 2>&1 || die "jq not found — it is required to read the ledger"
   if [ ! -s "$file" ]; then
-    printf '%s\n' '{"v":1,"latest":null,"previous":null,"guard":{"missions_after_change":0,"sufficient":false},"excluded":{"non_comparable":0,"unrecognized":0,"meta":0}}'
+    # Second producer of the same shape, and it cannot share the jq above (there is no input to
+    # run it on), so the key set is kept in step by hand and check-kaizen.sh compares the two as
+    # key sets. A consumer reading `null` where the real series gives a number is the drift.
+    printf '%s\n' '{"v":1,"latest":null,"previous":null,"guard":{"missions_after_change":0,"missions_with_session":0,"sessions":0,"sufficient":false},"excluded":{"non_comparable":0,"unrecognized":0,"meta":0}}'
     return 0
   fi
   jq -n '
@@ -1868,6 +1871,13 @@ kaizen_series() {
                       cost_usd: (map(.cost_usd // 0) | add)})) as $detail
       | {kit_sha: $rows[0].kit_sha,
          missions: ($rows | map(.mission) | unique | length),
+         # The floor of the guard, and NOT the same number as `missions` above: that one counts
+         # every mission on the axis, escalations included, which is right for the display and
+         # wrong for the floor. A mission that stopped the line without spending a session left
+         # the judge nothing to read about this kit version, and three of them used to clear a
+         # floor meant to mean "enough observation". Derived from $sess, the one place this
+         # program already calls a row a session.
+         missions_with_session: ($sess | map(.mission) | unique | length),
          sessions: ($sess | length),
          moved_rate: (if ($sess | length) == 0 then null
                       else (($sess | map(select(.moved == true)) | length) / ($sess | length) * 100 | round / 100) end),
@@ -1889,11 +1899,18 @@ kaizen_series() {
     | ($ok | map(.kit_sha) | reduce .[] as $s ([]; if index($s) then . else . + [$s] end)) as $shas
     | (if ($shas | length) >= 1 then ($ok | map(select(.kit_sha == $shas[-1])) | group_summary) else null end) as $latest
     | (if ($shas | length) >= 2 then ($ok | map(select(.kit_sha == $shas[-2])) | group_summary) else null end) as $previous
+    # ONE binding for the number the floor reads, so the exposed field and the verdict of the
+    # guard cannot drift apart: written twice, an edit to one of them would leave the series
+    # PRINTING a count it did not gate on, which is the same class of divergence I7 closed one
+    # field over. Everything the guard says about itself comes from here.
+    | (($latest.missions_with_session) // 0) as $observed
     | {v: 1,
        latest: $latest,
        previous: $previous,
        guard: {missions_after_change: ($latest.missions // 0),
-               sufficient: (($latest.missions // 0) >= 3)},   # guard floor: 3 distinct missions (D4); I13.4 revisits
+               missions_with_session: $observed,
+               sessions: ($latest.sessions // 0),
+               sufficient: ($observed >= 3)},   # guard floor: 3 missions WITH a session (D4); I13.4 revisits
        excluded: {non_comparable: ($noncomp | length), unrecognized: $unrec,
                   meta: ($meta | length)}}
   ' < "$file"

@@ -243,6 +243,15 @@ mut_RUN_refez_dropped() {
   sed -i 's|then "refez"|then "ok"|' "$1"
 }
 
+# The guard floor goes back to counting every mission on the axis, escalations included: three
+# missions that stopped the line without spending a single session free the judge to rule
+# `melhorou` on a kit version it observed nothing of. Same RUN_ prefix and same reason as the
+# mutation above — the floor lives in kaizen_series, a helper; KAIZEN_guard_ignored is the one
+# that sabotages the gate that READS it, and the pair covers producer and consumer.
+mut_RUN_guard_counts_escalations() {
+  sed -i 's@missions_with_session: (\$sess @missions_with_session: (\$rows @' "$1"
+}
+
 # The guard stops guarding: gate_KAIZEN accepts `melhorou`/`piorou` written over an insufficient
 # series. The whole point of the runner-owned guard (boot prompt: "the guard belongs to the
 # runner") dies silently — a verdict label alone starts satisfying the gate, which is the
@@ -381,6 +390,7 @@ CATALOG=(
   KAIZEN_guard_ignored
   KAIZEN_approved_bailout_dead
   RUN_refez_dropped
+  RUN_guard_counts_escalations
 )
 
 # Mutations that are NOT caught today, each with the increment that closes it. Ratchet in both

@@ -250,14 +250,6 @@ Achados sobre **repos-alvo** vão para o `TODO.md` daquele repo. Este arquivo é
   `no-progress` do PR encerrar — medido: ramo entrado 3×, `warn` 3×, ledger 1×. — descoberto por
   `sdd-executor`, estreitado por `sdd-qa` na missão `20260815-ledger-sem-ponto-cego` (2026-08-16)
 
-- [ ] **Missão que só produziu escalada conta para `guard.sufficient`** — `bin/sdd:1846` —
-  `missions` conta `map(.mission) | unique` sobre **todas** as linhas admitidas, escaladas
-  incluídas: três missões que escalaram sem gastar sessão devolvem `sufficient: true` com
-  `sessions: 0`, e o juiz é liberado a julgar uma versão da qual não observou sessão nenhuma.
-  Reproduzido em fixture na revisão r1; não é regressão (o `blocked` já tinha a propriedade).
-  Direção: contar só missões com sessão comparável, ou expor `sessions` junto de `sufficient`.
-  — descoberto por `sdd-reviewer` na missão `20260815-ledger-sem-ponto-cego` (2026-08-16)
-
 - [ ] **A sessão de fase é um ponto cego enquanto roda** — `bin/sdd:897` — `--output-format json`
   emite um blob único no fim, então `.sdd/logs/<missão>/<FASE>-*.json` fica com **0 bytes**
   durante os ~10 min da sessão e não há como acompanhar o agente de dentro do kit (o transcript
