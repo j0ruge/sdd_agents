@@ -1,0 +1,22 @@
+diff --git a/tests/check-todo.sh b/tests/check-todo.sh
+index d77489b..9eb7b80
+--- a/tests/check-todo.sh
++++ b/tests/check-todo.sh
+@@ -199,6 +199,17 @@ todo_awk() {
+     # rendered as a task item and went invisible, all 288 carrying a `<`, none without one. The
+     # widening was meant to accept a header example written as `- [ ] **<what>** — …`; anchoring
+     # to the title position accepts that and nothing else.
++    # A list marker whose OWN line does not carry the box: the box lands on the next line and
++    # GitHub still renders a task item. Whole-file, like the ticked rule, because the header skip
++    # is what let this one through.
++    /^[ \t>]*([-*+]|[0-9]+[.)])[ \t]*$/ && NR <= from {
++      if (mode == "lint") print "  line " NR ": a bare list marker above the findings section"
++      next
++    }
++    /^[ \t>]*\[[ xX]\]([ \t]|$)/ {
++      if (mode == "lint") print "  line " NR ": a line opening with a bare [ ]/[x] box"
++      flush(); next
++    }
+     NR <= from && /^[ \t>]*([-*+]|[0-9]+[.)])[ \t]+\[ \]/ {
+       if ($0 !~ /^[ \t>]*([-*+]|[0-9]+[.)])[ \t]+\[ \][ \t]*(\*\*)?</ && mode == "lint")
+         print "  line " NR ": a finding above the findings section"

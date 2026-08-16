@@ -75,6 +75,14 @@ Achados sobre **repos-alvo** vão para o `TODO.md` daquele repo. Este arquivo é
   ele roda num alvo `OUTPUT_LANG="en"` sem mudança. — descoberto por `humano` revisando o sensor
   novo (2026-08-16)
 
+- [ ] **Caixa marcada na linha SEGUINTE ao marcador escapa da regra 2** — `tests/check-todo.sh`
+  (regra 2) — a regra é por linha e exige marcador e `[x]` juntos; o GFM marca a caixa quando o
+  primeiro bloco do item é um parágrafo abrindo com `[x] `, e a linha do marcador pode sumir do
+  AST (marcador vazio, ou link-reference definition). Achado fechado renderiza marcado com rc 0
+  num arquivo de aparência saudável, e o cabeçalho do sensor (linhas 67-69, 179) afirma o
+  contrário. Patch medido em `docs/handoffs/20260816-todo-enxuto/`. — descoberto por
+  `revisao-adversarial` na 12ª rodada de revisão do sensor (2026-08-16)
+
 - [ ] **`cmd_health` é o único comando do runner sem sensor** — `bin/sdd` (`cmd_health`,
   `health_proveniencia`, `health_catraca`) — o catálogo cobre os gates e o diário, e o próprio
   health cobra mutação por gate, mas ninguém sabota as checagens dele. Já mordeu: duas nasceram
