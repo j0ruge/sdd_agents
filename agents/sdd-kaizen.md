@@ -91,6 +91,14 @@ closed — planning it again is waste. From the genuinely open items, pick a bat
 **one** mission by value against risk. A finding that does not make the cut stays where it is,
 untouched.
 
+**The triage is also the sweep.** A resolved item stays in the file only until the PR that cites
+it merges; after that it is deleted, never archived. So for every `RESOLVIDO por <hash>` you
+meet, check whether the hash already reached the base branch —
+`git merge-base --is-ancestor <hash> main` — and list the ones that did under a
+**"resolvidos a apagar"** heading in the born plan, with the hash beside each. Never delete them
+yourself: your session plans, the mission executes. Proving by the hash and not by the PR label
+is the same artifact-over-label rule the gates run on.
+
 ## 6. Give birth to the plan
 
 In the **same directory** as the verdict, write the three artifacts from the kit's own

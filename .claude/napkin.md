@@ -7,20 +7,27 @@
 - Each item includes date + "Do instead".
 
 ## Execution & Validation (Highest Priority)
-1. **[2026-08-15] A caixa `- [ ]` do TODO.md mente; o corpo é a verdade**
+1. **[2026-08-16] A caixa `- [ ]` do TODO.md mente; o corpo é a verdade**
    Do instead: antes de planejar sobre um item do TODO.md, ler o corpo — itens com
-   **RESOLVIDO por `<hash>`** já estão fechados mesmo desmarcados.
+   **RESOLVIDO por `<hash>`** já estão fechados mesmo desmarcados. Se o hash já está em
+   `main` (`git merge-base --is-ancestor`), o item **se apaga**, não se arquiva; `- [x]`
+   não existe mais no arquivo e o teto por item é 8 linhas (`tests/check-todo.sh`).
 2. **[2026-08-15] Gate/sensor novo não entra sem mutação**
    Do instead: toda asserção nova de gate ganha entrada em `tests/check-mutation.sh`
    e o catálogo do `sdd health`; provar por sabotagem que a suíte morre.
-3. **[2026-08-15] A suíte é `tests/run-all.sh` (~38s no default, mutação 23/23)**
-   Do instead: rodar ela como TEST_CMD; `SDD_MUTATION_JOBS=10` derruba para ~27s
-   nesta máquina de 20 núcleos (default 4, decisão de default é do humano — o
-   estouro do alvo <30s está no TODO.md com as três saídas).
+3. **[2026-08-16] A suíte é `tests/run-all.sh` (~66s no default, mutação 30/30)**
+   Do instead: rodar ela como TEST_CMD; `SDD_MUTATION_JOBS=10` derruba para ~35s
+   nesta máquina de 20 núcleos (medido 2026-08-16; default 4, decisão de default é
+   do humano — o estouro do alvo <30s está no TODO.md com as três saídas).
 4. **[2026-08-15] Fixture de veredito vem do real, nunca de memória**
    Do instead: o frontmatter dos fixtures de `05-verdict.md` no check-kaizen.sh
    é copiado do veredito real (`c2dd298`) com nota de proveniência; ao mudar o
    formato do veredito, re-copiar do artefato real, não editar de cabeça.
+
+5. **[2026-08-16] Sensor sobre conteúdo em `OUTPUT_LANG` mede estrutura, não palavra**
+   Do instead: regra de sensor sobre `TODO.md`/handoffs ancora em pontuação, crase,
+   data `(YYYY-MM-DD)` — nunca em "descoberto por". Palavra em português quebra num
+   repo-alvo `OUTPUT_LANG="en"` e ainda obriga a excluir o sensor do `check-lang`.
 
 ## Language & Contract
 1. **[2026-08-15] Superfície do kit = inglês; artefato de missão = OUTPUT_LANG (pt-BR aqui)**

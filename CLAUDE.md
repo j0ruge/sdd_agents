@@ -56,6 +56,17 @@ o escopo; nunca perder o achado. Formato:
 - [ ] <o quê> — `arquivo:linha` — <por que importa> — descoberto por `<agente>` na missão `<slug>` (YYYY-MM-DD)
 ```
 
+O item **cabe em ~6 linhas** (teto duro de 8, medido por `tests/check-todo.sh`): o quê, a âncora
+em `arquivo:linha`, por que importa, a direção, quem descobriu. A análise longa mora no handoff
+da missão citada — duplicá-la aqui foi o que levou este arquivo a 861 linhas.
+
+Fechado **é apagado**, nunca arquivado: o item com `RESOLVIDO por <hash>` fica na seção Aberto só
+até o PR que cita a evidência ser mergeado, e então sai do arquivo. A memória durável já existe
+em três lugares (`git log -S`, `KAIZEN_LOG.md`, handoffs) e o próprio item cita o hash. Apagar
+prova por artefato — `git merge-base --is-ancestor <hash> main` —, nunca pelo rótulo do PR.
+⚠️ `- [x]` não existe neste arquivo: caixa marcada era uma segunda convenção de fechamento,
+invisível para a triagem do kaizen, que procura `RESOLVIDO por` no corpo.
+
 **6. YAGNI.** Sem daemon, sem UI, sem banco, sem servidor. Um script bash, seis markdowns e
 templates. Se a solução pede infraestrutura, provavelmente é a solução errada.
 
@@ -100,14 +111,36 @@ O kit é bash + markdown, então o "teste" é o **Check** de cada incremento do 
 com resultado esperado. Escreva o Check antes de implementar o incremento.
 
 A suíte é `tests/run-all.sh` — é ela o `TEST_CMD` deste repo, e é ela que os gates rodam. Sensor
-novo entra lá (`check-templates.sh`, `check-gates.sh`, `check-dry-run.sh`, `check-mutation.sh` e
-`check-lang.sh` são os de hoje). `sdd preflight`, `bash -n bin/sdd` e os dry-runs completam, mas
-não substituem.
+novo entra lá. Os nove de hoje: `check-templates.sh`, `check-gates.sh`, `check-dry-run.sh`,
+`check-mutation.sh`, `check-lang.sh`, `check-autonomy.sh`, `check-kaizen.sh`, `check-preflight.sh`
+e `check-todo.sh`. `sdd preflight`, `bash -n bin/sdd` e os dry-runs completam, mas não substituem.
 
-**Sensor que se auto-exclui carrega um auto-teste.** `check-lang.sh` não pode se escanear (o
-dicionário dele É português), então quem o mede é um `selftest()` com probes e rc próprios — 90,
-91, 92 — mais um piso de caminhos na superfície (93). Sem isso, regex quebrada reporta "tudo
-limpo" para sempre. A regra vale para qualquer sensor futuro que precise se excluir do que mede.
+**Sensor que o catálogo de mutação não alcança carrega um auto-teste.** São duas situações, e
+hoje há uma de cada. `check-lang.sh` não pode se escanear (o dicionário dele É português).
+`check-todo.sh` mede um markdown, não o `bin/sdd`, então nenhuma sabotagem do runner o faria
+morrer. Nos dois casos quem mede o sensor é um `selftest()` com probes e rc próprios — 90, 91,
+92 — mais um piso contra vacuidade. Sem isso, regex quebrada reporta "tudo limpo" para sempre.
+
+⚠️ **O selftest tem de exercitar o CAMINHO, não só a função.** Achado consertando o
+`check-todo.sh`: os probes provavam que o parser pulava blocos cercados, e mesmo assim trocar a
+contagem por um `grep` no chamador passava verde — porque nenhum probe rodava o caminho de
+reporte. A saída foi um modo `--check <arquivo>` que o próprio selftest invoca, sem recursão.
+
+⚠️ **Selftest verde prova as regras que têm probe, e só essas.** Sensor novo ganha uma passada de
+**sabotagem adversarial** antes de ser considerado pronto: degrade cada regra para uma versão mais
+frouxa (a data virando "qualquer parêntese", o título virando "`**` em qualquer lugar", a âncora
+virando "crase em qualquer lugar") e exija que o selftest fique vermelho em cada uma. O que passar
+é regra sem probe. No `check-todo.sh` isso achou 17 defeitos depois de a auto-revisão ter dado
+Grade A, dois deles **falhando abertos** — o pior modo possível num sensor, porque ele afirma ter
+medido o que não mediu. Regra que a sabotagem não consegue quebrar de forma alguma é redundante:
+remova, não escreva probe para ela.
+
+⚠️ **A revisão é laço, e o critério de parada é uma rodada que não acha nada.** No `check-todo.sh`
+foram cinco: 17, 9, 11 e 11 achados, e **três vezes seguidas o conserto de uma rodada criou o
+defeito que a seguinte encontrou**. Quando isso acontece duas vezes na mesma vizinhança, pare de
+remendar e pergunte **que estado está faltando** — ali a resposta era "o parser não sabe quando
+está dentro do bloco de código de um item", e um estado novo fechou de uma vez quatro defeitos que
+pareciam separados. Sintoma consertado individualmente vira o próximo sintoma.
 
 **Fixture que imita saída de skill de terceiro é copiado da fonte**, com o caminho no comentário
 de proveniência — nunca escrito de memória. Três bugs de gate nasceram de fixture imaginado:
@@ -147,6 +180,16 @@ enquanto o comentário jurava "one-shot per process". Função que tem efeito co
 **publica** o resultado num global (como `run_phase` faz com `LAST_PHASE_*`) e é **chamada**, nunca
 substituída. Se você precisa dos dois — valor de retorno e efeito —, é sinal de que são duas
 funções.
+
+⚠️ **O `awk` desta máquina é o `mawk`, e ele é orientado a BYTE em qualquer locale.** Uma classe
+negada com caractere multibyte — `[^—]`, `[^á]` — não nega o caractere: nega os **bytes** dele.
+Como toda a faixa U+2000..U+2FFF começa com `0xE2` (aspas curvas, reticências, en-dash, bullet,
+setas), uma aspa curva na entrada faz a classe casar onde não devia e o `sub()` falhar em
+silêncio. Custou o `head_of()` do `check-todo.sh`, que degradou para a regra frouxa e passou a
+**falhar aberto** em pontuação corriqueira. Para separador literal use `index()`/`substr()`, que
+também são byte-based mas consistentemente; classe negada, só com ASCII. `bash -n` não acusa, o
+`shellcheck` não acusa, e o teste passa enquanto a entrada for pura ASCII — que é o pior dos
+mundos, porque a entrada real vira multibyte no dia em que alguém escrever bem.
 
 ## Kaizen
 

@@ -4,6 +4,183 @@ Registro de melhorias com **antes/depois medido**. Sem número, não entra.
 
 ---
 
+## 2026-08-16 — O arquivo de achados para de crescer (5S no `TODO.md`)
+
+**Problema medido:** o `TODO.md` chegou a **861 linhas / 75.331 bytes**, e o custo não era só de
+leitura humana — o prompt de boot da fase KAIZEN (`bin/sdd:655`) manda a sessão paga de triagem
+**ler o arquivo inteiro**. Duas causas, ambas de processo e não de conteúdo. (1) O contrato
+mandava o item com `RESOLVIDO por <hash>` descer para "Feito" depois do merge do PR que o cita, e
+ninguém executava a descida: **14 itens fechados** ocupavam a seção Aberto, incluindo cinco numa
+**segunda convenção de fechamento não documentada** (`- [x]` com `[FEITO em <hash>]` no título) —
+invisível para a triagem do kaizen, que procura `RESOLVIDO por` no corpo. (2) O formato prescrevia
+uma linha por achado desde sempre; a prática eram corpos de até 31 linhas com análise completa,
+reproduções e blocos "Atualização (data)" — profundidade que já existe no handoff que cada item
+cita.
+
+| | Antes (`fc304bf`) | Depois (`c5f5beb`, fecho do 5S) |
+|---|---|---|
+| Linhas / bytes do `TODO.md` | 861 / 75.331 | **362 / 26.566** (−58% / −65%) |
+| Itens fechados parados na seção Aberto | 14 | **0** |
+| Convenções de fechamento | 2 (uma não documentada) | **1** |
+| Mediana / máximo de linhas por item | 10 / 31 | **6 / 8** |
+| Itens no arquivo | 64 | **45** (14 resolvidos + 4 de "Feito" apagados, 2 fusões, 1 split) |
+| Sensor sustentando a forma | 0 | **1** (`check-todo.sh`, 20 probes de selftest) |
+| Suíte no default | 66,02 s | 67,08 s (o sensor custa **23 ms**; o resto é ruído de carga) |
+
+Todas as linhas medidas na mesma máquina e na mesma sessão, `fc304bf` num worktree descartável
+contra o `HEAD`, `./tests/run-all.sh` verde nos dois lados (mutação 30/30).
+
+**A causa raiz não era o tamanho, era não haver dono do apagar.** A regra existia — em um lugar
+só, um blockquote no meio do próprio arquivo — e dependia de alguém lembrar dela depois de um
+merge, que é exatamente o momento em que a atenção está no PR seguinte. Por isso o conserto tem
+duas metades, e a segunda é a que importa: a regra mudou de "desce para Feito" para **"é
+apagado"** (a memória durável já existe em `git log -S`, `KAIZEN_LOG.md` e nos handoffs, e o item
+cita o hash que o fecha), e a **triagem do `sdd-kaizen` virou o gatilho recorrente** — ela já lia
+o arquivo corpo a corpo para não replanejar o que está fechado; agora também confere
+`git merge-base --is-ancestor <hash> main` e lista os resolvidos a apagar no plano nascido. Sem
+gatilho, um sweep manual seria pico isolado; com ele, o arquivo encolhe a cada volta do laço.
+
+**Apagar prova por artefato, nunca por rótulo.** Os 14 hashes foram confirmados ancestrais de
+`main` antes de qualquer remoção, e os identificadores ficaram anotados no corpo do commit
+`c0193a7` — a rede de segurança mais barata que existe, e que só serve se for escrita antes.
+
+**Padronizado em** (confirmado abrindo cada arquivo): `CLAUDE.md` § princípio 5 (teto de ~6
+linhas, fechado é apagado, `- [x]` proibido), `agents/sdd-kaizen.md` § 5 e o espelho
+`.claude/agents/sdd-kaizen.md`, `CONTEXT.md` (glossário "Triagem kaizen"), `.claude/napkin.md`
+(itens 1 e 5), o cabeçalho do próprio `TODO.md` e o `CLAUDE.md` § "TDD aqui dentro" — onde a lista
+de sensores voltou a bater com o disco (5 listados, 9 reais) e a regra do auto-teste passou de
+"sensor que se auto-exclui" para "sensor que o catálogo de mutação não alcança", que é a
+formulação que cobre os dois casos de hoje.
+
+**O que o sensor ensinou sobre si mesmo.** Duas decisões saíram diferentes do plano, as duas por
+medição e não por gosto. A primeira: todas as regras do `check-todo.sh` são **estruturais**
+(pontuação, crase, data `(YYYY-MM-DD)`), nunca uma palavra em português — um sensor amarrado a
+"descoberto por" quebraria num repo-alvo com `OUTPUT_LANG="en"` e alargaria o buraco de cobertura
+que o próprio `TODO.md` registra contra a `surface()` do `check-lang`. Com isso o arquivo novo
+**não** precisou de entrada na `lang-allowlist` nem de exclusão da superfície, ao contrário do que
+o plano previa. A segunda: o `check-lang` reprovou a primeira versão deste sensor por **duas
+citações em português nos meus próprios comentários** — o sensor de idioma pegou o autor do
+sensor de forma, que é o laço funcionando.
+
+⚠️ **O alvo de 300 linhas não foi atingido: foram 362 no fecho.** As sete seções `###` custaram
+~46 linhas e ficaram porque agrupar por natureza (sensores, contrato, runner, saída humana,
+comentário, custo, YAGNI) é o que torna dezenas de itens navegáveis. Registrado como número, não
+como sucesso.
+
+⚠️ **Toda linha desta tabela é medida NO COMMIT que o cabeçalho nomeia, não "hoje".** O `TODO.md`
+é arquivo vivo: um achado novo entra e o número sobe no mesmo dia — como aconteceu horas depois
+deste fecho. Três correções seguidas desta entrada tiveram a mesma causa raiz (medir num commit e
+rotular outro), então a âncora agora está no cabeçalho e a prosa fala no passado.
+
+⚠️ **A primeira versão desta tabela trazia "Achados abertos 47 → 46", e os dois números estavam
+errados** — corrigidos para 64 → 45 pela revisão de código. Duas causas somadas, e as duas
+instrutivas. A primeira: o "antes" foi medido no commit do próprio sweep (`c0193a7`), não no
+`fc304bf` que o cabeçalho da tabela promete — baseline errada sob rótulo certo. A segunda: o
+contador era um `grep -cE '^- \[[ x]\] '` que conta também o exemplo de formato dentro do bloco
+cercado do cabeçalho do `TODO.md`, então inflava **os dois** lados em um. O mesmo `grep` estava no
+`check-todo.sh` recém-escrito, ao lado de um parser awk que pula cercas corretamente — dois
+mecanismos respondendo à mesma pergunta, que é a família de defeito que este repo já pagou três
+vezes (os dois leitores do ledger, as duas definições de comparabilidade, e agora o contador).
+Consertado com um parser só em dois modos (`lint`/`count`) e um probe fim-a-fim que reprova se a
+contagem reportada divergir da que o parser vê.
+
+**A lição mais cara da sessão: selftest verde prova as regras que têm probe, e só essas.** Depois
+de a auto-revisão desta sessão dar Grade A ao sensor, uma leitura **adversarial independente**
+achou **17 defeitos** — 2 CRITICAL, 5 HIGH, todos com reprodução. Os dois piores eram da mesma
+espécie e a pior que existe num sensor: **falhar aberto**. Um `TODO.md` existente mas ilegível
+fazia o `awk` imprimir nada, e contagem vazia num teste numérico é erro de sintaxe do `[` (rc 2)
+que, sem `set -e`, cai fora do `if` — o run terminava em `ok 0 finding(s)`, rc 0. E uma única
+cerca ``` sem fechamento travava o latch do parser e pulava **todas** as regras até o fim do
+arquivo, também verde. Nos dois casos o sensor dizia "medi e está limpo" sobre o que não mediu.
+
+| | Auto | 1ª | 2ª | 3ª | 4ª | 5ª | 6ª | 7ª | 8ª | 9ª |
+|---|---|---|---|---|---|---|---|---|---|---|
+| Defeitos achados | 0 | 17 | 9 | 11 | 11 | 11 | 11 | 10 | 5 | **3** |
+| Herdados de rodadas anteriores | — | 17 | 2 | 3 | 5 | 4 | 5 | 5 | 3 | **0** |
+| Probes do selftest | 14 | 20 | 30 | 37 | 45 | 49 | 48 | 58 | 63 | **67** |
+| Linhas do parser `awk` | 47 | 62 | 71 | 84 | 107 | 107 | 75 | 82 | 79 | **74** |
+| Estado de cerca no parser | sim | sim | sim | sim | sim | sim | não | não | sim | **não** |
+
+**O número que mais ensina não é nenhum defeito: é que cada rodada achou um defeito criado pela
+anterior — três vezes seguidas.** A 1ª consertou a âncora com uma classe negada de travessão, e a
+2ª mostrou que sob mawk isso nega *bytes*. A 2ª partiu a regra de cerca em duas, e a 3ª mostrou
+que isso criou um latch de mão única. A 3ª acrescentou a regra de sub-item marcado, e a 4ª mostrou
+que ela acusava amostras de código — contradizendo o comentário três linhas acima, no mesmo commit.
+
+**A 4ª rodada achou a causa comum das três** — o parser não tinha estado para "dentro do bloco de
+código de um item" — e acrescentou esse estado. Fechou quatro defeitos e a 5ª rodada achou mais
+quatro **dentro do estado novo**: uma `- [x]` em coluna 0 entre a abertura e o fechamento do bloco
+sumia com o run verde, um span inline abria bloco fantasma, e as formas `+ [x]` / `1. [x]` /
+indentada seguiam invisíveis.
+
+**O que finalmente quebrou o ciclo foi apagar a feature, não consertá-la.** O estado saiu inteiro:
+nenhum dos 46 achados carrega bloco de código e o teto de ~6 linhas não deixa caber, então item
+simplesmente **não pode** carregar cerca — uma linha no lugar de uma máquina de estado, falhando
+fechado e nomeando a causa raiz. Junto, caixa marcada virou regra **por linha** em vez de por
+item, que é o que finalmente cobriu todas as formas que o GitHub renderiza marcadas. O parser
+`awk` encolheu para 107 linhas e a família de defeitos foi embora com o estado que a hospedava.
+
+**A 6ª rodada mostrou que nem isso bastava**, e o diagnóstico final é mais amplo: **este arquivo
+tinha virado um parser CommonMark escrito em awk.** Cerca de 4 espaços que o CommonMark chama de
+bloco de código, fechador com info string, delimitador `1)`, tab no lugar do espaço, blockquote —
+uma enumeração exaustiva de 117.649 documentos de 6 linhas achou 24 fail-opens, **100% deles na
+lógica de cerca**. Markdown é genuinamente difícil, e cada rodada acertava um caso de borda
+criando outro.
+
+Então o rastreamento de cerca saiu inteiro. A seção de achados não tem cerca nenhuma — a única do
+arquivo é o exemplo de formato, no cabeçalho —, então o parser **pula o cabeçalho** e **proíbe
+cerca depois dele**. Não sobrou estado para dessincronizar. Parser de **107 → 75 linhas**, e a
+regra da caixa marcada, agora independente de cerca, cobre as dez formas que o GitHub renderiza
+marcadas em vez das cinco de que eu tinha partido.
+
+**As duas lições, e nenhuma é sobre bash.** A primeira: YAGNI não é só sobre o que custa escrever,
+é sobre o que custa *manter correto* — cinco rodadas foram gastas defendendo bloco de código
+dentro de item, que nenhum dos achados usa e que o teto de ~6 linhas já proíbe. A segunda, mais
+geral: **um sensor deve RECUSAR o que não sabe interpretar com segurança, não adivinhar.** Ser
+mais estrito que o formato de entrada é uma decisão de projeto legítima e barata; tentar
+interpretar tudo é o que custou seis gerações de defeito.
+
+**A linha da tabela que mais ensina é "estado de cerca no parser".** Ele saiu na 6ª rodada e a 7ª
+e a 8ª não acharam nada nessa família. Aí eu o reintroduzi na 8ª — limitado ao cabeçalho, "seguro
+por construção" — e a 9ª achou nele exatamente o mesmo fail-open de sempre: uma cerca solta fazia
+o arquivo inteiro renderizar como código com o run reportando "ok". A guarda que eu tinha escrito
+para pegar isso era código morto inalcançável. **Terceira vez aprendendo a mesma coisa.** O
+substituto não tem estado: uma contagem de paridade calculada fora do awk, que não pode
+dessincronizar porque não lembra de nada.
+
+**E a curva de convergência é o número que fecha o argumento:** achados herdados de rodadas
+anteriores foram 17 → 2 → 3 → 5 → 4 → 5 → 5 → 3 → **0**. Enquanto o conserto era remendo, o
+herdado não caía; ele só foi a zero depois que a estrutura virou lista-branca sem estado. O laço
+não converge por esforço — converge por simplificação.
+
+Duas consequências para o processo, e são elas que ficam. **Revisão adversarial é laço, não
+etapa**: o critério de parada não pode ser "consertei os achados", tem de ser uma rodada que não
+acha nada. E **quando três rodadas seguidas acham defeitos na mesma vizinhança, o defeito não é
+nenhum deles — é a estrutura que os hospeda**; a saída é parar de remendar e perguntar que estado
+está faltando.
+
+**A segunda rodada achou um defeito que a primeira rodada CRIOU, e essa é a parte que ensina.** O
+conserto da âncora usava `sub(/ — [^—]*$/, ...)`, e o `awk` desta máquina é o **mawk 1.3.4**, que é
+orientado a byte em qualquer locale: `[^—]` não nega o caractere, nega os bytes `{0xE2,0x80,0x94}`.
+Como toda a faixa U+2000..U+2FFF começa com `0xE2`, bastava uma aspa curva na cauda do item —
+`the team’s mission` — para o `sub()` falhar, o `head` continuar o item inteiro e a regra degradar
+de volta para "crase em qualquer lugar", que a própria atribuição satisfaz. **Falhando aberto em
+pontuação corriqueira**, com todos os 30 probes verdes, porque todo probe era ASCII puro. Vale como
+regra geral e está no `CLAUDE.md`: classe negada só com ASCII; separador literal se procura com
+`index()`/`substr()`.
+
+O padrão por trás dos 17: toda regra que **nenhum probe distinguia** podia ser degradada sem que
+nada notasse — a régua da data virava "qualquer parêntese", a do título virava "`**` em qualquer
+lugar", a da âncora virava "crase em qualquer lugar" (satisfeita pela própria atribuição). O
+selftest ficava verde nas três. Sabotagem adversarial é o que encontra a regra sem probe; o
+selftest é o que impede que ela volte. **São instrumentos diferentes e um não substitui o outro** —
+que é a mesma relação entre a suíte e o `check-mutation.sh` que o I13.2 já tinha registrado, um
+nível abaixo. Duas regras, aliás, eram decoração pura e foram **removidas** em vez de ganharem
+probe: o `/^#/` virou redundante quando a regra de coluna 0 entrou, e o piso de 20 itens punia
+exatamente o encolhimento que o sensor existe para causar.
+
+---
+
 ## 2026-08-16 — O ledger e o Jidoka param de mentir (missão `20260815-ledger-sem-ponto-cego`)
 
 **Problema medido:** a primeira missão **planejada pelo próprio kit** (Marco 2) atacou o
