@@ -53,6 +53,15 @@ Achados sobre **repos-alvo** vão para o `TODO.md` daquele repo. Este arquivo é
   de cada fase; tolerar `<criada pela fase TICKET>` antes do TICKET. Sensor em `check-gates.sh`.
   — descoberto por `sdd-publisher` e por `humano` no piloto SQ-97 (2026-08-14)
 
+- [ ] **O formato de achado vale para os repos-alvo, mas o sensor só guarda o arquivo do kit** —
+  `tests/check-todo.sh` vs `CLAUDE.md` (princípio 5) — a regra de formato e o ciclo "fechado é
+  apagado" são prescritos para o `TODO.md` de **qualquer** repo, e os agentes escrevem nos dois;
+  o sensor mora na suíte do kit e nunca é instalado. Um alvo acumula o mesmo inchaço sem nada
+  medindo. Direção: `sdd install` copiar o sensor (ou uma versão dele) e o `starter.conf` sugerir
+  incluí-lo no `TEST_CMD`. ⚠️ As regras já são estruturais e language-neutral de propósito, então
+  ele roda num alvo `OUTPUT_LANG="en"` sem mudança. — descoberto por `humano` revisando o sensor
+  novo (2026-08-16)
+
 - [ ] **`cmd_health` é o único comando do runner sem sensor** — `bin/sdd` (`cmd_health`,
   `health_proveniencia`, `health_catraca`) — o catálogo cobre os gates e o diário, e o próprio
   health cobra mutação por gate, mas ninguém sabota as checagens dele. Já mordeu: duas nasceram
