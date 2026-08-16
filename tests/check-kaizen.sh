@@ -114,6 +114,152 @@ assert_eq "with latest null, not an invented group" "null" "$(field '.latest')"
 assert_eq "and an insufficient guard, never a vacuous pass" "false" \
   "$(field '.guard.sufficient')"
 
+# =============================================================================
+# gate + jidoka — the flow around the verdict artifact
+# =============================================================================
+# The fixture is a KIT-SHAPED repo: bin/, templates/ and config/ copied in and committed, so that
+# SDD_HOME (parent of bin/) IS the repo root — the configuration `sdd kaizen` requires, since the
+# kaizen phase plans the KIT's next mission, never a target project's. The gate-section ledger is
+# the series fixture above, so the expected sha is aaa1111; every row cmd_kaizen appends carries
+# phase KAIZEN and lands in excluded.meta, never shifting the axis it is judged on.
+echo "== gate fixture (a kit-shaped repo: SDD_HOME == REPO_ROOT) =="
+FIX="$OUTSIDE/fix"
+mkdir -p "$FIX"
+cd "$FIX" || exit 1
+git init -q -b main
+git config user.email "fixture@example.com"
+git config user.name "Fixture"
+cp -r "$ROOT/bin" "$ROOT/templates" "$ROOT/config" "$FIX/"
+KSDD="$FIX/bin/sdd"
+echo "kit" > kit.txt
+git add -A && git commit -qm "init kit fixture"
+"$KSDD" install >/dev/null
+cat > .sdd/config.sh <<'EOF'
+PROJECT_NAME="kitfix"
+DEFAULT_BRANCH="main"
+TEST_CMD="true"
+E2E_CMD=""
+HANDOFF_DIR="docs/handoffs"
+QA_DOCS_PATH="docs/qa"
+JIRA_ENABLED=false
+EOF
+printf -- '- [ ] a kit finding worth a mission\n' > TODO.md
+git add -A && git commit -qm "chore: fixture kit config"
+
+# No test spends tokens. The dead stub lets the pending-gate path burn its two attempts offline;
+# the loud stub makes any session on a path that must NOT open one visible in the ledger row it
+# would write (run_phase sends claude's own streams to log files, so the ledger is the witness).
+mkdir -p "$OUTSIDE/stub"
+dead_stub() {
+  printf '#!/usr/bin/env bash\nexit 1\n' > "$OUTSIDE/stub/claude"
+  chmod +x "$OUTSIDE/stub/claude"
+}
+loud_stub() {
+  printf '#!/usr/bin/env bash\necho "ERROR: the test invoked the real claude" >&2\nexit 97\n' \
+    > "$OUTSIDE/stub/claude"
+  chmod +x "$OUTSIDE/stub/claude"
+}
+PATH="$OUTSIDE/stub:$PATH"
+
+# KAIZEN rows in the ledger — sessions and escalations the kaizen flow itself wrote. Starts at 1:
+# the series fixture above already carries one meta row.
+krows() { jq -s '[.[] | select(.phase == "KAIZEN")] | length' "$LEDGER"; }
+
+echo "== gate: verdict pending =="
+# A stale verdict for an OLDER kit sha, with a complete born plan beside it: a gate blind to
+# kit_sha_judged would accept this one and pass — the exact sabotage the KAIZEN_gate_blind
+# mutation applies. The honest gate must keep asking for the CURRENT sha.
+OLD="$FIX/docs/handoffs/20250101-old"
+mkdir -p "$OLD"
+cat > "$OLD/05-verdict.md" <<'EOF'
+---
+verdict: melhorou
+kit_sha_judged: 0000000
+date: 2025-01-01
+---
+# Verdict for an older kit change
+EOF
+cat > "$OLD/00-missao.md" <<'EOF'
+---
+missao: 20250101-old
+aprovacao:
+---
+# Older mission
+EOF
+: > "$OLD/01-plano.md"
+: > "$OLD/checkpoint.md"
+git add -A && git commit -qm "chore: stale verdict for an older kit sha"
+
+dead_stub
+out="$( cd "$FIX" && "$KSDD" kaizen 2>&1 )"; rc=$?
+assert_eq "with no verdict for the CURRENT sha the command blocks (rc 3)" "3" "$rc"
+assert_eq "and the reason names the sha it is waiting for" "yes" \
+  "$(grep -q 'no verdict for kit aaa1111' <<< "$out" && echo yes || echo no)"
+assert_eq "the two dead sessions and the escalation reached the ledger as KAIZEN rows" \
+  "4" "$(krows)"
+
+echo "== jidoka: verdict piorou stops the line =="
+loud_stub
+VDIR="$FIX/docs/handoffs/20260815-kaizen-verdict"
+mkdir -p "$VDIR"
+cat > "$VDIR/05-verdict.md" <<'EOF'
+---
+verdict: piorou
+kit_sha_judged: aaa1111
+date: 2026-08-15
+---
+# The previous change made autonomy worse
+EOF
+git add -A && git commit -qm "chore: piorou verdict for the current sha"
+before_rows="$(krows)"
+out="$( cd "$FIX" && "$KSDD" kaizen 2>&1 )"; rc=$?
+assert_eq "verdict piorou stops the line (rc 3)" "3" "$rc"
+assert_eq "without opening any session" "$before_rows" "$(krows)"
+assert_eq "and says the previous change made autonomy worse" "1" \
+  "$(grep -c 'made autonomy WORSE' <<< "$out")"
+
+echo "== gate: verdict without the born plan =="
+sed -i 's/^verdict: piorou$/verdict: melhorou/' "$VDIR/05-verdict.md"
+git add -A && git commit -qm "chore: verdict flips to melhorou"
+dead_stub
+out="$( cd "$FIX" && "$KSDD" kaizen 2>&1 )"; rc=$?
+assert_eq "a verdict without the born plan beside it blocks (rc 3)" "3" "$rc"
+assert_eq "naming the missing artifact" "yes" \
+  "$(grep -q '00-missao\.md is missing' <<< "$out" && echo yes || echo no)"
+
+echo "== gate: born plan with empty aprovacao passes =="
+loud_stub
+cat > "$VDIR/00-missao.md" <<'EOF'
+---
+missao: 20260815-kaizen-verdict
+aprovacao:
+titulo: next kit batch
+---
+# Mission born from the kaizen loop
+EOF
+: > "$VDIR/01-plano.md"
+: > "$VDIR/checkpoint.md"
+git add -A && git commit -qm "chore: born plan beside the verdict"
+before_rows="$(krows)"
+out="$( cd "$FIX" && "$KSDD" kaizen 2>&1 )"; rc=$?
+assert_eq "verdict + born plan with empty aprovacao passes (rc 0)" "0" "$rc"
+assert_eq "spending no session (already judged, idempotent)" "$before_rows" "$(krows)"
+assert_eq "and hands the plan to the human" "1" "$(grep -c "fill 'aprovacao:'" <<< "$out")"
+
+echo "== gate: the plan never approves itself =="
+dead_stub
+sed -i 's/^aprovacao:$/aprovacao: auto/' "$VDIR/00-missao.md"
+git add -A && git commit -qm "chore: the born plan tries to approve itself"
+out="$( cd "$FIX" && "$KSDD" kaizen 2>&1 )"; rc=$?
+assert_eq "a born plan that approves itself is refused (rc 3)" "3" "$rc"
+assert_eq "naming the self-approval" "yes" \
+  "$(grep -q "aprovacao: auto" <<< "$out" && echo yes || echo no)"
+
+echo "== hygiene =="
+assert_eq "the fixture kit tree ends clean" "" "$(git -C "$FIX" status --porcelain)"
+assert_eq "the ledger is never tracked by the fixture kit" "0" \
+  "$(git -C "$FIX" ls-files | grep -c 'autonomy-log\.jsonl')"
+
 echo
 if [ "$fails" -eq 0 ]; then printf '  ok    the series tells the truth and the gate holds\n'; exit 0; fi
 printf '%d kaizen check(s) failed\n' "$fails" >&2
