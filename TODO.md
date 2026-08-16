@@ -185,6 +185,14 @@ Achados sobre **repos-alvo** vão para o `TODO.md` daquele repo. Este arquivo é
   quando houver folga de régua. — descoberto por `sdd-executor` na missão
   `20260815-ledger-sem-ponto-cego` (2026-08-16)
 
+- [ ] **O schema da série não tem sensor de drift contra a prosa que o descreve** — `bin/sdd:1892`
+  vs `docs/pipeline.md:352` e `agents/sdd-kaizen.md:30` — o objeto que o juiz é mandado citar é
+  produzido em dois lugares (o `jq` e o literal do ledger vazio, `:1829`) e descrito em dois
+  outros; o `sdd health` mede drift de doc/config e gate-sem-mutação, mas nada casa os campos do
+  `guard` com quem os promete. Campo novo esquecido passa verde. Direção: extrair os campos do
+  `jq` e cobrá-los na doc. — descoberto por `sdd-executor` na missão
+  `20260816-runner-sem-dividas` (2026-08-16)
+
 ### Contrato e configuração
 
 - [ ] **`config/schema.md` promete cinco comportamentos que o runner não tem** —
