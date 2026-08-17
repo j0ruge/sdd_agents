@@ -4,6 +4,81 @@ Registro de melhorias com **antes/depois medido**. Sem número, não entra.
 
 ---
 
+## 2026-08-17 — As portas entre humano e runner ganham dono (missão `20260816-portas-do-humano`)
+
+**Problema (Gemba):** quatro pontos onde humano e runner se tocam estavam sem instrumento, os
+quatro conferidos com `arquivo:linha` antes de virar incremento:
+
+- **aprovar um plano era editar frontmatter à mão.** Destravar o `gate_PLAN` exigia digitar
+  `aprovacao: humano-YYYY-MM-DD` no formato exato que o gate grepa — sem ver o que se aprovava, sem
+  data automática, sem commit. Convida a errar o formato ou a delegar à sessão, que é justamente
+  quem não pode decidir;
+- **ninguém lia o campo `branch:`.** Ele só existia no `templates/missao.md`. No piloto SQ-97 isso
+  custou cinco fases commitando na branch de outro PR — 16 commits, ~US$ 45 de `rebase --onto` —, e
+  o primeiro passo repetiu em 2026-08-16 com o humano trocando de branch à mão;
+- **`sdd retry` commitava na base em silêncio.** Era a quarta porta que commita e a única sem
+  `warn_if_on_base_branch`;
+- **plano nascido do `sdd kaizen` podia se auto-aprovar.** O `gate_PLAN` aceitava `auto` sem olhar
+  a origem, e "o laço nunca aprova o próprio plano" vivia só na prosa de dois agentes.
+
+A fase QA achou os dois defeitos que existem **entre** os incrementos, onde nenhum sensor de
+incremento podia enxergar: o remédio que o gate novo nomeia (`sdd approve`) lia `auto` como "já
+aprovado" e desistia — recusa e remédio formando um laço infinito, nunca "às vezes" —, e o próprio
+`sdd approve` nasceu sendo a **quinta** porta que commita, em silêncio, na mesma missão que fechou
+o silêncio da quarta.
+
+**Contramedida:** quatro incrementos e dois fixes, todos com **uma definição por regra** onde havia
+leitura repetida — `plan_approves_itself()` para o `gate_PLAN` e o `cmd_approve` (o defeito ERA dois
+pontos lendo a mesma regra e discordando), `ensure_mission_branch()` para o `cmd_run` e o
+`cmd_retry`, `warn_if_on_base_branch` para as cinco portas. `sdd approve` imprime o plano inteiro,
+pergunta `[y/N]`, escreve com `frontmatter_write` (só dentro do bloco entre os dois primeiros `---`)
+e commita **um** arquivo. Falha de checkout mata alto, com a mensagem do git: adivinhar por cima de
+uma árvore que o git recusou é como se perde o trabalho de outra pessoa.
+
+| | Antes (`c2c8e73` = `main`) | Depois (`c821ade`) |
+|---|---|---|
+| Aprovar um plano | editar o frontmatter à mão, no formato que o gate grepa | **`sdd approve <missão>`** — imprime, pergunta `[y/N]`, escreve `humano-<data>`, commita 1 arquivo |
+| Campo `branch:` do plano | decorativo: nenhuma linha do runner o lia | **lido antes do primeiro gate** de `sdd run` e `sdd retry` — checkout, ou `-b` a partir da atual |
+| Portas que commitam avisando a branch base | 3 de 4 | **5 de 5** |
+| `aprovacao: auto` em plano kaizen-born | aceito pelo gate | **recusado**, nomeando `sdd approve` como saída |
+| Score de mutação | 44 caught, 0 gap, of 44 | **55 caught, 0 gap, of 55** |
+| Asserções `ok` numa passada verde | 457 | **490** |
+| Suíte, mesma máquina e mesma sessão | 3:12,87 | 4:18,70 (**+34%**) |
+| Os 4 itens da métrica no `TODO.md` | abertos | **RESOLVIDO por** `96a1f68`, `b3b8c2f`, `3ffa586`, `2510c3c` |
+
+Os dois tempos foram medidos nesta máquina e nesta sessão, `main` num worktree descartável contra o
+HEAD, suíte verde dos dois lados. O **+34% é catálogo, não desperdício** — 11 mutantes novos são 11
+suítes inteiras a mais —, mas o alvo `<30 s` da D7 está agora **8,6× distante**: a decisão de subir
+o alvo ou aposentá-lo por escrito segue no `TODO.md`, e a pergunta aberta do `CONTEXT.md` recebeu a
+terceira medição consecutiva que a confirma.
+
+### A métrica planejada dizia 44 → 48; o real foi 44 → 55
+
+O plano previu **um mutante por incremento**. Vieram onze, e os sete extras não são escopo que
+vazou — são defeitos que a missão só podia descobrir depois de existir, cada um medido no caminho
+que o achou:
+
+| Origem | Mutantes | O que provaram |
+|---|---|---|
+| Os 4 incrementos planejados | `RUN_approve_writes_auto`, `RUN_branch_switch_dead`, `RETRY_base_branch_warn_dead`, `PLAN_kaizen_born_blind` | o previsto: um por fatia |
+| Fixes da QA (`5c3d118`, `88ae514`) | `RUN_approve_bails_on_kaizen_born`, `APPROVE_base_branch_warn_dead` | os dois defeitos **entre** incrementos |
+| Rodada de REVIEW em voo (`1cc6c34`) | `RUN_branch_option_name`, `PLAN_remedy_unnamed` | o gate que não nomeia o remédio, e o nome de branch parecendo opção |
+| Resgate da árvore suja (`7f9e660`) | `RUN_branch_orphan_blind` | cinco asserções de branch concordando sobre uma propriedade que nenhuma podia ver |
+| Fecho da REVIEW r1 (`ad0c89d`) | `RUN_branch_order_swap`, `FRONTMATTER_write_unscoped` | dois **fail-open**: a suíte inteira verde com o defeito dentro |
+
+A leitura kaizen: uma métrica de catálogo é previsão, não meta. Cravar 48 e parar ali teria
+transformado sete achados reais em dívida — e dois deles eram fail-open, o modo em que um
+instrumento afirma ter medido o que não mediu. O número que vale é `0 known gap(s)`, que se manteve
+em todas as onze entradas.
+
+### O que ficou sabido, e não foi consertado
+
+A métrica do `00-missao.md` diz "a classe SQ-97 morre" sem ressalva, e a ressalva é real: com
+`JIRA_ENABLED=true` a branch nasce na fase TICKET e mora no `10-ticket.md`, que ninguém copia para
+o campo que o runner lê. A classe morre **no caminho sem JIRA** — o único que esta missão andou.
+Está no `TODO.md` com direção, no glossário do `CONTEXT.md` e na seção nova do `docs/pipeline.md`:
+registrado em três lugares em vez de corrigido por decreto num.
+
 ## 2026-08-16 — Quatro instrumentos param de afirmar o que nunca mediram (missão `20260816-kit-como-alvo`)
 
 **Problema (Gemba):** o kit foi desenhado para rodar em repo-alvo e passou a rodar em si mesmo.

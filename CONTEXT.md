@@ -46,11 +46,12 @@
 - **O critério (4) da D7 — "suíte < 30 s no default" — segue não atingido, e o estouro deixou de
   ser marginal.** A saída "subir o default" foi tomada em 2026-08-16: `SDD_MUTATION_JOBS` deriva
   de `min(núcleos, 8)` e o escalonador virou pool — mediana 54,13 s → **32,87 s**, score intacto
-  (KAIZEN_LOG). Desde então a previsão escrita nesta linha se confirmou **duas vezes**, porque o
+  (KAIZEN_LOG). Desde então a previsão escrita nesta linha se confirmou **três vezes**, porque o
   estouro **cresce com o catálogo** e cada mutante é uma suíte inteira: `20260816-runner-sem-dividas`
-  mediu 33,95 s → 44,55 s (30 → 38 mutantes) e `20260816-kit-como-alvo` mediu **1:17,62 → 1:45,17**
-  (40 → 44 mutantes), as duas na mesma máquina e na mesma sessão, worktree da base contra o HEAD.
-  O alvo está agora **3,5× distante** e ninguém o defende. Cortar mutação para ganhar relógio
+  mediu 33,95 s → 44,55 s (30 → 38 mutantes), `20260816-kit-como-alvo` mediu **1:17,62 → 1:45,17**
+  (40 → 44 mutantes) e `20260816-portas-do-humano` mediu **3:12,87 → 4:18,70** (44 → 55 mutantes) —
+  as três na mesma máquina e na mesma sessão, worktree da base contra o HEAD.
+  O alvo está agora **8,6× distante** e ninguém o defende. Cortar mutação para ganhar relógio
   violaria o princípio que motivou o I13.2, então o que resta é **subir o alvo ou aposentá-lo por
   escrito** — decisão do humano; o item vivo mora no `TODO.md`.
 
