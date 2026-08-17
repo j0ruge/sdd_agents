@@ -325,6 +325,14 @@ Achados sobre **repos-alvo** vão para o `TODO.md` daquele repo. Este arquivo é
   `jq` e cobrá-los na doc. — descoberto por `sdd-executor` na missão
   `20260816-runner-sem-dividas` (2026-08-16)
 
+- [ ] **A fase corrente de um `sdd run` em background só existe na leitura de quem acompanha** —
+  `bin/sdd:1080` (`pipeline_log_line`) — o feed durável tem a linha por sessão e as escaladas, mas
+  não o `$GATE_WHY` ("2 of 4 increment(s)"), que só vai para stdout. Pior: gate que passa **sem
+  abrir sessão** não gera evento nenhum — medido nesta missão, o `QA` passou em silêncio quando o
+  `F1` devolveu a suíte ao verde. Direção: emitir `PROGRESS <fase> <motivo>` a cada tentativa, mais
+  `sdd monitor <missão>` seguindo o feed e `--no-monitor` para desligar, ligado por default.
+  — descoberto por `humano` na missão `20260817-eixo-do-juiz` (2026-08-17)
+
 ### Contrato e configuração
 
 - [ ] **O lembrete pós-pipeline manda o humano a um comando que não enxerga o que ele contou** —
@@ -408,6 +416,15 @@ Achados sobre **repos-alvo** vão para o `TODO.md` daquele repo. Este arquivo é
   inglesa com prosa-guia que o agente reescreve — a segunda mexe no contrato que
   `check-templates.sh` mede, então vem depois da entrada acima. — descoberto por `humano` na
   missão `20260815-i13.5-kit-em-ingles` (2026-08-15)
+
+- [ ] **A identidade do ledger resolve caminho com dois `cd`, e cada camada custou uma rodada de
+  review** — `bin/sdd:894` (`ledger_repo_root`) — a sequência foi `--show-toplevel` (errava
+  worktree) → `--git-common-dir` (submódulo colapsava) → `cd` para o pai (bare devolvia o pai) →
+  `CDPATH` (tudo colapsava, CRITICAL). O git resolve sozinho: `rev-parse --path-format=absolute
+  --git-common-dir` (2.31+, aqui é 2.43) dispensa os dois `cd`, o `pwd -P` e a guarda de CDPATH.
+  Não é conserto — o código de hoje está correto e medido; é remover a classe inteira. Direção:
+  trocar e reancorar os dois mutantes.
+  — descoberto por `humano` na missão `20260817-eixo-do-juiz` (2026-08-17)
 
 ### Saída humana e cosmética
 
