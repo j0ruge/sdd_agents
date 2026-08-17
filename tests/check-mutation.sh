@@ -94,8 +94,10 @@ trap 'rm -rf "$WORK"' EXIT
 # mutation that does not sabotage is the decorative assertion this file exists to hunt, one level
 # up. Anchor on CODE, never on prose: prose gets translated, code does not.
 #
-# Name: mut_<GATE>_<slug> for a gate, mut_RUN_<slug> for what is not a gate. `sdd health` uses
-# that prefix to demand one mutation per gate — changing the convention blinds health.
+# Name: mut_<GATE>_<slug> for a gate — `sdd health` greps exactly that prefix to demand one
+# mutation per gate, so changing it there blinds health. Everything else is named after the
+# COMMAND or helper it sabotages (RUN_, PRE_, RETRY_, APPROVE_, AUTONOMY_, FRONTMATTER_): the
+# prefix is where to look when a mutant survives, and "not a gate" is not a place.
 # ---------------------------------------------------------------------------
 
 mut_PLAN_empty_approval() {   # accepts an empty `aprovacao:` — an unapproved plan becomes runnable
@@ -289,8 +291,8 @@ mut_KAIZEN_approved_bailout_dead() {
 
 # The rubric's strongest signal is dropped: phases with an escalation, a human retry or a failing
 # last gate label as "ok". The judge would congratulate the kit precisely on the missions where
-# the human had to push the work again. RUN_ prefix: kaizen_series is a helper, not a gate —
-# the two-prefix contract in the header comment holds.
+# the human had to push the work again. RUN_ prefix and not KAIZEN_: kaizen_series is a helper the
+# runner reads, not the gate — the naming rule in the header comment holds.
 mut_RUN_refez_dropped() {
   sed -i 's|then "refez"|then "ok"|' "$1"
 }
@@ -501,6 +503,20 @@ mut_RUN_entrypoint_unguarded() {
 # can survive it, because both compare two readings of ONE file against each other.
 mut_RUN_ledger_no_repo_filter() {
   sed -i 's@def ledger_row_is_local: if (type == "object" and has("repo")) then .repo == $repo else true end;@def ledger_row_is_local: true;@' "$1"
+}
+
+# Not a gate: `--all-repos` is still accepted, still documented, and does nothing — the shape of
+# dead flag that is worst to have, because the human asks the cross-project question, gets an
+# answer, and the answer is about one repo. The complement of the mutation above: that one opens
+# the filter that must stay shut by default, this one welds shut the door that must open on demand.
+#
+# `g` because the flag is parsed in TWO commands (cmd_autonomy and cmd_kaizen) and the differential
+# pair reads one of them each: killing only the first would leave the judge's half green and
+# measure half a flag. It sabotages the SETTERS and not `ledger_row_is_local`, which is the whole
+# point of there being one predicate — a mutant that emptied the predicate would be indistinguishable
+# from mut_RUN_ledger_no_repo_filter and would score the same point twice.
+mut_AUTONOMY_all_repos_ignored() {
+  sed -i 's@LEDGER_ALL_REPOS=1@LEDGER_ALL_REPOS=0@g' "$1"
 }
 
 # Not a gate: the preflight goes back to asking whether the agent copy EXISTS, which is what it did
@@ -737,6 +753,7 @@ CATALOG=(
   FRONTMATTER_write_unscoped
   KAIZEN_adr_0003_orphan
   KAIZEN_degenerate_axis_blind
+  AUTONOMY_all_repos_ignored
 )
 
 # Mutations that are NOT caught today, each with the increment that closes it. Ratchet in both

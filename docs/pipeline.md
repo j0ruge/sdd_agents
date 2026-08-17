@@ -355,6 +355,16 @@ by any test. Three consequences worth knowing:
   the empty series. That is the safe direction — an empty series is `guard.sufficient: false` and
   supports only `indeterminado`, never somebody else's numbers read as a verdict about this kit.
 
+**`--all-repos` is the door back to the cross-project question.** Per repo is the right *default*
+and the wrong *only option*: this ledger is one file per machine precisely so maturity can be
+compared BETWEEN projects, and while the filter was the only behaviour no reader could ask that
+at all. `sdd autonomy --all-repos` and `sdd kaizen --series --all-repos` flip the same single
+predicate, so the flag reaches every reader at once — including the post-pipeline reminder, which
+holds no filter of its own. Under it `excluded.other_repo` is `0` (nothing is foreign any more)
+and the human table's header names the scope it read instead of a repo path. It is never the
+default and never implicit: the judge's verdict about *this kit* must not be computed over another
+project's rows, which is exactly the contamination the filter removed.
+
 It records **facts, never a score**: phase, attempt, whether the session moved the disk, rc, cost,
 the gate result and its reason. `ok|leve|refez` is a label, and a runner that labels its own work
 is the "label instead of artifact" every gate here exists to forbid. The judge derives the label,

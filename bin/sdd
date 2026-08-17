@@ -884,7 +884,16 @@ ledger_repo_root() {
 # swallowed it would be hiding corruption instead of reporting it: the readers already classify
 # those rows out loud (one counts them `unrecognized`, the other dies naming the file), and that
 # has to keep happening in whichever repo the human is standing in.
+#
+# `--all-repos` flips this ONE definition instead of adding a fourth spelling of the question to
+# each reader: the flag reaching the predicate is the flag reaching every reader, including the
+# post-pipeline reminder that holds no filter of its own. It is a flag and not the default because
+# the default is what got contaminated (d99a7fc) — but the ledger is one file per machine precisely
+# so maturity stays comparable BETWEEN projects, and after the filter landed no reader could ask
+# that question at all. Opt-in restores the cross-repo answer without restoring the contamination.
+LEDGER_ALL_REPOS=0
 ledger_row_is_local() {
+  if [ "$LEDGER_ALL_REPOS" = "1" ]; then printf '%s' 'def ledger_row_is_local: true;'; return 0; fi
   printf '%s' 'def ledger_row_is_local: if (type == "object" and has("repo")) then .repo == $repo else true end;'
 }
 
@@ -2221,6 +2230,13 @@ cmd_retry() {
 # This command is the human's window; the JUDGE reads the JSONL with jq. Coupling I13.3 to this
 # text would freeze a table nobody promised to keep.
 cmd_autonomy() {
+  while [ $# -gt 0 ]; do
+    case "$1" in
+      --all-repos) LEDGER_ALL_REPOS=1 ;;
+      *)           die "unknown autonomy option: $1" ;;
+    esac
+    shift
+  done
   local file; file="$(autonomy_log_path)"
   command -v jq >/dev/null 2>&1 || die "jq not found — it is required to read the ledger"
 
@@ -2266,7 +2282,12 @@ cmd_autonomy() {
     fi
     return 1
   fi
-  step "sdd autonomy — $file · $total row(s) · $repo"
+  # The header names the SCOPE it just read, not the cwd: under --all-repos the rows below come
+  # from every project on this machine, and a header still pointing at one repo path would read as
+  # a claim about that repo — the same misattribution the filter was added to remove.
+  local scope="$repo"
+  [ "$LEDGER_ALL_REPOS" = "1" ] && scope="all repos (--all-repos)"
+  step "sdd autonomy — $file · $total row(s) · $scope"
 
   # Every row lands in exactly ONE of four buckets, and the buckets are exhaustive: comparable
   # session, non-comparable row, escalation on the axis, or unrecognized (event missing, or a value
@@ -2373,7 +2394,10 @@ kaizen_series() {
   # this kit. It is said out loud because an empty series that nobody explained is the kind of
   # zero this file spends the rest of its lines refusing to print.
   local repo; repo="$(ledger_repo_root)"
-  [ -n "$repo" ] \
+  # Silenced under --all-repos, and only there: with the filter open the cwd decides nothing, so
+  # the warning would be announcing an emptiness that is not going to happen. Kept loud otherwise —
+  # an empty series nobody explained is the kind of zero this file spends its lines refusing.
+  [ -n "$repo" ] || [ "$LEDGER_ALL_REPOS" = "1" ] \
     || warn "not inside a git repository — the ledger is read per repo, so this series comes back empty (cwd: $PWD)"
   if [ ! -s "$file" ]; then
     # Second producer of the same shape, and it cannot share the jq above (there is no input to
@@ -2654,6 +2678,12 @@ cmd_kaizen() {
     case "$1" in
       --series)  series_only=1 ;;
       --dry-run) DRY_RUN=1 ;;
+      # Accepted on the whole command and not just on --series: kaizen_reminder and the KAIZEN
+      # gate read through kaizen_series, so the flag lands on every number this command derives
+      # rather than on the JSON alone. What it must NEVER do is default to on — the judge's own
+      # verdict would then be computed over other projects' rows (ADR 0003 is about the axis being
+      # read in the right place; this is the same rule about the repo).
+      --all-repos) LEDGER_ALL_REPOS=1 ;;
       *)         die "unknown kaizen option: $1" ;;
     esac
     shift
@@ -2791,6 +2821,14 @@ USAGE
   sdd kaizen --series        the deterministic series (JSON) the judge cites, for the repo
                              it runs in (the ledger file is global, the reading is not)
   sdd help | sdd version
+
+LEDGER OPTIONS (`autonomy` and `kaizen`)
+  --all-repos                read the WHOLE ledger, not just the rows born in this repo. The
+                             default is per repo because a `sdd run` in a throwaway fixture repo
+                             once moved the judge's own numbers, and the judge must never take
+                             another project's rows as a verdict about this kit. Ask for it when
+                             the question really is cross-project maturity — which is why the
+                             ledger is one file per machine to begin with.
 
 FOR SCRIPTS
   sdd phase <mission>        print only the current phase (or DONE)

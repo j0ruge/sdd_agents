@@ -939,6 +939,48 @@ assert_eq "and says the rows exist, under another repo — not that nothing was 
 assert_eq "never a percentage computed out of somebody else's sessions" "0" \
   "$(grep -c '%' <<< "$out_none")"
 
+# --- ...and --all-repos is the door back to the cross-repo question ----------
+# The filter above is right as a DEFAULT and wrong as the only option. The ledger is ONE file per
+# machine precisely so maturity stays comparable BETWEEN projects (docs/pipeline.md), and once the
+# filter landed no reader could ask that question at all — the fixture contamination it removed
+# took the cross-repo number with it. The flag is the explicit door back; leaving the default open
+# is what let a /tmp fixture repo move the judge's own numbers in the first place.
+#
+# DIFFERENTIAL over ONE ledger, like every pair in this file: the two readings are compared to EACH
+# OTHER and never to a constant. A flag that is a no-op prints the same numbers twice; a flag that
+# opened the default prints the whole file twice (and the assertions above go red); only an honest
+# one is STRICTLY wider with the flag than without, with the foreign bucket emptied because with it
+# nothing is foreign any more. Both readers are pinned, because the flag has to reach the predicate
+# and not one command's own copy of the question.
+echo "== reader: --all-repos =="
+
+# wider <a> <b> -> "wider" when a is strictly greater than b, "not wider" otherwise. A side that is
+# not a number (an unknown-option death printing nothing, a jq miss) is NEVER evidence of widening:
+# it answers "not wider" instead of letting `[ -gt ]` die and leaving the assertion to read the
+# shell's own noise. Same reason num_before defaults to "" rather than guessing.
+wider() {
+  case "${1:-x}" in *[!0-9]*) printf 'not wider'; return 0 ;; esac
+  case "${2:-x}" in *[!0-9]*) printf 'not wider'; return 0 ;; esac
+  if [ "$1" -gt "$2" ]; then printf 'wider'; else printf 'not wider'; fi
+}
+foreign_of() { local m; m="$(num_before "$1" 'row\(s\) excluded: born in another repo')"; printf '%s' "${m:-0}"; }
+
+out_all="$( SDD_STATE_DIR="$OUTSIDE/tworepos" "$SDD" autonomy --all-repos 2>&1 )"
+assert_eq "all-repos: the human table widens to the whole ledger, and nothing is foreign under it" \
+  "wider 3 0" \
+  "$(wider "$(sum_sessions "$out_all")" "$(sum_sessions "$out_here")") $(foreign_of "$out_here") $(foreign_of "$out_all")"
+
+# The judge reads the same file through its own jq program. Pinning only the human's table would
+# leave the flag able to reach one reader and not the other — the divergence between two
+# instruments over one file that this whole section exists to prevent.
+ser_here="$( SDD_STATE_DIR="$OUTSIDE/tworepos" "$SDD" kaizen --series 2>/dev/null )"
+ser_all="$(  SDD_STATE_DIR="$OUTSIDE/tworepos" "$SDD" kaizen --series --all-repos 2>/dev/null )"
+assert_eq "all-repos: the judge's series answers it too — other_repo falls to 0 and the missions rise" \
+  "3 0 wider" \
+  "$(jq -r '.excluded.other_repo' <<< "$ser_here") $(jq -r '.excluded.other_repo' <<< "$ser_all") $(wider "$(jq -r '.guard.missions_with_session' <<< "$ser_all")" "$(jq -r '.guard.missions_with_session' <<< "$ser_here")")"
+# Anti-vacuity: a flag that widened the reading by losing rows on the way would still be "wider".
+assert_bucket_sum "the four buckets sum to the header total (--all-repos over two repos)" "$out_all"
+
 # A row with no `event` at all, or an event nobody recognizes yet: the reviewer's exact repro. It
 # must be counted, not merely fail to crash. It also carries no `repo`, which is deliberate twice
 # over: a row that cannot say where it came from is never excluded by the repo filter — hiding
