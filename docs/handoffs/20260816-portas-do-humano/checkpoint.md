@@ -32,6 +32,8 @@ atualizado: 2026-08-16 23:55
 | I2 | o runner troca para a branch declarada | `o=$(bash tests/check-gates.sh 2>&1); grep -c '^  ok    branch ' <<< "$o"` → `3` | done | b3b8c2f |
 | I3 | `sdd retry` vira a quarta porta com aviso | `o=$(bash tests/check-gates.sh 2>&1); grep -c '^  ok    retry ' <<< "$o"` → `2` | done | 3ffa586 |
 | I4 | plano kaizen-born nunca se auto-aprova | `o=$(bash tests/check-gates.sh 2>&1); grep -c '^  ok    kaizen-born' <<< "$o"` → `3` | done | 2510c3c |
+| F1 | `sdd approve` destrava o plano kaizen-born que o próprio gate manda ele destravar | `o=$(bash tests/check-gates.sh 2>&1); grep -c '^  ok    approve resolves' <<< "$o"` → `1`, e a jornada re-andada: `./bin/sdd health` → verde nos 5 checks | pending | — |
+| F2 | `sdd approve` é a quinta porta que commita: avisa a branch base como as outras quatro | `o=$(bash tests/check-gates.sh 2>&1); grep -c '^  ok    approve warns' <<< "$o"` → `1`, e a jornada re-andada: `./bin/sdd health` → verde nos 5 checks | pending | — |
 
 ## Notas de execução
 
@@ -116,9 +118,61 @@ atualizado: 2026-08-16 23:55
   o campo `branch:` que o I2 já anotou: os dois comandos/campos novos desta missão precisam de casa
   na superfície de comandos do `pipeline.md`.
 
+- 2026-08-16 · `QA` · **as quatro jornadas foram andadas na linha de comando** num clone real
+  (`/tmp/qa-portas/clone`), com stub de `claude` e `TEST_CMD="true"`, nunca em fixture de sensor.
+  Verde: approve (preview, `n`, `y`, idempotência, stdin fechado, árvore suja, chave ausente),
+  troca de branch (dry-run não troca, inexistente criada da atual, existente checkout, placeholder
+  no-op, git recusa ⇒ `die` sem gastar sessão), retry (avisa na base, silencia fora, honra a branch,
+  avisa **depois** do checkout) e kaizen-born (auto+verdict recusa, auto sem verdict passa,
+  `humano-*`+verdict passa). Os dois achados abaixo saíram das costuras ENTRE incrementos, que
+  nenhum sensor de incremento mediu.
+- 2026-08-16 · `QA` · **F1 nasce do achado "o remédio que o gate nomeia não existe"** (§Achados do
+  `30-handoff-qa.md`). `gate_PLAN` recusa `auto`+verdict e manda `run 'sdd approve <missão>'`;
+  `cmd_approve` (`bin/sdd:1774`) lê `auto` como "already approved — nothing to do" e volta 0 sem
+  escrever. Os conjuntos são **aninhados**, não sobrepostos: o gate só recusa quando o valor é
+  `auto`, e `auto` é exatamente o que faz o approve desistir — o remédio nunca funciona, não é
+  "às vezes". Andado: `sdd why`, `sdd status` (2×) e `sdd run` imprimem a instrução; obedecê-la
+  deixa `aprovacao: auto` e a fase em PLAN. Saída só editando o frontmatter à mão, que é a falha
+  que esta missão existe para matar.
+- 2026-08-16 · `QA` · **F2 nasce do achado "a quinta porta commita em silêncio"**. `cmd_approve`
+  commita e não chama `warn_if_on_base_branch`; o comentário da definição (`bin/sdd:1271`) enumera
+  "the four doors that can end up committing" e o approve, escrito na MESMA missão, é a quinta.
+  Andado: de pé na base, `sdd approve` deixou `chore(missao): plan … approved by the human` na
+  branch base sem uma palavra — a classe SQ-97, reaberta pela porta nova.
+- 2026-08-16 · `QA` · **por que o I4 passou verde com o remédio morto:** a última asserção
+  kaizen-born do `tests/check-gates.sh` alcança o estado aprovado com `sed -i`. Simular o remédio
+  prova que o **gate aceita** o que o comando escreveria, nunca que o **comando chega lá** — e o
+  comentário dessa asserção já dizia, por escrito, "unrunnable FOREVER, `sdd approve` included".
+  A asserção nova invoca o remédio que o runner imprime, em vez de imitá-lo.
+- 2026-08-16 · `QA` · a asserção do F1 é **par diferencial** de propósito: `auto`+verdict tem de ser
+  destravado E `auto` sem verdict tem de continuar recusado. Sem a segunda metade o conserto mais
+  barato é tirar `auto` do `case` de bail — medido: essa sabotagem deixa a asserção **vermelha**,
+  como tem de ficar. Um approve que reescreve todo `auto` em `humano-<hoje>` apagaria a procedência
+  do PLAN-AUTO em silêncio.
+- 2026-08-16 · `QA` · **enquanto F1/F2 estiverem `pending` o `check-mutation.sh` reporta
+  `HARNESS-BROKEN` e sai 1** — é a guarda de controle dele (`tests/check-mutation.sh:653`), que
+  recusa pontuar quando a cópia sem sabotagem já está vermelha. É comportamento desenhado, não um
+  terceiro bug: sem ela o score leria 48/48 por vacuidade. Volta a pontuar quando os dois fixes
+  fecharem.
+- 2026-08-16 · `QA` · prefixos novos são contrato com os Checks e foram escolhidos para **não**
+  inflar os vizinhos: `approve resolves` e `approve warns` não casam `^  ok    sdd approve`. Medido
+  depois de escrever as asserções — os quatro Checks do EXEC continuam 3/3/2/3.
+
 ## Incrementos de fix (QA)
 
 > Escritos pelo `sdd-qa` quando um bug sanável é reprovado. Entram na mesma tabela acima com ID
 > `F<n>`, e o Check obrigatoriamente inclui **regression test passa** + **re-walk da jornada
 > impactada verde**. Bug que exige julgamento humano NÃO vira fix — vai para
 > "Decisions for a Human" no handoff de QA.
+
+**F1** — em `cmd_approve`, o `case` que trata `auto|humano-*)` como "já aprovado" precisa distinguir
+o plano kaizen-born: com `05-verdict.md` ao lado, `auto` não é aprovação, é a máquina se
+certificando — o mesmo teste que o `gate_PLAN` já faz. A condição existe em UM lugar hoje (o gate);
+lida em dois, vira uma definição, pela regra do enum do `CLAUDE.md`. Sem verdict, `auto` continua
+sendo "already approved" e o comando continua no-op.
+
+**F2** — `warn_if_on_base_branch` no início de `cmd_approve`, e o comentário da definição
+(`bin/sdd:1271`) passa de "four doors" para cinco. **Aviso, nunca `die`:** o plano legitimamente
+vive na branch base antes de a branch da missão ser cortada — é de lá que `ensure_mission_branch`
+corta —, então recusar quebraria o fluxo normal. Vale a mutação de call site, como o
+`RETRY_base_branch_warn_dead` do I3 fez pelo mesmo motivo.
