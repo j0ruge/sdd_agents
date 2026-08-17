@@ -924,8 +924,10 @@ ledger_repo_root() {
 # nothing in the output saying so.
 #
 # `--all-repos` flips this ONE definition instead of adding a fourth spelling of the question to
-# each reader: the flag reaching the predicate is the flag reaching every reader, including the
-# post-pipeline reminder that holds no filter of its own. It is a flag and not the default because
+# each reader: the flag reaching the predicate is the flag reaching every reader that an invocation
+# carrying it can reach. ⚠️ NOT the post-pipeline reminder, whatever this said before — it is
+# called from cmd_run alone, and `sdd run` has no --all-repos, so it always reads per repo. The
+# twin of this comment in cmd_kaizen said the same false thing. It is a flag and not the default because
 # the default is what got contaminated (d99a7fc) — but the ledger is one file per machine precisely
 # so maturity stays comparable BETWEEN projects, and after the filter landed no reader could ask
 # that question at all. Opt-in restores the cross-repo answer without restoring the contamination.
