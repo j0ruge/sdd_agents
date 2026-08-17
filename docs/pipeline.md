@@ -346,10 +346,14 @@ by any test. Three consequences worth knowing:
 
 - what leaves is **counted, never dropped in silence**: `excluded.other_repo` in the series, and
   one `N row(s) excluded: born in another repo` line in the human table;
-- a row that cannot say where it came from — not an object, or an object with no `repo` key — is
-  **never** excluded by the filter. It reaches the bucket that names it (`unrecognized`, or a loud
-  death naming the file) in whichever repo you are standing in: hiding corruption is the one thing
-  a filter must not do;
+- a row with **no `repo` key** belongs to no project, so it leaves through a bucket of its own —
+  `excluded.no_repo` in the series, one `N row(s) excluded: no repo field` line in the human table,
+  and a fourth "no data" silence when the whole ledger is like that. Never `other_repo`: "born
+  nowhere" and "born elsewhere" are different accusations. ⚠️ It used to be counted as local in
+  **every** repo, on the claim that the readers named it anyway — false for a well-formed session
+  row, because `is_unrecognized` asks `.event` and never `.repo`, so three of them cleared the
+  judge's floor of 3 in silence. A row that is not an object at all is still admitted here and
+  still dies loudly naming the file: hiding corruption is the one thing a filter must not do;
 - read from **outside any git repository**, nothing in the ledger is yours: `sdd autonomy` refuses
   with rc 1 saying the rows exist under another repo, and `sdd kaizen --series` warns and returns
   the empty series. That is the safe direction — an empty series is `guard.sufficient: false` and
@@ -467,10 +471,11 @@ Plus a `guard` (`missions_after_change`, `missions_with_session`, `sessions`,
 one, but bought the judge no observation and so does not raise the floor;
 `degenerate_axis`, true when every kit version in the slice bought exactly one session **and**
 there is more than one of them) and an `excluded`
-accounting with four reasons
+accounting with five reasons
 (`non_comparable` dirty-kit rows, `unrecognized` rows, the `meta` rows the kaizen sessions
-themselves write — the loop never lets its own sessions shift the axis it is judged on — and
-`other_repo`, the rows born somewhere else). The empty-ledger branch prints the same key set with
+themselves write — the loop never lets its own sessions shift the axis it is judged on —
+`other_repo`, the rows born somewhere else, and `no_repo`, the rows that name no project at all).
+The empty-ledger branch prints the same key set with
 zeros: a consumer must never read `null` on one branch where the other gives a number.
 
 `degenerate_axis` exists because `sufficient: false` alone says two different things. In a target

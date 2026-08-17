@@ -34,10 +34,11 @@ nothing to read. `degenerate_axis: true` means every kit version in the slice bo
 session — the shape of the repo that BUILDS the kit, where each session commits and the next lands
 on a fresh sha. Then `sufficient: false` is structural, not a matter of waiting: say so in the
 verdict and cite ADR 0003, instead of writing "a few more missions and we will know". It also counts
-what it excluded, in **four** buckets — dirty-kit rows, unrecognized rows, the meta rows your own
-sessions write, and `other_repo`, the rows born in another repo (the ledger file is global, this
-reading is not). Cite `other_repo` like the rest: it is the bucket that can empty a series on its
-own, and a series that shrank with nothing naming the reason is the defect the counter exists for.
+what it excluded, in **five** buckets — dirty-kit rows, unrecognized rows, the meta rows your own
+sessions write, `other_repo`, the rows born in another repo (the ledger file is global, this
+reading is not), and `no_repo`, the rows that name no project at all and so belong to none. Cite
+those last two like the rest: they are the buckets that can empty a series on its own, and a series
+that shrank with nothing naming the reason is the defect the counters exist for.
 
 Every number in your verdict comes from this output. Cite them as they are.
 

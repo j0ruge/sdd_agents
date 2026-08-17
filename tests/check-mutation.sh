@@ -502,7 +502,22 @@ mut_RUN_entrypoint_unguarded() {
 # repos in check-kaizen.sh, the human table read from two repos in check-autonomy.sh — and neither
 # can survive it, because both compare two readings of ONE file against each other.
 mut_RUN_ledger_no_repo_filter() {
-  sed -i 's@def ledger_row_is_local: if (type == "object" and has("repo")) then .repo == $repo else true end;@def ledger_row_is_local: true;@' "$1"
+  sed -i 's@def ledger_row_is_local: if ledger_row_no_repo then false elif (type == "object" and has("repo")) then .repo == $repo else true end;@def ledger_row_is_local: true;@' "$1"
+}
+
+# Not a gate: a row with no `repo` key goes back to being local in EVERY repo, and the bucket that
+# names it goes back to reading 0. The judge's floor is then movable by rows nobody can attribute
+# to any project — three of them cleared `sufficient` in fixture — and nothing in the output says a
+# row was even admitted. The expensive shape again: not a number missing, a number moved with no
+# reason printed beside it.
+#
+# It sabotages `ledger_row_no_repo` and NOT `ledger_row_is_local`, which is what keeps it distinct
+# from the two entries above: the repo filter itself stays honest (the two-repo differentials stay
+# green), so what has to die is the pair that reads the same three sessions with and without the
+# key. Emptying the definition kills the counter and the exclusion at once, because both go
+# through it — the single-definition discipline, measured.
+mut_LEDGER_no_repo_counted_as_local() {
+  sed -i 's@def ledger_row_no_repo: type == "object" and (has("repo") | not);@def ledger_row_no_repo: false;@' "$1"
 }
 
 # Not a gate: `--all-repos` is still accepted, still documented, and does nothing — the shape of
@@ -771,6 +786,7 @@ CATALOG=(
   KAIZEN_degenerate_axis_blind
   AUTONOMY_all_repos_ignored
   LEDGER_repo_root_toplevel
+  LEDGER_no_repo_counted_as_local
 )
 
 # Mutations that are NOT caught today, each with the increment that closes it. Ratchet in both

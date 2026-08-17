@@ -1056,13 +1056,75 @@ assert_eq "worktree: a row born in a worktree is local in the main checkout, and
 assert_eq "worktree: and the two checkouts read one ledger identically — same rows, same buckets" \
   "$(wt_summary "$WTMAIN")" "$(wt_summary "$WTLINK")"
 
+# --- ...and a row that cannot say where it came from is nobody's ------------
+# `ledger_row_is_local` used to answer `true` for a row with no `repo` key — local in EVERY repo.
+# The comment above it claimed the readers then classified those rows out loud, and for a bare
+# array that is true (one dies naming the file). For a WELL-FORMED session row it was false:
+# `is_unrecognized` looks at `.event`, never at `.repo`, so three sessions that named no project
+# walked straight into the slice and cleared the judge's floor of 3 — a guard moved by rows nobody
+# can attribute to anything, in silence. They now land in `excluded.no_repo`: counted, never summed
+# into the slice, never dropped without a word.
+#
+# DIFFERENTIAL over TWO ledgers that differ in exactly one key: the same three clean sessions, on
+# the same kit_sha, in the same three missions — with and without `repo`. Read once, nothing tells
+# "excludes the unattributable" from "excludes everything": a blanket refusal answers `false` on
+# both, the old behaviour answers `true` on both, and only the honest one splits them.
+echo "== reader: a row that says no repo belongs to no repo =="
+mkdir -p "$OUTSIDE/norepo" "$OUTSIDE/withrepo" "$OUTSIDE/norepomix"
+norepo_row() {   # norepo_row <mission> — ledger_row's twin, minus the one key under test
+  jq -cn --arg mission "$1" \
+    '{v:1, ts:"2026-08-16T15:00:00-03:00", event:"session", run_id:"r", invocation:"run",
+      kit_sha:"ccccccc", kit_dirty:false, project:"p", mission:$mission,
+      phase:"EXEC", step:"EXEC", agent:"sdd-executor", model:"opus", attempt:1,
+      auto_retry:false, session:"s", rc:0, dur_s:10, cost_usd:1.0, moved:true,
+      gate:"pass", gate_why:"x"}'
+}
+{ norepo_row n1;            norepo_row n2;            norepo_row n3; }            > "$OUTSIDE/norepo/autonomy-log.jsonl"
+{ ledger_row "$FIXROOT" n1; ledger_row "$FIXROOT" n2; ledger_row "$FIXROOT" n3; } > "$OUTSIDE/withrepo/autonomy-log.jsonl"
+# Interleaved with two local rows, so the human table has a slice to print beside the exclusion.
+{ ledger_row "$FIXROOT" h1; norepo_row n1; ledger_row "$FIXROOT" h2
+  norepo_row n2;            norepo_row n3; } > "$OUTSIDE/norepomix/autonomy-log.jsonl"
+
+triple() { jq -r '[.excluded.no_repo, .excluded.other_repo, .guard.sufficient] | map(tostring) | join(" ")' <<< "$1"; }
+ser_norepo="$(   SDD_STATE_DIR="$OUTSIDE/norepo"   "$SDD" kaizen --series 2>/dev/null )"
+ser_withrepo="$( SDD_STATE_DIR="$OUTSIDE/withrepo" "$SDD" kaizen --series 2>/dev/null )"
+assert_eq "no-repo: three well-formed sessions that name no project are counted apart, and never reach the guard" \
+  "3 0 false" "$(triple "$ser_norepo")"
+# The control, and it is what makes the line above an assertion instead of a refusal: the same
+# three rows WITH a repo do clear the floor. A bucket that swallowed everything fails here.
+assert_eq "no-repo: and the same three rows WITH a repo still clear the floor — the bucket is not a blanket refusal" \
+  "0 0 true" "$(triple "$ser_withrepo")"
+
+# `--all-repos` has its OWN branch of the predicate, and the two-repo fixture further up holds no
+# unattributable row — so without this line that branch could answer a plain `true` and nothing in
+# the file would notice. The flag widens the question BETWEEN projects; a row that names none is
+# out of every scope, so it stays counted and stays out. Sessions, not just the bucket: a flag that
+# admitted the three would read 5 here, and the bucket alone cannot tell that apart.
+ser_mix_all="$( SDD_STATE_DIR="$OUTSIDE/norepomix" "$SDD" kaizen --series --all-repos 2>/dev/null )"
+assert_eq "the cross-project door widens the scope, it does not admit rows that belong to no scope" \
+  "3 2" "$(jq -r '[.excluded.no_repo, .guard.sessions] | map(tostring) | join(" ")' <<< "$ser_mix_all")"
+
+out_mix="$( SDD_STATE_DIR="$OUTSIDE/norepomix" "$SDD" autonomy 2>&1 )"
+assert_eq "the human table names them out loud, never drops them in silence" "1" \
+  "$(grep -c '3 row(s) excluded: no repo' <<< "$out_mix")"
+assert_eq "and never files them under another repo — the two exclusions are different accusations" \
+  "0" "$(foreign_of "$out_mix")"
+assert_bucket_sum "the four buckets sum to the header total (unattributable rows beside local ones)" "$out_mix"
+
+# The fourth silence. Without it the reader blames THIS repo ("none of the 3 row(s) were born
+# here") for rows that were born in no repo at all — sending the human hunting for a path that
+# does not exist, which is the same wrong hunt the other three silences are named apart to avoid.
+out_only="$( SDD_STATE_DIR="$OUTSIDE/norepo" "$SDD" autonomy 2>&1 )"; rc=$?
+assert_eq "a ledger of nothing but unattributable rows refuses, and says which silence it is" "1 1" \
+  "$rc $(grep -c 'say which repo they came from' <<< "$out_only")"
+
 # A row with no `event` at all, or an event nobody recognizes yet: the reviewer's exact repro. It
-# must be counted, not merely fail to crash. It also carries no `repo`, which is deliberate twice
-# over: a row that cannot say where it came from is never excluded by the repo filter — hiding
-# corruption is the one thing a filter must not do — so it still reaches the bucket that names it.
+# must be counted, not merely fail to crash. It carries a `repo` ON PURPOSE, and that is the
+# change: the repo filter runs FIRST, so a row that names no project is excluded as `no_repo`
+# before anything looks at its event, and would never reach the bucket under test here.
 echo "== reader: unrecognized row =="
 mkdir -p "$OUTSIDE/stray"
-printf '{"v":1,"ts":"2026-08-15T10:00:00-03:00"}\n' > "$OUTSIDE/stray/autonomy-log.jsonl"
+printf '{"v":1,"ts":"2026-08-15T10:00:00-03:00","repo":"%s"}\n' "$FIXROOT" > "$OUTSIDE/stray/autonomy-log.jsonl"
 out="$( SDD_STATE_DIR="$OUTSIDE/stray" "$SDD" autonomy 2>&1 )"; rc=$?
 assert_eq "exits 0 (an unrecognized row is not a malformed one)" "0" "$rc"
 assert_eq "says there are no comparable sessions" "1" "$(grep -c 'no comparable sessions' <<< "$out")"

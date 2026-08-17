@@ -114,7 +114,8 @@ localize > "$LEDGER" <<'EOF'
 {"v":1,"ts":"2026-08-15T10:07:00-03:00","event":"session","run_id":"r5","invocation":"run","kit_sha":"fff9999","kit_dirty":false,"project":"p1","repo":"/p1","mission":"m2","phase":"EXEC","step":"EXEC","agent":"sdd-executor","model":"opus","attempt":2,"auto_retry":false,"session":"s5","rc":0,"dur_s":10,"cost_usd":1.5,"moved":true,"gate":"pass","gate_why":"x"}
 {"v":1,"ts":"2026-08-15T10:08:00-03:00","event":"session","run_id":"r6","invocation":"run","kit_sha":"fff9999","kit_dirty":true,"project":"p1","repo":"/p1","mission":"m4","phase":"EXEC","step":"EXEC","agent":"sdd-executor","model":"opus","attempt":1,"auto_retry":false,"session":"s6","rc":0,"dur_s":10,"cost_usd":1.0,"moved":true,"gate":"pass","gate_why":"x"}
 {"v":1,"ts":"2026-08-15T10:09:00-03:00","event":"session","run_id":"r7","invocation":"run","kit_sha":null,"kit_dirty":null,"project":"p1","repo":"/p1","mission":"m5","phase":"EXEC","step":"EXEC","agent":"sdd-executor","model":"opus","attempt":1,"auto_retry":false,"session":"s7","rc":0,"dur_s":10,"cost_usd":1.0,"moved":true,"gate":"pass","gate_why":"x"}
-{"v":1,"ts":"2026-08-15T10:10:00-03:00"}
+{"v":1,"ts":"2026-08-15T10:10:00-03:00","repo":"/p1"}
+{"v":1,"ts":"2026-08-15T10:10:30-03:00"}
 {"v":1,"ts":"2026-08-15T10:11:00-03:00","event":"session","run_id":"r8","invocation":"run","kit_sha":"aaa1111","kit_dirty":false,"project":"sdd_agents","repo":"/kit","mission":"20260815-kaizen","phase":"KAIZEN","step":"KAIZEN","agent":"sdd-kaizen","model":"opus","attempt":1,"auto_retry":false,"session":"s8","rc":0,"dur_s":10,"cost_usd":0.5,"moved":true,"gate":"pass","gate_why":"x"}
 EOF
 
@@ -151,8 +152,12 @@ assert_eq "one mission is below the guard floor of 3" "false" "$(field '.guard.s
 assert_eq "the meta row does not inflate the latest group's sessions" "1" \
   "$(field '.latest.sessions')"
 assert_eq "nor its missions" "1" "$(field '.latest.missions')"
+# The two stray rows in the fixture are byte-identical but for the `repo` key, and they have to
+# land in DIFFERENT buckets: one row nobody can attribute is not the same accusation as one whose
+# event nobody recognizes. Lumped together (the old `else true end`) this reads `unrecognized:2,
+# no_repo:0` — an object compared whole, so neither bucket can drift alone.
 assert_eq "every excluded row is counted, by reason" \
-  '{"non_comparable":2,"unrecognized":1,"meta":1,"other_repo":0}' \
+  '{"non_comparable":2,"unrecognized":1,"meta":1,"other_repo":0,"no_repo":1}' \
   "$(jq -c '.excluded' <<< "$SERIES_OUT")"
 
 # --- a degradation is an escalation the series has to SEE --------------------

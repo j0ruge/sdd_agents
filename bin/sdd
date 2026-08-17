@@ -898,11 +898,18 @@ ledger_repo_root() {
 # three rows into the real ledger and the judge read `66% waste · 2 mission(s)` where the truth was
 # `0% · 1` — the judge's own source of truth, contaminable by any test.
 #
-# A row that does not SAY where it came from — not an object at all, or an object with no `repo`
-# key — is never excluded by this filter. It cannot be attributed to any repo, and a filter that
-# swallowed it would be hiding corruption instead of reporting it: the readers already classify
-# those rows out loud (one counts them `unrecognized`, the other dies naming the file), and that
-# has to keep happening in whichever repo the human is standing in.
+# A row that does not SAY where it came from cannot be attributed to any repo, and a filter that
+# swallowed it in silence would be hiding corruption instead of reporting it. So it leaves the
+# slice through a bucket of its OWN — `no_repo`, counted by every reader — and never through
+# `other_repo`, which is a different accusation ("born elsewhere", not "born nowhere").
+#
+# ⚠️ This used to answer `true` for such a row: local in EVERY repo. The claim written here was
+# that the readers classified them out loud anyway (one counting them `unrecognized`, the other
+# dying naming the file), and for a row that is not an object at all that is still true — which is
+# why THAT case is left alone below. For a well-formed session row it was false: `is_unrecognized`
+# asks `.event`, never `.repo`. Three sessions naming no project walked into the slice and cleared
+# the judge's floor of 3, measured in fixture — a guard moved by rows nobody can attribute, with
+# nothing in the output saying so.
 #
 # `--all-repos` flips this ONE definition instead of adding a fourth spelling of the question to
 # each reader: the flag reaching the predicate is the flag reaching every reader, including the
@@ -912,8 +919,14 @@ ledger_repo_root() {
 # that question at all. Opt-in restores the cross-repo answer without restoring the contamination.
 LEDGER_ALL_REPOS=0
 ledger_row_is_local() {
-  if [ "$LEDGER_ALL_REPOS" = "1" ]; then printf '%s' 'def ledger_row_is_local: true;'; return 0; fi
-  printf '%s' 'def ledger_row_is_local: if (type == "object" and has("repo")) then .repo == $repo else true end;'
+  # Emitted alongside, never folded in: `no repo at all` and `some other repo` are two different
+  # answers, each reader counts them into a bucket of its own, and `--all-repos` opens exactly one
+  # of the two. A row that names no project is unattributable in every scope, so the flag does not
+  # reach it — widening the question between projects is not the same as admitting rows that
+  # belong to none.
+  printf '%s' 'def ledger_row_no_repo: type == "object" and (has("repo") | not);'
+  if [ "$LEDGER_ALL_REPOS" = "1" ]; then printf '%s' 'def ledger_row_is_local: ledger_row_no_repo | not;'; return 0; fi
+  printf '%s' 'def ledger_row_is_local: if ledger_row_no_repo then false elif (type == "object" and has("repo")) then .repo == $repo else true end;'
 }
 
 # Publishes AUTONOMY_KIT_STAMP as "<sha>|<true|false>", or "|" when SDD_HOME is not a git checkout.
@@ -2291,16 +2304,22 @@ cmd_autonomy() {
   # would turn that sum into an accusation against the buckets instead of a measurement.
   local repo; repo="$(ledger_repo_root)"
   local def; def="$(ledger_row_is_local)"
-  local total lines
+  local total lines norepo
   lines="$(jq -s 'length' "$file")"
+  norepo="$(jq -s --arg repo "$repo" "$def"' map(select(ledger_row_no_repo)) | length' "$file")"
   total="$(jq -s --arg repo "$repo" "$def"' map(select(ledger_row_is_local)) | length' "$file")"
   if [ "$total" -eq 0 ]; then
-    # Three different silences, named apart: an empty file, a cwd that belongs to no repo, and a
-    # ledger full of somebody else rows. Collapsing them into one "no data" would send the reader
-    # hunting for a runner that never wrote, when the rows are right there under another path.
+    # FOUR different silences, named apart: an empty file, a ledger of rows that name no repo at
+    # all, a cwd that belongs to no repo, and a ledger full of somebody else rows. Collapsing them
+    # into one "no data" would send the reader hunting for a runner that never wrote, when the rows
+    # are right there under another path. The unattributable case is checked BEFORE the two that
+    # name a path, for the same reason: both of those would blame a repo the rows never claimed.
     if [ "$lines" -eq 0 ]; then
       warn "no data: the ledger at $file does not exist yet (or has no rows)"
       dim "  It is written by 'sdd run' and 'sdd retry'. Nothing has been recorded on this machine."
+    elif [ "$norepo" -eq "$lines" ]; then
+      warn "no data: none of the $lines row(s) in $file say which repo they came from"
+      dim "  A row with no 'repo' field belongs to no project — counted apart, never mixed into one."
     elif [ -z "$repo" ]; then
       warn "no data: the ledger is read per repo and this is not a git repository (cwd: $PWD)"
       dim "  $file holds $lines row(s), all of them belonging to some repo. Run this inside one."
@@ -2361,7 +2380,10 @@ cmd_autonomy() {
     # The repo filter runs before every bucket, and its own count is kept for the same reason the
     # other three exclusions are printed: a row that leaves has to say so. Bound BEFORE the pipe
     # so the buckets below still see a plain array of this repo rows and nothing changes shape.
-    (map(select(ledger_row_is_local | not)) | length) as $foreign
+    # TWO counts and not one: "born in another repo" and "says no repo at all" are different
+    # accusations, and a single number for both would name the wrong one in every message.
+    (map(select(ledger_row_no_repo)) | length) as $norepo
+    | (map(select((ledger_row_is_local | not) and (ledger_row_no_repo | not))) | length) as $foreign
     | map(select(ledger_row_is_local))
     | (map(select((is_session and (comparable | not))
                 or (is_escalation and (on_axis | not)))) | length) as $skipped
@@ -2385,6 +2407,7 @@ cmd_autonomy() {
     , (if $skipped > 0 then "\n  (\($skipped) non-comparable row(s) excluded: dirty kit, no kit_sha, or no moved field)" else "" end)
     , (if $stray > 0 then "\n  (\($stray) unrecognized row(s) excluded: event missing or not one of session/blocked/degraded)" else "" end)
     , (if $foreign > 0 then "\n  (\($foreign) row(s) excluded: born in another repo — the ledger is global, this reader is not)" else "" end)
+    , (if $norepo > 0 then "\n  (\($norepo) row(s) excluded: no repo field — the row cannot say which project it came from)" else "" end)
   ' "$file" 2>/dev/null)" || jq_rc=$?
   if [ "$jq_rc" -ne 0 ]; then
     die "malformed row in $file — the ledger is not readable"
@@ -2431,7 +2454,7 @@ kaizen_series() {
     # Second producer of the same shape, and it cannot share the jq above (there is no input to
     # run it on), so the key set is kept in step by hand and check-kaizen.sh compares the two as
     # key sets. A consumer reading `null` where the real series gives a number is the drift.
-    printf '%s\n' '{"v":1,"latest":null,"previous":null,"guard":{"missions_after_change":0,"missions_with_session":0,"sessions":0,"sufficient":false,"degenerate_axis":false},"excluded":{"non_comparable":0,"unrecognized":0,"meta":0,"other_repo":0}}'
+    printf '%s\n' '{"v":1,"latest":null,"previous":null,"guard":{"missions_after_change":0,"missions_with_session":0,"sessions":0,"sufficient":false,"degenerate_axis":false},"excluded":{"non_comparable":0,"unrecognized":0,"meta":0,"other_repo":0,"no_repo":0}}'
     return 0
   fi
   jq -n --arg repo "$repo" "$(ledger_row_is_local)"'
@@ -2506,8 +2529,12 @@ kaizen_series() {
     # another repo is not this repo unrecognized row, it is not this repo row at all — and it is
     # counted rather than dropped, because a number that moved with nothing explaining why is the
     # defect this filter exists to remove, not one to introduce one layer down.
+    | ($file_rows | map(select(ledger_row_no_repo)) | length) as $no_repo
     | ($file_rows | map(select(ledger_row_is_local))) as $raw
-    | (($file_rows | length) - ($raw | length)) as $other_repo
+    # Subtracted out, never lumped in: a row that names no project did not come from another repo,
+    # and a bucket that said it did would be a wrong reason printed with the confidence of a right
+    # one. The two counts partition what the filter removed, so the arithmetic still closes.
+    | (($file_rows | length) - ($raw | length) - $no_repo) as $other_repo
     | ($raw | map(select(type == "object" and .v == 1
                          and (.event == "session" or is_escalation)))) as $all
     | ($all | map(select(.phase == "KAIZEN"))) as $meta
@@ -2541,7 +2568,7 @@ kaizen_series() {
                sufficient: ($observed >= 3),   # guard floor: 3 missions WITH a session (D4); I13.4 revisits
                degenerate_axis: $degenerate},
        excluded: {non_comparable: ($noncomp | length), unrecognized: $unrec,
-                  meta: ($meta | length), other_repo: $other_repo}}
+                  meta: ($meta | length), other_repo: $other_repo, no_repo: $no_repo}}
   ' < "$file"
 }
 
