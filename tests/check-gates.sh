@@ -1313,19 +1313,27 @@ QN_HEAD_1="$( cd "$FIX" && git rev-parse HEAD )"
 # `already approved` is demanded ABSENT on one side and PRESENT on the other for the same reason the
 # `auto` check exists above — the bail path and the write path both return 0, so rc alone cannot
 # tell them apart.
+# The announcement clause was added by sdd-executor closing F1, after a sabotage pass found it was
+# the one degradation that survived: stripping the warning left `sdd approve` silently replacing a
+# committed `aprovacao: auto` with `humano-<today>`, and every clause below stayed green. Overwriting
+# a value the artifact carries is exactly what this command was built NOT to do quietly — the human
+# is told which of the two `auto`s this is before being asked. Demanded present on the kaizen-born
+# side and ABSENT on the verdict-less one, so a runner that simply warns at every approve fails too.
 if grep -q 'kaizen-born' <<< "$QM_WHY" \
    && [ "$QM_RC" -eq 0 ] \
    && { [ "$QM_LINE" = "aprovacao: humano-$QM_DAY_0" ] \
         || [ "$QM_LINE" = "aprovacao: humano-$QM_DAY_1" ]; } \
    && ! grep -q 'already approved' <<< "$QM_OUT" \
+   && grep -q 'born of sdd kaizen' <<< "$QM_OUT" \
    && [ "$QM_PHASE" != "PLAN" ] \
    && [ "$QN_LINE" = "aprovacao: auto" ] \
    && grep -q 'already approved' <<< "$QN_OUT" \
+   && ! grep -q 'born of sdd kaizen' <<< "$QN_OUT" \
    && [ "$QN_HEAD_1" = "$QN_HEAD_0" ]; then
   pass "approve resolves the refusal that names it, and still declines an 'auto' with no verdict"
 else
   fail "approve resolves the refusal that names it, and still declines an 'auto' with no verdict" \
-       "PLAN refused for kaizen-born, then 'aprovacao: humano-$QM_DAY_0' written and the phase off PLAN — while the verdict-less sibling stays 'aprovacao: auto' with no commit" \
+       "PLAN refused for kaizen-born, then the born plan announced and 'aprovacao: humano-$QM_DAY_0' written and the phase off PLAN — while the verdict-less sibling stays 'aprovacao: auto', unannounced and uncommitted" \
        "why: $QM_WHY | rc $QM_RC, phase $QM_PHASE, line '$QM_LINE', out: $(tail -2 <<< "$QM_OUT") | sibling line '$QN_LINE', sibling out: $(tail -1 <<< "$QN_OUT")"
 fi
 

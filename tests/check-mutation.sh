@@ -102,12 +102,18 @@ mut_PLAN_empty_approval() {   # accepts an empty `aprovacao:` — an unapproved 
   sed -i 's/^    auto)          : ;;/    auto)          : ;;\n    "")            : ;;/' "$1"
 }
 
-# Blinds gate_PLAN to where the plan came from: `aprovacao: auto` next to a 05-verdict.md passes
+# Blinds the kit to where the plan came from: `aprovacao: auto` next to a 05-verdict.md passes
 # again, so a plan the kit wrote about itself certifies its own homework and `sdd run` spends a
 # whole pipeline on it. Anchored on the marker's filename inside the condition — the one token that
 # cannot survive a rewrite of this branch, and the only thing gate_KAIZEN and gate_PLAN agree on.
+#
+# It sabotages the DEFINITION, which since the F1 fix is shared: the predicate answers "no" to both
+# readers at once, so gate_PLAN stops refusing AND cmd_approve goes back to reading the born plan's
+# `auto` as an approval. That is the point — the two readers agreeing wrongly is the state this
+# function exists to make impossible, and a mutant that killed only the gate's call would leave the
+# other reader's assertion green and credit this entry for half a measurement.
 mut_PLAN_kaizen_born_blind() {
-  sed -i 's|^  if \[ "\$approval" = "auto" \] && \[ -f "\$MISSION_DIR/05-verdict.md" \]; then$|  if false; then|' "$1"
+  sed -i 's|^    && \[ -f "\$MISSION_DIR/05-verdict.md" \]$|    \&\& false|' "$1"
 }
 
 mut_TICKET_no_sprint() {      # stops requiring `sprint:` — a card in the backlog is invisible work
@@ -503,6 +509,28 @@ mut_RUN_approve_writes_auto() {
   sed -i 's@^  local approved_as; approved_as="humano-\$(date +%F)"$@  local approved_as; approved_as="auto"@' "$1"
 }
 
+# `sdd approve` goes back to reading a kaizen-born `auto` as an approval already given — the exact
+# state the kit shipped in between increment I4 and this fix, and the one sdd-qa walked: gate_PLAN
+# refuses the plan and names this command, the command answers "already approved — nothing to do",
+# and the two loop forever with no exit but the hand-edited frontmatter the command exists to end.
+# Nothing fails, nothing warns; the runner simply prints an instruction that cannot be obeyed.
+#
+# The SECOND deliberate exception to "sabotage the definition, never the call site", for the same
+# reason mut_RETRY_base_branch_warn_dead is the first: the defect this increment closes IS a reader
+# that does not consult the shared condition, and mut_PLAN_kaizen_born_blind already empties the
+# definition for both readers at once. Sabotaging the body again would measure that entry's ground
+# twice and leave the approve door borrowing its coverage from a neighbour. What has to die here is
+# `approve resolves` and only it — the gate keeps refusing, so every kaizen-born assertion above it
+# stays green and the score credits this entry for the remedy alone.
+#
+# Addressed to cmd_approve's body: `plan_approves_itself` is read in two functions, and an
+# unaddressed substitution would be a sabotage of the gate wearing this entry's name. The range
+# ends at the first column-zero `}`, which is cmd_approve's own — every line of the body is
+# indented.
+mut_RUN_approve_bails_on_kaizen_born() {
+  sed -i '/^cmd_approve() {/,/^}/ s@^      if ! plan_approves_itself; then$@      if true; then@' "$1"
+}
+
 # The runner stops reading the `branch:` field — the state the kit lived in until this mission, and
 # the one that let five phases of the SQ-97 pilot commit into another PR's branch. It is a no-op
 # that costs nothing and breaks nothing on screen: the run goes on, the gates pass, and every
@@ -588,6 +616,7 @@ CATALOG=(
   PRE_agent_presence_only
   RUN_base_branch_warn_dead
   RUN_approve_writes_auto
+  RUN_approve_bails_on_kaizen_born
   RUN_branch_switch_dead
   RETRY_base_branch_warn_dead
 )

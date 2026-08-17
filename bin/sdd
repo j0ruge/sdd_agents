@@ -289,6 +289,35 @@ latest_matching() {
   ls -1d $pattern 2>/dev/null | sort -V | tail -1 || true
 }
 
+# plan_approves_itself → 0 when the mission on disk is a kaizen-born plan carrying `aprovacao: auto`
+#
+# ONE definition, because two places read it and they must never disagree: gate_PLAN refuses this
+# state, and cmd_approve must NOT mistake it for an approval already given. That disagreement is
+# not hypothetical — it is the bug this function was extracted to close (found by sdd-qa in mission
+# 20260816-portas-do-humano): the gate named `sdd approve` as the one way out while approve read
+# the same `auto` as "already approved — nothing to do", so the only remedy the runner printed was
+# the one thing it refused to do, and the loop had no exit but hand-editing the frontmatter.
+#
+# `auto` carries ONE premise: the PLAN-AUTO table was filled with the human in the room. A plan
+# born of `sdd kaizen` had no human in the room — the kit planned its own next change — so `auto`
+# there is the machine certifying its own homework. agents/sdd-kaizen.md orders the born plan to
+# ship with `aprovacao:` empty and gate_KAIZEN refuses to hand one over with the field filled, but
+# both of those act at BIRTH: nothing stopped the field from being filled afterwards. A rule that
+# lives only in prose is a rule the runner does not have.
+#
+# `05-verdict.md` beside the mission is the marker, and it is structural rather than agreed: the
+# kaizen gate locates the verdict and takes its `dirname` as the born plan's home, so the two are
+# siblings by construction. Read per MISSION and never per repo — `ls $HANDOFF_DIR/*/05-verdict.md`
+# passes every assertion in this family and then refuses every `auto` in any repo that has ever run
+# `sdd kaizen`, the kit's own included (measured in increment I4).
+#
+# Only `auto` is caught: with a human's own `humano-YYYY-MM-DD` the mission runs, verdict and all,
+# or the kit's improvement loop would have no terminating state.
+plan_approves_itself() {
+  [ "$(frontmatter "$MISSION_DIR/00-missao.md" aprovacao)" = "auto" ] \
+    && [ -f "$MISSION_DIR/05-verdict.md" ]
+}
+
 # ---------------------------------------------------------------------------
 # Gates — each returns 0 (satisfied) or 1, writing the reason into GATE_WHY.
 # WARNING: no gate may be satisfied by model text. Artifacts only.
@@ -307,22 +336,13 @@ gate_PLAN() {
     humano-*)      : ;;
     *) GATE_WHY="00-missao.md has 'aprovacao: ${approval:-<empty>}' — it must be 'auto' (PLAN-AUTO all ✅) or 'humano-YYYY-MM-DD'"; return 1 ;;
   esac
-  # `auto` carries ONE premise: the PLAN-AUTO table was filled with the human in the room. A plan
-  # born of `sdd kaizen` had no human in the room — the kit planned its own next change — so `auto`
-  # there is the machine certifying its own homework, and this gate is what `sdd run` asks before
-  # spending a pipeline on it. agents/sdd-kaizen.md orders the born plan to ship with `aprovacao:`
-  # empty and gate_KAIZEN refuses to hand one over with the field filled, but both of those act at
-  # BIRTH: nothing stopped the field from being filled afterwards, and gate_PLAN read `auto` without
-  # ever asking where the plan came from. A rule that lives only in prose is a rule the runner does
-  # not have.
-  #
-  # `05-verdict.md` beside the mission is the marker, and it is structural rather than agreed: the
-  # kaizen gate locates the verdict and takes its `dirname` as the born plan's home, so the two are
-  # siblings by construction. The remedy is named in the reason because the alternative — a human
-  # hand-typing `humano-YYYY-MM-DD` into the frontmatter — is the exact failure `sdd approve` exists
-  # to end. Only `auto` is refused: with a human's own approval the mission runs, verdict and all,
-  # or the kit's improvement loop would have no terminating state.
-  if [ "$approval" = "auto" ] && [ -f "$MISSION_DIR/05-verdict.md" ]; then
+  # This gate is what `sdd run` asks before spending a pipeline on a plan the kit wrote about
+  # itself; the rule and the marker live with plan_approves_itself, which cmd_approve reads too.
+  # The remedy is named in the reason because the alternative — a human hand-typing
+  # `humano-YYYY-MM-DD` into the frontmatter — is the exact failure `sdd approve` exists to end,
+  # and naming a remedy obliges the remedy to work: that obligation is asserted in
+  # tests/check-gates.sh, invoking the command instead of simulating it with `sed`.
+  if plan_approves_itself; then
     GATE_WHY="kaizen-born plan (05-verdict.md sits beside it) may not approve itself — a human must: run 'sdd approve $MISSION'"
     return 1
   fi
@@ -1771,10 +1791,24 @@ cmd_approve() {
   if ! gate_PLAN && [[ $GATE_WHY == missing\ * ]]; then die "$GATE_WHY"; fi
 
   local approval; approval="$(frontmatter "$m" aprovacao)"
+  # Idempotence, with ONE exception, and the exception is the whole point of the guard below.
+  # `auto` beside a 05-verdict.md is not an approval anybody gave — it is the machine certifying
+  # its own homework, which is exactly the state gate_PLAN refuses while naming THIS command as the
+  # way out. Reading it as "already approved" made the named remedy decline every plan the gate
+  # stopped: not sometimes, never. plan_approves_itself is the gate's own condition, read here
+  # rather than restated, so the two cannot drift apart again.
+  #
+  # Everything else keeps bailing, and the verdict-less `auto` is why that matters: an approve that
+  # simply stopped recognising `auto` would rewrite every planner-written approval into
+  # `humano-<today>` on contact, erasing in silence the PLAN-AUTO provenance the value carries.
   case "$approval" in
     auto|humano-*)
-      info "plan $MISSION is already approved (aprovacao: $approval) — nothing to do"
-      return 0
+      if ! plan_approves_itself; then
+        info "plan $MISSION is already approved (aprovacao: $approval) — nothing to do"
+        return 0
+      fi
+      warn "aprovacao: auto with 05-verdict.md beside it — this plan was born of sdd kaizen and"
+      warn "cannot certify its own homework. Approving replaces it with your own approval."
       ;;
   esac
 
