@@ -30,6 +30,13 @@ Achados sobre **repos-alvo** vão para o `TODO.md` daquele repo. Este arquivo é
 
 ### Sensores que faltam
 
+- [ ] **O `die` de artefato faltando do `sdd approve` é regra sem probe** — `bin/sdd:1818` — o
+  comando repete o diagnóstico do `gate_PLAN` (`missing 01-plano.md`) e morre antes de imprimir
+  qualquer coisa; os cinco fixtures de approve carregam sempre os três artefatos, então trocar o
+  `die` por um `return 0` deixa a suíte inteira verde e o comando passa a commitar aprovação de uma
+  missão sem plano. Direção: um sexto fixture só com `00-missao.md`, nomeado fora dos prefixos
+  contados. — descoberto por `sdd-reviewer` na missão `20260816-portas-do-humano` (2026-08-16)
+
 - [ ] **`sdd health` morre mudo quando a suíte está vermelha — o caso que ele existe para relatar**
   — `bin/sdd:1537` — `out="$( … run-all.sh )"; rc=$?` é atribuição de substituição de comando: sob
   `set -e` a suíte vermelha mata o script ali, e o `health_bad "suite red (rc $rc)"` da linha
