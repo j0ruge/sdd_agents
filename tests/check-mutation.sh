@@ -888,6 +888,102 @@ mut_HEALTH_todo_count_blind() {
   sed -i 's@^    health_finding "todo-findings .*@    true@' "$1"
 }
 
+# `sdd retry` loses the checkout and goes back to committing wherever the human happens to stand.
+# ONE definition, two call sites: `mut_RUN_branch_switch_dead` above sabotages the FIELD READ inside
+# ensure_mission_branch, so it kills the function for both doors at once and can never say which of
+# the two still calls it. This one leaves the function whole and removes the CALL — the shape a
+# refactor arrives at honestly — so the score stops crediting cmd_run's coverage to cmd_retry.
+#
+# Range-addressed to cmd_retry: the line is byte-identical in cmd_run, and an unaddressed `d` would
+# delete both, sabotaging the door this entry is not about.
+mut_RETRY_branch_switch_dead() {
+  sed -i '/^cmd_retry() {/,/^}/ { /^  ensure_mission_branch$/d }' "$1"
+}
+
+# The ghost UUID comes back (the bug fixed in `032c09c`): an in-loop retry runs with `--resume …
+# --fork-session` and WITHOUT `--session-id`, so the `$sid` generated at the top of the call was
+# never handed to claude — recording it leaves the retry row pointing at a session that identifies
+# nothing, and neither reader can tie the retry back to the session it forked from.
+#
+# The DRY-RUN copy of the same assignment is left ALONE — it carries four leading spaces and this
+# one two — so a mutant cannot break the projection and the ledger at once, and this entry is
+# credited for the recorded id and nothing else.
+mut_RUN_ghost_session_id() {
+  sed -i 's|^  LAST_PHASE_SID="${resume_sid:-$sid}"$|  LAST_PHASE_SID="$sid"|' "$1"
+}
+
+# `sdd retry` stops measuring whether its session changed the disk. `mut_RUN_moved_never_true` above
+# anchors on the FOUR-space copy inside cmd_run's loop; cmd_retry and cmd_kaizen carry their own at
+# two spaces, and the retry's was uncovered — measured, not assumed: the RUN_ sabotage leaves
+# "sdd retry that changed the disk records moved:true" green. Waste is defined as sessions that did
+# NOT move the disk, so a retry stuck on `moved:false` files every redone phase as waste and feeds
+# the judge a mission that never progressed.
+#
+# Range-addressed to cmd_retry: the two-space form is byte-identical in cmd_kaizen.
+mut_RETRY_moved_never_true() {
+  sed -i '/^cmd_retry() {/,/^}/ { s|^  \[ "$before" != "$after" \] && moved="true"$|  true| }' "$1"
+}
+
+# The post-pipeline nudge goes silent: missions pile up on a kit sha nobody judged and `sdd run`
+# stops saying so, which is how the kaizen loop stalls without anybody noticing it stalled. Every
+# OTHER assertion about the reminder asserts its ABSENCE (empty ledger, verdict already on disk), so
+# the whole family stays green with the reminder deleted — a set of assertions that can only pass.
+# The `dim` becomes a `:` carrying the same string, so the computation above it still runs and a
+# reader still sees a line here.
+mut_KAIZEN_reminder_dead() {
+  sed -i 's|^  dim "  autonomy series: |  : "  autonomy series: |' "$1"
+}
+
+# `sdd kaizen` stops being idempotent: with the verdict already on disk the gate passes, the outcome
+# is repeated — and then the command falls THROUGH and opens a session anyway. Re-running it to
+# re-read a verdict is the ordinary human move, and it would quietly cost an opus session every
+# time, on a judge with nothing new to judge.
+#
+# Range-addressed from the gate call: `return "$out_rc"` appears six times inside cmd_kaizen, so an
+# unaddressed sed would collapse every bailout of the command into this one mutant and the entry
+# would be credited for whichever of them the suite noticed first. The `return` is REPLACED by a `:`
+# carrying the same expansion, never deleted: the branch stays syntactically whole and what dies is
+# the early exit alone.
+mut_KAIZEN_already_judged_spends() {
+  sed -i '/^  gate_KAIZEN || gate_rc=\$?$/,+4 { s|^    return "$out_rc"$|    : "$out_rc"| }' "$1"
+}
+
+# The other half of the pair `mut_RUN_degraded_row_dropped` opens: the runner lowering its own bar
+# still reaches the judge's ledger and disappears from the HUMAN's trail. `pipeline.log` is where a
+# human reconstructs what a headless run did, and a REVIEW that ended in a draft PR would read there
+# as a phase that simply stopped. The `continue` bug the pair closes skipped BOTH writers, so each
+# needs its own sabotage or one of them is credited for the other's coverage.
+mut_RUN_degraded_journal_dropped() {
+  sed -i 's|^          pipeline_log_line "$(date -Iseconds)  DEGRADED  |          : "$(date -Iseconds)  DEGRADED  |' "$1"
+}
+
+# `cmd_autonomy`'s own `is_escalation` forgets `degraded`, so the human reader files a row the runner
+# itself wrote under "unrecognized" while the judge goes on counting it — two instruments over ONE
+# file reporting different escalation counts for the same period, with nothing on screen explaining
+# the divergence. That is the exact failure the single-definition rule was written for, reappearing
+# inside one of the definitions it created.
+#
+# Range-addressed to cmd_autonomy: kaizen_series holds a byte-identical definition, and three
+# neighbours have to stay distinguishable from this one — `mut_RUN_escalations_no_axis` (the axis of
+# the same table), `mut_RUN_degraded_label_blind` (kaizen_series' phase_label) and
+# `mut_KAIZEN_series_escalations_dropped` below (kaizen_series' admission filter).
+mut_AUTONOMY_is_escalation_blind() {
+  sed -i '/^cmd_autonomy() {/,/^}/ { s|^    def is_escalation: .event == "blocked" or .event == "degraded";$|    def is_escalation: .event == "blocked";| }' "$1"
+}
+
+# The series stops ADMITTING escalations: `blocked` and `degraded` rows fall out of `$all`, so every
+# event saying a mission stopped or the runner lowered its bar leaves the judge's numbers — and lands
+# in the unrecognized bucket instead, a count that reads "the ledger is corrupt" about rows the
+# runner wrote correctly.
+#
+# It sabotages the ADMISSION and not the definition, which is what keeps it apart from
+# `mut_AUTONOMY_is_escalation_blind` above (the reader's predicate) and `mut_RUN_degraded_label_blind`
+# (phase_label's use of this same program's predicate): each of the three stays caught with the other
+# two intact, and each names a different consumer of the escalation pair.
+mut_KAIZEN_series_escalations_dropped() {
+  sed -i 's|^                         and (.event == "session" or is_escalation)))) as $all$|                         and (.event == "session")))) as $all|' "$1"
+}
+
 CATALOG=(
   PLAN_empty_approval
   PLAN_kaizen_born_blind
@@ -962,6 +1058,14 @@ CATALOG=(
   HEALTH_ratchet_one_way
   HEALTH_provenance_blind
   HEALTH_todo_count_blind
+  RETRY_branch_switch_dead
+  RUN_ghost_session_id
+  RETRY_moved_never_true
+  KAIZEN_reminder_dead
+  KAIZEN_already_judged_spends
+  RUN_degraded_journal_dropped
+  AUTONOMY_is_escalation_blind
+  KAIZEN_series_escalations_dropped
 )
 
 # Mutations that are NOT caught today, each with the increment that closes it. Ratchet in both

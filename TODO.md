@@ -294,6 +294,13 @@ Achados sobre **repos-alvo** vão para o `TODO.md` daquele repo. Este arquivo é
   pelo caminho real. Ainda pega campo ausente ou `moved` sempre-`true`; só o nome discrimina mais
   do que ela. — descoberto por `/codereview` na missão `20260815-i13.1-autonomy-log` (2026-08-15)
 
+- [ ] **O `moved` do `cmd_kaizen` não tem asserção, logo não pode ter mutação** — `bin/sdd:3103` —
+  as outras duas cópias de `[ "$before" != "$after" ] && moved="true"` ganharam mutação nesta
+  missão (`cmd_run`, `cmd_retry`); esta foi sabotada à mão e `check-kaizen.sh` **e**
+  `check-autonomy.sh` ficaram verdes. Sessão de KAIZEN que move o disco entra no ledger como
+  desperdício. Direção: a asserção primeiro, a entrada do catálogo depois.
+  — descoberto por `sdd-executor` na missão `20260817-catraca-do-backlog` (2026-08-17)
+
 - [ ] **`cmd_kaizen` tem partes sem mutação própria** — `bin/sdd` (`kaizen_reminder`, ramo
   "already judged" idempotente) — as 5 mutações do catálogo cobrem `gate_KAIZEN` cego, Jidoka
   morto, guarda ignorada, bailout de aprovação morto e a régua de rótulos; o lembrete e a
