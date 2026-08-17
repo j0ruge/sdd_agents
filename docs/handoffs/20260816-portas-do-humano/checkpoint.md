@@ -1,6 +1,6 @@
 ---
 missao: 20260816-portas-do-humano
-atualizado: 2026-08-17 01:25
+atualizado: 2026-08-17 00:37
 ---
 
 # Checkpoint — as portas de controle do humano
@@ -228,6 +228,36 @@ atualizado: 2026-08-17 01:25
   F2, exatamente como a QA previu: `score: 50 caught, 0 known gap(s), of 50`, suíte verde e
   `./bin/sdd health` verde nos 5 checks — as duas metades dos Checks do F1 e do F2 agora são
   medidas, não carimbadas.
+
+- 2026-08-17 00:37 · `EXEC` · **sessão sem incremento: a fase foi rederivada por engano.** Nenhuma
+  linha estava `pending` e nenhuma mudou de status aqui. O runner abriu EXEC porque `gate_EXEC` roda
+  o `TEST_CMD` sobre o **working tree** (`bin/sdd:426`) e a árvore estava suja: a sessão da REVIEW
+  morreu depois de escrever a rodada inteira e antes de commitar. `sdd why` respondia
+  `EXEC: TEST_CMD failed` com os seis incrementos `done`. Antes de tocar em nada, medido num clone
+  limpo do HEAD (`274ee45`): `suite green`, `52 caught, 0 known gap(s), of 52` — **nenhum incremento
+  quebrado**, por isso nada foi marcado `blocked`. O vermelho era de outra fase, não de uma fatia
+  daqui.
+- 2026-08-17 00:37 · `EXEC` · o vermelho tinha **uma** causa: SC2010 (`ls "$AMDIR" | grep -c .`) numa
+  linha que a própria rodada da REVIEW acrescentara — o passo de lint da suíte cobre `tests/*.sh`.
+  Virou glob (`( "$AMDIR"/* )`), medido equivalente antes de trocar: 3 no diretório limpo, 4 com um
+  `00-missao.md.aBc123` ao lado (a pegada do `mktemp`, que é o que a asserção existe para pegar) e 1
+  no diretório vazio sem `nullglob`, que também não é 3 — falha fechado. Commit `7f9e660`.
+- 2026-08-17 00:37 · `EXEC` · **descartar a árvore suja teria sido o conserto caro.** A rodada em voo
+  carregava o achado que as cinco asserções de branch não conseguiam enxergar: o fixture nunca dava
+  `git add` nos artefatos, e nesse regime `git checkout` não pode removê-los — a família inteira
+  concordava sobre uma propriedade que nenhuma delas podia ver (regime do fixture ≠ propriedade,
+  `CLAUDE.md`). Preservada, com a mutação `RUN_branch_orphan_blind`: score **52 → 53**, `0 known
+  gaps`. Os seis Checks foram remedidos **depois** do commit e seguem `3/3/2/3/1/1`; `./bin/sdd
+  health` verde nos 5 checks.
+- 2026-08-17 00:37 · `EXEC` · **o que esta sessão NÃO fez, de propósito:** não escreveu
+  `40-review-r2.md`. O artefato é da fase REVIEW e o `gate_REVIEW` é quem o cobra — carimbá-lo aqui
+  seria rótulo, não artefato. Com a árvore limpa o runner já rederiva sozinho:
+  `sdd why` → `REVIEW: no 40-review-r<N>.md`. A próxima sessão de REVIEW encontra a **própria rodada
+  já commitada** em `7f9e660` (asserção da branch órfã, mutação nova, `die` de `ensure_mission_branch`,
+  `frontmatter_write` endurecido, 3 TODOs) e deve fechar o artefato em vez de refazer o trabalho.
+- 2026-08-17 00:37 · `EXEC` · o defeito sistêmico — `gate_EXEC` não distingue **árvore suja** de
+  **HEAD vermelho**, então o vermelho de qualquer fase em voo rederiva EXEC em laço a ~US$ 25 a volta
+  — foi para o `TODO.md` em vez de virar diff nesta missão.
 
 ## Incrementos de fix (QA)
 
