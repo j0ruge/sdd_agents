@@ -1,6 +1,6 @@
 ---
 missao: 20260817-eixo-do-juiz
-atualizado: 2026-08-17 08:20
+atualizado: 2026-08-17 09:40
 ---
 
 # Checkpoint — o eixo do juiz
@@ -29,7 +29,7 @@ atualizado: 2026-08-17 08:20
 | ID | Incremento | Check (comando → esperado) | Status | Commit |
 |---|---|---|---|---|
 | I1 | ADR 0003: a pergunta que o juiz responde | `o=$(bash tests/check-kaizen.sh 2>&1); grep -c '^  ok    adr 0003' <<< "$o"` → `2` | done | 3547a83 |
-| I2 | o runner explica o `indeterminado` estrutural | `o=$(bash tests/check-kaizen.sh 2>&1); grep -c '^  ok    degenerate axis' <<< "$o"` → `2` | pending | — |
+| I2 | o runner explica o `indeterminado` estrutural | `o=$(bash tests/check-kaizen.sh 2>&1); grep -c '^  ok    degenerate axis' <<< "$o"` → `2` | done | abac043 |
 | I3 | `--all-repos` nos três leitores | `o=$(bash tests/check-autonomy.sh 2>&1); grep -c '^  ok    all-repos' <<< "$o"` → `2` | pending | — |
 | I4 | identidade de repo sobrevive a worktree | `o=$(bash tests/check-autonomy.sh 2>&1); grep -c '^  ok    worktree' <<< "$o"` → `2` | pending | — |
 | I5 | linha sem `repo` ganha balde próprio | `o=$(bash tests/check-autonomy.sh 2>&1); grep -c '^  ok    no-repo' <<< "$o"` → `2` | pending | — |
@@ -66,6 +66,22 @@ atualizado: 2026-08-17 08:20
 - 2026-08-17 · `EXEC I1` · passada de sabotagem adversarial na asserção de forma: degradar o
   título, a linha de data/status e o heading `## Decision` deixa a contagem em **1** nos três
   casos — nenhuma das três regras é decoração. A asserção da citação é provada pelo catálogo.
+- 2026-08-17 · `EXEC I2` · suíte verde antes (`score: 56`) e depois (**57**, `0 known gap(s)`),
+  `sdd health` verde nos cinco. As 3 asserções nasceram **vermelhas** (rc 1, contagem 0).
+- 2026-08-17 · `EXEC I2` · a terceira asserção (sha único ⇒ `false`) fica **fora** do prefixo
+  `degenerate axis` de propósito: o Check conta `-c` e exige exatamente `2`. Cláusula nova que
+  precise de probe entra com outro nome, nunca com o prefixo que o checkpoint conta.
+- 2026-08-17 · `EXEC I2` · sabotagem adversarial, **seis** degrades, todos vermelhos na asserção
+  certa: as duas cláusulas do predicado (`> 1` sha; uma sessão por sha), a citação do ADR na
+  frase, a chamada de `kaizen_axis_note` em `cmd_kaizen` e a chave no literal do ledger vazio.
+  Cada probe conferiu antes que o `sed` mudou o arquivo (`cmp -s`) — probe vazio não conclui.
+- 2026-08-17 · `EXEC I2` · **`.claude/agents/` não é gravável por esta sessão**: o harness barra
+  `cp` e Edit no caminho. Quem sincroniza é `./bin/sdd install --force`, e o `cmp -s` do
+  preflight só fica verde depois disso. Vale para todo incremento que tocar `agents/*.md` — está
+  no `TODO.md` (`b7d1c30`).
+- 2026-08-17 · `EXEC I2` · métrica da missão medida no repo real: `sdd kaizen --series` devolve
+  `guard.degenerate_axis: true` com `sufficient: false`, e `sdd kaizen --dry-run` imprime a
+  explicação citando **ADR 0003**. O I3 herda a série já com a chave nova.
 
 ## Incrementos de fix (QA)
 
