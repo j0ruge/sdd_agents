@@ -44,6 +44,14 @@ Achados sobre **repos-alvo** vão para o `TODO.md` daquele repo. Este arquivo é
   fixture, junto de rever o Check que fixa a contagem em 3.
   — descoberto por `sdd-executor` na missão `20260816-portas-do-humano` (2026-08-16)
 
+- [ ] **A ordem checkout-antes-do-aviso é regra sem probe no `cmd_run`** — `bin/sdd:1865-1869` —
+  inverter as duas linhas deixa a suíte inteira verde: o fixture do par diferencial da branch base
+  não declara `branch:`, então os dois usos são indistinguíveis nele. Invertido, o `sdd run` avisa
+  que vai commitar na base um humano que ele tira da base na linha seguinte — aviso falso, e é
+  assim que se aprende a não ler aviso. O `cmd_retry` ganhou a asserção (`3ffa586`); o `cmd_run`
+  não. Direção: espelhar a asserção com fixture que declara branch inexistente.
+  — descoberto por `sdd-executor` na missão `20260816-portas-do-humano` (2026-08-16)
+
 - [ ] **Aprovar plano é editar frontmatter à mão — o gate humano é a única interação sem
   comando** — `bin/sdd` (não existe `cmd_approve`) vs `gate_PLAN` (`:261`) — destravar a fase
   PLAN exige abrir o `00-missao.md` e digitar `aprovacao: humano-YYYY-MM-DD` no formato exato.
@@ -301,8 +309,9 @@ Achados sobre **repos-alvo** vão para o `TODO.md` daquele repo. Este arquivo é
 - [ ] **`sdd retry` é a quarta porta que commita e não avisa da branch base** — `bin/sdd:1868`
   (`cmd_retry` chama `run_phase` sem `warn_if_on_base_branch`) — o comentário da função
   (`bin/sdd:1209`) declara "as três portas que commitam" e o I4 fechou três; a quarta abre sessão
-  que commita igual. `sdd retry` na `main` commita na `main` em silêncio. Direção: a quarta
-  chamada + asserção diferencial no `check-gates.sh`, como as outras três.
+  que commita igual. `sdd retry` na `main` commita na `main` em silêncio. RESOLVIDO por `3ffa586`:
+  a chamada entra depois de `ensure_mission_branch` (avisar antes gritaria lobo), o comentário diz
+  quatro, e o par diferencial `retry ` + `RETRY_base_branch_warn_dead` seguram.
   — descoberto por `sdd-reviewer` na missão `20260816-kit-como-alvo` (2026-08-16)
 
 - [ ] **Worktree do git parte a identidade do repo no ledger** — `bin/sdd:768`
