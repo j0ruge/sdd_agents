@@ -184,7 +184,7 @@ Achados sobre **repos-alvo** vão para o `TODO.md` daquele repo. Este arquivo é
   e **cinco fases commitaram na branch errada**: 16 commits sobre um PR alheio, todos os gates
   verdes, pego só pelo `sdd-publisher` no fim da linha, a ~US$ 45 de `rebase --onto`. Repetiu um
   passo antes hoje: plano declarando `missao/20260816-kit-como-alvo`, humano trocando à mão.
-  RESOLVIDO por b3b8c2f: `ensure_mission_branch()`, uma definição em `cmd_run` e `cmd_retry` —
+  RESOLVIDO por `b3b8c2f`: `ensure_mission_branch()`, uma definição em `cmd_run` e `cmd_retry` —
   existe ⇒ checkout, não existe ⇒ cria da ATUAL, placeholder ⇒ no-op, git recusa ⇒ `die`.
   — descoberto por `sdd-publisher` e `humano` no piloto SQ-97 (2026-08-14)
 
