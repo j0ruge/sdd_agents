@@ -133,9 +133,26 @@ cat > "$MDIR/checkpoint.md" <<'EOF'
 EOF
 assert_phase "artifacts exist but 'aprovacao' is empty" "PLAN"
 assert_why   "PLAN explains the missing approval" "PLAN" "aprovacao"
+# And it names the command that ends the wait. An empty `aprovacao:` is the state EVERY plan a
+# human approves starts in — the common stall, not the exotic one — and until this assertion the
+# reason handed the human the shape to type into the frontmatter BY HAND, which is the exact
+# failure `sdd approve` was built to end. The sibling branch of the very same gate (the kaizen-born
+# refusal, three lines below it in bin/sdd) already names the remedy, and its comment states the
+# rule the two must share: "naming a remedy obliges the remedy to work". A rule applied to one of
+# two neighbouring branches is a rule the runner does not have.
+#
+# The mission NAME is demanded, not the bare verb: `sdd approve` with no argument resolves the
+# LATEST mission, which on a repo with several open missions is the wrong one. The one thing a
+# stalled human must be able to do is copy the line.
+assert_why   "the unapproved plan is told which command approves it" "PLAN" "sdd approve $MISSION"
 
 sed -i 's/^aprovacao:.*/aprovacao: auto/' "$MDIR/00-missao.md"
 assert_phase "plan approved (auto) with a pending increment" "EXEC"
+# The other half, and the reason the pair is not decoration: a reason that carried the remedy
+# unconditionally would satisfy the assertion above while telling an already-approved plan to
+# approve itself again. Same fixture, one `sed` apart, so no regime of fixture satisfies both by
+# accident — whichever side a regression breaks, the other is standing next to it.
+assert_why_absent "and an approved plan is not told to approve itself again" "PLAN" "sdd approve"
 
 # JIRA on with no version stalls at PLAN — a version label is a human decision.
 sed -i 's/^JIRA_ENABLED=false/JIRA_ENABLED=true/' .sdd/config.sh
@@ -943,6 +960,46 @@ else
 fi
 git checkout -q -- file.txt
 git branch -q -D missao/20260103-refused
+
+# --- 4b. a declared name git would read as an OPTION is refused before git sees it.
+#
+# Deliberately NOT prefixed `branch `, for the reason case 4 gives: the checkpoint's Check counts
+# the three cases the plan named. This is the second one the adversarial pass demanded, and it is
+# the only path in this function that can DESTROY work.
+#
+# `git checkout -f` is a legal command: it returns 0, switches to nothing, and throws away every
+# uncommitted change in the tree. So a `branch: -f` reaching the checkout unfiltered discards the
+# human's work, succeeds, and has the runner announce a switch that never happened — the SQ-97
+# class with data loss on top, produced by the very function written to close it.
+#
+# It takes a REF to get there, and that is why this fixture builds one instead of just writing `-f`
+# into the frontmatter: a name git refuses to CREATE (`git checkout -b -- '-f'` → "not a valid
+# branch name") already dies on the other path, so a fixture without the ref measures nothing.
+# `git update-ref` accepts `refs/heads/-f` and `git check-ref-format` calls it valid — measured —
+# so the ref-exists path is reachable, and it is the dangerous one.
+#
+# The probe is the DIRTY FILE, not the rc: a die and a survived `checkout -f` both leave the tree on
+# main, and only one of them still has the human's uncommitted line in it. `BLOCKED in EXEC` rides
+# along as the "the run went on" marker, exactly as in case 4.
+git update-ref "refs/heads/-f" HEAD
+printf 'an uncommitted line the human has not saved anywhere else\n' > file.txt
+branch_mission "-f"
+BR_OPT_OUT="$( cd "$FIX" && "$SDD" run "$BM" 2>&1 )"; BR_OPT_RC=$?
+BR_OPT_AT="$(git branch --show-current)"
+BR_OPT_FILE="$(cat file.txt)"
+if [ "$BR_OPT_RC" -eq 1 ] \
+   && [ "$BR_OPT_AT" = "main" ] \
+   && [ "$BR_OPT_FILE" = "an uncommitted line the human has not saved anywhere else" ] \
+   && ! grep -qE "$BRANCH_LINE" <<< "$BR_OPT_OUT" \
+   && ! grep -q "BLOCKED in EXEC" <<< "$BR_OPT_OUT"; then
+  pass "a declared name git would read as an option is refused, and the dirty tree survives it"
+else
+  fail "a declared name git would read as an option is refused, and the dirty tree survives it" \
+       "rc 1, still on main, the uncommitted line intact, no switch announced and no phase after it" \
+       "rc $BR_OPT_RC at $BR_OPT_AT, file.txt now '$BR_OPT_FILE': $(tail -3 <<< "$BR_OPT_OUT")"
+fi
+git update-ref -d "refs/heads/-f"
+git checkout -q -- file.txt
 
 # --- 5. the SECOND call site: `sdd retry` honours the declared branch too.
 #

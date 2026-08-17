@@ -334,7 +334,14 @@ gate_PLAN() {
   case "$approval" in
     auto)          : ;;
     humano-*)      : ;;
-    *) GATE_WHY="00-missao.md has 'aprovacao: ${approval:-<empty>}' — it must be 'auto' (PLAN-AUTO all ✅) or 'humano-YYYY-MM-DD'"; return 1 ;;
+    # The remedy is named here for the same reason it is named in the kaizen-born branch below,
+    # and this is the branch where it matters most: an empty `aprovacao:` is where EVERY
+    # human-approved plan starts, so this is the common stall, not the exotic one. Without the
+    # command on screen the reason reads as an instruction to type `humano-YYYY-MM-DD` into the
+    # frontmatter by hand — the precise failure `sdd approve` exists to end, printed by the gate
+    # that ends it. The mission name rides along because `sdd approve` with no argument resolves
+    # the LATEST mission, which in a repo with two open ones is the wrong one.
+    *) GATE_WHY="00-missao.md has 'aprovacao: ${approval:-<empty>}' — it must be 'auto' (PLAN-AUTO all ✅) or 'humano-YYYY-MM-DD': run 'sdd approve $MISSION'"; return 1 ;;
   esac
   # This gate is what `sdd run` asks before spending a pipeline on a plan the kit wrote about
   # itself; the rule and the marker live with plan_approves_itself, which cmd_approve reads too.
@@ -1352,6 +1359,20 @@ ensure_mission_branch() {
   # keep working exactly as it did before this function existed.
   [ -n "$want" ] || return 0
   case "$want" in '<'*) return 0 ;; esac
+  # A name git would read as an OPTION dies here, before git sees it, and this is the one path in
+  # this function that can destroy work rather than merely land in the wrong place. `git checkout
+  # -f` is a legal command: it returns 0, switches to nothing, and throws away every uncommitted
+  # change in the tree — so a `branch: -f` would leave the human's work gone, the run going on, and
+  # the `ok` line below announcing a switch that never happened.
+  #
+  # The `-b` path already dies on such a name (git refuses to CREATE it), but that is the wrong
+  # half to rely on: `git update-ref refs/heads/-f HEAD` is accepted and `git check-ref-format`
+  # calls the name valid, so the ref CAN exist, and then the branch above runs it as a flag.
+  # Refusing the shape is one line and does not depend on which of the two paths a given tree
+  # takes. Asserted in tests/check-gates.sh with a fixture that builds the ref and a dirty file.
+  case "$want" in
+    -*) die "the branch '$want' declared in 00-missao.md starts with '-' — git would read it as an option, not a branch" ;;
+  esac
   current="$( cd "$REPO_ROOT" && git branch --show-current 2>/dev/null || true )"
   [ "$want" = "$current" ] && return 0
   if ( cd "$REPO_ROOT" && git show-ref --verify --quiet "refs/heads/$want" ); then

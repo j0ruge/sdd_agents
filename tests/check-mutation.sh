@@ -116,6 +116,22 @@ mut_PLAN_kaizen_born_blind() {
   sed -i 's|^    && \[ -f "\$MISSION_DIR/05-verdict.md" \]$|    \&\& false|' "$1"
 }
 
+# Strips the remedy from the ORDINARY refusal: a plan whose `aprovacao:` is empty — the state every
+# human-approved plan starts in, so the common stall and not the exotic one — is handed the SHAPE to
+# type into the frontmatter and never the command that types it. No gate opens that should not and
+# nothing fails; the runner simply goes back to sending the human to an editor, which is the failure
+# `sdd approve` was built to end and which the sibling branch three lines below already refuses to
+# commit. The expensive shape again: not a command that breaks, a door whose handle is invisible.
+#
+# ADDRESSED to the line rather than anchored on the bare command name: `sdd approve $MISSION`
+# appears twice in gate_PLAN — here and in the kaizen-born refusal — and an unaddressed
+# substitution would gut both while wearing this entry's name, when mut_PLAN_kaizen_born_blind
+# already owns the other one. What has to die is the `unapproved plan is told` pair and only it, so
+# every kaizen-born assertion stays green and the score credits this entry for the common stall.
+mut_PLAN_remedy_unnamed() {
+  sed -i '/00-missao.md has/ s@: run .sdd approve \$MISSION.@@' "$1"
+}
+
 mut_TICKET_no_sprint() {      # stops requiring `sprint:` — a card in the backlog is invisible work
   sed -i "s|.*if ! grep -qiE '\^sprint:.*|  if false; then|" "$1"
 }
@@ -549,6 +565,20 @@ mut_RUN_branch_switch_dead() {
   sed -i 's@^  want="\$(frontmatter "\$MISSION_DIR/00-missao.md" branch)"$@  want=""@' "$1"
 }
 
+# Lets a declared branch name that git reads as an OPTION through to the checkout. The case arm
+# stays in the file, it simply stops matching — so the function still looks guarded to a reader, and
+# `branch: -f` becomes `git checkout -f`: a legal command that returns 0, switches to nothing and
+# DISCARDS every uncommitted change in the tree. The run then goes on, on the branch the human was
+# already standing on, with the `ok` line announcing a switch that never happened. It is the only
+# path in this function that destroys work rather than merely landing in the wrong place.
+#
+# The pattern is what gets sabotaged rather than the `die`, because a mutant that turned the die
+# into a `return 0` would make the whole field a no-op and kill three other assertions with it —
+# this entry has to be credited for the option-shaped name and nothing else.
+mut_RUN_branch_option_name() {
+  sed -i 's@^    -\*) die "the branch@    -x-that-never-matches*) die "the branch@' "$1"
+}
+
 # `sdd retry` goes back to being the silent door: the function still exists, still warns for the
 # other three, and this one call site simply is not there — which is the exact state the kit lived
 # in until this increment. Nothing on screen changes except the missing line, and the phase gets
@@ -592,6 +622,7 @@ mut_APPROVE_base_branch_warn_dead() {
 CATALOG=(
   PLAN_empty_approval
   PLAN_kaizen_born_blind
+  PLAN_remedy_unnamed
   TICKET_no_sprint
   EXEC_done_without_commit
   EXEC_orphan_commit
@@ -638,6 +669,7 @@ CATALOG=(
   RUN_approve_writes_auto
   RUN_approve_bails_on_kaizen_born
   RUN_branch_switch_dead
+  RUN_branch_option_name
   RETRY_base_branch_warn_dead
   APPROVE_base_branch_warn_dead
 )
