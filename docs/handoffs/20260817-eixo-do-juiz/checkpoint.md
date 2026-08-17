@@ -33,6 +33,7 @@ atualizado: 2026-08-17 12:10
 | I3 | `--all-repos` nos três leitores | `o=$(bash tests/check-autonomy.sh 2>&1); grep -c '^  ok    all-repos' <<< "$o"` → `2` | done | d62f08c |
 | I4 | identidade de repo sobrevive a worktree | `o=$(bash tests/check-autonomy.sh 2>&1); grep -c '^  ok    worktree' <<< "$o"` → `2` | done | c514e36 |
 | I5 | linha sem `repo` ganha balde próprio | `o=$(bash tests/check-autonomy.sh 2>&1); grep -c '^  ok    no-repo' <<< "$o"` → `2` | done | 4ca8015 |
+| F1 | o juiz e o agente voltam a ler UMA série sob `--all-repos` | `o=$(bash tests/run-all.sh 2>&1); printf '%s %s' "$(grep -c '^  ok    one series' <<< "$o")" "$(grep -c '^  ok    KAIZEN_prompt_series_unflagged' <<< "$o")"` → `2 1` | pending | — |
 
 ## Notas de execução
 
@@ -170,3 +171,46 @@ atualizado: 2026-08-17 12:10
 > `F<n>`, e o Check obrigatoriamente inclui **regression test passa** + **re-walk da jornada
 > impactada verde**. Bug que exige julgamento humano NÃO vira fix — vai para
 > "Decisions for a Human" no handoff de QA.
+
+- 2026-08-17 · `QA` · **F1 nasce de `BUG-1`, achado andando a jornada `sdd kaizen --all-repos`** —
+  a flag que o I3 (`d62f08c`) criou. `gate_KAIZEN` chama `kaizen_series` em processo, então toda
+  opção de ledger da invocação o alcança; o prompt de boot do KAIZEN entrega ao agente uma **linha
+  de comando escrita** (`bin/sdd:771`), e ali `--all-repos` não entra. Duas séries, dois `latest`,
+  e o `kit_sha_judged:` que o prompt manda escrever nunca é o que o gate procura.
+- 2026-08-17 · `QA` · a consequência medida não é número errado, é **fase insatisfazível**: gate
+  reprova, o runner repete uma vez, a segunda sessão escreve o mesmo sha e `cmd_kaizen` termina em
+  `BLOCKED in KAIZEN — no-progress`. Duas sessões opus compram uma linha `blocked`.
+- 2026-08-17 · `QA` · diferencial observado à mão, mesmo repo e mesmo ledger de fixture:
+  `sdd kaizen --dry-run` respondeu *"the born plan is already approved"* (nenhuma sessão) e
+  `sdd kaizen --dry-run --all-repos` projetou uma sessão cujo prompt cita `kaizen --series` sem a
+  flag. **A flag sozinha decide se uma sessão é gasta, e a sessão gasta lê a série errada.**
+- 2026-08-17 · `QA` · o Check do F1 nomeia a mutação `KAIZEN_prompt_series_unflagged`: o conserto
+  entra com mutação própria, como todo incremento desta missão (catálogo 60 → 61). Medido num
+  worktree com o conserto aplicado à mão: suíte **verde**,
+  `score: 60 caught, 0 known gap(s), of 60` e `one series` = 2 — só a mutação separa esse estado
+  do que o Check cobra.
+- 2026-08-17 · `QA` · **as duas metades do Check são ok-ancoradas, e a segunda não é decorativa**:
+  a primeira tentativa ancorava em `^score: 61 …` e o `tests/check-checkpoint.sh` reprovou na hora
+  ("this cell answers 'the assertion exists', never 'the assertion passed'"). Ancorar na linha
+  `ok` da mutação é mais forte de graça: o control run do `check-mutation.sh` se recusa a medir
+  mutante sobre suíte que não está verde, então nenhuma linha `ok    KAIZEN_…` é impressa
+  enquanto qualquer sensor estiver vermelho — a suíte verde vem junto, por construção.
+- 2026-08-17 · `QA` · **a suíte fica VERMELHA de propósito até o F1 fechar** (Jidoka). São
+  exatamente **duas** linhas vermelhas, e as duas são esperadas: a asserção
+  `one series: under --all-repos …` e o `HARNESS-BROKEN` do `check-mutation.sh` — este último não
+  é defeito do harness, é o control run recusando-se a medir mutação sobre uma suíte que já não
+  está verde. As duas somem juntas com o conserto (medido no worktree acima).
+- 2026-08-17 · `QA` · a passada de sabotagem no sensor novo achou **um defeito no próprio sensor**:
+  a testemunha do regime estava escrita como o par literal `qqq1111 zzz9999`, e o probe que
+  renomeou os shas do fixture renomeou a expectativa junto — a testemunha concordou com a
+  sabotagem e reportou `ok` sobre um fixture que deixara de divergir. Hoje ela afirma a
+  **propriedade** (`differ`), que nenhuma edição de fixture move em conjunto.
+- 2026-08-17 · `QA` · e achou um probe quebrado antes de qualquer conclusão: `judge_prompt_sha`
+  fazia `eval` da linha do prompt no ambiente do arquivo, que exporta `SDD_STATE_DIR` global — os
+  dois lados liam o OUTRO ledger de fixture e voltavam `aaa1111` os dois, concordando por um
+  motivo que nada tinha a ver com a flag. Probe que responde do ledger errado não conclui nada.
+- 2026-08-17 · `QA` · quatro degrades adversariais, cada um com `cmp -s` provando que o `sed` mudou
+  o arquivo: (A) flag no-op no prompt — só a asserção do `--all-repos` morre; (B) prompt com
+  `--all-repos` fixo — só o **control** morre, que é o que o mantém fora da decoração; (C) fixture
+  que para de divergir — a **testemunha** morre e o runner quebrado marca 2 de 2, que é
+  exatamente o buraco que ela tapa; (D) `eval` no ambiente errado — o par inteiro morre.

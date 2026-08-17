@@ -851,6 +851,105 @@ assert_eq "but a bare --series read does not warn: it opens no session" "no" \
   "$(grep -q 'you are on the base branch' \
        <<< "$( cd "$FIX" && "$KSDD" kaizen --series 2>&1 )" && echo yes || echo no)"
 
+# =============================================================================
+# one series behind the verdict — the gate and the prompt may never read two
+# =============================================================================
+# ADR 0001 splits the judge: the runner derives the numbers, the agent gives the verdict CITING
+# them. That split only holds while both halves read the SAME series. `gate_KAIZEN` reads it by
+# calling kaizen_series in-process, so every ledger option the invocation carries reaches it; the
+# KAIZEN boot prompt hands the agent a WRITTEN command line, so an option only reaches it if
+# someone wrote it there. `--all-repos` reaches the first and not the second.
+#
+# The consequence is not cosmetic and not a wrong number — it is an UNSATISFIABLE phase. The
+# prompt orders `kit_sha_judged:` to be "the series' latest kit_sha"; the gate then hunts for a
+# verdict whose kit_sha_judged equals the latest of ITS series. Two series, two latests, no
+# verdict the agent can write that the gate will accept: gate fails, the runner retries once, the
+# second session writes the same sha, and cmd_kaizen ends in `BLOCKED in KAIZEN — no-progress`.
+# Two opus sessions bought a blocked row. Found by sdd-qa walking `sdd kaizen --all-repos` in
+# mission 20260817-eixo-do-juiz, the mission that introduced the flag.
+#
+# DIFFERENTIAL, and the two halves are not interchangeable: the flagged reading is the regression,
+# the bare reading is the control that a fix cannot satisfy by refusing everything (hardcoding one
+# series into both halves would pass the first and fail the second). The fixture puts the two
+# series in the regime where they DISAGREE — a same-latest ledger would let the broken code pass
+# by accident, which is the whole reason the witness below is asserted first.
+echo "== one series behind the verdict =="
+mkdir -p "$OUTSIDE/judgeother" "$OUTSIDE/judgesplit"
+( cd "$OUTSIDE/judgeother" && git init -q -b main )
+JOTHER="$( cd "$OUTSIDE/judgeother" && git rev-parse --show-toplevel )"
+# Same shape as ledger_row above; kit_sha and ts are what this section varies. Three missions a
+# side, so `guard.sufficient` is true in BOTH readings and no assertion here can be satisfied by
+# an insufficient guard forcing `indeterminado` for the wrong reason.
+split_row() {   # split_row <repo> <mission> <kit_sha> <ts>
+  jq -cn --arg repo "$1" --arg mission "$2" --arg sha "$3" --arg ts "$4" \
+    '{v:1, ts:$ts, event:"session", run_id:"r1", invocation:"run",
+      kit_sha:$sha, kit_dirty:false, project:"p", repo:$repo, mission:$mission,
+      phase:"EXEC", step:"EXEC", agent:"sdd-executor", model:"opus", attempt:1,
+      auto_retry:false, session:"s", rc:0, dur_s:10, cost_usd:1.0, moved:true,
+      gate:"pass", gate_why:"x"}'
+}
+# The kit's own rows come FIRST in file order and the other repo's LAST, because `latest` is
+# picked by file order: that is what makes the two readings land on different shas.
+{ split_row "$FIXROOT" j1 qqq1111 2026-08-10T10:00:00-03:00
+  split_row "$FIXROOT" j2 qqq1111 2026-08-10T11:00:00-03:00
+  split_row "$FIXROOT" j3 qqq1111 2026-08-10T12:00:00-03:00
+  split_row "$JOTHER"  o1 zzz9999 2026-08-16T10:00:00-03:00
+  split_row "$JOTHER"  o2 zzz9999 2026-08-16T11:00:00-03:00
+  split_row "$JOTHER"  o3 zzz9999 2026-08-16T12:00:00-03:00
+} > "$OUTSIDE/judgesplit/autonomy-log.jsonl"
+
+# judge_sha <flags...> — the sha the AGENT would write: run the very command the boot prompt hands
+# it, whatever that command turns out to be. Executing the prompt's own line instead of a line
+# this test composed is the point: a test that rebuilt the command from its own idea of the flags
+# would agree with itself no matter what the runner wrote.
+judge_prompt_sha() {
+  local out line
+  out="$( cd "$FIX" && SDD_STATE_DIR="$OUTSIDE/judgesplit" "$KSDD" kaizen --dry-run "$@" 2>&1 )"
+  # The `│`-prefixed block is the human-readable projection of the same prompt; the escaped
+  # `claude -p $'...'` form above it carries literal \n and is not runnable as-is.
+  line="$( grep -m1 '^  │ *1\. run: ' <<< "$out" )"
+  [ -n "$line" ] || { printf 'PROBE-BROKEN-no-prompt\n'; return 0; }
+  line="${line#*run: }"
+  # Run it where the AGENT would: same cwd and same SDD_STATE_DIR the runner itself held when it
+  # wrote the prompt. This file exports SDD_STATE_DIR globally for the sections above, so an eval
+  # in the bare environment silently reads the OTHER fixture ledger — it did, and both halves of
+  # the pair came back `aaa1111`, agreeing with each other for a reason that had nothing to do
+  # with the flag. A probe that answers from the wrong ledger concludes nothing.
+  ( cd "$FIX" && SDD_STATE_DIR="$OUTSIDE/judgesplit" eval "$line" ) 2>/dev/null \
+    | jq -r '.latest.kit_sha // "none"'
+}
+# gate_sha <flags...> — the sha the GATE demands. gate_KAIZEN is not callable from here (bin/sdd
+# is an entrypoint, never sourced), so it is read through the same door the gate uses: it calls
+# kaizen_series in-process, under whatever ledger flags the invocation carried.
+gate_sha() {
+  ( cd "$FIX" && SDD_STATE_DIR="$OUTSIDE/judgesplit" "$KSDD" kaizen --series "$@" 2>/dev/null ) \
+    | jq -r '.latest.kit_sha // "none"'
+}
+# Witness for the REGIME, not the regression — deliberately outside the `one series` prefix the
+# checkpoint counts. The pair below compares gate against prompt, and on a ledger where both
+# readings land on the same sha the BROKEN runner satisfies it too: measured, it scored 2 of 2.
+# So the divergence is a precondition, and a precondition nobody asserts is a way for the pair to
+# go quietly vacuous the day someone edits the fixture.
+#
+# ⚠️ Asserted as a PROPERTY ("differ") and never as the literal pair `qqq1111 zzz9999`. The first
+# draft used the literals, and the sabotage probe that renamed the fixture shas renamed the
+# expectation with them — the witness agreed with the sabotage and reported `ok` on a fixture that
+# had stopped diverging. An expectation a fixture edit can move in lockstep witnesses nothing.
+# Both shas are required real, too: two nulls are equal, but one null against a sha would read as
+# "differ" out of emptiness rather than out of the split this section exists to hold.
+JS_LOCAL="$(gate_sha)"
+JS_ALL="$(gate_sha --all-repos)"
+assert_eq "witness: the two readings really do disagree about latest (else the pair proves nothing)" \
+  "differ" \
+  "$( if [ "$JS_LOCAL" != "$JS_ALL" ] && [ "$JS_LOCAL" != "none" ] && [ "$JS_ALL" != "none" ]
+      then echo differ; else echo "same:$JS_LOCAL/$JS_ALL"; fi )"
+
+# The pair. Gate against prompt, one string each, under the flag and without it.
+assert_eq "one series: under --all-repos the gate demands the sha the prompt hands the agent" \
+  "$JS_ALL" "$(judge_prompt_sha --all-repos)"
+assert_eq "one series: and without the flag too — the control a fix cannot skip" \
+  "$JS_LOCAL" "$(judge_prompt_sha)"
+
 echo "== hygiene =="
 assert_eq "the fixture kit tree ends clean" "" "$(git -C "$FIX" status --porcelain)"
 assert_eq "the ledger is never tracked by the fixture kit" "0" \
