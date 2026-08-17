@@ -788,6 +788,64 @@ else
 fi
 git checkout -q -- file.txt
 
+# --- 4. the mission whose frontmatter has no `aprovacao:` key at all.
+#
+# Deliberately NOT prefixed `sdd approve `: that string is I1's Check in checkpoint.md, and an
+# assertion that inflates it turns a contract into a coincidence.
+#
+# TWO guards of `cmd_approve` are written for this state and NEITHER had a fixture that reached it,
+# because all five approve fixtures above ship the key inside the frontmatter:
+#
+#   - the `inside &&` scope of frontmatter_write, which is what keeps the write inside the first
+#     `---` block. The fixture above carries a body copy of `aprovacao:` on purpose, but the
+#     frontmatter copy always comes FIRST and `!written` stops there, so the scope guard is never
+#     the thing that decides. Measured: deleting `inside && ` left check-gates.sh at 82 `ok`, rc 0,
+#     and the whole suite green — while the command silently rewrote mission prose.
+#   - the read-back before the commit, which exists precisely because an absent key makes
+#     frontmatter_write a no-op by design, and committing that would be an approval approving
+#     nothing.
+#
+# The probe is the FILE BYTES, not the rc: with the key absent both the scoped and the unscoped
+# write end at the same `die` (frontmatter() cannot see a body line either way), so rc 1 and "no
+# commit" are shared by the defect and the fix. What separates them is whether the body survived.
+# The rc and HEAD ride along anyway, as the read-back guard's own half: drop that `die` and this
+# assertion fails on the commit that should not exist.
+NK="20260102-nokey"
+NKDIR="$FIX/docs/handoffs/$NK"
+mkdir -p "$NKDIR"
+cat > "$NKDIR/00-missao.md" <<'EOF'
+---
+missao: 20260102-nokey
+titulo: a mission whose frontmatter never declared the key
+---
+
+# Mission fixture
+
+aprovacao: quoted in the body and nowhere else — the write must not reach this line
+EOF
+printf '# Plano\n' > "$NKDIR/01-plano.md"
+cat > "$NKDIR/checkpoint.md" <<'EOF'
+| ID | Incremento | Check (comando → esperado) | Status | Commit |
+|---|---|---|---|---|
+| I1 | fatia-de-fixture | `true` → 0 | pending | — |
+EOF
+NK_BEFORE="$(cat "$NKDIR/00-missao.md")"
+NK_HEAD_0="$(git rev-parse HEAD)"
+NK_OUT="$( cd "$FIX" && "$SDD" approve "$NK" 2>&1 <<< "y" )"; NK_RC=$?
+NK_AFTER="$(cat "$NKDIR/00-missao.md")"
+NK_DIR_ENTRIES=( "$NKDIR"/* )
+if [ "$NK_RC" -eq 1 ] \
+   && [ "$NK_AFTER" = "$NK_BEFORE" ] \
+   && [ "${#NK_DIR_ENTRIES[@]}" -eq 3 ] \
+   && [ "$(git rev-parse HEAD)" = "$NK_HEAD_0" ] \
+   && grep -q "aprovacao" <<< "$NK_OUT"; then
+  pass "approve refuses a mission whose frontmatter has no aprovacao: key, and never touches the body"
+else
+  fail "approve refuses a mission whose frontmatter has no aprovacao: key, and never touches the body" \
+       "rc 1, the file byte-identical, three files in the directory, HEAD unmoved" \
+       "rc $NK_RC, changed: $(diff <(printf '%s\n' "$NK_BEFORE") <(printf '%s\n' "$NK_AFTER") | head -4), ${#NK_DIR_ENTRIES[@]} file(s): $(tail -2 <<< "$NK_OUT")"
+fi
+
 # --- the declared mission branch -------------------------------------------
 echo "== the declared mission branch =="
 # `branch:` shipped in templates/missao.md from the start and NOTHING in the runner ever read it.
@@ -1028,6 +1086,51 @@ else
 fi
 git update-ref -d "refs/heads/-f"
 git checkout -q -- file.txt
+
+# --- 4c. the ORDER of the two guards in `sdd run`, which is a decision and not an accident.
+#
+# Deliberately NOT prefixed `branch `, for the reason cases 4 and 4b give: the checkpoint's Check
+# counts the three cases the plan named.
+#
+# `cmd_retry` got this witness when it was written (case 5 of the `retry ` family below); `cmd_run`
+# — the door nearly every invocation goes through — did not, and the gap was measured: swapping the
+# two calls left check-gates.sh at 82 `ok`, rc 0, and the whole suite green. It survived because the
+# base-branch pair for `sdd run` uses a fixture that declares NO branch, and a mission with no
+# declared branch cannot tell the two orders apart.
+#
+# What the wrong order produces is a FALSE warning: the human is told the pipeline is about to
+# commit into the base branch by a runner that is, in the very next line, moving them off it. A
+# warning that cries wolf is how people learn to skip reading the true ones.
+#
+# Self-contained differential, both halves on the SAME command, the SAME fixture and the SAME
+# warning text, so no fixture regime can satisfy it by accident: an empty `branch:` leaves the run
+# standing on the base and the warning MUST appear exactly once; a declared branch moves it off and
+# the warning MUST NOT appear at all. Asserting only the absence would be satisfied by a runner that
+# never warns; asserting only the presence, by one that always does. The branch the run ENDS on is
+# what proves the checkout really happened first, rather than not at all.
+git checkout -q main
+BASE_WARN='you are on the base branch'
+branch_mission ""
+BR_ORD_BASE_OUT="$( cd "$FIX" && "$SDD" run "$BM" 2>&1 )"; BR_ORD_BASE_RC=$?
+BR_ORD_BASE_AT="$(git branch --show-current)"
+BR_ORD_BASE_N="$(grep -c "$BASE_WARN" <<< "$BR_ORD_BASE_OUT" || true)"
+branch_mission "missao/20260103-order"
+BR_ORD_OFF_OUT="$( cd "$FIX" && "$SDD" run "$BM" 2>&1 )"; BR_ORD_OFF_RC=$?
+BR_ORD_OFF_AT="$(git branch --show-current)"
+BR_ORD_OFF_N="$(grep -c "$BASE_WARN" <<< "$BR_ORD_OFF_OUT" || true)"
+if [ "$BR_ORD_BASE_AT" = "main" ] \
+   && [ "$BR_ORD_BASE_N" = "1" ] \
+   && [ "$BR_ORD_OFF_AT" = "missao/20260103-order" ] \
+   && [ "$BR_ORD_OFF_N" = "0" ] \
+   && [ "$BR_ORD_BASE_RC" = "$BR_ORD_OFF_RC" ]; then
+  pass "run order: the base-branch warning follows the checkout, and never precedes it"
+else
+  fail "run order: the base-branch warning follows the checkout, and never precedes it" \
+       "warned once while it stays on main, silent once the declared branch takes it off, same rc" \
+       "on main: $BR_ORD_BASE_AT warned $BR_ORD_BASE_N× (rc $BR_ORD_BASE_RC) · declared: $BR_ORD_OFF_AT warned $BR_ORD_OFF_N× (rc $BR_ORD_OFF_RC)"
+fi
+git checkout -q main
+git branch -q -D missao/20260103-order
 
 # --- 5. the SECOND call site: `sdd retry` honours the declared branch too.
 #

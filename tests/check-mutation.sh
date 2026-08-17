@@ -632,6 +632,31 @@ mut_APPROVE_base_branch_warn_dead() {
   sed -i '/^cmd_approve() {/,/^}/ s@^  warn_if_on_base_branch$@@' "$1"
 }
 
+# The ORDER of the two guards in cmd_run, not their presence. Both calls stay — the warning simply
+# moves ahead of the checkout, which is the shape a future editor arrives at honestly, following the
+# "ahead of anything that could scroll it away" rule the other four doors state. What it produces is
+# a human told the pipeline will commit into the base branch by a runner that moves them off it one
+# line later. `cmd_retry` has had this entry since it was written; cmd_run went without, and the gap
+# was measured (the swap left the whole suite green) by the REVIEW round of 20260816-portas-do-humano.
+#
+# Range-addressed to cmd_run: `ensure_mission_branch` now appears twice in the file and
+# `warn_if_on_base_branch` five times, so an unaddressed sed would credit this entry for breaking
+# somebody else's call site.
+mut_RUN_branch_order_swap() {
+  sed -i '/^cmd_run() {/,/^}/ {
+    /^  ensure_mission_branch$/d
+    s/^  warn_if_on_base_branch$/  warn_if_on_base_branch\n  ensure_mission_branch/
+  }' "$1"
+}
+
+# frontmatter_write stops being scoped to the frontmatter block and rewrites the first line shaped
+# like the key ANYWHERE in the file. A mission body legitimately quotes its own frontmatter — this
+# repo's own 00-missao.md does — so the mutant silently rewrites committed prose. Sabotaging the
+# DEFINITION and not a call site: there is one caller today, and the property belongs to the writer.
+mut_FRONTMATTER_write_unscoped() {
+  sed -i 's/^    inside && !written {$/    !written {/' "$1"
+}
+
 CATALOG=(
   PLAN_empty_approval
   PLAN_kaizen_born_blind
@@ -686,6 +711,8 @@ CATALOG=(
   RUN_branch_orphan_blind
   RETRY_base_branch_warn_dead
   APPROVE_base_branch_warn_dead
+  RUN_branch_order_swap
+  FRONTMATTER_write_unscoped
 )
 
 # Mutations that are NOT caught today, each with the increment that closes it. Ratchet in both
