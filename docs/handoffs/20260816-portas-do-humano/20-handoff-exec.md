@@ -87,7 +87,7 @@ onde nenhum sensor de incremento olhava porque cada um foi escrito na sessão do
 | `tests/check-gates.sh` | 16 asserções novas (13 contadas pelos 6 Checks, 3 nascidas da sabotagem e nomeadas fora dos prefixos de propósito) |
 | `tests/check-mutation.sh` | 6 mutações novas: `RUN_approve_writes_auto`, `RUN_branch_switch_dead`, `RETRY_base_branch_warn_dead`, `PLAN_kaizen_born_blind`, `RUN_approve_bails_on_kaizen_born`, `APPROVE_base_branch_warn_dead` |
 | `templates/missao.md`, `agents/sdd-planner.md`, `.claude/agents/sdd-planner.md`, `docs/pipeline.md` | contrato de artefato atualizado nos mesmos commits (I2 e I4) |
-| `TODO.md` | 62 achados; os 4 desta missão com `RESOLVIDO por <hash>`, 2 achados novos abertos |
+| `TODO.md` | 64 achados abertos em `73229c1`; os 4 desta missão com `RESOLVIDO por <hash>`, 3 achados novos abertos (corrigido na REVIEW r1: os números eram 62/2 e nenhuma convenção do arquivo os produzia — a própria seção "Achados fora de escopo" deste handoff lista os 3) |
 
 ## Boot da próxima fase
 
