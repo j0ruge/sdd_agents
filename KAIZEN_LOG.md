@@ -43,14 +43,24 @@ uma árvore que o git recusou é como se perde o trabalho de outra pessoa.
 | `aprovacao: auto` em plano kaizen-born | aceito pelo gate | **recusado**, nomeando `sdd approve` como saída |
 | Score de mutação | 44 caught, 0 gap, of 44 | **55 caught, 0 gap, of 55** |
 | Asserções `ok` numa passada verde | 457 | **490** |
-| Suíte, mesma máquina e mesma sessão | 3:12,87 | 4:18,70 (**+34%**) |
+| Suíte, mesma máquina, duas passadas por lado | 1:45,74 / 1:47,49 | **2:27,10 / 2:27,59** (+39%) |
 | Os 4 itens da métrica no `TODO.md` | abertos | **RESOLVIDO por** `96a1f68`, `b3b8c2f`, `3ffa586`, `2510c3c` |
 
-Os dois tempos foram medidos nesta máquina e nesta sessão, `main` num worktree descartável contra o
-HEAD, suíte verde dos dois lados. O **+34% é catálogo, não desperdício** — 11 mutantes novos são 11
-suítes inteiras a mais —, mas o alvo `<30 s` da D7 está agora **8,6× distante**: a decisão de subir
-o alvo ou aposentá-lo por escrito segue no `TODO.md`, e a pergunta aberta do `CONTEXT.md` recebeu a
-terceira medição consecutiva que a confirma.
+Os tempos foram medidos nesta máquina, `main` num worktree descartável contra o HEAD noutro, os
+quatro **em sequência e sem nada mais rodando**, suíte verde nos quatro. O **+39% é catálogo, não
+desperdício** — 11 mutantes novos são 11 suítes inteiras a mais —, mas o alvo `<30 s` da D7 está
+agora **4,9× distante**: a decisão de subir o alvo ou aposentá-lo por escrito segue no `TODO.md`, e
+a pergunta aberta do `CONTEXT.md` recebeu a terceira medição consecutiva que a confirma.
+
+⚠️ **A primeira tentativa desta medição produziu números inventados, e o sintoma foi ela discordar
+de si mesma.** Rodadas feitas enquanto outra suíte rodava deram `main` 3:12,87 e HEAD 4:18,70 — e
+uma terceira, do MESMO HEAD, 2:25,87: mais rápida que o "antes", o que é impossível se o número
+mede o que diz medir. Duas suítes concorrentes, cada uma com pool de 8, disputando a mesma máquina
+(`load average` 24). Refeitas em sequência, as duas passadas de cada lado ficam dentro de 2 s uma
+da outra, e o `main` bate em **1:45,74** contra os **1:45,17** que a missão anterior registrou para
+o mesmo commit — é essa reprodutibilidade, não a plausibilidade do número, que separa medição de
+palpite. Tempo de relógio medido sob carga alheia não é medição: é a mesma classe do "vermelho pelo
+motivo errado" que este arquivo cataloga desde a missão do ledger.
 
 ### A métrica planejada dizia 44 → 48; o real foi 44 → 55
 
