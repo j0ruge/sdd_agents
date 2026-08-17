@@ -65,22 +65,34 @@ a judged regression that disappears from the record will be re-attempted.
 `sdd autonomy` refuses with rc 1 naming the same count. The ledger file is right there and it is
 not empty.
 
-**Cause:** the file is global, the **reading is per repo** — one predicate admits only the rows
-whose `repo` equals the repo you are standing in. Three ordinary ways to land here: reading from a
-directory that is no git repository at all; reading in the kit repo while every session was spent
-on a target (or the reverse); or reaching the repo through a path the rows do not carry — a symlink
-or a git worktree, which `git rev-parse --show-toplevel` reports as a toplevel of its own.
+**Cause:** the file is global, the **reading is per repo by default** — one predicate admits only
+the rows whose `repo` equals the repo you are standing in. Three ordinary ways to land here:
+reading from a directory that is no git repository at all; reading in the kit repo while every
+session was spent on a target (or the reverse); or reaching the repo through a path the rows do not
+carry — a symlink, or a **worktree row written before** `c514e36`, when identity still came from
+`git rev-parse --show-toplevel` and every worktree therefore looked like a repo of its own.
 
 **What you do:** run the reader **inside** the repo whose missions you want to judge, and compare
-`git rev-parse --show-toplevel` with `jq -r .repo ~/.sdd/autonomy-log.jsonl | sort -u`. The
-comparison is verbatim on both sides by design: a `realpath` invented here would silently merge two
-checkouts the ledger deliberately keeps apart. Full contract in
-[`pipeline.md`](pipeline.md) § "The autonomy ledger".
+what `ledger_repo_root` derives — `cd "$(git rev-parse --git-common-dir)/.." && pwd -P`, the shared
+`.git` and never the per-worktree toplevel — with
+`jq -r .repo ~/.sdd/autonomy-log.jsonl | sort -u`. If the question really is cross-project
+maturity, that is what `--all-repos` is for: `sdd autonomy --all-repos`, `sdd kaizen --series
+--all-repos`. ⚠️ At read time the comparison is verbatim on both sides by design: a `realpath`
+invented there would silently merge two checkouts the ledger deliberately keeps apart. Full
+contract in [`pipeline.md`](pipeline.md) § "The autonomy ledger".
 
-**Do not:** read this as data loss. What the filter removed is **counted** — `excluded.other_repo`
-in the series, one `N row(s) excluded` line in the human table — and an empty series is
-`guard.sufficient: false`, which supports only `indeterminado`. Somebody else's numbers read as a
-verdict about this kit is exactly what the filter exists to prevent.
+**Do not:** read this as data loss. What the filter removed is **counted**, and by reason —
+`excluded.other_repo` for rows born elsewhere and `excluded.no_repo` for rows that name no project
+at all, one `N row(s) excluded` line each in the human table, plus a fourth "no data" silence when
+the whole ledger is unattributable. An empty series is `guard.sufficient: false`, which supports
+only `indeterminado`. A throwaway fixture repo's numbers read as a verdict about this kit is
+exactly what the default filter exists to prevent.
+
+⚠️ **`sufficient: false` in the kit repo is not this failure mode.** If `guard.degenerate_axis` is
+`true`, every kit version in the slice bought exactly one session and no number of missions *here*
+will clear the floor — the axis is being read in the repo that builds the kit. `sdd kaizen` says so
+and names [ADR 0003](adr/0003-judge-axis-evidence-from-target-repos.md); the floor is not the
+defect and does not loosen.
 
 ---
 

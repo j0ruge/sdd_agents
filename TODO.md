@@ -308,13 +308,13 @@ Achados sobre **repos-alvo** vão para o `TODO.md` daquele repo. Este arquivo é
   quando houver folga de régua. — descoberto por `sdd-executor` na missão
   `20260815-ledger-sem-ponto-cego` (2026-08-16)
 
-- [ ] **A guarda do juiz é insatisfazível quando o kit desenvolve a si mesmo** — `bin/sdd:2024`
+- [ ] **A guarda do juiz é insatisfazível quando o kit desenvolve a si mesmo** — `bin/sdd:2580`
   (`sufficient: ($observed >= 3)`) vs `autonomy_kit_stamp` — o eixo é o `HEAD` do kit no instante
   de CADA linha, e a fase EXEC commita no `bin/sdd` entre sessões: medido, **24 kit_sha distintos
-  no ledger, todos com exatamente 1 sessão, nenhum com 2**. A guarda pede 3 missões no MESMO sha,
-  então `sufficient` é `false` por construção aqui. Não é bug em alvo (lá o kit não muda na
-  missão) — é o eixo degenerando no repo que o desenvolve, e trava o I13.4. Direção: rodar missão
-  em alvo real, ou carimbar o sha uma vez por missão — decidir qual pergunta o juiz responde.
+  no ledger, todos com exatamente 1 sessão, nenhum com 2**, então `sufficient` é `false` por
+  construção aqui. Não é bug em alvo — é o eixo degenerando no repo que o desenvolve. RESOLVIDO
+  por `3547a83`+`abac043`: o ADR 0003 decide (evidência vem de alvo real, o piso não afrouxa) e
+  `guard.degenerate_axis` faz o runner dizer isso em voz alta, citando o registro.
   — descoberto por `humano` na missão `20260816-runner-sem-dividas` (2026-08-16)
 
 - [ ] **O schema da série não tem sensor de drift contra a prosa que o descreve** — `bin/sdd:1976`
@@ -328,14 +328,15 @@ Achados sobre **repos-alvo** vão para o `TODO.md` daquele repo. Este arquivo é
 ### Contrato e configuração
 
 - [ ] **O lembrete pós-pipeline manda o humano a um comando que não enxerga o que ele contou** —
-  `bin/sdd:2147` (`kaizen_reminder`) vs `:2300` (`cmd_kaizen`) — o lembrete roda com
+  `bin/sdd:2596` (`kaizen_reminder`) vs `:2742` (`cmd_kaizen`) — o lembrete roda com
   `REPO_ROOT` = repo-ALVO e conta as missões dele; o juiz roda no repo do KIT e, com o filtro por
-  repo, lê `latest: null` e `other_repo: N`. Medido em fixture: 3 missões viram "run 'sdd kaizen'
-  in the kit repo", e lá a guarda é `0/0/0`. Direção: silenciar o lembrete fora do kit, ou decidir
-  o eixo (item da guarda). — descoberto por `sdd-reviewer` na missão `20260816-kit-como-alvo` (2026-08-16)
+  repo, lê `latest: null` e `other_repo: N`. ⚠️ `--all-repos` (`d62f08c`) **não** fecha isto: o
+  lembrete só é chamado de `cmd_run`, e `sdd run` não tem a flag — segue aberto, não estampar.
+  Direção: silenciar o lembrete fora do kit, ou responder se o juiz pode pesar linha de outro
+  projeto — ADR 0004. — descoberto por `sdd-reviewer` na missão `20260816-kit-como-alvo` (2026-08-16)
 
 - [ ] **Worktree do git parte a identidade do repo no ledger** — `bin/sdd:768`
-  (`ledger_repo_root` usa `--show-toplevel`) — o toplevel é por worktree, então missão rodada num
+  (`ledger_repo_root`, `bin/sdd:894`, usava `--show-toplevel`) — o toplevel é por worktree, então missão rodada num
   worktree grava `repo: .../wt` e a mesma leitura do checkout principal a devolve como
   `other_repo` e a série vem vazia. RESOLVIDO por `c514e36`: identidade pelo `.git` compartilhado
   (`--git-common-dir` normalizado), no escritor **e** nos leitores, com par diferencial
@@ -350,7 +351,7 @@ Achados sobre **repos-alvo** vão para o `TODO.md` daquele repo. Este arquivo é
   lados, com par diferencial. — descoberto por `sdd-executor` na missão `20260817-eixo-do-juiz` (2026-08-17)
 
 - [ ] **Linha sem `repo` é "local" em TODO repo, e o comentário afirma o contrário** —
-  `bin/sdd:785` — o comentário diz que os leitores classificam essas linhas em voz alta
+  `bin/sdd:933` — o comentário dizia que os leitores classificam essas linhas em voz alta
   (`unrecognized`, ou morte alta), mas `is_unrecognized` olha `.event` e não `.repo`: linha de
   sessão bem-formada sem `repo` é sessão comparável em toda máquina — 3 delas bastaram para virar
   `guard.sufficient` para `true` em fixture. Hoje são 0 no ledger real. RESOLVIDO por `4ca8015`:
@@ -359,7 +360,7 @@ Achados sobre **repos-alvo** vão para o `TODO.md` daquele repo. Este arquivo é
   — descoberto por `sdd-reviewer` na missão `20260816-kit-como-alvo` (2026-08-16)
 
 - [ ] **O juiz no repo do kit deixou de enxergar missão de repo-alvo** — `bin/sdd:790`
-  (`ledger_row_is_local`) — a leitura por repo é o conserto certo para contaminação de fixture,
+  (`ledger_row_is_local`, `bin/sdd:933`) — a leitura por repo é o conserto certo para contaminação de fixture,
   mas o ledger existe para medir maturidade **entre** projetos (`docs/pipeline.md:274`) e nenhum
   leitor consegue mais fazê-lo. RESOLVIDO por `d62f08c`: `--all-repos` explícito, ligando o
   predicado único e alcançando os três leitores de uma vez; medido no ledger real, 49 linhas →

@@ -372,11 +372,28 @@ the ledger is append-only and is never migrated.
 and the wrong *only option*: this ledger is one file per machine precisely so maturity can be
 compared BETWEEN projects, and while the filter was the only behaviour no reader could ask that
 at all. `sdd autonomy --all-repos` and `sdd kaizen --series --all-repos` flip the same single
-predicate, so the flag reaches every reader at once — including the post-pipeline reminder, which
-holds no filter of its own. Under it `excluded.other_repo` is `0` (nothing is foreign any more)
+predicate, so one flag reaches both readers of that command at once. Under it
+`excluded.other_repo` is `0` (nothing is foreign any more)
 and the human table's header names the scope it read instead of a repo path. It is never the
-default and never implicit: the judge's verdict about *this kit* must not be computed over another
-project's rows, which is exactly the contamination the filter removed.
+default and never implicit: the contamination the filter removed was a `sdd run` in a **throwaway
+fixture** repo moving the judge's own numbers, and no verdict about this kit may rest on rows a
+test invented.
+
+⚠️ Whether a **real target** repo's rows may carry a verdict is a different question, and this
+mission deliberately left it open. [ADR 0003](adr/0003-judge-axis-evidence-from-target-repos.md)
+says verdict evidence comes from target repos — the kit's own axis degenerates — and `--all-repos`
+is the only mechanism that can read them; but nothing in the ledger yet tells a target apart from a
+fixture, so the default stays shut and neither `gate_KAIZEN` nor the agent prompt is pointed at the
+flag by the runner itself. Answering it is ADR 0004's job, and it is what unblocks I13.4.
+
+⚠️ The **post-pipeline reminder** is the one reader the flag does not reach. It goes through the
+same single predicate and would inherit it — but it is called from `sdd run` alone, and `sdd run`
+has no `--all-repos` (it dies on any unknown `-*` option), so it always reads per repo. That is
+why the `TODO.md` item about the reminder pointing the human at a command that sees different
+numbers is **not** closed by this flag: `sdd run` in a target repo counts the target's missions,
+and `sdd kaizen` in the kit repo still answers about the kit's. Deciding that one means answering
+whether the judge may weigh another project's rows at all — the question
+[ADR 0003](adr/0003-judge-axis-evidence-from-target-repos.md) deliberately left to its successor.
 
 It reaches the **KAIZEN boot prompt** too, and that is not a convenience. `gate_KAIZEN` reads its
 half of the series by calling `kaizen_series` in-process, so every ledger option the invocation

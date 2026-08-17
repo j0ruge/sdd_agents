@@ -2745,11 +2745,16 @@ cmd_kaizen() {
     case "$1" in
       --series)  series_only=1 ;;
       --dry-run) DRY_RUN=1 ;;
-      # Accepted on the whole command and not just on --series: kaizen_reminder and the KAIZEN
-      # gate read through kaizen_series, so the flag lands on every number this command derives
+      # Accepted on the whole command and not just on --series: the KAIZEN gate reads through
+      # kaizen_series in this same process, so the flag lands on every number this command derives
       # rather than on the JSON alone. What it must NEVER do is default to on — the judge's own
       # verdict would then be computed over other projects' rows (ADR 0003 is about the axis being
       # read in the right place; this is the same rule about the repo).
+      # ⚠️ NOT kaizen_reminder, whatever this comment said before: the reminder is called from
+      # cmd_run and nowhere else, and `sdd run` has no --all-repos (it dies on any unknown `-*`).
+      # It reads through the same single predicate and WOULD inherit the flag — but no invocation
+      # that reaches it can carry one, so today it always reads per repo. Saying otherwise was the
+      # same lying comment this mission removed one function up.
       --all-repos) LEDGER_ALL_REPOS=1 ;;
       *)         die "unknown kaizen option: $1" ;;
     esac
@@ -2882,20 +2887,26 @@ USAGE
   sdd run <mission>          run from the first unsatisfied phase through to the PR
   sdd retry <mission>        retry the current phase with a fresh session
   sdd close <mission>        post-merge: close the JIRA issue
-  sdd autonomy               waste per kit version, for THIS repo, from the global ledger
+  sdd autonomy [--all-repos] waste per kit version, for THIS repo, from the global ledger
   sdd kaizen [--dry-run]     judge the previous kit change and give birth to the next kit
-                             mission plan (kit repo only; exit 3 = the change made it worse)
+             [--all-repos]   mission plan (kit repo only; exit 3 = the change made it worse)
   sdd kaizen --series        the deterministic series (JSON) the judge cites, for the repo
-                             it runs in (the ledger file is global, the reading is not)
+             [--all-repos]   it runs in (the ledger file is global, the reading is not)
   sdd help | sdd version
 
 LEDGER OPTIONS (`autonomy` and `kaizen`)
   --all-repos                read the WHOLE ledger, not just the rows born in this repo. The
-                             default is per repo because a `sdd run` in a throwaway fixture repo
-                             once moved the judge's own numbers, and the judge must never take
-                             another project's rows as a verdict about this kit. Ask for it when
-                             the question really is cross-project maturity — which is why the
-                             ledger is one file per machine to begin with.
+                             default is per repo because a `sdd run` in a THROWAWAY FIXTURE repo
+                             once moved the judge's own numbers, and a verdict about this kit
+                             must never rest on rows a test invented. Ask for it when the question
+                             really is cross-project maturity — which is why the ledger is one
+                             file per machine to begin with.
+                             ⚠️ Whether a REAL target repo's rows may carry a verdict is a
+                             different question, and an open one: ADR 0003 says verdict evidence
+                             comes from target repos (the kit's own axis degenerates), and this
+                             flag is the only way to read them — but nothing here yet distinguishes
+                             a target from a fixture, so the default stays shut and the judge is
+                             not pointed at it. That decision is ADR 0004's, not this flag's.
 
 FOR SCRIPTS
   sdd phase <mission>        print only the current phase (or DONE)
