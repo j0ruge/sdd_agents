@@ -4,6 +4,151 @@ Registro de melhorias com **antes/depois medido**. Sem número, não entra.
 
 ---
 
+## 2026-08-17 — O juiz para de parecer quebrado quando o kit é o próprio alvo (missão `20260817-eixo-do-juiz`)
+
+**Problema (Gemba):** o `sdd kaizen` julga a mudança anterior do kit e dá à luz a missão seguinte.
+O julgamento estava **morto na água**, medido no ledger real em 2026-08-16:
+
+```
+latest    kit_sha 818b800 · 1 sessão · fase PR   · US$ 1,48
+previous  kit_sha 4126b50 · 1 sessão · fase DOCS · US$ 7,31
+guard     missions_after_change 1 · sessions 1 · sufficient false
+```
+
+`latest` e `previous` eram **a mesma missão**, duas fases consecutivas. Comparar isso não media kit
+nenhum: media que publicar é mais barato que documentar. A causa é estrutural, não um bug —
+`autonomy_kit_stamp` carimba `kit_sha` = `HEAD` do kit no instante de cada linha, e a fase EXEC
+commita no `bin/sdd` **entre** sessões: 24 shas distintos no ledger, todos com exatamente 1 sessão,
+nenhum com 2. E o humano lia só `sufficient: false`, indistinguível de "faltam missões" — a leitura
+que convida a afrouxar o piso. Mais três defeitos adjacentes na mesma vizinhança: `--all-repos` não
+existia (o ledger é global **para** comparar projetos e nenhum leitor conseguia mais), worktree
+partia a identidade do repo (`--show-toplevel` é por worktree, e o kit recomenda worktree), e linha
+sem `repo` contava como local em **todo** repo — 3 delas bastavam para virar `sufficient: true`
+sobre o nada.
+
+**Contramedida:** um ADR **primeiro** (0003: evidência de veredito vem de repo-alvo real; o eixo não
+muda; o piso `>= 3` não afrouxa) e quatro incrementos que fazem o runner **dizer** isso —
+`guard.degenerate_axis` citando o ADR na saída, `--all-repos` explícito ligando o predicado único
+que os três leitores compartilham, identidade de repo derivada do `.git` **comum** no escritor e nos
+leitores, e `excluded.no_repo` como quinto balde. A régua não foi tocada em ponto nenhum: a resposta
+ao "a série nunca enche" foi explicar, não baixar o piso.
+
+| | Antes (`96a9bf1` = `main`) | Depois (`5056709`) |
+|---|---|---|
+| `sufficient: false` no repo do kit | número pelado — "faltam missões" e "este eixo não funciona aqui" liam igual | **`degenerate_axis: true`** + frase impressa citando **ADR 0003** |
+| Pergunta entre projetos (a razão de o ledger ser global) | **inacessível** — nenhum dos três leitores | `--all-repos` nos dois comandos, um predicado; `other_repo` **11 → 0**, 57 linhas → 68 |
+| Missão rodada em `git worktree add` | `repo` por worktree ⇒ série **vazia** no checkout principal, em silêncio | worktree do mesmo repo **é** o mesmo repo (escritor e leitores por `ledger_repo_root`) |
+| 3 linhas de sessão sem `repo` | `sufficient: true` — a guarda dizendo "já dá para julgar" sobre o nada | `excluded.no_repo: 3`, `sufficient` **permanece** `false` |
+| Baldes de `excluded` (nos dois produtores da shape) | 4 | **5** |
+| Ledger com uma linha ilegível | `gate_KAIZEN` lia string vazia como "ainda não julgado" e **gastava uma sessão opus** | morre antes da sessão, rc 1, com o remédio nomeado |
+| ADRs | 2 | **3** |
+| Score de mutação | 55 caught, 0 gap, of 55 | **70 caught, 0 gap, of 70** |
+| Asserções de sensor numa passada verde (`grep -c '^  ok    '`) | 435 | **509** |
+
+⚠️ **A linha das asserções não é comparável com a da entrada anterior, e o motivo é o
+instrumento.** Aquela entrada registrou **490** para um `main` que é código-idêntico ao desta
+(`git diff c821ade..96a9bf1 -- tests/ bin/sdd` é **vazio**: só docs mudaram entre os dois), e este
+`main` mede **435**. Não caiu nada: `490` é a contagem de `^  ok`, que soma às asserções de sensor as
+**55** linhas `  ok   ` de **três** espaços que o `sdd install` e outros comandos do runner imprimem
+dentro dos fixtures. A âncora certa é `^  ok    ` com **quatro** espaços — a mesma que o
+`templates/checkpoint.md` e a `CLAUDE.md` obrigam nos Checks, e pelo mesmo motivo: a forma solta
+responde "a linha existe", nunca "a asserção passou". Os dois lados desta linha foram medidos com a
+âncora de quatro espaços, em passadas sequenciais, `main` num worktree descartável. Fica registrado
+em vez de silenciosamente corrigido, e virou item do `TODO.md`: uma linha do `KAIZEN_LOG` cujo
+instrumento não está fixado é a "número que se move sem nada explicando por quê" que este arquivo
+cataloga desde a missão do ledger — só que aplicada a ele mesmo. A série 408 → 457 → 490 das entradas
+anteriores **não** foi reescrita: recontar tree antigo custa uma suíte por entrada e o degrau já está
+nomeado aqui, com o comando que o distingue.
+
+⚠️ **`missions` não subiu no ledger real sob `--all-repos`, e isso não é a flag falhando.** O sha
+corrente tem uma missão só — é exatamente o eixo degenerado que o I2 acabara de expor. Quem mede a
+subida é o fixture de dois repos do sensor, com as duas saídas comparadas **entre si**. Uma métrica
+que só pode ser observada onde o defeito que a missão descreve não está presente precisa dizer isso
+em voz alta, ou o próximo leitor conclui que a flag não funciona.
+
+### A métrica planejada dizia 55 → 60; o real foi 70
+
+Um mutante por incremento previa 60. Vieram dez extras, e nenhum é escopo que vazou — são defeitos
+que a missão só podia descobrir **depois de existir**, cada um medido no caminho que o achou:
+
+| Origem | O que provaram |
+|---|---|
+| Os 5 incrementos planejados | o previsto: um por fatia |
+| Fix da QA (`c5c9a9f`) | a flag chegava ao gate e **não** ao prompt do juiz: duas séries, dois `latest`, e a fase virava **insatisfazível** — não "número errado". Duas sessões opus compravam uma linha `blocked` |
+| REVIEW r2 (`913cb3f`, `d0a3b59`) | a primeira grafia da identidade tomava o **pai** do `.git` e fundia submódulos irmãos e bares vizinhos numa identidade só, em silêncio; e `CDPATH` colapsava **todos** os repos da máquina numa identidade, alcançável por variável de ambiente |
+| REVIEW r3 (`3ef0753`, `b03d2f8`) | duas HIGH **dentro do campo que esta missão criou**: a janela contava SESSÕES onde o piso conta MISSÕES (uma retentativa bastava para calar o sensor), e a ordem-de-arquivo da janela **não tinha probe** — `sort` deixava os dois sensores verdes porque toda fixture usava shas cuja ordem lexical coincidia com a de arquivo |
+
+A leitura kaizen é a mesma que a missão anterior registrou e que se confirmou de novo: métrica de
+catálogo é **previsão, não meta**. Cravar 60 e parar ali teria transformado dez achados reais em
+dívida — dois deles fail-open, e um deles um fail-open sobre a propriedade central do conserto da
+rodada **anterior**. O número que vale é `0 known gap(s)`, que se manteve nas dez entradas.
+
+### O conserto trocou a unidade, e a fonte da verdade driftou de si mesma
+
+O achado desta fase DOCS, e o mais barato de repetir: o F1 da r3 trocou a unidade do
+`degenerate_axis` de **sessões** para **missões** — porque é `missions_with_session` que o piso
+conta, e duas sessões da mesma missão deixavam o piso igualmente insatisfazível enquanto calavam o
+campo. O `jq` mudou, com comentário medido. Tudo o que o **enuncia**, não: **oito** dos dez lugares
+seguiam dizendo "exactly one session" horas depois — e quatro deles estão dentro do `bin/sdd`. O
+comentário duas linhas **acima** do predicado dizia sessões, e o `warn` que o humano lê imprimia "the
+recent kit versions each bought exactly one session" enquanto o código ao lado contava missões.
+
+| | Antes (`5056709`) | Depois (esta fase) |
+|---|---|---|
+| Lugares que enunciam a unidade do eixo | 6 conhecidos | **10** nomeados: `docs/failure-modes.md` estava fora do inventário, e contar `bin/sdd` como **um** era grosseiro — ele a enuncia em três comentários e na frase que imprime |
+| Deles com a unidade certa | **1 de 10** (só o `jq`; o `CONTEXT.md` não enunciava nenhuma) | **10 de 10** |
+| Vezes que o item "schema sem sensor de drift" cobrou preço | 5 | **6** |
+
+A r3 fechou em Grade A afirmando "os seis lugares dizem a mesma coisa", e estava de boa-fé: ela
+consertou o sexto que a r2 deixara velho. O que nenhuma rodada podia ver é que o **próprio conserto
+dela** criou drift novo em oito — mudar unidade é mudar contrato, e contrato quebrado em N lugares
+é o modo de falha mais caro deste kit, escrito na `CLAUDE.md` desde a primeira missão. Duas leituras
+que valem mais que "revisar melhor":
+
+- **um arquivo não é um lugar.** "O código é a fonte da verdade" some quando o mesmo arquivo carrega
+  cinco enunciados da mesma regra — o predicado, três comentários que o explicam e a frase que imprime.
+  Foi um comentário mentiroso a **um `sed -n` de distância** do predicado que sobreviveu a três
+  rodadas de review, e a frase impressa é a única das nove vozes que o humano lê;
+- **âncora podre pagou por si.** Os dois drifts de dentro do runner apareceram porque uma âncora
+  `bin/sdd:2735` do `TODO.md` estava velha e caiu **no comentário errado**. Seguir uma âncora até o
+  lugar errado achou o que a leitura dirigida não achou.
+
+E a conclusão estrutural é a mesma de sempre: **este repo não tem sensor de drift entre os campos do
+`jq` e o que os promete**, e enquanto não tiver, a conta volta. Sexta cobrança, com as dez âncoras e
+a direção no `TODO.md`.
+
+### O que ficou sabido, e não foi consertado
+
+- **A quinta métrica do `00-missao.md` não foi cumprida, e isso é registro, não omissão.** O plano
+  previa 5 itens do `TODO.md` com `RESOLVIDO por <hash>`; são **4**. O quinto — o lembrete
+  pós-pipeline que manda o humano a um comando que enxerga números diferentes — **não é fechado por
+  `--all-repos`**: o lembrete só é chamado de `cmd_run`, e `sdd run` não tem a flag. Estampá-lo
+  seria rótulo sem artefato, exatamente o que o kit existe para proibir. O item segue aberto com o
+  motivo escrito nele, e fechá-lo exige responder se o juiz pode pesar linha de outro projeto —
+  possível **ADR 0004**, e é ele que destrava o I13.4.
+- **Um marcador de fechamento estava invisível para a triagem.** O `RESOLVIDO por` do item do eixo
+  degenerado tinha quebra de linha entre as duas palavras, e a triagem do kaizen grepa a frase
+  inteira: item fechado que a próxima sessão leria como aberto. Reencapado nesta fase. A lição é a
+  de sempre nesta casa — convenção lida por `grep` precisa de sensor, e esta não tem.
+- **O `sdd kaizen` recusa rodar de um worktree do próprio kit** pela mesma pergunta por worktree que
+  o ledger acabou de deixar de fazer, noutra porta (`bin/sdd:2735`). Está no `TODO.md`, achado pela
+  EXEC do I4 — a classe fechada num sítio e viva no vizinho.
+- **O `TODO.md` aceita duplicata, e a fase DOCS provou isso contra si mesma.** Abri um item sobre a
+  contagem de `selftest` da `CLAUDE.md` (cinco escritos, seis medidos) e ele **já estava lá**, aberto
+  pela fase DOCS da missão anterior um dia antes. O `tests/check-todo.sh` mede forma, âncora, data e
+  teto — nunca duplicata —, então as duas teriam ficado verdes lado a lado, cada uma parecendo
+  confirmar a outra. Retirado. A conduta cabe numa linha e não precisa de sensor: **grepar o tema
+  antes de abrir item.**
+- **Este arquivo não fixa os instrumentos das próprias linhas**, e a linha das asserções já pagou por
+  isso (⚠️ acima). Item aberto com direção: nomear o comando ao lado do número, do jeito que a linha
+  do score já faz de graça ao citar `score:`.
+
+**Custo:** 10 sessões, **US$ 105,48** até o fim da REVIEW — 3 rodadas de review (US$ 69,03, 65% do
+total) sobre 5 incrementos + 1 fix de QA. O preço das rodadas é o preço de achar duas HIGH e uma
+CRITICAL **antes** do merge, num campo que a missão acabara de criar.
+
+---
+
 ## 2026-08-17 — As portas entre humano e runner ganham dono (missão `20260816-portas-do-humano`)
 
 **Problema (Gemba):** quatro pontos onde humano e runner se tocam estavam sem instrumento, os

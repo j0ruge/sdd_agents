@@ -175,7 +175,7 @@ Achados sobre **repos-alvo** vão para o `TODO.md` daquele repo. Este arquivo é
   tentador é `KNOWN_GAPS`. Direção: reprovar guarda de `SDD_MUTANT` em arquivo que invoca `bin/sdd`.
   — descoberto por `sdd-executor` na missão `20260816-runner-sem-dividas` (2026-08-16)
 
-- [ ] **`check-autonomy.sh` é vermelho intermitente, causa desconhecida** — `bin/sdd:972` —
+- [ ] **`check-autonomy.sh` é vermelho intermitente, causa desconhecida** — `bin/sdd:989` —
   ⚠️ **A causa registrada foi REFUTADA; o sintoma segue aberto.** Era "colisão de nome de log em
   repo que versiona `.sdd/logs/`", e não se sustenta: `check-autonomy.sh:140` chama
   `sdd install` ANTES de existir log, e `bin/sdd:1125` já põe `.sdd/logs/` no `.gitignore` —
@@ -308,51 +308,64 @@ Achados sobre **repos-alvo** vão para o `TODO.md` daquele repo. Este arquivo é
   quando houver folga de régua. — descoberto por `sdd-executor` na missão
   `20260815-ledger-sem-ponto-cego` (2026-08-16)
 
-- [ ] **A guarda do juiz é insatisfazível quando o kit desenvolve a si mesmo** — `bin/sdd:2024`
+- [ ] **A guarda do juiz é insatisfazível quando o kit desenvolve a si mesmo** — `bin/sdd:2738`
   (`sufficient: ($observed >= 3)`) vs `autonomy_kit_stamp` — o eixo é o `HEAD` do kit no instante
   de CADA linha, e a fase EXEC commita no `bin/sdd` entre sessões: medido, **24 kit_sha distintos
-  no ledger, todos com exatamente 1 sessão, nenhum com 2**. A guarda pede 3 missões no MESMO sha,
-  então `sufficient` é `false` por construção aqui. Não é bug em alvo (lá o kit não muda na
-  missão) — é o eixo degenerando no repo que o desenvolve, e trava o I13.4. Direção: rodar missão
-  em alvo real, ou carimbar o sha uma vez por missão — decidir qual pergunta o juiz responde.
+  no ledger, todos com exatamente 1 sessão, nenhum com 2**, então `sufficient` é `false` por
+  construção aqui. Não é bug em alvo — é o eixo degenerando no repo que o desenvolve.
+  RESOLVIDO por `3547a83`+`abac043`: o ADR 0003 decide (evidência vem de alvo real, o piso não afrouxa) e
+  `guard.degenerate_axis` faz o runner dizer isso em voz alta, citando o registro.
   — descoberto por `humano` na missão `20260816-runner-sem-dividas` (2026-08-16)
 
-- [ ] **O schema da série não tem sensor de drift contra a prosa que o descreve** — `bin/sdd:1976`
-  vs `docs/pipeline.md:366` e `agents/sdd-kaizen.md:30` — o objeto que o juiz é mandado citar é
-  produzido em dois lugares (o `jq` e o literal do ledger vazio, `:1902`) e descrito em dois
-  outros; o `sdd health` mede drift de doc/config e gate-sem-mutação, mas nada casa os campos do
-  `guard` com quem os promete. Campo novo esquecido passa verde. Direção: extrair os campos do
-  `jq` e cobrá-los na doc. — descoberto por `sdd-executor` na missão
-  `20260816-runner-sem-dividas` (2026-08-16)
+- [ ] **O schema da série não tem sensor de drift contra a prosa que o descreve** — `bin/sdd:2738`
+  vs `:2735`, `:2926`, `docs/pipeline.md:499`, `docs/adr/0003:57`, `agents/sdd-kaizen.md:40` e
+  `docs/failure-modes.md:99` — produzido em dois lugares (o `jq` e o literal vazio, `:2558`) e
+  descrito em **dez**, QUATRO deles dentro do `bin/sdd`. Cobrado 6×: na DOCS de
+  `20260817-eixo-do-juiz`, **oito** dos dez diziam a unidade que o F1 da r3 trocara horas antes
+  (sessão → missão) — o ADR que o runner cita, a folha do juiz, e a própria frase que o runner
+  IMPRIME. Direção: extrair os campos do `jq` e cobrá-los na doc.
+  — descoberto por `sdd-executor` na missão `20260816-runner-sem-dividas` (2026-08-16)
 
 ### Contrato e configuração
 
 - [ ] **O lembrete pós-pipeline manda o humano a um comando que não enxerga o que ele contou** —
-  `bin/sdd:2147` (`kaizen_reminder`) vs `:2300` (`cmd_kaizen`) — o lembrete roda com
+  `bin/sdd:2757` (`kaizen_reminder`) vs `:2924` (`cmd_kaizen`) — o lembrete roda com
   `REPO_ROOT` = repo-ALVO e conta as missões dele; o juiz roda no repo do KIT e, com o filtro por
-  repo, lê `latest: null` e `other_repo: N`. Medido em fixture: 3 missões viram "run 'sdd kaizen'
-  in the kit repo", e lá a guarda é `0/0/0`. Direção: silenciar o lembrete fora do kit, ou decidir
-  o eixo (item da guarda). — descoberto por `sdd-reviewer` na missão `20260816-kit-como-alvo` (2026-08-16)
+  repo, lê `latest: null` e `other_repo: N`. ⚠️ `--all-repos` (`d62f08c`) **não** fecha isto: o
+  lembrete só é chamado de `cmd_run`, e `sdd run` não tem a flag — segue aberto, não estampar.
+  Direção: silenciar o lembrete fora do kit, ou responder se o juiz pode pesar linha de outro
+  projeto — ADR 0004. — descoberto por `sdd-reviewer` na missão `20260816-kit-como-alvo` (2026-08-16)
 
-- [ ] **Worktree do git parte a identidade do repo no ledger** — `bin/sdd:768`
-  (`ledger_repo_root` usa `--show-toplevel`) — o toplevel é por worktree, então missão rodada num
+- [ ] **Worktree do git parte a identidade do repo no ledger** — `bin/sdd:894`
+  (`ledger_repo_root`, usava `--show-toplevel`) — o toplevel é por worktree, então missão rodada num
   worktree grava `repo: .../wt` e a mesma leitura do checkout principal a devolve como
-  `other_repo` e a série vem vazia. Worktree é fluxo de primeira classe aqui. Direção:
-  `git rev-parse --git-common-dir` como identidade, com asserção diferencial.
+  `other_repo` e a série vem vazia. RESOLVIDO por `c514e36+913cb3f`: a identidade **é** o `.git`
+  compartilhado, no escritor e nos leitores. ⚠️ `c514e36` sozinho tomava o **pai** do `.git` e
+  fundia submódulos irmãos e bares vizinhos numa identidade só, em silêncio; `913cb3f` corrigiu.
   — descoberto por `sdd-reviewer` na missão `20260816-kit-como-alvo` (2026-08-16)
 
+- [ ] **`sdd kaizen` recusa rodar de um worktree do próprio kit** — `bin/sdd:2963` — a porta
+  "estou no repo do kit?" compara `kit_root` (`--show-toplevel` de `$SDD_HOME`) com `$REPO_ROOT`,
+  e o toplevel é por worktree: de um worktree do kit os dois divergem e o comando morre em
+  "run it in the kit repo". Mesma classe que `c514e36` acabou de fechar no ledger, em outra
+  porta — e o kit recomenda worktree para isolar missão. Direção: `ledger_repo_root` dos dois
+  lados, com par diferencial. — descoberto por `sdd-executor` na missão `20260817-eixo-do-juiz` (2026-08-17)
+
 - [ ] **Linha sem `repo` é "local" em TODO repo, e o comentário afirma o contrário** —
-  `bin/sdd:785` — o comentário diz que os leitores classificam essas linhas em voz alta
+  `bin/sdd:933` — o comentário dizia que os leitores classificam essas linhas em voz alta
   (`unrecognized`, ou morte alta), mas `is_unrecognized` olha `.event` e não `.repo`: linha de
   sessão bem-formada sem `repo` é sessão comparável em toda máquina — 3 delas bastaram para virar
-  `guard.sufficient` para `true` em fixture. Hoje são 0 no ledger real. Direção: contar num balde
-  próprio. — descoberto por `sdd-reviewer` na missão `20260816-kit-como-alvo` (2026-08-16)
+  `guard.sufficient` para `true` em fixture. Hoje são 0 no ledger real. RESOLVIDO por `4ca8015`:
+  balde `excluded.no_repo` nos dois leitores (nunca `other_repo`, que é outra acusação), quarta voz
+  de "no data", e o comentário corrigido com o motivo.
+  — descoberto por `sdd-reviewer` na missão `20260816-kit-como-alvo` (2026-08-16)
 
 - [ ] **O juiz no repo do kit deixou de enxergar missão de repo-alvo** — `bin/sdd:790`
-  (`ledger_row_is_local`) — a leitura por repo é o conserto certo para contaminação de fixture,
+  (`ledger_row_is_local`, `bin/sdd:933`) — a leitura por repo é o conserto certo para contaminação de fixture,
   mas o ledger existe para medir maturidade **entre** projetos (`docs/pipeline.md:274`) e nenhum
-  leitor consegue mais fazê-lo. Hoje não morde: as 26 linhas reais são todas do kit. Direção: um
-  `--all-repos` explícito, ou o eixo do juiz decidido por ADR (item da guarda, acima).
+  leitor consegue mais fazê-lo. RESOLVIDO por `d62f08c`: `--all-repos` explícito, ligando o
+  predicado único e alcançando os três leitores de uma vez; medido no ledger real, 49 linhas →
+  60 e `other_repo` 11 → 0. O default segue filtrado, que era a outra metade da decisão.
   — descoberto por `sdd-executor` na missão `20260816-kit-como-alvo` (2026-08-16)
 
 - [ ] **`config/schema.md` promete cinco comportamentos que o runner não tem** —
@@ -411,6 +424,13 @@ Achados sobre **repos-alvo** vão para o `TODO.md` daquele repo. Este arquivo é
 
 ### Saída humana e cosmética
 
+- [ ] **43% do `docs/pipeline.md` é um subsistema só, e ele cresce toda missão do ledger** —
+  `docs/pipeline.md:326-568` — as seções "The autonomy ledger" (149 linhas) e "The kaizen loop" (94)
+  somam **243 de 568** num arquivo que é o índice do pipeline; esta missão engordou as duas. Índice
+  que carrega profundidade é o doc que a próxima sessão não lê inteiro. Direção: `references/` para
+  o ledger + juiz, com o índice roteando — **não** executar no meio de outra missão, é refator de
+  estrutura e merece a sua. — descoberto por `sdd-docs` na missão `20260817-eixo-do-juiz` (2026-08-17)
+
 - [ ] **`BLOCKED in <FASE> — N sessions` conta voltas do laço, não sessões** — `bin/sdd:1626` —
   `attempts[$phase]` sobe em toda volta que chega ao topo com a fase, inclusive as que não abrem
   sessão nenhuma. Medido no fixture do I9: REVIEW imprime `3 sessions without satisfying the gate`
@@ -460,6 +480,29 @@ Achados sobre **repos-alvo** vão para o `TODO.md` daquele repo. Este arquivo é
   `.claude/` como arquivo sensível, então a drift só é corrigível por sessão com humano presente.
   Direção: decidir se o napkin entra na superfície que o DOCS mantém ou sai do versionamento.
   — descoberto por `sdd-docs` na missão `20260816-runner-sem-dividas` (2026-08-16)
+
+- [ ] **A regra manda sincronizar `.claude/agents/` e não diz como; `cp` e Edit são barrados** —
+  `CLAUDE.md` (seção "Ao mexer nos agentes") — o harness trata `.claude/` como caminho sensível,
+  então a sessão headless leva negativa nas duas ferramentas e a fase parece travada com o
+  preflight vermelho em `agent stale`. Quem resolve é `sdd install --force`, citado só na
+  mensagem de falha do preflight. Direção: dizer isso na regra. — descoberto por `sdd-executor`
+  na missão `20260817-eixo-do-juiz` (2026-08-17)
+
+- [ ] **O `KAIZEN_LOG.md` não fixa o instrumento das próprias linhas, e uma delas já mentiu** —
+  `KAIZEN_LOG.md:175` — a entrada de `20260816-portas-do-humano` registrou "asserções `ok`: 490" para
+  um `main` que mede **435** pela âncora de 4 espaços; `490` é a contagem solta `^  ok`, que soma 55
+  linhas de 3 espaços impressas pelo runner dentro dos fixtures. O tree é o mesmo
+  (`git diff c821ade..96a9bf1 -- tests/ bin/sdd` vazio), então a série 408 → 457 → 490 do arquivo tem
+  degrau fantasma. Direção: nomear o comando ao lado do número, como a linha do `score:` já faz.
+  — descoberto por `sdd-docs` na missão `20260817-eixo-do-juiz` (2026-08-17)
+
+- [ ] **O `kaizen_axis_note` promete não repetir o piso e o repete duas linhas abaixo** —
+  `bin/sdd:2924` vs `:2928` — o comentário diz "no count in the sentence on purpose: writing '3'
+  here would be a third copy of a number the jq program already owns", e o `dim` seguinte imprime
+  "The floor of 3 missions per kit version". O `guard_floor` do `jq` é o dono; esta é a cópia que
+  drifta calada no dia em que o piso mudar, e é a **única** das seis vozes do schema que o humano lê
+  em voz alta. Direção: interpolar o `guard_floor` da série, ou tirar o número da frase.
+  — descoberto por `sdd-docs` na missão `20260817-eixo-do-juiz` (2026-08-17)
 
 - [ ] **O que arma a corrida do Jidoka é a POSIÇÃO da linha `blocked`, não o tamanho do
   checkpoint** — `tests/check-gates.sh:229-232` — a grandeza real é quantos bytes sobram para o

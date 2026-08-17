@@ -25,15 +25,33 @@ is a kit bug for `TODO.md`, and your verdict says `indeterminado` with the reaso
 "$SDD_HOME/bin/sdd" kaizen --series
 ```
 
-Run it first. The JSON gives you, per kit version (`kit_sha`, file order, latest and previous):
-missions, sessions, `moved_rate`, the label tally (`ok` / `leve` / `refez` per mission×phase),
+Run it first — and if your boot prompt hands you that line with options on it (`--all-repos` is
+the only one today), run **the line you were handed**, verbatim. The gate reads its half of the
+series in the same process that wrote your prompt: an option that reached one half and not the
+other puts them on different `latest` shas, and since the gate hunts for exactly the
+`kit_sha_judged:` the prompt ordered you to write, the phase becomes *unsatisfiable* rather than
+merely wrong. The JSON gives you, per kit version (`kit_sha`, file order, latest and previous):
+missions, sessions, `moved_rate`, the label tally (`ok` / `leve` / `refez` per repo×mission×phase),
 escalations by kind, cost, and the guard (`missions_after_change`, `missions_with_session`,
-`sessions`, `sufficient`). The floor is `missions_with_session`, not `missions_after_change`: a
-mission that stopped the line without spending a session left you nothing to read. It also counts
-what it excluded, in **four** buckets — dirty-kit rows, unrecognized rows, the meta rows your own
-sessions write, and `other_repo`, the rows born in another repo (the ledger file is global, this
-reading is not). Cite `other_repo` like the rest: it is the bucket that can empty a series on its
-own, and a series that shrank with nothing naming the reason is the defect the counter exists for.
+`sessions`, `sufficient`, `degenerate_axis`). The floor is `missions_with_session`, not
+`missions_after_change`: a mission that stopped the line without spending a session left you
+nothing to read. A mission is identified by `(repo, mission)` and never by the slug alone — slugs
+are dated and repeat across projects, so under `--all-repos` the repo is what keeps two projects
+apart; each `detail` entry names its own. `degenerate_axis: true` means the **last three** kit
+versions in the slice each bought exactly one **mission** — the same unit the floor counts, never
+sessions, because two sessions of the SAME mission on one sha (an in-loop retry) leave the floor
+just as unsatisfiable — **and** no version in the whole history ever
+reached the floor — the shape of the repo that BUILDS the kit,
+where each session commits and the next lands
+on a fresh sha. That second clause is deliberate: a repo that once reached the floor and is merely
+quiet right now has a working axis, and the field must not call it broken.
+Then `sufficient: false` is structural, not a matter of waiting: say so in the
+verdict and cite ADR 0003, instead of writing "a few more missions and we will know". It also counts
+what it excluded, in **five** buckets — dirty-kit rows, unrecognized rows, the meta rows your own
+sessions write, `other_repo`, the rows born in another repo (the ledger file is global, this
+reading is not), and `no_repo`, the rows that name no project at all and so belong to none. Cite
+those last two like the rest: they are the buckets that can empty a series on its own, and a series
+that shrank with nothing naming the reason is the defect the counters exist for.
 
 Every number in your verdict comes from this output. Cite them as they are.
 

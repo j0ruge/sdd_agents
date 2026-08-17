@@ -762,13 +762,25 @@ stay in English: they are contract, not prose.
   # mission-phase prompt below byte for byte untouched (the RUN_ignores_output_lang mutation
   # watches part of that; the rest is contract with every already-installed repo).
   if [ "$step" = "KAIZEN" ]; then
+    # ADR 0001 splits the judge in two halves that must read ONE series: the runner derives the
+    # numbers, the agent gives the verdict citing them. `gate_KAIZEN` reads its half by calling
+    # kaizen_series IN PROCESS, so every ledger option the invocation carries reaches it — the
+    # prompt below hands the agent a WRITTEN command line, so an option reaches that half only if
+    # it is written here. `--all-repos` reached the gate and not the prompt, and the cost is not a
+    # wrong number: the prompt orders `kit_sha_judged:` to be the series' latest, the gate hunts
+    # for its OWN latest, no verdict satisfies both, the runner retries once and the phase ends in
+    # `BLOCKED in KAIZEN — no-progress`. Two opus sessions for a blocked row. The human who typed
+    # the flag asked for the cross-project reading; honouring it on BOTH halves restores the
+    # invariant without taking away the capability he asked for. Found by sdd-qa (BUG-1).
+    local ledger_flags=""
+    [ "$LEDGER_ALL_REPOS" = "1" ] && ledger_flags=" --all-repos"
     cat <<EOF
 You are in phase KAIZEN of the kit \`$PROJECT_NAME\` — the meta-loop that judges the kit itself —
 as the agent sdd-kaizen.
 
 All of your state comes from disk. There was NO earlier conversation — nothing was "agreed"
 before. Before anything else:
-  1. run: "$SDD_HOME/bin/sdd" kaizen --series
+  1. run: "$SDD_HOME/bin/sdd" kaizen --series$ledger_flags
      That JSON is the deterministic series — your SOURCE OF TRUTH. Cite its numbers; NEVER
      recalculate them from the ledger (recalculating is a contract violation).
   2. read $TODO_FILE, CONTEXT.md and KAIZEN_LOG.md at the repo root
@@ -857,14 +869,69 @@ AUTONOMY_SHA_WARNED=0
 
 autonomy_log_path() { printf '%s/autonomy-log.jsonl' "${SDD_STATE_DIR:-$HOME/.sdd}"; }
 
-# The repo whose rows a reader is allowed to see. `sdd autonomy` and `sdd kaizen --series` skip
-# load_config on purpose (they answer a question about the LEDGER, not about a mission, and need
-# no target configuration), so REPO_ROOT is still empty when they run and has to be resolved here.
-# Deliberately NOT resolve_repo_root: that one dies, and dying is a worse answer than "nothing in
-# this file is yours" for a command whose whole job is to report what the ledger holds.
+# The repo a ledger row BELONGS to — one definition for the writer that stamps `repo` and for the
+# three readers that filter on it. Not two spellings of the same question: writer and reader
+# disagreeing about identity is a filter that silently excludes rows born in the repo you are
+# standing in, which is exactly the defect below.
+#
+# `sdd autonomy` and `sdd kaizen --series` skip load_config on purpose (they answer a question
+# about the LEDGER, not about a mission, and need no target configuration), so REPO_ROOT is still
+# empty when they read and the identity has to be resolved from the cwd here. Deliberately NOT
+# resolve_repo_root: that one dies, and dying is a worse answer than "nothing in this file is
+# yours" for a command whose whole job is to report what the ledger holds.
+#
+# It is the shared `.git` and NOT `git rev-parse --show-toplevel`, because the toplevel is per
+# WORKTREE: a mission run from `git worktree add` stamped a path the main checkout had never seen,
+# and every reader outside that worktree counted the rows as `other_repo` — the series went empty
+# in the isolation workflow this kit itself recommends. `--git-common-dir` is the same path from
+# every worktree of one repo; it comes back RELATIVE at the root of a checkout (`.git`) and inside
+# a subdirectory (`../.git`), absolute only from a linked worktree, so it is resolved from $start
+# and normalized with `pwd -P` — the three shapes have to end at one string or the comparison the
+# readers do (verbatim, no normalization on either side) is back to answering per worktree.
+#
+# ⚠️ Rows written BEFORE this carry the old per-worktree path and keep landing in `other_repo`.
+# That is history, not a bug: the ledger is append-only and is never migrated.
 ledger_repo_root() {
-  if [ -n "$REPO_ROOT" ]; then printf '%s' "$REPO_ROOT"; return 0; fi
-  git rev-parse --show-toplevel 2>/dev/null || true
+  local start="${REPO_ROOT:-$PWD}" common gitdir
+  common="$( git -C "$start" rev-parse --git-common-dir 2>/dev/null )" || return 0
+  [ -n "$common" ] || return 0
+  # The identity IS the common dir, never its parent. `cd "$common/.."` was the first spelling and
+  # it collapsed two repositories into one string in two shapes, both silently — `other_repo: 0`,
+  # nothing excluded, nothing said, which is the very contamination the filter above exists to
+  # report: in a SUBMODULE the common dir is `/parent/.git/modules/<name>`, so the parent is
+  # `/parent/.git/modules` for EVERY submodule of that parent; in a BARE repo it is `.`, so the
+  # parent is the directory that merely contains the repo, shared by every bare repo beside it.
+  # `--show-toplevel` got both of those right and only worktrees wrong. The common dir gets all
+  # three right, because it is the identity git itself keeps per repository.
+  # ⚠️ `CDPATH=` on the cd, and it is load-bearing. `$common` is RELATIVE at a repo root (`.git`),
+  # and bash searches CDPATH for any operand not starting with `/` — printing the resolved directory
+  # to STDOUT when it finds one there, straight into this command substitution. With
+  # `CDPATH=$HOME` where $HOME is itself a checkout (dotfiles), every repo on the machine collapsed
+  # into one identity, and writer and readers agreed on it: `other_repo: 0`, nothing excluded,
+  # nothing said — the exact silent contamination this function exists to prevent, reachable from an
+  # env var. `CDPATH=.` alone appended a second LINE to the answer, putting a newline into the
+  # ledger `repo` field. Emptying it for the duration of the cd is the whole fix.
+  gitdir="$( CDPATH='' cd "$start" && CDPATH='' cd "$common" && pwd -P 2>/dev/null )" || return 0
+  [ -n "$gitdir" ] || return 0
+  # Cosmetic, and ONLY cosmetic: `/repo/.git` prints back as `/repo`, so the ledger and the header
+  # keep naming the root a human recognizes instead of a path inside `.git`. Injective, therefore
+  # safe to collapse: exactly one repository can own `/repo/.git`. Withheld from a bare repo, whose
+  # common dir is the repository itself and whose parent belongs to nobody.
+  # ⚠️ The bare test is `core.bare` and NOT `rev-parse --is-bare-repository`, and the difference is
+  # an identity split. `--is-bare-repository` answers about the ENTRY POINT, not the repository: for
+  # a bare repo living in a directory named `.git` (`/x/.git`, the shape this very guard exists for)
+  # it says `true` read from the repo and `false` read from a worktree of that same repo, so the
+  # strip fired on one reading and not the other — measured, `/x/.git` and `/x`, one repository with
+  # two identities, which is the defect the whole function exists to prevent. `core.bare` lives in
+  # the config of the COMMON dir, so every worktree of a repository answers it the same way. Unset
+  # (a repo some tool created without the key) reads empty and means not bare, the same direction
+  # `!= "true"` already took.
+  if [ "$( git -C "$start" config --bool --get core.bare 2>/dev/null )" != "true" ] \
+     && [ "${gitdir##*/}" = ".git" ] && [ -n "${gitdir%/.git}" ]; then
+    printf '%s' "${gitdir%/.git}"
+  else
+    printf '%s' "$gitdir"
+  fi
 }
 
 # ONE definition of "this row was born in the repo I am standing in", spliced into every reader's
@@ -879,13 +946,49 @@ ledger_repo_root() {
 # three rows into the real ledger and the judge read `66% waste · 2 mission(s)` where the truth was
 # `0% · 1` — the judge's own source of truth, contaminable by any test.
 #
-# A row that does not SAY where it came from — not an object at all, or an object with no `repo`
-# key — is never excluded by this filter. It cannot be attributed to any repo, and a filter that
-# swallowed it would be hiding corruption instead of reporting it: the readers already classify
-# those rows out loud (one counts them `unrecognized`, the other dies naming the file), and that
-# has to keep happening in whichever repo the human is standing in.
+# A row that does not SAY where it came from cannot be attributed to any repo, and a filter that
+# swallowed it in silence would be hiding corruption instead of reporting it. So it leaves the
+# slice through a bucket of its OWN — `no_repo`, counted by every reader — and never through
+# `other_repo`, which is a different accusation ("born elsewhere", not "born nowhere").
+#
+# ⚠️ This used to answer `true` for such a row: local in EVERY repo. The claim written here was
+# that the readers classified them out loud anyway (one counting them `unrecognized`, the other
+# dying naming the file), and for a row that is not an object at all that is still true — which is
+# why THAT case is left alone below. For a well-formed session row it was false: `is_unrecognized`
+# asks `.event`, never `.repo`. Three sessions naming no project walked into the slice and cleared
+# the judge's floor of 3, measured in fixture — a guard moved by rows nobody can attribute, with
+# nothing in the output saying so.
+#
+# `--all-repos` flips this ONE definition instead of adding a fourth spelling of the question to
+# each reader: the flag reaching the predicate is the flag reaching every reader that an invocation
+# carrying it can reach. ⚠️ NOT the post-pipeline reminder, whatever this said before — it is
+# called from cmd_run alone, and `sdd run` has no --all-repos, so it always reads per repo. The
+# twin of this comment in cmd_kaizen said the same false thing. It is a flag and not the default because
+# the default is what got contaminated (d99a7fc) — but the ledger is one file per machine precisely
+# so maturity stays comparable BETWEEN projects, and after the filter landed no reader could ask
+# that question at all. Opt-in restores the cross-repo answer without restoring the contamination.
+LEDGER_ALL_REPOS=0
 ledger_row_is_local() {
-  printf '%s' 'def ledger_row_is_local: if (type == "object" and has("repo")) then .repo == $repo else true end;'
+  # Emitted alongside, never folded in: `no repo at all` and `some other repo` are two different
+  # answers, each reader counts them into a bucket of its own, and `--all-repos` opens exactly one
+  # of the two. A row that names no project is unattributable in every scope, so the flag does not
+  # reach it — widening the question between projects is not the same as admitting rows that
+  # belong to none.
+  # `(.repo // "") == ""` and not `has("repo") | not`: the three shapes of "this row names no
+  # project" are the key absent, the key present and null, and the key present and empty, and the
+  # LAST is the one the writer produces — `autonomy_session_row` always passes `--arg repo "$repo"`
+  # into `{… repo: $repo …}`, so the key is never missing and comes back `""` whenever
+  # `ledger_repo_root` resolved nothing (a session run outside any git repo). Key-absent is the
+  # shape the writer can never emit; it and the null arrive by hand edit or partial write, which is
+  # precisely the corruption this bucket exists to report. All three are one answer here, which is
+  # why the spelling covers them rather than testing for one. Under the old spelling
+  # they fell through to `.repo == $repo` and were accused of being `other_repo` ("born elsewhere"),
+  # a wrong reason printed with the confidence of a right one; and standing outside any git repo,
+  # where $repo is itself empty, a `repo: ""` row compared EQUAL and was counted local in a repo
+  # that does not exist.
+  printf '%s' 'def ledger_row_no_repo: type == "object" and ((.repo // "") == "");'
+  if [ "$LEDGER_ALL_REPOS" = "1" ]; then printf '%s' 'def ledger_row_is_local: ledger_row_no_repo | not;'; return 0; fi
+  printf '%s' 'def ledger_row_is_local: if ledger_row_no_repo then false elif (type == "object" and has("repo")) then .repo == $repo else true end;'
 }
 
 # Publishes AUTONOMY_KIT_STAMP as "<sha>|<true|false>", or "|" when SDD_HOME is not a git checkout.
@@ -944,6 +1047,14 @@ autonomy_append() {   # autonomy_append <one json object, already built>
   }
 }
 
+# ONE definition of "the ledger parses", for the same reason `is_escalation` and `mission_key` are
+# one definition each. It was written twice, and the two copies did not disagree about the ANSWER —
+# they disagreed about who checks: `cmd_autonomy` ran it and died loudly, `kaizen_series` never ran
+# it at all, so the judge's own gate read a corrupt ledger as an empty series and reported "no
+# verdict for kit  yet". Same file, same rows: one reader refusing to guess and the other guessing
+# "pending". Every reader of the ledger calls this before believing a number.
+ledger_parses() { jq -se . "$1" >/dev/null 2>&1; }
+
 # Never a malformed row: broken JSONL is the one way the judge reads garbage believing it is data.
 # jq is a hard dependency (preflight fails without it), so absence here is an anomaly, not a mode.
 autonomy_have_jq() {
@@ -980,12 +1091,18 @@ autonomy_escalation_row() {   # autonomy_escalation_row <event> <kind> <phase> <
   # The damage when it DOES cut mid-codepoint is also smaller than the old text claimed: jq 1.7
   # here substitutes U+FFFD and exits 0 (measured) instead of rejecting the --arg, so the row
   # survives with a mangled last character rather than vanishing through the emptiness guard.
+  # Substituted and NOT called, unlike autonomy_kit_stamp above: ledger_repo_root only prints, so
+  # there is no global for the subshell to eat. And it, never $REPO_ROOT, is what the row carries:
+  # $REPO_ROOT is the worktree the session runs IN, the row records the repo it BELONGS to, and
+  # the readers filter on the second. No `#` inside the `\`-continued block below — a comment
+  # there breaks the command in silence and `bash -n` says nothing.
+  local repo; repo="$(ledger_repo_root)"
   autonomy_append "$( jq -cn \
     --arg ts "$(date -Iseconds)" --arg event "$1" --arg kind "$2" --arg phase "$3" \
     --arg why "${4:0:200}" \
     --arg run_id "$AUTONOMY_RUN_ID" --arg invocation "$AUTONOMY_INVOCATION" \
     --arg sha "${stamp%%|*}" --arg dirty "${stamp#*|}" \
-    --arg project "$PROJECT_NAME" --arg repo "$REPO_ROOT" --arg mission "$MISSION" \
+    --arg project "$PROJECT_NAME" --arg repo "$repo" --arg mission "$MISSION" \
     '{v: 1, ts: $ts, event: $event, kind: $kind,
       run_id: $run_id, invocation: $invocation,
       kit_sha: (if $sha == "" then null else $sha end),
@@ -1007,13 +1124,16 @@ autonomy_session_row() {  # <phase> <attempt> <auto_retry> <moved> <gate> <gate_
   autonomy_kit_stamp; local stamp="$AUTONOMY_KIT_STAMP"
   # "${6:0:200}" caps gate_why under the same locale caveat as autonomy_escalation_row's
   # "${4:0:200}" above — characters when the locale is multibyte, bytes under C/POSIX.
+  # Same identity as the escalation row above, for the same reason: one repo per row, resolved by
+  # the one definition the readers also go through.
+  local repo; repo="$(ledger_repo_root)"
   autonomy_append "$( jq -cn \
     --arg ts "$(date -Iseconds)" --arg phase "$1" --arg attempt "$2" \
     --arg auto_retry "$3" --arg moved "$4" --arg gate "$5" \
     --arg why "${6:0:200}" \
     --arg run_id "$AUTONOMY_RUN_ID" --arg invocation "$AUTONOMY_INVOCATION" \
     --arg sha "${stamp%%|*}" --arg dirty "${stamp#*|}" \
-    --arg project "$PROJECT_NAME" --arg repo "$REPO_ROOT" --arg mission "$MISSION" \
+    --arg project "$PROJECT_NAME" --arg repo "$repo" --arg mission "$MISSION" \
     --arg step "$LAST_PHASE_STEP" --arg agent "$LAST_PHASE_AGENT" \
     --arg model "$LAST_PHASE_MODEL" --arg session "$LAST_PHASE_SID" \
     --arg rc "$LAST_PHASE_RC" --arg dur "$LAST_PHASE_DUR" --arg cost "$LAST_PHASE_COST" \
@@ -2221,6 +2341,13 @@ cmd_retry() {
 # This command is the human's window; the JUDGE reads the JSONL with jq. Coupling I13.3 to this
 # text would freeze a table nobody promised to keep.
 cmd_autonomy() {
+  while [ $# -gt 0 ]; do
+    case "$1" in
+      --all-repos) LEDGER_ALL_REPOS=1 ;;
+      *)           die "unknown autonomy option: $1" ;;
+    esac
+    shift
+  done
   local file; file="$(autonomy_log_path)"
   command -v jq >/dev/null 2>&1 || die "jq not found — it is required to read the ledger"
 
@@ -2233,7 +2360,7 @@ cmd_autonomy() {
   fi
   # A malformed row dies loudly. Skipping it quietly is how a judge ends up reading a subset and
   # calling it the whole history.
-  jq -se . "$file" >/dev/null 2>&1 || die "malformed row in $file — the ledger is not readable"
+  ledger_parses "$file" || die "malformed row in $file — the ledger is not readable"
 
   # A REAL row count, not a line count. `grep -c .` counted LINES: a single pretty-printed JSON
   # row made the header say "9 row(s)" while the table correctly said "1 session(s)" — two
@@ -2247,26 +2374,48 @@ cmd_autonomy() {
   # would turn that sum into an accusation against the buckets instead of a measurement.
   local repo; repo="$(ledger_repo_root)"
   local def; def="$(ledger_row_is_local)"
-  local total lines
+  local total lines norepo
   lines="$(jq -s 'length' "$file")"
+  norepo="$(jq -s --arg repo "$repo" "$def"' map(select(ledger_row_no_repo)) | length' "$file")"
   total="$(jq -s --arg repo "$repo" "$def"' map(select(ledger_row_is_local)) | length' "$file")"
   if [ "$total" -eq 0 ]; then
-    # Three different silences, named apart: an empty file, a cwd that belongs to no repo, and a
-    # ledger full of somebody else rows. Collapsing them into one "no data" would send the reader
-    # hunting for a runner that never wrote, when the rows are right there under another path.
+    # FOUR different silences, named apart: an empty file, a ledger of rows that name no repo at
+    # all, a cwd that belongs to no repo, and a ledger full of somebody else rows. Collapsing them
+    # into one "no data" would send the reader hunting for a runner that never wrote, when the rows
+    # are right there under another path. The unattributable case is checked BEFORE the two that
+    # name a path, for the same reason: both of those would blame a repo the rows never claimed.
     if [ "$lines" -eq 0 ]; then
       warn "no data: the ledger at $file does not exist yet (or has no rows)"
       dim "  It is written by 'sdd run' and 'sdd retry'. Nothing has been recorded on this machine."
+    elif [ "$norepo" -eq "$lines" ]; then
+      warn "no data: none of the $lines row(s) in $file say which repo they came from"
+      dim "  A row with no 'repo' field belongs to no project — counted apart, never mixed into one."
     elif [ -z "$repo" ]; then
       warn "no data: the ledger is read per repo and this is not a git repository (cwd: $PWD)"
       dim "  $file holds $lines row(s), all of them belonging to some repo. Run this inside one."
     else
       warn "no data for $repo: none of the $lines row(s) in $file were born in this repo"
-      dim "  The ledger is global, the reader is not. Run 'sdd autonomy' in the repo you want."
+      # FIVE states, not four. A MIXED ledger — some rows born elsewhere, some naming no repo at
+      # all — used to get this one headline for every row, and the remedy it prints reaches only
+      # the first kind: `--all-repos` deliberately does not admit rows that belong to no project,
+      # so "run it over there / open the scope" is advice nobody can carry out for them. The split
+      # is printed instead of implied, for the same reason every exclusion above is counted.
+      if [ "$norepo" -gt 0 ]; then
+        dim "  $((lines - norepo)) row(s) came from other repos; $norepo name no repo at all."
+        dim "  Run 'sdd autonomy' in the repo you want, or --all-repos for every project — but"
+        dim "  neither reaches the $norepo unattributable row(s): no scope can claim them."
+      else
+        dim "  The ledger is global, the reader is not. Run 'sdd autonomy' in the repo you want."
+      fi
     fi
     return 1
   fi
-  step "sdd autonomy — $file · $total row(s) · $repo"
+  # The header names the SCOPE it just read, not the cwd: under --all-repos the rows below come
+  # from every project on this machine, and a header still pointing at one repo path would read as
+  # a claim about that repo — the same misattribution the filter was added to remove.
+  local scope="$repo"
+  [ "$LEDGER_ALL_REPOS" = "1" ] && scope="all repos (--all-repos)"
+  step "sdd autonomy — $file · $total row(s) · $scope"
 
   # Every row lands in exactly ONE of four buckets, and the buckets are exhaustive: comparable
   # session, non-comparable row, escalation on the axis, or unrecognized (event missing, or a value
@@ -2309,10 +2458,22 @@ cmd_autonomy() {
     def is_session: .event == "session";
     def is_escalation: .event == "blocked" or .event == "degraded";
     def is_unrecognized: (is_session or is_escalation) | not;
+    # ONE definition of "which mission is this row about" for this program too, exactly as
+    # kaizen_series holds one: the repo is part of the identity, because two projects run the same
+    # dated slug on the same day and --all-repos puts their rows in one reading. Counting by slug
+    # alone made `2 mission(s)` out of three, in the very header a human reads to decide whether
+    # the kit got better. A no-op in per-repo scope. The two readers keep the same spelling on
+    # purpose; check-autonomy.sh compares them to each other so neither can be "improved" alone.
+    # An ARRAY, for the same two reasons the twin states: a separator inside a value collides, and
+    # `+` on a non-string value makes jq die and takes this whole command down with it.
+    def mission_key: [(.repo // ""), (.mission // "")];
     # The repo filter runs before every bucket, and its own count is kept for the same reason the
     # other three exclusions are printed: a row that leaves has to say so. Bound BEFORE the pipe
     # so the buckets below still see a plain array of this repo rows and nothing changes shape.
-    (map(select(ledger_row_is_local | not)) | length) as $foreign
+    # TWO counts and not one: "born in another repo" and "says no repo at all" are different
+    # accusations, and a single number for both would name the wrong one in every message.
+    (map(select(ledger_row_no_repo)) | length) as $norepo
+    | (map(select((ledger_row_is_local | not) and (ledger_row_no_repo | not))) | length) as $foreign
     | map(select(ledger_row_is_local))
     | (map(select((is_session and (comparable | not))
                 or (is_escalation and (on_axis | not)))) | length) as $skipped
@@ -2325,7 +2486,7 @@ cmd_autonomy() {
             (.[0].kit_sha) as $sha
             | (length) as $n
             | (map(select(.moved == false)) | length) as $stalled
-            | (map(.mission) | unique | length) as $missions
+            | (map(mission_key) | unique | length) as $missions
             | (map(.cost_usd // 0) | add) as $cost
             | "  \($sha)  \($n) session(s) · \($stalled) stalled · \(($stalled * 100 / $n) | floor)% waste · \($missions) mission(s) · US$ \($cost | . * 100 | round / 100)"
           ) | join("\n"))
@@ -2336,6 +2497,7 @@ cmd_autonomy() {
     , (if $skipped > 0 then "\n  (\($skipped) non-comparable row(s) excluded: dirty kit, no kit_sha, or no moved field)" else "" end)
     , (if $stray > 0 then "\n  (\($stray) unrecognized row(s) excluded: event missing or not one of session/blocked/degraded)" else "" end)
     , (if $foreign > 0 then "\n  (\($foreign) row(s) excluded: born in another repo — the ledger is global, this reader is not)" else "" end)
+    , (if $norepo > 0 then "\n  (\($norepo) row(s) excluded: no repo field — the row cannot say which project it came from)" else "" end)
   ' "$file" 2>/dev/null)" || jq_rc=$?
   if [ "$jq_rc" -ne 0 ]; then
     die "malformed row in $file — the ledger is not readable"
@@ -2367,19 +2529,33 @@ cmd_autonomy() {
 kaizen_series() {
   local file; file="$(autonomy_log_path)"
   command -v jq >/dev/null 2>&1 || die "jq not found — it is required to read the ledger"
+  # The SAME readability test cmd_autonomy runs, and the reason it is here is that it was not:
+  # `sdd autonomy` died loudly on a corrupt ledger while this function returned an unparsed
+  # non-zero to a caller that dropped it, and `gate_KAIZEN` then read the empty string as "no
+  # verdict yet" — corruption spelled exactly like pending work, which costs an opus session over a
+  # file nobody could read. `warn` and not `die`: this function is read through `$( )`, where `die`
+  # exits the SUBSHELL and the caller sees a bare rc anyway, so the sentence is printed here (once)
+  # and the decision belongs to whoever called.
+  if [ -s "$file" ] && ! ledger_parses "$file"; then
+    warn "malformed row in $file — the ledger is not readable"
+    return 1
+  fi
   # Read PER REPO, from the repo this process is standing in. Standing in none, nothing in the
   # ledger is yours: the series comes back empty, which is the SAFE direction (guard.sufficient
   # false supports only `indeterminado`) and never another repo's numbers read as a verdict about
   # this kit. It is said out loud because an empty series that nobody explained is the kind of
   # zero this file spends the rest of its lines refusing to print.
   local repo; repo="$(ledger_repo_root)"
-  [ -n "$repo" ] \
+  # Silenced under --all-repos, and only there: with the filter open the cwd decides nothing, so
+  # the warning would be announcing an emptiness that is not going to happen. Kept loud otherwise —
+  # an empty series nobody explained is the kind of zero this file spends its lines refusing.
+  [ -n "$repo" ] || [ "$LEDGER_ALL_REPOS" = "1" ] \
     || warn "not inside a git repository — the ledger is read per repo, so this series comes back empty (cwd: $PWD)"
   if [ ! -s "$file" ]; then
     # Second producer of the same shape, and it cannot share the jq above (there is no input to
     # run it on), so the key set is kept in step by hand and check-kaizen.sh compares the two as
     # key sets. A consumer reading `null` where the real series gives a number is the drift.
-    printf '%s\n' '{"v":1,"latest":null,"previous":null,"guard":{"missions_after_change":0,"missions_with_session":0,"sessions":0,"sufficient":false},"excluded":{"non_comparable":0,"unrecognized":0,"meta":0,"other_repo":0}}'
+    printf '%s\n' '{"v":1,"latest":null,"previous":null,"guard":{"missions_after_change":0,"missions_with_session":0,"sessions":0,"sufficient":false,"degenerate_axis":false},"excluded":{"non_comparable":0,"unrecognized":0,"meta":0,"other_repo":0,"no_repo":0}}'
     return 0
   fi
   jq -n --arg repo "$repo" "$(ledger_row_is_local)"'
@@ -2402,6 +2578,95 @@ kaizen_series() {
     # single-quoted shell string, and one would end it mid-comment.)
     def on_axis: .kit_dirty == false and .kit_sha != null;
 
+    # ONE definition of "this axis degenerated", same discipline as the two above, and the reason
+    # the field below exists at all: a guard that says only `sufficient: false` cannot tell "not
+    # enough missions yet" (a target repo, where waiting works) from "the axis cannot work here"
+    # (the repo that BUILDS the kit, where every session commits and the next lands on a fresh sha,
+    # so waiting never works). Input is the on-axis rows. MORE THAN ONE sha is required on purpose:
+    # a first sha with one mission has not degenerated, it has only just started.
+    #
+    # ONE definition of the floor, shared by the guard verdict below and by the window this field
+    # looks through. They cannot drift: the field says "waiting will never satisfy that floor", so
+    # it has to be measured over as many kit versions as the floor asks missions of.
+    def guard_floor: 3;
+    # ONE definition of "the distinct kit versions, in FILE order", used by the latest/previous
+    # pair below and by the window here. group_by sorts by key and answers a different question;
+    # two hand-written copies of this reduce is how the blocked/degraded pair came to disagree.
+    def shas_in_file_order: map(.kit_sha) | reduce .[] as $s ([]; if index($s) then . else . + [$s] end);
+    # ONE definition of "which mission is this row about", and the repo is PART of it. The slug
+    # alone was the first spelling, and it was a no-op bug until this mission opened --all-repos:
+    # slugs are dated (`YYYYMMDD-<name>`) and cmd_kaizen mints `$(date +%Y%m%d)-kaizen`, identical
+    # in every repo on the same day. Measured with three repos, one session each on one kit_sha and
+    # two slugs colliding: missions_with_session fell 3 -> 2, guard.sufficient flipped true ->
+    # false, and one project refez absorbed the other project clean ok into a single group — a
+    # verdict about the kit decided by a slug coincidence. Since F1 the flag reaches the judge
+    # prompt, so this reached the verdict. A NO-OP in per-repo scope, where every row shares one
+    # repo, which is why the fix costs the default reading nothing.
+    #
+    # An ARRAY and not a joined string, which is the shape the old `.mission + "|" + .phase` used.
+    # Two reasons, both measured: a separator inside a value collides — repo `a|b` with mission `c`
+    # and repo `a` with mission `b|c` joined to the same key and read as ONE mission — and `+` on a
+    # value that is not a string makes jq DIE, so a hand-edited row with a numeric `repo` took
+    # `sdd autonomy` down with `malformed row` and returned the judge nothing. group_by and unique
+    # order any JSON, so the array costs nothing and admits no delimiter to inject.
+    #
+    # Defined HERE, above degenerate_axis, and not beside group_summary where it used to sit: jq
+    # resolves a `def` only after it appears, and the second clause of degenerate_axis counts
+    # missions. Moved rather than copied — a second spelling of this question is the exact defect
+    # the paragraph above is about.
+    def mission_key: [(.repo // ""), (.mission // "")];
+    # ...and "how many missions bought a session on this version", which is the number the floor
+    # reads. Shared with the guard verdict through guard_floor, so the two cannot drift.
+    def missions_on($sha): map(select(.kit_sha == $sha and .event == "session"))
+                           | map(mission_key) | unique | length;
+    def degenerate_axis:
+      . as $rows
+      | ($rows | shas_in_file_order) as $order
+      # The LAST guard_floor versions, and NOT the whole history. Over all of $ok this was a
+      # one-way switch: the ledger is append-only, so one ancient sha that happened to buy two
+      # sessions turned the explanation off FOREVER while every recent version sat at exactly one.
+      # Measured: 20 shas x 1 session => true; add a second session to the OLDEST sha => false,
+      # with nothing about today having changed. An explanation that expires on a fact from last
+      # year is exactly the number that moves with nothing explaining why.
+      | ($order | length) as $n
+      | ($order[(if $n > guard_floor then $n - guard_floor else 0 end):]) as $window
+      # MISSIONS per version, not sessions, because `missions_with_session` is the unit the floor
+      # reads and this field exists to explain that floor. Counting sessions made the two disagree
+      # on the one row shape that separates them: a version whose TWO sessions belong to the SAME
+      # mission (an in-loop auto retry, or any second `sdd run` on a phase that neither commits nor
+      # dirties the kit tree) still contributes exactly one mission, so the floor stays as
+      # unsatisfiable as before — and yet the session count of 2 turned this field to `false` and
+      # `kaizen_axis_note` went SILENT. Measured: three versions, the newest with two sessions of
+      # one mission => `missions_with_session: 1`, `sufficient: false`, `degenerate_axis: false` and
+      # the sentence printed zero times. The human then reads a bare `sufficient: false` and waits
+      # for missions that cannot help, which is the exact misreading ADR 0003 built this field to
+      # end. Zero is still not one: a version whose rows are all escalations observed NOTHING, a
+      # different silence with a different remedy, and `== 1` keeps it out.
+      # ...AND the floor was never once reached in this whole ledger. The window alone was the
+      # second formulation and it traded one wrong answer for another: it says "the axis cannot work
+      # HERE", and a quiet stretch is not a broken axis. Measured on the window alone — two versions
+      # carrying 3 missions apiece, then three versions with one mission each => `true`, in a repo
+      # whose OWN history proves 3-missions-per-version is reachable twice over. The field then errs
+      # at exactly the distinction it was created to make, and it feeds the judge prompt.
+      #
+      # Never-reached is a PERMANENT fact about a repository, so latching the explanation off on it
+      # is correct — which is what separates this clause from the whole-history rule it restores a
+      # piece of. That one latched on "some sha once bought two sessions", a coincidence that says
+      # nothing about whether the floor is attainable; this one latches on the floor itself having
+      # been met. In the repo that BUILDS the kit no version ever reaches it (every session commits
+      # and the next lands on a fresh sha), so the explanation stays on, which is the point.
+      # Grouped ONCE rather than re-scanning every row per version: written as
+      # `all($order[]; ($rows | missions_on(.)) < guard_floor)` this clause is O(versions × rows),
+      # and the repo that BUILDS the kit is precisely where versions grow without bound — one per
+      # session, forever. Measured on 3000 rows across 750 versions: 1.40 s that way, 0.20 s this
+      # way. `group_by` sorts, and here that is safe because only the MAXIMUM is wanted and a
+      # maximum has no order — the file-order property lives in $order above, untouched.
+      | ($rows | map(select(.event == "session")) | group_by(.kit_sha)
+               | map(map(mission_key) | unique | length) | max // 0) as $best_reach
+      | ($window | length) > 1
+        and all($window[]; . as $sha | ($rows | missions_on($sha)) == 1)
+        and $best_reach < guard_floor;
+
     def phase_label:
       if (map(select(is_escalation)) | length) > 0
          or (map(select(.event == "session" and .invocation == "retry")) | length) > 0
@@ -2415,19 +2680,21 @@ kaizen_series() {
     def group_summary:
       . as $rows
       | ($rows | map(select(.event == "session"))) as $sess
-      | ($rows | group_by(.mission + "|" + .phase)
-               | map({mission: .[0].mission, phase: .[0].phase, label: phase_label,
+      | ($rows | group_by(mission_key + [(.phase // "")])
+               | map({repo: .[0].repo, mission: .[0].mission, phase: .[0].phase, label: phase_label,
                       sessions: (map(select(.event == "session")) | length),
                       cost_usd: (map(.cost_usd // 0) | add)})) as $detail
       | {kit_sha: $rows[0].kit_sha,
-         missions: ($rows | map(.mission) | unique | length),
+         missions: ($rows | map(mission_key) | unique | length),
          # The floor of the guard, and NOT the same number as `missions` above: that one counts
          # every mission on the axis, escalations included, which is right for the display and
          # wrong for the floor. A mission that stopped the line without spending a session left
          # the judge nothing to read about this kit version, and three of them used to clear a
          # floor meant to mean "enough observation". Derived from $sess, the one place this
-         # program already calls a row a session.
-         missions_with_session: ($sess | map(.mission) | unique | length),
+         # program already calls a row a session. Keyed by mission_key like every other count here:
+         # this is the number the floor reads, so a slug collision between two projects landing
+         # here is a guard moved by a coincidence.
+         missions_with_session: ($sess | map(mission_key) | unique | length),
          sessions: ($sess | length),
          moved_rate: (if ($sess | length) == 0 then null
                       else (($sess | map(select(.moved == true)) | length) / ($sess | length) * 100 | round / 100) end),
@@ -2443,8 +2710,12 @@ kaizen_series() {
     # another repo is not this repo unrecognized row, it is not this repo row at all — and it is
     # counted rather than dropped, because a number that moved with nothing explaining why is the
     # defect this filter exists to remove, not one to introduce one layer down.
+    | ($file_rows | map(select(ledger_row_no_repo)) | length) as $no_repo
     | ($file_rows | map(select(ledger_row_is_local))) as $raw
-    | (($file_rows | length) - ($raw | length)) as $other_repo
+    # Subtracted out, never lumped in: a row that names no project did not come from another repo,
+    # and a bucket that said it did would be a wrong reason printed with the confidence of a right
+    # one. The two counts partition what the filter removed, so the arithmetic still closes.
+    | (($file_rows | length) - ($raw | length) - $no_repo) as $other_repo
     | ($raw | map(select(type == "object" and .v == 1
                          and (.event == "session" or is_escalation)))) as $all
     | ($all | map(select(.phase == "KAIZEN"))) as $meta
@@ -2452,7 +2723,7 @@ kaizen_series() {
     | (($raw | length) - ($all | length)) as $unrec
     | ($rows | map(select(on_axis | not))) as $noncomp
     | ($rows | map(select(on_axis))) as $ok
-    | ($ok | map(.kit_sha) | reduce .[] as $s ([]; if index($s) then . else . + [$s] end)) as $shas
+    | ($ok | shas_in_file_order) as $shas
     | (if ($shas | length) >= 1 then ($ok | map(select(.kit_sha == $shas[-1])) | group_summary) else null end) as $latest
     | (if ($shas | length) >= 2 then ($ok | map(select(.kit_sha == $shas[-2])) | group_summary) else null end) as $previous
     # ONE binding for the number the floor reads, so the exposed field and the verdict of the
@@ -2460,15 +2731,25 @@ kaizen_series() {
     # PRINTING a count it did not gate on, which is the same class of divergence I7 closed one
     # field over. Everything the guard says about itself comes from here.
     | (($latest.missions_with_session) // 0) as $observed
+    # Derived from the WHOLE comparable slice, never from $latest alone: a degenerate axis is a
+    # property of the SET of recent kit versions (each carrying exactly one MISSION — the unit
+    # $observed above reads, never sessions), which no single group can state about itself. It adds
+    # no fact to the ledger and changes no verdict — it explains one.
+    | ($ok | degenerate_axis) as $degenerate
     | {v: 1,
        latest: $latest,
        previous: $previous,
+       # The floor below does not loosen, and ADR 0003 is why: verdict evidence comes from real
+       # target repos, where many missions share one kit_sha. In the repo that BUILDS the kit every
+       # session lands on a fresh sha, so the axis degenerates and the floor is unsatisfiable by
+       # construction — that is the axis being read in the wrong place, never a floor set too high.
        guard: {missions_after_change: ($latest.missions // 0),
                missions_with_session: $observed,
                sessions: ($latest.sessions // 0),
-               sufficient: ($observed >= 3)},   # guard floor: 3 missions WITH a session (D4); I13.4 revisits
+               sufficient: ($observed >= guard_floor),  # 3 missions WITH a session (D4); I13.4 revisits
+               degenerate_axis: $degenerate},
        excluded: {non_comparable: ($noncomp | length), unrecognized: $unrec,
-                  meta: ($meta | length), other_repo: $other_repo}}
+                  meta: ($meta | length), other_repo: $other_repo, no_repo: $no_repo}}
   ' < "$file"
 }
 
@@ -2529,11 +2810,25 @@ GATE_KAIZEN_VERDICT=""
 GATE_KAIZEN_VERDICT_FILE=""
 GATE_KAIZEN_PLAN_DIR=""
 GATE_KAIZEN_APPROVED=""
+GATE_KAIZEN_UNREADABLE=""
 gate_KAIZEN() {
   GATE_KAIZEN_VERDICT=""; GATE_KAIZEN_VERDICT_FILE=""; GATE_KAIZEN_PLAN_DIR=""
-  GATE_KAIZEN_APPROVED=""
-  local series expected f found=""
-  series="$(kaizen_series)"
+  GATE_KAIZEN_APPROVED=""; GATE_KAIZEN_UNREADABLE=""
+  local series expected f found="" series_rc=0
+  # The rc is READ, and that is the whole point. Written `series="$(kaizen_series)"` bare, this line
+  # looked safe because errexit would catch it — and errexit is OFF inside here, every time: every
+  # caller invokes this function as `gate_KAIZEN || gate_rc=$?`, which disables it for the entire
+  # body. So a failed read left `series` empty, `expected` empty, and the gate answered "no verdict
+  # for kit  yet" (that double space was the only tell) — a corrupt ledger routed into the branch
+  # meaning "the judge has not run", which spends an opus session on a file that cannot be read.
+  # A series that could not be read supports NO statement about the kit, so it gets its own outcome
+  # rather than the most optimistic neighbouring one.
+  series="$(kaizen_series)" || series_rc=$?
+  if [ "$series_rc" -ne 0 ] || [ -z "$series" ]; then
+    GATE_KAIZEN_UNREADABLE=1
+    GATE_WHY="the ledger could not be read (the series reader exited $series_rc) — this is NOT 'not judged yet': run 'sdd autonomy' to see which row breaks it. No session can judge a series nobody can read."
+    return 1
+  fi
   expected="$(jq -r '.latest.kit_sha // "none"' <<< "$series")"
   for f in "$REPO_ROOT/$HANDOFF_DIR"/*/05-verdict.md; do
     [ -f "$f" ] || continue
@@ -2608,12 +2903,49 @@ kaizen_approved_outcome() {
   return 0
 }
 
+# The structural `indeterminado`, said out loud instead of left for the human to infer. The number
+# it reads is derived by kaizen_series (ADR 0001: the runner never opines, it reports), and the
+# sentence exists because `guard.sufficient: false` means two different things in two different
+# repos — "a few more missions and we are there" in a target, "no number of missions here will ever
+# do it" in the repo that builds the kit. Read as the first, the human waits forever.
+#
+# ADR 0003 is NAMED, not paraphrased: the decision is why the floor does not loosen in answer to
+# this, and a sentence carrying its own evidence is the difference between a report and an opinion.
+kaizen_axis_note() {
+  autonomy_have_jq || return 0
+  local series
+  # stderr dropped ON PURPOSE, and only here: this is a second read of the same series the gate is
+  # about to take, so an unreadable ledger printed jq raw diagnostic TWICE in a row — the same
+  # complaint from two voices reads as two problems. Reporting corruption is the gate job, one
+  # line down, and it still does it. This function only ever explains a degenerate axis, and it
+  # has nothing to explain about a file it could not parse.
+  series="$(kaizen_series 2>/dev/null)" || return 0
+  [ "$(jq -r '.guard.degenerate_axis' <<< "$series")" = "true" ] || return 0
+  # No count in the sentence on purpose: the window is `guard_floor` and writing "3" here would be
+  # a third copy of a number the jq program already owns, drifting the day the floor moves.
+  warn "the kit_sha axis is degenerate here: the recent kit versions each carry exactly one mission, and none ever reached the floor"
+  dim "  This repo BUILDS the kit, so each session commits and the next one lands on a fresh sha."
+  dim "  The floor of 3 missions per kit version is unsatisfiable here, and 'indeterminado' is then"
+  dim "  the CORRECT verdict, not a missing mission: evidence comes from real target repos (ADR 0003)."
+}
+
 cmd_kaizen() {
   local series_only=0
   while [ $# -gt 0 ]; do
     case "$1" in
       --series)  series_only=1 ;;
       --dry-run) DRY_RUN=1 ;;
+      # Accepted on the whole command and not just on --series: the KAIZEN gate reads through
+      # kaizen_series in this same process, so the flag lands on every number this command derives
+      # rather than on the JSON alone. What it must NEVER do is default to on — the judge's own
+      # verdict would then be computed over other projects' rows (ADR 0003 is about the axis being
+      # read in the right place; this is the same rule about the repo).
+      # ⚠️ NOT kaizen_reminder, whatever this comment said before: the reminder is called from
+      # cmd_run and nowhere else, and `sdd run` has no --all-repos (it dies on any unknown `-*`).
+      # It reads through the same single predicate and WOULD inherit the flag — but no invocation
+      # that reaches it can carry one, so today it always reads per repo. Saying otherwise was the
+      # same lying comment this mission removed one function up.
+      --all-repos) LEDGER_ALL_REPOS=1 ;;
       *)         die "unknown kaizen option: $1" ;;
     esac
     shift
@@ -2656,6 +2988,10 @@ cmd_kaizen() {
 
   step "kaizen — judging the previous kit change and planning the next kit mission"
   [ "$DRY_RUN" = "1" ] && dim "  (dry-run: no session will be opened and nothing is written)"
+  # Before the gate, so the explanation reaches the human on BOTH outcomes: a pending gate is
+  # exactly where `sufficient: false` is about to be read, and an already-judged one is where the
+  # next question ("why indeterminado again?") is asked. CALLED, never `$( )` — it prints.
+  kaizen_axis_note
 
   # Idempotent: already judged ⇒ no session is spent, only the outcome is repeated.
   local gate_rc=0 out_rc=0
@@ -2664,6 +3000,15 @@ cmd_kaizen() {
     dim "  already judged: no session to spend"
     kaizen_outcome || out_rc=$?
     return "$out_rc"
+  fi
+  # An unreadable ledger stops the line BEFORE any session, and ahead of every other bailout: each
+  # one below reasons about numbers this series was supposed to carry, and it carries none. The
+  # session is the thing being refused — a corrupt ledger is not a state an agent can fix from
+  # inside a session (the file lives in $HOME and is not in the repo), so opening one only spends
+  # opus to arrive at the same sentence. `die`, exactly as cmd_autonomy does over the same file:
+  # this is the same refusal, reached through the gate instead of through the reader.
+  if [ -n "$GATE_KAIZEN_UNREADABLE" ]; then
+    die "$GATE_WHY"
   fi
   # A filled `aprovacao:` bails out BEFORE any session — see kaizen_approved_outcome.
   if [ -n "$GATE_KAIZEN_APPROVED" ]; then
@@ -2741,12 +3086,26 @@ USAGE
   sdd run <mission>          run from the first unsatisfied phase through to the PR
   sdd retry <mission>        retry the current phase with a fresh session
   sdd close <mission>        post-merge: close the JIRA issue
-  sdd autonomy               waste per kit version, for THIS repo, from the global ledger
+  sdd autonomy [--all-repos] waste per kit version, for this repo unless --all-repos, from the ledger
   sdd kaizen [--dry-run]     judge the previous kit change and give birth to the next kit
-                             mission plan (kit repo only; exit 3 = the change made it worse)
+             [--all-repos]   mission plan (kit repo only; exit 3 = the change made it worse)
   sdd kaizen --series        the deterministic series (JSON) the judge cites, for the repo
-                             it runs in (the ledger file is global, the reading is not)
+             [--all-repos]   it runs in (the ledger file is global, the reading is not)
   sdd help | sdd version
+
+LEDGER OPTIONS (`autonomy` and `kaizen`)
+  --all-repos                read the WHOLE ledger, not just the rows born in this repo. The
+                             default is per repo because a `sdd run` in a THROWAWAY FIXTURE repo
+                             once moved the judge's own numbers, and a verdict about this kit
+                             must never rest on rows a test invented. Ask for it when the question
+                             really is cross-project maturity — which is why the ledger is one
+                             file per machine to begin with.
+                             ⚠️ Whether a REAL target repo's rows may carry a verdict is a
+                             different question, and an open one: ADR 0003 says verdict evidence
+                             comes from target repos (the kit's own axis degenerates), and this
+                             flag is the only way to read them — but nothing here yet distinguishes
+                             a target from a fixture, so the default stays shut and the judge is
+                             not pointed at it. That decision is ADR 0004's, not this flag's.
 
 FOR SCRIPTS
   sdd phase <mission>        print only the current phase (or DONE)

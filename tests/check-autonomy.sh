@@ -939,13 +939,492 @@ assert_eq "and says the rows exist, under another repo — not that nothing was 
 assert_eq "never a percentage computed out of somebody else's sessions" "0" \
   "$(grep -c '%' <<< "$out_none")"
 
+# --- ...and --all-repos is the door back to the cross-repo question ----------
+# The filter above is right as a DEFAULT and wrong as the only option. The ledger is ONE file per
+# machine precisely so maturity stays comparable BETWEEN projects (docs/pipeline.md), and once the
+# filter landed no reader could ask that question at all — the fixture contamination it removed
+# took the cross-repo number with it. The flag is the explicit door back; leaving the default open
+# is what let a /tmp fixture repo move the judge's own numbers in the first place.
+#
+# DIFFERENTIAL over ONE ledger, like every pair in this file: the two readings are compared to EACH
+# OTHER and never to a constant. A flag that is a no-op prints the same numbers twice; a flag that
+# opened the default prints the whole file twice (and the assertions above go red); only an honest
+# one is STRICTLY wider with the flag than without, with the foreign bucket emptied because with it
+# nothing is foreign any more. Both readers are pinned, because the flag has to reach the predicate
+# and not one command's own copy of the question.
+echo "== reader: --all-repos =="
+
+# wider <a> <b> -> "wider" when a is strictly greater than b, "not wider" otherwise. A side that is
+# not a number (an unknown-option death printing nothing, a jq miss) is NEVER evidence of widening:
+# it answers "not wider" instead of letting `[ -gt ]` die and leaving the assertion to read the
+# shell's own noise. Same reason num_before defaults to "" rather than guessing.
+wider() {
+  case "${1:-x}" in *[!0-9]*) printf 'not wider'; return 0 ;; esac
+  case "${2:-x}" in *[!0-9]*) printf 'not wider'; return 0 ;; esac
+  if [ "$1" -gt "$2" ]; then printf 'wider'; else printf 'not wider'; fi
+}
+foreign_of() { local m; m="$(num_before "$1" 'row\(s\) excluded: born in another repo')"; printf '%s' "${m:-0}"; }
+
+out_all="$( SDD_STATE_DIR="$OUTSIDE/tworepos" "$SDD" autonomy --all-repos 2>&1 )"
+assert_eq "all-repos: the human table widens to the whole ledger, and nothing is foreign under it" \
+  "wider 3 0" \
+  "$(wider "$(sum_sessions "$out_all")" "$(sum_sessions "$out_here")") $(foreign_of "$out_here") $(foreign_of "$out_all")"
+
+# The judge reads the same file through its own jq program. Pinning only the human's table would
+# leave the flag able to reach one reader and not the other — the divergence between two
+# instruments over one file that this whole section exists to prevent.
+ser_here="$( SDD_STATE_DIR="$OUTSIDE/tworepos" "$SDD" kaizen --series 2>/dev/null )"
+ser_all="$(  SDD_STATE_DIR="$OUTSIDE/tworepos" "$SDD" kaizen --series --all-repos 2>/dev/null )"
+assert_eq "all-repos: the judge's series answers it too — other_repo falls to 0 and the missions rise" \
+  "3 0 wider" \
+  "$(jq -r '.excluded.other_repo' <<< "$ser_here") $(jq -r '.excluded.other_repo' <<< "$ser_all") $(wider "$(jq -r '.guard.missions_with_session' <<< "$ser_all")" "$(jq -r '.guard.missions_with_session' <<< "$ser_here")")"
+# Anti-vacuity: a flag that widened the reading by losing rows on the way would still be "wider".
+assert_bucket_sum "the four buckets sum to the header total (--all-repos over two repos)" "$out_all"
+
+# The header has to name the SCOPE it actually read. Under the flag the rows below come from every
+# project on the machine, and a header still ending in one repo path reads as a claim ABOUT that
+# repo — the same misattribution the filter was added to remove, now printed by the reader itself.
+# Both halves are asserted: the right text present AND the other repo path absent, because a header
+# that carried both would satisfy either half alone.
+# ⚠️ NOT prefixed `all-repos` — the checkpoint Check for I3 counts `^  ok    all-repos` and demands
+# exactly two. A new clause that needs a probe takes a new name, never a counted prefix.
+assert_eq "scope header: it names the scope it read, never the one repo path it did not confine itself to" \
+  "1 0" \
+  "$( printf '%s %s' "$(grep -c 'all repos (--all-repos)' <<< "$out_all")" \
+                     "$(grep -c "row(s) · $FIXROOT\$" <<< "$out_all")" )"
+# And the control: WITHOUT the flag the header does end in this repo path, so the assertion above
+# is about the flag and not about a header that never names a repo at all.
+assert_eq "and without it the header does name this repo — the scope line is not merely blank" "1" \
+  "$(grep -c "row(s) · $FIXROOT\$" <<< "$out_here")"
+
+# `sdd help` advertises the flag; the parsers accept one. Nothing tied the two together, so a typo
+# in either was green in both sensors — measured, `--allrepos` in the help text passed everything.
+# The flag token is READ OUT of the help output and handed to both parsers, so the two can only
+# agree by really agreeing. A parser that does not know it dies naming it (`unknown … option`).
+HELPFLAG="$( "$SDD" help 2>&1 | sed -n 's/^  \(--[a-z][a-z-]*\) *read the WHOLE ledger.*/\1/p' | head -1 )"
+assert_eq "the ledger flag the help advertises is one the help itself states — and not empty" "yes" \
+  "$( case "${HELPFLAG:-}" in --?*) echo yes ;; *) echo "no:${HELPFLAG:-<empty>}" ;; esac )"
+# ⚠️ ACCEPTANCE is read as rc 0, never as the absence of the word "unknown", and the near-miss is
+# half the assertion. Both were measured on the previous spelling of this pair, which read
+# `grep -c 'unknown'` on each parser: (a) replacing both `*) die "unknown … option"` arms with
+# `*) : ;;` left it GREEN — a parser that accepts everything says "unknown" about nothing, so the
+# typo in the help text this pair exists to catch sailed through the very assertion aimed at it;
+# (b) making the `--all-repos)` arm die with a different sentence also left it green, while the
+# command rejected the flag the help advertises. The word was the death's WORDING, not the answer.
+# rc 0 on the advertised token says accepted; rc non-zero on `<token>x` says the arm matches the
+# token and not a prefix of it, which is what kills the accept-everything degrade.
+parser_rc() {  # parser_rc <args…> -> the rc of the runner, run against the two-repo fixture
+  ( SDD_STATE_DIR="$OUTSIDE/tworepos" "$SDD" "$@" >/dev/null 2>&1 ); printf '%s' "$?"
+}
+assert_eq "BOTH parsers accept the very token the help prints, and BOTH reject a near-miss of it" \
+  "0 0 reject reject" \
+  "$( printf '%s %s %s %s' \
+       "$(parser_rc autonomy "${HELPFLAG:-–none}")" \
+       "$(parser_rc kaizen --series "${HELPFLAG:-–none}")" \
+       "$( [ "$(parser_rc autonomy "${HELPFLAG:-–none}x")" != 0 ] && echo reject || echo accept )" \
+       "$( [ "$(parser_rc kaizen --series "${HELPFLAG:-–none}x")" != 0 ] && echo reject || echo accept )" )"
+
+# --- ...and one mission is one mission in BOTH readers -----------------------
+# The comment on `def mission_key` in bin/sdd promises that this file compares the two readers to
+# each other so neither can be "improved" alone. It did not: nothing here mentioned mission_key,
+# and the catalogue's mutant rewrites both spellings at once (`/g` on purpose), so not even it
+# would see them diverge. A comment promising a sensor that does not exist is the same debt this
+# mission removed three times over, so the sensor is written rather than the comment deleted.
+#
+# TWO clauses, because either alone fails open. The pair compared to EACH OTHER catches a fork (one
+# reader taught the repo, the other left on the slug); the absolute `2` catches both being wrong
+# TOGETHER, which is exactly the shape of the catalogue mutant. The fixture is the collision that
+# made this real: `cmd_kaizen` mints `$(date +%Y%m%d)-kaizen`, so two projects judged on the same
+# day carry the identical slug, and under --all-repos their rows land in one reading.
+mkdir -p "$OUTSIDE/slugclash"
+{ ledger_row "$FIXROOT" 20260817-kaizen; ledger_row "$OTHER" 20260817-kaizen; } \
+  > "$OUTSIDE/slugclash/autonomy-log.jsonl"
+assert_eq "mission identity: two projects sharing one dated slug are two missions in both readers" \
+  "2 2" \
+  "$( h="$( SDD_STATE_DIR="$OUTSIDE/slugclash" "$SDD" autonomy --all-repos 2>&1 \
+              | sed -n 's/^  ccccccc  .* · \([0-9][0-9]*\) mission(s) · .*/\1/p' )"
+      j="$( SDD_STATE_DIR="$OUTSIDE/slugclash" "$SDD" kaizen --series --all-repos 2>/dev/null \
+              | jq -r '.latest.missions' )"
+      printf '%s %s' "${h:-<empty>}" "${j:-<empty>}" )"
+
+# --- ...and a worktree of one repo is still that repo ------------------------
+# `git rev-parse --show-toplevel` answers per WORKTREE, so a mission run from `git worktree add`
+# stamped a `repo` path the main checkout had never heard of. The row was born in the same repo
+# and the reader called it foreign: the series went empty in the very workflow this kit tells you
+# to use for isolation (superpowers:using-git-worktrees, and the multi-mission item in TODO.md).
+#
+# The rows here are written by the REAL writer, not by hand: what is under test is that the writer
+# and the readers resolve ONE identity, and a hand-written `repo` field would just be this test
+# agreeing with itself about the formula. The `blocked` increment reaches the writer with rc 3
+# before any session opens — no token, same door the fixture at the top of this file uses.
+#
+# DIFFERENTIAL, and ASYMMETRIC on purpose: ONE row born in the main checkout, TWO born in the
+# worktree, into ONE ledger. Broken, the two readings are 1-own/2-foreign and 2-own/1-foreign —
+# they DISAGREE, and no swap of the two sides makes them match. Fixed, both read 3-own/0-foreign.
+# A reader that refused everything would read 0/3 on both sides and agree — which is why the
+# absolute assertion sits next to the differential one and neither is enough alone.
+echo "== reader: a worktree is not another repo =="
+WTMAIN="$OUTSIDE/wtrepo"
+WTLINK="$OUTSIDE/wtlinked"
+WTSTATE="$OUTSIDE/wtledger"
+mkdir -p "$WTMAIN" "$WTSTATE"
+(
+  cd "$WTMAIN" || exit 1
+  git init -q -b main
+  git config user.email "fixture@example.com"
+  git config user.name "Fixture"
+  mkdir -p .sdd "docs/handoffs/$MISSION"
+  printf '.sdd/logs/\n' > .gitignore
+  cat > .sdd/config.sh <<'CFG'
+PROJECT_NAME="wtfixture"
+DEFAULT_BRANCH="main"
+TEST_CMD="true"
+E2E_CMD=""
+HANDOFF_DIR="docs/handoffs"
+QA_DOCS_PATH="docs/qa"
+JIRA_ENABLED=false
+CFG
+  cat > "docs/handoffs/$MISSION/00-missao.md" <<'MIS'
+---
+missao: 20260101-fixture
+aprovacao: auto
+---
+# Mission
+MIS
+  : > "docs/handoffs/$MISSION/01-plano.md"
+  cat > "docs/handoffs/$MISSION/checkpoint.md" <<'CPT'
+| ID | Incremento | Check (comando → esperado) | Status | Commit |
+|---|---|---|---|---|
+| I1 | slice one | `true` → 0 | blocked | — |
+CPT
+  git add -A && git commit -qm "init"
+  git worktree add "$WTLINK" -b wtprobe
+) >/dev/null 2>&1
+
+( cd "$WTMAIN" && SDD_STATE_DIR="$WTSTATE" "$SDD" run "$MISSION" ) >/dev/null 2>&1
+( cd "$WTLINK" && SDD_STATE_DIR="$WTSTATE" "$SDD" run "$MISSION" ) >/dev/null 2>&1
+( cd "$WTLINK" && SDD_STATE_DIR="$WTSTATE" "$SDD" run "$MISSION" ) >/dev/null 2>&1
+
+# Floor, and NOT named `worktree…`: the checkpoint's Check counts `^  ok    worktree` and expects
+# exactly two. Without this line a fixture that silently wrote nothing would leave both assertions
+# below reading "0 0" on each side — absolutely equal, and absolutely vacuous.
+assert_eq "the worktree probe reached the real writer from both checkouts" "3" \
+  "$( [ -f "$WTSTATE/autonomy-log.jsonl" ] && grep -c . "$WTSTATE/autonomy-log.jsonl" || echo 0 )"
+
+# "<own rows> <foreign rows>", read by the human's table from the checkout given.
+wt_summary() {
+  local o m; o="$( cd "$1" && SDD_STATE_DIR="$WTSTATE" "$SDD" autonomy 2>&1 )"
+  m="$(num_before "$o" 'row\(s\) ·')"
+  printf '%s %s' "${m:-0}" "$(foreign_of "$o")"
+}
+assert_eq "worktree: a row born in a worktree is local in the main checkout, and none is foreign" \
+  "3 0" "$(wt_summary "$WTMAIN")"
+assert_eq "worktree: and the two checkouts read one ledger identically — same rows, same buckets" \
+  "$(wt_summary "$WTMAIN")" "$(wt_summary "$WTLINK")"
+
+# --- ...but two repositories are never ONE ------------------------------------
+# The fix above resolves the identity from the shared `.git`, and its FIRST spelling took the
+# PARENT of that path — which merged distinct repositories in two shapes, both SILENTLY. In a
+# SUBMODULE the common dir is `/parent/.git/modules/<name>`, so the parent is `/parent/.git/modules`
+# for every submodule of that parent. In a BARE repo it is `.`, so the parent is whatever directory
+# happens to hold the repo, shared with every bare repo beside it. Writer and readers then agree on
+# the merged string, so nothing is excluded and `other_repo` stays 0: exactly the contamination
+# d99a7fc closed, arriving through another door, and with no line of output admitting it.
+# `--show-toplevel` answered both of these correctly and only worktrees wrong, so a fix for
+# worktrees that lost them was a regression the pair above could not see.
+#
+# The identity is read back FROM THE RUNNER and never composed here: the fourth "no data" voice
+# names the repo it resolved, so every comparison below is between things the command itself said.
+# A probe that rebuilt the path from its own idea of the formula would agree with itself in every
+# shape, which is how a green suite confirms an assumption instead of measuring it.
+#
+# The submodule shape comes from `git init --separate-git-dir`, which writes the very same `.git`
+# FILE a submodule carries (`gitdir: /parent/.git/modules/<name>`) with no `submodule add` and no
+# file-protocol config a modern git would demand for it.
+echo "== reader: two repositories are never one =="
+IDROOT="$OUTSIDE/identity"
+IDSTATE="$OUTSIDE/identityledger"
+mkdir -p "$IDROOT/parent/.git/modules" "$IDSTATE"
+(
+  git init -q "$IDROOT/parent"
+  git init -q --separate-git-dir="$IDROOT/parent/.git/modules/suba" "$IDROOT/suba"
+  git init -q --separate-git-dir="$IDROOT/parent/.git/modules/subb" "$IDROOT/subb"
+  git init -q --bare "$IDROOT/bare1.git"
+  git init -q --bare "$IDROOT/bare2.git"
+  git init -q "$IDROOT/plain"
+  mkdir -p "$IDROOT/hidden"
+  git init -q --bare "$IDROOT/hidden/.git"
+  # ...and a linked worktree OF that same bare repo, which is the shape that split its identity in
+  # two: `rev-parse --is-bare-repository` answers about the ENTRY POINT, so the bare repo read from
+  # itself said `true` and read from this worktree said `false`, and the cosmetic `/.git` strip fired
+  # on one reading only. `worktree add` needs a commit and a bare repo has no index to make one
+  # with, so it is minted with plumbing straight into the bare repo — no second checkout, no push.
+  # The identity is passed explicitly: a machine with no `user.email` would otherwise fail HERE, and
+  # a fixture that failed to build is caught by the floor below rather than read as a passing rule.
+  GIT_AUTHOR_NAME=sdd GIT_AUTHOR_EMAIL=sdd@invalid \
+  GIT_COMMITTER_NAME=sdd GIT_COMMITTER_EMAIL=sdd@invalid \
+    git -C "$IDROOT/hidden/.git" commit-tree \
+      "$( git -C "$IDROOT/hidden/.git" hash-object -w -t tree /dev/null )" -m seed \
+    > "$IDROOT/hidden-seed"
+  git -C "$IDROOT/hidden/.git" branch -f main "$(cat "$IDROOT/hidden-seed")"
+  git -C "$IDROOT/hidden/.git" worktree add -q "$IDROOT/hiddenwt" main
+) >/dev/null 2>&1
+ln -sfn "$IDROOT/plain" "$IDROOT/plain-link"
+
+# One row from a repo that is none of these, so every reading below has rows to REJECT and reaches
+# the voice that names the identity it resolved. Over an empty file the first voice fires instead
+# and names nothing, and every comparison here would be "" against "" — equal, and vacuous.
+ledger_row "/elsewhere/notmine" x1 > "$IDSTATE/autonomy-log.jsonl"
+id_of() { ( cd "$1" && SDD_STATE_DIR="$IDSTATE" "$SDD" autonomy 2>&1 ) \
+            | sed -n 's/.*no data for \([^:]*\):.*/\1/p'; }
+
+# Floor against exactly that vacuity: a fixture that failed to build resolves nothing, and "" is
+# equal to "" in every pair below. Deliberately NOT named `identity…`, so it cannot be mistaken for
+# one of the properties — it only says the instrument is plugged in.
+assert_eq "the identity probe resolved a repo from all five shapes through the runner own voice" "5" \
+  "$( n=0; for p in suba subb bare1.git bare2.git plain; do
+        if [ -n "$(id_of "$IDROOT/$p")" ]; then n=$((n + 1)); fi
+      done; echo "$n" )"
+
+assert_eq "identity: two sibling submodules are two repos, never the modules dir that holds both" \
+  "differ" \
+  "$( if [ "$(id_of "$IDROOT/suba")" != "$(id_of "$IDROOT/subb")" ]
+      then echo differ; else echo "same:$(id_of "$IDROOT/suba")"; fi )"
+assert_eq "identity: two sibling bare repos are two repos, never the directory that merely holds them" \
+  "differ" \
+  "$( if [ "$(id_of "$IDROOT/bare1.git")" != "$(id_of "$IDROOT/bare2.git")" ]
+      then echo differ; else echo "same:$(id_of "$IDROOT/bare1.git")"; fi )"
+# The `pwd -P` half of the fix, which the worktree pair above never exercises: TMPDIR may itself be
+# a symlink (the comment at the top of this file already says so), and one repo reached by two
+# paths read as two repos is the same "series went empty" the worktree case was about.
+assert_eq "identity: a checkout reached through a symlink is the SAME repo, not a second one" \
+  "$(id_of "$IDROOT/plain")" "$(id_of "$IDROOT/plain-link")"
+# The `/repo/.git` -> `/repo` step is COSMETIC and must not fire on a repository that IS a
+# directory called `.git` — a bare repo there is the repo itself, and stripping the last component
+# would name the directory that merely contains it, which is not a repo at all. That was the second
+# half of the bare-repo defect: an identity that is non-empty and wrong silences the honest
+# "not inside a git repository" warning and returns an empty series with nothing explaining it.
+# Asserted as the PROPERTY (the last component survived) and not against a composed path: TMPDIR
+# may be a symlink, so a literal expectation would be comparing a logical path against a resolved
+# one and could go red for the normalization instead of for the rule.
+assert_eq "identity: a bare repo that lives in a dir named .git is itself, not the dir above it" \
+  "yes" \
+  "$( id="$(id_of "$IDROOT/hidden/.git")"
+      case "$id" in */hidden/.git) echo yes ;; *) echo "no:${id:-<empty>}" ;; esac )"
+# ...and the OTHER entry point into that same repository has to agree, which is the half the rule
+# above cannot state about itself. `--is-bare-repository` is a property of the entry point, not of
+# the repository: it said `true` from the bare repo and `false` from this worktree of it, the strip
+# fired on the second reading only, and one repository answered `/x/.git` and `/x` — the very
+# collapse-and-split this function exists to prevent, reached without any exotic environment.
+# DIFFERENTIAL and not a literal path: the two readings are compared to EACH OTHER, so no spelling
+# of the formula satisfies it by agreeing with the test's own idea of it. `/hidden/.git` on the
+# right is the anti-vacuity half — two empty reads are also "equal", and a reader that stripped
+# BOTH would agree at `/hidden`, which is a directory that is nobody's repository.
+assert_eq "identity: and a worktree of that bare repo resolves to the SAME repo, not to its parent" \
+  "same /hidden/.git" \
+  "$( a="$(id_of "$IDROOT/hidden/.git")"; b="$(id_of "$IDROOT/hiddenwt")"
+      if [ "$a" = "$b" ]; then s=same; else s="split:${a:-<empty>}|${b:-<empty>}"; fi
+      case "$b" in */hidden/.git) t=/hidden/.git ;; *) t="${b:-<empty>}" ;; esac
+      printf '%s %s' "$s" "$t" )"
+
+# Differing strings are not yet the property that matters. THIS is: a row born in one submodule is
+# not readable as its sibling own. Broken, both readings answer 1 — they AGREE, and the agreement
+# is the contamination. The `1` on the left is the anti-vacuity half: a reader that refused
+# everything would answer `0 0` and fail here.
+own_of() {
+  local o; o="$( cd "$1" && SDD_STATE_DIR="$IDSTATE" "$SDD" autonomy 2>&1 )"
+  if grep -q 'no data' <<< "$o"; then printf '0'; else printf '%s' "$(num_before "$o" 'row\(s\) ·')"; fi
+}
+ledger_row "$(id_of "$IDROOT/suba")" s1 > "$IDSTATE/autonomy-log.jsonl"
+assert_eq "identity: a row born in one submodule is that submodule row and never its sibling" \
+  "1 0" "$(printf '%s %s' "$(own_of "$IDROOT/suba")" "$(own_of "$IDROOT/subb")")"
+ledger_row "$(id_of "$IDROOT/bare1.git")" b1 > "$IDSTATE/autonomy-log.jsonl"
+assert_eq "identity: and a row born in a bare repo is never the neighbouring bare repo row" \
+  "1 0" "$(printf '%s %s' "$(own_of "$IDROOT/bare1.git")" "$(own_of "$IDROOT/bare2.git")")"
+
+# --- ...not even when the environment answers `cd` for us -------------------
+# `--git-common-dir` comes back RELATIVE at the root of a checkout (`.git`), and bash searches
+# $CDPATH for any `cd` operand whose first component is neither `/`, `.` nor `..` — so `cd .git`
+# at a repo root is an environment-controlled lookup. Two ways it lied, both measured:
+#
+#   * with CDPATH naming any directory that holds a `.git` (a dotfiles checkout in $HOME is the
+#     everyday shape), EVERY repo on the machine resolved to that one identity. Writer and readers
+#     agree on it, so `other_repo` stays 0 and not one line of output admits it — the same silent
+#     contamination d99a7fc closed, this time reachable from an env var;
+#   * bash PRINTS the directory it found through CDPATH, on stdout, straight into this command
+#     substitution — so `CDPATH=.` appended a second LINE to the identity and put a newline inside
+#     the ledger's `repo` field.
+#
+# Both are shut by emptying CDPATH for the duration of each `cd`. The rule is the environment's,
+# not git's, so no fixture of repository SHAPES could reach it: this block is the only probe.
+#
+# ⚠️ The floor below is not decoration and is deliberately NOT named `cdpath…`: it proves the
+# poison is ARMED in this shell before any conclusion is drawn from it. A CDPATH that is not being
+# consulted (a bash built with it off, a fixture whose poison directory holds no `.git`) makes
+# every assertion here pass while measuring nothing — a probe that cannot sabotage what it claims
+# to sabotage concludes nothing, and this file has already been bitten by exactly that.
+echo "== reader: the environment does not get to answer 'which repo is this' =="
+CDROOT="$OUTSIDE/cdpath"
+mkdir -p "$CDROOT"
+( git init -q "$CDROOT/poison"; git init -q "$CDROOT/one"; git init -q "$CDROOT/two" ) >/dev/null 2>&1
+
+assert_eq "the CDPATH poison is armed: an unguarded relative cd .git lands in the poison checkout" \
+  "yes" \
+  "$( p="$( CDPATH="$CDROOT/poison" bash -c 'cd "$1" && cd .git >/dev/null && pwd -P' _ "$CDROOT/one" )"
+      case "$p" in */poison/.git) echo yes ;; *) echo "no:${p:-<empty>}" ;; esac )"
+
+# Read back from the runner's own "no data for <repo>" voice, like id_of above, and never composed
+# here — a probe that rebuilt the path from its own idea of the formula would agree with itself
+# under any CDPATH. The env goes on the EXTERNAL command (never as a prefix to a shell function,
+# where bash's export rules differ), so what the runner sees is what this line says.
+id_cd() {  # id_cd <cdpath> <dir> — the identity the runner resolves with CDPATH set to <cdpath>
+  ( cd "$2" && CDPATH="$1" SDD_STATE_DIR="$IDSTATE" "$SDD" autonomy 2>&1 ) \
+    | sed -n 's/.*no data for \([^:]*\):.*/\1/p'
+}
+
+# Basenames, not "differ" alone: two repos collapsed onto the POISON is the defect, and a pair that
+# only said "they differ" would also be satisfied by two identities that are both wrong. An empty
+# read (the vacuous way to pass) prints nothing and fails here too.
+assert_eq "cdpath: a poisoned CDPATH leaves two repos two, and leaves each of them itself" \
+  "one two differ" \
+  "$( a="$(id_cd "$CDROOT/poison" "$CDROOT/one")"; b="$(id_cd "$CDROOT/poison" "$CDROOT/two")"
+      if [ "$a" != "$b" ]; then d=differ; else d="same:${a:-<empty>}"; fi
+      printf '%s %s %s' "${a##*/}" "${b##*/}" "$d" )"
+
+# The other half, and a different failure entirely: here the identity is not moved to another repo,
+# it is DOUBLED — bash echoes what it found and the answer becomes two lines. One line is as much
+# part of the contract as the right path, because the readers compare `repo` verbatim.
+assert_eq "cdpath: CDPATH=. yields the repo on ONE line, not the path echoed by cd as well" \
+  "one 1" \
+  "$( id="$(id_cd . "$CDROOT/one")"; printf '%s %s' "${id##*/}" "$(grep -c . <<< "$id")" )"
+
+# --- ...and a row that cannot say where it came from is nobody's ------------
+# `ledger_row_is_local` used to answer `true` for a row with no `repo` key — local in EVERY repo.
+# The comment above it claimed the readers then classified those rows out loud, and for a bare
+# array that is true (one dies naming the file). For a WELL-FORMED session row it was false:
+# `is_unrecognized` looks at `.event`, never at `.repo`, so three sessions that named no project
+# walked straight into the slice and cleared the judge's floor of 3 — a guard moved by rows nobody
+# can attribute to anything, in silence. They now land in `excluded.no_repo`: counted, never summed
+# into the slice, never dropped without a word.
+#
+# DIFFERENTIAL over TWO ledgers that differ in exactly one key: the same three clean sessions, on
+# the same kit_sha, in the same three missions — with and without `repo`. Read once, nothing tells
+# "excludes the unattributable" from "excludes everything": a blanket refusal answers `false` on
+# both, the old behaviour answers `true` on both, and only the honest one splits them.
+echo "== reader: a row that says no repo belongs to no repo =="
+mkdir -p "$OUTSIDE/norepo" "$OUTSIDE/withrepo" "$OUTSIDE/norepomix"
+norepo_row() {   # norepo_row <mission> — ledger_row's twin, minus the one key under test
+  jq -cn --arg mission "$1" \
+    '{v:1, ts:"2026-08-16T15:00:00-03:00", event:"session", run_id:"r", invocation:"run",
+      kit_sha:"ccccccc", kit_dirty:false, project:"p", mission:$mission,
+      phase:"EXEC", step:"EXEC", agent:"sdd-executor", model:"opus", attempt:1,
+      auto_retry:false, session:"s", rc:0, dur_s:10, cost_usd:1.0, moved:true,
+      gate:"pass", gate_why:"x"}'
+}
+{ norepo_row n1;            norepo_row n2;            norepo_row n3; }            > "$OUTSIDE/norepo/autonomy-log.jsonl"
+{ ledger_row "$FIXROOT" n1; ledger_row "$FIXROOT" n2; ledger_row "$FIXROOT" n3; } > "$OUTSIDE/withrepo/autonomy-log.jsonl"
+# Interleaved with two local rows, so the human table has a slice to print beside the exclusion.
+{ ledger_row "$FIXROOT" h1; norepo_row n1; ledger_row "$FIXROOT" h2
+  norepo_row n2;            norepo_row n3; } > "$OUTSIDE/norepomix/autonomy-log.jsonl"
+
+triple() { jq -r '[.excluded.no_repo, .excluded.other_repo, .guard.sufficient] | map(tostring) | join(" ")' <<< "$1"; }
+ser_norepo="$(   SDD_STATE_DIR="$OUTSIDE/norepo"   "$SDD" kaizen --series 2>/dev/null )"
+ser_withrepo="$( SDD_STATE_DIR="$OUTSIDE/withrepo" "$SDD" kaizen --series 2>/dev/null )"
+assert_eq "no-repo: three well-formed sessions that name no project are counted apart, and never reach the guard" \
+  "3 0 false" "$(triple "$ser_norepo")"
+# The control, and it is what makes the line above an assertion instead of a refusal: the same
+# three rows WITH a repo do clear the floor. A bucket that swallowed everything fails here.
+assert_eq "no-repo: and the same three rows WITH a repo still clear the floor — the bucket is not a blanket refusal" \
+  "0 0 true" "$(triple "$ser_withrepo")"
+
+# `--all-repos` has its OWN branch of the predicate, and the two-repo fixture further up holds no
+# unattributable row — so without this line that branch could answer a plain `true` and nothing in
+# the file would notice. The flag widens the question BETWEEN projects; a row that names none is
+# out of every scope, so it stays counted and stays out. Sessions, not just the bucket: a flag that
+# admitted the three would read 5 here, and the bucket alone cannot tell that apart.
+ser_mix_all="$( SDD_STATE_DIR="$OUTSIDE/norepomix" "$SDD" kaizen --series --all-repos 2>/dev/null )"
+assert_eq "the cross-project door widens the scope, it does not admit rows that belong to no scope" \
+  "3 2" "$(jq -r '[.excluded.no_repo, .guard.sessions] | map(tostring) | join(" ")' <<< "$ser_mix_all")"
+
+out_mix="$( SDD_STATE_DIR="$OUTSIDE/norepomix" "$SDD" autonomy 2>&1 )"
+assert_eq "the human table names them out loud, never drops them in silence" "1" \
+  "$(grep -c '3 row(s) excluded: no repo' <<< "$out_mix")"
+assert_eq "and never files them under another repo — the two exclusions are different accusations" \
+  "0" "$(foreign_of "$out_mix")"
+assert_bucket_sum "the four buckets sum to the header total (unattributable rows beside local ones)" "$out_mix"
+
+# The fourth silence. Without it the reader blames THIS repo ("none of the 3 row(s) were born
+# here") for rows that were born in no repo at all — sending the human hunting for a path that
+# does not exist, which is the same wrong hunt the other three silences are named apart to avoid.
+out_only="$( SDD_STATE_DIR="$OUTSIDE/norepo" "$SDD" autonomy 2>&1 )"; rc=$?
+assert_eq "a ledger of nothing but unattributable rows refuses, and says which silence it is" "1 1" \
+  "$rc $(grep -c 'say which repo they came from' <<< "$out_only")"
+
+# ...and the FIFTH state, which the four voices used to answer wrongly: a MIXED ledger with no local
+# row at all — some rows born elsewhere, some naming no repo. The headline was true and the remedy
+# was false for part of the file: `--all-repos` deliberately does not admit rows that belong to no
+# project, so "run it over there / open the scope" is advice nobody can carry out for them.
+#
+# It is also the probe the third voice never had: its condition is `norepo -eq lines`, and relaxing
+# it to `norepo -gt 0` was green in this whole file. Here it would print "none of the 3 row(s) say
+# which repo they came from" over a file where one of them says exactly that — a falsehood about
+# rows that HAVE a repo. So both halves are asserted: the right voice present and the wrong one
+# ABSENT, which is what makes the pair distinguish the two branches instead of counting messages.
+mkdir -p "$OUTSIDE/norepoforeign"
+{ ledger_row "$OTHER" f1; norepo_row n1; norepo_row n2; } > "$OUTSIDE/norepoforeign/autonomy-log.jsonl"
+out_mixnone="$( SDD_STATE_DIR="$OUTSIDE/norepoforeign" "$SDD" autonomy 2>&1 )"; rc=$?
+assert_eq "a mixed ledger with nothing of yours refuses through the voice that fits it, not the one next door" \
+  "1 1 0" \
+  "$rc $(grep -c 'were born in this repo' <<< "$out_mixnone") $(grep -c 'say which repo they came from' <<< "$out_mixnone")"
+# And the remedy is split, because it is two remedies: one reachable, one not. A single sentence
+# here sent the human hunting for a cwd or a flag that can never surface two of the three rows.
+assert_eq "and the advice separates what a cwd or a flag can reach from what nothing can" "1 1" \
+  "$( printf '%s %s' "$(grep -c '1 row(s) came from other repos; 2 name no repo at all' <<< "$out_mixnone")" \
+                     "$(grep -c 'neither reaches the 2 unattributable row(s)' <<< "$out_mixnone")" )"
+
+# The three shapes of "this row names no project": key absent, key present and null, key present and
+# empty. Only the first is one the writer can produce; the other two arrive by hand edit or partial
+# write, which is the corruption the bucket exists to report. Under `has("repo") | not` they fell
+# through to `.repo == $repo` and were accused of being `other_repo` — "born elsewhere", a wrong
+# reason with the confidence of a right one. Asserted as ONE object so neither bucket can drift
+# alone, exactly as the excluded assertion in check-kaizen.sh does.
+mkdir -p "$OUTSIDE/norepshapes"
+{ norepo_row n1
+  jq -cn '{v:1, ts:"2026-08-16T15:00:00-03:00", event:"session", run_id:"r", invocation:"run",
+           kit_sha:"ccccccc", kit_dirty:false, project:"p", repo:null, mission:"n2",
+           phase:"EXEC", step:"EXEC", agent:"sdd-executor", model:"opus", attempt:1,
+           auto_retry:false, session:"s", rc:0, dur_s:10, cost_usd:1.0, moved:true,
+           gate:"pass", gate_why:"x"}'
+  jq -cn '{v:1, ts:"2026-08-16T15:00:00-03:00", event:"session", run_id:"r", invocation:"run",
+           kit_sha:"ccccccc", kit_dirty:false, project:"p", repo:"", mission:"n3",
+           phase:"EXEC", step:"EXEC", agent:"sdd-executor", model:"opus", attempt:1,
+           auto_retry:false, session:"s", rc:0, dur_s:10, cost_usd:1.0, moved:true,
+           gate:"pass", gate_why:"x"}'
+} > "$OUTSIDE/norepshapes/autonomy-log.jsonl"
+ser_shapes="$( SDD_STATE_DIR="$OUTSIDE/norepshapes" "$SDD" kaizen --series 2>/dev/null )"
+# ⚠️ NOT prefixed `no-repo` — the checkpoint Check for I5 counts `^  ok    no-repo` and demands
+# exactly two, and these two clauses are new. Same rule as the scope-header assertion above.
+assert_eq "unattributable shapes: absent, null and empty are one 'names no project', never three verdicts" \
+  '{"non_comparable":0,"unrecognized":0,"meta":0,"other_repo":0,"no_repo":3}' \
+  "$(jq -c '.excluded' <<< "$ser_shapes")"
+# The one that mattered outside a git repo: there $repo is itself empty, so a `repo: ""` row
+# compared EQUAL to it and was counted local in a repo that does not exist.
+# ⚠️ PAIRED with the bucket, in ONE invocation, and that is the whole point: read alone, the `0` on
+# the left is indistinguishable from a command that read nothing at all — a `kaizen --series` that
+# died, printed no JSON and left jq with empty input answers `0` too, and the assertion would call
+# that a passing rule. The `3` is the witness that the three rows were seen and placed; only then
+# does the `0` mean "seen and refused" instead of "never looked".
+assert_eq "unattributable shapes: and standing outside any repo, an empty repo field is still nobody's" "0 3" \
+  "$( cd "$OUTSIDE" && SDD_STATE_DIR="$OUTSIDE/norepshapes" "$SDD" kaizen --series 2>/dev/null \
+       | jq -r '"\(.guard.sessions) \(.excluded.no_repo)"' )"
+
 # A row with no `event` at all, or an event nobody recognizes yet: the reviewer's exact repro. It
-# must be counted, not merely fail to crash. It also carries no `repo`, which is deliberate twice
-# over: a row that cannot say where it came from is never excluded by the repo filter — hiding
-# corruption is the one thing a filter must not do — so it still reaches the bucket that names it.
+# must be counted, not merely fail to crash. It carries a `repo` ON PURPOSE, and that is the
+# change: the repo filter runs FIRST, so a row that names no project is excluded as `no_repo`
+# before anything looks at its event, and would never reach the bucket under test here.
 echo "== reader: unrecognized row =="
 mkdir -p "$OUTSIDE/stray"
-printf '{"v":1,"ts":"2026-08-15T10:00:00-03:00"}\n' > "$OUTSIDE/stray/autonomy-log.jsonl"
+printf '{"v":1,"ts":"2026-08-15T10:00:00-03:00","repo":"%s"}\n' "$FIXROOT" > "$OUTSIDE/stray/autonomy-log.jsonl"
 out="$( SDD_STATE_DIR="$OUTSIDE/stray" "$SDD" autonomy 2>&1 )"; rc=$?
 assert_eq "exits 0 (an unrecognized row is not a malformed one)" "0" "$rc"
 assert_eq "says there are no comparable sessions" "1" "$(grep -c 'no comparable sessions' <<< "$out")"

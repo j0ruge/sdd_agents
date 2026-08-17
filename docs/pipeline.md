@@ -346,14 +346,64 @@ by any test. Three consequences worth knowing:
 
 - what leaves is **counted, never dropped in silence**: `excluded.other_repo` in the series, and
   one `N row(s) excluded: born in another repo` line in the human table;
-- a row that cannot say where it came from — not an object, or an object with no `repo` key — is
-  **never** excluded by the filter. It reaches the bucket that names it (`unrecognized`, or a loud
-  death naming the file) in whichever repo you are standing in: hiding corruption is the one thing
-  a filter must not do;
+- a row with **no `repo` key** belongs to no project, so it leaves through a bucket of its own —
+  `excluded.no_repo` in the series, one `N row(s) excluded: no repo field` line in the human table,
+  and a fourth "no data" silence when the whole ledger is like that. Never `other_repo`: "born
+  nowhere" and "born elsewhere" are different accusations. ⚠️ It used to be counted as local in
+  **every** repo, on the claim that the readers named it anyway — false for a well-formed session
+  row, because `is_unrecognized` asks `.event` and never `.repo`, so three of them cleared the
+  judge's floor of 3 in silence. A row that is not an object at all is still admitted here and
+  still dies loudly naming the file: hiding corruption is the one thing a filter must not do;
 - read from **outside any git repository**, nothing in the ledger is yours: `sdd autonomy` refuses
   with rc 1 saying the rows exist under another repo, and `sdd kaizen --series` warns and returns
   the empty series. That is the safe direction — an empty series is `guard.sufficient: false` and
   supports only `indeterminado`, never somebody else's numbers read as a verdict about this kit.
+
+**A worktree is not another repo.** Writer and readers resolve identity through the same
+`ledger_repo_root`, and it derives from the **shared** `.git` (`git rev-parse --git-common-dir`,
+normalized) — never `--show-toplevel`, which answers per worktree. Without that, a mission run
+from `git worktree add` stamped a path no other checkout of the same repo had seen, and every
+reader outside that worktree filed the rows under `other_repo`: the series went empty in the very
+isolation workflow this kit recommends, and went empty quietly. ⚠️ Rows written **before** the
+fix keep the old per-worktree path and keep landing in `other_repo`. That is history, not a bug —
+the ledger is append-only and is never migrated.
+
+**`--all-repos` is the door back to the cross-project question.** Per repo is the right *default*
+and the wrong *only option*: this ledger is one file per machine precisely so maturity can be
+compared BETWEEN projects, and while the filter was the only behaviour no reader could ask that
+at all. `sdd autonomy --all-repos` and `sdd kaizen --series --all-repos` flip the same single
+predicate, so one flag reaches both readers of that command at once. Under it
+`excluded.other_repo` is `0` (nothing is foreign any more)
+and the human table's header names the scope it read instead of a repo path. It is never the
+default and never implicit: the contamination the filter removed was a `sdd run` in a **throwaway
+fixture** repo moving the judge's own numbers, and no verdict about this kit may rest on rows a
+test invented.
+
+⚠️ Whether a **real target** repo's rows may carry a verdict is a different question, and this
+mission deliberately left it open. [ADR 0003](adr/0003-judge-axis-evidence-from-target-repos.md)
+says verdict evidence comes from target repos — the kit's own axis degenerates — and `--all-repos`
+is the only mechanism that can read them; but nothing in the ledger yet tells a target apart from a
+fixture, so the default stays shut and neither `gate_KAIZEN` nor the agent prompt is pointed at the
+flag by the runner itself. Answering it is ADR 0004's job, and it is what unblocks I13.4.
+
+⚠️ The **post-pipeline reminder** is the one reader the flag does not reach. It goes through the
+same single predicate and would inherit it — but it is called from `sdd run` alone, and `sdd run`
+has no `--all-repos` (it dies on any unknown `-*` option), so it always reads per repo. That is
+why the `TODO.md` item about the reminder pointing the human at a command that sees different
+numbers is **not** closed by this flag: `sdd run` in a target repo counts the target's missions,
+and `sdd kaizen` in the kit repo still answers about the kit's. Deciding that one means answering
+whether the judge may weigh another project's rows at all — the question
+[ADR 0003](adr/0003-judge-axis-evidence-from-target-repos.md) deliberately left to its successor.
+
+It reaches the **KAIZEN boot prompt** too, and that is not a convenience. `gate_KAIZEN` reads its
+half of the series by calling `kaizen_series` in-process, so every ledger option the invocation
+carries lands on it; the prompt hands the agent a *written* command line, so an option lands there
+only if the runner wrote it. When one half is flagged and the other is not, the two land on
+different `latest` shas — and because the gate hunts for exactly the `kit_sha_judged:` the prompt
+ordered the agent to write, the phase stops being *wrong* and becomes **unsatisfiable**: the gate
+fails, the runner retries once, the second session writes the same sha, and the run ends in
+`BLOCKED in KAIZEN — no-progress`. Two opus sessions for a blocked row. ADR 0001 splits the judge;
+what keeps the split honest is both halves reading ONE series, whichever one the human asked for.
 
 It records **facts, never a score**: phase, attempt, whether the session moved the disk, rc, cost,
 the gate result and its reason. `ok|leve|refez` is a label, and a runner that labels its own work
@@ -385,7 +435,7 @@ present on both shapes.
 | `kit_sha` | string \| `null` | never absent, but `null` | `null` when `$SDD_HOME` is not a git checkout. Short SHA of the kit's own HEAD when the row was written — the before/after axis the whole ledger exists for. |
 | `kit_dirty` | boolean \| `null` | never absent, but `null` | `null` exactly when `kit_sha` is `null` (paired). `true` means the kit's own working tree had uncommitted changes — the row is real but not comparable across versions. |
 | `project` | string | never | `PROJECT_NAME` from the target repo's `.sdd/config.sh`. |
-| `repo` | string | never | Absolute path of the target repo, as `git rev-parse --show-toplevel` returns it — can carry client-identifying paths, which is why the ledger stays in `$HOME` and is never committed. It is also the **only** field the readers filter on before anything else: see "The file is global; the READING is per repo" above. Compared verbatim, with no normalization on either side, so a repo reached through a symlink is a different repo. |
+| `repo` | string | never | Absolute path of the target repo — the directory holding the **shared** `.git`, as `ledger_repo_root` in `bin/sdd` resolves it (`git rev-parse --git-common-dir`, normalized). Can carry client-identifying paths, which is why the ledger stays in `$HOME` and is never committed. It is also the **only** field the readers filter on before anything else: see "The file is global; the READING is per repo" above. Compared verbatim, with no normalization at read time on either side, so a repo reached through a symlink is a different repo. |
 | `mission` | string | never | The mission slug. |
 | `phase` | string | never | The pipeline phase (`EXEC`, `QA`, …). `PLAN` never appears — the interactive phase spends no session. |
 | `step` | string | on escalation rows | The sub-step actually run (`QA:plan`, `QA:exec`, `QA:close`); equal to `phase` outside QA. |
@@ -436,7 +486,7 @@ kit versions (by
 **file order** of first appearance, never by sort — and a reappearing old sha rejoins its old
 group), each with missions, `missions_with_session` (the subset that bought an observation — the
 guard below counts these, not the raw mission tally), sessions, `moved_rate`, cost, escalations
-by kind, a per mission×phase `detail`, and a label per group:
+by kind, a per repo×mission×phase `detail` (each entry naming its `repo`), and a label per group:
 
 - `refez` — an escalation, a human `sdd retry`, or the phase's last session still failing its
   gate: the work was pushed again.
@@ -445,12 +495,57 @@ by kind, a per mission×phase `detail`, and a label per group:
 
 Plus a `guard` (`missions_after_change`, `missions_with_session`, `sessions`,
 `sufficient: missions_with_session >= 3` — a mission that only escalated ran, and is counted as
-one, but bought the judge no observation and so does not raise the floor) and an `excluded`
-accounting with four reasons
+one, but bought the judge no observation and so does not raise the floor;
+`degenerate_axis`, true when the **last three** kit versions in the slice each bought exactly one
+*mission* — the same unit the floor counts, never sessions — there is more than one of them, **and
+no version anywhere in the history ever reached the floor** — that third clause is what separates
+"this axis cannot work here" from a merely quiet stretch in a healthy repo) and an `excluded`
+accounting with five reasons
 (`non_comparable` dirty-kit rows, `unrecognized` rows, the `meta` rows the kaizen sessions
-themselves write — the loop never lets its own sessions shift the axis it is judged on — and
-`other_repo`, the rows born somewhere else). The empty-ledger branch prints the same key set with
+themselves write — the loop never lets its own sessions shift the axis it is judged on —
+`other_repo`, the rows born somewhere else, and `no_repo`, the rows that name no project at all —
+the field absent, `null`, or empty are one and the same answer).
+
+**A mission is a mission of a repo, not a slug.** Every count above keys off `(repo, mission)`.
+Under one repo that is a no-op; under `--all-repos` it is what keeps two projects that ran the same
+dated slug on the same `kit_sha` from collapsing into one group — mission slugs are dated and
+`sdd kaizen` itself mints `<today>-kaizen`, identical in every repo on the same day.
+The empty-ledger branch prints the same key set with
 zeros: a consumer must never read `null` on one branch where the other gives a number.
+
+`degenerate_axis` exists because `sufficient: false` alone says two different things. In a target
+repo it means "not enough missions yet", and waiting works. In the repo that **builds** the kit
+every session commits, so the next one lands on a fresh `kit_sha`, each version holds exactly one
+mission and the floor is unsatisfiable by construction — waiting never works, and `indeterminado`
+there is the correct answer rather than a broken runner. `sdd kaizen` says so out loud, citing
+[ADR 0003](adr/0003-judge-axis-evidence-from-target-repos.md); the floor does **not** loosen in
+answer to it. One version with one mission is not degenerate: that axis has only just started.
+
+⚠️ **The unit is missions, and it has to be**, because `sufficient` counts
+`missions_with_session` and this field exists to explain *that* floor. Counting sessions made the
+two disagree on the one row shape that separates them — a version whose two sessions belong to the
+**same** mission, which is what an in-loop retry or a second `sdd run` over a phase that neither
+commits nor dirties the kit tree produces. Measured: three versions, the newest holding two
+sessions of one mission ⇒ `missions_with_session: 1`, `sufficient: false`, and yet
+`degenerate_axis: false` with the sentence printed zero times. The human then reads a bare
+`sufficient: false` and waits for missions that cannot help — the exact misreading this field was
+built to end, and a single retry was enough to silence it. Zero is still not one: a version whose
+rows are all escalations observed **nothing**, a different silence with a different remedy.
+
+It reads the **last three** versions and not the whole history, for the same reason: the ledger is
+append-only, so a single ancient `kit_sha` that once carried two missions would switch the
+explanation off forever while every recent version sat at one mission each — and nothing about
+today could ever switch it back on. Three is the guard floor, held as one definition in the `jq`
+program so the window and the number it explains cannot drift apart.
+
+The window alone was not enough, and the second clause is why. The field claims the axis **cannot
+work here**, and a quiet stretch is not a broken axis: a repo whose history reached the floor twice
+and then went three versions quiet read `true`, telling its human to stop waiting for missions that
+were in fact arriving. So the whole history is consulted for one question only — did any version
+ever reach the floor? Having reached it once is a permanent fact about a repository, which is why
+latching the explanation off on *that* is right where latching it off on "some sha once carried two
+missions" was wrong. In the repo that builds the kit no version ever reaches it, so the explanation
+stays on.
 
 **The agent gives the verdict.** The `sdd-kaizen` session runs the series as its source of truth
 (citing, never recalculating), interprets the sha axis with `git log`, and writes

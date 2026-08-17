@@ -94,8 +94,10 @@ trap 'rm -rf "$WORK"' EXIT
 # mutation that does not sabotage is the decorative assertion this file exists to hunt, one level
 # up. Anchor on CODE, never on prose: prose gets translated, code does not.
 #
-# Name: mut_<GATE>_<slug> for a gate, mut_RUN_<slug> for what is not a gate. `sdd health` uses
-# that prefix to demand one mutation per gate — changing the convention blinds health.
+# Name: mut_<GATE>_<slug> for a gate — `sdd health` greps exactly that prefix to demand one
+# mutation per gate, so changing it there blinds health. Everything else is named after the
+# COMMAND or helper it sabotages (RUN_, PRE_, RETRY_, APPROVE_, AUTONOMY_, FRONTMATTER_): the
+# prefix is where to look when a mutant survives, and "not a gate" is not a place.
 # ---------------------------------------------------------------------------
 
 mut_PLAN_empty_approval() {   # accepts an empty `aprovacao:` — an unapproved plan becomes runnable
@@ -249,6 +251,122 @@ mut_KAIZEN_gate_blind() {
   sed -i 's|if \[ "\$(frontmatter "\$f" kit_sha_judged)" = "\$expected" \]|if [ -f "$f" ]|' "$1"
 }
 
+# ADR 0003 becomes an orphan: the runner stops naming the record that decides its own guard floor.
+# The document survives on disk, so the shape assertion stays green and only the citation half of
+# check-kaizen.sh goes red — which is the point. A decision record no code names is a label, and a
+# label is what every gate in this kit refuses to accept as evidence. `g` because the citation is
+# expected to appear at more than one site (the floor comment, the explanation printed to the
+# human): stripping only the first would leave the assertion green and measure nothing.
+mut_KAIZEN_adr_0003_orphan() {
+  sed -i 's|ADR 0003|ADR|g' "$1"
+}
+
+# The runner goes blind to a degenerate axis: the predicate answers false everywhere, so
+# `guard.degenerate_axis` is false in every repo and the explanation never prints. The human in the
+# kit repo reads `sufficient: false` and goes hunting for the missions that would satisfy it — which
+# no number of missions in THIS repo ever will, because each one commits and lands on a fresh sha
+# (ADR 0003). Sabotaging the PREDICATE and not the printer measures both halves at once: the field
+# and the sentence come from one source, and a mutant that killed only the print would leave the
+# derived number free to drift from what the human is told. `@` as the delimiter because the pattern
+# carries the jq pipe.
+mut_KAIZEN_degenerate_axis_blind() {
+  sed -i 's@| ($window | length) > 1@| false@' "$1"
+}
+
+# The window goes back to the WHOLE history, which is what it was until r2 of mission
+# 20260817-eixo-do-juiz. The ledger is append-only, so one ancient kit_sha that once bought two
+# sessions turns the structural explanation off forever while every recent version sits at one
+# session each — the field stops working and nothing says so.
+mut_KAIZEN_degenerate_axis_all_history() {
+  sed -i 's@| ($order\[(if $n > guard_floor then $n - guard_floor else 0 end):\]) as $window@| $order as $window@' "$1"
+}
+
+# The window loses its second clause and goes back to judging a QUIET STRETCH as a broken axis. The
+# field says "the axis cannot work here", so a repo whose own history reached the floor — twice —
+# and then went three versions quiet reads `degenerate_axis: true`, and the runner tells its human
+# to stop waiting for missions that are in fact arriving. The field then errs at exactly the
+# distinction it exists to make, and it feeds the judge prompt.
+# ⚠️ The anchor is `$best_reach`, not the `all($order[]; …)` this clause was first written as: the
+# reach test was regrouped into one `group_by` to stop being O(versions × rows), and the old anchor
+# stopped matching. It failed the honest way — CATALOGUE-BROKEN, rc 90 — which is the harness guard
+# doing its job, and the same trap the apostrophe in `mut_LEDGER_repo_root_common_parent` sprang.
+mut_KAIZEN_degenerate_axis_reach_blind() {
+  sed -i 's@        and $best_reach < guard_floor;@        ;@' "$1"
+}
+
+# `gate_KAIZEN` goes back to dropping the rc of the series read. errexit is OFF inside every gate
+# (each caller invokes it as `gate_KAIZEN || gate_rc=$?`), so an unreadable ledger arrives as the
+# empty string and the gate reports "no verdict for kit  yet" — corruption spelled exactly like
+# pending work, which sends the runner on to spend an opus session judging a file nobody can parse.
+# The reader beside it dies loudly over the same file; this half guessed, and guessed expensively.
+# The window goes back to counting SESSIONS instead of MISSIONS, and stops agreeing with the floor
+# it explains. A version whose two sessions belong to one mission — an in-loop auto retry — still
+# contributes one mission, so `missions_with_session` stays 1 and the floor stays unsatisfiable; the
+# session count of 2 nevertheless turns the field `false` and takes the sentence with it. The human
+# reads a bare `sufficient: false` and waits for missions that cannot help.
+mut_KAIZEN_degenerate_axis_session_unit() {
+  sed -i 's@and all($window\[\]; . as $sha | ($rows | missions_on($sha)) == 1)@and all($window[]; . as $sha | ($rows | map(select(.kit_sha == $sha and .event == "session")) | length) == 1)@' "$1"
+}
+
+# The window sorts its versions and stops meaning "recent". `shas_in_file_order` is what makes the
+# window recency rather than alphabetical, and a `sort` slipped inside this one consumer is
+# invisible: the latest/previous pair keeps its own probe, so only the window goes blind. An ancient
+# version whose sha happens to sort last is dragged into the window and silences the explanation
+# forever — N8 all over again, and by construction with nothing saying so.
+mut_KAIZEN_degenerate_axis_window_sorted() {
+  sed -i 's@| ($rows | shas_in_file_order) as $order@| ($rows | shas_in_file_order | sort) as $order@' "$1"
+}
+
+mut_KAIZEN_series_rc_dropped() {
+  sed -i 's@  series="$(kaizen_series)" || series_rc=$?@  series="$(kaizen_series 2>/dev/null)"; series_rc=0; series="${series:-{\\}}"@' "$1"
+}
+
+# The mission identity loses the repo and goes back to the bare slug. A no-op until --all-repos
+# existed; with it, two projects that ran the same dated slug on the same kit_sha collapse into one
+# group — missions_with_session drops, guard.sufficient can flip, and one project `refez` swallows
+# another project clean `ok`. Both readers are sabotaged by the one anchor pair below on purpose:
+# the two spellings are one mechanism, and check-autonomy.sh compares the readers to each other.
+mut_KAIZEN_mission_key_slug_only() {
+  sed -i 's@def mission_key: \[(.repo // ""), (.mission // "")\];@def mission_key: [(.mission // "")];@g' "$1"
+}
+
+# The repo identity goes back to the PARENT of the shared .git — the first spelling of the worktree
+# fix, and the one that silently merged repositories: every submodule of one parent answers
+# `/parent/.git/modules`, and every bare repo beside another answers the directory that holds them.
+# Nothing is excluded and nothing is reported (`other_repo: 0`), which is the contamination the
+# filter exists to name, arriving through a different door.
+#
+# ⚠️ DOUBLE-quoted, and it has to be. The anchor contains `CDPATH=''`, and an apostrophe cannot
+# survive inside a single-quoted shell string: `''` there closes the quote and reopens it, so sed
+# received `CDPATH= cd` and stopped matching the file the day the SC1007 spelling was fixed. It
+# failed the honest way — CATALOGUE-BROKEN, rc 90 — which is the harness guard doing its job, but
+# the same trap silently mis-anchors any sed whose target holds a quote. Same family as the rule
+# forbidding an apostrophe inside the jq programs in bin/sdd (see CLAUDE.md).
+mut_LEDGER_repo_root_common_parent() {
+  sed -i "s@^  gitdir=\"\\\$( CDPATH='' cd \"\\\$start\" && CDPATH='' cd \"\\\$common\" && pwd -P 2>/dev/null )\" || return 0\$@  printf \"%s\" \"\$( cd \"\$start\" \&\& cd \"\$common/..\" \&\& pwd -P 2>/dev/null )\"; return 0@" "$1"
+}
+
+# The guard that keeps the ENVIRONMENT from answering "which repo is this" goes away, and the repo
+# identity becomes whatever $CDPATH says: `--git-common-dir` is relative at a checkout root (`.git`)
+# and bash searches CDPATH for that operand, so a single dotfiles checkout in the path collapses
+# every repository on the machine into one identity — writer and readers agreeing, `other_repo: 0`,
+# nothing said. `/g` on purpose: the two `cd`s are ONE guard, and sabotaging half of it would leave
+# the pair in check-autonomy.sh measuring the half that still works.
+mut_LEDGER_repo_root_cdpath_leak() {
+  sed -i "s@CDPATH='' cd@cd@g" "$1"
+}
+
+# The bare test goes back to asking about the ENTRY POINT instead of the repository, and one
+# repository gets two identities. `rev-parse --is-bare-repository` answers for the path git was
+# entered through: a bare repo living in a directory named `.git` says `true` read from itself and
+# `false` read from a linked worktree of itself, so the cosmetic `/.git` strip fires on the second
+# reading only — `/x/.git` and `/x` for one repo, which makes every row written from the worktree
+# foreign to every row written from the repo. The sibling of the collapse above and the same class
+# of silence: both readings are non-empty and plausible, so nothing warns.
+mut_LEDGER_bare_by_entry_point() {
+  sed -i 's@git -C "$start" config --bool --get core.bare 2>/dev/null@git -C "$start" rev-parse --is-bare-repository 2>/dev/null@' "$1"
+}
+
 # The Jidoka dies: `verdict: piorou` no longer stops the line. The outcome falls through to the
 # born-plan branch and exits 0 — a kit change that made autonomy WORSE reads as a green light,
 # which is the exact failure ADR 0002 exists to forbid.
@@ -267,8 +385,8 @@ mut_KAIZEN_approved_bailout_dead() {
 
 # The rubric's strongest signal is dropped: phases with an escalation, a human retry or a failing
 # last gate label as "ok". The judge would congratulate the kit precisely on the missions where
-# the human had to push the work again. RUN_ prefix: kaizen_series is a helper, not a gate —
-# the two-prefix contract in the header comment holds.
+# the human had to push the work again. RUN_ prefix and not KAIZEN_: kaizen_series is a helper the
+# runner reads, not the gate — the naming rule in the header comment holds.
 mut_RUN_refez_dropped() {
   sed -i 's|then "refez"|then "ok"|' "$1"
 }
@@ -478,7 +596,52 @@ mut_RUN_entrypoint_unguarded() {
 # repos in check-kaizen.sh, the human table read from two repos in check-autonomy.sh — and neither
 # can survive it, because both compare two readings of ONE file against each other.
 mut_RUN_ledger_no_repo_filter() {
-  sed -i 's@def ledger_row_is_local: if (type == "object" and has("repo")) then .repo == $repo else true end;@def ledger_row_is_local: true;@' "$1"
+  sed -i 's@def ledger_row_is_local: if ledger_row_no_repo then false elif (type == "object" and has("repo")) then .repo == $repo else true end;@def ledger_row_is_local: true;@' "$1"
+}
+
+# Not a gate: a row with no `repo` key goes back to being local in EVERY repo, and the bucket that
+# names it goes back to reading 0. The judge's floor is then movable by rows nobody can attribute
+# to any project — three of them cleared `sufficient` in fixture — and nothing in the output says a
+# row was even admitted. The expensive shape again: not a number missing, a number moved with no
+# reason printed beside it.
+#
+# It sabotages `ledger_row_no_repo` and NOT `ledger_row_is_local`, which is what keeps it distinct
+# from the two entries above: the repo filter itself stays honest (the two-repo differentials stay
+# green), so what has to die is the pair that reads the same three sessions with and without the
+# key. Emptying the definition kills the counter and the exclusion at once, because both go
+# through it — the single-definition discipline, measured.
+mut_LEDGER_no_repo_counted_as_local() {
+  sed -i 's@def ledger_row_no_repo: type == "object" and ((\.repo // "") == "");@def ledger_row_no_repo: false;@' "$1"
+}
+
+# Not a gate: `--all-repos` is still accepted, still documented, and does nothing — the shape of
+# dead flag that is worst to have, because the human asks the cross-project question, gets an
+# answer, and the answer is about one repo. The complement of the mutation above: that one opens
+# the filter that must stay shut by default, this one welds shut the door that must open on demand.
+#
+# `g` because the flag is parsed in TWO commands (cmd_autonomy and cmd_kaizen) and the differential
+# pair reads one of them each: killing only the first would leave the judge's half green and
+# measure half a flag. It sabotages the SETTERS and not `ledger_row_is_local`, which is the whole
+# point of there being one predicate — a mutant that emptied the predicate would be indistinguishable
+# from mut_RUN_ledger_no_repo_filter and would score the same point twice.
+mut_AUTONOMY_all_repos_ignored() {
+  sed -i 's@LEDGER_ALL_REPOS=1@LEDGER_ALL_REPOS=0@g' "$1"
+}
+
+# Not a gate: the ledger's repo identity goes back to `git rev-parse --show-toplevel`, which
+# answers per WORKTREE. Nothing fails, nothing is malformed — a mission run from `git worktree add`
+# simply stamps a path no other checkout of the same repo recognizes, and every reader files those
+# rows under `other_repo`. The judge's series goes empty in the isolation workflow this kit itself
+# recommends, and it goes empty QUIETLY, which is the shape of defect the repo filter exists to
+# forbid: a number that moved with nothing saying why.
+#
+# It sabotages the ONE definition and not the call sites, like mut_RUN_ledger_no_repo_filter: the
+# writer and the three readers all resolve identity here, so emptying the body is what proves they
+# really share it. Reverting only the writer (or only the reader) would leave the two sides
+# agreeing on the OLD identity — the differential pair reads 3-own/0-foreign either way, and the
+# mutant would survive while measuring nothing.
+mut_LEDGER_repo_root_toplevel() {
+  sed -i 's@^  common="\$( git -C "\$start" rev-parse --git-common-dir 2>/dev/null )" || return 0$@  printf "%s" "$( git -C "$start" rev-parse --show-toplevel 2>/dev/null )"; return 0@' "$1"
 }
 
 # Not a gate: the preflight goes back to asking whether the agent copy EXISTS, which is what it did
@@ -657,6 +820,23 @@ mut_FRONTMATTER_write_unscoped() {
   sed -i 's/^    inside && !written {$/    !written {/' "$1"
 }
 
+# Not a gate: `--all-repos` keeps working EVERYWHERE except in the one line the agent is handed.
+# The gate reads its series in-process under the flag, the prompt tells the agent to run the bare
+# `--series`, and the two halves land on different `latest` shas — so no `kit_sha_judged:` the
+# agent can write is the one the gate hunts for. Nothing is malformed and no number is wrong: the
+# PHASE is unsatisfiable, the runner retries once, and `BLOCKED in KAIZEN — no-progress` buys a
+# blocked row with two opus sessions (BUG-1, sdd-qa, mission 20260817-eixo-do-juiz).
+#
+# It sabotages the propagation and NOT the setters: `AUTONOMY_all_repos_ignored` already welds the
+# setters shut, and a mutant that killed those again would score the same point twice while leaving
+# this half unmeasured. Killing only `ledger_flags` keeps the gate's reading flagged and the
+# prompt's bare — which is precisely the split, and precisely what the differential pair in
+# check-kaizen.sh reads. The control half of that pair (no flag ⇒ both bare) stays green here, as
+# it must: a "fix" that hardcoded the flag into the prompt is the mutant this one does not cover.
+mut_KAIZEN_prompt_series_unflagged() {
+  sed -i 's@ledger_flags=" --all-repos"@ledger_flags=""@' "$1"
+}
+
 CATALOG=(
   PLAN_empty_approval
   PLAN_kaizen_born_blind
@@ -713,6 +893,21 @@ CATALOG=(
   APPROVE_base_branch_warn_dead
   RUN_branch_order_swap
   FRONTMATTER_write_unscoped
+  KAIZEN_adr_0003_orphan
+  KAIZEN_degenerate_axis_blind
+  AUTONOMY_all_repos_ignored
+  LEDGER_repo_root_toplevel
+  LEDGER_no_repo_counted_as_local
+  KAIZEN_prompt_series_unflagged
+  KAIZEN_degenerate_axis_all_history
+  KAIZEN_mission_key_slug_only
+  LEDGER_repo_root_common_parent
+  LEDGER_repo_root_cdpath_leak
+  LEDGER_bare_by_entry_point
+  KAIZEN_degenerate_axis_reach_blind
+  KAIZEN_degenerate_axis_session_unit
+  KAIZEN_degenerate_axis_window_sorted
+  KAIZEN_series_rc_dropped
 )
 
 # Mutations that are NOT caught today, each with the increment that closes it. Ratchet in both
@@ -740,6 +935,14 @@ sandbox() { # sandbox <target-dir> — the whole kit the suite needs, and nothin
   # control run stayed green. It is NOT copied for check-lang.sh, which reads it too but is guarded
   # out of the mutants; adding it here does not make that guard removable.
   cp -r "$ROOT/bin" "$ROOT/tests" "$ROOT/templates" "$ROOT/config" "$ROOT/agents" "$1/"
+  # `docs/adr` and NOT `docs`: check-kaizen.sh asserts the runner still names ADR 0003, and the
+  # sabotage that strips the citation has to be able to kill it INSIDE a mutant. Three small files,
+  # against a `docs/` tree whose handoffs are megabytes and which no sensor here reads — the
+  # sensors that DO read the rest of docs/ (check-todo.sh, check-checkpoint.sh) are the ones
+  # run-all.sh guards out under SDD_MUTANT, so this stays the whole kit the suite needs and nothing
+  # more.
+  mkdir -p "$1/docs"
+  cp -r "$ROOT/docs/adr" "$1/docs/"
 }
 
 # run_mutant <slug> — writes $WORK/<slug>.rc and $WORK/<slug>.log

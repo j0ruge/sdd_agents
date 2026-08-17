@@ -65,22 +65,76 @@ a judged regression that disappears from the record will be re-attempted.
 `sdd autonomy` refuses with rc 1 naming the same count. The ledger file is right there and it is
 not empty.
 
-**Cause:** the file is global, the **reading is per repo** — one predicate admits only the rows
-whose `repo` equals the repo you are standing in. Three ordinary ways to land here: reading from a
-directory that is no git repository at all; reading in the kit repo while every session was spent
-on a target (or the reverse); or reaching the repo through a path the rows do not carry — a symlink
-or a git worktree, which `git rev-parse --show-toplevel` reports as a toplevel of its own.
+**Cause:** the file is global, the **reading is per repo by default** — one predicate admits only
+the rows whose `repo` equals the repo you are standing in. Three ordinary ways to land here:
+reading from a directory that is no git repository at all; reading in the kit repo while every
+session was spent on a target (or the reverse); or reaching the repo through a path the rows do not
+carry — a symlink, or a **worktree row written before** `c514e36`, when identity still came from
+`git rev-parse --show-toplevel` and every worktree therefore looked like a repo of its own.
 
 **What you do:** run the reader **inside** the repo whose missions you want to judge, and compare
-`git rev-parse --show-toplevel` with `jq -r .repo ~/.sdd/autonomy-log.jsonl | sort -u`. The
-comparison is verbatim on both sides by design: a `realpath` invented here would silently merge two
-checkouts the ledger deliberately keeps apart. Full contract in
-[`pipeline.md`](pipeline.md) § "The autonomy ledger".
+what `ledger_repo_root` derives — the shared `.git` **itself**, `cd "$(git rev-parse
+--git-common-dir)" && pwd -P`, with a trailing `/.git` stripped off when the repo is not bare —
+with `jq -r .repo ~/.sdd/autonomy-log.jsonl | sort -u`. ⚠️ Not the PARENT of that path, which was
+the first spelling and merged repositories silently: in a submodule the common dir is
+`/parent/.git/modules/<name>`, so the parent is the same string for every submodule of one parent,
+and in a bare repo it is `.`, so the parent is whatever directory happens to hold the repo. If the
+question really is cross-project
+maturity, that is what `--all-repos` is for: `sdd autonomy --all-repos`, `sdd kaizen --series
+--all-repos`. ⚠️ At read time the comparison is verbatim on both sides by design: a `realpath`
+invented there would silently merge two checkouts the ledger deliberately keeps apart. Full
+contract in [`pipeline.md`](pipeline.md) § "The autonomy ledger".
 
-**Do not:** read this as data loss. What the filter removed is **counted** — `excluded.other_repo`
-in the series, one `N row(s) excluded` line in the human table — and an empty series is
-`guard.sufficient: false`, which supports only `indeterminado`. Somebody else's numbers read as a
-verdict about this kit is exactly what the filter exists to prevent.
+**Do not:** read this as data loss. What the filter removed is **counted**, and by reason —
+`excluded.other_repo` for rows born elsewhere and `excluded.no_repo` for rows that name no project
+at all (field absent, `null`, or empty — one answer, not three), one `N row(s) excluded` line each
+in the human table, plus its own "no data" voice per silence: an empty file, a wholly unattributable
+ledger, a cwd in no repo, a ledger of somebody else's rows, and a **mixed** one, which says how the
+rows split because `--all-repos` reaches the foreign ones and can reach none of the unattributable
+ones. An empty series is `guard.sufficient: false`, which supports
+only `indeterminado`. A throwaway fixture repo's numbers read as a verdict about this kit is
+exactly what the default filter exists to prevent.
+
+⚠️ **`sufficient: false` in the kit repo is not this failure mode.** If `guard.degenerate_axis` is
+`true`, the last three kit versions in the slice each hold exactly one **mission** — the unit the
+floor counts, never sessions — and no number of
+missions *here* will clear the floor — the axis is being read in the repo that builds the kit. It
+reads a window and not the whole file on purpose: over all of history one ancient sha with two
+sessions would switch the explanation off forever, and an append-only ledger could never switch it
+back on. `sdd kaizen` says so
+and names [ADR 0003](adr/0003-judge-axis-evidence-from-target-repos.md); the floor is not the
+defect and does not loosen. ⚠️ Careful with the ancient-sha sentence above: the unit there is
+missions too. One old version that carried two *missions* is what latches the window off — and the
+second clause, "no version anywhere ever reached the floor", is what keeps the whole thing off a
+healthy repo that is merely quiet.
+
+---
+
+## `sdd kaizen` refuses: "the ledger could not be read"
+
+**Symptom:** `sdd kaizen` (or `--dry-run`) prints `malformed row in <path> — the ledger is not
+readable` and then `error: the ledger could not be read (the series reader exited 1) — this is NOT
+'not judged yet'`, rc 1, with **no session opened**. `sdd kaizen --series` alone warns the same and
+exits 1 with no JSON on stdout.
+
+**Cause:** one row of `~/.sdd/autonomy-log.jsonl` is not valid JSON — a truncated write, a hand
+edit, a file appended to by two processes at once. Before this was checked, the reader's empty
+output was assigned into `series=$(kaizen_series)` with the return code dropped, and `errexit` is
+**off** inside every gate (each caller runs `gate_KAIZEN || rc=$?`), so an unreadable ledger read
+back as "no verdict for the kit yet" — a doubled space in that message was the only tell — and the
+runner went on to spend an opus session judging a series nobody could read.
+
+**What you do:** run `sdd autonomy`, which names the file and dies on the same row, then find it
+with `jq -c . ~/.sdd/autonomy-log.jsonl` — the last line it prints before failing is the one before
+the break. The ledger is append-only *facts*, so the repair is to fix or delete that one row; a row
+that was never valid JSON never carried a fact.
+
+**Do not:** re-run hoping a fresh session fixes it, and do not point a session at it. The file
+lives in `$HOME`, **outside** the repo the session is given — no session can reach it, so the only
+thing another attempt buys is a second opus bill and the same sentence. This is why the gate
+publishes a reason of its own (`GATE_KAIZEN_UNREADABLE`, whose `GATE_WHY` names the remedy) instead
+of letting the phase look merely unsatisfied — "unreadable" and "not judged yet" ask for opposite
+things from you.
 
 ---
 

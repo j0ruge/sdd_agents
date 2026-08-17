@@ -59,7 +59,10 @@ sdd retry <mission>          # retry the current phase with a fresh session
 sdd close <mission>          # post-merge: close the JIRA issue
 sdd health                   # KIT sensor (≠ preflight, which is about the target's environment)
 sdd autonomy                 # waste per kit version, for THIS repo, from the global ledger (~/.sdd/autonomy-log.jsonl)
-sdd kaizen                   # judge the previous kit change and plan the next kit mission (kit repo only)
+sdd autonomy --all-repos     # ...for EVERY repo on this machine (the cross-project question; never the default)
+sdd kaizen [--all-repos]     # judge the previous kit change and plan the next kit mission (kit repo only);
+                             #   the flag reaches BOTH halves that read the series — gate and agent prompt
+sdd kaizen --series [--all-repos]   # the deterministic series (JSON) the judge cites, on its own
 
 sdd run <mission> --dry-run         # project the whole pipeline without spending tokens
 sdd run <mission> --phase EXEC      # force one specific phase
