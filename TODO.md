@@ -308,15 +308,6 @@ Achados sobre **repos-alvo** vão para o `TODO.md` daquele repo. Este arquivo é
   quando houver folga de régua. — descoberto por `sdd-executor` na missão
   `20260815-ledger-sem-ponto-cego` (2026-08-16)
 
-- [ ] **A guarda do juiz é insatisfazível quando o kit desenvolve a si mesmo** — `bin/sdd:2738`
-  (`sufficient: ($observed >= 3)`) vs `autonomy_kit_stamp` — o eixo é o `HEAD` do kit no instante
-  de CADA linha, e a fase EXEC commita no `bin/sdd` entre sessões: medido, **24 kit_sha distintos
-  no ledger, todos com exatamente 1 sessão, nenhum com 2**, então `sufficient` é `false` por
-  construção aqui. Não é bug em alvo — é o eixo degenerando no repo que o desenvolve.
-  RESOLVIDO por `3547a83`+`abac043`: o ADR 0003 decide (evidência vem de alvo real, o piso não afrouxa) e
-  `guard.degenerate_axis` faz o runner dizer isso em voz alta, citando o registro.
-  — descoberto por `humano` na missão `20260816-runner-sem-dividas` (2026-08-16)
-
 - [ ] **O schema da série não tem sensor de drift contra a prosa que o descreve** — `bin/sdd:2738`
   vs `:2735`, `:2926`, `docs/pipeline.md:499`, `docs/adr/0003:57`, `agents/sdd-kaizen.md:40` e
   `docs/failure-modes.md:99` — produzido em dois lugares (o `jq` e o literal vazio, `:2558`) e
@@ -344,37 +335,12 @@ Achados sobre **repos-alvo** vão para o `TODO.md` daquele repo. Este arquivo é
   Direção: silenciar o lembrete fora do kit, ou responder se o juiz pode pesar linha de outro
   projeto — ADR 0004. — descoberto por `sdd-reviewer` na missão `20260816-kit-como-alvo` (2026-08-16)
 
-- [ ] **Worktree do git parte a identidade do repo no ledger** — `bin/sdd:894`
-  (`ledger_repo_root`, usava `--show-toplevel`) — o toplevel é por worktree, então missão rodada num
-  worktree grava `repo: .../wt` e a mesma leitura do checkout principal a devolve como
-  `other_repo` e a série vem vazia. RESOLVIDO por `c514e36+913cb3f`: a identidade **é** o `.git`
-  compartilhado, no escritor e nos leitores. ⚠️ `c514e36` sozinho tomava o **pai** do `.git` e
-  fundia submódulos irmãos e bares vizinhos numa identidade só, em silêncio; `913cb3f` corrigiu.
-  — descoberto por `sdd-reviewer` na missão `20260816-kit-como-alvo` (2026-08-16)
-
 - [ ] **`sdd kaizen` recusa rodar de um worktree do próprio kit** — `bin/sdd:2963` — a porta
   "estou no repo do kit?" compara `kit_root` (`--show-toplevel` de `$SDD_HOME`) com `$REPO_ROOT`,
   e o toplevel é por worktree: de um worktree do kit os dois divergem e o comando morre em
   "run it in the kit repo". Mesma classe que `c514e36` acabou de fechar no ledger, em outra
   porta — e o kit recomenda worktree para isolar missão. Direção: `ledger_repo_root` dos dois
   lados, com par diferencial. — descoberto por `sdd-executor` na missão `20260817-eixo-do-juiz` (2026-08-17)
-
-- [ ] **Linha sem `repo` é "local" em TODO repo, e o comentário afirma o contrário** —
-  `bin/sdd:933` — o comentário dizia que os leitores classificam essas linhas em voz alta
-  (`unrecognized`, ou morte alta), mas `is_unrecognized` olha `.event` e não `.repo`: linha de
-  sessão bem-formada sem `repo` é sessão comparável em toda máquina — 3 delas bastaram para virar
-  `guard.sufficient` para `true` em fixture. Hoje são 0 no ledger real. RESOLVIDO por `4ca8015`:
-  balde `excluded.no_repo` nos dois leitores (nunca `other_repo`, que é outra acusação), quarta voz
-  de "no data", e o comentário corrigido com o motivo.
-  — descoberto por `sdd-reviewer` na missão `20260816-kit-como-alvo` (2026-08-16)
-
-- [ ] **O juiz no repo do kit deixou de enxergar missão de repo-alvo** — `bin/sdd:790`
-  (`ledger_row_is_local`, `bin/sdd:933`) — a leitura por repo é o conserto certo para contaminação de fixture,
-  mas o ledger existe para medir maturidade **entre** projetos (`docs/pipeline.md:274`) e nenhum
-  leitor consegue mais fazê-lo. RESOLVIDO por `d62f08c`: `--all-repos` explícito, ligando o
-  predicado único e alcançando os três leitores de uma vez; medido no ledger real, 49 linhas →
-  60 e `other_repo` 11 → 0. O default segue filtrado, que era a outra metade da decisão.
-  — descoberto por `sdd-executor` na missão `20260816-kit-como-alvo` (2026-08-16)
 
 - [ ] **`config/schema.md` promete cinco comportamentos que o runner não tem** —
   `config/schema.md:24-25,32-34` vs `bin/sdd:81-82` — `LINT_CMD`, `BUILD_CMD`, `DEV_UP_CMD`,
