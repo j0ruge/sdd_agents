@@ -76,14 +76,24 @@ field() { jq -r "$1" <<< "$SERIES_OUT"; }
 echo "== adr 0003 =="
 
 ADR3="$ROOT/docs/adr/0003-judge-axis-evidence-from-target-repos.md"
-# One `grep -c` over five DISTINCT line patterns, so the count is the number of format elements
-# present: title in `# NNNN — ` form, the dated status line, and the three sections 0001/0002 ship.
-# A file that exists but drifted from the format scores below 5 and is not accepted.
-adr3_shape="0"
-[ -f "$ADR3" ] && adr3_shape="$(grep -c \
-  -e '^# 0003 — ' \
-  -e '^Date: .* · Status: accepted$' \
-  -e '^## Context$' -e '^## Decision$' -e '^## Consequences$' "$ADR3")"
+# ONE grep per element, each contributing at most 1 — so the count really is "how many of the five
+# format elements are present". ⚠️ It was a single `grep -c` with five `-e`, and that counts
+# matching LINES, not distinct elements: measured, a copy that lost the `# 0003 — ` title and
+# gained a second `## Context` still scored 5 and the assertion passed green. A shape assertion a
+# duplicated heading can satisfy asserts nothing about the element that went missing — the
+# fail-open shape this repo treats as the worst thing a sensor can do, because it reports having
+# measured what it did not measure.
+ADR3_SHAPE_PATS=(
+  '^# 0003 — .'                       # title in the `# NNNN — <title>` form 0001/0002 ship
+  '^Date: .* · Status: accepted$'     # the dated status line
+  '^## Context$' '^## Decision$' '^## Consequences$'
+)
+adr3_shape=0
+if [ -f "$ADR3" ]; then
+  for pat in "${ADR3_SHAPE_PATS[@]}"; do
+    grep -qE "$pat" "$ADR3" && adr3_shape=$((adr3_shape + 1))
+  done
+fi
 assert_eq "adr 0003 exists in the shape of 0001/0002 (title, dated status, three sections)" \
   "5" "$adr3_shape"
 
