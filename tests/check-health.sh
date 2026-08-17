@@ -21,6 +21,13 @@
 #   5. the green fixture reaches `kit healthy` — the FLOOR against vacuity. Without it, 1-4 are
 #      all satisfied by a fixture that is red for some reason of its own, and this file would
 #      claim to have measured what it never measured.
+#   6. a baseline off by one on the TODO.md finding count fails in BOTH directions at once — the
+#      backlog ratchet, which is the whole point of the mission that added it. One edit, two
+#      complaints: the emitted count is outside the baseline AND the baseline's count is stale.
+#   7. the count check dies when the suite prints no finding count, and is the SOLE author of that
+#      failure. Without it the contract could rot on the check-todo.sh side and cmd_health would
+#      go blind in silence — the failure mode the `score:` check above was already written
+#      against, and the one it still has (TODO.md: it dies of `set -e` before it can say so).
 #
 # Usage: tests/check-health.sh   (exit 0 = cmd_health discriminates)
 #
@@ -71,7 +78,7 @@ fail() { printf '  FAIL  %s\n         expected: %s\n         got:      %s\n' "$1
 broken() { printf '  SENSOR-BROKEN  %s\n' "$1" >&2; exit 90; }
 
 # The ratchet-relevant lines of an output, flattened onto one line for a FAIL report.
-digest() { grep -E 'baseline|provenance|kit healthy|check\(s\) failed' <<< "$1" | tr '\n' ' '; }
+digest() { grep -E 'baseline|provenance|finding count|kit healthy|check\(s\) failed' <<< "$1" | tr '\n' ' '; }
 
 # ---------------------------------------------------------------------------
 # The fixture
@@ -81,6 +88,12 @@ digest() { grep -E 'baseline|provenance|kit healthy|check\(s\) failed' <<< "$1" 
 # SHAPE is the contract cmd_health reads (`^score: [0-9]+ caught, 0 known gap`), and a number
 # that tracked the real one would invite a future editor to keep them in sync for no reason.
 STUB_SCORE='score: 3 caught, 0 known gap(s), of 3'
+
+# The stub suite's TODO.md finding count — the SECOND line cmd_health reads off the suite's own
+# stdout, emitted for real by tests/check-todo.sh. Same reasoning as STUB_SCORE, and the same
+# reason it is a contract and not a recount: bin/sdd reads this number, tests/check-todo.sh
+# writes it, and nobody re-derives it. The value here is deliberately not the real TODO.md's.
+STUB_TODO_COUNT=7
 
 reset_home() {
   rm -rf "${FIX:?}/home"
@@ -108,11 +121,23 @@ build_fixture() {
   cp "$ROOT/config/schema.md" "$FIX/config/schema.md"
   cp "$ROOT/tests/check-mutation.sh" "$ROOT/tests/check-gates.sh" "$FIX/tests/"
 
+  write_stub_suite with-count
+}
+
+# The stub suite. `$1` is `with-count` or `no-count`: assertion 7 needs a suite that prints
+# everything except the finding count, and it has to be the ONLY thing that changes between the
+# two worlds it compares — hence one writer with a switch, not two heredocs drifting apart.
+write_stub_suite() { # write_stub_suite <with-count|no-count>
+  local count_line=""
+  [ "$1" = "with-count" ] \
+    && count_line="printf '  ok    %d finding(s), all within 8 lines and carrying anchor + date\\n' $STUB_TODO_COUNT"
+
   cat > "$FIX/tests/run-all.sh" <<EOF
 #!/usr/bin/env bash
 # Stub suite. See the RECURSION note in tests/check-health.sh: the real one runs that file, which
 # runs this command, which would run the real one.
 printf '%s\n' '$STUB_SCORE'
+$count_line
 exit 0
 EOF
   chmod +x "$FIX/tests/run-all.sh"
@@ -259,13 +284,69 @@ fi
 clear_skills
 set_baseline "$CALIBRATED"
 health_run
+OUT_GREEN="$HEALTH_OUT"; RC_GREEN="$HEALTH_RC"
 
-if [ "$HEALTH_RC" -eq 0 ] && grep -q 'kit healthy' <<< "$HEALTH_OUT"; then
+if [ "$RC_GREEN" -eq 0 ] && grep -q 'kit healthy' <<< "$OUT_GREEN"; then
   pass "the green fixture reaches kit healthy"
 else
   fail "the green fixture reaches kit healthy" \
        "rc 0 and 'kit healthy' — without this floor the four assertions above are satisfied by a fixture that is red for a reason of its own" \
+       "rc $RC_GREEN · $(digest "$OUT_GREEN")"
+fi
+
+# ---------------------------------------------------------------------------
+# 6 — the backlog ratchet: a count off by one fails in BOTH directions, one edit
+#
+# This is the property the mission exists for, and it is asserted as a CONJUNCTION on purpose:
+# demanding both sentences out of a single world is what makes the assertion survive a ratchet
+# that learned to complain about only one side. The baseline is BUILT (the todo line stripped and
+# a wrong one appended), never sed-ed out of the calibrated one — with a substitution, a runner
+# that stopped emitting the count would leave a baseline with nothing to be stale about and the
+# whole world would go green. Built this way the stale line is there whatever the runner does, so
+# the missing half is the emitted finding, and the conjunction is what notices.
+# ---------------------------------------------------------------------------
+OFF_BY_ONE="$(grep -vE '^todo-findings ' <<< "$CALIBRATED")
+todo-findings $(( STUB_TODO_COUNT - 1 ))"
+set_baseline "$OFF_BY_ONE"
+health_run
+
+if [ "$HEALTH_RC" -ne 0 ] \
+   && grep -qF "finding outside the baseline: todo-findings $STUB_TODO_COUNT" <<< "$HEALTH_OUT" \
+   && grep -qF "stale baseline: 'todo-findings $(( STUB_TODO_COUNT - 1 ))' is no longer a finding" <<< "$HEALTH_OUT"; then
+  pass "a baseline off by one fails both ways"
+else
+  fail "a baseline off by one fails both ways" \
+       "rc != 0 and BOTH 'finding outside the baseline: todo-findings $STUB_TODO_COUNT' and \"stale baseline: 'todo-findings $(( STUB_TODO_COUNT - 1 ))'\"" \
        "rc $HEALTH_RC · $(digest "$HEALTH_OUT")"
+fi
+
+# ---------------------------------------------------------------------------
+# 7 — the count is a contract between two files, and a broken contract has to say so
+#
+# THE BASELINE DROPS THE COUNT LINE FOR THIS WORLD ON PURPOSE, and that line of setup is the
+# whole assertion. Keep it and the un-emitted finding leaves the baseline's own entry with no
+# pair, so the STALE branch fails the run by itself and the `rc != 0` below is authored by
+# somebody else entirely — the assertion would read a shared rc and conclude the count check
+# works. Measured, not feared: with the count line in the baseline, downgrading this very
+# `health_bad` to a `warn` survived every assertion in this file. Stripped, the count check is the
+# only thing left that can fail this world, so the rc means what it says.
+#
+# The OUT_GREEN half is load-bearing for a different defect and was kept because sabotage broke
+# it: a diagnostic that shouts the sentence in EVERY world, healthy ones included, fails only
+# here — assertion 5 stays green, because a `warn` is not a failure.
+# ---------------------------------------------------------------------------
+write_stub_suite no-count
+set_baseline "$(grep -vE '^todo-findings ' <<< "$CALIBRATED")"
+health_run
+
+if [ "$HEALTH_RC" -ne 0 ] \
+   && grep -q 'did not print the TODO.md finding count' <<< "$HEALTH_OUT" \
+   && ! grep -q 'did not print the TODO.md finding count' <<< "$OUT_GREEN"; then
+  pass "the count check dies when the suite prints no finding count"
+else
+  fail "the count check dies when the suite prints no finding count" \
+       "the count-less suite fails, saying so, and the world of assertion 5 never says the sentence" \
+       "no-count: rc $HEALTH_RC · $(digest "$HEALTH_OUT") // green: rc $RC_GREEN · $(digest "$OUT_GREEN")"
 fi
 
 # ---------------------------------------------------------------------------

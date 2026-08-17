@@ -1727,7 +1727,32 @@ cmd_health() {
     health_bad "mutation with an open gap — $score_line"
   fi
 
-  # --- 3. every gate has a mutation ----------------------------------------
+  # --- 3. the TODO.md backlog count, read from the SAME run ----------------
+  # The count is a CONTRACT between two files: tests/check-todo.sh writes the line, bin/sdd reads
+  # it, and NOBODY EVER RECOUNTS. A `grep -c '^- \[ \]' TODO.md` here answers one too many — it
+  # swallows the format example inside the header's fenced block, which the parser of
+  # check-todo.sh needed a whole review round to learn to skip. Reword the line on either side
+  # alone and this goes red, exactly like the `score:` contract above.
+  #
+  # Growing is still allowed: principle 5 of CLAUDE.md does not change, and a mission that finds
+  # three real things has to be able to write them down. What is forbidden is growing UNDECLARED.
+  # The number is a line of tests/health-baseline.txt, so it moves in a diff with an author, and
+  # health_ratchet refuses it in both directions — the count that rose without a record and the
+  # baseline left behind after a sweep.
+  #
+  # `|| true` is not noise. Under this file's own `set -e`, a grep that matches nothing makes the
+  # assignment return 1 and kills the runner mid-command — rc 1, not one word said — so the
+  # `-z` branch below would be unreachable and a broken contract would read as a crash. Same
+  # family as the two silent aborts of `find` and `grep -vE` recorded in TODO.md.
+  local todo_line
+  todo_line="$(grep -m1 -E '^  ok    [0-9]+ finding\(s\)' <<< "$out" || true)"
+  if [ -z "$todo_line" ]; then
+    health_bad "the suite did not print the TODO.md finding count — health went blind to the backlog"
+  else
+    health_finding "todo-findings $(sed -E 's/^  ok    ([0-9]+) .*/\1/' <<< "$todo_line")"
+  fi
+
+  # --- 4. every gate has a mutation ----------------------------------------
   # Explicit floor: zero gates found would pass by vacuity (a rename, an indentation change).
   local gates; gates="$(grep -oE '^gate_[A-Z]+' "$kit/bin/sdd" | sed 's/^gate_//' | sort -u)"
   n="$(grep -c . <<< "$gates")"
@@ -1745,7 +1770,7 @@ cmd_health() {
     fi
   fi
 
-  # --- 4. drift load_config() ↔ config/schema.md ----------------------------
+  # --- 5. drift load_config() ↔ config/schema.md ----------------------------
   local documented; documented="$(grep -oE '^\| `[A-Z0-9_]+`' "$kit/config/schema.md" | tr -d '|` ' | sort -u)"
   local keys; keys="$(health_default_keys)"
   for k in $keys; do
@@ -1755,7 +1780,7 @@ cmd_health() {
     grep -qxF "$k" <<< "$keys" || health_finding "doc-without-key $k"
   done
 
-  # --- 5. subcommand missing from --help -----------------------------------
+  # --- 6. subcommand missing from --help -----------------------------------
   local subcmds; subcmds="$(awk '/^main\(\) \{/ { inside = 1 } inside && /^\}/ { exit }
       inside && match($0, /^ +[a-z|+-]+\)/) {
         label = substr($0, RSTART, RLENGTH); gsub(/[ )]/, "", label); print label
@@ -1767,7 +1792,7 @@ cmd_health() {
     grep -qE "\bsdd $k\b" <<< "$help_out" || health_finding "cmd-not-in-help $k"
   done
 
-  # --- 6. variable with a default and never read ---------------------------
+  # --- 7. variable with a default and never read ---------------------------
   # BARE word, not `$K`: QA_MAX_ITER and EXEC_MAX_RETRY live in arithmetic context
   # (`$(( QA_MAX_ITER * 3 ))`), and a detector looking for `$K` would call them dead.
   # Scope: bin/sdd only. Sweeping the whole kit would make the key "appear" in schema.md and in
@@ -1780,7 +1805,7 @@ cmd_health() {
     grep -qE "\b${k}\b" <<< "$body" || health_finding "var-never-read $k"
   done
 
-  # --- 7. fixture provenance -----------------------------------------------
+  # --- 8. fixture provenance -----------------------------------------------
   health_provenance
 
   # --- ratchet --------------------------------------------------------------

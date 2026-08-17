@@ -413,6 +413,14 @@ Achados sobre **repos-alvo** vão para o `TODO.md` daquele repo. Este arquivo é
   máquina com o diretório. Direção: `|| true` nos dois, com asserção em `tests/check-health.sh`.
   — descoberto por `sdd-executor` na missão `20260817-catraca-do-backlog` (2026-08-17)
 
+- [ ] **A checagem do `score:` do `sdd health` promete reprovar e morre calada** — `bin/sdd:1721` —
+  `score_line="$(grep -m1 …)"` devolve 1 quando a linha não existe e, sob `set -e`, mata o runner
+  na atribuição: o `health_bad "…went blind to the mutation"` seguinte é código morto e o
+  comentário acima dele afirma o contrário. Terceiro da família (`:1854` e `:1882`), e o mais caro,
+  porque é a checagem escrita para impedir cegueira. Provado por probe nesta sessão. Direção:
+  `|| true`, como o check 3 já faz, com asserção diferencial em `tests/check-health.sh`.
+  — descoberto por `sdd-executor` na missão `20260817-catraca-do-backlog` (2026-08-17)
+
 ### Saída humana e cosmética
 
 - [ ] **43% do `docs/pipeline.md` é um subsistema só, e ele cresce toda missão do ledger** —

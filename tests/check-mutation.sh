@@ -871,6 +871,23 @@ mut_HEALTH_provenance_blind() {
   sed -i 's|    if \[ "\$line" = "\$fix" \]; then checked|    if true; then checked|' "$1"
 }
 
+# The backlog ratchet goes blind: `sdd health` still runs the whole TODO.md check, still refuses a
+# suite that prints no count — and then records nothing. The debt is free to grow in silence
+# again, which is the entire defect the mission that added this check exists to close.
+#
+# ⚠️ It is caught by the STALE-BASELINE half of the ratchet, not by the new-finding half, and that
+# is correct: with nothing emitted there is no finding to be outside the baseline — it is the
+# baseline's own line that loses its pair. Written down because the shape invites a future session
+# to "fix" the mutation, believing it aims at the wrong branch. Concretely: assertion 6 of
+# check-health.sh builds a baseline carrying a wrong count on purpose and demands BOTH sentences
+# out of that one world, so the mutant satisfies half a conjunction and fails it.
+#
+# The line is replaced, never deleted: it is the whole body of an `else`, and an `else` with no
+# body is a syntax error — the mutant would die of bash, scoring a point for a door never opened.
+mut_HEALTH_todo_count_blind() {
+  sed -i 's@^    health_finding "todo-findings .*@    true@' "$1"
+}
+
 CATALOG=(
   PLAN_empty_approval
   PLAN_kaizen_born_blind
@@ -944,6 +961,7 @@ CATALOG=(
   KAIZEN_series_rc_dropped
   HEALTH_ratchet_one_way
   HEALTH_provenance_blind
+  HEALTH_todo_count_blind
 )
 
 # Mutations that are NOT caught today, each with the increment that closes it. Ratchet in both
