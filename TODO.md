@@ -317,30 +317,30 @@ Achados sobre **repos-alvo** vão para o `TODO.md` daquele repo. Este arquivo é
   `guard.degenerate_axis` faz o runner dizer isso em voz alta, citando o registro.
   — descoberto por `humano` na missão `20260816-runner-sem-dividas` (2026-08-16)
 
-- [ ] **O schema da série não tem sensor de drift contra a prosa que o descreve** — `bin/sdd:1976`
-  vs `docs/pipeline.md:366` e `agents/sdd-kaizen.md:30` — o objeto que o juiz é mandado citar é
-  produzido em dois lugares (o `jq` e o literal do ledger vazio, `:1902`) e descrito em dois
-  outros; o `sdd health` mede drift de doc/config e gate-sem-mutação, mas nada casa os campos do
-  `guard` com quem os promete. Campo novo esquecido passa verde. Direção: extrair os campos do
-  `jq` e cobrá-los na doc. — descoberto por `sdd-executor` na missão
-  `20260816-runner-sem-dividas` (2026-08-16)
+- [ ] **O schema da série não tem sensor de drift contra a prosa que o descreve** — `bin/sdd:2656`
+  vs `docs/pipeline.md:496` e `agents/sdd-kaizen.md:35` — o objeto que o juiz é mandado citar é
+  produzido em dois lugares (o `jq` e o literal do ledger vazio, `:2516`) e descrito em **cinco**;
+  o `sdd health` mede drift de doc/config e gate-sem-mutação, mas nada casa os campos do `guard`
+  com quem os promete. Já cobrou o preço 4×, a última na r2 de `20260817-eixo-do-juiz` (semântica
+  de `degenerate_axis` e chave por repo, 5 arquivos à mão). Direção: extrair os campos do `jq` e
+  cobrá-los na doc. — descoberto por `sdd-executor` na missão `20260816-runner-sem-dividas` (2026-08-16)
 
 ### Contrato e configuração
 
 - [ ] **O lembrete pós-pipeline manda o humano a um comando que não enxerga o que ele contou** —
-  `bin/sdd:2596` (`kaizen_reminder`) vs `:2742` (`cmd_kaizen`) — o lembrete roda com
+  `bin/sdd:2675` (`kaizen_reminder`) vs `:2828` (`cmd_kaizen`) — o lembrete roda com
   `REPO_ROOT` = repo-ALVO e conta as missões dele; o juiz roda no repo do KIT e, com o filtro por
   repo, lê `latest: null` e `other_repo: N`. ⚠️ `--all-repos` (`d62f08c`) **não** fecha isto: o
   lembrete só é chamado de `cmd_run`, e `sdd run` não tem a flag — segue aberto, não estampar.
   Direção: silenciar o lembrete fora do kit, ou responder se o juiz pode pesar linha de outro
   projeto — ADR 0004. — descoberto por `sdd-reviewer` na missão `20260816-kit-como-alvo` (2026-08-16)
 
-- [ ] **Worktree do git parte a identidade do repo no ledger** — `bin/sdd:768`
-  (`ledger_repo_root`, `bin/sdd:894`, usava `--show-toplevel`) — o toplevel é por worktree, então missão rodada num
+- [ ] **Worktree do git parte a identidade do repo no ledger** — `bin/sdd:894`
+  (`ledger_repo_root`, usava `--show-toplevel`) — o toplevel é por worktree, então missão rodada num
   worktree grava `repo: .../wt` e a mesma leitura do checkout principal a devolve como
-  `other_repo` e a série vem vazia. RESOLVIDO por `c514e36`: identidade pelo `.git` compartilhado
-  (`--git-common-dir` normalizado), no escritor **e** nos leitores, com par diferencial
-  assimétrico (1 linha no principal, 2 no worktree; 1/2 vs 2/1 quebrado, 3/0 nos dois consertado).
+  `other_repo` e a série vem vazia. RESOLVIDO por `c514e36+913cb3f`: a identidade **é** o `.git`
+  compartilhado, no escritor e nos leitores. ⚠️ `c514e36` sozinho tomava o **pai** do `.git` e
+  fundia submódulos irmãos e bares vizinhos numa identidade só, em silêncio; `913cb3f` corrigiu.
   — descoberto por `sdd-reviewer` na missão `20260816-kit-como-alvo` (2026-08-16)
 
 - [ ] **`sdd kaizen` recusa rodar de um worktree do próprio kit** — `bin/sdd:2735` — a porta
