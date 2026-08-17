@@ -1245,6 +1245,139 @@ else
        "phase $KB_HUMAN_PHASE, why: $KB_HUMAN_WHY"
 fi
 
+# --- the remedy the refusal names has to work ------------------------------
+echo "== the remedy the kaizen-born refusal names =="
+# gate_PLAN refuses a kaizen-born `auto` and names ONE way out: `run 'sdd approve <mission>'`.
+# cmd_approve reads `auto` as "already approved — nothing to do" and returns 0 without writing.
+# The two sets are not merely overlapping, they are nested: the gate refuses only when the value is
+# `auto`, and `auto` is exactly what makes approve bail. Every plan the gate stops is a plan the
+# named remedy declines to fix, so the instruction never works — not sometimes, never. What is left
+# is hand-typing `humano-YYYY-MM-DD` into the frontmatter, which is the failure `sdd approve` was
+# built to end and which the refusal's own comment says it exists to avoid.
+#
+# The assertion above this one already reaches the approved state — with `sed -i`. That is why the
+# seam went unmeasured: simulating the remedy proves the GATE accepts what the command would write,
+# never that the COMMAND gets there. This one invokes the remedy the runner prints.
+#
+# Found by sdd-qa walking the journey in mission 20260816-portas-do-humano: `sdd why`, `sdd status`
+# and `sdd run` each print the instruction, and all three loop forever.
+QM="20260107-named-remedy"
+QMDIR="$FIX/docs/handoffs/$QM"
+mkdir -p "$QMDIR"
+# The slug carries neither "already" nor the words the probe looks for below: a fixture whose name
+# satisfies the probe hands the runner the needle (the I4 notes paid for that lesson once).
+cat > "$QMDIR/00-missao.md" <<'EOF'
+---
+missao: 20260107-named-remedy
+titulo: fixture — a machine-approved plan with a verdict beside it
+aprovacao: auto
+---
+# Mission
+EOF
+: > "$QMDIR/01-plano.md"
+cat > "$QMDIR/checkpoint.md" <<'EOF'
+| ID | Incremento | Check (comando → esperado) | Status | Commit |
+|---|---|---|---|---|
+| I1 | fatia de fixture | `true` → `0` | pending | — |
+EOF
+printf -- '---\nmissao: %s\n---\n# Verdict\n' "$QM" > "$QMDIR/05-verdict.md"
+( cd "$FIX" && git add -A && git commit -qm "fixture: a kaizen-born plan carrying auto" ) >/dev/null
+
+# The SIBLING that keeps the fix honest: `auto` with no verdict beside it is an ordinary
+# planner-written plan, already approved, and `sdd approve` must go on declining it. Without this
+# half the cheapest way to satisfy the assertion above is to drop `auto` from the bail case
+# altogether — which would rewrite every legitimate `auto` into `humano-<today>` on contact,
+# erasing the PLAN-AUTO provenance the value carries. What is being demanded is that approve act on
+# the kaizen-born condition, not that it stop recognising approval.
+QN="20260107-planner-auto"
+QNDIR="$FIX/docs/handoffs/$QN"
+mkdir -p "$QNDIR"
+sed -e "s/$QM/$QN/" -e 's/^titulo:.*/titulo: fixture — an ordinary plan the planner approved/' \
+    "$QMDIR/00-missao.md" > "$QNDIR/00-missao.md"
+: > "$QNDIR/01-plano.md"
+cp "$QMDIR/checkpoint.md" "$QNDIR/checkpoint.md"
+( cd "$FIX" && git add -A && git commit -qm "fixture: a planner-written plan approved auto" ) >/dev/null
+
+QM_WHY="$( cd "$FIX" && "$SDD" why "$QM" PLAN 2>&1 )"
+QM_DAY_0="$(date +%F)"
+QM_OUT="$( cd "$FIX" && "$SDD" approve "$QM" 2>&1 <<< "y" )"; QM_RC=$?
+QM_DAY_1="$(date +%F)"
+QM_LINE="$(grep -m1 '^aprovacao:' "$QMDIR/00-missao.md")"
+QM_PHASE="$( cd "$FIX" && "$SDD" phase "$QM" 2>&1 )"
+QN_HEAD_0="$( cd "$FIX" && git rev-parse HEAD )"
+QN_OUT="$( cd "$FIX" && "$SDD" approve "$QN" 2>&1 <<< "y" )"
+QN_LINE="$(grep -m1 '^aprovacao:' "$QNDIR/00-missao.md")"
+QN_HEAD_1="$( cd "$FIX" && git rev-parse HEAD )"
+# The refusal is asserted FIRST: without it a runner that simply stopped refusing kaizen-born plans
+# would satisfy every clause below, and this assertion would quietly become a test of nothing.
+# `already approved` is demanded ABSENT on one side and PRESENT on the other for the same reason the
+# `auto` check exists above — the bail path and the write path both return 0, so rc alone cannot
+# tell them apart.
+if grep -q 'kaizen-born' <<< "$QM_WHY" \
+   && [ "$QM_RC" -eq 0 ] \
+   && { [ "$QM_LINE" = "aprovacao: humano-$QM_DAY_0" ] \
+        || [ "$QM_LINE" = "aprovacao: humano-$QM_DAY_1" ]; } \
+   && ! grep -q 'already approved' <<< "$QM_OUT" \
+   && [ "$QM_PHASE" != "PLAN" ] \
+   && [ "$QN_LINE" = "aprovacao: auto" ] \
+   && grep -q 'already approved' <<< "$QN_OUT" \
+   && [ "$QN_HEAD_1" = "$QN_HEAD_0" ]; then
+  pass "approve resolves the refusal that names it, and still declines an 'auto' with no verdict"
+else
+  fail "approve resolves the refusal that names it, and still declines an 'auto' with no verdict" \
+       "PLAN refused for kaizen-born, then 'aprovacao: humano-$QM_DAY_0' written and the phase off PLAN — while the verdict-less sibling stays 'aprovacao: auto' with no commit" \
+       "why: $QM_WHY | rc $QM_RC, phase $QM_PHASE, line '$QM_LINE', out: $(tail -2 <<< "$QM_OUT") | sibling line '$QN_LINE', sibling out: $(tail -1 <<< "$QN_OUT")"
+fi
+
+# --- approve is a door that commits, so it says which branch it is on ------
+echo "== approve on the base branch =="
+# warn_if_on_base_branch has ONE definition and its comment enumerates "the four doors that can end
+# up committing": preflight, run, retry, kaizen. `sdd approve` commits — it is the fifth, written in
+# the same mission that closed the silence for the fourth, and it is the only one that does not
+# warn. Approving while standing on `main` drops a `chore(missao)` commit straight into the base
+# branch without a word, which is the class this mission exists to end.
+#
+# A warning and never a `die`: the plan legitimately lives on the base branch before the mission
+# branch is cut (ensure_mission_branch cuts it FROM there), so refusing would break the ordinary
+# flow. The pair is what keeps it honest — a guard that always fires teaches people to skip reading
+# it, and is indistinguishable from a banner.
+#
+# `n` on both calls: the warning fires before the question, so the pair measures the warning alone
+# and leaves the fixture's history untouched.
+QW="20260108-door-that-commits"
+QWDIR="$FIX/docs/handoffs/$QW"
+mkdir -p "$QWDIR"
+cat > "$QWDIR/00-missao.md" <<'EOF'
+---
+missao: 20260108-door-that-commits
+titulo: fixture — approving from the base branch
+aprovacao:
+branch:
+---
+# Mission
+EOF
+: > "$QWDIR/01-plano.md"
+cat > "$QWDIR/checkpoint.md" <<'EOF'
+| ID | Incremento | Check (comando → esperado) | Status | Commit |
+|---|---|---|---|---|
+| I1 | fatia de fixture | `true` → `0` | pending | — |
+EOF
+( cd "$FIX" && git add -A && git commit -qm "fixture: a plan waiting for approval" ) >/dev/null
+
+( cd "$FIX" && git checkout -q main )
+QW_ON_BASE="$( cd "$FIX" && "$SDD" approve "$QW" 2>&1 <<< "n" )"
+( cd "$FIX" && git checkout -q -b off-base-for-approve )
+QW_OFF_BASE="$( cd "$FIX" && "$SDD" approve "$QW" 2>&1 <<< "n" )"
+QW_BRANCH="$( cd "$FIX" && git branch --show-current )"
+if grep -q 'you are on the base branch' <<< "$QW_ON_BASE" \
+   && ! grep -q 'you are on the base branch' <<< "$QW_OFF_BASE"; then
+  pass "approve warns about the base branch it is about to commit into, and is silent off it"
+else
+  fail "approve warns about the base branch it is about to commit into, and is silent off it" \
+       "the warning on main, no warning on $QW_BRANCH" \
+       "on main: $(tail -2 <<< "$QW_ON_BASE") | off base: $(tail -2 <<< "$QW_OFF_BASE")"
+fi
+
 # ---------------------------------------------------------------------------
 echo
 if [ "$fails" -eq 0 ]; then
