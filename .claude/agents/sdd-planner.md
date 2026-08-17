@@ -131,6 +131,27 @@ Ask the human for the version label and record it in `versao:` in `00-missao.md`
 on your own**: a version is communication with the people who use the product, not a technical
 consequence of the diff.
 
+## 8. Branch (`branch:` in `00-missao.md`)
+
+**The runner reads this field and acts on it.** It was decorative until `ensure_mission_branch`,
+so a plan that fills it in carelessly is no longer a typo — before the first gate of every
+`sdd run` and every `sdd retry`, the runner checks that branch out, and **creates it from
+whatever branch the human is standing on** when it does not exist yet. Three values, three
+behaviours:
+
+- **the `<...>` placeholder the template ships** (or an empty value) → no-op, the runner stays
+  where it is. This is the right answer whenever the branch name is not yours to decide — with
+  `JIRA_ENABLED=true` it is the TICKET phase that creates the branch.
+- **a real branch name** → checked out if it exists, cut from the current branch if it does not.
+  Write one only when you mean "this mission's commits belong there", which is the ordinary case
+  for a mission planned outside JIRA.
+- **anything git refuses** (a name starting with `-`, spaces, `..`) → the runner `die`s and the
+  pipeline stops before spending a session.
+
+Never invent a name to fill the field in. The failure this exists to close is the SQ-97 class —
+five phases committing into another PR's branch — and it is not closed by a plan that declares a
+branch nobody meant.
+
 ## Language
 
 Write the three artifacts in the language the target repo declares in `OUTPUT_LANG`
