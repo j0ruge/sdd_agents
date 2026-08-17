@@ -65,8 +65,9 @@ Achados sobre **repos-alvo** vão para o `TODO.md` daquele repo. Este arquivo é
   ("EMPTY, always") — plano kaizen-born com PLAN-AUTO toda ✅ dá ao planner licença textual para
   `auto`, e a premissa que a justifica ("the human was present") é falsa em sessão headless.
   `gate_PLAN` aceita `auto` e o pipeline vai até o PR; quem reclama é a volta seguinte do
-  `sdd kaizen`, com rc 3 (`bin/sdd:2151`). Direção: o prompt da fase PLAN dizer ao planner que o
-  plano nasceu do kaizen. — descoberto por `humano` na missão `20260816-kit-como-alvo` (2026-08-16)
+  `sdd kaizen`, com rc 3 (`bin/sdd:2151`). RESOLVIDO por `2510c3c`: `gate_PLAN` recusa `auto` com
+  `05-verdict.md` ao lado e nomeia `sdd approve`; a exceção entrou no planner e no `pipeline.md`
+  no mesmo commit. — descoberto por `humano` na missão `20260816-kit-como-alvo` (2026-08-16)
 
 - [ ] **O parser do checkpoint não conhece `\|`, o escape padrão de pipe em tabela GFM** —
   `bin/sdd:174` (`checkpoint_rows`, `awk -F'|'`) — o split é cru, então célula com `\|` vira
