@@ -646,6 +646,74 @@ assert_eq "the projection creates no mission directory" \
 assert_eq "and writes no row to the main ledger" "$before_rows" "$(krows)"
 assert_eq "nor to the insufficient one" "$before2" "$(state2_rows)"
 
+echo "== the axis degenerates in the kit repo and holds in a target =="
+# ADR 0003 compiled into something the human can read. `guard.sufficient: false` alone is ambiguous
+# by construction: in a target repo it means "not enough missions yet", and in the repo that BUILDS
+# the kit it means the axis itself cannot work — every session commits, so the next one lands on a
+# fresh kit_sha and no number of missions here will ever clear the floor. Read as the first, the
+# human goes hunting for missions that would never help.
+#
+# Both halves are asserted TOGETHER per fixture (`<field>/<note>`), because either alone is a
+# different, weaker claim: a field nobody prints explains nothing to the human, and a sentence with
+# no derived field behind it is the runner having an opinion — which is what ADR 0001 forbids.
+#
+# DIFFERENTIAL, and built so that no cheaper reading passes both sides: the healthy fixture carries
+# MORE THAN ONE sha (so "count the shas" fails it) and the degenerate one carries more than one
+# mission and more than one phase (so "one mission" or "one phase" fails it too).
+mkdir -p "$OUTSIDE/degenaxis" "$OUTSIDE/healthyaxis" "$OUTSIDE/firstsha"
+
+# A — the kit repo, measured: three consecutive phases of ONE mission, each on its own kit_sha
+# because the phase before it committed. This is the gemba of 2026-08-16, where `latest` and
+# `previous` turned out to be two phases of the same mission (PR at US$ 1.48 vs DOCS at US$ 7.31).
+localize > "$OUTSIDE/degenaxis/autonomy-log.jsonl" <<'EOF'
+{"v":1,"ts":"2026-08-16T14:00:00-03:00","event":"session","run_id":"k1","invocation":"run","kit_sha":"a000001","kit_dirty":false,"project":"p1","repo":"/p1","mission":"m20","phase":"EXEC","step":"EXEC","agent":"sdd-executor","model":"opus","attempt":1,"auto_retry":false,"session":"k1s","rc":0,"dur_s":10,"cost_usd":5.0,"moved":true,"gate":"pass","gate_why":"x"}
+{"v":1,"ts":"2026-08-16T14:01:00-03:00","event":"session","run_id":"k2","invocation":"run","kit_sha":"a000002","kit_dirty":false,"project":"p1","repo":"/p1","mission":"m20","phase":"DOCS","step":"DOCS","agent":"sdd-docs","model":"opus","attempt":1,"auto_retry":false,"session":"k2s","rc":0,"dur_s":10,"cost_usd":7.31,"moved":true,"gate":"pass","gate_why":"x"}
+{"v":1,"ts":"2026-08-16T14:02:00-03:00","event":"session","run_id":"k3","invocation":"run","kit_sha":"a000003","kit_dirty":false,"project":"p1","repo":"/p1","mission":"m21","phase":"PR","step":"PR","agent":"sdd-publisher","model":"sonnet","attempt":1,"auto_retry":false,"session":"k3s","rc":0,"dur_s":10,"cost_usd":1.48,"moved":true,"gate":"pass","gate_why":"x"}
+EOF
+
+# B — a real target repo: the kit does not change during a mission, so many missions share one sha
+# and a sha change is an upgrade of the kit, not a commit of it. Two shas, three sessions each.
+localize > "$OUTSIDE/healthyaxis/autonomy-log.jsonl" <<'EOF'
+{"v":1,"ts":"2026-08-16T15:00:00-03:00","event":"session","run_id":"t1","invocation":"run","kit_sha":"b000001","kit_dirty":false,"project":"p1","repo":"/p1","mission":"n1","phase":"EXEC","step":"EXEC","agent":"sdd-executor","model":"opus","attempt":1,"auto_retry":false,"session":"t1s","rc":0,"dur_s":10,"cost_usd":1.0,"moved":true,"gate":"pass","gate_why":"x"}
+{"v":1,"ts":"2026-08-16T15:01:00-03:00","event":"session","run_id":"t2","invocation":"run","kit_sha":"b000001","kit_dirty":false,"project":"p1","repo":"/p1","mission":"n2","phase":"EXEC","step":"EXEC","agent":"sdd-executor","model":"opus","attempt":1,"auto_retry":false,"session":"t2s","rc":0,"dur_s":10,"cost_usd":1.0,"moved":true,"gate":"pass","gate_why":"x"}
+{"v":1,"ts":"2026-08-16T15:02:00-03:00","event":"session","run_id":"t3","invocation":"run","kit_sha":"b000001","kit_dirty":false,"project":"p1","repo":"/p1","mission":"n3","phase":"EXEC","step":"EXEC","agent":"sdd-executor","model":"opus","attempt":1,"auto_retry":false,"session":"t3s","rc":0,"dur_s":10,"cost_usd":1.0,"moved":true,"gate":"pass","gate_why":"x"}
+{"v":1,"ts":"2026-08-16T16:00:00-03:00","event":"session","run_id":"t4","invocation":"run","kit_sha":"b000002","kit_dirty":false,"project":"p1","repo":"/p1","mission":"n4","phase":"EXEC","step":"EXEC","agent":"sdd-executor","model":"opus","attempt":1,"auto_retry":false,"session":"t4s","rc":0,"dur_s":10,"cost_usd":1.0,"moved":true,"gate":"pass","gate_why":"x"}
+{"v":1,"ts":"2026-08-16T16:01:00-03:00","event":"session","run_id":"t5","invocation":"run","kit_sha":"b000002","kit_dirty":false,"project":"p1","repo":"/p1","mission":"n5","phase":"QA","step":"QA:close","agent":"sdd-qa","model":"opus","attempt":1,"auto_retry":false,"session":"t5s","rc":0,"dur_s":10,"cost_usd":1.0,"moved":true,"gate":"pass","gate_why":"x"}
+{"v":1,"ts":"2026-08-16T16:02:00-03:00","event":"session","run_id":"t6","invocation":"run","kit_sha":"b000002","kit_dirty":false,"project":"p1","repo":"/p1","mission":"n6","phase":"EXEC","step":"EXEC","agent":"sdd-executor","model":"opus","attempt":1,"auto_retry":false,"session":"t6s","rc":0,"dur_s":10,"cost_usd":1.0,"moved":true,"gate":"pass","gate_why":"x"}
+EOF
+
+# C — one kit version, one session: that axis has not degenerated, it has only just started. The
+# probe for the "more than one sha" half of the predicate, which the two fixtures above cannot see.
+localize > "$OUTSIDE/firstsha/autonomy-log.jsonl" <<'EOF'
+{"v":1,"ts":"2026-08-16T17:00:00-03:00","event":"session","run_id":"u1","invocation":"run","kit_sha":"c000001","kit_dirty":false,"project":"p1","repo":"/p1","mission":"o1","phase":"EXEC","step":"EXEC","agent":"sdd-executor","model":"opus","attempt":1,"auto_retry":false,"session":"u1s","rc":0,"dur_s":10,"cost_usd":1.0,"moved":true,"gate":"pass","gate_why":"x"}
+EOF
+
+# Three answers, not two: a sentence printed WITHOUT the record that decides it is not the same
+# event as no sentence at all, and folding them together would let a half-printed explanation
+# satisfy the negative side by accident.
+axis_note() {   # axis_note <captured output> -> yes | adr-missing | no
+  grep -q 'kit_sha axis is degenerate' <<< "$1" || { printf 'no'; return 0; }
+  grep -q 'ADR 0003' <<< "$1" && printf 'yes' || printf 'adr-missing'
+}
+
+# --dry-run: the projection reaches nothing that spends a session (the loud stub above is still
+# armed), and the explanation belongs to the human-facing path — `--series` returns pure JSON.
+deg_out="$( cd "$FIX" && SDD_STATE_DIR="$OUTSIDE/degenaxis" "$KSDD" kaizen --dry-run 2>&1 )"
+SERIES_OUT="$( cd "$FIX" && SDD_STATE_DIR="$OUTSIDE/degenaxis" "$KSDD" kaizen --series 2>/dev/null )"
+assert_eq "degenerate axis: one session per kit version, several versions — the series says so and the runner explains it citing ADR 0003" \
+  "true/yes" "$(field '.guard.degenerate_axis')/$(axis_note "$deg_out")"
+
+healthy_out="$( cd "$FIX" && SDD_STATE_DIR="$OUTSIDE/healthyaxis" "$KSDD" kaizen --dry-run 2>&1 )"
+SERIES_OUT="$( cd "$FIX" && SDD_STATE_DIR="$OUTSIDE/healthyaxis" "$KSDD" kaizen --series 2>/dev/null )"
+assert_eq "degenerate axis: missions sharing a kit version is the axis WORKING — false, and not a word about it" \
+  "false/no" "$(field '.guard.degenerate_axis')/$(axis_note "$healthy_out")"
+
+# Deliberately NOT prefixed `degenerate axis`: the checkpoint Check counts exactly the two
+# assertions above, and this third one guards the clause they share a blind spot on.
+SERIES_OUT="$( cd "$FIX" && SDD_STATE_DIR="$OUTSIDE/firstsha" "$KSDD" kaizen --series 2>/dev/null )"
+assert_eq "a single kit version has not degenerated, it has only just started" "false" \
+  "$(field '.guard.degenerate_axis')"
+
 echo "== the approved plan never reaches a session =="
 # Once `aprovacao:` is filled, the generic fix-it retry prompt ("complete what is missing")
 # reads, to a live agent, as an instruction to blank the field — erasing a decision that may be

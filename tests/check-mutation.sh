@@ -259,6 +259,18 @@ mut_KAIZEN_adr_0003_orphan() {
   sed -i 's|ADR 0003|ADR|g' "$1"
 }
 
+# The runner goes blind to a degenerate axis: the predicate answers false everywhere, so
+# `guard.degenerate_axis` is false in every repo and the explanation never prints. The human in the
+# kit repo reads `sufficient: false` and goes hunting for the missions that would satisfy it — which
+# no number of missions in THIS repo ever will, because each one commits and lands on a fresh sha
+# (ADR 0003). Sabotaging the PREDICATE and not the printer measures both halves at once: the field
+# and the sentence come from one source, and a mutant that killed only the print would leave the
+# derived number free to drift from what the human is told. `@` as the delimiter because the pattern
+# carries the jq pipe.
+mut_KAIZEN_degenerate_axis_blind() {
+  sed -i 's@| ($slices | length) > 1@| false@' "$1"
+}
+
 # The Jidoka dies: `verdict: piorou` no longer stops the line. The outcome falls through to the
 # born-plan branch and exits 0 — a kit change that made autonomy WORSE reads as a green light,
 # which is the exact failure ADR 0002 exists to forbid.
@@ -724,6 +736,7 @@ CATALOG=(
   RUN_branch_order_swap
   FRONTMATTER_write_unscoped
   KAIZEN_adr_0003_orphan
+  KAIZEN_degenerate_axis_blind
 )
 
 # Mutations that are NOT caught today, each with the increment that closes it. Ratchet in both

@@ -28,8 +28,12 @@ is a kit bug for `TODO.md`, and your verdict says `indeterminado` with the reaso
 Run it first. The JSON gives you, per kit version (`kit_sha`, file order, latest and previous):
 missions, sessions, `moved_rate`, the label tally (`ok` / `leve` / `refez` per mission×phase),
 escalations by kind, cost, and the guard (`missions_after_change`, `missions_with_session`,
-`sessions`, `sufficient`). The floor is `missions_with_session`, not `missions_after_change`: a
-mission that stopped the line without spending a session left you nothing to read. It also counts
+`sessions`, `sufficient`, `degenerate_axis`). The floor is `missions_with_session`, not
+`missions_after_change`: a mission that stopped the line without spending a session left you
+nothing to read. `degenerate_axis: true` means every kit version in the slice bought exactly one
+session — the shape of the repo that BUILDS the kit, where each session commits and the next lands
+on a fresh sha. Then `sufficient: false` is structural, not a matter of waiting: say so in the
+verdict and cite ADR 0003, instead of writing "a few more missions and we will know". It also counts
 what it excluded, in **four** buckets — dirty-kit rows, unrecognized rows, the meta rows your own
 sessions write, and `other_repo`, the rows born in another repo (the ledger file is global, this
 reading is not). Cite `other_repo` like the rest: it is the bucket that can empty a series on its

@@ -445,12 +445,22 @@ by kind, a per mission×phase `detail`, and a label per group:
 
 Plus a `guard` (`missions_after_change`, `missions_with_session`, `sessions`,
 `sufficient: missions_with_session >= 3` — a mission that only escalated ran, and is counted as
-one, but bought the judge no observation and so does not raise the floor) and an `excluded`
+one, but bought the judge no observation and so does not raise the floor;
+`degenerate_axis`, true when every kit version in the slice bought exactly one session **and**
+there is more than one of them) and an `excluded`
 accounting with four reasons
 (`non_comparable` dirty-kit rows, `unrecognized` rows, the `meta` rows the kaizen sessions
 themselves write — the loop never lets its own sessions shift the axis it is judged on — and
 `other_repo`, the rows born somewhere else). The empty-ledger branch prints the same key set with
 zeros: a consumer must never read `null` on one branch where the other gives a number.
+
+`degenerate_axis` exists because `sufficient: false` alone says two different things. In a target
+repo it means "not enough missions yet", and waiting works. In the repo that **builds** the kit
+every session commits, so the next one lands on a fresh `kit_sha`, every version holds exactly one
+session and the floor is unsatisfiable by construction — waiting never works, and `indeterminado`
+there is the correct answer rather than a broken runner. `sdd kaizen` says so out loud, citing
+[ADR 0003](adr/0003-judge-axis-evidence-from-target-repos.md); the floor does **not** loosen in
+answer to it. One version with one session is not degenerate: that axis has only just started.
 
 **The agent gives the verdict.** The `sdd-kaizen` session runs the series as its source of truth
 (citing, never recalculating), interprets the sha axis with `git log`, and writes

@@ -2379,7 +2379,7 @@ kaizen_series() {
     # Second producer of the same shape, and it cannot share the jq above (there is no input to
     # run it on), so the key set is kept in step by hand and check-kaizen.sh compares the two as
     # key sets. A consumer reading `null` where the real series gives a number is the drift.
-    printf '%s\n' '{"v":1,"latest":null,"previous":null,"guard":{"missions_after_change":0,"missions_with_session":0,"sessions":0,"sufficient":false},"excluded":{"non_comparable":0,"unrecognized":0,"meta":0,"other_repo":0}}'
+    printf '%s\n' '{"v":1,"latest":null,"previous":null,"guard":{"missions_after_change":0,"missions_with_session":0,"sessions":0,"sufficient":false,"degenerate_axis":false},"excluded":{"non_comparable":0,"unrecognized":0,"meta":0,"other_repo":0}}'
     return 0
   fi
   jq -n --arg repo "$repo" "$(ledger_row_is_local)"'
@@ -2401,6 +2401,17 @@ kaizen_series() {
     # from inside one command to between two. (No apostrophes in here: this jq program is a
     # single-quoted shell string, and one would end it mid-comment.)
     def on_axis: .kit_dirty == false and .kit_sha != null;
+
+    # ONE definition of "this axis degenerated", same discipline as the two above, and the reason
+    # the field below exists at all: a guard that says only `sufficient: false` cannot tell "not
+    # enough missions yet" (a target repo, where waiting works) from "the axis cannot work here"
+    # (the repo that BUILDS the kit, where every session commits and the next lands on a fresh sha,
+    # so waiting never works). Input is the on-axis rows. MORE THAN ONE sha is required on purpose:
+    # a first sha with one session has not degenerated, it has only just started.
+    def degenerate_axis:
+      group_by(.kit_sha) as $slices
+      | ($slices | length) > 1
+        and all($slices[]; (map(select(.event == "session")) | length) == 1);
 
     def phase_label:
       if (map(select(is_escalation)) | length) > 0
@@ -2460,6 +2471,11 @@ kaizen_series() {
     # PRINTING a count it did not gate on, which is the same class of divergence I7 closed one
     # field over. Everything the guard says about itself comes from here.
     | (($latest.missions_with_session) // 0) as $observed
+    # Derived from the WHOLE comparable slice, never from $latest alone: a degenerate axis is a
+    # property of the SET of kit versions (every one of them bought exactly one session), which no
+    # single group can state about itself. It adds no fact to the ledger and changes no verdict —
+    # it explains one.
+    | ($ok | degenerate_axis) as $degenerate
     | {v: 1,
        latest: $latest,
        previous: $previous,
@@ -2470,7 +2486,8 @@ kaizen_series() {
        guard: {missions_after_change: ($latest.missions // 0),
                missions_with_session: $observed,
                sessions: ($latest.sessions // 0),
-               sufficient: ($observed >= 3)},   # guard floor: 3 missions WITH a session (D4); I13.4 revisits
+               sufficient: ($observed >= 3),   # guard floor: 3 missions WITH a session (D4); I13.4 revisits
+               degenerate_axis: $degenerate},
        excluded: {non_comparable: ($noncomp | length), unrecognized: $unrec,
                   meta: ($meta | length), other_repo: $other_repo}}
   ' < "$file"
@@ -2612,6 +2629,25 @@ kaizen_approved_outcome() {
   return 0
 }
 
+# The structural `indeterminado`, said out loud instead of left for the human to infer. The number
+# it reads is derived by kaizen_series (ADR 0001: the runner never opines, it reports), and the
+# sentence exists because `guard.sufficient: false` means two different things in two different
+# repos — "a few more missions and we are there" in a target, "no number of missions here will ever
+# do it" in the repo that builds the kit. Read as the first, the human waits forever.
+#
+# ADR 0003 is NAMED, not paraphrased: the decision is why the floor does not loosen in answer to
+# this, and a sentence carrying its own evidence is the difference between a report and an opinion.
+kaizen_axis_note() {
+  autonomy_have_jq || return 0
+  local series
+  series="$(kaizen_series)" || return 0
+  [ "$(jq -r '.guard.degenerate_axis' <<< "$series")" = "true" ] || return 0
+  warn "the kit_sha axis is degenerate here: every kit version in this series bought exactly one session"
+  dim "  This repo BUILDS the kit, so each session commits and the next one lands on a fresh sha."
+  dim "  The floor of 3 missions per kit version is unsatisfiable here, and 'indeterminado' is then"
+  dim "  the CORRECT verdict, not a missing mission: evidence comes from real target repos (ADR 0003)."
+}
+
 cmd_kaizen() {
   local series_only=0
   while [ $# -gt 0 ]; do
@@ -2660,6 +2696,10 @@ cmd_kaizen() {
 
   step "kaizen — judging the previous kit change and planning the next kit mission"
   [ "$DRY_RUN" = "1" ] && dim "  (dry-run: no session will be opened and nothing is written)"
+  # Before the gate, so the explanation reaches the human on BOTH outcomes: a pending gate is
+  # exactly where `sufficient: false` is about to be read, and an already-judged one is where the
+  # next question ("why indeterminado again?") is asked. CALLED, never `$( )` — it prints.
+  kaizen_axis_note
 
   # Idempotent: already judged ⇒ no session is spent, only the outcome is repeated.
   local gate_rc=0 out_rc=0
