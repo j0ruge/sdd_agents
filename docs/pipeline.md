@@ -355,6 +355,15 @@ by any test. Three consequences worth knowing:
   the empty series. That is the safe direction — an empty series is `guard.sufficient: false` and
   supports only `indeterminado`, never somebody else's numbers read as a verdict about this kit.
 
+**A worktree is not another repo.** Writer and readers resolve identity through the same
+`ledger_repo_root`, and it derives from the **shared** `.git` (`git rev-parse --git-common-dir`,
+normalized) — never `--show-toplevel`, which answers per worktree. Without that, a mission run
+from `git worktree add` stamped a path no other checkout of the same repo had seen, and every
+reader outside that worktree filed the rows under `other_repo`: the series went empty in the very
+isolation workflow this kit recommends, and went empty quietly. ⚠️ Rows written **before** the
+fix keep the old per-worktree path and keep landing in `other_repo`. That is history, not a bug —
+the ledger is append-only and is never migrated.
+
 **`--all-repos` is the door back to the cross-project question.** Per repo is the right *default*
 and the wrong *only option*: this ledger is one file per machine precisely so maturity can be
 compared BETWEEN projects, and while the filter was the only behaviour no reader could ask that
@@ -395,7 +404,7 @@ present on both shapes.
 | `kit_sha` | string \| `null` | never absent, but `null` | `null` when `$SDD_HOME` is not a git checkout. Short SHA of the kit's own HEAD when the row was written — the before/after axis the whole ledger exists for. |
 | `kit_dirty` | boolean \| `null` | never absent, but `null` | `null` exactly when `kit_sha` is `null` (paired). `true` means the kit's own working tree had uncommitted changes — the row is real but not comparable across versions. |
 | `project` | string | never | `PROJECT_NAME` from the target repo's `.sdd/config.sh`. |
-| `repo` | string | never | Absolute path of the target repo, as `git rev-parse --show-toplevel` returns it — can carry client-identifying paths, which is why the ledger stays in `$HOME` and is never committed. It is also the **only** field the readers filter on before anything else: see "The file is global; the READING is per repo" above. Compared verbatim, with no normalization on either side, so a repo reached through a symlink is a different repo. |
+| `repo` | string | never | Absolute path of the target repo — the directory holding the **shared** `.git`, as `ledger_repo_root` in `bin/sdd` resolves it (`git rev-parse --git-common-dir`, normalized). Can carry client-identifying paths, which is why the ledger stays in `$HOME` and is never committed. It is also the **only** field the readers filter on before anything else: see "The file is global; the READING is per repo" above. Compared verbatim, with no normalization at read time on either side, so a repo reached through a symlink is a different repo. |
 | `mission` | string | never | The mission slug. |
 | `phase` | string | never | The pipeline phase (`EXEC`, `QA`, …). `PLAN` never appears — the interactive phase spends no session. |
 | `step` | string | on escalation rows | The sub-step actually run (`QA:plan`, `QA:exec`, `QA:close`); equal to `phase` outside QA. |

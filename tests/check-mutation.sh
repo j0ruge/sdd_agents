@@ -519,6 +519,22 @@ mut_AUTONOMY_all_repos_ignored() {
   sed -i 's@LEDGER_ALL_REPOS=1@LEDGER_ALL_REPOS=0@g' "$1"
 }
 
+# Not a gate: the ledger's repo identity goes back to `git rev-parse --show-toplevel`, which
+# answers per WORKTREE. Nothing fails, nothing is malformed — a mission run from `git worktree add`
+# simply stamps a path no other checkout of the same repo recognizes, and every reader files those
+# rows under `other_repo`. The judge's series goes empty in the isolation workflow this kit itself
+# recommends, and it goes empty QUIETLY, which is the shape of defect the repo filter exists to
+# forbid: a number that moved with nothing saying why.
+#
+# It sabotages the ONE definition and not the call sites, like mut_RUN_ledger_no_repo_filter: the
+# writer and the three readers all resolve identity here, so emptying the body is what proves they
+# really share it. Reverting only the writer (or only the reader) would leave the two sides
+# agreeing on the OLD identity — the differential pair reads 3-own/0-foreign either way, and the
+# mutant would survive while measuring nothing.
+mut_LEDGER_repo_root_toplevel() {
+  sed -i 's@^  common="\$( git -C "\$start" rev-parse --git-common-dir 2>/dev/null )" || return 0$@  printf "%s" "$( git -C "$start" rev-parse --show-toplevel 2>/dev/null )"; return 0@' "$1"
+}
+
 # Not a gate: the preflight goes back to asking whether the agent copy EXISTS, which is what it did
 # for its whole life while printing "N kit agent(s) checked" — a label over a comparison that never
 # happened. The harness loads the copy, so with this in place the kit source can be corrected and
@@ -754,6 +770,7 @@ CATALOG=(
   KAIZEN_adr_0003_orphan
   KAIZEN_degenerate_axis_blind
   AUTONOMY_all_repos_ignored
+  LEDGER_repo_root_toplevel
 )
 
 # Mutations that are NOT caught today, each with the increment that closes it. Ratchet in both

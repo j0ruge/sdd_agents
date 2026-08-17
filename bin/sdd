@@ -857,14 +857,33 @@ AUTONOMY_SHA_WARNED=0
 
 autonomy_log_path() { printf '%s/autonomy-log.jsonl' "${SDD_STATE_DIR:-$HOME/.sdd}"; }
 
-# The repo whose rows a reader is allowed to see. `sdd autonomy` and `sdd kaizen --series` skip
-# load_config on purpose (they answer a question about the LEDGER, not about a mission, and need
-# no target configuration), so REPO_ROOT is still empty when they run and has to be resolved here.
-# Deliberately NOT resolve_repo_root: that one dies, and dying is a worse answer than "nothing in
-# this file is yours" for a command whose whole job is to report what the ledger holds.
+# The repo a ledger row BELONGS to — one definition for the writer that stamps `repo` and for the
+# three readers that filter on it. Not two spellings of the same question: writer and reader
+# disagreeing about identity is a filter that silently excludes rows born in the repo you are
+# standing in, which is exactly the defect below.
+#
+# `sdd autonomy` and `sdd kaizen --series` skip load_config on purpose (they answer a question
+# about the LEDGER, not about a mission, and need no target configuration), so REPO_ROOT is still
+# empty when they read and the identity has to be resolved from the cwd here. Deliberately NOT
+# resolve_repo_root: that one dies, and dying is a worse answer than "nothing in this file is
+# yours" for a command whose whole job is to report what the ledger holds.
+#
+# It is the shared `.git` and NOT `git rev-parse --show-toplevel`, because the toplevel is per
+# WORKTREE: a mission run from `git worktree add` stamped a path the main checkout had never seen,
+# and every reader outside that worktree counted the rows as `other_repo` — the series went empty
+# in the isolation workflow this kit itself recommends. `--git-common-dir` is the same path from
+# every worktree of one repo; it comes back RELATIVE at the root of a checkout (`.git`) and inside
+# a subdirectory (`../.git`), absolute only from a linked worktree, so it is resolved from $start
+# and normalized with `pwd -P` — the three shapes have to end at one string or the comparison the
+# readers do (verbatim, no normalization on either side) is back to answering per worktree.
+#
+# ⚠️ Rows written BEFORE this carry the old per-worktree path and keep landing in `other_repo`.
+# That is history, not a bug: the ledger is append-only and is never migrated.
 ledger_repo_root() {
-  if [ -n "$REPO_ROOT" ]; then printf '%s' "$REPO_ROOT"; return 0; fi
-  git rev-parse --show-toplevel 2>/dev/null || true
+  local start="${REPO_ROOT:-$PWD}" common
+  common="$( git -C "$start" rev-parse --git-common-dir 2>/dev/null )" || return 0
+  [ -n "$common" ] || return 0
+  ( cd "$start" && cd "$common/.." && pwd -P ) 2>/dev/null || true
 }
 
 # ONE definition of "this row was born in the repo I am standing in", spliced into every reader's
@@ -989,12 +1008,18 @@ autonomy_escalation_row() {   # autonomy_escalation_row <event> <kind> <phase> <
   # The damage when it DOES cut mid-codepoint is also smaller than the old text claimed: jq 1.7
   # here substitutes U+FFFD and exits 0 (measured) instead of rejecting the --arg, so the row
   # survives with a mangled last character rather than vanishing through the emptiness guard.
+  # Substituted and NOT called, unlike autonomy_kit_stamp above: ledger_repo_root only prints, so
+  # there is no global for the subshell to eat. And it, never $REPO_ROOT, is what the row carries:
+  # $REPO_ROOT is the worktree the session runs IN, the row records the repo it BELONGS to, and
+  # the readers filter on the second. No `#` inside the `\`-continued block below — a comment
+  # there breaks the command in silence and `bash -n` says nothing.
+  local repo; repo="$(ledger_repo_root)"
   autonomy_append "$( jq -cn \
     --arg ts "$(date -Iseconds)" --arg event "$1" --arg kind "$2" --arg phase "$3" \
     --arg why "${4:0:200}" \
     --arg run_id "$AUTONOMY_RUN_ID" --arg invocation "$AUTONOMY_INVOCATION" \
     --arg sha "${stamp%%|*}" --arg dirty "${stamp#*|}" \
-    --arg project "$PROJECT_NAME" --arg repo "$REPO_ROOT" --arg mission "$MISSION" \
+    --arg project "$PROJECT_NAME" --arg repo "$repo" --arg mission "$MISSION" \
     '{v: 1, ts: $ts, event: $event, kind: $kind,
       run_id: $run_id, invocation: $invocation,
       kit_sha: (if $sha == "" then null else $sha end),
@@ -1016,13 +1041,16 @@ autonomy_session_row() {  # <phase> <attempt> <auto_retry> <moved> <gate> <gate_
   autonomy_kit_stamp; local stamp="$AUTONOMY_KIT_STAMP"
   # "${6:0:200}" caps gate_why under the same locale caveat as autonomy_escalation_row's
   # "${4:0:200}" above — characters when the locale is multibyte, bytes under C/POSIX.
+  # Same identity as the escalation row above, for the same reason: one repo per row, resolved by
+  # the one definition the readers also go through.
+  local repo; repo="$(ledger_repo_root)"
   autonomy_append "$( jq -cn \
     --arg ts "$(date -Iseconds)" --arg phase "$1" --arg attempt "$2" \
     --arg auto_retry "$3" --arg moved "$4" --arg gate "$5" \
     --arg why "${6:0:200}" \
     --arg run_id "$AUTONOMY_RUN_ID" --arg invocation "$AUTONOMY_INVOCATION" \
     --arg sha "${stamp%%|*}" --arg dirty "${stamp#*|}" \
-    --arg project "$PROJECT_NAME" --arg repo "$REPO_ROOT" --arg mission "$MISSION" \
+    --arg project "$PROJECT_NAME" --arg repo "$repo" --arg mission "$MISSION" \
     --arg step "$LAST_PHASE_STEP" --arg agent "$LAST_PHASE_AGENT" \
     --arg model "$LAST_PHASE_MODEL" --arg session "$LAST_PHASE_SID" \
     --arg rc "$LAST_PHASE_RC" --arg dur "$LAST_PHASE_DUR" --arg cost "$LAST_PHASE_COST" \

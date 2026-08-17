@@ -981,6 +981,81 @@ assert_eq "all-repos: the judge's series answers it too — other_repo falls to 
 # Anti-vacuity: a flag that widened the reading by losing rows on the way would still be "wider".
 assert_bucket_sum "the four buckets sum to the header total (--all-repos over two repos)" "$out_all"
 
+# --- ...and a worktree of one repo is still that repo ------------------------
+# `git rev-parse --show-toplevel` answers per WORKTREE, so a mission run from `git worktree add`
+# stamped a `repo` path the main checkout had never heard of. The row was born in the same repo
+# and the reader called it foreign: the series went empty in the very workflow this kit tells you
+# to use for isolation (superpowers:using-git-worktrees, and the multi-mission item in TODO.md).
+#
+# The rows here are written by the REAL writer, not by hand: what is under test is that the writer
+# and the readers resolve ONE identity, and a hand-written `repo` field would just be this test
+# agreeing with itself about the formula. The `blocked` increment reaches the writer with rc 3
+# before any session opens — no token, same door the fixture at the top of this file uses.
+#
+# DIFFERENTIAL, and ASYMMETRIC on purpose: ONE row born in the main checkout, TWO born in the
+# worktree, into ONE ledger. Broken, the two readings are 1-own/2-foreign and 2-own/1-foreign —
+# they DISAGREE, and no swap of the two sides makes them match. Fixed, both read 3-own/0-foreign.
+# A reader that refused everything would read 0/3 on both sides and agree — which is why the
+# absolute assertion sits next to the differential one and neither is enough alone.
+echo "== reader: a worktree is not another repo =="
+WTMAIN="$OUTSIDE/wtrepo"
+WTLINK="$OUTSIDE/wtlinked"
+WTSTATE="$OUTSIDE/wtledger"
+mkdir -p "$WTMAIN" "$WTSTATE"
+(
+  cd "$WTMAIN" || exit 1
+  git init -q -b main
+  git config user.email "fixture@example.com"
+  git config user.name "Fixture"
+  mkdir -p .sdd "docs/handoffs/$MISSION"
+  printf '.sdd/logs/\n' > .gitignore
+  cat > .sdd/config.sh <<'CFG'
+PROJECT_NAME="wtfixture"
+DEFAULT_BRANCH="main"
+TEST_CMD="true"
+E2E_CMD=""
+HANDOFF_DIR="docs/handoffs"
+QA_DOCS_PATH="docs/qa"
+JIRA_ENABLED=false
+CFG
+  cat > "docs/handoffs/$MISSION/00-missao.md" <<'MIS'
+---
+missao: 20260101-fixture
+aprovacao: auto
+---
+# Mission
+MIS
+  : > "docs/handoffs/$MISSION/01-plano.md"
+  cat > "docs/handoffs/$MISSION/checkpoint.md" <<'CPT'
+| ID | Incremento | Check (comando → esperado) | Status | Commit |
+|---|---|---|---|---|
+| I1 | slice one | `true` → 0 | blocked | — |
+CPT
+  git add -A && git commit -qm "init"
+  git worktree add "$WTLINK" -b wtprobe
+) >/dev/null 2>&1
+
+( cd "$WTMAIN" && SDD_STATE_DIR="$WTSTATE" "$SDD" run "$MISSION" ) >/dev/null 2>&1
+( cd "$WTLINK" && SDD_STATE_DIR="$WTSTATE" "$SDD" run "$MISSION" ) >/dev/null 2>&1
+( cd "$WTLINK" && SDD_STATE_DIR="$WTSTATE" "$SDD" run "$MISSION" ) >/dev/null 2>&1
+
+# Floor, and NOT named `worktree…`: the checkpoint's Check counts `^  ok    worktree` and expects
+# exactly two. Without this line a fixture that silently wrote nothing would leave both assertions
+# below reading "0 0" on each side — absolutely equal, and absolutely vacuous.
+assert_eq "the worktree probe reached the real writer from both checkouts" "3" \
+  "$( [ -f "$WTSTATE/autonomy-log.jsonl" ] && grep -c . "$WTSTATE/autonomy-log.jsonl" || echo 0 )"
+
+# "<own rows> <foreign rows>", read by the human's table from the checkout given.
+wt_summary() {
+  local o m; o="$( cd "$1" && SDD_STATE_DIR="$WTSTATE" "$SDD" autonomy 2>&1 )"
+  m="$(num_before "$o" 'row\(s\) ·')"
+  printf '%s %s' "${m:-0}" "$(foreign_of "$o")"
+}
+assert_eq "worktree: a row born in a worktree is local in the main checkout, and none is foreign" \
+  "3 0" "$(wt_summary "$WTMAIN")"
+assert_eq "worktree: and the two checkouts read one ledger identically — same rows, same buckets" \
+  "$(wt_summary "$WTMAIN")" "$(wt_summary "$WTLINK")"
+
 # A row with no `event` at all, or an event nobody recognizes yet: the reviewer's exact repro. It
 # must be counted, not merely fail to crash. It also carries no `repo`, which is deliberate twice
 # over: a row that cannot say where it came from is never excluded by the repo filter — hiding
