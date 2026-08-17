@@ -270,7 +270,33 @@ mut_KAIZEN_adr_0003_orphan() {
 # derived number free to drift from what the human is told. `@` as the delimiter because the pattern
 # carries the jq pipe.
 mut_KAIZEN_degenerate_axis_blind() {
-  sed -i 's@| ($slices | length) > 1@| false@' "$1"
+  sed -i 's@| ($window | length) > 1@| false@' "$1"
+}
+
+# The window goes back to the WHOLE history, which is what it was until r2 of mission
+# 20260817-eixo-do-juiz. The ledger is append-only, so one ancient kit_sha that once bought two
+# sessions turns the structural explanation off forever while every recent version sits at one
+# session each — the field stops working and nothing says so.
+mut_KAIZEN_degenerate_axis_all_history() {
+  sed -i 's@| ($order\[(if $n > guard_floor then $n - guard_floor else 0 end):\]) as $window@| $order as $window@' "$1"
+}
+
+# The mission identity loses the repo and goes back to the bare slug. A no-op until --all-repos
+# existed; with it, two projects that ran the same dated slug on the same kit_sha collapse into one
+# group — missions_with_session drops, guard.sufficient can flip, and one project `refez` swallows
+# another project clean `ok`. Both readers are sabotaged by the one anchor pair below on purpose:
+# the two spellings are one mechanism, and check-autonomy.sh compares the readers to each other.
+mut_KAIZEN_mission_key_slug_only() {
+  sed -i 's@def mission_key: (.repo // "") + "|" + (.mission // "");@def mission_key: (.mission // "");@g' "$1"
+}
+
+# The repo identity goes back to the PARENT of the shared .git — the first spelling of the worktree
+# fix, and the one that silently merged repositories: every submodule of one parent answers
+# `/parent/.git/modules`, and every bare repo beside another answers the directory that holds them.
+# Nothing is excluded and nothing is reported (`other_repo: 0`), which is the contamination the
+# filter exists to name, arriving through a different door.
+mut_LEDGER_repo_root_common_parent() {
+  sed -i 's@^  gitdir="\$( cd "\$start" && cd "\$common" && pwd -P 2>/dev/null )" || return 0$@  printf "%s" "$( cd "$start" \&\& cd "$common/.." \&\& pwd -P 2>/dev/null )"; return 0@' "$1"
 }
 
 # The Jidoka dies: `verdict: piorou` no longer stops the line. The outcome falls through to the
@@ -517,7 +543,7 @@ mut_RUN_ledger_no_repo_filter() {
 # key. Emptying the definition kills the counter and the exclusion at once, because both go
 # through it — the single-definition discipline, measured.
 mut_LEDGER_no_repo_counted_as_local() {
-  sed -i 's@def ledger_row_no_repo: type == "object" and (has("repo") | not);@def ledger_row_no_repo: false;@' "$1"
+  sed -i 's@def ledger_row_no_repo: type == "object" and ((\.repo // "") == "");@def ledger_row_no_repo: false;@' "$1"
 }
 
 # Not a gate: `--all-repos` is still accepted, still documented, and does nothing — the shape of
@@ -805,6 +831,9 @@ CATALOG=(
   LEDGER_repo_root_toplevel
   LEDGER_no_repo_counted_as_local
   KAIZEN_prompt_series_unflagged
+  KAIZEN_degenerate_axis_all_history
+  KAIZEN_mission_key_slug_only
+  LEDGER_repo_root_common_parent
 )
 
 # Mutations that are NOT caught today, each with the increment that closes it. Ratchet in both

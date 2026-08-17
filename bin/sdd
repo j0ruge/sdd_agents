@@ -892,10 +892,29 @@ autonomy_log_path() { printf '%s/autonomy-log.jsonl' "${SDD_STATE_DIR:-$HOME/.sd
 # ⚠️ Rows written BEFORE this carry the old per-worktree path and keep landing in `other_repo`.
 # That is history, not a bug: the ledger is append-only and is never migrated.
 ledger_repo_root() {
-  local start="${REPO_ROOT:-$PWD}" common
+  local start="${REPO_ROOT:-$PWD}" common gitdir
   common="$( git -C "$start" rev-parse --git-common-dir 2>/dev/null )" || return 0
   [ -n "$common" ] || return 0
-  ( cd "$start" && cd "$common/.." && pwd -P ) 2>/dev/null || true
+  # The identity IS the common dir, never its parent. `cd "$common/.."` was the first spelling and
+  # it collapsed two repositories into one string in two shapes, both silently — `other_repo: 0`,
+  # nothing excluded, nothing said, which is the very contamination the filter above exists to
+  # report: in a SUBMODULE the common dir is `/parent/.git/modules/<name>`, so the parent is
+  # `/parent/.git/modules` for EVERY submodule of that parent; in a BARE repo it is `.`, so the
+  # parent is the directory that merely contains the repo, shared by every bare repo beside it.
+  # `--show-toplevel` got both of those right and only worktrees wrong. The common dir gets all
+  # three right, because it is the identity git itself keeps per repository.
+  gitdir="$( cd "$start" && cd "$common" && pwd -P 2>/dev/null )" || return 0
+  [ -n "$gitdir" ] || return 0
+  # Cosmetic, and ONLY cosmetic: `/repo/.git` prints back as `/repo`, so the ledger and the header
+  # keep naming the root a human recognizes instead of a path inside `.git`. Injective, therefore
+  # safe to collapse: exactly one repository can own `/repo/.git`. Withheld from a bare repo, whose
+  # common dir is the repository itself and whose parent belongs to nobody.
+  if [ "$( git -C "$start" rev-parse --is-bare-repository 2>/dev/null )" != "true" ] \
+     && [ "${gitdir##*/}" = ".git" ] && [ -n "${gitdir%/.git}" ]; then
+    printf '%s' "${gitdir%/.git}"
+  else
+    printf '%s' "$gitdir"
+  fi
 }
 
 # ONE definition of "this row was born in the repo I am standing in", spliced into every reader's
@@ -938,7 +957,15 @@ ledger_row_is_local() {
   # of the two. A row that names no project is unattributable in every scope, so the flag does not
   # reach it — widening the question between projects is not the same as admitting rows that
   # belong to none.
-  printf '%s' 'def ledger_row_no_repo: type == "object" and (has("repo") | not);'
+  # `(.repo // "") == ""` and not `has("repo") | not`: the three shapes of "this row names no
+  # project" are the key absent, the key present and null, and the key present and empty, and only
+  # the first is a shape the writer can produce — the other two arrive by hand edit or partial
+  # write, which is precisely the corruption this bucket exists to report. Under the old spelling
+  # they fell through to `.repo == $repo` and were accused of being `other_repo` ("born elsewhere"),
+  # a wrong reason printed with the confidence of a right one; and standing outside any git repo,
+  # where $repo is itself empty, a `repo: ""` row compared EQUAL and was counted local in a repo
+  # that does not exist.
+  printf '%s' 'def ledger_row_no_repo: type == "object" and ((.repo // "") == "");'
   if [ "$LEDGER_ALL_REPOS" = "1" ]; then printf '%s' 'def ledger_row_is_local: ledger_row_no_repo | not;'; return 0; fi
   printf '%s' 'def ledger_row_is_local: if ledger_row_no_repo then false elif (type == "object" and has("repo")) then .repo == $repo else true end;'
 }
@@ -2339,7 +2366,18 @@ cmd_autonomy() {
       dim "  $file holds $lines row(s), all of them belonging to some repo. Run this inside one."
     else
       warn "no data for $repo: none of the $lines row(s) in $file were born in this repo"
-      dim "  The ledger is global, the reader is not. Run 'sdd autonomy' in the repo you want."
+      # FIVE states, not four. A MIXED ledger — some rows born elsewhere, some naming no repo at
+      # all — used to get this one headline for every row, and the remedy it prints reaches only
+      # the first kind: `--all-repos` deliberately does not admit rows that belong to no project,
+      # so "run it over there / open the scope" is advice nobody can carry out for them. The split
+      # is printed instead of implied, for the same reason every exclusion above is counted.
+      if [ "$norepo" -gt 0 ]; then
+        dim "  $((lines - norepo)) row(s) came from other repos; $norepo name no repo at all."
+        dim "  Run 'sdd autonomy' in the repo you want, or --all-repos for every project — but"
+        dim "  neither reaches the $norepo unattributable row(s): no scope can claim them."
+      else
+        dim "  The ledger is global, the reader is not. Run 'sdd autonomy' in the repo you want."
+      fi
     fi
     return 1
   fi
@@ -2391,6 +2429,13 @@ cmd_autonomy() {
     def is_session: .event == "session";
     def is_escalation: .event == "blocked" or .event == "degraded";
     def is_unrecognized: (is_session or is_escalation) | not;
+    # ONE definition of "which mission is this row about" for this program too, exactly as
+    # kaizen_series holds one: the repo is part of the identity, because two projects run the same
+    # dated slug on the same day and --all-repos puts their rows in one reading. Counting by slug
+    # alone made `2 mission(s)` out of three, in the very header a human reads to decide whether
+    # the kit got better. A no-op in per-repo scope. The two readers keep the same spelling on
+    # purpose; check-autonomy.sh compares them to each other so neither can be "improved" alone.
+    def mission_key: (.repo // "") + "|" + (.mission // "");
     # The repo filter runs before every bucket, and its own count is kept for the same reason the
     # other three exclusions are printed: a row that leaves has to say so. Bound BEFORE the pipe
     # so the buckets below still see a plain array of this repo rows and nothing changes shape.
@@ -2410,7 +2455,7 @@ cmd_autonomy() {
             (.[0].kit_sha) as $sha
             | (length) as $n
             | (map(select(.moved == false)) | length) as $stalled
-            | (map(.mission) | unique | length) as $missions
+            | (map(mission_key) | unique | length) as $missions
             | (map(.cost_usd // 0) | add) as $cost
             | "  \($sha)  \($n) session(s) · \($stalled) stalled · \(($stalled * 100 / $n) | floor)% waste · \($missions) mission(s) · US$ \($cost | . * 100 | round / 100)"
           ) | join("\n"))
@@ -2497,10 +2542,29 @@ kaizen_series() {
     # (the repo that BUILDS the kit, where every session commits and the next lands on a fresh sha,
     # so waiting never works). Input is the on-axis rows. MORE THAN ONE sha is required on purpose:
     # a first sha with one session has not degenerated, it has only just started.
+    #
+    # ONE definition of the floor, shared by the guard verdict below and by the window this field
+    # looks through. They cannot drift: the field says "waiting will never satisfy that floor", so
+    # it has to be measured over as many kit versions as the floor asks missions of.
+    def guard_floor: 3;
+    # ONE definition of "the distinct kit versions, in FILE order", used by the latest/previous
+    # pair below and by the window here. group_by sorts by key and answers a different question;
+    # two hand-written copies of this reduce is how the blocked/degraded pair came to disagree.
+    def shas_in_file_order: map(.kit_sha) | reduce .[] as $s ([]; if index($s) then . else . + [$s] end);
     def degenerate_axis:
-      group_by(.kit_sha) as $slices
-      | ($slices | length) > 1
-        and all($slices[]; (map(select(.event == "session")) | length) == 1);
+      . as $rows
+      | ($rows | shas_in_file_order) as $order
+      # The LAST guard_floor versions, and NOT the whole history. Over all of $ok this was a
+      # one-way switch: the ledger is append-only, so one ancient sha that happened to buy two
+      # sessions turned the explanation off FOREVER while every recent version sat at exactly one.
+      # Measured: 20 shas x 1 session => true; add a second session to the OLDEST sha => false,
+      # with nothing about today having changed. An explanation that expires on a fact from last
+      # year is exactly the number that moves with nothing explaining why.
+      | ($order | length) as $n
+      | ($order[(if $n > guard_floor then $n - guard_floor else 0 end):]) as $window
+      | ($window | length) > 1
+        and all($window[]; . as $sha
+                | ($rows | map(select(.kit_sha == $sha and .event == "session")) | length) == 1);
 
     def phase_label:
       if (map(select(is_escalation)) | length) > 0
@@ -2512,22 +2576,35 @@ kaizen_series() {
       else "ok"
       end;
 
+    # ONE definition of "which mission is this row about", and the repo is PART of it. The slug
+    # alone was the first spelling, and it was a no-op bug until this mission opened --all-repos:
+    # slugs are dated (`YYYYMMDD-<name>`) and cmd_kaizen mints `$(date +%Y%m%d)-kaizen`, identical
+    # in every repo on the same day. Measured with three repos, one session each on one kit_sha and
+    # two slugs colliding: missions_with_session fell 3 -> 2, guard.sufficient flipped true ->
+    # false, and one project refez absorbed the other project clean ok into a single group — a
+    # verdict about the kit decided by a slug coincidence. Since F1 the flag reaches the judge
+    # prompt, so this reached the verdict. A NO-OP in per-repo scope, where every row shares one
+    # repo, which is why the fix costs the default reading nothing.
+    def mission_key: (.repo // "") + "|" + (.mission // "");
+
     def group_summary:
       . as $rows
       | ($rows | map(select(.event == "session"))) as $sess
-      | ($rows | group_by(.mission + "|" + .phase)
-               | map({mission: .[0].mission, phase: .[0].phase, label: phase_label,
+      | ($rows | group_by(mission_key + "|" + (.phase // ""))
+               | map({repo: .[0].repo, mission: .[0].mission, phase: .[0].phase, label: phase_label,
                       sessions: (map(select(.event == "session")) | length),
                       cost_usd: (map(.cost_usd // 0) | add)})) as $detail
       | {kit_sha: $rows[0].kit_sha,
-         missions: ($rows | map(.mission) | unique | length),
+         missions: ($rows | map(mission_key) | unique | length),
          # The floor of the guard, and NOT the same number as `missions` above: that one counts
          # every mission on the axis, escalations included, which is right for the display and
          # wrong for the floor. A mission that stopped the line without spending a session left
          # the judge nothing to read about this kit version, and three of them used to clear a
          # floor meant to mean "enough observation". Derived from $sess, the one place this
-         # program already calls a row a session.
-         missions_with_session: ($sess | map(.mission) | unique | length),
+         # program already calls a row a session. Keyed by mission_key like every other count here:
+         # this is the number the floor reads, so a slug collision between two projects landing
+         # here is a guard moved by a coincidence.
+         missions_with_session: ($sess | map(mission_key) | unique | length),
          sessions: ($sess | length),
          moved_rate: (if ($sess | length) == 0 then null
                       else (($sess | map(select(.moved == true)) | length) / ($sess | length) * 100 | round / 100) end),
@@ -2556,7 +2633,7 @@ kaizen_series() {
     | (($raw | length) - ($all | length)) as $unrec
     | ($rows | map(select(on_axis | not))) as $noncomp
     | ($rows | map(select(on_axis))) as $ok
-    | ($ok | map(.kit_sha) | reduce .[] as $s ([]; if index($s) then . else . + [$s] end)) as $shas
+    | ($ok | shas_in_file_order) as $shas
     | (if ($shas | length) >= 1 then ($ok | map(select(.kit_sha == $shas[-1])) | group_summary) else null end) as $latest
     | (if ($shas | length) >= 2 then ($ok | map(select(.kit_sha == $shas[-2])) | group_summary) else null end) as $previous
     # ONE binding for the number the floor reads, so the exposed field and the verdict of the
@@ -2579,7 +2656,7 @@ kaizen_series() {
        guard: {missions_after_change: ($latest.missions // 0),
                missions_with_session: $observed,
                sessions: ($latest.sessions // 0),
-               sufficient: ($observed >= 3),   # guard floor: 3 missions WITH a session (D4); I13.4 revisits
+               sufficient: ($observed >= guard_floor),  # 3 missions WITH a session (D4); I13.4 revisits
                degenerate_axis: $degenerate},
        excluded: {non_comparable: ($noncomp | length), unrecognized: $unrec,
                   meta: ($meta | length), other_repo: $other_repo, no_repo: $no_repo}}
@@ -2733,7 +2810,12 @@ kaizen_approved_outcome() {
 kaizen_axis_note() {
   autonomy_have_jq || return 0
   local series
-  series="$(kaizen_series)" || return 0
+  # stderr dropped ON PURPOSE, and only here: this is a second read of the same series the gate is
+  # about to take, so an unreadable ledger printed jq raw diagnostic TWICE in a row — the same
+  # complaint from two voices reads as two problems. Reporting corruption is the gate job, one
+  # line down, and it still does it. This function only ever explains a degenerate axis, and it
+  # has nothing to explain about a file it could not parse.
+  series="$(kaizen_series 2>/dev/null)" || return 0
   [ "$(jq -r '.guard.degenerate_axis' <<< "$series")" = "true" ] || return 0
   warn "the kit_sha axis is degenerate here: every kit version in this series bought exactly one session"
   dim "  This repo BUILDS the kit, so each session commits and the next one lands on a fresh sha."

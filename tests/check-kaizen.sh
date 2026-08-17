@@ -97,10 +97,22 @@ fi
 assert_eq "adr 0003 exists in the shape of 0001/0002 (title, dated status, three sections)" \
   "5" "$adr3_shape"
 
-# Reading a FILE, not a pipe: `grep -q` here cannot hit the SIGPIPE-141 inversion the house rule
-# warns about, which only bites when a writer is piped into it.
+# ⚠️ It grepped the WHOLE file, and `ADR 0003` appears there five times — FOUR of them in comments.
+# So the assertion whose own words are "a decision record no code cites is a label" was itself
+# measuring prose: under a degrade that strips the citation from the sentence the runner PRINTS, the
+# four comments kept it green. Comment lines are dropped first, which is the difference between
+# "the file mentions the decision" and "the implementation names it".
+#
+# The RUNTIME half — that the citation reaches the human on stdout — is asserted by the
+# `degenerate axis` pair further down, whose helper demands `ADR 0003` inside the printed
+# explanation. This one holds the source end; that one holds the terminal end.
+#
+# Read through a variable and a herestring, never `grep file | grep -q`: the second grep exits on
+# the first match, the first takes SIGPIPE, and under `pipefail` the pipeline returns 141 — the
+# house trap that inverts on large input and behaves on small.
+adr3_code="$(grep -v '^[[:space:]]*#' "$SDD" || true)"
 assert_eq "adr 0003 is named by bin/sdd — a decision record no code cites is a label" "yes" \
-  "$(grep -q 'ADR 0003' "$SDD" && echo yes || echo no)"
+  "$(grep -q 'ADR 0003' <<< "$adr3_code" && echo yes || echo no)"
 
 # =============================================================================
 # series — the deterministic half of the judge
@@ -729,6 +741,128 @@ SERIES_OUT="$( cd "$FIX" && SDD_STATE_DIR="$OUTSIDE/firstsha" "$KSDD" kaizen --s
 assert_eq "a single kit version has not degenerated, it has only just started" "false" \
   "$(field '.guard.degenerate_axis')"
 
+# --- ...and the predicate has more clauses than two fixtures can see ---------
+# A sabotage pass over the clauses of `degenerate_axis` and over the guard of `kaizen_axis_note`
+# found FOUR degrades that stayed green on the fixtures above — one of them printing "the kit_sha
+# axis is degenerate here" about a healthy target repo, which is the exact misreading ADR 0003 was
+# written to prevent, arriving from the runner's own mouth. Each degrade gets the fixture that
+# separates it. All of these are deliberately OUTSIDE the `degenerate axis` prefix: the checkpoint
+# Check counts exactly the two assertions above, with `-c`.
+axis_row() {   # axis_row <kit_sha> <mission> <session|blocked> — one on-axis row for THIS repo
+  jq -cn --arg sha "$1" --arg mission "$2" --arg ev "$3" --arg repo "$FIXROOT" \
+    'if $ev == "session"
+     then {v:1, ts:"2026-08-16T18:00:00-03:00", event:"session", run_id:"x", invocation:"run",
+           kit_sha:$sha, kit_dirty:false, project:"p", repo:$repo, mission:$mission,
+           phase:"EXEC", step:"EXEC", agent:"sdd-executor", model:"opus", attempt:1,
+           auto_retry:false, session:"s", rc:0, dur_s:10, cost_usd:1.0, moved:true,
+           gate:"pass", gate_why:"x"}
+     else {v:1, ts:"2026-08-16T18:00:00-03:00", event:"blocked", run_id:"x", invocation:"run",
+           kit_sha:$sha, kit_dirty:false, project:"p", repo:$repo, mission:$mission,
+           phase:"EXEC", kind:"increment-blocked", gate_why:"x"}
+     end'
+}
+# axis_case <name> < rows -> "<guard.degenerate_axis>/<note printed: yes|no>/<guard.sufficient>"
+# All three read from ONE fixture, because the interesting degrades move one of them and not the
+# others: a field with no sentence explains nothing, a sentence with no field is the runner having
+# an opinion, and `sufficient` is the question the note guard was interchangeable with.
+axis_case() {
+  local d="$OUTSIDE/axis-$1"; mkdir -p "$d"; cat > "$d/autonomy-log.jsonl"
+  local s o
+  s="$( cd "$FIX" && SDD_STATE_DIR="$d" "$KSDD" kaizen --series  2>/dev/null )"
+  o="$( cd "$FIX" && SDD_STATE_DIR="$d" "$KSDD" kaizen --dry-run 2>&1 )"
+  printf '%s/%s/%s' \
+    "$(jq -r '.guard.degenerate_axis' <<< "$s")" \
+    "$( if grep -q 'kit_sha axis is degenerate' <<< "$o"; then echo yes; else echo no; fi )" \
+    "$(jq -r '.guard.sufficient' <<< "$s")"
+}
+
+# `all` -> `any`. One version that bought three sessions beside one that bought a single session is
+# an axis WORKING and merely young. Under `any` it reads degenerate, and the runner tells the human
+# to stop waiting for missions that are in fact arriving.
+# `sufficient` reads $latest, which here is the QUIET version (file order), so it is false — the
+# floor speaks about the newest kit version, never about the busiest one.
+assert_eq "axis clause: one busy kit version beside a quiet one is not a degenerate axis" \
+  "false/no/false" \
+  "$( { axis_row s000a01 q1 session; axis_row s000a01 q2 session; axis_row s000a01 q3 session
+        axis_row s000a02 q4 session; } | axis_case any )"
+
+# `== 1` -> `<= 1`. A version whose rows are all escalations bought ZERO sessions, and zero is not
+# one: nothing was OBSERVED on that version, which is a different silence with a different remedy.
+assert_eq "axis clause: a kit version that bought no session at all is not one that bought a session" \
+  "false/no/false" \
+  "$( { axis_row s000b01 q1 session; axis_row s000b02 q2 blocked; } | axis_case zero )"
+
+# `map(select(.event == "session")) | length` -> `length`. A version that bought one session AND
+# escalated has still bought exactly one session; counting ROWS makes the slice read as two and the
+# explanation disappears with nothing saying so — the silent direction, which is the expensive one.
+assert_eq "axis clause: a session with an escalation beside it is still one session" \
+  "true/yes/false" \
+  "$( { axis_row s000c01 q1 session; axis_row s000c01 q1 blocked
+        axis_row s000c02 q2 session; } | axis_case escal )"
+
+# The window, and its control: two fixtures of FOUR versions and FIVE sessions that differ only in
+# WHICH version got the second session. Over the whole history this was a one-way switch — the
+# ledger is append-only, so one ancient version that happened to buy two sessions turned the
+# explanation off forever and nothing about today could turn it back on. The pair is what makes it a
+# window rather than a blanket: outside it the second session must not matter, inside it must.
+assert_eq "axis window: an ancient version with two sessions does not silence what the recent ones say" \
+  "true/yes/false" \
+  "$( { axis_row s000d01 q1 session; axis_row s000d01 q2 session
+        axis_row s000d02 q3 session; axis_row s000d03 q4 session
+        axis_row s000d04 q5 session; } | axis_case window )"
+assert_eq "axis window: but a RECENT version with two sessions does silence it — same rows, one moved" \
+  "false/no/false" \
+  "$( { axis_row s000d01 q1 session
+        axis_row s000d02 q3 session; axis_row s000d03 q4 session
+        axis_row s000d04 q5 session; axis_row s000d04 q2 session; } | axis_case windowctl )"
+
+# The guard of `kaizen_axis_note` asks `degenerate_axis == true`, and `sufficient == false` was
+# INTERCHANGEABLE with it across every fixture above: the degenerate one is also insufficient, the
+# healthy one is also sufficient. This is the third case that pulls them apart — a healthy target
+# axis still below the floor (two versions, two missions each). Swapped, the runner announces "the
+# kit_sha axis is degenerate here" about a repo where waiting is exactly the right advice, which is
+# the wrong reading ADR 0003 exists to forbid, printed by the instrument that was built to prevent it.
+assert_eq "axis note: a healthy axis below the floor is insufficient WITHOUT being degenerate, and the runner stays quiet" \
+  "false/no/false" \
+  "$( { axis_row s000f01 q1 session; axis_row s000f01 q2 session
+        axis_row s000f02 q3 session; axis_row s000f02 q4 session; } | axis_case note )"
+
+# --- ...and a mission is a mission of a REPO, not a slug ---------------------
+# Every count in the series keyed off the bare mission slug. A no-op while the reader was confined
+# to one repo, and a defect the moment `--all-repos` opened it: slugs are dated (`YYYYMMDD-<name>`)
+# and cmd_kaizen itself mints `$(date +%Y%m%d)-kaizen`, identical in every repo on the same day.
+#
+# DIFFERENTIAL over two ledgers that differ in exactly one character of one slug — three repos, one
+# session each, one kit version. Colliding, the floor used to read 2 and `guard.sufficient` flipped
+# to false, and one project's `refez` swallowed another project's clean `ok` into a single group: a
+# verdict about the kit decided by a slug coincidence. Both halves matter — the label tally is what
+# shows the two missions were really FUSED and not merely miscounted.
+collide_row() {   # collide_row <repo> <mission> <gate>
+  jq -cn --arg repo "$1" --arg mission "$2" --arg gate "$3" \
+    '{v:1, ts:"2026-08-17T10:00:00-03:00", event:"session", run_id:"c", invocation:"run",
+      kit_sha:"e000001", kit_dirty:false, project:"p", repo:$repo, mission:$mission,
+      phase:"EXEC", step:"EXEC", agent:"sdd-executor", model:"opus", attempt:1,
+      auto_retry:false, session:"s", rc:0, dur_s:10, cost_usd:1.0, moved:true,
+      gate:$gate, gate_why:"x"}'
+}
+collide_case() {   # collide_case <name> < rows -> "<missions_with_session> <sufficient> <labels>"
+  local d="$OUTSIDE/collide-$1"; mkdir -p "$d"; cat > "$d/autonomy-log.jsonl"
+  ( cd "$FIX" && SDD_STATE_DIR="$d" "$KSDD" kaizen --series --all-repos 2>/dev/null ) \
+    | jq -r '[(.guard.missions_with_session | tostring), (.guard.sufficient | tostring),
+              (.latest.labels | tojson)] | join(" ")'
+}
+assert_eq "mission key: two projects that ran the SAME slug are two missions, and neither label eats the other" \
+  '3 true {"ok":2,"leve":0,"refez":1}' \
+  "$( { collide_row /c1 20260817-kaizen pass; collide_row /c2 20260817-kaizen fail
+        collide_row /c3 20260817-other pass; } | collide_case same )"
+# The control: the same three rows with DISTINCT slugs must read identically. Without it, a key that
+# simply stopped grouping (one group per row) would satisfy the line above and break every other
+# count in the file quietly.
+assert_eq "mission key: and with distinct slugs the reading is the same — the repo in the key changed nothing else" \
+  '3 true {"ok":2,"leve":0,"refez":1}' \
+  "$( { collide_row /c1 20260817-a pass; collide_row /c2 20260817-b fail
+        collide_row /c3 20260817-other pass; } | collide_case distinct )"
+
 echo "== the approved plan never reaches a session =="
 # Once `aprovacao:` is filled, the generic fix-it retry prompt ("complete what is missing")
 # reads, to a live agent, as an instruction to blank the field — erasing a decision that may be
@@ -959,6 +1093,42 @@ assert_eq "one series: under --all-repos the gate demands the sha the prompt han
   "$JS_ALL" "$(judge_prompt_sha --all-repos)"
 assert_eq "one series: and without the flag too — the control a fix cannot skip" \
   "$JS_LOCAL" "$(judge_prompt_sha)"
+
+# ...and the GATE half of that pair, driven for real instead of by proxy.
+#
+# `gate_sha` above reads the series through the same door gate_KAIZEN uses, which measures the
+# SERIES and takes the gate on faith. Measured: degrading gate_KAIZEN to force a per-repo read
+# (`series="$( LEDGER_ALL_REPOS=0 kaizen_series )"`) left all three assertions above GREEN — the
+# section written to forbid BUG-1 was blind to the same bug one function further on. So the gate is
+# driven end to end here: the verdict on disk names the sha the PROMPT hands the agent, and the
+# runner's own rc says whether the gate accepted it.
+#
+# The pair is what makes it an assertion. Accepted-with-the-right-sha alone is satisfied by a gate
+# that accepts anything; refused-with-the-other-sha alone is satisfied by a gate that refuses
+# everything. Together they pin the gate to ONE series — and under the degrade BOTH go red, because
+# it is exactly the two shas that swap places.
+#
+# ⚠️ NOT prefixed `one series`: the checkpoint Check for F1 counts `^  ok    one series` with `-c`
+# and demands exactly two. New clause, new name.
+gate_verdict_rc() {   # gate_verdict_rc <sha to write into the verdict> <flags...> -> "<rc> <found?>"
+  local sha="$1"; shift
+  sed -i "s/^kit_sha_judged: .*/kit_sha_judged: $sha/" "$VDIR/05-verdict.md"
+  git -C "$FIX" add -A >/dev/null 2>&1
+  git -C "$FIX" commit -qm "chore: the verdict names $sha" >/dev/null 2>&1
+  local o r
+  o="$( cd "$FIX" && SDD_STATE_DIR="$OUTSIDE/judgesplit" "$KSDD" kaizen "$@" 2>&1 )"; r=$?
+  if grep -q 'no verdict for kit' <<< "$o"; then printf '%s no-verdict' "$r"
+  else printf '%s verdict-found' "$r"; fi
+}
+# The verdict is `melhorou`, which the gate only accepts over a sufficient series — and both
+# readings of this fixture are sufficient (three missions a side), so nothing here can pass or fail
+# for the guard's reason instead of the series' reason.
+loud_stub   # no session may open on the accepting path; a real one would show up as a ledger row
+assert_eq "real gate: it accepts the very sha the prompt hands the agent, under --all-repos" \
+  "0 verdict-found" "$(gate_verdict_rc "$(judge_prompt_sha --all-repos)" --all-repos)"
+dead_stub   # the refusing path burns its two offline attempts and escalates, exactly as rc 3 says
+assert_eq "real gate: and refuses the other series sha, so the acceptance above is no rubber stamp" \
+  "3 no-verdict" "$(gate_verdict_rc "$JS_LOCAL" --all-repos)"
 
 echo "== hygiene =="
 assert_eq "the fixture kit tree ends clean" "" "$(git -C "$FIX" status --porcelain)"
