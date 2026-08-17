@@ -1,6 +1,6 @@
 ---
 missao: 20260817-eixo-do-juiz
-atualizado: 2026-08-17 12:10
+atualizado: 2026-08-17 10:10
 ---
 
 # Checkpoint — o eixo do juiz
@@ -33,7 +33,7 @@ atualizado: 2026-08-17 12:10
 | I3 | `--all-repos` nos três leitores | `o=$(bash tests/check-autonomy.sh 2>&1); grep -c '^  ok    all-repos' <<< "$o"` → `2` | done | d62f08c |
 | I4 | identidade de repo sobrevive a worktree | `o=$(bash tests/check-autonomy.sh 2>&1); grep -c '^  ok    worktree' <<< "$o"` → `2` | done | c514e36 |
 | I5 | linha sem `repo` ganha balde próprio | `o=$(bash tests/check-autonomy.sh 2>&1); grep -c '^  ok    no-repo' <<< "$o"` → `2` | done | 4ca8015 |
-| F1 | o juiz e o agente voltam a ler UMA série sob `--all-repos` | `o=$(bash tests/run-all.sh 2>&1); printf '%s %s' "$(grep -c '^  ok    one series' <<< "$o")" "$(grep -c '^  ok    KAIZEN_prompt_series_unflagged' <<< "$o")"` → `2 1` | pending | — |
+| F1 | o juiz e o agente voltam a ler UMA série sob `--all-repos` | `o=$(bash tests/run-all.sh 2>&1); printf '%s %s' "$(grep -c '^  ok    one series' <<< "$o")" "$(grep -c '^  ok    KAIZEN_prompt_series_unflagged' <<< "$o")"` → `2 1` | done | c5c9a9f |
 
 ## Notas de execução
 
@@ -214,3 +214,39 @@ atualizado: 2026-08-17 12:10
   `--all-repos` fixo — só o **control** morre, que é o que o mantém fora da decoração; (C) fixture
   que para de divergir — a **testemunha** morre e o runner quebrado marca 2 de 2, que é
   exatamente o buraco que ela tapa; (D) `eval` no ambiente errado — o par inteiro morre.
+- 2026-08-17 · `EXEC F1` · suíte **vermelha** antes, nas 2 linhas que o QA previu e em nenhuma
+  outra (`one series` + o `HARNESS-BROKEN` do control run); verde depois, `score: 61 caught,
+  0 known gap(s), of 61`, `sdd health` ok nos cinco. O Check literal do F1 devolve `2 1`.
+- 2026-08-17 · `EXEC F1` · o conserto é **um** `local ledger_flags` em `boot_prompt`, interpolado
+  na linha do prompt. `run_phase KAIZEN` roda no mesmo processo que fez o parse da flag, então o
+  global chega — `boot_prompt` só **lê** `LEDGER_ALL_REPOS`, nunca escreve, e por isso a
+  substituição de comando que captura o prompt não morde (a armadilha do `x="$(f)"` da `CLAUDE.md`).
+- 2026-08-17 · `EXEC F1` · **o contrato estava quebrado em TRÊS lugares, não em um.** Consertar só
+  o `bin/sdd` deixaria `agents/sdd-kaizen.md` mandando o agente rodar `kaizen --series` puro — o
+  mesmo defeito numa terceira porta, e a mais silenciosa, porque o agente segue a própria folha de
+  instruções. Hoje ela manda rodar **a linha que ele recebeu**, verbatim. `docs/pipeline.md` ganhou
+  o porquê. Os três no mesmo commit, como a `CLAUDE.md` cobra.
+- 2026-08-17 · `EXEC F1` · **`agents/*.md` de novo exigiu `./bin/sdd install --force`** para
+  sincronizar `.claude/agents/` (o harness barra escrita direta no caminho) — mesma nota do
+  `EXEC I2`, já registrada no `TODO.md` (`b7d1c30`). Sem isso o `cmp -s` do preflight fica vermelho.
+- 2026-08-17 · `EXEC F1` · a mutação `KAIZEN_prompt_series_unflagged` sabota a **propagação** e não
+  os setters: `AUTONOMY_all_repos_ignored` já solda os setters, e repeti-los marcaria o mesmo ponto
+  duas vezes deixando esta metade sem medida. A âncora (`ledger_flags=" --all-repos"`) é única no
+  arquivo e não colide com o `LEDGER_ALL_REPOS=1` que a vizinha procura.
+- 2026-08-17 · `EXEC F1` · **catálogo medido nos dois sentidos.** Com o mutante, a suíte INTEIRA
+  morre em **uma** linha, e é a asserção nova — nenhuma outra a pega por acidente. Neutralizada
+  essa asserção (comparando `$JS_ALL` consigo mesmo), o **mesmo** mutante sobrevive com a suíte
+  verde. É esse par que prova que a entrada do catálogo mede a asserção, e não o contrário.
+- 2026-08-17 · `EXEC F1` · sabotagem adversarial no conserto, três degrades além da própria
+  mutação, cada um com `cmp -s` + `bash -n` provando que o `sed` mudou o arquivo e o deixou válido:
+  (B) prompt com a flag fixa → só o **controle** morre; (C) interpolação apagada da linha do prompt
+  → só a asserção do `--all-repos` morre; (D) condição invertida → **as duas** morrem. O par não é
+  intercambiável, e nenhuma das metades é decoração.
+- 2026-08-17 · `EXEC F1` · jornada medida no repo real, as duas saídas comparadas **entre si**:
+  `sdd kaizen --dry-run` projeta `kaizen --series` e `sdd kaizen --dry-run --all-repos` projeta
+  `kaizen --series --all-repos`, nas duas formas do prompt (a `claude -p $'...'` escapada e o bloco
+  `│` legível). Uma saída só não distinguiria o conserto de um prompt com a flag fixa.
+- 2026-08-17 · `EXEC F1` · nenhum achado fora de escopo, nada acrescentado ao `TODO.md`. A pendência
+  de política herdada da QA (o juiz pode julgar o kit com linhas de repo-alvo? — possível ADR 0004)
+  **não** virou item de `TODO.md`: é decisão humana e vive na seção do handoff que o PR carrega.
+  **Continuam devendo os `RESOLVIDO por <hash>` dos itens do I1 e do I2** — é da fase DOCS.
