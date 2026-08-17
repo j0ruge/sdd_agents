@@ -61,6 +61,38 @@ SERIES_OUT=""
 field() { jq -r "$1" <<< "$SERIES_OUT"; }
 
 # =============================================================================
+# adr 0003 — the axis the judge stands on
+# =============================================================================
+# ADR 0001 says WHERE the judgement lives (runner derives, agent interprets); 0003 says what the
+# axis MEANS — that evidence for a verdict comes from real target repos, that `kit_sha` stays the
+# axis, and that the `>= 3` floor does not loosen. The runner's floor and its structural
+# `indeterminado` are that decision compiled into code, so both assertions here are about the pair
+# staying together.
+#
+# The second one is the load-bearing half: a decision record no code names is a label, and a label
+# is exactly what this kit refuses to accept as evidence. Sabotage it (mut_KAIZEN_adr_0003_orphan
+# strips the citation from the runner) and the suite has to die — that is what separates an ADR the
+# implementation stands on from a markdown file nobody reads.
+echo "== adr 0003 =="
+
+ADR3="$ROOT/docs/adr/0003-judge-axis-evidence-from-target-repos.md"
+# One `grep -c` over five DISTINCT line patterns, so the count is the number of format elements
+# present: title in `# NNNN — ` form, the dated status line, and the three sections 0001/0002 ship.
+# A file that exists but drifted from the format scores below 5 and is not accepted.
+adr3_shape="0"
+[ -f "$ADR3" ] && adr3_shape="$(grep -c \
+  -e '^# 0003 — ' \
+  -e '^Date: .* · Status: accepted$' \
+  -e '^## Context$' -e '^## Decision$' -e '^## Consequences$' "$ADR3")"
+assert_eq "adr 0003 exists in the shape of 0001/0002 (title, dated status, three sections)" \
+  "5" "$adr3_shape"
+
+# Reading a FILE, not a pipe: `grep -q` here cannot hit the SIGPIPE-141 inversion the house rule
+# warns about, which only bites when a writer is piped into it.
+assert_eq "adr 0003 is named by bin/sdd — a decision record no code cites is a label" "yes" \
+  "$(grep -q 'ADR 0003' "$SDD" && echo yes || echo no)"
+
+# =============================================================================
 # series — the deterministic half of the judge
 # =============================================================================
 echo "== series =="

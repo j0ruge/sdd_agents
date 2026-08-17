@@ -249,6 +249,16 @@ mut_KAIZEN_gate_blind() {
   sed -i 's|if \[ "\$(frontmatter "\$f" kit_sha_judged)" = "\$expected" \]|if [ -f "$f" ]|' "$1"
 }
 
+# ADR 0003 becomes an orphan: the runner stops naming the record that decides its own guard floor.
+# The document survives on disk, so the shape assertion stays green and only the citation half of
+# check-kaizen.sh goes red — which is the point. A decision record no code names is a label, and a
+# label is what every gate in this kit refuses to accept as evidence. `g` because the citation is
+# expected to appear at more than one site (the floor comment, the explanation printed to the
+# human): stripping only the first would leave the assertion green and measure nothing.
+mut_KAIZEN_adr_0003_orphan() {
+  sed -i 's|ADR 0003|ADR|g' "$1"
+}
+
 # The Jidoka dies: `verdict: piorou` no longer stops the line. The outcome falls through to the
 # born-plan branch and exits 0 — a kit change that made autonomy WORSE reads as a green light,
 # which is the exact failure ADR 0002 exists to forbid.
@@ -713,6 +723,7 @@ CATALOG=(
   APPROVE_base_branch_warn_dead
   RUN_branch_order_swap
   FRONTMATTER_write_unscoped
+  KAIZEN_adr_0003_orphan
 )
 
 # Mutations that are NOT caught today, each with the increment that closes it. Ratchet in both
@@ -740,6 +751,14 @@ sandbox() { # sandbox <target-dir> — the whole kit the suite needs, and nothin
   # control run stayed green. It is NOT copied for check-lang.sh, which reads it too but is guarded
   # out of the mutants; adding it here does not make that guard removable.
   cp -r "$ROOT/bin" "$ROOT/tests" "$ROOT/templates" "$ROOT/config" "$ROOT/agents" "$1/"
+  # `docs/adr` and NOT `docs`: check-kaizen.sh asserts the runner still names ADR 0003, and the
+  # sabotage that strips the citation has to be able to kill it INSIDE a mutant. Three small files,
+  # against a `docs/` tree whose handoffs are megabytes and which no sensor here reads — the
+  # sensors that DO read the rest of docs/ (check-todo.sh, check-checkpoint.sh) are the ones
+  # run-all.sh guards out under SDD_MUTANT, so this stays the whole kit the suite needs and nothing
+  # more.
+  mkdir -p "$1/docs"
+  cp -r "$ROOT/docs/adr" "$1/docs/"
 }
 
 # run_mutant <slug> — writes $WORK/<slug>.rc and $WORK/<slug>.log

@@ -2463,6 +2463,10 @@ kaizen_series() {
     | {v: 1,
        latest: $latest,
        previous: $previous,
+       # The floor below does not loosen, and ADR 0003 is why: verdict evidence comes from real
+       # target repos, where many missions share one kit_sha. In the repo that BUILDS the kit every
+       # session lands on a fresh sha, so the axis degenerates and the floor is unsatisfiable by
+       # construction — that is the axis being read in the wrong place, never a floor set too high.
        guard: {missions_after_change: ($latest.missions // 0),
                missions_with_session: $observed,
                sessions: ($latest.sessions // 0),
