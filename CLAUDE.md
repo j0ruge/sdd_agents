@@ -230,6 +230,21 @@ também são byte-based mas consistentemente; classe negada, só com ASCII. `bas
 `shellcheck` não acusa, e o teste passa enquanto a entrada for pura ASCII — que é o pior dos
 mundos, porque a entrada real vira multibyte no dia em que alguém escrever bem.
 
+⚠️ **`cd` com operando relativo dentro de `$(...)` leva `CDPATH=''`, sempre.** O bash procura o
+operando no `$CDPATH` quando ele não começa por `/`, `.` ou `..` — e, quando acha por lá, **imprime
+o diretório resolvido na stdout**, direto para dentro da substituição de comando. Custou a CRITICAL
+da r2 de `20260817-eixo-do-juiz`: `ledger_repo_root` resolve `git rev-parse --git-common-dir`, que
+devolve o relativo `.git` na raiz de um checkout, e com `CDPATH=$HOME` sendo o $HOME um checkout de
+dotfiles **todos os repos da máquina colapsavam numa identidade só** — escritor e leitores
+concordando nela, `other_repo: 0`, nada excluído, nada dito: a contaminação silenciosa que a função
+existe para impedir, alcançável por variável de ambiente. `CDPATH=.` sozinho já acrescentava uma
+segunda **linha** à resposta, metendo um `\n` no campo `repo` do ledger. Esvaziar o `CDPATH` pela
+duração de cada `cd` é o conserto inteiro; quem cobra é a mutação `LEDGER_repo_root_cdpath_leak` mais o
+par diferencial do `check-autonomy.sh` — que carrega um **piso provando que o veneno está ARMADO**
+no shell antes de concluir qualquer coisa, porque regra do ambiente sem veneno armado é decoração.
+`bash -n` não acusa, o `shellcheck` não acusa, e o teste passa enquanto quem roda tiver `CDPATH`
+vazio — que é a máquina de todo mundo até não ser.
+
 ## Kaizen
 
 Melhoria com antes/depois **medido** vai para o [`KAIZEN_LOG.md`](KAIZEN_LOG.md). Sem número,

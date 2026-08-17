@@ -38,7 +38,9 @@ escalations by kind, cost, and the guard (`missions_after_change`, `missions_wit
 nothing to read. A mission is identified by `(repo, mission)` and never by the slug alone — slugs
 are dated and repeat across projects, so under `--all-repos` the repo is what keeps two projects
 apart; each `detail` entry names its own. `degenerate_axis: true` means the **last three** kit
-versions in the slice each bought exactly one session **and** no version in the whole history ever
+versions in the slice each bought exactly one **mission** — the same unit the floor counts, never
+sessions, because two sessions of the SAME mission on one sha (an in-loop retry) leave the floor
+just as unsatisfiable — **and** no version in the whole history ever
 reached the floor — the shape of the repo that BUILDS the kit,
 where each session commits and the next lands
 on a fresh sha. That second clause is deliberate: a repo that once reached the floor and is merely

@@ -55,10 +55,14 @@ in `TODO.md` as its own decision, not as a dependency of the judge.
   triages `TODO.md` and gives birth to the next plan — but the `melhorou | piorou | indeterminado`
   half of it will read `indeterminado` until the evidence arrives from elsewhere.
 - The runner owes the human an explanation, not just a number: a degenerate axis (each of the last
-  three shas holding exactly one session, across more than one sha, and no sha in the history ever
-  having reached the floor) is a distinguishable state and is reported as such, citing this record.
-  The last clause is what keeps the explanation off a healthy repo that is merely quiet: reaching
-  the floor once proves the axis works there, and that proof does not expire.
+  three shas holding exactly one **mission**, across more than one sha, and no sha in the history
+  ever having reached the floor) is a distinguishable state and is reported as such, citing this
+  record. The last clause is what keeps the explanation off a healthy repo that is merely quiet:
+  reaching the floor once proves the axis works there, and that proof does not expire.
+  The unit is missions and not sessions because the floor it explains counts
+  `missions_with_session`: two sessions of the SAME mission on one sha — an in-loop retry, or a
+  second `sdd run` over a phase that neither commits nor dirties the kit tree — leave the floor
+  exactly as unsatisfiable while silencing a session-counting field. One retry was enough.
 - I13.4 (autonomy graduation) depends on missions run in target repos, where several missions share
   one kit sha and the floor of 3 behaves as designed. It is unblocked by evidence, never by a
   smaller yardstick.

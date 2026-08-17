@@ -96,13 +96,45 @@ only `indeterminado`. A throwaway fixture repo's numbers read as a verdict about
 exactly what the default filter exists to prevent.
 
 ⚠️ **`sufficient: false` in the kit repo is not this failure mode.** If `guard.degenerate_axis` is
-`true`, the last three kit versions in the slice each bought exactly one session and no number of
+`true`, the last three kit versions in the slice each hold exactly one **mission** — the unit the
+floor counts, never sessions — and no number of
 missions *here* will clear the floor — the axis is being read in the repo that builds the kit. It
 reads a window and not the whole file on purpose: over all of history one ancient sha with two
 sessions would switch the explanation off forever, and an append-only ledger could never switch it
 back on. `sdd kaizen` says so
 and names [ADR 0003](adr/0003-judge-axis-evidence-from-target-repos.md); the floor is not the
-defect and does not loosen.
+defect and does not loosen. ⚠️ Careful with the ancient-sha sentence above: the unit there is
+missions too. One old version that carried two *missions* is what latches the window off — and the
+second clause, "no version anywhere ever reached the floor", is what keeps the whole thing off a
+healthy repo that is merely quiet.
+
+---
+
+## `sdd kaizen` refuses: "the ledger could not be read"
+
+**Symptom:** `sdd kaizen` (or `--dry-run`) prints `malformed row in <path> — the ledger is not
+readable` and then `error: the ledger could not be read (the series reader exited 1) — this is NOT
+'not judged yet'`, rc 1, with **no session opened**. `sdd kaizen --series` alone warns the same and
+exits 1 with no JSON on stdout.
+
+**Cause:** one row of `~/.sdd/autonomy-log.jsonl` is not valid JSON — a truncated write, a hand
+edit, a file appended to by two processes at once. Before this was checked, the reader's empty
+output was assigned into `series=$(kaizen_series)` with the return code dropped, and `errexit` is
+**off** inside every gate (each caller runs `gate_KAIZEN || rc=$?`), so an unreadable ledger read
+back as "no verdict for the kit yet" — a doubled space in that message was the only tell — and the
+runner went on to spend an opus session judging a series nobody could read.
+
+**What you do:** run `sdd autonomy`, which names the file and dies on the same row, then find it
+with `jq -c . ~/.sdd/autonomy-log.jsonl` — the last line it prints before failing is the one before
+the break. The ledger is append-only *facts*, so the repair is to fix or delete that one row; a row
+that was never valid JSON never carried a fact.
+
+**Do not:** re-run hoping a fresh session fixes it, and do not point a session at it. The file
+lives in `$HOME`, **outside** the repo the session is given — no session can reach it, so the only
+thing another attempt buys is a second opus bill and the same sentence. This is why the gate
+publishes a reason of its own (`GATE_KAIZEN_UNREADABLE`, whose `GATE_WHY` names the remedy) instead
+of letting the phase look merely unsatisfied — "unreadable" and "not judged yet" ask for opposite
+things from you.
 
 ---
 

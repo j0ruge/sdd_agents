@@ -497,9 +497,9 @@ Plus a `guard` (`missions_after_change`, `missions_with_session`, `sessions`,
 `sufficient: missions_with_session >= 3` — a mission that only escalated ran, and is counted as
 one, but bought the judge no observation and so does not raise the floor;
 `degenerate_axis`, true when the **last three** kit versions in the slice each bought exactly one
-session, there is more than one of them, **and no version anywhere in the history ever reached the
-floor** — that third clause is what separates "this axis cannot work here" from a merely quiet
-stretch in a healthy repo) and an `excluded`
+*mission* — the same unit the floor counts, never sessions — there is more than one of them, **and
+no version anywhere in the history ever reached the floor** — that third clause is what separates
+"this axis cannot work here" from a merely quiet stretch in a healthy repo) and an `excluded`
 accounting with five reasons
 (`non_comparable` dirty-kit rows, `unrecognized` rows, the `meta` rows the kaizen sessions
 themselves write — the loop never lets its own sessions shift the axis it is judged on —
@@ -516,14 +516,25 @@ zeros: a consumer must never read `null` on one branch where the other gives a n
 `degenerate_axis` exists because `sufficient: false` alone says two different things. In a target
 repo it means "not enough missions yet", and waiting works. In the repo that **builds** the kit
 every session commits, so the next one lands on a fresh `kit_sha`, each version holds exactly one
-session and the floor is unsatisfiable by construction — waiting never works, and `indeterminado`
+mission and the floor is unsatisfiable by construction — waiting never works, and `indeterminado`
 there is the correct answer rather than a broken runner. `sdd kaizen` says so out loud, citing
 [ADR 0003](adr/0003-judge-axis-evidence-from-target-repos.md); the floor does **not** loosen in
-answer to it. One version with one session is not degenerate: that axis has only just started.
+answer to it. One version with one mission is not degenerate: that axis has only just started.
+
+⚠️ **The unit is missions, and it has to be**, because `sufficient` counts
+`missions_with_session` and this field exists to explain *that* floor. Counting sessions made the
+two disagree on the one row shape that separates them — a version whose two sessions belong to the
+**same** mission, which is what an in-loop retry or a second `sdd run` over a phase that neither
+commits nor dirties the kit tree produces. Measured: three versions, the newest holding two
+sessions of one mission ⇒ `missions_with_session: 1`, `sufficient: false`, and yet
+`degenerate_axis: false` with the sentence printed zero times. The human then reads a bare
+`sufficient: false` and waits for missions that cannot help — the exact misreading this field was
+built to end, and a single retry was enough to silence it. Zero is still not one: a version whose
+rows are all escalations observed **nothing**, a different silence with a different remedy.
 
 It reads the **last three** versions and not the whole history, for the same reason: the ledger is
-append-only, so a single ancient `kit_sha` that once bought two sessions would switch the
-explanation off forever while every recent version sat at one session each — and nothing about
+append-only, so a single ancient `kit_sha` that once carried two missions would switch the
+explanation off forever while every recent version sat at one mission each — and nothing about
 today could ever switch it back on. Three is the guard floor, held as one definition in the `jq`
 program so the window and the number it explains cannot drift apart.
 
@@ -532,8 +543,8 @@ work here**, and a quiet stretch is not a broken axis: a repo whose history reac
 and then went three versions quiet read `true`, telling its human to stop waiting for missions that
 were in fact arriving. So the whole history is consulted for one question only — did any version
 ever reach the floor? Having reached it once is a permanent fact about a repository, which is why
-latching the explanation off on *that* is right where latching it off on "some sha once bought two
-sessions" was wrong. In the repo that builds the kit no version ever reaches it, so the explanation
+latching the explanation off on *that* is right where latching it off on "some sha once carried two
+missions" was wrong. In the repo that builds the kit no version ever reaches it, so the explanation
 stays on.
 
 **The agent gives the verdict.** The `sdd-kaizen` session runs the series as its source of truth
