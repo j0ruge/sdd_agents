@@ -295,8 +295,25 @@ mut_KAIZEN_mission_key_slug_only() {
 # `/parent/.git/modules`, and every bare repo beside another answers the directory that holds them.
 # Nothing is excluded and nothing is reported (`other_repo: 0`), which is the contamination the
 # filter exists to name, arriving through a different door.
+#
+# ⚠️ DOUBLE-quoted, and it has to be. The anchor contains `CDPATH=''`, and an apostrophe cannot
+# survive inside a single-quoted shell string: `''` there closes the quote and reopens it, so sed
+# received `CDPATH= cd` and stopped matching the file the day the SC1007 spelling was fixed. It
+# failed the honest way — CATALOGUE-BROKEN, rc 90 — which is the harness guard doing its job, but
+# the same trap silently mis-anchors any sed whose target holds a quote. Same family as the rule
+# forbidding an apostrophe inside the jq programs in bin/sdd (see CLAUDE.md).
 mut_LEDGER_repo_root_common_parent() {
-  sed -i 's@^  gitdir="\$( CDPATH='' cd "\$start" && CDPATH='' cd "\$common" && pwd -P 2>/dev/null )" || return 0$@  printf "%s" "$( cd "$start" \&\& cd "$common/.." \&\& pwd -P 2>/dev/null )"; return 0@' "$1"
+  sed -i "s@^  gitdir=\"\\\$( CDPATH='' cd \"\\\$start\" && CDPATH='' cd \"\\\$common\" && pwd -P 2>/dev/null )\" || return 0\$@  printf \"%s\" \"\$( cd \"\$start\" \&\& cd \"\$common/..\" \&\& pwd -P 2>/dev/null )\"; return 0@" "$1"
+}
+
+# The guard that keeps the ENVIRONMENT from answering "which repo is this" goes away, and the repo
+# identity becomes whatever $CDPATH says: `--git-common-dir` is relative at a checkout root (`.git`)
+# and bash searches CDPATH for that operand, so a single dotfiles checkout in the path collapses
+# every repository on the machine into one identity — writer and readers agreeing, `other_repo: 0`,
+# nothing said. `/g` on purpose: the two `cd`s are ONE guard, and sabotaging half of it would leave
+# the pair in check-autonomy.sh measuring the half that still works.
+mut_LEDGER_repo_root_cdpath_leak() {
+  sed -i "s@CDPATH='' cd@cd@g" "$1"
 }
 
 # The Jidoka dies: `verdict: piorou` no longer stops the line. The outcome falls through to the
@@ -834,6 +851,7 @@ CATALOG=(
   KAIZEN_degenerate_axis_all_history
   KAIZEN_mission_key_slug_only
   LEDGER_repo_root_common_parent
+  LEDGER_repo_root_cdpath_leak
 )
 
 # Mutations that are NOT caught today, each with the increment that closes it. Ratchet in both

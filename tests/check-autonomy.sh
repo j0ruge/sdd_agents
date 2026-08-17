@@ -1177,6 +1177,62 @@ ledger_row "$(id_of "$IDROOT/bare1.git")" b1 > "$IDSTATE/autonomy-log.jsonl"
 assert_eq "identity: and a row born in a bare repo is never the neighbouring bare repo row" \
   "1 0" "$(printf '%s %s' "$(own_of "$IDROOT/bare1.git")" "$(own_of "$IDROOT/bare2.git")")"
 
+# --- ...not even when the environment answers `cd` for us -------------------
+# `--git-common-dir` comes back RELATIVE at the root of a checkout (`.git`), and bash searches
+# $CDPATH for any `cd` operand whose first component is neither `/`, `.` nor `..` — so `cd .git`
+# at a repo root is an environment-controlled lookup. Two ways it lied, both measured:
+#
+#   * with CDPATH naming any directory that holds a `.git` (a dotfiles checkout in $HOME is the
+#     everyday shape), EVERY repo on the machine resolved to that one identity. Writer and readers
+#     agree on it, so `other_repo` stays 0 and not one line of output admits it — the same silent
+#     contamination d99a7fc closed, this time reachable from an env var;
+#   * bash PRINTS the directory it found through CDPATH, on stdout, straight into this command
+#     substitution — so `CDPATH=.` appended a second LINE to the identity and put a newline inside
+#     the ledger's `repo` field.
+#
+# Both are shut by emptying CDPATH for the duration of each `cd`. The rule is the environment's,
+# not git's, so no fixture of repository SHAPES could reach it: this block is the only probe.
+#
+# ⚠️ The floor below is not decoration and is deliberately NOT named `cdpath…`: it proves the
+# poison is ARMED in this shell before any conclusion is drawn from it. A CDPATH that is not being
+# consulted (a bash built with it off, a fixture whose poison directory holds no `.git`) makes
+# every assertion here pass while measuring nothing — a probe that cannot sabotage what it claims
+# to sabotage concludes nothing, and this file has already been bitten by exactly that.
+echo "== reader: the environment does not get to answer 'which repo is this' =="
+CDROOT="$OUTSIDE/cdpath"
+mkdir -p "$CDROOT"
+( git init -q "$CDROOT/poison"; git init -q "$CDROOT/one"; git init -q "$CDROOT/two" ) >/dev/null 2>&1
+
+assert_eq "the CDPATH poison is armed: an unguarded relative cd .git lands in the poison checkout" \
+  "yes" \
+  "$( p="$( CDPATH="$CDROOT/poison" bash -c 'cd "$1" && cd .git >/dev/null && pwd -P' _ "$CDROOT/one" )"
+      case "$p" in */poison/.git) echo yes ;; *) echo "no:${p:-<empty>}" ;; esac )"
+
+# Read back from the runner's own "no data for <repo>" voice, like id_of above, and never composed
+# here — a probe that rebuilt the path from its own idea of the formula would agree with itself
+# under any CDPATH. The env goes on the EXTERNAL command (never as a prefix to a shell function,
+# where bash's export rules differ), so what the runner sees is what this line says.
+id_cd() {  # id_cd <cdpath> <dir> — the identity the runner resolves with CDPATH set to <cdpath>
+  ( cd "$2" && CDPATH="$1" SDD_STATE_DIR="$IDSTATE" "$SDD" autonomy 2>&1 ) \
+    | sed -n 's/.*no data for \([^:]*\):.*/\1/p'
+}
+
+# Basenames, not "differ" alone: two repos collapsed onto the POISON is the defect, and a pair that
+# only said "they differ" would also be satisfied by two identities that are both wrong. An empty
+# read (the vacuous way to pass) prints nothing and fails here too.
+assert_eq "cdpath: a poisoned CDPATH leaves two repos two, and leaves each of them itself" \
+  "one two differ" \
+  "$( a="$(id_cd "$CDROOT/poison" "$CDROOT/one")"; b="$(id_cd "$CDROOT/poison" "$CDROOT/two")"
+      if [ "$a" != "$b" ]; then d=differ; else d="same:${a:-<empty>}"; fi
+      printf '%s %s %s' "${a##*/}" "${b##*/}" "$d" )"
+
+# The other half, and a different failure entirely: here the identity is not moved to another repo,
+# it is DOUBLED — bash echoes what it found and the answer becomes two lines. One line is as much
+# part of the contract as the right path, because the readers compare `repo` verbatim.
+assert_eq "cdpath: CDPATH=. yields the repo on ONE line, not the path echoed by cd as well" \
+  "one 1" \
+  "$( id="$(id_cd . "$CDROOT/one")"; printf '%s %s' "${id##*/}" "$(grep -c . <<< "$id")" )"
+
 # --- ...and a row that cannot say where it came from is nobody's ------------
 # `ledger_row_is_local` used to answer `true` for a row with no `repo` key — local in EVERY repo.
 # The comment above it claimed the readers then classified those rows out loud, and for a bare
