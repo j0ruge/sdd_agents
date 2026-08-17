@@ -1,6 +1,6 @@
 ---
 missao: 20260816-portas-do-humano
-atualizado: 2026-08-16 22:40
+atualizado: 2026-08-16 23:55
 ---
 
 # Checkpoint — as portas de controle do humano
@@ -31,7 +31,7 @@ atualizado: 2026-08-16 22:40
 | I1 | `sdd approve`: o gate humano ganha comando | `o=$(bash tests/check-gates.sh 2>&1); grep -c '^  ok    sdd approve' <<< "$o"` → `3` | done | 96a1f68 |
 | I2 | o runner troca para a branch declarada | `o=$(bash tests/check-gates.sh 2>&1); grep -c '^  ok    branch ' <<< "$o"` → `3` | done | b3b8c2f |
 | I3 | `sdd retry` vira a quarta porta com aviso | `o=$(bash tests/check-gates.sh 2>&1); grep -c '^  ok    retry ' <<< "$o"` → `2` | done | 3ffa586 |
-| I4 | plano kaizen-born nunca se auto-aprova | `o=$(bash tests/check-gates.sh 2>&1); grep -c '^  ok    kaizen-born' <<< "$o"` → `3` | pending | — |
+| I4 | plano kaizen-born nunca se auto-aprova | `o=$(bash tests/check-gates.sh 2>&1); grep -c '^  ok    kaizen-born' <<< "$o"` → `3` | done | 2510c3c |
 
 ## Notas de execução
 
@@ -96,6 +96,25 @@ atualizado: 2026-08-16 22:40
   a definição já tem `RUN_base_branch_warn_dead`. O `sed` é endereçado ao corpo de `cmd_retry` —
   depois deste commit a linha `  warn_if_on_base_branch` aparece **4×** e um `sed` sem endereço
   mataria as quatro, creditando esta entrada pelo que a outra quebrou. Score 46 → 47, `0 known gaps`.
+
+- 2026-08-16 · `I4` · o marcador kaizen-born é lido **por missão** (`$MISSION_DIR/05-verdict.md`),
+  nunca por repo. A sabotagem construiu a versão que pergunta `ls $HANDOFF_DIR/*/05-verdict.md` e
+  ela passou por **todas** as asserções: recusaria todo plano `auto` em qualquer repo que já tenha
+  rodado `sdd kaizen` — o próprio kit, para começar. Quem a mata é uma missão **irmã**, `auto` e sem
+  verdict, lida depois de o verdict existir. Ausência sozinha não distingue escopo.
+- 2026-08-16 · `I4` · **o slug do fixture entregava a agulha.** Com a missão chamada
+  `20260106-kaizen-born`, a asserção `grep 'kaizen-born'` era satisfeita pelo nome que a própria
+  recusa imprime (`run 'sdd approve <missão>'`) — degradar a mensagem para largar a palavra ficava
+  verde. Fixture não pode carregar no slug a palavra que o probe procura na saída do runner; os dois
+  foram renomeados (`20260106-selfapproved`, `20260106-planner-written`).
+- 2026-08-16 · `I4` · passada de sabotagem: **27 degradações em 4 rodadas**, parando na rodada sem
+  achado novo. 2 sobreviventes, as duas acima, ambas viraram asserção. A rodada 3 (10 mutantes) e a
+  4 (4 mutantes frescos: `GATE_WHY` não escrito, teste invertido, marcador exigindo tamanho, guarda
+  antes do `case`) morreram todas.
+- 2026-08-16 · `I4` · o `docs/pipeline.md` **não tem seção para o `sdd approve`** — a prosa nova cita
+  o comando em texto, não em link, porque a âncora não existe. **Sobra para a fase DOCS**, junto com
+  o campo `branch:` que o I2 já anotou: os dois comandos/campos novos desta missão precisam de casa
+  na superfície de comandos do `pipeline.md`.
 
 ## Incrementos de fix (QA)
 
