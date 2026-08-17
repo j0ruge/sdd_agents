@@ -1249,12 +1249,12 @@ cmd_install() {
   dim "next: edit .sdd/config.sh and run 'sdd preflight'"
 }
 
-# "you are standing on the base branch" — ONE definition, called by the three doors that can end
-# up committing: cmd_preflight, cmd_run and cmd_kaizen.
+# "you are standing on the base branch" — ONE definition, called by the four doors that can end
+# up committing: cmd_preflight, cmd_run, cmd_retry and cmd_kaizen.
 #
 # It used to be four lines inlined in cmd_preflight and nowhere else, and preflight is OPTIONAL:
-# `sdd run` from `main` commits every phase straight into the base branch without a word, and
-# `sdd kaizen` is worse — it checks the kit repo and the dirty tree, then writes a verdict and
+# `sdd run` from `main` commits every phase straight into the base branch without a word, `sdd
+# retry` does the same for a single redone phase, and `sdd kaizen` is worse — it checks the kit repo and the dirty tree, then writes a verdict and
 # three artifacts wherever you happen to be. Same rule that gave `is_escalation` a single home
 # after the blocked/degraded pair diverged across three call sites: an enum (or a warning) read in
 # more than one place is defined once, or the call sites drift apart one at a time.
@@ -2066,6 +2066,14 @@ cmd_retry() {
   # have put it. Same guard, same die, same silence in a dry run (retry has no dry mode, and the
   # global defaults to 0 — the guard costs nothing and outlives the assumption).
   ensure_mission_branch
+  # The fourth door, and the last one to get the guard: `sdd retry` redoes a phase with a FRESH
+  # session, and that session COMMITS. Fired from `main` it used to put the redone phase straight
+  # into the base branch without a word — the one door of the four that opened in silence.
+  #
+  # AFTER ensure_mission_branch, exactly like cmd_run and for the same reason: the checkout is what
+  # decides where this retry will commit, so warning first would cry wolf at a human the runner is
+  # about to move off the base branch anyway.
+  warn_if_on_base_branch
   local phase; phase="$(current_phase)"
   [ -n "$phase" ] || { info "pipeline complete — nothing to retry"; return 0; }
   [ "$phase" = "PLAN" ] && die "PLAN is interactive — there is nothing to retry headless"

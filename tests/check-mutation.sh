@@ -513,6 +513,26 @@ mut_RUN_branch_switch_dead() {
   sed -i 's@^  want="\$(frontmatter "\$MISSION_DIR/00-missao.md" branch)"$@  want=""@' "$1"
 }
 
+# `sdd retry` goes back to being the silent door: the function still exists, still warns for the
+# other three, and this one call site simply is not there — which is the exact state the kit lived
+# in until this increment. Nothing on screen changes except the missing line, and the phase gets
+# redone and committed into whatever branch the human was standing on.
+#
+# The ONE deliberate exception to "sabotage the definition, never the call site" in this catalogue.
+# The defect this increment closes IS an absent call site, and mut_RUN_base_branch_warn_dead
+# already empties the definition — so a second sabotage of the body would measure the same thing
+# twice and this door would keep its own coverage from a neighbour's entry. What has to die is the
+# `retry ` pair in check-gates.sh, and only the pair: the three other doors stay warning, so every
+# assertion about them stays green and the score credits this entry for nothing but the fourth.
+#
+# The sed is ADDRESSED to cmd_retry's body rather than anchored on the bare call, because after
+# this increment the line `  warn_if_on_base_branch` appears four times and an unaddressed
+# substitution would gut all four at once. The range ends at the first column-zero `}`, which is
+# cmd_retry's own closing brace — every line of the body is indented.
+mut_RETRY_base_branch_warn_dead() {
+  sed -i '/^cmd_retry() {/,/^}/ s@^  warn_if_on_base_branch$@@' "$1"
+}
+
 CATALOG=(
   PLAN_empty_approval
   TICKET_no_sprint
@@ -560,6 +580,7 @@ CATALOG=(
   RUN_base_branch_warn_dead
   RUN_approve_writes_auto
   RUN_branch_switch_dead
+  RETRY_base_branch_warn_dead
 )
 
 # Mutations that are NOT caught today, each with the increment that closes it. Ratchet in both

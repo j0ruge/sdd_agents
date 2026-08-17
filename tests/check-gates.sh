@@ -986,6 +986,130 @@ fi
 git checkout -q main
 git branch -q -D missao/20260104-retry
 
+# --- the fourth door: sdd retry warns about the base branch ----------------
+echo "== sdd retry on the base branch =="
+# `sdd retry` opens a session that COMMITS, exactly like the three doors that already warn
+# (cmd_preflight, cmd_run, cmd_kaizen). It was the one that did not: a retry fired from `main`
+# redid a phase and committed it straight into the base branch with nothing on screen saying so.
+#
+# DIFFERENTIAL, and for the same reason as the `sdd run` pair above: a single fixture standing on
+# `main` cannot tell "warns on the base branch" from "always warns", and the second is a warning
+# that means nothing. The SAME fixture is read twice, one checkout apart, and the two runs are
+# compared to each other.
+#
+# The mission declares NO `branch:` key, which is what keeps this pair measuring the warning
+# instead of the checkout: with a branch declared, ensure_mission_branch would move the retry off
+# `main` before the warning could fire, and the two cases would stop being one checkout apart. The
+# branch each run ENDS on is asserted on both sides, so a fixture that grew a `branch:` key would
+# fail here rather than quietly turn both halves into the same case.
+#
+# It stands at PLAN, and that is what makes a REAL `sdd retry` free: the runner refuses a headless
+# PLAN and dies before `run_phase`, so the warning — which happens earlier — is observable with no
+# session spent. The claude stub turns a reordering that broke that into a loud failure.
+RW="20260105-retry-warn"
+RWDIR="$FIX/docs/handoffs/$RW"
+mkdir -p "$RWDIR"
+cat > "$RWDIR/00-missao.md" <<'EOF'
+---
+missao: 20260105-retry-warn
+aprovacao:
+---
+# Mission fixture
+EOF
+# Captured APART and only then joined, like the `sdd run` pair: a `2>&1` capture cannot tell `warn`
+# (stderr) from `dim` (stdout), and a warning nobody sees on the error stream is decoration again.
+RW_BASE_ERR="$SDD_STATE_FIX/retry-warn-main.err"
+RW_FEAT_ERR="$SDD_STATE_FIX/retry-warn-feature.err"
+RW_BASE_RAW="$( cd "$FIX" && "$SDD" retry "$RW" 2>"$RW_BASE_ERR" )"; RW_BASE_RC=$?
+RW_BASE_AT="$(git branch --show-current)"
+git checkout -q -b missao/20260105-retry-warn
+RW_FEAT_RAW="$( cd "$FIX" && "$SDD" retry "$RW" 2>"$RW_FEAT_ERR" )"; RW_FEAT_RC=$?
+RW_FEAT_AT="$(git branch --show-current)"
+git checkout -q main
+git branch -q -D missao/20260105-retry-warn
+RW_BASE_OUT="$(no_uuid <<< "$RW_BASE_RAW"$'\n'"$(cat "$RW_BASE_ERR")")"
+RW_FEAT_OUT="$(no_uuid <<< "$RW_FEAT_RAW"$'\n'"$(cat "$RW_FEAT_ERR")")"
+
+# Reads the ERROR stream: presence and severity in one assertion, so the only way to satisfy it is
+# the `warn` the runner is supposed to print. The rc and the PLAN refusal ride along because the
+# expensive regression here is not a missing line, it is the guard turning into a `die` — that
+# would lock a human out of retrying the moment they forgot to branch.
+#
+# EXACTLY one, never "at least one". The adversarial pass duplicated the call inside cmd_retry and
+# a presence check stayed green: the differential half below strips every copy of the line before
+# comparing, so a runner shouting the same warning twice satisfied both halves. A warning that
+# repeats is how people learn to skip reading them, which is the failure this door exists to avoid.
+RW_BASE_WARN="$(grep -c 'you are on the base branch' <<< "$RW_BASE_OUT")"
+if grep -q 'you are on the base branch' "$RW_BASE_ERR" \
+   && [ "$RW_BASE_WARN" -eq 1 ] \
+   && [ "$RW_BASE_RC" -eq 1 ] \
+   && [ "$RW_BASE_AT" = "main" ] \
+   && grep -q "PLAN is interactive" <<< "$RW_BASE_OUT" \
+   && ! grep -q "the test invoked the real claude" <<< "$RW_BASE_OUT"; then
+  pass "retry warns on the base branch too — on stderr, and still a warn and not a die"
+else
+  fail "retry warns on the base branch too — on stderr, and still a warn and not a die" \
+       "the warning on STDERR, rc 1 at the interactive-PLAN refusal, still on main" \
+       "rc $RW_BASE_RC at $RW_BASE_AT, warned $RW_BASE_WARN× · stderr: $(tr '\n' '|' < "$RW_BASE_ERR" | head -c 200)"
+fi
+
+# The other half. The byte comparison is what separates "the warning was added" from "the warning
+# changed the retry": strip the warned line from the base-branch output and the two runs have to be
+# the same text, at the same rc. A retry that started behaving differently on one of the two
+# branches — an early return, a phase resolved elsewhere — passes the assertion above and dies here.
+RW_FEAT_WARN="$(grep -c 'you are on the base branch' <<< "$RW_FEAT_OUT")"
+if [ "$RW_FEAT_WARN" -eq 0 ] \
+   && [ "$RW_FEAT_AT" = "missao/20260105-retry-warn" ] \
+   && [ "$RW_BASE_RC" = "$RW_FEAT_RC" ] \
+   && [ "$(grep -v 'you are on the base branch' <<< "$RW_BASE_OUT")" = "$RW_FEAT_OUT" ]; then
+  pass "retry is silent off it, and the warning is the ONLY difference between the two retries"
+else
+  fail "retry is silent off it, and the warning is the ONLY difference between the two retries" \
+       "no warning on missao/20260105-retry-warn, same rc, identical output once the line is removed" \
+       "at $RW_FEAT_AT (rc $RW_FEAT_RC, base rc $RW_BASE_RC), warned $RW_FEAT_WARN×: $(diff <(grep -v 'you are on the base branch' <<< "$RW_BASE_OUT") <(printf '%s\n' "$RW_FEAT_OUT") | head -5)"
+fi
+
+# --- and the ORDER of the two guards, which is a decision and not an accident.
+#
+# Deliberately NOT prefixed `retry `: that string is this increment's Check in checkpoint.md, and
+# an assertion that inflates it turns a contract into a coincidence. This is the third case, born
+# of the adversarial pass — moving the call ABOVE ensure_mission_branch left the pair above green,
+# because a mission that declares no branch cannot tell the two orders apart.
+#
+# What the wrong order produces is a FALSE warning: the human is told the pipeline is about to
+# commit into the base branch by a runner that is, in the very next line, moving them off it. A
+# warning that cries wolf is how people learn to skip reading them — the same reason the guard
+# stays silent on a detached HEAD.
+#
+# The absence is only meaningful because the presence half exists above, on the same command and
+# the same warning text: on its own, "no warning here" is satisfied by a runner that never warns at
+# all. The branch the retry ENDS on is what says the checkout really happened first.
+RWO="20260105-retry-order"
+RWODIR="$FIX/docs/handoffs/$RWO"
+mkdir -p "$RWODIR"
+cat > "$RWODIR/00-missao.md" <<'EOF'
+---
+missao: 20260105-retry-order
+aprovacao:
+branch: missao/20260105-retry-order
+---
+# Mission fixture
+EOF
+RWO_OUT="$( cd "$FIX" && "$SDD" retry "$RWO" 2>&1 )"; RWO_RC=$?
+RWO_AT="$(git branch --show-current)"
+if [ "$RWO_AT" = "missao/20260105-retry-order" ] \
+   && [ "$RWO_RC" -eq 1 ] \
+   && grep -q "PLAN is interactive" <<< "$RWO_OUT" \
+   && ! grep -q 'you are on the base branch' <<< "$RWO_OUT"; then
+  pass "and the warning follows the checkout: a retry being moved off the base branch is not warned"
+else
+  fail "and the warning follows the checkout: a retry being moved off the base branch is not warned" \
+       "on missao/20260105-retry-order, rc 1 at the PLAN refusal, and no base-branch warning" \
+       "at $RWO_AT, rc $RWO_RC: $(tail -3 <<< "$RWO_OUT")"
+fi
+git checkout -q main
+git branch -q -D missao/20260105-retry-order
+
 # ---------------------------------------------------------------------------
 echo
 if [ "$fails" -eq 0 ]; then
