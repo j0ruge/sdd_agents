@@ -461,6 +461,13 @@ Achados sobre **repos-alvo** vão para o `TODO.md` daquele repo. Este arquivo é
   Direção: decidir se o napkin entra na superfície que o DOCS mantém ou sai do versionamento.
   — descoberto por `sdd-docs` na missão `20260816-runner-sem-dividas` (2026-08-16)
 
+- [ ] **A regra manda sincronizar `.claude/agents/` e não diz como; `cp` e Edit são barrados** —
+  `CLAUDE.md` (seção "Ao mexer nos agentes") — o harness trata `.claude/` como caminho sensível,
+  então a sessão headless leva negativa nas duas ferramentas e a fase parece travada com o
+  preflight vermelho em `agent stale`. Quem resolve é `sdd install --force`, citado só na
+  mensagem de falha do preflight. Direção: dizer isso na regra. — descoberto por `sdd-executor`
+  na missão `20260817-eixo-do-juiz` (2026-08-17)
+
 - [ ] **O que arma a corrida do Jidoka é a POSIÇÃO da linha `blocked`, não o tamanho do
   checkpoint** — `tests/check-gates.sh:229-232` — a grandeza real é quantos bytes sobram para o
   `printf` escrever **depois** do casamento do `grep`: com a linha no fim de um checkpoint de
