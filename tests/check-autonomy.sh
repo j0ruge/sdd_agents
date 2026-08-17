@@ -1459,6 +1459,103 @@ printf '{"v":1,"event":"session"\n' > "$OUTSIDE/bad/autonomy-log.jsonl"
 out="$( SDD_STATE_DIR="$OUTSIDE/bad" "$SDD" autonomy 2>&1 )"; rc=$?
 assert_eq "a malformed row fails loudly" "1" "$rc"
 
+# --- the human-facing output ------------------------------------------------
+# Five defects that sat open through three missions, and they sat open for one reason: none of them
+# moves a COUNT, so not one assertion above this line could go red on any of them. `sdd autonomy` is
+# the human's window — a column that stops lining up, a refusal that names the wrong remedy and a
+# table whose last row is not the latest version are defects of the same instrument as a wrong sum.
+# Prefixed `output:` so the increment's Check can count them without reading them.
+echo "== reader: the human-facing output =="
+
+# One clean comparable session, with the three fields these assertions vary. Same shape as
+# `ledger_row` above; a second helper rather than a fourth parameter on that one, because that one
+# is the fixture of the repo-filter section and its callers pin its arity.
+out_row() {   # out_row <kit_sha> <mission> <cost_usd>
+  jq -cn --arg repo "$FIXROOT" --arg sha "$1" --arg mission "$2" --argjson cost "$3" \
+    '{v:1, ts:"2026-08-16T14:00:00-03:00", event:"session", run_id:"r", invocation:"run",
+      kit_sha:$sha, kit_dirty:false, project:"p", repo:$repo, mission:$mission,
+      phase:"EXEC", step:"EXEC", agent:"sdd-executor", model:"opus", attempt:1,
+      auto_retry:false, session:"s", rc:0, dur_s:10, cost_usd:$cost, moved:true,
+      gate:"pass", gate_why:"x"}'
+}
+# The ledger path is part of every refusal message on purpose, and the two fixtures below live in
+# different directories — so a differential assertion that compared the messages raw would find them
+# "different" for a reason that has nothing to do with what they accuse, and would go on passing
+# after both were rewritten into one sentence. Normalised out, once, for both.
+norm_ledger() { sed -e "s|$OUTSIDE/[A-Za-z0-9]*/autonomy-log\.jsonl|<LEDGER>|g" <<< "$1"; }
+
+# D1 — money is a COLUMN. jq interpolates NUMBERS, not formatted strings, so a total of 2.0 printed
+# `US$ 2` in a column next to `US$ 1.5`: the table stops lining up and a reader in a hurry reads "no
+# cents were computed". Both shapes in one ledger (a whole number and a one-place number) and the
+# TOTAL of money columns asserted alongside, so a formatter that fixes only the integer case fails,
+# and so does an output that lost the column altogether.
+mkdir -p "$OUTSIDE/money"
+{ out_row zzzzzzz m1 2.0; out_row aaaaaaa m2 1.5; } > "$OUTSIDE/money/autonomy-log.jsonl"
+out="$( SDD_STATE_DIR="$OUTSIDE/money" "$SDD" autonomy 2>&1 )"
+assert_eq "output: every money column carries two decimals, and there are two of them" "2 2" \
+  "$(grep -c 'US\$ ' <<< "$out") $(grep -cE 'US\$ [0-9]+\.[0-9][0-9]$' <<< "$out")"
+
+# D2 — two defects, one sentence. `[1,2,3]` is valid JSON of the wrong SHAPE (a writer produced a
+# non-object: somebody has to find the writer); a truncated line is not JSON at all (somebody has to
+# fix the line). The remedies are different and the reader could not tell which had happened.
+# DIFFERENTIAL, because an assertion that only looked for the text of one of them stays green after
+# the other is rewritten to say the same thing again — which is how these two got here.
+die_line() { grep -m1 'error:' <<< "$(norm_ledger "$1")"; }
+bad_msg="$(die_line "$( SDD_STATE_DIR="$OUTSIDE/bad" "$SDD" autonomy 2>&1 )")"
+shape_msg="$(die_line "$( SDD_STATE_DIR="$OUTSIDE/shape" "$SDD" autonomy 2>&1 )")"
+assert_eq "output: the two malformed-ledger refusals accuse different things" \
+  "spoke spoke different" \
+  "$(printf '%s %s %s' "${bad_msg:+spoke}" "${shape_msg:+spoke}" \
+       "$( [ "$bad_msg" = "$shape_msg" ] && echo same || echo different )")"
+
+# D3 — the "no data" block was written twice, word for word: once for a file that is not there and
+# once for a file that holds no row. Both guards are necessary and they test different things, but
+# they are ONE refusal, and two copies is how one of them gets rewritten alone — leaving two voices
+# for the very sentence that separates "empty ledger" from "corrupt ledger". Asserted at BOTH ends,
+# in one assertion: the sentence exists once in the source (which is the debt), and the two guards
+# still reach it (which is what makes one copy a refactor instead of a deletion). The `1` on the
+# left is also the floor — a source that lost the sentence counts 0, and two silent guards would
+# otherwise compare equal.
+mkdir -p "$OUTSIDE/blanklines"
+printf '\n\n\n' > "$OUTSIDE/blanklines/autonomy-log.jsonl"
+out_nofile="$( SDD_STATE_DIR="$OUTSIDE/empty" "$SDD" autonomy 2>&1 )"
+out_norows="$( SDD_STATE_DIR="$OUTSIDE/blanklines" "$SDD" autonomy 2>&1 )"
+assert_eq "output: the two empty-ledger refusals are one sentence, written once" \
+  "1 $(norm_ledger "$out_nofile")" \
+  "$(grep -cF 'no data: the ledger at ' "$SDD") $(norm_ledger "$out_norows")"
+
+# D4 — `group_by(.kit_sha)` sorts by KEY, so "the last line of the table" was the lexically-largest
+# version and not the most recent one. `kaizen_series` has always ordered by first appearance in the
+# file (`shas_in_file_order`), so the human's window and the judge's series disagreed about which
+# version is latest — over the same file, with nothing on screen explaining it, in the table a human
+# reads to decide whether the kit got better. DIFFERENTIAL against the judge, over a ledger whose
+# file order is the REVERSE of its sort order: no single ordering satisfies both readings by chance.
+mkdir -p "$OUTSIDE/vorder"
+{ out_row zzzzzzz m1 1.0; out_row aaaaaaa m2 1.0; } > "$OUTSIDE/vorder/autonomy-log.jsonl"
+out="$( SDD_STATE_DIR="$OUTSIDE/vorder" "$SDD" autonomy 2>&1 )"
+vseries="$( SDD_STATE_DIR="$OUTSIDE/vorder" "$SDD" kaizen --series 2>/dev/null )"
+# awk and not `grep | tail`: $3 is "session(s)" on the table lines and a count on the escalation
+# lines, so one field test keeps them apart with no pipe to trip over pipefail. An output with no
+# table at all leaves `sha` empty, which fails against the judge's answer instead of matching it.
+assert_eq "output: the table's last version is the judge's latest, not the lexically largest" \
+  "aaaaaaa aaaaaaa" \
+  "$(jq -r '.latest.kit_sha' <<< "$vseries") $(awk '$3 == "session(s)" { sha = $1 } END { print sha }' <<< "$out")"
+
+# D5 — with no escalations and one unrecognized row, two blank lines opened between the table and
+# the exclusion line. Each exclusion string already begins with `\n` AND jq's `,` puts every output
+# on its own line, so an exclusion that prints "" for a count of zero contributes a blank line of
+# its own. Cosmetic and confirmed by reproduction: no count moves. The exclusion line is the floor —
+# an output that dropped its accounting has no double blank either, and would pass on nothing.
+mkdir -p "$OUTSIDE/gap"
+{ out_row aaaaaaa m1 1.0
+  jq -cn --arg repo "$FIXROOT" '{v:1, ts:"2026-08-16T14:00:00-03:00", repo:$repo}'
+} > "$OUTSIDE/gap/autonomy-log.jsonl"
+out="$( SDD_STATE_DIR="$OUTSIDE/gap" "$SDD" autonomy 2>&1 )"
+gap_blanks="$(awk 'prev == "" && $0 == "" { n++ } { prev = $0 } END { print n + 0 }' <<< "$out")"
+gap_excl="$(grep -c '1 unrecognized row(s) excluded' <<< "$out")"
+assert_eq "output: never two blank lines in a row, and the accounting still prints" "0 1" \
+  "$gap_blanks $gap_excl"
+
 # --- the instrument never lands inside the thing it measures ----------------
 # Pins the $OUTSIDE decision at the top of this file. If the ledger, a reader fixture or the kit
 # copy ever moves back under $FIX, the moving stub's `git add -A` commits it into the repo under

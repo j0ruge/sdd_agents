@@ -470,6 +470,13 @@ Achados sobre **repos-alvo** vão para o `TODO.md` daquele repo. Este arquivo é
   o I3 alinhou o eixo, não a ordem. Família do `latest_matching`, já fechado. — descoberto por
   `sdd-executor` na missão `20260815-ledger-sem-ponto-cego` (2026-08-16)
 
+- [ ] **As linhas de exclusão do `sdd autonomy` levam uma linha em branco entre cada duas** —
+  `bin/sdd:2557-2560` — as quatro strings abrem com `\n` cada uma, então três exclusões saem como
+  bloco+branco+bloco+branco+bloco em vez de um parágrafo só. O I3 tirou a linha em branco DUPLA (a
+  que o `else ""` produzia com contagem zero); esta é a que sobra, mesma família, e agora é visível
+  porque nada mais a esconde. Direção: juntar as não-vazias num array e emitir um `\n` só na frente.
+  — descoberto por `sdd-executor` na missão `20260817-catraca-do-backlog` (2026-08-17)
+
 ### Comentário e registro
 
 - [ ] **O `.claude/napkin.md` é rastreado, cita números da suíte e nenhuma fase pode editá-lo** —
