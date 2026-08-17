@@ -337,9 +337,17 @@ Achados sobre **repos-alvo** vão para o `TODO.md` daquele repo. Este arquivo é
 - [ ] **Worktree do git parte a identidade do repo no ledger** — `bin/sdd:768`
   (`ledger_repo_root` usa `--show-toplevel`) — o toplevel é por worktree, então missão rodada num
   worktree grava `repo: .../wt` e a mesma leitura do checkout principal a devolve como
-  `other_repo` e a série vem vazia. Worktree é fluxo de primeira classe aqui. Direção:
-  `git rev-parse --git-common-dir` como identidade, com asserção diferencial.
+  `other_repo` e a série vem vazia. RESOLVIDO por `c514e36`: identidade pelo `.git` compartilhado
+  (`--git-common-dir` normalizado), no escritor **e** nos leitores, com par diferencial
+  assimétrico (1 linha no principal, 2 no worktree; 1/2 vs 2/1 quebrado, 3/0 nos dois consertado).
   — descoberto por `sdd-reviewer` na missão `20260816-kit-como-alvo` (2026-08-16)
+
+- [ ] **`sdd kaizen` recusa rodar de um worktree do próprio kit** — `bin/sdd:2735` — a porta
+  "estou no repo do kit?" compara `kit_root` (`--show-toplevel` de `$SDD_HOME`) com `$REPO_ROOT`,
+  e o toplevel é por worktree: de um worktree do kit os dois divergem e o comando morre em
+  "run it in the kit repo". Mesma classe que `c514e36` acabou de fechar no ledger, em outra
+  porta — e o kit recomenda worktree para isolar missão. Direção: `ledger_repo_root` dos dois
+  lados, com par diferencial. — descoberto por `sdd-executor` na missão `20260817-eixo-do-juiz` (2026-08-17)
 
 - [ ] **Linha sem `repo` é "local" em TODO repo, e o comentário afirma o contrário** —
   `bin/sdd:785` — o comentário diz que os leitores classificam essas linhas em voz alta
