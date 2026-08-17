@@ -1,6 +1,6 @@
 ---
 missao: 20260817-catraca-do-backlog
-atualizado: 2026-08-17 20:26
+atualizado: 2026-08-17 21:58
 ---
 
 # Checkpoint — a catraca do backlog
@@ -24,7 +24,7 @@ atualizado: 2026-08-17 20:26
 | I1 | sensor `check-health.sh` sobre `cmd_health` | `o=$(bash tests/check-health.sh 2>&1); grep -c '^  ok    the ratchet fails on a stale baseline line' <<< "$o"` → `1` | done | afe5db6 |
 | I2 | catraca da contagem de achados | `o=$(bash tests/check-health.sh 2>&1); grep -c '^  ok    a baseline off by one fails both ways' <<< "$o"` → `1` | done | 36a6eb6 |
 | I3 | cinco defeitos de saída do `cmd_autonomy` | `o=$(bash tests/check-autonomy.sh 2>&1); grep -c '^  ok    output:' <<< "$o"` → `5` | done | 02e5da6 |
-| I4 | mutações que faltam no catálogo | `grep -cE '^mut_[A-Za-z0-9_]+\(\) \{' tests/check-mutation.sh` → `77` | pending | — |
+| I4 | mutações que faltam no catálogo | `grep -cE '^mut_[A-Za-z0-9_]+\(\) \{' tests/check-mutation.sh` → `81` | done | f0bbf82 |
 | I5 | política escrita e baseline no número real | `o=$(bash tests/check-health.sh 2>&1); grep -c '^  ok    the ratchet policy is written where the next mission meets it' <<< "$o"` → `1` | pending | — |
 
 ## Notas de execução
@@ -135,6 +135,38 @@ atualizado: 2026-08-17 20:26
   — é tarefa do I5, e ficam em `TODO.md:440`, `:446`, `:453`, `:459` e `:466` (seção "Saída humana e
   cosmética"), todos com hash `02e5da6`. As âncoras `bin/sdd:` que eles citam continuam defasadas;
   a tabela boa está no `01-plano.md`.
+
+- 2026-08-17 21:58 · `I4` · **O `77` foi recalculado para `81`, e o Check da linha foi ajustado** —
+  a rota que o próprio plano abre ("o `77` é derivado, não sagrado"). A aritmética nova é
+  `73 + 1 (retry/branch) + 2 (ledger) + 2 (kaizen) + 3 (degraded)`. O plano previu 4 porque contou
+  um item = uma mutação; três dos quatro itens pedem mais de uma. A **verificação end-to-end** do
+  `01-plano.md` passa a esperar `score: 81 caught, 0 known gap(s), of 81` — medido, `sdd health` →
+  `kit healthy`, `ratchet: 7 known debt(s), none new`.
+- 2026-08-17 21:58 · `I4` · **A re-derivação contradisse o plano nos dois pontos em que ele mandava
+  conferir, e nas duas vezes para MAIS trabalho, não menos.** (a) `mut_RUN_moved_never_true` **não**
+  cobre o `moved` do `cmd_retry`: ele ancora na cópia de QUATRO espaços do `cmd_run`, e `cmd_retry`
+  e `cmd_kaizen` têm a sua com DOIS — sob aquela sabotagem a asserção da linha 326 do
+  `check-autonomy.sh` fica verde. Medido por probe, não por leitura. (b) Nenhuma das quatro
+  `mut_RUN_degraded_*` alcança as três metades do item: elas cobrem o escritor do ledger, a guarda
+  one-shot, o `phase_label` do `kaizen_series` e o número de voltas. As três (journal, predicado do
+  `cmd_autonomy`, admissão da série) estavam mesmo descobertas.
+- 2026-08-17 21:58 · `I4` · **As oito nasceram sabotadas à mão, cada uma contra o sensor que a
+  pega, e cada uma morre pela asserção que o comentário nomeia** — nunca por rc compartilhado. Duas
+  precisaram de endereçamento por FAIXA depois de a primeira tentativa sabotar demais: `return
+  "$out_rc"` aparece **6×** dentro do `cmd_kaizen` (um `sed` sem faixa colapsa todos os bailouts do
+  comando num mutante só) e `def is_escalation` é byte a byte igual no `cmd_autonomy` e no
+  `kaizen_series`. Todas as oito verificadas mudando **exatamente uma linha** (`diff` contado) e
+  passando `bash -n`.
+- 2026-08-17 21:58 · `I4` · **Achado fora de escopo, com probe:** o `moved` do próprio `cmd_kaizen`
+  (`bin/sdd:3103`) sabotado à mão deixa `check-kaizen.sh` **e** `check-autonomy.sh` verdes — não há
+  asserção, logo não pode haver entrada no catálogo (é a regra do I4: sabotagem que deixa tudo verde
+  vira achado, não entrada). Foi para o `TODO.md`, e a baseline da catraca subiu **72 → 73 no mesmo
+  commit**, pelo mesmo motivo registrado no I3: catraca vermelha atravessando incremento é o oposto
+  do que ela existe para fazer.
+- 2026-08-17 21:58 · `I4` · **Os 4 itens que este incremento fecha ainda NÃO levam `RESOLVIDO por`**
+  — é tarefa do I5, e ficam em `TODO.md:80`, `:284`, `:304` e `:310` (os dois últimos deslocaram de
+  `:297` e `:303` com a entrada nova acima), todos com hash `f0bbf82`. ⚠️ As âncoras `bin/sdd:` que os quatro citam
+  estão ~800 linhas defasadas; as reais estão nos comentários das entradas novas do catálogo.
 
 ## Incrementos de fix (QA)
 
