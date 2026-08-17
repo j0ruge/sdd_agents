@@ -31,7 +31,7 @@ atualizado: 2026-08-17 12:10
 | I1 | ADR 0003: a pergunta que o juiz responde | `o=$(bash tests/check-kaizen.sh 2>&1); grep -c '^  ok    adr 0003' <<< "$o"` → `2` | done | 3547a83 |
 | I2 | o runner explica o `indeterminado` estrutural | `o=$(bash tests/check-kaizen.sh 2>&1); grep -c '^  ok    degenerate axis' <<< "$o"` → `2` | done | abac043 |
 | I3 | `--all-repos` nos três leitores | `o=$(bash tests/check-autonomy.sh 2>&1); grep -c '^  ok    all-repos' <<< "$o"` → `2` | done | d62f08c |
-| I4 | identidade de repo sobrevive a worktree | `o=$(bash tests/check-autonomy.sh 2>&1); grep -c '^  ok    worktree' <<< "$o"` → `2` | pending | — |
+| I4 | identidade de repo sobrevive a worktree | `o=$(bash tests/check-autonomy.sh 2>&1); grep -c '^  ok    worktree' <<< "$o"` → `2` | done | c514e36 |
 | I5 | linha sem `repo` ganha balde próprio | `o=$(bash tests/check-autonomy.sh 2>&1); grep -c '^  ok    no-repo' <<< "$o"` → `2` | pending | — |
 
 ## Notas de execução
@@ -106,6 +106,32 @@ atualizado: 2026-08-17 12:10
 - 2026-08-17 · `EXEC I3` · o item correspondente do `TODO.md` ganhou `RESOLVIDO por d62f08c`
   (`e02319b`). **Os itens do I1 e do I2 ainda não têm o seu** — a varredura dos 5 itens que a
   "Verificação end-to-end" do plano cobra continua devendo, e é da fase DOCS.
+- 2026-08-17 · `EXEC I4` · suíte verde antes (`score: 58`) e depois (**59**, `0 known gap(s)`),
+  `sdd health` verde nos cinco. As 2 asserções nasceram **vermelhas** pelo motivo certo: `3 0`
+  esperado contra `1 2` lido, e as duas leituras discordando (`1 2` × `2 1`).
+- 2026-08-17 · `EXEC I4` · **o plano dizia "Onde: `bin/sdd:865-869`" e isso não bastava.** Os dois
+  construtores de linha carimbavam `--arg repo "$REPO_ROOT"`, então consertar só o leitor deixaria
+  escritor e leitor discordando — pior que o defeito. Os dois passaram a resolver `ledger_repo_root`.
+  O próprio plano já previa a consequência ("mudar a identidade muda o valor gravado em `repo:`"),
+  só não listou o sítio. Escritor e leitor com UMA identidade é o mesmo princípio do predicado único.
+- 2026-08-17 · `EXEC I4` · **o short-circuit `if [ -n "$REPO_ROOT" ]` teve de sair**, ao contrário
+  do que o plano sugeria ("`$REPO_ROOT` continua respeitado"): `$REPO_ROOT` É o worktree em que a
+  sessão roda, então devolvê-lo direto reintroduz a resposta por worktree. Hoje ele é o diretório
+  de **partida** da resolução — o probe D da sabotagem mede exatamente isso.
+- 2026-08-17 · `EXEC I4` · o par diferencial é **assimétrico de propósito** (1 linha nascida no
+  checkout principal, 2 no worktree): quebrado, os dois lados leem `1 2` e `2 1` — discordam, e
+  nenhuma troca de lados os faz casar. Simétrico (1 e 1) a asserção diferencial passaria verde no
+  código quebrado, porque `1 1` = `1 1`. As linhas vêm do **escritor real** (incremento `blocked`,
+  rc 3, zero token); `repo` escrito à mão seria o teste concordando com a própria fórmula.
+- 2026-08-17 · `EXEC I4` · sabotagem adversarial, quatro degrades, todos vermelhos e cada um com
+  `cmp -s` provando que o `sed` mudou o arquivo: voltar ao toplevel (0/2), escritor com
+  `$REPO_ROOT` (1/2), sem `pwd -P` (0/2), short-circuit de volta (1/2).
+- 2026-08-17 · `EXEC I4` · a mutação sabota a **definição**, não os sítios de chamada: reverter só
+  um lado deixaria escritor e leitor concordando na identidade velha, o par leria `3 0` dos dois
+  lados e o mutante sobreviveria medindo nada.
+- 2026-08-17 · `EXEC I4` · achado fora de escopo no `TODO.md` (`80cbea2`): `cmd_kaizen`
+  (`bin/sdd:2735`) decide "estou no repo do kit?" com `--show-toplevel`, a **mesma** pergunta por
+  worktree que o ledger acabou de deixar de fazer — de um worktree do kit o comando recusa rodar.
 
 ## Incrementos de fix (QA)
 
