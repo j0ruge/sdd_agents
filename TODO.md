@@ -353,8 +353,10 @@ Achados sobre **repos-alvo** vão para o `TODO.md` daquele repo. Este arquivo é
   `bin/sdd:785` — o comentário diz que os leitores classificam essas linhas em voz alta
   (`unrecognized`, ou morte alta), mas `is_unrecognized` olha `.event` e não `.repo`: linha de
   sessão bem-formada sem `repo` é sessão comparável em toda máquina — 3 delas bastaram para virar
-  `guard.sufficient` para `true` em fixture. Hoje são 0 no ledger real. Direção: contar num balde
-  próprio. — descoberto por `sdd-reviewer` na missão `20260816-kit-como-alvo` (2026-08-16)
+  `guard.sufficient` para `true` em fixture. Hoje são 0 no ledger real. RESOLVIDO por `4ca8015`:
+  balde `excluded.no_repo` nos dois leitores (nunca `other_repo`, que é outra acusação), quarta voz
+  de "no data", e o comentário corrigido com o motivo.
+  — descoberto por `sdd-reviewer` na missão `20260816-kit-como-alvo` (2026-08-16)
 
 - [ ] **O juiz no repo do kit deixou de enxergar missão de repo-alvo** — `bin/sdd:790`
   (`ledger_row_is_local`) — a leitura por repo é o conserto certo para contaminação de fixture,
