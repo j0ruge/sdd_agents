@@ -50,8 +50,8 @@ Achados sobre **repos-alvo** vão para o `TODO.md` daquele repo. Este arquivo é
   `tests/check-gates.sh:708` (`approval_stripped`) — a cópia de `aprovacao:` no corpo pega `sed`
   global porque `sed` reescreve TODAS as ocorrências; o awk que o kit usa para na primeira sozinho,
   então tirar a guarda `inside &&` (reescrever a primeira chave em qualquer lugar do arquivo) deixa
-  a suíte verde e corrompe prosa de missão sem a chave no frontmatter. Direção: fixture cujo
-  frontmatter NÃO tem `aprovacao:` e cujo corpo tem — mata também a guarda de read-back.
+  a suíte verde e corrompe prosa de missão sem a chave no frontmatter. RESOLVIDO por `ad0c89d`:
+  fixture sem a chave no frontmatter e com ela no corpo, probe nos BYTES do arquivo.
   — descoberto por `sdd-reviewer` na missão `20260816-portas-do-humano` (2026-08-16)
 
 - [ ] **`frontmatter_write` confia em três coisas que não valem sempre** — `bin/sdd:191-215` — o
@@ -61,6 +61,28 @@ Achados sobre **repos-alvo** vão para o `TODO.md` daquele repo. Este arquivo é
   invertida — inócuo no único chamador de hoje, armadilha para o segundo. Direção: `warn` no chmod,
   `readlink -f` (ou `die`) no alvo, e valor por `ENVIRON` no awk.
   — descoberto por `sdd-reviewer` na missão `20260816-portas-do-humano` (2026-08-16)
+
+- [ ] **A branch que a fase TICKET cria nunca chega ao campo que o runner lê** —
+  `agents/sdd-publisher.md:98` grava `branch:` no `10-ticket.md`, e `ensure_mission_branch`
+  (`bin/sdd:1363`) só lê o `00-missao.md`. Com `JIRA_ENABLED=true` o campo fica no placeholder para
+  sempre e a guarda da classe SQ-97 não existe nesses repos — a missão fechou a porta no caminho
+  sem JIRA, e a decisão 6 do `00-missao.md` manteve o TICKET fora de escopo de propósito.
+  Direção: a fase TICKET escreve o nome criado no `00-missao.md` via `frontmatter_write`.
+  — descoberto por `sdd-reviewer` na missão `20260816-portas-do-humano` (2026-08-17)
+
+- [ ] **A releitura pós-checkout confere o campo `branch:`, não a identidade do plano** —
+  `bin/sdd:1405` — se a branch declarada carrega uma cópia ANTIGA do mesmo `00-missao.md` (slug
+  reusado, branch velha de mesmo nome), o campo bate, a guarda passa e o pipeline roda contra um
+  plano que ninguém aprovou nesta sessão. O comentário da própria função já enuncia o risco ("a
+  branch carrying an OLDER copy"). Direção: comparar hash do artefato antes e depois do checkout.
+  — descoberto por `sdd-reviewer` na missão `20260816-portas-do-humano` (2026-08-17)
+
+- [ ] **O call site de `ensure_mission_branch` no `cmd_retry` não tem entrada no catálogo** —
+  `tests/check-mutation.sh:635` (`CATALOG`) — remover a linha do `cmd_retry` É pego pelo
+  `check-gates.sh` ("sdd retry is the other call site"), mas nenhuma mutação exercita a remoção,
+  então o score não credita a proteção. Não é defeito, é contabilidade do `sdd health`.
+  Direção: `mut_RETRY_branch_switch_dead` endereçado ao corpo do `cmd_retry`.
+  — descoberto por `sdd-reviewer` na missão `20260816-portas-do-humano` (2026-08-17)
 
 - [ ] **O `die` de artefato faltando do `sdd approve` é regra sem probe** — `bin/sdd:1818` — o
   comando repete o diagnóstico do `gate_PLAN` (`missing 01-plano.md`) e morre antes de imprimir
@@ -86,16 +108,16 @@ Achados sobre **repos-alvo** vão para o `TODO.md` daquele repo. Este arquivo é
 - [ ] **A guarda de read-back do `sdd approve` é regra sem probe** — `bin/sdd:1766` — o comando
   relê o `aprovacao:` pelo mesmo parser do gate antes de commitar, para o caso de a chave não
   existir no frontmatter (aí o `frontmatter_write` é no-op e o commit aprovaria nada). Sabotar a
-  guarda deixa as 3 asserções verdes: nenhum fixture tem missão sem a chave. Direção: um quarto
-  fixture, junto de rever o Check que fixa a contagem em 3.
+  guarda deixa as 3 asserções verdes: nenhum fixture tem missão sem a chave. RESOLVIDO por
+  `ad0c89d`: o fixture `20260102-nokey` alcança o estado, nomeado fora do prefixo contado.
   — descoberto por `sdd-executor` na missão `20260816-portas-do-humano` (2026-08-16)
 
 - [ ] **A ordem checkout-antes-do-aviso é regra sem probe no `cmd_run`** — `bin/sdd:1865-1869` —
   inverter as duas linhas deixa a suíte inteira verde: o fixture do par diferencial da branch base
   não declara `branch:`, então os dois usos são indistinguíveis nele. Invertido, o `sdd run` avisa
   que vai commitar na base um humano que ele tira da base na linha seguinte — aviso falso, e é
-  assim que se aprende a não ler aviso. O `cmd_retry` ganhou a asserção (`3ffa586`); o `cmd_run`
-  não. Direção: espelhar a asserção com fixture que declara branch inexistente.
+  assim que se aprende a não ler aviso. RESOLVIDO por `ad0c89d`: par diferencial autocontido
+  (`branch:` vazia avisa 1×, declarada avisa 0×) mais a mutação `RUN_branch_order_swap`.
   — descoberto por `sdd-executor` na missão `20260816-portas-do-humano` (2026-08-16)
 
 - [ ] **Aprovar plano é editar frontmatter à mão — o gate humano é a única interação sem
