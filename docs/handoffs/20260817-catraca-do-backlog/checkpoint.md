@@ -1,6 +1,6 @@
 ---
 missao: 20260817-catraca-do-backlog
-atualizado: 2026-08-17 17:44
+atualizado: 2026-08-17 19:42
 ---
 
 # Checkpoint — a catraca do backlog
@@ -22,7 +22,7 @@ atualizado: 2026-08-17 17:44
 | ID | Incremento | Check (comando → esperado) | Status | Commit |
 |---|---|---|---|---|
 | I1 | sensor `check-health.sh` sobre `cmd_health` | `o=$(bash tests/check-health.sh 2>&1); grep -c '^  ok    the ratchet fails on a stale baseline line' <<< "$o"` → `1` | done | afe5db6 |
-| I2 | catraca da contagem de achados | `o=$(bash tests/check-health.sh 2>&1); grep -c '^  ok    a baseline off by one fails both ways' <<< "$o"` → `1` | pending | — |
+| I2 | catraca da contagem de achados | `o=$(bash tests/check-health.sh 2>&1); grep -c '^  ok    a baseline off by one fails both ways' <<< "$o"` → `1` | done | 36a6eb6 |
 | I3 | cinco defeitos de saída do `cmd_autonomy` | `o=$(bash tests/check-autonomy.sh 2>&1); grep -c '^  ok    output:' <<< "$o"` → `5` | pending | — |
 | I4 | mutações que faltam no catálogo | `grep -cE '^mut_[A-Za-z0-9_]+\(\) \{' tests/check-mutation.sh` → `77` | pending | — |
 | I5 | política escrita e baseline no número real | `o=$(bash tests/check-health.sh 2>&1); grep -c '^  ok    the ratchet policy is written where the next mission meets it' <<< "$o"` → `1` | pending | — |
@@ -66,6 +66,37 @@ atualizado: 2026-08-17 17:44
   nenhuma das duas é redundante. O par que o plano previu se confirmou: `ratchet_one_way` mata a 2
   e a 3 e deixa a 1 viva. Cada mutação foi verificada matando a suíte **só** por este sensor
   (`1 suite(s) failed`), não por rc compartilhado com outro.
+- 2026-08-17 19:42 · `I2` · **A sabotagem adversarial achou uma falha-aberta na asserção 7, que a
+  auto-revisão não teria achado.** Com a linha da contagem na baseline daquele mundo, o `rc != 0`
+  que a asserção lia era escrito pelo ramo de **baseline órfã** (o achado deixa de ser emitido, a
+  linha fica sem par) — não pelo check novo. Medido: rebaixar o `health_bad` do check para `warn`
+  passava verde nas 7 asserções. Conserto: retirar a linha da baseline naquele mundo, o que faz o
+  check ser o único autor possível da falha. É o modo "rc compartilhado com outro ramo" do
+  `CLAUDE.md`, e ele apareceu numa asserção escrita justamente contra ele.
+- 2026-08-17 19:42 · `I2` · **Um conjunto foi escrito e depois REMOVIDO por decisão de regra.**
+  `grep -qF '1 check(s) failed'` entrou como o conserto da falha-aberta acima; a matriz provou que
+  quem consertava era a baseline enxuta, e que nenhuma sabotagem de ponto único quebrava o
+  conjunto. `CLAUDE.md`: regra que a sabotagem não alcança é decoração — removida, não documentada.
+- 2026-08-17 19:42 · `I2` · Matriz da sabotagem: **5 defeitos × 3 degradações**, todos os 5 pegos
+  pelo sensor íntegro, e cada degradação deixa escapar exatamente o seu defeito (D1→F1, D2→F2,
+  D3→F6), com o kit saudável ainda verde nas três. Os três conjuntos são carga, nenhum é enfeite.
+  ⚠️ A primeira rodada da matriz concluiu errado em 2 probes: `D2`/`D3` **apagavam** a linha que
+  carrega o `; then`, quebrando o `if` — o probe morria de sintaxe e o resultado não dizia nada.
+  Degradação **substitui** por `true`, nunca apaga, e o harness roda `bash -n` no **sensor** além
+  do `bin/sdd`.
+- 2026-08-17 19:42 · `I2` · **Terceiro aborto calado da família, e o pior deles:** a checagem do
+  `score:` (`bin/sdd:1721`) promete `health_bad` e morre antes — `score_line="$(grep …)"` devolve 1
+  sob `set -e` e mata o runner na atribuição. Provado por probe. Fora de escopo (I2 é a contagem):
+  foi para o `TODO.md`. O check novo já nasce com `|| true` por causa dele — copiar "o padrão
+  inteiro" como o plano mandava teria replicado o defeito, e a asserção 7 foi quem barrou.
+- 2026-08-17 19:42 · `I2` · A baseline foi escrita em **71**, não nos 68 do plano: o I1 registrou
+  dois achados e este incremento registrou um terceiro. É o risco "a missão descobre itens novos"
+  da tabela do plano acontecendo — e é o desenho, não o desvio. O I5 remede no fim.
+- 2026-08-17 19:42 · `I2` · Catálogo em **73** (`72 + 1`), `0 known gap(s)`; `sdd health` →
+  `kit healthy`, `ratchet: 7 known debt(s), none new`. O `77` do I4 segue de pé (`73 + 4`).
+- 2026-08-17 19:42 · `I2` · Métrica 1 provada **fora do fixture**, no repo real: baseline por 1
+  errada reprova com as duas mensagens (`finding outside the baseline: todo-findings 71` e
+  `stale baseline: 'todo-findings 70'`), rc 1. Baseline restaurada por `trap`.
 
 ## Incrementos de fix (QA)
 
