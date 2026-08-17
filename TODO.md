@@ -312,18 +312,18 @@ Achados sobre **repos-alvo** vão para o `TODO.md` daquele repo. Este arquivo é
   (`sufficient: ($observed >= 3)`) vs `autonomy_kit_stamp` — o eixo é o `HEAD` do kit no instante
   de CADA linha, e a fase EXEC commita no `bin/sdd` entre sessões: medido, **24 kit_sha distintos
   no ledger, todos com exatamente 1 sessão, nenhum com 2**, então `sufficient` é `false` por
-  construção aqui. Não é bug em alvo — é o eixo degenerando no repo que o desenvolve. RESOLVIDO
-  por `3547a83`+`abac043`: o ADR 0003 decide (evidência vem de alvo real, o piso não afrouxa) e
+  construção aqui. Não é bug em alvo — é o eixo degenerando no repo que o desenvolve.
+  RESOLVIDO por `3547a83`+`abac043`: o ADR 0003 decide (evidência vem de alvo real, o piso não afrouxa) e
   `guard.degenerate_axis` faz o runner dizer isso em voz alta, citando o registro.
   — descoberto por `humano` na missão `20260816-runner-sem-dividas` (2026-08-16)
 
 - [ ] **O schema da série não tem sensor de drift contra a prosa que o descreve** — `bin/sdd:2738`
-  vs `docs/pipeline.md:496` e `agents/sdd-kaizen.md:35` — o objeto que o juiz é mandado citar é
-  produzido em dois lugares (o `jq` e o literal do ledger vazio, `:2558`) e descrito em **seis**;
-  o `sdd health` mede drift de doc/config e gate-sem-mutação, mas nada casa os campos do `guard`
-  com quem os promete. Já cobrou o preço 5×, a última na r3 de `20260817-eixo-do-juiz`, que achou o
-  **sexto** lugar — `docs/adr/0003`, o único que o runner **cita na saída**, e o único que a r2
-  deixou descrever a regra antiga. Direção: extrair os campos do `jq` e cobrá-los na doc.
+  vs `docs/pipeline.md:499`, `agents/sdd-kaizen.md:40`, `docs/adr/0003:57` e
+  `docs/failure-modes.md:99` — produzido em dois lugares (o `jq` e o literal do ledger vazio,
+  `:2558`) e descrito em **sete**; nada casa os campos do `guard` com quem os promete. Cobrado 6×:
+  na DOCS de `20260817-eixo-do-juiz`, **cinco** dos sete descreviam a unidade que o F1 da r3 trocara
+  horas antes (sessão → missão) — inclusive o ADR que o runner cita na saída e a folha do próprio
+  juiz. Direção: extrair os campos do `jq` e cobrá-los na doc.
   — descoberto por `sdd-executor` na missão `20260816-runner-sem-dividas` (2026-08-16)
 
 ### Contrato e configuração
@@ -480,6 +480,22 @@ Achados sobre **repos-alvo** vão para o `TODO.md` daquele repo. Este arquivo é
   preflight vermelho em `agent stale`. Quem resolve é `sdd install --force`, citado só na
   mensagem de falha do preflight. Direção: dizer isso na regra. — descoberto por `sdd-executor`
   na missão `20260817-eixo-do-juiz` (2026-08-17)
+
+- [ ] **O `KAIZEN_LOG.md` não fixa o instrumento das próprias linhas, e uma delas já mentiu** —
+  `KAIZEN_LOG.md:175` — a entrada de `20260816-portas-do-humano` registrou "asserções `ok`: 490" para
+  um `main` que mede **435** pela âncora de 4 espaços; `490` é a contagem solta `^  ok`, que soma 55
+  linhas de 3 espaços impressas pelo runner dentro dos fixtures. O tree é o mesmo
+  (`git diff c821ade..96a9bf1 -- tests/ bin/sdd` vazio), então a série 408 → 457 → 490 do arquivo tem
+  degrau fantasma. Direção: nomear o comando ao lado do número, como a linha do `score:` já faz.
+  — descoberto por `sdd-docs` na missão `20260817-eixo-do-juiz` (2026-08-17)
+
+- [ ] **A `CLAUDE.md` diz que `grep -l selftest tests/` devolve cinco, e devolve seis** —
+  `CLAUDE.md:136` — o sexto é o `jobs_selftest()` do `check-mutation.sh:63`, que mede o pool de
+  jobs e já estava lá antes desta missão (medido em `main` e no HEAD: seis dos dois lados). A frase
+  existe para ensinar que a rubrica é "a mutação não alcança" e **não** "tem `selftest()`" — a
+  contagem é a evidência dela, e evidência errada convida a próxima sessão a corrigir para o lado
+  errado. Direção: dizer seis nomeando o `jobs_selftest`, ou parar de contar por `grep`.
+  — descoberto por `sdd-docs` na missão `20260817-eixo-do-juiz` (2026-08-17)
 
 - [ ] **O que arma a corrida do Jidoka é a POSIÇÃO da linha `blocked`, não o tamanho do
   checkpoint** — `tests/check-gates.sh:229-232` — a grandeza real é quantos bytes sobram para o
