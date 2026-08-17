@@ -41,7 +41,7 @@ asserções + 1 testemunha, vermelhas agora) e o incremento **`F1`**, pendente. 
 
 ## O que foi feito
 
-- `4444bc7` — nasce a asserção `one series` em `tests/check-kaizen.sh` (2 asserções contadas + 1
+- `00ad6fb` — nasce a asserção `one series` em `tests/check-kaizen.sh` (2 asserções contadas + 1
   testemunha de regime), o incremento `F1` no `checkpoint.md` e este handoff. Nenhuma linha de
   `bin/sdd` foi tocada: QA não conserta produção.
 
