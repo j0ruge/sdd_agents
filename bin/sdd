@@ -2583,7 +2583,7 @@ kaizen_series() {
     # enough missions yet" (a target repo, where waiting works) from "the axis cannot work here"
     # (the repo that BUILDS the kit, where every session commits and the next lands on a fresh sha,
     # so waiting never works). Input is the on-axis rows. MORE THAN ONE sha is required on purpose:
-    # a first sha with one session has not degenerated, it has only just started.
+    # a first sha with one mission has not degenerated, it has only just started.
     #
     # ONE definition of the floor, shared by the guard verdict below and by the window this field
     # looks through. They cannot drift: the field says "waiting will never satisfy that floor", so
@@ -2645,7 +2645,7 @@ kaizen_series() {
       # ...AND the floor was never once reached in this whole ledger. The window alone was the
       # second formulation and it traded one wrong answer for another: it says "the axis cannot work
       # HERE", and a quiet stretch is not a broken axis. Measured on the window alone — two versions
-      # carrying 3 missions apiece, then three versions with one session each => `true`, in a repo
+      # carrying 3 missions apiece, then three versions with one mission each => `true`, in a repo
       # whose OWN history proves 3-missions-per-version is reachable twice over. The field then errs
       # at exactly the distinction it was created to make, and it feeds the judge prompt.
       #
@@ -2732,9 +2732,9 @@ kaizen_series() {
     # field over. Everything the guard says about itself comes from here.
     | (($latest.missions_with_session) // 0) as $observed
     # Derived from the WHOLE comparable slice, never from $latest alone: a degenerate axis is a
-    # property of the SET of recent kit versions (each bought exactly one session), which no
-    # single group can state about itself. It adds no fact to the ledger and changes no verdict —
-    # it explains one.
+    # property of the SET of recent kit versions (each carrying exactly one MISSION — the unit
+    # $observed above reads, never sessions), which no single group can state about itself. It adds
+    # no fact to the ledger and changes no verdict — it explains one.
     | ($ok | degenerate_axis) as $degenerate
     | {v: 1,
        latest: $latest,
@@ -2923,7 +2923,7 @@ kaizen_axis_note() {
   [ "$(jq -r '.guard.degenerate_axis' <<< "$series")" = "true" ] || return 0
   # No count in the sentence on purpose: the window is `guard_floor` and writing "3" here would be
   # a third copy of a number the jq program already owns, drifting the day the floor moves.
-  warn "the kit_sha axis is degenerate here: the recent kit versions each bought exactly one session, and none ever reached the floor"
+  warn "the kit_sha axis is degenerate here: the recent kit versions each carry exactly one mission, and none ever reached the floor"
   dim "  This repo BUILDS the kit, so each session commits and the next one lands on a fresh sha."
   dim "  The floor of 3 missions per kit version is unsatisfiable here, and 'indeterminado' is then"
   dim "  the CORRECT verdict, not a missing mission: evidence comes from real target repos (ADR 0003)."
