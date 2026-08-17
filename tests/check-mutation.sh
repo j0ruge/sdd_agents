@@ -316,6 +316,17 @@ mut_LEDGER_repo_root_cdpath_leak() {
   sed -i "s@CDPATH='' cd@cd@g" "$1"
 }
 
+# The bare test goes back to asking about the ENTRY POINT instead of the repository, and one
+# repository gets two identities. `rev-parse --is-bare-repository` answers for the path git was
+# entered through: a bare repo living in a directory named `.git` says `true` read from itself and
+# `false` read from a linked worktree of itself, so the cosmetic `/.git` strip fires on the second
+# reading only — `/x/.git` and `/x` for one repo, which makes every row written from the worktree
+# foreign to every row written from the repo. The sibling of the collapse above and the same class
+# of silence: both readings are non-empty and plausible, so nothing warns.
+mut_LEDGER_bare_by_entry_point() {
+  sed -i 's@git -C "$start" config --bool --get core.bare 2>/dev/null@git -C "$start" rev-parse --is-bare-repository 2>/dev/null@' "$1"
+}
+
 # The Jidoka dies: `verdict: piorou` no longer stops the line. The outcome falls through to the
 # born-plan branch and exits 0 — a kit change that made autonomy WORSE reads as a green light,
 # which is the exact failure ADR 0002 exists to forbid.
@@ -852,6 +863,7 @@ CATALOG=(
   KAIZEN_mission_key_slug_only
   LEDGER_repo_root_common_parent
   LEDGER_repo_root_cdpath_leak
+  LEDGER_bare_by_entry_point
 )
 
 # Mutations that are NOT caught today, each with the increment that closes it. Ratchet in both

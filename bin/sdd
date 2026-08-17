@@ -917,7 +917,16 @@ ledger_repo_root() {
   # keep naming the root a human recognizes instead of a path inside `.git`. Injective, therefore
   # safe to collapse: exactly one repository can own `/repo/.git`. Withheld from a bare repo, whose
   # common dir is the repository itself and whose parent belongs to nobody.
-  if [ "$( git -C "$start" rev-parse --is-bare-repository 2>/dev/null )" != "true" ] \
+  # ⚠️ The bare test is `core.bare` and NOT `rev-parse --is-bare-repository`, and the difference is
+  # an identity split. `--is-bare-repository` answers about the ENTRY POINT, not the repository: for
+  # a bare repo living in a directory named `.git` (`/x/.git`, the shape this very guard exists for)
+  # it says `true` read from the repo and `false` read from a worktree of that same repo, so the
+  # strip fired on one reading and not the other — measured, `/x/.git` and `/x`, one repository with
+  # two identities, which is the defect the whole function exists to prevent. `core.bare` lives in
+  # the config of the COMMON dir, so every worktree of a repository answers it the same way. Unset
+  # (a repo some tool created without the key) reads empty and means not bare, the same direction
+  # `!= "true"` already took.
+  if [ "$( git -C "$start" config --bool --get core.bare 2>/dev/null )" != "true" ] \
      && [ "${gitdir##*/}" = ".git" ] && [ -n "${gitdir%/.git}" ]; then
     printf '%s' "${gitdir%/.git}"
   else

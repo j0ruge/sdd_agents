@@ -1004,12 +1004,48 @@ assert_eq "and without it the header does name this repo — the scope line is n
 HELPFLAG="$( "$SDD" help 2>&1 | sed -n 's/^  \(--[a-z][a-z-]*\) *read the WHOLE ledger.*/\1/p' | head -1 )"
 assert_eq "the ledger flag the help advertises is one the help itself states — and not empty" "yes" \
   "$( case "${HELPFLAG:-}" in --?*) echo yes ;; *) echo "no:${HELPFLAG:-<empty>}" ;; esac )"
-assert_eq "and BOTH parsers accept the very token the help prints, never a near-miss of it" "0 0" \
-  "$( printf '%s %s' \
-       "$( SDD_STATE_DIR="$OUTSIDE/tworepos" "$SDD" autonomy "${HELPFLAG:-–none}" 2>&1 \
-             | grep -c 'unknown' )" \
-       "$( SDD_STATE_DIR="$OUTSIDE/tworepos" "$SDD" kaizen --series "${HELPFLAG:-–none}" 2>&1 \
-             | grep -c 'unknown' )" )"
+# ⚠️ ACCEPTANCE is read as rc 0, never as the absence of the word "unknown", and the near-miss is
+# half the assertion. Both were measured on the previous spelling of this pair, which read
+# `grep -c 'unknown'` on each parser: (a) replacing both `*) die "unknown … option"` arms with
+# `*) : ;;` left it GREEN — a parser that accepts everything says "unknown" about nothing, so the
+# typo in the help text this pair exists to catch sailed through the very assertion aimed at it;
+# (b) making the `--all-repos)` arm die with a different sentence also left it green, while the
+# command rejected the flag the help advertises. The word was the death's WORDING, not the answer.
+# rc 0 on the advertised token says accepted; rc non-zero on `<token>x` says the arm matches the
+# token and not a prefix of it, which is what kills the accept-everything degrade.
+parser_rc() {  # parser_rc <args…> -> the rc of the runner, run against the two-repo fixture
+  ( SDD_STATE_DIR="$OUTSIDE/tworepos" "$SDD" "$@" >/dev/null 2>&1 ); printf '%s' "$?"
+}
+assert_eq "BOTH parsers accept the very token the help prints, and BOTH reject a near-miss of it" \
+  "0 0 reject reject" \
+  "$( printf '%s %s %s %s' \
+       "$(parser_rc autonomy "${HELPFLAG:-–none}")" \
+       "$(parser_rc kaizen --series "${HELPFLAG:-–none}")" \
+       "$( [ "$(parser_rc autonomy "${HELPFLAG:-–none}x")" != 0 ] && echo reject || echo accept )" \
+       "$( [ "$(parser_rc kaizen --series "${HELPFLAG:-–none}x")" != 0 ] && echo reject || echo accept )" )"
+
+# --- ...and one mission is one mission in BOTH readers -----------------------
+# The comment on `def mission_key` in bin/sdd promises that this file compares the two readers to
+# each other so neither can be "improved" alone. It did not: nothing here mentioned mission_key,
+# and the catalogue's mutant rewrites both spellings at once (`/g` on purpose), so not even it
+# would see them diverge. A comment promising a sensor that does not exist is the same debt this
+# mission removed three times over, so the sensor is written rather than the comment deleted.
+#
+# TWO clauses, because either alone fails open. The pair compared to EACH OTHER catches a fork (one
+# reader taught the repo, the other left on the slug); the absolute `2` catches both being wrong
+# TOGETHER, which is exactly the shape of the catalogue mutant. The fixture is the collision that
+# made this real: `cmd_kaizen` mints `$(date +%Y%m%d)-kaizen`, so two projects judged on the same
+# day carry the identical slug, and under --all-repos their rows land in one reading.
+mkdir -p "$OUTSIDE/slugclash"
+{ ledger_row "$FIXROOT" 20260817-kaizen; ledger_row "$OTHER" 20260817-kaizen; } \
+  > "$OUTSIDE/slugclash/autonomy-log.jsonl"
+assert_eq "mission identity: two projects sharing one dated slug are two missions in both readers" \
+  "2 2" \
+  "$( h="$( SDD_STATE_DIR="$OUTSIDE/slugclash" "$SDD" autonomy --all-repos 2>&1 \
+              | sed -n 's/^  ccccccc  .* · \([0-9][0-9]*\) mission(s) · .*/\1/p' )"
+      j="$( SDD_STATE_DIR="$OUTSIDE/slugclash" "$SDD" kaizen --series --all-repos 2>/dev/null \
+              | jq -r '.latest.missions' )"
+      printf '%s %s' "${h:-<empty>}" "${j:-<empty>}" )"
 
 # --- ...and a worktree of one repo is still that repo ------------------------
 # `git rev-parse --show-toplevel` answers per WORKTREE, so a mission run from `git worktree add`
@@ -1118,6 +1154,20 @@ mkdir -p "$IDROOT/parent/.git/modules" "$IDSTATE"
   git init -q "$IDROOT/plain"
   mkdir -p "$IDROOT/hidden"
   git init -q --bare "$IDROOT/hidden/.git"
+  # ...and a linked worktree OF that same bare repo, which is the shape that split its identity in
+  # two: `rev-parse --is-bare-repository` answers about the ENTRY POINT, so the bare repo read from
+  # itself said `true` and read from this worktree said `false`, and the cosmetic `/.git` strip fired
+  # on one reading only. `worktree add` needs a commit and a bare repo has no index to make one
+  # with, so it is minted with plumbing straight into the bare repo — no second checkout, no push.
+  # The identity is passed explicitly: a machine with no `user.email` would otherwise fail HERE, and
+  # a fixture that failed to build is caught by the floor below rather than read as a passing rule.
+  GIT_AUTHOR_NAME=sdd GIT_AUTHOR_EMAIL=sdd@invalid \
+  GIT_COMMITTER_NAME=sdd GIT_COMMITTER_EMAIL=sdd@invalid \
+    git -C "$IDROOT/hidden/.git" commit-tree \
+      "$( git -C "$IDROOT/hidden/.git" hash-object -w -t tree /dev/null )" -m seed \
+    > "$IDROOT/hidden-seed"
+  git -C "$IDROOT/hidden/.git" branch -f main "$(cat "$IDROOT/hidden-seed")"
+  git -C "$IDROOT/hidden/.git" worktree add -q "$IDROOT/hiddenwt" main
 ) >/dev/null 2>&1
 ln -sfn "$IDROOT/plain" "$IDROOT/plain-link"
 
@@ -1161,6 +1211,21 @@ assert_eq "identity: a bare repo that lives in a dir named .git is itself, not t
   "yes" \
   "$( id="$(id_of "$IDROOT/hidden/.git")"
       case "$id" in */hidden/.git) echo yes ;; *) echo "no:${id:-<empty>}" ;; esac )"
+# ...and the OTHER entry point into that same repository has to agree, which is the half the rule
+# above cannot state about itself. `--is-bare-repository` is a property of the entry point, not of
+# the repository: it said `true` from the bare repo and `false` from this worktree of it, the strip
+# fired on the second reading only, and one repository answered `/x/.git` and `/x` — the very
+# collapse-and-split this function exists to prevent, reached without any exotic environment.
+# DIFFERENTIAL and not a literal path: the two readings are compared to EACH OTHER, so no spelling
+# of the formula satisfies it by agreeing with the test's own idea of it. `/hidden/.git` on the
+# right is the anti-vacuity half — two empty reads are also "equal", and a reader that stripped
+# BOTH would agree at `/hidden`, which is a directory that is nobody's repository.
+assert_eq "identity: and a worktree of that bare repo resolves to the SAME repo, not to its parent" \
+  "same /hidden/.git" \
+  "$( a="$(id_of "$IDROOT/hidden/.git")"; b="$(id_of "$IDROOT/hiddenwt")"
+      if [ "$a" = "$b" ]; then s=same; else s="split:${a:-<empty>}|${b:-<empty>}"; fi
+      case "$b" in */hidden/.git) t=/hidden/.git ;; *) t="${b:-<empty>}" ;; esac
+      printf '%s %s' "$s" "$t" )"
 
 # Differing strings are not yet the property that matters. THIS is: a row born in one submodule is
 # not readable as its sibling own. Broken, both readings answer 1 — they AGREE, and the agreement
@@ -1344,9 +1409,14 @@ assert_eq "unattributable shapes: absent, null and empty are one 'names no proje
   "$(jq -c '.excluded' <<< "$ser_shapes")"
 # The one that mattered outside a git repo: there $repo is itself empty, so a `repo: ""` row
 # compared EQUAL to it and was counted local in a repo that does not exist.
-assert_eq "unattributable shapes: and standing outside any repo, an empty repo field is still nobody's" "0" \
+# ⚠️ PAIRED with the bucket, in ONE invocation, and that is the whole point: read alone, the `0` on
+# the left is indistinguishable from a command that read nothing at all — a `kaizen --series` that
+# died, printed no JSON and left jq with empty input answers `0` too, and the assertion would call
+# that a passing rule. The `3` is the witness that the three rows were seen and placed; only then
+# does the `0` mean "seen and refused" instead of "never looked".
+assert_eq "unattributable shapes: and standing outside any repo, an empty repo field is still nobody's" "0 3" \
   "$( cd "$OUTSIDE" && SDD_STATE_DIR="$OUTSIDE/norepshapes" "$SDD" kaizen --series 2>/dev/null \
-       | jq -r '.guard.sessions' )"
+       | jq -r '"\(.guard.sessions) \(.excluded.no_repo)"' )"
 
 # A row with no `event` at all, or an event nobody recognizes yet: the reviewer's exact repro. It
 # must be counted, not merely fail to crash. It carries a `repo` ON PURPOSE, and that is the
