@@ -2642,7 +2642,7 @@ kaizen_series() {
     # field over. Everything the guard says about itself comes from here.
     | (($latest.missions_with_session) // 0) as $observed
     # Derived from the WHOLE comparable slice, never from $latest alone: a degenerate axis is a
-    # property of the SET of kit versions (every one of them bought exactly one session), which no
+    # property of the SET of recent kit versions (each bought exactly one session), which no
     # single group can state about itself. It adds no fact to the ledger and changes no verdict —
     # it explains one.
     | ($ok | degenerate_axis) as $degenerate
@@ -2817,7 +2817,9 @@ kaizen_axis_note() {
   # has nothing to explain about a file it could not parse.
   series="$(kaizen_series 2>/dev/null)" || return 0
   [ "$(jq -r '.guard.degenerate_axis' <<< "$series")" = "true" ] || return 0
-  warn "the kit_sha axis is degenerate here: every kit version in this series bought exactly one session"
+  # No count in the sentence on purpose: the window is `guard_floor` and writing "3" here would be
+  # a third copy of a number the jq program already owns, drifting the day the floor moves.
+  warn "the kit_sha axis is degenerate here: the recent kit versions each bought exactly one session"
   dim "  This repo BUILDS the kit, so each session commits and the next one lands on a fresh sha."
   dim "  The floor of 3 missions per kit version is unsatisfiable here, and 'indeterminado' is then"
   dim "  the CORRECT verdict, not a missing mission: evidence comes from real target repos (ADR 0003)."

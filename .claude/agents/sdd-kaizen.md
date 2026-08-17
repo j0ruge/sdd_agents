@@ -31,12 +31,15 @@ series in the same process that wrote your prompt: an option that reached one ha
 other puts them on different `latest` shas, and since the gate hunts for exactly the
 `kit_sha_judged:` the prompt ordered you to write, the phase becomes *unsatisfiable* rather than
 merely wrong. The JSON gives you, per kit version (`kit_sha`, file order, latest and previous):
-missions, sessions, `moved_rate`, the label tally (`ok` / `leve` / `refez` per mission×phase),
+missions, sessions, `moved_rate`, the label tally (`ok` / `leve` / `refez` per repo×mission×phase),
 escalations by kind, cost, and the guard (`missions_after_change`, `missions_with_session`,
 `sessions`, `sufficient`, `degenerate_axis`). The floor is `missions_with_session`, not
 `missions_after_change`: a mission that stopped the line without spending a session left you
-nothing to read. `degenerate_axis: true` means every kit version in the slice bought exactly one
-session — the shape of the repo that BUILDS the kit, where each session commits and the next lands
+nothing to read. A mission is identified by `(repo, mission)` and never by the slug alone — slugs
+are dated and repeat across projects, so under `--all-repos` the repo is what keeps two projects
+apart; each `detail` entry names its own. `degenerate_axis: true` means the **last three** kit
+versions in the slice each bought exactly one session — the shape of the repo that BUILDS the kit,
+where each session commits and the next lands
 on a fresh sha. Then `sufficient: false` is structural, not a matter of waiting: say so in the
 verdict and cite ADR 0003, instead of writing "a few more missions and we will know". It also counts
 what it excluded, in **five** buckets — dirty-kit rows, unrecognized rows, the meta rows your own

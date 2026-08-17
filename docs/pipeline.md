@@ -486,7 +486,7 @@ kit versions (by
 **file order** of first appearance, never by sort — and a reappearing old sha rejoins its old
 group), each with missions, `missions_with_session` (the subset that bought an observation — the
 guard below counts these, not the raw mission tally), sessions, `moved_rate`, cost, escalations
-by kind, a per mission×phase `detail`, and a label per group:
+by kind, a per repo×mission×phase `detail` (each entry naming its `repo`), and a label per group:
 
 - `refez` — an escalation, a human `sdd retry`, or the phase's last session still failing its
   gate: the work was pushed again.
@@ -496,22 +496,34 @@ by kind, a per mission×phase `detail`, and a label per group:
 Plus a `guard` (`missions_after_change`, `missions_with_session`, `sessions`,
 `sufficient: missions_with_session >= 3` — a mission that only escalated ran, and is counted as
 one, but bought the judge no observation and so does not raise the floor;
-`degenerate_axis`, true when every kit version in the slice bought exactly one session **and**
-there is more than one of them) and an `excluded`
+`degenerate_axis`, true when the **last three** kit versions in the slice each bought exactly one
+session **and** there is more than one of them) and an `excluded`
 accounting with five reasons
 (`non_comparable` dirty-kit rows, `unrecognized` rows, the `meta` rows the kaizen sessions
 themselves write — the loop never lets its own sessions shift the axis it is judged on —
-`other_repo`, the rows born somewhere else, and `no_repo`, the rows that name no project at all).
+`other_repo`, the rows born somewhere else, and `no_repo`, the rows that name no project at all —
+the field absent, `null`, or empty are one and the same answer).
+
+**A mission is a mission of a repo, not a slug.** Every count above keys off `(repo, mission)`.
+Under one repo that is a no-op; under `--all-repos` it is what keeps two projects that ran the same
+dated slug on the same `kit_sha` from collapsing into one group — mission slugs are dated and
+`sdd kaizen` itself mints `<today>-kaizen`, identical in every repo on the same day.
 The empty-ledger branch prints the same key set with
 zeros: a consumer must never read `null` on one branch where the other gives a number.
 
 `degenerate_axis` exists because `sufficient: false` alone says two different things. In a target
 repo it means "not enough missions yet", and waiting works. In the repo that **builds** the kit
-every session commits, so the next one lands on a fresh `kit_sha`, every version holds exactly one
+every session commits, so the next one lands on a fresh `kit_sha`, each version holds exactly one
 session and the floor is unsatisfiable by construction — waiting never works, and `indeterminado`
 there is the correct answer rather than a broken runner. `sdd kaizen` says so out loud, citing
 [ADR 0003](adr/0003-judge-axis-evidence-from-target-repos.md); the floor does **not** loosen in
 answer to it. One version with one session is not degenerate: that axis has only just started.
+
+It reads the **last three** versions and not the whole history, for the same reason: the ledger is
+append-only, so a single ancient `kit_sha` that once bought two sessions would switch the
+explanation off forever while every recent version sat at one session each — and nothing about
+today could ever switch it back on. Three is the guard floor, held as one definition in the `jq`
+program so the window and the number it explains cannot drift apart.
 
 **The agent gives the verdict.** The `sdd-kaizen` session runs the series as its source of truth
 (citing, never recalculating), interprets the sha axis with `git log`, and writes

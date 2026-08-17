@@ -73,9 +73,13 @@ carry — a symlink, or a **worktree row written before** `c514e36`, when identi
 `git rev-parse --show-toplevel` and every worktree therefore looked like a repo of its own.
 
 **What you do:** run the reader **inside** the repo whose missions you want to judge, and compare
-what `ledger_repo_root` derives — `cd "$(git rev-parse --git-common-dir)/.." && pwd -P`, the shared
-`.git` and never the per-worktree toplevel — with
-`jq -r .repo ~/.sdd/autonomy-log.jsonl | sort -u`. If the question really is cross-project
+what `ledger_repo_root` derives — the shared `.git` **itself**, `cd "$(git rev-parse
+--git-common-dir)" && pwd -P`, with a trailing `/.git` stripped off when the repo is not bare —
+with `jq -r .repo ~/.sdd/autonomy-log.jsonl | sort -u`. ⚠️ Not the PARENT of that path, which was
+the first spelling and merged repositories silently: in a submodule the common dir is
+`/parent/.git/modules/<name>`, so the parent is the same string for every submodule of one parent,
+and in a bare repo it is `.`, so the parent is whatever directory happens to hold the repo. If the
+question really is cross-project
 maturity, that is what `--all-repos` is for: `sdd autonomy --all-repos`, `sdd kaizen --series
 --all-repos`. ⚠️ At read time the comparison is verbatim on both sides by design: a `realpath`
 invented there would silently merge two checkouts the ledger deliberately keeps apart. Full
@@ -83,14 +87,20 @@ contract in [`pipeline.md`](pipeline.md) § "The autonomy ledger".
 
 **Do not:** read this as data loss. What the filter removed is **counted**, and by reason —
 `excluded.other_repo` for rows born elsewhere and `excluded.no_repo` for rows that name no project
-at all, one `N row(s) excluded` line each in the human table, plus a fourth "no data" silence when
-the whole ledger is unattributable. An empty series is `guard.sufficient: false`, which supports
+at all (field absent, `null`, or empty — one answer, not three), one `N row(s) excluded` line each
+in the human table, plus its own "no data" voice per silence: an empty file, a wholly unattributable
+ledger, a cwd in no repo, a ledger of somebody else's rows, and a **mixed** one, which says how the
+rows split because `--all-repos` reaches the foreign ones and can reach none of the unattributable
+ones. An empty series is `guard.sufficient: false`, which supports
 only `indeterminado`. A throwaway fixture repo's numbers read as a verdict about this kit is
 exactly what the default filter exists to prevent.
 
 ⚠️ **`sufficient: false` in the kit repo is not this failure mode.** If `guard.degenerate_axis` is
-`true`, every kit version in the slice bought exactly one session and no number of missions *here*
-will clear the floor — the axis is being read in the repo that builds the kit. `sdd kaizen` says so
+`true`, the last three kit versions in the slice each bought exactly one session and no number of
+missions *here* will clear the floor — the axis is being read in the repo that builds the kit. It
+reads a window and not the whole file on purpose: over all of history one ancient sha with two
+sessions would switch the explanation off forever, and an append-only ledger could never switch it
+back on. `sdd kaizen` says so
 and names [ADR 0003](adr/0003-judge-axis-evidence-from-target-repos.md); the floor is not the
 defect and does not loosen.
 
