@@ -405,6 +405,14 @@ Achados sobre **repos-alvo** vão para o `TODO.md` daquele repo. Este arquivo é
   trocar e reancorar os dois mutantes.
   — descoberto por `humano` na missão `20260817-eixo-do-juiz` (2026-08-17)
 
+- [ ] **`sdd health` aborta calado no meio quando `~/.claude/plugins/cache` não existe** —
+  `bin/sdd:1829` — `find` em diretório ausente devolve 1 e, sob o `set -e` + `pipefail` do runner,
+  a atribuição mata o comando: três `ok` na tela, rc 1, nenhuma palavra dita — os checks 4-6, a
+  proveniência e a catraca nunca rodam. O irmão em `:1856` faz o mesmo quando a baseline não tem
+  linha viva; os dois foram achados pelo fixture hermético do sensor novo, que precisou modelar
+  máquina com o diretório. Direção: `|| true` nos dois, com asserção em `tests/check-health.sh`.
+  — descoberto por `sdd-executor` na missão `20260817-catraca-do-backlog` (2026-08-17)
+
 ### Saída humana e cosmética
 
 - [ ] **43% do `docs/pipeline.md` é um subsistema só, e ele cresce toda missão do ledger** —
@@ -528,6 +536,14 @@ Achados sobre **repos-alvo** vão para o `TODO.md` daquele repo. Este arquivo é
   I13.1 já é história) ou aceitar os ~3 s de estouro, que crescem com o catálogo. — medido por
   `sdd-executor` e `humano` nas missões `20260815-ledger-sem-ponto-cego` e no kaizen do
   paralelismo (2026-08-16)
+
+- [ ] **Sensor novo na suíte é multiplicador, não parcela: custa uma vez por mutante** —
+  `tests/run-all.sh:180` — medido nesta missão: `check-health.sh` roda em **1,5 s** sozinho, dentro
+  do teto de 2 s que o plano fixou, e ainda assim levou a suíte de **2m34s para 7m15s** — roda
+  dentro dos 73 mutantes, +4 s em cada, e a contenção sobre o pool de 8 é super-linear (esperado
+  +36 s, medido +281 s). O item acima fala em crescer com o catálogo; este é outro mecanismo.
+  Direção: rodar por mutante só o sensor que o alcança — decisão do humano, junto com o alvo da D7.
+  — descoberto por `sdd-executor` na missão `20260817-catraca-do-backlog` (2026-08-17)
 
 ### Adiados por YAGNI
 

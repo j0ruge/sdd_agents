@@ -401,8 +401,12 @@ EOF
   for i in 1 2 3; do : > "$tree/tests/check-$i.sh"; done
   probe 'a shrunken surface fails instead of reporting clean' 93 'surface shrank' "$tree" --scan
 
+  # One test file per unit of the floor, minus the bin/sdd that comes free: the tree has to CLEAR
+  # the floor, so this loop moves with it. Left one short, every probe below turns into "surface
+  # shrank" and stops measuring the thing it names — which is how the floor bump of this mission
+  # was caught, by three probes failing at once with the wrong message.
   tree="$box/full"; mkdir -p "$tree/bin" "$tree/tests"; : > "$tree/bin/sdd"
-  for i in 1 2 3 4 5 6 7 8 9 10 11 12; do : > "$tree/tests/check-$i.sh"; done
+  for i in 1 2 3 4 5 6 7 8 9 10 11 12 13; do : > "$tree/tests/check-$i.sh"; done
   probe 'a full clean surface passes' 0 '(0 waived)' "$tree" --scan
 
   # The waived COUNT is the only thing that makes the waiver hole visible in a diff, so it is a
@@ -440,13 +444,13 @@ scan_surface() {
   files="$(surface "$root")"
   n_files="$(grep -c . <<< "$files")"
   # Explicit floor, same reason as the one in check-lang.sh: a glob that stops matching leaves the
-  # loop with nothing to read and the sensor reports "0 violations" — clean by vacuity. 13 paths
-  # today (bin/sdd + twelve suite scripts, minus this file); it was 11 until
-  # tests/check-entrypoint.sh landed and 12 until tests/check-checkpoint.sh did, and it tracks the
-  # real count rather than staying at a number that would still pass while describing a smaller
-  # surface than the one actually scanned.
-  if [ "$n_files" -lt 13 ]; then
-    printf '  FAIL  surface shrank to %d path(s), expected at least 13 — did something move?\n' \
+  # loop with nothing to read and the sensor reports "0 violations" — clean by vacuity. 14 paths
+  # today (bin/sdd + thirteen suite scripts, minus this file); it was 11 until
+  # tests/check-entrypoint.sh landed, 12 until tests/check-checkpoint.sh did and 13 until
+  # tests/check-health.sh did, and it tracks the real count rather than staying at a number that
+  # would still pass while describing a smaller surface than the one actually scanned.
+  if [ "$n_files" -lt 14 ]; then
+    printf '  FAIL  surface shrank to %d path(s), expected at least 14 — did something move?\n' \
       "$n_files" >&2
     return 93
   fi

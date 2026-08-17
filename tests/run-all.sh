@@ -58,12 +58,12 @@ run "entry point cannot fall through into itself" "$ROOT/tests/check-entrypoint.
 # certifying a threshold nobody runs at. The risk table of this mission forbade lowering `-S`;
 # this is what makes the ban a sensor instead of a sentence.
 #
-# The floor moved 12 → 13 when tests/check-entrypoint.sh landed, and 13 → 14 for
-# tests/check-checkpoint.sh. It tracks the real count on purpose: left behind it would still pass,
-# and would go on describing a surface one file smaller than the one it reads — the
-# label-instead-of-artifact shape this whole mission is about.
+# The floor moved 12 → 13 when tests/check-entrypoint.sh landed, 13 → 14 for
+# tests/check-checkpoint.sh, and 14 → 15 for tests/check-health.sh. It tracks the real count on
+# purpose: left behind it would still pass, and would go on describing a surface one file smaller
+# than the one it reads — the label-instead-of-artifact shape this whole mission is about.
 LINT_SEVERITY=warning
-LINT_FLOOR=14
+LINT_FLOOR=15
 
 lint_surface() {
   local files=("$ROOT/bin/sdd") f
@@ -142,6 +142,14 @@ run "gate state machine" "$ROOT/tests/check-gates.sh"
 run "dry-run projection" "$ROOT/tests/check-dry-run.sh"
 run "autonomy ledger" "$ROOT/tests/check-autonomy.sh"
 run "kaizen series and gate" "$ROOT/tests/check-kaizen.sh"
+
+# Deliberately NOT guarded by SDD_MUTANT, unlike the four above. It exists precisely to die inside
+# mut_HEALTH_ratchet_one_way and mut_HEALTH_provenance_blind, so guarding it would leave those two
+# entries scoring points nothing had measured — the vacuity the catalogue exists to hunt, one
+# level up. It reads nothing the mutation sandbox does not copy: bin/sdd, config/schema.md,
+# tests/check-mutation.sh and tests/check-gates.sh, all of them into a fixture of its own, and
+# the fixture's suite is a stub (the real one is THIS file, and running it here would recurse).
+run "sdd health discriminates" "$ROOT/tests/check-health.sh"
 
 # This one used to be guarded like the three above, on the reasoning "preflight is not a gate, so
 # it can never score a point inside a mutant". That stopped being true the day the file also

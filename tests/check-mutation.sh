@@ -837,6 +837,40 @@ mut_KAIZEN_prompt_series_unflagged() {
   sed -i 's@ledger_flags=" --all-repos"@ledger_flags=""@' "$1"
 }
 
+# The ratchet of `sdd health` stops being a ratchet and becomes a one-way gate: a NEW finding
+# still fails, a baseline line that stopped being a finding no longer does. The debt list turns
+# into folklore — it can only grow, and every line anyone ever pays off stays in the file
+# describing a world that no longer exists. Nothing breaks, nothing is malformed, and the command
+# still prints a green "ratchet: N known debt(s)"; the number is simply about nothing.
+#
+# Caught by tests/check-health.sh, which until this mission had no ancestor: cmd_health was the
+# only command of the runner no sensor ran. It kills assertion 2 (the stale line) and assertion 3
+# (the differential) and leaves assertion 1 alive — and that PAIR is the point. A one-way ratchet
+# that still refused the other direction with the same sentence would satisfy assertions 1 and 2
+# while distinguishing nothing; the survivor is what proves the differential measures.
+#
+# Anchored on the herestring of the second loop, which is the only thing that tells the two loops
+# apart: they are the same three lines otherwise, and the first reads `<<< "$known"`.
+#
+# The `@` delimiter is not a taste: with sed's usual `|`, the substitution opens with the literal
+# text `s|grep -q`, and tests/check-pipefail.sh reads that as a writer piped into `grep -q` — the
+# SIGPIPE bug it exists to forbid. It was right to: a human reading `|grep -q` sees a pipe too.
+mut_HEALTH_ratchet_one_way() {
+  sed -i 's@grep -qxF "\$line" <<< "\$HEALTH_FINDINGS"@true@' "$1"
+}
+
+# Fixture provenance always agrees. `sdd health` goes on reporting "provenance: N fixture(s) match
+# the installed skills" while comparing nothing — which is the exact shape of the most expensive
+# bug in the kit's history, now inside the instrument built to catch it. A fixture written from
+# memory agrees with the wrong gate forever, and this check is the only thing that ever notices.
+#
+# It sabotages the COMPARISON and not the skill lookup: a mutant that hid the template would be
+# SKIPPED by design (missing skill ⇒ skipped, like the absent linter), so it would fail nothing
+# and score a point for a door that was never open.
+mut_HEALTH_provenance_blind() {
+  sed -i 's|    if \[ "\$line" = "\$fix" \]; then checked|    if true; then checked|' "$1"
+}
+
 CATALOG=(
   PLAN_empty_approval
   PLAN_kaizen_born_blind
@@ -908,6 +942,8 @@ CATALOG=(
   KAIZEN_degenerate_axis_session_unit
   KAIZEN_degenerate_axis_window_sorted
   KAIZEN_series_rc_dropped
+  HEALTH_ratchet_one_way
+  HEALTH_provenance_blind
 )
 
 # Mutations that are NOT caught today, each with the increment that closes it. Ratchet in both
