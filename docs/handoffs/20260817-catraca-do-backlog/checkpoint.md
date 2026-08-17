@@ -1,6 +1,6 @@
 ---
 missao: 20260817-catraca-do-backlog
-atualizado: 2026-08-17 19:42
+atualizado: 2026-08-17 20:26
 ---
 
 # Checkpoint — a catraca do backlog
@@ -23,7 +23,7 @@ atualizado: 2026-08-17 19:42
 |---|---|---|---|---|
 | I1 | sensor `check-health.sh` sobre `cmd_health` | `o=$(bash tests/check-health.sh 2>&1); grep -c '^  ok    the ratchet fails on a stale baseline line' <<< "$o"` → `1` | done | afe5db6 |
 | I2 | catraca da contagem de achados | `o=$(bash tests/check-health.sh 2>&1); grep -c '^  ok    a baseline off by one fails both ways' <<< "$o"` → `1` | done | 36a6eb6 |
-| I3 | cinco defeitos de saída do `cmd_autonomy` | `o=$(bash tests/check-autonomy.sh 2>&1); grep -c '^  ok    output:' <<< "$o"` → `5` | pending | — |
+| I3 | cinco defeitos de saída do `cmd_autonomy` | `o=$(bash tests/check-autonomy.sh 2>&1); grep -c '^  ok    output:' <<< "$o"` → `5` | done | 02e5da6 |
 | I4 | mutações que faltam no catálogo | `grep -cE '^mut_[A-Za-z0-9_]+\(\) \{' tests/check-mutation.sh` → `77` | pending | — |
 | I5 | política escrita e baseline no número real | `o=$(bash tests/check-health.sh 2>&1); grep -c '^  ok    the ratchet policy is written where the next mission meets it' <<< "$o"` → `1` | pending | — |
 
@@ -97,6 +97,44 @@ atualizado: 2026-08-17 19:42
 - 2026-08-17 19:42 · `I2` · Métrica 1 provada **fora do fixture**, no repo real: baseline por 1
   errada reprova com as duas mensagens (`finding outside the baseline: todo-findings 71` e
   `stale baseline: 'todo-findings 70'`), rc 1. Baseline restaurada por `trap`.
+
+- 2026-08-17 20:26 · `I3` · **Os cinco Checks re-derivados antes de escrever: os cinco reproduzidos
+  à mão** (`US$ 2` e `US$ 1.5`; as duas mensagens de `die` idênticas; os dois blocos "no data"
+  byte a byte iguais; `zzzzzzz` escrito primeiro saindo depois de `aaaaaaa`; duas linhas em branco).
+  As cinco asserções nasceram vermelhas **cada uma pelo seu motivo**, lidas uma a uma na saída.
+- 2026-08-17 20:26 · `I3` · **Desvio do plano, deliberado: `printf` não entrou.** O plano e o
+  `TODO.md` diziam "`printf` no lugar da interpolação"; a linha inteira da tabela nasce dentro de um
+  único programa `jq`, e o `jq` 1.7 não tem `printf` — buscar o número de volta no bash partiria uma
+  linha em duas linguagens. Saiu `def usd`, que arredonda para centavo INTEIRO e re-parte, com o
+  porquê no comentário do ponto de mudança.
+- 2026-08-17 20:26 · `I3` · **Uma das duas mensagens de `die` foi mantida de propósito.** Só a do
+  *shape* ganhou frase nova: `kaizen_series` (`bin/sdd:2565`) recusa o mesmo ledger ilegível com as
+  mesmas palavras da outra, e renomeá-la moveria a colisão de dentro de um comando para entre dois —
+  a versão mais difícil de notar. Quem chegar aqui querendo "terminar o serviço": não termine.
+- 2026-08-17 20:26 · `I3` · **O programa `jq` do `cmd_autonomy` é UMA string em aspas simples, e um
+  apóstrofo de comentário a encerra no meio.** Custou dois ciclos: `human's` e `judge's` num
+  comentário novo, e `bash -n` acusou erro de sintaxe ~30 linhas depois da frase que quebrou. Toda
+  a prosa de lá é escrita contornando o possessivo — agora com o ⚠️ no topo do programa, que era o
+  lugar onde a regra faltava.
+- 2026-08-17 20:26 · `I3` · Sabotagem adversarial: **10 degradações, 10 pegas**. Em laboratório
+  limpo (baseline 0 falhas) cada uma reprova **exatamente uma** asserção — a sua. Nenhum rc
+  compartilhado, nenhuma asserção redundante. As quatro últimas miram só os **pisos** contra
+  vacuidade (coluna de dinheiro some, contabilidade some, frase some do fonte, tabela some): os
+  quatro são carga, nenhum é enfeite.
+  ⚠️ A primeira rodada concluiu **nada** em 3 dos 4 probes de piso — o `perl -0pe` não casou por
+  escape de `\(`. O harness grita `SABOTAGE-BROKEN` quando a edição não muda o arquivo ou quebra o
+  `bash -n`, e foi ele que barrou as três conclusões vazias. Probe sem prova de que sabotou não vale.
+- 2026-08-17 20:26 · `I3` · **A baseline da catraca subiu 71 → 72 neste commit**, e não no I5. Este
+  incremento registrou um achado (a linha em branco que sobra ENTRE exclusões consecutivas — mesma
+  família, fora do item relatado). O plano reserva o número ao I5, mas deixar a catraca vermelha por
+  dois incrementos é o oposto do que ela existe para fazer: crescer é permitido, aparecer no diff é
+  a regra. `sdd health` → `kit healthy`, `ratchet: 7 known debt(s), none new`. O I5 remede no fim.
+- 2026-08-17 20:26 · `I3` · Catálogo segue em **73**, `0 known gap(s)` — o I3 não acrescenta
+  mutação por desenho (o plano só prevê as 4 do I4). Logo o `77` do I4 continua de pé (`73 + 4`).
+- 2026-08-17 20:26 · `I3` · **Os 5 itens que este incremento fecha ainda NÃO levam `RESOLVIDO por`**
+  — é tarefa do I5, e ficam em `TODO.md:440`, `:446`, `:453`, `:459` e `:466` (seção "Saída humana e
+  cosmética"), todos com hash `02e5da6`. As âncoras `bin/sdd:` que eles citam continuam defasadas;
+  a tabela boa está no `01-plano.md`.
 
 ## Incrementos de fix (QA)
 
