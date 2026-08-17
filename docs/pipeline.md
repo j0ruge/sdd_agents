@@ -62,6 +62,14 @@ open, checklists, self-containment, a Check per increment, the version) **with e
 well-run grill is the approval — the human was present. Any criterion left open and the planner
 leaves `aprovacao` empty, and the runner stops asking for explicit approval.
 
+**And that explicit approval is a command, not a hand edit.** `sdd approve <mission>` prints what is
+being approved — the title, the PLAN-AUTO evidence, the increments, the open questions — asks
+`[y/N]`, and only on an explicit yes writes `aprovacao: humano-<date>` and commits **that one file**.
+It never opens a session: approving is the one decision in the pipeline that has to come from
+outside it. Whenever the gate stalls on the field it names the command in its own reason, because a
+refusal that does not carry its remedy sends the human back to typing `humano-YYYY-MM-DD` into the
+frontmatter by hand — which is the failure the command exists to end.
+
 **And `auto` is refused outright on a kaizen-born plan.** When `05-verdict.md` sits beside the
 mission's artifacts, the plan came out of [the kaizen loop](#the-kaizen-loop) — the kit planning
 its own next change, with no human in the room. The premise `auto` rests on is false there, so the
@@ -192,6 +200,12 @@ real guarantee is narrower, and it is this:
 
 - **it spends no session:** no `claude` is invoked;
 - **it does not touch the mission artifacts:** nothing is written to `docs/handoffs/<mission>/`;
+- **it does not switch branches:** `sdd run` honours the `branch:` field of `00-missao.md` —
+  checking the declared branch out, or cutting it from the branch you are standing on — and
+  `ensure_mission_branch()` returns before any of that in a projection. A checkout is a mutation of
+  the working tree, which is the half the dry-run does promise, and it is the loudest state change
+  the runner makes: leaving it out of this list would make the list read as complete while the one
+  thing a human fears from a projection went unmentioned;
 - **it does not write to the journal:** the guard lives inside `pipeline_log_line()`, not in the
   callers. Three paths log before any session (checkpoint `blocked`, budget blown, two sessions
   with no progress) and a fourth added tomorrow would be born with the defect again; a single

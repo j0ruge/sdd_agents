@@ -50,6 +50,7 @@ runner says nothing about language, and each session follows whatever the existi
 ## Usage
 
 ```bash
+sdd approve <mission>        # show the plan and, on an explicit y, write the human approval and commit it
 sdd run <mission>            # run from the first unsatisfied gate through to the PR
 sdd status <mission>         # where it stands, what is missing, why it stalled
 sdd why <mission> [PHASE]    # why that phase's gate did not pass — start any diagnosis here
