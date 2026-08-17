@@ -246,6 +246,28 @@ atualizado: 2026-08-17 10:10
   `sdd kaizen --dry-run` projeta `kaizen --series` e `sdd kaizen --dry-run --all-repos` projeta
   `kaizen --series --all-repos`, nas duas formas do prompt (a `claude -p $'...'` escapada e o bloco
   `│` legível). Uma saída só não distinguiria o conserto de um prompt com a flag fixa.
+- 2026-08-17 · `DOCS` · **o F1 da r3 trocou a unidade do `degenerate_axis` e tudo que a descreve
+  ficou atrás**: OITO dos DEZ lugares seguiam em "exactly one session" — `docs/adr/0003` (o único
+  que o runner cita na saída), `agents/sdd-kaizen.md` + a cópia `.claude/`, `docs/failure-modes.md`
+  (fora do inventário de seis da r3), duas passagens do `docs/pipeline.md` e — os piores — TRÊS
+  comentários do `bin/sdd` (`:2586`, `:2648`, `:2735`) e o `warn` do `:2926`, a frase que o HUMANO lê. A fonte da verdade
+  driftou de si mesma: o `jq` contava missões entre um comentário e uma frase que diziam sessões.
+  Fechados em `c53500b` (docs) e `43f7eb2` (runner). Quem consertar campo do `guard` grepa os
+  dez antes de fechar — **um arquivo não é um lugar**.
+- 2026-08-17 · `DOCS` · **os dois drifts de dentro do runner apareceram por âncora podre**: o item do
+  `sdd kaizen`-em-worktree apontava `bin/sdd:2735`, a linha andou, e conferir a âncora caiu no
+  comentário mentiroso. Reancorado para `:2963`. Âncora velha do `TODO.md` não é só ruído.
+- 2026-08-17 · `DOCS` · a coluna "Antes" do `KAIZEN_LOG` foi **medida, não copiada**, e por isso
+  achou que a entrada anterior registra `490` asserções para um tree que mede `435`: `490` é
+  `grep -c '^  ok'`, que soma 55 linhas de TRÊS espaços que o runner imprime nos fixtures. `main` e
+  HEAD remedidos com a âncora de quatro espaços, sequencialmente: 435 → 509. Item no `TODO.md`.
+- 2026-08-17 · `DOCS` · **a quinta métrica do `00-missao.md` não foi cumprida**, e o handoff diz isso
+  em voz alta: 4 itens com `RESOLVIDO por`, não 5. O lembrete pós-pipeline não é fechado por
+  `--all-repos` (só é chamado de `cmd_run`, que não tem a flag). O `00-missao.md` **não** foi editado
+  — corrigir a métrica depois do fato apaga a evidência de que a previsão estava errada.
+- 2026-08-17 · `DOCS` · um `RESOLVIDO por` estava quebrado entre duas linhas e a triagem do kaizen
+  grepa a frase inteira: `grep -c` via 3 fechados onde havia 4. Convenção lida por `grep` sem sensor
+  que a meça — o `check-todo.sh` mede âncora, data e tamanho, não isto.
 - 2026-08-17 · `EXEC F1` · nenhum achado fora de escopo, nada acrescentado ao `TODO.md`. A pendência
   de política herdada da QA (o juiz pode julgar o kit com linhas de repo-alvo? — possível ADR 0004)
   **não** virou item de `TODO.md`: é decisão humana e vive na seção do handoff que o PR carrega.

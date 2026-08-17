@@ -318,12 +318,12 @@ Achados sobre **repos-alvo** vão para o `TODO.md` daquele repo. Este arquivo é
   — descoberto por `humano` na missão `20260816-runner-sem-dividas` (2026-08-16)
 
 - [ ] **O schema da série não tem sensor de drift contra a prosa que o descreve** — `bin/sdd:2738`
-  vs `docs/pipeline.md:499`, `agents/sdd-kaizen.md:40`, `docs/adr/0003:57` e
-  `docs/failure-modes.md:99` — produzido em dois lugares (o `jq` e o literal do ledger vazio,
-  `:2558`) e descrito em **sete**; nada casa os campos do `guard` com quem os promete. Cobrado 6×:
-  na DOCS de `20260817-eixo-do-juiz`, **cinco** dos sete descreviam a unidade que o F1 da r3 trocara
-  horas antes (sessão → missão) — inclusive o ADR que o runner cita na saída e a folha do próprio
-  juiz. Direção: extrair os campos do `jq` e cobrá-los na doc.
+  vs `:2735`, `:2926`, `docs/pipeline.md:499`, `docs/adr/0003:57`, `agents/sdd-kaizen.md:40` e
+  `docs/failure-modes.md:99` — produzido em dois lugares (o `jq` e o literal vazio, `:2558`) e
+  descrito em **dez**, QUATRO deles dentro do `bin/sdd`. Cobrado 6×: na DOCS de
+  `20260817-eixo-do-juiz`, **oito** dos dez diziam a unidade que o F1 da r3 trocara horas antes
+  (sessão → missão) — o ADR que o runner cita, a folha do juiz, e a própria frase que o runner
+  IMPRIME. Direção: extrair os campos do `jq` e cobrá-los na doc.
   — descoberto por `sdd-executor` na missão `20260816-runner-sem-dividas` (2026-08-16)
 
 ### Contrato e configuração
@@ -344,7 +344,7 @@ Achados sobre **repos-alvo** vão para o `TODO.md` daquele repo. Este arquivo é
   fundia submódulos irmãos e bares vizinhos numa identidade só, em silêncio; `913cb3f` corrigiu.
   — descoberto por `sdd-reviewer` na missão `20260816-kit-como-alvo` (2026-08-16)
 
-- [ ] **`sdd kaizen` recusa rodar de um worktree do próprio kit** — `bin/sdd:2735` — a porta
+- [ ] **`sdd kaizen` recusa rodar de um worktree do próprio kit** — `bin/sdd:2963` — a porta
   "estou no repo do kit?" compara `kit_root` (`--show-toplevel` de `$SDD_HOME`) com `$REPO_ROOT`,
   e o toplevel é por worktree: de um worktree do kit os dois divergem e o comando morre em
   "run it in the kit repo". Mesma classe que `c514e36` acabou de fechar no ledger, em outra
@@ -424,6 +424,13 @@ Achados sobre **repos-alvo** vão para o `TODO.md` daquele repo. Este arquivo é
 
 ### Saída humana e cosmética
 
+- [ ] **43% do `docs/pipeline.md` é um subsistema só, e ele cresce toda missão do ledger** —
+  `docs/pipeline.md:326-568` — as seções "The autonomy ledger" (149 linhas) e "The kaizen loop" (94)
+  somam **243 de 568** num arquivo que é o índice do pipeline; esta missão engordou as duas. Índice
+  que carrega profundidade é o doc que a próxima sessão não lê inteiro. Direção: `references/` para
+  o ledger + juiz, com o índice roteando — **não** executar no meio de outra missão, é refator de
+  estrutura e merece a sua. — descoberto por `sdd-docs` na missão `20260817-eixo-do-juiz` (2026-08-17)
+
 - [ ] **`BLOCKED in <FASE> — N sessions` conta voltas do laço, não sessões** — `bin/sdd:1626` —
   `attempts[$phase]` sobe em toda volta que chega ao topo com a fase, inclusive as que não abrem
   sessão nenhuma. Medido no fixture do I9: REVIEW imprime `3 sessions without satisfying the gate`
@@ -489,12 +496,12 @@ Achados sobre **repos-alvo** vão para o `TODO.md` daquele repo. Este arquivo é
   degrau fantasma. Direção: nomear o comando ao lado do número, como a linha do `score:` já faz.
   — descoberto por `sdd-docs` na missão `20260817-eixo-do-juiz` (2026-08-17)
 
-- [ ] **A `CLAUDE.md` diz que `grep -l selftest tests/` devolve cinco, e devolve seis** —
-  `CLAUDE.md:136` — o sexto é o `jobs_selftest()` do `check-mutation.sh:63`, que mede o pool de
-  jobs e já estava lá antes desta missão (medido em `main` e no HEAD: seis dos dois lados). A frase
-  existe para ensinar que a rubrica é "a mutação não alcança" e **não** "tem `selftest()`" — a
-  contagem é a evidência dela, e evidência errada convida a próxima sessão a corrigir para o lado
-  errado. Direção: dizer seis nomeando o `jobs_selftest`, ou parar de contar por `grep`.
+- [ ] **O `kaizen_axis_note` promete não repetir o piso e o repete duas linhas abaixo** —
+  `bin/sdd:2924` vs `:2928` — o comentário diz "no count in the sentence on purpose: writing '3'
+  here would be a third copy of a number the jq program already owns", e o `dim` seguinte imprime
+  "The floor of 3 missions per kit version". O `guard_floor` do `jq` é o dono; esta é a cópia que
+  drifta calada no dia em que o piso mudar, e é a **única** das seis vozes do schema que o humano lê
+  em voz alta. Direção: interpolar o `guard_floor` da série, ou tirar o número da frase.
   — descoberto por `sdd-docs` na missão `20260817-eixo-do-juiz` (2026-08-17)
 
 - [ ] **O que arma a corrida do Jidoka é a POSIÇÃO da linha `blocked`, não o tamanho do

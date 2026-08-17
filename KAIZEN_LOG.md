@@ -83,28 +83,39 @@ catálogo é **previsão, não meta**. Cravar 60 e parar ali teria transformado 
 dívida — dois deles fail-open, e um deles um fail-open sobre a propriedade central do conserto da
 rodada **anterior**. O número que vale é `0 known gap(s)`, que se manteve nas dez entradas.
 
-### O conserto trocou a unidade, e cinco documentos ficaram na unidade velha
+### O conserto trocou a unidade, e a fonte da verdade driftou de si mesma
 
 O achado desta fase DOCS, e o mais barato de repetir: o F1 da r3 trocou a unidade do
 `degenerate_axis` de **sessões** para **missões** — porque é `missions_with_session` que o piso
 conta, e duas sessões da mesma missão deixavam o piso igualmente insatisfazível enquanto calavam o
-campo. O código mudou, com comentário medido. A prosa não: **cinco** dos sete lugares que descrevem
-o schema seguiam dizendo "exactly one session" horas depois, incluindo `docs/adr/0003` — o único que
-o runner **cita na saída** — e `agents/sdd-kaizen.md`, a folha que o próprio juiz segue.
+campo. O `jq` mudou, com comentário medido. Tudo o que o **enuncia**, não: **oito** dos dez lugares
+seguiam dizendo "exactly one session" horas depois — e quatro deles estão dentro do `bin/sdd`. O
+comentário duas linhas **acima** do predicado dizia sessões, e o `warn` que o humano lê imprimia "the
+recent kit versions each bought exactly one session" enquanto o código ao lado contava missões.
 
 | | Antes (`5056709`) | Depois (esta fase) |
 |---|---|---|
-| Lugares que descrevem o schema da série | 6 conhecidos (`docs/failure-modes.md` fora do inventário) | **7**, nomeados no item do `TODO.md` |
-| Deles com a unidade certa do `degenerate_axis` | **2 de 7** (`bin/sdd`, `CONTEXT.md` — que não citava unidade) | **7 de 7** |
+| Lugares que enunciam a unidade do eixo | 6 conhecidos | **10** nomeados: `docs/failure-modes.md` estava fora do inventário, e contar `bin/sdd` como **um** era grosseiro — ele a enuncia em três comentários e na frase que imprime |
+| Deles com a unidade certa | **1 de 10** (só o `jq`; o `CONTEXT.md` não enunciava nenhuma) | **10 de 10** |
 | Vezes que o item "schema sem sensor de drift" cobrou preço | 5 | **6** |
 
 A r3 fechou em Grade A afirmando "os seis lugares dizem a mesma coisa", e estava de boa-fé: ela
 consertou o sexto que a r2 deixara velho. O que nenhuma rodada podia ver é que o **próprio conserto
-dela** criou drift novo em cinco — mudar unidade é mudar contrato, e contrato quebrado em N lugares
-é o modo de falha mais caro deste kit, escrito na `CLAUDE.md` desde a primeira missão. A conclusão
-não é "revisar melhor": é que **este repo não tem sensor de drift entre os campos do `jq` e a prosa
-que os promete**, e enquanto não tiver, a conta volta. Sexta cobrança, com âncora e direção no
-`TODO.md`.
+dela** criou drift novo em oito — mudar unidade é mudar contrato, e contrato quebrado em N lugares
+é o modo de falha mais caro deste kit, escrito na `CLAUDE.md` desde a primeira missão. Duas leituras
+que valem mais que "revisar melhor":
+
+- **um arquivo não é um lugar.** "O código é a fonte da verdade" some quando o mesmo arquivo carrega
+  cinco enunciados da mesma regra — o predicado, três comentários que o explicam e a frase que imprime.
+  Foi um comentário mentiroso a **um `sed -n` de distância** do predicado que sobreviveu a três
+  rodadas de review, e a frase impressa é a única das nove vozes que o humano lê;
+- **âncora podre pagou por si.** Os dois drifts de dentro do runner apareceram porque uma âncora
+  `bin/sdd:2735` do `TODO.md` estava velha e caiu **no comentário errado**. Seguir uma âncora até o
+  lugar errado achou o que a leitura dirigida não achou.
+
+E a conclusão estrutural é a mesma de sempre: **este repo não tem sensor de drift entre os campos do
+`jq` e o que os promete**, e enquanto não tiver, a conta volta. Sexta cobrança, com as dez âncoras e
+a direção no `TODO.md`.
 
 ### O que ficou sabido, e não foi consertado
 
@@ -122,10 +133,12 @@ que os promete**, e enquanto não tiver, a conta volta. Sexta cobrança, com ân
 - **O `sdd kaizen` recusa rodar de um worktree do próprio kit** pela mesma pergunta por worktree que
   o ledger acabou de deixar de fazer, noutra porta (`bin/sdd:2735`). Está no `TODO.md`, achado pela
   EXEC do I4 — a classe fechada num sítio e viva no vizinho.
-- **A `CLAUDE.md` afirma que `grep -l selftest tests/` devolve cinco, e devolve seis.** Já estava
-  errado antes desta missão (medido nos dois lados), então virou item em vez de conserto por
-  decreto: a contagem é a **evidência** de uma regra sobre rubrica, e evidência errada convida a
-  próxima sessão a corrigir para o lado errado.
+- **O `TODO.md` aceita duplicata, e a fase DOCS provou isso contra si mesma.** Abri um item sobre a
+  contagem de `selftest` da `CLAUDE.md` (cinco escritos, seis medidos) e ele **já estava lá**, aberto
+  pela fase DOCS da missão anterior um dia antes. O `tests/check-todo.sh` mede forma, âncora, data e
+  teto — nunca duplicata —, então as duas teriam ficado verdes lado a lado, cada uma parecendo
+  confirmar a outra. Retirado. A conduta cabe numa linha e não precisa de sensor: **grepar o tema
+  antes de abrir item.**
 - **Este arquivo não fixa os instrumentos das próprias linhas**, e a linha das asserções já pagou por
   isso (⚠️ acima). Item aberto com direção: nomear o comando ao lado do número, do jeito que a linha
   do score já faz de graça ao citar `score:`.
