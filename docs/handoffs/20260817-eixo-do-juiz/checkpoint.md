@@ -1,6 +1,6 @@
 ---
 missao: 20260817-eixo-do-juiz
-atualizado: 2026-08-17 09:40
+atualizado: 2026-08-17 12:10
 ---
 
 # Checkpoint — o eixo do juiz
@@ -30,7 +30,7 @@ atualizado: 2026-08-17 09:40
 |---|---|---|---|---|
 | I1 | ADR 0003: a pergunta que o juiz responde | `o=$(bash tests/check-kaizen.sh 2>&1); grep -c '^  ok    adr 0003' <<< "$o"` → `2` | done | 3547a83 |
 | I2 | o runner explica o `indeterminado` estrutural | `o=$(bash tests/check-kaizen.sh 2>&1); grep -c '^  ok    degenerate axis' <<< "$o"` → `2` | done | abac043 |
-| I3 | `--all-repos` nos três leitores | `o=$(bash tests/check-autonomy.sh 2>&1); grep -c '^  ok    all-repos' <<< "$o"` → `2` | pending | — |
+| I3 | `--all-repos` nos três leitores | `o=$(bash tests/check-autonomy.sh 2>&1); grep -c '^  ok    all-repos' <<< "$o"` → `2` | done | d62f08c |
 | I4 | identidade de repo sobrevive a worktree | `o=$(bash tests/check-autonomy.sh 2>&1); grep -c '^  ok    worktree' <<< "$o"` → `2` | pending | — |
 | I5 | linha sem `repo` ganha balde próprio | `o=$(bash tests/check-autonomy.sh 2>&1); grep -c '^  ok    no-repo' <<< "$o"` → `2` | pending | — |
 
@@ -82,6 +82,30 @@ atualizado: 2026-08-17 09:40
 - 2026-08-17 · `EXEC I2` · métrica da missão medida no repo real: `sdd kaizen --series` devolve
   `guard.degenerate_axis: true` com `sufficient: false`, e `sdd kaizen --dry-run` imprime a
   explicação citando **ADR 0003**. O I3 herda a série já com a chave nova.
+- 2026-08-17 · `EXEC I3` · suíte verde antes (`score: 57`) e depois (**58**, `0 known gap(s)`),
+  `sdd health` verde nos cinco. As 2 asserções nasceram **vermelhas** (rc 1, contagem 0), falhando
+  pelo motivo certo: `autonomy --all-repos` ignorava o argumento e `kaizen --series --all-repos`
+  morria em "unknown kaizen option".
+- 2026-08-17 · `EXEC I3` · métrica da missão medida no ledger REAL: `sdd autonomy` lê 49 linhas,
+  `--all-repos` lê 60; na série, `excluded.other_repo` cai de **11** para **0**. `missions` não
+  sobe no ledger real porque o sha corrente tem uma missão só — é o eixo degenerado que o I2
+  expôs, não a flag; quem mede a subida é o fixture de dois repos do sensor.
+- 2026-08-17 · `EXEC I3` · **os dois setters de `LEDGER_ALL_REPOS=1` são bytes idênticos**, então
+  `sed` por linha não os distingue: dois probes de sabotagem "por site" mataram os dois de uma vez
+  e quase concluíram falso. Refeitos por número de linha **com prova de que só 1 linha mudou** —
+  aí sim, matar o de `cmd_autonomy` deixa a asserção do juiz verde (e vice-versa). É por isso que
+  a mutação usa `sed …/g`: matar um site mediria meia flag.
+- 2026-08-17 · `EXEC I3` · quatro degrades adversariais, todos vermelhos: flag no-op nos dois
+  setters, predicado ignorando o global, e `--all-repos` derrubando toda linha. Nenhuma das duas
+  asserções é decoração.
+- 2026-08-17 · `EXEC I3` · a mutação chama-se `AUTONOMY_all_repos_ignored` como o plano manda —
+  e o cabeçalho do catálogo prometia um "contrato de dois prefixos" (`<GATE>_` ou `RUN_`) que já
+  era **falso antes deste commit**: `PRE_`, `RETRY_`, `APPROVE_` e `FRONTMATTER_` existem há
+  missões. A frase foi corrigida no mesmo commit, pela convenção do comentário mentiroso — este
+  incremento acrescentava o sexto prefixo e a tornaria mais falsa.
+- 2026-08-17 · `EXEC I3` · o item correspondente do `TODO.md` ganhou `RESOLVIDO por d62f08c`
+  (`e02319b`). **Os itens do I1 e do I2 ainda não têm o seu** — a varredura dos 5 itens que a
+  "Verificação end-to-end" do plano cobra continua devendo, e é da fase DOCS.
 
 ## Incrementos de fix (QA)
 
