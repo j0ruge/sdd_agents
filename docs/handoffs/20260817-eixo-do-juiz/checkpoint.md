@@ -1,6 +1,6 @@
 ---
 missao: 20260817-eixo-do-juiz
-atualizado: 2026-08-17 00:20
+atualizado: 2026-08-17 08:20
 ---
 
 # Checkpoint — o eixo do juiz
@@ -28,7 +28,7 @@ atualizado: 2026-08-17 00:20
 
 | ID | Incremento | Check (comando → esperado) | Status | Commit |
 |---|---|---|---|---|
-| I1 | ADR 0003: a pergunta que o juiz responde | `o=$(bash tests/check-kaizen.sh 2>&1); grep -c '^  ok    adr 0003' <<< "$o"` → `2` | pending | — |
+| I1 | ADR 0003: a pergunta que o juiz responde | `o=$(bash tests/check-kaizen.sh 2>&1); grep -c '^  ok    adr 0003' <<< "$o"` → `2` | done | 3547a83 |
 | I2 | o runner explica o `indeterminado` estrutural | `o=$(bash tests/check-kaizen.sh 2>&1); grep -c '^  ok    degenerate axis' <<< "$o"` → `2` | pending | — |
 | I3 | `--all-repos` nos três leitores | `o=$(bash tests/check-autonomy.sh 2>&1); grep -c '^  ok    all-repos' <<< "$o"` → `2` | pending | — |
 | I4 | identidade de repo sobrevive a worktree | `o=$(bash tests/check-autonomy.sh 2>&1); grep -c '^  ok    worktree' <<< "$o"` → `2` | pending | — |
@@ -50,6 +50,22 @@ atualizado: 2026-08-17 00:20
 - 2026-08-17 00:20 · `PLAN` · `excluded` e `guard` têm **dois** produtores da mesma shape (o
   programa `jq` e o literal do ledger vazio em `bin/sdd:2382`): campo novo entra nos dois no mesmo
   commit, senão `tests/check-kaizen.sh` reprova comparando-os como conjuntos de chave.
+- 2026-08-17 · `EXEC I1` · suíte verde antes de começar, `score: 55`; ao fim, **56**, `sdd health`
+  verde nos cinco. As 2 asserções nasceram **vermelhas** (rc 1, contagem 0) e ficaram verdes só
+  depois do ADR + da citação.
+- 2026-08-17 · `EXEC I1` · **a citação do ADR entrou no `bin/sdd` neste incremento**, não no I2: a
+  segunda asserção do I1 cobra que o runner nomeie `ADR 0003`, então o I1 não fecharia sem ela. Ela
+  é um comentário no programa `jq`, na linha do piso que o ADR governa. O I2 acrescenta a frase
+  **impressa** ao humano — a mutação `KAIZEN_adr_0003_orphan` usa `sed …/g` justamente porque a
+  citação passa a existir em mais de um sítio.
+- 2026-08-17 · `EXEC I1` · **`docs/adr` entrou no `sandbox()` do `check-mutation.sh`.** Sem isso a
+  asserção de forma do ADR morre dentro de todo mutante e o *control run* reprova com
+  HARNESS-BROKEN — o comentário do próprio harness já avisava ("a future test reading agents/ or
+  docs/"). Copia-se `docs/adr`, nunca `docs/`: os sensores que leem o resto (`check-todo.sh`,
+  `check-checkpoint.sh`) são os que o `run-all.sh` guarda sob `SDD_MUTANT`.
+- 2026-08-17 · `EXEC I1` · passada de sabotagem adversarial na asserção de forma: degradar o
+  título, a linha de data/status e o heading `## Decision` deixa a contagem em **1** nos três
+  casos — nenhuma das três regras é decoração. A asserção da citação é provada pelo catálogo.
 
 ## Incrementos de fix (QA)
 
