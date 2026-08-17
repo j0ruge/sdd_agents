@@ -177,17 +177,22 @@ branch the plan declares:
 | a branch that exists | `git checkout <name>` |
 | a branch that does not exist | `git checkout -b <name>` **from the branch you are standing on** — the one the plan's own commit lives on |
 
-Anything git refuses — a name starting with `-`, a space, `..`, or a dirty tree the checkout would
-overwrite — becomes a `die` carrying git's own message, before a single session is spent. Guessing
-on top of a working tree git declined is the cheapest way to lose somebody else's work, so the
-answer is to stop. What to do about it is in
+A name starting with `-` is refused by the runner itself, before git sees it: `git checkout -f` is
+a legal command that returns 0, switches to nothing and throws away every uncommitted change.
+Everything else git refuses — a space, `..`, a dirty tree the checkout would overwrite — becomes a
+`die` carrying git's own message. And the artifact is re-read **after** the switch: a branch that
+does not carry this mission's `00-missao.md` also stops the line, because the alternative is
+spending sessions against a plan nobody approved there. All of it before a single session is spent;
+what to do about each is in
 [`docs/failure-modes.md`](failure-modes.md#the-runner-refused-to-switch-to-the-declared-branch).
 
 The failure this closes was measured: in the SQ-97 pilot five phases committed into another PR's
 branch — 16 commits over somebody else's work, ~US$ 45 of `rebase --onto` to undo. Committing on
 the wrong branch is loud now in **all five doors that can end up committing** — `sdd run`,
 `sdd retry`, `sdd approve`, `sdd kaizen` and `sdd preflight` — each warning when you are standing
-on the base branch, and each with a mutation proving the warning still fires.
+on the base branch. The warning has one definition, so sabotaging it silences all five at once and
+the suite dies; the two call sites added last (`sdd retry` and `sdd approve`) carry a mutation of
+their own, because for those two the defect was the missing call, not the missing warning.
 
 Two things it deliberately does not do:
 

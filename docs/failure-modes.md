@@ -260,23 +260,24 @@ empty is worth one `wc -c .sdd/config.sh`; on `0`, delete it and install again.
 
 ## The runner refused to switch to the declared branch
 
-**Symptom:** `sdd run` (or `sdd retry`) exits before opening any session, printing git's own error
-— usually *"Your local changes to the following files would be overwritten by checkout"*, or
-*"not a valid ref"* for a name git will not accept.
+**Symptom:** `sdd run` (or `sdd retry`) exits before opening any session, with one of three
+messages naming the `branch:` field of `00-missao.md`.
 
-**Cause:** `branch:` in `00-missao.md` names a branch the runner has to be on, and it checks it out
-before the first gate. Git declined: the working tree carries changes the checkout would destroy,
-or the name is not one git can use.
+**Cause and what you do**, one per message:
 
-**How the kit reacts:** it stops — `die` with git's message, no session spent, nothing guessed.
-The alternative was to carry on wherever the checkout left you, which is the SQ-97 class the field
-exists to close ([the mission's branch](pipeline.md#the-missions-branch)).
+| The runner said | What happened | What you do |
+|---|---|---|
+| `could not switch to the branch '<name>' … — git said: <git's own message>` | git declined the checkout. Usually the working tree carries changes the switch would overwrite. | Deal with the tree the way you would for any checkout — `git stash`, commit, or discard. The kit will not choose for you: picking one of those three is deciding whose work survives. |
+| `the branch '<name>' … starts with '-' — git would read it as an option` | the declared name would reach `git checkout` as a flag. `git checkout -f` is a legal command that returns 0 and throws the whole dirty tree away, so the shape is refused before git sees it. | Fix `branch:` in `00-missao.md`. |
+| `the branch '<name>' … does not carry this mission — you are now on it, and the plan that asked for it is on '<other>'` | the checkout worked and the mission's artifacts are not on the branch it asked for — an old branch of the same name, or one cut before the mission existed. | Go back (`git checkout <other>`) and decide which branch the mission belongs on. **Do not** re-run from here: the pipeline would spend sessions against a plan nobody approved on this branch. |
 
-**What you do:** deal with the working tree the way you would for any checkout (`git stash`,
-commit, or discard — the kit will not choose for you), then `sdd run <mission>` again. If it is the
-name that is wrong, fix `branch:` — with `sdd approve` already run, editing the field is a normal
-commit, not an approval. A mission that should not move branches at all leaves the field at the
-`<…>` placeholder the template ships, which is a no-op.
+**How the kit reacts:** it stops, every time — `die`, no session spent, nothing guessed. Carrying
+on from wherever the checkout left the tree is the SQ-97 class the field exists to close
+([the mission's branch](pipeline.md#the-missions-branch)).
+
+A mission that should not move branches at all leaves `branch:` at the `<…>` placeholder the
+template ships, which is a no-op — that is the right value whenever the name is not yours to
+decide.
 
 ---
 
