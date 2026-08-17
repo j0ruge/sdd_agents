@@ -133,9 +133,26 @@ cat > "$MDIR/checkpoint.md" <<'EOF'
 EOF
 assert_phase "artifacts exist but 'aprovacao' is empty" "PLAN"
 assert_why   "PLAN explains the missing approval" "PLAN" "aprovacao"
+# And it names the command that ends the wait. An empty `aprovacao:` is the state EVERY plan a
+# human approves starts in — the common stall, not the exotic one — and until this assertion the
+# reason handed the human the shape to type into the frontmatter BY HAND, which is the exact
+# failure `sdd approve` was built to end. The sibling branch of the very same gate (the kaizen-born
+# refusal, three lines below it in bin/sdd) already names the remedy, and its comment states the
+# rule the two must share: "naming a remedy obliges the remedy to work". A rule applied to one of
+# two neighbouring branches is a rule the runner does not have.
+#
+# The mission NAME is demanded, not the bare verb: `sdd approve` with no argument resolves the
+# LATEST mission, which on a repo with several open missions is the wrong one. The one thing a
+# stalled human must be able to do is copy the line.
+assert_why   "the unapproved plan is told which command approves it" "PLAN" "sdd approve $MISSION"
 
 sed -i 's/^aprovacao:.*/aprovacao: auto/' "$MDIR/00-missao.md"
 assert_phase "plan approved (auto) with a pending increment" "EXEC"
+# The other half, and the reason the pair is not decoration: a reason that carried the remedy
+# unconditionally would satisfy the assertion above while telling an already-approved plan to
+# approve itself again. Same fixture, one `sed` apart, so no regime of fixture satisfies both by
+# accident — whichever side a regression breaks, the other is standing next to it.
+assert_why_absent "and an approved plan is not told to approve itself again" "PLAN" "sdd approve"
 
 # JIRA on with no version stalls at PLAN — a version label is a human decision.
 sed -i 's/^JIRA_ENABLED=false/JIRA_ENABLED=true/' .sdd/config.sh
@@ -579,6 +596,1061 @@ if [ "$BASE_RC" = "$FEAT_RC" ] && [ "$BASE_RC" -eq 0 ]; then
 else
   fail "the warning does not change the rc of sdd run" \
        "the same rc on both branches, and 0" "main=$BASE_RC feature=$FEAT_RC"
+fi
+
+# --- sdd approve -----------------------------------------------------------
+echo "== sdd approve =="
+# Closing the PLAN gate used to mean typing `aprovacao: humano-YYYY-MM-DD` into the frontmatter by
+# hand, in the exact shape gate_PLAN greps. Two failure modes, both cheap to hit: the human gets
+# the format wrong and the gate stays shut with no explanation, or the human delegates the edit to
+# the session — and the session is precisely who may not decide.
+#
+# A SECOND mission, not the fixture walked above: that one is approved (`auto`) and already at PR,
+# and an approve test needs the one state it no longer has — an empty `aprovacao:`. The frontmatter
+# below carries a `/` (in `branch:`) and an `&` (in `titulo:`) on purpose: the write has to be a
+# surgical rewrite of ONE key, and a naive `sed 's/^aprovacao:.*/…/'` over the whole file is one
+# careless replacement away from eating either character.
+#
+# Frontmatter KEYS are contract and stay exactly as templates/missao.md ships them. The section
+# HEADINGS are not: `sdd approve` prints the whole body instead of parsing headings, so the fixture
+# spells them in English — templates/check-templates.sh owns the pt-BR heading contract, and
+# tests/check-lang.sh (which scans this file) owns the rule that kit surface carries no Portuguese.
+# `titulo:` deliberately differs from the body's own heading: grepping it in the output is then
+# proof the frontmatter key was READ, not that the body happened to contain the words.
+AM="20260102-approve"
+AMDIR="$FIX/docs/handoffs/$AM"
+mkdir -p "$AMDIR"
+cat > "$AMDIR/00-missao.md" <<'EOF'
+---
+missao: 20260102-approve
+titulo: portas & barras — a/b
+data: 2026-01-02
+versao:
+branch: missao/20260102-approve
+aprovacao:
+ddd: n/a
+---
+
+# Mission fixture
+
+## Gate PLAN-AUTO
+
+| # | Criterion | Status | Evidence |
+|---|---|---|---|
+| a | grill clean | ✅ | criterio-a-evidencia |
+
+## Open questions for the human
+
+pendencia-fixture-unica
+
+aprovacao: humano-YYYY-MM-DD is the shape gate_PLAN greps, quoted here in the body on purpose
+EOF
+printf '# Plano\n' > "$AMDIR/01-plano.md"
+cat > "$AMDIR/checkpoint.md" <<'EOF'
+| ID | Incremento | Check (comando → esperado) | Status | Commit |
+|---|---|---|---|---|
+| I1 | fatia-de-fixture | `true` → 0 | pending | — |
+EOF
+# The three artifacts are left UNTRACKED on purpose, and it buys two things for free. First, the
+# real first-approval state: nothing says the planner committed, and `git commit -- <path>` refuses
+# a path git has never heard of — the command has to stage it. Second, the two siblings become the
+# control for the commit's blast radius below: they sit right next to 00-missao.md, uncommitted,
+# and a `git add -A` would swallow both.
+
+# --- 1. the preview, and `n` as a real no-op.
+#
+# The refusal runs FIRST and on the SAME fixture the acceptance will run on: that is what makes the
+# pair differential. A command that wrote the approval unconditionally — ignoring the answer — would
+# satisfy every assertion about the written value below and die here, and a command that never
+# wrote anything would die there. Neither half alone can tell the two apart.
+#
+# The preview is asserted in the same breath because refusing is only a decision if the human was
+# shown what they were refusing: the title, the PLAN-AUTO evidence, the increments and the open
+# questions. Approving blind is the manual edit with extra steps.
+#
+# Herestring, never `printf 'n' | sdd approve`: under `pipefail` that pipe returns 141 the moment
+# the command stops reading, which would read as a failing runner. See check-pipefail.sh.
+APPROVE_HEAD_0="$(git rev-parse HEAD)"
+APPROVE_N_OUT="$( cd "$FIX" && "$SDD" approve "$AM" 2>&1 <<< "n" )"; APPROVE_N_RC=$?
+# A bare Enter is the OTHER no, and the one the prompt's shape promises: `[y/N]` says out loud that
+# the default is no. Feeding only "n" and "y" leaves that promise untested — an adversarial pass
+# added `""` to the accept list and every clause here stayed green while a stray newline approved a
+# plan in the human's name. It is the kit's only gate of human consent; the empty answer is the arm
+# a careless `read` reaches first.
+APPROVE_EMPTY_OUT="$( cd "$FIX" && "$SDD" approve "$AM" 2>&1 <<< "" )"; APPROVE_EMPTY_RC=$?
+APPROVE_N_PHASE="$( cd "$FIX" && "$SDD" phase "$AM" 2>&1 )"
+if [ "$APPROVE_N_RC" -eq 0 ] \
+   && [ "$APPROVE_EMPTY_RC" -eq 0 ] \
+   && ! grep -q 'approved: aprovacao' <<< "$APPROVE_EMPTY_OUT" \
+   && grep -q 'portas & barras' <<< "$APPROVE_N_OUT" \
+   && grep -q 'criterio-a-evidencia' <<< "$APPROVE_N_OUT" \
+   && grep -q 'fatia-de-fixture' <<< "$APPROVE_N_OUT" \
+   && grep -q 'pendencia-fixture-unica' <<< "$APPROVE_N_OUT" \
+   && grep -qx 'aprovacao:' "$AMDIR/00-missao.md" \
+   && [ "$(git rev-parse HEAD)" = "$APPROVE_HEAD_0" ] \
+   && [ "$APPROVE_N_PHASE" = "PLAN" ]; then
+  pass "sdd approve shows title, PLAN-AUTO, increments and open questions — and 'n' changes nothing"
+else
+  fail "sdd approve shows title, PLAN-AUTO, increments and open questions — and 'n' changes nothing" \
+       "the four sections on screen, rc 0, frontmatter untouched, no commit, still PLAN" \
+       "rc $APPROVE_N_RC, phase $APPROVE_N_PHASE, approval line '$(grep -m1 '^aprovacao:' "$AMDIR/00-missao.md")': $(tail -3 <<< "$APPROVE_N_OUT")"
+fi
+
+# --- 2. `y` writes humano-<today>, never `auto`, and the gate opens.
+#
+# `auto` is asserted ABSENT and not merely "humano- present": the two values share the gate's happy
+# path, so a command that wrote `auto` would close the gate just the same and every rc-reading
+# assertion would stay green — while the artifact now claims the PLAN-AUTO table was all ✅ when a
+# human in fact typed y. House rule: the text of the right branch AND the absence of the other's
+# marker.
+#
+# The unrelated dirty file is planted here and read by assertion 3 — the commit has to carry
+# 00-missao.md and nothing else, and a fixture with a clean tree cannot tell `git commit -- <path>`
+# from `git commit -a`.
+echo "unrelated change" >> file.txt
+# Everything except the FIRST `aprovacao:` line — the one in the frontmatter, the only line the
+# write is allowed to touch. `grep -v '^aprovacao:'` would have been the obvious filter and is the
+# wrong one: it also hides the copy the fixture body carries at column 0, which is precisely what a
+# whole-file `sed 's/^aprovacao:.*/…/'` would rewrite. The filter that hides the defect from the
+# assertion is the filter that makes the assertion decorative.
+approval_stripped() { awk '!seen && /^aprovacao:/ { seen=1; next } { print }' "$1"; }
+APPROVE_FILE_BEFORE="$(approval_stripped "$AMDIR/00-missao.md")"
+# The mode rides along because the byte comparison below reads CONTENT and never metadata, and the
+# write goes through a `mktemp` (0600) plus a `chmod --reference`. Drop that chmod and the approved
+# artifact comes out readable only by whoever approved it — git tracks the exec bit alone, so the
+# one property version control cannot show is the one nothing was measuring.
+APPROVE_MODE_BEFORE="$(stat -c %a "$AMDIR/00-missao.md")"
+APPROVE_DAY_0="$(date +%F)"
+APPROVE_Y_OUT="$( cd "$FIX" && "$SDD" approve "$AM" 2>&1 <<< "y" )"; APPROVE_Y_RC=$?
+APPROVE_DAY_1="$(date +%F)"
+APPROVE_MODE_AFTER="$(stat -c %a "$AMDIR/00-missao.md")"
+APPROVE_LINE="$(grep -m1 '^aprovacao:' "$AMDIR/00-missao.md")"
+APPROVE_PHASE="$( cd "$FIX" && "$SDD" phase "$AM" 2>&1 )"
+if [ "$APPROVE_Y_RC" -eq 0 ] \
+   && { [ "$APPROVE_LINE" = "aprovacao: humano-$APPROVE_DAY_0" ] \
+        || [ "$APPROVE_LINE" = "aprovacao: humano-$APPROVE_DAY_1" ]; } \
+   && ! grep -q 'aprovacao:.*auto' "$AMDIR/00-missao.md" \
+   && [ "$(approval_stripped "$AMDIR/00-missao.md")" = "$APPROVE_FILE_BEFORE" ] \
+   && [ "$APPROVE_MODE_AFTER" = "$APPROVE_MODE_BEFORE" ] \
+   && [ "$APPROVE_PHASE" != "PLAN" ]; then
+  pass "sdd approve answered 'y' writes humano-<today>, never 'auto', and opens the PLAN gate"
+else
+  fail "sdd approve answered 'y' writes humano-<today>, never 'auto', and opens the PLAN gate" \
+       "aprovacao: humano-$APPROVE_DAY_0, the rest of the file byte-identical, phase off PLAN" \
+       "rc $APPROVE_Y_RC, phase $APPROVE_PHASE, line '$APPROVE_LINE', diff: $(diff <(printf '%s\n' "$APPROVE_FILE_BEFORE") <(approval_stripped "$AMDIR/00-missao.md") | head -4), out: $(tail -2 <<< "$APPROVE_Y_OUT")"
+fi
+
+# --- 3. the commit: one file, the conventional message, and no second one.
+#
+# `sdd approve` is the first thing in the runner that commits, so its blast radius is the assertion:
+# the unrelated edit planted above must still be uncommitted afterwards. And the second call has to
+# be a no-op — a human who runs it twice, or a script that retries, must not stack a second
+# `chore(missao)` commit onto a plan that was already approved.
+#
+# The subject is ENGLISH with the pt-BR `missao` scope kept, and that is a deliberate departure from
+# the pt-BR wording the grill wrote down in 00-missao.md (decision 2). Two reasons, both structural:
+# the runner is kit surface installed into repos declaring any OUTPUT_LANG, and here it is the only
+# writer — there is no session to write the message in the target language. tests/check-lang.sh
+# measures that rule over bin/sdd, and the grill's phrasing carries one of its stopwords, so the
+# original subject cannot be spelled in the runner at all. Recorded in the checkpoint notes.
+APPROVE_SUBJECT="$(git log -1 --format=%s)"
+# Captured into variables and read with herestrings below, never `git … | grep -q`: that pipe
+# returns 141 when grep FINDS the line, and both assertions here are positive ones.
+APPROVE_TOUCHED="$(git show --name-only --format= HEAD)"
+APPROVE_STATUS="$(git status --porcelain)"
+APPROVE_FILES="$(grep -c . <<< "$APPROVE_TOUCHED")"
+# The mission directory's blast radius, next to the commit's. `frontmatter_write` mktemps INSIDE it,
+# so a `cp` where the `mv` belongs leaves `00-missao.md.aBc123` sitting beside the artifacts —
+# swept into the next `git add -A`, and read by every glob that walks that directory. The porcelain
+# check above says what IS dirty and cannot say what else appeared.
+#
+# A glob and not `ls | grep -c .`: shellcheck refuses that pipe (SC2010) and the lint step is part
+# of the suite, so the original spelling was red on arrival. The two count the same thing here —
+# measured, 3 for the clean directory and 4 with a `00-missao.md.aBc123` beside it — and with no
+# `nullglob` an empty directory leaves the pattern unexpanded at 1, which is not 3 either: the
+# degradation this guards against keeps failing, and it fails closed.
+APPROVE_DIR_ENTRIES=( "$AMDIR"/* )
+APPROVE_DIR_N="${#APPROVE_DIR_ENTRIES[@]}"
+APPROVE_HEAD_1="$(git rev-parse HEAD)"
+APPROVE_AGAIN_OUT="$( cd "$FIX" && "$SDD" approve "$AM" 2>&1 <<< "y" )"; APPROVE_AGAIN_RC=$?
+if [ "$APPROVE_SUBJECT" = "chore(missao): plan $AM approved by the human" ] \
+   && [ "$APPROVE_FILES" -eq 1 ] \
+   && [ "$APPROVE_DIR_N" -eq 3 ] \
+   && grep -qx "docs/handoffs/$AM/00-missao.md" <<< "$APPROVE_TOUCHED" \
+   && grep -q '^ M file.txt' <<< "$APPROVE_STATUS" \
+   && [ "$APPROVE_AGAIN_RC" -eq 0 ] \
+   && [ "$(git rev-parse HEAD)" = "$APPROVE_HEAD_1" ]; then
+  pass "sdd approve commits only 00-missao.md, and approving twice makes no second commit"
+else
+  fail "sdd approve commits only 00-missao.md, and approving twice makes no second commit" \
+       "one file in the commit, the unrelated edit left dirty, HEAD unmoved on the second call" \
+       "subject '$APPROVE_SUBJECT', $APPROVE_FILES file(s), rc2 $APPROVE_AGAIN_RC, status: ${APPROVE_STATUS//$'\n'/ · }, second call: $(tail -2 <<< "$APPROVE_AGAIN_OUT")"
+fi
+git checkout -q -- file.txt
+
+# --- 4. the mission whose frontmatter has no `aprovacao:` key at all.
+#
+# Deliberately NOT prefixed `sdd approve `: that string is I1's Check in checkpoint.md, and an
+# assertion that inflates it turns a contract into a coincidence.
+#
+# TWO guards of `cmd_approve` are written for this state and NEITHER had a fixture that reached it,
+# because all five approve fixtures above ship the key inside the frontmatter:
+#
+#   - the `inside &&` scope of frontmatter_write, which is what keeps the write inside the first
+#     `---` block. The fixture above carries a body copy of `aprovacao:` on purpose, but the
+#     frontmatter copy always comes FIRST and `!written` stops there, so the scope guard is never
+#     the thing that decides. Measured: deleting `inside && ` left check-gates.sh at 82 `ok`, rc 0,
+#     and the whole suite green — while the command silently rewrote mission prose.
+#   - the read-back before the commit, which exists precisely because an absent key makes
+#     frontmatter_write a no-op by design, and committing that would be an approval approving
+#     nothing.
+#
+# The probe is the FILE BYTES, not the rc: with the key absent both the scoped and the unscoped
+# write end at the same `die` (frontmatter() cannot see a body line either way), so rc 1 and "no
+# commit" are shared by the defect and the fix. What separates them is whether the body survived.
+# The rc and HEAD ride along anyway, as the read-back guard's own half: drop that `die` and this
+# assertion fails on the commit that should not exist.
+NK="20260102-nokey"
+NKDIR="$FIX/docs/handoffs/$NK"
+mkdir -p "$NKDIR"
+cat > "$NKDIR/00-missao.md" <<'EOF'
+---
+missao: 20260102-nokey
+titulo: a mission whose frontmatter never declared the key
+---
+
+# Mission fixture
+
+aprovacao: quoted in the body and nowhere else — the write must not reach this line
+EOF
+printf '# Plano\n' > "$NKDIR/01-plano.md"
+cat > "$NKDIR/checkpoint.md" <<'EOF'
+| ID | Incremento | Check (comando → esperado) | Status | Commit |
+|---|---|---|---|---|
+| I1 | fatia-de-fixture | `true` → 0 | pending | — |
+EOF
+NK_BEFORE="$(cat "$NKDIR/00-missao.md")"
+NK_HEAD_0="$(git rev-parse HEAD)"
+NK_OUT="$( cd "$FIX" && "$SDD" approve "$NK" 2>&1 <<< "y" )"; NK_RC=$?
+NK_AFTER="$(cat "$NKDIR/00-missao.md")"
+NK_DIR_ENTRIES=( "$NKDIR"/* )
+if [ "$NK_RC" -eq 1 ] \
+   && [ "$NK_AFTER" = "$NK_BEFORE" ] \
+   && [ "${#NK_DIR_ENTRIES[@]}" -eq 3 ] \
+   && [ "$(git rev-parse HEAD)" = "$NK_HEAD_0" ] \
+   && grep -q "aprovacao" <<< "$NK_OUT"; then
+  pass "approve refuses a mission whose frontmatter has no aprovacao: key, and never touches the body"
+else
+  fail "approve refuses a mission whose frontmatter has no aprovacao: key, and never touches the body" \
+       "rc 1, the file byte-identical, three files in the directory, HEAD unmoved" \
+       "rc $NK_RC, changed: $(diff <(printf '%s\n' "$NK_BEFORE") <(printf '%s\n' "$NK_AFTER") | head -4), ${#NK_DIR_ENTRIES[@]} file(s): $(tail -2 <<< "$NK_OUT")"
+fi
+
+# --- the declared mission branch -------------------------------------------
+echo "== the declared mission branch =="
+# `branch:` shipped in templates/missao.md from the start and NOTHING in the runner ever read it.
+# The plan declared where the mission's commits belong and the human was the only one honouring it,
+# by hand, before every run. In the SQ-97 pilot that hand-off failed once and five phases committed
+# into someone else's branch — 16 commits and a `rebase --onto` to undo.
+#
+# These three assertions run a REAL (non-dry) `sdd run`, for the same reason assert_jidoka does and
+# with the same safety: the mission below carries a `blocked` increment, so the runner escalates
+# before reaching any `run_phase`, and the claude stub at the top of this file turns a broken
+# ordering into a loud failure instead of a spent token. Checking a branch out is a mutation of the
+# working tree, which is exactly what `--dry-run` promises not to do — so the first assertion is a
+# PAIR, projection against real run, and the guard cannot be deleted without one half dying.
+BM="20260103-branch"
+BMDIR="$FIX/docs/handoffs/$BM"
+mkdir -p "$BMDIR"
+: > "$BMDIR/01-plano.md"
+# `blocked`, so `sdd run` escalates on the spot: the branch decision happens before the gates, and
+# this fixture only ever needs the runner to get that far.
+cat > "$BMDIR/checkpoint.md" <<'EOF'
+| ID | Incremento | Check (comando → esperado) | Status | Commit |
+|---|---|---|---|---|
+| I1 | one slice | `true` → 0 | blocked | — |
+EOF
+# branch_mission <value of the `branch:` key> — the ONE thing that varies between the cases below.
+#
+# printf and not a heredoc, because one of the callers passes a value read out of
+# templates/missao.md: an unquoted heredoc expands `$` and backticks, so the day someone writes a
+# backtick into that placeholder this fixture would EXECUTE it. Quoting the delimiter would kill
+# the expansion and the parameter with it.
+branch_mission() {
+  printf -- '---\nmissao: %s\naprovacao: auto\nbranch: %s\n---\n# Mission fixture\n' \
+    "$BM" "$1" > "$BMDIR/00-missao.md"
+}
+
+# The line the runner prints when it really does switch. It is asserted PRESENT here and ABSENT in
+# case 3, and the pair is the point: a lone absence assertion is satisfied by a runner that never
+# announces anything at all, which is how a "silent no-op" check goes vacuous without a word. Both
+# halves read the same variable so neither can drift into measuring a different line.
+BRANCH_LINE='branch: .* → '
+
+# --- 1. the declared branch exists: check it out — and never in a dry run.
+git branch missao/20260103-existing
+branch_mission "missao/20260103-existing"
+git checkout -q main
+BR_DRY_OUT="$( cd "$FIX" && "$SDD" run --dry-run "$BM" 2>&1 )"; BR_DRY_RC=$?
+BR_DRY_AT="$(git branch --show-current)"
+BR_RUN_OUT="$( cd "$FIX" && "$SDD" run "$BM" 2>&1 )"; BR_RUN_RC=$?
+BR_RUN_AT="$(git branch --show-current)"
+# The switch has to reach the TRAIL as well as the working tree. pipeline.log is where a human (and
+# the kaizen judge) reconstructs what a run did, and a checkout is the single event most likely to
+# be asked about afterwards — "which branch did phase three commit into?". Asserted here rather
+# than in its own case because it is the same event: a switch nobody recorded is half a switch.
+BR_LOG="$FIX/.sdd/logs/$BM/pipeline.log"
+BR_LOG_LINES="$(grep -c 'BRANCH  main -> missao/20260103-existing' "$BR_LOG" 2>/dev/null || true)"
+if [ "$BR_DRY_AT" = "main" ] \
+   && [ "$BR_RUN_AT" = "missao/20260103-existing" ] \
+   && [ "$BR_DRY_RC" = "$BR_RUN_RC" ] \
+   && [ "$BR_LOG_LINES" = "1" ] \
+   && grep -qF "branch: main → missao/20260103-existing" <<< "$BR_RUN_OUT" \
+   && ! grep -qE "$BRANCH_LINE" <<< "$BR_DRY_OUT" \
+   && ! grep -q "the test invoked the real claude" <<< "$BR_RUN_OUT"; then
+  pass "branch declared and already there: sdd run checks it out, logs it, and a dry run does neither"
+else
+  fail "branch declared and already there: sdd run checks it out, logs it, and a dry run does neither" \
+       "still on main after the projection, on missao/20260103-existing after the run, same rc, one BRANCH line" \
+       "dry: $BR_DRY_AT (rc $BR_DRY_RC) · run: $BR_RUN_AT (rc $BR_RUN_RC) · BRANCH lines: $BR_LOG_LINES: $(tail -2 <<< "$BR_RUN_OUT")"
+fi
+
+# --- 2. the declared branch does not exist: created from the CURRENT branch, not from the base.
+#
+# The distinction is the whole assertion, and a fixture standing on `main` could not make it: both
+# behaviours would produce the same tip. So the run starts from a branch carrying a commit that
+# exists NOWHERE else, and the new branch has to carry it too. `main` is asserted NOT to contain it
+# in the same breath — that is what keeps the check from passing on a fixture where every branch
+# happens to share a tip. The direction matters because the plan's own commit lives on the branch
+# the human is standing on when they run: cutting from the base would leave it behind.
+git checkout -q -b missao/20260103-source
+echo "a commit that lives only off the base branch" > branch-source-marker.txt
+git add branch-source-marker.txt
+git commit -qm "branch fixture: a commit that exists only off main"
+BR_SOURCE_TIP="$(git rev-parse HEAD)"
+branch_mission "missao/20260103-created"
+BR_NEW_OUT="$( cd "$FIX" && "$SDD" run "$BM" 2>&1 )"; BR_NEW_RC=$?
+BR_NEW_AT="$(git branch --show-current)"
+BR_NEW_TIP="$(git rev-parse HEAD)"
+BR_MAIN_HAS_SOURCE=0
+git merge-base --is-ancestor "$BR_SOURCE_TIP" main 2>/dev/null && BR_MAIN_HAS_SOURCE=1
+if [ "$BR_NEW_AT" = "missao/20260103-created" ] \
+   && [ "$BR_NEW_TIP" = "$BR_SOURCE_TIP" ] \
+   && [ "$BR_MAIN_HAS_SOURCE" -eq 0 ] \
+   && [ "$BR_NEW_RC" = "$BR_RUN_RC" ]; then
+  pass "branch declared and absent: created from the CURRENT branch, never from the base"
+else
+  fail "branch declared and absent: created from the CURRENT branch, never from the base" \
+       "on missao/20260103-created, tip $BR_SOURCE_TIP (a commit main does not have)" \
+       "at $BR_NEW_AT, tip $BR_NEW_TIP, main-has-source $BR_MAIN_HAS_SOURCE, rc $BR_NEW_RC: $(tail -2 <<< "$BR_NEW_OUT")"
+fi
+
+# --- 3. the two silent no-ops: the placeholder, and a run already on the declared branch.
+#
+# templates/missao.md ships a `<...>` placeholder in `branch:` while the name is still unknown, and
+# it is not a branch name: git rejects both the `<` and the spaces. A runner that tried would `die`
+# and take the whole pipeline with it — so the branch COUNT is asserted alongside the name, because
+# "no switch happened" and "no branch was created" are two different failures and only one of them
+# shows up in `--show-current`.
+#
+# The value is READ from the template instead of spelled here, and that bought two things the day
+# it was written. The plan for this increment quoted a placeholder the kit does not ship — reading
+# the file is what caught it — and a literal would have frozen today's wording into a sensor that
+# keeps passing after the template moves on. It also keeps this file free of the Portuguese that
+# tests/check-lang.sh forbids on kit surface: the template is artifact prose in OUTPUT_LANG, a
+# sensor is not.
+#
+# The second half is what keeps the same-branch short-circuit honest. Dropping it breaks nothing
+# visible: `git checkout` onto the branch you are already on succeeds. What it produces is a run
+# that ANNOUNCES a switch that never happened and appends a BRANCH line to pipeline.log every lap
+# — a false entry in the audit trail, which is the one thing this repo's gates exist to refuse. So
+# both no-ops are asserted SILENT, not merely harmless, and the announcement line is the probe.
+# awk with index()/substr() and never a negated class: the awk of this house is mawk, which negates
+# BYTES, and a placeholder carrying a curved quote or a dash would silently fall out of the match.
+BR_PLACEHOLDER="$(awk '/^branch: / { print substr($0, index($0, ":") + 2); exit }' "$ROOT/templates/missao.md")"
+# Without this the whole case degrades in silence: an empty value is a DIFFERENT no-op (the empty
+# guard, not the placeholder guard), so a template that stopped shipping a `<...>` here would leave
+# the assertion passing while measuring nothing at all.
+case "$BR_PLACEHOLDER" in
+  '<'*) ;;
+  *) fail "SENSOR-BROKEN: the placeholder case reads templates/missao.md" \
+          "a <...> placeholder in the template's branch: key" "'$BR_PLACEHOLDER'" ;;
+esac
+branch_mission "$BR_PLACEHOLDER"
+BR_PH_BEFORE="$(git branch --show-current)"
+BR_PH_LIST_BEFORE="$(git branch --list)"
+BR_PH_OUT="$( cd "$FIX" && "$SDD" run "$BM" 2>&1 )"; BR_PH_RC=$?
+BR_PH_AFTER="$(git branch --show-current)"
+BR_PH_LIST_AFTER="$(git branch --list)"
+# Herestrings, never `git branch --list | grep -c`: this file runs under `pipefail` and the house
+# rule is one form for all of them, so nobody has to work out which pipes are safe.
+BR_PH_N_BEFORE="$(grep -c . <<< "$BR_PH_LIST_BEFORE")"
+BR_PH_N_AFTER="$(grep -c . <<< "$BR_PH_LIST_AFTER")"
+branch_mission "$BR_PH_AFTER"
+BR_SAME_OUT="$( cd "$FIX" && "$SDD" run "$BM" 2>&1 )"; BR_SAME_RC=$?
+BR_SAME_AT="$(git branch --show-current)"
+if [ "$BR_PH_AFTER" = "$BR_PH_BEFORE" ] \
+   && [ "$BR_PH_N_AFTER" = "$BR_PH_N_BEFORE" ] \
+   && [ "$BR_PH_RC" = "$BR_RUN_RC" ] \
+   && ! grep -qE "$BRANCH_LINE" <<< "$BR_PH_OUT" \
+   && [ "$BR_SAME_AT" = "$BR_PH_AFTER" ] \
+   && [ "$BR_SAME_RC" = "$BR_RUN_RC" ] \
+   && ! grep -qE "$BRANCH_LINE" <<< "$BR_SAME_OUT"; then
+  pass "branch already there or still a placeholder: both no-ops, and both silent about switching"
+else
+  fail "branch already there or still a placeholder: both no-ops, and both silent about switching" \
+       "on $BR_PH_BEFORE both times, $BR_PH_N_BEFORE branches, rc $BR_RUN_RC, no switch announced" \
+       "placeholder: $BR_PH_AFTER, $BR_PH_N_AFTER branches, rc $BR_PH_RC · same-branch: $BR_SAME_AT, rc $BR_SAME_RC · announced: $(grep -cE "$BRANCH_LINE" <<< "$BR_PH_OUT$BR_SAME_OUT")"
+fi
+git checkout -q main
+
+# --- 4. git refusing the checkout stops the line — a die, never a warn.
+#
+# Deliberately NOT prefixed `branch `: the checkpoint's Check for this increment counts the three
+# cases the plan named, and this is a fourth the adversarial pass demanded. Degrading the `die`
+# into a `warn` survived every other assertion here — and it is the worst survivor of the set,
+# because a warned run GOES ON: the whole pipeline then commits into whatever branch git left the
+# tree on, which is the exact SQ-97 failure this increment exists to close.
+#
+# The refusal is manufactured the way it actually happens: a tracked file changed on the target
+# branch and dirty in the working tree. git will not clobber it, and the runner must not guess on
+# top of a tree git already refused.
+#
+# Two discriminators, because the rc alone cannot tell a die from a warn — a warned run escalates
+# on the blocked increment with rc 3, and rc 1 is also what a dozen other `die`s return:
+#   - "BLOCKED in EXEC" must be ABSENT. That marker is proof the run went on, which is the whole
+#     defect. Its absence is what says the line stopped HERE.
+#   - git's own words must be present. `file.txt` is the probe rather than the English sentence
+#     around it: git localises that sentence and the kit's preflight measures the GNU userland,
+#     never the locale — but the file it refuses to clobber is named in every language, and no
+#     paraphrase written in this runner would contain it.
+git checkout -q -b missao/20260103-refused
+echo "content that lives only on the refused branch" > file.txt
+git commit -qam "branch fixture: a conflicting change to a tracked file"
+git checkout -q main
+echo "an uncommitted local change to that very same file" > file.txt
+branch_mission "missao/20260103-refused"
+BR_DIE_OUT="$( cd "$FIX" && "$SDD" run "$BM" 2>&1 )"; BR_DIE_RC=$?
+BR_DIE_AT="$(git branch --show-current)"
+if [ "$BR_DIE_RC" -eq 1 ] \
+   && [ "$BR_DIE_AT" = "main" ] \
+   && grep -q "missao/20260103-refused" <<< "$BR_DIE_OUT" \
+   && grep -q "git said:" <<< "$BR_DIE_OUT" \
+   && grep -q "file\.txt" <<< "$BR_DIE_OUT" \
+   && ! grep -q "BLOCKED in EXEC" <<< "$BR_DIE_OUT"; then
+  pass "refused checkout stops the line: rc 1 carrying git's own words, and the run never goes on"
+else
+  fail "refused checkout stops the line: rc 1 carrying git's own words, and the run never goes on" \
+       "rc 1, still on main, git's message quoted, and no phase escalation after it" \
+       "rc $BR_DIE_RC at $BR_DIE_AT: $(tail -3 <<< "$BR_DIE_OUT")"
+fi
+git checkout -q -- file.txt
+git branch -q -D missao/20260103-refused
+
+# --- 4b. a declared name git would read as an OPTION is refused before git sees it.
+#
+# Deliberately NOT prefixed `branch `, for the reason case 4 gives: the checkpoint's Check counts
+# the three cases the plan named. This is the second one the adversarial pass demanded, and it is
+# the only path in this function that can DESTROY work.
+#
+# `git checkout -f` is a legal command: it returns 0, switches to nothing, and throws away every
+# uncommitted change in the tree. So a `branch: -f` reaching the checkout unfiltered discards the
+# human's work, succeeds, and has the runner announce a switch that never happened — the SQ-97
+# class with data loss on top, produced by the very function written to close it.
+#
+# It takes a REF to get there, and that is why this fixture builds one instead of just writing `-f`
+# into the frontmatter: a name git refuses to CREATE (`git checkout -b -- '-f'` → "not a valid
+# branch name") already dies on the other path, so a fixture without the ref measures nothing.
+# `git update-ref` accepts `refs/heads/-f` and `git check-ref-format` calls it valid — measured —
+# so the ref-exists path is reachable, and it is the dangerous one.
+#
+# The probe is the DIRTY FILE, not the rc: a die and a survived `checkout -f` both leave the tree on
+# main, and only one of them still has the human's uncommitted line in it. `BLOCKED in EXEC` rides
+# along as the "the run went on" marker, exactly as in case 4.
+git update-ref "refs/heads/-f" HEAD
+printf 'an uncommitted line the human has not saved anywhere else\n' > file.txt
+branch_mission "-f"
+BR_OPT_OUT="$( cd "$FIX" && "$SDD" run "$BM" 2>&1 )"; BR_OPT_RC=$?
+BR_OPT_AT="$(git branch --show-current)"
+BR_OPT_FILE="$(cat file.txt)"
+if [ "$BR_OPT_RC" -eq 1 ] \
+   && [ "$BR_OPT_AT" = "main" ] \
+   && [ "$BR_OPT_FILE" = "an uncommitted line the human has not saved anywhere else" ] \
+   && ! grep -qE "$BRANCH_LINE" <<< "$BR_OPT_OUT" \
+   && ! grep -q "BLOCKED in EXEC" <<< "$BR_OPT_OUT"; then
+  pass "a declared name git would read as an option is refused, and the dirty tree survives it"
+else
+  fail "a declared name git would read as an option is refused, and the dirty tree survives it" \
+       "rc 1, still on main, the uncommitted line intact, no switch announced and no phase after it" \
+       "rc $BR_OPT_RC at $BR_OPT_AT, file.txt now '$BR_OPT_FILE': $(tail -3 <<< "$BR_OPT_OUT")"
+fi
+git update-ref -d "refs/heads/-f"
+git checkout -q -- file.txt
+
+# --- 4c. the ORDER of the two guards in `sdd run`, which is a decision and not an accident.
+#
+# Deliberately NOT prefixed `branch `, for the reason cases 4 and 4b give: the checkpoint's Check
+# counts the three cases the plan named.
+#
+# `cmd_retry` got this witness when it was written (case 5 of the `retry ` family below); `cmd_run`
+# — the door nearly every invocation goes through — did not, and the gap was measured: swapping the
+# two calls left check-gates.sh at 82 `ok`, rc 0, and the whole suite green. It survived because the
+# base-branch pair for `sdd run` uses a fixture that declares NO branch, and a mission with no
+# declared branch cannot tell the two orders apart.
+#
+# What the wrong order produces is a FALSE warning: the human is told the pipeline is about to
+# commit into the base branch by a runner that is, in the very next line, moving them off it. A
+# warning that cries wolf is how people learn to skip reading the true ones.
+#
+# Self-contained differential, both halves on the SAME command, the SAME fixture and the SAME
+# warning text, so no fixture regime can satisfy it by accident: an empty `branch:` leaves the run
+# standing on the base and the warning MUST appear exactly once; a declared branch moves it off and
+# the warning MUST NOT appear at all. Asserting only the absence would be satisfied by a runner that
+# never warns; asserting only the presence, by one that always does. The branch the run ENDS on is
+# what proves the checkout really happened first, rather than not at all.
+git checkout -q main
+BASE_WARN='you are on the base branch'
+branch_mission ""
+BR_ORD_BASE_OUT="$( cd "$FIX" && "$SDD" run "$BM" 2>&1 )"; BR_ORD_BASE_RC=$?
+BR_ORD_BASE_AT="$(git branch --show-current)"
+BR_ORD_BASE_N="$(grep -c "$BASE_WARN" <<< "$BR_ORD_BASE_OUT" || true)"
+branch_mission "missao/20260103-order"
+BR_ORD_OFF_OUT="$( cd "$FIX" && "$SDD" run "$BM" 2>&1 )"; BR_ORD_OFF_RC=$?
+BR_ORD_OFF_AT="$(git branch --show-current)"
+BR_ORD_OFF_N="$(grep -c "$BASE_WARN" <<< "$BR_ORD_OFF_OUT" || true)"
+if [ "$BR_ORD_BASE_AT" = "main" ] \
+   && [ "$BR_ORD_BASE_N" = "1" ] \
+   && [ "$BR_ORD_OFF_AT" = "missao/20260103-order" ] \
+   && [ "$BR_ORD_OFF_N" = "0" ] \
+   && [ "$BR_ORD_BASE_RC" = "$BR_ORD_OFF_RC" ]; then
+  pass "run order: the base-branch warning follows the checkout, and never precedes it"
+else
+  fail "run order: the base-branch warning follows the checkout, and never precedes it" \
+       "warned once while it stays on main, silent once the declared branch takes it off, same rc" \
+       "on main: $BR_ORD_BASE_AT warned $BR_ORD_BASE_N× (rc $BR_ORD_BASE_RC) · declared: $BR_ORD_OFF_AT warned $BR_ORD_OFF_N× (rc $BR_ORD_OFF_RC)"
+fi
+git checkout -q main
+git branch -q -D missao/20260103-order
+
+# --- 5. the SECOND call site: `sdd retry` honours the declared branch too.
+#
+# One definition, two doors that open a session which commits. Deleting the call in cmd_retry left
+# all four assertions above green — the function still existed, still worked, and was simply never
+# reached by the other door, which is precisely how a single definition drifts back into two
+# behaviours. So the second site gets its own witness.
+#
+# Prefixed neither `branch ` nor `retry `: those two strings are the Checks of this increment and
+# of the next one in checkpoint.md, and an assertion that quietly inflates a sibling's count turns
+# a contract into a coincidence.
+#
+# The mission below stands at PLAN, and that is what makes a REAL `sdd retry` free: the runner
+# refuses a headless PLAN and dies before `run_phase`, so the branch decision — which happens
+# earlier still — is observable with no session spent. "PLAN is interactive" is asserted as the
+# stopping point, so a future reordering that moved the checkout after the session would fail here
+# instead of quietly spending tokens.
+RM="20260104-retry-branch"
+RMDIR="$FIX/docs/handoffs/$RM"
+mkdir -p "$RMDIR"
+cat > "$RMDIR/00-missao.md" <<'EOF'
+---
+missao: 20260104-retry-branch
+aprovacao:
+branch: missao/20260104-retry
+---
+# Mission fixture
+EOF
+BR_RETRY_OUT="$( cd "$FIX" && "$SDD" retry "$RM" 2>&1 )"; BR_RETRY_RC=$?
+BR_RETRY_AT="$(git branch --show-current)"
+if [ "$BR_RETRY_AT" = "missao/20260104-retry" ] \
+   && [ "$BR_RETRY_RC" -eq 1 ] \
+   && grep -q "PLAN is interactive" <<< "$BR_RETRY_OUT" \
+   && ! grep -q "the test invoked the real claude" <<< "$BR_RETRY_OUT"; then
+  pass "sdd retry is the other call site: it honours the declared branch before it stops at PLAN"
+else
+  fail "sdd retry is the other call site: it honours the declared branch before it stops at PLAN" \
+       "on missao/20260104-retry, rc 1 at the interactive-PLAN refusal, no session spent" \
+       "at $BR_RETRY_AT, rc $BR_RETRY_RC: $(tail -2 <<< "$BR_RETRY_OUT")"
+fi
+git checkout -q main
+git branch -q -D missao/20260104-retry
+
+# --- 6. the branch that does not carry the mission: the checkout is not the end of the decision.
+#
+# Every assertion above runs on a fixture whose mission files are UNTRACKED, and in that regime
+# `git checkout` physically cannot remove them — so five assertions agreed about a property none of
+# them could see. This one commits the artifacts first, which is what `sdd approve` now does to
+# 00-missao.md, and then declares a branch cut BEFORE they existed. The house calls this the fixture
+# regime instead of the property (CLAUDE.md): the family was green in the only regime where the
+# question could not be asked.
+#
+# What the runner did with that: read the plan on branch A, switch to branch B, and go on with
+# MISSION_DIR pointing at a path that is no longer there — announcing the switch as a success and
+# then telling the human the mission was never planned. The expensive variant is worse and needs no
+# new fixture to imagine: B carrying an OLDER copy of the plan spends real sessions executing a
+# plan nobody approved.
+#
+# The probe is the DIE plus git's `--show-current`, and the marker of the run going on
+# (`sdd-planner`, the PLAN advice) must be ABSENT: rc 1 alone cannot tell a stopped line from a
+# line that stopped later for its own reasons.
+OM="20260109-orphan"
+OMDIR="$FIX/docs/handoffs/$OM"
+git branch missao/20260109-orphan          # cut BEFORE the mission exists — the ticket-skill flow
+mkdir -p "$OMDIR"
+printf -- '---\nmissao: %s\naprovacao: humano-2026-01-09\nbranch: missao/20260109-orphan\n---\n# Mission fixture\n' \
+  "$OM" > "$OMDIR/00-missao.md"
+: > "$OMDIR/01-plano.md"
+cp "$BMDIR/checkpoint.md" "$OMDIR/checkpoint.md"
+( cd "$FIX" && git add -A && git commit -qm "fixture: a mission whose declared branch predates it" ) >/dev/null
+BR_ORPH_OUT="$( cd "$FIX" && "$SDD" run "$OM" 2>&1 )"; BR_ORPH_RC=$?
+BR_ORPH_AT="$(git branch --show-current)"
+( cd "$FIX" && git checkout -q main )
+if [ "$BR_ORPH_RC" -eq 1 ] \
+   && grep -q "missao/20260109-orphan" <<< "$BR_ORPH_OUT" \
+   && grep -q "does not carry" <<< "$BR_ORPH_OUT" \
+   && ! grep -q "sdd-planner" <<< "$BR_ORPH_OUT" \
+   && ! grep -q "BLOCKED in EXEC" <<< "$BR_ORPH_OUT"; then
+  pass "a declared branch that does not carry the mission stops the line instead of running blind"
+else
+  fail "a declared branch that does not carry the mission stops the line instead of running blind" \
+       "rc 1 naming the branch and saying it does not carry the mission, with no phase after it" \
+       "rc $BR_ORPH_RC, ended at $BR_ORPH_AT: $(tail -3 <<< "$BR_ORPH_OUT")"
+fi
+git branch -q -D missao/20260109-orphan
+
+# --- the fourth door: sdd retry warns about the base branch ----------------
+echo "== sdd retry on the base branch =="
+# `sdd retry` opens a session that COMMITS, exactly like the three doors that already warn
+# (cmd_preflight, cmd_run, cmd_kaizen). It was the one that did not: a retry fired from `main`
+# redid a phase and committed it straight into the base branch with nothing on screen saying so.
+#
+# DIFFERENTIAL, and for the same reason as the `sdd run` pair above: a single fixture standing on
+# `main` cannot tell "warns on the base branch" from "always warns", and the second is a warning
+# that means nothing. The SAME fixture is read twice, one checkout apart, and the two runs are
+# compared to each other.
+#
+# The mission declares NO `branch:` key, which is what keeps this pair measuring the warning
+# instead of the checkout: with a branch declared, ensure_mission_branch would move the retry off
+# `main` before the warning could fire, and the two cases would stop being one checkout apart. The
+# branch each run ENDS on is asserted on both sides, so a fixture that grew a `branch:` key would
+# fail here rather than quietly turn both halves into the same case.
+#
+# It stands at PLAN, and that is what makes a REAL `sdd retry` free: the runner refuses a headless
+# PLAN and dies before `run_phase`, so the warning — which happens earlier — is observable with no
+# session spent. The claude stub turns a reordering that broke that into a loud failure.
+RW="20260105-retry-warn"
+RWDIR="$FIX/docs/handoffs/$RW"
+mkdir -p "$RWDIR"
+cat > "$RWDIR/00-missao.md" <<'EOF'
+---
+missao: 20260105-retry-warn
+aprovacao:
+---
+# Mission fixture
+EOF
+# Captured APART and only then joined, like the `sdd run` pair: a `2>&1` capture cannot tell `warn`
+# (stderr) from `dim` (stdout), and a warning nobody sees on the error stream is decoration again.
+RW_BASE_ERR="$SDD_STATE_FIX/retry-warn-main.err"
+RW_FEAT_ERR="$SDD_STATE_FIX/retry-warn-feature.err"
+RW_BASE_RAW="$( cd "$FIX" && "$SDD" retry "$RW" 2>"$RW_BASE_ERR" )"; RW_BASE_RC=$?
+RW_BASE_AT="$(git branch --show-current)"
+git checkout -q -b missao/20260105-retry-warn
+RW_FEAT_RAW="$( cd "$FIX" && "$SDD" retry "$RW" 2>"$RW_FEAT_ERR" )"; RW_FEAT_RC=$?
+RW_FEAT_AT="$(git branch --show-current)"
+git checkout -q main
+git branch -q -D missao/20260105-retry-warn
+RW_BASE_OUT="$(no_uuid <<< "$RW_BASE_RAW"$'\n'"$(cat "$RW_BASE_ERR")")"
+RW_FEAT_OUT="$(no_uuid <<< "$RW_FEAT_RAW"$'\n'"$(cat "$RW_FEAT_ERR")")"
+
+# Reads the ERROR stream: presence and severity in one assertion, so the only way to satisfy it is
+# the `warn` the runner is supposed to print. The rc and the PLAN refusal ride along because the
+# expensive regression here is not a missing line, it is the guard turning into a `die` — that
+# would lock a human out of retrying the moment they forgot to branch.
+#
+# EXACTLY one, never "at least one". The adversarial pass duplicated the call inside cmd_retry and
+# a presence check stayed green: the differential half below strips every copy of the line before
+# comparing, so a runner shouting the same warning twice satisfied both halves. A warning that
+# repeats is how people learn to skip reading them, which is the failure this door exists to avoid.
+RW_BASE_WARN="$(grep -c 'you are on the base branch' <<< "$RW_BASE_OUT")"
+if grep -q 'you are on the base branch' "$RW_BASE_ERR" \
+   && [ "$RW_BASE_WARN" -eq 1 ] \
+   && [ "$RW_BASE_RC" -eq 1 ] \
+   && [ "$RW_BASE_AT" = "main" ] \
+   && grep -q "PLAN is interactive" <<< "$RW_BASE_OUT" \
+   && ! grep -q "the test invoked the real claude" <<< "$RW_BASE_OUT"; then
+  pass "retry warns on the base branch too — on stderr, and still a warn and not a die"
+else
+  fail "retry warns on the base branch too — on stderr, and still a warn and not a die" \
+       "the warning on STDERR, rc 1 at the interactive-PLAN refusal, still on main" \
+       "rc $RW_BASE_RC at $RW_BASE_AT, warned $RW_BASE_WARN× · stderr: $(tr '\n' '|' < "$RW_BASE_ERR" | head -c 200)"
+fi
+
+# The other half. The byte comparison is what separates "the warning was added" from "the warning
+# changed the retry": strip the warned line from the base-branch output and the two runs have to be
+# the same text, at the same rc. A retry that started behaving differently on one of the two
+# branches — an early return, a phase resolved elsewhere — passes the assertion above and dies here.
+RW_FEAT_WARN="$(grep -c 'you are on the base branch' <<< "$RW_FEAT_OUT")"
+if [ "$RW_FEAT_WARN" -eq 0 ] \
+   && [ "$RW_FEAT_AT" = "missao/20260105-retry-warn" ] \
+   && [ "$RW_BASE_RC" = "$RW_FEAT_RC" ] \
+   && [ "$(grep -v 'you are on the base branch' <<< "$RW_BASE_OUT")" = "$RW_FEAT_OUT" ]; then
+  pass "retry is silent off it, and the warning is the ONLY difference between the two retries"
+else
+  fail "retry is silent off it, and the warning is the ONLY difference between the two retries" \
+       "no warning on missao/20260105-retry-warn, same rc, identical output once the line is removed" \
+       "at $RW_FEAT_AT (rc $RW_FEAT_RC, base rc $RW_BASE_RC), warned $RW_FEAT_WARN×: $(diff <(grep -v 'you are on the base branch' <<< "$RW_BASE_OUT") <(printf '%s\n' "$RW_FEAT_OUT") | head -5)"
+fi
+
+# --- and the ORDER of the two guards, which is a decision and not an accident.
+#
+# Deliberately NOT prefixed `retry `: that string is this increment's Check in checkpoint.md, and
+# an assertion that inflates it turns a contract into a coincidence. This is the third case, born
+# of the adversarial pass — moving the call ABOVE ensure_mission_branch left the pair above green,
+# because a mission that declares no branch cannot tell the two orders apart.
+#
+# What the wrong order produces is a FALSE warning: the human is told the pipeline is about to
+# commit into the base branch by a runner that is, in the very next line, moving them off it. A
+# warning that cries wolf is how people learn to skip reading them — the same reason the guard
+# stays silent on a detached HEAD.
+#
+# The absence is only meaningful because the presence half exists above, on the same command and
+# the same warning text: on its own, "no warning here" is satisfied by a runner that never warns at
+# all. The branch the retry ENDS on is what says the checkout really happened first.
+RWO="20260105-retry-order"
+RWODIR="$FIX/docs/handoffs/$RWO"
+mkdir -p "$RWODIR"
+cat > "$RWODIR/00-missao.md" <<'EOF'
+---
+missao: 20260105-retry-order
+aprovacao:
+branch: missao/20260105-retry-order
+---
+# Mission fixture
+EOF
+RWO_OUT="$( cd "$FIX" && "$SDD" retry "$RWO" 2>&1 )"; RWO_RC=$?
+RWO_AT="$(git branch --show-current)"
+if [ "$RWO_AT" = "missao/20260105-retry-order" ] \
+   && [ "$RWO_RC" -eq 1 ] \
+   && grep -q "PLAN is interactive" <<< "$RWO_OUT" \
+   && ! grep -q 'you are on the base branch' <<< "$RWO_OUT"; then
+  pass "and the warning follows the checkout: a retry being moved off the base branch is not warned"
+else
+  fail "and the warning follows the checkout: a retry being moved off the base branch is not warned" \
+       "on missao/20260105-retry-order, rc 1 at the PLAN refusal, and no base-branch warning" \
+       "at $RWO_AT, rc $RWO_RC: $(tail -3 <<< "$RWO_OUT")"
+fi
+git checkout -q main
+git branch -q -D missao/20260105-retry-order
+
+# --- a kaizen-born plan never approves itself ------------------------------
+echo "== kaizen-born plans =="
+# `aprovacao: auto` means one thing and one thing only: the PLAN-AUTO table was all ✅ *with the
+# human in the room*, which is the premise sdd-planner writes it under. A plan born of `sdd kaizen`
+# had no human in the room — the kit planned its own next change — so `auto` there is a machine
+# certifying its own homework. agents/sdd-kaizen.md already orders the born plan to ship with
+# `aprovacao:` EMPTY, and gate_KAIZEN refuses to hand one over with the field filled; but nothing
+# stopped the born plan from filling it in later, and gate_PLAN — the gate `sdd run` actually asks
+# — read `auto` without ever looking at where the plan came from. Prose on one side, a gate blind
+# to it on the other: the kit could approve itself and run.
+#
+# The marker is `05-verdict.md` sitting in the mission directory, and it is not a convention
+# invented here: gate_KAIZEN finds the verdict and takes `dirname` as the born plan's home
+# (bin/sdd:2441), so the two files are siblings by construction. Provenance of the frontmatter
+# below: docs/handoffs/20260816-kit-como-alvo/05-verdict.md, the verdict the kit's own second
+# kaizen lap wrote — read from there, not remembered. It is spelled out instead of `cp`ed because
+# the gate reads the file's NAME and nothing inside it, and a copy would make this sensor depend on
+# one mission directory surviving in the repo forever.
+#
+# THREE cases on ONE fixture, and the shape is what makes them differential. Only one thing changes
+# between case 1 and case 2 (the verdict file appears) and only one between 2 and 3 (the approval
+# becomes a human's), so no assertion can be satisfied by a fixture that happens to sit in the
+# right regime: whichever half a regression breaks, the other half is standing right next to it.
+#
+# Neither slug below contains the words the assertions grep for, and that is not tidiness. The
+# refusal names the mission (`run 'sdd approve <mission>'`), so a fixture called `…-kaizen-born`
+# put the probe's own needle into the runner's output: degrading the message to drop "kaizen-born"
+# left the assertion green, because the mission NAME was still carrying it. The probe must only be
+# satisfiable by the gate's own words.
+KM="20260106-selfapproved"
+KMDIR="$FIX/docs/handoffs/$KM"
+mkdir -p "$KMDIR"
+cat > "$KMDIR/00-missao.md" <<'EOF'
+---
+missao: 20260106-selfapproved
+aprovacao: auto
+---
+# Mission fixture
+EOF
+: > "$KMDIR/01-plano.md"
+cat > "$KMDIR/checkpoint.md" <<'EOF'
+| ID | Incremento | Check (comando → esperado) | Status | Commit |
+|---|---|---|---|---|
+| I1 | one slice | `true` → 0 | pending | — |
+EOF
+# A SIBLING mission, planner-written and approved `auto`, that never gets a verdict of its own. It
+# is read in case 2 — after the verdict below exists — and it is what pins the marker to THE
+# MISSION instead of to the repo. The adversarial pass built the version that asks
+# `ls $HANDOFF_DIR/*/05-verdict.md`, which reads identically on the case-1 fixture and then refuses
+# every `auto` plan in any repo that has ever run `sdd kaizen` — the kit's own, for one. It
+# survived every other assertion here.
+KS="20260106-planner-written"
+KSDIR="$FIX/docs/handoffs/$KS"
+mkdir -p "$KSDIR"
+printf -- '---\nmissao: %s\naprovacao: auto\n---\n# Mission fixture\n' "$KS" > "$KSDIR/00-missao.md"
+: > "$KSDIR/01-plano.md"
+cp "$KMDIR/checkpoint.md" "$KSDIR/checkpoint.md"
+
+# --- 1. the control: the very same `auto`, with no verdict beside it, runs.
+#
+# It goes FIRST and on the fixture the refusal will use, because it is the only thing that says the
+# new branch discriminates instead of just refusing. A gate that turned every `auto` away would
+# satisfy every assertion about the refusal below and die here — and it would brick the ordinary
+# planner-written mission, which is most of them.
+KB_OK_PHASE="$( cd "$FIX" && "$SDD" phase "$KM" 2>&1 )"
+KB_OK_WHY="$( cd "$FIX" && "$SDD" why "$KM" PLAN 2>&1 )"
+if [ "$KB_OK_PHASE" = "EXEC" ] \
+   && grep -q 'plan approved' <<< "$KB_OK_WHY" \
+   && ! grep -q 'kaizen-born' <<< "$KB_OK_WHY"; then
+  pass "kaizen-born: 'auto' with no verdict beside it is an ordinary approved plan and still runs"
+else
+  fail "kaizen-born: 'auto' with no verdict beside it is an ordinary approved plan and still runs" \
+       "phase EXEC and a PLAN reason that approves without mentioning kaizen-born" \
+       "phase $KB_OK_PHASE, why: $KB_OK_WHY"
+fi
+
+# --- 2. the verdict appears: the same file, the same `auto`, and now the gate shuts.
+#
+# The reason is read, not just the rc: `auto` is on gate_PLAN's happy path, so a refusal that came
+# out of some OTHER branch (a missing artifact, an unparseable checkpoint) would leave the phase at
+# PLAN exactly the same way and this assertion could not tell which one ran. Hence the pair — the
+# new branch's own words present AND the happy path's marker absent.
+#
+# `sdd approve <mission>` is demanded inside the reason on purpose. A gate that shuts without
+# naming the way out sends the human back to hand-editing frontmatter, which is the failure the
+# approve command was built to end: the refusal has to carry its own remedy or it is just a wall.
+cat > "$KMDIR/05-verdict.md" <<'EOF'
+---
+verdict: indeterminado
+kit_sha_judged: dd80cb9
+date: 2026-01-06
+---
+# Verdict fixture
+EOF
+#
+# The sibling is read in the same breath, and only now that a verdict exists somewhere in the tree:
+# it is the witness that the marker is the mission's own file and not "this repo does kaizen".
+KB_NO_PHASE="$( cd "$FIX" && "$SDD" phase "$KM" 2>&1 )"
+KB_NO_WHY="$( cd "$FIX" && "$SDD" why "$KM" PLAN 2>&1 )"
+KB_SIB_PHASE="$( cd "$FIX" && "$SDD" phase "$KS" 2>&1 )"
+if [ "$KB_NO_PHASE" = "PLAN" ] \
+   && grep -q 'kaizen-born' <<< "$KB_NO_WHY" \
+   && grep -q "sdd approve $KM" <<< "$KB_NO_WHY" \
+   && ! grep -q 'plan approved' <<< "$KB_NO_WHY" \
+   && [ "$KB_SIB_PHASE" = "EXEC" ]; then
+  pass "kaizen-born: the verdict beside it turns 'auto' into a refusal that names sdd approve"
+else
+  fail "kaizen-born: the verdict beside it turns 'auto' into a refusal that names sdd approve" \
+       "phase PLAN and a reason citing kaizen-born and 'sdd approve $KM', never 'plan approved' — and the sibling mission still at EXEC" \
+       "phase $KB_NO_PHASE, sibling $KB_SIB_PHASE, why: $KB_NO_WHY"
+fi
+
+# --- 3. and the way out really is a way out: the human's own approval passes, verdict and all.
+#
+# Without this the branch could be `[ -f 05-verdict.md ]` alone and everything above would still be
+# green — a kaizen-born mission would then be unrunnable FOREVER, `sdd approve` included, and the
+# kit's own improvement loop would have no terminating state at all. What is refused is a machine
+# certifying itself, never the presence of a verdict.
+#
+# The value is written the way cmd_approve writes it (`humano-<date>`) and not some other legal
+# string, so this case also pins the two halves of the mission together: the gate has to accept
+# exactly what the command produces.
+sed -i 's/^aprovacao: auto/aprovacao: humano-2026-01-06/' "$KMDIR/00-missao.md"
+KB_HUMAN_PHASE="$( cd "$FIX" && "$SDD" phase "$KM" 2>&1 )"
+KB_HUMAN_WHY="$( cd "$FIX" && "$SDD" why "$KM" PLAN 2>&1 )"
+if [ "$KB_HUMAN_PHASE" = "EXEC" ] \
+   && grep -q 'plan approved (humano-2026-01-06)' <<< "$KB_HUMAN_WHY" \
+   && ! grep -q 'kaizen-born' <<< "$KB_HUMAN_WHY"; then
+  pass "kaizen-born: the human's own approval opens the gate with the verdict still sitting there"
+else
+  fail "kaizen-born: the human's own approval opens the gate with the verdict still sitting there" \
+       "phase EXEC and a PLAN reason approving 'humano-2026-01-06' without mentioning kaizen-born" \
+       "phase $KB_HUMAN_PHASE, why: $KB_HUMAN_WHY"
+fi
+
+# --- the remedy the refusal names has to work ------------------------------
+echo "== the remedy the kaizen-born refusal names =="
+# gate_PLAN refuses a kaizen-born `auto` and names ONE way out: `run 'sdd approve <mission>'`.
+# cmd_approve reads `auto` as "already approved — nothing to do" and returns 0 without writing.
+# The two sets are not merely overlapping, they are nested: the gate refuses only when the value is
+# `auto`, and `auto` is exactly what makes approve bail. Every plan the gate stops is a plan the
+# named remedy declines to fix, so the instruction never works — not sometimes, never. What is left
+# is hand-typing `humano-YYYY-MM-DD` into the frontmatter, which is the failure `sdd approve` was
+# built to end and which the refusal's own comment says it exists to avoid.
+#
+# The assertion above this one already reaches the approved state — with `sed -i`. That is why the
+# seam went unmeasured: simulating the remedy proves the GATE accepts what the command would write,
+# never that the COMMAND gets there. This one invokes the remedy the runner prints.
+#
+# Found by sdd-qa walking the journey in mission 20260816-portas-do-humano: `sdd why`, `sdd status`
+# and `sdd run` each print the instruction, and all three loop forever.
+QM="20260107-named-remedy"
+QMDIR="$FIX/docs/handoffs/$QM"
+mkdir -p "$QMDIR"
+# The slug carries neither "already" nor the words the probe looks for below: a fixture whose name
+# satisfies the probe hands the runner the needle (the I4 notes paid for that lesson once).
+cat > "$QMDIR/00-missao.md" <<'EOF'
+---
+missao: 20260107-named-remedy
+titulo: fixture — a machine-approved plan with a verdict beside it
+aprovacao: auto
+---
+# Mission
+EOF
+: > "$QMDIR/01-plano.md"
+cat > "$QMDIR/checkpoint.md" <<'EOF'
+| ID | Incremento | Check (comando → esperado) | Status | Commit |
+|---|---|---|---|---|
+| I1 | fatia de fixture | `true` → `0` | pending | — |
+EOF
+printf -- '---\nmissao: %s\n---\n# Verdict\n' "$QM" > "$QMDIR/05-verdict.md"
+( cd "$FIX" && git add -A && git commit -qm "fixture: a kaizen-born plan carrying auto" ) >/dev/null
+
+# The SIBLING that keeps the fix honest: `auto` with no verdict beside it is an ordinary
+# planner-written plan, already approved, and `sdd approve` must go on declining it. Without this
+# half the cheapest way to satisfy the assertion above is to drop `auto` from the bail case
+# altogether — which would rewrite every legitimate `auto` into `humano-<today>` on contact,
+# erasing the PLAN-AUTO provenance the value carries. What is being demanded is that approve act on
+# the kaizen-born condition, not that it stop recognising approval.
+QN="20260107-planner-auto"
+QNDIR="$FIX/docs/handoffs/$QN"
+mkdir -p "$QNDIR"
+sed -e "s/$QM/$QN/" -e 's/^titulo:.*/titulo: fixture — an ordinary plan the planner approved/' \
+    "$QMDIR/00-missao.md" > "$QNDIR/00-missao.md"
+: > "$QNDIR/01-plano.md"
+cp "$QMDIR/checkpoint.md" "$QNDIR/checkpoint.md"
+( cd "$FIX" && git add -A && git commit -qm "fixture: a planner-written plan approved auto" ) >/dev/null
+
+QM_WHY="$( cd "$FIX" && "$SDD" why "$QM" PLAN 2>&1 )"
+QM_DAY_0="$(date +%F)"
+QM_OUT="$( cd "$FIX" && "$SDD" approve "$QM" 2>&1 <<< "y" )"; QM_RC=$?
+QM_DAY_1="$(date +%F)"
+QM_LINE="$(grep -m1 '^aprovacao:' "$QMDIR/00-missao.md")"
+QM_PHASE="$( cd "$FIX" && "$SDD" phase "$QM" 2>&1 )"
+QN_HEAD_0="$( cd "$FIX" && git rev-parse HEAD )"
+QN_OUT="$( cd "$FIX" && "$SDD" approve "$QN" 2>&1 <<< "y" )"
+QN_LINE="$(grep -m1 '^aprovacao:' "$QNDIR/00-missao.md")"
+QN_HEAD_1="$( cd "$FIX" && git rev-parse HEAD )"
+# The refusal is asserted FIRST: without it a runner that simply stopped refusing kaizen-born plans
+# would satisfy every clause below, and this assertion would quietly become a test of nothing.
+# `already approved` is demanded ABSENT on one side and PRESENT on the other for the same reason the
+# `auto` check exists above — the bail path and the write path both return 0, so rc alone cannot
+# tell them apart.
+# The announcement clause was added by sdd-executor closing F1, after a sabotage pass found it was
+# the one degradation that survived: stripping the warning left `sdd approve` silently replacing a
+# committed `aprovacao: auto` with `humano-<today>`, and every clause below stayed green. Overwriting
+# a value the artifact carries is exactly what this command was built NOT to do quietly — the human
+# is told which of the two `auto`s this is before being asked. Demanded present on the kaizen-born
+# side and ABSENT on the verdict-less one, so a runner that simply warns at every approve fails too.
+if grep -q 'kaizen-born' <<< "$QM_WHY" \
+   && [ "$QM_RC" -eq 0 ] \
+   && { [ "$QM_LINE" = "aprovacao: humano-$QM_DAY_0" ] \
+        || [ "$QM_LINE" = "aprovacao: humano-$QM_DAY_1" ]; } \
+   && ! grep -q 'already approved' <<< "$QM_OUT" \
+   && grep -q 'born of sdd kaizen' <<< "$QM_OUT" \
+   && [ "$QM_PHASE" != "PLAN" ] \
+   && [ "$QN_LINE" = "aprovacao: auto" ] \
+   && grep -q 'already approved' <<< "$QN_OUT" \
+   && grep -q 'you are on the base branch' <<< "$QM_OUT" \
+   && ! grep -q 'you are on the base branch' <<< "$QN_OUT" \
+   && ! grep -q 'born of sdd kaizen' <<< "$QN_OUT" \
+   && [ "$QN_HEAD_1" = "$QN_HEAD_0" ]; then
+  pass "approve resolves the refusal that names it, and still declines an 'auto' with no verdict"
+else
+  fail "approve resolves the refusal that names it, and still declines an 'auto' with no verdict" \
+       "PLAN refused for kaizen-born, then the born plan announced and 'aprovacao: humano-$QM_DAY_0' written and the phase off PLAN — while the verdict-less sibling stays 'aprovacao: auto', unannounced and uncommitted" \
+       "why: $QM_WHY | rc $QM_RC, phase $QM_PHASE, line '$QM_LINE', out: $(tail -2 <<< "$QM_OUT") | sibling line '$QN_LINE', sibling out: $(tail -1 <<< "$QN_OUT")"
+fi
+
+# --- approve is a door that commits, so it says which branch it is on ------
+echo "== approve on the base branch =="
+# warn_if_on_base_branch has ONE definition and its comment enumerates "the four doors that can end
+# up committing": preflight, run, retry, kaizen. `sdd approve` commits — it is the fifth, written in
+# the same mission that closed the silence for the fourth, and it is the only one that does not
+# warn. Approving while standing on `main` drops a `chore(missao)` commit straight into the base
+# branch without a word, which is the class this mission exists to end.
+#
+# A warning and never a `die`: the plan legitimately lives on the base branch before the mission
+# branch is cut (ensure_mission_branch cuts it FROM there), so refusing would break the ordinary
+# flow. The pair is what keeps it honest — a guard that always fires teaches people to skip reading
+# it, and is indistinguishable from a banner.
+#
+# `n` on both calls: the warning fires before the question, so the pair measures the warning alone
+# and leaves the fixture's history untouched.
+QW="20260108-door-that-commits"
+QWDIR="$FIX/docs/handoffs/$QW"
+mkdir -p "$QWDIR"
+cat > "$QWDIR/00-missao.md" <<'EOF'
+---
+missao: 20260108-door-that-commits
+titulo: fixture — approving from the base branch
+aprovacao:
+branch:
+---
+# Mission
+EOF
+: > "$QWDIR/01-plano.md"
+cat > "$QWDIR/checkpoint.md" <<'EOF'
+| ID | Incremento | Check (comando → esperado) | Status | Commit |
+|---|---|---|---|---|
+| I1 | fatia de fixture | `true` → `0` | pending | — |
+EOF
+( cd "$FIX" && git add -A && git commit -qm "fixture: a plan waiting for approval" ) >/dev/null
+
+( cd "$FIX" && git checkout -q main )
+QW_ON_BASE="$( cd "$FIX" && "$SDD" approve "$QW" 2>&1 <<< "n" )"
+( cd "$FIX" && git checkout -q -b off-base-for-approve )
+QW_OFF_BASE="$( cd "$FIX" && "$SDD" approve "$QW" 2>&1 <<< "n" )"
+QW_BRANCH="$( cd "$FIX" && git branch --show-current )"
+# A third invocation, back on the base branch, with the increment table made unparseable. The
+# branch is the ONLY thing this guard may depend on, and the pair above cannot say so: a sabotage
+# pass moved the call inside the `if [ -n "$rows" ]` arm and every clause stayed green, because the
+# fixture happened to satisfy the unrelated condition. That is how a guard ends up firing for the
+# missions that need it least — and a half-written checkpoint is exactly the mission most likely to
+# be approved in a hurry, from wherever the human is standing.
+( cd "$FIX" && git checkout -q main )
+printf 'this file carries no parseable increment row\n' > "$QWDIR/checkpoint.md"
+QW_NOROWS="$( cd "$FIX" && "$SDD" approve "$QW" 2>&1 <<< "n" )"
+QW_NOROWS_N="$(grep -c 'you are on the base branch' <<< "$QW_NOROWS")"
+( cd "$FIX" && git checkout -q -- "docs/handoffs/$QW/checkpoint.md" )
+# WHERE in the output, not merely whether: the clause below was added by sdd-executor closing F2,
+# after a sabotage pass found it was the one degradation the pair alone could not see. Moving the
+# call to just after `read -r ans` keeps both greps green and tells the human which branch they
+# were standing on AFTER they already answered — a guard that arrives late is not a guard, it is a
+# receipt, and the SQ-97 class this mission exists to end is precisely being told after the fact.
+# The prompt carries no trailing newline, so a warning printed after it lands ON the prompt line
+# and the comparison is strict: equal line numbers are the late warning, not an early one.
+#
+# awk with `exit` rather than `grep -n | head -1`: one process, no pipe, so nothing here can return
+# 141 under `pipefail` when the match is found before the writer finishes (a house lesson, in
+# CLAUDE.md). Both numbers are demanded non-empty — a missing warning would otherwise arrive as an
+# empty string and compare its way to a pass.
+#
+# Counted, not just present, for the reason the `retry ` pair states: with "at least one" a guard
+# that fires early AND again after the answer passes, and the late copy is the crying wolf the
+# definition's own comment says it must never become. Exactly one on the base branch, exactly none
+# off it.
+QW_WARN_N="$(grep -c 'you are on the base branch' <<< "$QW_ON_BASE")"
+QW_WARN_OFF_N="$(grep -c 'you are on the base branch' <<< "$QW_OFF_BASE")"
+QW_WARN_AT="$(awk '/you are on the base branch/ { print NR; exit }' <<< "$QW_ON_BASE")"
+QW_ASK_AT="$(awk '/approve this plan/ { print NR; exit }' <<< "$QW_ON_BASE")"
+if [ "$QW_WARN_N" -eq 1 ] \
+   && [ "$QW_WARN_OFF_N" -eq 0 ] \
+   && [ "$QW_NOROWS_N" -eq 1 ] \
+   && [ -n "$QW_WARN_AT" ] && [ -n "$QW_ASK_AT" ] && [ "$QW_WARN_AT" -lt "$QW_ASK_AT" ]; then
+  pass "approve warns about the base branch it is about to commit into, and is silent off it"
+else
+  fail "approve warns about the base branch it is about to commit into, and is silent off it" \
+       "exactly one warning on main and BEFORE the [y/N] question, none on $QW_BRANCH, one again with an unparseable checkpoint" \
+       "on main: $QW_WARN_N warning(s), at line ${QW_WARN_AT:-<none>}, question at line ${QW_ASK_AT:-<none>}, $(tail -2 <<< "$QW_ON_BASE") | off base: $QW_WARN_OFF_N warning(s), $(tail -2 <<< "$QW_OFF_BASE") | no rows: $QW_NOROWS_N warning(s), $(tail -1 <<< "$QW_NOROWS")"
 fi
 
 # ---------------------------------------------------------------------------

@@ -30,6 +30,82 @@ Achados sobre **repos-alvo** vão para o `TODO.md` daquele repo. Este arquivo é
 
 ### Sensores que faltam
 
+- [ ] **A rubrica do auto-teste no `CLAUDE.md` conta cinco sensores e o `grep` devolve seis** —
+  `CLAUDE.md:135` — a linha manda conferir por `grep -l selftest tests/` e declara o resultado
+  esperado; medido na `main` e no HEAD, os dois devolvem **6**, porque o `jobs_selftest()` do
+  escalonador (`tests/check-mutation.sh:63`, entrou em `52414e4`) casa o grep sem ser auto-teste de
+  regra. Número escrito à mão em rubrica é a mesma classe do `44 caught of 44` que esta missão já
+  tirou de lá. Direção: contar a propriedade (`grep -l '^selftest()' `) ou citar os nomes.
+  — descoberto por `sdd-docs` na missão `20260816-portas-do-humano` (2026-08-17)
+
+- [ ] **Fase que morre com a árvore suja faz o runner rederivar EXEC para sempre** —
+  `bin/sdd:426` — `gate_EXEC` roda o `TEST_CMD` sobre o working tree, então o vermelho de QUALQUER
+  fase em voo é lido como vermelho do EXEC. Medido nesta missão: a REVIEW morreu antes de commitar,
+  o `sdd why` respondeu `EXEC: TEST_CMD failed` com os 6 incrementos `done` e o HEAD verde, e sem
+  intervenção o runner reabriria o EXEC a ~US$ 25 a volta. Direção: gate que distingue árvore suja
+  de HEAD vermelho e escala em vez de rederivar.
+  — descoberto por `sdd-executor` na missão `20260816-portas-do-humano` (2026-08-17)
+
+- [ ] **`sdd approve` diz "next: sdd run" com o `gate_PLAN` ainda fechado por outro motivo** —
+  `bin/sdd:1950` — o comando roda o gate uma vez no topo, só desiste em `missing *`, e depois de
+  commitar imprime o próximo passo sem reperguntar. Medido: com `JIRA_ENABLED=true` e `versao:`
+  placeholder, ele aprova, commita, manda `sdd run` — e o `sdd why` seguinte recusa por `versao`.
+  Todo motivo novo do gate herda o defeito de graça. Direção: reperguntar o gate depois do commit e
+  imprimir `GATE_WHY` em vez do próximo passo (some também o `warn` do checkpoint feito à mão).
+  — descoberto por `sdd-reviewer` na missão `20260816-portas-do-humano` (2026-08-16)
+
+- [ ] **O fixture do `approve` mede o `sed` no arquivo inteiro, não o escopo do frontmatter** —
+  `tests/check-gates.sh:716` (`approval_stripped`) — a cópia de `aprovacao:` no corpo pega `sed`
+  global porque `sed` reescreve TODAS as ocorrências; o awk que o kit usa para na primeira sozinho,
+  então tirar a guarda `inside &&` (reescrever a primeira chave em qualquer lugar do arquivo) deixa
+  a suíte verde e corrompe prosa de missão sem a chave no frontmatter. RESOLVIDO por `ad0c89d`:
+  fixture sem a chave no frontmatter e com ela no corpo, probe nos BYTES do arquivo.
+  — descoberto por `sdd-reviewer` na missão `20260816-portas-do-humano` (2026-08-16)
+
+- [ ] **`frontmatter_write` confia em três coisas que não valem sempre** — `bin/sdd:188-218` — o
+  `chmod --reference … || true` engole a falha e deixa o artefato 0600 para sempre em userland não
+  GNU; o `mv` troca um `00-missao.md` que seja SYMLINK por arquivo comum (o alvo real fica com o
+  valor velho, e o commit leva a troca de tipo); e `awk -v v="$valor"` interpreta escape de barra
+  invertida — inócuo no único chamador de hoje, armadilha para o segundo. Direção: `warn` no chmod,
+  `readlink -f` (ou `die`) no alvo, e valor por `ENVIRON` no awk.
+  — descoberto por `sdd-reviewer` na missão `20260816-portas-do-humano` (2026-08-16)
+
+- [ ] **A branch que a fase TICKET cria nunca chega ao campo que o runner lê** —
+  `agents/sdd-publisher.md:98` grava `branch:` no `10-ticket.md`, e `ensure_mission_branch`
+  (`bin/sdd:1363`) só lê o `00-missao.md`. Com `JIRA_ENABLED=true` o campo fica no placeholder para
+  sempre e a guarda da classe SQ-97 não existe nesses repos — a missão fechou a porta no caminho
+  sem JIRA, e a decisão 6 do `00-missao.md` manteve o TICKET fora de escopo de propósito.
+  Direção: a fase TICKET escreve o nome criado no `00-missao.md` via `frontmatter_write`.
+  — descoberto por `sdd-reviewer` na missão `20260816-portas-do-humano` (2026-08-17)
+
+- [ ] **A releitura pós-checkout confere o campo `branch:`, não a identidade do plano** —
+  `bin/sdd:1405` — se a branch declarada carrega uma cópia ANTIGA do mesmo `00-missao.md` (slug
+  reusado, branch velha de mesmo nome), o campo bate, a guarda passa e o pipeline roda contra um
+  plano que ninguém aprovou nesta sessão. O comentário da própria função já enuncia o risco ("a
+  branch carrying an OLDER copy"). Direção: comparar hash do artefato antes e depois do checkout.
+  — descoberto por `sdd-reviewer` na missão `20260816-portas-do-humano` (2026-08-17)
+
+- [ ] **O call site de `ensure_mission_branch` no `cmd_retry` não tem entrada no catálogo** —
+  `tests/check-mutation.sh:660` (`CATALOG`) — remover a linha do `cmd_retry` É pego pelo
+  `check-gates.sh` ("sdd retry is the other call site"), mas nenhuma mutação exercita a remoção,
+  então o score não credita a proteção. Não é defeito, é contabilidade do `sdd health`.
+  Direção: `mut_RETRY_branch_switch_dead` endereçado ao corpo do `cmd_retry`.
+  — descoberto por `sdd-reviewer` na missão `20260816-portas-do-humano` (2026-08-17)
+
+- [ ] **O `die` de artefato faltando do `sdd approve` é regra sem probe** — `bin/sdd:1842` — o
+  comando repete o diagnóstico do `gate_PLAN` (`missing 01-plano.md`) e morre antes de imprimir
+  qualquer coisa; os cinco fixtures de approve carregam sempre os três artefatos, então trocar o
+  `die` por um `return 0` deixa a suíte inteira verde e o comando passa a commitar aprovação de uma
+  missão sem plano. Direção: um sexto fixture só com `00-missao.md`, nomeado fora dos prefixos
+  contados. — descoberto por `sdd-reviewer` na missão `20260816-portas-do-humano` (2026-08-16)
+
+- [ ] **`sdd health` morre mudo quando a suíte está vermelha — o caso que ele existe para relatar**
+  — `bin/sdd:1588` — `out="$( … run-all.sh )"; rc=$?` é atribuição de substituição de comando: sob
+  `set -e` a suíte vermelha mata o script ali, e o `health_bad "suite red (rc $rc)"` da linha
+  seguinte é código morto. Medido: 1 linha de saída e rc 1, sem dizer o que quebrou — os 4 checks
+  restantes nunca rodam. Direção: `if out="$(…)"; then` ou `|| rc=$?`, com fixture de suíte vermelha.
+  — descoberto por `sdd-executor` na missão `20260816-portas-do-humano` (2026-08-16)
+
 - [ ] **A linha `N kit agent(s) checked` não é observável por nenhum fixture** — `bin/sdd:1356` —
   ela só sai com `fails -eq 0`, e todo fixture offline reprova antes (o probe do `claude` e o
   `gh auth status`). O I3 provou o ramo de falha por diferencial, mas o ramo de sucesso — a frase
@@ -37,21 +113,37 @@ Achados sobre **repos-alvo** vão para o `TODO.md` daquele repo. Este arquivo é
   contador de agentes impresso fora da guarda de `fails`.
   — descoberto por `sdd-executor` na missão `20260816-kit-como-alvo` (2026-08-16)
 
+- [ ] **A guarda de read-back do `sdd approve` é regra sem probe** — `bin/sdd:1933` — o comando
+  relê o `aprovacao:` pelo mesmo parser do gate antes de commitar, para o caso de a chave não
+  existir no frontmatter (aí o `frontmatter_write` é no-op e o commit aprovaria nada). Sabotar a
+  guarda deixa as 3 asserções verdes: nenhum fixture tem missão sem a chave. RESOLVIDO por
+  `ad0c89d`: o fixture `20260102-nokey` alcança o estado, nomeado fora do prefixo contado.
+  — descoberto por `sdd-executor` na missão `20260816-portas-do-humano` (2026-08-16)
+
+- [ ] **A ordem checkout-antes-do-aviso é regra sem probe no `cmd_run`** — `bin/sdd:1986-1990` —
+  inverter as duas linhas deixa a suíte inteira verde: o fixture do par diferencial da branch base
+  não declara `branch:`, então os dois usos são indistinguíveis nele. Invertido, o `sdd run` avisa
+  que vai commitar na base um humano que ele tira da base na linha seguinte — aviso falso, e é
+  assim que se aprende a não ler aviso. RESOLVIDO por `ad0c89d`: par diferencial autocontido
+  (`branch:` vazia avisa 1×, declarada avisa 0×) mais a mutação `RUN_branch_order_swap`.
+  — descoberto por `sdd-executor` na missão `20260816-portas-do-humano` (2026-08-16)
+
 - [ ] **Aprovar plano é editar frontmatter à mão — o gate humano é a única interação sem
   comando** — `bin/sdd` (não existe `cmd_approve`) vs `gate_PLAN` (`:261`) — destravar a fase
   PLAN exige abrir o `00-missao.md` e digitar `aprovacao: humano-YYYY-MM-DD` no formato exato.
   Sem apresentação do que se aprova, sem data automática, sem commit: convida a errar o formato
-  ou a delegar à sessão, que é justamente quem não pode decidir. Direção: `sdd approve <missão>`
-  imprimindo título, PLAN-AUTO, incrementos e riscos, pedindo confirmação e escrevendo com
-  `date +%F`. — descoberto por `humano` na missão `20260816-kit-como-alvo` (2026-08-16)
+  ou a delegar à sessão, que é justamente quem não pode decidir. RESOLVIDO por `96a1f68`:
+  `sdd approve <missão>` imprime, pergunta `[y/N]`, escreve com `date +%F` e commita só o
+  `00-missao.md`. — descoberto por `humano` na missão `20260816-kit-como-alvo` (2026-08-16)
 
 - [ ] **Duas regras conflitantes sobre `aprovacao:`, e só um comando aplica a restrição** —
   `agents/sdd-planner.md:111` ("all ✅ → `aprovacao: auto`") vs `agents/sdd-kaizen.md:113`
   ("EMPTY, always") — plano kaizen-born com PLAN-AUTO toda ✅ dá ao planner licença textual para
   `auto`, e a premissa que a justifica ("the human was present") é falsa em sessão headless.
   `gate_PLAN` aceita `auto` e o pipeline vai até o PR; quem reclama é a volta seguinte do
-  `sdd kaizen`, com rc 3 (`bin/sdd:2151`). Direção: o prompt da fase PLAN dizer ao planner que o
-  plano nasceu do kaizen. — descoberto por `humano` na missão `20260816-kit-como-alvo` (2026-08-16)
+  `sdd kaizen`, com rc 3 (`bin/sdd:2151`). RESOLVIDO por `2510c3c`: `gate_PLAN` recusa `auto` com
+  `05-verdict.md` ao lado e nomeia `sdd approve`; a exceção entrou no planner e no `pipeline.md`
+  no mesmo commit. — descoberto por `humano` na missão `20260816-kit-como-alvo` (2026-08-16)
 
 - [ ] **O parser do checkpoint não conhece `\|`, o escape padrão de pipe em tabela GFM** —
   `bin/sdd:174` (`checkpoint_rows`, `awk -F'|'`) — o split é cru, então célula com `\|` vira
@@ -168,8 +260,8 @@ Achados sobre **repos-alvo** vão para o `TODO.md` daquele repo. Este arquivo é
   e **cinco fases commitaram na branch errada**: 16 commits sobre um PR alheio, todos os gates
   verdes, pego só pelo `sdd-publisher` no fim da linha, a ~US$ 45 de `rebase --onto`. Repetiu um
   passo antes hoje: plano declarando `missao/20260816-kit-como-alvo`, humano trocando à mão.
-  Direção (humano, 2026-08-16): o runner **troca**, não só confere — existe ⇒ checkout; não
-  existe ⇒ cria da ATUAL, onde o commit do plano vive; `<criada pela fase TICKET>` ⇒ no-op.
+  RESOLVIDO por `b3b8c2f`: `ensure_mission_branch()`, uma definição em `cmd_run` e `cmd_retry` —
+  existe ⇒ checkout, não existe ⇒ cria da ATUAL, placeholder ⇒ no-op, git recusa ⇒ `die`.
   — descoberto por `sdd-publisher` e `humano` no piloto SQ-97 (2026-08-14)
 
 - [ ] **A regra da âncora é satisfeita por código inline no título** — `tests/check-todo.sh` (regra
@@ -294,8 +386,9 @@ Achados sobre **repos-alvo** vão para o `TODO.md` daquele repo. Este arquivo é
 - [ ] **`sdd retry` é a quarta porta que commita e não avisa da branch base** — `bin/sdd:1868`
   (`cmd_retry` chama `run_phase` sem `warn_if_on_base_branch`) — o comentário da função
   (`bin/sdd:1209`) declara "as três portas que commitam" e o I4 fechou três; a quarta abre sessão
-  que commita igual. `sdd retry` na `main` commita na `main` em silêncio. Direção: a quarta
-  chamada + asserção diferencial no `check-gates.sh`, como as outras três.
+  que commita igual. `sdd retry` na `main` commita na `main` em silêncio. RESOLVIDO por `3ffa586`:
+  a chamada entra depois de `ensure_mission_branch` (avisar antes gritaria lobo), o comentário diz
+  quatro, e o par diferencial `retry ` + `RETRY_base_branch_warn_dead` seguram.
   — descoberto por `sdd-reviewer` na missão `20260816-kit-como-alvo` (2026-08-16)
 
 - [ ] **Worktree do git parte a identidade do repo no ledger** — `bin/sdd:768`

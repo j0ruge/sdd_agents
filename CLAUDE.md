@@ -151,8 +151,10 @@ verde). A passada de sabotagem cobre **três** camadas — parser, contabilidade
 composição —, e a composição só é sondável se as chamadas de topo forem uma **lista**, que é o que
 um probe consegue contar. O que sobra é a última linha do sensor, sobre a qual ele não consegue
 asseverar: essa se prova pelo **catálogo de mutação medido nos dois sentidos** (íntegro
-`44 caught of 44` × neutralizado `43 caught` + rc 1), nunca por comentário. Detalhe no cabeçalho
-do `tests/check-entrypoint.sh`.
+`N caught of N` × neutralizado `N-1 caught` + rc 1), nunca por comentário. `N` era 44 quando o
+sensor nasceu e cresce a cada missão — o número de hoje sai da linha `score:` do `run-all.sh`, e
+fixá-lo aqui era uma data de validade escrita à mão. Detalhe no cabeçalho do
+`tests/check-entrypoint.sh`.
 
 ⚠️ **Selftest verde prova as regras que têm probe, e só essas.** Sensor novo ganha uma passada de
 **sabotagem adversarial** antes de ser considerado pronto: degrade cada regra para uma versão mais
@@ -162,6 +164,15 @@ virando "crase em qualquer lugar") e exija que o selftest fique vermelho em cada
 Grade A, dois deles **falhando abertos** — o pior modo possível num sensor, porque ele afirma ter
 medido o que não mediu. Regra que a sabotagem não consegue quebrar de forma alguma é redundante:
 remova, não escreva probe para ela.
+
+⚠️ **O probe de sabotagem prova primeiro que sabotou o que dizia sabotar.** Duas rodadas desta casa
+concluíram "sobrevive" sem ter testado a regra: uma ancorada em número de linha (apagou a linha
+vizinha e deixou viva a que o `grep` procura), outra com `perl -0pe 's/…//m'` **sem `/g`**, que casa
+a primeira ocorrência do ARQUIVO — os probes removiam a chamada de `cmd_preflight` e concluíam
+sobre a de `cmd_approve`. Quatro conclusões falsas quase viraram asserção. Ancore em CÓDIGO e faça
+o probe **morrer alto** quando o trecho que ele esperava mudar não mudou; conclusão de probe vazio
+não vale, nem quando aponta para o lado certo por acaso. Medido na missão
+`20260816-portas-do-humano` (F1 e F2) — detalhe nas notas do `checkpoint.md` dela.
 
 ⚠️ **A revisão é laço, e o critério de parada é uma rodada que não acha nada.** No `check-todo.sh`
 foram cinco: 17, 9, 11 e 11 achados, e **três vezes seguidas o conserto de uma rodada criou o

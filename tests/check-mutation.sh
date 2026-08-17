@@ -102,6 +102,36 @@ mut_PLAN_empty_approval() {   # accepts an empty `aprovacao:` — an unapproved 
   sed -i 's/^    auto)          : ;;/    auto)          : ;;\n    "")            : ;;/' "$1"
 }
 
+# Blinds the kit to where the plan came from: `aprovacao: auto` next to a 05-verdict.md passes
+# again, so a plan the kit wrote about itself certifies its own homework and `sdd run` spends a
+# whole pipeline on it. Anchored on the marker's filename inside the condition — the one token that
+# cannot survive a rewrite of this branch, and the only thing gate_KAIZEN and gate_PLAN agree on.
+#
+# It sabotages the DEFINITION, which since the F1 fix is shared: the predicate answers "no" to both
+# readers at once, so gate_PLAN stops refusing AND cmd_approve goes back to reading the born plan's
+# `auto` as an approval. That is the point — the two readers agreeing wrongly is the state this
+# function exists to make impossible, and a mutant that killed only the gate's call would leave the
+# other reader's assertion green and credit this entry for half a measurement.
+mut_PLAN_kaizen_born_blind() {
+  sed -i 's|^    && \[ -f "\$MISSION_DIR/05-verdict.md" \]$|    \&\& false|' "$1"
+}
+
+# Strips the remedy from the ORDINARY refusal: a plan whose `aprovacao:` is empty — the state every
+# human-approved plan starts in, so the common stall and not the exotic one — is handed the SHAPE to
+# type into the frontmatter and never the command that types it. No gate opens that should not and
+# nothing fails; the runner simply goes back to sending the human to an editor, which is the failure
+# `sdd approve` was built to end and which the sibling branch three lines below already refuses to
+# commit. The expensive shape again: not a command that breaks, a door whose handle is invisible.
+#
+# ADDRESSED to the line rather than anchored on the bare command name: `sdd approve $MISSION`
+# appears twice in gate_PLAN — here and in the kaizen-born refusal — and an unaddressed
+# substitution would gut both while wearing this entry's name, when mut_PLAN_kaizen_born_blind
+# already owns the other one. What has to die is the `unapproved plan is told` pair and only it, so
+# every kaizen-born assertion stays green and the score credits this entry for the common stall.
+mut_PLAN_remedy_unnamed() {
+  sed -i '/00-missao.md has/ s@: run .sdd approve \$MISSION.@@' "$1"
+}
+
 mut_TICKET_no_sprint() {      # stops requiring `sprint:` — a card in the backlog is invisible work
   sed -i "s|.*if ! grep -qiE '\^sprint:.*|  if false; then|" "$1"
 }
@@ -480,8 +510,157 @@ mut_RUN_base_branch_warn_dead() {
   sed -i 's@^  \[ -n "\$branch" \] && \[ -n "\$DEFAULT_BRANCH" \] && \[ "\$branch" = "\$DEFAULT_BRANCH" \] || return 0$@  return 0@' "$1"
 }
 
+# Not a gate: `sdd approve` keeps working, keeps asking, keeps committing — and writes `auto`
+# instead of `humano-<date>`. The gate opens either way, so nothing that reads an rc can see it,
+# and every downstream reader (the handoffs, the kaizen judge, a human doing archaeology on the
+# history) is now told the plan cleared PLAN-AUTO on its own when in fact a human typed y. The
+# expensive shape: not a command that fails, a command that lies in a committed artifact.
+#
+# It sabotages the single definition of the value rather than the write call, and that is what
+# makes it survivable enough to be interesting: the command's own read-back guard compares against
+# the same variable, so the mutant passes its self-check and reaches `git commit`. Splitting the
+# literal across the write and the verify would leave a mutant that merely dies, which measures
+# nothing. What has to die is the assertion demanding `humano-` AND the absence of `auto`.
+mut_RUN_approve_writes_auto() {
+  sed -i 's@^  local approved_as; approved_as="humano-\$(date +%F)"$@  local approved_as; approved_as="auto"@' "$1"
+}
+
+# `sdd approve` goes back to reading a kaizen-born `auto` as an approval already given — the exact
+# state the kit shipped in between increment I4 and this fix, and the one sdd-qa walked: gate_PLAN
+# refuses the plan and names this command, the command answers "already approved — nothing to do",
+# and the two loop forever with no exit but the hand-edited frontmatter the command exists to end.
+# Nothing fails, nothing warns; the runner simply prints an instruction that cannot be obeyed.
+#
+# The SECOND deliberate exception to "sabotage the definition, never the call site", for the same
+# reason mut_RETRY_base_branch_warn_dead is the first: the defect this increment closes IS a reader
+# that does not consult the shared condition, and mut_PLAN_kaizen_born_blind already empties the
+# definition for both readers at once. Sabotaging the body again would measure that entry's ground
+# twice and leave the approve door borrowing its coverage from a neighbour. What has to die here is
+# `approve resolves` and only it — the gate keeps refusing, so every kaizen-born assertion above it
+# stays green and the score credits this entry for the remedy alone.
+#
+# Addressed to cmd_approve's body: `plan_approves_itself` is read in two functions, and an
+# unaddressed substitution would be a sabotage of the gate wearing this entry's name. The range
+# ends at the first column-zero `}`, which is cmd_approve's own — every line of the body is
+# indented.
+mut_RUN_approve_bails_on_kaizen_born() {
+  sed -i '/^cmd_approve() {/,/^}/ s@^      if ! plan_approves_itself; then$@      if true; then@' "$1"
+}
+
+# The runner stops reading the `branch:` field — the state the kit lived in until this mission, and
+# the one that let five phases of the SQ-97 pilot commit into another PR's branch. It is a no-op
+# that costs nothing and breaks nothing on screen: the run goes on, the gates pass, and every
+# commit lands wherever the human happened to be standing.
+#
+# It blanks the READ rather than the checkout, which keeps the mutant honest in two ways. The whole
+# function still runs, so an assertion that merely reached the code would stay green; and the
+# empty-value no-op is the one path left alive, so the placeholder assertion survives on purpose —
+# what has to die is the pair that proves the declared branch is honoured, checked out when it
+# exists and cut from the CURRENT branch when it does not.
+#
+# The dry-run guard would have been the obvious anchor and is the wrong one: pipeline_log_line
+# carries a byte-identical line, so a `sed` on it sabotages two functions at once and the score
+# would credit this entry for whatever the other one broke.
+mut_RUN_branch_switch_dead() {
+  sed -i 's@^  want="\$(frontmatter "\$MISSION_DIR/00-missao.md" branch)"$@  want=""@' "$1"
+}
+
+# Lets a declared branch name that git reads as an OPTION through to the checkout. The case arm
+# stays in the file, it simply stops matching — so the function still looks guarded to a reader, and
+# `branch: -f` becomes `git checkout -f`: a legal command that returns 0, switches to nothing and
+# DISCARDS every uncommitted change in the tree. The run then goes on, on the branch the human was
+# already standing on, with the `ok` line announcing a switch that never happened. It is the only
+# path in this function that destroys work rather than merely landing in the wrong place.
+#
+# The pattern is what gets sabotaged rather than the `die`, because a mutant that turned the die
+# into a `return 0` would make the whole field a no-op and kill three other assertions with it —
+# this entry has to be credited for the option-shaped name and nothing else.
+# Goes back to treating the checkout as the end of the decision: the plan is read on one branch and
+# the tree is replaced by another, and nothing looks again. The `die` becomes a `:` with the same
+# string, so the condition still runs and a reader still sees a guard — the run simply goes on with
+# MISSION_DIR pointing at a directory the checkout removed, announcing the switch as a success and
+# then telling the human the mission was never planned. The quiet variant is the expensive one: a
+# branch carrying an OLDER copy spends real sessions on a plan nobody approved.
+#
+# This is the regime the whole branch family was blind to until r1 of the review: five assertions
+# on a fixture whose artifacts were never `git add`ed, where `git checkout` cannot remove them.
+mut_RUN_branch_orphan_blind() {
+  sed -i 's@^    die "the branch@    : "the branch@' "$1"
+}
+
+mut_RUN_branch_option_name() {
+  sed -i 's@^    -\*) die "the branch@    -x-that-never-matches*) die "the branch@' "$1"
+}
+
+# `sdd retry` goes back to being the silent door: the function still exists, still warns for the
+# other three, and this one call site simply is not there — which is the exact state the kit lived
+# in until this increment. Nothing on screen changes except the missing line, and the phase gets
+# redone and committed into whatever branch the human was standing on.
+#
+# The ONE deliberate exception to "sabotage the definition, never the call site" in this catalogue.
+# The defect this increment closes IS an absent call site, and mut_RUN_base_branch_warn_dead
+# already empties the definition — so a second sabotage of the body would measure the same thing
+# twice and this door would keep its own coverage from a neighbour's entry. What has to die is the
+# `retry ` pair in check-gates.sh, and only the pair: the three other doors stay warning, so every
+# assertion about them stays green and the score credits this entry for nothing but the fourth.
+#
+# The sed is ADDRESSED to cmd_retry's body rather than anchored on the bare call, because after
+# this increment the line `  warn_if_on_base_branch` appears four times and an unaddressed
+# substitution would gut all four at once. The range ends at the first column-zero `}`, which is
+# cmd_retry's own closing brace — every line of the body is indented.
+mut_RETRY_base_branch_warn_dead() {
+  sed -i '/^cmd_retry() {/,/^}/ s@^  warn_if_on_base_branch$@@' "$1"
+}
+
+# `sdd approve` goes back to being the silent fifth door: it still prints the plan, still asks, and
+# still commits — into whatever branch the human is standing on, saying nothing. The state the kit
+# shipped in between increment I1, which created this door, and the fix that closed it; sdd-qa
+# walked it and found a `chore(missao)` commit dropped into the base branch without a word.
+#
+# The THIRD deliberate exception to "sabotage the definition, never the call site", and the same one
+# mut_RETRY_base_branch_warn_dead declares: the defect this increment closes IS an absent call site,
+# and mut_RUN_base_branch_warn_dead already empties the body for every door at once. A second
+# sabotage of the definition would measure that entry's ground a third time and leave this door
+# borrowing its coverage from a neighbour. What has to die is the `approve warns` pair and only it —
+# the other four keep warning, so every assertion about them stays green.
+#
+# ADDRESSED to cmd_approve's body: after this fix the line `  warn_if_on_base_branch` appears five
+# times, and an unaddressed substitution would gut all five while wearing this entry's name. The
+# range ends at the first column-zero `}`, which is cmd_approve's own — every line of the body is
+# indented, including the awk program and the two `-m` arguments of the commit.
+mut_APPROVE_base_branch_warn_dead() {
+  sed -i '/^cmd_approve() {/,/^}/ s@^  warn_if_on_base_branch$@@' "$1"
+}
+
+# The ORDER of the two guards in cmd_run, not their presence. Both calls stay — the warning simply
+# moves ahead of the checkout, which is the shape a future editor arrives at honestly, following the
+# "ahead of anything that could scroll it away" rule the other four doors state. What it produces is
+# a human told the pipeline will commit into the base branch by a runner that moves them off it one
+# line later. `cmd_retry` has had this entry since it was written; cmd_run went without, and the gap
+# was measured (the swap left the whole suite green) by the REVIEW round of 20260816-portas-do-humano.
+#
+# Range-addressed to cmd_run: `ensure_mission_branch` now appears twice in the file and
+# `warn_if_on_base_branch` five times, so an unaddressed sed would credit this entry for breaking
+# somebody else's call site.
+mut_RUN_branch_order_swap() {
+  sed -i '/^cmd_run() {/,/^}/ {
+    /^  ensure_mission_branch$/d
+    s/^  warn_if_on_base_branch$/  warn_if_on_base_branch\n  ensure_mission_branch/
+  }' "$1"
+}
+
+# frontmatter_write stops being scoped to the frontmatter block and rewrites the first line shaped
+# like the key ANYWHERE in the file. A mission body legitimately quotes its own frontmatter — this
+# repo's own 00-missao.md does — so the mutant silently rewrites committed prose. Sabotaging the
+# DEFINITION and not a call site: there is one caller today, and the property belongs to the writer.
+mut_FRONTMATTER_write_unscoped() {
+  sed -i 's/^    inside && !written {$/    !written {/' "$1"
+}
+
 CATALOG=(
   PLAN_empty_approval
+  PLAN_kaizen_born_blind
+  PLAN_remedy_unnamed
   TICKET_no_sprint
   EXEC_done_without_commit
   EXEC_orphan_commit
@@ -525,6 +704,15 @@ CATALOG=(
   RUN_ledger_no_repo_filter
   PRE_agent_presence_only
   RUN_base_branch_warn_dead
+  RUN_approve_writes_auto
+  RUN_approve_bails_on_kaizen_born
+  RUN_branch_switch_dead
+  RUN_branch_option_name
+  RUN_branch_orphan_blind
+  RETRY_base_branch_warn_dead
+  APPROVE_base_branch_warn_dead
+  RUN_branch_order_swap
+  FRONTMATTER_write_unscoped
 )
 
 # Mutations that are NOT caught today, each with the increment that closes it. Ratchet in both

@@ -114,6 +114,14 @@ Fill the `00-missao.md` table **with evidence**, not with optimism:
 - **Any ✗** → leave `aprovacao` empty and ask the human for explicit approval, saying which
   criterion failed. The runner does not proceed without one of the two values.
 
+⚠️ **One exception, and the runner enforces it: a plan born of `sdd kaizen` may never carry
+`auto`.** The permission above rests on a single premise — "the human was present" — and for a
+plan the kit wrote about itself that premise is false: nobody was in the room, so `auto` would be
+the machine certifying its own homework. The marker is `05-verdict.md` sitting next to the plan in
+the mission directory. There, all ✅ still means **empty** `aprovacao:`, and the human closes the
+gate with `sdd approve <mission>`. `gate_PLAN` refuses `auto` beside a verdict, so writing it does
+not accelerate the mission — it stalls it with an error.
+
 This gate only works if you are honest filling it in. Marking ✅ on something that did not close
 accelerates nothing: it transfers a defect to a phase that has no human to catch it.
 
@@ -122,6 +130,27 @@ accelerates nothing: it transfers a defect to a phase that has no human to catch
 Ask the human for the version label and record it in `versao:` in `00-missao.md`. **Never decide
 on your own**: a version is communication with the people who use the product, not a technical
 consequence of the diff.
+
+## 8. Branch (`branch:` in `00-missao.md`)
+
+**The runner reads this field and acts on it.** It was decorative until `ensure_mission_branch`,
+so a plan that fills it in carelessly is no longer a typo — before the first gate of every
+`sdd run` and every `sdd retry`, the runner checks that branch out, and **creates it from
+whatever branch the human is standing on** when it does not exist yet. Three values, three
+behaviours:
+
+- **the `<...>` placeholder the template ships** (or an empty value) → no-op, the runner stays
+  where it is. This is the right answer whenever the branch name is not yours to decide — with
+  `JIRA_ENABLED=true` it is the TICKET phase that creates the branch.
+- **a real branch name** → checked out if it exists, cut from the current branch if it does not.
+  Write one only when you mean "this mission's commits belong there", which is the ordinary case
+  for a mission planned outside JIRA.
+- **anything git refuses** (a name starting with `-`, spaces, `..`) → the runner `die`s and the
+  pipeline stops before spending a session.
+
+Never invent a name to fill the field in. The failure this exists to close is the SQ-97 class —
+five phases committing into another PR's branch — and it is not closed by a plan that declares a
+branch nobody meant.
 
 ## Language
 

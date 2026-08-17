@@ -166,6 +166,57 @@ frontmatter() {
     }' "$file"
 }
 
+# frontmatter_write <file> <key> <value> — rewrites ONE key, in place, and nothing else.
+#
+# The counterpart of frontmatter(), which is read-only: closing the PLAN gate by hand was the only
+# way to approve a plan, and a command that does it for the human has to write with the same
+# precision the reader expects.
+#
+# Scoped to the block between the FIRST two `---` lines, never the whole file: a mission body is
+# prose that legitimately quotes its own frontmatter (this repo's 00-missao.md writes
+# "aprovacao: humano-YYYY-MM-DD" inside a sentence), and a file-wide substitution would rewrite the
+# prose too, silently.
+#
+# awk with index(), never sed: the replacement value would go through sed's own syntax, where `&`
+# means "the whole match" and `/` ends the expression — a mission title carrying either character
+# is ordinary, and the corruption would land in a committed artifact. index()/substr() also dodge
+# the mawk trap of the house (a negated class with a multibyte character negates its BYTES).
+#
+# Only the FIRST occurrence of the key is rewritten, and an absent key is left absent — the caller
+# verifies with frontmatter() and decides. Writing through a temporary and moving it into place
+# keeps a failed awk from truncating an artifact that is already committed.
+frontmatter_write() {
+  local file="$1" key="$2" value="$3" tmp
+  [ -f "$file" ] || die "frontmatter_write: $file does not exist"
+  # `|| die`: a mission directory the human cannot write to (a root-owned checkout, a 555 dir) makes
+  # mktemp fail, and under `set -e` the script would exit through mktemp's own message — no `error:`
+  # prefix, no mention of sdd or the artifact. Same family as the cmd_health item in TODO.md.
+  tmp="$(mktemp "${file}.XXXXXX")" || die "frontmatter_write: could not create a temporary beside $file"
+  awk -v k="$key" -v v="$value" '
+    NR==1 && $0=="---" { inside=1; print; next }
+    inside && $0=="---" { inside=0; print; next }
+    inside && !written {
+      idx = index($0, ":")
+      if (idx > 0) {
+        name = substr($0, 1, idx-1)
+        gsub(/^[ \t]+|[ \t]+$/, "", name)
+        if (name == k) { printf "%s: %s\n", k, v; written=1; next }
+      }
+    }
+    { print }
+  ' "$file" > "$tmp" || { rm -f "$tmp"; die "frontmatter_write: awk failed on $file"; }
+  # mktemp creates 0600; without this the artifact would come out of an approval readable only by
+  # whoever approved it. Git would not show the change (it tracks the exec bit only), which is what
+  # makes it worth a line here instead of a bug report later.
+  chmod --reference="$file" "$tmp" 2>/dev/null || true
+  # `-f`: GNU mv ASKS before replacing a destination the user cannot write to, and only when stdin
+  # is a terminal — which is exactly this command's situation. Without it a second, untranslated,
+  # git-plumbing-flavoured question appears right after the [y/N] prompt and eats a line of the
+  # human's stdin, and whether it appears at all depends on whether a human is watching. The
+  # writability question was already answered by mktemp succeeding in that same directory.
+  mv -f "$tmp" "$file" || { rm -f "$tmp"; die "frontmatter_write: could not replace $file"; }
+}
+
 # Checkpoint table rows as "ID<TAB>title<TAB>check<TAB>status<TAB>commit".
 # Skips the header, the separator, and any line that does not have the 5 columns.
 checkpoint_rows() {
@@ -246,6 +297,35 @@ latest_matching() {
   ls -1d $pattern 2>/dev/null | sort -V | tail -1 || true
 }
 
+# plan_approves_itself → 0 when the mission on disk is a kaizen-born plan carrying `aprovacao: auto`
+#
+# ONE definition, because two places read it and they must never disagree: gate_PLAN refuses this
+# state, and cmd_approve must NOT mistake it for an approval already given. That disagreement is
+# not hypothetical — it is the bug this function was extracted to close (found by sdd-qa in mission
+# 20260816-portas-do-humano): the gate named `sdd approve` as the one way out while approve read
+# the same `auto` as "already approved — nothing to do", so the only remedy the runner printed was
+# the one thing it refused to do, and the loop had no exit but hand-editing the frontmatter.
+#
+# `auto` carries ONE premise: the PLAN-AUTO table was filled with the human in the room. A plan
+# born of `sdd kaizen` had no human in the room — the kit planned its own next change — so `auto`
+# there is the machine certifying its own homework. agents/sdd-kaizen.md orders the born plan to
+# ship with `aprovacao:` empty and gate_KAIZEN refuses to hand one over with the field filled, but
+# both of those act at BIRTH: nothing stopped the field from being filled afterwards. A rule that
+# lives only in prose is a rule the runner does not have.
+#
+# `05-verdict.md` beside the mission is the marker, and it is structural rather than agreed: the
+# kaizen gate locates the verdict and takes its `dirname` as the born plan's home, so the two are
+# siblings by construction. Read per MISSION and never per repo — `ls $HANDOFF_DIR/*/05-verdict.md`
+# passes every assertion in this family and then refuses every `auto` in any repo that has ever run
+# `sdd kaizen`, the kit's own included (measured in increment I4).
+#
+# Only `auto` is caught: with a human's own `humano-YYYY-MM-DD` the mission runs, verdict and all,
+# or the kit's improvement loop would have no terminating state.
+plan_approves_itself() {
+  [ "$(frontmatter "$MISSION_DIR/00-missao.md" aprovacao)" = "auto" ] \
+    && [ -f "$MISSION_DIR/05-verdict.md" ]
+}
+
 # ---------------------------------------------------------------------------
 # Gates — each returns 0 (satisfied) or 1, writing the reason into GATE_WHY.
 # WARNING: no gate may be satisfied by model text. Artifacts only.
@@ -262,8 +342,25 @@ gate_PLAN() {
   case "$approval" in
     auto)          : ;;
     humano-*)      : ;;
-    *) GATE_WHY="00-missao.md has 'aprovacao: ${approval:-<empty>}' — it must be 'auto' (PLAN-AUTO all ✅) or 'humano-YYYY-MM-DD'"; return 1 ;;
+    # The remedy is named here for the same reason it is named in the kaizen-born branch below,
+    # and this is the branch where it matters most: an empty `aprovacao:` is where EVERY
+    # human-approved plan starts, so this is the common stall, not the exotic one. Without the
+    # command on screen the reason reads as an instruction to type `humano-YYYY-MM-DD` into the
+    # frontmatter by hand — the precise failure `sdd approve` exists to end, printed by the gate
+    # that ends it. The mission name rides along because `sdd approve` with no argument resolves
+    # the LATEST mission, which in a repo with two open ones is the wrong one.
+    *) GATE_WHY="00-missao.md has 'aprovacao: ${approval:-<empty>}' — it must be 'auto' (PLAN-AUTO all ✅) or 'humano-YYYY-MM-DD': run 'sdd approve $MISSION'"; return 1 ;;
   esac
+  # This gate is what `sdd run` asks before spending a pipeline on a plan the kit wrote about
+  # itself; the rule and the marker live with plan_approves_itself, which cmd_approve reads too.
+  # The remedy is named in the reason because the alternative — a human hand-typing
+  # `humano-YYYY-MM-DD` into the frontmatter — is the exact failure `sdd approve` exists to end,
+  # and naming a remedy obliges the remedy to work: that obligation is asserted in
+  # tests/check-gates.sh, invoking the command instead of simulating it with `sed`.
+  if plan_approves_itself; then
+    GATE_WHY="kaizen-born plan (05-verdict.md sits beside it) may not approve itself — a human must: run 'sdd approve $MISSION'"
+    return 1
+  fi
   if [ "$JIRA_ENABLED" = "true" ]; then
     local v; v="$(frontmatter "$m" versao)"
     if [ -z "$v" ] || [[ $v == \<* ]]; then
@@ -1206,12 +1303,18 @@ cmd_install() {
   dim "next: edit .sdd/config.sh and run 'sdd preflight'"
 }
 
-# "you are standing on the base branch" — ONE definition, called by the three doors that can end
-# up committing: cmd_preflight, cmd_run and cmd_kaizen.
+# "you are standing on the base branch" — ONE definition, called by the five doors that can end
+# up committing: cmd_preflight, cmd_run, cmd_retry, cmd_kaizen and cmd_approve.
+#
+# The count is not decoration: it was "four" until `sdd approve` was born committing in silence, in
+# the very mission that closed the silence of `sdd retry`. A door is added to this list the moment
+# it can reach a `git commit`, whether or not it opens a session — the criterion is what lands in
+# the history, and a count left stale here is how the next door gets written without the guard.
 #
 # It used to be four lines inlined in cmd_preflight and nowhere else, and preflight is OPTIONAL:
-# `sdd run` from `main` commits every phase straight into the base branch without a word, and
-# `sdd kaizen` is worse — it checks the kit repo and the dirty tree, then writes a verdict and
+# `sdd run` from `main` commits every phase straight into the base branch without a word, `sdd
+# retry` does the same for a single redone phase, `sdd approve` did it for the approval commit it
+# asks the human to authorise, and `sdd kaizen` is worse — it checks the kit repo and the dirty tree, then writes a verdict and
 # three artifacts wherever you happen to be. Same rule that gave `is_escalation` a single home
 # after the blocked/degraded pair diverged across three call sites: an enum (or a warning) read in
 # more than one place is defined once, or the call sites drift apart one at a time.
@@ -1228,6 +1331,83 @@ warn_if_on_base_branch() {
   branch="$( cd "$REPO_ROOT" && git branch --show-current 2>/dev/null || true )"
   [ -n "$branch" ] && [ -n "$DEFAULT_BRANCH" ] && [ "$branch" = "$DEFAULT_BRANCH" ] || return 0
   warn "you are on the base branch ($DEFAULT_BRANCH) — run like this and the pipeline commits straight into it"
+}
+
+# ensure_mission_branch — the runner honours the `branch:` field of 00-missao.md.
+#
+# The field shipped in templates/missao.md from the first day and NOTHING here ever read it: the
+# plan declared where the mission's commits belonged, and honouring it was a manual step before
+# every run. In the SQ-97 pilot the step was skipped once and five phases committed into another
+# PR's branch — 16 commits, and a `rebase --onto` to undo them.
+#
+# ONE definition, two call sites (cmd_run, cmd_retry) — the same rule that gave is_escalation and
+# warn_if_on_base_branch a single home each: a decision read in more than one place drifts apart
+# one call site at a time, and the site that stays behind is the one nobody tests.
+#
+# NEVER in a dry run. What `--dry-run` promises is narrower than "nothing happens" (the gates do
+# run TEST_CMD), but a checkout is a mutation of the working tree, which is precisely the half it
+# does promise.
+#
+# A branch that does not exist yet is cut from the CURRENT branch, never from DEFAULT_BRANCH: the
+# commit that carries the plan lives where the human is standing when they run, and cutting from
+# the base would leave the whole mission behind.
+#
+# git refusing the checkout is a `die`, never a warning: a dirty tree or a name git will not take.
+# Going on would run the entire pipeline on a branch the plan did not ask for, which is the exact
+# failure this function exists to close — and guessing on top of a tree git already refused is how
+# a working tree gets destroyed. The reason is git's to give, so its own output is carried into
+# the message instead of being replaced by a paraphrase.
+ensure_mission_branch() {
+  [ "$DRY_RUN" = "1" ] && return 0
+  local want current out rc=0
+  want="$(frontmatter "$MISSION_DIR/00-missao.md" branch)"
+  # Two no-ops: an empty field, and the `<...>` placeholder templates/missao.md ships while the
+  # name is still unknown (the TICKET phase fills it in). Neither is a branch name — git rejects
+  # the second for both the `<` and the spaces — and a mission that never declared a branch must
+  # keep working exactly as it did before this function existed.
+  [ -n "$want" ] || return 0
+  case "$want" in '<'*) return 0 ;; esac
+  # A name git would read as an OPTION dies here, before git sees it, and this is the one path in
+  # this function that can destroy work rather than merely land in the wrong place. `git checkout
+  # -f` is a legal command: it returns 0, switches to nothing, and throws away every uncommitted
+  # change in the tree — so a `branch: -f` would leave the human's work gone, the run going on, and
+  # the `ok` line below announcing a switch that never happened.
+  #
+  # The `-b` path already dies on such a name (git refuses to CREATE it), but that is the wrong
+  # half to rely on: `git update-ref refs/heads/-f HEAD` is accepted and `git check-ref-format`
+  # calls the name valid, so the ref CAN exist, and then the branch above runs it as a flag.
+  # Refusing the shape is one line and does not depend on which of the two paths a given tree
+  # takes. Asserted in tests/check-gates.sh with a fixture that builds the ref and a dirty file.
+  case "$want" in
+    -*) die "the branch '$want' declared in 00-missao.md starts with '-' — git would read it as an option, not a branch" ;;
+  esac
+  current="$( cd "$REPO_ROOT" && git branch --show-current 2>/dev/null || true )"
+  [ "$want" = "$current" ] && return 0
+  if ( cd "$REPO_ROOT" && git show-ref --verify --quiet "refs/heads/$want" ); then
+    out="$( cd "$REPO_ROOT" && git checkout "$want" 2>&1 )" || rc=$?
+  else
+    out="$( cd "$REPO_ROOT" && git checkout -b "$want" 2>&1 )" || rc=$?
+  fi
+  [ "$rc" -eq 0 ] \
+    || die "could not switch to the branch '$want' declared in 00-missao.md — git said: $out"
+  # The checkout is not the end of the decision, and this is the half that was missing. The plan is
+  # read on the branch the human is standing on and the tree is then REPLACED under the runner: if
+  # the declared branch was cut before the mission existed — the ordinary flow when the branch comes
+  # from the ticket step — the artifacts that justified every choice above are simply gone, and the
+  # runner would go on with MISSION_DIR pointing at a path that is no longer there, announcing the
+  # switch as a success and then telling the human the mission was never planned. Worse and
+  # quieter: a branch carrying an OLDER copy spends real sessions executing a plan nobody approved.
+  #
+  # So the artifact is re-read AFTER the switch, through the same parser, and it has to still be
+  # there and still declare THIS branch. `die`, never a warning, for the reason the refused checkout
+  # gives: going on would run the whole pipeline against a plan the human did not approve, which is
+  # the failure this function exists to close, entered from the other side.
+  if [ ! -f "$MISSION_DIR/00-missao.md" ] \
+     || [ "$(frontmatter "$MISSION_DIR/00-missao.md" branch)" != "$want" ]; then
+    die "the branch '$want' declared in 00-missao.md does not carry this mission — you are now on it, and the plan that asked for it is on '${current:-<detached>}'"
+  fi
+  ok "branch: ${current:-<detached>} → $want (declared in 00-missao.md)"
+  pipeline_log_line "$(date -Iseconds)  BRANCH  ${current:-<detached>} -> $want"
 }
 
 cmd_preflight() {
@@ -1633,6 +1813,143 @@ cmd_why() {
   printf '%s: %s\n' "$ph" "$GATE_WHY"
 }
 
+# `sdd approve <mission>` — the human gate of the PLAN phase gets a command.
+#
+# Until this existed, unlocking gate_PLAN meant opening 00-missao.md and typing
+# `aprovacao: humano-YYYY-MM-DD` in the exact shape the gate greps. Two ways that goes wrong, and
+# both were seen: the format comes out slightly off and the gate stays shut with a message about a
+# key the human believes they just wrote, or the edit gets delegated to the session — and the
+# session is precisely the party that may not decide whether the plan is worth building.
+#
+# It is NOT a phase and it never opens a session: approving is the one thing in the pipeline that
+# has to come from outside it. The two deliberate `claude -p` calls outside run_phase() stay two
+# (the preflight probe and `sdd close`); this command reads stdin and writes a file.
+#
+# It prints before it asks. An approval given without the plan on screen is the manual edit with
+# extra steps, so the whole mission body goes to stdout — title, PLAN-AUTO evidence, out of scope,
+# open questions — plus the increment table, which lives in the other file. The body is printed
+# whole rather than section by section on purpose: section headings are mission content in
+# OUTPUT_LANG, and a runner that grepped for them would work in pt-BR repos and go quietly blind
+# everywhere else.
+cmd_approve() {
+  load_config
+  resolve_mission "${1:-}"
+  local m="$MISSION_DIR/00-missao.md"
+
+  # The gate's own diagnosis, taken from the gate: this command exists to satisfy gate_PLAN, and a
+  # human told "missing 01-plano.md" by `sdd status` must not hear something different from the
+  # command that is supposed to fix it. GATE_WHY is read, never re-worded.
+  if ! gate_PLAN && [[ $GATE_WHY == missing\ * ]]; then die "$GATE_WHY"; fi
+
+  local approval; approval="$(frontmatter "$m" aprovacao)"
+  # Idempotence, with ONE exception, and the exception is the whole point of the guard below.
+  # `auto` beside a 05-verdict.md is not an approval anybody gave — it is the machine certifying
+  # its own homework, which is exactly the state gate_PLAN refuses while naming THIS command as the
+  # way out. Reading it as "already approved" made the named remedy decline every plan the gate
+  # stopped: not sometimes, never. plan_approves_itself is the gate's own condition, read here
+  # rather than restated, so the two cannot drift apart again.
+  #
+  # Everything else keeps bailing, and the verdict-less `auto` is why that matters: an approve that
+  # simply stopped recognising `auto` would rewrite every planner-written approval into
+  # `humano-<today>` on contact, erasing in silence the PLAN-AUTO provenance the value carries.
+  case "$approval" in
+    auto|humano-*)
+      if ! plan_approves_itself; then
+        info "plan $MISSION is already approved (aprovacao: $approval) — nothing to do"
+        return 0
+      fi
+      warn "aprovacao: auto with 05-verdict.md beside it — this plan was born of sdd kaizen and"
+      warn "cannot certify its own homework. Approving replaces it with your own approval."
+      ;;
+  esac
+
+  step "approve plan — $MISSION"
+  info ""
+  local titulo; titulo="$(frontmatter "$m" titulo)"
+  info "  ${titulo:-<no titulo: in the frontmatter of 00-missao.md>}"
+  info ""
+  # From the line after the closing `---` to the end. Same awk shape as frontmatter(), so a file
+  # with no frontmatter at all prints nothing rather than printing itself twice.
+  awk 'NR==1 && $0=="---" { inside=1; next }
+       inside && $0=="---" { inside=0; body=1; next }
+       body { print "  " $0 }' "$m"
+
+  local rows; rows="$(checkpoint_rows)"
+  info ""
+  if [ -n "$rows" ]; then
+    info "  increments:"
+    local id title _check st _commit
+    while IFS=$'\t' read -r id title _check st _commit; do
+      printf '    %-4s %-46s %s\n' "$id" "${title:0:46}" "$st"
+    done <<< "$rows"
+  else
+    warn "checkpoint.md has no parseable increment row — the PLAN gate will stay shut"
+  fi
+
+  # ONE definition of the value being written, read three times below (the warning, the write, the
+  # read-back). Split into a literal at each site, a mutant that writes `auto` — an approval that
+  # claims the PLAN-AUTO table was all ✅ when a human in fact typed y — would still satisfy the
+  # read-back and reach the commit. Sabotaging this single line is what mut_RUN_approve_writes_auto
+  # does, and the assertion that dies is the one demanding `humano-` AND the absence of `auto`.
+  local approved_as; approved_as="humano-$(date +%F)"
+
+  info ""
+  dim "  approving says: this plan is what you want built. It writes aprovacao: $approved_as"
+  dim "  into 00-missao.md and commits that one file. It does NOT start the pipeline."
+  # The fifth door, and the only one whose commit a human asks for out loud. It went in written by
+  # the same mission that closed the silence of the fourth (`sdd retry`) and shipped silent itself:
+  # standing on `main`, approving dropped a `chore(missao)` commit straight into the base branch
+  # without a word — the SQ-97 class, reopened by the door this mission created. sdd-qa walked it.
+  #
+  # A warning and NEVER a `die`, unlike the checkout of ensure_mission_branch: the plan legitimately
+  # lives on the base branch before the mission branch is cut, and it is from there that the cut is
+  # made — refusing would lock out the ordinary flow.
+  #
+  # HERE and not at the top of the command, which is where the other four doors call it: those four
+  # print almost nothing before acting, while this one prints the entire mission body plus the
+  # increment table, and a warning at the top would have scrolled off the screen by the time the
+  # question is asked. The rule the other call sites state as "ahead of anything that could scroll
+  # it away" reads, at a prompt, as "in the breath before the decision". After the idempotence bail
+  # for the second reason those comments give: a warning on a path that cannot commit is the crying
+  # wolf that teaches people to skip reading them.
+  warn_if_on_base_branch
+  printf '  approve this plan? [y/N] '
+  # `|| ans=""`: with stdin closed, `read` returns non-zero and `set -e` would abort mid-prompt.
+  # Anything that is not an explicit yes is a no — the default of a [y/N] prompt is the safe side.
+  local ans=""
+  read -r ans || ans=""
+  # The prompt ends without a newline, and a terminal supplies one when the human hits Enter. A
+  # pipe or a closed stdin does not, and the answer would sit glued to the prompt.
+  info ""
+  case "$ans" in
+    y|Y|yes|Yes|YES) : ;;
+    *) info "  not approved — nothing was written"; return 0 ;;
+  esac
+
+  frontmatter_write "$m" aprovacao "$approved_as"
+  # Read back through the same parser the gate uses. An absent `aprovacao:` key leaves
+  # frontmatter_write a no-op by design, and committing that would be an approval that approves
+  # nothing — the artifact has to answer the gate's question before the commit is made.
+  local written; written="$(frontmatter "$m" aprovacao)"
+  [ "$written" = "$approved_as" ] \
+    || die "could not write 'aprovacao: $approved_as' into $m (it reads '${written:-<empty>}') — is the 'aprovacao:' key in the frontmatter?"
+
+  local rel="${m#"$REPO_ROOT/"}"
+  # `-- "$rel"` on the commit, not `git commit -a`: whatever else the tree is carrying is none of
+  # this command's business. `git add` first so the path is known to the index even on the first
+  # commit of a brand-new mission directory.
+  ( cd "$REPO_ROOT" \
+    && git add -- "$rel" \
+    && git commit -q -m "chore(missao): plan $MISSION approved by the human" \
+         -m "Written by 'sdd approve': closing the PLAN gate used to mean editing the frontmatter
+by hand, in the exact shape gate_PLAN greps. Only 00-missao.md enters this commit." \
+         -- "$rel" ) \
+    || die "git refused the approval commit — 'aprovacao: $approved_as' IS written in $rel, commit it by hand"
+
+  ok "approved: aprovacao: $approved_as"
+  dim "  next: sdd run $MISSION"
+}
+
 cmd_run() {
   local mission_arg="" force_phase="" max_phases=0
   while [ $# -gt 0 ]; do
@@ -1661,6 +1978,12 @@ cmd_run() {
   # gates to run, and three of them run TEST_CMD. What the dry-run guarantees is narrower — no
   # claude session, no touching of the mission artifacts. Same honesty fix as in --help.
   [ "$DRY_RUN" = "1" ] && dim "  (dry-run: no session will be opened — but the gates do run TEST_CMD)"
+  # BEFORE the base-branch warning, and the order is the point: the checkout is what decides where
+  # this pipeline will commit, so warning first would cry wolf at a human the runner is about to
+  # move off the base branch anyway — and a warning that cries wolf is how people learn to skip
+  # reading them. In a dry run nothing is switched, so the projection still says out loud that you
+  # are standing on `main`.
+  ensure_mission_branch
   # Before the first gate, so it is on screen ahead of anything that could scroll it away. It warns
   # in a dry run too: the projection is where you look BEFORE spending sessions, which makes it the
   # cheapest moment to learn you are about to commit into the base branch.
@@ -1859,6 +2182,20 @@ cmd_retry() {
   PIPELINE_LOG="$(log_dir)/pipeline.log"
   AUTONOMY_RUN_ID="$(uuidgen)"
   AUTONOMY_INVOCATION="retry"
+  # The second call site of the single definition: `sdd retry` opens a session that COMMITS, so a
+  # retry fired from the wrong branch lands the redone phase exactly where `sdd run` would not
+  # have put it. Same guard, same die, same silence in a dry run (retry has no dry mode, and the
+  # global defaults to 0 — the guard costs nothing and outlives the assumption).
+  ensure_mission_branch
+  # The fourth door, and the last of the four that existed then: `sdd retry` redoes a phase with a
+  # FRESH session, and that session COMMITS. Fired from `main` it used to put the redone phase
+  # straight into the base branch without a word — the one door of the four that opened in silence.
+  # (`sdd approve`, written in this same mission, turned out to be a fifth and got the guard after.)
+  #
+  # AFTER ensure_mission_branch, exactly like cmd_run and for the same reason: the checkout is what
+  # decides where this retry will commit, so warning first would cry wolf at a human the runner is
+  # about to move off the base branch anyway.
+  warn_if_on_base_branch
   local phase; phase="$(current_phase)"
   [ -n "$phase" ] || { info "pipeline complete — nothing to retry"; return 0; }
   [ "$phase" = "PLAN" ] && die "PLAN is interactive — there is nothing to retry headless"
@@ -2399,6 +2736,8 @@ USAGE
   sdd preflight              environment sensor: tools, auth, config, plugins, git
   sdd health                 KIT sensor: suite, mutation, doc and config drift
   sdd status <mission>       where the mission stands, gate by gate, and what is missing
+  sdd approve <mission>      show the plan and, on an explicit y, write the human approval into
+                             00-missao.md and commit it (the PLAN gate — never a session)
   sdd run <mission>          run from the first unsatisfied phase through to the PR
   sdd retry <mission>        retry the current phase with a fresh session
   sdd close <mission>        post-merge: close the JIRA issue
@@ -2435,6 +2774,7 @@ main() {
     preflight) cmd_preflight "$@" ;;
     health)    cmd_health "$@" ;;
     status)    cmd_status "$@" ;;
+    approve)   cmd_approve "$@" ;;
     phase)     cmd_phase "$@" ;;
     why)       cmd_why "$@" ;;
     run)       cmd_run "$@" ;;

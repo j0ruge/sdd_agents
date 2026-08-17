@@ -19,6 +19,9 @@
 | **Guarda das 3 missões** | O juiz responde `indeterminado` quando há menos de 3 missões **com sessão comparável** depois da mudança julgada (decisão do design de 2026-08-14). Desde o I8 da missão `20260816-runner-sem-dividas` o piso é `missions_with_session`, e **não** `missions_after_change`: missão que só escalou rodou e conta como missão, mas não comprou observação nenhuma — três delas davam `sufficient: true` com `sessions: 0`, que é a guarda respondendo "já dá para julgar" sobre o nada. Os dois números viajam lado a lado na série para que `false` ao lado de `3` seja legível. Shape completa em `docs/pipeline.md` § "The kaizen loop". |
 | **Marco 1 / Marco 2** | M1: kit executa, humano planeja e faz merge. M2: kit **planeja** e executa; humano aprova o plano e faz merge. O I13.3 é a peça que falta para o M2. |
 | **`KAIZEN_AUTO_APPROVE`** | Chave futura (I13.4): plano kaizen nasce aprovado quando a rubrica recomendar graduação. **Fora de escopo no I13.3.** |
+| **Plano kaizen-born** | Plano que o kit escreveu sobre si mesmo, nascido do `sdd kaizen`. O marcador é `05-verdict.md` ao lado, no diretório da missão. Nunca carrega `aprovacao: auto`: a premissa que licencia o PLAN-AUTO ("o humano estava presente") é falsa ali — seria a máquina atestando o próprio dever de casa. Desde a missão `20260816-portas-do-humano` a regra é **gate**, não prosa: `plan_approves_itself()` é o predicado único que `gate_PLAN` e `cmd_approve` leem, e o único destravamento é `sdd approve <missão>`. |
+| **Portas que commitam** | Os comandos que podem terminar num `git commit` e por isso avisam quando você está na branch base (`warn_if_on_base_branch`, uma definição): `cmd_preflight`, `cmd_run`, `cmd_retry`, `cmd_kaizen` e `cmd_approve`. Eram quatro até o `sdd approve` nascer commitando em silêncio — na mesma missão que fechou o silêncio do `sdd retry`. ⚠️ O critério é **o que aterrissa no histórico**, não "abre sessão": porta nova entra na lista no instante em que alcança um commit, e contagem desatualizada aqui é como a próxima nasce sem a guarda. |
+| **Classe SQ-97** | O modo de falha "as fases commitaram na branch errada", batizado pelo piloto em que aconteceu: cinco fases, 16 commits sobre o PR de outra pessoa, ~US$ 45 de `rebase --onto` para desfazer. Fechada em `20260816-portas-do-humano` pelo campo `branch:` que o runner passou a ler (`ensure_mission_branch`) mais o aviso nas cinco portas acima. ⚠️ Morre **no caminho sem JIRA**: com `JIRA_ENABLED=true` a branch nasce na fase TICKET e mora no `10-ticket.md`, que ninguém copia para o campo que o runner lê — item vivo no `TODO.md`. |
 
 ## Decisões resolvidas
 
@@ -43,11 +46,14 @@
 - **O critério (4) da D7 — "suíte < 30 s no default" — segue não atingido, e o estouro deixou de
   ser marginal.** A saída "subir o default" foi tomada em 2026-08-16: `SDD_MUTATION_JOBS` deriva
   de `min(núcleos, 8)` e o escalonador virou pool — mediana 54,13 s → **32,87 s**, score intacto
-  (KAIZEN_LOG). Desde então a previsão escrita nesta linha se confirmou **duas vezes**, porque o
+  (KAIZEN_LOG). Desde então a previsão escrita nesta linha se confirmou **três vezes**, porque o
   estouro **cresce com o catálogo** e cada mutante é uma suíte inteira: `20260816-runner-sem-dividas`
-  mediu 33,95 s → 44,55 s (30 → 38 mutantes) e `20260816-kit-como-alvo` mediu **1:17,62 → 1:45,17**
-  (40 → 44 mutantes), as duas na mesma máquina e na mesma sessão, worktree da base contra o HEAD.
-  O alvo está agora **3,5× distante** e ninguém o defende. Cortar mutação para ganhar relógio
+  mediu 33,95 s → 44,55 s (30 → 38 mutantes), `20260816-kit-como-alvo` mediu **1:17,62 → 1:45,17**
+  (40 → 44 mutantes) e `20260816-portas-do-humano` mediu **1:45,74 → 2:27,10** (44 → 55 mutantes) —
+  as três na mesma máquina, worktree da base contra o HEAD. ⚠️ A terceira só vale porque foi
+  **refeita em sequência, sem outra suíte rodando**: sob carga concorrente os mesmos commits deram
+  3:12,87 e 4:18,70, e uma terceira passada do mesmo HEAD deu 2:25,87 — mais rápida que o "antes".
+  O alvo está agora **4,9× distante** e ninguém o defende. Cortar mutação para ganhar relógio
   violaria o princípio que motivou o I13.2, então o que resta é **subir o alvo ou aposentá-lo por
   escrito** — decisão do humano; o item vivo mora no `TODO.md`.
 
