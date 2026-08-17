@@ -1,6 +1,6 @@
 ---
 missao: 20260816-portas-do-humano
-atualizado: 2026-08-17 00:40
+atualizado: 2026-08-17 01:25
 ---
 
 # Checkpoint — as portas de controle do humano
@@ -33,7 +33,7 @@ atualizado: 2026-08-17 00:40
 | I3 | `sdd retry` vira a quarta porta com aviso | `o=$(bash tests/check-gates.sh 2>&1); grep -c '^  ok    retry ' <<< "$o"` → `2` | done | 3ffa586 |
 | I4 | plano kaizen-born nunca se auto-aprova | `o=$(bash tests/check-gates.sh 2>&1); grep -c '^  ok    kaizen-born' <<< "$o"` → `3` | done | 2510c3c |
 | F1 | `sdd approve` destrava o plano kaizen-born que o próprio gate manda ele destravar | `o=$(bash tests/check-gates.sh 2>&1); grep -c '^  ok    approve resolves' <<< "$o"` → `1`, e a jornada re-andada: `./bin/sdd health` → verde nos 5 checks | done | 5c3d118 |
-| F2 | `sdd approve` é a quinta porta que commita: avisa a branch base como as outras quatro | `o=$(bash tests/check-gates.sh 2>&1); grep -c '^  ok    approve warns' <<< "$o"` → `1`, e a jornada re-andada: `./bin/sdd health` → verde nos 5 checks | pending | — |
+| F2 | `sdd approve` é a quinta porta que commita: avisa a branch base como as outras quatro | `o=$(bash tests/check-gates.sh 2>&1); grep -c '^  ok    approve warns' <<< "$o"` → `1`, e a jornada re-andada: `./bin/sdd health` → verde nos 5 checks | done | 88ae514 |
 
 ## Notas de execução
 
@@ -194,6 +194,40 @@ atualizado: 2026-08-17 00:40
   `HEAD` sem este diff): com a suíte vermelha ele morre mudo na primeira linha, porque
   `out="$( … run-all.sh )"` sob `set -e` mata o script antes do `health_bad "suite red"`. Fora do
   escopo desta missão, registrado no `TODO.md` — quem for medir o Check do F2 não se assuste.
+
+- 2026-08-17 · `F2` · a chamada entra **no bloco do prompt**, não no topo do comando como nas outras
+  quatro portas — desvio deliberado da frase "no início de `cmd_approve`" do texto do F2. Só este
+  comando imprime a missão inteira antes de perguntar: um aviso no topo teria rolado para fora da
+  tela na hora da decisão, e a regra que as outras enunciam ("à frente do que possa rolar a tela")
+  lida num comando que pergunta vira "no fôlego antes da decisão". Fica **depois** do bail de
+  idempotência pelo segundo motivo que aqueles comentários dão: aviso em caminho que não commita é
+  o lobo que ensina a não ler avisos.
+- 2026-08-17 · `F2` · a asserção da QA ganhou **três cláusulas, não três vizinhas** (mesma escolha
+  do F1, e pelo mesmo motivo: o Check conta 1). Uma por sobrevivente da sabotagem — **ordem** (o
+  aviso antes da pergunta; movê-lo para depois do `read` deixava as duas cláusulas antigas verdes e
+  o humano sabendo da branch depois de já ter respondido), **contagem** (exatamente um, a regra que
+  o par do `retry ` já cobrava) e uma **terceira invocação com o checkpoint ilegível** (a sabotagem
+  pôs a chamada dentro do braço `if [ -n "$rows" ]` e tudo ficou verde, porque o fixture satisfazia
+  a condição alheia). Medido depois: os Checks seguem 3/3/2/3/1/1.
+- 2026-08-17 · `F2` · ⚠️ **a rodada 1 da sabotagem produziu quatro probes vazios e um "sobrevivente"
+  que não existia.** `perl -0pe 's/^  warn_if_on_base_branch\n//m'` sem `/g` casa a PRIMEIRA
+  ocorrência do arquivo, que é a do `cmd_preflight` — os probes removiam a chamada da porta errada e
+  concluíam que a de `cmd_approve` sobrevivia. Mesma família da lição do F1 (probe ancorado em linha
+  mede as linhas erradas). A saída foi um probe que **prova ter mudado o bloco do `cmd_approve`**
+  antes de a conclusão valer; sem essa guarda, quatro conclusões falsas teriam virado asserção.
+- 2026-08-17 · `F2` · passada de sabotagem: **26 degradações em 5 rodadas**, parando na rodada sem
+  achado novo. 3 sobreviventes reais viraram cláusula. **2 sobrevivem de propósito e são controle:**
+  mover a chamada para o topo do `cmd_approve` ou uma linha acima das `dim` continua correto, e uma
+  asserção que as matasse estaria medindo estilo, não a propriedade.
+- 2026-08-17 · `F2` · mutação **49 → 50**. `APPROVE_base_branch_warn_dead` sabota o call site — 3ª
+  exceção deliberada à regra "sabote a definição", pelo motivo já declarado no
+  `RETRY_base_branch_warn_dead`. O `sed` é endereçado ao corpo do `cmd_approve`: a linha
+  `  warn_if_on_base_branch` aparece agora **5×** e um `sed` sem endereço mataria as cinco. Medido:
+  o mutante mata **só** a asserção do F2 (77 `ok`, 1 `FAIL`).
+- 2026-08-17 · `F2` · o `HARNESS-BROKEN` do `check-mutation.sh` **liberou-se sozinho** ao fechar o
+  F2, exatamente como a QA previu: `score: 50 caught, 0 known gap(s), of 50`, suíte verde e
+  `./bin/sdd health` verde nos 5 checks — as duas metades dos Checks do F1 e do F2 agora são
+  medidas, não carimbadas.
 
 ## Incrementos de fix (QA)
 
