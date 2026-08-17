@@ -1110,6 +1110,141 @@ fi
 git checkout -q main
 git branch -q -D missao/20260105-retry-order
 
+# --- a kaizen-born plan never approves itself ------------------------------
+echo "== kaizen-born plans =="
+# `aprovacao: auto` means one thing and one thing only: the PLAN-AUTO table was all ✅ *with the
+# human in the room*, which is the premise sdd-planner writes it under. A plan born of `sdd kaizen`
+# had no human in the room — the kit planned its own next change — so `auto` there is a machine
+# certifying its own homework. agents/sdd-kaizen.md already orders the born plan to ship with
+# `aprovacao:` EMPTY, and gate_KAIZEN refuses to hand one over with the field filled; but nothing
+# stopped the born plan from filling it in later, and gate_PLAN — the gate `sdd run` actually asks
+# — read `auto` without ever looking at where the plan came from. Prose on one side, a gate blind
+# to it on the other: the kit could approve itself and run.
+#
+# The marker is `05-verdict.md` sitting in the mission directory, and it is not a convention
+# invented here: gate_KAIZEN finds the verdict and takes `dirname` as the born plan's home
+# (bin/sdd:2441), so the two files are siblings by construction. Provenance of the frontmatter
+# below: docs/handoffs/20260816-kit-como-alvo/05-verdict.md, the verdict the kit's own second
+# kaizen lap wrote — read from there, not remembered. It is spelled out instead of `cp`ed because
+# the gate reads the file's NAME and nothing inside it, and a copy would make this sensor depend on
+# one mission directory surviving in the repo forever.
+#
+# THREE cases on ONE fixture, and the shape is what makes them differential. Only one thing changes
+# between case 1 and case 2 (the verdict file appears) and only one between 2 and 3 (the approval
+# becomes a human's), so no assertion can be satisfied by a fixture that happens to sit in the
+# right regime: whichever half a regression breaks, the other half is standing right next to it.
+#
+# Neither slug below contains the words the assertions grep for, and that is not tidiness. The
+# refusal names the mission (`run 'sdd approve <mission>'`), so a fixture called `…-kaizen-born`
+# put the probe's own needle into the runner's output: degrading the message to drop "kaizen-born"
+# left the assertion green, because the mission NAME was still carrying it. The probe must only be
+# satisfiable by the gate's own words.
+KM="20260106-selfapproved"
+KMDIR="$FIX/docs/handoffs/$KM"
+mkdir -p "$KMDIR"
+cat > "$KMDIR/00-missao.md" <<'EOF'
+---
+missao: 20260106-selfapproved
+aprovacao: auto
+---
+# Mission fixture
+EOF
+: > "$KMDIR/01-plano.md"
+cat > "$KMDIR/checkpoint.md" <<'EOF'
+| ID | Incremento | Check (comando → esperado) | Status | Commit |
+|---|---|---|---|---|
+| I1 | one slice | `true` → 0 | pending | — |
+EOF
+# A SIBLING mission, planner-written and approved `auto`, that never gets a verdict of its own. It
+# is read in case 2 — after the verdict below exists — and it is what pins the marker to THE
+# MISSION instead of to the repo. The adversarial pass built the version that asks
+# `ls $HANDOFF_DIR/*/05-verdict.md`, which reads identically on the case-1 fixture and then refuses
+# every `auto` plan in any repo that has ever run `sdd kaizen` — the kit's own, for one. It
+# survived every other assertion here.
+KS="20260106-planner-written"
+KSDIR="$FIX/docs/handoffs/$KS"
+mkdir -p "$KSDIR"
+printf -- '---\nmissao: %s\naprovacao: auto\n---\n# Mission fixture\n' "$KS" > "$KSDIR/00-missao.md"
+: > "$KSDIR/01-plano.md"
+cp "$KMDIR/checkpoint.md" "$KSDIR/checkpoint.md"
+
+# --- 1. the control: the very same `auto`, with no verdict beside it, runs.
+#
+# It goes FIRST and on the fixture the refusal will use, because it is the only thing that says the
+# new branch discriminates instead of just refusing. A gate that turned every `auto` away would
+# satisfy every assertion about the refusal below and die here — and it would brick the ordinary
+# planner-written mission, which is most of them.
+KB_OK_PHASE="$( cd "$FIX" && "$SDD" phase "$KM" 2>&1 )"
+KB_OK_WHY="$( cd "$FIX" && "$SDD" why "$KM" PLAN 2>&1 )"
+if [ "$KB_OK_PHASE" = "EXEC" ] \
+   && grep -q 'plan approved' <<< "$KB_OK_WHY" \
+   && ! grep -q 'kaizen-born' <<< "$KB_OK_WHY"; then
+  pass "kaizen-born: 'auto' with no verdict beside it is an ordinary approved plan and still runs"
+else
+  fail "kaizen-born: 'auto' with no verdict beside it is an ordinary approved plan and still runs" \
+       "phase EXEC and a PLAN reason that approves without mentioning kaizen-born" \
+       "phase $KB_OK_PHASE, why: $KB_OK_WHY"
+fi
+
+# --- 2. the verdict appears: the same file, the same `auto`, and now the gate shuts.
+#
+# The reason is read, not just the rc: `auto` is on gate_PLAN's happy path, so a refusal that came
+# out of some OTHER branch (a missing artifact, an unparseable checkpoint) would leave the phase at
+# PLAN exactly the same way and this assertion could not tell which one ran. Hence the pair — the
+# new branch's own words present AND the happy path's marker absent.
+#
+# `sdd approve <mission>` is demanded inside the reason on purpose. A gate that shuts without
+# naming the way out sends the human back to hand-editing frontmatter, which is the failure the
+# approve command was built to end: the refusal has to carry its own remedy or it is just a wall.
+cat > "$KMDIR/05-verdict.md" <<'EOF'
+---
+verdict: indeterminado
+kit_sha_judged: dd80cb9
+date: 2026-01-06
+---
+# Verdict fixture
+EOF
+#
+# The sibling is read in the same breath, and only now that a verdict exists somewhere in the tree:
+# it is the witness that the marker is the mission's own file and not "this repo does kaizen".
+KB_NO_PHASE="$( cd "$FIX" && "$SDD" phase "$KM" 2>&1 )"
+KB_NO_WHY="$( cd "$FIX" && "$SDD" why "$KM" PLAN 2>&1 )"
+KB_SIB_PHASE="$( cd "$FIX" && "$SDD" phase "$KS" 2>&1 )"
+if [ "$KB_NO_PHASE" = "PLAN" ] \
+   && grep -q 'kaizen-born' <<< "$KB_NO_WHY" \
+   && grep -q "sdd approve $KM" <<< "$KB_NO_WHY" \
+   && ! grep -q 'plan approved' <<< "$KB_NO_WHY" \
+   && [ "$KB_SIB_PHASE" = "EXEC" ]; then
+  pass "kaizen-born: the verdict beside it turns 'auto' into a refusal that names sdd approve"
+else
+  fail "kaizen-born: the verdict beside it turns 'auto' into a refusal that names sdd approve" \
+       "phase PLAN and a reason citing kaizen-born and 'sdd approve $KM', never 'plan approved' — and the sibling mission still at EXEC" \
+       "phase $KB_NO_PHASE, sibling $KB_SIB_PHASE, why: $KB_NO_WHY"
+fi
+
+# --- 3. and the way out really is a way out: the human's own approval passes, verdict and all.
+#
+# Without this the branch could be `[ -f 05-verdict.md ]` alone and everything above would still be
+# green — a kaizen-born mission would then be unrunnable FOREVER, `sdd approve` included, and the
+# kit's own improvement loop would have no terminating state at all. What is refused is a machine
+# certifying itself, never the presence of a verdict.
+#
+# The value is written the way cmd_approve writes it (`humano-<date>`) and not some other legal
+# string, so this case also pins the two halves of the mission together: the gate has to accept
+# exactly what the command produces.
+sed -i 's/^aprovacao: auto/aprovacao: humano-2026-01-06/' "$KMDIR/00-missao.md"
+KB_HUMAN_PHASE="$( cd "$FIX" && "$SDD" phase "$KM" 2>&1 )"
+KB_HUMAN_WHY="$( cd "$FIX" && "$SDD" why "$KM" PLAN 2>&1 )"
+if [ "$KB_HUMAN_PHASE" = "EXEC" ] \
+   && grep -q 'plan approved (humano-2026-01-06)' <<< "$KB_HUMAN_WHY" \
+   && ! grep -q 'kaizen-born' <<< "$KB_HUMAN_WHY"; then
+  pass "kaizen-born: the human's own approval opens the gate with the verdict still sitting there"
+else
+  fail "kaizen-born: the human's own approval opens the gate with the verdict still sitting there" \
+       "phase EXEC and a PLAN reason approving 'humano-2026-01-06' without mentioning kaizen-born" \
+       "phase $KB_HUMAN_PHASE, why: $KB_HUMAN_WHY"
+fi
+
 # ---------------------------------------------------------------------------
 echo
 if [ "$fails" -eq 0 ]; then

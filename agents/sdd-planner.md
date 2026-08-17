@@ -114,6 +114,14 @@ Fill the `00-missao.md` table **with evidence**, not with optimism:
 - **Any ✗** → leave `aprovacao` empty and ask the human for explicit approval, saying which
   criterion failed. The runner does not proceed without one of the two values.
 
+⚠️ **One exception, and the runner enforces it: a plan born of `sdd kaizen` may never carry
+`auto`.** The permission above rests on a single premise — "the human was present" — and for a
+plan the kit wrote about itself that premise is false: nobody was in the room, so `auto` would be
+the machine certifying its own homework. The marker is `05-verdict.md` sitting next to the plan in
+the mission directory. There, all ✅ still means **empty** `aprovacao:`, and the human closes the
+gate with `sdd approve <mission>`. `gate_PLAN` refuses `auto` beside a verdict, so writing it does
+not accelerate the mission — it stalls it with an error.
+
 This gate only works if you are honest filling it in. Marking ✅ on something that did not close
 accelerates nothing: it transfers a defect to a phase that has no human to catch it.
 

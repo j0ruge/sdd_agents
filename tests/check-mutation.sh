@@ -102,6 +102,14 @@ mut_PLAN_empty_approval() {   # accepts an empty `aprovacao:` — an unapproved 
   sed -i 's/^    auto)          : ;;/    auto)          : ;;\n    "")            : ;;/' "$1"
 }
 
+# Blinds gate_PLAN to where the plan came from: `aprovacao: auto` next to a 05-verdict.md passes
+# again, so a plan the kit wrote about itself certifies its own homework and `sdd run` spends a
+# whole pipeline on it. Anchored on the marker's filename inside the condition — the one token that
+# cannot survive a rewrite of this branch, and the only thing gate_KAIZEN and gate_PLAN agree on.
+mut_PLAN_kaizen_born_blind() {
+  sed -i 's|^  if \[ "\$approval" = "auto" \] && \[ -f "\$MISSION_DIR/05-verdict.md" \]; then$|  if false; then|' "$1"
+}
+
 mut_TICKET_no_sprint() {      # stops requiring `sprint:` — a card in the backlog is invisible work
   sed -i "s|.*if ! grep -qiE '\^sprint:.*|  if false; then|" "$1"
 }
@@ -535,6 +543,7 @@ mut_RETRY_base_branch_warn_dead() {
 
 CATALOG=(
   PLAN_empty_approval
+  PLAN_kaizen_born_blind
   TICKET_no_sprint
   EXEC_done_without_commit
   EXEC_orphan_commit

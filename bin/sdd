@@ -307,6 +307,25 @@ gate_PLAN() {
     humano-*)      : ;;
     *) GATE_WHY="00-missao.md has 'aprovacao: ${approval:-<empty>}' — it must be 'auto' (PLAN-AUTO all ✅) or 'humano-YYYY-MM-DD'"; return 1 ;;
   esac
+  # `auto` carries ONE premise: the PLAN-AUTO table was filled with the human in the room. A plan
+  # born of `sdd kaizen` had no human in the room — the kit planned its own next change — so `auto`
+  # there is the machine certifying its own homework, and this gate is what `sdd run` asks before
+  # spending a pipeline on it. agents/sdd-kaizen.md orders the born plan to ship with `aprovacao:`
+  # empty and gate_KAIZEN refuses to hand one over with the field filled, but both of those act at
+  # BIRTH: nothing stopped the field from being filled afterwards, and gate_PLAN read `auto` without
+  # ever asking where the plan came from. A rule that lives only in prose is a rule the runner does
+  # not have.
+  #
+  # `05-verdict.md` beside the mission is the marker, and it is structural rather than agreed: the
+  # kaizen gate locates the verdict and takes its `dirname` as the born plan's home, so the two are
+  # siblings by construction. The remedy is named in the reason because the alternative — a human
+  # hand-typing `humano-YYYY-MM-DD` into the frontmatter — is the exact failure `sdd approve` exists
+  # to end. Only `auto` is refused: with a human's own approval the mission runs, verdict and all,
+  # or the kit's improvement loop would have no terminating state.
+  if [ "$approval" = "auto" ] && [ -f "$MISSION_DIR/05-verdict.md" ]; then
+    GATE_WHY="kaizen-born plan (05-verdict.md sits beside it) may not approve itself — a human must: run 'sdd approve $MISSION'"
+    return 1
+  fi
   if [ "$JIRA_ENABLED" = "true" ]; then
     local v; v="$(frontmatter "$m" versao)"
     if [ -z "$v" ] || [[ $v == \<* ]]; then

@@ -62,6 +62,14 @@ open, checklists, self-containment, a Check per increment, the version) **with e
 well-run grill is the approval — the human was present. Any criterion left open and the planner
 leaves `aprovacao` empty, and the runner stops asking for explicit approval.
 
+**And `auto` is refused outright on a kaizen-born plan.** When `05-verdict.md` sits beside the
+mission's artifacts, the plan came out of [the kaizen loop](#the-kaizen-loop) — the kit planning
+its own next change, with no human in the room. The premise `auto` rests on is false there, so the
+gate stalls the mission with `run 'sdd approve <mission>'` however the field got filled. The human
+closes it with `sdd approve <mission>`, which writes `humano-<date>` and commits. This is
+`gate_KAIZEN`'s "the loop never approves its own plan" enforced a second time, at the gate
+`sdd run` actually asks.
+
 ### TICKET — skipped when there is no JIRA
 
 **Passes when:** `JIRA_ENABLED=false` (skip recorded), or `10-ticket.md` exists with `issue:`
