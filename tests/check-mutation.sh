@@ -286,8 +286,12 @@ mut_KAIZEN_degenerate_axis_all_history() {
 # and then went three versions quiet reads `degenerate_axis: true`, and the runner tells its human
 # to stop waiting for missions that are in fact arriving. The field then errs at exactly the
 # distinction it exists to make, and it feeds the judge prompt.
+# ⚠️ The anchor is `$best_reach`, not the `all($order[]; …)` this clause was first written as: the
+# reach test was regrouped into one `group_by` to stop being O(versions × rows), and the old anchor
+# stopped matching. It failed the honest way — CATALOGUE-BROKEN, rc 90 — which is the harness guard
+# doing its job, and the same trap the apostrophe in `mut_LEDGER_repo_root_common_parent` sprang.
 mut_KAIZEN_degenerate_axis_reach_blind() {
-  sed -i 's@        and all($order\[\]; . as $sha | ($rows | missions_on($sha)) < guard_floor);@        ;@' "$1"
+  sed -i 's@        and $best_reach < guard_floor;@        ;@' "$1"
 }
 
 # `gate_KAIZEN` goes back to dropping the rc of the series read. errexit is OFF inside every gate

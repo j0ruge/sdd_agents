@@ -2630,7 +2630,6 @@ kaizen_series() {
       # year is exactly the number that moves with nothing explaining why.
       | ($order | length) as $n
       | ($order[(if $n > guard_floor then $n - guard_floor else 0 end):]) as $window
-      | ($window | length) > 1
       # MISSIONS per version, not sessions, because `missions_with_session` is the unit the floor
       # reads and this field exists to explain that floor. Counting sessions made the two disagree
       # on the one row shape that separates them: a version whose TWO sessions belong to the SAME
@@ -2643,7 +2642,6 @@ kaizen_series() {
       # for missions that cannot help, which is the exact misreading ADR 0003 built this field to
       # end. Zero is still not one: a version whose rows are all escalations observed NOTHING, a
       # different silence with a different remedy, and `== 1` keeps it out.
-        and all($window[]; . as $sha | ($rows | missions_on($sha)) == 1)
       # ...AND the floor was never once reached in this whole ledger. The window alone was the
       # second formulation and it traded one wrong answer for another: it says "the axis cannot work
       # HERE", and a quiet stretch is not a broken axis. Measured on the window alone — two versions
@@ -2657,7 +2655,17 @@ kaizen_series() {
       # nothing about whether the floor is attainable; this one latches on the floor itself having
       # been met. In the repo that BUILDS the kit no version ever reaches it (every session commits
       # and the next lands on a fresh sha), so the explanation stays on, which is the point.
-        and all($order[]; . as $sha | ($rows | missions_on($sha)) < guard_floor);
+      # Grouped ONCE rather than re-scanning every row per version: written as
+      # `all($order[]; ($rows | missions_on(.)) < guard_floor)` this clause is O(versions × rows),
+      # and the repo that BUILDS the kit is precisely where versions grow without bound — one per
+      # session, forever. Measured on 3000 rows across 750 versions: 1.40 s that way, 0.20 s this
+      # way. `group_by` sorts, and here that is safe because only the MAXIMUM is wanted and a
+      # maximum has no order — the file-order property lives in $order above, untouched.
+      | ($rows | map(select(.event == "session")) | group_by(.kit_sha)
+               | map(map(mission_key) | unique | length) | max // 0) as $best_reach
+      | ($window | length) > 1
+        and all($window[]; . as $sha | ($rows | missions_on($sha)) == 1)
+        and $best_reach < guard_floor;
 
     def phase_label:
       if (map(select(is_escalation)) | length) > 0
