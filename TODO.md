@@ -30,6 +30,13 @@ Achados sobre **repos-alvo** vão para o `TODO.md` daquele repo. Este arquivo é
 
 ### Sensores que faltam
 
+- [ ] **`sdd health` morre mudo quando a suíte está vermelha — o caso que ele existe para relatar**
+  — `bin/sdd:1537` — `out="$( … run-all.sh )"; rc=$?` é atribuição de substituição de comando: sob
+  `set -e` a suíte vermelha mata o script ali, e o `health_bad "suite red (rc $rc)"` da linha
+  seguinte é código morto. Medido: 1 linha de saída e rc 1, sem dizer o que quebrou — os 4 checks
+  restantes nunca rodam. Direção: `if out="$(…)"; then` ou `|| rc=$?`, com fixture de suíte vermelha.
+  — descoberto por `sdd-executor` na missão `20260816-portas-do-humano` (2026-08-16)
+
 - [ ] **A linha `N kit agent(s) checked` não é observável por nenhum fixture** — `bin/sdd:1356` —
   ela só sai com `fails -eq 0`, e todo fixture offline reprova antes (o probe do `claude` e o
   `gh auth status`). O I3 provou o ramo de falha por diferencial, mas o ramo de sucesso — a frase
