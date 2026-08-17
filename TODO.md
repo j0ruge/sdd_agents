@@ -175,7 +175,7 @@ Achados sobre **repos-alvo** vão para o `TODO.md` daquele repo. Este arquivo é
   tentador é `KNOWN_GAPS`. Direção: reprovar guarda de `SDD_MUTANT` em arquivo que invoca `bin/sdd`.
   — descoberto por `sdd-executor` na missão `20260816-runner-sem-dividas` (2026-08-16)
 
-- [ ] **`check-autonomy.sh` é vermelho intermitente, causa desconhecida** — `bin/sdd:972` —
+- [ ] **`check-autonomy.sh` é vermelho intermitente, causa desconhecida** — `bin/sdd:989` —
   ⚠️ **A causa registrada foi REFUTADA; o sintoma segue aberto.** Era "colisão de nome de log em
   repo que versiona `.sdd/logs/`", e não se sustenta: `check-autonomy.sh:140` chama
   `sdd install` ANTES de existir log, e `bin/sdd:1125` já põe `.sdd/logs/` no `.gitignore` —
@@ -308,7 +308,7 @@ Achados sobre **repos-alvo** vão para o `TODO.md` daquele repo. Este arquivo é
   quando houver folga de régua. — descoberto por `sdd-executor` na missão
   `20260815-ledger-sem-ponto-cego` (2026-08-16)
 
-- [ ] **A guarda do juiz é insatisfazível quando o kit desenvolve a si mesmo** — `bin/sdd:2580`
+- [ ] **A guarda do juiz é insatisfazível quando o kit desenvolve a si mesmo** — `bin/sdd:2738`
   (`sufficient: ($observed >= 3)`) vs `autonomy_kit_stamp` — o eixo é o `HEAD` do kit no instante
   de CADA linha, e a fase EXEC commita no `bin/sdd` entre sessões: medido, **24 kit_sha distintos
   no ledger, todos com exatamente 1 sessão, nenhum com 2**, então `sufficient` é `false` por
@@ -317,18 +317,19 @@ Achados sobre **repos-alvo** vão para o `TODO.md` daquele repo. Este arquivo é
   `guard.degenerate_axis` faz o runner dizer isso em voz alta, citando o registro.
   — descoberto por `humano` na missão `20260816-runner-sem-dividas` (2026-08-16)
 
-- [ ] **O schema da série não tem sensor de drift contra a prosa que o descreve** — `bin/sdd:2656`
+- [ ] **O schema da série não tem sensor de drift contra a prosa que o descreve** — `bin/sdd:2738`
   vs `docs/pipeline.md:496` e `agents/sdd-kaizen.md:35` — o objeto que o juiz é mandado citar é
-  produzido em dois lugares (o `jq` e o literal do ledger vazio, `:2516`) e descrito em **cinco**;
+  produzido em dois lugares (o `jq` e o literal do ledger vazio, `:2558`) e descrito em **seis**;
   o `sdd health` mede drift de doc/config e gate-sem-mutação, mas nada casa os campos do `guard`
-  com quem os promete. Já cobrou o preço 4×, a última na r2 de `20260817-eixo-do-juiz` (semântica
-  de `degenerate_axis` e chave por repo, 5 arquivos à mão). Direção: extrair os campos do `jq` e
-  cobrá-los na doc. — descoberto por `sdd-executor` na missão `20260816-runner-sem-dividas` (2026-08-16)
+  com quem os promete. Já cobrou o preço 5×, a última na r3 de `20260817-eixo-do-juiz`, que achou o
+  **sexto** lugar — `docs/adr/0003`, o único que o runner **cita na saída**, e o único que a r2
+  deixou descrever a regra antiga. Direção: extrair os campos do `jq` e cobrá-los na doc.
+  — descoberto por `sdd-executor` na missão `20260816-runner-sem-dividas` (2026-08-16)
 
 ### Contrato e configuração
 
 - [ ] **O lembrete pós-pipeline manda o humano a um comando que não enxerga o que ele contou** —
-  `bin/sdd:2675` (`kaizen_reminder`) vs `:2828` (`cmd_kaizen`) — o lembrete roda com
+  `bin/sdd:2757` (`kaizen_reminder`) vs `:2924` (`cmd_kaizen`) — o lembrete roda com
   `REPO_ROOT` = repo-ALVO e conta as missões dele; o juiz roda no repo do KIT e, com o filtro por
   repo, lê `latest: null` e `other_repo: N`. ⚠️ `--all-repos` (`d62f08c`) **não** fecha isto: o
   lembrete só é chamado de `cmd_run`, e `sdd run` não tem a flag — segue aberto, não estampar.

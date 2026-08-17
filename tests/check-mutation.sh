@@ -281,6 +281,42 @@ mut_KAIZEN_degenerate_axis_all_history() {
   sed -i 's@| ($order\[(if $n > guard_floor then $n - guard_floor else 0 end):\]) as $window@| $order as $window@' "$1"
 }
 
+# The window loses its second clause and goes back to judging a QUIET STRETCH as a broken axis. The
+# field says "the axis cannot work here", so a repo whose own history reached the floor — twice —
+# and then went three versions quiet reads `degenerate_axis: true`, and the runner tells its human
+# to stop waiting for missions that are in fact arriving. The field then errs at exactly the
+# distinction it exists to make, and it feeds the judge prompt.
+mut_KAIZEN_degenerate_axis_reach_blind() {
+  sed -i 's@        and all($order\[\]; . as $sha | ($rows | missions_on($sha)) < guard_floor);@        ;@' "$1"
+}
+
+# `gate_KAIZEN` goes back to dropping the rc of the series read. errexit is OFF inside every gate
+# (each caller invokes it as `gate_KAIZEN || gate_rc=$?`), so an unreadable ledger arrives as the
+# empty string and the gate reports "no verdict for kit  yet" — corruption spelled exactly like
+# pending work, which sends the runner on to spend an opus session judging a file nobody can parse.
+# The reader beside it dies loudly over the same file; this half guessed, and guessed expensively.
+# The window goes back to counting SESSIONS instead of MISSIONS, and stops agreeing with the floor
+# it explains. A version whose two sessions belong to one mission — an in-loop auto retry — still
+# contributes one mission, so `missions_with_session` stays 1 and the floor stays unsatisfiable; the
+# session count of 2 nevertheless turns the field `false` and takes the sentence with it. The human
+# reads a bare `sufficient: false` and waits for missions that cannot help.
+mut_KAIZEN_degenerate_axis_session_unit() {
+  sed -i 's@and all($window\[\]; . as $sha | ($rows | missions_on($sha)) == 1)@and all($window[]; . as $sha | ($rows | map(select(.kit_sha == $sha and .event == "session")) | length) == 1)@' "$1"
+}
+
+# The window sorts its versions and stops meaning "recent". `shas_in_file_order` is what makes the
+# window recency rather than alphabetical, and a `sort` slipped inside this one consumer is
+# invisible: the latest/previous pair keeps its own probe, so only the window goes blind. An ancient
+# version whose sha happens to sort last is dragged into the window and silences the explanation
+# forever — N8 all over again, and by construction with nothing saying so.
+mut_KAIZEN_degenerate_axis_window_sorted() {
+  sed -i 's@| ($rows | shas_in_file_order) as $order@| ($rows | shas_in_file_order | sort) as $order@' "$1"
+}
+
+mut_KAIZEN_series_rc_dropped() {
+  sed -i 's@  series="$(kaizen_series)" || series_rc=$?@  series="$(kaizen_series 2>/dev/null)"; series_rc=0; series="${series:-{\\}}"@' "$1"
+}
+
 # The mission identity loses the repo and goes back to the bare slug. A no-op until --all-repos
 # existed; with it, two projects that ran the same dated slug on the same kit_sha collapse into one
 # group — missions_with_session drops, guard.sufficient can flip, and one project `refez` swallows
@@ -864,6 +900,10 @@ CATALOG=(
   LEDGER_repo_root_common_parent
   LEDGER_repo_root_cdpath_leak
   LEDGER_bare_by_entry_point
+  KAIZEN_degenerate_axis_reach_blind
+  KAIZEN_degenerate_axis_session_unit
+  KAIZEN_degenerate_axis_window_sorted
+  KAIZEN_series_rc_dropped
 )
 
 # Mutations that are NOT caught today, each with the increment that closes it. Ratchet in both

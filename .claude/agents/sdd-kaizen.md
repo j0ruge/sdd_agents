@@ -38,9 +38,12 @@ escalations by kind, cost, and the guard (`missions_after_change`, `missions_wit
 nothing to read. A mission is identified by `(repo, mission)` and never by the slug alone — slugs
 are dated and repeat across projects, so under `--all-repos` the repo is what keeps two projects
 apart; each `detail` entry names its own. `degenerate_axis: true` means the **last three** kit
-versions in the slice each bought exactly one session — the shape of the repo that BUILDS the kit,
+versions in the slice each bought exactly one session **and** no version in the whole history ever
+reached the floor — the shape of the repo that BUILDS the kit,
 where each session commits and the next lands
-on a fresh sha. Then `sufficient: false` is structural, not a matter of waiting: say so in the
+on a fresh sha. That second clause is deliberate: a repo that once reached the floor and is merely
+quiet right now has a working axis, and the field must not call it broken.
+Then `sufficient: false` is structural, not a matter of waiting: say so in the
 verdict and cite ADR 0003, instead of writing "a few more missions and we will know". It also counts
 what it excluded, in **five** buckets — dirty-kit rows, unrecognized rows, the meta rows your own
 sessions write, `other_repo`, the rows born in another repo (the ledger file is global, this

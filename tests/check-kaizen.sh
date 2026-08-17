@@ -821,6 +821,64 @@ assert_eq "axis window: but a RECENT version with two sessions does silence it �
         axis_row s000d02 q3 session; axis_row s000d03 q4 session
         axis_row s000d04 q5 session; axis_row s000d04 q2 session; } | axis_case windowctl )"
 
+# ...and the window needed a second clause, because ON ITS OWN it traded one wrong answer for
+# another. The field claims "the axis cannot work HERE", and a quiet stretch is not a broken axis:
+# with the window alone, a repo whose history reached the floor TWICE and then went three versions
+# quiet answered `true`, and the runner told its human to stop waiting for missions that were
+# arriving. Measured before the fix, on the first fixture below.
+#
+# DIFFERENTIAL, and the two fixtures differ in ONE fact: whether the busy versions reached the floor
+# (3 missions apiece) or stopped one short of it (2). Same version count, same session count, same
+# quiet tail, same `sufficient`. Drop the clause and BOTH read `true`, so the first goes red; make it
+# too strong and the second stops explaining a genuinely degenerate axis, so the second goes red.
+# Neither fixture can satisfy its own assertion by the other's regime — which is the only way this
+# pair could pass without measuring the rule.
+assert_eq "axis reach: a repo whose own history reached the floor has a WORKING axis, quiet stretch or not" \
+  "false/no/false/2" \
+  "$( { axis_row s000e01 q1 session; axis_row s000e01 q2 session; axis_row s000e01 q3 session
+        axis_row s000e02 q4 session; axis_row s000e02 q5 session; axis_row s000e02 q6 session
+        axis_row s000e03 q7 session; axis_row s000e04 q8 session
+        axis_row s000e05 q9 session; } | axis_case reach )"
+assert_eq "axis reach: but a history that never once reached it is degenerate, and the runner says so" \
+  "true/yes/false/2" \
+  "$( { axis_row s000f01 q1 session; axis_row s000f01 q2 session
+        axis_row s000f02 q4 session; axis_row s000f02 q5 session
+        axis_row s000f03 q7 session; axis_row s000f04 q8 session
+        axis_row s000f05 q9 session; } | axis_case reachctl )"
+
+# The unit of the window is MISSIONS, not sessions, because the floor it explains is
+# `missions_with_session >= 3`. The two disagree on exactly one row shape, and it is a shape the
+# runner writes by itself: two sessions belonging to the SAME mission on one kit version — an in-loop
+# auto retry, or a second `sdd run` over a phase that neither commits nor dirties the kit tree. The
+# floor is as unsatisfiable as before (one mission), and counting sessions read `2`, turned the field
+# `false` and took the sentence away with it. Measured before the fix: `missions_with_session: 1`,
+# `sufficient: false`, `degenerate_axis: false`, sentence printed zero times — a human told nothing,
+# waiting for missions that cannot help.
+#
+# Its control is the `windowctl` case above: two sessions of TWO missions on the newest version is
+# genuinely `false`. Same session count, same version count — only the mission count differs, so
+# neither case can pass in the other's regime, and the session-unit spelling fails THIS one.
+assert_eq "axis unit: two sessions of ONE mission on a version is still one mission, and still degenerate" \
+  "true/yes/false/3" \
+  "$( { axis_row s000g01 q1 session; axis_row s000g02 q2 session
+        axis_row s000g03 q3 session; axis_row s000g03 q3 session; } | axis_case unit )"
+
+# ...and the window is the last versions in FILE order, which is what makes it mean "recent" at all.
+# That property was load-bearing and unprobed: `shas_in_file_order | sort` inside the window left
+# BOTH sensors green (rc 0, zero FAILs, measured), because every fixture that reaches the window
+# happened to use shas whose lexical order equals their file order. Under the degrade this very
+# ledger reads `false` — the ancient version silencing what the recent ones say, which is N8 verbatim
+# with the suite green.
+#
+# Descending on purpose, and that is the whole point: lexically `zzz0001` sorts LAST, so any sort or
+# reverse inside the window drags it in and its two missions break the clause. Paired with the two
+# ascending `axis window` cases above, the three pin recency to file order and to nothing else.
+assert_eq "axis order: recency is FILE order — an ancient version that sorts last is still ancient" \
+  "true/yes/false/2" \
+  "$( { axis_row zzz0001 q1 session; axis_row zzz0001 q2 session
+        axis_row aaa0002 q3 session; axis_row aaa0003 q4 session
+        axis_row aaa0004 q5 session; } | axis_case order )"
+
 # The guard of `kaizen_axis_note` asks `degenerate_axis == true`, and `sufficient == false` was
 # INTERCHANGEABLE with it across every fixture above: the degenerate one is also insufficient, the
 # healthy one is also sufficient. This is the third case that pulls them apart — a healthy target
@@ -1165,6 +1223,42 @@ assert_eq "real gate: it accepts the very sha the prompt hands the agent, under 
 dead_stub   # the refusing path burns its two offline attempts and escalates, exactly as rc 3 says
 assert_eq "real gate: and refuses the other series sha, so the acceptance above is no rubber stamp" \
   "3 no-verdict" "$(gate_verdict_rc "$JS_LOCAL" --all-repos)"
+
+# --- ...and corruption is never "not judged yet" -----------------------------
+# `gate_KAIZEN` read `series="$(kaizen_series)"` and dropped the rc. It looked safe because errexit
+# would catch it, and errexit is OFF inside there every time: every caller invokes the gate as
+# `gate_KAIZEN || gate_rc=$?`, which disables it for the whole body. So an unreadable ledger arrived
+# as the empty string, `expected` came out empty, and the gate answered "no verdict for kit  yet" —
+# that double space was the only tell. It is the branch meaning "the judge has not run", so the
+# runner went on to open an OPUS session to judge a file nobody could parse. `sdd autonomy` over the
+# same file died loudly; the judge's own gate guessed, and guessed the expensive way.
+#
+# FOUR clauses in one reading, because the degrades that matter move one and not the others: the rc
+# (rc 1, a refusal over corrupt input — not rc 3, which is what a burnt-out retry loop returns), the
+# sentence naming the unreadable file, the ABSENCE of the pending sentence (that confusion IS the
+# finding: a gate that complains and still says "no verdict yet" has not stopped conflating them),
+# and the loud stub, which is the witness that no session was opened at all.
+echo "== the judge refuses a ledger it cannot read =="
+mkdir -p "$OUTSIDE/judgecorrupt"
+{ cat "$OUTSIDE/judgesplit/autonomy-log.jsonl"; printf 'NOT JSON AT ALL {{{\n'; } \
+  > "$OUTSIDE/judgecorrupt/autonomy-log.jsonl"
+loud_stub
+assert_eq "corrupt ledger: refused as UNREADABLE, never as 'not judged yet', and no session is spent" \
+  "1 unreadable no-pending-claim no-session" \
+  "$( o="$( cd "$FIX" && SDD_STATE_DIR="$OUTSIDE/judgecorrupt" "$KSDD" kaizen 2>&1 )"; r=$?
+      printf '%s %s %s %s' "$r" \
+        "$(grep -q 'could not be read' <<< "$o" && echo unreadable || echo silent)" \
+        "$(grep -q 'no verdict for kit' <<< "$o" && echo pending-claim || echo no-pending-claim)" \
+        "$(grep -q 'invoked the real claude' <<< "$o" && echo SESSION-SPENT || echo no-session)" )"
+# The control, and it is not decoration: the clauses above are all satisfied by a runner that
+# refuses EVERY ledger. The same fixture with the broken line removed has to reach the gate and give
+# a verdict answer — so "refuses corruption" is distinguishable from "refuses".
+assert_eq "corrupt ledger: and the same ledger without the broken line still reaches the gate" \
+  "reaches-gate no-unreadable-claim" \
+  "$( o="$( cd "$FIX" && SDD_STATE_DIR="$OUTSIDE/judgesplit" "$KSDD" kaizen --series 2>&1 )"; r=$?
+      printf '%s %s' \
+        "$( [ "$r" = 0 ] && echo reaches-gate || echo "refused:$r" )" \
+        "$(grep -q 'could not be read' <<< "$o" && echo unreadable-claim || echo no-unreadable-claim)" )"
 
 echo "== hygiene =="
 assert_eq "the fixture kit tree ends clean" "" "$(git -C "$FIX" status --porcelain)"

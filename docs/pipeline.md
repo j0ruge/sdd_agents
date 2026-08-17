@@ -497,7 +497,9 @@ Plus a `guard` (`missions_after_change`, `missions_with_session`, `sessions`,
 `sufficient: missions_with_session >= 3` — a mission that only escalated ran, and is counted as
 one, but bought the judge no observation and so does not raise the floor;
 `degenerate_axis`, true when the **last three** kit versions in the slice each bought exactly one
-session **and** there is more than one of them) and an `excluded`
+session, there is more than one of them, **and no version anywhere in the history ever reached the
+floor** — that third clause is what separates "this axis cannot work here" from a merely quiet
+stretch in a healthy repo) and an `excluded`
 accounting with five reasons
 (`non_comparable` dirty-kit rows, `unrecognized` rows, the `meta` rows the kaizen sessions
 themselves write — the loop never lets its own sessions shift the axis it is judged on —
@@ -524,6 +526,15 @@ append-only, so a single ancient `kit_sha` that once bought two sessions would s
 explanation off forever while every recent version sat at one session each — and nothing about
 today could ever switch it back on. Three is the guard floor, held as one definition in the `jq`
 program so the window and the number it explains cannot drift apart.
+
+The window alone was not enough, and the second clause is why. The field claims the axis **cannot
+work here**, and a quiet stretch is not a broken axis: a repo whose history reached the floor twice
+and then went three versions quiet read `true`, telling its human to stop waiting for missions that
+were in fact arriving. So the whole history is consulted for one question only — did any version
+ever reach the floor? Having reached it once is a permanent fact about a repository, which is why
+latching the explanation off on *that* is right where latching it off on "some sha once bought two
+sessions" was wrong. In the repo that builds the kit no version ever reaches it, so the explanation
+stays on.
 
 **The agent gives the verdict.** The `sdd-kaizen` session runs the series as its source of truth
 (citing, never recalculating), interprets the sha axis with `git log`, and writes

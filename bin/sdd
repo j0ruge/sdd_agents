@@ -975,9 +975,13 @@ ledger_row_is_local() {
   # reach it — widening the question between projects is not the same as admitting rows that
   # belong to none.
   # `(.repo // "") == ""` and not `has("repo") | not`: the three shapes of "this row names no
-  # project" are the key absent, the key present and null, and the key present and empty, and only
-  # the first is a shape the writer can produce — the other two arrive by hand edit or partial
-  # write, which is precisely the corruption this bucket exists to report. Under the old spelling
+  # project" are the key absent, the key present and null, and the key present and empty, and the
+  # LAST is the one the writer produces — `autonomy_session_row` always passes `--arg repo "$repo"`
+  # into `{… repo: $repo …}`, so the key is never missing and comes back `""` whenever
+  # `ledger_repo_root` resolved nothing (a session run outside any git repo). Key-absent is the
+  # shape the writer can never emit; it and the null arrive by hand edit or partial write, which is
+  # precisely the corruption this bucket exists to report. All three are one answer here, which is
+  # why the spelling covers them rather than testing for one. Under the old spelling
   # they fell through to `.repo == $repo` and were accused of being `other_repo` ("born elsewhere"),
   # a wrong reason printed with the confidence of a right one; and standing outside any git repo,
   # where $repo is itself empty, a `repo: ""` row compared EQUAL and was counted local in a repo
@@ -1042,6 +1046,14 @@ autonomy_append() {   # autonomy_append <one json object, already built>
     return 0
   }
 }
+
+# ONE definition of "the ledger parses", for the same reason `is_escalation` and `mission_key` are
+# one definition each. It was written twice, and the two copies did not disagree about the ANSWER —
+# they disagreed about who checks: `cmd_autonomy` ran it and died loudly, `kaizen_series` never ran
+# it at all, so the judge's own gate read a corrupt ledger as an empty series and reported "no
+# verdict for kit  yet". Same file, same rows: one reader refusing to guess and the other guessing
+# "pending". Every reader of the ledger calls this before believing a number.
+ledger_parses() { jq -se . "$1" >/dev/null 2>&1; }
 
 # Never a malformed row: broken JSONL is the one way the judge reads garbage believing it is data.
 # jq is a hard dependency (preflight fails without it), so absence here is an anomaly, not a mode.
@@ -2348,7 +2360,7 @@ cmd_autonomy() {
   fi
   # A malformed row dies loudly. Skipping it quietly is how a judge ends up reading a subset and
   # calling it the whole history.
-  jq -se . "$file" >/dev/null 2>&1 || die "malformed row in $file — the ledger is not readable"
+  ledger_parses "$file" || die "malformed row in $file — the ledger is not readable"
 
   # A REAL row count, not a line count. `grep -c .` counted LINES: a single pretty-printed JSON
   # row made the header say "9 row(s)" while the table correctly said "1 session(s)" — two
@@ -2517,6 +2529,17 @@ cmd_autonomy() {
 kaizen_series() {
   local file; file="$(autonomy_log_path)"
   command -v jq >/dev/null 2>&1 || die "jq not found — it is required to read the ledger"
+  # The SAME readability test cmd_autonomy runs, and the reason it is here is that it was not:
+  # `sdd autonomy` died loudly on a corrupt ledger while this function returned an unparsed
+  # non-zero to a caller that dropped it, and `gate_KAIZEN` then read the empty string as "no
+  # verdict yet" — corruption spelled exactly like pending work, which costs an opus session over a
+  # file nobody could read. `warn` and not `die`: this function is read through `$( )`, where `die`
+  # exits the SUBSHELL and the caller sees a bare rc anyway, so the sentence is printed here (once)
+  # and the decision belongs to whoever called.
+  if [ -s "$file" ] && ! ledger_parses "$file"; then
+    warn "malformed row in $file — the ledger is not readable"
+    return 1
+  fi
   # Read PER REPO, from the repo this process is standing in. Standing in none, nothing in the
   # ledger is yours: the series comes back empty, which is the SAFE direction (guard.sufficient
   # false supports only `indeterminado`) and never another repo's numbers read as a verdict about
@@ -2570,31 +2593,6 @@ kaizen_series() {
     # pair below and by the window here. group_by sorts by key and answers a different question;
     # two hand-written copies of this reduce is how the blocked/degraded pair came to disagree.
     def shas_in_file_order: map(.kit_sha) | reduce .[] as $s ([]; if index($s) then . else . + [$s] end);
-    def degenerate_axis:
-      . as $rows
-      | ($rows | shas_in_file_order) as $order
-      # The LAST guard_floor versions, and NOT the whole history. Over all of $ok this was a
-      # one-way switch: the ledger is append-only, so one ancient sha that happened to buy two
-      # sessions turned the explanation off FOREVER while every recent version sat at exactly one.
-      # Measured: 20 shas x 1 session => true; add a second session to the OLDEST sha => false,
-      # with nothing about today having changed. An explanation that expires on a fact from last
-      # year is exactly the number that moves with nothing explaining why.
-      | ($order | length) as $n
-      | ($order[(if $n > guard_floor then $n - guard_floor else 0 end):]) as $window
-      | ($window | length) > 1
-        and all($window[]; . as $sha
-                | ($rows | map(select(.kit_sha == $sha and .event == "session")) | length) == 1);
-
-    def phase_label:
-      if (map(select(is_escalation)) | length) > 0
-         or (map(select(.event == "session" and .invocation == "retry")) | length) > 0
-         or ((map(select(.event == "session")) | last | .gate) != "pass")
-      then "refez"
-      elif (map(select(.event == "session" and (.auto_retry == true or .moved == false))) | length) > 0
-      then "leve"
-      else "ok"
-      end;
-
     # ONE definition of "which mission is this row about", and the repo is PART of it. The slug
     # alone was the first spelling, and it was a no-op bug until this mission opened --all-repos:
     # slugs are dated (`YYYYMMDD-<name>`) and cmd_kaizen mints `$(date +%Y%m%d)-kaizen`, identical
@@ -2611,7 +2609,65 @@ kaizen_series() {
     # value that is not a string makes jq DIE, so a hand-edited row with a numeric `repo` took
     # `sdd autonomy` down with `malformed row` and returned the judge nothing. group_by and unique
     # order any JSON, so the array costs nothing and admits no delimiter to inject.
+    #
+    # Defined HERE, above degenerate_axis, and not beside group_summary where it used to sit: jq
+    # resolves a `def` only after it appears, and the second clause of degenerate_axis counts
+    # missions. Moved rather than copied — a second spelling of this question is the exact defect
+    # the paragraph above is about.
     def mission_key: [(.repo // ""), (.mission // "")];
+    # ...and "how many missions bought a session on this version", which is the number the floor
+    # reads. Shared with the guard verdict through guard_floor, so the two cannot drift.
+    def missions_on($sha): map(select(.kit_sha == $sha and .event == "session"))
+                           | map(mission_key) | unique | length;
+    def degenerate_axis:
+      . as $rows
+      | ($rows | shas_in_file_order) as $order
+      # The LAST guard_floor versions, and NOT the whole history. Over all of $ok this was a
+      # one-way switch: the ledger is append-only, so one ancient sha that happened to buy two
+      # sessions turned the explanation off FOREVER while every recent version sat at exactly one.
+      # Measured: 20 shas x 1 session => true; add a second session to the OLDEST sha => false,
+      # with nothing about today having changed. An explanation that expires on a fact from last
+      # year is exactly the number that moves with nothing explaining why.
+      | ($order | length) as $n
+      | ($order[(if $n > guard_floor then $n - guard_floor else 0 end):]) as $window
+      | ($window | length) > 1
+      # MISSIONS per version, not sessions, because `missions_with_session` is the unit the floor
+      # reads and this field exists to explain that floor. Counting sessions made the two disagree
+      # on the one row shape that separates them: a version whose TWO sessions belong to the SAME
+      # mission (an in-loop auto retry, or any second `sdd run` on a phase that neither commits nor
+      # dirties the kit tree) still contributes exactly one mission, so the floor stays as
+      # unsatisfiable as before — and yet the session count of 2 turned this field to `false` and
+      # `kaizen_axis_note` went SILENT. Measured: three versions, the newest with two sessions of
+      # one mission => `missions_with_session: 1`, `sufficient: false`, `degenerate_axis: false` and
+      # the sentence printed zero times. The human then reads a bare `sufficient: false` and waits
+      # for missions that cannot help, which is the exact misreading ADR 0003 built this field to
+      # end. Zero is still not one: a version whose rows are all escalations observed NOTHING, a
+      # different silence with a different remedy, and `== 1` keeps it out.
+        and all($window[]; . as $sha | ($rows | missions_on($sha)) == 1)
+      # ...AND the floor was never once reached in this whole ledger. The window alone was the
+      # second formulation and it traded one wrong answer for another: it says "the axis cannot work
+      # HERE", and a quiet stretch is not a broken axis. Measured on the window alone — two versions
+      # carrying 3 missions apiece, then three versions with one session each => `true`, in a repo
+      # whose OWN history proves 3-missions-per-version is reachable twice over. The field then errs
+      # at exactly the distinction it was created to make, and it feeds the judge prompt.
+      #
+      # Never-reached is a PERMANENT fact about a repository, so latching the explanation off on it
+      # is correct — which is what separates this clause from the whole-history rule it restores a
+      # piece of. That one latched on "some sha once bought two sessions", a coincidence that says
+      # nothing about whether the floor is attainable; this one latches on the floor itself having
+      # been met. In the repo that BUILDS the kit no version ever reaches it (every session commits
+      # and the next lands on a fresh sha), so the explanation stays on, which is the point.
+        and all($order[]; . as $sha | ($rows | missions_on($sha)) < guard_floor);
+
+    def phase_label:
+      if (map(select(is_escalation)) | length) > 0
+         or (map(select(.event == "session" and .invocation == "retry")) | length) > 0
+         or ((map(select(.event == "session")) | last | .gate) != "pass")
+      then "refez"
+      elif (map(select(.event == "session" and (.auto_retry == true or .moved == false))) | length) > 0
+      then "leve"
+      else "ok"
+      end;
 
     def group_summary:
       . as $rows
@@ -2746,11 +2802,25 @@ GATE_KAIZEN_VERDICT=""
 GATE_KAIZEN_VERDICT_FILE=""
 GATE_KAIZEN_PLAN_DIR=""
 GATE_KAIZEN_APPROVED=""
+GATE_KAIZEN_UNREADABLE=""
 gate_KAIZEN() {
   GATE_KAIZEN_VERDICT=""; GATE_KAIZEN_VERDICT_FILE=""; GATE_KAIZEN_PLAN_DIR=""
-  GATE_KAIZEN_APPROVED=""
-  local series expected f found=""
-  series="$(kaizen_series)"
+  GATE_KAIZEN_APPROVED=""; GATE_KAIZEN_UNREADABLE=""
+  local series expected f found="" series_rc=0
+  # The rc is READ, and that is the whole point. Written `series="$(kaizen_series)"` bare, this line
+  # looked safe because errexit would catch it — and errexit is OFF inside here, every time: every
+  # caller invokes this function as `gate_KAIZEN || gate_rc=$?`, which disables it for the entire
+  # body. So a failed read left `series` empty, `expected` empty, and the gate answered "no verdict
+  # for kit  yet" (that double space was the only tell) — a corrupt ledger routed into the branch
+  # meaning "the judge has not run", which spends an opus session on a file that cannot be read.
+  # A series that could not be read supports NO statement about the kit, so it gets its own outcome
+  # rather than the most optimistic neighbouring one.
+  series="$(kaizen_series)" || series_rc=$?
+  if [ "$series_rc" -ne 0 ] || [ -z "$series" ]; then
+    GATE_KAIZEN_UNREADABLE=1
+    GATE_WHY="the ledger could not be read (the series reader exited $series_rc) — this is NOT 'not judged yet': run 'sdd autonomy' to see which row breaks it. No session can judge a series nobody can read."
+    return 1
+  fi
   expected="$(jq -r '.latest.kit_sha // "none"' <<< "$series")"
   for f in "$REPO_ROOT/$HANDOFF_DIR"/*/05-verdict.md; do
     [ -f "$f" ] || continue
@@ -2845,7 +2915,7 @@ kaizen_axis_note() {
   [ "$(jq -r '.guard.degenerate_axis' <<< "$series")" = "true" ] || return 0
   # No count in the sentence on purpose: the window is `guard_floor` and writing "3" here would be
   # a third copy of a number the jq program already owns, drifting the day the floor moves.
-  warn "the kit_sha axis is degenerate here: the recent kit versions each bought exactly one session"
+  warn "the kit_sha axis is degenerate here: the recent kit versions each bought exactly one session, and none ever reached the floor"
   dim "  This repo BUILDS the kit, so each session commits and the next one lands on a fresh sha."
   dim "  The floor of 3 missions per kit version is unsatisfiable here, and 'indeterminado' is then"
   dim "  the CORRECT verdict, not a missing mission: evidence comes from real target repos (ADR 0003)."
@@ -2923,6 +2993,15 @@ cmd_kaizen() {
     kaizen_outcome || out_rc=$?
     return "$out_rc"
   fi
+  # An unreadable ledger stops the line BEFORE any session, and ahead of every other bailout: each
+  # one below reasons about numbers this series was supposed to carry, and it carries none. The
+  # session is the thing being refused — a corrupt ledger is not a state an agent can fix from
+  # inside a session (the file lives in $HOME and is not in the repo), so opening one only spends
+  # opus to arrive at the same sentence. `die`, exactly as cmd_autonomy does over the same file:
+  # this is the same refusal, reached through the gate instead of through the reader.
+  if [ -n "$GATE_KAIZEN_UNREADABLE" ]; then
+    die "$GATE_WHY"
+  fi
   # A filled `aprovacao:` bails out BEFORE any session — see kaizen_approved_outcome.
   if [ -n "$GATE_KAIZEN_APPROVED" ]; then
     out_rc=0; kaizen_approved_outcome || out_rc=$?
@@ -2999,7 +3078,7 @@ USAGE
   sdd run <mission>          run from the first unsatisfied phase through to the PR
   sdd retry <mission>        retry the current phase with a fresh session
   sdd close <mission>        post-merge: close the JIRA issue
-  sdd autonomy [--all-repos] waste per kit version, for THIS repo, from the global ledger
+  sdd autonomy [--all-repos] waste per kit version, for this repo unless --all-repos, from the ledger
   sdd kaizen [--dry-run]     judge the previous kit change and give birth to the next kit
              [--all-repos]   mission plan (kit repo only; exit 3 = the change made it worse)
   sdd kaizen --series        the deterministic series (JSON) the judge cites, for the repo

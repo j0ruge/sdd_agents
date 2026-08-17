@@ -61,6 +61,7 @@ sdd health                   # KIT sensor (≠ preflight, which is about the tar
 sdd autonomy                 # waste per kit version, for THIS repo, from the global ledger (~/.sdd/autonomy-log.jsonl)
 sdd autonomy --all-repos     # ...for EVERY repo on this machine (the cross-project question; never the default)
 sdd kaizen                   # judge the previous kit change and plan the next kit mission (kit repo only)
+sdd kaizen --series [--all-repos]   # the deterministic series the judge cites; the flag widens BOTH halves
 
 sdd run <mission> --dry-run         # project the whole pipeline without spending tokens
 sdd run <mission> --phase EXEC      # force one specific phase
