@@ -30,6 +30,14 @@ Achados sobre **repos-alvo** vão para o `TODO.md` daquele repo. Este arquivo é
 
 ### Sensores que faltam
 
+- [ ] **A rubrica do auto-teste no `CLAUDE.md` conta cinco sensores e o `grep` devolve seis** —
+  `CLAUDE.md:135` — a linha manda conferir por `grep -l selftest tests/` e declara o resultado
+  esperado; medido na `main` e no HEAD, os dois devolvem **6**, porque o `jobs_selftest()` do
+  escalonador (`tests/check-mutation.sh:63`, entrou em `52414e4`) casa o grep sem ser auto-teste de
+  regra. Número escrito à mão em rubrica é a mesma classe do `44 caught of 44` que esta missão já
+  tirou de lá. Direção: contar a propriedade (`grep -l '^selftest()' `) ou citar os nomes.
+  — descoberto por `sdd-docs` na missão `20260816-portas-do-humano` (2026-08-17)
+
 - [ ] **Fase que morre com a árvore suja faz o runner rederivar EXEC para sempre** —
   `bin/sdd:426` — `gate_EXEC` roda o `TEST_CMD` sobre o working tree, então o vermelho de QUALQUER
   fase em voo é lido como vermelho do EXEC. Medido nesta missão: a REVIEW morreu antes de commitar,
