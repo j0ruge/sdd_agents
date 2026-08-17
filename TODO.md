@@ -351,8 +351,9 @@ Achados sobre **repos-alvo** vão para o `TODO.md` daquele repo. Este arquivo é
 - [ ] **O juiz no repo do kit deixou de enxergar missão de repo-alvo** — `bin/sdd:790`
   (`ledger_row_is_local`) — a leitura por repo é o conserto certo para contaminação de fixture,
   mas o ledger existe para medir maturidade **entre** projetos (`docs/pipeline.md:274`) e nenhum
-  leitor consegue mais fazê-lo. Hoje não morde: as 26 linhas reais são todas do kit. Direção: um
-  `--all-repos` explícito, ou o eixo do juiz decidido por ADR (item da guarda, acima).
+  leitor consegue mais fazê-lo. RESOLVIDO por `d62f08c`: `--all-repos` explícito, ligando o
+  predicado único e alcançando os três leitores de uma vez; medido no ledger real, 49 linhas →
+  60 e `other_repo` 11 → 0. O default segue filtrado, que era a outra metade da decisão.
   — descoberto por `sdd-executor` na missão `20260816-kit-como-alvo` (2026-08-16)
 
 - [ ] **`config/schema.md` promete cinco comportamentos que o runner não tem** —
