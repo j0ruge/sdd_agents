@@ -1377,13 +1377,47 @@ QW_ON_BASE="$( cd "$FIX" && "$SDD" approve "$QW" 2>&1 <<< "n" )"
 ( cd "$FIX" && git checkout -q -b off-base-for-approve )
 QW_OFF_BASE="$( cd "$FIX" && "$SDD" approve "$QW" 2>&1 <<< "n" )"
 QW_BRANCH="$( cd "$FIX" && git branch --show-current )"
-if grep -q 'you are on the base branch' <<< "$QW_ON_BASE" \
-   && ! grep -q 'you are on the base branch' <<< "$QW_OFF_BASE"; then
+# A third invocation, back on the base branch, with the increment table made unparseable. The
+# branch is the ONLY thing this guard may depend on, and the pair above cannot say so: a sabotage
+# pass moved the call inside the `if [ -n "$rows" ]` arm and every clause stayed green, because the
+# fixture happened to satisfy the unrelated condition. That is how a guard ends up firing for the
+# missions that need it least — and a half-written checkpoint is exactly the mission most likely to
+# be approved in a hurry, from wherever the human is standing.
+( cd "$FIX" && git checkout -q main )
+printf 'this file carries no parseable increment row\n' > "$QWDIR/checkpoint.md"
+QW_NOROWS="$( cd "$FIX" && "$SDD" approve "$QW" 2>&1 <<< "n" )"
+QW_NOROWS_N="$(grep -c 'you are on the base branch' <<< "$QW_NOROWS")"
+( cd "$FIX" && git checkout -q -- "docs/handoffs/$QW/checkpoint.md" )
+# WHERE in the output, not merely whether: the clause below was added by sdd-executor closing F2,
+# after a sabotage pass found it was the one degradation the pair alone could not see. Moving the
+# call to just after `read -r ans` keeps both greps green and tells the human which branch they
+# were standing on AFTER they already answered — a guard that arrives late is not a guard, it is a
+# receipt, and the SQ-97 class this mission exists to end is precisely being told after the fact.
+# The prompt carries no trailing newline, so a warning printed after it lands ON the prompt line
+# and the comparison is strict: equal line numbers are the late warning, not an early one.
+#
+# awk with `exit` rather than `grep -n | head -1`: one process, no pipe, so nothing here can return
+# 141 under `pipefail` when the match is found before the writer finishes (a house lesson, in
+# CLAUDE.md). Both numbers are demanded non-empty — a missing warning would otherwise arrive as an
+# empty string and compare its way to a pass.
+#
+# Counted, not just present, for the reason the `retry ` pair states: with "at least one" a guard
+# that fires early AND again after the answer passes, and the late copy is the crying wolf the
+# definition's own comment says it must never become. Exactly one on the base branch, exactly none
+# off it.
+QW_WARN_N="$(grep -c 'you are on the base branch' <<< "$QW_ON_BASE")"
+QW_WARN_OFF_N="$(grep -c 'you are on the base branch' <<< "$QW_OFF_BASE")"
+QW_WARN_AT="$(awk '/you are on the base branch/ { print NR; exit }' <<< "$QW_ON_BASE")"
+QW_ASK_AT="$(awk '/approve this plan/ { print NR; exit }' <<< "$QW_ON_BASE")"
+if [ "$QW_WARN_N" -eq 1 ] \
+   && [ "$QW_WARN_OFF_N" -eq 0 ] \
+   && [ "$QW_NOROWS_N" -eq 1 ] \
+   && [ -n "$QW_WARN_AT" ] && [ -n "$QW_ASK_AT" ] && [ "$QW_WARN_AT" -lt "$QW_ASK_AT" ]; then
   pass "approve warns about the base branch it is about to commit into, and is silent off it"
 else
   fail "approve warns about the base branch it is about to commit into, and is silent off it" \
-       "the warning on main, no warning on $QW_BRANCH" \
-       "on main: $(tail -2 <<< "$QW_ON_BASE") | off base: $(tail -2 <<< "$QW_OFF_BASE")"
+       "exactly one warning on main and BEFORE the [y/N] question, none on $QW_BRANCH, one again with an unparseable checkpoint" \
+       "on main: $QW_WARN_N warning(s), at line ${QW_WARN_AT:-<none>}, question at line ${QW_ASK_AT:-<none>}, $(tail -2 <<< "$QW_ON_BASE") | off base: $QW_WARN_OFF_N warning(s), $(tail -2 <<< "$QW_OFF_BASE") | no rows: $QW_NOROWS_N warning(s), $(tail -1 <<< "$QW_NOROWS")"
 fi
 
 # ---------------------------------------------------------------------------

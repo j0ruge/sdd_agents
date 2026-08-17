@@ -569,6 +569,26 @@ mut_RETRY_base_branch_warn_dead() {
   sed -i '/^cmd_retry() {/,/^}/ s@^  warn_if_on_base_branch$@@' "$1"
 }
 
+# `sdd approve` goes back to being the silent fifth door: it still prints the plan, still asks, and
+# still commits — into whatever branch the human is standing on, saying nothing. The state the kit
+# shipped in between increment I1, which created this door, and the fix that closed it; sdd-qa
+# walked it and found a `chore(missao)` commit dropped into the base branch without a word.
+#
+# The THIRD deliberate exception to "sabotage the definition, never the call site", and the same one
+# mut_RETRY_base_branch_warn_dead declares: the defect this increment closes IS an absent call site,
+# and mut_RUN_base_branch_warn_dead already empties the body for every door at once. A second
+# sabotage of the definition would measure that entry's ground a third time and leave this door
+# borrowing its coverage from a neighbour. What has to die is the `approve warns` pair and only it —
+# the other four keep warning, so every assertion about them stays green.
+#
+# ADDRESSED to cmd_approve's body: after this fix the line `  warn_if_on_base_branch` appears five
+# times, and an unaddressed substitution would gut all five while wearing this entry's name. The
+# range ends at the first column-zero `}`, which is cmd_approve's own — every line of the body is
+# indented, including the awk program and the two `-m` arguments of the commit.
+mut_APPROVE_base_branch_warn_dead() {
+  sed -i '/^cmd_approve() {/,/^}/ s@^  warn_if_on_base_branch$@@' "$1"
+}
+
 CATALOG=(
   PLAN_empty_approval
   PLAN_kaizen_born_blind
@@ -619,6 +639,7 @@ CATALOG=(
   RUN_approve_bails_on_kaizen_born
   RUN_branch_switch_dead
   RETRY_base_branch_warn_dead
+  APPROVE_base_branch_warn_dead
 )
 
 # Mutations that are NOT caught today, each with the increment that closes it. Ratchet in both

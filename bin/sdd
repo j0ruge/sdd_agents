@@ -1288,12 +1288,18 @@ cmd_install() {
   dim "next: edit .sdd/config.sh and run 'sdd preflight'"
 }
 
-# "you are standing on the base branch" — ONE definition, called by the four doors that can end
-# up committing: cmd_preflight, cmd_run, cmd_retry and cmd_kaizen.
+# "you are standing on the base branch" — ONE definition, called by the five doors that can end
+# up committing: cmd_preflight, cmd_run, cmd_retry, cmd_kaizen and cmd_approve.
+#
+# The count is not decoration: it was "four" until `sdd approve` was born committing in silence, in
+# the very mission that closed the silence of `sdd retry`. A door is added to this list the moment
+# it can reach a `git commit`, whether or not it opens a session — the criterion is what lands in
+# the history, and a count left stale here is how the next door gets written without the guard.
 #
 # It used to be four lines inlined in cmd_preflight and nowhere else, and preflight is OPTIONAL:
 # `sdd run` from `main` commits every phase straight into the base branch without a word, `sdd
-# retry` does the same for a single redone phase, and `sdd kaizen` is worse — it checks the kit repo and the dirty tree, then writes a verdict and
+# retry` does the same for a single redone phase, `sdd approve` did it for the approval commit it
+# asks the human to authorise, and `sdd kaizen` is worse — it checks the kit repo and the dirty tree, then writes a verdict and
 # three artifacts wherever you happen to be. Same rule that gave `is_escalation` a single home
 # after the blocked/degraded pair diverged across three call sites: an enum (or a warning) read in
 # more than one place is defined once, or the call sites drift apart one at a time.
@@ -1845,6 +1851,23 @@ cmd_approve() {
   info ""
   dim "  approving says: this plan is what you want built. It writes aprovacao: $approved_as"
   dim "  into 00-missao.md and commits that one file. It does NOT start the pipeline."
+  # The fifth door, and the only one whose commit a human asks for out loud. It went in written by
+  # the same mission that closed the silence of the fourth (`sdd retry`) and shipped silent itself:
+  # standing on `main`, approving dropped a `chore(missao)` commit straight into the base branch
+  # without a word — the SQ-97 class, reopened by the door this mission created. sdd-qa walked it.
+  #
+  # A warning and NEVER a `die`, unlike the checkout of ensure_mission_branch: the plan legitimately
+  # lives on the base branch before the mission branch is cut, and it is from there that the cut is
+  # made — refusing would lock out the ordinary flow.
+  #
+  # HERE and not at the top of the command, which is where the other four doors call it: those four
+  # print almost nothing before acting, while this one prints the entire mission body plus the
+  # increment table, and a warning at the top would have scrolled off the screen by the time the
+  # question is asked. The rule the other call sites state as "ahead of anything that could scroll
+  # it away" reads, at a prompt, as "in the breath before the decision". After the idempotence bail
+  # for the second reason those comments give: a warning on a path that cannot commit is the crying
+  # wolf that teaches people to skip reading them.
+  warn_if_on_base_branch
   printf '  approve this plan? [y/N] '
   # `|| ans=""`: with stdin closed, `read` returns non-zero and `set -e` would abort mid-prompt.
   # Anything that is not an explicit yes is a no — the default of a [y/N] prompt is the safe side.
@@ -2119,9 +2142,10 @@ cmd_retry() {
   # have put it. Same guard, same die, same silence in a dry run (retry has no dry mode, and the
   # global defaults to 0 — the guard costs nothing and outlives the assumption).
   ensure_mission_branch
-  # The fourth door, and the last one to get the guard: `sdd retry` redoes a phase with a FRESH
-  # session, and that session COMMITS. Fired from `main` it used to put the redone phase straight
-  # into the base branch without a word — the one door of the four that opened in silence.
+  # The fourth door, and the last of the four that existed then: `sdd retry` redoes a phase with a
+  # FRESH session, and that session COMMITS. Fired from `main` it used to put the redone phase
+  # straight into the base branch without a word — the one door of the four that opened in silence.
+  # (`sdd approve`, written in this same mission, turned out to be a fifth and got the guard after.)
   #
   # AFTER ensure_mission_branch, exactly like cmd_run and for the same reason: the checkout is what
   # decides where this retry will commit, so warning first would cry wolf at a human the runner is
