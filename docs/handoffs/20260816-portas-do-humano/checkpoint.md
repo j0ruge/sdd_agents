@@ -30,7 +30,7 @@ atualizado: 2026-08-16 22:40
 |---|---|---|---|---|
 | I1 | `sdd approve`: o gate humano ganha comando | `o=$(bash tests/check-gates.sh 2>&1); grep -c '^  ok    sdd approve' <<< "$o"` → `3` | done | 96a1f68 |
 | I2 | o runner troca para a branch declarada | `o=$(bash tests/check-gates.sh 2>&1); grep -c '^  ok    branch ' <<< "$o"` → `3` | done | b3b8c2f |
-| I3 | `sdd retry` vira a quarta porta com aviso | `o=$(bash tests/check-gates.sh 2>&1); grep -c '^  ok    retry ' <<< "$o"` → `2` | pending | — |
+| I3 | `sdd retry` vira a quarta porta com aviso | `o=$(bash tests/check-gates.sh 2>&1); grep -c '^  ok    retry ' <<< "$o"` → `2` | done | 3ffa586 |
 | I4 | plano kaizen-born nunca se auto-aprova | `o=$(bash tests/check-gates.sh 2>&1); grep -c '^  ok    kaizen-born' <<< "$o"` → `3` | pending | — |
 
 ## Notas de execução
@@ -77,6 +77,25 @@ atualizado: 2026-08-16 22:40
   é a classe SQ-97; e a linha BRANCH do `pipeline.log`). A r2 achou um **fail-open no que a r1
   tinha acabado de consertar**: sem a asserção positiva do anúncio, a de "no-op silencioso" fica
   verde num runner que nunca anuncia nada — par presente/ausente, nunca só a ausência.
+
+- 2026-08-16 · `I3` · a chamada entra **depois** de `ensure_mission_branch`, não "no início de
+  `cmd_retry`" como o `01-plano.md` diz — espelha a ordem já decidida no `cmd_run` (`bin/sdd:1865`)
+  e pelo mesmo motivo: o checkout é quem decide onde o retry commita, então avisar antes grita lobo
+  para um humano que o runner tira da base na linha seguinte. Não é desvio de intenção, é a mesma
+  regra aplicada ao segundo call site.
+- 2026-08-16 · `I3` · passada de sabotagem: **10 degradações em 4 rodadas**, parando na rodada sem
+  achado novo. 3 sobreviventes. Duas viraram asserção no mesmo commit — aviso **duplicado** (o par
+  diferencial remove TODAS as cópias da linha antes de comparar, então "pelo menos um" passava) e
+  aviso **antes** do checkout (indistinguível num fixture que não declara `branch:`). A terceira é
+  a mesma inversão de ordem no `cmd_run`: vizinha, fora do escopo, foi para o `TODO.md`.
+- 2026-08-16 · `I3` · o sensor tem **3** asserções e o Check conta **2**: a da ordem é nomeada fora
+  do prefixo `retry ` de propósito, como as duas do I2 fora de `branch `. Prefixo é contrato com o
+  Check; asserção que infla a contagem transforma contrato em coincidência.
+- 2026-08-16 · `I3` · a mutação `RETRY_base_branch_warn_dead` sabota o **call site**, exceção
+  deliberada à regra da casa ("sabote a definição"): o defeito desta fatia É o call site ausente, e
+  a definição já tem `RUN_base_branch_warn_dead`. O `sed` é endereçado ao corpo de `cmd_retry` —
+  depois deste commit a linha `  warn_if_on_base_branch` aparece **4×** e um `sed` sem endereço
+  mataria as quatro, creditando esta entrada pelo que a outra quebrou. Score 46 → 47, `0 known gaps`.
 
 ## Incrementos de fix (QA)
 
