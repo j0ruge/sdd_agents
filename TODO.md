@@ -39,7 +39,7 @@ Achados sobre **repos-alvo** vão para o `TODO.md` daquele repo. Este arquivo é
   — descoberto por `sdd-executor` na missão `20260816-portas-do-humano` (2026-08-17)
 
 - [ ] **`sdd approve` diz "next: sdd run" com o `gate_PLAN` ainda fechado por outro motivo** —
-  `bin/sdd:1946` — o comando roda o gate uma vez no topo, só desiste em `missing *`, e depois de
+  `bin/sdd:1950` — o comando roda o gate uma vez no topo, só desiste em `missing *`, e depois de
   commitar imprime o próximo passo sem reperguntar. Medido: com `JIRA_ENABLED=true` e `versao:`
   placeholder, ele aprova, commita, manda `sdd run` — e o `sdd why` seguinte recusa por `versao`.
   Todo motivo novo do gate herda o defeito de graça. Direção: reperguntar o gate depois do commit e
@@ -47,14 +47,14 @@ Achados sobre **repos-alvo** vão para o `TODO.md` daquele repo. Este arquivo é
   — descoberto por `sdd-reviewer` na missão `20260816-portas-do-humano` (2026-08-16)
 
 - [ ] **O fixture do `approve` mede o `sed` no arquivo inteiro, não o escopo do frontmatter** —
-  `tests/check-gates.sh:708` (`approval_stripped`) — a cópia de `aprovacao:` no corpo pega `sed`
+  `tests/check-gates.sh:716` (`approval_stripped`) — a cópia de `aprovacao:` no corpo pega `sed`
   global porque `sed` reescreve TODAS as ocorrências; o awk que o kit usa para na primeira sozinho,
   então tirar a guarda `inside &&` (reescrever a primeira chave em qualquer lugar do arquivo) deixa
   a suíte verde e corrompe prosa de missão sem a chave no frontmatter. RESOLVIDO por `ad0c89d`:
   fixture sem a chave no frontmatter e com ela no corpo, probe nos BYTES do arquivo.
   — descoberto por `sdd-reviewer` na missão `20260816-portas-do-humano` (2026-08-16)
 
-- [ ] **`frontmatter_write` confia em três coisas que não valem sempre** — `bin/sdd:191-215` — o
+- [ ] **`frontmatter_write` confia em três coisas que não valem sempre** — `bin/sdd:188-218` — o
   `chmod --reference … || true` engole a falha e deixa o artefato 0600 para sempre em userland não
   GNU; o `mv` troca um `00-missao.md` que seja SYMLINK por arquivo comum (o alvo real fica com o
   valor velho, e o commit leva a troca de tipo); e `awk -v v="$valor"` interpreta escape de barra
@@ -78,13 +78,13 @@ Achados sobre **repos-alvo** vão para o `TODO.md` daquele repo. Este arquivo é
   — descoberto por `sdd-reviewer` na missão `20260816-portas-do-humano` (2026-08-17)
 
 - [ ] **O call site de `ensure_mission_branch` no `cmd_retry` não tem entrada no catálogo** —
-  `tests/check-mutation.sh:635` (`CATALOG`) — remover a linha do `cmd_retry` É pego pelo
+  `tests/check-mutation.sh:660` (`CATALOG`) — remover a linha do `cmd_retry` É pego pelo
   `check-gates.sh` ("sdd retry is the other call site"), mas nenhuma mutação exercita a remoção,
   então o score não credita a proteção. Não é defeito, é contabilidade do `sdd health`.
   Direção: `mut_RETRY_branch_switch_dead` endereçado ao corpo do `cmd_retry`.
   — descoberto por `sdd-reviewer` na missão `20260816-portas-do-humano` (2026-08-17)
 
-- [ ] **O `die` de artefato faltando do `sdd approve` é regra sem probe** — `bin/sdd:1818` — o
+- [ ] **O `die` de artefato faltando do `sdd approve` é regra sem probe** — `bin/sdd:1842` — o
   comando repete o diagnóstico do `gate_PLAN` (`missing 01-plano.md`) e morre antes de imprimir
   qualquer coisa; os cinco fixtures de approve carregam sempre os três artefatos, então trocar o
   `die` por um `return 0` deixa a suíte inteira verde e o comando passa a commitar aprovação de uma
@@ -92,7 +92,7 @@ Achados sobre **repos-alvo** vão para o `TODO.md` daquele repo. Este arquivo é
   contados. — descoberto por `sdd-reviewer` na missão `20260816-portas-do-humano` (2026-08-16)
 
 - [ ] **`sdd health` morre mudo quando a suíte está vermelha — o caso que ele existe para relatar**
-  — `bin/sdd:1537` — `out="$( … run-all.sh )"; rc=$?` é atribuição de substituição de comando: sob
+  — `bin/sdd:1588` — `out="$( … run-all.sh )"; rc=$?` é atribuição de substituição de comando: sob
   `set -e` a suíte vermelha mata o script ali, e o `health_bad "suite red (rc $rc)"` da linha
   seguinte é código morto. Medido: 1 linha de saída e rc 1, sem dizer o que quebrou — os 4 checks
   restantes nunca rodam. Direção: `if out="$(…)"; then` ou `|| rc=$?`, com fixture de suíte vermelha.
@@ -105,14 +105,14 @@ Achados sobre **repos-alvo** vão para o `TODO.md` daquele repo. Este arquivo é
   contador de agentes impresso fora da guarda de `fails`.
   — descoberto por `sdd-executor` na missão `20260816-kit-como-alvo` (2026-08-16)
 
-- [ ] **A guarda de read-back do `sdd approve` é regra sem probe** — `bin/sdd:1766` — o comando
+- [ ] **A guarda de read-back do `sdd approve` é regra sem probe** — `bin/sdd:1933` — o comando
   relê o `aprovacao:` pelo mesmo parser do gate antes de commitar, para o caso de a chave não
   existir no frontmatter (aí o `frontmatter_write` é no-op e o commit aprovaria nada). Sabotar a
   guarda deixa as 3 asserções verdes: nenhum fixture tem missão sem a chave. RESOLVIDO por
   `ad0c89d`: o fixture `20260102-nokey` alcança o estado, nomeado fora do prefixo contado.
   — descoberto por `sdd-executor` na missão `20260816-portas-do-humano` (2026-08-16)
 
-- [ ] **A ordem checkout-antes-do-aviso é regra sem probe no `cmd_run`** — `bin/sdd:1865-1869` —
+- [ ] **A ordem checkout-antes-do-aviso é regra sem probe no `cmd_run`** — `bin/sdd:1986-1990` —
   inverter as duas linhas deixa a suíte inteira verde: o fixture do par diferencial da branch base
   não declara `branch:`, então os dois usos são indistinguíveis nele. Invertido, o `sdd run` avisa
   que vai commitar na base um humano que ele tira da base na linha seguinte — aviso falso, e é
