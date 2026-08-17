@@ -4,7 +4,7 @@ titulo: O backlog do kit ganha uma catraca que reprova crescimento silencioso, e
 data: 2026-08-17
 versao:
 branch: missao/20260817-catraca-do-backlog
-aprovacao:
+aprovacao: humano-2026-08-17
 ddd: n/a
 ---
 
