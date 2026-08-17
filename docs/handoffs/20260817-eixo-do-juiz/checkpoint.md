@@ -32,7 +32,7 @@ atualizado: 2026-08-17 12:10
 | I2 | o runner explica o `indeterminado` estrutural | `o=$(bash tests/check-kaizen.sh 2>&1); grep -c '^  ok    degenerate axis' <<< "$o"` → `2` | done | abac043 |
 | I3 | `--all-repos` nos três leitores | `o=$(bash tests/check-autonomy.sh 2>&1); grep -c '^  ok    all-repos' <<< "$o"` → `2` | done | d62f08c |
 | I4 | identidade de repo sobrevive a worktree | `o=$(bash tests/check-autonomy.sh 2>&1); grep -c '^  ok    worktree' <<< "$o"` → `2` | done | c514e36 |
-| I5 | linha sem `repo` ganha balde próprio | `o=$(bash tests/check-autonomy.sh 2>&1); grep -c '^  ok    no-repo' <<< "$o"` → `2` | pending | — |
+| I5 | linha sem `repo` ganha balde próprio | `o=$(bash tests/check-autonomy.sh 2>&1); grep -c '^  ok    no-repo' <<< "$o"` → `2` | done | 4ca8015 |
 
 ## Notas de execução
 
@@ -132,6 +132,37 @@ atualizado: 2026-08-17 12:10
 - 2026-08-17 · `EXEC I4` · achado fora de escopo no `TODO.md` (`80cbea2`): `cmd_kaizen`
   (`bin/sdd:2735`) decide "estou no repo do kit?" com `--show-toplevel`, a **mesma** pergunta por
   worktree que o ledger acabou de deixar de fazer — de um worktree do kit o comando recusa rodar.
+- 2026-08-17 · `EXEC I5` · suíte verde antes (`score: 59`) e depois (**60**, `0 known gap(s)`),
+  `sdd health` verde nos cinco. As 2 asserções nasceram **vermelhas** pelo motivo certo: `null 0
+  true` contra `3 0 false` esperado — o campo não existia **e** as 3 linhas sem `repo` estavam
+  mesmo virando `sufficient: true`, que é o defeito que o plano descreveu.
+- 2026-08-17 · `EXEC I5` · o par diferencial são **dois ledgers que diferem em uma chave**: as
+  MESMAS 3 sessões limpas, no mesmo sha, nas mesmas 3 missões, com e sem `repo` (`3 0 false` ×
+  `0 0 true`). Recusa geral responde `false` nos dois; o comportamento antigo responde `true` nos
+  dois; só o honesto os separa.
+- 2026-08-17 · `EXEC I5` · **`--all-repos` NÃO alcança o balde novo**, por decisão: alargar a
+  pergunta entre projetos não é admitir linha que não pertence a nenhum. O ramo `--all-repos` do
+  predicado é código sem probe no fixture de dois repos (ele não tem linha sem `repo`), então
+  ganhou asserção própria — com prefixo **nem `no-repo` nem `all-repos`**, que são os dois que os
+  Checks do I5 e do I3 contam com `-c`.
+- 2026-08-17 · `EXEC I5` · o fixture da linha `unrecognized` do `check-autonomy.sh` **passou a
+  carregar `repo`**: o filtro roda primeiro, então uma linha que não nomeia projeto é excluída
+  como `no_repo` antes de alguém olhar o `.event` e nunca chegaria ao balde sob teste. No
+  `check-kaizen.sh` as duas linhas estranhas passaram a diferir **só** pelo `repo`, e a asserção
+  exige que caiam em baldes DIFERENTES — lumpadas, ela lê `unrecognized:2, no_repo:0`.
+- 2026-08-17 · `EXEC I5` · sabotagem adversarial, **dez** degrades, todos vermelhos na asserção
+  dona da regra e nenhum `PROBE-BROKEN` (cada probe provou por `cmp -s` que o `sed` mudou o
+  arquivo): predicado morto, linha volta a ser local, `other_repo` absorvendo, balde sempre zero,
+  tabela humana muda, `foreign` lumpando, quarta voz apagada, `--all-repos` admitindo, literal
+  vazio sem a chave, e o juiz lumpando os dois baldes.
+- 2026-08-17 · `EXEC I5` · a mutação `LEDGER_no_repo_counted_as_local` sabota
+  `ledger_row_no_repo`, **não** `ledger_row_is_local`: é o que a mantém distinta das duas vizinhas
+  do catálogo — o filtro por repo segue honesto, e o que tem de morrer é só o par novo.
+  `mut_RUN_ledger_no_repo_filter` teve a âncora atualizada no mesmo commit (texto do predicado
+  mudou; sem isso o harness reprovaria com rc 90, que é o guard funcionando).
+- 2026-08-17 · `EXEC I5` · o item do `TODO.md` ganhou `RESOLVIDO por 4ca8015` (`34c4875`).
+  **Continuam devendo os itens do I1 e do I2** — a varredura dos 5 que a "Verificação end-to-end"
+  do plano cobra é da fase DOCS.
 
 ## Incrementos de fix (QA)
 
