@@ -1273,6 +1273,53 @@ warn_if_on_base_branch() {
   warn "you are on the base branch ($DEFAULT_BRANCH) — run like this and the pipeline commits straight into it"
 }
 
+# ensure_mission_branch — the runner honours the `branch:` field of 00-missao.md.
+#
+# The field shipped in templates/missao.md from the first day and NOTHING here ever read it: the
+# plan declared where the mission's commits belonged, and honouring it was a manual step before
+# every run. In the SQ-97 pilot the step was skipped once and five phases committed into another
+# PR's branch — 16 commits, and a `rebase --onto` to undo them.
+#
+# ONE definition, two call sites (cmd_run, cmd_retry) — the same rule that gave is_escalation and
+# warn_if_on_base_branch a single home each: a decision read in more than one place drifts apart
+# one call site at a time, and the site that stays behind is the one nobody tests.
+#
+# NEVER in a dry run. What `--dry-run` promises is narrower than "nothing happens" (the gates do
+# run TEST_CMD), but a checkout is a mutation of the working tree, which is precisely the half it
+# does promise.
+#
+# A branch that does not exist yet is cut from the CURRENT branch, never from DEFAULT_BRANCH: the
+# commit that carries the plan lives where the human is standing when they run, and cutting from
+# the base would leave the whole mission behind.
+#
+# git refusing the checkout is a `die`, never a warning: a dirty tree or a name git will not take.
+# Going on would run the entire pipeline on a branch the plan did not ask for, which is the exact
+# failure this function exists to close — and guessing on top of a tree git already refused is how
+# a working tree gets destroyed. The reason is git's to give, so its own output is carried into
+# the message instead of being replaced by a paraphrase.
+ensure_mission_branch() {
+  [ "$DRY_RUN" = "1" ] && return 0
+  local want current out rc=0
+  want="$(frontmatter "$MISSION_DIR/00-missao.md" branch)"
+  # Two no-ops: an empty field, and the `<...>` placeholder templates/missao.md ships while the
+  # name is still unknown (the TICKET phase fills it in). Neither is a branch name — git rejects
+  # the second for both the `<` and the spaces — and a mission that never declared a branch must
+  # keep working exactly as it did before this function existed.
+  [ -n "$want" ] || return 0
+  case "$want" in '<'*) return 0 ;; esac
+  current="$( cd "$REPO_ROOT" && git branch --show-current 2>/dev/null || true )"
+  [ "$want" = "$current" ] && return 0
+  if ( cd "$REPO_ROOT" && git show-ref --verify --quiet "refs/heads/$want" ); then
+    out="$( cd "$REPO_ROOT" && git checkout "$want" 2>&1 )" || rc=$?
+  else
+    out="$( cd "$REPO_ROOT" && git checkout -b "$want" 2>&1 )" || rc=$?
+  fi
+  [ "$rc" -eq 0 ] \
+    || die "could not switch to the branch '$want' declared in 00-missao.md — git said: $out"
+  ok "branch: ${current:-<detached>} → $want (declared in 00-missao.md)"
+  pipeline_log_line "$(date -Iseconds)  BRANCH  ${current:-<detached>} -> $want"
+}
+
 cmd_preflight() {
   load_config
   step "preflight — $PROJECT_NAME ($REPO_ROOT)"
@@ -1810,6 +1857,12 @@ cmd_run() {
   # gates to run, and three of them run TEST_CMD. What the dry-run guarantees is narrower — no
   # claude session, no touching of the mission artifacts. Same honesty fix as in --help.
   [ "$DRY_RUN" = "1" ] && dim "  (dry-run: no session will be opened — but the gates do run TEST_CMD)"
+  # BEFORE the base-branch warning, and the order is the point: the checkout is what decides where
+  # this pipeline will commit, so warning first would cry wolf at a human the runner is about to
+  # move off the base branch anyway — and a warning that cries wolf is how people learn to skip
+  # reading them. In a dry run nothing is switched, so the projection still says out loud that you
+  # are standing on `main`.
+  ensure_mission_branch
   # Before the first gate, so it is on screen ahead of anything that could scroll it away. It warns
   # in a dry run too: the projection is where you look BEFORE spending sessions, which makes it the
   # cheapest moment to learn you are about to commit into the base branch.
@@ -2008,6 +2061,11 @@ cmd_retry() {
   PIPELINE_LOG="$(log_dir)/pipeline.log"
   AUTONOMY_RUN_ID="$(uuidgen)"
   AUTONOMY_INVOCATION="retry"
+  # The second call site of the single definition: `sdd retry` opens a session that COMMITS, so a
+  # retry fired from the wrong branch lands the redone phase exactly where `sdd run` would not
+  # have put it. Same guard, same die, same silence in a dry run (retry has no dry mode, and the
+  # global defaults to 0 — the guard costs nothing and outlives the assumption).
+  ensure_mission_branch
   local phase; phase="$(current_phase)"
   [ -n "$phase" ] || { info "pipeline complete — nothing to retry"; return 0; }
   [ "$phase" = "PLAN" ] && die "PLAN is interactive — there is nothing to retry headless"

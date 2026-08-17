@@ -743,6 +743,249 @@ else
 fi
 git checkout -q -- file.txt
 
+# --- the declared mission branch -------------------------------------------
+echo "== the declared mission branch =="
+# `branch:` shipped in templates/missao.md from the start and NOTHING in the runner ever read it.
+# The plan declared where the mission's commits belong and the human was the only one honouring it,
+# by hand, before every run. In the SQ-97 pilot that hand-off failed once and five phases committed
+# into someone else's branch — 16 commits and a `rebase --onto` to undo.
+#
+# These three assertions run a REAL (non-dry) `sdd run`, for the same reason assert_jidoka does and
+# with the same safety: the mission below carries a `blocked` increment, so the runner escalates
+# before reaching any `run_phase`, and the claude stub at the top of this file turns a broken
+# ordering into a loud failure instead of a spent token. Checking a branch out is a mutation of the
+# working tree, which is exactly what `--dry-run` promises not to do — so the first assertion is a
+# PAIR, projection against real run, and the guard cannot be deleted without one half dying.
+BM="20260103-branch"
+BMDIR="$FIX/docs/handoffs/$BM"
+mkdir -p "$BMDIR"
+: > "$BMDIR/01-plano.md"
+# `blocked`, so `sdd run` escalates on the spot: the branch decision happens before the gates, and
+# this fixture only ever needs the runner to get that far.
+cat > "$BMDIR/checkpoint.md" <<'EOF'
+| ID | Incremento | Check (comando → esperado) | Status | Commit |
+|---|---|---|---|---|
+| I1 | one slice | `true` → 0 | blocked | — |
+EOF
+# branch_mission <value of the `branch:` key> — the ONE thing that varies between the cases below.
+#
+# printf and not a heredoc, because one of the callers passes a value read out of
+# templates/missao.md: an unquoted heredoc expands `$` and backticks, so the day someone writes a
+# backtick into that placeholder this fixture would EXECUTE it. Quoting the delimiter would kill
+# the expansion and the parameter with it.
+branch_mission() {
+  printf -- '---\nmissao: %s\naprovacao: auto\nbranch: %s\n---\n# Mission fixture\n' \
+    "$BM" "$1" > "$BMDIR/00-missao.md"
+}
+
+# The line the runner prints when it really does switch. It is asserted PRESENT here and ABSENT in
+# case 3, and the pair is the point: a lone absence assertion is satisfied by a runner that never
+# announces anything at all, which is how a "silent no-op" check goes vacuous without a word. Both
+# halves read the same variable so neither can drift into measuring a different line.
+BRANCH_LINE='branch: .* → '
+
+# --- 1. the declared branch exists: check it out — and never in a dry run.
+git branch missao/20260103-existing
+branch_mission "missao/20260103-existing"
+git checkout -q main
+BR_DRY_OUT="$( cd "$FIX" && "$SDD" run --dry-run "$BM" 2>&1 )"; BR_DRY_RC=$?
+BR_DRY_AT="$(git branch --show-current)"
+BR_RUN_OUT="$( cd "$FIX" && "$SDD" run "$BM" 2>&1 )"; BR_RUN_RC=$?
+BR_RUN_AT="$(git branch --show-current)"
+# The switch has to reach the TRAIL as well as the working tree. pipeline.log is where a human (and
+# the kaizen judge) reconstructs what a run did, and a checkout is the single event most likely to
+# be asked about afterwards — "which branch did phase three commit into?". Asserted here rather
+# than in its own case because it is the same event: a switch nobody recorded is half a switch.
+BR_LOG="$FIX/.sdd/logs/$BM/pipeline.log"
+BR_LOG_LINES="$(grep -c 'BRANCH  main -> missao/20260103-existing' "$BR_LOG" 2>/dev/null || true)"
+if [ "$BR_DRY_AT" = "main" ] \
+   && [ "$BR_RUN_AT" = "missao/20260103-existing" ] \
+   && [ "$BR_DRY_RC" = "$BR_RUN_RC" ] \
+   && [ "$BR_LOG_LINES" = "1" ] \
+   && grep -qE "$BRANCH_LINE" <<< "$BR_RUN_OUT" \
+   && ! grep -qE "$BRANCH_LINE" <<< "$BR_DRY_OUT" \
+   && ! grep -q "the test invoked the real claude" <<< "$BR_RUN_OUT"; then
+  pass "branch declared and already there: sdd run checks it out, logs it, and a dry run does neither"
+else
+  fail "branch declared and already there: sdd run checks it out, logs it, and a dry run does neither" \
+       "still on main after the projection, on missao/20260103-existing after the run, same rc, one BRANCH line" \
+       "dry: $BR_DRY_AT (rc $BR_DRY_RC) · run: $BR_RUN_AT (rc $BR_RUN_RC) · BRANCH lines: $BR_LOG_LINES: $(tail -2 <<< "$BR_RUN_OUT")"
+fi
+
+# --- 2. the declared branch does not exist: created from the CURRENT branch, not from the base.
+#
+# The distinction is the whole assertion, and a fixture standing on `main` could not make it: both
+# behaviours would produce the same tip. So the run starts from a branch carrying a commit that
+# exists NOWHERE else, and the new branch has to carry it too. `main` is asserted NOT to contain it
+# in the same breath — that is what keeps the check from passing on a fixture where every branch
+# happens to share a tip. The direction matters because the plan's own commit lives on the branch
+# the human is standing on when they run: cutting from the base would leave it behind.
+git checkout -q -b missao/20260103-source
+echo "a commit that lives only off the base branch" > branch-source-marker.txt
+git add branch-source-marker.txt
+git commit -qm "branch fixture: a commit that exists only off main"
+BR_SOURCE_TIP="$(git rev-parse HEAD)"
+branch_mission "missao/20260103-created"
+BR_NEW_OUT="$( cd "$FIX" && "$SDD" run "$BM" 2>&1 )"; BR_NEW_RC=$?
+BR_NEW_AT="$(git branch --show-current)"
+BR_NEW_TIP="$(git rev-parse HEAD)"
+BR_MAIN_HAS_SOURCE=0
+git merge-base --is-ancestor "$BR_SOURCE_TIP" main 2>/dev/null && BR_MAIN_HAS_SOURCE=1
+if [ "$BR_NEW_AT" = "missao/20260103-created" ] \
+   && [ "$BR_NEW_TIP" = "$BR_SOURCE_TIP" ] \
+   && [ "$BR_MAIN_HAS_SOURCE" -eq 0 ] \
+   && [ "$BR_NEW_RC" = "$BR_RUN_RC" ]; then
+  pass "branch declared and absent: created from the CURRENT branch, never from the base"
+else
+  fail "branch declared and absent: created from the CURRENT branch, never from the base" \
+       "on missao/20260103-created, tip $BR_SOURCE_TIP (a commit main does not have)" \
+       "at $BR_NEW_AT, tip $BR_NEW_TIP, main-has-source $BR_MAIN_HAS_SOURCE, rc $BR_NEW_RC: $(tail -2 <<< "$BR_NEW_OUT")"
+fi
+
+# --- 3. the two silent no-ops: the placeholder, and a run already on the declared branch.
+#
+# templates/missao.md ships a `<...>` placeholder in `branch:` while the name is still unknown, and
+# it is not a branch name: git rejects both the `<` and the spaces. A runner that tried would `die`
+# and take the whole pipeline with it — so the branch COUNT is asserted alongside the name, because
+# "no switch happened" and "no branch was created" are two different failures and only one of them
+# shows up in `--show-current`.
+#
+# The value is READ from the template instead of spelled here, and that bought two things the day
+# it was written. The plan for this increment quoted a placeholder the kit does not ship — reading
+# the file is what caught it — and a literal would have frozen today's wording into a sensor that
+# keeps passing after the template moves on. It also keeps this file free of the Portuguese that
+# tests/check-lang.sh forbids on kit surface: the template is artifact prose in OUTPUT_LANG, a
+# sensor is not.
+#
+# The second half is what keeps the same-branch short-circuit honest. Dropping it breaks nothing
+# visible: `git checkout` onto the branch you are already on succeeds. What it produces is a run
+# that ANNOUNCES a switch that never happened and appends a BRANCH line to pipeline.log every lap
+# — a false entry in the audit trail, which is the one thing this repo's gates exist to refuse. So
+# both no-ops are asserted SILENT, not merely harmless, and the announcement line is the probe.
+# awk with index()/substr() and never a negated class: the awk of this house is mawk, which negates
+# BYTES, and a placeholder carrying a curved quote or a dash would silently fall out of the match.
+BR_PLACEHOLDER="$(awk '/^branch: / { print substr($0, index($0, ":") + 2); exit }' "$ROOT/templates/missao.md")"
+# Without this the whole case degrades in silence: an empty value is a DIFFERENT no-op (the empty
+# guard, not the placeholder guard), so a template that stopped shipping a `<...>` here would leave
+# the assertion passing while measuring nothing at all.
+case "$BR_PLACEHOLDER" in
+  '<'*) ;;
+  *) fail "SENSOR-BROKEN: the placeholder case reads templates/missao.md" \
+          "a <...> placeholder in the template's branch: key" "'$BR_PLACEHOLDER'" ;;
+esac
+branch_mission "$BR_PLACEHOLDER"
+BR_PH_BEFORE="$(git branch --show-current)"
+BR_PH_LIST_BEFORE="$(git branch --list)"
+BR_PH_OUT="$( cd "$FIX" && "$SDD" run "$BM" 2>&1 )"; BR_PH_RC=$?
+BR_PH_AFTER="$(git branch --show-current)"
+BR_PH_LIST_AFTER="$(git branch --list)"
+# Herestrings, never `git branch --list | grep -c`: this file runs under `pipefail` and the house
+# rule is one form for all of them, so nobody has to work out which pipes are safe.
+BR_PH_N_BEFORE="$(grep -c . <<< "$BR_PH_LIST_BEFORE")"
+BR_PH_N_AFTER="$(grep -c . <<< "$BR_PH_LIST_AFTER")"
+branch_mission "$BR_PH_AFTER"
+BR_SAME_OUT="$( cd "$FIX" && "$SDD" run "$BM" 2>&1 )"; BR_SAME_RC=$?
+BR_SAME_AT="$(git branch --show-current)"
+if [ "$BR_PH_AFTER" = "$BR_PH_BEFORE" ] \
+   && [ "$BR_PH_N_AFTER" = "$BR_PH_N_BEFORE" ] \
+   && [ "$BR_PH_RC" = "$BR_RUN_RC" ] \
+   && ! grep -qE "$BRANCH_LINE" <<< "$BR_PH_OUT" \
+   && [ "$BR_SAME_AT" = "$BR_PH_AFTER" ] \
+   && [ "$BR_SAME_RC" = "$BR_RUN_RC" ] \
+   && ! grep -qE "$BRANCH_LINE" <<< "$BR_SAME_OUT"; then
+  pass "branch already there or still a placeholder: both no-ops, and both silent about switching"
+else
+  fail "branch already there or still a placeholder: both no-ops, and both silent about switching" \
+       "on $BR_PH_BEFORE both times, $BR_PH_N_BEFORE branches, rc $BR_RUN_RC, no switch announced" \
+       "placeholder: $BR_PH_AFTER, $BR_PH_N_AFTER branches, rc $BR_PH_RC · same-branch: $BR_SAME_AT, rc $BR_SAME_RC · announced: $(grep -cE "$BRANCH_LINE" <<< "$BR_PH_OUT$BR_SAME_OUT")"
+fi
+git checkout -q main
+
+# --- 4. git refusing the checkout stops the line — a die, never a warn.
+#
+# Deliberately NOT prefixed `branch `: the checkpoint's Check for this increment counts the three
+# cases the plan named, and this is a fourth the adversarial pass demanded. Degrading the `die`
+# into a `warn` survived every other assertion here — and it is the worst survivor of the set,
+# because a warned run GOES ON: the whole pipeline then commits into whatever branch git left the
+# tree on, which is the exact SQ-97 failure this increment exists to close.
+#
+# The refusal is manufactured the way it actually happens: a tracked file changed on the target
+# branch and dirty in the working tree. git will not clobber it, and the runner must not guess on
+# top of a tree git already refused.
+#
+# Two discriminators, because the rc alone cannot tell a die from a warn — a warned run escalates
+# on the blocked increment with rc 3, and rc 1 is also what a dozen other `die`s return:
+#   - "BLOCKED in EXEC" must be ABSENT. That marker is proof the run went on, which is the whole
+#     defect. Its absence is what says the line stopped HERE.
+#   - git's own words must be present. `file.txt` is the probe rather than the English sentence
+#     around it: git localises that sentence and the kit's preflight measures the GNU userland,
+#     never the locale — but the file it refuses to clobber is named in every language, and no
+#     paraphrase written in this runner would contain it.
+git checkout -q -b missao/20260103-refused
+echo "content that lives only on the refused branch" > file.txt
+git commit -qam "branch fixture: a conflicting change to a tracked file"
+git checkout -q main
+echo "an uncommitted local change to that very same file" > file.txt
+branch_mission "missao/20260103-refused"
+BR_DIE_OUT="$( cd "$FIX" && "$SDD" run "$BM" 2>&1 )"; BR_DIE_RC=$?
+BR_DIE_AT="$(git branch --show-current)"
+if [ "$BR_DIE_RC" -eq 1 ] \
+   && [ "$BR_DIE_AT" = "main" ] \
+   && grep -q "missao/20260103-refused" <<< "$BR_DIE_OUT" \
+   && grep -q "git said:" <<< "$BR_DIE_OUT" \
+   && grep -q "file\.txt" <<< "$BR_DIE_OUT" \
+   && ! grep -q "BLOCKED in EXEC" <<< "$BR_DIE_OUT"; then
+  pass "refused checkout stops the line: rc 1 carrying git's own words, and the run never goes on"
+else
+  fail "refused checkout stops the line: rc 1 carrying git's own words, and the run never goes on" \
+       "rc 1, still on main, git's message quoted, and no phase escalation after it" \
+       "rc $BR_DIE_RC at $BR_DIE_AT: $(tail -3 <<< "$BR_DIE_OUT")"
+fi
+git checkout -q -- file.txt
+git branch -q -D missao/20260103-refused
+
+# --- 5. the SECOND call site: `sdd retry` honours the declared branch too.
+#
+# One definition, two doors that open a session which commits. Deleting the call in cmd_retry left
+# all four assertions above green — the function still existed, still worked, and was simply never
+# reached by the other door, which is precisely how a single definition drifts back into two
+# behaviours. So the second site gets its own witness.
+#
+# Prefixed neither `branch ` nor `retry `: those two strings are the Checks of this increment and
+# of the next one in checkpoint.md, and an assertion that quietly inflates a sibling's count turns
+# a contract into a coincidence.
+#
+# The mission below stands at PLAN, and that is what makes a REAL `sdd retry` free: the runner
+# refuses a headless PLAN and dies before `run_phase`, so the branch decision — which happens
+# earlier still — is observable with no session spent. "PLAN is interactive" is asserted as the
+# stopping point, so a future reordering that moved the checkout after the session would fail here
+# instead of quietly spending tokens.
+RM="20260104-retry-branch"
+RMDIR="$FIX/docs/handoffs/$RM"
+mkdir -p "$RMDIR"
+cat > "$RMDIR/00-missao.md" <<'EOF'
+---
+missao: 20260104-retry-branch
+aprovacao:
+branch: missao/20260104-retry
+---
+# Mission fixture
+EOF
+BR_RETRY_OUT="$( cd "$FIX" && "$SDD" retry "$RM" 2>&1 )"; BR_RETRY_RC=$?
+BR_RETRY_AT="$(git branch --show-current)"
+if [ "$BR_RETRY_AT" = "missao/20260104-retry" ] \
+   && [ "$BR_RETRY_RC" -eq 1 ] \
+   && grep -q "PLAN is interactive" <<< "$BR_RETRY_OUT" \
+   && ! grep -q "the test invoked the real claude" <<< "$BR_RETRY_OUT"; then
+  pass "sdd retry is the other call site: it honours the declared branch before it stops at PLAN"
+else
+  fail "sdd retry is the other call site: it honours the declared branch before it stops at PLAN" \
+       "on missao/20260104-retry, rc 1 at the interactive-PLAN refusal, no session spent" \
+       "at $BR_RETRY_AT, rc $BR_RETRY_RC: $(tail -2 <<< "$BR_RETRY_OUT")"
+fi
+git checkout -q main
+git branch -q -D missao/20260104-retry
+
 # ---------------------------------------------------------------------------
 echo
 if [ "$fails" -eq 0 ]; then

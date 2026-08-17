@@ -495,6 +495,24 @@ mut_RUN_approve_writes_auto() {
   sed -i 's@^  local approved_as; approved_as="humano-\$(date +%F)"$@  local approved_as; approved_as="auto"@' "$1"
 }
 
+# The runner stops reading the `branch:` field — the state the kit lived in until this mission, and
+# the one that let five phases of the SQ-97 pilot commit into another PR's branch. It is a no-op
+# that costs nothing and breaks nothing on screen: the run goes on, the gates pass, and every
+# commit lands wherever the human happened to be standing.
+#
+# It blanks the READ rather than the checkout, which keeps the mutant honest in two ways. The whole
+# function still runs, so an assertion that merely reached the code would stay green; and the
+# empty-value no-op is the one path left alive, so the placeholder assertion survives on purpose —
+# what has to die is the pair that proves the declared branch is honoured, checked out when it
+# exists and cut from the CURRENT branch when it does not.
+#
+# The dry-run guard would have been the obvious anchor and is the wrong one: pipeline_log_line
+# carries a byte-identical line, so a `sed` on it sabotages two functions at once and the score
+# would credit this entry for whatever the other one broke.
+mut_RUN_branch_switch_dead() {
+  sed -i 's@^  want="\$(frontmatter "\$MISSION_DIR/00-missao.md" branch)"$@  want=""@' "$1"
+}
+
 CATALOG=(
   PLAN_empty_approval
   TICKET_no_sprint
@@ -541,6 +559,7 @@ CATALOG=(
   PRE_agent_presence_only
   RUN_base_branch_warn_dead
   RUN_approve_writes_auto
+  RUN_branch_switch_dead
 )
 
 # Mutations that are NOT caught today, each with the increment that closes it. Ratchet in both

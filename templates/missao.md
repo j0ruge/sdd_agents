@@ -3,7 +3,7 @@ missao: <YYYYMMDD>-<slug>
 titulo: <uma linha — o que o usuário ganha quando isto estiver pronto>
 data: <YYYY-MM-DD>
 versao: <ex.: 0.7.0 — obrigatório quando JIRA_ENABLED=true; confirmado pelo humano no planejamento>
-branch: <nome da branch de trabalho>
+branch: <nome da branch de trabalho — sdd run/retry faz checkout dela, criando-a da atual se não existir; placeholder entre <> = não troca nada>
 aprovacao: <auto | humano-YYYY-MM-DD>
 ddd: <aplicado | n/a>
 ---
