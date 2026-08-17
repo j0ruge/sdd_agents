@@ -1,6 +1,6 @@
 ---
 missao: 20260816-portas-do-humano
-atualizado: 2026-08-16 23:55
+atualizado: 2026-08-17 00:40
 ---
 
 # Checkpoint — as portas de controle do humano
@@ -32,7 +32,7 @@ atualizado: 2026-08-16 23:55
 | I2 | o runner troca para a branch declarada | `o=$(bash tests/check-gates.sh 2>&1); grep -c '^  ok    branch ' <<< "$o"` → `3` | done | b3b8c2f |
 | I3 | `sdd retry` vira a quarta porta com aviso | `o=$(bash tests/check-gates.sh 2>&1); grep -c '^  ok    retry ' <<< "$o"` → `2` | done | 3ffa586 |
 | I4 | plano kaizen-born nunca se auto-aprova | `o=$(bash tests/check-gates.sh 2>&1); grep -c '^  ok    kaizen-born' <<< "$o"` → `3` | done | 2510c3c |
-| F1 | `sdd approve` destrava o plano kaizen-born que o próprio gate manda ele destravar | `o=$(bash tests/check-gates.sh 2>&1); grep -c '^  ok    approve resolves' <<< "$o"` → `1`, e a jornada re-andada: `./bin/sdd health` → verde nos 5 checks | pending | — |
+| F1 | `sdd approve` destrava o plano kaizen-born que o próprio gate manda ele destravar | `o=$(bash tests/check-gates.sh 2>&1); grep -c '^  ok    approve resolves' <<< "$o"` → `1`, e a jornada re-andada: `./bin/sdd health` → verde nos 5 checks | done | 5c3d118 |
 | F2 | `sdd approve` é a quinta porta que commita: avisa a branch base como as outras quatro | `o=$(bash tests/check-gates.sh 2>&1); grep -c '^  ok    approve warns' <<< "$o"` → `1`, e a jornada re-andada: `./bin/sdd health` → verde nos 5 checks | pending | — |
 
 ## Notas de execução
@@ -157,6 +157,43 @@ atualizado: 2026-08-16 23:55
 - 2026-08-16 · `QA` · prefixos novos são contrato com os Checks e foram escolhidos para **não**
   inflar os vizinhos: `approve resolves` e `approve warns` não casam `^  ok    sdd approve`. Medido
   depois de escrever as asserções — os quatro Checks do EXEC continuam 3/3/2/3.
+
+- 2026-08-16 · `F1` · a condição virou `plan_approves_itself` (`bin/sdd:316`), lida pelo `gate_PLAN`
+  e pelo `cmd_approve`. Não é refactor de gosto: o defeito ERA dois pontos lendo a mesma regra e
+  discordando, então deixar a segunda leitura restatada em linha reabriria a mesma porta na próxima
+  vez. Sem verdict, `auto` continua sendo "already approved" — o conserto preguiçoso (tirar `auto`
+  do `case`) reescreveria toda aprovação do planner em `humano-<hoje>` e apagaria a procedência.
+- 2026-08-16 · `F1` · **a asserção do QA ganhou uma cláusula, não uma vizinha.** A sabotagem achou
+  que remover o aviso deixava o approve trocando um `auto` commitado por `humano-<hoje>` em
+  silêncio, com todas as outras cláusulas verdes. Virou `grep 'born of sdd kaizen'` exigido presente
+  no lado kaizen-born e AUSENTE no irmão sem verdict — dentro da asserção existente, para o Check
+  seguir contando 1. Medido depois: os quatro Checks do EXEC continuam 3/3/2/3.
+- 2026-08-16 · `F1` · passada de sabotagem: **17 degradações em 4 rodadas**, parando na rodada sem
+  achado novo. 1 sobrevivente real (o aviso, acima). Três degradações sobrevivem à asserção do F1 e
+  morrem em OUTRA da suíte — commit pulado, remédio não nomeado, idempotência de `humano-*` — e
+  isso é escopo certo, não buraco: são território do I1 e do I4.
+- 2026-08-16 · `F1` · ⚠️ **a rodada 1 estava ancorada em número de linha e media as linhas erradas.**
+  O probe "remove o aviso" apagava a segunda linha do aviso e o `;;`, deixando viva a linha que o
+  grep procura, e devolvia "sobrevive" sem ter testado a regra. Probe de sabotagem ancora em CÓDIGO,
+  exatamente como o cabeçalho do `check-mutation.sh` já manda — e conclusão de probe vacuoso não
+  vale, nem quando por acaso aponta para o lado certo. Rodadas 3 e 4 refeitas ancoradas.
+- 2026-08-16 · `F1` · mutação **48 → 49**. `RUN_approve_bails_on_kaizen_born` sabota o call site —
+  2ª exceção deliberada à regra "sabote a definição", pelo motivo declarado do
+  `RETRY_base_branch_warn_dead`: o defeito É o leitor que não consulta a condição, e
+  `PLAN_kaizen_born_blind` (reancorada na definição compartilhada) já cega os dois leitores de uma
+  vez. As duas foram medidas **à mão** em sandbox — `check-mutation.sh` recusa pontuar enquanto o
+  F2 mantiver a cópia de controle vermelha, e essa recusa é a guarda dele, não um bug.
+- 2026-08-16 · `F1` · **a segunda metade do Check (`sdd health` verde nos 5 checks) é insatisfazível
+  enquanto o F2 estiver `pending`**, por construção: a asserção do F2 mantém a suíte vermelha e o
+  `check-mutation.sh` no `HARNESS-BROKEN` que a própria QA registrou como desenhado. Em vez de
+  carimbar um verde que não existe, a jornada foi **re-andada à mão** num clone real
+  (`/tmp/f1-walk/clone`): plano kaizen-born com `auto` ⇒ `sdd why` recusa nomeando o remédio ⇒
+  `sdd approve` (com `y`) grava `humano-2026-08-16` e commita 1 arquivo ⇒ `sdd why` responde
+  `EXEC: 1 of 1`. O laço infinito fechou. A sessão do F2 re-mede as duas metades.
+- 2026-08-16 · `F1` · e o `sdd health` tem um defeito **próprio**, pré-existente (conferido em
+  `HEAD` sem este diff): com a suíte vermelha ele morre mudo na primeira linha, porque
+  `out="$( … run-all.sh )"` sob `set -e` mata o script antes do `health_bad "suite red"`. Fora do
+  escopo desta missão, registrado no `TODO.md` — quem for medir o Check do F2 não se assuste.
 
 ## Incrementos de fix (QA)
 
