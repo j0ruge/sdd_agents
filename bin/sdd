@@ -762,13 +762,25 @@ stay in English: they are contract, not prose.
   # mission-phase prompt below byte for byte untouched (the RUN_ignores_output_lang mutation
   # watches part of that; the rest is contract with every already-installed repo).
   if [ "$step" = "KAIZEN" ]; then
+    # ADR 0001 splits the judge in two halves that must read ONE series: the runner derives the
+    # numbers, the agent gives the verdict citing them. `gate_KAIZEN` reads its half by calling
+    # kaizen_series IN PROCESS, so every ledger option the invocation carries reaches it — the
+    # prompt below hands the agent a WRITTEN command line, so an option reaches that half only if
+    # it is written here. `--all-repos` reached the gate and not the prompt, and the cost is not a
+    # wrong number: the prompt orders `kit_sha_judged:` to be the series' latest, the gate hunts
+    # for its OWN latest, no verdict satisfies both, the runner retries once and the phase ends in
+    # `BLOCKED in KAIZEN — no-progress`. Two opus sessions for a blocked row. The human who typed
+    # the flag asked for the cross-project reading; honouring it on BOTH halves restores the
+    # invariant without taking away the capability he asked for. Found by sdd-qa (BUG-1).
+    local ledger_flags=""
+    [ "$LEDGER_ALL_REPOS" = "1" ] && ledger_flags=" --all-repos"
     cat <<EOF
 You are in phase KAIZEN of the kit \`$PROJECT_NAME\` — the meta-loop that judges the kit itself —
 as the agent sdd-kaizen.
 
 All of your state comes from disk. There was NO earlier conversation — nothing was "agreed"
 before. Before anything else:
-  1. run: "$SDD_HOME/bin/sdd" kaizen --series
+  1. run: "$SDD_HOME/bin/sdd" kaizen --series$ledger_flags
      That JSON is the deterministic series — your SOURCE OF TRUTH. Cite its numbers; NEVER
      recalculate them from the ledger (recalculating is a contract violation).
   2. read $TODO_FILE, CONTEXT.md and KAIZEN_LOG.md at the repo root

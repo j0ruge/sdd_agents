@@ -25,7 +25,12 @@ is a kit bug for `TODO.md`, and your verdict says `indeterminado` with the reaso
 "$SDD_HOME/bin/sdd" kaizen --series
 ```
 
-Run it first. The JSON gives you, per kit version (`kit_sha`, file order, latest and previous):
+Run it first — and if your boot prompt hands you that line with options on it (`--all-repos` is
+the only one today), run **the line you were handed**, verbatim. The gate reads its half of the
+series in the same process that wrote your prompt: an option that reached one half and not the
+other puts them on different `latest` shas, and since the gate hunts for exactly the
+`kit_sha_judged:` the prompt ordered you to write, the phase becomes *unsatisfiable* rather than
+merely wrong. The JSON gives you, per kit version (`kit_sha`, file order, latest and previous):
 missions, sessions, `moved_rate`, the label tally (`ok` / `leve` / `refez` per mission×phase),
 escalations by kind, cost, and the guard (`missions_after_change`, `missions_with_session`,
 `sessions`, `sufficient`, `degenerate_axis`). The floor is `missions_with_session`, not

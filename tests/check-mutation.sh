@@ -726,6 +726,23 @@ mut_FRONTMATTER_write_unscoped() {
   sed -i 's/^    inside && !written {$/    !written {/' "$1"
 }
 
+# Not a gate: `--all-repos` keeps working EVERYWHERE except in the one line the agent is handed.
+# The gate reads its series in-process under the flag, the prompt tells the agent to run the bare
+# `--series`, and the two halves land on different `latest` shas — so no `kit_sha_judged:` the
+# agent can write is the one the gate hunts for. Nothing is malformed and no number is wrong: the
+# PHASE is unsatisfiable, the runner retries once, and `BLOCKED in KAIZEN — no-progress` buys a
+# blocked row with two opus sessions (BUG-1, sdd-qa, mission 20260817-eixo-do-juiz).
+#
+# It sabotages the propagation and NOT the setters: `AUTONOMY_all_repos_ignored` already welds the
+# setters shut, and a mutant that killed those again would score the same point twice while leaving
+# this half unmeasured. Killing only `ledger_flags` keeps the gate's reading flagged and the
+# prompt's bare — which is precisely the split, and precisely what the differential pair in
+# check-kaizen.sh reads. The control half of that pair (no flag ⇒ both bare) stays green here, as
+# it must: a "fix" that hardcoded the flag into the prompt is the mutant this one does not cover.
+mut_KAIZEN_prompt_series_unflagged() {
+  sed -i 's@ledger_flags=" --all-repos"@ledger_flags=""@' "$1"
+}
+
 CATALOG=(
   PLAN_empty_approval
   PLAN_kaizen_born_blind
@@ -787,6 +804,7 @@ CATALOG=(
   AUTONOMY_all_repos_ignored
   LEDGER_repo_root_toplevel
   LEDGER_no_repo_counted_as_local
+  KAIZEN_prompt_series_unflagged
 )
 
 # Mutations that are NOT caught today, each with the increment that closes it. Ratchet in both

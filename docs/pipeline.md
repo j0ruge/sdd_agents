@@ -378,6 +378,16 @@ and the human table's header names the scope it read instead of a repo path. It 
 default and never implicit: the judge's verdict about *this kit* must not be computed over another
 project's rows, which is exactly the contamination the filter removed.
 
+It reaches the **KAIZEN boot prompt** too, and that is not a convenience. `gate_KAIZEN` reads its
+half of the series by calling `kaizen_series` in-process, so every ledger option the invocation
+carries lands on it; the prompt hands the agent a *written* command line, so an option lands there
+only if the runner wrote it. When one half is flagged and the other is not, the two land on
+different `latest` shas — and because the gate hunts for exactly the `kit_sha_judged:` the prompt
+ordered the agent to write, the phase stops being *wrong* and becomes **unsatisfiable**: the gate
+fails, the runner retries once, the second session writes the same sha, and the run ends in
+`BLOCKED in KAIZEN — no-progress`. Two opus sessions for a blocked row. ADR 0001 splits the judge;
+what keeps the split honest is both halves reading ONE series, whichever one the human asked for.
+
 It records **facts, never a score**: phase, attempt, whether the session moved the disk, rc, cost,
 the gate result and its reason. `ok|leve|refez` is a label, and a runner that labels its own work
 is the "label instead of artifact" every gate here exists to forbid. The judge derives the label,
