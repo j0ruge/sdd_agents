@@ -770,10 +770,15 @@ axis_case() {
   local s o
   s="$( cd "$FIX" && SDD_STATE_DIR="$d" "$KSDD" kaizen --series  2>/dev/null )"
   o="$( cd "$FIX" && SDD_STATE_DIR="$d" "$KSDD" kaizen --dry-run 2>&1 )"
-  printf '%s/%s/%s' \
+  # The FOURTH field is the anti-vacuity floor, and it is not decoration: an empty ledger reads
+  # `false/no/false`, which is exactly the expected string of four of the assertions below — measured,
+  # stubbing `axis_row` to write nothing left those four GREEN. The session count witnesses that the
+  # runner actually read the fixture, so "no rows" can no longer impersonate "the rule holds".
+  printf '%s/%s/%s/%s' \
     "$(jq -r '.guard.degenerate_axis' <<< "$s")" \
     "$( if grep -q 'kit_sha axis is degenerate' <<< "$o"; then echo yes; else echo no; fi )" \
-    "$(jq -r '.guard.sufficient' <<< "$s")"
+    "$(jq -r '.guard.sufficient' <<< "$s")" \
+    "$(jq -r '[.latest.sessions, .previous.sessions] | map(. // 0) | add' <<< "$s")"
 }
 
 # `all` -> `any`. One version that bought three sessions beside one that bought a single session is
@@ -782,21 +787,21 @@ axis_case() {
 # `sufficient` reads $latest, which here is the QUIET version (file order), so it is false — the
 # floor speaks about the newest kit version, never about the busiest one.
 assert_eq "axis clause: one busy kit version beside a quiet one is not a degenerate axis" \
-  "false/no/false" \
+  "false/no/false/4" \
   "$( { axis_row s000a01 q1 session; axis_row s000a01 q2 session; axis_row s000a01 q3 session
         axis_row s000a02 q4 session; } | axis_case any )"
 
 # `== 1` -> `<= 1`. A version whose rows are all escalations bought ZERO sessions, and zero is not
 # one: nothing was OBSERVED on that version, which is a different silence with a different remedy.
 assert_eq "axis clause: a kit version that bought no session at all is not one that bought a session" \
-  "false/no/false" \
+  "false/no/false/1" \
   "$( { axis_row s000b01 q1 session; axis_row s000b02 q2 blocked; } | axis_case zero )"
 
 # `map(select(.event == "session")) | length` -> `length`. A version that bought one session AND
 # escalated has still bought exactly one session; counting ROWS makes the slice read as two and the
 # explanation disappears with nothing saying so — the silent direction, which is the expensive one.
 assert_eq "axis clause: a session with an escalation beside it is still one session" \
-  "true/yes/false" \
+  "true/yes/false/2" \
   "$( { axis_row s000c01 q1 session; axis_row s000c01 q1 blocked
         axis_row s000c02 q2 session; } | axis_case escal )"
 
@@ -806,12 +811,12 @@ assert_eq "axis clause: a session with an escalation beside it is still one sess
 # explanation off forever and nothing about today could turn it back on. The pair is what makes it a
 # window rather than a blanket: outside it the second session must not matter, inside it must.
 assert_eq "axis window: an ancient version with two sessions does not silence what the recent ones say" \
-  "true/yes/false" \
+  "true/yes/false/2" \
   "$( { axis_row s000d01 q1 session; axis_row s000d01 q2 session
         axis_row s000d02 q3 session; axis_row s000d03 q4 session
         axis_row s000d04 q5 session; } | axis_case window )"
 assert_eq "axis window: but a RECENT version with two sessions does silence it — same rows, one moved" \
-  "false/no/false" \
+  "false/no/false/3" \
   "$( { axis_row s000d01 q1 session
         axis_row s000d02 q3 session; axis_row s000d03 q4 session
         axis_row s000d04 q5 session; axis_row s000d04 q2 session; } | axis_case windowctl )"
@@ -823,7 +828,7 @@ assert_eq "axis window: but a RECENT version with two sessions does silence it �
 # kit_sha axis is degenerate here" about a repo where waiting is exactly the right advice, which is
 # the wrong reading ADR 0003 exists to forbid, printed by the instrument that was built to prevent it.
 assert_eq "axis note: a healthy axis below the floor is insufficient WITHOUT being degenerate, and the runner stays quiet" \
-  "false/no/false" \
+  "false/no/false/4" \
   "$( { axis_row s000f01 q1 session; axis_row s000f01 q2 session
         axis_row s000f02 q3 session; axis_row s000f02 q4 session; } | axis_case note )"
 
@@ -862,6 +867,37 @@ assert_eq "mission key: and with distinct slugs the reading is the same — the 
   '3 true {"ok":2,"leve":0,"refez":1}' \
   "$( { collide_row /c1 20260817-a pass; collide_row /c2 20260817-b fail
         collide_row /c3 20260817-other pass; } | collide_case distinct )"
+# The key is an ARRAY, and these are the two things a joined string got wrong. A separator inside a
+# value collides: repo `a|b` + mission `c` and repo `a` + mission `b|c` joined to one key and read
+# as ONE mission — measured on the first spelling of this very fix. And `+` on a value that is not
+# a string makes jq DIE, so one hand-edited row with a numeric `repo` returned the judge nothing at
+# all and took `sdd autonomy` down with `malformed row`. Neither is exotic: `|` is legal in a path,
+# and reporting corruption is what the excluded buckets are for — dying is not reporting.
+inject_row() {   # inject_row <repo as raw JSON> <mission as raw JSON>
+  jq -cn --argjson repo "$1" --argjson mission "$2" \
+    '{v:1, ts:"2026-08-17T11:00:00-03:00", event:"session", run_id:"i", invocation:"run",
+      kit_sha:"f000001", kit_dirty:false, project:"p", repo:$repo, mission:$mission,
+      phase:"EXEC", step:"EXEC", agent:"sdd-executor", model:"opus", attempt:1,
+      auto_retry:false, session:"s", rc:0, dur_s:10, cost_usd:1.0, moved:true,
+      gate:"pass", gate_why:"x"}'
+}
+assert_eq "mission key: a separator inside a repo path does not fuse two missions into one" "2" \
+  "$( { inject_row '"/a|b"' '"c"'; inject_row '"/a"' '"b|c"'; } \
+      | { d="$OUTSIDE/collide-inject"; mkdir -p "$d"; cat > "$d/autonomy-log.jsonl"
+          ( cd "$FIX" && SDD_STATE_DIR="$d" "$KSDD" kaizen --series --all-repos 2>/dev/null ) \
+            | jq -r '.latest.missions'; } )"
+# The claim here is SURVIVAL, not exclusion: a row whose `repo` is not a string still names
+# something, so it is counted rather than dropped, and what must never happen is the reader dying
+# over it. Under the joined-string key `5 + "|"` was a fatal jq error — the series came back with
+# nothing in it and `sdd autonomy` died with `malformed row`, so ONE hand-edited row silenced both
+# instruments. The pair is the witness of that: a readable series AND a reader that exits 0.
+assert_eq "mission key: a row whose repo is not a string is counted, and never fatal to either reader" \
+  "1 0" \
+  "$( d="$OUTSIDE/collide-type"; mkdir -p "$d"
+      inject_row '5' '"m"' > "$d/autonomy-log.jsonl"
+      s="$( cd "$FIX" && SDD_STATE_DIR="$d" "$KSDD" kaizen --series --all-repos 2>/dev/null )"
+      ( cd "$FIX" && SDD_STATE_DIR="$d" "$KSDD" autonomy --all-repos >/dev/null 2>&1 ); r=$?
+      printf '%s %s' "$(jq -r '.guard.sessions' <<< "${s:-null}" 2>/dev/null || echo DIED)" "$r" )"
 
 echo "== the approved plan never reaches a session =="
 # Once `aprovacao:` is filled, the generic fix-it retry prompt ("complete what is missing")

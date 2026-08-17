@@ -287,7 +287,7 @@ mut_KAIZEN_degenerate_axis_all_history() {
 # another project clean `ok`. Both readers are sabotaged by the one anchor pair below on purpose:
 # the two spellings are one mechanism, and check-autonomy.sh compares the readers to each other.
 mut_KAIZEN_mission_key_slug_only() {
-  sed -i 's@def mission_key: (.repo // "") + "|" + (.mission // "");@def mission_key: (.mission // "");@g' "$1"
+  sed -i 's@def mission_key: \[(.repo // ""), (.mission // "")\];@def mission_key: [(.mission // "")];@g' "$1"
 }
 
 # The repo identity goes back to the PARENT of the shared .git — the first spelling of the worktree
@@ -296,7 +296,7 @@ mut_KAIZEN_mission_key_slug_only() {
 # Nothing is excluded and nothing is reported (`other_repo: 0`), which is the contamination the
 # filter exists to name, arriving through a different door.
 mut_LEDGER_repo_root_common_parent() {
-  sed -i 's@^  gitdir="\$( cd "\$start" && cd "\$common" && pwd -P 2>/dev/null )" || return 0$@  printf "%s" "$( cd "$start" \&\& cd "$common/.." \&\& pwd -P 2>/dev/null )"; return 0@' "$1"
+  sed -i 's@^  gitdir="\$( CDPATH='' cd "\$start" && CDPATH='' cd "\$common" && pwd -P 2>/dev/null )" || return 0$@  printf "%s" "$( cd "$start" \&\& cd "$common/.." \&\& pwd -P 2>/dev/null )"; return 0@' "$1"
 }
 
 # The Jidoka dies: `verdict: piorou` no longer stops the line. The outcome falls through to the

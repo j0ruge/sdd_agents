@@ -903,7 +903,15 @@ ledger_repo_root() {
   # parent is the directory that merely contains the repo, shared by every bare repo beside it.
   # `--show-toplevel` got both of those right and only worktrees wrong. The common dir gets all
   # three right, because it is the identity git itself keeps per repository.
-  gitdir="$( cd "$start" && cd "$common" && pwd -P 2>/dev/null )" || return 0
+  # ⚠️ `CDPATH=` on the cd, and it is load-bearing. `$common` is RELATIVE at a repo root (`.git`),
+  # and bash searches CDPATH for any operand not starting with `/` — printing the resolved directory
+  # to STDOUT when it finds one there, straight into this command substitution. With
+  # `CDPATH=$HOME` where $HOME is itself a checkout (dotfiles), every repo on the machine collapsed
+  # into one identity, and writer and readers agreed on it: `other_repo: 0`, nothing excluded,
+  # nothing said — the exact silent contamination this function exists to prevent, reachable from an
+  # env var. `CDPATH=.` alone appended a second LINE to the answer, putting a newline into the
+  # ledger `repo` field. Emptying it for the duration of the cd is the whole fix.
+  gitdir="$( CDPATH='' cd "$start" && CDPATH='' cd "$common" && pwd -P 2>/dev/null )" || return 0
   [ -n "$gitdir" ] || return 0
   # Cosmetic, and ONLY cosmetic: `/repo/.git` prints back as `/repo`, so the ledger and the header
   # keep naming the root a human recognizes instead of a path inside `.git`. Injective, therefore
@@ -2435,7 +2443,9 @@ cmd_autonomy() {
     # alone made `2 mission(s)` out of three, in the very header a human reads to decide whether
     # the kit got better. A no-op in per-repo scope. The two readers keep the same spelling on
     # purpose; check-autonomy.sh compares them to each other so neither can be "improved" alone.
-    def mission_key: (.repo // "") + "|" + (.mission // "");
+    # An ARRAY, for the same two reasons the twin states: a separator inside a value collides, and
+    # `+` on a non-string value makes jq die and takes this whole command down with it.
+    def mission_key: [(.repo // ""), (.mission // "")];
     # The repo filter runs before every bucket, and its own count is kept for the same reason the
     # other three exclusions are printed: a row that leaves has to say so. Bound BEFORE the pipe
     # so the buckets below still see a plain array of this repo rows and nothing changes shape.
@@ -2585,12 +2595,19 @@ kaizen_series() {
     # verdict about the kit decided by a slug coincidence. Since F1 the flag reaches the judge
     # prompt, so this reached the verdict. A NO-OP in per-repo scope, where every row shares one
     # repo, which is why the fix costs the default reading nothing.
-    def mission_key: (.repo // "") + "|" + (.mission // "");
+    #
+    # An ARRAY and not a joined string, which is the shape the old `.mission + "|" + .phase` used.
+    # Two reasons, both measured: a separator inside a value collides — repo `a|b` with mission `c`
+    # and repo `a` with mission `b|c` joined to the same key and read as ONE mission — and `+` on a
+    # value that is not a string makes jq DIE, so a hand-edited row with a numeric `repo` took
+    # `sdd autonomy` down with `malformed row` and returned the judge nothing. group_by and unique
+    # order any JSON, so the array costs nothing and admits no delimiter to inject.
+    def mission_key: [(.repo // ""), (.mission // "")];
 
     def group_summary:
       . as $rows
       | ($rows | map(select(.event == "session"))) as $sess
-      | ($rows | group_by(mission_key + "|" + (.phase // ""))
+      | ($rows | group_by(mission_key + [(.phase // "")])
                | map({repo: .[0].repo, mission: .[0].mission, phase: .[0].phase, label: phase_label,
                       sessions: (map(select(.event == "session")) | length),
                       cost_usd: (map(.cost_usd // 0) | add)})) as $detail
