@@ -188,7 +188,10 @@ frontmatter() {
 frontmatter_write() {
   local file="$1" key="$2" value="$3" tmp
   [ -f "$file" ] || die "frontmatter_write: $file does not exist"
-  tmp="$(mktemp "${file}.XXXXXX")"
+  # `|| die`: a mission directory the human cannot write to (a root-owned checkout, a 555 dir) makes
+  # mktemp fail, and under `set -e` the script would exit through mktemp's own message — no `error:`
+  # prefix, no mention of sdd or the artifact. Same family as the cmd_health item in TODO.md.
+  tmp="$(mktemp "${file}.XXXXXX")" || die "frontmatter_write: could not create a temporary beside $file"
   awk -v k="$key" -v v="$value" '
     NR==1 && $0=="---" { inside=1; print; next }
     inside && $0=="---" { inside=0; print; next }
@@ -206,7 +209,12 @@ frontmatter_write() {
   # whoever approved it. Git would not show the change (it tracks the exec bit only), which is what
   # makes it worth a line here instead of a bug report later.
   chmod --reference="$file" "$tmp" 2>/dev/null || true
-  mv "$tmp" "$file" || { rm -f "$tmp"; die "frontmatter_write: could not replace $file"; }
+  # `-f`: GNU mv ASKS before replacing a destination the user cannot write to, and only when stdin
+  # is a terminal — which is exactly this command's situation. Without it a second, untranslated,
+  # git-plumbing-flavoured question appears right after the [y/N] prompt and eats a line of the
+  # human's stdin, and whether it appears at all depends on whether a human is watching. The
+  # writability question was already answered by mktemp succeeding in that same directory.
+  mv -f "$tmp" "$file" || { rm -f "$tmp"; die "frontmatter_write: could not replace $file"; }
 }
 
 # Checkpoint table rows as "ID<TAB>title<TAB>check<TAB>status<TAB>commit".
@@ -1382,6 +1390,22 @@ ensure_mission_branch() {
   fi
   [ "$rc" -eq 0 ] \
     || die "could not switch to the branch '$want' declared in 00-missao.md — git said: $out"
+  # The checkout is not the end of the decision, and this is the half that was missing. The plan is
+  # read on the branch the human is standing on and the tree is then REPLACED under the runner: if
+  # the declared branch was cut before the mission existed — the ordinary flow when the branch comes
+  # from the ticket step — the artifacts that justified every choice above are simply gone, and the
+  # runner would go on with MISSION_DIR pointing at a path that is no longer there, announcing the
+  # switch as a success and then telling the human the mission was never planned. Worse and
+  # quieter: a branch carrying an OLDER copy spends real sessions executing a plan nobody approved.
+  #
+  # So the artifact is re-read AFTER the switch, through the same parser, and it has to still be
+  # there and still declare THIS branch. `die`, never a warning, for the reason the refused checkout
+  # gives: going on would run the whole pipeline against a plan the human did not approve, which is
+  # the failure this function exists to close, entered from the other side.
+  if [ ! -f "$MISSION_DIR/00-missao.md" ] \
+     || [ "$(frontmatter "$MISSION_DIR/00-missao.md" branch)" != "$want" ]; then
+    die "the branch '$want' declared in 00-missao.md does not carry this mission — you are now on it, and the plan that asked for it is on '${current:-<detached>}'"
+  fi
   ok "branch: ${current:-<detached>} → $want (declared in 00-missao.md)"
   pipeline_log_line "$(date -Iseconds)  BRANCH  ${current:-<detached>} -> $want"
 }

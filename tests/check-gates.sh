@@ -672,8 +672,16 @@ EOF
 # the command stops reading, which would read as a failing runner. See check-pipefail.sh.
 APPROVE_HEAD_0="$(git rev-parse HEAD)"
 APPROVE_N_OUT="$( cd "$FIX" && "$SDD" approve "$AM" 2>&1 <<< "n" )"; APPROVE_N_RC=$?
+# A bare Enter is the OTHER no, and the one the prompt's shape promises: `[y/N]` says out loud that
+# the default is no. Feeding only "n" and "y" leaves that promise untested — an adversarial pass
+# added `""` to the accept list and every clause here stayed green while a stray newline approved a
+# plan in the human's name. It is the kit's only gate of human consent; the empty answer is the arm
+# a careless `read` reaches first.
+APPROVE_EMPTY_OUT="$( cd "$FIX" && "$SDD" approve "$AM" 2>&1 <<< "" )"; APPROVE_EMPTY_RC=$?
 APPROVE_N_PHASE="$( cd "$FIX" && "$SDD" phase "$AM" 2>&1 )"
 if [ "$APPROVE_N_RC" -eq 0 ] \
+   && [ "$APPROVE_EMPTY_RC" -eq 0 ] \
+   && ! grep -q 'approved: aprovacao' <<< "$APPROVE_EMPTY_OUT" \
    && grep -q 'portas & barras' <<< "$APPROVE_N_OUT" \
    && grep -q 'criterio-a-evidencia' <<< "$APPROVE_N_OUT" \
    && grep -q 'fatia-de-fixture' <<< "$APPROVE_N_OUT" \
@@ -707,9 +715,15 @@ echo "unrelated change" >> file.txt
 # assertion is the filter that makes the assertion decorative.
 approval_stripped() { awk '!seen && /^aprovacao:/ { seen=1; next } { print }' "$1"; }
 APPROVE_FILE_BEFORE="$(approval_stripped "$AMDIR/00-missao.md")"
+# The mode rides along because the byte comparison below reads CONTENT and never metadata, and the
+# write goes through a `mktemp` (0600) plus a `chmod --reference`. Drop that chmod and the approved
+# artifact comes out readable only by whoever approved it — git tracks the exec bit alone, so the
+# one property version control cannot show is the one nothing was measuring.
+APPROVE_MODE_BEFORE="$(stat -c %a "$AMDIR/00-missao.md")"
 APPROVE_DAY_0="$(date +%F)"
 APPROVE_Y_OUT="$( cd "$FIX" && "$SDD" approve "$AM" 2>&1 <<< "y" )"; APPROVE_Y_RC=$?
 APPROVE_DAY_1="$(date +%F)"
+APPROVE_MODE_AFTER="$(stat -c %a "$AMDIR/00-missao.md")"
 APPROVE_LINE="$(grep -m1 '^aprovacao:' "$AMDIR/00-missao.md")"
 APPROVE_PHASE="$( cd "$FIX" && "$SDD" phase "$AM" 2>&1 )"
 if [ "$APPROVE_Y_RC" -eq 0 ] \
@@ -717,6 +731,7 @@ if [ "$APPROVE_Y_RC" -eq 0 ] \
         || [ "$APPROVE_LINE" = "aprovacao: humano-$APPROVE_DAY_1" ]; } \
    && ! grep -q 'aprovacao:.*auto' "$AMDIR/00-missao.md" \
    && [ "$(approval_stripped "$AMDIR/00-missao.md")" = "$APPROVE_FILE_BEFORE" ] \
+   && [ "$APPROVE_MODE_AFTER" = "$APPROVE_MODE_BEFORE" ] \
    && [ "$APPROVE_PHASE" != "PLAN" ]; then
   pass "sdd approve answered 'y' writes humano-<today>, never 'auto', and opens the PLAN gate"
 else
@@ -744,10 +759,23 @@ APPROVE_SUBJECT="$(git log -1 --format=%s)"
 APPROVE_TOUCHED="$(git show --name-only --format= HEAD)"
 APPROVE_STATUS="$(git status --porcelain)"
 APPROVE_FILES="$(grep -c . <<< "$APPROVE_TOUCHED")"
+# The mission directory's blast radius, next to the commit's. `frontmatter_write` mktemps INSIDE it,
+# so a `cp` where the `mv` belongs leaves `00-missao.md.aBc123` sitting beside the artifacts —
+# swept into the next `git add -A`, and read by every glob that walks that directory. The porcelain
+# check above says what IS dirty and cannot say what else appeared.
+#
+# A glob and not `ls | grep -c .`: shellcheck refuses that pipe (SC2010) and the lint step is part
+# of the suite, so the original spelling was red on arrival. The two count the same thing here —
+# measured, 3 for the clean directory and 4 with a `00-missao.md.aBc123` beside it — and with no
+# `nullglob` an empty directory leaves the pattern unexpanded at 1, which is not 3 either: the
+# degradation this guards against keeps failing, and it fails closed.
+APPROVE_DIR_ENTRIES=( "$AMDIR"/* )
+APPROVE_DIR_N="${#APPROVE_DIR_ENTRIES[@]}"
 APPROVE_HEAD_1="$(git rev-parse HEAD)"
 APPROVE_AGAIN_OUT="$( cd "$FIX" && "$SDD" approve "$AM" 2>&1 <<< "y" )"; APPROVE_AGAIN_RC=$?
 if [ "$APPROVE_SUBJECT" = "chore(missao): plan $AM approved by the human" ] \
    && [ "$APPROVE_FILES" -eq 1 ] \
+   && [ "$APPROVE_DIR_N" -eq 3 ] \
    && grep -qx "docs/handoffs/$AM/00-missao.md" <<< "$APPROVE_TOUCHED" \
    && grep -q '^ M file.txt' <<< "$APPROVE_STATUS" \
    && [ "$APPROVE_AGAIN_RC" -eq 0 ] \
@@ -819,7 +847,7 @@ if [ "$BR_DRY_AT" = "main" ] \
    && [ "$BR_RUN_AT" = "missao/20260103-existing" ] \
    && [ "$BR_DRY_RC" = "$BR_RUN_RC" ] \
    && [ "$BR_LOG_LINES" = "1" ] \
-   && grep -qE "$BRANCH_LINE" <<< "$BR_RUN_OUT" \
+   && grep -qF "branch: main → missao/20260103-existing" <<< "$BR_RUN_OUT" \
    && ! grep -qE "$BRANCH_LINE" <<< "$BR_DRY_OUT" \
    && ! grep -q "the test invoked the real claude" <<< "$BR_RUN_OUT"; then
   pass "branch declared and already there: sdd run checks it out, logs it, and a dry run does neither"
@@ -1042,6 +1070,49 @@ else
 fi
 git checkout -q main
 git branch -q -D missao/20260104-retry
+
+# --- 6. the branch that does not carry the mission: the checkout is not the end of the decision.
+#
+# Every assertion above runs on a fixture whose mission files are UNTRACKED, and in that regime
+# `git checkout` physically cannot remove them — so five assertions agreed about a property none of
+# them could see. This one commits the artifacts first, which is what `sdd approve` now does to
+# 00-missao.md, and then declares a branch cut BEFORE they existed. The house calls this the fixture
+# regime instead of the property (CLAUDE.md): the family was green in the only regime where the
+# question could not be asked.
+#
+# What the runner did with that: read the plan on branch A, switch to branch B, and go on with
+# MISSION_DIR pointing at a path that is no longer there — announcing the switch as a success and
+# then telling the human the mission was never planned. The expensive variant is worse and needs no
+# new fixture to imagine: B carrying an OLDER copy of the plan spends real sessions executing a
+# plan nobody approved.
+#
+# The probe is the DIE plus git's `--show-current`, and the marker of the run going on
+# (`sdd-planner`, the PLAN advice) must be ABSENT: rc 1 alone cannot tell a stopped line from a
+# line that stopped later for its own reasons.
+OM="20260109-orphan"
+OMDIR="$FIX/docs/handoffs/$OM"
+git branch missao/20260109-orphan          # cut BEFORE the mission exists — the ticket-skill flow
+mkdir -p "$OMDIR"
+printf -- '---\nmissao: %s\naprovacao: humano-2026-01-09\nbranch: missao/20260109-orphan\n---\n# Mission fixture\n' \
+  "$OM" > "$OMDIR/00-missao.md"
+: > "$OMDIR/01-plano.md"
+cp "$BMDIR/checkpoint.md" "$OMDIR/checkpoint.md"
+( cd "$FIX" && git add -A && git commit -qm "fixture: a mission whose declared branch predates it" ) >/dev/null
+BR_ORPH_OUT="$( cd "$FIX" && "$SDD" run "$OM" 2>&1 )"; BR_ORPH_RC=$?
+BR_ORPH_AT="$(git branch --show-current)"
+( cd "$FIX" && git checkout -q main )
+if [ "$BR_ORPH_RC" -eq 1 ] \
+   && grep -q "missao/20260109-orphan" <<< "$BR_ORPH_OUT" \
+   && grep -q "does not carry" <<< "$BR_ORPH_OUT" \
+   && ! grep -q "sdd-planner" <<< "$BR_ORPH_OUT" \
+   && ! grep -q "BLOCKED in EXEC" <<< "$BR_ORPH_OUT"; then
+  pass "a declared branch that does not carry the mission stops the line instead of running blind"
+else
+  fail "a declared branch that does not carry the mission stops the line instead of running blind" \
+       "rc 1 naming the branch and saying it does not carry the mission, with no phase after it" \
+       "rc $BR_ORPH_RC, ended at $BR_ORPH_AT: $(tail -3 <<< "$BR_ORPH_OUT")"
+fi
+git branch -q -D missao/20260109-orphan
 
 # --- the fourth door: sdd retry warns about the base branch ----------------
 echo "== sdd retry on the base branch =="
@@ -1385,6 +1456,8 @@ if grep -q 'kaizen-born' <<< "$QM_WHY" \
    && [ "$QM_PHASE" != "PLAN" ] \
    && [ "$QN_LINE" = "aprovacao: auto" ] \
    && grep -q 'already approved' <<< "$QN_OUT" \
+   && grep -q 'you are on the base branch' <<< "$QM_OUT" \
+   && ! grep -q 'you are on the base branch' <<< "$QN_OUT" \
    && ! grep -q 'born of sdd kaizen' <<< "$QN_OUT" \
    && [ "$QN_HEAD_1" = "$QN_HEAD_0" ]; then
   pass "approve resolves the refusal that names it, and still declines an 'auto' with no verdict"

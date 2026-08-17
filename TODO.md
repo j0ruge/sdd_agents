@@ -30,6 +30,38 @@ Achados sobre **repos-alvo** vão para o `TODO.md` daquele repo. Este arquivo é
 
 ### Sensores que faltam
 
+- [ ] **Fase que morre com a árvore suja faz o runner rederivar EXEC para sempre** —
+  `bin/sdd:426` — `gate_EXEC` roda o `TEST_CMD` sobre o working tree, então o vermelho de QUALQUER
+  fase em voo é lido como vermelho do EXEC. Medido nesta missão: a REVIEW morreu antes de commitar,
+  o `sdd why` respondeu `EXEC: TEST_CMD failed` com os 6 incrementos `done` e o HEAD verde, e sem
+  intervenção o runner reabriria o EXEC a ~US$ 25 a volta. Direção: gate que distingue árvore suja
+  de HEAD vermelho e escala em vez de rederivar.
+  — descoberto por `sdd-executor` na missão `20260816-portas-do-humano` (2026-08-17)
+
+- [ ] **`sdd approve` diz "next: sdd run" com o `gate_PLAN` ainda fechado por outro motivo** —
+  `bin/sdd:1946` — o comando roda o gate uma vez no topo, só desiste em `missing *`, e depois de
+  commitar imprime o próximo passo sem reperguntar. Medido: com `JIRA_ENABLED=true` e `versao:`
+  placeholder, ele aprova, commita, manda `sdd run` — e o `sdd why` seguinte recusa por `versao`.
+  Todo motivo novo do gate herda o defeito de graça. Direção: reperguntar o gate depois do commit e
+  imprimir `GATE_WHY` em vez do próximo passo (some também o `warn` do checkpoint feito à mão).
+  — descoberto por `sdd-reviewer` na missão `20260816-portas-do-humano` (2026-08-16)
+
+- [ ] **O fixture do `approve` mede o `sed` no arquivo inteiro, não o escopo do frontmatter** —
+  `tests/check-gates.sh:708` (`approval_stripped`) — a cópia de `aprovacao:` no corpo pega `sed`
+  global porque `sed` reescreve TODAS as ocorrências; o awk que o kit usa para na primeira sozinho,
+  então tirar a guarda `inside &&` (reescrever a primeira chave em qualquer lugar do arquivo) deixa
+  a suíte verde e corrompe prosa de missão sem a chave no frontmatter. Direção: fixture cujo
+  frontmatter NÃO tem `aprovacao:` e cujo corpo tem — mata também a guarda de read-back.
+  — descoberto por `sdd-reviewer` na missão `20260816-portas-do-humano` (2026-08-16)
+
+- [ ] **`frontmatter_write` confia em três coisas que não valem sempre** — `bin/sdd:191-215` — o
+  `chmod --reference … || true` engole a falha e deixa o artefato 0600 para sempre em userland não
+  GNU; o `mv` troca um `00-missao.md` que seja SYMLINK por arquivo comum (o alvo real fica com o
+  valor velho, e o commit leva a troca de tipo); e `awk -v v="$valor"` interpreta escape de barra
+  invertida — inócuo no único chamador de hoje, armadilha para o segundo. Direção: `warn` no chmod,
+  `readlink -f` (ou `die`) no alvo, e valor por `ENVIRON` no awk.
+  — descoberto por `sdd-reviewer` na missão `20260816-portas-do-humano` (2026-08-16)
+
 - [ ] **O `die` de artefato faltando do `sdd approve` é regra sem probe** — `bin/sdd:1818` — o
   comando repete o diagnóstico do `gate_PLAN` (`missing 01-plano.md`) e morre antes de imprimir
   qualquer coisa; os cinco fixtures de approve carregam sempre os três artefatos, então trocar o

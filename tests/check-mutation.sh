@@ -575,6 +575,19 @@ mut_RUN_branch_switch_dead() {
 # The pattern is what gets sabotaged rather than the `die`, because a mutant that turned the die
 # into a `return 0` would make the whole field a no-op and kill three other assertions with it —
 # this entry has to be credited for the option-shaped name and nothing else.
+# Goes back to treating the checkout as the end of the decision: the plan is read on one branch and
+# the tree is replaced by another, and nothing looks again. The `die` becomes a `:` with the same
+# string, so the condition still runs and a reader still sees a guard — the run simply goes on with
+# MISSION_DIR pointing at a directory the checkout removed, announcing the switch as a success and
+# then telling the human the mission was never planned. The quiet variant is the expensive one: a
+# branch carrying an OLDER copy spends real sessions on a plan nobody approved.
+#
+# This is the regime the whole branch family was blind to until r1 of the review: five assertions
+# on a fixture whose artifacts were never `git add`ed, where `git checkout` cannot remove them.
+mut_RUN_branch_orphan_blind() {
+  sed -i 's@^    die "the branch@    : "the branch@' "$1"
+}
+
 mut_RUN_branch_option_name() {
   sed -i 's@^    -\*) die "the branch@    -x-that-never-matches*) die "the branch@' "$1"
 }
@@ -670,6 +683,7 @@ CATALOG=(
   RUN_approve_bails_on_kaizen_born
   RUN_branch_switch_dead
   RUN_branch_option_name
+  RUN_branch_orphan_blind
   RETRY_base_branch_warn_dead
   APPROVE_base_branch_warn_dead
 )
