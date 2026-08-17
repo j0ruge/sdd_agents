@@ -1,6 +1,6 @@
 ---
 missao: 20260816-portas-do-humano
-atualizado: 2026-08-16 21:15
+atualizado: 2026-08-16 22:40
 ---
 
 # Checkpoint — as portas de controle do humano
@@ -29,7 +29,7 @@ atualizado: 2026-08-16 21:15
 | ID | Incremento | Check (comando → esperado) | Status | Commit |
 |---|---|---|---|---|
 | I1 | `sdd approve`: o gate humano ganha comando | `o=$(bash tests/check-gates.sh 2>&1); grep -c '^  ok    sdd approve' <<< "$o"` → `3` | done | 96a1f68 |
-| I2 | o runner troca para a branch declarada | `o=$(bash tests/check-gates.sh 2>&1); grep -c '^  ok    branch ' <<< "$o"` → `3` | pending | — |
+| I2 | o runner troca para a branch declarada | `o=$(bash tests/check-gates.sh 2>&1); grep -c '^  ok    branch ' <<< "$o"` → `3` | done | b3b8c2f |
 | I3 | `sdd retry` vira a quarta porta com aviso | `o=$(bash tests/check-gates.sh 2>&1); grep -c '^  ok    retry ' <<< "$o"` → `2` | pending | — |
 | I4 | plano kaizen-born nunca se auto-aprova | `o=$(bash tests/check-gates.sh 2>&1); grep -c '^  ok    kaizen-born' <<< "$o"` → `3` | pending | — |
 
@@ -57,6 +57,26 @@ atualizado: 2026-08-16 21:15
   asserção pretendida (resposta ignorada, commit varrendo a árvore, sem idempotência, `sed` no
   arquivo inteiro, corpo/incrementos/`titulo:` não impressos, gate ignorando `humano-*`, sem
   `git add`). A 11ª — remover a guarda de read-back — sobrevive verde e está no `TODO.md`.
+- 2026-08-16 · `I2` · **o placeholder que o plano cita não existe.** `00-missao.md` (decisão 6) e
+  `01-plano.md` dizem `<criada pela fase TICKET>`; `templates/missao.md:6` ship `<nome da branch
+  de trabalho>`, e `grep -r` não acha a primeira em lugar nenhum do kit. A guarda casa `'<'*`,
+  então cobre as duas — mas o fixture agora **lê** o placeholder do template, e foi ler que achou.
+  Quem for escrever fixture nesta missão: copie da fonte, não da prosa do plano.
+- 2026-08-16 · `I2` · `templates/missao.md` entrou no commit do incremento, fora do "Onde" do
+  plano (que dizia só `bin/sdd`): o campo `branch:` deixou de ser decorativo e virou carga lida
+  pelo runner, e contrato de artefato muda nos três lugares no MESMO commit (regra do `CLAUDE.md`).
+  **Sobra para a fase DOCS:** `docs/pipeline.md` não documenta o campo em lugar nenhum — não é
+  drift criado aqui, mas agora é drift que importa.
+- 2026-08-16 · `I2` · o sensor tem **5** asserções, e só 3 levam o prefixo `branch ` que o Check
+  conta. As outras duas (checkout recusado ⇒ `die`; `sdd retry` como segundo call site) nasceram
+  da sabotagem e são nomeadas fora do prefixo de propósito: `branch ` e `retry ` são os Checks
+  deste incremento e do I3, e asserção que infla a contagem do vizinho transforma contrato em
+  coincidência.
+- 2026-08-16 · `I2` · passada de sabotagem: **21 degradações em 3 rodadas**, parando na rodada que
+  não achou nada. As 2 sobreviventes da r1 viraram asserção (`die`→`warn`, a pior: o run SEGUE, que
+  é a classe SQ-97; e a linha BRANCH do `pipeline.log`). A r2 achou um **fail-open no que a r1
+  tinha acabado de consertar**: sem a asserção positiva do anúncio, a de "no-op silencioso" fica
+  verde num runner que nunca anuncia nada — par presente/ausente, nunca só a ausência.
 
 ## Incrementos de fix (QA)
 
