@@ -4,7 +4,7 @@ titulo: O juiz do kaizen para de parecer quebrado quando o kit é o próprio alv
 data: 2026-08-17
 versao:
 branch: missao/20260817-eixo-do-juiz
-aprovacao:
+aprovacao: humano-2026-08-17
 ddd: aplicado
 ---
 
