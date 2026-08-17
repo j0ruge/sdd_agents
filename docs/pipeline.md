@@ -164,6 +164,40 @@ the word `TODO` and failed every `45-docs.md` that named `TODO.md` — which is 
 **Passes when:** `50-pr.md` exists with `pr_url:` **and** `gh pr view <url>` confirms the PR
 exists. A file claiming a PR that does not exist fails — and it is good that it does.
 
+## The mission's branch
+
+`branch:` in `00-missao.md` was decorative until `ensure_mission_branch()`. The runner now reads it
+**before the first gate** of every `sdd run` and every `sdd retry`, and puts the pipeline on the
+branch the plan declares:
+
+| `branch:` | What the runner does |
+|---|---|
+| the `<…>` placeholder the template ships, or empty | nothing — the mission runs where you are |
+| the branch you are already on | nothing |
+| a branch that exists | `git checkout <name>` |
+| a branch that does not exist | `git checkout -b <name>` **from the branch you are standing on** — the one the plan's own commit lives on |
+
+Anything git refuses — a name starting with `-`, a space, `..`, or a dirty tree the checkout would
+overwrite — becomes a `die` carrying git's own message, before a single session is spent. Guessing
+on top of a working tree git declined is the cheapest way to lose somebody else's work, so the
+answer is to stop. What to do about it is in
+[`docs/failure-modes.md`](failure-modes.md#the-runner-refused-to-switch-to-the-declared-branch).
+
+The failure this closes was measured: in the SQ-97 pilot five phases committed into another PR's
+branch — 16 commits over somebody else's work, ~US$ 45 of `rebase --onto` to undo. Committing on
+the wrong branch is loud now in **all five doors that can end up committing** — `sdd run`,
+`sdd retry`, `sdd approve`, `sdd kaizen` and `sdd preflight` — each warning when you are standing
+on the base branch, and each with a mutation proving the warning still fires.
+
+Two things it deliberately does not do:
+
+- **it never runs in `--dry-run`** — a checkout is a mutation of state, and that is the half the
+  projection promises not to touch (below);
+- **it never learns the branch the TICKET phase creates.** With `JIRA_ENABLED=true` that name
+  lands in `10-ticket.md` and nothing copies it into the field the runner reads, so `branch:`
+  stays at the placeholder and this guard is a no-op. The SQ-97 class dies on the path without
+  JIRA, which is the only path this has been walked on.
+
 ## Dry-run — the projection
 
 `sdd run <mission> --dry-run` answers *"what happens if I run this?"* before spending tokens. It
@@ -200,12 +234,11 @@ real guarantee is narrower, and it is this:
 
 - **it spends no session:** no `claude` is invoked;
 - **it does not touch the mission artifacts:** nothing is written to `docs/handoffs/<mission>/`;
-- **it does not switch branches:** `sdd run` honours the `branch:` field of `00-missao.md` —
-  checking the declared branch out, or cutting it from the branch you are standing on — and
-  `ensure_mission_branch()` returns before any of that in a projection. A checkout is a mutation of
-  the working tree, which is the half the dry-run does promise, and it is the loudest state change
-  the runner makes: leaving it out of this list would make the list read as complete while the one
-  thing a human fears from a projection went unmentioned;
+- **it does not switch branches:** `ensure_mission_branch()` returns before touching git in a
+  projection — see [the mission's branch](#the-missions-branch) for what it does outside one. A
+  checkout is a mutation of the working tree, which is the half the dry-run does promise, and it is
+  the loudest state change the runner makes: leaving it out of this list would make the list read
+  as complete while the one thing a human fears from a projection went unmentioned;
 - **it does not write to the journal:** the guard lives inside `pipeline_log_line()`, not in the
   callers. Three paths log before any session (checkpoint `blocked`, budget blown, two sessions
   with no progress) and a fourth added tomorrow would be born with the defect again; a single

@@ -66,6 +66,19 @@ sdd run <mission> --phase EXEC      # force one specific phase
 sdd run <mission> --max-phases 2    # stop after N phases
 ```
 
+`sdd approve <mission>` is the human gate with a command instead of a hand edit. It prints what you
+are about to approve — the title, the PLAN-AUTO evidence, the increments, the open questions —
+asks `[y/N]`, and only on an explicit yes writes `aprovacao: humano-<date>` and commits that one
+file. It never opens a session: approving is the one decision in the pipeline that has to come from
+outside it. On a plan born of `sdd kaizen` it is the **only** way through the gate — `auto` is
+refused there, because nobody was in the room
+([why](docs/pipeline.md#plan--the-only-one-the-runner-does-not-execute)).
+
+`sdd run` and `sdd retry` put you on the branch the plan declares (`branch:` in `00-missao.md`)
+before the first gate — checking it out, or cutting it from where you stand. A `<…>` placeholder or
+an empty value means "stay here". What happens when git refuses, and why the field is not
+decorative, is in [`docs/pipeline.md`](docs/pipeline.md#the-missions-branch).
+
 `sdd health` answers *"does the kit still measure what it claims to?"* — it runs the suite,
 requires a **100% mutation score**, demands one mutation per gate, and reports drift between
 `load_config()` and `config/schema.md`, a command missing from `--help`, a variable with a default

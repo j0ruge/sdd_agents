@@ -258,6 +258,28 @@ empty is worth one `wc -c .sdd/config.sh`; on `0`, delete it and install again.
 
 ---
 
+## The runner refused to switch to the declared branch
+
+**Symptom:** `sdd run` (or `sdd retry`) exits before opening any session, printing git's own error
+— usually *"Your local changes to the following files would be overwritten by checkout"*, or
+*"not a valid ref"* for a name git will not accept.
+
+**Cause:** `branch:` in `00-missao.md` names a branch the runner has to be on, and it checks it out
+before the first gate. Git declined: the working tree carries changes the checkout would destroy,
+or the name is not one git can use.
+
+**How the kit reacts:** it stops — `die` with git's message, no session spent, nothing guessed.
+The alternative was to carry on wherever the checkout left you, which is the SQ-97 class the field
+exists to close ([the mission's branch](pipeline.md#the-missions-branch)).
+
+**What you do:** deal with the working tree the way you would for any checkout (`git stash`,
+commit, or discard — the kit will not choose for you), then `sdd run <mission>` again. If it is the
+name that is wrong, fix `branch:` — with `sdd approve` already run, editing the field is a normal
+commit, not an approval. A mission that should not move branches at all leaves the field at the
+`<…>` placeholder the template ships, which is a no-op.
+
+---
+
 ## A conflict with the base branch on push
 
 **Symptom:** `50-pr.md` with `status: blocked` and the reason for the conflict.
