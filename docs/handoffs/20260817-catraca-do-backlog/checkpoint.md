@@ -21,7 +21,7 @@ atualizado: 2026-08-17 17:44
 
 | ID | Incremento | Check (comando → esperado) | Status | Commit |
 |---|---|---|---|---|
-| I1 | sensor `check-health.sh` sobre `cmd_health` | `o=$(bash tests/check-health.sh 2>&1); grep -c '^  ok    the ratchet fails on a stale baseline line' <<< "$o"` → `1` | pending | — |
+| I1 | sensor `check-health.sh` sobre `cmd_health` | `o=$(bash tests/check-health.sh 2>&1); grep -c '^  ok    the ratchet fails on a stale baseline line' <<< "$o"` → `1` | done | afe5db6 |
 | I2 | catraca da contagem de achados | `o=$(bash tests/check-health.sh 2>&1); grep -c '^  ok    a baseline off by one fails both ways' <<< "$o"` → `1` | pending | — |
 | I3 | cinco defeitos de saída do `cmd_autonomy` | `o=$(bash tests/check-autonomy.sh 2>&1); grep -c '^  ok    output:' <<< "$o"` → `5` | pending | — |
 | I4 | mutações que faltam no catálogo | `grep -cE '^mut_[A-Za-z0-9_]+\(\) \{' tests/check-mutation.sh` → `77` | pending | — |
@@ -40,6 +40,32 @@ atualizado: 2026-08-17 17:44
   `TODO.md`.
 - 2026-08-17 17:44 · `PLAN` · O esperado `77` do I4 é derivado (`70 + 2 + 1 + 4`). Se a
   re-derivação do I4 fechar item por evidência em vez de por código, recalcule e registre aqui.
+- 2026-08-17 19:52 · `I1` · Catálogo em **72** como o plano previu, então o `77` do I4 segue de pé
+  (`72 + 1` do I2 `+ 4` do I4). `sdd health` → `kit healthy`, `score: 72 caught, 0 known gap(s)`.
+- 2026-08-17 19:52 · `I1` · **Desvio do plano, deliberado:** a asserção 4 chama-se `provenance
+  fails when the fixture diverges from an installed skill`, não "...when an installed skill is
+  missing". Skill ausente **não reprova** — `health_provenance` a PULA por desenho (`bin/sdd:1806`),
+  como o linter ausente é pulado. Escrita contra o caminho que de fato falha, e diferencial.
+- 2026-08-17 19:52 · `I1` · O fixture hermético achou **dois abortos calados do `sdd health`**: com
+  `~/.claude/plugins/cache` ausente o `find` devolve 1, e com baseline sem linha viva o `grep -vE`
+  também — sob `set -e` + `pipefail` os dois matam o comando no meio, rc 1 e nenhuma palavra dita.
+  Fora de escopo (I1 é o sensor, não o conserto): foi para o `TODO.md`, e o fixture modela máquina
+  com o diretório, com o porquê comentado em `reset_home()`.
+- 2026-08-17 19:52 · `I1` · **Custo medido, e é o risco da tabela do plano acontecendo:** o sensor
+  roda em **1,5 s** sozinho (dentro do teto de 2 s), mas a suíte foi de **2m34s para 7m15s** —
+  porque roda dentro dos 73 mutantes (+4 s cada) e a contenção é super-linear. Aceito e registrado
+  no `TODO.md`: o sensor cabe no seu orçamento, o multiplicador é do harness de mutação e a saída
+  ("rodar por mutante só o sensor que o alcança") é decisão do humano, junto com o alvo da D7.
+- 2026-08-17 19:52 · `I1` · Três pisos de superfície andaram junto com o arquivo novo, o que o
+  plano não listou: `LINT_FLOOR` 14→15, `check-pipefail` 13→14 e `check-lang` 36→37. O do
+  `check-pipefail` arrastou o fixture do próprio selftest, construído **exatamente** no piso —
+  três probes passaram a falhar com "surface shrank" em vez de medir o que nomeiam. Quem for
+  acrescentar sensor à suíte de novo: são quatro lugares, não um.
+- 2026-08-17 19:52 · `I1` · Sabotagem adversarial: **9 probes, 9 vermelhos**. Toda asserção morre
+  em pelo menos uma, e a 3 (diferencial) e a 5 (piso) morrem **sozinhas** em probes próprios —
+  nenhuma das duas é redundante. O par que o plano previu se confirmou: `ratchet_one_way` mata a 2
+  e a 3 e deixa a 1 viva. Cada mutação foi verificada matando a suíte **só** por este sensor
+  (`1 suite(s) failed`), não por rc compartilhado com outro.
 
 ## Incrementos de fix (QA)
 
