@@ -4,6 +4,65 @@ Registro de melhorias com **antes/depois medido**. Sem número, não entra.
 
 ---
 
+## 2026-08-18 — O Lote 0 do backlog barato: dez itens saem, e três deles por decisão, não por código
+
+**Problema (Gemba):** a triagem de 2026-08-17 (`docs/handoffs/lote-facil-20260817.md`) separou dos
+66 achados abertos os que satisfazem quatro critérios ao mesmo tempo — defeito já **localizado e
+reproduzido**, direção mecânica, sensor já existente onde a asserção vai morar, e nenhuma decisão
+humana pendente. Dez deles não tocam lógica nenhuma: são prosa, comentário e registro.
+
+Um era **insatisfazível em sessão headless**: o `.claude/napkin.md` é lido toda sessão, afirmava
+uma catraca vencida (`~33s` e `mutação 30/30` contra os `~3m30s` e `81/81` reais) e **nenhuma fase
+consegue editá-lo** — o harness barra `.claude/` como caminho sensível, e duas fases DOCS já
+queimaram sessão descobrindo isso. Runbook que afirma um score menor do que o real convida a
+próxima sessão a aceitar o menor. Por isso este lote foi feito à mão, com humano presente, **antes**
+de a missão do lote grande ser planejada.
+
+**Contramedida:** sete itens fecharam por conserto e três por **decisão registrada aqui**. Item
+aberto não tem memória durável em nenhum outro lugar — apagá-lo sem escrever o motivo é exatamente
+como o mesmo achado renasce daqui a três missões, e foi esse o argumento que já recusou uma
+política de expiração automática para o `TODO.md`.
+
+| | Antes (`48fa034` = `main`) | Depois |
+|---|---|---|
+| Achados abertos no `TODO.md` | 66 | **56** |
+| `todo-findings` em `tests/health-baseline.txt` | 66 | **56**, movido no mesmo commit |
+| Itens fechados por conserto / por decisão registrada | — | **7 / 3** |
+| `.claude/napkin.md` | versionado, com número vencido e ineditável por qualquer fase | **fora do versionamento** — runbook local, por máquina |
+| A rubrica do auto-teste do `CLAUDE.md` | `grep -l selftest tests/` responde **6** para uma frase que afirma **cinco** | `grep -l '^selftest()' tests/*` → **5**, com o sexto (`jobs_selftest()`, do escalonador) nomeado |
+| `KAIZEN_LOG.md:261` — asserções `ok` | `490`, a contagem solta `^  ok` | **435**, pela âncora de 4 espaços, com o comando escrito ao lado |
+| Como sincronizar `.claude/agents/` | dito só na mensagem de falha do preflight | **na regra**, com `sdd install --force` nomeado |
+| "Contexto não é gargalo" | fé — medido no piloto SQ-97 e nunca escrito | **registrado** em `docs/pipeline.md` e `config/schema.md`: picos de 184k–289k tokens, **zero compactações**, `--autocompact` como alavanca disponível e não usada |
+| Âncoras podres re-derivadas antes de editar | — | **2 de 7** — `bin/sdd:1533`→`:2301` (~768 linhas de defasagem) e `check-gates.sh:229`→`:265` |
+
+**As três decisões, escritas para não renascerem:**
+
+1. **A regra da âncora do `check-todo.sh` é satisfeita por código inline no título — fica como
+   está.** Apertá-la exige uma forma que os dados reais não sustentam: `git worktree` e
+   `KAIZEN_LOG` são âncoras legítimas e não têm `arquivo:linha`. Medido no achado original, **45
+   dos 46 itens passariam com o `file:line` apagado** — mas o custo de discriminar é reescrever a
+   âncora de todos num formato que boa parte dos casos recusa. O que de fato importa (achado
+   fechado escondido no arquivo) já é coberto pela regra 2 e pela lista-branca. Reabrir só se
+   aparecer um caso real de âncora inventada passando despercebida.
+2. **O corte UTF-8 de `${var:0:200}` (`bin/sdd:756,777`) segue sem asserção.** O risco **degrada
+   em vez de quebrar alto**: no jq 1.7 o byte inválido vira U+FFFD e sobrevive. Alcançar um
+   `gate_why` longo e multibyte pelo caminho real exige fixture com ID de incremento gigante, e o
+   próprio achado já dizia que pode não valer o custo. Reabrir se esse corte passar a alimentar
+   algo que quebre alto em vez de degradar.
+3. **O `def usd` com entrada negativa (`bin/sdd:2524`) é inalcançável hoje.** `round` e `floor` de
+   fato não fecham — `-1.5` sai `-2.50`, `-0.005` sai `-1.99` —, mas **nenhum escritor do ledger
+   produz `cost_usd` negativo**. Guardar contra um mundo que o escritor não produz custa um fixture
+   que só um teste consegue montar, para proteger uma linha ilegível no caso em que alguém edite o
+   ledger à mão. Reabrir no dia em que um custo negativo tiver origem legítima (estorno, crédito).
+
+**Custo:** 1 sessão com humano, **zero sessões de fase** — nenhum `sdd run`, nenhum gate, nenhum
+token de agente. É o argumento do lote: item barato fechado à mão não paga o pedágio de uma missão,
+e o que sobra para a missão são só os 18 itens que precisam de código e sensor.
+
+⚠️ **A catraca cobra este lote nos dois sentidos, e isso é o desenho.** Ao passar de 66 para 56 o
+`sdd health` reprova por `finding outside the baseline` **e** por `stale baseline` até
+`todo-findings` descer para 56 no **mesmo commit**.
+
 ## 2026-08-17 — O backlog para de crescer calado, e o `sdd health` ganha o primeiro sensor da sua vida (missão `20260817-catraca-do-backlog`)
 
 **Problema (Gemba):** a triagem de 2026-08-17 comparou `git show 8ca54b8:TODO.md` contra o HEAD e
@@ -258,9 +317,21 @@ uma árvore que o git recusou é como se perde o trabalho de outra pessoa.
 | Portas que commitam avisando a branch base | 3 de 4 | **5 de 5** |
 | `aprovacao: auto` em plano kaizen-born | aceito pelo gate | **recusado**, nomeando `sdd approve` como saída |
 | Score de mutação | 44 caught, 0 gap, of 44 | **55 caught, 0 gap, of 55** |
-| Asserções `ok` numa passada verde | 457 | **490** |
+| Asserções `ok` numa passada verde — `grep -c '^  ok    '` na saída de `tests/run-all.sh` | 457 (⚠️ instrumento não registrado) | **435** |
 | Suíte, mesma máquina, duas passadas por lado | 1:45,74 / 1:47,49 | **2:27,10 / 2:27,59** (+39%) |
 | Os 4 itens da métrica no `TODO.md` | abertos | **RESOLVIDO por** `96a1f68`, `b3b8c2f`, `3ffa586`, `2510c3c` |
+
+⚠️ **A linha das asserções foi corrigida em 2026-08-18: dizia `490`, mede `435`.** `490` saiu da
+contagem solta `^  ok`, que soma 55 linhas de **três** espaços impressas pelo runner *dentro* dos
+fixtures; a grandeza desta casa é a âncora de **quatro** (`grep -c '^  ok    '`), a mesma que o
+`templates/checkpoint.md` exige dos Checks. O tree é o mesmo — `git diff c821ade..96a9bf1 --
+tests/ bin/sdd` é vazio —, então o degrau era do instrumento, não do trabalho. O offset é
+**estrutural e estável**: medido de novo em 2026-08-18, num tree bem diferente (81 mutantes contra
+55), a passada verde dá `589` solto contra `534` na âncora — **os mesmos 55 de diferença**, o que
+confirma o `490 → 435` por medição independente em vez de por afirmação. O `457` do "Antes"
+vem da entrada de `20260816-kit-como-alvo` e **não foi re-medido**: a série `408 → 457` não é
+comparável com o `435` desta linha. É exatamente por isso que toda linha nova deste arquivo nomeia
+o comando ao lado do número, como a do `score:` já fazia de graça.
 
 Os tempos foram medidos nesta máquina, `main` num worktree descartável contra o HEAD noutro, os
 quatro **em sequência e sem nada mais rodando**, suíte verde nos quatro. O **+39% é catálogo, não
