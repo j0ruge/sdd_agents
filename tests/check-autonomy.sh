@@ -673,6 +673,35 @@ assert_eq "the phase that degraded" "REVIEW" \
   "$(jq -r -s '[.[] | select(.event == "degraded")][0].phase' "$LEDGER")"
 assert_eq "and the mission it happened in" "$MISSION" \
   "$(jq -r -s '[.[] | select(.event == "degraded")][0].mission' "$LEDGER")"
+
+# D6 — the blocked line counts SESSIONS, not laps of the loop. `attempts[$phase]` rises on every
+# lap that reaches the top with this phase, including the lap that escalates (which opens no
+# session at all) and every later lap the REVIEW→PR→REVIEW loop takes. The number is the last thing
+# a human reads when a run ends, and here it said `3 sessions` over a ledger holding ONE REVIEW
+# session. Prefixed `output:` with the reader assertions further down, but it lives HERE because
+# this is the only fixture in the file that reaches the budget branch at all — the mission has to
+# really be in REVIEW, and the stub has to move the disk on every call.
+#
+# DIFFERENTIAL against the ledger, and `agree/total` rather than a single number: the branch is
+# entered twice in this run (once to degrade, once to end it), so an assertion reading only the
+# first occurrence would go green on a fix that repaired one voice and left the other. `0/0` is the
+# vacuity floor — a fixture that stopped reaching the branch fails instead of passing on nothing —
+# and the REVIEW session count on the left pins the regime that makes laps and sessions differ.
+#
+# `session[^ ]*` and not the literal spelling: the defect is the NUMBER, and a pattern written
+# against the post-fix wording would have gone red on the plural alone — measured, it read `0/0`
+# against the old runner and would have called a pure rename a fix.
+rev_sessions="$(jq -s '[.[] | select(.event == "session" and .phase == "REVIEW")] | length' "$LEDGER")"
+blocked_says="$(awk -v n="$rev_sessions" '
+  { s = $0
+    while (match(s, /[0-9]+ session[^ ]* without satisfying the gate/)) {
+      total++
+      if (substr(s, RSTART, RLENGTH) + 0 == n) agree++
+      s = substr(s, RSTART + RLENGTH)
+    } }
+  END { printf "%d/%d", agree + 0, total + 0 }' <<< "$err")"
+assert_eq "output: the blocked line counts the sessions the phase spent, not the laps of the loop" \
+  "1 2/2" "$rev_sessions $blocked_says"
 # The kit stamp is what puts the row on the version axis the whole ledger exists to measure. A
 # writer that forgot it would still look fine in `sdd autonomy` and vanish from the series.
 assert_eq "the row carries the kit stamp, so it lands on the version axis" "true" \
@@ -1582,6 +1611,108 @@ gap_blanks="$(awk 'prev == "" && $0 == "" { n++ } { prev = $0 } END { print n + 
 gap_excl="$(grep -c '1 unrecognized row(s) excluded' <<< "$out")"
 assert_eq "output: never two blank lines in a row, and the accounting still prints" "0 1" \
   "$gap_blanks $gap_excl"
+
+# D7 — the SAME family as D5, and the half it left behind. Each of the four exclusion strings opens
+# with `\n` AND the jq comma puts every output on its own line, so with more than one bucket filled
+# the accounting came out block+blank+block+blank+block: four unrelated remarks where there is one
+# paragraph. D5 cannot see it — it counts CONSECUTIVE blanks, and this defect never makes two in a
+# row. All four buckets are filled at once, so a fix that groups only some of them fails here.
+#
+# Three numbers, and none of them is redundant: the four lines are the anti-vacuity floor (an
+# output that lost its accounting has no internal blank either, and would pass on nothing), the
+# zero is the defect, and the blank ABOVE the first line is what still separates the block from the
+# table — a fix that deleted every newline would satisfy the middle number and glue the accounting
+# onto the last row of the table.
+mkdir -p "$OUTSIDE/excl"
+{ out_row aaaaaaa m1 1.0
+  # non-comparable: on this repo, but the kit was dirty when the row was born
+  jq -cn --arg repo "$FIXROOT" \
+    '{v:1, ts:"2026-08-16T14:00:00-03:00", event:"session", kit_sha:"aaaaaaa", kit_dirty:true,
+      repo:$repo, mission:"m2", phase:"EXEC", moved:true}'
+  # unrecognized: no event field at all (counted after the repo filter, so it names this repo)
+  jq -cn --arg repo "$FIXROOT" '{v:1, ts:"2026-08-16T14:00:00-03:00", repo:$repo}'
+  # born in another repo, and says no repo at all — the two exclusions bound before the filter
+  jq -cn '{v:1, ts:"2026-08-16T14:00:00-03:00", event:"session", kit_sha:"aaaaaaa",
+      kit_dirty:false, repo:"/somewhere/else", mission:"m3", phase:"EXEC", moved:true}'
+  jq -cn '{v:1, ts:"2026-08-16T14:00:00-03:00", event:"session", kit_sha:"aaaaaaa",
+      kit_dirty:false, mission:"m4", phase:"EXEC", moved:true}'
+} > "$OUTSIDE/excl/autonomy-log.jsonl"
+out="$( SDD_STATE_DIR="$OUTSIDE/excl" "$SDD" autonomy 2>&1 )"
+excl_inner="$(awk '/row\(s\) excluded/ { if (started) n += blank; started = 1; blank = 0; next }
+                   started && $0 == "" { blank++ }
+                   END { print n + 0 }' <<< "$out")"
+excl_above="$(awk 'prev == "" && /row\(s\) excluded/ && !seen { seen = 1; n = 1 }
+                   { prev = $0 } END { print n + 0 }' <<< "$out")"
+assert_eq "output: the exclusion accounting is one paragraph, not one remark per bucket" "4 0 1" \
+  "$(grep -c 'row(s) excluded' <<< "$out") $excl_inner $excl_above"
+
+# D8 — the axis note kept a SECOND copy of the guard floor. Its own comment reads "no count in the
+# sentence on purpose ... writing 3 here would be a third copy of a number the jq program already
+# owns", and the `dim` two lines below it printed "The floor of 3 missions per kit version". Of the
+# floor's several voices this is the ONLY one a human reads out loud, and it was the one that would
+# drift in silence the day the floor moved.
+#
+# The note prints from `sdd kaizen` alone, which refuses to run anywhere but the KIT repo (SDD_HOME
+# has to BE the repo root), so this is the one assertion in this file that needs a kit-SHAPED
+# fixture — the $KIT copy above deliberately has no .git and is a target repo. `--dry-run` is
+# enough: the note prints before the gate and before anything that could spend a session.
+echo "== reader: the guard floor has one owner and one voice =="
+KITREPO="$OUTSIDE/kitrepo"
+mkdir -p "$KITREPO"
+cp -r "$ROOT/bin" "$ROOT/templates" "$ROOT/config" "$KITREPO/"
+git -C "$KITREPO" init -q -b main
+git -C "$KITREPO" config user.email "fixture@example.com"
+git -C "$KITREPO" config user.name "Fixture"
+( cd "$KITREPO" && "$KITREPO/bin/sdd" install >/dev/null 2>&1 )
+mkdir -p "$KITREPO/.sdd"
+cat > "$KITREPO/.sdd/config.sh" <<'EOF'
+PROJECT_NAME="kitfix"
+DEFAULT_BRANCH="main"
+TEST_CMD="true"
+E2E_CMD=""
+HANDOFF_DIR="docs/handoffs"
+QA_DOCS_PATH="docs/qa"
+JIRA_ENABLED=false
+EOF
+git -C "$KITREPO" add -A >/dev/null && git -C "$KITREPO" commit -qm "init kit fixture" >/dev/null
+KITROOT="$(git -C "$KITREPO" rev-parse --show-toplevel)"
+# Three consecutive phases of one mission, each landing on its own kit_sha because the phase before
+# it committed: the gemba of the repo that BUILDS the kit, where no number of missions ever reaches
+# the floor. Same shape as check-kaizen.sh's degenerate-axis fixture, pointed at this repo.
+mkdir -p "$OUTSIDE/degenaxis"
+axis_row() {   # axis_row <kit_sha> <phase>
+  jq -cn --arg repo "$KITROOT" --arg sha "$1" --arg phase "$2" \
+    '{v:1, ts:"2026-08-16T14:00:00-03:00", event:"session", run_id:"k", invocation:"run",
+      kit_sha:$sha, kit_dirty:false, project:"kitfix", repo:$repo, mission:"m20",
+      phase:$phase, step:$phase, agent:"a", model:"opus", attempt:1, auto_retry:false,
+      session:"s", rc:0, dur_s:10, cost_usd:1.0, moved:true, gate:"pass", gate_why:"x"}'
+}
+{ axis_row a000001 EXEC; axis_row a000002 DOCS; axis_row a000003 PR
+} > "$OUTSIDE/degenaxis/autonomy-log.jsonl"
+axis_out="$(    cd "$KITREPO" && SDD_STATE_DIR="$OUTSIDE/degenaxis" "$KITREPO/bin/sdd" kaizen --dry-run 2>&1 )"
+axis_series="$( cd "$KITREPO" && SDD_STATE_DIR="$OUTSIDE/degenaxis" "$KITREPO/bin/sdd" kaizen --series 2>/dev/null )"
+# Four terms, three of them floors. `degenerate_axis: true` proves the note was reachable at all
+# (it returns early on every other series, so a fixture that stopped degenerating would leave the
+# number empty and read as a fix); the series field is the owner; the printed number is the voice;
+# and the source count is what makes the two the SAME number — with a literal written back into the
+# sentence the first three still agree, and only the fourth goes red.
+#
+# That fourth term reads the PRINTING lines of `kaizen_axis_note` and nothing else. A plain grep
+# over the file counts the prose too: the comment above the sentence quotes the defect it is about,
+# so the first spelling of this assertion failed on its own documentation while the code was
+# already right — a source rule that cannot tell code from a comment about the code.
+#
+# It is written `<literals>/<lines read>` and not as a bare count, because a bare count FAILS OPEN:
+# rename the function, move the sentence into a helper, and the awk range matches nothing, `n`
+# stays 0 and the assertion goes on reporting "no literal" about a body it never opened. The
+# denominator is the floor — 0 lines read fails instead of passing on nothing.
+axis_literal="$(awk '/^kaizen_axis_note\(\) \{/ { inf = 1; next }
+                     inf && /^\}/ { inf = 0 }
+                     inf && /^ *(dim|warn) / { lines++; if ($0 ~ /[0-9]+ missions/) n++ }
+                     END { printf "%d/%d", n + 0, lines + 0 }' "$SDD")"
+assert_eq "output: the axis note quotes the guard floor instead of keeping a copy of its own" \
+  "true 3 3 0/4" \
+  "$(jq -r '.guard.degenerate_axis' <<< "$axis_series") $(jq -r '.guard.floor' <<< "$axis_series") $(num_before "$axis_out" 'missions per kit version') $axis_literal"
 
 # --- the instrument never lands inside the thing it measures ----------------
 # Pins the $OUTSIDE decision at the top of this file. If the ledger, a reader fixture or the kit

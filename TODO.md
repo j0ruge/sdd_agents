@@ -381,29 +381,7 @@ Achados sobre **repos-alvo** vão para o `TODO.md` daquele repo. Este arquivo é
   o ledger + juiz, com o índice roteando — **não** executar no meio de outra missão, é refator de
   estrutura e merece a sua. — descoberto por `sdd-docs` na missão `20260817-eixo-do-juiz` (2026-08-17)
 
-- [ ] **`BLOCKED in <FASE> — N sessions` conta voltas do laço, não sessões** — `bin/sdd:1626` —
-  `attempts[$phase]` sobe em toda volta que chega ao topo com a fase, inclusive as que não abrem
-  sessão nenhuma. Medido no fixture do I9: REVIEW imprime `3 sessions without satisfying the gate`
-  com **1** sessão de REVIEW no ledger, e desde o I9 essa é a última linha que o humano lê quando
-  o run encerra. Direção: contar sessões, ou dizer `attempts`. — descoberto por `sdd-executor` na
-  missão `20260816-runner-sem-dividas` (2026-08-16)
-
-- [ ] **As linhas de exclusão do `sdd autonomy` levam uma linha em branco entre cada duas** —
-  `bin/sdd:2557-2560` — as quatro strings abrem com `\n` cada uma, então três exclusões saem como
-  bloco+branco+bloco+branco+bloco em vez de um parágrafo só. O I3 tirou a linha em branco DUPLA (a
-  que o `else ""` produzia com contagem zero); esta é a que sobra, mesma família, e agora é visível
-  porque nada mais a esconde. Direção: juntar as não-vazias num array e emitir um `\n` só na frente.
-  — descoberto por `sdd-executor` na missão `20260817-catraca-do-backlog` (2026-08-17)
-
 ### Comentário e registro
-
-- [ ] **O `kaizen_axis_note` promete não repetir o piso e o repete duas linhas abaixo** —
-  `bin/sdd:2924` vs `:2928` — o comentário diz "no count in the sentence on purpose: writing '3'
-  here would be a third copy of a number the jq program already owns", e o `dim` seguinte imprime
-  "The floor of 3 missions per kit version". O `guard_floor` do `jq` é o dono; esta é a cópia que
-  drifta calada no dia em que o piso mudar, e é a **única** das seis vozes do schema que o humano lê
-  em voz alta. Direção: interpolar o `guard_floor` da série, ou tirar o número da frase.
-  — descoberto por `sdd-docs` na missão `20260817-eixo-do-juiz` (2026-08-17)
 
 ### Idioma
 

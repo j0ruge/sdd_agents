@@ -2176,6 +2176,13 @@ cmd_run() {
   warn_if_on_base_branch
 
   local -A attempts=()
+  # SESSIONS, which is not the same grandeza as `attempts` and was being printed as if it were.
+  # `attempts` counts laps of this loop: it rises on the lap that ESCALATES (which opens no session
+  # at all) and on every later lap the REVIEW->PR->REVIEW degradation takes, so the blocked line
+  # said `3 sessions` over a ledger holding one. It is the last thing a human reads when a run ends.
+  # Incremented beside `autonomy_session_row` and nowhere else, so the number the terminal says and
+  # the rows the ledger holds cannot drift: one writer, one counter, same two places.
+  local -A sessions=()
   local phases_run=0 phase before after budget
   # One-shot per `sdd run`, in the spirit of AUTONOMY_SHA_WARNED above: the runner lowers its own
   # bar ONCE, and both trails have to say so once. A plain local of cmd_run is enough here — the
@@ -2243,7 +2250,7 @@ cmd_run() {
     if [ "${attempts[$phase]}" -gt "$budget" ]; then
       gate_"$phase" || true
       info ""
-      bad "BLOCKED in $phase — ${attempts[$phase]} sessions without satisfying the gate"
+      bad "BLOCKED in $phase — ${sessions[$phase]:-0} session(s) without satisfying the gate"
       bad "  current reason: $GATE_WHY"
       dim "  'sdd status $MISSION' shows the full state; 'sdd why $MISSION $phase' the reason."
       if [ "$phase" = "REVIEW" ] && [ "$PUBLISH_ON_REVIEW_BLOCKED" = "draft" ]; then
@@ -2316,6 +2323,7 @@ cmd_run() {
     [ "$before" != "$after" ] && moved="true"
     autonomy_session_row "$phase" "${attempts[$phase]}" "false" "$moved" \
       "$( [ "$gate_rc" -eq 0 ] && echo pass || echo fail )" "$GATE_WHY"
+    sessions["$phase"]="$(( ${sessions[$phase]:-0} + 1 ))"
 
     phases_run=$((phases_run + 1))
     if [ "$max_phases" -gt 0 ] && [ "$phases_run" -ge "$max_phases" ]; then
@@ -2353,6 +2361,7 @@ cmd_run() {
     gate_"$phase" || gate_rc2=$?
     autonomy_session_row "$phase" "${attempts[$phase]}" "true" "$moved2" \
       "$( [ "$gate_rc2" -eq 0 ] && echo pass || echo fail )" "$GATE_WHY"
+    sessions["$phase"]="$(( ${sessions[$phase]:-0} + 1 ))"
 
     if [ "$gate_rc2" -eq 0 ]; then
       ok "gate $phase (on the retry): $GATE_WHY"
@@ -2612,16 +2621,22 @@ cmd_autonomy() {
     , (map(select(is_escalation and on_axis)) | group_by(.kit_sha, .kind)
        | map("  \(.[0].kit_sha)  \(.[0].kind): \(length)") | join("\n")
        | select(length > 0) | "\nescalations\n" + .)
-    # `empty` and NOT `""` on the zero side of all four, which is the whole of the double-blank-line
-    # defect: each string already opens with a newline AND the jq comma puts every output on a line
-    # of its own, so an exclusion with nothing to report used to contribute a blank line by itself —
-    # with no escalations and one unrecognized row, two blanks opened between the table and the
-    # accounting. `empty` emits no output at all, exactly as the escalations line above does through
-    # `select(length > 0)`. No count moves: this is spacing only.
-    , (if $skipped > 0 then "\n  (\($skipped) non-comparable row(s) excluded: dirty kit, no kit_sha, or no moved field)" else empty end)
-    , (if $stray > 0 then "\n  (\($stray) unrecognized row(s) excluded: event missing or not one of session/blocked/degraded)" else empty end)
-    , (if $foreign > 0 then "\n  (\($foreign) row(s) excluded: born in another repo — the ledger is global, this reader is not)" else empty end)
-    , (if $norepo > 0 then "\n  (\($norepo) row(s) excluded: no repo field — the row cannot say which project it came from)" else empty end)
+    # ONE output for the four buckets, and that is the second half of the spacing defect. The first
+    # half was `empty` instead of `""` on the zero side: each string opens with a newline AND the jq
+    # comma puts every output on a line of its own, so a bucket with nothing to report contributed a
+    # blank line by itself and two blanks opened between the table and the accounting. `empty` fixed
+    # that and left the other half standing — with two buckets filled the four strings came out
+    # block+blank+block, one blank between every two, because each surviving string still carried
+    # its own leading newline. The accounting is ONE paragraph: four remarks about where the rows
+    # went, not four unrelated asides. Collected into an array and joined, the leading newline is
+    # written ONCE, by the paragraph rather than by its lines, and `select(length > 0)` keeps the
+    # zero case emitting nothing at all — exactly as the escalations block above does. No count
+    # moves: this is spacing only.
+    , ([ (if $skipped > 0 then "  (\($skipped) non-comparable row(s) excluded: dirty kit, no kit_sha, or no moved field)" else empty end)
+       , (if $stray > 0 then "  (\($stray) unrecognized row(s) excluded: event missing or not one of session/blocked/degraded)" else empty end)
+       , (if $foreign > 0 then "  (\($foreign) row(s) excluded: born in another repo — the ledger is global, this reader is not)" else empty end)
+       , (if $norepo > 0 then "  (\($norepo) row(s) excluded: no repo field — the row cannot say which project it came from)" else empty end)
+       ] | select(length > 0) | "\n" + join("\n"))
   ' "$file" 2>/dev/null)" || jq_rc=$?
   if [ "$jq_rc" -ne 0 ]; then
     # A DIFFERENT sentence from the `ledger_parses` refusal above, because they are different
@@ -2657,6 +2672,17 @@ cmd_autonomy() {
 # latest/previous follow FILE order, not sort order: jq's group_by sorts by key and would call
 # the lexically-largest sha "latest" — the reduce/index below keeps first-appearance order, and a
 # reappearing old sha joins its old group instead of opening a new one.
+
+# The floor of the guard, and its ONE definition: how many missions WITH a session a kit version
+# needs before the series supports any verdict but `indeterminado`. ADR 0003 is why it does not
+# loosen. Three voices read it and each used to hold a copy — the jq program below (which decides
+# `sufficient` and `degenerate_axis`), the empty-series producer inside it (which has no input to
+# run that program on), and the sentence `kaizen_axis_note` prints to the human under a comment
+# swearing the number was not repeated. The jq one takes it through --argjson, the producer through
+# expansion, the sentence off `.guard.floor` of the series it is explaining: a change here moves
+# all three, or none of them.
+readonly KAIZEN_GUARD_FLOOR=3
+
 kaizen_series() {
   local file; file="$(autonomy_log_path)"
   command -v jq >/dev/null 2>&1 || die "jq not found — it is required to read the ledger"
@@ -2686,10 +2712,10 @@ kaizen_series() {
     # Second producer of the same shape, and it cannot share the jq above (there is no input to
     # run it on), so the key set is kept in step by hand and check-kaizen.sh compares the two as
     # key sets. A consumer reading `null` where the real series gives a number is the drift.
-    printf '%s\n' '{"v":1,"latest":null,"previous":null,"guard":{"missions_after_change":0,"missions_with_session":0,"sessions":0,"sufficient":false,"degenerate_axis":false},"excluded":{"non_comparable":0,"unrecognized":0,"meta":0,"other_repo":0,"no_repo":0}}'
+    printf '{"v":1,"latest":null,"previous":null,"guard":{"missions_after_change":0,"missions_with_session":0,"sessions":0,"floor":%s,"sufficient":false,"degenerate_axis":false},"excluded":{"non_comparable":0,"unrecognized":0,"meta":0,"other_repo":0,"no_repo":0}}\n' "$KAIZEN_GUARD_FLOOR"
     return 0
   fi
-  jq -n --arg repo "$repo" "$(ledger_row_is_local)"'
+  jq -n --arg repo "$repo" --argjson floor "$KAIZEN_GUARD_FLOOR" "$(ledger_row_is_local)"'
     # ONE definition of "escalation" for the whole program, exactly as cmd_autonomy has one. The
     # two events state different facts (`blocked` stopped the line, `degraded` lowered the bar and
     # went on) but they answer this rubric the same way, and writing the pair out three times is
@@ -2719,7 +2745,9 @@ kaizen_series() {
     # ONE definition of the floor, shared by the guard verdict below and by the window this field
     # looks through. They cannot drift: the field says "waiting will never satisfy that floor", so
     # it has to be measured over as many kit versions as the floor asks missions of.
-    def guard_floor: 3;
+    # The value comes in through --argjson from KAIZEN_GUARD_FLOOR, the single owner: the empty
+    # ledger takes the same road above, and neither of them can be moved on its own.
+    def guard_floor: $floor;
     # ONE definition of "the distinct kit versions, in FILE order", used by the latest/previous
     # pair below and by the window here. group_by sorts by key and answers a different question;
     # two hand-written copies of this reduce is how the blocked/degraded pair came to disagree.
@@ -2877,7 +2905,12 @@ kaizen_series() {
        guard: {missions_after_change: ($latest.missions // 0),
                missions_with_session: $observed,
                sessions: ($latest.sessions // 0),
-               sufficient: ($observed >= guard_floor),  # 3 missions WITH a session (D4); I13.4 revisits
+               # PUBLISHED, and that is what makes it one number instead of two. The sentence
+               # kaizen_axis_note prints to the human used to carry its own hand-written `3`, under
+               # a comment swearing it did not — the one voice of this floor a human reads out
+               # loud, and the one that would have drifted in silence the day the floor moved.
+               floor: guard_floor,
+               sufficient: ($observed >= guard_floor),  # missions WITH a session (D4); I13.4 revisits
                degenerate_axis: $degenerate},
        excluded: {non_comparable: ($noncomp | length), unrecognized: $unrec,
                   meta: ($meta | length), other_repo: $other_repo, no_repo: $no_repo}}
@@ -3052,11 +3085,15 @@ kaizen_axis_note() {
   # has nothing to explain about a file it could not parse.
   series="$(kaizen_series 2>/dev/null)" || return 0
   [ "$(jq -r '.guard.degenerate_axis' <<< "$series")" = "true" ] || return 0
-  # No count in the sentence on purpose: the window is `guard_floor` and writing "3" here would be
-  # a third copy of a number the jq program already owns, drifting the day the floor moves.
+  # READ off the series this sentence is explaining, never written here. The comment that used to
+  # sit on this line said "no count in the sentence on purpose: writing 3 here would be a third copy
+  # of a number the jq program already owns, drifting the day the floor moves" — and the `dim` two
+  # lines down printed "The floor of 3 missions". The promise was right; the code did the opposite,
+  # and this is the only voice of the floor a human ever reads out loud.
+  local floor; floor="$(jq -r '.guard.floor' <<< "$series")"
   warn "the kit_sha axis is degenerate here: the recent kit versions each carry exactly one mission, and none ever reached the floor"
   dim "  This repo BUILDS the kit, so each session commits and the next one lands on a fresh sha."
-  dim "  The floor of 3 missions per kit version is unsatisfiable here, and 'indeterminado' is then"
+  dim "  The floor of $floor missions per kit version is unsatisfiable here, and 'indeterminado' is then"
   dim "  the CORRECT verdict, not a missing mission: evidence comes from real target repos (ADR 0003)."
 }
 

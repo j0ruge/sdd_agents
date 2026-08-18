@@ -1066,6 +1066,65 @@ mut_KAIZEN_series_escalations_dropped() {
   sed -i 's|^                         and (.event == "session" or is_escalation)))) as $all$|                         and (.event == "session")))) as $all|' "$1"
 }
 
+# The blocked line goes back to counting LAPS OF THE LOOP and calling them sessions. `attempts`
+# rises on the lap that escalates — which opens no session at all — and on every later lap the
+# REVIEW->PR->REVIEW degradation takes, so the last line a human reads when a run ends said
+# `3 sessions` over a ledger holding one REVIEW session.
+#
+# It restores the historical defect exactly, rather than emptying the counter: a mutant that merely
+# stopped feeding `sessions` would print `0` and be caught by arithmetic, where this one prints a
+# plausible number that is simply about something else — the shape the assertion has to survive.
+mut_RUN_blocked_counts_laps() {
+  sed -i 's@${sessions\[$phase\]:-0} session(s) without satisfying@${attempts[$phase]} session(s) without satisfying@' "$1"
+}
+
+# The exclusion accounting goes back to one blank line between every two of its lines: a paragraph
+# about where the rows went, printed as four unrelated asides. Anchored on the `join` of the array
+# that collects them — the token that only exists because the four strings are ONE output now.
+#
+# The leading newline is left ALONE and only the separator doubles, so the blank that divides the
+# block from the table survives: the mutant reproduces the defect and nothing else, and an
+# assertion that passed on "there is a blank line somewhere" would not notice it.
+mut_AUTONOMY_exclusions_split() {
+  sed -i 's@\] | select(length > 0) | "\\n" + join("\\n"))@] | select(length > 0) | "\\n" + join("\\n\\n"))@' "$1"
+}
+
+# The one voice of the guard floor a human reads out loud writes its own copy of the number again,
+# under the comment that swears it does not. Nothing breaks and no count moves — the sentence goes
+# on being true until the floor changes, and then it is the only reader still saying the old value.
+#
+# The `$floor` in the anchor is what keeps it honest: it is the interpolation itself, so the mutant
+# cannot apply to a runner that never derived the number, and `cmp` reports "did not apply" instead
+# of scoring a point for sabotaging prose.
+mut_KAIZEN_axis_note_own_floor() {
+  sed -i 's@The floor of $floor missions per kit version@The floor of 3 missions per kit version@' "$1"
+}
+
+# The exclusion paragraph loses the blank line that divides it from the TABLE and is printed glued
+# to the last version row — the opposite over-correction to `mut_AUTONOMY_exclusions_split` above,
+# and the one a hand fixing that defect reaches for first (delete every newline and the blanks
+# between the lines go away too).
+#
+# It exists because that half of the claim has no other catcher: the split mutant leaves the
+# leading newline alone, and D5 next door counts CONSECUTIVE blanks, so an accounting welded onto
+# the table satisfies it. Without this entry the "one blank above" term would be a rule with no
+# probe — decoration, by this repo's own rubric.
+mut_AUTONOMY_exclusions_glued() {
+  sed -i 's@\] | select(length > 0) | "\\n" + join("\\n"))@] | select(length > 0) | join("\\n"))@' "$1"
+}
+
+# The series stops PUBLISHING the floor, so `.guard.floor` reads null and the sentence the human
+# hears has nothing left to quote. It is the other half of `mut_KAIZEN_axis_note_own_floor`: that
+# one puts a second copy of the number back, this one removes the first — either way the floor stops
+# having exactly one owner with exactly one voice.
+#
+# Caught twice on purpose, and that is not a duplicate point: check-kaizen.sh compares the guard KEY
+# SETS of the two producers (the jq program and the empty-ledger printf), so this mutation also
+# proves the empty series never silently drifts out of step with the real one.
+mut_KAIZEN_guard_floor_unpublished() {
+  sed -i '/^               floor: guard_floor,$/d' "$1"
+}
+
 CATALOG=(
   PLAN_empty_approval
   PLAN_kaizen_born_blind
@@ -1153,6 +1212,11 @@ CATALOG=(
   RUN_degraded_journal_dropped
   AUTONOMY_is_escalation_blind
   KAIZEN_series_escalations_dropped
+  RUN_blocked_counts_laps
+  AUTONOMY_exclusions_split
+  AUTONOMY_exclusions_glued
+  KAIZEN_axis_note_own_floor
+  KAIZEN_guard_floor_unpublished
 )
 
 # Mutations that are NOT caught today, each with the increment that closes it. Ratchet in both

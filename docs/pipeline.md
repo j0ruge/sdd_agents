@@ -511,7 +511,9 @@ by kind, a per repo×mission×phase `detail` (each entry naming its `repo`), and
 - `ok` — none of the above.
 
 Plus a `guard` (`missions_after_change`, `missions_with_session`, `sessions`,
-`sufficient: missions_with_session >= 3` — a mission that only escalated ran, and is counted as
+`floor` — the number of missions with a session a version needs, published because the runner also
+says it out loud to the human and a second copy of it would drift the day it moves;
+`sufficient: missions_with_session >= floor` — a mission that only escalated ran, and is counted as
 one, but bought the judge no observation and so does not raise the floor;
 `degenerate_axis`, true when the **last three** kit versions in the slice each bought exactly one
 *mission* — the same unit the floor counts, never sessions — there is more than one of them, **and
