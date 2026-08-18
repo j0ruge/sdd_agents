@@ -867,8 +867,16 @@ mut_HEALTH_ratchet_one_way() {
 # It sabotages the COMPARISON and not the skill lookup: a mutant that hid the template would be
 # SKIPPED by design (missing skill ⇒ skipped, like the absent linter), so it would fail nothing
 # and score a point for a door that was never open.
+# ⚠️ ADDRESSED BY RANGE, and the range is the whole point. `if [ "$line" = "$fix" ]; then checked`
+# is byte for byte the same line in the qa-execution branch and in the qa-report one, so a bare
+# `sed` sabotages BOTH and this single entry silently becomes two — the "one mutation, one line"
+# discipline of this file broken, and, worse, a dedicated entry for the qa-execution comparison
+# made impossible to ever score, because this one would already be killing it. Caught in the r1
+# review of 20260817-catraca-do-backlog. Only the qa-report half has a fixture in
+# tests/check-health.sh today, so only that half can honestly carry a mutation; the other two
+# comparisons are an open TODO.md finding, not a point this catalogue may claim.
 mut_HEALTH_provenance_blind() {
-  sed -i 's|    if \[ "\$line" = "\$fix" \]; then checked|    if true; then checked|' "$1"
+  sed -i '/# registry bug: the Status line/,/# codereview grade table/ s|    if \[ "\$line" = "\$fix" \]; then checked|    if true; then checked|' "$1"
 }
 
 # The backlog ratchet goes blind: `sdd health` still runs the whole TODO.md check, still refuses a

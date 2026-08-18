@@ -429,11 +429,11 @@ Achados sobre **repos-alvo** vão para o `TODO.md` daquele repo. Este arquivo é
   — descoberto por `humano` na missão `20260817-eixo-do-juiz` (2026-08-17)
 
 - [ ] **`sdd health` aborta calado no meio quando `~/.claude/plugins/cache` não existe** —
-  `bin/sdd:1829` — `find` em diretório ausente devolve 1 e, sob o `set -e` + `pipefail` do runner,
-  a atribuição mata o comando: três `ok` na tela, rc 1, nenhuma palavra dita — os checks 4-6, a
-  proveniência e a catraca nunca rodam. O irmão em `:1856` faz o mesmo quando a baseline não tem
-  linha viva; os dois foram achados pelo fixture hermético do sensor novo, que precisou modelar
-  máquina com o diretório. Direção: `|| true` nos dois, com asserção em `tests/check-health.sh`.
+  `bin/sdd:1854` — `find` em diretório ausente devolve 1 e, sob o `set -e` + `pipefail` do runner,
+  a atribuição mata o comando no meio da proveniência: rc 1, nenhuma palavra dita, e nem a catraca
+  nem o veredito final rodam. O irmão em `:1882` faz o mesmo quando a baseline não tem linha viva;
+  os dois foram achados pelo fixture hermético do sensor novo, que precisou modelar máquina com o
+  diretório. Direção: `|| true` nos dois, com asserção em `tests/check-health.sh`.
   — descoberto por `sdd-executor` na missão `20260817-catraca-do-backlog` (2026-08-17)
 
 - [ ] **A checagem do `score:` do `sdd health` promete reprovar e morre calada** — `bin/sdd:1721` —
@@ -443,6 +443,22 @@ Achados sobre **repos-alvo** vão para o `TODO.md` daquele repo. Este arquivo é
   porque é a checagem escrita para impedir cegueira. Provado por probe nesta sessão. Direção:
   `|| true`, como o check 3 já faz, com asserção diferencial em `tests/check-health.sh`.
   — descoberto por `sdd-executor` na missão `20260817-catraca-do-backlog` (2026-08-17)
+
+- [ ] **Duas das três comparações de `health_provenance` não têm fixture nem mutação** —
+  `bin/sdd:1829` (qa-execution) e `:1850` (a tabela de notas do codereview) — só a de `qa-report`
+  tem template instalado pelo fixture de `tests/check-health.sh`, então as outras duas ficam
+  permanentemente no ramo "skipped" e nada mede se ainda discriminam. A do codereview é a mais
+  exposta: é um laço `awk` de forma diferente das outras duas, e nenhuma `mut_HEALTH_*` a alcança.
+  Direção: um par match/divergência para cada, como a asserção 4 já faz.
+  — descoberto por `sdd-reviewer` na missão `20260817-catraca-do-backlog` (2026-08-17)
+
+- [ ] **Os 14 `ROOT="$(cd …)"` de `tests/` não levam `CDPATH=''`** — `tests/check-health.sh:61` e
+  os 13 irmãos — o operando é relativo (`tests/..`), então com `CDPATH` setado o `cd` resolve pelo
+  path de busca **e imprime o destino na stdout**: `ROOT` vira o diretório errado, duplicado em
+  duas linhas. Reproduzido. É a mesma família da CRITICAL que `ledger_repo_root` pagou, consertada
+  só lá. Exposto na invocação manual; via `run-all.sh` o caminho é absoluto. Direção: `CDPATH=''`
+  nos 14, de uma vez, com probe no `check-pipefail.sh` (que já varre a mesma superfície).
+  — descoberto por `sdd-reviewer` na missão `20260817-catraca-do-backlog` (2026-08-17)
 
 ### Saída humana e cosmética
 
@@ -505,6 +521,14 @@ Achados sobre **repos-alvo** vão para o `TODO.md` daquele repo. Este arquivo é
   que o `else ""` produzia com contagem zero); esta é a que sobra, mesma família, e agora é visível
   porque nada mais a esconde. Direção: juntar as não-vazias num array e emitir um `\n` só na frente.
   — descoberto por `sdd-executor` na missão `20260817-catraca-do-backlog` (2026-08-17)
+
+- [ ] **O `def usd` erra o dólar inteiro com entrada negativa** — `bin/sdd:2516` — `round` arredonda
+  ao mais próximo e `floor` desce para −∞, então o par não fecha: `-1.5` sai `-2.50` e `-0.005` sai
+  `-1.99`. Nenhum escritor do ledger produz `cost_usd` negativo, então hoje é inalcançável — o custo
+  é uma linha ilegível se uma linha for editada à mão. Mesma função perde um centavo em `1.005`
+  (`100.49999…` em ponto flutuante). Direção: decidir se vale guarda para mundo que o escritor não
+  produz; se valer, `fabs` mais o sinal de volta, com fixture que só um teste consegue montar.
+  — descoberto por `sdd-reviewer` na missão `20260817-catraca-do-backlog` (2026-08-17)
 
 ### Comentário e registro
 

@@ -59,7 +59,13 @@
 set -uo pipefail
 
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
-WORK="$(mktemp -d "${TMPDIR:-/tmp}/sdd-health-XXXXXX")"
+# `|| exit 90` and not a bare assignment: with mktemp failed, WORK is EMPTY and FIX becomes the
+# absolute path `/kit` — a non-empty string, so the `${FIX:?}` guard in reset_home() below is
+# satisfied and `rm -rf /kit/home` runs for real on any machine where / is writable. The guard
+# was written against exactly this and cannot see it, because it tests the symptom and not the
+# cause. Raised in the r1 review; the SENSOR-BROKEN rc is used before broken() is defined.
+WORK="$(mktemp -d "${TMPDIR:-/tmp}/sdd-health-XXXXXX")" \
+  || { printf '  SENSOR-BROKEN  mktemp -d failed — no fixture, so no verdict\n' >&2; exit 90; }
 FIX="$WORK/kit"
 
 # run-all.sh already exports SDD_STATE_DIR for everything it runs, but a standalone

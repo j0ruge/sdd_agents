@@ -2535,8 +2535,17 @@ cmd_autonomy() {
     # check-autonomy.sh compares the last table row to `.latest.kit_sha` of the series so neither
     # side can be "improved" alone. `index` returns 0 for the first element and 0 is truthy in jq,
     # which is what makes the reduce keep the first occurrence instead of appending it twice.
+    # The order is read off the SAME POPULATION the judge reads it off — every on_axis row, session
+    # or escalation — and not off the comparable sessions this table happens to draw. Getting that
+    # wrong is a second way to answer the same question differently: a version whose first on_axis
+    # row is an escalation is already known to the series when the table has never heard of it, so
+    # a sha that got blocked before it ever finished a session sorted after one that started later.
+    # Measured in the r1 review: rows blocked(aaaaaaa), session(bbbbbbb), session(aaaaaaa) put
+    # aaaaaaa last in the table while the series called bbbbbbb the latest. `comparable` implies
+    # on_axis by its own definition above, so every group here has a place in this list.
+    | (map(select(on_axis)) | map(.kit_sha)
+       | reduce .[] as $s ([]; if index($s) then . else . + [$s] end)) as $order
     | (map(select(is_session and comparable))
-       | (map(.kit_sha) | reduce .[] as $s ([]; if index($s) then . else . + [$s] end)) as $order
        | group_by(.kit_sha) | sort_by(.[0].kit_sha as $s | $order | index($s))) as $groups
     | (map(select(is_unrecognized)) | length) as $stray
     | (if ($groups | length) == 0 then

@@ -1541,6 +1541,33 @@ assert_eq "output: the table's last version is the judge's latest, not the lexic
   "aaaaaaa aaaaaaa" \
   "$(jq -r '.latest.kit_sha' <<< "$vseries") $(awk '$3 == "session(s)" { sha = $1 } END { print sha }' <<< "$out")"
 
+# D4b — the SAME question, over the one file order where reading it off the wrong POPULATION still
+# splits the two answers. D4 above is satisfied by any first-appearance order, because its ledger
+# holds nothing but comparable sessions; the judge, though, reads first appearance off every
+# on_axis row, escalations included. So a version whose first on_axis row is an escalation is
+# already known to the series while the table has never heard of it — and a table that ordered by
+# its OWN population put that version last while the judge called another one latest. Found in the
+# r1 review by reproduction, not by reading: rows blocked(aaaaaaa), session(bbbbbbb),
+# session(aaaaaaa) answered `aaaaaaa` here and `bbbbbbb` there over one file. Written DIFFERENTIAL
+# for the same reason D4 is, and the escalation goes FIRST because that is the only placement in
+# which the two populations disagree at all.
+esc_row() {   # esc_row <kit_sha> <mission> — same shape autonomy_escalation_row writes
+  jq -cn --arg repo "$FIXROOT" --arg sha "$1" --arg mission "$2" \
+    '{v:1, ts:"2026-08-16T13:00:00-03:00", event:"blocked", kind:"increment-blocked",
+      run_id:"r", invocation:"run", kit_sha:$sha, kit_dirty:false, project:"p", repo:$repo,
+      mission:$mission, phase:"EXEC", gate_why:"x"}'
+}
+mkdir -p "$OUTSIDE/vorder2"
+{ esc_row aaaaaaa m0; out_row bbbbbbb m1 1.0; out_row aaaaaaa m2 1.0
+} > "$OUTSIDE/vorder2/autonomy-log.jsonl"
+out="$( SDD_STATE_DIR="$OUTSIDE/vorder2" "$SDD" autonomy 2>&1 )"
+vseries2="$( SDD_STATE_DIR="$OUTSIDE/vorder2" "$SDD" kaizen --series 2>/dev/null )"
+# The FLOOR travels with the claim: two table rows, or a reader that lost half its table would
+# agree with the judge by having nothing left to disagree with.
+assert_eq "output: the table orders versions off the judge's population, escalations included" \
+  "bbbbbbb bbbbbbb 2" \
+  "$(jq -r '.latest.kit_sha' <<< "$vseries2") $(awk '$3 == "session(s)" { sha = $1 } END { print sha }' <<< "$out") $(grep -cE '^  [a-z]{7}  [0-9]+ session\(s\)' <<< "$out")"
+
 # D5 — with no escalations and one unrecognized row, two blank lines opened between the table and
 # the exclusion line. Each exclusion string already begins with `\n` AND jq's `,` puts every output
 # on its own line, so an exclusion that prints "" for a count of zero contributes a blank line of
@@ -1568,7 +1595,7 @@ assert_eq "the ledger is never tracked by the repo under test" "0" \
 assert_eq "the repo under test ends with a clean tree" "" \
   "$(git -C "$FIX" status --porcelain)"
 
-# sdd health check 5 fails on a subcommand missing from the help — assert it here too, so the
+# sdd health check 6 fails on a subcommand missing from the help — assert it here too, so the
 # reason is visible at the point of change instead of three files away.
 assert_eq "the subcommand is in sdd help" "1" "$( "$SDD" help 2>&1 | grep -c 'sdd autonomy' )"
 
