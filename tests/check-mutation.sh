@@ -21,7 +21,7 @@ if [ -n "${SDD_MUTANT:-}" ]; then
   exit 1
 fi
 
-ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
+ROOT="$(CDPATH='' cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 
 # ---------------------------------------------------------------------------
 # JOBS resolution
@@ -336,24 +336,32 @@ mut_KAIZEN_mission_key_slug_only() {
 # Nothing is excluded and nothing is reported (`other_repo: 0`), which is the contamination the
 # filter exists to name, arriving through a different door.
 #
-# ⚠️ DOUBLE-quoted, and it has to be. The anchor contains `CDPATH=''`, and an apostrophe cannot
-# survive inside a single-quoted shell string: `''` there closes the quote and reopens it, so sed
-# received `CDPATH= cd` and stopped matching the file the day the SC1007 spelling was fixed. It
-# failed the honest way — CATALOGUE-BROKEN, rc 90 — which is the harness guard doing its job, but
-# the same trap silently mis-anchors any sed whose target holds a quote. Same family as the rule
-# forbidding an apostrophe inside the jq programs in bin/sdd (see CLAUDE.md).
+# ⚠️ This anchor has now moved TWICE with the same function, and both moves were the honest
+# failure — CATALOGUE-BROKEN, rc 90 — rather than a mutant quietly measuring nothing. The first
+# time the anchor held `CDPATH=''` and had to be double-quoted, because an apostrophe cannot
+# survive inside a single-quoted shell string (`''` there closes the quote and reopens it, so sed
+# received `CDPATH= cd`). The second time `ledger_repo_root` dropped the two `cd`s entirely for
+# `--path-format=absolute`, and the whole anchored line ceased to exist. It is single-quoted again
+# now that no apostrophe is in it. The lesson both times: a mutant anchored on a line a refactor
+# can delete has to be re-derived WITH that refactor, in the same commit.
 mut_LEDGER_repo_root_common_parent() {
-  sed -i "s@^  gitdir=\"\\\$( CDPATH='' cd \"\\\$start\" && CDPATH='' cd \"\\\$common\" && pwd -P 2>/dev/null )\" || return 0\$@  printf \"%s\" \"\$( cd \"\$start\" \&\& cd \"\$common/..\" \&\& pwd -P 2>/dev/null )\"; return 0@" "$1"
+  sed -i 's@^  gitdir="\$( git -C "\$start" rev-parse --path-format=absolute --git-common-dir 2>/dev/null )" || return 0$@  printf "%s" "$( dirname "$( git -C "$start" rev-parse --path-format=absolute --git-common-dir 2>/dev/null )" )"; return 0@' "$1"
 }
 
-# The guard that keeps the ENVIRONMENT from answering "which repo is this" goes away, and the repo
-# identity becomes whatever $CDPATH says: `--git-common-dir` is relative at a checkout root (`.git`)
-# and bash searches CDPATH for that operand, so a single dotfiles checkout in the path collapses
-# every repository on the machine into one identity — writer and readers agreeing, `other_repo: 0`,
-# nothing said. `/g` on purpose: the two `cd`s are ONE guard, and sabotaging half of it would leave
-# the pair in check-autonomy.sh measuring the half that still works.
+# The ENVIRONMENT gets to answer "which repo is this" again. This mutant puts back the exact
+# spelling `ledger_repo_root` carried before the `--path-format=absolute` rewrite, minus the
+# `CDPATH=''` guards: a RELATIVE common dir (`.git` at a checkout root) fed to a bare `cd`, which
+# bash resolves through $CDPATH and whose find it echoes into the capture. A dotfiles checkout in
+# the path collapses every repository on the machine into one identity — writer and readers
+# agreeing, `other_repo: 0`, nothing said — and `CDPATH=.` alone puts a second LINE in the field.
+#
+# ⚠️ It is deliberately NOT a sabotage that fails with a clean environment. With $CDPATH unset this
+# mutant behaves EXACTLY like the healthy function, in every repo shape, which is the point: the
+# only thing that can catch it is the poisoned-CDPATH differential pair in check-autonomy.sh, and
+# the pair carries its own floor proving the poison is armed. A mutant that any assertion could
+# catch would prove nothing about the two that were written for this.
 mut_LEDGER_repo_root_cdpath_leak() {
-  sed -i "s@CDPATH='' cd@cd@g" "$1"
+  sed -i 's@^  gitdir="\$( git -C "\$start" rev-parse --path-format=absolute --git-common-dir 2>/dev/null )" || return 0$@  local rel; rel="$( git -C "$start" rev-parse --git-common-dir 2>/dev/null )"; gitdir="$( cd "$start" \&\& cd "$rel" \&\& pwd -P 2>/dev/null )" || return 0@' "$1"
 }
 
 # The bare test goes back to asking about the ENTRY POINT instead of the repository, and one
@@ -640,8 +648,11 @@ mut_AUTONOMY_all_repos_ignored() {
 # really share it. Reverting only the writer (or only the reader) would leave the two sides
 # agreeing on the OLD identity — the differential pair reads 3-own/0-foreign either way, and the
 # mutant would survive while measuring nothing.
+#
+# Re-anchored with the `--path-format=absolute` rewrite: it used to replace the `common=` line,
+# which that rewrite deleted.
 mut_LEDGER_repo_root_toplevel() {
-  sed -i 's@^  common="\$( git -C "\$start" rev-parse --git-common-dir 2>/dev/null )" || return 0$@  printf "%s" "$( git -C "$start" rev-parse --show-toplevel 2>/dev/null )"; return 0@' "$1"
+  sed -i 's@^  gitdir="\$( git -C "\$start" rev-parse --path-format=absolute --git-common-dir 2>/dev/null )" || return 0$@  printf "%s" "$( git -C "$start" rev-parse --show-toplevel 2>/dev/null )"; return 0@' "$1"
 }
 
 # Not a gate: the preflight goes back to asking whether the agent copy EXISTS, which is what it did

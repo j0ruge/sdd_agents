@@ -356,15 +356,6 @@ Achados sobre **repos-alvo** vão para o `TODO.md` daquele repo. Este arquivo é
   `check-templates.sh` mede, então vem depois da entrada acima. — descoberto por `humano` na
   missão `20260815-i13.5-kit-em-ingles` (2026-08-15)
 
-- [ ] **A identidade do ledger resolve caminho com dois `cd`, e cada camada custou uma rodada de
-  review** — `bin/sdd:894` (`ledger_repo_root`) — a sequência foi `--show-toplevel` (errava
-  worktree) → `--git-common-dir` (submódulo colapsava) → `cd` para o pai (bare devolvia o pai) →
-  `CDPATH` (tudo colapsava, CRITICAL). O git resolve sozinho: `rev-parse --path-format=absolute
-  --git-common-dir` (2.31+, aqui é 2.43) dispensa os dois `cd`, o `pwd -P` e a guarda de CDPATH.
-  Não é conserto — o código de hoje está correto e medido; é remover a classe inteira. Direção:
-  trocar e reancorar os dois mutantes.
-  — descoberto por `humano` na missão `20260817-eixo-do-juiz` (2026-08-17)
-
 - [ ] **Duas das três comparações de `health_provenance` não têm fixture nem mutação** —
   `bin/sdd:1829` (qa-execution) e `:1850` (a tabela de notas do codereview) — só a de `qa-report`
   tem template instalado pelo fixture de `tests/check-health.sh`, então as outras duas ficam
@@ -373,13 +364,13 @@ Achados sobre **repos-alvo** vão para o `TODO.md` daquele repo. Este arquivo é
   Direção: um par match/divergência para cada, como a asserção 4 já faz.
   — descoberto por `sdd-reviewer` na missão `20260817-catraca-do-backlog` (2026-08-17)
 
-- [ ] **Os 14 `ROOT="$(cd …)"` de `tests/` não levam `CDPATH=''`** — `tests/check-health.sh:61` e
-  os 13 irmãos — o operando é relativo (`tests/..`), então com `CDPATH` setado o `cd` resolve pelo
-  path de busca **e imprime o destino na stdout**: `ROOT` vira o diretório errado, duplicado em
-  duas linhas. Reproduzido. É a mesma família da CRITICAL que `ledger_repo_root` pagou, consertada
-  só lá. Exposto na invocação manual; via `run-all.sh` o caminho é absoluto. Direção: `CDPATH=''`
-  nos 14, de uma vez, com probe no `check-pipefail.sh` (que já varre a mesma superfície).
-  — descoberto por `sdd-reviewer` na missão `20260817-catraca-do-backlog` (2026-08-17)
+- [ ] **A regra `cdpath:` certifica como limpo o `cd` de operando VARIÁVEL** —
+  `tests/check-pipefail.sh:131` (o comentário do `CD_RE` declara o limite) — a regra só mede
+  operando que é substituição de comando, porque `cd "$FIX"` é indecidível no scanner e os ~150
+  sítios de `tests/` têm variável absoluta. Só que a única instância histórica da classe era
+  exatamente essa forma (`cd "$common"` do `ledger_repo_root`, uma CRITICAL), então a forma que
+  mais custou é a que o sensor não vê. Direção: medir em runtime, não por linha.
+  — descoberto por `sdd-executor` na missão `20260818-lote-facil` (2026-08-18)
 
 ### Saída humana e cosmética
 

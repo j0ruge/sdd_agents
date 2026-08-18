@@ -61,7 +61,7 @@
 
 set -uo pipefail
 
-ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
+ROOT="$(CDPATH='' cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 # `|| exit 90` and not a bare assignment: with mktemp failed, WORK is EMPTY and FIX becomes the
 # absolute path `/kit` — a non-empty string, so the `${FIX:?}` guard in reset_home() below is
 # satisfied and `rm -rf /kit/home` runs for real on any machine where / is writable. The guard

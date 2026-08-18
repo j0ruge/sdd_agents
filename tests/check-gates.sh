@@ -11,7 +11,7 @@
 
 set -uo pipefail
 
-ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
+ROOT="$(CDPATH='' cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 SDD="$ROOT/bin/sdd"
 FIX="$(mktemp -d "${TMPDIR:-/tmp}/sdd-gates-XXXXXX")"
 MISSION="20260101-fixture"

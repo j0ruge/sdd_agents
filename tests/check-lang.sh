@@ -16,7 +16,7 @@
 
 set -uo pipefail
 
-ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
+ROOT="$(CDPATH='' cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 ALLOWLIST="$ROOT/tests/lang-allowlist.txt"
 WORK="$(mktemp -d "${TMPDIR:-/tmp}/sdd-lang-XXXXXX")"
 trap 'rm -rf "$WORK"' EXIT

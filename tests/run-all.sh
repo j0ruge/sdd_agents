@@ -14,7 +14,7 @@ SDD_TEST_STATE="$(mktemp -d "${TMPDIR:-/tmp}/sdd-suite-state-XXXXXX")"
 export SDD_STATE_DIR="$SDD_TEST_STATE"
 trap 'rm -rf "$SDD_TEST_STATE"' EXIT
 
-ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
+ROOT="$(CDPATH='' cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 fails=0
 
 run() { # run <name> <command...>

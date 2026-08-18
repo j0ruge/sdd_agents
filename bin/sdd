@@ -34,15 +34,24 @@ fi
 
 # ---------------------------------------------------------------------------
 # SDD_HOME resolution (survives being called through a symlink in ~/.local/bin)
+#
+# ⚠️ `CDPATH=''` on both `cd`s, and it is load-bearing here for the same reason it is in
+# ledger_repo_root. `dirname` of a relative invocation (`./bin/sdd`, `bin/sdd`, a relative symlink
+# target) is RELATIVE, and bash searches $CDPATH for any operand that does not begin with `/`, `.`
+# or `..` — printing the directory it found on stdout, straight into this capture. Both failures
+# land on SDD_HOME, which is `readonly` one line below and from which every template, agent and
+# starter config is read: the wrong directory silently, or a two-line value that is not a path at
+# all. Reachable from an env var on a machine whose $CDPATH names any directory holding a `bin`.
+# The sensor is rule 2 of tests/check-pipefail.sh.
 # ---------------------------------------------------------------------------
 _resolve_self() {
   local src="${BASH_SOURCE[0]}" dir
   while [ -L "$src" ]; do
-    dir="$(cd -P "$(dirname "$src")" && pwd)"
+    dir="$(CDPATH='' cd -P "$(dirname "$src")" && pwd)"
     src="$(readlink "$src")"
     if [[ $src != /* ]]; then src="$dir/$src"; fi
   done
-  cd -P "$(dirname "$src")/.." && pwd
+  CDPATH='' cd -P "$(dirname "$src")/.." && pwd
 }
 SDD_HOME="$(_resolve_self)"
 readonly SDD_HOME
@@ -884,17 +893,24 @@ autonomy_log_path() { printf '%s/autonomy-log.jsonl' "${SDD_STATE_DIR:-$HOME/.sd
 # WORKTREE: a mission run from `git worktree add` stamped a path the main checkout had never seen,
 # and every reader outside that worktree counted the rows as `other_repo` — the series went empty
 # in the isolation workflow this kit itself recommends. `--git-common-dir` is the same path from
-# every worktree of one repo; it comes back RELATIVE at the root of a checkout (`.git`) and inside
-# a subdirectory (`../.git`), absolute only from a linked worktree, so it is resolved from $start
-# and normalized with `pwd -P` — the three shapes have to end at one string or the comparison the
-# readers do (verbatim, no normalization on either side) is back to answering per worktree.
+# every worktree of one repo, and the three shapes it comes back in have to end at ONE string or
+# the comparison the readers do (verbatim, no normalization on either side) is back to answering
+# per worktree: RELATIVE at the root of a checkout (`.git`), relative in a subdirectory
+# (`../.git`), absolute only from a linked worktree.
+#
+# `--path-format=absolute` (git 2.31+) is what collapses the three, and it replaced a hand-rolled
+# `cd "$start" && cd "$common" && pwd -P` that needed a `CDPATH=''` guard on each `cd` to keep the
+# ENVIRONMENT from answering "which repo is this". Asking git for the absolute path removes the
+# class instead of guarding it: no cd, no pwd -P, no guard, nothing for a $CDPATH to redirect.
+# Measured equal to the old spelling in all four shapes that matter — checkout root, subdirectory,
+# bare repo, linked worktree — and through a symlinked path, where git resolves the link exactly as
+# `pwd -P` did. The sensor is the differential pair in tests/check-autonomy.sh, which still runs a
+# poisoned CDPATH at the runner and still demands two repos stay two, on one line each.
 #
 # ⚠️ Rows written BEFORE this carry the old per-worktree path and keep landing in `other_repo`.
 # That is history, not a bug: the ledger is append-only and is never migrated.
 ledger_repo_root() {
-  local start="${REPO_ROOT:-$PWD}" common gitdir
-  common="$( git -C "$start" rev-parse --git-common-dir 2>/dev/null )" || return 0
-  [ -n "$common" ] || return 0
+  local start="${REPO_ROOT:-$PWD}" gitdir
   # The identity IS the common dir, never its parent. `cd "$common/.."` was the first spelling and
   # it collapsed two repositories into one string in two shapes, both silently — `other_repo: 0`,
   # nothing excluded, nothing said, which is the very contamination the filter above exists to
@@ -903,15 +919,7 @@ ledger_repo_root() {
   # parent is the directory that merely contains the repo, shared by every bare repo beside it.
   # `--show-toplevel` got both of those right and only worktrees wrong. The common dir gets all
   # three right, because it is the identity git itself keeps per repository.
-  # ⚠️ `CDPATH=` on the cd, and it is load-bearing. `$common` is RELATIVE at a repo root (`.git`),
-  # and bash searches CDPATH for any operand not starting with `/` — printing the resolved directory
-  # to STDOUT when it finds one there, straight into this command substitution. With
-  # `CDPATH=$HOME` where $HOME is itself a checkout (dotfiles), every repo on the machine collapsed
-  # into one identity, and writer and readers agreed on it: `other_repo: 0`, nothing excluded,
-  # nothing said — the exact silent contamination this function exists to prevent, reachable from an
-  # env var. `CDPATH=.` alone appended a second LINE to the answer, putting a newline into the
-  # ledger `repo` field. Emptying it for the duration of the cd is the whole fix.
-  gitdir="$( CDPATH='' cd "$start" && CDPATH='' cd "$common" && pwd -P 2>/dev/null )" || return 0
+  gitdir="$( git -C "$start" rev-parse --path-format=absolute --git-common-dir 2>/dev/null )" || return 0
   [ -n "$gitdir" ] || return 0
   # Cosmetic, and ONLY cosmetic: `/repo/.git` prints back as `/repo`, so the ledger and the header
   # keep naming the root a human recognizes instead of a path inside `.git`. Injective, therefore

@@ -90,8 +90,8 @@
 
 set -uo pipefail
 
-SELF_PATH="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)/$(basename "${BASH_SOURCE[0]}")"
-ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
+SELF_PATH="$(CDPATH='' cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)/$(basename "${BASH_SOURCE[0]}")"
+ROOT="$(CDPATH='' cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 
 # The anchor, written ONCE and read by three things: the cell rule, the two doc assertions, and
 # the probes. Written twice it would be the enum-in-three-places failure the house rule forbids —
