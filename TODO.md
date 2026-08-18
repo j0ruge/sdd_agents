@@ -534,9 +534,9 @@ Achados sobre **repos-alvo** vão para o `TODO.md` daquele repo. Este arquivo é
 
 - [ ] **O `.claude/napkin.md` é rastreado, cita números da suíte e nenhuma fase pode editá-lo** —
   `.claude/napkin.md:18` — o item 3 diz "~33s no default, mutação 30/30" e "alvo <30s estourado
-  por ~3s"; o real desta missão é 44,55 s, 38/38 e ~15 s. Runbook lido toda sessão que afirma um
-  ratchet vencido convida a aceitar score menor. A fase DOCS tentou consertar e o harness barrou
-  `.claude/` como arquivo sensível, então a drift só é corrigível por sessão com humano presente.
+  por ~3s"; o real de hoje é ~3m30s e **81/81**, com o alvo estourado em ~7×. Runbook lido toda
+  sessão que afirma uma catraca vencida convida a aceitar score menor. **Duas** fases DOCS já
+  tentaram consertar e o harness barrou `.claude/` como sensível nas duas — só sessão com humano.
   Direção: decidir se o napkin entra na superfície que o DOCS mantém ou sai do versionamento.
   — descoberto por `sdd-docs` na missão `20260816-runner-sem-dividas` (2026-08-16)
 

@@ -137,6 +137,15 @@ novo entra lá. Os treze de hoje: `check-templates.sh`, `check-gates.sh`, `check
 `run-all.sh` cobre `bin/sdd` **e** `tests/*.sh` — deixar a suíte fora do linter foi o que segurou
 dois SC2318 reais em `check-mutation.sh` por três missões.
 
+⚠️ **"Entra lá" são quatro lugares, não um — e o quarto arrasta um quinto.** Medido ao acrescentar
+o `check-health.sh`: a linha `run` do `tests/run-all.sh`, o `LINT_FLOOR` do mesmo arquivo, o piso
+de superfície do `tests/check-pipefail.sh` e o do `tests/check-lang.sh`. Os três pisos existem
+contra vacuidade — glob que para de casar deixa o laço sem nada para ler e o sensor reporta "0
+violações" —, então piso que ficou para trás continua **passando** enquanto descreve uma superfície
+menor do que a que lê. O quinto lugar é o **fixture do selftest** do `check-pipefail.sh`, construído
+exatamente no piso: deixá-lo um curto fez três probes falharem com `surface shrank` em vez de
+medirem o que nomeiam.
+
 **Sensor que o catálogo de mutação não alcança carrega um auto-teste.** São duas situações, e
 hoje há quatro sensores nelas. `check-lang.sh` e `check-pipefail.sh` não podem se escanear (o
 dicionário de um É português; as probes do outro TÊM de conter o que ele detecta). `check-todo.sh`
