@@ -78,6 +78,15 @@ exception, never a silent one** (kaizen K3). Values: any alias `claude --model` 
 When `JIRA_ENABLED=true`, `00-missao.md` **must** have `versao:` filled in — the version label is a
 human decision, never headless. The PLAN-AUTO gate (criterion `e`) checks this.
 
+### Not a config key: context compaction
+
+There is no key for `--autocompact`, because the runner never passes it. One session per phase
+already keeps the heaviest window at **289k tokens with zero compactions** (measured across the 6
+sessions of the SQ-97 pilot on `claude-opus-5`; see
+[`../docs/pipeline.md`](../docs/pipeline.md)), so the lever has never been needed. It is written
+down here so that whoever first hits a crowded window adds the key on a **measurement** against
+that baseline, instead of adding one on faith.
+
 ### Not a config key: `SDD_STATE_DIR`
 
 The autonomy ledger is **global**, not per-repo: `${SDD_STATE_DIR:-$HOME/.sdd}/autonomy-log.jsonl`.

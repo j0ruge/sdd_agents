@@ -39,14 +39,6 @@ Achados sobre **repos-alvo** vão para o `TODO.md` daquele repo. Este arquivo é
 
 ### Sensores que faltam
 
-- [ ] **A rubrica do auto-teste no `CLAUDE.md` conta cinco sensores e o `grep` devolve seis** —
-  `CLAUDE.md:163` — a linha manda conferir por `grep -l selftest tests/` e declara o resultado
-  esperado; medido na `main` e no HEAD, os dois devolvem **6**, porque o `jobs_selftest()` do
-  escalonador (`tests/check-mutation.sh:63`, entrou em `52414e4`) casa o grep sem ser auto-teste de
-  regra. Número escrito à mão em rubrica é a mesma classe do `44 caught of 44` que esta missão já
-  tirou de lá. Direção: contar a propriedade (`grep -l '^selftest()' `) ou citar os nomes.
-  — descoberto por `sdd-docs` na missão `20260816-portas-do-humano` (2026-08-17)
-
 - [ ] **Fase que morre com a árvore suja faz o runner rederivar EXEC para sempre** —
   `bin/sdd:426` — `gate_EXEC` roda o `TEST_CMD` sobre o working tree, então o vermelho de QUALQUER
   fase em voo é lido como vermelho do EXEC. Medido nesta missão: a REVIEW morreu antes de commitar,
@@ -217,13 +209,6 @@ Achados sobre **repos-alvo** vão para o `TODO.md` daquele repo. Este arquivo é
   para "não toca nos artefatos da missão" ou exercitar também num fixture que chegue ao REVIEW.
   — descoberto por `sdd-qa` na missão `20260814-dry-run-completo` (2026-08-14)
 
-- [ ] **A regra da âncora é satisfeita por código inline no título** — `tests/check-todo.sh` (regra
-  3) — ela pede crase não-vazia antes do último ` — `, e o título entra nesse trecho: medido, **45
-  dos 46 itens passariam com o `file:line` apagado**. Apertar exige teste de forma que os dados
-  reais não sustentam (`git worktree` e `KAIZEN_LOG` são âncoras legítimas). Não esconde achado
-  fechado — para isso servem a regra 2 e a lista-branca. — descoberto por `revisao-adversarial`
-  na 8ª rodada de revisão do sensor (2026-08-16)
-
 - [ ] **A regra da cauda quebra com travessão dentro das crases de atribuição** —
   `tests/check-todo.sh` (`last_sep`) — o corte é no último ` — ` e não conhece code span, então
   `— por \`x\` na missão \`a — b\` (data)` reporta "the last field names no `<agent>`" num item
@@ -268,13 +253,6 @@ Achados sobre **repos-alvo** vão para o `TODO.md` daquele repo. Este arquivo é
   existe para cobrir segue sem sensor. Direção: stub que emita `{"other_field": 1}` afirmando
   `cost_usd == null` no ledger. — descoberto por `sdd-reviewer` na missão
   `20260815-i13.1-autonomy-log` (2026-08-15)
-
-- [ ] **O corte UTF-8 de `${var:0:200}` não tem asserção** — `bin/sdd:756,777` — a guarda natural
-  seria uma mutação restaurando `head -c 200` (corte por byte), mas alcançar um `gate_why` longo
-  e multibyte pelo caminho real exige fixture com ID de incremento gigante, e no jq 1.7 o byte
-  inválido vira U+FFFD e sobrevive: o risco degrada em vez de quebrar alto. Pode não valer o
-  custo do fixture. — descoberto por `sdd-reviewer` na missão `20260815-i13.1-autonomy-log`
-  (2026-08-15)
 
 - [ ] **A asserção "the retry carries its own moved" não falha pela propriedade que promete** —
   `tests/check-autonomy.sh:208` — no fixture, `moved` sai `false` com qualquer baseline: o retry
@@ -442,38 +420,7 @@ Achados sobre **repos-alvo** vão para o `TODO.md` daquele repo. Este arquivo é
   porque nada mais a esconde. Direção: juntar as não-vazias num array e emitir um `\n` só na frente.
   — descoberto por `sdd-executor` na missão `20260817-catraca-do-backlog` (2026-08-17)
 
-- [ ] **O `def usd` erra o dólar inteiro com entrada negativa** — `bin/sdd:2516` — `round` arredonda
-  ao mais próximo e `floor` desce para −∞, então o par não fecha: `-1.5` sai `-2.50` e `-0.005` sai
-  `-1.99`. Nenhum escritor do ledger produz `cost_usd` negativo, então hoje é inalcançável — o custo
-  é uma linha ilegível se uma linha for editada à mão. Mesma função perde um centavo em `1.005`
-  (`100.49999…` em ponto flutuante). Direção: decidir se vale guarda para mundo que o escritor não
-  produz; se valer, `fabs` mais o sinal de volta, com fixture que só um teste consegue montar.
-  — descoberto por `sdd-reviewer` na missão `20260817-catraca-do-backlog` (2026-08-17)
-
 ### Comentário e registro
-
-- [ ] **O `.claude/napkin.md` é rastreado, cita números da suíte e nenhuma fase pode editá-lo** —
-  `.claude/napkin.md:18` — o item 3 diz "~33s no default, mutação 30/30" e "alvo <30s estourado
-  por ~3s"; o real de hoje é ~3m30s e **81/81**, com o alvo estourado em ~7×. Runbook lido toda
-  sessão que afirma uma catraca vencida convida a aceitar score menor. **Duas** fases DOCS já
-  tentaram consertar e o harness barrou `.claude/` como sensível nas duas — só sessão com humano.
-  Direção: decidir se o napkin entra na superfície que o DOCS mantém ou sai do versionamento.
-  — descoberto por `sdd-docs` na missão `20260816-runner-sem-dividas` (2026-08-16)
-
-- [ ] **A regra manda sincronizar `.claude/agents/` e não diz como; `cp` e Edit são barrados** —
-  `CLAUDE.md` (seção "Ao mexer nos agentes") — o harness trata `.claude/` como caminho sensível,
-  então a sessão headless leva negativa nas duas ferramentas e a fase parece travada com o
-  preflight vermelho em `agent stale`. Quem resolve é `sdd install --force`, citado só na
-  mensagem de falha do preflight. Direção: dizer isso na regra. — descoberto por `sdd-executor`
-  na missão `20260817-eixo-do-juiz` (2026-08-17)
-
-- [ ] **O `KAIZEN_LOG.md` não fixa o instrumento das próprias linhas, e uma delas já mentiu** —
-  `KAIZEN_LOG.md:261` — a entrada de `20260816-portas-do-humano` registrou "asserções `ok`: 490" para
-  um `main` que mede **435** pela âncora de 4 espaços; `490` é a contagem solta `^  ok`, que soma 55
-  linhas de 3 espaços impressas pelo runner dentro dos fixtures. O tree é o mesmo
-  (`git diff c821ade..96a9bf1 -- tests/ bin/sdd` vazio), então a série 408 → 457 → 490 do arquivo tem
-  degrau fantasma. Direção: nomear o comando ao lado do número, como a linha do `score:` já faz.
-  — descoberto por `sdd-docs` na missão `20260817-eixo-do-juiz` (2026-08-17)
 
 - [ ] **O `kaizen_axis_note` promete não repetir o piso e o repete duas linhas abaixo** —
   `bin/sdd:2924` vs `:2928` — o comentário diz "no count in the sentence on purpose: writing '3'
@@ -482,28 +429,6 @@ Achados sobre **repos-alvo** vão para o `TODO.md` daquele repo. Este arquivo é
   drifta calada no dia em que o piso mudar, e é a **única** das seis vozes do schema que o humano lê
   em voz alta. Direção: interpolar o `guard_floor` da série, ou tirar o número da frase.
   — descoberto por `sdd-docs` na missão `20260817-eixo-do-juiz` (2026-08-17)
-
-- [ ] **O que arma a corrida do Jidoka é a POSIÇÃO da linha `blocked`, não o tamanho do
-  checkpoint** — `tests/check-gates.sh:229-232` — a grandeza real é quantos bytes sobram para o
-  `printf` escrever **depois** do casamento do `grep`: com a linha no fim de um checkpoint de
-  1,1 MB o runner pré-conserto parava certo; no começo, queimou 2 sessões. Hoje quem segura é o
-  mutante `RUN_jidoka_pipefail`, então não há defeito vivo — é comentário impreciso sobre uma
-  invariante não escrita. Direção: dizer "linhas DEPOIS da `blocked`". — descoberto por `sdd-qa`
-  na missão `20260815-ledger-sem-ponto-cego` (2026-08-16)
-
-- [ ] **`after2` passou a ser amostrado antes do gate do retry, sem registro da decisão** —
-  `bin/sdd:1533-1537` — antes o `after` do retry era lido depois de avaliar o gate; agora é
-  antes. Benigno e talvez mais honesto (`state_fingerprint` lê HEAD, listagem e md5 do
-  checkpoint, e nenhum gate toca nos três), mas é mudança de comportamento em caminho raro que
-  ninguém decidiu nem documentou. — descoberto por `/codereview` na missão
-  `20260815-i13.1-autonomy-log` (2026-08-15)
-
-- [ ] **Contexto não é gargalo hoje, e isso deveria estar escrito** — `docs/pipeline.md`,
-  `config/schema.md` — medidas as 6 sessões do SQ-97: picos de 184k a **289k tokens**, **zero
-  compactações** (`claude-opus-5`). O anti-estouro funciona por construção — sessão por fase
-  mantém a mais pesada em 289k em vez de somar ~1,4M —, mas nunca foi medido nem documentado,
-  então é fé e não evidência. Registrar os números e que `--autocompact` é alavanca disponível e
-  hoje não usada. — descoberto por `humano` no piloto SQ-97 (2026-08-14)
 
 ### Idioma
 

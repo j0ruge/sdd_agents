@@ -323,6 +323,21 @@ handoffs. If it moved back into the committed tree it would dirty `git status` �
 fails `gate_REVIEW` and `sdd preflight`. `--max-budget-usd` per session is a damage cap, not a
 budget.
 
+### Context is not the bottleneck — measured, not assumed
+
+One session per phase is also what keeps the context window off the critical path, and until the
+SQ-97 pilot that was an article of faith rather than a number. Measured across its 6 sessions, on
+`claude-opus-5`: peaks of **184k to 289k tokens**, and **zero compactions**.
+
+The structure is what buys it. Because the phases are separate sessions, the heaviest one carries
+289k instead of the ~1.4M a single session would have accumulated by the end. Nothing is trimming
+anything — there is simply never enough context in one session to need trimming.
+
+So `--autocompact` is a lever that exists and is **deliberately not used**: the runner never passes
+it. If some future phase does start crowding its window, that is the knob to reach for, and the
+numbers above are the baseline it has to be compared against. Reach for it on a measurement, never
+on a hunch — the whole point of writing this down is that the next person does not have to guess.
+
 ## The autonomy ledger
 
 Two records, different jobs. `.sdd/logs/<mission>/pipeline.log` is the **journal of one mission**,

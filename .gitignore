@@ -4,6 +4,11 @@
 
 # Configuração local de máquina
 .claude/settings.local.json
+# O napkin é runbook LOCAL, por máquina — não contrato do repo. Versionado, ele citava números da
+# suíte que venciam (~33s / mutação 30/30 contra ~3m30s / 81/81) e nenhuma fase podia consertá-lo:
+# o harness barra `.claude/` como caminho sensível, e duas fases DOCS queimaram sessão tentando.
+# Os espelhos `.claude/agents/*.md` continuam versionados de propósito — o preflight os confere.
+.claude/napkin.md
 .env
 .env.*
 !.env.example
