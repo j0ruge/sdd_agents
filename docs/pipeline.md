@@ -484,7 +484,9 @@ The judge is split in two (ADR 0001):
 the repo it runs in — the file is global, the reading is not, see above: `latest` and `previous`
 kit versions (by
 **file order** of first appearance, never by sort — and a reappearing old sha rejoins its old
-group), each with missions, `missions_with_session` (the subset that bought an observation — the
+group; `sdd autonomy` orders its version table off the **same population**, every `on_axis` row
+and not just the sessions, because two readers disagreeing about which version is newest over one
+file is a defect and not a view), each with missions, `missions_with_session` (the subset that bought an observation — the
 guard below counts these, not the raw mission tally), sessions, `moved_rate`, cost, escalations
 by kind, a per repo×mission×phase `detail` (each entry naming its `repo`), and a label per group:
 

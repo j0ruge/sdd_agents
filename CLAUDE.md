@@ -104,6 +104,13 @@ templates. Se a solução pede infraestrutura, provavelmente é a solução erra
   cego — e a única missão em que o runner baixou a própria régua passou a ler `ok` para o juiz.
   Hoje cada programa define `is_escalation` uma vez. Evento novo entra pela definição, nunca por
   um `or` acrescentado a um `select`.
+  ⚠️ **Comentário que afirma paridade entre dois programas não é paridade.** Segunda instância da
+  classe, medida na r1 de `20260817-catraca-do-backlog`: o `$order` do `cmd_autonomy` lia "qual é
+  a versão mais recente" sobre `is_session and comparable`, o `kaizen_series` lê sobre **toda**
+  linha `on_axis`, e o comentário entre os dois jurava *"same spelling on purpose, in both
+  programs"*. Com uma escalada como primeira linha de uma versão, as duas janelas respondiam
+  diferente sobre o MESMO arquivo. Quem prova paridade é asserção **diferencial** — as duas saídas
+  comparadas entre si —, nunca a frase.
 
 ## Ao mexer nos agentes (`agents/*.md`)
 
