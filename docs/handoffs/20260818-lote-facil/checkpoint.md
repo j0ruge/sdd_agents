@@ -1,6 +1,6 @@
 ---
 missao: 20260818-lote-facil
-atualizado: 2026-08-18 08:09
+atualizado: 2026-08-18 20:05
 ---
 
 # Checkpoint — O `sdd health` para de morrer calado, e 18 achados baratos saem do backlog
@@ -20,7 +20,7 @@ atualizado: 2026-08-18 08:09
 
 | ID | Incremento | Check (comando → esperado) | Status | Commit |
 |---|---|---|---|---|
-| I1 | A família do aborto calado — 4 sítios do `cmd_health` | `o=$(bash tests/check-health.sh 2>&1); grep -c '^  ok    abort: ' <<< "$o"` → `4` | pending | — |
+| I1 | A família do aborto calado — 4 sítios do `cmd_health` | `o=$(bash tests/check-health.sh 2>&1); grep -c '^  ok    abort: ' <<< "$o"` → `4` | done | 4f11624 |
 | I2 | A família do `cd` relativo — 14 em `tests/` mais o `ledger_repo_root` | `o=$(bash tests/run-all.sh 2>&1); grep -c '^  ok    cdpath: ' <<< "$o"` → `3` | pending | — |
 | I3 | Saída humana do runner — 3 números que contam a grandeza errada | `o=$(bash tests/check-autonomy.sh 2>&1); grep -c '^  ok    output: ' <<< "$o"` → `9` | pending | — |
 | I4 | Cinco caminhos sem asserção ganham asserção e mutação | `o=$(bash tests/run-all.sh 2>&1); grep -c '^  ok    covered: ' <<< "$o"` → `5` | pending | — |
@@ -53,6 +53,35 @@ atualizado: 2026-08-18 08:09
 - 2026-08-18 08:09 · `planejamento` · O `check-autonomy.sh` é vermelho intermitente de causa
   desconhecida (não reproduziu em 152 runs). Se aparecer: registrar aqui e seguir. **Não**
   investigar — decisão 6 do `00-missao.md`.
+- 2026-08-18 · `I1` · **A família tinha CINCO sítios, não quatro** — o quinto apareceu na sonda de
+  re-derivação, antes de escrever asserção: `health_ratchet` terminava numa cadeia
+  `[ … ] && [ … ] && ok …`, que devolve o status do primeiro teste que falha. Catraca que ACHOU
+  algo devolvia 1 e o `set -e` matava o `cmd_health` uma linha antes do próprio veredito — o
+  achado saía impresso e o `N check(s) failed` nunca. Bate no caminho que **funciona**, e as 7
+  asserções que já existiam não notaram porque liam só `rc != 0`, que o `return 1` do fim do
+  `cmd_health` também produz.
+- 2026-08-18 · `I1` · **Decisão: o quinto sítio entrou no incremento, não no `TODO.md`.** A quarta
+  asserção (`baseline sem linha viva`) é a única sem check posterior para exigir — a catraca É o
+  último —, então a metade "e o run segue" dela só pode ser o veredito final. Sem consertar o
+  `health_ratchet` a asserção ficaria em `rc != 0` + frase, que as Notas do planejamento já
+  declaram insuficiente. Mesmo mecanismo, mesmo comando, mesma sessão: consertar era o mínimo para
+  o Check do próprio incremento ser honesto. Ganhou entrada própria no catálogo
+  (`mut_HEALTH_ratchet_eats_verdict`), então são **5** mutações novas e não 4.
+- 2026-08-18 · `I1` · Cada mutação nova foi verificada **individualmente** antes da suíte cheia:
+  aplica (o `cmp -s` do harness não a rejeita), continua bash válido, e é pega pela asserção
+  escrita para ela — uma a uma, sem cruzar. A quinta precisou de duas substituições, porque tirar
+  o `if` sem tirar o `fi` deixa o mutante inválido (rc 91 é falha de harness, não captura), e um
+  `true` no lugar do `fi` fixaria o retorno em 0 e desfaria o próprio defeito.
+- 2026-08-18 · `I1` · **`TODO.md` 56 → 54**, com `todo-findings 54` na baseline no mesmo commit:
+  saíram os 3 itens da família (os que apontavam `:1588`, `:1854`/`:1882` e `:1721`) e entrou 1
+  achado novo — o ciclo de vida do `RESOLVIDO por` (cabeçalho do `TODO.md`, linha 16) e a catraca
+  do backlog não cabem juntos, porque `check-todo.sh` conta `- [ ]` e não conhece o marcador, de
+  modo que `todo-findings` não pode descer na missão que consertou. Seguido o precedente de uma
+  missão atrás (`6136d39`, PR #11): apagar na hora. Isso muda a aritmética do alvo 38 do
+  `00-missao.md` para 38 + achados novos, exatamente como a tabela de riscos do plano previu.
+- 2026-08-18 · `I1` · Evidência do gate: `tests/run-all.sh` → `suite green`, rc 0, com
+  `score: 86 caught, 0 known gap(s), of 86` (era 81) e `54 finding(s)`. `./bin/sdd health` →
+  `kit healthy`, rc 0. O Check do incremento: `4`, medido `0` contra o HEAD antes do conserto.
 
 ## Incrementos de fix (QA)
 
