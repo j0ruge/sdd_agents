@@ -28,7 +28,10 @@
 #      failure. Without it the contract could rot on the check-todo.sh side and cmd_health would
 #      go blind in silence — the failure mode the `score:` check above was already written
 #      against, and the one it still has (TODO.md: it dies of `set -e` before it can say so).
-#   8. the ratchet policy is written where the next mission meets it — CLAUDE.md and TODO.md. The
+#   8-11. the four silent aborts, prefixed `abort:` — cmd_health may not DIE where it was written
+#      to speak. Each demands the sentence of the right branch AND that a check after the site
+#      still appears; see the block header down the file for why the rc alone proves nothing.
+#   12. the ratchet policy is written where the next mission meets it — CLAUDE.md and TODO.md. The
 #      one rule here that no mut_HEALTH_* can reach, since none of them can make a document say
 #      less, so it carries probes of its own over all three of its layers.
 #
@@ -86,8 +89,10 @@ fail() { printf '  FAIL  %s\n         expected: %s\n         got:      %s\n' "$1
 # of check-mutation.sh does, and for the same reason.
 broken() { printf '  SENSOR-BROKEN  %s\n' "$1" >&2; exit 90; }
 
-# The ratchet-relevant lines of an output, flattened onto one line for a FAIL report.
-digest() { grep -E 'baseline|provenance|finding count|kit healthy|check\(s\) failed' <<< "$1" | tr '\n' ' '; }
+# The verdict-relevant lines of an output, flattened onto one line for a FAIL report. It carries
+# the suite/score/gates lines too, and not only the ratchet's: the `abort:` assertions are ABOUT
+# what the run stopped saying, so a digest that dropped those would report the silence as silence.
+digest() { grep -E 'suite (green|red)|blind|gates have a mutation|baseline|provenance|finding count|kit healthy|check\(s\) failed' <<< "$1" | tr '\n' ' '; }
 
 # ---------------------------------------------------------------------------
 # The fixture
@@ -133,21 +138,25 @@ build_fixture() {
   write_stub_suite with-count
 }
 
-# The stub suite. `$1` is `with-count` or `no-count`: assertion 7 needs a suite that prints
-# everything except the finding count, and it has to be the ONLY thing that changes between the
-# two worlds it compares — hence one writer with a switch, not two heredocs drifting apart.
-write_stub_suite() { # write_stub_suite <with-count|no-count>
-  local count_line=""
+# The stub suite. Three switches, all defaulting to the healthy world: assertion 7 needs a suite
+# that prints everything except the finding count, assertion 9 one that prints everything except
+# the score, and assertion 8 one that is simply RED. Each has to be the ONLY thing that changes
+# between the two worlds it compares — hence one writer with switches, not four heredocs drifting
+# apart. The defaults are what keeps the existing two calls reading as they did.
+write_stub_suite() { # write_stub_suite <with-count|no-count> [with-score|no-score] [exit code]
+  local count_line="" score_line="" rc="${3:-0}"
   [ "$1" = "with-count" ] \
     && count_line="printf '  ok    %d finding(s), all within 8 lines and carrying anchor + date\\n' $STUB_TODO_COUNT"
+  [ "${2:-with-score}" = "with-score" ] \
+    && score_line="printf '%s\\n' '$STUB_SCORE'"
 
   cat > "$FIX/tests/run-all.sh" <<EOF
 #!/usr/bin/env bash
 # Stub suite. See the RECURSION note in tests/check-health.sh: the real one runs that file, which
 # runs this command, which would run the real one.
-printf '%s\n' '$STUB_SCORE'
+$score_line
 $count_line
-exit 0
+exit $rc
 EOF
   chmod +x "$FIX/tests/run-all.sh"
 }
@@ -359,7 +368,117 @@ else
 fi
 
 # ---------------------------------------------------------------------------
-# 8 — the policy is written where the next mission walks into it
+# 8-11 — the four silent aborts: `set -e` may not eat the rest of the run
+#
+# cmd_health captures what it reads with `out="$(cmd)"` under the runner's own `set -euo pipefail`.
+# When cmd returns non-zero the script dies ON THE ASSIGNMENT, so the health_bad written on the
+# next line is dead code and every check after it never runs: the operator gets the header, rc 1,
+# and not one word about what went wrong. The command that exists to answer "does the kit still
+# measure what it claims to?" was mute in four worlds — and A RED SUITE, the very case it was
+# written to report, was one of them.
+#
+# EVERY ASSERTION HERE DEMANDS TWO HALVES, and the second is what makes it an assertion at all:
+# the sentence of the right branch is said, AND something after the site still appears. `rc != 0`
+# alone discriminates nothing, because health_bad also ends in rc 1 — an assertion reading only
+# the rc stays green with the abort fully in place. Measured, not feared: that is exactly what the
+# four probes of the planning session saw (rc 1 in all four, one line of output).
+#
+# The differential control is OUT_GREEN, the world of assertion 5: it must say none of it.
+# ---------------------------------------------------------------------------
+
+# Back to the world OUT_GREEN was read from, so each sabotage below is the ONLY thing standing
+# between the fixture and `kit healthy`.
+green_world() { write_stub_suite with-count; clear_skills; set_baseline "$CALIBRATED"; }
+
+# The last line cmd_health prints when it walked the whole way, and the strongest `after` there
+# is: reaching it means no check was skipped. Named once because three assertions read it — a
+# wording drift would otherwise make three assertions vacuous one at a time and unnoticed.
+VERDICT='check(s) failed'
+# A check that lives after the suite capture AND after the score read — the "and it carried on"
+# half of the two assertions whose site is at the top of cmd_health.
+LATER='all 8 gates have a mutation'
+
+green_world
+write_stub_suite with-count with-score 1
+health_run
+OUT_SUITE_RED="$HEALTH_OUT"; RC_SUITE_RED="$HEALTH_RC"
+
+if [ "$RC_SUITE_RED" -ne 0 ] \
+   && grep -qF 'suite red' <<< "$OUT_SUITE_RED" \
+   && grep -qF "$LATER" <<< "$OUT_SUITE_RED" \
+   && grep -qF "$VERDICT" <<< "$OUT_SUITE_RED" \
+   && ! grep -qF 'suite red' <<< "$OUT_GREEN"; then
+  pass "abort: a red suite is said out loud and the run carries on"
+else
+  fail "abort: a red suite is said out loud and the run carries on" \
+       "rc != 0 and 'suite red' and '$LATER' and '$VERDICT', with the green world saying none of it" \
+       "rc $RC_SUITE_RED · $(digest "$OUT_SUITE_RED")"
+fi
+
+green_world
+write_stub_suite with-count no-score
+health_run
+OUT_NO_SCORE="$HEALTH_OUT"; RC_NO_SCORE="$HEALTH_RC"
+
+if [ "$RC_NO_SCORE" -ne 0 ] \
+   && grep -qF 'health went blind to the mutation' <<< "$OUT_NO_SCORE" \
+   && grep -qF "$LATER" <<< "$OUT_NO_SCORE" \
+   && grep -qF "$VERDICT" <<< "$OUT_NO_SCORE" \
+   && ! grep -qF 'went blind to the mutation' <<< "$OUT_GREEN"; then
+  pass "abort: a suite with no score line is said out loud and the run carries on"
+else
+  fail "abort: a suite with no score line is said out loud and the run carries on" \
+       "rc != 0 and 'health went blind to the mutation' and '$LATER' and '$VERDICT'" \
+       "rc $RC_NO_SCORE · $(digest "$OUT_NO_SCORE")"
+fi
+
+# The third site says nothing on its own — a machine with no plugins cache is not a defect, it is
+# a machine, and health_provenance SKIPS what is not installed. So this one is written as a pure
+# DIFFERENTIAL: the two worlds have to reach the SAME verdict, and the floor underneath (both
+# reach `kit healthy`, and the line compared is not empty) is what stops two identical silences
+# from satisfying it. Today they are not the same at all — the cacheless one dies inside `find`,
+# three ok lines and out, because `find` on a missing directory returns 1 under pipefail.
+green_world
+health_run
+OUT_CACHE="$HEALTH_OUT"; RC_CACHE="$HEALTH_RC"
+rm -rf "$FIX/home/.claude/plugins"
+health_run
+OUT_NO_CACHE="$HEALTH_OUT"; RC_NO_CACHE="$HEALTH_RC"
+PROV_WITH="$(grep 'provenance:' <<< "$OUT_CACHE")"
+PROV_WITHOUT="$(grep 'provenance:' <<< "$OUT_NO_CACHE")"
+
+if [ "$RC_CACHE" -eq 0 ] && [ "$RC_NO_CACHE" -eq 0 ] \
+   && grep -qF 'kit healthy' <<< "$OUT_NO_CACHE" \
+   && [ -n "$PROV_WITH" ] && [ "$PROV_WITH" = "$PROV_WITHOUT" ]; then
+  pass "abort: a machine with no plugins cache reads the same as one with an empty cache"
+else
+  fail "abort: a machine with no plugins cache reads the same as one with an empty cache" \
+       "both worlds rc 0 and 'kit healthy', and one same non-empty provenance line" \
+       "with cache: rc $RC_CACHE '$PROV_WITH' // without: rc $RC_NO_CACHE '$PROV_WITHOUT' · $(digest "$OUT_NO_CACHE")"
+fi
+
+# The fourth site is the ratchet's own first line, and the one with no later CHECK to point at —
+# the ratchet IS the last one. So the `after` half is the verdict itself, which is also why
+# health_ratchet may not return non-zero: a function that fails under `set -e` eats the verdict
+# just as thoroughly as an assignment does, and the operator loses the count of what failed.
+green_world
+set_baseline '# every line commented out, and not one live finding'
+health_run
+OUT_DEAD_BL="$HEALTH_OUT"; RC_DEAD_BL="$HEALTH_RC"
+
+if [ "$RC_DEAD_BL" -ne 0 ] \
+   && grep -qF 'finding outside the baseline' <<< "$OUT_DEAD_BL" \
+   && grep -qF "$VERDICT" <<< "$OUT_DEAD_BL" \
+   && ! grep -qF 'finding outside the baseline' <<< "$OUT_GREEN"; then
+  pass "abort: a baseline with no live line is said out loud and the run carries on"
+else
+  fail "abort: a baseline with no live line is said out loud and the run carries on" \
+       "rc != 0 and 'finding outside the baseline' and '$VERDICT', with the green world saying neither" \
+       "rc $RC_DEAD_BL · $(digest "$OUT_DEAD_BL")"
+fi
+
+# ---------------------------------------------------------------------------
+# 12 — the policy is written where the next mission walks into it
 #
 # The backlog ratchet is the one finding of cmd_health whose owner is not a TODO.md entry but the
 # FILE, so the only thing that can tell the next session what the number means is prose. Prose

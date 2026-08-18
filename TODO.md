@@ -85,13 +85,6 @@ Achados sobre **repos-alvo** vão para o `TODO.md` daquele repo. Este arquivo é
   missão sem plano. Direção: um sexto fixture só com `00-missao.md`, nomeado fora dos prefixos
   contados. — descoberto por `sdd-reviewer` na missão `20260816-portas-do-humano` (2026-08-16)
 
-- [ ] **`sdd health` morre mudo quando a suíte está vermelha — o caso que ele existe para relatar**
-  — `bin/sdd:1588` — `out="$( … run-all.sh )"; rc=$?` é atribuição de substituição de comando: sob
-  `set -e` a suíte vermelha mata o script ali, e o `health_bad "suite red (rc $rc)"` da linha
-  seguinte é código morto. Medido: 1 linha de saída e rc 1, sem dizer o que quebrou — os 4 checks
-  restantes nunca rodam. Direção: `if out="$(…)"; then` ou `|| rc=$?`, com fixture de suíte vermelha.
-  — descoberto por `sdd-executor` na missão `20260816-portas-do-humano` (2026-08-16)
-
 - [ ] **A linha `N kit agent(s) checked` não é observável por nenhum fixture** — `bin/sdd:1356` —
   ela só sai com `fails -eq 0`, e todo fixture offline reprova antes (o probe do `claude` e o
   `gh auth status`). O I3 provou o ramo de falha por diferencial, mas o ramo de sucesso — a frase
@@ -286,6 +279,13 @@ Achados sobre **repos-alvo** vão para o `TODO.md` daquele repo. Este arquivo é
 
 ### Contrato e configuração
 
+- [ ] **O ciclo de vida do `RESOLVIDO por` e a catraca do backlog não cabem juntos** —
+  `TODO.md:16` — o cabeçalho manda o item fechado ficar aqui, caixa desmarcada, até o PR mergear;
+  `tests/check-todo.sh` conta `- [ ]` e não conhece `RESOLVIDO por`, então `todo-findings` não pode
+  descer na missão que consertou. As duas últimas apagaram na hora (`6136d39`) e a convenção ficou
+  descrevendo outra prática. Direção: o sensor pular o corpo marcado, ou o cabeçalho adotar o
+  apagar-na-hora. — descoberto por `sdd-executor` na missão `20260818-lote-facil` (2026-08-18)
+
 - [ ] **O lembrete pós-pipeline manda o humano a um comando que não enxerga o que ele contou** —
   `bin/sdd:2757` (`kaizen_reminder`) vs `:2924` (`cmd_kaizen`) — o lembrete roda com
   `REPO_ROOT` = repo-ALVO e conta as missões dele; o juiz roda no repo do KIT e, com o filtro por
@@ -364,22 +364,6 @@ Achados sobre **repos-alvo** vão para o `TODO.md` daquele repo. Este arquivo é
   Não é conserto — o código de hoje está correto e medido; é remover a classe inteira. Direção:
   trocar e reancorar os dois mutantes.
   — descoberto por `humano` na missão `20260817-eixo-do-juiz` (2026-08-17)
-
-- [ ] **`sdd health` aborta calado no meio quando `~/.claude/plugins/cache` não existe** —
-  `bin/sdd:1854` — `find` em diretório ausente devolve 1 e, sob o `set -e` + `pipefail` do runner,
-  a atribuição mata o comando no meio da proveniência: rc 1, nenhuma palavra dita, e nem a catraca
-  nem o veredito final rodam. O irmão em `:1882` faz o mesmo quando a baseline não tem linha viva;
-  os dois foram achados pelo fixture hermético do sensor novo, que precisou modelar máquina com o
-  diretório. Direção: `|| true` nos dois, com asserção em `tests/check-health.sh`.
-  — descoberto por `sdd-executor` na missão `20260817-catraca-do-backlog` (2026-08-17)
-
-- [ ] **A checagem do `score:` do `sdd health` promete reprovar e morre calada** — `bin/sdd:1721` —
-  `score_line="$(grep -m1 …)"` devolve 1 quando a linha não existe e, sob `set -e`, mata o runner
-  na atribuição: o `health_bad "…went blind to the mutation"` seguinte é código morto e o
-  comentário acima dele afirma o contrário. Terceiro da família (`:1854` e `:1882`), e o mais caro,
-  porque é a checagem escrita para impedir cegueira. Provado por probe nesta sessão. Direção:
-  `|| true`, como o check 3 já faz, com asserção diferencial em `tests/check-health.sh`.
-  — descoberto por `sdd-executor` na missão `20260817-catraca-do-backlog` (2026-08-17)
 
 - [ ] **Duas das três comparações de `health_provenance` não têm fixture nem mutação** —
   `bin/sdd:1829` (qa-execution) e `:1850` (a tabela de notas do codereview) — só a de `qa-report`

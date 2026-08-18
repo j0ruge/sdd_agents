@@ -1705,7 +1705,15 @@ cmd_health() {
   step "sdd health — kit sensor at $kit"
 
   # --- 1. the suite, which already includes bash -n and the mutation --------
-  out="$( cd "$kit" && tests/run-all.sh 2>&1 )"; rc=$?
+  # `|| rc=$?` and not `; rc=$?`: this file runs under `set -e`, an assignment takes the exit
+  # status of its command substitution, and a RED SUITE is precisely a non-zero one — so the bare
+  # form died HERE, on the assignment, and the health_bad three lines down was dead code. The
+  # operator got the header, rc 1, and not one word about the suite. Measured against the real
+  # runner, four sites of this same family (this one, the score read, the provenance `find` and
+  # the ratchet's baseline read); the whole point of `sdd health` is to SAY what is wrong, and the
+  # red suite is the case it exists for. Guarded by the `abort:` assertions of check-health.sh.
+  rc=0
+  out="$( cd "$kit" && tests/run-all.sh 2>&1 )" || rc=$?
   if [ "$rc" -eq 0 ]; then ok "suite green"; else
     health_bad "suite red (rc $rc) — run tests/run-all.sh to see it"
     printf '%s\n' "$out" | tail -15 >&2
@@ -1717,8 +1725,13 @@ cmd_health() {
   #
   # The regex below is one contract across two files: the line is emitted by
   # tests/check-mutation.sh. Change the wording on either side alone and the suite goes red.
+  #
+  # `|| true` for the same reason the TODO.md count below carries one: a grep that matches nothing
+  # returns 1, and under `set -e` the assignment took the runner down with it — so the `-z` branch
+  # that was written to shout "health went blind" could never be reached, and going blind read as
+  # a crash. The sentence below is only sayable because of the two words on this line.
   local score_line
-  score_line="$(grep -m1 '^score: ' <<< "$out")"
+  score_line="$(grep -m1 '^score: ' <<< "$out" || true)"
   if [ -z "$score_line" ]; then
     health_bad "the suite did not print the 'score:' line — health went blind to the mutation"
   elif grep -qE '^score: [0-9]+ caught, 0 known gap' <<< "$score_line"; then
@@ -1851,8 +1864,14 @@ health_provenance() {
   # `sort -V` on the plugin version — a lexicographic `sort` would put 1.9 after 1.17. This was
   # once the only version-ordered pick in the file; latest_matching() carried the lexicographic
   # bug and this comment recorded it. It no longer does — both sort by version now.
+  #
+  # `|| true`: `find` on a missing directory returns 1, `set -o pipefail` carries that through
+  # `sort -V | tail -1`, and `set -e` then killed the whole command on the assignment — on a
+  # machine with no plugins cache, `sdd health` stopped dead HERE, three ok lines in, and neither
+  # provenance nor the ratchet ever ran. A machine without the directory is not a defect, it is a
+  # machine: an empty `$tpl` is the skip this branch already knows how to do.
   tpl="$(find "$HOME/.claude/plugins/cache" -path '*/codereview/*/references/report-template.md' \
-         2>/dev/null | sort -V | tail -1)"
+         2>/dev/null | sort -V | tail -1 || true)"
   if [ -n "$tpl" ] && [ -f "$tpl" ]; then
     local missing=""
     while IFS= read -r k; do
@@ -1879,8 +1898,13 @@ health_provenance() {
 # folklore.
 health_ratchet() {
   local bl="$SDD_HOME/tests/health-baseline.txt" known new_findings=0 stale=0 line
+  # `|| true`: a baseline with no live line (all comments, or missing outright) makes this grep
+  # return 1, and under `set -e` the runner died on the assignment — after the provenance line,
+  # before a single word of the ratchet, so it neither said `kit healthy` nor failed anything. An
+  # empty `known` is not an error to crash on: it means NOTHING is known debt, so every finding is
+  # outside the baseline, which is exactly what the loop below then says out loud.
   known="$(grep -vE '^[[:space:]]*(#|$)' "$bl" | sed 's/[[:space:]]*#.*//' \
-           | sed 's/[[:space:]]*$//')"
+           | sed 's/[[:space:]]*$//' || true)"
 
   while IFS= read -r line; do
     [ -n "$line" ] || continue
@@ -1894,8 +1918,17 @@ health_ratchet() {
       || { health_bad "stale baseline: '$line' is no longer a finding — delete the line"; stale=$((stale + 1)); }
   done <<< "$known"
 
-  [ "$new_findings" -eq 0 ] && [ "$stale" -eq 0 ] \
-    && ok "ratchet: $(grep -c . <<< "$known") known debt(s), none new"
+  # An `if` and not an `&&` chain, and the difference is a whole line of output. The chain returns
+  # the status of its first failing test, so a ratchet that FOUND something made health_ratchet
+  # return 1 — and `set -e` killed cmd_health on the call, one line before its own verdict. The
+  # finding was printed and then `N check(s) failed` never was: same family as the four capture
+  # sites above, same silence, and it hit the path that WORKS rather than a broken one. Every
+  # assertion here read only `rc != 0`, which is authored by the `return 1` at the end of
+  # cmd_health too, so nothing noticed. Failures are already counted in HEALTH_FAILS; this
+  # function's job is to report, never to decide the exit code.
+  if [ "$new_findings" -eq 0 ] && [ "$stale" -eq 0 ]; then
+    ok "ratchet: $(grep -c . <<< "$known") known debt(s), none new"
+  fi
 }
 
 cmd_status() {

@@ -896,6 +896,69 @@ mut_HEALTH_todo_count_blind() {
   sed -i 's@^    health_finding "todo-findings .*@    true@' "$1"
 }
 
+# ─── the five silent aborts of cmd_health ─────────────────────────────────────────────────────
+# One family, five entries, and the split is deliberate: each restores ONE site to the bare form
+# that used to be there, so the score stops crediting one guard for the other four. They are the
+# cheapest mutants in the catalogue to write and the ones that would hurt most to lose — every
+# single one of them was a REAL defect measured against the real runner, not an invented one, and
+# the shape they restore is the shape a future session writes by default.
+#
+# All five are range-addressed or anchored on the guard's own text, never on a line number: the
+# bare form `x="$(cmd)"` is the most common line in this file, and an unaddressed sed would
+# sabotage half the runner and score five points for one door.
+
+# `sdd health` goes back to dying on the suite capture. A RED SUITE — the one case the command
+# exists to report — prints the header, rc 1, and nothing else: `set -e` kills the assignment
+# before health_bad can say a word, and checks 2 through 8 never run at all.
+#
+# ⚠️ Caught by the `abort: a red suite` assertion of check-health.sh and by NOTHING ELSE, because
+# rc 1 is what a reporting health_bad returns too. Every other assertion in that file reads a
+# green stub suite, so this mutant leaves them all alive — which is the point of the split.
+mut_HEALTH_suite_capture_aborts() {
+  sed -i '/^cmd_health() {/,/^}/ s@" || rc=$?@"; rc=$?@' "$1"
+}
+
+# The `score:` read goes back to killing the run when it matches nothing. The branch below it
+# still carries the sentence "health went blind to the mutation" — it simply becomes unreachable,
+# so the kit's mutation score can silently stop being printed and `sdd health` reports it as a
+# crash instead of as the contract breach it is.
+mut_HEALTH_score_read_aborts() {
+  sed -i "s@grep -m1 '^score: ' <<< \"\$out\" || true@grep -m1 '^score: ' <<< \"\$out\"@" "$1"
+}
+
+# Provenance goes back to dying on a machine that has no plugins cache. `find` on a missing
+# directory returns 1, pipefail carries it, and the assignment takes the runner down three ok
+# lines in — no provenance, no ratchet, no verdict. Not a hypothetical machine: any box where the
+# codereview plugin was never installed.
+mut_HEALTH_provenance_find_aborts() {
+  sed -i 's@ | sort -V | tail -1 || true)"@ | sort -V | tail -1)"@' "$1"
+}
+
+# The ratchet goes back to dying on a baseline with no live line. An empty baseline is not an
+# error — it means nothing is known debt, so everything is new — but the bare form made it a
+# silent crash after the provenance line, saying neither `kit healthy` nor how many checks failed.
+mut_HEALTH_baseline_read_aborts() {
+  sed -i '/^health_ratchet() {/,/^}/ s@ || true)"@)"@' "$1"
+}
+
+# The SAME silence one call frame up, and the reason this is a fifth entry and not part of the one
+# above: the site is not a capture at all. As an `&&` chain the last statement returns the status
+# of its first failing test, so a ratchet that FOUND something returns 1 — and `set -e` kills
+# cmd_health on the call, one line before its own `N check(s) failed`. It eats the verdict on the
+# path that WORKS, and every assertion that reads only `rc != 0` stays green through it, since
+# cmd_health's own `return 1` would have produced the same rc.
+#
+# TWO substitutions and not one, because the `fi` has to go with the `if`: left behind it is a
+# syntax error, the mutant dies of bash (rc 91) and the harness scores a point for a door that was
+# never opened. Deleted rather than replaced with a `true` — a `true` at the end of the function
+# would pin the return status to 0 and quietly UNDO the very defect this entry exists to restore.
+mut_HEALTH_ratchet_eats_verdict() {
+  sed -i '/^health_ratchet() {/,/^}/ {
+      s@^  if \[ "$new_findings" -eq 0 \] && \[ "$stale" -eq 0 \]; then@  [ "$new_findings" -eq 0 ] \&\& [ "$stale" -eq 0 ] \&\&@
+      /^  fi$/d
+    }' "$1"
+}
+
 # `sdd retry` loses the checkout and goes back to committing wherever the human happens to stand.
 # ONE definition, two call sites: `mut_RUN_branch_switch_dead` above sabotages the FIELD READ inside
 # ensure_mission_branch, so it kills the function for both doors at once and can never say which of
@@ -1066,6 +1129,11 @@ CATALOG=(
   HEALTH_ratchet_one_way
   HEALTH_provenance_blind
   HEALTH_todo_count_blind
+  HEALTH_suite_capture_aborts
+  HEALTH_score_read_aborts
+  HEALTH_provenance_find_aborts
+  HEALTH_baseline_read_aborts
+  HEALTH_ratchet_eats_verdict
   RETRY_branch_switch_dead
   RUN_ghost_session_id
   RETRY_moved_never_true
