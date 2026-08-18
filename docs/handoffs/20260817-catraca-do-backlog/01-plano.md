@@ -232,6 +232,13 @@ humanas pendentes), i18n, e qualquer mudança em `tests/check-todo.sh`.
 
 ## Verificação end-to-end
 
+⚠️ **Os números `77` desta seção e do Check do I4 foram recalculados para `81` durante a execução**,
+pela rota que o próprio I4 abre ("o `77` é derivado, não sagrado"): três dos quatro itens pediam
+mais de uma mutação. O registro está nas Notas de execução do `checkpoint.md` (I4), que é a fonte
+do número real. Os `77` abaixo ficam como o que o planejamento estimou, não como o esperado de
+hoje. E a contagem do `todo-findings` fechou em **76**, não nos 73 do fim do EXEC: a r1 da REVIEW
+registrou três achados e moveu a baseline no mesmo commit, que é a catraca funcionando.
+
 Com os cinco incrementos `done`, nesta ordem:
 
 1. `tests/run-all.sh` → verde, com `score: 77 caught, 0 known gap(s), of 77`.

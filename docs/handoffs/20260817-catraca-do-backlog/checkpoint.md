@@ -23,7 +23,7 @@ atualizado: 2026-08-17 23:31
 |---|---|---|---|---|
 | I1 | sensor `check-health.sh` sobre `cmd_health` | `o=$(bash tests/check-health.sh 2>&1); grep -c '^  ok    the ratchet fails on a stale baseline line' <<< "$o"` → `1` | done | afe5db6 |
 | I2 | catraca da contagem de achados | `o=$(bash tests/check-health.sh 2>&1); grep -c '^  ok    a baseline off by one fails both ways' <<< "$o"` → `1` | done | 36a6eb6 |
-| I3 | cinco defeitos de saída do `cmd_autonomy` | `o=$(bash tests/check-autonomy.sh 2>&1); grep -c '^  ok    output:' <<< "$o"` → `5` | done | 02e5da6 |
+| I3 | cinco defeitos de saída do `cmd_autonomy` | `o=$(bash tests/check-autonomy.sh 2>&1); grep -c '^  ok    output:' <<< "$o"` → `6` | done | 02e5da6 |
 | I4 | mutações que faltam no catálogo | `grep -cE '^mut_[A-Za-z0-9_]+\(\) \{' tests/check-mutation.sh` → `81` | done | f0bbf82 |
 | I5 | política escrita e baseline no número real | `o=$(bash tests/check-health.sh 2>&1); grep -c '^  ok    the ratchet policy is written where the next mission meets it' <<< "$o"` → `1` | done | ca017f9 |
 
@@ -217,6 +217,25 @@ atualizado: 2026-08-17 23:31
   o `sdd health` imprimiu só o cabeçalho e saiu 1 — nem a linha `suite red` que ele existe para dar.
   Já é achado aberto do `TODO.md` (seção "Sensores que faltam"); registrado aqui como avistamento,
   não como item novo.
+
+- 2026-08-17 · `REVIEW r1` · **O Check do I3 subiu de `5` para `6`**: a rodada acrescentou uma sexta
+  asserção `output:` à mesma família (`the table orders versions off the judge's population`). Ela
+  pertence à REVIEW e não ao I3, mas o Check conta o prefixo, e um Check que espera 5 num arquivo
+  que imprime 6 é justamente o rótulo divergindo do artefato. Detalhe no `40-review-r1.md`.
+- 2026-08-17 · `REVIEW r1` · **O comentário do I3 sobre paridade com o `kaizen_series` era falso, e
+  a reprodução foi quem disse.** O `$order` do `cmd_autonomy` lia a primeira aparição sobre
+  `is_session and comparable`; o juiz lê sobre **toda** linha `on_axis`. Com uma escalada como
+  primeira linha de uma versão, os dois discordavam de qual é a mais recente sobre o MESMO arquivo
+  — o defeito que o I3 existe para fechar, num caso mais estreito. Consertado, com asserção
+  diferencial que nasceu vermelha sob sabotagem de uma linha contada por `diff`.
+- 2026-08-17 · `REVIEW r1` · **A catraca cobrou a própria missão, pelo caminho que o QA mediu em
+  J4.** A rodada registrou 3 achados novos, a contagem foi 73 → **76** e a baseline moveu no mesmo
+  commit. Quem revisar de novo: é essa a regra, e ela não tem exceção para a sessão que a escreveu.
+- 2026-08-17 · `REVIEW r1` · ⚠️ **`mut_HEALTH_provenance_blind` nasceu sabotando DUAS linhas.**
+  `if [ "$line" = "$fix" ]; then checked` é byte a byte igual nos ramos do `qa-execution` e do
+  `qa-report`. Além de quebrar "uma mutação, uma linha", isso impediria para sempre uma entrada
+  própria para o outro ramo. Endereçada por faixa. Quem for escrever mutação para `health_provenance`:
+  são TRÊS comparações, só uma tem fixture, e as outras duas estão no `TODO.md`.
 
 ## Incrementos de fix (QA)
 
