@@ -1,6 +1,6 @@
 ---
 missao: 20260818-lote-facil
-atualizado: 2026-08-18 20:05
+atualizado: 2026-08-18 21:40
 ---
 
 # Checkpoint — O `sdd health` para de morrer calado, e 18 achados baratos saem do backlog
@@ -21,7 +21,7 @@ atualizado: 2026-08-18 20:05
 | ID | Incremento | Check (comando → esperado) | Status | Commit |
 |---|---|---|---|---|
 | I1 | A família do aborto calado — 4 sítios do `cmd_health` | `o=$(bash tests/check-health.sh 2>&1); grep -c '^  ok    abort: ' <<< "$o"` → `4` | done | 4f11624 |
-| I2 | A família do `cd` relativo — 14 em `tests/` mais o `ledger_repo_root` | `o=$(bash tests/run-all.sh 2>&1); grep -c '^  ok    cdpath: ' <<< "$o"` → `3` | pending | — |
+| I2 | A família do `cd` relativo — 14 em `tests/` mais o `ledger_repo_root` | `o=$(bash tests/run-all.sh 2>&1); grep -c '^  ok    cdpath: ' <<< "$o"` → `3` | done | aa95b2e |
 | I3 | Saída humana do runner — 3 números que contam a grandeza errada | `o=$(bash tests/check-autonomy.sh 2>&1); grep -c '^  ok    output: ' <<< "$o"` → `9` | pending | — |
 | I4 | Cinco caminhos sem asserção ganham asserção e mutação | `o=$(bash tests/run-all.sh 2>&1); grep -c '^  ok    covered: ' <<< "$o"` → `5` | pending | — |
 | I5 | Regras de sensor e o `templates/review.md` que falta | `o=$(bash tests/run-all.sh 2>&1); grep -c '^  ok    rule: ' <<< "$o"` → `5` | pending | — |
@@ -82,6 +82,50 @@ atualizado: 2026-08-18 20:05
 - 2026-08-18 · `I1` · Evidência do gate: `tests/run-all.sh` → `suite green`, rc 0, com
   `score: 86 caught, 0 known gap(s), of 86` (era 81) e `54 finding(s)`. `./bin/sdd health` →
   `kit healthy`, rc 0. O Check do incremento: `4`, medido `0` contra o HEAD antes do conserto.
+
+- 2026-08-18 · `I2` · **A família tinha DEZENOVE sítios, não 14** — e a re-derivação achou mais
+  trabalho, como o plano previu. Três a mais em `tests/` (as linhas `SELF`/`SELF_PATH` de
+  `check-todo.sh`, `check-checkpoint.sh` e `check-entrypoint.sh`: mesma forma, e o item do TODO só
+  contava a linha `ROOT=` de cada arquivo) e **dois em `bin/sdd`**, no `_resolve_self`, que resolve
+  o `SDD_HOME`. Esse é defeito vivo no runner e não estava no backlog: `SDD_HOME` é `readonly` e
+  dele saem todo template, agente e starter config. Medido com veneno armado — com `CDPATH`
+  apontando para um diretório que tenha um `bin`, a forma antiga devolvia `/poison` em DUAS linhas.
+- 2026-08-18 · `I2` · **Decisão: os 5 sítios extras entraram no incremento, não no `TODO.md`.**
+  Mesma classe, mesmo mecanismo, mesmo sensor, mesma sessão — e a métrica da missão é a classe
+  sumir do repo, não ficar consertada em 14 dos 19 lugares. Mesmo precedente do quinto sítio do I1.
+- 2026-08-18 · `I2` · **TRÊS mutantes perderam a âncora, não os 2 que o plano previa.** A reescrita
+  do `ledger_repo_root` apagou as linhas em que `_toplevel` e `_common_parent` ancoravam; o
+  `_cdpath_leak` era pior, porque **seguia aplicando** — o `sed` dele era global sobre
+  `CDPATH='' cd` e passaria a sabotar o `_resolve_self`, medindo outra coisa com o nome do ledger.
+  Os três foram reancorados e verificados um a um, sem cruzar: aplica, continua bash válido, e é
+  pego pela asserção escrita para ele. O `_cdpath_leak` reintroduz a grafia antiga sem guarda,
+  então com ambiente limpo se comporta igual à função sã, e é pego por EXATAMENTE as duas
+  asserções `cdpath:` do `check-autonomy.sh` e por mais nada, com o piso do veneno seguindo verde.
+- 2026-08-18 · `I2` · ⚠️ **A primeira passada de sabotagem concluiu 11 vezes em falso.** Copiava o
+  sensor para um tmpdir cru, o `ROOT` resolvia fora de qualquer árvore, o `SELF_PATH` não existia e
+  as 11 degradações "morriam" em rc 127 no primeiro probe — resultado uniforme, convincente e sem
+  significado nenhum. É exatamente a armadilha que o `CLAUDE.md` já descreve. Refeita com controle
+  no arquivo são, âncora literal com contagem exigida em 1, e recusa de ler rodada cuja âncora não
+  casou: 9 das 11 morrem no probe que nomeia a regra exata. As 2 sobreviventes são o harness
+  testando a si mesmo, e a equivalência com o `probe()` que já existia foi **medida** por asserção
+  diferencial (mesma forma de edição em cada um, os dois sobrevivem), nunca afirmada.
+- 2026-08-18 · `I2` · Duas regras sem probe caíram na mesma passada: as grafias `CDPATH=""` e
+  `CDPATH=` saíram (nenhuma sabotagem as quebrava sem quebrar a canônica — regra irredutível é
+  redundante, e o `CLAUDE.md` manda remover, não probar), e a linha `ok cdpath:` do `scan_surface`
+  ganhou probe, porque apagá-la deixava o selftest verde e o Check da missão caindo de 3 para 2 em
+  silêncio.
+- 2026-08-18 · `I2` · **`TODO.md` 54 → 53**, com `todo-findings 53` na baseline no mesmo commit:
+  saem os 2 itens da família e entra 1 achado novo — a regra `cdpath:` certifica como limpo o `cd`
+  de operando **variável**, que é indecidível num scanner de linha e é justamente a forma da
+  CRITICAL de `20260817-eixo-do-juiz`. Limite declarado no cabeçalho do sensor e no backlog, no
+  mesmo precedente do `grep -m<N>` que a regra 1 já carrega.
+- 2026-08-18 · `I2` · Desvio do plano, deliberado: **um commit só** em vez de separar a troca do
+  `ledger_repo_root`. As duas metades tocam `bin/sdd` no mesmo arquivo, então dividir exigiria
+  staging parcial de hunk em sessão headless — risco maior que o ganho de granularidade de revert.
+- 2026-08-18 · `I2` · Evidência do gate: `tests/run-all.sh` → `suite green`, rc 0, com
+  `score: 86 caught, 0 known gap(s), of 86` e `53 finding(s)`. `./bin/sdd health` → `kit healthy`,
+  rc 0. `shellcheck -S warning bin/sdd tests/*.sh` limpo. O Check do incremento: `3`, medido `2`
+  contra o HEAD antes da asserção.
 
 ## Incrementos de fix (QA)
 
