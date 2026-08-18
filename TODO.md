@@ -354,10 +354,11 @@ Achados sobre **repos-alvo** vão para o `TODO.md` daquele repo. Este arquivo é
   `sdd-docs` na missão `20260814-dry-run-completo` (2026-08-14)
 
 - [ ] **`BUDGET_PER_PHASE_USD` é global, mas o custo por fase não é** — `config/schema.md` +
-  `run_phase` — teto único de US$ 15 calibrado por palpite. Medido: SQ-97 TICKET 2,56 · EXEC 7,37
-  · QA:plan 6,90 · **QA:exec 14,84** · QA:close 9,08; missão do kit **REVIEW 14,76**. Fase a 1%
-  do teto morre por dinheiro no meio do trabalho e o runner lê como "não avançou". Direção: teto
-  por fase com o global de default, e gate que reprove com motivo explícito nesse caso.
+  `run_phase` — teto único calibrado por palpite (default do kit US$ 15; **este repo em US$ 40**
+  desde 2026-08-17). Medido: SQ-97 TICKET 2,56 · EXEC 7,37 · QA:plan 6,90 · **QA:exec 14,84** ·
+  QA:close 9,08; kit **REVIEW 14,76**, e **REVIEW 23,13 contra teto 25** em `catraca-do-backlog` —
+  uma r2 teria morrido por dinheiro. Fase a 1% do teto morre no meio e o runner lê "não avançou".
+  Direção: teto por fase com o global de default, e gate que reprove com motivo explícito.
   — descoberto por `humano` no piloto SQ-97 (2026-08-14)
 
 - [ ] **O contrato de artefato ainda é PT-BR em cinco pontos** — chamadas de `frontmatter` em

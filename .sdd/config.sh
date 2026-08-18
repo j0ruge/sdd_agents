@@ -21,7 +21,7 @@ MODEL_TICKET="sonnet"
 QA_MAX_ITER=3
 REVIEW_MAX_ITER=3
 EXEC_MAX_RETRY=1
-BUDGET_PER_PHASE_USD=25
+BUDGET_PER_PHASE_USD=40
 PERMISSION_MODE="acceptEdits"
 
 # O kit ainda nao existe como projeto no JIRA — a fase TICKET e exercitada no piloto sales_quote.
