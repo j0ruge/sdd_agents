@@ -262,9 +262,16 @@ assert_jidoka "a 'blocked' increment escalates on the spot (exit 3, no session s
 # see the bug that matters. The runner reads the statuses into a variable and then tests it; while
 # that test is a PIPE (`printf … | grep -qx`), `grep -q` exits on the match, `printf` dies of
 # SIGPIPE and, under `pipefail`, the pipeline returns 141 — so the `if` reads "no blocked" WHILE
-# blocked exists, and the line does NOT stop. `ckstatus` gets one status line per table row, so the
-# row count is the knob: measured on this fixture the miss starts between 4000 and 5000 rows, and
-# 20000 keeps the assertion deep in the failure regime with margin for a different pipe buffer.
+# blocked exists, and the line does NOT stop. `ckstatus` gets one status line per table row, and
+# the knob is the rows that come AFTER the `blocked` one — what arms the race is how many bytes are
+# left for `printf` to write once `grep` has already matched and exited, never how big the
+# checkpoint is. Measured, and this is the whole point: with the `blocked` line at the END of a
+# 1.1 MB checkpoint the pre-fix runner stopped CORRECTLY — `printf` has already written everything
+# by the time `grep` matches, so its exit kills nothing and there is no SIGPIPE. Put the same line
+# near the BEGINNING of the same file and the bug burned 2 sessions.
+# Here the `blocked` row sits near the top and every filler row follows it, so on this fixture
+# row count and rows-after-blocked coincide: measured, the miss starts between 4000 and 5000 rows,
+# and 20000 keeps the assertion deep in the failure regime with margin for a different pipe buffer.
 # The rows are generated here on purpose — versioning ~1 MB of fixture would be paying in the repo
 # for what a loop produces in milliseconds.
 awk 'BEGIN { for (i = 1; i <= 20000; i++) printf "| P%d | filler row | `true` → 0 | pending | — |\n", i }' \

@@ -2298,6 +2298,14 @@ cmd_run() {
     run_phase "$phase" "$LAST_PHASE_SID"
     # The retry gets its own pair of fingerprints. Until now it ran with no measurement at all,
     # and `moved/total` is precisely the metric that needs it.
+    #
+    # `after2` is sampled BEFORE `gate_$phase` runs, and the ordering is a decision, not an
+    # accident: `moved2` has to answer "did the SESSION move the disk", so whatever the gate itself
+    # writes must fall OUTSIDE the sample. It is sound today because `state_fingerprint` reads HEAD,
+    # the mission listing and the checkpoint's md5, and no gate touches those three. A gate that
+    # ever starts writing into the mission directory breaks the property silently — the symptom
+    # would be `moved2=true` on a retry that changed nothing, which is exactly the reading that
+    # keeps the runner from escalating. `cmd_kaizen` samples in the same order for the same reason.
     local after2 moved2="false" gate_rc2=0
     after2="$(state_fingerprint)"
     [ "$after" != "$after2" ] && moved2="true"

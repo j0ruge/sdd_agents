@@ -120,6 +120,12 @@ templates. Se a solução pede infraestrutura, provavelmente é a solução erra
   agente existente, provavelmente é um agente novo — ou não é responsabilidade de agente nenhum.
 - O agente descreve **o que produzir e onde**, com o formato exato do artefato. Quem julga se
   ficou bom é o gate, não o texto do prompt.
+- **Mexeu num `agents/*.md`? Quem sincroniza o espelho é `sdd install --force` — nunca `cp`, nunca
+  Edit.** O harness carrega a **cópia** em `.claude/agents/`, jamais a fonte do kit, e trata
+  `.claude/` como caminho sensível: em sessão headless as duas ferramentas levam negativa e a fase
+  parece travada, com o `sdd preflight` vermelho em `agent <nome> stale` (`bin/sdd:1649`).
+  `sdd install` sozinho mostra o diff antes; `--force` adota. Duas fases DOCS já queimaram sessão
+  aqui porque a regra não dizia o comando.
 
 ## Commits
 
@@ -160,11 +166,15 @@ e `check-checkpoint.sh` medem markdown, não o `bin/sdd`, então nenhuma sabotag
 faria morrer — `check-pipefail.sh` está nas duas situações, porque também mede `tests/`. Nos
 quatro casos quem mede o sensor é um `selftest()` com probes e rc próprios — 90, 91, 92 — mais um
 piso contra vacuidade. Sem isso, regex quebrada reporta "tudo limpo" para sempre.
-⚠️ A rubrica é "a mutação não alcança", **não** "tem `selftest()`": `grep -l selftest tests/` hoje
-devolve **cinco**, porque o `check-entrypoint.sh` carrega um por escolha própria (o catálogo o
+⚠️ A rubrica é "a mutação não alcança", **não** "tem `selftest()`": `grep -l '^selftest()' tests/*`
+hoje devolve **cinco**, porque o `check-entrypoint.sh` carrega um por escolha própria (o catálogo o
 alcança via `mut_RUN_entrypoint_unguarded`, mas o parser dele é fino demais para depender só
 disso). Sensor a mais com auto-teste nunca é o defeito; sensor **sem** ele, estando nas duas
 situações, é.
+⚠️ A âncora `^selftest()` **é** o instrumento; `selftest` solto responde **seis**, somando o
+`jobs_selftest()` do escalonador (`tests/check-mutation.sh:63`), que mede o pool de jobs e não
+regra de sensor nenhuma. Número em rubrica sem o comando ao lado é a mesma classe do
+`44 caught of 44` que já venceu neste arquivo — conte a propriedade, não a palavra.
 
 ⚠️ **O selftest tem de exercitar o CAMINHO, não só a função.** Achado consertando o
 `check-todo.sh`: os probes provavam que o parser pulava blocos cercados, e mesmo assim trocar a
