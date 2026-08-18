@@ -237,6 +237,30 @@ atualizado: 2026-08-17 23:31
   própria para o outro ramo. Endereçada por faixa. Quem for escrever mutação para `health_provenance`:
   são TRÊS comparações, só uma tem fixture, e as outras duas estão no `TODO.md`.
 
+- 2026-08-17 · `DOCS` · **A r1 comparou dois números de réguas diferentes, e a fase PR copiaria
+  isso.** `589` asserções é `grep -c '^  ok'`; `533` é a âncora de QUATRO espaços. A diferença é
+  exatamente **55**, as linhas `  ok   ` de três espaços que o runner imprime dentro dos fixtures —
+  degrau fantasma já catalogado e já item aberto. Pela âncora certa a r1 mede **534** (533 + a
+  asserção do R1). O `40-review-r1.md` ficou **anotado, não reescrito**, e o `KAIZEN_LOG.md` registra
+  509 → 534 com os dois lados remedidos nesta fase, `main` num worktree descartável.
+- 2026-08-17 · `DOCS` · **O "+281 s" do I1 não reproduz.** Em máquina quieta e passadas sequenciais
+  o par é **155,97 s → 210,81 s** (+55 s), já com 11 mutações a mais no mesmo diff. O mecanismo
+  (sensor novo é multiplicador, roda uma vez por mutante) continua de pé; o número que decide o alvo
+  da D7 é este. O item do `TODO.md` foi corrigido, **não** duplicado — a contagem segue 76.
+- 2026-08-17 · `DOCS` · **Quatro âncoras do `TODO.md` deslocadas, e uma delas o R5 da r1 não pegou:**
+  `CLAUDE.md:135` já valia 147 no fim da REVIEW, movida pelo próprio I5, e vale **163** agora. As
+  outras três são desta fase (`KAIZEN_LOG.md:175`→`:261`, `docs/pipeline.md:499`→`:501`, split
+  `326-568`→`326-570`). Conferidas contra o CONTEÚDO que nomeiam, nunca pelo deslocamento aritmético.
+  Quem editar `CLAUDE.md`, `KAIZEN_LOG.md` ou `docs/` de novo: grepe o `TODO.md` por âncora nesses
+  arquivos **antes** de fechar a fase.
+- 2026-08-17 · `DOCS` · **O `D4` do `CONTEXT.md` já descrevia a ordem que o R1 consertou** ("na ordem
+  do arquivo, como `cmd_autonomy` já faz"): a prosa estava certa e o **código** é que tinha driftado
+  dela. Nenhuma edição devida ali — o que faltava era o invariante entre os DOIS leitores, que vivia
+  só num comentário e o comentário mentia. Escrito em `docs/pipeline.md` (`f69d28d`).
+- 2026-08-17 · `DOCS` · `.claude/napkin.md` **barrado pelo harness pela segunda fase DOCS seguida**
+  (caminho sensível). Não insista: é decisão humana registrada no `TODO.md` (o napkin entra na
+  superfície que o DOCS mantém, ou sai do versionamento). Os números do **item** foram reancorados.
+
 ## Incrementos de fix (QA)
 
 > Escritos pelo `sdd-qa` quando um bug sanável é reprovado. Entram na mesma tabela acima com ID
