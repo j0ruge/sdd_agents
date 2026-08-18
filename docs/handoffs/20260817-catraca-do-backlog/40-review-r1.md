@@ -171,6 +171,14 @@ sendo cobrada pela catraca que ela própria instalou, pelo caminho que o QA medi
 
 - `tests/run-all.sh` → **rc 0**, `suite green`, `score: 81 caught, 0 known gap(s), of 81`,
   **589** asserções `ok` (eram 533 no fim do EXEC).
+  ⚠️ **Anotado pela fase DOCS: os dois números saem de instrumentos diferentes e não se comparam.**
+  `589` é `grep -c '^  ok'`, que soma as **55** linhas `  ok   ` de TRÊS espaços que o runner
+  imprime dentro dos fixtures; `533` é a âncora de QUATRO espaços que os Checks obrigam. Pela de
+  quatro, esta rodada mede **534** — os 533 do EXEC mais a asserção do R1, que é a aritmética
+  esperada. A classe já é item aberto do `TODO.md` ("o `KAIZEN_LOG.md` não fixa o instrumento das
+  próprias linhas"), aqui reaparecendo num handoff; o `KAIZEN_LOG.md` desta missão registra
+  **509 → 534**, os dois lados medidos com a âncora de quatro espaços. Fica anotado em vez de
+  reescrito: apagar o número seria apagar a evidência de que o instrumento escorrega sozinho.
 - `shellcheck -S warning bin/sdd tests/*.sh` → limpo.
 - `bash -n bin/sdd` → limpo.
 - `./bin/sdd health` → **rc 0**, `kit healthy`, os 5 checks verdes,

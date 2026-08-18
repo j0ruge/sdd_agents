@@ -4,7 +4,78 @@ Registro de melhorias com **antes/depois medido**. Sem número, não entra.
 
 ---
 
-## 2026-08-17 — O juiz para de parecer quebrado quando o kit é o próprio alvo (missão `20260817-eixo-do-juiz`)
+## 2026-08-17 — O backlog para de crescer calado, e o `sdd health` ganha o primeiro sensor da sua vida (missão `20260817-catraca-do-backlog`)
+
+**Problema (Gemba):** a triagem de 2026-08-17 comparou `git show 8ca54b8:TODO.md` contra o HEAD e
+achou o kit registrando dívida ~1,8× mais rápido do que a fecha:
+
+| | itens | linhas |
+|---|---|---|
+| início da sessão (`8ca54b8`) | 56 | 449 |
+| HEAD daquele dia (`6d68dfc`) | **68** | 544 |
+
+**16 itens foram fechados e apagados** com prova por `git merge-base` (5 do PR #4, 7 do #5, 4 do
+#6) e o arquivo mesmo assim cresceu, porque **29 nasceram**. Duas missões completas, 24 sessões,
+US$ 234,07 — e **nenhum instrumento dizia**: `tests/check-todo.sh` mede forma, âncora, data e teto
+de 8 linhas com 75 probes, e passa verde em 68 itens exatamente como passaria em 680.
+
+O lugar certo para a catraca era o `sdd health`, e ele tinha um buraco próprio: **nenhum sensor da
+suíte executava `cmd_health`**. Os dois hits de `grep -l 'sdd health' tests/` eram comentário. O
+comando que existe para responder "o kit ainda mede o que diz medir?" era o único do runner sobre
+o qual ninguém perguntava a mesma coisa — e já tinha mordido: duas checagens dele nasceram com a
+lógica invertida pelo `pipefail` e foram pegas à mão, não por sensor.
+
+**Contramedida:** zero mecanismo novo. `cmd_health` extrai o número da linha que o `check-todo.sh`
+já imprime na stdout da suíte que ele **já** captura, chama `health_finding "todo-findings $N"`, e
+o `health_ratchet` que já existia faz o resto **nos dois sentidos**. A catraca mora no `sdd health`
+e **não** no `TEST_CMD`, de propósito: um teto dentro da suíte reprovaria `gate_EXEC`/`QA`/`REVIEW`
+de toda missão em voo, inclusive a que acabou de registrar o achado. Antes disso, o sensor que
+faltava — sem ele a catraca nova nasceria como código não medido, que é a falha aberta que esta
+casa proíbe.
+
+| | Antes (`6d68dfc` = merge-base de `main`) | Depois (`8535a3a`) |
+|---|---|---|
+| Sensores da suíte que executam `cmd_health` | **0** — os 2 hits em `tests/` eram comentário | **1** (`tests/check-health.sh`, 8 asserções + 6 probes de regra de documento) |
+| Contagem de achados abertos do `TODO.md` | medida a cada suíte, **nunca congelada**: 56 → 68 em duas missões sem nada dizendo | congelada como `todo-findings 76`, catraca mordendo nos dois sentidos |
+| Checks numerados do `cmd_health` | 7 | **8** |
+| Dívidas conhecidas na baseline | 6 | **7** |
+| Score de mutação | 70 caught, 0 gap, of 70 | **81 caught, 0 gap, of 81** |
+| Sensores na suíte | 12 | **13** |
+| Asserções de sensor numa passada verde (`grep -c '^  ok    '`) | 509 | **534** |
+| Suíte, passadas sequenciais na mesma máquina quieta | 155,97 s | **210,81 s** |
+| `sdd autonomy`, coluna de dinheiro | `US$ 2` e `US$ 1.5` — casas variáveis | `US$ 2.00`: **0** células fora de duas casas |
+| `sdd autonomy`, ordem das versões | lexicográfica, **e discordando do juiz** sobre qual é a mais recente | ordem de primeira aparição na população do juiz (`on_axis`) |
+| `sdd autonomy`, recusa de ledger ilegível | **uma** frase para dois defeitos distintos | duas (`malformed row` × `unreadable row … valid JSON but not an object`) |
+| `sdd autonomy`, bloco "no data" | duplicado byte a byte em dois pontos | um helper, uma voz (`autonomy_no_data`) |
+| Achados fechados com hash no corpo | — | **10**, os 10 verificados ancestrais de HEAD |
+
+**A catraca cobrou a própria missão, três vezes, e é esse o resultado.** A contagem foi de 68 para
+**76**: o EXEC registrou 4 achados novos (dois abortos calados do `sdd health` com o fixture
+hermético, um terceiro na checagem do `score:`, um `moved` sem asserção), a REVIEW r1 registrou 3 e
+a fase DOCS 0. Cada um deles moveu a baseline **no mesmo commit** — que é a regra funcionando, sem
+exceção para a sessão que a escreveu. Os 10 itens fechados **continuam contando**: eles saem na
+varredura pós-merge, provados por `git merge-base --is-ancestor <hash> main`, e é lá que a catraca
+cobra a baseline de novo. O número que este arquivo registra é o real medido, nunca o desejado.
+
+**⚠️ A linha das asserções vale 509 → 534, e não 490 → 589.** É a mesma armadilha de instrumento
+que a entrada anterior catalogou, e ela reapareceu **dentro desta missão**: o `40-review-r1.md`
+registrou "589 asserções `ok` (eram 533 no fim do EXEC)" comparando `grep -c '^  ok'` com a âncora
+de **quatro** espaços. `589 − 534 = 55`, exatamente as linhas `  ok   ` de **três** espaços que o
+runner imprime dentro dos fixtures. Os dois lados desta tabela foram medidos com a âncora de quatro
+espaços, em passadas sequenciais, `main` num worktree descartável — e o handoff da r1 ficou
+anotado em vez de reescrito. O item que pede o comando ao lado do número segue aberto.
+
+**⚠️ E o custo do sensor novo também estava medido no instrumento errado.** O EXEC registrou a
+suíte indo de 2m34s para **7m15s** e concluiu contenção super-linear. Não reproduz: em máquina
+quieta e passadas sequenciais o par é **155,97 s → 210,81 s** (+55 s), já com 11 mutações a mais no
+mesmo diff. O mecanismo é real — sensor novo é **multiplicador**, roda uma vez por mutante —, mas o
+número que decide o alvo da D7 é este, e o item do `TODO.md` foi corrigido em vez de duplicado.
+
+**O que ficou sabido e não foi consertado:** quatro abortos calados da mesma família dentro do
+`sdd health` (`find` em diretório ausente, baseline sem linha viva, a checagem do `score:` e a
+suíte vermelha imprimindo só o cabeçalho) — todos com âncora e direção no `TODO.md`, nenhum
+alcançável pelo escopo desta missão, e todos achados **pelo fixture hermético do sensor novo**, que
+é o argumento do I1 se pagando na primeira volta.
 
 **Problema (Gemba):** o `sdd kaizen` julga a mudança anterior do kit e dá à luz a missão seguinte.
 O julgamento estava **morto na água**, medido no ledger real em 2026-08-16:

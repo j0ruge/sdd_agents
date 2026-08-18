@@ -606,10 +606,11 @@ Achados sobre **repos-alvo** vão para o `TODO.md` daquele repo. Este arquivo é
   paralelismo (2026-08-16)
 
 - [ ] **Sensor novo na suíte é multiplicador, não parcela: custa uma vez por mutante** —
-  `tests/run-all.sh:180` — medido nesta missão: `check-health.sh` roda em **1,5 s** sozinho, dentro
-  do teto de 2 s que o plano fixou, e ainda assim levou a suíte de **2m34s para 7m15s** — roda
-  dentro dos 73 mutantes, +4 s em cada, e a contenção sobre o pool de 8 é super-linear (esperado
-  +36 s, medido +281 s). O item acima fala em crescer com o catálogo; este é outro mecanismo.
+  `tests/run-all.sh:180` — `check-health.sh` roda em ~1,5 s sozinho e roda **dentro de cada
+  mutante**, hoje 81. Medido em passadas sequenciais e máquina quieta, `main` (`6d68dfc`) contra o
+  HEAD desta missão: **155,97 s → 210,81 s**, +55 s com 11 mutações a mais no mesmo diff.
+  ⚠️ O EXEC registrou **+281 s** para a mesma família e isso não reproduz — era contenção, não o
+  mecanismo. O item acima fala em crescer com o catálogo; este é outro mecanismo.
   Direção: rodar por mutante só o sensor que o alcança — decisão do humano, junto com o alvo da D7.
   — descoberto por `sdd-executor` na missão `20260817-catraca-do-backlog` (2026-08-17)
 
