@@ -1,6 +1,6 @@
 ---
 missao: 20260818-lote-facil
-atualizado: 2026-08-18 21:40
+atualizado: 2026-08-18 22:55
 ---
 
 # Checkpoint — O `sdd health` para de morrer calado, e 18 achados baratos saem do backlog
@@ -22,7 +22,7 @@ atualizado: 2026-08-18 21:40
 |---|---|---|---|---|
 | I1 | A família do aborto calado — 4 sítios do `cmd_health` | `o=$(bash tests/check-health.sh 2>&1); grep -c '^  ok    abort: ' <<< "$o"` → `4` | done | 4f11624 |
 | I2 | A família do `cd` relativo — 14 em `tests/` mais o `ledger_repo_root` | `o=$(bash tests/run-all.sh 2>&1); grep -c '^  ok    cdpath: ' <<< "$o"` → `3` | done | aa95b2e |
-| I3 | Saída humana do runner — 3 números que contam a grandeza errada | `o=$(bash tests/check-autonomy.sh 2>&1); grep -c '^  ok    output: ' <<< "$o"` → `9` | pending | — |
+| I3 | Saída humana do runner — 3 números que contam a grandeza errada | `o=$(bash tests/check-autonomy.sh 2>&1); grep -c '^  ok    output: ' <<< "$o"` → `9` | done | 4f6aa8b |
 | I4 | Cinco caminhos sem asserção ganham asserção e mutação | `o=$(bash tests/run-all.sh 2>&1); grep -c '^  ok    covered: ' <<< "$o"` → `5` | pending | — |
 | I5 | Regras de sensor e o `templates/review.md` que falta | `o=$(bash tests/run-all.sh 2>&1); grep -c '^  ok    rule: ' <<< "$o"` → `5` | pending | — |
 
@@ -126,6 +126,44 @@ atualizado: 2026-08-18 21:40
   `score: 86 caught, 0 known gap(s), of 86` e `53 finding(s)`. `./bin/sdd health` → `kit healthy`,
   rc 0. `shellcheck -S warning bin/sdd tests/*.sh` limpo. O Check do incremento: `3`, medido `2`
   contra o HEAD antes da asserção.
+
+- 2026-08-18 · `I3` · ⚠️ **A primeira asserção nasceu vermelha pelo MOTIVO ERRADO, e quase passou
+  assim.** O padrão citava a grafia pós-conserto (`session(s)`), então contra o runner velho — que
+  escrevia `sessions` — não casava nada e a asserção lia `0/0`. Vermelho convincente, significado
+  nenhum: do jeito que estava, uma troca de plural sem tocar no número teria sido lida como
+  conserto. Reescrita para casar o NÚMERO e ignorar a grafia (`session[^ ]*`), reprovou `0/2` — as
+  duas vozes erradas, que é o defeito. É a regra do `CLAUDE.md` sobre red pelo motivo certo,
+  cobrada dentro da própria sessão que a estava aplicando.
+- 2026-08-18 · `I3` · ⚠️ **Segundo fail-open, no termo que prova que a frase do piso não guarda
+  literal.** Escrito como `grep` sobre o arquivo inteiro, ele reprovou na PRÓPRIA documentação (o
+  comentário acima da frase cita o defeito que descreve) — e o modo caro é o outro lado: renomeada
+  a função, o `grep` continuaria respondendo "nenhum literal" sobre um corpo que nunca abriu. Passou
+  a ler só as linhas de impressão de `kaizen_axis_note` e a carregar denominador (`0/4`), então 0
+  linhas lidas reprova em vez de passar no vazio.
+- 2026-08-18 · `I3` · **Cinco mutações e não três.** Uma por defeito é o mínimo do plano, mas duas
+  regras das asserções novas ficariam sem probe nenhum: o parágrafo de exclusão **colado na tabela**
+  (o `mut_..._split` deixa a linha em branco de cima intacta, e a asserção D5 vizinha conta brancos
+  CONSECUTIVOS, então nada mais a veria) e a **série que deixa de publicar** `.guard.floor`. Ambas
+  são o over-correction que uma mão consertando o defeito alcança primeiro. Custo medido: ~1 onda a
+  mais no pool de 8. Cada um dos cinco foi verificado sozinho — aplica, segue bash válido, morre na
+  asserção escrita para ele e em nenhuma outra.
+- 2026-08-18 · `I3` · **Decisão: o piso ganhou dono em bash (`KAIZEN_GUARD_FLOOR`), não em jq.** O
+  `TODO.md` mandava "interpolar o `guard_floor` da série", mas o produtor da série VAZIA é um
+  `printf` que não tem entrada para rodar o programa jq — publicar o campo só no jq teria criado um
+  `"floor":3` escrito à mão ao lado, que é o defeito de novo. A constante alimenta o jq por
+  `--argjson` e o `printf` por expansão; `check-kaizen.sh` já compara os dois conjuntos de chaves,
+  e a mutação `KAIZEN_guard_floor_unpublished` morre nos dois sensores.
+- 2026-08-18 · `I3` · `docs/pipeline.md:513` entrou no MESMO commit, não no `TODO.md`: a chave
+  `floor` é contrato de artefato (a série é lida pelo agente `sdd-kaizen`), e o `CLAUDE.md` manda
+  atualizar `templates/`, `docs/pipeline.md` e o agente afetado junto com a mudança.
+- 2026-08-18 · `I3` · **`TODO.md` 53 → 50**, com `todo-findings 50` na baseline no mesmo commit:
+  saem os 3 itens da família e **nenhum achado novo nasceu** — o primeiro incremento desta missão em
+  que a re-derivação não achou trabalho extra. As três âncoras do plano estavam defasadas de novo
+  (`:2205`→`:2246`, `:2580-2583`→`:2621-2624`, `:3004`→`:3045`), mas o defeito era o descrito.
+- 2026-08-18 · `I3` · Evidência do gate: `tests/run-all.sh` → `suite green`, rc 0, com
+  `score: 91 caught, 0 known gap(s), of 91` (era 86) e `50 finding(s)`. `./bin/sdd health` →
+  `kit healthy`, rc 0. `shellcheck -S warning bin/sdd tests/*.sh` limpo. O Check do incremento:
+  `9`, medido `6` contra o HEAD antes das asserções.
 
 ## Incrementos de fix (QA)
 
