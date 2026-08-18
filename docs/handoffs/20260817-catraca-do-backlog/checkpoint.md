@@ -1,6 +1,6 @@
 ---
 missao: 20260817-catraca-do-backlog
-atualizado: 2026-08-17 21:58
+atualizado: 2026-08-17 23:31
 ---
 
 # Checkpoint — a catraca do backlog
@@ -25,7 +25,7 @@ atualizado: 2026-08-17 21:58
 | I2 | catraca da contagem de achados | `o=$(bash tests/check-health.sh 2>&1); grep -c '^  ok    a baseline off by one fails both ways' <<< "$o"` → `1` | done | 36a6eb6 |
 | I3 | cinco defeitos de saída do `cmd_autonomy` | `o=$(bash tests/check-autonomy.sh 2>&1); grep -c '^  ok    output:' <<< "$o"` → `5` | done | 02e5da6 |
 | I4 | mutações que faltam no catálogo | `grep -cE '^mut_[A-Za-z0-9_]+\(\) \{' tests/check-mutation.sh` → `81` | done | f0bbf82 |
-| I5 | política escrita e baseline no número real | `o=$(bash tests/check-health.sh 2>&1); grep -c '^  ok    the ratchet policy is written where the next mission meets it' <<< "$o"` → `1` | pending | — |
+| I5 | política escrita e baseline no número real | `o=$(bash tests/check-health.sh 2>&1); grep -c '^  ok    the ratchet policy is written where the next mission meets it' <<< "$o"` → `1` | done | ca017f9 |
 
 ## Notas de execução
 
@@ -167,6 +167,56 @@ atualizado: 2026-08-17 21:58
   — é tarefa do I5, e ficam em `TODO.md:80`, `:284`, `:304` e `:310` (os dois últimos deslocaram de
   `:297` e `:303` com a entrada nova acima), todos com hash `f0bbf82`. ⚠️ As âncoras `bin/sdd:` que os quatro citam
   estão ~800 linhas defasadas; as reais estão nos comentários das entradas novas do catálogo.
+
+- 2026-08-17 23:31 · `I5` · **A asserção nasceu vermelha nos DOIS documentos, e metade dela já
+  passava por acidente:** o `TODO.md` carrega `health-baseline.txt` num achado alheio sobre
+  `E2E_DIR`. Só a conjunção com `todo-findings` discrimina — medido antes de escrever, não suposto.
+  A regra é estrutural (dois literais de contrato), nunca palavra em português: os dois arquivos
+  são conteúdo em `OUTPUT_LANG`, e é o mesmo motivo que mantém o `check-todo.sh` fora do
+  `lang-allowlist.txt`.
+- 2026-08-17 23:31 · `I5` · **A asserção 8 é a ÚNICA deste sensor que o catálogo de mutação não
+  alcança** — toda `mut_HEALTH_*` sabota o `bin/sdd`, e sabotagem de runner não faz documento dizer
+  menos. Por isso ela carrega seis probes próprios em vez de confiar na mutação, e o bloco do
+  **veredito** é exercitado em subshell: sem isso, as duas linhas que transformam documento calado
+  em run vermelho eram a camada que nenhum probe tocava (a regra "probe mede o CAMINHO, não só a
+  função", do `check-todo.sh`).
+- 2026-08-17 23:31 · `I5` · Sabotagem adversarial: **14 degradações, 14 pegas**, e o controle
+  íntegro dispara **NADA** (piso contra falso positivo). ⚠️ A primeira matriz concluiu errado sobre
+  dois probes: um `grep` de atribuição casava as duas asserções de veredito, então a de piso
+  aparecia como "nunca dispara" quando na verdade era a única a pegar `if false; then`. Harness
+  corrigido antes de qualquer conclusão — probe que não prova o que mediu não vale.
+- 2026-08-17 23:31 · `I5` · **Dois probes foram escritos e REMOVIDOS por decisão de regra**, como o
+  conjunto `1 check(s) failed` do I2: `a silent CLAUDE.md` e `a silent TODO.md` disparavam em cinco
+  degradações mas **nunca eram o motivo único** de um sensor degradado ficar vermelho — a matriz
+  provou que o conjunto perde zero cobertura sem eles. Os seis que ficaram são catraca única de
+  pelo menos uma degradação cada. Removidos, não documentados.
+- 2026-08-17 23:31 · `I5` · **A asserção nova quebrou o controle do harness de mutação, e o
+  conserto é do harness.** `sandbox()` copia `bin tests templates config agents docs/adr` e **não**
+  `CLAUDE.md`/`TODO.md`; a regra os resolve a partir da própria raiz do kit, que dentro do sandbox é
+  o sandbox, e ausentes ela REPROVA — correto, porque "pular o documento que falta" é a falha
+  aberta que a casa proíbe. O `HARNESS-BROKEN` acusou alto (`the copy is not green even without
+  sabotage`), que é o controle funcionando. Copiar os dois arquivos é o conserto inteiro.
+- 2026-08-17 23:31 · `I5` · **A contagem NÃO se moveu: segue 73, e a baseline foi escrita no número
+  real medido.** Os 10 achados fechados levam `RESOLVIDO por` no corpo e continuam contando — saem
+  na varredura pós-merge, provados por `git merge-base --is-ancestor`, e é lá que a catraca cobra a
+  baseline de novo. Este incremento não registrou achado novo: o único candidato (o sensor passou de
+  1,5 s para ~2,0 s) já tem dois itens da mesma família no `TODO.md`, e um terceiro seria a inflação
+  que esta missão combate.
+- 2026-08-17 23:31 · `I5` · ⚠️ O `RESOLVIDO por` vai no **corpo**, nunca na última linha: a regra 4
+  do `check-todo.sh` exige a `(YYYY-MM-DD)` do found-by na ÚLTIMA linha de conteúdo. Os 10 itens
+  ficaram entre 6 e 8 linhas, dentro do teto. Quem for fechar item em lote de novo: é essa a
+  restrição, e ela não está escrita em lugar nenhum além daqui.
+- 2026-08-17 23:31 · `I5` · **Métrica 1 provada de novo no repo real, já com o cabeçalho novo:**
+  baseline em 72 contra 73 reais reprova com as duas mensagens (`finding outside the baseline:
+  todo-findings 73` **e** `stale baseline: 'todo-findings 72' … delete the line`), rc 1, baseline
+  restaurada por `trap`. **Verificação end-to-end do plano, completa:** `tests/run-all.sh` → rc 0
+  `suite green` com `score: 81 caught, 0 known gap(s), of 81`; `sdd health` → `kit healthy` com
+  `ratchet: 7 known debt(s), none new`; `grep -c 'RESOLVIDO por' TODO.md` → **12** (os 10 itens mais
+  as 2 ocorrências da prosa do cabeçalho), exatamente o esperado no `01-plano.md`.
+- 2026-08-17 23:31 · `I5` · **Quarto aborto calado da família, visto ao vivo:** com a suíte vermelha
+  o `sdd health` imprimiu só o cabeçalho e saiu 1 — nem a linha `suite red` que ele existe para dar.
+  Já é achado aberto do `TODO.md` (seção "Sensores que faltam"); registrado aqui como avistamento,
+  não como item novo.
 
 ## Incrementos de fix (QA)
 
