@@ -4,7 +4,7 @@ titulo: O sdd health para de morrer calado, e 18 achados baratos saem do backlog
 data: 2026-08-18
 versao: n/a — JIRA_ENABLED=false neste repo
 branch: chore/lote-facil
-aprovacao:
+aprovacao: humano-2026-08-18
 ddd: n/a
 ---
 
