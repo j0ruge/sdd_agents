@@ -40,7 +40,7 @@ Achados sobre **repos-alvo** vão para o `TODO.md` daquele repo. Este arquivo é
 ### Sensores que faltam
 
 - [ ] **A rubrica do auto-teste no `CLAUDE.md` conta cinco sensores e o `grep` devolve seis** —
-  `CLAUDE.md:135` — a linha manda conferir por `grep -l selftest tests/` e declara o resultado
+  `CLAUDE.md:163` — a linha manda conferir por `grep -l selftest tests/` e declara o resultado
   esperado; medido na `main` e no HEAD, os dois devolvem **6**, porque o `jobs_selftest()` do
   escalonador (`tests/check-mutation.sh:63`, entrou em `52414e4`) casa o grep sem ser auto-teste de
   regra. Número escrito à mão em rubrica é a mesma classe do `44 caught of 44` que esta missão já
@@ -332,7 +332,7 @@ Achados sobre **repos-alvo** vão para o `TODO.md` daquele repo. Este arquivo é
   — descoberto por `sdd-executor` na missão `20260815-ledger-sem-ponto-cego` (2026-08-16)
 
 - [ ] **O schema da série não tem sensor de drift contra a prosa que o descreve** — `bin/sdd:2738`
-  vs `:2735`, `:2926`, `docs/pipeline.md:499`, `docs/adr/0003:57`, `agents/sdd-kaizen.md:40` e
+  vs `:2735`, `:2926`, `docs/pipeline.md:501`, `docs/adr/0003:57`, `agents/sdd-kaizen.md:40` e
   `docs/failure-modes.md:99` — produzido em dois lugares (o `jq` e o literal vazio, `:2558`) e
   descrito em **dez**, QUATRO deles dentro do `bin/sdd`. Cobrado 6×: na DOCS de
   `20260817-eixo-do-juiz`, **oito** dos dez diziam a unidade que o F1 da r3 trocara horas antes
@@ -463,8 +463,8 @@ Achados sobre **repos-alvo** vão para o `TODO.md` daquele repo. Este arquivo é
 ### Saída humana e cosmética
 
 - [ ] **43% do `docs/pipeline.md` é um subsistema só, e ele cresce toda missão do ledger** —
-  `docs/pipeline.md:326-568` — as seções "The autonomy ledger" (149 linhas) e "The kaizen loop" (94)
-  somam **243 de 568** num arquivo que é o índice do pipeline; esta missão engordou as duas. Índice
+  `docs/pipeline.md:326-570` — as seções "The autonomy ledger" (149 linhas) e "The kaizen loop" (96)
+  somam **245 de 570** num arquivo que é o índice do pipeline; esta missão engordou as duas. Índice
   que carrega profundidade é o doc que a próxima sessão não lê inteiro. Direção: `references/` para
   o ledger + juiz, com o índice roteando — **não** executar no meio de outra missão, é refator de
   estrutura e merece a sua. — descoberto por `sdd-docs` na missão `20260817-eixo-do-juiz` (2026-08-17)
@@ -548,7 +548,7 @@ Achados sobre **repos-alvo** vão para o `TODO.md` daquele repo. Este arquivo é
   na missão `20260817-eixo-do-juiz` (2026-08-17)
 
 - [ ] **O `KAIZEN_LOG.md` não fixa o instrumento das próprias linhas, e uma delas já mentiu** —
-  `KAIZEN_LOG.md:175` — a entrada de `20260816-portas-do-humano` registrou "asserções `ok`: 490" para
+  `KAIZEN_LOG.md:261` — a entrada de `20260816-portas-do-humano` registrou "asserções `ok`: 490" para
   um `main` que mede **435** pela âncora de 4 espaços; `490` é a contagem solta `^  ok`, que soma 55
   linhas de 3 espaços impressas pelo runner dentro dos fixtures. O tree é o mesmo
   (`git diff c821ade..96a9bf1 -- tests/ bin/sdd` vazio), então a série 408 → 457 → 490 do arquivo tem
