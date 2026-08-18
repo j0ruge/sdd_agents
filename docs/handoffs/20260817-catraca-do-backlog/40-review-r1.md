@@ -160,6 +160,13 @@ sendo cobrada pela catraca que ela própria instalou, pelo caminho que o QA medi
 | R7 | Mecânica reproduzida: `WORK=""; FIX="$WORK/kit"` → `/kit`, e `: "${FIX:?}"` **não** dispara |
 | T1–T3 | `tests/check-todo.sh` → `76 finding(s), all within 8 lines and carrying anchor + date`; baseline movida no mesmo commit |
 
+## Commits desta rodada
+
+| Hash | O que carrega |
+|---|---|
+| `cbe4159` | Os 7 consertos (R1–R7), os 3 itens novos do `TODO.md` (T1–T3) e a baseline em `todo-findings 76` — o conserto e a catraca no mesmo commit, como a regra exige |
+| `68a25b2` | Este relatório, as 4 notas da r1 no `checkpoint.md`, o Check do I3 em `6` e o aviso do `01-plano.md` |
+
 ## Evidência final
 
 - `tests/run-all.sh` → **rc 0**, `suite green`, `score: 81 caught, 0 known gap(s), of 81`,
