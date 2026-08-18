@@ -3,7 +3,13 @@
 # A finding that is NOT here fails: the debt may not grow in silence.
 # A line here that STOPPED being a finding fails too: a stale baseline is a label, not an
 # artifact, and a list describing a world that no longer exists is worse than no list at all.
-# Every line needs an owner — the TODO.md entry that will pay it off.
+# Every line needs an owner. For almost all of them that is the TODO.md entry that will pay it
+# off. ONE class is different and is admitted here rather than given a fake owner: a line that
+# freezes a PROPERTY OF THE WHOLE FILE, whose owner is that file. It is never paid off, because
+# there is nothing to pay — it moves in a diff, with an author, whenever the property moves. Today
+# the class has exactly one member, `todo-findings`, at the bottom. Inventing a TODO.md entry to
+# satisfy the older wording would have been a label pointing at nothing, which is the one thing
+# this file exists to refuse.
 #
 # format: <check-id> <target>   # <owner>        (blank lines and lines starting with # ignored)
 
@@ -16,3 +22,11 @@ var-never-read DEV_UP_CMD         # idem
 var-never-read DEV_READY_CMD      # idem
 var-never-read DEV_READY_TIMEOUT  # idem
 var-never-read E2E_DIR            # TODO.md `E2E_DIR`: read only by the agent, never by the runner
+
+# The backlog ratchet, and the one line whose owner is not a TODO.md entry — its owner is the
+# FILE. It freezes how many open findings TODO.md carries, so growth stops being silent: a mission
+# that legitimately finds three things still writes them down, but the number moves in a diff with
+# an author instead of drifting. Both directions bite — a count that rose without a record, and a
+# baseline left behind after a sweep closed items. Recount by `tests/check-todo.sh`, never by a
+# `grep -c`: that answers one too many (the format example in the header's fenced block).
+todo-findings 76

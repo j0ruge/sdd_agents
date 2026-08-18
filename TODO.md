@@ -27,11 +27,20 @@ Achados sobre **repos-alvo** vão para o `TODO.md` daquele repo. Este arquivo é
 > **Teto de tamanho.** Um item cabe em ~6 linhas: o quê + `arquivo:linha` + por que importa +
 > direção + quem descobriu. A análise longa mora no handoff da missão citada. `tests/check-todo.sh`
 > mede a forma e o teto.
+>
+> **Catraca do volume — crescer é permitido, crescer calado não.** Quantos itens este arquivo
+> carrega é o achado `todo-findings <N>` do `sdd health`, congelado em `tests/health-baseline.txt`.
+> Reprova nos **dois** sentidos: número que subiu sem registro, e baseline que ficou para trás
+> depois de uma faxina. Quem acrescenta item aqui **e** move a linha da baseline no mesmo commit
+> está certo — o número tem dono e aparece no diff. Quem só acrescenta descobre no `sdd health`.
+> Ela mora lá e não no `TEST_CMD` porque um teto dentro da suíte reprovaria toda missão em voo.
+> ⚠️ A contagem sai de `tests/check-todo.sh`, nunca de um `grep -c '^- \[ \]'` — este responde um
+> a mais, contando a linha de exemplo do bloco cercado acima.
 
 ### Sensores que faltam
 
 - [ ] **A rubrica do auto-teste no `CLAUDE.md` conta cinco sensores e o `grep` devolve seis** —
-  `CLAUDE.md:135` — a linha manda conferir por `grep -l selftest tests/` e declara o resultado
+  `CLAUDE.md:163` — a linha manda conferir por `grep -l selftest tests/` e declara o resultado
   esperado; medido na `main` e no HEAD, os dois devolvem **6**, porque o `jobs_selftest()` do
   escalonador (`tests/check-mutation.sh:63`, entrou em `52414e4`) casa o grep sem ser auto-teste de
   regra. Número escrito à mão em rubrica é a mesma classe do `44 caught of 44` que esta missão já
@@ -82,6 +91,7 @@ Achados sobre **repos-alvo** vão para o `TODO.md` daquele repo. Este arquivo é
   `check-gates.sh` ("sdd retry is the other call site"), mas nenhuma mutação exercita a remoção,
   então o score não credita a proteção. Não é defeito, é contabilidade do `sdd health`.
   Direção: `mut_RETRY_branch_switch_dead` endereçado ao corpo do `cmd_retry`.
+  **RESOLVIDO por `f0bbf82`** — a entrada entrou com esse nome, endereçada por faixa.
   — descoberto por `sdd-reviewer` na missão `20260816-portas-do-humano` (2026-08-17)
 
 - [ ] **O `die` de artefato faltando do `sdd approve` é regra sem probe** — `bin/sdd:1842` — o
@@ -250,6 +260,8 @@ Achados sobre **repos-alvo** vão para o `TODO.md` daquele repo. Este arquivo é
   health cobra mutação por gate, mas ninguém sabota as checagens dele. Já mordeu: duas nasceram
   com a lógica invertida pelo `pipefail` e foram pegas à mão, não por sensor. Direção: mutações
   `mut_HEALTH_*` (catraca que não reprova achado novo, proveniência que passa com skill ausente).
+  **RESOLVIDO por `afe5db6`** — `tests/check-health.sh`, mais `mut_HEALTH_ratchet_one_way` e
+  `mut_HEALTH_provenance_blind`; esta mira DIVERGÊNCIA, não skill ausente, que o health pula.
   — descoberto por `humano` na missão `20260814-i13.2-mutacao-health` (2026-08-14)
 
 - [ ] **A suíte não exercita `--max-phases`, e ele custa uma avaliação de gate a mais** —
@@ -286,6 +298,8 @@ Achados sobre **repos-alvo** vão para o `TODO.md` daquele repo. Este arquivo é
   — a revisora verificou à mão que as duas discriminam (reverter `LAST_PHASE_SID` derruba a
   primeira; no-op no `moved` do `cmd_retry` derruba a segunda), mas nenhuma sabotagem está no
   catálogo. A regra "gate novo entra com mutação" é sobre gate, não sobre toda asserção nova.
+  **RESOLVIDO por `f0bbf82`** — duas entradas; a do `moved` do `cmd_retry` precisou de âncora
+  própria, porque `mut_RUN_moved_never_true` mira a cópia de QUATRO espaços do `cmd_run`.
   — descoberto por `/codereview` na missão `20260815-i13.1-autonomy-log` (2026-08-15)
 
 - [ ] **A asserção "the retry carries its own moved" não falha pela propriedade que promete** —
@@ -294,10 +308,18 @@ Achados sobre **repos-alvo** vão para o `TODO.md` daquele repo. Este arquivo é
   pelo caminho real. Ainda pega campo ausente ou `moved` sempre-`true`; só o nome discrimina mais
   do que ela. — descoberto por `/codereview` na missão `20260815-i13.1-autonomy-log` (2026-08-15)
 
+- [ ] **O `moved` do `cmd_kaizen` não tem asserção, logo não pode ter mutação** — `bin/sdd:3103` —
+  as outras duas cópias de `[ "$before" != "$after" ] && moved="true"` ganharam mutação nesta
+  missão (`cmd_run`, `cmd_retry`); esta foi sabotada à mão e `check-kaizen.sh` **e**
+  `check-autonomy.sh` ficaram verdes. Sessão de KAIZEN que move o disco entra no ledger como
+  desperdício. Direção: a asserção primeiro, a entrada do catálogo depois.
+  — descoberto por `sdd-executor` na missão `20260817-catraca-do-backlog` (2026-08-17)
+
 - [ ] **`cmd_kaizen` tem partes sem mutação própria** — `bin/sdd` (`kaizen_reminder`, ramo
   "already judged" idempotente) — as 5 mutações do catálogo cobrem `gate_KAIZEN` cego, Jidoka
   morto, guarda ignorada, bailout de aprovação morto e a régua de rótulos; o lembrete e a
   idempotência têm asserções em `tests/check-kaizen.sh` sem sabotagem que prove que medem algo.
+  **RESOLVIDO por `f0bbf82`** — `mut_KAIZEN_reminder_dead` e `mut_KAIZEN_already_judged_spends`.
   — descoberto na execução do `i13.3-sdd-kaizen` (2026-08-15)
 
 - [ ] **Três das quatro metades do evento `degraded` não têm mutação** — `bin/sdd:1796` (o
@@ -305,11 +327,12 @@ Achados sobre **repos-alvo** vão para o `TODO.md` daquele repo. Este arquivo é
   — o I2 entrou com uma mutação só porque o Check do incremento fixava o score, e sabotar várias
   âncoras num mutante derrubaria a detecção de "âncora apodreceu". As três foram sabotadas à mão
   e as três mataram a suíte, mas evidência de sessão não roda no CI. Vale um mutante para cada
-  quando houver folga de régua. — descoberto por `sdd-executor` na missão
-  `20260815-ledger-sem-ponto-cego` (2026-08-16)
+  quando houver folga de régua. **RESOLVIDO por `f0bbf82`** — as três entraram; as quatro
+  `mut_RUN_degraded_*` que já existiam não alcançavam nenhuma delas.
+  — descoberto por `sdd-executor` na missão `20260815-ledger-sem-ponto-cego` (2026-08-16)
 
 - [ ] **O schema da série não tem sensor de drift contra a prosa que o descreve** — `bin/sdd:2738`
-  vs `:2735`, `:2926`, `docs/pipeline.md:499`, `docs/adr/0003:57`, `agents/sdd-kaizen.md:40` e
+  vs `:2735`, `:2926`, `docs/pipeline.md:501`, `docs/adr/0003:57`, `agents/sdd-kaizen.md:40` e
   `docs/failure-modes.md:99` — produzido em dois lugares (o `jq` e o literal vazio, `:2558`) e
   descrito em **dez**, QUATRO deles dentro do `bin/sdd`. Cobrado 6×: na DOCS de
   `20260817-eixo-do-juiz`, **oito** dos dez diziam a unidade que o F1 da r3 trocara horas antes
@@ -405,11 +428,43 @@ Achados sobre **repos-alvo** vão para o `TODO.md` daquele repo. Este arquivo é
   trocar e reancorar os dois mutantes.
   — descoberto por `humano` na missão `20260817-eixo-do-juiz` (2026-08-17)
 
+- [ ] **`sdd health` aborta calado no meio quando `~/.claude/plugins/cache` não existe** —
+  `bin/sdd:1854` — `find` em diretório ausente devolve 1 e, sob o `set -e` + `pipefail` do runner,
+  a atribuição mata o comando no meio da proveniência: rc 1, nenhuma palavra dita, e nem a catraca
+  nem o veredito final rodam. O irmão em `:1882` faz o mesmo quando a baseline não tem linha viva;
+  os dois foram achados pelo fixture hermético do sensor novo, que precisou modelar máquina com o
+  diretório. Direção: `|| true` nos dois, com asserção em `tests/check-health.sh`.
+  — descoberto por `sdd-executor` na missão `20260817-catraca-do-backlog` (2026-08-17)
+
+- [ ] **A checagem do `score:` do `sdd health` promete reprovar e morre calada** — `bin/sdd:1721` —
+  `score_line="$(grep -m1 …)"` devolve 1 quando a linha não existe e, sob `set -e`, mata o runner
+  na atribuição: o `health_bad "…went blind to the mutation"` seguinte é código morto e o
+  comentário acima dele afirma o contrário. Terceiro da família (`:1854` e `:1882`), e o mais caro,
+  porque é a checagem escrita para impedir cegueira. Provado por probe nesta sessão. Direção:
+  `|| true`, como o check 3 já faz, com asserção diferencial em `tests/check-health.sh`.
+  — descoberto por `sdd-executor` na missão `20260817-catraca-do-backlog` (2026-08-17)
+
+- [ ] **Duas das três comparações de `health_provenance` não têm fixture nem mutação** —
+  `bin/sdd:1829` (qa-execution) e `:1850` (a tabela de notas do codereview) — só a de `qa-report`
+  tem template instalado pelo fixture de `tests/check-health.sh`, então as outras duas ficam
+  permanentemente no ramo "skipped" e nada mede se ainda discriminam. A do codereview é a mais
+  exposta: é um laço `awk` de forma diferente das outras duas, e nenhuma `mut_HEALTH_*` a alcança.
+  Direção: um par match/divergência para cada, como a asserção 4 já faz.
+  — descoberto por `sdd-reviewer` na missão `20260817-catraca-do-backlog` (2026-08-17)
+
+- [ ] **Os 14 `ROOT="$(cd …)"` de `tests/` não levam `CDPATH=''`** — `tests/check-health.sh:61` e
+  os 13 irmãos — o operando é relativo (`tests/..`), então com `CDPATH` setado o `cd` resolve pelo
+  path de busca **e imprime o destino na stdout**: `ROOT` vira o diretório errado, duplicado em
+  duas linhas. Reproduzido. É a mesma família da CRITICAL que `ledger_repo_root` pagou, consertada
+  só lá. Exposto na invocação manual; via `run-all.sh` o caminho é absoluto. Direção: `CDPATH=''`
+  nos 14, de uma vez, com probe no `check-pipefail.sh` (que já varre a mesma superfície).
+  — descoberto por `sdd-reviewer` na missão `20260817-catraca-do-backlog` (2026-08-17)
+
 ### Saída humana e cosmética
 
 - [ ] **43% do `docs/pipeline.md` é um subsistema só, e ele cresce toda missão do ledger** —
-  `docs/pipeline.md:326-568` — as seções "The autonomy ledger" (149 linhas) e "The kaizen loop" (94)
-  somam **243 de 568** num arquivo que é o índice do pipeline; esta missão engordou as duas. Índice
+  `docs/pipeline.md:326-570` — as seções "The autonomy ledger" (149 linhas) e "The kaizen loop" (96)
+  somam **245 de 570** num arquivo que é o índice do pipeline; esta missão engordou as duas. Índice
   que carrega profundidade é o doc que a próxima sessão não lê inteiro. Direção: `references/` para
   o ledger + juiz, com o índice roteando — **não** executar no meio de outra missão, é refator de
   estrutura e merece a sua. — descoberto por `sdd-docs` na missão `20260817-eixo-do-juiz` (2026-08-17)
@@ -424,43 +479,64 @@ Achados sobre **repos-alvo** vão para o `TODO.md` daquele repo. Este arquivo é
 - [ ] **`sdd autonomy` imprime `US$ 2` em vez de `US$ 2.00`** — `bin/sdd:1617` — o `jq` imprime
   número, não string formatada: um total de `2.0` vira `2` e derruba o alinhamento de uma tabela
   feita para ser lida rápido; um leitor apressado lê "sem casas calculadas". Direção: `printf` no
-  lugar da interpolação. — descoberto por `sdd-reviewer` na missão `20260815-i13.1-autonomy-log`
-  (2026-08-15)
+  lugar da interpolação. **RESOLVIDO por `02e5da6`** — saiu `def usd` dentro do próprio `jq`, não
+  `printf`: a linha nasce num programa `jq` só, e o `jq` 1.7 não tem `printf`.
+  — descoberto por `sdd-reviewer` na missão `20260815-i13.1-autonomy-log` (2026-08-15)
 
 - [ ] **`cmd_autonomy` usa a mesma mensagem de `die` para dois defeitos** — `bin/sdd:1583` e
   `:1626` — as duas escrevem `"malformed row … the ledger is not readable"`: uma cobre JSON
   inválido, a outra JSON válido de shape errada. As correções são distintas (editar a linha vs
   entender por que o produtor escreveu não-objeto) e quem lê não sabe qual aconteceu. Direção:
-  duas mensagens, ou o detalhe do `jq` anexado. — descoberto por `sdd-reviewer` na missão
-  `20260815-i13.1-autonomy-log` (2026-08-15)
+  duas mensagens, ou o detalhe do `jq` anexado. **RESOLVIDO por `02e5da6`** — só a do *shape*
+  mudou: renomear a outra moveria a colisão para ENTRE dois comandos, mais difícil de notar.
+  — descoberto por `sdd-reviewer` na missão `20260815-i13.1-autonomy-log` (2026-08-15)
 
 - [ ] **`sdd autonomy` imprime duas linhas em branco em vez de uma** — `bin/sdd:1649-1652` —
   quando não há escaladas e há linha não reconhecida, sobra espaçamento entre o bloco "no
   comparable sessions" e a linha de exclusão. Cosmético, confirmado por reprodução: nenhuma
-  contagem some. — descoberto por `/codereview` na missão `20260815-i13.1-autonomy-log`
-  (2026-08-15)
+  contagem some. **RESOLVIDO por `02e5da6`** — a DUPLA saiu; a que sobra ENTRE duas exclusões é
+  outra, mesma família, e está registrada como achado próprio nesta seção.
+  — descoberto por `/codereview` na missão `20260815-i13.1-autonomy-log` (2026-08-15)
 
 - [ ] **`cmd_autonomy` repete o bloco "no data" literalmente** — `bin/sdd:1603-1605` e
   `:1620-1622` — as mesmas três linhas (`warn` + `dim` + `return 1`), palavra por palavra. As
   duas guardas são necessárias e checam coisas diferentes; a dívida é de manutenção: quem
   reescrever uma passa a ter duas vozes para a mesma recusa, e é essa mensagem que separa "ledger
-  vazio" de "ledger corrompido". Direção: um helper local chamado dos dois pontos. — descoberto
-  por `/codereview` na missão `20260815-i13.1-autonomy-log` (2026-08-15)
+  vazio" de "ledger corrompido". Direção: um helper local chamado dos dois pontos.
+  **RESOLVIDO por `02e5da6`** — helper local, uma voz só para a recusa.
+  — descoberto por `/codereview` na missão `20260815-i13.1-autonomy-log` (2026-08-15)
 
 - [ ] **A tabela do `sdd autonomy` ordena versões lexicograficamente** — `bin/sdd:1848` faz
   `group_by(.kit_sha)` (o jq ordena pela chave) enquanto `kaizen_series` deriva
   `latest`/`previous` por primeira aparição no arquivo (`:1969`). Quem ler a última linha da
   tabela como "a versão mais recente" pode ler a errada. É ordem de saída humana, não contagem —
-  o I3 alinhou o eixo, não a ordem. Família do `latest_matching`, já fechado. — descoberto por
-  `sdd-executor` na missão `20260815-ledger-sem-ponto-cego` (2026-08-16)
+  o I3 alinhou o eixo, não a ordem. Família do `latest_matching`, já fechado.
+  **RESOLVIDO por `02e5da6`** — a tabela passou a sair na ordem de primeira aparição no arquivo,
+  a mesma de `kaizen_series`. — descoberto por `sdd-executor` na missão
+  `20260815-ledger-sem-ponto-cego` (2026-08-16)
+
+- [ ] **As linhas de exclusão do `sdd autonomy` levam uma linha em branco entre cada duas** —
+  `bin/sdd:2557-2560` — as quatro strings abrem com `\n` cada uma, então três exclusões saem como
+  bloco+branco+bloco+branco+bloco em vez de um parágrafo só. O I3 tirou a linha em branco DUPLA (a
+  que o `else ""` produzia com contagem zero); esta é a que sobra, mesma família, e agora é visível
+  porque nada mais a esconde. Direção: juntar as não-vazias num array e emitir um `\n` só na frente.
+  — descoberto por `sdd-executor` na missão `20260817-catraca-do-backlog` (2026-08-17)
+
+- [ ] **O `def usd` erra o dólar inteiro com entrada negativa** — `bin/sdd:2516` — `round` arredonda
+  ao mais próximo e `floor` desce para −∞, então o par não fecha: `-1.5` sai `-2.50` e `-0.005` sai
+  `-1.99`. Nenhum escritor do ledger produz `cost_usd` negativo, então hoje é inalcançável — o custo
+  é uma linha ilegível se uma linha for editada à mão. Mesma função perde um centavo em `1.005`
+  (`100.49999…` em ponto flutuante). Direção: decidir se vale guarda para mundo que o escritor não
+  produz; se valer, `fabs` mais o sinal de volta, com fixture que só um teste consegue montar.
+  — descoberto por `sdd-reviewer` na missão `20260817-catraca-do-backlog` (2026-08-17)
 
 ### Comentário e registro
 
 - [ ] **O `.claude/napkin.md` é rastreado, cita números da suíte e nenhuma fase pode editá-lo** —
   `.claude/napkin.md:18` — o item 3 diz "~33s no default, mutação 30/30" e "alvo <30s estourado
-  por ~3s"; o real desta missão é 44,55 s, 38/38 e ~15 s. Runbook lido toda sessão que afirma um
-  ratchet vencido convida a aceitar score menor. A fase DOCS tentou consertar e o harness barrou
-  `.claude/` como arquivo sensível, então a drift só é corrigível por sessão com humano presente.
+  por ~3s"; o real de hoje é ~3m30s e **81/81**, com o alvo estourado em ~7×. Runbook lido toda
+  sessão que afirma uma catraca vencida convida a aceitar score menor. **Duas** fases DOCS já
+  tentaram consertar e o harness barrou `.claude/` como sensível nas duas — só sessão com humano.
   Direção: decidir se o napkin entra na superfície que o DOCS mantém ou sai do versionamento.
   — descoberto por `sdd-docs` na missão `20260816-runner-sem-dividas` (2026-08-16)
 
@@ -472,7 +548,7 @@ Achados sobre **repos-alvo** vão para o `TODO.md` daquele repo. Este arquivo é
   na missão `20260817-eixo-do-juiz` (2026-08-17)
 
 - [ ] **O `KAIZEN_LOG.md` não fixa o instrumento das próprias linhas, e uma delas já mentiu** —
-  `KAIZEN_LOG.md:175` — a entrada de `20260816-portas-do-humano` registrou "asserções `ok`: 490" para
+  `KAIZEN_LOG.md:261` — a entrada de `20260816-portas-do-humano` registrou "asserções `ok`: 490" para
   um `main` que mede **435** pela âncora de 4 espaços; `490` é a contagem solta `^  ok`, que soma 55
   linhas de 3 espaços impressas pelo runner dentro dos fixtures. O tree é o mesmo
   (`git diff c821ade..96a9bf1 -- tests/ bin/sdd` vazio), então a série 408 → 457 → 490 do arquivo tem
@@ -528,6 +604,15 @@ Achados sobre **repos-alvo** vão para o `TODO.md` daquele repo. Este arquivo é
   I13.1 já é história) ou aceitar os ~3 s de estouro, que crescem com o catálogo. — medido por
   `sdd-executor` e `humano` nas missões `20260815-ledger-sem-ponto-cego` e no kaizen do
   paralelismo (2026-08-16)
+
+- [ ] **Sensor novo na suíte é multiplicador, não parcela: custa uma vez por mutante** —
+  `tests/run-all.sh:180` — `check-health.sh` roda em ~1,5 s sozinho e roda **dentro de cada
+  mutante**, hoje 81. Medido em passadas sequenciais e máquina quieta, `main` (`6d68dfc`) contra o
+  HEAD desta missão: **155,97 s → 210,81 s**, +55 s com 11 mutações a mais no mesmo diff.
+  ⚠️ O EXEC registrou **+281 s** para a mesma família e isso não reproduz — era contenção, não o
+  mecanismo. O item acima fala em crescer com o catálogo; este é outro mecanismo.
+  Direção: rodar por mutante só o sensor que o alcança — decisão do humano, junto com o alvo da D7.
+  — descoberto por `sdd-executor` na missão `20260817-catraca-do-backlog` (2026-08-17)
 
 ### Adiados por YAGNI
 

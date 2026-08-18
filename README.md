@@ -85,10 +85,12 @@ decorative, is in [`docs/pipeline.md`](docs/pipeline.md#the-missions-branch).
 `sdd health` answers *"does the kit still measure what it claims to?"* — it runs the suite,
 requires a **100% mutation score**, demands one mutation per gate, and reports drift between
 `load_config()` and `config/schema.md`, a command missing from `--help`, a variable with a default
-that is never read, and a fixture that diverged from the skill it imitates. Known debt lives
-frozen in `tests/health-baseline.txt`, each line owned by a `TODO.md` entry: a new finding fails,
-and so does a baseline line that stopped being a finding. It spends no paid session and does not
-need `.sdd/config.sh`.
+that is never read, and a fixture that diverged from the skill it imitates. It also freezes **how
+many open findings `TODO.md` carries**, as `todo-findings <N>`, so the backlog cannot grow in
+silence: growing stays allowed, growing undeclared does not. Known debt lives frozen in
+`tests/health-baseline.txt` — almost every line owned by the `TODO.md` entry that will pay it off,
+and one, the count itself, owned by the file: a new finding fails, and so does a baseline line
+that stopped being a finding. It spends no paid session and does not need `.sdd/config.sh`.
 
 `--dry-run` answers *"what happens if I run this?"*: it prints **every** phase the mission would
 go through from today's state — in order, each with its agent, model and boot prompt — without

@@ -67,6 +67,17 @@ prova por artefato — `git merge-base --is-ancestor <hash> main` —, nunca pel
 ⚠️ `- [x]` não existe neste arquivo: caixa marcada era uma segunda convenção de fechamento,
 invisível para a triagem do kaizen, que procura `RESOLVIDO por` no corpo.
 
+**Crescer é permitido; crescer calado, não.** O `sdd health` emite a contagem de achados abertos
+como o achado `todo-findings <N>`, e `tests/health-baseline.txt` a congela. A catraca morde nos
+dois sentidos: número que subiu sem registro reprova, e baseline que ficou para trás depois de uma
+faxina reprova junto. Missão que legitimamente descobre três coisas continua registrando as três —
+só que o número passa a se mover num diff com autor, em vez de derivar. Medido: 56 → 68 itens em
+duas missões, 16 fechados contra 29 nascidos, e nenhum instrumento dizia. A catraca mora no
+`sdd health` e **não** no `TEST_CMD` de propósito: um teto dentro da suíte reprovaria
+`gate_EXEC`/`QA`/`REVIEW` de toda missão em voo, inclusive a que acabou de registrar o achado.
+⚠️ A contagem sai de `tests/check-todo.sh` e nunca de um `grep -c` novo — o `grep` responde um a
+mais, porque conta a linha de exemplo do cabeçalho.
+
 **6. YAGNI.** Sem daemon, sem UI, sem banco, sem servidor. Um script bash, seis markdowns e
 templates. Se a solução pede infraestrutura, provavelmente é a solução errada.
 
@@ -93,6 +104,13 @@ templates. Se a solução pede infraestrutura, provavelmente é a solução erra
   cego — e a única missão em que o runner baixou a própria régua passou a ler `ok` para o juiz.
   Hoje cada programa define `is_escalation` uma vez. Evento novo entra pela definição, nunca por
   um `or` acrescentado a um `select`.
+  ⚠️ **Comentário que afirma paridade entre dois programas não é paridade.** Segunda instância da
+  classe, medida na r1 de `20260817-catraca-do-backlog`: o `$order` do `cmd_autonomy` lia "qual é
+  a versão mais recente" sobre `is_session and comparable`, o `kaizen_series` lê sobre **toda**
+  linha `on_axis`, e o comentário entre os dois jurava *"same spelling on purpose, in both
+  programs"*. Com uma escalada como primeira linha de uma versão, as duas janelas respondiam
+  diferente sobre o MESMO arquivo. Quem prova paridade é asserção **diferencial** — as duas saídas
+  comparadas entre si —, nunca a frase.
 
 ## Ao mexer nos agentes (`agents/*.md`)
 
@@ -118,12 +136,22 @@ regras estão em `templates/checkpoint.md`, com o porquê medido, e quem as cobr
 `tests/check-checkpoint.sh`.
 
 A suíte é `tests/run-all.sh` — é ela o `TEST_CMD` deste repo, e é ela que os gates rodam. Sensor
-novo entra lá. Os doze de hoje: `check-templates.sh`, `check-gates.sh`, `check-dry-run.sh`,
+novo entra lá. Os treze de hoje: `check-templates.sh`, `check-gates.sh`, `check-dry-run.sh`,
 `check-mutation.sh`, `check-lang.sh`, `check-autonomy.sh`, `check-kaizen.sh`, `check-preflight.sh`,
-`check-todo.sh`, `check-pipefail.sh`, `check-entrypoint.sh` e `check-checkpoint.sh`.
+`check-todo.sh`, `check-pipefail.sh`, `check-entrypoint.sh`, `check-checkpoint.sh` e
+`check-health.sh`.
 `sdd preflight`, `bash -n bin/sdd` e os dry-runs completam, mas não substituem. O passo de lint do
 `run-all.sh` cobre `bin/sdd` **e** `tests/*.sh` — deixar a suíte fora do linter foi o que segurou
 dois SC2318 reais em `check-mutation.sh` por três missões.
+
+⚠️ **"Entra lá" são quatro lugares, não um — e o quarto arrasta um quinto.** Medido ao acrescentar
+o `check-health.sh`: a linha `run` do `tests/run-all.sh`, o `LINT_FLOOR` do mesmo arquivo, o piso
+de superfície do `tests/check-pipefail.sh` e o do `tests/check-lang.sh`. Os três pisos existem
+contra vacuidade — glob que para de casar deixa o laço sem nada para ler e o sensor reporta "0
+violações" —, então piso que ficou para trás continua **passando** enquanto descreve uma superfície
+menor do que a que lê. O quinto lugar é o **fixture do selftest** do `check-pipefail.sh`, construído
+exatamente no piso: deixá-lo um curto fez três probes falharem com `surface shrank` em vez de
+medirem o que nomeiam.
 
 **Sensor que o catálogo de mutação não alcança carrega um auto-teste.** São duas situações, e
 hoje há quatro sensores nelas. `check-lang.sh` e `check-pipefail.sh` não podem se escanear (o

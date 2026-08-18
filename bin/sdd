@@ -1727,7 +1727,32 @@ cmd_health() {
     health_bad "mutation with an open gap — $score_line"
   fi
 
-  # --- 3. every gate has a mutation ----------------------------------------
+  # --- 3. the TODO.md backlog count, read from the SAME run ----------------
+  # The count is a CONTRACT between two files: tests/check-todo.sh writes the line, bin/sdd reads
+  # it, and NOBODY EVER RECOUNTS. A `grep -c '^- \[ \]' TODO.md` here answers one too many — it
+  # swallows the format example inside the header's fenced block, which the parser of
+  # check-todo.sh needed a whole review round to learn to skip. Reword the line on either side
+  # alone and this goes red, exactly like the `score:` contract above.
+  #
+  # Growing is still allowed: principle 5 of CLAUDE.md does not change, and a mission that finds
+  # three real things has to be able to write them down. What is forbidden is growing UNDECLARED.
+  # The number is a line of tests/health-baseline.txt, so it moves in a diff with an author, and
+  # health_ratchet refuses it in both directions — the count that rose without a record and the
+  # baseline left behind after a sweep.
+  #
+  # `|| true` is not noise. Under this file's own `set -e`, a grep that matches nothing makes the
+  # assignment return 1 and kills the runner mid-command — rc 1, not one word said — so the
+  # `-z` branch below would be unreachable and a broken contract would read as a crash. Same
+  # family as the two silent aborts of `find` and `grep -vE` recorded in TODO.md.
+  local todo_line
+  todo_line="$(grep -m1 -E '^  ok    [0-9]+ finding\(s\)' <<< "$out" || true)"
+  if [ -z "$todo_line" ]; then
+    health_bad "the suite did not print the TODO.md finding count — health went blind to the backlog"
+  else
+    health_finding "todo-findings $(sed -E 's/^  ok    ([0-9]+) .*/\1/' <<< "$todo_line")"
+  fi
+
+  # --- 4. every gate has a mutation ----------------------------------------
   # Explicit floor: zero gates found would pass by vacuity (a rename, an indentation change).
   local gates; gates="$(grep -oE '^gate_[A-Z]+' "$kit/bin/sdd" | sed 's/^gate_//' | sort -u)"
   n="$(grep -c . <<< "$gates")"
@@ -1745,7 +1770,7 @@ cmd_health() {
     fi
   fi
 
-  # --- 4. drift load_config() ↔ config/schema.md ----------------------------
+  # --- 5. drift load_config() ↔ config/schema.md ----------------------------
   local documented; documented="$(grep -oE '^\| `[A-Z0-9_]+`' "$kit/config/schema.md" | tr -d '|` ' | sort -u)"
   local keys; keys="$(health_default_keys)"
   for k in $keys; do
@@ -1755,7 +1780,7 @@ cmd_health() {
     grep -qxF "$k" <<< "$keys" || health_finding "doc-without-key $k"
   done
 
-  # --- 5. subcommand missing from --help -----------------------------------
+  # --- 6. subcommand missing from --help -----------------------------------
   local subcmds; subcmds="$(awk '/^main\(\) \{/ { inside = 1 } inside && /^\}/ { exit }
       inside && match($0, /^ +[a-z|+-]+\)/) {
         label = substr($0, RSTART, RLENGTH); gsub(/[ )]/, "", label); print label
@@ -1767,7 +1792,7 @@ cmd_health() {
     grep -qE "\bsdd $k\b" <<< "$help_out" || health_finding "cmd-not-in-help $k"
   done
 
-  # --- 6. variable with a default and never read ---------------------------
+  # --- 7. variable with a default and never read ---------------------------
   # BARE word, not `$K`: QA_MAX_ITER and EXEC_MAX_RETRY live in arithmetic context
   # (`$(( QA_MAX_ITER * 3 ))`), and a detector looking for `$K` would call them dead.
   # Scope: bin/sdd only. Sweeping the whole kit would make the key "appear" in schema.md and in
@@ -1780,7 +1805,7 @@ cmd_health() {
     grep -qE "\b${k}\b" <<< "$body" || health_finding "var-never-read $k"
   done
 
-  # --- 7. fixture provenance -----------------------------------------------
+  # --- 8. fixture provenance -----------------------------------------------
   health_provenance
 
   # --- ratchet --------------------------------------------------------------
@@ -2340,6 +2365,17 @@ cmd_retry() {
 #
 # This command is the human's window; the JUDGE reads the JSONL with jq. Coupling I13.3 to this
 # text would freeze a table nobody promised to keep.
+#
+# ONE sentence for one refusal, reached from the two guards below that mean it: a ledger that is not
+# there, and a ledger that holds no row. It was written twice, word for word, and two copies is how
+# one of them gets rewritten alone — this is the sentence that separates "empty ledger" from
+# "corrupt ledger", and a second voice for it would send the reader hunting for a writer that never
+# ran when the rows are merely unreadable. It PRINTS and nothing else: the `return 1` stays at each
+# call site, where the control flow is readable, and there is no global to lose in a subshell.
+autonomy_no_data() {   # autonomy_no_data <ledger path>
+  warn "no data: the ledger at $1 does not exist yet (or has no rows)"
+  dim "  It is written by 'sdd run' and 'sdd retry'. Nothing has been recorded on this machine."
+}
 cmd_autonomy() {
   while [ $# -gt 0 ]; do
     case "$1" in
@@ -2354,8 +2390,7 @@ cmd_autonomy() {
   # Absent or empty is NOT zero waste. Zeros that look like excellence are exactly the vacuity the
   # floors in check-lang and cmd_health exist to kill.
   if [ ! -s "$file" ]; then
-    warn "no data: the ledger at $file does not exist yet (or has no rows)"
-    dim "  It is written by 'sdd run' and 'sdd retry'. Nothing has been recorded on this machine."
+    autonomy_no_data "$file"
     return 1
   fi
   # A malformed row dies loudly. Skipping it quietly is how a judge ends up reading a subset and
@@ -2385,8 +2420,7 @@ cmd_autonomy() {
     # are right there under another path. The unattributable case is checked BEFORE the two that
     # name a path, for the same reason: both of those would blame a repo the rows never claimed.
     if [ "$lines" -eq 0 ]; then
-      warn "no data: the ledger at $file does not exist yet (or has no rows)"
-      dim "  It is written by 'sdd run' and 'sdd retry'. Nothing has been recorded on this machine."
+      autonomy_no_data "$file"
     elif [ "$norepo" -eq "$lines" ]; then
       warn "no data: none of the $lines row(s) in $file say which repo they came from"
       dim "  A row with no 'repo' field belongs to no project — counted apart, never mixed into one."
@@ -2442,6 +2476,12 @@ cmd_autonomy() {
   # this command instead of leaking jq's own exit code.
   local out jq_rc=0
   out="$(jq -rs --arg repo "$repo" "$def"'
+    # ⚠️ NO APOSTROPHE anywhere below, prose included: everything from here to the closing quote is
+    # ONE single-quoted shell string, so a stray one ends it mid-jq and bash then reports a syntax
+    # error dozens of lines away from the sentence that broke it. That is why every comment in here
+    # is phrased around the possessive ("this repo rows", "the judge series"). `bash -n` does catch
+    # it — loudly and in the wrong place, which costs a cycle to read.
+    #
     # ONE definition of "attributable to a kit version" for the whole program, exactly as
     # is_escalation is one definition of the escalation pair — and for the same reason. This was
     # written twice, `.kit_dirty == false` for sessions and `.kit_dirty != true` for escalations,
@@ -2467,6 +2507,16 @@ cmd_autonomy() {
     # An ARRAY, for the same two reasons the twin states: a separator inside a value collides, and
     # `+` on a non-string value makes jq die and takes this whole command down with it.
     def mission_key: [(.repo // ""), (.mission // "")];
+    # Money is a COLUMN, and jq interpolates a NUMBER: 2.0 came out `US$ 2` in the column next to
+    # `US$ 1.5`, the table stopped lining up, and a reader in a hurry reads "no cents were computed".
+    # NOT printf, which is nowhere near this string: the whole row is built inside this one jq
+    # program, and taking the number back out to bash to format it would split one line across two
+    # languages. The cents are rounded to an INTEGER first and re-split, so the second place is
+    # always written, zero or not — `\($c / 100)` alone drops it again.
+    def usd: (. * 100 | round) as $c
+             | ($c / 100 | floor) as $whole
+             | ($c - $whole * 100) as $cents
+             | "\($whole).\(if $cents < 10 then "0\($cents)" else "\($cents)" end)";
     # The repo filter runs before every bucket, and its own count is kept for the same reason the
     # other three exclusions are printed: a row that leaves has to say so. Bound BEFORE the pipe
     # so the buckets below still see a plain array of this repo rows and nothing changes shape.
@@ -2477,7 +2527,26 @@ cmd_autonomy() {
     | map(select(ledger_row_is_local))
     | (map(select((is_session and (comparable | not))
                 or (is_escalation and (on_axis | not)))) | length) as $skipped
-    | (map(select(is_session and comparable)) | group_by(.kit_sha)) as $groups
+    # group_by SORTS BY KEY, and a kit sha is hex: "the last line of the table" was the lexically
+    # largest version, not the most recent one. `kaizen_series` has always ordered its versions by
+    # FIRST APPEARANCE in the file (`shas_in_file_order` there — same reduce, same reason), so this
+    # window and the judge series answered "which version is latest?" differently over one file,
+    # with nothing on screen explaining it. Same spelling on purpose, in both programs;
+    # check-autonomy.sh compares the last table row to `.latest.kit_sha` of the series so neither
+    # side can be "improved" alone. `index` returns 0 for the first element and 0 is truthy in jq,
+    # which is what makes the reduce keep the first occurrence instead of appending it twice.
+    # The order is read off the SAME POPULATION the judge reads it off — every on_axis row, session
+    # or escalation — and not off the comparable sessions this table happens to draw. Getting that
+    # wrong is a second way to answer the same question differently: a version whose first on_axis
+    # row is an escalation is already known to the series when the table has never heard of it, so
+    # a sha that got blocked before it ever finished a session sorted after one that started later.
+    # Measured in the r1 review: rows blocked(aaaaaaa), session(bbbbbbb), session(aaaaaaa) put
+    # aaaaaaa last in the table while the series called bbbbbbb the latest. `comparable` implies
+    # on_axis by its own definition above, so every group here has a place in this list.
+    | (map(select(on_axis)) | map(.kit_sha)
+       | reduce .[] as $s ([]; if index($s) then . else . + [$s] end)) as $order
+    | (map(select(is_session and comparable))
+       | group_by(.kit_sha) | sort_by(.[0].kit_sha as $s | $order | index($s))) as $groups
     | (map(select(is_unrecognized)) | length) as $stray
     | (if ($groups | length) == 0 then
         "  no comparable sessions in this ledger"
@@ -2488,19 +2557,32 @@ cmd_autonomy() {
             | (map(select(.moved == false)) | length) as $stalled
             | (map(mission_key) | unique | length) as $missions
             | (map(.cost_usd // 0) | add) as $cost
-            | "  \($sha)  \($n) session(s) · \($stalled) stalled · \(($stalled * 100 / $n) | floor)% waste · \($missions) mission(s) · US$ \($cost | . * 100 | round / 100)"
+            | "  \($sha)  \($n) session(s) · \($stalled) stalled · \(($stalled * 100 / $n) | floor)% waste · \($missions) mission(s) · US$ \($cost | usd)"
           ) | join("\n"))
       end)
     , (map(select(is_escalation and on_axis)) | group_by(.kit_sha, .kind)
        | map("  \(.[0].kit_sha)  \(.[0].kind): \(length)") | join("\n")
        | select(length > 0) | "\nescalations\n" + .)
-    , (if $skipped > 0 then "\n  (\($skipped) non-comparable row(s) excluded: dirty kit, no kit_sha, or no moved field)" else "" end)
-    , (if $stray > 0 then "\n  (\($stray) unrecognized row(s) excluded: event missing or not one of session/blocked/degraded)" else "" end)
-    , (if $foreign > 0 then "\n  (\($foreign) row(s) excluded: born in another repo — the ledger is global, this reader is not)" else "" end)
-    , (if $norepo > 0 then "\n  (\($norepo) row(s) excluded: no repo field — the row cannot say which project it came from)" else "" end)
+    # `empty` and NOT `""` on the zero side of all four, which is the whole of the double-blank-line
+    # defect: each string already opens with a newline AND the jq comma puts every output on a line
+    # of its own, so an exclusion with nothing to report used to contribute a blank line by itself —
+    # with no escalations and one unrecognized row, two blanks opened between the table and the
+    # accounting. `empty` emits no output at all, exactly as the escalations line above does through
+    # `select(length > 0)`. No count moves: this is spacing only.
+    , (if $skipped > 0 then "\n  (\($skipped) non-comparable row(s) excluded: dirty kit, no kit_sha, or no moved field)" else empty end)
+    , (if $stray > 0 then "\n  (\($stray) unrecognized row(s) excluded: event missing or not one of session/blocked/degraded)" else empty end)
+    , (if $foreign > 0 then "\n  (\($foreign) row(s) excluded: born in another repo — the ledger is global, this reader is not)" else empty end)
+    , (if $norepo > 0 then "\n  (\($norepo) row(s) excluded: no repo field — the row cannot say which project it came from)" else empty end)
   ' "$file" 2>/dev/null)" || jq_rc=$?
   if [ "$jq_rc" -ne 0 ]; then
-    die "malformed row in $file — the ledger is not readable"
+    # A DIFFERENT sentence from the `ledger_parses` refusal above, because they are different
+    # defects with different remedies: there a line is not JSON and somebody edits the line; here
+    # every line parses and one of them is not an object, so somebody has to find the writer that
+    # produced it. One sentence for both said "malformed row" to a reader who then could not tell
+    # which had happened. The other half of the pair keeps ITS wording on purpose — `kaizen_series`
+    # refuses the same unparseable ledger with the same words, and renaming one of those two would
+    # move the collision instead of removing it.
+    die "unreadable row in $file — a row is valid JSON but not an object; find the writer that produced it"
   fi
   printf '%s\n' "$out"
 }

@@ -1,0 +1,269 @@
+---
+missao: 20260817-catraca-do-backlog
+atualizado: 2026-08-17 23:31
+---
+
+# Checkpoint — a catraca do backlog
+
+> **Este arquivo é lido por máquina.** O runner faz parse da tabela abaixo para decidir a
+> próxima fase. Não mude as colunas, não mude os tokens de status, não quebre linhas dentro de
+> uma célula. Detalhe narrativo vai no `01-plano.md`, não aqui.
+>
+> ⚠️ **Nada de `|` na célula do Check — nem escapado como `\|`.** O parser é `awk -F'|'` cru e
+> não conhece o escape do GFM: a célula vira duas, o Status lido passa a ser um pedaço do
+> comando e o Commit passa a ser `pending`.
+>
+> ⚠️ **Check que lê a saída de um sensor ancora em `^  ok    ` — quatro espaços, com o `^`.**
+> O runner imprime `  ok   ` com TRÊS espaços; nenhum Check daqui lê saída do runner.
+>
+> Atualizar o checkpoint é o **último ato** de cada incremento — depois do commit, nunca antes.
+> Status válidos: `pending` · `doing` · `done` · `blocked`.
+
+| ID | Incremento | Check (comando → esperado) | Status | Commit |
+|---|---|---|---|---|
+| I1 | sensor `check-health.sh` sobre `cmd_health` | `o=$(bash tests/check-health.sh 2>&1); grep -c '^  ok    the ratchet fails on a stale baseline line' <<< "$o"` → `1` | done | afe5db6 |
+| I2 | catraca da contagem de achados | `o=$(bash tests/check-health.sh 2>&1); grep -c '^  ok    a baseline off by one fails both ways' <<< "$o"` → `1` | done | 36a6eb6 |
+| I3 | cinco defeitos de saída do `cmd_autonomy` | `o=$(bash tests/check-autonomy.sh 2>&1); grep -c '^  ok    output:' <<< "$o"` → `6` | done | 02e5da6 |
+| I4 | mutações que faltam no catálogo | `grep -cE '^mut_[A-Za-z0-9_]+\(\) \{' tests/check-mutation.sh` → `81` | done | f0bbf82 |
+| I5 | política escrita e baseline no número real | `o=$(bash tests/check-health.sh 2>&1); grep -c '^  ok    the ratchet policy is written where the next mission meets it' <<< "$o"` → `1` | done | ca017f9 |
+
+## Notas de execução
+
+> Uma linha por evento relevante: bloqueio, decisão tomada, desvio do plano com justificativa.
+> É o que a próxima sessão lê para não repetir um erro que já custou caro.
+
+- 2026-08-17 17:44 · `PLAN` · Os cinco Checks foram rodados contra o HEAD `6d68dfc` no
+  planejamento e **os cinco deram vermelho**: I1 `0`, I2 `0`, I3 `0`, I4 `70`, I5 `0`. Registrado
+  porque o `TODO.md` traz um achado aberto sobre o gate PLAN-AUTO aceitar Check que já nasce verde.
+- 2026-08-17 17:44 · `PLAN` · Âncoras do cluster 1 re-derivadas: as do `TODO.md` estão ~870 linhas
+  defasadas. A tabela correta está no `01-plano.md`, seção "Contexto verificado". Não use as do
+  `TODO.md`.
+- 2026-08-17 17:44 · `PLAN` · O esperado `77` do I4 é derivado (`70 + 2 + 1 + 4`). Se a
+  re-derivação do I4 fechar item por evidência em vez de por código, recalcule e registre aqui.
+- 2026-08-17 19:52 · `I1` · Catálogo em **72** como o plano previu, então o `77` do I4 segue de pé
+  (`72 + 1` do I2 `+ 4` do I4). `sdd health` → `kit healthy`, `score: 72 caught, 0 known gap(s)`.
+- 2026-08-17 19:52 · `I1` · **Desvio do plano, deliberado:** a asserção 4 chama-se `provenance
+  fails when the fixture diverges from an installed skill`, não "...when an installed skill is
+  missing". Skill ausente **não reprova** — `health_provenance` a PULA por desenho (`bin/sdd:1806`),
+  como o linter ausente é pulado. Escrita contra o caminho que de fato falha, e diferencial.
+- 2026-08-17 19:52 · `I1` · O fixture hermético achou **dois abortos calados do `sdd health`**: com
+  `~/.claude/plugins/cache` ausente o `find` devolve 1, e com baseline sem linha viva o `grep -vE`
+  também — sob `set -e` + `pipefail` os dois matam o comando no meio, rc 1 e nenhuma palavra dita.
+  Fora de escopo (I1 é o sensor, não o conserto): foi para o `TODO.md`, e o fixture modela máquina
+  com o diretório, com o porquê comentado em `reset_home()`.
+- 2026-08-17 19:52 · `I1` · **Custo medido, e é o risco da tabela do plano acontecendo:** o sensor
+  roda em **1,5 s** sozinho (dentro do teto de 2 s), mas a suíte foi de **2m34s para 7m15s** —
+  porque roda dentro dos 73 mutantes (+4 s cada) e a contenção é super-linear. Aceito e registrado
+  no `TODO.md`: o sensor cabe no seu orçamento, o multiplicador é do harness de mutação e a saída
+  ("rodar por mutante só o sensor que o alcança") é decisão do humano, junto com o alvo da D7.
+- 2026-08-17 19:52 · `I1` · Três pisos de superfície andaram junto com o arquivo novo, o que o
+  plano não listou: `LINT_FLOOR` 14→15, `check-pipefail` 13→14 e `check-lang` 36→37. O do
+  `check-pipefail` arrastou o fixture do próprio selftest, construído **exatamente** no piso —
+  três probes passaram a falhar com "surface shrank" em vez de medir o que nomeiam. Quem for
+  acrescentar sensor à suíte de novo: são quatro lugares, não um.
+- 2026-08-17 19:52 · `I1` · Sabotagem adversarial: **9 probes, 9 vermelhos**. Toda asserção morre
+  em pelo menos uma, e a 3 (diferencial) e a 5 (piso) morrem **sozinhas** em probes próprios —
+  nenhuma das duas é redundante. O par que o plano previu se confirmou: `ratchet_one_way` mata a 2
+  e a 3 e deixa a 1 viva. Cada mutação foi verificada matando a suíte **só** por este sensor
+  (`1 suite(s) failed`), não por rc compartilhado com outro.
+- 2026-08-17 19:42 · `I2` · **A sabotagem adversarial achou uma falha-aberta na asserção 7, que a
+  auto-revisão não teria achado.** Com a linha da contagem na baseline daquele mundo, o `rc != 0`
+  que a asserção lia era escrito pelo ramo de **baseline órfã** (o achado deixa de ser emitido, a
+  linha fica sem par) — não pelo check novo. Medido: rebaixar o `health_bad` do check para `warn`
+  passava verde nas 7 asserções. Conserto: retirar a linha da baseline naquele mundo, o que faz o
+  check ser o único autor possível da falha. É o modo "rc compartilhado com outro ramo" do
+  `CLAUDE.md`, e ele apareceu numa asserção escrita justamente contra ele.
+- 2026-08-17 19:42 · `I2` · **Um conjunto foi escrito e depois REMOVIDO por decisão de regra.**
+  `grep -qF '1 check(s) failed'` entrou como o conserto da falha-aberta acima; a matriz provou que
+  quem consertava era a baseline enxuta, e que nenhuma sabotagem de ponto único quebrava o
+  conjunto. `CLAUDE.md`: regra que a sabotagem não alcança é decoração — removida, não documentada.
+- 2026-08-17 19:42 · `I2` · Matriz da sabotagem: **5 defeitos × 3 degradações**, todos os 5 pegos
+  pelo sensor íntegro, e cada degradação deixa escapar exatamente o seu defeito (D1→F1, D2→F2,
+  D3→F6), com o kit saudável ainda verde nas três. Os três conjuntos são carga, nenhum é enfeite.
+  ⚠️ A primeira rodada da matriz concluiu errado em 2 probes: `D2`/`D3` **apagavam** a linha que
+  carrega o `; then`, quebrando o `if` — o probe morria de sintaxe e o resultado não dizia nada.
+  Degradação **substitui** por `true`, nunca apaga, e o harness roda `bash -n` no **sensor** além
+  do `bin/sdd`.
+- 2026-08-17 19:42 · `I2` · **Terceiro aborto calado da família, e o pior deles:** a checagem do
+  `score:` (`bin/sdd:1721`) promete `health_bad` e morre antes — `score_line="$(grep …)"` devolve 1
+  sob `set -e` e mata o runner na atribuição. Provado por probe. Fora de escopo (I2 é a contagem):
+  foi para o `TODO.md`. O check novo já nasce com `|| true` por causa dele — copiar "o padrão
+  inteiro" como o plano mandava teria replicado o defeito, e a asserção 7 foi quem barrou.
+- 2026-08-17 19:42 · `I2` · A baseline foi escrita em **71**, não nos 68 do plano: o I1 registrou
+  dois achados e este incremento registrou um terceiro. É o risco "a missão descobre itens novos"
+  da tabela do plano acontecendo — e é o desenho, não o desvio. O I5 remede no fim.
+- 2026-08-17 19:42 · `I2` · Catálogo em **73** (`72 + 1`), `0 known gap(s)`; `sdd health` →
+  `kit healthy`, `ratchet: 7 known debt(s), none new`. O `77` do I4 segue de pé (`73 + 4`).
+- 2026-08-17 19:42 · `I2` · Métrica 1 provada **fora do fixture**, no repo real: baseline por 1
+  errada reprova com as duas mensagens (`finding outside the baseline: todo-findings 71` e
+  `stale baseline: 'todo-findings 70'`), rc 1. Baseline restaurada por `trap`.
+
+- 2026-08-17 20:26 · `I3` · **Os cinco Checks re-derivados antes de escrever: os cinco reproduzidos
+  à mão** (`US$ 2` e `US$ 1.5`; as duas mensagens de `die` idênticas; os dois blocos "no data"
+  byte a byte iguais; `zzzzzzz` escrito primeiro saindo depois de `aaaaaaa`; duas linhas em branco).
+  As cinco asserções nasceram vermelhas **cada uma pelo seu motivo**, lidas uma a uma na saída.
+- 2026-08-17 20:26 · `I3` · **Desvio do plano, deliberado: `printf` não entrou.** O plano e o
+  `TODO.md` diziam "`printf` no lugar da interpolação"; a linha inteira da tabela nasce dentro de um
+  único programa `jq`, e o `jq` 1.7 não tem `printf` — buscar o número de volta no bash partiria uma
+  linha em duas linguagens. Saiu `def usd`, que arredonda para centavo INTEIRO e re-parte, com o
+  porquê no comentário do ponto de mudança.
+- 2026-08-17 20:26 · `I3` · **Uma das duas mensagens de `die` foi mantida de propósito.** Só a do
+  *shape* ganhou frase nova: `kaizen_series` (`bin/sdd:2565`) recusa o mesmo ledger ilegível com as
+  mesmas palavras da outra, e renomeá-la moveria a colisão de dentro de um comando para entre dois —
+  a versão mais difícil de notar. Quem chegar aqui querendo "terminar o serviço": não termine.
+- 2026-08-17 20:26 · `I3` · **O programa `jq` do `cmd_autonomy` é UMA string em aspas simples, e um
+  apóstrofo de comentário a encerra no meio.** Custou dois ciclos: `human's` e `judge's` num
+  comentário novo, e `bash -n` acusou erro de sintaxe ~30 linhas depois da frase que quebrou. Toda
+  a prosa de lá é escrita contornando o possessivo — agora com o ⚠️ no topo do programa, que era o
+  lugar onde a regra faltava.
+- 2026-08-17 20:26 · `I3` · Sabotagem adversarial: **10 degradações, 10 pegas**. Em laboratório
+  limpo (baseline 0 falhas) cada uma reprova **exatamente uma** asserção — a sua. Nenhum rc
+  compartilhado, nenhuma asserção redundante. As quatro últimas miram só os **pisos** contra
+  vacuidade (coluna de dinheiro some, contabilidade some, frase some do fonte, tabela some): os
+  quatro são carga, nenhum é enfeite.
+  ⚠️ A primeira rodada concluiu **nada** em 3 dos 4 probes de piso — o `perl -0pe` não casou por
+  escape de `\(`. O harness grita `SABOTAGE-BROKEN` quando a edição não muda o arquivo ou quebra o
+  `bash -n`, e foi ele que barrou as três conclusões vazias. Probe sem prova de que sabotou não vale.
+- 2026-08-17 20:26 · `I3` · **A baseline da catraca subiu 71 → 72 neste commit**, e não no I5. Este
+  incremento registrou um achado (a linha em branco que sobra ENTRE exclusões consecutivas — mesma
+  família, fora do item relatado). O plano reserva o número ao I5, mas deixar a catraca vermelha por
+  dois incrementos é o oposto do que ela existe para fazer: crescer é permitido, aparecer no diff é
+  a regra. `sdd health` → `kit healthy`, `ratchet: 7 known debt(s), none new`. O I5 remede no fim.
+- 2026-08-17 20:26 · `I3` · Catálogo segue em **73**, `0 known gap(s)` — o I3 não acrescenta
+  mutação por desenho (o plano só prevê as 4 do I4). Logo o `77` do I4 continua de pé (`73 + 4`).
+- 2026-08-17 20:26 · `I3` · **Os 5 itens que este incremento fecha ainda NÃO levam `RESOLVIDO por`**
+  — é tarefa do I5, e ficam em `TODO.md:440`, `:446`, `:453`, `:459` e `:466` (seção "Saída humana e
+  cosmética"), todos com hash `02e5da6`. As âncoras `bin/sdd:` que eles citam continuam defasadas;
+  a tabela boa está no `01-plano.md`.
+
+- 2026-08-17 21:58 · `I4` · **O `77` foi recalculado para `81`, e o Check da linha foi ajustado** —
+  a rota que o próprio plano abre ("o `77` é derivado, não sagrado"). A aritmética nova é
+  `73 + 1 (retry/branch) + 2 (ledger) + 2 (kaizen) + 3 (degraded)`. O plano previu 4 porque contou
+  um item = uma mutação; três dos quatro itens pedem mais de uma. A **verificação end-to-end** do
+  `01-plano.md` passa a esperar `score: 81 caught, 0 known gap(s), of 81` — medido, `sdd health` →
+  `kit healthy`, `ratchet: 7 known debt(s), none new`.
+- 2026-08-17 21:58 · `I4` · **A re-derivação contradisse o plano nos dois pontos em que ele mandava
+  conferir, e nas duas vezes para MAIS trabalho, não menos.** (a) `mut_RUN_moved_never_true` **não**
+  cobre o `moved` do `cmd_retry`: ele ancora na cópia de QUATRO espaços do `cmd_run`, e `cmd_retry`
+  e `cmd_kaizen` têm a sua com DOIS — sob aquela sabotagem a asserção da linha 326 do
+  `check-autonomy.sh` fica verde. Medido por probe, não por leitura. (b) Nenhuma das quatro
+  `mut_RUN_degraded_*` alcança as três metades do item: elas cobrem o escritor do ledger, a guarda
+  one-shot, o `phase_label` do `kaizen_series` e o número de voltas. As três (journal, predicado do
+  `cmd_autonomy`, admissão da série) estavam mesmo descobertas.
+- 2026-08-17 21:58 · `I4` · **As oito nasceram sabotadas à mão, cada uma contra o sensor que a
+  pega, e cada uma morre pela asserção que o comentário nomeia** — nunca por rc compartilhado. Duas
+  precisaram de endereçamento por FAIXA depois de a primeira tentativa sabotar demais: `return
+  "$out_rc"` aparece **6×** dentro do `cmd_kaizen` (um `sed` sem faixa colapsa todos os bailouts do
+  comando num mutante só) e `def is_escalation` é byte a byte igual no `cmd_autonomy` e no
+  `kaizen_series`. Todas as oito verificadas mudando **exatamente uma linha** (`diff` contado) e
+  passando `bash -n`.
+- 2026-08-17 21:58 · `I4` · **Achado fora de escopo, com probe:** o `moved` do próprio `cmd_kaizen`
+  (`bin/sdd:3103`) sabotado à mão deixa `check-kaizen.sh` **e** `check-autonomy.sh` verdes — não há
+  asserção, logo não pode haver entrada no catálogo (é a regra do I4: sabotagem que deixa tudo verde
+  vira achado, não entrada). Foi para o `TODO.md`, e a baseline da catraca subiu **72 → 73 no mesmo
+  commit**, pelo mesmo motivo registrado no I3: catraca vermelha atravessando incremento é o oposto
+  do que ela existe para fazer.
+- 2026-08-17 21:58 · `I4` · **Os 4 itens que este incremento fecha ainda NÃO levam `RESOLVIDO por`**
+  — é tarefa do I5, e ficam em `TODO.md:80`, `:284`, `:304` e `:310` (os dois últimos deslocaram de
+  `:297` e `:303` com a entrada nova acima), todos com hash `f0bbf82`. ⚠️ As âncoras `bin/sdd:` que os quatro citam
+  estão ~800 linhas defasadas; as reais estão nos comentários das entradas novas do catálogo.
+
+- 2026-08-17 23:31 · `I5` · **A asserção nasceu vermelha nos DOIS documentos, e metade dela já
+  passava por acidente:** o `TODO.md` carrega `health-baseline.txt` num achado alheio sobre
+  `E2E_DIR`. Só a conjunção com `todo-findings` discrimina — medido antes de escrever, não suposto.
+  A regra é estrutural (dois literais de contrato), nunca palavra em português: os dois arquivos
+  são conteúdo em `OUTPUT_LANG`, e é o mesmo motivo que mantém o `check-todo.sh` fora do
+  `lang-allowlist.txt`.
+- 2026-08-17 23:31 · `I5` · **A asserção 8 é a ÚNICA deste sensor que o catálogo de mutação não
+  alcança** — toda `mut_HEALTH_*` sabota o `bin/sdd`, e sabotagem de runner não faz documento dizer
+  menos. Por isso ela carrega seis probes próprios em vez de confiar na mutação, e o bloco do
+  **veredito** é exercitado em subshell: sem isso, as duas linhas que transformam documento calado
+  em run vermelho eram a camada que nenhum probe tocava (a regra "probe mede o CAMINHO, não só a
+  função", do `check-todo.sh`).
+- 2026-08-17 23:31 · `I5` · Sabotagem adversarial: **14 degradações, 14 pegas**, e o controle
+  íntegro dispara **NADA** (piso contra falso positivo). ⚠️ A primeira matriz concluiu errado sobre
+  dois probes: um `grep` de atribuição casava as duas asserções de veredito, então a de piso
+  aparecia como "nunca dispara" quando na verdade era a única a pegar `if false; then`. Harness
+  corrigido antes de qualquer conclusão — probe que não prova o que mediu não vale.
+- 2026-08-17 23:31 · `I5` · **Dois probes foram escritos e REMOVIDOS por decisão de regra**, como o
+  conjunto `1 check(s) failed` do I2: `a silent CLAUDE.md` e `a silent TODO.md` disparavam em cinco
+  degradações mas **nunca eram o motivo único** de um sensor degradado ficar vermelho — a matriz
+  provou que o conjunto perde zero cobertura sem eles. Os seis que ficaram são catraca única de
+  pelo menos uma degradação cada. Removidos, não documentados.
+- 2026-08-17 23:31 · `I5` · **A asserção nova quebrou o controle do harness de mutação, e o
+  conserto é do harness.** `sandbox()` copia `bin tests templates config agents docs/adr` e **não**
+  `CLAUDE.md`/`TODO.md`; a regra os resolve a partir da própria raiz do kit, que dentro do sandbox é
+  o sandbox, e ausentes ela REPROVA — correto, porque "pular o documento que falta" é a falha
+  aberta que a casa proíbe. O `HARNESS-BROKEN` acusou alto (`the copy is not green even without
+  sabotage`), que é o controle funcionando. Copiar os dois arquivos é o conserto inteiro.
+- 2026-08-17 23:31 · `I5` · **A contagem NÃO se moveu: segue 73, e a baseline foi escrita no número
+  real medido.** Os 10 achados fechados levam `RESOLVIDO por` no corpo e continuam contando — saem
+  na varredura pós-merge, provados por `git merge-base --is-ancestor`, e é lá que a catraca cobra a
+  baseline de novo. Este incremento não registrou achado novo: o único candidato (o sensor passou de
+  1,5 s para ~2,0 s) já tem dois itens da mesma família no `TODO.md`, e um terceiro seria a inflação
+  que esta missão combate.
+- 2026-08-17 23:31 · `I5` · ⚠️ O `RESOLVIDO por` vai no **corpo**, nunca na última linha: a regra 4
+  do `check-todo.sh` exige a `(YYYY-MM-DD)` do found-by na ÚLTIMA linha de conteúdo. Os 10 itens
+  ficaram entre 6 e 8 linhas, dentro do teto. Quem for fechar item em lote de novo: é essa a
+  restrição, e ela não está escrita em lugar nenhum além daqui.
+- 2026-08-17 23:31 · `I5` · **Métrica 1 provada de novo no repo real, já com o cabeçalho novo:**
+  baseline em 72 contra 73 reais reprova com as duas mensagens (`finding outside the baseline:
+  todo-findings 73` **e** `stale baseline: 'todo-findings 72' … delete the line`), rc 1, baseline
+  restaurada por `trap`. **Verificação end-to-end do plano, completa:** `tests/run-all.sh` → rc 0
+  `suite green` com `score: 81 caught, 0 known gap(s), of 81`; `sdd health` → `kit healthy` com
+  `ratchet: 7 known debt(s), none new`; `grep -c 'RESOLVIDO por' TODO.md` → **12** (os 10 itens mais
+  as 2 ocorrências da prosa do cabeçalho), exatamente o esperado no `01-plano.md`.
+- 2026-08-17 23:31 · `I5` · **Quarto aborto calado da família, visto ao vivo:** com a suíte vermelha
+  o `sdd health` imprimiu só o cabeçalho e saiu 1 — nem a linha `suite red` que ele existe para dar.
+  Já é achado aberto do `TODO.md` (seção "Sensores que faltam"); registrado aqui como avistamento,
+  não como item novo.
+
+- 2026-08-17 · `REVIEW r1` · **O Check do I3 subiu de `5` para `6`**: a rodada acrescentou uma sexta
+  asserção `output:` à mesma família (`the table orders versions off the judge's population`). Ela
+  pertence à REVIEW e não ao I3, mas o Check conta o prefixo, e um Check que espera 5 num arquivo
+  que imprime 6 é justamente o rótulo divergindo do artefato. Detalhe no `40-review-r1.md`.
+- 2026-08-17 · `REVIEW r1` · **O comentário do I3 sobre paridade com o `kaizen_series` era falso, e
+  a reprodução foi quem disse.** O `$order` do `cmd_autonomy` lia a primeira aparição sobre
+  `is_session and comparable`; o juiz lê sobre **toda** linha `on_axis`. Com uma escalada como
+  primeira linha de uma versão, os dois discordavam de qual é a mais recente sobre o MESMO arquivo
+  — o defeito que o I3 existe para fechar, num caso mais estreito. Consertado, com asserção
+  diferencial que nasceu vermelha sob sabotagem de uma linha contada por `diff`.
+- 2026-08-17 · `REVIEW r1` · **A catraca cobrou a própria missão, pelo caminho que o QA mediu em
+  J4.** A rodada registrou 3 achados novos, a contagem foi 73 → **76** e a baseline moveu no mesmo
+  commit. Quem revisar de novo: é essa a regra, e ela não tem exceção para a sessão que a escreveu.
+- 2026-08-17 · `REVIEW r1` · ⚠️ **`mut_HEALTH_provenance_blind` nasceu sabotando DUAS linhas.**
+  `if [ "$line" = "$fix" ]; then checked` é byte a byte igual nos ramos do `qa-execution` e do
+  `qa-report`. Além de quebrar "uma mutação, uma linha", isso impediria para sempre uma entrada
+  própria para o outro ramo. Endereçada por faixa. Quem for escrever mutação para `health_provenance`:
+  são TRÊS comparações, só uma tem fixture, e as outras duas estão no `TODO.md`.
+
+- 2026-08-17 · `DOCS` · **A r1 comparou dois números de réguas diferentes, e a fase PR copiaria
+  isso.** `589` asserções é `grep -c '^  ok'`; `533` é a âncora de QUATRO espaços. A diferença é
+  exatamente **55**, as linhas `  ok   ` de três espaços que o runner imprime dentro dos fixtures —
+  degrau fantasma já catalogado e já item aberto. Pela âncora certa a r1 mede **534** (533 + a
+  asserção do R1). O `40-review-r1.md` ficou **anotado, não reescrito**, e o `KAIZEN_LOG.md` registra
+  509 → 534 com os dois lados remedidos nesta fase, `main` num worktree descartável.
+- 2026-08-17 · `DOCS` · **O "+281 s" do I1 não reproduz.** Em máquina quieta e passadas sequenciais
+  o par é **155,97 s → 210,81 s** (+55 s), já com 11 mutações a mais no mesmo diff. O mecanismo
+  (sensor novo é multiplicador, roda uma vez por mutante) continua de pé; o número que decide o alvo
+  da D7 é este. O item do `TODO.md` foi corrigido, **não** duplicado — a contagem segue 76.
+- 2026-08-17 · `DOCS` · **Quatro âncoras do `TODO.md` deslocadas, e uma delas o R5 da r1 não pegou:**
+  `CLAUDE.md:135` já valia 147 no fim da REVIEW, movida pelo próprio I5, e vale **163** agora. As
+  outras três são desta fase (`KAIZEN_LOG.md:175`→`:261`, `docs/pipeline.md:499`→`:501`, split
+  `326-568`→`326-570`). Conferidas contra o CONTEÚDO que nomeiam, nunca pelo deslocamento aritmético.
+  Quem editar `CLAUDE.md`, `KAIZEN_LOG.md` ou `docs/` de novo: grepe o `TODO.md` por âncora nesses
+  arquivos **antes** de fechar a fase.
+- 2026-08-17 · `DOCS` · **O `D4` do `CONTEXT.md` já descrevia a ordem que o R1 consertou** ("na ordem
+  do arquivo, como `cmd_autonomy` já faz"): a prosa estava certa e o **código** é que tinha driftado
+  dela. Nenhuma edição devida ali — o que faltava era o invariante entre os DOIS leitores, que vivia
+  só num comentário e o comentário mentia. Escrito em `docs/pipeline.md` (`f69d28d`).
+- 2026-08-17 · `DOCS` · `.claude/napkin.md` **barrado pelo harness pela segunda fase DOCS seguida**
+  (caminho sensível). Não insista: é decisão humana registrada no `TODO.md` (o napkin entra na
+  superfície que o DOCS mantém, ou sai do versionamento). Os números do **item** foram reancorados.
+
+## Incrementos de fix (QA)
+
+> Escritos pelo `sdd-qa` quando um bug sanável é reprovado. Entram na mesma tabela acima com ID
+> `F<n>`, e o Check obrigatoriamente inclui **regression test passa** + **re-walk da jornada
+> impactada verde**. Bug que exige julgamento humano NÃO vira fix — vai para
+> "Decisions for a Human" no handoff de QA.
