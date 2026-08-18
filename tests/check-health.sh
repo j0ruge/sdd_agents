@@ -28,6 +28,9 @@
 #      failure. Without it the contract could rot on the check-todo.sh side and cmd_health would
 #      go blind in silence — the failure mode the `score:` check above was already written
 #      against, and the one it still has (TODO.md: it dies of `set -e` before it can say so).
+#   8. the ratchet policy is written where the next mission meets it — CLAUDE.md and TODO.md. The
+#      one rule here that no mut_HEALTH_* can reach, since none of them can make a document say
+#      less, so it carries probes of its own over all three of its layers.
 #
 # Usage: tests/check-health.sh   (exit 0 = cmd_health discriminates)
 #
@@ -348,6 +351,129 @@ else
        "the count-less suite fails, saying so, and the world of assertion 5 never says the sentence" \
        "no-count: rc $HEALTH_RC · $(digest "$HEALTH_OUT") // green: rc $RC_GREEN · $(digest "$OUT_GREEN")"
 fi
+
+# ---------------------------------------------------------------------------
+# 8 — the policy is written where the next mission walks into it
+#
+# The backlog ratchet is the one finding of cmd_health whose owner is not a TODO.md entry but the
+# FILE, so the only thing that can tell the next session what the number means is prose. Prose
+# nobody measures is how the count would drift back to being folklore with the mechanism still
+# running — the failure this mission exists to end, one level up.
+#
+# STRUCTURAL, never a Portuguese word. TODO.md and CLAUDE.md are content in this repo's
+# OUTPUT_LANG, and a rule keyed on their prose would break the day a target repo declares another
+# one — the same reasoning that keeps tests/check-todo.sh out of tests/lang-allowlist.txt. What is
+# demanded are the two literals the policy cannot be stated without: the check-id bin/sdd emits
+# and the file that freezes it.
+#
+# BOTH halves, the way check-checkpoint.sh's own doc_rule demands both of its own. Measured, not
+# assumed: TODO.md already carries `health-baseline.txt` in an unrelated finding, so the filename
+# alone is satisfied today by a document that says nothing about the ratchet at all. The check-id
+# alone is the mirror gap — it says what is emitted without saying that it is frozen.
+#
+# ⚠️ THIS IS THE ONE RULE IN THIS FILE THE MUTATION CATALOGUE CANNOT REACH. Every mut_HEALTH_*
+# sabotages bin/sdd, and no sabotage of bin/sdd can make a document say less — the house rule for
+# that is a probe of the sensor's own, so the rule carries four, and they run BEFORE the verdict.
+# A doc_rule that had stopped discriminating would otherwise report a clean policy over documents
+# it never read, which is the fail-open shape this repo pays the most for.
+# ---------------------------------------------------------------------------
+POLICY_ID='todo-findings'
+POLICY_FILE='health-baseline.txt'
+POLICY_DOCS='CLAUDE.md TODO.md'
+POLICY_DESC='the ratchet policy is written where the next mission meets it'
+
+doc_rule() { # doc_rule <path> — 0 when the document states the ratchet policy
+  local path="$1"
+  [ -r "$path" ] || return 1
+  grep -qF -- "$POLICY_ID" "$path" && grep -qF -- "$POLICY_FILE" "$path"
+}
+
+# policy_silent <root> — the documents of POLICY_DOCS that do not state the policy, space-joined.
+policy_silent() {
+  local root="$1" d out=""
+  for d in $POLICY_DOCS; do
+    if ! doc_rule "$root/$d"; then
+      if [ -z "$out" ]; then out="$d"; else out="$out $d"; fi
+    fi
+  done
+  printf '%s' "$out"
+}
+
+# policy_report <root> — the VERDICT, over any root. Parameterised for one reason only: a probe
+# has to be able to run this block, not just the function under it. The rule that probes measure
+# the PATH and not only the parser was learned in check-todo.sh, where every probe proved the
+# parser right while the caller counted with a grep that did not.
+policy_report() {
+  local silent; silent="$(policy_silent "$1")"
+  if [ -z "$silent" ]; then
+    pass "$POLICY_DESC"
+    return 0
+  fi
+  fail "$POLICY_DESC" \
+       "$POLICY_DOCS each carry the literals '$POLICY_ID' and '$POLICY_FILE'" \
+       "silent in: $silent"
+  return 1
+}
+
+# ── the probes ────────────────────────────────────────────────────────────────────────────────
+# broken() and not fail(): a policy rule that stopped discriminating makes the verdict below a
+# verdict about nothing, and one red assertion among eight would be outvoted by seven green ones.
+# Same reasoning as every other SENSOR-BROKEN here.
+#
+# They drive the real verdict path over fabricated roots, one document at a time, because the
+# THREE layers degrade separately: the two literals (doc_rule), which document is looked at
+# (policy_silent), and whether a silent world is actually reported (policy_report). Dropping
+# TODO.md from POLICY_DOCS leaves the real repo green today, since both documents state the
+# policy — the probe with a silent TODO.md is the only thing that notices.
+PROBE_ROOT="$WORK/policy"
+mkdir -p "$PROBE_ROOT"
+STATES="the ratchet freezes $POLICY_ID in tests/$POLICY_FILE"
+QUIET='a document about something else entirely'
+
+probe_policy() { # probe_policy <name> <expected silent list> <CLAUDE.md line> <TODO.md line>
+  local name="$1" want="$2" got
+  printf '%s\n' "$3" > "$PROBE_ROOT/CLAUDE.md"
+  printf '%s\n' "$4" > "$PROBE_ROOT/TODO.md"
+  got="$(policy_silent "$PROBE_ROOT")"
+  [ "$got" = "$want" ] \
+    || broken "policy probe '$name' reported silent:'$got', expected silent:'$want' — the rule stopped discriminating, so its verdict on the real documents means nothing"
+}
+
+probe_policy 'both silent'              'CLAUDE.md TODO.md'  "$QUIET"  "$QUIET"
+probe_policy 'the check-id alone'       'CLAUDE.md'          "the ratchet emits $POLICY_ID"         "$STATES"
+probe_policy 'the file name alone'      'CLAUDE.md'          "the baseline is tests/$POLICY_FILE"   "$STATES"
+# ⚠️ There is no `a silent CLAUDE.md` / `a silent TODO.md` pair here, and their absence is a
+# RESULT, not an oversight. Both were written, and the 14-degradation coverage matrix showed each
+# of them was subsumed: every sabotage they caught was caught by something else in this block, so
+# neither was ever the sole reason a degraded sensor went red. `both silent` carries the
+# per-document rule on its own — its expected value names both files, so a document dropped from
+# POLICY_DOCS shows up there. Removed rather than documented, the way check-health's own
+# `1 check(s) failed` set was: a rule no single sabotage needs is decoration.
+
+# An unreadable document is a rule with nowhere to live, never a rule that is satisfied. It gets
+# a world of its OWN rather than being folded into the verdict probes below, and the coverage
+# matrix is why: sharing one world with them left no sabotage that this rule alone could catch,
+# and a rule no sabotage can isolate is decoration by this repo's own standard.
+printf '%s\n' "$STATES" > "$PROBE_ROOT/TODO.md"; rm -f "$PROBE_ROOT/CLAUDE.md"
+PROBE_GONE="$(policy_silent "$PROBE_ROOT")"
+[ "$PROBE_GONE" = 'CLAUDE.md' ] \
+  || broken "policy probe 'a document that does not exist' reported silent:'$PROBE_GONE', expected silent:'CLAUDE.md' — an unreadable document is a rule with nowhere to live, not a satisfied one"
+
+# The verdict block itself, over BOTH worlds, on a document that exists. Run in a SUBSHELL so the
+# output and the `fails` increment die with it. Without the silent world, the two lines that turn
+# a silent document into a red run are the one layer no probe touches. Without the green world,
+# a verdict that refused EVERY world would satisfy the silent one while distinguishing nothing —
+# the anti-vacuity floor, and the only thing that catches `if false; then`.
+printf '%s\n' "$QUIET" > "$PROBE_ROOT/CLAUDE.md"
+PROBE_OUT="$( policy_report "$PROBE_ROOT" 2>&1 )"; PROBE_RC=$?
+[ "$PROBE_RC" -ne 0 ] && grep -q 'silent in: CLAUDE.md' <<< "$PROBE_OUT" \
+  || broken "the policy verdict reported rc $PROBE_RC over a world with a silent document — the rule discriminates and the report does not say so"
+printf '%s\n' "$STATES" > "$PROBE_ROOT/CLAUDE.md"
+PROBE_OUT="$( policy_report "$PROBE_ROOT" 2>&1 )"; PROBE_RC=$?
+[ "$PROBE_RC" -eq 0 ] && grep -qF "  ok    $POLICY_DESC" <<< "$PROBE_OUT" \
+  || broken "the policy verdict reported rc $PROBE_RC over a world where both documents state the policy — a rule that refuses every world distinguishes nothing"
+
+policy_report "$ROOT"
 
 # ---------------------------------------------------------------------------
 echo

@@ -1093,6 +1093,14 @@ sandbox() { # sandbox <target-dir> — the whole kit the suite needs, and nothin
   # control run stayed green. It is NOT copied for check-lang.sh, which reads it too but is guarded
   # out of the mutants; adding it here does not make that guard removable.
   cp -r "$ROOT/bin" "$ROOT/tests" "$ROOT/templates" "$ROOT/config" "$ROOT/agents" "$1/"
+  # `CLAUDE.md` and `TODO.md` earned their place the day check-health.sh started demanding that the
+  # backlog-ratchet policy be written in both: that rule resolves them from its OWN kit root, which
+  # inside a sandbox is the sandbox. Absent, the rule has nowhere to live and REFUSES — correctly,
+  # since "skip the document that is missing" is the fail-open this repo forbids — so the control
+  # run went red and every mutant would have scored by vacuity. Measured, not feared: that is how
+  # this line was born. Two files, and they keep the sandbox a faithful kit instead of making a
+  # documentation rule optional.
+  cp "$ROOT/CLAUDE.md" "$ROOT/TODO.md" "$1/"
   # `docs/adr` and NOT `docs`: check-kaizen.sh asserts the runner still names ADR 0003, and the
   # sabotage that strips the citation has to be able to kill it INSIDE a mutant. Three small files,
   # against a `docs/` tree whose handoffs are megabytes and which no sensor here reads — the

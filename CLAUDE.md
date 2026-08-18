@@ -67,6 +67,17 @@ prova por artefato — `git merge-base --is-ancestor <hash> main` —, nunca pel
 ⚠️ `- [x]` não existe neste arquivo: caixa marcada era uma segunda convenção de fechamento,
 invisível para a triagem do kaizen, que procura `RESOLVIDO por` no corpo.
 
+**Crescer é permitido; crescer calado, não.** O `sdd health` emite a contagem de achados abertos
+como o achado `todo-findings <N>`, e `tests/health-baseline.txt` a congela. A catraca morde nos
+dois sentidos: número que subiu sem registro reprova, e baseline que ficou para trás depois de uma
+faxina reprova junto. Missão que legitimamente descobre três coisas continua registrando as três —
+só que o número passa a se mover num diff com autor, em vez de derivar. Medido: 56 → 68 itens em
+duas missões, 16 fechados contra 29 nascidos, e nenhum instrumento dizia. A catraca mora no
+`sdd health` e **não** no `TEST_CMD` de propósito: um teto dentro da suíte reprovaria
+`gate_EXEC`/`QA`/`REVIEW` de toda missão em voo, inclusive a que acabou de registrar o achado.
+⚠️ A contagem sai de `tests/check-todo.sh` e nunca de um `grep -c` novo — o `grep` responde um a
+mais, porque conta a linha de exemplo do cabeçalho.
+
 **6. YAGNI.** Sem daemon, sem UI, sem banco, sem servidor. Um script bash, seis markdowns e
 templates. Se a solução pede infraestrutura, provavelmente é a solução errada.
 

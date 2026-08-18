@@ -3,7 +3,13 @@
 # A finding that is NOT here fails: the debt may not grow in silence.
 # A line here that STOPPED being a finding fails too: a stale baseline is a label, not an
 # artifact, and a list describing a world that no longer exists is worse than no list at all.
-# Every line needs an owner — the TODO.md entry that will pay it off.
+# Every line needs an owner. For almost all of them that is the TODO.md entry that will pay it
+# off. ONE class is different and is admitted here rather than given a fake owner: a line that
+# freezes a PROPERTY OF THE WHOLE FILE, whose owner is that file. It is never paid off, because
+# there is nothing to pay — it moves in a diff, with an author, whenever the property moves. Today
+# the class has exactly one member, `todo-findings`, at the bottom. Inventing a TODO.md entry to
+# satisfy the older wording would have been a label pointing at nothing, which is the one thing
+# this file exists to refuse.
 #
 # format: <check-id> <target>   # <owner>        (blank lines and lines starting with # ignored)
 
