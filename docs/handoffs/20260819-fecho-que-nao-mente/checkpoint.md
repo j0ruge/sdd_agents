@@ -32,6 +32,9 @@ atualizado: 2026-08-19 17:05
 | I2 | O `--list` imprime só passos, e `TEST_CMD` com `--list` é recusado | `o=$(bash tests/check-health.sh 2>&1); grep -c '^  ok    surface: --list prints steps only, and a TEST_CMD carrying it is refused' <<< "$o"` → `1` | done | 2f71646 |
 | I3 | O `gate_REVIEW` recusa placeholder na `Rationale` | `o=$(bash tests/check-gates.sh 2>&1); grep -c '^  ok    gate_REVIEW: a placeholder Rationale does not buy an A' <<< "$o"` → `1` | done | 9fa5b0b |
 | I4 | O catálogo ganha dono: `sdd health` carimba, `gate_PR` exige | `o=$(bash tests/check-gates.sh 2>&1); grep -c '^  ok    gate_PR: the mutation stamp is demanded only where the catalogue lives' <<< "$o"` → `1` | done | c962e2e |
+| F1 | O catálogo ganha piso: contagem vazia ou estreitada não vira carimbo verde | `o=$(bash tests/check-health.sh 2>&1); grep -c '^  ok    mutation: a catalogue too small to have measured anything is refused' <<< "$o"` → `1` | pending | — |
+| F2 | O carimbo é escrito na árvore de onde o `gate_PR` o lê | `o=$(bash tests/check-gates.sh 2>&1); grep -c '^  ok    gate_PR: the stamp is read from the tree whose content the gate measures' <<< "$o"` → `1` | pending | — |
+| F3 | O selo da rodada para de ser vencido por uma tecla | `o=$(bash tests/check-gates.sh 2>&1); grep -c '^  ok    gate_REVIEW: an unfilled gate field and a punctuated fill-in do not buy an A' <<< "$o"` → `1` | pending | — |
 
 ## Notas de execução
 
@@ -72,9 +75,37 @@ atualizado: 2026-08-19 17:05
 - 2026-08-19 · `I4` · ⚠️ **Para as fases QA/REVIEW/DOCS/PR: o `gate_PR` deste repo agora exige carimbo, e a fase DOCS não o invalida** (`CLAUDE.md` está fora dos quatro diretórios). O que invalida é qualquer commit que toque `bin/ tests/ templates/ config/` — inclusive um incremento de fix do QA ou um conserto da REVIEW. Regra prática: rodar `./bin/sdd health` **depois** do último commit de código e antes da fase PR. Se o `gate_PR` reprovar com "no green mutation catalogue for this content", o I4 está funcionando: rode `sdd health` e siga.
 - 2026-08-19 · `I2` · Catraca do backlog: um achado novo (a fronteira do que o I2 **não** fecha — `TEST_CMD` de repo-alvo que sai 0 sem rodar), `todo-findings` 72 → 73 no mesmo commit `ca0a360`. Nesse commit também entrou o `RESOLVIDO por` dos itens do I1 e do I2 — o do I1 tinha ficado para trás na sessão que o fechou, e o `00-missao.md` § Fora de escopo manda seguir o cabeçalho escrito do `TODO.md` (item fechado fica até o merge).
 
+- 2026-08-19 · `QA` · **A métrica da missão FECHOU nesta sessão.** `./bin/sdd health` sobre a árvore limpa de `1a96054`, 30 min: `ok mutation: score: 110 caught, 0 known gap(s), of 110` e `ok kit healthy`, rc 0. `caught == total`, `N = 110` contra o `N >= 108` que o `00-missao.md` pede, e o `N` de partida era 104 (+6, contra o +4 exigido). Log em `/tmp/qa-health.log`. Carimbo gravado: `0575d68c35e92748ceab5f671c8e102d`, conferido igual à chave de conteúdo do momento. ⚠️ A rodada que o EXEC disparou em background **morreu** — `/tmp/sdd-health-final.log` tem só o cabeçalho e nenhum `score:`; o risco que o handoff do EXEC declarou ("não foi visto verde ponta a ponta") era real e foi pago aqui.
+- 2026-08-19 · `QA` · **`F1` nasce do achado mais caro da fase, e é a tese da missão dentro do artefato da missão.** `tests/check-mutation.sh:1615` imprime `of ${#CATALOG[@]}` sem piso nenhum, e o veredito do I1 só compara `caught` com `total`. Reproduzido com a lógica de parse extraída verbatim para `/tmp`: `score: 0 caught, 0 known gap(s), of 0` → `OK`, `catalogue_green=1` → **carimbo gravado** → `gate_PR` abre sobre um catálogo que não mediu nada. `CATALOG=()` roda o laço zero vezes, `errors=0`, `exit 0`. Um catálogo ESTREITADO (`of 3`) faz o mesmo. Hoje 110 definidos e 110 listados, e nada assevera a igualdade. É a única contagem do `cmd_health` sem piso anti-vacuidade, entre `LINT_FLOOR`, `SURFACE_FLOOR`, `CAPTURE_FLOOR` e `REVIEW_FLOOR`. Jornada a re-andar: `./bin/sdd health` → `kit healthy` com `of N` real.
+- 2026-08-19 · `QA` · **`F2`: o escritor carimba `$SDD_HOME`, o leitor cobra sob `$REPO_ROOT`.** `bin/sdd:2063` grava em `$kit/$MUTATION_STAMP_REL` com `kit="$SDD_HOME"` (resolvido do caminho do SCRIPT, `bin/sdd:47-56`); `bin/sdd:712-715` escopa, chaveia e lê sob `$REPO_ROOT` (`git rev-parse --show-toplevel` do CWD). Divergem sempre que o `sdd` vem do PATH — e o `README.md:30` documenta exatamente isso (`export PATH=".../bin:$PATH"`) — sobre uma worktree ou um segundo clone do kit, que é o fluxo anunciado deste projeto. Efeito: `gate_PR` **insatisfazível para sempre**, e o remédio que a própria frase manda (`run 'sdd health'`) re-carimba a outra árvore, 20 a 50 min por volta. Os oito mundos do `check-gates.sh` invocam `$FIX/bin/sdd` de dentro de `$FIX`, então `SDD_HOME == REPO_ROOT` por construção em todos e nenhum o alcança. Junto vai a guarda de vazio do `mutation_stamp_key`: `xargs` sem `-r` roda `md5sum` uma vez sem operandos e devolve o md5 do vazio, então o `[ -n "$listing" ]` que o comentário de `bin/sdd:677-681` descreve como a recusa da vacuidade só dispara quando a RAIZ não existe. Jornada: `sdd why <missao> PR` com `50-pr.md` presente, de uma worktree.
+- 2026-08-19 · `QA` · **`F3`: a regra nova do I3 falha aberta por uma tecla, e contradiz o próprio comentário.** Duas metades medidas. (a) `bin/sdd:571` é `if (gate_field != "" && placeholder(gate_field))`, e o comentário três linhas acima afirma *"Present-but-unfilled is the case that lies, and it is the one refused"* — mas `gate:` com valor VAZIO é presente-e-não-preenchido e passa, porque `gate_field != ""` não distingue vazio de ausente. O item do `TODO.md` que `dc6a6c9` registrou cobre o caso AUSENTE, que é outro. (b) `placeholder()` compara a célula inteira por igualdade, então `TODO:` com dois-pontos, `TBD.`, `-`, `.`, `?`, `WIP` e `FILL ME` compram o `A` — e `TODO:` é justamente a grafia que um modelo escreve mais que o `TODO` pelado, enquanto `-` fica a uma tecla do `—` que é legítimo de propósito. ⚠️ Qualquer regra nova com `[[:punct:]]` tem de ser sondada contra o `—` ANTES de subir: o mawk é orientado a byte e o travessão é `E2 80 94` (a armadilha que o `CLAUDE.md` nomeia). Jornada: `sdd why <missao> REVIEW`.
+- 2026-08-19 · `QA` · ⚠️ **O carimbo ganho nesta sessão MORRE no commit desta sessão, e isso é esperado.** `tests/health-baseline.txt` mora dentro dos quatro diretórios da chave, então bumpar a catraca de 76 para 83 (princípio 5) invalida o carimbo `0575d68…`. Os três `F` também tocam `bin/` e `tests/`. Regra que continua valendo para quem fechar a missão: `./bin/sdd health` **depois** do último commit de código e antes da fase PR. A colisão entre a catraca e o carimbo virou item do `TODO.md`, § Contrato e configuração.
+- 2026-08-19 · `QA` · Candidatos investigados e **descartados com motivo**, para a REVIEW não os re-perseguir: o fixture do `check-gates.sh` NÃO apaga o carimbo real (invoca `$FIX/bin/sdd` e limpa `$FIX/.sdd/logs/mutation-stamp` na linha 841); a suíte não move a chave de conteúdo (todo fixture é `mktemp -d` sob `$TMPDIR`, árvore limpa depois de rodar); `.sdd/logs/` é gitignored de verdade, então o carimbo não suja o `git status`; os sete espelhos de `.claude/agents/` estão em sincronia com `agents/`; e `grep -m1` com herestring não sofre o 141 de SIGPIPE porque não há pipeline.
+
 ## Incrementos de fix (QA)
 
 > Escritos pelo `sdd-qa` quando um bug sanável é reprovado. Entram na mesma tabela acima com ID
 > `F<n>`, e o Check obrigatoriamente inclui **regression test passa** + **re-walk da jornada
 > impactada verde**. Bug que exige julgamento humano NÃO vira fix — vai para
 > "Decisions for a Human" no handoff de QA.
+
+Os três nascem de defeitos **dentro do diff desta missão**, todos reproduzidos nesta sessão, e
+todos da classe que a missão existe para acabar: o instrumento afirmando o que não mediu.
+
+- **F1** — nasce de "catálogo vazio ou estreitado é carimbado verde"; fura o **I1 + I4**;
+  jornada a re-andar: `./bin/sdd health` → `kit healthy` com `of N` real.
+- **F2** — nasce de "carimbo escrito em `$SDD_HOME`, cobrado sob `$REPO_ROOT`"; fura o **I4**;
+  jornada a re-andar: `sdd why <missao> PR` a partir de uma worktree do kit.
+- **F3** — nasce de "`gate:` vazio passa e `TODO:` compra o `A`"; fura o **I3**;
+  jornada a re-andar: `sdd why <missao> REVIEW`.
+
+⚠️ O Check da tabela ancora na asserção nova do sensor (é o que o `TEST_CMD` de todo gate roda);
+a re-andada da jornada é a lista acima e **não** cabe na célula — `sdd health` leva 20 a 50 min.
+Quem fechar o incremento roda as duas coisas.
+
+⚠️ E a lista acima é lista **de propósito**: `checkpoint_rows()` (`bin/sdd:231`) casa QUALQUER
+linha que comece com `|` e tenha 6 campos, sem se importar com o heading acima dela. A primeira
+escrita desta seção era uma tabela de quatro colunas, e o parser leria `F1` duas vezes, com
+`Status` valendo o texto da quarta coluna — o `gate_EXEC` reprovando por "invalid status" enquanto
+o `sdd status` parece saudável, que é exatamente o modo de falha que o cabeçalho deste arquivo
+descreve. Nenhuma tabela nova neste arquivo, nunca, fora a dos incrementos.
