@@ -721,7 +721,8 @@ PROBE_OUT="$( policy_report "$PROBE_ROOT" 2>&1 )"; PROBE_RC=$?
 [ "$PROBE_RC" -eq 0 ] && grep -qF "  ok    $POLICY_DESC" <<< "$PROBE_OUT" \
   || broken "the policy verdict reported rc $PROBE_RC over a world where both documents state the policy — a rule that refuses every world distinguishes nothing"
 
-policy_report "$ROOT"
+# The live call is not here: both rule verdicts are issued from the counted list at the foot of
+# this file. See the block there for why the two calls stopped being two statements.
 
 # ---------------------------------------------------------------------------
 # surface: the mutation catalogue is opt-in, and `sdd health` is the one caller that opts in
@@ -880,10 +881,55 @@ fi
 # anyone having to think of the world that would have exposed it. The mutation catalogue reaches
 # it because it reads the runner that check-mutation.sh sabotages, not a copy frozen in here.
 #
-# The statement is joined across lines up to its closing `)"`, so a guard living on a
-# continuation line — which is how the `find` of health_provenance is written — counts. Joining
-# by PAREN DEPTH was tried first and rejected: the region contains awk programs whose regexes
-# carry unbalanced `)`, and a depth counter reads those as an unterminated statement.
+# FOUR properties, and the r2 review of this same mission measured that the first version had
+# none of them. It knew ONE spelling — `x="$(cmd)"` — and every other way of writing a capture
+# was invisible AND shrank the census in silence:
+#
+#   `x=$(cmd)`      no quotes. Aborts identically (measured: rc 1). Worse, it never contains the
+#                   old `)"` terminator, so the open statement SWALLOWED the following lines until
+#                   some later, guarded capture closed it — one guarded capture WASHING an
+#                   unguarded one. Reproduced: rewriting the `gates` capture without quotes took
+#                   the census from 16 to 15 and the rule went on printing `ok`.
+#   `x=`cmd``       backticks. Same abort (measured: rc 1), no `$(` at all.
+#   `x="$(`         the substitution opened at end of line: `[^(]` had nothing to match.
+#   `x="$( (…) )"`  a real subshell, indistinguishable from arithmetic to the old exclusion.
+#
+# And the guard token was searched over the WHOLE accumulated statement, so a `|| true` inside a
+# comment or a quoted string certified the capture beside it. The guard is now read in exactly the
+# two places a guard can actually protect a capture, and both are ANCHORED — which is what leaves
+# prose nowhere to sit:
+#
+#   inside, at the very end   `x="$(cmd || true)"` — the idiom this region uses everywhere. Only
+#                             `|| true` and `|| :` count: under `set -o pipefail` the substitution
+#                             reports its LAST stage, so a `|| true` in the middle of a pipeline
+#                             guards nothing, and `|| anything_else` can itself report non-zero.
+#   in the tail, at the start `x="$(cmd)" || rc=$?` — what the suite capture uses. Here ANY or-list
+#                             counts, and that is not laxity: a command that is the left operand of
+#                             `||` is exempt from errexit whatever the right operand does. Pinning
+#                             the tail to the four spellings of the house style would accuse
+#                             `x="$(cmd)" || health_bad "…"`, which cannot abort.
+#
+# Stripping a trailing comment before that test was written first and then DELETED: the anchors
+# above already make it unreachable, an adversarial pass could not break it in any world, and this
+# kit's rule for a rule the sabotage cannot break is to remove it, not to write a probe for it.
+#
+# The other direction matters as much: THREE shapes cannot abort at all, and a rule that fails on
+# correct code is a rule the next author deletes. Measured on bash 5.2, `set -euo pipefail`:
+# `if x="$(cmd)"; then` survives (the condition of `if` is exempt from errexit), and so does
+# `local x="$(cmd)"` — the builtin's own status masks the substitution's. The split form the
+# region actually uses, `local x; x="$(cmd)"`, aborts, and is censused.
+#
+# Joining by PAREN DEPTH was tried first and rejected: the region contains awk programs whose
+# regexes carry unbalanced `)`, and a depth counter reads those as an unterminated statement. What
+# replaces it is a per-spelling terminator plus a SPAN CAP, and the cap is what makes the parser
+# fail closed: a statement this parser cannot see the end of is reported as `[unterminated]`
+# instead of being allowed to eat its neighbours. Every shape below that this parser reads wrongly
+# therefore lands on the loud side.
+#
+# Declared limits, none of them silent: a NESTED `$( … "$(…)" … )` closes on the inner `)"` and so
+# reads as unguarded (loud, and there are none in the region); a here-doc BODY carrying an
+# assignment would be censused as code (loud; the region has only `<<<` herestrings, checked); and
+# two captures on one line are read as one.
 # ---------------------------------------------------------------------------
 CAPTURE_DESC='guard: every capture in the `sdd health` region is protected from set -e'
 
@@ -891,42 +937,106 @@ CAPTURE_DESC='guard: every capture in the `sdd health` region is protected from 
 # function text, never on line numbers, so it does not rot at the first refactor.
 health_captures() {
   awk '
-    /^# Sensor of the KIT/ { inside = 1 }
-    inside && /^cmd_status\(\) \{/ { exit }
-    !inside { next }
-    # An open statement swallows lines until its closing `)"`.
-    open { acc = acc " " $0; if ($0 ~ /\)"/) { emit() } ; next }
-    # `[^(]` after `$(` is what keeps arithmetic `$((...))` — the HEALTH_FAILS and checked/skipped
-    # counters — out of the census. Without it every `n=$((n + 1))` reads as an unguarded capture
-    # and the rule fails closed on correct code, which is how a rule gets deleted.
-    /[A-Za-z_][A-Za-z0-9_]*="?\$\([^(]/ {
-      start = FNR; acc = $0; open = 1
-      if ($0 ~ /\)"/) { emit() }
-    }
-    function emit() {
+    function reset() { open = 0; acc = ""; kind = ""; safe = 0 }
+    # `why` empty = the statement terminated and was read; otherwise it is reported as-is.
+    function emit(pre_close, tail, why,   guarded) {
       total++
-      if (acc !~ /\|\|[ \t]*(true|:|return|rc=)/) printf "%d: %s\n", start, substr(acc, 1, 100)
-      open = 0; acc = ""
+      if (why != "") { printf "%d: [%s] %s\n", start, why, substr(acc, 1, 110); reset(); return }
+      if (safe) { safecnt++; reset(); return }
+      guarded = 0
+      if (pre_close ~ /\|\|[ \t]*(true|:)[ \t]*$/) guarded = 1
+      if (tail ~ /^[ \t]*\|\|/) guarded = 1
+      if (!guarded) printf "%d: %s\n", start, substr(acc, 1, 110)
+      reset()
     }
-    END { printf "TOTAL %d\n", total }
+    # Looks for the terminator of the open statement in `s` (an offset `off` into the raw line).
+    # Returns 1 and calls emit() when it closes; 0 while the statement is still open.
+    function close_try(line, from,   p, q, r) {
+      if (kind == "dq") { p = index(substr(line, from), ")\""); if (p == 0) return 0
+                          p = p + from - 1; emit(substr(line, 1, p - 1), substr(line, p + 2), ""); return 1 }
+      if (kind == "bt") { p = index(substr(line, from), "`");   if (p == 0) return 0
+                          p = p + from - 1; emit(substr(line, 1, p - 1), substr(line, p + 1), ""); return 1 }
+      # bare `x=$(…)`: the last `)` on the line. There is no closing quote to anchor on, so the
+      # guard can only be read from what precedes that paren and what follows it.
+      q = 0; r = from
+      while ((p = index(substr(line, r), ")")) > 0) { q = p + r - 1; r = q + 1 }
+      if (q == 0) return 0
+      emit(substr(line, 1, q - 1), substr(line, q + 1), ""); return 1
+    }
+    /^# Sensor of the KIT/ { inside = 1 }
+    inside && /^cmd_status\(\) \{/ { if (open) emit("", "", "unterminated"); exit }
+    !inside { next }
+    {
+      line = $0
+      if (open) {
+        acc = acc " " line; span++
+        # A new capture while one is open means the open one never terminated. Saying so is what
+        # keeps a guarded capture from laundering the unguarded one above it.
+        if (line ~ /[A-Za-z_][A-Za-z0-9_]*\+?=("?\$\(|"?`)/) { emit("", "", "unterminated") }
+        else if (close_try(line, 1)) { next }
+        else if (span > 12) { emit("", "", "unterminated") }
+        else { next }
+      }
+      rest = line; base = 0
+      while (match(rest, /[A-Za-z_][A-Za-z0-9_]*\+?=("?\$\(|"?`)/)) {
+        tok = substr(rest, RSTART, RLENGTH); abs = base + RSTART; after = abs + RLENGTH
+        # Arithmetic `$((n + 1))` is not a capture. Without this the HEALTH_FAILS and
+        # checked/skipped counters all read as unguarded and the rule fails closed on correct
+        # code — which is how a rule gets deleted. `$( (` with a space IS a subshell and stays in.
+        if (tok ~ /\$\($/ && substr(line, after, 1) == "(") {
+          base = after - 1; rest = substr(line, after); continue
+        }
+        pre = substr(line, 1, abs - 1); sub(/^[ \t]+/, "", pre); sub(/[ \t]+$/, "", pre)
+        safe = 0
+        # The condition of if/elif/while/until is exempt from errexit; `; then`/`; do` means the
+        # capture is already in the BODY and is not exempt.
+        if (pre ~ /^(if|elif|while|until)([ \t]|$)/ && pre !~ /(then|do)$/) safe = 1
+        # `local x="$(cmd)"` cannot abort: the builtin reports its own status. The split form the
+        # region uses — `local x; x="$(cmd)"` — leaves `x;` as the last word here and is censused.
+        if (pre ~ /(^|[ \t])(local|declare|typeset|export|readonly)$/) safe = 1
+        kind = (tok ~ /`$/) ? "bt" : ((tok ~ /"\$\($/) ? "dq" : "bare")
+        start = FNR; acc = line; open = 1; span = 1
+        if (!close_try(line, after)) { }
+        break
+      }
+    }
+    END { if (open) emit("", "", "unterminated"); printf "TOTAL %d %d\n", total, safecnt }
   ' "$1"
 }
 
 # Floor against vacuity, and it is the only thing standing between this rule and a silent pass:
 # if either anchor rots the region is empty, `health_captures` reports nothing, and "no unguarded
-# capture" is exactly what a clean kit looks like. The number is a floor and not an equality so
-# that adding a guarded capture does not fail the suite of the mission that added it.
-CAPTURE_FLOOR=12
+# capture" is exactly what a clean kit looks like.
+#
+# It is a BIDIRECTIONAL ratchet at today's census, and no longer the loose 12 it was born with.
+# Two measurements changed the shape. The first: 12 against 16 real captures let four of them
+# vanish without a word — the same silence the rule exists to refuse. The second: an adversarial
+# pass put the constant back to 12 and NOTHING went red, so the number was decoration.
+#
+# The comment this replaces argued for a floor over an equality, "so that adding a guarded capture
+# does not fail the suite of the mission that added it". That reasoning is overridden on purpose,
+# by this repo's own dominant convention: CLAUDE.md says growth is allowed and SILENT growth is
+# not, and both `todo-findings` and `tests/lang-allowlist.txt` bite in both directions for exactly
+# that reason. A mission that adds a capture to the health region is already editing this family;
+# moving one number in the same commit is the record, and the failure message says so.
+CAPTURE_FLOOR=16
 
 capture_report() {
-  local out total offenders
+  local out total safe offenders
   out="$(health_captures "$1/bin/sdd")"
-  total="$(sed -n 's/^TOTAL //p' <<< "$out")"
+  total="$(awk '/^TOTAL /{print $2}' <<< "$out")"
+  safe="$(awk '/^TOTAL /{print $3}' <<< "$out")"
   offenders="$(grep -v '^TOTAL ' <<< "$out")"
   if [ -z "$total" ] || [ "$total" -lt "$CAPTURE_FLOOR" ]; then
     fail "$CAPTURE_DESC" \
          "at least $CAPTURE_FLOOR capture(s) censused in the health region" \
-         "${total:-none} — the region anchors rotted, so this rule measured nothing"
+         "${total:-none} — either the region anchors rotted and this rule measured nothing, or a capture left: move CAPTURE_FLOOR in the same commit"
+    return 1
+  fi
+  if [ "$total" -gt "$CAPTURE_FLOOR" ]; then
+    fail "$CAPTURE_DESC" \
+         "exactly $CAPTURE_FLOOR capture(s) — the ratchet bites in both directions" \
+         "$total — a capture was added to the health region: move CAPTURE_FLOOR to $total in the same commit, so the growth is in a diff with an author"
     return 1
   fi
   if [ -n "$offenders" ]; then
@@ -935,7 +1045,7 @@ capture_report() {
          "$(tr '\n' ' ' <<< "$offenders")"
     return 1
   fi
-  pass "$CAPTURE_DESC ($total censused)"
+  pass "$CAPTURE_DESC ($total censused, $safe of them unable to abort)"
   return 0
 }
 
@@ -946,7 +1056,12 @@ capture_report() {
 CAPPROBE="$WORK/capguard"; mkdir -p "$CAPPROBE/bin"
 cap_world() { printf '# Sensor of the KIT\n%s\ncmd_status() {\n' "$1" > "$CAPPROBE/bin/sdd"; }
 cap_offenders() { health_captures "$CAPPROBE/bin/sdd" | grep -cv '^TOTAL '; }
-cap_total() { health_captures "$CAPPROBE/bin/sdd" | sed -n 's/^TOTAL //p'; }
+cap_total() { health_captures "$CAPPROBE/bin/sdd" | awk '/^TOTAL /{print $2}'; }
+cap_safe()  { health_captures "$CAPPROBE/bin/sdd" | awk '/^TOTAL /{print $3}'; }
+# Prints the offender lines themselves, so a probe can assert WHICH capture was accused and not
+# merely that the count is right — a rule that reports the neighbour is a rule that measured
+# nothing, and this file has already shipped one.
+cap_lines() { health_captures "$CAPPROBE/bin/sdd" | grep -v '^TOTAL ' || true; }
 
 cap_world '  x="$(grep foo bar)"'
 [ "$(cap_offenders)" = 1 ] || broken "capture probe 'a bare capture' was not reported — the rule reads nothing"
@@ -973,6 +1088,112 @@ cap_world '  x="$(grep foo bar || true)"'
 printf '  y="$(grep after censo)"\n' >> "$CAPPROBE/bin/sdd"
 [ "$(cap_offenders)" = 0 ] || broken "capture probe 'after cmd_status' was censused — the region has no end anchor"
 
+# --- the five spellings r2 measured passing invisibly ------------------------------------------
+# One probe per spelling, and each asserts the CENSUS too: the defect was never "no offender
+# printed", it was "no offender printed AND the total silently shrank", which is what let a floor
+# of 12 sit over sixteen real captures and notice nothing.
+cap_world '  x=$(grep foo bar)'
+[ "$(cap_offenders)" = 1 ] && [ "$(cap_total)" = 1 ] \
+  || broken "capture probe 'unquoted \$( )' was not reported — measured: it aborts under set -e exactly like the quoted form (rc 1, bash 5.2)"
+cap_world '  x=$(grep foo bar || true)'
+[ "$(cap_offenders)" = 0 ] && [ "$(cap_total)" = 1 ] \
+  || broken "capture probe 'unquoted and guarded' was reported — the rule refuses correct code in the spelling it just learned"
+cap_world '  x=`grep foo bar`'
+[ "$(cap_offenders)" = 1 ] && [ "$(cap_total)" = 1 ] \
+  || broken "capture probe 'backtick' was not reported — measured: it aborts under set -e (rc 1)"
+cap_world '  x=`grep foo bar || true`'
+[ "$(cap_offenders)" = 0 ] \
+  || broken "capture probe 'backtick, guarded' was reported — the rule refuses correct code"
+cap_world '  x="$(
+    grep foo bar)"'
+[ "$(cap_offenders)" = 1 ] \
+  || broken "capture probe 'substitution opened at end of line' was not reported — the opener regex demands a character that is not there"
+cap_world '  x="$( (cd /tmp && ls) )"'
+[ "$(cap_offenders)" = 1 ] \
+  || broken "capture probe 'subshell \$( ( … ) )' was not reported — the arithmetic exclusion swallowed a real capture"
+
+# The washing case, and the reason this rule stopped joining until `)"`. An unterminated capture
+# used to keep the statement open and let the NEXT capture's guard certify it — one line of
+# sabotage buying silence for two, and the second capture never counted at all. Both must be
+# censused and the FIRST must be the one accused by name: a rule that reports the neighbour
+# measured nothing. Written with an opener the parser genuinely cannot close on its own line,
+# because that is the only shape that exercises the rule: a first draft used `x=$(a b)`, which
+# closes on its own `)`, and the sabotage that deletes this rule survived it.
+cap_world '  x="$(grep a b
+  y="$(grep c d || true)"'
+[ "$(cap_total)" = 2 ] && [ "$(cap_offenders)" = 1 ] && [[ "$(cap_lines)" == *'[unterminated]'* ]] \
+  || broken "capture probe 'a guarded capture washing an unguarded one' — census $(cap_total), offenders $(cap_offenders): the open statement still eats its neighbour"
+# Same shape one level down: the washing detector has to know every opener spelling too, or a
+# backtick capture below an open statement buys the same silence.
+cap_world '  x="$(grep a b
+  y=`grep c d || true`'
+[ "$(cap_total)" = 2 ] && [ "$(cap_offenders)" = 1 ] \
+  || broken "capture probe 'a backtick capture washing an unguarded one' — census $(cap_total): the washing detector knows fewer spellings than the scanner"
+
+# --- the guard token is read where a guard can actually protect ---------------------------------
+# Searched over the whole statement, `|| true` written in PROSE certified the capture beside it.
+cap_world '  x="$(grep foo bar)"  # or write || true here'
+[ "$(cap_offenders)" = 1 ] \
+  || broken "capture probe 'a comment mentioning || true' certified an unguarded capture — the token is still read outside code"
+cap_world '  x="$(grep foo || true bar)"'
+[ "$(cap_offenders)" = 1 ] \
+  || broken "capture probe '|| true mid-pipeline' certified the capture — under pipefail the status is the LAST stage's, so a guard that is not at the end guards nothing"
+# The tail accepts ANY or-list, and it is measured rather than assumed: a command that is the left
+# operand of `||` is exempt from errexit whatever the right operand is. Pinning the tail to the
+# house style would accuse this line, which cannot abort.
+cap_world '  x="$(grep foo bar)" || health_bad "no score line"'
+[ "$(cap_offenders)" = 0 ] \
+  || broken "capture probe 'tail guarded by an or-list that is not || true' was accused — the rule refuses a shape that cannot abort"
+
+# --- the three shapes that cannot abort ---------------------------------------------------------
+# Measured on bash 5.2 under `set -euo pipefail`, each in its own script (probe3/probe4 of the r3
+# round): `if x="$(false)"` and `local x="$(false)"` both survive; `local x; x="$(false)"` exits 1.
+# They are counted in the census — they ARE captures in the region — and reported as unable to
+# abort. A rule that fails on correct code is a rule the next author deletes.
+cap_world '  if x="$(grep foo bar)"; then :; fi'
+[ "$(cap_offenders)" = 0 ] && [ "$(cap_safe)" = 1 ] \
+  || broken "capture probe 'if-condition' was accused — errexit exempts the condition of if, and the fix the message asks for would break the if"
+cap_world '  local x="$(grep foo bar)"'
+[ "$(cap_offenders)" = 0 ] && [ "$(cap_safe)" = 1 ] \
+  || broken "capture probe 'local x=\$(…)' was accused — the builtin reports its own status and masks the substitution's"
+cap_world '  local x; x="$(grep foo bar)"'
+[ "$(cap_offenders)" = 1 ] && [ "$(cap_safe)" = 0 ] \
+  || broken "capture probe 'local x; x=\$(…)' was excused — the SPLIT form is the one the region uses and it does abort"
+cap_world '  if [ -z "$q" ]; then y="$(grep foo bar)"; fi'
+[ "$(cap_offenders)" = 1 ] \
+  || broken "capture probe 'capture in an if BODY' was excused as a condition — a '; then' ends the exemption"
+
+# The span cap: a statement whose end this parser cannot see is reported, never dropped. The probe
+# has to put a PLAUSIBLE terminator far below the opener — a first draft simply left the statement
+# open to the end of the region, and the `END` fallback reported it with the cap deleted, so the
+# sabotage that removes the cap survived. Here the far line closes the statement and carries a
+# `|| true` right before it: without the cap the opener is read as guarded and vanishes.
+cap_world '  x="$(grep foo bar
+  # 1
+  # 2
+  # 3
+  # 4
+  # 5
+  # 6
+  # 7
+  # 8
+  # 9
+  # 10
+  # 11
+  # 12
+  # prose that happens to end like this || true)"'
+[ "$(cap_offenders)" = 1 ] && [[ "$(cap_lines)" == *'[unterminated]'* ]] \
+  || broken "capture probe 'a statement whose terminator is 14 lines away' was certified by it — the span cap does not fail closed"
+
+# The floor, in the direction the r2 review measured as decoration: putting the constant back to
+# the 12 it was born with must not be free. Asserted over the LIVE region, because that is the one
+# whose census the number is supposed to track.
+CAP_FLOOR_KEEP2="$CAPTURE_FLOOR"
+CAPTURE_FLOOR=12
+( capture_report "$ROOT" >/dev/null 2>&1 ) \
+  && broken "the capture verdict passed with CAPTURE_FLOOR below the live census — the constant is decoration, which is what let 12 sit over sixteen captures"
+CAPTURE_FLOOR="$CAP_FLOOR_KEEP2"
+
 # And the caller: a world with an offender must make `fails` grow, and a world with none must
 # not. Run in a subshell so the FAIL text and the increment die with it.
 cap_world '  a="$(grep 1 f || true)"
@@ -993,7 +1214,46 @@ CAPTURE_FLOOR=99
   && broken "the capture verdict passed a census below its own floor — the anti-vacuity floor is decoration"
 CAPTURE_FLOOR="$CAP_FLOOR_KEEP"
 
-capture_report "$ROOT"
+# ---------------------------------------------------------------------------
+# The rule verdicts over the LIVE kit, as a counted list and no longer as two statements dropped
+# beside their own probes.
+#
+# Every rule above is probed; the CALL that puts each rule on the live runner was not, and an
+# adversarial pass measured the cost: deleting the single line `capture_report "$ROOT"` left this
+# file green — every probe still passing, `sdd health discriminates`, rc 0 — over a `bin/sdd` whose
+# `gates` capture had had its `|| true` removed. That is the whole family this mission exists to
+# make unreinstatable, certified as absent by the sensor written to find it.
+#
+# The catalogue does reach it (`mut_HEALTH_gates_capture_aborts` survives the deletion, measured),
+# but since the catalogue left TEST_CMD it only runs when a human types `sdd health
+# --with-mutation`. A composition this load-bearing may not wait for that, so it is made countable
+# here — the shape CLAUDE.md records from check-entrypoint.sh: top-level calls a probe can count,
+# a derived expectation that bites when one is deleted, and a tally that bites when the loop goes.
+#
+# What is NOT claimed, because the adversarial pass measured it: neutering the equality below, or
+# pointing it at the list it is supposed to check, survives — and then deleting an entry is free
+# again. Two edits, not one. The outer witness for that residue is the mutation catalogue, and it
+# was measured rather than assumed: with the live call gone, `mut_HEALTH_gates_capture_aborts`
+# survives (`bin/sdd` with its `gates` guard removed, this file green, rc 0), so the catalogue
+# reports the gap. This comment says "two edits" and not "unreachable in one edit" on purpose —
+# r2 measured the second sentence to be false where a sensor header claimed it.
+RULE_REPORTS=(policy_report capture_report)
+# The expected count is DERIVED and not written by hand. A hand-written floor was tried first and
+# an adversarial pass set it to 0 for free — the same shape as the `CAPTURE_FLOOR=12` this round
+# is here to fix, a constant guarding a list with nothing guarding the constant. Counting the
+# `*_report()` definitions instead puts the two halves in independent places: a rule defined above
+# and left out of the list below fails on the mismatch, in either direction. A helper that ends in
+# `_report` and is not a rule verdict fails it too — loudly, which is the right side to fail on.
+RULE_REPORTS_DECLARED="$(grep -c '^[a-z_]*_report() {' "${BASH_SOURCE[0]}" || true)"
+[ "${#RULE_REPORTS[@]}" -eq "$RULE_REPORTS_DECLARED" ] \
+  || broken "${#RULE_REPORTS[@]} rule verdict(s) listed but $RULE_REPORTS_DECLARED defined in this file — a rule was probed in here and never run against the live kit"
+REPORTS_RUN=0
+for _rule_report in "${RULE_REPORTS[@]}"; do
+  "$_rule_report" "$ROOT" || true
+  REPORTS_RUN=$((REPORTS_RUN + 1))
+done
+[ "$REPORTS_RUN" -eq "${#RULE_REPORTS[@]}" ] \
+  || broken "$REPORTS_RUN of ${#RULE_REPORTS[@]} rule verdict(s) were issued — the loop that runs them is not running them"
 
 # ---------------------------------------------------------------------------
 echo
