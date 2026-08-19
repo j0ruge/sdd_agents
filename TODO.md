@@ -39,6 +39,14 @@ Achados sobre **repos-alvo** vão para o `TODO.md` daquele repo. Este arquivo é
 
 ### Sensores que faltam
 
+- [ ] **O check de mutação do `sdd health` diz `ok` sobre catálogo com sobrevivente** —
+  `bin/sdd:1801` — o regex exige `0 known gap` e **nunca** `caught == total`, então
+  `score: 103 caught, 0 known gap(s), of 104` sai com prefixo `ok`. Medido na `main` em `a9e8ce9`.
+  O veredito geral ainda reprova (a suíte devolve rc 1), mas a linha que o operador lê mente — e
+  isso no comando que virou o dono único do catálogo. Direção: comparar os dois números do próprio
+  `score:`, com mutação que troque a exigência por `0 known gap` sozinho.
+  — descoberto por `humano` na missão `20260818-lote-facil` (2026-08-19)
+
 - [ ] **O `--list` do `run-all.sh` imprime linha que não é passo, e sai 0 tendo rodado nada** —
   `tests/run-all.sh:146` — a mensagem de linter ausente fica fora do `run()` e entra na lista
   (`PATH=/tmp/empty tests/run-all.sh --list` mostra duas linhas que não são passos, uma delas
