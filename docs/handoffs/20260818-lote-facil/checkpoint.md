@@ -24,7 +24,7 @@ atualizado: 2026-08-18 23:59
 | I2 | A família do `cd` relativo — 14 em `tests/` mais o `ledger_repo_root` | `o=$(bash tests/run-all.sh 2>&1); grep -c '^  ok    cdpath: ' <<< "$o"` → `3` | done | aa95b2e |
 | I3 | Saída humana do runner — 3 números que contam a grandeza errada | `o=$(bash tests/check-autonomy.sh 2>&1); grep -c '^  ok    output: ' <<< "$o"` → `9` | done | 4f6aa8b |
 | I4 | Cinco caminhos sem asserção ganham asserção e mutação | `o=$(bash tests/run-all.sh 2>&1); grep -c '^  ok    covered: ' <<< "$o"` → `5` | done | f21df55 |
-| I5 | Regras de sensor e o `templates/review.md` que falta | `o=$(bash tests/run-all.sh 2>&1); grep -c '^  ok    rule: ' <<< "$o"` → `5` | pending | — |
+| I5 | Regras de sensor e o `templates/review.md` que falta | `o=$(bash tests/run-all.sh 2>&1); grep -c '^  ok    rule: ' <<< "$o"` → `5` | done | eff77b1 |
 
 ## Notas de execução
 
@@ -211,6 +211,43 @@ atualizado: 2026-08-18 23:59
   `score: 98 caught, 0 known gap(s), of 98` (era 91) e `45 finding(s)`. `./bin/sdd health` →
   `kit healthy`, rc 0, `ratchet: 7 known debt(s), none new`. `shellcheck -S warning bin/sdd
   tests/*.sh` limpo. O Check do incremento: `5`, medido `0` contra o HEAD antes das asserções.
+
+- 2026-08-18 · `I5` · ⚠️ **A passada adversarial concluiu em falso DUAS vezes antes de valer, e as
+  duas por bug do harness, não da regra.** Primeira: `awk -v from=…` **processa escapes**, então
+  toda âncora com `\t` — todas as regexes do `check-todo.sh` — chegava com TAB e o probe reportava
+  "a edição não mudou nada" (4 vezes). Segunda: `grep -cF` com âncora **multi-linha** trata cada
+  linha como um padrão alternativo, e a contagem de 1 virou 42. Refeito com `ENVIRON[]` no lugar do
+  `-v`, âncora multi-linha **recusada** pelo harness em vez de contada, e piso exigindo casamento
+  exato em 1. É a regra do `CLAUDE.md` — probe prova primeiro que sabotou o que dizia sabotar —
+  cobrada dentro da sessão que a estava aplicando, pela terceira missão seguida.
+- 2026-08-18 · `I5` · **A passada válida achou dois defeitos reais, ambos em asserção e não em
+  regra.** (1) O probe da caixa `[ ]` usava marcador vazio como carregador e afirmava a palavra
+  frouxa `bare` — então quem respondia era a regra VIZINHA do marcador pelado, e estreitar a regra
+  da caixa para `[xX]` deixava o selftest verde. Reescrito sobre o carregador link-reference, que
+  só a regra da caixa alcança, exigindo a mensagem exata. (2) O `PROBE_FLOOR` do
+  `check-checkpoint.sh` estava em 27 contra 28 probes reais: apagar um probe **pousava no piso** e
+  sobrevivia. Piso apertado. Resultado final: **38 sabotagens, 38 mortas, 0 harness-broken**.
+- 2026-08-18 · `I5` · **Sobrevivem por construção, nomeados nos cabeçalhos: baixar um piso enquanto
+  o que ele conta continua lá.** São três (`rule_end`, `RULES_FLOOR`, `REVIEW_FLOOR`) e nenhum é
+  alcançável numa edição só. O que transforma isso de buraco em sobrevivente-de-duas-edições são
+  as cinco sabotagens pareadas que **apagam o que cada piso conta** — todas mortas.
+- 2026-08-18 · `I5` · **Decisão: `rule:` e não `maxcount:` no `check-pipefail.sh`.** O prefixo é
+  contrato do Check deste incremento, que conta cinco linhas em quatro arquivos; nomear a regra 3
+  pelo assunto deixaria o Check em 4 e a nomenclatura interna consistente com um Check errado.
+- 2026-08-18 · `I5` · O `check-templates.sh` ganhou o `REVIEW_FAILS_BEFORE` em vez de contar
+  asserções que **passaram**: a primeira versão duplicava a contabilidade do `fails`, a passada
+  adversarial neutralizou a duplicata e o sensor seguiu imprimindo `ok rule:` sobre um template
+  que acabara de reprovar em catorze checagens. Uma pergunta, um mecanismo.
+- 2026-08-18 · `I5` · `agents/sdd-reviewer.md` entrou no mesmo commit (aponta para o template novo)
+  e o espelho foi sincronizado com `./bin/sdd install --force`, nunca `cp` — regra do `CLAUDE.md`.
+- 2026-08-18 · `I5` · **`TODO.md` 45 → 42**, com `todo-findings 42` na baseline no mesmo commit:
+  saem os 5 da família e entram 2 achados novos — o `check-templates.sh` sem `selftest()` e fora do
+  alcance do catálogo de mutação (as duas situações que o `CLAUDE.md` manda cobrir), e o limite
+  declarado da regra 3 (linha com dois greps recebe a mensagem apontando o comando errado).
+- 2026-08-18 · `I5` · Evidência do gate: `tests/run-all.sh` → `suite green`, rc 0, com
+  `score: 98 caught, 0 known gap(s), of 98` e `42 finding(s)`. `./bin/sdd health` → `kit healthy`,
+  rc 0, `ratchet: 7 known debt(s), none new`. `shellcheck -S warning bin/sdd tests/*.sh` limpo.
+  O Check do incremento: `5`, medido `0` contra o HEAD antes das asserções.
 
 ## Incrementos de fix (QA)
 
