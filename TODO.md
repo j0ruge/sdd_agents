@@ -425,7 +425,61 @@ Achados sobre **repos-alvo** vão para o `TODO.md` daquele repo. Este arquivo é
   list marker" some calada. Direção: probe próprio, ou declarar a redundância como o check de
   arquivo ilegível já declara a dele. — descoberto por `sdd-reviewer` na missão `20260818-lote-facil` (2026-08-18)
 
+- [ ] **O `gate_QA` compra o placeholder do próprio template como evidência de jornada** —
+  `bin/sdd:461` — em projeto sem interface a única âncora é `frontmatter gate`, testada só por
+  `-z`. O `templates/handoff.md:7` entrega `gate: <a evidência...>`: um handoff copiado sem tocar
+  a linha passa o gate com `journey walked without a browser interface`. É o defeito que o I3
+  fechou no `gate_REVIEW`, vivo um gate adiante, e a `placeholder()` está presa dentro do awk.
+  Direção: extrair a regra para uma função e cobrá-la nos dois gates.
+  — descoberto por `sdd-qa` na missão `20260819-fecho-que-nao-mente` (2026-08-19)
+
+- [ ] **Colons de alinhamento GFM reprovam o `gate_REVIEW` com motivo que não nomeia critério** —
+  `bin/sdd:557` — a linha separadora é pulada por `crit ~ /^-+$/`, que não conhece `:---:`. Uma
+  tabela formatada por prettier/markdownlint devolve `GATE_WHY=":---------- = :-----:"` e a
+  rodada trava até o `REVIEW_MAX_ITER` com uma frase que não nomeia critério nenhum. Anterior ao
+  I3; nenhuma das 14 rodadas em disco usa colons hoje. Direção: `crit ~ /^:?-+:?$/`.
+  — descoberto por `sdd-qa` na missão `20260819-fecho-que-nao-mente` (2026-08-19)
+
+- [ ] **O ramo de forma do `score:` no `cmd_health` não tem asserção nem mutante** —
+  `bin/sdd:1982` — é ele que impede que um `score:` presente e ilegível caminhe até `ok` e carimbe:
+  sem ele os três `[ "" -ne … ]` devolvem rc 2, o `if` lê falso e o `else` credita a rodada.
+  Nenhum `write_stub_suite` usa score malformado. Mesma linha: `grep -m1` pega a PRIMEIRA linha
+  `^score: ` e a autoritativa é a última. Direção: fixture com score torto + mutante, e `tail -1`.
+  — descoberto por `sdd-qa` na missão `20260819-fecho-que-nao-mente` (2026-08-19)
+
 ### Contrato e configuração
+
+- [ ] **A catraca do backlog e o carimbo de mutação colidem em toda missão** —
+  `tests/health-baseline.txt` — o arquivo mora DENTRO dos quatro diretórios da chave do carimbo,
+  então cumprir o princípio 5 (achado fora de escopo vira item) obriga a bumpar a catraca, o que
+  invalida o carimbo e cobra outra rodada de 20 a 50 min antes do `gate_PR`. Medido nesta sessão:
+  o carimbo `0575d68…` foi ganho e perdido pelo commit que registra estes achados. Direção: tirar
+  o baseline da chave, ou aceitar o custo declarando-o no boot da fase PR.
+  — descoberto por `sdd-qa` na missão `20260819-fecho-que-nao-mente` (2026-08-19)
+
+- [ ] **A regra do `--list` é só de espaço, e o `eval` que roda o `TEST_CMD` não é** —
+  `bin/sdd:2039` — o `case " $kit_test_cmd " in *" --list "*` não vê `TEST_CMD` com TAB antes da
+  flag, nem `"--list"` entre aspas; o `eval` do `run_check_cmd` (`bin/sdd:263`) entrega `--list`
+  à suíte nos três casos. O `sdd health` responde `ok TEST_CMD runs the suite` e todo gate passa
+  contra uma suíte que não rodou — o buraco que o I2 existe para fechar, outra grafia.
+  Direção: normalizar o espaço em branco antes do `case`.
+  — descoberto por `sdd-qa` na missão `20260819-fecho-que-nao-mente` (2026-08-19)
+
+- [ ] **Lixo ignorado pelo git dentro dos quatro diretórios move a chave do carimbo** —
+  `bin/sdd:688` — a chave é `find -type f` sobre a árvore, não sobre o que o git rastreia: um
+  `tests/debug.log` (ignorado por `*.log`, invisível no `git status`) muda a chave, e um swap de
+  editor que nasce e morre durante a rodada dispara a guarda de janela, jogando fora um verde
+  legitimamente ganho. O mundo 8 do `check-gates.sh` depende desse mecanismo de propósito.
+  Direção: basear a chave nos arquivos rastreados, ou podar dotfiles.
+  — descoberto por `sdd-qa` na missão `20260819-fecho-que-nao-mente` (2026-08-19)
+
+- [ ] **O exemplar do `agents/sdd-reviewer.md` é um artefato que o gate recusa nas oito linhas** —
+  `agents/sdd-reviewer.md:104` — o bloco é introduzido como "in the format" e todas as oito
+  `Rationale` são `<…>` ou `<one measured sentence…>`, ambas recusadas pela regra do envelope
+  angular; o aviso vem três parágrafos depois. Duas sessões já derivaram o heading errado da
+  ausência de exemplo copiável. Mesma linha: `bin/sdd:528` cita `templates/review.md:37-44`, que
+  o próprio commit empurrou para 48-55. Direção: uma linha do exemplar com frase real.
+  — descoberto por `sdd-qa` na missão `20260819-fecho-que-nao-mente` (2026-08-19)
 
 - [ ] **`REVIEW_MAX_ITER` conta por invocação de `sdd run`, não "in total" como o schema promete** —
   `config/schema.md:65` vs `bin/sdd:2297` — `local -A attempts=()` nasce dentro de `cmd_run`, então
