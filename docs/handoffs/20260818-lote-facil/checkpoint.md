@@ -300,6 +300,31 @@ atualizado: 2026-08-18 23:09
 - 2026-08-19 · `REVIEW r2` · Os outros quatro Checks foram rodados literais contra este HEAD e
   reproduzem: `abort: 4`, `output: 9`, `covered: 5`, `rule: 5`.
 
+- 2026-08-19 · `DOCS` · **A SUÍTE ESTÁ VERMELHA NO HEAD, e não é da árvore suja desta vez.**
+  `tests/run-all.sh` → rc 1, `score: 100 caught, 0 known gap(s), of 101`, árvore limpa.
+  Sobrevivente: `mut_LEDGER_repo_root_cdpath_leak`. O mutante troca só o **caminho rápido** de
+  `ledger_repo_root`, e o fallback pré-2.31 que `75c9d2a` acrescentou **repara a sabotagem** — a
+  guarda de forma esvazia o valor envenenado e o fallback resolve a identidade certa com
+  `CDPATH=''`. **Três medições independentes**: duas suítes completas (sempre o mesmo
+  sobrevivente) e um par diferencial em sandbox, com o `sed` provado antes, em que sã e mutante
+  dão saída **byte a byte idêntica** no `check-autonomy.sh`, rc 0 nas duas. Verde pela última vez
+  em `gate-exec-test-002459.log` (00:24), **antes** de `75c9d2a` (00:48).
+- 2026-08-19 · `DOCS` · **Consequência para quem retomar: o runner vai rederivar EXEC, não PR.**
+  `gate_EXEC` roda o `TEST_CMD` sobre o working tree, então suíte vermelha com todos os
+  incrementos `done` é lida como vermelho do EXEC — terceira ocorrência medida do defeito que já
+  está no `TODO.md` (`bin/sdd:426`). **Não** é incremento para o executor adotar: o conserto é uma
+  entrada do catálogo de mutação, e a escolha entre "sabotar as duas grafias no mesmo mutante" e
+  "dividir em dois" é de quem é dono dele. Registrado no `TODO.md` com a reprodução.
+- 2026-08-19 · `DOCS` · **Nenhuma linha de código foi tocada nesta fase, de propósito.** Cinco
+  commits, todos de documentação: `cc09edf` (CLAUDE.md, README.md, CONTEXT.md, pipeline.md,
+  failure-modes.md), `167944b` (KAIZEN_LOG + o achado da suíte vermelha), `4e2e752` e `4769f4f`
+  (o `45-docs.md`), `c706721` (o par do relógio). `TODO.md` 72 → 74, catraca junto nos dois.
+- 2026-08-19 · `DOCS` · O par da D7 foi refeito no protocolo (mesma máquina, em sequência, nada
+  mais rodando): base `9207b4d` **1268,31 s** (81 mutantes, verde) contra HEAD **1051,60 s** (101
+  mutantes, vermelha). O delta é ruído conhecido; o absoluto não — a suíte leva 17 a 21 minutos, e
+  o "~3m30s" do `01-plano.md` estava **6× errado**. Todo gate roda a suíte: contar ~20 min por
+  gate, não 3.
+
 ## Incrementos de fix (QA)
 
 > Escritos pelo `sdd-qa` quando um bug sanável é reprovado. Entram na mesma tabela acima com ID
