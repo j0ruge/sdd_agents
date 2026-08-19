@@ -3,7 +3,7 @@ missao: 20260818-lote-facil
 fase: DOCS
 data: 2026-08-19
 status: blocked
-gate: "A documentação está sincronizada — checklist de drift com 20 linhas, uma por área que o diff tocou, nenhum `✗`, quinze `✅` com hash e cinco `n/a` justificados (`cc09edf` + `167944b`), mais a entrada do `KAIZEN_LOG.md` com antes/depois medido. **Mas a missão não pode seguir para o PR: a suíte está VERMELHA no HEAD.** `tests/run-all.sh` → rc 1, `score: 100 caught, 0 known gap(s), of 101`, com `mut_LEDGER_repo_root_cdpath_leak` sobrevivendo — o fallback pré-2.31 que `75c9d2a` acrescentou **repara a sabotagem** do mutante, que só troca o caminho rápido. Reproduzido em sandbox com o `sed` provado antes: sã e mutante dão saída byte a byte idêntica no `check-autonomy.sh`, rc 0 nas duas. Asserção virou decoração. Registrado no `TODO.md` com a reprodução; a linha para aqui (Jidoka). Some-se a isso a r2 do REVIEW, que terminou `blocked` com quatro critérios abaixo de A."
+gate: "A documentação está sincronizada — checklist de drift com 21 linhas, uma por área que o diff tocou, nenhum `✗`, dezesseis `✅` com hash e cinco `n/a` justificados (`cc09edf`, `167944b`, `c706721`), mais a entrada do `KAIZEN_LOG.md` com antes/depois medido. **Mas a missão não pode seguir para o PR: a suíte está VERMELHA no HEAD.** `tests/run-all.sh` → rc 1, `score: 100 caught, 0 known gap(s), of 101`, com `mut_LEDGER_repo_root_cdpath_leak` sobrevivendo — o fallback pré-2.31 que `75c9d2a` acrescentou **repara a sabotagem** do mutante, que só troca o caminho rápido. Reproduzido em sandbox com o `sed` provado antes: sã e mutante dão saída byte a byte idêntica no `check-autonomy.sh`, rc 0 nas duas. Asserção virou decoração. Registrado no `TODO.md` com a reprodução; a linha para aqui (Jidoka). Some-se a isso a r2 do REVIEW, que terminou `blocked` com quatro critérios abaixo de A."
 ---
 
 # Documentação — 20260818-lote-facil
@@ -83,10 +83,11 @@ fechou.
 | `tests/check-autonomy.sh` — par diferencial pré-2.31, `cdpath:`, `output:` | `docs/failure-modes.md`, seção nova do git velho (é o sensor que ela cita) | ✅ | `cc09edf` |
 | `tests/check-todo.sh`, `check-checkpoint.sh`, `check-kaizen.sh`, `check-gates.sh`, `check-dry-run.sh`, `check-entrypoint.sh`, `check-lang.sh`, `check-preflight.sh`, `run-all.sh` | — | n/a | asserção e piso internos de sensor. Nenhum documento descreve asserção individual, e a **classe** (auto-teste, sabotagem adversarial, piso contra vacuidade) já está no `CLAUDE.md` e foi atualizada onde mudou. Documentar cada probe seria o inverso da disclosure progressiva |
 | `tests/check-mutation.sh` — catálogo 81 → 101, 3 mutantes reancorados | `TODO.md`, "Sensores que faltam" | ✅ | `167944b` — a regra "gate novo entra com mutação" não mudou, mas **uma entrada do catálogo parou de medir** e isso é achado, não prosa |
+| `tests/check-mutation.sh` — o relógio que o catálogo maior arrasta | `CONTEXT.md` 🚩 D7 e `KAIZEN_LOG.md` | ✅ | `c706721` — par medido no protocolo (1268,31 s na base contra 1051,60 s no HEAD); o alvo não está a 4,9× e sim a ~35× |
 | `tests/health-baseline.txt` — `todo-findings` movido em toda fase | `CLAUDE.md` princípio 5 e `README.md` (`sdd health` congela a contagem) | n/a | o mecanismo da catraca não mudou; mudou o número, que é exatamente o que ela existe para fazer aparecer num diff com autor. As duas linhas desta sessão (72 → 74) estão em `cc09edf` e `167944b` |
 | `TODO.md` — 18 achados fechados, 36 nascidos | `CLAUDE.md` princípio 5 (formato do item) e o cabeçalho do próprio `TODO.md` | n/a | formato e ciclo de vida inalterados. As entradas da missão foram **conferidas** uma a uma — seção abaixo |
 | `docs/handoffs/20260818-lote-facil/*` | — | n/a | artefato de missão, não documentação viva do repo. É o registro que os documentos acima citam quando precisam de profundidade |
-| A missão como um todo — antes/depois medido | `KAIZEN_LOG.md` | ✅ | `167944b` — entrada `2026-08-19`, com a tabela de números, o custo real e a suíte vermelha declarada |
+| A missão como um todo — antes/depois medido | `KAIZEN_LOG.md` | ✅ | `167944b` (entrada `2026-08-19`, tabela de números, custo real e a suíte vermelha declarada) e `c706721` (a linha do relógio) |
 
 ## Entradas do `TODO.md` conferidas nesta missão
 
@@ -154,7 +155,12 @@ Em ordem de bloqueio:
 2. **A rodada de revisão não fechou.** Três achados de sensor que falha aberto seguem abertos, com
    reprodução. Decidir entre uma r3 e mergear com a dívida registrada é do humano — e o corpo do
    PR tem de mostrar a nota real.
-3. **O alvo "<30 s" da D7** segue estourado e esta missão o piorou: o catálogo foi de 81 para 101
-   mutantes, e cada mutante é uma suíte inteira. O número medido está no `KAIZEN_LOG.md`.
+3. **O alvo "<30 s" da D7** segue estourado, e a ordem de grandeza que o `CONTEXT.md` afirmava
+   estava errada. Par medido no protocolo nesta sessão (mesma máquina, em sequência, nada mais
+   rodando): **1268,31 s na base contra 1051,60 s no HEAD**. O delta é ruído conhecido — o mesmo
+   par já oscilou ~2× entre passadas dos mesmos commits —, mas o absoluto é sólido: a suíte leva
+   **17 a 21 minutos**, ou **~35×** o alvo, e não os 4,9× registrados. Como todo gate roda a
+   suíte, `sdd phase` e `sdd why` bloqueiam por ~20 minutos. Subir o alvo ou aposentá-lo por
+   escrito continua sendo decisão do humano.
 4. **`LINT_CMD` preenchido e não lido pelo runner** — uma das 5 chaves fantasma do
    `config/schema.md`.
