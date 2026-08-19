@@ -81,6 +81,12 @@
 # paths from scan_file's counters to scan()'s verdict — the last two meant every cell-rule probe
 # was running through --check only). The one survivor left is named at the bottom of the selftest.
 #
+# Rule 3 (the pipe ban) added eight more in a later round, all dead: each half of the literal pair
+# dropped on its own, pipe_rule always returning 0, each of the two call sites deleted, the doc
+# floor lowered to zero, and the `ok rule:` line removed. That round also found PROBE_FLOOR sitting
+# one below the real probe count — deleting a probe landed exactly on the floor and survived — so
+# the floor is tight now and a deleted probe is caught.
+#
 # Exit codes, one per cause, FIRST failure wins:
 #    0  clean                        1  a checkpoint has violations
 #   89  no temp dir (probes never ran)      90/91/92  a selftest probe failed
@@ -203,6 +209,40 @@ doc_rule() {
   return 1
 }
 
+# pipe_rule <path> <label> — the twin of doc_rule for the OTHER rule a checkpoint has to be born
+# knowing: no `|` inside a Check cell, not even escaped.
+#
+# It existed only as prose and as rule 1 of the scan, with nothing joining the two. Deleting the
+# banner from templates/checkpoint.md AND from agents/sdd-planner.md left this file green, so the
+# rule that cost a whole mission would be rediscovered by the next planner the expensive way —
+# and rule 1 catches the violation only AFTER a checkpoint has been written with it, at which
+# point gate_EXEC has already read a fragment of a command as a status token.
+#
+# Both literals are demanded and both are STRUCTURAL, for the same reason as doc_rule: the
+# mechanism that cannot read the escape, and the escape itself. Either alone is half a rule — the
+# mechanism without the escape lets the next planner write `\|` and believe GFM saves it, and the
+# escape without the mechanism is a prohibition with no reason, which is the kind a later editor
+# deletes as noise. Neither is a Portuguese word, so this survives a target repo writing its
+# checkpoint prose in any language.
+PIPE_MECH="awk -F'|'"
+PIPE_ESCAPE='\|'
+# One document per place the next planner meets the rule. A floor, not a headcount: it is what
+# turns "both calls returned 0" into "both calls RAN", so deleting a call site cannot buy silence.
+PIPE_DOC_FLOOR=2
+
+pipe_rule() {
+  local path="$1" label="$2"
+  if [ ! -r "$path" ]; then
+    fail "$label is missing or unreadable — the pipe ban has nowhere to live"
+    return 1
+  fi
+  if grep -qF -- "$PIPE_MECH" "$path" && grep -qF -- "$PIPE_ESCAPE" "$path"; then
+    return 0
+  fi
+  fail "$label never states the pipe ban (wanted the literals \"$PIPE_MECH\" and '$PIPE_ESCAPE') — the next Check cell splits into six columns and the runner reads a fragment of the command as a status token"
+  return 1
+}
+
 scan() { # scan <root> — the full surface, floors and doc assertions included
   local root="$1" files f rc=0
   reset_counters
@@ -240,6 +280,17 @@ scan() { # scan <root> — the full surface, floors and doc assertions included
     "the checkpoint template teaches the ok-anchor rule" || rc=1
   doc_rule "$root/agents/sdd-planner.md" "agents/sdd-planner.md" \
     "the planner agent teaches the ok-anchor rule" || rc=1
+
+  # ONE ok line for the pair, and it prints only when BOTH documents carry the rule: the mission
+  # Check counts `^  ok    rule: ` and a line per document would answer 2 for a rule half taught.
+  local taught=0
+  pipe_rule "$root/templates/checkpoint.md" "templates/checkpoint.md" && taught=$((taught + 1))
+  pipe_rule "$root/agents/sdd-planner.md" "agents/sdd-planner.md" && taught=$((taught + 1))
+  if [ "$taught" -ge "$PIPE_DOC_FLOOR" ]; then
+    pass "rule: the ban on '|' inside a Check cell is taught where the next planner meets it ($taught doc(s))"
+  else
+    rc=1
+  fi
 
   [ "$rc" -eq 0 ] || fail "$((V_ANCHOR + V_COLS)) checkpoint violation(s)"
   return "$rc"
@@ -311,7 +362,10 @@ check_one() { # check_one <path> — one checkpoint, no floors, no doc assertion
 PROBES=0
 FAILS=0
 SELFTEST_RC=0
-PROBE_FLOOR=22
+# Tight, not a minimum with slack: at 27 against 28 real probes, deleting one probe left the count
+# on the floor and the sabotage that named exactly that survived the adversarial pass. A floor one
+# below the truth measures nothing it claims to.
+PROBE_FLOOR=28
 
 # FAILS is bumped by the assertions themselves, independently of fail_rc, and cross-checked at the
 # end. A single rc setter is a single point of failure: neuter it and every failure prints and
@@ -346,6 +400,14 @@ cp_row() { # cp_row <file> <id> <check cell>
   printf '| %s | slice | %s | done | abc1234 |\n' "$2" "$3" >> "$1"
 }
 
+# pipe_banner — the `|` ban in the shape both real documents write it: the mechanism that cannot
+# read the GFM escape, and the escape itself. A function rather than a literal in each fixture, so
+# the probes that isolate ONE half can be written by leaving one call out instead of by hand.
+pipe_banner() {
+  printf 'Never a `|` in the Check cell, not even escaped as `\\|` — the runner parses the table\n'
+  printf "with a raw awk -F'|' that does not know the GFM escape.\n"
+}
+
 # A tree that satisfies every floor, so the probes can degrade ONE thing at a time and read the
 # difference. 5 checkpoints, 21 rows, 4 of them under the anchor rule.
 build_tree() { # build_tree <root>
@@ -375,9 +437,11 @@ build_tree() { # build_tree <root>
   cp_row "$f" I1 '`<comando>` → `<esperado>`'
   printf 'A Check reading a sensor: `o=$(cmd 2>&1); grep -c '"'"'%s<assertion>'"'"' <<< "$o"`\n' \
     "$OK_ANCHOR" >> "$f"
+  pipe_banner >> "$f"
 
   printf 'A Check reading a sensor merges `2>&1` and anchors on `%s`.\n' \
     "$OK_ANCHOR" > "$root/agents/sdd-planner.md"
+  pipe_banner >> "$root/agents/sdd-planner.md"
 }
 
 selftest() {
@@ -456,19 +520,25 @@ selftest() {
     'the anchor rule applied to' "$novoid" --scan
 
   local notmpl="$box/notmpl" noagent="$box/noagent"
-  # Only the ANCHOR half is removed — the template keeps its `2>&1` — so the probe isolates the
-  # half that matters instead of passing because the whole line went away.
+  # Only the ANCHOR half is removed — the template keeps its `2>&1`, and it keeps the pipe banner
+  # too — so the probe isolates the half that matters instead of passing because the whole line
+  # went away, or because a NEIGHBOURING doc rule fired. The asserted message names the rule:
+  # both doc assertions open with "<label> never states", so a probe reading that prefix alone
+  # could not tell the ok-anchor rule from the pipe ban.
   build_tree "$notmpl"
   cp_head "$notmpl/templates/checkpoint.md"
   cp_row "$notmpl/templates/checkpoint.md" I1 '`<comando>` → `<esperado>`'
   printf 'A Check reading a sensor: `o=$(cmd 2>&1); grep -c <assertion> <<< "$o"`\n' \
     >> "$notmpl/templates/checkpoint.md"
-  probe 'a template that forgot the rule is caught' 1 \
-    'templates/checkpoint.md never states' "$notmpl" --scan
+  pipe_banner >> "$notmpl/templates/checkpoint.md"
+  probe 'a template that forgot the anchor rule is caught' 1 \
+    'templates/checkpoint.md never states the ok-anchor rule' "$notmpl" --scan
 
-  build_tree "$noagent"; printf 'nothing here\n' > "$noagent/agents/sdd-planner.md"
-  probe 'a planner that forgot the rule is caught' 1 \
-    'agents/sdd-planner.md never states' "$noagent" --scan
+  build_tree "$noagent"
+  printf 'nothing here\n' > "$noagent/agents/sdd-planner.md"
+  pipe_banner >> "$noagent/agents/sdd-planner.md"
+  probe 'a planner that forgot the anchor rule is caught' 1 \
+    'agents/sdd-planner.md never states the ok-anchor rule' "$noagent" --scan
 
   # The OTHER half of doc_rule, probed on its own: a doc that shows the anchor but never the
   # `2>&1` that makes it necessary states half a rule, and half a rule is how the next planner
@@ -476,8 +546,47 @@ selftest() {
   local halfdoc="$box/halfdoc"
   build_tree "$halfdoc"
   printf 'Anchor on `%s`.\n' "$OK_ANCHOR" > "$halfdoc/agents/sdd-planner.md"
+  pipe_banner >> "$halfdoc/agents/sdd-planner.md"
   probe 'a doc stating the anchor without the merge is caught' 1 \
-    'agents/sdd-planner.md never states' "$halfdoc" --scan
+    'agents/sdd-planner.md never states the ok-anchor rule' "$halfdoc" --scan
+
+  # ── the pipe ban, the rule that cost a whole mission and that no doc assertion cobrava ───────
+  # It was taught in prose and measured in the scan, and NOTHING joined the two: deleting the
+  # banner from templates/checkpoint.md and from the planner left this sensor green, so the next
+  # checkpoint would be born not knowing a rule whose violation shifts the runner's columns and
+  # still looks healthy. Same shape as doc_rule, one document at a time.
+  local notmplpipe="$box/notmplpipe" noagentpipe="$box/noagentpipe"
+  build_tree "$notmplpipe"
+  sed -i '/awk -F/d; /escaped as/d' "$notmplpipe/templates/checkpoint.md"
+  probe 'a template that forgot the pipe ban is caught' 1 \
+    'templates/checkpoint.md never states the pipe ban' "$notmplpipe" --scan
+
+  build_tree "$noagentpipe"
+  sed -i '/awk -F/d; /escaped as/d' "$noagentpipe/agents/sdd-planner.md"
+  probe 'a planner that forgot the pipe ban is caught' 1 \
+    'agents/sdd-planner.md never states the pipe ban' "$noagentpipe" --scan
+
+  # Each half on its own. A doc naming the MECHANISM without the escape lets the next planner
+  # write `\|` and believe GFM saves it — which is the exact mistake the banner exists to stop —
+  # and a doc naming the escape without the mechanism gives a prohibition with no reason, which
+  # is the kind a later editor deletes as noise.
+  local mechonly="$box/mechonly" escapeonly="$box/escapeonly"
+  build_tree "$mechonly"
+  sed -i '/escaped as/d' "$mechonly/agents/sdd-planner.md"
+  probe 'the mechanism without the escape is half a rule' 1 \
+    'agents/sdd-planner.md never states the pipe ban' "$mechonly" --scan
+
+  build_tree "$escapeonly"
+  sed -i '/awk -F/d' "$escapeonly/agents/sdd-planner.md"
+  probe 'the escape without the mechanism is half a rule too' 1 \
+    'agents/sdd-planner.md never states the pipe ban' "$escapeonly" --scan
+
+  # And the ok line itself, which is what the mission Check counts: a pipe_rule that returned 0
+  # without printing would leave the scan green and one assertion short, in silence.
+  local pipeok="$box/pipeok"
+  build_tree "$pipeok"
+  probe 'a clean tree SAYS the pipe ban was found in both docs' 0 \
+    'ok    rule:' "$pipeok" --scan
 
   # ── the calibration, over trees of fake sensors ──
   # These probes do NOT derive their `pass()` lines from OK_ANCHOR: that independence is the whole

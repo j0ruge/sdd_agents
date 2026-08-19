@@ -39,6 +39,14 @@ Achados sobre **repos-alvo** vão para o `TODO.md` daquele repo. Este arquivo é
 
 ### Sensores que faltam
 
+- [ ] **O `check-templates.sh` não tem auto-teste e nenhuma mutação o alcança** —
+  `tests/check-templates.sh:22` (a função `check()`) — ele mede `templates/`, então o catálogo,
+  que sabota o `bin/sdd`, nunca o mata; e `check()` não tem probe nenhum. Regex quebrada ali
+  reporta "template contract intact" para sempre sobre 60 asserções, inclusive as do
+  `40-review-r<N>.md` que o `gate_REVIEW` lê. Está nas duas situações que o `CLAUDE.md` manda
+  cobrir com `selftest()`. Direção: `--check <arquivo>` mais probes, como o `check-todo.sh` fez.
+  — descoberto por `sdd-executor` na missão `20260818-lote-facil` (2026-08-18)
+
 - [ ] **Fase que morre com a árvore suja faz o runner rederivar EXEC para sempre** —
   `bin/sdd:426` — `gate_EXEC` roda o `TEST_CMD` sobre o working tree, então o vermelho de QUALQUER
   fase em voo é lido como vermelho do EXEC. Medido nesta missão: a REVIEW morreu antes de commitar,
@@ -94,27 +102,12 @@ Achados sobre **repos-alvo** vão para o `TODO.md` daquele repo. Este arquivo é
   Direção: tratar `\|` antes do split, com asserção. — descoberto por `sdd status` na missão
   `20260816-kit-como-alvo` (2026-08-16)
 
-- [ ] **O `40-review-r<N>.md` é o único artefato com gate e sem template** — `templates/` — os
-  outros cinco têm (`missao`, `plano`, `checkpoint`, `handoff`, `pr-body`), e é justamente o do
-  review que o `gate_REVIEW` lê por regex literal (`^###[[:space:]]+Overall Grade`, `bin/sdd:409`).
-  Evidência: as rodadas r1 E r2 desta missão escreveram `## Overall Grade` e o gate devolveu
-  `NO-TABLE` — duas sessões independentes derivando igual. Direção: `templates/review.md` com o
-  heading e a tabela, mais a linha no `check-templates.sh`.
-  — descoberto por `sdd-reviewer` na missão `20260816-kit-como-alvo` (2026-08-16)
-
 - [ ] **Os dois ramos de diagnóstico do `differential()` não têm probe** —
   `tests/check-entrypoint.sh:234` — a passada adversarial da r2 matou 20 de 25 degradações, e o
   que sobra sem probe é a comparação do próprio diferencial: neutralizá-la faz o sensor ler "1 vs
   1" e seguir verde, então o dia em que o fall-through parar de reproduzir neste bash passa
   despercebido. Hoje o limite é o par de contagens ser IMPRESSO na linha `ok`. Direção: um gancho
   de contagem falsa, como o `SDD_EP_FORCE_FAIL` da composição, com um probe por ramo.
-  — descoberto por `sdd-reviewer` na missão `20260816-kit-como-alvo` (2026-08-16)
-
-- [ ] **A regra do `|` na célula do Check é ensinada em prosa e medida no scan, mas nenhum
-  `doc_rule` a cobra** — `tests/check-checkpoint.sh:239-241` — as duas asserções de documento
-  exigem só o âncora `^  ok    `; apagar o banner do `|` de `templates/checkpoint.md` e do
-  `sdd-planner` deixa o sensor **verde**, e a regra que custou uma missão inteira volta a nascer
-  desconhecida. Direção: um `pipe_rule()` gêmeo, com probe no `selftest()`.
   — descoberto por `sdd-reviewer` na missão `20260816-kit-como-alvo` (2026-08-16)
 
 - [ ] **O `check-todo.sh` mede a FORMA da âncora, nunca se ela ainda aponta o que o item diz** —
@@ -164,14 +157,6 @@ Achados sobre **repos-alvo** vão para o `TODO.md` daquele repo. Este arquivo é
   medir de novo antes de consertar. — refutado por `sdd-reviewer` (r2), descoberto por
   `sdd-executor` na missão `20260816-runner-sem-dividas` (2026-08-16)
 
-- [ ] **`grep -m<N>` é a mesma corrida do `grep -q`, e nenhum sensor a vê** —
-  `tests/check-dry-run.sh:234` — `-m1` também sai no primeiro casamento e mata o escritor com
-  SIGPIPE, então sob `pipefail` o pipeline devolve 141 igual. A ocorrência de hoje é inofensiva
-  (está no ramo de `fail`, capturada em substituição, não em condição), mas o
-  `tests/check-pipefail.sh` do I5 declara a lacuna em vez de fechá-la. Direção: estender a regex
-  para o par `-m`/`--max-count` e converter as ocorrências no mesmo commit.
-  — descoberto por `sdd-executor` na missão `20260816-runner-sem-dividas` (2026-08-16)
-
 - [ ] **O gate PLAN-AUTO aceita Check que já nasce verde** — `templates/missao.md:44` — o critério
   `d` cobra "Check executável (comando → esperado)", não "Check que
   reprova o HEAD de hoje". Medido: o Check do I1 desta missão era `grep -c 'gate_DOCS reprova'
@@ -195,12 +180,6 @@ Achados sobre **repos-alvo** vão para o `TODO.md` daquele repo. Este arquivo é
   para "não toca nos artefatos da missão" ou exercitar também num fixture que chegue ao REVIEW.
   — descoberto por `sdd-qa` na missão `20260814-dry-run-completo` (2026-08-14)
 
-- [ ] **A regra da cauda quebra com travessão dentro das crases de atribuição** —
-  `tests/check-todo.sh` (`last_sep`) — o corte é no último ` — ` e não conhece code span, então
-  `— por \`x\` na missão \`a — b\` (data)` reporta "the last field names no `<agent>`" num item
-  bem formado. Direção: mascarar code spans antes de cortar. — descoberto por
-  `revisao-adversarial` na 8ª rodada de revisão do sensor (2026-08-16)
-
 - [ ] **O formato de achado vale para os repos-alvo, mas o sensor só guarda o arquivo do kit** —
   `tests/check-todo.sh` vs `CLAUDE.md` (princípio 5) — a regra de formato e o ciclo "fechado é
   apagado" são prescritos para o `TODO.md` de **qualquer** repo, e os agentes escrevem nos dois;
@@ -209,14 +188,6 @@ Achados sobre **repos-alvo** vão para o `TODO.md` daquele repo. Este arquivo é
   incluí-lo no `TEST_CMD`. ⚠️ As regras já são estruturais e language-neutral de propósito, então
   ele roda num alvo `OUTPUT_LANG="en"` sem mudança. — descoberto por `humano` revisando o sensor
   novo (2026-08-16)
-
-- [ ] **Caixa marcada na linha SEGUINTE ao marcador escapa da regra 2** — `tests/check-todo.sh`
-  (regra 2) — a regra é por linha e exige marcador e `[x]` juntos; o GFM marca a caixa quando o
-  primeiro bloco do item é um parágrafo abrindo com `[x] `, e a linha do marcador pode sumir do
-  AST (marcador vazio, ou link-reference definition). Achado fechado renderiza marcado com rc 0
-  num arquivo de aparência saudável, contra o que o cabeçalho do sensor afirma (linhas 67-69,
-  179). Patch e repros: [handoff](docs/handoffs/20260816-todo-enxuto/r12-caixa-partida.md).
-  — descoberto por `revisao-adversarial` na 12ª rodada de revisão do sensor (2026-08-16)
 
 - [ ] **A economia de `current_phase()`/`next_pending_phase()` depende da memoização e ninguém
   conta** — `bin/sdd:475-492` vs `:193-210` — as duas reavaliam o gate de toda fase a cada
@@ -334,6 +305,14 @@ Achados sobre **repos-alvo** vão para o `TODO.md` daquele repo. Este arquivo é
   sítios de `tests/` têm variável absoluta. Só que a única instância histórica da classe era
   exatamente essa forma (`cd "$common"` do `ledger_repo_root`, uma CRITICAL), então a forma que
   mais custou é a que o sensor não vê. Direção: medir em runtime, não por linha.
+  — descoberto por `sdd-executor` na missão `20260818-lote-facil` (2026-08-18)
+
+- [ ] **A regra 3 nomeia o comando errado quando a linha tem DOIS greps** —
+  `tests/check-pipefail.sh` (o comentário de `maxc_violations` declara o limite) — linha que
+  carrega quiet **e** `-m<N>` é reportada só pela regra 1, de propósito: mesmo defeito, mesmo
+  conserto, uma mensagem. Só que em `foo | grep -q a | grep -m1 b` os dois flags são de comandos
+  diferentes, e o leitor recebe a mensagem da regra 1 apontando para o `-m` do outro. Nenhuma
+  instância no kit hoje. Direção: casar por comando, o que pede parser de shell.
   — descoberto por `sdd-executor` na missão `20260818-lote-facil` (2026-08-18)
 
 ### Saída humana e cosmética

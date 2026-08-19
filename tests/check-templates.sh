@@ -11,6 +11,14 @@
 # split is the whole point of OUTPUT_LANG: a target repo declaring another language gets its
 # artifacts in that language, while the kit stays readable to everyone.
 #
+# This file has no selftest and the mutation catalogue cannot reach it (that catalogue sabotages
+# bin/sdd; this one reads templates/). What stands in for one is the REVIEW_FLOOR below plus an
+# adversarial pass: writing the review heading at level 2, renaming the table columns, dropping the
+# **Overall** row and deleting the assertion loop each turn this file red. What survives by
+# construction, named rather than hidden and not reachable in one edit: lowering REVIEW_FLOOR while
+# the assertions are still there. Inert alone — the paired sabotage, deleting the assertions, dies
+# on the floor.
+#
 # Usage: tests/check-templates.sh   (exit 0 = contract intact)
 
 set -uo pipefail
@@ -84,6 +92,57 @@ check pr-body.md '^## Plano'                  "section 'Plano'"
 check pr-body.md '^## Pendências \(Decisions for a Human\)' "open-questions section"
 check pr-body.md '^## Achados fora de escopo' "section 'Achados fora de escopo'"
 check pr-body.md '^## Riscos e não-feitos'    "section 'Riscos e não-feitos'"
+
+# == templates/review.md ==
+#
+# The review round report was the ONE artifact with a gate and no template. gate_REVIEW reads it
+# with a literal `^###[[:space:]]+Overall Grade` (bin/sdd) and answers NO-TABLE when the heading
+# is written at any other level — which two independent review sessions did, both writing `##`,
+# because there was nothing to copy from. A template is what stops a third from deriving it again.
+#
+# These assertions are DERIVED from the gate rather than restated beside it: the heading regex and
+# the column names are what the awk in gate_REVIEW actually reads. Note the `###` in the check
+# below is the whole point — a `##` here would ship the exact defect the template exists to stop.
+# REVIEW_ASSERTIONS counts CALLS, never passes, and `fails` alone decides the verdict — one
+# mechanism per question. A first draft counted only the assertions that held, which duplicated
+# the `fails` accounting: an adversarial pass neutered the duplicate and the sensor went on
+# printing an `ok rule:` line about a template that had just failed fourteen checks.
+REVIEW_ASSERTIONS=0
+REVIEW_FAILS_BEFORE="$fails"
+review_check() { # review_check <regex> <description> — check(), counted for the floor below
+  check review.md "$1" "$2"
+  REVIEW_ASSERTIONS=$((REVIEW_ASSERTIONS + 1))
+}
+
+echo "== templates/review.md =="
+for k in missao fase rodada status sessao data gate; do
+  review_check "^${k}:" "frontmatter key '${k}'"
+done
+review_check '^### Overall Grade' "the '### Overall Grade' heading gate_REVIEW greps, at level 3"
+review_check '^\| Criterion \| Grade \| Rationale \|' "the exact table header the gate parses"
+review_check '^\| \*\*Overall\*\* \|'  "the '**Overall**' row"
+review_check '^## Achados da rodada'   "section 'Achados da rodada'"
+review_check '^## O que foi corrigido' "section 'O que foi corrigido'"
+review_check '^## O que foi refutado'  "section 'O que foi refutado'"
+review_check '^## Achados fora de escopo' "section 'Achados fora de escopo'"
+
+# The floor is what turns "no assertion failed" into "the assertions ran". Deleting the loop above
+# would otherwise leave this file green while measuring nothing about the file it names — the
+# vacuity every sensor in this suite carries a floor against.
+REVIEW_FLOOR=14
+if [ "$REVIEW_ASSERTIONS" -lt "$REVIEW_FLOOR" ]; then
+  printf '  FAIL review.md: only %d assertion(s) ran, expected at least %d — a clean report over\n' \
+    "$REVIEW_ASSERTIONS" "$REVIEW_FLOOR" >&2
+  printf '       a rule that never ran is what this floor exists to refuse\n' >&2
+  fails=$((fails + 1))
+elif [ "$fails" -ne "$REVIEW_FAILS_BEFORE" ]; then
+  # An assertion above failed and check() has already said which. No ok line: a sensor whose two
+  # verdicts share a stream cannot be read by a grep, and this one IS read by a grep.
+  :
+else
+  printf '  ok    rule: the review template carries the heading and table gate_REVIEW parses (%d assertion(s))\n' \
+    "$REVIEW_ASSERTIONS"
+fi
 
 echo
 if [ "$fails" -eq 0 ]; then

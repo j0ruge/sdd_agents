@@ -1,13 +1,16 @@
 #!/usr/bin/env bash
-# Sensor against the shell traps that make a CAPTURED VALUE lie — two rules, one scanned surface.
+# Sensor against the shell traps that make a CAPTURED VALUE lie — three rules, one scanned surface.
 #
 # RULE 1 (`grep -q`), the house's signature bug: a writer piped into an early-exiting `grep -q`
 # while `set -o pipefail` is in force.
 #
 # RULE 2 (`cdpath:`), its sibling: a `cd` into a command substitution with no `CDPATH=''` guard.
-# Both defects have the same shape — the value the author reads back is not the value the command
-# produced — and both are invisible to `bash -n`, to shellcheck, and to any test run on a machine
-# whose environment happens to be clean. Rule 2 is documented at its own regex below.
+#
+# RULE 3 (`rule:`), rule 1's other half: a writer piped into `grep -m<N>` with no quiet flag at
+# all, which exits early for exactly the same reason. All three defects have the same shape — the
+# value the author reads back is not the value the command produced — and all three are invisible
+# to `bash -n`, to shellcheck, and to any test run on a machine whose environment happens to be
+# clean. Rules 2 and 3 are documented at their own regexes below.
 #
 # `grep -q` exits on the FIRST match and closes the pipe. The writer upstream then dies of
 # SIGPIPE, `pipefail` propagates its 141, and `if writer | grep -q X` reads "X is absent" for the
@@ -47,12 +50,14 @@
 #                                              surface floor and the per-file wiring get probed)
 #
 # ── Known limits, stated so nobody re-discovers them as surprises ──────────────────────────────
-# NOT measured: `grep -m<N>` with NO quiet flag at all, which exits early for exactly the same
-# reason. Same family, real gap, and it is in TODO.md rather than here — widening the rule to
-# early-exit-without-`-q` would force conversions this increment did not scope, and a sensor that
-# lands with unconverted violations lands red. Note the boundary, because the two are one keystroke
-# apart: `| grep -m 1 -q x` IS measured (a quiet flag is present, it is just late on the line) and
-# was the fail-open this file shipped with; `| grep -m 1 x` is the TODO.md item and still silent.
+# `grep -m<N>` with no quiet flag WAS the first entry here, declared rather than closed because
+# widening the rule forces conversions. It is RULE 3 now, and the one live violation it found
+# (tests/check-dry-run.sh) was converted in the same commit — a sensor that lands with unconverted
+# violations lands red.
+#
+# NOT measured: a line carrying BOTH a quiet flag and `-m<N>`, reported by rule 1 alone. Same
+# defect, same fix, one message. The declared cost is a line with two greps, where rule 1 answers
+# for a `-m` that belongs to the other command — see maxc_violations().
 #
 # NOT measured either: a quiet flag separated from `grep` by a shell metacharacter, e.g. a pattern
 # containing an unquoted-looking `|` (`| grep "a|b" -q`). The boundary set that kills the false
@@ -80,7 +85,12 @@
 # An adversarial pass degraded every rule above one at a time and demanded a red selftest for each
 # — 26 sabotages on the first draft, 15 more on the PIPE_RE rewrite (each member of the boundary
 # set dropped on its own, the middle put back to flags-only, the trailing anchor widened and
-# narrowed), and 11 more when rule 2 landed: the leading boundary dropped, the flag group dropped,
+# narrowed), 11 more when rule 3 landed (the short form alone, the long form alone, the cluster
+# widened to `m[[:alnum:]]*`, the trailing anchor narrowed to whitespace, the leading pipe dropped,
+# the middle forced to one-or-more tokens, maxc_violations reading nothing, the rule-1-owns-it skip
+# dropped, has_early_exit forgetting rule 3, check_file never reading it, and the `ok rule:` line
+# deleted — all eleven died on the probe that names the exact rule), and 11 when rule 2 landed:
+# the leading boundary dropped, the flag group dropped,
 # the operand widened to any quoted token, strip_cd_guards neutered, the comment exemption
 # dropped, cd_violations emptied, the block cut out of check_file, the `cdpath:` line cut out of
 # scan_surface, and the poison floor left unarmed. Nine of those eleven died on the probe that
@@ -182,6 +192,32 @@ PIPE_RE='\|[[:space:]]*grep([[:space:]]+[^[:space:]|;&()<>`#]+)*[[:space:]]+(-[[
 # adversarial pass could not break either without breaking the canonical one too, which is how the
 # kit finds out a rule is redundant — removed rather than given a probe. `CDPATH= cd` is also the
 # spelling shellcheck flags as SC1007, so refusing it is the direction the linter already points.
+# ── RULE 3: a pipe into `grep -m<N>` with no quiet flag at all ─────────────────────────────────
+#
+# The same race as rule 1, one keystroke away: `-m<N>` makes grep exit after the Nth match, the
+# writer upstream dies of SIGPIPE, and `pipefail` propagates its 141. `| grep -m 1 -q x` was
+# already measured by rule 1 (a quiet flag is present, just late on the line); `| grep -m 1 x` was
+# the gap this file SHIPPED WITH — declared in the header and parked in TODO.md rather than closed,
+# because widening rule 1 would have forced conversions that increment had not scoped.
+#
+# It is a rule of its own rather than a third alternative inside PIPE_RE for two reasons, and both
+# are about the report rather than the detection: rule 1's message names `grep -q` and would be
+# wrong here, and the existing probes assert that message. Same fix in both cases — a herestring.
+#
+# The middle and the trailing anchor are PIPE_RE's, verbatim in shape and for the same reasons
+# (see the long comment above it — the boundary set, GNU permutation, the separated argument).
+# What differs is the flag itself:
+#
+#   * the short form is a flag CLUSTER ENDING in `m`, optionally followed by the attached count:
+#     `-m1`, `-m 1`, `-om1`, `-im 1`. Written the way rule 1 writes its quiet cluster
+#     (`-[[:alnum:]]*m[[:alnum:]]*`) it would fire on every dashed word carrying an m — `-mtime`,
+#     `-march`, `-mode` — and a sensor that invents violations gets its rule deleted, not fixed.
+#     grep's argument to `-m` is a number, so digits are what may follow it.
+#   * the long form is exact, and `--max-count` is the ONLY long spelling grep gives this flag —
+#     unlike `-q`, which has three names. `--max-count=1` and `--max-count 1` both work because
+#     the trailing anchor excludes alnum and `-`, which leaves `=` and whitespace.
+MAXC_RE='\|[[:space:]]*grep([[:space:]]+[^[:space:]|;&()<>`#]+)*[[:space:]]+(-[[:alnum:]]*m[0-9]*|--max-count)([^[:alnum:]-]|$)'
+
 CD_RE='(^|[^[:alnum:]_./$-])cd([[:space:]]+-[[:alpha:]]+)*[[:space:]]+"?(\$\(|`)'
 CD_GUARD="CDPATH='' cd"
 # A token with no `cd` in it: what is left after the guarded ones are blanked is what CD_RE reads.
@@ -203,6 +239,38 @@ violations() {
     is_comment "$text" && continue
     printf '%s\t%s\n' "$no" "$text"
   done < <(grep -nE "$PIPE_RE" -- "$1" 2>/dev/null)
+}
+
+# maxc_violations <file> — prints "<lineno>\t<text>" per pipe into an early-exiting `grep -m<N>`
+# that carries no quiet flag. Never fails.
+#
+# Lines rule 1 already reports are skipped, and that is the ONE place the two rules are coupled:
+# they describe the same defect with the same fix, so a line carrying both flags is named once.
+# The declared cost is a line with TWO greps — `| grep -q a | grep -m1 b` — where rule 1 answers
+# first and rule 3 stays quiet. A line scanner cannot tell the two commands apart, and this errs
+# toward one honest message instead of two, one of which would point at the wrong command.
+maxc_violations() {
+  local hit no text
+  while IFS= read -r hit; do
+    [ -n "$hit" ] || continue
+    no="${hit%%:*}"; text="${hit#*:}"
+    case "$text" in *"$WAIVER"*) continue ;; esac
+    is_comment "$text" && continue
+    # Herestring, never a pipe — rule 1 applies to rule 3's implementation too.
+    grep -qE "$PIPE_RE" <<< "$text" && continue
+    printf '%s\t%s\n' "$no" "$text"
+  done < <(grep -nE "$MAXC_RE" -- "$1" 2>/dev/null)
+  return 0
+}
+
+# has_early_exit <text> — true when the line pipes into a grep that stops reading before its
+# writer is done, by EITHER rule. ONE definition, so the waiver classifier cannot learn about a
+# rule the scanner already knows (or the other way round): a real rule-3 violation carrying the
+# marker would otherwise be reported as a STALE waiver — "nothing to waive" on a line that has
+# something to waive, which reads as the opposite of the truth and invites deleting the marker.
+has_early_exit() {
+  grep -qE "$PIPE_RE" <<< "$1" && return 0
+  grep -qE "$MAXC_RE" <<< "$1"
 }
 
 # strip_cd_guards <text> — blanks every GUARDED `cd` so only the unguarded ones survive for CD_RE.
@@ -245,7 +313,7 @@ waiver_lines() {
     no="${hit%%:*}"; text="${hit#*:}"
     is_comment "$text" && continue
     # Herestring, never a pipe — a sensor for this bug must not carry it.
-    if grep -qE "$PIPE_RE" <<< "$text"; then printf 'good\t%s\t%s\n' "$no" "$text"
+    if has_early_exit "$text"; then printf 'good\t%s\t%s\n' "$no" "$text"
     else printf 'stale\t%s\t%s\n' "$no" "$text"; fi
   done < <(grep -nF -- "$WAIVER" "$1" 2>/dev/null)
 }
@@ -257,7 +325,7 @@ waiver_count() {
 
 # check_file <file> — the real check on one path. rc 0 clean, 1 dirty, 94 unreadable.
 check_file() {
-  local f="$1" label="$2" bad found stale cdbad rc=0
+  local f="$1" label="$2" bad found stale cdbad maxbad rc=0
   if [ ! -f "$f" ] || [ ! -r "$f" ]; then
     printf '  FAIL  file missing or unreadable: %s\n' "$f" >&2
     return 94
@@ -280,6 +348,16 @@ check_file() {
         "$label" "${bad%%$'\t'*}" >&2
       printf '        %s\n' "${bad#*$'\t'}" >&2
     done <<< "$found"
+    rc=1
+  fi
+  maxbad="$(maxc_violations "$f")"
+  if [ -n "$maxbad" ]; then
+    while IFS= read -r bad; do
+      printf '  FAIL  %s:%s: pipe into an early-exiting `grep -m<N>` under pipefail — same race\n' \
+        "$label" "${bad%%$'\t'*}" >&2
+      printf '        as `grep -q`, same fix: a herestring\n' >&2
+      printf '        %s\n' "${bad#*$'\t'}" >&2
+    done <<< "$maxbad"
     rc=1
   fi
   stale="$(grep '^stale' <<< "$(waiver_lines "$f")")"
@@ -383,7 +461,7 @@ cd_poison_probes() {
 }
 
 selftest() {
-  local box t out_r2
+  local box t out_r2 out_r3
   box="$(mktemp -d "${TMPDIR:-/tmp}/sdd-pipefail-selftest-XXXXXX")" || {
     echo 'SENSOR-BROKEN: no temp dir — the probes never ran' >&2; return 92; }
   t="$box/probe.sh"
@@ -612,6 +690,99 @@ EOF
   # And bash's own behaviour, which is what the rule is FOR.
   cd_poison_probes "$box"
 
+  # ── RULE 3 ────────────────────────────────────────────────────────────────────────────────────
+  # `grep -m<N>` with NO quiet flag: the same early exit, one keystroke from a shape rule 1
+  # already measures. Every spelling grep accepts for the flag gets a probe, for the same reason
+  # rule 1 has six: a spelling this file does not know is a spelling it certifies as clean.
+  cat > "$t" <<'EOF'
+if printf '%s\n' "$out" | grep -m1 'BLOCKED'; then :; fi
+EOF
+  probe 'an attached -m1 with no quiet flag is detected' 1 'early-exiting `grep -m' "$t"
+
+  cat > "$t" <<'EOF'
+line="$(cat "$f" | grep -m 1 'x')"
+EOF
+  probe 'a separated -m 1 is detected' 1 'early-exiting `grep -m' "$t"
+
+  cat > "$t" <<'EOF'
+line="$(cat "$f" | grep -om1 'x')"
+EOF
+  probe 'a flag CLUSTER ending in m is detected' 1 'early-exiting `grep -m' "$t"
+
+  cat > "$t" <<'EOF'
+line="$(cat "$f" | grep --max-count=1 'x')"
+EOF
+  probe '--max-count= is detected (grep spells this flag two ways)' 1 'early-exiting `grep -m' "$t"
+
+  cat > "$t" <<'EOF'
+line="$(cat "$f" | grep --max-count 1 'x')"
+EOF
+  probe '--max-count with a separated argument is detected' 1 'early-exiting `grep -m' "$t"
+
+  # The shapes that are NOT the bug. Without these, "flag every pipe into grep" scores full marks.
+  cat > "$t" <<'EOF'
+n="$(printf '%s\n' "$v" | grep -c 'x')"
+EOF
+  probe 'a pipe into a grep that reads to EOF is accepted' 0 '-' "$t"
+
+  # The `m` has to be in a FLAG, not in an operand: `grep make` reads to EOF.
+  cat > "$t" <<'EOF'
+hits="$(ls | grep make)"
+EOF
+  probe 'an operand merely containing an m is not the -m flag' 0 '-' "$t"
+
+  # And the flag is `-m` plus DIGITS, not any dashed token containing an m. Written as
+  # `-[[:alnum:]]*m[[:alnum:]]*` the rule would fire on `-mtime`, `-march`, `-mode` — every dashed
+  # word with an m in it — and a sensor that invents violations gets its rule deleted, not fixed.
+  cat > "$t" <<'EOF'
+hits="$(printf '%s\n' "$out" | grep -F -- -mtime)"
+EOF
+  probe 'a dashed word merely containing an m is not -m either' 0 '-' "$t"
+
+  # No writer, no SIGPIPE: grep reading a FILE has nothing upstream to kill.
+  cat > "$t" <<'EOF'
+line="$(grep -m1 'x' "$f")"
+EOF
+  probe 'grep -m1 on a FILE (no pipe) is accepted' 0 '-' "$t"
+
+  # ONE message per line. The line carrying BOTH flags is rule 1's — the fix is the same
+  # herestring, and telling the reader the same defect twice under two names is how a report stops
+  # being read. The second half is the half that matters: without it, "rule 1 owns it" is a claim
+  # satisfied by rule 1 firing, whether or not rule 3 also did.
+  cat > "$t" <<'EOF'
+if foo | grep -m 1 -q x; then :; fi
+EOF
+  probe 'a line carrying both flags is reported by rule 1' 1 'pipe into `grep -q`' "$t"
+  out_r3="$( "$SELF_PATH" --check "$t" 2>&1 )"
+  PROBES=$((PROBES + 1))
+  if grep -qF 'early-exiting `grep -m' <<< "$out_r3"; then
+    printf 'SENSOR-BROKEN: a line carrying both flags was reported twice, once per rule\n%s\n' \
+      "$out_r3" >&2
+    FAILS=$((FAILS + 1)); fail_rc 91
+  fi
+
+  # Line number, same reason as the other two rules: a report that cannot say WHERE is a rumour.
+  cat > "$t" <<'EOF'
+: line one
+: line two
+line="$(cat "$f" | grep -m1 'x')"
+EOF
+  probe 'the max-count violation carries its line number' 1 'probe.sh:3:' "$t"
+
+  # Prose describing the trap is not the trap — this file's own header writes the bad shape.
+  cat > "$t" <<'EOF'
+   # never write cat "$f" | grep -m1 x here
+EOF
+  probe 'a whole-line comment naming the max-count shape is accepted' 0 '-' "$t"
+
+  # The waiver has to know rule 3 exists. Without that, waiving a real max-count violation makes
+  # the file fail as a STALE waiver — the marker on a line with "nothing to waive" — which reads
+  # as the opposite of the truth and pushes the author to delete the marker.
+  cat > "$t" <<'EOF'
+line="$(cat "$f" | grep -m1 'x')"  # sdd-pipefail-waiver: sabotage payload
+EOF
+  probe 'a waived max-count violation is accepted, not called stale' 0 '-' "$t"
+
   # 14-16: the SCAN path, over fixture trees. Without these three the whole surface half of this
   # file is unmeasured: a floor lowered to zero, or a scan_surface that never calls check_file at
   # all, would both print "no pipe into grep -q" and exit 0 forever. That is precisely the
@@ -650,12 +821,25 @@ EOF
   probe 'a clean scan SAYS the cd rule was applied, it does not merely stay quiet' \
     0 'ok    cdpath:' "$tree" --scan
 
+  # Same reason for rule 3, and it is the line the mission Check counts: dropping it would leave
+  # a scan that still exits 0 on a clean tree and still names the other two rules, silently one
+  # assertion short everywhere that counts them.
+  probe 'a clean scan SAYS the max-count rule was applied too' \
+    0 'ok    rule:' "$tree" --scan
+
+  cat > "$tree/tests/check-7.sh" <<'EOF'
+line="$(cat "$f" | grep -m1 'x')"
+EOF
+  probe 'the scan reports a max-count violation on the surface' \
+    1 'early-exiting `grep -m' "$tree" --scan
+  rm -f "$tree/tests/check-7.sh"; : > "$tree/tests/check-7.sh"
+
   rm -rf "$box"
 
   # Floor on the probe COUNT: neutering every assertion body leaves a selftest that ran nothing,
   # and a selftest that ran nothing reads exactly like one that passed. Moves only on purpose.
-  if [ "$PROBES" -lt 41 ]; then
-    printf 'SENSOR-BROKEN: only %d probe(s) ran, expected at least 41\n' "$PROBES" >&2
+  if [ "$PROBES" -lt 57 ]; then
+    printf 'SENSOR-BROKEN: only %d probe(s) ran, expected at least 57\n' "$PROBES" >&2
     FAILS=$((FAILS + 1)); fail_rc 92
   fi
   # Direct assignment, deliberately NOT through fail_rc: two independent paths from "a probe
@@ -688,13 +872,18 @@ scan_surface() {
     waived=$((waived + $(waiver_count "$root/$f")))
   done <<< "$files"
   if [ "$fails" -ne 0 ]; then
-    printf '\n%d file(s) break one of the two capture rules\n' "$fails" >&2
+    printf '\n%d file(s) break one of the three capture rules\n' "$fails" >&2
     return 1
   fi
   printf '  ok    %d path(s) scanned, no pipe into `grep -q` (%d waived)\n' "$n_files" "$waived"
   # Its own line, and prefixed: the two rules are reported separately so a reader (and the
   # mission Check that counts `^  ok    cdpath: `) can tell WHICH of them is being asserted.
   printf '  ok    cdpath: %d path(s) scanned, every `cd` into a capture empties CDPATH first\n' \
+    "$n_files"
+  # Rule 3, its own line for the same reason and carrying the prefix the mission Check counts:
+  # a reader (and `grep -c '^  ok    rule: '`) has to be able to tell WHICH of the three rules is
+  # being asserted, and a rule that only refrains from failing says nothing about having run.
+  printf '  ok    rule: %d path(s) scanned, no pipe into an early-exiting `grep -m<N>` either\n' \
     "$n_files"
   return 0
 }

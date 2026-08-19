@@ -56,10 +56,22 @@
 # probe asserts its own message; there is a floor on the probe count and a FAILS counter
 # independent of `fail_rc`. Rules known to be unprobed are listed in TODO.md, not papered over.
 #
+# The two rules added last (the code-span-aware tail cut, and the box that lands on the line after
+# its marker) went through their own adversarial pass: 13 degradations, 12 dead. The one SURVIVOR
+# of that round was a probe, not a rule — the unticked-box fixture used an empty marker and
+# asserted the loose word "bare", so the MARKER rule answered for it and the box rule could be
+# narrowed to `[xX]` with the selftest still green. It reads the exact message now, over the link
+# reference carrier, which only the box rule can catch.
+#
+# What survives by construction, named rather than hidden and not reachable in one edit: lowering
+# a floor while the thing it counts is still there. That is inert on its own — the paired sabotage
+# (delete a probe, delete a rule_end call) dies on the floor, which is what makes the floor a rule
+# and not a decoration.
+#
 # Not measured, on purpose: whether an anchor still points at real code, whether the prose is any
 # good, and whether a finding is worth keeping. All three are human judgement on the diff.
 #
-# THREE measured weaknesses, stated rather than hidden. The first is the header: nothing here
+# TWO measured weaknesses, stated rather than hidden. The first is the header: nothing here
 # models a fence, so a stray or unbalanced fence in the header — which makes GitHub render the
 # whole findings section as a code block — is NOT detected. Four mechanisms tried to catch it and
 # all four were worse than the gap: two failed silent, and the last also failed RED on an inline
@@ -68,13 +80,22 @@
 # is bounded and visible: the ticked-box rule never depended on fences, so no closed finding can
 # hide behind one, and a file rendering as code is obvious to the first human who opens it.
 #
-# The other two: Rule 3 asks for a backticked token before
-# the last separator, so an item whose TITLE carries inline code satisfies it without an anchor —
-# 45 of the 46 findings would still pass with their `file:line` deleted. Tightening it needs a
-# shape test the real data will not support (`git worktree` and `KAIZEN_LOG` are legitimate
-# anchors). And rule 4 splits on the last ` — `, so an em-dash inside the attribution backticks
-# misreports. Both are in TODO.md; neither can hide a closed finding, which is what rules 2 and
-# the whitelist are for.
+# ⚠️ That last sentence was FALSE for two missions, and not because of fences: the ticked rule is
+# per-line and demanded the marker and the `[x]` together, while GFM ticks a box whose marker line
+# vanished from the AST. Two carriers did it and both are refused by name now, with the bare-box
+# rule beside the ticked one. The claim above is true again, and it is worth remembering that it
+# read as true while it was not.
+#
+# The one that is left: rule 3 asks for a backticked token before the last separator, so an item
+# whose TITLE carries inline code satisfies it without an anchor — 45 of the 46 findings would
+# still pass with their `file:line` deleted. Tightening it needs a shape test the real data will
+# not support (`git worktree` and `KAIZEN_LOG` are legitimate anchors). It is in TODO.md, and it
+# cannot hide a closed finding, which is what rule 2 and the whitelist are for.
+#
+# The third used to live here — rule 4 splitting on the last ` — ` without knowing code spans, so
+# an em-dash inside the attribution backticks misreported a well-formed item. Closed: last_sep()
+# skips any separator sitting at an odd backtick depth. It was a false ALARM rather than a
+# fail-open, and those cost the sensor the trust that makes it worth reading.
 #
 # Exit codes, one per cause, FIRST failure wins — a shared or last-write-wins code would leave
 # the reader unable to tell which failure happened:
@@ -130,14 +151,35 @@ todo_awk() {
   # having to understand fences. Absent (a probe fixture), the whole file is the findings section.
   from="$(grep -n '^## Aberto' "$f" 2>/dev/null | head -1 | cut -d: -f1)"
   awk -v cap="$2" -v mode="$3" -v from="${from:-0}" '
-    # Byte offset of the last " — " separator, 0 when there is none.
+    # How many backticks occur in text. Byte-based like everything else here, and that is safe:
+    # a backtick is ASCII, so no multibyte character can contain one as a byte.
+    function backticks(text,   n, i, p) {
+      n = 0; i = 1
+      while ((p = index(substr(text, i), "`")) > 0) { n++; i = i + p }
+      return n
+    }
+    # Byte offset of the last " — " separator that is NOT inside a code span, 0 when there is none.
+    #
     # ⚠️ index()/substr(), never a regex with a negated em-dash class. The awk this repo runs is
     # mawk, BYTE-oriented whatever the locale: `[^—]` is the negated byte set {0xE2,0x80,0x94},
     # so any character from U+2000..U+2FFF in the tail — every curly quote, ellipsis, en-dash,
     # bullet and arrow — broke the match and the anchor rule failed OPEN on ordinary punctuation.
-    function last_sep(text,   sep, i, p, last) {
+    #
+    # ⚠️ The code-span test is a BACKTICK PARITY, not a code-span model — this file does not write
+    # CommonMark parsers, and six adversarial rounds are why. An odd number of backticks before an
+    # offset means the offset is inside a span; that is exactly the precondition, and it needs no
+    # knowledge of fences, of multi-backtick delimiters or of nesting. Without it the cut landed
+    # inside `a — b` and reported "the last field names no `<agent>`" on an item whose attribution
+    # was perfectly well formed — a FALSE ALARM, which costs the reader the trust that makes the
+    # sensor worth reading. An unclosed backtick makes every later separator read as "inside", so
+    # the cut moves left and the item is reported malformed: the honest answer, since it is.
+    function last_sep(text,   sep, i, p, last, at) {
       sep = " — "; last = 0; i = 1
-      while ((p = index(substr(text, i), sep)) > 0) { last = i + p - 1; i = last + length(sep) }
+      while ((p = index(substr(text, i), sep)) > 0) {
+        at = i + p - 1
+        if (backticks(substr(text, 1, at - 1)) % 2 == 0) last = at
+        i = at + length(sep)
+      }
       return last
     }
     # The anchor lives BEFORE the last separator, the agent name AFTER it. Position, not presence:
@@ -182,6 +224,34 @@ todo_awk() {
         print "  line " NR ": ticked box — a closed finding is deleted after its PR merges, never [x]"
       flush(); next
     }
+    # ── The box that lands on the line AFTER its marker, and the two carriers that put it there ─
+    # The rule above is per-line and demands the marker and the `[x]` together. GFM does not: it
+    # ticks the box when the first rendered block of the item is a paragraph opening with `[x] `,
+    # and the line of the marker can vanish from the AST entirely. Two carriers do it — an empty
+    # marker (`-` alone) and a link-reference definition (`- [ref]: https://…`, which emits no
+    # node) — so a closed finding renders TICKED on GitHub while the run exits 0 on a file that
+    # looks perfectly healthy. Measured against the merged sensor in the 12th adversarial round,
+    # with the CommonMark AST as witness: in both carriers the first child of the item is a
+    # paragraph whose first text is `[`, `x`, `]`, ` ` — the same shape as the item below it.
+    #
+    # Both rules run over the WHOLE file for the same reason the ticked rule does: "the header" is
+    # not a fixed preamble but everything above a heading an editor can move, and the header skip
+    # is precisely what let the first carrier through.
+    #
+    # Refused by name, never parsed. Deciding what a split item MEANS is the road this file has
+    # already refused four times; deciding whether it belongs is a question with a short answer.
+    /^[ \t>]*([-*+]|[0-9]+[.)])[ \t]*$/ {
+      if (mode == "lint") print "  line " NR ": a bare list marker — a finding is one line-start"
+      flush(); next
+    }
+    # The second carrier is caught by the box itself rather than by the line that carried it: a
+    # link-reference definition is only one of the shapes that can disappear from the AST, and the
+    # box is what every one of them ends up pointing at. `[ ]` counts as well as `[x]` — GitHub
+    # renders it as an OPEN task item, which is a finding the counter never saw.
+    /^[ \t>]*\[[ xX]\]([ \t]|$)/ {
+      if (mode == "lint") print "  line " NR ": a bare [ ]/[x] box — the marker it belongs to is on another line"
+      flush(); next
+    }
     # ── Header: NOTHING here models a fence, and that is the fourth and final answer ───────────
     # Four mechanisms tried to know where the header example begins and ends — a global toggle, a
     # bounded toggle, a parity count, and the closer-matching in between. All four failed, and the
@@ -213,12 +283,6 @@ todo_awk() {
     # "all within 8 lines" — the very regression this sensor exists to stop, passing green.
     /^[ \t>]*(```|~~~)/ {
       if (mode == "lint") print "  line " NR ": a fenced block in the findings section"
-      flush(); next
-    }
-    # A list marker alone on its line, with the box on the NEXT line, is one rendered task item —
-    # GitHub ticks it — and no per-line rule can see the pair. Refused instead of parsed.
-    /^[ \t>]*([-*+]|[0-9]+[.)])[ \t]*$/ {
-      if (mode == "lint") print "  line " NR ": a bare list marker — a finding is one line-start"
       flush(); next
     }
     /^- \[ \]/ {
@@ -285,6 +349,34 @@ assert_says() { # <file> <cap> <substring> <label>
   printf '  SELFTEST FAIL  %s — expected a violation saying "%s", got: %s\n' \
     "$4" "$3" "${out:-<nothing>}" >&2
   FAILS=$((FAILS + 1)); fail_rc 91
+}
+
+# rule_begin / rule_end — one `ok    rule: ` line per rule, printed only when that rule's OWN
+# probes ran AND passed.
+#
+# It is an assertion, not a caption. The floor is the half that bites: deleting a rule's probes
+# leaves the parser change with nothing measuring it, and without a per-rule floor the global
+# PROBES floor absorbs the loss the moment any other rule grows a probe. The FAILS comparison is
+# the other half — a rule whose probes went red does not get to print a green line about itself,
+# and the selftest has already said so on stderr.
+RULE_MARK_PROBES=0
+RULE_MARK_FAILS=0
+# Counted, so that deleting a rule_end CALL SITE cannot buy silence. Without this the per-rule
+# floor guards the probes and nothing guards the report: the sensor would stay green while saying
+# one rule fewer than it ran, which is the shape of every quiet regression in this suite.
+RULES_REPORTED=0
+RULES_FLOOR=2
+rule_begin() { RULE_MARK_PROBES="$PROBES"; RULE_MARK_FAILS="$FAILS"; }
+rule_end() { # rule_end <floor> <text>
+  local n=$((PROBES - RULE_MARK_PROBES))
+  if [ "$n" -lt "$1" ]; then
+    printf '  SELFTEST FAIL  the rule "%s" ran %d probe(s), expected at least %d — probes deleted\n' \
+      "$2" "$n" "$1" >&2
+    FAILS=$((FAILS + 1)); fail_rc 92; return 0
+  fi
+  [ "$FAILS" -eq "$RULE_MARK_FAILS" ] || return 0
+  printf '  ok    rule: %s (%d probe(s))\n' "$2" "$n"
+  RULES_REPORTED=$((RULES_REPORTED + 1))
 }
 
 # assert_rc <expected> <label> <args...> — for the exit paths. Defined at file scope beside the
@@ -801,6 +893,143 @@ EOF
     PROBES_SKIPPED=$((PROBES_SKIPPED + 1))
   fi
 
+  # ── the tail cut, and the code spans it used to cut inside ───────────────────────────────────
+  # `last_sep` takes the LAST " — " in the item and calls everything after it the found-by field.
+  # A code span in the attribution carrying an em-dash — a mission slug, a flag, a quoted message
+  # — moves that cut INSIDE the span, and a perfectly well-formed item is reported as malformed.
+  # It is a fail-open's mirror image: a false alarm, which costs the reader the trust that makes
+  # the sensor worth reading at all.
+  rule_begin
+  cat > "$box/tailspan.md" <<'EOF'
+## Aberto
+
+- [ ] **A finding whose attribution carries an em-dash in backticks** — `bin/sdd:42` — why it
+  matters, in one clause. — found by `sdd-qa` in mission `a — b` (2026-08-16)
+EOF
+  assert_clean "$box/tailspan.md" 8 "an em-dash inside the attribution's code span"
+
+  # TWO spans carrying a separator, and the scan has to walk past both. A loop that stopped at the
+  # first one it had to skip would answer with a cut further left and call the item malformed for
+  # a different reason — the same false alarm wearing another message.
+  #
+  # Note what this probe does NOT claim. The false alarm has exactly one direction: an em-dash
+  # span BEFORE the last legitimate separator changes nothing, because the head keeps an earlier
+  # complete span either way. A first draft here asserted the head side too and was red against
+  # the FIXED parser — the fixture it used was genuinely malformed (its anchor sat in the tail),
+  # so it was measuring the anchor rule and calling it the tail rule.
+  cat > "$box/twospans.md" <<'EOF'
+## Aberto
+
+- [ ] **A finding with two em-dash spans in its tail** — `bin/sdd:42` — why it matters, in one
+  clause. — found by `a — b` in mission `c — d` (2026-08-16)
+EOF
+  assert_clean "$box/twospans.md" 8 "two code spans carrying separators in the tail"
+
+  # The rule must still BITE, or "ignore code spans" is just "stop checking". A tail with no code
+  # span at all is still an item that never names its agent.
+  cat > "$box/tailspan-bad.md" <<'EOF'
+## Aberto
+
+- [ ] **A finding with an em-dash in a span and no agent** — `bin/sdd:42` — because `a — b`
+  matters — found by nobody at all (2026-08-16)
+EOF
+  assert_says "$box/tailspan-bad.md" 8 'last field names no' \
+    "a code span earlier in the line does not excuse an agentless tail"
+
+  # And the degenerate case: EVERY separator inside a span leaves no cut at all, which is the
+  # same answer as an item with no separator — malformed, said out loud.
+  cat > "$box/allspan.md" <<'EOF'
+## Aberto
+
+- [ ] **A finding whose only separators hide in one span** — `a — b — c` (2026-08-16)
+EOF
+  assert_says "$box/allspan.md" 8 'no non-empty' \
+    "an item whose every separator sits inside a code span"
+  rule_end 4 'the found-by tail is cut outside the code spans, not inside them'
+
+  # ── the box that lands on the line after its marker ──────────────────────────────────────────
+  # Rule 2 (ticked box) is a per-line regex demanding the marker and the `[x]` on the SAME source
+  # line. GFM does not ask for that: it ticks the box when the item's first rendered block is a
+  # paragraph opening with `[x] `, and the marker's own line can vanish from the AST entirely —
+  # an empty marker, or a link-reference definition, which emits no node. The result is a closed
+  # finding rendering with a ticked box on GitHub while this sensor exits 0, on a file that looks
+  # perfectly healthy. Measured against the merged sensor in the 12th adversarial round
+  # (docs/handoffs/20260816-todo-enxuto/r12-caixa-partida.md), with the CommonMark AST as witness.
+  #
+  # Refused by name, like every other construct this file will not model — it is not a parser.
+  rule_begin
+  cat > "$box/splitmarker.md" <<'EOF'
+# TODO
+
+-
+  [x] **a closed finding hiding behind an empty marker**
+
+## Aberto
+
+- [ ] **A well-formed item** — `bin/sdd:42` — why — found by `x` in mission `y` (2026-08-16)
+EOF
+  assert_says "$box/splitmarker.md" 8 'bare list marker' \
+    "an empty list marker above the findings section"
+
+  cat > "$box/linkrefbox.md" <<'EOF'
+# TODO
+
+- [ref]: https://example.com
+  [x] **a closed finding hiding behind a link reference**
+
+## Aberto
+
+- [ ] **A well-formed item** — `bin/sdd:42` — why — found by `x` in mission `y` (2026-08-16)
+EOF
+  assert_says "$box/linkrefbox.md" 8 'bare [ ]/[x] box' \
+    "a link-reference definition carrying the box on the next line"
+
+  # The unticked twin. GitHub renders it as an OPEN task item, so it is a finding the count never
+  # saw — the same hole the ticked rule had, one character away.
+  #
+  # ⚠️ The carrier here is the LINK REFERENCE, not the empty marker, and the asserted message is
+  # the box rule's own. Written the other way — an empty marker, asserting the loose word "bare" —
+  # the probe was answered by the MARKER rule and passed with the box rule narrowed to `[xX]`.
+  # It survived the adversarial pass that way: a probe reading a message its neighbour also prints
+  # measures the neighbour. Same defect this suite fixed in assert_says six probes at a time.
+  cat > "$box/splitopen.md" <<'EOF'
+# TODO
+
+- [ref]: https://example.com
+  [ ] **an open finding the counter never saw**
+
+## Aberto
+
+- [ ] **A well-formed item** — `bin/sdd:42` — why — found by `x` in mission `y` (2026-08-16)
+EOF
+  assert_says "$box/splitopen.md" 8 'bare [ ]/[x] box' \
+    "an unticked box that lands on the line after its marker"
+
+  # The bare marker rule stopped being header-only. It was already refused INSIDE the findings
+  # section; making it whole-file is what closes the carrier, and this probe is what keeps the
+  # findings-section half from being deleted as a duplicate of the new one.
+  cat > "$box/splitinside.md" <<'EOF'
+## Aberto
+
+-
+  [x] **a closed finding inside the findings section**
+
+- [ ] **A well-formed item** — `bin/sdd:42` — why — found by `x` in mission `y` (2026-08-16)
+EOF
+  assert_says "$box/splitinside.md" 8 'bare list marker' \
+    "an empty list marker inside the findings section"
+
+  # And the shapes that must NOT be swept up. A `[` opening ordinary prose is not a box, and the
+  # well-formed item — whose own line carries `- [ ] ` — is not a bare box either.
+  cat > "$box/notabox.md" <<'EOF'
+## Aberto
+
+- [ ] **A well-formed item** — `bin/sdd:42` — why it matters. See
+  [the handoff](docs/handoffs/x.md) for the analysis. — found by `x` in mission `y` (2026-08-16)
+EOF
+  assert_clean "$box/notabox.md" 8 "a markdown link opening a continuation line is not a box"
+  rule_end 5 'a box landing on the line after its marker is refused, not rendered'
+
   # Every exit path carries a probe, or the code that names it is decoration: mutating any of
   # these `exit`/`return` values used to survive the whole selftest.
   assert_rc 95 "a non-integer cap must exit 95" env SDD_TODO_CAP=abc bash "$SELF" --check "$box/good.md"
@@ -816,9 +1045,16 @@ EOF
   # Floor on the probe COUNT, for the same reason every other floor here exists: neutering all the
   # assert_* call sites made the summary print "0 probe(s)" and exit 0 — a selftest that ran
   # nothing reads exactly like a selftest that passed. The number moves only on purpose.
-  if [ "$((PROBES + PROBES_SKIPPED))" -lt 75 ]; then
-    printf '  SELFTEST FAIL  only %d probe(s) accounted for (%d ran, %d skipped), expected 75\n' \
+  if [ "$((PROBES + PROBES_SKIPPED))" -lt 84 ]; then
+    printf '  SELFTEST FAIL  only %d probe(s) accounted for (%d ran, %d skipped), expected 84\n' \
       "$((PROBES + PROBES_SKIPPED))" "$PROBES" "$PROBES_SKIPPED" >&2
+    FAILS=$((FAILS + 1)); fail_rc 92
+  fi
+
+  if [ "$RULES_REPORTED" -lt "$RULES_FLOOR" ]; then
+    printf '  SELFTEST FAIL  %d rule line(s) reported, expected %d — either a rule_end call site\n' \
+      "$RULES_REPORTED" "$RULES_FLOOR" >&2
+    printf '                 was deleted or one of the rules above went red\n' >&2
     FAILS=$((FAILS + 1)); fail_rc 92
   fi
 

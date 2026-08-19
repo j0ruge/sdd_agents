@@ -53,6 +53,9 @@ requires a **clean working tree**.
 ## 4. Write the round report
 
 `docs/handoffs/<mission>/40-review-r<N>.md`, where `<N>` is the round number (`r1`, `r2`, …).
+Start from `templates/review.md` in the kit — it carries the frontmatter, the sections and the
+table at the exact heading level the gate reads. This artifact went two missions with a gate and
+no template, and two independent rounds wrote `## Overall Grade` and collected `NO-TABLE`.
 
 The file **must** contain the `### Overall Grade` section with the skill's table, in the format:
 
