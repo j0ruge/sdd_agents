@@ -198,6 +198,33 @@ todo_awk() {
           print "  line " start ": no non-empty `file:line` anchor before the found-by tail"
         else if (tail_of(body) !~ /`[^`]+`/)
           print "  line " start ": the last field names no `<agent>` — the found-by must be the tail"
+        # The found-by opens with PROSE — "found by", "descoberto por" — never with the span
+        # itself. Skipping separators inside spans (above) has a second edge nobody asked for:
+        # when the last content of an item IS a span, the cut lands on the separator BEFORE it
+        # and the whole decoy span becomes the tail. That span carries a backtick pair, so the
+        # check right above is satisfied, and an item naming no agent AT ALL reads well formed.
+        # Measured: the naive cut used to land INSIDE such a span and reject the item by
+        # accident, so removing the false alarm opened a real hole. Position again, not
+        # presence — the same answer the anchor/tail split already gives, asked now of the
+        # first token of the tail. All 43 items open this field with prose, none with a span.
+        #
+        # ⚠️ DECLARED LIMIT, and the sentence above used to read as though the hole were shut.
+        # It is not: this rule reaches the span that IS the whole tail, and nothing else. A decoy
+        # span sitting LATER in the same tail — prose, then the span, then more prose, then the
+        # date — still satisfies the presence check above and still names no agent. Measured
+        # differentially in the r2 review: the merge-base sensor REJECTED that shape (the naive
+        # cut fell inside the span, leaving one lone backtick), this one accepts it, so it is a
+        # regression of this mission and not the pre-existing weakness it was first filed as.
+        # It is left open on purpose. Every syntactic rule tried against it invents violations
+        # on the real file — requiring the span to be the last content before the date rejects
+        # five well-formed items, because real found-by fields legitimately carry prose after
+        # the agent name. Closing it needs the semantic re-derivation that 00-missao.md put out
+        # of scope by name. Filed in TODO.md with this differential; the mirror weakness on
+        # head_of is declared in this sensor header, and now so is this one.
+        # ⚠️ No apostrophe and no backtick in this comment: the whole program is single-quoted
+        # in the shell, so either one ends the quote and bash parses awk source as commands.
+        else if (tail_of(body) ~ /^[ \t]*`/)
+          print "  line " start ": the found-by tail opens with a code span — it names no `<agent>`, the cut fell before a trailing span"
         if (last !~ /\([0-9][0-9][0-9][0-9]-[0-9][0-9]-[0-9][0-9]\)/)
           print "  line " start ": last line carries no (YYYY-MM-DD) — the found-by field is the tail"
         if (nlines > cap)
@@ -945,7 +972,47 @@ EOF
 EOF
   assert_says "$box/allspan.md" 8 'no non-empty' \
     "an item whose every separator sits inside a code span"
-  rule_end 4 'the found-by tail is cut outside the code spans, not inside them'
+
+  # The hole the span-skip opened, and the reason this rule has six probes and not four. The item
+  # below names NO agent anywhere; its last content is a quoted phrase that happens to carry an
+  # em-dash. The cut lands on the separator before that span, the span becomes the whole tail, and
+  # its backtick pair satisfies "the tail names an agent". Before the span-skip existed the cut
+  # fell INSIDE the span and the item was rejected — by accident, but rejected. Verified against
+  # the merge-base copy of this sensor, which says `last field names no`; without this probe the
+  # regression is invisible and an unattributed finding hides behind any trailing quoted phrase.
+  cat > "$box/decoyspan.md" <<'EOF'
+## Aberto
+
+- [ ] **A finding with a decoy span and no attribution** — `bin/sdd:42` — `emdash — inside decoy span` (2026-08-16)
+EOF
+  assert_says "$box/decoyspan.md" 8 'opens with a code span' \
+    "a trailing decoy span is not an attribution"
+
+  # The same shape spread over a continuation line: the span opens on one physical line and closes
+  # on the next, so a rule reading single lines instead of the joined body would miss it.
+  cat > "$box/decoyspan-multi.md" <<'EOF'
+## Aberto
+
+- [ ] **A finding with a decoy span across two lines** — `bin/sdd:42` — why it matters, in one
+  clause. — `emdash — inside decoy span` (2026-08-16)
+EOF
+  assert_says "$box/decoyspan-multi.md" 8 'opens with a code span' \
+    "a trailing decoy span split across lines is not an attribution either"
+
+  # The `[ \t]*` in the rule, which had no probe of its own. The separator ends a physical line
+  # and the decoy span opens the next, so the joined tail starts with the continuation indent
+  # rather than with the backtick. Dropping the tolerance — a one-character edit to `/^`/` —
+  # left the whole selftest green in the r2 adversarial pass while this shape, which is ordinary
+  # authoring and not a contrivance, walked through unattributed.
+  cat > "$box/decoyspan-indent.md" <<'EOF'
+## Aberto
+
+- [ ] **A finding whose decoy span opens the continuation line** — `bin/sdd:42` — why it matters —
+  `emdash — inside decoy span` (2026-08-16)
+EOF
+  assert_says "$box/decoyspan-indent.md" 8 'opens with a code span' \
+    "a decoy span opening an indented continuation line is not an attribution"
+  rule_end 7 'the found-by tail is cut outside the code spans, not inside them'
 
   # ── the box that lands on the line after its marker ──────────────────────────────────────────
   # Rule 2 (ticked box) is a per-line regex demanding the marker and the `[x]` on the SAME source
@@ -1005,6 +1072,25 @@ EOF
   assert_says "$box/splitopen.md" 8 'bare [ ]/[x] box' \
     "an unticked box that lands on the line after its marker"
 
+  # The SAME carrier with an uppercase tick, and the reason it is a probe of its own: the box
+  # rule's class is `[ xX]`, the ticked-box rule two screens up already probes its own `X` with
+  # tickedupper.md, and this branch — the one that catches a CLOSED finding hidden on a split
+  # line — had none. Narrowing the class to `[ x]` left the whole selftest green in the r2
+  # adversarial pass while a `[X]` carrier walked straight through, which is the fail-open this
+  # sensor exists to make impossible. GitHub renders `[X]` ticked; so must this.
+  cat > "$box/splitopenupper.md" <<'EOF'
+# TODO
+
+- [ref]: https://example.com
+  [X] **a closed finding hiding behind an uppercase tick on the split line**
+
+## Aberto
+
+- [ ] **A well-formed item** — `bin/sdd:42` — why — found by `x` in mission `y` (2026-08-16)
+EOF
+  assert_says "$box/splitopenupper.md" 8 'bare [ ]/[x] box' \
+    "an uppercase-ticked box that lands on the line after its marker"
+
   # The bare marker rule stopped being header-only. It was already refused INSIDE the findings
   # section; making it whole-file is what closes the carrier, and this probe is what keeps the
   # findings-section half from being deleted as a duplicate of the new one.
@@ -1045,8 +1131,8 @@ EOF
   # Floor on the probe COUNT, for the same reason every other floor here exists: neutering all the
   # assert_* call sites made the summary print "0 probe(s)" and exit 0 — a selftest that ran
   # nothing reads exactly like a selftest that passed. The number moves only on purpose.
-  if [ "$((PROBES + PROBES_SKIPPED))" -lt 84 ]; then
-    printf '  SELFTEST FAIL  only %d probe(s) accounted for (%d ran, %d skipped), expected 84\n' \
+  if [ "$((PROBES + PROBES_SKIPPED))" -lt 88 ]; then
+    printf '  SELFTEST FAIL  only %d probe(s) accounted for (%d ran, %d skipped), expected 88\n' \
       "$((PROBES + PROBES_SKIPPED))" "$PROBES" "$PROBES_SKIPPED" >&2
     FAILS=$((FAILS + 1)); fail_rc 92
   fi

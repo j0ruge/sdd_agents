@@ -1413,6 +1413,63 @@ assert_eq "cdpath: CDPATH=. yields the repo on ONE line, not the path echoed by 
   "one 1" \
   "$( id="$(id_cd . "$CDROOT/one")"; printf '%s %s' "${id##*/}" "$(grep -c . <<< "$id")" )"
 
+# --- the same identity, asked of a git that predates --path-format ----------
+# `ledger_repo_root` asks git for `--path-format=absolute`, born in git 2.31. An OLDER git does not
+# refuse it: `rev-parse` echoes a token it does not recognize straight back to stdout and still
+# exits 0, so it answers TWO lines — the flag, then the common dir, still relative. `|| return 0`
+# cannot fire (rc is 0) and `-n` cannot fire (the string is not empty), so the whole two-line
+# string used to become the repository IDENTITY, newline and all, in every row of an append-only
+# ledger that is never migrated. Same shape as the CDPATH pair above and a strictly worse
+# consequence, which is why it sits beside it: there the identity moved, here it is not a path.
+GITSHIM="$CDROOT/oldgit"; mkdir -p "$GITSHIM"
+{ printf '#!/usr/bin/env bash\n'
+  printf 'is_rp=0; for a in "$@"; do [ "$a" = rev-parse ] && is_rp=1; done\n'
+  printf 'if [ "$is_rp" = 1 ]; then\n'
+  printf '  keep=(); echoed=()\n'
+  printf '  for a in "$@"; do case "$a" in --path-format=*) echoed+=("$a");; *) keep+=("$a");; esac; done\n'
+  printf '  if [ "${#echoed[@]}" -gt 0 ]; then\n'
+  printf '    for e in "${echoed[@]}"; do printf "%%s\\n" "$e"; done\n'
+  printf '    exec %s "${keep[@]}"\n' "$(command -v git)"
+  printf '  fi\n'
+  printf 'fi\n'
+  printf 'exec %s "$@"\n' "$(command -v git)"
+} > "$GITSHIM/git"
+chmod +x "$GITSHIM/git"
+
+# ⚠️ The floor, before any conclusion: a shim that failed to imitate the old git would make the
+# assertion below pass over a modern git and say nothing. Two properties, because either one alone
+# is satisfiable by a broken shim — it must ECHO the unknown flag (two lines, the first being the
+# flag itself) and it must stay transparent for every other rev-parse.
+assert_eq "the pre-2.31 git shim is armed: rev-parse echoes the flag it does not know, rc 0" \
+  "2 --path-format=absolute ok" \
+  "$( o="$( PATH="$GITSHIM:$PATH" git -C "$CDROOT/one" rev-parse --path-format=absolute --git-common-dir 2>&1 )"
+      t="$( PATH="$GITSHIM:$PATH" git -C "$CDROOT/one" rev-parse --git-common-dir 2>/dev/null )"
+      printf '%s %s %s' "$(grep -c . <<< "$o")" "$(head -1 <<< "$o")" \
+        "$( [ "$t" = .git ] && echo ok || echo "opaque:$t" )" )"
+
+# ⚠️ RAW, and never through the `no data for <repo>:` extractor `id_cd` uses. That extractor was
+# the first spelling of this probe and it could not see the defect BY CONSTRUCTION: its `sed`
+# needs `no data for X:` on ONE line, while the leak is two lines by definition — the echoed flag
+# is always a whole line of its own, so the pattern never matched and the probe read the empty
+# string in BOTH worlds, reporting `clean 0` whether the guard was there or not. Measured: with
+# `mut_LEDGER_repo_root_shape_blind` applied — guard gone, `bash -n` clean — the whole of
+# check-autonomy.sh stayed green. A sensor written to protect a CRITICAL, blind to that CRITICAL.
+raw_oldgit() { ( cd "$1" && PATH="$GITSHIM:$PATH" SDD_STATE_DIR="$IDSTATE" "$SDD" autonomy 2>&1 ); }
+
+# Refusing the shape is the whole contract: the answer is the real repo or it is nothing, and it is
+# never the echoed flag and never two lines. Three fields, and each answers an objection the other
+# two cannot. `said` is the FLOOR — the old-git run must still produce the runner's per-repo voice,
+# because "the flag does not appear" is satisfied for free by a run that printed nothing at all, or
+# by one that died. `leak` is the property. `new` is read in the same breath and compared, so a
+# runner that had simply stopped resolving anything cannot buy the green: the old git may answer
+# less, never something else.
+assert_eq "cdpath: a git older than --path-format yields no identity, never the echoed flag" \
+  "one said clean" \
+  "$( new="$(id_cd '' "$CDROOT/one")"; raw="$(raw_oldgit "$CDROOT/one")"
+      case "$raw" in *"no data"*) s=said ;; *) s="mute:$(head -c 40 <<< "$raw")" ;; esac
+      case "$raw" in *--path-format*) g=leaked ;; *) g=clean ;; esac
+      printf '%s %s %s' "${new##*/}" "$s" "$g" )"
+
 # --- ...and a row that cannot say where it came from is nobody's ------------
 # `ledger_row_is_local` used to answer `true` for a row with no `repo` key — local in EVERY repo.
 # The comment above it claimed the readers then classified those rows out loud, and for a bare
