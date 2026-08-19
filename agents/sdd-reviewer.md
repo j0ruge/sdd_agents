@@ -101,19 +101,32 @@ The file **must** contain the `### Overall Grade` section with the skill's table
 
 | Criterion | Grade | Rationale |
 |-----------|-------|-----------|
-| Code Quality (Zen) | A | ... |
-| Type Safety | A | ... |
-| Error Handling | A | ... |
-| Security | A | ... |
-| Performance | A | ... |
-| Test Coverage | A | ... |
-| Documentation | A | ... |
-| **Overall** | **A** | ... |
+| Code Quality (Zen) | A | <one measured sentence, never a fill-in> |
+| Type Safety | A | <…> |
+| Error Handling | A | <…> |
+| Security | A | <…> |
+| Performance | A | <…> |
+| Test Coverage | A | <…> |
+| Documentation | A | <…> |
+| **Overall** | **A** | <…> |
 ```
 
 **The runner parses this table.** Any criterion graded other than `A` — including a `—` for "not
 analysed" — fails the gate. A partial review is not a review: if a criterion was not analysed,
 analyse it.
+
+**It parses the `Rationale` column too, and a placeholder there fails the gate.** An empty cell,
+the whole cell between angle brackets (which is how the template above ships it), a bare ellipsis,
+or the words `PREENCHER` / `TODO` / `TBD` / `FIXME` / `XXX` — any of them names the criterion and
+refuses the round. The `A` is bought by the sentence, not by the letter: `20260818-lote-facil` r1
+left `PREENCHER` in all seven justifications and would have been certified, because until this gate
+read `f[4]` it read the letter alone. The skill's own terse rationales — `clean`, `n/a`, `—` —
+are NOT placeholders: they mean measured, with nothing to say.
+
+The same refusal covers the `gate:` frontmatter field, which is the other half of the seal: fill
+it with the round's real evidence (summarised `TEST_CMD` output, tree state), never with the
+template's `<…>`. Absent it is left alone — rounds older than the field exist — but present and
+unfilled fails.
 
 Also include: the round's findings, what was fixed (with a hash), what was refuted (with
 evidence) and what went to `TODO_FILE`.

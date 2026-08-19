@@ -510,8 +510,37 @@ gate_REVIEW() {
   # Documented anchor: the "### Overall Grade" section of the codereview skill (contract
   # v1.13.0+), table | Criterion | Grade | Rationale | on an A–F scale. The gate requires A on
   # EVERY row — "—" (not analysed) fails too: a partial review is not a review.
-  local offending
-  offending="$(awk '
+  #
+  # It reads the `Rationale` column too, and refuses a placeholder there. For two missions the
+  # extractor took `crit = f[2]; grade = f[3]` and never touched `f[4]`, so a table with `A` on
+  # every row and the literal `PREENCHER` on every justification passed — the live instance is
+  # docs/handoffs/20260818-lote-facil/40-review-r1.md, whose own `gate:` field records it. An `A`
+  # that no sentence supports is a label, and this gate exists to refuse labels.
+  # The `gate:` field is the other half of the seal, and it is judged by the SAME rule — so it is
+  # fed INTO the awk below instead of being tested again in shell. One definition per program: the
+  # day this repo spelled a two-value enum by hand in three places, two learned the new event and
+  # the third went blind (CLAUDE.md, "enum lido em mais de um ponto").
+  local offending TAB gate_field
+  TAB=$'\t'
+  gate_field="$(frontmatter "$last" gate)"
+  offending="$(awk -v gate_field="$gate_field" '
+      # The refused set, written here so the next reader does not have to guess it: an EMPTY cell;
+      # the whole cell wrapped in angle brackets, which is how templates/review.md:37-44 ships its
+      # fill-ins; a bare ellipsis; and the bare fill-in words below. It targets the WHOLE cell,
+      # never the presence of a character — a real sentence containing <A> is a real sentence.
+      # NOT refused: `clean`, `n/a` and `—`. Those are the codereview skill terse rationales
+      # (report-template.md:154-156) and mean measured-with-nothing-to-say; refusing them would
+      # make this gate contradict the skill it parses, which is the SQ-97 gate_DOCS bug again.
+      function placeholder(s,   u) {
+        if (s == "") return 1
+        if (s ~ /^<.*>$/) return 1
+        # String equality, not a regex: the ellipsis is multibyte and mawk is byte-oriented, so a
+        # negated class over it would match by bytes instead of by character.
+        if (s == "..." || s == "…") return 1
+        u = toupper(s)
+        if (u == "PREENCHER" || u == "TODO" || u == "TBD" || u == "FIXME" || u == "XXX") return 1
+        return 0
+      }
       /^###[[:space:]]+Overall Grade/ { inside = 1; next }
       # Exit on ANY heading, not only `###`. Exiting only on `###`, a following section of a
       # HIGHER level (`## Fixes this round`) did not end the read, and the parser kept swallowing
@@ -521,19 +550,44 @@ gate_REVIEW() {
       inside && /^[ \t]*\|/ {
         n = split($0, f, "|")
         if (n < 4) next
-        crit = f[2]; grade = f[3]
+        crit = f[2]; grade = f[3]; rat = f[4]
         gsub(/\*/, "", crit);  gsub(/^[ \t]+|[ \t]+$/, "", crit)
         gsub(/\*/, "", grade); gsub(/^[ \t]+|[ \t]+$/, "", grade)
+        gsub(/[*`]/, "", rat); gsub(/^[ \t]+|[ \t]+$/, "", rat)
         if (crit == "Criterion" || crit ~ /^-+$/ || crit == "") next
         rows++
-        if (grade != "A") { print crit " = " (grade == "" ? "<empty>" : grade); exit }
+        # Grade first, on purpose: a row that is both off-A and unjustified is reported by its
+        # grade, which is the older and more specific message.
+        if (grade != "A") { verdict = crit " = " (grade == "" ? "<empty>" : grade); exit }
+        if (placeholder(rat)) { verdict = "PLACEHOLDER\t" crit "\t" (rat == "" ? "<empty>" : rat); exit }
       }
-      END { if (rows == 0) print "NO-TABLE" }
+      END {
+        if (verdict != "") { print verdict; exit }
+        if (rows == 0)     { print "NO-TABLE"; exit }
+        # The other half of the seal. ABSENT is left alone on purpose, and the scope is measured,
+        # not assumed: 6 of the 14 rounds on disk in this repo predate the field, and a gate that
+        # refused them would be rewriting history instead of measuring the round that just ran.
+        # Present-but-unfilled is the case that lies, and it is the one refused.
+        if (gate_field != "" && placeholder(gate_field))
+          print "GATE-FIELD\t" gate_field
+      }
     ' "$last")"
   if [ "$offending" = "NO-TABLE" ]; then
     GATE_WHY="$(basename "$last") has no '### Overall Grade' section — the gate has nothing to measure"
     return 1
   fi
+  case "$offending" in
+    PLACEHOLDER"$TAB"*)
+      local rest crit rat
+      rest="${offending#PLACEHOLDER$TAB}"
+      crit="${rest%%$TAB*}"
+      rat="${rest#*$TAB}"
+      GATE_WHY="$(basename "$last"): $crit has Grade A with a placeholder Rationale ($rat) — a grade no sentence supports is a label, not a review"
+      return 1 ;;
+    GATE-FIELD"$TAB"*)
+      GATE_WHY="$(basename "$last"): the 'gate:' frontmatter is still a placeholder (${offending#GATE-FIELD$TAB}) — that field carries the evidence the round closed, not the shape of it"
+      return 1 ;;
+  esac
   if [ -n "$offending" ]; then
     GATE_WHY="$(basename "$last"): $offending — the gate requires Grade A on every criterion"; return 1
   fi

@@ -142,6 +142,17 @@ types, build, docs) has no journey to walk. Inventing a journey just to "have QA
 
 A criterion graded `—` (not analysed) fails too: a partial review is not a review.
 
+The gate reads the `Rationale` column as well, and a placeholder there fails the round: an empty
+cell, the whole cell between angle brackets (the shape `templates/review.md` ships), a bare
+ellipsis, or `PREENCHER` / `TODO` / `TBD` / `FIXME` / `XXX`. For two missions it read the `Grade`
+column and nothing else, so `A` on every row with `PREENCHER` on every justification bought a green
+gate — `docs/handoffs/20260818-lote-facil/40-review-r1.md:8` records exactly that in its own
+`gate:` field. The skill's terse rationales `clean`, `n/a` and `—` are not placeholders.
+
+The same rule covers the `gate:` frontmatter field — the other half of the seal — when it is
+present: an unfilled one fails, an absent one is left alone (6 of the 14 rounds on disk here
+predate the field, and refusing them would rewrite history instead of measuring this round).
+
 The round report starts from [`templates/review.md`](../templates/review.md). Until
 `20260818-lote-facil` this was the one artifact in the kit with a gate and no template, and two
 independent rounds derived the heading as `## Overall Grade` and collected `NO-TABLE` — the gate

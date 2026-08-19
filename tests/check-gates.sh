@@ -450,7 +450,7 @@ cat > "$MDIR/40-review-r3.md" <<'EOF'
 | Performance | A | clean |
 | Test Coverage | A | clean |
 | Documentation | A | clean |
-| **Overall** | **A** | |
+| **Overall** | **A** | nothing left open |
 
 ## Grading Scale
 
@@ -496,7 +496,7 @@ cat > "$MDIR/40-review-r10.md" <<'EOF'
 | Performance | A | clean |
 | Test Coverage | A | clean |
 | Documentation | A | clean |
-| **Overall** | **C** | |
+| **Overall** | **C** | one HIGH left open |
 EOF
 git add -A && git commit -qm "chore: review r10"
 assert_phase "the tenth round counts, not the third: r10 > r3 by version" "REVIEW"
@@ -506,10 +506,128 @@ assert_why_absent "the lexicographic pick (r3) is not the file the gate read" "R
 # r10 turns green and the phase advances — proving the gate advances BECAUSE of r10, not despite
 # it. Without this second half the assertion above would also pass on a runner that simply never
 # leaves REVIEW.
-sed -i 's/^| Security | C |.*/| Security | A | clean |/;s/^| \*\*Overall\*\* | \*\*C\*\* |/| **Overall** | **A** |/' \
+sed -i 's/^| Security | C |.*/| Security | A | clean |/;s/^| \*\*Overall\*\* .*/| **Overall** | **A** | nothing left open |/' \
   "$MDIR/40-review-r10.md"
 git add -A && git commit -qm "chore: review"
 assert_phase "last review all Grade A, suite green, clean tree" "DOCS"
+
+# --- the Rationale column ---------------------------------------------------
+#
+# DIFFERENTIAL, and it has to be: the extractor read `crit = f[2]; grade = f[3]` and never touched
+# `f[4]`, so a table with `A` on every row and the literal `PREENCHER` on every justification
+# bought a green gate. Not a hypothesis — the live instance is
+# docs/handoffs/20260818-lote-facil/40-review-r1.md, whose own `gate:` field records that the round
+# left `PREENCHER` in all seven rationales. An `A` that no sentence supports is exactly the label
+# this repo refuses to accept in place of an artifact.
+#
+# The nine worlds below differ ONLY in the Rationale column and in the `gate:` frontmatter — same
+# file name, same criteria, same grades, same tree state. Asserting one of them alone would not say
+# WHICH column the gate read: a runner that never leaves REVIEW satisfies the refusing worlds, and
+# one that reads nothing at all satisfies the accepting ones. The pair is what distinguishes them.
+#
+# The two accepting worlds are not decoration either. World 5 is the near miss the refusal must
+# NOT eat (a real sentence that happens to contain `<A>`): the rule targets the WHOLE cell being a
+# placeholder, never the presence of the character. World 6 carries `clean`, `n/a` and `—`, which
+# are the codereview skill's own terse rationales (report-template.md:154-156) — refusing them
+# would make the gate contradict the skill it parses, which is the SQ-97 gate_DOCS bug again.
+i3_bad=0
+i3_rows=("Code Quality (Zen)" "Type Safety" "Error Handling" "Security" "Performance" "Test Coverage" "Documentation")
+
+write_r11() { # write_r11 <rationale on every row> [gate: frontmatter value] — latest round by version
+  local rat="$1" gate="${2-}" c
+  {
+    if [ -n "$gate" ]; then printf -- '---\nfase: REVIEW\nrodada: 11\ngate: %s\n---\n\n' "$gate"; fi
+    printf '# Review r11\n\n### Overall Grade\n\n'
+    printf '| Criterion | Grade | Rationale |\n|-----------|-------|-----------|\n'
+    for c in "${i3_rows[@]}"; do printf '| %s | A | %s |\n' "$c" "$rat"; done
+    printf '| **Overall** | **A** | %s |\n' "$rat"
+  } > "$MDIR/40-review-r11.md"
+}
+
+commit_r11() { git add -A && git commit -qm "chore: review r11" >/dev/null; }
+
+i3_phase() { # i3_phase <world> <expected phase>
+  local world="$1" want="$2" got
+  got="$( cd "$FIX" && "$SDD" phase "$MISSION" 2>&1 )"
+  [ "$got" = "$want" ] && return 0
+  printf '         world "%s": expected phase %s, got %s\n' "$world" "$want" "$got" >&2
+  i3_bad=$((i3_bad + 1))
+}
+
+i3_why() { # i3_why <world> <regex the reason MUST match> <regex it must NOT match>
+  local world="$1" want="$2" absent="$3" got
+  got="$( cd "$FIX" && "$SDD" why "$MISSION" REVIEW 2>&1 )"
+  if ! grep -qE "$want" <<< "$got"; then
+    printf '         world "%s": reason did not match /%s/ — got: %s\n' "$world" "$want" "$got" >&2
+    i3_bad=$((i3_bad + 1))
+  fi
+  # Herestring, never `printf | grep -q` — see the note on assert_why_absent above.
+  if grep -qE "$absent" <<< "$got"; then
+    printf '         world "%s": reason still carries /%s/, so the gate did not stop at the table — got: %s\n' \
+      "$world" "$absent" "$got" >&2
+    i3_bad=$((i3_bad + 1))
+  fi
+}
+
+# 1. filled in — the control. Without it every refusal below would also pass on a gate that
+#    refuses everything, and the assertion would be measuring nothing.
+write_r11 "reproduced before the fix and green after it"; commit_r11
+i3_phase "a real justification on every row" "DOCS"
+
+# 2. the live instance: `A` everywhere, `PREENCHER` everywhere. `assert_why_absent` in spirit —
+#    demanding the ABSENCE of the dirty-tree/suite markers is what proves the gate stopped at the
+#    table instead of arriving at the same verdict by a different road.
+write_r11 "PREENCHER"; commit_r11
+i3_phase "the whole Rationale column left as PREENCHER" "REVIEW"
+i3_why   "PREENCHER" "Code Quality \(Zen\).*placeholder Rationale" "tree dirty|working tree|TEST_CMD"
+
+# 3. the template shipped unfilled. Copied from templates/review.md, whose Rationale cells are
+#    `<…>` — the shape a round that started from the template and never filled it in still has.
+write_r11 "<…>"; commit_r11
+i3_phase "the template placeholder left between angle brackets" "REVIEW"
+
+# 4. ONE empty cell among seven real ones — the cheapest way to inflate a grade, and the row the
+#    reason has to name is the empty one, never the first.
+write_r11 "measured, nothing open"
+sed -i 's/^| Test Coverage | A | .* |$/| Test Coverage | A |  |/' "$MDIR/40-review-r11.md"; commit_r11
+i3_phase "a single empty Rationale among filled ones" "REVIEW"
+i3_why   "one empty cell" "Test Coverage.*placeholder Rationale \(<empty>\)" "Code Quality"
+
+# 5. the near miss. A refusal keyed on the CHARACTER instead of the whole cell would eat this.
+write_r11 "refuted: the reviewer read <A> as a grade and it is prose"; commit_r11
+i3_phase "a real sentence that merely contains angle brackets" "DOCS"
+
+# 6. the skill's own terse rationales, which mean measured-and-nothing-to-say.
+write_r11 "clean"
+sed -i 's/^| Security | A | clean |$/| Security | A | — |/;s/^| Performance | A | clean |$/| Performance | A | n\/a |/' \
+  "$MDIR/40-review-r11.md"; commit_r11
+i3_phase "clean, n/a and — are the skill's terse rationales, not placeholders" "DOCS"
+
+# 7-9. the other half of the seal: the `gate:` frontmatter, which templates/review.md ships as an
+#      unfilled `<…>`. Same rule, one implementation — the field is fed INTO the same awk. The
+#      ABSENT world is the one that keeps this from rewriting history: 6 of the 14 rounds on disk
+#      in this repo carry no `gate:` at all, and every world above already exercises it.
+write_r11 "measured, nothing open" "<the evidence this round closed>"; commit_r11
+i3_phase "the gate: frontmatter left as the template shipped it" "REVIEW"
+i3_why   "gate: placeholder" "gate:. frontmatter is still a placeholder" "tree dirty|working tree|TEST_CMD"
+
+write_r11 "measured, nothing open" "PREENCHER"; commit_r11
+i3_phase "the gate: frontmatter left as PREENCHER" "REVIEW"
+
+write_r11 "measured, nothing open" "tests/run-all.sh: suite green, 559 assertions, tree clean"; commit_r11
+i3_phase "a gate: frontmatter carrying real evidence closes the round" "DOCS"
+
+if [ "$i3_bad" -eq 0 ]; then
+  pass "gate_REVIEW: a placeholder Rationale does not buy an A"
+else
+  fail "gate_REVIEW: a placeholder Rationale does not buy an A" \
+       "the 6 worlds above agreeing" "$i3_bad disagreement(s), listed above"
+fi
+
+# Back to the state the DOCS section inherits: r10 is the latest round again, all Grade A.
+rm -f "$MDIR/40-review-r11.md"
+git add -A && git commit -qm "chore: drop the r11 fixture" >/dev/null
+assert_phase "with the Rationale fixture gone the mission is back at DOCS" "DOCS"
 
 # --- DOCS ------------------------------------------------------------------
 echo "== DOCS phase =="

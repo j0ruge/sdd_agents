@@ -188,6 +188,25 @@ mut_REVIEW_accepts_B() {      # any grade passes — the gate stops requiring Gr
   sed -i 's|if (grade != "A")|if (grade == "ZZZ")|' "$1"
 }
 
+# Historical bug 4 (reproduced 2026-08-19, in the planning session of the mission that fixed it —
+# the slug is not spelled out here because tests/ is English surface): the extractor took
+# `crit = f[2]; grade = f[3]` and never touched `f[4]`, so `A` on every row with the literal
+# `PREENCHER` on every justification bought a green gate. The live instance is
+# docs/handoffs/20260818-lote-facil/40-review-r1.md:8, which records it in its own `gate:` field —
+# a round that did not close, certified by the one sensor of the mission's quality.
+# Addressed to the body of gate_REVIEW: an unaddressed `s|if (placeholder|` would be the same
+# family as the two mutations already logged in TODO.md for sabotaging a second site in silence.
+mut_REVIEW_placeholder_rationale_blind() {
+  sed -i '/^gate_REVIEW()/,/^}/ s|if (placeholder(rat))|if (0)|' "$1"
+}
+
+# The other half of the same seal, and a SECOND mutant on purpose: one sabotage per site. With
+# only the Rationale mutant above, the `gate:` branch could be deleted whole and the catalogue
+# would still read 100% — the exact vacuity this file exists to refuse.
+mut_REVIEW_gate_field_blind() {
+  sed -i '/^gate_REVIEW()/,/^}/ s|if (gate_field != "" \&\& placeholder(gate_field))|if (0)|' "$1"
+}
+
 mut_DOCS_pending_status() {   # accepts an area with Status '✗' in the drift checklist
   sed -i 's|.*\[ -n "\$pending_cell" \].*|  if false; then|' "$1"
 }
@@ -1332,6 +1351,8 @@ CATALOG=(
   QA_bug_open
   REVIEW_stops_at_h3
   REVIEW_accepts_B
+  REVIEW_placeholder_rationale_blind
+  REVIEW_gate_field_blind
   DOCS_pending_status
   PR_no_artifact
   RUN_inverted_journal
