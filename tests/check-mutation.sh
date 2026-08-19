@@ -1014,7 +1014,7 @@ mut_HEALTH_report_provenance_blind() {
 # with both branches whole, so the `else` that counts the fixture as checked still runs and the
 # mutant reports "provenance: 1 fixture(s) checked" exactly like a healthy kit.
 mut_HEALTH_grade_table_blind() {
-  sed -i 's@    if \[ -n "$missing" \]; then@    if false; then@' "$1"
+  sed -i 's@    elif \[ -n "$missing" \]; then@    elif false; then@' "$1"
 }
 
 # The backlog ratchet goes blind: `sdd health` still runs the whole TODO.md check, still refuses a
