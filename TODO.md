@@ -406,6 +406,15 @@ Achados sobre **repos-alvo** vão para o `TODO.md` daquele repo. Este arquivo é
 
 ### Contrato e configuração
 
+- [ ] **`REVIEW_MAX_ITER` conta por invocação de `sdd run`, não "in total" como o schema promete** —
+  `config/schema.md:65` vs `bin/sdd:2297` — `local -A attempts=()` nasce dentro de `cmd_run`, então
+  cada `sdd run` recomeça o contador e o teto nunca é alcançado por quem re-roda. Medido nesta
+  missão: **4 sessões de REVIEW** (~US$ 107) em 3 invocações, `attempt` chegando a 2, nenhum
+  `BLOCKED`, nenhum `degraded` — e `docs/failure-modes.md:217` descreve como sintoma justamente o
+  `BLOCKED in REVIEW` que não apareceu. Vale para os três tetos. Direção: derivar a contagem do
+  ledger (`autonomy`, por `(missão, fase)`) em vez de um array de processo, ou corrigir os dois
+  textos. — descoberto por `sdd-docs` na missão `20260818-lote-facil` (2026-08-19)
+
 - [ ] **O ciclo de vida do `RESOLVIDO por` e a catraca do backlog não cabem juntos** —
   `TODO.md:16` — o cabeçalho manda o item fechado ficar aqui, caixa desmarcada, até o PR mergear;
   `tests/check-todo.sh` conta `- [ ]` e não conhece `RESOLVIDO por`, então `todo-findings` não pode

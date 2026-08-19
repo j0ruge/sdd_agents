@@ -32,7 +32,7 @@ export PATH="$HOME/repos/sdd_agents/bin:$PATH"     # or ln -s .../bin/sdd ~/.loc
 cd ~/repos/my-project
 sdd install            # creates .sdd/config.sh and copies .claude/agents/sdd-*.md
 $EDITOR .sdd/config.sh # set TEST_CMD, E2E_CMD, APP_URL, OUTPUT_LANG, JIRA_ENABLED...
-sdd preflight          # environment sensor: claude, gh, GNU userland, agent-browser, clean tree
+sdd preflight          # environment sensor: claude, gh, GNU userland, git 2.31+, agent-browser, clean tree
 ```
 
 `sdd install` is idempotent: running it again shows the agent diff instead of overwriting.
@@ -91,6 +91,13 @@ silence: growing stays allowed, growing undeclared does not. Known debt lives fr
 `tests/health-baseline.txt` — almost every line owned by the `TODO.md` entry that will pay it off,
 and one, the count itself, owned by the file: a new finding fails, and so does a baseline line
 that stopped being a finding. It spends no paid session and does not need `.sdd/config.sh`.
+
+Every one of those checks **says its verdict out loud and the run carries on** — including the one
+case the command exists for, a red suite. It did not always: a bare `out="$(cmd)"` under
+`set -euo pipefail` killed the process at the assignment, so `sdd health` answered a red suite with
+one line of header and rc 1, and the four checks after it never ran. What keeps the class from
+coming back is the `guard:` rule of `tests/check-health.sh`, which enumerates the whole region
+instead of probing site by site — the reasoning is in that file's header.
 
 `--dry-run` answers *"what happens if I run this?"*: it prints **every** phase the mission would
 go through from today's state — in order, each with its agent, model and boot prompt — without

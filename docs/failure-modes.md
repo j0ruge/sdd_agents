@@ -184,6 +184,34 @@ configuration, and `tests/check-preflight.sh` is what keeps the probe honest.
 
 ---
 
+## `sdd preflight` warns: this git does not know `--path-format`
+
+**Symptom:** a yellow `warn` line about `rev-parse --path-format` (2.31+). Nothing fails, no phase
+stops.
+
+**Cause:** the autonomy ledger stamps a repository **identity** on every row, and that identity is
+the shared `.git` resolved absolute. `ledger_repo_root` asks for it in one shot with
+`git rev-parse --path-format=absolute --git-common-dir`, born in git 2.31. An older git does not
+reject the flag — `git rev-parse` **echoes back** an option it does not recognise and still exits
+0, so it answers two lines, the flag and a still-relative path. Ubuntu 20.04 ships 2.25 and
+Debian 11 ships 2.30.
+
+**How the kit reacts:** the function refuses that shape and then **resolves** the identity the old
+way (`cd` + `pwd -P`, both `cd`s with an emptied `CDPATH`), which answers the same string. The
+ledger stays correct; the cost is one extra `rev-parse` per ledger write. The probe is by
+**behaviour** and not by `git --version`, for the same reason as the GNU userland above: what the
+runner needs is an answer, not a number.
+
+**What you do:** nothing, unless you want the fast path back — then upgrade git. Do **not** "fix"
+this by making the refusal return empty: empty is the contract for *"not a repository"*, so every
+row would be filed under `excluded.no_repo`, a bucket `--all-repos` deliberately does not admit,
+and `sdd autonomy` would answer "no data" while `sdd kaizen` could only ever say `indeterminado` —
+silently, permanently, because the ledger is append-only. That regression shipped and was caught
+in the r2 review of `20260818-lote-facil`; the differential assertion in `tests/check-autonomy.sh`
+now demands the two gits **agree**, not that the old one stays quiet.
+
+---
+
 ## `agent-browser` missing or hung
 
 **Symptom:** `agent-browser: command not found`, or the QA phase hangs.

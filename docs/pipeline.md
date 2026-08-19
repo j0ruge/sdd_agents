@@ -142,6 +142,12 @@ types, build, docs) has no journey to walk. Inventing a journey just to "have QA
 
 A criterion graded `—` (not analysed) fails too: a partial review is not a review.
 
+The round report starts from [`templates/review.md`](../templates/review.md). Until
+`20260818-lote-facil` this was the one artifact in the kit with a gate and no template, and two
+independent rounds derived the heading as `## Overall Grade` and collected `NO-TABLE` — the gate
+reads the literal `^###[[:space:]]+Overall Grade`. `tests/check-templates.sh` derives its
+assertions from that same regex rather than restating it.
+
 The review→fix→re-review loop happens **inside** the session. If it ends without closing, the
 runner opens a fresh session to continue, up to `REVIEW_MAX_ITER` in total. Blown →
 `BLOCKED`, or a draft PR when `PUBLISH_ON_REVIEW_BLOCKED=draft` — the one place the runner lowers
