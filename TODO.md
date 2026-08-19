@@ -324,6 +324,14 @@ Achados sobre **repos-alvo** vão para o `TODO.md` daquele repo. Este arquivo é
   o ledger + juiz, com o índice roteando — **não** executar no meio de outra missão, é refator de
   estrutura e merece a sua. — descoberto por `sdd-docs` na missão `20260817-eixo-do-juiz` (2026-08-17)
 
+- [ ] **A contabilidade do `sdd autonomy` não fecha na tela: o cabeçalho conta o escopo, o
+  parágrafo mistura duas populações** — `bin/sdd:2473` — `total` conta só as linhas locais, e as
+  quatro linhas de exclusão somam a ele duas que **já estavam fora** (`foreign`, `norepo`). Medido
+  no repo real: cabeçalho `75 row(s)` sobre arquivo de 86 linhas, `11 excluded: born in another
+  repo`, tabela somando 73 sessões — 75 − 2 − 11 ≠ 73. Direção: **decisão humana** entre o cabeçalho
+  contar o arquivo (quebra as 7 asserções `assert_bucket_sum`) ou as duas linhas fora de escopo
+  saírem do parágrafo. — descoberto por `sdd-qa` na missão `20260818-lote-facil` (2026-08-18)
+
 ### Comentário e registro
 
 ### Idioma

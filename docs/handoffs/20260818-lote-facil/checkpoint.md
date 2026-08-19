@@ -1,6 +1,6 @@
 ---
 missao: 20260818-lote-facil
-atualizado: 2026-08-18 23:59
+atualizado: 2026-08-18 22:19
 ---
 
 # Checkpoint — O `sdd health` para de morrer calado, e 18 achados baratos saem do backlog
@@ -255,3 +255,26 @@ atualizado: 2026-08-18 23:59
 > `F<n>`, e o Check obrigatoriamente inclui **regression test passa** + **re-walk da jornada
 > impactada verde**. Bug que exige julgamento humano NÃO vira fix — vai para "Decisions for a
 > Human" no handoff de QA.
+
+**Nenhum `F<n>` nasceu.** As 6 jornadas da fase QA (14 sondas) passaram verdes: os 5 sítios do
+`sdd health` falam e seguem, o parágrafo de exclusão do `sdd autonomy` é único, o piso do kaizen é
+citado uma vez só e sai da série, a linha `BLOCKED` conta sessões, o `CDPATH` sujo não vaza e o
+`templates/review.md` devolve tabela onde o `##` devolveria `NO-TABLE`. O único achado confirmado
+— a contabilidade do `sdd autonomy` não fechar na tela — é **pré-existente, fora do escopo e uma
+decisão entre dois contratos** (um deles mexe em 7 asserções de sensor), então foi para o `TODO.md`
+e para "Decisions for a Human", nunca para um fix. Detalhe em `30-handoff-qa.md`.
+
+- 2026-08-18 · `QA` · Evidência do gate: `tests/run-all.sh` → `suite green`, rc 0,
+  `score: 98 caught, 0 known gap(s), of 98`, `43 finding(s)` (era 42 — 1 achado registrado, catraca
+  movida no mesmo commit). Jornadas andadas num kit copiado, porque `SDD_HOME` é `readonly`.
+- 2026-08-18 · `QA` · ⚠️ **Duas sondas concluíram no vazio antes de valer, e as duas foram
+  refeitas.** (1) O veneno do `CDPATH` não armava: no bash 5.2 o `CDPATH` só vence quando o
+  operando NÃO existe no diretório corrente, e `_resolve_self` passa `<dir>/..`, que existe — medido
+  com três casos antes de concluir qualquer coisa. (2) A sonda do piso do kaizen rodava num sandbox
+  sem linha nenhuma daquele repo no ledger, então a nota não imprimia e o `grep` respondia `0` nos
+  dois lados do diferencial. Refeita com ledger de eixo degenerado.
+- 2026-08-18 · `QA` · **A réplica da suíte usada nas sondas A2–A5 teve a fidelidade MEDIDA, não
+  afirmada:** `sdd health` sobre a réplica (rc 0) produz saída idêntica à do `sdd health` sobre a
+  suíte real, byte a byte, fora o path do sandbox. O sítio 1 não depende dela — foi andado também
+  com a suíte genuinamente vermelha, revertendo o conserto do I3 em `bin/sdd:2253`, o que reprovou
+  `check-autonomy.sh` em exatamente uma asserção (a escrita para esse defeito) e em nenhuma outra.
