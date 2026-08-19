@@ -1,6 +1,6 @@
 ---
 missao: 20260818-lote-facil
-atualizado: 2026-08-18 22:19
+atualizado: 2026-08-18 23:09
 ---
 
 # Checkpoint — O `sdd health` para de morrer calado, e 18 achados baratos saem do backlog
@@ -248,6 +248,47 @@ atualizado: 2026-08-18 22:19
   `score: 98 caught, 0 known gap(s), of 98` e `42 finding(s)`. `./bin/sdd health` → `kit healthy`,
   rc 0, `ratchet: 7 known debt(s), none new`. `shellcheck -S warning bin/sdd tests/*.sh` limpo.
   O Check do incremento: `5`, medido `0` contra o HEAD antes das asserções.
+
+- 2026-08-18 23:09 · `EXEC (re-entrada)` · **Nada foi executado, e a linha para aqui.** A tabela
+  não tem uma linha `pending`: I1–I5 estão `done` com os cinco hashes na história de `e0074ec`. Não
+  há incremento para escolher, e o executor não adota trabalho de outra fase.
+- 2026-08-18 23:09 · `EXEC (re-entrada)` · **A suíte está vermelha, e o vermelho NÃO é do HEAD nem
+  de incremento nenhum.** Medido nesta sessão: `bash tests/run-all.sh` → rc 1, `1 suite(s) failed`,
+  com **uma** falha em toda a suíte — `FAIL  LEDGER_repo_root_shape_blind is NOT caught`,
+  `score: 98 caught, 0 known gap(s), of 99`. Todo o resto verde, inclusive `52 finding(s)` batendo
+  com a baseline. Esse mutante **não existe no HEAD**: `git show HEAD:tests/check-mutation.sh` não
+  o menciona (0 ocorrências) e lá o catálogo é `98 of 98`. Ele nasceu na **árvore suja**.
+- 2026-08-18 23:09 · `EXEC (re-entrada)` · **A árvore suja é a rodada r1 do REVIEW, não commitada**
+  — 8 arquivos, +213/−6 (`bin/sdd`, `tests/check-autonomy.sh`, `check-mutation.sh`,
+  `check-templates.sh`, `check-todo.sh`, `health-baseline.txt`, `TODO.md`, `README.md`), mais o
+  `40-review-r1.md` **untracked**. A sessão terminou em **US$ 36,31** do teto de US$ 40
+  (`.sdd/logs/…/run-…console.log`), ou seja, morreu no teto antes de commitar.
+- 2026-08-18 23:09 · `EXEC (re-entrada)` · **O que o vermelho está dizendo importa, e é da rodada
+  de revisão.** O mutante que sobrevive é o escrito para o conserto do CRITICAL 1 (a guarda de
+  forma do `ledger_repo_root`): ele **aplica** e a suíte **não morre**, logo o par diferencial
+  novo do `check-autonomy.sh` não mede a guarda que diz medir. É o modo "asserção que é decoração",
+  exatamente o que o catálogo existe para pegar — e é a razão pela qual adotar esse diff seria
+  commitar 213 linhas cujo único sensor já acusa uma asserção morta. Fechar isso é da r1 do REVIEW.
+- 2026-08-18 23:09 · `EXEC (re-entrada)` · O `40-review-r1.md` está **incompleto**, não só não
+  commitado: o `gate:` do frontmatter e as **8** células `Rationale` da tabela `Overall Grade`
+  seguem com o literal `PREENCHER`. A rodada r1 não fechou.
+- 2026-08-18 23:09 · `EXEC (re-entrada)` · **A re-entrada do EXEC é defeito conhecido, e esta é a
+  segunda ocorrência medida.** `TODO.md`, `bin/sdd:426`: "Fase que morre com a árvore suja faz o
+  runner rederivar EXEC para sempre" — `gate_EXEC` roda o `TEST_CMD` sobre o working tree, então o
+  vermelho de QUALQUER fase em voo é lido como vermelho do EXEC. A primeira medição foi em
+  `20260816-portas-do-humano` (2026-08-17), com a **mesma forma**: REVIEW morreu antes de commitar,
+  HEAD verde, todos os incrementos `done`. **Nenhuma entrada nova no `TODO.md`** — o achado já está
+  registrado com âncora e direção, e duplicá-lo é o desperdício que a catraca existe para impedir.
+- 2026-08-18 23:09 · `EXEC (re-entrada)` · O `TODO.md` **não foi tocado de propósito**: ele carrega
+  as 63 linhas não commitadas do revisor e o movimento de catraca `todo-findings 43 → 52` que
+  pertence ao commit dele. Escrever ali misturaria dois autores num diff só. Esta sessão mexeu em
+  **um** arquivo — este — e em nenhum outro.
+- 2026-08-18 23:09 · `EXEC (re-entrada)` · **Jidoka: a decisão é do humano / da fase REVIEW**, em
+  dois caminhos. (a) Retomar a r1: fazer o par diferencial do `check-autonomy.sh` morrer sob
+  `mut_LEDGER_repo_root_shape_blind`, preencher o `gate:` e as 8 `Rationale`, e commitar. (b)
+  Descartar a árvore para `e0074ec` e reabrir o REVIEW com árvore limpa — o custo já pago da r1 se
+  perde, e o CRITICAL 1 que ela achou (identidade do repo virando lixo em git < 2.31) volta a ser
+  achado aberto. Reprodução em um comando: `bash tests/run-all.sh; echo rc=$?`.
 
 ## Incrementos de fix (QA)
 
