@@ -550,7 +550,15 @@ gate_REVIEW() {
   # like a file with no `gate:` at all, and the two deserve opposite verdicts.
   gate_present=0
   if frontmatter_has "$last" gate; then gate_present=1; fi
-  offending="$(awk -v gate_field="$gate_field" -v gate_present="$gate_present" '
+  # Through the ENVIRONMENT and never `awk -v`: an assignment made with `-v` is run through awk's
+  # ESCAPE processing before the program ever sees it, so evidence quoting a regex arrives mangled.
+  # Measured on this machine's mawk 1.3.4:
+  #   awk -v x='grep -E \bcaught\b' 'BEGIN{print x}'  →  grep -E caught
+  # The `\b`s are gone, and the same corrupted string is what the GATE-FIELD branch echoes back at
+  # the operator — a refusal quoting text that is not what is on disk. ENVIRON is handed over byte
+  # for byte. `gate_present` stays on `-v`: it is one digit, and it has to arrive as a NUMBER.
+  offending="$(SDD_GATE_FIELD="$gate_field" awk -v gate_present="$gate_present" '
+      BEGIN { gate_field = ENVIRON["SDD_GATE_FIELD"] }
       # The refused set, written here so the next reader does not have to guess it: an EMPTY cell;
       # the whole cell wrapped in angle brackets, which is how templates/review.md:37-44 ships its
       # fill-ins; a bare ellipsis; and the bare fill-in words below. It targets the WHOLE cell,
@@ -586,7 +594,21 @@ gate_REVIEW() {
       # column in a table of commits. Measured in the SQ-97 pilot.
       inside && /^#{1,6}[[:space:]]/ { exit }
       inside && /^[ \t]*\|/ {
-        n = split($0, f, "|")
+        # GFM writes a literal pipe INSIDE a cell as `\|`, and a raw split on "|" cuts the row
+        # there. Harmless while only f[2] and f[3] were read; the moment f[4] became a verdict it
+        # turned into a false RED, which is the same defect as a false green — the gate saying
+        # something it did not measure. Measured with the row
+        #   | Code Quality (Zen) | A | `TODO\|` list references removed. Confirmed green. |
+        # the stump left behind was `TODO\`, which normalises straight into the refused fill-in
+        # word: a real justification reported as a placeholder, and a PR blocked for a reason that
+        # is not true. Rejoined here so every column downstream sees the cell the author wrote.
+        delete f
+        rawn = split($0, raw, "|")
+        n = 0
+        for (i = 1; i <= rawn; i++) {
+          if (n > 0 && f[n] ~ /\\$/) { sub(/\\$/, "|", f[n]); f[n] = f[n] raw[i] }
+          else { f[++n] = raw[i] }
+        }
         if (n < 4) next
         crit = f[2]; grade = f[3]; rat = f[4]
         gsub(/\*/, "", crit);  gsub(/^[ \t]+|[ \t]+$/, "", crit)
@@ -2154,9 +2176,19 @@ cmd_health() {
   if [ ! -f "$kit_cfg" ]; then
     health_bad "the kit at $kit has no .sdd/config.sh — health cannot say whether TEST_CMD runs anything"
   else
-    # `|| true` in the tail, the same family the whole command was audited for: a config with a
-    # syntax error makes the subshell die, and unguarded that would kill the run HERE, on the
-    # assignment, with everything below it unreachable. Empty then lands in the branch that says so.
+    # `|| true` in the tail, the same family the whole command was audited for — but the reason is
+    # the LAST command of the substitution and not the sourcing. Measured, because the first version
+    # of this comment claimed the sourcing was what could kill the run and that is false: without
+    # `shopt -s inherit_errexit` a `$( … )` does not carry errexit in, so a config that fails to
+    # parse still reaches the `printf` and the substitution exits 0.
+    # Reproduced with a bad.sh holding `if then fi`, run through this exact assignment under
+    # `set -euo pipefail`: the shell reaches the line after it and reports rc 0.
+    # (The command is described and not pasted: the `guard:` census of check-health.sh scans this
+    # region line by line and would have counted the example as a twenty-third capture — it did,
+    # once, and the ratchet went red. Fail-closed, and noted in TODO.md.)
+    # What the guard is really for is the day this line grows a different tail — and for the record
+    # a broken config lands as EMPTY here, so the operator is told "declares no TEST_CMD" while the
+    # parse error itself is swallowed by the redirect. That gap is in TODO.md, not hidden here.
     # shellcheck disable=SC1090
     kit_test_cmd="$( . "$kit_cfg" >/dev/null 2>&1; printf '%s' "${TEST_CMD:-}" )" || true
     # Padded on both sides so `--list` is matched as a WHOLE ARGUMENT: an unpadded `*--list*` would
