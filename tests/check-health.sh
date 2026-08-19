@@ -206,6 +206,20 @@ install_codereview_skill() { # install_codereview_skill <extra table row, or "">
   } > "$dir/report-template.md"
 }
 
+# Same fixture with the table's HEADING renamed. The rows are all still there and all still match
+# the check-gates.sh fixture — what changes is the one line health_provenance's awk anchors on, so
+# the criteria loop runs zero times. This is the shape of real skill drift (a column renamed in an
+# upstream template), and the only kind of divergence that used to make the check say `all 3
+# fixtures match` about a table it never read.
+install_codereview_skill_renamed_heading() {
+  local dir="$FIX/home/.claude/plugins/cache/fixture-marketplace/codereview/1.13.0/skills/codereview/references"
+  mkdir -p "$dir"
+  {
+    sed 's/^| Criterion | Grade/| Aspect | Score/' <<< "$GRADE_TABLE"
+    printf '\n## Grading Scale\n'
+  } > "$dir/report-template.md"
+}
+
 clear_skills() { reset_home; }
 
 HEALTH_OUT=""
@@ -404,6 +418,11 @@ install_codereview_skill "| $UNKNOWN_CRITERION | A | fixture |"
 health_run
 OUT_CR_BAD="$HEALTH_OUT"; RC_CR_BAD="$HEALTH_RC"
 
+clear_skills
+install_codereview_skill_renamed_heading
+health_run
+OUT_CR_EMPTY="$HEALTH_OUT"; RC_CR_EMPTY="$HEALTH_RC"
+
 if [ "$RC_REP_OK" -eq 0 ] && ! grep -q 'diverged from the skill' <<< "$OUT_REP_OK" \
    && [ "$RC_REP_BAD" -ne 0 ] \
    && grep -q 'report fixture diverged from the skill' <<< "$OUT_REP_BAD" \
@@ -418,6 +437,25 @@ else
        "the matching worlds rc 0 and silent, the drifted report says only 'report fixture diverged from the skill', the drifted table says only 'grade table has a criterion the fixture does not cover: $UNKNOWN_CRITERION'" \
        "report match: rc $RC_REP_OK · $(digest "$OUT_REP_OK") // report drift: rc $RC_REP_BAD · $(digest "$OUT_REP_BAD") // table match: rc $RC_CR_OK · $(digest "$OUT_CR_OK") // table drift: rc $RC_CR_BAD · $(digest "$OUT_CR_BAD")"
 fi
+
+# The vacuous world, kept as its own assertion because it fails in the opposite direction from the
+# one above: not "a criterion is missing" but "no criterion was read at all". With the heading
+# renamed the `while` runs zero times, `missing` stays empty and `checked` goes up — so the old
+# code answered `provenance: all 3 fixtures match the installed skills`, rc 0, about a table it
+# had never read. That is precisely the drift this function exists to catch, certified as absent
+# by the function itself. The `! grep` half is what makes it differential rather than a second
+# spelling of the assertion above.
+if [ "$RC_CR_EMPTY" -ne 0 ] \
+   && grep -q 'grade table read as EMPTY' <<< "$OUT_CR_EMPTY" \
+   && ! grep -q 'all 3 fixtures match' <<< "$OUT_CR_EMPTY" \
+   && ! grep -q 'grade table has a criterion' <<< "$OUT_CR_EMPTY"; then
+  pass "covered: a grade table whose heading was renamed reads as EMPTY, never as a match"
+else
+  fail "covered: a grade table whose heading was renamed reads as EMPTY, never as a match" \
+       "rc != 0, saying the table read as empty, and never claiming all 3 fixtures match" \
+       "rc $RC_CR_EMPTY · $(digest "$OUT_CR_EMPTY")"
+fi
+
 
 # ---------------------------------------------------------------------------
 # 5 — the floor: a kit with nothing wrong reaches `kit healthy`
@@ -488,6 +526,28 @@ else
   fail "the count check dies when the suite prints no finding count" \
        "the count-less suite fails, saying so, and the world of assertion 5 never says the sentence" \
        "no-count: rc $HEALTH_RC · $(digest "$HEALTH_OUT") // green: rc $RC_GREEN · $(digest "$OUT_GREEN")"
+fi
+
+# A blind producer may not have its baseline line called stale.
+#
+# Note what the assertion above had to do to be written: it DELETES `todo-findings` from the
+# baseline first. That was not hygiene, it was working around this defect — with the real baseline
+# in place, the count-less world made `sdd health` say in one breath that it had gone blind to the
+# backlog and that `todo-findings N` "is no longer a finding — delete the line". Deleting it
+# removes the backlog ratchet's only anchor: destructive advice drawn from a measurement that had
+# just declared itself impossible. Same world as above, real baseline, both halves demanded.
+write_stub_suite no-count
+set_baseline "$CALIBRATED"
+health_run
+
+if grep -q 'went blind to the backlog' <<< "$HEALTH_OUT" \
+   && ! grep -q 'stale baseline' <<< "$HEALTH_OUT" \
+   && grep -q "not judged: the check that produces it declared itself blind" <<< "$HEALTH_OUT"; then
+  pass "a baseline line whose producer went blind is not called stale"
+else
+  fail "a baseline line whose producer went blind is not called stale" \
+       "the blind sentence, no 'stale baseline', and the line said to be unjudged" \
+       "rc $HEALTH_RC · $(digest "$HEALTH_OUT")"
 fi
 
 # ---------------------------------------------------------------------------

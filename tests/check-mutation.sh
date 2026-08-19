@@ -958,6 +958,23 @@ mut_HEALTH_ratchet_one_way() {
   sed -i 's@grep -qxF "\$line" <<< "\$HEALTH_FINDINGS"@true@' "$1"
 }
 
+# The blind exemption removed: a check that declared itself unable to measure has its baseline line
+# judged anyway, and the ratchet tells the operator to DELETE the backlog ratchet's only anchor.
+# Destructive advice out of a measurement that did not happen — worse than saying nothing, which is
+# why it is a mutant and not a comment. Caught by "a baseline line whose producer went blind is not
+# called stale" in check-health.sh.
+mut_HEALTH_stale_judges_the_blind() {
+  sed -i 's@if grep -qxF "${line%% \*}" <<< "$HEALTH_BLIND"; then@if false; then@' "$1"
+}
+
+# The grade-table criteria loop passes by never iterating: with the skill's heading renamed the
+# `while` runs zero times, `missing` stays empty, `checked` goes up, and the summary announces
+# `all 3 fixtures match` about a table it never read. The exact drift health_provenance exists to
+# catch, certified as absent by health_provenance itself.
+mut_HEALTH_provenance_empty_table() {
+  sed -i 's@if \[ "$n_crit" -eq 0 \]; then@if false; then@' "$1"
+}
+
 # Fixture provenance always agrees. `sdd health` goes on reporting "provenance: N fixture(s) match
 # the installed skills" while comparing nothing — which is the exact shape of the most expensive
 # bug in the kit's history, now inside the instrument built to catch it. A fixture written from
@@ -1344,6 +1361,8 @@ CATALOG=(
   HEALTH_gates_capture_aborts
   HEALTH_provenance_line_aborts
   HEALTH_ratchet_one_way
+  HEALTH_stale_judges_the_blind
+  HEALTH_provenance_empty_table
   HEALTH_provenance_blind
   HEALTH_report_provenance_blind
   HEALTH_grade_table_blind

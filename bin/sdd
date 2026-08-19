@@ -1755,6 +1755,14 @@ health_bad() { bad "$*"; HEALTH_FAILS=$((HEALTH_FAILS + 1)); }
 
 # Records a drift finding for the ratchet to judge at the end.
 health_finding() { HEALTH_FINDINGS="${HEALTH_FINDINGS}${1}"$'\n'; }
+# A check that could not measure declares the KEY it would have produced, so the ratchet can tell
+# "this debt is gone" apart from "nobody looked". Without it the stale half judged anyway: with a
+# suite that died before printing `N finding(s)`, `sdd health` said in one breath that it had gone
+# blind to the backlog and that `todo-findings 74` "is no longer a finding — delete the line".
+# Deleting it removes the backlog ratchet's only anchor. Destructive advice drawn from a
+# measurement that declared itself impossible.
+HEALTH_BLIND=""
+health_blind() { HEALTH_BLIND="${HEALTH_BLIND}${1}"$'\n'; }
 
 # Keys with a default in load_config(). The block is delimited by the anchor comments, not by
 # line number, so it does not rot at the first refactor.
@@ -1834,6 +1842,7 @@ cmd_health() {
   todo_line="$(grep -m1 -E '^  ok    [0-9]+ finding\(s\)' <<< "$out" || true)"
   if [ -z "$todo_line" ]; then
     health_bad "the suite did not print the TODO.md finding count — health went blind to the backlog"
+    health_blind "todo-findings"
   else
     health_finding "todo-findings $(sed -E 's/^  ok    ([0-9]+) .*/\1/' <<< "$todo_line")"
   fi
@@ -1941,6 +1950,9 @@ cmd_health() {
 # (Do not start a comment line with the linter's name: it would parse as a directive, SC1073.)
 health_provenance() {
   local gates="$SDD_HOME/tests/check-gates.sh" tpl line fix skipped=0 checked=0
+  # The number of fixtures this function pins, in ONE place: the three `if [ -f "$tpl" ]` blocks
+  # below. Move it when you add a fourth.
+  local PROVENANCE_FIXTURES=3
 
   # ⚠️ Every `grep` below carries `|| true`, and this is the site where the family of silent
   # aborts costs the most. `-f "$tpl"` proves the FILE is there; it proves nothing about the
@@ -1998,15 +2010,23 @@ health_provenance() {
   tpl="$(find "$HOME/.claude/plugins/cache" -path '*/codereview/*/references/report-template.md' \
          2>/dev/null | sort -V | tail -1 || true)"
   if [ -n "$tpl" ] && [ -f "$tpl" ]; then
-    local missing=""
+    local missing="" n_crit=0
     while IFS= read -r k; do
       [ -n "$k" ] || continue
+      n_crit=$((n_crit + 1))
       grep -qF "| $k |" "$gates" || missing="$missing '$k'"
     done < <(awk -F'|' '/^\| Criterion \| Grade/ { t = 1; next }
         t && /^\|-/ { next }
         t && /^\|/ { c = $2; gsub(/^[ \t]+|[ \t]+$/, "", c); if (c !~ /^\*\*/) print c; next }
         t { exit }' "$tpl")
-    if [ -n "$missing" ]; then
+    # The floor, for the same argument checks 5 and 6 got theirs on: with the skill's heading
+    # renamed, the `while` runs ZERO times, `missing` stays empty, `checked` goes up and the
+    # summary says `all 3 fixtures match` about a table it never read — which is precisely the
+    # drift this function exists to catch. One criterion is enough to prove the awk found the
+    # table; demanding today's seven would fail the day the skill legitimately grows an eighth.
+    if [ "$n_crit" -eq 0 ]; then
+      health_bad "the codereview grade table read as EMPTY — the '| Criterion | Grade' heading this parses was renamed, so nothing was compared"
+    elif [ -n "$missing" ]; then
       health_bad "the skill's grade table has a criterion the fixture does not cover:$missing"
     else checked=$((checked + 1)); fi
   else skipped=$((skipped + 1)); fi
@@ -2019,13 +2039,16 @@ health_provenance() {
   # used to die before printing anything at all; guarding them turned a silent abort into a loud
   # lie, and a lie in the summary of the provenance check is worse than either. Three states,
   # three sentences, and the `all 3` wording is reserved for the one world where it is true.
-  local diverged=$(( 3 - checked - skipped ))
+  # One owner for the count, read by the arithmetic AND by the sentence. Written twice, the two
+  # drifted the moment a fourth fixture was added: the rubric picked its branch from one number
+  # and the operator read the other.
+  local diverged=$(( PROVENANCE_FIXTURES - checked - skipped ))
   if [ "$diverged" -gt 0 ]; then
     ok "provenance: $checked fixture(s) match, $diverged diverged, $skipped skipped"
   elif [ "$skipped" -gt 0 ]; then
     ok "provenance: $checked fixture(s) checked, $skipped skipped (skill not installed)"
   else
-    ok "provenance: all 3 fixtures match the installed skills"
+    ok "provenance: all $PROVENANCE_FIXTURES fixtures match the installed skills"
   fi
 }
 
@@ -2050,6 +2073,12 @@ health_ratchet() {
 
   while IFS= read -r line; do
     [ -n "$line" ] || continue
+    # The key is the first field: a baseline line is `<key> <value>`, and a blind producer knows
+    # its key but not the value it never measured.
+    if grep -qxF "${line%% *}" <<< "$HEALTH_BLIND"; then
+      info "  baseline '$line' not judged: the check that produces it declared itself blind"
+      continue
+    fi
     grep -qxF "$line" <<< "$HEALTH_FINDINGS" \
       || { health_bad "stale baseline: '$line' is no longer a finding — delete the line"; stale=$((stale + 1)); }
   done <<< "$known"
