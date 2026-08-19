@@ -81,9 +81,18 @@ Achados sobre **repos-alvo** vão para o `TODO.md` daquele repo. Este arquivo é
   `sdd health`** — `tests/run-all.sh:23` — a mutação saiu do `TEST_CMD` para o `sdd health`, e este
   repo não tem `.github/workflows/`. Medido na missão que fez a troca, e não temido: a suíte rápida
   respondeu `suite green` rc 0 enquanto o catálogo estava vermelho em
-  `LEDGER_repo_root_cdpath_leak`, e só o `sdd health` viu. Direção: CI rodando
-  `tests/run-all.sh --with-mutation`, ou o `gate_PR` chamando `sdd health` uma vez por missão.
+  `LEDGER_repo_root_cdpath_leak`, e só o `sdd health` viu. **RESOLVIDO por `c962e2e`**: o
+  `gate_PR` exige carimbo de catálogo verde sobre o conteúdo atual; `mut_PR_stamp_blind`.
   — descoberto por `humano` na missão `20260818-lote-facil` (2026-08-19)
+
+- [ ] **O carimbo de mutação cobre 4 dos 8 caminhos que a sandbox do catálogo copia** —
+  `bin/sdd:668` contra `tests/check-mutation.sh:1485` — a chave lê `bin tests templates config`,
+  mas `sandbox()` também copia `agents/`, `CLAUDE.md`, `TODO.md` e `docs/adr`. Mudança confinada a
+  esses quatro mantém o carimbo válido sobre conteúdo que o catálogo de fato mede — a
+  regra 12 do `check-health.sh` lê o `CLAUDE.md`. Estreitamento deliberado (a fase DOCS edita
+  `CLAUDE.md`, e chavear nele custaria uma segunda rodada de ~20 min por missão). Direção: ler a
+  lista do próprio `sandbox()`, decidido o custo. — descoberto por `sdd-executor` na missão
+  `20260819-fecho-...` (2026-08-19)
 
 - [ ] **Quatro regras do `check-health.sh` sobrevivem à passada adversarial** —
   `tests/check-health.sh:826` — o probe aritmético conclui no vazio (`n=$((n+1))` não tem `)"`,
