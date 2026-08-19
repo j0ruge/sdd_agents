@@ -43,16 +43,25 @@ Achados sobre **repos-alvo** vão para o `TODO.md` daquele repo. Este arquivo é
   `bin/sdd:1801` — o regex exige `0 known gap` e **nunca** `caught == total`, então
   `score: 103 caught, 0 known gap(s), of 104` sai com prefixo `ok`. Medido na `main` em `a9e8ce9`.
   O veredito geral ainda reprova (a suíte devolve rc 1), mas a linha que o operador lê mente — e
-  isso no comando que virou o dono único do catálogo. Direção: comparar os dois números do próprio
-  `score:`, com mutação que troque a exigência por `0 known gap` sozinho.
+  isso no comando que virou o dono único do catálogo. **RESOLVIDO por `7a6653b`**: a checagem lê os
+  três números do `score:` e compara `caught` com `of`; `mut_HEALTH_mutation_survivor_blind`.
   — descoberto por `humano` na missão `20260818-lote-facil` (2026-08-19)
 
 - [ ] **O `--list` do `run-all.sh` imprime linha que não é passo, e sai 0 tendo rodado nada** —
   `tests/run-all.sh:146` — a mensagem de linter ausente fica fora do `run()` e entra na lista
   (`PATH=/tmp/empty tests/run-all.sh --list` mostra duas linhas que não são passos, uma delas
   contando para o `SURFACE_FLOOR`). E `TEST_CMD` com `--list` faria todo gate passar na hora, com
-  14 linhas plausíveis no log. Direção: filtrar não-passos, e recusar `--list` como TEST_CMD.
+  14 linhas plausíveis no log. **RESOLVIDO por `2f71646`**: a mensagem foi para a stderr e a
+  checagem 2b do `sdd health` recusa a flag; `mut_HEALTH_testcmd_list_blind`.
   — descoberto por `sdd-reviewer` na missão `20260818-lote-facil` (2026-08-19)
+
+- [ ] **`sdd health` recusa `--list`, e nada recusa um `TEST_CMD` de repo-alvo que sai 0 sem rodar** —
+  `bin/sdd:1848` — a checagem 2b casa a flag `--list`, que é da suíte **do kit**, e lê o config do
+  kit. Num repo-alvo, `TEST_CMD="true"`, `npm test --listTests` ou `pytest --collect-only` passa
+  gate_EXEC, gate_QA e gate_REVIEW na hora, e o `sdd preflight` só confere que a chave não está
+  vazia (`bin/sdd:1674`). Direção: exigir do `TEST_CMD` evidência de **execução** (contagem de
+  testes na saída, ou um probe que falhe de propósito), nunca uma lista de flags proibidas.
+  — descoberto por `sdd-executor` na missão `20260819-fecho-que-nao-mente` (2026-08-19)
 
 - [ ] **O `stub-argv.txt` do `check-health.sh` nunca é apagado entre mundos de fixture** —
   `tests/check-health.sh:930` — todo `health_run` sobrescreve, ninguém remove. Hoje não reproduz
