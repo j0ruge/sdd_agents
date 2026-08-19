@@ -31,6 +31,26 @@ If the runner booted this session with `/goal /codereview:codereview until every
 the loop is already driven: review → fix → re-review until it closes. If not, **drive the loop
 yourself**, with the same stopping criterion.
 
+### When to keep going, and when to stop
+
+"Until every item is Grade A" says when the loop is DONE. It does not say when to give up, and a
+round count is the wrong answer to that — it stops a loop that is working and it keeps paying for
+one that is not. The criterion is **movement**, read off the artifacts:
+
+Compare this round's `### Overall Grade` table against the previous round's `40-review-r<N-1>.md`.
+While the criteria below A are getting fewer, or their letters are rising, the loop is working —
+keep going. Stop when a round ends with **the same set of letters** as the one before it, or with
+**any letter lower**. A plateau means the round is finding the same class without closing it, and
+the next one will too; a regression means the fixes are costing more than they buy. In both cases
+write the report with the real grade and name in the `gate:` field which criteria stalled, so the
+human decides with the evidence in front of them.
+
+Rising grades count only when there are **commits with real fixes** behind them. A round whose
+only change is a rewritten report has not moved anything, whatever the table says.
+
+Measured, mission `20260818-lote-facil`: r1 blocked without ever grading, r2 four criteria below A
+(one of them a C), r3 all seven at A. Each round that worked left fix commits behind it.
+
 ## 3. Fix what was raised
 
 Every CRITICAL/HIGH finding becomes a fix in this session, with a test where one fits:
@@ -49,6 +69,23 @@ report why it was refuted, with evidence. Performatively agreeing with a mistake
 
 Run `TEST_CMD` (and `E2E_CMD`, if there is one) after each fix. Commit the fixes — the gate
 requires a **clean working tree**.
+
+### Two ways this session dies, both measured, both avoidable
+
+**Never end your turn with a command still running.** This session is headless: ending the turn
+IS ending the session, and there is nobody to wake you. A tool call that answered "running in
+background" has not answered — poll it, in this same turn, until it does. Three rounds of one
+mission died with the words *"waiting for the suite"* after doing the entire analysis: US$ 104
+spent, no review delivered, because a slow `TEST_CMD` outlasted the patience of a single call.
+
+If `TEST_CMD` really is too slow to sit through, that is a **finding** — it goes to `TODO_FILE`
+with the measurement. It is never a reason to narrate that you are waiting and stop.
+
+**Commit each fix the moment it verifies, never in one batch at the end.** Two of those three
+rounds died holding a whole round of correct work uncommitted, and the loss was not only the
+rework: the dirty tree made the runner re-derive `gate_EXEC`, which runs `TEST_CMD` over the
+working tree, so it read another phase's mess as EXEC work and re-entered EXEC in a loop. The next
+phase paid for the commit this one did not make. An uncommitted fix is not a fix.
 
 ## 4. Write the round report
 
@@ -102,7 +139,11 @@ translated.
 
 - Review and fix in the same session; the loop is yours.
 - Every criterion at A, or the report tells the truth about the grade.
-- Fixes committed — the gate requires a clean tree.
+- The loop stops on a plateau or a regression against the previous round's table — never on a
+  round count, and never while the letters are still rising.
+- Never end the turn with a command still running: in a headless session that ends the session.
+- Fixes committed as they verify, one by one — the gate requires a clean tree, and the next phase
+  pays for the commit you did not make.
 - A refused finding needs written evidence, not an opinion.
 - An unfixed MEDIUM/LOW becomes a line in `TODO_FILE`, it never vanishes.
 - You do not push, do not open a PR, do not merge.
