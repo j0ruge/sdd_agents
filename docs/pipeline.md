@@ -188,6 +188,22 @@ the word `TODO` and failed every `45-docs.md` that named `TODO.md` — which is 
 **Passes when:** `50-pr.md` exists with `pr_url:` **and** `gh pr view <url>` confirms the PR
 exists. A file claiming a PR that does not exist fails — and it is good that it does.
 
+**In a repo that owns a mutation catalogue there is a third requirement, and it is checked last:**
+a stamp in `.sdd/logs/mutation-stamp` matching the current content of `bin/ tests/ templates/
+config/`. `sdd health` writes it when the catalogue comes back green; nothing else writes it; a red
+catalogue, or a tree that moved while it ran, **removes** it. The refusal names its own remedy —
+`no green mutation catalogue for this content — run 'sdd health'` — because a gate that stops the
+line without naming the command sends the operator to run the fast suite, watch it go green, and
+conclude the runner is lying.
+
+The requirement is scoped by **artifact** (`tests/check-mutation.sh` exists under this root?) and
+never by the identity of the repository, so a target repo is untouched: same gate, same two
+requirements it always had. It is checked last so the likeliest message stays the one it already
+was. And the gate never *runs* the catalogue — holding the working tree for twenty minutes inside a
+gate is what made the REVIEW phase unsatisfiable headless, which is why the catalogue is opt-in in
+the first place. It asks for the receipt instead. Why a stamp rather than CI, and what was
+discarded, is [ADR 0004](adr/0004-mutation-catalogue-owner-stamp-not-ci.md).
+
 ## The mission's branch
 
 `branch:` in `00-missao.md` was decorative until `ensure_mission_branch()`. The runner now reads it
