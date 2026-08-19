@@ -673,6 +673,16 @@ readonly MUTATION_STAMP_PATHS=(bin tests templates config)
 # runner re-derive EXEC in a loop, at about US$ 25 a lap.
 readonly MUTATION_STAMP_REL='.sdd/logs/mutation-stamp'
 
+# The size below which a catalogue cannot have measured the runner, whatever its score says.
+#
+# EIGHT because check 4 of cmd_health already demands one mutation per gate, so a catalogue under
+# this number fails that check anyway — the floor states a bound the command was already committed
+# to, instead of inventing a threshold somebody would have to keep bumping. It is deliberately NOT
+# a ratchet at today's census: the size that has to track the catalogue is read off the catalogue
+# itself (see check 2), and this constant is only the guard against BOTH sides being gutted at
+# once, where that comparison would read 0 == 0 and pass.
+readonly MUTATION_CATALOGUE_FLOOR=8
+
 # The content key of the paths above: prints it, or prints NOTHING and returns 1.
 #
 # The difference is the whole guard. `md5sum` of no input at all is a perfectly valid-looking
@@ -1974,7 +1984,26 @@ cmd_health() {
   # repo DECLARED, listed by name in KNOWN_GAPS with the increment that closes it; a survivor is
   # protection the catalogue goes on crediting that nobody owns. Same green before, and the
   # operator could not tell which one they had.
-  local score_line score_nums caught gaps total
+  # How many mutants the catalogue DEFINES, read off the file that printed the line being judged.
+  # `score: 0 caught, 0 known gap(s), of 0` satisfies both conditions below it — no gap, and
+  # `caught == of` — because `CATALOG=()` runs the loop zero times, leaves `errors` at 0 and exits
+  # 0: the emptiest possible run printing the greenest possible line, stamped by check 2c, opening
+  # gate_PR over a catalogue that measured nothing. A catalogue merely NARROWED does the same, one
+  # deleted entry at a time and never once going red. It was the last count of this command with no
+  # anti-vacuity floor, beside LINT_FLOOR, SURFACE_FLOOR, CAPTURE_FLOOR and REVIEW_FLOOR.
+  #
+  # Compared against the mut_*() DEFINITIONS and never against a number written here: `of` is
+  # `${#CATALOG[@]}`, so a hand-narrowed CATALOG agrees with itself and the functions left behind
+  # are the only thing on disk that can contradict it. MUTATION_CATALOGUE_FLOOR is the other half —
+  # gut both and the comparison would read 0 == 0 — and neither number ever needs bumping by hand.
+  #
+  # `|| true` for the family this whole region is audited for: `grep -c` returns 1 exactly when it
+  # counts zero, and unguarded that kills the runner on this line, with every sentence below it
+  # dead code. A missing or renamed catalogue lands on 0 and is REFUSED, which is the side of the
+  # fence a count that cannot be taken belongs on.
+  local score_line score_nums caught gaps total defined
+  defined="$(grep -cE '^mut_[A-Za-z0-9_]+\(\) \{' "$kit/tests/check-mutation.sh" 2>/dev/null || true)"
+  if [ -z "$defined" ]; then defined=0; fi
   score_line="$(grep -m1 '^score: ' <<< "$out" || true)"
   score_nums="$(sed -nE 's/^score: ([0-9]+) caught, ([0-9]+) known gap\(s\), of ([0-9]+)$/\1 \2 \3/p' <<< "$score_line" || true)"
   if [ -z "$score_line" ]; then
@@ -1986,7 +2015,14 @@ cmd_health() {
     health_bad "the 'score:' line no longer parses — health went blind to the mutation: $score_line"
   else
     read -r caught gaps total <<< "$score_nums"
-    if [ "$gaps" -ne 0 ]; then
+    # SIZE first, and the order is a dependency rather than a taste: with `of` disagreeing with the
+    # catalogue on disk, neither the gap count nor the survivor count is about the catalogue this
+    # kit has, so both sentences below would describe a measurement that did not happen. It takes
+    # nothing away from them either — a catalogue of the right size can still carry a gap or a
+    # survivor, which is the ordinary world both were written for.
+    if [ "$total" -ne "$defined" ] || [ "$defined" -lt "$MUTATION_CATALOGUE_FLOOR" ]; then
+      health_bad "mutation: the catalogue ran $total of the $defined mutant(s) tests/check-mutation.sh defines (floor $MUTATION_CATALOGUE_FLOOR) — an emptied or narrowed catalogue goes on printing caught == of, and that green is about a loop that ran $total time(s)"
+    elif [ "$gaps" -ne 0 ]; then
       health_bad "mutation with an open gap — $score_line"
     elif [ "$caught" -ne "$total" ]; then
       # The reproduction command is IN the sentence, the same rule the red-suite line above obeys:

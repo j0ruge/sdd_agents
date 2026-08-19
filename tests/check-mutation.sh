@@ -1121,6 +1121,21 @@ mut_HEALTH_mutation_survivor_blind() {
   sed -i '/^cmd_health() {/,/^}/ s@elif \[ "$caught" -ne "$total" \]; then@elif [ "$caught" -ne "$caught" ]; then@' "$1"
 }
 
+# `sdd health` goes back to certifying a catalogue that ran NOTHING. With the size comparison gone,
+# `score: 0 caught, 0 known gap(s), of 0` satisfies everything left — no gap, and `caught == of` —
+# so an empty `CATALOG=()` reaches `ok`, sets catalogue_green, WRITES THE STAMP, and opens gate_PR
+# over a loop that ran zero times. A catalogue merely narrowed does the same, one entry at a time.
+#
+# The sabotage is a condition that is false for every score a catalogue can print, and NOT the
+# deletion of the branch: what has to be measured is the comparison, not the presence of an `if`.
+# Range-addressed to the body of cmd_health for the reason the mutant above gives.
+# Caught by `mutation: a catalogue too small to have measured anything is refused` in
+# check-health.sh, and by nothing else — every other world there reads a score whose size the
+# fixture's own tests/check-mutation.sh backs.
+mut_HEALTH_catalogue_floor_blind() {
+  sed -i '/^cmd_health() {/,/^}/ s@if \[ "$total" -ne "$defined" \] || \[ "$defined" -lt "$MUTATION_CATALOGUE_FLOOR" \]; then@if [ "$total" -lt 0 ]; then@' "$1"
+}
+
 # `sdd health` stops asking the suite for the catalogue — and since the catalogue left TEST_CMD,
 # health is the ONLY caller that asks. Nobody else runs it; there is no CI in this repo.
 #
@@ -1448,6 +1463,7 @@ CATALOG=(
   HEALTH_suite_capture_aborts
   HEALTH_score_read_aborts
   HEALTH_mutation_survivor_blind
+  HEALTH_catalogue_floor_blind
   HEALTH_testcmd_list_blind
   HEALTH_suite_without_mutation
   HEALTH_provenance_find_aborts

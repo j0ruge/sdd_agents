@@ -688,8 +688,19 @@ assert_why   "PR reports the missing 50-pr.md" "PR" "50-pr.md"
 # still, which is the only arrangement in which the removal is the sole suspect.
 i4_bad=0
 i4_home="$SDD_STATE_FIX/health-home"; mkdir -p "$i4_home"
-I4_SCORE_GREEN='score: 1 caught, 0 known gap(s), of 1'
-I4_SCORE_SURVIVOR='score: 0 caught, 0 known gap(s), of 1'
+# The size the stand-in catalogue below has to have, READ OFF THE RUNNER and never typed here.
+# cmd_health no longer takes the score line's word for the catalogue's size: it weighs the `of N`
+# against the mut_*() definitions on disk and refuses anything under its own floor, because
+# `score: 0 caught, 0 known gap(s), of 0` used to be stamped as green. So a stand-in that merely
+# EXISTS is no longer a kit whose catalogue can be certified — worlds 3, 5 and 7 would be asking
+# for a stamp the writer is right to withhold, and this assertion would report a stamp property it
+# never got to measure. Derived, so a floor that moves in bin/sdd moves this fixture with it.
+I4_FLOOR="$(sed -nE 's/^readonly MUTATION_CATALOGUE_FLOOR=([0-9]+)$/\1/p' "$ROOT/bin/sdd")"
+[ -n "$I4_FLOOR" ] \
+  || fail "SENSOR-BROKEN: the stamp fixture reads the runner's catalogue floor" \
+          "a 'readonly MUTATION_CATALOGUE_FLOOR=<n>' line in bin/sdd" "nothing — the stand-in catalogue below would be sized by an empty string"
+I4_SCORE_GREEN="score: $I4_FLOOR caught, 0 known gap(s), of $I4_FLOOR"
+I4_SCORE_SURVIVOR="score: $(( I4_FLOOR - 1 )) caught, 0 known gap(s), of $I4_FLOOR"
 
 i4_phase() { # i4_phase <world> <expected phase>
   local world="$1" want="$2" got
@@ -767,13 +778,25 @@ i4_phase "a repo with no tests/check-mutation.sh closes as it always did" "DONE"
 #    ABSENCE of the earlier requirements' markers is what proves the gate reached the stamp
 #    instead of arriving at the same refusal by the 50-pr.md road.
 mkdir -p "$FIX/tests"
-cat > "$FIX/tests/check-mutation.sh" <<'CAT'
+{
+  cat <<'CAT'
 #!/usr/bin/env bash
-# Stand-in for the kit's mutation catalogue. Only its EXISTENCE is read here: it is the artifact
-# gate_PR scopes on, chosen over the identity of the repository because the identity door the kit
-# already has (cmd_kaizen) carries a live worktree bug recorded in TODO.md.
-exit 0
+# Stand-in for the kit's mutation catalogue. Its EXISTENCE is what gate_PR scopes on — the artifact,
+# chosen over the identity of the repository because the identity door the kit already has
+# (cmd_kaizen) carries a live worktree bug recorded in TODO.md.
+#
+# The mut_*() lines below are the second thing read of this file, and by the OTHER end of the
+# mechanism: cmd_health counts them to decide whether the score line it was handed describes a
+# catalogue that could have measured anything. They are generated, one per unit of the runner's own
+# floor, so this file stays a coherent kit rather than a catalogue claiming a size nothing backs.
 CAT
+  i4_n=0
+  while [ "$i4_n" -lt "${I4_FLOOR:-0}" ]; do
+    printf 'mut_FIXTURE_%d() { :; }\n' "$i4_n"
+    i4_n=$(( i4_n + 1 ))
+  done
+  printf 'exit 0\n'
+} > "$FIX/tests/check-mutation.sh"
 chmod +x "$FIX/tests/check-mutation.sh"
 git add -A && git commit -qm "chore: the repo grows a mutation catalogue" >/dev/null
 i4_phase "the catalogue is here and nothing says it ran green" "PR"
