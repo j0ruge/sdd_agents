@@ -1320,7 +1320,10 @@ health_captures() {
 # the record the ratchet demands.
 # 17 → 18: check 2b reads the kit's own TEST_CMD out of .sdd/config.sh, so the region gained the
 # `kit_test_cmd` capture — guarded in the tail, which is the form this ratchet was built to keep.
-CAPTURE_FLOOR=18
+# 18 → 19: check 2c turns the catalogue's verdict into an artifact on disk, so the region gained
+# the `stamp_key` capture. Guarded INSIDE, `|| true`, because an empty key is not a crash here: it
+# is the branch that refuses to stamp, which is exactly what a root with nothing to measure earns.
+CAPTURE_FLOOR=19
 
 capture_report() {
   local out total safe offenders

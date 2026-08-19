@@ -640,6 +640,59 @@ gate_DOCS() {
   return 0
 }
 
+# ---------------------------------------------------------------------------
+# The mutation catalogue's stamp
+# ---------------------------------------------------------------------------
+# Since 4c86712 the catalogue is OPT-IN: TEST_CMD does not run it, and this repo has no CI. That
+# left the one instrument that measures whether the assertions still bite with NO owner, and the
+# bill arrived between PR #12 and PR #13 — a fix rotted the anchor of one mutation, the REVIEW and
+# PR gates ran the fast suite and answered green, and the base branch carried a score with a live
+# survivor for days, until a human happened to type `sdd health`.
+#
+# The fix is not to RUN the catalogue inside a gate: that is exactly what 4c86712 undid, after
+# twenty minutes of held working tree made the REVIEW phase unsatisfiable headless and ended three
+# sessions with the words "waiting for the suite". The gate asks for the ARTIFACT instead — a stamp
+# `sdd health` writes when the catalogue came back green, and that nothing else in the kit writes.
+
+# The directories the catalogue's verdict is a function of, named in ONE place and read at both
+# ends: cmd_health writes the key, gate_PR demands it.
+#
+# FOUR, and the boundary is declared rather than assumed. sandbox() in tests/check-mutation.sh also
+# copies agents/, CLAUDE.md, TODO.md and docs/adr, so a change confined to THOSE is not covered by
+# this key. The narrowing is deliberate and its reason is operational: the DOCS phase edits
+# CLAUDE.md and TODO.md on its way to the PR, so keying on them would throw the stamp away between
+# the last code commit and the gate that reads it — a second twenty-minute run per mission, bought
+# for documents no mutant edits. What the mutants DO edit is bin/sdd, and what decides their fate
+# is the assertions in tests/ plus the templates/ and config/ those assertions read. The residual
+# gap is in TODO.md with its direction, not hidden in a sentence here.
+readonly MUTATION_STAMP_PATHS=(bin tests templates config)
+
+# Under .sdd/logs/ and not .sdd/: `sdd install` guarantees .sdd/logs/ is gitignored in every repo
+# the kit touches, while .sdd/config.sh right above it is TRACKED. A stamp one directory up would
+# appear in the `git status` of every phase — and a phase that dies with a dirty tree makes the
+# runner re-derive EXEC in a loop, at about US$ 25 a lap.
+readonly MUTATION_STAMP_REL='.sdd/logs/mutation-stamp'
+
+# The content key of the paths above: prints it, or prints NOTHING and returns 1.
+#
+# The difference is the whole guard. `md5sum` of no input at all is a perfectly valid-looking
+# constant, so a root whose four directories are all absent would otherwise be handed a stable key
+# that every other empty root matches — a stamp certifying nothing, indistinguishable from a stamp
+# certifying everything. Emptiness is refused here, once, instead of at each call site.
+mutation_stamp_key() { # mutation_stamp_key <root>
+  local listing
+  # `md5sum` and not `sha256sum`: it is the digest `sdd preflight` already probes the userland for,
+  # so this adds no assumption the kit was not already making. The relative paths ride INSIDE the
+  # digest, which is what makes a file that merely MOVED change the key.
+  listing="$( CDPATH='' cd "$1" 2>/dev/null \
+              && find "${MUTATION_STAMP_PATHS[@]}" -type f -print0 2>/dev/null \
+                 | LC_ALL=C sort -z | xargs -0 md5sum 2>/dev/null )" || true
+  [ -n "$listing" ] || return 1
+  # Herestring, never `printf … |`: under `pipefail` that form returns 141 when the reader exits
+  # first, which is a failure whose likelihood grows with the size of the tree being hashed.
+  md5sum <<< "$listing" | cut -d' ' -f1
+}
+
 gate_PR() {
   local p="$MISSION_DIR/50-pr.md"
   [ -f "$p" ] || { GATE_WHY="missing 50-pr.md"; return 1; }
@@ -648,6 +701,35 @@ gate_PR() {
   local live
   live="$( cd "$REPO_ROOT" && gh pr view "$url" --json url --jq .url 2>/dev/null )" || true
   [ -n "$live" ] || { GATE_WHY="gh does not confirm PR $url — 50-pr.md may be lying"; return 1; }
+
+  # The catalogue's stamp, and LAST on purpose: the two requirements above are the ones that fail
+  # in practice, so the message an operator already knows stays the likely one.
+  #
+  # Scoped by ARTIFACT — "is there a catalogue here?" — and never by the identity of the
+  # repository. A target repo has no tests/check-mutation.sh, so nothing about it changes; and the
+  # identity door the kit already owns (cmd_kaizen) carries a live worktree bug, recorded in
+  # TODO.md, which inheriting would simply buy.
+  if [ -f "$REPO_ROOT/tests/check-mutation.sh" ]; then
+    local key stamp
+    key="$(mutation_stamp_key "$REPO_ROOT" || true)"
+    stamp="$(cat "$REPO_ROOT/$MUTATION_STAMP_REL" 2>/dev/null || true)"
+    # ONE refusal and one sentence, with `-z` folded into it rather than given a message of its
+    # own. The disjunct is load-bearing and not decoration: an absent stamp file reads as the empty
+    # string, so an empty KEY would compare EQUAL to it and open the gate — the two ways of knowing
+    # nothing agreeing that everything is fine. It is also, today, unreachable, and that is
+    # declared rather than dressed up: the scope condition above is a file INSIDE tests/, so
+    # reaching this line at all proves tests/ is non-empty. A second GATE_WHY here would be a
+    # sentence no world can print, which is the dead code this repo keeps finding in its own gates.
+    #
+    # The remedy is IN the sentence, the same rule cmd_health's red-suite line obeys and for the
+    # same measured reason: without the command named, the operator runs the fast suite, sees
+    # green, and concludes the gate is lying — which is the one thing it may never be.
+    if [ -z "$key" ] || [ "$stamp" != "$key" ]; then
+      GATE_WHY="no green mutation catalogue for this content — run 'sdd health' (since 4c86712 TEST_CMD does not run the catalogue, so no gate before this one measures it)"
+      return 1
+    fi
+  fi
+
   GATE_WHY="PR open: $live"
   return 0
 }
@@ -1826,7 +1908,12 @@ health_default_keys() {
 }
 
 cmd_health() {
-  local kit="$SDD_HOME" out rc k n
+  # `catalogue_green` is the ONE thing check 2c reads out of checks 1 and 2, and it is a variable
+  # rather than a re-reading of the output because the stamp has to mean BOTH: a green
+  # `--with-mutation` run (check 1) AND a score whose two numbers agree (check 2). Either one alone
+  # is a world this repo has already shipped — a red suite over a perfect score line, and a green
+  # suite over `103 caught … of 104`.
+  local kit="$SDD_HOME" out rc k n catalogue_green=0
 
   step "sdd health — kit sensor at $kit"
 
@@ -1896,6 +1983,10 @@ cmd_health() {
       health_bad "mutation: $caught of $total caught — $((total - caught)) survivor(s), assertions the suite does not have — run tests/run-all.sh --with-mutation"
     else
       ok "mutation: $score_line"
+      # An `if` and never `[ … ] && catalogue_green=1`: under this file's `set -e` the `&&` list is
+      # the last command of the branch, so a red suite here would make the whole `if` statement
+      # return non-zero and kill cmd_health one line after it said the catalogue was clean.
+      if [ "$rc" -eq 0 ]; then catalogue_green=1; fi
     fi
   fi
 
@@ -1944,6 +2035,36 @@ cmd_health() {
           ok "TEST_CMD runs the suite ($kit_test_cmd)"
         fi ;;
     esac
+  fi
+
+  # --- 2c. the stamp: the catalogue stops depending on somebody REMEMBERING --
+  # Checks 1 and 2 have just answered the only question the catalogue can be asked, and until now
+  # that answer died with the terminal it was printed on. gate_PR needs it in DISK, because the
+  # alternative it replaces is a memory — "somebody ran the catalogue at some point" — which is a
+  # label, and this repo's first principle is that a label is not an artifact.
+  #
+  # Numbered 2c beside its two inputs rather than appended at the end, for the reason 2b spells
+  # out: these numbers are cited from tests/check-health.sh and from the catalogue's own comments,
+  # and renumbering the blocks below to insert one is how a citation rots.
+  #
+  # Written AFTER the run and never before, and keyed on the content the run measured, so what
+  # lands on disk is "this exact tree was measured green" and never "the command was here".
+  local stamp_path="$kit/$MUTATION_STAMP_REL" stamp_key
+  stamp_key="$(mutation_stamp_key "$kit" || true)"
+  if [ "$catalogue_green" = 1 ] && [ -n "$stamp_key" ]; then
+    # The write is the CONDITION of the `if`, which is what keeps a read-only .sdd/ from killing
+    # the command on the line that was written to report it — the family every capture in this
+    # region carries a guard against.
+    if mkdir -p "${stamp_path%/*}" 2>/dev/null && printf '%s\n' "$stamp_key" > "$stamp_path" 2>/dev/null; then
+      ok "mutation stamp written — gate_PR can see that THIS content ran green"
+    else
+      health_bad "the mutation stamp could not be written at $stamp_path — gate_PR will go on asking for it"
+    fi
+  else
+    # REMOVED, not merely left behind. A stamp that outlives the green it certifies is the exact
+    # label this block exists to replace: it would go on telling gate_PR that a catalogue which
+    # just came back red, over this very content, had been measured and was clean.
+    rm -f "$stamp_path"
   fi
 
   # --- 3. the TODO.md backlog count, read from the SAME run ----------------

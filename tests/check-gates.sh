@@ -645,6 +645,183 @@ git add -A && git commit -qm "chore: docs"
 assert_phase "drift checklist complete" "PR"
 assert_why   "PR reports the missing 50-pr.md" "PR" "50-pr.md"
 
+# --- the mutation catalogue's stamp -----------------------------------------
+#
+# Since 4c86712 the catalogue is OPT-IN: TEST_CMD does not run it, and this repo has no CI. That
+# left it with no owner, and the bill arrived between PR #12 and PR #13 — a fix rotted the anchor
+# of one mutation, every gate ran the fast suite and answered green, and `main` carried a score
+# with a live survivor for days, until a human happened to type `sdd health`.
+#
+# gate_PR does NOT run the catalogue. Holding the working tree for twenty minutes inside a gate is
+# precisely what 4c86712 undid, after it made the REVIEW phase unsatisfiable headless. It demands
+# the EVIDENCE that the catalogue ran green over THIS content: a stamp `sdd health` writes and
+# that nothing else in the kit writes.
+#
+# SIX worlds, in three pairs, and no pair is decoration:
+#   SCOPE   (1, 2) the requirement exists only where tests/check-mutation.sh does. World 1 is what
+#           keeps every target repo — none of which has that file — behaving exactly as before, and
+#           without it worlds 2-6 are all satisfied by a gate that refuses everything.
+#   CONTENT (3, 4) the stamp keys on the CONTENT of the measured directories, never on the clock
+#           and never on HEAD: the PR phase commits handoff markdown, which would move HEAD and
+#           throw away a stamp that is still perfectly valid.
+#   MEANING (5, 6, 7) the stamp means the catalogue was GREEN, not that the command ran — and
+#           BOTH inputs feed that: a red suite and a green suite whose score carries a survivor
+#           each have to take the stamp away. Without them, a `sdd health` that stamped
+#           unconditionally satisfies worlds 1-4.
+#
+# The key is NEVER computed here. A second spelling of that algorithm would agree with the first by
+# construction and measure nothing, so world 3 drives the real WRITER instead: a LIVE copy of the
+# runner inside the fixture, with a stub suite standing in for the twenty-minute catalogue. Live
+# for the same reason check-health.sh copies it live — the copy is what carries the sabotage of
+# mut_PR_stamp_blind into the fixture, and a runner frozen into this file would make the mutation
+# invisible while the catalogue went on crediting protection that does not exist.
+#
+# ⚠️ The stub's VERDICT lives outside the measured directories, in a control file under .sdd/logs/,
+# and that is the whole reason worlds 5-7 measure anything. The first version of this block flipped
+# the suite to red by REWRITING tests/run-all.sh — which moved the content key at the same time, so
+# the refusal that followed could not tell "the stamp was taken away" from "the content changed".
+# Measured, not feared: an adversarial pass that deleted the `catalogue_green` condition entirely
+# left this assertion GREEN. The control file changes the answer while every hashed byte stands
+# still, which is the only arrangement in which the removal is the sole suspect.
+i4_bad=0
+i4_home="$SDD_STATE_FIX/health-home"; mkdir -p "$i4_home"
+I4_SCORE_GREEN='score: 1 caught, 0 known gap(s), of 1'
+I4_SCORE_SURVIVOR='score: 0 caught, 0 known gap(s), of 1'
+
+i4_phase() { # i4_phase <world> <expected phase>
+  local world="$1" want="$2" got
+  got="$( cd "$FIX" && "$SDD" phase "$MISSION" 2>&1 )"
+  [ "$got" = "$want" ] && return 0
+  printf '         world "%s": expected phase %s, got %s\n' "$world" "$want" "$got" >&2
+  i4_bad=$((i4_bad + 1))
+}
+
+i4_why() { # i4_why <world> <regex the reason MUST match> <regex it must NOT match>
+  local world="$1" want="$2" absent="$3" got
+  got="$( cd "$FIX" && "$SDD" why "$MISSION" PR 2>&1 )"
+  if ! grep -qE "$want" <<< "$got"; then
+    printf '         world "%s": reason did not match /%s/ — got: %s\n' "$world" "$want" "$got" >&2
+    i4_bad=$((i4_bad + 1))
+  fi
+  # Herestring, never `printf | grep -q` — see the note on assert_why_absent above.
+  if grep -qE "$absent" <<< "$got"; then
+    printf '         world "%s": reason still carries /%s/, so the gate stopped before the stamp — got: %s\n' \
+      "$world" "$absent" "$got" >&2
+    i4_bad=$((i4_bad + 1))
+  fi
+}
+
+# The WRITER, run for real out of the fixture's own copy. HOME is redirected because
+# health_provenance reads the skills of whoever is running the suite, and a sensor whose verdict
+# depends on the developer's machine is not a sensor. rc is ignored on purpose: the fixture kit has
+# no config/schema.md and no baseline, so `sdd health` legitimately fails several other checks —
+# what is under test is the stamp, which the command writes right after the catalogue's verdict.
+i4_health() { ( cd "$FIX" && HOME="$i4_home" NO_COLOR=1 "$FIX/bin/sdd" health >/dev/null 2>&1 ) || true; }
+
+# What the stub suite will answer next. It is written into .sdd/logs/, which is gitignored AND
+# outside the four measured directories — so changing the catalogue's verdict changes not one byte
+# of the content key. See the ⚠️ above: that separation is what the assertion rests on.
+i4_verdict() { # i4_verdict <exit code> <the score line>
+  printf '%s\n%s\n' "$1" "$2" > "$FIX/.sdd/logs/stub-verdict"
+}
+
+# The stub suite. Written ONCE, and its bytes never change again: it reads its own verdict from the
+# control file above, so tests/ stays fixed across every world below.
+i4_write_suite() {
+  cat > "$FIX/tests/run-all.sh" <<EOF
+#!/usr/bin/env bash
+# Stub for the twenty-minute catalogue. cmd_health reads the score line off this stdout and the
+# suite's verdict off this exit code; both come from a control file OUTSIDE the hashed paths.
+sed -n 2p "$FIX/.sdd/logs/stub-verdict"
+exit "\$(sed -n 1p "$FIX/.sdd/logs/stub-verdict")"
+EOF
+  chmod +x "$FIX/tests/run-all.sh"
+}
+
+# gate_PR asks `gh` whether the PR is real, and no test may touch the network.
+cat > "$FIX/.stub/gh" <<'STUB'
+#!/usr/bin/env bash
+# Answers the one question gate_PR asks: `gh pr view <url> --json url --jq .url`.
+[ "${1:-}" = "pr" ] && [ "${2:-}" = "view" ] || { echo "unexpected gh call: $*" >&2; exit 9; }
+printf '%s\n' "${3:-}"
+STUB
+chmod +x "$FIX/.stub/gh"
+printf -- '---\nfase: PR\npr_url: https://github.com/fixture/repo/pull/1\n---\n# PR\n' > "$MDIR/50-pr.md"
+git add -A && git commit -qm "chore: the PR artifact and the gh stub" >/dev/null
+
+# 1. SCOPE — a repo with no catalogue. The gate is exactly the gate it always was, which is the
+#    world every target repo lives in.
+i4_phase "a repo with no tests/check-mutation.sh closes as it always did" "DONE"
+
+# 2. SCOPE — the catalogue is here and nothing on disk says it ever ran green. Demanding the
+#    ABSENCE of the earlier requirements' markers is what proves the gate reached the stamp
+#    instead of arriving at the same refusal by the 50-pr.md road.
+mkdir -p "$FIX/tests"
+cat > "$FIX/tests/check-mutation.sh" <<'CAT'
+#!/usr/bin/env bash
+# Stand-in for the kit's mutation catalogue. Only its EXISTENCE is read here: it is the artifact
+# gate_PR scopes on, chosen over the identity of the repository because the identity door the kit
+# already has (cmd_kaizen) carries a live worktree bug recorded in TODO.md.
+exit 0
+CAT
+chmod +x "$FIX/tests/check-mutation.sh"
+git add -A && git commit -qm "chore: the repo grows a mutation catalogue" >/dev/null
+i4_phase "the catalogue is here and nothing says it ran green" "PR"
+i4_why   "no stamp at all" "sdd health" "50-pr\.md|does not confirm"
+
+# 3. CONTENT — the writer runs. From here on the fixture is also a small kit: bin/sdd live, plus a
+#    stub suite, which is all cmd_health needs to reach its verdict on the catalogue.
+mkdir -p "$FIX/bin" "$FIX/.sdd/logs"
+cp "$ROOT/bin/sdd" "$FIX/bin/sdd"
+i4_write_suite
+git add -A && git commit -qm "chore: a kit inside the fixture, so the writer can run" >/dev/null
+i4_verdict 0 "$I4_SCORE_GREEN"; i4_health
+i4_phase "sdd health over a green catalogue stamps this content" "DONE"
+
+# 4. CONTENT — one line into a measured directory and the stamp no longer describes what is here.
+#    A stamp keyed on the clock, on HEAD or on nothing at all would still be accepted.
+printf '\n# one more line, so the measured content is not the content that was stamped\n' \
+  >> "$FIX/tests/check-mutation.sh"
+git add -A && git commit -qm "chore: the catalogue changes after the stamp" >/dev/null
+i4_phase "a stamped repo whose tests/ moved is unstamped again" "PR"
+i4_why   "stale stamp" "sdd health" "50-pr\.md|does not confirm"
+
+# 5. MEANING — stamp the new content, so worlds 6 and 7 have something to take away.
+i4_verdict 0 "$I4_SCORE_GREEN"; i4_health
+i4_phase "health over the new content stamps it in turn" "DONE"
+
+# 6. MEANING — the SUITE comes back red, over content that did not move by a single byte. The
+#    stamp has to go: one that survived would mean "sdd health was executed", which is a label,
+#    and the difference between a label and an artifact is the whole mission.
+i4_verdict 1 "$I4_SCORE_GREEN"; i4_health
+i4_phase "a red suite takes the stamp away, so it never means 'the command ran'" "PR"
+
+# 7. MEANING — and the OTHER input, because the stamp answers to both checks. Here the suite is
+#    green and the score carries a live survivor: `103 caught … of 104` is not a hypothesis, it is
+#    what this repo's base branch carried for days. The green run in between is not scaffolding
+#    either — it proves the removal is a verdict that can be revised and not a one-way latch.
+i4_verdict 0 "$I4_SCORE_GREEN"; i4_health
+i4_phase "green again, and the stamp comes back" "DONE"
+i4_verdict 0 "$I4_SCORE_SURVIVOR"; i4_health
+i4_phase "a score with a live survivor takes the stamp away too" "PR"
+
+if [ "$i4_bad" -eq 0 ]; then
+  pass "gate_PR: the mutation stamp is demanded only where the catalogue lives"
+else
+  fail "gate_PR: the mutation stamp is demanded only where the catalogue lives" \
+       "the 6 worlds above agreeing" "$i4_bad disagreement(s), listed above"
+fi
+
+# Back to the state the sections below inherit: no catalogue, no kit copy, no PR artifact — the
+# fixture is a plain target repo again, sitting at PR with 50-pr.md missing.
+# `${FIX:?}` and not `$FIX`: with the fixture variable empty this line is `rm -rf /bin /tests` on
+# the machine of whoever ran the suite. The same family check-health.sh records in its own header,
+# where an unguarded `rm -rf` reached `/kit` for real.
+rm -rf "${FIX:?}/bin" "${FIX:?}/tests" "${FIX:?}/.stub/gh" "$MDIR/50-pr.md" "${FIX:?}/.sdd/logs/mutation-stamp"
+git add -A && git commit -qm "chore: drop the stamp fixture" >/dev/null
+assert_phase "with the stamp fixture gone the mission is back at PR" "PR"
+assert_why   "and back to the reason it had before" "PR" "50-pr.md"
+
 # --- the base branch warning -----------------------------------------------
 echo "== base branch warning =="
 # The warning lived in ONE place, cmd_preflight — and preflight is OPTIONAL, while `sdd run` is

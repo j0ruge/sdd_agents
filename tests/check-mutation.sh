@@ -215,6 +215,16 @@ mut_PR_no_artifact() {        # a missing 50-pr.md stops failing — a "complete
   sed -i 's|GATE_WHY="missing 50-pr.md"; return 1|GATE_WHY="missing 50-pr.md"; return 0|' "$1"
 }
 
+# The gate stops looking at the stamp, so a mission closes over a mutation catalogue nobody ran.
+# It is the state the kit was actually in between PR #12 and PR #13: the fast suite green, the
+# catalogue carrying a live survivor, and every gate agreeing that the mission was finished.
+# Addressed to the body of gate_PR — an unaddressed `s|if \[ -f "$REPO_ROOT/tests|` would be the
+# same family as the two mutations already logged in TODO.md for sabotaging a second site in
+# silence, since the runner tests other files by that shape elsewhere.
+mut_PR_stamp_blind() {
+  sed -i '/^gate_PR()/,/^}/ s|if \[ -f "\$REPO_ROOT/tests/check-mutation.sh" \]; then|if false; then|' "$1"
+}
+
 # Not a gate, and the only decorative-assertion bug that really happened (TODO.md): the inverted
 # guard makes the PROJECTION (`--dry-run`) write to the journal while the real path goes mute — a
 # read command dirtying the working tree, and an audit trail lying in both directions.
@@ -1355,6 +1365,7 @@ CATALOG=(
   REVIEW_gate_field_blind
   DOCS_pending_status
   PR_no_artifact
+  PR_stamp_blind
   RUN_inverted_journal
   RUN_ignores_output_lang
   RUN_autonomy_ignores_dry_run
