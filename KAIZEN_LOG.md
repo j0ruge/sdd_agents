@@ -4,6 +4,74 @@ Registro de melhorias com **antes/depois medido**. Sem número, não entra.
 
 ---
 
+## 2026-08-19 — Os quatro instrumentos que certificam o fecho de uma missão param de afirmar o que não mediram
+
+**Problema (Gemba):** quatro instrumentos decidem se uma missão do kit fechou, e **três deles
+falharam abertos** quando a sessão de planejamento os sondou um por um contra a `main` em
+`7957a85` — afirmaram ter medido o que não mediram. Nenhum é hipótese; os três foram reproduzidos
+no terminal, e o quarto tem instância na história do repo:
+
+- `sdd health` exigia `0 known gap` e **nunca** comparava `caught` com `of`, então
+  `score: 103 caught, 0 known gap(s), of 104` — um catálogo com sobrevivente vivo — imprimia `ok`,
+  na linha que o operador lê no comando que virou o dono único do catálogo;
+- `gate_REVIEW` lia a coluna `Grade` e nunca a `Rationale`: `A` em toda linha com `PREENCHER` em
+  toda justificativa comprava o selo. Instância viva no próprio repo —
+  `docs/handoffs/20260818-lote-facil/40-review-r1.md:8` registra, no campo `gate:`, que a r1
+  deixou `PREENCHER` nas sete;
+- `tests/run-all.sh --list` imprimia uma linha que não é passo e saía 0 tendo rodado nada: um
+  `TEST_CMD` com `--list` faria **todo gate do runner** passar na hora, com log plausível;
+- e **nada automático rodava o catálogo** desde que ele virou opt-in. A conta chegou entre os PRs
+  #12 e #13: `f6ecf73` apodreceu a âncora de `mut_HEALTH_grade_table_blind`, os gates rodaram a
+  suíte rápida, responderam verde, e a `main` carregou `103 caught of 104` por dias — até alguém
+  digitar o comando.
+
+Os quatro são o mesmo mecanismo, e é o que este repo mais paga: **rótulo aceito no lugar de
+artefato**, dentro dos próprios instrumentos que existem para recusar rótulo.
+
+**Contramedida:** três apertos locais e um desenho. O `sdd health` compara os dois números do mesmo
+`score:` e ganha piso de tamanho (catálogo esvaziado não certifica nada); o `--list` imprime só
+passos e um `TEST_CMD` que o carregue é recusado; o `awk` do `gate_REVIEW` passa a ler `f[4]` e a
+recusar placeholder — na tabela e no campo `gate:` do frontmatter. O quarto troca rótulo por
+artefato: `sdd health` **carimba** o conteúdo que mediu, `gate_PR` **exige** o carimbo. O gate não
+roda o catálogo — foi isso que `4c86712` desfez —, ele pede o recibo. Desenho e alternativas
+descartadas em [`docs/adr/0004`](docs/adr/0004-mutation-catalogue-owner-stamp-not-ci.md).
+
+| | Antes (`7957a85`) | Depois (`3407fe3`) |
+|---|---|---|
+| `sdd health` sobre `score: 103 caught, 0 known gap(s), of 104` | `ok` | `health_bad`, nomeando os dois números |
+| `sdd health` sobre `score: 0 caught, 0 known gap(s), of 0` | `ok` — **e gravava carimbo** | `health_bad`, pesando o `of N` contra as definições `mut_*()` em disco |
+| `gate_REVIEW` sobre `A` em toda linha + `PREENCHER` em toda `Rationale` | **passa** | recusa, nomeando o critério ofensor |
+| `tests/run-all.sh --list` com um `PATH` sem `shellcheck` | 1 linha da saída não é passo | toda linha é passo (o aviso foi para a stderr) |
+| `TEST_CMD="tests/run-all.sh --list"` | aceito | recusado pelo `sdd health` |
+| quem cobra o catálogo de mutação | ninguém automático | `gate_PR`, pelo carimbo, como último requisito |
+| catálogo | **104** mutantes | **118**, `score: 118 caught, 0 known gap(s), of 118` |
+| gates com mutação no catálogo | 8 de 8 | 8 de 8 (mantido; 14 mutantes novos) |
+| `TEST_CMD` | 1m24s | **1m41s** (+20%), 487 asserções `ok`, rc 0 |
+| catraca `todo-findings` | 72 | **89** |
+| achados fechados com `RESOLVIDO por <hash>` | — | **4** (`7a6653b`, `2f71646`, `9fa5b0b`, `c962e2e`) |
+
+**O que a missão descobriu sobre si mesma, e é o número que mais vale:** a fase QA andou as
+jornadas que os quatro incrementos criaram e achou **três defeitos dentro do próprio diff**, todos
+da classe que a missão existe para acabar — um piso que fazia o `sdd health` carimbar sobre um
+catálogo vazio (`score: 0 caught … of 0` respondia `ok`), um carimbo escrito numa árvore e cobrado
+noutra (`gate_PR` insatisfazível **para sempre** em worktree), e um selo de rodada que uma tecla
+vencia (`TODO:` com dois-pontos não era `TODO`). A r1 do REVIEW achou mais sete, **um deles criado
+pela própria rodada**. Sete incrementos, não quatro. O laço QA⇄EXEC pagou por si.
+
+⚠️ **O relógio subiu 20% e nenhuma asserção foi cortada.** A tabela de riscos do plano previa
+converter em achado um `TEST_CMD` acima de ~60 s; o limiar já estava vencido **antes** da missão
+começar, então media a coisa errada e foi registrado como tal em vez de virar corte. Quase todo o
+delta está em invocações reais de `sdd health` e `sdd phase` dentro dos fixtures — asserção
+diferencial que anda o CLI de verdade custa relógio, e é exatamente por isso que ela mede.
+
+**Custo:** 9 sessões pagas até o fim da REVIEW, **US$ 113,57**
+(`jq` sobre `.sdd/logs/20260819-fecho-que-nao-mente/*.json`). A rodada completa do catálogo levou
+**20 min** para 118 mutantes nesta máquina, contra 30 min para 110 medidos na fase QA — cresceu o
+catálogo e caiu o relógio, e a diferença é contenção de CPU, não melhoria. Nenhum dos dois números
+serve como estimativa de runner de CI, que segue sendo decisão do humano.
+
+---
+
 ## 2026-08-19 — A mutação sai do `TEST_CMD`, e a fase REVIEW volta a caber numa sessão
 
 **Problema (Gemba):** a entrada abaixo mede a suíte em **17 a 21 minutos** e chama a decisão sobre
