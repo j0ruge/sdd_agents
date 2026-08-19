@@ -464,6 +464,14 @@ Achados sobre **repos-alvo** vão para o `TODO.md` daquele repo. Este arquivo é
   Direção: comparar `${#CATALOG[@]}` com as definições `mut_*()` no próprio catálogo.
   — descoberto por `sdd-executor` na missão `20260819-fecho-que-nao-mente` (2026-08-19)
 
+- [ ] **`FIXME` e `XXX` são recusados pelo `gate_REVIEW` sem nenhum mundo que prove** —
+  `bin/sdd:578` — a lista de palavras de preenchimento tem sete entradas e só cinco têm mundo no
+  `check-gates.sh`. Medido na passada de sabotagem do F3: tirar `WIP` ou `FILLME` deixa a asserção
+  vermelha, tirar `FIXME` ou `XXX` a deixa **verde**. As duas nasceram assim no I3 e a lista cresceu
+  por cima. Regra sem probe é decoração e some calada no dia em que alguém a reescreve.
+  Direção: um mundo para cada, ou tirá-las da lista.
+  — descoberto por `sdd-executor` na missão `20260819-fecho-que-nao-mente` (2026-08-19)
+
 ### Contrato e configuração
 
 - [ ] **A catraca do backlog e o carimbo de mutação colidem em toda missão** —
