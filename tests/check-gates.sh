@@ -650,6 +650,20 @@ write_r11 "measured, nothing open" '<a\tb>'; commit_r11
 i3_phase "a gate: placeholder is refused whatever escapes it carries" "REVIEW"
 i3_why   "gate: escapes survive verbatim" 'placeholder \(<a\\tb>\)' "tree dirty|working tree|TEST_CMD"
 
+# 12. the PARITY of that escape, and this world exists because the FIRST rejoin got it wrong. `\\`
+#     is how GFM spells a literal backslash, so a cell ending in one sits against a REAL delimiter;
+#     asking merely "does this field end in a backslash" glued two columns into one. Measured
+#     against the runner one commit earlier, which passes the same row: it was reported as
+#     `Escaping (\| A = Confirmed …`, a Grade-A round blocked by a criterion nobody wrote. World 10
+#     alone could never see it — it only carries an ODD run — so the fix of this round had made the
+#     defect this round's second pass found, which is the loop CLAUDE.md says to break by asking
+#     what state is missing. The missing state was the COUNT of the backslashes.
+write_r11 "measured, nothing open"
+sed -i 's/^| Code Quality (Zen) | A | measured, nothing open |$/| Escaping (\\\\| A | measured, nothing open |/' \
+  "$MDIR/40-review-r11.md"
+commit_r11
+i3_phase "a cell ending in an escaped backslash sits against a REAL delimiter" "DOCS"
+
 if [ "$i3_bad" -eq 0 ]; then
   pass "gate_REVIEW: a placeholder Rationale does not buy an A"
 else

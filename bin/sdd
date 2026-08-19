@@ -587,6 +587,13 @@ gate_REVIEW() {
             w == "WIP" || w == "FILLME") return 1
         return 0
       }
+      # PARITY, and not "does this field end in a backslash". `\\` is how GFM spells a literal
+      # backslash, so a cell ending in one sits against a REAL delimiter — and the first version of
+      # the rejoin below could not tell the two apart. Measured against the runner one commit
+      # earlier, which passes the same row: `| Escaping (\\| A | Confirmed no leaks. |` was reported
+      # as `Escaping (\| A = Confirmed no leaks.`, a Grade-A row blocked by a criterion nobody
+      # wrote. An ODD run of trailing backslashes escapes the pipe; an EVEN one does not.
+      function escaped_pipe(s,   t) { t = s; sub(/\\+$/, "", t); return (length(s) - length(t)) % 2 }
       /^###[[:space:]]+Overall Grade/ { inside = 1; next }
       # Exit on ANY heading, not only `###`. Exiting only on `###`, a following section of a
       # HIGHER level (`## Fixes this round`) did not end the read, and the parser kept swallowing
@@ -606,7 +613,7 @@ gate_REVIEW() {
         rawn = split($0, raw, "|")
         n = 0
         for (i = 1; i <= rawn; i++) {
-          if (n > 0 && f[n] ~ /\\$/) { sub(/\\$/, "|", f[n]); f[n] = f[n] raw[i] }
+          if (n > 0 && escaped_pipe(f[n])) { sub(/\\$/, "|", f[n]); f[n] = f[n] raw[i] }
           else { f[++n] = raw[i] }
         }
         if (n < 4) next

@@ -219,6 +219,16 @@ mut_REVIEW_blank_gate_field_blind() {
 }
 
 # A cell that is only punctuation stops saying nothing: `-`, `?` and `.` buy the A again.
+# The two halves of the GFM pipe escape, one sabotage each, on the same enforcement point — the
+# same shape as the gate_field pair below: fully disabled, and subtly-wrong-condition.
+mut_REVIEW_escaped_pipe_blind() {
+  sed -i '/^gate_REVIEW()/,/^}/ s|if (n > 0 && escaped_pipe(f\[n\]))|if (0)|' "$1"
+}
+
+mut_REVIEW_escaped_pipe_parity_blind() {
+  sed -i '/^gate_REVIEW()/,/^}/ s|if (n > 0 && escaped_pipe(f\[n\]))|if (n > 0 \&\& f[n] ~ /\\\\$/)|' "$1"
+}
+
 mut_REVIEW_punctuation_only_blind() {
   sed -i '/^gate_REVIEW()/,/^}/ s|if (u !~ /\[\[:alnum:\]\]/) return 1|if (0) return 1|' "$1"
 }
@@ -1433,6 +1443,8 @@ CATALOG=(
   REVIEW_placeholder_rationale_blind
   REVIEW_gate_field_blind
   REVIEW_blank_gate_field_blind
+  REVIEW_escaped_pipe_blind
+  REVIEW_escaped_pipe_parity_blind
   REVIEW_punctuation_only_blind
   REVIEW_punctuated_fillin_blind
   DOCS_pending_status
