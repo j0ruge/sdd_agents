@@ -225,6 +225,16 @@ mut_PR_stamp_blind() {
   sed -i '/^gate_PR()/,/^}/ s|if \[ -f "\$REPO_ROOT/tests/check-mutation.sh" \]; then|if false; then|' "$1"
 }
 
+# The WRITER's half of the same seal, and a second mutant for the same reason the `gate:` branch of
+# gate_REVIEW got one: with only the reader sabotaged, this whole comparison could be deleted and
+# the catalogue would go on reading 100%. One sabotage per site.
+# The stamp stops asking whether the measured tree moved WHILE the catalogue ran — a window twenty
+# to fifty minutes wide, opened by the very phase that also commits, at the end of which the key
+# would describe whatever is on disk rather than what was measured.
+mut_HEALTH_stamp_window_blind() {
+  sed -i '/^cmd_health()/,/^}/ s|elif \[ "\$stamp_key" != "\$stamp_key_before" \]; then|elif false; then|' "$1"
+}
+
 # Not a gate, and the only decorative-assertion bug that really happened (TODO.md): the inverted
 # guard makes the PROJECTION (`--dry-run`) write to the journal while the real path goes mute — a
 # read command dirtying the working tree, and an audit trail lying in both directions.
@@ -1366,6 +1376,7 @@ CATALOG=(
   DOCS_pending_status
   PR_no_artifact
   PR_stamp_blind
+  HEALTH_stamp_window_blind
   RUN_inverted_journal
   RUN_ignores_output_lang
   RUN_autonomy_ignores_dry_run

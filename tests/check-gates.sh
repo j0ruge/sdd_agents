@@ -657,7 +657,7 @@ assert_why   "PR reports the missing 50-pr.md" "PR" "50-pr.md"
 # the EVIDENCE that the catalogue ran green over THIS content: a stamp `sdd health` writes and
 # that nothing else in the kit writes.
 #
-# SIX worlds, in three pairs, and no pair is decoration:
+# EIGHT worlds, in three pairs plus one, and none of them is decoration:
 #   SCOPE   (1, 2) the requirement exists only where tests/check-mutation.sh does. World 1 is what
 #           keeps every target repo — none of which has that file — behaving exactly as before, and
 #           without it worlds 2-6 are all satisfied by a gate that refuses everything.
@@ -668,6 +668,9 @@ assert_why   "PR reports the missing 50-pr.md" "PR" "50-pr.md"
 #           BOTH inputs feed that: a red suite and a green suite whose score carries a survivor
 #           each have to take the stamp away. Without them, a `sdd health` that stamped
 #           unconditionally satisfies worlds 1-4.
+#   WINDOW  (8) the green has to be about the content that is still here. The real catalogue runs
+#           for twenty to fifty minutes and the phase that starts it is a phase that commits, so a
+#           key read only after the run would stamp whatever the tree happens to be at the end.
 #
 # The key is NEVER computed here. A second spelling of that algorithm would agree with the first by
 # construction and measure nothing, so world 3 drives the real WRITER instead: a LIVE copy of the
@@ -721,18 +724,25 @@ i4_health() { ( cd "$FIX" && HOME="$i4_home" NO_COLOR=1 "$FIX/bin/sdd" health >/
 # What the stub suite will answer next. It is written into .sdd/logs/, which is gitignored AND
 # outside the four measured directories — so changing the catalogue's verdict changes not one byte
 # of the content key. See the ⚠️ above: that separation is what the assertion rests on.
-i4_verdict() { # i4_verdict <exit code> <the score line>
-  printf '%s\n%s\n' "$1" "$2" > "$FIX/.sdd/logs/stub-verdict"
+i4_verdict() { # i4_verdict <exit code> <the score line> [move-the-tree]
+  printf '%s\n%s\n%s\n' "$1" "$2" "${3-}" > "$FIX/.sdd/logs/stub-verdict"
 }
 
 # The stub suite. Written ONCE, and its bytes never change again: it reads its own verdict from the
 # control file above, so tests/ stays fixed across every world below.
+#
+# The scratch file it can append to lives INSIDE tests/ — so `find` sees it and the content key
+# moves — and is gitignored, so the working tree stays clean and the mission does not fall back to
+# the REVIEW gate instead of reaching PR. That combination is the whole of world 8.
 i4_write_suite() {
   cat > "$FIX/tests/run-all.sh" <<EOF
 #!/usr/bin/env bash
 # Stub for the twenty-minute catalogue. cmd_health reads the score line off this stdout and the
 # suite's verdict off this exit code; both come from a control file OUTSIDE the hashed paths.
 sed -n 2p "$FIX/.sdd/logs/stub-verdict"
+if [ "\$(sed -n 3p "$FIX/.sdd/logs/stub-verdict")" = move-the-tree ]; then
+  printf 'written while the catalogue was running\n' >> "$FIX/tests/scratch.ignored"
+fi
 exit "\$(sed -n 1p "$FIX/.sdd/logs/stub-verdict")"
 EOF
   chmod +x "$FIX/tests/run-all.sh"
@@ -774,6 +784,7 @@ i4_why   "no stamp at all" "sdd health" "50-pr\.md|does not confirm"
 mkdir -p "$FIX/bin" "$FIX/.sdd/logs"
 cp "$ROOT/bin/sdd" "$FIX/bin/sdd"
 i4_write_suite
+printf 'tests/scratch.ignored\n' >> "$FIX/.gitignore"
 git add -A && git commit -qm "chore: a kit inside the fixture, so the writer can run" >/dev/null
 i4_verdict 0 "$I4_SCORE_GREEN"; i4_health
 i4_phase "sdd health over a green catalogue stamps this content" "DONE"
@@ -804,6 +815,16 @@ i4_verdict 0 "$I4_SCORE_GREEN"; i4_health
 i4_phase "green again, and the stamp comes back" "DONE"
 i4_verdict 0 "$I4_SCORE_SURVIVOR"; i4_health
 i4_phase "a score with a live survivor takes the stamp away too" "PR"
+
+# 8. WINDOW — the catalogue is green AND the measured tree moves while it runs. The real run takes
+#    twenty to fifty minutes, and the phase that types `sdd health` is the phase that also commits,
+#    so this is the widest window in the kit for a tree to shift under a measurement. A key read
+#    only AFTER the run would describe exactly what is on disk when the command ends, so the stamp
+#    would fit, the gate would open, and the green would belong to content that was never measured.
+#    The world distinguishes on its own, whatever the stamp state before it: unfixed, the stamp is
+#    written and the phase is DONE.
+i4_verdict 0 "$I4_SCORE_GREEN" move-the-tree; i4_health
+i4_phase "a tree that moved DURING the run is not stamped by the green it did not take part in" "PR"
 
 if [ "$i4_bad" -eq 0 ]; then
   pass "gate_PR: the mutation stamp is demanded only where the catalogue lives"

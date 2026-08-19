@@ -1323,7 +1323,9 @@ health_captures() {
 # 18 → 19: check 2c turns the catalogue's verdict into an artifact on disk, so the region gained
 # the `stamp_key` capture. Guarded INSIDE, `|| true`, because an empty key is not a crash here: it
 # is the branch that refuses to stamp, which is exactly what a root with nothing to measure earns.
-CAPTURE_FLOOR=19
+# 19 → 20: the same key is now read a SECOND time, before the suite runs, so the stamp can refuse a
+# tree that moved during the twenty-to-fifty-minute catalogue. Guarded identically.
+CAPTURE_FLOOR=20
 
 capture_report() {
   local out total safe offenders

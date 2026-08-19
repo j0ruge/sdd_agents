@@ -1925,6 +1925,17 @@ cmd_health() {
   # runner, four sites of this same family (this one, the score read, the provenance `find` and
   # the ratchet's baseline read); the whole point of `sdd health` is to SAY what is wrong, and the
   # red suite is the case it exists for. Guarded by the `abort:` assertions of check-health.sh.
+  # The content key read BEFORE the suite, and compared with the one read after it — because the
+  # run below takes twenty to fifty minutes, and that is the widest window in the whole kit for the
+  # tree to move underneath a measurement. Read after the run alone, the stamp would key on whatever
+  # is on disk when the command ENDS, so a commit landing during the catalogue would be handed a
+  # green it was never part of: the instrument certifying content it did not measure, which is the
+  # exact defect the stamp exists to end. Found while reviewing this block, not in production —
+  # and reachable in practice, since the phase that runs `sdd health` is the phase that also
+  # commits.
+  local stamp_key_before
+  stamp_key_before="$(mutation_stamp_key "$kit" || true)"
+
   rc=0
   # `--with-mutation`, and this command is now the ONLY caller that asks for it. The catalogue used
   # to ride inside TEST_CMD, where it held the working tree for over ten minutes per gate and made
@@ -2051,20 +2062,24 @@ cmd_health() {
   # lands on disk is "this exact tree was measured green" and never "the command was here".
   local stamp_path="$kit/$MUTATION_STAMP_REL" stamp_key
   stamp_key="$(mutation_stamp_key "$kit" || true)"
-  if [ "$catalogue_green" = 1 ] && [ -n "$stamp_key" ]; then
-    # The write is the CONDITION of the `if`, which is what keeps a read-only .sdd/ from killing
-    # the command on the line that was written to report it — the family every capture in this
-    # region carries a guard against.
-    if mkdir -p "${stamp_path%/*}" 2>/dev/null && printf '%s\n' "$stamp_key" > "$stamp_path" 2>/dev/null; then
-      ok "mutation stamp written — gate_PR can see that THIS content ran green"
-    else
-      health_bad "the mutation stamp could not be written at $stamp_path — gate_PR will go on asking for it"
-    fi
-  else
+  if [ "$catalogue_green" != 1 ] || [ -z "$stamp_key" ]; then
     # REMOVED, not merely left behind. A stamp that outlives the green it certifies is the exact
     # label this block exists to replace: it would go on telling gate_PR that a catalogue which
     # just came back red, over this very content, had been measured and was clean.
     rm -f "$stamp_path"
+  elif [ "$stamp_key" != "$stamp_key_before" ]; then
+    # The window, closed. Saying it out loud matters as much as refusing: an operator who watched
+    # a green catalogue scroll past and then finds gate_PR still asking for a stamp needs to be
+    # told that their own commit, not the catalogue, is why.
+    health_bad "the measured tree moved WHILE the catalogue was running — nothing was stamped, because the green it just reported is about content that is no longer here. Re-run once the tree stops moving."
+    rm -f "$stamp_path"
+  elif mkdir -p "${stamp_path%/*}" 2>/dev/null && printf '%s\n' "$stamp_key" > "$stamp_path" 2>/dev/null; then
+    # The write is a CONDITION and not a statement, which is what keeps a read-only .sdd/ from
+    # killing the command on the very line written to report it — the family every capture in this
+    # region carries a guard against.
+    ok "mutation stamp written — gate_PR can see that THIS content ran green"
+  else
+    health_bad "the mutation stamp could not be written at $stamp_path — gate_PR will go on asking for it"
   fi
 
   # --- 3. the TODO.md backlog count, read from the SAME run ----------------
