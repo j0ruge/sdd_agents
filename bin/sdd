@@ -1777,9 +1777,18 @@ cmd_health() {
   # the ratchet's baseline read); the whole point of `sdd health` is to SAY what is wrong, and the
   # red suite is the case it exists for. Guarded by the `abort:` assertions of check-health.sh.
   rc=0
-  out="$( cd "$kit" && tests/run-all.sh 2>&1 )" || rc=$?
+  # `--with-mutation`, and this command is now the ONLY caller that asks for it. The catalogue used
+  # to ride inside TEST_CMD, where it held the working tree for over ten minutes per gate and made
+  # the REVIEW phase unsatisfiable headless — three sessions ended their turn "waiting for the
+  # suite", which in `claude -p` is ending the session. tests/run-all.sh carries the full reasoning.
+  # Nothing was loosened: all the assertions are still demanded, here, once, by the command whose
+  # whole job is asking whether the kit still measures what it claims to.
+  out="$( cd "$kit" && tests/run-all.sh --with-mutation 2>&1 )" || rc=$?
   if [ "$rc" -eq 0 ]; then ok "suite green"; else
-    health_bad "suite red (rc $rc) — run tests/run-all.sh to see it"
+    # The flag is IN the reproduction line. Without it the operator runs the fast suite, sees green
+    # over a red the catalogue found, and concludes health is lying — the one thing this command
+    # may never be. The sentence has to name the command that reproduces what was just measured.
+    health_bad "suite red (rc $rc) — run tests/run-all.sh --with-mutation to see it"
     printf '%s\n' "$out" | tail -15 >&2
   fi
 

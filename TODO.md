@@ -39,14 +39,13 @@ Achados sobre **repos-alvo** vão para o `TODO.md` daquele repo. Este arquivo é
 
 ### Sensores que faltam
 
-- [ ] **A SUÍTE ESTÁ VERMELHA: `mut_LEDGER_repo_root_cdpath_leak` virou decoração, porque o
-  fallback conserta a sabotagem** — `tests/check-mutation.sh:363` — o mutante troca só o CAMINHO
-  RÁPIDO pela grafia antiga sem guarda; desde `75c9d2a` a guarda de forma esvazia o valor
-  envenenado e o **fallback pré-2.31 o resolve certo** com `CDPATH=''`. Medido em sandbox: sã e
-  mutante dão saída BYTE A BYTE idêntica no `check-autonomy.sh`, rc 0 nos dois, com o `sed` provado
-  antes. HEAD responde `score: 100 caught, 0 known gap(s), of 101`, rc 1. Direção: sabotar as duas
-  grafias no mesmo mutante, ou dividir em dois.
-  — descoberto por `sdd-docs` na missão `20260818-lote-facil` (2026-08-19)
+- [ ] **Nada automático roda o catálogo de mutação: sem CI, ele depende de alguém digitar
+  `sdd health`** — `tests/run-all.sh:23` — a mutação saiu do `TEST_CMD` para o `sdd health`, e este
+  repo não tem `.github/workflows/`. Medido na missão que fez a troca, e não temido: a suíte rápida
+  respondeu `suite green` rc 0 enquanto o catálogo estava vermelho em
+  `LEDGER_repo_root_cdpath_leak`, e só o `sdd health` viu. Direção: CI rodando
+  `tests/run-all.sh --with-mutation`, ou o `gate_PR` chamando `sdd health` uma vez por missão.
+  — descoberto por `humano` na missão `20260818-lote-facil` (2026-08-19)
 
 - [ ] **A regra `guard:` do `check-health.sh` conhece UMA grafia de captura e falha aberta nas
   outras** — `tests/check-health.sh:761` — o regex exige `x="$(cmd)"`; `x=$(cmd)`, crase, `$(` no

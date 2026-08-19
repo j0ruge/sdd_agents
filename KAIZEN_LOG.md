@@ -4,6 +4,61 @@ Registro de melhorias com **antes/depois medido**. Sem número, não entra.
 
 ---
 
+## 2026-08-19 — A mutação sai do `TEST_CMD`, e a fase REVIEW volta a caber numa sessão
+
+**Problema (Gemba):** a entrada abaixo mede a suíte em **17 a 21 minutos** e chama a decisão sobre
+o alvo "<30 s" da D7 de pendência do humano. Ela deixou de ser cosmética no mesmo dia: **três
+sessões de REVIEW seguidas morreram encerrando o turno com as palavras *"waiting for the suite"***.
+Numa sessão headless `claude -p`, terminar o turno **é** terminar a sessão — o agente dispara a
+suíte, a ferramenta devolve "rodando em background", ele diz "aguardando", e não há quem o acorde.
+As três tinham feito o trabalho analítico e morreram antes de commitar: **US$ 104 de revisão que
+não compraram revisão**. Observado num gate real: `tests/run-all.sh` segurando a árvore por
+**10m39s** depois de a fase que o pediu já ter terminado. A causa é estrutural e está no código —
+`tests/check-mutation.sh:1401` verifica **cada** mutante rodando a suíte inteira numa sandbox.
+
+**Contramedida:** o catálogo passa a ser **opt-in** (`tests/run-all.sh --with-mutation`) e ganha um
+dono único: o `sdd health`, que é o comando escrito para perguntar se o kit ainda mede o que diz
+medir. **Nada foi afrouxado** — as 102 asserções continuam todas, e todas continuam sendo cobradas.
+Muda **quem** cobra e **quando**. O precedente já estava escrito no `CLAUDE.md`, com o mesmo
+argumento, para a catraca do backlog.
+
+| | Antes | Depois |
+|---|---|---|
+| `TEST_CMD` — o que todo gate roda | a suíte completa | **44,3 s**, `suite green`, rc 0 |
+| suíte completa, agora só no `sdd health` | — | **298 s** (4m58), rc 0 |
+| quem cobra o catálogo | todo gate, toda fase, toda missão | `sdd health`, uma vez |
+| catálogo | `100 caught of 101` — **VERMELHO** | `102 caught, 0 known gap(s), of 102` — **verde** |
+| asserções `surface:` | 0 | **2**, com 3 probes adversariais e 1 mutação |
+
+⚠️ **O relógio, com as condições ao lado — e elas não batem.** A entrada abaixo mediu a mesma suíte
+completa em **1051,60 s e 1268,31 s**; as três medições desta seção deram **298–306 s**. É 3,4×, e
+a diferença é a máquina: aquelas foram tiradas com sessões do pipeline rodando, estas com a máquina
+parada. Nenhum dos dois números está errado e nenhum foi apagado — a nota abaixo já avisava que
+esse par oscila ~2× sob carga, e este é o terceiro ponto confirmando que **o número da suíte não é
+uma constante, é uma função da carga**. O que muda de verdade não é o relógio da suíte cheia: é que
+o **caminho crítico** (todo gate de toda fase) deixou de contê-la.
+
+**O vermelho da entrada abaixo está fechado, e o conserto foi a lição 3 dela.** O
+`mut_LEDGER_repo_root_cdpath_leak` sabotava só o caminho rápido, e o fallback pré-2.31 — que
+carrega o próprio `CDPATH=''` — reparava a sabotagem. Agora ele sabota **as duas grafias**, porque
+a propriedade defendida ("nenhum `cd` desta função lê `CDPATH`") tem dois sítios. Provado nos dois
+sentidos em sandbox fiel: controle rc 0, mutante rc 1 matando **as duas** asserções `cdpath:`.
+
+**A lacuna que este movimento abre, dita em voz alta:** este repo não tem `.github/workflows/`, então
+o catálogo passa a rodar **só quando alguém digita `sdd health`**. Não é hipótese — aconteceu dentro
+desta própria sessão: a suíte rápida respondeu `suite green` rc 0 enquanto o catálogo estava
+vermelho, e só o `sdd health` viu. Está no `TODO.md` com a direção (CI, ou `gate_PR` chamando
+`sdd health` uma vez por missão).
+
+**A lição, escrita para não renascer:** **um instrumento que não cabe na paciência de quem o roda
+deixa de ser instrumento.** O alvo "<30 s" da D7 parecia higiene e era um requisito de
+funcionamento: passado certo limite, a suíte não fica "lenta" — ela torna uma fase inteira
+**insatisfazível**, e o modo de falha não se parece com lentidão, se parece com um agente
+desistindo. O sintoma custou US$ 104 e três sessões antes de alguém perguntar quanto tempo a suíte
+levava. Instrumento tem orçamento de tempo como tem orçamento de dinheiro, e ele se mede.
+
+---
+
 ## 2026-08-19 — O `sdd health` para de morrer calado, duas classes somem do repo, e o lote barato prova que barato não é
 
 **Problema (Gemba):** o comando que existe para responder *"o kit ainda mede o que diz medir?"*
@@ -48,6 +103,11 @@ mutante dão saída **byte a byte idêntica** no `check-autonomy.sh`, rc 0 nas d
 decoração — o modo de falha que o catálogo existe para pegar, e ele pegou. **Três medições
 independentes**, não uma: duas suítes completas (rc 1, `100 of 101`, sempre o MESMO sobrevivente) e
 o par diferencial em sandbox. Registrado no `TODO.md` com a reprodução; a linha para aqui.
+
+> **FECHADO** pela entrada de cima, no mesmo dia e na mesma branch: o mutante passou a sabotar as
+> duas grafias e o catálogo voltou a `102 caught, 0 known gap(s), of 102`, rc 0. O parágrafo acima
+> fica como está — ele é o registro de que o instrumento pegou a si mesmo, e apagá-lo trocaria a
+> prova pelo resultado.
 
 **Custo:** **US$ 176,48** em 11 sessões de fase (5 EXEC + 1 re-entrada + 1 QA + 4 REVIEW), contra
 US$ 48–88 das seis missões anteriores do kit sobre si mesmo. **Duas a três vezes mais caro**, e o

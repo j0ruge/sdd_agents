@@ -360,8 +360,21 @@ mut_LEDGER_repo_root_common_parent() {
 # only thing that can catch it is the poisoned-CDPATH differential pair in check-autonomy.sh, and
 # the pair carries its own floor proving the poison is armed. A mutant that any assertion could
 # catch would prove nothing about the two that were written for this.
+# ⚠️ BOTH spellings, in one mutant, and that is the whole repair of this entry.
+#
+# It sabotaged only the FAST path, and `75c9d2a` made that a no-op: the shape guard empties a
+# poisoned value and the pre-2.31 FALLBACK — which carries its own `CDPATH=''` — then resolves it
+# correctly. Sane and mutant answered BYTE FOR BYTE the same, rc 0 both, so the entry sat in the
+# catalogue certifying a protection nothing was measuring. Reported as `is NOT caught`, which is
+# the catalogue doing its job on itself.
+#
+# Splitting it in two was the other direction the finding offered, and it is the wrong one HERE:
+# a fast-path-only mutant stays neutralised by the fallback no matter which entry it lives under.
+# The property being defended is "no `cd` in this function reads CDPATH", and that property has
+# two sites, so the sabotage has two sites.
 mut_LEDGER_repo_root_cdpath_leak() {
   sed -i 's@^  gitdir="\$( git -C "\$start" rev-parse --path-format=absolute --git-common-dir 2>/dev/null )" || return 0$@  local rel; rel="$( git -C "$start" rev-parse --git-common-dir 2>/dev/null )"; gitdir="$( cd "$start" \&\& cd "$rel" \&\& pwd -P 2>/dev/null )" || return 0@' "$1"
+  sed -i 's@CDPATH='"''"' cd "\$start" && CDPATH='"''"' cd "\$common"@cd "$start" \&\& cd "$common"@' "$1"
 }
 
 # The bare test goes back to asking about the ENTRY POINT instead of the repository, and one
@@ -1034,6 +1047,25 @@ mut_HEALTH_score_read_aborts() {
   sed -i "s@grep -m1 '^score: ' <<< \"\$out\" || true@grep -m1 '^score: ' <<< \"\$out\"@" "$1"
 }
 
+# `sdd health` stops asking the suite for the catalogue — and since the catalogue left TEST_CMD,
+# health is the ONLY caller that asks. Nobody else runs it; there is no CI in this repo.
+#
+# The expensive part is how quietly it fails. health still prints `suite green`, still finds no
+# `score:` line, and still says `health went blind to the mutation` — a sentence that reads as an
+# accusation against check-mutation.sh for a defect living in this very line. An operator would go
+# looking in the wrong file while 101 assertions sat unrun.
+#
+# Caught by `surface: cmd_health asks the suite for the mutation catalogue` in check-health.sh,
+# which reads the argv the stub suite RECORDED rather than the text of this call.
+# ⚠️ `2>\&1` and not `2>&1`: an unescaped `&` in a sed REPLACEMENT means "the whole match", so the
+# naive form expands to `2>tests/run-all.sh --with-mutation 2>&11` — still valid bash, so `bash -n`
+# passes it and the harness accepts the mutant. It killed the assertion, but as garbage killing ten
+# of them, not as this defect killing one. Red for the wrong reason is the one verdict this
+# catalogue may never take: it certifies an assertion that was never the thing measuring.
+mut_HEALTH_suite_without_mutation() {
+  sed -i 's@tests/run-all.sh --with-mutation 2>\&1@tests/run-all.sh 2>\&1@' "$1"
+}
+
 # Provenance goes back to dying on a machine that has no plugins cache. `find` on a missing
 # directory returns 1, pipefail carries it, and the assignment takes the runner down three ok
 # lines in — no provenance, no ratchet, no verdict. Not a hypothetical machine: any box where the
@@ -1318,6 +1350,7 @@ CATALOG=(
   HEALTH_todo_count_blind
   HEALTH_suite_capture_aborts
   HEALTH_score_read_aborts
+  HEALTH_suite_without_mutation
   HEALTH_provenance_find_aborts
   HEALTH_baseline_read_aborts
   HEALTH_ratchet_eats_verdict

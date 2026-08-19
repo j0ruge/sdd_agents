@@ -157,6 +157,13 @@ write_stub_suite() { # write_stub_suite <with-count|no-count> [with-score|no-sco
 #!/usr/bin/env bash
 # Stub suite. See the RECURSION note in tests/check-health.sh: the real one runs that file, which
 # runs this command, which would run the real one.
+#
+# It records its own argv, and that file is the whole evidence of the "surface:" assertion below:
+# what cmd_health ACTUALLY passed, read off the call itself. A grep over bin/sdd would certify the
+# TEXT of an invocation rather than the invocation — green for a call that moved, or that a second
+# code path bypasses. Written by the stub because the stub is the only witness standing where the
+# argument arrives.
+printf '%s\n' "\$*" > "$FIX/tests/stub-argv.txt"
 $score_line
 $count_line
 exit $rc
@@ -715,6 +722,140 @@ PROBE_OUT="$( policy_report "$PROBE_ROOT" 2>&1 )"; PROBE_RC=$?
   || broken "the policy verdict reported rc $PROBE_RC over a world where both documents state the policy — a rule that refuses every world distinguishes nothing"
 
 policy_report "$ROOT"
+
+# ---------------------------------------------------------------------------
+# surface: the mutation catalogue is opt-in, and `sdd health` is the one caller that opts in
+#
+# The catalogue used to ride inside TEST_CMD. Measured, on this machine, with nothing else on it:
+# one gate's suite held the working tree for over ten minutes. That is not a comfort problem — it
+# made a PHASE unsatisfiable. Three REVIEW sessions of 20260818-lote-facil in a row ended their
+# turn with the words "waiting for the suite", and in a headless `claude -p` session ending the
+# turn IS ending the session; nobody wakes it up. US$ 104 of review bought no review.
+#
+# So the catalogue moved to `sdd health`. NOTHING WAS LOOSENED — every assertion is still demanded,
+# once, by the command whose whole job is asking whether the kit still measures what it claims to.
+# What these three assertions hold shut is the pair of ways that sentence could quietly stop being
+# true, and they are opposite ways:
+#
+#   1. the fast suite grows the catalogue back        → gates go back to ten minutes
+#   3. `sdd health` stops asking for it               → NOBODY runs it, and the kit goes blind
+#
+# 3 is the expensive one and it is silent: `sdd health` would still print `suite green`, still find
+# no `score:` line, and say `health went blind to the mutation` — accusing check-mutation.sh of a
+# defect that lives in its own caller. 2 is what keeps 1 and 3 from being satisfiable by a
+# degenerate `--list`: the two lists compared against EACH OTHER, differing by exactly one line.
+#
+# `^mutation: ` is a contract across two files, like the `score:` line already is: tests/run-all.sh
+# names the step, this file reads the name. Reword either alone and the suite goes red.
+#
+# Rules 1 and 2 are OUT OF THE CATALOGUE'S REACH and that is structural, not an oversight:
+# check-mutation.sh sabotages `$box/bin/sdd` and only that (line ~1393), so no mutant can degrade
+# tests/run-all.sh. A mutant that turned the step on unconditionally would also be caught for the
+# WRONG reason — inside the sandbox it would recurse into check-mutation.sh, whose twin guard kills
+# the suite, proving the recursion guard rather than these rules. So they carry probes of their
+# own, below, in this file's `broken()` idiom. Rule 3 IS reachable, and is the one that gets a
+# catalogue entry (mut_HEALTH_suite_without_mutation).
+# ---------------------------------------------------------------------------
+SURFACE_MUTATION_STEP='^mutation: '
+
+# Anti-vacuity only, and deliberately NOT the real step count. A `--list` that prints nothing would
+# satisfy "the plain suite does not carry the mutation step" while measuring exactly nothing; this
+# floor is what refuses that. It is not a shrink detector — LINT_FLOOR in run-all.sh and the
+# surface floors of check-pipefail.sh and check-lang.sh already own that question, and making a
+# fourth place track the sensor count would add a fifth file to the "four places that are really
+# five" CLAUDE.md already warns about. Raise it only if it ever stops refusing an empty list.
+SURFACE_FLOOR=10
+
+surface_lists() { # surface_lists <run-all.sh> — PUBLISHES SURFACE_PLAIN / SURFACE_FULL
+  # Published in globals and called, never read through `x="$(...)"`: the house rule, and the same
+  # subshell trap health_run above carries the comment for.
+  #
+  # ⚠️ `env -u SDD_MUTANT`, and it is not defensive noise — without it this rule fails inside every
+  # mutant AND inside the control, which is how it was found. This file is NOT guarded out of the
+  # mutants, so it runs with SDD_MUTANT=1 exported; run-all.sh then lists only the nine behavioural
+  # steps (below the floor) and skips the catalogue step in BOTH lists (so nothing is ever added).
+  # check-mutation.sh's control run went red and died before printing `score:`, and `sdd health`
+  # reported `went blind to the mutation` — accusing the catalogue of a defect that was here.
+  # The property is about the composition of a NORMAL run, so the probe has to ask a normal one.
+  SURFACE_PLAIN="$( env -u SDD_MUTANT "$1" --list 2>/dev/null )"
+  SURFACE_FULL="$(  env -u SDD_MUTANT "$1" --list --with-mutation 2>/dev/null )"
+}
+
+# 0 = rules 1 and 2 both hold over the published lists. ONE definition, read by the verdict on the
+# real file AND by every probe below — a second copy for the probes would let the two drift, and
+# the probes would then certify a rule nobody runs.
+surface_rules_hold() {
+  local n added removed
+  n="$(grep -c . <<< "$SURFACE_PLAIN" || true)"
+  [ "$n" -ge "$SURFACE_FLOOR" ] || return 1
+  # Rule 1: the fast suite does not carry the step.
+  ! grep -qE "$SURFACE_MUTATION_STEP" <<< "$SURFACE_PLAIN" || return 1
+  # Rule 2: --with-mutation adds it, and adds ONLY it. `removed` is not decoration — without it a
+  # degradation that SWAPS one step for the mutation step would satisfy "exactly one added".
+  added="$(comm -13 <(sort <<< "$SURFACE_PLAIN") <(sort <<< "$SURFACE_FULL"))"
+  removed="$(comm -23 <(sort <<< "$SURFACE_PLAIN") <(sort <<< "$SURFACE_FULL"))"
+  [ -z "$removed" ] || return 1
+  [ "$(grep -c . <<< "$added" || true)" -eq 1 ] || return 1
+  grep -qE "$SURFACE_MUTATION_STEP" <<< "$added" || return 1
+  return 0
+}
+
+# --- the probes, and each one proves it sabotaged what it says it sabotaged -----------------
+# A probe whose edit did not land concludes "the rule survives" over a file it never changed. Two
+# rounds of this house have made exactly that mistake, so the anchor is CODE and a miss is loud.
+SURF="$WORK/surface"
+mkdir -p "$SURF/tests"
+
+surface_degrade() { # surface_degrade <sed-expression> <what it should have changed>
+  cp "$ROOT/tests/run-all.sh" "$SURF/tests/run-all.sh"
+  sed -i "$1" "$SURF/tests/run-all.sh"
+  cmp -s "$ROOT/tests/run-all.sh" "$SURF/tests/run-all.sh" \
+    && broken "surface probe '$2' changed nothing — the anchor rotted, and a probe over an unedited file proves nothing"
+  bash -n "$SURF/tests/run-all.sh" 2>/dev/null \
+    || broken "surface probe '$2' left run-all.sh invalid — a rule cannot be measured against a file that will not parse"
+  surface_lists "$SURF/tests/run-all.sh"
+}
+
+# The control FIRST: a degraded world means nothing if the pristine copy does not pass.
+cp "$ROOT/tests/run-all.sh" "$SURF/tests/run-all.sh"
+surface_lists "$SURF/tests/run-all.sh"
+surface_rules_hold \
+  || broken "the pristine copy of run-all.sh fails its own surface rules — the probes below would all be vacuous"
+
+surface_degrade 's/^\[ -n "${SDD_MUTANT:-}" \] || \[ "$WITH_MUTATION" = 0 \] \\$/[ -n "${SDD_MUTANT:-}" ] \\/' 'mutation step unconditional'
+surface_rules_hold \
+  && broken "the surface rules passed a suite that runs the catalogue WITHOUT being asked — rule 1 is decoration"
+
+surface_degrade 's/^    --with-mutation) WITH_MUTATION=1 ;;$/    --with-mutation) WITH_MUTATION=0 ;;/' '--with-mutation does nothing'
+surface_rules_hold \
+  && broken "the surface rules passed a suite where --with-mutation adds nothing — rule 2 is decoration"
+
+surface_degrade 's/^  if \[ "$LIST_ONLY" = 1 \]; then printf .%s.n. "$1"; return 0; fi$/  if [ "$LIST_ONLY" = 1 ]; then return 0; fi/' 'a --list that prints nothing'
+surface_rules_hold \
+  && broken "the surface rules passed an empty --list — the anti-vacuity floor is decoration"
+
+# --- the verdict, on the real file ----------------------------------------------------------
+surface_lists "$ROOT/tests/run-all.sh"
+if surface_rules_hold; then
+  pass 'surface: the plain suite does not carry the mutation step, and --with-mutation adds only it'
+else
+  fail 'surface: the plain suite does not carry the mutation step, and --with-mutation adds only it' \
+       "at least $SURFACE_FLOOR steps listed, none matching ${SURFACE_MUTATION_STEP}, and exactly one added by --with-mutation" \
+       "plain: $(grep -c . <<< "$SURFACE_PLAIN" || true) step(s) · full: $(grep -c . <<< "$SURFACE_FULL" || true) step(s)"
+fi
+
+# Rule 3, read off the CALL and not off the text of bin/sdd. The stub records its own argv; this
+# reads what cmd_health actually handed it.
+green_world
+health_run
+SURFACE_ARGV="$(cat "$FIX/tests/stub-argv.txt" 2>/dev/null || true)"
+if grep -qF -- '--with-mutation' <<< "$SURFACE_ARGV"; then
+  pass 'surface: cmd_health asks the suite for the mutation catalogue'
+else
+  fail 'surface: cmd_health asks the suite for the mutation catalogue' \
+       "the stub suite receives --with-mutation from cmd_health" \
+       "argv was '${SURFACE_ARGV:-<the stub was never called>}' — with no catalogue in TEST_CMD, nothing else runs it"
+fi
 
 # ---------------------------------------------------------------------------
 # guard: no capture in the `sdd health` region may abort the run
