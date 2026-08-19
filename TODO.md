@@ -78,13 +78,6 @@ Achados sobre **repos-alvo** vão para o `TODO.md` daquele repo. Este arquivo é
   branch carrying an OLDER copy"). Direção: comparar hash do artefato antes e depois do checkout.
   — descoberto por `sdd-reviewer` na missão `20260816-portas-do-humano` (2026-08-17)
 
-- [ ] **O `die` de artefato faltando do `sdd approve` é regra sem probe** — `bin/sdd:1842` — o
-  comando repete o diagnóstico do `gate_PLAN` (`missing 01-plano.md`) e morre antes de imprimir
-  qualquer coisa; os cinco fixtures de approve carregam sempre os três artefatos, então trocar o
-  `die` por um `return 0` deixa a suíte inteira verde e o comando passa a commitar aprovação de uma
-  missão sem plano. Direção: um sexto fixture só com `00-missao.md`, nomeado fora dos prefixos
-  contados. — descoberto por `sdd-reviewer` na missão `20260816-portas-do-humano` (2026-08-16)
-
 - [ ] **A linha `N kit agent(s) checked` não é observável por nenhum fixture** — `bin/sdd:1356` —
   ela só sai com `fails -eq 0`, e todo fixture offline reprova antes (o probe do `claude` e o
   `gh auth status`). O I3 provou o ramo de falha por diferencial, mas o ramo de sucesso — a frase
@@ -225,13 +218,6 @@ Achados sobre **repos-alvo** vão para o `TODO.md` daquele repo. Este arquivo é
   179). Patch e repros: [handoff](docs/handoffs/20260816-todo-enxuto/r12-caixa-partida.md).
   — descoberto por `revisao-adversarial` na 12ª rodada de revisão do sensor (2026-08-16)
 
-- [ ] **A suíte não exercita `--max-phases`, e ele custa uma avaliação de gate a mais** —
-  `bin/sdd:1489-1498` vs `:1369` — o gate roda e escreve a linha do ledger **antes** de checar o
-  limite, de propósito (a última fase projetada ainda ganha registro), mas o `TEST_CMD` extra na
-  última iteração nunca foi medido: a flag não aparece em nenhum dos três sensores de runner.
-  Direção: caso com `--max-phases 1` afirmando uma linha de ledger e a mensagem "reached".
-  — descoberto por `sdd-reviewer` na missão `20260815-i13.1-autonomy-log` (2026-08-15)
-
 - [ ] **A economia de `current_phase()`/`next_pending_phase()` depende da memoização e ninguém
   conta** — `bin/sdd:475-492` vs `:193-210` — as duas reavaliam o gate de toda fase a cada
   chamada, e isso só é barato porque `run_check_cmd` cacheia por `$cmd`. Quem mexer em **quando**
@@ -240,25 +226,11 @@ Achados sobre **repos-alvo** vão para o `TODO.md` daquele repo. Este arquivo é
   o número de fases pendentes. — descoberto por `sdd-reviewer` na missão
   `20260815-i13.1-autonomy-log` (2026-08-15)
 
-- [ ] **O fallback `"?"` de `cost_usd` nunca é exercitado** — `bin/sdd:852` vs `:794` — todo stub
-  `claude` da suíte escreve log **vazio**, então o campo chega `""` ao `jq`, não a string `"?"`
-  que o fallback produz quando o JSON é válido mas não traz custo. O caminho que o fallback
-  existe para cobrir segue sem sensor. Direção: stub que emita `{"other_field": 1}` afirmando
-  `cost_usd == null` no ledger. — descoberto por `sdd-reviewer` na missão
-  `20260815-i13.1-autonomy-log` (2026-08-15)
-
 - [ ] **A asserção "the retry carries its own moved" não falha pela propriedade que promete** —
   `tests/check-autonomy.sh:208` — no fixture, `moved` sai `false` com qualquer baseline: o retry
   só é alcançado quando `before == after`, então a asserção nunca observa um `moved:true` genuíno
   pelo caminho real. Ainda pega campo ausente ou `moved` sempre-`true`; só o nome discrimina mais
   do que ela. — descoberto por `/codereview` na missão `20260815-i13.1-autonomy-log` (2026-08-15)
-
-- [ ] **O `moved` do `cmd_kaizen` não tem asserção, logo não pode ter mutação** — `bin/sdd:3103` —
-  as outras duas cópias de `[ "$before" != "$after" ] && moved="true"` ganharam mutação nesta
-  missão (`cmd_run`, `cmd_retry`); esta foi sabotada à mão e `check-kaizen.sh` **e**
-  `check-autonomy.sh` ficaram verdes. Sessão de KAIZEN que move o disco entra no ledger como
-  desperdício. Direção: a asserção primeiro, a entrada do catálogo depois.
-  — descoberto por `sdd-executor` na missão `20260817-catraca-do-backlog` (2026-08-17)
 
 - [ ] **O schema da série não tem sensor de drift contra a prosa que o descreve** — `bin/sdd:2738`
   vs `:2735`, `:2926`, `docs/pipeline.md:501`, `docs/adr/0003:57`, `agents/sdd-kaizen.md:40` e
@@ -355,14 +327,6 @@ Achados sobre **repos-alvo** vão para o `TODO.md` daquele repo. Este arquivo é
   inglesa com prosa-guia que o agente reescreve — a segunda mexe no contrato que
   `check-templates.sh` mede, então vem depois da entrada acima. — descoberto por `humano` na
   missão `20260815-i13.5-kit-em-ingles` (2026-08-15)
-
-- [ ] **Duas das três comparações de `health_provenance` não têm fixture nem mutação** —
-  `bin/sdd:1829` (qa-execution) e `:1850` (a tabela de notas do codereview) — só a de `qa-report`
-  tem template instalado pelo fixture de `tests/check-health.sh`, então as outras duas ficam
-  permanentemente no ramo "skipped" e nada mede se ainda discriminam. A do codereview é a mais
-  exposta: é um laço `awk` de forma diferente das outras duas, e nenhuma `mut_HEALTH_*` a alcança.
-  Direção: um par match/divergência para cada, como a asserção 4 já faz.
-  — descoberto por `sdd-reviewer` na missão `20260817-catraca-do-backlog` (2026-08-17)
 
 - [ ] **A regra `cdpath:` certifica como limpo o `cd` de operando VARIÁVEL** —
   `tests/check-pipefail.sh:131` (o comentário do `CD_RE` declara o limite) — a regra só mede

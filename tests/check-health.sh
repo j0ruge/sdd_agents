@@ -34,6 +34,9 @@
 #   12. the ratchet policy is written where the next mission meets it — CLAUDE.md and TODO.md. The
 #      one rule here that no mut_HEALTH_* can reach, since none of them can make a document say
 #      less, so it carries probes of its own over all three of its layers.
+#   13. the OTHER two provenance comparisons, prefixed `covered:` — the qa-execution report and the
+#      codereview grade table. Assertion 4 reaches one of the three; these two sat permanently on
+#      the `skipped` branch, so either could have been `if true` with this file fully green.
 #
 # Usage: tests/check-health.sh   (exit 0 = cmd_health discriminates)
 #
@@ -92,7 +95,7 @@ broken() { printf '  SENSOR-BROKEN  %s\n' "$1" >&2; exit 90; }
 # The verdict-relevant lines of an output, flattened onto one line for a FAIL report. It carries
 # the suite/score/gates lines too, and not only the ratchet's: the `abort:` assertions are ABOUT
 # what the run stopped saying, so a digest that dropped those would report the silence as silence.
-digest() { grep -E 'suite (green|red)|blind|gates have a mutation|baseline|provenance|finding count|kit healthy|check\(s\) failed' <<< "$1" | tr '\n' ' '; }
+digest() { grep -E 'suite (green|red)|blind|gates have a mutation|baseline|provenance|finding count|kit healthy|check\(s\) failed|diverged from the skill|grade table has a criterion' <<< "$1" | tr '\n' ' '; }
 
 # ---------------------------------------------------------------------------
 # The fixture
@@ -169,6 +172,33 @@ install_bug_skill() { # install_bug_skill <status line>
   mkdir -p "$dir"
   printf '%s\n' '# BUG-<n> — <title>' '' "$1" > "$dir/bug-template.md"
 }
+
+# The qa-execution report template — health_provenance's FIRST comparison, and one of the two
+# nothing ever installed. Same decision as install_bug_skill and for the same reason: the content
+# is DERIVED from the check-gates.sh fixture, never typed here. A template written from memory is
+# the exact defect provenance exists to catch, and this sensor would end up confirming the
+# assumption instead of measuring it.
+install_report_skill() { # install_report_skill <the '- **Started:**' line>
+  local dir="$FIX/home/.claude/skills/qa-execution/assets"
+  mkdir -p "$dir"
+  printf '%s\n' '# QA execution report' '' "$1" > "$dir/report-template.md"
+}
+
+# The codereview grade table — the THIRD comparison, and the one no mut_HEALTH_* could reach: it
+# is a loop of a different shape from the other two. The path spells out what health_provenance's
+# `find -path '*/codereview/*/references/report-template.md'` matches, and mirrors the real cache
+# layout (…/<marketplace>/codereview/<version>/skills/codereview/references/). The table itself is
+# the check-gates.sh fixture's own, read off the file — see GRADE_TABLE below.
+install_codereview_skill() { # install_codereview_skill <extra table row, or "">
+  local dir="$FIX/home/.claude/plugins/cache/fixture-marketplace/codereview/1.13.0/skills/codereview/references"
+  mkdir -p "$dir"
+  {
+    printf '%s\n' "$GRADE_TABLE"
+    [ -n "$1" ] && printf '%s\n' "$1"
+    printf '\n## Grading Scale\n'
+  } > "$dir/report-template.md"
+}
+
 clear_skills() { reset_home; }
 
 HEALTH_OUT=""
@@ -294,6 +324,92 @@ else
   fail "provenance fails when the fixture diverges from an installed skill" \
        "the diverged template fails with 'bug fixture diverged from the skill' and the matching one does not" \
        "matching: rc $RC_PROV_OK · $(digest "$OUT_PROV_OK") // diverged: rc $RC_PROV_BAD · $(digest "$OUT_PROV_BAD")"
+fi
+
+# ---------------------------------------------------------------------------
+# 13 — the other two provenance comparisons, which nothing ever reached
+#
+# health_provenance compares THREE fixtures against three installed skills, and until this
+# assertion exactly one of them — the qa-report bug template of assertion 4 — had a fixture that
+# got that far. The other two stayed permanently on the `skipped` branch, because no test in the
+# repo ever installed a qa-execution report template or a codereview grade table: both comparisons
+# could have read `if true` for a whole mission with every assertion in this file green. The
+# catalogue says so in as many words — mut_HEALTH_provenance_blind is range-addressed to the one
+# half that could honestly carry a mutation, and names the other two as an open finding.
+#
+# ONE assertion over FOUR worlds, because it is ONE property: a fixture that drifted from the
+# skill it copies is reported, and one that matches is not. Each half is differential in BOTH
+# directions — its own sentence present, the sibling comparison's sentence absent — so a
+# provenance that started shouting every sentence in every world fails here instead of passing on
+# the strength of the one it got right.
+#
+# The two worlds install ONE skill each rather than both at once, and that is what makes the
+# absence half mean something: with both installed, "the grade-table sentence is absent" would be
+# satisfied by a grade table that simply happens to match, not by a comparison that stayed quiet.
+# ---------------------------------------------------------------------------
+# The `- **Started:**` line as bin/sdd normalises it. `<ISO timestamp>` is the SKILL's own
+# placeholder (qa-execution/assets/report-template.md), which is why normalising the fixture's
+# concrete timestamp lands on the installed skill's line byte for byte — that equality is the
+# contract, and the case below refuses to install a template that could never satisfy it.
+PROV_REPORT_LINE="$(grep -m1 -- '- \*\*Started:\*\*' "$ROOT/tests/check-gates.sh" \
+                    | sed 's/2026-01-01T10:00:00Z/<ISO timestamp>/')"
+case "$PROV_REPORT_LINE" in
+  *'<ISO timestamp>'*) : ;;
+  *) broken "the check-gates.sh '- **Started:**' line no longer carries the timestamp bin/sdd normalises ('$PROV_REPORT_LINE') — the match world would install a template that can never agree, and the assertion would be red for the fixture instead of for the runner" ;;
+esac
+
+# The fixture's OWN grade table, copied out whole: header, separator, every criterion row and the
+# `**Overall**` row, which is the shape the real plugin ships (report-template.md:163-172,
+# chewiesoft-marketplace/codereview). Copied rather than re-derived so this file does not carry a
+# second implementation of the runner's criterion parser — what is under test is whether cmd_health
+# compares the criteria at all, not how they are spelled.
+GRADE_TABLE="$(awk '/^\| Criterion \| Grade/ { t = 1 }
+                    t && substr($0, 1, 1) != "|" { exit }
+                    t { print }' "$ROOT/tests/check-gates.sh")"
+# Anti-vacuity: with an empty (or one-row) table the runner's loop runs over nothing, `missing`
+# stays empty, and the matching world would be green for having measured nothing at all.
+GRADE_ROWS="$(grep -c . <<< "$GRADE_TABLE")"
+[ "$GRADE_ROWS" -ge 5 ] \
+  || broken "check-gates.sh no longer carries a grade table of at least 5 rows (got $GRADE_ROWS) — the criteria loop would run over nothing and the codereview half would pass by vacuity"
+
+# A criterion check-gates.sh cannot contain: the divergence has to be a criterion the fixture does
+# NOT cover, and any real one would be covered by construction.
+UNKNOWN_CRITERION='Fixture Criterion Nobody Ever Graded'
+
+clear_skills
+set_baseline "$CALIBRATED"
+install_report_skill "$PROV_REPORT_LINE"
+health_run
+OUT_REP_OK="$HEALTH_OUT"; RC_REP_OK="$HEALTH_RC"
+
+clear_skills
+install_report_skill "$PROV_REPORT_LINE  <!-- and one column the fixture never had -->"
+health_run
+OUT_REP_BAD="$HEALTH_OUT"; RC_REP_BAD="$HEALTH_RC"
+
+clear_skills
+install_codereview_skill ""
+health_run
+OUT_CR_OK="$HEALTH_OUT"; RC_CR_OK="$HEALTH_RC"
+
+clear_skills
+install_codereview_skill "| $UNKNOWN_CRITERION | A | fixture |"
+health_run
+OUT_CR_BAD="$HEALTH_OUT"; RC_CR_BAD="$HEALTH_RC"
+
+if [ "$RC_REP_OK" -eq 0 ] && ! grep -q 'diverged from the skill' <<< "$OUT_REP_OK" \
+   && [ "$RC_REP_BAD" -ne 0 ] \
+   && grep -q 'report fixture diverged from the skill' <<< "$OUT_REP_BAD" \
+   && ! grep -q 'grade table has a criterion' <<< "$OUT_REP_BAD" \
+   && [ "$RC_CR_OK" -eq 0 ] && ! grep -q 'grade table has a criterion' <<< "$OUT_CR_OK" \
+   && [ "$RC_CR_BAD" -ne 0 ] \
+   && grep -qF "grade table has a criterion the fixture does not cover: '$UNKNOWN_CRITERION'" <<< "$OUT_CR_BAD" \
+   && ! grep -q 'diverged from the skill' <<< "$OUT_CR_BAD"; then
+  pass "covered: the report and the grade table are compared too, not only the bug fixture"
+else
+  fail "covered: the report and the grade table are compared too, not only the bug fixture" \
+       "the matching worlds rc 0 and silent, the drifted report says only 'report fixture diverged from the skill', the drifted table says only 'grade table has a criterion the fixture does not cover: $UNKNOWN_CRITERION'" \
+       "report match: rc $RC_REP_OK · $(digest "$OUT_REP_OK") // report drift: rc $RC_REP_BAD · $(digest "$OUT_REP_BAD") // table match: rc $RC_CR_OK · $(digest "$OUT_CR_OK") // table drift: rc $RC_CR_BAD · $(digest "$OUT_CR_BAD")"
 fi
 
 # ---------------------------------------------------------------------------

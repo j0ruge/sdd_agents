@@ -560,6 +560,34 @@ mut_RUN_stream_summary_fatal() {
   sed -i "s@jq -c 'select(.type == \"result\")' \"\$1\" 2>/dev/null | tail -1 || true@jq -c 'select(.type == \"result\")' \"\$1\" 2>/dev/null | tail -1@" "$1"
 }
 
+# The journal stops naming an unknown cost, half one of two: an answer that carries no money makes
+# jq print its own `null`, and the run files that word in the money column as if the CLI had said
+# it. The ledger cannot notice — `($cost | tonumber? // null)` maps "?", "null" and "" to the same
+# null — so this is a defect only the human reading pipeline.log ever meets, which is exactly the
+# kind this catalogue keeps letting through. Caught by the `covered:` cost assertion of
+# check-autonomy.sh and by nothing else in that file.
+mut_RUN_cost_absent_unlabelled() {
+  sed -i 's@ // "?"@@' "$1"
+}
+
+# Half two, and a separate entry because it is a separate guard for a separate shape: a session with
+# no terminal `result` leaves an EMPTY summary, jq exits 0 having printed nothing, and the `|| echo
+# "?"` above it never fires because nothing failed. The journal line came out `cost_usd=  log=…`,
+# an unlabelled hole where every other row says `?`. Replaced by `true` rather than deleted, so the
+# shape of the function is untouched and only the fallback dies.
+mut_RUN_cost_empty_unlabelled() {
+  sed -i 's@^  \[ -n "$cost" \] || cost="?"$@  true@' "$1"
+}
+
+# `--max-phases` stops stopping. The option still parses and still counts; the run simply keeps
+# going and opens every session the pipeline has left — the human who asked for ONE session to look
+# at the result gets the whole pipeline instead. The branch is left whole and only its condition
+# dies, so the mutant is a runner that reads the flag and ignores it, which is what a regression
+# here would actually look like.
+mut_RUN_max_phases_ignored() {
+  sed -i 's@^    if \[ "$max_phases" -gt 0 \] && \[ "$phases_run" -ge "$max_phases" \]; then$@    if false; then@' "$1"
+}
+
 # The watcher's exit status overwrites the session's. The tempting one-liner — `wait` without the
 # `|| true`, or with its status kept — and the phase then reports how the WATCHER died instead of
 # how the session did: journal and ledger record a green phase for a failed one.
@@ -719,6 +747,21 @@ mut_RUN_approve_writes_auto() {
 # indented.
 mut_RUN_approve_bails_on_kaizen_born() {
   sed -i '/^cmd_approve() {/,/^}/ s@^      if ! plan_approves_itself; then$@      if true; then@' "$1"
+}
+
+# `sdd approve` stops refusing a mission whose plan is not on disk: the guard still asks gate_PLAN
+# and still tests the reason, it simply does nothing about it. The command then previews, writes
+# `aprovacao: humano-<today>` and commits — an approval of a mission that is one file, with the
+# next `sdd run` opening an EXEC session over no plan and no increments.
+#
+# `:` and not a deletion: the `then` needs a body, and a mutant that dies of bash scores a point
+# for a door that was never opened. Range-addressed to cmd_approve because `die "$GATE_WHY"` is
+# also how cmd_kaizen refuses an unreadable ledger, and an unaddressed sed would sabotage the two
+# commands at once. Caught by the `covered:` assertion of check-gates.sh and by nothing else —
+# measured, and unsurprising: every other approve fixture ships the three artifacts, so gate_PLAN
+# never answers `missing ` for them.
+mut_RUN_approve_no_plan_blind() {
+  sed -i '/^cmd_approve() {/,/^}/ s@; then die "$GATE_WHY"; fi@; then :; fi@' "$1"
 }
 
 # The runner stops reading the `branch:` field — the state the kit lived in until this mission, and
@@ -883,11 +926,33 @@ mut_HEALTH_ratchet_one_way() {
 # `sed` sabotages BOTH and this single entry silently becomes two — the "one mutation, one line"
 # discipline of this file broken, and, worse, a dedicated entry for the qa-execution comparison
 # made impossible to ever score, because this one would already be killing it. Caught in the r1
-# review of 20260817-catraca-do-backlog. Only the qa-report half has a fixture in
-# tests/check-health.sh today, so only that half can honestly carry a mutation; the other two
-# comparisons are an open TODO.md finding, not a point this catalogue may claim.
+# review of 20260817-catraca-do-backlog. The two entries below are the other two comparisons,
+# which used to be an open TODO.md finding for exactly this reason: no fixture installed the skills
+# they read, so neither could honestly carry a mutation. Now that both have one, the range here
+# earns its keep three times over.
 mut_HEALTH_provenance_blind() {
   sed -i '/# registry bug: the Status line/,/# codereview grade table/ s|    if \[ "\$line" = "\$fix" \]; then checked|    if true; then checked|' "$1"
+}
+
+# The FIRST of the three comparisons goes blind: the qa-execution report fixture agrees with any
+# template the skill ships. Range-addressed for the same reason as the entry above and against the
+# same byte-identical line — this one takes the half BEFORE the qa-report branch.
+#
+# Caught by the `covered:` assertion of check-health.sh and by nothing else, measured one mutant at
+# a time: assertion 4 reads the qa-report comparison, which this leaves untouched, and every other
+# assertion in that file runs with no skill installed at all.
+mut_HEALTH_report_provenance_blind() {
+  sed -i '/# qa-execution report: the Status line/,/# registry bug: the Status line/ s|    if \[ "\$line" = "\$fix" \]; then checked|    if true; then checked|' "$1"
+}
+
+# The THIRD comparison goes blind: the codereview grade table may grow a criterion the gate fixture
+# never covers and `sdd health` says nothing. It is not a `$line = $fix` twin — it is a loop that
+# collects the uncovered criteria and then judges — so it needs its own sabotage, and the verdict
+# is where it goes: the loop keeps running and the finding is simply never spoken. Left as an `if`
+# with both branches whole, so the `else` that counts the fixture as checked still runs and the
+# mutant reports "provenance: 1 fixture(s) checked" exactly like a healthy kit.
+mut_HEALTH_grade_table_blind() {
+  sed -i 's@    if \[ -n "$missing" \]; then@    if false; then@' "$1"
 }
 
 # The backlog ratchet goes blind: `sdd health` still runs the whole TODO.md check, still refuses a
@@ -1004,6 +1069,17 @@ mut_RUN_ghost_session_id() {
 # Range-addressed to cmd_retry: the two-space form is byte-identical in cmd_kaizen.
 mut_RETRY_moved_never_true() {
   sed -i '/^cmd_retry() {/,/^}/ { s|^  \[ "$before" != "$after" \] && moved="true"$|  true| }' "$1"
+}
+
+# The THIRD copy of the same line, and the last one that had no mutation: `sdd kaizen` stops
+# measuring whether the judge's session changed the disk. Same argument as the retry entry above,
+# with one extra edge — the kaizen row is the ONLY session row a kit repo writes about itself, so a
+# judge stuck on moved:false teaches the next verdict that its own loop never progresses.
+#
+# Range-addressed to cmd_kaizen: the two-space form is byte-identical in cmd_retry, and an
+# unaddressed sed would sabotage both doors and credit this entry for the other's coverage.
+mut_KAIZEN_moved_never_true() {
+  sed -i '/^cmd_kaizen() {/,/^}/ { s|^  \[ "$before" != "$after" \] && moved="true"$|  true| }' "$1"
 }
 
 # The post-pipeline nudge goes silent: missions pile up on a kit sha nobody judged and `sdd run`
@@ -1166,6 +1242,9 @@ CATALOG=(
   RUN_stream_no_verbose
   RUN_stream_summary_unfiltered
   RUN_stream_summary_fatal
+  RUN_cost_absent_unlabelled
+  RUN_cost_empty_unlabelled
+  RUN_max_phases_ignored
   RUN_progress_eats_rc
   RUN_progress_dead
   RUN_entrypoint_unguarded
@@ -1174,6 +1253,7 @@ CATALOG=(
   RUN_base_branch_warn_dead
   RUN_approve_writes_auto
   RUN_approve_bails_on_kaizen_born
+  RUN_approve_no_plan_blind
   RUN_branch_switch_dead
   RUN_branch_option_name
   RUN_branch_orphan_blind
@@ -1198,6 +1278,8 @@ CATALOG=(
   KAIZEN_series_rc_dropped
   HEALTH_ratchet_one_way
   HEALTH_provenance_blind
+  HEALTH_report_provenance_blind
+  HEALTH_grade_table_blind
   HEALTH_todo_count_blind
   HEALTH_suite_capture_aborts
   HEALTH_score_read_aborts
@@ -1207,6 +1289,7 @@ CATALOG=(
   RETRY_branch_switch_dead
   RUN_ghost_session_id
   RETRY_moved_never_true
+  KAIZEN_moved_never_true
   KAIZEN_reminder_dead
   KAIZEN_already_judged_spends
   RUN_degraded_journal_dropped

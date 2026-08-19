@@ -515,6 +515,92 @@ assert_eq "the run ends on its OWN verdict with the sessions in the ledger, not 
 assert_eq "and the cost is still distilled out of the truncated stream, to the last digit" \
   "0.0362104" "$(jq -r -s '.[0].cost_usd' "$LEDGER")"
 
+# --- an unknown cost has a NAME, and the name is `?` ------------------------
+# The journal's money column has two ways of coming out unknown and, until this block, no fixture
+# reached either. Every stub above answers either the full capture (cost present, asserted to the
+# last digit) or nothing at all with rc 1 — and the dead one leaves an EMPTY summary, which is the
+# second shape below. The ledger could not tell the difference: `($cost | tonumber? // null)` maps
+# "?", "null" and "" to the same null, so an assertion that only reads the ledger is green in every
+# world. The JOURNAL is where it shows, and the journal is what a human reads to reconstruct a
+# headless run: `cost_usd=` with nothing after it is an unlabelled hole where every other row says
+# `?`, and `cost_usd=null` is jq's word for "the key was absent" being filed as if it were an answer.
+#
+# TWO worlds because the runner has two guards, one per shape, and neither had a fixture:
+#   A. an answer that carries no money — the `// "?"` arm of the jq filter;
+#   B. an answer with no terminal `result` at all, so the summary is empty and jq exits 0 having
+#      printed nothing — the `[ -n "$cost" ]` arm, which the `|| echo "?"` does NOT cover.
+# ONE assertion over both, with the floor of each world beside its verdict: the costless sample
+# really is a result object with no money in it, and world B's summary really is empty. Without
+# those two terms the world could stop being the world the assertion names and nothing would say so.
+echo "== an unknown cost is journalled as '?' in both of its shapes =="
+# The captured sample MINUS its money, derived with jq and never pasted: the provenance rule at the
+# top of this file covers this line too. A result object typed out here would be this file's idea
+# of the CLI's shape, and the runner would be measured against that idea forever.
+COSTLESS_SAMPLE="$OUTSIDE/stream-costless.jsonl"
+jq -c 'del(.total_cost_usd, .cost_usd)' "$STREAM_SAMPLE" > "$COSTLESS_SAMPLE"
+costless_floor="$(jq -rs '[.[] | select(.type == "result")]
+                          | "\(length) \([.[] | select(has("total_cost_usd") or has("cost_usd"))] | length)"' \
+                          "$COSTLESS_SAMPLE")"
+
+: > "$LEDGER"
+rm -f "$LOGDIR"/*.json "$LOGDIR"/*.jsonl "$LOGDIR"/*.err
+cat > "$OUTSIDE/stub/claude" <<STUB
+#!/usr/bin/env bash
+cat "$COSTLESS_SAMPLE"
+exit 0
+STUB
+chmod +x "$OUTSIDE/stub/claude"
+"$SDD" run "$MISSION" >/dev/null 2>&1
+cost_a_journal="$(grep -o 'cost_usd=[^ ]*' "$FIX/.sdd/logs/$MISSION/pipeline.log" | tail -1)"
+cost_a_ledger="$(jq -r -s '.[0].cost_usd' "$LEDGER")"
+
+: > "$LEDGER"
+rm -f "$LOGDIR"/*.json "$LOGDIR"/*.jsonl "$LOGDIR"/*.err
+# The first two lines of the capture and no `result`: the shape a session killed before its verdict
+# leaves behind. stream_summary finds nothing to distil, so the summary file is created and stays
+# at zero bytes — which is the state the second guard exists for.
+cat > "$OUTSIDE/stub/claude" <<STUB
+#!/usr/bin/env bash
+head -2 "$STREAM_SAMPLE"
+exit 0
+STUB
+chmod +x "$OUTSIDE/stub/claude"
+"$SDD" run "$MISSION" >/dev/null 2>&1
+summary_b_lines="$(cat "$LOGDIR"/*.json 2>/dev/null | grep -c .)"
+cost_b_journal="$(grep -o 'cost_usd=[^ ]*' "$FIX/.sdd/logs/$MISSION/pipeline.log" | tail -1)"
+cost_b_ledger="$(jq -r -s '.[0].cost_usd' "$LEDGER")"
+
+assert_eq "covered: an unknown cost is journalled as '?', both when the answer carries none and when there is no answer" \
+  "1 0 cost_usd=? null 0 cost_usd=? null" \
+  "$costless_floor $cost_a_journal $cost_a_ledger $summary_b_lines $cost_b_journal $cost_b_ledger"
+
+# --- --max-phases stops the run where the human asked -----------------------
+# The option is parsed, counted and reported, and nothing ever ran it. It is the flag a human
+# reaches for to spend ONE session and look at the result — the cheapest way to drive a headless
+# runner by hand — so a regression here is silent and expensive in the same breath: the run simply
+# keeps going and opens every session the pipeline has left.
+#
+# The row count is the half that says WHERE it stopped, and the ordering it pins is deliberate: the
+# gate is evaluated and the ledger row written BEFORE the limit is tested, so the session that ran
+# is recorded rather than dropped on the way out. One row and not zero; three (two sessions plus the
+# no-progress escalation) is what the same fixture writes with no limit at all — measured two blocks
+# up, where the dead stub runs to its own escalation.
+#
+# The message rides along because the count alone cannot tell a stop from a crash, and because the
+# number in it is the parsed value: a parse that dropped the argument would leave `max_phases` at 0,
+# the branch unreachable, and the run would escalate exactly as if the flag had never been typed.
+echo "== --max-phases 1 stops after one phase, with the row already written =="
+: > "$LEDGER"
+cat > "$OUTSIDE/stub/claude" <<'STUB'
+#!/usr/bin/env bash
+exit 1
+STUB
+chmod +x "$OUTSIDE/stub/claude"
+maxout="$( "$SDD" run "$MISSION" --max-phases 1 2>&1 )"; maxrc=$?
+assert_eq "covered: --max-phases 1 stops after one phase, having written that phase's row first" \
+  "0 1 said" \
+  "$maxrc $(nrows) $(grep -q -- '--max-phases=1 reached' <<< "$maxout" && echo said || echo silent)"
+
 # --- a kit without .git warns ONCE, not once per row ------------------------
 # `autonomy_kit_stamp` used to be read as `stamp="$(autonomy_kit_stamp)"`, so the whole body ran in
 # a subshell: its `AUTONOMY_SHA_WARNED=1` died with the command substitution, the flag was back to 0
