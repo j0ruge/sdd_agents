@@ -1,6 +1,6 @@
 ---
 missao: 20260818-lote-facil
-atualizado: 2026-08-18 22:55
+atualizado: 2026-08-18 23:59
 ---
 
 # Checkpoint — O `sdd health` para de morrer calado, e 18 achados baratos saem do backlog
@@ -23,7 +23,7 @@ atualizado: 2026-08-18 22:55
 | I1 | A família do aborto calado — 4 sítios do `cmd_health` | `o=$(bash tests/check-health.sh 2>&1); grep -c '^  ok    abort: ' <<< "$o"` → `4` | done | 4f11624 |
 | I2 | A família do `cd` relativo — 14 em `tests/` mais o `ledger_repo_root` | `o=$(bash tests/run-all.sh 2>&1); grep -c '^  ok    cdpath: ' <<< "$o"` → `3` | done | aa95b2e |
 | I3 | Saída humana do runner — 3 números que contam a grandeza errada | `o=$(bash tests/check-autonomy.sh 2>&1); grep -c '^  ok    output: ' <<< "$o"` → `9` | done | 4f6aa8b |
-| I4 | Cinco caminhos sem asserção ganham asserção e mutação | `o=$(bash tests/run-all.sh 2>&1); grep -c '^  ok    covered: ' <<< "$o"` → `5` | pending | — |
+| I4 | Cinco caminhos sem asserção ganham asserção e mutação | `o=$(bash tests/run-all.sh 2>&1); grep -c '^  ok    covered: ' <<< "$o"` → `5` | done | f21df55 |
 | I5 | Regras de sensor e o `templates/review.md` que falta | `o=$(bash tests/run-all.sh 2>&1); grep -c '^  ok    rule: ' <<< "$o"` → `5` | pending | — |
 
 ## Notas de execução
@@ -164,6 +164,53 @@ atualizado: 2026-08-18 22:55
   `score: 91 caught, 0 known gap(s), of 91` (era 86) e `50 finding(s)`. `./bin/sdd health` →
   `kit healthy`, rc 0. `shellcheck -S warning bin/sdd tests/*.sh` limpo. O Check do incremento:
   `9`, medido `6` contra o HEAD antes das asserções.
+
+- 2026-08-18 · `I4` · **O incremento não muda uma linha do `bin/sdd`, e isso é a forma dele.** Os
+  cinco caminhos já estavam corretos; o que faltava era medida. Por isso o "vermelho primeiro" aqui
+  não é um defeito consertado — é a asserção morrendo contra o runner SABOTADO, uma sabotagem por
+  vez, verificada antes de a suíte cheia rodar: aplica (o `cmp -s` do harness não rejeita), segue
+  bash válido, e morre na asserção escrita para ela e em nenhuma outra do mesmo arquivo.
+- 2026-08-18 · `I4` · **Sete mutações e não cinco.** Duas das cinco famílias têm DUAS guardas cada,
+  e uma mutação por família deixaria a outra metade sem probe: o custo desconhecido tem o braço
+  `// "?"` do jq (resposta sem dinheiro) **e** o braço `[ -n "$cost" ]` (resposta sem `result`
+  nenhum, sumário vazio — que o `|| echo "?"` ao lado NÃO cobre), e a proveniência tem a comparação
+  do `qa-execution` **e** o laço `awk` do codereview, que é de forma diferente das outras duas.
+- 2026-08-18 · `I4` · ⚠️ **A receita literal do plano para o custo mirava a SEGUNDA guarda, não a
+  primeira.** Um stub que emita `{"other_field": 1}` não tem `type == "result"`, então o
+  `stream_summary` filtra tudo e o sumário sai VAZIO — que é exatamente o caminho do
+  `[ -n "$cost" ]`. As duas estavam descobertas; ambas ganharam mundo. Registrado porque a receita
+  do backlog parecia apontar para o `// "?"` e aponta para a outra.
+- 2026-08-18 · `I4` · **Uma asserção `covered:` por item, não uma por sítio** — o Check conta
+  exatamente 5 linhas `^  ok    covered: `. A da proveniência é uma conjunção sobre QUATRO mundos
+  (match/divergência para cada uma das duas skills) e a do custo sobre dois, cada uma carregando o
+  piso do próprio mundo ao lado do veredito: que a amostra sem custo é mesmo um `result` sem
+  dinheiro, e que o sumário do segundo mundo é mesmo vazio. Sem esses termos o mundo pode deixar de
+  ser o mundo que a asserção nomeia e nada diria.
+- 2026-08-18 · `I4` · **O conteúdo das duas skills novas é DERIVADO do `check-gates.sh`**, nunca
+  escrito de memória: a linha `- **Started:**` normalizada como o `bin/sdd` a normaliza, e a tabela
+  de notas copiada inteira do fixture. Template imaginado é o defeito que o `health_provenance`
+  existe para pegar — escrevê-lo aqui faria este sensor confirmar a suposição em vez de medi-la.
+  Conferido contra as skills instaladas nesta máquina (`qa-execution/assets/report-template.md` e
+  `codereview/1.17.1/…/references/report-template.md:163-172`): a linha e o conjunto de critérios
+  batem.
+- 2026-08-18 · `I4` · **As cinco âncoras do plano estavam defasadas de novo**, desta vez por obra da
+  própria missão (I1–I3 editaram o `bin/sdd`): `:1987`→`:2028` (o `die` do approve), `:1294`→`:1302`
+  e `:1303` (as duas guardas do custo), `:2104`/`:2281`→`:2145`/`:2329` (`--max-phases`),
+  `:3120`→`:3198` (`moved` do `cmd_kaizen`), `:1829`/`:1854`→`:1854`/`:1883-1894` (proveniência).
+  O defeito era o descrito em todas.
+- 2026-08-18 · `I4` · ⚠️ **A primeira caixa de sabotagem concluiu em falso e disse por quê.** O
+  `sandbox()` do `check-mutation.sh` copia `docs/adr` e a caixa montada à mão não copiava: o
+  `check-kaizen.sh` reprovou em `adr 0003 exists…` junto com a asserção sob teste, e "duas
+  asserções morreram" teria virado uma alegação errada sobre qual delas mede o mutante. Refeita com
+  `docs/adr` presente, sobra UMA. É a regra do `CLAUDE.md` sobre o probe provar primeiro que
+  sabotou o que dizia sabotar, cobrada dentro da sessão que a estava aplicando.
+- 2026-08-18 · `I4` · **`TODO.md` 50 → 45**, com `todo-findings 45` na baseline no mesmo commit:
+  saem os 5 itens da família e **nenhum achado novo nasceu** — segundo incremento seguido em que a
+  re-derivação não achou trabalho extra.
+- 2026-08-18 · `I4` · Evidência do gate: `tests/run-all.sh` → `suite green`, rc 0, com
+  `score: 98 caught, 0 known gap(s), of 98` (era 91) e `45 finding(s)`. `./bin/sdd health` →
+  `kit healthy`, rc 0, `ratchet: 7 known debt(s), none new`. `shellcheck -S warning bin/sdd
+  tests/*.sh` limpo. O Check do incremento: `5`, medido `0` contra o HEAD antes das asserções.
 
 ## Incrementos de fix (QA)
 
