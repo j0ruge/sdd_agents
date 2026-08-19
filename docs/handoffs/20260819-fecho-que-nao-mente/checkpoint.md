@@ -1,6 +1,6 @@
 ---
 missao: 20260819-fecho-que-nao-mente
-atualizado: 2026-08-19 13:40
+atualizado: 2026-08-19 14:35
 ---
 
 # Checkpoint — O caminho que certifica o fecho de uma missão para de afirmar o que não mediu
@@ -28,7 +28,7 @@ atualizado: 2026-08-19 13:40
 
 | ID | Incremento | Check (comando → esperado) | Status | Commit |
 |---|---|---|---|---|
-| I1 | O `sdd health` compara os dois números do `score:` | `o=$(bash tests/check-health.sh 2>&1); grep -c '^  ok    mutation: a score whose caught differs from total is refused' <<< "$o"` → `1` | pending | — |
+| I1 | O `sdd health` compara os dois números do `score:` | `o=$(bash tests/check-health.sh 2>&1); grep -c '^  ok    mutation: a score whose caught differs from total is refused' <<< "$o"` → `1` | done | 7a6653b |
 | I2 | O `--list` imprime só passos, e `TEST_CMD` com `--list` é recusado | `o=$(bash tests/check-health.sh 2>&1); grep -c '^  ok    surface: --list prints steps only, and a TEST_CMD carrying it is refused' <<< "$o"` → `1` | pending | — |
 | I3 | O `gate_REVIEW` recusa placeholder na `Rationale` | `o=$(bash tests/check-gates.sh 2>&1); grep -c '^  ok    gate_REVIEW: a placeholder Rationale does not buy an A' <<< "$o"` → `1` | pending | — |
 | I4 | O catálogo ganha dono: `sdd health` carimba, `gate_PR` exige | `o=$(bash tests/check-gates.sh 2>&1); grep -c '^  ok    gate_PR: the mutation stamp is demanded only where the catalogue lives' <<< "$o"` → `1` | pending | — |
@@ -41,6 +41,10 @@ atualizado: 2026-08-19 13:40
 - 2026-08-19 13:40 · `plano` · Nascido pela sessão `sdd kaizen` ao lado de `05-verdict.md`, sem humano. `aprovacao:` vazia por contrato — só `sdd approve 20260819-fecho-que-nao-mente` a preenche.
 - 2026-08-19 13:40 · `I1` · **Primeira nota do executor deve registrar o `N` de partida do catálogo**: rode `./bin/sdd health` e anote a linha `score:` verbatim. Sem esse número, a verificação end-to-end ("N cresceu pelo menos 4") não tem contra o que comparar.
 - 2026-08-19 13:40 · `I4` · A ordem I1 → I4 é dependência real: carimbar antes de consertar o veredito do `score:` gravaria em disco a certificação de um catálogo com sobrevivente.
+- 2026-08-19 · `I1` · **`N` de partida do catálogo = 104**, medido no `9bc65dd` (a `main` desta missão) e não em prosa: `awk '/^CATALOG=\(/{f=1;next} f&&/^\)/{exit} f&&NF{n++} END{print n}' tests/check-mutation.sh` → `104`. Depois do I1 são **105**. O fecho exige `of N` com `N >= 108` e `caught == of`.
+- 2026-08-19 · `I1` · A linha `score:` **verbatim** de partida não entrou nesta nota porque o catálogo leva ~20 a 50 min e a sessão headless morre se encerrar o turno esperando comando. Ela está sendo medida numa worktree limpa do `9bc65dd`, em background: saída em `/tmp/sdd-baseline-score.txt`, worktree em `/tmp/sdd-baseline` (apagar com `git worktree remove /tmp/sdd-baseline`). Quem a quiser, lê o arquivo; quem não a tiver, o `of 104` acima é o número que a métrica compara.
+- 2026-08-19 · `I1` · Tempo do `TEST_CMD`: **1m29s** antes, **1m51s** depois — mas a segunda medição rodou com o catálogo de background ocupando 8 cores (`33% cpu` contra `53% cpu`), então o delta está **contaminado** e não vale como evidência. Re-medir só depois que `/tmp/sdd-baseline-score.txt` tiver a linha `score:` (é o fim do run de background que segura os cores), antes de decidir se vira achado do `TODO.md`.
+- 2026-08-19 · `I1` · Desvio do plano, declarado: o `sed` do `sdd health` lê os **três** números da linha e o veredito compara `gaps` **antes** de `caught != total`. A ordem inversa (a do plano) tornaria a frase `mutation with an open gap` inalcançável — com gap aberto, `caught < total` sempre —, apagando uma mensagem existente. Ganhou também um ramo novo para a linha que **não parseia**: sem ele, o `sed` que deixasse de casar pularia a comparação inteira em silêncio, que é a mesma vacuidade do ramo "sem linha `score:`".
 
 ## Incrementos de fix (QA)
 
