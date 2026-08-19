@@ -4,7 +4,7 @@ titulo: O caminho que certifica o fecho de uma missão para de afirmar o que nã
 data: 2026-08-19
 versao: n/a — JIRA_ENABLED=false neste repo
 branch: fix/fecho-que-nao-mente
-aprovacao:
+aprovacao: humano-2026-08-19
 ddd: n/a
 ---
 
