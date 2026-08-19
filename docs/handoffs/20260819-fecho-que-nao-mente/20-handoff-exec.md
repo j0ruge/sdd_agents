@@ -4,7 +4,7 @@ fase: EXEC
 status: done
 sessao: 5a129c75-96ae-4d73-9d9f-c2a86cc14a79
 data: 2026-08-19 18:05
-gate: "tests/run-all.sh → `suite green`, rc 0, 1m36s (58% cpu), 14 passos; as quatro asserções da métrica presentes com `^  ok    `: `mutation: a score whose caught differs from total is refused`, `surface: --list prints steps only, and a TEST_CMD carrying it is refused`, `gate_REVIEW: a placeholder Rationale does not buy an A`, `gate_PR: the mutation stamp is demanded only where the catalogue lives`. Checkpoint: 4 de 4 incrementos `done`, hashes 7a6653b / 2f71646 / 9fa5b0b / c962e2e, todos ancestrais de HEAD."
+gate: "tests/run-all.sh → `suite green`, rc 0, 1m50s (48% cpu), 14 passos; as quatro asserções da métrica presentes com `^  ok    `: `mutation: a score whose caught differs from total is refused`, `surface: --list prints steps only, and a TEST_CMD carrying it is refused`, `gate_REVIEW: a placeholder Rationale does not buy an A`, `gate_PR: the mutation stamp is demanded only where the catalogue lives`. Checkpoint: 4 de 4 incrementos `done`, hashes 7a6653b / 2f71646 / 9fa5b0b / c962e2e (+ 1b31304, segundo commit do I4), todos ancestrais de HEAD."
 ---
 
 # Handoff — EXEC — O caminho que certifica o fecho de uma missão para de afirmar o que não mediu
@@ -18,18 +18,19 @@ Os quatro instrumentos que certificam o fecho de uma missão pararam de poder di
 medido: o `sdd health` compara os dois números do próprio `score:`, o `--list` não passa mais por
 uma suíte que rodou, o `gate_REVIEW` recusa selo com justificativa de placeholder, e o catálogo de
 mutação ganhou dono — o `gate_PR` exige carimbo de catálogo verde sobre o conteúdo atual.
-Suíte verde; catálogo de 104 → 109 mutantes. **A fase QA começa por rodar `./bin/sdd health`**: sem
+Suíte verde; catálogo de 104 → 110 mutantes. **A fase QA começa por rodar `./bin/sdd health`**: sem
 ele o `gate_PR` desta própria missão reprova, e isso é o I4 funcionando.
 
 ## Estado do repo
 
 - **Branch:** `fix/fecho-que-nao-mente` — **sem upstream**; nada foi empurrado (é da fase PR).
-- **Último commit:** `0af6654` `chore(checkpoint): I4 done em c962e2e, com o defeito que a passada adversarial achou na própria asserção`
+- **Último commit:** `1b31304` `fix(health): o carimbo recusa a árvore que se mexeu enquanto o catálogo rodava` (mais o commit deste handoff, escrito logo depois).
 - **Working tree:** limpo.
-- **Suíte:** `tests/run-all.sh` → **verde**, rc 0, 1m36s. Ponto de partida da missão: 1m24s.
+- **Suíte:** `tests/run-all.sh` → **verde**, rc 0, 1m50s. Ponto de partida da missão: 1m24s (+31%, tudo em invocações reais de `sdd health` dentro do fixture do `check-gates.sh`).
 - **E2E:** `E2E_CMD=""` — o kit não tem interface; n/a por configuração, não por omissão.
-- **Catálogo de mutação:** opt-in, **não** roda no `TEST_CMD`. Rodada completa em andamento no fim
-  desta sessão; o `N` do `CATALOG=(` foi de **104** (`9bc65dd`) para **109**.
+- **Catálogo de mutação:** opt-in, **não** roda no `TEST_CMD`. Rodada completa disparada no fim desta sessão, sobre a árvore limpa de `1b31304` (log em
+  `/tmp/sdd-health-final.log`); uma rodada anterior foi morta por medir árvore em movimento —
+  ver as notas do `checkpoint.md`. o `N` do `CATALOG=(` foi de **104** (`9bc65dd`) para **110**.
 
 ## O que foi feito
 
@@ -49,8 +50,13 @@ ele o `gate_PR` desta própria missão reprova, e isso é o I4 funcionando.
 - `c962e2e` — **I4.** `cmd_health` grava um carimbo — o md5 do conteúdo de
   `bin/ tests/ templates/ config/` — depois das checagens 1 e 2 passarem, e o **remove** quando
   qualquer uma reprova. `gate_PR` exige esse carimbo como **último** requisito, e **só** onde
-  `tests/check-mutation.sh` existe (escopo por artefato, nunca por identidade de repo). Sete mundos
-  em três pares; mutante `mut_PR_stamp_blind`.
+  `tests/check-mutation.sh` existe (escopo por artefato, nunca por identidade de repo). Oito mundos
+  em três pares mais um; mutante `mut_PR_stamp_blind`.
+- `1b31304` — **I4, segundo commit.** A **janela**: a chave era lida só depois da rodada, então um
+  commit que aterrissasse durante os ~20 a 50 min do catálogo ganhava um verde do qual nunca
+  participou. Hoje ela é lida **antes** e comparada com a de depois. Oitavo mundo (WINDOW) +
+  `mut_HEALTH_stamp_window_blind`. É o defeito da missão dentro do artefato da missão, achado numa
+  releitura do próprio escritor.
 - `ca0a360` `dc6a6c9` `c8de654` — os `RESOLVIDO por <hash>` dos quatro achados que a missão fecha,
   mais os três que ela abriu, com a catraca `todo-findings` movida no mesmo commit (72 → 76).
 - `742cc67` `66f482e` `5d72d72` `0af6654` — checkpoint, um por incremento, com as notas de desvio.
@@ -59,11 +65,11 @@ ele o `gate_PR` desta própria missão reprova, e isso é o I4 funcionando.
 
 | Arquivo | O que contém |
 |---|---|
-| `docs/handoffs/20260819-fecho-que-nao-mente/checkpoint.md` | Tabela 4/4 `done` + **30 notas de execução** — os desvios do plano, as medições e as armadilhas. É o documento mais denso da missão. |
+| `docs/handoffs/20260819-fecho-que-nao-mente/checkpoint.md` | Tabela 4/4 `done` + **33 notas de execução** — os desvios do plano, as medições e as armadilhas. É o documento mais denso da missão. |
 | `bin/sdd` | `cmd_health` checagens 2, 2b e 2c; `gate_REVIEW` (extrator `f[4]` + `gate:`); `gate_PR` (carimbo); `mutation_stamp_key` e as duas constantes acima dele. |
-| `tests/check-gates.sh` | As duas asserções diferenciais novas (I3, nove mundos; I4, sete mundos). |
-| `tests/check-health.sh` | As duas asserções novas (I1, I2) e o `CAPTURE_FLOOR` 16 → 19 (medido em `git show 9bc65dd:`, não de memória). |
-| `tests/check-mutation.sh` | Cinco mutantes novos; `CATALOG=(` de 104 para 109. |
+| `tests/check-gates.sh` | As duas asserções diferenciais novas (I3, nove mundos; I4, oito mundos). |
+| `tests/check-health.sh` | As duas asserções novas (I1, I2) e o `CAPTURE_FLOOR` 16 → 20 (medido em `git show 9bc65dd:`, não de memória). |
+| `tests/check-mutation.sh` | Seis mutantes novos; `CATALOG=(` de 104 para 110. |
 | `TODO.md` + `tests/health-baseline.txt` | Quatro achados fechados, três abertos, catraca em 76. |
 
 ## Boot da próxima fase
@@ -79,7 +85,7 @@ quatro fatos binários + o fecho do catálogo), este handoff, e as notas do `che
 ```
 
 Três razões que se somam: é o **fecho da métrica** (`00-missao.md` § Métrica pede
-`score: N caught, 0 known gap(s), of N` com `caught == of` e `N >= 108`; hoje `N` é 109); é o único
+`score: N caught, 0 known gap(s), of N` com `caught == of` e `N >= 108`; hoje `N` é 110); é o único
 lugar onde o catálogo roda, já que o `TEST_CMD` não o roda desde `4c86712`; e é ele que **destrava
 o `gate_PR` desta própria missão**. Se o `gate_PR` reprovar com
 `no green mutation catalogue for this content`, o I4 está funcionando — rode `sdd health` e siga.
@@ -131,9 +137,9 @@ desta missão foram rodados depois do I4 e projetam até a fase PR sem erro (`rc
   background no fim do EXEC; o log fica em `/tmp/sdd-health-i4.log`. O gate desta fase é o
   `TEST_CMD`, que está verde — mas a **métrica da missão** só fecha quando alguém ler a linha
   `score:` dessa rodada. É o primeiro comando do boot acima, e é por isso que ele está lá.
-- **A suíte ficou mais lenta:** 1m24s → 1m36s (+14%). Registrado, não convertido em achado: o
+- **A suíte ficou mais lenta:** 1m24s → 1m50s (+31%). Registrado, não convertido em achado: o
   limiar de ~60 s da tabela de riscos do plano já estava vencido antes da missão começar, então
-  mede a coisa errada. Se virar incômodo, o custo está nas quatro invocações reais de `sdd health`
+  mede a coisa errada. Se virar incômodo, o custo está nas cinco invocações reais de `sdd health`
   dentro do fixture do `check-gates.sh`.
 - **Não-feitos declarados no plano, todos intactos:** a re-derivação das âncoras do `TODO.md`, o CI,
   o auto-teste do `check-templates.sh` e as famílias grandes do `check-todo.sh`/`check-health.sh`.
