@@ -14,7 +14,7 @@
 
 set -uo pipefail
 
-ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
+ROOT="$(CDPATH='' cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 SDD="$ROOT/bin/sdd"
 FIX="$(mktemp -d "${TMPDIR:-/tmp}/sdd-autonomy-XXXXXX")"
 MISSION="20260101-fixture"
@@ -515,6 +515,92 @@ assert_eq "the run ends on its OWN verdict with the sessions in the ledger, not 
 assert_eq "and the cost is still distilled out of the truncated stream, to the last digit" \
   "0.0362104" "$(jq -r -s '.[0].cost_usd' "$LEDGER")"
 
+# --- an unknown cost has a NAME, and the name is `?` ------------------------
+# The journal's money column has two ways of coming out unknown and, until this block, no fixture
+# reached either. Every stub above answers either the full capture (cost present, asserted to the
+# last digit) or nothing at all with rc 1 — and the dead one leaves an EMPTY summary, which is the
+# second shape below. The ledger could not tell the difference: `($cost | tonumber? // null)` maps
+# "?", "null" and "" to the same null, so an assertion that only reads the ledger is green in every
+# world. The JOURNAL is where it shows, and the journal is what a human reads to reconstruct a
+# headless run: `cost_usd=` with nothing after it is an unlabelled hole where every other row says
+# `?`, and `cost_usd=null` is jq's word for "the key was absent" being filed as if it were an answer.
+#
+# TWO worlds because the runner has two guards, one per shape, and neither had a fixture:
+#   A. an answer that carries no money — the `// "?"` arm of the jq filter;
+#   B. an answer with no terminal `result` at all, so the summary is empty and jq exits 0 having
+#      printed nothing — the `[ -n "$cost" ]` arm, which the `|| echo "?"` does NOT cover.
+# ONE assertion over both, with the floor of each world beside its verdict: the costless sample
+# really is a result object with no money in it, and world B's summary really is empty. Without
+# those two terms the world could stop being the world the assertion names and nothing would say so.
+echo "== an unknown cost is journalled as '?' in both of its shapes =="
+# The captured sample MINUS its money, derived with jq and never pasted: the provenance rule at the
+# top of this file covers this line too. A result object typed out here would be this file's idea
+# of the CLI's shape, and the runner would be measured against that idea forever.
+COSTLESS_SAMPLE="$OUTSIDE/stream-costless.jsonl"
+jq -c 'del(.total_cost_usd, .cost_usd)' "$STREAM_SAMPLE" > "$COSTLESS_SAMPLE"
+costless_floor="$(jq -rs '[.[] | select(.type == "result")]
+                          | "\(length) \([.[] | select(has("total_cost_usd") or has("cost_usd"))] | length)"' \
+                          "$COSTLESS_SAMPLE")"
+
+: > "$LEDGER"
+rm -f "$LOGDIR"/*.json "$LOGDIR"/*.jsonl "$LOGDIR"/*.err
+cat > "$OUTSIDE/stub/claude" <<STUB
+#!/usr/bin/env bash
+cat "$COSTLESS_SAMPLE"
+exit 0
+STUB
+chmod +x "$OUTSIDE/stub/claude"
+"$SDD" run "$MISSION" >/dev/null 2>&1
+cost_a_journal="$(grep -o 'cost_usd=[^ ]*' "$FIX/.sdd/logs/$MISSION/pipeline.log" | tail -1)"
+cost_a_ledger="$(jq -r -s '.[0].cost_usd' "$LEDGER")"
+
+: > "$LEDGER"
+rm -f "$LOGDIR"/*.json "$LOGDIR"/*.jsonl "$LOGDIR"/*.err
+# The first two lines of the capture and no `result`: the shape a session killed before its verdict
+# leaves behind. stream_summary finds nothing to distil, so the summary file is created and stays
+# at zero bytes — which is the state the second guard exists for.
+cat > "$OUTSIDE/stub/claude" <<STUB
+#!/usr/bin/env bash
+head -2 "$STREAM_SAMPLE"
+exit 0
+STUB
+chmod +x "$OUTSIDE/stub/claude"
+"$SDD" run "$MISSION" >/dev/null 2>&1
+summary_b_lines="$(cat "$LOGDIR"/*.json 2>/dev/null | grep -c .)"
+cost_b_journal="$(grep -o 'cost_usd=[^ ]*' "$FIX/.sdd/logs/$MISSION/pipeline.log" | tail -1)"
+cost_b_ledger="$(jq -r -s '.[0].cost_usd' "$LEDGER")"
+
+assert_eq "covered: an unknown cost is journalled as '?', both when the answer carries none and when there is no answer" \
+  "1 0 cost_usd=? null 0 cost_usd=? null" \
+  "$costless_floor $cost_a_journal $cost_a_ledger $summary_b_lines $cost_b_journal $cost_b_ledger"
+
+# --- --max-phases stops the run where the human asked -----------------------
+# The option is parsed, counted and reported, and nothing ever ran it. It is the flag a human
+# reaches for to spend ONE session and look at the result — the cheapest way to drive a headless
+# runner by hand — so a regression here is silent and expensive in the same breath: the run simply
+# keeps going and opens every session the pipeline has left.
+#
+# The row count is the half that says WHERE it stopped, and the ordering it pins is deliberate: the
+# gate is evaluated and the ledger row written BEFORE the limit is tested, so the session that ran
+# is recorded rather than dropped on the way out. One row and not zero; three (two sessions plus the
+# no-progress escalation) is what the same fixture writes with no limit at all — measured two blocks
+# up, where the dead stub runs to its own escalation.
+#
+# The message rides along because the count alone cannot tell a stop from a crash, and because the
+# number in it is the parsed value: a parse that dropped the argument would leave `max_phases` at 0,
+# the branch unreachable, and the run would escalate exactly as if the flag had never been typed.
+echo "== --max-phases 1 stops after one phase, with the row already written =="
+: > "$LEDGER"
+cat > "$OUTSIDE/stub/claude" <<'STUB'
+#!/usr/bin/env bash
+exit 1
+STUB
+chmod +x "$OUTSIDE/stub/claude"
+maxout="$( "$SDD" run "$MISSION" --max-phases 1 2>&1 )"; maxrc=$?
+assert_eq "covered: --max-phases 1 stops after one phase, having written that phase's row first" \
+  "0 1 said" \
+  "$maxrc $(nrows) $(grep -q -- '--max-phases=1 reached' <<< "$maxout" && echo said || echo silent)"
+
 # --- a kit without .git warns ONCE, not once per row ------------------------
 # `autonomy_kit_stamp` used to be read as `stamp="$(autonomy_kit_stamp)"`, so the whole body ran in
 # a subshell: its `AUTONOMY_SHA_WARNED=1` died with the command substitution, the flag was back to 0
@@ -673,6 +759,35 @@ assert_eq "the phase that degraded" "REVIEW" \
   "$(jq -r -s '[.[] | select(.event == "degraded")][0].phase' "$LEDGER")"
 assert_eq "and the mission it happened in" "$MISSION" \
   "$(jq -r -s '[.[] | select(.event == "degraded")][0].mission' "$LEDGER")"
+
+# D6 — the blocked line counts SESSIONS, not laps of the loop. `attempts[$phase]` rises on every
+# lap that reaches the top with this phase, including the lap that escalates (which opens no
+# session at all) and every later lap the REVIEW→PR→REVIEW loop takes. The number is the last thing
+# a human reads when a run ends, and here it said `3 sessions` over a ledger holding ONE REVIEW
+# session. Prefixed `output:` with the reader assertions further down, but it lives HERE because
+# this is the only fixture in the file that reaches the budget branch at all — the mission has to
+# really be in REVIEW, and the stub has to move the disk on every call.
+#
+# DIFFERENTIAL against the ledger, and `agree/total` rather than a single number: the branch is
+# entered twice in this run (once to degrade, once to end it), so an assertion reading only the
+# first occurrence would go green on a fix that repaired one voice and left the other. `0/0` is the
+# vacuity floor — a fixture that stopped reaching the branch fails instead of passing on nothing —
+# and the REVIEW session count on the left pins the regime that makes laps and sessions differ.
+#
+# `session[^ ]*` and not the literal spelling: the defect is the NUMBER, and a pattern written
+# against the post-fix wording would have gone red on the plural alone — measured, it read `0/0`
+# against the old runner and would have called a pure rename a fix.
+rev_sessions="$(jq -s '[.[] | select(.event == "session" and .phase == "REVIEW")] | length' "$LEDGER")"
+blocked_says="$(awk -v n="$rev_sessions" '
+  { s = $0
+    while (match(s, /[0-9]+ session[^ ]* without satisfying the gate/)) {
+      total++
+      if (substr(s, RSTART, RLENGTH) + 0 == n) agree++
+      s = substr(s, RSTART + RLENGTH)
+    } }
+  END { printf "%d/%d", agree + 0, total + 0 }' <<< "$err")"
+assert_eq "output: the blocked line counts the sessions the phase spent, not the laps of the loop" \
+  "1 2/2" "$rev_sessions $blocked_says"
 # The kit stamp is what puts the row on the version axis the whole ledger exists to measure. A
 # writer that forgot it would still look fine in `sdd autonomy` and vanish from the series.
 assert_eq "the row carries the kit stamp, so it lands on the version axis" "true" \
@@ -1298,6 +1413,74 @@ assert_eq "cdpath: CDPATH=. yields the repo on ONE line, not the path echoed by 
   "one 1" \
   "$( id="$(id_cd . "$CDROOT/one")"; printf '%s %s' "${id##*/}" "$(grep -c . <<< "$id")" )"
 
+# --- the same identity, asked of a git that predates --path-format ----------
+# `ledger_repo_root` asks git for `--path-format=absolute`, born in git 2.31. An OLDER git does not
+# refuse it: `rev-parse` echoes a token it does not recognize straight back to stdout and still
+# exits 0, so it answers TWO lines — the flag, then the common dir, still relative. `|| return 0`
+# cannot fire (rc is 0) and `-n` cannot fire (the string is not empty), so the whole two-line
+# string used to become the repository IDENTITY, newline and all, in every row of an append-only
+# ledger that is never migrated. Same shape as the CDPATH pair above and a strictly worse
+# consequence, which is why it sits beside it: there the identity moved, here it is not a path.
+GITSHIM="$CDROOT/oldgit"; mkdir -p "$GITSHIM"
+{ printf '#!/usr/bin/env bash\n'
+  printf 'is_rp=0; for a in "$@"; do [ "$a" = rev-parse ] && is_rp=1; done\n'
+  printf 'if [ "$is_rp" = 1 ]; then\n'
+  printf '  keep=(); echoed=()\n'
+  printf '  for a in "$@"; do case "$a" in --path-format=*) echoed+=("$a");; *) keep+=("$a");; esac; done\n'
+  printf '  if [ "${#echoed[@]}" -gt 0 ]; then\n'
+  printf '    for e in "${echoed[@]}"; do printf "%%s\\n" "$e"; done\n'
+  printf '    exec %s "${keep[@]}"\n' "$(command -v git)"
+  printf '  fi\n'
+  printf 'fi\n'
+  printf 'exec %s "$@"\n' "$(command -v git)"
+} > "$GITSHIM/git"
+chmod +x "$GITSHIM/git"
+
+# ⚠️ The floor, before any conclusion: a shim that failed to imitate the old git would make the
+# assertion below pass over a modern git and say nothing. Two properties, because either one alone
+# is satisfiable by a broken shim — it must ECHO the unknown flag (two lines, the first being the
+# flag itself) and it must stay transparent for every other rev-parse.
+assert_eq "the pre-2.31 git shim is armed: rev-parse echoes the flag it does not know, rc 0" \
+  "2 --path-format=absolute ok" \
+  "$( o="$( PATH="$GITSHIM:$PATH" git -C "$CDROOT/one" rev-parse --path-format=absolute --git-common-dir 2>&1 )"
+      t="$( PATH="$GITSHIM:$PATH" git -C "$CDROOT/one" rev-parse --git-common-dir 2>/dev/null )"
+      printf '%s %s %s' "$(grep -c . <<< "$o")" "$(head -1 <<< "$o")" \
+        "$( [ "$t" = .git ] && echo ok || echo "opaque:$t" )" )"
+
+# ⚠️ RAW, and never through the `no data for <repo>:` extractor `id_cd` uses. That extractor was
+# the first spelling of this probe and it could not see the defect BY CONSTRUCTION: its `sed`
+# needs `no data for X:` on ONE line, while the leak is two lines by definition — the echoed flag
+# is always a whole line of its own, so the pattern never matched and the probe read the empty
+# string in BOTH worlds, reporting `clean 0` whether the guard was there or not. Measured: with
+# `mut_LEDGER_repo_root_shape_blind` applied — guard gone, `bash -n` clean — the whole of
+# check-autonomy.sh stayed green. A sensor written to protect a CRITICAL, blind to that CRITICAL.
+raw_oldgit() { ( cd "$1" && PATH="$GITSHIM:$PATH" SDD_STATE_DIR="$IDSTATE" "$SDD" autonomy 2>&1 ); }
+
+# ⚠️ REFUSING the shape was only half the contract, and asserting the refusal alone is what let the
+# second defect live: the r2 of 20260818-lote-facil made the old git yield NOTHING and this
+# assertion called that a pass. Empty is the contract for "not a repo", so on git 2.25 and 2.30
+# every ledger row would be written `repo: ""`, land in `no_repo` — a bucket `--all-repos` does not
+# admit — and the whole judge would go dark, silently and permanently, on a spelling that used to
+# work. The property is AGREEMENT, not silence: the answer is the real repo, the same string the
+# modern git resolves, and never the echoed flag.
+#
+# Four fields, each answering an objection the other three cannot. `said` is the FLOOR — the old-git
+# run must still produce the runner's per-repo voice, because "the flag does not appear" is free for
+# a run that printed nothing or died. `leak` is the shape property, read RAW (see above: the `no
+# data for X:` extractor cannot see a two-line answer BY CONSTRUCTION). `same` is the identity
+# property, and it is DIFFERENTIAL — the two gits compared to each other, so no fixture regime
+# satisfies it by accident and either side moving reproves it. Requiring `old` non-empty is what
+# stops "resolved nothing" from buying the green a third time.
+assert_eq "cdpath: a git older than --path-format resolves the SAME identity, never the echoed flag" \
+  "one said clean same" \
+  "$( new="$(id_cd '' "$CDROOT/one")"; raw="$(raw_oldgit "$CDROOT/one")"
+      old="$(sed -n 's/.*no data for \([^:]*\):.*/\1/p' <<< "$raw")"
+      case "$raw" in *"no data"*) s=said ;; *) s="mute:$(head -c 40 <<< "$raw")" ;; esac
+      case "$raw" in *--path-format*) g=leaked ;; *) g=clean ;; esac
+      if [ -n "$old" ] && [ "$old" = "$new" ]; then m=same
+      else m="split:${old:-<empty>}|${new:-<empty>}"; fi
+      printf '%s %s %s %s' "${new##*/}" "$s" "$g" "$m" )"
+
 # --- ...and a row that cannot say where it came from is nobody's ------------
 # `ledger_row_is_local` used to answer `true` for a row with no `repo` key — local in EVERY repo.
 # The comment above it claimed the readers then classified those rows out loud, and for a bare
@@ -1582,6 +1765,108 @@ gap_blanks="$(awk 'prev == "" && $0 == "" { n++ } { prev = $0 } END { print n + 
 gap_excl="$(grep -c '1 unrecognized row(s) excluded' <<< "$out")"
 assert_eq "output: never two blank lines in a row, and the accounting still prints" "0 1" \
   "$gap_blanks $gap_excl"
+
+# D7 — the SAME family as D5, and the half it left behind. Each of the four exclusion strings opens
+# with `\n` AND the jq comma puts every output on its own line, so with more than one bucket filled
+# the accounting came out block+blank+block+blank+block: four unrelated remarks where there is one
+# paragraph. D5 cannot see it — it counts CONSECUTIVE blanks, and this defect never makes two in a
+# row. All four buckets are filled at once, so a fix that groups only some of them fails here.
+#
+# Three numbers, and none of them is redundant: the four lines are the anti-vacuity floor (an
+# output that lost its accounting has no internal blank either, and would pass on nothing), the
+# zero is the defect, and the blank ABOVE the first line is what still separates the block from the
+# table — a fix that deleted every newline would satisfy the middle number and glue the accounting
+# onto the last row of the table.
+mkdir -p "$OUTSIDE/excl"
+{ out_row aaaaaaa m1 1.0
+  # non-comparable: on this repo, but the kit was dirty when the row was born
+  jq -cn --arg repo "$FIXROOT" \
+    '{v:1, ts:"2026-08-16T14:00:00-03:00", event:"session", kit_sha:"aaaaaaa", kit_dirty:true,
+      repo:$repo, mission:"m2", phase:"EXEC", moved:true}'
+  # unrecognized: no event field at all (counted after the repo filter, so it names this repo)
+  jq -cn --arg repo "$FIXROOT" '{v:1, ts:"2026-08-16T14:00:00-03:00", repo:$repo}'
+  # born in another repo, and says no repo at all — the two exclusions bound before the filter
+  jq -cn '{v:1, ts:"2026-08-16T14:00:00-03:00", event:"session", kit_sha:"aaaaaaa",
+      kit_dirty:false, repo:"/somewhere/else", mission:"m3", phase:"EXEC", moved:true}'
+  jq -cn '{v:1, ts:"2026-08-16T14:00:00-03:00", event:"session", kit_sha:"aaaaaaa",
+      kit_dirty:false, mission:"m4", phase:"EXEC", moved:true}'
+} > "$OUTSIDE/excl/autonomy-log.jsonl"
+out="$( SDD_STATE_DIR="$OUTSIDE/excl" "$SDD" autonomy 2>&1 )"
+excl_inner="$(awk '/row\(s\) excluded/ { if (started) n += blank; started = 1; blank = 0; next }
+                   started && $0 == "" { blank++ }
+                   END { print n + 0 }' <<< "$out")"
+excl_above="$(awk 'prev == "" && /row\(s\) excluded/ && !seen { seen = 1; n = 1 }
+                   { prev = $0 } END { print n + 0 }' <<< "$out")"
+assert_eq "output: the exclusion accounting is one paragraph, not one remark per bucket" "4 0 1" \
+  "$(grep -c 'row(s) excluded' <<< "$out") $excl_inner $excl_above"
+
+# D8 — the axis note kept a SECOND copy of the guard floor. Its own comment reads "no count in the
+# sentence on purpose ... writing 3 here would be a third copy of a number the jq program already
+# owns", and the `dim` two lines below it printed "The floor of 3 missions per kit version". Of the
+# floor's several voices this is the ONLY one a human reads out loud, and it was the one that would
+# drift in silence the day the floor moved.
+#
+# The note prints from `sdd kaizen` alone, which refuses to run anywhere but the KIT repo (SDD_HOME
+# has to BE the repo root), so this is the one assertion in this file that needs a kit-SHAPED
+# fixture — the $KIT copy above deliberately has no .git and is a target repo. `--dry-run` is
+# enough: the note prints before the gate and before anything that could spend a session.
+echo "== reader: the guard floor has one owner and one voice =="
+KITREPO="$OUTSIDE/kitrepo"
+mkdir -p "$KITREPO"
+cp -r "$ROOT/bin" "$ROOT/templates" "$ROOT/config" "$KITREPO/"
+git -C "$KITREPO" init -q -b main
+git -C "$KITREPO" config user.email "fixture@example.com"
+git -C "$KITREPO" config user.name "Fixture"
+( cd "$KITREPO" && "$KITREPO/bin/sdd" install >/dev/null 2>&1 )
+mkdir -p "$KITREPO/.sdd"
+cat > "$KITREPO/.sdd/config.sh" <<'EOF'
+PROJECT_NAME="kitfix"
+DEFAULT_BRANCH="main"
+TEST_CMD="true"
+E2E_CMD=""
+HANDOFF_DIR="docs/handoffs"
+QA_DOCS_PATH="docs/qa"
+JIRA_ENABLED=false
+EOF
+git -C "$KITREPO" add -A >/dev/null && git -C "$KITREPO" commit -qm "init kit fixture" >/dev/null
+KITROOT="$(git -C "$KITREPO" rev-parse --show-toplevel)"
+# Three consecutive phases of one mission, each landing on its own kit_sha because the phase before
+# it committed: the gemba of the repo that BUILDS the kit, where no number of missions ever reaches
+# the floor. Same shape as check-kaizen.sh's degenerate-axis fixture, pointed at this repo.
+mkdir -p "$OUTSIDE/degenaxis"
+axis_row() {   # axis_row <kit_sha> <phase>
+  jq -cn --arg repo "$KITROOT" --arg sha "$1" --arg phase "$2" \
+    '{v:1, ts:"2026-08-16T14:00:00-03:00", event:"session", run_id:"k", invocation:"run",
+      kit_sha:$sha, kit_dirty:false, project:"kitfix", repo:$repo, mission:"m20",
+      phase:$phase, step:$phase, agent:"a", model:"opus", attempt:1, auto_retry:false,
+      session:"s", rc:0, dur_s:10, cost_usd:1.0, moved:true, gate:"pass", gate_why:"x"}'
+}
+{ axis_row a000001 EXEC; axis_row a000002 DOCS; axis_row a000003 PR
+} > "$OUTSIDE/degenaxis/autonomy-log.jsonl"
+axis_out="$(    cd "$KITREPO" && SDD_STATE_DIR="$OUTSIDE/degenaxis" "$KITREPO/bin/sdd" kaizen --dry-run 2>&1 )"
+axis_series="$( cd "$KITREPO" && SDD_STATE_DIR="$OUTSIDE/degenaxis" "$KITREPO/bin/sdd" kaizen --series 2>/dev/null )"
+# Four terms, three of them floors. `degenerate_axis: true` proves the note was reachable at all
+# (it returns early on every other series, so a fixture that stopped degenerating would leave the
+# number empty and read as a fix); the series field is the owner; the printed number is the voice;
+# and the source count is what makes the two the SAME number — with a literal written back into the
+# sentence the first three still agree, and only the fourth goes red.
+#
+# That fourth term reads the PRINTING lines of `kaizen_axis_note` and nothing else. A plain grep
+# over the file counts the prose too: the comment above the sentence quotes the defect it is about,
+# so the first spelling of this assertion failed on its own documentation while the code was
+# already right — a source rule that cannot tell code from a comment about the code.
+#
+# It is written `<literals>/<lines read>` and not as a bare count, because a bare count FAILS OPEN:
+# rename the function, move the sentence into a helper, and the awk range matches nothing, `n`
+# stays 0 and the assertion goes on reporting "no literal" about a body it never opened. The
+# denominator is the floor — 0 lines read fails instead of passing on nothing.
+axis_literal="$(awk '/^kaizen_axis_note\(\) \{/ { inf = 1; next }
+                     inf && /^\}/ { inf = 0 }
+                     inf && /^ *(dim|warn) / { lines++; if ($0 ~ /[0-9]+ missions/) n++ }
+                     END { printf "%d/%d", n + 0, lines + 0 }' "$SDD")"
+assert_eq "output: the axis note quotes the guard floor instead of keeping a copy of its own" \
+  "true 3 3 0/4" \
+  "$(jq -r '.guard.degenerate_axis' <<< "$axis_series") $(jq -r '.guard.floor' <<< "$axis_series") $(num_before "$axis_out" 'missions per kit version') $axis_literal"
 
 # --- the instrument never lands inside the thing it measures ----------------
 # Pins the $OUTSIDE decision at the top of this file. If the ledger, a reader fixture or the kit

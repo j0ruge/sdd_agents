@@ -142,6 +142,12 @@ types, build, docs) has no journey to walk. Inventing a journey just to "have QA
 
 A criterion graded `—` (not analysed) fails too: a partial review is not a review.
 
+The round report starts from [`templates/review.md`](../templates/review.md). Until
+`20260818-lote-facil` this was the one artifact in the kit with a gate and no template, and two
+independent rounds derived the heading as `## Overall Grade` and collected `NO-TABLE` — the gate
+reads the literal `^###[[:space:]]+Overall Grade`. `tests/check-templates.sh` derives its
+assertions from that same regex rather than restating it.
+
 The review→fix→re-review loop happens **inside** the session. If it ends without closing, the
 runner opens a fresh session to continue, up to `REVIEW_MAX_ITER` in total. Blown →
 `BLOCKED`, or a draft PR when `PUBLISH_ON_REVIEW_BLOCKED=draft` — the one place the runner lowers
@@ -511,9 +517,12 @@ by kind, a per repo×mission×phase `detail` (each entry naming its `repo`), and
 - `ok` — none of the above.
 
 Plus a `guard` (`missions_after_change`, `missions_with_session`, `sessions`,
-`sufficient: missions_with_session >= 3` — a mission that only escalated ran, and is counted as
+`floor` — the number of missions with a session a version needs, published because the runner also
+says it out loud to the human and a second copy of it would drift the day it moves;
+`sufficient: missions_with_session >= floor` — a mission that only escalated ran, and is counted as
 one, but bought the judge no observation and so does not raise the floor;
-`degenerate_axis`, true when the **last three** kit versions in the slice each bought exactly one
+`degenerate_axis`, true when the **last `floor`** kit versions in the slice — the same number, read
+from the same owner, never a second copy of it — each bought exactly one
 *mission* — the same unit the floor counts, never sessions — there is more than one of them, **and
 no version anywhere in the history ever reached the floor** — that third clause is what separates
 "this axis cannot work here" from a merely quiet stretch in a healthy repo) and an `excluded`

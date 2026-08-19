@@ -111,6 +111,18 @@ templates. Se a solução pede infraestrutura, provavelmente é a solução erra
   programs"*. Com uma escalada como primeira linha de uma versão, as duas janelas respondiam
   diferente sobre o MESMO arquivo. Quem prova paridade é asserção **diferencial** — as duas saídas
   comparadas entre si —, nunca a frase.
+- **Captura na região do `sdd health` é guardada, ou a suíte reprova na linha que você escreveu.**
+  `bin/sdd` roda sob `set -euo pipefail`, então `x="$(cmd)"` mata o processo **na atribuição** no
+  instante em que `cmd` devolve não-zero — e para `grep`, `find` e pipeline com `pipefail`,
+  "não-zero" é só "não achou nada". Todo `health_bad` escrito abaixo de uma linha dessas é código
+  morto, e o comando que existe para responder *"o kit ainda mede o que diz medir?"* responde
+  **calando**. Conserte com `|| rc=$?`, `|| true` ou `if out="$(…)"; then`. Quem cobra é a regra
+  `guard:` do `tests/check-health.sh`, que **enumera a região** em vez de sondar sítio por sítio —
+  e a razão é medida: `20260818-lote-facil` fechou cinco sítios um a um e declarou a família
+  varrida; a r2 da mesma missão achou **onze** ainda vivos no mesmo comando, três reproduzidos
+  ponta a ponta. Probe por sítio prova os sítios que têm probe e não diz nada sobre o décimo
+  segundo. ⚠️ A regra de hoje conhece **uma** grafia de captura (`x="$(cmd)"`) e falha aberta nas
+  outras — está no `TODO.md`, com a reprodução.
 
 ## Ao mexer nos agentes (`agents/*.md`)
 
@@ -146,6 +158,16 @@ novo entra lá. Os treze de hoje: `check-templates.sh`, `check-gates.sh`, `check
 `check-mutation.sh`, `check-lang.sh`, `check-autonomy.sh`, `check-kaizen.sh`, `check-preflight.sh`,
 `check-todo.sh`, `check-pipefail.sh`, `check-entrypoint.sh`, `check-checkpoint.sh` e
 `check-health.sh`.
+
+⚠️ **Doze dos treze rodam no `TEST_CMD`; o `check-mutation.sh` é opt-in desde `4c86712`.** Ele
+verifica CADA mutante rodando a suíte inteira numa sandbox, e isso segurava a árvore por mais de
+dez minutos por gate — até tornar uma FASE insatisfazível: três sessões de REVIEW seguidas
+encerraram o turno com as palavras *"waiting for the suite"*, e em `claude -p` encerrar o turno é
+encerrar a sessão. Hoje o catálogo mora no `sdd health`, pelo mesmo argumento que já vale para a
+catraca do backlog. **Nada foi afrouxado** — muda quem cobra e quando: os gates fazem a pergunta
+rápida, `sdd health --with-mutation` faz a cara. A lacuna que isso abre está declarada no
+`TODO.md`: sem CI neste repo, o catálogo depende de alguém digitar o comando, e já aconteceu de a
+suíte rápida responder verde por cima de um catálogo vermelho.
 `sdd preflight`, `bash -n bin/sdd` e os dry-runs completam, mas não substituem. O passo de lint do
 `run-all.sh` cobre `bin/sdd` **e** `tests/*.sh` — deixar a suíte fora do linter foi o que segurou
 dois SC2318 reais em `check-mutation.sh` por três missões.
@@ -160,18 +182,25 @@ exatamente no piso: deixá-lo um curto fez três probes falharem com `surface sh
 medirem o que nomeiam.
 
 **Sensor que o catálogo de mutação não alcança carrega um auto-teste.** São duas situações, e
-hoje há quatro sensores nelas. `check-lang.sh` e `check-pipefail.sh` não podem se escanear (o
-dicionário de um É português; as probes do outro TÊM de conter o que ele detecta). `check-todo.sh`
-e `check-checkpoint.sh` medem markdown, não o `bin/sdd`, então nenhuma sabotagem do runner os
-faria morrer — `check-pipefail.sh` está nas duas situações, porque também mede `tests/`. Nos
-quatro casos quem mede o sensor é um `selftest()` com probes e rc próprios — 90, 91, 92 — mais um
-piso contra vacuidade. Sem isso, regex quebrada reporta "tudo limpo" para sempre.
+hoje há **cinco** sensores nelas. `check-lang.sh` e `check-pipefail.sh` não podem se escanear (o
+dicionário de um É português; as probes do outro TÊM de conter o que ele detecta). `check-todo.sh`,
+`check-checkpoint.sh` e `check-templates.sh` medem markdown, não o `bin/sdd`, então nenhuma
+sabotagem do runner os faria morrer — `check-pipefail.sh` está nas duas situações, porque também
+mede `tests/`. Onde a regra está paga quem mede o sensor é um `selftest()` com probes e rc
+próprios — 90, 91, 92 — mais um piso contra vacuidade. Sem isso, regex quebrada reporta "tudo
+limpo" para sempre.
+⚠️ **Quatro dos cinco pagam; o `check-templates.sh` não, e a dívida é declarada e não escondida.**
+No lugar do auto-teste ele tem o `REVIEW_FLOOR` mais uma passada adversarial nomeada no próprio
+cabeçalho — e a r2 de `20260818-lote-facil` mediu que esse piso conta **chamadas**, então uma linha
+apagada o faz certificar um `templates/review.md` de zero byte com `23 assertion(s)`. Está no
+`TODO.md`. Sensor sem auto-teste que declara o buraco é dívida; sensor sem auto-teste que jura
+estar coberto é o fail-open que esta seção inteira existe para impedir.
 ⚠️ A rubrica é "a mutação não alcança", **não** "tem `selftest()`": `grep -l '^selftest()' tests/*`
 hoje devolve **cinco**, porque o `check-entrypoint.sh` carrega um por escolha própria (o catálogo o
 alcança via `mut_RUN_entrypoint_unguarded`, mas o parser dele é fino demais para depender só
 disso). Sensor a mais com auto-teste nunca é o defeito; sensor **sem** ele, estando nas duas
 situações, é.
-⚠️ A âncora `^selftest()` **é** o instrumento; `selftest` solto responde **seis**, somando o
+⚠️ A âncora `^selftest()` **é** o instrumento; `selftest` solto responde **sete**, somando o
 `jobs_selftest()` do escalonador (`tests/check-mutation.sh:63`), que mede o pool de jobs e não
 regra de sensor nenhuma. Número em rubrica sem o comando ao lado é a mesma classe do
 `44 caught of 44` que já venceu neste arquivo — conte a propriedade, não a palavra.
@@ -245,6 +274,10 @@ o modo caro. Três perguntas antes de aceitar um verde:
 ⚠️ Este arquivo roda com `set -o pipefail`: `printf … | grep -q` devolve **141** quando o grep
 ACHA e sai antes de o printf terminar de escrever (SIGPIPE). A lógica fica invertida em entrada
 grande e correta em entrada pequena — o pior dos dois mundos. Use herestring (`<<< "$var"`).
+⚠️ **`grep -m<N>` sem flag quiet é a MESMA família e desde `20260818-lote-facil` também é cobrada**
+— RULE 3 (`rule:`) do `check-pipefail.sh`. Ele sai cedo pelo mesmo motivo, e a fronteira é de uma
+tecla: `grep -m 1 -q x` já era medido pela RULE 1, `grep -m 1 x` não era. Regra que chega com
+violação não convertida chega vermelha: a única instância viva foi convertida no mesmo commit.
 
 ⚠️ Mesma família: um comentário `#` **dentro** de um bloco continuado por `\` quebra o comando em
 silêncio, e `bash -n` não acusa — achado escrevendo os construtores `jq -cn \` do ledger de
@@ -271,17 +304,37 @@ mundos, porque a entrada real vira multibyte no dia em que alguém escrever bem.
 ⚠️ **`cd` com operando relativo dentro de `$(...)` leva `CDPATH=''`, sempre.** O bash procura o
 operando no `$CDPATH` quando ele não começa por `/`, `.` ou `..` — e, quando acha por lá, **imprime
 o diretório resolvido na stdout**, direto para dentro da substituição de comando. Custou a CRITICAL
-da r2 de `20260817-eixo-do-juiz`: `ledger_repo_root` resolve `git rev-parse --git-common-dir`, que
+da r2 de `20260817-eixo-do-juiz`: `ledger_repo_root` resolvia `git rev-parse --git-common-dir`, que
 devolve o relativo `.git` na raiz de um checkout, e com `CDPATH=$HOME` sendo o $HOME um checkout de
 dotfiles **todos os repos da máquina colapsavam numa identidade só** — escritor e leitores
 concordando nela, `other_repo: 0`, nada excluído, nada dito: a contaminação silenciosa que a função
 existe para impedir, alcançável por variável de ambiente. `CDPATH=.` sozinho já acrescentava uma
-segunda **linha** à resposta, metendo um `\n` no campo `repo` do ledger. Esvaziar o `CDPATH` pela
-duração de cada `cd` é o conserto inteiro; quem cobra é a mutação `LEDGER_repo_root_cdpath_leak` mais o
-par diferencial do `check-autonomy.sh` — que carrega um **piso provando que o veneno está ARMADO**
-no shell antes de concluir qualquer coisa, porque regra do ambiente sem veneno armado é decoração.
+segunda **linha** à resposta, metendo um `\n` no campo `repo` do ledger.
 `bash -n` não acusa, o `shellcheck` não acusa, e o teste passa enquanto quem roda tiver `CDPATH`
 vazio — que é a máquina de todo mundo até não ser.
+
+⚠️ **Consertar a função não fecha a classe; o que fecha é o scanner.** Em `20260818-lote-facil` a
+mesma grafia estava viva em **dezenove** sítios — os `ROOT=`/`SELF_PATH=` de `tests/` e dois no
+`_resolve_self` do `bin/sdd`, que resolve o `SDD_HOME` de onde saem template, agente e starter
+config. O item do backlog contava 14; a contagem de hoje sai de
+`grep -h "CDPATH='' cd" bin/sdd tests/*.sh`, nunca daqui. Quem cobra é a **RULE 2 (`cdpath:`)
+do `tests/check-pipefail.sh`**, que varre `bin/` e `tests/` linha a linha, mais os pares
+diferenciais do `check-autonomy.sh` — que carregam um **piso provando que o veneno está ARMADO**
+no shell antes de concluir qualquer coisa, porque regra de ambiente sem veneno armado é decoração.
+Limites declarados no comentário do `CD_RE`: operando **variável** é indecidível num scanner de
+linha (medido em runtime pelo par diferencial), e `pushd` tem o mesmo bug e está no `TODO.md`.
+
+⚠️ **Recusar a forma é metade do conserto; a outra metade é RESOLVER.** Segunda parte da mesma
+história, e o modo caro. `ledger_repo_root` hoje pede `git rev-parse --path-format=absolute
+--git-common-dir` (2.31+) e dispensa `cd` no caminho rápido — mas `git rev-parse` **ecoa de volta**
+uma opção que não conhece e ainda sai 0, então um git velho responde duas linhas. A guarda que
+recusou essa forma **devolvia vazio**, e vazio é o contrato de "não é um repo": em git 2.25/2.30
+toda linha viraria `repo: ""`, todo leitor a arquivaria em `no_repo` — balde que `--all-repos`
+deliberadamente não admite —, e isso é **estritamente pior** que a grafia anterior, que respondia
+certo nesses mesmos gits. Ramo de recusa que devolve o sentinela de outro significado é um segundo
+defeito com a roupa do primeiro. A grafia antiga voltou como **fallback**, segura agora pelas
+guardas de `CDPATH` acima; e a asserção mudou de "o git velho fica calado" para **acordo** — os
+dois gits comparados um com o outro. Detalhe em `docs/handoffs/20260818-lote-facil/40-review-r2.md`.
 
 ## Kaizen
 

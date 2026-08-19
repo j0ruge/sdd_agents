@@ -21,7 +21,7 @@ if [ -n "${SDD_MUTANT:-}" ]; then
   exit 1
 fi
 
-ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
+ROOT="$(CDPATH='' cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 
 # ---------------------------------------------------------------------------
 # JOBS resolution
@@ -336,24 +336,45 @@ mut_KAIZEN_mission_key_slug_only() {
 # Nothing is excluded and nothing is reported (`other_repo: 0`), which is the contamination the
 # filter exists to name, arriving through a different door.
 #
-# ⚠️ DOUBLE-quoted, and it has to be. The anchor contains `CDPATH=''`, and an apostrophe cannot
-# survive inside a single-quoted shell string: `''` there closes the quote and reopens it, so sed
-# received `CDPATH= cd` and stopped matching the file the day the SC1007 spelling was fixed. It
-# failed the honest way — CATALOGUE-BROKEN, rc 90 — which is the harness guard doing its job, but
-# the same trap silently mis-anchors any sed whose target holds a quote. Same family as the rule
-# forbidding an apostrophe inside the jq programs in bin/sdd (see CLAUDE.md).
+# ⚠️ This anchor has now moved TWICE with the same function, and both moves were the honest
+# failure — CATALOGUE-BROKEN, rc 90 — rather than a mutant quietly measuring nothing. The first
+# time the anchor held `CDPATH=''` and had to be double-quoted, because an apostrophe cannot
+# survive inside a single-quoted shell string (`''` there closes the quote and reopens it, so sed
+# received `CDPATH= cd`). The second time `ledger_repo_root` dropped the two `cd`s entirely for
+# `--path-format=absolute`, and the whole anchored line ceased to exist. It is single-quoted again
+# now that no apostrophe is in it. The lesson both times: a mutant anchored on a line a refactor
+# can delete has to be re-derived WITH that refactor, in the same commit.
 mut_LEDGER_repo_root_common_parent() {
-  sed -i "s@^  gitdir=\"\\\$( CDPATH='' cd \"\\\$start\" && CDPATH='' cd \"\\\$common\" && pwd -P 2>/dev/null )\" || return 0\$@  printf \"%s\" \"\$( cd \"\$start\" \&\& cd \"\$common/..\" \&\& pwd -P 2>/dev/null )\"; return 0@" "$1"
+  sed -i 's@^  gitdir="\$( git -C "\$start" rev-parse --path-format=absolute --git-common-dir 2>/dev/null )" || return 0$@  printf "%s" "$( dirname "$( git -C "$start" rev-parse --path-format=absolute --git-common-dir 2>/dev/null )" )"; return 0@' "$1"
 }
 
-# The guard that keeps the ENVIRONMENT from answering "which repo is this" goes away, and the repo
-# identity becomes whatever $CDPATH says: `--git-common-dir` is relative at a checkout root (`.git`)
-# and bash searches CDPATH for that operand, so a single dotfiles checkout in the path collapses
-# every repository on the machine into one identity — writer and readers agreeing, `other_repo: 0`,
-# nothing said. `/g` on purpose: the two `cd`s are ONE guard, and sabotaging half of it would leave
-# the pair in check-autonomy.sh measuring the half that still works.
+# The ENVIRONMENT gets to answer "which repo is this" again. This mutant puts back the exact
+# spelling `ledger_repo_root` carried before the `--path-format=absolute` rewrite, minus the
+# `CDPATH=''` guards: a RELATIVE common dir (`.git` at a checkout root) fed to a bare `cd`, which
+# bash resolves through $CDPATH and whose find it echoes into the capture. A dotfiles checkout in
+# the path collapses every repository on the machine into one identity — writer and readers
+# agreeing, `other_repo: 0`, nothing said — and `CDPATH=.` alone puts a second LINE in the field.
+#
+# ⚠️ It is deliberately NOT a sabotage that fails with a clean environment. With $CDPATH unset this
+# mutant behaves EXACTLY like the healthy function, in every repo shape, which is the point: the
+# only thing that can catch it is the poisoned-CDPATH differential pair in check-autonomy.sh, and
+# the pair carries its own floor proving the poison is armed. A mutant that any assertion could
+# catch would prove nothing about the two that were written for this.
+# ⚠️ BOTH spellings, in one mutant, and that is the whole repair of this entry.
+#
+# It sabotaged only the FAST path, and `75c9d2a` made that a no-op: the shape guard empties a
+# poisoned value and the pre-2.31 FALLBACK — which carries its own `CDPATH=''` — then resolves it
+# correctly. Sane and mutant answered BYTE FOR BYTE the same, rc 0 both, so the entry sat in the
+# catalogue certifying a protection nothing was measuring. Reported as `is NOT caught`, which is
+# the catalogue doing its job on itself.
+#
+# Splitting it in two was the other direction the finding offered, and it is the wrong one HERE:
+# a fast-path-only mutant stays neutralised by the fallback no matter which entry it lives under.
+# The property being defended is "no `cd` in this function reads CDPATH", and that property has
+# two sites, so the sabotage has two sites.
 mut_LEDGER_repo_root_cdpath_leak() {
-  sed -i "s@CDPATH='' cd@cd@g" "$1"
+  sed -i 's@^  gitdir="\$( git -C "\$start" rev-parse --path-format=absolute --git-common-dir 2>/dev/null )" || return 0$@  local rel; rel="$( git -C "$start" rev-parse --git-common-dir 2>/dev/null )"; gitdir="$( cd "$start" \&\& cd "$rel" \&\& pwd -P 2>/dev/null )" || return 0@' "$1"
+  sed -i 's@CDPATH='"''"' cd "\$start" && CDPATH='"''"' cd "\$common"@cd "$start" \&\& cd "$common"@' "$1"
 }
 
 # The bare test goes back to asking about the ENTRY POINT instead of the repository, and one
@@ -552,6 +573,34 @@ mut_RUN_stream_summary_fatal() {
   sed -i "s@jq -c 'select(.type == \"result\")' \"\$1\" 2>/dev/null | tail -1 || true@jq -c 'select(.type == \"result\")' \"\$1\" 2>/dev/null | tail -1@" "$1"
 }
 
+# The journal stops naming an unknown cost, half one of two: an answer that carries no money makes
+# jq print its own `null`, and the run files that word in the money column as if the CLI had said
+# it. The ledger cannot notice — `($cost | tonumber? // null)` maps "?", "null" and "" to the same
+# null — so this is a defect only the human reading pipeline.log ever meets, which is exactly the
+# kind this catalogue keeps letting through. Caught by the `covered:` cost assertion of
+# check-autonomy.sh and by nothing else in that file.
+mut_RUN_cost_absent_unlabelled() {
+  sed -i 's@ // "?"@@' "$1"
+}
+
+# Half two, and a separate entry because it is a separate guard for a separate shape: a session with
+# no terminal `result` leaves an EMPTY summary, jq exits 0 having printed nothing, and the `|| echo
+# "?"` above it never fires because nothing failed. The journal line came out `cost_usd=  log=…`,
+# an unlabelled hole where every other row says `?`. Replaced by `true` rather than deleted, so the
+# shape of the function is untouched and only the fallback dies.
+mut_RUN_cost_empty_unlabelled() {
+  sed -i 's@^  \[ -n "$cost" \] || cost="?"$@  true@' "$1"
+}
+
+# `--max-phases` stops stopping. The option still parses and still counts; the run simply keeps
+# going and opens every session the pipeline has left — the human who asked for ONE session to look
+# at the result gets the whole pipeline instead. The branch is left whole and only its condition
+# dies, so the mutant is a runner that reads the flag and ignores it, which is what a regression
+# here would actually look like.
+mut_RUN_max_phases_ignored() {
+  sed -i 's@^    if \[ "$max_phases" -gt 0 \] && \[ "$phases_run" -ge "$max_phases" \]; then$@    if false; then@' "$1"
+}
+
 # The watcher's exit status overwrites the session's. The tempting one-liner — `wait` without the
 # `|| true`, or with its status kept — and the phase then reports how the WATCHER died instead of
 # how the session did: journal and ledger record a green phase for a failed one.
@@ -640,8 +689,22 @@ mut_AUTONOMY_all_repos_ignored() {
 # really share it. Reverting only the writer (or only the reader) would leave the two sides
 # agreeing on the OLD identity — the differential pair reads 3-own/0-foreign either way, and the
 # mutant would survive while measuring nothing.
+#
+# Re-anchored with the `--path-format=absolute` rewrite: it used to replace the `common=` line,
+# which that rewrite deleted.
+# The shape guard drops, and a git older than 2.31 gets to name the repository. `rev-parse` ECHOES
+# an option it does not know and still exits 0, so the answer is two lines — the flag, then the
+# relative common dir — and neither `|| return 0` (rc is 0) nor `-n` (not empty) refuses it. Caught
+# by the pre-2.31 differential pair of check-autonomy.sh, which reads the identity back out of the
+# runner under a shim and demands it be the repo or nothing, never the flag. The `case` and its
+# `esac` go together: removing the opener alone leaves invalid bash, which is a harness failure and
+# not a capture.
+mut_LEDGER_repo_root_shape_blind() {
+  perl -0pi -e 's@  case "\$gitdir" in\n    /\*\) \[ "\$gitdir" = "\$\{gitdir%%\$.\\n.\*\}" \] \|\| gitdir="" ;;\n    \*\)  gitdir="" ;;\n  esac\n@@' "$1"
+}
+
 mut_LEDGER_repo_root_toplevel() {
-  sed -i 's@^  common="\$( git -C "\$start" rev-parse --git-common-dir 2>/dev/null )" || return 0$@  printf "%s" "$( git -C "$start" rev-parse --show-toplevel 2>/dev/null )"; return 0@' "$1"
+  sed -i 's@^  gitdir="\$( git -C "\$start" rev-parse --path-format=absolute --git-common-dir 2>/dev/null )" || return 0$@  printf "%s" "$( git -C "$start" rev-parse --show-toplevel 2>/dev/null )"; return 0@' "$1"
 }
 
 # Not a gate: the preflight goes back to asking whether the agent copy EXISTS, which is what it did
@@ -708,6 +771,21 @@ mut_RUN_approve_writes_auto() {
 # indented.
 mut_RUN_approve_bails_on_kaizen_born() {
   sed -i '/^cmd_approve() {/,/^}/ s@^      if ! plan_approves_itself; then$@      if true; then@' "$1"
+}
+
+# `sdd approve` stops refusing a mission whose plan is not on disk: the guard still asks gate_PLAN
+# and still tests the reason, it simply does nothing about it. The command then previews, writes
+# `aprovacao: humano-<today>` and commits — an approval of a mission that is one file, with the
+# next `sdd run` opening an EXEC session over no plan and no increments.
+#
+# `:` and not a deletion: the `then` needs a body, and a mutant that dies of bash scores a point
+# for a door that was never opened. Range-addressed to cmd_approve because `die "$GATE_WHY"` is
+# also how cmd_kaizen refuses an unreadable ledger, and an unaddressed sed would sabotage the two
+# commands at once. Caught by the `covered:` assertion of check-gates.sh and by nothing else —
+# measured, and unsurprising: every other approve fixture ships the three artifacts, so gate_PLAN
+# never answers `missing ` for them.
+mut_RUN_approve_no_plan_blind() {
+  sed -i '/^cmd_approve() {/,/^}/ s@; then die "$GATE_WHY"; fi@; then :; fi@' "$1"
 }
 
 # The runner stops reading the `branch:` field — the state the kit lived in until this mission, and
@@ -855,8 +933,46 @@ mut_KAIZEN_prompt_series_unflagged() {
 # The `@` delimiter is not a taste: with sed's usual `|`, the substitution opens with the literal
 # text `s|grep -q`, and tests/check-pipefail.sh reads that as a writer piped into `grep -q` — the
 # SIGPIPE bug it exists to forbid. It was right to: a human reading `|grep -q` sees a pipe too.
+# The two guards the r2 review of 20260818-lote-facil added to the family the mission thought it
+# had closed. `sdd health` runs under `set -euo pipefail`, so a capture whose command reports
+# non-zero — and for grep, "no match" IS non-zero — kills the runner AT THE ASSIGNMENT, leaving
+# every health_bad below it as dead code. The mission fixed five sites one at a time; eleven more
+# were still live, three of them reproduced end to end. Both mutants below are caught by the
+# `guard:` rule of check-health.sh, which censuses the whole region instead of probing one site.
+#
+# ⚠️ Both carry a RANGE ADDRESS and neither may lose it: `| sort -u || true)"` occurs three times
+# in cmd_health alone, so an unaddressed `sed` would sabotage two extra sites in silence — the
+# defect this same review round found twice in the pre-existing catalogue.
+mut_HEALTH_gates_capture_aborts() {
+  sed -i '/# --- 4. every gate has a mutation/,/# --- 5. drift load_config/ s@| sort -u || true)"@| sort -u)"@' "$1"
+}
+
+# The provenance line read, which is the site where the silence cost the most: `-f "$tpl"` proves
+# the file is there and nothing about the LINE, so a skill that renamed the field it pins killed
+# the run in exactly the case health_provenance exists to report.
+mut_HEALTH_provenance_line_aborts() {
+  sed -i '/# qa-execution report: the Status line/,/# registry bug: the Status line/ s@"\$tpl" || true)"@"$tpl")"@' "$1"
+}
+
 mut_HEALTH_ratchet_one_way() {
   sed -i 's@grep -qxF "\$line" <<< "\$HEALTH_FINDINGS"@true@' "$1"
+}
+
+# The blind exemption removed: a check that declared itself unable to measure has its baseline line
+# judged anyway, and the ratchet tells the operator to DELETE the backlog ratchet's only anchor.
+# Destructive advice out of a measurement that did not happen — worse than saying nothing, which is
+# why it is a mutant and not a comment. Caught by "a baseline line whose producer went blind is not
+# called stale" in check-health.sh.
+mut_HEALTH_stale_judges_the_blind() {
+  sed -i 's@if grep -qxF "${line%% \*}" <<< "$HEALTH_BLIND"; then@if false; then@' "$1"
+}
+
+# The grade-table criteria loop passes by never iterating: with the skill's heading renamed the
+# `while` runs zero times, `missing` stays empty, `checked` goes up, and the summary announces
+# `all 3 fixtures match` about a table it never read. The exact drift health_provenance exists to
+# catch, certified as absent by health_provenance itself.
+mut_HEALTH_provenance_empty_table() {
+  sed -i 's@if \[ "$n_crit" -eq 0 \]; then@if false; then@' "$1"
 }
 
 # Fixture provenance always agrees. `sdd health` goes on reporting "provenance: N fixture(s) match
@@ -872,11 +988,33 @@ mut_HEALTH_ratchet_one_way() {
 # `sed` sabotages BOTH and this single entry silently becomes two — the "one mutation, one line"
 # discipline of this file broken, and, worse, a dedicated entry for the qa-execution comparison
 # made impossible to ever score, because this one would already be killing it. Caught in the r1
-# review of 20260817-catraca-do-backlog. Only the qa-report half has a fixture in
-# tests/check-health.sh today, so only that half can honestly carry a mutation; the other two
-# comparisons are an open TODO.md finding, not a point this catalogue may claim.
+# review of 20260817-catraca-do-backlog. The two entries below are the other two comparisons,
+# which used to be an open TODO.md finding for exactly this reason: no fixture installed the skills
+# they read, so neither could honestly carry a mutation. Now that both have one, the range here
+# earns its keep three times over.
 mut_HEALTH_provenance_blind() {
-  sed -i '/# registry bug: the Status line/,/# codereview grade table/ s|    if \[ "\$line" = "\$fix" \]; then checked|    if true; then checked|' "$1"
+  sed -i '/# registry bug: the Status line/,/# codereview grade table/ s|    if \[ -n "\$line" \] && \[ "\$line" = "\$fix" \]; then checked|    if true; then checked|' "$1"
+}
+
+# The FIRST of the three comparisons goes blind: the qa-execution report fixture agrees with any
+# template the skill ships. Range-addressed for the same reason as the entry above and against the
+# same byte-identical line — this one takes the half BEFORE the qa-report branch.
+#
+# Caught by the `covered:` assertion of check-health.sh and by nothing else, measured one mutant at
+# a time: assertion 4 reads the qa-report comparison, which this leaves untouched, and every other
+# assertion in that file runs with no skill installed at all.
+mut_HEALTH_report_provenance_blind() {
+  sed -i '/# qa-execution report: the Status line/,/# registry bug: the Status line/ s|    if \[ -n "\$line" \] && \[ "\$line" = "\$fix" \]; then checked|    if true; then checked|' "$1"
+}
+
+# The THIRD comparison goes blind: the codereview grade table may grow a criterion the gate fixture
+# never covers and `sdd health` says nothing. It is not a `$line = $fix` twin — it is a loop that
+# collects the uncovered criteria and then judges — so it needs its own sabotage, and the verdict
+# is where it goes: the loop keeps running and the finding is simply never spoken. Left as an `if`
+# with both branches whole, so the `else` that counts the fixture as checked still runs and the
+# mutant reports "provenance: 1 fixture(s) checked" exactly like a healthy kit.
+mut_HEALTH_grade_table_blind() {
+  sed -i 's@    if \[ -n "$missing" \]; then@    if false; then@' "$1"
 }
 
 # The backlog ratchet goes blind: `sdd health` still runs the whole TODO.md check, still refuses a
@@ -894,6 +1032,88 @@ mut_HEALTH_provenance_blind() {
 # body is a syntax error — the mutant would die of bash, scoring a point for a door never opened.
 mut_HEALTH_todo_count_blind() {
   sed -i 's@^    health_finding "todo-findings .*@    true@' "$1"
+}
+
+# ─── the five silent aborts of cmd_health ─────────────────────────────────────────────────────
+# One family, five entries, and the split is deliberate: each restores ONE site to the bare form
+# that used to be there, so the score stops crediting one guard for the other four. They are the
+# cheapest mutants in the catalogue to write and the ones that would hurt most to lose — every
+# single one of them was a REAL defect measured against the real runner, not an invented one, and
+# the shape they restore is the shape a future session writes by default.
+#
+# All five are range-addressed or anchored on the guard's own text, never on a line number: the
+# bare form `x="$(cmd)"` is the most common line in this file, and an unaddressed sed would
+# sabotage half the runner and score five points for one door.
+
+# `sdd health` goes back to dying on the suite capture. A RED SUITE — the one case the command
+# exists to report — prints the header, rc 1, and nothing else: `set -e` kills the assignment
+# before health_bad can say a word, and checks 2 through 8 never run at all.
+#
+# ⚠️ Caught by the `abort: a red suite` assertion of check-health.sh and by NOTHING ELSE, because
+# rc 1 is what a reporting health_bad returns too. Every other assertion in that file reads a
+# green stub suite, so this mutant leaves them all alive — which is the point of the split.
+mut_HEALTH_suite_capture_aborts() {
+  sed -i '/^cmd_health() {/,/^}/ s@" || rc=$?@"; rc=$?@' "$1"
+}
+
+# The `score:` read goes back to killing the run when it matches nothing. The branch below it
+# still carries the sentence "health went blind to the mutation" — it simply becomes unreachable,
+# so the kit's mutation score can silently stop being printed and `sdd health` reports it as a
+# crash instead of as the contract breach it is.
+mut_HEALTH_score_read_aborts() {
+  sed -i "s@grep -m1 '^score: ' <<< \"\$out\" || true@grep -m1 '^score: ' <<< \"\$out\"@" "$1"
+}
+
+# `sdd health` stops asking the suite for the catalogue — and since the catalogue left TEST_CMD,
+# health is the ONLY caller that asks. Nobody else runs it; there is no CI in this repo.
+#
+# The expensive part is how quietly it fails. health still prints `suite green`, still finds no
+# `score:` line, and still says `health went blind to the mutation` — a sentence that reads as an
+# accusation against check-mutation.sh for a defect living in this very line. An operator would go
+# looking in the wrong file while the whole catalogue sat unrun.
+#
+# Caught by `surface: cmd_health asks the suite for the mutation catalogue` in check-health.sh,
+# which reads the argv the stub suite RECORDED rather than the text of this call.
+# ⚠️ `2>\&1` and not `2>&1`: an unescaped `&` in a sed REPLACEMENT means "the whole match", so the
+# naive form expands to `2>tests/run-all.sh --with-mutation 2>&11` — still valid bash, so `bash -n`
+# passes it and the harness accepts the mutant. It killed the assertion, but as garbage killing ten
+# of them, not as this defect killing one. Red for the wrong reason is the one verdict this
+# catalogue may never take: it certifies an assertion that was never the thing measuring.
+mut_HEALTH_suite_without_mutation() {
+  sed -i 's@tests/run-all.sh --with-mutation 2>\&1@tests/run-all.sh 2>\&1@' "$1"
+}
+
+# Provenance goes back to dying on a machine that has no plugins cache. `find` on a missing
+# directory returns 1, pipefail carries it, and the assignment takes the runner down three ok
+# lines in — no provenance, no ratchet, no verdict. Not a hypothetical machine: any box where the
+# codereview plugin was never installed.
+mut_HEALTH_provenance_find_aborts() {
+  sed -i 's@ | sort -V | tail -1 || true)"@ | sort -V | tail -1)"@' "$1"
+}
+
+# The ratchet goes back to dying on a baseline with no live line. An empty baseline is not an
+# error — it means nothing is known debt, so everything is new — but the bare form made it a
+# silent crash after the provenance line, saying neither `kit healthy` nor how many checks failed.
+mut_HEALTH_baseline_read_aborts() {
+  sed -i '/^health_ratchet() {/,/^}/ s@ || true)"@)"@' "$1"
+}
+
+# The SAME silence one call frame up, and the reason this is a fifth entry and not part of the one
+# above: the site is not a capture at all. As an `&&` chain the last statement returns the status
+# of its first failing test, so a ratchet that FOUND something returns 1 — and `set -e` kills
+# cmd_health on the call, one line before its own `N check(s) failed`. It eats the verdict on the
+# path that WORKS, and every assertion that reads only `rc != 0` stays green through it, since
+# cmd_health's own `return 1` would have produced the same rc.
+#
+# TWO substitutions and not one, because the `fi` has to go with the `if`: left behind it is a
+# syntax error, the mutant dies of bash (rc 91) and the harness scores a point for a door that was
+# never opened. Deleted rather than replaced with a `true` — a `true` at the end of the function
+# would pin the return status to 0 and quietly UNDO the very defect this entry exists to restore.
+mut_HEALTH_ratchet_eats_verdict() {
+  sed -i '/^health_ratchet() {/,/^}/ {
+      s@^  if \[ "$new_findings" -eq 0 \] && \[ "$stale" -eq 0 \]; then@  [ "$new_findings" -eq 0 ] \&\& [ "$stale" -eq 0 ] \&\&@
+      /^  fi$/d
+    }' "$1"
 }
 
 # `sdd retry` loses the checkout and goes back to committing wherever the human happens to stand.
@@ -930,6 +1150,17 @@ mut_RUN_ghost_session_id() {
 # Range-addressed to cmd_retry: the two-space form is byte-identical in cmd_kaizen.
 mut_RETRY_moved_never_true() {
   sed -i '/^cmd_retry() {/,/^}/ { s|^  \[ "$before" != "$after" \] && moved="true"$|  true| }' "$1"
+}
+
+# The THIRD copy of the same line, and the last one that had no mutation: `sdd kaizen` stops
+# measuring whether the judge's session changed the disk. Same argument as the retry entry above,
+# with one extra edge — the kaizen row is the ONLY session row a kit repo writes about itself, so a
+# judge stuck on moved:false teaches the next verdict that its own loop never progresses.
+#
+# Range-addressed to cmd_kaizen: the two-space form is byte-identical in cmd_retry, and an
+# unaddressed sed would sabotage both doors and credit this entry for the other's coverage.
+mut_KAIZEN_moved_never_true() {
+  sed -i '/^cmd_kaizen() {/,/^}/ { s|^  \[ "$before" != "$after" \] && moved="true"$|  true| }' "$1"
 }
 
 # The post-pipeline nudge goes silent: missions pile up on a kit sha nobody judged and `sdd run`
@@ -992,6 +1223,65 @@ mut_KAIZEN_series_escalations_dropped() {
   sed -i 's|^                         and (.event == "session" or is_escalation)))) as $all$|                         and (.event == "session")))) as $all|' "$1"
 }
 
+# The blocked line goes back to counting LAPS OF THE LOOP and calling them sessions. `attempts`
+# rises on the lap that escalates — which opens no session at all — and on every later lap the
+# REVIEW->PR->REVIEW degradation takes, so the last line a human reads when a run ends said
+# `3 sessions` over a ledger holding one REVIEW session.
+#
+# It restores the historical defect exactly, rather than emptying the counter: a mutant that merely
+# stopped feeding `sessions` would print `0` and be caught by arithmetic, where this one prints a
+# plausible number that is simply about something else — the shape the assertion has to survive.
+mut_RUN_blocked_counts_laps() {
+  sed -i 's@${sessions\[$phase\]:-0} session(s) without satisfying@${attempts[$phase]} session(s) without satisfying@' "$1"
+}
+
+# The exclusion accounting goes back to one blank line between every two of its lines: a paragraph
+# about where the rows went, printed as four unrelated asides. Anchored on the `join` of the array
+# that collects them — the token that only exists because the four strings are ONE output now.
+#
+# The leading newline is left ALONE and only the separator doubles, so the blank that divides the
+# block from the table survives: the mutant reproduces the defect and nothing else, and an
+# assertion that passed on "there is a blank line somewhere" would not notice it.
+mut_AUTONOMY_exclusions_split() {
+  sed -i 's@\] | select(length > 0) | "\\n" + join("\\n"))@] | select(length > 0) | "\\n" + join("\\n\\n"))@' "$1"
+}
+
+# The one voice of the guard floor a human reads out loud writes its own copy of the number again,
+# under the comment that swears it does not. Nothing breaks and no count moves — the sentence goes
+# on being true until the floor changes, and then it is the only reader still saying the old value.
+#
+# The `$floor` in the anchor is what keeps it honest: it is the interpolation itself, so the mutant
+# cannot apply to a runner that never derived the number, and `cmp` reports "did not apply" instead
+# of scoring a point for sabotaging prose.
+mut_KAIZEN_axis_note_own_floor() {
+  sed -i 's@The floor of $floor missions per kit version@The floor of 3 missions per kit version@' "$1"
+}
+
+# The exclusion paragraph loses the blank line that divides it from the TABLE and is printed glued
+# to the last version row — the opposite over-correction to `mut_AUTONOMY_exclusions_split` above,
+# and the one a hand fixing that defect reaches for first (delete every newline and the blanks
+# between the lines go away too).
+#
+# It exists because that half of the claim has no other catcher: the split mutant leaves the
+# leading newline alone, and D5 next door counts CONSECUTIVE blanks, so an accounting welded onto
+# the table satisfies it. Without this entry the "one blank above" term would be a rule with no
+# probe — decoration, by this repo's own rubric.
+mut_AUTONOMY_exclusions_glued() {
+  sed -i 's@\] | select(length > 0) | "\\n" + join("\\n"))@] | select(length > 0) | join("\\n"))@' "$1"
+}
+
+# The series stops PUBLISHING the floor, so `.guard.floor` reads null and the sentence the human
+# hears has nothing left to quote. It is the other half of `mut_KAIZEN_axis_note_own_floor`: that
+# one puts a second copy of the number back, this one removes the first — either way the floor stops
+# having exactly one owner with exactly one voice.
+#
+# Caught twice on purpose, and that is not a duplicate point: check-kaizen.sh compares the guard KEY
+# SETS of the two producers (the jq program and the empty-ledger printf), so this mutation also
+# proves the empty series never silently drifts out of step with the real one.
+mut_KAIZEN_guard_floor_unpublished() {
+  sed -i '/^               floor: guard_floor,$/d' "$1"
+}
+
 CATALOG=(
   PLAN_empty_approval
   PLAN_kaizen_born_blind
@@ -1033,6 +1323,9 @@ CATALOG=(
   RUN_stream_no_verbose
   RUN_stream_summary_unfiltered
   RUN_stream_summary_fatal
+  RUN_cost_absent_unlabelled
+  RUN_cost_empty_unlabelled
+  RUN_max_phases_ignored
   RUN_progress_eats_rc
   RUN_progress_dead
   RUN_entrypoint_unguarded
@@ -1041,6 +1334,7 @@ CATALOG=(
   RUN_base_branch_warn_dead
   RUN_approve_writes_auto
   RUN_approve_bails_on_kaizen_born
+  RUN_approve_no_plan_blind
   RUN_branch_switch_dead
   RUN_branch_option_name
   RUN_branch_orphan_blind
@@ -1051,6 +1345,7 @@ CATALOG=(
   KAIZEN_adr_0003_orphan
   KAIZEN_degenerate_axis_blind
   AUTONOMY_all_repos_ignored
+  LEDGER_repo_root_shape_blind
   LEDGER_repo_root_toplevel
   LEDGER_no_repo_counted_as_local
   KAIZEN_prompt_series_unflagged
@@ -1063,17 +1358,35 @@ CATALOG=(
   KAIZEN_degenerate_axis_session_unit
   KAIZEN_degenerate_axis_window_sorted
   KAIZEN_series_rc_dropped
+  HEALTH_gates_capture_aborts
+  HEALTH_provenance_line_aborts
   HEALTH_ratchet_one_way
+  HEALTH_stale_judges_the_blind
+  HEALTH_provenance_empty_table
   HEALTH_provenance_blind
+  HEALTH_report_provenance_blind
+  HEALTH_grade_table_blind
   HEALTH_todo_count_blind
+  HEALTH_suite_capture_aborts
+  HEALTH_score_read_aborts
+  HEALTH_suite_without_mutation
+  HEALTH_provenance_find_aborts
+  HEALTH_baseline_read_aborts
+  HEALTH_ratchet_eats_verdict
   RETRY_branch_switch_dead
   RUN_ghost_session_id
   RETRY_moved_never_true
+  KAIZEN_moved_never_true
   KAIZEN_reminder_dead
   KAIZEN_already_judged_spends
   RUN_degraded_journal_dropped
   AUTONOMY_is_escalation_blind
   KAIZEN_series_escalations_dropped
+  RUN_blocked_counts_laps
+  AUTONOMY_exclusions_split
+  AUTONOMY_exclusions_glued
+  KAIZEN_axis_note_own_floor
+  KAIZEN_guard_floor_unpublished
 )
 
 # Mutations that are NOT caught today, each with the increment that closes it. Ratchet in both

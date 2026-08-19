@@ -2,7 +2,10 @@
 # The kit's suite. It is bash + markdown, so the "tests" are the kit's own sensors: the runner
 # syntax, the template contract, the gate state machine, and the language of the kit surface.
 #
-# Usage: tests/run-all.sh
+# Usage: tests/run-all.sh [--with-mutation] [--list]
+#   --with-mutation  also run the mutation catalogue (minutes; see the block below for why it is
+#                    opt-in). `sdd health` is the one caller that asks for it.
+#   --list           print the steps that WOULD run and exit 0, executing none of them.
 
 set -uo pipefail
 
@@ -14,10 +17,55 @@ SDD_TEST_STATE="$(mktemp -d "${TMPDIR:-/tmp}/sdd-suite-state-XXXXXX")"
 export SDD_STATE_DIR="$SDD_TEST_STATE"
 trap 'rm -rf "$SDD_TEST_STATE"' EXIT
 
-ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
+ROOT="$(CDPATH='' cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 fails=0
 
+# The mutation catalogue is OPT-IN, and that is a decision with a measured reason.
+#
+# check-mutation.sh verifies each mutant by running THIS FILE inside a sandbox — every mutant times
+# the nine behavioural sensors — and the result is a suite of minutes. Measured: a single gate run
+# held the working tree for more than ten minutes. That stopped being a comfort problem the day it
+# made a PHASE unsatisfiable: three REVIEW sessions in a row ended their turn with the words
+# "waiting for the suite", and in a headless `claude -p` session ending the turn IS ending the
+# session. Nobody wakes it up. US$ 104 of review bought no review.
+#
+# So the catalogue moves to `sdd health`, which is the command written to answer "does the kit
+# still measure what it claims to?" — and the precedent is already in CLAUDE.md, with the same
+# argument, for the backlog ratchet: it lives in `sdd health` and NOT in TEST_CMD on purpose,
+# because a ceiling inside the suite fails the EXEC/QA/REVIEW gate of every mission in flight.
+#
+# NOTHING IS LOOSENED. Every assertion stays, and every one is still demanded. What changes is
+# who asks, and when: the gates ask the fast question, `sdd health` asks the expensive one.
+# The known cost of the trade — no CI in this repo, so the catalogue now runs only when a human
+# types `sdd health` — is written down in TODO.md rather than left silent.
+#
+# No count is written here on purpose: the catalogue grows every mission, and CLAUDE.md records
+# that a number written into prose is a use-by date. It arrived stale in this very file — three
+# sites said 101 in the commit that took the catalogue to 102. The live number is the `score:`
+# line of `tests/run-all.sh --with-mutation`.
+WITH_MUTATION=0
+# Prints the steps that WOULD run and exits, executing none of them. It exists so the composition
+# above is assertable without paying for it: `--list` against `--list --with-mutation` is a
+# differential over the REAL dispatch path — the same guards, the same conditionals — instead of a
+# second hand-written list that rots the first time someone edits only one of them. Same shape as
+# the `--check <file>` mode CLAUDE.md records for check-todo.sh, and for the same reason: a probe
+# has to exercise the path, not just the function.
+LIST_ONLY=0
+for arg in "$@"; do
+  case "$arg" in
+    --with-mutation) WITH_MUTATION=1 ;;
+    --list)          LIST_ONLY=1 ;;
+    # Refused by name, never ignored: an option silently dropped would let `sdd health` ask for the
+    # catalogue, get a suite without it, and report `health went blind to the mutation` — blaming
+    # check-mutation.sh for a typo in the caller.
+    *) printf 'run-all.sh: unknown option: %s (want --with-mutation or --list)\n' "$arg" >&2; exit 2 ;;
+  esac
+done
+
 run() { # run <name> <command...>
+  # The list mode lives HERE, in the one function every step goes through, and not in a table
+  # beside them: a step added tomorrow is listed without anyone remembering to list it.
+  if [ "$LIST_ONLY" = 1 ]; then printf '%s\n' "$1"; return 0; fi
   printf '\n\033[1m▸ %s\033[0m\n' "$1"; shift
   if "$@"; then :; else printf '\033[31m  ✗ failed\033[0m\n' >&2; fails=$((fails + 1)); fi
 }
@@ -162,10 +210,22 @@ run "sdd health discriminates" "$ROOT/tests/check-health.sh"
 # Cost of letting it in, measured: 0.14 s per run, ~0.6 s of wall clock across the whole pool.
 run "preflight and the install guard" "$ROOT/tests/check-preflight.sh"
 
-# Sensor of the sensor. Outside the guard this would be infinite recursion: every mutant runs this
-# same suite. check-mutation.sh has the twin guard and dies if it is born with SDD_MUTANT set.
-[ -n "${SDD_MUTANT:-}" ] || run "mutation: the suite dies when the runner is sabotaged" \
-  "$ROOT/tests/check-mutation.sh"
+# Sensor of the sensor. TWO conditions, and they answer different questions — collapsing them into
+# one would reopen something the other was holding shut:
+#
+#   SDD_MUTANT   recursion. Every mutant runs this same suite; check-mutation.sh has the twin guard
+#                and dies if it is born with SDD_MUTANT set. This one is about correctness and can
+#                never be lifted.
+#   WITH_MUTATION cost. The opt-in described at the top of this file. This one is about who pays.
+#
+# Dropping the first because the second "already covers it" is the tempting edit and the wrong one:
+# `sdd health` asks for --with-mutation, and inside its sandbox that would recurse.
+[ -n "${SDD_MUTANT:-}" ] || [ "$WITH_MUTATION" = 0 ] \
+  || run "mutation: the suite dies when the runner is sabotaged" "$ROOT/tests/check-mutation.sh"
+
+# Before the verdict, not after: a list that ended in `suite green` would be claiming a run that
+# never happened — the label-instead-of-artifact shape this kit exists to refuse.
+[ "$LIST_ONLY" = 1 ] && exit 0
 
 printf '\n'
 if [ "$fails" -eq 0 ]; then printf '\033[32m\033[1msuite green\033[0m\n'; exit 0; fi

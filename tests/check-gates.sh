@@ -11,7 +11,7 @@
 
 set -uo pipefail
 
-ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
+ROOT="$(CDPATH='' cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 SDD="$ROOT/bin/sdd"
 FIX="$(mktemp -d "${TMPDIR:-/tmp}/sdd-gates-XXXXXX")"
 MISSION="20260101-fixture"
@@ -851,6 +851,55 @@ else
   fail "approve refuses a mission whose frontmatter has no aprovacao: key, and never touches the body" \
        "rc 1, the file byte-identical, three files in the directory, HEAD unmoved" \
        "rc $NK_RC, changed: $(diff <(printf '%s\n' "$NK_BEFORE") <(printf '%s\n' "$NK_AFTER") | head -4), ${#NK_DIR_ENTRIES[@]} file(s): $(tail -2 <<< "$NK_OUT")"
+fi
+
+# --- 5. the mission whose plan is not on disk at all ------------------------
+#
+# `cmd_approve` opens by asking gate_PLAN and dying when the reason starts with `missing `. Until
+# this fixture NO world reached that guard: all five approve missions above ship the three
+# artifacts, so replacing the `die` with a no-op left this file green — and the command went on to
+# print a preview, write `aprovacao: humano-<today>` and commit it, over a mission that is one
+# file. The next `sdd run` then opens an EXEC session with no plan and no increments to execute.
+#
+# THE rc IS NOT THE ASSERTION. `die` ends in rc 1 and so does half this file; what separates the
+# guard from its absence is that the artifact and HEAD are untouched, and that the refusal NAMES
+# the file that is missing. The name is load-bearing rather than cosmetic: the guard exists to
+# hand the human gate_PLAN's OWN diagnosis, and a die that reworded it — or that fired on some
+# other reason — would leave the human hunting for which of the three artifacts to write. The
+# whole `sdd approve` block is built on GATE_WHY being read and never restated.
+#
+# Deliberately a SIXTH mission and not a `rm` on one of the five: they are walked in order, and
+# assertion 3 reads the directory of $AM as its own blast radius.
+NP="20260102-noplan"
+NPDIR="$FIX/docs/handoffs/$NP"
+mkdir -p "$NPDIR"
+cat > "$NPDIR/00-missao.md" <<'EOF'
+---
+missao: 20260102-noplan
+titulo: a mission whose plan was never written
+aprovacao:
+---
+
+# Mission fixture
+EOF
+NP_BEFORE="$(cat "$NPDIR/00-missao.md")"
+NP_HEAD_0="$(git rev-parse HEAD)"
+# `y` on purpose, and it is what makes the world adversarial: the human is answering YES, so the
+# only thing between this mission and an approval is the guard under test.
+NP_OUT="$( cd "$FIX" && "$SDD" approve "$NP" 2>&1 <<< "y" )"; NP_RC=$?
+NP_AFTER="$(cat "$NPDIR/00-missao.md")"
+NP_DIR_ENTRIES=( "$NPDIR"/* )
+if [ "$NP_RC" -eq 1 ] \
+   && [ "$NP_AFTER" = "$NP_BEFORE" ] \
+   && [ "${#NP_DIR_ENTRIES[@]}" -eq 1 ] \
+   && [ "$(git rev-parse HEAD)" = "$NP_HEAD_0" ] \
+   && grep -q '01-plano.md' <<< "$NP_OUT" \
+   && ! grep -q 'aprovacao: humano-' "$NPDIR/00-missao.md"; then
+  pass "covered: approve refuses a mission whose plan is not on disk, naming the missing artifact"
+else
+  fail "covered: approve refuses a mission whose plan is not on disk, naming the missing artifact" \
+       "rc 1 naming 01-plano.md, the file byte-identical, one file in the directory, HEAD unmoved" \
+       "rc $NP_RC, ${#NP_DIR_ENTRIES[@]} file(s), changed: $(diff <(printf '%s\n' "$NP_BEFORE") <(printf '%s\n' "$NP_AFTER") | head -4), out: $(tail -2 <<< "$NP_OUT")"
 fi
 
 # --- the declared mission branch -------------------------------------------

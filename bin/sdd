@@ -34,15 +34,24 @@ fi
 
 # ---------------------------------------------------------------------------
 # SDD_HOME resolution (survives being called through a symlink in ~/.local/bin)
+#
+# ⚠️ `CDPATH=''` on both `cd`s, and it is load-bearing here for the same reason it is in
+# ledger_repo_root. `dirname` of a relative invocation (`./bin/sdd`, `bin/sdd`, a relative symlink
+# target) is RELATIVE, and bash searches $CDPATH for any operand that does not begin with `/`, `.`
+# or `..` — printing the directory it found on stdout, straight into this capture. Both failures
+# land on SDD_HOME, which is `readonly` one line below and from which every template, agent and
+# starter config is read: the wrong directory silently, or a two-line value that is not a path at
+# all. Reachable from an env var on a machine whose $CDPATH names any directory holding a `bin`.
+# The sensor is rule 2 of tests/check-pipefail.sh.
 # ---------------------------------------------------------------------------
 _resolve_self() {
   local src="${BASH_SOURCE[0]}" dir
   while [ -L "$src" ]; do
-    dir="$(cd -P "$(dirname "$src")" && pwd)"
+    dir="$(CDPATH='' cd -P "$(dirname "$src")" && pwd)"
     src="$(readlink "$src")"
     if [[ $src != /* ]]; then src="$dir/$src"; fi
   done
-  cd -P "$(dirname "$src")/.." && pwd
+  CDPATH='' cd -P "$(dirname "$src")/.." && pwd
 }
 SDD_HOME="$(_resolve_self)"
 readonly SDD_HOME
@@ -884,17 +893,24 @@ autonomy_log_path() { printf '%s/autonomy-log.jsonl' "${SDD_STATE_DIR:-$HOME/.sd
 # WORKTREE: a mission run from `git worktree add` stamped a path the main checkout had never seen,
 # and every reader outside that worktree counted the rows as `other_repo` — the series went empty
 # in the isolation workflow this kit itself recommends. `--git-common-dir` is the same path from
-# every worktree of one repo; it comes back RELATIVE at the root of a checkout (`.git`) and inside
-# a subdirectory (`../.git`), absolute only from a linked worktree, so it is resolved from $start
-# and normalized with `pwd -P` — the three shapes have to end at one string or the comparison the
-# readers do (verbatim, no normalization on either side) is back to answering per worktree.
+# every worktree of one repo, and the three shapes it comes back in have to end at ONE string or
+# the comparison the readers do (verbatim, no normalization on either side) is back to answering
+# per worktree: RELATIVE at the root of a checkout (`.git`), relative in a subdirectory
+# (`../.git`), absolute only from a linked worktree.
+#
+# `--path-format=absolute` (git 2.31+) is what collapses the three, and it replaced a hand-rolled
+# `cd "$start" && cd "$common" && pwd -P` that needed a `CDPATH=''` guard on each `cd` to keep the
+# ENVIRONMENT from answering "which repo is this". Asking git for the absolute path removes the
+# class instead of guarding it: no cd, no pwd -P, no guard, nothing for a $CDPATH to redirect.
+# Measured equal to the old spelling in all four shapes that matter — checkout root, subdirectory,
+# bare repo, linked worktree — and through a symlinked path, where git resolves the link exactly as
+# `pwd -P` did. The sensor is the differential pair in tests/check-autonomy.sh, which still runs a
+# poisoned CDPATH at the runner and still demands two repos stay two, on one line each.
 #
 # ⚠️ Rows written BEFORE this carry the old per-worktree path and keep landing in `other_repo`.
 # That is history, not a bug: the ledger is append-only and is never migrated.
 ledger_repo_root() {
-  local start="${REPO_ROOT:-$PWD}" common gitdir
-  common="$( git -C "$start" rev-parse --git-common-dir 2>/dev/null )" || return 0
-  [ -n "$common" ] || return 0
+  local start="${REPO_ROOT:-$PWD}" gitdir
   # The identity IS the common dir, never its parent. `cd "$common/.."` was the first spelling and
   # it collapsed two repositories into one string in two shapes, both silently — `other_repo: 0`,
   # nothing excluded, nothing said, which is the very contamination the filter above exists to
@@ -903,16 +919,46 @@ ledger_repo_root() {
   # parent is the directory that merely contains the repo, shared by every bare repo beside it.
   # `--show-toplevel` got both of those right and only worktrees wrong. The common dir gets all
   # three right, because it is the identity git itself keeps per repository.
-  # ⚠️ `CDPATH=` on the cd, and it is load-bearing. `$common` is RELATIVE at a repo root (`.git`),
-  # and bash searches CDPATH for any operand not starting with `/` — printing the resolved directory
-  # to STDOUT when it finds one there, straight into this command substitution. With
-  # `CDPATH=$HOME` where $HOME is itself a checkout (dotfiles), every repo on the machine collapsed
-  # into one identity, and writer and readers agreed on it: `other_repo: 0`, nothing excluded,
-  # nothing said — the exact silent contamination this function exists to prevent, reachable from an
-  # env var. `CDPATH=.` alone appended a second LINE to the answer, putting a newline into the
-  # ledger `repo` field. Emptying it for the duration of the cd is the whole fix.
-  gitdir="$( CDPATH='' cd "$start" && CDPATH='' cd "$common" && pwd -P 2>/dev/null )" || return 0
-  [ -n "$gitdir" ] || return 0
+  gitdir="$( git -C "$start" rev-parse --path-format=absolute --git-common-dir 2>/dev/null )" || return 0
+  # ⚠️ ONE ABSOLUTE LINE, or this is not an answer — and the test is load-bearing on any git older
+  # than 2.31, which is where `--path-format` was born. `git rev-parse` ECHOES a token it does not
+  # recognize as an option straight back to stdout and still exits 0, so a pre-2.31 git answers TWO
+  # lines here: the flag itself, then the common dir, still relative. `|| return 0` never fires (rc
+  # is 0) and `-n` never fires (the string is not empty), so the first spelling of this guard let
+  # `--path-format=absolute\n.git` through as the repository's IDENTITY — stamped into every ledger
+  # row by `--arg repo`, newline and all, matching no reader and never migrated, because the ledger
+  # is append-only.
+  #
+  # ⚠️ REFUSING is not enough, and returning empty here was a second defect wearing the first one's
+  # clothes. Empty is the contract for "not a repo", so on git 2.25 (Ubuntu 20.04) and 2.30 (Debian
+  # 11) EVERY row would be written `repo: ""`, every reader would file it under `no_repo` — a bucket
+  # `--all-repos` deliberately does not admit — and `sdd autonomy` would answer "no data" while
+  # `sdd kaizen` could only ever say `indeterminado`. Silent, permanent, and a REGRESSION: the
+  # `cd`-based spelling this replaced answered CORRECTLY on those same gits.
+  #
+  # So the old spelling is the fallback, not the casualty. It is safe to keep now for the reason
+  # that made it dangerous before: the `CDPATH=''` guards this mission added to the whole repo. The
+  # fast path stays the one-shot `--path-format`; the slow path costs a second `rev-parse` and two
+  # `cd`s, and only on a git that cannot do it in one. The sensor is the pre-2.31 differential pair
+  # in tests/check-autonomy.sh, which asserts the two gits answer the SAME identity — not merely
+  # that the new one does not leak.
+  case "$gitdir" in
+    /*) [ "$gitdir" = "${gitdir%%$'\n'*}" ] || gitdir="" ;;
+    *)  gitdir="" ;;
+  esac
+  if [ -z "$gitdir" ]; then
+    local common
+    common="$( git -C "$start" rev-parse --git-common-dir 2>/dev/null )" || return 0
+    [ -n "$common" ] || return 0
+    # Relative at a checkout root (`.git`), relative in a subdirectory (`../.git`), absolute from a
+    # linked worktree — `cd "$start"` first, then `cd "$common"`, resolves all three. Both `cd`s
+    # carry the emptied CDPATH: with a relative operand the environment would otherwise pick where
+    # this lands AND echo the path it found into the capture. That is the CRITICAL of
+    # 20260817-eixo-do-juiz, and it is why this spelling was retired rather than deleted.
+    gitdir="$( CDPATH='' cd "$start" && CDPATH='' cd "$common" && pwd -P )" || return 0
+    [ -n "$gitdir" ] || return 0
+    [ "$gitdir" = "${gitdir%%$'\n'*}" ] || return 0
+  fi
   # Cosmetic, and ONLY cosmetic: `/repo/.git` prints back as `/repo`, so the ledger and the header
   # keep naming the root a human recognizes instead of a path inside `.git`. Injective, therefore
   # safe to collapse: exactly one repository can own `/repo/.git`. Withheld from a bare repo, whose
@@ -1556,6 +1602,24 @@ cmd_preflight() {
   md5sum </dev/null >/dev/null 2>&1  || gnu="$gnu md5sum"
   date -Iseconds >/dev/null 2>&1     || gnu="$gnu 'date -Iseconds'"
   sort -V </dev/null >/dev/null 2>&1 || gnu="$gnu 'sort -V'"
+  # git 2.31+, probed by BEHAVIOUR for the same reason as the userland above: `git --version`
+  # parses into three fields on some builds and four on others, and what the runner needs is not a
+  # number but an ANSWER. `ledger_repo_root` asks for `--path-format=absolute`, born in 2.31, and
+  # `git rev-parse` ECHOES an option it does not know back to stdout while still exiting 0 — so an
+  # older git does not fail here, it answers two lines, and the repository identity written to
+  # every ledger row becomes a string no reader can match. The function refuses that shape and then
+  # RESOLVES the identity the old way (`cd` + `pwd -P`, both `cd`s with an emptied CDPATH), so an
+  # old git costs a second rev-parse and nothing else. This line is where the operator is told that
+  # the slow path is the one being taken — a notice, not a broken kit.
+  if [ "$( git rev-parse --path-format=absolute --git-common-dir 2>/dev/null | grep -c . )" = 1 ]; then
+    ok "git speaks --path-format (2.31+)"
+  else
+    warn "this git does not know 'rev-parse --path-format' (2.31+, and it does not fail — it
+        echoes the flag back and exits 0). 'ledger_repo_root' refuses the echoed shape and falls
+        back to resolving the common dir with cd + pwd -P, which answers the same string, so the
+        ledger stays correct. Upgrading git removes the extra rev-parse per ledger write."
+  fi
+
   if [ -z "$gnu" ]; then
     ok "GNU userland (md5sum, date -Iseconds, sort -V)"
   else
@@ -1691,6 +1755,14 @@ health_bad() { bad "$*"; HEALTH_FAILS=$((HEALTH_FAILS + 1)); }
 
 # Records a drift finding for the ratchet to judge at the end.
 health_finding() { HEALTH_FINDINGS="${HEALTH_FINDINGS}${1}"$'\n'; }
+# A check that could not measure declares the KEY it would have produced, so the ratchet can tell
+# "this debt is gone" apart from "nobody looked". Without it the stale half judged anyway: with a
+# suite that died before printing `N finding(s)`, `sdd health` said in one breath that it had gone
+# blind to the backlog and that `todo-findings 74` "is no longer a finding — delete the line".
+# Deleting it removes the backlog ratchet's only anchor. Destructive advice drawn from a
+# measurement that declared itself impossible.
+HEALTH_BLIND=""
+health_blind() { HEALTH_BLIND="${HEALTH_BLIND}${1}"$'\n'; }
 
 # Keys with a default in load_config(). The block is delimited by the anchor comments, not by
 # line number, so it does not rot at the first refactor.
@@ -1705,9 +1777,26 @@ cmd_health() {
   step "sdd health — kit sensor at $kit"
 
   # --- 1. the suite, which already includes bash -n and the mutation --------
-  out="$( cd "$kit" && tests/run-all.sh 2>&1 )"; rc=$?
+  # `|| rc=$?` and not `; rc=$?`: this file runs under `set -e`, an assignment takes the exit
+  # status of its command substitution, and a RED SUITE is precisely a non-zero one — so the bare
+  # form died HERE, on the assignment, and the health_bad three lines down was dead code. The
+  # operator got the header, rc 1, and not one word about the suite. Measured against the real
+  # runner, four sites of this same family (this one, the score read, the provenance `find` and
+  # the ratchet's baseline read); the whole point of `sdd health` is to SAY what is wrong, and the
+  # red suite is the case it exists for. Guarded by the `abort:` assertions of check-health.sh.
+  rc=0
+  # `--with-mutation`, and this command is now the ONLY caller that asks for it. The catalogue used
+  # to ride inside TEST_CMD, where it held the working tree for over ten minutes per gate and made
+  # the REVIEW phase unsatisfiable headless — three sessions ended their turn "waiting for the
+  # suite", which in `claude -p` is ending the session. tests/run-all.sh carries the full reasoning.
+  # Nothing was loosened: all the assertions are still demanded, here, once, by the command whose
+  # whole job is asking whether the kit still measures what it claims to.
+  out="$( cd "$kit" && tests/run-all.sh --with-mutation 2>&1 )" || rc=$?
   if [ "$rc" -eq 0 ]; then ok "suite green"; else
-    health_bad "suite red (rc $rc) — run tests/run-all.sh to see it"
+    # The flag is IN the reproduction line. Without it the operator runs the fast suite, sees green
+    # over a red the catalogue found, and concludes health is lying — the one thing this command
+    # may never be. The sentence has to name the command that reproduces what was just measured.
+    health_bad "suite red (rc $rc) — run tests/run-all.sh --with-mutation to see it"
     printf '%s\n' "$out" | tail -15 >&2
   fi
 
@@ -1717,8 +1806,13 @@ cmd_health() {
   #
   # The regex below is one contract across two files: the line is emitted by
   # tests/check-mutation.sh. Change the wording on either side alone and the suite goes red.
+  #
+  # `|| true` for the same reason the TODO.md count below carries one: a grep that matches nothing
+  # returns 1, and under `set -e` the assignment took the runner down with it — so the `-z` branch
+  # that was written to shout "health went blind" could never be reached, and going blind read as
+  # a crash. The sentence below is only sayable because of the two words on this line.
   local score_line
-  score_line="$(grep -m1 '^score: ' <<< "$out")"
+  score_line="$(grep -m1 '^score: ' <<< "$out" || true)"
   if [ -z "$score_line" ]; then
     health_bad "the suite did not print the 'score:' line — health went blind to the mutation"
   elif grep -qE '^score: [0-9]+ caught, 0 known gap' <<< "$score_line"; then
@@ -1748,14 +1842,23 @@ cmd_health() {
   todo_line="$(grep -m1 -E '^  ok    [0-9]+ finding\(s\)' <<< "$out" || true)"
   if [ -z "$todo_line" ]; then
     health_bad "the suite did not print the TODO.md finding count — health went blind to the backlog"
+    health_blind "todo-findings"
   else
     health_finding "todo-findings $(sed -E 's/^  ok    ([0-9]+) .*/\1/' <<< "$todo_line")"
   fi
 
   # --- 4. every gate has a mutation ----------------------------------------
   # Explicit floor: zero gates found would pass by vacuity (a rename, an indentation change).
-  local gates; gates="$(grep -oE '^gate_[A-Z]+' "$kit/bin/sdd" | sed 's/^gate_//' | sort -u)"
-  n="$(grep -c . <<< "$gates")"
+  #
+  # ⚠️ The floor was UNREACHABLE until the r2 review of 20260818-lote-facil, and by the exact
+  # mechanism it was written against: the two captures below are how `grep` reports "no match",
+  # and under this file's `set -e` a capture that reports non-zero kills the runner AT THE
+  # ASSIGNMENT. Renaming the gates — the scenario this comment names — made `sdd health` stop
+  # dead after check 2, rc 1, without ever saying `found 0 gates`. Measured. `grep -c` is the
+  # second half of the same pair and returns 1 precisely when it counts ZERO, so guarding only
+  # the line above would have moved the death one line down.
+  local gates; gates="$(grep -oE '^gate_[A-Z]+' "$kit/bin/sdd" | sed 's/^gate_//' | sort -u || true)"
+  n="$(grep -c . <<< "$gates" || true)"
   if [ "$n" -ne 8 ]; then
     health_bad "found $n gates in bin/sdd, expected 8 — new/renamed gate: update the floor here"
   else
@@ -1771,8 +1874,21 @@ cmd_health() {
   fi
 
   # --- 5. drift load_config() ↔ config/schema.md ----------------------------
-  local documented; documented="$(grep -oE '^\| `[A-Z0-9_]+`' "$kit/config/schema.md" | tr -d '|` ' | sort -u)"
-  local keys; keys="$(health_default_keys)"
+  # Both captures guarded for the reason spelled out at check 4, and both measured dying: a
+  # reformatted key table in schema.md killed the runner on the first line, a load_config() that
+  # lost its `:=` defaults killed it on the second — three ok lines and out, rc 1, silent.
+  #
+  # `keys` then carries a FLOOR, and the floor is the other half of the fix. Guarding a capture
+  # turns "dies loudly by accident" into "carries on with an empty string", and an empty `keys`
+  # makes the loop below iterate zero times: check 5 half-blind and check 7 fully blind, both
+  # reporting nothing and both looking exactly like a clean kit. An abort at least stopped the
+  # line; silent vacuity does not. `documented` needs no floor — empty makes every key land in
+  # `key-without-doc`, which the ratchet says out loud.
+  local documented; documented="$(grep -oE '^\| `[A-Z0-9_]+`' "$kit/config/schema.md" | tr -d '|` ' | sort -u || true)"
+  local keys; keys="$(health_default_keys || true)"
+  if [ -z "$keys" ]; then
+    health_bad "load_config() declares no defaulted key — checks 5 and 7 have nothing to measure"
+  fi
   for k in $keys; do
     grep -qxF "$k" <<< "$documented" || health_finding "key-without-doc $k"
   done
@@ -1784,8 +1900,18 @@ cmd_health() {
   local subcmds; subcmds="$(awk '/^main\(\) \{/ { inside = 1 } inside && /^\}/ { exit }
       inside && match($0, /^ +[a-z|+-]+\)/) {
         label = substr($0, RSTART, RLENGTH); gsub(/[ )]/, "", label); print label
-      }' "$kit/bin/sdd" | tr '|' '\n' | grep -vE '^-' | sort -u)"
-  local help_out; help_out="$( "$kit/bin/sdd" help 2>&1 )"
+      }' "$kit/bin/sdd" | tr '|' '\n' | grep -vE '^-' | sort -u || true)"
+  # `sdd help` is the one capture here whose command is the runner itself: it exits 0 today, and
+  # the day a refactor makes it exit non-zero this check would take the whole command down with
+  # it rather than reporting anything. Guarded like the rest; an empty `help_out` then lands every
+  # subcommand in `cmd-not-in-help`, which the ratchet says out loud.
+  local help_out; help_out="$( "$kit/bin/sdd" help 2>&1 || true )"
+  # Floor, same argument as `keys` at check 5: a `main()` whose case labels stop matching leaves
+  # this loop with nothing to iterate, and a check measuring nothing prints exactly what a clean
+  # kit prints.
+  if [ -z "$subcmds" ]; then
+    health_bad "no subcommand parsed out of main() — check 6 has nothing to measure"
+  fi
   for k in $subcmds; do
     # Appearing as `sdd <cmd>` anywhere in the help is enough: some share a line
     # (`sdd help | sdd version`), and demanding a fixed column would fail a documented command.
@@ -1800,7 +1926,7 @@ cmd_health() {
   # debt. A comment line does not count as a read either, for the same reason: quoting the key in
   # an explanation would make it "live" and hide exactly what it represents.
   local body; body="$(awk '/^load_config\(\) \{/ { inside = 1 }
-      inside && /^\}/ { inside = 0; next } !inside && !/^[[:space:]]*#/' "$kit/bin/sdd")"
+      inside && /^\}/ { inside = 0; next } !inside && !/^[[:space:]]*#/' "$kit/bin/sdd" || true)"
   for k in $keys; do
     grep -qE "\b${k}\b" <<< "$body" || health_finding "var-never-read $k"
   done
@@ -1824,13 +1950,37 @@ cmd_health() {
 # (Do not start a comment line with the linter's name: it would parse as a directive, SC1073.)
 health_provenance() {
   local gates="$SDD_HOME/tests/check-gates.sh" tpl line fix skipped=0 checked=0
+  # The number of fixtures this function pins, in ONE place: the three `if [ -f "$tpl" ]` blocks
+  # below. Move it when you add a fourth.
+  local PROVENANCE_FIXTURES=3
 
-  # qa-execution report: the Status line, with the timestamp made concrete in the fixture
+  # ⚠️ Every `grep` below carries `|| true`, and this is the site where the family of silent
+  # aborts costs the most. `-f "$tpl"` proves the FILE is there; it proves nothing about the
+  # LINE. A skill that renames the field it pins — `- **Started:**` becoming anything else — is
+  # not a hypothetical: it is the precise drift this whole function exists to catch, and it is
+  # the way skills actually change. Unguarded, the grep found nothing, returned 1, and `set -e`
+  # killed the runner ON THE ASSIGNMENT: `sdd health` printed three ok lines and exited 1 without
+  # the words `fixture diverged`, without the ratchet, and without a verdict. The countermeasure
+  # for the most expensive bug in the kit's history went silent exactly when it fired. Measured
+  # in the r2 review of 20260818-lote-facil, against both skills, both directions; guarded by
+  # the `abort:` assertions of check-health.sh and by mut_HEALTH_provenance_line_aborts.
+  # Empty is the right value and needs no branch of its own: an absent line can never equal the
+  # fixture, so the existing comparison reports it as the divergence it is.
+  #
+  # qa-execution report: the Status line, with the timestamp made concrete in the fixture.
+  # ⚠️ That sentence is a RANGE ANCHOR, not decoration: mut_HEALTH_report_provenance_blind and
+  # mut_HEALTH_provenance_blind address themselves between it and the `registry bug` line below,
+  # and rewriting this comment without it reported both as CATALOGUE-BROKEN — measured, when the
+  # r2 review first replaced the comment wholesale.
   tpl="$HOME/.claude/skills/qa-execution/assets/report-template.md"
   if [ -f "$tpl" ]; then
-    line="$(grep -m1 -- '- \*\*Started:\*\*' "$tpl")"
-    fix="$(grep -m1 -- '- \*\*Started:\*\*' "$gates" | sed 's/2026-01-01T10:00:00Z/<ISO timestamp>/')"
-    if [ "$line" = "$fix" ]; then checked=$((checked + 1))
+    line="$(grep -m1 -- '- \*\*Started:\*\*' "$tpl" || true)"
+    fix="$(grep -m1 -- '- \*\*Started:\*\*' "$gates" | sed 's/2026-01-01T10:00:00Z/<ISO timestamp>/' || true)"
+    # `-n` FIRST, and it is not decoration: with the guard above, two ABSENCES compare equal, so
+    # a skill and a fixture that both dropped the line would read as a match and increment
+    # `checked`. That is the fail-open the guard would have bought at the price of the abort —
+    # the same trade the r1 round of this mission made in check-todo.sh and had to undo.
+    if [ -n "$line" ] && [ "$line" = "$fix" ]; then checked=$((checked + 1))
     else health_bad "report fixture diverged from the skill:
          skill:   $line
          fixture: $fix"; fi
@@ -1839,9 +1989,9 @@ health_provenance() {
   # registry bug: the Status line with the enum legend
   tpl="$HOME/.claude/skills/qa-report/assets/bug-template.md"
   if [ -f "$tpl" ]; then
-    line="$(grep -m1 -- '- \*\*Status:\*\*' "$tpl")"
-    fix="$(grep -m1 -- '- \*\*Status:\*\* open' "$gates")"
-    if [ "$line" = "$fix" ]; then checked=$((checked + 1))
+    line="$(grep -m1 -- '- \*\*Status:\*\*' "$tpl" || true)"
+    fix="$(grep -m1 -- '- \*\*Status:\*\* open' "$gates" || true)"
+    if [ -n "$line" ] && [ "$line" = "$fix" ]; then checked=$((checked + 1))
     else health_bad "bug fixture diverged from the skill:
          skill:   $line
          fixture: $fix"; fi
@@ -1851,26 +2001,54 @@ health_provenance() {
   # `sort -V` on the plugin version — a lexicographic `sort` would put 1.9 after 1.17. This was
   # once the only version-ordered pick in the file; latest_matching() carried the lexicographic
   # bug and this comment recorded it. It no longer does — both sort by version now.
+  #
+  # `|| true`: `find` on a missing directory returns 1, `set -o pipefail` carries that through
+  # `sort -V | tail -1`, and `set -e` then killed the whole command on the assignment — on a
+  # machine with no plugins cache, `sdd health` stopped dead HERE, three ok lines in, and neither
+  # provenance nor the ratchet ever ran. A machine without the directory is not a defect, it is a
+  # machine: an empty `$tpl` is the skip this branch already knows how to do.
   tpl="$(find "$HOME/.claude/plugins/cache" -path '*/codereview/*/references/report-template.md' \
-         2>/dev/null | sort -V | tail -1)"
+         2>/dev/null | sort -V | tail -1 || true)"
   if [ -n "$tpl" ] && [ -f "$tpl" ]; then
-    local missing=""
+    local missing="" n_crit=0
     while IFS= read -r k; do
       [ -n "$k" ] || continue
+      n_crit=$((n_crit + 1))
       grep -qF "| $k |" "$gates" || missing="$missing '$k'"
     done < <(awk -F'|' '/^\| Criterion \| Grade/ { t = 1; next }
         t && /^\|-/ { next }
         t && /^\|/ { c = $2; gsub(/^[ \t]+|[ \t]+$/, "", c); if (c !~ /^\*\*/) print c; next }
         t { exit }' "$tpl")
-    if [ -n "$missing" ]; then
+    # The floor, for the same argument checks 5 and 6 got theirs on: with the skill's heading
+    # renamed, the `while` runs ZERO times, `missing` stays empty, `checked` goes up and the
+    # summary says `all 3 fixtures match` about a table it never read — which is precisely the
+    # drift this function exists to catch. One criterion is enough to prove the awk found the
+    # table; demanding today's seven would fail the day the skill legitimately grows an eighth.
+    if [ "$n_crit" -eq 0 ]; then
+      health_bad "the codereview grade table read as EMPTY — the '| Criterion | Grade' heading this parses was renamed, so nothing was compared"
+    elif [ -n "$missing" ]; then
       health_bad "the skill's grade table has a criterion the fixture does not cover:$missing"
     else checked=$((checked + 1)); fi
   else skipped=$((skipped + 1)); fi
 
-  if [ "$skipped" -gt 0 ]; then
+  # The summary reads `checked` and `skipped`, and it may not claim the third state. A DIVERGED
+  # fixture increments neither counter — it went to `health_bad` — so with three skills installed
+  # and one diverged the old rubric fell through to the `else` and printed `all 3 fixtures match
+  # the installed skills` on the line right after saying one of them did not. Unreachable until
+  # the r2 review of 20260818-lote-facil guarded the two `grep` captures above, because the run
+  # used to die before printing anything at all; guarding them turned a silent abort into a loud
+  # lie, and a lie in the summary of the provenance check is worse than either. Three states,
+  # three sentences, and the `all 3` wording is reserved for the one world where it is true.
+  # One owner for the count, read by the arithmetic AND by the sentence. Written twice, the two
+  # drifted the moment a fourth fixture was added: the rubric picked its branch from one number
+  # and the operator read the other.
+  local diverged=$(( PROVENANCE_FIXTURES - checked - skipped ))
+  if [ "$diverged" -gt 0 ]; then
+    ok "provenance: $checked fixture(s) match, $diverged diverged, $skipped skipped"
+  elif [ "$skipped" -gt 0 ]; then
     ok "provenance: $checked fixture(s) checked, $skipped skipped (skill not installed)"
   else
-    ok "provenance: all 3 fixtures match the installed skills"
+    ok "provenance: all $PROVENANCE_FIXTURES fixtures match the installed skills"
   fi
 }
 
@@ -1879,8 +2057,13 @@ health_provenance() {
 # folklore.
 health_ratchet() {
   local bl="$SDD_HOME/tests/health-baseline.txt" known new_findings=0 stale=0 line
+  # `|| true`: a baseline with no live line (all comments, or missing outright) makes this grep
+  # return 1, and under `set -e` the runner died on the assignment — after the provenance line,
+  # before a single word of the ratchet, so it neither said `kit healthy` nor failed anything. An
+  # empty `known` is not an error to crash on: it means NOTHING is known debt, so every finding is
+  # outside the baseline, which is exactly what the loop below then says out loud.
   known="$(grep -vE '^[[:space:]]*(#|$)' "$bl" | sed 's/[[:space:]]*#.*//' \
-           | sed 's/[[:space:]]*$//')"
+           | sed 's/[[:space:]]*$//' || true)"
 
   while IFS= read -r line; do
     [ -n "$line" ] || continue
@@ -1890,12 +2073,27 @@ health_ratchet() {
 
   while IFS= read -r line; do
     [ -n "$line" ] || continue
+    # The key is the first field: a baseline line is `<key> <value>`, and a blind producer knows
+    # its key but not the value it never measured.
+    if grep -qxF "${line%% *}" <<< "$HEALTH_BLIND"; then
+      info "  baseline '$line' not judged: the check that produces it declared itself blind"
+      continue
+    fi
     grep -qxF "$line" <<< "$HEALTH_FINDINGS" \
       || { health_bad "stale baseline: '$line' is no longer a finding — delete the line"; stale=$((stale + 1)); }
   done <<< "$known"
 
-  [ "$new_findings" -eq 0 ] && [ "$stale" -eq 0 ] \
-    && ok "ratchet: $(grep -c . <<< "$known") known debt(s), none new"
+  # An `if` and not an `&&` chain, and the difference is a whole line of output. The chain returns
+  # the status of its first failing test, so a ratchet that FOUND something made health_ratchet
+  # return 1 — and `set -e` killed cmd_health on the call, one line before its own verdict. The
+  # finding was printed and then `N check(s) failed` never was: same family as the four capture
+  # sites above, same silence, and it hit the path that WORKS rather than a broken one. Every
+  # assertion here read only `rc != 0`, which is authored by the `return 1` at the end of
+  # cmd_health too, so nothing noticed. Failures are already counted in HEALTH_FAILS; this
+  # function's job is to report, never to decide the exit code.
+  if [ "$new_findings" -eq 0 ] && [ "$stale" -eq 0 ]; then
+    ok "ratchet: $(grep -c . <<< "$known") known debt(s), none new"
+  fi
 }
 
 cmd_status() {
@@ -2135,6 +2333,13 @@ cmd_run() {
   warn_if_on_base_branch
 
   local -A attempts=()
+  # SESSIONS, which is not the same grandeza as `attempts` and was being printed as if it were.
+  # `attempts` counts laps of this loop: it rises on the lap that ESCALATES (which opens no session
+  # at all) and on every later lap the REVIEW->PR->REVIEW degradation takes, so the blocked line
+  # said `3 sessions` over a ledger holding one. It is the last thing a human reads when a run ends.
+  # Incremented beside `autonomy_session_row` and nowhere else, so the number the terminal says and
+  # the rows the ledger holds cannot drift: one writer, one counter, same two places.
+  local -A sessions=()
   local phases_run=0 phase before after budget
   # One-shot per `sdd run`, in the spirit of AUTONOMY_SHA_WARNED above: the runner lowers its own
   # bar ONCE, and both trails have to say so once. A plain local of cmd_run is enough here — the
@@ -2202,7 +2407,7 @@ cmd_run() {
     if [ "${attempts[$phase]}" -gt "$budget" ]; then
       gate_"$phase" || true
       info ""
-      bad "BLOCKED in $phase — ${attempts[$phase]} sessions without satisfying the gate"
+      bad "BLOCKED in $phase — ${sessions[$phase]:-0} session(s) without satisfying the gate"
       bad "  current reason: $GATE_WHY"
       dim "  'sdd status $MISSION' shows the full state; 'sdd why $MISSION $phase' the reason."
       if [ "$phase" = "REVIEW" ] && [ "$PUBLISH_ON_REVIEW_BLOCKED" = "draft" ]; then
@@ -2275,6 +2480,7 @@ cmd_run() {
     [ "$before" != "$after" ] && moved="true"
     autonomy_session_row "$phase" "${attempts[$phase]}" "false" "$moved" \
       "$( [ "$gate_rc" -eq 0 ] && echo pass || echo fail )" "$GATE_WHY"
+    sessions["$phase"]="$(( ${sessions[$phase]:-0} + 1 ))"
 
     phases_run=$((phases_run + 1))
     if [ "$max_phases" -gt 0 ] && [ "$phases_run" -ge "$max_phases" ]; then
@@ -2312,6 +2518,7 @@ cmd_run() {
     gate_"$phase" || gate_rc2=$?
     autonomy_session_row "$phase" "${attempts[$phase]}" "true" "$moved2" \
       "$( [ "$gate_rc2" -eq 0 ] && echo pass || echo fail )" "$GATE_WHY"
+    sessions["$phase"]="$(( ${sessions[$phase]:-0} + 1 ))"
 
     if [ "$gate_rc2" -eq 0 ]; then
       ok "gate $phase (on the retry): $GATE_WHY"
@@ -2571,16 +2778,22 @@ cmd_autonomy() {
     , (map(select(is_escalation and on_axis)) | group_by(.kit_sha, .kind)
        | map("  \(.[0].kit_sha)  \(.[0].kind): \(length)") | join("\n")
        | select(length > 0) | "\nescalations\n" + .)
-    # `empty` and NOT `""` on the zero side of all four, which is the whole of the double-blank-line
-    # defect: each string already opens with a newline AND the jq comma puts every output on a line
-    # of its own, so an exclusion with nothing to report used to contribute a blank line by itself —
-    # with no escalations and one unrecognized row, two blanks opened between the table and the
-    # accounting. `empty` emits no output at all, exactly as the escalations line above does through
-    # `select(length > 0)`. No count moves: this is spacing only.
-    , (if $skipped > 0 then "\n  (\($skipped) non-comparable row(s) excluded: dirty kit, no kit_sha, or no moved field)" else empty end)
-    , (if $stray > 0 then "\n  (\($stray) unrecognized row(s) excluded: event missing or not one of session/blocked/degraded)" else empty end)
-    , (if $foreign > 0 then "\n  (\($foreign) row(s) excluded: born in another repo — the ledger is global, this reader is not)" else empty end)
-    , (if $norepo > 0 then "\n  (\($norepo) row(s) excluded: no repo field — the row cannot say which project it came from)" else empty end)
+    # ONE output for the four buckets, and that is the second half of the spacing defect. The first
+    # half was `empty` instead of `""` on the zero side: each string opens with a newline AND the jq
+    # comma puts every output on a line of its own, so a bucket with nothing to report contributed a
+    # blank line by itself and two blanks opened between the table and the accounting. `empty` fixed
+    # that and left the other half standing — with two buckets filled the four strings came out
+    # block+blank+block, one blank between every two, because each surviving string still carried
+    # its own leading newline. The accounting is ONE paragraph: four remarks about where the rows
+    # went, not four unrelated asides. Collected into an array and joined, the leading newline is
+    # written ONCE, by the paragraph rather than by its lines, and `select(length > 0)` keeps the
+    # zero case emitting nothing at all — exactly as the escalations block above does. No count
+    # moves: this is spacing only.
+    , ([ (if $skipped > 0 then "  (\($skipped) non-comparable row(s) excluded: dirty kit, no kit_sha, or no moved field)" else empty end)
+       , (if $stray > 0 then "  (\($stray) unrecognized row(s) excluded: event missing or not one of session/blocked/degraded)" else empty end)
+       , (if $foreign > 0 then "  (\($foreign) row(s) excluded: born in another repo — the ledger is global, this reader is not)" else empty end)
+       , (if $norepo > 0 then "  (\($norepo) row(s) excluded: no repo field — the row cannot say which project it came from)" else empty end)
+       ] | select(length > 0) | "\n" + join("\n"))
   ' "$file" 2>/dev/null)" || jq_rc=$?
   if [ "$jq_rc" -ne 0 ]; then
     # A DIFFERENT sentence from the `ledger_parses` refusal above, because they are different
@@ -2616,6 +2829,17 @@ cmd_autonomy() {
 # latest/previous follow FILE order, not sort order: jq's group_by sorts by key and would call
 # the lexically-largest sha "latest" — the reduce/index below keeps first-appearance order, and a
 # reappearing old sha joins its old group instead of opening a new one.
+
+# The floor of the guard, and its ONE definition: how many missions WITH a session a kit version
+# needs before the series supports any verdict but `indeterminado`. ADR 0003 is why it does not
+# loosen. Three voices read it and each used to hold a copy — the jq program below (which decides
+# `sufficient` and `degenerate_axis`), the empty-series producer inside it (which has no input to
+# run that program on), and the sentence `kaizen_axis_note` prints to the human under a comment
+# swearing the number was not repeated. The jq one takes it through --argjson, the producer through
+# expansion, the sentence off `.guard.floor` of the series it is explaining: a change here moves
+# all three, or none of them.
+readonly KAIZEN_GUARD_FLOOR=3
+
 kaizen_series() {
   local file; file="$(autonomy_log_path)"
   command -v jq >/dev/null 2>&1 || die "jq not found — it is required to read the ledger"
@@ -2645,10 +2869,10 @@ kaizen_series() {
     # Second producer of the same shape, and it cannot share the jq above (there is no input to
     # run it on), so the key set is kept in step by hand and check-kaizen.sh compares the two as
     # key sets. A consumer reading `null` where the real series gives a number is the drift.
-    printf '%s\n' '{"v":1,"latest":null,"previous":null,"guard":{"missions_after_change":0,"missions_with_session":0,"sessions":0,"sufficient":false,"degenerate_axis":false},"excluded":{"non_comparable":0,"unrecognized":0,"meta":0,"other_repo":0,"no_repo":0}}'
+    printf '{"v":1,"latest":null,"previous":null,"guard":{"missions_after_change":0,"missions_with_session":0,"sessions":0,"floor":%s,"sufficient":false,"degenerate_axis":false},"excluded":{"non_comparable":0,"unrecognized":0,"meta":0,"other_repo":0,"no_repo":0}}\n' "$KAIZEN_GUARD_FLOOR"
     return 0
   fi
-  jq -n --arg repo "$repo" "$(ledger_row_is_local)"'
+  jq -n --arg repo "$repo" --argjson floor "$KAIZEN_GUARD_FLOOR" "$(ledger_row_is_local)"'
     # ONE definition of "escalation" for the whole program, exactly as cmd_autonomy has one. The
     # two events state different facts (`blocked` stopped the line, `degraded` lowered the bar and
     # went on) but they answer this rubric the same way, and writing the pair out three times is
@@ -2678,7 +2902,9 @@ kaizen_series() {
     # ONE definition of the floor, shared by the guard verdict below and by the window this field
     # looks through. They cannot drift: the field says "waiting will never satisfy that floor", so
     # it has to be measured over as many kit versions as the floor asks missions of.
-    def guard_floor: 3;
+    # The value comes in through --argjson from KAIZEN_GUARD_FLOOR, the single owner: the empty
+    # ledger takes the same road above, and neither of them can be moved on its own.
+    def guard_floor: $floor;
     # ONE definition of "the distinct kit versions, in FILE order", used by the latest/previous
     # pair below and by the window here. group_by sorts by key and answers a different question;
     # two hand-written copies of this reduce is how the blocked/degraded pair came to disagree.
@@ -2836,7 +3062,12 @@ kaizen_series() {
        guard: {missions_after_change: ($latest.missions // 0),
                missions_with_session: $observed,
                sessions: ($latest.sessions // 0),
-               sufficient: ($observed >= guard_floor),  # 3 missions WITH a session (D4); I13.4 revisits
+               # PUBLISHED, and that is what makes it one number instead of two. The sentence
+               # kaizen_axis_note prints to the human used to carry its own hand-written `3`, under
+               # a comment swearing it did not — the one voice of this floor a human reads out
+               # loud, and the one that would have drifted in silence the day the floor moved.
+               floor: guard_floor,
+               sufficient: ($observed >= guard_floor),  # missions WITH a session (D4); I13.4 revisits
                degenerate_axis: $degenerate},
        excluded: {non_comparable: ($noncomp | length), unrecognized: $unrec,
                   meta: ($meta | length), other_repo: $other_repo, no_repo: $no_repo}}
@@ -3011,11 +3242,15 @@ kaizen_axis_note() {
   # has nothing to explain about a file it could not parse.
   series="$(kaizen_series 2>/dev/null)" || return 0
   [ "$(jq -r '.guard.degenerate_axis' <<< "$series")" = "true" ] || return 0
-  # No count in the sentence on purpose: the window is `guard_floor` and writing "3" here would be
-  # a third copy of a number the jq program already owns, drifting the day the floor moves.
+  # READ off the series this sentence is explaining, never written here. The comment that used to
+  # sit on this line said "no count in the sentence on purpose: writing 3 here would be a third copy
+  # of a number the jq program already owns, drifting the day the floor moves" — and the `dim` two
+  # lines down printed "The floor of 3 missions". The promise was right; the code did the opposite,
+  # and this is the only voice of the floor a human ever reads out loud.
+  local floor; floor="$(jq -r '.guard.floor' <<< "$series")"
   warn "the kit_sha axis is degenerate here: the recent kit versions each carry exactly one mission, and none ever reached the floor"
   dim "  This repo BUILDS the kit, so each session commits and the next one lands on a fresh sha."
-  dim "  The floor of 3 missions per kit version is unsatisfiable here, and 'indeterminado' is then"
+  dim "  The floor of $floor missions per kit version is unsatisfiable here, and 'indeterminado' is then"
   dim "  the CORRECT verdict, not a missing mission: evidence comes from real target repos (ADR 0003)."
 }
 

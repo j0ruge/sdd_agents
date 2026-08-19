@@ -119,8 +119,8 @@ set -uo pipefail
 
 # `${BASH_SOURCE[0]}` and not a hardcoded name: the probes re-invoke THIS file, and a copy running
 # under another name has to probe itself, not whatever still sits at the old path.
-SELF_PATH="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)/$(basename -- "${BASH_SOURCE[0]}")"
-ROOT="$(cd "$(dirname "$SELF_PATH")/.." && pwd)"
+SELF_PATH="$(CDPATH='' cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)/$(basename -- "${BASH_SOURCE[0]}")"
+ROOT="$(CDPATH='' cd "$(dirname "$SELF_PATH")/.." && pwd)"
 
 # Every normal path below removes its own temp dir; the trap is for the abnormal ones (a signal, or
 # `set -u` tripping over something a future edit forgot to set).

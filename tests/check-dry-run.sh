@@ -13,7 +13,7 @@
 
 set -uo pipefail
 
-ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
+ROOT="$(CDPATH='' cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 SDD="$ROOT/bin/sdd"
 FIX="$(mktemp -d "${TMPDIR:-/tmp}/sdd-dryrun-XXXXXX")"
 MISSION="20260101-fixture"
@@ -231,7 +231,7 @@ assert_eq "a project WITH an interface and no charters starts at QA:plan (qa-rep
 if grep -q '│ /qa-report docs/qa' <<< "$out2"; then
   pass "the boot prompt starts with the literal /qa-report slash"
 else
-  fail "QA:plan boot" "prompt starting with /qa-report" "$(printf '%s\n' "$out2" | grep -m1 '│' || echo empty)"
+  fail "QA:plan boot" "prompt starting with /qa-report" "$(grep -m1 '│' <<< "$out2" || echo empty)"
 fi
 # With a charter AND a closed report, the cycle moves on to closing (sdd-qa). This assertion
 # exists because the "report closed" anchor used to live duplicated in the gate and in the

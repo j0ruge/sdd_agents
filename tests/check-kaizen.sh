@@ -21,7 +21,7 @@
 
 set -uo pipefail
 
-ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
+ROOT="$(CDPATH='' cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 SDD="$ROOT/bin/sdd"
 fails=0
 
@@ -515,6 +515,51 @@ assert_eq "and the reason names the sha it is waiting for" "yes" \
   "$(grep -q 'no verdict for kit aaa1111' <<< "$out" && echo yes || echo no)"
 assert_eq "the two dead sessions and the escalation reached the ledger as KAIZEN rows" \
   "$((before_rows + 3))" "$(krows)"
+
+echo "== the judge's own session is measured against the disk =="
+# cmd_kaizen carries a THIRD copy of `[ "$before" != "$after" ] && moved="true"` — cmd_run has one
+# at four spaces, cmd_retry and cmd_kaizen one each at two, byte for byte the same line. The retry's
+# was covered by check-autonomy.sh the day the moving stub was written for it; the judge's never
+# was, because every kaizen fixture in this file runs the DEAD stub, which does not touch the repo.
+# So `moved` was "false" in every row the judge has ever written, and replacing the line with a
+# no-op changed nothing anybody measured. It is not cosmetic: `moved` IS the waste metric — a judge
+# pinned to false files every kaizen session as waste and feeds the next verdict a loop that never
+# progressed, while a judge pinned to true hides a session that did nothing at all.
+#
+# The stub writes into the kaizen mission directory, which is what the real judge does and what
+# state_fingerprint reads, on its FIRST call only. The retry that follows finds nothing left to
+# change, so ONE world yields both rows and the pair is differential: a hardcoded `true` fails on
+# the second, a hardcoded `false` on the first, and no regime of this fixture satisfies both.
+#
+# A STATE DIRECTORY OF ITS OWN, seeded from the ledger the gate section wrote: the rows below would
+# otherwise land in the ledger every later scenario reads, and the session that moves the disk
+# leaves the kit tree dirty while it runs — `kit_dirty` rows are exactly what the comparability
+# filter drops. Isolated, this block cannot move a single number the blocks after it assert.
+KSTATE="$OUTSIDE/kaizenmoved"
+mkdir -p "$KSTATE"
+cp "$LEDGER" "$KSTATE/autonomy-log.jsonl"
+KMARK="$OUTSIDE/kaizen-moved-once"
+rm -f "$KMARK"
+# The marker lives OUTSIDE the repo under test, the same decision check-autonomy.sh pins with an
+# assertion of its own: a marker inside would be part of the fingerprint it is there to control.
+cat > "$OUTSIDE/stub/claude" <<STUB
+#!/usr/bin/env bash
+if [ ! -e "$KMARK" ]; then
+  : > "$KMARK"
+  d="$FIX/docs/handoffs/\$(date +%Y%m%d)-kaizen"
+  mkdir -p "\$d"
+  printf 'the judge left a note\n' > "\$d/notes.md"
+fi
+exit 1
+STUB
+chmod +x "$OUTSIDE/stub/claude"
+( cd "$FIX" && SDD_STATE_DIR="$KSTATE" "$KSDD" kaizen >/dev/null 2>&1 )
+assert_eq "covered: the judge's session records moved:true, and its retry moved:false" "true false" \
+  "$(jq -rs '[.[] | select(.phase == "KAIZEN" and .event == "session")] | .[-2:] | map(.moved | tostring) | join(" ")' "$KSTATE/autonomy-log.jsonl")"
+# Back to the world every later block expects: the dead stub, and a clean tree — the note the
+# judge left is untracked, and `git add -A` two blocks down would commit it into the fixture kit.
+rm -rf "$FIX/docs/handoffs/"*-kaizen
+dead_stub
 
 echo "== reminder: pipeline complete points at the judge =="
 # A COMPLETE mission in the fixture kit: every gate satisfied, so cmd_run reaches the

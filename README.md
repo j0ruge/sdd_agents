@@ -32,7 +32,7 @@ export PATH="$HOME/repos/sdd_agents/bin:$PATH"     # or ln -s .../bin/sdd ~/.loc
 cd ~/repos/my-project
 sdd install            # creates .sdd/config.sh and copies .claude/agents/sdd-*.md
 $EDITOR .sdd/config.sh # set TEST_CMD, E2E_CMD, APP_URL, OUTPUT_LANG, JIRA_ENABLED...
-sdd preflight          # environment sensor: claude, gh, GNU userland, agent-browser, clean tree
+sdd preflight          # environment sensor: claude, gh, GNU userland, git 2.31+, agent-browser, clean tree
 ```
 
 `sdd install` is idempotent: running it again shows the agent diff instead of overwriting.
@@ -92,6 +92,13 @@ silence: growing stays allowed, growing undeclared does not. Known debt lives fr
 and one, the count itself, owned by the file: a new finding fails, and so does a baseline line
 that stopped being a finding. It spends no paid session and does not need `.sdd/config.sh`.
 
+Every one of those checks **says its verdict out loud and the run carries on** — including the one
+case the command exists for, a red suite. It did not always: a bare `out="$(cmd)"` under
+`set -euo pipefail` killed the process at the assignment, so `sdd health` answered a red suite with
+one line of header and rc 1, and the four checks after it never ran. What keeps the class from
+coming back is the `guard:` rule of `tests/check-health.sh`, which enumerates the whole region
+instead of probing site by site — the reasoning is in that file's header.
+
 `--dry-run` answers *"what happens if I run this?"*: it prints **every** phase the mission would
 go through from today's state — in order, each with its agent, model and boot prompt — without
 opening a single session. It projects the **current** state, it does not simulate the future; the
@@ -109,7 +116,7 @@ the directory `docs/handoffs/<YYYYMMDD>-<slug>/`.
 | [`docs/failure-modes.md`](docs/failure-modes.md) | what breaks, how the kit reacts, how to get unstuck |
 | [`config/schema.md`](config/schema.md) | every `.sdd/config.sh` key, with its default and why |
 | [`agents/`](agents/) | the 6 agents (open markdown — portable to other harnesses) |
-| [`templates/`](templates/) | mission, plan, handoff, checkpoint, PR body |
+| [`templates/`](templates/) | mission, plan, handoff, checkpoint, review, PR body |
 | [`CLAUDE.md`](CLAUDE.md) | conventions for whoever (human or agent) works on **this** kit |
 | [`KAIZEN_LOG.md`](KAIZEN_LOG.md) | history of improvements with a measured before/after |
 | [`TODO.md`](TODO.md) | findings about the kit itself, recorded by any agent |

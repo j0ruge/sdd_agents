@@ -1,6 +1,16 @@
 #!/usr/bin/env bash
-# Sensor against the house's signature bug: a writer piped into an early-exiting `grep -q` while
-# `set -o pipefail` is in force.
+# Sensor against the shell traps that make a CAPTURED VALUE lie — three rules, one scanned surface.
+#
+# RULE 1 (`grep -q`), the house's signature bug: a writer piped into an early-exiting `grep -q`
+# while `set -o pipefail` is in force.
+#
+# RULE 2 (`cdpath:`), its sibling: a `cd` into a command substitution with no `CDPATH=''` guard.
+#
+# RULE 3 (`rule:`), rule 1's other half: a writer piped into `grep -m<N>` with no quiet flag at
+# all, which exits early for exactly the same reason. All three defects have the same shape — the
+# value the author reads back is not the value the command produced — and all three are invisible
+# to `bash -n`, to shellcheck, and to any test run on a machine whose environment happens to be
+# clean. Rules 2 and 3 are documented at their own regexes below.
 #
 # `grep -q` exits on the FIRST match and closes the pipe. The writer upstream then dies of
 # SIGPIPE, `pipefail` propagates its 141, and `if writer | grep -q X` reads "X is absent" for the
@@ -14,7 +24,12 @@
 # second process to kill. CLAUDE.md states the rule as prose; this file is what makes it a sensor.
 # Prose already lost this argument twice.
 #
-# What it measures, per scanned line:
+# What RULE 2 measures, per scanned line: a `cd` whose OPERAND is a command substitution and which
+# is not prefixed by an emptied CDPATH. Only that operand shape, and the reason is that it is the
+# only one a line scanner can classify honestly — see the CD_RE comment for the two shapes left
+# unmeasured on purpose and why neither is a fail-open in this repo.
+#
+# What RULE 1 measures, per scanned line:
 #   1. a pipe into `grep` carrying a `-q` flag in any spelling — `-q`, `-qE`, `-Eq`, `-E -q`,
 #      `--quiet`, `--silent` — at ANY position on the command, including after a flag that takes a
 #      separate argument (`-m 1 -q`) and after the pattern operand (`grep pat -q`, which getopt's
@@ -35,12 +50,14 @@
 #                                              surface floor and the per-file wiring get probed)
 #
 # ── Known limits, stated so nobody re-discovers them as surprises ──────────────────────────────
-# NOT measured: `grep -m<N>` with NO quiet flag at all, which exits early for exactly the same
-# reason. Same family, real gap, and it is in TODO.md rather than here — widening the rule to
-# early-exit-without-`-q` would force conversions this increment did not scope, and a sensor that
-# lands with unconverted violations lands red. Note the boundary, because the two are one keystroke
-# apart: `| grep -m 1 -q x` IS measured (a quiet flag is present, it is just late on the line) and
-# was the fail-open this file shipped with; `| grep -m 1 x` is the TODO.md item and still silent.
+# `grep -m<N>` with no quiet flag WAS the first entry here, declared rather than closed because
+# widening the rule forces conversions. It is RULE 3 now, and the one live violation it found
+# (tests/check-dry-run.sh) was converted in the same commit — a sensor that lands with unconverted
+# violations lands red.
+#
+# NOT measured: a line carrying BOTH a quiet flag and `-m<N>`, reported by rule 1 alone. Same
+# defect, same fix, one message. The declared cost is a line with two greps, where rule 1 answers
+# for a `-m` that belongs to the other command — see maxc_violations().
 #
 # NOT measured either: a quiet flag separated from `grep` by a shell metacharacter, e.g. a pattern
 # containing an unquoted-looking `|` (`| grep "a|b" -q`). The boundary set that kills the false
@@ -66,13 +83,32 @@
 # catching it here would steal the point from the behavioural fixture that is supposed to earn it).
 #
 # An adversarial pass degraded every rule above one at a time and demanded a red selftest for each
-# — 26 sabotages on the first draft, and 15 more on the PIPE_RE rewrite (each member of the
-# boundary set dropped on its own, the middle put back to flags-only, the trailing anchor widened
-# and narrowed). 14 of those 15 died on the probe that names the exact rule; the survivor was the
-# probe floor lowered on its own, which is survivor #3 below and hides nothing while the probe
-# bodies are intact. The three that SURVIVE are worth naming rather than hiding, because all three
-# are the harness testing itself and none is reachable in one edit:
-#   - neutering fail_rc AND the FAILS cross-check (two independent paths, both must die)
+# — 26 sabotages on the first draft, 15 more on the PIPE_RE rewrite (each member of the boundary
+# set dropped on its own, the middle put back to flags-only, the trailing anchor widened and
+# narrowed), 11 more when rule 3 landed (the short form alone, the long form alone, the cluster
+# widened to `m[[:alnum:]]*`, the trailing anchor narrowed to whitespace, the leading pipe dropped,
+# the middle forced to one-or-more tokens, maxc_violations reading nothing, the rule-1-owns-it skip
+# dropped, has_early_exit forgetting rule 3, check_file never reading it, and the `ok rule:` line
+# deleted — all eleven died on the probe that names the exact rule), and 11 when rule 2 landed:
+# the leading boundary dropped, the flag group dropped,
+# the operand widened to any quoted token, strip_cd_guards neutered, the comment exemption
+# dropped, cd_violations emptied, the block cut out of check_file, the `cdpath:` line cut out of
+# scan_surface, and the poison floor left unarmed. Nine of those eleven died on the probe that
+# names the exact rule. Two survived and BOTH are the harness testing itself, already named below.
+#
+# ⚠️ The first attempt at that pass concluded nothing at all and looked like it had concluded
+# everything: the sabotaged copy was run from a bare temp dir, so ROOT resolved outside any tree,
+# `$SELF_PATH` did not exist, and all eleven "died" at rc 127 on the FIRST probe — a uniform,
+# convincing, meaningless result. A sabotage probe proves it sabotaged what it said before it
+# concludes anything: anchor on CODE (a literal, asserted to appear exactly once), run a CONTROL
+# on the healthy file first, and refuse to read a run whose anchor did not match.
+#
+# The three that SURVIVE are worth naming rather than hiding, because all three are the harness
+# testing itself and none is reachable in one edit:
+#   - neutering fail_rc AND the FAILS cross-check (two independent paths, both must die). vprobe()
+#     shares this survivor with probe(), and that is measured rather than assumed: the same edit
+#     shape applied to each in turn leaves the selftest green in both cases, so rule 2 added no
+#     weakness here that rule 1 did not already have
 #   - neutering probe()'s message check AND then changing a message
 #   - neutering the probe bodies AND lowering the probe floor to match
 # A fourth survivor was not a limit but a duplicate: the waiver predicate had a second copy in the
@@ -86,7 +122,7 @@
 
 set -uo pipefail
 
-ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
+ROOT="$(CDPATH='' cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 SELF_PATH="$ROOT/tests/check-pipefail.sh"
 SELF_REL='tests/check-pipefail.sh'
 WAIVER='sdd-pipefail-waiver'
@@ -128,6 +164,96 @@ WAIVER='sdd-pipefail-waiver'
 # reading as `--quiet`.
 PIPE_RE='\|[[:space:]]*grep([[:space:]]+[^[:space:]|;&()<>`#]+)*[[:space:]]+(-[[:alnum:]]*q[[:alnum:]]*|--quiet|--silent)([^[:alnum:]-]|$)'
 
+# ── RULE 2: `cd` into a command substitution, with no emptied CDPATH ───────────────────────────
+#
+# bash searches $CDPATH for any `cd` operand that does not begin with `/`, `.` or `..` — and when
+# it finds one there it PRINTS the resolved directory on stdout, straight into the enclosing
+# command substitution. Two distinct failures from one cause, both silent, both already paid for
+# in this repo (the CRITICAL of 20260817-eixo-do-juiz):
+#   * the wrong directory. `git rev-parse --git-common-dir` answers `.git` at a checkout root, and
+#     with `CDPATH=$HOME` where $HOME is itself a checkout, EVERY repo on the machine collapsed
+#     into one ledger identity — writer and readers agreeing on it, nothing excluded, nothing said.
+#   * a second LINE in the answer. `CDPATH=.` alone put a newline inside the ledger's `repo` field.
+#
+# The operand shape measured is a COMMAND SUBSTITUTION (`"$(…)"`, `$(…)`, a backtick), because
+# that is the one a line scanner can classify without guessing: its result is not knowable here, it
+# is `dirname` of a relative path everywhere in this kit, and `dirname` of a relative path is
+# relative. Two shapes are deliberately NOT measured, and neither is a fail-open here:
+#   * a literal operand — `cd sub`, `cd tests`. It IS the bug, but no line in the kit writes one,
+#     and a rule with no live instance is a rule no sabotage can exercise.
+#   * a VARIABLE operand — `cd "$FIX"`. Statically unknowable: `$FIX` is absolute at runtime in
+#     every one of the ~150 sites in tests/, so requiring a guard there would be noise with no
+#     defect behind it. The one site where a variable really did hold a relative path was
+#     `ledger_repo_root`, and this mission removed the `cd` from it rather than guarding it.
+#
+# The guard is recognised in EXACTLY ONE spelling and nothing else — fail-CLOSED on purpose, so
+# the ratchet pushes toward the single spelling the kit writes instead of blessing a new one each
+# time somebody invents it. A first draft also accepted `CDPATH="" cd` and `CDPATH= cd`; the
+# adversarial pass could not break either without breaking the canonical one too, which is how the
+# kit finds out a rule is redundant — removed rather than given a probe. `CDPATH= cd` is also the
+# spelling shellcheck flags as SC1007, so refusing it is the direction the linter already points.
+# ── RULE 3: a pipe into `grep -m<N>` with no quiet flag at all ─────────────────────────────────
+#
+# The same race as rule 1, one keystroke away: `-m<N>` makes grep exit after the Nth match, the
+# writer upstream dies of SIGPIPE, and `pipefail` propagates its 141. `| grep -m 1 -q x` was
+# already measured by rule 1 (a quiet flag is present, just late on the line); `| grep -m 1 x` was
+# the gap this file SHIPPED WITH — declared in the header and parked in TODO.md rather than closed,
+# because widening rule 1 would have forced conversions that increment had not scoped.
+#
+# It is a rule of its own rather than a third alternative inside PIPE_RE for two reasons, and both
+# are about the report rather than the detection: rule 1's message names `grep -q` and would be
+# wrong here, and the existing probes assert that message. Same fix in both cases — a herestring.
+#
+# The middle and the trailing anchor are PIPE_RE's, verbatim in shape and for the same reasons
+# (see the long comment above it — the boundary set, GNU permutation, the separated argument).
+# What differs is the flag itself:
+#
+#   * the short form is a flag CLUSTER ENDING in `m`, optionally followed by the attached count:
+#     `-m1`, `-m 1`, `-om1`, `-im 1`. Written the way rule 1 writes its quiet cluster
+#     (`-[[:alnum:]]*m[[:alnum:]]*`) it would fire on every dashed word carrying an m — `-mtime`,
+#     `-march`, `-mode` — and a sensor that invents violations gets its rule deleted, not fixed.
+#     grep's argument to `-m` is a number, so digits are what may follow it.
+#   * the long form is exact, and `--max-count` is the ONLY long spelling grep gives this flag —
+#     unlike `-q`, which has three names. `--max-count=1` and `--max-count 1` both work because
+#     the trailing anchor excludes alnum and `-`, which leaves `=` and whitespace.
+MAXC_RE='\|[[:space:]]*grep([[:space:]]+[^[:space:]|;&()<>`#]+)*[[:space:]]+(-[[:alnum:]]*m[0-9]*|--max-count)([^[:alnum:]-]|$)'
+
+# Rule 2's operand shape, and the two the header promises are named here. Both are OPERAND
+# shapes; the flag-level and lexical gaps (`cd --`, an operand across a `\` continuation) are a
+# different accusation and live in TODO.md, not here.
+#
+# MEASURED: the operand is a command substitution — `cd "$(dirname "$0")/..`". It is the one shape
+# a line scanner can classify honestly, because the operand is written out on the line: no `/`,
+# `.` or `..` at its head means bash may resolve it through $CDPATH, and $CDPATH resolving it
+# PRINTS the directory it found on stdout — straight into the enclosing capture. That is the whole
+# defect, and it is decidable from the text.
+#
+# NOT MEASURED (1) — a VARIABLE operand: `cd "$dir"`, `cd "$1"`. Undecidable per line: whether the
+# value starts with `/` is a runtime fact, and the same `cd` is safe or unsafe depending on the
+# caller. The kit is full of them —
+#     grep -cE '(^|[^[:alnum:]_./$-])cd[[:space:]]+"?\$\{?[A-Za-z_0-9]' bin/sdd tests/*.sh
+# — and a syntactic rule over that population invents ~170 violations, which gets a rule deleted
+# rather than fixed. ⚠️ This is NOT a benign gap: the only instance of the class that ever cost
+# this kit anything had exactly this shape (`cd "$common"` in ledger_repo_root, the CRITICAL of
+# 20260817-eixo-do-juiz). It is not a fail-open because it is measured OUT OF BAND and at runtime,
+# where the question is decidable: the differential pair in tests/check-autonomy.sh runs the real
+# runner under an ARMED $CDPATH poison and asserts the identity comes back on one line. A line
+# scanner and a runtime probe answer different questions; this file owns the first only.
+#
+# NOT MEASURED (2) — a LITERAL relative operand: `cd bin`. Decidable from the text, and left out
+# on purpose: the echoed path only becomes a SILENT corruption when the `cd` sits inside a
+# capture, and a capture is exactly what CD_RE already keys on. A bare `cd bin` at statement level
+# spills onto the operator's terminal instead, which is noise and not a lie.
+# Not a fail-open by population, measured rather than asserted:
+#     grep -nE '(^|[^[:alnum:]_./$-])cd[[:space:]]+[A-Za-z0-9_]' bin/sdd tests/*.sh | grep -vE ':[[:space:]]*#'
+# answers with prose only — the words "cd into a capture", "cd rule", "cd prints" inside probe and
+# assert_eq DESCRIPTIONS. Zero of the hits are a `cd` command. Re-derive before trusting that
+# sentence: it is a count, and counts rot.
+CD_RE='(^|[^[:alnum:]_./$-])cd([[:space:]]+-[[:alpha:]]+)*[[:space:]]+"?(\$\(|`)'
+CD_GUARD="CDPATH='' cd"
+# A token with no `cd` in it: what is left after the guarded ones are blanked is what CD_RE reads.
+CD_GUARD_TOKEN='CDPATHWASEMPTIED'
+
 # is_comment <text> — true when the line is nothing but a comment.
 is_comment() {
   local t="${1#"${1%%[![:space:]]*}"}"
@@ -146,6 +272,62 @@ violations() {
   done < <(grep -nE "$PIPE_RE" -- "$1" 2>/dev/null)
 }
 
+# maxc_violations <file> — prints "<lineno>\t<text>" per pipe into an early-exiting `grep -m<N>`
+# that carries no quiet flag. Never fails.
+#
+# Lines rule 1 already reports are skipped, and that is the ONE place the two rules are coupled:
+# they describe the same defect with the same fix, so a line carrying both flags is named once.
+# The declared cost is a line with TWO greps — `| grep -q a | grep -m1 b` — where rule 1 answers
+# first and rule 3 stays quiet. A line scanner cannot tell the two commands apart, and this errs
+# toward one honest message instead of two, one of which would point at the wrong command.
+maxc_violations() {
+  local hit no text
+  while IFS= read -r hit; do
+    [ -n "$hit" ] || continue
+    no="${hit%%:*}"; text="${hit#*:}"
+    case "$text" in *"$WAIVER"*) continue ;; esac
+    is_comment "$text" && continue
+    # Herestring, never a pipe — rule 1 applies to rule 3's implementation too.
+    grep -qE "$PIPE_RE" <<< "$text" && continue
+    printf '%s\t%s\n' "$no" "$text"
+  done < <(grep -nE "$MAXC_RE" -- "$1" 2>/dev/null)
+  return 0
+}
+
+# has_early_exit <text> — true when the line pipes into a grep that stops reading before its
+# writer is done, by EITHER rule. ONE definition, so the waiver classifier cannot learn about a
+# rule the scanner already knows (or the other way round): a real rule-3 violation carrying the
+# marker would otherwise be reported as a STALE waiver — "nothing to waive" on a line that has
+# something to waive, which reads as the opposite of the truth and invites deleting the marker.
+has_early_exit() {
+  grep -qE "$PIPE_RE" <<< "$1" && return 0
+  grep -qE "$MAXC_RE" <<< "$1"
+}
+
+# strip_cd_guards <text> — blanks every GUARDED `cd` so only the unguarded ones survive for CD_RE.
+# Literal replacement (the pattern is quoted), never a regex: the spellings contain `$`-free but
+# quote-heavy text and a regex here would be one more thing to get wrong.
+strip_cd_guards() {
+  printf '%s' "${1//"$CD_GUARD"/$CD_GUARD_TOKEN}"
+}
+
+# cd_violations <file> — prints "<lineno>\t<text>" per unguarded `cd` into a command substitution.
+# Never fails. Whole-line comments are exempt for the same reason as in violations(): this header
+# documents the shape, and a comment executes nothing.
+cd_violations() {
+  local hit no text
+  while IFS= read -r hit; do
+    [ -n "$hit" ] || continue
+    no="${hit%%:*}"; text="${hit#*:}"
+    is_comment "$text" && continue
+    # Herestring, never a pipe — rule 1 applies to rule 2's implementation too.
+    if grep -qE "$CD_RE" <<< "$(strip_cd_guards "$text")"; then
+      printf '%s\t%s\n' "$no" "$text"
+    fi
+  done < <(grep -nE "$CD_RE" -- "$1" 2>/dev/null)
+  return 0
+}
+
 # waiver_lines <file> — classifies every line carrying the marker and prints
 # "<good|stale>\t<lineno>\t<text>". ONE definition of "this line is a waiver", read by both the
 # stale-waiver failure and the summary count: two near-copies of the same predicate is the exact
@@ -162,7 +344,7 @@ waiver_lines() {
     no="${hit%%:*}"; text="${hit#*:}"
     is_comment "$text" && continue
     # Herestring, never a pipe — a sensor for this bug must not carry it.
-    if grep -qE "$PIPE_RE" <<< "$text"; then printf 'good\t%s\t%s\n' "$no" "$text"
+    if has_early_exit "$text"; then printf 'good\t%s\t%s\n' "$no" "$text"
     else printf 'stale\t%s\t%s\n' "$no" "$text"; fi
   done < <(grep -nF -- "$WAIVER" "$1" 2>/dev/null)
 }
@@ -174,10 +356,21 @@ waiver_count() {
 
 # check_file <file> — the real check on one path. rc 0 clean, 1 dirty, 94 unreadable.
 check_file() {
-  local f="$1" label="$2" bad found stale rc=0
+  local f="$1" label="$2" bad found stale cdbad maxbad rc=0
   if [ ! -f "$f" ] || [ ! -r "$f" ]; then
     printf '  FAIL  file missing or unreadable: %s\n' "$f" >&2
     return 94
+  fi
+  cdbad="$(cd_violations "$f")"
+  if [ -n "$cdbad" ]; then
+    while IFS= read -r bad; do
+      printf '  FAIL  %s:%s: `cd` into a command substitution with no CDPATH guard — bash searches\n' \
+        "$label" "${bad%%$'\t'*}" >&2
+      printf '        $CDPATH and prints what it finds into the capture. Write: CDPATH=%s cd …\n' \
+        "''" >&2
+      printf '        %s\n' "${bad#*$'\t'}" >&2
+    done <<< "$cdbad"
+    rc=1
   fi
   found="$(violations "$f")"
   if [ -n "$found" ]; then
@@ -186,6 +379,16 @@ check_file() {
         "$label" "${bad%%$'\t'*}" >&2
       printf '        %s\n' "${bad#*$'\t'}" >&2
     done <<< "$found"
+    rc=1
+  fi
+  maxbad="$(maxc_violations "$f")"
+  if [ -n "$maxbad" ]; then
+    while IFS= read -r bad; do
+      printf '  FAIL  %s:%s: pipe into an early-exiting `grep -m<N>` under pipefail — same race\n' \
+        "$label" "${bad%%$'\t'*}" >&2
+      printf '        as `grep -q`, same fix: a herestring\n' >&2
+      printf '        %s\n' "${bad#*$'\t'}" >&2
+    done <<< "$maxbad"
     rc=1
   fi
   stale="$(grep '^stale' <<< "$(waiver_lines "$f")")"
@@ -242,8 +445,54 @@ probe() {
   fi
 }
 
+# vprobe <desc> <want> <got> — a probe over a measured VALUE rather than over a run of this file.
+# Same accounting as probe() (PROBES, FAILS, fail_rc) so the floor and the cross-check below cover
+# both kinds. Rule 2's differential cannot go through probe(): what it measures is bash's own
+# behaviour under a poisoned environment, not this scanner's verdict about a file.
+vprobe() {
+  local desc="$1" want="$2" got="$3"
+  PROBES=$((PROBES + 1))
+  if [ "$got" != "$want" ]; then
+    printf 'SENSOR-BROKEN: %s — wanted "%s", got "%s"\n' "$desc" "$want" "$got" >&2
+    FAILS=$((FAILS + 1)); fail_rc 90
+  fi
+}
+
+# cd_poison_probes <box> — the differential rule 2 exists for, and the FLOOR that makes it mean
+# something. The floor is not decoration and is deliberately measured FIRST: a CDPATH that is not
+# being consulted (a bash built without it, a poison directory that does not hold the name being
+# looked up) makes the guarded half pass while measuring nothing. A probe that cannot demonstrate
+# the sabotage it claims concludes nothing — this repo has already been bitten by exactly that, and
+# the sibling floor in tests/check-autonomy.sh exists for the same reason.
+#
+# Both `here/sub` and `poison/sub` exist, so the two halves differ only in the guard: bash searches
+# $CDPATH BEFORE falling back to the current directory, which is what makes the poison win.
+cd_poison_probes() {
+  local box="$1" got
+  mkdir -p "$box/poison/sub" "$box/here/sub"
+
+  # FLOOR — the poison is armed: an unguarded `cd` into a capture lands in the poison checkout.
+  got="$( cd "$box/here" \
+          && CDPATH="$box/poison" bash -c 'cd "$(dirname "sub/x")" >/dev/null 2>&1 && pwd -P' )"
+  vprobe 'the CDPATH poison is armed: an unguarded cd into a capture lands in the poison tree' \
+    "$box/poison/sub" "$got"
+
+  # FLOOR, other half — and it is the SECOND defect, not a restatement of the first: bash echoes
+  # the directory it found, so the capture comes back with a line the author never wrote.
+  got="$( cd "$box/here" \
+          && CDPATH="$box/poison" bash -c 'cd "$(dirname "sub/x")" && pwd -P' | grep -c . )"
+  vprobe 'the poison also DOUBLES the capture: cd prints what it found, so the value is 2 lines' \
+    2 "$got"
+
+  # The guard, against that armed poison: right directory, and one line.
+  got="$( cd "$box/here" \
+          && CDPATH="$box/poison" bash -c 'CDPATH='\'''\'' cd "$(dirname "sub/x")" && pwd -P' )"
+  vprobe 'CDPATH= on the cd yields the local directory, on ONE line, under the same poison' \
+    "$box/here/sub" "$got"
+}
+
 selftest() {
-  local box t
+  local box t out_r2 out_r3
   box="$(mktemp -d "${TMPDIR:-/tmp}/sdd-pipefail-selftest-XXXXXX")" || {
     echo 'SENSOR-BROKEN: no temp dir — the probes never ran' >&2; return 92; }
   t="$box/probe.sh"
@@ -391,6 +640,180 @@ EOF
   # reports on a surface it never opened.
   probe 'a missing file is not silently clean' 94 'missing or unreadable' "$box/does-not-exist.sh"
 
+  # ── RULE 2 ────────────────────────────────────────────────────────────────────────────────────
+  # The shape that IS the bug, and the one every script in tests/ was written in.
+  cat > "$t" <<'EOF'
+ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
+EOF
+  probe 'an unguarded cd into a capture is detected' 1 'no CDPATH guard' "$t"
+
+  # The fix. Without this probe "flag every cd" scores full marks on the one above.
+  cat > "$t" <<'EOF'
+ROOT="$(CDPATH='' cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
+EOF
+  probe 'the CDPATH guard is accepted' 0 '-' "$t"
+
+  # The guard has ONE spelling. `CDPATH= cd` empties CDPATH just as well, and is refused anyway:
+  # the ratchet is toward one spelling, and without this probe that decision is unmeasured.
+  cat > "$t" <<'EOF'
+ROOT="$(CDPATH= cd "$(dirname "$0")/.." && pwd)"
+EOF
+  probe 'a non-canonical guard spelling is refused, not silently blessed' 1 'no CDPATH guard' "$t"
+
+  # A flag between `cd` and the operand must not hide it — bin/sdd's own SDD_HOME resolution
+  # writes `cd -P "$(dirname "$src")"`, and a rule keyed on `cd "` would have certified it clean.
+  cat > "$t" <<'EOF'
+dir="$(cd -P "$(dirname "$src")" && pwd)"
+EOF
+  probe 'a flag between cd and the operand does not hide it' 1 'no CDPATH guard' "$t"
+
+  # The two operand shapes the header declares unmeasured. They are probes precisely BECAUSE they
+  # are limits: if a later widening starts flagging them, that is a decision, not a surprise.
+  cat > "$t" <<'EOF'
+cd "$FIX" || exit 1
+out="$( cd "$FIX/target" && "$KIT/bin/sdd" install 2>&1 )"
+EOF
+  probe 'a VARIABLE operand is out of scope (declared limit, not a silent pass)' 0 '-' "$t"
+
+  cat > "$t" <<'EOF'
+( cd "$ROOT" && ls -1 bin/sdd )
+cd -P /tmp && pwd
+EOF
+  probe 'an absolute operand needs no guard' 0 '-' "$t"
+
+  # `abcd`, `--cd`, `$cd`, `bin/cd`: the token has to BE the command. Without the leading boundary
+  # the rule invents violations in every neighbouring word that happens to end in "cd".
+  cat > "$t" <<'EOF'
+abcd "$(f)"
+foo --cd "$(f)"
+"$cd" "$(f)"
+/usr/bin/cd "$(f)"
+EOF
+  probe 'a word merely ending in cd is not the cd command' 0 '-' "$t"
+
+  # Line number, same reason as rule 1: a report that cannot say WHERE is a rumour.
+  cat > "$t" <<'EOF'
+: line one
+: line two
+ROOT="$(cd "$(dirname "$0")/.." && pwd)"
+EOF
+  probe 'the cd violation carries its line number' 1 'probe.sh:3:' "$t"
+
+  # Prose describing the trap is not the trap — this file's own header writes the bad shape.
+  cat > "$t" <<'EOF'
+  # never write ROOT="$(cd "$(dirname "$0")/.." && pwd)" without emptying CDPATH
+EOF
+  probe 'a whole-line comment showing the bad shape is accepted' 0 '-' "$t"
+
+  # The two rules must be told APART. A file that breaks only rule 2 has to say so: with one
+  # shared message, a reader (and the mission Check) could not tell which rule fired.
+  cat > "$t" <<'EOF'
+ROOT="$(cd "$(dirname "$0")/.." && pwd)"
+EOF
+  probe 'a rule-2 violation is not reported as a pipe into grep -q' 1 'no CDPATH guard' "$t"
+  out_r2="$( "$SELF_PATH" --check "$t" 2>&1 )"
+  PROBES=$((PROBES + 1))
+  if grep -qF 'pipe into `grep -q`' <<< "$out_r2"; then
+    printf 'SENSOR-BROKEN: rule 2 fired but the message blamed rule 1\n%s\n' "$out_r2" >&2
+    FAILS=$((FAILS + 1)); fail_rc 91
+  fi
+
+  # And bash's own behaviour, which is what the rule is FOR.
+  cd_poison_probes "$box"
+
+  # ── RULE 3 ────────────────────────────────────────────────────────────────────────────────────
+  # `grep -m<N>` with NO quiet flag: the same early exit, one keystroke from a shape rule 1
+  # already measures. Every spelling grep accepts for the flag gets a probe, for the same reason
+  # rule 1 has six: a spelling this file does not know is a spelling it certifies as clean.
+  cat > "$t" <<'EOF'
+if printf '%s\n' "$out" | grep -m1 'BLOCKED'; then :; fi
+EOF
+  probe 'an attached -m1 with no quiet flag is detected' 1 'early-exiting `grep -m' "$t"
+
+  cat > "$t" <<'EOF'
+line="$(cat "$f" | grep -m 1 'x')"
+EOF
+  probe 'a separated -m 1 is detected' 1 'early-exiting `grep -m' "$t"
+
+  cat > "$t" <<'EOF'
+line="$(cat "$f" | grep -om1 'x')"
+EOF
+  probe 'a flag CLUSTER ending in m is detected' 1 'early-exiting `grep -m' "$t"
+
+  cat > "$t" <<'EOF'
+line="$(cat "$f" | grep --max-count=1 'x')"
+EOF
+  probe '--max-count= is detected (grep spells this flag two ways)' 1 'early-exiting `grep -m' "$t"
+
+  cat > "$t" <<'EOF'
+line="$(cat "$f" | grep --max-count 1 'x')"
+EOF
+  probe '--max-count with a separated argument is detected' 1 'early-exiting `grep -m' "$t"
+
+  # The shapes that are NOT the bug. Without these, "flag every pipe into grep" scores full marks.
+  cat > "$t" <<'EOF'
+n="$(printf '%s\n' "$v" | grep -c 'x')"
+EOF
+  probe 'a pipe into a grep that reads to EOF is accepted' 0 '-' "$t"
+
+  # The `m` has to be in a FLAG, not in an operand: `grep make` reads to EOF.
+  cat > "$t" <<'EOF'
+hits="$(ls | grep make)"
+EOF
+  probe 'an operand merely containing an m is not the -m flag' 0 '-' "$t"
+
+  # And the flag is `-m` plus DIGITS, not any dashed token containing an m. Written as
+  # `-[[:alnum:]]*m[[:alnum:]]*` the rule would fire on `-mtime`, `-march`, `-mode` — every dashed
+  # word with an m in it — and a sensor that invents violations gets its rule deleted, not fixed.
+  cat > "$t" <<'EOF'
+hits="$(printf '%s\n' "$out" | grep -F -- -mtime)"
+EOF
+  probe 'a dashed word merely containing an m is not -m either' 0 '-' "$t"
+
+  # No writer, no SIGPIPE: grep reading a FILE has nothing upstream to kill.
+  cat > "$t" <<'EOF'
+line="$(grep -m1 'x' "$f")"
+EOF
+  probe 'grep -m1 on a FILE (no pipe) is accepted' 0 '-' "$t"
+
+  # ONE message per line. The line carrying BOTH flags is rule 1's — the fix is the same
+  # herestring, and telling the reader the same defect twice under two names is how a report stops
+  # being read. The second half is the half that matters: without it, "rule 1 owns it" is a claim
+  # satisfied by rule 1 firing, whether or not rule 3 also did.
+  cat > "$t" <<'EOF'
+if foo | grep -m 1 -q x; then :; fi
+EOF
+  probe 'a line carrying both flags is reported by rule 1' 1 'pipe into `grep -q`' "$t"
+  out_r3="$( "$SELF_PATH" --check "$t" 2>&1 )"
+  PROBES=$((PROBES + 1))
+  if grep -qF 'early-exiting `grep -m' <<< "$out_r3"; then
+    printf 'SENSOR-BROKEN: a line carrying both flags was reported twice, once per rule\n%s\n' \
+      "$out_r3" >&2
+    FAILS=$((FAILS + 1)); fail_rc 91
+  fi
+
+  # Line number, same reason as the other two rules: a report that cannot say WHERE is a rumour.
+  cat > "$t" <<'EOF'
+: line one
+: line two
+line="$(cat "$f" | grep -m1 'x')"
+EOF
+  probe 'the max-count violation carries its line number' 1 'probe.sh:3:' "$t"
+
+  # Prose describing the trap is not the trap — this file's own header writes the bad shape.
+  cat > "$t" <<'EOF'
+   # never write cat "$f" | grep -m1 x here
+EOF
+  probe 'a whole-line comment naming the max-count shape is accepted' 0 '-' "$t"
+
+  # The waiver has to know rule 3 exists. Without that, waiving a real max-count violation makes
+  # the file fail as a STALE waiver — the marker on a line with "nothing to waive" — which reads
+  # as the opposite of the truth and pushes the author to delete the marker.
+  cat > "$t" <<'EOF'
+line="$(cat "$f" | grep -m1 'x')"  # sdd-pipefail-waiver: sabotage payload
+EOF
+  probe 'a waived max-count violation is accepted, not called stale' 0 '-' "$t"
+
   # 14-16: the SCAN path, over fixture trees. Without these three the whole surface half of this
   # file is unmeasured: a floor lowered to zero, or a scan_surface that never calls check_file at
   # all, would both print "no pipe into grep -q" and exit 0 forever. That is precisely the
@@ -422,12 +845,32 @@ if printf '%s\n' "$out" | grep -q 'x'; then :; fi
 EOF
   probe 'the scan actually opens each file on the surface' 1 'pipe into `grep -q`' "$tree" --scan
 
+  # Rule 2 has to REPORT, not merely refrain from failing. A scan_surface that dropped the
+  # `cdpath:` line would still exit 0 on a clean tree and still say "no pipe into grep -q" — green
+  # here, and silently one assertion short everywhere that counts them.
+  rm -f "$tree/tests/check-7.sh"; : > "$tree/tests/check-7.sh"
+  probe 'a clean scan SAYS the cd rule was applied, it does not merely stay quiet' \
+    0 'ok    cdpath:' "$tree" --scan
+
+  # Same reason for rule 3, and it is the line the mission Check counts: dropping it would leave
+  # a scan that still exits 0 on a clean tree and still names the other two rules, silently one
+  # assertion short everywhere that counts them.
+  probe 'a clean scan SAYS the max-count rule was applied too' \
+    0 'ok    rule:' "$tree" --scan
+
+  cat > "$tree/tests/check-7.sh" <<'EOF'
+line="$(cat "$f" | grep -m1 'x')"
+EOF
+  probe 'the scan reports a max-count violation on the surface' \
+    1 'early-exiting `grep -m' "$tree" --scan
+  rm -f "$tree/tests/check-7.sh"; : > "$tree/tests/check-7.sh"
+
   rm -rf "$box"
 
   # Floor on the probe COUNT: neutering every assertion body leaves a selftest that ran nothing,
   # and a selftest that ran nothing reads exactly like one that passed. Moves only on purpose.
-  if [ "$PROBES" -lt 26 ]; then
-    printf 'SENSOR-BROKEN: only %d probe(s) ran, expected at least 26\n' "$PROBES" >&2
+  if [ "$PROBES" -lt 57 ]; then
+    printf 'SENSOR-BROKEN: only %d probe(s) ran, expected at least 57\n' "$PROBES" >&2
     FAILS=$((FAILS + 1)); fail_rc 92
   fi
   # Direct assignment, deliberately NOT through fail_rc: two independent paths from "a probe
@@ -460,10 +903,19 @@ scan_surface() {
     waived=$((waived + $(waiver_count "$root/$f")))
   done <<< "$files"
   if [ "$fails" -ne 0 ]; then
-    printf '\n%d file(s) pipe a writer into `grep -q`\n' "$fails" >&2
+    printf '\n%d file(s) break one of the three capture rules\n' "$fails" >&2
     return 1
   fi
   printf '  ok    %d path(s) scanned, no pipe into `grep -q` (%d waived)\n' "$n_files" "$waived"
+  # Its own line, and prefixed: the two rules are reported separately so a reader (and the
+  # mission Check that counts `^  ok    cdpath: `) can tell WHICH of them is being asserted.
+  printf '  ok    cdpath: %d path(s) scanned, every `cd` into a capture empties CDPATH first\n' \
+    "$n_files"
+  # Rule 3, its own line for the same reason and carrying the prefix the mission Check counts:
+  # a reader (and `grep -c '^  ok    rule: '`) has to be able to tell WHICH of the three rules is
+  # being asserted, and a rule that only refrains from failing says nothing about having run.
+  printf '  ok    rule: %d path(s) scanned, no pipe into an early-exiting `grep -m<N>` either\n' \
+    "$n_files"
   return 0
 }
 

@@ -8,7 +8,7 @@
 
 | Termo | Definição |
 |---|---|
-| **Ledger de autonomia** | `~/.sdd/autonomy-log.jsonl` (global, fora dos repos). Uma linha JSON por sessão gasta ou escalada, escrita pelo runner. Grava **fato, nunca rótulo**. ⚠️ O **arquivo** é global; a **leitura** é por repo **por padrão** desde a missão `20260816-kit-como-alvo`: um predicado único (`ledger_row_is_local`) admite só as linhas cujo `repo` é o repo corrente, e os três leitores passam por ele. Enquanto não era assim, o ledger era um espaço de nomes compartilhado por acidente — um `sdd run` de fixture em `/tmp` contaminou a fonte da verdade do juiz. Desde `20260817-eixo-do-juiz`, `--all-repos` reabre a pergunta entre projetos nos dois leitores de `sdd autonomy`/`sdd kaizen` (nunca por padrão, nunca implícito), e a identidade do repo **é** o `.git` compartilhado (`--git-common-dir` normalizado, com `/.git` final removido só por cosmética e só em repo não-bare) e não o toplevel — worktree do mesmo repo é o mesmo repo. ⚠️ Não é o **pai** do `.git`: essa foi a primeira grafia e fundia repositórios em silêncio (todo submódulo de um pai responde `/pai/.git/modules`; todo bare responde o diretório que apenas o contém). Interface completa em `docs/pipeline.md` § "The autonomy ledger". |
+| **Ledger de autonomia** | `~/.sdd/autonomy-log.jsonl` (global, fora dos repos). Uma linha JSON por sessão gasta ou escalada, escrita pelo runner. Grava **fato, nunca rótulo**. ⚠️ O **arquivo** é global; a **leitura** é por repo **por padrão** desde a missão `20260816-kit-como-alvo`: um predicado único (`ledger_row_is_local`) admite só as linhas cujo `repo` é o repo corrente, e os três leitores passam por ele. Enquanto não era assim, o ledger era um espaço de nomes compartilhado por acidente — um `sdd run` de fixture em `/tmp` contaminou a fonte da verdade do juiz. Desde `20260817-eixo-do-juiz`, `--all-repos` reabre a pergunta entre projetos nos dois leitores de `sdd autonomy`/`sdd kaizen` (nunca por padrão, nunca implícito), e a identidade do repo **é** o `.git` compartilhado (`--git-common-dir` **absoluto**, com `/.git` final removido só por cosmética e só em repo não-bare) e não o toplevel — worktree do mesmo repo é o mesmo repo. ⚠️ Não é o **pai** do `.git`: essa foi a primeira grafia e fundia repositórios em silêncio (todo submódulo de um pai responde `/pai/.git/modules`; todo bare responde o diretório que apenas o contém). ⚠️ Desde `20260818-lote-facil` o caminho rápido é `--path-format=absolute` (git 2.31+), numa chamada só; git mais velho **ecoa a bandeira de volta e sai 0**, então a guarda recusa a forma de duas linhas e cai no fallback `cd` + `pwd -P` (com `CDPATH` esvaziado), que responde a MESMA string. Recusar sem resolver era um segundo defeito com a roupa do primeiro: vazio é o contrato de "não é um repo", e em git 2.25/2.30 todo o ledger iria para `excluded.no_repo`. Operador vê isso como um `warn` do `sdd preflight`, nunca como falha. Interface completa em `docs/pipeline.md` § "The autonomy ledger". |
 | **Rótulo** | `ok \| leve \| refez` por fase/sessão, derivado **depois** a partir dos fatos do ledger — nunca gravado pelo runner. Vem da rubrica de maturidade do usuário (`~/.claude/skills/release-notes/references/autonomy-rubric.md`). |
 | **Veredito** | A resposta "a última mudança do kit **melhorou, piorou ou indeterminado**?", dada por mudança de versão do kit (eixo `kit_sha`). |
 | **Série** | Os agregados comparados por grupo de `kit_sha`, **do repo em que ela é lida**: desperdício (`moved:false`/total), escaladas por `kind`, custo, retentativas. `sdd autonomy` já imprime a visão humana disso. O que ficou de fora é contado, nunca sumido: `excluded` tem cinco baldes (`non_comparable`, `unrecognized`, `meta`, `other_repo`, `no_repo` — "nasceu em outro repo" e "não diz de onde veio" são acusações diferentes), e o literal do ramo de ledger vazio carrega os cinco — série que encolheu sem nada nomeando o motivo é o defeito que o contador existe para pegar. A `guard` expõe quatro números mais `degenerate_axis` — **eixo degenerado**, verbete próprio abaixo. ⚠️ Toda contagem chaveia por `(repo, missão)` e nunca pelo slug sozinho: slugs são datados e se repetem entre projetos, então sob `--all-repos` era o repo que faltava para dois projetos não virarem um grupo. |
@@ -55,9 +55,19 @@
   as três na mesma máquina, worktree da base contra o HEAD. ⚠️ A terceira só vale porque foi
   **refeita em sequência, sem outra suíte rodando**: sob carga concorrente os mesmos commits deram
   3:12,87 e 4:18,70, e uma terceira passada do mesmo HEAD deu 2:25,87 — mais rápida que o "antes".
-  O alvo está agora **4,9× distante** e ninguém o defende. Cortar mutação para ganhar relógio
-  violaria o princípio que motivou o I13.2, então o que resta é **subir o alvo ou aposentá-lo por
-  escrito** — decisão do humano; o item vivo mora no `TODO.md`.
+  ⚠️ **Quarta medição, `20260818-lote-facil` (2026-08-19), e a ordem de grandeza mudou:** o par foi
+  refeito no protocolo (mesma máquina, em sequência, nada mais rodando) e deu **1268,31 s (21m08s)
+  na base `9207b4d`, 81 mutantes, verde** contra **1051,60 s (17m32s) no HEAD, 101 mutantes**. Duas
+  leituras que importam mais que o delta: (a) o HEAD ficou **mais rápido** com 20 mutantes a mais,
+  o que é a mesma volatilidade que a nota acima já documenta — **um par não é tendência**; (b) o
+  **absoluto** é sólido nos dois lados, e o alvo não está mais a 4,9× e sim a **~35×**. O
+  "~3m30s" que o `01-plano.md` desta missão registrou como contexto verificado estava **6× errado**;
+  todo gate rodava a suíte, então `sdd phase` e `sdd why` bloqueavam por ~20 minutos, não por 3.
+  ⚠️ **Esta frase deixou de valer em `4c86712`**, e foi ela que motivou a mudança: o catálogo saiu
+  do `TEST_CMD` para o `sdd health --with-mutation`, e o `TEST_CMD` passou a 44,3 s medidos. O
+  número de mutantes deixou de ser escrito em prosa em qualquer lugar — sai da linha `score:`.
+  Cortar mutação para ganhar relógio violaria o princípio que motivou o I13.2, então o que resta é
+  **subir o alvo ou aposentá-lo por escrito** — decisão do humano; o item vivo mora no `TODO.md`.
 
 _As duas perguntas abertas no grill (D9, D10) foram resolvidas na execução do I13.3 e movidas para
 a tabela acima._

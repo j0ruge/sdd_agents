@@ -28,9 +28,15 @@
 #      failure. Without it the contract could rot on the check-todo.sh side and cmd_health would
 #      go blind in silence — the failure mode the `score:` check above was already written
 #      against, and the one it still has (TODO.md: it dies of `set -e` before it can say so).
-#   8. the ratchet policy is written where the next mission meets it — CLAUDE.md and TODO.md. The
+#   8-11. the four silent aborts, prefixed `abort:` — cmd_health may not DIE where it was written
+#      to speak. Each demands the sentence of the right branch AND that a check after the site
+#      still appears; see the block header down the file for why the rc alone proves nothing.
+#   12. the ratchet policy is written where the next mission meets it — CLAUDE.md and TODO.md. The
 #      one rule here that no mut_HEALTH_* can reach, since none of them can make a document say
 #      less, so it carries probes of its own over all three of its layers.
+#   13. the OTHER two provenance comparisons, prefixed `covered:` — the qa-execution report and the
+#      codereview grade table. Assertion 4 reaches one of the three; these two sat permanently on
+#      the `skipped` branch, so either could have been `if true` with this file fully green.
 #
 # Usage: tests/check-health.sh   (exit 0 = cmd_health discriminates)
 #
@@ -58,7 +64,7 @@
 
 set -uo pipefail
 
-ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
+ROOT="$(CDPATH='' cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 # `|| exit 90` and not a bare assignment: with mktemp failed, WORK is EMPTY and FIX becomes the
 # absolute path `/kit` — a non-empty string, so the `${FIX:?}` guard in reset_home() below is
 # satisfied and `rm -rf /kit/home` runs for real on any machine where / is writable. The guard
@@ -86,8 +92,10 @@ fail() { printf '  FAIL  %s\n         expected: %s\n         got:      %s\n' "$1
 # of check-mutation.sh does, and for the same reason.
 broken() { printf '  SENSOR-BROKEN  %s\n' "$1" >&2; exit 90; }
 
-# The ratchet-relevant lines of an output, flattened onto one line for a FAIL report.
-digest() { grep -E 'baseline|provenance|finding count|kit healthy|check\(s\) failed' <<< "$1" | tr '\n' ' '; }
+# The verdict-relevant lines of an output, flattened onto one line for a FAIL report. It carries
+# the suite/score/gates lines too, and not only the ratchet's: the `abort:` assertions are ABOUT
+# what the run stopped saying, so a digest that dropped those would report the silence as silence.
+digest() { grep -E 'suite (green|red)|blind|gates have a mutation|baseline|provenance|finding count|kit healthy|check\(s\) failed|diverged from the skill|grade table has a criterion' <<< "$1" | tr '\n' ' '; }
 
 # ---------------------------------------------------------------------------
 # The fixture
@@ -133,21 +141,32 @@ build_fixture() {
   write_stub_suite with-count
 }
 
-# The stub suite. `$1` is `with-count` or `no-count`: assertion 7 needs a suite that prints
-# everything except the finding count, and it has to be the ONLY thing that changes between the
-# two worlds it compares — hence one writer with a switch, not two heredocs drifting apart.
-write_stub_suite() { # write_stub_suite <with-count|no-count>
-  local count_line=""
+# The stub suite. Three switches, all defaulting to the healthy world: assertion 7 needs a suite
+# that prints everything except the finding count, assertion 9 one that prints everything except
+# the score, and assertion 8 one that is simply RED. Each has to be the ONLY thing that changes
+# between the two worlds it compares — hence one writer with switches, not four heredocs drifting
+# apart. The defaults are what keeps the existing two calls reading as they did.
+write_stub_suite() { # write_stub_suite <with-count|no-count> [with-score|no-score] [exit code]
+  local count_line="" score_line="" rc="${3:-0}"
   [ "$1" = "with-count" ] \
     && count_line="printf '  ok    %d finding(s), all within 8 lines and carrying anchor + date\\n' $STUB_TODO_COUNT"
+  [ "${2:-with-score}" = "with-score" ] \
+    && score_line="printf '%s\\n' '$STUB_SCORE'"
 
   cat > "$FIX/tests/run-all.sh" <<EOF
 #!/usr/bin/env bash
 # Stub suite. See the RECURSION note in tests/check-health.sh: the real one runs that file, which
 # runs this command, which would run the real one.
-printf '%s\n' '$STUB_SCORE'
+#
+# It records its own argv, and that file is the whole evidence of the "surface:" assertion below:
+# what cmd_health ACTUALLY passed, read off the call itself. A grep over bin/sdd would certify the
+# TEXT of an invocation rather than the invocation — green for a call that moved, or that a second
+# code path bypasses. Written by the stub because the stub is the only witness standing where the
+# argument arrives.
+printf '%s\n' "\$*" > "$FIX/tests/stub-argv.txt"
+$score_line
 $count_line
-exit 0
+exit $rc
 EOF
   chmod +x "$FIX/tests/run-all.sh"
 }
@@ -160,6 +179,47 @@ install_bug_skill() { # install_bug_skill <status line>
   mkdir -p "$dir"
   printf '%s\n' '# BUG-<n> — <title>' '' "$1" > "$dir/bug-template.md"
 }
+
+# The qa-execution report template — health_provenance's FIRST comparison, and one of the two
+# nothing ever installed. Same decision as install_bug_skill and for the same reason: the content
+# is DERIVED from the check-gates.sh fixture, never typed here. A template written from memory is
+# the exact defect provenance exists to catch, and this sensor would end up confirming the
+# assumption instead of measuring it.
+install_report_skill() { # install_report_skill <the '- **Started:**' line>
+  local dir="$FIX/home/.claude/skills/qa-execution/assets"
+  mkdir -p "$dir"
+  printf '%s\n' '# QA execution report' '' "$1" > "$dir/report-template.md"
+}
+
+# The codereview grade table — the THIRD comparison, and the one no mut_HEALTH_* could reach: it
+# is a loop of a different shape from the other two. The path spells out what health_provenance's
+# `find -path '*/codereview/*/references/report-template.md'` matches, and mirrors the real cache
+# layout (…/<marketplace>/codereview/<version>/skills/codereview/references/). The table itself is
+# the check-gates.sh fixture's own, read off the file — see GRADE_TABLE below.
+install_codereview_skill() { # install_codereview_skill <extra table row, or "">
+  local dir="$FIX/home/.claude/plugins/cache/fixture-marketplace/codereview/1.13.0/skills/codereview/references"
+  mkdir -p "$dir"
+  {
+    printf '%s\n' "$GRADE_TABLE"
+    [ -n "$1" ] && printf '%s\n' "$1"
+    printf '\n## Grading Scale\n'
+  } > "$dir/report-template.md"
+}
+
+# Same fixture with the table's HEADING renamed. The rows are all still there and all still match
+# the check-gates.sh fixture — what changes is the one line health_provenance's awk anchors on, so
+# the criteria loop runs zero times. This is the shape of real skill drift (a column renamed in an
+# upstream template), and the only kind of divergence that used to make the check say `all 3
+# fixtures match` about a table it never read.
+install_codereview_skill_renamed_heading() {
+  local dir="$FIX/home/.claude/plugins/cache/fixture-marketplace/codereview/1.13.0/skills/codereview/references"
+  mkdir -p "$dir"
+  {
+    sed 's/^| Criterion | Grade/| Aspect | Score/' <<< "$GRADE_TABLE"
+    printf '\n## Grading Scale\n'
+  } > "$dir/report-template.md"
+}
+
 clear_skills() { reset_home; }
 
 HEALTH_OUT=""
@@ -288,6 +348,116 @@ else
 fi
 
 # ---------------------------------------------------------------------------
+# 13 — the other two provenance comparisons, which nothing ever reached
+#
+# health_provenance compares THREE fixtures against three installed skills, and until this
+# assertion exactly one of them — the qa-report bug template of assertion 4 — had a fixture that
+# got that far. The other two stayed permanently on the `skipped` branch, because no test in the
+# repo ever installed a qa-execution report template or a codereview grade table: both comparisons
+# could have read `if true` for a whole mission with every assertion in this file green. The
+# catalogue says so in as many words — mut_HEALTH_provenance_blind is range-addressed to the one
+# half that could honestly carry a mutation, and names the other two as an open finding.
+#
+# ONE assertion over FOUR worlds, because it is ONE property: a fixture that drifted from the
+# skill it copies is reported, and one that matches is not. Each half is differential in BOTH
+# directions — its own sentence present, the sibling comparison's sentence absent — so a
+# provenance that started shouting every sentence in every world fails here instead of passing on
+# the strength of the one it got right.
+#
+# The two worlds install ONE skill each rather than both at once, and that is what makes the
+# absence half mean something: with both installed, "the grade-table sentence is absent" would be
+# satisfied by a grade table that simply happens to match, not by a comparison that stayed quiet.
+# ---------------------------------------------------------------------------
+# The `- **Started:**` line as bin/sdd normalises it. `<ISO timestamp>` is the SKILL's own
+# placeholder (qa-execution/assets/report-template.md), which is why normalising the fixture's
+# concrete timestamp lands on the installed skill's line byte for byte — that equality is the
+# contract, and the case below refuses to install a template that could never satisfy it.
+PROV_REPORT_LINE="$(grep -m1 -- '- \*\*Started:\*\*' "$ROOT/tests/check-gates.sh" \
+                    | sed 's/2026-01-01T10:00:00Z/<ISO timestamp>/')"
+case "$PROV_REPORT_LINE" in
+  *'<ISO timestamp>'*) : ;;
+  *) broken "the check-gates.sh '- **Started:**' line no longer carries the timestamp bin/sdd normalises ('$PROV_REPORT_LINE') — the match world would install a template that can never agree, and the assertion would be red for the fixture instead of for the runner" ;;
+esac
+
+# The fixture's OWN grade table, copied out whole: header, separator, every criterion row and the
+# `**Overall**` row, which is the shape the real plugin ships (report-template.md:163-172,
+# chewiesoft-marketplace/codereview). Copied rather than re-derived so this file does not carry a
+# second implementation of the runner's criterion parser — what is under test is whether cmd_health
+# compares the criteria at all, not how they are spelled.
+GRADE_TABLE="$(awk '/^\| Criterion \| Grade/ { t = 1 }
+                    t && substr($0, 1, 1) != "|" { exit }
+                    t { print }' "$ROOT/tests/check-gates.sh")"
+# Anti-vacuity: with an empty (or one-row) table the runner's loop runs over nothing, `missing`
+# stays empty, and the matching world would be green for having measured nothing at all.
+GRADE_ROWS="$(grep -c . <<< "$GRADE_TABLE")"
+[ "$GRADE_ROWS" -ge 5 ] \
+  || broken "check-gates.sh no longer carries a grade table of at least 5 rows (got $GRADE_ROWS) — the criteria loop would run over nothing and the codereview half would pass by vacuity"
+
+# A criterion check-gates.sh cannot contain: the divergence has to be a criterion the fixture does
+# NOT cover, and any real one would be covered by construction.
+UNKNOWN_CRITERION='Fixture Criterion Nobody Ever Graded'
+
+clear_skills
+set_baseline "$CALIBRATED"
+install_report_skill "$PROV_REPORT_LINE"
+health_run
+OUT_REP_OK="$HEALTH_OUT"; RC_REP_OK="$HEALTH_RC"
+
+clear_skills
+install_report_skill "$PROV_REPORT_LINE  <!-- and one column the fixture never had -->"
+health_run
+OUT_REP_BAD="$HEALTH_OUT"; RC_REP_BAD="$HEALTH_RC"
+
+clear_skills
+install_codereview_skill ""
+health_run
+OUT_CR_OK="$HEALTH_OUT"; RC_CR_OK="$HEALTH_RC"
+
+clear_skills
+install_codereview_skill "| $UNKNOWN_CRITERION | A | fixture |"
+health_run
+OUT_CR_BAD="$HEALTH_OUT"; RC_CR_BAD="$HEALTH_RC"
+
+clear_skills
+install_codereview_skill_renamed_heading
+health_run
+OUT_CR_EMPTY="$HEALTH_OUT"; RC_CR_EMPTY="$HEALTH_RC"
+
+if [ "$RC_REP_OK" -eq 0 ] && ! grep -q 'diverged from the skill' <<< "$OUT_REP_OK" \
+   && [ "$RC_REP_BAD" -ne 0 ] \
+   && grep -q 'report fixture diverged from the skill' <<< "$OUT_REP_BAD" \
+   && ! grep -q 'grade table has a criterion' <<< "$OUT_REP_BAD" \
+   && [ "$RC_CR_OK" -eq 0 ] && ! grep -q 'grade table has a criterion' <<< "$OUT_CR_OK" \
+   && [ "$RC_CR_BAD" -ne 0 ] \
+   && grep -qF "grade table has a criterion the fixture does not cover: '$UNKNOWN_CRITERION'" <<< "$OUT_CR_BAD" \
+   && ! grep -q 'diverged from the skill' <<< "$OUT_CR_BAD"; then
+  pass "covered: the report and the grade table are compared too, not only the bug fixture"
+else
+  fail "covered: the report and the grade table are compared too, not only the bug fixture" \
+       "the matching worlds rc 0 and silent, the drifted report says only 'report fixture diverged from the skill', the drifted table says only 'grade table has a criterion the fixture does not cover: $UNKNOWN_CRITERION'" \
+       "report match: rc $RC_REP_OK · $(digest "$OUT_REP_OK") // report drift: rc $RC_REP_BAD · $(digest "$OUT_REP_BAD") // table match: rc $RC_CR_OK · $(digest "$OUT_CR_OK") // table drift: rc $RC_CR_BAD · $(digest "$OUT_CR_BAD")"
+fi
+
+# The vacuous world, kept as its own assertion because it fails in the opposite direction from the
+# one above: not "a criterion is missing" but "no criterion was read at all". With the heading
+# renamed the `while` runs zero times, `missing` stays empty and `checked` goes up — so the old
+# code answered `provenance: all 3 fixtures match the installed skills`, rc 0, about a table it
+# had never read. That is precisely the drift this function exists to catch, certified as absent
+# by the function itself. The `! grep` half is what makes it differential rather than a second
+# spelling of the assertion above.
+if [ "$RC_CR_EMPTY" -ne 0 ] \
+   && grep -q 'grade table read as EMPTY' <<< "$OUT_CR_EMPTY" \
+   && ! grep -q 'all 3 fixtures match' <<< "$OUT_CR_EMPTY" \
+   && ! grep -q 'grade table has a criterion' <<< "$OUT_CR_EMPTY"; then
+  pass "covered: a grade table whose heading was renamed reads as EMPTY, never as a match"
+else
+  fail "covered: a grade table whose heading was renamed reads as EMPTY, never as a match" \
+       "rc != 0, saying the table read as empty, and never claiming all 3 fixtures match" \
+       "rc $RC_CR_EMPTY · $(digest "$OUT_CR_EMPTY")"
+fi
+
+
+# ---------------------------------------------------------------------------
 # 5 — the floor: a kit with nothing wrong reaches `kit healthy`
 # ---------------------------------------------------------------------------
 clear_skills
@@ -358,8 +528,140 @@ else
        "no-count: rc $HEALTH_RC · $(digest "$HEALTH_OUT") // green: rc $RC_GREEN · $(digest "$OUT_GREEN")"
 fi
 
+# A blind producer may not have its baseline line called stale.
+#
+# Note what the assertion above had to do to be written: it DELETES `todo-findings` from the
+# baseline first. That was not hygiene, it was working around this defect — with the real baseline
+# in place, the count-less world made `sdd health` say in one breath that it had gone blind to the
+# backlog and that `todo-findings N` "is no longer a finding — delete the line". Deleting it
+# removes the backlog ratchet's only anchor: destructive advice drawn from a measurement that had
+# just declared itself impossible. Same world as above, real baseline, both halves demanded.
+write_stub_suite no-count
+set_baseline "$CALIBRATED"
+health_run
+
+if grep -q 'went blind to the backlog' <<< "$HEALTH_OUT" \
+   && ! grep -q 'stale baseline' <<< "$HEALTH_OUT" \
+   && grep -q "not judged: the check that produces it declared itself blind" <<< "$HEALTH_OUT"; then
+  pass "a baseline line whose producer went blind is not called stale"
+else
+  fail "a baseline line whose producer went blind is not called stale" \
+       "the blind sentence, no 'stale baseline', and the line said to be unjudged" \
+       "rc $HEALTH_RC · $(digest "$HEALTH_OUT")"
+fi
+
 # ---------------------------------------------------------------------------
-# 8 — the policy is written where the next mission walks into it
+# 8-11 — the four silent aborts: `set -e` may not eat the rest of the run
+#
+# cmd_health captures what it reads with `out="$(cmd)"` under the runner's own `set -euo pipefail`.
+# When cmd returns non-zero the script dies ON THE ASSIGNMENT, so the health_bad written on the
+# next line is dead code and every check after it never runs: the operator gets the header, rc 1,
+# and not one word about what went wrong. The command that exists to answer "does the kit still
+# measure what it claims to?" was mute in four worlds — and A RED SUITE, the very case it was
+# written to report, was one of them.
+#
+# EVERY ASSERTION HERE DEMANDS TWO HALVES, and the second is what makes it an assertion at all:
+# the sentence of the right branch is said, AND something after the site still appears. `rc != 0`
+# alone discriminates nothing, because health_bad also ends in rc 1 — an assertion reading only
+# the rc stays green with the abort fully in place. Measured, not feared: that is exactly what the
+# four probes of the planning session saw (rc 1 in all four, one line of output).
+#
+# The differential control is OUT_GREEN, the world of assertion 5: it must say none of it.
+# ---------------------------------------------------------------------------
+
+# Back to the world OUT_GREEN was read from, so each sabotage below is the ONLY thing standing
+# between the fixture and `kit healthy`.
+green_world() { write_stub_suite with-count; clear_skills; set_baseline "$CALIBRATED"; }
+
+# The last line cmd_health prints when it walked the whole way, and the strongest `after` there
+# is: reaching it means no check was skipped. Named once because three assertions read it — a
+# wording drift would otherwise make three assertions vacuous one at a time and unnoticed.
+VERDICT='check(s) failed'
+# A check that lives after the suite capture AND after the score read — the "and it carried on"
+# half of the two assertions whose site is at the top of cmd_health.
+LATER='all 8 gates have a mutation'
+
+green_world
+write_stub_suite with-count with-score 1
+health_run
+OUT_SUITE_RED="$HEALTH_OUT"; RC_SUITE_RED="$HEALTH_RC"
+
+if [ "$RC_SUITE_RED" -ne 0 ] \
+   && grep -qF 'suite red' <<< "$OUT_SUITE_RED" \
+   && grep -qF "$LATER" <<< "$OUT_SUITE_RED" \
+   && grep -qF "$VERDICT" <<< "$OUT_SUITE_RED" \
+   && ! grep -qF 'suite red' <<< "$OUT_GREEN"; then
+  pass "abort: a red suite is said out loud and the run carries on"
+else
+  fail "abort: a red suite is said out loud and the run carries on" \
+       "rc != 0 and 'suite red' and '$LATER' and '$VERDICT', with the green world saying none of it" \
+       "rc $RC_SUITE_RED · $(digest "$OUT_SUITE_RED")"
+fi
+
+green_world
+write_stub_suite with-count no-score
+health_run
+OUT_NO_SCORE="$HEALTH_OUT"; RC_NO_SCORE="$HEALTH_RC"
+
+if [ "$RC_NO_SCORE" -ne 0 ] \
+   && grep -qF 'health went blind to the mutation' <<< "$OUT_NO_SCORE" \
+   && grep -qF "$LATER" <<< "$OUT_NO_SCORE" \
+   && grep -qF "$VERDICT" <<< "$OUT_NO_SCORE" \
+   && ! grep -qF 'went blind to the mutation' <<< "$OUT_GREEN"; then
+  pass "abort: a suite with no score line is said out loud and the run carries on"
+else
+  fail "abort: a suite with no score line is said out loud and the run carries on" \
+       "rc != 0 and 'health went blind to the mutation' and '$LATER' and '$VERDICT'" \
+       "rc $RC_NO_SCORE · $(digest "$OUT_NO_SCORE")"
+fi
+
+# The third site says nothing on its own — a machine with no plugins cache is not a defect, it is
+# a machine, and health_provenance SKIPS what is not installed. So this one is written as a pure
+# DIFFERENTIAL: the two worlds have to reach the SAME verdict, and the floor underneath (both
+# reach `kit healthy`, and the line compared is not empty) is what stops two identical silences
+# from satisfying it. Today they are not the same at all — the cacheless one dies inside `find`,
+# three ok lines and out, because `find` on a missing directory returns 1 under pipefail.
+green_world
+health_run
+OUT_CACHE="$HEALTH_OUT"; RC_CACHE="$HEALTH_RC"
+rm -rf "$FIX/home/.claude/plugins"
+health_run
+OUT_NO_CACHE="$HEALTH_OUT"; RC_NO_CACHE="$HEALTH_RC"
+PROV_WITH="$(grep 'provenance:' <<< "$OUT_CACHE")"
+PROV_WITHOUT="$(grep 'provenance:' <<< "$OUT_NO_CACHE")"
+
+if [ "$RC_CACHE" -eq 0 ] && [ "$RC_NO_CACHE" -eq 0 ] \
+   && grep -qF 'kit healthy' <<< "$OUT_NO_CACHE" \
+   && [ -n "$PROV_WITH" ] && [ "$PROV_WITH" = "$PROV_WITHOUT" ]; then
+  pass "abort: a machine with no plugins cache reads the same as one with an empty cache"
+else
+  fail "abort: a machine with no plugins cache reads the same as one with an empty cache" \
+       "both worlds rc 0 and 'kit healthy', and one same non-empty provenance line" \
+       "with cache: rc $RC_CACHE '$PROV_WITH' // without: rc $RC_NO_CACHE '$PROV_WITHOUT' · $(digest "$OUT_NO_CACHE")"
+fi
+
+# The fourth site is the ratchet's own first line, and the one with no later CHECK to point at —
+# the ratchet IS the last one. So the `after` half is the verdict itself, which is also why
+# health_ratchet may not return non-zero: a function that fails under `set -e` eats the verdict
+# just as thoroughly as an assignment does, and the operator loses the count of what failed.
+green_world
+set_baseline '# every line commented out, and not one live finding'
+health_run
+OUT_DEAD_BL="$HEALTH_OUT"; RC_DEAD_BL="$HEALTH_RC"
+
+if [ "$RC_DEAD_BL" -ne 0 ] \
+   && grep -qF 'finding outside the baseline' <<< "$OUT_DEAD_BL" \
+   && grep -qF "$VERDICT" <<< "$OUT_DEAD_BL" \
+   && ! grep -qF 'finding outside the baseline' <<< "$OUT_GREEN"; then
+  pass "abort: a baseline with no live line is said out loud and the run carries on"
+else
+  fail "abort: a baseline with no live line is said out loud and the run carries on" \
+       "rc != 0 and 'finding outside the baseline' and '$VERDICT', with the green world saying neither" \
+       "rc $RC_DEAD_BL · $(digest "$OUT_DEAD_BL")"
+fi
+
+# ---------------------------------------------------------------------------
+# 12 — the policy is written where the next mission walks into it
 #
 # The backlog ratchet is the one finding of cmd_health whose owner is not a TODO.md entry but the
 # FILE, so the only thing that can tell the next session what the number means is prose. Prose
@@ -479,7 +781,628 @@ PROBE_OUT="$( policy_report "$PROBE_ROOT" 2>&1 )"; PROBE_RC=$?
 [ "$PROBE_RC" -eq 0 ] && grep -qF "  ok    $POLICY_DESC" <<< "$PROBE_OUT" \
   || broken "the policy verdict reported rc $PROBE_RC over a world where both documents state the policy — a rule that refuses every world distinguishes nothing"
 
-policy_report "$ROOT"
+# The live call is not here: both rule verdicts are issued from the counted list at the foot of
+# this file. See the block there for why the two calls stopped being two statements.
+
+# ---------------------------------------------------------------------------
+# surface: the mutation catalogue is opt-in, and `sdd health` is the one caller that opts in
+#
+# The catalogue used to ride inside TEST_CMD. Measured, on this machine, with nothing else on it:
+# one gate's suite held the working tree for over ten minutes. That is not a comfort problem — it
+# made a PHASE unsatisfiable. Three REVIEW sessions of 20260818-lote-facil in a row ended their
+# turn with the words "waiting for the suite", and in a headless `claude -p` session ending the
+# turn IS ending the session; nobody wakes it up. US$ 104 of review bought no review.
+#
+# So the catalogue moved to `sdd health`. NOTHING WAS LOOSENED — every assertion is still demanded,
+# once, by the command whose whole job is asking whether the kit still measures what it claims to.
+# What these three assertions hold shut is the pair of ways that sentence could quietly stop being
+# true, and they are opposite ways:
+#
+#   1. the fast suite grows the catalogue back        → gates go back to ten minutes
+#   3. `sdd health` stops asking for it               → NOBODY runs it, and the kit goes blind
+#
+# 3 is the expensive one and it is silent: `sdd health` would still print `suite green`, still find
+# no `score:` line, and say `health went blind to the mutation` — accusing check-mutation.sh of a
+# defect that lives in its own caller. 2 is what keeps 1 and 3 from being satisfiable by a
+# degenerate `--list`: the two lists compared against EACH OTHER, differing by exactly one line.
+#
+# `^mutation: ` is a contract across two files, like the `score:` line already is: tests/run-all.sh
+# names the step, this file reads the name. Reword either alone and the suite goes red.
+#
+# Rules 1 and 2 are OUT OF THE CATALOGUE'S REACH and that is structural, not an oversight:
+# check-mutation.sh sabotages `$box/bin/sdd` and only that (line ~1393), so no mutant can degrade
+# tests/run-all.sh. A mutant that turned the step on unconditionally would also be caught for the
+# WRONG reason — inside the sandbox it would recurse into check-mutation.sh, whose twin guard kills
+# the suite, proving the recursion guard rather than these rules. So they carry probes of their
+# own, below, in this file's `broken()` idiom. Rule 3 IS reachable, and is the one that gets a
+# catalogue entry (mut_HEALTH_suite_without_mutation).
+# ---------------------------------------------------------------------------
+SURFACE_MUTATION_STEP='^mutation: '
+
+# Anti-vacuity only, and deliberately NOT the real step count. A `--list` that prints nothing would
+# satisfy "the plain suite does not carry the mutation step" while measuring exactly nothing; this
+# floor is what refuses that.
+#
+# It is not a shrink detector, and the comment that used to stand here said the shrink question was
+# "already owned" by LINT_FLOOR and the surface floors of check-pipefail.sh and check-lang.sh. That
+# was measured and is FALSE: all three count paths or files, none counts dispatched steps, and
+# commenting out one `run` line took the suite from 14 steps to 13 with every one of them green.
+# What owns it now is rule 5 below — every sensor file invoked exactly once — which needs no fourth
+# hand-written number because both of its sides are derived.
+SURFACE_FLOOR=10
+
+surface_lists() { # surface_lists <run-all.sh> — PUBLISHES SURFACE_PLAIN / SURFACE_FULL
+  # Published in globals and called, never read through `x="$(...)"`: the house rule, and the same
+  # subshell trap health_run above carries the comment for.
+  #
+  # ⚠️ `env -u SDD_MUTANT`, and it is not defensive noise — without it this rule fails inside every
+  # mutant AND inside the control, which is how it was found. This file is NOT guarded out of the
+  # mutants, so it runs with SDD_MUTANT=1 exported; run-all.sh then lists only the nine behavioural
+  # steps (below the floor) and skips the catalogue step in BOTH lists (so nothing is ever added).
+  # check-mutation.sh's control run went red and died before printing `score:`, and `sdd health`
+  # reported `went blind to the mutation` — accusing the catalogue of a defect that was here.
+  # The property is about the composition of a NORMAL run, so the probe has to ask a normal one.
+  SURFACE_FILE="$1"
+  SURFACE_PLAIN="$( env -u SDD_MUTANT "$1" --list 2>/dev/null )"
+  SURFACE_FULL="$(  env -u SDD_MUTANT "$1" --list --with-mutation 2>/dev/null )"
+}
+
+# 0 = rules 1 and 2 both hold over the published lists. ONE definition, read by the verdict on the
+# real file AND by every probe below — a second copy for the probes would let the two drift, and
+# the probes would then certify a rule nobody runs.
+surface_rules_hold() {
+  local n added removed
+  n="$(grep -c . <<< "$SURFACE_PLAIN" || true)"
+  [ "$n" -ge "$SURFACE_FLOOR" ] || return 1
+  # Rule 1: the fast suite does not carry the step.
+  ! grep -qE "$SURFACE_MUTATION_STEP" <<< "$SURFACE_PLAIN" || return 1
+  # Rule 2: --with-mutation adds it, and adds ONLY it. `removed` is not decoration — without it a
+  # degradation that SWAPS one step for the mutation step would satisfy "exactly one added".
+  added="$(comm -13 <(sort <<< "$SURFACE_PLAIN") <(sort <<< "$SURFACE_FULL"))"
+  removed="$(comm -23 <(sort <<< "$SURFACE_PLAIN") <(sort <<< "$SURFACE_FULL"))"
+  [ -z "$removed" ] || return 1
+  [ "$(grep -c . <<< "$added" || true)" -eq 1 ] || return 1
+  grep -qE "$SURFACE_MUTATION_STEP" <<< "$added" || return 1
+  # Rule 4: every sensor file is invoked EXACTLY ONCE by the suite, counted over the invocation
+  # form `$ROOT/tests/<file>` and not the bare name — this file's prose names check-mutation.sh
+  # seven times, and a rule that counts mentions counts comments. It answers two questions at once,
+  # which is why the separate rule that used to sit here was deleted as subsumed rather than probed:
+  #
+  #   too FEW — a sensor quietly unhooked. Rules 1-3 read only `--list`, and nothing else in this
+  #     repo counts dispatched steps: commenting out one `run` line left check-lang.sh,
+  #     check-pipefail.sh and this file green over a suite of 13. Measured.
+  #   too MANY — the catalogue invoked a SECOND time, beside run(). `--list` prints only what goes
+  #     through run(), so that world reinstates the ten-minute regression with every assertion here
+  #     printing `ok`. Reproduced end to end: the plain suite really executed the catalogue.
+  #
+  # Both sides are derived — the files on disk, the invocations in the file under test — so there
+  # is no fourth hand-written number to fall behind.
+  local f n_inv
+  for f in "$ROOT"/tests/check-*.sh; do
+    n_inv="$(grep -c "\$ROOT/tests/$(basename -- "$f")" "$SURFACE_FILE" || true)"
+    [ "$n_inv" -eq 1 ] || return 1
+  done
+  return 0
+}
+
+# --- the probes, and each one proves it sabotaged what it says it sabotaged -----------------
+# A probe whose edit did not land concludes "the rule survives" over a file it never changed. Two
+# rounds of this house have made exactly that mistake, so the anchor is CODE and a miss is loud.
+SURF="$WORK/surface"
+mkdir -p "$SURF/tests"
+
+surface_degrade() { # surface_degrade <sed-expression> <what it should have changed>
+  cp "$ROOT/tests/run-all.sh" "$SURF/tests/run-all.sh"
+  sed -i "$1" "$SURF/tests/run-all.sh"
+  cmp -s "$ROOT/tests/run-all.sh" "$SURF/tests/run-all.sh" \
+    && broken "surface probe '$2' changed nothing — the anchor rotted, and a probe over an unedited file proves nothing"
+  bash -n "$SURF/tests/run-all.sh" 2>/dev/null \
+    || broken "surface probe '$2' left run-all.sh invalid — a rule cannot be measured against a file that will not parse"
+  surface_lists "$SURF/tests/run-all.sh"
+}
+
+# The control FIRST: a degraded world means nothing if the pristine copy does not pass.
+cp "$ROOT/tests/run-all.sh" "$SURF/tests/run-all.sh"
+surface_lists "$SURF/tests/run-all.sh"
+surface_rules_hold \
+  || broken "the pristine copy of run-all.sh fails its own surface rules — the probes below would all be vacuous"
+
+surface_degrade 's/^\[ -n "${SDD_MUTANT:-}" \] || \[ "$WITH_MUTATION" = 0 \] \\$/[ -n "${SDD_MUTANT:-}" ] \\/' 'mutation step unconditional'
+surface_rules_hold \
+  && broken "the surface rules passed a suite that runs the catalogue WITHOUT being asked — rule 1 is decoration"
+
+surface_degrade 's/^    --with-mutation) WITH_MUTATION=1 ;;$/    --with-mutation) WITH_MUTATION=0 ;;/' '--with-mutation does nothing'
+surface_rules_hold \
+  && broken "the surface rules passed a suite where --with-mutation adds nothing — rule 2 is decoration"
+
+surface_degrade 's/^  if \[ "$LIST_ONLY" = 1 \]; then printf .%s.n. "$1"; return 0; fi$/  if [ "$LIST_ONLY" = 1 ]; then return 0; fi/' 'a --list that prints nothing'
+surface_rules_hold \
+  && broken "the surface rules passed an empty --list — the anti-vacuity floor is decoration"
+
+# --- probes that isolate ONE rule each ------------------------------------------------------
+# The three above prove the COMPOSITION and nothing finer: an adversarial pass deleted the floor,
+# rule 1 and the `removed` check one at a time and all three probes stayed green, because every
+# world they build also violates rule 2's `added` grep. A probe that several rules answer proves
+# only that at least one of them is awake. Each world below is answered by exactly one rule, so
+# deleting that rule turns exactly one of them red.
+#
+# The floor: six steps removed, so the list shrinks below it while --with-mutation still adds
+# exactly the catalogue step. Rule 2 is satisfied throughout; only the floor refuses this.
+surface_degrade '0,/^run "sdd health discriminates"/s/^run "/# run "/; 0,/^run "preflight and the install/s/^run "/# run "/' 'a suite that lost steps'
+surface_rules_hold \
+  && broken "the surface rules passed a suite that quietly lost steps — the anti-vacuity floor answers no world of its own"
+
+# Rule 1: a SECOND, unguarded catalogue step, listed by --list. Plain then carries `mutation: `
+# while --with-mutation still adds exactly one matching step, so rule 2, the floor and `removed`
+# are all satisfied. This is the world rule 1 exists for, and the first draft had none.
+surface_degrade 's@^\[ -n "${SDD_MUTANT:-}" \] || \[ "$WITH_MUTATION" = 0 \] \\@run "mutation: an unguarded second caller" true\n&@' 'a second, unguarded mutation step'
+surface_rules_hold \
+  && broken "the surface rules passed a plain suite carrying a mutation step — rule 1 answers no world of its own"
+
+# `removed`: a SWAP. With --with-mutation the gate sensor is not listed and the catalogue is, so
+# exactly one step is added and it matches — a sensor silently leaves the suite and only the
+# `removed` term notices.
+surface_degrade 's@^run "gate state machine" "\$ROOT/tests/check-gates.sh"$@[ "$WITH_MUTATION" = 0 ] \&\& &@' 'a step that --with-mutation drops'
+surface_rules_hold \
+  && broken "the surface rules passed a suite that SWAPPED a step for the catalogue — the 'removed' term answers no world of its own"
+
+# The `added` COUNT: --with-mutation brings a second step along with the catalogue. The added set
+# still contains a `mutation: ` line, so the content grep is satisfied and only the count refuses.
+surface_degrade 's@^\[ -n "${SDD_MUTANT:-}" \] || \[ "$WITH_MUTATION" = 0 \] \\@[ "$WITH_MUTATION" = 1 ] \&\& run "an extra step riding along" true\n&@' 'a second step added by --with-mutation'
+surface_rules_hold \
+  && broken "the surface rules passed a --with-mutation that adds two steps — the added count answers no world of its own"
+
+# The `added` CONTENT: --with-mutation adds exactly one step, but not the catalogue. This is the
+# cross-file half of `^mutation: ` — reword the step in run-all.sh and the name this file reads no
+# longer finds it. Count, floor, `removed` and rule 4 are all satisfied here.
+surface_degrade 's@^  || run "mutation: @  || run "catalogue: @' 'the mutation step renamed'
+surface_rules_hold \
+  && broken "the surface rules passed a --with-mutation that adds a step which is NOT the catalogue — the added-content grep answers no world of its own"
+
+# The catalogue invoked a SECOND time, beside run(), where --list cannot see it. The fail-open an
+# adversarial pass reproduced end to end: the plain suite really ran the catalogue.
+surface_degrade 's@^printf ..n.$@if [ -z "${SDD_MUTANT:-}" ]; then "$ROOT/tests/check-mutation.sh" >/dev/null 2>\&1 || true; fi\n&@' 'a catalogue call outside run()'
+surface_rules_hold \
+  && broken "the surface rules passed a suite invoking the catalogue outside run() — --list cannot see it and rule 4 is decoration"
+
+# Rule 5: one sensor quietly unhooked from the suite. Nothing else in this repo notices — measured
+# on check-lang.sh, check-pipefail.sh and this file, all green over the 13-step suite.
+# DELETED, not commented out: rule 5 counts invocations in the file text, so a `#` in front of the
+# line leaves the invocation there and the probe would conclude over a world it did not build.
+surface_degrade '/^run "gate state machine/d' 'a sensor unhooked from the suite'
+surface_rules_hold \
+  && broken "the surface rules passed a suite with a sensor unhooked — rule 5 is decoration and nothing owns the shrink question"
+
+# --- the verdict, on the real file ----------------------------------------------------------
+surface_lists "$ROOT/tests/run-all.sh"
+if surface_rules_hold; then
+  pass 'surface: the plain suite does not carry the mutation step, and --with-mutation adds only it'
+else
+  fail 'surface: the plain suite does not carry the mutation step, and --with-mutation adds only it' \
+       "at least $SURFACE_FLOOR steps listed, none matching ${SURFACE_MUTATION_STEP}, and exactly one added by --with-mutation" \
+       "plain: $(grep -c . <<< "$SURFACE_PLAIN" || true) step(s) · full: $(grep -c . <<< "$SURFACE_FULL" || true) step(s)"
+fi
+
+# Rule 3, read off the CALL and not off the text of bin/sdd. The stub records its own argv; this
+# reads what cmd_health actually handed it.
+green_world
+health_run
+SURFACE_ARGV="$(cat "$FIX/tests/stub-argv.txt" 2>/dev/null || true)"
+# The two failing states are DIFFERENT and get different sentences. `printf '%s\n' "$*"` writes a
+# bare newline for an empty argv and `$(...)` strips it, so "called with no arguments" and "never
+# called" both arrive here as an empty string — and the default text accused the wrong one. That
+# matters because `mut_HEALTH_suite_without_mutation`, the ONE defect this assertion exists for,
+# lands in exactly the empty-argv branch: the operator was sent hunting for a deleted call when the
+# real cause was a dropped flag. The file's existence is what tells them apart.
+if grep -qF -- '--with-mutation' <<< "$SURFACE_ARGV"; then
+  pass 'surface: cmd_health asks the suite for the mutation catalogue'
+else
+  if [ -e "$FIX/tests/stub-argv.txt" ]; then
+    SURFACE_WHY="argv was '$SURFACE_ARGV' — the suite WAS called, without the flag; with no catalogue in TEST_CMD, nothing else runs it"
+  else
+    SURFACE_WHY="the stub suite was never called at all — cmd_health has no path to the suite"
+  fi
+  fail 'surface: cmd_health asks the suite for the mutation catalogue' \
+       "the stub suite receives --with-mutation from cmd_health" \
+       "$SURFACE_WHY"
+fi
+
+# ---------------------------------------------------------------------------
+# guard: no capture in the `sdd health` region may abort the run
+#
+# The rule the four `abort:` assertions above cannot carry, and the reason it is written as a
+# RULE and not as a fifth, sixth and seventh probe. `bin/sdd` runs under `set -euo pipefail`, so
+# `x="$(cmd)"` kills the process AT THE ASSIGNMENT the moment `cmd` reports non-zero — and for
+# `grep`, `find` and a `pipefail` pipeline, "non-zero" is simply "found nothing". Every
+# `health_bad` written below such a line is dead code, and `sdd health` answers the one question
+# it exists for by saying nothing at all.
+#
+# The mission 20260818-lote-facil closed FIVE of these one at a time and declared the family
+# swept. The r2 review of that same mission then found ELEVEN more still live, in the same
+# command, three of them reproduced end to end: renaming the gates made the run stop after check
+# 2 without ever printing the `found 0 gates` its own comment promised; reformatting the key
+# table of config/schema.md stopped it after check 4; and a skill that renamed the field
+# `health_provenance` pins killed it in exactly the case that function exists to report.
+#
+# That is the lesson this block encodes: a per-site probe proves the sites that have a probe and
+# says nothing about the twelfth. Enumerating the region instead makes the class unreinstatable —
+# a future editor who writes a bare capture here fails the suite on the line they wrote, without
+# anyone having to think of the world that would have exposed it. The mutation catalogue reaches
+# it because it reads the runner that check-mutation.sh sabotages, not a copy frozen in here.
+#
+# FOUR properties, and the r2 review of this same mission measured that the first version had
+# none of them. It knew ONE spelling — `x="$(cmd)"` — and every other way of writing a capture
+# was invisible AND shrank the census in silence:
+#
+#   `x=$(cmd)`      no quotes. Aborts identically (measured: rc 1). Worse, it never contains the
+#                   old `)"` terminator, so the open statement SWALLOWED the following lines until
+#                   some later, guarded capture closed it — one guarded capture WASHING an
+#                   unguarded one. Reproduced: rewriting the `gates` capture without quotes took
+#                   the census from 16 to 15 and the rule went on printing `ok`.
+#   `x=`cmd``       backticks. Same abort (measured: rc 1), no `$(` at all.
+#   `x="$(`         the substitution opened at end of line: `[^(]` had nothing to match.
+#   `x="$( (…) )"`  a real subshell, indistinguishable from arithmetic to the old exclusion.
+#
+# And the guard token was searched over the WHOLE accumulated statement, so a `|| true` inside a
+# comment or a quoted string certified the capture beside it. The guard is now read in exactly the
+# two places a guard can actually protect a capture, and both are ANCHORED — which is what leaves
+# prose nowhere to sit:
+#
+#   inside, at the very end   `x="$(cmd || true)"` — the idiom this region uses everywhere. Only
+#                             `|| true` and `|| :` count: under `set -o pipefail` the substitution
+#                             reports its LAST stage, so a `|| true` in the middle of a pipeline
+#                             guards nothing, and `|| anything_else` can itself report non-zero.
+#   in the tail, at the start `x="$(cmd)" || rc=$?` — what the suite capture uses. Here ANY or-list
+#                             counts, and that is not laxity: a command that is the left operand of
+#                             `||` is exempt from errexit whatever the right operand does. Pinning
+#                             the tail to the four spellings of the house style would accuse
+#                             `x="$(cmd)" || health_bad "…"`, which cannot abort.
+#
+# Stripping a trailing comment before that test was written first and then DELETED: the anchors
+# above already make it unreachable, an adversarial pass could not break it in any world, and this
+# kit's rule for a rule the sabotage cannot break is to remove it, not to write a probe for it.
+#
+# The other direction matters as much: THREE shapes cannot abort at all, and a rule that fails on
+# correct code is a rule the next author deletes. Measured on bash 5.2, `set -euo pipefail`:
+# `if x="$(cmd)"; then` survives (the condition of `if` is exempt from errexit), and so does
+# `local x="$(cmd)"` — the builtin's own status masks the substitution's. The split form the
+# region actually uses, `local x; x="$(cmd)"`, aborts, and is censused.
+#
+# Joining by PAREN DEPTH was tried first and rejected: the region contains awk programs whose
+# regexes carry unbalanced `)`, and a depth counter reads those as an unterminated statement. What
+# replaces it is a per-spelling terminator plus a SPAN CAP, and the cap is what makes the parser
+# fail closed: a statement this parser cannot see the end of is reported as `[unterminated]`
+# instead of being allowed to eat its neighbours. Every shape below that this parser reads wrongly
+# therefore lands on the loud side.
+#
+# Declared limits, none of them silent: a NESTED `$( … "$(…)" … )` closes on the inner `)"` and so
+# reads as unguarded (loud, and there are none in the region); a here-doc BODY carrying an
+# assignment would be censused as code (loud; the region has only `<<<` herestrings, checked); and
+# two captures on one line are read as one.
+# ---------------------------------------------------------------------------
+CAPTURE_DESC='guard: every capture in the `sdd health` region is protected from set -e'
+
+# Prints one line per unguarded capture, `<line>: <text>`. Region is anchored on comment and
+# function text, never on line numbers, so it does not rot at the first refactor.
+health_captures() {
+  awk '
+    function reset() { open = 0; acc = ""; kind = ""; safe = 0 }
+    # `why` empty = the statement terminated and was read; otherwise it is reported as-is.
+    function emit(pre_close, tail, why,   guarded) {
+      total++
+      if (why != "") { printf "%d: [%s] %s\n", start, why, substr(acc, 1, 110); reset(); return }
+      if (safe) { safecnt++; reset(); return }
+      guarded = 0
+      if (pre_close ~ /\|\|[ \t]*(true|:)[ \t]*$/) guarded = 1
+      if (tail ~ /^[ \t]*\|\|/) guarded = 1
+      if (!guarded) printf "%d: %s\n", start, substr(acc, 1, 110)
+      reset()
+    }
+    # Looks for the terminator of the open statement in `s` (an offset `off` into the raw line).
+    # Returns 1 and calls emit() when it closes; 0 while the statement is still open.
+    function close_try(line, from,   p, q, r) {
+      if (kind == "dq") { p = index(substr(line, from), ")\""); if (p == 0) return 0
+                          p = p + from - 1; emit(substr(line, 1, p - 1), substr(line, p + 2), ""); return 1 }
+      if (kind == "bt") { p = index(substr(line, from), "`");   if (p == 0) return 0
+                          p = p + from - 1; emit(substr(line, 1, p - 1), substr(line, p + 1), ""); return 1 }
+      # bare `x=$(…)`: the last `)` on the line. There is no closing quote to anchor on, so the
+      # guard can only be read from what precedes that paren and what follows it.
+      q = 0; r = from
+      while ((p = index(substr(line, r), ")")) > 0) { q = p + r - 1; r = q + 1 }
+      if (q == 0) return 0
+      emit(substr(line, 1, q - 1), substr(line, q + 1), ""); return 1
+    }
+    /^# Sensor of the KIT/ { inside = 1 }
+    inside && /^cmd_status\(\) \{/ { if (open) emit("", "", "unterminated"); exit }
+    !inside { next }
+    {
+      line = $0
+      if (open) {
+        acc = acc " " line; span++
+        # A new capture while one is open means the open one never terminated. Saying so is what
+        # keeps a guarded capture from laundering the unguarded one above it.
+        if (line ~ /[A-Za-z_][A-Za-z0-9_]*\+?=("?\$\(|"?`)/) { emit("", "", "unterminated") }
+        else if (close_try(line, 1)) { next }
+        else if (span > 12) { emit("", "", "unterminated") }
+        else { next }
+      }
+      rest = line; base = 0
+      while (match(rest, /[A-Za-z_][A-Za-z0-9_]*\+?=("?\$\(|"?`)/)) {
+        tok = substr(rest, RSTART, RLENGTH); abs = base + RSTART; after = abs + RLENGTH
+        # Arithmetic `$((n + 1))` is not a capture. Without this the HEALTH_FAILS and
+        # checked/skipped counters all read as unguarded and the rule fails closed on correct
+        # code — which is how a rule gets deleted. `$( (` with a space IS a subshell and stays in.
+        if (tok ~ /\$\($/ && substr(line, after, 1) == "(") {
+          base = after - 1; rest = substr(line, after); continue
+        }
+        pre = substr(line, 1, abs - 1); sub(/^[ \t]+/, "", pre); sub(/[ \t]+$/, "", pre)
+        safe = 0
+        # The condition of if/elif/while/until is exempt from errexit; `; then`/`; do` means the
+        # capture is already in the BODY and is not exempt.
+        if (pre ~ /^(if|elif|while|until)([ \t]|$)/ && pre !~ /(then|do)$/) safe = 1
+        # `local x="$(cmd)"` cannot abort: the builtin reports its own status. The split form the
+        # region uses — `local x; x="$(cmd)"` — leaves `x;` as the last word here and is censused.
+        if (pre ~ /(^|[ \t])(local|declare|typeset|export|readonly)$/) safe = 1
+        kind = (tok ~ /`$/) ? "bt" : ((tok ~ /"\$\($/) ? "dq" : "bare")
+        start = FNR; acc = line; open = 1; span = 1
+        if (!close_try(line, after)) { }
+        break
+      }
+    }
+    END { if (open) emit("", "", "unterminated"); printf "TOTAL %d %d\n", total, safecnt }
+  ' "$1"
+}
+
+# Floor against vacuity, and it is the only thing standing between this rule and a silent pass:
+# if either anchor rots the region is empty, `health_captures` reports nothing, and "no unguarded
+# capture" is exactly what a clean kit looks like.
+#
+# It is a BIDIRECTIONAL ratchet at today's census, and no longer the loose 12 it was born with.
+# Two measurements changed the shape. The first: 12 against 16 real captures let four of them
+# vanish without a word — the same silence the rule exists to refuse. The second: an adversarial
+# pass put the constant back to 12 and NOTHING went red, so the number was decoration.
+#
+# The comment this replaces argued for a floor over an equality, "so that adding a guarded capture
+# does not fail the suite of the mission that added it". That reasoning is overridden on purpose,
+# by this repo's own dominant convention: CLAUDE.md says growth is allowed and SILENT growth is
+# not, and both `todo-findings` and `tests/lang-allowlist.txt` bite in both directions for exactly
+# that reason. A mission that adds a capture to the health region is already editing this family;
+# moving one number in the same commit is the record, and the failure message says so.
+CAPTURE_FLOOR=16
+
+capture_report() {
+  local out total safe offenders
+  out="$(health_captures "$1/bin/sdd")"
+  total="$(awk '/^TOTAL /{print $2}' <<< "$out")"
+  safe="$(awk '/^TOTAL /{print $3}' <<< "$out")"
+  offenders="$(grep -v '^TOTAL ' <<< "$out")"
+  if [ -z "$total" ] || [ "$total" -lt "$CAPTURE_FLOOR" ]; then
+    fail "$CAPTURE_DESC" \
+         "at least $CAPTURE_FLOOR capture(s) censused in the health region" \
+         "${total:-none} — either the region anchors rotted and this rule measured nothing, or a capture left: move CAPTURE_FLOOR in the same commit"
+    return 1
+  fi
+  if [ "$total" -gt "$CAPTURE_FLOOR" ]; then
+    fail "$CAPTURE_DESC" \
+         "exactly $CAPTURE_FLOOR capture(s) — the ratchet bites in both directions" \
+         "$total — a capture was added to the health region: move CAPTURE_FLOOR to $total in the same commit, so the growth is in a diff with an author"
+    return 1
+  fi
+  if [ -n "$offenders" ]; then
+    fail "$CAPTURE_DESC" \
+         "every capture guarded by '|| true', '|| :', '|| return' or '|| rc=\$?'" \
+         "$(tr '\n' ' ' <<< "$offenders")"
+    return 1
+  fi
+  pass "$CAPTURE_DESC ($total censused, $safe of them unable to abort)"
+  return 0
+}
+
+# Probes over the PARSER and over the CALLER, because this repo has already shipped a sensor
+# whose probes proved the parser while the path from "a defect exists" to "the suite is red" had
+# no probe at all. `capture_report` is invoked for real below on the live runner; here it is
+# invoked on synthetic regions whose answer is known.
+CAPPROBE="$WORK/capguard"; mkdir -p "$CAPPROBE/bin"
+cap_world() { printf '# Sensor of the KIT\n%s\ncmd_status() {\n' "$1" > "$CAPPROBE/bin/sdd"; }
+cap_offenders() { health_captures "$CAPPROBE/bin/sdd" | grep -cv '^TOTAL '; }
+cap_total() { health_captures "$CAPPROBE/bin/sdd" | awk '/^TOTAL /{print $2}'; }
+cap_safe()  { health_captures "$CAPPROBE/bin/sdd" | awk '/^TOTAL /{print $3}'; }
+# Prints the offender lines themselves, so a probe can assert WHICH capture was accused and not
+# merely that the count is right — a rule that reports the neighbour is a rule that measured
+# nothing, and this file has already shipped one.
+cap_lines() { health_captures "$CAPPROBE/bin/sdd" | grep -v '^TOTAL ' || true; }
+
+cap_world '  x="$(grep foo bar)"'
+[ "$(cap_offenders)" = 1 ] || broken "capture probe 'a bare capture' was not reported — the rule reads nothing"
+cap_world '  x="$(grep foo bar || true)"'
+[ "$(cap_offenders)" = 0 ] || broken "capture probe 'a guarded capture' was reported — the rule refuses correct code"
+cap_world '  x="$( cd . && ls )" || rc=$?'
+[ "$(cap_offenders)" = 0 ] || broken "capture probe '|| rc=\$?' was reported — the guard the suite capture uses is not recognised"
+# The continuation case, and the reason the join exists at all: written without it, the real
+# `find` of health_provenance reads as unguarded and the rule fails closed on the live runner.
+cap_world '  x="$(find /tmp -name z \
+         2>/dev/null | tail -1 || true)"'
+[ "$(cap_offenders)" = 0 ] || broken "capture probe 'guard on the continuation line' was reported — the statement join does not span lines"
+cap_world '  x="$(find /tmp -name z \
+         2>/dev/null | tail -1)"'
+[ "$(cap_offenders)" = 1 ] || broken "capture probe 'unguarded across two lines' was not reported — the join swallows the defect with the statement"
+# Arithmetic is not a capture. Unprobed, `[^(]` looks like a typo to the next reader and gets
+# removed, and the rule then reports every counter in the region.
+cap_world '  n=$((n + 1))
+  HEALTH_FAILS=$((HEALTH_FAILS + 1))'
+[ "$(cap_offenders)" = 0 ] && [ "$(cap_total)" = 0 ] \
+  || broken "capture probe 'arithmetic expansion' was counted as a capture — the rule fails closed on every counter"
+# The region is bounded at BOTH ends: text before the header and after cmd_status is invisible.
+cap_world '  x="$(grep foo bar || true)"'
+printf '  y="$(grep after censo)"\n' >> "$CAPPROBE/bin/sdd"
+[ "$(cap_offenders)" = 0 ] || broken "capture probe 'after cmd_status' was censused — the region has no end anchor"
+
+# --- the five spellings r2 measured passing invisibly ------------------------------------------
+# One probe per spelling, and each asserts the CENSUS too: the defect was never "no offender
+# printed", it was "no offender printed AND the total silently shrank", which is what let a floor
+# of 12 sit over sixteen real captures and notice nothing.
+cap_world '  x=$(grep foo bar)'
+[ "$(cap_offenders)" = 1 ] && [ "$(cap_total)" = 1 ] \
+  || broken "capture probe 'unquoted \$( )' was not reported — measured: it aborts under set -e exactly like the quoted form (rc 1, bash 5.2)"
+cap_world '  x=$(grep foo bar || true)'
+[ "$(cap_offenders)" = 0 ] && [ "$(cap_total)" = 1 ] \
+  || broken "capture probe 'unquoted and guarded' was reported — the rule refuses correct code in the spelling it just learned"
+cap_world '  x=`grep foo bar`'
+[ "$(cap_offenders)" = 1 ] && [ "$(cap_total)" = 1 ] \
+  || broken "capture probe 'backtick' was not reported — measured: it aborts under set -e (rc 1)"
+cap_world '  x=`grep foo bar || true`'
+[ "$(cap_offenders)" = 0 ] \
+  || broken "capture probe 'backtick, guarded' was reported — the rule refuses correct code"
+cap_world '  x="$(
+    grep foo bar)"'
+[ "$(cap_offenders)" = 1 ] \
+  || broken "capture probe 'substitution opened at end of line' was not reported — the opener regex demands a character that is not there"
+cap_world '  x="$( (cd /tmp && ls) )"'
+[ "$(cap_offenders)" = 1 ] \
+  || broken "capture probe 'subshell \$( ( … ) )' was not reported — the arithmetic exclusion swallowed a real capture"
+
+# The washing case, and the reason this rule stopped joining until `)"`. An unterminated capture
+# used to keep the statement open and let the NEXT capture's guard certify it — one line of
+# sabotage buying silence for two, and the second capture never counted at all. Both must be
+# censused and the FIRST must be the one accused by name: a rule that reports the neighbour
+# measured nothing. Written with an opener the parser genuinely cannot close on its own line,
+# because that is the only shape that exercises the rule: a first draft used `x=$(a b)`, which
+# closes on its own `)`, and the sabotage that deletes this rule survived it.
+cap_world '  x="$(grep a b
+  y="$(grep c d || true)"'
+[ "$(cap_total)" = 2 ] && [ "$(cap_offenders)" = 1 ] && [[ "$(cap_lines)" == *'[unterminated]'* ]] \
+  || broken "capture probe 'a guarded capture washing an unguarded one' — census $(cap_total), offenders $(cap_offenders): the open statement still eats its neighbour"
+# Same shape one level down: the washing detector has to know every opener spelling too, or a
+# backtick capture below an open statement buys the same silence.
+cap_world '  x="$(grep a b
+  y=`grep c d || true`'
+[ "$(cap_total)" = 2 ] && [ "$(cap_offenders)" = 1 ] \
+  || broken "capture probe 'a backtick capture washing an unguarded one' — census $(cap_total): the washing detector knows fewer spellings than the scanner"
+
+# --- the guard token is read where a guard can actually protect ---------------------------------
+# Searched over the whole statement, `|| true` written in PROSE certified the capture beside it.
+cap_world '  x="$(grep foo bar)"  # or write || true here'
+[ "$(cap_offenders)" = 1 ] \
+  || broken "capture probe 'a comment mentioning || true' certified an unguarded capture — the token is still read outside code"
+cap_world '  x="$(grep foo || true bar)"'
+[ "$(cap_offenders)" = 1 ] \
+  || broken "capture probe '|| true mid-pipeline' certified the capture — under pipefail the status is the LAST stage's, so a guard that is not at the end guards nothing"
+# The tail accepts ANY or-list, and it is measured rather than assumed: a command that is the left
+# operand of `||` is exempt from errexit whatever the right operand is. Pinning the tail to the
+# house style would accuse this line, which cannot abort.
+cap_world '  x="$(grep foo bar)" || health_bad "no score line"'
+[ "$(cap_offenders)" = 0 ] \
+  || broken "capture probe 'tail guarded by an or-list that is not || true' was accused — the rule refuses a shape that cannot abort"
+
+# --- the three shapes that cannot abort ---------------------------------------------------------
+# Measured on bash 5.2 under `set -euo pipefail`, each in its own script (probe3/probe4 of the r3
+# round): `if x="$(false)"` and `local x="$(false)"` both survive; `local x; x="$(false)"` exits 1.
+# They are counted in the census — they ARE captures in the region — and reported as unable to
+# abort. A rule that fails on correct code is a rule the next author deletes.
+cap_world '  if x="$(grep foo bar)"; then :; fi'
+[ "$(cap_offenders)" = 0 ] && [ "$(cap_safe)" = 1 ] \
+  || broken "capture probe 'if-condition' was accused — errexit exempts the condition of if, and the fix the message asks for would break the if"
+cap_world '  local x="$(grep foo bar)"'
+[ "$(cap_offenders)" = 0 ] && [ "$(cap_safe)" = 1 ] \
+  || broken "capture probe 'local x=\$(…)' was accused — the builtin reports its own status and masks the substitution's"
+cap_world '  local x; x="$(grep foo bar)"'
+[ "$(cap_offenders)" = 1 ] && [ "$(cap_safe)" = 0 ] \
+  || broken "capture probe 'local x; x=\$(…)' was excused — the SPLIT form is the one the region uses and it does abort"
+cap_world '  if [ -z "$q" ]; then y="$(grep foo bar)"; fi'
+[ "$(cap_offenders)" = 1 ] \
+  || broken "capture probe 'capture in an if BODY' was excused as a condition — a '; then' ends the exemption"
+
+# The span cap: a statement whose end this parser cannot see is reported, never dropped. The probe
+# has to put a PLAUSIBLE terminator far below the opener — a first draft simply left the statement
+# open to the end of the region, and the `END` fallback reported it with the cap deleted, so the
+# sabotage that removes the cap survived. Here the far line closes the statement and carries a
+# `|| true` right before it: without the cap the opener is read as guarded and vanishes.
+cap_world '  x="$(grep foo bar
+  # 1
+  # 2
+  # 3
+  # 4
+  # 5
+  # 6
+  # 7
+  # 8
+  # 9
+  # 10
+  # 11
+  # 12
+  # prose that happens to end like this || true)"'
+[ "$(cap_offenders)" = 1 ] && [[ "$(cap_lines)" == *'[unterminated]'* ]] \
+  || broken "capture probe 'a statement whose terminator is 14 lines away' was certified by it — the span cap does not fail closed"
+
+# The floor, in the direction the r2 review measured as decoration: putting the constant back to
+# the 12 it was born with must not be free. Asserted over the LIVE region, because that is the one
+# whose census the number is supposed to track.
+CAP_FLOOR_KEEP2="$CAPTURE_FLOOR"
+CAPTURE_FLOOR=12
+( capture_report "$ROOT" >/dev/null 2>&1 ) \
+  && broken "the capture verdict passed with CAPTURE_FLOOR below the live census — the constant is decoration, which is what let 12 sit over sixteen captures"
+CAPTURE_FLOOR="$CAP_FLOOR_KEEP2"
+
+# And the caller: a world with an offender must make `fails` grow, and a world with none must
+# not. Run in a subshell so the FAIL text and the increment die with it.
+cap_world '  a="$(grep 1 f || true)"
+  b="$(grep 2 f || true)"
+  c="$(grep 3 f)"'
+CAP_FLOOR_KEEP="$CAPTURE_FLOOR"
+CAPTURE_FLOOR=3
+( capture_report "$CAPPROBE" >/dev/null 2>&1 ) \
+  && broken "the capture verdict passed a world holding an unguarded capture — the rule discriminates and the report does not say so"
+cap_world '  a="$(grep 1 f || true)"
+  b="$(grep 2 f || true)"
+  c="$(grep 3 f || true)"'
+( capture_report "$CAPPROBE" >/dev/null 2>&1 ) \
+  || broken "the capture verdict refused a world where every capture is guarded — a rule that refuses every world distinguishes nothing"
+# The floor itself, over the same clean world: a census below it is not a pass.
+CAPTURE_FLOOR=99
+( capture_report "$CAPPROBE" >/dev/null 2>&1 ) \
+  && broken "the capture verdict passed a census below its own floor — the anti-vacuity floor is decoration"
+CAPTURE_FLOOR="$CAP_FLOOR_KEEP"
+
+# ---------------------------------------------------------------------------
+# The rule verdicts over the LIVE kit, as a counted list and no longer as two statements dropped
+# beside their own probes.
+#
+# Every rule above is probed; the CALL that puts each rule on the live runner was not, and an
+# adversarial pass measured the cost: deleting the single line `capture_report "$ROOT"` left this
+# file green — every probe still passing, `sdd health discriminates`, rc 0 — over a `bin/sdd` whose
+# `gates` capture had had its `|| true` removed. That is the whole family this mission exists to
+# make unreinstatable, certified as absent by the sensor written to find it.
+#
+# The catalogue does reach it (`mut_HEALTH_gates_capture_aborts` survives the deletion, measured),
+# but since the catalogue left TEST_CMD it only runs when a human types `sdd health
+# --with-mutation`. A composition this load-bearing may not wait for that, so it is made countable
+# here — the shape CLAUDE.md records from check-entrypoint.sh: top-level calls a probe can count,
+# a derived expectation that bites when one is deleted, and a tally that bites when the loop goes.
+#
+# What is NOT claimed, because the adversarial pass measured it: neutering the equality below, or
+# pointing it at the list it is supposed to check, survives — and then deleting an entry is free
+# again. Two edits, not one. The outer witness for that residue is the mutation catalogue, and it
+# was measured rather than assumed: with the live call gone, `mut_HEALTH_gates_capture_aborts`
+# survives (`bin/sdd` with its `gates` guard removed, this file green, rc 0), so the catalogue
+# reports the gap. This comment says "two edits" and not "unreachable in one edit" on purpose —
+# r2 measured the second sentence to be false where a sensor header claimed it.
+RULE_REPORTS=(policy_report capture_report)
+# The expected count is DERIVED and not written by hand. A hand-written floor was tried first and
+# an adversarial pass set it to 0 for free — the same shape as the `CAPTURE_FLOOR=12` this round
+# is here to fix, a constant guarding a list with nothing guarding the constant. Counting the
+# `*_report()` definitions instead puts the two halves in independent places: a rule defined above
+# and left out of the list below fails on the mismatch, in either direction. A helper that ends in
+# `_report` and is not a rule verdict fails it too — loudly, which is the right side to fail on.
+RULE_REPORTS_DECLARED="$(grep -c '^[a-z_]*_report() {' "${BASH_SOURCE[0]}" || true)"
+[ "${#RULE_REPORTS[@]}" -eq "$RULE_REPORTS_DECLARED" ] \
+  || broken "${#RULE_REPORTS[@]} rule verdict(s) listed but $RULE_REPORTS_DECLARED defined in this file — a rule was probed in here and never run against the live kit"
+REPORTS_RUN=0
+for _rule_report in "${RULE_REPORTS[@]}"; do
+  "$_rule_report" "$ROOT" || true
+  REPORTS_RUN=$((REPORTS_RUN + 1))
+done
+[ "$REPORTS_RUN" -eq "${#RULE_REPORTS[@]}" ] \
+  || broken "$REPORTS_RUN of ${#RULE_REPORTS[@]} rule verdict(s) were issued — the loop that runs them is not running them"
 
 # ---------------------------------------------------------------------------
 echo
