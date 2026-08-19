@@ -37,6 +37,9 @@
 #   13. the OTHER two provenance comparisons, prefixed `covered:` — the qa-execution report and the
 #      codereview grade table. Assertion 4 reaches one of the three; these two sat permanently on
 #      the `skipped` branch, so either could have been `if true` with this file fully green.
+#   14. the `score:` line's TWO numbers are COMPARED, not merely parsed. The check used to ask only
+#      for `0 known gap` and never that `caught == of`, so a catalogue with a live mutant read as
+#      `ok` — in the command that, since the catalogue left TEST_CMD, is its only caller.
 #
 # Usage: tests/check-health.sh   (exit 0 = cmd_health discriminates)
 #
@@ -95,7 +98,7 @@ broken() { printf '  SENSOR-BROKEN  %s\n' "$1" >&2; exit 90; }
 # The verdict-relevant lines of an output, flattened onto one line for a FAIL report. It carries
 # the suite/score/gates lines too, and not only the ratchet's: the `abort:` assertions are ABOUT
 # what the run stopped saying, so a digest that dropped those would report the silence as silence.
-digest() { grep -E 'suite (green|red)|blind|gates have a mutation|baseline|provenance|finding count|kit healthy|check\(s\) failed|diverged from the skill|grade table has a criterion' <<< "$1" | tr '\n' ' '; }
+digest() { grep -E 'suite (green|red)|blind|gates have a mutation|baseline|provenance|finding count|kit healthy|check\(s\) failed|diverged from the skill|grade table has a criterion|mutation: |survivor' <<< "$1" | tr '\n' ' '; }
 
 # ---------------------------------------------------------------------------
 # The fixture
@@ -146,12 +149,15 @@ build_fixture() {
 # the score, and assertion 8 one that is simply RED. Each has to be the ONLY thing that changes
 # between the two worlds it compares — hence one writer with switches, not four heredocs drifting
 # apart. The defaults are what keeps the existing two calls reading as they did.
-write_stub_suite() { # write_stub_suite <with-count|no-count> [with-score|no-score] [exit code]
-  local count_line="" score_line="" rc="${3:-0}"
+# The fourth switch is the score LINE itself, defaulting to STUB_SCORE so every existing call reads
+# as it did. Assertion 14 needs two worlds that differ in nothing but the two numbers of that line,
+# and a second heredoc here is exactly the drift this one writer was created to prevent.
+write_stub_suite() { # write_stub_suite <with-count|no-count> [with-score|no-score] [exit code] [score line]
+  local count_line="" score_line="" rc="${3:-0}" score="${4:-$STUB_SCORE}"
   [ "$1" = "with-count" ] \
     && count_line="printf '  ok    %d finding(s), all within 8 lines and carrying anchor + date\\n' $STUB_TODO_COUNT"
   [ "${2:-with-score}" = "with-score" ] \
-    && score_line="printf '%s\\n' '$STUB_SCORE'"
+    && score_line="printf '%s\\n' '$score'"
 
   cat > "$FIX/tests/run-all.sh" <<EOF
 #!/usr/bin/env bash
@@ -613,6 +619,52 @@ else
   fail "abort: a suite with no score line is said out loud and the run carries on" \
        "rc != 0 and 'health went blind to the mutation' and '$LATER' and '$VERDICT'" \
        "rc $RC_NO_SCORE · $(digest "$OUT_NO_SCORE")"
+fi
+
+# ---------------------------------------------------------------------------
+# 14 — the score's TWO numbers are compared, not merely parsed
+#
+# `score: 103 caught, 0 known gap(s), of 104` is a catalogue with a mutant ALIVE — an assertion the
+# suite does not have, protection the catalogue goes on crediting and nobody owns. The check asked
+# only for `0 known gap` and NEVER that `caught == of`, so that line printed `ok` in the one command
+# that opts the catalogue in. Not feared: the main branch carried exactly it between PR #12 and
+# #13, for days, with every gate green, until a human typed `sdd health`.
+#
+# DIFFERENTIAL, and it has to be: a world alone distinguishes nothing, because `health_bad` and a
+# crash share the rc, and because a check that refused EVERY score would satisfy the survivor half
+# on its own. Two worlds differing in exactly two digits, compared against each other.
+#
+# The `$LATER`/`$VERDICT` half is the `abort:` family's, and it belongs here for the same reason:
+# this branch sits at the same site, and a refusal that ate the rest of the run would be a second
+# defect wearing the first one's clothes.
+# ---------------------------------------------------------------------------
+SCORE_FULL='score: 104 caught, 0 known gap(s), of 104'
+SCORE_SURVIVOR='score: 103 caught, 0 known gap(s), of 104'
+
+green_world
+write_stub_suite with-count with-score 0 "$SCORE_FULL"
+health_run
+OUT_SCORE_FULL="$HEALTH_OUT"; RC_SCORE_FULL="$HEALTH_RC"
+
+green_world
+write_stub_suite with-count with-score 0 "$SCORE_SURVIVOR"
+health_run
+OUT_SCORE_SURV="$HEALTH_OUT"; RC_SCORE_SURV="$HEALTH_RC"
+
+if [ "$RC_SCORE_FULL" -eq 0 ] \
+   && grep -qF "mutation: $SCORE_FULL" <<< "$OUT_SCORE_FULL" \
+   && grep -qF 'kit healthy' <<< "$OUT_SCORE_FULL" \
+   && ! grep -qF 'survivor' <<< "$OUT_SCORE_FULL" \
+   && [ "$RC_SCORE_SURV" -ne 0 ] \
+   && grep -qF 'mutation: 103 of 104 caught' <<< "$OUT_SCORE_SURV" \
+   && grep -qF 'survivor' <<< "$OUT_SCORE_SURV" \
+   && grep -qF "$LATER" <<< "$OUT_SCORE_SURV" \
+   && grep -qF "$VERDICT" <<< "$OUT_SCORE_SURV"; then
+  pass "mutation: a score whose caught differs from total is refused"
+else
+  fail "mutation: a score whose caught differs from total is refused" \
+       "the full score reaches 'kit healthy' saying nothing of survivors; the 103-of-104 one fails naming BOTH numbers, and '$LATER' and '$VERDICT' still appear" \
+       "full: rc $RC_SCORE_FULL · $(digest "$OUT_SCORE_FULL") // survivor: rc $RC_SCORE_SURV · $(digest "$OUT_SCORE_SURV")"
 fi
 
 # The third site says nothing on its own — a machine with no plugins cache is not a defect, it is
@@ -1168,7 +1220,10 @@ health_captures() {
 # not, and both `todo-findings` and `tests/lang-allowlist.txt` bite in both directions for exactly
 # that reason. A mission that adds a capture to the health region is already editing this family;
 # moving one number in the same commit is the record, and the failure message says so.
-CAPTURE_FLOOR=16
+# 16 → 17: the `score:` check stopped asking a regex whether the line "looks green" and started
+# READING its three numbers, so the health region gained the `score_nums` capture. This line is
+# the record the ratchet demands.
+CAPTURE_FLOOR=17
 
 capture_report() {
   local out total safe offenders

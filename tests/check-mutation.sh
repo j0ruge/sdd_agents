@@ -1064,6 +1064,24 @@ mut_HEALTH_score_read_aborts() {
   sed -i "s@grep -m1 '^score: ' <<< \"\$out\" || true@grep -m1 '^score: ' <<< \"\$out\"@" "$1"
 }
 
+# `sdd health` goes back to certifying a catalogue with a mutant ALIVE. The comparison loses its
+# second operand, so `score: 103 caught, 0 known gap(s), of 104` — one assertion the suite does not
+# have — walks straight into `ok`, exactly as the pre-mission form did, and the operator reads
+# `kit healthy` over a hole.
+#
+# Not an invented defect: that line sat on main between PR #12 and #13, for days, because f6ecf73
+# rotted the anchor of mut_HEALTH_grade_table_blind and every gate ran only the fast suite. Since
+# 4c86712 the catalogue is opt-in and this command is its ONLY caller, so `ok` here is the entire
+# verdict on the catalogue.
+#
+# Range-addressed to the body of cmd_health, per the header of the five above: `[ "$caught" -ne
+# "$total" ]` is a shape this file would rather not chase across the whole runner.
+# Caught by `mutation: a score whose caught differs from total is refused` in check-health.sh and
+# by nothing else — every other world in that file reads a stub score whose two numbers agree.
+mut_HEALTH_mutation_survivor_blind() {
+  sed -i '/^cmd_health() {/,/^}/ s@elif \[ "$caught" -ne "$total" \]; then@elif [ "$caught" -ne "$caught" ]; then@' "$1"
+}
+
 # `sdd health` stops asking the suite for the catalogue — and since the catalogue left TEST_CMD,
 # health is the ONLY caller that asks. Nobody else runs it; there is no CI in this repo.
 #
@@ -1369,6 +1387,7 @@ CATALOG=(
   HEALTH_todo_count_blind
   HEALTH_suite_capture_aborts
   HEALTH_score_read_aborts
+  HEALTH_mutation_survivor_blind
   HEALTH_suite_without_mutation
   HEALTH_provenance_find_aborts
   HEALTH_baseline_read_aborts

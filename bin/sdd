@@ -1811,14 +1811,38 @@ cmd_health() {
   # returns 1, and under `set -e` the assignment took the runner down with it — so the `-z` branch
   # that was written to shout "health went blind" could never be reached, and going blind read as
   # a crash. The sentence below is only sayable because of the two words on this line.
-  local score_line
+  # The THREE numbers of that line, read once, because the verdict needs TWO of them compared.
+  # The old form asked `^score: [0-9]+ caught, 0 known gap` and NOTHING about `of` — so
+  # `score: 103 caught, 0 known gap(s), of 104`, a catalogue with a mutant ALIVE, printed `ok`
+  # here. It is not a hypothetical: the main branch carried exactly that line between PR #12 and
+  # #13, for days, while every gate ran the fast suite and answered green. Since 4c86712 the
+  # catalogue is opt-in and THIS command is its only caller, so `ok` here is the whole verdict.
+  #
+  # A survivor is not a gap, and the two get different sentences on purpose: a gap is debt this
+  # repo DECLARED, listed by name in KNOWN_GAPS with the increment that closes it; a survivor is
+  # protection the catalogue goes on crediting that nobody owns. Same green before, and the
+  # operator could not tell which one they had.
+  local score_line score_nums caught gaps total
   score_line="$(grep -m1 '^score: ' <<< "$out" || true)"
+  score_nums="$(sed -nE 's/^score: ([0-9]+) caught, ([0-9]+) known gap\(s\), of ([0-9]+)$/\1 \2 \3/p' <<< "$score_line" || true)"
   if [ -z "$score_line" ]; then
     health_bad "the suite did not print the 'score:' line — health went blind to the mutation"
-  elif grep -qE '^score: [0-9]+ caught, 0 known gap' <<< "$score_line"; then
-    ok "mutation: $score_line"
+  elif [ -z "$score_nums" ]; then
+    # Shape drift is a contract breach, never a green. Without this branch the whole comparison
+    # below would be skipped by a line the sed stopped reading, which is the same vacuity as the
+    # missing line above — with the extra insult of a `score:` sitting right there in the log.
+    health_bad "the 'score:' line no longer parses — health went blind to the mutation: $score_line"
   else
-    health_bad "mutation with an open gap — $score_line"
+    read -r caught gaps total <<< "$score_nums"
+    if [ "$gaps" -ne 0 ]; then
+      health_bad "mutation with an open gap — $score_line"
+    elif [ "$caught" -ne "$total" ]; then
+      # The reproduction command is IN the sentence, the same rule the red-suite line above obeys:
+      # without it the operator runs the fast suite, sees green, and concludes health is lying.
+      health_bad "mutation: $caught of $total caught — $((total - caught)) survivor(s), assertions the suite does not have — run tests/run-all.sh --with-mutation"
+    else
+      ok "mutation: $score_line"
+    fi
   fi
 
   # --- 3. the TODO.md backlog count, read from the SAME run ----------------
