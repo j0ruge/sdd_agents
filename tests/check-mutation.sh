@@ -687,7 +687,7 @@ mut_AUTONOMY_all_repos_ignored() {
 # `esac` go together: removing the opener alone leaves invalid bash, which is a harness failure and
 # not a capture.
 mut_LEDGER_repo_root_shape_blind() {
-  perl -0pi -e 's@  case "\$gitdir" in\n    /\*\) \[ "\$gitdir" = "\$\{gitdir%%\$.\\n.\*\}" \] \|\| return 0 ;;\n    \*\)  return 0 ;;\n  esac\n@@' "$1"
+  perl -0pi -e 's@  case "\$gitdir" in\n    /\*\) \[ "\$gitdir" = "\$\{gitdir%%\$.\\n.\*\}" \] \|\| gitdir="" ;;\n    \*\)  gitdir="" ;;\n  esac\n@@' "$1"
 }
 
 mut_LEDGER_repo_root_toplevel() {

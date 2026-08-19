@@ -1456,19 +1456,30 @@ assert_eq "the pre-2.31 git shim is armed: rev-parse echoes the flag it does not
 # check-autonomy.sh stayed green. A sensor written to protect a CRITICAL, blind to that CRITICAL.
 raw_oldgit() { ( cd "$1" && PATH="$GITSHIM:$PATH" SDD_STATE_DIR="$IDSTATE" "$SDD" autonomy 2>&1 ); }
 
-# Refusing the shape is the whole contract: the answer is the real repo or it is nothing, and it is
-# never the echoed flag and never two lines. Three fields, and each answers an objection the other
-# two cannot. `said` is the FLOOR — the old-git run must still produce the runner's per-repo voice,
-# because "the flag does not appear" is satisfied for free by a run that printed nothing at all, or
-# by one that died. `leak` is the property. `new` is read in the same breath and compared, so a
-# runner that had simply stopped resolving anything cannot buy the green: the old git may answer
-# less, never something else.
-assert_eq "cdpath: a git older than --path-format yields no identity, never the echoed flag" \
-  "one said clean" \
+# ⚠️ REFUSING the shape was only half the contract, and asserting the refusal alone is what let the
+# second defect live: the r2 of 20260818-lote-facil made the old git yield NOTHING and this
+# assertion called that a pass. Empty is the contract for "not a repo", so on git 2.25 and 2.30
+# every ledger row would be written `repo: ""`, land in `no_repo` — a bucket `--all-repos` does not
+# admit — and the whole judge would go dark, silently and permanently, on a spelling that used to
+# work. The property is AGREEMENT, not silence: the answer is the real repo, the same string the
+# modern git resolves, and never the echoed flag.
+#
+# Four fields, each answering an objection the other three cannot. `said` is the FLOOR — the old-git
+# run must still produce the runner's per-repo voice, because "the flag does not appear" is free for
+# a run that printed nothing or died. `leak` is the shape property, read RAW (see above: the `no
+# data for X:` extractor cannot see a two-line answer BY CONSTRUCTION). `same` is the identity
+# property, and it is DIFFERENTIAL — the two gits compared to each other, so no fixture regime
+# satisfies it by accident and either side moving reproves it. Requiring `old` non-empty is what
+# stops "resolved nothing" from buying the green a third time.
+assert_eq "cdpath: a git older than --path-format resolves the SAME identity, never the echoed flag" \
+  "one said clean same" \
   "$( new="$(id_cd '' "$CDROOT/one")"; raw="$(raw_oldgit "$CDROOT/one")"
+      old="$(sed -n 's/.*no data for \([^:]*\):.*/\1/p' <<< "$raw")"
       case "$raw" in *"no data"*) s=said ;; *) s="mute:$(head -c 40 <<< "$raw")" ;; esac
       case "$raw" in *--path-format*) g=leaked ;; *) g=clean ;; esac
-      printf '%s %s %s' "${new##*/}" "$s" "$g" )"
+      if [ -n "$old" ] && [ "$old" = "$new" ]; then m=same
+      else m="split:${old:-<empty>}|${new:-<empty>}"; fi
+      printf '%s %s %s %s' "${new##*/}" "$s" "$g" "$m" )"
 
 # --- ...and a row that cannot say where it came from is nobody's ------------
 # `ledger_row_is_local` used to answer `true` for a row with no `repo` key — local in EVERY repo.

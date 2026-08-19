@@ -39,6 +39,117 @@ Achados sobre **repos-alvo** vão para o `TODO.md` daquele repo. Este arquivo é
 
 ### Sensores que faltam
 
+- [ ] **A regra `guard:` do `check-health.sh` conhece UMA grafia de captura e falha aberta nas
+  outras** — `tests/check-health.sh:761` — o regex exige `x="$(cmd)"`; `x=$(cmd)`, crase, `$(` no
+  fim da linha e `$( ( subshell ) )` são invisíveis E encolhem o `total` calado. Pior, a forma sem
+  aspas nunca vê `)"`, então engole as linhas seguintes e uma captura guardada LAVA a desguardada.
+  Medido: `mut_HEALTH_gates_capture_aborts` reescrito sem aspas deixa a suíte verde e o `sdd health`
+  morre em 3 linhas. Direção: casar `` ` `` ou `$(` e terminar por parênteses balanceados.
+  — descoberto por `sdd-reviewer` na missão `20260818-lote-facil` (2026-08-19)
+
+- [ ] **O token de guarda do `guard:` é procurado no enunciado inteiro, não no rabo da captura** —
+  `tests/check-health.sh:767` — `acc !~ /\|\|[ \t]*(true|:|return|rc=)/` varre os 100+ chars
+  acumulados, então um `|| true` dentro de comentário ou de string certifica a captura. Medido: com
+  `# no || true here` no fim da linha o censo segue 16 e o `sdd health` morre calado. Afrouxar a
+  alternância para `/\|\|/` também sobrevive ao selftest. Direção: cortar comentário e exigir a
+  guarda depois do `)` que fecha a substituição.
+  — descoberto por `sdd-reviewer` na missão `20260818-lote-facil` (2026-08-19)
+
+- [ ] **Quatro regras do `check-health.sh` sobrevivem à passada adversarial** —
+  `tests/check-health.sh:826` — o probe aritmético conclui no vazio (`n=$((n+1))` não tem `)"`,
+  então some com e sem `[^(]`); `CAPTURE_FLOOR=12` contra 16 capturas reais e a constante sem probe;
+  as alternativas `:` e `return` da guarda nunca usadas e sem probe; e a chamada de topo
+  `policy_report "$ROOT"` sem probe **e** fora do alcance do catálogo, que só sabota `bin/sdd`.
+  Direção: lista contável de reports, como o `check-entrypoint.sh` faz.
+  — descoberto por `sdd-reviewer` na missão `20260818-lote-facil` (2026-08-19)
+
+- [ ] **O `guard:` fala alto em três formas que NÃO abortam, e é cego a helper fora da região** —
+  `tests/check-health.sh:754` — `if x="$(cmd)"`, `local x="$(cmd)"` e corpo de here-doc são
+  seguros sob `set -e` e viram offender, e a mensagem manda pôr `|| true`, que quebraria o `if`.
+  No outro sentido, um `health_*()` definido depois da âncora `cmd_status()` não é censurado.
+  Regra que reprova código correto é regra que o próximo autor apaga. Direção: pular
+  `if`/`while`/`until`/`local`/here-doc e censurar todo `health_*()` onde ele estiver.
+  — descoberto por `sdd-reviewer` na missão `20260818-lote-facil` (2026-08-19)
+
+- [ ] **O `REVIEW_FLOOR` conta CHAMADAS, então uma linha apagada certifica um template vazio** —
+  `tests/check-templates.sh:113` — apagar `check review.md "$1" "$2"` de `review_check()` faz o
+  sensor imprimir `23 assertion(s)` e `template contract intact` sobre um `templates/review.md` de
+  ZERO byte, rc 0. O cabeçalho jura o contrário ("not reachable in one edit… Inert alone"). É o
+  único portador dos 7 critérios que o `gate_REVIEW` não confere. Direção: contar o que o `check()`
+  RETORNOU, como o `PIPE_DOC_FLOOR` do `check-checkpoint.sh` já faz.
+  — descoberto por `sdd-reviewer` na missão `20260818-lote-facil` (2026-08-19)
+
+- [ ] **Os três helpers de asserção do `check-todo.sh` viram no-op com uma linha, e o selftest
+  segue dizendo que mediu** — `tests/check-todo.sh:361` — `assert_clean`, `assert_says` e
+  `assert_rc` trocados por `return 0` deixam `88 probe(s), o sensor measures what it claims`, rc 0,
+  porque os pisos contam SÍTIOS DE CHAMADA e nada sonda o veredito dentro do helper. Some o
+  `selftest ||` do dispatch e nada nota — e `check-todo.sh` está fora do catálogo
+  (`run-all.sh:130`), sem `mut_TODO_*`. Direção: controle negativo por helper.
+  — descoberto por `sdd-reviewer` na missão `20260818-lote-facil` (2026-08-19)
+
+- [ ] **Duas formas bem formadas são recusadas pelo `check-todo.sh`** — `tests/check-todo.sh:176` —
+  code span de CRASE DUPLA com travessão dentro (a paridade trata ``` `` ``` como dois
+  delimitadores) e linha de continuação que ABRE com `[x] ` — que é exatamente a cara de um achado
+  SOBRE a regra da caixa, e o `flush()` dela ainda cascateia mais três violações falsas. Nenhuma das
+  duas está entre os limites declarados no cabeçalho. Direção: consumir RUNS de crase; e declarar
+  ou isentar a caixa enquanto `initem` estiver ligado.
+  — descoberto por `sdd-reviewer` na missão `20260818-lote-facil` (2026-08-19)
+
+- [ ] **Quatro regras do `check-todo.sh` que o selftest diz medir e não mede** —
+  `tests/check-todo.sh:1190` — a contagem de violações trocada pela constante `3` passa (o fixture
+  tem exatamente 3); o `^` do `grep '^## Aberto'` é load-bearing e o probe não o exercita; o
+  `flush()` do ramo da caixa marcada não tem probe (esconde 3 de 4 violações); e o probe
+  `--check ''` é vácuo quando `$ROOT/TODO.md` não existe. Direção: segundo fixture com contagem
+  DIFERENTE, e prosa contendo `## Aberto` fora da coluna 0.
+  — descoberto por `sdd-reviewer` na missão `20260818-lote-facil` (2026-08-19)
+
+- [ ] **Os dois literais "ESTRUTURAIS" da regra 3 do `check-checkpoint.sh` afrouxam em verde** —
+  `tests/check-checkpoint.sh:227` — `PIPE_MECH="awk"` vira `"aw"` e `PIPE_ESCAPE='\|'` vira `'\'`
+  com o selftest verde; só `"a"` mata, e por acidente do fixture. O cabeçalho lista oito sabotagens
+  mortas, todas de APAGAR — afrouxar, que é a regra do `CLAUDE.md`, não está coberto. Degradado
+  assim, qualquer doc com "raw" e uma barra satisfaz a regra. Direção: um probe por literal, contra
+  um doc de quase-acerto (`awk` sem `-F'|'`).
+  — descoberto por `sdd-reviewer` na missão `20260818-lote-facil` (2026-08-19)
+
+- [ ] **O `pushd "$(…)"` tem o mesmo bug de CDPATH e não é medido nem declarado** —
+  `tests/check-pipefail.sh:252` — `pushd` consulta `$CDPATH` e ecoa o diretório resolvido
+  exatamente como `cd`. Medido: `tests/check-pipefail.sh --check` sobre um arquivo com
+  `pushd "$(dirname "$0")"` responde rc 0. Não está entre os dois limites que o comentário do
+  `CD_RE` declara nem entre os do `TODO.md`. Nenhuma instância viva hoje. Direção: `(cd|pushd)` no
+  `CD_RE`, ou entrar no bloco de limites declarados.
+  — descoberto por `sdd-reviewer` na missão `20260818-lote-facil` (2026-08-19)
+
+- [ ] **O braço 1 da guarda de forma do `ledger_repo_root` não tem probe, e a mutação junta os
+  dois** — `bin/sdd:946` — sob o shim pré-2.31 o valor não começa com `/`, então quem dispara é
+  sempre o braço 2; o braço 1 (uma linha só, caminho absoluto) só é alcançado por um repo cujo
+  CAMINHO contém `\n`, e nenhum fixture tem um. `mut_LEDGER_repo_root_shape_blind` apaga os dois de
+  uma vez, então o catálogo não os distingue. Direção: fixture com `\n` no caminho e dividir a
+  mutação em duas. — descoberto por `sdd-reviewer` na missão `20260818-lote-facil` (2026-08-19)
+
+- [ ] **O piso do shim pré-2.31 prova que o shim é um git falso, não que o runner o consulta** —
+  `tests/check-autonomy.sh:1443` — o piso invoca `git` diretamente sob o `PATH` do shim, e nada
+  ancora no caminho de resolução do runner. Medido: trocar `git` por `/usr/bin/git` no
+  `ledger_repo_root` E apagar a guarda deixa `check-autonomy.sh` inteiro verde, porque o shim segue
+  um impostor correto que nunca é chamado. Direção: termo provando INTERCEPTAÇÃO — a resposta do
+  runner sob o shim tem de diferir da resposta sem ele.
+  — descoberto por `sdd-reviewer` na missão `20260818-lote-facil` (2026-08-19)
+
+- [ ] **O `health_provenance` conta como conferida uma fixture cujo laço não iterou** —
+  `bin/sdd:1965` — com o heading da tabela do `codereview` renomeado, o `while read` roda zero
+  vezes, `missing` fica vazio, `checked` incrementa e o sumário diz `all 3 fixtures match` — sobre
+  uma tabela que nunca leu, e é exatamente a deriva que a função existe para pegar. Os checks 5 e 6
+  ganharam piso nesta mesma rodada por este argumento; este não. O `diverged` ainda repete o `3`
+  literal. Direção: piso na contagem de critérios, e um dono só para o `3`.
+  — descoberto por `sdd-reviewer` na missão `20260818-lote-facil` (2026-08-19)
+
+- [ ] **A catraca manda APAGAR uma linha viva da baseline quando a suíte morre truncada** —
+  `bin/sdd:2021` — se `tests/run-all.sh` falha antes de imprimir `N finding(s)`, o check 3 diz que
+  não conseguiu medir e a metade `stale` do `health_ratchet` julga assim mesmo: `stale baseline:
+  'todo-findings 57' is no longer a finding — delete the line`. Apagá-la remove a âncora única da
+  catraca do backlog. Remédio destrutivo tirado de uma medição que não aconteceu. Direção: suprimir
+  o veredito `stale` dos check-ids cujo produtor se declarou cego.
+  — descoberto por `sdd-reviewer` na missão `20260818-lote-facil` (2026-08-19)
+
 - [ ] **Nada mede se o esperado de um Check do checkpoint ainda reproduz** —
   `tests/check-checkpoint.sh:1` — o sensor mede a FORMA da célula (âncora `^  ok    `, ausência de
   `|`, cinco colunas) e nunca o VALOR. Medido nesta missão: o Check do I2 dizia `3` e responde `4`

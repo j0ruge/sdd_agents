@@ -920,23 +920,45 @@ ledger_repo_root() {
   # `--show-toplevel` got both of those right and only worktrees wrong. The common dir gets all
   # three right, because it is the identity git itself keeps per repository.
   gitdir="$( git -C "$start" rev-parse --path-format=absolute --git-common-dir 2>/dev/null )" || return 0
-  # ⚠️ ONE ABSOLUTE LINE, or this is not an answer — and the guard is load-bearing on any git
-  # older than 2.31, which is where `--path-format` was born. `git rev-parse` ECHOES a token it
-  # does not recognize as an option straight back to stdout and still exits 0, so a pre-2.31 git
-  # answers TWO lines here: the flag itself, then the common dir, still relative. `|| return 0`
-  # never fires (rc is 0) and `-n` never fires (the string is not empty), so the old spelling of
-  # this guard let `--path-format=absolute\n.git` through as the repository's IDENTITY — stamped
-  # into every ledger row by `--arg repo`, newline and all, matching no reader and never migrated,
-  # because the ledger is append-only. Strictly worse than the CDPATH class this rewrite removed:
-  # the `cd`-based form it replaced answered correctly on the same git. Empty is the existing
-  # contract for "not a repo" and is what the callers already handle; the LOUD half of this lives
-  # in `sdd preflight`, which probes the capability by behaviour and names the consequence.
-  # The sensor is the pre-2.31 differential pair in tests/check-autonomy.sh.
-  [ -n "$gitdir" ] || return 0
+  # ⚠️ ONE ABSOLUTE LINE, or this is not an answer — and the test is load-bearing on any git older
+  # than 2.31, which is where `--path-format` was born. `git rev-parse` ECHOES a token it does not
+  # recognize as an option straight back to stdout and still exits 0, so a pre-2.31 git answers TWO
+  # lines here: the flag itself, then the common dir, still relative. `|| return 0` never fires (rc
+  # is 0) and `-n` never fires (the string is not empty), so the first spelling of this guard let
+  # `--path-format=absolute\n.git` through as the repository's IDENTITY — stamped into every ledger
+  # row by `--arg repo`, newline and all, matching no reader and never migrated, because the ledger
+  # is append-only.
+  #
+  # ⚠️ REFUSING is not enough, and returning empty here was a second defect wearing the first one's
+  # clothes. Empty is the contract for "not a repo", so on git 2.25 (Ubuntu 20.04) and 2.30 (Debian
+  # 11) EVERY row would be written `repo: ""`, every reader would file it under `no_repo` — a bucket
+  # `--all-repos` deliberately does not admit — and `sdd autonomy` would answer "no data" while
+  # `sdd kaizen` could only ever say `indeterminado`. Silent, permanent, and a REGRESSION: the
+  # `cd`-based spelling this replaced answered CORRECTLY on those same gits.
+  #
+  # So the old spelling is the fallback, not the casualty. It is safe to keep now for the reason
+  # that made it dangerous before: the `CDPATH=''` guards this mission added to the whole repo. The
+  # fast path stays the one-shot `--path-format`; the slow path costs a second `rev-parse` and two
+  # `cd`s, and only on a git that cannot do it in one. The sensor is the pre-2.31 differential pair
+  # in tests/check-autonomy.sh, which asserts the two gits answer the SAME identity — not merely
+  # that the new one does not leak.
   case "$gitdir" in
-    /*) [ "$gitdir" = "${gitdir%%$'\n'*}" ] || return 0 ;;
-    *)  return 0 ;;
+    /*) [ "$gitdir" = "${gitdir%%$'\n'*}" ] || gitdir="" ;;
+    *)  gitdir="" ;;
   esac
+  if [ -z "$gitdir" ]; then
+    local common
+    common="$( git -C "$start" rev-parse --git-common-dir 2>/dev/null )" || return 0
+    [ -n "$common" ] || return 0
+    # Relative at a checkout root (`.git`), relative in a subdirectory (`../.git`), absolute from a
+    # linked worktree — `cd "$start"` first, then `cd "$common"`, resolves all three. Both `cd`s
+    # carry the emptied CDPATH: with a relative operand the environment would otherwise pick where
+    # this lands AND echo the path it found into the capture. That is the CRITICAL of
+    # 20260817-eixo-do-juiz, and it is why this spelling was retired rather than deleted.
+    gitdir="$( CDPATH='' cd "$start" && CDPATH='' cd "$common" && pwd -P )" || return 0
+    [ -n "$gitdir" ] || return 0
+    [ "$gitdir" = "${gitdir%%$'\n'*}" ] || return 0
+  fi
   # Cosmetic, and ONLY cosmetic: `/repo/.git` prints back as `/repo`, so the ledger and the header
   # keep naming the root a human recognizes instead of a path inside `.git`. Injective, therefore
   # safe to collapse: exactly one repository can own `/repo/.git`. Withheld from a bare repo, whose
@@ -1585,15 +1607,17 @@ cmd_preflight() {
   # number but an ANSWER. `ledger_repo_root` asks for `--path-format=absolute`, born in 2.31, and
   # `git rev-parse` ECHOES an option it does not know back to stdout while still exiting 0 — so an
   # older git does not fail here, it answers two lines, and the repository identity written to
-  # every ledger row becomes a string no reader can match. The function refuses that shape and
-  # falls back to empty, which is silent by design; this line is where the operator is told.
+  # every ledger row becomes a string no reader can match. The function refuses that shape and then
+  # RESOLVES the identity the old way (`cd` + `pwd -P`, both `cd`s with an emptied CDPATH), so an
+  # old git costs a second rev-parse and nothing else. This line is where the operator is told that
+  # the slow path is the one being taken — a notice, not a broken kit.
   if [ "$( git rev-parse --path-format=absolute --git-common-dir 2>/dev/null | grep -c . )" = 1 ]; then
     ok "git speaks --path-format (2.31+)"
   else
-    _fail "this git does not know 'rev-parse --path-format' (2.31+, and it does not fail — it
-        echoes the flag back and exits 0). Without it the ledger cannot name the repository it
-        is writing about: every row lands as another repo's, 'sdd autonomy' and 'sdd kaizen'
-        read an empty series, and the rows are never migrated because the ledger is append-only."
+    warn "this git does not know 'rev-parse --path-format' (2.31+, and it does not fail — it
+        echoes the flag back and exits 0). 'ledger_repo_root' refuses the echoed shape and falls
+        back to resolving the common dir with cd + pwd -P, which answers the same string, so the
+        ledger stays correct. Upgrading git removes the extra rev-parse per ledger write."
   fi
 
   if [ -z "$gnu" ]; then
