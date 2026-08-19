@@ -920,7 +920,23 @@ ledger_repo_root() {
   # `--show-toplevel` got both of those right and only worktrees wrong. The common dir gets all
   # three right, because it is the identity git itself keeps per repository.
   gitdir="$( git -C "$start" rev-parse --path-format=absolute --git-common-dir 2>/dev/null )" || return 0
+  # ⚠️ ONE ABSOLUTE LINE, or this is not an answer — and the guard is load-bearing on any git
+  # older than 2.31, which is where `--path-format` was born. `git rev-parse` ECHOES a token it
+  # does not recognize as an option straight back to stdout and still exits 0, so a pre-2.31 git
+  # answers TWO lines here: the flag itself, then the common dir, still relative. `|| return 0`
+  # never fires (rc is 0) and `-n` never fires (the string is not empty), so the old spelling of
+  # this guard let `--path-format=absolute\n.git` through as the repository's IDENTITY — stamped
+  # into every ledger row by `--arg repo`, newline and all, matching no reader and never migrated,
+  # because the ledger is append-only. Strictly worse than the CDPATH class this rewrite removed:
+  # the `cd`-based form it replaced answered correctly on the same git. Empty is the existing
+  # contract for "not a repo" and is what the callers already handle; the LOUD half of this lives
+  # in `sdd preflight`, which probes the capability by behaviour and names the consequence.
+  # The sensor is the pre-2.31 differential pair in tests/check-autonomy.sh.
   [ -n "$gitdir" ] || return 0
+  case "$gitdir" in
+    /*) [ "$gitdir" = "${gitdir%%$'\n'*}" ] || return 0 ;;
+    *)  return 0 ;;
+  esac
   # Cosmetic, and ONLY cosmetic: `/repo/.git` prints back as `/repo`, so the ledger and the header
   # keep naming the root a human recognizes instead of a path inside `.git`. Injective, therefore
   # safe to collapse: exactly one repository can own `/repo/.git`. Withheld from a bare repo, whose
@@ -1564,6 +1580,22 @@ cmd_preflight() {
   md5sum </dev/null >/dev/null 2>&1  || gnu="$gnu md5sum"
   date -Iseconds >/dev/null 2>&1     || gnu="$gnu 'date -Iseconds'"
   sort -V </dev/null >/dev/null 2>&1 || gnu="$gnu 'sort -V'"
+  # git 2.31+, probed by BEHAVIOUR for the same reason as the userland above: `git --version`
+  # parses into three fields on some builds and four on others, and what the runner needs is not a
+  # number but an ANSWER. `ledger_repo_root` asks for `--path-format=absolute`, born in 2.31, and
+  # `git rev-parse` ECHOES an option it does not know back to stdout while still exiting 0 — so an
+  # older git does not fail here, it answers two lines, and the repository identity written to
+  # every ledger row becomes a string no reader can match. The function refuses that shape and
+  # falls back to empty, which is silent by design; this line is where the operator is told.
+  if [ "$( git rev-parse --path-format=absolute --git-common-dir 2>/dev/null | grep -c . )" = 1 ]; then
+    ok "git speaks --path-format (2.31+)"
+  else
+    _fail "this git does not know 'rev-parse --path-format' (2.31+, and it does not fail — it
+        echoes the flag back and exits 0). Without it the ledger cannot name the repository it
+        is writing about: every row lands as another repo's, 'sdd autonomy' and 'sdd kaizen'
+        read an empty series, and the rows are never migrated because the ledger is append-only."
+  fi
+
   if [ -z "$gnu" ]; then
     ok "GNU userland (md5sum, date -Iseconds, sort -V)"
   else
@@ -1775,8 +1807,16 @@ cmd_health() {
 
   # --- 4. every gate has a mutation ----------------------------------------
   # Explicit floor: zero gates found would pass by vacuity (a rename, an indentation change).
-  local gates; gates="$(grep -oE '^gate_[A-Z]+' "$kit/bin/sdd" | sed 's/^gate_//' | sort -u)"
-  n="$(grep -c . <<< "$gates")"
+  #
+  # ⚠️ The floor was UNREACHABLE until the r2 review of 20260818-lote-facil, and by the exact
+  # mechanism it was written against: the two captures below are how `grep` reports "no match",
+  # and under this file's `set -e` a capture that reports non-zero kills the runner AT THE
+  # ASSIGNMENT. Renaming the gates — the scenario this comment names — made `sdd health` stop
+  # dead after check 2, rc 1, without ever saying `found 0 gates`. Measured. `grep -c` is the
+  # second half of the same pair and returns 1 precisely when it counts ZERO, so guarding only
+  # the line above would have moved the death one line down.
+  local gates; gates="$(grep -oE '^gate_[A-Z]+' "$kit/bin/sdd" | sed 's/^gate_//' | sort -u || true)"
+  n="$(grep -c . <<< "$gates" || true)"
   if [ "$n" -ne 8 ]; then
     health_bad "found $n gates in bin/sdd, expected 8 — new/renamed gate: update the floor here"
   else
@@ -1792,8 +1832,21 @@ cmd_health() {
   fi
 
   # --- 5. drift load_config() ↔ config/schema.md ----------------------------
-  local documented; documented="$(grep -oE '^\| `[A-Z0-9_]+`' "$kit/config/schema.md" | tr -d '|` ' | sort -u)"
-  local keys; keys="$(health_default_keys)"
+  # Both captures guarded for the reason spelled out at check 4, and both measured dying: a
+  # reformatted key table in schema.md killed the runner on the first line, a load_config() that
+  # lost its `:=` defaults killed it on the second — three ok lines and out, rc 1, silent.
+  #
+  # `keys` then carries a FLOOR, and the floor is the other half of the fix. Guarding a capture
+  # turns "dies loudly by accident" into "carries on with an empty string", and an empty `keys`
+  # makes the loop below iterate zero times: check 5 half-blind and check 7 fully blind, both
+  # reporting nothing and both looking exactly like a clean kit. An abort at least stopped the
+  # line; silent vacuity does not. `documented` needs no floor — empty makes every key land in
+  # `key-without-doc`, which the ratchet says out loud.
+  local documented; documented="$(grep -oE '^\| `[A-Z0-9_]+`' "$kit/config/schema.md" | tr -d '|` ' | sort -u || true)"
+  local keys; keys="$(health_default_keys || true)"
+  if [ -z "$keys" ]; then
+    health_bad "load_config() declares no defaulted key — checks 5 and 7 have nothing to measure"
+  fi
   for k in $keys; do
     grep -qxF "$k" <<< "$documented" || health_finding "key-without-doc $k"
   done
@@ -1805,8 +1858,18 @@ cmd_health() {
   local subcmds; subcmds="$(awk '/^main\(\) \{/ { inside = 1 } inside && /^\}/ { exit }
       inside && match($0, /^ +[a-z|+-]+\)/) {
         label = substr($0, RSTART, RLENGTH); gsub(/[ )]/, "", label); print label
-      }' "$kit/bin/sdd" | tr '|' '\n' | grep -vE '^-' | sort -u)"
-  local help_out; help_out="$( "$kit/bin/sdd" help 2>&1 )"
+      }' "$kit/bin/sdd" | tr '|' '\n' | grep -vE '^-' | sort -u || true)"
+  # `sdd help` is the one capture here whose command is the runner itself: it exits 0 today, and
+  # the day a refactor makes it exit non-zero this check would take the whole command down with
+  # it rather than reporting anything. Guarded like the rest; an empty `help_out` then lands every
+  # subcommand in `cmd-not-in-help`, which the ratchet says out loud.
+  local help_out; help_out="$( "$kit/bin/sdd" help 2>&1 || true )"
+  # Floor, same argument as `keys` at check 5: a `main()` whose case labels stop matching leaves
+  # this loop with nothing to iterate, and a check measuring nothing prints exactly what a clean
+  # kit prints.
+  if [ -z "$subcmds" ]; then
+    health_bad "no subcommand parsed out of main() — check 6 has nothing to measure"
+  fi
   for k in $subcmds; do
     # Appearing as `sdd <cmd>` anywhere in the help is enough: some share a line
     # (`sdd help | sdd version`), and demanding a fixed column would fail a documented command.
@@ -1821,7 +1884,7 @@ cmd_health() {
   # debt. A comment line does not count as a read either, for the same reason: quoting the key in
   # an explanation would make it "live" and hide exactly what it represents.
   local body; body="$(awk '/^load_config\(\) \{/ { inside = 1 }
-      inside && /^\}/ { inside = 0; next } !inside && !/^[[:space:]]*#/' "$kit/bin/sdd")"
+      inside && /^\}/ { inside = 0; next } !inside && !/^[[:space:]]*#/' "$kit/bin/sdd" || true)"
   for k in $keys; do
     grep -qE "\b${k}\b" <<< "$body" || health_finding "var-never-read $k"
   done
@@ -1846,12 +1909,33 @@ cmd_health() {
 health_provenance() {
   local gates="$SDD_HOME/tests/check-gates.sh" tpl line fix skipped=0 checked=0
 
-  # qa-execution report: the Status line, with the timestamp made concrete in the fixture
+  # ⚠️ Every `grep` below carries `|| true`, and this is the site where the family of silent
+  # aborts costs the most. `-f "$tpl"` proves the FILE is there; it proves nothing about the
+  # LINE. A skill that renames the field it pins — `- **Started:**` becoming anything else — is
+  # not a hypothetical: it is the precise drift this whole function exists to catch, and it is
+  # the way skills actually change. Unguarded, the grep found nothing, returned 1, and `set -e`
+  # killed the runner ON THE ASSIGNMENT: `sdd health` printed three ok lines and exited 1 without
+  # the words `fixture diverged`, without the ratchet, and without a verdict. The countermeasure
+  # for the most expensive bug in the kit's history went silent exactly when it fired. Measured
+  # in the r2 review of 20260818-lote-facil, against both skills, both directions; guarded by
+  # the `abort:` assertions of check-health.sh and by mut_HEALTH_provenance_line_aborts.
+  # Empty is the right value and needs no branch of its own: an absent line can never equal the
+  # fixture, so the existing comparison reports it as the divergence it is.
+  #
+  # qa-execution report: the Status line, with the timestamp made concrete in the fixture.
+  # ⚠️ That sentence is a RANGE ANCHOR, not decoration: mut_HEALTH_report_provenance_blind and
+  # mut_HEALTH_provenance_blind address themselves between it and the `registry bug` line below,
+  # and rewriting this comment without it reported both as CATALOGUE-BROKEN — measured, when the
+  # r2 review first replaced the comment wholesale.
   tpl="$HOME/.claude/skills/qa-execution/assets/report-template.md"
   if [ -f "$tpl" ]; then
-    line="$(grep -m1 -- '- \*\*Started:\*\*' "$tpl")"
-    fix="$(grep -m1 -- '- \*\*Started:\*\*' "$gates" | sed 's/2026-01-01T10:00:00Z/<ISO timestamp>/')"
-    if [ "$line" = "$fix" ]; then checked=$((checked + 1))
+    line="$(grep -m1 -- '- \*\*Started:\*\*' "$tpl" || true)"
+    fix="$(grep -m1 -- '- \*\*Started:\*\*' "$gates" | sed 's/2026-01-01T10:00:00Z/<ISO timestamp>/' || true)"
+    # `-n` FIRST, and it is not decoration: with the guard above, two ABSENCES compare equal, so
+    # a skill and a fixture that both dropped the line would read as a match and increment
+    # `checked`. That is the fail-open the guard would have bought at the price of the abort —
+    # the same trade the r1 round of this mission made in check-todo.sh and had to undo.
+    if [ -n "$line" ] && [ "$line" = "$fix" ]; then checked=$((checked + 1))
     else health_bad "report fixture diverged from the skill:
          skill:   $line
          fixture: $fix"; fi
@@ -1860,9 +1944,9 @@ health_provenance() {
   # registry bug: the Status line with the enum legend
   tpl="$HOME/.claude/skills/qa-report/assets/bug-template.md"
   if [ -f "$tpl" ]; then
-    line="$(grep -m1 -- '- \*\*Status:\*\*' "$tpl")"
-    fix="$(grep -m1 -- '- \*\*Status:\*\* open' "$gates")"
-    if [ "$line" = "$fix" ]; then checked=$((checked + 1))
+    line="$(grep -m1 -- '- \*\*Status:\*\*' "$tpl" || true)"
+    fix="$(grep -m1 -- '- \*\*Status:\*\* open' "$gates" || true)"
+    if [ -n "$line" ] && [ "$line" = "$fix" ]; then checked=$((checked + 1))
     else health_bad "bug fixture diverged from the skill:
          skill:   $line
          fixture: $fix"; fi
@@ -1894,7 +1978,18 @@ health_provenance() {
     else checked=$((checked + 1)); fi
   else skipped=$((skipped + 1)); fi
 
-  if [ "$skipped" -gt 0 ]; then
+  # The summary reads `checked` and `skipped`, and it may not claim the third state. A DIVERGED
+  # fixture increments neither counter — it went to `health_bad` — so with three skills installed
+  # and one diverged the old rubric fell through to the `else` and printed `all 3 fixtures match
+  # the installed skills` on the line right after saying one of them did not. Unreachable until
+  # the r2 review of 20260818-lote-facil guarded the two `grep` captures above, because the run
+  # used to die before printing anything at all; guarding them turned a silent abort into a loud
+  # lie, and a lie in the summary of the provenance check is worse than either. Three states,
+  # three sentences, and the `all 3` wording is reserved for the one world where it is true.
+  local diverged=$(( 3 - checked - skipped ))
+  if [ "$diverged" -gt 0 ]; then
+    ok "provenance: $checked fixture(s) match, $diverged diverged, $skipped skipped"
+  elif [ "$skipped" -gt 0 ]; then
     ok "provenance: $checked fixture(s) checked, $skipped skipped (skill not installed)"
   else
     ok "provenance: all 3 fixtures match the installed skills"

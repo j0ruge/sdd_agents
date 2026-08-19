@@ -717,6 +717,144 @@ PROBE_OUT="$( policy_report "$PROBE_ROOT" 2>&1 )"; PROBE_RC=$?
 policy_report "$ROOT"
 
 # ---------------------------------------------------------------------------
+# guard: no capture in the `sdd health` region may abort the run
+#
+# The rule the four `abort:` assertions above cannot carry, and the reason it is written as a
+# RULE and not as a fifth, sixth and seventh probe. `bin/sdd` runs under `set -euo pipefail`, so
+# `x="$(cmd)"` kills the process AT THE ASSIGNMENT the moment `cmd` reports non-zero — and for
+# `grep`, `find` and a `pipefail` pipeline, "non-zero" is simply "found nothing". Every
+# `health_bad` written below such a line is dead code, and `sdd health` answers the one question
+# it exists for by saying nothing at all.
+#
+# The mission 20260818-lote-facil closed FIVE of these one at a time and declared the family
+# swept. The r2 review of that same mission then found ELEVEN more still live, in the same
+# command, three of them reproduced end to end: renaming the gates made the run stop after check
+# 2 without ever printing the `found 0 gates` its own comment promised; reformatting the key
+# table of config/schema.md stopped it after check 4; and a skill that renamed the field
+# `health_provenance` pins killed it in exactly the case that function exists to report.
+#
+# That is the lesson this block encodes: a per-site probe proves the sites that have a probe and
+# says nothing about the twelfth. Enumerating the region instead makes the class unreinstatable —
+# a future editor who writes a bare capture here fails the suite on the line they wrote, without
+# anyone having to think of the world that would have exposed it. The mutation catalogue reaches
+# it because it reads the runner that check-mutation.sh sabotages, not a copy frozen in here.
+#
+# The statement is joined across lines up to its closing `)"`, so a guard living on a
+# continuation line — which is how the `find` of health_provenance is written — counts. Joining
+# by PAREN DEPTH was tried first and rejected: the region contains awk programs whose regexes
+# carry unbalanced `)`, and a depth counter reads those as an unterminated statement.
+# ---------------------------------------------------------------------------
+CAPTURE_DESC='guard: every capture in the `sdd health` region is protected from set -e'
+
+# Prints one line per unguarded capture, `<line>: <text>`. Region is anchored on comment and
+# function text, never on line numbers, so it does not rot at the first refactor.
+health_captures() {
+  awk '
+    /^# Sensor of the KIT/ { inside = 1 }
+    inside && /^cmd_status\(\) \{/ { exit }
+    !inside { next }
+    # An open statement swallows lines until its closing `)"`.
+    open { acc = acc " " $0; if ($0 ~ /\)"/) { emit() } ; next }
+    # `[^(]` after `$(` is what keeps arithmetic `$((...))` — the HEALTH_FAILS and checked/skipped
+    # counters — out of the census. Without it every `n=$((n + 1))` reads as an unguarded capture
+    # and the rule fails closed on correct code, which is how a rule gets deleted.
+    /[A-Za-z_][A-Za-z0-9_]*="?\$\([^(]/ {
+      start = FNR; acc = $0; open = 1
+      if ($0 ~ /\)"/) { emit() }
+    }
+    function emit() {
+      total++
+      if (acc !~ /\|\|[ \t]*(true|:|return|rc=)/) printf "%d: %s\n", start, substr(acc, 1, 100)
+      open = 0; acc = ""
+    }
+    END { printf "TOTAL %d\n", total }
+  ' "$1"
+}
+
+# Floor against vacuity, and it is the only thing standing between this rule and a silent pass:
+# if either anchor rots the region is empty, `health_captures` reports nothing, and "no unguarded
+# capture" is exactly what a clean kit looks like. The number is a floor and not an equality so
+# that adding a guarded capture does not fail the suite of the mission that added it.
+CAPTURE_FLOOR=12
+
+capture_report() {
+  local out total offenders
+  out="$(health_captures "$1/bin/sdd")"
+  total="$(sed -n 's/^TOTAL //p' <<< "$out")"
+  offenders="$(grep -v '^TOTAL ' <<< "$out")"
+  if [ -z "$total" ] || [ "$total" -lt "$CAPTURE_FLOOR" ]; then
+    fail "$CAPTURE_DESC" \
+         "at least $CAPTURE_FLOOR capture(s) censused in the health region" \
+         "${total:-none} — the region anchors rotted, so this rule measured nothing"
+    return 1
+  fi
+  if [ -n "$offenders" ]; then
+    fail "$CAPTURE_DESC" \
+         "every capture guarded by '|| true', '|| :', '|| return' or '|| rc=\$?'" \
+         "$(tr '\n' ' ' <<< "$offenders")"
+    return 1
+  fi
+  pass "$CAPTURE_DESC ($total censused)"
+  return 0
+}
+
+# Probes over the PARSER and over the CALLER, because this repo has already shipped a sensor
+# whose probes proved the parser while the path from "a defect exists" to "the suite is red" had
+# no probe at all. `capture_report` is invoked for real below on the live runner; here it is
+# invoked on synthetic regions whose answer is known.
+CAPPROBE="$WORK/capguard"; mkdir -p "$CAPPROBE/bin"
+cap_world() { printf '# Sensor of the KIT\n%s\ncmd_status() {\n' "$1" > "$CAPPROBE/bin/sdd"; }
+cap_offenders() { health_captures "$CAPPROBE/bin/sdd" | grep -cv '^TOTAL '; }
+cap_total() { health_captures "$CAPPROBE/bin/sdd" | sed -n 's/^TOTAL //p'; }
+
+cap_world '  x="$(grep foo bar)"'
+[ "$(cap_offenders)" = 1 ] || broken "capture probe 'a bare capture' was not reported — the rule reads nothing"
+cap_world '  x="$(grep foo bar || true)"'
+[ "$(cap_offenders)" = 0 ] || broken "capture probe 'a guarded capture' was reported — the rule refuses correct code"
+cap_world '  x="$( cd . && ls )" || rc=$?'
+[ "$(cap_offenders)" = 0 ] || broken "capture probe '|| rc=\$?' was reported — the guard the suite capture uses is not recognised"
+# The continuation case, and the reason the join exists at all: written without it, the real
+# `find` of health_provenance reads as unguarded and the rule fails closed on the live runner.
+cap_world '  x="$(find /tmp -name z \
+         2>/dev/null | tail -1 || true)"'
+[ "$(cap_offenders)" = 0 ] || broken "capture probe 'guard on the continuation line' was reported — the statement join does not span lines"
+cap_world '  x="$(find /tmp -name z \
+         2>/dev/null | tail -1)"'
+[ "$(cap_offenders)" = 1 ] || broken "capture probe 'unguarded across two lines' was not reported — the join swallows the defect with the statement"
+# Arithmetic is not a capture. Unprobed, `[^(]` looks like a typo to the next reader and gets
+# removed, and the rule then reports every counter in the region.
+cap_world '  n=$((n + 1))
+  HEALTH_FAILS=$((HEALTH_FAILS + 1))'
+[ "$(cap_offenders)" = 0 ] && [ "$(cap_total)" = 0 ] \
+  || broken "capture probe 'arithmetic expansion' was counted as a capture — the rule fails closed on every counter"
+# The region is bounded at BOTH ends: text before the header and after cmd_status is invisible.
+cap_world '  x="$(grep foo bar || true)"'
+printf '  y="$(grep after censo)"\n' >> "$CAPPROBE/bin/sdd"
+[ "$(cap_offenders)" = 0 ] || broken "capture probe 'after cmd_status' was censused — the region has no end anchor"
+
+# And the caller: a world with an offender must make `fails` grow, and a world with none must
+# not. Run in a subshell so the FAIL text and the increment die with it.
+cap_world '  a="$(grep 1 f || true)"
+  b="$(grep 2 f || true)"
+  c="$(grep 3 f)"'
+CAP_FLOOR_KEEP="$CAPTURE_FLOOR"
+CAPTURE_FLOOR=3
+( capture_report "$CAPPROBE" >/dev/null 2>&1 ) \
+  && broken "the capture verdict passed a world holding an unguarded capture — the rule discriminates and the report does not say so"
+cap_world '  a="$(grep 1 f || true)"
+  b="$(grep 2 f || true)"
+  c="$(grep 3 f || true)"'
+( capture_report "$CAPPROBE" >/dev/null 2>&1 ) \
+  || broken "the capture verdict refused a world where every capture is guarded — a rule that refuses every world distinguishes nothing"
+# The floor itself, over the same clean world: a census below it is not a pass.
+CAPTURE_FLOOR=99
+( capture_report "$CAPPROBE" >/dev/null 2>&1 ) \
+  && broken "the capture verdict passed a census below its own floor — the anti-vacuity floor is decoration"
+CAPTURE_FLOOR="$CAP_FLOOR_KEEP"
+
+capture_report "$ROOT"
+
+# ---------------------------------------------------------------------------
 echo
 if [ "$fails" -eq 0 ]; then
   echo "sdd health discriminates"

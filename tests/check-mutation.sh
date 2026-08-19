@@ -679,6 +679,17 @@ mut_AUTONOMY_all_repos_ignored() {
 #
 # Re-anchored with the `--path-format=absolute` rewrite: it used to replace the `common=` line,
 # which that rewrite deleted.
+# The shape guard drops, and a git older than 2.31 gets to name the repository. `rev-parse` ECHOES
+# an option it does not know and still exits 0, so the answer is two lines — the flag, then the
+# relative common dir — and neither `|| return 0` (rc is 0) nor `-n` (not empty) refuses it. Caught
+# by the pre-2.31 differential pair of check-autonomy.sh, which reads the identity back out of the
+# runner under a shim and demands it be the repo or nothing, never the flag. The `case` and its
+# `esac` go together: removing the opener alone leaves invalid bash, which is a harness failure and
+# not a capture.
+mut_LEDGER_repo_root_shape_blind() {
+  perl -0pi -e 's@  case "\$gitdir" in\n    /\*\) \[ "\$gitdir" = "\$\{gitdir%%\$.\\n.\*\}" \] \|\| return 0 ;;\n    \*\)  return 0 ;;\n  esac\n@@' "$1"
+}
+
 mut_LEDGER_repo_root_toplevel() {
   sed -i 's@^  gitdir="\$( git -C "\$start" rev-parse --path-format=absolute --git-common-dir 2>/dev/null )" || return 0$@  printf "%s" "$( git -C "$start" rev-parse --show-toplevel 2>/dev/null )"; return 0@' "$1"
 }
@@ -909,6 +920,27 @@ mut_KAIZEN_prompt_series_unflagged() {
 # The `@` delimiter is not a taste: with sed's usual `|`, the substitution opens with the literal
 # text `s|grep -q`, and tests/check-pipefail.sh reads that as a writer piped into `grep -q` — the
 # SIGPIPE bug it exists to forbid. It was right to: a human reading `|grep -q` sees a pipe too.
+# The two guards the r2 review of 20260818-lote-facil added to the family the mission thought it
+# had closed. `sdd health` runs under `set -euo pipefail`, so a capture whose command reports
+# non-zero — and for grep, "no match" IS non-zero — kills the runner AT THE ASSIGNMENT, leaving
+# every health_bad below it as dead code. The mission fixed five sites one at a time; eleven more
+# were still live, three of them reproduced end to end. Both mutants below are caught by the
+# `guard:` rule of check-health.sh, which censuses the whole region instead of probing one site.
+#
+# ⚠️ Both carry a RANGE ADDRESS and neither may lose it: `| sort -u || true)"` occurs three times
+# in cmd_health alone, so an unaddressed `sed` would sabotage two extra sites in silence — the
+# defect this same review round found twice in the pre-existing catalogue.
+mut_HEALTH_gates_capture_aborts() {
+  sed -i '/# --- 4. every gate has a mutation/,/# --- 5. drift load_config/ s@| sort -u || true)"@| sort -u)"@' "$1"
+}
+
+# The provenance line read, which is the site where the silence cost the most: `-f "$tpl"` proves
+# the file is there and nothing about the LINE, so a skill that renamed the field it pins killed
+# the run in exactly the case health_provenance exists to report.
+mut_HEALTH_provenance_line_aborts() {
+  sed -i '/# qa-execution report: the Status line/,/# registry bug: the Status line/ s@"\$tpl" || true)"@"$tpl")"@' "$1"
+}
+
 mut_HEALTH_ratchet_one_way() {
   sed -i 's@grep -qxF "\$line" <<< "\$HEALTH_FINDINGS"@true@' "$1"
 }
@@ -931,7 +963,7 @@ mut_HEALTH_ratchet_one_way() {
 # they read, so neither could honestly carry a mutation. Now that both have one, the range here
 # earns its keep three times over.
 mut_HEALTH_provenance_blind() {
-  sed -i '/# registry bug: the Status line/,/# codereview grade table/ s|    if \[ "\$line" = "\$fix" \]; then checked|    if true; then checked|' "$1"
+  sed -i '/# registry bug: the Status line/,/# codereview grade table/ s|    if \[ -n "\$line" \] && \[ "\$line" = "\$fix" \]; then checked|    if true; then checked|' "$1"
 }
 
 # The FIRST of the three comparisons goes blind: the qa-execution report fixture agrees with any
@@ -942,7 +974,7 @@ mut_HEALTH_provenance_blind() {
 # a time: assertion 4 reads the qa-report comparison, which this leaves untouched, and every other
 # assertion in that file runs with no skill installed at all.
 mut_HEALTH_report_provenance_blind() {
-  sed -i '/# qa-execution report: the Status line/,/# registry bug: the Status line/ s|    if \[ "\$line" = "\$fix" \]; then checked|    if true; then checked|' "$1"
+  sed -i '/# qa-execution report: the Status line/,/# registry bug: the Status line/ s|    if \[ -n "\$line" \] && \[ "\$line" = "\$fix" \]; then checked|    if true; then checked|' "$1"
 }
 
 # The THIRD comparison goes blind: the codereview grade table may grow a criterion the gate fixture
@@ -1264,6 +1296,7 @@ CATALOG=(
   KAIZEN_adr_0003_orphan
   KAIZEN_degenerate_axis_blind
   AUTONOMY_all_repos_ignored
+  LEDGER_repo_root_shape_blind
   LEDGER_repo_root_toplevel
   LEDGER_no_repo_counted_as_local
   KAIZEN_prompt_series_unflagged
@@ -1276,6 +1309,8 @@ CATALOG=(
   KAIZEN_degenerate_axis_session_unit
   KAIZEN_degenerate_axis_window_sorted
   KAIZEN_series_rc_dropped
+  HEALTH_gates_capture_aborts
+  HEALTH_provenance_line_aborts
   HEALTH_ratchet_one_way
   HEALTH_provenance_blind
   HEALTH_report_provenance_blind
