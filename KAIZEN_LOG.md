@@ -4,6 +4,70 @@ Registro de melhorias com **antes/depois medido**. Sem número, não entra.
 
 ---
 
+## 2026-08-19 — O `sdd health` para de morrer calado, duas classes somem do repo, e o lote barato prova que barato não é
+
+**Problema (Gemba):** o comando que existe para responder *"o kit ainda mede o que diz medir?"*
+**morria na atribuição** e não dizia nada. `cmd_health` capturava saída com `out="$(cmd)"` sob
+`set -euo pipefail`, então qualquer `cmd` com rc≠0 matava o script uma linha antes do `health_bad`
+que existia para relatar — e para `grep`/`find`/pipeline com `pipefail`, "rc≠0" é só "não achou
+nada". Quatro sondas com o runner real (kit copiado, controle verde antes de cada sabotagem)
+mostraram o pior caso: **com a suíte vermelha, `sdd health` imprimia uma linha de cabeçalho e saía
+rc 1**, e os quatro checks seguintes nunca rodavam. A suíte vermelha é exatamente o caso que ele
+existe para relatar. Junto vinham 17 outros achados do backlog barato, agrupados **por mecanismo**.
+
+**Contramedida:** cinco incrementos, cada um varrendo uma família inteira com a asserção morando
+num sensor que já existia — e a regra transversal de que asserção nova entra **com mutação**.
+
+| | Antes (`9207b4d` = `main`) | Depois (HEAD `chore/lote-facil`) |
+|---|---|---|
+| `sdd health` com a suíte vermelha | **uma linha, rc 1**; checks 2–5 nunca rodam | diz `suite red` **e segue** — os 4 modos de falha ditos em voz alta |
+| Capturas desguardadas na região do `sdd health` | 5 conhecidas — e 11 que ninguém tinha visto | **0 de 16 censuradas**, com a regra `guard:` enumerando a região inteira |
+| `cd` relativo sem `CDPATH=''` | consertado em 1 função; **19 sítios vivos** no repo | **0**, com scanner durável (RULE 2 do `check-pipefail.sh`) |
+| `ledger_repo_root` | 2 `cd` + `pwd -P` + guarda de `CDPATH` | caminho rápido sem `cd` (`--path-format=absolute`), grafia antiga como fallback pré-2.31 |
+| Artefato com gate e **sem** template | 1 — o `40-review-r<N>.md` | **0** — `templates/review.md`, 23 asserções derivadas do próprio `gate_REVIEW` |
+| Asserções `abort:` / `cdpath:` / `output:` / `covered:` / `rule:` / `guard:` | 0 / 2 / 6 / 0 / 0 / 0 | **4 / 4 / 9 / 5 / 5 / 1** |
+| Catálogo de mutação | `score: 81 caught, 0 known gap(s), of 81` — **verde** | `score: 100 caught, 0 known gap(s), of 101` — **VERMELHA** (abaixo) |
+| Achados abertos no `TODO.md` | 56 | **74** — 18 fechados, 36 nascidos, catraca movida em todo commit |
+| `sdd preflight` em git < 2.31 | não olhava | `warn` com o remédio certo; o kit responde correto pelo fallback |
+
+**O número que reprova, e ele fica aqui porque medir só o que deu certo é o oposto de kaizen:**
+a suíte está **vermelha no HEAD**. `mut_LEDGER_repo_root_cdpath_leak` sobrevive — ele sabota
+apenas o **caminho rápido**, e o fallback que o conserto da r2 (`75c9d2a`) acrescentou **repara a
+sabotagem**: a guarda de forma esvazia o valor envenenado e o fallback resolve a identidade certa
+com `CDPATH=''`. Reproduzido em sandbox com o `sed` provado antes de qualquer conclusão: sã e
+mutante dão saída **byte a byte idêntica** no `check-autonomy.sh`, rc 0 nas duas. A asserção virou
+decoração — o modo de falha que o catálogo existe para pegar, e ele pegou. Registrado no `TODO.md`
+com a reprodução; a linha para aqui.
+
+**Custo:** **US$ 176,48** em 11 sessões de fase (5 EXEC + 1 re-entrada + 1 QA + 4 REVIEW), contra
+US$ 48–88 das seis missões anteriores do kit sobre si mesmo. **Duas a três vezes mais caro**, e o
+motivo é medido: 4 sessões de REVIEW a ~US$ 34 cada, porque o diff que a revisão tinha de ler era
+de 28 arquivos e +3.566 linhas.
+
+**As três lições, escritas para não renascerem:**
+
+1. **Probe por sítio prova os sítios que têm probe.** O I1 fechou cinco capturas uma a uma e
+   declarou a família varrida; a r2 achou **onze** ainda vivas no mesmo comando, três reproduzidas
+   ponta a ponta. A saída não foi um sexto probe — foi **enumerar a região**, que é o que torna a
+   classe irreinstaurável: quem escrever uma captura pelada ali reprova na linha que escreveu.
+   Vale igual para o `cd` relativo: o item do backlog contava 14 sítios e havia 19.
+2. **A re-derivação acha MAIS trabalho, não menos, e o plano tem de contar com isso.** As 18
+   âncoras foram re-derivadas no planejamento (8 estavam podres, a pior por ~615 linhas) e mesmo
+   assim **cada incremento achou sítio extra**: I1 fechou 5 e não 4, I2 fechou 19 e não 14, I3
+   precisou de 5 mutações e não 3, I4 de 7 e não 5. Alvo de backlog escrito como número absoluto
+   (56 → 38) é frágil por construção: o lote fechou seus 18 exatamente como prometido e o arquivo
+   terminou em 74, porque os instrumentos da própria missão acharam 36 coisas novas — 29 delas numa
+   rodada de revisão só. O que o plano previu certo foi o **risco**; o que ele escreveu errado foi
+   a **métrica**.
+3. **Conserto que restaura um caminho antigo tem de restaurar a mutação junto.** A r2 estava certa
+   em trazer a grafia velha de volta como fallback — devolver vazio era um segundo defeito com a
+   roupa do primeiro, e matava o ledger em git 2.25/2.30. O que faltou foi perguntar **o que o
+   caminho novo tornou inobservável**: com o fallback consertando a sabotagem, o mutante que
+   guardava a classe deixou de medir. Caminho de código que só roda num ambiente que a máquina de
+   teste não tem precisa da mutação sabotando **as duas grafias**, ou de duas entradas.
+
+---
+
 ## 2026-08-18 — O Lote 0 do backlog barato: dez itens saem, e três deles por decisão, não por código
 
 **Problema (Gemba):** a triagem de 2026-08-17 (`docs/handoffs/lote-facil-20260817.md`) separou dos
