@@ -351,6 +351,12 @@ PROBES=0
 PROBES_SKIPPED=0
 FAILS=0
 SELFTEST_RC=0
+# Set by selftest() at its end, read by check_file: see the coupling there. It is the state
+# that makes `selftest ||` undeletable from the bare dispatch.
+SELFTEST_RAN_IN_PROC=0
+# 1 only on the explicit `--check <file>` path, which names its file and makes no claim about the
+# parser, so it is exempt from that coupling.
+EXPLICIT_MODE=0
 
 # FAILS is bumped by the assertions THEMSELVES, independently of fail_rc, and cross-checked at the
 # end by direct assignment. fail_rc was a single point of failure: neutering it to `return 0` let
@@ -419,8 +425,86 @@ assert_rc() {
   FAILS=$((FAILS + 1)); fail_rc 92
 }
 
+# --- negative controls over the assertion helpers themselves ------------------------------------
+# The three helpers above are the ONLY thing standing between a broken parser and a green run, and
+# the r2 review of 20260818-lote-facil measured that nothing stood behind them: replacing the body
+# of `assert_clean`, `assert_says` and `assert_rc` with `return 0` — while still bumping PROBES —
+# left this file printing `88 probe(s), the sensor measures what it claims`, rc 0. The floors count
+# CALL SITES, and every call site was still there; nothing probed the VERDICT inside the helper.
+#
+# So each helper is run against a world whose answer is known, and the ground truth for that world
+# is taken from `lint_todo` itself rather than assumed — a control over a fixture that turned out
+# to be clean would be vacuous in exactly the direction being tested. The counters are saved and
+# restored, so the controls cost the report nothing.
+helper_selfcheck() {
+  local box bad good msg cfail=0
+  box="$(mktemp -d "${TMPDIR:-/tmp}/sdd-todo-helperprobe-XXXXXX")"
+  if [ -z "$box" ] || [ ! -d "$box" ]; then
+    printf '  SELFTEST FAIL  could not create a temp dir for the helper controls\n' >&2
+    FAILS=$((FAILS + 1)); fail_rc 89; return 0
+  fi
+  cat > "$box/bad.md" <<'EOF'
+## Aberto
+
+- [ ] a finding with no bold title, no anchor and no date
+EOF
+  cat > "$box/good.md" <<'EOF'
+## Aberto
+
+- [ ] **A finding with every field in place** — `bin/sdd:42` — why it matters, in one clause.
+  Direction: what to do about it. — found by `sdd-qa` in mission `20260816-probe` (2026-08-16)
+EOF
+  # Ground truth from the parser itself, never assumed: a control over a fixture that turned out
+  # clean would be vacuous in exactly the direction being tested.
+  bad="$(lint_todo "$box/bad.md" 8)"; good="$(lint_todo "$box/good.md" 8)"
+  if [ -z "$bad" ] || [ -n "$good" ]; then
+    printf '  SELFTEST FAIL  the helper controls are vacuous: the bad world lints clean or the good one does not\n' >&2
+    FAILS=$((FAILS + 1)); fail_rc 89; rm -rf "$box"; return 0
+  fi
+
+  # Each control reads the helper's own MESSAGE from a subshell. That is the whole design: a first
+  # draft let the helpers bump FAILS for real and restored the counters afterwards — and the
+  # restore threw away the verdict it had just recorded, so all three neutered helpers passed. In
+  # a subshell the counters cannot be perturbed, so there is nothing to restore and no way to lose
+  # the answer. `say()` is not used: the controls must not print unless something is wrong.
+  msg="$(assert_clean "$box/bad.md" 8 '<negative control>' 2>&1)"
+  case "$msg" in *'expected no violation'*) ;; *) cfail=$((cfail + 1))
+    printf '  SELFTEST FAIL  assert_clean accepted a file that lints dirty — the helper is a no-op and every probe using it proves nothing\n' >&2 ;; esac
+
+  msg="$(assert_says "$box/bad.md" 8 'a substring no message contains' '<negative control>' 2>&1)"
+  case "$msg" in *'expected a violation saying'*) ;; *) cfail=$((cfail + 1))
+    printf '  SELFTEST FAIL  assert_says accepted a message that does not contain what it asked for — the helper is a no-op\n' >&2 ;; esac
+
+  msg="$(assert_rc 77 '<negative control>' true 2>&1)"
+  case "$msg" in *'expected rc 77, got 0'*) ;; *) cfail=$((cfail + 1))
+    printf '  SELFTEST FAIL  assert_rc accepted rc 0 where it demanded 77 — the helper is a no-op\n' >&2 ;; esac
+
+  # And the other direction, or a helper that fails on EVERY world would pass the three above.
+  msg="$(assert_clean "$box/good.md" 8 '<positive control>' 2>&1)$(assert_says "$box/bad.md" 8 'does not open with' '<positive control>' 2>&1)$(assert_rc 0 '<positive control>' true 2>&1)"
+  [ -z "$msg" ] || { cfail=$((cfail + 1))
+    printf '  SELFTEST FAIL  a helper accused a world it should accept — a rule that refuses everything distinguishes nothing: %s\n' "$msg" >&2; }
+
+  [ "$cfail" -eq 0 ] || { FAILS=$((FAILS + cfail)); fail_rc 90; }
+  rm -rf "$box"
+  HELPER_CONTROLS_RAN=1
+}
+
 selftest() {
   local box
+  # The bare-dispatch probe below re-enters this file with no arguments, which is the path that
+  # runs `selftest || exit $?; check_file`. Answering here — before any probe — is what keeps that
+  # from recursing, and makes the poisoned run report a rc no clean world produces.
+  case "${SDD_TODO_SELFTEST_POISON:-}" in
+    '') ;;
+    *)
+      printf '  SELFTEST FAIL  poisoned on purpose, so a probe can prove the bare dispatch runs the selftest\n' >&2
+      return 97 ;;
+  esac
+  HELPER_CONTROLS_RAN=0
+  helper_selfcheck
+  [ "$HELPER_CONTROLS_RAN" -eq 1 ] || {
+    printf '  SELFTEST FAIL  the helper controls did not run — the assertions below are unmeasured\n' >&2
+    FAILS=$((FAILS + 1)); fail_rc 89; }
   # An unchecked mktemp leaves $box empty, and every probe below then writes to /<name>.md —
   # the run would fail as "probe rejected" when the real cause was "no tmpdir".
   box="$(mktemp -d "${TMPDIR:-/tmp}/sdd-todo-selftest-XXXXXX")"
@@ -716,6 +800,31 @@ EOF
 
   assert_rc 93 "--check with an empty argument must not fall back to TODO.md" \
     bash "$SELF" --check ''
+
+  # The DISPATCH, and not just the functions it dispatches to. `''` is the branch the suite uses —
+  # `selftest || exit $?; check_file "$TODO"` — and r2 measured that deleting the `selftest ||`
+  # half of it went unnoticed: `check_file` alone answers 0 over a healthy TODO.md and the run
+  # looks identical. The poison makes the selftest report 97, a code no clean world produces, and
+  # the two probes are a pair: the first pays the floor — proving the poison is armed at all —
+  # before the second concludes anything about the path from it.
+  #
+  # These two do NOT close the deletion itself, and pretending otherwise is the failure this round
+  # exists to stop: delete `selftest ||` and the probes below never run, because they live inside
+  # the function that was just unhooked. What closes it is the coupling in check_file (see there) —
+  # missing state, not one more assertion that the same edit could take with it.
+  # Guarded on the poison being ABSENT, and that guard is not decoration: it is what makes the
+  # recursion impossible by construction rather than by the branch these probes are testing. An
+  # adversarial pass deleted that branch and the suite HUNG — the child ran the full selftest,
+  # which spawned another child in the same world, forever. A sensor that hangs is worse than one
+  # that lies, and this repo has just spent three REVIEW sessions on suites that never returned.
+  if [ -z "${SDD_TODO_SELFTEST_POISON:-}" ]; then
+    assert_rc 97 "the poison is armed: --selftest reports it" \
+      env SDD_TODO_SELFTEST_POISON=1 bash "$SELF" --selftest
+    assert_rc 97 "the bare dispatch runs the selftest and propagates its rc" \
+      env SDD_TODO_SELFTEST_POISON=1 bash "$SELF"
+  else
+    PROBES_SKIPPED=$((PROBES_SKIPPED + 2))
+  fi
 
   # `+8` passes bash's `[ -gt 0 ]` but explodes in `$((10#+8))`; `08` passes both and then dies in
   # `printf %d` as an invalid octal, announcing a cap it never enforced. The digit class and the
@@ -1148,6 +1257,7 @@ EOF
   # failed" to "the exit status is non-zero", so neutering either one alone still reddens the run.
   if [ "$FAILS" -ne 0 ] && [ "$SELFTEST_RC" -eq 0 ]; then SELFTEST_RC=92; fi
 
+  SELFTEST_RAN_IN_PROC=1
   [ "$SELFTEST_RC" -eq 0 ] && printf '  ok    selftest: %d probe(s), the sensor measures what it claims\n' "$PROBES"
   return "$SELFTEST_RC"
 }
@@ -1156,6 +1266,19 @@ EOF
 # invoke it through `--check` without recursing into itself.
 check_file() {
   local file="$1" cap="$2" n_items violations
+
+  # The coupling that makes `selftest ||` undeletable from the bare dispatch, and it is STATE and
+  # not an assertion on purpose. r2 measured the hole: drop the `selftest ||` half of the `''`
+  # branch and check_file alone answers `ok 74 finding(s)`, rc 0, over a healthy TODO.md — the run
+  # reads identical and every probe in this file has just been unhooked. An assertion could not
+  # close that, because the assertions live inside the function the same edit removes; what closes
+  # it is check_file refusing to speak on the bare path about a parser nothing measured.
+  # `--check` is the explicit mode and is exempt: it names its file and makes no such claim.
+  if [ "$EXPLICIT_MODE" -eq 0 ] && [ "$SELFTEST_RAN_IN_PROC" -eq 0 ]; then
+    printf '  FAIL  the bare path reached check_file without running the selftest — the parser\n' >&2
+    printf '        below is unmeasured, so its verdict on %s means nothing\n' "$(basename -- "$file")" >&2
+    return 98
+  fi
 
   # `-r`, not `-f`: an existing but unreadable file made awk print nothing, and "nothing" then
   # sailed through the floor as a `[` syntax error. Readability is checked where it can still be
@@ -1217,7 +1340,7 @@ case "${1:-}" in
   --selftest) selftest; exit $? ;;
   # `${2-$TODO}` and not `${2:-$TODO}`: an EMPTY argument is a caller passing an unset variable,
   # and defaulting it to TODO.md answered "ok" about a file the caller never named.
-  --check)    check_file "${2-$TODO}" "$CAP"; exit $? ;;
+  --check)    EXPLICIT_MODE=1; check_file "${2-$TODO}" "$CAP"; exit $? ;;
   '')         selftest || exit $?; check_file "$TODO" "$CAP"; exit $? ;;
   *)          printf '  FAIL  unknown option: %s (see the usage header)\n' "$1" >&2; exit 96 ;;
 esac
