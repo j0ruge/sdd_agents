@@ -1845,6 +1845,53 @@ cmd_health() {
     fi
   fi
 
+  # --- 2b. the TEST_CMD the GATES will run has to actually RUN something ----
+  # `tests/run-all.sh --list` exits 0 having executed nothing. That is the mode's contract and it
+  # is correct — what is not correct is that its output is indistinguishable from a suite that
+  # passed: a dozen step names and rc 0. As TEST_CMD it makes gate_EXEC, gate_QA and gate_REVIEW
+  # pass INSTANTLY, in every mission, forever, and every phase would certify itself against a run
+  # that never happened. Label instead of artifact, reached through the one key the whole pipeline
+  # trusts, and nothing in the kit said a word.
+  #
+  # Numbered 2b and not 3: the numbers of these blocks are cited from tests/check-health.sh and
+  # from the catalogue's own comments, and renumbering six of them to insert one is how a citation
+  # rots. It sits here, beside the other question about the suite, rather than at the end where
+  # append-only numbering would have put it.
+  #
+  # Read off the KIT's own .sdd/config.sh (tracked — only .sdd/logs/ is ignored) and never off
+  # $REPO_ROOT, for three reasons that agree: `sdd health` is the kit sensor, and its other eight
+  # checks all read $kit; `--list` is a flag of the KIT's suite, so this is where the danger lives
+  # and a target repo's `npm test` could not carry it; and resolving $REPO_ROOT here would make the
+  # check need a git repository, which neither the check-health.sh fixture nor the mutation sandbox
+  # is — it would die where it was written to speak.
+  #
+  # SOURCED, not grepped, because the value that matters is the one load_config() hands the gates,
+  # after expansion — and sourcing this file is what load_config() already does for every other
+  # command. In a subshell, so nothing here can reach the rest of the run.
+  local kit_cfg="$kit/.sdd/config.sh" kit_test_cmd
+  if [ ! -f "$kit_cfg" ]; then
+    health_bad "the kit at $kit has no .sdd/config.sh — health cannot say whether TEST_CMD runs anything"
+  else
+    # `|| true` in the tail, the same family the whole command was audited for: a config with a
+    # syntax error makes the subshell die, and unguarded that would kill the run HERE, on the
+    # assignment, with everything below it unreachable. Empty then lands in the branch that says so.
+    # shellcheck disable=SC1090
+    kit_test_cmd="$( . "$kit_cfg" >/dev/null 2>&1; printf '%s' "${TEST_CMD:-}" )" || true
+    # Padded on both sides so `--list` is matched as a WHOLE ARGUMENT: an unpadded `*--list*` would
+    # also accuse a suite named `run-all.sh --listen-mode`, and a rule that fails on correct config
+    # is a rule the next author deletes.
+    case " $kit_test_cmd " in
+      *" --list "*)
+        health_bad "TEST_CMD carries --list ($kit_test_cmd) — that mode exits 0 having run NOTHING, so every gate would pass against a suite that never ran" ;;
+      *)
+        if [ -z "$kit_test_cmd" ]; then
+          health_bad "the kit's .sdd/config.sh declares no TEST_CMD — the gates have no suite to run"
+        else
+          ok "TEST_CMD runs the suite ($kit_test_cmd)"
+        fi ;;
+    esac
+  fi
+
   # --- 3. the TODO.md backlog count, read from the SAME run ----------------
   # The count is a CONTRACT between two files: tests/check-todo.sh writes the line, bin/sdd reads
   # it, and NOBODY EVER RECOUNTS. A `grep -c '^- \[ \]' TODO.md` here answers one too many — it

@@ -1105,6 +1105,23 @@ mut_HEALTH_suite_without_mutation() {
 # directory returns 1, pipefail carries it, and the assignment takes the runner down three ok
 # lines in — no provenance, no ratchet, no verdict. Not a hypothetical machine: any box where the
 # codereview plugin was never installed.
+# `sdd health` goes blind to a TEST_CMD that only LISTS the suite. `tests/run-all.sh --list` exits
+# 0 having executed nothing — correct for the mode, fatal as TEST_CMD: gate_EXEC, gate_QA and
+# gate_REVIEW would each pass instantly, in every mission, against a run that never happened, and
+# the log left behind is a dozen plausible step names. Health is where that gets said, because
+# nothing else in the kit reads TEST_CMD as anything but a command to obey.
+#
+# The pattern is degraded rather than deleted, and the `case` is left with the same arms: a mutant
+# that removed the branch outright would also remove the `ok` line, and half the assertions in
+# check-health.sh would go red for a missing sentence instead of for the blindness.
+#
+# Range-addressed to the body of cmd_health, per the header of the entries above. Caught by
+# `surface: --list prints steps only, and a TEST_CMD carrying it is refused` in check-health.sh —
+# by its (b) half, whose two worlds differ in exactly this flag.
+mut_HEALTH_testcmd_list_blind() {
+  sed -i '/^cmd_health() {/,/^}/ s@\*" --list "\*)@*" --a-flag-no-config-carries "*)@' "$1"
+}
+
 mut_HEALTH_provenance_find_aborts() {
   sed -i 's@ | sort -V | tail -1 || true)"@ | sort -V | tail -1)"@' "$1"
 }
@@ -1388,6 +1405,7 @@ CATALOG=(
   HEALTH_suite_capture_aborts
   HEALTH_score_read_aborts
   HEALTH_mutation_survivor_blind
+  HEALTH_testcmd_list_blind
   HEALTH_suite_without_mutation
   HEALTH_provenance_find_aborts
   HEALTH_baseline_read_aborts

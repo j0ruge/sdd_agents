@@ -40,6 +40,10 @@
 #   14. the `score:` line's TWO numbers are COMPARED, not merely parsed. The check used to ask only
 #      for `0 known gap` and never that `caught == of`, so a catalogue with a live mutant read as
 #      `ok` — in the command that, since the catalogue left TEST_CMD, is its only caller.
+#   15. `--list` prints STEPS and nothing else, and a TEST_CMD carrying `--list` is refused. Two
+#      ends of one hole: a mode that exits 0 having run nothing, whose output is indistinguishable
+#      from a suite that passed. Prefixed `surface:` because both ends are about what the suite
+#      LOOKS like from outside.
 #
 # Usage: tests/check-health.sh   (exit 0 = cmd_health discriminates)
 #
@@ -98,7 +102,7 @@ broken() { printf '  SENSOR-BROKEN  %s\n' "$1" >&2; exit 90; }
 # The verdict-relevant lines of an output, flattened onto one line for a FAIL report. It carries
 # the suite/score/gates lines too, and not only the ratchet's: the `abort:` assertions are ABOUT
 # what the run stopped saying, so a digest that dropped those would report the silence as silence.
-digest() { grep -E 'suite (green|red)|blind|gates have a mutation|baseline|provenance|finding count|kit healthy|check\(s\) failed|diverged from the skill|grade table has a criterion|mutation: |survivor' <<< "$1" | tr '\n' ' '; }
+digest() { grep -E 'suite (green|red)|blind|gates have a mutation|baseline|provenance|finding count|kit healthy|check\(s\) failed|diverged from the skill|grade table has a criterion|mutation: |survivor|TEST_CMD' <<< "$1" | tr '\n' ' '; }
 
 # ---------------------------------------------------------------------------
 # The fixture
@@ -114,6 +118,12 @@ STUB_SCORE='score: 3 caught, 0 known gap(s), of 3'
 # reason it is a contract and not a recount: bin/sdd reads this number, tests/check-todo.sh
 # writes it, and nobody re-derives it. The value here is deliberately not the real TODO.md's.
 STUB_TODO_COUNT=7
+
+# The TEST_CMD of the fixture kit's own .sdd/config.sh — the THIRD thing cmd_health reads that the
+# fixture owns, beside the stub suite's two lines. It is deliberately the real spelling and not an
+# invented one: the property under test is whether a `--list` rides along, and a value that could
+# never plausibly appear in a config would make the passing world a straw man.
+STUB_TEST_CMD='tests/run-all.sh'
 
 reset_home() {
   rm -rf "${FIX:?}/home"
@@ -140,6 +150,10 @@ build_fixture() {
   #   tests/check-gates.sh    check 7 (fixture provenance)
   cp "$ROOT/config/schema.md" "$FIX/config/schema.md"
   cp "$ROOT/tests/check-mutation.sh" "$ROOT/tests/check-gates.sh" "$FIX/tests/"
+
+  #   .sdd/config.sh          the TEST_CMD check — the suite the GATES will run, which is not the
+  #                           same file as the suite cmd_health runs itself
+  set_test_cmd "$STUB_TEST_CMD"
 
   write_stub_suite with-count
 }
@@ -178,6 +192,14 @@ EOF
 }
 
 set_baseline() { printf '%s\n' "$1" > "$FIX/tests/health-baseline.txt"; }
+
+# The fixture kit's own config. Only the one key: cmd_health reads TEST_CMD and nothing else out
+# of this file, and a fuller copy would invite the next editor to keep it in sync with the real
+# one for no reason — the same argument STUB_SCORE carries.
+set_test_cmd() { # set_test_cmd <the TEST_CMD value>
+  mkdir -p "$FIX/.sdd"
+  printf 'TEST_CMD="%s"\n' "$1" > "$FIX/.sdd/config.sh"
+}
 
 # The qa-report skill template cmd_health compares its check-gates.sh fixture against.
 install_bug_skill() { # install_bug_skill <status line>
@@ -577,7 +599,7 @@ fi
 
 # Back to the world OUT_GREEN was read from, so each sabotage below is the ONLY thing standing
 # between the fixture and `kit healthy`.
-green_world() { write_stub_suite with-count; clear_skills; set_baseline "$CALIBRATED"; }
+green_world() { write_stub_suite with-count; clear_skills; set_baseline "$CALIBRATED"; set_test_cmd "$STUB_TEST_CMD"; }
 
 # The last line cmd_health prints when it walked the whole way, and the strongest `after` there
 # is: reaching it means no check was skipped. Named once because three assertions read it — a
@@ -1060,6 +1082,79 @@ else
 fi
 
 # ---------------------------------------------------------------------------
+# surface: `--list` prints STEPS ONLY, and a TEST_CMD carrying it is refused
+#
+# Two ends of ONE hole, which is why they share a sentence: `--list` exits 0 having executed
+# nothing — that is the mode's contract and it is correct — and its output is indistinguishable
+# from a suite that passed. A dozen plausible lines, rc 0, no run.
+#
+#   (a) THE LIST ITSELF leaked a line that is not a step. On a machine with no shellcheck,
+#       run-all.sh printed `  (linter absent — skipped)` onto the LIST, in the middle of the step
+#       names. Every consumer counting steps counted it, SURFACE_FLOOR above included — so the
+#       anti-vacuity floor could be reached by a notice instead of by a step.
+#   (b) `TEST_CMD="tests/run-all.sh --list"` in .sdd/config.sh makes gate_EXEC, gate_QA and
+#       gate_REVIEW pass INSTANTLY, in every mission, with a log nobody would look at twice.
+#       Nothing in the kit said a word. `sdd health` is where it gets said, because health is the
+#       command whose whole job is asking whether the kit still measures what it claims to.
+#
+# (a) is measured over a world where the linter is genuinely out of reach, and the world is BUILT
+# rather than found: `if command -v shellcheck` is degraded to `if false`, which is exactly what a
+# machine without the tool executes. Poisoning $PATH was written first and thrown away — on this
+# distribution shellcheck and the whole GNU userland share /usr/bin, so removing the directory
+# that holds one removes grep, sed and comm from the sub-process too, and the probe would then be
+# measuring a suite that cannot run rather than a suite with no linter.
+# surface_degrade() carries the armed proof (a sed that changed nothing is loud), and the second
+# leg is asserted here: the degraded list really lost the lint step, so the else branch really ran.
+#
+# (b) is DIFFERENTIAL, the shape no fixture regime satisfies by accident: the same kit, the same
+# stub suite, two configs differing in one flag, and the two outputs compared against each other.
+# The floor underneath it is that the clean world still reaches `kit healthy` — without it, a
+# check that refused EVERY TEST_CMD would satisfy the refusing half while distinguishing nothing.
+# ---------------------------------------------------------------------------
+SURFACE_LIST_DESC='surface: --list prints steps only, and a TEST_CMD carrying it is refused'
+# Cross-file contract, the same shape as SURFACE_MUTATION_STEP: run-all.sh names the step, this
+# file reads the name. Reword either alone and the second leg of the armed proof goes red.
+SURFACE_LINT_STEP='^lint: '
+
+# 0 = every listed line is a STEP. `run()` lists with `printf '%s\n' "$1"`, so a step is a
+# non-blank line with no leading whitespace, and nothing that goes through run() can be anything
+# else. Anything the list carries that does not fit came from a printf that is not run()'s.
+surface_steps_only() {
+  ! grep -qE '^([[:space:]]|$)' <<< "$SURFACE_PLAIN"
+}
+
+surface_degrade 's@^  if command -v shellcheck >/dev/null 2>&1; then$@  if false; then  # the machine has no linter@' 'a machine with no linter'
+grep -qE "$SURFACE_LINT_STEP" <<< "$SURFACE_PLAIN" \
+  && broken "the no-linter world still lists the lint step — the branch this rule is about was never entered, so any verdict over it is a verdict about nothing"
+SURFACE_NOT_STEP="$(grep -nE '^([[:space:]]|$)' <<< "$SURFACE_PLAIN" | tr '\n' ' ')"
+
+# (b) — the differential, both worlds off the same green fixture.
+green_world
+set_test_cmd "$STUB_TEST_CMD"
+health_run
+OUT_TC_OK="$HEALTH_OUT"; RC_TC_OK="$HEALTH_RC"
+
+green_world
+set_test_cmd "$STUB_TEST_CMD --list"
+health_run
+OUT_TC_LIST="$HEALTH_OUT"; RC_TC_LIST="$HEALTH_RC"
+
+green_world
+
+if surface_steps_only \
+   && [ "$RC_TC_OK" -eq 0 ] && grep -qF 'kit healthy' <<< "$OUT_TC_OK" \
+   && ! grep -qF 'TEST_CMD carries --list' <<< "$OUT_TC_OK" \
+   && [ "$RC_TC_LIST" -ne 0 ] \
+   && grep -qF 'TEST_CMD carries --list' <<< "$OUT_TC_LIST" \
+   && grep -qF "$VERDICT" <<< "$OUT_TC_LIST"; then
+  pass "$SURFACE_LIST_DESC"
+else
+  fail "$SURFACE_LIST_DESC" \
+       "the no-linter --list lists only steps; TEST_CMD='$STUB_TEST_CMD' reaches 'kit healthy' saying nothing of --list, and TEST_CMD='$STUB_TEST_CMD --list' fails naming it, with '$VERDICT' still printed" \
+       "non-step line(s) in the no-linter list: ${SURFACE_NOT_STEP:-none} // clean: rc $RC_TC_OK $(digest "$OUT_TC_OK") // --list: rc $RC_TC_LIST $(digest "$OUT_TC_LIST")"
+fi
+
+# ---------------------------------------------------------------------------
 # guard: no capture in the `sdd health` region may abort the run
 #
 # The rule the four `abort:` assertions above cannot carry, and the reason it is written as a
@@ -1223,7 +1318,9 @@ health_captures() {
 # 16 → 17: the `score:` check stopped asking a regex whether the line "looks green" and started
 # READING its three numbers, so the health region gained the `score_nums` capture. This line is
 # the record the ratchet demands.
-CAPTURE_FLOOR=17
+# 17 → 18: check 2b reads the kit's own TEST_CMD out of .sdd/config.sh, so the region gained the
+# `kit_test_cmd` capture — guarded in the tail, which is the form this ratchet was built to keep.
+CAPTURE_FLOOR=18
 
 capture_report() {
   local out total safe offenders
