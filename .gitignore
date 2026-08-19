@@ -12,3 +12,7 @@
 .env
 .env.*
 !.env.example
+
+# QA living docs — generated views & bulky evidence (source of truth: docs/qa/scenarios/ etc.)
+docs/qa/state.csv
+docs/qa/evidence/
