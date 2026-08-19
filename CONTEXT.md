@@ -55,9 +55,16 @@
   as três na mesma máquina, worktree da base contra o HEAD. ⚠️ A terceira só vale porque foi
   **refeita em sequência, sem outra suíte rodando**: sob carga concorrente os mesmos commits deram
   3:12,87 e 4:18,70, e uma terceira passada do mesmo HEAD deu 2:25,87 — mais rápida que o "antes".
-  O alvo está agora **4,9× distante** e ninguém o defende. Cortar mutação para ganhar relógio
-  violaria o princípio que motivou o I13.2, então o que resta é **subir o alvo ou aposentá-lo por
-  escrito** — decisão do humano; o item vivo mora no `TODO.md`.
+  ⚠️ **Quarta medição, `20260818-lote-facil` (2026-08-19), e a ordem de grandeza mudou:** o par foi
+  refeito no protocolo (mesma máquina, em sequência, nada mais rodando) e deu **1268,31 s (21m08s)
+  na base `9207b4d`, 81 mutantes, verde** contra **1051,60 s (17m32s) no HEAD, 101 mutantes**. Duas
+  leituras que importam mais que o delta: (a) o HEAD ficou **mais rápido** com 20 mutantes a mais,
+  o que é a mesma volatilidade que a nota acima já documenta — **um par não é tendência**; (b) o
+  **absoluto** é sólido nos dois lados, e o alvo não está mais a 4,9× e sim a **~35×**. O
+  "~3m30s" que o `01-plano.md` desta missão registrou como contexto verificado estava **6× errado**;
+  todo gate roda a suíte, então `sdd phase` e `sdd why` bloqueiam por ~20 minutos, não por 3.
+  Cortar mutação para ganhar relógio violaria o princípio que motivou o I13.2, então o que resta é
+  **subir o alvo ou aposentá-lo por escrito** — decisão do humano; o item vivo mora no `TODO.md`.
 
 _As duas perguntas abertas no grill (D9, D10) foram resolvidas na execução do I13.3 e movidas para
 a tabela acima._

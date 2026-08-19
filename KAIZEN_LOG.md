@@ -29,6 +29,15 @@ num sensor que já existia — e a regra transversal de que asserção nova entr
 | Catálogo de mutação | `score: 81 caught, 0 known gap(s), of 81` — **verde** | `score: 100 caught, 0 known gap(s), of 101` — **VERMELHA** (abaixo) |
 | Achados abertos no `TODO.md` | 56 | **74** — 18 fechados, 36 nascidos, catraca movida em todo commit |
 | `sdd preflight` em git < 2.31 | não olhava | `warn` com o remédio certo; o kit responde correto pelo fallback |
+| `tests/run-all.sh` — mesma máquina, em sequência, nada mais rodando | **1268,31 s** (21m08s) | **1051,60 s** (17m32s) — mais rápido com 20 mutantes A MAIS |
+
+⚠️ **O relógio: um par não é tendência, e o que vale é o absoluto.** O `CONTEXT.md` já registra que
+esse mesmo par oscilou ~2× entre passadas dos MESMOS commits sob carga, então "ficou 17% mais
+rápido" não é conclusão que este número sustente. O que ele sustenta é a ordem de grandeza, e ela
+é sólida nos dois lados: a suíte leva **17 a 21 minutos**, ou seja **~35×** o alvo "<30 s" da D7 —
+não os 4,9× que o `CONTEXT.md` dizia nem os "~3m30s" que o `01-plano.md` desta missão registrou
+como contexto verificado, que estavam **6× errados**. Como todo gate roda a suíte, `sdd phase` e
+`sdd why` bloqueiam por ~20 minutos. A decisão de subir o alvo ou aposentá-lo continua do humano.
 
 **O número que reprova, e ele fica aqui porque medir só o que deu certo é o oposto de kaizen:**
 a suíte está **vermelha no HEAD**. `mut_LEDGER_repo_root_cdpath_leak` sobrevive — ele sabota
@@ -36,8 +45,9 @@ apenas o **caminho rápido**, e o fallback que o conserto da r2 (`75c9d2a`) acre
 sabotagem**: a guarda de forma esvazia o valor envenenado e o fallback resolve a identidade certa
 com `CDPATH=''`. Reproduzido em sandbox com o `sed` provado antes de qualquer conclusão: sã e
 mutante dão saída **byte a byte idêntica** no `check-autonomy.sh`, rc 0 nas duas. A asserção virou
-decoração — o modo de falha que o catálogo existe para pegar, e ele pegou. Registrado no `TODO.md`
-com a reprodução; a linha para aqui.
+decoração — o modo de falha que o catálogo existe para pegar, e ele pegou. **Três medições
+independentes**, não uma: duas suítes completas (rc 1, `100 of 101`, sempre o MESMO sobrevivente) e
+o par diferencial em sandbox. Registrado no `TODO.md` com a reprodução; a linha para aqui.
 
 **Custo:** **US$ 176,48** em 11 sessões de fase (5 EXEC + 1 re-entrada + 1 QA + 4 REVIEW), contra
 US$ 48–88 das seis missões anteriores do kit sobre si mesmo. **Duas a três vezes mais caro**, e o
