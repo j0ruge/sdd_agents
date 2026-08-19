@@ -531,6 +531,11 @@ assert_phase "last review all Grade A, suite green, clean tree" "DOCS"
 # are the codereview skill's own terse rationales (report-template.md:154-156) — refusing them
 # would make the gate contradict the skill it parses, which is the SQ-97 gate_DOCS bug again.
 i3_bad=0
+# Counted, never written in prose. The failure line used to say "the 6 worlds above" while nine ran
+# below it, and it stayed 6 as the block grew — the same class CLAUDE.md names with `44 caught of
+# 44`: a number in a rubric with no command beside it expires quietly. Every `_phase` helper in this
+# file now increments its own tally, so the sentence can only be wrong if the tally is.
+i3_worlds=0
 i3_rows=("Code Quality (Zen)" "Type Safety" "Error Handling" "Security" "Performance" "Test Coverage" "Documentation")
 
 write_r11() { # write_r11 <rationale on every row> [gate: frontmatter value] — latest round by version
@@ -554,6 +559,7 @@ commit_r11() { git add -A && git commit -qm "chore: review r11" >/dev/null; }
 
 i3_phase() { # i3_phase <world> <expected phase>
   local world="$1" want="$2" got
+  i3_worlds=$((i3_worlds + 1))
   got="$( cd "$FIX" && "$SDD" phase "$MISSION" 2>&1 )"
   [ "$got" = "$want" ] && return 0
   printf '         world "%s": expected phase %s, got %s\n' "$world" "$want" "$got" >&2
@@ -623,11 +629,32 @@ i3_phase "the gate: frontmatter left as PREENCHER" "REVIEW"
 write_r11 "measured, nothing open" "tests/run-all.sh: suite green, 559 assertions, tree clean"; commit_r11
 i3_phase "a gate: frontmatter carrying real evidence closes the round" "DOCS"
 
+# 10. the false RED, which is the same defect as a false green wearing the other coat. GFM writes a
+#     literal pipe inside a cell as `\|`, and the extractor splits the row on every `|` byte: the
+#     cell below was cut at the escape, the stump `TODO\` normalised into a refused fill-in word,
+#     and a fully justified round was blocked with a reason that is not true. A gate that refuses
+#     everything passes every world above this one; only this world tells the two apart.
+#     ⚠️ The cell has to OPEN with the escaped pipe. Written first as "the `TODO\|` list …", the
+#     stump left behind was `the TODO\`, which normalises to THETODO and is not a fill-in word — the
+#     world went green against the unfixed runner and measured nothing. Caught by the sabotage pass,
+#     which is the whole reason this repo runs one.
+write_r11 '`TODO\|` list references removed; assertions now target the function. Green.'
+commit_r11
+i3_phase "a Rationale quoting a shell pipeline is a real justification" "DOCS"
+
+# 11. and the evidence the refusal QUOTES has to be the bytes on disk. `awk -v x=…` runs the value
+#     through awk's escape processing before the program sees it, so a `gate:` carrying a regex
+#     arrived mangled and the refusal echoed text the file does not contain. Measured side by side
+#     on mawk 1.3.4: `-v` turns this value into `<a<TAB>b>`, ENVIRON hands it over byte for byte.
+write_r11 "measured, nothing open" '<a\tb>'; commit_r11
+i3_phase "a gate: placeholder is refused whatever escapes it carries" "REVIEW"
+i3_why   "gate: escapes survive verbatim" 'placeholder \(<a\\tb>\)' "tree dirty|working tree|TEST_CMD"
+
 if [ "$i3_bad" -eq 0 ]; then
   pass "gate_REVIEW: a placeholder Rationale does not buy an A"
 else
   fail "gate_REVIEW: a placeholder Rationale does not buy an A" \
-       "the 6 worlds above agreeing" "$i3_bad disagreement(s), listed above"
+       "the $i3_worlds worlds above agreeing" "$i3_bad disagreement(s), listed above"
 fi
 
 # --- the seal that one keystroke used to win ---------------------------------
@@ -651,11 +678,16 @@ fi
 # the blessed cell into an empty one. World `—` below is that probe, and it is the reason this
 # block exists as a pair instead of a list of refusals.
 f3_bad=0
+# Counted and not written in prose — see the note on i3_worlds above. This block's hand-written 11
+# happened to be right the day it was written, which is the only state a hand-written count is ever
+# in; the two beside it had already drifted to 6 while nine and eight worlds ran under them.
+f3_worlds=0
 
 # Twins of i3_phase/i3_why, counting into their own variable ON PURPOSE. Sharing the counter would
 # make one broken world redden BOTH assertions, and the report would name a rule that never broke.
 f3_phase() { # f3_phase <world> <expected phase>
   local world="$1" want="$2" got
+  f3_worlds=$((f3_worlds + 1))
   got="$( cd "$FIX" && "$SDD" phase "$MISSION" 2>&1 )"
   [ "$got" = "$want" ] && return 0
   printf '         world "%s": expected phase %s, got %s\n' "$world" "$want" "$got" >&2
@@ -739,7 +771,7 @@ if [ "$f3_bad" -eq 0 ]; then
   pass "gate_REVIEW: an unfilled gate field and a punctuated fill-in do not buy an A"
 else
   fail "gate_REVIEW: an unfilled gate field and a punctuated fill-in do not buy an A" \
-       "the 11 worlds above agreeing" "$f3_bad disagreement(s), listed above"
+       "the $f3_worlds worlds above agreeing" "$f3_bad disagreement(s), listed above"
 fi
 
 # Back to the state the DOCS section inherits: r10 is the latest round again, all Grade A.
@@ -805,6 +837,8 @@ assert_why   "PR reports the missing 50-pr.md" "PR" "50-pr.md"
 # left this assertion GREEN. The control file changes the answer while every hashed byte stands
 # still, which is the only arrangement in which the removal is the sole suspect.
 i4_bad=0
+# Counted and not written in prose — see the note on i3_worlds above.
+i4_worlds=0
 i4_home="$SDD_STATE_FIX/health-home"; mkdir -p "$i4_home"
 # The size the stand-in catalogue below has to have, READ OFF THE RUNNER and never typed here.
 # cmd_health no longer takes the score line's word for the catalogue's size: it weighs the `of N`
@@ -822,6 +856,7 @@ I4_SCORE_SURVIVOR="score: $(( I4_FLOOR - 1 )) caught, 0 known gap(s), of $I4_FLO
 
 i4_phase() { # i4_phase <world> <expected phase>
   local world="$1" want="$2" got
+  i4_worlds=$((i4_worlds + 1))
   got="$( cd "$FIX" && "$SDD" phase "$MISSION" 2>&1 )"
   [ "$got" = "$want" ] && return 0
   printf '         world "%s": expected phase %s, got %s\n' "$world" "$want" "$got" >&2
@@ -930,6 +965,18 @@ git add -A && git commit -qm "chore: a kit inside the fixture, so the writer can
 i4_verdict 0 "$I4_SCORE_GREEN"; i4_health
 i4_phase "sdd health over a green catalogue stamps this content" "DONE"
 
+# 3b. CONTENT, the other direction — HEAD moves and the measured content does not. This is the half
+#     the block's header CLAIMED and no world measured: keying on `git rev-parse HEAD` would throw
+#     the stamp away on the very commit the PR phase makes on its way to this gate, costing a second
+#     twenty-to-fifty-minute run per mission for markdown no mutant reads. Measured while this world
+#     was missing: with mutation_stamp_key rewritten to hash HEAD, worlds 1-7 all stayed GREEN and
+#     only world 8 went red — and world 8's own sentence blames "a tree that moved DURING the run",
+#     so the one world that noticed misnamed the cause. Claimed-and-unmeasured is the whole subject
+#     of this mission; a sensor is allowed to say only what it tests.
+printf '\n<!-- handoff prose: the PR phase commits markdown on its way to this gate -->\n' >> "$MDIR/50-pr.md"
+git add -A && git commit -qm "chore: HEAD moves, and not one measured byte with it" >/dev/null
+i4_phase "a commit outside the measured directories leaves the stamp standing" "DONE"
+
 # 4. CONTENT — one line into a measured directory and the stamp no longer describes what is here.
 #    A stamp keyed on the clock, on HEAD or on nothing at all would still be accepted.
 printf '\n# one more line, so the measured content is not the content that was stamped\n' \
@@ -971,7 +1018,7 @@ if [ "$i4_bad" -eq 0 ]; then
   pass "gate_PR: the mutation stamp is demanded only where the catalogue lives"
 else
   fail "gate_PR: the mutation stamp is demanded only where the catalogue lives" \
-       "the 6 worlds above agreeing" "$i4_bad disagreement(s), listed above"
+       "the $i4_worlds worlds above agreeing" "$i4_bad disagreement(s), listed above"
 fi
 
 # --- the two ends of the stamp, and the tree they have to agree on ----------
@@ -997,6 +1044,7 @@ fi
 # followed the cwd would leave every target repo, and every operator standing outside a git
 # checkout, with no stamped kit at all.
 tree_bad=0
+tree_worlds=0
 tree_note() { # tree_note <world> <what disagreed>
   printf '         world "%s": %s\n' "$1" "$2" >&2
   tree_bad=$((tree_bad + 1))
@@ -1039,6 +1087,8 @@ mkdir -p "$TREE_PLAIN"
 # Runs the INSTALLED kit's health from <cwd>, after taking every stamp away — so what is on disk
 # afterwards was written by THIS run and never inherited from the block above.
 tree_health() { # tree_health <cwd>
+  # One call, one world — counted here for the reason the note on i3_worlds gives.
+  tree_worlds=$((tree_worlds + 1))
   rm -f "$FIX/$TREE_STAMP" "$TREE_KIT/$TREE_STAMP" "$TREE_PLAIN/$TREE_STAMP"
   ( cd "$1" && HOME="$i4_home" NO_COLOR=1 "$TREE_KIT/bin/sdd" health >/dev/null 2>&1 ) || true
 }
@@ -1084,7 +1134,7 @@ if [ "$tree_bad" -eq 0 ]; then
   pass "gate_PR: the stamp is read from the tree whose content the gate measures"
 else
   fail "gate_PR: the stamp is read from the tree whose content the gate measures" \
-       "the 3 worlds above agreeing" "$tree_bad disagreement(s), listed above"
+       "the $tree_worlds worlds above agreeing" "$tree_bad disagreement(s), listed above"
 fi
 
 # Back to the state the sections below inherit: no catalogue, no kit copy, no PR artifact — the
@@ -1092,7 +1142,7 @@ fi
 # `${FIX:?}` and not `$FIX`: with the fixture variable empty this line is `rm -rf /bin /tests` on
 # the machine of whoever ran the suite. The same family check-health.sh records in its own header,
 # where an unguarded `rm -rf` reached `/kit` for real.
-rm -rf "${FIX:?}/bin" "${FIX:?}/tests" "${FIX:?}/.stub/gh" "$MDIR/50-pr.md" "${FIX:?}/.sdd/logs/mutation-stamp"
+rm -rf "${FIX:?}/bin" "${FIX:?}/tests" "${FIX:?}/.stub/gh" "${MDIR:?}/50-pr.md" "${FIX:?}/.sdd/logs/mutation-stamp"
 git add -A && git commit -qm "chore: drop the stamp fixture" >/dev/null
 assert_phase "with the stamp fixture gone the mission is back at PR" "PR"
 assert_why   "and back to the reason it had before" "PR" "50-pr.md"

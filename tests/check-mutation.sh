@@ -246,6 +246,16 @@ mut_PR_stamp_blind() {
   sed -i '/^gate_PR()/,/^}/ s|if has_mutation_catalogue "\$REPO_ROOT"; then|if false; then|' "$1"
 }
 
+# The key stops being a function of the CONTENT alone and starts following HEAD as well. Deliberately
+# ADDITIVE and not a swap: a key that is only HEAD is already refused by the window world, which would
+# have made this mutation say nothing about the world it is here for. Keyed on content AND HEAD, the
+# only world that can tell is the commit that moves HEAD and not one measured byte — the very commit
+# the PR phase makes on its way to the gate. `git -C` and not a `cd`, so the mutated runner carries no
+# relative `cd` for check-pipefail's RULE 2 to read.
+mut_PR_stamp_key_follows_head() {
+  sed -i '/^mutation_stamp_key() {/,/^}/ s@md5sum <<< "$listing"@md5sum <<< "$listing$(git -C "$1" rev-parse HEAD 2>/dev/null)"@' "$1"
+}
+
 # The WRITER goes back to answering about the tree its own file sits in, whatever tree the operator
 # is standing in and whatever tree the gate is about to ask for. With `sdd` on the PATH — the
 # install README.md documents — over a worktree or a second clone of the kit, the stamp lands in
@@ -1428,6 +1438,7 @@ CATALOG=(
   DOCS_pending_status
   PR_no_artifact
   PR_stamp_blind
+  PR_stamp_key_follows_head
   HEALTH_stamp_window_blind
   HEALTH_stamp_tree_blind
   RUN_inverted_journal
