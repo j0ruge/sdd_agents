@@ -165,9 +165,22 @@ dez minutos por gate — até tornar uma FASE insatisfazível: três sessões de
 encerraram o turno com as palavras *"waiting for the suite"*, e em `claude -p` encerrar o turno é
 encerrar a sessão. Hoje o catálogo mora no `sdd health`, pelo mesmo argumento que já vale para a
 catraca do backlog. **Nada foi afrouxado** — muda quem cobra e quando: os gates fazem a pergunta
-rápida, `sdd health --with-mutation` faz a cara. A lacuna que isso abre está declarada no
-`TODO.md`: sem CI neste repo, o catálogo depende de alguém digitar o comando, e já aconteceu de a
-suíte rápida responder verde por cima de um catálogo vermelho.
+rápida, `sdd health --with-mutation` faz a cara.
+
+⚠️ **A lacuna que o opt-in abriu está fechada desde `c962e2e`, e não por CI — por artefato.** Ela
+era real e cobrou: entre os PRs #12 e #13 um conserto apodreceu a âncora de um mutante, os gates de
+REVIEW e de PR rodaram a suíte rápida, responderam verde, e a `main` carregou
+`score: 103 caught of 104` por dias até alguém digitar o comando. Hoje o `sdd health` **carimba**
+quando o catálogo volta verde, e o `gate_PR` **exige o carimbo**; o gate nunca roda o catálogo, que
+é exatamente o que `4c86712` desfez. Verbete "Carimbo de mutação" no `CONTEXT.md`, desenho e
+alternativas descartadas em [`docs/adr/0004`](docs/adr/0004-mutation-catalogue-owner-stamp-not-ci.md).
+⚠️ **Consequência operacional que custa 20 a 50 min quando se erra a ordem:** a chave é o conteúdo
+de `bin/ tests/ templates/ config/`, então `./bin/sdd health` roda **depois do último commit de
+código**. `CLAUDE.md`, `CONTEXT.md`, `docs/` e `TODO.md` não invalidam — mas
+`tests/health-baseline.txt` invalida, e é lá que a catraca do backlog mora, então registrar achado
+(princípio 5) mata o carimbo. A colisão está no `TODO.md`; o sintoma e a saída, em
+[`docs/failure-modes.md`](docs/failure-modes.md).
+
 `sdd preflight`, `bash -n bin/sdd` e os dry-runs completam, mas não substituem. O passo de lint do
 `run-all.sh` cobre `bin/sdd` **e** `tests/*.sh` — deixar a suíte fora do linter foi o que segurou
 dois SC2318 reais em `check-mutation.sh` por três missões.
