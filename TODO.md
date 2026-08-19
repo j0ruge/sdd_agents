@@ -391,10 +391,24 @@ Achados sobre **repos-alvo** vão para o `TODO.md` daquele repo. Este arquivo é
 
 - [ ] **O `gate_REVIEW` lê a coluna `Grade` e nunca o resto da linha** —
   `bin/sdd:529` — uma tabela com `A` em toda linha e `PREENCHER` (ou `<…>`) em toda `Rationale`
-  passa no gate com selo verdadeiro; o `40-review-r1.md` desta missão é a instância viva. O
-  `check-templates.sh` confere que as chaves do frontmatter existem, nunca que o VALOR deixou de
-  ser placeholder. Direção: recusar token de placeholder em `Rationale` e em `gate:`, com mutação.
+  passa no gate com selo verdadeiro; o `40-review-r1.md` desta missão é a instância viva.
+  RESOLVIDO por `9fa5b0b`: o extrator lê `f[4]` e o `gate:` do frontmatter pela mesma regra, com
+  asserção diferencial de nove mundos e dois mutantes.
   — descoberto por `sdd-reviewer` na missão `20260818-lote-facil` (2026-08-18)
+
+- [ ] **O `gate:` do frontmatter só é cobrado quando existe, e 6 das 14 rodadas não o têm** —
+  `bin/sdd:568` — a recusa de placeholder no `gate:` deixa AUSENTE em paz de propósito, para não
+  reprovar rodadas anteriores ao campo; mas ausente e placeholder afirmam o mesmo nada, e o
+  `check-templates.sh` cobra a chave no template sem que gate nenhum a cobre no artefato. Direção:
+  exigir o campo a partir de uma data/versão, ou cobrá-lo no `sdd health` como dívida congelada.
+  — descoberto por `sdd-executor` na missão `20260819-fecho-que-nao-mente` (2026-08-19)
+
+- [ ] **Slug de missão em pt-BR não pode ser citado na superfície inglesa** —
+  `tests/check-lang.sh:51` — `que`, `nao`, `sem` e `sobre` são stopwords, e `-w` as casa dentro de
+  um slug hifenizado: citar `20260819-fecho-que-nao-mente` num comentário de `tests/` reprova o
+  sensor. A proveniência degrada para uma data, que é o dado mais fraco — o slug é o que liga o
+  comentário ao handoff. Direção: isentar o casamento `^[0-9]{8}-` do escaneamento de stopwords.
+  — descoberto por `sdd-executor` na missão `20260819-fecho-que-nao-mente` (2026-08-19)
 
 - [ ] **O ramo de lista ordenada da regra do marcador pelado não tem probe próprio** —
   `tests/check-todo.sh:249` — tirar `[0-9]+[.)]` da classe deixa o selftest verde: a regra da
