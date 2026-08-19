@@ -2,7 +2,10 @@
 # The kit's suite. It is bash + markdown, so the "tests" are the kit's own sensors: the runner
 # syntax, the template contract, the gate state machine, and the language of the kit surface.
 #
-# Usage: tests/run-all.sh
+# Usage: tests/run-all.sh [--with-mutation] [--list]
+#   --with-mutation  also run the mutation catalogue (minutes; see the block below for why it is
+#                    opt-in). `sdd health` is the one caller that asks for it.
+#   --list           print the steps that WOULD run and exit 0, executing none of them.
 
 set -uo pipefail
 
@@ -19,7 +22,7 @@ fails=0
 
 # The mutation catalogue is OPT-IN, and that is a decision with a measured reason.
 #
-# check-mutation.sh verifies each mutant by running THIS FILE inside a sandbox — 101 mutants times
+# check-mutation.sh verifies each mutant by running THIS FILE inside a sandbox — every mutant times
 # the nine behavioural sensors — and the result is a suite of minutes. Measured: a single gate run
 # held the working tree for more than ten minutes. That stopped being a comfort problem the day it
 # made a PHASE unsatisfiable: three REVIEW sessions in a row ended their turn with the words
@@ -31,10 +34,15 @@ fails=0
 # argument, for the backlog ratchet: it lives in `sdd health` and NOT in TEST_CMD on purpose,
 # because a ceiling inside the suite fails the EXEC/QA/REVIEW gate of every mission in flight.
 #
-# NOTHING IS LOOSENED. All 101 assertions stay, and every one is still demanded. What changes is
+# NOTHING IS LOOSENED. Every assertion stays, and every one is still demanded. What changes is
 # who asks, and when: the gates ask the fast question, `sdd health` asks the expensive one.
 # The known cost of the trade — no CI in this repo, so the catalogue now runs only when a human
 # types `sdd health` — is written down in TODO.md rather than left silent.
+#
+# No count is written here on purpose: the catalogue grows every mission, and CLAUDE.md records
+# that a number written into prose is a use-by date. It arrived stale in this very file — three
+# sites said 101 in the commit that took the catalogue to 102. The live number is the `score:`
+# line of `tests/run-all.sh --with-mutation`.
 WITH_MUTATION=0
 # Prints the steps that WOULD run and exits, executing none of them. It exists so the composition
 # above is assertable without paying for it: `--list` against `--list --with-mutation` is a

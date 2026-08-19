@@ -62,7 +62,10 @@
   o que é a mesma volatilidade que a nota acima já documenta — **um par não é tendência**; (b) o
   **absoluto** é sólido nos dois lados, e o alvo não está mais a 4,9× e sim a **~35×**. O
   "~3m30s" que o `01-plano.md` desta missão registrou como contexto verificado estava **6× errado**;
-  todo gate roda a suíte, então `sdd phase` e `sdd why` bloqueiam por ~20 minutos, não por 3.
+  todo gate rodava a suíte, então `sdd phase` e `sdd why` bloqueavam por ~20 minutos, não por 3.
+  ⚠️ **Esta frase deixou de valer em `4c86712`**, e foi ela que motivou a mudança: o catálogo saiu
+  do `TEST_CMD` para o `sdd health --with-mutation`, e o `TEST_CMD` passou a 44,3 s medidos. O
+  número de mutantes deixou de ser escrito em prosa em qualquer lugar — sai da linha `score:`.
   Cortar mutação para ganhar relógio violaria o princípio que motivou o I13.2, então o que resta é
   **subir o alvo ou aposentá-lo por escrito** — decisão do humano; o item vivo mora no `TODO.md`.
 

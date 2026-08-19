@@ -1070,7 +1070,7 @@ mut_HEALTH_score_read_aborts() {
 # The expensive part is how quietly it fails. health still prints `suite green`, still finds no
 # `score:` line, and still says `health went blind to the mutation` — a sentence that reads as an
 # accusation against check-mutation.sh for a defect living in this very line. An operator would go
-# looking in the wrong file while 101 assertions sat unrun.
+# looking in the wrong file while the whole catalogue sat unrun.
 #
 # Caught by `surface: cmd_health asks the suite for the mutation catalogue` in check-health.sh,
 # which reads the argv the stub suite RECORDED rather than the text of this call.

@@ -11,13 +11,16 @@
 # split is the whole point of OUTPUT_LANG: a target repo declaring another language gets its
 # artifacts in that language, while the kit stays readable to everyone.
 #
-# This file has no selftest and the mutation catalogue cannot reach it (that catalogue sabotages
-# bin/sdd; this one reads templates/). What stands in for one is the REVIEW_FLOOR below plus an
-# adversarial pass: writing the review heading at level 2, renaming the table columns, dropping the
-# **Overall** row and deleting the assertion loop each turn this file red. What survives by
-# construction, named rather than hidden and not reachable in one edit: lowering REVIEW_FLOOR while
-# the assertions are still there. Inert alone — the paired sabotage, deleting the assertions, dies
-# on the floor.
+# The mutation catalogue cannot reach this file (it sabotages bin/sdd; this one reads templates/),
+# so it carries a selftest — see the block above the first `echo`. It did NOT for two missions, and
+# the paragraph that stood here claimed the REVIEW_FLOOR plus an adversarial pass stood in for one,
+# "not reachable in one edit". The r2 review of 20260818-lote-facil measured that sentence to be
+# false: ONE deleted line inside `review_check` printed `23 assertion(s)` and `template contract
+# intact` over a zero-byte templates/review.md.
+#
+# What survives now, named rather than hidden, and stated as TWO edits because that is what was
+# measured: deleting the `selftest` call AND the SELFTEST_RAN guard that follows it; or neutering
+# check() AND the negative controls that would catch it. Each alone turns this file red.
 #
 # Usage: tests/check-templates.sh   (exit 0 = contract intact)
 

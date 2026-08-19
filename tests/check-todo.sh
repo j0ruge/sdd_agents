@@ -63,10 +63,15 @@
 # narrowed to `[xX]` with the selftest still green. It reads the exact message now, over the link
 # reference carrier, which only the box rule can catch.
 #
-# What survives by construction, named rather than hidden and not reachable in one edit: lowering
-# a floor while the thing it counts is still there. That is inert on its own — the paired sabotage
-# (delete a probe, delete a rule_end call) dies on the floor, which is what makes the floor a rule
-# and not a decoration.
+# What survives, named rather than hidden — and stated as TWO edits, because "not reachable in one
+# edit" is what this comment used to say and the r2 review of 20260818-lote-facil measured it to be
+# false: replacing the bodies of assert_clean, assert_says and assert_rc with `return 0` left the
+# file printing `88 probe(s), the sensor measures what it claims`, rc 0. The floors counted CALL
+# SITES, and every call site was still there. The negative controls above close that; what is left
+# needs two edits each, and each half alone turns the file red:
+#   - lowering a floor AND deleting the probes it counts
+#   - neutering a helper AND discarding the `cfail` verdict of its control
+#   - deleting `selftest ||` from the dispatch AND the coupling in check_file that refuses it
 #
 # Not measured, on purpose: whether an anchor still points at real code, whether the prose is any
 # good, and whether a finding is worth keeping. All three are human judgement on the diff.

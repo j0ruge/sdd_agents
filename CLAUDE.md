@@ -158,6 +158,16 @@ novo entra lá. Os treze de hoje: `check-templates.sh`, `check-gates.sh`, `check
 `check-mutation.sh`, `check-lang.sh`, `check-autonomy.sh`, `check-kaizen.sh`, `check-preflight.sh`,
 `check-todo.sh`, `check-pipefail.sh`, `check-entrypoint.sh`, `check-checkpoint.sh` e
 `check-health.sh`.
+
+⚠️ **Doze dos treze rodam no `TEST_CMD`; o `check-mutation.sh` é opt-in desde `4c86712`.** Ele
+verifica CADA mutante rodando a suíte inteira numa sandbox, e isso segurava a árvore por mais de
+dez minutos por gate — até tornar uma FASE insatisfazível: três sessões de REVIEW seguidas
+encerraram o turno com as palavras *"waiting for the suite"*, e em `claude -p` encerrar o turno é
+encerrar a sessão. Hoje o catálogo mora no `sdd health`, pelo mesmo argumento que já vale para a
+catraca do backlog. **Nada foi afrouxado** — muda quem cobra e quando: os gates fazem a pergunta
+rápida, `sdd health --with-mutation` faz a cara. A lacuna que isso abre está declarada no
+`TODO.md`: sem CI neste repo, o catálogo depende de alguém digitar o comando, e já aconteceu de a
+suíte rápida responder verde por cima de um catálogo vermelho.
 `sdd preflight`, `bash -n bin/sdd` e os dry-runs completam, mas não substituem. O passo de lint do
 `run-all.sh` cobre `bin/sdd` **e** `tests/*.sh` — deixar a suíte fora do linter foi o que segurou
 dois SC2318 reais em `check-mutation.sh` por três missões.
