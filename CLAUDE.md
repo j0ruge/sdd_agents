@@ -171,7 +171,7 @@ hoje devolve **cinco**, porque o `check-entrypoint.sh` carrega um por escolha pr
 alcança via `mut_RUN_entrypoint_unguarded`, mas o parser dele é fino demais para depender só
 disso). Sensor a mais com auto-teste nunca é o defeito; sensor **sem** ele, estando nas duas
 situações, é.
-⚠️ A âncora `^selftest()` **é** o instrumento; `selftest` solto responde **seis**, somando o
+⚠️ A âncora `^selftest()` **é** o instrumento; `selftest` solto responde **sete**, somando o
 `jobs_selftest()` do escalonador (`tests/check-mutation.sh:63`), que mede o pool de jobs e não
 regra de sensor nenhuma. Número em rubrica sem o comando ao lado é a mesma classe do
 `44 caught of 44` que já venceu neste arquivo — conte a propriedade, não a palavra.

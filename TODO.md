@@ -39,6 +39,50 @@ Achados sobre **repos-alvo** vão para o `TODO.md` daquele repo. Este arquivo é
 
 ### Sensores que faltam
 
+- [ ] **A sonda de `--path-format` do preflight não tem asserção nenhuma** —
+  `bin/sdd:1591` — a guarda que ela anuncia (`ledger_repo_root` recusando a resposta de duas
+  linhas) tem par diferencial e mutação; a linha que **fala** com o operador não tem. O
+  `check-preflight.sh` já carrega a receita pronta — o shim `$FIX/.bsd` faz exatamente isto para
+  a userland GNU. Direção: um shim `.oldgit` e o par (fala com git velho, cala com git novo).
+  — descoberto por `sdd-reviewer` na missão `20260818-lote-facil` (2026-08-18)
+
+- [ ] **Três frouxidões da regra da caixa pelada passam pelo selftest** —
+  `tests/check-todo.sh:278` — tirar o limite final `([ \t]|$)`, alargar `[ xX]` para `.` e tirar
+  o `>` do ancoramento deixam os 86 probes verdes. A terceira estreita a regra: caixa dentro de
+  bloco de citação deixaria de ser pega e nada diria. Regra sem probe é o que a passada
+  adversarial existe para achar. Direção: um probe por frouxidão, como `inlinebox.md` já faz.
+  — descoberto por `sdd-reviewer` na missão `20260818-lote-facil` (2026-08-18)
+
+- [ ] **O `tail_of` aceita qualquer par de crases como se fosse a atribuição** —
+  `tests/check-todo.sh:190` — a regra pergunta "o rabo tem um code span", não "o rabo nomeia um
+  agente", então um título com código inline satisfaz a metade da atribuição do mesmo jeito que
+  já satisfaz a da âncora (fraqueza espelhada, e só a da âncora está declarada no cabeçalho).
+  A forma aguda virou conserto; a que sobra é REGRESSÃO desta missão, medida em diferencial (o
+  sensor do merge-base recusa o item, este aceita). Fechar exige a re-derivação semântica posta
+  fora de escopo: toda regra sintática tentada inventa 5 violações no arquivo real.
+  — descoberto por `sdd-reviewer` na missão `20260818-lote-facil` (2026-08-18)
+
+- [ ] **A regra `cdpath:` não vê `cd --` nem comando quebrado com `\`** —
+  `tests/check-pipefail.sh:221` — o grupo de flags é `-[[:alpha:]]+`, e `--` não tem alfa
+  nenhum depois do segundo traço, então `cd -- "$(...)"` sem guarda passa limpo; e as três
+  regras leem linha física, então operando na linha seguinte a um `\` é invisível. Nenhuma
+  instância viva hoje. Direção: alargar para `(--|-[[:alpha:]]+)` e declarar a continuação.
+  — descoberto por `sdd-reviewer` na missão `20260818-lote-facil` (2026-08-18)
+
+- [ ] **O `moved2` do `cmd_kaizen` não tem asserção que morra ao apagá-lo** —
+  `bin/sdd:2453` — a asserção `covered:` do `moved` cobre a primeira atribuição; neutralizar a
+  do retry deixa `check-kaizen.sh`, `check-autonomy.sh` e o catálogo verdes, porque o default
+  local `false` coincide com o que o regime do fixture espera. Só o hardcode para `true` morre.
+  Direção: um mundo em que o retry mexe no disco de verdade, ou estreitar o que a asserção diz.
+  — descoberto por `sdd-reviewer` na missão `20260818-lote-facil` (2026-08-18)
+
+- [ ] **Duas mutações têm `sed` sem endereço e sabotam um segundo sítio calado** —
+  `tests/check-mutation.sh:203` e `:508` — a `RUN_inverted_journal` também vira a guarda
+  `DRY_RUN` de `ensure_mission_branch` (`bin/sdd:1489`), a única que impede `--dry-run` de fazer
+  `git checkout` de verdade; a `RUN_on_axis_forked` também edita o `on_axis` do juiz. Inertes
+  hoje, e é a classe que o `_cdpath_leak` já custou. Direção: endereçar ao corpo da função.
+  — descoberto por `sdd-reviewer` na missão `20260818-lote-facil` (2026-08-18)
+
 - [ ] **O `check-templates.sh` não tem auto-teste e nenhuma mutação o alcança** —
   `tests/check-templates.sh:22` (a função `check()`) — ele mede `templates/`, então o catálogo,
   que sabota o `bin/sdd`, nunca o mata; e `check()` não tem probe nenhum. Regex quebrada ali
@@ -220,6 +264,27 @@ Achados sobre **repos-alvo** vão para o `TODO.md` daquele repo. Este arquivo é
   `sdd monitor <missão>` seguindo o feed e `--no-monitor` para desligar, ligado por default.
   — descoberto por `humano` na missão `20260817-eixo-do-juiz` (2026-08-17)
 
+- [ ] **O conjunto de fronteira do `MAXC_RE` não tem probe, e o comentário jura paridade com o
+  `PIPE_RE`** — `tests/check-pipefail.sh:219` — o `PIPE_RE` ganha quatro probes de falso-positivo
+  para essa mesma classe; o `MAXC_RE` copia a grafia e não ganha nenhuma. Trocado por `.+`, o
+  selftest fica verde e a regra passa a INVENTAR violação nas quatro formas que os probes do
+  vizinho existem para recusar. É a classe "comentário afirmando paridade não é paridade" que o
+  `CLAUDE.md` já nomeia duas vezes. Direção: derivar o miolo comum de UMA variável, ou dar ao
+  `MAXC_RE` os mesmos quatro probes. — descoberto por `sdd-reviewer` na missão `20260818-lote-facil` (2026-08-18)
+
+- [ ] **O `gate_REVIEW` lê a coluna `Grade` e nunca o resto da linha** —
+  `bin/sdd:529` — uma tabela com `A` em toda linha e `PREENCHER` (ou `<…>`) em toda `Rationale`
+  passa no gate com selo verdadeiro; o `40-review-r1.md` desta missão é a instância viva. O
+  `check-templates.sh` confere que as chaves do frontmatter existem, nunca que o VALOR deixou de
+  ser placeholder. Direção: recusar token de placeholder em `Rationale` e em `gate:`, com mutação.
+  — descoberto por `sdd-reviewer` na missão `20260818-lote-facil` (2026-08-18)
+
+- [ ] **O ramo de lista ordenada da regra do marcador pelado não tem probe próprio** —
+  `tests/check-todo.sh:249` — tirar `[0-9]+[.)]` da classe deixa o selftest verde: a regra da
+  caixa pelada pega o item por outro caminho, então a redundância é acidental e a mensagem "bare
+  list marker" some calada. Direção: probe próprio, ou declarar a redundância como o check de
+  arquivo ilegível já declara a dele. — descoberto por `sdd-reviewer` na missão `20260818-lote-facil` (2026-08-18)
+
 ### Contrato e configuração
 
 - [ ] **O ciclo de vida do `RESOLVIDO por` e a catraca do backlog não cabem juntos** —
@@ -333,6 +398,39 @@ Achados sobre **repos-alvo** vão para o `TODO.md` daquele repo. Este arquivo é
   saírem do parágrafo. — descoberto por `sdd-qa` na missão `20260818-lote-facil` (2026-08-18)
 
 ### Comentário e registro
+
+- [ ] **22 das 33 âncoras do `TODO.md` apontam para a linha errada** —
+  `tests/check-todo.sh:1` — auditadas uma a uma contra o HEAD: várias erram por centenas de
+  linhas e uma cai fora do arquivo (`tests/run-all.sh:180`, num arquivo de 173). O sensor mede
+  **forma**, nunca se a âncora ainda acerta o alvo, então o número não se move sozinho — e esta
+  missão empurrou parte delas ao crescer o `bin/sdd` em 162 linhas. Direção: re-derivar em lote.
+  — descoberto por `sdd-reviewer` na missão `20260818-lote-facil` (2026-08-18)
+
+- [ ] **O `check-health.sh` diz "the four silent aborts" e o catálogo tem cinco** —
+  `tests/check-health.sh:31` — o `mut_HEALTH_ratchet_eats_verdict` não tem asserção própria: ele
+  morre no fixture da asserção 11, que produz o outro defeito por tabela. Os dois mutantes são
+  pegos, então não é fail-open — é o cabeçalho subcontando, e é ele que um leitor usa para mapear
+  mutação em asserção. Direção: dizer os cinco e por que dois dividem um fixture.
+  — descoberto por `sdd-reviewer` na missão `20260818-lote-facil` (2026-08-18)
+
+- [ ] **O `rows=13` do `gate:` da QA não sai do extrator do `gate_REVIEW`** —
+  `docs/handoffs/20260818-lote-facil/30-handoff-qa.md:7` — o awk literal do gate responde `rows=8`
+  sobre `templates/review.md`; 13 é a contagem sem o filtro de cabeçalho e separador. A conclusão
+  da J6 está certa e foi refeita nesta rodada (`##` devolve `NO-TABLE`), mas o número citado como
+  evidência não reproduz. Direção: recontar com o extrator, ou dizer qual variante foi usada.
+  — descoberto por `sdd-reviewer` na missão `20260818-lote-facil` (2026-08-18)
+
+- [ ] **O `README.md` diz "the 6 agents" e existem 7** — `README.md:111` — o `sdd-kaizen` não
+  aparece nem no rótulo nem na tabela de `agents/`, embora o `sdd preflight` conte `7 kit
+  agent(s) checked`. Pré-existente (nasceu com o agente, fora do diff desta missão). Direção:
+  derivar o número de `ls agents/*.md` em vez de escrevê-lo à mão.
+  — descoberto por `sdd-reviewer` na missão `20260818-lote-facil` (2026-08-18)
+
+- [ ] **O `CLAUDE.md` chama de "quatro" os sensores fora do alcance da mutação e agora são cinco**
+  — `CLAUDE.md:163` — o `check-templates.sh` mede `templates/`, o catálogo sabota o `bin/sdd`, e
+  ele não tem `selftest()` — a rubrica da casa exigiria um. A exceção está declarada no cabeçalho
+  do próprio sensor e em nenhum lugar da regra. Direção: admitir a quinta com o porquê, ou dar-lhe
+  o auto-teste. — descoberto por `sdd-reviewer` na missão `20260818-lote-facil` (2026-08-18)
 
 ### Idioma
 

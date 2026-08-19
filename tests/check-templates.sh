@@ -121,6 +121,20 @@ done
 review_check '^### Overall Grade' "the '### Overall Grade' heading gate_REVIEW greps, at level 3"
 review_check '^\| Criterion \| Grade \| Rationale \|' "the exact table header the gate parses"
 review_check '^\| \*\*Overall\*\* \|'  "the '**Overall**' row"
+# The seven criteria, one assertion each, because the gate CANNOT check them. gate_REVIEW reads
+# whatever rows it finds and demands Grade A on each; a table that lost six of its seven criteria
+# still passes it, and passes it with a real seal. The template is the only carrier of the list,
+# and it says so itself two lines above the table ("não traduza os critérios: eles são contrato do
+# skill"). Measured: deleting all seven rows left this sensor green, still printing its `ok rule:`
+# line — the rule was written and never probed. Sibling tables in this file already assert each
+# row individually (missao.md's PLAN-AUTO criteria, `for c in a b c d e`); this follows them.
+# English on purpose, in a pt-BR template: the names belong to the codereview skill, not to us.
+for c in 'Code Quality (Zen)' 'Type Safety' 'Error Handling' 'Security' 'Performance' \
+         'Test Coverage' 'Documentation'; do
+  review_check "^\| ${c//(/\\(}" "the '${c}' criterion row"
+done
+review_check '^## TL;DR'               "section 'TL;DR'"
+review_check '^## Pendências / Decisions for a Human' "section 'Pendências / Decisions for a Human'"
 review_check '^## Achados da rodada'   "section 'Achados da rodada'"
 review_check '^## O que foi corrigido' "section 'O que foi corrigido'"
 review_check '^## O que foi refutado'  "section 'O que foi refutado'"
@@ -129,7 +143,7 @@ review_check '^## Achados fora de escopo' "section 'Achados fora de escopo'"
 # The floor is what turns "no assertion failed" into "the assertions ran". Deleting the loop above
 # would otherwise leave this file green while measuring nothing about the file it names — the
 # vacuity every sensor in this suite carries a floor against.
-REVIEW_FLOOR=14
+REVIEW_FLOOR=23
 if [ "$REVIEW_ASSERTIONS" -lt "$REVIEW_FLOOR" ]; then
   printf '  FAIL review.md: only %d assertion(s) ran, expected at least %d — a clean report over\n' \
     "$REVIEW_ASSERTIONS" "$REVIEW_FLOOR" >&2

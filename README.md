@@ -109,7 +109,7 @@ the directory `docs/handoffs/<YYYYMMDD>-<slug>/`.
 | [`docs/failure-modes.md`](docs/failure-modes.md) | what breaks, how the kit reacts, how to get unstuck |
 | [`config/schema.md`](config/schema.md) | every `.sdd/config.sh` key, with its default and why |
 | [`agents/`](agents/) | the 6 agents (open markdown — portable to other harnesses) |
-| [`templates/`](templates/) | mission, plan, handoff, checkpoint, PR body |
+| [`templates/`](templates/) | mission, plan, handoff, checkpoint, review, PR body |
 | [`CLAUDE.md`](CLAUDE.md) | conventions for whoever (human or agent) works on **this** kit |
 | [`KAIZEN_LOG.md`](KAIZEN_LOG.md) | history of improvements with a measured before/after |
 | [`TODO.md`](TODO.md) | findings about the kit itself, recorded by any agent |
