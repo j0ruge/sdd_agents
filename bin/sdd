@@ -673,6 +673,42 @@ readonly MUTATION_STAMP_PATHS=(bin tests templates config)
 # runner re-derive EXEC in a loop, at about US$ 25 a lap.
 readonly MUTATION_STAMP_REL='.sdd/logs/mutation-stamp'
 
+# "Is this root a tree the catalogue is about?" — asked at BOTH ends, and therefore written once.
+#
+# gate_PR's question ("is a stamp demanded here?") and cmd_health's ("which tree do I measure?")
+# have to be the SAME question, or the two ends address different trees and the seal becomes a
+# refusal with no reachable remedy. Two spellings of it is precisely how that happened: the writer
+# answered about $SDD_HOME and the reader asked about $REPO_ROOT.
+#
+# Scoped by ARTIFACT and never by the identity of the repository, for the reason gate_PR records
+# below: the identity door the kit already has (cmd_kaizen) carries a live worktree bug.
+has_mutation_catalogue() { [ -f "$1/tests/check-mutation.sh" ]; }
+
+# The kit tree `sdd health` measures — and therefore the tree it stamps.
+#
+# NOT $SDD_HOME unconditionally, which is what it used to be. `sdd` on the PATH is the install
+# README.md documents, and standing in a worktree or a second clone of the kit made $SDD_HOME and
+# gate_PR's $REPO_ROOT two different trees: the stamp landed in one while the gate asked the other,
+# so gate_PR was unsatisfiable FOREVER and `sdd health` — the command its own refusal names as the
+# remedy — re-measured the wrong tree, twenty to fifty minutes a lap.
+#
+# The working directory wins only when it is itself a tree with a catalogue, tested by the SAME
+# predicate gate_PR scopes on: every root the gate would demand a stamp for is a root this command
+# measures and stamps, and every root it would not is left to $SDD_HOME. A target repo has no
+# tests/check-mutation.sh, so `sdd health` inside one is the command it always was.
+health_kit_root() {
+  local cwd_root
+  # `|| true`, and not for style: this file runs under `set -e`, an assignment takes the status of
+  # its substitution, and "the cwd is not a git repository" is a perfectly ordinary answer here —
+  # unguarded, it would kill `sdd health` on its first line for every operator outside a checkout.
+  cwd_root="$( git rev-parse --show-toplevel 2>/dev/null || true )"
+  if [ -n "$cwd_root" ] && has_mutation_catalogue "$cwd_root"; then
+    printf '%s\n' "$cwd_root"
+  else
+    printf '%s\n' "$SDD_HOME"
+  fi
+}
+
 # The size below which a catalogue cannot have measured the runner, whatever its score says.
 #
 # EIGHT because check 4 of cmd_health already demands one mutation per gate, so a catalogue under
@@ -689,6 +725,14 @@ readonly MUTATION_CATALOGUE_FLOOR=8
 # constant, so a root whose four directories are all absent would otherwise be handed a stable key
 # that every other empty root matches — a stamp certifying nothing, indistinguishable from a stamp
 # certifying everything. Emptiness is refused here, once, instead of at each call site.
+#
+# ⚠️ `xargs -r`, and it is what makes the sentence above TRUE rather than merely intended: without
+# it, `xargs` with nothing on its input runs `md5sum` once with no operands, `md5sum` reads the
+# already-drained pipe, and the function hands back the digest of the empty string — the exact
+# constant the guard exists to refuse, with the `[ -n "$listing" ]` below satisfied by it. Today no
+# caller reaches that state (both ends only ask about a root whose tests/ holds a catalogue, so
+# `find` always has at least that file to print), and that is declared, not sold as measured: this
+# is a one-token hardening of a guard whose comment was ahead of its code.
 mutation_stamp_key() { # mutation_stamp_key <root>
   local listing
   # `md5sum` and not `sha256sum`: it is the digest `sdd preflight` already probes the userland for,
@@ -696,7 +740,7 @@ mutation_stamp_key() { # mutation_stamp_key <root>
   # digest, which is what makes a file that merely MOVED change the key.
   listing="$( CDPATH='' cd "$1" 2>/dev/null \
               && find "${MUTATION_STAMP_PATHS[@]}" -type f -print0 2>/dev/null \
-                 | LC_ALL=C sort -z | xargs -0 md5sum 2>/dev/null )" || true
+                 | LC_ALL=C sort -z | xargs -0 -r md5sum 2>/dev/null )" || true
   [ -n "$listing" ] || return 1
   # Herestring, never `printf … |`: under `pipefail` that form returns 141 when the reader exits
   # first, which is a failure whose likelihood grows with the size of the tree being hashed.
@@ -719,7 +763,7 @@ gate_PR() {
   # repository. A target repo has no tests/check-mutation.sh, so nothing about it changes; and the
   # identity door the kit already owns (cmd_kaizen) carries a live worktree bug, recorded in
   # TODO.md, which inheriting would simply buy.
-  if [ -f "$REPO_ROOT/tests/check-mutation.sh" ]; then
+  if has_mutation_catalogue "$REPO_ROOT"; then
     local key stamp
     key="$(mutation_stamp_key "$REPO_ROOT" || true)"
     stamp="$(cat "$REPO_ROOT/$MUTATION_STAMP_REL" 2>/dev/null || true)"
@@ -1923,8 +1967,13 @@ cmd_health() {
   # `--with-mutation` run (check 1) AND a score whose two numbers agree (check 2). Either one alone
   # is a world this repo has already shipped — a red suite over a perfect score line, and a green
   # suite over `103 caught … of 104`.
-  local kit="$SDD_HOME" out rc k n catalogue_green=0
+  local out rc k n catalogue_green=0 kit
+  # The tree, resolved ONCE and used by every check below — including the stamp, which is the whole
+  # point: what this command measures and what it stamps can never again be two different trees.
+  kit="$(health_kit_root || true)"
 
+  # The tree is IN the header, because it is now an answer and no longer a constant: an operator
+  # standing in a worktree has to be able to see which of their checkouts was just measured.
   step "sdd health — kit sensor at $kit"
 
   # --- 1. the suite, which already includes bash -n and the mutation --------

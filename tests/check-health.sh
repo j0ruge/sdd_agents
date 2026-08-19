@@ -278,8 +278,18 @@ HEALTH_RC=0
 # command substitution runs in a subshell, and every global it assigns dies with the
 # substitution — `bash -n` does not say so and the linter does not either. The house rule, and
 # the runner's own run_phase / LAST_PHASE_* shape.
+#
+# The working directory is PINNED to the fixture, and that is load-bearing rather than tidiness:
+# `sdd health` now measures the checkout the operator is standing in when that checkout carries a
+# catalogue, so an unpinned invocation asks about whatever tree the caller happened to be in. Run
+# from this repo it would measure THIS repo and spend twenty to fifty minutes on the real
+# catalogue; run from inside a check-mutation.sh sandbox — which is a copy of the kit, catalogue
+# included — it would recurse into a second catalogue for every mutant. Measured, not feared: both
+# happened on the first run after the resolution changed. $FIX is not a git checkout, so the
+# runner falls back to its own $SDD_HOME, which IS the fixture. A sensor whose answer depends on
+# the caller's cwd is not a sensor, the same reason HOME is redirected on the line below.
 health_run() {
-  HEALTH_OUT="$( HOME="$FIX/home" NO_COLOR=1 "$FIX/bin/sdd" health 2>&1 )"
+  HEALTH_OUT="$( cd "$FIX" && HOME="$FIX/home" NO_COLOR=1 "$FIX/bin/sdd" health 2>&1 )"
   HEALTH_RC=$?
 }
 
@@ -1441,7 +1451,12 @@ health_captures() {
 # the region gained the `defined` capture. `grep -c` returns 1 exactly when it counts zero, which
 # is the emptied catalogue this very check exists to refuse — unguarded it would have killed the
 # run on the line written to report it.
-CAPTURE_FLOOR=21
+# 21 → 22: the tree the command measures stopped being the constant $SDD_HOME and became an answer
+# — health_kit_root, so the writer stamps the tree gate_PR reads — and the region gained the `kit`
+# capture. Guarded INSIDE with `|| true`, though the function it calls cannot fail: the ratchet
+# counts every capture in the region, and a capture whose guard depends on the callee staying
+# infallible is a guard that rots the day somebody adds a branch to it.
+CAPTURE_FLOOR=22
 
 capture_report() {
   local out total safe offenders

@@ -222,7 +222,20 @@ mut_PR_no_artifact() {        # a missing 50-pr.md stops failing — a "complete
 # same family as the two mutations already logged in TODO.md for sabotaging a second site in
 # silence, since the runner tests other files by that shape elsewhere.
 mut_PR_stamp_blind() {
-  sed -i '/^gate_PR()/,/^}/ s|if \[ -f "\$REPO_ROOT/tests/check-mutation.sh" \]; then|if false; then|' "$1"
+  sed -i '/^gate_PR()/,/^}/ s|if has_mutation_catalogue "\$REPO_ROOT"; then|if false; then|' "$1"
+}
+
+# The WRITER goes back to answering about the tree its own file sits in, whatever tree the operator
+# is standing in and whatever tree the gate is about to ask for. With `sdd` on the PATH — the
+# install README.md documents — over a worktree or a second clone of the kit, the stamp lands in
+# one tree while gate_PR keys, scopes and reads under the other: a gate unsatisfiable forever whose
+# own remedy re-measures the wrong tree at twenty to fifty minutes a lap.
+#
+# Sabotaging the CONDITION and not deleting the branch: what has to be measured is that the working
+# directory can win, not that an `if` is present. Addressed to the body of health_kit_root, the
+# family two mutations already in TODO.md got wrong by leaving the address off.
+mut_HEALTH_stamp_tree_blind() {
+  sed -i '/^health_kit_root() {/,/^}/ s|if \[ -n "\$cwd_root" \] \&\& has_mutation_catalogue "\$cwd_root"; then|if false; then|' "$1"
 }
 
 # The WRITER's half of the same seal, and a second mutant for the same reason the `gate:` branch of
@@ -1392,6 +1405,7 @@ CATALOG=(
   PR_no_artifact
   PR_stamp_blind
   HEALTH_stamp_window_blind
+  HEALTH_stamp_tree_blind
   RUN_inverted_journal
   RUN_ignores_output_lang
   RUN_autonomy_ignores_dry_run

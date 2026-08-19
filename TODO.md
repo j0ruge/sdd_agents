@@ -85,6 +85,15 @@ Achados sobre **repos-alvo** vão para o `TODO.md` daquele repo. Este arquivo é
   `gate_PR` exige carimbo de catálogo verde sobre o conteúdo atual; `mut_PR_stamp_blind`.
   — descoberto por `humano` na missão `20260818-lote-facil` (2026-08-19)
 
+- [ ] **Nada impede a próxima invocação de `sdd health` sem `cd`, e ela mede a árvore de quem
+  chamou** — `tests/check-health.sh:291` — desde o F2 o `health_kit_root` deixa o diretório
+  corrente escolher a árvore medida, então um chamador que não fixa o `cd` mede o que estiver em
+  volta. Medido, não temido: o fixture do sensor passou a medir ESTE repo (catálogo real, 20 a 50
+  min) e, dentro de uma sandbox do `check-mutation.sh`, recursaria num segundo catálogo por
+  mutante. O sítio foi fixado; nenhum sensor recusa o próximo. Direção: regra que enumere as
+  invocações de `bin/sdd` dos fixtures e exija `cd` fixado. — descoberto por `sdd-executor` na
+  missão `20260819-fecho-...` (2026-08-19)
+
 - [ ] **O carimbo de mutação cobre 4 dos 8 caminhos que a sandbox do catálogo copia** —
   `bin/sdd:668` contra `tests/check-mutation.sh:1485` — a chave lê `bin tests templates config`,
   mas `sandbox()` também copia `agents/`, `CLAUDE.md`, `TODO.md` e `docs/adr`. Mudança confinada a

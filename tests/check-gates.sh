@@ -856,6 +856,119 @@ else
        "the 6 worlds above agreeing" "$i4_bad disagreement(s), listed above"
 fi
 
+# --- the two ends of the stamp, and the tree they have to agree on ----------
+#
+# The block above proves WHAT the stamp means. This one proves WHERE it lives, which is a separate
+# property and the one the writer got wrong. cmd_health stamped $SDD_HOME — the tree the running
+# bin/sdd sits in — while gate_PR scopes, keys and reads under $REPO_ROOT, the git toplevel of the
+# working directory. Those are the same tree only when the kit is invoked out of the very checkout
+# being worked on. Put `sdd` on the PATH, which README.md documents as the install, then stand in a
+# worktree or a second clone of the kit: the writer answers about one tree and the reader asks
+# about the other, so nothing ever stamps the tree the gate is asking about. gate_PR is then
+# unsatisfiable FOREVER, and the remedy its own sentence names re-measures the wrong tree at twenty
+# to fifty minutes a lap — a refusal with no reachable remedy, which is worse than the label it
+# replaced.
+#
+# Every world of the block above invokes "$FIX/bin/sdd" from inside $FIX, so SDD_HOME == REPO_ROOT
+# holds by construction in all eight and none of them can see this. The three below are the worlds
+# where the two DIVERGE: a second kit, living outside the fixture and never the working directory,
+# is the one whose bin/sdd runs.
+#
+# THREE worlds, and the last two are not decoration — they are the half that says the answer is
+# "the tree the gate measures", not "always the working directory". A cmd_health that simply
+# followed the cwd would leave every target repo, and every operator standing outside a git
+# checkout, with no stamped kit at all.
+tree_bad=0
+tree_note() { # tree_note <world> <what disagreed>
+  printf '         world "%s": %s\n' "$1" "$2" >&2
+  tree_bad=$((tree_bad + 1))
+}
+TREE_STAMP=".sdd/logs/mutation-stamp"
+tree_stamped() { [ -f "$1/$TREE_STAMP" ]; }
+
+# The INSTALLED kit: a second checkout, outside the fixture, whose bin/sdd is the one on the PATH.
+# It carries a catalogue and a stub suite of its own, so that a `sdd health` which measures THIS
+# tree can still reach a verdict without the twenty-minute run — otherwise worlds 2 and 3 would be
+# measuring an absent suite instead of the fallback.
+TREE_KIT="$SDD_STATE_FIX/kit-install"
+mkdir -p "$TREE_KIT/bin" "$TREE_KIT/tests" "$TREE_KIT/.sdd/logs"
+cp "$ROOT/bin/sdd" "$TREE_KIT/bin/sdd"
+cat > "$TREE_KIT/tests/run-all.sh" <<EOF
+#!/usr/bin/env bash
+# Stub for the installed kit's own catalogue: always green, always this score.
+printf '%s\n' "$I4_SCORE_GREEN"
+EOF
+chmod +x "$TREE_KIT/tests/run-all.sh"
+{
+  printf '#!/usr/bin/env bash\n'
+  # Sized off the runner's floor, for the reason I4_FLOOR spells out above: a catalogue under it is
+  # one cmd_health is right to refuse, and worlds 2 and 3 would then be asking for a stamp that no
+  # correct writer would ever produce.
+  tree_n=0
+  while [ "$tree_n" -lt "${I4_FLOOR:-0}" ]; do
+    printf 'mut_INSTALL_%d() { :; }\n' "$tree_n"
+    tree_n=$(( tree_n + 1 ))
+  done
+  printf 'exit 0\n'
+} > "$TREE_KIT/tests/check-mutation.sh"
+chmod +x "$TREE_KIT/tests/check-mutation.sh"
+
+# A plain git repo with no catalogue: the world every target repo of the kit lives in.
+TREE_PLAIN="$SDD_STATE_FIX/plain-repo"
+mkdir -p "$TREE_PLAIN"
+( cd "$TREE_PLAIN" && git init -q -b main ) >/dev/null 2>&1
+
+# Runs the INSTALLED kit's health from <cwd>, after taking every stamp away — so what is on disk
+# afterwards was written by THIS run and never inherited from the block above.
+tree_health() { # tree_health <cwd>
+  rm -f "$FIX/$TREE_STAMP" "$TREE_KIT/$TREE_STAMP" "$TREE_PLAIN/$TREE_STAMP"
+  ( cd "$1" && HOME="$i4_home" NO_COLOR=1 "$TREE_KIT/bin/sdd" health >/dev/null 2>&1 ) || true
+}
+
+# The control file still says `move-the-tree` from world 8, and a run that moves the tree is right
+# to stamp nothing at all — which would make every world below pass for the wrong reason.
+i4_verdict 0 "$I4_SCORE_GREEN"
+
+# 1. The kit runs from the PATH while the working directory is a kit worktree. The tree the gate
+#    measures is $FIX; the tree the runner's own file sits in is $TREE_KIT. Only one of them can be
+#    the one that gets stamped, and it has to be the one the gate reads.
+tree_health "$FIX"
+tree_stamped "$FIX" \
+  || tree_note "sdd from the PATH, standing in a kit worktree" \
+               "the tree gate_PR measures was not stamped — the gate has no reachable remedy"
+tree_stamped "$TREE_KIT" \
+  && tree_note "sdd from the PATH, standing in a kit worktree" \
+               "the installed kit was stamped instead, and it is not the tree the gate asks about"
+tree_got="$( cd "$FIX" && "$SDD" phase "$MISSION" 2>&1 )"
+[ "$tree_got" = "DONE" ] \
+  || tree_note "sdd from the PATH, standing in a kit worktree" \
+               "expected phase DONE after health, got $tree_got"
+
+# 2. The same install, standing in a repo with no catalogue — a target repo. The kit itself is what
+#    gets measured and stamped, exactly as before, and the target repo is left alone: it has no
+#    catalogue, so gate_PR asks it for nothing and a stamp there would certify a tree nobody ran.
+tree_health "$TREE_PLAIN"
+tree_stamped "$TREE_KIT" \
+  || tree_note "sdd from the PATH, standing in a target repo" \
+               "the installed kit was not stamped — the fallback every target repo depends on is gone"
+tree_stamped "$TREE_PLAIN" \
+  && tree_note "sdd from the PATH, standing in a target repo" \
+               "the target repo was stamped, and nothing ever measured it"
+
+# 3. And the other half of that fallback: no git repository at all under the working directory.
+#    A resolution that read the cwd without asking whether it is a kit would stamp nothing here.
+tree_health "$TREE_KIT"
+tree_stamped "$TREE_KIT" \
+  || tree_note "sdd invoked from outside any git repository" \
+               "the installed kit was not stamped, so health has no tree to measure at all"
+
+if [ "$tree_bad" -eq 0 ]; then
+  pass "gate_PR: the stamp is read from the tree whose content the gate measures"
+else
+  fail "gate_PR: the stamp is read from the tree whose content the gate measures" \
+       "the 3 worlds above agreeing" "$tree_bad disagreement(s), listed above"
+fi
+
 # Back to the state the sections below inherit: no catalogue, no kit copy, no PR artifact — the
 # fixture is a plain target repo again, sitting at PR with 50-pr.md missing.
 # `${FIX:?}` and not `$FIX`: with the fixture variable empty this line is `rm -rf /bin /tests` on
