@@ -122,6 +122,14 @@ de produto. As três que já existiam continuam de pé e seguem para o PR:
   instrumentos do `00-missao.md` — é fora de escopo por artefato, não por conveniência.
 - **A suíte:** 1m22s nesta medição, contra 1m50s registrado pelo EXEC. A diferença é contenção de
   CPU, não melhoria: a medição do EXEC dividia os cores com o catálogo. Nada vai para o `TODO.md`.
+- ⚠️ **Uma árvore `docs/qa/` inteira apareceu no meio desta fase e foi REMOVIDA.** Scaffold
+  completo (`README.md`, `personas.md`, `templates/`, `journeys/` com mermaid citando esta missão)
+  mais duas linhas acrescentadas ao `.gitignore`, nascidos entre 16:46 e 16:49 sem hook algum
+  configurado. Neste projeto `E2E_CMD=""`, e o contrato do `sdd-qa` é explícito: sem interface a
+  árvore `docs/qa/` **não existe e não se cria** — a evidência da jornada mora no `gate:` deste
+  handoff. Estava untracked, então nada entrou no diff; o `.gitignore` foi revertido e a árvore
+  apagada, e o `git status` fechou limpo. Quem vir isso reaparecer: apague de novo, não commite.
+  Não virou item do `TODO.md` porque a origem está fora do kit (nenhum arquivo do repo a gera).
 
 ## Achados fora de escopo
 
