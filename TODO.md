@@ -39,6 +39,14 @@ Achados sobre **repos-alvo** vão para o `TODO.md` daquele repo. Este arquivo é
 
 ### Sensores que faltam
 
+- [ ] **Nada mede se o esperado de um Check do checkpoint ainda reproduz** —
+  `tests/check-checkpoint.sh:1` — o sensor mede a FORMA da célula (âncora `^  ok    `, ausência de
+  `|`, cinco colunas) e nunca o VALOR. Medido nesta missão: o Check do I2 dizia `3` e responde `4`
+  desde `8812a9c`, com a suíte verde o tempo todo — e o commit seguinte, que re-derivou âncoras,
+  passou ao lado. Direção: não é rodar os Checks (custa a suíte por célula); é a fase que move uma
+  contagem re-rodar os Checks do mesmo predicado.
+  — descoberto por `sdd-reviewer` na missão `20260818-lote-facil` (2026-08-19)
+
 - [ ] **A sonda de `--path-format` do preflight não tem asserção nenhuma** —
   `bin/sdd:1591` — a guarda que ela anuncia (`ledger_repo_root` recusando a resposta de duas
   linhas) tem par diferencial e mutação; a linha que **fala** com o operador não tem. O
@@ -63,7 +71,7 @@ Achados sobre **repos-alvo** vão para o `TODO.md` daquele repo. Este arquivo é
   — descoberto por `sdd-reviewer` na missão `20260818-lote-facil` (2026-08-18)
 
 - [ ] **A regra `cdpath:` não vê `cd --` nem comando quebrado com `\`** —
-  `tests/check-pipefail.sh:221` — o grupo de flags é `-[[:alpha:]]+`, e `--` não tem alfa
+  `tests/check-pipefail.sh:252` — o grupo de flags é `-[[:alpha:]]+`, e `--` não tem alfa
   nenhum depois do segundo traço, então `cd -- "$(...)"` sem guarda passa limpo; e as três
   regras leem linha física, então operando na linha seguinte a um `\` é invisível. Nenhuma
   instância viva hoje. Direção: alargar para `(--|-[[:alpha:]]+)` e declarar a continuação.
@@ -84,7 +92,7 @@ Achados sobre **repos-alvo** vão para o `TODO.md` daquele repo. Este arquivo é
   — descoberto por `sdd-reviewer` na missão `20260818-lote-facil` (2026-08-18)
 
 - [ ] **O `check-templates.sh` não tem auto-teste e nenhuma mutação o alcança** —
-  `tests/check-templates.sh:22` (a função `check()`) — ele mede `templates/`, então o catálogo,
+  `tests/check-templates.sh:30` (a função `check()`) — ele mede `templates/`, então o catálogo,
   que sabota o `bin/sdd`, nunca o mata; e `check()` não tem probe nenhum. Regex quebrada ali
   reporta "template contract intact" para sempre sobre 60 asserções, inclusive as do
   `40-review-r<N>.md` que o `gate_REVIEW` lê. Está nas duas situações que o `CLAUDE.md` manda
@@ -365,7 +373,7 @@ Achados sobre **repos-alvo** vão para o `TODO.md` daquele repo. Este arquivo é
   missão `20260815-i13.5-kit-em-ingles` (2026-08-15)
 
 - [ ] **A regra `cdpath:` certifica como limpo o `cd` de operando VARIÁVEL** —
-  `tests/check-pipefail.sh:131` (o comentário do `CD_RE` declara o limite) — a regra só mede
+  `tests/check-pipefail.sh:231` (o comentário do `CD_RE` declara o limite) — a regra só mede
   operando que é substituição de comando, porque `cd "$FIX"` é indecidível no scanner e os ~150
   sítios de `tests/` têm variável absoluta. Só que a única instância histórica da classe era
   exatamente essa forma (`cd "$common"` do `ledger_repo_root`, uma CRITICAL), então a forma que
@@ -390,7 +398,7 @@ Achados sobre **repos-alvo** vão para o `TODO.md` daquele repo. Este arquivo é
   estrutura e merece a sua. — descoberto por `sdd-docs` na missão `20260817-eixo-do-juiz` (2026-08-17)
 
 - [ ] **A contabilidade do `sdd autonomy` não fecha na tela: o cabeçalho conta o escopo, o
-  parágrafo mistura duas populações** — `bin/sdd:2473` — `total` conta só as linhas locais, e as
+  parágrafo mistura duas populações** — `bin/sdd:2568` — `total` conta só as linhas locais, e as
   quatro linhas de exclusão somam a ele duas que **já estavam fora** (`foreign`, `norepo`). Medido
   no repo real: cabeçalho `75 row(s)` sobre arquivo de 86 linhas, `11 excluded: born in another
   repo`, tabela somando 73 sessões — 75 − 2 − 11 ≠ 73. Direção: **decisão humana** entre o cabeçalho

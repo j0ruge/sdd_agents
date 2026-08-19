@@ -21,7 +21,7 @@ atualizado: 2026-08-18 23:09
 | ID | Incremento | Check (comando → esperado) | Status | Commit |
 |---|---|---|---|---|
 | I1 | A família do aborto calado — 4 sítios do `cmd_health` | `o=$(bash tests/check-health.sh 2>&1); grep -c '^  ok    abort: ' <<< "$o"` → `4` | done | 4f11624 |
-| I2 | A família do `cd` relativo — 14 em `tests/` mais o `ledger_repo_root` | `o=$(bash tests/run-all.sh 2>&1); grep -c '^  ok    cdpath: ' <<< "$o"` → `3` | done | aa95b2e |
+| I2 | A família do `cd` relativo — 14 em `tests/` mais o `ledger_repo_root` | `o=$(bash tests/run-all.sh 2>&1); grep -c '^  ok    cdpath: ' <<< "$o"` → `4` | done | aa95b2e |
 | I3 | Saída humana do runner — 3 números que contam a grandeza errada | `o=$(bash tests/check-autonomy.sh 2>&1); grep -c '^  ok    output: ' <<< "$o"` → `9` | done | 4f6aa8b |
 | I4 | Cinco caminhos sem asserção ganham asserção e mutação | `o=$(bash tests/run-all.sh 2>&1); grep -c '^  ok    covered: ' <<< "$o"` → `5` | done | f21df55 |
 | I5 | Regras de sensor e o `templates/review.md` que falta | `o=$(bash tests/run-all.sh 2>&1); grep -c '^  ok    rule: ' <<< "$o"` → `5` | done | eff77b1 |
@@ -289,6 +289,16 @@ atualizado: 2026-08-18 23:09
   Descartar a árvore para `e0074ec` e reabrir o REVIEW com árvore limpa — o custo já pago da r1 se
   perde, e o CRITICAL 1 que ela achou (identidade do repo virando lixo em git < 2.31) volta a ser
   achado aberto. Reprodução em um comando: `bash tests/run-all.sh; echo rc=$?`.
+- 2026-08-19 · `REVIEW r2` · **O Check do I2 dizia `3` e responde `4`; o esperado foi movido, não o
+  Check.** A r1 escreveu o par diferencial pré-2.31 do `check-autonomy.sh` e a r2 o commitou em
+  `8812a9c` — uma quarta asserção `cdpath:`, legítima e do mesmo eixo do I2. O commit seguinte,
+  `1272690`, chamava-se "com âncora re-derivada" e não olhou para cá. O incremento continua `done`:
+  o que mudou é a população que o Check conta, e a linha nova é do mesmo predicado que ele mede.
+  ⚠️ **O `check-checkpoint.sh` é verde sobre isto por construção** — ele mede a FORMA da célula (o
+  `^  ok    `, a ausência de `|`, as cinco colunas), nunca se o esperado ainda reproduz. Rodar os
+  Checks exigiria a suíte inteira por célula. Registrado no `TODO.md` como sensor que falta.
+- 2026-08-19 · `REVIEW r2` · Os outros quatro Checks foram rodados literais contra este HEAD e
+  reproduzem: `abort: 4`, `output: 9`, `covered: 5`, `rule: 5`.
 
 ## Incrementos de fix (QA)
 

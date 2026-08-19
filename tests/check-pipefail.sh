@@ -218,6 +218,37 @@ PIPE_RE='\|[[:space:]]*grep([[:space:]]+[^[:space:]|;&()<>`#]+)*[[:space:]]+(-[[
 #     the trailing anchor excludes alnum and `-`, which leaves `=` and whitespace.
 MAXC_RE='\|[[:space:]]*grep([[:space:]]+[^[:space:]|;&()<>`#]+)*[[:space:]]+(-[[:alnum:]]*m[0-9]*|--max-count)([^[:alnum:]-]|$)'
 
+# Rule 2's operand shape, and the two the header promises are named here. Both are OPERAND
+# shapes; the flag-level and lexical gaps (`cd --`, an operand across a `\` continuation) are a
+# different accusation and live in TODO.md, not here.
+#
+# MEASURED: the operand is a command substitution — `cd "$(dirname "$0")/..`". It is the one shape
+# a line scanner can classify honestly, because the operand is written out on the line: no `/`,
+# `.` or `..` at its head means bash may resolve it through $CDPATH, and $CDPATH resolving it
+# PRINTS the directory it found on stdout — straight into the enclosing capture. That is the whole
+# defect, and it is decidable from the text.
+#
+# NOT MEASURED (1) — a VARIABLE operand: `cd "$dir"`, `cd "$1"`. Undecidable per line: whether the
+# value starts with `/` is a runtime fact, and the same `cd` is safe or unsafe depending on the
+# caller. The kit is full of them —
+#     grep -cE '(^|[^[:alnum:]_./$-])cd[[:space:]]+"?\$\{?[A-Za-z_0-9]' bin/sdd tests/*.sh
+# — and a syntactic rule over that population invents ~170 violations, which gets a rule deleted
+# rather than fixed. ⚠️ This is NOT a benign gap: the only instance of the class that ever cost
+# this kit anything had exactly this shape (`cd "$common"` in ledger_repo_root, the CRITICAL of
+# 20260817-eixo-do-juiz). It is not a fail-open because it is measured OUT OF BAND and at runtime,
+# where the question is decidable: the differential pair in tests/check-autonomy.sh runs the real
+# runner under an ARMED $CDPATH poison and asserts the identity comes back on one line. A line
+# scanner and a runtime probe answer different questions; this file owns the first only.
+#
+# NOT MEASURED (2) — a LITERAL relative operand: `cd bin`. Decidable from the text, and left out
+# on purpose: the echoed path only becomes a SILENT corruption when the `cd` sits inside a
+# capture, and a capture is exactly what CD_RE already keys on. A bare `cd bin` at statement level
+# spills onto the operator's terminal instead, which is noise and not a lie.
+# Not a fail-open by population, measured rather than asserted:
+#     grep -nE '(^|[^[:alnum:]_./$-])cd[[:space:]]+[A-Za-z0-9_]' bin/sdd tests/*.sh | grep -vE ':[[:space:]]*#'
+# answers with prose only — the words "cd into a capture", "cd rule", "cd prints" inside probe and
+# assert_eq DESCRIPTIONS. Zero of the hits are a `cd` command. Re-derive before trusting that
+# sentence: it is a count, and counts rot.
 CD_RE='(^|[^[:alnum:]_./$-])cd([[:space:]]+-[[:alpha:]]+)*[[:space:]]+"?(\$\(|`)'
 CD_GUARD="CDPATH='' cd"
 # A token with no `cd` in it: what is left after the guarded ones are blanked is what CD_RE reads.
