@@ -354,3 +354,28 @@ e para "Decisions for a Human", nunca para um fix. Detalhe em `30-handoff-qa.md`
   suíte real, byte a byte, fora o path do sandbox. O sítio 1 não depende dela — foi andado também
   com a suíte genuinamente vermelha, revertendo o conserto do I3 em `bin/sdd:2253`, o que reprovou
   `check-autonomy.sh` em exatamente uma asserção (a escrita para esse defeito) e em nenhuma outra.
+
+- 2026-08-19 · `REVIEW r3` · **A rodada fecha: os sete critérios em A**, e o laço que a r1 abriu
+  termina em `40-review-r3.md`. Os três fail-open que reprovaram a r2 estão consertados, cada um
+  reproduzido contra o HEAD antes de qualquer edição — o censo do `guard:` caindo de 16 para 15 em
+  silêncio, `23 assertion(s)` sobre um `review.md` de zero byte, e `88 probe(s), the sensor
+  measures what it claims` com os três helpers neutralizados.
+- 2026-08-19 · `REVIEW r3` · ⚠️ **O `4c86712` nunca tinha sido revisado** — nasceu depois da r2, e
+  é ele que tira o catálogo do `TEST_CMD`. Rendeu cinco achados, dois deles fail-open reproduzidos
+  ponta a ponta: catálogo invocado ao lado do `run()` (o `--list` não vê, e a suíte rápida executou
+  o catálogo de verdade com o sensor imprimindo `ok`), e um sensor desenganchado levando a suíte de
+  14 para 13 passos sem ninguém notar. Fase de código entrada por decisão de fora do laço merece
+  revisão como qualquer outra.
+- 2026-08-19 · `REVIEW r3` · **Quarenta sabotagens, e a primeira rodada teve SEIS sobreviventes.**
+  Três eram probe fraco meu — o probe de lavagem usava uma captura que fecha na própria linha, o do
+  teto de span deixava o `END` reportar por ele, e o de "sensor desenganchado" punha `# ` na frente
+  de uma linha cuja contagem lê o TEXTO. Um era código redundante (removido, não sondado). Um era
+  um **HANG**: sem guarda, o filho envenenado do `check-todo.sh` gerava outro filho no mesmo mundo,
+  para sempre. Sensor que trava é pior que sensor que mente, e esta missão já gastou três sessões
+  de REVIEW em suíte que não voltava.
+- 2026-08-19 · `REVIEW r3` · ⚠️ **Duas vezes o conserto trouxe o defeito que ele consertava**, e
+  as duas foram pegas por medição e não por leitura: os controles do `check-todo.sh` restauravam
+  os contadores e com isso apagavam o próprio veredito (os três helpers neutralizados voltavam a
+  passar), e o patch que acrescentou o mundo da tabela vazia órfãou o `else` da asserção irmã,
+  deixando o mundo que falha passar calado. Conserto de fail-open é o lugar mais fácil de escrever
+  um fail-open novo.
