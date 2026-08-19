@@ -472,7 +472,32 @@ Achados sobre **repos-alvo** vão para o `TODO.md` daquele repo. Este arquivo é
   Direção: um mundo para cada, ou tirá-las da lista.
   — descoberto por `sdd-executor` na missão `20260819-fecho-que-nao-mente` (2026-08-19)
 
+- [ ] **O censo `guard:` conta captura escrita dentro de COMENTÁRIO** —
+  `tests/check-health.sh:1352` — a regra varre a região do `sdd health` linha a linha e não sabe
+  distinguir código de comentário. Medido nesta rodada: um exemplo de reprodução colado num
+  comentário do `cmd_health`, na forma `o="$( … )"`, virou a 23ª captura e a catraca de duas mãos
+  reprovou a suíte. Falha FECHADA, então não certifica nada de errado — mas proíbe documentar a
+  armadilha com o comando que a demonstra, que é justamente como esta casa documenta.
+  Direção: pular linha cujo primeiro caractere não-branco é `#`, com probe nos dois sentidos.
+  — descoberto por `sdd-reviewer` na missão `20260819-fecho-que-nao-mente` (2026-08-19)
+
+- [ ] **A guarda de vazio do `mutation_stamp_key` só cobre a ausência TOTAL dos quatro caminhos** —
+  `bin/sdd:806` — com `tests/` presente e `bin/` ausente, o `find` imprime o que achou, sai não-zero,
+  o `2>/dev/null` engole o aviso e a chave sai de uma listagem PARCIAL, sem sinal nenhum de que
+  faltou diretório. Hoje inalcançável (as duas pontas só perguntam por raiz cujo `tests/` tem
+  catálogo), e o comentário da função declara só o caso "todos ausentes".
+  Direção: exigir que cada caminho de `MUTATION_STAMP_PATHS` exista, ou carimbar a lista na chave.
+  — descoberto por `sdd-reviewer` na missão `20260819-fecho-que-nao-mente` (2026-08-19)
+
 ### Contrato e configuração
+
+- [ ] **`.sdd/config.sh` que não parseia é reportado como "declares no TEST_CMD"** —
+  `bin/sdd:2183` — a checagem 2b lê o `TEST_CMD` sourceando o config num subshell com
+  `>/dev/null 2>&1`, então o erro de sintaxe é engolido e o valor chega vazio: o operador ouve que
+  a chave não existe quando o arquivo inteiro está quebrado. Medido nesta rodada que o `set -e`
+  NÃO derruba a substituição (sem `inherit_errexit`), então o ramo existe e é alcançável.
+  Direção: capturar a stderr do source e, se ela não estiver vazia, dizer "não parseia" e mostrá-la.
+  — descoberto por `sdd-reviewer` na missão `20260819-fecho-que-nao-mente` (2026-08-19)
 
 - [ ] **A catraca do backlog e o carimbo de mutação colidem em toda missão** —
   `tests/health-baseline.txt` — o arquivo mora DENTRO dos quatro diretórios da chave do carimbo,
