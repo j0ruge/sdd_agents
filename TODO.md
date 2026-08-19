@@ -39,6 +39,27 @@ Achados sobre **repos-alvo** vão para o `TODO.md` daquele repo. Este arquivo é
 
 ### Sensores que faltam
 
+- [ ] **O `--list` do `run-all.sh` imprime linha que não é passo, e sai 0 tendo rodado nada** —
+  `tests/run-all.sh:146` — a mensagem de linter ausente fica fora do `run()` e entra na lista
+  (`PATH=/tmp/empty tests/run-all.sh --list` mostra duas linhas que não são passos, uma delas
+  contando para o `SURFACE_FLOOR`). E `TEST_CMD` com `--list` faria todo gate passar na hora, com
+  14 linhas plausíveis no log. Direção: filtrar não-passos, e recusar `--list` como TEST_CMD.
+  — descoberto por `sdd-reviewer` na missão `20260818-lote-facil` (2026-08-19)
+
+- [ ] **O `stub-argv.txt` do `check-health.sh` nunca é apagado entre mundos de fixture** —
+  `tests/check-health.sh:930` — todo `health_run` sobrescreve, ninguém remove. Hoje não reproduz
+  fail-open (medido: sem chamada nenhuma à suíte, o arquivo some e a asserção acusa certo), mas no
+  dia em que `cmd_health` ganhar um segundo caminho para a suíte a última escrita vence calada.
+  Direção: apagar no `green_world`, como as outras fixtures fazem.
+  — descoberto por `sdd-reviewer` na missão `20260818-lote-facil` (2026-08-19)
+
+- [ ] **Dois resíduos de sensor que precisam de DUAS edições, e nenhum tem testemunha externa** —
+  `tests/check-todo.sh:66` — neutralizar um helper E descartar o `cfail` do controle; apagar o
+  `selftest ||` E o acoplamento do `check_file`. Estão declarados nos cabeçalhos, o que é dívida
+  honesta e não fail-open — mas `check-todo.sh` e `check-templates.sh` seguem fora do catálogo, que
+  só sabota `bin/sdd`. Direção: catálogo que também sabote `tests/`, ou a última linha fica sem juiz.
+  — descoberto por `sdd-reviewer` na missão `20260818-lote-facil` (2026-08-19)
+
 - [ ] **Nada automático roda o catálogo de mutação: sem CI, ele depende de alguém digitar
   `sdd health`** — `tests/run-all.sh:23` — a mutação saiu do `TEST_CMD` para o `sdd health`, e este
   repo não tem `.github/workflows/`. Medido na missão que fez a troca, e não temido: a suíte rápida
@@ -46,22 +67,6 @@ Achados sobre **repos-alvo** vão para o `TODO.md` daquele repo. Este arquivo é
   `LEDGER_repo_root_cdpath_leak`, e só o `sdd health` viu. Direção: CI rodando
   `tests/run-all.sh --with-mutation`, ou o `gate_PR` chamando `sdd health` uma vez por missão.
   — descoberto por `humano` na missão `20260818-lote-facil` (2026-08-19)
-
-- [ ] **A regra `guard:` do `check-health.sh` conhece UMA grafia de captura e falha aberta nas
-  outras** — `tests/check-health.sh:761` — o regex exige `x="$(cmd)"`; `x=$(cmd)`, crase, `$(` no
-  fim da linha e `$( ( subshell ) )` são invisíveis E encolhem o `total` calado. Pior, a forma sem
-  aspas nunca vê `)"`, então engole as linhas seguintes e uma captura guardada LAVA a desguardada.
-  Medido: `mut_HEALTH_gates_capture_aborts` reescrito sem aspas deixa a suíte verde e o `sdd health`
-  morre em 3 linhas. Direção: casar `` ` `` ou `$(` e terminar por parênteses balanceados.
-  — descoberto por `sdd-reviewer` na missão `20260818-lote-facil` (2026-08-19)
-
-- [ ] **O token de guarda do `guard:` é procurado no enunciado inteiro, não no rabo da captura** —
-  `tests/check-health.sh:767` — `acc !~ /\|\|[ \t]*(true|:|return|rc=)/` varre os 100+ chars
-  acumulados, então um `|| true` dentro de comentário ou de string certifica a captura. Medido: com
-  `# no || true here` no fim da linha o censo segue 16 e o `sdd health` morre calado. Afrouxar a
-  alternância para `/\|\|/` também sobrevive ao selftest. Direção: cortar comentário e exigir a
-  guarda depois do `)` que fecha a substituição.
-  — descoberto por `sdd-reviewer` na missão `20260818-lote-facil` (2026-08-19)
 
 - [ ] **Quatro regras do `check-health.sh` sobrevivem à passada adversarial** —
   `tests/check-health.sh:826` — o probe aritmético conclui no vazio (`n=$((n+1))` não tem `)"`,
@@ -77,22 +82,6 @@ Achados sobre **repos-alvo** vão para o `TODO.md` daquele repo. Este arquivo é
   No outro sentido, um `health_*()` definido depois da âncora `cmd_status()` não é censurado.
   Regra que reprova código correto é regra que o próximo autor apaga. Direção: pular
   `if`/`while`/`until`/`local`/here-doc e censurar todo `health_*()` onde ele estiver.
-  — descoberto por `sdd-reviewer` na missão `20260818-lote-facil` (2026-08-19)
-
-- [ ] **O `REVIEW_FLOOR` conta CHAMADAS, então uma linha apagada certifica um template vazio** —
-  `tests/check-templates.sh:113` — apagar `check review.md "$1" "$2"` de `review_check()` faz o
-  sensor imprimir `23 assertion(s)` e `template contract intact` sobre um `templates/review.md` de
-  ZERO byte, rc 0. O cabeçalho jura o contrário ("not reachable in one edit… Inert alone"). É o
-  único portador dos 7 critérios que o `gate_REVIEW` não confere. Direção: contar o que o `check()`
-  RETORNOU, como o `PIPE_DOC_FLOOR` do `check-checkpoint.sh` já faz.
-  — descoberto por `sdd-reviewer` na missão `20260818-lote-facil` (2026-08-19)
-
-- [ ] **Os três helpers de asserção do `check-todo.sh` viram no-op com uma linha, e o selftest
-  segue dizendo que mediu** — `tests/check-todo.sh:361` — `assert_clean`, `assert_says` e
-  `assert_rc` trocados por `return 0` deixam `88 probe(s), o sensor measures what it claims`, rc 0,
-  porque os pisos contam SÍTIOS DE CHAMADA e nada sonda o veredito dentro do helper. Some o
-  `selftest ||` do dispatch e nada nota — e `check-todo.sh` está fora do catálogo
-  (`run-all.sh:130`), sem `mut_TODO_*`. Direção: controle negativo por helper.
   — descoberto por `sdd-reviewer` na missão `20260818-lote-facil` (2026-08-19)
 
 - [ ] **Duas formas bem formadas são recusadas pelo `check-todo.sh`** — `tests/check-todo.sh:176` —
@@ -140,22 +129,6 @@ Achados sobre **repos-alvo** vão para o `TODO.md` daquele repo. Este arquivo é
   `ledger_repo_root` E apagar a guarda deixa `check-autonomy.sh` inteiro verde, porque o shim segue
   um impostor correto que nunca é chamado. Direção: termo provando INTERCEPTAÇÃO — a resposta do
   runner sob o shim tem de diferir da resposta sem ele.
-  — descoberto por `sdd-reviewer` na missão `20260818-lote-facil` (2026-08-19)
-
-- [ ] **O `health_provenance` conta como conferida uma fixture cujo laço não iterou** —
-  `bin/sdd:1965` — com o heading da tabela do `codereview` renomeado, o `while read` roda zero
-  vezes, `missing` fica vazio, `checked` incrementa e o sumário diz `all 3 fixtures match` — sobre
-  uma tabela que nunca leu, e é exatamente a deriva que a função existe para pegar. Os checks 5 e 6
-  ganharam piso nesta mesma rodada por este argumento; este não. O `diverged` ainda repete o `3`
-  literal. Direção: piso na contagem de critérios, e um dono só para o `3`.
-  — descoberto por `sdd-reviewer` na missão `20260818-lote-facil` (2026-08-19)
-
-- [ ] **A catraca manda APAGAR uma linha viva da baseline quando a suíte morre truncada** —
-  `bin/sdd:2021` — se `tests/run-all.sh` falha antes de imprimir `N finding(s)`, o check 3 diz que
-  não conseguiu medir e a metade `stale` do `health_ratchet` julga assim mesmo: `stale baseline:
-  'todo-findings 57' is no longer a finding — delete the line`. Apagá-la remove a âncora única da
-  catraca do backlog. Remédio destrutivo tirado de uma medição que não aconteceu. Direção: suprimir
-  o veredito `stale` dos check-ids cujo produtor se declarou cego.
   — descoberto por `sdd-reviewer` na missão `20260818-lote-facil` (2026-08-19)
 
 - [ ] **Nada mede se o esperado de um Check do checkpoint ainda reproduz** —
