@@ -761,10 +761,14 @@ SURFACE_MUTATION_STEP='^mutation: '
 
 # Anti-vacuity only, and deliberately NOT the real step count. A `--list` that prints nothing would
 # satisfy "the plain suite does not carry the mutation step" while measuring exactly nothing; this
-# floor is what refuses that. It is not a shrink detector — LINT_FLOOR in run-all.sh and the
-# surface floors of check-pipefail.sh and check-lang.sh already own that question, and making a
-# fourth place track the sensor count would add a fifth file to the "four places that are really
-# five" CLAUDE.md already warns about. Raise it only if it ever stops refusing an empty list.
+# floor is what refuses that.
+#
+# It is not a shrink detector, and the comment that used to stand here said the shrink question was
+# "already owned" by LINT_FLOOR and the surface floors of check-pipefail.sh and check-lang.sh. That
+# was measured and is FALSE: all three count paths or files, none counts dispatched steps, and
+# commenting out one `run` line took the suite from 14 steps to 13 with every one of them green.
+# What owns it now is rule 5 below — every sensor file invoked exactly once — which needs no fourth
+# hand-written number because both of its sides are derived.
 SURFACE_FLOOR=10
 
 surface_lists() { # surface_lists <run-all.sh> — PUBLISHES SURFACE_PLAIN / SURFACE_FULL
@@ -778,6 +782,7 @@ surface_lists() { # surface_lists <run-all.sh> — PUBLISHES SURFACE_PLAIN / SUR
   # check-mutation.sh's control run went red and died before printing `score:`, and `sdd health`
   # reported `went blind to the mutation` — accusing the catalogue of a defect that was here.
   # The property is about the composition of a NORMAL run, so the probe has to ask a normal one.
+  SURFACE_FILE="$1"
   SURFACE_PLAIN="$( env -u SDD_MUTANT "$1" --list 2>/dev/null )"
   SURFACE_FULL="$(  env -u SDD_MUTANT "$1" --list --with-mutation 2>/dev/null )"
 }
@@ -798,6 +803,25 @@ surface_rules_hold() {
   [ -z "$removed" ] || return 1
   [ "$(grep -c . <<< "$added" || true)" -eq 1 ] || return 1
   grep -qE "$SURFACE_MUTATION_STEP" <<< "$added" || return 1
+  # Rule 4: every sensor file is invoked EXACTLY ONCE by the suite, counted over the invocation
+  # form `$ROOT/tests/<file>` and not the bare name — this file's prose names check-mutation.sh
+  # seven times, and a rule that counts mentions counts comments. It answers two questions at once,
+  # which is why the separate rule that used to sit here was deleted as subsumed rather than probed:
+  #
+  #   too FEW — a sensor quietly unhooked. Rules 1-3 read only `--list`, and nothing else in this
+  #     repo counts dispatched steps: commenting out one `run` line left check-lang.sh,
+  #     check-pipefail.sh and this file green over a suite of 13. Measured.
+  #   too MANY — the catalogue invoked a SECOND time, beside run(). `--list` prints only what goes
+  #     through run(), so that world reinstates the ten-minute regression with every assertion here
+  #     printing `ok`. Reproduced end to end: the plain suite really executed the catalogue.
+  #
+  # Both sides are derived — the files on disk, the invocations in the file under test — so there
+  # is no fourth hand-written number to fall behind.
+  local f n_inv
+  for f in "$ROOT"/tests/check-*.sh; do
+    n_inv="$(grep -c "\$ROOT/tests/$(basename -- "$f")" "$SURFACE_FILE" || true)"
+    [ "$n_inv" -eq 1 ] || return 1
+  done
   return 0
 }
 
@@ -835,6 +859,60 @@ surface_degrade 's/^  if \[ "$LIST_ONLY" = 1 \]; then printf .%s.n. "$1"; return
 surface_rules_hold \
   && broken "the surface rules passed an empty --list — the anti-vacuity floor is decoration"
 
+# --- probes that isolate ONE rule each ------------------------------------------------------
+# The three above prove the COMPOSITION and nothing finer: an adversarial pass deleted the floor,
+# rule 1 and the `removed` check one at a time and all three probes stayed green, because every
+# world they build also violates rule 2's `added` grep. A probe that several rules answer proves
+# only that at least one of them is awake. Each world below is answered by exactly one rule, so
+# deleting that rule turns exactly one of them red.
+#
+# The floor: six steps removed, so the list shrinks below it while --with-mutation still adds
+# exactly the catalogue step. Rule 2 is satisfied throughout; only the floor refuses this.
+surface_degrade '0,/^run "sdd health discriminates"/s/^run "/# run "/; 0,/^run "preflight and the install/s/^run "/# run "/' 'a suite that lost steps'
+surface_rules_hold \
+  && broken "the surface rules passed a suite that quietly lost steps — the anti-vacuity floor answers no world of its own"
+
+# Rule 1: a SECOND, unguarded catalogue step, listed by --list. Plain then carries `mutation: `
+# while --with-mutation still adds exactly one matching step, so rule 2, the floor and `removed`
+# are all satisfied. This is the world rule 1 exists for, and the first draft had none.
+surface_degrade 's@^\[ -n "${SDD_MUTANT:-}" \] || \[ "$WITH_MUTATION" = 0 \] \\@run "mutation: an unguarded second caller" true\n&@' 'a second, unguarded mutation step'
+surface_rules_hold \
+  && broken "the surface rules passed a plain suite carrying a mutation step — rule 1 answers no world of its own"
+
+# `removed`: a SWAP. With --with-mutation the gate sensor is not listed and the catalogue is, so
+# exactly one step is added and it matches — a sensor silently leaves the suite and only the
+# `removed` term notices.
+surface_degrade 's@^run "gate state machine" "\$ROOT/tests/check-gates.sh"$@[ "$WITH_MUTATION" = 0 ] \&\& &@' 'a step that --with-mutation drops'
+surface_rules_hold \
+  && broken "the surface rules passed a suite that SWAPPED a step for the catalogue — the 'removed' term answers no world of its own"
+
+# The `added` COUNT: --with-mutation brings a second step along with the catalogue. The added set
+# still contains a `mutation: ` line, so the content grep is satisfied and only the count refuses.
+surface_degrade 's@^\[ -n "${SDD_MUTANT:-}" \] || \[ "$WITH_MUTATION" = 0 \] \\@[ "$WITH_MUTATION" = 1 ] \&\& run "an extra step riding along" true\n&@' 'a second step added by --with-mutation'
+surface_rules_hold \
+  && broken "the surface rules passed a --with-mutation that adds two steps — the added count answers no world of its own"
+
+# The `added` CONTENT: --with-mutation adds exactly one step, but not the catalogue. This is the
+# cross-file half of `^mutation: ` — reword the step in run-all.sh and the name this file reads no
+# longer finds it. Count, floor, `removed` and rule 4 are all satisfied here.
+surface_degrade 's@^  || run "mutation: @  || run "catalogue: @' 'the mutation step renamed'
+surface_rules_hold \
+  && broken "the surface rules passed a --with-mutation that adds a step which is NOT the catalogue — the added-content grep answers no world of its own"
+
+# The catalogue invoked a SECOND time, beside run(), where --list cannot see it. The fail-open an
+# adversarial pass reproduced end to end: the plain suite really ran the catalogue.
+surface_degrade 's@^printf ..n.$@if [ -z "${SDD_MUTANT:-}" ]; then "$ROOT/tests/check-mutation.sh" >/dev/null 2>\&1 || true; fi\n&@' 'a catalogue call outside run()'
+surface_rules_hold \
+  && broken "the surface rules passed a suite invoking the catalogue outside run() — --list cannot see it and rule 4 is decoration"
+
+# Rule 5: one sensor quietly unhooked from the suite. Nothing else in this repo notices — measured
+# on check-lang.sh, check-pipefail.sh and this file, all green over the 13-step suite.
+# DELETED, not commented out: rule 5 counts invocations in the file text, so a `#` in front of the
+# line leaves the invocation there and the probe would conclude over a world it did not build.
+surface_degrade '/^run "gate state machine/d' 'a sensor unhooked from the suite'
+surface_rules_hold \
+  && broken "the surface rules passed a suite with a sensor unhooked — rule 5 is decoration and nothing owns the shrink question"
+
 # --- the verdict, on the real file ----------------------------------------------------------
 surface_lists "$ROOT/tests/run-all.sh"
 if surface_rules_hold; then
@@ -850,12 +928,23 @@ fi
 green_world
 health_run
 SURFACE_ARGV="$(cat "$FIX/tests/stub-argv.txt" 2>/dev/null || true)"
+# The two failing states are DIFFERENT and get different sentences. `printf '%s\n' "$*"` writes a
+# bare newline for an empty argv and `$(...)` strips it, so "called with no arguments" and "never
+# called" both arrive here as an empty string — and the default text accused the wrong one. That
+# matters because `mut_HEALTH_suite_without_mutation`, the ONE defect this assertion exists for,
+# lands in exactly the empty-argv branch: the operator was sent hunting for a deleted call when the
+# real cause was a dropped flag. The file's existence is what tells them apart.
 if grep -qF -- '--with-mutation' <<< "$SURFACE_ARGV"; then
   pass 'surface: cmd_health asks the suite for the mutation catalogue'
 else
+  if [ -e "$FIX/tests/stub-argv.txt" ]; then
+    SURFACE_WHY="argv was '$SURFACE_ARGV' — the suite WAS called, without the flag; with no catalogue in TEST_CMD, nothing else runs it"
+  else
+    SURFACE_WHY="the stub suite was never called at all — cmd_health has no path to the suite"
+  fi
   fail 'surface: cmd_health asks the suite for the mutation catalogue' \
        "the stub suite receives --with-mutation from cmd_health" \
-       "argv was '${SURFACE_ARGV:-<the stub was never called>}' — with no catalogue in TEST_CMD, nothing else runs it"
+       "$SURFACE_WHY"
 fi
 
 # ---------------------------------------------------------------------------
