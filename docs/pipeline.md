@@ -143,15 +143,22 @@ types, build, docs) has no journey to walk. Inventing a journey just to "have QA
 A criterion graded `—` (not analysed) fails too: a partial review is not a review.
 
 The gate reads the `Rationale` column as well, and a placeholder there fails the round: an empty
-cell, the whole cell between angle brackets (the shape `templates/review.md` ships), a bare
-ellipsis, or `PREENCHER` / `TODO` / `TBD` / `FIXME` / `XXX`. For two missions it read the `Grade`
-column and nothing else, so `A` on every row with `PREENCHER` on every justification bought a green
-gate — `docs/handoffs/20260818-lote-facil/40-review-r1.md:8` records exactly that in its own
-`gate:` field. The skill's terse rationales `clean`, `n/a` and `—` are not placeholders.
+cell, the whole cell between angle brackets (the shape `templates/review.md` ships), a cell that is
+nothing but punctuation (`-`, `?`, `...`, `…`), or one of the fill-in words `PREENCHER` / `TODO` /
+`TBD` / `FIXME` / `XXX` / `WIP` / `FILL ME`. For two missions it read the `Grade` column and nothing
+else, so `A` on every row with `PREENCHER` on every justification bought a green gate —
+`docs/handoffs/20260818-lote-facil/40-review-r1.md:8` records exactly that in its own `gate:` field.
 
-The same rule covers the `gate:` frontmatter field — the other half of the seal — when it is
-present: an unfilled one fails, an absent one is left alone (6 of the 14 rounds on disk here
-predate the field, and refusing them would rewrite history instead of measuring this round).
+The fill-in words are matched as **words**, not as spellings: `TODO:`, `TBD.` and `FILL ME` are the
+same claim as the bare ones, and comparing whole cells by equality let a single keystroke buy the
+`A`. Punctuation is never the offence on its own — a real sentence that ends in a full stop is a
+real sentence. The skill's terse rationales `clean`, `n/a` and `—` are not placeholders either.
+
+The same rule covers the `gate:` frontmatter field — the other half of the seal — when the key is
+**present**, whatever its value: written and left blank fails exactly like `<…>` does, and absent is
+left alone (6 of the 14 rounds on disk here predate the field, and refusing them would rewrite
+history instead of measuring this round). Present-and-blank was itself a hole for two commits,
+because the reader that fetches the value cannot tell it from a key that was never written.
 
 The round report starts from [`templates/review.md`](../templates/review.md). Until
 `20260818-lote-facil` this was the one artifact in the kit with a gate and no template, and two

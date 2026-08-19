@@ -154,10 +154,18 @@ resolve_mission() {
 # ---------------------------------------------------------------------------
 
 # frontmatter <file> <key> → value (empty when absent)
+# frontmatter <file> <key> [string to print when the key is ABSENT]
+#
+# The third argument exists because a key written and left blank prints the same empty string as a
+# key that is not there at all, and for gate_REVIEW that difference is the whole point. Callers
+# that do not care omit it and get exactly the behaviour they had.
 frontmatter() {
-  local file="$1" key="$2"
-  [ -f "$file" ] || return 0
-  awk -v k="$key" '
+  local file="$1" key="$2" absent="${3-}"
+  if [ ! -f "$file" ]; then
+    if [ -n "$absent" ]; then printf '%s\n' "$absent"; fi
+    return 0
+  fi
+  awk -v k="$key" -v absent="$absent" '
     NR==1 && $0=="---" { inside=1; next }
     inside && $0=="---" { exit }
     inside {
@@ -166,13 +174,28 @@ frontmatter() {
       name = substr($0, 1, idx-1)
       gsub(/^[ \t]+|[ \t]+$/, "", name)
       if (name == k) {
+        found = 1
         val = substr($0, idx+1)
         gsub(/^[ \t]+|[ \t]+$/, "", val)
         gsub(/^["'\'']|["'\'']$/, "", val)
         print val
         exit
       }
-    }' "$file"
+    }
+    END { if (!found && absent != "") print absent }' "$file"
+}
+
+# frontmatter_has <file> <key> — 0 when the key is PRESENT, whatever its value.
+#
+# Asked THROUGH frontmatter() on purpose. A second copy of the parser would be a second answer to
+# "is this key mine?", and the day one of them learns to strip quotes and the other does not they
+# disagree in silence — the class CLAUDE.md names in "enum lido em mais de um ponto".
+# The sentinel is a value no frontmatter can carry by accident; a file that literally wrote it
+# would read as absent, which is the same verdict the round would get by writing nothing.
+FRONTMATTER_ABSENT='@sdd-frontmatter-absent@'
+frontmatter_has() {
+  local v; v="$(frontmatter "$1" "$2" "$FRONTMATTER_ABSENT")"
+  [ "$v" != "$FRONTMATTER_ABSENT" ]
 }
 
 # frontmatter_write <file> <key> <value> — rewrites ONE key, in place, and nothing else.
@@ -520,10 +543,14 @@ gate_REVIEW() {
   # fed INTO the awk below instead of being tested again in shell. One definition per program: the
   # day this repo spelled a two-value enum by hand in three places, two learned the new event and
   # the third went blind (CLAUDE.md, "enum lido em mais de um ponto").
-  local offending TAB gate_field
+  local offending TAB gate_field gate_present
   TAB=$'\t'
   gate_field="$(frontmatter "$last" gate)"
-  offending="$(awk -v gate_field="$gate_field" '
+  # Presence, asked separately: `gate:` with nothing after it reads as the empty string, exactly
+  # like a file with no `gate:` at all, and the two deserve opposite verdicts.
+  gate_present=0
+  if frontmatter_has "$last" gate; then gate_present=1; fi
+  offending="$(awk -v gate_field="$gate_field" -v gate_present="$gate_present" '
       # The refused set, written here so the next reader does not have to guess it: an EMPTY cell;
       # the whole cell wrapped in angle brackets, which is how templates/review.md:37-44 ships its
       # fill-ins; a bare ellipsis; and the bare fill-in words below. It targets the WHOLE cell,
@@ -531,14 +558,25 @@ gate_REVIEW() {
       # NOT refused: `clean`, `n/a` and `—`. Those are the codereview skill terse rationales
       # (report-template.md:154-156) and mean measured-with-nothing-to-say; refusing them would
       # make this gate contradict the skill it parses, which is the SQ-97 gate_DOCS bug again.
-      function placeholder(s,   u) {
+      function placeholder(s,   u, w) {
         if (s == "") return 1
         if (s ~ /^<.*>$/) return 1
-        # String equality, not a regex: the ellipsis is multibyte and mawk is byte-oriented, so a
-        # negated class over it would match by bytes instead of by character.
-        if (s == "..." || s == "…") return 1
         u = toupper(s)
-        if (u == "PREENCHER" || u == "TODO" || u == "TBD" || u == "FIXME" || u == "XXX") return 1
+        # `—` is E2 80 94 and mawk is byte-oriented, so every rule written about punctuation sees
+        # three non-alphanumeric bytes there and not one character. This line is the ONLY reason
+        # the skill terse rationale survives the two rules below. Measured on mawk 1.3.4.
+        # The other two, `clean` and `n/a`, need no line here — they carry letters and are not in
+        # the list at the bottom, which is the mechanism, and the sensor holds a world for each.
+        if (s == "—") return 0
+        # A cell with no letter and no digit left in it says nothing at all: `-`, `?`, `.`, `--`,
+        # and the ellipsis in both its spellings, `...` and `…`.
+        if (u !~ /[[:alnum:]]/) return 1
+        # Compare the WORD, not the spelling. Equality alone let one keystroke buy the A: `TODO:`
+        # is what a model writes far more often than the bare `TODO` this list used to know, and
+        # `TBD.` is the same claim with a full stop.
+        w = u; gsub(/[^[:alnum:]]/, "", w)
+        if (w == "PREENCHER" || w == "TODO" || w == "TBD" || w == "FIXME" || w == "XXX" ||
+            w == "WIP" || w == "FILLME") return 1
         return 0
       }
       /^###[[:space:]]+Overall Grade/ { inside = 1; next }
@@ -567,9 +605,12 @@ gate_REVIEW() {
         # The other half of the seal. ABSENT is left alone on purpose, and the scope is measured,
         # not assumed: 6 of the 14 rounds on disk in this repo predate the field, and a gate that
         # refused them would be rewriting history instead of measuring the round that just ran.
-        # Present-but-unfilled is the case that lies, and it is the one refused.
-        if (gate_field != "" && placeholder(gate_field))
-          print "GATE-FIELD\t" gate_field
+        # Present-but-unfilled is the case that lies, and it is the one refused — which is why
+        # this reads PRESENCE and not the value: `gate:` with nothing after it is present and
+        # unfilled, and for two commits the test `gate_field != ""` let exactly that case through
+        # while this comment claimed otherwise.
+        if (gate_present && placeholder(gate_field))
+          print "GATE-FIELD\t" (gate_field == "" ? "<empty>" : gate_field)
       }
     ' "$last")"
   if [ "$offending" = "NO-TABLE" ]; then

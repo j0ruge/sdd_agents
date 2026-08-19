@@ -116,17 +116,21 @@ analysed" — fails the gate. A partial review is not a review: if a criterion w
 analyse it.
 
 **It parses the `Rationale` column too, and a placeholder there fails the gate.** An empty cell,
-the whole cell between angle brackets (which is how the template above ships it), a bare ellipsis,
-or the words `PREENCHER` / `TODO` / `TBD` / `FIXME` / `XXX` — any of them names the criterion and
-refuses the round. The `A` is bought by the sentence, not by the letter: `20260818-lote-facil` r1
-left `PREENCHER` in all seven justifications and would have been certified, because until this gate
-read `f[4]` it read the letter alone. The skill's own terse rationales — `clean`, `n/a`, `—` —
-are NOT placeholders: they mean measured, with nothing to say.
+the whole cell between angle brackets (which is how the template above ships it), a cell that is
+nothing but punctuation (`-`, `?`, `...`, `…`), or one of the fill-in words `PREENCHER` / `TODO` /
+`TBD` / `FIXME` / `XXX` / `WIP` / `FILL ME` — any of them names the criterion and refuses the
+round. The words are matched as WORDS, not as spellings: `TODO:` and `TBD.` are the same claim as
+the bare ones, and it was exactly that keystroke that used to buy the seal. Punctuation alone is
+never the offence — a real sentence that ends in a full stop is a real sentence. The `A` is bought
+by the sentence, not by the letter: `20260818-lote-facil` r1 left `PREENCHER` in all seven
+justifications and would have been certified, because until this gate read `f[4]` it read the
+letter alone. The skill's own terse rationales — `clean`, `n/a`, `—` — are NOT placeholders: they
+mean measured, with nothing to say.
 
 The same refusal covers the `gate:` frontmatter field, which is the other half of the seal: fill
 it with the round's real evidence (summarised `TEST_CMD` output, tree state), never with the
-template's `<…>`. Absent it is left alone — rounds older than the field exist — but present and
-unfilled fails.
+template's `<…>`. Absent it is left alone — rounds older than the field exist — but PRESENT is
+judged whatever its value, so the key written and left blank fails just like `<…>` does.
 
 Also include: the round's findings, what was fixed (with a hash), what was refuted (with
 evidence) and what went to `TODO_FILE`.

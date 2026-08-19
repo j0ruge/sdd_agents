@@ -534,9 +534,15 @@ i3_bad=0
 i3_rows=("Code Quality (Zen)" "Type Safety" "Error Handling" "Security" "Performance" "Test Coverage" "Documentation")
 
 write_r11() { # write_r11 <rationale on every row> [gate: frontmatter value] — latest round by version
+  # The literal @empty@ writes the key with NO value at all. That is a third world, not a spelling
+  # of the second: an omitted argument means the key is ABSENT (six rounds on disk in this repo are
+  # like that, and the gate leaves them alone), while `gate:` written and left blank is a round
+  # claiming a seal it never filled. frontmatter() cannot tell them apart on its own — it prints
+  # the same empty string for both — so the fixture has to be able to build both.
   local rat="$1" gate="${2-}" c
   {
-    if [ -n "$gate" ]; then printf -- '---\nfase: REVIEW\nrodada: 11\ngate: %s\n---\n\n' "$gate"; fi
+    if [ "$gate" = '@empty@' ]; then printf -- '---\nfase: REVIEW\nrodada: 11\ngate:\n---\n\n'
+    elif [ -n "$gate" ]; then printf -- '---\nfase: REVIEW\nrodada: 11\ngate: %s\n---\n\n' "$gate"; fi
     printf '# Review r11\n\n### Overall Grade\n\n'
     printf '| Criterion | Grade | Rationale |\n|-----------|-------|-----------|\n'
     for c in "${i3_rows[@]}"; do printf '| %s | A | %s |\n' "$c" "$rat"; done
@@ -622,6 +628,118 @@ if [ "$i3_bad" -eq 0 ]; then
 else
   fail "gate_REVIEW: a placeholder Rationale does not buy an A" \
        "the 6 worlds above agreeing" "$i3_bad disagreement(s), listed above"
+fi
+
+# --- the seal that one keystroke used to win ---------------------------------
+#
+# The rule above shipped with two holes, both found by walking the journey it created:
+#
+#   (a) `gate_field != "" && placeholder(gate_field)` cannot tell a key that is ABSENT from a key
+#       written and left BLANK — frontmatter() prints the same empty string for both. So the
+#       comment three lines above it in bin/sdd claimed "present-but-unfilled is the case that
+#       lies, and it is the one refused" while `gate:` with nothing after it walked straight
+#       through. A gate whose comment is ahead of its code is the failure mode this repo pays for.
+#
+#   (b) placeholder() compared the WHOLE cell by equality, so a single character of punctuation
+#       bought the A: `TODO:` — which is what a model actually writes, more often than the bare
+#       `TODO` the list knew — plus `TBD.`, `-`, `?`, `WIP` and `FILL ME`.
+#
+# The refusing worlds and the accepting ones are BOTH load-bearing, and the accepting ones more so
+# here than anywhere else in this file: the fix for (b) is a rule about punctuation, and mawk is
+# byte-oriented. The skill's own terse rationale `—` is E2 80 94, three bytes that no character
+# class sees as one — a rule spelled with [[:punct:]] or a negated class strips it away and turns
+# the blessed cell into an empty one. World `—` below is that probe, and it is the reason this
+# block exists as a pair instead of a list of refusals.
+f3_bad=0
+
+# Twins of i3_phase/i3_why, counting into their own variable ON PURPOSE. Sharing the counter would
+# make one broken world redden BOTH assertions, and the report would name a rule that never broke.
+f3_phase() { # f3_phase <world> <expected phase>
+  local world="$1" want="$2" got
+  got="$( cd "$FIX" && "$SDD" phase "$MISSION" 2>&1 )"
+  [ "$got" = "$want" ] && return 0
+  printf '         world "%s": expected phase %s, got %s\n' "$world" "$want" "$got" >&2
+  f3_bad=$((f3_bad + 1))
+}
+
+f3_why() { # f3_why <world> <regex the reason MUST match> <regex it must NOT match>
+  local world="$1" want="$2" absent="$3" got
+  got="$( cd "$FIX" && "$SDD" why "$MISSION" REVIEW 2>&1 )"
+  if ! grep -qE "$want" <<< "$got"; then
+    printf '         world "%s": reason did not match /%s/ — got: %s\n' "$world" "$want" "$got" >&2
+    f3_bad=$((f3_bad + 1))
+  fi
+  if grep -qE "$absent" <<< "$got"; then
+    printf '         world "%s": reason still carries /%s/, so the gate did not stop at the seal — got: %s\n' \
+      "$world" "$absent" "$got" >&2
+    f3_bad=$((f3_bad + 1))
+  fi
+}
+
+# (a) the unfilled seal. The Rationale column is real prose in this world, so the ONLY thing that
+#     can stop the round is the blank `gate:` — and the reason has to say so, naming <empty>.
+write_r11 "measured, nothing open" '@empty@'; commit_r11
+f3_phase "gate: written and left blank" "REVIEW"
+f3_why   "gate: written and left blank" "gate:. frontmatter is still a placeholder \(<empty>\)" \
+         "tree dirty|working tree|TEST_CMD"
+
+# The control for (a), and the one that keeps this from rewriting history: ABSENT is not blank.
+write_r11 "measured, nothing open"; commit_r11
+f3_phase "no gate: field at all, as six rounds on disk in this repo" "DOCS"
+
+# (b) the punctuated fill-ins. `TODO:` first: it is the spelling the equality test missed.
+write_r11 "TODO:"; commit_r11
+f3_phase "TODO with a colon" "REVIEW"
+f3_why   "TODO with a colon" "Code Quality \(Zen\).*placeholder Rationale \(TODO:\)" \
+         "tree dirty|working tree|TEST_CMD"
+
+write_r11 "TBD."; commit_r11
+f3_phase "TBD with a full stop" "REVIEW"
+
+write_r11 "WIP"; commit_r11
+f3_phase "WIP is an admission the criterion is unfinished" "REVIEW"
+
+write_r11 "FILL ME"; commit_r11
+f3_phase "FILL ME, the fill-in written as two words" "REVIEW"
+
+# A cell that is only punctuation says nothing at all. `-` is ONE keystroke from the `—` two
+# worlds below, which is why the pair has to be measured and not reasoned about. There is no
+# second world for `?` or `.`: they die to the very same sabotage as this one, and a probe that
+# no distinct degradation can turn red on its own is decoration.
+write_r11 "-"; commit_r11
+f3_phase "a bare ASCII hyphen" "REVIEW"
+
+# The same rule reaching the other half of the seal — one definition, fed into the same awk. If
+# the two halves ever grow separate spellings, this world is what notices.
+write_r11 "measured, nothing open" "TBD."; commit_r11
+f3_phase "the gate: frontmatter carrying a punctuated fill-in" "REVIEW"
+
+# --- the near misses the refusal must NOT eat --------------------------------
+#
+# THE probe of this block: mawk is byte-oriented, `—` is E2 80 94, and every rule that strips
+# punctuation would strip it byte by byte into the empty cell the gate refuses. The codereview
+# skill ships it as a terse rationale (report-template.md:154-156); eating it would make the gate
+# contradict the skill it parses, which is the SQ-97 gate_DOCS bug for the third time.
+write_r11 "—"; commit_r11
+f3_phase "the em dash survives a rule written about punctuation" "DOCS"
+
+# The second of the skill's three terse rationales, and the one with a character in it that a
+# stripping rule is most likely to eat. `clean` is not repeated here: it survives by the very
+# mechanism this world measures, and world 6 of the block above already holds it.
+write_r11 "n/a"; commit_r11
+f3_phase "n/a survives it too, slash and all" "DOCS"
+
+# Punctuation is not the offence — being nothing BUT a fill-in is. A real sentence that happens to
+# end in a full stop is what separates the two, and without it the rule could refuse every
+# well-punctuated review in the repo and this block would still be green.
+write_r11 "reproduced before the fix, green after it."; commit_r11
+f3_phase "a real sentence that ends in punctuation" "DOCS"
+
+if [ "$f3_bad" -eq 0 ]; then
+  pass "gate_REVIEW: an unfilled gate field and a punctuated fill-in do not buy an A"
+else
+  fail "gate_REVIEW: an unfilled gate field and a punctuated fill-in do not buy an A" \
+       "the 11 worlds above agreeing" "$f3_bad disagreement(s), listed above"
 fi
 
 # Back to the state the DOCS section inherits: r10 is the latest round again, all Grade A.

@@ -204,7 +204,28 @@ mut_REVIEW_placeholder_rationale_blind() {
 # only the Rationale mutant above, the `gate:` branch could be deleted whole and the catalogue
 # would still read 100% — the exact vacuity this file exists to refuse.
 mut_REVIEW_gate_field_blind() {
-  sed -i '/^gate_REVIEW()/,/^}/ s|if (gate_field != "" \&\& placeholder(gate_field))|if (0)|' "$1"
+  sed -i '/^gate_REVIEW()/,/^}/ s|if (gate_present \&\& placeholder(gate_field))|if (0)|' "$1"
+}
+
+# The three below are the sites the seal used to be won at, one keystroke each. They are separate
+# mutants because they are separate decisions: whether the field was WRITTEN, whether the cell is
+# nothing but punctuation, and whether a fill-in still counts as one with a colon glued to it.
+# Folding them into the mutant above would let two of the three be deleted in silence.
+
+# The defect in its pure form: back to testing the VALUE instead of the presence, so `gate:` with
+# nothing after it reads exactly like a file that never had the field and walks through.
+mut_REVIEW_blank_gate_field_blind() {
+  sed -i '/^gate_REVIEW()/,/^}/ s|if (gate_present \&\& placeholder(gate_field))|if (gate_field != "" \&\& placeholder(gate_field))|' "$1"
+}
+
+# A cell that is only punctuation stops saying nothing: `-`, `?` and `.` buy the A again.
+mut_REVIEW_punctuation_only_blind() {
+  sed -i '/^gate_REVIEW()/,/^}/ s|if (u !~ /\[\[:alnum:\]\]/) return 1|if (0) return 1|' "$1"
+}
+
+# The word stops being compared as a word, which is the equality test that `TODO:` beat.
+mut_REVIEW_punctuated_fillin_blind() {
+  sed -i '/^gate_REVIEW()/,/^}/ s|w = u; gsub(/\[^\[:alnum:\]\]/, "", w)|w = u|' "$1"
 }
 
 mut_DOCS_pending_status() {   # accepts an area with Status '✗' in the drift checklist
@@ -1401,6 +1422,9 @@ CATALOG=(
   REVIEW_accepts_B
   REVIEW_placeholder_rationale_blind
   REVIEW_gate_field_blind
+  REVIEW_blank_gate_field_blind
+  REVIEW_punctuation_only_blind
+  REVIEW_punctuated_fillin_blind
   DOCS_pending_status
   PR_no_artifact
   PR_stamp_blind
