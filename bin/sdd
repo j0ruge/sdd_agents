@@ -154,10 +154,18 @@ resolve_mission() {
 # ---------------------------------------------------------------------------
 
 # frontmatter <file> <key> → value (empty when absent)
+# frontmatter <file> <key> [string to print when the key is ABSENT]
+#
+# The third argument exists because a key written and left blank prints the same empty string as a
+# key that is not there at all, and for gate_REVIEW that difference is the whole point. Callers
+# that do not care omit it and get exactly the behaviour they had.
 frontmatter() {
-  local file="$1" key="$2"
-  [ -f "$file" ] || return 0
-  awk -v k="$key" '
+  local file="$1" key="$2" absent="${3-}"
+  if [ ! -f "$file" ]; then
+    if [ -n "$absent" ]; then printf '%s\n' "$absent"; fi
+    return 0
+  fi
+  awk -v k="$key" -v absent="$absent" '
     NR==1 && $0=="---" { inside=1; next }
     inside && $0=="---" { exit }
     inside {
@@ -166,13 +174,28 @@ frontmatter() {
       name = substr($0, 1, idx-1)
       gsub(/^[ \t]+|[ \t]+$/, "", name)
       if (name == k) {
+        found = 1
         val = substr($0, idx+1)
         gsub(/^[ \t]+|[ \t]+$/, "", val)
         gsub(/^["'\'']|["'\'']$/, "", val)
         print val
         exit
       }
-    }' "$file"
+    }
+    END { if (!found && absent != "") print absent }' "$file"
+}
+
+# frontmatter_has <file> <key> — 0 when the key is PRESENT, whatever its value.
+#
+# Asked THROUGH frontmatter() on purpose. A second copy of the parser would be a second answer to
+# "is this key mine?", and the day one of them learns to strip quotes and the other does not they
+# disagree in silence — the class CLAUDE.md names in "enum lido em mais de um ponto".
+# The sentinel is a value no frontmatter can carry by accident; a file that literally wrote it
+# would read as absent, which is the same verdict the round would get by writing nothing.
+FRONTMATTER_ABSENT='@sdd-frontmatter-absent@'
+frontmatter_has() {
+  local v; v="$(frontmatter "$1" "$2" "$FRONTMATTER_ABSENT")"
+  [ "$v" != "$FRONTMATTER_ABSENT" ]
 }
 
 # frontmatter_write <file> <key> <value> — rewrites ONE key, in place, and nothing else.
@@ -510,8 +533,67 @@ gate_REVIEW() {
   # Documented anchor: the "### Overall Grade" section of the codereview skill (contract
   # v1.13.0+), table | Criterion | Grade | Rationale | on an A–F scale. The gate requires A on
   # EVERY row — "—" (not analysed) fails too: a partial review is not a review.
-  local offending
-  offending="$(awk '
+  #
+  # It reads the `Rationale` column too, and refuses a placeholder there. For two missions the
+  # extractor took `crit = f[2]; grade = f[3]` and never touched `f[4]`, so a table with `A` on
+  # every row and the literal `PREENCHER` on every justification passed — the live instance is
+  # docs/handoffs/20260818-lote-facil/40-review-r1.md, whose own `gate:` field records it. An `A`
+  # that no sentence supports is a label, and this gate exists to refuse labels.
+  # The `gate:` field is the other half of the seal, and it is judged by the SAME rule — so it is
+  # fed INTO the awk below instead of being tested again in shell. One definition per program: the
+  # day this repo spelled a two-value enum by hand in three places, two learned the new event and
+  # the third went blind (CLAUDE.md, "enum lido em mais de um ponto").
+  local offending TAB gate_field gate_present
+  TAB=$'\t'
+  gate_field="$(frontmatter "$last" gate)"
+  # Presence, asked separately: `gate:` with nothing after it reads as the empty string, exactly
+  # like a file with no `gate:` at all, and the two deserve opposite verdicts.
+  gate_present=0
+  if frontmatter_has "$last" gate; then gate_present=1; fi
+  # Through the ENVIRONMENT and never `awk -v`: an assignment made with `-v` is run through awk's
+  # ESCAPE processing before the program ever sees it, so evidence quoting a regex arrives mangled.
+  # Measured on this machine's mawk 1.3.4:
+  #   awk -v x='grep -E \bcaught\b' 'BEGIN{print x}'  →  grep -E caught
+  # The `\b`s are gone, and the same corrupted string is what the GATE-FIELD branch echoes back at
+  # the operator — a refusal quoting text that is not what is on disk. ENVIRON is handed over byte
+  # for byte. `gate_present` stays on `-v`: it is one digit, and it has to arrive as a NUMBER.
+  offending="$(SDD_GATE_FIELD="$gate_field" awk -v gate_present="$gate_present" '
+      BEGIN { gate_field = ENVIRON["SDD_GATE_FIELD"] }
+      # The refused set, written here so the next reader does not have to guess it: an EMPTY cell;
+      # the whole cell wrapped in angle brackets, which is how templates/review.md:37-44 ships its
+      # fill-ins; a bare ellipsis; and the bare fill-in words below. It targets the WHOLE cell,
+      # never the presence of a character — a real sentence containing <A> is a real sentence.
+      # NOT refused: `clean`, `n/a` and `—`. Those are the codereview skill terse rationales
+      # (report-template.md:154-156) and mean measured-with-nothing-to-say; refusing them would
+      # make this gate contradict the skill it parses, which is the SQ-97 gate_DOCS bug again.
+      function placeholder(s,   u, w) {
+        if (s == "") return 1
+        if (s ~ /^<.*>$/) return 1
+        u = toupper(s)
+        # `—` is E2 80 94 and mawk is byte-oriented, so every rule written about punctuation sees
+        # three non-alphanumeric bytes there and not one character. This line is the ONLY reason
+        # the skill terse rationale survives the two rules below. Measured on mawk 1.3.4.
+        # The other two, `clean` and `n/a`, need no line here — they carry letters and are not in
+        # the list at the bottom, which is the mechanism, and the sensor holds a world for each.
+        if (s == "—") return 0
+        # A cell with no letter and no digit left in it says nothing at all: `-`, `?`, `.`, `--`,
+        # and the ellipsis in both its spellings, `...` and `…`.
+        if (u !~ /[[:alnum:]]/) return 1
+        # Compare the WORD, not the spelling. Equality alone let one keystroke buy the A: `TODO:`
+        # is what a model writes far more often than the bare `TODO` this list used to know, and
+        # `TBD.` is the same claim with a full stop.
+        w = u; gsub(/[^[:alnum:]]/, "", w)
+        if (w == "PREENCHER" || w == "TODO" || w == "TBD" || w == "FIXME" || w == "XXX" ||
+            w == "WIP" || w == "FILLME") return 1
+        return 0
+      }
+      # PARITY, and not "does this field end in a backslash". `\\` is how GFM spells a literal
+      # backslash, so a cell ending in one sits against a REAL delimiter — and the first version of
+      # the rejoin below could not tell the two apart. Measured against the runner one commit
+      # earlier, which passes the same row: `| Escaping (\\| A | Confirmed no leaks. |` was reported
+      # as `Escaping (\| A = Confirmed no leaks.`, a Grade-A row blocked by a criterion nobody
+      # wrote. An ODD run of trailing backslashes escapes the pipe; an EVEN one does not.
+      function escaped_pipe(s,   t) { t = s; sub(/\\+$/, "", t); return (length(s) - length(t)) % 2 }
       /^###[[:space:]]+Overall Grade/ { inside = 1; next }
       # Exit on ANY heading, not only `###`. Exiting only on `###`, a following section of a
       # HIGHER level (`## Fixes this round`) did not end the read, and the parser kept swallowing
@@ -519,21 +601,63 @@ gate_REVIEW() {
       # column in a table of commits. Measured in the SQ-97 pilot.
       inside && /^#{1,6}[[:space:]]/ { exit }
       inside && /^[ \t]*\|/ {
-        n = split($0, f, "|")
+        # GFM writes a literal pipe INSIDE a cell as `\|`, and a raw split on "|" cuts the row
+        # there. Harmless while only f[2] and f[3] were read; the moment f[4] became a verdict it
+        # turned into a false RED, which is the same defect as a false green — the gate saying
+        # something it did not measure. Measured with the row
+        #   | Code Quality (Zen) | A | `TODO\|` list references removed. Confirmed green. |
+        # the stump left behind was `TODO\`, which normalises straight into the refused fill-in
+        # word: a real justification reported as a placeholder, and a PR blocked for a reason that
+        # is not true. Rejoined here so every column downstream sees the cell the author wrote.
+        delete f
+        rawn = split($0, raw, "|")
+        n = 0
+        for (i = 1; i <= rawn; i++) {
+          if (n > 0 && escaped_pipe(f[n])) { sub(/\\$/, "|", f[n]); f[n] = f[n] raw[i] }
+          else { f[++n] = raw[i] }
+        }
         if (n < 4) next
-        crit = f[2]; grade = f[3]
+        crit = f[2]; grade = f[3]; rat = f[4]
         gsub(/\*/, "", crit);  gsub(/^[ \t]+|[ \t]+$/, "", crit)
         gsub(/\*/, "", grade); gsub(/^[ \t]+|[ \t]+$/, "", grade)
+        gsub(/[*`]/, "", rat); gsub(/^[ \t]+|[ \t]+$/, "", rat)
         if (crit == "Criterion" || crit ~ /^-+$/ || crit == "") next
         rows++
-        if (grade != "A") { print crit " = " (grade == "" ? "<empty>" : grade); exit }
+        # Grade first, on purpose: a row that is both off-A and unjustified is reported by its
+        # grade, which is the older and more specific message.
+        if (grade != "A") { verdict = crit " = " (grade == "" ? "<empty>" : grade); exit }
+        if (placeholder(rat)) { verdict = "PLACEHOLDER\t" crit "\t" (rat == "" ? "<empty>" : rat); exit }
       }
-      END { if (rows == 0) print "NO-TABLE" }
+      END {
+        if (verdict != "") { print verdict; exit }
+        if (rows == 0)     { print "NO-TABLE"; exit }
+        # The other half of the seal. ABSENT is left alone on purpose, and the scope is measured,
+        # not assumed: 6 of the 14 rounds on disk in this repo predate the field, and a gate that
+        # refused them would be rewriting history instead of measuring the round that just ran.
+        # Present-but-unfilled is the case that lies, and it is the one refused — which is why
+        # this reads PRESENCE and not the value: `gate:` with nothing after it is present and
+        # unfilled, and for two commits the test `gate_field != ""` let exactly that case through
+        # while this comment claimed otherwise.
+        if (gate_present && placeholder(gate_field))
+          print "GATE-FIELD\t" (gate_field == "" ? "<empty>" : gate_field)
+      }
     ' "$last")"
   if [ "$offending" = "NO-TABLE" ]; then
     GATE_WHY="$(basename "$last") has no '### Overall Grade' section — the gate has nothing to measure"
     return 1
   fi
+  case "$offending" in
+    PLACEHOLDER"$TAB"*)
+      local rest crit rat
+      rest="${offending#PLACEHOLDER$TAB}"
+      crit="${rest%%$TAB*}"
+      rat="${rest#*$TAB}"
+      GATE_WHY="$(basename "$last"): $crit has Grade A with a placeholder Rationale ($rat) — a grade no sentence supports is a label, not a review"
+      return 1 ;;
+    GATE-FIELD"$TAB"*)
+      GATE_WHY="$(basename "$last"): the 'gate:' frontmatter is still a placeholder (${offending#GATE-FIELD$TAB}) — that field carries the evidence the round closed, not the shape of it"
+      return 1 ;;
+  esac
   if [ -n "$offending" ]; then
     GATE_WHY="$(basename "$last"): $offending — the gate requires Grade A on every criterion"; return 1
   fi
@@ -586,6 +710,113 @@ gate_DOCS() {
   return 0
 }
 
+# ---------------------------------------------------------------------------
+# The mutation catalogue's stamp
+# ---------------------------------------------------------------------------
+# Since 4c86712 the catalogue is OPT-IN: TEST_CMD does not run it, and this repo has no CI. That
+# left the one instrument that measures whether the assertions still bite with NO owner, and the
+# bill arrived between PR #12 and PR #13 — a fix rotted the anchor of one mutation, the REVIEW and
+# PR gates ran the fast suite and answered green, and the base branch carried a score with a live
+# survivor for days, until a human happened to type `sdd health`.
+#
+# The fix is not to RUN the catalogue inside a gate: that is exactly what 4c86712 undid, after
+# twenty minutes of held working tree made the REVIEW phase unsatisfiable headless and ended three
+# sessions with the words "waiting for the suite". The gate asks for the ARTIFACT instead — a stamp
+# `sdd health` writes when the catalogue came back green, and that nothing else in the kit writes.
+
+# The directories the catalogue's verdict is a function of, named in ONE place and read at both
+# ends: cmd_health writes the key, gate_PR demands it.
+#
+# FOUR, and the boundary is declared rather than assumed. sandbox() in tests/check-mutation.sh also
+# copies agents/, CLAUDE.md, TODO.md and docs/adr, so a change confined to THOSE is not covered by
+# this key. The narrowing is deliberate and its reason is operational: the DOCS phase edits
+# CLAUDE.md and TODO.md on its way to the PR, so keying on them would throw the stamp away between
+# the last code commit and the gate that reads it — a second twenty-minute run per mission, bought
+# for documents no mutant edits. What the mutants DO edit is bin/sdd, and what decides their fate
+# is the assertions in tests/ plus the templates/ and config/ those assertions read. The residual
+# gap is in TODO.md with its direction, not hidden in a sentence here.
+readonly MUTATION_STAMP_PATHS=(bin tests templates config)
+
+# Under .sdd/logs/ and not .sdd/: `sdd install` guarantees .sdd/logs/ is gitignored in every repo
+# the kit touches, while .sdd/config.sh right above it is TRACKED. A stamp one directory up would
+# appear in the `git status` of every phase — and a phase that dies with a dirty tree makes the
+# runner re-derive EXEC in a loop, at about US$ 25 a lap.
+readonly MUTATION_STAMP_REL='.sdd/logs/mutation-stamp'
+
+# "Is this root a tree the catalogue is about?" — asked at BOTH ends, and therefore written once.
+#
+# gate_PR's question ("is a stamp demanded here?") and cmd_health's ("which tree do I measure?")
+# have to be the SAME question, or the two ends address different trees and the seal becomes a
+# refusal with no reachable remedy. Two spellings of it is precisely how that happened: the writer
+# answered about $SDD_HOME and the reader asked about $REPO_ROOT.
+#
+# Scoped by ARTIFACT and never by the identity of the repository, for the reason gate_PR records
+# below: the identity door the kit already has (cmd_kaizen) carries a live worktree bug.
+has_mutation_catalogue() { [ -f "$1/tests/check-mutation.sh" ]; }
+
+# The kit tree `sdd health` measures — and therefore the tree it stamps.
+#
+# NOT $SDD_HOME unconditionally, which is what it used to be. `sdd` on the PATH is the install
+# README.md documents, and standing in a worktree or a second clone of the kit made $SDD_HOME and
+# gate_PR's $REPO_ROOT two different trees: the stamp landed in one while the gate asked the other,
+# so gate_PR was unsatisfiable FOREVER and `sdd health` — the command its own refusal names as the
+# remedy — re-measured the wrong tree, twenty to fifty minutes a lap.
+#
+# The working directory wins only when it is itself a tree with a catalogue, tested by the SAME
+# predicate gate_PR scopes on: every root the gate would demand a stamp for is a root this command
+# measures and stamps, and every root it would not is left to $SDD_HOME. A target repo has no
+# tests/check-mutation.sh, so `sdd health` inside one is the command it always was.
+health_kit_root() {
+  local cwd_root
+  # `|| true`, and not for style: this file runs under `set -e`, an assignment takes the status of
+  # its substitution, and "the cwd is not a git repository" is a perfectly ordinary answer here —
+  # unguarded, it would kill `sdd health` on its first line for every operator outside a checkout.
+  cwd_root="$( git rev-parse --show-toplevel 2>/dev/null || true )"
+  if [ -n "$cwd_root" ] && has_mutation_catalogue "$cwd_root"; then
+    printf '%s\n' "$cwd_root"
+  else
+    printf '%s\n' "$SDD_HOME"
+  fi
+}
+
+# The size below which a catalogue cannot have measured the runner, whatever its score says.
+#
+# EIGHT because check 4 of cmd_health already demands one mutation per gate, so a catalogue under
+# this number fails that check anyway — the floor states a bound the command was already committed
+# to, instead of inventing a threshold somebody would have to keep bumping. It is deliberately NOT
+# a ratchet at today's census: the size that has to track the catalogue is read off the catalogue
+# itself (see check 2), and this constant is only the guard against BOTH sides being gutted at
+# once, where that comparison would read 0 == 0 and pass.
+readonly MUTATION_CATALOGUE_FLOOR=8
+
+# The content key of the paths above: prints it, or prints NOTHING and returns 1.
+#
+# The difference is the whole guard. `md5sum` of no input at all is a perfectly valid-looking
+# constant, so a root whose four directories are all absent would otherwise be handed a stable key
+# that every other empty root matches — a stamp certifying nothing, indistinguishable from a stamp
+# certifying everything. Emptiness is refused here, once, instead of at each call site.
+#
+# ⚠️ `xargs -r`, and it is what makes the sentence above TRUE rather than merely intended: without
+# it, `xargs` with nothing on its input runs `md5sum` once with no operands, `md5sum` reads the
+# already-drained pipe, and the function hands back the digest of the empty string — the exact
+# constant the guard exists to refuse, with the `[ -n "$listing" ]` below satisfied by it. Today no
+# caller reaches that state (both ends only ask about a root whose tests/ holds a catalogue, so
+# `find` always has at least that file to print), and that is declared, not sold as measured: this
+# is a one-token hardening of a guard whose comment was ahead of its code.
+mutation_stamp_key() { # mutation_stamp_key <root>
+  local listing
+  # `md5sum` and not `sha256sum`: it is the digest `sdd preflight` already probes the userland for,
+  # so this adds no assumption the kit was not already making. The relative paths ride INSIDE the
+  # digest, which is what makes a file that merely MOVED change the key.
+  listing="$( CDPATH='' cd "$1" 2>/dev/null \
+              && find "${MUTATION_STAMP_PATHS[@]}" -type f -print0 2>/dev/null \
+                 | LC_ALL=C sort -z | xargs -0 -r md5sum 2>/dev/null )" || true
+  [ -n "$listing" ] || return 1
+  # Herestring, never `printf … |`: under `pipefail` that form returns 141 when the reader exits
+  # first, which is a failure whose likelihood grows with the size of the tree being hashed.
+  md5sum <<< "$listing" | cut -d' ' -f1
+}
+
 gate_PR() {
   local p="$MISSION_DIR/50-pr.md"
   [ -f "$p" ] || { GATE_WHY="missing 50-pr.md"; return 1; }
@@ -594,6 +825,35 @@ gate_PR() {
   local live
   live="$( cd "$REPO_ROOT" && gh pr view "$url" --json url --jq .url 2>/dev/null )" || true
   [ -n "$live" ] || { GATE_WHY="gh does not confirm PR $url — 50-pr.md may be lying"; return 1; }
+
+  # The catalogue's stamp, and LAST on purpose: the two requirements above are the ones that fail
+  # in practice, so the message an operator already knows stays the likely one.
+  #
+  # Scoped by ARTIFACT — "is there a catalogue here?" — and never by the identity of the
+  # repository. A target repo has no tests/check-mutation.sh, so nothing about it changes; and the
+  # identity door the kit already owns (cmd_kaizen) carries a live worktree bug, recorded in
+  # TODO.md, which inheriting would simply buy.
+  if has_mutation_catalogue "$REPO_ROOT"; then
+    local key stamp
+    key="$(mutation_stamp_key "$REPO_ROOT" || true)"
+    stamp="$(cat "$REPO_ROOT/$MUTATION_STAMP_REL" 2>/dev/null || true)"
+    # ONE refusal and one sentence, with `-z` folded into it rather than given a message of its
+    # own. The disjunct is load-bearing and not decoration: an absent stamp file reads as the empty
+    # string, so an empty KEY would compare EQUAL to it and open the gate — the two ways of knowing
+    # nothing agreeing that everything is fine. It is also, today, unreachable, and that is
+    # declared rather than dressed up: the scope condition above is a file INSIDE tests/, so
+    # reaching this line at all proves tests/ is non-empty. A second GATE_WHY here would be a
+    # sentence no world can print, which is the dead code this repo keeps finding in its own gates.
+    #
+    # The remedy is IN the sentence, the same rule cmd_health's red-suite line obeys and for the
+    # same measured reason: without the command named, the operator runs the fast suite, sees
+    # green, and concludes the gate is lying — which is the one thing it may never be.
+    if [ -z "$key" ] || [ "$stamp" != "$key" ]; then
+      GATE_WHY="no green mutation catalogue for this content — run 'sdd health' (since 4c86712 TEST_CMD does not run the catalogue, so no gate before this one measures it)"
+      return 1
+    fi
+  fi
+
   GATE_WHY="PR open: $live"
   return 0
 }
@@ -1772,8 +2032,18 @@ health_default_keys() {
 }
 
 cmd_health() {
-  local kit="$SDD_HOME" out rc k n
+  # `catalogue_green` is the ONE thing check 2c reads out of checks 1 and 2, and it is a variable
+  # rather than a re-reading of the output because the stamp has to mean BOTH: a green
+  # `--with-mutation` run (check 1) AND a score whose two numbers agree (check 2). Either one alone
+  # is a world this repo has already shipped — a red suite over a perfect score line, and a green
+  # suite over `103 caught … of 104`.
+  local out rc k n catalogue_green=0 kit
+  # The tree, resolved ONCE and used by every check below — including the stamp, which is the whole
+  # point: what this command measures and what it stamps can never again be two different trees.
+  kit="$(health_kit_root || true)"
 
+  # The tree is IN the header, because it is now an answer and no longer a constant: an operator
+  # standing in a worktree has to be able to see which of their checkouts was just measured.
   step "sdd health — kit sensor at $kit"
 
   # --- 1. the suite, which already includes bash -n and the mutation --------
@@ -1784,6 +2054,17 @@ cmd_health() {
   # runner, four sites of this same family (this one, the score read, the provenance `find` and
   # the ratchet's baseline read); the whole point of `sdd health` is to SAY what is wrong, and the
   # red suite is the case it exists for. Guarded by the `abort:` assertions of check-health.sh.
+  # The content key read BEFORE the suite, and compared with the one read after it — because the
+  # run below takes twenty to fifty minutes, and that is the widest window in the whole kit for the
+  # tree to move underneath a measurement. Read after the run alone, the stamp would key on whatever
+  # is on disk when the command ENDS, so a commit landing during the catalogue would be handed a
+  # green it was never part of: the instrument certifying content it did not measure, which is the
+  # exact defect the stamp exists to end. Found while reviewing this block, not in production —
+  # and reachable in practice, since the phase that runs `sdd health` is the phase that also
+  # commits.
+  local stamp_key_before
+  stamp_key_before="$(mutation_stamp_key "$kit" || true)"
+
   rc=0
   # `--with-mutation`, and this command is now the ONLY caller that asks for it. The catalogue used
   # to ride inside TEST_CMD, where it held the working tree for over ten minutes per gate and made
@@ -1811,14 +2092,159 @@ cmd_health() {
   # returns 1, and under `set -e` the assignment took the runner down with it — so the `-z` branch
   # that was written to shout "health went blind" could never be reached, and going blind read as
   # a crash. The sentence below is only sayable because of the two words on this line.
-  local score_line
+  # The THREE numbers of that line, read once, because the verdict needs TWO of them compared.
+  # The old form asked `^score: [0-9]+ caught, 0 known gap` and NOTHING about `of` — so
+  # `score: 103 caught, 0 known gap(s), of 104`, a catalogue with a mutant ALIVE, printed `ok`
+  # here. It is not a hypothetical: the main branch carried exactly that line between PR #12 and
+  # #13, for days, while every gate ran the fast suite and answered green. Since 4c86712 the
+  # catalogue is opt-in and THIS command is its only caller, so `ok` here is the whole verdict.
+  #
+  # A survivor is not a gap, and the two get different sentences on purpose: a gap is debt this
+  # repo DECLARED, listed by name in KNOWN_GAPS with the increment that closes it; a survivor is
+  # protection the catalogue goes on crediting that nobody owns. Same green before, and the
+  # operator could not tell which one they had.
+  # How many mutants the catalogue DEFINES, read off the file that printed the line being judged.
+  # `score: 0 caught, 0 known gap(s), of 0` satisfies both conditions below it — no gap, and
+  # `caught == of` — because `CATALOG=()` runs the loop zero times, leaves `errors` at 0 and exits
+  # 0: the emptiest possible run printing the greenest possible line, stamped by check 2c, opening
+  # gate_PR over a catalogue that measured nothing. A catalogue merely NARROWED does the same, one
+  # deleted entry at a time and never once going red. It was the last count of this command with no
+  # anti-vacuity floor, beside LINT_FLOOR, SURFACE_FLOOR, CAPTURE_FLOOR and REVIEW_FLOOR.
+  #
+  # Compared against the mut_*() DEFINITIONS and never against a number written here: `of` is
+  # `${#CATALOG[@]}`, so a hand-narrowed CATALOG agrees with itself and the functions left behind
+  # are the only thing on disk that can contradict it. MUTATION_CATALOGUE_FLOOR is the other half —
+  # gut both and the comparison would read 0 == 0 — and neither number ever needs bumping by hand.
+  #
+  # `|| true` for the family this whole region is audited for: `grep -c` returns 1 exactly when it
+  # counts zero, and unguarded that kills the runner on this line, with every sentence below it
+  # dead code. A missing or renamed catalogue lands on 0 and is REFUSED, which is the side of the
+  # fence a count that cannot be taken belongs on.
+  local score_line score_nums caught gaps total defined
+  defined="$(grep -cE '^mut_[A-Za-z0-9_]+\(\) \{' "$kit/tests/check-mutation.sh" 2>/dev/null || true)"
+  if [ -z "$defined" ]; then defined=0; fi
   score_line="$(grep -m1 '^score: ' <<< "$out" || true)"
+  score_nums="$(sed -nE 's/^score: ([0-9]+) caught, ([0-9]+) known gap\(s\), of ([0-9]+)$/\1 \2 \3/p' <<< "$score_line" || true)"
   if [ -z "$score_line" ]; then
     health_bad "the suite did not print the 'score:' line — health went blind to the mutation"
-  elif grep -qE '^score: [0-9]+ caught, 0 known gap' <<< "$score_line"; then
-    ok "mutation: $score_line"
+  elif [ -z "$score_nums" ]; then
+    # Shape drift is a contract breach, never a green. Without this branch the whole comparison
+    # below would be skipped by a line the sed stopped reading, which is the same vacuity as the
+    # missing line above — with the extra insult of a `score:` sitting right there in the log.
+    health_bad "the 'score:' line no longer parses — health went blind to the mutation: $score_line"
   else
-    health_bad "mutation with an open gap — $score_line"
+    read -r caught gaps total <<< "$score_nums"
+    # SIZE first, and the order is a dependency rather than a taste: with `of` disagreeing with the
+    # catalogue on disk, neither the gap count nor the survivor count is about the catalogue this
+    # kit has, so both sentences below would describe a measurement that did not happen. It takes
+    # nothing away from them either — a catalogue of the right size can still carry a gap or a
+    # survivor, which is the ordinary world both were written for.
+    if [ "$total" -ne "$defined" ] || [ "$defined" -lt "$MUTATION_CATALOGUE_FLOOR" ]; then
+      health_bad "mutation: the catalogue ran $total of the $defined mutant(s) tests/check-mutation.sh defines (floor $MUTATION_CATALOGUE_FLOOR) — an emptied or narrowed catalogue goes on printing caught == of, and that green is about a loop that ran $total time(s)"
+    elif [ "$gaps" -ne 0 ]; then
+      health_bad "mutation with an open gap — $score_line"
+    elif [ "$caught" -ne "$total" ]; then
+      # The reproduction command is IN the sentence, the same rule the red-suite line above obeys:
+      # without it the operator runs the fast suite, sees green, and concludes health is lying.
+      health_bad "mutation: $caught of $total caught — $((total - caught)) survivor(s), assertions the suite does not have — run tests/run-all.sh --with-mutation"
+    else
+      ok "mutation: $score_line"
+      # An `if` and never `[ … ] && catalogue_green=1`: under this file's `set -e` the `&&` list is
+      # the last command of the branch, so a red suite here would make the whole `if` statement
+      # return non-zero and kill cmd_health one line after it said the catalogue was clean.
+      if [ "$rc" -eq 0 ]; then catalogue_green=1; fi
+    fi
+  fi
+
+  # --- 2b. the TEST_CMD the GATES will run has to actually RUN something ----
+  # `tests/run-all.sh --list` exits 0 having executed nothing. That is the mode's contract and it
+  # is correct — what is not correct is that its output is indistinguishable from a suite that
+  # passed: a dozen step names and rc 0. As TEST_CMD it makes gate_EXEC, gate_QA and gate_REVIEW
+  # pass INSTANTLY, in every mission, forever, and every phase would certify itself against a run
+  # that never happened. Label instead of artifact, reached through the one key the whole pipeline
+  # trusts, and nothing in the kit said a word.
+  #
+  # Numbered 2b and not 3: the numbers of these blocks are cited from tests/check-health.sh and
+  # from the catalogue's own comments, and renumbering six of them to insert one is how a citation
+  # rots. It sits here, beside the other question about the suite, rather than at the end where
+  # append-only numbering would have put it.
+  #
+  # Read off the KIT's own .sdd/config.sh (tracked — only .sdd/logs/ is ignored) and never off
+  # $REPO_ROOT, for three reasons that agree: `sdd health` is the kit sensor, and its other eight
+  # checks all read $kit; `--list` is a flag of the KIT's suite, so this is where the danger lives
+  # and a target repo's `npm test` could not carry it; and resolving $REPO_ROOT here would make the
+  # check need a git repository, which neither the check-health.sh fixture nor the mutation sandbox
+  # is — it would die where it was written to speak.
+  #
+  # SOURCED, not grepped, because the value that matters is the one load_config() hands the gates,
+  # after expansion — and sourcing this file is what load_config() already does for every other
+  # command. In a subshell, so nothing here can reach the rest of the run.
+  local kit_cfg="$kit/.sdd/config.sh" kit_test_cmd
+  if [ ! -f "$kit_cfg" ]; then
+    health_bad "the kit at $kit has no .sdd/config.sh — health cannot say whether TEST_CMD runs anything"
+  else
+    # `|| true` in the tail, the same family the whole command was audited for — but the reason is
+    # the LAST command of the substitution and not the sourcing. Measured, because the first version
+    # of this comment claimed the sourcing was what could kill the run and that is false: without
+    # `shopt -s inherit_errexit` a `$( … )` does not carry errexit in, so a config that fails to
+    # parse still reaches the `printf` and the substitution exits 0.
+    # Reproduced with a bad.sh holding `if then fi`, run through this exact assignment under
+    # `set -euo pipefail`: the shell reaches the line after it and reports rc 0.
+    # (The command is described and not pasted: the `guard:` census of check-health.sh scans this
+    # region line by line and would have counted the example as a twenty-third capture — it did,
+    # once, and the ratchet went red. Fail-closed, and noted in TODO.md.)
+    # What the guard is really for is the day this line grows a different tail — and for the record
+    # a broken config lands as EMPTY here, so the operator is told "declares no TEST_CMD" while the
+    # parse error itself is swallowed by the redirect. That gap is in TODO.md, not hidden here.
+    # shellcheck disable=SC1090
+    kit_test_cmd="$( . "$kit_cfg" >/dev/null 2>&1; printf '%s' "${TEST_CMD:-}" )" || true
+    # Padded on both sides so `--list` is matched as a WHOLE ARGUMENT: an unpadded `*--list*` would
+    # also accuse a suite named `run-all.sh --listen-mode`, and a rule that fails on correct config
+    # is a rule the next author deletes.
+    case " $kit_test_cmd " in
+      *" --list "*)
+        health_bad "TEST_CMD carries --list ($kit_test_cmd) — that mode exits 0 having run NOTHING, so every gate would pass against a suite that never ran" ;;
+      *)
+        if [ -z "$kit_test_cmd" ]; then
+          health_bad "the kit's .sdd/config.sh declares no TEST_CMD — the gates have no suite to run"
+        else
+          ok "TEST_CMD runs the suite ($kit_test_cmd)"
+        fi ;;
+    esac
+  fi
+
+  # --- 2c. the stamp: the catalogue stops depending on somebody REMEMBERING --
+  # Checks 1 and 2 have just answered the only question the catalogue can be asked, and until now
+  # that answer died with the terminal it was printed on. gate_PR needs it in DISK, because the
+  # alternative it replaces is a memory — "somebody ran the catalogue at some point" — which is a
+  # label, and this repo's first principle is that a label is not an artifact.
+  #
+  # Numbered 2c beside its two inputs rather than appended at the end, for the reason 2b spells
+  # out: these numbers are cited from tests/check-health.sh and from the catalogue's own comments,
+  # and renumbering the blocks below to insert one is how a citation rots.
+  #
+  # Written AFTER the run and never before, and keyed on the content the run measured, so what
+  # lands on disk is "this exact tree was measured green" and never "the command was here".
+  local stamp_path="$kit/$MUTATION_STAMP_REL" stamp_key
+  stamp_key="$(mutation_stamp_key "$kit" || true)"
+  if [ "$catalogue_green" != 1 ] || [ -z "$stamp_key" ]; then
+    # REMOVED, not merely left behind. A stamp that outlives the green it certifies is the exact
+    # label this block exists to replace: it would go on telling gate_PR that a catalogue which
+    # just came back red, over this very content, had been measured and was clean.
+    rm -f "$stamp_path"
+  elif [ "$stamp_key" != "$stamp_key_before" ]; then
+    # The window, closed. Saying it out loud matters as much as refusing: an operator who watched
+    # a green catalogue scroll past and then finds gate_PR still asking for a stamp needs to be
+    # told that their own commit, not the catalogue, is why.
+    health_bad "the measured tree moved WHILE the catalogue was running — nothing was stamped, because the green it just reported is about content that is no longer here. Re-run once the tree stops moving."
+    rm -f "$stamp_path"
+  elif mkdir -p "${stamp_path%/*}" 2>/dev/null && printf '%s\n' "$stamp_key" > "$stamp_path" 2>/dev/null; then
+    # The write is a CONDITION and not a statement, which is what keeps a read-only .sdd/ from
+    # killing the command on the very line written to report it — the family every capture in this
+    # region carries a guard against.
+    ok "mutation stamp written — gate_PR can see that THIS content ran green"
+  else
+    health_bad "the mutation stamp could not be written at $stamp_path — gate_PR will go on asking for it"
   fi
 
   # --- 3. the TODO.md backlog count, read from the SAME run ----------------

@@ -43,16 +43,25 @@ Achados sobre **repos-alvo** vão para o `TODO.md` daquele repo. Este arquivo é
   `bin/sdd:1801` — o regex exige `0 known gap` e **nunca** `caught == total`, então
   `score: 103 caught, 0 known gap(s), of 104` sai com prefixo `ok`. Medido na `main` em `a9e8ce9`.
   O veredito geral ainda reprova (a suíte devolve rc 1), mas a linha que o operador lê mente — e
-  isso no comando que virou o dono único do catálogo. Direção: comparar os dois números do próprio
-  `score:`, com mutação que troque a exigência por `0 known gap` sozinho.
+  isso no comando que virou o dono único do catálogo. **RESOLVIDO por `7a6653b`**: a checagem lê os
+  três números do `score:` e compara `caught` com `of`; `mut_HEALTH_mutation_survivor_blind`.
   — descoberto por `humano` na missão `20260818-lote-facil` (2026-08-19)
 
 - [ ] **O `--list` do `run-all.sh` imprime linha que não é passo, e sai 0 tendo rodado nada** —
   `tests/run-all.sh:146` — a mensagem de linter ausente fica fora do `run()` e entra na lista
   (`PATH=/tmp/empty tests/run-all.sh --list` mostra duas linhas que não são passos, uma delas
   contando para o `SURFACE_FLOOR`). E `TEST_CMD` com `--list` faria todo gate passar na hora, com
-  14 linhas plausíveis no log. Direção: filtrar não-passos, e recusar `--list` como TEST_CMD.
+  14 linhas plausíveis no log. **RESOLVIDO por `2f71646`**: a mensagem foi para a stderr e a
+  checagem 2b do `sdd health` recusa a flag; `mut_HEALTH_testcmd_list_blind`.
   — descoberto por `sdd-reviewer` na missão `20260818-lote-facil` (2026-08-19)
+
+- [ ] **`sdd health` recusa `--list`, e nada recusa um `TEST_CMD` de repo-alvo que sai 0 sem rodar** —
+  `bin/sdd:1848` — a checagem 2b casa a flag `--list`, que é da suíte **do kit**, e lê o config do
+  kit. Num repo-alvo, `TEST_CMD="true"`, `npm test --listTests` ou `pytest --collect-only` passa
+  gate_EXEC, gate_QA e gate_REVIEW na hora, e o `sdd preflight` só confere que a chave não está
+  vazia (`bin/sdd:1674`). Direção: exigir do `TEST_CMD` evidência de **execução** (contagem de
+  testes na saída, ou um probe que falhe de propósito), nunca uma lista de flags proibidas.
+  — descoberto por `sdd-executor` na missão `20260819-fecho-que-nao-mente` (2026-08-19)
 
 - [ ] **O `stub-argv.txt` do `check-health.sh` nunca é apagado entre mundos de fixture** —
   `tests/check-health.sh:930` — todo `health_run` sobrescreve, ninguém remove. Hoje não reproduz
@@ -72,9 +81,27 @@ Achados sobre **repos-alvo** vão para o `TODO.md` daquele repo. Este arquivo é
   `sdd health`** — `tests/run-all.sh:23` — a mutação saiu do `TEST_CMD` para o `sdd health`, e este
   repo não tem `.github/workflows/`. Medido na missão que fez a troca, e não temido: a suíte rápida
   respondeu `suite green` rc 0 enquanto o catálogo estava vermelho em
-  `LEDGER_repo_root_cdpath_leak`, e só o `sdd health` viu. Direção: CI rodando
-  `tests/run-all.sh --with-mutation`, ou o `gate_PR` chamando `sdd health` uma vez por missão.
+  `LEDGER_repo_root_cdpath_leak`, e só o `sdd health` viu. **RESOLVIDO por `c962e2e`**: o
+  `gate_PR` exige carimbo de catálogo verde sobre o conteúdo atual; `mut_PR_stamp_blind`.
   — descoberto por `humano` na missão `20260818-lote-facil` (2026-08-19)
+
+- [ ] **Nada impede a próxima invocação de `sdd health` sem `cd`, e ela mede a árvore de quem
+  chamou** — `tests/check-health.sh:291` — desde o F2 o `health_kit_root` deixa o diretório
+  corrente escolher a árvore medida, então um chamador que não fixa o `cd` mede o que estiver em
+  volta. Medido, não temido: o fixture do sensor passou a medir ESTE repo (catálogo real, 20 a 50
+  min) e, dentro de uma sandbox do `check-mutation.sh`, recursaria num segundo catálogo por
+  mutante. O sítio foi fixado; nenhum sensor recusa o próximo. Direção: regra que enumere as
+  invocações de `bin/sdd` dos fixtures e exija `cd` fixado. — descoberto por `sdd-executor` na
+  missão `20260819-fecho-...` (2026-08-19)
+
+- [ ] **O carimbo de mutação cobre 4 dos 8 caminhos que a sandbox do catálogo copia** —
+  `bin/sdd:668` contra `tests/check-mutation.sh:1485` — a chave lê `bin tests templates config`,
+  mas `sandbox()` também copia `agents/`, `CLAUDE.md`, `TODO.md` e `docs/adr`. Mudança confinada a
+  esses quatro mantém o carimbo válido sobre conteúdo que o catálogo de fato mede — a
+  regra 12 do `check-health.sh` lê o `CLAUDE.md`. Estreitamento deliberado (a fase DOCS edita
+  `CLAUDE.md`, e chavear nele custaria uma segunda rodada de ~20 min por missão). Direção: ler a
+  lista do próprio `sandbox()`, decidido o custo. — descoberto por `sdd-executor` na missão
+  `20260819-fecho-...` (2026-08-19)
 
 - [ ] **Quatro regras do `check-health.sh` sobrevivem à passada adversarial** —
   `tests/check-health.sh:826` — o probe aritmético conclui no vazio (`n=$((n+1))` não tem `)"`,
@@ -382,10 +409,24 @@ Achados sobre **repos-alvo** vão para o `TODO.md` daquele repo. Este arquivo é
 
 - [ ] **O `gate_REVIEW` lê a coluna `Grade` e nunca o resto da linha** —
   `bin/sdd:529` — uma tabela com `A` em toda linha e `PREENCHER` (ou `<…>`) em toda `Rationale`
-  passa no gate com selo verdadeiro; o `40-review-r1.md` desta missão é a instância viva. O
-  `check-templates.sh` confere que as chaves do frontmatter existem, nunca que o VALOR deixou de
-  ser placeholder. Direção: recusar token de placeholder em `Rationale` e em `gate:`, com mutação.
+  passa no gate com selo verdadeiro; o `40-review-r1.md` desta missão é a instância viva.
+  RESOLVIDO por `9fa5b0b`: o extrator lê `f[4]` e o `gate:` do frontmatter pela mesma regra, com
+  asserção diferencial de nove mundos e dois mutantes.
   — descoberto por `sdd-reviewer` na missão `20260818-lote-facil` (2026-08-18)
+
+- [ ] **O `gate:` do frontmatter só é cobrado quando existe, e 6 das 14 rodadas não o têm** —
+  `bin/sdd:568` — a recusa de placeholder no `gate:` deixa AUSENTE em paz de propósito, para não
+  reprovar rodadas anteriores ao campo; mas ausente e placeholder afirmam o mesmo nada, e o
+  `check-templates.sh` cobra a chave no template sem que gate nenhum a cobre no artefato. Direção:
+  exigir o campo a partir de uma data/versão, ou cobrá-lo no `sdd health` como dívida congelada.
+  — descoberto por `sdd-executor` na missão `20260819-fecho-que-nao-mente` (2026-08-19)
+
+- [ ] **Slug de missão em pt-BR não pode ser citado na superfície inglesa** —
+  `tests/check-lang.sh:51` — `que`, `nao`, `sem` e `sobre` são stopwords, e `-w` as casa dentro de
+  um slug hifenizado: citar `20260819-fecho-que-nao-mente` num comentário de `tests/` reprova o
+  sensor. A proveniência degrada para uma data, que é o dado mais fraco — o slug é o que liga o
+  comentário ao handoff. Direção: isentar o casamento `^[0-9]{8}-` do escaneamento de stopwords.
+  — descoberto por `sdd-executor` na missão `20260819-fecho-que-nao-mente` (2026-08-19)
 
 - [ ] **O ramo de lista ordenada da regra do marcador pelado não tem probe próprio** —
   `tests/check-todo.sh:249` — tirar `[0-9]+[.)]` da classe deixa o selftest verde: a regra da
@@ -393,7 +434,102 @@ Achados sobre **repos-alvo** vão para o `TODO.md` daquele repo. Este arquivo é
   list marker" some calada. Direção: probe próprio, ou declarar a redundância como o check de
   arquivo ilegível já declara a dele. — descoberto por `sdd-reviewer` na missão `20260818-lote-facil` (2026-08-18)
 
+- [ ] **O `gate_QA` compra o placeholder do próprio template como evidência de jornada** —
+  `bin/sdd:461` — em projeto sem interface a única âncora é `frontmatter gate`, testada só por
+  `-z`. O `templates/handoff.md:7` entrega `gate: <a evidência...>`: um handoff copiado sem tocar
+  a linha passa o gate com `journey walked without a browser interface`. É o defeito que o I3
+  fechou no `gate_REVIEW`, vivo um gate adiante, e a `placeholder()` está presa dentro do awk.
+  Direção: extrair a regra para uma função e cobrá-la nos dois gates.
+  — descoberto por `sdd-qa` na missão `20260819-fecho-que-nao-mente` (2026-08-19)
+
+- [ ] **Colons de alinhamento GFM reprovam o `gate_REVIEW` com motivo que não nomeia critério** —
+  `bin/sdd:557` — a linha separadora é pulada por `crit ~ /^-+$/`, que não conhece `:---:`. Uma
+  tabela formatada por prettier/markdownlint devolve `GATE_WHY=":---------- = :-----:"` e a
+  rodada trava até o `REVIEW_MAX_ITER` com uma frase que não nomeia critério nenhum. Anterior ao
+  I3; nenhuma das 14 rodadas em disco usa colons hoje. Direção: `crit ~ /^:?-+:?$/`.
+  — descoberto por `sdd-qa` na missão `20260819-fecho-que-nao-mente` (2026-08-19)
+
+- [ ] **O ramo de forma do `score:` no `cmd_health` não tem asserção nem mutante** —
+  `bin/sdd:1982` — é ele que impede que um `score:` presente e ilegível caminhe até `ok` e carimbe:
+  sem ele os três `[ "" -ne … ]` devolvem rc 2, o `if` lê falso e o `else` credita a rodada.
+  Nenhum `write_stub_suite` usa score malformado. Mesma linha: `grep -m1` pega a PRIMEIRA linha
+  `^score: ` e a autoritativa é a última. Direção: fixture com score torto + mutante, e `tail -1`.
+  — descoberto por `sdd-qa` na missão `20260819-fecho-que-nao-mente` (2026-08-19)
+
+- [ ] **O piso do catálogo mora só no consumidor; quem imprime o `score:` segue sem nenhum** —
+  `tests/check-mutation.sh:1631` — com `CATALOG=()` o laço roda zero vezes, `errors` fica 0 e o
+  arquivo imprime `score: 0 caught, 0 known gap(s), of 0` saindo 0. O F1 pôs o piso no `cmd_health`,
+  hoje o único chamador — mas duas frases do próprio runner (`bin/sdd:1961` e `:2030`) mandam o
+  operador rodar `tests/run-all.sh --with-mutation` à mão, e aí o verde volta a mentir.
+  Direção: comparar `${#CATALOG[@]}` com as definições `mut_*()` no próprio catálogo.
+  — descoberto por `sdd-executor` na missão `20260819-fecho-que-nao-mente` (2026-08-19)
+
+- [ ] **`FIXME` e `XXX` são recusados pelo `gate_REVIEW` sem nenhum mundo que prove** —
+  `bin/sdd:578` — a lista de palavras de preenchimento tem sete entradas e só cinco têm mundo no
+  `check-gates.sh`. Medido na passada de sabotagem do F3: tirar `WIP` ou `FILLME` deixa a asserção
+  vermelha, tirar `FIXME` ou `XXX` a deixa **verde**. As duas nasceram assim no I3 e a lista cresceu
+  por cima. Regra sem probe é decoração e some calada no dia em que alguém a reescreve.
+  Direção: um mundo para cada, ou tirá-las da lista.
+  — descoberto por `sdd-executor` na missão `20260819-fecho-que-nao-mente` (2026-08-19)
+
+- [ ] **O censo `guard:` conta captura escrita dentro de COMENTÁRIO** —
+  `tests/check-health.sh:1352` — a regra varre a região do `sdd health` linha a linha e não sabe
+  distinguir código de comentário. Medido nesta rodada: um exemplo de reprodução colado num
+  comentário do `cmd_health`, na forma `o="$( … )"`, virou a 23ª captura e a catraca de duas mãos
+  reprovou a suíte. Falha FECHADA, então não certifica nada de errado — mas proíbe documentar a
+  armadilha com o comando que a demonstra, que é justamente como esta casa documenta.
+  Direção: pular linha cujo primeiro caractere não-branco é `#`, com probe nos dois sentidos.
+  — descoberto por `sdd-reviewer` na missão `20260819-fecho-que-nao-mente` (2026-08-19)
+
+- [ ] **A guarda de vazio do `mutation_stamp_key` só cobre a ausência TOTAL dos quatro caminhos** —
+  `bin/sdd:806` — com `tests/` presente e `bin/` ausente, o `find` imprime o que achou, sai não-zero,
+  o `2>/dev/null` engole o aviso e a chave sai de uma listagem PARCIAL, sem sinal nenhum de que
+  faltou diretório. Hoje inalcançável (as duas pontas só perguntam por raiz cujo `tests/` tem
+  catálogo), e o comentário da função declara só o caso "todos ausentes".
+  Direção: exigir que cada caminho de `MUTATION_STAMP_PATHS` exista, ou carimbar a lista na chave.
+  — descoberto por `sdd-reviewer` na missão `20260819-fecho-que-nao-mente` (2026-08-19)
+
 ### Contrato e configuração
+
+- [ ] **`.sdd/config.sh` que não parseia é reportado como "declares no TEST_CMD"** —
+  `bin/sdd:2183` — a checagem 2b lê o `TEST_CMD` sourceando o config num subshell com
+  `>/dev/null 2>&1`, então o erro de sintaxe é engolido e o valor chega vazio: o operador ouve que
+  a chave não existe quando o arquivo inteiro está quebrado. Medido nesta rodada que o `set -e`
+  NÃO derruba a substituição (sem `inherit_errexit`), então o ramo existe e é alcançável.
+  Direção: capturar a stderr do source e, se ela não estiver vazia, dizer "não parseia" e mostrá-la.
+  — descoberto por `sdd-reviewer` na missão `20260819-fecho-que-nao-mente` (2026-08-19)
+
+- [ ] **A catraca do backlog e o carimbo de mutação colidem em toda missão** —
+  `tests/health-baseline.txt` — o arquivo mora DENTRO dos quatro diretórios da chave do carimbo,
+  então cumprir o princípio 5 (achado fora de escopo vira item) obriga a bumpar a catraca, o que
+  invalida o carimbo e cobra outra rodada de 20 a 50 min antes do `gate_PR`. Medido nesta sessão:
+  o carimbo `0575d68…` foi ganho e perdido pelo commit que registra estes achados. Direção: tirar
+  o baseline da chave, ou aceitar o custo declarando-o no boot da fase PR.
+  — descoberto por `sdd-qa` na missão `20260819-fecho-que-nao-mente` (2026-08-19)
+
+- [ ] **A regra do `--list` é só de espaço, e o `eval` que roda o `TEST_CMD` não é** —
+  `bin/sdd:2039` — o `case " $kit_test_cmd " in *" --list "*` não vê `TEST_CMD` com TAB antes da
+  flag, nem `"--list"` entre aspas; o `eval` do `run_check_cmd` (`bin/sdd:263`) entrega `--list`
+  à suíte nos três casos. O `sdd health` responde `ok TEST_CMD runs the suite` e todo gate passa
+  contra uma suíte que não rodou — o buraco que o I2 existe para fechar, outra grafia.
+  Direção: normalizar o espaço em branco antes do `case`.
+  — descoberto por `sdd-qa` na missão `20260819-fecho-que-nao-mente` (2026-08-19)
+
+- [ ] **Lixo ignorado pelo git dentro dos quatro diretórios move a chave do carimbo** —
+  `bin/sdd:688` — a chave é `find -type f` sobre a árvore, não sobre o que o git rastreia: um
+  `tests/debug.log` (ignorado por `*.log`, invisível no `git status`) muda a chave, e um swap de
+  editor que nasce e morre durante a rodada dispara a guarda de janela, jogando fora um verde
+  legitimamente ganho. O mundo 8 do `check-gates.sh` depende desse mecanismo de propósito.
+  Direção: basear a chave nos arquivos rastreados, ou podar dotfiles.
+  — descoberto por `sdd-qa` na missão `20260819-fecho-que-nao-mente` (2026-08-19)
+
+- [ ] **O exemplar do `agents/sdd-reviewer.md` é um artefato que o gate recusa nas oito linhas** —
+  `agents/sdd-reviewer.md:104` — o bloco é introduzido como "in the format" e todas as oito
+  `Rationale` são `<…>` ou `<one measured sentence…>`, ambas recusadas pela regra do envelope
+  angular; o aviso vem três parágrafos depois. Duas sessões já derivaram o heading errado da
+  ausência de exemplo copiável. Mesma linha: `bin/sdd:528` cita `templates/review.md:37-44`, que
+  o próprio commit empurrou para 48-55. Direção: uma linha do exemplar com frase real.
+  — descoberto por `sdd-qa` na missão `20260819-fecho-que-nao-mente` (2026-08-19)
 
 - [ ] **`REVIEW_MAX_ITER` conta por invocação de `sdd run`, não "in total" como o schema promete** —
   `config/schema.md:65` vs `bin/sdd:2297` — `local -A attempts=()` nasce dentro de `cmd_run`, então

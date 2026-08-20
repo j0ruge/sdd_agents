@@ -30,6 +30,22 @@ qualquer repo.
 Qualquer critério com nota diferente de `A` reprova — inclusive `—` para "não analisado". Revisão
 parcial não é revisão: se um critério não foi analisado, analise.
 
+⚠️ **A coluna `Rationale` também é lida, e placeholder nela reprova.** Célula vazia, célula
+inteira entre `<` e `>` (é assim que os `<…>` abaixo vêm), célula que é só pontuação (`-`, `?`,
+`...`, `…`) ou uma das palavras de preenchimento `PREENCHER` / `TODO` / `TBD` / `FIXME` / `XXX` /
+`WIP` / `FILL ME`: o gate nomeia o critério e recusa a rodada. As palavras são comparadas como
+**palavra**, não como grafia — `TODO:` e `TBD.` são a mesma coisa que as peladas, e foi por uma
+tecla dessas que o selo já foi comprado. O `A` é comprado pela frase, não pela letra: a r1 de
+`20260818-lote-facil` deixou `PREENCHER` nas sete justificativas e teria sido certificada.
+Pontuação sozinha nunca é a ofensa — frase real que termina em ponto é frase real —, e `clean`,
+`n/a` e `—` **não** são placeholder: são as justificativas curtas do próprio `codereview` e querem
+dizer "medido, nada a dizer".
+
+A mesma recusa vale para o campo `gate:` do frontmatter, a outra metade do selo: preencha com a
+evidência real da rodada, nunca com o `<…>` que este template entrega. Ausente ele é deixado em
+paz — há rodadas mais velhas que o campo —, mas **presente** reprova por qualquer placeholder,
+inclusive o campo escrito e deixado em branco.
+
 ### Overall Grade
 
 | Criterion | Grade | Rationale |

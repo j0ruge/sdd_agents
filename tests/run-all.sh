@@ -151,7 +151,13 @@ if [ -z "${SDD_MUTANT:-}" ]; then
   if command -v shellcheck >/dev/null 2>&1; then
     run "lint: the runner and the whole suite" lint_surface
   else
-    printf '\n  (linter absent — skipped)\n'
+    # STDERR, and the redirect is the assertion `surface: --list prints steps only` in
+    # check-health.sh. `--list` promises "the steps that WOULD run"; this notice is not a step, and
+    # on stdout it landed in the MIDDLE of the list, where every consumer counting steps counted
+    # it — SURFACE_FLOOR, the anti-vacuity floor of that same rule, included. A floor a notice can
+    # satisfy is not a floor. It stays printed, in both modes, because a list that silently drops
+    # the lint step without saying why is the other half of the same lie.
+    printf '\n  (linter absent — skipped)\n' >&2
   fi
 fi
 

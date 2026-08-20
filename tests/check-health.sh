@@ -37,6 +37,17 @@
 #   13. the OTHER two provenance comparisons, prefixed `covered:` — the qa-execution report and the
 #      codereview grade table. Assertion 4 reaches one of the three; these two sat permanently on
 #      the `skipped` branch, so either could have been `if true` with this file fully green.
+#   14. the `score:` line's TWO numbers are COMPARED, not merely parsed. The check used to ask only
+#      for `0 known gap` and never that `caught == of`, so a catalogue with a live mutant read as
+#      `ok` — in the command that, since the catalogue left TEST_CMD, is its only caller.
+#   15. `--list` prints STEPS and nothing else, and a TEST_CMD carrying `--list` is refused. Two
+#      ends of one hole: a mode that exits 0 having run nothing, whose output is indistinguishable
+#      from a suite that passed. Prefixed `surface:` because both ends are about what the suite
+#      LOOKS like from outside.
+#   16. the catalogue's SIZE is judged too, and an empty or narrowed one does not become a green
+#      stamp. `of 0` satisfies assertion 14's `caught == of` perfectly — an empty loop printing the
+#      greenest line the command has — and it used to reach `kit healthy` and write the stamp that
+#      opens gate_PR.
 #
 # Usage: tests/check-health.sh   (exit 0 = cmd_health discriminates)
 #
@@ -95,22 +106,44 @@ broken() { printf '  SENSOR-BROKEN  %s\n' "$1" >&2; exit 90; }
 # The verdict-relevant lines of an output, flattened onto one line for a FAIL report. It carries
 # the suite/score/gates lines too, and not only the ratchet's: the `abort:` assertions are ABOUT
 # what the run stopped saying, so a digest that dropped those would report the silence as silence.
-digest() { grep -E 'suite (green|red)|blind|gates have a mutation|baseline|provenance|finding count|kit healthy|check\(s\) failed|diverged from the skill|grade table has a criterion' <<< "$1" | tr '\n' ' '; }
+digest() { grep -E 'suite (green|red)|blind|gates have a mutation|baseline|provenance|finding count|kit healthy|check\(s\) failed|diverged from the skill|grade table has a criterion|mutation: |survivor|TEST_CMD|stamp' <<< "$1" | tr '\n' ' '; }
 
 # ---------------------------------------------------------------------------
 # The fixture
 # ---------------------------------------------------------------------------
 
-# The stub suite's score line. The number is deliberately NOT the real catalogue's: only the
-# SHAPE is the contract cmd_health reads (`^score: [0-9]+ caught, 0 known gap`), and a number
-# that tracked the real one would invite a future editor to keep them in sync for no reason.
-STUB_SCORE='score: 3 caught, 0 known gap(s), of 3'
+# How many mutants the catalogue the fixture carries actually DEFINES, counted off the very file
+# build_fixture copies into $FIX/tests/ — never written by hand.
+#
+# It became load-bearing when cmd_health stopped reading the `score:` line alone: the check now
+# compares the `of N` it was handed against the catalogue on disk, so a stub score of an invented
+# size is no longer a world this fixture can stand in. It IS the world assertion 16 refuses — a
+# catalogue reporting a size nothing on disk backs — and leaving it as the default would stage that
+# defect permanently under every other assertion in this file.
+#
+# `|| true` because `grep -c` returns 1 precisely when it counts zero, and this file runs under
+# `set -o pipefail`; the floor below is what turns that zero into a sentence instead of a fixture
+# that quietly models a kit with no catalogue.
+CATALOG_DEFINED="$(grep -cE '^mut_[A-Za-z0-9_]+\(\) \{' "$ROOT/tests/check-mutation.sh" || true)"
+[ "${CATALOG_DEFINED:-0}" -ge 8 ] \
+  || broken "the kit's catalogue defines ${CATALOG_DEFINED:-0} mutant(s), expected at least 8 (one per gate) — either tests/check-mutation.sh stopped spelling its mutants 'mut_<slug>() {' or the fixture would model a kit whose catalogue measures nothing, and every score world below would be a world about nothing"
+
+# The stub suite's score line. Only the SHAPE used to be the contract cmd_health read; since the
+# catalogue floor it also has to be a size the fixture's own tests/check-mutation.sh backs, which
+# is why this is derived and no longer the invented `of 3` it was born as.
+STUB_SCORE="score: $CATALOG_DEFINED caught, 0 known gap(s), of $CATALOG_DEFINED"
 
 # The stub suite's TODO.md finding count — the SECOND line cmd_health reads off the suite's own
 # stdout, emitted for real by tests/check-todo.sh. Same reasoning as STUB_SCORE, and the same
 # reason it is a contract and not a recount: bin/sdd reads this number, tests/check-todo.sh
 # writes it, and nobody re-derives it. The value here is deliberately not the real TODO.md's.
 STUB_TODO_COUNT=7
+
+# The TEST_CMD of the fixture kit's own .sdd/config.sh — the THIRD thing cmd_health reads that the
+# fixture owns, beside the stub suite's two lines. It is deliberately the real spelling and not an
+# invented one: the property under test is whether a `--list` rides along, and a value that could
+# never plausibly appear in a config would make the passing world a straw man.
+STUB_TEST_CMD='tests/run-all.sh'
 
 reset_home() {
   rm -rf "${FIX:?}/home"
@@ -138,6 +171,10 @@ build_fixture() {
   cp "$ROOT/config/schema.md" "$FIX/config/schema.md"
   cp "$ROOT/tests/check-mutation.sh" "$ROOT/tests/check-gates.sh" "$FIX/tests/"
 
+  #   .sdd/config.sh          the TEST_CMD check — the suite the GATES will run, which is not the
+  #                           same file as the suite cmd_health runs itself
+  set_test_cmd "$STUB_TEST_CMD"
+
   write_stub_suite with-count
 }
 
@@ -146,12 +183,15 @@ build_fixture() {
 # the score, and assertion 8 one that is simply RED. Each has to be the ONLY thing that changes
 # between the two worlds it compares — hence one writer with switches, not four heredocs drifting
 # apart. The defaults are what keeps the existing two calls reading as they did.
-write_stub_suite() { # write_stub_suite <with-count|no-count> [with-score|no-score] [exit code]
-  local count_line="" score_line="" rc="${3:-0}"
+# The fourth switch is the score LINE itself, defaulting to STUB_SCORE so every existing call reads
+# as it did. Assertion 14 needs two worlds that differ in nothing but the two numbers of that line,
+# and a second heredoc here is exactly the drift this one writer was created to prevent.
+write_stub_suite() { # write_stub_suite <with-count|no-count> [with-score|no-score] [exit code] [score line]
+  local count_line="" score_line="" rc="${3:-0}" score="${4:-$STUB_SCORE}"
   [ "$1" = "with-count" ] \
     && count_line="printf '  ok    %d finding(s), all within 8 lines and carrying anchor + date\\n' $STUB_TODO_COUNT"
   [ "${2:-with-score}" = "with-score" ] \
-    && score_line="printf '%s\\n' '$STUB_SCORE'"
+    && score_line="printf '%s\\n' '$score'"
 
   cat > "$FIX/tests/run-all.sh" <<EOF
 #!/usr/bin/env bash
@@ -172,6 +212,14 @@ EOF
 }
 
 set_baseline() { printf '%s\n' "$1" > "$FIX/tests/health-baseline.txt"; }
+
+# The fixture kit's own config. Only the one key: cmd_health reads TEST_CMD and nothing else out
+# of this file, and a fuller copy would invite the next editor to keep it in sync with the real
+# one for no reason — the same argument STUB_SCORE carries.
+set_test_cmd() { # set_test_cmd <the TEST_CMD value>
+  mkdir -p "$FIX/.sdd"
+  printf 'TEST_CMD="%s"\n' "$1" > "$FIX/.sdd/config.sh"
+}
 
 # The qa-report skill template cmd_health compares its check-gates.sh fixture against.
 install_bug_skill() { # install_bug_skill <status line>
@@ -230,8 +278,18 @@ HEALTH_RC=0
 # command substitution runs in a subshell, and every global it assigns dies with the
 # substitution — `bash -n` does not say so and the linter does not either. The house rule, and
 # the runner's own run_phase / LAST_PHASE_* shape.
+#
+# The working directory is PINNED to the fixture, and that is load-bearing rather than tidiness:
+# `sdd health` now measures the checkout the operator is standing in when that checkout carries a
+# catalogue, so an unpinned invocation asks about whatever tree the caller happened to be in. Run
+# from this repo it would measure THIS repo and spend twenty to fifty minutes on the real
+# catalogue; run from inside a check-mutation.sh sandbox — which is a copy of the kit, catalogue
+# included — it would recurse into a second catalogue for every mutant. Measured, not feared: both
+# happened on the first run after the resolution changed. $FIX is not a git checkout, so the
+# runner falls back to its own $SDD_HOME, which IS the fixture. A sensor whose answer depends on
+# the caller's cwd is not a sensor, the same reason HOME is redirected on the line below.
 health_run() {
-  HEALTH_OUT="$( HOME="$FIX/home" NO_COLOR=1 "$FIX/bin/sdd" health 2>&1 )"
+  HEALTH_OUT="$( cd "$FIX" && HOME="$FIX/home" NO_COLOR=1 "$FIX/bin/sdd" health 2>&1 )"
   HEALTH_RC=$?
 }
 
@@ -571,7 +629,12 @@ fi
 
 # Back to the world OUT_GREEN was read from, so each sabotage below is the ONLY thing standing
 # between the fixture and `kit healthy`.
-green_world() { write_stub_suite with-count; clear_skills; set_baseline "$CALIBRATED"; }
+# The catalogue file is restored HERE and not at the end of the world that removes it: green_world
+# is what every block below calls to mean "the fixture is back to what OUT_GREEN was read from",
+# and a restore living in the block that broke it is one `return` away from leaving every later
+# assertion measuring a kit with no catalogue — green, and about nothing.
+green_world() { write_stub_suite with-count; clear_skills; set_baseline "$CALIBRATED"; set_test_cmd "$STUB_TEST_CMD"
+                cp "$ROOT/tests/check-mutation.sh" "$FIX/tests/check-mutation.sh"; }
 
 # The last line cmd_health prints when it walked the whole way, and the strongest `after` there
 # is: reaching it means no check was skipped. Named once because three assertions read it — a
@@ -613,6 +676,139 @@ else
   fail "abort: a suite with no score line is said out loud and the run carries on" \
        "rc != 0 and 'health went blind to the mutation' and '$LATER' and '$VERDICT'" \
        "rc $RC_NO_SCORE · $(digest "$OUT_NO_SCORE")"
+fi
+
+# ---------------------------------------------------------------------------
+# 14 — the score's TWO numbers are compared, not merely parsed
+#
+# `score: 103 caught, 0 known gap(s), of 104` is a catalogue with a mutant ALIVE — an assertion the
+# suite does not have, protection the catalogue goes on crediting and nobody owns. The check asked
+# only for `0 known gap` and NEVER that `caught == of`, so that line printed `ok` in the one command
+# that opts the catalogue in. Not feared: the main branch carried exactly it between PR #12 and
+# #13, for days, with every gate green, until a human typed `sdd health`.
+#
+# DIFFERENTIAL, and it has to be: a world alone distinguishes nothing, because `health_bad` and a
+# crash share the rc, and because a check that refused EVERY score would satisfy the survivor half
+# on its own. Two worlds differing in exactly two digits, compared against each other.
+#
+# The `$LATER`/`$VERDICT` half is the `abort:` family's, and it belongs here for the same reason:
+# this branch sits at the same site, and a refusal that ate the rest of the run would be a second
+# defect wearing the first one's clothes.
+# ---------------------------------------------------------------------------
+# DERIVED off CATALOG_DEFINED, and no longer the hand-written 104/103 pair this assertion was born
+# with: the survivor world has to differ from the full one in the two numbers under test and in
+# NOTHING ELSE, and since the catalogue floor a size the fixture's tests/check-mutation.sh does not
+# back is refused one branch earlier. Left at 104, the full world would fail for the floor's reason
+# and this assertion would report the survivor comparison it never made.
+SCORE_FULL="score: $CATALOG_DEFINED caught, 0 known gap(s), of $CATALOG_DEFINED"
+SCORE_SURVIVOR="score: $((CATALOG_DEFINED - 1)) caught, 0 known gap(s), of $CATALOG_DEFINED"
+
+green_world
+write_stub_suite with-count with-score 0 "$SCORE_FULL"
+health_run
+OUT_SCORE_FULL="$HEALTH_OUT"; RC_SCORE_FULL="$HEALTH_RC"
+
+green_world
+write_stub_suite with-count with-score 0 "$SCORE_SURVIVOR"
+health_run
+OUT_SCORE_SURV="$HEALTH_OUT"; RC_SCORE_SURV="$HEALTH_RC"
+
+if [ "$RC_SCORE_FULL" -eq 0 ] \
+   && grep -qF "mutation: $SCORE_FULL" <<< "$OUT_SCORE_FULL" \
+   && grep -qF 'kit healthy' <<< "$OUT_SCORE_FULL" \
+   && ! grep -qF 'survivor' <<< "$OUT_SCORE_FULL" \
+   && [ "$RC_SCORE_SURV" -ne 0 ] \
+   && grep -qF "mutation: $((CATALOG_DEFINED - 1)) of $CATALOG_DEFINED caught" <<< "$OUT_SCORE_SURV" \
+   && grep -qF 'survivor' <<< "$OUT_SCORE_SURV" \
+   && grep -qF "$LATER" <<< "$OUT_SCORE_SURV" \
+   && grep -qF "$VERDICT" <<< "$OUT_SCORE_SURV"; then
+  pass "mutation: a score whose caught differs from total is refused"
+else
+  fail "mutation: a score whose caught differs from total is refused" \
+       "the full score reaches 'kit healthy' saying nothing of survivors; the 103-of-104 one fails naming BOTH numbers, and '$LATER' and '$VERDICT' still appear" \
+       "full: rc $RC_SCORE_FULL · $(digest "$OUT_SCORE_FULL") // survivor: rc $RC_SCORE_SURV · $(digest "$OUT_SCORE_SURV")"
+fi
+
+# ---------------------------------------------------------------------------
+# 16 — the catalogue's SIZE is judged, not only the agreement of its two numbers
+#
+# Assertion 14 made `caught == of` a requirement. `score: 0 caught, 0 known gap(s), of 0` satisfies
+# it perfectly: `CATALOG=()` runs the loop zero times, `errors` stays 0, the suite exits 0, and
+# cmd_health printed `ok`, set catalogue_green=1 and WROTE THE STAMP — so gate_PR opened over a
+# catalogue that measured nothing at all. A catalogue merely NARROWED (`of 3`) does the same. Both
+# reproduced in the QA phase of this mission, with the verdict's own parse extracted verbatim.
+#
+# It was the last count of cmd_health with no anti-vacuity floor, beside LINT_FLOOR, SURFACE_FLOOR,
+# CAPTURE_FLOOR and REVIEW_FLOOR — and the emptiest possible loop printing the greenest possible
+# line is this mission's own thesis, standing in the artifact the mission produced.
+#
+# THREE worlds, and the third is what makes the first two an assertion: a check that refused every
+# score would satisfy the two refusals on its own, exactly as assertion 14's pair does. The green
+# leg demands `kit healthy` AND the stamp line, because "does not become a green stamp" is the
+# property, and a refusal that also stopped stamping the healthy world would be a second defect
+# wearing the first one's clothes.
+#
+# The `$LATER`/`$VERDICT` half is the `abort:` family's, for the reason its own block gives: this
+# branch sits at the same site as the two above it, and a refusal that ate the rest of the run
+# would report as a refusal while blinding six checks.
+# ---------------------------------------------------------------------------
+CATALOG_FLOOR_DESC='mutation: a catalogue too small to have measured anything is refused'
+SCORE_EMPTY='score: 0 caught, 0 known gap(s), of 0'
+SCORE_NARROW='score: 3 caught, 0 known gap(s), of 3'
+STAMPED='mutation stamp written'
+
+green_world
+write_stub_suite with-count with-score 0 "$SCORE_EMPTY"
+health_run
+OUT_CAT_EMPTY="$HEALTH_OUT"; RC_CAT_EMPTY="$HEALTH_RC"
+
+green_world
+write_stub_suite with-count with-score 0 "$SCORE_NARROW"
+health_run
+OUT_CAT_NARROW="$HEALTH_OUT"; RC_CAT_NARROW="$HEALTH_RC"
+
+# The FLOOR's own world, and it is not decoration: with the catalogue file gone, the size read off
+# disk is 0 and `of 0` AGREES with it — the equality reads 0 == 0 and hands the emptiest possible
+# run a green. Measured, not feared: with the floor clause removed and the equality kept, the two
+# worlds above stay red and this one goes green, which is the whole reason it is here.
+#
+# REMOVED rather than emptied, because that arms a second thing in the same world: `grep -c` over a
+# missing file prints NOTHING, so the size lands as the empty string, and an arithmetic test
+# against it errors out to FALSE — every branch of the verdict skipped and the run walking into
+# `ok`. Refusing an unreadable catalogue and refusing an empty one are one sentence here, and this
+# world is what keeps both halves of it honest.
+green_world
+rm -f "$FIX/tests/check-mutation.sh"
+[ ! -f "$FIX/tests/check-mutation.sh" ] \
+  || broken "the fixture still carries a catalogue file — the floor world was never armed, and any verdict over it is a verdict about nothing"
+write_stub_suite with-count with-score 0 "$SCORE_EMPTY"
+health_run
+OUT_CAT_GONE="$HEALTH_OUT"; RC_CAT_GONE="$HEALTH_RC"
+
+green_world
+health_run
+OUT_CAT_REAL="$HEALTH_OUT"; RC_CAT_REAL="$HEALTH_RC"
+
+if [ "$RC_CAT_EMPTY" -ne 0 ] \
+   && grep -qF "the catalogue ran 0 of the $CATALOG_DEFINED" <<< "$OUT_CAT_EMPTY" \
+   && ! grep -qF "$STAMPED" <<< "$OUT_CAT_EMPTY" \
+   && grep -qF "$LATER" <<< "$OUT_CAT_EMPTY" \
+   && grep -qF "$VERDICT" <<< "$OUT_CAT_EMPTY" \
+   && [ "$RC_CAT_NARROW" -ne 0 ] \
+   && grep -qF "the catalogue ran 3 of the $CATALOG_DEFINED" <<< "$OUT_CAT_NARROW" \
+   && ! grep -qF "$STAMPED" <<< "$OUT_CAT_NARROW" \
+   && [ "$RC_CAT_GONE" -ne 0 ] \
+   && grep -qF 'the catalogue ran 0 of the 0 mutant(s)' <<< "$OUT_CAT_GONE" \
+   && ! grep -qF "$STAMPED" <<< "$OUT_CAT_GONE" \
+   && [ "$RC_CAT_REAL" -eq 0 ] \
+   && grep -qF 'kit healthy' <<< "$OUT_CAT_REAL" \
+   && grep -qF "$STAMPED" <<< "$OUT_CAT_REAL" \
+   && ! grep -qF 'the catalogue ran' <<< "$OUT_CAT_REAL"; then
+  pass "$CATALOG_FLOOR_DESC"
+else
+  fail "$CATALOG_FLOOR_DESC" \
+       "'of 0' and 'of 3' both fail naming the size the catalogue defines ($CATALOG_DEFINED), a catalogue that is GONE fails on the floor at 0 of 0, none of the three writes the stamp, and '$LATER' and '$VERDICT' are still printed; the real size reaches 'kit healthy', stamps, and never says the sentence" \
+       "empty: rc $RC_CAT_EMPTY · $(digest "$OUT_CAT_EMPTY") // narrowed: rc $RC_CAT_NARROW · $(digest "$OUT_CAT_NARROW") // gone: rc $RC_CAT_GONE · $(digest "$OUT_CAT_GONE") // real: rc $RC_CAT_REAL · $(digest "$OUT_CAT_REAL")"
 fi
 
 # The third site says nothing on its own — a machine with no plugins cache is not a defect, it is
@@ -1008,6 +1204,79 @@ else
 fi
 
 # ---------------------------------------------------------------------------
+# surface: `--list` prints STEPS ONLY, and a TEST_CMD carrying it is refused
+#
+# Two ends of ONE hole, which is why they share a sentence: `--list` exits 0 having executed
+# nothing — that is the mode's contract and it is correct — and its output is indistinguishable
+# from a suite that passed. A dozen plausible lines, rc 0, no run.
+#
+#   (a) THE LIST ITSELF leaked a line that is not a step. On a machine with no shellcheck,
+#       run-all.sh printed `  (linter absent — skipped)` onto the LIST, in the middle of the step
+#       names. Every consumer counting steps counted it, SURFACE_FLOOR above included — so the
+#       anti-vacuity floor could be reached by a notice instead of by a step.
+#   (b) `TEST_CMD="tests/run-all.sh --list"` in .sdd/config.sh makes gate_EXEC, gate_QA and
+#       gate_REVIEW pass INSTANTLY, in every mission, with a log nobody would look at twice.
+#       Nothing in the kit said a word. `sdd health` is where it gets said, because health is the
+#       command whose whole job is asking whether the kit still measures what it claims to.
+#
+# (a) is measured over a world where the linter is genuinely out of reach, and the world is BUILT
+# rather than found: `if command -v shellcheck` is degraded to `if false`, which is exactly what a
+# machine without the tool executes. Poisoning $PATH was written first and thrown away — on this
+# distribution shellcheck and the whole GNU userland share /usr/bin, so removing the directory
+# that holds one removes grep, sed and comm from the sub-process too, and the probe would then be
+# measuring a suite that cannot run rather than a suite with no linter.
+# surface_degrade() carries the armed proof (a sed that changed nothing is loud), and the second
+# leg is asserted here: the degraded list really lost the lint step, so the else branch really ran.
+#
+# (b) is DIFFERENTIAL, the shape no fixture regime satisfies by accident: the same kit, the same
+# stub suite, two configs differing in one flag, and the two outputs compared against each other.
+# The floor underneath it is that the clean world still reaches `kit healthy` — without it, a
+# check that refused EVERY TEST_CMD would satisfy the refusing half while distinguishing nothing.
+# ---------------------------------------------------------------------------
+SURFACE_LIST_DESC='surface: --list prints steps only, and a TEST_CMD carrying it is refused'
+# Cross-file contract, the same shape as SURFACE_MUTATION_STEP: run-all.sh names the step, this
+# file reads the name. Reword either alone and the second leg of the armed proof goes red.
+SURFACE_LINT_STEP='^lint: '
+
+# 0 = every listed line is a STEP. `run()` lists with `printf '%s\n' "$1"`, so a step is a
+# non-blank line with no leading whitespace, and nothing that goes through run() can be anything
+# else. Anything the list carries that does not fit came from a printf that is not run()'s.
+surface_steps_only() {
+  ! grep -qE '^([[:space:]]|$)' <<< "$SURFACE_PLAIN"
+}
+
+surface_degrade 's@^  if command -v shellcheck >/dev/null 2>&1; then$@  if false; then  # the machine has no linter@' 'a machine with no linter'
+grep -qE "$SURFACE_LINT_STEP" <<< "$SURFACE_PLAIN" \
+  && broken "the no-linter world still lists the lint step — the branch this rule is about was never entered, so any verdict over it is a verdict about nothing"
+SURFACE_NOT_STEP="$(grep -nE '^([[:space:]]|$)' <<< "$SURFACE_PLAIN" | tr '\n' ' ')"
+
+# (b) — the differential, both worlds off the same green fixture.
+green_world
+set_test_cmd "$STUB_TEST_CMD"
+health_run
+OUT_TC_OK="$HEALTH_OUT"; RC_TC_OK="$HEALTH_RC"
+
+green_world
+set_test_cmd "$STUB_TEST_CMD --list"
+health_run
+OUT_TC_LIST="$HEALTH_OUT"; RC_TC_LIST="$HEALTH_RC"
+
+green_world
+
+if surface_steps_only \
+   && [ "$RC_TC_OK" -eq 0 ] && grep -qF 'kit healthy' <<< "$OUT_TC_OK" \
+   && ! grep -qF 'TEST_CMD carries --list' <<< "$OUT_TC_OK" \
+   && [ "$RC_TC_LIST" -ne 0 ] \
+   && grep -qF 'TEST_CMD carries --list' <<< "$OUT_TC_LIST" \
+   && grep -qF "$VERDICT" <<< "$OUT_TC_LIST"; then
+  pass "$SURFACE_LIST_DESC"
+else
+  fail "$SURFACE_LIST_DESC" \
+       "the no-linter --list lists only steps; TEST_CMD='$STUB_TEST_CMD' reaches 'kit healthy' saying nothing of --list, and TEST_CMD='$STUB_TEST_CMD --list' fails naming it, with '$VERDICT' still printed" \
+       "non-step line(s) in the no-linter list: ${SURFACE_NOT_STEP:-none} // clean: rc $RC_TC_OK $(digest "$OUT_TC_OK") // --list: rc $RC_TC_LIST $(digest "$OUT_TC_LIST")"
+fi
+
+# ---------------------------------------------------------------------------
 # guard: no capture in the `sdd health` region may abort the run
 #
 # The rule the four `abort:` assertions above cannot carry, and the reason it is written as a
@@ -1168,7 +1437,26 @@ health_captures() {
 # not, and both `todo-findings` and `tests/lang-allowlist.txt` bite in both directions for exactly
 # that reason. A mission that adds a capture to the health region is already editing this family;
 # moving one number in the same commit is the record, and the failure message says so.
-CAPTURE_FLOOR=16
+# 16 → 17: the `score:` check stopped asking a regex whether the line "looks green" and started
+# READING its three numbers, so the health region gained the `score_nums` capture. This line is
+# the record the ratchet demands.
+# 17 → 18: check 2b reads the kit's own TEST_CMD out of .sdd/config.sh, so the region gained the
+# `kit_test_cmd` capture — guarded in the tail, which is the form this ratchet was built to keep.
+# 18 → 19: check 2c turns the catalogue's verdict into an artifact on disk, so the region gained
+# the `stamp_key` capture. Guarded INSIDE, `|| true`, because an empty key is not a crash here: it
+# is the branch that refuses to stamp, which is exactly what a root with nothing to measure earns.
+# 19 → 20: the same key is now read a SECOND time, before the suite runs, so the stamp can refuse a
+# tree that moved during the twenty-to-fifty-minute catalogue. Guarded identically.
+# 20 → 21: the score's `of` is now weighed against the mutants tests/check-mutation.sh DEFINES, so
+# the region gained the `defined` capture. `grep -c` returns 1 exactly when it counts zero, which
+# is the emptied catalogue this very check exists to refuse — unguarded it would have killed the
+# run on the line written to report it.
+# 21 → 22: the tree the command measures stopped being the constant $SDD_HOME and became an answer
+# — health_kit_root, so the writer stamps the tree gate_PR reads — and the region gained the `kit`
+# capture. Guarded INSIDE with `|| true`, though the function it calls cannot fail: the ratchet
+# counts every capture in the region, and a capture whose guard depends on the callee staying
+# infallible is a guard that rots the day somebody adds a branch to it.
+CAPTURE_FLOOR=22
 
 capture_report() {
   local out total safe offenders

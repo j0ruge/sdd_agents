@@ -27,9 +27,21 @@ Every handoff in `docs/handoffs/<mission>/`: `00-missao.md`, `01-plano.md`, `che
 
 - clean working tree (`git status --porcelain` empty);
 - suite green (`TEST_CMD`), and `E2E_CMD` green if there is one;
-- the current branch is **not** `DEFAULT_BRANCH`.
+- the current branch is **not** `DEFAULT_BRANCH`;
+- **in a repo that owns `tests/check-mutation.sh`** — the mutation stamp. Ask the runner
+  (`sdd why <mission> PR`) rather than guessing: `no green mutation catalogue for this content`
+  means the gate will refuse your PR even after `gh` confirms it exists, because `TEST_CMD` does
+  not run the catalogue and nothing before this gate measured it.
 
 Any of them failing: **stop** and write down the reason. Do not fix it — it is not your phase.
+
+The stamp is the one exception to that last line, and only because the remedy is a command rather
+than a change: run `./bin/sdd health` (twenty to fifty minutes) and let it finish. It has to run
+**after** the last commit that touches `bin/ tests/ templates/ config/`, so if you are about to
+commit anything under those four, commit first and measure after. Docs and `TODO.md` do not
+invalidate it; `tests/health-baseline.txt` does. Never end your turn waiting on it — a headless
+session that ends its turn is a session that ended. Details in
+[`docs/failure-modes.md`](../docs/failure-modes.md).
 
 ### 3. Push
 

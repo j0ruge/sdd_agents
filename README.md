@@ -83,7 +83,10 @@ an empty value means "stay here". What happens when git refuses, and why the fie
 decorative, is in [`docs/pipeline.md`](docs/pipeline.md#the-missions-branch).
 
 `sdd health` answers *"does the kit still measure what it claims to?"* — it runs the suite,
-requires a **100% mutation score**, demands one mutation per gate, and reports drift between
+requires a **100% mutation score** (both numbers of the `score:` line compared, not just the gap
+count — a catalogue with one live survivor used to print `ok`), refuses a catalogue too small to
+have measured anything, refuses a `TEST_CMD` carrying `--list` (a command that exits 0 having run
+nothing would pass every gate instantly), demands one mutation per gate, and reports drift between
 `load_config()` and `config/schema.md`, a command missing from `--help`, a variable with a default
 that is never read, and a fixture that diverged from the skill it imitates. It also freezes **how
 many open findings `TODO.md` carries**, as `todo-findings <N>`, so the backlog cannot grow in
@@ -91,6 +94,18 @@ silence: growing stays allowed, growing undeclared does not. Known debt lives fr
 `tests/health-baseline.txt` — almost every line owned by the `TODO.md` entry that will pay it off,
 and one, the count itself, owned by the file: a new finding fails, and so does a baseline line
 that stopped being a finding. It spends no paid session and does not need `.sdd/config.sh`.
+
+**In the kit repo it is also a gate, not only a report.** Since the catalogue became opt-in it had
+no automatic owner, and the base branch once carried a live survivor for days because nobody typed
+the command. So a green run now **stamps** `.sdd/logs/mutation-stamp` with the content of
+`bin/ tests/ templates/ config/`, and the `PR` gate refuses while no stamp matches that content:
+`no green mutation catalogue for this content — run 'sdd health'`. The gate never runs the
+catalogue itself — asking a gate to hold the tree for twenty minutes is what made a phase
+unsatisfiable once. The requirement exists only where `tests/check-mutation.sh` does, so a target
+repo sees none of it. Run it **after the last code commit**: editing docs does not invalidate the
+stamp, editing `bin/ tests/ templates/ config/` does. Design and discarded alternatives in
+[ADR 0004](docs/adr/0004-mutation-catalogue-owner-stamp-not-ci.md); the way out of a refusal in
+[`docs/failure-modes.md`](docs/failure-modes.md).
 
 Every one of those checks **says its verdict out loud and the run carries on** — including the one
 case the command exists for, a red suite. It did not always: a bare `out="$(cmd)"` under
@@ -114,7 +129,9 @@ the directory `docs/handoffs/<YYYYMMDD>-<slug>/`.
 |---|---|
 | [`docs/pipeline.md`](docs/pipeline.md) | state machine, gates per phase, what each agent reads and writes |
 | [`docs/failure-modes.md`](docs/failure-modes.md) | what breaks, how the kit reacts, how to get unstuck |
+| [`docs/adr/`](docs/adr/) | the architectural decisions taken, and the alternatives discarded with them |
 | [`config/schema.md`](config/schema.md) | every `.sdd/config.sh` key, with its default and why |
+| [`CONTEXT.md`](CONTEXT.md) | glossary of the kit's own vocabulary, and the decisions resolved in interview |
 | [`agents/`](agents/) | the 6 agents (open markdown — portable to other harnesses) |
 | [`templates/`](templates/) | mission, plan, handoff, checkpoint, review, PR body |
 | [`CLAUDE.md`](CLAUDE.md) | conventions for whoever (human or agent) works on **this** kit |

@@ -142,6 +142,24 @@ types, build, docs) has no journey to walk. Inventing a journey just to "have QA
 
 A criterion graded `—` (not analysed) fails too: a partial review is not a review.
 
+The gate reads the `Rationale` column as well, and a placeholder there fails the round: an empty
+cell, the whole cell between angle brackets (the shape `templates/review.md` ships), a cell that is
+nothing but punctuation (`-`, `?`, `...`, `…`), or one of the fill-in words `PREENCHER` / `TODO` /
+`TBD` / `FIXME` / `XXX` / `WIP` / `FILL ME`. For two missions it read the `Grade` column and nothing
+else, so `A` on every row with `PREENCHER` on every justification bought a green gate —
+`docs/handoffs/20260818-lote-facil/40-review-r1.md:8` records exactly that in its own `gate:` field.
+
+The fill-in words are matched as **words**, not as spellings: `TODO:`, `TBD.` and `FILL ME` are the
+same claim as the bare ones, and comparing whole cells by equality let a single keystroke buy the
+`A`. Punctuation is never the offence on its own — a real sentence that ends in a full stop is a
+real sentence. The skill's terse rationales `clean`, `n/a` and `—` are not placeholders either.
+
+The same rule covers the `gate:` frontmatter field — the other half of the seal — when the key is
+**present**, whatever its value: written and left blank fails exactly like `<…>` does, and absent is
+left alone (6 of the 14 rounds on disk here predate the field, and refusing them would rewrite
+history instead of measuring this round). Present-and-blank was itself a hole for two commits,
+because the reader that fetches the value cannot tell it from a key that was never written.
+
 The round report starts from [`templates/review.md`](../templates/review.md). Until
 `20260818-lote-facil` this was the one artifact in the kit with a gate and no template, and two
 independent rounds derived the heading as `## Overall Grade` and collected `NO-TABLE` — the gate
@@ -169,6 +187,22 @@ the word `TODO` and failed every `45-docs.md` that named `TODO.md` — which is 
 
 **Passes when:** `50-pr.md` exists with `pr_url:` **and** `gh pr view <url>` confirms the PR
 exists. A file claiming a PR that does not exist fails — and it is good that it does.
+
+**In a repo that owns a mutation catalogue there is a third requirement, and it is checked last:**
+a stamp in `.sdd/logs/mutation-stamp` matching the current content of `bin/ tests/ templates/
+config/`. `sdd health` writes it when the catalogue comes back green; nothing else writes it; a red
+catalogue, or a tree that moved while it ran, **removes** it. The refusal names its own remedy —
+`no green mutation catalogue for this content — run 'sdd health'` — because a gate that stops the
+line without naming the command sends the operator to run the fast suite, watch it go green, and
+conclude the runner is lying.
+
+The requirement is scoped by **artifact** (`tests/check-mutation.sh` exists under this root?) and
+never by the identity of the repository, so a target repo is untouched: same gate, same two
+requirements it always had. It is checked last so the likeliest message stays the one it already
+was. And the gate never *runs* the catalogue — holding the working tree for twenty minutes inside a
+gate is what made the REVIEW phase unsatisfiable headless, which is why the catalogue is opt-in in
+the first place. It asks for the receipt instead. Why a stamp rather than CI, and what was
+discarded, is [ADR 0004](adr/0004-mutation-catalogue-owner-stamp-not-ci.md).
 
 ## The mission's branch
 

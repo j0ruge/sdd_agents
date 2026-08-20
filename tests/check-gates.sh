@@ -450,7 +450,7 @@ cat > "$MDIR/40-review-r3.md" <<'EOF'
 | Performance | A | clean |
 | Test Coverage | A | clean |
 | Documentation | A | clean |
-| **Overall** | **A** | |
+| **Overall** | **A** | nothing left open |
 
 ## Grading Scale
 
@@ -496,7 +496,7 @@ cat > "$MDIR/40-review-r10.md" <<'EOF'
 | Performance | A | clean |
 | Test Coverage | A | clean |
 | Documentation | A | clean |
-| **Overall** | **C** | |
+| **Overall** | **C** | one HIGH left open |
 EOF
 git add -A && git commit -qm "chore: review r10"
 assert_phase "the tenth round counts, not the third: r10 > r3 by version" "REVIEW"
@@ -506,10 +506,292 @@ assert_why_absent "the lexicographic pick (r3) is not the file the gate read" "R
 # r10 turns green and the phase advances — proving the gate advances BECAUSE of r10, not despite
 # it. Without this second half the assertion above would also pass on a runner that simply never
 # leaves REVIEW.
-sed -i 's/^| Security | C |.*/| Security | A | clean |/;s/^| \*\*Overall\*\* | \*\*C\*\* |/| **Overall** | **A** |/' \
+sed -i 's/^| Security | C |.*/| Security | A | clean |/;s/^| \*\*Overall\*\* .*/| **Overall** | **A** | nothing left open |/' \
   "$MDIR/40-review-r10.md"
 git add -A && git commit -qm "chore: review"
 assert_phase "last review all Grade A, suite green, clean tree" "DOCS"
+
+# --- the Rationale column ---------------------------------------------------
+#
+# DIFFERENTIAL, and it has to be: the extractor read `crit = f[2]; grade = f[3]` and never touched
+# `f[4]`, so a table with `A` on every row and the literal `PREENCHER` on every justification
+# bought a green gate. Not a hypothesis — the live instance is
+# docs/handoffs/20260818-lote-facil/40-review-r1.md, whose own `gate:` field records that the round
+# left `PREENCHER` in all seven rationales. An `A` that no sentence supports is exactly the label
+# this repo refuses to accept in place of an artifact.
+#
+# The nine worlds below differ ONLY in the Rationale column and in the `gate:` frontmatter — same
+# file name, same criteria, same grades, same tree state. Asserting one of them alone would not say
+# WHICH column the gate read: a runner that never leaves REVIEW satisfies the refusing worlds, and
+# one that reads nothing at all satisfies the accepting ones. The pair is what distinguishes them.
+#
+# The two accepting worlds are not decoration either. World 5 is the near miss the refusal must
+# NOT eat (a real sentence that happens to contain `<A>`): the rule targets the WHOLE cell being a
+# placeholder, never the presence of the character. World 6 carries `clean`, `n/a` and `—`, which
+# are the codereview skill's own terse rationales (report-template.md:154-156) — refusing them
+# would make the gate contradict the skill it parses, which is the SQ-97 gate_DOCS bug again.
+i3_bad=0
+# Counted, never written in prose. The failure line used to say "the 6 worlds above" while nine ran
+# below it, and it stayed 6 as the block grew — the same class CLAUDE.md names with `44 caught of
+# 44`: a number in a rubric with no command beside it expires quietly. Every `_phase` helper in this
+# file now increments its own tally, so the sentence can only be wrong if the tally is.
+i3_worlds=0
+i3_rows=("Code Quality (Zen)" "Type Safety" "Error Handling" "Security" "Performance" "Test Coverage" "Documentation")
+
+write_r11() { # write_r11 <rationale on every row> [gate: frontmatter value] — latest round by version
+  # The literal @empty@ writes the key with NO value at all. That is a third world, not a spelling
+  # of the second: an omitted argument means the key is ABSENT (six rounds on disk in this repo are
+  # like that, and the gate leaves them alone), while `gate:` written and left blank is a round
+  # claiming a seal it never filled. frontmatter() cannot tell them apart on its own — it prints
+  # the same empty string for both — so the fixture has to be able to build both.
+  local rat="$1" gate="${2-}" c
+  {
+    if [ "$gate" = '@empty@' ]; then printf -- '---\nfase: REVIEW\nrodada: 11\ngate:\n---\n\n'
+    elif [ -n "$gate" ]; then printf -- '---\nfase: REVIEW\nrodada: 11\ngate: %s\n---\n\n' "$gate"; fi
+    printf '# Review r11\n\n### Overall Grade\n\n'
+    printf '| Criterion | Grade | Rationale |\n|-----------|-------|-----------|\n'
+    for c in "${i3_rows[@]}"; do printf '| %s | A | %s |\n' "$c" "$rat"; done
+    printf '| **Overall** | **A** | %s |\n' "$rat"
+  } > "$MDIR/40-review-r11.md"
+}
+
+commit_r11() { git add -A && git commit -qm "chore: review r11" >/dev/null; }
+
+i3_phase() { # i3_phase <world> <expected phase>
+  local world="$1" want="$2" got
+  i3_worlds=$((i3_worlds + 1))
+  got="$( cd "$FIX" && "$SDD" phase "$MISSION" 2>&1 )"
+  [ "$got" = "$want" ] && return 0
+  printf '         world "%s": expected phase %s, got %s\n' "$world" "$want" "$got" >&2
+  i3_bad=$((i3_bad + 1))
+}
+
+i3_why() { # i3_why <world> <regex the reason MUST match> <regex it must NOT match>
+  local world="$1" want="$2" absent="$3" got
+  got="$( cd "$FIX" && "$SDD" why "$MISSION" REVIEW 2>&1 )"
+  if ! grep -qE "$want" <<< "$got"; then
+    printf '         world "%s": reason did not match /%s/ — got: %s\n' "$world" "$want" "$got" >&2
+    i3_bad=$((i3_bad + 1))
+  fi
+  # Herestring, never `printf | grep -q` — see the note on assert_why_absent above.
+  if grep -qE "$absent" <<< "$got"; then
+    printf '         world "%s": reason still carries /%s/, so the gate did not stop at the table — got: %s\n' \
+      "$world" "$absent" "$got" >&2
+    i3_bad=$((i3_bad + 1))
+  fi
+}
+
+# 1. filled in — the control. Without it every refusal below would also pass on a gate that
+#    refuses everything, and the assertion would be measuring nothing.
+write_r11 "reproduced before the fix and green after it"; commit_r11
+i3_phase "a real justification on every row" "DOCS"
+
+# 2. the live instance: `A` everywhere, `PREENCHER` everywhere. `assert_why_absent` in spirit —
+#    demanding the ABSENCE of the dirty-tree/suite markers is what proves the gate stopped at the
+#    table instead of arriving at the same verdict by a different road.
+write_r11 "PREENCHER"; commit_r11
+i3_phase "the whole Rationale column left as PREENCHER" "REVIEW"
+i3_why   "PREENCHER" "Code Quality \(Zen\).*placeholder Rationale" "tree dirty|working tree|TEST_CMD"
+
+# 3. the template shipped unfilled. Copied from templates/review.md, whose Rationale cells are
+#    `<…>` — the shape a round that started from the template and never filled it in still has.
+write_r11 "<…>"; commit_r11
+i3_phase "the template placeholder left between angle brackets" "REVIEW"
+
+# 4. ONE empty cell among seven real ones — the cheapest way to inflate a grade, and the row the
+#    reason has to name is the empty one, never the first.
+write_r11 "measured, nothing open"
+sed -i 's/^| Test Coverage | A | .* |$/| Test Coverage | A |  |/' "$MDIR/40-review-r11.md"; commit_r11
+i3_phase "a single empty Rationale among filled ones" "REVIEW"
+i3_why   "one empty cell" "Test Coverage.*placeholder Rationale \(<empty>\)" "Code Quality"
+
+# 5. the near miss. A refusal keyed on the CHARACTER instead of the whole cell would eat this.
+write_r11 "refuted: the reviewer read <A> as a grade and it is prose"; commit_r11
+i3_phase "a real sentence that merely contains angle brackets" "DOCS"
+
+# 6. the skill's own terse rationales, which mean measured-and-nothing-to-say.
+write_r11 "clean"
+sed -i 's/^| Security | A | clean |$/| Security | A | — |/;s/^| Performance | A | clean |$/| Performance | A | n\/a |/' \
+  "$MDIR/40-review-r11.md"; commit_r11
+i3_phase "clean, n/a and — are the skill's terse rationales, not placeholders" "DOCS"
+
+# 7-9. the other half of the seal: the `gate:` frontmatter, which templates/review.md ships as an
+#      unfilled `<…>`. Same rule, one implementation — the field is fed INTO the same awk. The
+#      ABSENT world is the one that keeps this from rewriting history: 6 of the 14 rounds on disk
+#      in this repo carry no `gate:` at all, and every world above already exercises it.
+write_r11 "measured, nothing open" "<the evidence this round closed>"; commit_r11
+i3_phase "the gate: frontmatter left as the template shipped it" "REVIEW"
+i3_why   "gate: placeholder" "gate:. frontmatter is still a placeholder" "tree dirty|working tree|TEST_CMD"
+
+write_r11 "measured, nothing open" "PREENCHER"; commit_r11
+i3_phase "the gate: frontmatter left as PREENCHER" "REVIEW"
+
+write_r11 "measured, nothing open" "tests/run-all.sh: suite green, 559 assertions, tree clean"; commit_r11
+i3_phase "a gate: frontmatter carrying real evidence closes the round" "DOCS"
+
+# 10. the false RED, which is the same defect as a false green wearing the other coat. GFM writes a
+#     literal pipe inside a cell as `\|`, and the extractor splits the row on every `|` byte: the
+#     cell below was cut at the escape, the stump `TODO\` normalised into a refused fill-in word,
+#     and a fully justified round was blocked with a reason that is not true. A gate that refuses
+#     everything passes every world above this one; only this world tells the two apart.
+#     ⚠️ The cell has to OPEN with the escaped pipe. Written first as "the `TODO\|` list …", the
+#     stump left behind was `the TODO\`, which normalises to THETODO and is not a fill-in word — the
+#     world went green against the unfixed runner and measured nothing. Caught by the sabotage pass,
+#     which is the whole reason this repo runs one.
+write_r11 '`TODO\|` list references removed; assertions now target the function. Green.'
+commit_r11
+i3_phase "a Rationale quoting a shell pipeline is a real justification" "DOCS"
+
+# 11. and the evidence the refusal QUOTES has to be the bytes on disk. `awk -v x=…` runs the value
+#     through awk's escape processing before the program sees it, so a `gate:` carrying a regex
+#     arrived mangled and the refusal echoed text the file does not contain. Measured side by side
+#     on mawk 1.3.4: `-v` turns this value into `<a<TAB>b>`, ENVIRON hands it over byte for byte.
+write_r11 "measured, nothing open" '<a\tb>'; commit_r11
+i3_phase "a gate: placeholder is refused whatever escapes it carries" "REVIEW"
+i3_why   "gate: escapes survive verbatim" 'placeholder \(<a\\tb>\)' "tree dirty|working tree|TEST_CMD"
+
+# 12. the PARITY of that escape, and this world exists because the FIRST rejoin got it wrong. `\\`
+#     is how GFM spells a literal backslash, so a cell ending in one sits against a REAL delimiter;
+#     asking merely "does this field end in a backslash" glued two columns into one. Measured
+#     against the runner one commit earlier, which passes the same row: it was reported as
+#     `Escaping (\| A = Confirmed …`, a Grade-A round blocked by a criterion nobody wrote. World 10
+#     alone could never see it — it only carries an ODD run — so the fix of this round had made the
+#     defect this round's second pass found, which is the loop CLAUDE.md says to break by asking
+#     what state is missing. The missing state was the COUNT of the backslashes.
+write_r11 "measured, nothing open"
+sed -i 's/^| Code Quality (Zen) | A | measured, nothing open |$/| Escaping (\\\\| A | measured, nothing open |/' \
+  "$MDIR/40-review-r11.md"
+commit_r11
+i3_phase "a cell ending in an escaped backslash sits against a REAL delimiter" "DOCS"
+
+if [ "$i3_bad" -eq 0 ]; then
+  pass "gate_REVIEW: a placeholder Rationale does not buy an A"
+else
+  fail "gate_REVIEW: a placeholder Rationale does not buy an A" \
+       "the $i3_worlds worlds above agreeing" "$i3_bad disagreement(s), listed above"
+fi
+
+# --- the seal that one keystroke used to win ---------------------------------
+#
+# The rule above shipped with two holes, both found by walking the journey it created:
+#
+#   (a) `gate_field != "" && placeholder(gate_field)` cannot tell a key that is ABSENT from a key
+#       written and left BLANK — frontmatter() prints the same empty string for both. So the
+#       comment three lines above it in bin/sdd claimed "present-but-unfilled is the case that
+#       lies, and it is the one refused" while `gate:` with nothing after it walked straight
+#       through. A gate whose comment is ahead of its code is the failure mode this repo pays for.
+#
+#   (b) placeholder() compared the WHOLE cell by equality, so a single character of punctuation
+#       bought the A: `TODO:` — which is what a model actually writes, more often than the bare
+#       `TODO` the list knew — plus `TBD.`, `-`, `?`, `WIP` and `FILL ME`.
+#
+# The refusing worlds and the accepting ones are BOTH load-bearing, and the accepting ones more so
+# here than anywhere else in this file: the fix for (b) is a rule about punctuation, and mawk is
+# byte-oriented. The skill's own terse rationale `—` is E2 80 94, three bytes that no character
+# class sees as one — a rule spelled with [[:punct:]] or a negated class strips it away and turns
+# the blessed cell into an empty one. World `—` below is that probe, and it is the reason this
+# block exists as a pair instead of a list of refusals.
+f3_bad=0
+# Counted and not written in prose — see the note on i3_worlds above. This block's hand-written 11
+# happened to be right the day it was written, which is the only state a hand-written count is ever
+# in; the two beside it had already drifted to 6 while nine and eight worlds ran under them.
+f3_worlds=0
+
+# Twins of i3_phase/i3_why, counting into their own variable ON PURPOSE. Sharing the counter would
+# make one broken world redden BOTH assertions, and the report would name a rule that never broke.
+f3_phase() { # f3_phase <world> <expected phase>
+  local world="$1" want="$2" got
+  f3_worlds=$((f3_worlds + 1))
+  got="$( cd "$FIX" && "$SDD" phase "$MISSION" 2>&1 )"
+  [ "$got" = "$want" ] && return 0
+  printf '         world "%s": expected phase %s, got %s\n' "$world" "$want" "$got" >&2
+  f3_bad=$((f3_bad + 1))
+}
+
+f3_why() { # f3_why <world> <regex the reason MUST match> <regex it must NOT match>
+  local world="$1" want="$2" absent="$3" got
+  got="$( cd "$FIX" && "$SDD" why "$MISSION" REVIEW 2>&1 )"
+  if ! grep -qE "$want" <<< "$got"; then
+    printf '         world "%s": reason did not match /%s/ — got: %s\n' "$world" "$want" "$got" >&2
+    f3_bad=$((f3_bad + 1))
+  fi
+  if grep -qE "$absent" <<< "$got"; then
+    printf '         world "%s": reason still carries /%s/, so the gate did not stop at the seal — got: %s\n' \
+      "$world" "$absent" "$got" >&2
+    f3_bad=$((f3_bad + 1))
+  fi
+}
+
+# (a) the unfilled seal. The Rationale column is real prose in this world, so the ONLY thing that
+#     can stop the round is the blank `gate:` — and the reason has to say so, naming <empty>.
+write_r11 "measured, nothing open" '@empty@'; commit_r11
+f3_phase "gate: written and left blank" "REVIEW"
+f3_why   "gate: written and left blank" "gate:. frontmatter is still a placeholder \(<empty>\)" \
+         "tree dirty|working tree|TEST_CMD"
+
+# The control for (a), and the one that keeps this from rewriting history: ABSENT is not blank.
+write_r11 "measured, nothing open"; commit_r11
+f3_phase "no gate: field at all, as six rounds on disk in this repo" "DOCS"
+
+# (b) the punctuated fill-ins. `TODO:` first: it is the spelling the equality test missed.
+write_r11 "TODO:"; commit_r11
+f3_phase "TODO with a colon" "REVIEW"
+f3_why   "TODO with a colon" "Code Quality \(Zen\).*placeholder Rationale \(TODO:\)" \
+         "tree dirty|working tree|TEST_CMD"
+
+write_r11 "TBD."; commit_r11
+f3_phase "TBD with a full stop" "REVIEW"
+
+write_r11 "WIP"; commit_r11
+f3_phase "WIP is an admission the criterion is unfinished" "REVIEW"
+
+write_r11 "FILL ME"; commit_r11
+f3_phase "FILL ME, the fill-in written as two words" "REVIEW"
+
+# A cell that is only punctuation says nothing at all. `-` is ONE keystroke from the `—` two
+# worlds below, which is why the pair has to be measured and not reasoned about. There is no
+# second world for `?` or `.`: they die to the very same sabotage as this one, and a probe that
+# no distinct degradation can turn red on its own is decoration.
+write_r11 "-"; commit_r11
+f3_phase "a bare ASCII hyphen" "REVIEW"
+
+# The same rule reaching the other half of the seal — one definition, fed into the same awk. If
+# the two halves ever grow separate spellings, this world is what notices.
+write_r11 "measured, nothing open" "TBD."; commit_r11
+f3_phase "the gate: frontmatter carrying a punctuated fill-in" "REVIEW"
+
+# --- the near misses the refusal must NOT eat --------------------------------
+#
+# THE probe of this block: mawk is byte-oriented, `—` is E2 80 94, and every rule that strips
+# punctuation would strip it byte by byte into the empty cell the gate refuses. The codereview
+# skill ships it as a terse rationale (report-template.md:154-156); eating it would make the gate
+# contradict the skill it parses, which is the SQ-97 gate_DOCS bug for the third time.
+write_r11 "—"; commit_r11
+f3_phase "the em dash survives a rule written about punctuation" "DOCS"
+
+# The second of the skill's three terse rationales, and the one with a character in it that a
+# stripping rule is most likely to eat. `clean` is not repeated here: it survives by the very
+# mechanism this world measures, and world 6 of the block above already holds it.
+write_r11 "n/a"; commit_r11
+f3_phase "n/a survives it too, slash and all" "DOCS"
+
+# Punctuation is not the offence — being nothing BUT a fill-in is. A real sentence that happens to
+# end in a full stop is what separates the two, and without it the rule could refuse every
+# well-punctuated review in the repo and this block would still be green.
+write_r11 "reproduced before the fix, green after it."; commit_r11
+f3_phase "a real sentence that ends in punctuation" "DOCS"
+
+if [ "$f3_bad" -eq 0 ]; then
+  pass "gate_REVIEW: an unfilled gate field and a punctuated fill-in do not buy an A"
+else
+  fail "gate_REVIEW: an unfilled gate field and a punctuated fill-in do not buy an A" \
+       "the $f3_worlds worlds above agreeing" "$f3_bad disagreement(s), listed above"
+fi
+
+# Back to the state the DOCS section inherits: r10 is the latest round again, all Grade A.
+rm -f "$MDIR/40-review-r11.md"
+git add -A && git commit -qm "chore: drop the r11 fixture" >/dev/null
+assert_phase "with the Rationale fixture gone the mission is back at DOCS" "DOCS"
 
 # --- DOCS ------------------------------------------------------------------
 echo "== DOCS phase =="
@@ -526,6 +808,358 @@ printf '# Docs\n\ndrift checklist\n\n| Area | Doc | Status | Evidence |\n|---|--
 git add -A && git commit -qm "chore: docs"
 assert_phase "drift checklist complete" "PR"
 assert_why   "PR reports the missing 50-pr.md" "PR" "50-pr.md"
+
+# --- the mutation catalogue's stamp -----------------------------------------
+#
+# Since 4c86712 the catalogue is OPT-IN: TEST_CMD does not run it, and this repo has no CI. That
+# left it with no owner, and the bill arrived between PR #12 and PR #13 — a fix rotted the anchor
+# of one mutation, every gate ran the fast suite and answered green, and `main` carried a score
+# with a live survivor for days, until a human happened to type `sdd health`.
+#
+# gate_PR does NOT run the catalogue. Holding the working tree for twenty minutes inside a gate is
+# precisely what 4c86712 undid, after it made the REVIEW phase unsatisfiable headless. It demands
+# the EVIDENCE that the catalogue ran green over THIS content: a stamp `sdd health` writes and
+# that nothing else in the kit writes.
+#
+# EIGHT worlds, in three pairs plus one, and none of them is decoration:
+#   SCOPE   (1, 2) the requirement exists only where tests/check-mutation.sh does. World 1 is what
+#           keeps every target repo — none of which has that file — behaving exactly as before, and
+#           without it worlds 2-6 are all satisfied by a gate that refuses everything.
+#   CONTENT (3, 4) the stamp keys on the CONTENT of the measured directories, never on the clock
+#           and never on HEAD: the PR phase commits handoff markdown, which would move HEAD and
+#           throw away a stamp that is still perfectly valid.
+#   MEANING (5, 6, 7) the stamp means the catalogue was GREEN, not that the command ran — and
+#           BOTH inputs feed that: a red suite and a green suite whose score carries a survivor
+#           each have to take the stamp away. Without them, a `sdd health` that stamped
+#           unconditionally satisfies worlds 1-4.
+#   WINDOW  (8) the green has to be about the content that is still here. The real catalogue runs
+#           for twenty to fifty minutes and the phase that starts it is a phase that commits, so a
+#           key read only after the run would stamp whatever the tree happens to be at the end.
+#
+# The key is NEVER computed here. A second spelling of that algorithm would agree with the first by
+# construction and measure nothing, so world 3 drives the real WRITER instead: a LIVE copy of the
+# runner inside the fixture, with a stub suite standing in for the twenty-minute catalogue. Live
+# for the same reason check-health.sh copies it live — the copy is what carries the sabotage of
+# mut_PR_stamp_blind into the fixture, and a runner frozen into this file would make the mutation
+# invisible while the catalogue went on crediting protection that does not exist.
+#
+# ⚠️ The stub's VERDICT lives outside the measured directories, in a control file under .sdd/logs/,
+# and that is the whole reason worlds 5-7 measure anything. The first version of this block flipped
+# the suite to red by REWRITING tests/run-all.sh — which moved the content key at the same time, so
+# the refusal that followed could not tell "the stamp was taken away" from "the content changed".
+# Measured, not feared: an adversarial pass that deleted the `catalogue_green` condition entirely
+# left this assertion GREEN. The control file changes the answer while every hashed byte stands
+# still, which is the only arrangement in which the removal is the sole suspect.
+i4_bad=0
+# Counted and not written in prose — see the note on i3_worlds above.
+i4_worlds=0
+i4_home="$SDD_STATE_FIX/health-home"; mkdir -p "$i4_home"
+# The size the stand-in catalogue below has to have, READ OFF THE RUNNER and never typed here.
+# cmd_health no longer takes the score line's word for the catalogue's size: it weighs the `of N`
+# against the mut_*() definitions on disk and refuses anything under its own floor, because
+# `score: 0 caught, 0 known gap(s), of 0` used to be stamped as green. So a stand-in that merely
+# EXISTS is no longer a kit whose catalogue can be certified — worlds 3, 5 and 7 would be asking
+# for a stamp the writer is right to withhold, and this assertion would report a stamp property it
+# never got to measure. Derived, so a floor that moves in bin/sdd moves this fixture with it.
+I4_FLOOR="$(sed -nE 's/^readonly MUTATION_CATALOGUE_FLOOR=([0-9]+)$/\1/p' "$ROOT/bin/sdd")"
+[ -n "$I4_FLOOR" ] \
+  || fail "SENSOR-BROKEN: the stamp fixture reads the runner's catalogue floor" \
+          "a 'readonly MUTATION_CATALOGUE_FLOOR=<n>' line in bin/sdd" "nothing — the stand-in catalogue below would be sized by an empty string"
+I4_SCORE_GREEN="score: $I4_FLOOR caught, 0 known gap(s), of $I4_FLOOR"
+I4_SCORE_SURVIVOR="score: $(( I4_FLOOR - 1 )) caught, 0 known gap(s), of $I4_FLOOR"
+
+i4_phase() { # i4_phase <world> <expected phase>
+  local world="$1" want="$2" got
+  i4_worlds=$((i4_worlds + 1))
+  got="$( cd "$FIX" && "$SDD" phase "$MISSION" 2>&1 )"
+  [ "$got" = "$want" ] && return 0
+  printf '         world "%s": expected phase %s, got %s\n' "$world" "$want" "$got" >&2
+  i4_bad=$((i4_bad + 1))
+}
+
+i4_why() { # i4_why <world> <regex the reason MUST match> <regex it must NOT match>
+  local world="$1" want="$2" absent="$3" got
+  got="$( cd "$FIX" && "$SDD" why "$MISSION" PR 2>&1 )"
+  if ! grep -qE "$want" <<< "$got"; then
+    printf '         world "%s": reason did not match /%s/ — got: %s\n' "$world" "$want" "$got" >&2
+    i4_bad=$((i4_bad + 1))
+  fi
+  # Herestring, never `printf | grep -q` — see the note on assert_why_absent above.
+  if grep -qE "$absent" <<< "$got"; then
+    printf '         world "%s": reason still carries /%s/, so the gate stopped before the stamp — got: %s\n' \
+      "$world" "$absent" "$got" >&2
+    i4_bad=$((i4_bad + 1))
+  fi
+}
+
+# The WRITER, run for real out of the fixture's own copy. HOME is redirected because
+# health_provenance reads the skills of whoever is running the suite, and a sensor whose verdict
+# depends on the developer's machine is not a sensor. rc is ignored on purpose: the fixture kit has
+# no config/schema.md and no baseline, so `sdd health` legitimately fails several other checks —
+# what is under test is the stamp, which the command writes right after the catalogue's verdict.
+i4_health() { ( cd "$FIX" && HOME="$i4_home" NO_COLOR=1 "$FIX/bin/sdd" health >/dev/null 2>&1 ) || true; }
+
+# What the stub suite will answer next. It is written into .sdd/logs/, which is gitignored AND
+# outside the four measured directories — so changing the catalogue's verdict changes not one byte
+# of the content key. See the ⚠️ above: that separation is what the assertion rests on.
+i4_verdict() { # i4_verdict <exit code> <the score line> [move-the-tree]
+  printf '%s\n%s\n%s\n' "$1" "$2" "${3-}" > "$FIX/.sdd/logs/stub-verdict"
+}
+
+# The stub suite. Written ONCE, and its bytes never change again: it reads its own verdict from the
+# control file above, so tests/ stays fixed across every world below.
+#
+# The scratch file it can append to lives INSIDE tests/ — so `find` sees it and the content key
+# moves — and is gitignored, so the working tree stays clean and the mission does not fall back to
+# the REVIEW gate instead of reaching PR. That combination is the whole of world 8.
+i4_write_suite() {
+  cat > "$FIX/tests/run-all.sh" <<EOF
+#!/usr/bin/env bash
+# Stub for the twenty-minute catalogue. cmd_health reads the score line off this stdout and the
+# suite's verdict off this exit code; both come from a control file OUTSIDE the hashed paths.
+sed -n 2p "$FIX/.sdd/logs/stub-verdict"
+if [ "\$(sed -n 3p "$FIX/.sdd/logs/stub-verdict")" = move-the-tree ]; then
+  printf 'written while the catalogue was running\n' >> "$FIX/tests/scratch.ignored"
+fi
+exit "\$(sed -n 1p "$FIX/.sdd/logs/stub-verdict")"
+EOF
+  chmod +x "$FIX/tests/run-all.sh"
+}
+
+# gate_PR asks `gh` whether the PR is real, and no test may touch the network.
+cat > "$FIX/.stub/gh" <<'STUB'
+#!/usr/bin/env bash
+# Answers the one question gate_PR asks: `gh pr view <url> --json url --jq .url`.
+[ "${1:-}" = "pr" ] && [ "${2:-}" = "view" ] || { echo "unexpected gh call: $*" >&2; exit 9; }
+printf '%s\n' "${3:-}"
+STUB
+chmod +x "$FIX/.stub/gh"
+printf -- '---\nfase: PR\npr_url: https://github.com/fixture/repo/pull/1\n---\n# PR\n' > "$MDIR/50-pr.md"
+git add -A && git commit -qm "chore: the PR artifact and the gh stub" >/dev/null
+
+# 1. SCOPE — a repo with no catalogue. The gate is exactly the gate it always was, which is the
+#    world every target repo lives in.
+i4_phase "a repo with no tests/check-mutation.sh closes as it always did" "DONE"
+
+# 2. SCOPE — the catalogue is here and nothing on disk says it ever ran green. Demanding the
+#    ABSENCE of the earlier requirements' markers is what proves the gate reached the stamp
+#    instead of arriving at the same refusal by the 50-pr.md road.
+mkdir -p "$FIX/tests"
+{
+  cat <<'CAT'
+#!/usr/bin/env bash
+# Stand-in for the kit's mutation catalogue. Its EXISTENCE is what gate_PR scopes on — the artifact,
+# chosen over the identity of the repository because the identity door the kit already has
+# (cmd_kaizen) carries a live worktree bug recorded in TODO.md.
+#
+# The mut_*() lines below are the second thing read of this file, and by the OTHER end of the
+# mechanism: cmd_health counts them to decide whether the score line it was handed describes a
+# catalogue that could have measured anything. They are generated, one per unit of the runner's own
+# floor, so this file stays a coherent kit rather than a catalogue claiming a size nothing backs.
+CAT
+  i4_n=0
+  while [ "$i4_n" -lt "${I4_FLOOR:-0}" ]; do
+    printf 'mut_FIXTURE_%d() { :; }\n' "$i4_n"
+    i4_n=$(( i4_n + 1 ))
+  done
+  printf 'exit 0\n'
+} > "$FIX/tests/check-mutation.sh"
+chmod +x "$FIX/tests/check-mutation.sh"
+git add -A && git commit -qm "chore: the repo grows a mutation catalogue" >/dev/null
+i4_phase "the catalogue is here and nothing says it ran green" "PR"
+i4_why   "no stamp at all" "sdd health" "50-pr\.md|does not confirm"
+
+# 3. CONTENT — the writer runs. From here on the fixture is also a small kit: bin/sdd live, plus a
+#    stub suite, which is all cmd_health needs to reach its verdict on the catalogue.
+mkdir -p "$FIX/bin" "$FIX/.sdd/logs"
+cp "$ROOT/bin/sdd" "$FIX/bin/sdd"
+i4_write_suite
+printf 'tests/scratch.ignored\n' >> "$FIX/.gitignore"
+git add -A && git commit -qm "chore: a kit inside the fixture, so the writer can run" >/dev/null
+i4_verdict 0 "$I4_SCORE_GREEN"; i4_health
+i4_phase "sdd health over a green catalogue stamps this content" "DONE"
+
+# 3b. CONTENT, the other direction — HEAD moves and the measured content does not. This is the half
+#     the block's header CLAIMED and no world measured: keying on `git rev-parse HEAD` would throw
+#     the stamp away on the very commit the PR phase makes on its way to this gate, costing a second
+#     twenty-to-fifty-minute run per mission for markdown no mutant reads. Measured while this world
+#     was missing: with mutation_stamp_key rewritten to hash HEAD, worlds 1-7 all stayed GREEN and
+#     only world 8 went red — and world 8's own sentence blames "a tree that moved DURING the run",
+#     so the one world that noticed misnamed the cause. Claimed-and-unmeasured is the whole subject
+#     of this mission; a sensor is allowed to say only what it tests.
+printf '\n<!-- handoff prose: the PR phase commits markdown on its way to this gate -->\n' >> "$MDIR/50-pr.md"
+git add -A && git commit -qm "chore: HEAD moves, and not one measured byte with it" >/dev/null
+i4_phase "a commit outside the measured directories leaves the stamp standing" "DONE"
+
+# 4. CONTENT — one line into a measured directory and the stamp no longer describes what is here.
+#    A stamp keyed on the clock, on HEAD or on nothing at all would still be accepted.
+printf '\n# one more line, so the measured content is not the content that was stamped\n' \
+  >> "$FIX/tests/check-mutation.sh"
+git add -A && git commit -qm "chore: the catalogue changes after the stamp" >/dev/null
+i4_phase "a stamped repo whose tests/ moved is unstamped again" "PR"
+i4_why   "stale stamp" "sdd health" "50-pr\.md|does not confirm"
+
+# 5. MEANING — stamp the new content, so worlds 6 and 7 have something to take away.
+i4_verdict 0 "$I4_SCORE_GREEN"; i4_health
+i4_phase "health over the new content stamps it in turn" "DONE"
+
+# 6. MEANING — the SUITE comes back red, over content that did not move by a single byte. The
+#    stamp has to go: one that survived would mean "sdd health was executed", which is a label,
+#    and the difference between a label and an artifact is the whole mission.
+i4_verdict 1 "$I4_SCORE_GREEN"; i4_health
+i4_phase "a red suite takes the stamp away, so it never means 'the command ran'" "PR"
+
+# 7. MEANING — and the OTHER input, because the stamp answers to both checks. Here the suite is
+#    green and the score carries a live survivor: `103 caught … of 104` is not a hypothesis, it is
+#    what this repo's base branch carried for days. The green run in between is not scaffolding
+#    either — it proves the removal is a verdict that can be revised and not a one-way latch.
+i4_verdict 0 "$I4_SCORE_GREEN"; i4_health
+i4_phase "green again, and the stamp comes back" "DONE"
+i4_verdict 0 "$I4_SCORE_SURVIVOR"; i4_health
+i4_phase "a score with a live survivor takes the stamp away too" "PR"
+
+# 8. WINDOW — the catalogue is green AND the measured tree moves while it runs. The real run takes
+#    twenty to fifty minutes, and the phase that types `sdd health` is the phase that also commits,
+#    so this is the widest window in the kit for a tree to shift under a measurement. A key read
+#    only AFTER the run would describe exactly what is on disk when the command ends, so the stamp
+#    would fit, the gate would open, and the green would belong to content that was never measured.
+#    The world distinguishes on its own, whatever the stamp state before it: unfixed, the stamp is
+#    written and the phase is DONE.
+i4_verdict 0 "$I4_SCORE_GREEN" move-the-tree; i4_health
+i4_phase "a tree that moved DURING the run is not stamped by the green it did not take part in" "PR"
+
+if [ "$i4_bad" -eq 0 ]; then
+  pass "gate_PR: the mutation stamp is demanded only where the catalogue lives"
+else
+  fail "gate_PR: the mutation stamp is demanded only where the catalogue lives" \
+       "the $i4_worlds worlds above agreeing" "$i4_bad disagreement(s), listed above"
+fi
+
+# --- the two ends of the stamp, and the tree they have to agree on ----------
+#
+# The block above proves WHAT the stamp means. This one proves WHERE it lives, which is a separate
+# property and the one the writer got wrong. cmd_health stamped $SDD_HOME — the tree the running
+# bin/sdd sits in — while gate_PR scopes, keys and reads under $REPO_ROOT, the git toplevel of the
+# working directory. Those are the same tree only when the kit is invoked out of the very checkout
+# being worked on. Put `sdd` on the PATH, which README.md documents as the install, then stand in a
+# worktree or a second clone of the kit: the writer answers about one tree and the reader asks
+# about the other, so nothing ever stamps the tree the gate is asking about. gate_PR is then
+# unsatisfiable FOREVER, and the remedy its own sentence names re-measures the wrong tree at twenty
+# to fifty minutes a lap — a refusal with no reachable remedy, which is worse than the label it
+# replaced.
+#
+# Every world of the block above invokes "$FIX/bin/sdd" from inside $FIX, so SDD_HOME == REPO_ROOT
+# holds by construction in all eight and none of them can see this. The three below are the worlds
+# where the two DIVERGE: a second kit, living outside the fixture and never the working directory,
+# is the one whose bin/sdd runs.
+#
+# THREE worlds, and the last two are not decoration — they are the half that says the answer is
+# "the tree the gate measures", not "always the working directory". A cmd_health that simply
+# followed the cwd would leave every target repo, and every operator standing outside a git
+# checkout, with no stamped kit at all.
+tree_bad=0
+tree_worlds=0
+tree_note() { # tree_note <world> <what disagreed>
+  printf '         world "%s": %s\n' "$1" "$2" >&2
+  tree_bad=$((tree_bad + 1))
+}
+TREE_STAMP=".sdd/logs/mutation-stamp"
+tree_stamped() { [ -f "$1/$TREE_STAMP" ]; }
+
+# The INSTALLED kit: a second checkout, outside the fixture, whose bin/sdd is the one on the PATH.
+# It carries a catalogue and a stub suite of its own, so that a `sdd health` which measures THIS
+# tree can still reach a verdict without the twenty-minute run — otherwise worlds 2 and 3 would be
+# measuring an absent suite instead of the fallback.
+TREE_KIT="$SDD_STATE_FIX/kit-install"
+mkdir -p "$TREE_KIT/bin" "$TREE_KIT/tests" "$TREE_KIT/.sdd/logs"
+cp "$ROOT/bin/sdd" "$TREE_KIT/bin/sdd"
+cat > "$TREE_KIT/tests/run-all.sh" <<EOF
+#!/usr/bin/env bash
+# Stub for the installed kit's own catalogue: always green, always this score.
+printf '%s\n' "$I4_SCORE_GREEN"
+EOF
+chmod +x "$TREE_KIT/tests/run-all.sh"
+{
+  printf '#!/usr/bin/env bash\n'
+  # Sized off the runner's floor, for the reason I4_FLOOR spells out above: a catalogue under it is
+  # one cmd_health is right to refuse, and worlds 2 and 3 would then be asking for a stamp that no
+  # correct writer would ever produce.
+  tree_n=0
+  while [ "$tree_n" -lt "${I4_FLOOR:-0}" ]; do
+    printf 'mut_INSTALL_%d() { :; }\n' "$tree_n"
+    tree_n=$(( tree_n + 1 ))
+  done
+  printf 'exit 0\n'
+} > "$TREE_KIT/tests/check-mutation.sh"
+chmod +x "$TREE_KIT/tests/check-mutation.sh"
+
+# A plain git repo with no catalogue: the world every target repo of the kit lives in.
+TREE_PLAIN="$SDD_STATE_FIX/plain-repo"
+mkdir -p "$TREE_PLAIN"
+( cd "$TREE_PLAIN" && git init -q -b main ) >/dev/null 2>&1
+
+# Runs the INSTALLED kit's health from <cwd>, after taking every stamp away — so what is on disk
+# afterwards was written by THIS run and never inherited from the block above.
+tree_health() { # tree_health <cwd>
+  # One call, one world — counted here for the reason the note on i3_worlds gives.
+  tree_worlds=$((tree_worlds + 1))
+  rm -f "$FIX/$TREE_STAMP" "$TREE_KIT/$TREE_STAMP" "$TREE_PLAIN/$TREE_STAMP"
+  ( cd "$1" && HOME="$i4_home" NO_COLOR=1 "$TREE_KIT/bin/sdd" health >/dev/null 2>&1 ) || true
+}
+
+# The control file still says `move-the-tree` from world 8, and a run that moves the tree is right
+# to stamp nothing at all — which would make every world below pass for the wrong reason.
+i4_verdict 0 "$I4_SCORE_GREEN"
+
+# 1. The kit runs from the PATH while the working directory is a kit worktree. The tree the gate
+#    measures is $FIX; the tree the runner's own file sits in is $TREE_KIT. Only one of them can be
+#    the one that gets stamped, and it has to be the one the gate reads.
+tree_health "$FIX"
+tree_stamped "$FIX" \
+  || tree_note "sdd from the PATH, standing in a kit worktree" \
+               "the tree gate_PR measures was not stamped — the gate has no reachable remedy"
+tree_stamped "$TREE_KIT" \
+  && tree_note "sdd from the PATH, standing in a kit worktree" \
+               "the installed kit was stamped instead, and it is not the tree the gate asks about"
+tree_got="$( cd "$FIX" && "$SDD" phase "$MISSION" 2>&1 )"
+[ "$tree_got" = "DONE" ] \
+  || tree_note "sdd from the PATH, standing in a kit worktree" \
+               "expected phase DONE after health, got $tree_got"
+
+# 2. The same install, standing in a repo with no catalogue — a target repo. The kit itself is what
+#    gets measured and stamped, exactly as before, and the target repo is left alone: it has no
+#    catalogue, so gate_PR asks it for nothing and a stamp there would certify a tree nobody ran.
+tree_health "$TREE_PLAIN"
+tree_stamped "$TREE_KIT" \
+  || tree_note "sdd from the PATH, standing in a target repo" \
+               "the installed kit was not stamped — the fallback every target repo depends on is gone"
+tree_stamped "$TREE_PLAIN" \
+  && tree_note "sdd from the PATH, standing in a target repo" \
+               "the target repo was stamped, and nothing ever measured it"
+
+# 3. And the other half of that fallback: no git repository at all under the working directory.
+#    A resolution that read the cwd without asking whether it is a kit would stamp nothing here.
+tree_health "$TREE_KIT"
+tree_stamped "$TREE_KIT" \
+  || tree_note "sdd invoked from outside any git repository" \
+               "the installed kit was not stamped, so health has no tree to measure at all"
+
+if [ "$tree_bad" -eq 0 ]; then
+  pass "gate_PR: the stamp is read from the tree whose content the gate measures"
+else
+  fail "gate_PR: the stamp is read from the tree whose content the gate measures" \
+       "the $tree_worlds worlds above agreeing" "$tree_bad disagreement(s), listed above"
+fi
+
+# Back to the state the sections below inherit: no catalogue, no kit copy, no PR artifact — the
+# fixture is a plain target repo again, sitting at PR with 50-pr.md missing.
+# `${FIX:?}` and not `$FIX`: with the fixture variable empty this line is `rm -rf /bin /tests` on
+# the machine of whoever ran the suite. The same family check-health.sh records in its own header,
+# where an unguarded `rm -rf` reached `/kit` for real.
+rm -rf "${FIX:?}/bin" "${FIX:?}/tests" "${FIX:?}/.stub/gh" "${MDIR:?}/50-pr.md" "${FIX:?}/.sdd/logs/mutation-stamp"
+git add -A && git commit -qm "chore: drop the stamp fixture" >/dev/null
+assert_phase "with the stamp fixture gone the mission is back at PR" "PR"
+assert_why   "and back to the reason it had before" "PR" "50-pr.md"
 
 # --- the base branch warning -----------------------------------------------
 echo "== base branch warning =="

@@ -188,12 +188,105 @@ mut_REVIEW_accepts_B() {      # any grade passes — the gate stops requiring Gr
   sed -i 's|if (grade != "A")|if (grade == "ZZZ")|' "$1"
 }
 
+# Historical bug 4 (reproduced 2026-08-19, in the planning session of the mission that fixed it —
+# the slug is not spelled out here because tests/ is English surface): the extractor took
+# `crit = f[2]; grade = f[3]` and never touched `f[4]`, so `A` on every row with the literal
+# `PREENCHER` on every justification bought a green gate. The live instance is
+# docs/handoffs/20260818-lote-facil/40-review-r1.md:8, which records it in its own `gate:` field —
+# a round that did not close, certified by the one sensor of the mission's quality.
+# Addressed to the body of gate_REVIEW: an unaddressed `s|if (placeholder|` would be the same
+# family as the two mutations already logged in TODO.md for sabotaging a second site in silence.
+mut_REVIEW_placeholder_rationale_blind() {
+  sed -i '/^gate_REVIEW()/,/^}/ s|if (placeholder(rat))|if (0)|' "$1"
+}
+
+# The other half of the same seal, and a SECOND mutant on purpose: one sabotage per site. With
+# only the Rationale mutant above, the `gate:` branch could be deleted whole and the catalogue
+# would still read 100% — the exact vacuity this file exists to refuse.
+mut_REVIEW_gate_field_blind() {
+  sed -i '/^gate_REVIEW()/,/^}/ s|if (gate_present \&\& placeholder(gate_field))|if (0)|' "$1"
+}
+
+# The three below are the sites the seal used to be won at, one keystroke each. They are separate
+# mutants because they are separate decisions: whether the field was WRITTEN, whether the cell is
+# nothing but punctuation, and whether a fill-in still counts as one with a colon glued to it.
+# Folding them into the mutant above would let two of the three be deleted in silence.
+
+# The defect in its pure form: back to testing the VALUE instead of the presence, so `gate:` with
+# nothing after it reads exactly like a file that never had the field and walks through.
+mut_REVIEW_blank_gate_field_blind() {
+  sed -i '/^gate_REVIEW()/,/^}/ s|if (gate_present \&\& placeholder(gate_field))|if (gate_field != "" \&\& placeholder(gate_field))|' "$1"
+}
+
+# A cell that is only punctuation stops saying nothing: `-`, `?` and `.` buy the A again.
+# The two halves of the GFM pipe escape, one sabotage each, on the same enforcement point — the
+# same shape as the gate_field pair below: fully disabled, and subtly-wrong-condition.
+mut_REVIEW_escaped_pipe_blind() {
+  sed -i '/^gate_REVIEW()/,/^}/ s|if (n > 0 && escaped_pipe(f\[n\]))|if (0)|' "$1"
+}
+
+mut_REVIEW_escaped_pipe_parity_blind() {
+  sed -i '/^gate_REVIEW()/,/^}/ s|if (n > 0 && escaped_pipe(f\[n\]))|if (n > 0 \&\& f[n] ~ /\\\\$/)|' "$1"
+}
+
+mut_REVIEW_punctuation_only_blind() {
+  sed -i '/^gate_REVIEW()/,/^}/ s|if (u !~ /\[\[:alnum:\]\]/) return 1|if (0) return 1|' "$1"
+}
+
+# The word stops being compared as a word, which is the equality test that `TODO:` beat.
+mut_REVIEW_punctuated_fillin_blind() {
+  sed -i '/^gate_REVIEW()/,/^}/ s|w = u; gsub(/\[^\[:alnum:\]\]/, "", w)|w = u|' "$1"
+}
+
 mut_DOCS_pending_status() {   # accepts an area with Status '✗' in the drift checklist
   sed -i 's|.*\[ -n "\$pending_cell" \].*|  if false; then|' "$1"
 }
 
 mut_PR_no_artifact() {        # a missing 50-pr.md stops failing — a "complete" mission with no PR
   sed -i 's|GATE_WHY="missing 50-pr.md"; return 1|GATE_WHY="missing 50-pr.md"; return 0|' "$1"
+}
+
+# The gate stops looking at the stamp, so a mission closes over a mutation catalogue nobody ran.
+# It is the state the kit was actually in between PR #12 and PR #13: the fast suite green, the
+# catalogue carrying a live survivor, and every gate agreeing that the mission was finished.
+# Addressed to the body of gate_PR — an unaddressed `s|if \[ -f "$REPO_ROOT/tests|` would be the
+# same family as the two mutations already logged in TODO.md for sabotaging a second site in
+# silence, since the runner tests other files by that shape elsewhere.
+mut_PR_stamp_blind() {
+  sed -i '/^gate_PR()/,/^}/ s|if has_mutation_catalogue "\$REPO_ROOT"; then|if false; then|' "$1"
+}
+
+# The key stops being a function of the CONTENT alone and starts following HEAD as well. Deliberately
+# ADDITIVE and not a swap: a key that is only HEAD is already refused by the window world, which would
+# have made this mutation say nothing about the world it is here for. Keyed on content AND HEAD, the
+# only world that can tell is the commit that moves HEAD and not one measured byte — the very commit
+# the PR phase makes on its way to the gate. `git -C` and not a `cd`, so the mutated runner carries no
+# relative `cd` for check-pipefail's RULE 2 to read.
+mut_PR_stamp_key_follows_head() {
+  sed -i '/^mutation_stamp_key() {/,/^}/ s@md5sum <<< "$listing"@md5sum <<< "$listing$(git -C "$1" rev-parse HEAD 2>/dev/null)"@' "$1"
+}
+
+# The WRITER goes back to answering about the tree its own file sits in, whatever tree the operator
+# is standing in and whatever tree the gate is about to ask for. With `sdd` on the PATH — the
+# install README.md documents — over a worktree or a second clone of the kit, the stamp lands in
+# one tree while gate_PR keys, scopes and reads under the other: a gate unsatisfiable forever whose
+# own remedy re-measures the wrong tree at twenty to fifty minutes a lap.
+#
+# Sabotaging the CONDITION and not deleting the branch: what has to be measured is that the working
+# directory can win, not that an `if` is present. Addressed to the body of health_kit_root, the
+# family two mutations already in TODO.md got wrong by leaving the address off.
+mut_HEALTH_stamp_tree_blind() {
+  sed -i '/^health_kit_root() {/,/^}/ s|if \[ -n "\$cwd_root" \] \&\& has_mutation_catalogue "\$cwd_root"; then|if false; then|' "$1"
+}
+
+# The WRITER's half of the same seal, and a second mutant for the same reason the `gate:` branch of
+# gate_REVIEW got one: with only the reader sabotaged, this whole comparison could be deleted and
+# the catalogue would go on reading 100%. One sabotage per site.
+# The stamp stops asking whether the measured tree moved WHILE the catalogue ran — a window twenty
+# to fifty minutes wide, opened by the very phase that also commits, at the end of which the key
+# would describe whatever is on disk rather than what was measured.
+mut_HEALTH_stamp_window_blind() {
+  sed -i '/^cmd_health()/,/^}/ s|elif \[ "\$stamp_key" != "\$stamp_key_before" \]; then|elif false; then|' "$1"
 }
 
 # Not a gate, and the only decorative-assertion bug that really happened (TODO.md): the inverted
@@ -1064,6 +1157,39 @@ mut_HEALTH_score_read_aborts() {
   sed -i "s@grep -m1 '^score: ' <<< \"\$out\" || true@grep -m1 '^score: ' <<< \"\$out\"@" "$1"
 }
 
+# `sdd health` goes back to certifying a catalogue with a mutant ALIVE. The comparison loses its
+# second operand, so `score: 103 caught, 0 known gap(s), of 104` — one assertion the suite does not
+# have — walks straight into `ok`, exactly as the pre-mission form did, and the operator reads
+# `kit healthy` over a hole.
+#
+# Not an invented defect: that line sat on main between PR #12 and #13, for days, because f6ecf73
+# rotted the anchor of mut_HEALTH_grade_table_blind and every gate ran only the fast suite. Since
+# 4c86712 the catalogue is opt-in and this command is its ONLY caller, so `ok` here is the entire
+# verdict on the catalogue.
+#
+# Range-addressed to the body of cmd_health, per the header of the five above: `[ "$caught" -ne
+# "$total" ]` is a shape this file would rather not chase across the whole runner.
+# Caught by `mutation: a score whose caught differs from total is refused` in check-health.sh and
+# by nothing else — every other world in that file reads a stub score whose two numbers agree.
+mut_HEALTH_mutation_survivor_blind() {
+  sed -i '/^cmd_health() {/,/^}/ s@elif \[ "$caught" -ne "$total" \]; then@elif [ "$caught" -ne "$caught" ]; then@' "$1"
+}
+
+# `sdd health` goes back to certifying a catalogue that ran NOTHING. With the size comparison gone,
+# `score: 0 caught, 0 known gap(s), of 0` satisfies everything left — no gap, and `caught == of` —
+# so an empty `CATALOG=()` reaches `ok`, sets catalogue_green, WRITES THE STAMP, and opens gate_PR
+# over a loop that ran zero times. A catalogue merely narrowed does the same, one entry at a time.
+#
+# The sabotage is a condition that is false for every score a catalogue can print, and NOT the
+# deletion of the branch: what has to be measured is the comparison, not the presence of an `if`.
+# Range-addressed to the body of cmd_health for the reason the mutant above gives.
+# Caught by `mutation: a catalogue too small to have measured anything is refused` in
+# check-health.sh, and by nothing else — every other world there reads a score whose size the
+# fixture's own tests/check-mutation.sh backs.
+mut_HEALTH_catalogue_floor_blind() {
+  sed -i '/^cmd_health() {/,/^}/ s@if \[ "$total" -ne "$defined" \] || \[ "$defined" -lt "$MUTATION_CATALOGUE_FLOOR" \]; then@if [ "$total" -lt 0 ]; then@' "$1"
+}
+
 # `sdd health` stops asking the suite for the catalogue — and since the catalogue left TEST_CMD,
 # health is the ONLY caller that asks. Nobody else runs it; there is no CI in this repo.
 #
@@ -1087,6 +1213,23 @@ mut_HEALTH_suite_without_mutation() {
 # directory returns 1, pipefail carries it, and the assignment takes the runner down three ok
 # lines in — no provenance, no ratchet, no verdict. Not a hypothetical machine: any box where the
 # codereview plugin was never installed.
+# `sdd health` goes blind to a TEST_CMD that only LISTS the suite. `tests/run-all.sh --list` exits
+# 0 having executed nothing — correct for the mode, fatal as TEST_CMD: gate_EXEC, gate_QA and
+# gate_REVIEW would each pass instantly, in every mission, against a run that never happened, and
+# the log left behind is a dozen plausible step names. Health is where that gets said, because
+# nothing else in the kit reads TEST_CMD as anything but a command to obey.
+#
+# The pattern is degraded rather than deleted, and the `case` is left with the same arms: a mutant
+# that removed the branch outright would also remove the `ok` line, and half the assertions in
+# check-health.sh would go red for a missing sentence instead of for the blindness.
+#
+# Range-addressed to the body of cmd_health, per the header of the entries above. Caught by
+# `surface: --list prints steps only, and a TEST_CMD carrying it is refused` in check-health.sh —
+# by its (b) half, whose two worlds differ in exactly this flag.
+mut_HEALTH_testcmd_list_blind() {
+  sed -i '/^cmd_health() {/,/^}/ s@\*" --list "\*)@*" --a-flag-no-config-carries "*)@' "$1"
+}
+
 mut_HEALTH_provenance_find_aborts() {
   sed -i 's@ | sort -V | tail -1 || true)"@ | sort -V | tail -1)"@' "$1"
 }
@@ -1297,8 +1440,19 @@ CATALOG=(
   QA_bug_open
   REVIEW_stops_at_h3
   REVIEW_accepts_B
+  REVIEW_placeholder_rationale_blind
+  REVIEW_gate_field_blind
+  REVIEW_blank_gate_field_blind
+  REVIEW_escaped_pipe_blind
+  REVIEW_escaped_pipe_parity_blind
+  REVIEW_punctuation_only_blind
+  REVIEW_punctuated_fillin_blind
   DOCS_pending_status
   PR_no_artifact
+  PR_stamp_blind
+  PR_stamp_key_follows_head
+  HEALTH_stamp_window_blind
+  HEALTH_stamp_tree_blind
   RUN_inverted_journal
   RUN_ignores_output_lang
   RUN_autonomy_ignores_dry_run
@@ -1369,6 +1523,9 @@ CATALOG=(
   HEALTH_todo_count_blind
   HEALTH_suite_capture_aborts
   HEALTH_score_read_aborts
+  HEALTH_mutation_survivor_blind
+  HEALTH_catalogue_floor_blind
+  HEALTH_testcmd_list_blind
   HEALTH_suite_without_mutation
   HEALTH_provenance_find_aborts
   HEALTH_baseline_read_aborts

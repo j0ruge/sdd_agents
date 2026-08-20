@@ -376,6 +376,47 @@ on.
 
 ---
 
+## The `PR` gate refuses: "no green mutation catalogue for this content"
+
+**Symptom:** every other gate is green, the branch is ready, and `sdd why <mission> PR` answers
+`no green mutation catalogue for this content — run 'sdd health' (since 4c86712 TEST_CMD does not
+run the catalogue, so no gate before this one measures it)`. Running `tests/run-all.sh` by hand
+answers `suite green`, which makes the refusal look like a lie. It is not.
+
+**Cause:** the catalogue is opt-in — `TEST_CMD` does not run it — so no gate before this one has
+measured whether the suite's assertions still bite. The `PR` gate therefore demands the **artifact**
+`sdd health` leaves behind: a stamp keyed on the content of `bin/ tests/ templates/ config/`. Three
+states produce this message and only the first is common:
+
+- **nothing was ever stamped** on this tree, or the last stamp was for other content — the ordinary
+  case, and usually it means a commit landed after the last `sdd health`;
+- **the catalogue came back red**, so the stamp was removed rather than left behind;
+- **the tree moved while the catalogue was running** — a commit, or an editor swap file, landing
+  during the twenty-to-fifty-minute round. `sdd health` says so out loud
+  (`the measured tree moved WHILE the catalogue was running`) and stamps nothing, because the green
+  it just reported is about content that is no longer there.
+
+**How the kit reacts:** it stops, and it stops **last** — after `50-pr.md` and `gh pr view`, so the
+likelier failures still speak first. Nothing is pushed, nothing is merged. In a repo without
+`tests/check-mutation.sh` this requirement does not exist at all.
+
+**What you do:** run `./bin/sdd health` from the checkout the mission is in, and run it **after the
+last commit that touches `bin/ tests/ templates/ config/`**. Twenty to fifty minutes on a laptop; a
+green round ends with `mutation stamp written` and the gate opens. Two things worth knowing before
+you start it:
+
+- editing `CLAUDE.md`, `CONTEXT.md`, `docs/` or `TODO.md` does **not** invalidate the stamp, so the
+  DOCS phase can work freely — but `tests/health-baseline.txt` **does**, and that is where the
+  backlog ratchet lives. Recording an out-of-scope finding therefore costs the stamp. The collision
+  is a known item in `TODO.md`, with its direction;
+- do not start it on a tree you are still committing to. The window guard will refuse the round and
+  you will have spent the wall-clock for nothing.
+
+Design, and why this is a stamp rather than CI, is
+[ADR 0004](adr/0004-mutation-catalogue-owner-stamp-not-ci.md).
+
+---
+
 ## `sdd health` fails: the backlog count moved
 
 **Symptom:** `sdd health` exits 1 with **two** lines about the same number — `fail  finding
