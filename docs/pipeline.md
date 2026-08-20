@@ -122,10 +122,16 @@ journeys in a project with no browser is the paperwork `skipped` exists to avoid
     `<QA_DOCS_PATH>/reports/` is `**Status:** closed` and no row of the session matrix is still
     `Pending`;
   - **without an interface** (neither `E2E_CMD` nor `APP_URL`) — the `gate:` field of
-    `30-handoff-qa.md` itself is filled in. Here the `qa-report`/`qa-execution` skills never ran,
-    so the `docs/qa/` tree does not exist: demanding their dated report would require an artifact
-    nobody produces, and the gate would be unsatisfiable precisely in the case where QA did the
-    work and **found** something;
+    `30-handoff-qa.md` itself is filled in. Here the `qa-report`/`qa-execution` skills did not run
+    as part of the phase, so demanding their dated report would require an artifact nobody
+    produces, and the gate would be unsatisfiable precisely in the case where QA did the work and
+    **found** something.
+    ⚠️ **That is about what the gate DEMANDS, never about what may exist on disk.** A human can run
+    `/qa-report` by hand and commit a `docs/qa/` tree in a project with no interface too. One did,
+    on 2026-08-19, and an `sdd-qa` session read the older wording as licence and deleted it
+    (`9f84cbc`). A tree that is there is read and complemented, never removed: this path still asks
+    for no report from it, and Anchor 3 below (`bugs/` with no `Status: open`) already applies to
+    both paths;
 - no file in `<QA_DOCS_PATH>/bugs/` has `**Status:** open` (true in both cases);
 - `TEST_CMD` exits 0 and `E2E_CMD` exits 0 (when set).
 

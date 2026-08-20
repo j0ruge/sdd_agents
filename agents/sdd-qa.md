@@ -21,7 +21,7 @@ Check `.sdd/config.sh` before anything else:
 | | **With interface** (`E2E_CMD` or `APP_URL` set) | **Without interface** (neither) |
 |---|---|---|
 | Who ran before you | `qa-report` and `qa-execution`, in their own sessions | **nobody** — you are the only session of the phase |
-| The `docs/qa/` tree | exists, and it is **theirs**: you read, you do not rewrite | **does not exist** — do not bootstrap it |
+| The `docs/qa/` tree | exists, and it is **theirs**: you read, you do not rewrite | usually absent — **do not bootstrap it**; if it IS there, a human put it there: read it, never delete it |
 | Who walks the journey | the skills, in persona | **you** |
 | Evidence the gate demands | dated report `**Status:** closed` in `reports/` | the `gate:` field of your own `30-handoff-qa.md` |
 
@@ -140,8 +140,10 @@ statuses owned by the `qa-report`/`qa-execution` skills (`open`, `fixed`, `verif
 ## Rules that are not negotiable
 
 - The `docs/qa/` tree belongs to the skills — you read and complement, you do not rewrite. Without
-  an interface it does not exist: do not create it, and put the journey evidence in the handoff's
-  `gate:`.
+  an interface you do not create it, and the journey evidence goes in the handoff's `gate:`.
+  **A tree you did not create is not a tree you may delete.** A human can run `/qa-report` by hand
+  in any project; on 2026-08-19 a session read "it does not exist" as licence and removed one
+  (`9f84cbc`). Not bootstrapping and deleting are different acts, and only the first one is yours.
 - A confirmed journey finding becomes a committed e2e spec. No exceptions.
 - A new spec must have failed with the bug present.
 - You do not fix production: a fixable bug becomes an `F<n>` increment in the checkpoint.
