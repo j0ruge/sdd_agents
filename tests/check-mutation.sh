@@ -350,12 +350,6 @@ mut_RUN_ignores_output_lang() {
   sed -i 's|.*if \[ -n "\$OUTPUT_LANG" \]; then.*|  if false; then|' "$1"
 }
 
-# Not a gate: the per-phase damage cap collapses back into one number. Every session gets the
-# global, so REVIEW — the phase that costs the most — dies mid-round on the ceiling meant for a PR
-# body, and the money is spent with nothing on disk. The failure mode is the resolver that exists,
-# is called, and answers the same thing whatever it is asked, which no assertion reading a single
-# phase can tell apart from a working one. Anchored on the FUNCTION range, so a case arm that
-# moves does not rot it.
 # The REVIEW ceiling goes back to living in memory only. `attempts` is a `local -A` of cmd_run, born
 # with the process, so `REVIEW_MAX_ITER` caps one `sdd run` and the next one hands out a fresh set
 # of rounds — no ceiling at all across invocations, on the most expensive phase in the kit. The
@@ -366,6 +360,12 @@ mut_RUN_review_ceiling_in_memory() {
   sed -i '/^review_rounds_on_disk()/,/^}/ s@^  last="\$(latest_matching .*)"$@  last=""@' "$1"
 }
 
+# Not a gate: the per-phase damage cap collapses back into one number. Every session gets the
+# global, so REVIEW — the phase that costs the most — dies mid-round on the ceiling meant for a PR
+# body, and the money is spent with nothing on disk. The failure mode is the resolver that exists,
+# is called, and answers the same thing whatever it is asked, which no assertion reading a single
+# phase can tell apart from a working one. Anchored on the FUNCTION range, so a case arm that
+# moves does not rot it.
 mut_RUN_budget_single_ceiling() {
   # `@` as the delimiter, not `|`: with `s|…|…|` the alternation `\|` reads as an escaped
   # DELIMITER, the pattern matches nothing, and the sabotage lands nowhere. Caught by the
@@ -880,16 +880,16 @@ mut_LEDGER_repo_root_toplevel() {
 # is the differential pair in check-preflight.sh — one fixture read twice, one byte apart — plus
 # the stale message itself. `elif` → `elif false &&` keeps the branch syntactically alive so the
 # mutant is valid bash and the sabotage is precisely the comparison, nothing else.
+mut_PRE_agent_presence_only() {
+  sed -i 's@elif ! cmp -s "$a" "$copy"; then@elif false \&\& ! cmp -s "$a" "$copy"; then@' "$1"
+}
+
 # The preflight stops asking whether TEST_CMD would run anything at all. A `true` left behind while
 # the config was being wired up then passes preflight, and after it gate_EXEC, gate_QA and
 # gate_REVIEW pass instantly, in every mission, for ever — each phase certifying itself against a
 # run that never happened, through the one key the whole pipeline trusts.
 mut_PRE_testcmd_noop_blind() {
   sed -i '/^cmd_preflight()/,/^}/ s@if test_cmd_looks_noop "\$TEST_CMD"; then@if false; then@' "$1"
-}
-
-mut_PRE_agent_presence_only() {
-  sed -i 's@elif ! cmp -s "$a" "$copy"; then@elif false \&\& ! cmp -s "$a" "$copy"; then@' "$1"
 }
 
 # Not a gate: the base branch warning goes back to being decoration. The body is emptied while the
@@ -1390,6 +1390,10 @@ mut_KAIZEN_moved_never_true() {
 # the whole family stays green with the reminder deleted — a set of assertions that can only pass.
 # The `dim` becomes a `:` carrying the same string, so the computation above it still runs and a
 # reader still sees a line here.
+mut_KAIZEN_reminder_dead() {
+  sed -i 's|^  dim "  autonomy series: |  : "  autonomy series: |' "$1"
+}
+
 # The reminder goes back to believing every repo is the kit, so a target project is sent to
 # `sdd kaizen` in the kit — a judge that reads a different set of numbers entirely. The human opens
 # the kit, runs the command, and is told something about the kit's own missions that has nothing to
@@ -1397,10 +1401,6 @@ mut_KAIZEN_moved_never_true() {
 # mutant that forced the OTHER branch instead would be caught by the same fixture.
 mut_KAIZEN_reminder_wrong_repo() {
   sed -i '/^kaizen_reminder()/,/^}/ s@if \[ -n "\$kit_root" \] && \[ "\$kit_root" = "\$REPO_ROOT" \]; then@if true; then@' "$1"
-}
-
-mut_KAIZEN_reminder_dead() {
-  sed -i 's|^  dim "  autonomy series: |  : "  autonomy series: |' "$1"
 }
 
 # `sdd kaizen` stops being idempotent: with the verdict already on disk the gate passes, the outcome
