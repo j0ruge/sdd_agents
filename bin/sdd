@@ -478,7 +478,16 @@ gate_TICKET() {
   return 0
 }
 
+# Set by gate_EXEC when the suite is red over an uncommitted tree, read by cmd_run's second Jidoka.
+# A GLOBAL and not a return value because the gate already spends its rc on pass/fail, and a gate
+# that answered the two questions in one code would make every caller decode it. Reset at the entry
+# of gate_EXEC below, never at the call site: the gate returns from a dozen places before ever
+# reaching the suite, and a marker left over from an earlier evaluation would escalate a run for a
+# tree that is long since clean.
+GATE_EXEC_DIRTY=0
+
 gate_EXEC() {
+  GATE_EXEC_DIRTY=0
   local rows; rows="$(checkpoint_rows)"
   [ -n "$rows" ] || { GATE_WHY="checkpoint.md is empty"; return 1; }
 
@@ -514,6 +523,17 @@ gate_EXEC() {
   if [ "$pending" -gt 0 ]; then GATE_WHY="$pending of $total increment(s) still to execute"; return 1; fi
 
   if ! run_check_cmd "$TEST_CMD" "gate-exec-test"; then
+    # A phase that DIED leaves its work uncommitted, and the suite then runs over a working tree
+    # nobody approved. Every increment reads `done`, so the runner re-derives EXEC, opens another
+    # session against the same red suite, and `state_fingerprint` — HEAD, the mission listing and
+    # the checkpoint's md5 — cannot see a dirty tree, so `attempts` resets on every `sdd run` and
+    # the lap costs a full EXEC session, for ever. The marker below is what turns that into an
+    # escalation in cmd_run, before a session is opened.
+    if [ -n "$( cd "$REPO_ROOT" && git status --porcelain )" ]; then
+      GATE_EXEC_DIRTY=1
+      GATE_WHY="TEST_CMD failed ($TEST_CMD) over a DIRTY working tree — the uncommitted changes are what the suite is running against; a session cannot fix what it cannot see. See $LAST_CHECK_LOG"
+      return 1
+    fi
     GATE_WHY="TEST_CMD failed ($TEST_CMD) — see $LAST_CHECK_LOG"; return 1
   fi
   [ -f "$MISSION_DIR/20-handoff-exec.md" ] \
@@ -2914,6 +2934,30 @@ cmd_run() {
       pipeline_log_line "$(date -Iseconds)  BLOCKED  EXEC  increment marked blocked by the executor"
       autonomy_blocked_row "increment-blocked" "EXEC" "$GATE_WHY"
       return 3
+    fi
+
+    # The second Jidoka of the same phase, and the one that costs money when it is missing. A phase
+    # that dies mid-way leaves the tree uncommitted; the suite then runs against changes nobody
+    # approved and comes back red; every increment still reads `done`, so EXEC is re-derived and
+    # another session opens against the same wall. `state_fingerprint` does not read the working
+    # tree, so `attempts` starts at zero on every `sdd run` — measured at about US$ 25 a lap, with
+    # no end condition. A human has to commit or discard; no session can.
+    #
+    # gate_EXEC is CALLED, never `$( )`: read through a command substitution it runs in a subshell
+    # and GATE_EXEC_DIRTY dies with it — the lesson autonomy_kit_stamp paid for. `|| true` because
+    # the gate failing is the whole point here.
+    if [ "$phase" = "EXEC" ]; then
+      gate_EXEC || true
+      if [ "$GATE_EXEC_DIRTY" = "1" ]; then
+        info ""
+        bad "BLOCKED in EXEC — $GATE_WHY"
+        dim "  The line stopped on purpose: the working tree is dirty and the suite is red."
+        dim "  A session would run against the same uncommitted changes and fail the same way."
+        dim "  Commit what belongs to the mission, or 'git restore' what does not, then 'sdd run'."
+        pipeline_log_line "$(date -Iseconds)  BLOCKED  EXEC  red suite over a dirty working tree"
+        autonomy_blocked_row "dirty-tree" "EXEC" "$GATE_WHY"
+        return 3
+      fi
     fi
 
     budget="$(phase_budget "$phase")"

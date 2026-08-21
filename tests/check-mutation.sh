@@ -182,6 +182,16 @@ mut_DOCS_alignment_colon_blind() {
   sed -i '/^gate_DOCS()/,/^}/ s@cell ~ /\^:?-+:?\$/@cell ~ /^-+$/@' "$1"
 }
 
+# The gate stops telling "the suite is red" from "the suite is red over work nobody committed", so
+# cmd_run's second Jidoka never fires and the runner opens another EXEC session against the same
+# uncommitted tree — about US$ 25 a lap, with no end condition, because state_fingerprint does not
+# read the working tree and `attempts` restarts on every `sdd run`. `:` and not the whole branch, so
+# the GATE_WHY and the `return 1` stay: a mutant that also stopped failing would be caught by the
+# older red-suite assertion instead, and would score this point for the wrong reason.
+mut_EXEC_dirty_tree_as_red() {
+  sed -i '/^gate_EXEC()/,/^}/ s@^      GATE_EXEC_DIRTY=1$@      :@' "$1"
+}
+
 mut_EXEC_ignores_TEST_CMD() { # discards the suite's rc — the gate stops measuring TEST_CMD
   sed -i 's|.*run_check_cmd "\$TEST_CMD" "gate-exec-test".*|  if false; then|' "$1"
 }
@@ -1486,6 +1496,7 @@ CATALOG=(
   EXEC_ignores_TEST_CMD
   EXEC_escaped_pipe_blind
   EXEC_alignment_colon_blind
+  EXEC_dirty_tree_as_red
   REVIEW_alignment_colon_blind
   DOCS_alignment_colon_blind
   QA_status_line_start

@@ -316,6 +316,66 @@ assert_jidoka "a 'blocked' increment escalates in a checkpoint bigger than the p
 mv "$MDIR/checkpoint.jidoka.bak" "$MDIR/checkpoint.md"
 printf -- '---\nfase: EXEC\nstatus: done\n---\n' > "$MDIR/20-handoff-exec.md"
 
+# The OTHER Jidoka of the same phase, and the one that costs money when it is missing. A phase that
+# dies mid-way leaves the tree uncommitted; the suite runs against changes nobody approved and comes
+# back red; every increment still reads `done`, so EXEC is re-derived and another session opens
+# against the same wall. `state_fingerprint` reads HEAD, the mission listing and the checkpoint's
+# md5 — never the working tree — so `attempts` starts at zero on every `sdd run`. Measured at about
+# US$ 25 a lap, with no end condition.
+#
+# DIFFERENTIAL, one `echo` apart: the same red suite on a clean tree is the ORDINARY case and must
+# still open a session. Without that half, a runner that escalated on every red suite would satisfy
+# the dirty half — and would end the line on the most common situation there is.
+git add -A && git commit -qm "chore: handoff back"
+sed -i 's|^TEST_CMD="true"|TEST_CMD="false"|' .sdd/config.sh
+git add -A && git commit -qm "chore: red suite, clean tree"
+if [ -z "$( cd "$FIX" && git status --porcelain )" ]; then
+  pass "fixture: the tree really is clean before the differential"
+else
+  fail "dirty-tree fixture" "a clean tree" "$( cd "$FIX" && git status --porcelain )"
+fi
+# "A session was spent" is counted in the ARTEFACT the runner leaves behind — one `EXEC-*.json` per
+# invocation, under `.sdd/logs/<mission>/`. NOT by grepping the stub's marker out of `sdd run`'s
+# output: run_phase redirects the session's stdout AND stderr into that log file, so the marker
+# never reaches the terminal and an assertion reading for it there is green whether a session ran
+# or not. (The neighbouring assert_jidoka has that shape; recorded in TODO.md.)
+sessions_spent() {
+  find "$FIX/.sdd/logs/$MISSION" -maxdepth 1 -name 'EXEC-*.json' 2>/dev/null | grep -c . || true
+}
+n_before="$(sessions_spent)"
+out_clean="$( cd "$FIX" && "$SDD" run "$MISSION" --max-phases 1 2>&1 )"; rc_clean=$?
+n_clean="$(sessions_spent)"
+if [ "$n_clean" -gt "$n_before" ]; then
+  pass "a red suite over a CLEAN tree still opens a session (the ordinary case)"
+else
+  fail "red suite, clean tree" "a new EXEC session log" \
+       "exit $rc_clean, $n_before → $n_clean log(s): $(tail -3 <<< "$out_clean")"
+fi
+
+echo "work nobody committed" >> file.txt
+out_dirty="$( cd "$FIX" && "$SDD" run "$MISSION" 2>&1 )"; rc_dirty=$?
+n_dirty="$(sessions_spent)"
+if [ "$rc_dirty" -eq 3 ] \
+   && grep -q "DIRTY working tree" <<< "$out_dirty" \
+   && [ "$n_dirty" -eq "$n_clean" ]; then
+  pass "a dirty tree with every increment done escalates (exit 3, no session spent)"
+else
+  fail "a dirty tree with every increment done escalates (exit 3, no session spent)" \
+       "exit 3, the dirty-tree branch, and no new session log" \
+       "exit $rc_dirty, $n_clean → $n_dirty log(s): $(tail -3 <<< "$out_dirty")"
+fi
+# The escalation has to be the DIRTY one and not the budget one, which shares rc 3 and the
+# "BLOCKED in EXEC" prefix — the discriminator the neighbouring assert_jidoka already insists on.
+if grep -q "session(s) without satisfying the gate" <<< "$out_dirty"; then
+  fail "the escalation is the dirty-tree branch, not budget exhaustion" \
+       "no budget-exhaustion text" "$(grep -m1 'session(s) without' <<< "$out_dirty")"
+else
+  pass "the escalation is the dirty-tree branch, not budget exhaustion"
+fi
+git checkout -- file.txt
+sed -i 's|^TEST_CMD="false"|TEST_CMD="true"|' .sdd/config.sh
+git add -A && git commit -qm "chore: green again"
+
 # An invalid checkpoint status fails loudly, not in silence.
 cp "$MDIR/checkpoint.md" "$MDIR/checkpoint.bak"
 sed -i "s/| done | $REAL_HASH |/| completed | $REAL_HASH |/" "$MDIR/checkpoint.md"
