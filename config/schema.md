@@ -67,7 +67,16 @@ exception, never a silent one** (kaizen K3). Values: any alias `claude --model` 
 | `QA_MAX_ITER` | `3` | Rounds of the QA⇄EXEC loop before `BLOCKED`. Protects against an endless "the fix breaks another journey". Careful raising it: one round is **up to 3 sessions** (one per sub-step), so the phase session cap is `QA_MAX_ITER × 3` — 9 by default. |
 | `REVIEW_MAX_ITER` | `3` | Review sessions in total before `BLOCKED`. |
 | `EXEC_MAX_RETRY` | `1` | Retries per increment before `BLOCKED`. |
-| `BUDGET_PER_PHASE_USD` | `15` | Goes into `--max-budget-usd` per session. A damage cap, not a budget. |
+| `BUDGET_PER_PHASE_USD` | `15` | Goes into `--max-budget-usd` per session. A damage cap, not a budget. Applies to the phases with no key of their own: DOCS, PR, TICKET, KAIZEN. |
+| `BUDGET_EXEC_USD` | `25` | Cap for an EXEC session — one increment in TDD, which reads, writes, runs the suite and commits. |
+| `BUDGET_QA_USD` | `25` | Cap for a QA session. One QA **round** is up to three of them, so the round costs up to `3 ×` this. |
+| `BUDGET_REVIEW_USD` | `40` | Cap for a REVIEW round. The most expensive phase: the `codereview` skill routes by severity and the session fixes inside itself. |
+
+⚠️ Trade-off, declared: raising `BUDGET_PER_PHASE_USD` does **not** raise EXEC, QA or REVIEW —
+they read their own key. One number for every phase was either too low for REVIEW, where the
+session dies mid-round and the money is spent with nothing on disk, or too high for PR, where it
+stopped capping anything. Four keys instead of one is the price of the cap meaning something in
+both places.
 | `PUBLISH_ON_REVIEW_BLOCKED` | `off` | `draft` ⇒ a blown review opens a **draft** PR with the current grade and the open items, instead of stopping dead. The runner records that it lowered its own bar, **once per run**: a `DEGRADED` line in the mission's `pipeline.log` and one `event:"degraded"` / `kind:"review-to-draft"` row in the autonomy ledger. The draft PR gets **one** chance: if its own gate fails too, the run ends on `blocked` / `budget-exhausted` in **REVIEW** — the phase whose ceiling was actually blown — instead of handing REVIEW back and going round again. |
 | `PERMISSION_MODE` | `acceptEdits` | The ceiling. `bypassPermissions` is **never** the kit's default. |
 | `ALLOWED_TOOLS` | `Bash` | Goes into `--allowedTools`, as a **single argument**. **Required in practice**: `acceptEdits` auto-approves file edits, but **not** `Bash` — without this key the phase session cannot run the suite nor commit, and the EXEC phase becomes unsatisfiable. Verified in the fixture mission `20260814-dry-run-completo`. The kit has only exercised the default; if you need more than one tool, check the format your `claude` accepts before trusting the gate. |

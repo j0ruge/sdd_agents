@@ -103,6 +103,11 @@ load_config() {
   : "${MODEL_KAIZEN:=opus}"
   : "${QA_MAX_ITER:=3}"; : "${REVIEW_MAX_ITER:=3}"; : "${EXEC_MAX_RETRY:=1}"
   : "${BUDGET_PER_PHASE_USD:=15}"; : "${PUBLISH_ON_REVIEW_BLOCKED:=off}"
+  # The cap is per phase because the phases do not cost the same. One number was either too low
+  # for REVIEW — the session dies mid-round and the money is spent with nothing on disk — or too
+  # high for PR, where it stopped capping anything. The global stays for the cheap phases; raising
+  # it does NOT raise these three, which is the trade-off config/schema.md declares.
+  : "${BUDGET_EXEC_USD:=25}"; : "${BUDGET_QA_USD:=25}"; : "${BUDGET_REVIEW_USD:=40}"
   : "${PERMISSION_MODE:=acceptEdits}"; : "${JIRA_ENABLED:=false}"
   # `acceptEdits` auto-approves FILE EDITS, not `Bash`. Without this allowlist the phase session
   # cannot run TEST_CMD, cannot run `git add`/`git commit`, and the EXEC phase is unsatisfiable
@@ -898,6 +903,19 @@ phase_model() {
   esac
 }
 
+# Damage cap configured for the phase, in US$. Mirrors phase_model on purpose: same shape, same
+# fallthrough. The phases NOT named here (DOCS, PR, TICKET, KAIZEN) are the cheap ones and stay on
+# the global — a body assembled from finished handoffs or an `acli` call with the fields already
+# decided does not need its own key.
+phase_budget_usd() {
+  case "$1" in
+    EXEC)   printf '%s\n' "$BUDGET_EXEC_USD" ;;
+    QA)     printf '%s\n' "$BUDGET_QA_USD" ;;
+    REVIEW) printf '%s\n' "$BUDGET_REVIEW_USD" ;;
+    *)      printf '%s\n' "$BUDGET_PER_PHASE_USD" ;;
+  esac
+}
+
 # QA sub-step, DERIVED from the artifacts — same philosophy as the gates, no extra state.
 # The QA phase is three sessions: the qa-report/qa-execution skills carry
 # `disable-model-invocation`, so each one has to enter through the literal slash as the opening
@@ -1537,7 +1555,7 @@ missing and write the artifacts. The gate will be re-evaluated."
     --output-format stream-json --verbose
     --setting-sources "user,project,local"
     --allowedTools "$ALLOWED_TOOLS"
-    --max-budget-usd "$BUDGET_PER_PHASE_USD")
+    --max-budget-usd "$(phase_budget_usd "$phase")")
   if [ -n "$agent" ]; then cmd+=(--agent "$agent"); fi
   if [ -n "$resume_sid" ]; then cmd+=(--resume "$resume_sid" --fork-session)
   else cmd+=(--session-id "$sid"); fi

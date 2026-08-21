@@ -304,6 +304,19 @@ mut_RUN_ignores_output_lang() {
   sed -i 's|.*if \[ -n "\$OUTPUT_LANG" \]; then.*|  if false; then|' "$1"
 }
 
+# Not a gate: the per-phase damage cap collapses back into one number. Every session gets the
+# global, so REVIEW — the phase that costs the most — dies mid-round on the ceiling meant for a PR
+# body, and the money is spent with nothing on disk. The failure mode is the resolver that exists,
+# is called, and answers the same thing whatever it is asked, which no assertion reading a single
+# phase can tell apart from a working one. Anchored on the FUNCTION range, so a case arm that
+# moves does not rot it.
+mut_RUN_budget_single_ceiling() {
+  # `@` as the delimiter, not `|`: with `s|…|…|` the alternation `\|` reads as an escaped
+  # DELIMITER, the pattern matches nothing, and the sabotage lands nowhere. Caught by the
+  # `cmp` guard in run_mutant (rc 90) — the reason that guard exists.
+  sed -i '/^phase_budget_usd()/,/^}/ s@"\$BUDGET_\(EXEC\|QA\|REVIEW\)_USD"@"$BUDGET_PER_PHASE_USD"@' "$1"
+}
+
 # Not a gate: the ledger the kaizen judge reads. The projection starts writing, and rows for
 # sessions that never happened enter the arithmetic that decides whether the kit graduates.
 mut_RUN_autonomy_ignores_dry_run() {
@@ -1456,6 +1469,7 @@ CATALOG=(
   HEALTH_stamp_tree_blind
   RUN_inverted_journal
   RUN_ignores_output_lang
+  RUN_budget_single_ceiling
   RUN_autonomy_ignores_dry_run
   RUN_autonomy_null_moved_as_zero
   RUN_moved_never_true

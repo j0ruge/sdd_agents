@@ -184,6 +184,34 @@ assert_eq "every projected phase asks for stream-json WITH --verbose" "$blocks" 
 assert_eq "and no phase is left on the single-blob format" "0" \
   "$(grep -c -- '--output-format json' <<< "$argv")"
 
+# --- the damage cap is per phase -------------------------------------------
+# One global ceiling priced every phase as if they cost the same. They do not: a REVIEW round with
+# the `codereview` skill and a QA walk are the expensive ones, and a PR body assembled from
+# finished handoffs is mechanical. A single number is therefore either too low for REVIEW (the
+# session dies mid-round and the money is spent with nothing to show) or too high for PR (the cap
+# stops capping anything).
+#
+# Read off the REAL argv of the projection, which is the only place in this suite where the flags
+# the CLI would receive are visible — a stub answers regardless of what it was handed.
+budget_of() {
+  awk -v want="$1" '
+    /^--- DRY RUN: phase .* ---$/ { blk = $5; next }
+    blk == want {
+      for (i = 1; i <= NF; i++) if ($i == "--max-budget-usd") { print $(i + 1); exit }
+    }
+  ' <<< "$argv"
+}
+
+echo "== the damage cap is per phase =="
+# The headline pair: the most expensive phase and the cheapest, in ONE assertion, so a resolver
+# that echoes the same number for everything cannot satisfy it whatever that number is.
+assert_eq "REVIEW carries --max-budget-usd 40 while PR carries 15" \
+  "40 15" "$(budget_of REVIEW) $(budget_of PR)"
+# And the rest of the case arm, so the two keys that are neither the global nor REVIEW are covered
+# by something. DOCS falls through to the global on purpose: it is one write of documentation.
+assert_eq "EXEC and QA carry their own ceiling, DOCS falls back to the global" \
+  "25 25 15" "$(budget_of EXEC) $(budget_of QA:close) $(budget_of DOCS)"
+
 # --- OUTPUT_LANG reaches the boot prompt -----------------------------------
 # Anchored on the VALUE of the key, never on the prose of the prompt: the runner text is English
 # and the artifacts may be in any language, and an assertion tied to the prose would die at the
