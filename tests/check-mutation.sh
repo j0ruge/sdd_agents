@@ -1390,6 +1390,15 @@ mut_KAIZEN_moved_never_true() {
 # the whole family stays green with the reminder deleted — a set of assertions that can only pass.
 # The `dim` becomes a `:` carrying the same string, so the computation above it still runs and a
 # reader still sees a line here.
+# The reminder goes back to believing every repo is the kit, so a target project is sent to
+# `sdd kaizen` in the kit — a judge that reads a different set of numbers entirely. The human opens
+# the kit, runs the command, and is told something about the kit's own missions that has nothing to
+# do with the run that just finished. The pair of assertions it dies on is differential, so a
+# mutant that forced the OTHER branch instead would be caught by the same fixture.
+mut_KAIZEN_reminder_wrong_repo() {
+  sed -i '/^kaizen_reminder()/,/^}/ s@if \[ -n "\$kit_root" \] && \[ "\$kit_root" = "\$REPO_ROOT" \]; then@if true; then@' "$1"
+}
+
 mut_KAIZEN_reminder_dead() {
   sed -i 's|^  dim "  autonomy series: |  : "  autonomy series: |' "$1"
 }
@@ -1622,6 +1631,7 @@ CATALOG=(
   RETRY_moved_never_true
   KAIZEN_moved_never_true
   KAIZEN_reminder_dead
+  KAIZEN_reminder_wrong_repo
   KAIZEN_already_judged_spends
   RUN_degraded_journal_dropped
   AUTONOMY_is_escalation_blind

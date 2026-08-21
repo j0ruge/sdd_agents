@@ -607,6 +607,36 @@ assert_eq "with an empty ledger the pipeline still completes (rc 0)" "0" "$rc"
 assert_eq "and the reminder stays silent" "no" \
   "$(grep -q 'autonomy series:' <<< "$out" && echo yes || echo no)"
 
+echo "== reminder: outside the kit it tells the truth about the judge =="
+# The reminder counts THIS repo's missions and then used to send every reader, from every repo, to
+# `sdd kaizen` in the kit — a judge that reads a different set of numbers entirely. In a target
+# repo the human opens the kit, runs the command, and is told something about the kit's own
+# missions that has nothing to do with the run that just finished.
+#
+# A SECOND kit checkout is the whole fixture, so SDD_HOME resolves somewhere else while the repo
+# under the runner — and therefore the ledger rows, the series and every number in it — stays
+# byte for byte the one the assertions above just measured. One `cp` apart: a differential, not a
+# second world, so whichever side regresses the other is standing next to it.
+KIT2="$OUTSIDE/kit2"
+mkdir -p "$KIT2/bin"
+cp "$ROOT/bin/sdd" "$KIT2/bin/sdd"
+( cd "$KIT2" && git init -q -b main \
+  && git config user.email "fixture@example.com" && git config user.name "Fixture" \
+  && git add -A && git commit -qm "init the second kit checkout" ) >/dev/null 2>&1
+
+out="$( cd "$FIX" && "$KIT2/bin/sdd" run 20260102-donemission 2>&1 )"; rc=$?
+assert_eq "outside the kit the pipeline still completes (rc 0)" "0" "$rc"
+assert_eq "outside the kit the reminder tells the truth about the judge" "yes" \
+  "$(grep -q "reads only the kit's own missions" <<< "$out" && echo yes || echo no)"
+# The other half, the house rule: the text of the right branch AND the absence of the wrong one.
+# Without it the assertion above passes on a runner that prints both lines.
+assert_eq "and it does not send the human to a judge reading other numbers" "no" \
+  "$(grep -q "run 'sdd kaizen'" <<< "$out" && echo yes || echo no)"
+# It says what IS true and stops: promising an option that does not exist yet would be the same
+# lie in the other direction.
+assert_eq "and it promises no --all-repos that has not been decided" "no" \
+  "$(grep -q -- '--all-repos' <<< "$out" && echo yes || echo no)"
+
 echo "== jidoka: verdict piorou stops the line =="
 loud_stub
 VDIR="$FIX/docs/handoffs/20260815-kaizen-verdict"

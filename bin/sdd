@@ -3851,7 +3851,21 @@ kaizen_reminder() {
     [ -f "$f" ] || continue
     [ "$(frontmatter "$f" kit_sha_judged)" = "$sha" ] && return 0
   done
-  dim "  autonomy series: $n mission(s) on kit $sha without a verdict — run 'sdd kaizen' in the kit repo ($SDD_HOME) for the next kit mission plan"
+  # WHERE this is being said from decides WHAT is true. The count above is this repo's missions,
+  # and it used to be followed, in every repo, by "run 'sdd kaizen' in the kit repo" — a pointer to
+  # a judge that reads a DIFFERENT set of numbers. In a target repo the human would open the kit,
+  # run the command, and be told something about the kit's own missions that has nothing to do with
+  # the run that just finished. Same question cmd_kaizen asks to decide where it may run at all.
+  local kit_root
+  kit_root="$( cd "$SDD_HOME" && git rev-parse --show-toplevel 2>/dev/null || true )"
+  if [ -n "$kit_root" ] && [ "$kit_root" = "$REPO_ROOT" ]; then
+    dim "  autonomy series: $n mission(s) on kit $sha without a verdict — run 'sdd kaizen' in the kit repo ($SDD_HOME) for the next kit mission plan"
+    return 0
+  fi
+  # Outside the kit there is nothing to run and no pointer to give. What IS true: the sessions are
+  # recorded, and today's judge will not count them. It stops there on purpose — promising an
+  # option that does not exist yet would be the same lie one branch up, in the other direction.
+  dim "  autonomy series: $n mission(s) of this repo on kit $sha are in the ledger. Today's kaizen judge reads only the kit's own missions, so it will not count them."
 }
 
 # KAIZEN gate — same convention as every gate (0/1, reason in GATE_WHY), but NOT in PHASES:
