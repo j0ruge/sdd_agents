@@ -339,6 +339,55 @@ ok_case 'make test && echo done'         'an echo that is not the command is not
 
 mv .sdd/config.sh.bak .sdd/config.sh
 
+# --- third-party skills the phases depend on --------------------------------
+# Three phases are driven by skills the kit does not ship: TICKET boots `ticket`, the two QA
+# sub-steps boot `qa-report` and `qa-execution`, and REVIEW loads `codereview`. A missing one is
+# not a broken kit — it is a session that boots, finds no skill, improvises, and burns the phase
+# budget answering something nobody can gate.
+#
+# WARN and never fail: the search roots are a CONVENTION (`~/.claude/skills/`, the plugin cache,
+# the project's own `.claude/skills/`), not a contract the kit can enforce, and a rule that fails on
+# a heuristic is the rule the next author deletes. Same call the ddd/kaizen plugin check already
+# makes, one screen up in the same command.
+#
+# The root is injectable so this is testable at all: with SDD_SKILLS_ROOT pointing at an empty
+# directory every skill is missing, and pointing at one that holds them, none is.
+echo "== third-party skills =="
+cd "$FIX" || exit 1
+EMPTY_SKILLS="$FIX/.skills-empty"
+FULL_SKILLS="$FIX/.skills-full"
+mkdir -p "$EMPTY_SKILLS" "$FULL_SKILLS/skills/ticket" "$FULL_SKILLS/skills/qa-report" \
+         "$FULL_SKILLS/skills/qa-execution" "$FULL_SKILLS/skills/codereview"
+for s in ticket qa-report qa-execution codereview; do
+  printf -- '---\nname: %s\n---\n' "$s" > "$FULL_SKILLS/skills/$s/SKILL.md"
+done
+
+# JIRA on and an interface declared, so all four skills are in play.
+cp .sdd/config.sh .sdd/config.sh.bak
+sed -i 's|^JIRA_ENABLED=false|JIRA_ENABLED=true|; s|^E2E_CMD=""|E2E_CMD="npm run e2e"|' .sdd/config.sh
+printf 'PROJECT=FX\nBOARD=1\n' > .jira-project
+
+out_noskills="$( SDD_SKILLS_ROOT="$EMPTY_SKILLS" "$SDD" preflight 2>&1 )"
+assert_has "preflight warns about a ticket skill it cannot find" "ticket" "$out_noskills"
+assert_has "the warning names where it looked" "$EMPTY_SKILLS" "$out_noskills"
+assert_has "the warning says what the absence costs" "boots the skill" "$out_noskills"
+
+# The differential, one root apart: the SAME config with the skills present says nothing. Without
+# it, a preflight that printed the warning unconditionally would satisfy every assertion above.
+out_skills="$( SDD_SKILLS_ROOT="$FULL_SKILLS" "$SDD" preflight 2>&1 )"
+assert_lacks "with the skills installed the warning is silent" "boots the skill" "$out_skills"
+
+# And the trigger is the CONFIG, not the calendar: with JIRA off, `ticket` is not asked for.
+sed -i 's|^JIRA_ENABLED=true|JIRA_ENABLED=false|; s|^E2E_CMD="npm run e2e"|E2E_CMD=""|' .sdd/config.sh
+out_nojira="$( SDD_SKILLS_ROOT="$EMPTY_SKILLS" "$SDD" preflight 2>&1 )"
+assert_lacks "with JIRA off the ticket skill is not asked for" "ticket" "$out_nojira"
+assert_lacks "with no interface the qa skills are not asked for" "qa-report" "$out_nojira"
+# codereview is asked for in every project: REVIEW runs in every mission.
+assert_has "codereview is asked for whatever the config says" "codereview" "$out_nojira"
+
+rm -f .jira-project
+mv .sdd/config.sh.bak .sdd/config.sh
+
 # --- install seeds the tree the runner cannot work without ------------------
 # `sdd install` made `.sdd/` and `.claude/agents/` and stopped. `resolve_mission` dies on the FIRST
 # command a new user types — "docs/handoffs/ does not exist in the target repo" — and `TODO_FILE`,

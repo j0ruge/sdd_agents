@@ -1750,6 +1750,32 @@ state_fingerprint() {
     "$( cat "$MISSION_DIR/checkpoint.md" 2>/dev/null | md5sum 2>/dev/null | cut -d' ' -f1 )"
 }
 
+# skill_findable <name> → 0 when a skill by that name can be found where skills live.
+#
+# Three phases are driven by skills the kit does not ship: TICKET boots `ticket`, the two QA
+# sub-steps boot `qa-report` and `qa-execution`, and REVIEW loads `codereview`. A missing one is not
+# a session that fails — it is a session that boots, finds nothing, improvises, and spends the
+# phase budget producing something no gate can read.
+#
+# HEURISTIC, and therefore a warn and never a fail. The roots below are a CONVENTION of the harness,
+# not a contract the kit can enforce, and a rule that fails on a heuristic is the rule the next
+# author deletes (the ddd/kaizen plugin check one screen down makes the same call). Three roots,
+# the two `health_provenance` already walks plus the project's own: a plain `skills/<name>/`
+# directory, and the plugin cache, where a skill arrives inside a versioned plugin tree.
+#
+# SDD_SKILLS_ROOT exists so this is testable at all — with no injectable root the only worlds
+# available to a sensor are "this developer's machine" and nothing.
+skill_findable() {
+  local name="${1:-}" root="${SDD_SKILLS_ROOT:-$HOME/.claude}"
+  [ -n "$name" ] || return 1
+  [ -d "$root/skills/$name" ] && return 0
+  [ -d "$REPO_ROOT/.claude/skills/$name" ] && return 0
+  # `-quit` on the first hit: the cache holds every version of every plugin, and this question is
+  # "is it anywhere", not "where". `|| true` because `find` on a missing directory returns 1 and
+  # pipefail would carry that into the caller's assignment.
+  [ -n "$( find "$root/plugins/cache" -maxdepth 6 -type d -name "$name" -print -quit 2>/dev/null || true )" ]
+}
+
 # test_cmd_looks_noop <cmd> → 0 when the command would exit 0 having run no test at all.
 #
 # `TEST_CMD` is the EXEC gate and half the REVIEW gate. A value that runs nothing is worse than an
@@ -2169,6 +2195,28 @@ cmd_preflight() {
     else _fail "JIRA_ENABLED=true but there is no .jira-project in the repo (the ticket skill needs it)"; fi
   else
     dim "  ---  JIRA_ENABLED=false — the TICKET phase will be skipped"
+  fi
+
+  # --- third-party skills the phases boot ---
+  # Asked for BY CONFIG, not by a fixed list: a project with no interface never boots the QA
+  # skills, and JIRA off means the TICKET phase is skipped entirely. Warning about a skill the
+  # pipeline will not use is how an operator learns to skip reading warnings.
+  local sk skills_root missing_skills=""
+  skills_root="${SDD_SKILLS_ROOT:-$HOME/.claude}"
+  local -a wanted=(codereview)   # REVIEW runs in every mission
+  [ "$JIRA_ENABLED" = "true" ] && wanted+=(ticket)
+  { [ -n "$E2E_CMD" ] || [ -n "$APP_URL" ]; } && wanted+=(qa-report qa-execution)
+  for sk in "${wanted[@]}"; do
+    skill_findable "$sk" || missing_skills="$missing_skills $sk"
+  done
+  if [ -z "$missing_skills" ]; then
+    ok "third-party skills present (${wanted[*]})"
+  else
+    warn "skills not found:$missing_skills
+        Looked in $skills_root/skills/, $skills_root/plugins/cache/ and
+        $REPO_ROOT/.claude/skills/ — those roots are a convention, so this is a warning and not a
+        failure. The phase boots the skill by name anyway: if it really is absent, the session
+        improvises and spends the phase budget producing something no gate can read."
   fi
 
   # --- target repo plugins ---
