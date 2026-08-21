@@ -286,7 +286,12 @@ checkpoint_rows() {
       }
       if (n < 6) next
       for (i = 2; i <= 6; i++) { gsub(/^[ \t]+|[ \t]+$/, "", f[i]) }
-      if (f[2] == "ID" || f[2] ~ /^-+$/ || f[2] == "") next
+      # `:?-+:?` and not `-+`: GFM spells column alignment with colons on the separator row, and
+      # prettier and markdownlint WRITE them (`|:---|:---:|`). Matched against the bare dashes only,
+      # the separator stopped being skipped and became a row whose Status is `:---:` — outside the
+      # enum — so gate_EXEC refused a checkpoint with every increment done. The same three-character
+      # blindness lives in gate_REVIEW and gate_DOCS; all three carry this regex.
+      if (f[2] == "ID" || f[2] ~ /^:?-+:?$/ || f[2] == "") next
       if (f[5] == "Status") next
       printf "%s\t%s\t%s\t%s\t%s\n", f[2], f[3], f[4], f[5], f[6]
     }' "$file"
@@ -652,7 +657,10 @@ gate_REVIEW() {
         gsub(/\*/, "", crit);  gsub(/^[ \t]+|[ \t]+$/, "", crit)
         gsub(/\*/, "", grade); gsub(/^[ \t]+|[ \t]+$/, "", grade)
         gsub(/[*`]/, "", rat); gsub(/^[ \t]+|[ \t]+$/, "", rat)
-        if (crit == "Criterion" || crit ~ /^-+$/ || crit == "") next
+        # `:?-+:?` — a formatter-aligned separator (`|:---|:---:|`) is a separator, not a criterion.
+        # Read as a row it graded `:` with `---`, and REVIEW looped to REVIEW_MAX_ITER with a reason
+        # naming no criterion anybody wrote. Same regex in checkpoint_rows and gate_DOCS.
+        if (crit == "Criterion" || crit ~ /^:?-+:?$/ || crit == "") next
         rows++
         # Grade first, on purpose: a row that is both off-A and unjustified is reported by its
         # grade, which is the older and more specific message.
@@ -727,7 +735,10 @@ gate_DOCS() {
       }
       col && /^[ \t]*\|/ {
         cell = $col; gsub(/^[ \t]+|[ \t]+$/, "", cell)
-        if (cell ~ /^-+$/ || cell == "") next
+        # `:?-+:?` — with a formatter-aligned separator (`|:---:|`) the Status column of the
+        # separator row read as a pending Status, and gate_DOCS failed a drift checklist with
+        # nothing pending in it. Same regex in checkpoint_rows and gate_REVIEW.
+        if (cell ~ /^:?-+:?$/ || cell == "") next
         if (cell == "✅" || cell == "n/a" || cell == "N/A") next
         print cell; exit
       }

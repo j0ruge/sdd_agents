@@ -155,6 +155,23 @@ mut_EXEC_escaped_pipe_blind() {
   sed -i '/^checkpoint_rows()/,/^}/ s|if (n > 0 && escaped_pipe(f\[n\]))|if (0)|' "$1"
 }
 
+# The three faces of the same three-character blindness: the separator-row skip goes back to the
+# bare dashes, so a GFM alignment row (`|:---|:---:|`, what prettier and markdownlint write) stops
+# being skipped and becomes DATA. One mutant per gate, because each one fails differently and a
+# single one would leave the other two enforcement points free to rot: EXEC reads `:---:` as a
+# status, REVIEW grades a criterion called `:`, DOCS reads `:---:` as a pending Status.
+mut_EXEC_alignment_colon_blind() {
+  sed -i '/^checkpoint_rows()/,/^}/ s@f\[2\] ~ /\^:?-+:?\$/@f[2] ~ /^-+$/@' "$1"
+}
+
+mut_REVIEW_alignment_colon_blind() {
+  sed -i '/^gate_REVIEW()/,/^}/ s@crit ~ /\^:?-+:?\$/@crit ~ /^-+$/@' "$1"
+}
+
+mut_DOCS_alignment_colon_blind() {
+  sed -i '/^gate_DOCS()/,/^}/ s@cell ~ /\^:?-+:?\$/@cell ~ /^-+$/@' "$1"
+}
+
 mut_EXEC_ignores_TEST_CMD() { # discards the suite's rc — the gate stops measuring TEST_CMD
   sed -i 's|.*run_check_cmd "\$TEST_CMD" "gate-exec-test".*|  if false; then|' "$1"
 }
@@ -1457,6 +1474,9 @@ CATALOG=(
   EXEC_orphan_commit
   EXEC_ignores_TEST_CMD
   EXEC_escaped_pipe_blind
+  EXEC_alignment_colon_blind
+  REVIEW_alignment_colon_blind
+  DOCS_alignment_colon_blind
   QA_status_line_start
   QA_status_enum_loose
   QA_bug_enum_loose

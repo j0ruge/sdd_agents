@@ -320,6 +320,20 @@ else
 fi
 mv "$MDIR/checkpoint.pipe.bak" "$MDIR/checkpoint.md"
 
+# The same formatter, on the checkpoint. `|:---|:---:|` is what prettier and markdownlint write,
+# and a separator cell that starts or ends with a colon is not matched by the `/^-+$/` skip: the
+# separator becomes a ROW, its ID is `:---` and its Status is `:---:` — outside the enum. gate_EXEC
+# then refuses the phase with "invalid status" on a checkpoint whose every increment is done.
+cp "$MDIR/checkpoint.md" "$MDIR/checkpoint.colon.bak"
+sed -i 's@^|---|---|---|---|---|$@|:---|:---|:---:|:---:|:---|@' "$MDIR/checkpoint.md"
+if grep -qF '|:---|:---|:---:|:---:|:---|' "$MDIR/checkpoint.md"; then
+  pass "fixture: the checkpoint separator really carries alignment colons"
+else
+  fail "alignment-colon fixture" "a separator row with colons" "$(sed -n '2p' "$MDIR/checkpoint.md")"
+fi
+assert_phase "an alignment-colon separator is not an increment" "QA"
+mv "$MDIR/checkpoint.colon.bak" "$MDIR/checkpoint.md"
+
 # --- QA --------------------------------------------------------------------
 # The QA gate has TWO contracts, because there are two kinds of project.
 #
@@ -542,6 +556,31 @@ sed -i 's/^| Security | C |.*/| Security | A | clean |/;s/^| \*\*Overall\*\* .*/
   "$MDIR/40-review-r10.md"
 git add -A && git commit -qm "chore: review"
 assert_phase "last review all Grade A, suite green, clean tree" "DOCS"
+
+# The separator row prettier and markdownlint actually write. GFM spells column alignment with
+# colons — `|:---|:---:|---:|` — and the `/^-+$/` skip does not match a cell that starts or ends
+# with one, so the separator became a criterion: `: = ---` , a grade no reviewer wrote, on a
+# criterion named `:`. REVIEW then loops to its ceiling with a GATE_WHY naming no criterion at all,
+# and every round costs a session. Nothing in the kit writes these colons — a formatter run over
+# the target repo does, which is why no fixture had them until now.
+cat > "$MDIR/40-review-r11.md" <<'EOF'
+# Review r11
+### Overall Grade
+
+| Criterion | Grade | Rationale |
+|:----------|:-----:|:----------|
+| Code Quality (Zen) | A | clean |
+| Type Safety | A | clean |
+| Error Handling | A | clean |
+| Security | A | clean |
+| Performance | A | clean |
+| Test Coverage | A | clean |
+| Documentation | A | clean |
+| **Overall** | **A** | nothing left open |
+EOF
+git add -A && git commit -qm "chore: review r11, formatter-aligned"
+assert_phase "an alignment-colon separator row is not a criterion" "DOCS"
+assert_why_absent "and the reason does not name the separator as a criterion" "REVIEW" "^:|= ---|:---"
 
 # --- the Rationale column ---------------------------------------------------
 #
@@ -840,6 +879,15 @@ printf '# Docs\n\ndrift checklist\n\n| Area | Doc | Status | Evidence |\n|---|--
 git add -A && git commit -qm "chore: docs"
 assert_phase "drift checklist complete" "PR"
 assert_why   "PR reports the missing 50-pr.md" "PR" "50-pr.md"
+
+# Same formatter, other gate. Here the alignment colons land in the Status COLUMN of the separator
+# row, so the skip lets `:---:` through as a Status value and gate_DOCS fails a drift checklist
+# with nothing pending in it — the phase refused for a row the author never wrote.
+printf '# Docs\n\ndrift checklist\n\n| Area | Doc | Status | Evidence |\n|:------|:----|:------:|:---------|\n| runner | README | ✅ | commit abc1234 |\n| libs | — | n/a | internal refactor |\n\nFindings recorded in TODO.md for this mission.\n' \
+  > "$MDIR/45-docs.md"
+git add -A && git commit -qm "chore: docs, formatter-aligned"
+assert_phase "a formatter-aligned drift checklist is still complete" "PR"
+assert_why_absent "gate_DOCS does not read the separator row as a Status" "DOCS" ":---"
 
 # --- the mutation catalogue's stamp -----------------------------------------
 #
