@@ -6,13 +6,13 @@ persona: Priya
 journey: J-target-repo-ships
 expected: In a repo with no tests/check-mutation.sh, no gate message mentions a stamp, a catalogue, or sdd health
 entry_points: sdd run <mission> (in a repo that is not the kit)
-qa_status: untested
+qa_status: pass
 bug_ids: 
 fix_status: 
 retest_status:
 fix_commits:
 evidence:
-last_report: 
+last_report: ../reports/2026-08-21-missao-porteira.md
 overlaps: 
 ---
 

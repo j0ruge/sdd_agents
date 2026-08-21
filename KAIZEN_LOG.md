@@ -458,6 +458,11 @@ a direção no `TODO.md`.
   seria rótulo sem artefato, exatamente o que o kit existe para proibir. O item segue aberto com o
   motivo escrito nele, e fechá-lo exige responder se o juiz pode pesar linha de outro projeto —
   possível **ADR 0004**, e é ele que destrava o I13.4.
+  - *Nota corretiva (2026-08-21, missão `20260820-missao-porteira`):* o número **0004** foi
+    consumido depois disto pela decisão do carimbo de mutação
+    ([`docs/adr/0004`](docs/adr/0004-mutation-catalogue-owner-stamp-not-ci.md)). A ADR do eixo do
+    juiz segue **adiada, sem número**, para depois do piloto — o registro acima fica como está,
+    porque é histórico.
 - **Um marcador de fechamento estava invisível para a triagem.** O `RESOLVIDO por` do item do eixo
   degenerado tinha quebra de linha entre as duas palavras, e a triagem do kaizen grepa a frase
   inteira: item fechado que a próxima sessão leria como aberto. Reencapado nesta fase. A lição é a

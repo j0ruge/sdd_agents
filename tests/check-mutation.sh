@@ -134,6 +134,16 @@ mut_PLAN_remedy_unnamed() {
   sed -i '/00-missao.md has/ s@: run .sdd approve \$MISSION.@@' "$1"
 }
 
+# The gate stops checking that the branch born in this phase reached the artifact the runner reads.
+# `ensure_mission_branch` looks at `branch:` in 00-missao.md and nowhere else, so a name recorded
+# only in 10-ticket.md leaves every later phase running on whatever branch the human was standing
+# on — the SQ-97 shape, five phases into another PR's branch. The fixture carries both worlds
+# (placeholder ⇒ refuse, written back ⇒ pass), so a gate that simply refused every TICKET would
+# not survive either.
+mut_TICKET_branch_writeback_blind() {
+  sed -i '/^gate_TICKET()/,/^}/ s@tbranch="\$(frontmatter "\$t" branch)"@tbranch=""@' "$1"
+}
+
 mut_TICKET_no_sprint() {      # stops requiring `sprint:` — a card in the backlog is invisible work
   sed -i "s|.*if ! grep -qiE '\^sprint:.*|  if false; then|" "$1"
 }
@@ -144,6 +154,42 @@ mut_EXEC_done_without_commit() {  # accepts a 'done' increment with commit '—'
 
 mut_EXEC_orphan_commit() {    # back to `cat-file -e`: a loose object passes as a commit in history
   sed -i 's|.*git merge-base --is-ancestor.*|        if false; then|' "$1"
+}
+
+# The checkpoint parser goes back to a raw split on "|". A Check cell carrying the GFM escape `\|`
+# shifts every column after it one to the left, so Status is read out of the CHECK cell and an
+# increment written `done` is refused as `invalid status` — a phase blocked for a reason nobody
+# wrote. Anchored on the FUNCTION range, which is what keeps it distinct from the
+# `mut_REVIEW_escaped_pipe*` pair sabotaging the deliberately duplicated copy in gate_REVIEW.
+mut_EXEC_escaped_pipe_blind() {
+  sed -i '/^checkpoint_rows()/,/^}/ s|if (n > 0 && escaped_pipe(f\[n\]))|if (0)|' "$1"
+}
+
+# The three faces of the same three-character blindness: the separator-row skip goes back to the
+# bare dashes, so a GFM alignment row (`|:---|:---:|`, what prettier and markdownlint write) stops
+# being skipped and becomes DATA. One mutant per gate, because each one fails differently and a
+# single one would leave the other two enforcement points free to rot: EXEC reads `:---:` as a
+# status, REVIEW grades a criterion called `:`, DOCS reads `:---:` as a pending Status.
+mut_EXEC_alignment_colon_blind() {
+  sed -i '/^checkpoint_rows()/,/^}/ s@f\[2\] ~ /\^:?-+:?\$/@f[2] ~ /^-+$/@' "$1"
+}
+
+mut_REVIEW_alignment_colon_blind() {
+  sed -i '/^gate_REVIEW()/,/^}/ s@crit ~ /\^:?-+:?\$/@crit ~ /^-+$/@' "$1"
+}
+
+mut_DOCS_alignment_colon_blind() {
+  sed -i '/^gate_DOCS()/,/^}/ s@cell ~ /\^:?-+:?\$/@cell ~ /^-+$/@' "$1"
+}
+
+# The gate stops telling "the suite is red" from "the suite is red over work nobody committed", so
+# cmd_run's second Jidoka never fires and the runner opens another EXEC session against the same
+# uncommitted tree — about US$ 25 a lap, with no end condition, because state_fingerprint does not
+# read the working tree and `attempts` restarts on every `sdd run`. `:` and not the whole branch, so
+# the GATE_WHY and the `return 1` stay: a mutant that also stopped failing would be caught by the
+# older red-suite assertion instead, and would score this point for the wrong reason.
+mut_EXEC_dirty_tree_as_red() {
+  sed -i '/^gate_EXEC()/,/^}/ s@^      GATE_EXEC_DIRTY=1$@      :@' "$1"
 }
 
 mut_EXEC_ignores_TEST_CMD() { # discards the suite's rc — the gate stops measuring TEST_CMD
@@ -298,9 +344,33 @@ mut_RUN_inverted_journal() {
 
 # Not a gate: the target repo declares OUTPUT_LANG and the runner swallows the request in silence.
 # It is the typical failure mode of a config key — the key exists, the schema promises it, and
-# nobody reads it (the LINT_CMD/BUILD_CMD/DEV_UP_CMD family, frozen in health-baseline).
+# nobody reads it (`E2E_DIR`, frozen in health-baseline; the five keys that promised a lint, a
+# build and a `docker compose up` were removed rather than frozen).
 mut_RUN_ignores_output_lang() {
   sed -i 's|.*if \[ -n "\$OUTPUT_LANG" \]; then.*|  if false; then|' "$1"
+}
+
+# The REVIEW ceiling goes back to living in memory only. `attempts` is a `local -A` of cmd_run, born
+# with the process, so `REVIEW_MAX_ITER` caps one `sdd run` and the next one hands out a fresh set
+# of rounds — no ceiling at all across invocations, on the most expensive phase in the kit. The
+# helper answering 0 for every mission is the exact shape of that regression: present, called, and
+# blind. It sabotages the ONE definition rather than the call site, so a second reader added later
+# is covered by the same mutant.
+mut_RUN_review_ceiling_in_memory() {
+  sed -i '/^review_rounds_on_disk()/,/^}/ s@^  last="\$(latest_matching .*)"$@  last=""@' "$1"
+}
+
+# Not a gate: the per-phase damage cap collapses back into one number. Every session gets the
+# global, so REVIEW — the phase that costs the most — dies mid-round on the ceiling meant for a PR
+# body, and the money is spent with nothing on disk. The failure mode is the resolver that exists,
+# is called, and answers the same thing whatever it is asked, which no assertion reading a single
+# phase can tell apart from a working one. Anchored on the FUNCTION range, so a case arm that
+# moves does not rot it.
+mut_RUN_budget_single_ceiling() {
+  # `@` as the delimiter, not `|`: with `s|…|…|` the alternation `\|` reads as an escaped
+  # DELIMITER, the pattern matches nothing, and the sabotage lands nowhere. Caught by the
+  # `cmp` guard in run_mutant (rc 90) — the reason that guard exists.
+  sed -i '/^phase_budget_usd()/,/^}/ s@"\$BUDGET_\(EXEC\|QA\|REVIEW\)_USD"@"$BUDGET_PER_PHASE_USD"@' "$1"
 }
 
 # Not a gate: the ledger the kaizen judge reads. The projection starts writing, and rows for
@@ -814,6 +884,14 @@ mut_PRE_agent_presence_only() {
   sed -i 's@elif ! cmp -s "$a" "$copy"; then@elif false \&\& ! cmp -s "$a" "$copy"; then@' "$1"
 }
 
+# The preflight stops asking whether TEST_CMD would run anything at all. A `true` left behind while
+# the config was being wired up then passes preflight, and after it gate_EXEC, gate_QA and
+# gate_REVIEW pass instantly, in every mission, for ever — each phase certifying itself against a
+# run that never happened, through the one key the whole pipeline trusts.
+mut_PRE_testcmd_noop_blind() {
+  sed -i '/^cmd_preflight()/,/^}/ s@if test_cmd_looks_noop "\$TEST_CMD"; then@if false; then@' "$1"
+}
+
 # Not a gate: the base branch warning goes back to being decoration. The body is emptied while the
 # function keeps existing and keeps returning 0, so every call site stays syntactically valid and
 # nothing else about the runs changes — which is exactly the shape of the defect this closes, a
@@ -1316,6 +1394,15 @@ mut_KAIZEN_reminder_dead() {
   sed -i 's|^  dim "  autonomy series: |  : "  autonomy series: |' "$1"
 }
 
+# The reminder goes back to believing every repo is the kit, so a target project is sent to
+# `sdd kaizen` in the kit — a judge that reads a different set of numbers entirely. The human opens
+# the kit, runs the command, and is told something about the kit's own missions that has nothing to
+# do with the run that just finished. The pair of assertions it dies on is differential, so a
+# mutant that forced the OTHER branch instead would be caught by the same fixture.
+mut_KAIZEN_reminder_wrong_repo() {
+  sed -i '/^kaizen_reminder()/,/^}/ s@if \[ -n "\$kit_root" \] && \[ "\$kit_root" = "\$REPO_ROOT" \]; then@if true; then@' "$1"
+}
+
 # `sdd kaizen` stops being idempotent: with the verdict already on disk the gate passes, the outcome
 # is repeated — and then the command falls THROUGH and opens a session anyway. Re-running it to
 # re-read a verdict is the ordinary human move, and it would quietly cost an opus session every
@@ -1378,6 +1465,16 @@ mut_RUN_blocked_counts_laps() {
   sed -i 's@${sessions\[$phase\]:-0} session(s) without satisfying@${attempts[$phase]} session(s) without satisfying@' "$1"
 }
 
+# The sentence that makes the blocked headline true goes back to the OTHER channel. `bad` writes to
+# stderr and `dim` to stdout, so on `dim` the escalation arrived in halves: `2>/dev/null` kept the
+# explanation and lost `BLOCKED in REVIEW`, `>file` kept `0 session(s)` and lost the sentence saying
+# why that zero is correct. It restores the historical defect exactly — the line is still PRINTED,
+# and still says the same words, which is what makes it invisible to every assertion in the suite
+# that merges the two channels with `2>&1`. Only the stderr-alone pair in check-gates.sh dies here.
+mut_RUN_ceiling_note_other_channel() {
+  sed -i 's@\[ -n "$ceiling_note" \] && bad "  $ceiling_note"@[ -n "$ceiling_note" ] \&\& dim "  $ceiling_note"@' "$1"
+}
+
 # The exclusion accounting goes back to one blank line between every two of its lines: a paragraph
 # about where the rows went, printed as four unrelated asides. Anchored on the `join` of the array
 # that collects them — the token that only exists because the four strings are ONE output now.
@@ -1430,9 +1527,15 @@ CATALOG=(
   PLAN_kaizen_born_blind
   PLAN_remedy_unnamed
   TICKET_no_sprint
+  TICKET_branch_writeback_blind
   EXEC_done_without_commit
   EXEC_orphan_commit
   EXEC_ignores_TEST_CMD
+  EXEC_escaped_pipe_blind
+  EXEC_alignment_colon_blind
+  EXEC_dirty_tree_as_red
+  REVIEW_alignment_colon_blind
+  DOCS_alignment_colon_blind
   QA_status_line_start
   QA_status_enum_loose
   QA_bug_enum_loose
@@ -1455,6 +1558,8 @@ CATALOG=(
   HEALTH_stamp_tree_blind
   RUN_inverted_journal
   RUN_ignores_output_lang
+  RUN_budget_single_ceiling
+  RUN_review_ceiling_in_memory
   RUN_autonomy_ignores_dry_run
   RUN_autonomy_null_moved_as_zero
   RUN_moved_never_true
@@ -1485,6 +1590,7 @@ CATALOG=(
   RUN_entrypoint_unguarded
   RUN_ledger_no_repo_filter
   PRE_agent_presence_only
+  PRE_testcmd_noop_blind
   RUN_base_branch_warn_dead
   RUN_approve_writes_auto
   RUN_approve_bails_on_kaizen_born
@@ -1535,11 +1641,13 @@ CATALOG=(
   RETRY_moved_never_true
   KAIZEN_moved_never_true
   KAIZEN_reminder_dead
+  KAIZEN_reminder_wrong_repo
   KAIZEN_already_judged_spends
   RUN_degraded_journal_dropped
   AUTONOMY_is_escalation_blind
   KAIZEN_series_escalations_dropped
   RUN_blocked_counts_laps
+  RUN_ceiling_note_other_channel
   AUTONOMY_exclusions_split
   AUTONOMY_exclusions_glued
   KAIZEN_axis_note_own_floor

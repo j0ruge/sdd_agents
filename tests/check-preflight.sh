@@ -108,7 +108,7 @@ else fail "the created config is not empty" "a non-zero .sdd/config.sh" \
 cat > .sdd/config.sh <<'EOF'
 PROJECT_NAME="fixture"
 DEFAULT_BRANCH="main"
-TEST_CMD="true"
+TEST_CMD="npm test"
 E2E_CMD=""
 HANDOFF_DIR="docs/handoffs"
 QA_DOCS_PATH="docs/qa"
@@ -293,6 +293,156 @@ assert_lacks "the guard fires before sed does" "sed:" "$out"
 if [ ! -e "$FIX/target/.sdd/config.sh" ]; then pass "no empty config is left behind"
 else fail "no empty config is left behind" "no .sdd/config.sh at all" \
        "$(wc -c < "$FIX/target/.sdd/config.sh") byte(s) on disk"; fi
+
+# --- a TEST_CMD that runs nothing -------------------------------------------
+# `TEST_CMD` is the EXEC gate and half the REVIEW gate, and the preflight only ever refused it
+# EMPTY or literally `TODO`. A value that exits 0 having executed nothing is worse than empty: it
+# passes every gate, in every mission, for ever, and each phase certifies itself against a run that
+# never happened — a label reached through the one key the whole pipeline trusts. `sdd health`
+# already refused one spelling of this (`--list`) but only for the KIT's own suite; every target
+# repo was on its own.
+#
+# The forms below are the ones people actually write: the placeholder left behind after wiring the
+# config up, and the "list the tests without running them" flag of three ecosystems.
+echo "== a TEST_CMD that runs nothing =="
+cd "$FIX" || exit 1
+cp .sdd/config.sh .sdd/config.sh.bak
+
+noop_case() { # noop_case <TEST_CMD> <description>
+  sed -i "s|^TEST_CMD=.*|TEST_CMD=\"$1\"|" .sdd/config.sh
+  local o; o="$( "$SDD" preflight 2>&1 )"
+  if grep -qF "runs nothing" <<< "$o"; then pass "$2"
+  else fail "$2" "a preflight refusing TEST_CMD=$1" "$(grep -m1 'TEST_CMD' <<< "$o" || echo 'no TEST_CMD line at all')"; fi
+}
+
+noop_case 'true'                'preflight fails a no-op TEST_CMD'
+noop_case ':'                   'preflight fails TEST_CMD=":"'
+noop_case 'echo ok'             'preflight fails a TEST_CMD that only echoes'
+noop_case 'npm test -- --list'  'preflight fails a TEST_CMD carrying --list'
+noop_case 'pytest --collect-only' 'preflight fails a TEST_CMD that only collects'
+
+# The other half, and the half that keeps the rule alive: a rule that fires on correct config is a
+# rule the next author deletes. `--listen-port` is the near miss the whole-argument padding exists
+# for, and `echo` inside a longer command is not a command that only echoes.
+ok_case() { # ok_case <TEST_CMD> <description>
+  sed -i "s|^TEST_CMD=.*|TEST_CMD=\"$1\"|" .sdd/config.sh
+  local o; o="$( "$SDD" preflight 2>&1 )"
+  if grep -qF "runs nothing" <<< "$o"; then
+    fail "$2" "no refusal for TEST_CMD=$1" "$(grep -m1 'runs nothing' <<< "$o")"
+  else pass "$2"; fi
+}
+
+ok_case 'npm test'                       'a real TEST_CMD is not accused'
+ok_case 'tests/run-all.sh'               'the kit own suite is not accused'
+ok_case './run.sh --listen-port 8080'    'a flag that merely starts with --list is not accused'
+ok_case 'make test && echo done'         'an echo that is not the command is not accused'
+
+mv .sdd/config.sh.bak .sdd/config.sh
+
+# --- third-party skills the phases depend on --------------------------------
+# Three phases are driven by skills the kit does not ship: TICKET boots `ticket`, the two QA
+# sub-steps boot `qa-report` and `qa-execution`, and REVIEW loads `codereview`. A missing one is
+# not a broken kit — it is a session that boots, finds no skill, improvises, and burns the phase
+# budget answering something nobody can gate.
+#
+# WARN and never fail: the search roots are a CONVENTION (`~/.claude/skills/`, the plugin cache,
+# the project's own `.claude/skills/`), not a contract the kit can enforce, and a rule that fails on
+# a heuristic is the rule the next author deletes. Same call the ddd/kaizen plugin check already
+# makes, one screen up in the same command.
+#
+# The root is injectable so this is testable at all: with SDD_SKILLS_ROOT pointing at an empty
+# directory every skill is missing, and pointing at one that holds them, none is.
+echo "== third-party skills =="
+cd "$FIX" || exit 1
+EMPTY_SKILLS="$FIX/.skills-empty"
+FULL_SKILLS="$FIX/.skills-full"
+mkdir -p "$EMPTY_SKILLS" "$FULL_SKILLS/skills/ticket" "$FULL_SKILLS/skills/qa-report" \
+         "$FULL_SKILLS/skills/qa-execution" "$FULL_SKILLS/skills/codereview"
+for s in ticket qa-report qa-execution codereview; do
+  printf -- '---\nname: %s\n---\n' "$s" > "$FULL_SKILLS/skills/$s/SKILL.md"
+done
+
+# JIRA on and an interface declared, so all four skills are in play.
+cp .sdd/config.sh .sdd/config.sh.bak
+sed -i 's|^JIRA_ENABLED=false|JIRA_ENABLED=true|; s|^E2E_CMD=""|E2E_CMD="npm run e2e"|' .sdd/config.sh
+printf 'PROJECT=FX\nBOARD=1\n' > .jira-project
+
+out_noskills="$( SDD_SKILLS_ROOT="$EMPTY_SKILLS" "$SDD" preflight 2>&1 )"
+assert_has "preflight warns about a ticket skill it cannot find" "ticket" "$out_noskills"
+assert_has "the warning names where it looked" "$EMPTY_SKILLS" "$out_noskills"
+assert_has "the warning says what the absence costs" "boots the skill" "$out_noskills"
+
+# The differential, one root apart: the SAME config with the skills present says nothing. Without
+# it, a preflight that printed the warning unconditionally would satisfy every assertion above.
+out_skills="$( SDD_SKILLS_ROOT="$FULL_SKILLS" "$SDD" preflight 2>&1 )"
+assert_lacks "with the skills installed the warning is silent" "boots the skill" "$out_skills"
+
+# And the trigger is the CONFIG, not the calendar: with JIRA off, `ticket` is not asked for.
+sed -i 's|^JIRA_ENABLED=true|JIRA_ENABLED=false|; s|^E2E_CMD="npm run e2e"|E2E_CMD=""|' .sdd/config.sh
+out_nojira="$( SDD_SKILLS_ROOT="$EMPTY_SKILLS" "$SDD" preflight 2>&1 )"
+assert_lacks "with JIRA off the ticket skill is not asked for" "ticket" "$out_nojira"
+assert_lacks "with no interface the qa skills are not asked for" "qa-report" "$out_nojira"
+# codereview is asked for in every project: REVIEW runs in every mission.
+assert_has "codereview is asked for whatever the config says" "codereview" "$out_nojira"
+
+rm -f .jira-project
+mv .sdd/config.sh.bak .sdd/config.sh
+
+# --- install seeds the tree the runner cannot work without ------------------
+# `sdd install` made `.sdd/` and `.claude/agents/` and stopped. `resolve_mission` dies on the FIRST
+# command a new user types — "docs/handoffs/ does not exist in the target repo" — and `TODO_FILE`,
+# where principle 5 sends every out-of-scope finding, is not there either. Both are named in the
+# config the installer just wrote, so the installer is where they belong.
+#
+# Read the way check 2b of `sdd health` reads TEST_CMD: the config is SOURCED in a subshell, so the
+# value seeded is the one `load_config` will hand the runner after expansion, not a grep of the
+# text.
+echo "== install seeds HANDOFF_DIR and the findings file =="
+SEED="$FIX/seed"
+mkdir -p "$SEED"
+( cd "$SEED" && git init -q -b main \
+  && git config user.email "fixture@example.com" && git config user.name "Fixture" \
+  && echo content > file.txt && git add -A && git commit -qm "init" ) >/dev/null 2>&1
+seed_out="$( cd "$SEED" && "$SDD" install 2>&1 )"
+
+assert_has "install seeds HANDOFF_DIR and the findings file" "docs/handoffs/" "$seed_out"
+if [ -d "$SEED/docs/handoffs" ]; then pass "the handoff root exists on disk after install"
+else fail "the handoff root exists on disk after install" "a docs/handoffs/ directory" "absent"; fi
+if [ -s "$SEED/TODO.md" ]; then pass "the findings file is seeded, and not empty"
+else fail "the findings file is seeded, and not empty" "a non-empty TODO.md" \
+       "$(wc -c < "$SEED/TODO.md" 2>/dev/null || echo 'no file') byte(s)"; fi
+
+# A second install must not overwrite what the repo already has — the installer is idempotent
+# everywhere else, and a TODO.md flattened on the second run would take real findings with it.
+printf -- '- [ ] a real finding — `x:1` — it matters — found by `x` in mission `m` (2026-01-01)\n' \
+  >> "$SEED/TODO.md"
+before_todo="$(md5sum < "$SEED/TODO.md")"
+( cd "$SEED" && "$SDD" install >/dev/null 2>&1 )
+if [ "$before_todo" = "$(md5sum < "$SEED/TODO.md")" ]; then
+  pass "a second install leaves an existing findings file untouched"
+else
+  fail "a second install leaves an existing findings file untouched" "the same TODO.md" "rewritten"
+fi
+
+# --- the autodetect cascade: first match wins -------------------------------
+# Four `if`s with no `elif`: every one of them ran, so the LAST match won whatever the repo is. A
+# Node repo carrying a `go.mod` for a sidecar tool was installed with `go test ./...` as the suite
+# the gates run — the wrong suite, chosen in silence, in the one key the whole pipeline trusts.
+echo "== the autodetect cascade =="
+MULTI="$FIX/multi"
+mkdir -p "$MULTI"
+( cd "$MULTI" && git init -q -b main \
+  && git config user.email "fixture@example.com" && git config user.name "Fixture" \
+  && printf '{}\n' > package.json && printf 'module x\n' > go.mod \
+  && git add -A && git commit -qm "init" ) >/dev/null 2>&1
+( cd "$MULTI" && "$SDD" install >/dev/null 2>&1 )
+multi_test_cmd="$( . "$MULTI/.sdd/config.sh" >/dev/null 2>&1; printf '%s' "${TEST_CMD:-}" )" || true
+if [ "$multi_test_cmd" = "npm test" ]; then
+  pass "with two manifests the first match wins (package.json → npm test)"
+else
+  fail "with two manifests the first match wins (package.json → npm test)" \
+       "npm test" "$multi_test_cmd"
+fi
 
 # ---------------------------------------------------------------------------
 echo

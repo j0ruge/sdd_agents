@@ -96,14 +96,18 @@ load_config() {
   source "$CONFIG_FILE"
 
   : "${PROJECT_NAME:=}"; : "${DEFAULT_BRANCH:=}"; : "${TEST_CMD:=}"
-  : "${E2E_CMD:=}"; : "${E2E_DIR:=e2e}"; : "${LINT_CMD:=}"; : "${BUILD_CMD:=}"
-  : "${APP_URL:=}"; : "${DEV_UP_CMD:=}"; : "${DEV_READY_CMD:=}"; : "${DEV_READY_TIMEOUT:=90}"
+  : "${E2E_CMD:=}"; : "${E2E_DIR:=e2e}"; : "${APP_URL:=}"
   : "${HANDOFF_DIR:=docs/handoffs}"; : "${QA_DOCS_PATH:=docs/qa}"; : "${TODO_FILE:=TODO.md}"
   : "${MODEL_EXEC:=opus}"; : "${MODEL_QA:=opus}"; : "${MODEL_REVIEW:=opus}"
   : "${MODEL_DOCS:=opus}"; : "${MODEL_PUBLISH:=sonnet}"; : "${MODEL_TICKET:=sonnet}"
   : "${MODEL_KAIZEN:=opus}"
   : "${QA_MAX_ITER:=3}"; : "${REVIEW_MAX_ITER:=3}"; : "${EXEC_MAX_RETRY:=1}"
   : "${BUDGET_PER_PHASE_USD:=15}"; : "${PUBLISH_ON_REVIEW_BLOCKED:=off}"
+  # The cap is per phase because the phases do not cost the same. One number was either too low
+  # for REVIEW — the session dies mid-round and the money is spent with nothing on disk — or too
+  # high for PR, where it stopped capping anything. The global stays for the cheap phases; raising
+  # it does NOT raise these three, which is the trade-off config/schema.md declares.
+  : "${BUDGET_EXEC_USD:=25}"; : "${BUDGET_QA_USD:=25}"; : "${BUDGET_REVIEW_USD:=40}"
   : "${PERMISSION_MODE:=acceptEdits}"; : "${JIRA_ENABLED:=false}"
   # `acceptEdits` auto-approves FILE EDITS, not `Bash`. Without this allowlist the phase session
   # cannot run TEST_CMD, cannot run `git add`/`git commit`, and the EXEC phase is unsatisfiable
@@ -251,16 +255,45 @@ frontmatter_write() {
 
 # Checkpoint table rows as "ID<TAB>title<TAB>check<TAB>status<TAB>commit".
 # Skips the header, the separator, and any line that does not have the 5 columns.
+#
+# The `escaped_pipe`/rejoin pair below is DUPLICATED from gate_REVIEW (same file, the `### Overall
+# Grade` reader) on purpose, and the duplication is cheaper than the extraction: the two programs
+# are anchored separately by the mutation catalogue (`mut_REVIEW_escaped_pipe*`,
+# `mut_EXEC_escaped_pipe_blind`), and a shared helper would collapse both anchors into one — the
+# class the mutation stamp caught between PRs #12 and #13. Change one, change the other, and check
+# the neighbour's comment says so too.
 checkpoint_rows() {
   local file="$MISSION_DIR/checkpoint.md"
   [ -f "$file" ] || return 0
   awk -F'|' '
+    # PARITY, not "does this field end in a backslash": `\\` is how GFM spells a literal backslash,
+    # so a cell ending in one sits against a REAL delimiter. An ODD run of trailing backslashes
+    # escapes the pipe; an EVEN one does not. ASCII only — mawk is byte-oriented and a negated
+    # class with a multibyte character would negate its BYTES.
+    function escaped_pipe(s,   t) { t = s; sub(/\\+$/, "", t); return (length(s) - length(t)) % 2 }
     /^[ \t]*\|/ {
-      if (NF < 6) next
-      for (i = 2; i <= 6; i++) { gsub(/^[ \t]+|[ \t]+$/, "", $i) }
-      if ($2 == "ID" || $2 ~ /^-+$/ || $2 == "") next
-      if ($5 == "Status") next
-      printf "%s\t%s\t%s\t%s\t%s\n", $2, $3, $4, $5, $6
+      # A raw split on "|" cuts a Check cell at its `\|` and shifts every column after it one to
+      # the left, so Status is read out of the CHECK cell: an increment written `done` was reported
+      # as `invalid status`, naming a status the author never wrote, and gate_EXEC refused the
+      # phase for a reason that is not true. Rejoined here so every column downstream sees the cell
+      # the author wrote. `-F` stays because the escape hatch below still reads $0.
+      delete f
+      rawn = split($0, raw, "|")
+      n = 0
+      for (i = 1; i <= rawn; i++) {
+        if (n > 0 && escaped_pipe(f[n])) { sub(/\\$/, "|", f[n]); f[n] = f[n] raw[i] }
+        else { f[++n] = raw[i] }
+      }
+      if (n < 6) next
+      for (i = 2; i <= 6; i++) { gsub(/^[ \t]+|[ \t]+$/, "", f[i]) }
+      # `:?-+:?` and not `-+`: GFM spells column alignment with colons on the separator row, and
+      # prettier and markdownlint WRITE them (`|:---|:---:|`). Matched against the bare dashes only,
+      # the separator stopped being skipped and became a row whose Status is `:---:` — outside the
+      # enum — so gate_EXEC refused a checkpoint with every increment done. The same three-character
+      # blindness lives in gate_REVIEW and gate_DOCS; all three carry this regex.
+      if (f[2] == "ID" || f[2] ~ /^:?-+:?$/ || f[2] == "") next
+      if (f[5] == "Status") next
+      printf "%s\t%s\t%s\t%s\t%s\n", f[2], f[3], f[4], f[5], f[6]
     }' "$file"
 }
 
@@ -416,11 +449,45 @@ gate_TICKET() {
     GATE_WHY="10-ticket.md has no 'sprint:' — the issue must be IN THE ACTIVE SPRINT, not in the backlog"
     return 1
   fi
+  # The branch is BORN in this phase — the `ticket` skill creates it — and used to be recorded in
+  # 10-ticket.md alone. `ensure_mission_branch` reads `branch:` from 00-missao.md and nowhere else,
+  # so with JIRA on every later phase ran wherever the human happened to be standing while the
+  # runner guarded a name that was never written down: the SQ-97 shape, five phases into another
+  # PR's branch and a `rebase --onto` to undo them.
+  #
+  # The WRITE is the session's, never this gate's: a gate that writes breaks `moved2`, the
+  # fingerprint that answers "did the session move the disk" (see the comment at that variable).
+  # What is left here is the verifiable half — declared in one artifact means declared in both.
+  #
+  # No `branch:` in 10-ticket.md ⇒ pass. That is every mission planned before the field existed,
+  # and refusing them would be rewriting history instead of measuring the phase that just ran.
+  local tbranch; tbranch="$(frontmatter "$t" branch)"
+  case "$tbranch" in ''|'<'*) ;; *)
+    local mbranch; mbranch="$(frontmatter "$MISSION_DIR/00-missao.md" branch)"
+    case "$mbranch" in
+      ''|'<'*)
+        GATE_WHY="10-ticket.md declares branch '$tbranch' and 00-missao.md still carries the placeholder — the TICKET session writes it back, or every later phase runs on whatever branch the human is standing on"
+        return 1 ;;
+    esac
+    if [ "$mbranch" != "$tbranch" ]; then
+      GATE_WHY="10-ticket.md declares branch '$tbranch' and 00-missao.md declares '$mbranch' — the runner honours 00-missao.md, so the mission would run on a branch the ticket never created"
+      return 1
+    fi
+  ;; esac
   GATE_WHY="issue $issue in the sprint"
   return 0
 }
 
+# Set by gate_EXEC when the suite is red over an uncommitted tree, read by cmd_run's second Jidoka.
+# A GLOBAL and not a return value because the gate already spends its rc on pass/fail, and a gate
+# that answered the two questions in one code would make every caller decode it. Reset at the entry
+# of gate_EXEC below, never at the call site: the gate returns from a dozen places before ever
+# reaching the suite, and a marker left over from an earlier evaluation would escalate a run for a
+# tree that is long since clean.
+GATE_EXEC_DIRTY=0
+
 gate_EXEC() {
+  GATE_EXEC_DIRTY=0
   local rows; rows="$(checkpoint_rows)"
   [ -n "$rows" ] || { GATE_WHY="checkpoint.md is empty"; return 1; }
 
@@ -456,6 +523,17 @@ gate_EXEC() {
   if [ "$pending" -gt 0 ]; then GATE_WHY="$pending of $total increment(s) still to execute"; return 1; fi
 
   if ! run_check_cmd "$TEST_CMD" "gate-exec-test"; then
+    # A phase that DIED leaves its work uncommitted, and the suite then runs over a working tree
+    # nobody approved. Every increment reads `done`, so the runner re-derives EXEC, opens another
+    # session against the same red suite, and `state_fingerprint` — HEAD, the mission listing and
+    # the checkpoint's md5 — cannot see a dirty tree, so `attempts` resets on every `sdd run` and
+    # the lap costs a full EXEC session, for ever. The marker below is what turns that into an
+    # escalation in cmd_run, before a session is opened.
+    if [ -n "$( cd "$REPO_ROOT" && git status --porcelain )" ]; then
+      GATE_EXEC_DIRTY=1
+      GATE_WHY="TEST_CMD failed ($TEST_CMD) over a DIRTY working tree — the uncommitted changes are what the suite is running against; a session cannot fix what it cannot see. See $LAST_CHECK_LOG"
+      return 1
+    fi
     GATE_WHY="TEST_CMD failed ($TEST_CMD) — see $LAST_CHECK_LOG"; return 1
   fi
   [ -f "$MISSION_DIR/20-handoff-exec.md" ] \
@@ -560,12 +638,14 @@ gate_REVIEW() {
   offending="$(SDD_GATE_FIELD="$gate_field" awk -v gate_present="$gate_present" '
       BEGIN { gate_field = ENVIRON["SDD_GATE_FIELD"] }
       # The refused set, written here so the next reader does not have to guess it: an EMPTY cell;
-      # the whole cell wrapped in angle brackets, which is how templates/review.md:37-44 ships its
-      # fill-ins; a bare ellipsis; and the bare fill-in words below. It targets the WHOLE cell,
+      # the whole cell wrapped in angle brackets, which is how the `### Overall Grade` table of
+      # templates/review.md ships its fill-ins (named by SECTION and not by line number: the two
+      # citations this comment used to carry both rotted, one of them by six lines);
+      # a bare ellipsis; and the bare fill-in words below. It targets the WHOLE cell,
       # never the presence of a character — a real sentence containing <A> is a real sentence.
       # NOT refused: `clean`, `n/a` and `—`. Those are the codereview skill terse rationales
-      # (report-template.md:154-156) and mean measured-with-nothing-to-say; refusing them would
-      # make this gate contradict the skill it parses, which is the SQ-97 gate_DOCS bug again.
+      # (its `### Overall Grade` section, likewise by name) and mean measured-with-nothing-to-say;
+      # refusing them would make this gate contradict the skill it parses — the SQ-97 gate_DOCS bug.
       function placeholder(s,   u, w) {
         if (s == "") return 1
         if (s ~ /^<.*>$/) return 1
@@ -587,6 +667,9 @@ gate_REVIEW() {
             w == "WIP" || w == "FILLME") return 1
         return 0
       }
+      # DUPLICATED, deliberately, in checkpoint_rows — see the comment above that function for why
+      # a shared helper would cost more than it saves. The two copies must stay identical.
+      #
       # PARITY, and not "does this field end in a backslash". `\\` is how GFM spells a literal
       # backslash, so a cell ending in one sits against a REAL delimiter — and the first version of
       # the rejoin below could not tell the two apart. Measured against the runner one commit
@@ -621,7 +704,10 @@ gate_REVIEW() {
         gsub(/\*/, "", crit);  gsub(/^[ \t]+|[ \t]+$/, "", crit)
         gsub(/\*/, "", grade); gsub(/^[ \t]+|[ \t]+$/, "", grade)
         gsub(/[*`]/, "", rat); gsub(/^[ \t]+|[ \t]+$/, "", rat)
-        if (crit == "Criterion" || crit ~ /^-+$/ || crit == "") next
+        # `:?-+:?` — a formatter-aligned separator (`|:---|:---:|`) is a separator, not a criterion.
+        # Read as a row it graded `:` with `---`, and REVIEW looped to REVIEW_MAX_ITER with a reason
+        # naming no criterion anybody wrote. Same regex in checkpoint_rows and gate_DOCS.
+        if (crit == "Criterion" || crit ~ /^:?-+:?$/ || crit == "") next
         rows++
         # Grade first, on purpose: a row that is both off-A and unjustified is reported by its
         # grade, which is the older and more specific message.
@@ -696,7 +782,10 @@ gate_DOCS() {
       }
       col && /^[ \t]*\|/ {
         cell = $col; gsub(/^[ \t]+|[ \t]+$/, "", cell)
-        if (cell ~ /^-+$/ || cell == "") next
+        # `:?-+:?` — with a formatter-aligned separator (`|:---:|`) the Status column of the
+        # separator row read as a pending Status, and gate_DOCS failed a drift checklist with
+        # nothing pending in it. Same regex in checkpoint_rows and gate_REVIEW.
+        if (cell ~ /^:?-+:?$/ || cell == "") next
         if (cell == "✅" || cell == "n/a" || cell == "N/A") next
         print cell; exit
       }
@@ -899,6 +988,19 @@ phase_model() {
   esac
 }
 
+# Damage cap configured for the phase, in US$. Mirrors phase_model on purpose: same shape, same
+# fallthrough. The phases NOT named here (DOCS, PR, TICKET, KAIZEN) are the cheap ones and stay on
+# the global — a body assembled from finished handoffs or an `acli` call with the fields already
+# decided does not need its own key.
+phase_budget_usd() {
+  case "$1" in
+    EXEC)   printf '%s\n' "$BUDGET_EXEC_USD" ;;
+    QA)     printf '%s\n' "$BUDGET_QA_USD" ;;
+    REVIEW) printf '%s\n' "$BUDGET_REVIEW_USD" ;;
+    *)      printf '%s\n' "$BUDGET_PER_PHASE_USD" ;;
+  esac
+}
+
 # QA sub-step, DERIVED from the artifacts — same philosophy as the gates, no extra state.
 # The QA phase is three sessions: the qa-report/qa-execution skills carry
 # `disable-model-invocation`, so each one has to enter through the literal slash as the opening
@@ -960,11 +1062,19 @@ phase_agent() {
 }
 
 # Literal slash that opens the session, when the phase is driven by a third-party skill.
+#
+# ONLY where the skill cannot be reached any other way. The `qa-report` and `qa-execution` skills
+# carry `disable-model-invocation`, so the literal slash as the first line of the prompt is their
+# only route — and both answer `<none>` in phase_agent, exactly as the invariant above it requires.
+# TICKET used to be listed here as well, WITH `sdd-publisher` as its agent: two system prompts over
+# one session, which is the thing that invariant refuses. The slash was the half that went, because
+# the `ticket` skill has no `disable-model-invocation` and agents/sdd-publisher.md already tells the
+# session to invoke `/ticket open`. It also took one read of the PT-BR frontmatter key `titulo` out
+# of the runner; the remaining one is `cmd_approve`, which only prints it for the human.
 phase_slash() {
   case "$1" in
     QA:plan) printf '/qa-report %s\n' "$QA_DOCS_PATH" ;;
     QA:exec) printf '/qa-execution %s\n' "$QA_DOCS_PATH" ;;
-    TICKET)  printf '/ticket open %s\n' "$(frontmatter "$MISSION_DIR/00-missao.md" titulo)" ;;
     *)       printf '%s\n' "" ;;
   esac
 }
@@ -1538,7 +1648,7 @@ missing and write the artifacts. The gate will be re-evaluated."
     --output-format stream-json --verbose
     --setting-sources "user,project,local"
     --allowedTools "$ALLOWED_TOOLS"
-    --max-budget-usd "$BUDGET_PER_PHASE_USD")
+    --max-budget-usd "$(phase_budget_usd "$phase")")
   if [ -n "$agent" ]; then cmd+=(--agent "$agent"); fi
   if [ -n "$resume_sid" ]; then cmd+=(--resume "$resume_sid" --fork-session)
   else cmd+=(--session-id "$sid"); fi
@@ -1642,6 +1752,85 @@ state_fingerprint() {
     "$( cat "$MISSION_DIR/checkpoint.md" 2>/dev/null | md5sum 2>/dev/null | cut -d' ' -f1 )"
 }
 
+# skill_findable <name> → 0 when a skill by that name can be found where skills live.
+#
+# Three phases are driven by skills the kit does not ship: TICKET boots `ticket`, the two QA
+# sub-steps boot `qa-report` and `qa-execution`, and REVIEW loads `codereview`. A missing one is not
+# a session that fails — it is a session that boots, finds nothing, improvises, and spends the
+# phase budget producing something no gate can read.
+#
+# HEURISTIC, and therefore a warn and never a fail. The roots below are a CONVENTION of the harness,
+# not a contract the kit can enforce, and a rule that fails on a heuristic is the rule the next
+# author deletes (the ddd/kaizen plugin check one screen down makes the same call). Three roots,
+# the two `health_provenance` already walks plus the project's own: a plain `skills/<name>/`
+# directory, and the plugin cache, where a skill arrives inside a versioned plugin tree.
+#
+# SDD_SKILLS_ROOT exists so this is testable at all — with no injectable root the only worlds
+# available to a sensor are "this developer's machine" and nothing.
+skill_findable() {
+  local name="${1:-}" root="${SDD_SKILLS_ROOT:-$HOME/.claude}"
+  [ -n "$name" ] || return 1
+  [ -d "$root/skills/$name" ] && return 0
+  [ -d "$REPO_ROOT/.claude/skills/$name" ] && return 0
+  # `-quit` on the first hit: the cache holds every version of every plugin, and this question is
+  # "is it anywhere", not "where". `|| true` because `find` on a missing directory returns 1 and
+  # pipefail would carry that into the caller's assignment.
+  [ -n "$( find "$root/plugins/cache" -maxdepth 6 -type d -name "$name" -print -quit 2>/dev/null || true )" ]
+}
+
+# test_cmd_looks_noop <cmd> → 0 when the command would exit 0 having run no test at all.
+#
+# `TEST_CMD` is the EXEC gate and half the REVIEW gate. A value that runs nothing is worse than an
+# empty one: it passes every gate, in every mission, for ever, and each phase certifies itself
+# against a run that never happened — a label reached through the one key the whole pipeline
+# trusts. The preflight only refused EMPTY and the literal `TODO`.
+#
+# Two rules, both the shape `sdd health`'s check 2b already uses:
+#   - the FIRST WORD is a command that runs nothing. `true` and `:` are what a config carries while
+#     it is being wired up, and `echo`/`printf` are what a placeholder turns into;
+#   - an argument, matched WHOLE (padded on both sides), that asks the runner to enumerate the
+#     tests instead of running them. Unpadded, `*--list*` would also accuse `--listen-port`, and a
+#     rule that fires on correct config is a rule the next author deletes.
+#
+# ONE definition, called from cmd_preflight. Check 2b in cmd_health deliberately keeps its OWN
+# narrower `--list` case rather than calling this: its subject is the kit's own suite mode, its
+# message says so, and `mut_HEALTH_testcmd_list_blind` anchors on that case pattern. The
+# duplication is declared here rather than hidden — a new spelling belongs in BOTH.
+# `tc` and not `cmd`: `cmd` is a `local -a` in run_phase, and shellcheck reasons about the name
+# across the whole file — a scalar `cmd` here makes it read every use as the first element of an
+# array (SC2178/SC2128) and the lint step of the suite goes red.
+test_cmd_looks_noop() {
+  local tc="${1:-}"
+  [ -n "$tc" ] || return 1
+  case "${tc%% *}" in
+    true|:|echo|printf|exit) return 0 ;;
+  esac
+  case " $tc " in
+    *" --list "*|*" --listTests "*|*" --collect-only "*) return 0 ;;
+  esac
+  return 1
+}
+
+# How many REVIEW rounds this mission has already spent, read off the disk.
+#
+# `attempts` in cmd_run is a `local -A` born with the PROCESS, so `REVIEW_MAX_ITER` only ever
+# capped one invocation: three rounds, escalate — and then `sdd run` again handed out three more,
+# for ever, at the price of the most expensive phase there is. The rounds themselves are on disk,
+# named `40-review-r<N>.md`, which is the state the whole kit derives from (principle 4). Same
+# `latest_matching` the REVIEW gate reads, so the two cannot disagree about which round is latest:
+# it sorts `-V`, so r10 comes after r3.
+review_rounds_on_disk() {
+  local last n
+  last="$(latest_matching "$MISSION_DIR/40-review-r*.md")"
+  [ -n "$last" ] || { printf '0\n'; return 0; }
+  n="${last##*/40-review-r}"
+  n="${n%.md}"
+  # A file the glob matched but whose N is not a number answers 0 rather than poisoning an
+  # arithmetic test with a string — `40-review-rounds.md` would otherwise abort the run.
+  case "$n" in ''|*[!0-9]*) printf '0\n'; return 0 ;; esac
+  printf '%s\n' "$n"
+}
+
 # How many sessions a phase may consume before turning BLOCKED.
 phase_budget() {
   case "$1" in
@@ -1675,11 +1864,17 @@ cmd_install() {
       && git symbolic-ref --quiet --short refs/remotes/origin/HEAD 2>/dev/null \
       | sed 's|^origin/||' || true )"
     [ -n "$branch" ] || branch="$( cd "$REPO_ROOT" && git branch --show-current )"
+    # `elif`, first match wins. Four independent `if`s meant every one of them ran, so the LAST
+    # match won whatever the repo actually is: a Node project carrying a `go.mod` for a sidecar
+    # tool was installed with `go test ./...` as the suite every gate runs — the wrong suite,
+    # chosen in silence, in the one key the whole pipeline trusts. package.json first because a
+    # repo with two manifests is usually a JS project with a helper in another language.
     test_cmd="TODO"
-    if [ -f "$REPO_ROOT/package.json" ];   then test_cmd="npm test"; fi
-    if [ -f "$REPO_ROOT/pyproject.toml" ]; then test_cmd="pytest -q"; fi
-    if [ -f "$REPO_ROOT/Cargo.toml" ];     then test_cmd="cargo test"; fi
-    if [ -f "$REPO_ROOT/go.mod" ];         then test_cmd="go test ./..."; fi
+    if   [ -f "$REPO_ROOT/package.json" ];   then test_cmd="npm test"
+    elif [ -f "$REPO_ROOT/pyproject.toml" ]; then test_cmd="pytest -q"
+    elif [ -f "$REPO_ROOT/Cargo.toml" ];     then test_cmd="cargo test"
+    elif [ -f "$REPO_ROOT/go.mod" ];         then test_cmd="go test ./..."
+    fi
     # The redirect below creates $CONFIG_FILE BEFORE sed runs, so a half-copied kit used to leave
     # a 0-byte config on disk and only then die on sed's rc. rc was already non-zero, which is why
     # this looked harmless: the damage was the ARTIFACT. The next `sdd install` found the file,
@@ -1695,6 +1890,62 @@ cmd_install() {
         -e "s|<SDD_HOME>|$SDD_HOME|g" \
         "$SDD_HOME/config/starter.conf" > "$CONFIG_FILE"
     ok ".sdd/config.sh created (base branch detected: $branch — confirm it)"
+  fi
+
+  # The two paths the runner cannot work without, both NAMED in the config just written — which is
+  # what makes this the installer's job. Without HANDOFF_DIR, `resolve_mission` dies on the FIRST
+  # command a new user types ("docs/handoffs/ does not exist in the target repo"), and TODO_FILE is
+  # where principle 5 sends every out-of-scope finding.
+  #
+  # SOURCED in a subshell, the way check 2b of cmd_health reads TEST_CMD: what matters is the value
+  # `load_config` will hand the runner after expansion, never the text of the line. `|| true`
+  # because the rc of a substitution is its LAST command's, and a config that fails to parse must
+  # not take the install down here — it is `sdd preflight`'s job to say so, in its own words.
+  local inst_handoff inst_todo
+  # shellcheck disable=SC1090
+  inst_handoff="$( . "$CONFIG_FILE" >/dev/null 2>&1; printf '%s' "${HANDOFF_DIR:-}" )" || true
+  # shellcheck disable=SC1090
+  inst_todo="$( . "$CONFIG_FILE" >/dev/null 2>&1; printf '%s' "${TODO_FILE:-}" )" || true
+  # Same defaults load_config applies, restated here because a broken config arrives EMPTY.
+  [ -n "$inst_handoff" ] || inst_handoff="docs/handoffs"
+  [ -n "$inst_todo" ]    || inst_todo="TODO.md"
+
+  if [ -d "$REPO_ROOT/$inst_handoff" ]; then
+    ok "$inst_handoff/ already exists"
+  else
+    mkdir -p "$REPO_ROOT/$inst_handoff"
+    ok "$inst_handoff/ created (the mission's durable state lives here, committed)"
+  fi
+
+  if [ -f "$REPO_ROOT/$inst_todo" ]; then
+    ok "$inst_todo already exists (preserved)"
+  else
+    # Seeded with the FORMAT, because an empty file teaches nothing and the format is what makes
+    # the entries countable. Never overwritten: a second install over a file holding real findings
+    # would take them with it.
+    cat > "$REPO_ROOT/$inst_todo" <<'SEED'
+# Findings
+
+> Out-of-scope findings from `sdd` missions. Never divert the mission to fix one; never lose it.
+> One entry, about six lines: what, the anchor, why it matters, the direction, who found it.
+> The long analysis belongs in the handoff of the mission cited.
+>
+> Format:
+>
+> ```md
+> - [ ] <what> — `file:line` — <why it matters> — found by `<agent>` in mission `<slug>` (YYYY-MM-DD)
+> ```
+>
+> Closed is DELETED, never archived: an entry marked `RESOLVED by <hash>` stays here only until
+> the PR citing that evidence is merged, then leaves the file. Durable memory already exists in
+> `git log -S`, in the handoffs, and in the hash the entry itself quotes. Delete on the artifact
+> — `git merge-base --is-ancestor <hash> <base>` — never on a PR label.
+
+## Open
+
+## Resolved
+SEED
+    ok "$inst_todo created (out-of-scope findings go here — principle 5)"
   fi
 
   local a name target changed=0
@@ -1932,13 +2183,42 @@ cmd_preflight() {
   bash -n "$CONFIG_FILE" && ok "config syntax valid"
   case "$TEST_CMD" in
     TODO|"") _fail "TEST_CMD not configured in .sdd/config.sh" ;;
-    *) ok "TEST_CMD=$TEST_CMD" ;;
+    *)
+      if test_cmd_looks_noop "$TEST_CMD"; then
+        _fail "TEST_CMD runs nothing ($TEST_CMD) — it exits 0 having executed no test, so
+        gate_EXEC, gate_QA and gate_REVIEW would pass instantly, in every mission, against a
+        run that never happened. Point TEST_CMD at the suite itself."
+      else
+        ok "TEST_CMD=$TEST_CMD"
+      fi ;;
   esac
   if [ "$JIRA_ENABLED" = "true" ]; then
     if [ -f "$REPO_ROOT/.jira-project" ]; then ok "JIRA enabled, .jira-project present"
     else _fail "JIRA_ENABLED=true but there is no .jira-project in the repo (the ticket skill needs it)"; fi
   else
     dim "  ---  JIRA_ENABLED=false — the TICKET phase will be skipped"
+  fi
+
+  # --- third-party skills the phases boot ---
+  # Asked for BY CONFIG, not by a fixed list: a project with no interface never boots the QA
+  # skills, and JIRA off means the TICKET phase is skipped entirely. Warning about a skill the
+  # pipeline will not use is how an operator learns to skip reading warnings.
+  local sk skills_root missing_skills=""
+  skills_root="${SDD_SKILLS_ROOT:-$HOME/.claude}"
+  local -a wanted=(codereview)   # REVIEW runs in every mission
+  [ "$JIRA_ENABLED" = "true" ] && wanted+=(ticket)
+  { [ -n "$E2E_CMD" ] || [ -n "$APP_URL" ]; } && wanted+=(qa-report qa-execution)
+  for sk in "${wanted[@]}"; do
+    skill_findable "$sk" || missing_skills="$missing_skills $sk"
+  done
+  if [ -z "$missing_skills" ]; then
+    ok "third-party skills present (${wanted[*]})"
+  else
+    warn "skills not found:$missing_skills
+        Looked in $skills_root/skills/, $skills_root/plugins/cache/ and
+        $REPO_ROOT/.claude/skills/ — those roots are a convention, so this is a warning and not a
+        failure. The phase boots the skill by name anyway: if it really is absent, the session
+        improvises and spends the phase budget producing something no gate can read."
   fi
 
   # --- target repo plugins ---
@@ -2828,12 +3108,65 @@ cmd_run() {
       return 3
     fi
 
+    # The second Jidoka of the same phase, and the one that costs money when it is missing. A phase
+    # that dies mid-way leaves the tree uncommitted; the suite then runs against changes nobody
+    # approved and comes back red; every increment still reads `done`, so EXEC is re-derived and
+    # another session opens against the same wall. `state_fingerprint` does not read the working
+    # tree, so `attempts` starts at zero on every `sdd run` — measured at about US$ 25 a lap, with
+    # no end condition. A human has to commit or discard; no session can.
+    #
+    # gate_EXEC is CALLED, never `$( )`: read through a command substitution it runs in a subshell
+    # and GATE_EXEC_DIRTY dies with it — the lesson autonomy_kit_stamp paid for. `|| true` because
+    # the gate failing is the whole point here.
+    if [ "$phase" = "EXEC" ]; then
+      gate_EXEC || true
+      if [ "$GATE_EXEC_DIRTY" = "1" ]; then
+        info ""
+        bad "BLOCKED in EXEC — $GATE_WHY"
+        dim "  The line stopped on purpose: the working tree is dirty and the suite is red."
+        dim "  A session would run against the same uncommitted changes and fail the same way."
+        dim "  Commit what belongs to the mission, or 'git restore' what does not, then 'sdd run'."
+        pipeline_log_line "$(date -Iseconds)  BLOCKED  EXEC  red suite over a dirty working tree"
+        autonomy_blocked_row "dirty-tree" "EXEC" "$GATE_WHY"
+        return 3
+      fi
+    fi
+
     budget="$(phase_budget "$phase")"
     attempts["$phase"]="$(( ${attempts[$phase]:-0} + 1 ))"
-    if [ "${attempts[$phase]}" -gt "$budget" ]; then
+    local over_ceiling=0 ceiling_note=""
+    [ "${attempts[$phase]}" -gt "$budget" ] && over_ceiling=1
+    # REVIEW's ceiling counts rounds IN TOTAL, and the total is on disk. `attempts` dies with the
+    # process, so `sdd run` after a blown REVIEW used to hand out a fresh set of rounds, and the
+    # most expensive phase in the kit had no ceiling at all across invocations. `phase_budget
+    # REVIEW` stays as the intra-invocation guard: a session that writes no `40-review-r<N>.md`
+    # moves nothing on disk and would otherwise loop inside one run.
+    #
+    # DERIVED path only. `--phase REVIEW` is a human asking for one specific round with their eyes
+    # on it, and refusing that would leave no way to run the round that unblocks the mission.
+    # `force_phase` is also how the PUBLISH_ON_REVIEW_BLOCKED=draft jump reaches PR, and it is
+    # empty again by the time REVIEW is re-derived — so that degradation keeps its one chance.
+    if [ "$phase" = "REVIEW" ] && [ -z "$force_phase" ]; then
+      local rounds; rounds="$(review_rounds_on_disk)"
+      if [ "$rounds" -ge "$REVIEW_MAX_ITER" ]; then
+        over_ceiling=1
+        ceiling_note="$rounds review round(s) already on disk, REVIEW_MAX_ITER=$REVIEW_MAX_ITER — the ceiling counts rounds IN TOTAL, derived from the 40-review-r<N>.md files, so 'sdd run' does not reset it"
+      fi
+    fi
+    if [ "$over_ceiling" -eq 1 ]; then
       gate_"$phase" || true
       info ""
       bad "BLOCKED in $phase — ${sessions[$phase]:-0} session(s) without satisfying the gate"
+      # `bad` and not `dim`, and directly under the headline: this is the line that makes the
+      # headline's number true. When the ceiling comes off the DISK the count above is `0` — this
+      # invocation opened no session, because the ceiling refused before it could — and read alone
+      # that reads as a runner bug. `bad` writes to stderr and `dim` to stdout, so on `dim` the two
+      # halves travelled on different channels: `sdd run 2>/dev/null` kept the sentence and dropped
+      # the headline, `sdd run >file` kept the headline and dropped the sentence, and the escalation
+      # a human is meant to ACT on lost the half that says what to do. Every other assertion about
+      # this branch merges the channels with `2>&1` and cannot see the difference; the one in
+      # tests/check-gates.sh that pins it reads stderr ALONE.
+      [ -n "$ceiling_note" ] && bad "  $ceiling_note"
       bad "  current reason: $GATE_WHY"
       dim "  'sdd status $MISSION' shows the full state; 'sdd why $MISSION $phase' the reason."
       if [ "$phase" = "REVIEW" ] && [ "$PUBLISH_ON_REVIEW_BLOCKED" = "draft" ]; then
@@ -3527,7 +3860,21 @@ kaizen_reminder() {
     [ -f "$f" ] || continue
     [ "$(frontmatter "$f" kit_sha_judged)" = "$sha" ] && return 0
   done
-  dim "  autonomy series: $n mission(s) on kit $sha without a verdict — run 'sdd kaizen' in the kit repo ($SDD_HOME) for the next kit mission plan"
+  # WHERE this is being said from decides WHAT is true. The count above is this repo's missions,
+  # and it used to be followed, in every repo, by "run 'sdd kaizen' in the kit repo" — a pointer to
+  # a judge that reads a DIFFERENT set of numbers. In a target repo the human would open the kit,
+  # run the command, and be told something about the kit's own missions that has nothing to do with
+  # the run that just finished. Same question cmd_kaizen asks to decide where it may run at all.
+  local kit_root
+  kit_root="$( cd "$SDD_HOME" && git rev-parse --show-toplevel 2>/dev/null || true )"
+  if [ -n "$kit_root" ] && [ "$kit_root" = "$REPO_ROOT" ]; then
+    dim "  autonomy series: $n mission(s) on kit $sha without a verdict — run 'sdd kaizen' in the kit repo ($SDD_HOME) for the next kit mission plan"
+    return 0
+  fi
+  # Outside the kit there is nothing to run and no pointer to give. What IS true: the sessions are
+  # recorded, and today's judge will not count them. It stops there on purpose — promising an
+  # option that does not exist yet would be the same lie one branch up, in the other direction.
+  dim "  autonomy series: $n mission(s) of this repo on kit $sha are in the ledger. Today's kaizen judge reads only the kit's own missions, so it will not count them."
 }
 
 # KAIZEN gate — same convention as every gate (0/1, reason in GATE_WHY), but NOT in PHASES:
@@ -3856,7 +4203,9 @@ LEDGER OPTIONS (`autonomy` and `kaizen`)
                              comes from target repos (the kit's own axis degenerates), and this
                              flag is the only way to read them — but nothing here yet distinguishes
                              a target from a fixture, so the default stays shut and the judge is
-                             not pointed at it. That decision is ADR 0004's, not this flag's.
+                             not pointed at it. That decision belongs to a future ADR
+                             (deliberately deferred; 0004 has since been taken by the
+                             mutation-stamp decision), not to this flag.
 
 FOR SCRIPTS
   sdd phase <mission>        print only the current phase (or DONE)

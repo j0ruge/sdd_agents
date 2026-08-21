@@ -175,9 +175,44 @@ assert_why   "TICKET reports the missing sprint" "TICKET" "ACTIVE SPRINT|sprint"
 printf -- '---\nfase: TICKET\nstatus: done\nissue: FX-1\nsprint: Sprint 1\n---\n' > "$MDIR/10-ticket.md"
 assert_phase "an issue in the active sprint passes" "EXEC"
 
-# back to the no-JIRA state for the rest of the test
+# With JIRA on, the branch is BORN in the TICKET phase (the `ticket` skill creates it) and used to
+# stay in 10-ticket.md alone. `ensure_mission_branch` reads only 00-missao.md, so every later phase
+# ran on whatever branch the human happened to be standing on, guarding a name that was never
+# there — the SQ-97 shape, where five phases committed into another PR's branch.
+#
+# The write-back is the TICKET SESSION's job, never the gate's: a gate that wrote would break
+# `moved2`, the fingerprint that answers "did the session move the disk". So the gate takes the
+# half it can verify — if 10-ticket.md declares a branch, 00-missao.md must declare the same one,
+# and not the placeholder.
+#
+# Three worlds, and the middle one is what the assertion is named after.
+printf -- '---\nfase: TICKET\nstatus: done\nissue: FX-1\nsprint: Sprint 1\nbranch: feature/FX-1\n---\n' \
+  > "$MDIR/10-ticket.md"
+sed -i 's|^versao: 0.1.0|versao: 0.1.0\nbranch: <nome da branch de trabalho>|' "$MDIR/00-missao.md"
+assert_phase "TICKET refuses a branch that never reached 00-missao.md" "TICKET"
+assert_why   "TICKET names the artifact the branch has to reach" "TICKET" "00-missao"
+
+# A DIFFERENT branch is the same defect wearing a filled-in field: 00-missao.md declares a name,
+# `ensure_mission_branch` honours it, and the mission runs somewhere the ticket never created.
+sed -i 's|^branch: <nome da branch de trabalho>|branch: feature/OTHER|' "$MDIR/00-missao.md"
+assert_phase "TICKET refuses a 00-missao.md declaring another branch" "TICKET"
+
+# And the other side: written back, the phase passes. Without it the two assertions above are
+# satisfied by a gate that refuses every TICKET whatever is on disk.
+sed -i 's|^branch: feature/OTHER|branch: feature/FX-1|' "$MDIR/00-missao.md"
+assert_phase "the branch written back to 00-missao.md passes" "EXEC"
+
+# back to the no-JIRA state for the rest of the test. The `branch:` line goes too: left behind, the
+# `sdd run` invocations further down would check a branch out inside the fixture.
 sed -i 's/^JIRA_ENABLED=true/JIRA_ENABLED=false/' .sdd/config.sh
+sed -i '/^branch: feature\/FX-1$/d' "$MDIR/00-missao.md"
 rm -f .jira-project "$MDIR/10-ticket.md"
+if grep -q '^branch:' "$MDIR/00-missao.md"; then
+  fail "the TICKET block leaves no branch behind" "no branch: line in 00-missao.md" \
+       "$(grep -m1 '^branch:' "$MDIR/00-missao.md")"
+else
+  pass "the TICKET block leaves no branch behind in the fixture"
+fi
 
 # --- EXEC ------------------------------------------------------------------
 echo "== EXEC phase =="
@@ -281,12 +316,123 @@ assert_jidoka "a 'blocked' increment escalates in a checkpoint bigger than the p
 mv "$MDIR/checkpoint.jidoka.bak" "$MDIR/checkpoint.md"
 printf -- '---\nfase: EXEC\nstatus: done\n---\n' > "$MDIR/20-handoff-exec.md"
 
+# The OTHER Jidoka of the same phase, and the one that costs money when it is missing. A phase that
+# dies mid-way leaves the tree uncommitted; the suite runs against changes nobody approved and comes
+# back red; every increment still reads `done`, so EXEC is re-derived and another session opens
+# against the same wall. `state_fingerprint` reads HEAD, the mission listing and the checkpoint's
+# md5 — never the working tree — so `attempts` starts at zero on every `sdd run`. Measured at about
+# US$ 25 a lap, with no end condition.
+#
+# DIFFERENTIAL, one `echo` apart: the same red suite on a clean tree is the ORDINARY case and must
+# still open a session. Without that half, a runner that escalated on every red suite would satisfy
+# the dirty half — and would end the line on the most common situation there is.
+git add -A && git commit -qm "chore: handoff back"
+sed -i 's|^TEST_CMD="true"|TEST_CMD="false"|' .sdd/config.sh
+git add -A && git commit -qm "chore: red suite, clean tree"
+if [ -z "$( cd "$FIX" && git status --porcelain )" ]; then
+  pass "fixture: the tree really is clean before the differential"
+else
+  fail "dirty-tree fixture" "a clean tree" "$( cd "$FIX" && git status --porcelain )"
+fi
+# "A session was spent" is counted in the ARTEFACT the runner leaves behind: one line per
+# `run_phase` in the mission journal. NOT by grepping the stub's marker out of `sdd run`'s output —
+# run_phase redirects the session's stdout AND stderr into its log file, so the marker never
+# reaches the terminal and an assertion reading for it there is green whether a session ran or not.
+# (The neighbouring assert_jidoka has that shape; recorded in TODO.md.)
+#
+# And not by counting `EXEC-*.json` files either: those are named `<PHASE>-%Y%m%d-%H%M%S.json`, so
+# two sessions inside the same SECOND land on the same path and the second overwrites the first.
+# The journal is append-only, which is what makes it countable.
+phase_sessions_spent() { # phase_sessions_spent <PHASE>
+  grep -c "  $1  agent=" "$FIX/.sdd/logs/$MISSION/pipeline.log" 2>/dev/null || true
+}
+sessions_spent() { phase_sessions_spent EXEC; }
+n_before="$(sessions_spent)"
+out_clean="$( cd "$FIX" && "$SDD" run "$MISSION" --max-phases 1 2>&1 )"; rc_clean=$?
+n_clean="$(sessions_spent)"
+if [ "$n_clean" -gt "$n_before" ]; then
+  pass "a red suite over a CLEAN tree still opens a session (the ordinary case)"
+else
+  fail "red suite, clean tree" "a new EXEC session log" \
+       "exit $rc_clean, $n_before → $n_clean log(s): $(tail -3 <<< "$out_clean")"
+fi
+
+echo "work nobody committed" >> file.txt
+out_dirty="$( cd "$FIX" && "$SDD" run "$MISSION" 2>&1 )"; rc_dirty=$?
+n_dirty="$(sessions_spent)"
+if [ "$rc_dirty" -eq 3 ] \
+   && grep -q "DIRTY working tree" <<< "$out_dirty" \
+   && [ "$n_dirty" -eq "$n_clean" ]; then
+  pass "a dirty tree with every increment done escalates (exit 3, no session spent)"
+else
+  fail "a dirty tree with every increment done escalates (exit 3, no session spent)" \
+       "exit 3, the dirty-tree branch, and no new session log" \
+       "exit $rc_dirty, $n_clean → $n_dirty log(s): $(tail -3 <<< "$out_dirty")"
+fi
+# The escalation has to be the DIRTY one and not the budget one, which shares rc 3 and the
+# "BLOCKED in EXEC" prefix — the discriminator the neighbouring assert_jidoka already insists on.
+if grep -q "session(s) without satisfying the gate" <<< "$out_dirty"; then
+  fail "the escalation is the dirty-tree branch, not budget exhaustion" \
+       "no budget-exhaustion text" "$(grep -m1 'session(s) without' <<< "$out_dirty")"
+else
+  pass "the escalation is the dirty-tree branch, not budget exhaustion"
+fi
+git checkout -- file.txt
+sed -i 's|^TEST_CMD="false"|TEST_CMD="true"|' .sdd/config.sh
+git add -A && git commit -qm "chore: green again"
+
 # An invalid checkpoint status fails loudly, not in silence.
 cp "$MDIR/checkpoint.md" "$MDIR/checkpoint.bak"
 sed -i "s/| done | $REAL_HASH |/| completed | $REAL_HASH |/" "$MDIR/checkpoint.md"
 assert_phase "a status outside the enum fails" "EXEC"
 assert_why   "EXEC reports the invalid status" "EXEC" "invalid status"
 mv "$MDIR/checkpoint.bak" "$MDIR/checkpoint.md"
+
+# A literal pipe inside a Check cell is spelled `\|` in GFM, and a raw split on "|" cuts the row
+# there — every column after it shifts one to the left, so the Status column is read out of the
+# CHECK cell. The increment is `done` and the gate answers "invalid status", naming a status the
+# author never wrote. gate_REVIEW learned this the expensive way (its comment carries the measured
+# row); the checkpoint parser had not.
+#
+# The answer is taken BEFORE the escape is introduced and compared to the answer after it: a
+# differential, not a literal. No fixture regime satisfies both sides by accident, and whichever
+# side a regression breaks, the other is standing right next to it.
+plain_answer="$( cd "$FIX" && "$SDD" phase "$MISSION" 2>&1 )"
+cp "$MDIR/checkpoint.md" "$MDIR/checkpoint.pipe.bak"
+# `@` as the delimiter, never `|`: with `s|…|…|` the `|` of the replacement CLOSES the expression
+# and the escape never reaches the file. `\\` is what spells one literal backslash in a sed
+# replacement, so the cell ends up carrying `\|` — the GFM escape, which is the point.
+sed -i 's@`true` → 0@`printf a\\|b` → 0@' "$MDIR/checkpoint.md"
+# The probe dies loud if it sabotaged nothing: an assertion about an escaped pipe on a fixture that
+# has none would be green forever, pointing at the right thing by accident. `-F`, because in a BRE
+# `\|` is alternation and `grep 'a\|b'` would match the untouched row too.
+if grep -qF '`printf a\|b` → 0' "$MDIR/checkpoint.md"; then
+  pass "fixture: the Check cell really carries an escaped pipe"
+else
+  fail "escaped-pipe fixture" 'a Check cell containing \|' "$(grep -m1 '^| I1' "$MDIR/checkpoint.md")"
+fi
+assert_phase "a Check cell with an escaped pipe keeps its status readable" "QA"
+escaped_answer="$( cd "$FIX" && "$SDD" phase "$MISSION" 2>&1 )"
+if [ "$plain_answer" = "$escaped_answer" ]; then
+  pass "the escaped pipe changes nothing about which phase is due"
+else
+  fail "the escaped pipe changes nothing about which phase is due" "$plain_answer" "$escaped_answer"
+fi
+mv "$MDIR/checkpoint.pipe.bak" "$MDIR/checkpoint.md"
+
+# The same formatter, on the checkpoint. `|:---|:---:|` is what prettier and markdownlint write,
+# and a separator cell that starts or ends with a colon is not matched by the `/^-+$/` skip: the
+# separator becomes a ROW, its ID is `:---` and its Status is `:---:` — outside the enum. gate_EXEC
+# then refuses the phase with "invalid status" on a checkpoint whose every increment is done.
+cp "$MDIR/checkpoint.md" "$MDIR/checkpoint.colon.bak"
+sed -i 's@^|---|---|---|---|---|$@|:---|:---|:---:|:---:|:---|@' "$MDIR/checkpoint.md"
+if grep -qF '|:---|:---|:---:|:---:|:---|' "$MDIR/checkpoint.md"; then
+  pass "fixture: the checkpoint separator really carries alignment colons"
+else
+  fail "alignment-colon fixture" "a separator row with colons" "$(sed -n '2p' "$MDIR/checkpoint.md")"
+fi
+assert_phase "an alignment-colon separator is not an increment" "QA"
+mv "$MDIR/checkpoint.colon.bak" "$MDIR/checkpoint.md"
 
 # --- QA --------------------------------------------------------------------
 # The QA gate has TWO contracts, because there are two kinds of project.
@@ -510,6 +656,118 @@ sed -i 's/^| Security | C |.*/| Security | A | clean |/;s/^| \*\*Overall\*\* .*/
   "$MDIR/40-review-r10.md"
 git add -A && git commit -qm "chore: review"
 assert_phase "last review all Grade A, suite green, clean tree" "DOCS"
+
+# The separator row prettier and markdownlint actually write. GFM spells column alignment with
+# colons — `|:---|:---:|---:|` — and the `/^-+$/` skip does not match a cell that starts or ends
+# with one, so the separator became a criterion: `: = ---` , a grade no reviewer wrote, on a
+# criterion named `:`. REVIEW then loops to its ceiling with a GATE_WHY naming no criterion at all,
+# and every round costs a session. Nothing in the kit writes these colons — a formatter run over
+# the target repo does, which is why no fixture had them until now.
+cat > "$MDIR/40-review-r11.md" <<'EOF'
+# Review r11
+### Overall Grade
+
+| Criterion | Grade | Rationale |
+|:----------|:-----:|:----------|
+| Code Quality (Zen) | A | clean |
+| Type Safety | A | clean |
+| Error Handling | A | clean |
+| Security | A | clean |
+| Performance | A | clean |
+| Test Coverage | A | clean |
+| Documentation | A | clean |
+| **Overall** | **A** | nothing left open |
+EOF
+git add -A && git commit -qm "chore: review r11, formatter-aligned"
+assert_phase "an alignment-colon separator row is not a criterion" "DOCS"
+assert_why_absent "and the reason does not name the separator as a criterion" "REVIEW" "^:|= ---|:---"
+
+# --- the REVIEW ceiling counts rounds in total, not per invocation ----------
+# `attempts` is a `local -A` of cmd_run, born with the PROCESS. REVIEW_MAX_ITER therefore only ever
+# capped ONE `sdd run`: three rounds, escalate — and the next `sdd run` handed out three more, for
+# ever, on the most expensive phase in the kit. The rounds are on disk as `40-review-r<N>.md`, which
+# is where the whole kit derives its state from.
+#
+# The fixture already carries r1, r2, r3, r10 and r11, so the count on disk is 11 against a
+# REVIEW_MAX_ITER of 3. r11 goes red so REVIEW is the DERIVED phase again.
+sed -i 's/^| Security | A | clean |/| Security | C | injection left open |/;s/^| \*\*Overall\*\* .*/| **Overall** | **C** | one HIGH left open |/' \
+  "$MDIR/40-review-r11.md"
+git add -A && git commit -qm "chore: review r11 red again"
+assert_phase "fixture: REVIEW is the derived phase again" "REVIEW"
+
+review_sessions_spent() { phase_sessions_spent REVIEW; }
+rv_before="$(review_sessions_spent)"
+out_rv="$( cd "$FIX" && "$SDD" run "$MISSION" 2>&1 )"; rc_rv=$?
+rv_after="$(review_sessions_spent)"
+if [ "$rc_rv" -eq 3 ] && [ "$rv_after" -eq "$rv_before" ] \
+   && grep -q "rounds IN TOTAL" <<< "$out_rv"; then
+  pass "a fresh sdd run refuses round N+1 past REVIEW_MAX_ITER (exit 3, no session spent)"
+else
+  fail "a fresh sdd run refuses round N+1 past REVIEW_MAX_ITER (exit 3, no session spent)" \
+       "exit 3, the disk-derived ceiling, and no new REVIEW session log" \
+       "exit $rc_rv, $rv_before → $rv_after log(s): $(tail -3 <<< "$out_rv")"
+fi
+
+# The headline and the sentence that makes it true travel on the SAME channel. With the ceiling
+# derived from disk the count in the headline is `0` — this invocation opened no session, because
+# the ceiling refused before it could — so read alone it looks like a runner bug. `bad` writes to
+# stderr and `dim` to stdout: with the note on `dim`, `sdd run 2>/dev/null` kept the sentence and
+# dropped the headline, and `sdd run >file` kept the headline and dropped the sentence.
+#
+# `2>&1 >/dev/null` and not `2>&1`: the order matters and it is the whole assertion. stderr is
+# pointed at the capture FIRST, then stdout is thrown away, so what comes back is stderr ALONE.
+# Every other assertion in this file merges the two and is green whichever channel each half took
+# — this is the only one that can tell them apart, which is why the note above it says so.
+err_rv="$( cd "$FIX" && "$SDD" run "$MISSION" 2>&1 >/dev/null )"
+if grep -q "BLOCKED in REVIEW" <<< "$err_rv" && grep -q "rounds IN TOTAL" <<< "$err_rv"; then
+  pass "the ceiling note rides the same channel as the headline it explains"
+else
+  fail "the ceiling note rides the same channel as the headline it explains" \
+       "stderr alone carrying BOTH the headline and the 'rounds IN TOTAL' sentence" \
+       "stderr alone: $(tail -3 <<< "$err_rv")"
+fi
+# And the other half, or the assertion above is satisfied by a runner that shouts everything on
+# stderr and leaves stdout empty: the navigation hint is NOT an escalation line and stays on stdout.
+out_only_rv="$( cd "$FIX" && "$SDD" run "$MISSION" 2>/dev/null )"
+if grep -q "shows the full state" <<< "$out_only_rv"; then
+  pass "and the navigation hint stays on stdout, where it was"
+else
+  fail "and the navigation hint stays on stdout, where it was" \
+       "stdout alone carrying the 'sdd status' hint" "stdout alone: $(tail -3 <<< "$out_only_rv")"
+fi
+
+# The differential, one config key apart: with the ceiling above the rounds on disk, the SAME state
+# spends a session. Without it, a runner that escalated on every derived REVIEW would pass the
+# assertion above while making the phase unreachable.
+printf 'REVIEW_MAX_ITER=99\n' >> .sdd/config.sh
+git add -A && git commit -qm "chore: raise the review ceiling"
+out_rv2="$( cd "$FIX" && "$SDD" run "$MISSION" --max-phases 1 2>&1 )"; rc_rv2=$?
+if [ "$(review_sessions_spent)" -gt "$rv_after" ]; then
+  pass "with REVIEW_MAX_ITER above the rounds on disk the same state opens a session"
+else
+  fail "the ceiling is what refuses, not the phase itself" "a new REVIEW session log" \
+       "exit $rc_rv2: $(tail -3 <<< "$out_rv2")"
+fi
+
+# And `--phase REVIEW` is a human asking for one specific round with their eyes on it: the
+# disk-derived ceiling does not apply to the forced path, or the round that unblocks the mission
+# could never be run.
+sed -i '/^REVIEW_MAX_ITER=99$/d' .sdd/config.sh
+git add -A && git commit -qm "chore: back to the default ceiling"
+rv3="$(review_sessions_spent)"
+out_rv3="$( cd "$FIX" && "$SDD" run "$MISSION" --phase REVIEW 2>&1 )"; rc_rv3=$?
+if [ "$(review_sessions_spent)" -gt "$rv3" ]; then
+  pass "--phase REVIEW still runs the round a human asked for"
+else
+  fail "--phase REVIEW still runs the round a human asked for" "a new REVIEW session log" \
+       "exit $rc_rv3: $(tail -3 <<< "$out_rv3")"
+fi
+
+# Back to green so the phases below carry on from DOCS.
+sed -i 's/^| Security | C |.*/| Security | A | clean |/;s/^| \*\*Overall\*\* .*/| **Overall** | **A** | nothing left open |/' \
+  "$MDIR/40-review-r11.md"
+git add -A && git commit -qm "chore: review r11 green"
+assert_phase "with the ceiling fixture gone the mission is back at DOCS" "DOCS"
 
 # --- the Rationale column ---------------------------------------------------
 #
@@ -808,6 +1066,15 @@ printf '# Docs\n\ndrift checklist\n\n| Area | Doc | Status | Evidence |\n|---|--
 git add -A && git commit -qm "chore: docs"
 assert_phase "drift checklist complete" "PR"
 assert_why   "PR reports the missing 50-pr.md" "PR" "50-pr.md"
+
+# Same formatter, other gate. Here the alignment colons land in the Status COLUMN of the separator
+# row, so the skip lets `:---:` through as a Status value and gate_DOCS fails a drift checklist
+# with nothing pending in it — the phase refused for a row the author never wrote.
+printf '# Docs\n\ndrift checklist\n\n| Area | Doc | Status | Evidence |\n|:------|:----|:------:|:---------|\n| runner | README | ✅ | commit abc1234 |\n| libs | — | n/a | internal refactor |\n\nFindings recorded in TODO.md for this mission.\n' \
+  > "$MDIR/45-docs.md"
+git add -A && git commit -qm "chore: docs, formatter-aligned"
+assert_phase "a formatter-aligned drift checklist is still complete" "PR"
+assert_why_absent "gate_DOCS does not read the separator row as a Status" "DOCS" ":---"
 
 # --- the mutation catalogue's stamp -----------------------------------------
 #

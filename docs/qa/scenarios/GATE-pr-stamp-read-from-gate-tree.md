@@ -6,13 +6,13 @@ persona: Mara
 journey: J-certify-mission-close
 expected: The tree sdd health stamps is the same tree gate_PR reads it from, including when sdd is invoked from PATH
 entry_points: sdd why <mission> PR (sdd resolved from PATH, cwd in a worktree)
-qa_status: fail
+qa_status: skipped
 bug_ids: BUG-20260819-stamp-written-where-gate-cannot-read
 fix_status: fixed
 retest_status: pending
 fix_commits: 1dc713f
 evidence:
-last_report: docs/handoffs/20260819-fecho-que-nao-mente/checkpoint.md
+last_report: ../reports/2026-08-21-missao-porteira.md
 overlaps: 
 ---
 
@@ -28,3 +28,10 @@ No verdict came from a dated report: this repo's QA phase does not produce one (
 the gate measures, and the new world in `tests/check-gates.sh` is the first to run with
 `SDD_HOME != REPO_ROOT`. The `xargs -0 -r` vacuity guard was hardened in the same commit but no
 world reaches it, which is declared. Retest pending on a real `./bin/sdd health` after F3.
+
+**Skipped 2026-08-21, with the reason** (CH-stamp-round-trip-from-a-worktree re-run). The stamp is
+on disk in the kit and `sdd health` wrote it at `128 caught of 128` after the last code commit — but
+this branch's mission was executed **interactively**, not through `sdd run`, so there is no
+`docs/handoffs/<mission>/` for `gate_PR` to be asked about. Walking it would mean inventing a
+mission directory to make the path reachable, which is fixture-editing to reach a code path — the
+thing persona fidelity forbids. The next mission driven by `sdd run` settles it for free.

@@ -184,6 +184,34 @@ assert_eq "every projected phase asks for stream-json WITH --verbose" "$blocks" 
 assert_eq "and no phase is left on the single-blob format" "0" \
   "$(grep -c -- '--output-format json' <<< "$argv")"
 
+# --- the damage cap is per phase -------------------------------------------
+# One global ceiling priced every phase as if they cost the same. They do not: a REVIEW round with
+# the `codereview` skill and a QA walk are the expensive ones, and a PR body assembled from
+# finished handoffs is mechanical. A single number is therefore either too low for REVIEW (the
+# session dies mid-round and the money is spent with nothing to show) or too high for PR (the cap
+# stops capping anything).
+#
+# Read off the REAL argv of the projection, which is the only place in this suite where the flags
+# the CLI would receive are visible — a stub answers regardless of what it was handed.
+budget_of() {
+  awk -v want="$1" '
+    /^--- DRY RUN: phase .* ---$/ { blk = $5; next }
+    blk == want {
+      for (i = 1; i <= NF; i++) if ($i == "--max-budget-usd") { print $(i + 1); exit }
+    }
+  ' <<< "$argv"
+}
+
+echo "== the damage cap is per phase =="
+# The headline pair: the most expensive phase and the cheapest, in ONE assertion, so a resolver
+# that echoes the same number for everything cannot satisfy it whatever that number is.
+assert_eq "REVIEW carries --max-budget-usd 40 while PR carries 15" \
+  "40 15" "$(budget_of REVIEW) $(budget_of PR)"
+# And the rest of the case arm, so the two keys that are neither the global nor REVIEW are covered
+# by something. DOCS falls through to the global on purpose: it is one write of documentation.
+assert_eq "EXEC and QA carry their own ceiling, DOCS falls back to the global" \
+  "25 25 15" "$(budget_of EXEC) $(budget_of QA:close) $(budget_of DOCS)"
+
 # --- OUTPUT_LANG reaches the boot prompt -----------------------------------
 # Anchored on the VALUE of the key, never on the prose of the prompt: the runner text is English
 # and the artifacts may be in any language, and an assertion tied to the prose would die at the
@@ -255,6 +283,33 @@ assert_eq "an in-progress report goes back to the exec sub-step" \
 rm -rf docs/qa/charters docs/qa/reports
 
 sed -i 's|^E2E_CMD="true"|E2E_CMD=""|' .sdd/config.sh
+
+# --- TICKET boots ONE driver, not two --------------------------------------
+# `phase_agent`'s own invariant, written above it in bin/sdd: an agent and a slash are two system
+# prompts fighting over one session, which is noise and not reinforcement. Every other phase obeys
+# it — the QA sub-steps driven by a skill answer `<none>`. TICKET declared BOTH: the `sdd-publisher`
+# agent AND a prepended `/ticket open`. The slash is what goes: the `ticket` skill has no
+# `disable-model-invocation`, so it does not need to be the first line of the prompt to load, and
+# agents/sdd-publisher.md already instructs the session to invoke it.
+#
+# Differential, and both halves are needed: the agent alone would pass on a runner that also kept
+# the slash, and the absent slash alone would pass on a runner that booted TICKET with no driver at
+# all.
+echo "== TICKET boots one driver =="
+sed -i 's|^JIRA_ENABLED=false|JIRA_ENABLED=true|' .sdd/config.sh
+printf 'PROJECT=FX\nBOARD=1\n' > .jira-project
+outt="$( "$SDD" run "$MISSION" --dry-run --phase TICKET 2>&1 )"
+assert_eq "TICKET boots the agent without a prepended slash" \
+  "TICKET=sdd-publisher" "$(printf '%s\n' "$outt" | projected)"
+if grep -q '│ /ticket open' <<< "$outt"; then
+  fail "the TICKET boot prompt does not open with a slash" \
+       "no '/ticket open' first line" "$(grep -m1 '│' <<< "$outt")"
+else
+  pass "the TICKET boot prompt does not open with a slash"
+fi
+sed -i 's|^JIRA_ENABLED=true|JIRA_ENABLED=false|' .sdd/config.sh
+rm -f .jira-project
+assert_eq "the fixture comes back clean after the TICKET test" "" "$(git status --porcelain)"
 
 # --- the projection must not write to the mission journal ------------------
 # Found by the QA phase of mission 20260814-dry-run-completo: with a `blocked` increment, the

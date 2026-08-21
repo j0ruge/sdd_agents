@@ -94,14 +94,17 @@ Start from `templates/review.md` in the kit — it carries the frontmatter, the 
 table at the exact heading level the gate reads. This artifact went two missions with a gate and
 no template, and two independent rounds wrote `## Overall Grade` and collected `NO-TABLE`.
 
-The file **must** contain the `### Overall Grade` section with the skill's table, in the format:
+The file **must** contain the `### Overall Grade` section with the skill's table. Below, the `<…>`
+cells are the SHAPE, not something you may leave behind — the gate refuses any cell left between
+angle brackets, so every one of them has to become a sentence like the first row's before the round
+closes:
 
 ```md
 ### Overall Grade
 
 | Criterion | Grade | Rationale |
 |-----------|-------|-----------|
-| Code Quality (Zen) | A | <one measured sentence, never a fill-in> |
+| Code Quality (Zen) | A | Duplicated parser unified; suite green (13/13 sensors). |
 | Type Safety | A | <…> |
 | Error Handling | A | <…> |
 | Security | A | <…> |

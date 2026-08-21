@@ -22,17 +22,20 @@ They all run with cwd at the root of the target repo. The runner only looks at t
 | `TEST_CMD` | yes | — | Unit/integration suite. It is the EXEC gate and part of the REVIEW gate. It must be fast enough to run on every increment. |
 | `E2E_CMD` | no | empty | End-to-end suite. Empty ⇒ the QA gate ignores e2e (a project with no UI). |
 | `E2E_DIR` | no | `e2e` | Where `sdd-qa` commits new specs. |
-| `LINT_CMD` | no | empty | Runs in the REVIEW gate when set. |
-| `BUILD_CMD` | no | empty | Runs in the REVIEW gate when set. |
+
+The runner has exactly these three. A separate lint or build command belongs **inside** `TEST_CMD`:
+a key the runner never reads is a promise the user cannot collect on, and this schema carried five
+such keys — for a lint, a build and bringing the environment up — until they were removed. Adding
+one back means wiring the read in `bin/sdd` in the **same** commit.
 
 ## Running application (QA phase)
 
 | Key | Required | Default | What it is |
 |---|---|---|---|
 | `APP_URL` | only with `E2E_CMD` | empty | URL `agent-browser` opens in the exploratory sessions. |
-| `DEV_UP_CMD` | no | empty | Brings the environment up before QA (e.g. `docker compose up -d`). Empty ⇒ the runner assumes it is already up and warns if `APP_URL` does not answer. |
-| `DEV_READY_CMD` | no | empty | Command returning 0 when the app is ready (e.g. `curl -sf $APP_URL`). The runner polls for up to `DEV_READY_TIMEOUT` seconds. |
-| `DEV_READY_TIMEOUT` | no | `90` | Seconds to wait for `DEV_READY_CMD`. |
+
+The runner does not bring the environment up: it assumes the app is already running. Starting it
+(`docker compose up -d` and friends) is a step for whoever runs `sdd`, or for `E2E_CMD` itself.
 
 ## Artifact paths
 
@@ -62,12 +65,23 @@ exception, never a silent one** (kaizen K3). Values: any alias `claude --model` 
 | Key | Default | What it is |
 |---|---|---|
 | `QA_MAX_ITER` | `3` | Rounds of the QA⇄EXEC loop before `BLOCKED`. Protects against an endless "the fix breaks another journey". Careful raising it: one round is **up to 3 sessions** (one per sub-step), so the phase session cap is `QA_MAX_ITER × 3` — 9 by default. |
-| `REVIEW_MAX_ITER` | `3` | Review sessions in total before `BLOCKED`. |
+| `REVIEW_MAX_ITER` | `3` | Review **rounds in total**, derived from the `40-review-r<N>.md` files on disk — re-running `sdd run` does not reset it. A second guard counts sessions inside one invocation, for the session that writes no round at all. `--phase REVIEW` is exempt: that is a human asking for one specific round with their eyes on it. |
 | `EXEC_MAX_RETRY` | `1` | Retries per increment before `BLOCKED`. |
-| `BUDGET_PER_PHASE_USD` | `15` | Goes into `--max-budget-usd` per session. A damage cap, not a budget. |
+| `BUDGET_PER_PHASE_USD` | `15` | Goes into `--max-budget-usd` per session. A damage cap, not a budget. Applies to the phases with no key of their own: DOCS, PR, TICKET, KAIZEN. |
+| `BUDGET_EXEC_USD` | `25` | Cap for an EXEC session — one increment in TDD, which reads, writes, runs the suite and commits. |
+| `BUDGET_QA_USD` | `25` | Cap for a QA session. One QA **round** is up to three of them, so the round costs up to `3 ×` this. |
+| `BUDGET_REVIEW_USD` | `40` | Cap for a REVIEW round. The most expensive phase: the `codereview` skill routes by severity and the session fixes inside itself. |
 | `PUBLISH_ON_REVIEW_BLOCKED` | `off` | `draft` ⇒ a blown review opens a **draft** PR with the current grade and the open items, instead of stopping dead. The runner records that it lowered its own bar, **once per run**: a `DEGRADED` line in the mission's `pipeline.log` and one `event:"degraded"` / `kind:"review-to-draft"` row in the autonomy ledger. The draft PR gets **one** chance: if its own gate fails too, the run ends on `blocked` / `budget-exhausted` in **REVIEW** — the phase whose ceiling was actually blown — instead of handing REVIEW back and going round again. |
 | `PERMISSION_MODE` | `acceptEdits` | The ceiling. `bypassPermissions` is **never** the kit's default. |
 | `ALLOWED_TOOLS` | `Bash` | Goes into `--allowedTools`, as a **single argument**. **Required in practice**: `acceptEdits` auto-approves file edits, but **not** `Bash` — without this key the phase session cannot run the suite nor commit, and the EXEC phase becomes unsatisfiable. Verified in the fixture mission `20260814-dry-run-completo`. The kit has only exercised the default; if you need more than one tool, check the format your `claude` accepts before trusting the gate. |
+
+⚠️ Trade-off, declared: raising `BUDGET_PER_PHASE_USD` does **not** raise EXEC, QA or REVIEW —
+they read their own key. One number for every phase was either too low for REVIEW, where the
+session dies mid-round and the money is spent with nothing on disk, or too high for PR, where it
+stopped capping anything. Four keys instead of one is the price of the cap meaning something in
+both places. ⚠️ The paragraph sits **below** the table and not between two of its rows: a
+paragraph inside a GFM table ends it, and the rows after it stop being rows at all — three keys
+rendered as one run-on sentence until this was caught in review.
 
 ## JIRA
 

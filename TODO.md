@@ -59,9 +59,9 @@ Achados sobre **repos-alvo** vão para o `TODO.md` daquele repo. Este arquivo é
   `bin/sdd:1848` — a checagem 2b casa a flag `--list`, que é da suíte **do kit**, e lê o config do
   kit. Num repo-alvo, `TEST_CMD="true"`, `npm test --listTests` ou `pytest --collect-only` passa
   gate_EXEC, gate_QA e gate_REVIEW na hora, e o `sdd preflight` só confere que a chave não está
-  vazia (`bin/sdd:1674`). Direção: exigir do `TEST_CMD` evidência de **execução** (contagem de
-  testes na saída, ou um probe que falhe de propósito), nunca uma lista de flags proibidas.
-  — descoberto por `sdd-executor` na missão `20260819-fecho-que-nao-mente` (2026-08-19)
+  vazia (`bin/sdd:1674`). **RESOLVIDO por `41f6c34`**: `test_cmd_looks_noop()`, uma definição,
+  chamada no preflight de todo repo-alvo. — descoberto por `sdd-executor` na missão
+  `20260819-fecho-que-nao-mente` (2026-08-19)
 
 - [ ] **O `stub-argv.txt` do `check-health.sh` nunca é apagado entre mundos de fixture** —
   `tests/check-health.sh:930` — todo `health_run` sobrescreve, ninguém remove. Hoje não reproduz
@@ -230,8 +230,8 @@ Achados sobre **repos-alvo** vão para o `TODO.md` daquele repo. Este arquivo é
   `bin/sdd:426` — `gate_EXEC` roda o `TEST_CMD` sobre o working tree, então o vermelho de QUALQUER
   fase em voo é lido como vermelho do EXEC. Medido nesta missão: a REVIEW morreu antes de commitar,
   o `sdd why` respondeu `EXEC: TEST_CMD failed` com os 6 incrementos `done` e o HEAD verde, e sem
-  intervenção o runner reabriria o EXEC a ~US$ 25 a volta. Direção: gate que distingue árvore suja
-  de HEAD vermelho e escala em vez de rederivar.
+  intervenção o runner reabriria o EXEC a ~US$ 25 a volta. **RESOLVIDO por `550dc98`**: o gate
+  marca `GATE_EXEC_DIRTY` e o `cmd_run` escala sem abrir sessão.
   — descoberto por `sdd-executor` na missão `20260816-portas-do-humano` (2026-08-17)
 
 - [ ] **`sdd approve` diz "next: sdd run" com o `gate_PLAN` ainda fechado por outro motivo** —
@@ -255,8 +255,8 @@ Achados sobre **repos-alvo** vão para o `TODO.md` daquele repo. Este arquivo é
   (`bin/sdd:1363`) só lê o `00-missao.md`. Com `JIRA_ENABLED=true` o campo fica no placeholder para
   sempre e a guarda da classe SQ-97 não existe nesses repos — a missão fechou a porta no caminho
   sem JIRA, e a decisão 6 do `00-missao.md` manteve o TICKET fora de escopo de propósito.
-  Direção: a fase TICKET escreve o nome criado no `00-missao.md` via `frontmatter_write`.
-  — descoberto por `sdd-reviewer` na missão `20260816-portas-do-humano` (2026-08-17)
+  **RESOLVIDO por `779d87a`**: a sessão TICKET escreve o nome de volta e o `gate_TICKET` cobra a
+  metade verificável. — descoberto por `sdd-reviewer` na missão `20260816-portas-do-humano` (2026-08-17)
 
 - [ ] **A releitura pós-checkout confere o campo `branch:`, não a identidade do plano** —
   `bin/sdd:1405` — se a branch declarada carrega uma cópia ANTIGA do mesmo `00-missao.md` (slug
@@ -278,8 +278,16 @@ Achados sobre **repos-alvo** vão para o `TODO.md` daquele repo. Este arquivo é
   do limpo, e o runner leu Status=`` `grep -c '…'` `` e Commit=`pending`. `gate_EXEC` reprova com
   "invalid status", e `sdd status` imprime `pending` na coluna Commit — plausível e errado. O
   gatilho é Check que canaliza sensor para `grep`; nem o template nem checkpoint anterior o tinha.
-  Direção: tratar `\|` antes do split, com asserção. — descoberto por `sdd status` na missão
-  `20260816-kit-como-alvo` (2026-08-16)
+  **RESOLVIDO por `5434a65`**: o rejoin por paridade que o `gate_REVIEW` já tinha.
+  — descoberto por `sdd status` na missão `20260816-kit-como-alvo` (2026-08-16)
+
+- [ ] **A metade "nenhuma sessão foi gasta" do `assert_jidoka` é vácua** —
+  `tests/check-gates.sh:281` — ela grepa o marcador do stub (`the test invoked the real claude`)
+  na saída do `sdd run`, e `run_phase` manda stdout E stderr da sessão para o arquivo de log: o
+  marcador nunca chega ao terminal, então a asserção fica verde tenha havido sessão ou não. É
+  justamente o discriminador que o comentário acima dela chama de "o que 'no session spent'
+  significa". Direção: contar o `pipeline.log`, como as duas asserções novas desta missão fazem
+  (`phase_sessions_spent`). — descoberto por `humano` na missão `20260820-missao-porteira` (2026-08-21)
 
 - [ ] **Os dois ramos de diagnóstico do `differential()` não têm probe** —
   `tests/check-entrypoint.sh:234` — a passada adversarial da r2 matou 20 de 25 degradações, e o
@@ -446,7 +454,8 @@ Achados sobre **repos-alvo** vão para o `TODO.md` daquele repo. Este arquivo é
   `bin/sdd:557` — a linha separadora é pulada por `crit ~ /^-+$/`, que não conhece `:---:`. Uma
   tabela formatada por prettier/markdownlint devolve `GATE_WHY=":---------- = :-----:"` e a
   rodada trava até o `REVIEW_MAX_ITER` com uma frase que não nomeia critério nenhum. Anterior ao
-  I3; nenhuma das 14 rodadas em disco usa colons hoje. Direção: `crit ~ /^:?-+:?$/`.
+  I3; nenhuma das 14 rodadas em disco usa colons hoje. **RESOLVIDO por `db26cc1`**: `/^:?-+:?$/`
+  nos três parsers (REVIEW, DOCS, checkpoint), um mutante cada.
   — descoberto por `sdd-qa` na missão `20260819-fecho-que-nao-mente` (2026-08-19)
 
 - [ ] **O ramo de forma do `score:` no `cmd_health` não tem asserção nem mutante** —
@@ -527,8 +536,9 @@ Achados sobre **repos-alvo** vão para o `TODO.md` daquele repo. Este arquivo é
   `agents/sdd-reviewer.md:104` — o bloco é introduzido como "in the format" e todas as oito
   `Rationale` são `<…>` ou `<one measured sentence…>`, ambas recusadas pela regra do envelope
   angular; o aviso vem três parágrafos depois. Duas sessões já derivaram o heading errado da
-  ausência de exemplo copiável. Mesma linha: `bin/sdd:528` cita `templates/review.md:37-44`, que
-  o próprio commit empurrou para 48-55. Direção: uma linha do exemplar com frase real.
+  ausência de exemplo copiável. Mesma linha: `bin/sdd:528` cita `templates/review.md:37-44`, podre.
+  **RESOLVIDO por `346b0a2`**: uma linha com frase real, a frase-guia dizendo que os `<…>` são a
+  forma, e as duas citações agora por seção.
   — descoberto por `sdd-qa` na missão `20260819-fecho-que-nao-mente` (2026-08-19)
 
 - [ ] **`REVIEW_MAX_ITER` conta por invocação de `sdd run`, não "in total" como o schema promete** —
@@ -536,9 +546,9 @@ Achados sobre **repos-alvo** vão para o `TODO.md` daquele repo. Este arquivo é
   cada `sdd run` recomeça o contador e o teto nunca é alcançado por quem re-roda. Medido nesta
   missão: **4 sessões de REVIEW** (~US$ 107) em 3 invocações, `attempt` chegando a 2, nenhum
   `BLOCKED`, nenhum `degraded` — e `docs/failure-modes.md:217` descreve como sintoma justamente o
-  `BLOCKED in REVIEW` que não apareceu. Vale para os três tetos. Direção: derivar a contagem do
-  ledger (`autonomy`, por `(missão, fase)`) em vez de um array de processo, ou corrigir os dois
-  textos. — descoberto por `sdd-docs` na missão `20260818-lote-facil` (2026-08-19)
+  `BLOCKED in REVIEW` que não apareceu. **RESOLVIDO por `d3dea51`** para o REVIEW: o teto sai dos
+  `40-review-r<N>.md` em disco. QA e EXEC seguem por invocação, sem caso medido.
+  — descoberto por `sdd-docs` na missão `20260818-lote-facil` (2026-08-19)
 
 - [ ] **O ciclo de vida do `RESOLVIDO por` e a catraca do backlog não cabem juntos** —
   `TODO.md:16` — o cabeçalho manda o item fechado ficar aqui, caixa desmarcada, até o PR mergear;
@@ -551,9 +561,10 @@ Achados sobre **repos-alvo** vão para o `TODO.md` daquele repo. Este arquivo é
   `bin/sdd:2757` (`kaizen_reminder`) vs `:2924` (`cmd_kaizen`) — o lembrete roda com
   `REPO_ROOT` = repo-ALVO e conta as missões dele; o juiz roda no repo do KIT e, com o filtro por
   repo, lê `latest: null` e `other_repo: N`. ⚠️ `--all-repos` (`d62f08c`) **não** fecha isto: o
-  lembrete só é chamado de `cmd_run`, e `sdd run` não tem a flag — segue aberto, não estampar.
-  Direção: silenciar o lembrete fora do kit, ou responder se o juiz pode pesar linha de outro
-  projeto — ADR 0004. — descoberto por `sdd-reviewer` na missão `20260816-kit-como-alvo` (2026-08-16)
+  lembrete só é chamado de `cmd_run`, e `sdd run` não tem a flag. **RESOLVIDO por `2a1b4cd`**: o
+  lembrete resolve a identidade do repo e, fora do kit, diz o que é verdade sem apontar o comando.
+  Se o juiz pode pesar linha de outro projeto segue aberto — ADR futura (o 0004 foi consumido).
+  — descoberto por `sdd-reviewer` na missão `20260816-kit-como-alvo` (2026-08-16)
 
 - [ ] **`sdd kaizen` recusa rodar de um worktree do próprio kit** — `bin/sdd:2963` — a porta
   "estou no repo do kit?" compara `kit_root` (`--show-toplevel` de `$SDD_HOME`) com `$REPO_ROOT`,
@@ -566,7 +577,8 @@ Achados sobre **repos-alvo** vão para o `TODO.md` daquele repo. Este arquivo é
   `config/schema.md:24-25,32-34` vs `bin/sdd:81-82` — `LINT_CMD`, `BUILD_CMD`, `DEV_UP_CMD`,
   `DEV_READY_CMD` e `DEV_READY_TIMEOUT` estão documentados como se o gate de REVIEW e a fase QA
   os usassem; nenhum é lido em lugar nenhum. Um `LINT_CMD` preenchido dá ao usuário um sensor que
-  ele acha que tem — pior que não ter. Direção: implementar, ou marcar as chaves como reservadas.
+  ele acha que tem — pior que não ter. **RESOLVIDO por `c8070dc`**: as cinco saíram do schema, do
+  runner e das duas configs, com a regra de que chave nova entra com a leitura no mesmo commit.
   — descoberto por `sdd-reviewer` na missão `20260814-dry-run-completo` (2026-08-14)
 
 - [ ] **`E2E_DIR` tem default no runner e é lida só pelo agente** — `bin/sdd:81` vs
@@ -582,8 +594,8 @@ Achados sobre **repos-alvo** vão para o `TODO.md` daquele repo. Este arquivo é
   ruído"), `QA:plan`/`QA:exec` respeitam e TICKET não: nasce com `--agent sdd-publisher` **e** o
   slash `/ticket open` prependado. É redundante — a skill `ticket` não tem
   `disable-model-invocation` e o `sdd-publisher` já invoca o slash sozinho. Não morde com
-  `JIRA_ENABLED=false`. Direção: escolher um dos dois. — descoberto por `sdd-reviewer` na missão
-  `20260814-dry-run-completo` (2026-08-14)
+  `JIRA_ENABLED=false`. **RESOLVIDO por `557e267`**: saiu o slash. — descoberto por `sdd-reviewer`
+  na missão `20260814-dry-run-completo` (2026-08-14)
 
 - [ ] **O kit não tem `CHANGELOG.md`, e a fase DOCS cobra um** — `agents/sdd-docs.md` (tabela "O
   que atualizar") — o registro durável aqui é `KAIZEN_LOG.md` + handoffs + corpo do PR, e nenhum
@@ -596,8 +608,8 @@ Achados sobre **repos-alvo** vão para o `TODO.md` daquele repo. Este arquivo é
   `run_phase` — teto único calibrado por palpite (default do kit US$ 15; **este repo em US$ 40**
   desde 2026-08-17). Medido: SQ-97 TICKET 2,56 · EXEC 7,37 · QA:plan 6,90 · **QA:exec 14,84** ·
   QA:close 9,08; kit **REVIEW 14,76**, e **REVIEW 23,13 contra teto 25** em `catraca-do-backlog` —
-  uma r2 teria morrido por dinheiro. Fase a 1% do teto morre no meio e o runner lê "não avançou".
-  Direção: teto por fase com o global de default, e gate que reprove com motivo explícito.
+  uma r2 teria morrido por dinheiro. **RESOLVIDO por `2be05fd`**: `phase_budget_usd()` com
+  `BUDGET_EXEC_USD=25`, `BUDGET_QA_USD=25`, `BUDGET_REVIEW_USD=40`, e o global para as baratas.
   — descoberto por `humano` no piloto SQ-97 (2026-08-14)
 
 - [ ] **O contrato de artefato ainda é PT-BR em cinco pontos** — chamadas de `frontmatter` em

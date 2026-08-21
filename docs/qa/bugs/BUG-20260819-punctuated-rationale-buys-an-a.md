@@ -1,6 +1,6 @@
 # BUG-20260819-punctuated-rationale-buys-an-a: one keystroke turns a refused placeholder into an accepted review
 
-- **Status:** fixed
+- **Status:** verified <!-- open | fixed | verified | wont-fix | invalid -->
 - **Impact (user-side):** Trust-Damage
 - **Severity:** High · **Priority:** P1
 - **Persona Affected:** Sessão
@@ -75,3 +75,10 @@ Not yet `verified`: the re-walk under the original persona is `sdd why <mission>
 round file carrying each refused spelling, and the REVIEW phase now running is the first real
 exercise of it — the round it writes is judged by the rule this bug produced. Move to `verified`
 once that round is on disk and the gate's verdict on it has been read.
+
+## Verification
+
+- **Retested:** 2026-08-21, Mara / J-review-round-seal · **Report:** ../reports/2026-08-21-missao-porteira.md
+- **Result:** observable confirmed fixed. Walked on a live target repo (not a suite fixture), on a
+  round whose table was colon-aligned and prettier-formatted, so the retest also covers the
+  alignment change that landed since the fix.
