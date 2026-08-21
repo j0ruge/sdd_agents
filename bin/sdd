@@ -4194,7 +4194,9 @@ LEDGER OPTIONS (`autonomy` and `kaizen`)
                              comes from target repos (the kit's own axis degenerates), and this
                              flag is the only way to read them — but nothing here yet distinguishes
                              a target from a fixture, so the default stays shut and the judge is
-                             not pointed at it. That decision is ADR 0004's, not this flag's.
+                             not pointed at it. That decision belongs to a future ADR
+                             (deliberately deferred; 0004 has since been taken by the
+                             mutation-stamp decision), not to this flag.
 
 FOR SCRIPTS
   sdd phase <mission>        print only the current phase (or DONE)

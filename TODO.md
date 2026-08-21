@@ -553,7 +553,7 @@ Achados sobre **repos-alvo** vão para o `TODO.md` daquele repo. Este arquivo é
   repo, lê `latest: null` e `other_repo: N`. ⚠️ `--all-repos` (`d62f08c`) **não** fecha isto: o
   lembrete só é chamado de `cmd_run`, e `sdd run` não tem a flag — segue aberto, não estampar.
   Direção: silenciar o lembrete fora do kit, ou responder se o juiz pode pesar linha de outro
-  projeto — ADR 0004. — descoberto por `sdd-reviewer` na missão `20260816-kit-como-alvo` (2026-08-16)
+  projeto — ADR futura (o 0004 foi consumido). — descoberto por `sdd-reviewer` na missão `20260816-kit-como-alvo` (2026-08-16)
 
 - [ ] **`sdd kaizen` recusa rodar de um worktree do próprio kit** — `bin/sdd:2963` — a porta
   "estou no repo do kit?" compara `kit_root` (`--show-toplevel` de `$SDD_HOME`) com `$REPO_ROOT`,

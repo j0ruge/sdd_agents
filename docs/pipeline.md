@@ -455,7 +455,8 @@ mission deliberately left it open. [ADR 0003](adr/0003-judge-axis-evidence-from-
 says verdict evidence comes from target repos — the kit's own axis degenerates — and `--all-repos`
 is the only mechanism that can read them; but nothing in the ledger yet tells a target apart from a
 fixture, so the default stays shut and neither `gate_KAIZEN` nor the agent prompt is pointed at the
-flag by the runner itself. Answering it is ADR 0004's job, and it is what unblocks I13.4.
+flag by the runner itself. Answering it is the job of a future ADR (deliberately deferred; 0004 has
+since been taken by the mutation-stamp decision), and it is what unblocks I13.4.
 
 ⚠️ The **post-pipeline reminder** is the one reader the flag does not reach. It goes through the
 same single predicate and would inherit it — but it is called from `sdd run` alone, and `sdd run`
