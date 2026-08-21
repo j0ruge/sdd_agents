@@ -244,12 +244,24 @@ the problem is one of design and belongs back in planning, not with the executor
 
 ## The review does not close at Grade A
 
-**Symptom:** `BLOCKED in REVIEW` after `REVIEW_MAX_ITER` sessions.
+**Symptom:** `BLOCKED in REVIEW` with `N review round(s) already on disk, REVIEW_MAX_ITER=M`.
+
+**The ceiling counts rounds IN TOTAL**, derived from the `40-review-r<N>.md` files — not sessions
+per invocation. Re-running `sdd run` does **not** hand out a fresh set of rounds, which is exactly
+what it used to do: 4 REVIEW sessions over 3 invocations, ~US$ 107, and no `BLOCKED` anywhere. So
+the headline can name **0 sessions**: this invocation opened none, because the ceiling refused
+before it could. The line under it names the count that actually refused.
 
 **What you do:** read the last `40-review-r<N>.md` — the real grade is there. If the findings are
 legitimate and large, the mission was badly sliced. If you want the PR anyway, set
 `PUBLISH_ON_REVIEW_BLOCKED="draft"`: out comes a **draft** PR with the current grade and the open
 items visible, instead of hiding the problem.
+
+**To run one more round anyway**, two ways, and they mean different things. `sdd run <mission>
+--phase REVIEW` is exempt from the disk-derived ceiling — a human asking for one specific round
+with their eyes on it — and is the right one when you know what that round has to fix. Raising
+`REVIEW_MAX_ITER` in `.sdd/config.sh` lifts the ceiling for every future round of every mission in
+the repo, which is a decision about the project and not about this mission.
 
 **Never:** edit the report to put an A there. That switches off the mission's only quality sensor.
 
@@ -466,6 +478,13 @@ compares the fixtures against the installed skills and reports the divergence on
 duration; `<PHASE>-<ts>.stream.jsonl` beside it has that session's whole event stream, so an
 expensive phase can be read turn by turn instead of guessed at — and `tail -f` on it answers
 "what is it doing right now?" while the phase is still running.
-`BUDGET_PER_PHASE_USD` is a per-session cap (maximum damage), not a mission budget. If a
-phase is expensive over and over, the problem is usually a badly sliced plan — big sessions
-re-exploring what the "verified context" should have handed over ready.
+The damage cap is a **per-session** ceiling, not a mission budget, and it is **four keys and not
+one**. `BUDGET_PER_PHASE_USD` (default 15) applies only to the phases with no key of their own —
+DOCS, PR, TICKET, KAIZEN. The three expensive phases read their own: `BUDGET_EXEC_USD` (25),
+`BUDGET_QA_USD` (25), `BUDGET_REVIEW_USD` (40). ⚠️ **Raising the global does not raise those
+three** — the commonest way to spend an afternoon wondering why a REVIEW keeps dying on the same
+ceiling. Full table in [`config/schema.md`](../config/schema.md).
+
+If a phase is expensive over and over, the problem is usually a badly sliced plan — big sessions
+re-exploring what the "verified context" should have handed over ready. Raising the cap for that
+phase buys a longer session against the same wall.
