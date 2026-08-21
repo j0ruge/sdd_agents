@@ -1750,6 +1750,26 @@ state_fingerprint() {
     "$( cat "$MISSION_DIR/checkpoint.md" 2>/dev/null | md5sum 2>/dev/null | cut -d' ' -f1 )"
 }
 
+# How many REVIEW rounds this mission has already spent, read off the disk.
+#
+# `attempts` in cmd_run is a `local -A` born with the PROCESS, so `REVIEW_MAX_ITER` only ever
+# capped one invocation: three rounds, escalate — and then `sdd run` again handed out three more,
+# for ever, at the price of the most expensive phase there is. The rounds themselves are on disk,
+# named `40-review-r<N>.md`, which is the state the whole kit derives from (principle 4). Same
+# `latest_matching` the REVIEW gate reads, so the two cannot disagree about which round is latest:
+# it sorts `-V`, so r10 comes after r3.
+review_rounds_on_disk() {
+  local last n
+  last="$(latest_matching "$MISSION_DIR/40-review-r*.md")"
+  [ -n "$last" ] || { printf '0\n'; return 0; }
+  n="${last##*/40-review-r}"
+  n="${n%.md}"
+  # A file the glob matched but whose N is not a number answers 0 rather than poisoning an
+  # arithmetic test with a string — `40-review-rounds.md` would otherwise abort the run.
+  case "$n" in ''|*[!0-9]*) printf '0\n'; return 0 ;; esac
+  printf '%s\n' "$n"
+}
+
 # How many sessions a phase may consume before turning BLOCKED.
 phase_budget() {
   case "$1" in
@@ -2962,11 +2982,31 @@ cmd_run() {
 
     budget="$(phase_budget "$phase")"
     attempts["$phase"]="$(( ${attempts[$phase]:-0} + 1 ))"
-    if [ "${attempts[$phase]}" -gt "$budget" ]; then
+    local over_ceiling=0 ceiling_note=""
+    [ "${attempts[$phase]}" -gt "$budget" ] && over_ceiling=1
+    # REVIEW's ceiling counts rounds IN TOTAL, and the total is on disk. `attempts` dies with the
+    # process, so `sdd run` after a blown REVIEW used to hand out a fresh set of rounds, and the
+    # most expensive phase in the kit had no ceiling at all across invocations. `phase_budget
+    # REVIEW` stays as the intra-invocation guard: a session that writes no `40-review-r<N>.md`
+    # moves nothing on disk and would otherwise loop inside one run.
+    #
+    # DERIVED path only. `--phase REVIEW` is a human asking for one specific round with their eyes
+    # on it, and refusing that would leave no way to run the round that unblocks the mission.
+    # `force_phase` is also how the PUBLISH_ON_REVIEW_BLOCKED=draft jump reaches PR, and it is
+    # empty again by the time REVIEW is re-derived — so that degradation keeps its one chance.
+    if [ "$phase" = "REVIEW" ] && [ -z "$force_phase" ]; then
+      local rounds; rounds="$(review_rounds_on_disk)"
+      if [ "$rounds" -ge "$REVIEW_MAX_ITER" ]; then
+        over_ceiling=1
+        ceiling_note="$rounds review round(s) already on disk, REVIEW_MAX_ITER=$REVIEW_MAX_ITER — the ceiling counts rounds IN TOTAL, derived from the 40-review-r<N>.md files, so 'sdd run' does not reset it"
+      fi
+    fi
+    if [ "$over_ceiling" -eq 1 ]; then
       gate_"$phase" || true
       info ""
       bad "BLOCKED in $phase — ${sessions[$phase]:-0} session(s) without satisfying the gate"
       bad "  current reason: $GATE_WHY"
+      [ -n "$ceiling_note" ] && dim "  $ceiling_note"
       dim "  'sdd status $MISSION' shows the full state; 'sdd why $MISSION $phase' the reason."
       if [ "$phase" = "REVIEW" ] && [ "$PUBLISH_ON_REVIEW_BLOCKED" = "draft" ]; then
         # The two writers come BEFORE the `continue`, and that order is the whole I2 increment. The

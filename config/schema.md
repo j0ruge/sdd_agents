@@ -65,7 +65,7 @@ exception, never a silent one** (kaizen K3). Values: any alias `claude --model` 
 | Key | Default | What it is |
 |---|---|---|
 | `QA_MAX_ITER` | `3` | Rounds of the QA⇄EXEC loop before `BLOCKED`. Protects against an endless "the fix breaks another journey". Careful raising it: one round is **up to 3 sessions** (one per sub-step), so the phase session cap is `QA_MAX_ITER × 3` — 9 by default. |
-| `REVIEW_MAX_ITER` | `3` | Review sessions in total before `BLOCKED`. |
+| `REVIEW_MAX_ITER` | `3` | Review **rounds in total**, derived from the `40-review-r<N>.md` files on disk — re-running `sdd run` does not reset it. A second guard counts sessions inside one invocation, for the session that writes no round at all. `--phase REVIEW` is exempt: that is a human asking for one specific round with their eyes on it. |
 | `EXEC_MAX_RETRY` | `1` | Retries per increment before `BLOCKED`. |
 | `BUDGET_PER_PHASE_USD` | `15` | Goes into `--max-budget-usd` per session. A damage cap, not a budget. Applies to the phases with no key of their own: DOCS, PR, TICKET, KAIZEN. |
 | `BUDGET_EXEC_USD` | `25` | Cap for an EXEC session — one increment in TDD, which reads, writes, runs the suite and commits. |

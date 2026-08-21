@@ -356,6 +356,16 @@ mut_RUN_ignores_output_lang() {
 # is called, and answers the same thing whatever it is asked, which no assertion reading a single
 # phase can tell apart from a working one. Anchored on the FUNCTION range, so a case arm that
 # moves does not rot it.
+# The REVIEW ceiling goes back to living in memory only. `attempts` is a `local -A` of cmd_run, born
+# with the process, so `REVIEW_MAX_ITER` caps one `sdd run` and the next one hands out a fresh set
+# of rounds — no ceiling at all across invocations, on the most expensive phase in the kit. The
+# helper answering 0 for every mission is the exact shape of that regression: present, called, and
+# blind. It sabotages the ONE definition rather than the call site, so a second reader added later
+# is covered by the same mutant.
+mut_RUN_review_ceiling_in_memory() {
+  sed -i '/^review_rounds_on_disk()/,/^}/ s@^  last="\$(latest_matching .*)"$@  last=""@' "$1"
+}
+
 mut_RUN_budget_single_ceiling() {
   # `@` as the delimiter, not `|`: with `s|…|…|` the alternation `\|` reads as an escaped
   # DELIMITER, the pattern matches nothing, and the sabotage lands nowhere. Caught by the
@@ -1522,6 +1532,7 @@ CATALOG=(
   RUN_inverted_journal
   RUN_ignores_output_lang
   RUN_budget_single_ceiling
+  RUN_review_ceiling_in_memory
   RUN_autonomy_ignores_dry_run
   RUN_autonomy_null_moved_as_zero
   RUN_moved_never_true

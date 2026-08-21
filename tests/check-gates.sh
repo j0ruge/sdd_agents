@@ -677,6 +677,67 @@ git add -A && git commit -qm "chore: review r11, formatter-aligned"
 assert_phase "an alignment-colon separator row is not a criterion" "DOCS"
 assert_why_absent "and the reason does not name the separator as a criterion" "REVIEW" "^:|= ---|:---"
 
+# --- the REVIEW ceiling counts rounds in total, not per invocation ----------
+# `attempts` is a `local -A` of cmd_run, born with the PROCESS. REVIEW_MAX_ITER therefore only ever
+# capped ONE `sdd run`: three rounds, escalate — and the next `sdd run` handed out three more, for
+# ever, on the most expensive phase in the kit. The rounds are on disk as `40-review-r<N>.md`, which
+# is where the whole kit derives its state from.
+#
+# The fixture already carries r1, r2, r3, r10 and r11, so the count on disk is 11 against a
+# REVIEW_MAX_ITER of 3. r11 goes red so REVIEW is the DERIVED phase again.
+sed -i 's/^| Security | A | clean |/| Security | C | injection left open |/;s/^| \*\*Overall\*\* .*/| **Overall** | **C** | one HIGH left open |/' \
+  "$MDIR/40-review-r11.md"
+git add -A && git commit -qm "chore: review r11 red again"
+assert_phase "fixture: REVIEW is the derived phase again" "REVIEW"
+
+review_sessions_spent() {
+  find "$FIX/.sdd/logs/$MISSION" -maxdepth 1 -name 'REVIEW-*.json' 2>/dev/null | grep -c . || true
+}
+rv_before="$(review_sessions_spent)"
+out_rv="$( cd "$FIX" && "$SDD" run "$MISSION" 2>&1 )"; rc_rv=$?
+rv_after="$(review_sessions_spent)"
+if [ "$rc_rv" -eq 3 ] && [ "$rv_after" -eq "$rv_before" ] \
+   && grep -q "rounds IN TOTAL" <<< "$out_rv"; then
+  pass "a fresh sdd run refuses round N+1 past REVIEW_MAX_ITER (exit 3, no session spent)"
+else
+  fail "a fresh sdd run refuses round N+1 past REVIEW_MAX_ITER (exit 3, no session spent)" \
+       "exit 3, the disk-derived ceiling, and no new REVIEW session log" \
+       "exit $rc_rv, $rv_before → $rv_after log(s): $(tail -3 <<< "$out_rv")"
+fi
+
+# The differential, one config key apart: with the ceiling above the rounds on disk, the SAME state
+# spends a session. Without it, a runner that escalated on every derived REVIEW would pass the
+# assertion above while making the phase unreachable.
+printf 'REVIEW_MAX_ITER=99\n' >> .sdd/config.sh
+git add -A && git commit -qm "chore: raise the review ceiling"
+out_rv2="$( cd "$FIX" && "$SDD" run "$MISSION" --max-phases 1 2>&1 )"; rc_rv2=$?
+if [ "$(review_sessions_spent)" -gt "$rv_after" ]; then
+  pass "with REVIEW_MAX_ITER above the rounds on disk the same state opens a session"
+else
+  fail "the ceiling is what refuses, not the phase itself" "a new REVIEW session log" \
+       "exit $rc_rv2: $(tail -3 <<< "$out_rv2")"
+fi
+
+# And `--phase REVIEW` is a human asking for one specific round with their eyes on it: the
+# disk-derived ceiling does not apply to the forced path, or the round that unblocks the mission
+# could never be run.
+sed -i '/^REVIEW_MAX_ITER=99$/d' .sdd/config.sh
+git add -A && git commit -qm "chore: back to the default ceiling"
+rv3="$(review_sessions_spent)"
+out_rv3="$( cd "$FIX" && "$SDD" run "$MISSION" --phase REVIEW 2>&1 )"; rc_rv3=$?
+if [ "$(review_sessions_spent)" -gt "$rv3" ]; then
+  pass "--phase REVIEW still runs the round a human asked for"
+else
+  fail "--phase REVIEW still runs the round a human asked for" "a new REVIEW session log" \
+       "exit $rc_rv3: $(tail -3 <<< "$out_rv3")"
+fi
+
+# Back to green so the phases below carry on from DOCS.
+sed -i 's/^| Security | C |.*/| Security | A | clean |/;s/^| \*\*Overall\*\* .*/| **Overall** | **A** | nothing left open |/' \
+  "$MDIR/40-review-r11.md"
+git add -A && git commit -qm "chore: review r11 green"
+assert_phase "with the ceiling fixture gone the mission is back at DOCS" "DOCS"
+
 # --- the Rationale column ---------------------------------------------------
 #
 # DIFFERENTIAL, and it has to be: the extractor read `crit = f[2]; grade = f[3]` and never touched
