@@ -298,7 +298,8 @@ mut_RUN_inverted_journal() {
 
 # Not a gate: the target repo declares OUTPUT_LANG and the runner swallows the request in silence.
 # It is the typical failure mode of a config key — the key exists, the schema promises it, and
-# nobody reads it (the LINT_CMD/BUILD_CMD/DEV_UP_CMD family, frozen in health-baseline).
+# nobody reads it (`E2E_DIR`, frozen in health-baseline; the five keys that promised a lint, a
+# build and a `docker compose up` were removed rather than frozen).
 mut_RUN_ignores_output_lang() {
   sed -i 's|.*if \[ -n "\$OUTPUT_LANG" \]; then.*|  if false; then|' "$1"
 }

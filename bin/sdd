@@ -96,8 +96,7 @@ load_config() {
   source "$CONFIG_FILE"
 
   : "${PROJECT_NAME:=}"; : "${DEFAULT_BRANCH:=}"; : "${TEST_CMD:=}"
-  : "${E2E_CMD:=}"; : "${E2E_DIR:=e2e}"; : "${LINT_CMD:=}"; : "${BUILD_CMD:=}"
-  : "${APP_URL:=}"; : "${DEV_UP_CMD:=}"; : "${DEV_READY_CMD:=}"; : "${DEV_READY_TIMEOUT:=90}"
+  : "${E2E_CMD:=}"; : "${E2E_DIR:=e2e}"; : "${APP_URL:=}"
   : "${HANDOFF_DIR:=docs/handoffs}"; : "${QA_DOCS_PATH:=docs/qa}"; : "${TODO_FILE:=TODO.md}"
   : "${MODEL_EXEC:=opus}"; : "${MODEL_QA:=opus}"; : "${MODEL_REVIEW:=opus}"
   : "${MODEL_DOCS:=opus}"; : "${MODEL_PUBLISH:=sonnet}"; : "${MODEL_TICKET:=sonnet}"

@@ -22,17 +22,20 @@ They all run with cwd at the root of the target repo. The runner only looks at t
 | `TEST_CMD` | yes | — | Unit/integration suite. It is the EXEC gate and part of the REVIEW gate. It must be fast enough to run on every increment. |
 | `E2E_CMD` | no | empty | End-to-end suite. Empty ⇒ the QA gate ignores e2e (a project with no UI). |
 | `E2E_DIR` | no | `e2e` | Where `sdd-qa` commits new specs. |
-| `LINT_CMD` | no | empty | Runs in the REVIEW gate when set. |
-| `BUILD_CMD` | no | empty | Runs in the REVIEW gate when set. |
+
+The runner has exactly these three. A separate lint or build command belongs **inside** `TEST_CMD`:
+a key the runner never reads is a promise the user cannot collect on, and this schema carried five
+such keys — for a lint, a build and bringing the environment up — until they were removed. Adding
+one back means wiring the read in `bin/sdd` in the **same** commit.
 
 ## Running application (QA phase)
 
 | Key | Required | Default | What it is |
 |---|---|---|---|
 | `APP_URL` | only with `E2E_CMD` | empty | URL `agent-browser` opens in the exploratory sessions. |
-| `DEV_UP_CMD` | no | empty | Brings the environment up before QA (e.g. `docker compose up -d`). Empty ⇒ the runner assumes it is already up and warns if `APP_URL` does not answer. |
-| `DEV_READY_CMD` | no | empty | Command returning 0 when the app is ready (e.g. `curl -sf $APP_URL`). The runner polls for up to `DEV_READY_TIMEOUT` seconds. |
-| `DEV_READY_TIMEOUT` | no | `90` | Seconds to wait for `DEV_READY_CMD`. |
+
+The runner does not bring the environment up: it assumes the app is already running. Starting it
+(`docker compose up -d` and friends) is a step for whoever runs `sdd`, or for `E2E_CMD` itself.
 
 ## Artifact paths
 
