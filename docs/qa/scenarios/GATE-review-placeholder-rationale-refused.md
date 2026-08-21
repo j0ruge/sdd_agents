@@ -13,7 +13,7 @@ retest_status:
 fix_commits:
 evidence:
 last_report: 
-overlaps: GATE-review-punctuated-placeholder-refused
+overlaps: GATE-review-punctuated-placeholder-refused; GATE-review-exemplar-matches-the-gate
 ---
 
 The mission's I3. The live instance is in this repo: `docs/handoffs/20260818-lote-facil/40-review-r1.md`

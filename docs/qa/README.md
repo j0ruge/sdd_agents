@@ -8,9 +8,18 @@ promise is in.
 Planned 2026-08-19 on branch `fix/fecho-que-nao-mente`. No legacy QA artifacts were adopted —
 nothing outside `docs/handoffs/` held QA state before this tree.
 
-> ⚠️ **Read "Relationship to the `sdd` pipeline" at the bottom before committing this tree.**
-> Installing it changes `gate_QA`'s behaviour for every future mission in this repo, and it
-> contradicts a written contract in `docs/pipeline.md`. That is a decision, not a detail.
+> ✅ **The question this file used to open with is answered.** It warned that committing the tree
+> changed `gate_QA`'s behaviour and contradicted a written contract in `docs/pipeline.md`. The
+> contract was changed to match, in `6dea0d5`: a `docs/qa/` tree that exists "is read and
+> complemented, never removed", and the no-interface path still asks for no dated report from it.
+> The tree is committed and the coupling below is live, not hypothetical.
+
+## Cycles
+
+| Cycle | Branch | Tier | What it planned |
+|---|---|---|---|
+| 2026-08-19 | `fix/fecho-que-nao-mente` | Targeted | Bootstrap: 5 journeys, 7 charters, 20 scenarios, 5 bugs |
+| 2026-08-21 | `20260820-missao-porteira` | Targeted | 3 journeys added, 3 updated, 6 charters, 24 scenarios; no new bugs |
 
 ## The product, and who its users are
 
@@ -109,6 +118,8 @@ dated reports in it are for humans and for the next cycle, not for a gate.
 
 **3. An autonomous `sdd-qa` session already rejected this tree once**, on 2026-08-19 at 16:51,
 and recorded why in commit `9f84cbc` — it appeared untracked mid-phase, and the agent read fact 1
-and fact 2 the same way this file does. If this tree is installed, that commit's note is the thing
-to answer: the contract in `docs/pipeline.md` has to change with it, or the next `sdd-qa` session
-will remove it again.
+and fact 2 the same way this file did. **That is settled**: `docs/pipeline.md` was rewritten in
+`6dea0d5` to say the opposite in as many words — *"a tree that is there is read and complemented,
+never removed"* — and it cites the deletion by hash so the next session meets the reasoning rather
+than re-deriving it. The three facts above stay because they are still the operating conditions,
+not because the question is still open.

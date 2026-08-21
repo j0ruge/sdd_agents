@@ -6,9 +6,13 @@ sentence* rather than typed.
 
 ```mermaid
 flowchart TD
-    A[Entry: sdd-reviewer session finishes a review round] --> B[Writes docs/handoffs/mission/40-review-rN.md]
+    A[Entry: sdd-reviewer session finishes a review round] --> A1{how many rounds are already on disk?}
+    A1 -->|at or above REVIEW_MAX_ITER, derived path| A2[No session opens at all: BLOCKED, exit 3 — walked in J-trouble-stops-the-line]
+    A1 -->|below| B[Writes docs/handoffs/mission/40-review-rN.md]
     B --> C[./bin/sdd run mission reaches gate_REVIEW]
-    C --> D{Overall Grade section present?}
+    C --> C1{is the separator row a separator?}
+    C1 -->|formatter wrote :---: and the skip does not match it| C2[The separator becomes a criterion called ':' graded '---'] --> Z
+    C1 -->|yes| D{Overall Grade section present?}
     D -->|no| D1[Refuse: the gate has nothing to measure] --> Z[Reviewer rewrites the round]
     D -->|yes| E{any row whose Grade is not A?}
     E -->|yes| E1[Refuse: criterion = B] --> Z
@@ -25,6 +29,7 @@ flowchart TD
     F1 -.->|reviewer retypes a dash or TODO-colon instead of a sentence| X1[Abandon-A: the placeholder set is compared by string equality, so one keystroke buys the A]
     E1 -.->|reviewer raises the grade instead of fixing the code| X2[Abandon-B: round N+1 is all A with real sentences about work never done]
     B -.->|session dies before writing the file| X3[Abandon-C: no round file; the phase re-derives and a fresh round starts from zero]
+    A -.->|the session copies the exemplar out of agents/sdd-reviewer.md| X4[Abandon-D: the exemplar showed eight angle-bracket Rationales — the exact form the gate refuses]
 ```
 
 ```yaml
@@ -66,7 +71,13 @@ journey:
     - at_step: 1
       how: The session dies before writing the file.
       resume: The phase re-derives from disk, finds no round, and a fresh session starts — losing the round's findings entirely.
-  crosses: [gate_REVIEW, agents/sdd-reviewer.md, templates/review.md, the codereview skill report template, 50-pr.md]
+    - at_step: 1
+      how: "The session copies the table straight out of agents/sdd-reviewer.md, which is what an exemplar is for."
+      resume: "Until `346b0a2` the exemplar's eight Rationale cells were all `<…>` — the exact form the gate refuses. The session produced the artifact the agent showed it and the gate refused it, so the phase looped on a sentence the kit itself taught it to write."
+    - at_step: 1
+      how: A formatter (prettier, markdownlint) rewrote the round's separator row with alignment colons.
+      resume: "Until `db26cc1` the separator became a criterion named `:` graded `---`, and REVIEW looped to REVIEW_MAX_ITER with a GATE_WHY naming no criterion anybody wrote. Nothing in the kit writes those colons; an adopter's formatter does."
+  crosses: [gate_REVIEW, review_rounds_on_disk, agents/sdd-reviewer.md, templates/review.md, the codereview skill report template, 50-pr.md]
 ```
 
 ## Notes
@@ -84,3 +95,19 @@ reading a new column of this table inherits the problem: reassemble the columns 
 
 The checkpoint table in every mission has the identical trap, documented in its own header. Two
 parsers, one repo, same byte.
+
+⚠️ **Update (branch `20260820-missao-porteira`).** Three things in this journey moved and the flow
+above carries them:
+
+1. **The escape is now understood on both sides.** `checkpoint_rows` grew the same
+   `escaped_pipe()` + rejoin this gate already had (`5434a65`), deliberately duplicated with a
+   cross-reference comment — a shared helper would collapse two mutation anchors into one, which is
+   the class the stamp caught between PRs #12 and #13.
+2. **Alignment colons stopped being data** (`db26cc1`): `/^:?-+:?$/` in all three parsers. The
+   REVIEW half is the one walked here; the EXEC and DOCS halves are in
+   [`J-checkpoint-survives-a-formatter`](J-checkpoint-survives-a-formatter.md).
+3. **The round may never start.** `REVIEW_MAX_ITER` now counts rounds *in total* off the
+   `40-review-r<N>.md` files on disk (`d3dea51`), so a mission that spent its rounds is refused
+   before a session opens. That branch is walked in
+   [`J-trouble-stops-the-line`](J-trouble-stops-the-line.md); it appears in this flowchart only as
+   the entry condition, because it changes whether this journey is reachable at all.

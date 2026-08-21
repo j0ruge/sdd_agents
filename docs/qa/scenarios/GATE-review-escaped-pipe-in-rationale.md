@@ -13,7 +13,7 @@ retest_status: pending
 fix_commits: 53586c5; e2e5252
 evidence:
 last_report: docs/handoffs/20260819-fecho-que-nao-mente/40-review-r1.md
-overlaps: GATE-review-punctuated-placeholder-refused
+overlaps: GATE-review-punctuated-placeholder-refused; GATE-exec-escaped-pipe-keeps-status
 ---
 
 The false-red counterpart of the placeholder rule, and the reason that rule needs a scenario on each
