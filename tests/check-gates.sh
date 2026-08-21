@@ -708,6 +708,34 @@ else
        "exit $rc_rv, $rv_before → $rv_after log(s): $(tail -3 <<< "$out_rv")"
 fi
 
+# The headline and the sentence that makes it true travel on the SAME channel. With the ceiling
+# derived from disk the count in the headline is `0` — this invocation opened no session, because
+# the ceiling refused before it could — so read alone it looks like a runner bug. `bad` writes to
+# stderr and `dim` to stdout: with the note on `dim`, `sdd run 2>/dev/null` kept the sentence and
+# dropped the headline, and `sdd run >file` kept the headline and dropped the sentence.
+#
+# `2>&1 >/dev/null` and not `2>&1`: the order matters and it is the whole assertion. stderr is
+# pointed at the capture FIRST, then stdout is thrown away, so what comes back is stderr ALONE.
+# Every other assertion in this file merges the two and is green whichever channel each half took
+# — this is the only one that can tell them apart, which is why the note above it says so.
+err_rv="$( cd "$FIX" && "$SDD" run "$MISSION" 2>&1 >/dev/null )"
+if grep -q "BLOCKED in REVIEW" <<< "$err_rv" && grep -q "rounds IN TOTAL" <<< "$err_rv"; then
+  pass "the ceiling note rides the same channel as the headline it explains"
+else
+  fail "the ceiling note rides the same channel as the headline it explains" \
+       "stderr alone carrying BOTH the headline and the 'rounds IN TOTAL' sentence" \
+       "stderr alone: $(tail -3 <<< "$err_rv")"
+fi
+# And the other half, or the assertion above is satisfied by a runner that shouts everything on
+# stderr and leaves stdout empty: the navigation hint is NOT an escalation line and stays on stdout.
+out_only_rv="$( cd "$FIX" && "$SDD" run "$MISSION" 2>/dev/null )"
+if grep -q "shows the full state" <<< "$out_only_rv"; then
+  pass "and the navigation hint stays on stdout, where it was"
+else
+  fail "and the navigation hint stays on stdout, where it was" \
+       "stdout alone carrying the 'sdd status' hint" "stdout alone: $(tail -3 <<< "$out_only_rv")"
+fi
+
 # The differential, one config key apart: with the ceiling above the rounds on disk, the SAME state
 # spends a session. Without it, a runner that escalated on every derived REVIEW would pass the
 # assertion above while making the phase unreachable.

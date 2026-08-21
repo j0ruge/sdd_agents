@@ -3157,8 +3157,17 @@ cmd_run() {
       gate_"$phase" || true
       info ""
       bad "BLOCKED in $phase — ${sessions[$phase]:-0} session(s) without satisfying the gate"
+      # `bad` and not `dim`, and directly under the headline: this is the line that makes the
+      # headline's number true. When the ceiling comes off the DISK the count above is `0` — this
+      # invocation opened no session, because the ceiling refused before it could — and read alone
+      # that reads as a runner bug. `bad` writes to stderr and `dim` to stdout, so on `dim` the two
+      # halves travelled on different channels: `sdd run 2>/dev/null` kept the sentence and dropped
+      # the headline, `sdd run >file` kept the headline and dropped the sentence, and the escalation
+      # a human is meant to ACT on lost the half that says what to do. Every other assertion about
+      # this branch merges the channels with `2>&1` and cannot see the difference; the one in
+      # tests/check-gates.sh that pins it reads stderr ALONE.
+      [ -n "$ceiling_note" ] && bad "  $ceiling_note"
       bad "  current reason: $GATE_WHY"
-      [ -n "$ceiling_note" ] && dim "  $ceiling_note"
       dim "  'sdd status $MISSION' shows the full state; 'sdd why $MISSION $phase' the reason."
       if [ "$phase" = "REVIEW" ] && [ "$PUBLISH_ON_REVIEW_BLOCKED" = "draft" ]; then
         # The two writers come BEFORE the `continue`, and that order is the whole I2 increment. The

@@ -1465,6 +1465,16 @@ mut_RUN_blocked_counts_laps() {
   sed -i 's@${sessions\[$phase\]:-0} session(s) without satisfying@${attempts[$phase]} session(s) without satisfying@' "$1"
 }
 
+# The sentence that makes the blocked headline true goes back to the OTHER channel. `bad` writes to
+# stderr and `dim` to stdout, so on `dim` the escalation arrived in halves: `2>/dev/null` kept the
+# explanation and lost `BLOCKED in REVIEW`, `>file` kept `0 session(s)` and lost the sentence saying
+# why that zero is correct. It restores the historical defect exactly — the line is still PRINTED,
+# and still says the same words, which is what makes it invisible to every assertion in the suite
+# that merges the two channels with `2>&1`. Only the stderr-alone pair in check-gates.sh dies here.
+mut_RUN_ceiling_note_other_channel() {
+  sed -i 's@\[ -n "$ceiling_note" \] && bad "  $ceiling_note"@[ -n "$ceiling_note" ] \&\& dim "  $ceiling_note"@' "$1"
+}
+
 # The exclusion accounting goes back to one blank line between every two of its lines: a paragraph
 # about where the rows went, printed as four unrelated asides. Anchored on the `join` of the array
 # that collects them — the token that only exists because the four strings are ONE output now.
@@ -1637,6 +1647,7 @@ CATALOG=(
   AUTONOMY_is_escalation_blind
   KAIZEN_series_escalations_dropped
   RUN_blocked_counts_laps
+  RUN_ceiling_note_other_channel
   AUTONOMY_exclusions_split
   AUTONOMY_exclusions_glued
   KAIZEN_axis_note_own_floor
