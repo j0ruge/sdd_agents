@@ -638,12 +638,14 @@ gate_REVIEW() {
   offending="$(SDD_GATE_FIELD="$gate_field" awk -v gate_present="$gate_present" '
       BEGIN { gate_field = ENVIRON["SDD_GATE_FIELD"] }
       # The refused set, written here so the next reader does not have to guess it: an EMPTY cell;
-      # the whole cell wrapped in angle brackets, which is how templates/review.md:37-44 ships its
-      # fill-ins; a bare ellipsis; and the bare fill-in words below. It targets the WHOLE cell,
+      # the whole cell wrapped in angle brackets, which is how the `### Overall Grade` table of
+      # templates/review.md ships its fill-ins (named by SECTION and not by line number: the two
+      # citations this comment used to carry both rotted, one of them by six lines);
+      # a bare ellipsis; and the bare fill-in words below. It targets the WHOLE cell,
       # never the presence of a character — a real sentence containing <A> is a real sentence.
       # NOT refused: `clean`, `n/a` and `—`. Those are the codereview skill terse rationales
-      # (report-template.md:154-156) and mean measured-with-nothing-to-say; refusing them would
-      # make this gate contradict the skill it parses, which is the SQ-97 gate_DOCS bug again.
+      # (its `### Overall Grade` section, likewise by name) and mean measured-with-nothing-to-say;
+      # refusing them would make this gate contradict the skill it parses — the SQ-97 gate_DOCS bug.
       function placeholder(s,   u, w) {
         if (s == "") return 1
         if (s ~ /^<.*>$/) return 1
