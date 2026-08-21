@@ -6,13 +6,13 @@ persona: Sessão
 journey: J-review-round-seal
 expected: TODO with a colon, TBD with a full stop, a bare hyphen, WIP and FILL ME are refused like their bare forms
 entry_points: ./bin/sdd why <mission> REVIEW
-qa_status: fail
+qa_status: pass
 bug_ids: BUG-20260819-punctuated-rationale-buys-an-a
 fix_status: fixed
-retest_status: pending
+retest_status: pass
 fix_commits: 272cb91
 evidence:
-last_report: docs/handoffs/20260819-fecho-que-nao-mente/checkpoint.md
+last_report: ../reports/2026-08-21-missao-porteira.md
 overlaps: GATE-review-placeholder-rationale-refused
 ---
 

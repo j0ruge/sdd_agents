@@ -6,13 +6,13 @@ persona: Rui
 journey: J-trouble-stops-the-line
 expected: The same red suite over a committed tree opens an EXEC session, exactly as before the change
 entry_points: sdd run <mission>
-qa_status: untested
+qa_status: pass
 bug_ids:
 fix_status:
 retest_status:
 fix_commits:
 evidence:
-last_report:
+last_report: ../reports/2026-08-21-missao-porteira.md
 overlaps: RUN-dirty-tree-stops-the-line
 ---
 

@@ -6,13 +6,13 @@ persona: Sessão
 journey: J-ticket-opens-and-branch-lands
 expected: The projection shows agent sdd-publisher and a boot prompt that does not open with /ticket open
 entry_points: sdd run <mission> --dry-run --phase TICKET
-qa_status: untested
+qa_status: pass
 bug_ids:
 fix_status:
 retest_status:
 fix_commits:
 evidence:
-last_report:
+last_report: ../reports/2026-08-21-missao-porteira.md
 overlaps:
 ---
 

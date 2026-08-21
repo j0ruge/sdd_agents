@@ -6,13 +6,13 @@ persona: Rui
 journey: J-checkpoint-survives-a-formatter
 expected: sdd status and the gate's refusal describe the same rows, before and after a formatter runs
 entry_points: sdd status <mission>; sdd why <mission> EXEC
-qa_status: untested
+qa_status: pass
 bug_ids:
 fix_status:
 retest_status:
 fix_commits:
 evidence:
-last_report:
+last_report: ../reports/2026-08-21-missao-porteira.md
 overlaps:
 ---
 

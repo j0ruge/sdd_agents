@@ -6,13 +6,13 @@ persona: Sessão
 journey: J-review-round-seal
 expected: clean, n/a and the em dash pass as rationales; the refusal targets the whole cell, not any short cell
 entry_points: ./bin/sdd run <mission>
-qa_status: untested
+qa_status: pass
 bug_ids: 
 fix_status: 
 retest_status: pending
 fix_commits: 272cb91
 evidence:
-last_report: 
+last_report: ../reports/2026-08-21-missao-porteira.md
 overlaps: 
 ---
 

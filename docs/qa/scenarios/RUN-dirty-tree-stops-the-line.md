@@ -6,13 +6,13 @@ persona: Rui
 journey: J-trouble-stops-the-line
 expected: sdd run exits 3 naming the dirty tree, and the mission journal gains no new EXEC session line
 entry_points: sdd run <mission>
-qa_status: untested
+qa_status: pass
 bug_ids:
 fix_status:
 retest_status:
 fix_commits:
 evidence:
-last_report:
+last_report: ../reports/2026-08-21-missao-porteira.md
 overlaps: RUN-red-suite-clean-tree-still-runs
 ---
 

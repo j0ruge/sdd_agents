@@ -1,6 +1,6 @@
 # BUG-20260819-escaped-pipe-rationale-read-as-placeholder: a real justification is refused as a placeholder, and the refusal quotes back words nobody wrote
 
-- **Status:** fixed
+- **Status:** verified <!-- open | fixed | verified | wont-fix | invalid -->
 - **Impact (user-side):** Blocks-Completion
 - **Severity:** Critical · **Priority:** P0
 - **Persona Affected:** Sessão
@@ -68,3 +68,10 @@ that contains an escaped pipe. That round is being written now and is the natura
      That bug's symptom is a placeholder buying an A; this one's is a real sentence being refused.
      Opposite directions, different personas' experience, different fix — one id each. The two are
      linked through the scenarios' `overlaps` instead. -->
+
+## Verification
+
+- **Retested:** 2026-08-21, Mara / J-review-round-seal · **Report:** ../reports/2026-08-21-missao-porteira.md
+- **Result:** observable confirmed fixed. Walked on a live target repo (not a suite fixture), on a
+  round whose table was colon-aligned and prettier-formatted, so the retest also covers the
+  alignment change that landed since the fix.

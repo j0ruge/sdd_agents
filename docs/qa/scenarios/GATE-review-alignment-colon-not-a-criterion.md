@@ -6,13 +6,13 @@ persona: Mara
 journey: J-review-round-seal
 expected: An all-A round whose separator reads |:---|:---:| passes, and no reason names ':' as a criterion
 entry_points: sdd run <mission>; sdd why <mission> REVIEW
-qa_status: untested
+qa_status: pass
 bug_ids:
 fix_status:
 retest_status:
 fix_commits:
 evidence:
-last_report:
+last_report: ../reports/2026-08-21-missao-porteira.md
 overlaps: GATE-exec-alignment-colon-not-an-increment
 ---
 

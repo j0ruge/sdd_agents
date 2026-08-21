@@ -6,13 +6,13 @@ persona: Priya
 journey: J-target-repo-ships
 expected: A repo with package.json and go.mod is installed with npm test, not with the last manifest checked
 entry_points: sdd install
-qa_status: untested
+qa_status: pass
 bug_ids:
 fix_status:
 retest_status:
 fix_commits:
 evidence:
-last_report:
+last_report: ../reports/2026-08-21-missao-porteira.md
 overlaps:
 ---
 

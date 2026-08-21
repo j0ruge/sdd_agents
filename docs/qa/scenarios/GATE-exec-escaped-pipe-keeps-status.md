@@ -6,13 +6,13 @@ persona: Sessão
 journey: J-checkpoint-survives-a-formatter
 expected: A checkpoint whose Check cell contains \| derives the same phase as the identical checkpoint without it
 entry_points: sdd phase <mission>; sdd run <mission>; sdd why <mission> EXEC
-qa_status: untested
+qa_status: pass
 bug_ids:
 fix_status:
 retest_status:
 fix_commits:
 evidence:
-last_report:
+last_report: ../reports/2026-08-21-missao-porteira.md
 overlaps: GATE-review-escaped-pipe-in-rationale
 ---
 

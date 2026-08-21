@@ -6,13 +6,13 @@ persona: Sessão
 journey: J-review-round-seal
 expected: A rationale containing a GFM-escaped pipe passes, and any refusal quotes back text that actually appears in the file
 entry_points: ./bin/sdd why <mission> REVIEW
-qa_status: fail
+qa_status: pass
 bug_ids: BUG-20260819-escaped-pipe-rationale-read-as-placeholder
 fix_status: fixed
-retest_status: pending
+retest_status: pass
 fix_commits: 53586c5; e2e5252
 evidence:
-last_report: docs/handoffs/20260819-fecho-que-nao-mente/40-review-r1.md
+last_report: ../reports/2026-08-21-missao-porteira.md
 overlaps: GATE-review-punctuated-placeholder-refused; GATE-exec-escaped-pipe-keeps-status
 ---
 

@@ -6,13 +6,13 @@ persona: Sessão
 journey: J-trouble-stops-the-line
 expected: The refusal names both directions — commit what belongs to the mission, restore what does not
 entry_points: sdd run <mission>; sdd why <mission> EXEC
-qa_status: untested
+qa_status: pass
 bug_ids:
 fix_status:
 retest_status:
 fix_commits:
 evidence:
-last_report:
+last_report: ../reports/2026-08-21-missao-porteira.md
 overlaps:
 ---
 

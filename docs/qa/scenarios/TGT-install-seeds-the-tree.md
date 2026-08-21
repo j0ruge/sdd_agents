@@ -6,13 +6,13 @@ persona: Priya
 journey: J-target-repo-ships
 expected: After sdd install the handoff root exists and the findings file is present and non-empty
 entry_points: sdd install
-qa_status: untested
+qa_status: pass
 bug_ids:
 fix_status:
 retest_status:
 fix_commits:
 evidence:
-last_report:
+last_report: ../reports/2026-08-21-missao-porteira.md
 overlaps:
 ---
 

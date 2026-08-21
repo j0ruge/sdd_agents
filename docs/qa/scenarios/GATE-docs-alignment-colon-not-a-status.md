@@ -6,13 +6,13 @@ persona: Priya
 journey: J-checkpoint-survives-a-formatter
 expected: A formatter-aligned 45-docs.md with every area ✅ or n/a passes gate_DOCS
 entry_points: sdd run <mission>; sdd why <mission> DOCS
-qa_status: untested
+qa_status: pass
 bug_ids:
 fix_status:
 retest_status:
 fix_commits:
 evidence:
-last_report:
+last_report: ../reports/2026-08-21-missao-porteira.md
 overlaps: GATE-exec-alignment-colon-not-an-increment
 ---
 

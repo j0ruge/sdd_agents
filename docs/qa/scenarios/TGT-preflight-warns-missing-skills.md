@@ -6,13 +6,13 @@ persona: Priya
 journey: J-target-repo-ships
 expected: preflight warns (never fails) about a skill it cannot find, naming the roots searched and the cost
 entry_points: sdd preflight
-qa_status: untested
+qa_status: pass
 bug_ids:
 fix_status:
 retest_status:
 fix_commits:
 evidence:
-last_report:
+last_report: ../reports/2026-08-21-missao-porteira.md
 overlaps: TGT-preflight-skill-warning-follows-the-config
 ---
 

@@ -6,13 +6,13 @@ persona: Sessão
 journey: J-review-round-seal
 expected: The table in agents/sdd-reviewer.md carries at least one real Rationale sentence, and says the <…> cells are the shape
 entry_points: .claude/agents/sdd-reviewer.md; sdd run <mission> --dry-run --phase REVIEW
-qa_status: untested
+qa_status: pass
 bug_ids:
 fix_status:
 retest_status:
 fix_commits:
 evidence:
-last_report:
+last_report: ../reports/2026-08-21-missao-porteira.md
 overlaps: GATE-review-placeholder-rationale-refused
 ---
 

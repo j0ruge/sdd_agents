@@ -1,6 +1,6 @@
 # BUG-20260819-empty-catalogue-stamped-green: the kit certifies itself healthy over a catalogue that ran nothing
 
-- **Status:** fixed
+- **Status:** verified <!-- open | fixed | verified | wont-fix | invalid -->
 - **Impact (user-side):** Trust-Damage
 - **Severity:** High · **Priority:** P1
 - **Persona Affected:** Mara
@@ -74,3 +74,12 @@ mission died without printing a `score:` line.
 What *is* measured today: the two numbers the new rule compares in the real kit are **111 and
 111**, above the floor of 8, so a genuine run is not refused by the new guard. Whoever closes F3
 runs `./bin/sdd health` and only then moves to the PR phase — that run is this bug's verification.
+
+## Verification
+
+- **Retested:** 2026-08-21, Mara / J-health-verdict · **Report:** ../reports/2026-08-21-missao-porteira.md
+- **Result:** observable confirmed fixed. A kit copy whose `CATALOG=()` was emptied (the emptying
+  proven before the run, not assumed) produced `score: 0 caught, 0 known gap(s), of 0`, and the
+  sensor refused it: *"the catalogue ran 0 of the 128 mutant(s) tests/check-mutation.sh defines
+  (floor 8) — an emptied or narrowed catalogue goes on printing caught == of, and that green is
+  about a loop that ran 0 time(s)"*. No stamp was written.

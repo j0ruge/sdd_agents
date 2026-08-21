@@ -6,13 +6,13 @@ persona: Priya
 journey: J-target-repo-ships
 expected: preflight fails a TEST_CMD of true, :, echo, --list, --listTests or --collect-only, naming the consequence
 entry_points: sdd preflight
-qa_status: untested
+qa_status: pass
 bug_ids:
 fix_status:
 retest_status:
 fix_commits:
 evidence:
-last_report:
+last_report: ../reports/2026-08-21-missao-porteira.md
 overlaps: SUI-testcmd-with-list-refused
 ---
 

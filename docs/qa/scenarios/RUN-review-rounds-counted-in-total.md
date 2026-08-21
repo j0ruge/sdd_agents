@@ -6,13 +6,13 @@ persona: Rui
 journey: J-trouble-stops-the-line
 expected: With REVIEW_MAX_ITER rounds already on disk a fresh sdd run exits 3 without opening a REVIEW session
 entry_points: sdd run <mission>
-qa_status: untested
+qa_status: pass
 bug_ids:
 fix_status:
 retest_status:
 fix_commits:
 evidence:
-last_report:
+last_report: ../reports/2026-08-21-missao-porteira.md
 overlaps: RUN-forced-review-round-still-runs
 ---
 

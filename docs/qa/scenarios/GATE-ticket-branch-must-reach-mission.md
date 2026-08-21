@@ -6,13 +6,13 @@ persona: Priya
 journey: J-ticket-opens-and-branch-lands
 expected: With branch filled in 10-ticket.md and a placeholder in 00-missao.md, gate_TICKET refuses and names 00-missao.md
 entry_points: sdd run <mission>; sdd why <mission> TICKET
-qa_status: untested
+qa_status: pass
 bug_ids:
 fix_status:
 retest_status:
 fix_commits:
 evidence:
-last_report:
+last_report: ../reports/2026-08-21-missao-porteira.md
 overlaps: GATE-ticket-branch-mismatch-refused; GATE-ticket-without-branch-still-passes
 ---
 

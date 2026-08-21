@@ -6,13 +6,13 @@ persona: Mara
 journey: J-trouble-stops-the-line
 expected: sdd run --phase REVIEW opens a session even when the rounds on disk are at or above the ceiling
 entry_points: sdd run <mission> --phase REVIEW
-qa_status: untested
+qa_status: pass
 bug_ids:
 fix_status:
 retest_status:
 fix_commits:
 evidence:
-last_report:
+last_report: ../reports/2026-08-21-missao-porteira.md
 overlaps: RUN-review-rounds-counted-in-total
 ---
 

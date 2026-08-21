@@ -6,13 +6,13 @@ persona: Priya
 journey: J-target-repo-ships
 expected: With JIRA off the ticket skill is not asked for, with no interface the qa skills are not, and codereview always is
 entry_points: sdd preflight
-qa_status: untested
+qa_status: pass
 bug_ids:
 fix_status:
 retest_status:
 fix_commits:
 evidence:
-last_report:
+last_report: ../reports/2026-08-21-missao-porteira.md
 overlaps: TGT-preflight-warns-missing-skills
 ---
 

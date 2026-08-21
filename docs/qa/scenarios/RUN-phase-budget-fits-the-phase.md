@@ -6,13 +6,13 @@ persona: Mara
 journey: J-trouble-stops-the-line
 expected: The projected command line carries --max-budget-usd 40 for REVIEW, 25 for EXEC and QA, and 15 for PR and DOCS
 entry_points: sdd run <mission> --dry-run
-qa_status: untested
+qa_status: pass
 bug_ids:
 fix_status:
 retest_status:
 fix_commits:
 evidence:
-last_report:
+last_report: ../reports/2026-08-21-missao-porteira.md
 overlaps:
 ---
 

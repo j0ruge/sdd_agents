@@ -6,13 +6,13 @@ persona: Priya
 journey: J-ticket-opens-and-branch-lands
 expected: 00-missao.md naming another branch is refused, with both names quoted in the reason
 entry_points: sdd run <mission>; sdd why <mission> TICKET
-qa_status: untested
+qa_status: pass
 bug_ids:
 fix_status:
 retest_status:
 fix_commits:
 evidence:
-last_report:
+last_report: ../reports/2026-08-21-missao-porteira.md
 overlaps: GATE-ticket-branch-must-reach-mission
 ---
 

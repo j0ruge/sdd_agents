@@ -6,13 +6,13 @@ persona: Priya
 journey: J-ticket-opens-and-branch-lands
 expected: A 10-ticket.md with issue and sprint but no branch passes the gate unchanged
 entry_points: sdd run <mission>
-qa_status: untested
+qa_status: pass
 bug_ids:
 fix_status:
 retest_status:
 fix_commits:
 evidence:
-last_report:
+last_report: ../reports/2026-08-21-missao-porteira.md
 overlaps: GATE-ticket-branch-must-reach-mission
 ---
 

@@ -1,6 +1,6 @@
 # BUG-20260819-empty-gate-field-passes: the guard's own comment describes the case it lets through
 
-- **Status:** fixed
+- **Status:** verified <!-- open | fixed | verified | wont-fix | invalid -->
 - **Impact (user-side):** Trust-Damage
 - **Severity:** High · **Priority:** P1
 - **Persona Affected:** Sessão
@@ -59,3 +59,10 @@ history rather than measure the current round. That gap is already recorded in `
 Not yet `verified` — same re-walk as the sibling bug, and the REVIEW phase now running is its first
 real exercise. The refusal message gained the `(<empty>)` label for this case, so the verification
 observable is that a round shipping `gate:` with a blank value is named, not merely refused.
+
+## Verification
+
+- **Retested:** 2026-08-21, Mara / J-review-round-seal · **Report:** ../reports/2026-08-21-missao-porteira.md
+- **Result:** observable confirmed fixed. Walked on a live target repo (not a suite fixture), on a
+  round whose table was colon-aligned and prettier-formatted, so the retest also covers the
+  alignment change that landed since the fix.

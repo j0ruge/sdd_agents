@@ -6,13 +6,13 @@ persona: Mara
 journey: J-health-verdict
 expected: A catalogue of zero or a handful of mutants is refused; it never reaches a green stamp
 entry_points: ./bin/sdd health
-qa_status: fail
+qa_status: pass
 bug_ids: BUG-20260819-empty-catalogue-stamped-green
 fix_status: fixed
-retest_status: pending
+retest_status: pass
 fix_commits: 688553f
 evidence:
-last_report: docs/handoffs/20260819-fecho-que-nao-mente/checkpoint.md
+last_report: ../reports/2026-08-21-missao-porteira.md
 overlaps: 
 ---
 
