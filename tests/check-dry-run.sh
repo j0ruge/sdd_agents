@@ -284,6 +284,33 @@ rm -rf docs/qa/charters docs/qa/reports
 
 sed -i 's|^E2E_CMD="true"|E2E_CMD=""|' .sdd/config.sh
 
+# --- TICKET boots ONE driver, not two --------------------------------------
+# `phase_agent`'s own invariant, written above it in bin/sdd: an agent and a slash are two system
+# prompts fighting over one session, which is noise and not reinforcement. Every other phase obeys
+# it — the QA sub-steps driven by a skill answer `<none>`. TICKET declared BOTH: the `sdd-publisher`
+# agent AND a prepended `/ticket open`. The slash is what goes: the `ticket` skill has no
+# `disable-model-invocation`, so it does not need to be the first line of the prompt to load, and
+# agents/sdd-publisher.md already instructs the session to invoke it.
+#
+# Differential, and both halves are needed: the agent alone would pass on a runner that also kept
+# the slash, and the absent slash alone would pass on a runner that booted TICKET with no driver at
+# all.
+echo "== TICKET boots one driver =="
+sed -i 's|^JIRA_ENABLED=false|JIRA_ENABLED=true|' .sdd/config.sh
+printf 'PROJECT=FX\nBOARD=1\n' > .jira-project
+outt="$( "$SDD" run "$MISSION" --dry-run --phase TICKET 2>&1 )"
+assert_eq "TICKET boots the agent without a prepended slash" \
+  "TICKET=sdd-publisher" "$(printf '%s\n' "$outt" | projected)"
+if grep -q '│ /ticket open' <<< "$outt"; then
+  fail "the TICKET boot prompt does not open with a slash" \
+       "no '/ticket open' first line" "$(grep -m1 '│' <<< "$outt")"
+else
+  pass "the TICKET boot prompt does not open with a slash"
+fi
+sed -i 's|^JIRA_ENABLED=true|JIRA_ENABLED=false|' .sdd/config.sh
+rm -f .jira-project
+assert_eq "the fixture comes back clean after the TICKET test" "" "$(git status --porcelain)"
+
 # --- the projection must not write to the mission journal ------------------
 # Found by the QA phase of mission 20260814-dry-run-completo: with a `blocked` increment, the
 # dry-run escapes through the `cmd_run` Jidoka BEFORE reaching the DRY_RUN block, and that path

@@ -1015,11 +1015,19 @@ phase_agent() {
 }
 
 # Literal slash that opens the session, when the phase is driven by a third-party skill.
+#
+# ONLY where the skill cannot be reached any other way. The `qa-report` and `qa-execution` skills
+# carry `disable-model-invocation`, so the literal slash as the first line of the prompt is their
+# only route — and both answer `<none>` in phase_agent, exactly as the invariant above it requires.
+# TICKET used to be listed here as well, WITH `sdd-publisher` as its agent: two system prompts over
+# one session, which is the thing that invariant refuses. The slash was the half that went, because
+# the `ticket` skill has no `disable-model-invocation` and agents/sdd-publisher.md already tells the
+# session to invoke `/ticket open`. It also took one read of the PT-BR frontmatter key `titulo` out
+# of the runner; the remaining one is `cmd_approve`, which only prints it for the human.
 phase_slash() {
   case "$1" in
     QA:plan) printf '/qa-report %s\n' "$QA_DOCS_PATH" ;;
     QA:exec) printf '/qa-execution %s\n' "$QA_DOCS_PATH" ;;
-    TICKET)  printf '/ticket open %s\n' "$(frontmatter "$MISSION_DIR/00-missao.md" titulo)" ;;
     *)       printf '%s\n' "" ;;
   esac
 }
