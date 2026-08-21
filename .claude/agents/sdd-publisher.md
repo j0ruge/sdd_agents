@@ -97,7 +97,14 @@ Runs **before** execution, when `JIRA_ENABLED=true`.
 2. Boot: the `ticket` skill does the work (`/ticket open <summary>`). It reads `.jira-project` from
    the repo, creates the issue **already in the active sprint** with story points via
    `acli --from-json`, verifies the card left the backlog, and creates the branch.
-3. Record `docs/handoffs/<mission>/10-ticket.md`:
+3. **Write the branch back into `00-missao.md`**: replace the `<...>` placeholder of the `branch:`
+   field with the name the skill just created. This is not bookkeeping — the runner reads
+   `branch:` from `00-missao.md` and from nowhere else, so a branch recorded only in
+   `10-ticket.md` means every later phase runs on whatever branch the human happened to be
+   standing on. The gate refuses the mismatch, but only **you** can write it: a gate that wrote
+   would corrupt the fingerprint the runner uses to tell "the session moved the disk" from "the
+   session did nothing".
+4. Record `docs/handoffs/<mission>/10-ticket.md`:
 
 ```yaml
 ---
@@ -114,7 +121,11 @@ gate: "acli confirms issue SQ-123 in sprint <id>"
 ```
 
 The gate requires `issue:` **and** `sprint:` — an issue created in the backlog does not pass. A
-card in the backlog is invisible work for the team.
+card in the backlog is invisible work for the team. When you fill `branch:` in, it also requires
+`00-missao.md` to declare the **same** branch.
+
+Commit both files on the branch the skill created — `10-ticket.md` and the edited `00-missao.md`
+— before the phase ends.
 
 ## Language
 

@@ -449,6 +449,31 @@ gate_TICKET() {
     GATE_WHY="10-ticket.md has no 'sprint:' — the issue must be IN THE ACTIVE SPRINT, not in the backlog"
     return 1
   fi
+  # The branch is BORN in this phase — the `ticket` skill creates it — and used to be recorded in
+  # 10-ticket.md alone. `ensure_mission_branch` reads `branch:` from 00-missao.md and nowhere else,
+  # so with JIRA on every later phase ran wherever the human happened to be standing while the
+  # runner guarded a name that was never written down: the SQ-97 shape, five phases into another
+  # PR's branch and a `rebase --onto` to undo them.
+  #
+  # The WRITE is the session's, never this gate's: a gate that writes breaks `moved2`, the
+  # fingerprint that answers "did the session move the disk" (see the comment at that variable).
+  # What is left here is the verifiable half — declared in one artifact means declared in both.
+  #
+  # No `branch:` in 10-ticket.md ⇒ pass. That is every mission planned before the field existed,
+  # and refusing them would be rewriting history instead of measuring the phase that just ran.
+  local tbranch; tbranch="$(frontmatter "$t" branch)"
+  case "$tbranch" in ''|'<'*) ;; *)
+    local mbranch; mbranch="$(frontmatter "$MISSION_DIR/00-missao.md" branch)"
+    case "$mbranch" in
+      ''|'<'*)
+        GATE_WHY="10-ticket.md declares branch '$tbranch' and 00-missao.md still carries the placeholder — the TICKET session writes it back, or every later phase runs on whatever branch the human is standing on"
+        return 1 ;;
+    esac
+    if [ "$mbranch" != "$tbranch" ]; then
+      GATE_WHY="10-ticket.md declares branch '$tbranch' and 00-missao.md declares '$mbranch' — the runner honours 00-missao.md, so the mission would run on a branch the ticket never created"
+      return 1
+    fi
+  ;; esac
   GATE_WHY="issue $issue in the sprint"
   return 0
 }

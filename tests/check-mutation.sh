@@ -134,6 +134,16 @@ mut_PLAN_remedy_unnamed() {
   sed -i '/00-missao.md has/ s@: run .sdd approve \$MISSION.@@' "$1"
 }
 
+# The gate stops checking that the branch born in this phase reached the artifact the runner reads.
+# `ensure_mission_branch` looks at `branch:` in 00-missao.md and nowhere else, so a name recorded
+# only in 10-ticket.md leaves every later phase running on whatever branch the human was standing
+# on — the SQ-97 shape, five phases into another PR's branch. The fixture carries both worlds
+# (placeholder ⇒ refuse, written back ⇒ pass), so a gate that simply refused every TICKET would
+# not survive either.
+mut_TICKET_branch_writeback_blind() {
+  sed -i '/^gate_TICKET()/,/^}/ s@tbranch="\$(frontmatter "\$t" branch)"@tbranch=""@' "$1"
+}
+
 mut_TICKET_no_sprint() {      # stops requiring `sprint:` — a card in the backlog is invisible work
   sed -i "s|.*if ! grep -qiE '\^sprint:.*|  if false; then|" "$1"
 }
@@ -1470,6 +1480,7 @@ CATALOG=(
   PLAN_kaizen_born_blind
   PLAN_remedy_unnamed
   TICKET_no_sprint
+  TICKET_branch_writeback_blind
   EXEC_done_without_commit
   EXEC_orphan_commit
   EXEC_ignores_TEST_CMD

@@ -175,9 +175,44 @@ assert_why   "TICKET reports the missing sprint" "TICKET" "ACTIVE SPRINT|sprint"
 printf -- '---\nfase: TICKET\nstatus: done\nissue: FX-1\nsprint: Sprint 1\n---\n' > "$MDIR/10-ticket.md"
 assert_phase "an issue in the active sprint passes" "EXEC"
 
-# back to the no-JIRA state for the rest of the test
+# With JIRA on, the branch is BORN in the TICKET phase (the `ticket` skill creates it) and used to
+# stay in 10-ticket.md alone. `ensure_mission_branch` reads only 00-missao.md, so every later phase
+# ran on whatever branch the human happened to be standing on, guarding a name that was never
+# there — the SQ-97 shape, where five phases committed into another PR's branch.
+#
+# The write-back is the TICKET SESSION's job, never the gate's: a gate that wrote would break
+# `moved2`, the fingerprint that answers "did the session move the disk". So the gate takes the
+# half it can verify — if 10-ticket.md declares a branch, 00-missao.md must declare the same one,
+# and not the placeholder.
+#
+# Three worlds, and the middle one is what the assertion is named after.
+printf -- '---\nfase: TICKET\nstatus: done\nissue: FX-1\nsprint: Sprint 1\nbranch: feature/FX-1\n---\n' \
+  > "$MDIR/10-ticket.md"
+sed -i 's|^versao: 0.1.0|versao: 0.1.0\nbranch: <nome da branch de trabalho>|' "$MDIR/00-missao.md"
+assert_phase "TICKET refuses a branch that never reached 00-missao.md" "TICKET"
+assert_why   "TICKET names the artifact the branch has to reach" "TICKET" "00-missao"
+
+# A DIFFERENT branch is the same defect wearing a filled-in field: 00-missao.md declares a name,
+# `ensure_mission_branch` honours it, and the mission runs somewhere the ticket never created.
+sed -i 's|^branch: <nome da branch de trabalho>|branch: feature/OTHER|' "$MDIR/00-missao.md"
+assert_phase "TICKET refuses a 00-missao.md declaring another branch" "TICKET"
+
+# And the other side: written back, the phase passes. Without it the two assertions above are
+# satisfied by a gate that refuses every TICKET whatever is on disk.
+sed -i 's|^branch: feature/OTHER|branch: feature/FX-1|' "$MDIR/00-missao.md"
+assert_phase "the branch written back to 00-missao.md passes" "EXEC"
+
+# back to the no-JIRA state for the rest of the test. The `branch:` line goes too: left behind, the
+# `sdd run` invocations further down would check a branch out inside the fixture.
 sed -i 's/^JIRA_ENABLED=true/JIRA_ENABLED=false/' .sdd/config.sh
+sed -i '/^branch: feature\/FX-1$/d' "$MDIR/00-missao.md"
 rm -f .jira-project "$MDIR/10-ticket.md"
+if grep -q '^branch:' "$MDIR/00-missao.md"; then
+  fail "the TICKET block leaves no branch behind" "no branch: line in 00-missao.md" \
+       "$(grep -m1 '^branch:' "$MDIR/00-missao.md")"
+else
+  pass "the TICKET block leaves no branch behind in the fixture"
+fi
 
 # --- EXEC ------------------------------------------------------------------
 echo "== EXEC phase =="

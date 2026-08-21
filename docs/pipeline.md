@@ -81,10 +81,17 @@ closes it with `sdd approve <mission>`, which writes `humano-<date>` and commits
 ### TICKET — skipped when there is no JIRA
 
 **Passes when:** `JIRA_ENABLED=false` (skip recorded), or `10-ticket.md` exists with `issue:`
-**and** `sprint:` in the frontmatter.
+**and** `sprint:` in the frontmatter — and, when it also carries `branch:`, `00-missao.md` declares
+the **same** branch.
 
 Requiring `sprint:` is deliberate: a card created in the backlog is invisible work for the team.
 The `ticket` skill creates it straight into the active sprint and confirms it left the backlog.
+
+The `branch:` check exists because the runner honours `branch:` from `00-missao.md` and from
+nowhere else. The session writes the name back and commits both files; a `10-ticket.md` that
+declares a branch nobody copied over means every later phase runs on whatever branch the human is
+standing on. `branch:` absent from `10-ticket.md` passes — that is every mission planned before the
+field existed.
 
 ### EXEC — one session per increment
 
@@ -240,14 +247,17 @@ on the base branch. The warning has one definition, so sabotaging it silences al
 the suite dies; the two call sites added last (`sdd retry` and `sdd approve`) carry a mutation of
 their own, because for those two the defect was the missing call, not the missing warning.
 
-Two things it deliberately does not do:
+One thing it deliberately does not do: **it never runs in `--dry-run`** — a checkout is a mutation
+of state, and that is the half the projection promises not to touch (below).
 
-- **it never runs in `--dry-run`** — a checkout is a mutation of state, and that is the half the
-  projection promises not to touch (below);
-- **it never learns the branch the TICKET phase creates.** With `JIRA_ENABLED=true` that name
-  lands in `10-ticket.md` and nothing copies it into the field the runner reads, so `branch:`
-  stays at the placeholder and this guard is a no-op. The SQ-97 class dies on the path without
-  JIRA, which is the only path this has been walked on.
+**How the branch created by TICKET gets here.** With `JIRA_ENABLED=true` the `ticket` skill creates
+the branch, and the name used to land in `10-ticket.md` alone — nothing copied it into the field
+this function reads, so `branch:` stayed at the placeholder and the guard was a no-op on the exact
+path it was written for. The TICKET **session** now writes it back into `00-missao.md` and commits
+both files; `gate_TICKET` takes the half a gate can take, refusing a `10-ticket.md` whose `branch:`
+is filled in while `00-missao.md` still carries the placeholder or declares another name. The write
+is the session's and never the gate's: a gate that wrote would corrupt `moved`/`moved2`, the
+fingerprints that tell "the session moved the disk" from "the session did nothing".
 
 ## Dry-run — the projection
 
