@@ -1750,6 +1750,39 @@ state_fingerprint() {
     "$( cat "$MISSION_DIR/checkpoint.md" 2>/dev/null | md5sum 2>/dev/null | cut -d' ' -f1 )"
 }
 
+# test_cmd_looks_noop <cmd> → 0 when the command would exit 0 having run no test at all.
+#
+# `TEST_CMD` is the EXEC gate and half the REVIEW gate. A value that runs nothing is worse than an
+# empty one: it passes every gate, in every mission, for ever, and each phase certifies itself
+# against a run that never happened — a label reached through the one key the whole pipeline
+# trusts. The preflight only refused EMPTY and the literal `TODO`.
+#
+# Two rules, both the shape `sdd health`'s check 2b already uses:
+#   - the FIRST WORD is a command that runs nothing. `true` and `:` are what a config carries while
+#     it is being wired up, and `echo`/`printf` are what a placeholder turns into;
+#   - an argument, matched WHOLE (padded on both sides), that asks the runner to enumerate the
+#     tests instead of running them. Unpadded, `*--list*` would also accuse `--listen-port`, and a
+#     rule that fires on correct config is a rule the next author deletes.
+#
+# ONE definition, called from cmd_preflight. Check 2b in cmd_health deliberately keeps its OWN
+# narrower `--list` case rather than calling this: its subject is the kit's own suite mode, its
+# message says so, and `mut_HEALTH_testcmd_list_blind` anchors on that case pattern. The
+# duplication is declared here rather than hidden — a new spelling belongs in BOTH.
+# `tc` and not `cmd`: `cmd` is a `local -a` in run_phase, and shellcheck reasons about the name
+# across the whole file — a scalar `cmd` here makes it read every use as the first element of an
+# array (SC2178/SC2128) and the lint step of the suite goes red.
+test_cmd_looks_noop() {
+  local tc="${1:-}"
+  [ -n "$tc" ] || return 1
+  case "${tc%% *}" in
+    true|:|echo|printf|exit) return 0 ;;
+  esac
+  case " $tc " in
+    *" --list "*|*" --listTests "*|*" --collect-only "*) return 0 ;;
+  esac
+  return 1
+}
+
 # How many REVIEW rounds this mission has already spent, read off the disk.
 #
 # `attempts` in cmd_run is a `local -A` born with the PROCESS, so `REVIEW_MAX_ITER` only ever
@@ -2060,7 +2093,14 @@ cmd_preflight() {
   bash -n "$CONFIG_FILE" && ok "config syntax valid"
   case "$TEST_CMD" in
     TODO|"") _fail "TEST_CMD not configured in .sdd/config.sh" ;;
-    *) ok "TEST_CMD=$TEST_CMD" ;;
+    *)
+      if test_cmd_looks_noop "$TEST_CMD"; then
+        _fail "TEST_CMD runs nothing ($TEST_CMD) — it exits 0 having executed no test, so
+        gate_EXEC, gate_QA and gate_REVIEW would pass instantly, in every mission, against a
+        run that never happened. Point TEST_CMD at the suite itself."
+      else
+        ok "TEST_CMD=$TEST_CMD"
+      fi ;;
   esac
   if [ "$JIRA_ENABLED" = "true" ]; then
     if [ -f "$REPO_ROOT/.jira-project" ]; then ok "JIRA enabled, .jira-project present"

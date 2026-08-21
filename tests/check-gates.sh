@@ -334,14 +334,19 @@ if [ -z "$( cd "$FIX" && git status --porcelain )" ]; then
 else
   fail "dirty-tree fixture" "a clean tree" "$( cd "$FIX" && git status --porcelain )"
 fi
-# "A session was spent" is counted in the ARTEFACT the runner leaves behind — one `EXEC-*.json` per
-# invocation, under `.sdd/logs/<mission>/`. NOT by grepping the stub's marker out of `sdd run`'s
-# output: run_phase redirects the session's stdout AND stderr into that log file, so the marker
-# never reaches the terminal and an assertion reading for it there is green whether a session ran
-# or not. (The neighbouring assert_jidoka has that shape; recorded in TODO.md.)
-sessions_spent() {
-  find "$FIX/.sdd/logs/$MISSION" -maxdepth 1 -name 'EXEC-*.json' 2>/dev/null | grep -c . || true
+# "A session was spent" is counted in the ARTEFACT the runner leaves behind: one line per
+# `run_phase` in the mission journal. NOT by grepping the stub's marker out of `sdd run`'s output —
+# run_phase redirects the session's stdout AND stderr into its log file, so the marker never
+# reaches the terminal and an assertion reading for it there is green whether a session ran or not.
+# (The neighbouring assert_jidoka has that shape; recorded in TODO.md.)
+#
+# And not by counting `EXEC-*.json` files either: those are named `<PHASE>-%Y%m%d-%H%M%S.json`, so
+# two sessions inside the same SECOND land on the same path and the second overwrites the first.
+# The journal is append-only, which is what makes it countable.
+phase_sessions_spent() { # phase_sessions_spent <PHASE>
+  grep -c "  $1  agent=" "$FIX/.sdd/logs/$MISSION/pipeline.log" 2>/dev/null || true
 }
+sessions_spent() { phase_sessions_spent EXEC; }
 n_before="$(sessions_spent)"
 out_clean="$( cd "$FIX" && "$SDD" run "$MISSION" --max-phases 1 2>&1 )"; rc_clean=$?
 n_clean="$(sessions_spent)"
@@ -690,9 +695,7 @@ sed -i 's/^| Security | A | clean |/| Security | C | injection left open |/;s/^|
 git add -A && git commit -qm "chore: review r11 red again"
 assert_phase "fixture: REVIEW is the derived phase again" "REVIEW"
 
-review_sessions_spent() {
-  find "$FIX/.sdd/logs/$MISSION" -maxdepth 1 -name 'REVIEW-*.json' 2>/dev/null | grep -c . || true
-}
+review_sessions_spent() { phase_sessions_spent REVIEW; }
 rv_before="$(review_sessions_spent)"
 out_rv="$( cd "$FIX" && "$SDD" run "$MISSION" 2>&1 )"; rc_rv=$?
 rv_after="$(review_sessions_spent)"

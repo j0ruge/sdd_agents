@@ -880,6 +880,14 @@ mut_LEDGER_repo_root_toplevel() {
 # is the differential pair in check-preflight.sh — one fixture read twice, one byte apart — plus
 # the stale message itself. `elif` → `elif false &&` keeps the branch syntactically alive so the
 # mutant is valid bash and the sabotage is precisely the comparison, nothing else.
+# The preflight stops asking whether TEST_CMD would run anything at all. A `true` left behind while
+# the config was being wired up then passes preflight, and after it gate_EXEC, gate_QA and
+# gate_REVIEW pass instantly, in every mission, for ever — each phase certifying itself against a
+# run that never happened, through the one key the whole pipeline trusts.
+mut_PRE_testcmd_noop_blind() {
+  sed -i '/^cmd_preflight()/,/^}/ s@if test_cmd_looks_noop "\$TEST_CMD"; then@if false; then@' "$1"
+}
+
 mut_PRE_agent_presence_only() {
   sed -i 's@elif ! cmp -s "$a" "$copy"; then@elif false \&\& ! cmp -s "$a" "$copy"; then@' "$1"
 }
@@ -1563,6 +1571,7 @@ CATALOG=(
   RUN_entrypoint_unguarded
   RUN_ledger_no_repo_filter
   PRE_agent_presence_only
+  PRE_testcmd_noop_blind
   RUN_base_branch_warn_dead
   RUN_approve_writes_auto
   RUN_approve_bails_on_kaizen_born

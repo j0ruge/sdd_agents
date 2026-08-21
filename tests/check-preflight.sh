@@ -108,7 +108,7 @@ else fail "the created config is not empty" "a non-zero .sdd/config.sh" \
 cat > .sdd/config.sh <<'EOF'
 PROJECT_NAME="fixture"
 DEFAULT_BRANCH="main"
-TEST_CMD="true"
+TEST_CMD="npm test"
 E2E_CMD=""
 HANDOFF_DIR="docs/handoffs"
 QA_DOCS_PATH="docs/qa"
@@ -293,6 +293,51 @@ assert_lacks "the guard fires before sed does" "sed:" "$out"
 if [ ! -e "$FIX/target/.sdd/config.sh" ]; then pass "no empty config is left behind"
 else fail "no empty config is left behind" "no .sdd/config.sh at all" \
        "$(wc -c < "$FIX/target/.sdd/config.sh") byte(s) on disk"; fi
+
+# --- a TEST_CMD that runs nothing -------------------------------------------
+# `TEST_CMD` is the EXEC gate and half the REVIEW gate, and the preflight only ever refused it
+# EMPTY or literally `TODO`. A value that exits 0 having executed nothing is worse than empty: it
+# passes every gate, in every mission, for ever, and each phase certifies itself against a run that
+# never happened — a label reached through the one key the whole pipeline trusts. `sdd health`
+# already refused one spelling of this (`--list`) but only for the KIT's own suite; every target
+# repo was on its own.
+#
+# The forms below are the ones people actually write: the placeholder left behind after wiring the
+# config up, and the "list the tests without running them" flag of three ecosystems.
+echo "== a TEST_CMD that runs nothing =="
+cd "$FIX" || exit 1
+cp .sdd/config.sh .sdd/config.sh.bak
+
+noop_case() { # noop_case <TEST_CMD> <description>
+  sed -i "s|^TEST_CMD=.*|TEST_CMD=\"$1\"|" .sdd/config.sh
+  local o; o="$( "$SDD" preflight 2>&1 )"
+  if grep -qF "runs nothing" <<< "$o"; then pass "$2"
+  else fail "$2" "a preflight refusing TEST_CMD=$1" "$(grep -m1 'TEST_CMD' <<< "$o" || echo 'no TEST_CMD line at all')"; fi
+}
+
+noop_case 'true'                'preflight fails a no-op TEST_CMD'
+noop_case ':'                   'preflight fails TEST_CMD=":"'
+noop_case 'echo ok'             'preflight fails a TEST_CMD that only echoes'
+noop_case 'npm test -- --list'  'preflight fails a TEST_CMD carrying --list'
+noop_case 'pytest --collect-only' 'preflight fails a TEST_CMD that only collects'
+
+# The other half, and the half that keeps the rule alive: a rule that fires on correct config is a
+# rule the next author deletes. `--listen-port` is the near miss the whole-argument padding exists
+# for, and `echo` inside a longer command is not a command that only echoes.
+ok_case() { # ok_case <TEST_CMD> <description>
+  sed -i "s|^TEST_CMD=.*|TEST_CMD=\"$1\"|" .sdd/config.sh
+  local o; o="$( "$SDD" preflight 2>&1 )"
+  if grep -qF "runs nothing" <<< "$o"; then
+    fail "$2" "no refusal for TEST_CMD=$1" "$(grep -m1 'runs nothing' <<< "$o")"
+  else pass "$2"; fi
+}
+
+ok_case 'npm test'                       'a real TEST_CMD is not accused'
+ok_case 'tests/run-all.sh'               'the kit own suite is not accused'
+ok_case './run.sh --listen-port 8080'    'a flag that merely starts with --list is not accused'
+ok_case 'make test && echo done'         'an echo that is not the command is not accused'
+
+mv .sdd/config.sh.bak .sdd/config.sh
 
 # ---------------------------------------------------------------------------
 echo
