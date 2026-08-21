@@ -339,6 +339,62 @@ ok_case 'make test && echo done'         'an echo that is not the command is not
 
 mv .sdd/config.sh.bak .sdd/config.sh
 
+# --- install seeds the tree the runner cannot work without ------------------
+# `sdd install` made `.sdd/` and `.claude/agents/` and stopped. `resolve_mission` dies on the FIRST
+# command a new user types — "docs/handoffs/ does not exist in the target repo" — and `TODO_FILE`,
+# where principle 5 sends every out-of-scope finding, is not there either. Both are named in the
+# config the installer just wrote, so the installer is where they belong.
+#
+# Read the way check 2b of `sdd health` reads TEST_CMD: the config is SOURCED in a subshell, so the
+# value seeded is the one `load_config` will hand the runner after expansion, not a grep of the
+# text.
+echo "== install seeds HANDOFF_DIR and the findings file =="
+SEED="$FIX/seed"
+mkdir -p "$SEED"
+( cd "$SEED" && git init -q -b main \
+  && git config user.email "fixture@example.com" && git config user.name "Fixture" \
+  && echo content > file.txt && git add -A && git commit -qm "init" ) >/dev/null 2>&1
+seed_out="$( cd "$SEED" && "$SDD" install 2>&1 )"
+
+assert_has "install seeds HANDOFF_DIR and the findings file" "docs/handoffs/" "$seed_out"
+if [ -d "$SEED/docs/handoffs" ]; then pass "the handoff root exists on disk after install"
+else fail "the handoff root exists on disk after install" "a docs/handoffs/ directory" "absent"; fi
+if [ -s "$SEED/TODO.md" ]; then pass "the findings file is seeded, and not empty"
+else fail "the findings file is seeded, and not empty" "a non-empty TODO.md" \
+       "$(wc -c < "$SEED/TODO.md" 2>/dev/null || echo 'no file') byte(s)"; fi
+
+# A second install must not overwrite what the repo already has — the installer is idempotent
+# everywhere else, and a TODO.md flattened on the second run would take real findings with it.
+printf -- '- [ ] a real finding — `x:1` — it matters — found by `x` in mission `m` (2026-01-01)\n' \
+  >> "$SEED/TODO.md"
+before_todo="$(md5sum < "$SEED/TODO.md")"
+( cd "$SEED" && "$SDD" install >/dev/null 2>&1 )
+if [ "$before_todo" = "$(md5sum < "$SEED/TODO.md")" ]; then
+  pass "a second install leaves an existing findings file untouched"
+else
+  fail "a second install leaves an existing findings file untouched" "the same TODO.md" "rewritten"
+fi
+
+# --- the autodetect cascade: first match wins -------------------------------
+# Four `if`s with no `elif`: every one of them ran, so the LAST match won whatever the repo is. A
+# Node repo carrying a `go.mod` for a sidecar tool was installed with `go test ./...` as the suite
+# the gates run — the wrong suite, chosen in silence, in the one key the whole pipeline trusts.
+echo "== the autodetect cascade =="
+MULTI="$FIX/multi"
+mkdir -p "$MULTI"
+( cd "$MULTI" && git init -q -b main \
+  && git config user.email "fixture@example.com" && git config user.name "Fixture" \
+  && printf '{}\n' > package.json && printf 'module x\n' > go.mod \
+  && git add -A && git commit -qm "init" ) >/dev/null 2>&1
+( cd "$MULTI" && "$SDD" install >/dev/null 2>&1 )
+multi_test_cmd="$( . "$MULTI/.sdd/config.sh" >/dev/null 2>&1; printf '%s' "${TEST_CMD:-}" )" || true
+if [ "$multi_test_cmd" = "npm test" ]; then
+  pass "with two manifests the first match wins (package.json → npm test)"
+else
+  fail "with two manifests the first match wins (package.json → npm test)" \
+       "npm test" "$multi_test_cmd"
+fi
+
 # ---------------------------------------------------------------------------
 echo
 if [ "$fails" -eq 0 ]; then printf '  ok    preflight measures the GNU userland instead of assuming it\n'; exit 0; fi

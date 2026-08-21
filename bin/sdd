@@ -1836,11 +1836,17 @@ cmd_install() {
       && git symbolic-ref --quiet --short refs/remotes/origin/HEAD 2>/dev/null \
       | sed 's|^origin/||' || true )"
     [ -n "$branch" ] || branch="$( cd "$REPO_ROOT" && git branch --show-current )"
+    # `elif`, first match wins. Four independent `if`s meant every one of them ran, so the LAST
+    # match won whatever the repo actually is: a Node project carrying a `go.mod` for a sidecar
+    # tool was installed with `go test ./...` as the suite every gate runs — the wrong suite,
+    # chosen in silence, in the one key the whole pipeline trusts. package.json first because a
+    # repo with two manifests is usually a JS project with a helper in another language.
     test_cmd="TODO"
-    if [ -f "$REPO_ROOT/package.json" ];   then test_cmd="npm test"; fi
-    if [ -f "$REPO_ROOT/pyproject.toml" ]; then test_cmd="pytest -q"; fi
-    if [ -f "$REPO_ROOT/Cargo.toml" ];     then test_cmd="cargo test"; fi
-    if [ -f "$REPO_ROOT/go.mod" ];         then test_cmd="go test ./..."; fi
+    if   [ -f "$REPO_ROOT/package.json" ];   then test_cmd="npm test"
+    elif [ -f "$REPO_ROOT/pyproject.toml" ]; then test_cmd="pytest -q"
+    elif [ -f "$REPO_ROOT/Cargo.toml" ];     then test_cmd="cargo test"
+    elif [ -f "$REPO_ROOT/go.mod" ];         then test_cmd="go test ./..."
+    fi
     # The redirect below creates $CONFIG_FILE BEFORE sed runs, so a half-copied kit used to leave
     # a 0-byte config on disk and only then die on sed's rc. rc was already non-zero, which is why
     # this looked harmless: the damage was the ARTIFACT. The next `sdd install` found the file,
@@ -1856,6 +1862,62 @@ cmd_install() {
         -e "s|<SDD_HOME>|$SDD_HOME|g" \
         "$SDD_HOME/config/starter.conf" > "$CONFIG_FILE"
     ok ".sdd/config.sh created (base branch detected: $branch — confirm it)"
+  fi
+
+  # The two paths the runner cannot work without, both NAMED in the config just written — which is
+  # what makes this the installer's job. Without HANDOFF_DIR, `resolve_mission` dies on the FIRST
+  # command a new user types ("docs/handoffs/ does not exist in the target repo"), and TODO_FILE is
+  # where principle 5 sends every out-of-scope finding.
+  #
+  # SOURCED in a subshell, the way check 2b of cmd_health reads TEST_CMD: what matters is the value
+  # `load_config` will hand the runner after expansion, never the text of the line. `|| true`
+  # because the rc of a substitution is its LAST command's, and a config that fails to parse must
+  # not take the install down here — it is `sdd preflight`'s job to say so, in its own words.
+  local inst_handoff inst_todo
+  # shellcheck disable=SC1090
+  inst_handoff="$( . "$CONFIG_FILE" >/dev/null 2>&1; printf '%s' "${HANDOFF_DIR:-}" )" || true
+  # shellcheck disable=SC1090
+  inst_todo="$( . "$CONFIG_FILE" >/dev/null 2>&1; printf '%s' "${TODO_FILE:-}" )" || true
+  # Same defaults load_config applies, restated here because a broken config arrives EMPTY.
+  [ -n "$inst_handoff" ] || inst_handoff="docs/handoffs"
+  [ -n "$inst_todo" ]    || inst_todo="TODO.md"
+
+  if [ -d "$REPO_ROOT/$inst_handoff" ]; then
+    ok "$inst_handoff/ already exists"
+  else
+    mkdir -p "$REPO_ROOT/$inst_handoff"
+    ok "$inst_handoff/ created (the mission's durable state lives here, committed)"
+  fi
+
+  if [ -f "$REPO_ROOT/$inst_todo" ]; then
+    ok "$inst_todo already exists (preserved)"
+  else
+    # Seeded with the FORMAT, because an empty file teaches nothing and the format is what makes
+    # the entries countable. Never overwritten: a second install over a file holding real findings
+    # would take them with it.
+    cat > "$REPO_ROOT/$inst_todo" <<'SEED'
+# Findings
+
+> Out-of-scope findings from `sdd` missions. Never divert the mission to fix one; never lose it.
+> One entry, about six lines: what, the anchor, why it matters, the direction, who found it.
+> The long analysis belongs in the handoff of the mission cited.
+>
+> Format:
+>
+> ```md
+> - [ ] <what> — `file:line` — <why it matters> — found by `<agent>` in mission `<slug>` (YYYY-MM-DD)
+> ```
+>
+> Closed is DELETED, never archived: an entry marked `RESOLVED by <hash>` stays here only until
+> the PR citing that evidence is merged, then leaves the file. Durable memory already exists in
+> `git log -S`, in the handoffs, and in the hash the entry itself quotes. Delete on the artifact
+> — `git merge-base --is-ancestor <hash> <base>` — never on a PR label.
+
+## Open
+
+## Resolved
+SEED
+    ok "$inst_todo created (out-of-scope findings go here — principle 5)"
   fi
 
   local a name target changed=0
