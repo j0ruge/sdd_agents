@@ -146,6 +146,15 @@ mut_EXEC_orphan_commit() {    # back to `cat-file -e`: a loose object passes as 
   sed -i 's|.*git merge-base --is-ancestor.*|        if false; then|' "$1"
 }
 
+# The checkpoint parser goes back to a raw split on "|". A Check cell carrying the GFM escape `\|`
+# shifts every column after it one to the left, so Status is read out of the CHECK cell and an
+# increment written `done` is refused as `invalid status` — a phase blocked for a reason nobody
+# wrote. Anchored on the FUNCTION range, which is what keeps it distinct from the
+# `mut_REVIEW_escaped_pipe*` pair sabotaging the deliberately duplicated copy in gate_REVIEW.
+mut_EXEC_escaped_pipe_blind() {
+  sed -i '/^checkpoint_rows()/,/^}/ s|if (n > 0 && escaped_pipe(f\[n\]))|if (0)|' "$1"
+}
+
 mut_EXEC_ignores_TEST_CMD() { # discards the suite's rc — the gate stops measuring TEST_CMD
   sed -i 's|.*run_check_cmd "\$TEST_CMD" "gate-exec-test".*|  if false; then|' "$1"
 }
@@ -1447,6 +1456,7 @@ CATALOG=(
   EXEC_done_without_commit
   EXEC_orphan_commit
   EXEC_ignores_TEST_CMD
+  EXEC_escaped_pipe_blind
   QA_status_line_start
   QA_status_enum_loose
   QA_bug_enum_loose

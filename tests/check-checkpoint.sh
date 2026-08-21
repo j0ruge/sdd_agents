@@ -22,11 +22,17 @@
 # side can satisfy. That is the rule this file enforces.
 #
 # What it measures, per row of every checkpoint table under docs/handoffs/ plus the template:
-#   1. the row hands the runner exactly five columns. `checkpoint_rows` in bin/sdd is a raw
-#      `awk -F'|'` and does not know GFM's `\|`, so a pipe inside a cell shifts Status and Commit
-#      one place and gate_EXEC starts reading a fragment of the command as a status token. It is
-#      also what keeps rule 2 from failing open: with the columns shifted, the Check cell this
-#      file reads is a truncation and the anchor rule would stop applying in silence.
+#   1. the row hands the runner exactly five columns when split on a raw `|`. A RAW pipe inside a
+#      cell shifts Status and Commit one place and gate_EXEC starts reading a fragment of the
+#      command as a status token. It is also what keeps rule 2 from failing open: with the columns
+#      shifted, the Check cell this file reads is a truncation and the anchor rule would stop
+#      applying in silence.
+#      This rule is deliberately STRICTER than the runner and does not mirror it. `checkpoint_rows`
+#      in bin/sdd rejoins GFM's `\|` by backslash parity, so an escaped pipe no longer breaks a
+#      mission — but it stays refused HERE, in the kit's own checkpoints, because a Check needing a
+#      pipe has a herestring form that is plainly better, and because the rejoin is a safety net for
+#      what target repos write, not a licence for what this repo writes. Stricter and loud is the
+#      one direction that costs nothing: the row fails, it never passes unmeasured.
 #   2. a Check cell that merges stderr (`2>&1`) AND greps must carry the `^  ok    ` anchor on
 #      every one of its greps. Both halves of the precondition matter: without `2>&1` there is no
 #      FAIL text in the stream to confuse, and without `grep` nothing is being read.
@@ -140,9 +146,11 @@ surface() {
 
 # rows_of <path> — one line per table row: "NF<TAB>ID<TAB>Check cell".
 #
-# The row recognition MIRRORS checkpoint_rows() in bin/sdd on purpose: this file has to read the
-# cell the runner reads, not a better-parsed one. NF is emitted rather than checked here so the
-# caller can tell "pipe inside a cell" from "not a table row at all".
+# The row recognition is the raw `awk -F'|'` split, with NO rejoin of GFM's `\|` — deliberately
+# stricter than checkpoint_rows() in bin/sdd, which does rejoin it. See rule 1 in the header for
+# why: any pipe in a Check cell is refused in this repo's checkpoints, escaped or not. NF is
+# emitted rather than checked here so the caller can tell "pipe inside a cell" from "not a table
+# row at all".
 rows_of() {
   awk -F'|' '
     /^[ \t]*\|/ {
@@ -173,7 +181,7 @@ scan_file() {
 
     # Rule 1 — five columns, or the cell below is a truncation and rule 2 fails open.
     if [ "$nf" -ne 7 ]; then
-      fail "$label: row $id hands the runner $((nf - 2)) column(s) instead of 5 — a '|' inside a cell splits it, and awk -F'|' does not know GFM's backslash escape"
+      fail "$label: row $id hands the runner $((nf - 2)) column(s) instead of 5 — a '|' inside a cell splits it. A raw pipe breaks gate_EXEC; the escape '\\|' the runner rejoins, but this repo's checkpoints use the herestring form instead"
       V_COLS=$((V_COLS + 1))
       continue
     fi
@@ -555,14 +563,30 @@ selftest() {
   # banner from templates/checkpoint.md and from the planner left this sensor green, so the next
   # checkpoint would be born not knowing a rule whose violation shifts the runner's columns and
   # still looks healthy. Same shape as doc_rule, one document at a time.
+#
+  # The sabotage strips the LITERALS the rule reads, never a phrase of the surrounding prose. It
+  # used to delete lines matching `escaped as`, and rewording the banner (the day the runner
+  # learned to rejoin `\|`) left that sed matching nothing: four probes went on "passing" while
+  # sabotaging a file they had not touched. A probe that concludes about an unmodified world is the
+  # false-green this whole file exists to refuse — anchor on what is measured, and the mismatch
+  # shows up as the probe's own rc instead of as silence.
+  strip_lit() { # strip_lit <file> <literal…> — remove every line carrying any of the literals
+    local f="$1"; shift
+    local lit
+    for lit in "$@"; do
+      grep -vF -- "$lit" "$f" > "$f.stripped" || true
+      mv "$f.stripped" "$f"
+    done
+  }
+
   local notmplpipe="$box/notmplpipe" noagentpipe="$box/noagentpipe"
   build_tree "$notmplpipe"
-  sed -i '/awk -F/d; /escaped as/d' "$notmplpipe/templates/checkpoint.md"
+  strip_lit "$notmplpipe/templates/checkpoint.md" "$PIPE_MECH" "$PIPE_ESCAPE"
   probe 'a template that forgot the pipe ban is caught' 1 \
     'templates/checkpoint.md never states the pipe ban' "$notmplpipe" --scan
 
   build_tree "$noagentpipe"
-  sed -i '/awk -F/d; /escaped as/d' "$noagentpipe/agents/sdd-planner.md"
+  strip_lit "$noagentpipe/agents/sdd-planner.md" "$PIPE_MECH" "$PIPE_ESCAPE"
   probe 'a planner that forgot the pipe ban is caught' 1 \
     'agents/sdd-planner.md never states the pipe ban' "$noagentpipe" --scan
 
@@ -572,12 +596,12 @@ selftest() {
   # is the kind a later editor deletes as noise.
   local mechonly="$box/mechonly" escapeonly="$box/escapeonly"
   build_tree "$mechonly"
-  sed -i '/escaped as/d' "$mechonly/agents/sdd-planner.md"
+  strip_lit "$mechonly/agents/sdd-planner.md" "$PIPE_ESCAPE"
   probe 'the mechanism without the escape is half a rule' 1 \
     'agents/sdd-planner.md never states the pipe ban' "$mechonly" --scan
 
   build_tree "$escapeonly"
-  sed -i '/awk -F/d' "$escapeonly/agents/sdd-planner.md"
+  strip_lit "$escapeonly/agents/sdd-planner.md" "$PIPE_MECH"
   probe 'the escape without the mechanism is half a rule too' 1 \
     'agents/sdd-planner.md never states the pipe ban' "$escapeonly" --scan
 

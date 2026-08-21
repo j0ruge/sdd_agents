@@ -288,6 +288,38 @@ assert_phase "a status outside the enum fails" "EXEC"
 assert_why   "EXEC reports the invalid status" "EXEC" "invalid status"
 mv "$MDIR/checkpoint.bak" "$MDIR/checkpoint.md"
 
+# A literal pipe inside a Check cell is spelled `\|` in GFM, and a raw split on "|" cuts the row
+# there — every column after it shifts one to the left, so the Status column is read out of the
+# CHECK cell. The increment is `done` and the gate answers "invalid status", naming a status the
+# author never wrote. gate_REVIEW learned this the expensive way (its comment carries the measured
+# row); the checkpoint parser had not.
+#
+# The answer is taken BEFORE the escape is introduced and compared to the answer after it: a
+# differential, not a literal. No fixture regime satisfies both sides by accident, and whichever
+# side a regression breaks, the other is standing right next to it.
+plain_answer="$( cd "$FIX" && "$SDD" phase "$MISSION" 2>&1 )"
+cp "$MDIR/checkpoint.md" "$MDIR/checkpoint.pipe.bak"
+# `@` as the delimiter, never `|`: with `s|…|…|` the `|` of the replacement CLOSES the expression
+# and the escape never reaches the file. `\\` is what spells one literal backslash in a sed
+# replacement, so the cell ends up carrying `\|` — the GFM escape, which is the point.
+sed -i 's@`true` → 0@`printf a\\|b` → 0@' "$MDIR/checkpoint.md"
+# The probe dies loud if it sabotaged nothing: an assertion about an escaped pipe on a fixture that
+# has none would be green forever, pointing at the right thing by accident. `-F`, because in a BRE
+# `\|` is alternation and `grep 'a\|b'` would match the untouched row too.
+if grep -qF '`printf a\|b` → 0' "$MDIR/checkpoint.md"; then
+  pass "fixture: the Check cell really carries an escaped pipe"
+else
+  fail "escaped-pipe fixture" 'a Check cell containing \|' "$(grep -m1 '^| I1' "$MDIR/checkpoint.md")"
+fi
+assert_phase "a Check cell with an escaped pipe keeps its status readable" "QA"
+escaped_answer="$( cd "$FIX" && "$SDD" phase "$MISSION" 2>&1 )"
+if [ "$plain_answer" = "$escaped_answer" ]; then
+  pass "the escaped pipe changes nothing about which phase is due"
+else
+  fail "the escaped pipe changes nothing about which phase is due" "$plain_answer" "$escaped_answer"
+fi
+mv "$MDIR/checkpoint.pipe.bak" "$MDIR/checkpoint.md"
+
 # --- QA --------------------------------------------------------------------
 # The QA gate has TWO contracts, because there are two kinds of project.
 #

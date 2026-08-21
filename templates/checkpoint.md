@@ -9,11 +9,14 @@ atualizado: <YYYY-MM-DD HH:MM>
 > próxima fase. Não mude as colunas, não mude os tokens de status, não quebre linhas dentro de
 > uma célula. Detalhe narrativo vai no `01-plano.md`, não aqui.
 >
-> ⚠️ **Nada de `|` na célula do Check — nem escapado como `\|`.** O parser é `awk -F'|'` cru e
-> não conhece o escape do GFM: a célula vira duas, o Status lido passa a ser um pedaço do
-> comando e o Commit passa a ser `pending`. O `gate_EXEC` reprova por "invalid status" e o
-> `sdd status` imprime algo de aparência saudável — custou uma missão inteira até alguém olhar.
-> Check que precisaria de pipe vira herestring: `` o=$(cmd 2>&1); grep -c 'x' <<< "$o" ``.
+> ⚠️ **Nada de `|` cru na célula do Check.** A tabela é lida com `awk -F'|'`: um pipe cru parte a
+> célula em duas, o Status lido passa a ser um pedaço do comando e o Commit passa a ser `pending`.
+> O `gate_EXEC` reprova por "invalid status" e o `sdd status` imprime algo de aparência saudável —
+> custou uma missão inteira até alguém olhar. O escape do GFM, `\|`, o runner **hoje entende**:
+> `checkpoint_rows` remonta a célula por paridade de `\`, como o `gate_REVIEW` já fazia. Isso é
+> rede de segurança, não licença — Check que precisaria de pipe continua virando herestring:
+> `` o=$(cmd 2>&1); grep -c 'x' <<< "$o" ``, e o `tests/check-checkpoint.sh` recusa as duas formas
+> nos checkpoints deste repo.
 >
 > ⚠️ **Check que lê a saída de um sensor ancora em `^  ok    ` — quatro espaços, com o `^`.**
 > Todo sensor da suíte imprime `  ok    <asserção>` na **stdout** e `  FAIL  <asserção>` na

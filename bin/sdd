@@ -255,16 +255,40 @@ frontmatter_write() {
 
 # Checkpoint table rows as "ID<TAB>title<TAB>check<TAB>status<TAB>commit".
 # Skips the header, the separator, and any line that does not have the 5 columns.
+#
+# The `escaped_pipe`/rejoin pair below is DUPLICATED from gate_REVIEW (same file, the `### Overall
+# Grade` reader) on purpose, and the duplication is cheaper than the extraction: the two programs
+# are anchored separately by the mutation catalogue (`mut_REVIEW_escaped_pipe*`,
+# `mut_EXEC_escaped_pipe_blind`), and a shared helper would collapse both anchors into one — the
+# class the mutation stamp caught between PRs #12 and #13. Change one, change the other, and check
+# the neighbour's comment says so too.
 checkpoint_rows() {
   local file="$MISSION_DIR/checkpoint.md"
   [ -f "$file" ] || return 0
   awk -F'|' '
+    # PARITY, not "does this field end in a backslash": `\\` is how GFM spells a literal backslash,
+    # so a cell ending in one sits against a REAL delimiter. An ODD run of trailing backslashes
+    # escapes the pipe; an EVEN one does not. ASCII only — mawk is byte-oriented and a negated
+    # class with a multibyte character would negate its BYTES.
+    function escaped_pipe(s,   t) { t = s; sub(/\\+$/, "", t); return (length(s) - length(t)) % 2 }
     /^[ \t]*\|/ {
-      if (NF < 6) next
-      for (i = 2; i <= 6; i++) { gsub(/^[ \t]+|[ \t]+$/, "", $i) }
-      if ($2 == "ID" || $2 ~ /^-+$/ || $2 == "") next
-      if ($5 == "Status") next
-      printf "%s\t%s\t%s\t%s\t%s\n", $2, $3, $4, $5, $6
+      # A raw split on "|" cuts a Check cell at its `\|` and shifts every column after it one to
+      # the left, so Status is read out of the CHECK cell: an increment written `done` was reported
+      # as `invalid status`, naming a status the author never wrote, and gate_EXEC refused the
+      # phase for a reason that is not true. Rejoined here so every column downstream sees the cell
+      # the author wrote. `-F` stays because the escape hatch below still reads $0.
+      delete f
+      rawn = split($0, raw, "|")
+      n = 0
+      for (i = 1; i <= rawn; i++) {
+        if (n > 0 && escaped_pipe(f[n])) { sub(/\\$/, "|", f[n]); f[n] = f[n] raw[i] }
+        else { f[++n] = raw[i] }
+      }
+      if (n < 6) next
+      for (i = 2; i <= 6; i++) { gsub(/^[ \t]+|[ \t]+$/, "", f[i]) }
+      if (f[2] == "ID" || f[2] ~ /^-+$/ || f[2] == "") next
+      if (f[5] == "Status") next
+      printf "%s\t%s\t%s\t%s\t%s\n", f[2], f[3], f[4], f[5], f[6]
     }' "$file"
 }
 
@@ -591,6 +615,9 @@ gate_REVIEW() {
             w == "WIP" || w == "FILLME") return 1
         return 0
       }
+      # DUPLICATED, deliberately, in checkpoint_rows — see the comment above that function for why
+      # a shared helper would cost more than it saves. The two copies must stay identical.
+      #
       # PARITY, and not "does this field end in a backslash". `\\` is how GFM spells a literal
       # backslash, so a cell ending in one sits against a REAL delimiter — and the first version of
       # the rejoin below could not tell the two apart. Measured against the runner one commit
