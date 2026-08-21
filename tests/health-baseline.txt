@@ -24,4 +24,4 @@ var-never-read E2E_DIR            # TODO.md `E2E_DIR`: read only by the agent, n
 # an author instead of drifting. Both directions bite — a count that rose without a record, and a
 # baseline left behind after a sweep closed items. Recount by `tests/check-todo.sh`, never by a
 # `grep -c`: that answers one too many (the format example in the header's fenced block).
-todo-findings 90
+todo-findings 75
