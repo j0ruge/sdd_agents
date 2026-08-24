@@ -1582,14 +1582,19 @@ mut_RUN_ceiling_note_other_channel() {
 }
 
 # The exclusion accounting goes back to one blank line between every two of its lines: a paragraph
-# about where the rows went, printed as four unrelated asides. Anchored on the `join` of the array
-# that collects them — the token that only exists because the four strings are ONE output now.
+# about where the rows went, printed as unrelated asides. Anchored on the `join` of the array that
+# collects them — the token that only exists because the strings are ONE output now.
 #
 # The leading newline is left ALONE and only the separator doubles, so the blank that divides the
 # block from the table survives: the mutant reproduces the defect and nothing else, and an
 # assertion that passed on "there is a blank line somewhere" would not notice it.
+#
+# ⚠️ The anchor lost its leading `]` when the paragraph was split into in-scope and out-of-scope
+# halves: the array now ends in a parenthesised expression, not a bracket. That change reported
+# itself as `did not apply` — the rc-90 arm of run_mutant, which is why a rotted anchor is
+# CATALOGUE-BROKEN here and not a silent point.
 mut_AUTONOMY_exclusions_split() {
-  sed -i 's@\] | select(length > 0) | "\\n" + join("\\n"))@] | select(length > 0) | "\\n" + join("\\n\\n"))@' "$1"
+  sed -i 's@| select(length > 0) | "\\n" + join("\\n"))@| select(length > 0) | "\\n" + join("\\n\\n"))@' "$1"
 }
 
 # The one voice of the guard floor a human reads out loud writes its own copy of the number again,
@@ -1612,8 +1617,9 @@ mut_KAIZEN_axis_note_own_floor() {
 # leading newline alone, and D5 next door counts CONSECUTIVE blanks, so an accounting welded onto
 # the table satisfies it. Without this entry the "one blank above" term would be a rule with no
 # probe — decoration, by this repo's own rubric.
+# ⚠️ Same re-anchoring as its twin above, and for the same reason.
 mut_AUTONOMY_exclusions_glued() {
-  sed -i 's@\] | select(length > 0) | "\\n" + join("\\n"))@] | select(length > 0) | join("\\n"))@' "$1"
+  sed -i 's@| select(length > 0) | "\\n" + join("\\n"))@| select(length > 0) | join("\\n"))@' "$1"
 }
 
 # The series stops PUBLISHING the floor, so `.guard.floor` reads null and the sentence the human
