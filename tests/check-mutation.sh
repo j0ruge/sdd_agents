@@ -413,6 +413,19 @@ mut_RUN_approve_next_unconditional() {
   sed -i 's@^  if gate_PLAN; then$@  if true; then@' "$1"
 }
 
+# Not a gate, and the sharper of the two shapes this key can fail in: the boot prompt goes on
+# NAMING E2E_DIR and hands over the default instead of the configured value. `sdd-qa` commits its
+# new specs to `<E2E_DIR>/`, so a repo that moved its specs is told to write them where they used
+# to be — and because the default (`e2e`) is the convention most repos already follow, the session
+# lands in the right place most of the time, which is what kept the key unread for so long.
+#
+# It is also what the assertion in check-dry-run.sh is shaped for: a fixture on the default value
+# would be green here, so that fixture declares a directory the default cannot produce and demands
+# the configured one AND the absence of the default.
+mut_RUN_e2e_dir_hardcoded() {
+  sed -i 's@E2E_DIR=\\"$E2E_DIR\\"@E2E_DIR=\\"e2e\\"@' "$1"
+}
+
 # Not a gate: the target repo declares OUTPUT_LANG and the runner swallows the request in silence.
 # It is the typical failure mode of a config key — the key exists, the schema promises it, and
 # nobody reads it (`E2E_DIR`, frozen in health-baseline; the five keys that promised a lint, a
@@ -1638,6 +1651,7 @@ CATALOG=(
   PRE_default_branch_unchecked
   PRE_testcmd_never_run
   RUN_approve_next_unconditional
+  RUN_e2e_dir_hardcoded
   RUN_ignores_output_lang
   RUN_budget_single_ceiling
   RUN_review_ceiling_in_memory

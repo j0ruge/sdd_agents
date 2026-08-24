@@ -314,7 +314,34 @@ assert_eq "an in-progress report goes back to the exec sub-step" \
   "QA:exec=<none>" "$(printf '%s\n' "$out4" | projected)"
 rm -rf docs/qa/charters docs/qa/reports
 
+# --- E2E_DIR reaches the session that writes into it -----------------------
+# `: "${E2E_DIR:=e2e}"` was the ONLY occurrence of the key in the whole runner: no gate consulted
+# it and no prompt carried it, while agents/sdd-qa.md tells the session to commit its new specs to
+# `<E2E_DIR>/`. Changing the key therefore did not change where the specs land, and the coincidence
+# between the default (`e2e`) and the convention most repos already follow is exactly what hid it:
+# a session that guesses right is indistinguishable from a session that was told.
+#
+# So the fixture sets a value the default CANNOT produce. An assertion written against `e2e` would
+# be green on a runner that hardcoded the string and never read the key at all — the same shape as
+# a fixture whose regime happens to satisfy the property by accident.
+echo "== E2E_DIR reaches the boot prompt =="
+sed -i 's|^E2E_DIR=.*||' .sdd/config.sh
+printf 'E2E_DIR="tests/browser"\n' >> .sdd/config.sh
+out_dir="$( "$SDD" run "$MISSION" --dry-run --phase QA 2>&1 )"
+in_prompt() { grep -c "^  │ .*$1" <<< "$2" ; }
+assert_eq "the QA prompt names E2E_DIR, with the value the config declared and not the default" \
+  "1 0" "$(in_prompt 'E2E_DIR="tests/browser"' "$out_dir") $(in_prompt 'E2E_DIR="e2e"' "$out_dir")"
+sed -i '/^E2E_DIR=/d' .sdd/config.sh
+
 sed -i 's|^E2E_CMD="true"|E2E_CMD=""|' .sdd/config.sh
+
+# The other half, and the one that keeps the line from becoming noise: a project with no interface
+# writes no specs, so a key about where specs go has nothing to say to it. Same reason E2E_CMD
+# itself is guarded on that line. Without this, the fix would push a `E2E_DIR="e2e"` nobody asked
+# for into the boot prompt of every phase of every backend repo.
+out_nodir="$( "$SDD" run "$MISSION" --dry-run --phase QA 2>&1 )"
+assert_eq "a project with no interface is not told about a spec directory it has no specs for" \
+  "0" "$(in_prompt 'E2E_DIR' "$out_nodir")"
 
 # --- TICKET boots ONE driver, not two --------------------------------------
 # `phase_agent`'s own invariant, written above it in bin/sdd: an agent and a slash are two system

@@ -31,7 +31,7 @@ They all run with cwd at the root of the target repo. The runner only looks at t
 |---|---|---|---|
 | `TEST_CMD` | yes | — | Unit/integration suite. It is the EXEC gate and part of the REVIEW gate. It must be fast enough to run on every increment. |
 | `E2E_CMD` | no | empty | End-to-end suite. Empty ⇒ the QA gate ignores e2e (a project with no UI). |
-| `E2E_DIR` | no | `e2e` | Where `sdd-qa` commits new specs. |
+| `E2E_DIR` | no | `e2e` | Where `sdd-qa` commits new specs. Reaches the boot prompt of every phase, beside `E2E_CMD` and only when that key is set: a repo with no interface writes no specs. |
 
 The runner has exactly these three. A separate lint or build command belongs **inside** `TEST_CMD`:
 a key the runner never reads is a promise the user cannot collect on, and this schema carried five
