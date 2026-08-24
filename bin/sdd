@@ -2993,8 +2993,6 @@ cmd_approve() {
     while IFS=$'\t' read -r id title _check st _commit; do
       printf '    %-4s %-46s %s\n' "$id" "${title:0:46}" "$st"
     done <<< "$rows"
-  else
-    warn "checkpoint.md has no parseable increment row — the PLAN gate will stay shut"
   fi
 
   # ONE definition of the value being written, read three times below (the warning, the write, the
@@ -3058,7 +3056,24 @@ by hand, in the exact shape gate_PLAN greps. Only 00-missao.md enters this commi
     || die "git refused the approval commit — 'aprovacao: $approved_as' IS written in $rel, commit it by hand"
 
   ok "approved: aprovacao: $approved_as"
-  dim "  next: sdd run $MISSION"
+
+  # ASK THE GATE AGAIN. It was asked once, at the top, and only `missing *` was allowed to stop the
+  # command — every other reason gate_PLAN can hold was carried straight past the commit into a
+  # `next: sdd run` that the very next `sdd why` refuses. The reproduction is a config, not a corner
+  # case: JIRA_ENABLED=true with `versao:` still a placeholder is what the pilot's target repo ships.
+  #
+  # Re-asking rather than adding a second condition here is the point. gate_PLAN holds for approval,
+  # for a kaizen-born plan, for `versao:` and for an unparseable checkpoint today, and every reason
+  # it learns tomorrow would inherit the defect for free if this command carried its own list.
+  # The hand-written "the PLAN gate will stay shut" warning above the prompt went with it: it was a
+  # restatement of one of those reasons, and the gate says it now, in the gate's own words.
+  if gate_PLAN; then
+    dim "  next: sdd run $MISSION"
+  else
+    warn "the PLAN gate is still shut, for a reason approving does not touch:"
+    warn "  $GATE_WHY"
+    dim "  fix that first — 'sdd run $MISSION' would refuse."
+  fi
 }
 
 cmd_run() {

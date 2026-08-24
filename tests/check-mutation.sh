@@ -401,6 +401,18 @@ mut_PRE_testcmd_never_run() {
   sed -i 's@run_check_cmd "$TEST_CMD" "preflight-test" || test_rc=$?@test_rc=0@' "$1"
 }
 
+# Not a gate: `sdd approve` goes back to announcing the next step unconditionally, the way it did
+# when the gate was asked once at the top and only `missing *` could stop the command. Everything
+# else gate_PLAN holds for — a kaizen-born plan, an unparseable checkpoint, `versao:` unfilled with
+# JIRA on — was carried past the commit into `next: sdd run`, and the very next `sdd why` refused.
+# The reproduction is a config and not a corner case: it is what the pilot's target repo ships.
+#
+# Anchored on the re-ASK, which is what makes the mutant the original defect rather than a new one:
+# the approval is still written and still committed, and only the second opinion disappears.
+mut_RUN_approve_next_unconditional() {
+  sed -i 's@^  if gate_PLAN; then$@  if true; then@' "$1"
+}
+
 # Not a gate: the target repo declares OUTPUT_LANG and the runner swallows the request in silence.
 # It is the typical failure mode of a config key — the key exists, the schema promises it, and
 # nobody reads it (`E2E_DIR`, frozen in health-baseline; the five keys that promised a lint, a
@@ -1625,6 +1637,7 @@ CATALOG=(
   RUN_templates_kaizen_only
   PRE_default_branch_unchecked
   PRE_testcmd_never_run
+  RUN_approve_next_unconditional
   RUN_ignores_output_lang
   RUN_budget_single_ceiling
   RUN_review_ceiling_in_memory
