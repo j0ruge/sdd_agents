@@ -87,14 +87,6 @@ Achados sobre **repos-alvo** vão para o `TODO.md` daquele repo. Este arquivo é
   `if`/`while`/`until`/`local`/here-doc e censurar todo `health_*()` onde ele estiver.
   — descoberto por `sdd-reviewer` na missão `20260818-lote-facil` (2026-08-19)
 
-- [ ] **Duas formas bem formadas são recusadas pelo `check-todo.sh`** — `tests/check-todo.sh:176` —
-  code span de CRASE DUPLA com travessão dentro (a paridade trata ``` `` ``` como dois
-  delimitadores) e linha de continuação que ABRE com `[x] ` — que é exatamente a cara de um achado
-  SOBRE a regra da caixa, e o `flush()` dela ainda cascateia mais três violações falsas. Nenhuma das
-  duas está entre os limites declarados no cabeçalho. Direção: consumir RUNS de crase; e declarar
-  ou isentar a caixa enquanto `initem` estiver ligado.
-  — descoberto por `sdd-reviewer` na missão `20260818-lote-facil` (2026-08-19)
-
 - [ ] **Quatro regras do `check-todo.sh` que o selftest diz medir e não mede** —
   `tests/check-todo.sh:1190` — a contagem de violações trocada pela constante `3` passa (o fixture
   tem exatamente 3); o `^` do `grep '^## Aberto'` é load-bearing e o probe não o exercita; o
@@ -371,12 +363,6 @@ Achados sobre **repos-alvo** vão para o `TODO.md` daquele repo. Este arquivo é
   sensor. A proveniência degrada para uma data, que é o dado mais fraco — o slug é o que liga o
   comentário ao handoff. Direção: isentar o casamento `^[0-9]{8}-` do escaneamento de stopwords.
   — descoberto por `sdd-executor` na missão `20260819-fecho-que-nao-mente` (2026-08-19)
-
-- [ ] **O ramo de lista ordenada da regra do marcador pelado não tem probe próprio** —
-  `tests/check-todo.sh:249` — tirar `[0-9]+[.)]` da classe deixa o selftest verde: a regra da
-  caixa pelada pega o item por outro caminho, então a redundância é acidental e a mensagem "bare
-  list marker" some calada. Direção: probe próprio, ou declarar a redundância como o check de
-  arquivo ilegível já declara a dele. — descoberto por `sdd-reviewer` na missão `20260818-lote-facil` (2026-08-18)
 
 - [ ] **O `gate_QA` compra o placeholder do próprio template como evidência de jornada** —
   `bin/sdd:461` — em projeto sem interface a única âncora é `frontmatter gate`, testada só por
