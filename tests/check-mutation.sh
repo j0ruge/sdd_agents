@@ -379,6 +379,28 @@ mut_RUN_templates_kaizen_only() {
   sed -i 's|^  6\. the artifact templates in \$SDD_HOME/templates/.*|  6. (nothing)|' "$1"
 }
 
+# Not a gate, and the fail-open shape in pure form: every DEFAULT_BRANCH "exists on origin",
+# including the ones that name no branch at all. The key is the base of `gh pr create` in the PR
+# phase — the LAST phase — so a wrong value is discovered after EXEC, QA, REVIEW and DOCS have all
+# been paid for. The pilot's target declares `DEFAULT_BRANCH="develop"` and the value has already
+# been got wrong once.
+#
+# Anchored on the CONDITION, which is what makes the mutant a fail-open rather than a crash: the
+# two other arms simply become unreachable and the preflight goes on answering ok.
+mut_PRE_default_branch_unchecked() {
+  sed -i 's@if ( cd "$REPO_ROOT" \&\& git rev-parse --verify --quiet "refs/remotes/origin/$DEFAULT_BRANCH" >/dev/null ); then@if true; then@' "$1"
+}
+
+# Not a gate: the preflight goes back to judging TEST_CMD by its SPELLING alone. `test_cmd_looks_noop`
+# knows `true`, `:`, `echo`, `printf`, `exit` and three "list the tests" flags, and certifies every
+# other value on sight — so a repo whose `npm test` dies on an uninstalled dependency passes green
+# and then gate_EXEC, running the same command for real, refuses for ever at one EXEC session per
+# lap. The sabotage leaves the verdict printed and only removes the EXECUTION, which is why
+# check-preflight.sh asserts it with a witness file instead of with the wording.
+mut_PRE_testcmd_never_run() {
+  sed -i 's@run_check_cmd "$TEST_CMD" "preflight-test" || test_rc=$?@test_rc=0@' "$1"
+}
+
 # Not a gate: the target repo declares OUTPUT_LANG and the runner swallows the request in silence.
 # It is the typical failure mode of a config key — the key exists, the schema promises it, and
 # nobody reads it (`E2E_DIR`, frozen in health-baseline; the five keys that promised a lint, a
@@ -925,6 +947,10 @@ mut_PRE_agent_presence_only() {
 # the config was being wired up then passes preflight, and after it gate_EXEC, gate_QA and
 # gate_REVIEW pass instantly, in every mission, for ever — each phase certifying itself against a
 # run that never happened, through the one key the whole pipeline trusts.
+# Since the preflight also EXECUTES the command it accepted, this mutant carries a second sabotage
+# for free: `true` now falls through into the arm that runs, so the assertion "a TEST_CMD the
+# heuristic already refused is not executed at all" dies here too. That assertion has no mutant of
+# its own on purpose — this is it.
 mut_PRE_testcmd_noop_blind() {
   sed -i '/^cmd_preflight()/,/^}/ s@if test_cmd_looks_noop "\$TEST_CMD"; then@if false; then@' "$1"
 }
@@ -1597,6 +1623,8 @@ CATALOG=(
   RUN_phase_log_time_only
   RUN_check_log_time_only
   RUN_templates_kaizen_only
+  PRE_default_branch_unchecked
+  PRE_testcmd_never_run
   RUN_ignores_output_lang
   RUN_budget_single_ceiling
   RUN_review_ceiling_in_memory

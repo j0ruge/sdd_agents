@@ -53,6 +53,14 @@ assert_lacks() {
   else pass "$1"; fi
 }
 
+# assert_eq <description> <expected> <got>. The two above answer one yes/no about one needle; the
+# blocks that have to say "this arm fired AND the other one did not, AND the command really ran"
+# compose their answer into a string and compare it whole, so a red names which term went wrong
+# instead of only that something did.
+assert_eq() {
+  if [ "$2" = "$3" ]; then pass "$1"; else fail "$1" "$2" "$3"; fi
+}
+
 OK_LINE="GNU userland (md5sum, date -Iseconds, sort -V)"
 BAD_LINE="the kit assumes the GNU userland, and these do not answer: md5sum 'date -Iseconds' 'sort -V'"
 
@@ -337,6 +345,93 @@ ok_case 'tests/run-all.sh'               'the kit own suite is not accused'
 ok_case './run.sh --listen-port 8080'    'a flag that merely starts with --list is not accused'
 ok_case 'make test && echo done'         'an echo that is not the command is not accused'
 
+mv .sdd/config.sh.bak .sdd/config.sh
+
+# --- and then it RUNS the thing --------------------------------------------
+# The block above is a STRING heuristic: it knows `true`, `:`, `echo`, `printf`, `exit` and three
+# spellings of "list the tests without running them", and certifies everything else. A target repo
+# whose `npm test` dies on a dependency that was never installed passes it green — and then
+# gate_EXEC (which runs the same command for real) refuses for ever, at one EXEC session per lap,
+# because a session cannot install what the gate never told anybody about. The whole point of a
+# preflight is to move that discovery to before the first token.
+#
+# Asserted by WITNESS and not by the message: a preflight that printed "ran green" without running
+# anything is exactly the label-over-artifact this repo forbids, and no wording check can see it.
+# The probes live outside the fixture repo so running them cannot dirty the tree being measured.
+echo "== the preflight RUNS the TEST_CMD =="
+PROBE="$(mktemp -d "${TMPDIR:-/tmp}/sdd-preflight-probe-XXXXXX")"
+trap 'rm -rf "$FIX" "$PROBE"' EXIT
+printf '#!/usr/bin/env bash\nprintf "ran\\n" >> "%s/witness"\nexit 0\n' "$PROBE" > "$PROBE/suite-green.sh"
+printf '#!/usr/bin/env bash\nprintf "ran\\n" >> "%s/witness"\nexit 3\n' "$PROBE" > "$PROBE/suite-red.sh"
+chmod +x "$PROBE/suite-green.sh" "$PROBE/suite-red.sh"
+
+cp .sdd/config.sh .sdd/config.sh.bak
+run_case() { # run_case <script> <expected-marker> <forbidden-marker> <description>
+  : > "$PROBE/witness"
+  sed -i "s|^TEST_CMD=.*|TEST_CMD=\"$PROBE/$1\"|" .sdd/config.sh
+  local o ran; o="$( "$SDD" preflight 2>&1 )"
+  ran="$(grep -c . "$PROBE/witness" 2>/dev/null || true)"
+  local got="ran=$ran"
+  grep -qF "$2" <<< "$o" || got="$got, the expected line is absent"
+  grep -qF "$3" <<< "$o" && got="$got, and the OTHER verdict was printed too"
+  assert_eq "$4" "ran=1" "$got"
+}
+run_case suite-green.sh "TEST_CMD ran green" "TEST_CMD FAILED" \
+  "a green TEST_CMD is EXECUTED, and only then called green"
+run_case suite-red.sh   "TEST_CMD FAILED"    "TEST_CMD ran green" \
+  "a TEST_CMD that exits non-zero is refused by its exit status, not by its spelling"
+
+# The no-op arm keeps its old shape: a command the heuristic already refused must NOT be executed.
+# Running whatever someone typed into a key the preflight had already decided was wrong is a
+# preflight doing damage on config it just rejected. GREEN before the fix by construction — nothing
+# ran anything then — and it is `mut_PRE_testcmd_noop_blind` that gives it teeth: with the
+# heuristic blinded, `true` falls through into the arm that executes, and this line is the one that
+# says the execution went somewhere it should not have rather than only that the refusal stopped.
+: > "$PROBE/witness"
+sed -i 's|^TEST_CMD=.*|TEST_CMD="true"|' .sdd/config.sh
+noop_out="$( "$SDD" preflight 2>&1 )"
+noop_ran="$(grep -c . "$PROBE/witness" 2>/dev/null || true)"
+assert_eq "a TEST_CMD the heuristic already refused is not executed at all" \
+  "runs nothing, ran=0" \
+  "$(grep -qF 'runs nothing' <<< "$noop_out" && printf 'runs nothing' || printf 'not refused'), ran=$noop_ran"
+mv .sdd/config.sh.bak .sdd/config.sh
+
+# --- DEFAULT_BRANCH names a branch that EXISTS ------------------------------
+# `load_config` demands only that the key be non-empty, and `warn_if_on_base_branch` only compares
+# it with the current branch name — nothing ever asked the repository whether the branch is there.
+# The failure surfaces in `gh pr create --base` in the PR phase: the LAST one, after EXEC, QA,
+# REVIEW and DOCS have all been paid for. The pilot declares `DEFAULT_BRANCH="develop"` and the
+# value has already been got wrong once.
+#
+# Three arms and three distinct markers, so no arm can be satisfied by another's text: on origin is
+# what `gh pr create` actually opens against, local-only is a warning (the branch exists, the PR
+# still cannot be opened there), absent is a refusal.
+echo "== DEFAULT_BRANCH is verified against the repository =="
+ORIGIN="$(mktemp -d "${TMPDIR:-/tmp}/sdd-preflight-origin-XXXXXX")"
+trap 'rm -rf "$FIX" "$PROBE" "$ORIGIN"' EXIT
+git init -q --bare -b main "$ORIGIN"
+git remote add origin "$ORIGIN"
+git push -q origin main
+git branch only-local
+
+cp .sdd/config.sh .sdd/config.sh.bak
+branch_case() { # branch_case <value> <expected-marker> <forbidden-marker> <description>
+  sed -i "s|^DEFAULT_BRANCH=.*|DEFAULT_BRANCH=\"$1\"|" .sdd/config.sh
+  local o; o="$( "$SDD" preflight 2>&1 )"
+  local got="ok"
+  grep -qF "$2" <<< "$o" || got="the expected line is absent"
+  grep -qF "$3" <<< "$o" && got="$got + the OTHER verdict was printed too"
+  assert_eq "$4" "ok" "$got"
+}
+branch_case main       "DEFAULT_BRANCH=main exists on origin" \
+                       "is not a branch of this repository" \
+                       "a DEFAULT_BRANCH that exists on origin is accepted"
+branch_case only-local "exists locally but not on origin" \
+                       "is not a branch of this repository" \
+                       "a DEFAULT_BRANCH that exists only locally warns — the PR opens against the REMOTE"
+branch_case develop    "is not a branch of this repository" \
+                       "exists on origin" \
+                       "a DEFAULT_BRANCH that names no branch at all is refused, and the key is named"
 mv .sdd/config.sh.bak .sdd/config.sh
 
 # --- third-party skills the phases depend on --------------------------------

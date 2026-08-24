@@ -3,7 +3,17 @@
 The file is **pure bash** — the runner sources it. No logic: assignments only.
 Created by `sdd install` from [`examples/sales_quote.conf`](examples/sales_quote.conf).
 
-Rule: if a required key is empty, `sdd preflight` fails **before** spending a session.
+Rule: if a required key is empty, `sdd preflight` fails **before** spending a session. For two keys
+it goes further than "not empty", because for those two an unusable value is only discovered by a
+phase that has already been paid for:
+
+- **`DEFAULT_BRANCH` is looked up in the repository.** On `origin` ⇒ ok; only local ⇒ a warning, since
+  `gh pr create --base` opens the PR against the *remote* branch; nowhere ⇒ a failure. Without this
+  the error surfaces in the PR phase, the last one, with EXEC, QA, REVIEW and DOCS already spent.
+- **`TEST_CMD` is EXECUTED**, not just read. The spelling check that refuses `true`, `:` and
+  `--list` cannot see a suite that dies on a dependency nobody installed — and `gate_EXEC` runs the
+  same command for real, so a red suite makes the EXEC phase unsatisfiable at one session per lap.
+  A value the spelling check already refused is *not* executed.
 
 ## Project identity
 

@@ -2214,9 +2214,46 @@ cmd_preflight() {
         gate_EXEC, gate_QA and gate_REVIEW would pass instantly, in every mission, against a
         run that never happened. Point TEST_CMD at the suite itself."
       else
-        ok "TEST_CMD=$TEST_CMD"
+        # And then RUN it. Everything above is a string heuristic: it knows a handful of spellings
+        # of "this executes nothing" and certifies every other value on sight. A repo whose
+        # `npm test` dies on a dependency nobody installed passes that heuristic green — and then
+        # gate_EXEC, which runs the SAME command for real, refuses for ever at one EXEC session per
+        # lap, because a session cannot install what no gate ever told anyone about.
+        #
+        # Only in the arm the heuristic accepted: a value already judged wrong is not executed, or
+        # the preflight would be running whatever someone typed into a key it had just rejected.
+        # Through run_check_cmd, which already memoises and already puts the output in the mission
+        # log rather than on the runner's stdout.
+        local test_rc=0
+        run_check_cmd "$TEST_CMD" "preflight-test" || test_rc=$?
+        if [ "$test_rc" -eq 0 ]; then
+          ok "TEST_CMD ran green ($TEST_CMD)"
+        else
+          _fail "TEST_CMD FAILED (rc $test_rc): $TEST_CMD
+        gate_EXEC, gate_QA and gate_REVIEW run this same command, so a red suite makes the EXEC
+        phase unsatisfiable — one session per lap, for ever. Output: $LAST_CHECK_LOG"
+        fi
       fi ;;
   esac
+
+  # DEFAULT_BRANCH is the base of `gh pr create` in the PR phase — the LAST phase, after EXEC, QA,
+  # REVIEW and DOCS have all been paid for. Nothing ever asked the repository whether the branch was
+  # there: load_config demands only a non-empty value, and warn_if_on_base_branch only compares it
+  # with the current branch's NAME. The REMOTE ref is what decides, because that is what the PR is
+  # opened against — a branch that exists only locally is a warning and not an ok, since the PR
+  # still cannot be opened there.
+  if ( cd "$REPO_ROOT" && git rev-parse --verify --quiet "refs/remotes/origin/$DEFAULT_BRANCH" >/dev/null ); then
+    ok "DEFAULT_BRANCH=$DEFAULT_BRANCH exists on origin"
+  elif ( cd "$REPO_ROOT" && git rev-parse --verify --quiet "refs/heads/$DEFAULT_BRANCH" >/dev/null ); then
+    warn "DEFAULT_BRANCH=$DEFAULT_BRANCH exists locally but not on origin — 'gh pr create --base'
+        opens the PR against the REMOTE branch, so the PR phase would fail there. Push the branch,
+        or fix the key in .sdd/config.sh."
+  else
+    _fail "DEFAULT_BRANCH=$DEFAULT_BRANCH is not a branch of this repository (neither
+        origin/$DEFAULT_BRANCH nor a local one). The PR phase ends in 'gh pr create --base
+        $DEFAULT_BRANCH' — the last phase there is, so the error would arrive with EXEC, QA,
+        REVIEW and DOCS already paid for."
+  fi
   if [ "$JIRA_ENABLED" = "true" ]; then
     if [ -f "$REPO_ROOT/.jira-project" ]; then ok "JIRA enabled, .jira-project present"
     else _fail "JIRA_ENABLED=true but there is no .jira-project in the repo (the ticket skill needs it)"; fi
