@@ -1205,6 +1205,93 @@ assert_eq "all-repos: the judge's series answers it too — other_repo falls to 
 # Anti-vacuity: a flag that widened the reading by losing rows on the way would still be "wider".
 assert_bucket_sum "the four buckets sum to the header total (--all-repos over two repos)" "$out_all"
 
+# --- an exclusion that was NEVER in the header total says so -----------------
+# The header counts the rows this reader admitted; the accounting paragraph under the table lists
+# what left. Two of its four lines name populations that were bound BEFORE the repo filter — they
+# never entered the total in the first place — so a reader adding the paragraph up against the
+# header could not make it close. Measured on the real ledger: header 96, table 89 sessions, 7
+# non-comparable (89 + 7 = 96, correct), and then "11 row(s) excluded: born in another repo"
+# printed underneath, inviting 96 - 11.
+#
+# What is NOT done here, and the reason: deleting those two lines would close the arithmetic and
+# break something older and better — "what left has to be NAMED", the invariant three assertions
+# above this one exist to hold. The fix is a sentence that says the two populations were never in
+# the total, so both hold at once. Hence the assertion is about ORDER and PRESENCE, not about a
+# number: the disclaimer has to be there exactly when there is something to disclaim, and above it.
+declared_scope() { # declared_scope <reader output> -> declared | silent | none | <what is wrong>
+  local o="$1" dis oos
+  dis="$(grep -n 'never part of the' <<< "$o" | head -1 | cut -d: -f1)"
+  oos="$(grep -n 'born in another repo\|no repo field' <<< "$o" | head -1 | cut -d: -f1)"
+  if [ -z "$oos" ]; then
+    [ -z "$dis" ] && printf 'none' || printf 'a disclaimer with nothing to disclaim'
+    return 0
+  fi
+  [ -n "$dis" ] || { printf 'silent'; return 0; }
+  if [ "$dis" -lt "$oos" ]; then printf 'declared'; else printf 'the disclaimer sits below the lines it disclaims'; fi
+}
+# DIFFERENTIAL over one ledger: the same file read per repo (3 foreign rows) and with --all-repos
+# (nothing is foreign). A fix that printed the sentence unconditionally would answer "declared" for
+# both and be caught by the second term; one that never printed it answers "silent".
+assert_eq "an exclusion that never entered the header total says so, and only when there is one" \
+  "declared none" "$(declared_scope "$out_here") $(declared_scope "$out_all")"
+
+# --- ...and the mission is a unit the reader can ask about ------------------
+# The kit_sha table answers "did this VERSION get better". D12 asks a different question — US$ per
+# merged PR, and how many times a human had to step in — and its unit is the MISSION. Without this
+# view the pilot measures it by hand, which is the form of proof principle 1 refuses.
+#
+# The grouping key is (repo, mission), the one kaizen_series already holds: two projects run the
+# same dated slug on the same day, and --all-repos puts their rows in one reading.
+echo "== reader: --by-mission =="
+# Two `- intervention:` notes for h1 and none for h2 — the count has to come from the ARTEFACT.
+# The marker is a TOKEN and the text after it is prose, exactly like the status words the boot
+# prompt tells every session to leave in English: the third bullet below carries the word in the
+# middle of a sentence and must NOT be counted, or the reader is a word-frequency meter rather
+# than a census of a marker.
+mkdir -p "$FIX/docs/handoffs/h1" "$FIX/docs/handoffs/h2"
+cat > "$FIX/docs/handoffs/h1/checkpoint.md" <<'EOF'
+| ID | Incremento | Check | Status | Commit |
+|---|---|---|---|---|
+| I1 | slice one | `true` -> 0 | done | abc1234 |
+
+## Execution notes
+
+- intervention: the human redid the REVIEW phase by hand — REVIEW — US$ 12.40
+- intervention: the human fixed the branch by hand — PR
+- 2026-01-01 10:00 · `I1` · no intervention was needed here, and this line is prose
+EOF
+printf '# no notes here\n' > "$FIX/docs/handoffs/h2/checkpoint.md"
+
+out_bm="$( SDD_STATE_DIR="$OUTSIDE/tworepos" "$SDD" autonomy --by-mission 2>&1 )"
+mission_line() { grep -m1 -E "^  $1  " <<< "$2"; }
+# Summed in integer CENTS, never as a float: `printf "%.2f"` writes `0,00` under a pt-BR locale and
+# `0.00` under C, so a float comparison here would pass or fail by the environment of whoever ran
+# the suite. The money is already printed to exactly two places by the reader's own `usd`.
+usd_cents() {
+  grep -oE 'US\$ [0-9]+\.[0-9][0-9]' <<< "$1" \
+    | sed 's/US\$ //; s/\.//' \
+    | awk '{ s += $1 + 0 } END { print s + 0 }'
+}
+
+# ONE assertion for the shape: a line per mission of THIS repo, the interventions read off the
+# artifact (2 for h1, 0 for h2), and nothing from the other repo's three missions.
+assert_eq "--by-mission prints one line per mission of this repo, with the interventions the checkpoint records" \
+  "2 h1:2 h2:0" \
+  "$(grep -cE '^  h[12]  ' <<< "$out_bm") h1:$(mission_line h1 "$out_bm" | grep -oE '[0-9]+ intervention' | grep -oE '^[0-9]+') h2:$(mission_line h2 "$out_bm" | grep -oE '[0-9]+ intervention' | grep -oE '^[0-9]+')"
+
+# The Check of the increment: two groupings of ONE population have to agree about the money. A
+# view that summed a different set of rows would be a second instrument disagreeing with the first
+# over one file — the divergence the kit_sha axis of this reader was rewritten to remove.
+# Floor beside the verdict: a comparison of two zeros is green in every broken world, and the
+# reader printing nothing at all is exactly one of them.
+assert_eq "the money adds up the same however the rows are grouped" \
+  "$(usd_cents "$out_here") over-zero" \
+  "$(usd_cents "$out_bm") $([ "$(usd_cents "$out_here")" -gt 0 ] && echo over-zero || echo 'both sides are zero')"
+
+# The fixture repo has to end clean — the two assertions at the bottom of this file say so, and
+# these handoff directories are this block's own litter.
+rm -rf "$FIX/docs/handoffs/h1" "$FIX/docs/handoffs/h2"
+
 # The header has to name the SCOPE it actually read. Under the flag the rows below come from every
 # project on the machine, and a header still ending in one repo path reads as a claim ABOUT that
 # repo — the same misattribution the filter was added to remove, now printed by the reader itself.

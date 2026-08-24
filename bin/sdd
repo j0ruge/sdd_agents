@@ -3428,10 +3428,16 @@ autonomy_no_data() {   # autonomy_no_data <ledger path>
   dim "  It is written by 'sdd run' and 'sdd retry'. Nothing has been recorded on this machine."
 }
 cmd_autonomy() {
+  # The kit_sha table answers "did this VERSION get better". D12 asks a different question — US$ per
+  # merged PR, and how many times a human had to step in — and its unit is the MISSION. The two are
+  # groupings of ONE population, so the money has to add up the same either way; check-autonomy.sh
+  # compares the two sums to each other for exactly that reason.
+  local by_mission=0
   while [ $# -gt 0 ]; do
     case "$1" in
-      --all-repos) LEDGER_ALL_REPOS=1 ;;
-      *)           die "unknown autonomy option: $1" ;;
+      --all-repos)  LEDGER_ALL_REPOS=1 ;;
+      --by-mission) by_mission=1 ;;
+      *)            die "unknown autonomy option: $1" ;;
     esac
     shift
   done
@@ -3502,6 +3508,50 @@ cmd_autonomy() {
   [ "$LEDGER_ALL_REPOS" = "1" ] && scope="all repos (--all-repos)"
   step "sdd autonomy — $file · $total row(s) · $scope"
 
+  # The human interventions D12 prescribes: one `- intervention:` line in the execution notes of the
+  # mission checkpoint, per time a human had to step in (a retry, a fix by hand, a BLOCKED taken
+  # over). Cost alone cannot tell "ran cheap" from "ran cheap because a human did half of it", and
+  # only the two halves together are the evidence I13.4 will ask for.
+  #
+  # The TOKEN is English and the prose after it is not, exactly like the status words the boot
+  # prompt already tells every session to leave alone: pending, done, blocked, auto, skipped. D12
+  # wrote the marker in pt-BR; spelling it that way here would have put a new Portuguese contract
+  # token on the kit surface — the very lock CLAUDE.md lists as debt for `aprovacao`, `versao` and
+  # `titulo`, and that tests/check-lang.sh refuses. The checkpoint is an OUTPUT_LANG artifact, so
+  # what follows the colon is written in whatever language the repo declared.
+  #
+  # Only for missions of THIS repo: the count comes from a file under `$repo/$HANDOFF_DIR/`, and
+  # HANDOFF_DIR is a key of the config of the repo the reader is standing in. Under --all-repos the
+  # rows of other projects are read from a config this process never loaded, so those missions
+  # answer `?` rather than a zero that would read as "nobody intervened".
+  local interventions="{}"
+  if [ "$by_mission" = "1" ] && [ -n "$repo" ]; then
+    local mlist m ck n hdir
+    # SOURCED in a subshell, the way check 2b of cmd_health reads TEST_CMD, and NOT through
+    # load_config: `sdd autonomy` has never required a .sdd/config.sh — it has a branch for "this is
+    # not a git repository" — and making it demand one to answer a question about the ledger would
+    # be a new requirement bought with nothing. An absent or broken config costs the default, not
+    # the command. Same default load_config applies, restated here because a broken config arrives
+    # EMPTY.
+    # shellcheck disable=SC1090
+    hdir="$( . "$repo/.sdd/config.sh" >/dev/null 2>&1; printf '%s' "${HANDOFF_DIR:-}" )" || true
+    [ -n "$hdir" ] || hdir="docs/handoffs"
+    # Guarded, like every capture in this file: jq answering nothing must leave an empty list and a
+    # census of zero missions, never abort the command it is a detail of.
+    mlist="$(jq -rs --arg repo "$repo" "$def"'
+               map(select(ledger_row_is_local and (.repo == $repo)))
+               | map(.mission // "") | unique | .[] | select(length > 0)' "$file" 2>/dev/null || true)"
+    while IFS= read -r m; do
+      [ -n "$m" ] || continue
+      ck="$repo/$hdir/$m/checkpoint.md"
+      n=0
+      # `|| true` on BOTH: grep exits 1 when it counts zero, and `set -e` would take the whole
+      # command down on the first mission that had no interventions — the common case.
+      [ -f "$ck" ] && n="$(grep -cE '^[[:space:]]*-[[:space:]]*intervention:' "$ck" || true)"
+      interventions="$(jq -c --arg m "$m" --argjson n "${n:-0}" '. + {($m): $n}' <<< "$interventions")"
+    done <<< "$mlist"
+  fi
+
   # Every row lands in exactly ONE of four buckets, and the buckets are exhaustive: comparable
   # session, non-comparable row, escalation on the axis, or unrecognized (event missing, or a value
   # none of session/blocked/degraded — a future event type, a hand edit, a partial write). Every
@@ -3526,7 +3576,8 @@ cmd_autonomy() {
   # that failure is caught below and re-raised through die(), same rc 1 as every other refusal in
   # this command instead of leaking jq's own exit code.
   local out jq_rc=0
-  out="$(jq -rs --arg repo "$repo" "$def"'
+  out="$(jq -rs --arg repo "$repo" --argjson interventions "$interventions" \
+                --argjson by_mission "$by_mission" --arg allrepos "$LEDGER_ALL_REPOS" "$def"'
     # ⚠️ NO APOSTROPHE anywhere below, prose included: everything from here to the closing quote is
     # ONE single-quoted shell string, so a stray one ends it mid-jq and bash then reports a syntax
     # error dozens of lines away from the sentence that broke it. That is why every comment in here
@@ -3576,6 +3627,9 @@ cmd_autonomy() {
     (map(select(ledger_row_no_repo)) | length) as $norepo
     | (map(select((ledger_row_is_local | not) and (ledger_row_no_repo | not))) | length) as $foreign
     | map(select(ledger_row_is_local))
+    # The header total, re-derived here so the accounting paragraph can NAME it. The two exclusions
+    # bound above were computed before this filter and were therefore never in it.
+    | (length) as $local_total
     | (map(select((is_session and (comparable | not))
                 or (is_escalation and (on_axis | not)))) | length) as $skipped
     # group_by SORTS BY KEY, and a kit sha is hex: "the last line of the table" was the lexically
@@ -3599,7 +3653,34 @@ cmd_autonomy() {
     | (map(select(is_session and comparable))
        | group_by(.kit_sha) | sort_by(.[0].kit_sha as $s | $order | index($s))) as $groups
     | (map(select(is_unrecognized)) | length) as $stray
-    | (if ($groups | length) == 0 then
+    # The SAME population the kit_sha table draws, regrouped. Not a second reading of the file: two
+    # instruments over one ledger that disagreed about the money would corrode the trust the whole
+    # kaizen loop runs on, which is the argument that already bent this reader onto the series axis.
+    # Escalations ride along per mission for the same reason they do per version — they are the
+    # loudest friction signal a mission can produce — and are counted on the axis, exactly as the
+    # escalations block below counts them.
+    | (map(select(is_session and comparable))
+       | group_by(mission_key) | sort_by(.[0].ts)) as $mgroups
+    | (if $by_mission == 1 then
+        (if ($mgroups | length) == 0 then
+          "  no comparable sessions in this ledger"
+        else
+          ($mgroups | map(
+              (.[0].mission // "") as $m
+              | (.[0].repo // "") as $r
+              | (if $allrepos == "1" then "\($r | split("/") | last)/\($m)" else $m end) as $label
+              | (length) as $n
+              | (map(select(.moved == false)) | length) as $stalled
+              | (map(.cost_usd // 0) | add) as $cost
+              # `?` and not 0 for a mission of another repo: its checkpoint lives under a
+              # HANDOFF_DIR this process never loaded, and a zero there would read as
+              # "nobody intervened" when the truth is "nobody looked".
+              | (if ($interventions | has($m)) then "\($interventions[$m]) intervention(s)"
+                 else "? intervention(s)" end) as $iv
+              | "  \($label)  \($n) session(s) · \($stalled) stalled · \($iv) · US$ \($cost | usd)"
+            ) | join("\n"))
+        end)
+      elif ($groups | length) == 0 then
         "  no comparable sessions in this ledger"
       else
         ($groups | map(
@@ -3625,11 +3706,28 @@ cmd_autonomy() {
     # written ONCE, by the paragraph rather than by its lines, and `select(length > 0)` keeps the
     # zero case emitting nothing at all — exactly as the escalations block above does. No count
     # moves: this is spacing only.
+    # TWO paragraphs, and the split is arithmetic rather than taste. The first two lines are rows
+    # that WERE in the header total and then left a bucket; a reader can add them to the table and
+    # arrive at the header. The last two were bound BEFORE the repo filter, so they were never in
+    # the total at all — printed among the others they invited an impossible subtraction, and the
+    # real ledger showed it: header 96, table 89 sessions, 7 non-comparable (89 + 7 = 96, correct),
+    # and underneath "11 row(s) excluded: born in another repo", inviting 96 - 11.
+    #
+    # DELETING those two lines would have closed the arithmetic and broken something older: what
+    # leaves has to be NAMED, or the filter is the silent instrument this reader was rewritten to
+    # stop being. A sentence that says they were never counted holds both at once, and it appears
+    # only when there is something to disclaim.
     , ([ (if $skipped > 0 then "  (\($skipped) non-comparable row(s) excluded: dirty kit, no kit_sha, or no moved field)" else empty end)
        , (if $stray > 0 then "  (\($stray) unrecognized row(s) excluded: event missing or not one of session/blocked/degraded)" else empty end)
-       , (if $foreign > 0 then "  (\($foreign) row(s) excluded: born in another repo — the ledger is global, this reader is not)" else empty end)
-       , (if $norepo > 0 then "  (\($norepo) row(s) excluded: no repo field — the row cannot say which project it came from)" else empty end)
-       ] | select(length > 0) | "\n" + join("\n"))
+       ] as $inside
+       | [ (if $foreign > 0 then "  (\($foreign) row(s) excluded: born in another repo — the ledger is global, this reader is not)" else empty end)
+         , (if $norepo > 0 then "  (\($norepo) row(s) excluded: no repo field — the row cannot say which project it came from)" else empty end)
+         ] as $outside
+       | ($inside
+          + (if ($outside | length) > 0
+             then ["  never part of the \($local_total) counted above — these left before the header:"] + $outside
+             else [] end))
+       | select(length > 0) | "\n" + join("\n"))
   ' "$file" 2>/dev/null)" || jq_rc=$?
   if [ "$jq_rc" -ne 0 ]; then
     # A DIFFERENT sentence from the `ledger_parses` refusal above, because they are different
@@ -4262,6 +4360,9 @@ USAGE
   sdd retry <mission>        retry the current phase with a fresh session
   sdd close <mission>        post-merge: close the JIRA issue
   sdd autonomy [--all-repos] waste per kit version, for this repo unless --all-repos, from the ledger
+             [--by-mission]  group by mission instead of by kit version: sessions, stalled,
+                             human interventions (the `- intervention:` notes of the checkpoint)
+                             and the mission cost. Same rows, same money, other unit.
   sdd kaizen [--dry-run]     judge the previous kit change and give birth to the next kit
              [--all-repos]   mission plan (kit repo only; exit 3 = the change made it worse)
   sdd kaizen --series        the deterministic series (JSON) the judge cites, for the repo

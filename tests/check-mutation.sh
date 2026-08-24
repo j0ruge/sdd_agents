@@ -426,6 +426,24 @@ mut_RUN_e2e_dir_hardcoded() {
   sed -i 's@E2E_DIR=\\"$E2E_DIR\\"@E2E_DIR=\\"e2e\\"@' "$1"
 }
 
+# Not a gate: the accounting paragraph goes back to ONE list, and the two lines that were bound
+# before the repo filter sit among the ones that were in the header total. A reader adding it up
+# then cannot make it close — measured on the real ledger: header 96, table 89 sessions, 7
+# non-comparable (89 + 7 = 96), and underneath "11 row(s) excluded: born in another repo", inviting
+# 96 - 11. Deleting those two lines would have closed the arithmetic and broken the older invariant
+# that what leaves has to be NAMED, so the fix is the sentence and the sentence is what this removes.
+mut_RUN_autonomy_exclusions_undeclared() {
+  sed -i 's@then \["  never part of the \\($local_total) counted above — these left before the header:"\] + $outside@then $outside@' "$1"
+}
+
+# Not a gate: --by-mission counts the marker anywhere on the line instead of at its start, so the
+# census becomes a word-frequency meter — "no intervention was needed here" in a note counts as an
+# intervention. It is the D12 number a pilot reports, and inflating it turns the one signal that
+# separates "ran cheap" from "ran cheap because a human did half of it" into noise.
+mut_RUN_intervention_anywhere() {
+  sed -i "s@'\^\[\[:space:\]\]\*-\[\[:space:\]\]\*intervention:'@'intervention'@" "$1"
+}
+
 # Not a gate: the target repo declares OUTPUT_LANG and the runner swallows the request in silence.
 # It is the typical failure mode of a config key — the key exists, the schema promises it, and
 # nobody reads it (`E2E_DIR`, frozen in health-baseline; the five keys that promised a lint, a
@@ -1652,6 +1670,8 @@ CATALOG=(
   PRE_testcmd_never_run
   RUN_approve_next_unconditional
   RUN_e2e_dir_hardcoded
+  RUN_autonomy_exclusions_undeclared
+  RUN_intervention_anywhere
   RUN_ignores_output_lang
   RUN_budget_single_ceiling
   RUN_review_ceiling_in_memory
