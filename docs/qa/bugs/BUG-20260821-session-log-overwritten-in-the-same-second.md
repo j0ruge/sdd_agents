@@ -1,6 +1,6 @@
 # BUG-20260821-session-log-overwritten-in-the-same-second: the runner points two sessions at one log file and destroys the first one's transcript
 
-- **Status:** open <!-- open | fixed | verified | wont-fix | invalid -->
+- **Status:** verified <!-- open | fixed | verified | wont-fix | invalid -->
 - **Impact (user-side):** Data-Loss
 - **Severity:** Critical · **Priority:** P0
 - **Persona Affected:** Rui
@@ -75,3 +75,53 @@ are read together, and a fix that changed only one would replace lost data with 
 ⚠️ Two consumers depend on the current shape and must be checked before changing it:
 `tests/check-health.sh` and `tests/check-gates.sh` count or match these files by name, and this
 repo's own `TODO.md` already carries a related note about counting sessions by log file.
+
+## Fix
+
+- **Root cause:** the file name carried second-resolution time and nothing else, so it identified a
+  SECOND rather than an invocation. The session id that would identify the invocation was already
+  minted three lines above and was not used.
+- **Fix commit:** `6d69a99` (increment I1 of M1)
+- **The family had three sites, not one.** `run_phase` was the P0; `run_check_cmd` had the same
+  defect one function over and *worse* — it carried the clock time with no date at all, so two runs
+  on different days at the same second collided too, and it is the log `GATE_WHY` sends the operator
+  to read. `cmd_close` had the same spelling. The two derived names (`.stream.jsonl`, `.err`) come
+  from `${logfile%.json}` and were fixed by the first one.
+- **`$sid` and not `${resume_sid:-$sid}`,** which is what keeps the journal honest in both fields:
+  `session=` goes on naming the conversation, `log=` starts naming the invocation, and the pointer
+  follows the file by construction because the journal line prints the same variable. Two retries of
+  one *resumed* session share `resume_sid` and would have collided again on the other spelling.
+- **`mktemp` and not a counter, in `run_check_cmd`.** Every caller reads the phase as
+  `"$(current_phase)"`, and a command substitution is a subshell: an incremented counter dies with
+  the fork and the parent reuses the number the subshell just wrote under. Measured while fixing it —
+  four executions of the check command in one `sdd run`, three files. `mktemp` creates the file
+  atomically and assumes no shared state at all, which is the only property that survives being
+  called from inside a substitution.
+- **Regression test:** `tests/check-autonomy.sh`, block *"a second session in the same second does
+  not overwrite the first"*. It FREEZES the clock for exactly the two formats a log name is built
+  from — everything else goes to the real `date` — so the collision is the regime the assertion runs
+  in every time instead of a race it usually loses. Both assertions are self-relative (one transcript
+  per session, one log per execution) and each carries its own anti-vacuity floor; the freeze itself
+  carries a floor proving the poison is armed.
+- **Catalogue mutants:** `mut_RUN_phase_log_time_only` and `mut_RUN_check_log_time_only` put the old
+  form back. Verified one at a time: each kills exactly one assertion, with no overlap.
+- **The two consumers named above were checked and neither moved.** `tests/check-autonomy.sh` and
+  `tests/check-gates.sh` glob (`*.json`, `*.stream.jsonl`) or count the journal, never a literal
+  name; `tests/check-health.sh` matches no log name at all. `bin/sdd`'s only other reference is the
+  comment above `pipeline_log_line`, whose `gate-*-test-*.log` pattern still matches. The stale
+  sentence in `check-gates.sh` — which cited this very collision as the reason not to count files —
+  was rewritten in the fix commit rather than left to read as a live defect.
+
+## Verification
+
+- **Retested:** 2026-08-24, increment I1 of M1 · reproduction re-walked from this file, step 3
+  ("simply let one `sdd run` retry the phase, which it does automatically when the session moved
+  nothing"), with the clock frozen so both sessions land in one second by construction.
+- **Result:** confirmed fixed. Two sessions of one phase, two distinct journal lines, two distinct
+  `log=` paths, two transcripts on disk — `EXEC-20260101-120000-4fe4bfb0.*` and
+  `EXEC-20260101-120000-adcccde0.*`. Red before the fix, in the same fixture and the same second:
+  two sessions, one pointer, one transcript.
+- **Scope of the retest, stated plainly:** a suite fixture with a stubbed `claude`, not a live
+  mission. That is the environment this bug's own Reproduction section prescribes, and for the same
+  reason it gives — a session that ends immediately is exactly what a failing phase does — but it is
+  a fixture, and the first live exercise will be the next real `sdd run`.

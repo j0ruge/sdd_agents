@@ -603,6 +603,15 @@ Achados sobre **repos-alvo** vão para o `TODO.md` daquele repo. Este arquivo é
   Direção: rodar por mutante só o sensor que o alcança — decisão do humano, junto com o alvo da D7.
   — descoberto por `sdd-executor` na missão `20260817-catraca-do-backlog` (2026-08-17)
 
+- [ ] **O memo do `run_check_cmd` marca ZERO acertos num `sdd run` inteiro: substituição de comando
+  é subshell** — `bin/sdd:310` — todo leitor pega a fase como `"$(current_phase)"`, e o `_CHECK_RC`
+  escrito lá dentro morre com o fork. Medido em ordem no fixture: 4 chamadas, 4 execuções, 2
+  invalidações — e as duas primeiras caem na MESMA época, ou seja uma suíte inteira rodada à toa por
+  volta (~60 s aqui, `vitest run` no alvo). O `sdd status` chama os gates direto e acerta (3
+  chamadas, 2 hits, 1 execução), então o comentário de `bin/sdd:303` está certo sobre ele e calado
+  sobre o `run`. Direção: publicar num global, como `run_phase` faz com `LAST_PHASE_*`.
+  — descoberto por `sdd-executor` na missão `m1-20260824` (2026-08-24)
+
 ### Adiados por YAGNI
 
 - [ ] **Espelho global de vereditos legível por máquina (JSONL em `~/.sdd/`)** — D3 do
