@@ -342,6 +342,30 @@ mut_RUN_inverted_journal() {
   sed -i 's|\[ "\$DRY_RUN" = "1" \] && return 0|[ "$DRY_RUN" = "0" ] \&\& return 0|' "$1"
 }
 
+# Not a gate, and BUG-20260821-session-log-overwritten-in-the-same-second put back: the phase log
+# name goes back to carrying second-resolution time alone. Two sessions of one phase inside one
+# second — which is precisely what the runner's own inline retry produces — then land on one path,
+# and the earlier transcript is destroyed while the journal goes on naming it. Filed Data-Loss
+# because the runner tells the operator which file to read and then deletes it.
+#
+# It sabotages the DISCRIMINATOR and not the whole name, so a mutant that still writes a readable,
+# dated file stays indistinguishable from the fix by everything except the property that matters.
+# Caught by check-autonomy.sh, which freezes the clock for exactly the two formats a log name is
+# built from rather than waiting for the two sessions to fall inside one real second.
+mut_RUN_phase_log_time_only() {
+  sed -i 's|${phase}-$(date +%Y%m%d-%H%M%S)-${sid:0:8}.json|${phase}-$(date +%Y%m%d-%H%M%S).json|' "$1"
+}
+
+# The same defect one function over, and the half that needs its own mutant: run_check_cmd names the
+# TEST_CMD log — the file GATE_WHY sends the operator to read — and `invalidate_checks` empties the
+# memo after every phase, so one `sdd run` executes the check command once per gate evaluation. The
+# fix is `mktemp` rather than a counter because EVERY caller reads the phase as `"$(current_phase)"`
+# and a command substitution is a subshell: a counter incremented in there dies with the fork and
+# the parent reuses the number. Reverting to the timestamp puts all of them back on one path.
+mut_RUN_check_log_time_only() {
+  sed -i 's|logfile="$(mktemp "$(log_dir)/${label}-$(date +%Y%m%d-%H%M%S)-XXXXXX.log")"|logfile="$(log_dir)/${label}-$(date +%Y%m%d-%H%M%S).log"|' "$1"
+}
+
 # Not a gate: the target repo declares OUTPUT_LANG and the runner swallows the request in silence.
 # It is the typical failure mode of a config key — the key exists, the schema promises it, and
 # nobody reads it (`E2E_DIR`, frozen in health-baseline; the five keys that promised a lint, a
@@ -1557,6 +1581,8 @@ CATALOG=(
   HEALTH_stamp_window_blind
   HEALTH_stamp_tree_blind
   RUN_inverted_journal
+  RUN_phase_log_time_only
+  RUN_check_log_time_only
   RUN_ignores_output_lang
   RUN_budget_single_ceiling
   RUN_review_ceiling_in_memory

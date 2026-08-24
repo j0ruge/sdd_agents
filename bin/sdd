@@ -314,8 +314,20 @@ run_check_cmd() {
     LAST_CHECK_LOG="${_CHECK_LOG[$cmd]}"
     return "${_CHECK_RC[$cmd]}"
   fi
-  logfile="$(log_dir)/${label}-$(date +%H%M%S).log"
-  mkdir -p "$(dirname "$logfile")"
+  # The name has to be unique per EXECUTION, and it was unique per second per LABEL — which is
+  # neither. This is the file GATE_WHY sends the operator to read ("see $LAST_CHECK_LOG"), so an
+  # overwrite replaces the evidence of the failure being reported with the evidence of a later one.
+  # The date is part of the fix and not decoration: this site carried the clock time ALONE, so two
+  # runs on different days at the same second collided as well.
+  #
+  # `mktemp` and not a counter, because a counter cannot be made honest here: EVERY caller reads
+  # the phase as `"$(current_phase)"`, and a command substitution is a SUBSHELL — the increment,
+  # like the memo beside it, dies with the fork, so the parent's next call reuses the number the
+  # subshell just wrote under. Measured on the fixture in tests/check-autonomy.sh: four executions,
+  # three files. mktemp creates the file atomically and assumes no shared state at all, which is
+  # the only property that survives being called from inside a substitution.
+  mkdir -p "$(log_dir)"
+  logfile="$(mktemp "$(log_dir)/${label}-$(date +%Y%m%d-%H%M%S)-XXXXXX.log")"
   ( cd "$REPO_ROOT" && eval "$cmd" ) >"$logfile" 2>&1 || rc=$?
   _CHECK_RC[$cmd]="$rc"
   _CHECK_LOG[$cmd]="$logfile"
@@ -1668,7 +1680,18 @@ missing and write the artifacts. The gate will be re-evaluated."
     return 0
   fi
 
-  logfile="$(log_dir)/${phase}-$(date +%Y%m%d-%H%M%S).json"
+  # `$sid` and never `${resume_sid:-$sid}`, and the distinction is the whole fix. The file names an
+  # INVOCATION; `session=` in the journal below names the CONVERSATION. $sid is minted
+  # unconditionally at the top of this function, so it is fresh on every call — including a retry,
+  # where claude is handed `--resume "$resume_sid" --fork-session` and never sees $sid at all. Two
+  # retries of one resumed session share `resume_sid` and would collide again on that spelling.
+  #
+  # Second-resolution time alone was BUG-20260821-session-log-overwritten-in-the-same-second, filed
+  # Data-Loss: the runner tells the operator which file to read and then destroys it, because
+  # retrying is exactly what puts two sessions of one phase inside one second. The journal recorded
+  # both sessions, with two ids, pointing at one path. `log=$logfile` below prints this same
+  # variable, so the pointer follows the file by construction rather than by a second edit.
+  logfile="$(log_dir)/${phase}-$(date +%Y%m%d-%H%M%S)-${sid:0:8}.json"
   streamfile="${logfile%.json}.stream.jsonl"
   mkdir -p "$(dirname "$logfile")"
   started="$(date +%s)"
@@ -4270,7 +4293,11 @@ cmd_close() {
   step "closing $issue"
   local sid logfile rc=0
   sid="$(uuidgen)"
-  logfile="$(log_dir)/CLOSE-$(date +%Y%m%d-%H%M%S).json"
+  # Same grafia, same fix as run_phase above — and here $sid is the id claude is actually handed
+  # via --session-id, so the name and the journal's `session=` field agree exactly. Reached once per
+  # mission, so no fixture drives it; it is fixed by FORM, and that is said out loud rather than
+  # left to look measured.
+  logfile="$(log_dir)/CLOSE-$(date +%Y%m%d-%H%M%S)-${sid:0:8}.json"
   mkdir -p "$(dirname "$logfile")"
   ( cd "$REPO_ROOT" && claude -p "/ticket close $issue" \
       --model "$MODEL_TICKET" --permission-mode "$PERMISSION_MODE" --output-format json \

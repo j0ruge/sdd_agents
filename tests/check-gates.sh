@@ -340,9 +340,12 @@ fi
 # reaches the terminal and an assertion reading for it there is green whether a session ran or not.
 # (The neighbouring assert_jidoka has that shape; recorded in TODO.md.)
 #
-# And not by counting `EXEC-*.json` files either: those are named `<PHASE>-%Y%m%d-%H%M%S.json`, so
-# two sessions inside the same SECOND land on the same path and the second overwrites the first.
-# The journal is append-only, which is what makes it countable.
+# And not by counting `EXEC-*.json` files either. That was once a correctness argument — the name
+# was `<PHASE>-%Y%m%d-%H%M%S.json`, so two sessions inside one SECOND landed on one path and the
+# second destroyed the first (BUG-20260821-session-log-overwritten-in-the-same-second, now fixed:
+# the name carries the session id, and check-autonomy.sh holds that property under a frozen clock).
+# It stays an argument about the INSTRUMENT: the journal is append-only and is what the kaizen
+# judge reads, so counting it measures the record rather than a directory listing beside it.
 phase_sessions_spent() { # phase_sessions_spent <PHASE>
   grep -c "  $1  agent=" "$FIX/.sdd/logs/$MISSION/pipeline.log" 2>/dev/null || true
 }
