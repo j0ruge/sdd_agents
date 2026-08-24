@@ -178,6 +178,38 @@ blocks="$(grep -c -- '^--- DRY RUN: phase ' <<< "$argv")"
 assert_eq "the projection has the five phase blocks the assertions below count over" "5" "$blocks"
 assert_eq "every projected phase asks for stream-json WITH --verbose" "$blocks" \
   "$(grep -c -- '--output-format stream-json --verbose' <<< "$argv")"
+
+# --- the artifact templates reach every phase, not only KAIZEN --------------
+# The agents are told to start from `templates/review.md`, `templates/handoff.md` and the rest —
+# and `cmd_install` copies the agents, the config, the handoff root and a seeded findings file,
+# but NOT templates/. In a target repo that relative path resolves to nothing. The one place the
+# kit ever hands over a resolvable path is the KAIZEN branch of boot_prompt; the six mission
+# phases were given none.
+#
+# The price is not a vague "worse output": `templates/review.md` is where the `### Overall Grade`
+# contract gate_REVIEW parses lives. With no template the session invents a shape, the gate answers
+# NO-TABLE, and REVIEW_MAX_ITER × the phase budget is spent arriving at BLOCKED.
+#
+# Read per BLOCK and named per phase, so a red says WHICH phase lost the path instead of "a count
+# fell". Restricted to the `  │ ` prompt block on purpose: the argv line above it prints the whole
+# prompt back through `%q`, so an unrestricted grep would answer "present" for a runner that never
+# put the path in the prompt at all.
+echo "== the artifact templates reach every phase =="
+templates_in_prompt() {
+  awk '
+    /^--- DRY RUN: phase .* ---$/ { if (ph != "") print ph "=" seen; ph = $5; seen = "NO"; next }
+    ph != "" && /^  │ / && /\/templates\// { seen = "yes" }
+    END { if (ph != "") print ph "=" seen }
+  '
+}
+want_tmpl="$(printf '%s\n' \
+  "EXEC=yes" \
+  "QA:close=yes" \
+  "REVIEW=yes" \
+  "DOCS=yes" \
+  "PR=yes")"
+assert_eq "every projected phase is handed a resolvable templates path in its boot prompt" \
+  "$want_tmpl" "$(printf '%s\n' "$out" | templates_in_prompt)"
 # The other half, the house rule: the text of the right branch AND the absence of the wrong one.
 # A runner that ADDED the streaming flags without removing the old one satisfies the assertion
 # above while handing the CLI two conflicting --output-format values.

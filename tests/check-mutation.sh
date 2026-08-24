@@ -366,6 +366,19 @@ mut_RUN_check_log_time_only() {
   sed -i 's|logfile="$(mktemp "$(log_dir)/${label}-$(date +%Y%m%d-%H%M%S)-XXXXXX.log")"|logfile="$(log_dir)/${label}-$(date +%Y%m%d-%H%M%S).log"|' "$1"
 }
 
+# Not a gate: the six mission phases stop being handed a resolvable path to the artifact templates,
+# and only KAIZEN keeps one. `cmd_install` copies agents, config, the handoff root and a seeded
+# findings file — never templates/ — so the relative `templates/review.md` the agents used to cite
+# resolves to nothing in a target repo. The bill is exact rather than vague: templates/review.md
+# holds the `### Overall Grade` contract gate_REVIEW parses, so the session invents a shape, the
+# gate answers NO-TABLE, and REVIEW_MAX_ITER × the phase budget buys a BLOCKED.
+#
+# Anchored on the ITEM the prompt lists and not on the prose beside it: the number is what the
+# projection reads, and prose gets rewritten.
+mut_RUN_templates_kaizen_only() {
+  sed -i 's|^  6\. the artifact templates in \$SDD_HOME/templates/.*|  6. (nothing)|' "$1"
+}
+
 # Not a gate: the target repo declares OUTPUT_LANG and the runner swallows the request in silence.
 # It is the typical failure mode of a config key — the key exists, the schema promises it, and
 # nobody reads it (`E2E_DIR`, frozen in health-baseline; the five keys that promised a lint, a
@@ -1583,6 +1596,7 @@ CATALOG=(
   RUN_inverted_journal
   RUN_phase_log_time_only
   RUN_check_log_time_only
+  RUN_templates_kaizen_only
   RUN_ignores_output_lang
   RUN_budget_single_ceiling
   RUN_review_ceiling_in_memory

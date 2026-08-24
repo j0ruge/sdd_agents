@@ -22,8 +22,10 @@ because a session with no memory at all can execute it. That is the test, and it
 | `docs/handoffs/<YYYYMMDD>-<slug>/01-plano.md` | the how, the verified context, the increments with their sensors |
 | `docs/handoffs/<YYYYMMDD>-<slug>/checkpoint.md` | the table the runner parses |
 
-Use `templates/missao.md`, `templates/plano.md` and `templates/checkpoint.md` from the kit.
-Preserve the headings: the runner and the tests grep them.
+Use `missao.md`, `plano.md` and `checkpoint.md` from the templates directory your boot prompt
+names — a bare `templates/` resolves to nothing in a target repo, since the kit installs the
+agents and the config there but never the templates. Preserve the headings: the runner and the
+tests grep them.
 
 ## 1. Brainstorm and grill (with the human)
 

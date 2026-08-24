@@ -1205,6 +1205,8 @@ before. Read, in this order, before anything else:
   3. $HANDOFF_DIR/$MISSION/checkpoint.md  (the increment table)
   4. the most recent handoff in $HANDOFF_DIR/$MISSION/ (what already happened)
   5. .sdd/config.sh (TEST_CMD="$TEST_CMD"${E2E_CMD:+, E2E_CMD=\"$E2E_CMD\"})
+  6. the artifact templates in $SDD_HOME/templates/ — start every artifact from the template that
+     names it, NEVER from memory: their headings are the contract the gates parse
 $lang_line
 Your task in this session: $(phase_task "$step").
 $(phase_extra "$step")
