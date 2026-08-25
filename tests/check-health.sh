@@ -169,6 +169,15 @@ build_fixture() {
   #   tests/check-mutation.sh check 3 (every gate has a mutation)
   #   tests/check-gates.sh    check 7 (fixture provenance)
   cp "$ROOT/config/schema.md" "$FIX/config/schema.md"
+  # A finding the FIXTURE OWNS. calibrate() needs at least two findings against an empty baseline —
+  # assertion 1 drops one and the rest of the baseline still has to hold — and until this line those
+  # two were whatever debt the KIT happened to be carrying at the time. That is a sensor whose floor
+  # is satisfied by the bug it is measuring: paying the debt off (the runner started reading
+  # `E2E_DIR`) took the count to 1 and this file reported SENSOR-BROKEN for a kit that had just got
+  # healthier. A key documented here and defaulted nowhere is check 5's `doc-without-key`, planted
+  # on purpose and spelled — like $STALE — so it can never collide with a key the runner grows.
+  printf '| `%s` | no | — | Planted by tests/check-health.sh: documented on purpose, implemented nowhere. |\n' \
+    'SDD_FIXTURE_ONLY_KEY' >> "$FIX/config/schema.md"
   cp "$ROOT/tests/check-mutation.sh" "$ROOT/tests/check-gates.sh" "$FIX/tests/"
 
   #   .sdd/config.sh          the TEST_CMD check — the suite the GATES will run, which is not the

@@ -76,6 +76,26 @@
 # Not measured, on purpose: whether an anchor still points at real code, whether the prose is any
 # good, and whether a finding is worth keeping. All three are human judgement on the diff.
 #
+# ── Declared debt, admitted here instead of into the backlog (the D15 rule of CLAUDE.md) ────────
+# A finding earns a TODO.md entry when the sensor CLAIMS to measure what it does not (fail-open)
+# or when the defect has a consumer outside the kit's own suite. These two are neither: they fail
+# CLOSED, and the only reader they inconvenience is whoever writes in this repo's own TODO.md.
+# Written down is the point — declared debt is a limit, undeclared debt is the fail-open this whole
+# header exists to refuse.
+#
+#   - TWO well-formed shapes are REFUSED. A code span opened with a DOUBLE backtick and carrying an
+#     em-dash inside (the parity count reads ```` `` ```` as two delimiters), and a continuation line
+#     that OPENS with `[x] ` — which is exactly what a finding ABOUT the box rule looks like, and
+#     whose `flush()` then cascades three more false violations. Fixing the first means consuming
+#     RUNS of backticks; the second means exempting the box while `initem` is on. Until then, write
+#     around them: single backticks, and never start a continuation line with a bracketed letter.
+#     Measured by sdd-reviewer in 20260818-lote-facil (2026-08-19).
+#   - The ORDERED-LIST branch of the bare-marker rule has no probe of its own: dropping
+#     `[0-9]+[.)]` from the class leaves the selftest green, because the bare-box rule catches the
+#     item by another road. The redundancy is accidental rather than designed, and what it costs is
+#     the specific message ("bare list marker") going quiet — never a violation going unreported.
+#     Measured by sdd-reviewer in 20260818-lote-facil (2026-08-18).
+#
 # TWO measured weaknesses, stated rather than hidden. The first is the header: nothing here
 # models a fence, so a stray or unbalanced fence in the header — which makes GitHub render the
 # whole findings section as a code block — is NOT detected. Four mechanisms tried to catch it and

@@ -90,9 +90,12 @@ phase paid for the commit this one did not make. An uncommitted fix is not a fix
 ## 4. Write the round report
 
 `docs/handoffs/<mission>/40-review-r<N>.md`, where `<N>` is the round number (`r1`, `r2`, …).
-Start from `templates/review.md` in the kit — it carries the frontmatter, the sections and the
-table at the exact heading level the gate reads. This artifact went two missions with a gate and
-no template, and two independent rounds wrote `## Overall Grade` and collected `NO-TABLE`.
+Start from `review.md` in the templates directory your boot prompt names — it carries the
+frontmatter, the sections and the table at the exact heading level the gate reads. A bare
+`templates/` resolves to nothing in a target repo: the kit installs the agents and the config
+there, never the templates, which is why the prompt hands you the path. This artifact went two
+missions with a gate and no template, and two independent rounds wrote `## Overall Grade` and
+collected `NO-TABLE`.
 
 The file **must** contain the `### Overall Grade` section with the skill's table. Below, the `<…>`
 cells are the SHAPE, not something you may leave behind — the gate refuses any cell left between

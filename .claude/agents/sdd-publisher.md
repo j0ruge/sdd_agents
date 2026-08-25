@@ -53,9 +53,9 @@ human judgement. An automatic rebase here is the cheapest way to lose somebody e
 
 ### 4. Open the PR
 
-`gh pr create --base <DEFAULT_BRANCH> --head <branch>`, with the body assembled from
-`templates/pr-body.md`. Fill it **from what is in the handoffs**, inventing nothing and softening
-nothing:
+`gh pr create --base <DEFAULT_BRANCH> --head <branch>`, with the body assembled from `pr-body.md`
+in the templates directory your boot prompt names — a bare `templates/` resolves to nothing in a
+target repo. Fill it **from what is in the handoffs**, inventing nothing and softening nothing:
 
 - **what changed** — in product language, not commit language;
 - **how to verify** — the commands, in order;

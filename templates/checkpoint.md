@@ -41,6 +41,17 @@ atualizado: <YYYY-MM-DD HH:MM>
 
 - <YYYY-MM-DD HH:MM> · `<ID>` · <o que aconteceu>
 
+> **Toda vez que um humano precisou entrar na linha** — um `sdd retry`, um conserto à mão, um
+> `BLOCKED` assumido — sai uma linha com o marcador `intervention:`. É o que o
+> `sdd autonomy --by-mission` conta, e é a metade que o custo sozinho não mostra: US$ baixo não
+> distingue "rodou barato" de "rodou barato porque um humano fez metade".
+>
+> ⚠️ O marcador é **inglês e minúsculo**, como `pending`/`done`/`blocked`: é contrato, não prosa.
+> O texto depois dos dois-pontos vai no idioma do `OUTPUT_LANG`, como o resto deste arquivo.
+> Só conta quando abre a linha — `intervention` no meio de uma frase é prosa e não é contado.
+
+- intervention: <o que o humano teve de fazer> — <fase> — <custo, se houver>
+
 ## Incrementos de fix (QA)
 
 > Escritos pelo `sdd-qa` quando um bug sanável é reprovado. Entram na mesma tabela acima com ID

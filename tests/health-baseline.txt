@@ -16,7 +16,6 @@
 # The owners live in TODO.md, which is written in this repo's OUTPUT_LANG (pt-BR). Pointed at
 # by subject rather than quoted verbatim, so the pointer survives the artifact being in another
 # language: search TODO.md for the word in backticks.
-var-never-read E2E_DIR            # TODO.md `E2E_DIR`: read only by the agent, never by the runner
 
 # The backlog ratchet, and the one line whose owner is not a TODO.md entry — its owner is the
 # FILE. It freezes how many open findings TODO.md carries, so growth stops being silent: a mission
@@ -24,4 +23,4 @@ var-never-read E2E_DIR            # TODO.md `E2E_DIR`: read only by the agent, n
 # an author instead of drifting. Both directions bite — a count that rose without a record, and a
 # baseline left behind after a sweep closed items. Recount by `tests/check-todo.sh`, never by a
 # `grep -c`: that answers one too many (the format example in the header's fenced block).
-todo-findings 75
+todo-findings 74

@@ -87,14 +87,6 @@ Achados sobre **repos-alvo** vão para o `TODO.md` daquele repo. Este arquivo é
   `if`/`while`/`until`/`local`/here-doc e censurar todo `health_*()` onde ele estiver.
   — descoberto por `sdd-reviewer` na missão `20260818-lote-facil` (2026-08-19)
 
-- [ ] **Duas formas bem formadas são recusadas pelo `check-todo.sh`** — `tests/check-todo.sh:176` —
-  code span de CRASE DUPLA com travessão dentro (a paridade trata ``` `` ``` como dois
-  delimitadores) e linha de continuação que ABRE com `[x] ` — que é exatamente a cara de um achado
-  SOBRE a regra da caixa, e o `flush()` dela ainda cascateia mais três violações falsas. Nenhuma das
-  duas está entre os limites declarados no cabeçalho. Direção: consumir RUNS de crase; e declarar
-  ou isentar a caixa enquanto `initem` estiver ligado.
-  — descoberto por `sdd-reviewer` na missão `20260818-lote-facil` (2026-08-19)
-
 - [ ] **Quatro regras do `check-todo.sh` que o selftest diz medir e não mede** —
   `tests/check-todo.sh:1190` — a contagem de violações trocada pela constante `3` passa (o fixture
   tem exatamente 3); o `^` do `grep '^## Aberto'` é load-bearing e o probe não o exercita; o
@@ -372,12 +364,6 @@ Achados sobre **repos-alvo** vão para o `TODO.md` daquele repo. Este arquivo é
   comentário ao handoff. Direção: isentar o casamento `^[0-9]{8}-` do escaneamento de stopwords.
   — descoberto por `sdd-executor` na missão `20260819-fecho-que-nao-mente` (2026-08-19)
 
-- [ ] **O ramo de lista ordenada da regra do marcador pelado não tem probe próprio** —
-  `tests/check-todo.sh:249` — tirar `[0-9]+[.)]` da classe deixa o selftest verde: a regra da
-  caixa pelada pega o item por outro caminho, então a redundância é acidental e a mensagem "bare
-  list marker" some calada. Direção: probe próprio, ou declarar a redundância como o check de
-  arquivo ilegível já declara a dele. — descoberto por `sdd-reviewer` na missão `20260818-lote-facil` (2026-08-18)
-
 - [ ] **O `gate_QA` compra o placeholder do próprio template como evidência de jornada** —
   `bin/sdd:461` — em projeto sem interface a única âncora é `frontmatter gate`, testada só por
   `-z`. O `templates/handoff.md:7` entrega `gate: <a evidência...>`: um handoff copiado sem tocar
@@ -474,12 +460,12 @@ Achados sobre **repos-alvo** vão para o `TODO.md` daquele repo. Este arquivo é
   porta — e o kit recomenda worktree para isolar missão. Direção: `ledger_repo_root` dos dois
   lados, com par diferencial. — descoberto por `sdd-executor` na missão `20260817-eixo-do-juiz` (2026-08-17)
 
-- [ ] **`E2E_DIR` tem default no runner e é lida só pelo agente** — `bin/sdd:81` vs
-  `agents/sdd-qa.md:44` — `: "${E2E_DIR:=e2e}"` é a única ocorrência no runner: nenhum gate ou
-  prompt a consulta, e quem usa o valor é a prosa do `sdd-qa`. Mudar a chave **não muda onde as
-  specs são commitadas**, e a coincidência entre default e convenção esconde isso. Direção: o
-  runner passa `E2E_DIR` ao prompt da fase QA, ou a chave sai do schema. Congelada na catraca
-  `tests/health-baseline.txt`. — descoberto por `sdd health` na missão
+- [ ] **`E2E_DIR` tem default no runner e é lida só pelo agente** — `bin/sdd:99` vs
+  `agents/sdd-qa.md:45` — `: "${E2E_DIR:=e2e}"` era a única ocorrência no runner: nenhum gate ou
+  prompt a consultava, e quem usava o valor era a prosa do `sdd-qa`. Mudar a chave **não mudava
+  onde as specs são commitadas**, e a coincidência entre default e convenção escondia isso.
+  **RESOLVIDO por `a2d1840`**: entra na linha 5 do prompt de boot com a guarda do `E2E_CMD`, e a
+  linha sai da `tests/health-baseline.txt`. — descoberto por `sdd health` na missão
   `20260814-i13.2-mutacao-health` (2026-08-14)
 
 - [ ] **O kit não tem `CHANGELOG.md`, e a fase DOCS cobra um** — `agents/sdd-docs.md` (tabela "O
@@ -602,6 +588,15 @@ Achados sobre **repos-alvo** vão para o `TODO.md` daquele repo. Este arquivo é
   mecanismo. O item acima fala em crescer com o catálogo; este é outro mecanismo.
   Direção: rodar por mutante só o sensor que o alcança — decisão do humano, junto com o alvo da D7.
   — descoberto por `sdd-executor` na missão `20260817-catraca-do-backlog` (2026-08-17)
+
+- [ ] **O memo do `run_check_cmd` marca ZERO acertos num `sdd run` inteiro: substituição de comando
+  é subshell** — `bin/sdd:310` — todo leitor pega a fase como `"$(current_phase)"`, e o `_CHECK_RC`
+  escrito lá dentro morre com o fork. Medido em ordem no fixture: 4 chamadas, 4 execuções, 2
+  invalidações — e as duas primeiras caem na MESMA época, ou seja uma suíte inteira rodada à toa por
+  volta (~60 s aqui, `vitest run` no alvo). O `sdd status` chama os gates direto e acerta (3
+  chamadas, 2 hits, 1 execução), então o comentário de `bin/sdd:303` está certo sobre ele e calado
+  sobre o `run`. Direção: publicar num global, como `run_phase` faz com `LAST_PHASE_*`.
+  — descoberto por `sdd-executor` na missão `m1-20260824` (2026-08-24)
 
 ### Adiados por YAGNI
 

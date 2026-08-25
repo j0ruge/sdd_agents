@@ -34,6 +34,11 @@ pass() { printf '  ok    %s\n' "$1"; }
 fail() { printf '  FAIL  %s\n         expected: %s\n         got:      %s\n' "$1" "$2" "$3" >&2
          fails=$((fails + 1)); }
 
+# assert_eq <description> <expected> <got>. For the blocks that compose several terms into one
+# string — "this arm fired AND the other did not AND the artifact was written" — so a red names the
+# term that went wrong instead of only that something did.
+assert_eq() { if [ "$2" = "$3" ]; then pass "$1"; else fail "$1" "$2" "$3"; fi }
+
 # assert_phase <description> <expected phase>
 assert_phase() {
   local desc="$1" want="$2" got
@@ -340,9 +345,12 @@ fi
 # reaches the terminal and an assertion reading for it there is green whether a session ran or not.
 # (The neighbouring assert_jidoka has that shape; recorded in TODO.md.)
 #
-# And not by counting `EXEC-*.json` files either: those are named `<PHASE>-%Y%m%d-%H%M%S.json`, so
-# two sessions inside the same SECOND land on the same path and the second overwrites the first.
-# The journal is append-only, which is what makes it countable.
+# And not by counting `EXEC-*.json` files either. That was once a correctness argument — the name
+# was `<PHASE>-%Y%m%d-%H%M%S.json`, so two sessions inside one SECOND landed on one path and the
+# second destroyed the first (BUG-20260821-session-log-overwritten-in-the-same-second, now fixed:
+# the name carries the session id, and check-autonomy.sh holds that property under a frozen clock).
+# It stays an argument about the INSTRUMENT: the journal is append-only and is what the kaizen
+# judge reads, so counting it measures the record rather than a directory listing beside it.
 phase_sessions_spent() { # phase_sessions_spent <PHASE>
   grep -c "  $1  agent=" "$FIX/.sdd/logs/$MISSION/pipeline.log" 2>/dev/null || true
 }
@@ -1695,6 +1703,69 @@ else
        "subject '$APPROVE_SUBJECT', $APPROVE_FILES file(s), rc2 $APPROVE_AGAIN_RC, status: ${APPROVE_STATUS//$'\n'/ · }, second call: $(tail -2 <<< "$APPROVE_AGAIN_OUT")"
 fi
 git checkout -q -- file.txt
+
+# --- 3a. and it stops sending the human to a gate that is still shut.
+#
+# `cmd_approve` asked gate_PLAN ONCE, at the top, and bailed only on `missing *`. Every other
+# reason the gate can hold — and it can hold several that approving does not touch — was carried
+# straight past the commit into `next: sdd run`. The reproduction is literally the pilot's config:
+# JIRA_ENABLED=true with `versao:` still a placeholder. Approve writes the approval, commits, says
+# "next: sdd run", and the very next `sdd why` refuses for `versao:`. Every new reason gate_PLAN
+# learns inherits the defect for free, which is why the fix re-ASKS the gate instead of adding a
+# second condition here.
+#
+# DIFFERENTIAL, and it has to be: an "improvement" that simply deleted the `next:` line would satisfy
+# the shut half and break nothing else in this file. The two outputs are compared against each other
+# — the same command, one gate open and one shut — so neither arm can be reached by accident.
+SHUT="20260103-approve-shut"
+SHUTDIR="$FIX/docs/handoffs/$SHUT"
+mkdir -p "$SHUTDIR"
+cat > "$SHUTDIR/00-missao.md" <<'EOF'
+---
+missao: 20260103-approve-shut
+titulo: the gate holds for a reason approving does not touch
+data: 2026-01-03
+versao: <versao>
+branch: missao/20260103-approve-shut
+aprovacao:
+ddd: n/a
+---
+
+# Mission fixture
+EOF
+printf '# Plano
+' > "$SHUTDIR/01-plano.md"
+cat > "$SHUTDIR/checkpoint.md" <<'EOF'
+| ID | Incremento | Check (comando → esperado) | Status | Commit |
+|---|---|---|---|---|
+| I1 | slice one | `true` → 0 | pending | — |
+EOF
+sed -i 's/^JIRA_ENABLED=false/JIRA_ENABLED=true/' .sdd/config.sh
+SHUT_OUT="$( cd "$FIX" && "$SDD" approve "$SHUT" 2>&1 <<< "y" )"; SHUT_RC=$?
+SHUT_LINE="$(grep -m1 '^aprovacao:' "$SHUTDIR/00-missao.md")"
+SHUT_WHY="$( cd "$FIX" && "$SDD" why "$SHUT" 2>&1 )"
+sed -i 's/^JIRA_ENABLED=true/JIRA_ENABLED=false/' .sdd/config.sh
+
+# Composed into one string so the red names which term went wrong. Four terms, and each is a
+# different way the fix could be wrong: the approval still has to be WRITTEN (a fix that refused to
+# approve would be worse than the bug), the next step must be absent, the gate's own reason must be
+# on screen, and the OPEN case must still print the next step.
+shut_got="$(printf 'rc=%s written=%s next=%s reason=%s open_still_says_next=%s' \
+  "$SHUT_RC" \
+  "$([ -n "$SHUT_LINE" ] && [[ $SHUT_LINE == aprovacao:\ humano-* ]] && echo yes || echo NO)" \
+  "$(grep -q "next: sdd run" <<< "$SHUT_OUT" && echo printed || echo absent)" \
+  "$(grep -q "versao:" <<< "$SHUT_OUT" && echo named || echo MISSING)" \
+  "$(grep -q "next: sdd run" <<< "$APPROVE_Y_OUT" && echo yes || echo NO)")"
+assert_eq "approve with the gate still shut prints the gate's reason, not 'next: sdd run'" \
+  "rc=0 written=yes next=absent reason=named open_still_says_next=yes" "$shut_got"
+# The floor under the whole block: the reason really is one approving cannot fix, so the arm being
+# measured is the arm the comment names. Read from `sdd why`, the reader that owns the question.
+assert_eq "and the reason really is one approving does not touch" \
+  "versao" "$(grep -qF 'versao' <<< "$SHUT_WHY" && printf 'versao')"
+# Swept, and not left for a later `git add -A` to adopt. `cmd_approve` stages only the mission file
+# it wrote, so the plan and the checkpoint below would ride into the next fixture commit as
+# untracked strays — a fixture leaking into the state a later block measures.
+rm -rf "$SHUTDIR"
 
 # --- 4. the mission whose frontmatter has no `aprovacao:` key at all.
 #

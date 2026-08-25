@@ -178,6 +178,42 @@ blocks="$(grep -c -- '^--- DRY RUN: phase ' <<< "$argv")"
 assert_eq "the projection has the five phase blocks the assertions below count over" "5" "$blocks"
 assert_eq "every projected phase asks for stream-json WITH --verbose" "$blocks" \
   "$(grep -c -- '--output-format stream-json --verbose' <<< "$argv")"
+
+# --- the artifact templates reach every phase, not only KAIZEN --------------
+# The agents are told to start from `templates/review.md`, `templates/handoff.md` and the rest —
+# and `cmd_install` copies the agents, the config, the handoff root and a seeded findings file,
+# but NOT templates/. In a target repo that relative path resolves to nothing. The one place the
+# kit ever hands over a resolvable path is the KAIZEN branch of boot_prompt; the six mission
+# phases were given none.
+#
+# The price is not a vague "worse output": `templates/review.md` is where the `### Overall Grade`
+# contract gate_REVIEW parses lives. With no template the session invents a shape, the gate answers
+# NO-TABLE, and REVIEW_MAX_ITER × the phase budget is spent arriving at BLOCKED.
+#
+# Read per BLOCK and named per phase, so a red says WHICH phase lost the path instead of "a count
+# fell". Restricted to the `  │ ` prompt block on purpose: the argv line above it prints the whole
+# prompt back through `%q`, so an unrestricted grep would answer "present" for a runner that never
+# put the path in the prompt at all.
+echo "== the artifact templates reach every phase =="
+templates_in_prompt() {
+  awk '
+    /^--- DRY RUN: phase .* ---$/ { if (ph != "") print ph "=" seen; ph = $5; seen = "NO"; next }
+    ph != "" && /^  │ / && /\/templates\// { seen = "yes" }
+    END { if (ph != "") print ph "=" seen }
+  '
+}
+want_tmpl="$(printf '%s\n' \
+  "EXEC=yes" \
+  "QA:close=yes" \
+  "REVIEW=yes" \
+  "DOCS=yes" \
+  "PR=yes")"
+assert_eq "every projected phase is handed a resolvable templates path in its boot prompt" \
+  "$want_tmpl" "$(printf '%s\n' "$out" | templates_in_prompt)"
+# The sixth phase is asserted where its fixture already lives — see `== TICKET boots one driver ==`
+# below, which is the one block that can turn JIRA on. Named here so the count above reads as five
+# of six by DESIGN and not as the phase nobody remembered.
+
 # The other half, the house rule: the text of the right branch AND the absence of the wrong one.
 # A runner that ADDED the streaming flags without removing the old one satisfies the assertion
 # above while handing the CLI two conflicting --output-format values.
@@ -282,7 +318,34 @@ assert_eq "an in-progress report goes back to the exec sub-step" \
   "QA:exec=<none>" "$(printf '%s\n' "$out4" | projected)"
 rm -rf docs/qa/charters docs/qa/reports
 
+# --- E2E_DIR reaches the session that writes into it -----------------------
+# `: "${E2E_DIR:=e2e}"` was the ONLY occurrence of the key in the whole runner: no gate consulted
+# it and no prompt carried it, while agents/sdd-qa.md tells the session to commit its new specs to
+# `<E2E_DIR>/`. Changing the key therefore did not change where the specs land, and the coincidence
+# between the default (`e2e`) and the convention most repos already follow is exactly what hid it:
+# a session that guesses right is indistinguishable from a session that was told.
+#
+# So the fixture sets a value the default CANNOT produce. An assertion written against `e2e` would
+# be green on a runner that hardcoded the string and never read the key at all — the same shape as
+# a fixture whose regime happens to satisfy the property by accident.
+echo "== E2E_DIR reaches the boot prompt =="
+sed -i '/^E2E_DIR=/d' .sdd/config.sh
+printf 'E2E_DIR="tests/browser"\n' >> .sdd/config.sh
+out_dir="$( "$SDD" run "$MISSION" --dry-run --phase QA 2>&1 )"
+in_prompt() { grep -c "^  │ .*$1" <<< "$2" ; }
+assert_eq "the QA prompt names E2E_DIR, with the value the config declared and not the default" \
+  "1 0" "$(in_prompt 'E2E_DIR="tests/browser"' "$out_dir") $(in_prompt 'E2E_DIR="e2e"' "$out_dir")"
+sed -i '/^E2E_DIR=/d' .sdd/config.sh
+
 sed -i 's|^E2E_CMD="true"|E2E_CMD=""|' .sdd/config.sh
+
+# The other half, and the one that keeps the line from becoming noise: a project with no interface
+# writes no specs, so a key about where specs go has nothing to say to it. Same reason E2E_CMD
+# itself is guarded on that line. Without this, the fix would push a `E2E_DIR="e2e"` nobody asked
+# for into the boot prompt of every phase of every backend repo.
+out_nodir="$( "$SDD" run "$MISSION" --dry-run --phase QA 2>&1 )"
+assert_eq "a project with no interface is not told about a spec directory it has no specs for" \
+  "0" "$(in_prompt 'E2E_DIR' "$out_nodir")"
 
 # --- TICKET boots ONE driver, not two --------------------------------------
 # `phase_agent`'s own invariant, written above it in bin/sdd: an agent and a slash are two system
@@ -307,6 +370,12 @@ if grep -q '│ /ticket open' <<< "$outt"; then
 else
   pass "the TICKET boot prompt does not open with a slash"
 fi
+# The sixth phase of the templates-path assertion above. TICKET shares the boot prompt's `cat <<EOF`
+# with the other five, which is exactly why it needs its own line: a TICKET-specific early return
+# or override — and TICKET is the one phase with a branch of its own right before that block — would
+# take the path away here and nowhere else, and the five-phase projection would go on saying yes.
+assert_eq "and TICKET, the sixth phase, is handed the same resolvable templates path" \
+  "TICKET=yes" "$(printf '%s\n' "$outt" | templates_in_prompt)"
 sed -i 's|^JIRA_ENABLED=true|JIRA_ENABLED=false|' .sdd/config.sh
 rm -f .jira-project
 assert_eq "the fixture comes back clean after the TICKET test" "" "$(git status --porcelain)"

@@ -67,6 +67,21 @@ prova por artefato — `git merge-base --is-ancestor <hash> main` —, nunca pel
 ⚠️ `- [x]` não existe neste arquivo: caixa marcada era uma segunda convenção de fechamento,
 invisível para a triagem do kaizen, que procura `RESOLVIDO por` no corpo.
 
+**Nem tudo que é verdade é achado — a régua de admissão (D15).** Um achado entra no `TODO.md`
+quando **o sensor afirma medir o que não mede** (fail-open) ou quando **o defeito tem consumidor
+fora da suíte do próprio kit**. Fora disso, a dívida vai para o **cabeçalho do sensor**, na seção
+de limites declarados, e não para o backlog: uma regra sem probe próprio cuja redundância é
+*declarada* — "esta regra é pega por outro caminho, e o cabeçalho diz isso" — deixa de ser defeito
+no instante em que está escrita. Dívida declarada é limite; dívida calada é o fail-open que a
+régua existe para separar dela.
+A régua ataca a **taxa de nascimento**, não o estoque, e é por isso que ela vem antes de qualquer
+faxina: 16 itens fechados contra 29 nascidos em duas missões é um arquivo que cresce por acúmulo
+de verdades, não de problemas. Quem aplica é a triagem do `sdd kaizen` e quem escreve o achado.
+⚠️ Ela **não** é licença para declarar tudo e esvaziar o backlog: um fail-open segue entrando
+mesmo depois de escrito no cabeçalho — escrever não conserta, só deixa de mentir. Aplicada pela
+primeira vez à família do `check-todo.sh` (6 itens): dois saíram para o cabeçalho do sensor,
+quatro ficaram porque são fail-open, e a catraca desceu 76 → 74 num diff com autor.
+
 **Crescer é permitido; crescer calado, não.** O `sdd health` emite a contagem de achados abertos
 como o achado `todo-findings <N>`, e `tests/health-baseline.txt` a congela. A catraca morde nos
 dois sentidos: número que subiu sem registro reprova, e baseline que ficou para trás depois de uma

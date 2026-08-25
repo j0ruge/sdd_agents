@@ -114,6 +114,18 @@ closed — planning it again is waste. From the genuinely open items, pick a bat
 **one** mission by value against risk. A finding that does not make the cut stays where it is,
 untouched.
 
+**The triage is also the admission board (D15).** An open item earns its place only if the sensor
+it is about **claims to measure what it does not** (a fail-open) or the defect has a **consumer
+outside the kit's own suite**. An item that is neither — a rule with no probe of its own whose
+redundancy is real, an over-refusal that fails CLOSED and only inconveniences whoever writes in
+this repo — belongs in the sensor's own header, under its declared limits, and the plan you write
+says so: give those items a heading of their own naming the file each one moves into.
+Declared debt is a limit; undeclared debt is the fail-open the rule exists to separate from it.
+This attacks the birth rate rather than the stock, which is the half a sweep cannot do: 16 items
+closed against 29 born in two missions is a file growing on true statements, not on problems.
+⚠️ It is not licence to declare everything away. A fail-open stays an open item after it is written
+into a header — writing it down stops the lie, it does not fix the defect.
+
 **The triage is also the sweep.** A resolved item stays in the file only until the PR that cites
 it merges; after that it is deleted, never archived. So for every `RESOLVIDO por <hash>` you
 meet, check whether the hash already reached the base branch —

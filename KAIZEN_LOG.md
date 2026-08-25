@@ -4,6 +4,45 @@ Registro de melhorias com **antes/depois medido**. Sem número, não entra.
 
 ---
 
+## 2026-08-24 — O log que o runner manda ler é o log que ele apaga
+
+**Problema (Gemba):** o nome do arquivo de log carregava tempo com resolução de segundo e mais
+nada, então a segunda sessão de uma fase caía no caminho da primeira. Retentar é justamente o que
+põe duas sessões no mesmo segundo — o runner retenta sozinho quando a sessão não moveu o disco —,
+e a fase que mais custa é a que mais retenta. O journal registrava as duas sessões, com dois ids,
+apontando para UM arquivo: é assim que a perda é provável em vez de suspeita
+(`BUG-20260821-session-log-overwritten-in-the-same-second`, Data-Loss/P0).
+
+A família tinha **três** sítios e não um. O `run_check_cmd` — dono do log que o `GATE_WHY` manda o
+operador ler — era pior: carregava a hora **sem data**, então dois dias no mesmo horário colidiam
+também. Consertar um sítio não fecharia a classe.
+
+**Contramedida:** o nome passa a nomear a INVOCAÇÃO. Em `run_phase`, `${sid:0:8}` — e `$sid`, nunca
+`${resume_sid:-$sid}`: duas retentativas de uma mesma sessão retomada compartilham `resume_sid` e
+voltariam a colidir. Em `run_check_cmd`, `mktemp` e não um contador, porque TODO leitor pega a fase
+como `"$(current_phase)"` e substituição de comando é subshell: o incremento morre com o fork e o
+pai reusa o número. O sensor CONGELA o relógio para exatamente os dois formatos de que um nome de
+log é feito, com piso provando que o veneno está armado — a colisão passa a ser o regime em que a
+asserção roda toda vez, em vez de uma corrida que ela normalmente perde.
+
+| | Antes (`ba1653c`) | Depois (`7395c78`) |
+|---|---|---|
+| duas sessões de uma fase no mesmo segundo | **1** transcript em disco, 2 linhas de journal apontando para ele | **2** transcripts, cada linha apontando para o seu |
+| execuções do `TEST_CMD` num `sdd run` × arquivos de log | 4 × **1** | 4 × **4** |
+| bugs `open` em `docs/qa/bugs/` | 1 de 6 (trancava o `gate_QA` deste repo) | **0** de 6 |
+| catálogo de mutação | 129 de 129 | **138** de 138 |
+| achados abertos no `TODO.md` | 75 | **74** (D15 tirou 2, o memo do `run_check_cmd` acrescentou 1) |
+
+⚠️ **O `sdd health` cobrou o preço que ele existe para cobrar, na mesma missão.** A primeira
+passada respondeu `score: 136 caught, 0 known gap(s), of 138` — e os dois faltantes **não** eram
+sobreviventes: eram `did not apply`. O I6 partiu o parágrafo de exclusão do `sdd autonomy` em duas
+metades e o array deixou de terminar em colchete, apodrecendo a âncora de
+`mut_AUTONOMY_exclusions_split` e `_glued`. Duas mutações que não sabotavam nada, com cara de
+cobertura. É a mesma classe do `103 caught of 104` que ficou dias na `main` entre os PRs #12 e #13,
+e desta vez foi pega antes do PR — que é exatamente o que o carimbo de `c962e2e` comprou.
+
+---
+
 ## 2026-08-19 — Os quatro instrumentos que certificam o fecho de uma missão param de afirmar o que não mediram
 
 **Problema (Gemba):** quatro instrumentos decidem se uma missão do kit fechou, e **três deles

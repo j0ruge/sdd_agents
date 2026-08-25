@@ -103,7 +103,9 @@ In the `docs/qa/` tree these appear as `Blocked (needs human verify)` or
 
 ## 6. Write the handoff
 
-`docs/handoffs/<mission>/30-handoff-qa.md`, from `templates/handoff.md`:
+`docs/handoffs/<mission>/30-handoff-qa.md`, from `handoff.md` in the templates directory your
+boot prompt names — a bare `templates/` resolves to nothing in a target repo, because the kit
+installs the agents and the config there but never the templates:
 
 - frontmatter: `fase: QA`, `status: done|skipped|blocked`, `sessao`, `gate:` with real evidence —
   **with interface**: the report name, the count of sessions walked, the `E2E_CMD` output;

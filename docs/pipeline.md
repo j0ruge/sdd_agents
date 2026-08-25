@@ -544,6 +544,28 @@ different counts for the same period corrode the trust the whole loop runs on, a
 the axis the ledger exists to measure — so a change to one reader's grouping belongs in the same
 commit as the other's.
 
+**`sdd autonomy --by-mission` regroups the same rows by mission** — the unit of "US$ per merged PR",
+which is what a pilot has to report and what the kit_sha axis cannot answer. Same population, same
+money: the two views sum to the same total, and a fixture in `tests/check-autonomy.sh` compares
+them to each other so neither can be changed alone.
+
+Its extra column is **human interventions**, and it is the half cost alone cannot show: a cheap
+mission and a mission that ran cheap because a human did half of it print the same number of
+dollars. Each one is a line in the execution notes of `checkpoint.md` opening with the marker
+`intervention:` — a `sdd retry`, a fix by hand, a `BLOCKED` taken over. The marker is **English and
+contract**, like `pending`/`done`/`blocked`; the text after the colon follows `OUTPUT_LANG` like the
+rest of the artifact, and the word in the middle of a sentence is prose and is not counted. A
+mission belonging to another repo (only reachable under `--all-repos`) answers `?` and never `0`:
+its checkpoint lives under a `HANDOFF_DIR` the reader never loaded, and a zero there would read as
+"nobody intervened" when the truth is "nobody looked".
+
+**The accounting paragraph under the table is two paragraphs.** The first lists rows that were in
+the header total and then left a bucket — add them to the table and you get the header. The second
+is introduced by *"never part of the N counted above"* and lists rows the repo filter removed before
+anything was counted (born in another repo; carrying no `repo` field). Printed together they invited
+a subtraction that could not close: header 96, table 89 sessions, 7 non-comparable — correct — and
+then "11 row(s) excluded: born in another repo" underneath.
+
 ## The kaizen loop
 
 The ledger records; `sdd kaizen` closes. Run **in the kit repo** (it refuses anywhere else), it

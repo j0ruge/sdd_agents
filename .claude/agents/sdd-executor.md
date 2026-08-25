@@ -88,7 +88,8 @@ that the hash exists in the `git log` — a label is not an artifact.
 ## 6. Was that the last increment?
 
 If after your update **no** row is left `pending`, also write
-`docs/handoffs/<mission>/20-handoff-exec.md` from `templates/handoff.md`, with:
+`docs/handoffs/<mission>/20-handoff-exec.md` from `handoff.md` in the templates directory your
+boot prompt names — a bare `templates/` resolves to nothing in a target repo — with:
 
 - frontmatter: `fase: EXEC`, `status: done`, `sessao: <this session's uuid>`, `gate:` carrying the
   real evidence (a summarised `TEST_CMD` output, not the word "passed");

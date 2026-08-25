@@ -153,7 +153,10 @@ mut_EXEC_done_without_commit() {  # accepts a 'done' increment with commit '—'
 }
 
 mut_EXEC_orphan_commit() {    # back to `cat-file -e`: a loose object passes as a commit in history
-  sed -i 's|.*git merge-base --is-ancestor.*|        if false; then|' "$1"
+  # RANGE-ADDRESSED because the unaddressed pattern also matched PROSE: the sentence explaining the
+  # rule inside the TODO.md seed cmd_install writes (bin/sdd:1967). This file's own header forbids
+  # exactly that — anchor on CODE, never on prose, because prose gets reworded and code does not.
+  sed -i '/^gate_EXEC() {/,/^}/ s|.*git merge-base --is-ancestor.*|        if false; then|' "$1"
 }
 
 # The checkpoint parser goes back to a raw split on "|". A Check cell carrying the GFM escape `\|`
@@ -338,8 +341,125 @@ mut_HEALTH_stamp_window_blind() {
 # Not a gate, and the only decorative-assertion bug that really happened (TODO.md): the inverted
 # guard makes the PROJECTION (`--dry-run`) write to the journal while the real path goes mute — a
 # read command dirtying the working tree, and an audit trail lying in both directions.
+# RANGE-ADDRESSED, and not for tidiness: that guard is written byte-for-byte identically in
+# ensure_mission_branch (bin/sdd:2062), and `sed` without `g` still substitutes once per LINE, so
+# the unaddressed form flipped BOTH. A slug scored green by a dry-run assertion tripping over the
+# branch guard says nothing about the journal, which is the property this entry is named for.
 mut_RUN_inverted_journal() {
-  sed -i 's|\[ "\$DRY_RUN" = "1" \] && return 0|[ "$DRY_RUN" = "0" ] \&\& return 0|' "$1"
+  sed -i '/^pipeline_log_line() {/,/^}/ s|\[ "\$DRY_RUN" = "1" \] && return 0|[ "$DRY_RUN" = "0" ] \&\& return 0|' "$1"
+}
+
+# Not a gate, and BUG-20260821-session-log-overwritten-in-the-same-second put back: the phase log
+# name goes back to carrying second-resolution time alone. Two sessions of one phase inside one
+# second — which is precisely what the runner's own inline retry produces — then land on one path,
+# and the earlier transcript is destroyed while the journal goes on naming it. Filed Data-Loss
+# because the runner tells the operator which file to read and then deletes it.
+#
+# It sabotages the DISCRIMINATOR and not the whole name, so a mutant that still writes a readable,
+# dated file stays indistinguishable from the fix by everything except the property that matters.
+# Caught by check-autonomy.sh, which freezes the clock for exactly the two formats a log name is
+# built from rather than waiting for the two sessions to fall inside one real second.
+mut_RUN_phase_log_time_only() {
+  sed -i 's|${phase}-$(date +%Y%m%d-%H%M%S)-${sid:0:8}.json|${phase}-$(date +%Y%m%d-%H%M%S).json|' "$1"
+}
+
+# The same defect one function over, and the half that needs its own mutant: run_check_cmd names the
+# TEST_CMD log — the file GATE_WHY sends the operator to read — and `invalidate_checks` empties the
+# memo after every phase, so one `sdd run` executes the check command once per gate evaluation. The
+# fix is `mktemp` rather than a counter because EVERY caller reads the phase as `"$(current_phase)"`
+# and a command substitution is a subshell: a counter incremented in there dies with the fork and
+# the parent reuses the number. Reverting to the timestamp puts all of them back on one path.
+mut_RUN_check_log_time_only() {
+  sed -i 's|logfile="$(mktemp "$(log_dir)/${label}-$(date +%Y%m%d-%H%M%S)-XXXXXX.log")"|logfile="$(log_dir)/${label}-$(date +%Y%m%d-%H%M%S).log"|' "$1"
+}
+
+# Not a gate: the six mission phases stop being handed a resolvable path to the artifact templates,
+# and only KAIZEN keeps one. `cmd_install` copies agents, config, the handoff root and a seeded
+# findings file — never templates/ — so the relative `templates/review.md` the agents used to cite
+# resolves to nothing in a target repo. The bill is exact rather than vague: templates/review.md
+# holds the `### Overall Grade` contract gate_REVIEW parses, so the session invents a shape, the
+# gate answers NO-TABLE, and REVIEW_MAX_ITER × the phase budget buys a BLOCKED.
+#
+# Anchored on the ITEM the prompt lists and not on the prose beside it: the number is what the
+# projection reads, and prose gets rewritten.
+mut_RUN_templates_kaizen_only() {
+  sed -i 's|^  6\. the artifact templates in \$SDD_HOME/templates/.*|  6. (nothing)|' "$1"
+}
+
+# The same loss, reached by the door the entry above cannot see. `mut_RUN_templates_kaizen_only`
+# deletes the line, so all six phases lose the path at once and any ONE of them going red is enough
+# to score it caught — which says nothing about whether the sixth was ever read. TICKET is the phase
+# that can hide: it is the only one with a branch of its own immediately before the shared boot
+# block, so a short circuit there takes the path away from TICKET and from nothing else, and the
+# five-phase projection goes on answering yes. Caught by exactly one assertion in the suite, the
+# TICKET line of check-dry-run.sh — which is the whole reason that line exists.
+mut_RUN_templates_ticket_short_circuit() {
+  sed -i 's|^  \[ -n "\$slash" \] && printf|  if [ "$step" = TICKET ]; then printf "ticket\\n"; return 0; fi\n&|' "$1"
+}
+
+# Not a gate, and the fail-open shape in pure form: every DEFAULT_BRANCH "exists on origin",
+# including the ones that name no branch at all. The key is the base of `gh pr create` in the PR
+# phase — the LAST phase — so a wrong value is discovered after EXEC, QA, REVIEW and DOCS have all
+# been paid for. The pilot's target declares `DEFAULT_BRANCH="develop"` and the value has already
+# been got wrong once.
+#
+# Anchored on the CONDITION, which is what makes the mutant a fail-open rather than a crash: the
+# two other arms simply become unreachable and the preflight goes on answering ok.
+mut_PRE_default_branch_unchecked() {
+  sed -i 's@if ( cd "$REPO_ROOT" \&\& git rev-parse --verify --quiet "refs/remotes/origin/$DEFAULT_BRANCH" >/dev/null ); then@if true; then@' "$1"
+}
+
+# Not a gate: the preflight goes back to judging TEST_CMD by its SPELLING alone. `test_cmd_looks_noop`
+# knows `true`, `:`, `echo`, `printf`, `exit` and three "list the tests" flags, and certifies every
+# other value on sight — so a repo whose `npm test` dies on an uninstalled dependency passes green
+# and then gate_EXEC, running the same command for real, refuses for ever at one EXEC session per
+# lap. The sabotage leaves the verdict printed and only removes the EXECUTION, which is why
+# check-preflight.sh asserts it with a witness file instead of with the wording.
+mut_PRE_testcmd_never_run() {
+  sed -i 's@run_check_cmd "$TEST_CMD" "preflight-test" || test_rc=$?@test_rc=0@' "$1"
+}
+
+# Not a gate: `sdd approve` goes back to announcing the next step unconditionally, the way it did
+# when the gate was asked once at the top and only `missing *` could stop the command. Everything
+# else gate_PLAN holds for — a kaizen-born plan, an unparseable checkpoint, `versao:` unfilled with
+# JIRA on — was carried past the commit into `next: sdd run`, and the very next `sdd why` refused.
+# The reproduction is a config and not a corner case: it is what the pilot's target repo ships.
+#
+# Anchored on the re-ASK, which is what makes the mutant the original defect rather than a new one:
+# the approval is still written and still committed, and only the second opinion disappears.
+mut_RUN_approve_next_unconditional() {
+  sed -i 's@^  if gate_PLAN; then$@  if true; then@' "$1"
+}
+
+# Not a gate, and the sharper of the two shapes this key can fail in: the boot prompt goes on
+# NAMING E2E_DIR and hands over the default instead of the configured value. `sdd-qa` commits its
+# new specs to `<E2E_DIR>/`, so a repo that moved its specs is told to write them where they used
+# to be — and because the default (`e2e`) is the convention most repos already follow, the session
+# lands in the right place most of the time, which is what kept the key unread for so long.
+#
+# It is also what the assertion in check-dry-run.sh is shaped for: a fixture on the default value
+# would be green here, so that fixture declares a directory the default cannot produce and demands
+# the configured one AND the absence of the default.
+mut_RUN_e2e_dir_hardcoded() {
+  sed -i 's@E2E_DIR=\\"$E2E_DIR\\"@E2E_DIR=\\"e2e\\"@' "$1"
+}
+
+# Not a gate: the accounting paragraph goes back to ONE list, and the two lines that were bound
+# before the repo filter sit among the ones that were in the header total. A reader adding it up
+# then cannot make it close — measured on the real ledger: header 96, table 89 sessions, 7
+# non-comparable (89 + 7 = 96), and underneath "11 row(s) excluded: born in another repo", inviting
+# 96 - 11. Deleting those two lines would have closed the arithmetic and broken the older invariant
+# that what leaves has to be NAMED, so the fix is the sentence and the sentence is what this removes.
+mut_RUN_autonomy_exclusions_undeclared() {
+  sed -i 's@then \["  never part of the \\($local_total) counted above — these left before the header:"\] + $outside@then $outside@' "$1"
+}
+
+# Not a gate: --by-mission counts the marker anywhere on the line instead of at its start, so the
+# census becomes a word-frequency meter — "no intervention was needed here" in a note counts as an
+# intervention. It is the D12 number a pilot reports, and inflating it turns the one signal that
+# separates "ran cheap" from "ran cheap because a human did half of it" into noise.
+mut_RUN_intervention_anywhere() {
+  sed -i "s@'\^\[\[:space:\]\]\*-\[\[:space:\]\]\*intervention:'@'intervention'@" "$1"
 }
 
 # Not a gate: the target repo declares OUTPUT_LANG and the runner swallows the request in silence.
@@ -682,8 +802,12 @@ mut_RUN_install_no_guard() {
 # the session table denies. Every row the runner writes today satisfies both spellings, so no
 # fixture in the ordinary regime can tell this mutant from the fix.
 mut_RUN_on_axis_forked() {
+  # The on_axis half is RANGE-ADDRESSED and the comparable half needs no address: the first
+  # definition is repeated verbatim in kaizen_series (bin/sdd:3777), a different consumer with its
+  # own assertions, and mutating the judge's axis as a side effect of measuring the reader's would
+  # let check-kaizen.sh score this slug for the wrong program.
   sed -i \
-    -e 's@def on_axis: .kit_dirty == false and .kit_sha != null;@def on_axis: .kit_dirty != true and .kit_sha != null;@' \
+    -e '/^cmd_autonomy() {/,/^}/ s@def on_axis: .kit_dirty == false and .kit_sha != null;@def on_axis: .kit_dirty != true and .kit_sha != null;@' \
     -e 's@def comparable: .event == "session" and on_axis and (has("moved"));@def comparable: .event == "session" and .kit_dirty == false and (.kit_sha != null) and (has("moved"));@' \
     "$1"
 }
@@ -888,8 +1012,24 @@ mut_PRE_agent_presence_only() {
 # the config was being wired up then passes preflight, and after it gate_EXEC, gate_QA and
 # gate_REVIEW pass instantly, in every mission, for ever — each phase certifying itself against a
 # run that never happened, through the one key the whole pipeline trusts.
+# It is caught by the MESSAGE half of check-preflight.sh's no-op assertion, and only that half.
+# This comment used to claim a second sabotage for free — that blinding the heuristic also killed
+# the "a TEST_CMD the heuristic already refused is not executed at all" witness, so that assertion
+# needed no mutant of its own. It did not: the block ran `TEST_CMD="true"`, and a builtin that
+# writes nothing leaves `ran=0` in the blinded world exactly as in the correct one. The witness was
+# a constant, and this entry was the reason nobody looked. The value there is now a script that
+# marks the witness when run, and the execution half has its own entry below.
 mut_PRE_testcmd_noop_blind() {
   sed -i '/^cmd_preflight()/,/^}/ s@if test_cmd_looks_noop "\$TEST_CMD"; then@if false; then@' "$1"
+}
+
+# The refusal that refuses in words and runs the command anyway. `_fail` counts and returns, so the
+# "runs nothing" sentence still reaches the terminal untouched and every wording assertion in
+# check-preflight.sh stays green — the execution is the ONLY observable, and `$PROBE/witness` is the
+# only place it is observable from. Sabotaging the arm rather than the heuristic is what separates
+# the two halves: mut_PRE_testcmd_noop_blind above kills the message, this one leaves it alone.
+mut_PRE_testcmd_noop_runs_anyway() {
+  sed -i '/^cmd_preflight()/,/^}/ s@if test_cmd_looks_noop "\$TEST_CMD"; then@if test_cmd_looks_noop "$TEST_CMD"; then run_check_cmd "$TEST_CMD" "preflight-test" || true;@' "$1"
 }
 
 # Not a gate: the base branch warning goes back to being decoration. The body is emptied while the
@@ -1476,14 +1616,19 @@ mut_RUN_ceiling_note_other_channel() {
 }
 
 # The exclusion accounting goes back to one blank line between every two of its lines: a paragraph
-# about where the rows went, printed as four unrelated asides. Anchored on the `join` of the array
-# that collects them — the token that only exists because the four strings are ONE output now.
+# about where the rows went, printed as unrelated asides. Anchored on the `join` of the array that
+# collects them — the token that only exists because the strings are ONE output now.
 #
 # The leading newline is left ALONE and only the separator doubles, so the blank that divides the
 # block from the table survives: the mutant reproduces the defect and nothing else, and an
 # assertion that passed on "there is a blank line somewhere" would not notice it.
+#
+# ⚠️ The anchor lost its leading `]` when the paragraph was split into in-scope and out-of-scope
+# halves: the array now ends in a parenthesised expression, not a bracket. That change reported
+# itself as `did not apply` — the rc-90 arm of run_mutant, which is why a rotted anchor is
+# CATALOGUE-BROKEN here and not a silent point.
 mut_AUTONOMY_exclusions_split() {
-  sed -i 's@\] | select(length > 0) | "\\n" + join("\\n"))@] | select(length > 0) | "\\n" + join("\\n\\n"))@' "$1"
+  sed -i 's@| select(length > 0) | "\\n" + join("\\n"))@| select(length > 0) | "\\n" + join("\\n\\n"))@' "$1"
 }
 
 # The one voice of the guard floor a human reads out loud writes its own copy of the number again,
@@ -1506,8 +1651,9 @@ mut_KAIZEN_axis_note_own_floor() {
 # leading newline alone, and D5 next door counts CONSECUTIVE blanks, so an accounting welded onto
 # the table satisfies it. Without this entry the "one blank above" term would be a rule with no
 # probe — decoration, by this repo's own rubric.
+# ⚠️ Same re-anchoring as its twin above, and for the same reason.
 mut_AUTONOMY_exclusions_glued() {
-  sed -i 's@\] | select(length > 0) | "\\n" + join("\\n"))@] | select(length > 0) | join("\\n"))@' "$1"
+  sed -i 's@| select(length > 0) | "\\n" + join("\\n"))@| select(length > 0) | join("\\n"))@' "$1"
 }
 
 # The series stops PUBLISHING the floor, so `.guard.floor` reads null and the sentence the human
@@ -1557,6 +1703,16 @@ CATALOG=(
   HEALTH_stamp_window_blind
   HEALTH_stamp_tree_blind
   RUN_inverted_journal
+  RUN_phase_log_time_only
+  RUN_check_log_time_only
+  RUN_templates_kaizen_only
+  RUN_templates_ticket_short_circuit
+  PRE_default_branch_unchecked
+  PRE_testcmd_never_run
+  RUN_approve_next_unconditional
+  RUN_e2e_dir_hardcoded
+  RUN_autonomy_exclusions_undeclared
+  RUN_intervention_anywhere
   RUN_ignores_output_lang
   RUN_budget_single_ceiling
   RUN_review_ceiling_in_memory
@@ -1591,6 +1747,7 @@ CATALOG=(
   RUN_ledger_no_repo_filter
   PRE_agent_presence_only
   PRE_testcmd_noop_blind
+  PRE_testcmd_noop_runs_anyway
   RUN_base_branch_warn_dead
   RUN_approve_writes_auto
   RUN_approve_bails_on_kaizen_born

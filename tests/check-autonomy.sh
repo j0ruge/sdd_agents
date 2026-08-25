@@ -425,6 +425,115 @@ assert_eq "the .json summary is still exactly the result object the old format p
 assert_eq "the ledger reads the cost out of the streamed session, to the last digit" \
   "0.0362104" "$(jq -r -s '.[0].cost_usd' "$LEDGER")"
 
+# --- two sessions inside one second are two transcripts, not one -----------
+# BUG-20260821-session-log-overwritten-in-the-same-second, filed Data-Loss: the log file name
+# carried second-resolution time and nothing else, so the second session of a phase landed on the
+# first one's path and destroyed a transcript the runner had just told the operator to go read.
+# The journal recorded both sessions faithfully, with two different ids, and pointed both at the
+# SAME file — which is how the loss is provable rather than merely suspected.
+#
+# The phase that costs the most is the one most likely to lose its evidence, because retrying is
+# what puts two sessions in the same second in the first place. This fixture does not wait for
+# that coincidence: it FREEZES the clock for the ONE format a log name is built from — both naming
+# sites, bin/sdd:330 and bin/sdd:1696, spell it `+%Y%m%d-%H%M%S` — so
+# the collision is the regime the assertion runs in every time instead of a race it usually loses.
+# Everything else the runner asks `date` for — the journal's -Iseconds stamp, the duration's %s —
+# goes to the real binary untouched, and the floor below proves the freeze is armed before any
+# verdict is read. An environment rule whose poison is not armed is decoration.
+#
+# One `sdd run` against a stub that answers and changes nothing spends TWO sessions of one phase
+# (the session and the runner's own inline retry) and then escalates — the second reproduction the
+# bug report names, and the one that needs no second invocation.
+echo "== a second session in the same second does not overwrite the first =="
+: > "$LEDGER"
+rm -f "$LOGDIR"/*.json "$LOGDIR"/*.jsonl "$LOGDIR"/*.err "$LOGDIR"/gate-*.log
+
+# Resolved through the DEFAULT path, never through $PATH: the stub directory is already in front
+# of it, and a `date` that resolved to the stub being written would recurse forever.
+REAL_DATE="$(command -p -v date)"
+cat > "$OUTSIDE/stub/date" <<STUB
+#!/usr/bin/env bash
+case "\$*" in
+  "+%Y%m%d-%H%M%S") printf '20260101-120000\n' ;;
+  *)                exec "$REAL_DATE" "\$@" ;;
+esac
+STUB
+chmod +x "$OUTSIDE/stub/date"
+
+# The floor, read through the same PATH the runner will use. Two terms and not one: the frozen
+# format has to be frozen AND the passthrough has to still answer, or a stub that froze everything
+# would make the collision unreachable for a reason that has nothing to do with the runner.
+freeze="frozen=$(date +%Y%m%d-%H%M%S) passthrough=$(date -Iseconds | grep -c .)"
+
+# The check command counts its own executions. `printf` exits 0 exactly like the `true` it
+# replaces, so no gate changes its mind — what changes is that the number of times run_check_cmd
+# actually ran the command becomes readable, and that number is what its log files have to match.
+# The memo makes the two equal by construction: a cache hit runs nothing and writes no file.
+CHECK_WITNESS="$OUTSIDE/check-witness"
+: > "$CHECK_WITNESS"
+sed -i "s|^TEST_CMD=.*|TEST_CMD=\"printf 'x\\\\n' >> $CHECK_WITNESS\"|" "$FIX/.sdd/config.sh"
+
+# The checkpoint is walked to `done` for this block ALONE, and the reason is that gate_EXEC returns
+# on a pending increment BEFORE it ever reaches run_check_cmd — with the fixture's usual checkpoint
+# the check command is unreachable and its log files could never exist to collide. Every increment
+# done and the suite green, the gate now fails one line further on, at the missing
+# 20-handoff-exec.md: the phase stays EXEC, the sessions still run, and TEST_CMD runs once per gate
+# evaluation because invalidate_checks empties the memo after every phase. Restored below, so the
+# blocks after this one read the fixture they were written against.
+CKPT_SAVED="$OUTSIDE/checkpoint.saved"
+cp "$MDIR/checkpoint.md" "$CKPT_SAVED"
+cat > "$MDIR/checkpoint.md" <<EOF
+| ID | Incremento | Check (comando → esperado) | Status | Commit |
+|---|---|---|---|---|
+| I1 | slice one | \`true\` → 0 | done | $(git -C "$FIX" rev-parse --short HEAD) |
+EOF
+git -C "$FIX" add -A && git -C "$FIX" commit -qm "chore: increment done, handoff still missing"
+
+cat > "$OUTSIDE/stub/claude" <<STUB
+#!/usr/bin/env bash
+cat "$STREAM_SAMPLE"
+exit 0
+STUB
+chmod +x "$OUTSIDE/stub/claude"
+
+# The journal is append-only and shared with every block above — deliberately never truncated here
+# (a later block counts DEGRADED lines in it), so this run is read as the lines it ADDED.
+JOURNAL="$FIX/.sdd/logs/$MISSION/pipeline.log"
+jbefore="$(wc -l < "$JOURNAL" 2>/dev/null || echo 0)"
+"$SDD" run "$MISSION" >/dev/null 2>&1
+jnew="$(tail -n +$((jbefore + 1)) "$JOURNAL" 2>/dev/null || true)"
+
+rm -f "$OUTSIDE/stub/date"
+sed -i 's|^TEST_CMD=.*|TEST_CMD="true"|' "$FIX/.sdd/config.sh"
+cp "$CKPT_SAVED" "$MDIR/checkpoint.md"
+git -C "$FIX" add -A && git -C "$FIX" commit -qm "chore: restore the pending checkpoint"
+
+sessions="$(grep -c "  EXEC  agent=" <<< "$jnew")"
+pointers="$(grep -o 'log=[^ ]*' <<< "$jnew" | sort -u | grep -c .)"
+# `transcripts` and not `streams`: an array by that name is live above, and shellcheck reads the
+# reuse as SC2178 — the linter is right, two meanings for one name in one file.
+transcripts=0; for f in "$LOGDIR"/EXEC-*.stream.jsonl; do [ -f "$f" ] && transcripts=$((transcripts + 1)); done
+
+# Self-relative on purpose: the property is "one transcript per session", not "exactly two". The
+# `ok` term is the anti-vacuity floor — with fewer than two sessions the counts agree trivially and
+# the collision this block exists to reproduce never happened.
+floor="ok"
+[ "$sessions" -ge 2 ] || floor="only $sessions session(s) ran — the collision needs two"
+[ "$freeze" = "frozen=20260101-120000 passthrough=1" ] || floor="the clock freeze is not armed: $freeze"
+assert_eq "each session of one phase in one second left a transcript of its own, and the journal names it" \
+  "$sessions $sessions ok" "$pointers $transcripts $floor"
+
+# The same defect, one function over: run_check_cmd names the TEST_CMD log by time alone — and with
+# no date at all, so two runs on different days at the same clock time collided too. It is the log
+# GATE_WHY sends the operator to read, and `invalidate_checks` makes the gate run it again after
+# every phase, so the overwrite is reachable inside a single process without any retry.
+checklogs=0; for f in "$LOGDIR"/gate-*.log; do [ -f "$f" ] && checklogs=$((checklogs + 1)); done
+runs="$(grep -c . "$CHECK_WITNESS")"
+check_floor="ok"
+[ "$runs" -ge 2 ] || check_floor="the check command ran $runs time(s) — the overwrite needs two"
+assert_eq "each execution of the check command left the log the gate reason points at" \
+  "$runs ok" "$checklogs $check_floor"
+
 # --- and the human at the TERMINAL stops being the blind half -------------------------------
 # The stream above closed the blind spot for whoever runs `tail -f` on the file. It did nothing
 # for the person watching the run: `> "$streamfile"` takes claude's stdout off the terminal, so a
@@ -1095,6 +1204,93 @@ assert_eq "all-repos: the judge's series answers it too — other_repo falls to 
   "$(jq -r '.excluded.other_repo' <<< "$ser_here") $(jq -r '.excluded.other_repo' <<< "$ser_all") $(wider "$(jq -r '.guard.missions_with_session' <<< "$ser_all")" "$(jq -r '.guard.missions_with_session' <<< "$ser_here")")"
 # Anti-vacuity: a flag that widened the reading by losing rows on the way would still be "wider".
 assert_bucket_sum "the four buckets sum to the header total (--all-repos over two repos)" "$out_all"
+
+# --- an exclusion that was NEVER in the header total says so -----------------
+# The header counts the rows this reader admitted; the accounting paragraph under the table lists
+# what left. Two of its four lines name populations that were bound BEFORE the repo filter — they
+# never entered the total in the first place — so a reader adding the paragraph up against the
+# header could not make it close. Measured on the real ledger: header 96, table 89 sessions, 7
+# non-comparable (89 + 7 = 96, correct), and then "11 row(s) excluded: born in another repo"
+# printed underneath, inviting 96 - 11.
+#
+# What is NOT done here, and the reason: deleting those two lines would close the arithmetic and
+# break something older and better — "what left has to be NAMED", the invariant three assertions
+# above this one exist to hold. The fix is a sentence that says the two populations were never in
+# the total, so both hold at once. Hence the assertion is about ORDER and PRESENCE, not about a
+# number: the disclaimer has to be there exactly when there is something to disclaim, and above it.
+declared_scope() { # declared_scope <reader output> -> declared | silent | none | <what is wrong>
+  local o="$1" dis oos
+  dis="$(grep -n 'never part of the' <<< "$o" | head -1 | cut -d: -f1)"
+  oos="$(grep -n 'born in another repo\|no repo field' <<< "$o" | head -1 | cut -d: -f1)"
+  if [ -z "$oos" ]; then
+    [ -z "$dis" ] && printf 'none' || printf 'a disclaimer with nothing to disclaim'
+    return 0
+  fi
+  [ -n "$dis" ] || { printf 'silent'; return 0; }
+  if [ "$dis" -lt "$oos" ]; then printf 'declared'; else printf 'the disclaimer sits below the lines it disclaims'; fi
+}
+# DIFFERENTIAL over one ledger: the same file read per repo (3 foreign rows) and with --all-repos
+# (nothing is foreign). A fix that printed the sentence unconditionally would answer "declared" for
+# both and be caught by the second term; one that never printed it answers "silent".
+assert_eq "an exclusion that never entered the header total says so, and only when there is one" \
+  "declared none" "$(declared_scope "$out_here") $(declared_scope "$out_all")"
+
+# --- ...and the mission is a unit the reader can ask about ------------------
+# The kit_sha table answers "did this VERSION get better". D12 asks a different question — US$ per
+# merged PR, and how many times a human had to step in — and its unit is the MISSION. Without this
+# view the pilot measures it by hand, which is the form of proof principle 1 refuses.
+#
+# The grouping key is (repo, mission), the one kaizen_series already holds: two projects run the
+# same dated slug on the same day, and --all-repos puts their rows in one reading.
+echo "== reader: --by-mission =="
+# Two `- intervention:` notes for h1 and none for h2 — the count has to come from the ARTEFACT.
+# The marker is a TOKEN and the text after it is prose, exactly like the status words the boot
+# prompt tells every session to leave in English: the third bullet below carries the word in the
+# middle of a sentence and must NOT be counted, or the reader is a word-frequency meter rather
+# than a census of a marker.
+mkdir -p "$FIX/docs/handoffs/h1" "$FIX/docs/handoffs/h2"
+cat > "$FIX/docs/handoffs/h1/checkpoint.md" <<'EOF'
+| ID | Incremento | Check | Status | Commit |
+|---|---|---|---|---|
+| I1 | slice one | `true` -> 0 | done | abc1234 |
+
+## Execution notes
+
+- intervention: the human redid the REVIEW phase by hand — REVIEW — US$ 12.40
+- intervention: the human fixed the branch by hand — PR
+- 2026-01-01 10:00 · `I1` · no intervention was needed here, and this line is prose
+EOF
+printf '# no notes here\n' > "$FIX/docs/handoffs/h2/checkpoint.md"
+
+out_bm="$( SDD_STATE_DIR="$OUTSIDE/tworepos" "$SDD" autonomy --by-mission 2>&1 )"
+mission_line() { grep -m1 -E "^  $1  " <<< "$2"; }
+# Summed in integer CENTS, never as a float: `printf "%.2f"` writes `0,00` under a pt-BR locale and
+# `0.00` under C, so a float comparison here would pass or fail by the environment of whoever ran
+# the suite. The money is already printed to exactly two places by the reader's own `usd`.
+usd_cents() {
+  grep -oE 'US\$ [0-9]+\.[0-9][0-9]' <<< "$1" \
+    | sed 's/US\$ //; s/\.//' \
+    | awk '{ s += $1 + 0 } END { print s + 0 }'
+}
+
+# ONE assertion for the shape: a line per mission of THIS repo, the interventions read off the
+# artifact (2 for h1, 0 for h2), and nothing from the other repo's three missions.
+assert_eq "--by-mission prints one line per mission of this repo, with the interventions the checkpoint records" \
+  "2 h1:2 h2:0" \
+  "$(grep -cE '^  h[12]  ' <<< "$out_bm") h1:$(mission_line h1 "$out_bm" | grep -oE '[0-9]+ intervention' | grep -oE '^[0-9]+') h2:$(mission_line h2 "$out_bm" | grep -oE '[0-9]+ intervention' | grep -oE '^[0-9]+')"
+
+# The Check of the increment: two groupings of ONE population have to agree about the money. A
+# view that summed a different set of rows would be a second instrument disagreeing with the first
+# over one file — the divergence the kit_sha axis of this reader was rewritten to remove.
+# Floor beside the verdict: a comparison of two zeros is green in every broken world, and the
+# reader printing nothing at all is exactly one of them.
+assert_eq "the money adds up the same however the rows are grouped" \
+  "$(usd_cents "$out_here") over-zero" \
+  "$(usd_cents "$out_bm") $([ "$(usd_cents "$out_here")" -gt 0 ] && echo over-zero || echo 'both sides are zero')"
+
+# The fixture repo has to end clean — the two assertions at the bottom of this file say so, and
+# these handoff directories are this block's own litter.
+rm -rf "$FIX/docs/handoffs/h1" "$FIX/docs/handoffs/h2"
 
 # The header has to name the SCOPE it actually read. Under the flag the rows below come from every
 # project on the machine, and a header still ending in one repo path reads as a claim ABOUT that
