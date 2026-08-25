@@ -49,8 +49,13 @@ atualizado: <YYYY-MM-DD HH:MM>
 > ⚠️ O marcador é **inglês e minúsculo**, como `pending`/`done`/`blocked`: é contrato, não prosa.
 > O texto depois dos dois-pontos vai no idioma do `OUTPUT_LANG`, como o resto deste arquivo.
 > Só conta quando abre a linha — `intervention` no meio de uma frase é prosa e não é contado.
-
-- intervention: <o que o humano teve de fazer> — <fase> — <custo, se houver>
+>
+> O exemplo abaixo mora **dentro** desta citação de propósito: o `>` quebra o casamento com
+> `^[[:space:]]*-`, e sem ele o exemplo era contado verbatim — todo checkpoint recém-instanciado
+> nascia devendo uma intervenção fantasma ao instrumento que mede autonomia. Copie a forma para
+> fora da citação ao registrar uma intervenção de verdade.
+>
+> - intervention: <o que o humano teve de fazer> — <fase> — <custo, se houver>
 
 ## Incrementos de fix (QA)
 

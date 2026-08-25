@@ -1290,7 +1290,27 @@ assert_eq "the money adds up the same however the rows are grouped" \
 
 # The fixture repo has to end clean — the two assertions at the bottom of this file say so, and
 # these handoff directories are this block's own litter.
-rm -rf "$FIX/docs/handoffs/h1" "$FIX/docs/handoffs/h2"
+# A checkpoint straight out of the template owes ZERO interventions. The template ships one
+# `- intervention:` line to show the FORM of the marker, and that stub used to be counted verbatim
+# by the reader: every mission was born owing a phantom intervention to the very instrument that
+# judges how much the human had to step in. Measured on 2026-08-25, on the M2 pilot — the executor
+# deleted the line by hand and nothing checked that it had.
+# The fixture is `cp` of the real template, never a hand-written imitation: an imitation would be
+# written by whoever writes the fix, and would agree with the fix instead of measuring it.
+# Its own ledger, never `tworepos`: the counts of that file sustain eight assertions above.
+mkdir -p "$FIX/docs/handoffs/h3" "$OUTSIDE/bymission3"
+cp "$ROOT/templates/checkpoint.md" "$FIX/docs/handoffs/h3/checkpoint.md"
+{ ledger_row "$FIXROOT" h1; ledger_row "$FIXROOT" h2; ledger_row "$FIXROOT" h3; } \
+  > "$OUTSIDE/bymission3/autonomy-log.jsonl"
+out_bm3="$( SDD_STATE_DIR="$OUTSIDE/bymission3" "$SDD" autonomy --by-mission 2>&1 )"
+# The presence term comes FIRST and as its own field: a reader that printed no h3 line at all would
+# leave the count field empty, and "absent" is not "zero" — without the term, deleting the mission
+# from the report would be one of the worlds this assertion calls green.
+assert_eq "a checkpoint born verbatim from the template owes no intervention" \
+  "1 h3:0" \
+  "$(grep -cE '^  h3  ' <<< "$out_bm3") h3:$(mission_line h3 "$out_bm3" | grep -oE '[0-9]+ intervention' | grep -oE '^[0-9]+')"
+
+rm -rf "$FIX/docs/handoffs/h1" "$FIX/docs/handoffs/h2" "$FIX/docs/handoffs/h3"
 
 # The header has to name the SCOPE it actually read. Under the flag the rows below come from every
 # project on the machine, and a header still ending in one repo path reads as a claim ABOUT that
