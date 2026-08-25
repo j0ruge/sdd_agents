@@ -34,12 +34,12 @@ pass() { printf '  ok    %s\n' "$1"; }
 fail() { printf '  FAIL  %s\n         expected: %s\n         got:      %s\n' "$1" "$2" "$3" >&2
          fails=$((fails + 1)); }
 
-# assert_phase <description> <expected phase>
 # assert_eq <description> <expected> <got>. For the blocks that compose several terms into one
 # string — "this arm fired AND the other did not AND the artifact was written" — so a red names the
 # term that went wrong instead of only that something did.
 assert_eq() { if [ "$2" = "$3" ]; then pass "$1"; else fail "$1" "$2" "$3"; fi }
 
+# assert_phase <description> <expected phase>
 assert_phase() {
   local desc="$1" want="$2" got
   got="$( cd "$FIX" && "$SDD" phase "$MISSION" 2>&1 )"
@@ -1704,7 +1704,7 @@ else
 fi
 git checkout -q -- file.txt
 
-# --- 4. and it stops sending the human to a gate that is still shut.
+# --- 3a. and it stops sending the human to a gate that is still shut.
 #
 # `cmd_approve` asked gate_PLAN ONCE, at the top, and bailed only on `missing *`. Every other
 # reason the gate can hold — and it can hold several that approving does not touch — was carried
@@ -1761,7 +1761,11 @@ assert_eq "approve with the gate still shut prints the gate's reason, not 'next:
 # The floor under the whole block: the reason really is one approving cannot fix, so the arm being
 # measured is the arm the comment names. Read from `sdd why`, the reader that owns the question.
 assert_eq "and the reason really is one approving does not touch" \
-  "versao" "$(grep -o 'versao' <<< "$SHUT_WHY" | head -1)"
+  "versao" "$(grep -qF 'versao' <<< "$SHUT_WHY" && printf 'versao')"
+# Swept, and not left for a later `git add -A` to adopt. `cmd_approve` stages only the mission file
+# it wrote, so the plan and the checkpoint below would ride into the next fixture commit as
+# untracked strays — a fixture leaking into the state a later block measures.
+rm -rf "$SHUTDIR"
 
 # --- 4. the mission whose frontmatter has no `aprovacao:` key at all.
 #

@@ -329,7 +329,7 @@ rm -rf docs/qa/charters docs/qa/reports
 # be green on a runner that hardcoded the string and never read the key at all — the same shape as
 # a fixture whose regime happens to satisfy the property by accident.
 echo "== E2E_DIR reaches the boot prompt =="
-sed -i 's|^E2E_DIR=.*||' .sdd/config.sh
+sed -i '/^E2E_DIR=/d' .sdd/config.sh
 printf 'E2E_DIR="tests/browser"\n' >> .sdd/config.sh
 out_dir="$( "$SDD" run "$MISSION" --dry-run --phase QA 2>&1 )"
 in_prompt() { grep -c "^  │ .*$1" <<< "$2" ; }

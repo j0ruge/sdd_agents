@@ -434,7 +434,8 @@ assert_eq "the ledger reads the cost out of the streamed session, to the last di
 #
 # The phase that costs the most is the one most likely to lose its evidence, because retrying is
 # what puts two sessions in the same second in the first place. This fixture does not wait for
-# that coincidence: it FREEZES the clock for exactly the two formats a log name is built from, so
+# that coincidence: it FREEZES the clock for the ONE format a log name is built from — both naming
+# sites, bin/sdd:330 and bin/sdd:1696, spell it `+%Y%m%d-%H%M%S` — so
 # the collision is the regime the assertion runs in every time instead of a race it usually loses.
 # Everything else the runner asks `date` for — the journal's -Iseconds stamp, the duration's %s —
 # goes to the real binary untouched, and the floor below proves the freeze is armed before any
@@ -454,7 +455,6 @@ cat > "$OUTSIDE/stub/date" <<STUB
 #!/usr/bin/env bash
 case "\$*" in
   "+%Y%m%d-%H%M%S") printf '20260101-120000\n' ;;
-  "+%H%M%S")        printf '120000\n' ;;
   *)                exec "$REAL_DATE" "\$@" ;;
 esac
 STUB
