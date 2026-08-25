@@ -4,6 +4,56 @@ Registro de melhorias com **antes/depois medido**. Sem número, não entra.
 
 ---
 
+## 2026-08-25 — O fecho, a guarda do kit e a régua da própria revisão (missão `20260825-a-regua-vale-para-o-kit`)
+
+**Problema (Gemba):** o piloto M2 devolveu três defeitos que nenhum instrumento tinha visto.
+`sdd close` imprimiu `ok SQ-108 closed` sobre uma issue em "Em andamento" — lia o `rc` da sessão, e
+esse `rc` é COMPARTILHADO entre a sessão que fecha e a que apenas **pede confirmação**. O stub
+`- intervention:` do `templates/checkpoint.md` casava o contador do `sdd autonomy`, então toda
+missão nascia devendo uma intervenção fantasma. E uma sessão de EXEC cujo alvo era outro repo
+commitou um achado de kit direto na `main` daqui (`2d28d13`), deixando a suíte vermelha fora de
+qualquer revisão.
+
+**Contramedida:** um sensor por defeito, e o `sdd close` deixou de ser "consertado" para ser
+reprojetado — a pergunta que verifica virou o **pré-cheque**, antes da sessão. Verdito inalcançável
+não é motivo para gastar orçamento primeiro e só então admitir que nunca se poderia ter checado.
+
+**A parte que a revisão pagou, e é a razão desta entrada:** a primeira rodada deste trabalho
+declarou dois "consertos" que não eram. O `--dry-run` foi **deliberadamente** desarmado do
+`kit_guard_check` com o argumento de que *"nenhuma sabotagem de uma guarda de DRY_RUN poderia fazer
+um probe ficar vermelho"* — e o probe existe, tem quatro linhas, e fica vermelho. E o pré-cheque do
+`sdd close` verificava `command -v`, que não enxerga auth expirada — que é exatamente o mundo cujo
+fixture a mesma missão tinha capturado.
+
+| | Antes da revisão | Depois |
+|---|---|---|
+| Avisos de ledger numa projeção (kit como cópia simples) | 1 — sobre linhas que a projeção nunca escreve | 0, e o par diferencial exige 1 na corrida real |
+| Sessão paga gasta com auth expirada | 1 por invocação | 0 — recusa antes, e diz o comando para conferir à mão |
+| Sessão paga gasta sobre issue já `Done` | 1 | 0 — uma chamada de acli e o veredito |
+| Portas que abrem sessão e ficam de fora da guarda do kit | 1 (`sdd close`) | 0 — quatro portas, quatro probes |
+| Regimes `close:` | 6 | 10, e um deles fixa o pré-cheque ABAIXO do gate do JIRA |
+| Regime de controle da guarda sem piso anti-vacuidade | 1 (verde com a corrida apagada) | 0 |
+| Mutantes da família close/kit-guard | 3 | 8 |
+
+**Como as duas frestas apareceram:** sabotagem, e não leitura. Levantar o pré-cheque para cima do
+gate do `JIRA_ENABLED` deixava a suíte inteira verde enquanto `sdd close` passava a morrer com
+`rc 1` em todo repo sem JIRA e sem acli. Apagar a construção do mundo de controle da guarda **e a
+corrida inteira** deixava a asserção "a sessão que não mexe no kit não é acusada de nada" dizendo
+`ok`. As duas hoje ficam vermelhas.
+
+**Contramedida de processo:** a régua que o kit aplica ao repo-alvo passou a valer para o kit —
+comentário que afirma que uma regra é indispensável, ou que nenhuma sabotagem a alcança, vale
+exatamente o que vale o probe ao lado dele. Dívida declarada continua sendo limite: a quarta
+fixture de terceiro (`tests/fixtures/acli-*.json`) não tem sensor de drift, e isso está escrito no
+cabeçalho do `health_provenance` em vez de calado.
+
+**Efeito colateral honesto, não escondido:** `cd49351` corrige a intervenção fantasma para as
+missões NOVAS. As antigas continuam com o stub no checkpoint, então o `sdd autonomy --by-mission`
+tem um degrau de −1 entre antes e depois — comparável dentro de cada lado, não entre eles. Não
+alcança o veredito automático: `kaizen_series` não lê intervenções, só `cmd_autonomy` as imprime.
+
+---
+
 ## 2026-08-24 — O log que o runner manda ler é o log que ele apaga
 
 **Problema (Gemba):** o nome do arquivo de log carregava tempo com resolução de segundo e mais

@@ -2820,6 +2820,16 @@ health_provenance() {
   local gates="$SDD_HOME/tests/check-gates.sh" tpl line fix skipped=0 checked=0
   # The number of fixtures this function pins, in ONE place: the three `if [ -f "$tpl" ]` blocks
   # below. Move it when you add a fourth.
+  #
+  # DECLARED LIMIT — the kit has a fourth captured third-party fixture and this function does not
+  # reach it. `tests/fixtures/acli-workitem-search-done.json` is stdout captured from a CLI, and the
+  # mechanism here is a DIFF against the installed file the capture came from; a command's stdout
+  # has no installed file, and asking acli live would need credentials and a network, which is a
+  # different kind of check from this one. So the gap is written down instead of pretended away: if
+  # acli renames `key` or moves it under `fields`, `close_query` stops matching and every close
+  # regime stays green on the frozen bytes. What IS pinned is the shape the runner reads, asserted
+  # next to the fixture in check-gates.sh — enough to catch a fixture edited until the tests pass,
+  # not enough to catch the tool moving underneath it.
   local PROVENANCE_FIXTURES=3
 
   # ⚠️ Every `grep` below carries `|| true`, and this is the site where the family of silent

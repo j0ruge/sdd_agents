@@ -407,16 +407,15 @@ Achados sobre **repos-alvo** vão para o `TODO.md` daquele repo. Este arquivo é
 ### Contrato e configuração
 
 - [ ] **`sdd close` afirma "closed" sem verificar que a issue fechou** —
-  `bin/sdd:4462` — o comando lia `rc=0` da sessão e imprimia `ok "$issue closed"`, mas a sessão sai
-  0 também quando apenas **pediu confirmação**, que é o comportamento correto dela. Medido na M2:
-  respondeu `ok SQ-108 closed` com a issue em "Em andamento". Era rótulo em vez de artefato — o
-  fail-open que o princípio 1 proíbe. **RESOLVIDO por `5f1798f`**: relê a issue por JQL
-  (`statusCategory = Done`) e o artefato decide nos dois sentidos; seis regimes `close:` mais o
-  mutante `mut_RUN_close_believes_rc`.
+  `bin/sdd:4600` (`cmd_close`) — o comando lia `rc=0` da sessão e imprimia `ok "$issue closed"`,
+  mas a sessão sai 0 também quando apenas **pediu confirmação**. Medido na M2: respondeu
+  `ok SQ-108 closed` com a issue em "Em andamento". Era rótulo em vez de artefato — o fail-open que
+  o princípio 1 proíbe. **RESOLVIDO por `5f1798f`** e endurecido na revisão: a pergunta que verifica
+  virou o pré-cheque, antes da sessão; dez regimes `close:` e cinco mutantes.
   — descoberto por `claude` na missão `20260825-cif-forma-pagamento` (2026-08-25)
 
 - [ ] **O stub `- intervention:` do template é contado como intervenção real** —
-  `templates/checkpoint.md:53` — a linha de exemplo casava o contador do `sdd autonomy`
+  `templates/checkpoint.md:52` — a linha de exemplo casava o contador do `sdd autonomy`
   (`grep -cE '^[[:space:]]*-[[:space:]]*intervention:'`), então **toda missão nascia com 1
   intervenção fantasma** e a autonomia medida nunca chegava a 0 — pior justamente na missão que
   rodou limpa. **RESOLVIDO por `cd49351`**: o stub entrou no bloco `>`, e o probe `born verbatim`

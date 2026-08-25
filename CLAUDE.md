@@ -64,6 +64,16 @@ uma sessão de EXEC cujo alvo era outro repo commitou um achado de kit direto na
 a suíte vermelha e fora de qualquer revisão, e as linhas de ledger da própria corrida passaram a
 carimbar o sha do commit que a corrida acabara de fazer. O runner hoje avisa e registra
 (`KIT-TOUCHED` no `pipeline.log`), mas **não para a linha** — guarda de aviso, não fronteira.
+⚠️ A guarda mora nos **chamadores**, e são quatro portas: as duas do laço do `cmd_run`, o
+`cmd_retry` e o `cmd_close`. É a forma que este arquivo recusa em toda outra família (o `journal`
+tem UMA definição de escalada justamente por isso), e aqui ela é deliberada — o `kit_guard_check`
+precisa correr **depois** de `moved2` ser amostrado, e uma guarda dentro do `run_phase` cairia
+dentro da janela. O preço é que a quinta porta nasce desguardada; ele é pago com um probe por
+porta (`tests/check-autonomy.sh`, regimes 1, 4, 5 e 7), então porta acrescentada sem probe é porta
+cuja remoção nenhuma asserção percebe. A projeção (`--dry-run`) **não arma nada**: `sdd run
+--dry-run` não abre sessão a que atribuir mudança, e armar mesmo assim fazia a projeção herdar o
+aviso de ledger do `autonomy_kit_stamp` — medido, 0 avisos antes e 1 depois, com o kit instalado
+como cópia simples.
 
 O item **cabe em ~6 linhas** (teto duro de 8, medido por `tests/check-todo.sh`): o quê, a âncora
 em `arquivo:linha`, por que importa, a direção, quem descobriu. A análise longa mora no handoff
