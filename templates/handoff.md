@@ -64,6 +64,12 @@ não "continue de onde parei".>
 > não escreve, não commita e não entra no repositório do kit. A linha **completa** do achado mora
 > aqui, marcada `kit:`, e quem a transporta é um humano ou a triagem do `sdd kaizen`. Ponteiro para
 > um arquivo que ninguém escreveu é achado perdido.
+>
+> O exemplo abaixo mora **dentro** desta citação pelo mesmo motivo que o `- intervention:` do
+> `checkpoint.md` (`cd49351`): exemplo que abre a linha com `-` é contado verbatim por quem vier
+> varrer os handoffs atrás de `kit:`, e todo handoff nasceria devendo um achado fantasma. Copie a
+> forma para fora da citação ao registrar um achado de verdade.
+>
+> - kit: <o quê> — <arquivo:linha do kit> — <por que importa>
 
 - <o quê> → `TODO.md` (<seção>)
-- kit: <o quê> — <arquivo:linha do kit> — <por que importa>
