@@ -460,14 +460,6 @@ Achados sobre **repos-alvo** vão para o `TODO.md` daquele repo. Este arquivo é
   porta — e o kit recomenda worktree para isolar missão. Direção: `ledger_repo_root` dos dois
   lados, com par diferencial. — descoberto por `sdd-executor` na missão `20260817-eixo-do-juiz` (2026-08-17)
 
-- [ ] **`E2E_DIR` tem default no runner e é lida só pelo agente** — `bin/sdd:99` vs
-  `agents/sdd-qa.md:45` — `: "${E2E_DIR:=e2e}"` era a única ocorrência no runner: nenhum gate ou
-  prompt a consultava, e quem usava o valor era a prosa do `sdd-qa`. Mudar a chave **não mudava
-  onde as specs são commitadas**, e a coincidência entre default e convenção escondia isso.
-  **RESOLVIDO por `a2d1840`**: entra na linha 5 do prompt de boot com a guarda do `E2E_CMD`, e a
-  linha sai da `tests/health-baseline.txt`. — descoberto por `sdd health` na missão
-  `20260814-i13.2-mutacao-health` (2026-08-14)
-
 - [ ] **O kit não tem `CHANGELOG.md`, e a fase DOCS cobra um** — `agents/sdd-docs.md` (tabela "O
   que atualizar") — o registro durável aqui é `KAIZEN_LOG.md` + handoffs + corpo do PR, e nenhum
   é changelog por versão; há `SDD_VERSION="0.1.0"` em `bin/sdd:5` sem nada que o acompanhe. Toda
