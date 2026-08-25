@@ -990,12 +990,24 @@ mut_PRE_agent_presence_only() {
 # the config was being wired up then passes preflight, and after it gate_EXEC, gate_QA and
 # gate_REVIEW pass instantly, in every mission, for ever — each phase certifying itself against a
 # run that never happened, through the one key the whole pipeline trusts.
-# Since the preflight also EXECUTES the command it accepted, this mutant carries a second sabotage
-# for free: `true` now falls through into the arm that runs, so the assertion "a TEST_CMD the
-# heuristic already refused is not executed at all" dies here too. That assertion has no mutant of
-# its own on purpose — this is it.
+# It is caught by the MESSAGE half of check-preflight.sh's no-op assertion, and only that half.
+# This comment used to claim a second sabotage for free — that blinding the heuristic also killed
+# the "a TEST_CMD the heuristic already refused is not executed at all" witness, so that assertion
+# needed no mutant of its own. It did not: the block ran `TEST_CMD="true"`, and a builtin that
+# writes nothing leaves `ran=0` in the blinded world exactly as in the correct one. The witness was
+# a constant, and this entry was the reason nobody looked. The value there is now a script that
+# marks the witness when run, and the execution half has its own entry below.
 mut_PRE_testcmd_noop_blind() {
   sed -i '/^cmd_preflight()/,/^}/ s@if test_cmd_looks_noop "\$TEST_CMD"; then@if false; then@' "$1"
+}
+
+# The refusal that refuses in words and runs the command anyway. `_fail` counts and returns, so the
+# "runs nothing" sentence still reaches the terminal untouched and every wording assertion in
+# check-preflight.sh stays green — the execution is the ONLY observable, and `$PROBE/witness` is the
+# only place it is observable from. Sabotaging the arm rather than the heuristic is what separates
+# the two halves: mut_PRE_testcmd_noop_blind above kills the message, this one leaves it alone.
+mut_PRE_testcmd_noop_runs_anyway() {
+  sed -i '/^cmd_preflight()/,/^}/ s@if test_cmd_looks_noop "\$TEST_CMD"; then@if test_cmd_looks_noop "$TEST_CMD"; then run_check_cmd "$TEST_CMD" "preflight-test" || true;@' "$1"
 }
 
 # Not a gate: the base branch warning goes back to being decoration. The body is emptied while the
@@ -1712,6 +1724,7 @@ CATALOG=(
   RUN_ledger_no_repo_filter
   PRE_agent_presence_only
   PRE_testcmd_noop_blind
+  PRE_testcmd_noop_runs_anyway
   RUN_base_branch_warn_dead
   RUN_approve_writes_auto
   RUN_approve_bails_on_kaizen_born

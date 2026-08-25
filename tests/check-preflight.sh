@@ -381,14 +381,23 @@ run_case suite-green.sh "TEST_CMD ran green" "TEST_CMD FAILED" \
 run_case suite-red.sh   "TEST_CMD FAILED"    "TEST_CMD ran green" \
   "a TEST_CMD that exits non-zero is refused by its exit status, not by its spelling"
 
-# The no-op arm keeps its old shape: a command the heuristic already refused must NOT be executed.
-# Running whatever someone typed into a key the preflight had already decided was wrong is a
-# preflight doing damage on config it just rejected. GREEN before the fix by construction — nothing
-# ran anything then — and it is `mut_PRE_testcmd_noop_blind` that gives it teeth: with the
-# heuristic blinded, `true` falls through into the arm that executes, and this line is the one that
-# says the execution went somewhere it should not have rather than only that the refusal stopped.
+# The no-op arm: a command the heuristic already refused must NOT be executed. Running whatever
+# someone typed into a key the preflight had already decided was wrong is a preflight doing damage
+# on config it just rejected.
+#
+# The value is the probe script WITH `--list`, and both halves of it are load-bearing. `--list` is
+# what trips `test_cmd_looks_noop`, so the refusal arm is the one that fires; the SCRIPT is what
+# appends to the witness, so an execution that should not have happened leaves a mark. This block
+# used to carry `TEST_CMD="true"`, and that value could not do the second half: `true` is a builtin
+# that touches nothing, so `ran=0` held in the blinded world exactly as in the correct one. The
+# term read like a witness and was a constant — the sensor claiming to measure what it did not.
+#
+# Each half now has a mutant of its own, which is the only reason either can be believed:
+# `mut_PRE_testcmd_noop_blind` blinds the heuristic and is caught by the MESSAGE, while
+# `mut_PRE_testcmd_noop_runs_anyway` keeps the message and executes anyway — caught by `ran` and
+# by nothing else in this suite.
 : > "$PROBE/witness"
-sed -i 's|^TEST_CMD=.*|TEST_CMD="true"|' .sdd/config.sh
+sed -i "s|^TEST_CMD=.*|TEST_CMD=\"$PROBE/suite-green.sh --list\"|" .sdd/config.sh
 noop_out="$( "$SDD" preflight 2>&1 )"
 noop_ran="$(grep -c . "$PROBE/witness" 2>/dev/null || true)"
 assert_eq "a TEST_CMD the heuristic already refused is not executed at all" \
