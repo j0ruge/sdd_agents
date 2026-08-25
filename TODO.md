@@ -415,17 +415,11 @@ Achados sobre **repos-alvo** vão para o `TODO.md` daquele repo. Este arquivo é
 ### Contrato e configuração
 
 - [ ] **O stub `- intervention:` do template é contado como intervenção real** —
-  `templates/checkpoint.md:53` — a linha de exemplo que o template semeia
-  (`- intervention: <o que o humano teve de fazer> — <fase> — <custo, se houver>`) casa exatamente
-  o contador do `sdd autonomy`, que é
-  `grep -cE '^[[:space:]]*-[[:space:]]*intervention:'` (`bin/sdd:3550`). Ou seja: **toda missão
-  nasce com 1 intervenção fantasma**, e a leitura só é honesta se quem executa apagar o stub —
-  disciplina que nada verifica. O efeito é pior justamente onde mais importa: numa missão que
-  rodou sem nenhuma intervenção (o caso comum, e o que o kit existe para produzir) a autonomia
-  medida nunca chega a 0, e o primeiro ponto de um repo-alvo novo já entra enviesado. Detectado
-  ao semear o ledger do `sales_quote`, onde o stub foi apagado à mão para não corromper a
-  primeira medição. Direção: fazer o stub não casar o contador — comentá-lo em HTML, ou movê-lo
-  para dentro do bloco de citação `>` que já explica o marcador, onde a linha não abre com `-`.
+  `templates/checkpoint.md:53` — a linha de exemplo casa o contador do `sdd autonomy`
+  (`grep -cE '^[[:space:]]*-[[:space:]]*intervention:'`, `bin/sdd:3550`), então **toda missão
+  nasce com 1 intervenção fantasma** e a autonomia medida nunca chega a 0 — pior justamente na
+  missão que rodou limpa. Direção: mover o stub para dentro do bloco `>` que já explica o
+  marcador, onde a linha não abre com `-`. Detectado ao semear o ledger do `sales_quote`.
   — descoberto por `sdd-executor` na missão `20260825-cif-forma-pagamento` (2026-08-25)
 
 - [ ] **`.sdd/config.sh` que não parseia é reportado como "declares no TEST_CMD"** —
