@@ -30,7 +30,7 @@ asserção roda toda vez, em vez de uma corrida que ela normalmente perde.
 | duas sessões de uma fase no mesmo segundo | **1** transcript em disco, 2 linhas de journal apontando para ele | **2** transcripts, cada linha apontando para o seu |
 | execuções do `TEST_CMD` num `sdd run` × arquivos de log | 4 × **1** | 4 × **4** |
 | bugs `open` em `docs/qa/bugs/` | 1 de 6 (trancava o `gate_QA` deste repo) | **0** de 6 |
-| catálogo de mutação | 135 de 135 | **138** de 138 |
+| catálogo de mutação | 129 de 129 | **138** de 138 |
 | achados abertos no `TODO.md` | 75 | **74** (D15 tirou 2, o memo do `run_check_cmd` acrescentou 1) |
 
 ⚠️ **O `sdd health` cobrou o preço que ele existe para cobrar, na mesma missão.** A primeira
