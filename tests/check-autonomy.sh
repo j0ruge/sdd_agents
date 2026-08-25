@@ -2084,6 +2084,173 @@ assert_eq "output: the axis note quotes the guard floor instead of keeping a cop
   "true 3 3 0/4" \
   "$(jq -r '.guard.degenerate_axis' <<< "$axis_series") $(jq -r '.guard.floor' <<< "$axis_series") $(num_before "$axis_out" 'missions per kit version') $axis_literal"
 
+# --- a target-repo session that edits the KIT ------------------------------
+# Measured on 2026-08-25: an EXEC session whose mission was another repo entirely committed a kit
+# finding straight into this kit's `main` (2d28d13). The kit's own suite went red, and the ledger
+# rows of that very run stamped the sha of the commit the run had just made — the instrument
+# recording a kit version that only existed because the run created it.
+#
+# The world here is a FAKE KIT: a `cp -r` (never a symlink — `_resolve_self` resolves symlinks and
+# would land back on the real kit) of the four directories `sdd` reads from. Invoking
+# `$OUTSIDE/fakekit/bin/sdd` makes SDD_HOME the fake, which is what makes "the kit changed under
+# the run" a thing a test may cause. It also keeps the mutation catalogue honest: inside a mutant
+# the sandbox is what gets copied here, so the sabotage travels into the fake kit too.
+echo "== reader: a target-repo session that edits the kit =="
+FAKEKIT="$OUTSIDE/fakekit"
+mkdir -p "$FAKEKIT"
+cp -r "$ROOT/bin" "$ROOT/templates" "$ROOT/config" "$ROOT/agents" "$FAKEKIT/"
+( cd "$FAKEKIT" && git init -q -b main && git config user.email "fixture@example.com" \
+    && git config user.name "Fixture" && git add -A && git commit -qm "chore: the kit" ) >/dev/null
+
+# kitguard_world <dir> — a target repo sitting at EXEC with a `pending` increment. CALLED, never
+# substituted: it cds and writes, and there is nothing here worth losing to a subshell.
+kitguard_world() {
+  mkdir -p "$1"
+  ( cd "$1" || exit 1
+    git init -q -b main
+    git config user.email "fixture@example.com"
+    git config user.name "Fixture"
+    echo content > file.txt
+    "$FAKEKIT/bin/sdd" install >/dev/null
+    cat > .sdd/config.sh <<'CFG'
+PROJECT_NAME="kitguard"
+DEFAULT_BRANCH="main"
+TEST_CMD="true"
+E2E_CMD=""
+HANDOFF_DIR="docs/handoffs"
+QA_DOCS_PATH="docs/qa"
+JIRA_ENABLED=false
+CFG
+    mkdir -p "docs/handoffs/$MISSION"
+    cat > "docs/handoffs/$MISSION/00-missao.md" <<'MIS'
+---
+missao: 20260101-fixture
+aprovacao: auto
+---
+# Mission
+MIS
+    : > "docs/handoffs/$MISSION/01-plano.md"
+    # `pending`, not `blocked`: the Jidoka path escapes BEFORE opening a session, and this block
+    # needs sessions to actually run. The increment never reaches `done`, so the gate fails, the
+    # session moved nothing in THIS repo, and the runner spends its inline retry too — which is
+    # the second half of regime 1: one divergence must be reported once, not once per session.
+    cat > "docs/handoffs/$MISSION/checkpoint.md" <<'CK'
+| ID | Incremento | Check (comando → esperado) | Status | Commit |
+|---|---|---|---|---|
+| I1 | slice one | `true` → 0 | pending | — |
+CK
+    git add -A && git commit -qm "chore: fixture mission" ) >/dev/null 2>&1
+}
+
+# The session that commits into the kit, on one chosen invocation. A COUNTER FILE and not a shell
+# variable: the stub is a separate process per `claude` call, so nothing in it survives to the next
+# one. Which call it fires on is a parameter because the three call sites of the guard are reached
+# by different sessions — a stub that always fired first would leave two of them unmeasured, which
+# is exactly what the sabotage pass caught before these regimes existed.
+#
+# `git add` of the ONE file it wrote, never `-A`: a blanket add inside a kit checkout would sweep up
+# whatever else the run happened to drop there, and the assertion would stop being about the file
+# the session actually wrote.
+KIT_TOUCH_COUNT="$OUTSIDE/kit-touch-count"
+kitguard_stub() {   # kitguard_stub <repo to commit into, or "" for benign> [invocation to fire on]
+  local fire="${2:-1}"
+  if [ -z "$1" ]; then
+    cat > "$OUTSIDE/stub/claude" <<STUB
+#!/usr/bin/env bash
+cat "$STREAM_SAMPLE"
+exit 0
+STUB
+  else
+    cat > "$OUTSIDE/stub/claude" <<STUB
+#!/usr/bin/env bash
+n=\$(( \$(cat "$KIT_TOUCH_COUNT" 2>/dev/null || echo 0) + 1 ))
+printf '%s\n' "\$n" > "$KIT_TOUCH_COUNT"
+if [ "\$n" -eq $fire ]; then
+  printf 'a finding the session had no business committing here\n' >> "$1/TODO.md"
+  git -C "$1" add TODO.md
+  git -C "$1" commit -qm "chore: the session wrote into the kit"
+fi
+cat "$STREAM_SAMPLE"
+exit 0
+STUB
+  fi
+  chmod +x "$OUTSIDE/stub/claude"
+}
+
+# kitguard_touched -> 1 when the stub really did commit into a kit, 0 otherwise. The FLOOR of every
+# regime below: without it, a regime is green in the world where the stub never fired at all, which
+# is every world where the fixture quietly stopped working.
+kitguard_touched() { [ -s "$KIT_TOUCH_COUNT" ] && printf 1 || printf 0; }
+
+# 1. THE INCIDENT. Exactly one KIT-TOUCHED for one divergence — not one per session, and the
+#    retry above guarantees there were two. `kit_before` and `kit_after` are demanded DIFFERENT:
+#    a line that printed the same stamp twice would satisfy "a line exists" while saying nothing.
+rm -f "$KIT_TOUCH_COUNT"
+KGT="$OUTSIDE/kitguard-target"
+kitguard_world "$KGT"
+kitguard_stub "$FAKEKIT"
+KG1_ERR="$( cd "$KGT" && "$FAKEKIT/bin/sdd" run "$MISSION" 2>&1 >/dev/null )"
+KG1_LOG="$(cat "$KGT/.sdd/logs/$MISSION/pipeline.log" 2>/dev/null || true)"
+KG1_BEFORE="$(grep -oE 'kit_before=[^ ]+' <<< "$KG1_LOG" | head -1)"
+KG1_AFTER="$(grep -oE 'kit_after=[^ ]+' <<< "$KG1_LOG" | head -1)"
+assert_eq "kit-guard: a session that edits the kit during another repo's mission is warned once and journalled once" \
+  "moved:1 lines:1 warns:1 phase:EXEC differ:1" \
+  "moved:$(kitguard_touched) lines:$(grep -c 'KIT-TOUCHED' <<< "$KG1_LOG") warns:$(grep -c 'changed during' <<< "$KG1_ERR") phase:$(grep -oE 'KIT-TOUCHED[[:space:]]+[A-Z]+' <<< "$KG1_LOG" | head -1 | awk '{print $2}') differ:$([ "${KG1_BEFORE#kit_before=}" != "${KG1_AFTER#kit_after=}" ] && echo 1 || echo 0)"
+
+# 2. CONTROL. The same run, same sessions, same everything — with a session that leaves the kit
+#    alone. Without this term the guard could be a line printed unconditionally.
+rm -f "$KIT_TOUCH_COUNT"
+KGC="$OUTSIDE/kitguard-control"
+kitguard_world "$KGC"
+kitguard_stub ""
+KG2_ERR="$( cd "$KGC" && "$FAKEKIT/bin/sdd" run "$MISSION" 2>&1 >/dev/null )"
+KG2_LOG="$(cat "$KGC/.sdd/logs/$MISSION/pipeline.log" 2>/dev/null || true)"
+assert_eq "kit-guard: a session that leaves the kit alone is not accused of anything" \
+  "lines:0 warns:0" \
+  "lines:$(grep -c 'KIT-TOUCHED' <<< "$KG2_LOG") warns:$(grep -c 'changed during' <<< "$KG2_ERR")"
+
+# 3. SELF-EXCLUSION. A mission whose target IS the kit edits the kit for a living. A guard that
+#    fired on every phase of every kit mission would train its only reader to ignore it, and the
+#    run it finally mattered on would scroll past unread. This regime is why the guard compares
+#    the kit root against REPO_ROOT rather than merely asking "did the kit change".
+rm -f "$KIT_TOUCH_COUNT"
+kitguard_world "$FAKEKIT"
+kitguard_stub "$FAKEKIT"
+KG3_ERR="$( cd "$FAKEKIT" && "$FAKEKIT/bin/sdd" run "$MISSION" 2>&1 >/dev/null )"
+KG3_LOG="$(cat "$FAKEKIT/.sdd/logs/$MISSION/pipeline.log" 2>/dev/null || true)"
+assert_eq "kit-guard: a mission whose own repo IS the kit is left alone — the guard must not cry wolf" \
+  "moved:1 lines:0 warns:0" \
+  "moved:$(kitguard_touched) lines:$(grep -c 'KIT-TOUCHED' <<< "$KG3_LOG") warns:$(grep -c 'changed during' <<< "$KG3_ERR")"
+
+
+# 4. THE INLINE RETRY has a guard of its own. When the first session leaves the kit alone and the
+#    RETRY is the one that writes into it, only the check on the retry path can see it — measured:
+#    with that call site deleted, regimes 1-3 stay green and this one goes to lines:0. The stub
+#    fires on invocation 2 because a gate that fails over a session which moved nothing is exactly
+#    what makes cmd_run spend its one inline retry.
+rm -f "$KIT_TOUCH_COUNT"
+KGR="$OUTSIDE/kitguard-inline-retry"
+kitguard_world "$KGR"
+kitguard_stub "$FAKEKIT" 2
+KG4_ERR="$( cd "$KGR" && "$FAKEKIT/bin/sdd" run "$MISSION" 2>&1 >/dev/null )"
+KG4_LOG="$(cat "$KGR/.sdd/logs/$MISSION/pipeline.log" 2>/dev/null || true)"
+assert_eq "kit-guard: the kit edited by the inline RETRY is caught by the retry's own check" \
+  "moved:1 lines:1 warns:1" \
+  "moved:$(kitguard_touched) lines:$(grep -c 'KIT-TOUCHED' <<< "$KG4_LOG") warns:$(grep -c 'changed during' <<< "$KG4_ERR")"
+
+# 5. `sdd retry` is the OTHER door that opens a session which commits, and it does not go through
+#    cmd_run's loop at all: its arm/check pair is its own. Measured the same way — delete that pair
+#    and every regime above stays green while this one reports nothing.
+rm -f "$KIT_TOUCH_COUNT"
+KGT2="$OUTSIDE/kitguard-retry-cmd"
+kitguard_world "$KGT2"
+kitguard_stub "$FAKEKIT" 1
+KG5_ERR="$( cd "$KGT2" && "$FAKEKIT/bin/sdd" retry "$MISSION" 2>&1 >/dev/null )"
+KG5_LOG="$(cat "$KGT2/.sdd/logs/$MISSION/pipeline.log" 2>/dev/null || true)"
+assert_eq "kit-guard: sdd retry is the other door that opens a session, and it is guarded too" \
+  "moved:1 lines:1 warns:1" \
+  "moved:$(kitguard_touched) lines:$(grep -c 'KIT-TOUCHED' <<< "$KG5_LOG") warns:$(grep -c 'changed during' <<< "$KG5_ERR")"
+
 # --- the instrument never lands inside the thing it measures ----------------
 # Pins the $OUTSIDE decision at the top of this file. If the ledger, a reader fixture or the kit
 # copy ever moves back under $FIX, the moving stub's `git add -A` commits it into the repo under

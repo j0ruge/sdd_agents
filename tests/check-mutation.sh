@@ -1668,6 +1668,30 @@ mut_KAIZEN_guard_floor_unpublished() {
   sed -i '/^               floor: guard_floor,$/d' "$1"
 }
 
+# The kit-integrity guard goes blind: the comparison that decides whether the kit moved is replaced
+# by a term that is true for every possible pair, so the guard returns before it can say anything.
+# NOT the deletion of the `warn` and NOT the deletion of the branch — what has to be measured is
+# the COMPARISON, and a mutant that removed the message would still leave a guard that decided.
+#
+# Caught by the three regimes in check-autonomy.sh that make a session write into a fake kit: the
+# incident, the inline retry and `sdd retry`. It survives the two control regimes on purpose —
+# a guard that has gone quiet is invisible to any world where nothing should have been said.
+mut_RUN_kit_touched_blind() {
+  sed -i 's@\[ "$kit_after" = "$KIT_GUARD_BEFORE" \] && return 0@[ true ] \&\& return 0@' "$1"
+}
+
+# The guard stops excluding the kit's OWN missions and starts warning on every phase of every kit
+# mission. It is the opposite defect to the one above and it is not a smaller one: a warning that
+# fires on runs where it is meaningless teaches its only reader to scroll past it, and the run it
+# finally matters on goes by unread. That is the failure this kit has already paid for once, in the
+# `crying wolf` note the base-branch warning in check-gates.sh carries.
+#
+# The comparison is redirected rather than deleted, so the mutant leaves a guard that still decides
+# something — just never the thing it was written to decide.
+mut_RUN_kit_guard_cries_wolf() {
+  sed -i 's@\[ "$kit_root" = "$REPO_ROOT" \] && return 0@[ "$kit_root" = "/nowhere" ] \&\& return 0@' "$1"
+}
+
 # `sdd close` goes back to believing the session's exit code — the historical defect, restored
 # verbatim rather than approximated. The session that closed the issue exits 0 and so does the one
 # that merely ASKED whether to close it, so this mutant is not "a check removed": it is the check
@@ -1826,6 +1850,8 @@ CATALOG=(
   KAIZEN_axis_note_own_floor
   KAIZEN_guard_floor_unpublished
   RUN_close_believes_rc
+  RUN_kit_touched_blind
+  RUN_kit_guard_cries_wolf
 )
 
 # Mutations that are NOT caught today, each with the increment that closes it. Ratchet in both
