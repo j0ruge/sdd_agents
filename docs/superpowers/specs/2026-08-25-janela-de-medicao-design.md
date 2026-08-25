@@ -1,6 +1,7 @@
 # A janela de medição — o primeiro veredito do juiz do kaizen
 
-**Data:** 2026-08-25 · **Estado:** aprovado o rumo, Fase 0 ainda NÃO começou.
+**Data:** 2026-08-25 · **Estado:** Fase 0 **executada** por este commit (branch
+`chore/abre-a-janela-de-medicao`). O eixo da medição é o merge dele na `main`. Fases 1-3 pendentes.
 
 Este documento é auto-contido de propósito. A sessão que o ler não participou da conversa que o
 gerou e não precisa dela. Leia inteiro antes de agir.
@@ -116,7 +117,7 @@ Os textos completos dos itens 1 e 2 estão no `TODO.md` do `sales_quote`. O item
 
 ## 5. O plano, em quatro fases
 
-**Fase 0 — o último commit do kit (o chore). AINDA NÃO FEITA.**
+**Fase 0 — o último commit do kit (o chore). ✅ FEITA — é este commit.**
 Este é o commit que **abre a janela**: o sha resultante é o eixo da medição.
 1. Apagar do `TODO.md` do kit os dois itens marcados `RESOLVIDO` (o do `sdd close`, por `5f1798f`,
    e o do stub `- intervention:`, por `cd49351`). A prova por artefato já foi feita:
@@ -128,6 +129,12 @@ Este é o commit que **abre a janela**: o sha resultante é o eixo da medição.
    existe", e que a saída é escrever o probe antes de apagar a regra.
 4. `./bin/sdd health --with-mutation` (20-50 min — `tests/health-baseline.txt` está na chave do
    carimbo, então o passo 2 o mata e ele tem de ser reconquistado). Commitar, empurrar.
+
+Medido ao executar: `check-todo.sh` respondeu **72** depois do passo 1, confirmando a aritmética
+74 → 72; os dois `git merge-base --is-ancestor` (de `5f1798f` e `cd49351` contra a `main`)
+responderam 0 antes de qualquer apagar. A ressalva do passo 3 ficou ancorada em `d4deb35` (a
+remoção) e `7cbc8e2` (a volta, no `kit_guard_arm`) em vez de num slug de missão — esta missão foi
+planejada pelo `superpowers`, não pelo `sdd-planner`, e não tem `docs/handoffs/`.
 
 **Fase 1 — congelar. Sem sensor novo.**
 O instrumento já existe: `./bin/sdd kaizen --series | jq .guard` responde `missions_after_change`.
@@ -149,6 +156,16 @@ a próxima mudança do kit tem número atrás dela.
 
 - **Nenhum commit no kit** depois da Fase 0, até as 3 missões estarem no ledger. Um commit zera a
   contagem e a janela recomeça.
+- ⚠️ **E a árvore do kit tem de estar LIMPA durante cada missão — árvore suja custa mais caro que
+  um commit.** `autonomy_kit_stamp` (`bin/sdd:1448`) deriva `kit_dirty` de
+  `git -C "$SDD_HOME" status --porcelain`, que **conta arquivo untracked também**; e a fatia
+  comparável do juiz é `on_axis: .kit_dirty == false and .kit_sha != null` (`bin/sdd:3945`). Linha
+  nascida suja fica **permanentemente** fora da contagem do piso: o ledger é append-only e nunca é
+  migrado. Um commit reabre a janela e a próxima missão volta a contar; um arquivo de rascunho
+  esquecido em `~/repos/sdd_agents` durante uma missão do `sales_quote` queima aquela missão para
+  sempre. O runner avisa uma vez (`bin/sdd:4365`), mas o aviso sai na saída da missão — não em
+  nada que `--series` mostre depois. **Antes de cada `sdd run`:
+  `git -C ~/repos/sdd_agents status --porcelain` tem de sair vazio.**
 - **Não mexer no piso de 3** (`KAIZEN_GUARD_FLOOR` em `bin/sdd`). Baixá-lo é mudar o kit, o que
   reabre o sha, e ainda por cima baixa a confiança de um número já pequeno.
 - **Não atacar os 47 itens de "Sensores que faltam"** do `TODO.md`. É a maior seção por larga
@@ -183,11 +200,26 @@ morre calado. **Rode o `sdd kaizen` do checkout principal**, ou feche o item ant
 ```bash
 cd ~/repos/sdd_agents
 git log --oneline -1                      # esperado: 42e5845 (ou adiante, se a Fase 0 já rodou)
+git status --porcelain                    # TEM de sair vazio — ver a regra da árvore suja no §6
 ./bin/sdd kaizen --series | jq .guard     # missions_after_change diz onde a janela está
-grep -n 'RESOLVIDO por' TODO.md           # esperado: 2 itens, se a Fase 0 ainda não rodou
+grep -n 'RESOLVIDO por' TODO.md           # 6 ocorrências = Fase 0 pendente; 4 = já rodou
 ```
 
-Se os dois `RESOLVIDO` ainda estiverem lá, a Fase 0 não começou — comece por ela.
+O `grep` do `RESOLVIDO` conta a prosa do cabeçalho (2 linhas) e o item `:441`, que fala **sobre** a
+convenção (2 linhas) — essas 4 ficam para sempre. As outras 2 eram os itens fechados que a Fase 0
+apagou.
+
+⚠️ **A Fase 0 NÃO move o eixo, e isso não é falha.** O `latest` do juiz sai do **ledger**, que só
+ganha linha quando uma missão roda. Logo depois da Fase 0 o `--series` continua respondendo
+`671d432` / `missions_after_change: 1`. O eixo reancora no sha novo quando a missão 1 escrever a
+primeira linha dela — não antes.
+
+⚠️ **Rode tudo do checkout principal, nunca de um worktree** — e não é só pelo `sdd kaizen` do §7.
+O carimbo de mutação é escrito em `.sdd/logs/mutation-stamp`, que está no `.gitignore`, portanto é
+**por checkout**: carimbar de um worktree deixa o checkout principal sem carimbo e o
+`health --with-mutation` de 20-50 min é pago duas vezes. Já há artefato de QA sobre exatamente
+isso — `docs/qa/bugs/BUG-20260819-stamp-written-where-gate-cannot-read.md` e
+`docs/qa/charters/CH-stamp-round-trip-from-a-worktree.md`.
 
 **Antes de implementar qualquer coisa, apresente o que pretende fazer e espere o "sim".** O rumo
 está aprovado; cada passo, não.

@@ -283,6 +283,21 @@ Grade A, dois deles **falhando abertos** — o pior modo possível num sensor, p
 medido o que não mediu. Regra que a sabotagem não consegue quebrar de forma alguma é redundante:
 remova, não escreva probe para ela.
 
+⚠️ **Esse corolário tem contra-exemplo medido, e ele custou uma regressão — escreva o probe ANTES
+de apagar a regra.** Duas regras foram removidas da `kit_guard_check` com esse argumento em
+`d4deb35`. Uma delas era o early-return de `DRY_RUN`, apagado com a frase *"no sabotage of a
+DRY_RUN guard could have made a probe [red]"* escrita no próprio comentário que ocupou o lugar
+dele. O probe existe, tem quatro linhas, e fica vermelho: armar a guarda numa projeção fazia
+`sdd run --dry-run` herdar o aviso de ledger do `autonomy_kit_stamp` — 1 aviso contra 0 na versão
+anterior. A revisão do mesmo PR (#22) desfez a remoção em `7cbc8e2`, agora no `kit_guard_arm`. (A
+outra, a guarda de kit-não-git, resistiu a duas tentativas de quebra e continua fora — o corolário
+não está errado, está **condicionado**.) *"Não consegui construir o mundo em que a regra importa"*
+e *"esse mundo não existe"* são afirmações diferentes, e o comentário escreveu a segunda — a mesma
+régua que este arquivo já aplica a *"comentário que afirma paridade não é paridade"*. Se o probe
+não sair, diga no comentário **qual mundo você não conseguiu construir**, nunca que ele não existe;
+e regra que sobrevive por ser inalcançável hoje, mas que decide **qual falha** o defeito produz,
+fica com a ausência de probe declarada no cabeçalho, pela régua de admissão do D15.
+
 ⚠️ **O probe de sabotagem prova primeiro que sabotou o que dizia sabotar.** Duas rodadas desta casa
 concluíram "sobrevive" sem ter testado a regra: uma ancorada em número de linha (apagou a linha
 vizinha e deixou viva a que o `grep` procura), outra com `perl -0pe 's/…//m'` **sem `/g`**, que casa
