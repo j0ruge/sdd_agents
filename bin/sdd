@@ -4508,6 +4508,55 @@ main() {
   esac
 }
 
+# close_query <acli binary> <issue> — publishes CLOSE_REACHABLE and CLOSE_VERIFIED.
+#
+# CALLED, never substituted: it publishes two globals, and `$(close_query ...)` would run the body
+# in a subshell where both assignments die with the substitution — the autonomy_kit_stamp scar,
+# written down again because a function with TWO outputs has no honest way to be read through a
+# single `$( )` anyway. cmd_close needs both: "could I ask?" and "what was the answer?" are
+# different questions and the whole fix is that they stopped being one.
+#
+# `--fields "key,status"` and not `--fields key`: the short spelling answers `[null]`. `.key` is
+# top-level in each object; `statusCategory = Done` is the project-agnostic form, because the status
+# NAME is localized per project and per language, while the category is not.
+#
+# The capture carries `|| true` INSIDE the substitution: this file runs under `set -e`, where
+# `x="$(cmd)"` dies at the assignment the moment cmd is non-zero — and non-zero is exactly what acli
+# returns for expired auth. The rc is deliberately not consulted; it discriminates nothing, since
+# the same tool answers rc 0 for a hit AND for a miss, and was measured answering rc 1 for
+# unauthenticated on 2026-08-25. The SHAPE of the answer is the only witness there is.
+CLOSE_REACHABLE=false
+CLOSE_VERIFIED=false
+close_query() {
+  local out keys
+  CLOSE_REACHABLE=false; CLOSE_VERIFIED=false
+  out="$( cd "$REPO_ROOT" && "$1" jira workitem search \
+      --jql "key = $2 AND statusCategory = Done" --fields "key,status" --json 2>/dev/null || true )"
+  # A JSON ARRAY is the whole reachability test, and it is a shape and not a status: acli answers
+  # one for a hit (`[{...}]`) and one for a miss (`[]`), and prose for expired auth or a spelling it
+  # does not know. `type == "array"` and NOT `. != null`, because jq reads a bare `null` as perfectly
+  # valid JSON and the empty capture would then read as reachable.
+  #
+  # Every shape MEASURED against this jq rather than reasoned about, because "no output" is the one
+  # that would have been guessed wrong — `jq -e` exits 4 on it, not 0:
+  #   `[]` 0 · `[{...}]` 0 · `null` 1 · `{...}` 1 · empty 4 · prose 5
+  # Only the two zeroes reach `CLOSE_REACHABLE=true`, so a tool that dies producing nothing at all
+  # is refused with the rest of them instead of letting a paid session through.
+  #
+  # This is also where a missing `jq` lands, and that is deliberate rather than a fourth
+  # `command -v` above: jq is a hard dependency the preflight already refuses without, and an
+  # unprobeable branch is the kind this repo deletes. The direction is right — no session is spent —
+  # and the die message names the parse as one of the three things that produce it.
+  jq -e 'type == "array"' >/dev/null 2>&1 <<< "$out" || return 0
+  CLOSE_REACHABLE=true
+  keys="$( jq -r '.[]?.key // empty' <<< "$out" 2>/dev/null || true )"
+  # Herestring, never `printf | grep -q`: under `pipefail` that form returns 141 when grep FINDS the
+  # match and closes the pipe early, so it would invert on long input and pass on short. `-x` and
+  # `-F`: the JQL is what selects, but an acli that ever ignored it must not be able to satisfy this
+  # with some other issue's key.
+  if grep -qxF "$2" <<< "$keys"; then CLOSE_VERIFIED=true; fi
+}
+
 # Post-merge: closes the JIRA issue. Fired by the human after the merge — it is the only thing
 # that happens AFTER the human gate, which is why it is not part of `sdd run`.
 cmd_close() {
@@ -4528,14 +4577,32 @@ cmd_close() {
     fi
   fi
 
-  # The pre-check comes BEFORE the session and fails closed, in that order and for that reason: a
-  # verdict this command cannot reach is not a reason to spend a phase budget first and only then
-  # admit it could never have checked. The seam is there so a sensor can model "no acli on this
-  # machine" without uninstalling one — same shape, same reason, as SDD_SKILLS_ROOT above.
   local acli_bin="${SDD_ACLI_BIN:-acli}"
   command -v "$acli_bin" >/dev/null 2>&1 || die "cannot reach '$acli_bin' — 'sdd close' verifies the close against JIRA itself and will not report a close it did not see.
 Install the acli CLI (or point SDD_ACLI_BIN at it), and check that its auth has not expired.
 To confirm by hand:  $acli_bin jira workitem search --jql \"key = $issue AND statusCategory = Done\" --fields \"key,status\" --json"
+
+  # THE PRE-CHECK IS THE VERIFICATION QUERY, and the earlier round of this work stopped one step
+  # short of that: it asked `command -v` and called itself fail-closed. `command -v` proves the
+  # binary is on PATH and nothing else — expired auth, the failure this repo actually captured a
+  # fixture for (tests/.stub/acli-unauth.txt, and it is why that fixture exists), is invisible to
+  # it. So the shape that argued "a verdict this command cannot reach is not a reason to spend a
+  # phase budget first" spent the budget anyway on the one unreachable case that happens.
+  #
+  # Asking the real question here answers three at once: acli is reachable, it is authenticated,
+  # and the issue may ALREADY be Done — in which case a second `sdd close` used to buy a second
+  # session to learn it.
+  close_query "$acli_bin" "$issue"
+  [ "$CLOSE_REACHABLE" = true ] || die "'$acli_bin' did not answer JSON for $issue — expired auth, a version that spells the query differently, or a jq that cannot read it.
+'sdd close' will not open a paid session it could never verify the result of.
+To see what it saw:  $acli_bin jira workitem search --jql \"key = $issue AND statusCategory = Done\" --fields \"key,status\" --json"
+  if [ "$CLOSE_VERIFIED" = true ]; then
+    # No session, and the journal says so with `session=none`: a CLOSE row that named a session id
+    # nobody spent would be the same class of lie as the rc this whole function stopped believing.
+    pipeline_log_line "$(date -Iseconds)  CLOSE  issue=$issue  session=none  rc=0  verified=true  log=none"
+    ok "$issue is already Done — JIRA confirms it, and no session was spent"
+    return 0
+  fi
 
   step "closing $issue"
   local sid logfile rc=0
@@ -4546,35 +4613,27 @@ To confirm by hand:  $acli_bin jira workitem search --jql \"key = $issue AND sta
   # left to look measured.
   logfile="$(log_dir)/CLOSE-$(date +%Y%m%d-%H%M%S)-${sid:0:8}.json"
   mkdir -p "$(dirname "$logfile")"
+  # The fourth arm/check pair. `sdd close` opens a session with the same --allowedTools and the same
+  # --permission-mode every phase gets, so "a target-repo session has no business editing the kit"
+  # either covers it or is a claim wider than the guard. Probed by kit-guard regime 7.
+  kit_guard_arm
   ( cd "$REPO_ROOT" && claude -p "/ticket close $issue" \
       --model "$MODEL_TICKET" --permission-mode "$PERMISSION_MODE" --output-format json \
       --setting-sources "user,project,local" --allowedTools "$ALLOWED_TOOLS" \
       --session-id "$sid" --max-budget-usd "$BUDGET_PER_PHASE_USD" ) > "$logfile" 2>&1 || rc=$?
+  kit_guard_check "CLOSE"
   # The session's rc decides NOTHING here. It is one exit code shared by two branches — the session
   # that closed the issue exits 0, and so does the session that only ASKED whether to close it — so
   # reading it was reading a label. Measured on 2026-08-25: `ok SQ-108 closed` printed over an issue
   # sitting in "Em andamento". Principle 1 of CLAUDE.md, and the pattern gate_PR already uses: go
   # back to the live artifact and look.
   #
-  # `--fields "key,status"` and not `--fields key`: the short spelling answers `[null]`. `.key` is
-  # top-level in each object; `statusCategory = Done` is the project-agnostic form, because the
-  # status NAME is localized per project and per language, while the category is not.
-  #
-  # Both captures carry `|| true` INSIDE the substitution: this file runs under `set -e`, where
-  # `x="$(cmd)"` dies at the assignment the moment cmd is non-zero — and non-zero is exactly what
-  # acli returns for expired auth. The rc is deliberately not consulted either way; a non-JSON
-  # answer leaves $close_verified empty and falls closed on its own, which is a false NEGATIVE on a
-  # real close and therefore the safe direction.
-  local close_search close_verified verified=false
-  close_search="$( cd "$REPO_ROOT" && "$acli_bin" jira workitem search \
-      --jql "key = $issue AND statusCategory = Done" --fields "key,status" --json 2>/dev/null || true )"
-  close_verified="$( jq -r '.[]?.key // empty' <<< "$close_search" 2>/dev/null || true )"
-  # Herestring, never `printf | grep -q`: under `pipefail` that form returns 141 when grep FINDS the
-  # match and closes the pipe early, so it would inverted-fail on long input and pass on short.
-  # `if`, never `grep … && verified=true`: as the last command of a statement an AND-list that fails
-  # takes the whole runner down under `set -e`, and "the issue is not Done" is the common case.
-  if grep -qxF "$issue" <<< "$close_verified"; then verified=true; fi
-  pipeline_log_line "$(date -Iseconds)  CLOSE  issue=$issue  session=$sid  rc=$rc  verified=$verified  log=$logfile"
+  # Asked a SECOND time, and the repetition is the point: acli can go unreachable between the
+  # pre-check and here (auth expiring mid-session is the ordinary way), and a run that trusted the
+  # earlier answer would be reading a label again — just an older one.
+  close_query "$acli_bin" "$issue"
+  local verified="$CLOSE_VERIFIED"
+  pipeline_log_line "$(date -Iseconds)  CLOSE  issue=$issue  session=$sid  rc=$rc  verified=$verified  reachable=$CLOSE_REACHABLE  log=$logfile"
   if [ "$verified" = true ]; then
     # The artifact outranks the rc in BOTH directions, or it is not the artifact deciding — it is a
     # second label ANDed onto the first. A session that fell over after closing the issue closed it.
@@ -4582,9 +4641,18 @@ To confirm by hand:  $acli_bin jira workitem search --jql \"key = $issue AND sta
     ok "$issue closed — JIRA confirms it is Done"
     return 0
   fi
+  # THREE outcomes, not two, and the third is why this branch exists: "I asked and JIRA said no" and
+  # "I could not ask" are different facts, and telling a human the session only asked for
+  # confirmation when what actually happened is that acli stopped answering sends them to read the
+  # wrong log. Both fall closed — the direction never changes — but the sentence has to name which.
+  if [ "$CLOSE_REACHABLE" != true ]; then
+    bad "$issue is UNVERIFIED — the session ran, but '$acli_bin' stopped answering JSON afterwards (auth expiring mid-session is the ordinary way), so this command cannot say whether the close landed; see $logfile"
+    return 1
+  fi
   bad "$issue is still open — JIRA does not confirm the close (the session may have only asked for confirmation); see $logfile"
   return 1
 }
+
 
 # The braces and the `exit` are load-bearing, and tests/check-entrypoint.sh is why. bash keeps the
 # file offset in sync with what it has parsed, so returning from a bare `main "$@"` sends it back

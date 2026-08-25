@@ -111,6 +111,21 @@ sessions of the SQ-97 pilot on `claude-opus-5`; see
 down here so that whoever first hits a crowded window adds the key on a **measurement** against
 that baseline, instead of adding one on faith.
 
+### Not a config key: `SDD_ACLI_BIN`
+
+`sdd close` verifies the close against JIRA itself instead of trusting the session's exit code, and
+it asks with `${SDD_ACLI_BIN:-acli}`. The override exists so a sensor can model "no acli on this
+machine" without uninstalling one; on a real machine you never set it, unless the CLI lives
+somewhere off `PATH`. Environment variable and not a `.sdd/config.sh` key, for the same reason as
+`SDD_STATE_DIR` below: it describes the machine, not the project.
+
+The question it asks is `key = <issue> AND statusCategory = Done` — the **category** and never the
+status name, because the name is localized per project and per language while the category is not.
+It is asked twice, before the session and after it: an answer that is not a JSON array means the
+tool could not be reached (expired auth is the ordinary way), and `sdd close` refuses **before**
+spending a paid session rather than after. An issue already `Done` is reported as such and costs no
+session at all.
+
 ### Not a config key: `SDD_STATE_DIR`
 
 The autonomy ledger is **global**, not per-repo: `${SDD_STATE_DIR:-$HOME/.sdd}/autonomy-log.jsonl`.
