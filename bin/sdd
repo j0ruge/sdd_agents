@@ -1471,6 +1471,20 @@ autonomy_kit_stamp() {
 #   - ledger rows born after a divergence still carry the sha of the run's own commit. The guard
 #     does not re-attribute them — the KIT-TOUCHED line is what lets a human reading those rows
 #     later know why they say what they say.
+#   - an INHERITED `GIT_DIR` in the environment (a git hook, `git rebase --exec`) makes
+#     `git -C "$SDD_HOME" rev-parse --short HEAD` answer that repository's HEAD rather than the
+#     kit's, so every commit the session makes in the target repo would read as the kit moving.
+#     Measured, and left declared rather than guarded: the kit_root probe answers non-empty in that
+#     world too, so there is no cheap test that separates it, and the failure direction is a warn
+#     nobody can act on — not a silent miss. `sdd` is not run from hooks today.
+#
+# FOUR CALL SITES, and the arm/check pair is placed by hand at each because the check has an
+# ordering constraint run_phase cannot satisfy (see cmd_run: `moved2` must be sampled before the
+# check writes anything). cmd_run has two, cmd_retry one, cmd_close one — every path in this file
+# that opens a `claude -p` session able to commit. A fifth added tomorrow is born unguarded, which
+# is the shape this file otherwise refuses; it is paid for with a probe per site instead
+# (tests/check-autonomy.sh, kit-guard regimes 1, 4, 5 and 7), so a site added without one is a site
+# whose deletion no assertion notices.
 KIT_GUARD_BEFORE=""
 
 # Called, never substituted. `$(kit_guard_arm)` would run the body in a subshell where the
@@ -1479,6 +1493,24 @@ KIT_GUARD_BEFORE=""
 # every line of this comment still claimed it was on. That is the exact scar autonomy_kit_stamp
 # above carries, and the reason it is written down twice.
 kit_guard_arm() {
+  # THE PROJECTION IS DISARMED, and the earlier round of this work got it wrong in the other
+  # direction — the reasoning is written out because the wrong version also sounded measured.
+  # It argued that a projection opens no session, so no window exists and no sabotage could turn a
+  # probe red. The window was never the point: `autonomy_kit_stamp` is reached from NOWHERE ELSE
+  # during a dry run (`autonomy_append` returns early on DRY_RUN, and the row builders sit past the
+  # projection's own return in cmd_run), so arming it made `sdd run --dry-run` inherit that
+  # function's one-shot warning — "$SDD_HOME is not a git checkout, autonomy rows get kit_sha:null"
+  # — printed over a projection that writes no rows at all. Measured on 2026-08-25 against a
+  # plain-copy kit: 0 such warnings on the previous version of this file, 1 on the armed one. The
+  # probe that "could not go red" is regime 6 of the kit-guard block in tests/check-autonomy.sh,
+  # and it is differential: the same kit and the same repo in a REAL run must still warn.
+  #
+  # HERE and not in kit_guard_check, on purpose: the empty baseline is the disarmed state the check
+  # already knows how to read, so one return covers both halves — and the `[ -n "$KIT_GUARD_BEFORE" ]`
+  # line below stops being a branch no call site can reach. Cleared rather than left alone because
+  # this is the state the check reads: a baseline that survived from somewhere else would make the
+  # projection compare against a sample no phase of this run ever took.
+  if [ "$DRY_RUN" = "1" ]; then KIT_GUARD_BEFORE=""; return 0; fi
   autonomy_kit_stamp
   KIT_GUARD_BEFORE="$AUTONOMY_KIT_STAMP"
 }
@@ -1486,23 +1518,16 @@ kit_guard_arm() {
 # kit_guard_check <phase> — one warn and one journal line per DIVERGENCE, never per session.
 kit_guard_check() {
   local phase="${1:-}" kit_root kit_after
-  # There is deliberately NO `$DRY_RUN` early-return here, and the absence was measured rather than
-  # assumed. A projection opens no session, so the only thing running between kit_guard_arm and
-  # this call is a `run_phase` that returns immediately — the window in which a projection could
-  # observe a divergence does not exist, and no sabotage of a DRY_RUN guard could have made a probe
-  # go red. This repo's rule for a rule no sabotage can break is to delete it, not to write a probe
-  # that cannot fail. (Should a projection ever grow a real window, what it would report is a human
-  # editing the kit in another terminal — true, and worth saying.)
-  # Never armed — or armed inside a subshell that ate the assignment. Say nothing, rather than
-  # compare against an empty string and accuse every phase of every run on the machine.
+  # DISARMED, and it is the projection that gets here that way — kit_guard_arm clears the baseline
+  # under DRY_RUN and this is the line that reads the clearing. It is also the honest answer for an
+  # arm that ran inside a subshell that ate the assignment: say nothing, rather than compare against
+  # an empty string and accuse every phase of every run on the machine.
   #
-  # DECLARED: this line has no probe of its own, and that is not an oversight. No call site can
-  # reach it (every one of the three arms first), so deleting it leaves the suite green — yet it is
-  # not dead code, because it decides WHICH failure the subshell scar produces. Measured both ways:
-  # with the line, an arm read through `$( )` makes the guard go SILENT and the incident regime
-  # goes red; without it, the same scar accuses every clean session and the control regime goes red
-  # instead. Either way the suite catches it, so the line is a choice between two detected
-  # behaviours and not a gap — silence being the one that does not train a reader to ignore warns.
+  # Two probes, and they pull in opposite directions, which is what makes the line a decision rather
+  # than a spare `if`: regime 6 (projection) reads the DRY_RUN clearing through it, and the subshell
+  # scar is caught either way — with the line, an arm read through `$( )` makes the guard go SILENT
+  # and the incident regime goes red; without it, the same scar accuses every clean session and the
+  # control regime goes red instead. Silence is the one that does not train a reader to ignore warns.
   [ -n "$KIT_GUARD_BEFORE" ] || return 0
   # No `[ -n "$kit_root" ] || return 0` here either, and again the absence was measured. A kit
   # installed as a plain copy rather than a checkout has no shas to compare — but autonomy_kit_stamp
