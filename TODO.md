@@ -178,14 +178,6 @@ Achados sobre **repos-alvo** vão para o `TODO.md` daquele repo. Este arquivo é
   hoje, e é a classe que o `_cdpath_leak` já custou. Direção: endereçar ao corpo da função.
   — descoberto por `sdd-reviewer` na missão `20260818-lote-facil` (2026-08-18)
 
-- [ ] **O `check-templates.sh` não tem auto-teste e nenhuma mutação o alcança** —
-  `tests/check-templates.sh:30` (a função `check()`) — ele mede `templates/`, então o catálogo,
-  que sabota o `bin/sdd`, nunca o mata; e `check()` não tem probe nenhum. Regex quebrada ali
-  reporta "template contract intact" para sempre sobre 60 asserções, inclusive as do
-  `40-review-r<N>.md` que o `gate_REVIEW` lê. Está nas duas situações que o `CLAUDE.md` manda
-  cobrir com `selftest()`. Direção: `--check <arquivo>` mais probes, como o `check-todo.sh` fez.
-  — descoberto por `sdd-executor` na missão `20260818-lote-facil` (2026-08-18)
-
 - [ ] **`sdd approve` diz "next: sdd run" com o `gate_PLAN` ainda fechado por outro motivo** —
   `bin/sdd:1950` — o comando roda o gate uma vez no topo, só desiste em `missing *`, e depois de
   commitar imprime o próximo passo sem reperguntar. Medido: com `JIRA_ENABLED=true` e `versao:`
@@ -415,19 +407,20 @@ Achados sobre **repos-alvo** vão para o `TODO.md` daquele repo. Este arquivo é
 ### Contrato e configuração
 
 - [ ] **`sdd close` afirma "closed" sem verificar que a issue fechou** —
-  `bin/sdd:4462` — o comando lê `rc=0` da sessão e imprime `ok "$issue closed"`, mas a sessão sai 0
-  também quando apenas **pediu confirmação** para a ação externa, que é o comportamento correto
-  dela. Medido na M2: respondeu `ok SQ-108 closed` com a issue em "Em andamento", e o fecho teve
-  de ser feito à mão. É rótulo em vez de artefato — o fail-open que o princípio 1 proíbe. Direção:
-  reler o status da issue depois da sessão, como o `gate_PR` faz com `gh pr view`.
+  `bin/sdd:4462` — o comando lia `rc=0` da sessão e imprimia `ok "$issue closed"`, mas a sessão sai
+  0 também quando apenas **pediu confirmação**, que é o comportamento correto dela. Medido na M2:
+  respondeu `ok SQ-108 closed` com a issue em "Em andamento". Era rótulo em vez de artefato — o
+  fail-open que o princípio 1 proíbe. **RESOLVIDO por `5f1798f`**: relê a issue por JQL
+  (`statusCategory = Done`) e o artefato decide nos dois sentidos; seis regimes `close:` mais o
+  mutante `mut_RUN_close_believes_rc`.
   — descoberto por `claude` na missão `20260825-cif-forma-pagamento` (2026-08-25)
 
 - [ ] **O stub `- intervention:` do template é contado como intervenção real** —
-  `templates/checkpoint.md:53` — a linha de exemplo casa o contador do `sdd autonomy`
-  (`grep -cE '^[[:space:]]*-[[:space:]]*intervention:'`, `bin/sdd:3550`), então **toda missão
-  nasce com 1 intervenção fantasma** e a autonomia medida nunca chega a 0 — pior justamente na
-  missão que rodou limpa. Direção: mover o stub para dentro do bloco `>` que já explica o
-  marcador, onde a linha não abre com `-`. Detectado ao semear o ledger do `sales_quote`.
+  `templates/checkpoint.md:53` — a linha de exemplo casava o contador do `sdd autonomy`
+  (`grep -cE '^[[:space:]]*-[[:space:]]*intervention:'`), então **toda missão nascia com 1
+  intervenção fantasma** e a autonomia medida nunca chegava a 0 — pior justamente na missão que
+  rodou limpa. **RESOLVIDO por `cd49351`**: o stub entrou no bloco `>`, e o probe `born verbatim`
+  do `check-autonomy.sh` mede o template REAL por `cp`, nunca uma imitação.
   — descoberto por `sdd-executor` na missão `20260825-cif-forma-pagamento` (2026-08-25)
 
 - [ ] **`.sdd/config.sh` que não parseia é reportado como "declares no TEST_CMD"** —
