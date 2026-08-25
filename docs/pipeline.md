@@ -325,9 +325,43 @@ refusal is deliberate:
 | `JIRA_ENABLED=false` | not an error — reports "nothing to close" and exits 0 |
 | no `issue:` in `10-ticket.md` | error: the TICKET phase did not run, there is nothing to close |
 | `50-pr.md` with a `pr_url:` whose PR is not `MERGED` | error: `sdd close` is **post-merge**, and closing the issue before the merge lies to the board |
+| `acli` not on `PATH` (or `SDD_ACLI_BIN` pointing at nothing) | error, **before** any session: the command will not report a close it could not see |
+| `acli` answering anything but a JSON array — expired auth, an unknown spelling | error, **before** any session, and it prints the query to run by hand |
+| the issue is already `Done` | reports it and exits 0, spending **no** session |
+
+The verdict is the **artifact and never the session's exit code**, in both directions. That rc is
+shared between two branches — the session that closed the issue exits 0, and so does the session
+that only *asked* whether to close it — so `sdd close` goes back to JIRA and looks, exactly as
+`gate_PR` re-reads the live PR. A session that fell over after closing the issue closed it; a
+session that exited 0 without closing anything did not. When the tool stops answering *between* the
+two questions, the answer is `UNVERIFIED` and not "still open": both fall closed, but they send a
+human to different logs.
 
 `sdd close` is the only invocation of `claude` outside `run_phase()` besides the `sdd preflight`
-probe — neither of them runs a phase.
+probe — neither of them runs a phase. It carries the kit guard anyway, for the reason below.
+
+## The kit guard
+
+The kit is not the target repo, and a session running a mission for some other repo has no business
+editing it. Measured on 2026-08-25: an EXEC session whose mission was another repo entirely
+committed a kit finding straight into the kit's `main`, leaving its test suite red and outside any
+review — and the autonomy rows of that very run then stamped the sha of the commit the run had just
+made, recording a kit version that existed only because the run created it.
+
+Around every session that can commit — the two in `sdd run`'s loop, `sdd retry`, and `sdd close` —
+the runner samples the kit's `HEAD` plus its working-tree state before and after. A difference gets
+one `warn` and one `KIT-TOUCHED` line in `.sdd/logs/<mission>/pipeline.log`, naming both stamps.
+
+It **warns and records; it does not stop the line**, and the cost is named on both sides: a human
+editing the kit in another terminal while a mission runs is a real false positive, and a guard that
+halts a paid pipeline on one is a guard the next author switches off. Two things it deliberately
+does not do: it stays quiet when the mission's own repo *is* the kit (a kit mission edits the kit
+for a living, and a warning on every phase of it teaches its only reader to scroll past), and it
+arms nothing during `--dry-run`, because a projection opens no session for a change to be
+attributed to.
+
+Where the finding itself should go — the handoff, never a commit into the kit — is in
+[`../CLAUDE.md`](../CLAUDE.md) and in the executor's own instructions.
 
 ## Models per phase
 

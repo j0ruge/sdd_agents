@@ -2681,6 +2681,236 @@ else
        "on main: $QW_WARN_N warning(s), at line ${QW_WARN_AT:-<none>}, question at line ${QW_ASK_AT:-<none>}, $(tail -2 <<< "$QW_ON_BASE") | off base: $QW_WARN_OFF_N warning(s), $(tail -2 <<< "$QW_OFF_BASE") | no rows: $QW_NOROWS_N warning(s), $(tail -1 <<< "$QW_NOROWS")"
 fi
 
+# --- sdd close: the artifact decides, never the exit code ------------------
+# `cmd_close` printed `ok <issue> closed` off `[ "$rc" -eq 0 ]` — the exit code of the session it
+# had just asked to close the issue. That rc is SHARED between two branches: the session that
+# closed the issue exits 0, and so does the session that only ASKED whether to close it. Measured
+# on 2026-08-25 in the M2 pilot — `ok SQ-108 closed` printed over an issue sitting in "Em
+# andamento". It is the shape principle 1 of CLAUDE.md refuses (gate = artifact, never label), and
+# the pattern that is right is one screen up in gate_PR, which re-reads the live PR.
+#
+# The nine regimes below are DIFFERENTIAL pairs: each demands the text of the branch it is in AND
+# the absence of the other branch's marker. A message that carried both would satisfy either half
+# alone, which is how an assertion stops distinguishing anything.
+#
+# `session-spent` is a term of most of them and not decoration. The verification query is also the
+# PRE-CHECK, so where it runs decides whether a verdict this command cannot reach costs a paid
+# session: an assertion that only read the rc would be equally green with the whole check moved
+# below the session, which is the shape the first round of this work shipped.
+#
+# They run LAST on purpose — the claude stub planted at the top of this file exists to turn any
+# real session into a loud failure, and this block has to replace it with one that answers. The
+# fixture is put BACK at the end of the block rather than left mutated, so "runs last" stops being
+# a load-bearing assumption a future author can break silently by appending below.
+echo "== sdd close: the artifact decides =="
+
+CLOSE_CTL="$FIX/.sdd/logs/close-ctl"           # the acli stub's answers, one per invocation
+CLOSE_MARK="$FIX/.sdd/logs/close-session-ran"  # the claude stub's marker: a session WAS spent
+CLOSE_RCFILE="$FIX/.sdd/logs/close-session-rc" # what the claude stub exits with
+CLOSE_ACLI_LOG="$FIX/.sdd/logs/close-acli-calls"
+CLOSE_JOURNAL="$FIX/.sdd/logs/$MISSION/pipeline.log"
+mkdir -p "$FIX/.sdd/logs/$MISSION"
+
+# The close session, reproduced: it spends a session, leaves a marker so "was a session spent?" is
+# ASSERTED and not assumed, exits with whatever the control file says — and never closes anything.
+cat > "$FIX/.stub/claude" <<STUB
+#!/usr/bin/env bash
+: > "$CLOSE_MARK"
+exit "\$(cat "$CLOSE_RCFILE" 2>/dev/null || echo 0)"
+STUB
+chmod +x "$FIX/.stub/claude"
+
+# cmd_close asks `gh` exactly one thing before it spends anything: is the PR merged?
+cat > "$FIX/.stub/gh" <<'STUB'
+#!/usr/bin/env bash
+[ "${1:-}" = "pr" ] && [ "${2:-}" = "view" ] || { echo "unexpected gh call: $*" >&2; exit 9; }
+printf 'MERGED\n'
+STUB
+chmod +x "$FIX/.stub/gh"
+
+# PROVENANCE — every byte below is stdout captured live on 2026-08-25 from the real Jira this repo
+# tickets against, never written from memory (CLAUDE.md: a fixture and the gate that reads it
+# written by the same hand agree with each other instead of measuring anything):
+#
+#   acli jira workitem search --jql "key = SQ-108 AND statusCategory = Done" \
+#        --fields "key,status" --json
+#
+# `done` is that command's stdout for a CLOSED issue — which is why the fixture mission carries the
+# real key SQ-108: renaming it to something tidier would make this a fixture written from memory.
+# `notdone` is the same command against an OPEN issue (SQ-98): `[]`, and **rc 0 in both cases** —
+# the exit code discriminates nothing, and the SHAPE of the answer is the only witness there is.
+#
+# The captured bytes live in tests/fixtures/ rather than in a heredoc here, and that is not tidying:
+# a Jira status name is LOCALIZED — this instance answers in pt-BR — so inlining it would put
+# Portuguese into a file check-lang.sh scans as English kit surface — and the only ways out of that
+# would be to edit the capture until the scan goes quiet, which is a fixture written from memory
+# wearing a fixture's clothes. tests/fixtures/ is captured third-party DATA, never kit logic; the
+# header of check-lang.sh names the category.
+#
+# DECLARED LIMIT, because this is the fourth third-party fixture in the kit and the first with no
+# drift sensor: `health_provenance` pins the other three against the skill file each was captured
+# from, and there is no installed file to diff a CLI's stdout against. If acli renames `key` or
+# moves it under `fields`, `close_query`'s `.[]?.key` stops matching, `sdd close` answers "still
+# open" over every real close, and every regime below stays green on the frozen bytes. What IS
+# pinned here is the shape the runner depends on — the assertion right below — so a fixture edited
+# until the tests pass fails instead. Re-capture with the command above when acli majors.
+cp "$ROOT/tests/fixtures/acli-workitem-search-done.json" "$FIX/.stub/acli-done.json"
+assert_eq "close: the captured acli fixture still has the shape close_query reads" \
+  "array:true key:SQ-108 status:1" \
+  "array:$(jq -r 'type == "array"' "$FIX/.stub/acli-done.json") key:$(jq -r '.[0].key' "$FIX/.stub/acli-done.json") status:$(jq -r '[.[0].fields.status.statusCategory.key == "done"] | length' "$FIX/.stub/acli-done.json")"
+
+# Same provenance, same day: the failure text, captured by pointing HOME at an empty directory so
+# the tool had no credentials. It came back on **rc 1** — the plan for this work had assumed rc 0,
+# and the live probe said otherwise. Both are exercised below and the reason is structural: the
+# runner captures with `|| true`, so a non-JSON answer arriving with a success rc is a world the
+# code manufactures for itself no matter which code the tool actually picked.
+printf '%s\n' "✗ Error: unauthorized: use 'acli [product] auth login' to authenticate" \
+  > "$FIX/.stub/acli-unauth.txt"
+
+# One verdict per INVOCATION, and the sequence is the whole point: `cmd_close` asks twice — once
+# before the session and once after — and the two answers have to be settable independently or the
+# regimes cannot tell "refused before spending anything" from "asked, spent, then refused". Runs
+# past the end of the list repeat the last line, so a one-word sequence still means "always this".
+cat > "$FIX/.stub/acli" <<STUB
+#!/usr/bin/env bash
+printf '%s\n' "\$*" >> "$CLOSE_ACLI_LOG"
+n=\$(wc -l < "$CLOSE_ACLI_LOG")
+v="\$(sed -n "\${n}p" "$CLOSE_CTL" 2>/dev/null)"
+[ -n "\$v" ] || v="\$(tail -1 "$CLOSE_CTL" 2>/dev/null)"
+case "\$v" in
+  done)    cat "$FIX/.stub/acli-done.json" ;;
+  notdone) printf '[]\n' ;;
+  error0)  cat "$FIX/.stub/acli-unauth.txt"; exit 0 ;;
+  *)       cat "$FIX/.stub/acli-unauth.txt"; exit 1 ;;
+esac
+STUB
+chmod +x "$FIX/.stub/acli"
+
+CLOSE_ISSUE="SQ-108"
+printf -- '---\nfase: TICKET\nissue: %s\n---\n# TICKET\n' "$CLOSE_ISSUE" > "$MDIR/10-ticket.md"
+printf -- '---\nfase: PR\npr_url: https://github.com/fixture/repo/pull/1\n---\n# PR\n' > "$MDIR/50-pr.md"
+sed -i 's/^JIRA_ENABLED=false$/JIRA_ENABLED=true/' "$FIX/.sdd/config.sh"
+
+# has <text> <ERE> -> 1|0. A term of a composed assertion, so a red names WHICH half moved instead
+# of only reporting that something did.
+has() { if grep -qE "$2" <<< "$1"; then printf 1; else printf 0; fi }
+spent() { if [ -e "$CLOSE_MARK" ]; then printf 1; else printf 0; fi }
+acli_calls() { if [ -e "$CLOSE_ACLI_LOG" ]; then wc -l < "$CLOSE_ACLI_LOG" | tr -d ' '; else printf 0; fi }
+
+# close_run <acli verdict sequence, space-separated> <session rc> — CALLED, never substituted: it
+# publishes its results in globals, and a `$(close_run …)` would run it in a subshell where every
+# one of those assignments dies with the substitution. That is a scar this repo already carries
+# (CLAUDE.md, the one-shot guard of autonomy_kit_stamp), and it is why the two outputs come back as
+# CLOSE_RC_OUT/CLOSE_OUT.
+CLOSE_RC_OUT=0
+CLOSE_OUT=""
+close_run() {
+  rm -f "$CLOSE_MARK" "$CLOSE_ACLI_LOG" "$CLOSE_JOURNAL"
+  # Herestring into `tr`, never `printf … | tr`: this file runs under `pipefail`, where the pipe
+  # form is the family check-pipefail.sh exists to keep out.
+  tr ' ' '\n' <<< "$1" > "$CLOSE_CTL"
+  printf '%s\n' "$2" > "$CLOSE_RCFILE"
+  CLOSE_RC_OUT=0
+  CLOSE_OUT="$( cd "$FIX" && "$SDD" close "$MISSION" 2>&1 )" || CLOSE_RC_OUT=$?
+}
+
+# 1. No acli on the machine. Fail-closed and BEFORE the session: a verdict this command cannot
+#    reach is not a reason to spend a budget first and then admit it. `session-spent:0` is the
+#    whole point of the regime — without it the guard could sit after the session and still pass.
+rm -f "$CLOSE_MARK" "$CLOSE_ACLI_LOG"
+printf 'done\n' > "$CLOSE_CTL"
+printf '0\n' > "$CLOSE_RCFILE"
+C1_RC=0
+C1_OUT="$( cd "$FIX" && SDD_ACLI_BIN=/nonexistent/acli "$SDD" close "$MISSION" 2>&1 )" || C1_RC=$?
+assert_eq "close: with no acli reachable it fails before spending a session, and says what to run by hand" \
+  "rc:1 acli:1 jql:1 auth:1 session-spent:0" \
+  "rc:$C1_RC acli:$(has "$C1_OUT" 'acli') jql:$(has "$C1_OUT" 'statusCategory = Done') auth:$(has "$C1_OUT" 'auth') session-spent:$(spent)"
+
+# 2. The pre-check sits BELOW the JIRA gate, and only this regime says so. Regime 9 cannot: it
+#    leaves acli reachable, so a pre-check lifted above `JIRA_ENABLED` would still find one and
+#    stay quiet. Measured on 2026-08-25 by lifting it: every close regime stayed green while
+#    `sdd close` began dying with rc 1 on every JIRA-less repo with no acli installed — a repo that
+#    tickets nothing has no business needing a Jira CLI.
+sed -i 's/^JIRA_ENABLED=true$/JIRA_ENABLED=false/' "$FIX/.sdd/config.sh"
+rm -f "$CLOSE_MARK" "$CLOSE_ACLI_LOG"
+C2_RC=0
+C2_OUT="$( cd "$FIX" && SDD_ACLI_BIN=/nonexistent/acli "$SDD" close "$MISSION" 2>&1 )" || C2_RC=$?
+assert_eq "close: with JIRA off an absent acli is nobody's business — the pre-check is below the gate" \
+  "rc:0 nothing:1 acli-error:0 session-spent:0" \
+  "rc:$C2_RC nothing:$(has "$C2_OUT" 'nothing to close') acli-error:$(has "$C2_OUT" 'cannot reach') session-spent:$(spent)"
+sed -i 's/^JIRA_ENABLED=false$/JIRA_ENABLED=true/' "$FIX/.sdd/config.sh"
+
+# 3. THE INCIDENT. The session exits 0 having only asked for confirmation; the issue is still open.
+close_run "notdone notdone" 0
+assert_eq "close: a session that exits 0 having only ASKED does not get to call the issue closed" \
+  "rc:1 confirms:0 refuses:1 session-spent:1 journal:1" \
+  "rc:$CLOSE_RC_OUT confirms:$(has "$CLOSE_OUT" 'JIRA confirms') refuses:$(has "$CLOSE_OUT" 'does not confirm') session-spent:$(spent) journal:$(has "$(cat "$CLOSE_JOURNAL" 2>/dev/null || true)" 'verified=false')"
+
+# 4. Confirmed by the issue itself — open before the session, Done after it.
+close_run "notdone done" 0
+assert_eq "close: with the issue actually Done it says closed, and the journal records what confirmed it" \
+  "rc:0 confirms:1 refuses:0 session-spent:1 journal:1" \
+  "rc:$CLOSE_RC_OUT confirms:$(has "$CLOSE_OUT" 'JIRA confirms') refuses:$(has "$CLOSE_OUT" 'does not confirm') session-spent:$(spent) journal:$(has "$(cat "$CLOSE_JOURNAL" 2>/dev/null || true)" 'verified=true')"
+
+# 5. The artifact outranks the exit code in BOTH directions — a session that fell over after
+#    closing the issue closed the issue. Without this regime the fix could be "trust rc AND the
+#    JQL", which is a second label added to the first rather than the artifact deciding.
+close_run "notdone done" 1
+assert_eq "close: a session that failed but left the issue Done is a close, and the rc is reported not obeyed" \
+  "rc:0 confirms:1 refuses:0 rc-shown:1" \
+  "rc:$CLOSE_RC_OUT confirms:$(has "$CLOSE_OUT" 'JIRA confirms') refuses:$(has "$CLOSE_OUT" 'does not confirm') rc-shown:$(has "$CLOSE_OUT" 'exited 1')"
+
+# 6. Prose where JSON was expected, under BOTH exit codes — the expired-auth world the fixture in
+#    .stub/acli-unauth.txt was captured from. It is refused at the PRE-CHECK, so `session-spent:0`
+#    is the term that matters: `command -v` cannot see expired auth, so a pre-check that only asked
+#    whether the binary exists spent the whole budget on the one unreachable case that happens.
+close_run "error1" 0
+C6_RC1="$CLOSE_RC_OUT"; C6_OUT1="$CLOSE_OUT"; C6_SPENT1="$(spent)"
+close_run "error0" 0
+assert_eq "close: an acli answering prose is refused BEFORE the session, whichever exit code it picks" \
+  "rc1:1 json1:1 confirms1:0 spent1:0 rc0:1 json0:1 confirms0:0 spent0:0" \
+  "rc1:$C6_RC1 json1:$(has "$C6_OUT1" 'did not answer JSON') confirms1:$(has "$C6_OUT1" 'JIRA confirms') spent1:$C6_SPENT1 rc0:$CLOSE_RC_OUT json0:$(has "$CLOSE_OUT" 'did not answer JSON') confirms0:$(has "$CLOSE_OUT" 'JIRA confirms') spent0:$(spent)"
+
+# 7. Reachable before the session, gone after it — auth expiring mid-session is the ordinary way.
+#    THREE outcomes, not two: "I asked and JIRA said no" and "I could not ask" both fall closed, but
+#    a human told the session merely asked for confirmation goes and reads the wrong log. The
+#    `still-open:0` term is the half that makes this regime distinguish anything.
+close_run "notdone error1" 0
+assert_eq "close: acli that dies after the session is UNVERIFIED, not 'the session only asked'" \
+  "rc:1 unverified:1 still-open:0 confirms:0 session-spent:1 journal:1" \
+  "rc:$CLOSE_RC_OUT unverified:$(has "$CLOSE_OUT" 'UNVERIFIED') still-open:$(has "$CLOSE_OUT" 'is still open') confirms:$(has "$CLOSE_OUT" 'JIRA confirms') session-spent:$(spent) journal:$(has "$(cat "$CLOSE_JOURNAL" 2>/dev/null || true)" 'reachable=false')"
+
+# 8. Already Done before anything is spent. The pre-check is the verification query, so this costs
+#    ONE acli call and no session — it used to cost a whole one to learn the issue was shut. The
+#    `acli-calls:1` term is what pins that: a second call would mean the query ran after a session
+#    that this regime says never happened.
+close_run "done" 0
+assert_eq "close: an issue already Done is confirmed without spending a session at all" \
+  "rc:0 already:1 confirms:1 session-spent:0 acli-calls:1 journal:1" \
+  "rc:$CLOSE_RC_OUT already:$(has "$CLOSE_OUT" 'already Done') confirms:$(has "$CLOSE_OUT" 'JIRA confirms') session-spent:$(spent) acli-calls:$(acli_calls) journal:$(has "$(cat "$CLOSE_JOURNAL" 2>/dev/null || true)" 'session=none')"
+
+# 9. Control. With JIRA off the command asks nothing of anyone — and the two `:0` terms are the
+#    half that matters: a guard that ran acli anyway would still print "nothing to close".
+sed -i 's/^JIRA_ENABLED=true$/JIRA_ENABLED=false/' "$FIX/.sdd/config.sh"
+rm -f "$CLOSE_MARK" "$CLOSE_ACLI_LOG"
+C9_RC=0
+C9_OUT="$( cd "$FIX" && "$SDD" close "$MISSION" 2>&1 )" || C9_RC=$?
+assert_eq "close: with JIRA off nothing is asked of anyone — no session, no acli, no verdict" \
+  "rc:0 nothing:1 session-spent:0 acli-calls:0" \
+  "rc:$C9_RC nothing:$(has "$C9_OUT" 'nothing to close') session-spent:$(spent) acli-calls:$(acli_calls)"
+
+# The fixture goes back the way it was found. "This block runs last" was the previous version's
+# only defence, and it is not one a sensor can hold: a future author appending below would inherit
+# a `gh` that answers MERGED to everything and a `claude` that returns success without doing
+# anything, and would never see why their new assertion passed. Restoring costs four lines.
+rm -f "$MDIR/10-ticket.md" "$MDIR/50-pr.md" "$FIX/.stub/gh" "$FIX/.stub/acli" "$CLOSE_JOURNAL"
+cat > "$FIX/.stub/claude" <<'STUB'
+#!/usr/bin/env bash
+echo "ERROR: the test invoked the real claude — the escalation path did not escape before the session" >&2
+exit 97
+STUB
+chmod +x "$FIX/.stub/claude"
+
 # ---------------------------------------------------------------------------
 echo
 if [ "$fails" -eq 0 ]; then

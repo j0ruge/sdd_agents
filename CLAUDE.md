@@ -56,6 +56,25 @@ o escopo; nunca perder o achado. Formato:
 - [ ] <o quê> — `arquivo:linha` — <por que importa> — descoberto por `<agente>` na missão `<slug>` (YYYY-MM-DD)
 ```
 
+⚠️ **A rota depende de quem é o repo da missão, e dizer só o DESTINO não bastou.** Missão cujo
+repo é o kit escreve aqui, como sempre. Missão de repo-alvo **nunca escreve, commita ou entra** no
+repositório do kit: a linha completa do achado vai na seção de achados fora de escopo do handoff,
+marcada `kit:`, e quem transporta é o humano ou a triagem do `sdd kaizen`. Medido em `2d28d13` —
+uma sessão de EXEC cujo alvo era outro repo commitou um achado de kit direto na `main` daqui, com
+a suíte vermelha e fora de qualquer revisão, e as linhas de ledger da própria corrida passaram a
+carimbar o sha do commit que a corrida acabara de fazer. O runner hoje avisa e registra
+(`KIT-TOUCHED` no `pipeline.log`), mas **não para a linha** — guarda de aviso, não fronteira.
+⚠️ A guarda mora nos **chamadores**, e são quatro portas: as duas do laço do `cmd_run`, o
+`cmd_retry` e o `cmd_close`. É a forma que este arquivo recusa em toda outra família (o `journal`
+tem UMA definição de escalada justamente por isso), e aqui ela é deliberada — o `kit_guard_check`
+precisa correr **depois** de `moved2` ser amostrado, e uma guarda dentro do `run_phase` cairia
+dentro da janela. O preço é que a quinta porta nasce desguardada; ele é pago com um probe por
+porta (`tests/check-autonomy.sh`, regimes 1, 4, 5 e 7), então porta acrescentada sem probe é porta
+cuja remoção nenhuma asserção percebe. A projeção (`--dry-run`) **não arma nada**: `sdd run
+--dry-run` não abre sessão a que atribuir mudança, e armar mesmo assim fazia a projeção herdar o
+aviso de ledger do `autonomy_kit_stamp` — medido, 0 avisos antes e 1 depois, com o kit instalado
+como cópia simples.
+
 O item **cabe em ~6 linhas** (teto duro de 8, medido por `tests/check-todo.sh`): o quê, a âncora
 em `arquivo:linha`, por que importa, a direção, quem descobriu. A análise longa mora no handoff
 da missão citada — duplicá-la aqui foi o que levou este arquivo a 861 linhas.
@@ -217,17 +236,21 @@ sabotagem do runner os faria morrer — `check-pipefail.sh` está nas duas situa
 mede `tests/`. Onde a regra está paga quem mede o sensor é um `selftest()` com probes e rc
 próprios — 90, 91, 92 — mais um piso contra vacuidade. Sem isso, regex quebrada reporta "tudo
 limpo" para sempre.
-⚠️ **Quatro dos cinco pagam; o `check-templates.sh` não, e a dívida é declarada e não escondida.**
-No lugar do auto-teste ele tem o `REVIEW_FLOOR` mais uma passada adversarial nomeada no próprio
-cabeçalho — e a r2 de `20260818-lote-facil` mediu que esse piso conta **chamadas**, então uma linha
-apagada o faz certificar um `templates/review.md` de zero byte com `23 assertion(s)`. Está no
-`TODO.md`. Sensor sem auto-teste que declara o buraco é dívida; sensor sem auto-teste que jura
-estar coberto é o fail-open que esta seção inteira existe para impedir.
+⚠️ **Os cinco pagam — o último a pagar foi o `check-templates.sh`, em `6aa2a16`.** Por duas
+missões ele foi a exceção declarada: no lugar do auto-teste tinha o `REVIEW_FLOOR` mais uma passada
+adversarial nomeada no cabeçalho, e a r2 de `20260818-lote-facil` mediu quanto isso valia — o piso
+contava **chamadas**, então uma linha apagada o fazia certificar um `templates/review.md` de zero
+byte com `23 assertion(s)` e `template contract intact`. Mover a contagem para dentro do `check()`
+não bastava: move a tartaruga uma casca para fora, porque um `check()` sem o `grep` conta igual.
+Quem fechou foi o **controle negativo** — rodar a primitiva de asserção contra um mundo de resposta
+conhecida e exigir que ela a diga. O `REVIEW_FLOOR=23` continua lá, agora como piso e não como
+álibi. Sensor sem auto-teste que declara o buraco é dívida; sensor sem auto-teste que jura estar
+coberto é o fail-open que esta seção inteira existe para impedir.
 ⚠️ A rubrica é "a mutação não alcança", **não** "tem `selftest()`": `grep -l '^selftest()' tests/*`
-hoje devolve **cinco**, porque o `check-entrypoint.sh` carrega um por escolha própria (o catálogo o
-alcança via `mut_RUN_entrypoint_unguarded`, mas o parser dele é fino demais para depender só
-disso). Sensor a mais com auto-teste nunca é o defeito; sensor **sem** ele, estando nas duas
-situações, é.
+hoje devolve **seis** — os cinco acima mais o `check-entrypoint.sh`, que carrega um por escolha
+própria (o catálogo o alcança via `mut_RUN_entrypoint_unguarded`, mas o parser dele é fino demais
+para depender só disso). Sensor a mais com auto-teste nunca é o defeito; sensor **sem** ele, estando
+nas duas situações, é.
 ⚠️ A âncora `^selftest()` **é** o instrumento; `selftest` solto responde **sete**, somando o
 `jobs_selftest()` do escalonador (`tests/check-mutation.sh:63`), que mede o pool de jobs e não
 regra de sensor nenhuma. Número em rubrica sem o comando ao lado é a mesma classe do

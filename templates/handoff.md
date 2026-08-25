@@ -55,7 +55,21 @@ não "continue de onde parei".>
 
 ## Achados fora de escopo
 
-> Registrados no `TODO.md` do repo-alvo (ou do `sdd_agents`, se for melhoria do kit). Aqui fica
-> só o ponteiro, para o PR conseguir citar.
+> Dois destinos, e a diferença já custou uma `main` vermelha (`2d28d13`).
+>
+> **Achado sobre o repo-alvo:** registrado no `TODO.md` dele; aqui fica só o ponteiro, para o PR
+> conseguir citar.
+>
+> **Achado sobre o kit** (runner, agente, template), numa missão cujo repo NÃO é o kit: a sessão
+> não escreve, não commita e não entra no repositório do kit. A linha **completa** do achado mora
+> aqui, marcada `kit:`, e quem a transporta é um humano ou a triagem do `sdd kaizen`. Ponteiro para
+> um arquivo que ninguém escreveu é achado perdido.
+>
+> O exemplo abaixo mora **dentro** desta citação pelo mesmo motivo que o `- intervention:` do
+> `checkpoint.md` (`cd49351`): exemplo que abre a linha com `-` é contado verbatim por quem vier
+> varrer os handoffs atrás de `kit:`, e todo handoff nasceria devendo um achado fantasma. Copie a
+> forma para fora da citação ao registrar um achado de verdade.
+>
+> - kit: <o quê> — <arquivo:linha do kit> — <por que importa>
 
 - <o quê> → `TODO.md` (<seção>)

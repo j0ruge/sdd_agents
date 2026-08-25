@@ -1290,7 +1290,27 @@ assert_eq "the money adds up the same however the rows are grouped" \
 
 # The fixture repo has to end clean — the two assertions at the bottom of this file say so, and
 # these handoff directories are this block's own litter.
-rm -rf "$FIX/docs/handoffs/h1" "$FIX/docs/handoffs/h2"
+# A checkpoint straight out of the template owes ZERO interventions. The template ships one
+# `- intervention:` line to show the FORM of the marker, and that stub used to be counted verbatim
+# by the reader: every mission was born owing a phantom intervention to the very instrument that
+# judges how much the human had to step in. Measured on 2026-08-25, on the M2 pilot — the executor
+# deleted the line by hand and nothing checked that it had.
+# The fixture is `cp` of the real template, never a hand-written imitation: an imitation would be
+# written by whoever writes the fix, and would agree with the fix instead of measuring it.
+# Its own ledger, never `tworepos`: the counts of that file sustain eight assertions above.
+mkdir -p "$FIX/docs/handoffs/h3" "$OUTSIDE/bymission3"
+cp "$ROOT/templates/checkpoint.md" "$FIX/docs/handoffs/h3/checkpoint.md"
+{ ledger_row "$FIXROOT" h1; ledger_row "$FIXROOT" h2; ledger_row "$FIXROOT" h3; } \
+  > "$OUTSIDE/bymission3/autonomy-log.jsonl"
+out_bm3="$( SDD_STATE_DIR="$OUTSIDE/bymission3" "$SDD" autonomy --by-mission 2>&1 )"
+# The presence term comes FIRST and as its own field: a reader that printed no h3 line at all would
+# leave the count field empty, and "absent" is not "zero" — without the term, deleting the mission
+# from the report would be one of the worlds this assertion calls green.
+assert_eq "a checkpoint born verbatim from the template owes no intervention" \
+  "1 h3:0" \
+  "$(grep -cE '^  h3  ' <<< "$out_bm3") h3:$(mission_line h3 "$out_bm3" | grep -oE '[0-9]+ intervention' | grep -oE '^[0-9]+')"
+
+rm -rf "$FIX/docs/handoffs/h1" "$FIX/docs/handoffs/h2" "$FIX/docs/handoffs/h3"
 
 # The header has to name the SCOPE it actually read. Under the flag the rows below come from every
 # project on the machine, and a header still ending in one repo path reads as a claim ABOUT that
@@ -2063,6 +2083,253 @@ axis_literal="$(awk '/^kaizen_axis_note\(\) \{/ { inf = 1; next }
 assert_eq "output: the axis note quotes the guard floor instead of keeping a copy of its own" \
   "true 3 3 0/4" \
   "$(jq -r '.guard.degenerate_axis' <<< "$axis_series") $(jq -r '.guard.floor' <<< "$axis_series") $(num_before "$axis_out" 'missions per kit version') $axis_literal"
+
+# --- a target-repo session that edits the KIT ------------------------------
+# Measured on 2026-08-25: an EXEC session whose mission was another repo entirely committed a kit
+# finding straight into this kit's `main` (2d28d13). The kit's own suite went red, and the ledger
+# rows of that very run stamped the sha of the commit the run had just made — the instrument
+# recording a kit version that only existed because the run created it.
+#
+# The world here is a FAKE KIT: a `cp -r` (never a symlink — `_resolve_self` resolves symlinks and
+# would land back on the real kit) of the four directories `sdd` reads from. Invoking
+# `$OUTSIDE/fakekit/bin/sdd` makes SDD_HOME the fake, which is what makes "the kit changed under
+# the run" a thing a test may cause. It also keeps the mutation catalogue honest: inside a mutant
+# the sandbox is what gets copied here, so the sabotage travels into the fake kit too.
+#
+# EVERY regime carries a floor proving its sessions ran, the two that expect SILENCE included. That
+# is not symmetry for its own sake: a regime whose whole expectation is `lines:0 warns:0` is green
+# in the world where `kitguard_world` quietly failed and no run happened at all — measured, by
+# deleting the control world and its run and watching the assertion still say ok. `kitguard_world`
+# silences its own subshell, so nothing else would have said a word.
+echo "== reader: a target-repo session that edits the kit =="
+FAKEKIT="$OUTSIDE/fakekit"
+mkdir -p "$FAKEKIT"
+cp -r "$ROOT/bin" "$ROOT/templates" "$ROOT/config" "$ROOT/agents" "$FAKEKIT/"
+( cd "$FAKEKIT" && git init -q -b main && git config user.email "fixture@example.com" \
+    && git config user.name "Fixture" && git add -A && git commit -qm "chore: the kit" ) >/dev/null
+
+# The same four directories with NO `git init`, which is the whole difference: a kit installed as a
+# plain copy is the world `autonomy_kit_stamp` warns about, and regime 6 is the only one that needs
+# it. Built next to the checkout rather than derived from it so neither can drift into the other.
+PLAINKIT="$OUTSIDE/plainkit"
+mkdir -p "$PLAINKIT"
+cp -r "$ROOT/bin" "$ROOT/templates" "$ROOT/config" "$ROOT/agents" "$PLAINKIT/"
+
+# kitguard_world <dir> [kit] — a target repo sitting at EXEC with a `pending` increment. CALLED,
+# never substituted: it cds and writes, and there is nothing here worth losing to a subshell.
+kitguard_world() {
+  local kit="${2:-$FAKEKIT}"
+  mkdir -p "$1"
+  ( cd "$1" || exit 1
+    git init -q -b main
+    git config user.email "fixture@example.com"
+    git config user.name "Fixture"
+    echo content > file.txt
+    "$kit/bin/sdd" install >/dev/null
+    cat > .sdd/config.sh <<'CFG'
+PROJECT_NAME="kitguard"
+DEFAULT_BRANCH="main"
+TEST_CMD="true"
+E2E_CMD=""
+HANDOFF_DIR="docs/handoffs"
+QA_DOCS_PATH="docs/qa"
+JIRA_ENABLED=false
+CFG
+    mkdir -p "docs/handoffs/$MISSION"
+    cat > "docs/handoffs/$MISSION/00-missao.md" <<'MIS'
+---
+missao: 20260101-fixture
+aprovacao: auto
+---
+# Mission
+MIS
+    : > "docs/handoffs/$MISSION/01-plano.md"
+    # `pending`, not `blocked`: the Jidoka path escapes BEFORE opening a session, and this block
+    # needs sessions to actually run. The increment never reaches `done`, so the gate fails, the
+    # session moved nothing in THIS repo, and the runner spends its inline retry too — which is
+    # the second half of regime 1: one divergence must be reported once, not once per session.
+    cat > "docs/handoffs/$MISSION/checkpoint.md" <<'CK'
+| ID | Incremento | Check (comando → esperado) | Status | Commit |
+|---|---|---|---|---|
+| I1 | slice one | `true` → 0 | pending | — |
+CK
+    git add -A && git commit -qm "chore: fixture mission" ) >/dev/null 2>&1
+}
+
+# The session that commits into the kit, on one chosen invocation. TWO files and not one, because
+# they answer different questions: the COUNTER says how many sessions ran (every regime's floor,
+# and the silent ones need it most), the MARK says a commit into a kit actually happened (the floor
+# of the regimes that expect a warning). One file could not tell a control run apart from a fixture
+# that stopped working.
+#
+# Files and not shell variables: the stub is a separate process per `claude` call, so nothing in it
+# survives to the next one. Which call it fires on is a parameter because the four call sites of the
+# guard are reached by different sessions — a stub that always fired first would leave three of them
+# unmeasured, which is exactly what the sabotage pass caught before these regimes existed.
+#
+# `git add` of the ONE file it wrote, never `-A`: a blanket add inside a kit checkout would sweep up
+# whatever else the run happened to drop there, and the assertion would stop being about the file
+# the session actually wrote.
+KIT_SESSION_COUNT="$OUTSIDE/kit-session-count"
+KIT_COMMIT_MARK="$OUTSIDE/kit-commit-mark"
+kitguard_stub() {   # kitguard_stub <repo to commit into, or "" for benign> [invocation to fire on]
+  local fire="${2:-1}"
+  cat > "$OUTSIDE/stub/claude" <<STUB
+#!/usr/bin/env bash
+n=\$(( \$(cat "$KIT_SESSION_COUNT" 2>/dev/null || echo 0) + 1 ))
+printf '%s\n' "\$n" > "$KIT_SESSION_COUNT"
+if [ -n "$1" ] && [ "\$n" -eq $fire ]; then
+  printf 'a finding the session had no business committing here\n' >> "$1/TODO.md"
+  git -C "$1" add TODO.md
+  git -C "$1" commit -qm "chore: the session wrote into the kit"
+  : > "$KIT_COMMIT_MARK"
+fi
+cat "$STREAM_SAMPLE"
+exit 0
+STUB
+  chmod +x "$OUTSIDE/stub/claude"
+}
+
+kitguard_reset()    { rm -f "$KIT_SESSION_COUNT" "$KIT_COMMIT_MARK"; }
+kitguard_touched()  { if [ -e "$KIT_COMMIT_MARK" ]; then printf 1; else printf 0; fi }
+kitguard_sessions() { cat "$KIT_SESSION_COUNT" 2>/dev/null || printf 0; }
+# kitguard_has <text> <fixed string> -> 1|0. A boolean and not a count, wherever the number is not
+# the property: regime 6's projection prints one banner per phase, and pinning that number here
+# would make the regime fail the day the phase list grows — an assertion about the wrong thing.
+kitguard_has()      { if grep -qF "$2" <<< "$1"; then printf 1; else printf 0; fi }
+
+# 1. THE INCIDENT. Exactly one KIT-TOUCHED for one divergence — not one per session, and
+#    `sessions:2` is what makes that sentence mean something: the retry guarantees there were two.
+#    `kit_before` and `kit_after` are demanded DIFFERENT: a line that printed the same stamp twice
+#    would satisfy "a line exists" while saying nothing.
+kitguard_reset
+KGT="$OUTSIDE/kitguard-target"
+kitguard_world "$KGT"
+kitguard_stub "$FAKEKIT"
+KG1_ERR="$( cd "$KGT" && "$FAKEKIT/bin/sdd" run "$MISSION" 2>&1 >/dev/null )"
+KG1_LOG="$(cat "$KGT/.sdd/logs/$MISSION/pipeline.log" 2>/dev/null || true)"
+KG1_BEFORE="$(grep -oE 'kit_before=[^ ]+' <<< "$KG1_LOG" | head -1)"
+KG1_AFTER="$(grep -oE 'kit_after=[^ ]+' <<< "$KG1_LOG" | head -1)"
+assert_eq "kit-guard: a session that edits the kit during another repo's mission is warned once and journalled once" \
+  "sessions:2 moved:1 lines:1 warns:1 phase:EXEC differ:1" \
+  "sessions:$(kitguard_sessions) moved:$(kitguard_touched) lines:$(grep -c 'KIT-TOUCHED' <<< "$KG1_LOG") warns:$(grep -c 'changed during' <<< "$KG1_ERR") phase:$(grep -oE 'KIT-TOUCHED[[:space:]]+[A-Z]+' <<< "$KG1_LOG" | head -1 | awk '{print $2}') differ:$([ "${KG1_BEFORE#kit_before=}" != "${KG1_AFTER#kit_after=}" ] && echo 1 || echo 0)"
+
+# 2. CONTROL. The same run, same sessions, same everything — with a session that leaves the kit
+#    alone. Without this term the guard could be a line printed unconditionally; without the
+#    `sessions:2` FLOOR the term itself is satisfied by a run that never happened, which is the
+#    measured hole this regime carried when it shipped.
+kitguard_reset
+KGC="$OUTSIDE/kitguard-control"
+kitguard_world "$KGC"
+kitguard_stub ""
+KG2_ERR="$( cd "$KGC" && "$FAKEKIT/bin/sdd" run "$MISSION" 2>&1 >/dev/null )"
+KG2_LOG="$(cat "$KGC/.sdd/logs/$MISSION/pipeline.log" 2>/dev/null || true)"
+assert_eq "kit-guard: a session that leaves the kit alone is not accused of anything" \
+  "sessions:2 moved:0 lines:0 warns:0" \
+  "sessions:$(kitguard_sessions) moved:$(kitguard_touched) lines:$(grep -c 'KIT-TOUCHED' <<< "$KG2_LOG") warns:$(grep -c 'changed during' <<< "$KG2_ERR")"
+
+# 3. SELF-EXCLUSION. A mission whose target IS the kit edits the kit for a living. A guard that
+#    fired on every phase of every kit mission would train its only reader to ignore it, and the
+#    run it finally mattered on would scroll past unread. This regime is why the guard compares
+#    the kit root against REPO_ROOT rather than merely asking "did the kit change".
+kitguard_reset
+kitguard_world "$FAKEKIT"
+kitguard_stub "$FAKEKIT"
+KG3_ERR="$( cd "$FAKEKIT" && "$FAKEKIT/bin/sdd" run "$MISSION" 2>&1 >/dev/null )"
+KG3_LOG="$(cat "$FAKEKIT/.sdd/logs/$MISSION/pipeline.log" 2>/dev/null || true)"
+assert_eq "kit-guard: a mission whose own repo IS the kit is left alone — the guard must not cry wolf" \
+  "moved:1 lines:0 warns:0" \
+  "moved:$(kitguard_touched) lines:$(grep -c 'KIT-TOUCHED' <<< "$KG3_LOG") warns:$(grep -c 'changed during' <<< "$KG3_ERR")"
+
+# 4. THE INLINE RETRY has a guard of its own. When the first session leaves the kit alone and the
+#    RETRY is the one that writes into it, only the check on the retry path can see it — measured:
+#    with that call site deleted, regimes 1-3 stay green and this one goes to lines:0. The stub
+#    fires on invocation 2 because a gate that fails over a session which moved nothing is exactly
+#    what makes cmd_run spend its one inline retry.
+kitguard_reset
+KGR="$OUTSIDE/kitguard-inline-retry"
+kitguard_world "$KGR"
+kitguard_stub "$FAKEKIT" 2
+KG4_ERR="$( cd "$KGR" && "$FAKEKIT/bin/sdd" run "$MISSION" 2>&1 >/dev/null )"
+KG4_LOG="$(cat "$KGR/.sdd/logs/$MISSION/pipeline.log" 2>/dev/null || true)"
+assert_eq "kit-guard: the kit edited by the inline RETRY is caught by the retry's own check" \
+  "sessions:2 moved:1 lines:1 warns:1" \
+  "sessions:$(kitguard_sessions) moved:$(kitguard_touched) lines:$(grep -c 'KIT-TOUCHED' <<< "$KG4_LOG") warns:$(grep -c 'changed during' <<< "$KG4_ERR")"
+
+# 5. `sdd retry` is ANOTHER door that opens a session which commits, and it does not go through
+#    cmd_run's loop at all: its arm/check pair is its own. Measured the same way — delete that pair
+#    and every regime above stays green while this one reports nothing.
+kitguard_reset
+KGT2="$OUTSIDE/kitguard-retry-cmd"
+kitguard_world "$KGT2"
+kitguard_stub "$FAKEKIT" 1
+KG5_ERR="$( cd "$KGT2" && "$FAKEKIT/bin/sdd" retry "$MISSION" 2>&1 >/dev/null )"
+KG5_LOG="$(cat "$KGT2/.sdd/logs/$MISSION/pipeline.log" 2>/dev/null || true)"
+assert_eq "kit-guard: sdd retry is another door that opens a session, and it is guarded too" \
+  "sessions:1 moved:1 lines:1 warns:1" \
+  "sessions:$(kitguard_sessions) moved:$(kitguard_touched) lines:$(grep -c 'KIT-TOUCHED' <<< "$KG5_LOG") warns:$(grep -c 'changed during' <<< "$KG5_ERR")"
+
+# 6. THE PROJECTION IS DISARMED, and this regime exists because the first round of this work argued
+#    the opposite and shipped it. It reasoned that a dry run opens no session, so no window exists
+#    and no sabotage could turn a probe red — and the window was never the point. `autonomy_kit_stamp`
+#    is reached from NOWHERE ELSE during a projection, so arming the pair made `sdd run --dry-run`
+#    inherit that function's warning about ledger rows a projection never writes.
+#
+#    DIFFERENTIAL, and it has to be: `dry-warn:0` alone is satisfied by a runner with the warning
+#    deleted outright, by a plain-copy kit that stopped being plain, and by a dry run that died
+#    before reaching anything. So the same kit and the same repo answer in a REAL run too
+#    (`real-warn:1`), the projection has to prove it projected (`projected:1`), and it has to prove
+#    it spent nothing (`dry-sessions:0`) — which is also the term that keeps this a statement about
+#    the guard rather than about the warning's spelling.
+kitguard_reset
+KGP="$OUTSIDE/kitguard-projection"
+kitguard_world "$KGP" "$PLAINKIT"
+kitguard_stub ""
+KG6_DRY_OUT="$( cd "$KGP" && "$PLAINKIT/bin/sdd" run "$MISSION" --dry-run 2>/dev/null )"
+KG6_DRY_ERR="$( cd "$KGP" && "$PLAINKIT/bin/sdd" run "$MISSION" --dry-run 2>&1 >/dev/null )"
+KG6_DRY_SESSIONS="$(kitguard_sessions)"
+KG6_REAL_ERR="$( cd "$KGP" && "$PLAINKIT/bin/sdd" run "$MISSION" 2>&1 >/dev/null )"
+assert_eq "kit-guard: the projection arms nothing — and the same plain-copy kit in a real run still warns" \
+  "dry-warn:0 real-warn:1 projected:1 dry-sessions:0" \
+  "dry-warn:$(kitguard_has "$KG6_DRY_ERR" 'not a git checkout') real-warn:$(kitguard_has "$KG6_REAL_ERR" 'not a git checkout') projected:$(kitguard_has "$KG6_DRY_OUT" 'DRY RUN: phase') dry-sessions:$KG6_DRY_SESSIONS"
+
+# 7. `sdd close` is the LAST door that opens a session able to commit, and it is not a phase: it
+#    never goes through run_phase or cmd_run's loop, so its arm/check pair is its own too. Without
+#    this regime the guard's own sentence — "a target-repo session has no business editing the kit"
+#    — would be wider than what it measures, which is the shape this repo calls fail-open.
+#
+#    The acli stub answers `[]`: a JSON array, so the pre-check finds the tool reachable and lets
+#    the session run, and an issue that is not Done, so nothing about the close verdict is what this
+#    regime is reading. `phase:CLOSE` is demanded so a pair copied from cmd_run with the wrong label
+#    still fails.
+kitguard_reset
+KGCL="$OUTSIDE/kitguard-close"
+kitguard_world "$KGCL"
+sed -i 's/^JIRA_ENABLED=false$/JIRA_ENABLED=true/' "$KGCL/.sdd/config.sh"
+printf -- '---\nfase: TICKET\nissue: SQ-1\n---\n# TICKET\n' > "$KGCL/docs/handoffs/$MISSION/10-ticket.md"
+cat > "$OUTSIDE/stub/acli" <<'STUB'
+#!/usr/bin/env bash
+printf '[]\n'
+STUB
+chmod +x "$OUTSIDE/stub/acli"
+kitguard_stub "$FAKEKIT" 1
+KG7_ERR="$( cd "$KGCL" && "$FAKEKIT/bin/sdd" close "$MISSION" 2>&1 >/dev/null )"
+KG7_LOG="$(cat "$KGCL/.sdd/logs/$MISSION/pipeline.log" 2>/dev/null || true)"
+assert_eq "kit-guard: sdd close opens a session too, and it is guarded like every other door" \
+  "sessions:1 moved:1 lines:1 warns:1 phase:CLOSE" \
+  "sessions:$(kitguard_sessions) moved:$(kitguard_touched) lines:$(grep -c 'KIT-TOUCHED' <<< "$KG7_LOG") warns:$(grep -c 'changed during' <<< "$KG7_ERR") phase:$(grep -oE 'KIT-TOUCHED[[:space:]]+[A-Z]+' <<< "$KG7_LOG" | head -1 | awk '{print $2}')"
+
+# The stubs go back the way they were found. "This block runs last" is not a property a sensor can
+# hold: a future author appending below would inherit a `claude` that returns success without doing
+# anything and an `acli` that answers `[]` to every question, and would never see why their new
+# assertion passed.
+rm -f "$OUTSIDE/stub/acli"
+cat > "$OUTSIDE/stub/claude" <<'STUB'
+#!/usr/bin/env bash
+echo "ERROR: the test invoked the real claude" >&2
+exit 97
+STUB
+chmod +x "$OUTSIDE/stub/claude"
 
 # --- the instrument never lands inside the thing it measures ----------------
 # Pins the $OUTSIDE decision at the top of this file. If the ledger, a reader fixture or the kit
