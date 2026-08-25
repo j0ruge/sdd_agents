@@ -1694,18 +1694,74 @@ mut_RUN_kit_guard_cries_wolf() {
 
 # `sdd close` goes back to believing the session's exit code — the historical defect, restored
 # verbatim rather than approximated. The session that closed the issue exits 0 and so does the one
-# that merely ASKED whether to close it, so this mutant is not "a check removed": it is the check
+# that merely ASKED whether to close it, so this mutant is not "a check removed": it is the verdict
 # replaced by a term that cannot tell the two branches apart, which is what it looked like on
 # 2026-08-25 when `ok SQ-108 closed` printed over an issue in "Em andamento".
 #
-# `close_verified` is a name this fix introduced, so the anchor matches exactly one line in the
-# file and cannot drift onto a sibling.
+# The post-session query still RUNS — only its answer is dropped. A mutant that deleted the call
+# would also be caught, and by the wrong thing: the acli-call count of the already-Done regime.
 #
 # Caught by `close: a session that exits 0 having only ASKED …` in check-gates.sh, and by the
 # artifact-wins regime from the other side: with the rc back in charge, the (rc≠0, Done) world
 # stops being a close.
 mut_RUN_close_believes_rc() {
-  sed -i 's@if grep -qxF "$issue" <<< "$close_verified"; then verified=true; fi@if [ "$rc" -eq 0 ]; then verified=true; fi@' "$1"
+  sed -i 's@^  local verified="$CLOSE_VERIFIED"$@  local verified=false; if [ "$rc" -eq 0 ]; then verified=true; fi@' "$1"
+}
+
+# The pre-check stops being able to refuse. The reachability verdict is still COMPUTED and still
+# journalled — only the branch that acts on it is neutered — so what dies is precisely the property
+# the pre-check exists for: a paid session opened over a JIRA this command could never have read.
+#
+# Caught by `close: an acli answering prose is refused BEFORE the session …`, on the
+# `session-spent` term of both exit codes. The regimes that read the verdict AFTER the session stay
+# green, which is the point: they never measured where the question was asked.
+mut_RUN_close_precheck_blind() {
+  sed -i 's@\[ "$CLOSE_REACHABLE" = true \] || die@[ true ] || die@' "$1"
+}
+
+# An issue that is already Done goes back to costing a session to discover. The query still runs and
+# still answers; the short-circuit is what goes. This is the cheapest defect in the family and the
+# easiest to reintroduce by tidying, because nothing about the OUTCOME changes — the command still
+# ends up printing that the issue is closed. Only the bill moves.
+#
+# Caught by `close: an issue already Done is confirmed without spending a session at all`, on both
+# `session-spent` and `acli-calls`: with the branch dead the query runs a second time after the
+# session, and one call becomes two.
+mut_RUN_close_already_done_spends() {
+  sed -i 's@^  if \[ "$CLOSE_VERIFIED" = true \]; then$@  if false; then@' "$1"
+}
+
+# "I asked and JIRA said no" and "I could not ask" collapse back into one sentence. Both still fall
+# closed — the rc does not move — so a suite that only read exit codes would score this as caught
+# while the human sent to read a session log for an acli that died learns nothing.
+#
+# Caught by `close: acli that dies after the session is UNVERIFIED, not 'the session only asked'`,
+# and specifically by its `still-open:0` term, which is the half that makes the regime distinguish
+# two branches instead of asserting that one of them exists.
+mut_RUN_close_unverified_conflated() {
+  sed -i 's@^  if \[ "$CLOSE_REACHABLE" != true \]; then$@  if false; then@' "$1"
+}
+
+# `sdd close` loses its kit guard. It is the one session-opening door that is not a phase, so no
+# call site of cmd_run or cmd_retry covers it — deleting this line leaves every other kit-guard
+# regime green.
+#
+# The CHECK and not the arm: an arm left behind with no check is the same silence, and this way the
+# mutant also proves the check is what reports rather than the arm being decorative.
+mut_RUN_close_unguarded() {
+  sed -i '/^  kit_guard_check "CLOSE"$/d' "$1"
+}
+
+# The projection arms the kit guard again — the shape the first round of this work shipped and
+# defended in a comment. Nothing about the guard's decision changes; what returns is
+# `autonomy_kit_stamp` being reached during a dry run, and with it that function's warning about
+# ledger rows a projection never writes.
+#
+# Caught by `kit-guard: the projection arms nothing …` in check-autonomy.sh, on its `dry-warn`
+# term. The `real-warn` half of that same assertion stays green, which is what stops the mutant from
+# being killable by simply deleting the warning.
+mut_RUN_kit_guard_arms_projection() {
+  sed -i '/^  if \[ "$DRY_RUN" = "1" \]; then KIT_GUARD_BEFORE=""; return 0; fi$/d' "$1"
 }
 
 CATALOG=(
@@ -1850,8 +1906,13 @@ CATALOG=(
   KAIZEN_axis_note_own_floor
   KAIZEN_guard_floor_unpublished
   RUN_close_believes_rc
+  RUN_close_precheck_blind
+  RUN_close_already_done_spends
+  RUN_close_unverified_conflated
+  RUN_close_unguarded
   RUN_kit_touched_blind
   RUN_kit_guard_cries_wolf
+  RUN_kit_guard_arms_projection
 )
 
 # Mutations that are NOT caught today, each with the increment that closes it. Ratchet in both
