@@ -445,12 +445,12 @@ Achados sobre **repos-alvo** vão para o `TODO.md` daquele repo. Este arquivo é
   descrevendo outra prática. Direção: o sensor pular o corpo marcado, ou o cabeçalho adotar o
   apagar-na-hora. — descoberto por `sdd-executor` na missão `20260818-lote-facil` (2026-08-18)
 
-- [ ] **`sdd kaizen` recusa rodar de um worktree do próprio kit** — `bin/sdd:2963` — a porta
+- [ ] **`sdd kaizen` recusa rodar de um worktree do próprio kit** — `bin/sdd:4354` — a porta
   "estou no repo do kit?" compara `kit_root` (`--show-toplevel` de `$SDD_HOME`) com `$REPO_ROOT`,
-  e o toplevel é por worktree: de um worktree do kit os dois divergem e o comando morre em
-  "run it in the kit repo". Mesma classe que `c514e36` acabou de fechar no ledger, em outra
-  porta — e o kit recomenda worktree para isolar missão. Direção: `ledger_repo_root` dos dois
-  lados, com par diferencial. — descoberto por `sdd-executor` na missão `20260817-eixo-do-juiz` (2026-08-17)
+  e o toplevel é por worktree: com o `sdd` do checkout principal e o cwd num worktree os dois
+  divergem e o `die` da `:4361` mata. ⚠️ **`--series` NÃO passa por ela** — sai na `:4348`, medido
+  nas duas formas de invocação, saída idêntica. Direção: `ledger_repo_root` dos dois lados, com par
+  diferencial. — descoberto por `sdd-executor` na missão `20260817-eixo-do-juiz` (2026-08-17)
 
 - [ ] **O kit não tem `CHANGELOG.md`, e a fase DOCS cobra um** — `agents/sdd-docs.md` (tabela "O
   que atualizar") — o registro durável aqui é `KAIZEN_LOG.md` + handoffs + corpo do PR, e nenhum

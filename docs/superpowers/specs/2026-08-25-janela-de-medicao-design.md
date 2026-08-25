@@ -187,13 +187,20 @@ Fase 0 está executando o apagar-na-hora**, que é o que as duas últimas fizera
 74 → 72 (duas linhas `- [ ]` a menos) está certa, e o item `:457` continua aberto porque a tensão
 entre sensor e convenção não muda com isso.
 
-**⚠️ `TODO.md:464` — `sdd kaizen` recusa rodar de um worktree do próprio kit.** A porta "estou no
-repo do kit?" (`bin/sdd:2963`) compara `kit_root` (`--show-toplevel` de `$SDD_HOME`) com
-`$REPO_ROOT`, e o toplevel é **por worktree**: de um worktree os dois divergem e o comando morre em
-*"run it in the kit repo"*. Isso atravessa a **Fase 1 e a Fase 3 deste plano**, que dependem de
-`./bin/sdd kaizen --series` para saber se a janela continua aberta e para colher o veredito. Se a
-próxima sessão trabalhar num worktree (o fluxo do `superpowers` recomenda worktree), o monitoramento
-morre calado. **Rode o `sdd kaizen` do checkout principal**, ou feche o item antes da Fase 1.
+**⚠️ `TODO.md:448` — `sdd kaizen` recusa rodar de um worktree do próprio kit, mas NÃO da forma que
+este parágrafo dizia.** A porta "estou no repo do kit?" (`bin/sdd:4354`, `die` na `:4361`) compara
+`kit_root` (`--show-toplevel` de `$SDD_HOME`) com `$REPO_ROOT`, e o toplevel é **por worktree**.
+
+A versão anterior deste parágrafo afirmava que isso atravessa a **Fase 1 e a Fase 3** e que "o
+monitoramento morre calado". **Metade está errada, e foi medida:** `--series` sai na `bin/sdd:4348`,
+**antes** da porta. Rodado de um worktree nas duas formas de invocação — o `sdd` do worktree e o do
+checkout principal — respondeu JSON idêntico, rc 0. A anterior também trazia a âncora `bin/sdd:2963`,
+que hoje é linha em branco; a âncora certa está acima e o item do `TODO.md` foi corrigido junto.
+
+O que a porta realmente pega: o `sdd kaizen` **completo** (o veredito da Fase 3), e só quando o
+binário pertence ao checkout principal e o cwd está no worktree — medido, morre em *"run it in the
+kit repo"*. Então: **Fase 1 (`--series`) roda de qualquer lugar; Fase 3 roda do checkout principal.**
+A razão para não usar worktree neste plano é outra e independente — o carimbo de mutação, no §8.
 
 ## 8. Por onde a próxima sessão começa
 
