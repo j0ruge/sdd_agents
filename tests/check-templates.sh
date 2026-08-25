@@ -140,6 +140,11 @@ check handoff.md '^## Boot da próxima fase'   "section 'Boot da próxima fase'"
 check handoff.md '^## Pendências / Decisions for a Human' "open-questions section"
 check handoff.md '^## Riscos e não-feitos'    "section 'Riscos e não-feitos'"
 check handoff.md '^## Achados fora de escopo' "section 'Achados fora de escopo'"
+# The handoff is the ONLY carrier a kit finding has when the mission's repo is not the kit — the
+# session is forbidden to write into the kit's own TODO.md, so a template that lost this line would
+# leave the instruction pointing at a slot that does not exist. Anchored on the marker `kit:` at the
+# start of a bullet, which is the token a human or the `sdd kaizen` triage greps for.
+check handoff.md '^- kit: ' "kit-finding slot in 'Achados fora de escopo'"
 
 echo "== templates/pr-body.md =="
 check pr-body.md '^## O que mudou'            "section 'O que mudou'"

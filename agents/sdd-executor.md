@@ -67,8 +67,20 @@ it** and **do not lose it**. One line in the repo's `TODO.md` (the `TODO_FILE` k
 - [ ] <what> — `file:line` — <why it matters> — found by `sdd-executor` in mission `<slug>` (YYYY-MM-DD)
 ```
 
-If the finding is about the **kit** (runner, agent, template), the entry goes in the `TODO.md` of
-`sdd_agents`, not in the target repo's.
+If the finding is about the **kit** (runner, agent, template), where it goes depends on whose
+mission this is, and the difference has already cost a red `main`:
+
+- **This mission's repo IS the kit.** The entry goes in this repo's own `TODO.md`, as above.
+- **This mission's repo is anything else.** Then you **never write to, commit to, or `cd` into the
+  kit's repository** — not the `TODO.md`, not a file, not a branch. Write the finding in full in
+  the *Achados fora de escopo* section of your handoff, on a line marked `kit:`, and stop there. A
+  human (or the `sdd kaizen` triage) carries it across.
+
+The reason is measured, not hypothetical: on 2026-08-25 a session whose mission was another repo
+entirely committed a kit finding straight into the kit's `main` (`2d28d13`). It left the kit's test
+suite red, outside any review, in a repository nobody had asked it to touch — and the autonomy rows
+of that very run then stamped the sha of the commit the run had just made. Recording the finding
+where it belongs costs one line; a commit in the wrong repository costs somebody's afternoon.
 
 Drifting off scope is the expensive mistake here. Recording costs one line.
 

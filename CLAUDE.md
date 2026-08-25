@@ -56,6 +56,15 @@ o escopo; nunca perder o achado. Formato:
 - [ ] <o quê> — `arquivo:linha` — <por que importa> — descoberto por `<agente>` na missão `<slug>` (YYYY-MM-DD)
 ```
 
+⚠️ **A rota depende de quem é o repo da missão, e dizer só o DESTINO não bastou.** Missão cujo
+repo é o kit escreve aqui, como sempre. Missão de repo-alvo **nunca escreve, commita ou entra** no
+repositório do kit: a linha completa do achado vai na seção de achados fora de escopo do handoff,
+marcada `kit:`, e quem transporta é o humano ou a triagem do `sdd kaizen`. Medido em `2d28d13` —
+uma sessão de EXEC cujo alvo era outro repo commitou um achado de kit direto na `main` daqui, com
+a suíte vermelha e fora de qualquer revisão, e as linhas de ledger da própria corrida passaram a
+carimbar o sha do commit que a corrida acabara de fazer. O runner hoje avisa e registra
+(`KIT-TOUCHED` no `pipeline.log`), mas **não para a linha** — guarda de aviso, não fronteira.
+
 O item **cabe em ~6 linhas** (teto duro de 8, medido por `tests/check-todo.sh`): o quê, a âncora
 em `arquivo:linha`, por que importa, a direção, quem descobriu. A análise longa mora no handoff
 da missão citada — duplicá-la aqui foi o que levou este arquivo a 861 linhas.
