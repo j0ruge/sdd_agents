@@ -379,6 +379,17 @@ mut_RUN_templates_kaizen_only() {
   sed -i 's|^  6\. the artifact templates in \$SDD_HOME/templates/.*|  6. (nothing)|' "$1"
 }
 
+# The same loss, reached by the door the entry above cannot see. `mut_RUN_templates_kaizen_only`
+# deletes the line, so all six phases lose the path at once and any ONE of them going red is enough
+# to score it caught — which says nothing about whether the sixth was ever read. TICKET is the phase
+# that can hide: it is the only one with a branch of its own immediately before the shared boot
+# block, so a short circuit there takes the path away from TICKET and from nothing else, and the
+# five-phase projection goes on answering yes. Caught by exactly one assertion in the suite, the
+# TICKET line of check-dry-run.sh — which is the whole reason that line exists.
+mut_RUN_templates_ticket_short_circuit() {
+  sed -i 's|^  \[ -n "\$slash" \] && printf|  if [ "$step" = TICKET ]; then printf "ticket\\n"; return 0; fi\n&|' "$1"
+}
+
 # Not a gate, and the fail-open shape in pure form: every DEFAULT_BRANCH "exists on origin",
 # including the ones that name no branch at all. The key is the base of `gh pr create` in the PR
 # phase — the LAST phase — so a wrong value is discovered after EXEC, QA, REVIEW and DOCS have all
@@ -1684,6 +1695,7 @@ CATALOG=(
   RUN_phase_log_time_only
   RUN_check_log_time_only
   RUN_templates_kaizen_only
+  RUN_templates_ticket_short_circuit
   PRE_default_branch_unchecked
   PRE_testcmd_never_run
   RUN_approve_next_unconditional

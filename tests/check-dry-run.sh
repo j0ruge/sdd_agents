@@ -210,6 +210,10 @@ want_tmpl="$(printf '%s\n' \
   "PR=yes")"
 assert_eq "every projected phase is handed a resolvable templates path in its boot prompt" \
   "$want_tmpl" "$(printf '%s\n' "$out" | templates_in_prompt)"
+# The sixth phase is asserted where its fixture already lives — see `== TICKET boots one driver ==`
+# below, which is the one block that can turn JIRA on. Named here so the count above reads as five
+# of six by DESIGN and not as the phase nobody remembered.
+
 # The other half, the house rule: the text of the right branch AND the absence of the wrong one.
 # A runner that ADDED the streaming flags without removing the old one satisfies the assertion
 # above while handing the CLI two conflicting --output-format values.
@@ -366,6 +370,12 @@ if grep -q '│ /ticket open' <<< "$outt"; then
 else
   pass "the TICKET boot prompt does not open with a slash"
 fi
+# The sixth phase of the templates-path assertion above. TICKET shares the boot prompt's `cat <<EOF`
+# with the other five, which is exactly why it needs its own line: a TICKET-specific early return
+# or override — and TICKET is the one phase with a branch of its own right before that block — would
+# take the path away here and nowhere else, and the five-phase projection would go on saying yes.
+assert_eq "and TICKET, the sixth phase, is handed the same resolvable templates path" \
+  "TICKET=yes" "$(printf '%s\n' "$outt" | templates_in_prompt)"
 sed -i 's|^JIRA_ENABLED=true|JIRA_ENABLED=false|' .sdd/config.sh
 rm -f .jira-project
 assert_eq "the fixture comes back clean after the TICKET test" "" "$(git status --porcelain)"
