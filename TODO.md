@@ -414,6 +414,22 @@ Achados sobre **repos-alvo** vão para o `TODO.md` daquele repo. Este arquivo é
 
 ### Contrato e configuração
 
+- [ ] **`sdd close` afirma "closed" sem verificar que a issue fechou** —
+  `bin/sdd:4462` — o comando lê `rc=0` da sessão e imprime `ok "$issue closed"`, mas a sessão sai 0
+  também quando apenas **pediu confirmação** para a ação externa, que é o comportamento correto
+  dela. Medido na M2: respondeu `ok SQ-108 closed` com a issue em "Em andamento", e o fecho teve
+  de ser feito à mão. É rótulo em vez de artefato — o fail-open que o princípio 1 proíbe. Direção:
+  reler o status da issue depois da sessão, como o `gate_PR` faz com `gh pr view`.
+  — descoberto por `claude` na missão `20260825-cif-forma-pagamento` (2026-08-25)
+
+- [ ] **O stub `- intervention:` do template é contado como intervenção real** —
+  `templates/checkpoint.md:53` — a linha de exemplo casa o contador do `sdd autonomy`
+  (`grep -cE '^[[:space:]]*-[[:space:]]*intervention:'`, `bin/sdd:3550`), então **toda missão
+  nasce com 1 intervenção fantasma** e a autonomia medida nunca chega a 0 — pior justamente na
+  missão que rodou limpa. Direção: mover o stub para dentro do bloco `>` que já explica o
+  marcador, onde a linha não abre com `-`. Detectado ao semear o ledger do `sales_quote`.
+  — descoberto por `sdd-executor` na missão `20260825-cif-forma-pagamento` (2026-08-25)
+
 - [ ] **`.sdd/config.sh` que não parseia é reportado como "declares no TEST_CMD"** —
   `bin/sdd:2183` — a checagem 2b lê o `TEST_CMD` sourceando o config num subshell com
   `>/dev/null 2>&1`, então o erro de sintaxe é engolido e o valor chega vazio: o operador ouve que
