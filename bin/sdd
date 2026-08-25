@@ -4445,6 +4445,15 @@ cmd_close() {
     fi
   fi
 
+  # The pre-check comes BEFORE the session and fails closed, in that order and for that reason: a
+  # verdict this command cannot reach is not a reason to spend a phase budget first and only then
+  # admit it could never have checked. The seam is there so a sensor can model "no acli on this
+  # machine" without uninstalling one — same shape, same reason, as SDD_SKILLS_ROOT above.
+  local acli_bin="${SDD_ACLI_BIN:-acli}"
+  command -v "$acli_bin" >/dev/null 2>&1 || die "cannot reach '$acli_bin' — 'sdd close' verifies the close against JIRA itself and will not report a close it did not see.
+Install the acli CLI (or point SDD_ACLI_BIN at it), and check that its auth has not expired.
+To confirm by hand:  $acli_bin jira workitem search --jql \"key = $issue AND statusCategory = Done\" --fields \"key,status\" --json"
+
   step "closing $issue"
   local sid logfile rc=0
   sid="$(uuidgen)"
@@ -4458,9 +4467,40 @@ cmd_close() {
       --model "$MODEL_TICKET" --permission-mode "$PERMISSION_MODE" --output-format json \
       --setting-sources "user,project,local" --allowedTools "$ALLOWED_TOOLS" \
       --session-id "$sid" --max-budget-usd "$BUDGET_PER_PHASE_USD" ) > "$logfile" 2>&1 || rc=$?
-  pipeline_log_line "$(date -Iseconds)  CLOSE  issue=$issue  session=$sid  rc=$rc  log=$logfile"
-  [ "$rc" -eq 0 ] && ok "$issue closed" || bad "failed to close $issue — see $logfile"
-  return "$rc"
+  # The session's rc decides NOTHING here. It is one exit code shared by two branches — the session
+  # that closed the issue exits 0, and so does the session that only ASKED whether to close it — so
+  # reading it was reading a label. Measured on 2026-08-25: `ok SQ-108 closed` printed over an issue
+  # sitting in "Em andamento". Principle 1 of CLAUDE.md, and the pattern gate_PR already uses: go
+  # back to the live artifact and look.
+  #
+  # `--fields "key,status"` and not `--fields key`: the short spelling answers `[null]`. `.key` is
+  # top-level in each object; `statusCategory = Done` is the project-agnostic form, because the
+  # status NAME is localized per project and per language, while the category is not.
+  #
+  # Both captures carry `|| true` INSIDE the substitution: this file runs under `set -e`, where
+  # `x="$(cmd)"` dies at the assignment the moment cmd is non-zero — and non-zero is exactly what
+  # acli returns for expired auth. The rc is deliberately not consulted either way; a non-JSON
+  # answer leaves $close_verified empty and falls closed on its own, which is a false NEGATIVE on a
+  # real close and therefore the safe direction.
+  local close_search close_verified verified=false
+  close_search="$( cd "$REPO_ROOT" && "$acli_bin" jira workitem search \
+      --jql "key = $issue AND statusCategory = Done" --fields "key,status" --json 2>/dev/null || true )"
+  close_verified="$( jq -r '.[]?.key // empty' <<< "$close_search" 2>/dev/null || true )"
+  # Herestring, never `printf | grep -q`: under `pipefail` that form returns 141 when grep FINDS the
+  # match and closes the pipe early, so it would inverted-fail on long input and pass on short.
+  # `if`, never `grep … && verified=true`: as the last command of a statement an AND-list that fails
+  # takes the whole runner down under `set -e`, and "the issue is not Done" is the common case.
+  if grep -qxF "$issue" <<< "$close_verified"; then verified=true; fi
+  pipeline_log_line "$(date -Iseconds)  CLOSE  issue=$issue  session=$sid  rc=$rc  verified=$verified  log=$logfile"
+  if [ "$verified" = true ]; then
+    # The artifact outranks the rc in BOTH directions, or it is not the artifact deciding — it is a
+    # second label ANDed onto the first. A session that fell over after closing the issue closed it.
+    if [ "$rc" -ne 0 ]; then dim "  (the close session exited $rc — see $logfile — but the issue is Done, so the artifact decides)"; fi
+    ok "$issue closed — JIRA confirms it is Done"
+    return 0
+  fi
+  bad "$issue is still open — JIRA does not confirm the close (the session may have only asked for confirmation); see $logfile"
+  return 1
 }
 
 # The braces and the `exit` are load-bearing, and tests/check-entrypoint.sh is why. bash keeps the

@@ -1668,6 +1668,22 @@ mut_KAIZEN_guard_floor_unpublished() {
   sed -i '/^               floor: guard_floor,$/d' "$1"
 }
 
+# `sdd close` goes back to believing the session's exit code — the historical defect, restored
+# verbatim rather than approximated. The session that closed the issue exits 0 and so does the one
+# that merely ASKED whether to close it, so this mutant is not "a check removed": it is the check
+# replaced by a term that cannot tell the two branches apart, which is what it looked like on
+# 2026-08-25 when `ok SQ-108 closed` printed over an issue in "Em andamento".
+#
+# `close_verified` is a name this fix introduced, so the anchor matches exactly one line in the
+# file and cannot drift onto a sibling.
+#
+# Caught by `close: a session that exits 0 having only ASKED …` in check-gates.sh, and by the
+# artifact-wins regime from the other side: with the rc back in charge, the (rc≠0, Done) world
+# stops being a close.
+mut_RUN_close_believes_rc() {
+  sed -i 's@if grep -qxF "$issue" <<< "$close_verified"; then verified=true; fi@if [ "$rc" -eq 0 ]; then verified=true; fi@' "$1"
+}
+
 CATALOG=(
   PLAN_empty_approval
   PLAN_kaizen_born_blind
@@ -1809,6 +1825,7 @@ CATALOG=(
   AUTONOMY_exclusions_glued
   KAIZEN_axis_note_own_floor
   KAIZEN_guard_floor_unpublished
+  RUN_close_believes_rc
 )
 
 # Mutations that are NOT caught today, each with the increment that closes it. Ratchet in both

@@ -24,6 +24,15 @@ trap 'rm -rf "$WORK"' EXIT
 # The English surface. templates/ and config/examples/ are absent on purpose: they are content
 # in OUTPUT_LANG, not kit surface. So are TODO.md, KAIZEN_LOG.md, CLAUDE.md and docs/handoffs/.
 #
+# tests/fixtures/ is absent for a third reason, and the glob below says so by scanning `tests/*.sh`
+# and nothing deeper: it holds stdout CAPTURED VERBATIM from third-party tools, and a Jira status
+# name arrives localized ("Concluído"). Scanning it would leave two exits, and both are worse than
+# the hole — edit the capture until the scan is quiet (a fixture written from memory, which passes
+# green forever) or exempt the whole .sh that carries it (a real English file going unscanned).
+# The rule that keeps this from becoming a loophole is a category, not a list: tests/fixtures/ holds
+# DATA, never logic. A .sh file there would be outside this surface while being exactly the thing
+# the surface exists to read.
+#
 # Two files are excluded, and neither is a loophole. They are the only places where Portuguese is
 # DATA rather than prose, so scanning them would force the data to be weakened just to keep the
 # scan quiet:

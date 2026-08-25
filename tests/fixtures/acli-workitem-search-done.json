@@ -1,0 +1,34 @@
+[
+  {
+    "changelog": null,
+    "editmeta": null,
+    "expand": "renderedFields,names,schema,operations,editmeta,changelog,versionedRepresentations",
+    "fields": {
+      "status": {
+        "description": "",
+        "iconUrl": "https://jira-prod-us-12-as-4.prod.atl-paas.net/",
+        "id": "10012",
+        "name": "Concluído",
+        "self": "https://jira-prod-us-12-as-4.prod.atl-paas.net/rest/api/3/status/10012",
+        "statusCategory": {
+          "colorName": "green",
+          "id": 3,
+          "key": "done",
+          "name": "Itens concluídos",
+          "self": "https://jira-prod-us-12-as-4.prod.atl-paas.net/rest/api/3/statuscategory/3"
+        }
+      }
+    },
+    "fieldsToInclude": null,
+    "id": "23033",
+    "key": "SQ-108",
+    "names": null,
+    "operations": null,
+    "properties": null,
+    "renderedFields": null,
+    "schema": null,
+    "self": "https://jira-prod-us-12-as-4.prod.atl-paas.net/rest/api/3/issue/23033",
+    "transitions": null,
+    "versionedRepresentations": null
+  }
+]
