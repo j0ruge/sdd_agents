@@ -153,7 +153,10 @@ mut_EXEC_done_without_commit() {  # accepts a 'done' increment with commit '—'
 }
 
 mut_EXEC_orphan_commit() {    # back to `cat-file -e`: a loose object passes as a commit in history
-  sed -i 's|.*git merge-base --is-ancestor.*|        if false; then|' "$1"
+  # RANGE-ADDRESSED because the unaddressed pattern also matched PROSE: the sentence explaining the
+  # rule inside the TODO.md seed cmd_install writes (bin/sdd:1967). This file's own header forbids
+  # exactly that — anchor on CODE, never on prose, because prose gets reworded and code does not.
+  sed -i '/^gate_EXEC() {/,/^}/ s|.*git merge-base --is-ancestor.*|        if false; then|' "$1"
 }
 
 # The checkpoint parser goes back to a raw split on "|". A Check cell carrying the GFM escape `\|`
@@ -338,8 +341,12 @@ mut_HEALTH_stamp_window_blind() {
 # Not a gate, and the only decorative-assertion bug that really happened (TODO.md): the inverted
 # guard makes the PROJECTION (`--dry-run`) write to the journal while the real path goes mute — a
 # read command dirtying the working tree, and an audit trail lying in both directions.
+# RANGE-ADDRESSED, and not for tidiness: that guard is written byte-for-byte identically in
+# ensure_mission_branch (bin/sdd:2062), and `sed` without `g` still substitutes once per LINE, so
+# the unaddressed form flipped BOTH. A slug scored green by a dry-run assertion tripping over the
+# branch guard says nothing about the journal, which is the property this entry is named for.
 mut_RUN_inverted_journal() {
-  sed -i 's|\[ "\$DRY_RUN" = "1" \] && return 0|[ "$DRY_RUN" = "0" ] \&\& return 0|' "$1"
+  sed -i '/^pipeline_log_line() {/,/^}/ s|\[ "\$DRY_RUN" = "1" \] && return 0|[ "$DRY_RUN" = "0" ] \&\& return 0|' "$1"
 }
 
 # Not a gate, and BUG-20260821-session-log-overwritten-in-the-same-second put back: the phase log
@@ -795,8 +802,12 @@ mut_RUN_install_no_guard() {
 # the session table denies. Every row the runner writes today satisfies both spellings, so no
 # fixture in the ordinary regime can tell this mutant from the fix.
 mut_RUN_on_axis_forked() {
+  # The on_axis half is RANGE-ADDRESSED and the comparable half needs no address: the first
+  # definition is repeated verbatim in kaizen_series (bin/sdd:3777), a different consumer with its
+  # own assertions, and mutating the judge's axis as a side effect of measuring the reader's would
+  # let check-kaizen.sh score this slug for the wrong program.
   sed -i \
-    -e 's@def on_axis: .kit_dirty == false and .kit_sha != null;@def on_axis: .kit_dirty != true and .kit_sha != null;@' \
+    -e '/^cmd_autonomy() {/,/^}/ s@def on_axis: .kit_dirty == false and .kit_sha != null;@def on_axis: .kit_dirty != true and .kit_sha != null;@' \
     -e 's@def comparable: .event == "session" and on_axis and (has("moved"));@def comparable: .event == "session" and .kit_dirty == false and (.kit_sha != null) and (has("moved"));@' \
     "$1"
 }
