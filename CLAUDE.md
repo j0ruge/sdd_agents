@@ -226,17 +226,21 @@ sabotagem do runner os faria morrer — `check-pipefail.sh` está nas duas situa
 mede `tests/`. Onde a regra está paga quem mede o sensor é um `selftest()` com probes e rc
 próprios — 90, 91, 92 — mais um piso contra vacuidade. Sem isso, regex quebrada reporta "tudo
 limpo" para sempre.
-⚠️ **Quatro dos cinco pagam; o `check-templates.sh` não, e a dívida é declarada e não escondida.**
-No lugar do auto-teste ele tem o `REVIEW_FLOOR` mais uma passada adversarial nomeada no próprio
-cabeçalho — e a r2 de `20260818-lote-facil` mediu que esse piso conta **chamadas**, então uma linha
-apagada o faz certificar um `templates/review.md` de zero byte com `23 assertion(s)`. Está no
-`TODO.md`. Sensor sem auto-teste que declara o buraco é dívida; sensor sem auto-teste que jura
-estar coberto é o fail-open que esta seção inteira existe para impedir.
+⚠️ **Os cinco pagam — o último a pagar foi o `check-templates.sh`, em `6aa2a16`.** Por duas
+missões ele foi a exceção declarada: no lugar do auto-teste tinha o `REVIEW_FLOOR` mais uma passada
+adversarial nomeada no cabeçalho, e a r2 de `20260818-lote-facil` mediu quanto isso valia — o piso
+contava **chamadas**, então uma linha apagada o fazia certificar um `templates/review.md` de zero
+byte com `23 assertion(s)` e `template contract intact`. Mover a contagem para dentro do `check()`
+não bastava: move a tartaruga uma casca para fora, porque um `check()` sem o `grep` conta igual.
+Quem fechou foi o **controle negativo** — rodar a primitiva de asserção contra um mundo de resposta
+conhecida e exigir que ela a diga. O `REVIEW_FLOOR=23` continua lá, agora como piso e não como
+álibi. Sensor sem auto-teste que declara o buraco é dívida; sensor sem auto-teste que jura estar
+coberto é o fail-open que esta seção inteira existe para impedir.
 ⚠️ A rubrica é "a mutação não alcança", **não** "tem `selftest()`": `grep -l '^selftest()' tests/*`
-hoje devolve **cinco**, porque o `check-entrypoint.sh` carrega um por escolha própria (o catálogo o
-alcança via `mut_RUN_entrypoint_unguarded`, mas o parser dele é fino demais para depender só
-disso). Sensor a mais com auto-teste nunca é o defeito; sensor **sem** ele, estando nas duas
-situações, é.
+hoje devolve **seis** — os cinco acima mais o `check-entrypoint.sh`, que carrega um por escolha
+própria (o catálogo o alcança via `mut_RUN_entrypoint_unguarded`, mas o parser dele é fino demais
+para depender só disso). Sensor a mais com auto-teste nunca é o defeito; sensor **sem** ele, estando
+nas duas situações, é.
 ⚠️ A âncora `^selftest()` **é** o instrumento; `selftest` solto responde **sete**, somando o
 `jobs_selftest()` do escalonador (`tests/check-mutation.sh:63`), que mede o pool de jobs e não
 regra de sensor nenhuma. Número em rubrica sem o comando ao lado é a mesma classe do
