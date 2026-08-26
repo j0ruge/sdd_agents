@@ -136,6 +136,11 @@ inside a fenced block — so quoting the line in a repro, a diff or an example d
 bug's genre, on either side of the real field. What it cannot see through is an **unfenced** quote
 sitting above the field: fence your examples, which is what the block above already does.
 
+The value is **lowercase**, and the match is case-sensitive: `Human` and `HUMAN` read as absent
+and block. That is the safe direction, but it is a silent one — the gate says the bug is open, not
+that its genre is misspelt — and the silence is the whole reason this sentence exists. Write it
+exactly as the enum legend spells it.
+
 ⚠️ **This is not licence to touch `Status:`.** `human` says *"no agent in this pipeline can close
 this"* — never that it is closed. The bug stays `open`, stays in the registry, and stays in the PR
 as a decision somebody has to make. The status enum is still the skills', and the rule at the
