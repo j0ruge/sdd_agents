@@ -89,7 +89,9 @@ walks again. A fix that passes the test and breaks the journey is not a fix.
 Also record in the checkpoint's execution notes which `BUG-<id>` gave rise to each `F<n>`.
 
 The runner sees a pending increment and hands the ball back to `sdd-executor` on its own — that is
-the QA⇄EXEC loop. It repeats until the registry is empty, capped at `QA_MAX_ITER`.
+the QA⇄EXEC loop. It repeats until no **agent-closable** bug is left `open`, capped at
+`QA_MAX_ITER` — not until the registry is empty. A bug marked `Closable by: human` stays `open`,
+stays in the registry and stays in the PR, and stops holding the phase (§ 5.1).
 
 ## 5. What does NOT become a fix increment
 

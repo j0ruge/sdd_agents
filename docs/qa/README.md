@@ -106,11 +106,23 @@ tree therefore exists because a human asked for it, not because the pipeline pro
 phase's gate artifact remains `30-handoff-qa.md` with its `gate:` field filled.
 
 **2. The runner DOES read one directory of this tree, and it is a gate.** `gate_QA` Anchor 3
-(`bin/sdd:485-491`) counts files under `<QA_DOCS_PATH>/bugs/` matching `- **Status:** open` and
-refuses the phase while any exist — in **both** the interface and the no-interface case. A bug filed
-here is not documentation: it holds the mission's QA gate shut until it moves to `fixed`+verified,
-`wont-fix`, or `invalid`. That is the QA⇄EXEC fix loop working as documented
-(`docs/pipeline.md:129`), and it is the coupling to weigh before filing.
+(in `bin/sdd`, the `Anchor 3` block of `gate_QA` — anchored on the name, because the line numbers
+here went stale once already and pointed at `gate_TICKET`) counts files under
+`<QA_DOCS_PATH>/bugs/` matching `- **Status:** open` and refuses the phase while any of them are
+**agent-closable** — in **both** the interface and the no-interface case. A bug filed here is not
+documentation: it holds the mission's QA gate shut until it moves to `fixed`+verified, `wont-fix`
+or `invalid`. That is the QA⇄EXEC fix loop working as documented (`docs/pipeline.md`, "Passes
+when"), and it is the coupling to weigh before filing.
+
+Since `20260826-o-laco-da-qa` a second field of the same file decides whether an `open` bug is one
+of those: `- **Closable by:** agent <!-- agent | human -->`. `agent` blocks (for that bug the
+`F<n>` cycle closes); `human` does not; **absent blocks**, which is the fail-safe every bug file
+older than the field relies on. The genre is read from that FIELD — not from anywhere the words
+appear in the body — and matched as a whole lowercase word, so `humano` and `Human` read as absent.
+Marking it is the `sdd-qa` agent's duty (`agents/sdd-qa.md` § 5.1) and the **only** line of a bug
+file an agent may write: `Status:` is still the skills', which is exactly why the genre had to
+exist. Before it, a bug waiting on a product decision held the phase with no path out — 7 of the 12
+QA sessions of `20260825-frete-cif-fob`, US$ 73,32.
 
 `gate_QA`'s other two anchors (a `closed` report, no `Pending` matrix row) are reached **only** when
 `E2E_CMD` or `APP_URL` is set. Neither is set here, so `reports/` is unread by the runner — the
