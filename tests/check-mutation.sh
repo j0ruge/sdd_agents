@@ -240,6 +240,34 @@ mut_QA_bug_genre_ignored() {
   sed -i 's|^    if grep -qE .*Closable by.*then continue; fi$|    if false; then continue; fi|' "$1"
 }
 
+# The two halves of the same line, one mutant each, because they fail open independently and a
+# single mutant would let either half rot while the other kept the catalogue green. Both were live
+# defects found by the QA phase of 20260826-o-laco-da-qa against the very increment that added the
+# genre, and both answered `registry clean, suites green` with an agent-closable bug open.
+#
+# Same anchoring discipline as the mutant above, and it is not theoretical here: the comment block
+# in bin/sdd spells out `humano`, `human-ish` and "the genre is read from the FIELD" in prose. A
+# `.*human.*` anchor would rewrite comment lines, clear the rc-90 cmp guard and sabotage nothing.
+# `human(` and `genre_line` were each measured to occur on the CODE line only.
+
+# The right-hand boundary goes: every value that merely STARTS with `human` is read as the genre
+# again. Caught by the one-letter differential `human` × `humano` — the pt-BR spelling, which is
+# the translation this repo's own OUTPUT_LANG makes likely and the agent contract forbids.
+#
+# Delimiter is `@` and not `|`: the text being matched IS an alternation, so a `|`-delimited script
+# would end at the first `[[:space:]]` and sed would reject it. The brackets are escaped for the
+# same reason — unescaped, `[[:space:]]` is a character class to sed, not the literal it must match.
+mut_QA_bug_genre_prefix() {
+  sed -i 's@human(\[\[:space:\]\]|\$)@human@' "$1"
+}
+
+# The field extraction goes: the genre is matched against the whole FILE again, so a bug whose own
+# field says `agent` stops blocking as soon as its body quotes the human line — which agents/sdd-qa.md
+# § 5.1 prints verbatim for the agent to copy.
+mut_QA_bug_genre_anywhere() {
+  sed -i 's|<<< "\$genre_line"|"\$bugfile"|' "$1"
+}
+
 # Historical bug 3 (SQ-97 pilot, ~US$ 10): the parser exited only at `###`, kept swallowing the
 # report's following tables and failed an all-Grade-A review for finding a `Commit` column.
 mut_REVIEW_stops_at_h3() {
@@ -1812,6 +1840,8 @@ CATALOG=(
   QA_matrix_pending
   QA_bug_open
   QA_bug_genre_ignored
+  QA_bug_genre_prefix
+  QA_bug_genre_anywhere
   REVIEW_stops_at_h3
   REVIEW_accepts_B
   REVIEW_placeholder_rationale_blind

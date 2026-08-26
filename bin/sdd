@@ -633,10 +633,30 @@ gate_QA() {
   # registry in one step. Strict for the same reason `closed` is strict at :587 — the enum legend
   # `<!-- agent | human -->` is preserved in the real files, so the word `human` appears in EVERY
   # bug on disk and a `.*human` spelling would fail open across the board.
-  local openbugs=0 bugfile
+  #
+  # TWO STEPS, and both are load-bearing — this is the first anchor in the gate where a loose match
+  # is PERMISSIVE, so every looseness here fails OPEN. Its sibling `Status: open` matches anywhere
+  # in the file too, but there anywhere-matching can only make a bug BLOCK.
+  #
+  #   1. The genre is read from the FIELD. `grep -q` is true for any line of the file, so a bug
+  #      whose own field says `agent` stopped blocking the moment its body QUOTED the human line.
+  #      Not a contrived body: agents/sdd-qa.md § 5.1 prints that exact line for the agent to copy,
+  #      so a bug filed ABOUT this field was the likely first victim.
+  #   2. The genre is the WHOLE WORD. Without a right-hand boundary every value that merely STARTS
+  #      with `human` read as the genre: `humano` — the pt-BR spelling, in a repo declaring
+  #      OUTPUT_LANG=pt-BR — plus `humans`, `humanoid`, `human-ish`. The boundary admits a
+  #      following space so the `<!-- agent | human -->` legend the real files preserve still
+  #      passes; anchoring a bare `$` here would reject every real bug file instead.
+  #
+  # Both measured in the QA phase of 20260826-o-laco-da-qa, both reported `registry clean`.
+  # Declared limit: `-m1` means the FIRST field-shaped line is the field, which is the template's
+  # own order (header fields, then body). A file that quoted the human line ABOVE its own field
+  # would still fail open — malformed by the template, and no probe pins it.
+  local openbugs=0 bugfile genre_line
   while IFS= read -r bugfile; do
     [ -n "$bugfile" ] || continue
-    if grep -qE '^\-[[:space:]]+\*\*Closable by:\*\*[[:space:]]+human' "$bugfile"; then continue; fi
+    genre_line="$(grep -m1 -E '^\-[[:space:]]+\*\*Closable by:\*\*' "$bugfile" || true)"
+    if grep -qE '^\-[[:space:]]+\*\*Closable by:\*\*[[:space:]]+human([[:space:]]|$)' <<< "$genre_line"; then continue; fi
     openbugs=$((openbugs + 1))
   done <<< "$( { grep -rlE '^\-[[:space:]]+\*\*Status:\*\*[[:space:]]+open' \
       "$REPO_ROOT/$QA_DOCS_PATH/bugs/" 2>/dev/null || true; } )"
