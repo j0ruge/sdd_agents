@@ -808,9 +808,26 @@ mut_RUN_jidoka_pipefail() {
 # NOBODY can satisfy for proving its own unsatisfiability twice — and when the session commits
 # something honest, `moved=true` buys another lap instead of two. Measured in
 # 20260825-frete-cif-fob: 7 of the 12 QA sessions in that loop, US$ 73,32 of US$ 144,88.
+#
+# ⚠️ The RANGE was re-anchored in the REVIEW round of 20260826-o-laco-da-qa, when door 1 moved
+# ABOVE the `--max-phases` ceiling (it used to answer that flag first and return 0 on a `blocked`
+# handoff). Its old range — `gate_rc -eq 0` … `moved = "true"` — no longer contains the door, so
+# the mutant would have become a silent NO-OP; the rc-90 `cmp -s` guard would have caught it, but
+# only after the fact. The new range brackets the door with the first pass's OWN session row
+# (`$gate_rc`, which the retry spells `$gate_rc2` — that is what makes it unique) and the
+# `phases_run` line the door now precedes. Both were measured to occur exactly once.
 mut_RUN_blocked_not_escalated() {
-  sed -i '/^    if \[ "\$gate_rc" -eq 0 \]; then$/,/^    if \[ "\$moved" = "true" \]; then$/ s|^    if handoff_blocked_escalation "\$phase"; then return 3; fi$|    if false; then return 3; fi|' "$1"
+  sed -i '/^      "\$( \[ "\$gate_rc" -eq 0 \] && echo pass || echo fail )" "\$GATE_WHY"$/,/^    phases_run=\$((phases_run + 1))$/ s|^    if handoff_blocked_escalation "\$phase"; then return 3; fi$|    if false; then return 3; fi|' "$1"
 }
+#
+# The ORDER of door 1 against the `--max-phases` ceiling deliberately gets no mutant of its own,
+# and this is a declared limit rather than an oversight. A mutant for it would have to MOVE a
+# block rather than neutralise a line, which in sed/perl means a multi-line rewrite whose anchor
+# rots on the next edit of either block — and a rotted mutant that still applies is the class this
+# catalogue has already paid for twice. The rule has a durable probe where it belongs, in
+# tests/check-autonomy.sh: `a --max-phases ceiling does not turn a blocked handoff into rc 0`,
+# differential against the increment-blocked sibling under the same flag, and it runs in TEST_CMD
+# on every gate rather than only when the catalogue is asked for.
 
 # Door 2: the inline retry. Without it the marker OUTLIVES the lap — `current_phase` runs in a
 # subshell and cannot clear the parent's copy, and every gate but gate_QA leaves it alone — so the

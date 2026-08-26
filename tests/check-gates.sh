@@ -611,6 +611,89 @@ assert_eq "the genre is the FIELD: a bug that merely quotes the human line still
 genre_quoted_above="$( cd "$FIX" && "$SDD" phase "$MISSION" 2>&1 )"
 assert_eq "the genre is the file's OWN field: a quote ABOVE it does not become the genre" \
   "REVIEW|QA" "$genre_exact|$genre_quoted_above"
+
+# Four more rules of the same anchor, one regime each. All four were found by an adversarial
+# sabotage pass in the REVIEW round of 20260826-o-laco-da-qa: each was degraded in turn and
+# `./tests/run-all.sh` stayed GREEN, which by the house rule makes them rules without a probe. In
+# THIS anchor that is never neutral — bin/sdd's own comment calls it "the first anchor in the gate
+# where a loose match is PERMISSIVE, so every looseness here fails OPEN" — so each was a fail-open
+# waiting for a bug body shaped that way. They are separate regimes and not one because they fail
+# open INDEPENDENTLY: a single fixture would let three of them rot behind the fourth.
+#
+# Every one keeps `$genre_exact` as the passing control, for the same reason as the blocks above:
+# a gate that blocked everything satisfies "it blocks" and would take the control red instead.
+
+# (a) The genre is LOWERCASE. check-gates.sh asserted this in a COMMENT — "`Human` and `HUMAN` did
+# not, the match being case-sensitive" — and nothing measured it: turning `grep -qE` into `grep
+# -qiE` left the whole suite green while `Human` and `HUMAN` went from blocking to passing. A
+# comment that states a measured property is not a measurement — the same rule this repo already
+# applies to a comment claiming parity between two programs, where only a differential assertion
+# counts as proof. This is the assertion that comment was standing in for.
+write_genre_bug '- **Closable by:** Human <!-- agent | human -->'
+genre_case="$( cd "$FIX" && "$SDD" phase "$MISSION" 2>&1 )"
+assert_eq "the genre is lowercase: the capitalised 'Human' reads as absent and still blocks" \
+  "REVIEW|QA" "$genre_exact|$genre_case"
+
+# (b) The FIRST field-shaped line outside a fence wins, and the extractor stops there. Without the
+# `exit`, every unfenced field-shaped line is printed and the match runs over a MULTI-LINE
+# `genre_line` — so `grep -q`, true for any line it is given, goes back to answering "human" for a
+# file whose own field says `agent`. That is the very defect the F1 increment closed, re-entering
+# through the extractor instead of through the matcher.
+{ printf '# BUG-20260102-genre: two field-shaped lines, neither fenced\n'
+  printf -- '- **Status:** open <!-- open | fixed | verified | wont-fix | invalid -->\n'
+  printf -- '- **Closable by:** agent <!-- agent | human -->\n'
+  printf '\nA later paragraph repeats the line without fencing it:\n\n'
+  printf -- '- **Closable by:** human <!-- agent | human -->\n'
+} > "$GENRE_BUG"
+genre_second="$( cd "$FIX" && "$SDD" phase "$MISSION" 2>&1 )"
+assert_eq "the FIRST unfenced field wins: a second field-shaped line later does not override it" \
+  "REVIEW|QA" "$genre_exact|$genre_second"
+
+# (c) BOTH fence spellings. GFM fences with ``` or with ~~~, and the extractor has to know both:
+# knowing only ``` leaves a ~~~-fenced quote counting as an ordinary line, which puts the defect
+# straight back for any bug filed with the other spelling. Same body as the quote-ABOVE regime,
+# one character of fence apart.
+{ printf '# BUG-20260102-genre: the repro is fenced with tildes\n'
+  printf -- '- **Status:** open <!-- open | fixed | verified | wont-fix | invalid -->\n'
+  printf '\nSteps to reproduce:\n\n~~~md\n'
+  printf -- '- **Closable by:** human <!-- agent | human -->\n'
+  printf '~~~\n\n'
+  printf -- '- **Closable by:** agent <!-- agent | human -->\n'
+} > "$GENRE_BUG"
+genre_tilde="$( cd "$FIX" && "$SDD" phase "$MISSION" 2>&1 )"
+assert_eq "a ~~~ fence hides the quote just as a \`\`\` fence does" \
+  "REVIEW|QA" "$genre_exact|$genre_tilde"
+
+# (d) The field starts at COLUMN ZERO. An indented `- **Closable by:** human` is a nested list
+# item or an indented code block — body, never the header — and admitting leading whitespace lets
+# any of them become the genre. Strict here for the same reason ABSENT blocks: in this anchor the
+# loose reading is the permissive one.
+#
+# ⚠️ DECLARED REDUNDANCY, and this assertion is a PROPERTY probe rather than a rule probe — said
+# out loud because the difference is exactly what the sabotage pass is for. The column-zero rule is
+# enforced TWICE: once by the awk extractor's `/^-/` and once by the matcher's own `^\-`. Degrading
+# either ALONE leaves the bug blocking, so neither has a probe of its own here. Measured, all four
+# corners, on this very fixture:
+#
+#     awk strict + grep strict -> BLOCKS      awk LOOSE + grep strict -> BLOCKS
+#     awk strict + grep LOOSE  -> BLOCKS      awk LOOSE + grep LOOSE  -> PASSES
+#
+# So the assertion is not vacuous — it is red in the one world where the property is actually
+# gone — but nobody should read it as pinning the awk anchor. By the D15 admission rule a
+# redundancy that is WRITTEN DOWN stops being debt; an unwritten one is the fail-open the rule
+# exists to separate from it. If a later change removes one of the two anchors, this assertion
+# will still pass, and that is the cost being declared here.
+{ printf '# BUG-20260102-genre: the quote is indented, not fenced\n'
+  printf -- '- **Status:** open <!-- open | fixed | verified | wont-fix | invalid -->\n'
+  printf '\nQuoted inside a nested list:\n\n'
+  printf -- '  - **Closable by:** human <!-- agent | human -->\n'
+  printf '\n'
+  printf -- '- **Closable by:** agent <!-- agent | human -->\n'
+} > "$GENRE_BUG"
+genre_indented="$( cd "$FIX" && "$SDD" phase "$MISSION" 2>&1 )"
+assert_eq "the field starts at column zero: an indented quote does not become the genre" \
+  "REVIEW|QA" "$genre_exact|$genre_indented"
+
 rm -f "$GENRE_BUG"
 
 # The QA site of latest_matching(), which the r10 fixture below does NOT cover: that one pins the

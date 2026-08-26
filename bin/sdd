@@ -3581,6 +3581,22 @@ cmd_run() {
       "$( [ "$gate_rc" -eq 0 ] && echo pass || echo fail )" "$GATE_WHY"
     sessions["$phase"]="$(( ${sessions[$phase]:-0} + 1 ))"
 
+    # DOOR 1 of the blocked escalation — see handoff_blocked_escalation above for why it exists.
+    # It is read immediately after the `gate_"$phase"` call that could have set the marker, and
+    # BEFORE `moved` is consulted: the whole point is to stop depending on the fingerprint.
+    #
+    # ABOVE `--max-phases`, and that placement is the fix, not a preference. This is the THIRD
+    # Jidoka, and its two siblings — the `blocked` increment (:3415) and the dirty tree (:3438) —
+    # sit above the ceiling check and escalate whatever it says. Below it, this one alone answered
+    # `--max-phases` FIRST: `sdd run <mission> --max-phases 1` on a handoff declaring
+    # `status: blocked` opened and paid for a QA session, armed the marker, and returned **0** with
+    # no ledger row and no pipeline.log line. An operator or CI wrapper pacing the pipeline one
+    # phase at a time got the pre-fix behaviour for ever, with a SUCCESS exit code every time — the
+    # very loop this mission exists to delete, wearing a green rc. Found in the REVIEW round of
+    # 20260826-o-laco-da-qa, differentially against the increment-blocked sibling (rc 3 + row)
+    # under the same flag. The session row above is already written, so the ledger keeps its order.
+    if handoff_blocked_escalation "$phase"; then return 3; fi
+
     phases_run=$((phases_run + 1))
     if [ "$max_phases" -gt 0 ] && [ "$phases_run" -ge "$max_phases" ]; then
       info ""; dim "  --max-phases=$max_phases reached"; return 0
@@ -3591,11 +3607,6 @@ cmd_run() {
       force_phase=""
       continue
     fi
-
-    # DOOR 1 of the blocked escalation — see handoff_blocked_escalation above for why it exists.
-    # It is read immediately after the `gate_"$phase"` call that could have set the marker, and
-    # BEFORE `moved` is consulted: the whole point is to stop depending on the fingerprint.
-    if handoff_blocked_escalation "$phase"; then return 3; fi
 
     if [ "$moved" = "true" ]; then
       dim "  gate $phase not yet: $GATE_WHY (but the session moved forward — carrying on)"

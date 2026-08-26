@@ -990,6 +990,36 @@ assert_eq "status: blocked escalates on the first session, where an ordinary gat
   "3|1|blocked|handoff-blocked · 3|2|blocked|no-progress" \
   "$qa_blocked · $qa_ordinary"
 
+# --- ...and a `--max-phases` ceiling does not turn that into rc 0 -----------
+# Door 1 used to sit BELOW the ceiling check, so `sdd run --max-phases 1` against this very
+# handoff opened and paid for a QA session, armed the marker, and returned **0**: no ledger row,
+# no pipeline.log line, and a SUCCESS exit code for a phase nobody in the pipeline can satisfy.
+# The two sibling Jidokas — the `blocked` increment and the dirty tree — sit ABOVE the ceiling and
+# escalate whatever it says, so the third one alone answered the flag first. An operator or a CI
+# wrapper pacing the pipeline one phase at a time got the pre-fix loop for ever, wearing a green
+# rc. Found in the REVIEW round of 20260826-o-laco-da-qa.
+#
+# DIFFERENTIAL, and it refuses BOTH over-broad readings in one pair: a runner that escalated
+# whenever `--max-phases` is set takes the CONTROL half red (an ordinary gate failure under the
+# same flag must still end `0`, with no escalation row at all), and a runner where the ceiling
+# always wins takes the BLOCKED half red. Only the word in the handoff differs between the runs —
+# same mission, same dead stub, same flag, same ceiling.
+: > "$LEDGER"
+printf -- '---\nfase: QA\nstatus: blocked\n---\n' > "$MDIR/30-handoff-qa.md"
+git add -A && git commit -qm "chore: QA handoff declares blocked, under a ceiling"
+"$SDD" run "$MISSION" --max-phases 1 >/dev/null 2>&1; rc=$?
+qa_ceiling_blocked="$(blocked_shape "$rc")"
+
+: > "$LEDGER"
+printf -- '---\nfase: QA\nstatus: done\n---\n' > "$MDIR/30-handoff-qa.md"
+git add -A && git commit -qm "chore: ordinary gate failure, under the same ceiling"
+"$SDD" run "$MISSION" --max-phases 1 >/dev/null 2>&1; rc=$?
+qa_ceiling_ordinary="$(blocked_shape "$rc")"
+
+assert_eq "a --max-phases ceiling does not turn a blocked handoff into rc 0, where an ordinary failure still ends 0" \
+  "3|1|blocked|handoff-blocked · 0|1|null|null" \
+  "$qa_ceiling_blocked · $qa_ceiling_ordinary"
+
 # --- ...and it escalates from the INLINE RETRY on the same terms -------------
 # The branch above sits on the FIRST pass only. The inline retry (bin/sdd:3538) calls the same gate,
 # which sets the same marker, but the code below it consults `moved2` and nothing else — so a retry
