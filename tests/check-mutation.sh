@@ -268,6 +268,21 @@ mut_QA_bug_genre_anywhere() {
   sed -i 's|<<< "\$genre_line"|"\$bugfile"|' "$1"
 }
 
+# The fence state goes: the extractor stops knowing it is inside a ```/~~~ block, so the first
+# line merely SHAPED like the field wins again — and a bug whose repro is pasted above its own
+# metadata reads its genre out of the quote. Third half of the same line, and it fails open
+# independently of the other two, which is why it gets its own mutant rather than riding theirs:
+# with the fence tracking gone, both regimes above still block (their real field comes first) and
+# only the quote-ABOVE assertion dies.
+#
+# `fenced = !fenced` occurs on the CODE line only — the prose beside it says "SKIPS fenced blocks"
+# and "the fence is STATE", neither of which contains the assignment. Same anchoring discipline as
+# the three mutants above, and for the same measured reason: a mutant that rewrites only a comment
+# applies, clears the rc-90 `cmp -s` guard, and certifies a protection nobody measured.
+mut_QA_bug_genre_fenced() {
+  sed -i 's|{ fenced = !fenced; next }|{ next }|' "$1"
+}
+
 # Historical bug 3 (SQ-97 pilot, ~US$ 10): the parser exited only at `###`, kept swallowing the
 # report's following tables and failed an all-Grade-A review for finding a `Commit` column.
 mut_REVIEW_stops_at_h3() {
@@ -1872,6 +1887,7 @@ CATALOG=(
   QA_bug_genre_ignored
   QA_bug_genre_prefix
   QA_bug_genre_anywhere
+  QA_bug_genre_fenced
   REVIEW_stops_at_h3
   REVIEW_accepts_B
   REVIEW_placeholder_rationale_blind

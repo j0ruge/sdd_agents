@@ -659,14 +659,35 @@ gate_QA() {
   #      following space so the `<!-- agent | human -->` legend the real files preserve still
   #      passes; anchoring a bare `$` here would reject every real bug file instead.
   #
-  # Both measured in the QA phase of 20260826-o-laco-da-qa, both reported `registry clean`.
-  # Declared limit: `-m1` means the FIRST field-shaped line is the field, which is the template's
-  # own order (header fields, then body). A file that quoted the human line ABOVE its own field
-  # would still fail open — malformed by the template, and no probe pins it.
+  #   3. The FIELD is the file's own, not the first thing SHAPED like one. Step 1 landed as
+  #      `grep -m1`, whose "the first field-shaped line IS the field" holds only while nothing
+  #      above the header is shaped like the field — and step 1's own scenario breaks it, because
+  #      a bug filed ABOUT the genre whose repro block is pasted before the metadata reads its
+  #      genre out of the quote. Reproduced in the REVIEW round of 20260826-o-laco-da-qa: same
+  #      `Closable by: agent` field, same fenced `human` line, only the ORDER moved, and the gate
+  #      went from blocking to answering `registry clean`. It shipped as a declared limit; a
+  #      declared limit is still a fail-open, and this anchor's every looseness is permissive.
+  #      So the extraction SKIPS fenced blocks and takes the first field-shaped line outside one.
+  #
+  # Both of the first two measured in the QA phase of 20260826-o-laco-da-qa, both reported
+  # `registry clean`. Declared limit that remains: a quote parked above the header and NOT fenced
+  # — bare prose opening with `- **Closable by:** human` — still reads as the field. It is the
+  # residue of the same class and it is named here rather than in a comment that claims the class
+  # is closed; the fenced form is the one agents/sdd-qa.md § 5.1 actually prints, and the one that
+  # reproduced.
+  #
+  # AWK and not a second `grep`: the fence is STATE, and a line-at-a-time matcher cannot hold it —
+  # the lesson check-todo.sh paid for when its parser did not know it was inside an item's code
+  # block. `[*][*]` and not `\*\*`: mawk's handling of an escaped literal inside a regex is not
+  # worth relying on when a bracket expression says the same thing unambiguously.
   local openbugs=0 bugfile genre_line
   while IFS= read -r bugfile; do
     [ -n "$bugfile" ] || continue
-    genre_line="$(grep -m1 -E '^\-[[:space:]]+\*\*Closable by:\*\*' "$bugfile" || true)"
+    genre_line="$(awk '
+      /^[[:space:]]*(```|~~~)/ { fenced = !fenced; next }
+      fenced { next }
+      /^-[[:space:]]+[*][*]Closable by:[*][*]/ { print; exit }
+    ' "$bugfile" || true)"
     if grep -qE '^\-[[:space:]]+\*\*Closable by:\*\*[[:space:]]+human([[:space:]]|$)' <<< "$genre_line"; then continue; fi
     openbugs=$((openbugs + 1))
   done <<< "$( { grep -rlE '^\-[[:space:]]+\*\*Status:\*\*[[:space:]]+open' \

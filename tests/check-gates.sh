@@ -587,6 +587,30 @@ assert_eq "the genre is the whole word: 'human' passes, the near-miss 'humano' s
 genre_quoted="$( cd "$FIX" && "$SDD" phase "$MISSION" 2>&1 )"
 assert_eq "the genre is the FIELD: a bug that merely quotes the human line still blocks" \
   "REVIEW|QA" "$genre_exact|$genre_quoted"
+
+# ...and "the FIELD" means the file's OWN field, not the first thing SHAPED like one. The fix above
+# landed as `grep -m1`, and "the first field-shaped line IS the field" holds only while nothing
+# above the header is shaped like the field. The regime right above breaks that itself the moment
+# its repro block moves: same `Closable by: agent` field, same fenced `human` line, only the ORDER
+# changed, and the gate went back to answering `registry clean` with an agent-closable bug open.
+# It shipped as a declared limit in bin/sdd and in the EXEC handoff; a declared limit is still a
+# fail-open, and every looseness in THIS anchor is permissive. Reproduced and closed in the REVIEW
+# round of 20260826-o-laco-da-qa.
+#
+# DIFFERENTIAL on ORDER ALONE, plus the passing control: the two quoting fixtures carry byte-equal
+# metadata and a byte-equal fenced quote, and differ only in which comes first — so a gate that
+# blocked everything would take `genre_exact` red with it, and a gate that read position instead of
+# the field would take the block above red. Neither half alone measures the rule.
+{ printf '# BUG-20260102-genre: filed about the genre field, repro pasted first\n'
+  printf -- '- **Status:** open <!-- open | fixed | verified | wont-fix | invalid -->\n'
+  printf '\nSteps to reproduce — the registry line that triggers it:\n\n```md\n'
+  printf -- '- **Closable by:** human <!-- agent | human -->\n'
+  printf '```\n\n'
+  printf -- '- **Closable by:** agent <!-- agent | human -->\n'
+} > "$GENRE_BUG"
+genre_quoted_above="$( cd "$FIX" && "$SDD" phase "$MISSION" 2>&1 )"
+assert_eq "the genre is the file's OWN field: a quote ABOVE it does not become the genre" \
+  "REVIEW|QA" "$genre_exact|$genre_quoted_above"
 rm -f "$GENRE_BUG"
 
 # The QA site of latest_matching(), which the r10 fixture below does NOT cover: that one pins the
