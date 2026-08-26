@@ -488,6 +488,214 @@ assert_why   "QA reports the open bug" "QA" "Status: open|bug\(s\) with Status"
 sed -i 's/\*\*Status:\*\* open/**Status:** wont-fix/' "$FIX/docs/qa/bugs/BUG-20260101-test.md"
 assert_phase "wont-fix is a human decision and does not block" "REVIEW"
 
+# Anchor 3 reads the bug's GENRE, and the unknown genre blocks.
+#
+# Why the genre exists at all: no agent in the pipeline may write the `Status:` line — that tree
+# belongs to the qa-report/qa-execution skills (agents/sdd-qa.md, "Rules that are not negotiable"), and
+# sdd-executor does not know the registry exists. So for a bug whose fix is a PRODUCT decision
+# there was no path from `open` to anything else, while Anchor 3 blocked the phase for it all the
+# same. Measured in 20260825-frete-cif-fob: 7 of the 12 QA sessions were in that loop, US$ 73,32.
+# `Closable by: agent` still blocks, because for THAT bug the F<n> cycle does close.
+#
+# One file rewritten three times, so nothing but the genre line differs between the regimes. The
+# `<!-- agent | human -->` legend is in every regime ON PURPOSE: the word `human` then exists in
+# EVERY bug file on the machine, so an anchor like `.*human` would fail open and switch Anchor 3
+# off for the whole registry — the same trap bin/sdd:587-588 already records for `closed`. With
+# the legend in the fixture, that loosening turns the differential red.
+GENRE_BUG="$FIX/docs/qa/bugs/BUG-20260102-genre.md"
+write_genre_bug() { # write_genre_bug <the `Closable by:` line, or '' for a bug older than the field>
+  { printf '# BUG-20260102-genre: needs a call nobody in the pipeline can make\n'
+    printf -- '- **Status:** open <!-- open | fixed | verified | wont-fix | invalid -->\n'
+    if [ -n "$1" ]; then printf -- '%s\n' "$1"; fi
+  } > "$GENRE_BUG"
+}
+
+write_genre_bug '- **Closable by:** human <!-- agent | human -->'
+genre_phase_human="$( cd "$FIX" && "$SDD" phase "$MISSION" 2>&1 )"
+genre_why_human="$(   cd "$FIX" && "$SDD" why "$MISSION" QA 2>&1 )"
+
+write_genre_bug '- **Closable by:** agent <!-- agent | human -->'
+genre_phase_agent="$( cd "$FIX" && "$SDD" phase "$MISSION" 2>&1 )"
+genre_why_agent="$(   cd "$FIX" && "$SDD" why "$MISSION" QA 2>&1 )"
+
+# DIFFERENTIAL, and not two separate "the gate passed" / "the gate failed" assertions: "passed" is
+# shared with every healthy regime, so on its own it distinguishes nothing (house rule, CLAUDE.md
+# — an assertion whose reading a wrong branch also produces is not measuring the branch). The two
+# regimes are compared against EACH OTHER, on one registry that differs by one word.
+genre_reasons=same
+[ "$genre_why_human" != "$genre_why_agent" ] && genre_reasons=differ
+assert_eq "genre differential: human-closable passes, agent-closable blocks, reasons differ" \
+  "REVIEW|QA|differ" "$genre_phase_human|$genre_phase_agent|$genre_reasons"
+
+# The other half of the rule: the absence of the wrong branch's marker. Without it the pair above
+# is satisfied by ANY two different reasons — two unrelated failures would read `differ` too.
+# `grep -cF`: the marker carries `(s)`, and a BRE would read those parentheses as literal only by
+# luck of the dialect.
+assert_eq "only the agent-closable regime carries the blocking marker" "0|1" \
+  "$( grep -cF 'with Status: open in the registry' <<< "$genre_why_human" )|$( grep -cF 'with Status: open in the registry' <<< "$genre_why_agent" )"
+
+# Fail-safe, and the reason the default is not permissive: every bug file that already exists in
+# every target repo predates this field. A missing genre reading as `human` would switch Anchor 3
+# off for the entire legacy registry at once (decision 3 of the grill).
+write_genre_bug ''
+assert_phase "an open bug with no genre field still blocks (fail-safe for the legacy registry)" "QA"
+
+# The genre is the WHOLE WORD, and the anchor above has no right-hand boundary — so every value that
+# merely STARTS with `human` was read as the genre `human` and stopped blocking. `humano` is the
+# pt-BR spelling, and this repo declares OUTPUT_LANG=pt-BR: the very translation the contract
+# forbids was the one that slipped through. agents/sdd-qa.md's Language section states the opposite
+# in so many words — "a translated genre is a genre the gate cannot read, and it reads as absent,
+# which blocks" — so the gate was failing OPEN against its own written promise, in the PERMISSIVE
+# direction that decision 3 of the grill exists to refuse. (`humans`, `humanoid` and `human-ish`
+# went the same way; `Human` and `HUMAN` did not, the match being case-sensitive.)
+#
+# DIFFERENTIAL, on ONE LETTER: the exact genre must pass and the near-miss must block, compared
+# against each other. "humano blocks" alone is satisfied by a gate that blocks everything — the
+# over-broad fix — and "human passes" alone is the assertion three blocks up. The exact regime keeps
+# the `<!-- agent | human -->` legend, so a fix that anchors the end of the line without allowing
+# the legend after the value turns this half red instead of passing quietly.
+write_genre_bug '- **Closable by:** human <!-- agent | human -->'
+genre_exact="$(  cd "$FIX" && "$SDD" phase "$MISSION" 2>&1 )"
+write_genre_bug '- **Closable by:** humano <!-- agent | human -->'
+genre_prefix="$( cd "$FIX" && "$SDD" phase "$MISSION" 2>&1 )"
+assert_eq "the genre is the whole word: 'human' passes, the near-miss 'humano' still blocks" \
+  "REVIEW|QA" "$genre_exact|$genre_prefix"
+
+# ...and the genre is read from the FIELD, not from wherever the two words happen to appear. `grep
+# -q` is true for ANY line of the file, so a bug whose own field says `agent` — the blocking
+# default — stopped blocking as soon as its body QUOTED the human line, in a fenced block, a repro
+# or a diff. Not a contrived body: `agents/sdd-qa.md` § 5.1 prints that exact line for the agent to
+# copy, so a bug filed ABOUT the genre field is the likely first victim, and a registry bug is
+# prose written by a skill that quotes freely.
+#
+# The asymmetry is what makes it a defect rather than a quirk. Its sibling anchor, `Status: open`,
+# matches anywhere in the file too — but there anywhere-matching is CONSERVATIVE (it can only make
+# a bug block). This is the first anchor in the gate where anywhere-matching is PERMISSIVE, and
+# `bin/sdd:631-637` calls the anchor "strict about it" while being strict only against the
+# enum-legend trap.
+#
+# DIFFERENTIAL against the genuine article: the field decides, so a real `human` FIELD passes and a
+# `human` MENTION under an `agent` field does not. Asserting only that the quoting bug blocks would
+# also be satisfied by a gate that blocks everything, which is the over-broad fix.
+{ printf '# BUG-20260102-genre: filed about the genre field itself\n'
+  printf -- '- **Status:** open <!-- open | fixed | verified | wont-fix | invalid -->\n'
+  printf -- '- **Closable by:** agent <!-- agent | human -->\n'
+  printf '\nThe template line this bug is about reads:\n\n```md\n'
+  printf -- '- **Closable by:** human <!-- agent | human -->\n'
+  printf '```\n'
+} > "$GENRE_BUG"
+genre_quoted="$( cd "$FIX" && "$SDD" phase "$MISSION" 2>&1 )"
+assert_eq "the genre is the FIELD: a bug that merely quotes the human line still blocks" \
+  "REVIEW|QA" "$genre_exact|$genre_quoted"
+
+# ...and "the FIELD" means the file's OWN field, not the first thing SHAPED like one. The fix above
+# landed as `grep -m1`, and "the first field-shaped line IS the field" holds only while nothing
+# above the header is shaped like the field. The regime right above breaks that itself the moment
+# its repro block moves: same `Closable by: agent` field, same fenced `human` line, only the ORDER
+# changed, and the gate went back to answering `registry clean` with an agent-closable bug open.
+# It shipped as a declared limit in bin/sdd and in the EXEC handoff; a declared limit is still a
+# fail-open, and every looseness in THIS anchor is permissive. Reproduced and closed in the REVIEW
+# round of 20260826-o-laco-da-qa.
+#
+# DIFFERENTIAL on ORDER ALONE, plus the passing control: the two quoting fixtures carry byte-equal
+# metadata and a byte-equal fenced quote, and differ only in which comes first — so a gate that
+# blocked everything would take `genre_exact` red with it, and a gate that read position instead of
+# the field would take the block above red. Neither half alone measures the rule.
+{ printf '# BUG-20260102-genre: filed about the genre field, repro pasted first\n'
+  printf -- '- **Status:** open <!-- open | fixed | verified | wont-fix | invalid -->\n'
+  printf '\nSteps to reproduce — the registry line that triggers it:\n\n```md\n'
+  printf -- '- **Closable by:** human <!-- agent | human -->\n'
+  printf '```\n\n'
+  printf -- '- **Closable by:** agent <!-- agent | human -->\n'
+} > "$GENRE_BUG"
+genre_quoted_above="$( cd "$FIX" && "$SDD" phase "$MISSION" 2>&1 )"
+assert_eq "the genre is the file's OWN field: a quote ABOVE it does not become the genre" \
+  "REVIEW|QA" "$genre_exact|$genre_quoted_above"
+
+# Four more rules of the same anchor, one regime each. All four were found by an adversarial
+# sabotage pass in the REVIEW round of 20260826-o-laco-da-qa: each was degraded in turn and
+# `./tests/run-all.sh` stayed GREEN, which by the house rule makes them rules without a probe. In
+# THIS anchor that is never neutral — bin/sdd's own comment calls it "the first anchor in the gate
+# where a loose match is PERMISSIVE, so every looseness here fails OPEN" — so each was a fail-open
+# waiting for a bug body shaped that way. They are separate regimes and not one because they fail
+# open INDEPENDENTLY: a single fixture would let three of them rot behind the fourth.
+#
+# Every one keeps `$genre_exact` as the passing control, for the same reason as the blocks above:
+# a gate that blocked everything satisfies "it blocks" and would take the control red instead.
+
+# (a) The genre is LOWERCASE. check-gates.sh asserted this in a COMMENT — "`Human` and `HUMAN` did
+# not, the match being case-sensitive" — and nothing measured it: turning `grep -qE` into `grep
+# -qiE` left the whole suite green while `Human` and `HUMAN` went from blocking to passing. A
+# comment that states a measured property is not a measurement — the same rule this repo already
+# applies to a comment claiming parity between two programs, where only a differential assertion
+# counts as proof. This is the assertion that comment was standing in for.
+write_genre_bug '- **Closable by:** Human <!-- agent | human -->'
+genre_case="$( cd "$FIX" && "$SDD" phase "$MISSION" 2>&1 )"
+assert_eq "the genre is lowercase: the capitalised 'Human' reads as absent and still blocks" \
+  "REVIEW|QA" "$genre_exact|$genre_case"
+
+# (b) The FIRST field-shaped line outside a fence wins, and the extractor stops there. Without the
+# `exit`, every unfenced field-shaped line is printed and the match runs over a MULTI-LINE
+# `genre_line` — so `grep -q`, true for any line it is given, goes back to answering "human" for a
+# file whose own field says `agent`. That is the very defect the F1 increment closed, re-entering
+# through the extractor instead of through the matcher.
+{ printf '# BUG-20260102-genre: two field-shaped lines, neither fenced\n'
+  printf -- '- **Status:** open <!-- open | fixed | verified | wont-fix | invalid -->\n'
+  printf -- '- **Closable by:** agent <!-- agent | human -->\n'
+  printf '\nA later paragraph repeats the line without fencing it:\n\n'
+  printf -- '- **Closable by:** human <!-- agent | human -->\n'
+} > "$GENRE_BUG"
+genre_second="$( cd "$FIX" && "$SDD" phase "$MISSION" 2>&1 )"
+assert_eq "the FIRST unfenced field wins: a second field-shaped line later does not override it" \
+  "REVIEW|QA" "$genre_exact|$genre_second"
+
+# (c) BOTH fence spellings. GFM fences with ``` or with ~~~, and the extractor has to know both:
+# knowing only ``` leaves a ~~~-fenced quote counting as an ordinary line, which puts the defect
+# straight back for any bug filed with the other spelling. Same body as the quote-ABOVE regime,
+# one character of fence apart.
+{ printf '# BUG-20260102-genre: the repro is fenced with tildes\n'
+  printf -- '- **Status:** open <!-- open | fixed | verified | wont-fix | invalid -->\n'
+  printf '\nSteps to reproduce:\n\n~~~md\n'
+  printf -- '- **Closable by:** human <!-- agent | human -->\n'
+  printf '~~~\n\n'
+  printf -- '- **Closable by:** agent <!-- agent | human -->\n'
+} > "$GENRE_BUG"
+genre_tilde="$( cd "$FIX" && "$SDD" phase "$MISSION" 2>&1 )"
+assert_eq "a ~~~ fence hides the quote just as a \`\`\` fence does" \
+  "REVIEW|QA" "$genre_exact|$genre_tilde"
+
+# (d) The field starts at COLUMN ZERO. An indented `- **Closable by:** human` is a nested list
+# item or an indented code block — body, never the header — and admitting leading whitespace lets
+# any of them become the genre. Strict here for the same reason ABSENT blocks: in this anchor the
+# loose reading is the permissive one.
+#
+# ⚠️ DECLARED REDUNDANCY, and this assertion is a PROPERTY probe rather than a rule probe — said
+# out loud because the difference is exactly what the sabotage pass is for. The column-zero rule is
+# enforced TWICE: once by the awk extractor's `/^-/` and once by the matcher's own `^\-`. Degrading
+# either ALONE leaves the bug blocking, so neither has a probe of its own here. Measured, all four
+# corners, on this very fixture:
+#
+#     awk strict + grep strict -> BLOCKS      awk LOOSE + grep strict -> BLOCKS
+#     awk strict + grep LOOSE  -> BLOCKS      awk LOOSE + grep LOOSE  -> PASSES
+#
+# So the assertion is not vacuous — it is red in the one world where the property is actually
+# gone — but nobody should read it as pinning the awk anchor. By the D15 admission rule a
+# redundancy that is WRITTEN DOWN stops being debt; an unwritten one is the fail-open the rule
+# exists to separate from it. If a later change removes one of the two anchors, this assertion
+# will still pass, and that is the cost being declared here.
+{ printf '# BUG-20260102-genre: the quote is indented, not fenced\n'
+  printf -- '- **Status:** open <!-- open | fixed | verified | wont-fix | invalid -->\n'
+  printf '\nQuoted inside a nested list:\n\n'
+  printf -- '  - **Closable by:** human <!-- agent | human -->\n'
+  printf '\n'
+  printf -- '- **Closable by:** agent <!-- agent | human -->\n'
+} > "$GENRE_BUG"
+genre_indented="$( cd "$FIX" && "$SDD" phase "$MISSION" 2>&1 )"
+assert_eq "the field starts at column zero: an indented quote does not become the genre" \
+  "REVIEW|QA" "$genre_exact|$genre_indented"
+
+rm -f "$GENRE_BUG"
+
 # The QA site of latest_matching(), which the r10 fixture below does NOT cover: that one pins the
 # REVIEW glob (`40-review-r*.md`), and for three rounds the runner comment claimed on top of it
 # that "version order keeps the dated names in the order plain sort gave them, so the qa call sites

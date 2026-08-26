@@ -137,13 +137,26 @@ journeys in a project with no browser is the paperwork `skipped` exists to avoid
     `/qa-report` by hand and commit a `docs/qa/` tree in a project with no interface too. One did,
     on 2026-08-19, and an `sdd-qa` session read the older wording as licence and deleted it
     (`9f84cbc`). A tree that is there is read and complemented, never removed: this path still asks
-    for no report from it, and Anchor 3 below (`bugs/` with no `Status: open`) already applies to
-    both paths;
-- no file in `<QA_DOCS_PATH>/bugs/` has `**Status:** open` (true in both cases);
+    for no report from it, and Anchor 3 below (`bugs/` with no agent-closable `Status: open`)
+    already applies to both paths;
+- no file in `<QA_DOCS_PATH>/bugs/` has a `**Status:** open` **that an agent could close** (true in
+  both cases). Since `20260826-o-laco-da-qa` the anchor reads a second field of the same file,
+  `- **Closable by:**`: `agent` blocks, `human` does not, and **absent blocks**. Absent is the
+  fail-safe and not an oversight — every bug file written before the field existed lacks it, so a
+  permissive default would switch this anchor off for a whole legacy registry in one step. The
+  genre is read from the FIELD, not from wherever the words happen to appear in the body, and
+  matched as a whole lowercase word: `humano`, `humans` and `Human` all read as absent, and block;
 - `TEST_CMD` exits 0 and `E2E_CMD` exits 0 (when set).
 
 `wont-fix` and `invalid` do **not** block: they are a recorded human decision, not a pending
-defect.
+defect. Neither does an `open` bug marked `Closable by: human`, and that is the only way an `open`
+bug passes. The reason is one level up: no agent in this pipeline may write the `Status:` line —
+the `docs/qa/` tree belongs to the `qa-report`/`qa-execution` skills — so a bug waiting on a
+product decision had no path out of `open` at all while this anchor blocked the phase for it
+anyway, and every honest finding bought another lap. Measured in `20260825-frete-cif-fob`: 7 of the
+12 QA sessions in that loop, US$ 73,32 of the mission's US$ 144,88. Marking the genre is the
+`sdd-qa` agent's duty and the one line of a bug file that is its (`agents/sdd-qa.md` § 5.1);
+`Status:` stays the skills'.
 
 `qa: skipped` is a legitimate and expected answer: a diff with no user-visible change (refactor,
 types, build, docs) has no journey to walk. Inventing a journey just to "have QA" is waste.
@@ -535,7 +548,7 @@ present on both shapes.
 | `v` | integer | never | Schema version of the row, `1` today. Lets the reader tell "old shape" from "malformed" when a future field is added. |
 | `ts` | string | never | `date -Iseconds` timestamp of when the row was written. |
 | `event` | string enum: `session` \| `blocked` \| `degraded` | never | A spent session versus a no-session escalation. `blocked` means the line **stopped** (the runner returns 3 and a human has to act); `degraded` means the runner lowered its own bar and **carried on**. They are kept apart on purpose: reusing `blocked` for a degradation would have been cheaper — it inherits the `kit_sha` axis and the aggregation with no `jq` to touch — but it records "stopped" for a run that continued, and the ledger exists to record fact. |
-| `kind` | string enum: `increment-blocked` \| `budget-exhausted` \| `no-progress` \| `review-to-draft` | on `event:"session"` rows | Which escalation path fired. `increment-blocked` is a deliberate Jidoka (can be a *good* sign); `budget-exhausted` and `no-progress` are pure friction. `review-to-draft` is the only `degraded` kind today: `PUBLISH_ON_REVIEW_BLOCKED=draft` and the review out of rounds, so the runner publishes a draft PR by itself instead of stopping. **At most one `review-to-draft` row per `run_id`**, and now at most one *jump*: the draft PR gets a single chance, and if its own gate fails the run ends on `blocked` / `budget-exhausted` in REVIEW rather than looping REVIEW→PR→REVIEW with the budget still blown. Before that, the branch was re-entered every lap and wrote a row every lap — both readers agreeing on a wrong number, which is worse than one of them being wrong. |
+| `kind` | string enum: `increment-blocked` \| `handoff-blocked` \| `budget-exhausted` \| `no-progress` \| `review-to-draft` | on `event:"session"` rows | Which escalation path fired. `increment-blocked` and `handoff-blocked` are deliberate Jidoka (they can be a *good* sign); `budget-exhausted` and `no-progress` are pure friction. `handoff-blocked` arrived with `20260826-o-laco-da-qa`: the phase's own handoff declares `status: blocked`, which already meant "the line stopped and a human has to act", so the runner escalates on that declaration instead of charging the phase a second session to prove the same thing. It is written from both doors of `cmd_run`'s loop — the first pass and the inline retry — and names the phase whose handoff declared it. ⚠️ This column is a **documented enum with an open tail**: the runtime readers do not validate it (`is_escalation` is defined over `.event` alone and both aggregations `group_by(.kind)` dynamically), so a new kind is admitted, counted and printed rather than filed as `unrecognized` — which means a kind added to the code and not to this row goes unnoticed by every sensor. Adding one is a contract change: code and this table in the same commit. `review-to-draft` is the only `degraded` kind today: `PUBLISH_ON_REVIEW_BLOCKED=draft` and the review out of rounds, so the runner publishes a draft PR by itself instead of stopping. **At most one `review-to-draft` row per `run_id`**, and now at most one *jump*: the draft PR gets a single chance, and if its own gate fails the run ends on `blocked` / `budget-exhausted` in REVIEW rather than looping REVIEW→PR→REVIEW with the budget still blown. Before that, the branch was re-entered every lap and wrote a row every lap — both readers agreeing on a wrong number, which is worse than one of them being wrong. |
 | `run_id` | string (uuid) | never | One per `cmd_run`/`cmd_retry` invocation. Groups every row a single command call produced — "this mission needed N runs" is a `run_id` count. |
 | `invocation` | string enum: `run` \| `retry` | never | Which command opened the session: `sdd run` or `sdd retry`. Answers "who opened the session", not "was this an in-loop retry" — that is `auto_retry`. |
 | `kit_sha` | string \| `null` | never absent, but `null` | `null` when `$SDD_HOME` is not a git checkout. Short SHA of the kit's own HEAD when the row was written — the before/after axis the whole ledger exists for. |

@@ -227,6 +227,62 @@ mut_QA_bug_open() {           # ignores a bug with Status: open in the registry
   sed -i 's|.*\[ "\$openbugs" -gt 0 \].*|  if false; then|' "$1"
 }
 
+# Anchor 3 goes back to counting EVERY open bug, whatever its genre. That is the state the kit was
+# in until 20260826-o-laco-da-qa: a bug whose fix is a product decision blocked the QA phase, and
+# no agent in the pipeline was allowed to write the `Status:` line that would unblock it — 7 of
+# the 12 QA sessions of 20260825-frete-cif-fob spent US$ 73,32 on a gate none of them could pass.
+#
+# Anchored on the CODE line and not on `.*Closable by.*human.*`: the comment above that line in
+# bin/sdd carries the same words, and a mutant that rewrites a comment applies (so it clears the
+# rc-90 cmp guard) while sabotaging nothing. The `^    if grep` prefix and the `then continue; fi`
+# suffix are what make the anchor hit exactly one line.
+mut_QA_bug_genre_ignored() {
+  sed -i 's|^    if grep -qE .*Closable by.*then continue; fi$|    if false; then continue; fi|' "$1"
+}
+
+# The two halves of the same line, one mutant each, because they fail open independently and a
+# single mutant would let either half rot while the other kept the catalogue green. Both were live
+# defects found by the QA phase of 20260826-o-laco-da-qa against the very increment that added the
+# genre, and both answered `registry clean, suites green` with an agent-closable bug open.
+#
+# Same anchoring discipline as the mutant above, and it is not theoretical here: the comment block
+# in bin/sdd spells out `humano`, `human-ish` and "the genre is read from the FIELD" in prose. A
+# `.*human.*` anchor would rewrite comment lines, clear the rc-90 cmp guard and sabotage nothing.
+# `human(` and `genre_line` were each measured to occur on the CODE line only.
+
+# The right-hand boundary goes: every value that merely STARTS with `human` is read as the genre
+# again. Caught by the one-letter differential `human` × `humano` — the pt-BR spelling, which is
+# the translation this repo's own OUTPUT_LANG makes likely and the agent contract forbids.
+#
+# Delimiter is `@` and not `|`: the text being matched IS an alternation, so a `|`-delimited script
+# would end at the first `[[:space:]]` and sed would reject it. The brackets are escaped for the
+# same reason — unescaped, `[[:space:]]` is a character class to sed, not the literal it must match.
+mut_QA_bug_genre_prefix() {
+  sed -i 's@human(\[\[:space:\]\]|\$)@human@' "$1"
+}
+
+# The field extraction goes: the genre is matched against the whole FILE again, so a bug whose own
+# field says `agent` stops blocking as soon as its body quotes the human line — which agents/sdd-qa.md
+# § 5.1 prints verbatim for the agent to copy.
+mut_QA_bug_genre_anywhere() {
+  sed -i 's|<<< "\$genre_line"|"\$bugfile"|' "$1"
+}
+
+# The fence state goes: the extractor stops knowing it is inside a ```/~~~ block, so the first
+# line merely SHAPED like the field wins again — and a bug whose repro is pasted above its own
+# metadata reads its genre out of the quote. Third half of the same line, and it fails open
+# independently of the other two, which is why it gets its own mutant rather than riding theirs:
+# with the fence tracking gone, both regimes above still block (their real field comes first) and
+# only the quote-ABOVE assertion dies.
+#
+# `fenced = !fenced` occurs on the CODE line only — the prose beside it says "SKIPS fenced blocks"
+# and "the fence is STATE", neither of which contains the assignment. Same anchoring discipline as
+# the three mutants above, and for the same measured reason: a mutant that rewrites only a comment
+# applies, clears the rc-90 `cmp -s` guard, and certifies a protection nobody measured.
+mut_QA_bug_genre_fenced() {
+  sed -i 's|{ fenced = !fenced; next }|{ next }|' "$1"
+}
+
 # Historical bug 3 (SQ-97 pilot, ~US$ 10): the parser exited only at `###`, kept swallowing the
 # report's following tables and failed an all-Grade-A review for finding a `Commit` column.
 mut_REVIEW_stops_at_h3() {
@@ -720,6 +776,68 @@ mut_KAIZEN_guard_ignored() {
 # why check-gates.sh asserts it on a 20000-row checkpoint.
 mut_RUN_jidoka_pipefail() {
   sed -i 's@grep -qx "blocked" <<< "$ckstatus"@printf "%s\\n" "$ckstatus" | grep -qx "blocked"@' "$1"  # sdd-pipefail-waiver: this payload IS the bug, deliberately
+}
+
+# Not a gate, and the third Jidoka: a handoff that declares `status: blocked` goes back to being
+# an ordinary gate failure, decided by the fingerprint heuristic. The runner then charges a phase
+# NOBODY can satisfy for proving its own unsatisfiability twice — and when the session commits
+# something honest, `moved=true` buys another lap instead of two. Measured in
+# 20260825-frete-cif-fob: 7 of the 12 QA sessions in that loop, US$ 73,32 of US$ 144,88.
+#
+# TWO mutants, one per DOOR, because since F2 the escalation is one body called from two places in
+# cmd_run's loop — the first pass and the inline retry — and the doors fail open INDEPENDENTLY. A
+# single mutant would let one of them rot with the catalogue green, which is the same argument that
+# split QA_bug_genre_prefix from QA_bug_genre_anywhere one increment ago.
+#
+# The BODY (handoff_blocked_escalation) deliberately gets no mutant of its own, and this is a
+# DECLARED limit, not an oversight: it is reached only through these two doors, so neutralising it
+# is indistinguishable from neutralising both at once — strictly weaker evidence than the pair
+# below, each of which kills exactly the assertion that names its door.
+#
+# The anchor is the WHOLE code line, `^…$`, inside a RANGE delimited by the two code lines that
+# bracket each door. The range is what makes the two anchors distinguishable at all: since F2 the
+# doors are the same text, so an unranged `s|…|…|` would rewrite BOTH and neither mutant would
+# isolate anything. And it stays anchored on CODE — `handoff_blocked_escalation` appears in the
+# comments beside each door and all over the contract above the body, and a loose
+# `.*handoff_blocked_escalation.*` would rewrite prose, pass the `cmp -s` guard and sabotage
+# nothing: a mutant certifying a protection nobody measures, the class already paid for by
+# mut_LEDGER_repo_root_cdpath_leak and again by mut_QA_bug_genre_ignored.
+
+# Door 1: the first pass. Without it a handoff that declares `status: blocked` goes back to being
+# an ordinary gate failure, decided by the fingerprint heuristic. The runner then charges a phase
+# NOBODY can satisfy for proving its own unsatisfiability twice — and when the session commits
+# something honest, `moved=true` buys another lap instead of two. Measured in
+# 20260825-frete-cif-fob: 7 of the 12 QA sessions in that loop, US$ 73,32 of US$ 144,88.
+#
+# ⚠️ The RANGE was re-anchored in the REVIEW round of 20260826-o-laco-da-qa, when door 1 moved
+# ABOVE the `--max-phases` ceiling (it used to answer that flag first and return 0 on a `blocked`
+# handoff). Its old range — `gate_rc -eq 0` … `moved = "true"` — no longer contains the door, so
+# the mutant would have become a silent NO-OP; the rc-90 `cmp -s` guard would have caught it, but
+# only after the fact. The new range brackets the door with the first pass's OWN session row
+# (`$gate_rc`, which the retry spells `$gate_rc2` — that is what makes it unique) and the
+# `phases_run` line the door now precedes. Both were measured to occur exactly once.
+mut_RUN_blocked_not_escalated() {
+  sed -i '/^      "\$( \[ "\$gate_rc" -eq 0 \] && echo pass || echo fail )" "\$GATE_WHY"$/,/^    phases_run=\$((phases_run + 1))$/ s|^    if handoff_blocked_escalation "\$phase"; then return 3; fi$|    if false; then return 3; fi|' "$1"
+}
+#
+# The ORDER of door 1 against the `--max-phases` ceiling deliberately gets no mutant of its own,
+# and this is a declared limit rather than an oversight. A mutant for it would have to MOVE a
+# block rather than neutralise a line, which in sed/perl means a multi-line rewrite whose anchor
+# rots on the next edit of either block — and a rotted mutant that still applies is the class this
+# catalogue has already paid for twice. The rule has a durable probe where it belongs, in
+# tests/check-autonomy.sh: `a --max-phases ceiling does not turn a blocked handoff into rc 0`,
+# differential against the increment-blocked sibling under the same flag, and it runs in TEST_CMD
+# on every gate rather than only when the catalogue is asked for.
+
+# Door 2: the inline retry. Without it the marker OUTLIVES the lap — `current_phase` runs in a
+# subshell and cannot clear the parent's copy, and every gate but gate_QA leaves it alone — so the
+# next lap runs gate_EXEC with the marker still set and door 1 fires for EXEC: the runner prints
+# "the phase's handoff declares 'status: blocked'" over a 20-handoff-exec.md that says `done`,
+# swallows the retry EXEC was owed, and writes {phase: EXEC, kind: handoff-blocked} into the ledger
+# the kaizen judge reads. So this one is caught twice over, by the session COUNT and by the phase
+# NAME, which is why check-autonomy.sh spends two assertions on it and not one.
+mut_RUN_blocked_retry_not_escalated() {
+  sed -i '/^    if \[ "\$gate_rc2" -eq 0 \]; then$/,/^    if \[ "\$moved2" = "false" \]; then$/ s|^    if handoff_blocked_escalation "\$phase"; then return 3; fi$|    if false; then return 3; fi|' "$1"
 }
 
 # Not a gate, and the exact bug I2 closed: `force_phase="PR"; continue` sat ABOVE both writers, so
@@ -1783,6 +1901,10 @@ CATALOG=(
   QA_bug_enum_loose
   QA_matrix_pending
   QA_bug_open
+  QA_bug_genre_ignored
+  QA_bug_genre_prefix
+  QA_bug_genre_anywhere
+  QA_bug_genre_fenced
   REVIEW_stops_at_h3
   REVIEW_accepts_B
   REVIEW_placeholder_rationale_blind
@@ -1817,6 +1939,8 @@ CATALOG=(
   RUN_moved_never_true
   RUN_autonomy_sha_warn_repeats
   RUN_jidoka_pipefail
+  RUN_blocked_not_escalated
+  RUN_blocked_retry_not_escalated
   RUN_degraded_row_dropped
   RUN_degraded_repeats
   RUN_escalations_no_axis

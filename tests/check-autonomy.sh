@@ -939,6 +939,225 @@ assert_eq "and the judge counts the same one, not one per lap" "1" \
 assert_eq "with nothing pushed into the unrecognized bucket to get there" "0" \
   "$(jq -r '.excluded.unrecognized' <<< "$series")"
 
+# --- `status: blocked` in the handoff escalates on the FIRST session ---------
+# `blocked` already MEANS "the line stopped; the runner returns 3 and a human has to act"
+# (bin/sdd:1602), and gate_QA has always refused it (:564). What was missing is that the refusal
+# went through the fingerprint heuristic like any other: session 1 fails the gate, the runner
+# retries, session 2 fails it identically, and only THEN does `no-progress` escalate. A phase
+# nobody can satisfy paid for proving its own unsatisfiability twice, at one session apiece —
+# and when the session did commit something honest, `moved=true` bought yet another lap instead.
+# Measured in 20260825-frete-cif-fob: 7 of the 12 QA sessions were in that loop, US$ 73,32.
+#
+# ONE assertion, and it is DIFFERENTIAL on purpose. "rc 3" is shared with every escalation in this
+# file, and "one session" alone would be satisfied by a runner that escalated on the first session
+# for ANY failing gate — which is the over-broad fix, not the fix. So the same fixture is run twice
+# and the two outputs are compared against each other: the `blocked` handoff must escalate on
+# session 1 by its own enum, and a handoff that fails the gate for an ordinary reason (no `gate:`
+# evidence, the no-interface branch at :568) must still spend its two sessions and still land on
+# `no-progress`. Either half alone passes under a mutant; together neither does.
+echo "== status: blocked escalates on the first session, an ordinary gate failure does not =="
+# The dead stub: no session moves the disk, so the control regime reaches `no-progress` — which is
+# also what makes the two halves differ ONLY in the reason the gate refused.
+cat > "$OUTSIDE/stub/claude" <<'STUB'
+#!/usr/bin/env bash
+exit 1
+STUB
+chmod +x "$OUTSIDE/stub/claude"
+
+# blocked_shape <expected-phase> -> "<rc>|<session rows>|<event>|<kind>" for the run just made.
+blocked_shape() {
+  printf '%s|%s|%s|%s' "$1" \
+    "$(jq -s '[.[] | select(.event == "session")] | length' "$LEDGER")" \
+    "$(jq -r -s '[.[] | select(.event == "blocked")][0].event' "$LEDGER")" \
+    "$(jq -r -s '[.[] | select(.event == "blocked")][0].kind' "$LEDGER")"
+}
+
+: > "$LEDGER"
+printf -- '---\nfase: QA\nstatus: blocked\n---\n' > "$MDIR/30-handoff-qa.md"
+git add -A && git commit -qm "chore: QA handoff declares blocked"
+"$SDD" run "$MISSION" >/dev/null 2>&1; rc=$?
+qa_blocked="$(blocked_shape "$rc")"
+
+: > "$LEDGER"
+# Same phase, same stub, same everything — only the REASON the gate refuses changes. `done` with
+# no `gate:` field is the ordinary failure of the no-interface branch (bin/sdd:568).
+printf -- '---\nfase: QA\nstatus: done\n---\n' > "$MDIR/30-handoff-qa.md"
+git add -A && git commit -qm "chore: QA handoff without the gate evidence"
+"$SDD" run "$MISSION" >/dev/null 2>&1; rc=$?
+qa_ordinary="$(blocked_shape "$rc")"
+
+assert_eq "status: blocked escalates on the first session, where an ordinary gate failure still spends two" \
+  "3|1|blocked|handoff-blocked · 3|2|blocked|no-progress" \
+  "$qa_blocked · $qa_ordinary"
+
+# --- ...and a `--max-phases` ceiling does not turn that into rc 0 -----------
+# Door 1 used to sit BELOW the ceiling check, so `sdd run --max-phases 1` against this very
+# handoff opened and paid for a QA session, armed the marker, and returned **0**: no ledger row,
+# no pipeline.log line, and a SUCCESS exit code for a phase nobody in the pipeline can satisfy.
+# The two sibling Jidokas — the `blocked` increment and the dirty tree — sit ABOVE the ceiling and
+# escalate whatever it says, so the third one alone answered the flag first. An operator or a CI
+# wrapper pacing the pipeline one phase at a time got the pre-fix loop for ever, wearing a green
+# rc. Found in the REVIEW round of 20260826-o-laco-da-qa.
+#
+# DIFFERENTIAL, and it refuses BOTH over-broad readings in one pair: a runner that escalated
+# whenever `--max-phases` is set takes the CONTROL half red (an ordinary gate failure under the
+# same flag must still end `0`, with no escalation row at all), and a runner where the ceiling
+# always wins takes the BLOCKED half red. Only the word in the handoff differs between the runs —
+# same mission, same dead stub, same flag, same ceiling.
+: > "$LEDGER"
+printf -- '---\nfase: QA\nstatus: blocked\n---\n' > "$MDIR/30-handoff-qa.md"
+git add -A && git commit -qm "chore: QA handoff declares blocked, under a ceiling"
+"$SDD" run "$MISSION" --max-phases 1 >/dev/null 2>&1; rc=$?
+qa_ceiling_blocked="$(blocked_shape "$rc")"
+
+: > "$LEDGER"
+printf -- '---\nfase: QA\nstatus: done\n---\n' > "$MDIR/30-handoff-qa.md"
+git add -A && git commit -qm "chore: ordinary gate failure, under the same ceiling"
+"$SDD" run "$MISSION" --max-phases 1 >/dev/null 2>&1; rc=$?
+qa_ceiling_ordinary="$(blocked_shape "$rc")"
+
+assert_eq "a --max-phases ceiling does not turn a blocked handoff into rc 0, where an ordinary failure still ends 0" \
+  "3|1|blocked|handoff-blocked · 0|1|null|null" \
+  "$qa_ceiling_blocked · $qa_ceiling_ordinary"
+
+# --- ...and it escalates from the INLINE RETRY on the same terms -------------
+# The branch above sits on the FIRST pass only. The inline retry (bin/sdd:3538) calls the same gate,
+# which sets the same marker, but the code below it consults `moved2` and nothing else — so a retry
+# session that declares `blocked` and COMMITS the declaration reads as "moved forward, carrying on"
+# and buys exactly the lap this mission exists to delete. The runner's own words for the marker are
+# "another session would re-read the same handoff and refuse the same way", and that is precisely
+# what the extra session then does: it re-reads the same `blocked` handoff and refuses identically.
+#
+# Reachable without contrivance: session 1 dies or writes nothing (moved=false is what SUMMONS the
+# retry), and the retry is the one that does the honest work of declaring the line stopped.
+#
+# DIFFERENTIAL against the first-pass regime above, and on the SAME enum: both must land on
+# `handoff-blocked`, so what the pair isolates is WHEN — the declaration itself, or one lap later.
+# Asserting the retry shape alone would be satisfied by a runner that escalates every retry, which
+# is the over-broad fix and would take the `no-progress` half of the block above red with it.
+: > "$LEDGER"
+RETRY_MARKER="$FIX/.retry-declares-blocked"
+rm -f "$RETRY_MARKER" "$RETRY_MARKER.2"
+printf -- '---\nfase: QA\nstatus: done\n---\n' > "$MDIR/30-handoff-qa.md"
+git add -A && git commit -qm "chore: QA handoff the retry session will replace"
+# Separate process per invocation, so the invocation count lives in marker FILES — same idiom as the
+# `moved` block above. Call 1 changes nothing (that is what makes the runner retry at all); call 2,
+# the inline retry, declares blocked and commits it.
+cat > "$OUTSIDE/stub/claude" <<STUB
+#!/usr/bin/env bash
+if [ ! -e "$RETRY_MARKER" ]; then
+  : > "$RETRY_MARKER"
+  exit 1
+fi
+if [ ! -e "$RETRY_MARKER.2" ]; then
+  : > "$RETRY_MARKER.2"
+  printf -- '---\nfase: QA\nstatus: blocked\n---\n' > "$MDIR/30-handoff-qa.md"
+  git -C "$FIX" add -A
+  git -C "$FIX" commit -qm "chore: the retry session declares the line stopped"
+  exit 0
+fi
+exit 1
+STUB
+chmod +x "$OUTSIDE/stub/claude"
+"$SDD" run "$MISSION" >/dev/null 2>&1; rc=$?
+qa_retry_blocked="$(blocked_shape "$rc")"
+
+assert_eq "a retry session that declares blocked escalates on that declaration, not a lap later" \
+  "3|1|blocked|handoff-blocked · 3|2|blocked|handoff-blocked" \
+  "$qa_blocked · $qa_retry_blocked"
+
+# ...and the lap it survives into escalates the WRONG PHASE, with a reason that is not true of it.
+# The marker is a global; `current_phase` is a SUBSHELL and cannot clear the parent's copy; and
+# gate_EXEC — like every gate but gate_QA — never touches it. So when the retry above carries on,
+# the next lap runs gate_EXEC with the marker still 1 and the reader at :3498 fires for EXEC: the
+# runner prints "the phase's handoff declares 'status: blocked'" about 20-handoff-exec.md, which
+# says `done`, swallows the retry EXEC was owed, and writes {phase: EXEC, kind: handoff-blocked}
+# into the ledger the kaizen judge reads. It is the exact failure the CONTRACT above
+# GATE_HANDOFF_BLOCKED (:508-511) warns a SECOND setter about — reached with only the first one,
+# because the marker outlives the lap rather than a gate.
+#
+# Reached by the pipeline's own instructions, not by contrivance: `agents/sdd-qa.md` § 4 tells the
+# QA session to answer a fixable bug with an `F<n>` row that is `pending`, and a pending row is
+# precisely what sends the next lap to EXEC. QA doing its job is the trigger.
+#
+# DIFFERENTIAL, and the control is what keeps it from passing vacuously: both regimes append the
+# same `F<n>` row, so both genuinely offer EXEC as the next phase — asserting "it escalates QA"
+# alone would also pass on a fixture that never left QA at all. Only the word in the QA handoff
+# differs, and it must not be able to relabel an escalation that belongs to another phase.
+CKPT_BEFORE_WRONG_PHASE="$OUTSIDE/checkpoint-before-wrong-phase.md"
+cp "$MDIR/checkpoint.md" "$CKPT_BEFORE_WRONG_PHASE"
+QA_DECL="$FIX/.qa-status-the-retry-declares"
+# One stub for both regimes, reading the word from a file: two hand-written stubs would be two
+# places for the regimes to drift apart, and what the pair measures is that ONLY that word differs.
+cat > "$OUTSIDE/stub/claude" <<STUB
+#!/usr/bin/env bash
+if [ ! -e "$RETRY_MARKER" ]; then : > "$RETRY_MARKER"; exit 1; fi
+if [ ! -e "$RETRY_MARKER.2" ]; then
+  : > "$RETRY_MARKER.2"
+  printf -- '---\nfase: QA\nstatus: %s\n---\n' "\$(cat "$QA_DECL")" > "$MDIR/30-handoff-qa.md"
+  printf -- '| F1 | the fix QA asked for | \`true\` → 0 | pending | — |\n' >> "$MDIR/checkpoint.md"
+  git -C "$FIX" add -A
+  git -C "$FIX" commit -qm "chore: the retry session reports, and opens a fix increment"
+  exit 0
+fi
+exit 1
+STUB
+chmod +x "$OUTSIDE/stub/claude"
+
+# blocked_where -> "<phase>|<kind>" of the escalation row.
+blocked_where() {
+  printf '%s|%s' \
+    "$(jq -r -s '[.[] | select(.event == "blocked")][0].phase' "$LEDGER")" \
+    "$(jq -r -s '[.[] | select(.event == "blocked")][0].kind'  "$LEDGER")"
+}
+
+: > "$LEDGER"; rm -f "$RETRY_MARKER" "$RETRY_MARKER.2"
+printf 'blocked\n' > "$QA_DECL"
+printf -- '---\nfase: QA\nstatus: done\n---\n' > "$MDIR/30-handoff-qa.md"
+git add -A && git commit -qm "chore: baseline before the retry declares blocked"
+out_blocked="$("$SDD" run "$MISSION" 2>&1)"
+where_blocked="$(blocked_where)"
+
+: > "$LEDGER"; rm -f "$RETRY_MARKER" "$RETRY_MARKER.2"
+cp "$CKPT_BEFORE_WRONG_PHASE" "$MDIR/checkpoint.md"
+printf 'done\n' > "$QA_DECL"
+printf -- '---\nfase: QA\nstatus: done\n---\n' > "$MDIR/30-handoff-qa.md"
+git add -A && git commit -qm "chore: control, the retry reports done"
+out_ordinary="$("$SDD" run "$MISSION" 2>&1)"
+where_ordinary="$(blocked_where)"
+
+assert_eq "the escalation names the phase whose handoff declared it, never the one that came next" \
+  "QA|handoff-blocked · EXEC|no-progress" \
+  "$where_blocked · $where_ordinary"
+
+# ...and it names that phase TO THE HUMAN, not only in the ledger. The two are written from the
+# same `$phase`, but only the ledger half was measured: an adversarial pass in the REVIEW round of
+# 20260826-o-laco-da-qa hardcoded the wrong phase into the `bad`/pipeline.log prose while leaving
+# the ledger row correct, and the whole suite stayed green at 585 ok. That is precisely the damage
+# the F2 narrative describes — the runner telling a human to go fix `status: blocked` in a
+# 20-handoff-exec.md that says `done` — so the half a human actually READS was the unmeasured one.
+# A Jidoka exists to be acted on by a person; its terminal output is not decoration.
+#
+# DIFFERENTIAL on the same pair of runs, and it costs no extra session: one word in the QA handoff
+# has to move the name in the human line from QA to EXEC and back. Both halves assert the ABSENCE
+# of the other phase's line too — "names QA" alone is satisfied by output that names both.
+assert_eq "and it names that phase to the HUMAN too, not only in the ledger row" \
+  "QA=1 EXEC=0 · QA=0 EXEC=1" \
+  "QA=$(grep -c 'BLOCKED in QA' <<< "$out_blocked") EXEC=$(grep -c 'BLOCKED in EXEC' <<< "$out_blocked") · QA=$(grep -c 'BLOCKED in QA' <<< "$out_ordinary") EXEC=$(grep -c 'BLOCKED in EXEC' <<< "$out_ordinary")"
+
+cp "$CKPT_BEFORE_WRONG_PHASE" "$MDIR/checkpoint.md"
+rm -f "$QA_DECL"
+# The fixture is left as the blocks below expect to find it: the dead stub, and a committed handoff
+# that is not `blocked`. A `blocked` handoff left behind would escalate every later `sdd run` here
+# on the FIRST session and quietly rewrite what those blocks measure.
+cat > "$OUTSIDE/stub/claude" <<'STUB'
+#!/usr/bin/env bash
+exit 1
+STUB
+chmod +x "$OUTSIDE/stub/claude"
+printf -- '---\nfase: QA\nstatus: done\n---\n' > "$MDIR/30-handoff-qa.md"
+git add -A && git commit -qm "chore: restore the handoff the retry regime replaced"
+
 # --- the reader ------------------------------------------------------------
 # Fixture ledger written by hand: this is OUR format, so there is no third-party source to copy
 # from (the provenance rule covers skill output). Every row here exists to prove one refusal.

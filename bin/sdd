@@ -498,6 +498,30 @@ gate_TICKET() {
 # tree that is long since clean.
 GATE_EXEC_DIRTY=0
 
+# Set by any gate that refuses because the phase's own handoff declares `status: blocked`, read by
+# cmd_run right after the gate call that could have set it. A GLOBAL for the same reason as
+# GATE_EXEC_DIRTY above — the rc is already spent on pass/fail — and a MARKER rather than a grep of
+# GATE_WHY because GATE_WHY is prose: every gate spells its refusal its own way, the word "blocked"
+# appears in gate_EXEC's Jidoka line too (:534), and an early exit anchored on a substring of prose
+# would escalate runs nobody asked it to. The risk is named in 01-plano.md of 20260826-o-laco-da-qa.
+#
+# CONTRACT for whoever teaches a second gate the token: reset it at the entry of THAT gate, never
+# at a call site. `current_phase` walks every gate in order, so a marker left set by an evaluation
+# two phases ago would escalate a phase whose own handoff says nothing of the kind. Today gate_QA
+# is the only setter, and the only reader is handoff_blocked_escalation.
+#
+# That reader is called from BOTH doors of cmd_run's loop — the first pass and the inline retry —
+# and the second door is not symmetry for its own sake. With only the first, the marker outlived
+# the LAP rather than a gate: a retry that declared `blocked` and carried on took it into the next
+# lap, gate_EXEC never touched it, and the escalation fired for EXEC with a reason untrue of it.
+# That is this very failure, reached with ONE setter instead of the second the paragraph above
+# warns about. Found by the QA phase of 20260826-o-laco-da-qa; the reproduction is in its handoff.
+#
+# ⚠️ So the marker not outliving a lap is a consequence of the FLOW — every lap that finds it armed
+# returns 3 — and not of construction. Whoever adds a third door, a second setter or a path that
+# can leave a lap with the marker still set has to re-derive that property, not assume it.
+GATE_HANDOFF_BLOCKED=0
+
 gate_EXEC() {
   GATE_EXEC_DIRTY=0
   local rows; rows="$(checkpoint_rows)"
@@ -556,12 +580,21 @@ gate_EXEC() {
 }
 
 gate_QA() {
+  GATE_HANDOFF_BLOCKED=0
   local h="$MISSION_DIR/30-handoff-qa.md" report=""
   [ -f "$h" ] || { GATE_WHY="missing 30-handoff-qa.md"; return 1; }
 
   local st; st="$(frontmatter "$h" status)"
   if [ "$st" = "skipped" ]; then GATE_WHY="qa: skipped (diff has no user-visible change)"; return 0; fi
-  if [ "$st" = "blocked" ]; then GATE_WHY="30-handoff-qa.md has status: blocked"; return 1; fi
+  # The marker, not the prose, is what cmd_run reads to escalate on the spot — see
+  # GATE_HANDOFF_BLOCKED above. `blocked` means the line stopped and a human has to act (:1602);
+  # QA is where that costs the most, because no agent in this pipeline may close the bugs that
+  # put it there (the docs/qa/ tree belongs to the skills — agents/sdd-qa.md, "Rules that are not
+  # negotiable"; anchored on the heading and not on a line number, which its own § 5.1 shifted).
+  if [ "$st" = "blocked" ]; then
+    GATE_HANDOFF_BLOCKED=1
+    GATE_WHY="30-handoff-qa.md has status: blocked"; return 1
+  fi
 
   # Project with no interface: the qa-report/qa-execution skills never ran (qa_substep sends it
   # straight to sdd-qa), so the docs/qa/ tree does not exist. Demanding their dated report would
@@ -595,11 +628,82 @@ gate_QA() {
       GATE_WHY="report $(basename "$report") still has 'Pending' row(s) in the matrix"; return 1
     fi
   fi
-  # Anchor 3: registry with no open bug. 'wont-fix'/'invalid' are human calls and do not block.
-  local openbugs; openbugs="$( { grep -rlE '^\-[[:space:]]+\*\*Status:\*\*[[:space:]]+open' \
-      "$REPO_ROOT/$QA_DOCS_PATH/bugs/" 2>/dev/null || true; } | wc -l )"
+  # Anchor 3: registry with no open bug an AGENT could close. 'wont-fix'/'invalid' are human calls
+  # and do not block — and neither does `Closable by: human`, for the same reason one level up.
+  #
+  # The genre is what makes the promise in GATE_WHY below true. No agent in this pipeline may
+  # write the `Status:` line: the docs/qa/ tree belongs to the qa-report/qa-execution skills
+  # (agents/sdd-qa.md, "Rules that are not negotiable"), and sdd-executor does not know it exists. So
+  # a bug whose fix is a PRODUCT decision had no path out of `open` at all, while this anchor
+  # blocked the phase for it anyway and every honest finding bought another lap. Measured in
+  # 20260825-frete-cif-fob: 7 of the 12 QA sessions were in that loop, US$ 73,32 of US$ 144,88.
+  # `Closable by: agent` still blocks, because for that bug the F<n> cycle does close.
+  #
+  # ABSENT ⇒ BLOCKS, and the anchor is strict about it. Every bug file written before this field
+  # existed lacks it, so a permissive default would switch this anchor off for a whole legacy
+  # registry in one step. Strict for the same reason `closed` is strict at :587 — the enum legend
+  # `<!-- agent | human -->` is preserved in the real files, so the word `human` appears in EVERY
+  # bug on disk and a `.*human` spelling would fail open across the board.
+  #
+  # THREE STEPS, and all three are load-bearing — this is the first anchor in the gate where a
+  # loose match is PERMISSIVE, so every looseness here fails OPEN. Its sibling `Status: open`
+  # matches anywhere in the file too, but there anywhere-matching can only make a bug BLOCK.
+  # Each step has a mutant of its own (QA_bug_genre_prefix, _anywhere, _fenced) because they fail
+  # open INDEPENDENTLY: one mutant for the line would let two of the three rot while staying green.
+  #
+  #   1. The genre is read from the FIELD. `grep -q` is true for any line of the file, so a bug
+  #      whose own field says `agent` stopped blocking the moment its body QUOTED the human line.
+  #      Not a contrived body: agents/sdd-qa.md § 5.1 prints that exact line for the agent to copy,
+  #      so a bug filed ABOUT this field was the likely first victim.
+  #   2. The genre is the WHOLE WORD. Without a right-hand boundary every value that merely STARTS
+  #      with `human` read as the genre: `humano` — the pt-BR spelling, in a repo declaring
+  #      OUTPUT_LANG=pt-BR — plus `humans`, `humanoid`, `human-ish`. The boundary admits a
+  #      following space so the `<!-- agent | human -->` legend the real files preserve still
+  #      passes; anchoring a bare `$` here would reject every real bug file instead.
+  #
+  #   3. The FIELD is the file's own, not the first thing SHAPED like one. Step 1 landed as
+  #      `grep -m1`, whose "the first field-shaped line IS the field" holds only while nothing
+  #      above the header is shaped like the field — and step 1's own scenario breaks it, because
+  #      a bug filed ABOUT the genre whose repro block is pasted before the metadata reads its
+  #      genre out of the quote. Reproduced in the REVIEW round of 20260826-o-laco-da-qa: same
+  #      `Closable by: agent` field, same fenced `human` line, only the ORDER moved, and the gate
+  #      went from blocking to answering `registry clean`. It shipped as a declared limit; a
+  #      declared limit is still a fail-open, and this anchor's every looseness is permissive.
+  #      So the extraction SKIPS fenced blocks and takes the first field-shaped line outside one.
+  #
+  # Both of the first two measured in the QA phase of 20260826-o-laco-da-qa, both reported
+  # `registry clean`. Declared limit that remains: a quote parked above the header and NOT fenced
+  # — bare prose opening with `- **Closable by:** human` — still reads as the field. It is the
+  # residue of the same class and it is named here rather than in a comment that claims the class
+  # is closed; the fenced form is the one agents/sdd-qa.md § 5.1 actually prints, and the one that
+  # reproduced.
+  #
+  # AWK and not a second `grep`: the fence is STATE, and a line-at-a-time matcher cannot hold it —
+  # the lesson check-todo.sh paid for when its parser did not know it was inside an item's code
+  # block. `[*][*]` and not `\*\*`: mawk's handling of an escaped literal inside a regex is not
+  # worth relying on when a bracket expression says the same thing unambiguously.
+  local openbugs=0 bugfile genre_line
+  while IFS= read -r bugfile; do
+    [ -n "$bugfile" ] || continue
+    genre_line="$(awk '
+      /^[[:space:]]*(```|~~~)/ { fenced = !fenced; next }
+      fenced { next }
+      /^-[[:space:]]+[*][*]Closable by:[*][*]/ { print; exit }
+    ' "$bugfile" || true)"
+    if grep -qE '^\-[[:space:]]+\*\*Closable by:\*\*[[:space:]]+human([[:space:]]|$)' <<< "$genre_line"; then continue; fi
+    openbugs=$((openbugs + 1))
+  done <<< "$( { grep -rlE '^\-[[:space:]]+\*\*Status:\*\*[[:space:]]+open' \
+      "$REPO_ROOT/$QA_DOCS_PATH/bugs/" 2>/dev/null || true; } )"
   if [ "$openbugs" -gt 0 ]; then
-    GATE_WHY="$openbugs bug(s) with Status: open in the registry — they become fix increments (QA⇄EXEC loop)"
+    # Names the ESCAPE HATCH, and that is the whole point of the mission this line belongs to.
+    # `they become fix increments (QA⇄EXEC loop)` is the promise 00-missao.md quotes as the false
+    # one: true for a bug an agent can close, false for a bug waiting on a product decision, and
+    # the count above includes every UNMARKED bug — which is exactly the bug whose genre nobody has
+    # decided yet. Telling that operator "make it a fix increment" is the wrong instruction in the
+    # one case this anchor was rewritten for, so the reason says how a bug leaves by the other
+    # door. The substring `with Status: open in the registry` is load-bearing: two assertions in
+    # check-gates.sh read it (:486 and the genre differential at :535).
+    GATE_WHY="$openbugs bug(s) with Status: open in the registry that an agent could close (an unmarked genre counts) — they become fix increments (QA⇄EXEC loop); one that needs a human decision is marked 'Closable by: human' instead (agents/sdd-qa.md § 5.1)"
     return 1
   fi
   if ! run_check_cmd "$TEST_CMD" "gate-qa-test"; then
@@ -3186,6 +3290,53 @@ by hand, in the exact shape gate_PLAN greps. Only 00-missao.md enters this commi
   fi
 }
 
+# Third Jidoka: the handoff itself says the line stopped. `blocked` already meant exactly that
+# (:1602), but the refusal used to go through the fingerprint heuristic like any other gate failure
+# — so a phase NOBODY can satisfy paid for proving its own unsatisfiability twice, at one session
+# apiece, and a session that committed something honest read as `moved=true` and bought another lap
+# instead. In QA that is not hypothetical: no agent in this pipeline may write the registry's
+# `Status:` line, so a bug needing a product decision has no path out at all. Measured in
+# 20260825-frete-cif-fob — 7 of the 12 QA sessions in that loop, US$ 73,32 of US$ 144,88.
+#
+# Read from the MARKER and not from GATE_WHY: see the contract above GATE_HANDOFF_BLOCKED.
+#
+# ONE definition and TWO doors in cmd_run's loop — the first pass and the inline retry — which is
+# the same shape kit_guard_check already has, for the same reason: the body must not drift between
+# the call sites, but WHERE the doors sit is a property of the loop and cannot be hoisted in here.
+# The retry door is not decoration. The marker is a global, `current_phase` runs in a SUBSHELL and
+# cannot clear the parent's copy, and every gate but gate_QA leaves it alone — so a retry that
+# declared `blocked` and carried on took the marker into the next lap, where gate_EXEC ran with it
+# still set and this escalation fired for EXEC: "the phase's handoff declares 'status: blocked'"
+# printed over a 20-handoff-exec.md that said `done`, the retry EXEC was owed swallowed, and
+# {phase: EXEC, kind: handoff-blocked} written into the ledger the kaizen judge reads. Found by the
+# QA phase of 20260826-o-laco-da-qa, and reached by the pipeline obeying its own instructions:
+# `agents/sdd-qa.md` § 4 tells the QA session to answer a fixable bug with a `pending` F<n> row, and
+# a pending row is exactly what sends the next lap to EXEC.
+#
+# Returns 0 when it escalated — the caller answers with `return 3` — and 1 when the marker is unset.
+# Callers spell that `if handoff_blocked_escalation "$phase"; then return 3; fi` rather than
+# `... && return 3`: under `set -e` the status of an && list whose left side failed is not worth
+# reasoning about at a call site whose whole job is to NOT exit.
+#
+# CALLED, never substituted. `x="$(handoff_blocked_escalation …)"` would run it in a subshell and
+# send the ledger row and the five lines a human is meant to act on into the substitution instead
+# of to the ledger and the terminal — the family CLAUDE.md records against `run_phase`.
+handoff_blocked_escalation() {
+  local phase="$1"
+  [ "$GATE_HANDOFF_BLOCKED" = "1" ] || return 1
+  info ""
+  bad "BLOCKED in $phase — $GATE_WHY"
+  dim "  The line stopped on purpose: the phase's handoff declares 'status: blocked'."
+  dim "  Another session would re-read the same handoff and refuse the same way."
+  # Same refusal as the EXEC Jidoka: names the section by what it IS, never by a heading that is
+  # artifact content in OUTPUT_LANG.
+  dim "  Read the handoff — the decisions it needs from a human are written there."
+  dim "  Once they are taken, set the handoff's status back and 'sdd run'."
+  pipeline_log_line "$(date -Iseconds)  BLOCKED  $phase  $GATE_WHY"
+  autonomy_blocked_row "handoff-blocked" "$phase" "$GATE_WHY"
+  return 0
+}
+
 cmd_run() {
   local mission_arg="" force_phase="" max_phases=0
   while [ $# -gt 0 ]; do
@@ -3430,6 +3581,22 @@ cmd_run() {
       "$( [ "$gate_rc" -eq 0 ] && echo pass || echo fail )" "$GATE_WHY"
     sessions["$phase"]="$(( ${sessions[$phase]:-0} + 1 ))"
 
+    # DOOR 1 of the blocked escalation — see handoff_blocked_escalation above for why it exists.
+    # It is read immediately after the `gate_"$phase"` call that could have set the marker, and
+    # BEFORE `moved` is consulted: the whole point is to stop depending on the fingerprint.
+    #
+    # ABOVE `--max-phases`, and that placement is the fix, not a preference. This is the THIRD
+    # Jidoka, and its two siblings — the `blocked` increment (:3415) and the dirty tree (:3438) —
+    # sit above the ceiling check and escalate whatever it says. Below it, this one alone answered
+    # `--max-phases` FIRST: `sdd run <mission> --max-phases 1` on a handoff declaring
+    # `status: blocked` opened and paid for a QA session, armed the marker, and returned **0** with
+    # no ledger row and no pipeline.log line. An operator or CI wrapper pacing the pipeline one
+    # phase at a time got the pre-fix behaviour for ever, with a SUCCESS exit code every time — the
+    # very loop this mission exists to delete, wearing a green rc. Found in the REVIEW round of
+    # 20260826-o-laco-da-qa, differentially against the increment-blocked sibling (rc 3 + row)
+    # under the same flag. The session row above is already written, so the ledger keeps its order.
+    if handoff_blocked_escalation "$phase"; then return 3; fi
+
     phases_run=$((phases_run + 1))
     if [ "$max_phases" -gt 0 ] && [ "$phases_run" -ge "$max_phases" ]; then
       info ""; dim "  --max-phases=$max_phases reached"; return 0
@@ -3477,6 +3644,12 @@ cmd_run() {
       force_phase=""
       continue
     fi
+
+    # DOOR 2, on the same terms, and it is what keeps the marker from outliving the lap. Placed
+    # after `moved2` is already settled, so it takes nothing away from the sampling window the
+    # comment above defends — it only refuses to let `moved2` answer a question that is not its.
+    if handoff_blocked_escalation "$phase"; then return 3; fi
+
     if [ "$moved2" = "false" ]; then
       info ""
       bad "BLOCKED in $phase — two sessions without moving the disk: $GATE_WHY"

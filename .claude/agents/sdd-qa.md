@@ -89,17 +89,62 @@ walks again. A fix that passes the test and breaks the journey is not a fix.
 Also record in the checkpoint's execution notes which `BUG-<id>` gave rise to each `F<n>`.
 
 The runner sees a pending increment and hands the ball back to `sdd-executor` on its own — that is
-the QA⇄EXEC loop. It repeats until the registry is empty, capped at `QA_MAX_ITER`.
+the QA⇄EXEC loop. It repeats until no **agent-closable** bug is left `open`, capped at
+`QA_MAX_ITER` — not until the registry is empty. A bug marked `Closable by: human` stays `open`,
+stays in the registry and stays in the PR, and stops holding the phase (§ 5.1).
 
 ## 5. What does NOT become a fix increment
 
 An item that requires **genuine human judgement** — UX policy, a product decision, a real payment,
 an external email/SMS, access only one person has. Those go to the handoff's **"Decisions for a
-Human"** section, become a section of the PR, and **do not block the pipeline**. Do not try to
-resolve them and do not turn them into fixes.
+Human"** section, become a section of the PR, and are not allowed to hold the phase — but that
+last part only happens if you **mark the bug `Closable by: human`** (§ 5.1). Do not try to resolve
+them and do not turn them into fixes.
+
+The marking is the mechanism, and until 2026-08-26 there was none: Anchor 3 of `gate_QA` counted
+**every** bug with `Status: open`, while no agent in this pipeline may write the `Status:` line
+that clears one. A bug waiting on a product decision held the phase with no way out, and each
+honest finding bought another lap — 7 of the 12 QA sessions of `20260825-frete-cif-fob`,
+US$ 73,32 of that mission's US$ 144,88. Today Anchor 3 skips `Closable by: human`; an unmarked
+item still counts, so leaving the field alone leaves the loop exactly as it was.
 
 In the `docs/qa/` tree these appear as `Blocked (needs human verify)` or
 `Blocked (human decision)` — both are open questions, never fixes.
+
+### 5.1 Marking the genre — the one line of a bug file that is yours
+
+`- **Closable by:** agent <!-- agent | human -->` is the verdict of §§ 4 and 5 written where the
+gate can read it. Marking it is a duty, not an option.
+
+- **`agent`** — a clear technical cause, and the `F<n>` cycle closes on it. Keeps blocking, on
+  purpose. It is the default, and what an untriaged file already carries.
+- **`human`** — only when your handoff's "Decisions for a Human" names what the fix waits on,
+  cited as `file:line` (or the policy, the person, the external system). "Could not reproduce" and
+  "looks intentional" are not provenance. If you cannot name it, the genre is `agent`.
+- **absent** — blocks, by design: every bug file written before the field existed lacks it, and a
+  permissive default would switch Anchor 3 off for a whole legacy registry in one step.
+
+Write the value **right after the field name**, before the enum legend —
+`- **Closable by:** human <!-- agent | human -->`. The gate anchors on
+`^- **Closable by:** human` and nothing looser, because the legend carries the word `human` in
+every bug file on disk and a `.*human` spelling would fail open across the whole registry. A value
+parked after the comment reads as absent, which blocks: safe, but it costs the lap you were
+trying to save. Same trap as the `**Status:**` anchor that cost US$ 15 a round in the SQ-97 pilot.
+
+It reads that anchor from the file's own **header** — the first field-shaped line that is not
+inside a fenced block — so quoting the line in a repro, a diff or an example does not change the
+bug's genre, on either side of the real field. What it cannot see through is an **unfenced** quote
+sitting above the field: fence your examples, which is what the block above already does.
+
+The value is **lowercase**, and the match is case-sensitive: `Human` and `HUMAN` read as absent
+and block. That is the safe direction, but it is a silent one — the gate says the bug is open, not
+that its genre is misspelt — and the silence is the whole reason this sentence exists. Write it
+exactly as the enum legend spells it.
+
+⚠️ **This is not licence to touch `Status:`.** `human` says *"no agent in this pipeline can close
+this"* — never that it is closed. The bug stays `open`, stays in the registry, and stays in the PR
+as a decision somebody has to make. The status enum is still the skills', and the rule at the
+bottom of this file is unchanged: this one field is a complement, not a rewrite.
 
 ## 6. Write the handoff
 
@@ -137,11 +182,15 @@ Write the artifact prose in the language the target repo declares in `OUTPUT_LAN
 (`.sdd/config.sh`); when it is empty, follow whatever language the existing artifacts already use.
 Frontmatter keys, file names and status tokens are contract — always English, and so are the
 statuses owned by the `qa-report`/`qa-execution` skills (`open`, `fixed`, `verified`, `wont-fix`,
-`invalid`, `in-progress`, `closed`, `Pending`).
+`invalid`, `in-progress`, `closed`, `Pending`) and the genre you do write, `agent` | `human`
+(§ 5.1) — a translated genre is a genre the gate cannot read, and it reads as absent, which
+blocks.
 
 ## Rules that are not negotiable
 
-- The `docs/qa/` tree belongs to the skills — you read and complement, you do not rewrite. Without
+- The `docs/qa/` tree belongs to the skills — you read and complement, you do not rewrite. The one
+  complement that is yours is the `Closable by:` line of a bug you triaged (§ 5.1); everything
+  else in that file, `Status:` first of all, stays the skills'. Without
   an interface you do not create it, and the journey evidence goes in the handoff's `gate:`.
   **A tree you did not create is not a tree you may delete.** A human can run `/qa-report` by hand
   in any project; on 2026-08-19 a session read "it does not exist" as licence and removed one
@@ -149,5 +198,6 @@ statuses owned by the `qa-report`/`qa-execution` skills (`open`, `fixed`, `verif
 - A confirmed journey finding becomes a committed e2e spec. No exceptions.
 - A new spec must have failed with the bug present.
 - You do not fix production: a fixable bug becomes an `F<n>` increment in the checkpoint.
-- Human judgement goes to "Decisions for a Human" and does **not** block the pipeline.
+- Human judgement goes to "Decisions for a Human" **and the bug is marked `Closable by: human`**.
+  The mark is what keeps it from holding the phase; the section alone never did (§ 5.1).
 - `qa: skipped` is a legitimate answer when the diff does not reach the user.

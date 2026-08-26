@@ -4,6 +4,88 @@ Registro de melhorias com **antes/depois medido**. Sem número, não entra.
 
 ---
 
+## 2026-08-26 — A fase QA para de girar em bug que ninguém tinha permissão de fechar (missão `20260826-o-laco-da-qa`)
+
+**Problema (Gemba):** a primeira missão de repo-alvo de verdade (`20260825-frete-cif-fob`, no
+`sales_quote`) custou US$ 144,88 em 23 sessões, e a **fase QA sozinha** levou US$ 73,32 em 12
+sessões — mais que EXEC + REVIEW + DOCS + PR + TICKET somados (US$ 71,56 em 11). **Sete daquelas
+doze estavam num laço que nenhuma delas podia vencer**, e as duas engrenagens eram contrato, não
+código.
+
+A primeira: a Âncora 3 do `gate_QA` exigia zero `Status: open` no registry, e a linha `Status:` é
+das skills `qa-report`/`qa-execution`. O `sdd-executor` não sabe que o registry existe
+(`grep -c 'qa/bugs\|Status:' agents/sdd-executor.md` → **1**, e é sobre o `checkpoint.md`); o
+`sdd-qa` é proibido por regra não-negociável. Para bug **sanável** o ciclo fecha pelo `F<n>`; para
+bug que espera **decisão de produto** não havia caminho nenhum — e a âncora barrava por ele do
+mesmo jeito, enquanto o `§ 5` do `agents/sdd-qa.md` prometia por escrito que ele *"does not block
+the pipeline"*. A promessa era falsa e o gate era a prova.
+
+A segunda: "moveu o disco" era lido como progresso. Só **duas** sessões seguidas sem mexer no disco
+disparavam `BLOCKED … no-progress`. Numa fase insatisfazível, todo achado honesto virava commit e
+**todo commit comprava a volta seguinte** — as instruções *"não commite"* das iterações 3, 4 e 6
+foram todas desobedecidas, **com razão**, porque cada uma achou algo real.
+
+**Contramedida:** o campo `- **Closable by:** <agent | human>` no arquivo de bug, que a âncora
+passa a ler, mais a escalada imediata do handoff que declara `status: blocked` — token que já
+significava exatamente isso desde sempre (`bin/sdd:1602`), e que só faltava ser obedecido na
+primeira sessão em vez de na segunda. **Nenhum agente ganhou permissão de escrever `Status:`**: o
+gênero é a única linha do arquivo que é do agente, e é justamente porque o `Status:` continua sendo
+das skills que o gênero precisou existir.
+
+| | Antes (`main`, `6e82acb`) | Depois (`4ec3850`) |
+|---|---|---|
+| bug `open` que espera decisão de produto | barra o `gate_QA` **para sempre** — ninguém no pipeline pode fechá-lo | passa marcado `Closable by: human`; segue `open`, no registry e no PR |
+| bug `open` sanável por agente | barra | barra — inalterado, e é o ponto: para ele o ciclo `F<n>` fecha |
+| bug `open` **sem** o campo | barra | barra — fail-safe deliberado, para o registry legado inteiro |
+| sessões que um handoff `status: blocked` custa até escalar | **2** | **1** |
+| `sdd run --max-phases 1` sobre handoff `blocked` | rc **0**, sem linha de ledger e sem `pipeline.log` | rc **3**, `kind: handoff-blocked` no ledger + `BLOCKED` no journal |
+| valores do enum `kind` do ledger | 4 | **5** |
+| asserções de `tests/run-all.sh` | 577 | **592** |
+| `tests/check-gates.sh` | 129 `ok` | **139** |
+| `tests/check-autonomy.sh` | 184 `ok` | **189** |
+| catálogo de mutação | 148 de 148 | **154** de 154 |
+| achados abertos no `TODO.md` | 72 | **74** |
+
+⚠️ **O antes/depois que MOTIVOU a missão não está nesta tabela, e não pode estar.** O número que
+importa — quanto custa a fase QA de uma missão de repo-alvo — só reaparece na próxima missão de
+repo-alvo; a missão inteira rodou no kit, cujo registry está limpo (6 arquivos, 5 `verified`, 1
+`fixed`, **0 `open`**), então o regime consertado nem sequer é reproduzível fora de fixture. O que a
+tabela mede é a **condição** que produzia o laço, uma linha por regime, e é o que dá para medir hoje
+sem inventar número.
+
+**Três defeitos que a própria missão criou e as suas fases pegaram**, o que é a razão de esta
+entrada existir e não só a contramedida:
+
+- **A QA achou dois no que a EXEC tinha acabado de escrever.** O gênero casava por **prefixo**
+  (`humano` — a grafia pt-BR, num repo que declara `OUTPUT_LANG=pt-BR` — lia como `human` e deixava
+  de barrar) e casava em **qualquer linha** do arquivo (um bug cujo campo dizia `agent` parava de
+  barrar no instante em que o corpo CITAVA a linha humana — e o `§ 5.1` imprime essa linha exata
+  para o agente copiar, então o primeiro alvo provável era um bug arquivado SOBRE o campo). Os dois
+  respondiam `registry clean`.
+- **A QA achou o terceiro no conserto da segunda engrenagem**: com uma porta só, o marcador
+  sobrevivia à **volta** em vez de ao gate, e a escalada saía `{phase: EXEC, kind: handoff-blocked}`
+  sobre um `20-handoff-exec.md` que dizia `done` — alcançado pelo pipeline obedecendo as próprias
+  instruções, porque o `§ 4` manda a QA responder bug sanável com uma linha `F<n> pending`, e linha
+  pendente é exatamente o que manda a volta seguinte para a EXEC.
+- **A REVIEW achou o quarto no teto**: a porta nova estava ABAIXO do `--max-phases`, então
+  `sdd run --max-phases 1` sobre um handoff `blocked` pagava a sessão e devolvia **0**, calado. As
+  duas Jidokas irmãs sempre estiveram acima do teto; esta nasceu abaixo, e o resultado era o laço
+  que a missão existe para apagar, vestindo um rc verde.
+
+**A lição de processo, e ela é a régua e não a anedota:** *verificável por comando* é metade do
+princípio 1. A outra metade é **quem, dentro do pipeline, pode escrever o artefato que o gate
+exige** — se a resposta é "ninguém", o gate não para a linha, faz ela girar. Está escrita no
+`CLAUDE.md`, com o verbete "Gate insatisfazível" no `CONTEXT.md` e a decisão (com as duas
+alternativas recusadas, uma delas por dado: dos quatro `wont-fix` que desbloquearam a missão 1,
+**dois eram P1**) no [ADR 0006](docs/adr/0006-qa-anchor-reads-genre-blocked-handoff-stops-the-line.md).
+
+⚠️ **Correção de um número que dois handoffs desta missão registraram errado:** o `40-review-r1.md`
+dá 581 asserções *"quando a missão começou"*. 581 é a medição da QA, tirada **depois** do I1–I4. A
+base real é **577**, medida nesta fase num worktree de `main` (`git worktree add`, `./tests/run-all.sh`
+→ rc 0). Os 592 de hoje são +15 sobre a base, não +11.
+
+---
+
 ## 2026-08-25 — O fecho, a guarda do kit e a régua da própria revisão (missão `20260825-a-regua-vale-para-o-kit`)
 
 **Problema (Gemba):** o piloto M2 devolveu três defeitos que nenhum instrumento tinha visto.

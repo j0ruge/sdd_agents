@@ -36,6 +36,19 @@ concluiu. O runner reavalia: roda `TEST_CMD`, faz `grep` no checkpoint, consulta
 chama `gh pr view`. Se você está escrevendo um gate novo e ele não é verificável por comando,
 o gate está errado.
 
+⚠️ **Verificável por comando é METADE da régua. A outra metade é: quem, dentro do pipeline, tem
+permissão de escrever o artefato que o gate exige?** Se a resposta é "ninguém", o gate não para a
+linha — ele a faz **girar**, porque o runner lê "moveu o disco" como progresso, e numa fase
+insatisfazível todo achado honesto vira commit e todo commit compra a volta seguinte. A Âncora 3 do
+`gate_QA` era verificável, determinística e barata, e exigia uma linha (`Status:` do registry) que
+nenhum agente do kit tem permissão de escrever: 7 das 12 sessões de QA de
+`20260825-frete-cif-fob`, **US$ 73,32 dos US$ 144,88** da missão. Gate novo nomeia o dono do
+artefato no próprio comentário; gate que descobre não ter dono se conserta subindo o **código** até
+a promessa, nunca baixando a promessa até o código — as duas alternativas que faziam o inverso
+estão recusadas com argumento em
+[`docs/adr/0006`](docs/adr/0006-qa-anchor-reads-genre-blocked-handoff-stops-the-line.md). Verbete
+"Gate insatisfazível" no [`CONTEXT.md`](CONTEXT.md).
+
 **2. Sensores, não percepção.** Todo trabalho cria um instrumento automático que prova que está
 correto — teste TDD (lógica), spec Playwright (jornada), gate do runner (fase), preflight
 (ambiente), checklist de drift (documentação). Sensor durável > checagem manual efêmera.
@@ -70,7 +83,13 @@ tem UMA definição de escalada justamente por isso), e aqui ela é deliberada �
 precisa correr **depois** de `moved2` ser amostrado, e uma guarda dentro do `run_phase` cairia
 dentro da janela. O preço é que a quinta porta nasce desguardada; ele é pago com um probe por
 porta (`tests/check-autonomy.sh`, regimes 1, 4, 5 e 7), então porta acrescentada sem probe é porta
-cuja remoção nenhuma asserção percebe. A projeção (`--dry-run`) **não arma nada**: `sdd run
+cuja remoção nenhuma asserção percebe.
+⚠️ **A forma tem uma SEGUNDA instância deliberada desde `20260826-o-laco-da-qa`**, e a frase acima
+("este arquivo a recusa em toda outra família") vale para as outras, não para esta: o
+`handoff_blocked_escalation` é UMA definição com DUAS portas no mesmo laço do `cmd_run` — a
+primeira passada e o retry inline. A conta é a mesma, um probe por porta. A segunda porta não é
+simetria: com só a primeira, o marcador sobrevivia à **volta** em vez de ao gate, e a escalada saía
+carimbada `{phase: EXEC}` sobre um handoff de EXEC que dizia `done`. A projeção (`--dry-run`) **não arma nada**: `sdd run
 --dry-run` não abre sessão a que atribuir mudança, e armar mesmo assim fazia a projeção herdar o
 aviso de ledger do `autonomy_kit_stamp` — medido, 0 avisos antes e 1 depois, com o kit instalado
 como cópia simples.
