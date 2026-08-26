@@ -727,6 +727,20 @@ mut_LEDGER_bare_by_entry_point() {
   sed -i 's@git -C "$start" config --bool --get core.bare 2>/dev/null@git -C "$start" rev-parse --is-bare-repository 2>/dev/null@' "$1"
 }
 
+# The writer takes the real ledger back from a throwaway checkout — the leak ADR 0005 part 3
+# closed, restored exactly as it was. Nothing fails and nothing is malformed: a `sdd run` in a
+# /tmp fixture simply lands its rows in ~/.sdd again, and the judge reads them as missions. Five
+# of the seven repositories in the real ledger got there this way.
+#
+# The `if` and not the body of `ledger_repo_is_temp`: emptied, the function would still be defined
+# and still be called, and this way the mutant proves it is the CALL that refuses rather than the
+# predicate merely existing. Caught by the four-regime block in check-autonomy.sh, whose A and D
+# arms go red while B and C — the two that write — stay green, so it cannot be killed by a runner
+# that simply refuses everything.
+mut_LEDGER_tmp_repo_allowed() {
+  sed -i 's@    if ledger_repo_is_temp "$guard_repo"; then@    if false; then@' "$1"
+}
+
 # The Jidoka dies: `verdict: piorou` no longer stops the line. The outcome falls through to the
 # born-plan branch and exits 0 — a kit change that made autonomy WORSE reads as a green light,
 # which is the exact failure ADR 0002 exists to forbid.
@@ -1991,6 +2005,7 @@ CATALOG=(
   LEDGER_repo_root_common_parent
   LEDGER_repo_root_cdpath_leak
   LEDGER_bare_by_entry_point
+  LEDGER_tmp_repo_allowed
   KAIZEN_degenerate_axis_reach_blind
   KAIZEN_degenerate_axis_session_unit
   KAIZEN_degenerate_axis_window_sorted

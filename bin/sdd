@@ -1653,6 +1653,34 @@ kit_guard_check() {
   KIT_GUARD_BEFORE="$kit_after"
 }
 
+# ONE definition of "this path is a throwaway checkout" — ADR 0005, part 3.
+#
+# ⚠️ DECLARED LIMITS, and they are exactly why this is a ratchet against the leak that actually
+# happened and never a boundary:
+#  · it is a PATH heuristic. It knows $TMPDIR and /tmp. macOS hands out /var/folders/…, /var/tmp
+#    is a temp directory it does not know, and a fixture built anywhere else walks straight past
+#    it. What covers the miss is part 2: the composition of the slice makes a contaminating repo
+#    VISIBLE in the series the judge reads. The two ship together and neither is sufficient alone.
+#  · it says nothing about a WORKTREE under /tmp of a real repository, on purpose. The caller
+#    hands it `ledger_repo_root`, which is the shared `.git` of the repository and not the
+#    checkout the session runs in, so `git worktree add /tmp/x` of a real repo keeps writing —
+#    the isolation workflow this kit recommends is not the leak this guard is about.
+# No glob metacharacter can escape from $TMPDIR into the pattern: it is quoted, so `case` reads it
+# as a literal string rather than as a pattern the environment gets to write.
+ledger_repo_is_temp() {   # ledger_repo_is_temp <path> — 0 when it sits under a known temp root
+  local repo="${1:-}" tmp="${TMPDIR:-}"
+  [ -n "$repo" ] || return 1
+  case "$repo" in /tmp/?*) return 0 ;; esac
+  # Trailing slashes stripped one at a time: TMPDIR="/var/tmp/" has to answer about the same root
+  # as TMPDIR="/var/tmp", and `${tmp%/}` alone leaves "/var/tmp//" one slash short.
+  while [ "$tmp" != "${tmp%/}" ]; do tmp="${tmp%/}"; done
+  # A TMPDIR of "/" would make every path on the machine a throwaway checkout, and an empty one
+  # names nothing. Both mean the same here: this arm has nothing to say.
+  case "$tmp" in ''|/) return 1 ;; esac
+  case "$repo" in "$tmp"/?*) return 0 ;; esac
+  return 1
+}
+
 # EVERY row goes through here, so every guard holds for every caller. The guards do NOT live in
 # the callers: the journal already paid that lesson — there are three escalation paths, and a
 # fourth added tomorrow would be born with the defect.
@@ -1669,6 +1697,27 @@ autonomy_append() {   # autonomy_append <one json object, already built>
   # ledger that JSONL gives no way to detect afterwards — the mission goes on, same as the
   # unwritable-file guard right below, so it gets the same warn.
   [ -n "${1:-}" ] || { warn "autonomy ledger row came out empty (jq failed to build it?) — the mission goes on, the row is lost"; return 0; }
+  # ADR 0005, part 3 — the real ledger is refused to a checkout that lives under a temp root.
+  # HERE and not in the callers, for the reason the header of this function already gives: every
+  # row goes through this door, so a writer added tomorrow is born guarded.
+  #
+  # `die`, and not the `warn`-and-carry-on the two guards below use, because this is a REFUSAL and
+  # not an I/O failure. A full disk costs a gap in the ledger; a throwaway checkout costs the
+  # judge's evidence, permanently, in a file that is append-only and never migrated — five of the
+  # seven repositories in the real ledger got there this way.
+  # ⚠️ DECLARED COST: the first row of a `sdd run` is written after the first session, so a mission
+  # that hits this has already paid for one (an escalation that spends no session is refused for
+  # free). Refusing earlier would mean a guard at every door that opens a session — the shape this
+  # repo pays for in four places already, and the shape that guarantees the fifth door is born
+  # unguarded.
+  # The identity is resolved through the SAME function that fills the row's `.repo`, so the guard
+  # and the row it is guarding can never disagree about which repository this is.
+  if [ -z "${SDD_STATE_DIR:-}" ]; then
+    local guard_repo; guard_repo="$(ledger_repo_root)"
+    if ledger_repo_is_temp "$guard_repo"; then
+      die "refusing to write the real autonomy ledger: $guard_repo lives under the temp directory, and rows from a throwaway checkout are what the judge reads as missions (ADR 0005). Set SDD_STATE_DIR to a directory of this run's own, or move the repo out of the temp root."
+    fi
+  fi
   local file; file="$(autonomy_log_path)"
   mkdir -p "$(dirname "$file")" 2>/dev/null || true
   # A ledger the mission dies for is worse than a gap in the ledger: ~/.sdd unwritable or a full

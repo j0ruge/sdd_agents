@@ -486,6 +486,31 @@ isolation workflow this kit recommends, and went empty quietly. ⚠️ Rows writ
 fix keep the old per-worktree path and keep landing in `other_repo`. That is history, not a bug —
 the ledger is append-only and is never migrated.
 
+**A checkout under the temp directory may not write the real ledger.**
+[ADR 0005](adr/0005-judge-reads-every-repo-with-visible-composition.md), part 3. `autonomy_append`
+refuses — `die`, rc 1 — when `SDD_STATE_DIR` is unset and the row's repo identity sits under
+`$TMPDIR` or `/tmp`. Five of the seven repositories in the real ledger are fixtures and every one
+of them sits under `/tmp`; all five came from **manual** exploratory runs that forgot the variable,
+never from the suite, which has exported it from `tests/run-all.sh` since the beginning. The
+mechanism existed and worked, so what leaked, leaked through discipline — and this repo closes that
+kind of gap with an instrument rather than a reminder. Whoever hits the refusal is one environment
+variable away from what they meant.
+
+⚠️ Three limits, declared in the guard's own header rather than discovered later:
+
+- it is a **path heuristic**. It knows `$TMPDIR` and `/tmp`. macOS hands out `/var/folders/…`,
+  `/var/tmp` is a temp directory it does not know, and a fixture built anywhere else walks straight
+  past it. It is a ratchet against the leak that actually happened, never a boundary — what covers
+  the miss is the **composition** below, which makes a contaminating repo visible in the very
+  series the judge reads. The two ship together and neither is sufficient alone;
+- it refuses at the **first row**, which in a `sdd run` is written after the first session, so a
+  mission that hits it has already paid for one (an escalation, which spends no session, is
+  refused for free). Refusing earlier would mean a guard at every door that opens a session — the
+  shape that guarantees the fifth door is born unguarded;
+- a **worktree** under `/tmp` of a real repository keeps writing, on purpose: the identity is the
+  shared `.git` of the repository and not the checkout the session runs in, so the isolation
+  workflow this kit recommends is untouched.
+
 **`--all-repos` is the door back to the cross-project question.** Per repo is the right *default*
 and the wrong *only option*: this ledger is one file per machine precisely so maturity can be
 compared BETWEEN projects, and while the filter was the only behaviour no reader could ask that

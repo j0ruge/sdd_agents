@@ -138,6 +138,35 @@ healthy repo that is merely quiet.
 
 ---
 
+## The runner refuses: "refusing to write the real autonomy ledger"
+
+**Symptom:** a `sdd run`, `sdd retry`, `sdd kaizen` or `sdd close` dies with rc 1 —
+`error: refusing to write the real autonomy ledger: <path> lives under the temp directory` — at the
+moment it would have written its first row. Everything before that point already happened: the
+phase ran, the gate was evaluated, the journal line is on disk. Only the ledger row is refused.
+
+**Cause:** the repository lives under `$TMPDIR` or `/tmp` and `SDD_STATE_DIR` is unset, so the row
+would land in the real `~/.sdd/autonomy-log.jsonl`. That is how five of the seven repositories in
+the ledger got there — a throwaway checkout whose rows the judge then reads as missions, in a file
+that is append-only and never migrated.
+[ADR 0005](adr/0005-judge-reads-every-repo-with-visible-composition.md), part 3.
+
+**What you do:** set `SDD_STATE_DIR` to a directory of that run's own and run again —
+`SDD_STATE_DIR=$(mktemp -d) sdd run <mission>`. Nothing is lost: there is no state file, so the
+runner resumes at exactly the phase whose gate is still unsatisfied. If the repository is a **real**
+project that genuinely lives under a temp root, move it out; the guard cannot tell the two apart and
+does not try.
+
+**Do not** unset the check by exporting a `SDD_STATE_DIR` that points at `~/.sdd` — that is the
+contamination spelled differently, and the composition published by the series will name the repo
+in the judge's own slice.
+
+⚠️ It is a **path heuristic** and it is declared as one: `/var/tmp`, `/var/folders/…` (macOS) and
+anywhere else walk straight past it. Never treat a silent write as proof that the repo is a real
+target — the instrument that covers that gap is the `composition` field of `sdd kaizen --series`.
+
+---
+
 ## `sdd kaizen` refuses: "the ledger could not be read"
 
 **Symptom:** `sdd kaizen` (or `--dry-run`) prints `malformed row in <path> — the ledger is not

@@ -2083,6 +2083,121 @@ assert_eq "a malformed row fails loudly" "1" "$rc"
 # the human's window — a column that stops lining up, a refusal that names the wrong remedy and a
 # table whose last row is not the latest version are defects of the same instrument as a wrong sum.
 # Prefixed `output:` so the increment's Check can count them without reading them.
+# =============================================================================
+# writer: the real ledger is refused to a throwaway checkout (ADR 0005, part 3)
+# =============================================================================
+# Five of the seven repositories in the real ledger are fixtures, and every one of them sits under
+# /tmp. All five came from MANUAL runs that forgot SDD_STATE_DIR, never from this suite — the
+# isolation mechanism exists and works, and what leaked, leaked through discipline. This section
+# measures the instrument that replaced the reminder.
+#
+# FOUR regimes, and they are two differential PAIRS rather than one refusal plus decoration:
+#   A/B  the same repo under /tmp, one environment variable apart. Unset refuses, set writes.
+#        Without B, "the runner refuses every ledger everywhere" satisfies A.
+#   C/D  the same repo under /var/tmp, one environment variable apart. TMPDIR unset writes,
+#        TMPDIR naming that root refuses. Without D the $TMPDIR arm of the heuristic has NO probe
+#        at all — every path mktemp hands this suite lands under /tmp, so the two arms are
+#        otherwise indistinguishable; without C nothing shows that a repo outside the temp roots
+#        is still written, and "refuses temp checkouts" would be unseparable from "refuses".
+#
+# /var/tmp is the control root on purpose: it is a temp directory the heuristic deliberately does
+# NOT know. The declared limit of ADR 0005 part 3, standing here as the control it makes possible.
+#
+# HOME is redirected in every regime: with SDD_STATE_DIR unset the writer targets $HOME/.sdd, and
+# a probe that wrote into the developer's real ledger would BE the contamination it exists to
+# forbid. The fake home is counted afterwards, and that count is the half proving the refusal
+# happened before the write rather than after it.
+echo "== writer: the real ledger is refused to a temp checkout =="
+
+TMPGUARD="$OUTSIDE/tmpguard"
+mkdir -p "$TMPGUARD/home"
+# NOT under $OUTSIDE, which is where mktemp puts things and therefore under /tmp. This one has to
+# live outside both temp roots the guard knows, or regimes C and D have nothing to stand on.
+VARTMP="$(mktemp -d /var/tmp/sdd-tmpguard-XXXXXX)"
+trap 'rm -rf "$FIX" "$OUTSIDE" "$VARTMP"' EXIT
+
+# tmpguard_fixture <dir> — a repo whose only increment is `blocked`, so `sdd run` escalates with
+# rc 3 BEFORE opening any session: the real writer is reachable without spending a token. Same
+# shape as the fixture at the top of this file, built as a function because two roots need one
+# each and a second hand-written copy is how two fixtures come to disagree.
+tmpguard_fixture() {
+  local d="$1"
+  mkdir -p "$d" || return 1
+  ( cd "$d" \
+    && git init -q -b main \
+    && git config user.email "fixture@example.com" \
+    && git config user.name "Fixture" \
+    && "$SDD" install >/dev/null ) || return 1
+  cat > "$d/.sdd/config.sh" <<'CFG'
+PROJECT_NAME="tmpguard"
+DEFAULT_BRANCH="main"
+TEST_CMD="true"
+E2E_CMD=""
+HANDOFF_DIR="docs/handoffs"
+QA_DOCS_PATH="docs/qa"
+JIRA_ENABLED=false
+CFG
+  mkdir -p "$d/docs/handoffs/$MISSION"
+  cat > "$d/docs/handoffs/$MISSION/00-missao.md" <<'MSN'
+---
+missao: 20260101-fixture
+aprovacao: auto
+---
+# Mission
+MSN
+  : > "$d/docs/handoffs/$MISSION/01-plano.md"
+  cat > "$d/docs/handoffs/$MISSION/checkpoint.md" <<'CKP'
+| ID | Incremento | Check (comando → esperado) | Status | Commit |
+|---|---|---|---|---|
+| I1 | slice one | `true` → 0 | blocked | — |
+CKP
+  ( cd "$d" && git add -A && git commit -qm "chore: fixture mission" >/dev/null ) || return 1
+}
+
+# tmpguard_run <dir> <state-dir-or-empty> <tmpdir-or-empty> -> "<rc> <refused|silent> <rows>"
+#
+# `env -u` FIRST and then the conditional re-set, because run-all.sh exports SDD_STATE_DIR for
+# everything it runs: without the -u every regime here would silently be regime B, and the four
+# would agree with each other for a reason that has nothing to do with the guard.
+# The array and not `${var:+VAR=value}`: the conditional expansion carries quotes that are not
+# quotes, and a path with a space in it would split into two arguments.
+tmpguard_run() {
+  local d="$1" state="$2" tmp="$3" out rc home rows=0
+  home="$TMPGUARD/home"
+  rm -rf "$home"; mkdir -p "$home"
+  local -a envv=( env -u SDD_STATE_DIR -u TMPDIR "HOME=$home" )
+  if [ -n "$state" ]; then rm -rf "$state"; mkdir -p "$state"; envv+=( "SDD_STATE_DIR=$state" ); fi
+  if [ -n "$tmp" ]; then envv+=( "TMPDIR=$tmp" ); fi
+  out="$( cd "$d" && "${envv[@]}" "$SDD" run "$MISSION" 2>&1 )"; rc=$?
+  # `grep -c` answers 1 when it counts zero, so the capture carries `|| true` — under this file's
+  # pipefail an unguarded one would hand the caller an empty string instead of a number.
+  [ -f "$home/.sdd/autonomy-log.jsonl" ] \
+    && rows="$(grep -c . "$home/.sdd/autonomy-log.jsonl" || true)"
+  printf '%s %s %s' "$rc" \
+    "$(grep -q 'SDD_STATE_DIR' <<< "$out" && echo refused || echo silent)" \
+    "${rows:-0}"
+}
+
+tmpguard_fixture "$TMPGUARD/under-tmp" \
+  || fail "PROBE-BROKEN: the /tmp fixture did not build" "built" "failed"
+tmpguard_fixture "$VARTMP/repo" \
+  || fail "PROBE-BROKEN: the /var/tmp fixture did not build" "built" "failed"
+
+# A — under /tmp with no SDD_STATE_DIR: refused, loudly, and nothing reached the real ledger path.
+assert_eq "writer: a repo under the temp dir may not write the real ledger" \
+  "1 refused 0" "$(tmpguard_run "$TMPGUARD/under-tmp" "" "")"
+# B — the control, one environment variable apart. rc 3 is the fixture's own escalation: asserting
+# the PRE-GUARD rc is what makes "the guard did not fire" a value instead of an absence.
+assert_eq "writer: ...and with SDD_STATE_DIR set the same repo writes its row" \
+  "3 silent 0" "$(tmpguard_run "$TMPGUARD/under-tmp" "$TMPGUARD/state" "")"
+# C — outside both temp roots the real ledger is written: the guard refuses throwaway checkouts,
+# not repositories. /var/tmp is a temp directory the heuristic deliberately does not know.
+assert_eq "writer: a repo outside the temp roots still writes the real ledger" \
+  "3 silent 1" "$(tmpguard_run "$VARTMP/repo" "" "")"
+# D — the same repo, refused the moment $TMPDIR names its root. The only probe of that arm.
+assert_eq "writer: ...and refused as soon as TMPDIR names that root" \
+  "1 refused 0" "$(tmpguard_run "$VARTMP/repo" "" "/var/tmp")"
+
 echo "== reader: the human-facing output =="
 
 # One clean comparable session, with the three fields these assertions vary. Same shape as
