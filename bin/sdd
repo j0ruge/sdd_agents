@@ -595,11 +595,31 @@ gate_QA() {
       GATE_WHY="report $(basename "$report") still has 'Pending' row(s) in the matrix"; return 1
     fi
   fi
-  # Anchor 3: registry with no open bug. 'wont-fix'/'invalid' are human calls and do not block.
-  local openbugs; openbugs="$( { grep -rlE '^\-[[:space:]]+\*\*Status:\*\*[[:space:]]+open' \
-      "$REPO_ROOT/$QA_DOCS_PATH/bugs/" 2>/dev/null || true; } | wc -l )"
+  # Anchor 3: registry with no open bug an AGENT could close. 'wont-fix'/'invalid' are human calls
+  # and do not block — and neither does `Closable by: human`, for the same reason one level up.
+  #
+  # The genre is what makes the promise in GATE_WHY below true. No agent in this pipeline may
+  # write the `Status:` line: the docs/qa/ tree belongs to the qa-report/qa-execution skills
+  # (agents/sdd-qa.md:142, non-negotiable), and sdd-executor does not know the registry exists. So
+  # a bug whose fix is a PRODUCT decision had no path out of `open` at all, while this anchor
+  # blocked the phase for it anyway and every honest finding bought another lap. Measured in
+  # 20260825-frete-cif-fob: 7 of the 12 QA sessions were in that loop, US$ 73,32 of US$ 144,88.
+  # `Closable by: agent` still blocks, because for that bug the F<n> cycle does close.
+  #
+  # ABSENT ⇒ BLOCKS, and the anchor is strict about it. Every bug file written before this field
+  # existed lacks it, so a permissive default would switch this anchor off for a whole legacy
+  # registry in one step. Strict for the same reason `closed` is strict at :587 — the enum legend
+  # `<!-- agent | human -->` is preserved in the real files, so the word `human` appears in EVERY
+  # bug on disk and a `.*human` spelling would fail open across the board.
+  local openbugs=0 bugfile
+  while IFS= read -r bugfile; do
+    [ -n "$bugfile" ] || continue
+    if grep -qE '^\-[[:space:]]+\*\*Closable by:\*\*[[:space:]]+human' "$bugfile"; then continue; fi
+    openbugs=$((openbugs + 1))
+  done <<< "$( { grep -rlE '^\-[[:space:]]+\*\*Status:\*\*[[:space:]]+open' \
+      "$REPO_ROOT/$QA_DOCS_PATH/bugs/" 2>/dev/null || true; } )"
   if [ "$openbugs" -gt 0 ]; then
-    GATE_WHY="$openbugs bug(s) with Status: open in the registry — they become fix increments (QA⇄EXEC loop)"
+    GATE_WHY="$openbugs agent-closable bug(s) with Status: open in the registry — they become fix increments (QA⇄EXEC loop)"
     return 1
   fi
   if ! run_check_cmd "$TEST_CMD" "gate-qa-test"; then

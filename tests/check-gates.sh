@@ -488,6 +488,59 @@ assert_why   "QA reports the open bug" "QA" "Status: open|bug\(s\) with Status"
 sed -i 's/\*\*Status:\*\* open/**Status:** wont-fix/' "$FIX/docs/qa/bugs/BUG-20260101-test.md"
 assert_phase "wont-fix is a human decision and does not block" "REVIEW"
 
+# Anchor 3 reads the bug's GENRE, and the unknown genre blocks.
+#
+# Why the genre exists at all: no agent in the pipeline may write the `Status:` line — that tree
+# belongs to the qa-report/qa-execution skills (agents/sdd-qa.md:142, a non-negotiable rule), and
+# sdd-executor does not know the registry exists. So for a bug whose fix is a PRODUCT decision
+# there was no path from `open` to anything else, while Anchor 3 blocked the phase for it all the
+# same. Measured in 20260825-frete-cif-fob: 7 of the 12 QA sessions were in that loop, US$ 73,32.
+# `Closable by: agent` still blocks, because for THAT bug the F<n> cycle does close.
+#
+# One file rewritten three times, so nothing but the genre line differs between the regimes. The
+# `<!-- agent | human -->` legend is in every regime ON PURPOSE: the word `human` then exists in
+# EVERY bug file on the machine, so an anchor like `.*human` would fail open and switch Anchor 3
+# off for the whole registry — the same trap bin/sdd:587-588 already records for `closed`. With
+# the legend in the fixture, that loosening turns the differential red.
+GENRE_BUG="$FIX/docs/qa/bugs/BUG-20260102-genre.md"
+write_genre_bug() { # write_genre_bug <the `Closable by:` line, or '' for a bug older than the field>
+  { printf '# BUG-20260102-genre: needs a call nobody in the pipeline can make\n'
+    printf -- '- **Status:** open <!-- open | fixed | verified | wont-fix | invalid -->\n'
+    if [ -n "$1" ]; then printf -- '%s\n' "$1"; fi
+  } > "$GENRE_BUG"
+}
+
+write_genre_bug '- **Closable by:** human <!-- agent | human -->'
+genre_phase_human="$( cd "$FIX" && "$SDD" phase "$MISSION" 2>&1 )"
+genre_why_human="$(   cd "$FIX" && "$SDD" why "$MISSION" QA 2>&1 )"
+
+write_genre_bug '- **Closable by:** agent <!-- agent | human -->'
+genre_phase_agent="$( cd "$FIX" && "$SDD" phase "$MISSION" 2>&1 )"
+genre_why_agent="$(   cd "$FIX" && "$SDD" why "$MISSION" QA 2>&1 )"
+
+# DIFFERENTIAL, and not two separate "the gate passed" / "the gate failed" assertions: "passed" is
+# shared with every healthy regime, so on its own it distinguishes nothing (house rule, CLAUDE.md
+# — an assertion whose reading a wrong branch also produces is not measuring the branch). The two
+# regimes are compared against EACH OTHER, on one registry that differs by one word.
+genre_reasons=same
+[ "$genre_why_human" != "$genre_why_agent" ] && genre_reasons=differ
+assert_eq "genre differential: human-closable passes, agent-closable blocks, reasons differ" \
+  "REVIEW|QA|differ" "$genre_phase_human|$genre_phase_agent|$genre_reasons"
+
+# The other half of the rule: the absence of the wrong branch's marker. Without it the pair above
+# is satisfied by ANY two different reasons — two unrelated failures would read `differ` too.
+# `grep -cF`: the marker carries `(s)`, and a BRE would read those parentheses as literal only by
+# luck of the dialect.
+assert_eq "only the agent-closable regime carries the blocking marker" "0|1" \
+  "$( grep -cF 'with Status: open in the registry' <<< "$genre_why_human" )|$( grep -cF 'with Status: open in the registry' <<< "$genre_why_agent" )"
+
+# Fail-safe, and the reason the default is not permissive: every bug file that already exists in
+# every target repo predates this field. A missing genre reading as `human` would switch Anchor 3
+# off for the entire legacy registry at once (decision 3 of the grill).
+write_genre_bug ''
+assert_phase "an open bug with no genre field still blocks (fail-safe for the legacy registry)" "QA"
+rm -f "$GENRE_BUG"
+
 # The QA site of latest_matching(), which the r10 fixture below does NOT cover: that one pins the
 # REVIEW glob (`40-review-r*.md`), and for three rounds the runner comment claimed on top of it
 # that "version order keeps the dated names in the order plain sort gave them, so the qa call sites

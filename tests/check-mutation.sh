@@ -227,6 +227,19 @@ mut_QA_bug_open() {           # ignores a bug with Status: open in the registry
   sed -i 's|.*\[ "\$openbugs" -gt 0 \].*|  if false; then|' "$1"
 }
 
+# Anchor 3 goes back to counting EVERY open bug, whatever its genre. That is the state the kit was
+# in until 20260826-o-laco-da-qa: a bug whose fix is a product decision blocked the QA phase, and
+# no agent in the pipeline was allowed to write the `Status:` line that would unblock it — 7 of
+# the 12 QA sessions of 20260825-frete-cif-fob spent US$ 73,32 on a gate none of them could pass.
+#
+# Anchored on the CODE line and not on `.*Closable by.*human.*`: the comment above that line in
+# bin/sdd carries the same words, and a mutant that rewrites a comment applies (so it clears the
+# rc-90 cmp guard) while sabotaging nothing. The `^    if grep` prefix and the `then continue; fi`
+# suffix are what make the anchor hit exactly one line.
+mut_QA_bug_genre_ignored() {
+  sed -i 's|^    if grep -qE .*Closable by.*then continue; fi$|    if false; then continue; fi|' "$1"
+}
+
 # Historical bug 3 (SQ-97 pilot, ~US$ 10): the parser exited only at `###`, kept swallowing the
 # report's following tables and failed an all-Grade-A review for finding a `Commit` column.
 mut_REVIEW_stops_at_h3() {
@@ -1783,6 +1796,7 @@ CATALOG=(
   QA_bug_enum_loose
   QA_matrix_pending
   QA_bug_open
+  QA_bug_genre_ignored
   REVIEW_stops_at_h3
   REVIEW_accepts_B
   REVIEW_placeholder_rationale_blind
