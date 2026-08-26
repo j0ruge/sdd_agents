@@ -939,6 +939,57 @@ assert_eq "and the judge counts the same one, not one per lap" "1" \
 assert_eq "with nothing pushed into the unrecognized bucket to get there" "0" \
   "$(jq -r '.excluded.unrecognized' <<< "$series")"
 
+# --- `status: blocked` in the handoff escalates on the FIRST session ---------
+# `blocked` already MEANS "the line stopped; the runner returns 3 and a human has to act"
+# (bin/sdd:1602), and gate_QA has always refused it (:564). What was missing is that the refusal
+# went through the fingerprint heuristic like any other: session 1 fails the gate, the runner
+# retries, session 2 fails it identically, and only THEN does `no-progress` escalate. A phase
+# nobody can satisfy paid for proving its own unsatisfiability twice, at one session apiece —
+# and when the session did commit something honest, `moved=true` bought yet another lap instead.
+# Measured in 20260825-frete-cif-fob: 7 of the 12 QA sessions were in that loop, US$ 73,32.
+#
+# ONE assertion, and it is DIFFERENTIAL on purpose. "rc 3" is shared with every escalation in this
+# file, and "one session" alone would be satisfied by a runner that escalated on the first session
+# for ANY failing gate — which is the over-broad fix, not the fix. So the same fixture is run twice
+# and the two outputs are compared against each other: the `blocked` handoff must escalate on
+# session 1 by its own enum, and a handoff that fails the gate for an ordinary reason (no `gate:`
+# evidence, the no-interface branch at :568) must still spend its two sessions and still land on
+# `no-progress`. Either half alone passes under a mutant; together neither does.
+echo "== status: blocked escalates on the first session, an ordinary gate failure does not =="
+# The dead stub: no session moves the disk, so the control regime reaches `no-progress` — which is
+# also what makes the two halves differ ONLY in the reason the gate refused.
+cat > "$OUTSIDE/stub/claude" <<'STUB'
+#!/usr/bin/env bash
+exit 1
+STUB
+chmod +x "$OUTSIDE/stub/claude"
+
+# blocked_shape <expected-phase> -> "<rc>|<session rows>|<event>|<kind>" for the run just made.
+blocked_shape() {
+  printf '%s|%s|%s|%s' "$1" \
+    "$(jq -s '[.[] | select(.event == "session")] | length' "$LEDGER")" \
+    "$(jq -r -s '[.[] | select(.event == "blocked")][0].event' "$LEDGER")" \
+    "$(jq -r -s '[.[] | select(.event == "blocked")][0].kind' "$LEDGER")"
+}
+
+: > "$LEDGER"
+printf -- '---\nfase: QA\nstatus: blocked\n---\n' > "$MDIR/30-handoff-qa.md"
+git add -A && git commit -qm "chore: QA handoff declares blocked"
+"$SDD" run "$MISSION" >/dev/null 2>&1; rc=$?
+qa_blocked="$(blocked_shape "$rc")"
+
+: > "$LEDGER"
+# Same phase, same stub, same everything — only the REASON the gate refuses changes. `done` with
+# no `gate:` field is the ordinary failure of the no-interface branch (bin/sdd:568).
+printf -- '---\nfase: QA\nstatus: done\n---\n' > "$MDIR/30-handoff-qa.md"
+git add -A && git commit -qm "chore: QA handoff without the gate evidence"
+"$SDD" run "$MISSION" >/dev/null 2>&1; rc=$?
+qa_ordinary="$(blocked_shape "$rc")"
+
+assert_eq "status: blocked escalates on the first session, where an ordinary gate failure still spends two" \
+  "3|1|blocked|handoff-blocked · 3|2|blocked|no-progress" \
+  "$qa_blocked · $qa_ordinary"
+
 # --- the reader ------------------------------------------------------------
 # Fixture ledger written by hand: this is OUR format, so there is no third-party source to copy
 # from (the provenance rule covers skill output). Every row here exists to prove one refusal.

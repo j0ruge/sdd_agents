@@ -498,6 +498,19 @@ gate_TICKET() {
 # tree that is long since clean.
 GATE_EXEC_DIRTY=0
 
+# Set by any gate that refuses because the phase's own handoff declares `status: blocked`, read by
+# cmd_run right after the gate call that could have set it. A GLOBAL for the same reason as
+# GATE_EXEC_DIRTY above — the rc is already spent on pass/fail — and a MARKER rather than a grep of
+# GATE_WHY because GATE_WHY is prose: every gate spells its refusal its own way, the word "blocked"
+# appears in gate_EXEC's Jidoka line too (:534), and an early exit anchored on a substring of prose
+# would escalate runs nobody asked it to. The risk is named in 01-plano.md of 20260826-o-laco-da-qa.
+#
+# CONTRACT for whoever teaches a second gate the token: reset it at the entry of THAT gate, never
+# at a call site. `current_phase` walks every gate in order, so a marker left set by an evaluation
+# two phases ago would escalate a phase whose own handoff says nothing of the kind. Today gate_QA
+# is the only setter, and the only reader is the branch in cmd_run's loop.
+GATE_HANDOFF_BLOCKED=0
+
 gate_EXEC() {
   GATE_EXEC_DIRTY=0
   local rows; rows="$(checkpoint_rows)"
@@ -556,12 +569,20 @@ gate_EXEC() {
 }
 
 gate_QA() {
+  GATE_HANDOFF_BLOCKED=0
   local h="$MISSION_DIR/30-handoff-qa.md" report=""
   [ -f "$h" ] || { GATE_WHY="missing 30-handoff-qa.md"; return 1; }
 
   local st; st="$(frontmatter "$h" status)"
   if [ "$st" = "skipped" ]; then GATE_WHY="qa: skipped (diff has no user-visible change)"; return 0; fi
-  if [ "$st" = "blocked" ]; then GATE_WHY="30-handoff-qa.md has status: blocked"; return 1; fi
+  # The marker, not the prose, is what cmd_run reads to escalate on the spot — see
+  # GATE_HANDOFF_BLOCKED above. `blocked` means the line stopped and a human has to act (:1602);
+  # QA is where that costs the most, because no agent in this pipeline may close the bugs that
+  # put it there (the docs/qa/ tree belongs to the skills, agents/sdd-qa.md:142).
+  if [ "$st" = "blocked" ]; then
+    GATE_HANDOFF_BLOCKED=1
+    GATE_WHY="30-handoff-qa.md has status: blocked"; return 1
+  fi
 
   # Project with no interface: the qa-report/qa-execution skills never ran (qa_substep sends it
   # straight to sdd-qa), so the docs/qa/ tree does not exist. Demanding their dated report would
@@ -3459,6 +3480,32 @@ cmd_run() {
       ok "gate $phase: $GATE_WHY"
       force_phase=""
       continue
+    fi
+
+    # Third Jidoka: the handoff itself says the line stopped. `blocked` already meant exactly that
+    # (:1602), but the refusal used to go through the fingerprint heuristic below like any other
+    # gate failure — so a phase NOBODY can satisfy paid for proving its own unsatisfiability twice,
+    # at one session apiece, and a session that committed something honest read as `moved=true` and
+    # bought another lap instead. In QA that is not hypothetical: no agent in this pipeline may
+    # write the registry's `Status:` line, so a bug needing a product decision has no path out at
+    # all. Measured in 20260825-frete-cif-fob — 7 of the 12 QA sessions in that loop, US$ 73,32 of
+    # US$ 144,88.
+    #
+    # Read from the MARKER and not from GATE_WHY: see the contract above GATE_HANDOFF_BLOCKED. It
+    # is read here, immediately after the `gate_"$phase"` call that could have set it, and before
+    # `moved` is consulted — the whole point is to stop depending on the fingerprint.
+    if [ "$GATE_HANDOFF_BLOCKED" = "1" ]; then
+      info ""
+      bad "BLOCKED in $phase — $GATE_WHY"
+      dim "  The line stopped on purpose: the phase's handoff declares 'status: blocked'."
+      dim "  Another session would re-read the same handoff and refuse the same way."
+      # Same refusal as the EXEC Jidoka above: names the section by what it IS, never by a heading
+      # that is artifact content in OUTPUT_LANG.
+      dim "  Read the handoff — the decisions it needs from a human are written there."
+      dim "  Once they are taken, set the handoff's status back and 'sdd run'."
+      pipeline_log_line "$(date -Iseconds)  BLOCKED  $phase  $GATE_WHY"
+      autonomy_blocked_row "handoff-blocked" "$phase" "$GATE_WHY"
+      return 3
     fi
 
     if [ "$moved" = "true" ]; then
