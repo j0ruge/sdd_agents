@@ -39,6 +39,23 @@ Achados sobre **repos-alvo** vão para o `TODO.md` daquele repo. Este arquivo é
 
 ### Sensores que faltam
 
+- [ ] **`sdd retry` devolve 3 sem escrever linha de escalada no ledger** — `bin/sdd:3653` — o
+  `cmd_retry` chama o gate e sai 3 em qualquer reprovação, mas nunca chama `autonomy_blocked_row`
+  nem escreve `BLOCKED` no `pipeline.log`, e nenhuma das cinco linhas que um humano deve agir sai
+  no terminal. Reproduzido com handoff `status: blocked`: rc 3, ledger só com a linha de sessão.
+  Vale para TODA escalada, não só a nova — o juiz do kaizen lê um ledger sem eventos que
+  aconteceram. Direção: a quinta porta do `handoff_blocked_escalation`, ou um escalador comum.
+  — descoberto por `sdd-reviewer` na missão `20260826-o-laco-da-qa` (2026-08-26)
+
+- [ ] **Citação NÃO-cercada acima do cabeçalho ainda vira o gênero do bug** — `bin/sdd:686` — o
+  extrator da Âncora 3 pula blocos cercados e pega a primeira linha com forma de campo fora de um,
+  então prosa nua abrindo com `- **Closable by:** human` acima do campo real ainda é lida como o
+  campo. É fail-open (o gate responde `registry clean` com bug sanável aberto), na direção que a
+  decisão 3 do grill recusa. Alcance baixo: exige arquivo que viole a ordem do template. Declarado
+  no comentário do `bin/sdd`; entra aqui porque fail-open declarado continua entrando (régua D15).
+  Direção: ancorar o gênero no MESMO bloco contíguo de `- **…:**` que traz a linha `Status:`.
+  — descoberto por `sdd-reviewer` na missão `20260826-o-laco-da-qa` (2026-08-26)
+
 - [ ] **O `stub-argv.txt` do `check-health.sh` nunca é apagado entre mundos de fixture** —
   `tests/check-health.sh:930` — todo `health_run` sobrescreve, ninguém remove. Hoje não reproduz
   fail-open (medido: sem chamada nenhuma à suíte, o arquivo some e a asserção acusa certo), mas no

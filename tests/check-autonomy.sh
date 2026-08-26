@@ -1115,7 +1115,7 @@ blocked_where() {
 printf 'blocked\n' > "$QA_DECL"
 printf -- '---\nfase: QA\nstatus: done\n---\n' > "$MDIR/30-handoff-qa.md"
 git add -A && git commit -qm "chore: baseline before the retry declares blocked"
-"$SDD" run "$MISSION" >/dev/null 2>&1
+out_blocked="$("$SDD" run "$MISSION" 2>&1)"
 where_blocked="$(blocked_where)"
 
 : > "$LEDGER"; rm -f "$RETRY_MARKER" "$RETRY_MARKER.2"
@@ -1123,12 +1123,27 @@ cp "$CKPT_BEFORE_WRONG_PHASE" "$MDIR/checkpoint.md"
 printf 'done\n' > "$QA_DECL"
 printf -- '---\nfase: QA\nstatus: done\n---\n' > "$MDIR/30-handoff-qa.md"
 git add -A && git commit -qm "chore: control, the retry reports done"
-"$SDD" run "$MISSION" >/dev/null 2>&1
+out_ordinary="$("$SDD" run "$MISSION" 2>&1)"
 where_ordinary="$(blocked_where)"
 
 assert_eq "the escalation names the phase whose handoff declared it, never the one that came next" \
   "QA|handoff-blocked · EXEC|no-progress" \
   "$where_blocked · $where_ordinary"
+
+# ...and it names that phase TO THE HUMAN, not only in the ledger. The two are written from the
+# same `$phase`, but only the ledger half was measured: an adversarial pass in the REVIEW round of
+# 20260826-o-laco-da-qa hardcoded the wrong phase into the `bad`/pipeline.log prose while leaving
+# the ledger row correct, and the whole suite stayed green at 585 ok. That is precisely the damage
+# the F2 narrative describes — the runner telling a human to go fix `status: blocked` in a
+# 20-handoff-exec.md that says `done` — so the half a human actually READS was the unmeasured one.
+# A Jidoka exists to be acted on by a person; its terminal output is not decoration.
+#
+# DIFFERENTIAL on the same pair of runs, and it costs no extra session: one word in the QA handoff
+# has to move the name in the human line from QA to EXEC and back. Both halves assert the ABSENCE
+# of the other phase's line too — "names QA" alone is satisfied by output that names both.
+assert_eq "and it names that phase to the HUMAN too, not only in the ledger row" \
+  "QA=1 EXEC=0 · QA=0 EXEC=1" \
+  "QA=$(grep -c 'BLOCKED in QA' <<< "$out_blocked") EXEC=$(grep -c 'BLOCKED in EXEC' <<< "$out_blocked") · QA=$(grep -c 'BLOCKED in QA' <<< "$out_ordinary") EXEC=$(grep -c 'BLOCKED in EXEC' <<< "$out_ordinary")"
 
 cp "$CKPT_BEFORE_WRONG_PHASE" "$MDIR/checkpoint.md"
 rm -f "$QA_DECL"
