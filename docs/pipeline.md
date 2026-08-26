@@ -511,43 +511,43 @@ variable away from what they meant.
   shared `.git` of the repository and not the checkout the session runs in, so the isolation
   workflow this kit recommends is untouched.
 
-**`--all-repos` is the door back to the cross-project question.** Per repo is the right *default*
-and the wrong *only option*: this ledger is one file per machine precisely so maturity can be
-compared BETWEEN projects, and while the filter was the only behaviour no reader could ask that
-at all. `sdd autonomy --all-repos` and `sdd kaizen --series --all-repos` flip the same single
-predicate, so one flag reaches both readers of that command at once. Under it
-`excluded.other_repo` is `0` (nothing is foreign any more)
-and the human table's header names the scope it read instead of a repo path. It is never the
-default and never implicit: the contamination the filter removed was a `sdd run` in a **throwaway
-fixture** repo moving the judge's own numbers, and no verdict about this kit may rest on rows a
-test invented.
+**The judge reads every repo; the human's table still reads one.** Two commands, two questions,
+one file. `sdd autonomy` asks *"what did THIS project cost"*, so per repo is its right default and
+`--all-repos` is the door back to the cross-project question — this ledger is one file per machine
+precisely so maturity can be compared BETWEEN projects. `sdd kaizen` asks the other question, and
+[ADR 0005](adr/0005-judge-reads-every-repo-with-visible-composition.md) part 1 points it at the
+whole ledger by default. `--all-repos` is still accepted there and is a **no-op**: scripts and
+handoffs already carry it, and a flag that silently changed meaning would be worse than one that
+stopped deciding in one of its two homes.
 
-⚠️ Whether a **real target** repo's rows may carry a verdict is a different question, and this
-mission deliberately left it open. [ADR 0003](adr/0003-judge-axis-evidence-from-target-repos.md)
-says verdict evidence comes from target repos — the kit's own axis degenerates — and `--all-repos`
-is the only mechanism that can read them; but nothing in the ledger yet tells a target apart from a
-fixture, so the default stays shut and neither `gate_KAIZEN` nor the agent prompt is pointed at the
-flag by the runner itself. Answering it is the job of a future ADR (deliberately deferred; 0004 has
-since been taken by the mutation-stamp decision), and it is what unblocks I13.4.
+⚠️ [ADR 0003](adr/0003-judge-axis-evidence-from-target-repos.md) said verdict evidence comes from
+real target repos — the kit's own axis degenerates by construction — and it stayed a **dead letter
+for nine days** because it never said how the judge READS those rows: the per-repo default kept it
+looking at exactly the one repo 0003 declared unusable, and excluded the evidence as `other_repo`.
+Measured on `20260825-frete-cif-fob`, the first real target-repo mission on a frozen kit: 21
+comparable rows, US$ 144.88, and the default reading saw **none of them**.
 
-⚠️ The **post-pipeline reminder** is the one reader the flag does not reach. It goes through the
-same single predicate and would inherit it — but it is called from `sdd run` alone, and `sdd run`
-has no `--all-repos` (it dies on any unknown `-*` option), so it always reads per repo. That is
-why the `TODO.md` item about the reminder pointing the human at a command that sees different
-numbers is **not** closed by this flag: `sdd run` in a target repo counts the target's missions,
-and `sdd kaizen` in the kit repo still answers about the kit's. Deciding that one means answering
-whether the judge may weigh another project's rows at all — the question
-[ADR 0003](adr/0003-judge-axis-evidence-from-target-repos.md) deliberately left to its successor.
+What makes the widening safe is not a filter. It is the **composition** published beside the
+numbers (above), which turns contamination into something you SEE, plus the writer guard that stops
+a checkout under `$TMPDIR` from entering the file at all. The two shipped together and neither is
+sufficient alone.
 
-It reaches the **KAIZEN boot prompt** too, and that is not a convenience. `gate_KAIZEN` reads its
-half of the series by calling `kaizen_series` in-process, so every ledger option the invocation
-carries lands on it; the prompt hands the agent a *written* command line, so an option lands there
-only if the runner wrote it. When one half is flagged and the other is not, the two land on
-different `latest` shas — and because the gate hunts for exactly the `kit_sha_judged:` the prompt
-ordered the agent to write, the phase stops being *wrong* and becomes **unsatisfiable**: the gate
-fails, the runner retries once, the second session writes the same sha, and the run ends in
-`BLOCKED in KAIZEN — no-progress`. Two opus sessions for a blocked row. ADR 0001 splits the judge;
-what keeps the split honest is both halves reading ONE series, whichever one the human asked for.
+⚠️ The **post-pipeline reminder** still reads per repo, and that is the right unit for it: it is
+called from `sdd run` alone, `sdd run` has no `--all-repos` (it dies on any unknown `-*` option),
+and the question it answers is what the run that just finished contributed. What changed with
+ADR 0005 is its **sentence**: it used to tell the human that the judge would not count these rows,
+which was true then and is false now, and it now points at `sdd kaizen` in the kit repo instead.
+
+The **KAIZEN boot prompt** no longer carries a ledger option, and the reason is worth keeping.
+`gate_KAIZEN` reads its half of the series by calling `kaizen_series` in-process, so every option
+the invocation carried landed on it; the prompt hands the agent a *written* command line, so an
+option landed there only if the runner wrote it. With one half flagged and the other not, the two
+landed on different `latest` shas — and because the gate hunts for exactly the `kit_sha_judged:`
+the prompt ordered the agent to write, the phase stopped being *wrong* and became **unsatisfiable**:
+gate fails, runner retries once, second session writes the same sha, run ends in `BLOCKED in
+KAIZEN — no-progress`. Two opus sessions for a blocked row. ADR 0001 splits the judge; what keeps
+the split honest is both halves reading ONE series — and since ADR 0005 there is only one to read,
+so the invariant holds by construction instead of by upkeep.
 
 It records **facts, never a score**: phase, attempt, whether the session moved the disk, rc, cost,
 the gate result and its reason. `ok|leve|refez` is a label, and a runner that labels its own work

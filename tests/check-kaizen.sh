@@ -364,38 +364,71 @@ ledger_row() {   # ledger_row <repo> <mission> — one clean session, kit eee555
       auto_retry:false, session:"s", rc:0, dur_s:10, cost_usd:1.0, moved:true,
       gate:"pass", gate_why:"x"}'
 }
+# Five sessions across two repositories, plus ONE row that names no project at all — the shape the
+# judge's widening deliberately does NOT admit.
 { ledger_row "$RA" a1; ledger_row "$RB" b1; ledger_row "$RA" a2
-  ledger_row "$RB" b2; ledger_row "$RB" b3; } > "$OUTSIDE/tworepos/autonomy-log.jsonl"
+  ledger_row "$RB" b2; ledger_row "$RB" b3; ledger_row "" x1; } \
+  > "$OUTSIDE/tworepos/autonomy-log.jsonl"
 
+# ⚠️ This section used to assert the OPPOSITE, and it was right until ADR 0005: `sdd kaizen
+# --series` filtered per repo, and these lines demanded that each repo see only its own missions.
+# Part 1 reverses that decision for the JUDGE and only for the judge — ADR 0003 says verdict
+# evidence comes from real target repos, and the per-repo default kept the judge looking at exactly
+# the one repo 0003 declared unusable. The assertions moved with the decision instead of the
+# decision being left to rot behind a green assertion; the per-repo reading did not disappear, it
+# stayed where its question lives, which is what the differential at the bottom pins.
 SERIES_A="$( cd "$RA" && SDD_STATE_DIR="$OUTSIDE/tworepos" "$SDD" kaizen --series 2>/dev/null )"
 SERIES_B="$( cd "$RB" && SDD_STATE_DIR="$OUTSIDE/tworepos" "$SDD" kaizen --series 2>/dev/null )"
 missions_of() { jq -r '[.latest.detail[].mission] | sort | join(",")' <<< "$1"; }
-a_missions="$(missions_of "$SERIES_A")"
-b_missions="$(missions_of "$SERIES_B")"
-# The two positive readings first: without them the emptiness check below would be satisfied by a
-# filter that refuses EVERYTHING, which is the vacuous way to have no shared mission.
-assert_eq "the reading from one repo sees exactly its own two missions" "a1,a2" "$a_missions"
-assert_eq "and the reading from the other sees exactly its own three" "b1,b2,b3" "$b_missions"
-shared="$( jq -rn --arg a "$a_missions" --arg b "$b_missions" \
-  '($a | split(",")) as $A | ($b | split(",")) as $B | ($A - ($A - $B)) | join(",")' )"
-assert_eq "a row from another repo never enters the series" "" "$shared"
-# What left has to be COUNTED. A filter that drops rows in silence is the same class of instrument
-# this mission exists to kill: the number would be right and nobody could tell why it moved.
-assert_eq "and what left is counted, never dropped in silence" "3" \
-  "$(jq -r '.excluded.other_repo' <<< "$SERIES_A")"
-assert_eq "symmetrically, read from the other side" "2" \
-  "$(jq -r '.excluded.other_repo' <<< "$SERIES_B")"
-assert_eq "the two readings together account for every session in the file" "5" \
-  "$(( $(jq -r '.guard.sessions' <<< "$SERIES_A") + $(jq -r '.guard.sessions' <<< "$SERIES_B") ))"
-# Standing in no repository at all, nothing in the ledger is yours. The safe direction: an empty
-# series is `sufficient:false`, so it can only support `indeterminado` — never someone else's
-# numbers read as a verdict about this kit.
+# The strongest form the property has: BYTE FOR BYTE the same answer from either repo. The judge's
+# question is about a kit version, not about where the human is standing, and a comparison of the
+# two readings with each other admits no fixture regime that satisfies it by accident — under the
+# per-repo filter the two differ in `detail`, in `guard` and in `excluded` at once.
+assert_eq "the judge answers the same series from either repo" "same" \
+  "$( [ "$SERIES_A" = "$SERIES_B" ] && echo same || echo differ )"
+# ...and the answer is the WHOLE file, not the empty intersection: without this, a reader that
+# returned nothing anywhere would satisfy the identity above.
+assert_eq "and it is every mission in the file, not the empty set they share" "a1,a2,b1,b2,b3" \
+  "$(missions_of "$SERIES_A")"
+# Nothing is foreign to the judge any more. Counted from both sides, because a reader that emptied
+# only one bucket would still be reporting a filter it no longer applies.
+assert_eq "nothing leaves as another repo's, read from either side" "0/0" \
+  "$(printf '%s/%s' "$(jq -r '.excluded.other_repo' <<< "$SERIES_A")" \
+                    "$(jq -r '.excluded.other_repo' <<< "$SERIES_B")")"
+# The half that did NOT move, and it is the one that keeps the widening honest: widening the
+# question BETWEEN projects is not the same as admitting rows that belong to none. A row naming no
+# repo is unattributable in every scope, so it still leaves — through its own bucket, counted.
+assert_eq "a row that names no project is still excluded, in its own bucket" "1/5" \
+  "$(printf '%s/%s' "$(jq -r '.excluded.no_repo' <<< "$SERIES_A")" \
+                    "$(jq -r '.guard.sessions' <<< "$SERIES_A")")"
+# Standing in no repository at all the cwd decides nothing, so the judge answers the same series it
+# answers from inside either repo. Before ADR 0005 this was the empty series plus a warning, and
+# that was the safe direction WHILE the reading was per repo: an empty series is
+# `sufficient: false` and supports only `indeterminado`. With one reading there is nothing for the
+# cwd to be safe about.
+mkdir -p "$OUTSIDE/anywhere"
 SERIES_NOWHERE="$( cd "$OUTSIDE/anywhere" \
   && SDD_STATE_DIR="$OUTSIDE/tworepos" "$SDD" kaizen --series 2>/dev/null )"
-assert_eq "read from outside any git repository the series is empty, not everyone's" "null" \
-  "$(jq -r '.latest' <<< "$SERIES_NOWHERE")"
-assert_eq "and it says so, counting every row as some other repo's" "5" \
-  "$(jq -r '.excluded.other_repo' <<< "$SERIES_NOWHERE")"
+assert_eq "read from outside any git repository the judge answers the same series" "same" \
+  "$( [ "$SERIES_NOWHERE" = "$SERIES_A" ] && echo same || echo differ )"
+
+# --- ...and the per-repo reading is still there, where its question lives ----
+# THE DIFFERENTIAL, and it is what stops all of the above from reading as "the filter was deleted".
+# ADR 0005 moves the JUDGE and leaves `sdd autonomy` alone, because that command's question really
+# is "what did THIS repo cost". One file, two commands, two answers — asserted against each other
+# rather than each against a literal, so neither can drift into the other's behaviour unnoticed.
+AUTO_A="$( cd "$RA" && SDD_STATE_DIR="$OUTSIDE/tworepos" "$SDD" autonomy 2>&1 )"
+AUTO_B="$( cd "$RB" && SDD_STATE_DIR="$OUTSIDE/tworepos" "$SDD" autonomy 2>&1 )"
+# One grep, nothing piped after it, no `-m1`: the first is this repo's SIGPIPE trap (a writer whose
+# reader exits early returns 141 under pipefail) and the second is the same family one letter
+# apart. The first line and the leading number are taken with bash's own expansions instead.
+foreign_rows() {
+  local m; m="$(grep -oE '[0-9]+ row\(s\) excluded: born in another repo' <<< "$1" || true)"
+  m="${m%%$'\n'*}"; m="${m%% *}"
+  printf '%s' "${m:-0}"
+}
+assert_eq "sdd autonomy still reads per repo: each side excludes the other's rows" "3/2" \
+  "$(printf '%s/%s' "$(foreign_rows "$AUTO_A")" "$(foreign_rows "$AUTO_B")")"
 
 # =============================================================================
 # gate + jidoka — the flow around the verdict artifact
@@ -626,15 +659,23 @@ cp "$ROOT/bin/sdd" "$KIT2/bin/sdd"
 
 out="$( cd "$FIX" && "$KIT2/bin/sdd" run 20260102-donemission 2>&1 )"; rc=$?
 assert_eq "outside the kit the pipeline still completes (rc 0)" "0" "$rc"
+# ⚠️ This used to demand the words "reads only the kit's own missions", and that sentence was true
+# when it was written and became FALSE with ADR 0005 part 1: the judge reads every repo now, and
+# ADR 0003 says a target repo's rows are exactly the evidence a verdict should rest on. So the
+# reminder points at the judge instead of warning the human away from it, and the assertion moved
+# with the fact rather than the fact being left to rot behind a green assertion.
 assert_eq "outside the kit the reminder tells the truth about the judge" "yes" \
-  "$(grep -q "reads only the kit's own missions" <<< "$out" && echo yes || echo no)"
+  "$(grep -q 'The kaizen judge counts them' <<< "$out" && echo yes || echo no)"
 # The other half, the house rule: the text of the right branch AND the absence of the wrong one.
-# Without it the assertion above passes on a runner that prints both lines.
-assert_eq "and it does not send the human to a judge reading other numbers" "no" \
-  "$(grep -q "run 'sdd kaizen'" <<< "$out" && echo yes || echo no)"
-# It says what IS true and stops: promising an option that does not exist yet would be the same
-# lie in the other direction.
-assert_eq "and it promises no --all-repos that has not been decided" "no" \
+# Without it the assertion above passes on a runner that prints both lines — which is exactly what
+# mut_KAIZEN_reminder_wrong_repo makes it do. The tell can no longer be "does it name sdd kaizen"
+# (both branches do now, correctly), so it is the kit branch's own tail: only the reading taken
+# from INSIDE the kit can promise the next kit mission plan.
+assert_eq "and it does not answer with the kit branch's sentence" "no" \
+  "$(grep -q 'for the next kit mission plan' <<< "$out" && echo yes || echo no)"
+# No flag in the sentence: on the judge `--all-repos` decides nothing since ADR 0005, so naming it
+# would send the human to type an option that changes no number.
+assert_eq "and it promises no --all-repos, which decides nothing on the judge" "no" \
   "$(grep -q -- '--all-repos' <<< "$out" && echo yes || echo no)"
 
 echo "== jidoka: verdict piorou stops the line =="
@@ -1310,11 +1351,15 @@ gate_sha() {
   ( cd "$FIX" && SDD_STATE_DIR="$OUTSIDE/judgesplit" "$KSDD" kaizen --series "$@" 2>/dev/null ) \
     | jq -r '.latest.kit_sha // "none"'
 }
-# Witness for the REGIME, not the regression — deliberately outside the `one series` prefix the
-# checkpoint counts. The pair below compares gate against prompt, and on a ledger where both
-# readings land on the same sha the BROKEN runner satisfies it too: measured, it scored 2 of 2.
-# So the divergence is a precondition, and a precondition nobody asserts is a way for the pair to
-# go quietly vacuous the day someone edits the fixture.
+# Witness for the REGIME, computed from the FIXTURE FILE and never from the runner — deliberately
+# outside the `one series` prefix the checkpoint counts. This whole section is about what the
+# runner answers, so a witness the runner derived would agree with whatever the runner does; the
+# property below is a fact of the ledger on disk, which no edit to bin/sdd can move.
+#
+# The property: the newest kit version IN THE FILE belongs to the other repo, not to the kit's own
+# rows. A judge that still filtered per repo lands on the kit's sha instead, and every assertion
+# under this one moves — which is what makes them assertions about ADR 0005 part 1 rather than
+# about a flag.
 #
 # ⚠️ Asserted as a PROPERTY ("differ") and never as the literal pair `qqq1111 zzz9999`. The first
 # draft used the literals, and the sabotage probe that renamed the fixture shas renamed the
@@ -1322,18 +1367,39 @@ gate_sha() {
 # had stopped diverging. An expectation a fixture edit can move in lockstep witnesses nothing.
 # Both shas are required real, too: two nulls are equal, but one null against a sha would read as
 # "differ" out of emptiness rather than out of the split this section exists to hold.
-JS_LOCAL="$(gate_sha)"
-JS_ALL="$(gate_sha --all-repos)"
-assert_eq "witness: the two readings really do disagree about latest (else the pair proves nothing)" \
+JS_KITONLY="$(jq -rs --arg r "$FIXROOT" '[.[] | select(.repo == $r)] | last | .kit_sha' \
+                "$OUTSIDE/judgesplit/autonomy-log.jsonl")"
+JS_WHOLE="$(jq -rs 'last | .kit_sha' "$OUTSIDE/judgesplit/autonomy-log.jsonl")"
+assert_eq "witness: the newest version in the file is not the kit repo's own (else the pair proves nothing)" \
   "differ" \
-  "$( if [ "$JS_LOCAL" != "$JS_ALL" ] && [ "$JS_LOCAL" != "none" ] && [ "$JS_ALL" != "none" ]
-      then echo differ; else echo "same:$JS_LOCAL/$JS_ALL"; fi )"
+  "$( if [ "$JS_KITONLY" != "$JS_WHOLE" ] \
+        && [ -n "$JS_KITONLY" ] && [ "$JS_KITONLY" != "null" ] \
+        && [ -n "$JS_WHOLE" ]   && [ "$JS_WHOLE" != "null" ]
+      then echo differ; else echo "same:$JS_KITONLY/$JS_WHOLE"; fi )"
 
-# The pair. Gate against prompt, one string each, under the flag and without it.
-assert_eq "one series: under --all-repos the gate demands the sha the prompt hands the agent" \
-  "$JS_ALL" "$(judge_prompt_sha --all-repos)"
-assert_eq "one series: and without the flag too — the control a fix cannot skip" \
-  "$JS_LOCAL" "$(judge_prompt_sha)"
+# ADR 0005, part 1. The judge's question is "what did this kit version cost", and ADR 0003 already
+# answered where that evidence lives: real target repos, because in the repo that BUILDS the kit
+# every session lands on a fresh sha and the axis degenerates by construction. So the default
+# reading is the WHOLE ledger — and for nine days it was not, which is what made 0003 a dead
+# letter: the per-repo default kept the judge looking at exactly the one repo 0003 declared
+# unusable.
+#
+# `--all-repos` is kept, and kept a NO-OP here, because scripts and handoffs already carry it and a
+# flag that silently changed meaning would be worse than one that stopped deciding in one of its
+# two homes. On `sdd autonomy` it still decides everything.
+assert_eq "the judge reads every repo by default (ADR 0005, part 1)" "$JS_WHOLE" "$(gate_sha)"
+assert_eq "...and --all-repos is a no-op on the judge, never a second reading" \
+  "$JS_WHOLE" "$(gate_sha --all-repos)"
+
+# The pair. Gate against prompt, one string each, with the flag and without it. It used to be the
+# flag that could put the two halves on different series — the gate inherited it in-process, the
+# prompt only if the runner wrote it into the command line it hands over. With ONE reading the
+# invariant holds by construction, and the second run is what says the flag cannot reopen the
+# split from either side.
+assert_eq "one series: the prompt hands the agent the reading the gate takes" \
+  "$(gate_sha)" "$(judge_prompt_sha)"
+assert_eq "one series: and the flag splits them from neither side, now that it decides nothing" \
+  "$(gate_sha --all-repos)" "$(judge_prompt_sha --all-repos)"
 
 # ...and the GATE half of that pair, driven for real instead of by proxy.
 #
@@ -1365,11 +1431,11 @@ gate_verdict_rc() {   # gate_verdict_rc <sha to write into the verdict> <flags..
 # readings of this fixture are sufficient (three missions a side), so nothing here can pass or fail
 # for the guard's reason instead of the series' reason.
 loud_stub   # no session may open on the accepting path; a real one would show up as a ledger row
-assert_eq "real gate: it accepts the very sha the prompt hands the agent, under --all-repos" \
-  "0 verdict-found" "$(gate_verdict_rc "$(judge_prompt_sha --all-repos)" --all-repos)"
+assert_eq "real gate: it accepts the very sha the prompt hands the agent" \
+  "0 verdict-found" "$(gate_verdict_rc "$(judge_prompt_sha)")"
 dead_stub   # the refusing path burns its two offline attempts and escalates, exactly as rc 3 says
-assert_eq "real gate: and refuses the other series sha, so the acceptance above is no rubber stamp" \
-  "3 no-verdict" "$(gate_verdict_rc "$JS_LOCAL" --all-repos)"
+assert_eq "real gate: and refuses the sha a per-repo reading would have demanded" \
+  "3 no-verdict" "$(gate_verdict_rc "$JS_KITONLY")"
 
 # --- ...and corruption is never "not judged yet" -----------------------------
 # `gate_KAIZEN` read `series="$(kaizen_series)"` and dropped the rc. It looked safe because errexit

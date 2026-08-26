@@ -25,22 +25,29 @@ is a kit bug for `TODO.md`, and your verdict says `indeterminado` with the reaso
 "$SDD_HOME/bin/sdd" kaizen --series
 ```
 
-Run it first — and if your boot prompt hands you that line with options on it (`--all-repos` is
-the only one today), run **the line you were handed**, verbatim. The gate reads its half of the
-series in the same process that wrote your prompt: an option that reached one half and not the
-other puts them on different `latest` shas, and since the gate hunts for exactly the
-`kit_sha_judged:` the prompt ordered you to write, the phase becomes *unsatisfiable* rather than
-merely wrong. The JSON gives you, per kit version (`kit_sha`, file order, latest and previous):
+Run it first, and run **the line your boot prompt handed you**, verbatim — never a line you
+composed. The gate reads its half of the series in the same process that wrote your prompt, so a
+reading that reached one half and not the other puts them on different `latest` shas, and since the
+gate hunts for exactly the `kit_sha_judged:` the prompt ordered you to write, the phase becomes
+*unsatisfiable* rather than merely wrong.
+
+⚠️ **The series covers EVERY repo in the ledger, not only the kit's own missions**
+(ADR 0005, part 1). ADR 0003 says verdict evidence comes from real target repos — in the repo that
+builds the kit each session commits and the next lands on a fresh sha, so the axis degenerates by
+construction — and the reading is what finally points the judge at that evidence. `--all-repos` is
+accepted and decides nothing here; do not add it, and do not read its absence as a narrower slice.
+
+The JSON gives you, per kit version (`kit_sha`, file order, latest and previous):
 missions, sessions, `moved_rate`, the label tally (`ok` / `leve` / `refez` per repo×mission×phase),
 escalations by kind, cost, and the guard (`missions_after_change`, `missions_with_session`,
 `sessions`, `sufficient`, `degenerate_axis`). The floor is `missions_with_session`, not
 `missions_after_change`: a mission that stopped the line without spending a session left you
 nothing to read. A mission is identified by `(repo, mission)` and never by the slug alone — slugs
-are dated and repeat across projects, so under `--all-repos` the repo is what keeps two projects
-apart; each `detail` entry names its own. `degenerate_axis: true` means the **last three** kit
-versions in the slice each bought exactly one **mission** — the same unit the floor counts, never
-sessions, because two sessions of the SAME mission on one sha (an in-loop retry) leave the floor
-just as unsatisfiable — **and** no version in the whole history ever
+are dated and repeat across projects, and your slice spans every repo, so the repo is what keeps
+two projects apart; each `detail` entry names its own. `degenerate_axis: true` means the **last
+three** kit versions in the slice each bought exactly one **mission** — the same unit the floor
+counts, never sessions, because two sessions of the SAME mission on one sha (an in-loop retry)
+leave the floor just as unsatisfiable — **and** no version in the whole history ever
 reached the floor — the shape of the repo that BUILDS the kit,
 where each session commits and the next lands
 on a fresh sha. That second clause is deliberate: a repo that once reached the floor and is merely
@@ -48,20 +55,21 @@ quiet right now has a working axis, and the field must not call it broken.
 Then `sufficient: false` is structural, not a matter of waiting: say so in the
 verdict and cite ADR 0003, instead of writing "a few more missions and we will know". It also counts
 what it excluded, in **five** buckets — dirty-kit rows, unrecognized rows, the meta rows your own
-sessions write, `other_repo`, the rows born in another repo (the ledger file is global, this
-reading is not), and `no_repo`, the rows that name no project at all and so belong to none. Cite
-those last two like the rest: they are the buckets that can empty a series on its own, and a series
-that shrank with nothing naming the reason is the defect the counters exist for.
+sessions write, `other_repo` and `no_repo`. ⚠️ `other_repo` is **0** in your slice and stays 0
+since ADR 0005: nothing in the ledger is foreign to the judge any more, so a non-zero there is a
+kit bug, not a scope. `no_repo` is the one that still bites — rows naming no project at all belong
+to none, so they leave in every scope. Cite it like the rest: it can empty a series on its own, and
+a series that shrank with nothing naming the reason is the defect the counters exist for.
 
 **`latest` and `previous` each carry a `composition`** — one `{repo, missions,
 missions_with_session}` per repository that contributed to that slice. Read it before you read
 anything else, and **cite it in the verdict**: the numbers above are about a MIXTURE, and a
 verdict that does not say what the mixture was is a label. Two readings it demands of you:
 
-- if the slice is dominated by a repository that is not a real target project — a throwaway clone,
-  a fixture path under `/tmp`, a scratch checkout — say so and weigh it accordingly. `indeterminado`
-  over a contaminated slice is the honest answer, and it is a different sentence from
-  `indeterminado` for want of missions;
+- if the slice is dominated by a repository that is not a real target project — a throwaway
+  clone, a fixture path under `/tmp`, a scratch checkout — say so and weigh it accordingly.
+  `indeterminado` over a contaminated slice is the honest answer, and it is a different
+  sentence from `indeterminado` for want of missions;
 - the two sums close against the guard (`sum(missions)` is `missions_after_change`,
   `sum(missions_with_session)` is the number the floor gates on). If they do not, the series is
   telling you something is wrong with itself — report that, do not paper over it.

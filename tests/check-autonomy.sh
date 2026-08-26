@@ -1413,14 +1413,25 @@ assert_eq "all-repos: the human table widens to the whole ledger, and nothing is
   "wider 3 0" \
   "$(wider "$(sum_sessions "$out_all")" "$(sum_sessions "$out_here")") $(foreign_of "$out_here") $(foreign_of "$out_all")"
 
-# The judge reads the same file through its own jq program. Pinning only the human's table would
-# leave the flag able to reach one reader and not the other — the divergence between two
-# instruments over one file that this whole section exists to prevent.
+# The judge reads the same file through its own jq program, and the two instruments must not drift.
+#
+# ⚠️ This pair used to demand that the flag CHANGE the judge's series (other_repo 3 → 0, missions
+# rising). ADR 0005 part 1 deletes that premise: the judge reads every repo by DEFAULT — ADR 0003
+# says verdict evidence comes from real target repos, and the per-repo default kept it looking at
+# exactly the one repo 0003 declared unusable. So the flag decides nothing here, and the old pair
+# would now be one value compared with itself. What replaced it is the same concern stated for the
+# world the ADR built: the flag is a no-op on the judge, and the two commands answer DIFFERENT
+# questions over one file on purpose.
 ser_here="$( SDD_STATE_DIR="$OUTSIDE/tworepos" "$SDD" kaizen --series 2>/dev/null )"
 ser_all="$(  SDD_STATE_DIR="$OUTSIDE/tworepos" "$SDD" kaizen --series --all-repos 2>/dev/null )"
-assert_eq "all-repos: the judge's series answers it too — other_repo falls to 0 and the missions rise" \
-  "3 0 wider" \
-  "$(jq -r '.excluded.other_repo' <<< "$ser_here") $(jq -r '.excluded.other_repo' <<< "$ser_all") $(wider "$(jq -r '.guard.missions_with_session' <<< "$ser_all")" "$(jq -r '.guard.missions_with_session' <<< "$ser_here")")"
+assert_eq "all-repos: the judge already reads every repo, so the flag moves nothing in its series" \
+  "0 0 same" \
+  "$(jq -r '.excluded.other_repo' <<< "$ser_here") $(jq -r '.excluded.other_repo' <<< "$ser_all") $( [ "$ser_here" = "$ser_all" ] && echo same || echo differ )"
+# The control, and it is what stops the line above from reading as "the repo filter was deleted":
+# over the SAME file the human's default table still excludes the other repo's rows. Two commands,
+# two answers, one ledger — asserted against each other rather than each against a literal.
+assert_eq "all-repos: ...and the human's default table over that same file still filters per repo" \
+  "0 3" "$(jq -r '.excluded.other_repo' <<< "$ser_here") $(foreign_of "$out_here")"
 # Anti-vacuity: a flag that widened the reading by losing rows on the way would still be "wider".
 assert_bucket_sum "the four buckets sum to the header total (--all-repos over two repos)" "$out_all"
 

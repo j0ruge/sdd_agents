@@ -1259,23 +1259,26 @@ stay in English: they are contract, not prose.
   if [ "$step" = "KAIZEN" ]; then
     # ADR 0001 splits the judge in two halves that must read ONE series: the runner derives the
     # numbers, the agent gives the verdict citing them. `gate_KAIZEN` reads its half by calling
-    # kaizen_series IN PROCESS, so every ledger option the invocation carries reaches it — the
-    # prompt below hands the agent a WRITTEN command line, so an option reaches that half only if
-    # it is written here. `--all-repos` reached the gate and not the prompt, and the cost is not a
-    # wrong number: the prompt orders `kit_sha_judged:` to be the series' latest, the gate hunts
-    # for its OWN latest, no verdict satisfies both, the runner retries once and the phase ends in
-    # `BLOCKED in KAIZEN — no-progress`. Two opus sessions for a blocked row. The human who typed
-    # the flag asked for the cross-project reading; honouring it on BOTH halves restores the
-    # invariant without taking away the capability he asked for. Found by sdd-qa (BUG-1).
-    local ledger_flags=""
-    [ "$LEDGER_ALL_REPOS" = "1" ] && ledger_flags=" --all-repos"
+    # kaizen_series IN PROCESS, so every ledger option the invocation carries reaches it; the
+    # prompt below hands the agent a WRITTEN command line, so an option reached that half only if
+    # the runner wrote it here. `--all-repos` used to reach the gate and not the prompt, and the
+    # cost was not a wrong number: the prompt orders `kit_sha_judged:` to be the series' latest,
+    # the gate hunts for its OWN latest, no verdict satisfies both, the runner retries once and the
+    # phase ends in `BLOCKED in KAIZEN — no-progress`. Two opus sessions for a blocked row. Found
+    # by sdd-qa (BUG-1, 20260817-eixo-do-juiz).
+    #
+    # Since ADR 0005 the invariant holds BY CONSTRUCTION instead of by upkeep: there is ONE
+    # reading, `cmd_kaizen` sets it for the whole process, and the line below carries no option
+    # that could disagree with the gate. The `ledger_flags` machinery that propagated the flag is
+    # gone with the split it patched, and `mut_KAIZEN_prompt_series_unflagged` with it —
+    # `mut_KAIZEN_series_default_per_repo` watches the default that replaced them both.
     cat <<EOF
 You are in phase KAIZEN of the kit \`$PROJECT_NAME\` — the meta-loop that judges the kit itself —
 as the agent sdd-kaizen.
 
 All of your state comes from disk. There was NO earlier conversation — nothing was "agreed"
 before. Before anything else:
-  1. run: "$SDD_HOME/bin/sdd" kaizen --series$ledger_flags
+  1. run: "$SDD_HOME/bin/sdd" kaizen --series
      That JSON is the deterministic series — your SOURCE OF TRUTH. Cite its numbers; NEVER
      recalculate them from the ledger (recalculating is a contract violation).
   2. read $TODO_FILE, CONTEXT.md and KAIZEN_LOG.md at the repo root
@@ -4379,9 +4382,13 @@ kaizen_series() {
 # without a verdict, and where to go. Pull, not push (D6) — the human is the kanban, so it prints
 # only when there is something to judge and no verdict for it yet, and it never blocks anything.
 # The third reader of the ledger, and it holds no filter of its own on purpose: it reads through
-# kaizen_series, so it inherits ledger_row_is_local along with every number it prints. A repo whose
-# rows all came from somewhere else gets missions_after_change 0 here and stays silent, which is
-# the right silence — there is nothing of THIS repo for the judge to look at.
+# kaizen_series, so it inherits ledger_row_is_local along with every number it prints. It is called
+# from cmd_run alone, and `sdd run` has no --all-repos (it dies on any unknown `-*`), so it reads
+# PER REPO — which is the right unit for the question it asks: what did the run that just finished
+# contribute. A repo whose rows all came from somewhere else gets missions_after_change 0 and stays
+# silent, still the right silence, but ⚠️ the REASON changed with ADR 0005: it is "this repo
+# contributed nothing new", no longer "the judge cannot see these rows". Since 0005 the judge sees
+# every repo, and the sentence at the bottom of this function had to stop saying otherwise.
 # The verdicts live in the KIT repo ($SDD_HOME/docs/handoffs/), readable from any target repo.
 # Every read goes through a variable or a herestring — never `printf | grep`, the pipefail trap.
 kaizen_reminder() {
@@ -4413,10 +4420,17 @@ kaizen_reminder() {
     dim "  autonomy series: $n mission(s) on kit $sha without a verdict — run 'sdd kaizen' in the kit repo ($SDD_HOME) for the next kit mission plan"
     return 0
   fi
-  # Outside the kit there is nothing to run and no pointer to give. What IS true: the sessions are
-  # recorded, and today's judge will not count them. It stops there on purpose — promising an
-  # option that does not exist yet would be the same lie one branch up, in the other direction.
-  dim "  autonomy series: $n mission(s) of this repo on kit $sha are in the ledger. Today's kaizen judge reads only the kit's own missions, so it will not count them."
+  # Outside the kit the pointer is to the kit, and the sentence is the one thing here that had to
+  # change with ADR 0005: it used to say the judge would not count these rows, which was true and
+  # is now false — the judge reads every repo, and ADR 0003 says these are exactly the rows a
+  # verdict should rest on. A line that goes on describing the old behaviour is the label this
+  # repo's first principle refuses, printed in every target repo after every run.
+  #
+  # The COUNT stays per repo, and that is not an oversight: this sentence is about what the run
+  # that just finished contributed, `sdd run` carries no ledger option to widen it with, and a
+  # reminder that answered with other projects' missions would be reporting somebody else's work
+  # as this repo's.
+  dim "  autonomy series: $n mission(s) of this repo on kit $sha are in the ledger. The kaizen judge counts them (ADR 0005) — run 'sdd kaizen' in the kit repo ($SDD_HOME)."
 }
 
 # KAIZEN gate — same convention as every gate (0/1, reason in GATE_WHY), but NOT in PHASES:
@@ -4600,21 +4614,37 @@ kaizen_composition_note() {
 }
 
 cmd_kaizen() {
+  # ADR 0005, part 1 — the judge reads the WHOLE ledger. ADR 0003 had already said where verdict
+  # evidence lives (real target repos: in the repo that BUILDS the kit every session lands on a
+  # fresh sha and the axis degenerates by construction), and it stayed a dead letter for nine days
+  # because nothing said how the judge READS those rows. The per-repo default kept it looking at
+  # exactly the one repo 0003 declared unusable and excluded the evidence as `other_repo`: measured
+  # on 20260825-frete-cif-fob, 21 comparable rows of a real target repo and 35 excluded, with three
+  # missions planned on a frozen sha that would all have answered `indeterminado`.
+  #
+  # Set HERE, before the option loop, so it reaches every half of this command in one process:
+  # `--series`, `gate_KAIZEN`, `kaizen_axis_note` and `kaizen_composition_note` all read ONE slice,
+  # and the boot prompt no longer has to carry a flag to keep them in step.
+  #
+  # What makes it safe is part 2, not a filter: the composition of the slice is published beside
+  # the numbers, so a verdict resting on a throwaway clone is a thing you SEE. `sdd autonomy` keeps
+  # the per-repo default — its question genuinely is "what did THIS repo cost".
+  LEDGER_ALL_REPOS=1
   local series_only=0
   while [ $# -gt 0 ]; do
     case "$1" in
       --series)  series_only=1 ;;
       --dry-run) DRY_RUN=1 ;;
-      # Accepted on the whole command and not just on --series: the KAIZEN gate reads through
-      # kaizen_series in this same process, so the flag lands on every number this command derives
-      # rather than on the JSON alone. What it must NEVER do is default to on — the judge's own
-      # verdict would then be computed over other projects' rows (ADR 0003 is about the axis being
-      # read in the right place; this is the same rule about the repo).
-      # ⚠️ NOT kaizen_reminder, whatever this comment said before: the reminder is called from
-      # cmd_run and nowhere else, and `sdd run` has no --all-repos (it dies on any unknown `-*`).
-      # It reads through the same single predicate and WOULD inherit the flag — but no invocation
-      # that reaches it can carry one, so today it always reads per repo. Saying otherwise was the
-      # same lying comment this mission removed one function up.
+      # KEPT, and a NO-OP here since ADR 0005: the judge reads every repo by default, set at the
+      # top of this function. It stays accepted because scripts, handoffs and the boot prompts of
+      # finished missions already carry it, and a flag that silently changed MEANING would be worse
+      # than one that stopped deciding in one of its two homes — on `sdd autonomy` it still decides
+      # everything.
+      # ⚠️ The comment this replaced said the flag "must NEVER default to on", and that sentence was
+      # right about fixtures and wrong about the question: what it protected against was a
+      # throwaway clone moving the judge's numbers, and that is now closed by the writer guard
+      # (part 3) and made visible by the composition (part 2) — neither of which is a reading
+      # filter. ADR 0005 records why the trade moved.
       --all-repos) LEDGER_ALL_REPOS=1 ;;
       *)         die "unknown kaizen option: $1" ;;
     esac
@@ -4765,26 +4795,28 @@ USAGE
                              human interventions (the `- intervention:` notes of the checkpoint)
                              and the mission cost. Same rows, same money, other unit.
   sdd kaizen [--dry-run]     judge the previous kit change and give birth to the next kit
-             [--all-repos]   mission plan (kit repo only; exit 3 = the change made it worse)
-  sdd kaizen --series        the deterministic series (JSON) the judge cites, for the repo
-             [--all-repos]   it runs in (the ledger file is global, the reading is not)
+                             mission plan (kit repo only; exit 3 = the change made it worse)
+  sdd kaizen --series        the deterministic series (JSON) the judge cites — EVERY repo in the
+                             ledger, with the composition of the slice beside the numbers
   sdd help | sdd version
 
 LEDGER OPTIONS (`autonomy` and `kaizen`)
-  --all-repos                read the WHOLE ledger, not just the rows born in this repo. The
-                             default is per repo because a `sdd run` in a THROWAWAY FIXTURE repo
-                             once moved the judge's own numbers, and a verdict about this kit
-                             must never rest on rows a test invented. Ask for it when the question
-                             really is cross-project maturity — which is why the ledger is one
-                             file per machine to begin with.
-                             ⚠️ Whether a REAL target repo's rows may carry a verdict is a
-                             different question, and an open one: ADR 0003 says verdict evidence
-                             comes from target repos (the kit's own axis degenerates), and this
-                             flag is the only way to read them — but nothing here yet distinguishes
-                             a target from a fixture, so the default stays shut and the judge is
-                             not pointed at it. That decision belongs to a future ADR
-                             (deliberately deferred; 0004 has since been taken by the
-                             mutation-stamp decision), not to this flag.
+  --all-repos                read the WHOLE ledger, not just the rows born in this repo. It
+                             decides on `autonomy` and nowhere else: per repo is the right default
+                             there, because that command's question is "what did THIS project
+                             cost", and because a `sdd run` in a THROWAWAY FIXTURE repo once moved
+                             the judge's own numbers. Ask for it when the question really is
+                             cross-project maturity — which is why the ledger is one file per
+                             machine to begin with.
+                             ⚠️ On `kaizen` it is a NO-OP, kept because scripts and handoffs carry
+                             it. Since ADR 0005 the judge always reads every repo: its question is
+                             the other one — ADR 0003 says verdict evidence comes from real target
+                             repos, because in the repo that BUILDS the kit every session lands on
+                             a fresh sha and the axis degenerates by construction. What makes that
+                             safe is not a filter — the series publishes the COMPOSITION of the
+                             slice it read (missions per repo), so a verdict resting on a throwaway
+                             clone is visible instead of silent, and a repo under $TMPDIR can no
+                             longer write the real ledger unless SDD_STATE_DIR says where to put it.
 
 FOR SCRIPTS
   sdd phase <mission>        print only the current phase (or DONE)

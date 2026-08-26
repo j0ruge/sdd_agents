@@ -87,14 +87,20 @@ a judged regression that disappears from the record will be re-attempted.
 
 ---
 
-## The series is empty, or the rows "were born in another repo"
+## `sdd autonomy` says the rows "were born in another repo"
 
-**Symptom:** `sdd kaizen --series` returns `latest: null` with `excluded.other_repo: N`, or
-`sdd autonomy` refuses with rc 1 naming the same count. The ledger file is right there and it is
-not empty.
+⚠️ **This is no longer a way for the JUDGE's series to come back empty.** Since
+[ADR 0005](adr/0005-judge-reads-every-repo-with-visible-composition.md) part 1, `sdd kaizen` and
+`sdd kaizen --series` read every repo in the ledger and report `excluded.other_repo: 0` — the
+composition of the slice names which repos it came from instead. What follows is about
+`sdd autonomy`, whose question really is "what did THIS project cost" and which still reads per
+repo.
 
-**Cause:** the file is global, the **reading is per repo by default** — one predicate admits only
-the rows whose `repo` equals the repo you are standing in. Three ordinary ways to land here:
+**Symptom:** `sdd autonomy` refuses with rc 1, or prints `N row(s) excluded: born in another repo`
+under a table far shorter than the file. The ledger is right there and it is not empty.
+
+**Cause:** the file is global, the **reading of `sdd autonomy` is per repo** — one predicate admits
+only the rows whose `repo` equals the repo you are standing in. Three ordinary ways to land here:
 reading from a directory that is no git repository at all; reading in the kit repo while every
 session was spent on a target (or the reverse); or reaching the repo through a path the rows do not
 carry — a symlink, or a **worktree row written before** `c514e36`, when identity still came from
@@ -108,9 +114,10 @@ the first spelling and merged repositories silently: in a submodule the common d
 `/parent/.git/modules/<name>`, so the parent is the same string for every submodule of one parent,
 and in a bare repo it is `.`, so the parent is whatever directory happens to hold the repo. If the
 question really is cross-project
-maturity, that is what `--all-repos` is for: `sdd autonomy --all-repos`, `sdd kaizen --series
---all-repos`. ⚠️ At read time the comparison is verbatim on both sides by design: a `realpath`
-invented there would silently merge two checkouts the ledger deliberately keeps apart. Full
+maturity, that is what `--all-repos` is for: `sdd autonomy --all-repos`. (On `sdd kaizen` the flag
+is a no-op — that reader is already cross-project.) ⚠️ At read time the comparison is verbatim on
+both sides by design: a `realpath` invented there would silently merge two checkouts the ledger
+deliberately keeps apart. Full
 contract in [`pipeline.md`](pipeline.md) § "The autonomy ledger".
 
 **Do not:** read this as data loss. What the filter removed is **counted**, and by reason —
@@ -120,8 +127,11 @@ in the human table, plus its own "no data" voice per silence: an empty file, a w
 ledger, a cwd in no repo, a ledger of somebody else's rows, and a **mixed** one, which says how the
 rows split because `--all-repos` reaches the foreign ones and can reach none of the unattributable
 ones. An empty series is `guard.sufficient: false`, which supports
-only `indeterminado`. A throwaway fixture repo's numbers read as a verdict about this kit is
-exactly what the default filter exists to prevent.
+only `indeterminado`. ⚠️ A throwaway fixture repo's numbers read as a verdict about this kit is
+what the per-repo default used to prevent for the judge as well; since ADR 0005 that job belongs to
+two other instruments — the writer refuses a checkout under `$TMPDIR` (the next section), and the
+series publishes the composition of the slice, so a contaminated verdict is visible rather than
+filtered away in silence.
 
 ⚠️ **`sufficient: false` in the kit repo is not this failure mode.** If `guard.degenerate_axis` is
 `true`, the last three kit versions in the slice each hold exactly one **mission** — the unit the

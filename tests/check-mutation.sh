@@ -1375,8 +1375,24 @@ mut_FRONTMATTER_write_unscoped() {
 # prompt's bare — which is precisely the split, and precisely what the differential pair in
 # check-kaizen.sh reads. The control half of that pair (no flag ⇒ both bare) stays green here, as
 # it must: a "fix" that hardcoded the flag into the prompt is the mutant this one does not cover.
-mut_KAIZEN_prompt_series_unflagged() {
-  sed -i 's@ledger_flags=" --all-repos"@ledger_flags=""@' "$1"
+# The judge goes back to reading only the repo it stands in — the dead letter ADR 0003 was for nine
+# days. Nothing fails and nothing is malformed: `sdd kaizen` in the kit repo simply looks at the one
+# repo 0003 declared unusable, files every real target repo's rows under `other_repo`, and can only
+# ever answer `indeterminado`. Measured on 20260825-frete-cif-fob: 21 comparable rows excluded, and
+# three missions planned on a frozen sha that would all have come back indeterminate.
+#
+# ⚠️ RANGE-ADDRESSED to the head of cmd_kaizen, and the address is load-bearing:
+# `LEDGER_ALL_REPOS=1` is also the `--all-repos)` arm of two option loops, so an unaddressed sed
+# would sabotage three sites while claiming one — the defect the r2 review of 20260818-lote-facil
+# found twice in this very catalogue.
+#
+# It REPLACES mut_KAIZEN_prompt_series_unflagged, which anchored on the `ledger_flags` machinery
+# that propagated the flag from the invocation into the agent's written command line. That
+# machinery is gone: with one reading the gate and the prompt cannot land on different series, so
+# the defect it reproduced is structurally unreachable and a mutant for it would SURVIVE while
+# measuring nothing. This one reproduces the defect that took its place.
+mut_KAIZEN_series_default_per_repo() {
+  sed -i '/^cmd_kaizen() {/,/^  local series_only=0$/ s@^  LEDGER_ALL_REPOS=1$@  LEDGER_ALL_REPOS=0@' "$1"
 }
 
 # The ratchet of `sdd health` stops being a ratchet and becomes a one-way gate: a NEW finding
@@ -2020,7 +2036,7 @@ CATALOG=(
   LEDGER_repo_root_shape_blind
   LEDGER_repo_root_toplevel
   LEDGER_no_repo_counted_as_local
-  KAIZEN_prompt_series_unflagged
+  KAIZEN_series_default_per_repo
   KAIZEN_degenerate_axis_all_history
   KAIZEN_mission_key_slug_only
   LEDGER_repo_root_common_parent

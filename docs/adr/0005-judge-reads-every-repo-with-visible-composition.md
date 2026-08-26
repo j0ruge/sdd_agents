@@ -1,13 +1,6 @@
 # 0005 — The judge reads every repo, and publishes the composition it read
 
-Date: 2026-08-26 · Status: accepted · **Implementation: NOT YET IN THE RUNNER**
-
-> ⚠️ Read this line before reading anything below as a description of today's behaviour. The
-> decision was taken by the human on 2026-08-26; none of the three parts is coded yet. As of
-> `5a82f12`, `sdd kaizen` still filters per repo, the series carries no composition field, and a
-> run from a `/tmp` checkout still writes the real ledger. This record says what WILL happen and
-> why — treating it as an account of the runner is the label-for-artifact mistake principle 1
-> exists to refuse. The line comes out in the commit that lands the last of the three parts.
+Date: 2026-08-26 · Status: accepted
 
 ## Context
 
