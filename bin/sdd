@@ -578,7 +578,8 @@ gate_QA() {
   # The marker, not the prose, is what cmd_run reads to escalate on the spot — see
   # GATE_HANDOFF_BLOCKED above. `blocked` means the line stopped and a human has to act (:1602);
   # QA is where that costs the most, because no agent in this pipeline may close the bugs that
-  # put it there (the docs/qa/ tree belongs to the skills, agents/sdd-qa.md:142).
+  # put it there (the docs/qa/ tree belongs to the skills — agents/sdd-qa.md, "Rules that are not
+  # negotiable"; anchored on the heading and not on a line number, which its own § 5.1 shifted).
   if [ "$st" = "blocked" ]; then
     GATE_HANDOFF_BLOCKED=1
     GATE_WHY="30-handoff-qa.md has status: blocked"; return 1
@@ -621,7 +622,7 @@ gate_QA() {
   #
   # The genre is what makes the promise in GATE_WHY below true. No agent in this pipeline may
   # write the `Status:` line: the docs/qa/ tree belongs to the qa-report/qa-execution skills
-  # (agents/sdd-qa.md:142, non-negotiable), and sdd-executor does not know the registry exists. So
+  # (agents/sdd-qa.md, "Rules that are not negotiable"), and sdd-executor does not know it exists. So
   # a bug whose fix is a PRODUCT decision had no path out of `open` at all, while this anchor
   # blocked the phase for it anyway and every honest finding bought another lap. Measured in
   # 20260825-frete-cif-fob: 7 of the 12 QA sessions were in that loop, US$ 73,32 of US$ 144,88.

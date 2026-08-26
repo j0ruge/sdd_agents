@@ -491,7 +491,7 @@ assert_phase "wont-fix is a human decision and does not block" "REVIEW"
 # Anchor 3 reads the bug's GENRE, and the unknown genre blocks.
 #
 # Why the genre exists at all: no agent in the pipeline may write the `Status:` line — that tree
-# belongs to the qa-report/qa-execution skills (agents/sdd-qa.md:142, a non-negotiable rule), and
+# belongs to the qa-report/qa-execution skills (agents/sdd-qa.md, "Rules that are not negotiable"), and
 # sdd-executor does not know the registry exists. So for a bug whose fix is a PRODUCT decision
 # there was no path from `open` to anything else, while Anchor 3 blocked the phase for it all the
 # same. Measured in 20260825-frete-cif-fob: 7 of the 12 QA sessions were in that loop, US$ 73,32.
