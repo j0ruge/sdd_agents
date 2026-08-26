@@ -40,6 +40,34 @@ suite; you would only lose the next session.
 
 ---
 
+## A handoff that declares `status: blocked`
+
+**Symptom:** `sdd run` exits with code 3 and `BLOCKED in <PHASE> — <handoff> has status: blocked`,
+after **one** session of that phase, with five lines telling you to read the handoff.
+
+**Cause:** the phase's own session wrote `status: blocked` in its handoff's frontmatter. That token
+has always meant "the line stopped and a human has to act"; since `20260826-o-laco-da-qa` the runner
+escalates on the declaration itself instead of routing it through the fingerprint heuristic. Before
+that, a phase nobody could satisfy was charged a **second** session to prove the same thing twice —
+and a session that failed the gate but committed something honest read as progress and bought
+another lap. That is a deliberate Jidoka, filed in the ledger as `kind: handoff-blocked` alongside
+`increment-blocked`, not as friction.
+
+**What you do:** read the handoff the message names. What it needs from a human is written in its
+"Decisions for a Human" section. Take the decisions, set the handoff's `status:` back, and run
+`sdd run` again.
+
+**In QA specifically, check the bug's genre first.** If the phase is blocked by an `open` bug that
+waits on a product decision, the answer is usually not for you to unblock the handoff by hand: it is
+that the bug should carry `- **Closable by:** human` (see the section below and
+[ADR 0006](adr/0006-qa-anchor-reads-genre-blocked-handoff-stops-the-line.md)).
+
+**Do not:** re-run the phase hoping a fresh session decides differently. Another session re-reads
+the same handoff and refuses the same way — the runner says so in its own refusal, and that is the
+whole reason it stopped instead of spinning.
+
+---
+
 ## `sdd kaizen` exited 3 (piorou)
 
 **Symptom:** `sdd kaizen` prints "the previous kit change made autonomy WORSE — the line is
@@ -232,10 +260,26 @@ ln -sf ../lib/node_modules/agent-browser/bin/agent-browser.js \
 
 ## The QA⇄EXEC loop does not converge
 
-**Symptom:** `BLOCKED in QA` after `QA_MAX_ITER` rounds; the bug registry does not empty.
+**Symptom:** `BLOCKED in QA` after `QA_MAX_ITER` rounds, or `N bug(s) with Status: open in the
+registry that an agent could close` on every lap.
 
-**Typical cause:** each fix breaks another journey — a sign the defect is deeper than the recorded
-symptoms.
+**First, check the genre of the bugs that are holding it.** Since `20260826-o-laco-da-qa` the gate
+does not ask for an empty registry — it asks that no `open` bug be one **an agent could close**. A
+bug whose fix is a product decision belongs to nobody in this pipeline (no agent may write the
+`Status:` line), so it must carry `- **Closable by:** human` or it holds the phase for ever. The
+count in the refusal includes every **unmarked** bug, which is exactly the bug whose genre nobody
+has decided yet. Left unmarked, this is not a convergence problem at all: it is the loop that cost
+7 of the 12 QA sessions of `20260825-frete-cif-fob`, US$ 73,32 of that mission's US$ 144,88, before
+the field existed. The runner names the escape hatch in its own refusal;
+[ADR 0006](adr/0006-qa-anchor-reads-genre-blocked-handoff-stops-the-line.md) has the reasoning.
+
+Three cheap things get read as "unmarked", because the match is deliberately strict and its
+looseness would fail **open**: a value written after the `<!-- agent | human -->` legend instead of
+before it, a translated value (`humano`), and a capitalised one (`Human`). All three block; none of
+them says so out loud. `agents/sdd-qa.md` § 5.1 spells the exact shape.
+
+**Typical cause once the genres are right:** each fix breaks another journey — a sign the defect is
+deeper than the recorded symptoms.
 
 **What you do:** read the `30-handoff-qa.md` of each round. If the bugs move around every round,
 the problem is one of design and belongs back in planning, not with the executor.

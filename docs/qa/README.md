@@ -124,6 +124,16 @@ file an agent may write: `Status:` is still the skills', which is exactly why th
 exist. Before it, a bug waiting on a product decision held the phase with no path out — 7 of the 12
 QA sessions of `20260825-frete-cif-fob`, US$ 73,32.
 
+⚠️ **The field does not travel to a target repo on its own.** `templates/bug.md` in this tree is a
+byte-for-byte copy of the installed skill's asset, and the `Closable by:` line is today the only
+difference between the two. The `qa-report` skill seeds a project's template from **its own** asset,
+and `sdd install` does not distribute a `docs/qa/` tree at all — so in any target repo every bug is
+born **without** the field, and therefore blocks. That is the fail-safe behaving as designed, not a
+bug, and the way out is the one `agents/sdd-qa.md` § 5.1 already makes a duty: the agent writes the
+line on the bug it triaged, whether or not the local template offers it. Nothing measures the drift
+between this copy and the skill asset — `tests/check-templates.sh` reads `templates/`, not
+`docs/qa/templates/` — so treat a mismatch as expected until a sensor owns it.
+
 `gate_QA`'s other two anchors (a `closed` report, no `Pending` matrix row) are reached **only** when
 `E2E_CMD` or `APP_URL` is set. Neither is set here, so `reports/` is unread by the runner — the
 dated reports in it are for humans and for the next cycle, not for a gate.
