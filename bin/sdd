@@ -645,9 +645,11 @@ gate_QA() {
   # `<!-- agent | human -->` is preserved in the real files, so the word `human` appears in EVERY
   # bug on disk and a `.*human` spelling would fail open across the board.
   #
-  # TWO STEPS, and both are load-bearing — this is the first anchor in the gate where a loose match
-  # is PERMISSIVE, so every looseness here fails OPEN. Its sibling `Status: open` matches anywhere
-  # in the file too, but there anywhere-matching can only make a bug BLOCK.
+  # THREE STEPS, and all three are load-bearing — this is the first anchor in the gate where a
+  # loose match is PERMISSIVE, so every looseness here fails OPEN. Its sibling `Status: open`
+  # matches anywhere in the file too, but there anywhere-matching can only make a bug BLOCK.
+  # Each step has a mutant of its own (QA_bug_genre_prefix, _anywhere, _fenced) because they fail
+  # open INDEPENDENTLY: one mutant for the line would let two of the three rot while staying green.
   #
   #   1. The genre is read from the FIELD. `grep -q` is true for any line of the file, so a bug
   #      whose own field says `agent` stopped blocking the moment its body QUOTED the human line.
@@ -693,7 +695,15 @@ gate_QA() {
   done <<< "$( { grep -rlE '^\-[[:space:]]+\*\*Status:\*\*[[:space:]]+open' \
       "$REPO_ROOT/$QA_DOCS_PATH/bugs/" 2>/dev/null || true; } )"
   if [ "$openbugs" -gt 0 ]; then
-    GATE_WHY="$openbugs agent-closable bug(s) with Status: open in the registry — they become fix increments (QA⇄EXEC loop)"
+    # Names the ESCAPE HATCH, and that is the whole point of the mission this line belongs to.
+    # `they become fix increments (QA⇄EXEC loop)` is the promise 00-missao.md quotes as the false
+    # one: true for a bug an agent can close, false for a bug waiting on a product decision, and
+    # the count above includes every UNMARKED bug — which is exactly the bug whose genre nobody has
+    # decided yet. Telling that operator "make it a fix increment" is the wrong instruction in the
+    # one case this anchor was rewritten for, so the reason says how a bug leaves by the other
+    # door. The substring `with Status: open in the registry` is load-bearing: two assertions in
+    # check-gates.sh read it (:486 and the genre differential at :535).
+    GATE_WHY="$openbugs bug(s) with Status: open in the registry that an agent could close (an unmarked genre counts) — they become fix increments (QA⇄EXEC loop); one that needs a human decision is marked 'Closable by: human' instead (agents/sdd-qa.md § 5.1)"
     return 1
   fi
   if ! run_check_cmd "$TEST_CMD" "gate-qa-test"; then

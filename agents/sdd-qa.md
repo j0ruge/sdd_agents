@@ -131,6 +131,11 @@ every bug file on disk and a `.*human` spelling would fail open across the whole
 parked after the comment reads as absent, which blocks: safe, but it costs the lap you were
 trying to save. Same trap as the `**Status:**` anchor that cost US$ 15 a round in the SQ-97 pilot.
 
+It reads that anchor from the file's own **header** — the first field-shaped line that is not
+inside a fenced block — so quoting the line in a repro, a diff or an example does not change the
+bug's genre, on either side of the real field. What it cannot see through is an **unfenced** quote
+sitting above the field: fence your examples, which is what the block above already does.
+
 ⚠️ **This is not licence to touch `Status:`.** `human` says *"no agent in this pipeline can close
 this"* — never that it is closed. The bug stays `open`, stays in the registry, and stays in the PR
 as a decision somebody has to make. The status enum is still the skills', and the rule at the
