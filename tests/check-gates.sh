@@ -539,6 +539,54 @@ assert_eq "only the agent-closable regime carries the blocking marker" "0|1" \
 # off for the entire legacy registry at once (decision 3 of the grill).
 write_genre_bug ''
 assert_phase "an open bug with no genre field still blocks (fail-safe for the legacy registry)" "QA"
+
+# The genre is the WHOLE WORD, and the anchor above has no right-hand boundary — so every value that
+# merely STARTS with `human` was read as the genre `human` and stopped blocking. `humano` is the
+# pt-BR spelling, and this repo declares OUTPUT_LANG=pt-BR: the very translation the contract
+# forbids was the one that slipped through. agents/sdd-qa.md's Language section states the opposite
+# in so many words — "a translated genre is a genre the gate cannot read, and it reads as absent,
+# which blocks" — so the gate was failing OPEN against its own written promise, in the PERMISSIVE
+# direction that decision 3 of the grill exists to refuse. (`humans`, `humanoid` and `human-ish`
+# went the same way; `Human` and `HUMAN` did not, the match being case-sensitive.)
+#
+# DIFFERENTIAL, on ONE LETTER: the exact genre must pass and the near-miss must block, compared
+# against each other. "humano blocks" alone is satisfied by a gate that blocks everything — the
+# over-broad fix — and "human passes" alone is the assertion three blocks up. The exact regime keeps
+# the `<!-- agent | human -->` legend, so a fix that anchors the end of the line without allowing
+# the legend after the value turns this half red instead of passing quietly.
+write_genre_bug '- **Closable by:** human <!-- agent | human -->'
+genre_exact="$(  cd "$FIX" && "$SDD" phase "$MISSION" 2>&1 )"
+write_genre_bug '- **Closable by:** humano <!-- agent | human -->'
+genre_prefix="$( cd "$FIX" && "$SDD" phase "$MISSION" 2>&1 )"
+assert_eq "the genre is the whole word: 'human' passes, the near-miss 'humano' still blocks" \
+  "REVIEW|QA" "$genre_exact|$genre_prefix"
+
+# ...and the genre is read from the FIELD, not from wherever the two words happen to appear. `grep
+# -q` is true for ANY line of the file, so a bug whose own field says `agent` — the blocking
+# default — stopped blocking as soon as its body QUOTED the human line, in a fenced block, a repro
+# or a diff. Not a contrived body: `agents/sdd-qa.md` § 5.1 prints that exact line for the agent to
+# copy, so a bug filed ABOUT the genre field is the likely first victim, and a registry bug is
+# prose written by a skill that quotes freely.
+#
+# The asymmetry is what makes it a defect rather than a quirk. Its sibling anchor, `Status: open`,
+# matches anywhere in the file too — but there anywhere-matching is CONSERVATIVE (it can only make
+# a bug block). This is the first anchor in the gate where anywhere-matching is PERMISSIVE, and
+# `bin/sdd:631-637` calls the anchor "strict about it" while being strict only against the
+# enum-legend trap.
+#
+# DIFFERENTIAL against the genuine article: the field decides, so a real `human` FIELD passes and a
+# `human` MENTION under an `agent` field does not. Asserting only that the quoting bug blocks would
+# also be satisfied by a gate that blocks everything, which is the over-broad fix.
+{ printf '# BUG-20260102-genre: filed about the genre field itself\n'
+  printf -- '- **Status:** open <!-- open | fixed | verified | wont-fix | invalid -->\n'
+  printf -- '- **Closable by:** agent <!-- agent | human -->\n'
+  printf '\nThe template line this bug is about reads:\n\n```md\n'
+  printf -- '- **Closable by:** human <!-- agent | human -->\n'
+  printf '```\n'
+} > "$GENRE_BUG"
+genre_quoted="$( cd "$FIX" && "$SDD" phase "$MISSION" 2>&1 )"
+assert_eq "the genre is the FIELD: a bug that merely quotes the human line still blocks" \
+  "REVIEW|QA" "$genre_exact|$genre_quoted"
 rm -f "$GENRE_BUG"
 
 # The QA site of latest_matching(), which the r10 fixture below does NOT cover: that one pins the
