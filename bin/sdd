@@ -4285,6 +4285,33 @@ kaizen_series() {
          # this is the number the floor reads, so a slug collision between two projects landing
          # here is a guard moved by a coincidence.
          missions_with_session: ($sess | map(mission_key) | unique | length),
+         # ADR 0005, part 2 — how many missions each repo contributed to this slice. It is what
+         # makes reading every repo SAFE: a verdict resting on rows from a throwaway clone is a
+         # verdict about nothing, and under a silent filter nobody could tell. Contamination
+         # becomes a thing you SEE rather than a thing the runner guesses at.
+         #
+         # Derived from $rows and NEVER from $sess. The rows the guard admits are sessions AND
+         # escalations, and three of the seven repositories in the real ledger contribute
+         # escalations only — counted over sessions this field reports a clean slice over a
+         # contaminated one, which is the mistake the first draft of the ADR made (it answered
+         # "four repos" over seven) and the reason the record says so about itself.
+         #
+         # BOTH numbers, because the guard above reads two and they read different rows:
+         # `missions` is what missions_after_change reports, `missions_with_session` is what the
+         # FLOOR gates on. Each sum closes against its own field, which is what makes this an
+         # explanation of the guard instead of a second opinion beside it.
+         #
+         # An ARRAY of objects and not an object keyed by path, for the same reason mission_key is
+         # an array: a repo path is arbitrary text, and a key set built out of it admits a
+         # delimiter nobody chose. sort_by is what makes the order a fact of the data rather than
+         # of jq — group_by already sorts by key, and leaning on that would publish an order no
+         # line of this program states.
+         composition: ($rows | group_by(.repo // "")
+                             | map({repo: (.[0].repo // ""),
+                                    missions: (map(mission_key) | unique | length),
+                                    missions_with_session:
+                                      (map(select(.event == "session")) | map(mission_key) | unique | length)})
+                             | sort_by(-.missions, .repo)),
          sessions: ($sess | length),
          moved_rate: (if ($sess | length) == 0 then null
                       else (($sess | map(select(.moved == true)) | length) / ($sess | length) * 100 | round / 100) end),
@@ -4542,6 +4569,36 @@ kaizen_axis_note() {
   dim "  the CORRECT verdict, not a missing mission: evidence comes from real target repos (ADR 0003)."
 }
 
+# The composition of the axis slice, said out loud — ADR 0005, part 2. The series carries it as
+# data and the judge reads it there; this is the same fact on the terminal, because the argument
+# that makes reading every repo safe is that a contaminated slice is SEEN, and a JSON field nobody
+# opens is not seen. It EXPLAINS and never decides: no verdict, no threshold, no opinion (ADR 0001
+# — the runner reports, the agent judges).
+#
+# Silent when there is no latest slice at all, and silent when the slice has no composition: an
+# empty series has nothing to publish, and a header printed over nothing is the kind of zero this
+# file spends its lines refusing.
+kaizen_composition_note() {
+  autonomy_have_jq || return 0
+  local series
+  # stderr dropped for the same reason kaizen_axis_note drops it, and only for that reason: this
+  # is a second read of the series the gate is about to take, and the same complaint arriving from
+  # two voices reads as two problems. Reporting corruption is the gate's job, and it still does it.
+  series="$(kaizen_series 2>/dev/null)" || return 0
+  local sha; sha="$(jq -r '.latest.kit_sha // empty' <<< "$series")"
+  [ -n "$sha" ] || return 0
+  # `composition[]?` and not `composition[]`: a series read from a runner that predates the field
+  # — or one whose latest is null — must leave this function quiet rather than make jq die inside
+  # a command substitution the caller cannot see.
+  local lines
+  lines="$(jq -r '.latest.composition[]?
+                  | "    \(.missions) mission(s), \(.missions_with_session) with a session  —  "
+                    + (if .repo == "" then "<no repo>" else .repo end)' <<< "$series")"
+  [ -n "$lines" ] || return 0
+  dim "  the slice the judge reads for kit $sha, by repo:"
+  local l; while IFS= read -r l; do dim "$l"; done <<< "$lines"
+}
+
 cmd_kaizen() {
   local series_only=0
   while [ $# -gt 0 ]; do
@@ -4605,6 +4662,10 @@ cmd_kaizen() {
   # exactly where `sufficient: false` is about to be read, and an already-judged one is where the
   # next question ("why indeterminado again?") is asked. CALLED, never `$( )` — it prints.
   kaizen_axis_note
+  # Beside the axis note and on the same terms: before the gate, so it reaches the human on BOTH
+  # outcomes — a pending gate is where the numbers are about to be read, and an already-judged one
+  # is where "why that verdict?" gets asked. CALLED, never `$( )`: it prints.
+  kaizen_composition_note
 
   # Idempotent: already judged ⇒ no session is spent, only the outcome is repeated.
   local gate_rc=0 out_rc=0

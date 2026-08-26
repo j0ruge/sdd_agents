@@ -656,6 +656,27 @@ mut_KAIZEN_degenerate_axis_window_sorted() {
   sed -i 's@| ($rows | shas_in_file_order) as $order@| ($rows | shas_in_file_order | sort) as $order@' "$1"
 }
 
+# The composition goes back to counting SESSIONS — the error the first draft of ADR 0005 made and
+# left written inside itself, where it answered "four repos" over a ledger holding seven. A repo
+# that only ESCALATED on this kit version vanishes from the published mixture, so the field
+# under-reports exactly the repos it exists to expose, and every number it still prints is
+# plausible. That is the shape the assertion has to survive: not an empty field, a wrong one.
+#
+# Caught by `composition: a repo that only ESCALATED is still in it` in check-kaizen.sh, and by
+# the sum assertion beside it — the `missions` half stops closing against
+# guard.missions_after_change the moment escalation-only missions leave.
+mut_KAIZEN_composition_session_unit() {
+  sed -i 's@composition: ($rows | group_by(.repo // "")@composition: ($rows | map(select(.event == "session")) | group_by(.repo // "")@' "$1"
+}
+
+# The human stops being shown the mixture. The series keeps the field, so every JSON assertion in
+# check-kaizen.sh stays green and only the terminal goes quiet — which is exactly the difference
+# between a fact that is AVAILABLE and a fact that is SEEN, and the second is the one ADR 0005
+# part 1 rests on. A composition nobody reads is the silent filter it replaced, wearing a schema.
+mut_KAIZEN_composition_unprinted() {
+  sed -i '/^  kaizen_composition_note$/d' "$1"
+}
+
 mut_KAIZEN_series_rc_dropped() {
   sed -i 's@  series="$(kaizen_series)" || series_rc=$?@  series="$(kaizen_series 2>/dev/null)"; series_rc=0; series="${series:-{\\}}"@' "$1"
 }
@@ -2010,6 +2031,8 @@ CATALOG=(
   KAIZEN_degenerate_axis_session_unit
   KAIZEN_degenerate_axis_window_sorted
   KAIZEN_series_rc_dropped
+  KAIZEN_composition_session_unit
+  KAIZEN_composition_unprinted
   HEALTH_gates_capture_aborts
   HEALTH_provenance_line_aborts
   HEALTH_ratchet_one_way

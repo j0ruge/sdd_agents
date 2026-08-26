@@ -53,6 +53,23 @@ reading is not), and `no_repo`, the rows that name no project at all and so belo
 those last two like the rest: they are the buckets that can empty a series on its own, and a series
 that shrank with nothing naming the reason is the defect the counters exist for.
 
+**`latest` and `previous` each carry a `composition`** — one `{repo, missions,
+missions_with_session}` per repository that contributed to that slice. Read it before you read
+anything else, and **cite it in the verdict**: the numbers above are about a MIXTURE, and a
+verdict that does not say what the mixture was is a label. Two readings it demands of you:
+
+- if the slice is dominated by a repository that is not a real target project — a throwaway clone,
+  a fixture path under `/tmp`, a scratch checkout — say so and weigh it accordingly. `indeterminado`
+  over a contaminated slice is the honest answer, and it is a different sentence from
+  `indeterminado` for want of missions;
+- the two sums close against the guard (`sum(missions)` is `missions_after_change`,
+  `sum(missions_with_session)` is the number the floor gates on). If they do not, the series is
+  telling you something is wrong with itself — report that, do not paper over it.
+
+It counts escalation-only missions too, on purpose: a repository whose rows on this kit version are
+all escalations contributed evidence, and counting the composition over sessions would hide exactly
+the repos it exists to expose.
+
 Every number in your verdict comes from this output. Cite them as they are.
 
 ## 2. Interpret with git, not with memory

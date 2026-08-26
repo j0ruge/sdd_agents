@@ -1032,6 +1032,78 @@ assert_eq "mission key: a row whose repo is not a string is counted, and never f
       ( cd "$FIX" && SDD_STATE_DIR="$d" "$KSDD" autonomy --all-repos >/dev/null 2>&1 ); r=$?
       printf '%s %s' "$(jq -r '.guard.sessions' <<< "${s:-null}" 2>/dev/null || echo DIED)" "$r" )"
 
+# =============================================================================
+# series: the composition of the axis slice (ADR 0005, part 2)
+# =============================================================================
+# Pointing the judge at every repo in the ledger is safe only because the MIXTURE becomes visible.
+# A verdict resting on rows from a throwaway clone is a verdict about nothing, and under a silent
+# filter nobody could tell — so the series publishes how many missions each repo contributed to
+# the slice it read. It is the rule this repo applies everywhere else: a number without the
+# composition beside it is a label, and the first principle refuses labels.
+#
+# ⚠️ Derived over the rows the GUARD ADMITS and never over `event: session`. That is the mistake
+# the first draft of ADR 0005 made and left written inside itself: counted over sessions it
+# answered "four repos" over a ledger holding seven, because three of the seven contribute
+# escalations only. A composition counted that way under-reports exactly the repos it exists to
+# expose, which is worse than not having one.
+#
+# BOTH numbers are published, because the guard reads two: `missions_after_change` counts every
+# admitted mission and `missions_with_session` is what the FLOOR gates on. Each sum closes against
+# its own field, which is what makes this an explanation of the guard rather than a second set of
+# numbers standing beside it.
+echo "== series: the composition of the axis slice =="
+
+mkdir -p "$OUTSIDE/comp"
+# Repo paths as LITERALS and not as localized fixture roots: under the cross-repo reading a repo is
+# a string the readers compare, nothing is resolved on disk, and a literal keeps the expectation
+# below readable instead of an absolute temp path nobody can check by eye. Two kit versions in file
+# order so `previous` is a real slice and the last assertion is not satisfied by a null.
+#   bbb0000  /repo-alpha m0 session                          -> previous: alpha 1/1
+#   ccc0001  /repo-alpha m1 session, /repo-alpha m2 blocked,
+#            /repo-beta  m3 session, /tmp/throwaway-clone m4 blocked
+#                                                            -> latest:   4 missions, 2 with a session
+cat > "$OUTSIDE/comp/autonomy-log.jsonl" <<'EOF'
+{"v":1,"ts":"2026-08-19T10:00:00-03:00","event":"session","run_id":"b1","invocation":"run","kit_sha":"bbb0000","kit_dirty":false,"project":"alpha","repo":"/repo-alpha","mission":"c-m0","phase":"EXEC","step":"EXEC","agent":"sdd-executor","model":"opus","attempt":1,"auto_retry":false,"session":"s0","rc":0,"dur_s":10,"cost_usd":1.0,"moved":true,"gate":"pass","gate_why":"x"}
+{"v":1,"ts":"2026-08-20T10:00:00-03:00","event":"session","run_id":"c1","invocation":"run","kit_sha":"ccc0001","kit_dirty":false,"project":"alpha","repo":"/repo-alpha","mission":"c-m1","phase":"EXEC","step":"EXEC","agent":"sdd-executor","model":"opus","attempt":1,"auto_retry":false,"session":"s1","rc":0,"dur_s":10,"cost_usd":1.0,"moved":true,"gate":"pass","gate_why":"x"}
+{"v":1,"ts":"2026-08-20T10:01:00-03:00","event":"blocked","kind":"increment-blocked","run_id":"c2","invocation":"run","kit_sha":"ccc0001","kit_dirty":false,"project":"alpha","repo":"/repo-alpha","mission":"c-m2","phase":"EXEC","gate_why":"x"}
+{"v":1,"ts":"2026-08-20T10:02:00-03:00","event":"session","run_id":"c3","invocation":"run","kit_sha":"ccc0001","kit_dirty":false,"project":"beta","repo":"/repo-beta","mission":"c-m3","phase":"EXEC","step":"EXEC","agent":"sdd-executor","model":"opus","attempt":1,"auto_retry":false,"session":"s2","rc":0,"dur_s":10,"cost_usd":2.0,"moved":true,"gate":"pass","gate_why":"x"}
+{"v":1,"ts":"2026-08-20T10:03:00-03:00","event":"blocked","kind":"budget-exhausted","run_id":"c4","invocation":"run","kit_sha":"ccc0001","kit_dirty":false,"project":"throwaway","repo":"/tmp/throwaway-clone","mission":"c-m4","phase":"REVIEW","gate_why":"x"}
+EOF
+
+COMP_OUT="$( cd "$FIX" && SDD_STATE_DIR="$OUTSIDE/comp" "$KSDD" kaizen --series --all-repos 2>/dev/null )"
+comp() { jq -r "$1" <<< "$COMP_OUT"; }
+
+# Every repo of the slice, each with its own pair of numbers, as ONE string: a composition that
+# dropped a repo, merged two of them, or counted the wrong unit moves this assertion.
+assert_eq "composition: every repo of the slice, with missions and missions-with-a-session" \
+  "/repo-alpha 2 1|/repo-beta 1 1|/tmp/throwaway-clone 1 0" \
+  "$(comp '[.latest.composition[] | "\(.repo) \(.missions) \(.missions_with_session)"] | join("|")')"
+# The load-bearing one. Counted over `event: session` the throwaway repo DISAPPEARS, and the field
+# would report a clean two-repo slice over a ledger holding three — the ADR's own first draft.
+assert_eq "composition: a repo that only ESCALATED is still in it" "1" \
+  "$(comp '[.latest.composition[] | select(.repo == "/tmp/throwaway-clone")] | length')"
+# The arithmetic closes on BOTH numbers against the guard's own two. This is what makes the
+# composition an explanation of the guard instead of a second opinion beside it.
+assert_eq "composition: the two sums are the guard's two numbers" "4/2 4/2" \
+  "$(comp '"\([.latest.composition[].missions] | add)/\([.latest.composition[].missions_with_session] | add) \(.guard.missions_after_change)/\(.guard.missions_with_session)"')"
+# `previous` carries one too, and it is asserted by VALUE and not by `has`: the judge compares two
+# slices, and a composition on only one of them explains half of the comparison. A `previous` that
+# came back null would satisfy a presence test and prove nothing.
+assert_eq "composition: previous carries its own, over its own rows" \
+  "/repo-alpha 1 1" \
+  "$(comp '[.previous.composition[] | "\(.repo) \(.missions) \(.missions_with_session)"] | join("|")')"
+
+# --- ...and the human is shown it, not merely offered it --------------------
+# The series holds the contract and the judge reads it there. This is the half a human actually
+# reads, and it is the half that makes "contamination is visible" true rather than available.
+# Asserted by the repos NAMED and by how many lines the block has — never by its wording, which
+# gets rewritten.
+COMP_TTY="$( cd "$FIX" && SDD_STATE_DIR="$OUTSIDE/comp" "$KSDD" kaizen --dry-run --all-repos 2>&1 )"
+assert_eq "composition: the human is shown which repos the slice came from" "3" \
+  "$(grep -c 'mission(s), .* with a session' <<< "$COMP_TTY")"
+assert_eq "composition: including the throwaway one, by name" "yes" \
+  "$(grep -q '/tmp/throwaway-clone' <<< "$COMP_TTY" && echo yes || echo no)"
+
 echo "== the approved plan never reaches a session =="
 # Once `aprovacao:` is filled, the generic fix-it retry prompt ("complete what is missing")
 # reads, to a live agent, as an instruction to blank the field — erasing a decision that may be

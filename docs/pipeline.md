@@ -661,6 +661,24 @@ by kind, a per repo×mission×phase `detail` (each entry naming its `repo`), and
 - `leve` — an in-loop auto retry, or a session that did not move the disk: friction, absorbed.
 - `ok` — none of the above.
 
+Each of `latest` and `previous` also carries a **`composition`**
+([ADR 0005](adr/0005-judge-reads-every-repo-with-visible-composition.md), part 2): an array of
+`{repo, missions, missions_with_session}`, one entry per repository that contributed to that
+slice, sorted by `missions` descending and then by `repo`. It is what makes reading every repo
+safe — a verdict resting on rows from a throwaway clone is a verdict about nothing, and under a
+silent filter nobody could tell, so the mixture is published beside the numbers instead of guessed
+at. `sdd kaizen` prints it to the human too, because a field nobody opens is available and not
+seen.
+
+⚠️ It is derived over the rows the guard **admits** — sessions *and* escalations — and never over
+`event: session`. Three of the seven repositories in the real ledger contribute escalations only,
+so a session-counted composition under-reports exactly the repos it exists to expose: the first
+draft of ADR 0005 counted sessions, answered "four repos" over seven, and says so about itself.
+Both numbers are published because the guard reads two, and each sum closes against its own field
+— `sum(missions) == guard.missions_after_change`, `sum(missions_with_session) ==
+guard.missions_with_session` — which is what makes the composition an explanation of the guard
+rather than a second set of numbers standing beside it.
+
 Plus a `guard` (`missions_after_change`, `missions_with_session`, `sessions`,
 `floor` — the number of missions with a session a version needs, published because the runner also
 says it out loud to the human and a second copy of it would drift the day it moves;
