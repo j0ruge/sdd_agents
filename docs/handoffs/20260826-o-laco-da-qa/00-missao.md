@@ -4,7 +4,7 @@ titulo: a fase QA para de girar em bug que ninguém no pipeline tem permissão d
 data: 2026-08-26
 versao:
 branch: fix/o-laco-da-qa
-aprovacao:
+aprovacao: humano-2026-08-26
 ddd: n/a — sem toque de domínio: o kit é bash + markdown, e a mudança é em gate e contrato de agente
 ---
 
