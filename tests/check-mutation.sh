@@ -769,13 +769,43 @@ mut_RUN_jidoka_pipefail() {
 # something honest, `moved=true` buys another lap instead of two. Measured in
 # 20260825-frete-cif-fob: 7 of the 12 QA sessions in that loop, US$ 73,32 of US$ 144,88.
 #
-# The anchor is the WHOLE code line, `^…$`. `GATE_HANDOFF_BLOCKED` appears in three comments beside
-# it — the contract above the global and the two lines explaining this branch — and a loose
-# `.*GATE_HANDOFF_BLOCKED.*` would rewrite prose, pass the `cmp -s` guard and sabotage nothing:
-# a mutant in the catalogue certifying a protection nobody measures, the class already paid for by
-# mut_LEDGER_repo_root_cdpath_leak and again by mut_QA_bug_genre_ignored one increment ago.
+# TWO mutants, one per DOOR, because since F2 the escalation is one body called from two places in
+# cmd_run's loop — the first pass and the inline retry — and the doors fail open INDEPENDENTLY. A
+# single mutant would let one of them rot with the catalogue green, which is the same argument that
+# split QA_bug_genre_prefix from QA_bug_genre_anywhere one increment ago.
+#
+# The BODY (handoff_blocked_escalation) deliberately gets no mutant of its own, and this is a
+# DECLARED limit, not an oversight: it is reached only through these two doors, so neutralising it
+# is indistinguishable from neutralising both at once — strictly weaker evidence than the pair
+# below, each of which kills exactly the assertion that names its door.
+#
+# The anchor is the WHOLE code line, `^…$`, inside a RANGE delimited by the two code lines that
+# bracket each door. The range is what makes the two anchors distinguishable at all: since F2 the
+# doors are the same text, so an unranged `s|…|…|` would rewrite BOTH and neither mutant would
+# isolate anything. And it stays anchored on CODE — `handoff_blocked_escalation` appears in the
+# comments beside each door and all over the contract above the body, and a loose
+# `.*handoff_blocked_escalation.*` would rewrite prose, pass the `cmp -s` guard and sabotage
+# nothing: a mutant certifying a protection nobody measures, the class already paid for by
+# mut_LEDGER_repo_root_cdpath_leak and again by mut_QA_bug_genre_ignored.
+
+# Door 1: the first pass. Without it a handoff that declares `status: blocked` goes back to being
+# an ordinary gate failure, decided by the fingerprint heuristic. The runner then charges a phase
+# NOBODY can satisfy for proving its own unsatisfiability twice — and when the session commits
+# something honest, `moved=true` buys another lap instead of two. Measured in
+# 20260825-frete-cif-fob: 7 of the 12 QA sessions in that loop, US$ 73,32 of US$ 144,88.
 mut_RUN_blocked_not_escalated() {
-  sed -i 's|^    if \[ "\$GATE_HANDOFF_BLOCKED" = "1" \]; then$|    if false; then|' "$1"
+  sed -i '/^    if \[ "\$gate_rc" -eq 0 \]; then$/,/^    if \[ "\$moved" = "true" \]; then$/ s|^    if handoff_blocked_escalation "\$phase"; then return 3; fi$|    if false; then return 3; fi|' "$1"
+}
+
+# Door 2: the inline retry. Without it the marker OUTLIVES the lap — `current_phase` runs in a
+# subshell and cannot clear the parent's copy, and every gate but gate_QA leaves it alone — so the
+# next lap runs gate_EXEC with the marker still set and door 1 fires for EXEC: the runner prints
+# "the phase's handoff declares 'status: blocked'" over a 20-handoff-exec.md that says `done`,
+# swallows the retry EXEC was owed, and writes {phase: EXEC, kind: handoff-blocked} into the ledger
+# the kaizen judge reads. So this one is caught twice over, by the session COUNT and by the phase
+# NAME, which is why check-autonomy.sh spends two assertions on it and not one.
+mut_RUN_blocked_retry_not_escalated() {
+  sed -i '/^    if \[ "\$gate_rc2" -eq 0 \]; then$/,/^    if \[ "\$moved2" = "false" \]; then$/ s|^    if handoff_blocked_escalation "\$phase"; then return 3; fi$|    if false; then return 3; fi|' "$1"
 }
 
 # Not a gate, and the exact bug I2 closed: `force_phase="PR"; continue` sat ABOVE both writers, so
@@ -1877,6 +1907,7 @@ CATALOG=(
   RUN_autonomy_sha_warn_repeats
   RUN_jidoka_pipefail
   RUN_blocked_not_escalated
+  RUN_blocked_retry_not_escalated
   RUN_degraded_row_dropped
   RUN_degraded_repeats
   RUN_escalations_no_axis

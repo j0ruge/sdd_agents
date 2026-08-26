@@ -508,7 +508,18 @@ GATE_EXEC_DIRTY=0
 # CONTRACT for whoever teaches a second gate the token: reset it at the entry of THAT gate, never
 # at a call site. `current_phase` walks every gate in order, so a marker left set by an evaluation
 # two phases ago would escalate a phase whose own handoff says nothing of the kind. Today gate_QA
-# is the only setter, and the only reader is the branch in cmd_run's loop.
+# is the only setter, and the only reader is handoff_blocked_escalation.
+#
+# That reader is called from BOTH doors of cmd_run's loop — the first pass and the inline retry —
+# and the second door is not symmetry for its own sake. With only the first, the marker outlived
+# the LAP rather than a gate: a retry that declared `blocked` and carried on took it into the next
+# lap, gate_EXEC never touched it, and the escalation fired for EXEC with a reason untrue of it.
+# That is this very failure, reached with ONE setter instead of the second the paragraph above
+# warns about. Found by the QA phase of 20260826-o-laco-da-qa; the reproduction is in its handoff.
+#
+# ⚠️ So the marker not outliving a lap is a consequence of the FLOW — every lap that finds it armed
+# returns 3 — and not of construction. Whoever adds a third door, a second setter or a path that
+# can leave a lap with the marker still set has to re-derive that property, not assume it.
 GATE_HANDOFF_BLOCKED=0
 
 gate_EXEC() {
@@ -3248,6 +3259,53 @@ by hand, in the exact shape gate_PLAN greps. Only 00-missao.md enters this commi
   fi
 }
 
+# Third Jidoka: the handoff itself says the line stopped. `blocked` already meant exactly that
+# (:1602), but the refusal used to go through the fingerprint heuristic like any other gate failure
+# — so a phase NOBODY can satisfy paid for proving its own unsatisfiability twice, at one session
+# apiece, and a session that committed something honest read as `moved=true` and bought another lap
+# instead. In QA that is not hypothetical: no agent in this pipeline may write the registry's
+# `Status:` line, so a bug needing a product decision has no path out at all. Measured in
+# 20260825-frete-cif-fob — 7 of the 12 QA sessions in that loop, US$ 73,32 of US$ 144,88.
+#
+# Read from the MARKER and not from GATE_WHY: see the contract above GATE_HANDOFF_BLOCKED.
+#
+# ONE definition and TWO doors in cmd_run's loop — the first pass and the inline retry — which is
+# the same shape kit_guard_check already has, for the same reason: the body must not drift between
+# the call sites, but WHERE the doors sit is a property of the loop and cannot be hoisted in here.
+# The retry door is not decoration. The marker is a global, `current_phase` runs in a SUBSHELL and
+# cannot clear the parent's copy, and every gate but gate_QA leaves it alone — so a retry that
+# declared `blocked` and carried on took the marker into the next lap, where gate_EXEC ran with it
+# still set and this escalation fired for EXEC: "the phase's handoff declares 'status: blocked'"
+# printed over a 20-handoff-exec.md that said `done`, the retry EXEC was owed swallowed, and
+# {phase: EXEC, kind: handoff-blocked} written into the ledger the kaizen judge reads. Found by the
+# QA phase of 20260826-o-laco-da-qa, and reached by the pipeline obeying its own instructions:
+# `agents/sdd-qa.md` § 4 tells the QA session to answer a fixable bug with a `pending` F<n> row, and
+# a pending row is exactly what sends the next lap to EXEC.
+#
+# Returns 0 when it escalated — the caller answers with `return 3` — and 1 when the marker is unset.
+# Callers spell that `if handoff_blocked_escalation "$phase"; then return 3; fi` rather than
+# `... && return 3`: under `set -e` the status of an && list whose left side failed is not worth
+# reasoning about at a call site whose whole job is to NOT exit.
+#
+# CALLED, never substituted. `x="$(handoff_blocked_escalation …)"` would run it in a subshell and
+# send the ledger row and the five lines a human is meant to act on into the substitution instead
+# of to the ledger and the terminal — the family CLAUDE.md records against `run_phase`.
+handoff_blocked_escalation() {
+  local phase="$1"
+  [ "$GATE_HANDOFF_BLOCKED" = "1" ] || return 1
+  info ""
+  bad "BLOCKED in $phase — $GATE_WHY"
+  dim "  The line stopped on purpose: the phase's handoff declares 'status: blocked'."
+  dim "  Another session would re-read the same handoff and refuse the same way."
+  # Same refusal as the EXEC Jidoka: names the section by what it IS, never by a heading that is
+  # artifact content in OUTPUT_LANG.
+  dim "  Read the handoff — the decisions it needs from a human are written there."
+  dim "  Once they are taken, set the handoff's status back and 'sdd run'."
+  pipeline_log_line "$(date -Iseconds)  BLOCKED  $phase  $GATE_WHY"
+  autonomy_blocked_row "handoff-blocked" "$phase" "$GATE_WHY"
+  return 0
+}
+
 cmd_run() {
   local mission_arg="" force_phase="" max_phases=0
   while [ $# -gt 0 ]; do
@@ -3503,31 +3561,10 @@ cmd_run() {
       continue
     fi
 
-    # Third Jidoka: the handoff itself says the line stopped. `blocked` already meant exactly that
-    # (:1602), but the refusal used to go through the fingerprint heuristic below like any other
-    # gate failure — so a phase NOBODY can satisfy paid for proving its own unsatisfiability twice,
-    # at one session apiece, and a session that committed something honest read as `moved=true` and
-    # bought another lap instead. In QA that is not hypothetical: no agent in this pipeline may
-    # write the registry's `Status:` line, so a bug needing a product decision has no path out at
-    # all. Measured in 20260825-frete-cif-fob — 7 of the 12 QA sessions in that loop, US$ 73,32 of
-    # US$ 144,88.
-    #
-    # Read from the MARKER and not from GATE_WHY: see the contract above GATE_HANDOFF_BLOCKED. It
-    # is read here, immediately after the `gate_"$phase"` call that could have set it, and before
-    # `moved` is consulted — the whole point is to stop depending on the fingerprint.
-    if [ "$GATE_HANDOFF_BLOCKED" = "1" ]; then
-      info ""
-      bad "BLOCKED in $phase — $GATE_WHY"
-      dim "  The line stopped on purpose: the phase's handoff declares 'status: blocked'."
-      dim "  Another session would re-read the same handoff and refuse the same way."
-      # Same refusal as the EXEC Jidoka above: names the section by what it IS, never by a heading
-      # that is artifact content in OUTPUT_LANG.
-      dim "  Read the handoff — the decisions it needs from a human are written there."
-      dim "  Once they are taken, set the handoff's status back and 'sdd run'."
-      pipeline_log_line "$(date -Iseconds)  BLOCKED  $phase  $GATE_WHY"
-      autonomy_blocked_row "handoff-blocked" "$phase" "$GATE_WHY"
-      return 3
-    fi
+    # DOOR 1 of the blocked escalation — see handoff_blocked_escalation above for why it exists.
+    # It is read immediately after the `gate_"$phase"` call that could have set the marker, and
+    # BEFORE `moved` is consulted: the whole point is to stop depending on the fingerprint.
+    if handoff_blocked_escalation "$phase"; then return 3; fi
 
     if [ "$moved" = "true" ]; then
       dim "  gate $phase not yet: $GATE_WHY (but the session moved forward — carrying on)"
@@ -3565,6 +3602,12 @@ cmd_run() {
       force_phase=""
       continue
     fi
+
+    # DOOR 2, on the same terms, and it is what keeps the marker from outliving the lap. Placed
+    # after `moved2` is already settled, so it takes nothing away from the sampling window the
+    # comment above defends — it only refuses to let `moved2` answer a question that is not its.
+    if handoff_blocked_escalation "$phase"; then return 3; fi
+
     if [ "$moved2" = "false" ]; then
       info ""
       bad "BLOCKED in $phase — two sessions without moving the disk: $GATE_WHY"
