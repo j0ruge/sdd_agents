@@ -1,7 +1,8 @@
 # A janela de medição — o primeiro veredito do juiz do kaizen
 
-**Data:** 2026-08-25 · **Estado:** Fase 0 **executada** por este commit (branch
-`chore/abre-a-janela-de-medicao`). O eixo da medição é o merge dele na `main`. Fases 1-3 pendentes.
+**Data:** 2026-08-25 · **Estado (2026-08-26): JANELA ENCERRADA APÓS A MISSÃO 1, POR DECISÃO
+HUMANA.** Leia a seção 9 antes de qualquer outra coisa — o plano abaixo está **preservado como
+escrito**, e a seção 9 diz o que dele sobreviveu ao contato com a realidade.
 
 Este documento é auto-contido de propósito. A sessão que o ler não participou da conversa que o
 gerou e não precisa dela. Leia inteiro antes de agir.
@@ -230,3 +231,60 @@ isso — `docs/qa/bugs/BUG-20260819-stamp-written-where-gate-cannot-read.md` e
 
 **Antes de implementar qualquer coisa, apresente o que pretende fazer e espere o "sim".** O rumo
 está aprovado; cada passo, não.
+
+
+---
+
+## 9. ⚠️ O que aconteceu — encerramento, 2026-08-26
+
+**A Fase 0 rodou** (PR #23, eixo `5a82f12`). **A missão 1 rodou e foi mergeada** (PR #127 do
+`sales_quote`, merge `971d6f4`). **As missões 2 e 3 NÃO rodaram, e a janela foi encerrada.**
+
+### Por que a janela foi encerrada
+
+Dois motivos medidos, e o primeiro invalida a Fase 3 como escrita.
+
+**1. O juiz não lê linha de repo-alvo.** A Fase 3 manda rodar `./bin/sdd kaizen` esperando
+`sufficient: true`. Ele filtra **por repo** por padrão e só roda no repo do kit — então aponta para
+o único repo cujo eixo a ADR 0003 declarou inutilizável, e exclui as linhas do `sales_quote` como
+`other_repo`. Medido no fim da missão 1:
+
+```
+per repo (o padrão, do kit):  latest 671d432 · other_repo: 35 excluídas
+--all-repos:                  latest 5a82f12 · sessions: 20 · other_repo: 0
+```
+
+O runner disse isso sozinho, na última linha da corrida: *"Today's kaizen judge reads only the
+kit's own missions, so it will not count them."* As três missões dariam `indeterminado` — ~US$ 400
+de evidência para a qual o juiz não está apontado. **Decidido em
+[ADR 0005](../../adr/0005-judge-reads-every-repo-with-visible-composition.md)**, mergeada em
+`6e82acb`, com `Implementation: NOT YET IN THE RUNNER` no cabeçalho.
+
+**2. A missão 1 custou US$ 144,88, não os US$ 3-9 estimados** — 16x. A fase QA sozinha custou
+**US$ 73,32 em 12 sessões**, mais que todo o resto do pipeline junto, e 7 daquelas 12 estavam num
+laço insatisfazível. Rodar as missões 2 e 3 antes de consertar isso custaria ~US$ 290 só em QA.
+
+### O que a missão 1 entregou
+
+Trabalho verde e mergeado: 7/7 incrementos (4 planejados + 3 fix da QA), `TEST_CMD` rc 0, e2e
+85/85, REVIEW Grade A na primeira rodada. O plano tinha mapeado **três** sítios sem guarda; a QA
+achou um **quarto** (o rascunho restaurado do `localStorage`, `d2a1d9c`).
+
+Uma intervenção humana registrada: quatro bugs do registry, de ciclos anteriores e todos escolha de
+produto, receberam `wont-fix` assinado, e o `status:` do handoff foi virado à mão.
+
+### O que ficou de pé deste plano
+
+- A **regra da árvore suja** (§6) foi validada na prática: 21 linhas de ledger, todas
+  `kit_dirty: false`. A janela nunca foi contaminada.
+- O **eixo `5a82f12`** existe e tem 20 sessões comparáveis. Elas não somem — quando a ADR 0005 for
+  implementada, ficam legíveis.
+- O aviso do §8 de que **a Fase 0 não move o eixo** estava certo e foi medido.
+
+### O que vem agora, nesta ordem
+
+1. **`20260826-o-laco-da-qa`** — plano em `docs/handoffs/20260826-o-laco-da-qa/`, aprovação
+   pendente. Conserta as duas engrenagens do laço da QA. É o que torna a janela pagável.
+2. **Implementar a ADR 0005** — as três partes. É o que torna a janela contável.
+3. **Reabrir a janela**, com as missões 2 e 3 do `sales_quote` (as âncoras da tabela do §4 seguem
+   válidas; o item 3, SQ-98, segue com causa-raiz desconhecida e a armadilha do §3 segue de pé).
