@@ -1770,6 +1770,21 @@ mut_KAIZEN_series_escalations_dropped() {
 # It restores the historical defect exactly, rather than emptying the counter: a mutant that merely
 # stopped feeding `sessions` would print `0` and be caught by arithmetic, where this one prints a
 # plausible number that is simply about something else — the shape the assertion has to survive.
+# The phase ceiling counts LAPS again — the historical defect, restored line for line. `attempts`
+# rises once per lap, before the first run_phase of that lap, and the retry inside the lap opens a
+# second session without touching it, so a budget of N buys up to 2N sessions: QA's
+# `QA_MAX_ITER * 3` = 9 is a ceiling of 18, and nothing anywhere says so. Measured on
+# 20260825-frete-cif-fob — 9 laps, 3 of them buying a retry, 12 sessions, US$ 11.27.
+#
+# NOT the same line as mut_RUN_blocked_counts_laps below, and the pair is the point: that one
+# restores the confusion in the HEADLINE, where it misreports a number; this one restores it in the
+# DECISION, where it buys sessions. Caught by the alternating-stub block in check-autonomy.sh,
+# whose fixture spends 8 sessions instead of 4 under it — and whose witness assertion stays green,
+# which is what says the fixture really was in the regime that tells the two units apart.
+mut_RUN_qa_ceiling_counts_laps() {
+  sed -i 's@\[ "${sessions\[$phase\]:-0}" -ge "$budget" \] \&\& over_ceiling=1@[ "${attempts[$phase]}" -gt "$budget" ] \&\& over_ceiling=1@' "$1"
+}
+
 mut_RUN_blocked_counts_laps() {
   sed -i 's@${sessions\[$phase\]:-0} session(s) without satisfying@${attempts[$phase]} session(s) without satisfying@' "$1"
 }
@@ -2077,6 +2092,7 @@ CATALOG=(
   RUN_degraded_journal_dropped
   AUTONOMY_is_escalation_blind
   KAIZEN_series_escalations_dropped
+  RUN_qa_ceiling_counts_laps
   RUN_blocked_counts_laps
   RUN_ceiling_note_other_channel
   AUTONOMY_exclusions_split

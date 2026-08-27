@@ -3523,9 +3523,30 @@ cmd_run() {
     fi
 
     budget="$(phase_budget "$phase")"
+    # `attempts` is the LAP number and it stays exactly that: it is what the ledger's `attempt`
+    # field carries, and the retry inside a lap is told apart by `auto_retry` rather than by a
+    # number of its own. It no longer decides anything about the ceiling.
     attempts["$phase"]="$(( ${attempts[$phase]:-0} + 1 ))"
     local over_ceiling=0 ceiling_note=""
-    [ "${attempts[$phase]}" -gt "$budget" ] && over_ceiling=1
+    # SESSIONS, never laps. This line used to read `attempts`, which rises ONCE per lap, before the
+    # first run_phase of that lap — and the retry inside the lap opens a second session without
+    # touching it. So a budget of N bought up to 2N sessions, and QA's `QA_MAX_ITER * 3` = 9 was a
+    # ceiling of 18. Every budget in phase_budget is already written in sessions ("3 sub-steps per
+    # round"), so this makes the unit match the arithmetic instead of lowering a limit.
+    #
+    # Measured on 20260825-frete-cif-fob: the ceiling WORKED — 9 laps, exactly the limit — and 3 of
+    # those laps bought a retry, turning 9 sessions into 12 at US$ 11.27. The phase was not out of
+    # control; the meter was reading the wrong unit.
+    #
+    # `sessions` is the counter this loop already keeps at BOTH session sites and the blocked
+    # headline already reads, so the number in the escalation and the number that caused it are one
+    # quantity rather than two that agree by habit.
+    #
+    # ⚠️ `-ge`, and read BEFORE the lap, so the bound is budget + 1 rather than budget: the test
+    # happens once per lap and a lap already admitted may still buy its retry. Said out loud
+    # instead of hidden — exact accounting would need a second ceiling inside the lap, which is a
+    # second door, and this file pays for that shape in four places already.
+    [ "${sessions[$phase]:-0}" -ge "$budget" ] && over_ceiling=1
     # REVIEW's ceiling counts rounds IN TOTAL, and the total is on disk. `attempts` dies with the
     # process, so `sdd run` after a blown REVIEW used to hand out a fresh set of rounds, and the
     # most expensive phase in the kit had no ceiling at all across invocations. `phase_budget

@@ -2209,6 +2209,78 @@ assert_eq "writer: a repo outside the temp roots still writes the real ledger" \
 assert_eq "writer: ...and refused as soon as TMPDIR names that root" \
   "1 refused 0" "$(tmpguard_run "$VARTMP/repo" "" "/var/tmp")"
 
+# =============================================================================
+# the phase ceiling counts SESSIONS, not laps of the loop
+# =============================================================================
+# `attempts` rises once per lap, before the first run_phase of that lap, and the retry INSIDE the
+# lap opens a second session without touching it. So a budget of N bought up to 2N sessions, and
+# QA's `QA_MAX_ITER * 3` = 9 was a ceiling of 18. Measured on 20260825-frete-cif-fob: the ceiling
+# WORKED — 9 laps, exactly the limit — and 3 of those laps bought a retry, turning 9 sessions into
+# 12 at US$ 11.27. Every budget in phase_budget is already written in sessions ("3 sub-steps per
+# round"), so counting them makes the unit match the arithmetic rather than lowering a limit.
+#
+# `sessions` is the counter cmd_run already kept at BOTH session sites and the blocked headline
+# already read; `attempts` keeps the ledger's `attempt` field, so no row shape moves.
+#
+# THE WITNESS COMES FIRST, and it is not decoration: on a fixture where every lap costs one session
+# laps and sessions are the SAME number, and the count below is satisfied by the defect it exists
+# to forbid. The alternating stub is what puts the fixture in the regime that separates them —
+# odd sessions change nothing (so the runner retries inside the lap), even sessions commit (so the
+# lap ends "carrying on" instead of escalating no-progress).
+echo "== the phase ceiling counts sessions, not laps =="
+
+CEIL="$OUTSIDE/ceiling"
+CEILSTATE="$OUTSIDE/ceilstate"
+mkdir -p "$CEIL/stub" "$CEILSTATE"
+CEILLEDGER="$CEILSTATE/autonomy-log.jsonl"
+tmpguard_fixture "$CEIL/repo" \
+  || fail "PROBE-BROKEN: the ceiling fixture did not build" "built" "failed"
+# `pending`, not `blocked`: the Jidoka of a blocked increment escalates before any session and this
+# section is about the sessions. EXEC_MAX_RETRY is pinned so the budget below is derivable by hand
+# instead of by whatever the default happens to be: rows + EXEC_MAX_RETRY + 2 = 1 + 1 + 2 = 4.
+sed -i 's/| blocked | — |/| pending | — |/' "$CEIL/repo/docs/handoffs/$MISSION/checkpoint.md"
+printf 'EXEC_MAX_RETRY=1\n' >> "$CEIL/repo/.sdd/config.sh"
+( cd "$CEIL/repo" && git add -A && git commit -qm "chore: a pending increment" ) >/dev/null 2>&1
+
+rm -f "$CEIL/n"
+cat > "$CEIL/stub/claude" <<STUB
+#!/usr/bin/env bash
+n=\$(( \$(cat "$CEIL/n" 2>/dev/null || echo 0) + 1 ))
+echo "\$n" > "$CEIL/n"
+if [ \$(( n % 2 )) -eq 1 ]; then exit 9; fi
+: > "$CEIL/repo/docs/handoffs/$MISSION/note-\$n.md"
+git -C "$CEIL/repo" add -A >/dev/null 2>&1
+git -C "$CEIL/repo" commit -qm "chore: session \$n moved the disk" >/dev/null 2>&1
+cat "$STREAM_SAMPLE"
+exit 0
+STUB
+chmod +x "$CEIL/stub/claude"
+
+( cd "$CEIL/repo" && PATH="$CEIL/stub:$PATH" SDD_STATE_DIR="$CEILSTATE" \
+    "$SDD" run "$MISSION" >/dev/null 2>&1 )
+ceil_sessions="$(jq -rs '[.[] | select(.event == "session")] | length' "$CEILLEDGER" 2>/dev/null)"
+ceil_retries="$(jq -rs '[.[] | select(.event == "session" and .auto_retry == true)] | length' "$CEILLEDGER" 2>/dev/null)"
+ceil_laps="$(jq -rs '[.[] | select(.event == "session") | .attempt] | max // 0' "$CEILLEDGER" 2>/dev/null)"
+
+assert_eq "witness: the fixture really does buy a retry inside a lap" "yes" \
+  "$( [ "${ceil_retries:-0}" -ge 1 ] && echo yes || echo "no:${ceil_retries:-<none>}" )"
+# EXEC's budget here is 4 SESSIONS. Two laps of two sessions each spend them, and the third lap is
+# refused before it opens anything: 4 rows, then `budget-exhausted`. Counting LAPS the same fixture
+# runs five laps and buys EIGHT sessions before the same escalation — double the bill for the same
+# refusal, which is exactly what happened in QA.
+# The escalation KIND is part of the same string on purpose: 4 sessions followed by `no-progress`
+# would be a different run altogether (the alternating stub having stopped alternating), and a
+# count asserted alone would call it green.
+assert_eq "the ceiling stops the phase by sessions spent, not by laps of the loop" \
+  "4 budget-exhausted" \
+  "$(printf '%s %s' "${ceil_sessions:-0}" \
+       "$(jq -rs '[.[] | select(.event == "blocked")] | last | .kind // "none"' "$CEILLEDGER" 2>/dev/null)")"
+# The differential that makes the number mean something: on THIS fixture laps really are fewer than
+# sessions, so "4" was not reached by the two being the same quantity under another name.
+assert_eq "...and on this fixture the two units really do disagree" "fewer" \
+  "$( if [ "${ceil_laps:-0}" -lt "${ceil_sessions:-0}" ]; then echo fewer
+      else echo "same:${ceil_laps:-0}/${ceil_sessions:-0}"; fi )"
+
 echo "== reader: the human-facing output =="
 
 # One clean comparable session, with the three fields these assertions vary. Same shape as
