@@ -4,6 +4,93 @@ Registro de melhorias com **antes/depois medido**. Sem número, não entra.
 
 ---
 
+## 2026-08-26 — A ADR 0005 sai do papel, e o teto de fase passa a contar sessões (`60fe724`…`ee6404e`)
+
+**Problema (Gemba):** dois defeitos independentes, ambos medidos e nenhum deles visível de dentro.
+
+O primeiro: a [ADR 0003](docs/adr/0003-judge-axis-evidence-from-target-repos.md) decidiu, em
+2026-08-17, que a evidência de veredito vem de **repo-alvo de verdade** — no repo que CONSTRÓI o
+kit toda sessão commita e a seguinte cai num `kit_sha` novo, então o eixo degenera por construção.
+Ela ficou **carta morta por nove dias** porque nunca disse *como o juiz LÊ* essas linhas: o
+`kaizen_series` filtrava por repo, `sdd kaizen` só roda no repo do kit, e o filtro deixava o juiz
+olhando exatamente para o único repo que a 0003 declarara inservível. Medido na `main`, sobre o
+ledger real: `excluded.other_repo: 38`. Na primeira missão de repo-alvo de verdade
+(`20260825-frete-cif-fob`) eram **21 linhas comparáveis e US$ 144,88** que a leitura padrão do juiz
+não via — e três missões planejadas sobre um sha congelado que teriam respondido `indeterminado`
+para sempre. O próprio runner dizia isso na última linha da corrida, e ninguém tinha o que fazer
+com o aviso.
+
+O segundo: `attempts["$phase"]` sobe **uma vez por volta do laço**, antes do primeiro `run_phase`
+daquela volta, e o retry **dentro** da volta abre uma segunda sessão sem encostar no contador. O
+teto lia `attempts`, então um orçamento de N comprava até 2N sessões: o `QA_MAX_ITER * 3` = 9 da QA
+era um teto de **18**. O `config/schema.md` prometia sessões (*"the phase session cap is
+QA_MAX_ITER × 3"*) desde que a chave nasceu — a prosa estava certa e o código contava outra coisa.
+Na `20260825-frete-cif-fob` o teto **funcionou** (9 voltas, exatamente o limite) e 3 dessas voltas
+compraram retry: 12 sessões, US$ 11,27. A fase não estava descontrolada; o medidor lia a unidade
+errada.
+
+**Contramedida:** as três partes da [ADR 0005](docs/adr/0005-judge-reads-every-repo-with-visible-composition.md)
+e o conserto do teto.
+
+1. **O juiz lê todos os repos** (`28af7ea`). `LEDGER_ALL_REPOS=1` no topo do `cmd_kaizen`, uma vez,
+   para o processo inteiro — `--series`, `gate_KAIZEN`, `kaizen_axis_note` e o bloco novo de
+   composição leem UMA fatia. `--all-repos` continua aceito e vira **no-op** ali; no `sdd autonomy`
+   ele decide tudo, porque a pergunta daquele comando é mesmo "quanto ESTE projeto custou".
+2. **A série publica a composição da fatia** (`0a84833`), derivada sobre as linhas que a **guarda
+   admite** — sessões E escaladas — e nunca sobre `event: session`: três dos sete repos do ledger
+   real só contribuem escalada, e o primeiro rascunho da ADR, que contou sessões, respondeu "quatro
+   repos" sobre sete e ficou escrito lá dentro dizendo isso de si mesmo. É o que torna a parte 1
+   segura: contaminação vira coisa que se **vê**, e não coisa que o runner adivinha.
+3. **O runner recusa o ledger real para checkout sob `$TMPDIR`** (`60fe724`). Cinco dos sete repos
+   do ledger real são fixture e os cinco moram sob `/tmp`; os cinco vieram de corridas **manuais**
+   que esqueceram `SDD_STATE_DIR`, nunca da suíte, que exporta a variável desde sempre. O mecanismo
+   existia e funcionava — o que vazou, vazou por disciplina, e por isso virou instrumento.
+4. **O teto conta sessões** (`ee6404e`). Passa a ler `sessions[$phase]`, o contador que o laço já
+   mantinha nos DOIS sítios de sessão e que a manchete de `BLOCKED` já lia. `attempts` continua
+   dono do campo `attempt` do ledger, então nenhuma linha muda de forma.
+
+| | Antes (`606643f`) | Depois (`ee6404e`) |
+|---|---|---|
+| `excluded.other_repo` na leitura padrão do juiz (ledger real) | **38** | **0** |
+| composição da fatia do eixo | não existia | `[{repo, missions, missions_with_session}]`, em `latest` e em `previous`, impressa também no terminal |
+| repo com só escalada numa versão do kit | invisível em qualquer contagem por sessão | aparece na composição, com `missions_with_session: 0` |
+| `sdd run` de checkout sob `/tmp` sem `SDD_STATE_DIR` | escreve no `~/.sdd` real, calado | `die`, rc 1, nenhuma linha escrita |
+| `sdd run` de checkout **fora** dos dois raízes temporárias | escreve | escreve — inalterado, e é o controle que separa "recusa fixture" de "recusa" |
+| teto da fase EXEC no fixture do sensor (orçamento 4) | **8** sessões | **4** sessões, mesma escalada `budget-exhausted` |
+| teto de sessões da QA com `QA_MAX_ITER=3` | até **18** | **9** (limite superior 10: o teto é testado uma vez por volta) |
+| asserções de `tests/run-all.sh` | 592 | **606** |
+| `tests/check-autonomy.sh` | 189 `ok` | **197** |
+| `tests/check-kaizen.sh` | 131 `ok` | **137** |
+| catálogo de mutação | 154 de 154 | **158** de 158 |
+| relógio da suíte | 48,5 s | 51,1 s |
+| achados abertos no `TODO.md` | 74 | 74 |
+
+**Cinco mutantes entram e um sai.** Entram `LEDGER_tmp_repo_allowed`,
+`KAIZEN_composition_session_unit`, `KAIZEN_composition_unprinted`,
+`KAIZEN_series_default_per_repo` e `RUN_qa_ceiling_counts_laps`. Sai
+`KAIZEN_prompt_series_unflagged`, e a razão é a régua desta casa e não conveniência: ele ancorava na
+maquinaria `ledger_flags`, que propagava a flag da invocação para a linha de comando escrita no
+prompt do agente. Com **uma** leitura, o gate e o prompt não conseguem cair em séries diferentes —
+o defeito que ele reproduzia é inalcançável por construção, e re-ancorado ele **sobreviveria**
+medindo nada. Quem ocupa o lugar é o `KAIZEN_series_default_per_repo`, pego por cinco asserções em
+dois sensores.
+
+**Duas seções de sensor afirmavam a decisão ANTIGA e foram reescritas, não apagadas.** Uma seção
+removida é uma propriedade que ninguém mede: a `== series: the ledger is global, the readers are
+not ==` do `check-kaizen.sh` passou a cobrar que o juiz responda **a mesma série byte a byte** de
+qualquer um dos dois repos **e** que o `sdd autonomy` sobre o mesmo arquivo continue filtrando —
+dois comandos, duas respostas, um ledger, comparados um com o outro. O par `all-repos` do
+`check-autonomy.sh` passou a cobrar que a flag **não mova nada** na série do juiz, com o controle de
+que ela ainda move a tabela do humano.
+
+⚠️ **O que ISTO NÃO PROVA.** O conserto do teto nunca correu contra missão de verdade — a prova é a
+próxima missão de repo-alvo. E a composição só ganha valor quando a fatia tiver mais de um repo:
+hoje, no ledger real, `latest` é uma missão de um repo só, que é exatamente o eixo degenerado que a
+ADR 0003 descreve. O número que motivou a parte 1 (US$ 400 de evidência que o juiz não contava)
+volta a ser mensurável na reabertura da janela, não aqui.
+
+---
+
 ## 2026-08-26 — A fase QA para de girar em bug que ninguém tinha permissão de fechar (missão `20260826-o-laco-da-qa`)
 
 **Problema (Gemba):** a primeira missão de repo-alvo de verdade (`20260825-frete-cif-fob`, no
