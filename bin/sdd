@@ -1746,9 +1746,14 @@ ledger_row_is_local() {
 #              as progress and buys the next lap. The bucket that was invisible.
 #   idle     — nothing on disk, gate failed: the old `stalled`, under the name that says what it is.
 #
-# Applied to the sessions each reader already admits — `comparable` in cmd_autonomy (which demands
-# `has("moved")`), the on_axis sessions in kaizen_series — never to escalation rows, which carry
-# neither field and would all read `idle`. Old-schema rows stay where they were.
+# Applied to the sessions each reader admits, and both admit a session only with `moved` present:
+# cmd_autonomy's `comparable` has demanded `has("moved")` all along, and kaizen_series now files a
+# session without it into `excluded.non_comparable` too — the same bucket, not a second one with
+# the same name. (Measured before that fix landed: a session row with no `moved` field read
+# on_axis in the series and non-comparable in the window, so a version of 2 comparable sessions on
+# the human table came back 3 sessions on the judge, with the extra one always landing `idle`.)
+# Never applied to escalation rows, which carry neither `gate` nor `moved` and would all read
+# `idle`. Old-schema rows stay where they were.
 # `outcome_tally` lives here and not in each program because its three keys ARE the enum, and an
 # enum read in more than one place is one definition.
 #
@@ -4508,12 +4513,22 @@ kaizen_series() {
 
     # ONE definition of the kit_sha axis for this program too — the third hand-written copy of the
     # same question lived here, as the complementary pair `.kit_dirty == true or .kit_sha == null`
-    # / `.kit_dirty != true and .kit_sha != null`. Same words as cmd_autonomy on purpose: the judge
-    # and the window the human reads take the SAME file, so a row one of them attributes to a
-    # version and the other does not is the divergence the ledger exists to prevent, merely moved
-    # from inside one command to between two. (No apostrophes in here: this jq program is a
-    # single-quoted shell string, and one would end it mid-comment.)
+    # / `.kit_dirty != true and .kit_sha != null`. `on_axis` alone is what an ESCALATION needs to be
+    # admitted — it never carries `moved`, and demanding one would exclude every escalation that
+    # ever happened. A SESSION needs more: `comparable_row` below adds `has("moved")` on top of
+    # `on_axis` for a session row, which is exactly the rule cmd_autonomy names `comparable`.
+    # Divergent for one measured row shape until this fix: a session with no `moved` field (old
+    # schema) read on_axis here and non-comparable there — 2 sessions on the human table read 3 on
+    # the judge series, 1 idle read 2 — so the judge and the window the human reads now admit the
+    # SAME rows from the SAME file, never merely the same kit_sha filter. (No apostrophes in here:
+    # this jq program is a single-quoted shell string, and one would end it mid-comment.)
     def on_axis: .kit_dirty == false and .kit_sha != null;
+    # SESSION admission is the human window rule named comparable (on_axis and has("moved"));
+    # ESCALATION admission stays bare `on_axis`, because .event != "session" short-circuits the
+    # has("moved") arm before it ever runs on a row that could never satisfy it. Used by BOTH
+    # bindings of the $noncomp/$ok partition below, so a session without `moved` cannot land in
+    # $ok through one binding while excluded through the other.
+    def comparable_row: on_axis and ((.event != "session") or has("moved"));
 
     # ONE definition of "this axis degenerated", same discipline as the two above, and the reason
     # the field below exists at all: a guard that says only `sufficient: false` cannot tell "not
@@ -4697,8 +4712,8 @@ kaizen_series() {
     | ($all | map(select(.phase == "KAIZEN"))) as $meta
     | ($all | map(select(.phase != "KAIZEN"))) as $rows
     | (($raw | length) - ($all | length)) as $unrec
-    | ($rows | map(select(on_axis | not))) as $noncomp
-    | ($rows | map(select(on_axis))) as $ok
+    | ($rows | map(select(comparable_row | not))) as $noncomp
+    | ($rows | map(select(comparable_row))) as $ok
     | ($ok | shas_in_file_order) as $shas
     | (if ($shas | length) >= 1 then ($ok | map(select(.kit_sha == $shas[-1])) | group_summary) else null end) as $latest
     | (if ($shas | length) >= 2 then ($ok | map(select(.kit_sha == $shas[-2])) | group_summary) else null end) as $previous

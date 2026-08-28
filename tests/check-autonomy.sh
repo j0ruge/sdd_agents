@@ -1418,11 +1418,16 @@ localize > "$OUTSIDE/tristate/autonomy-log.jsonl" <<'EOF'
 {"v":1,"ts":"2026-08-15T10:05:00-03:00","event":"session","run_id":"r2","invocation":"run","kit_sha":"ddddddd","kit_dirty":false,"project":"p1","repo":"/p1","mission":"m2","phase":"EXEC","step":"EXEC","agent":"sdd-executor","model":"opus","attempt":2,"auto_retry":false,"session":"s6","rc":0,"dur_s":10,"cost_usd":1.0,"moved":true,"gate":"pass","gate_why":"x"}
 {"v":1,"ts":"2026-08-15T10:06:00-03:00","event":"session","run_id":"r3","invocation":"run","kit_sha":"ddddddd","kit_dirty":true,"project":"p1","repo":"/p1","mission":"m2","phase":"QA","step":"QA:close","agent":"sdd-qa","model":"opus","attempt":1,"auto_retry":false,"session":"s7","rc":0,"dur_s":10,"cost_usd":1.0,"moved":true,"gate":"pass","gate_why":"x"}
 {"v":1,"ts":"2026-08-15T10:07:00-03:00","event":"blocked","kind":"no-progress","run_id":"r3","invocation":"run","kit_sha":"ddddddd","kit_dirty":false,"project":"p1","repo":"/p1","mission":"m2","phase":"QA","gate_why":"x"}
+{"v":1,"ts":"2026-08-15T10:08:00-03:00","event":"session","run_id":"r3","invocation":"run","kit_sha":"ddddddd","kit_dirty":false,"project":"p1","repo":"/p1","mission":"m2","phase":"QA","step":"QA:close","agent":"sdd-qa","model":"opus","attempt":2,"auto_retry":false,"session":"s8","rc":0,"dur_s":10,"cost_usd":1.0,"gate":"fail","gate_why":"old schema, no moved"}
 EOF
 out_tri="$( SDD_STATE_DIR="$OUTSIDE/tristate" "$SDD" autonomy 2>&1 )"; rc=$?
 assert_eq "a ledger of three outcomes is data (rc 0)" "0" "$rc"
 # 6 comparable sessions: the gate passed on 3 (advanced), 2 wrote and still failed (churned), 1
-# wrote nothing and failed (idle). The dirty row and the escalation are the other two buckets.
+# wrote nothing and failed (idle). The dirty row (s7), the escalation, and the old-schema session
+# with no `moved` field (s8) are the other three rows — 9 total, 6 + 2 non-comparable + 1
+# escalation + 0 unrecognized. s8 is the row review found: an on-axis SESSION missing `moved` used
+# to be admitted by kaizen_series (on_axis alone) while cmd_autonomy already refused it
+# (`comparable` demands has("moved")) — 2 non-comparable here proves both readers refuse it now.
 assert_eq "the version line says what the sessions did, in the order advanced · churned · idle" "1" \
   "$(grep -cE '^  ddddddd  6 session\(s\) · 3 advanced · 2 churned · 1 idle · ' <<< "$out_tri")"
 assert_eq "and the word stalled is gone — idle is the same number under the name that says what it is" "0" \
@@ -1438,8 +1443,17 @@ series_tri="$( SDD_STATE_DIR="$OUTSIDE/tristate" "$SDD" kaizen --series 2>/dev/n
 table_tri="$(sed -nE 's/^  ddddddd  [0-9]+ session\(s\) · ([0-9]+) advanced · ([0-9]+) churned · ([0-9]+) idle · .*/\1 \2 \3/p' <<< "$out_tri")"
 assert_eq "the human window and the judge count the outcomes of the latest version alike" \
   "$(jq -r '.latest.outcomes | "\(.advanced) \(.churned) \(.idle)"' <<< "$series_tri")" "$table_tri"
-# ...and not by both being empty: the floor is the known histogram of this fixture.
+# ...and not by both being empty: the floor is the known histogram of this fixture. This fixture
+# now carries the row shape (an on-axis session with no `moved` field) that made the two readers
+# disagree before this fix — s8 above — and the parity assertion above only holds because both
+# readers now refuse it the same way.
 assert_eq "the parity is not vacuous — the table printed the three counts" "3 2 1" "$table_tri"
+# The divergence review measured directly: the human count of excluded non-comparable rows and the
+# series' own excluded.non_comparable field, over the SAME fixture that carries the row shape that
+# used to split them (s7, dirty kit; s8, session with no moved). Both must read 2.
+human_noncomp_tri="$(num_before "$out_tri" 'non-comparable')"; human_noncomp_tri="${human_noncomp_tri:-0}"
+assert_eq "the judge excludes exactly the rows the human's reader excludes (session with no moved included)" \
+  "2 2" "$human_noncomp_tri $(jq -r '.excluded.non_comparable' <<< "$series_tri")"
 
 # --- the reader gives a full accounting, never a silent gap --------------------------------------
 # Two findings from review, one root cause: a bucket the reader does not name is a bucket that can
