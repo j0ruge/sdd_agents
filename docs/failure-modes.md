@@ -297,10 +297,53 @@ ln -sf ../lib/node_modules/agent-browser/bin/agent-browser.js \
 
 ---
 
+## The app is down while the e2e runs
+
+**Symptom:** `sdd run` exits 3 with `BLOCKED in QA — E2E_CMD failed (...) and nothing is listening
+at <host>:<port> (APP_URL) — the app is down; no session can start it`, after **one** QA session.
+Or, one step earlier, `sdd preflight` fails with the same address named.
+
+**Cause:** the e2e came back non-zero and a TCP connect to `APP_URL` was refused. Nothing is
+serving that port. This is not a QA finding and not a regression — it is the environment.
+
+**Why it gets its own stop.** A red e2e says nothing about whose fault it is: a dead app, a stopped
+database, a missing browser binary and a genuinely broken assertion all leave the same exit code,
+and the runner used to read every one of them as "QA still has work to do". The session that
+reported the problem honestly counted as progress, so the next lap bought another one. Measured on
+the SQ-111 mission of 2026-08-27: US$ 14,16 for a QA phase reproved by the environment, plus
+US$ 7,61 for the lap that reopened a mission whose PR was already open. Since the probe landed, the
+gate asks — after the e2e, never before — and the line stops with the address in the message,
+filed as `kind: app-down`.
+
+**What you do:** start the app at the address the message names, then `sdd run` again. If the e2e
+is supposed to bring its own server up, then `APP_URL` should not point at a port nobody serves
+between runs — clear it, or point it at the address that is up.
+
+```bash
+sdd preflight            # asks the same question before a session is opened
+```
+
+**Do not:** re-run the phase hoping a fresh session finds a different answer. No agent in this
+pipeline is allowed to bring an environment up — that is declared policy in `config/schema.md`,
+not an oversight — so another session runs the same e2e against the same dead address.
+
+**If the message says `the app was not probed either way` instead**, the runner could not decide
+and deliberately did not escalate: `APP_URL` is empty or unparseable, `timeout(1)` is not on PATH,
+this bash has no `/dev/tcp`, or the connect failed in a way the probe does not read as a refusal (a
+name that does not resolve, a firewall that drops the packet). The reason is printed after the
+colon. Behaviour there is exactly what it was before the probe existed — the sensor is one-sided
+on purpose, and a false stop costs a person where the loop only costs money.
+
+---
+
 ## The QA⇄EXEC loop does not converge
 
 **Symptom:** `BLOCKED in QA` after `QA_MAX_ITER` rounds, or `N bug(s) with Status: open in the
 registry that an agent could close` on every lap.
+
+**Not this section if the message names an address.** `nothing is listening at <host>:<port>` is the
+environment, and its remedy is to start the app — see the section right above. Until that stop
+existed, a dead app arrived here, where the advice is to replan the mission.
 
 **First, check the genre of the bugs that are holding it.** Since `20260826-o-laco-da-qa` the gate
 does not ask for an empty registry — it asks that no `open` bug be one **an agent could close**. A
