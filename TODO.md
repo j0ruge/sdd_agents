@@ -39,6 +39,22 @@ Achados sobre **repos-alvo** vão para o `TODO.md` daquele repo. Este arquivo é
 
 ### Sensores que faltam
 
+- [ ] **`sdd preflight` responde `preflight ok` sem sondar `APP_URL` nem `E2E_CMD`** —
+  `bin/sdd:2371` — ele checa 19 coisas e mede `TEST_CMD` verde, mas nunca toca no app que a fase
+  QA exige, então certifica prontidão numa máquina onde o `gate_QA` não pode passar. Fail-open: o
+  comando afirma ter medido o que não mediu. O `.sdd/config.sh` do `sales_quote` já documenta a
+  precondição ("subir o app é trabalho de OPERADOR") e nada a verifica — custou US$ 14,16 numa
+  sessão de QA que reprovou por ambiente. Direção: sondar `APP_URL` quando `E2E_CMD` é não-vazio.
+  — descoberto por `operador` na missão `20260827-condicoes-pagamento-mesmo-cliente` (2026-08-27)
+
+- [ ] **`gate_QA` aceita relatório de QA de OUTRA missão** — `bin/sdd:614` — a Âncora 1 pega o
+  relatório mais recente do glob por `latest_matching` e só exige `closed` sem linhas `Pending`;
+  nada o amarra à missão corrente. Em `20260827-condicoes-pagamento-mesmo-cliente` o gate passou
+  lendo o `2026-08-24-sq107-status-material-frete.md`, de duas missões antes. Fail-open: promete
+  "a QA desta missão fechou" e mede "existe alguma QA fechada no disco". Direção: casar o
+  relatório com o slug da missão ou com a janela de datas dela.
+  — descoberto por `sdd-qa` na missão `20260827-condicoes-pagamento-mesmo-cliente` (2026-08-27)
+
 - [ ] **`sdd retry` devolve 3 sem escrever linha de escalada no ledger** — `bin/sdd:3653` — o
   `cmd_retry` chama o gate e sai 3 em qualquer reprovação, mas nunca chama `autonomy_blocked_row`
   nem escreve `BLOCKED` no `pipeline.log`, e nenhuma das cinco linhas que um humano deve agir sai
@@ -422,6 +438,14 @@ Achados sobre **repos-alvo** vão para o `TODO.md` daquele repo. Este arquivo é
   — descoberto por `sdd-reviewer` na missão `20260819-fecho-que-nao-mente` (2026-08-19)
 
 ### Contrato e configuração
+
+- [ ] **Fase interrompida depois do REVIEW faz o pipeline REGREDIR para o REVIEW** —
+  `bin/sdd:870` — o `gate_REVIEW` reprova com árvore suja e não distingue "o revisor deixou
+  sujeira" de "uma fase POSTERIOR está no meio do voo". Sessão de DOCS morta deixa arquivo não
+  commitado, `current_phase()` volta a responder REVIEW, e o `sdd run` seguinte abre sessão nova
+  da fase mais cara do kit — US$ 37,30 medidos nesta missão. Morte de sessão é o caso normal que
+  o princípio 4 promete resolver de graça. Direção: escopar a checagem ao que o REVIEW pode sujar.
+  — descoberto por `operador` na missão `20260827-condicoes-pagamento-mesmo-cliente` (2026-08-27)
 
 - [ ] **`.sdd/config.sh` que não parseia é reportado como "declares no TEST_CMD"** —
   `bin/sdd:2183` — a checagem 2b lê o `TEST_CMD` sourceando o config num subshell com
