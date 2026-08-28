@@ -1,6 +1,7 @@
 # Handoff — o gate aprende a dizer "o mundo está quebrado"
 
-**Data:** 2026-08-28 · **Estado:** plano **aprovado**, **I1 a I8 commitados**. Falta abrir o PR.
+**Data:** 2026-08-28 · **Estado:** plano **aprovado**, **I1 a I8 commitados**, mais a rodada de
+revisao pre-PR (I9-I10). Falta abrir o PR.
 
 Auto-contido de propósito. A sessão que ler isto não participou da conversa que o gerou.
 Onde há número, ele foi medido.
@@ -12,11 +13,12 @@ Onde há número, ele foi medido.
 ```bash
 cd ~/repos/sdd_agents
 git branch --show-current                  # esperado: feat/o-gate-sabe-que-o-app-caiu
-git log --oneline d30d199..HEAD | wc -l    # esperado: 9
+git log --oneline d30d199..HEAD | wc -l    # esperado: 12 — este handoff e o ultimo commit,
+                                           #   entao o numero sobe com ele: some 1 ao editar
 git status --porcelain                     # TEM de sair vazio
 
 ./tests/run-all.sh                         # suite green
-./bin/sdd health --with-mutation           # score N+6, carimbo escrito
+./bin/sdd health --with-mutation           # score N+8, carimbo escrito
 ```
 
 O plano completo está em `~/.claude/plans/isso-t-um-inferno-fluttering-glade.md`.
@@ -39,7 +41,7 @@ segue sendo trabalho do operador; o que mudou é que o runner **pergunta** e **p
 | | |
 |---|---|
 | `main` | `d30d199` |
-| branch | `feat/o-gate-sabe-que-o-app-caiu`, 9 commits à frente |
+| branch | `feat/o-gate-sabe-que-o-app-caiu`, 12 commits à frente |
 | I1 `8ca8470` | asserções do gate, vermelhas pelo motivo certo |
 | I2 `ab0278f` | `app_url_hostport` + `app_probe` + `GATE_APP_DOWN` + os três arms de `GATE_WHY` |
 | I3 `8f333ea` | o par da escalada, vermelho (`3\|2\|blocked\|no-progress`, o laço de hoje) |
@@ -48,6 +50,8 @@ segue sendo trabalho do operador; o que mudou é que o runner **pergunta** e **p
 | I6 `0184ace` | `cmd_preflight` + as asserções do preflight |
 | I7 `2516d14` | as seis mutações, cada uma com o assassino nomeado |
 | I8 `f7bb72c` | `pipeline.md`, `failure-modes.md`, `schema.md`, `starter.conf`, `TODO.md` |
+| I9 `5ed1126` | revisao: esquema case-insensitive (2 asserçoes, 2 mutantes) + piso das portas fora da faixa efemera |
+| I10 | revisao: o censo de portas do `CLAUDE.md`, o `dirty-tree` que faltava no enum, o hash do `RESOLVIDO por` |
 
 ## 4. O desenho, em três frases
 
@@ -67,7 +71,7 @@ por construção — vermelho vira vermelho **nomeado**, verde nunca vira vermel
 
 ```bash
 ./tests/run-all.sh                      # suite green
-./bin/sdd health --with-mutation        # score N+6, carimbo escrito
+./bin/sdd health --with-mutation        # score N+8, carimbo escrito
 bash tests/check-gates.sh               # o par da app morta, nas duas metades
 bash tests/check-autonomy.sh            # 3|1|blocked|app-down vs 3|2|blocked|no-progress
 bash tests/check-preflight.sh
@@ -99,6 +103,15 @@ sai rc 3, e a linha do ledger diz `app-down` nomeando o endereço.
 - **Piso que usa a função sob teste não é piso.** Os três pisos de porta-morta (`check-gates`,
   `check-autonomy`, `check-preflight`) são `timeout bash -c 'exec 3<>…'` crus, e morrem por nome
   quando não acham porta recusada.
+- **Piso medido UMA vez não cobre um bloco que dura minutos.** Os três sorteavam de 49152-59171,
+  **dentro** do `ip_local_port_range` do kernel (32768-60999 por padrão): a porta podia ser
+  distribuída no meio do bloco e as asserções virariam por um motivo que não é o runner. Hoje
+  sorteiam 20000-29999, sob o piso da faixa, e o resto do risco está **declarado** no comentário
+  em vez de calado. Achado na revisão pré-PR.
+- **Fixture de esquema é `http://` minúsculo em todo lugar**, então a superfície testada mentia
+  por unanimidade: o parser casava literal, `HTTP://` caía em `unknown`, e `unknown` não falha nem
+  avisa. Regime que nenhum fixture visita é regime sem asserção — e um sensor unilateral é
+  exatamente onde isso não aparece.
 - **`check-gates.sh` e `check-autonomy.sh` rodam com `set -uo pipefail` — sem `-e`.** Capture rc
   com `|| rc=$?`.
 - **Probe de sabotagem morre alto** quando o trecho que ele esperava mudar não mudou. Todos os
@@ -107,9 +120,11 @@ sai rc 3, e a linha do ledger diz `app-down` nomeando o endereço.
 ## 8. O que falta
 
 1. **Abrir o PR** contra `main` (`d30d199`), citando o carimbo e o score.
-2. Depois do merge, **apagar** o item `RESOLVIDO por 2516d14` do `TODO.md` e baixar a catraca
+2. Depois do merge, **apagar** o item `RESOLVIDO por 2ce6ce8` do `TODO.md` e baixar a catraca
    `todo-findings` no `tests/health-baseline.txt` — provado por
-   `git merge-base --is-ancestor 2516d14 main`, nunca pelo rótulo do PR.
+   `git merge-base --is-ancestor 2ce6ce8 main`, nunca pelo rótulo do PR. ⚠️ O hash era `2516d14`
+   (o commit das mutaçoes) até a revisao; quem entrega o comportamento é `2ce6ce8`, e a
+   ancestralidade dele já cobre a sonda de `ab0278f`.
 
 ## 9. A próxima missão, já desenhada
 

@@ -44,7 +44,7 @@ Achados sobre **repos-alvo** vão para o `TODO.md` daquele repo. Este arquivo é
   missão FECHADA, com PR já aberto, de volta para uma sessão paga de opus. Custou US$ 14,16 +
   US$ 7,61 (o retorno pós-PR). ⚠️ O `config.sh` que comenta `DEV_READY_CMD`/`DEV_READY_TIMEOUT` é
   o `.sdd/config.sh` do **repo-alvo**, nunca o do kit — as chaves não existem aqui.
-  **RESOLVIDO por `2516d14`**: a sonda roda depois do e2e vermelho e o runner para com `kind: app-down`.
+  **RESOLVIDO por `2ce6ce8`**: sonda (`ab0278f`) após o e2e vermelho, duas portas, `kind: app-down`.
   — descoberto por `sdd-qa` na missão SQ-111 (2026-08-27)
 
 - [ ] **`gate_QA` aceita relatório de QA de OUTRA missão** — `bin/sdd:614` — a Âncora 1 pega o
