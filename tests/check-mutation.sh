@@ -285,6 +285,63 @@ mut_QA_bug_genre_fenced() {
 
 # Historical bug 3 (SQ-97 pilot, ~US$ 10): the parser exited only at `###`, kept swallowing the
 # report's following tables and failed an all-Grade-A review for finding a `Commit` column.
+# The probe is never called: the gate falls back to the ONE sentence every red e2e used to get,
+# where a dead app, a stopped database, a missing browser binary and a genuinely broken assertion
+# were indistinguishable — and `cmd_run` then read `moved=true` and bought another opus session.
+# US$ 14,16 for one such QA on the SQ-111 mission of 2026-08-27.
+#
+# Caught in TWO places, which is what says the probe reaches both consumers: the reason a human
+# reads (check-gates.sh, "the reason names the address nothing is listening on") and the
+# escalation a run produces (check-autonomy.sh, the app-down pair). Neither alone would say the
+# other still worked.
+mut_QA_e2e_red_never_probed() {
+  sed -i 's@^    probe="$(app_probe "$APP_URL")"$@    probe="unknown|the probe was never called"@' "$1"
+}
+
+# THE FAIL-OPEN, and the most dangerous edit in this family: `unknown` starts arming the marker.
+# The probe is one-sided by construction — it may turn a red into a NAMED red and never a green
+# into a red — and this is the single line that breaks that promise. Its blast radius is every
+# repo the kit has ever been installed in: an empty APP_URL, a URL the parser cannot read, a bash
+# with no /dev/tcp, an error string worded differently by another kernel — all of them land in
+# `unknown`, so all of them would begin stopping the line for a machine nobody asked about.
+#
+# Caught by the CONTROL half of check-autonomy.sh's pair, never by the positive half: the control
+# is the same fixture with `APP_URL=""`, which under this mutant escalates `app-down` on the first
+# session instead of reaching `no-progress` on the second. A catalogue entry aimed at the positive
+# half would have scored nothing here.
+mut_QA_app_down_on_unknown() {
+  sed -i '/^    case "$state" in$/,/^    esac$/ s@^      \*)$@      *) GATE_APP_DOWN=1;@' "$1"
+}
+
+# THE FIX THAT IS WIDER THAN THE DEFECT: the app is probed whatever the e2e answered, so the gate
+# refuses over an app it never needed. A repo whose e2e brings its own server up, or whose APP_URL
+# only answers while the suite runs, would be blocked for a machine state that never mattered —
+# and a false BLOCKED costs a person, where the loop only costs money.
+#
+# It takes TWELVE assertions red, measured, and that breadth is the point rather than a bonus:
+# probing unconditionally refuses every QA fixture whose e2e is green. The one named here is
+# `a dead app does NOT block a green e2e` in check-gates.sh, because it is the only one that is
+# red for THIS reason and not merely as collateral — which is why that fixture keeps a dead
+# APP_URL beside a GREEN E2E_CMD instead of the tidy pairing of both red.
+mut_QA_probe_ignores_e2e_rc() {
+  sed -i 's@^  if \[ -n "$E2E_CMD" \] && ! run_check_cmd "$E2E_CMD" "gate-qa-e2e"; then$@  if [ -n "$E2E_CMD" ]; then@' "$1"
+}
+
+# The parser stops defaulting the port, so `http://host/` — the spelling most `.sdd/config.sh`
+# files carry — becomes unreadable and every one of them silently degrades to `unknown`. Silently
+# is the word that earns this its own entry: nothing fails, nothing warns, the escalation simply
+# stops existing for the majority spelling of the key.
+#
+# Caught by `http with no port defaults to 80` in check-gates.sh, which asserts the ADDRESS and
+# never the verdict — port 80 may well be open on the machine running the suite.
+#
+# The arms are NEUTRALISED rather than the line DELETED: it is the whole body of an `if`, and
+# removing it leaves a mutant that does not parse. Every sensor kills that on sight, which scores
+# a point for the shell and none for the assertions the catalogue exists to measure.
+mut_QA_hostport_no_default_port() {
+  sed -i 's@^    case "$scheme" in http) port=80 ;; https) port=443 ;; esac$@    case "$scheme" in http) : ;; https) : ;; esac@' "$1"
+}
+
 mut_REVIEW_stops_at_h3() {
   sed -i 's|.*inside && /\^#{1,6}\[\[:space:\]\]/ { exit }.*|      inside \&\& /^###[[:space:]]/ { exit }|' "$1"
 }
@@ -873,6 +930,28 @@ mut_RUN_blocked_not_escalated() {
 # NAME, which is why check-autonomy.sh spends two assertions on it and not one.
 mut_RUN_blocked_retry_not_escalated() {
   sed -i '/^    if \[ "\$gate_rc2" -eq 0 \]; then$/,/^    if \[ "\$moved2" = "false" \]; then$/ s|^    if handoff_blocked_escalation "\$phase"; then return 3; fi$|    if false; then return 3; fi|' "$1"
+}
+
+# Door 1 of the app-down escalation, and the sibling of RUN_blocked_not_escalated above in every
+# respect: same range, same neutralisation, and the line substituted is textually distinct so
+# neither mutant can apply to the other's door.
+#
+# Without it a dead app costs the SECOND session too and then lands on `no-progress` — the row the
+# kaizen judge reads says "two sessions moved nothing" about a machine that was never up, which
+# names neither the cause nor anyone who could act on it.
+mut_RUN_app_down_not_escalated() {
+  sed -i '/^      "$( \[ "$gate_rc" -eq 0 \] && echo pass || echo fail )" "$GATE_WHY"$/,/^    phases_run=$((phases_run + 1))$/ s|^    if app_down_escalation "$phase"; then return 3; fi$|    if false; then return 3; fi|' "$1"
+}
+
+# Door 2: the inline retry, and it is not symmetry. The marker is a global, `current_phase` runs in
+# a subshell and cannot clear the parent's copy, and every gate but gate_QA leaves it alone — so
+# without this door the marker outlives the LAP: the run carries on (the retry did move the disk),
+# the next lap derives EXEC, and door 1 fires there, printing an APP_URL diagnosis over a phase
+# that never ran an e2e and writing {phase: EXEC, kind: app-down} into the ledger. Measured on a
+# copy while this was being written: `QA|app-down` became `EXEC|app-down`, the exact shape the
+# handoff-blocked sibling paid for one house along.
+mut_RUN_app_down_retry_not_escalated() {
+  sed -i '/^    if \[ "$gate_rc2" -eq 0 \]; then$/,/^    if \[ "$moved2" = "false" \]; then$/ s|^    if app_down_escalation "$phase"; then return 3; fi$|    if false; then return 3; fi|' "$1"
 }
 
 # Not a gate, and the exact bug I2 closed: `force_phase="PR"; continue` sat ABOVE both writers, so
@@ -1971,6 +2050,10 @@ CATALOG=(
   QA_bug_genre_prefix
   QA_bug_genre_anywhere
   QA_bug_genre_fenced
+  QA_e2e_red_never_probed
+  QA_app_down_on_unknown
+  QA_probe_ignores_e2e_rc
+  QA_hostport_no_default_port
   REVIEW_stops_at_h3
   REVIEW_accepts_B
   REVIEW_placeholder_rationale_blind
@@ -2007,6 +2090,8 @@ CATALOG=(
   RUN_jidoka_pipefail
   RUN_blocked_not_escalated
   RUN_blocked_retry_not_escalated
+  RUN_app_down_not_escalated
+  RUN_app_down_retry_not_escalated
   RUN_degraded_row_dropped
   RUN_degraded_repeats
   RUN_escalations_no_axis
