@@ -39,13 +39,14 @@ Achados sobre **repos-alvo** vão para o `TODO.md` daquele repo. Este arquivo é
 
 ### Sensores que faltam
 
-- [ ] **`sdd preflight` responde `preflight ok` sem sondar `APP_URL` nem `E2E_CMD`** —
-  `bin/sdd:2371` — ele checa 19 coisas e mede `TEST_CMD` verde, mas nunca toca no app que a fase
-  QA exige, então certifica prontidão numa máquina onde o `gate_QA` não pode passar. Fail-open: o
-  comando afirma ter medido o que não mediu. O `.sdd/config.sh` do `sales_quote` já documenta a
-  precondição ("subir o app é trabalho de OPERADOR") e nada a verifica — custou US$ 14,16 numa
-  sessão de QA que reprovou por ambiente. Direção: sondar `APP_URL` quando `E2E_CMD` é não-vazio.
-  — descoberto por `operador` na missão `20260827-condicoes-pagamento-mesmo-cliente` (2026-08-27)
+- [ ] **`gate_QA` roda `E2E_CMD` sem checar se o app está de pé, e lê o vermelho como falha de QA** —
+  `bin/sdd:712` — app fora do ar dá um vermelho indistinguível de regressão, e o gate manda uma
+  missão FECHADA, com PR já aberto, de volta para uma sessão paga de opus que não pode consertar
+  porta sem processo atrás. `DEV_READY_CMD` e `DEV_READY_TIMEOUT` já estão comentados no
+  `config.sh` porque nada os lê, e o `sdd preflight` responde `preflight ok` sem tocar em
+  `APP_URL`. Custou US$ 14,16 + US$ 7,61 (o retorno pós-PR). Direção: app fora do ar é `BLOCKED`
+  com a causa nomeada, nunca vermelho de suíte.
+  — descoberto por `sdd-qa` na missão `20260827-condicoes-pagamento-mesmo-cliente` (2026-08-27)
 
 - [ ] **`gate_QA` aceita relatório de QA de OUTRA missão** — `bin/sdd:614` — a Âncora 1 pega o
   relatório mais recente do glob por `latest_matching` e só exige `closed` sem linhas `Pending`;
