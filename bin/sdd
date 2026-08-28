@@ -4303,6 +4303,28 @@ cmd_autonomy() {
     # An ARRAY, for the same two reasons the twin states: a separator inside a value collides, and
     # `+` on a non-string value makes jq die and takes this whole command down with it.
     def mission_key: [(.repo // ""), (.mission // "")];
+    # The number the D12 metric reads, since D16 was amended on 2026-08-28: distinct run_id — how
+    # many times a human typed `sdd run` or `sdd retry` for this mission. The FACT, never
+    # `launches - 1`: "interventions = launches - 1" is the reading, written in CONTEXT.md and in
+    # the judge prompt, and a `- 1` here would be the first arithmetic of opinion inside an
+    # instrument that prints facts — and would read 0 on a mission abandoned after its first
+    # launch, which is an intervention. It UNDERCOUNTS by design: bringing the app up by hand
+    # between two launches is one new run_id, not two. An honest floor, where the prose
+    # (`- intervention:` notes) was a ceiling nobody filled — the mission with three launches
+    # (SQ-111) had zero notes.
+    def launches: map(.run_id) | unique | length;
+    # A session in a phase BELOW one whose gate had already PASSED, in $PHASES order — the pipeline
+    # going backwards after it had gone forward. NOT "the phase index went down": that counts the
+    # designed loop (QA fails, opens a fix increment, EXEC runs it), which frete-cif-fob did three
+    # times with QA REFUSED, all of it the pipeline working. With the gate in the clause that
+    # mission reads 0 and SQ-111, which ran QA after PR had passed, reads 1. A phase outside the
+    # order (KAIZEN) has a null index and counts on neither side — the `!= null` guards are
+    # load-bearing, because jq orders null below every number. Input in file order, which is
+    # write order: the ledger is append-only, and group_by keeps it (jq sorts stably).
+    def reopened: reduce .[] as $r ({maxpass: -1, n: 0};
+                    ($r.phase | phase_index) as $i
+                    | (if $i != null and $i < .maxpass then .n += 1 else . end)
+                    | (if $i != null and $r.gate == "pass" then .maxpass = ([.maxpass, $i] | max) else . end)) | .n;
     # Money is a COLUMN, and jq interpolates a NUMBER: 2.0 came out `US$ 2` in the column next to
     # `US$ 1.5`, the table stopped lining up, and a reader in a hurry reads "no cents were computed".
     # NOT printf, which is nowhere near this string: the whole row is built inside this one jq
@@ -4355,6 +4377,19 @@ cmd_autonomy() {
     # escalations block below counts them.
     | (map(select(is_session and comparable))
        | group_by(mission_key) | sort_by(.[0].ts)) as $mgroups
+    # EVERY local session of each mission, comparable or not — the population launches and
+    # reopened are drawn over. They are facts about the human history of the mission and not about
+    # a kit version: a launch that landed on a dirty kit was a launch. Measured on SQ-111, the
+    # mission that motivated the two fields: its post-PR QA row carries kit_dirty:true, and over
+    # the comparable rows alone `reopened` read 0 exactly there. session(s), the outcomes and US$
+    # stay on the comparable rows, because that is the sum check-autonomy.sh closes against the
+    # version table. When the two populations differ for a printed mission the accounting
+    # paragraph says so, once, with the difference summed over the missions printed.
+    | (map(select(is_session)) | group_by(mission_key)) as $every_session
+    | def history_of: . as $k | $every_session | map(select((.[0] | mission_key) == $k)) | .[0] // [];
+      (if $by_mission == 1
+       then ($mgroups | map((.[0] | mission_key | history_of | length) - length) | add // 0)
+       else 0 end) as $history_extra
     | (if $by_mission == 1 then
         (if ($mgroups | length) == 0 then
           "  no comparable sessions in this ledger"
@@ -4366,12 +4401,15 @@ cmd_autonomy() {
               | (length) as $n
               | (outcome_tally) as $t
               | (map(.cost_usd // 0) | add) as $cost
+              | (.[0] | mission_key | history_of) as $every
+              | ($every | launches) as $launches
+              | ($every | reopened) as $reopened
               # `?` and not 0 for a mission of another repo: its checkpoint lives under a
               # HANDOFF_DIR this process never loaded, and a zero there would read as
               # "nobody intervened" when the truth is "nobody looked".
               | (if ($interventions | has($m)) then "\($interventions[$m]) intervention(s)"
                  else "? intervention(s)" end) as $iv
-              | "  \($label)  \($n) session(s) · \($t.advanced) advanced · \($t.churned) churned · \($t.idle) idle · \($iv) · US$ \($cost | usd)"
+              | "  \($label)  \($n) session(s) · \($t.advanced) advanced · \($t.churned) churned · \($t.idle) idle · \($launches) launch(es) · \($reopened) reopened · \($iv) · US$ \($cost | usd)"
             ) | join("\n"))
         end)
       elif ($groups | length) == 0 then
@@ -4415,6 +4453,7 @@ cmd_autonomy() {
     # only when there is something to disclaim.
     , ([ (if $skipped > 0 then "  (\($skipped) non-comparable row(s) excluded: dirty kit, no kit_sha, or no moved field)" else empty end)
        , (if $stray > 0 then "  (\($stray) unrecognized row(s) excluded: event missing or not one of session/blocked/degraded)" else empty end)
+       , (if $history_extra > 0 then "  (launches and reopened are counted over every session of the mission, \($history_extra) of them non-comparable)" else empty end)
        ] as $inside
        | [ (if $foreign > 0 then "  (\($foreign) row(s) excluded: born in another repo — the ledger is global, this reader is not)" else empty end)
          , (if $norepo > 0 then "  (\($norepo) row(s) excluded: no repo field — the row cannot say which project it came from)" else empty end)

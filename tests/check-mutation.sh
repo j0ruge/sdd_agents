@@ -2086,6 +2086,27 @@ mut_KAIZEN_churn_reads_ok() {
   sed -i 's@(.auto_retry == true or .moved == false or .gate == "fail")@(.auto_retry == true or .moved == false)@' "$1"
 }
 
+# `unique` leaves `launches`: three rows of one run read as three launches, and the intervention
+# count the D12 metric reads becomes a session count with a new name.
+mut_AUTONOMY_launches_counts_rows() {
+  sed -i 's@def launches: map(.run_id) | unique | length;@def launches: map(.run_id) | length;@' "$1"
+}
+
+# `reopened` advances its high-water mark on ANY session, passed or not — "the phase index went
+# down", the definition the spec refused: frete-cif-fob (EXEC after a REFUSED QA, three times)
+# would read 3 where the truth is 0. Caught by the fail twin of the reopen pair.
+mut_AUTONOMY_reopened_ignores_gate() {
+  sed -i 's@(if \$i != null and \$r.gate == "pass" then .maxpass@(if $i != null then .maxpass@' "$1"
+}
+
+# launches and reopened drawn over the COMPARABLE sessions of the mission instead of every local
+# one: SQ-111, whose post-PR QA row is on a dirty kit, reads `2 launch(es) · 0 reopened` as
+# `1 launch(es) · 0 reopened` — the population mistake that almost shipped. Caught by the
+# population pair, whose comparable population is exactly one row.
+mut_AUTONOMY_reopened_comparable_only() {
+  sed -i 's@| (\.\[0\] | mission_key | history_of) as \$every$@| . as $every@' "$1"
+}
+
 CATALOG=(
   PLAN_empty_approval
   PLAN_kaizen_born_blind
@@ -2257,6 +2278,9 @@ CATALOG=(
   KAIZEN_outcome_inlined_old
   AUTONOMY_waste_idle_only
   KAIZEN_churn_reads_ok
+  AUTONOMY_launches_counts_rows
+  AUTONOMY_reopened_ignores_gate
+  AUTONOMY_reopened_comparable_only
 )
 
 # Mutations that are NOT caught today, each with the increment that closes it. Ratchet in both

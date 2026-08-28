@@ -1819,6 +1819,81 @@ assert_eq "a checkpoint born verbatim from the template owes no intervention" \
 
 rm -rf "$FIX/docs/handoffs/h1" "$FIX/docs/handoffs/h2" "$FIX/docs/handoffs/h3"
 
+# --- launches and reopenings: the intervention count comes from the ledger, not from prose --------
+# D16 read the D12 count off `- intervention:` notes, and the notes were never written: the
+# mission with three launches (SQ-111, 2026-08-27) had zero. `run_id` is on every row of every
+# repo, so the count is distinct run_id per mission — the FACT, never `launches - 1` ("interventions
+# = launches - 1" is the reading, written in CONTEXT.md; a `- 1` here would print 0 on a mission
+# abandoned after its first launch, which is an intervention).
+echo "== reader: --by-mission counts launches =="
+mkdir -p "$OUTSIDE/launches"
+localize > "$OUTSIDE/launches/autonomy-log.jsonl" <<'EOF'
+{"v":1,"ts":"2026-08-15T10:00:00-03:00","event":"session","run_id":"r1","invocation":"run","kit_sha":"eeeeeee","kit_dirty":false,"project":"p1","repo":"/p1","mission":"m1","phase":"EXEC","step":"EXEC","agent":"sdd-executor","model":"opus","attempt":1,"auto_retry":false,"session":"s1","rc":0,"dur_s":10,"cost_usd":1.0,"moved":true,"gate":"fail","gate_why":"x"}
+{"v":1,"ts":"2026-08-15T10:01:00-03:00","event":"session","run_id":"r1","invocation":"run","kit_sha":"eeeeeee","kit_dirty":false,"project":"p1","repo":"/p1","mission":"m1","phase":"EXEC","step":"EXEC","agent":"sdd-executor","model":"opus","attempt":2,"auto_retry":false,"session":"s2","rc":0,"dur_s":10,"cost_usd":1.0,"moved":true,"gate":"fail","gate_why":"x"}
+{"v":1,"ts":"2026-08-15T10:02:00-03:00","event":"session","run_id":"r1","invocation":"run","kit_sha":"eeeeeee","kit_dirty":false,"project":"p1","repo":"/p1","mission":"m1","phase":"EXEC","step":"EXEC","agent":"sdd-executor","model":"opus","attempt":3,"auto_retry":false,"session":"s3","rc":0,"dur_s":10,"cost_usd":1.0,"moved":true,"gate":"pass","gate_why":"x"}
+{"v":1,"ts":"2026-08-15T10:03:00-03:00","event":"session","run_id":"r2","invocation":"run","kit_sha":"eeeeeee","kit_dirty":false,"project":"p1","repo":"/p1","mission":"m2","phase":"EXEC","step":"EXEC","agent":"sdd-executor","model":"opus","attempt":1,"auto_retry":false,"session":"s4","rc":0,"dur_s":10,"cost_usd":1.0,"moved":true,"gate":"pass","gate_why":"x"}
+{"v":1,"ts":"2026-08-15T10:04:00-03:00","event":"session","run_id":"r3","invocation":"retry","kit_sha":"eeeeeee","kit_dirty":false,"project":"p1","repo":"/p1","mission":"m2","phase":"QA","step":"QA:close","agent":"sdd-qa","model":"opus","attempt":1,"auto_retry":false,"session":"s5","rc":0,"dur_s":10,"cost_usd":1.0,"moved":true,"gate":"pass","gate_why":"x"}
+{"v":1,"ts":"2026-08-15T10:05:00-03:00","event":"session","run_id":"r4","invocation":"run","kit_sha":"eeeeeee","kit_dirty":false,"project":"p1","repo":"/p1","mission":"m3","phase":"EXEC","step":"EXEC","agent":"sdd-executor","model":"opus","attempt":1,"auto_retry":false,"session":"s6","rc":0,"dur_s":10,"cost_usd":1.0,"moved":true,"gate":"pass","gate_why":"x"}
+EOF
+out_l="$( SDD_STATE_DIR="$OUTSIDE/launches" "$SDD" autonomy --by-mission 2>&1 )"
+# cell_of <mission> <output> <cell-word>  -> the integer in front of that cell word, or "".
+# The writer is mission_line (a grep over a herestring); the readers consume all of its output, so
+# nothing on the reading end exits early — the SIGPIPE trap this repo warns about needs a reader
+# that quits, and -o never does.
+cell_of() { mission_line "$1" "$2" | grep -oE "[0-9]+ $3" | grep -oE '^[0-9]+'; }
+assert_eq "launches count distinct run_id per mission: three rows of one run are one launch" \
+  "m1:1 m2:2 m3:1" \
+  "m1:$(cell_of m1 "$out_l" 'launch') m2:$(cell_of m2 "$out_l" 'launch') m3:$(cell_of m3 "$out_l" 'launch')"
+
+# reopened: a session in a phase BELOW one whose gate had already PASSED, in $PHASES order. NOT
+# "the phase index went down" — that counts the designed loop (QA fails, opens a fix increment,
+# EXEC runs it), which frete-cif-fob did three times with QA REFUSED, all of it the pipeline
+# working. The pair below is identical but for the gate of the QA row, so only the gate can
+# separate 1 from 0. The KAIZEN row after PR sits outside $PHASES: null index, counted on neither
+# side — jq orders null below every number, so with the null guard gone the pass twin reads 2.
+echo "== reader: --by-mission counts reopenings by the gate, not by the direction =="
+mkdir -p "$OUTSIDE/reopen_pass" "$OUTSIDE/reopen_fail"
+localize > "$OUTSIDE/reopen_pass/autonomy-log.jsonl" <<'EOF'
+{"v":1,"ts":"2026-08-15T10:00:00-03:00","event":"session","run_id":"r1","invocation":"run","kit_sha":"eeeeeee","kit_dirty":false,"project":"p1","repo":"/p1","mission":"m1","phase":"EXEC","step":"EXEC","agent":"sdd-executor","model":"opus","attempt":1,"auto_retry":false,"session":"s1","rc":0,"dur_s":10,"cost_usd":1.0,"moved":true,"gate":"pass","gate_why":"x"}
+{"v":1,"ts":"2026-08-15T10:01:00-03:00","event":"session","run_id":"r1","invocation":"run","kit_sha":"eeeeeee","kit_dirty":false,"project":"p1","repo":"/p1","mission":"m1","phase":"QA","step":"QA:close","agent":"sdd-qa","model":"opus","attempt":1,"auto_retry":false,"session":"s2","rc":0,"dur_s":10,"cost_usd":1.0,"moved":true,"gate":"pass","gate_why":"the QA row"}
+{"v":1,"ts":"2026-08-15T10:02:00-03:00","event":"session","run_id":"r2","invocation":"run","kit_sha":"eeeeeee","kit_dirty":false,"project":"p1","repo":"/p1","mission":"m1","phase":"EXEC","step":"EXEC","agent":"sdd-executor","model":"opus","attempt":1,"auto_retry":false,"session":"s3","rc":0,"dur_s":10,"cost_usd":1.0,"moved":true,"gate":"pass","gate_why":"x"}
+{"v":1,"ts":"2026-08-15T10:03:00-03:00","event":"session","run_id":"r2","invocation":"run","kit_sha":"eeeeeee","kit_dirty":false,"project":"p1","repo":"/p1","mission":"m1","phase":"PR","step":"PR","agent":"sdd-publisher","model":"sonnet","attempt":1,"auto_retry":false,"session":"s4","rc":0,"dur_s":10,"cost_usd":1.0,"moved":true,"gate":"pass","gate_why":"x"}
+{"v":1,"ts":"2026-08-15T10:04:00-03:00","event":"session","run_id":"r3","invocation":"run","kit_sha":"eeeeeee","kit_dirty":false,"project":"p1","repo":"/p1","mission":"m1","phase":"KAIZEN","step":"KAIZEN","agent":"sdd-kaizen","model":"opus","attempt":1,"auto_retry":false,"session":"s5","rc":0,"dur_s":10,"cost_usd":1.0,"moved":true,"gate":"pass","gate_why":"x"}
+EOF
+sed 's|"gate":"pass","gate_why":"the QA row"|"gate":"fail","gate_why":"the QA row"|' \
+  "$OUTSIDE/reopen_pass/autonomy-log.jsonl" > "$OUTSIDE/reopen_fail/autonomy-log.jsonl"
+# The twin has to differ, or the differential below compares a file with itself.
+assert_eq "the twin differs from its pair on exactly one row" "1" \
+  "$(diff "$OUTSIDE/reopen_pass/autonomy-log.jsonl" "$OUTSIDE/reopen_fail/autonomy-log.jsonl" | grep -c '^<')"
+out_rp="$( SDD_STATE_DIR="$OUTSIDE/reopen_pass" "$SDD" autonomy --by-mission 2>&1 )"
+out_rf="$( SDD_STATE_DIR="$OUTSIDE/reopen_fail" "$SDD" autonomy --by-mission 2>&1 )"
+assert_eq "EXEC after a PASSED QA is a reopening; EXEC after a FAILED QA is the loop working" \
+  "pass:1 fail:0" "pass:$(cell_of m1 "$out_rp" 'reopened') fail:$(cell_of m1 "$out_rf" 'reopened')"
+
+# The population. session(s), the outcomes and US$ are drawn over the COMPARABLE sessions — that is
+# the sum this file closes against the version table. launches and reopened are drawn over EVERY
+# local session of the mission: a launch that landed on a dirty kit was a launch, and on SQ-111 the
+# post-PR QA row — the reopening that motivated the field — carries kit_dirty:true, so over the
+# comparable rows alone reopened read 0 exactly where it mattered. When the two populations differ
+# the accounting paragraph says so, once. Differential: the same mission with the dirty row removed
+# reads one launch, and the sentence is gone.
+echo "== reader: --by-mission draws launches over every session of the mission =="
+mkdir -p "$OUTSIDE/population" "$OUTSIDE/populationclean"
+localize > "$OUTSIDE/population/autonomy-log.jsonl" <<'EOF'
+{"v":1,"ts":"2026-08-15T10:00:00-03:00","event":"session","run_id":"r1","invocation":"run","kit_sha":"eeeeeee","kit_dirty":false,"project":"p1","repo":"/p1","mission":"m1","phase":"EXEC","step":"EXEC","agent":"sdd-executor","model":"opus","attempt":1,"auto_retry":false,"session":"s1","rc":0,"dur_s":10,"cost_usd":1.0,"moved":true,"gate":"pass","gate_why":"x"}
+{"v":1,"ts":"2026-08-15T10:01:00-03:00","event":"session","run_id":"r2","invocation":"run","kit_sha":"eeeeeee","kit_dirty":true,"project":"p1","repo":"/p1","mission":"m1","phase":"QA","step":"QA:close","agent":"sdd-qa","model":"opus","attempt":1,"auto_retry":false,"session":"s2","rc":0,"dur_s":10,"cost_usd":1.0,"moved":true,"gate":"pass","gate_why":"x"}
+EOF
+grep -v '"kit_dirty":true' "$OUTSIDE/population/autonomy-log.jsonl" > "$OUTSIDE/populationclean/autonomy-log.jsonl"
+out_pop="$(  SDD_STATE_DIR="$OUTSIDE/population"      "$SDD" autonomy --by-mission 2>&1 )"
+out_popc="$( SDD_STATE_DIR="$OUTSIDE/populationclean" "$SDD" autonomy --by-mission 2>&1 )"
+assert_eq "one comparable session, two launches: the launch on a dirty kit was a launch" "1 2" \
+  "$(cell_of m1 "$out_pop" 'session') $(cell_of m1 "$out_pop" 'launch')"
+assert_eq "and the accounting paragraph names the population difference, once" "1" \
+  "$(grep -c '(launches and reopened are counted over every session of the mission, 1 of them non-comparable)' <<< "$out_pop")"
+assert_eq "without the dirty row: one launch, and the sentence is gone" "1 0" \
+  "$(cell_of m1 "$out_popc" 'launch') $(grep -c 'counted over every session' <<< "$out_popc")"
+assert_bucket_sum "the four buckets still sum to the header total (--by-mission, a dirty launch)" "$out_pop"
+
 # The header has to name the SCOPE it actually read. Under the flag the rows below come from every
 # project on the machine, and a header still ending in one repo path reads as a claim ABOUT that
 # repo — the same misattribution the filter was added to remove, now printed by the reader itself.
