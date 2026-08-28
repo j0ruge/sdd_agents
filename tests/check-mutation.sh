@@ -342,6 +342,28 @@ mut_QA_hostport_no_default_port() {
   sed -i 's@^    case "$scheme" in http) port=80 ;; https) port=443 ;; esac$@    case "$scheme" in http) : ;; https) : ;; esac@' "$1"
 }
 
+# The scheme goes back to being matched LITERALLY, so `HTTP://` stops being a URL. Its own entry
+# and not a variant of the one above, because the two silences are different sizes: no-default-port
+# loses the majority spelling of the key, this one loses a spelling that is equally legal and that
+# no reader would think to check. Both degrade to `unknown`, where nothing fails and nothing warns.
+#
+# Caught by `an uppercase scheme reads as an address` in check-gates.sh, and by that one ALONE —
+# the sibling below is aimed at the other half of the same fix, and neither can score the other's
+# point. One mutant per half of the assertion.
+mut_QA_hostport_case_blind() {
+  sed -i 's@^  case "${url,,}" in$@  case "$url" in@' "$1"
+}
+
+# The CHEAP fix, and the reason the case pair is a pair: fold the whole URL instead of taking the
+# remainder by offset. It passes `an uppercase scheme reads as an address` perfectly — and folds
+# the HOST with it, so the address in the sentence is no longer the one the operator wrote and
+# went looking for. Mutating the `https` arm only, which is the arm the host assertion drives.
+#
+# Caught by `and the host keeps the case the operator wrote` in check-gates.sh.
+mut_QA_hostport_folds_host() {
+  sed -i 's@^    https://\*) scheme=https; rest="${url:8}" ;;$@    https://*) scheme=https; rest="${url,,}"; rest="${rest:8}" ;;@' "$1"
+}
+
 mut_REVIEW_stops_at_h3() {
   sed -i 's|.*inside && /\^#{1,6}\[\[:space:\]\]/ { exit }.*|      inside \&\& /^###[[:space:]]/ { exit }|' "$1"
 }
@@ -2054,6 +2076,8 @@ CATALOG=(
   QA_app_down_on_unknown
   QA_probe_ignores_e2e_rc
   QA_hostport_no_default_port
+  QA_hostport_case_blind
+  QA_hostport_folds_host
   REVIEW_stops_at_h3
   REVIEW_accepts_B
   REVIEW_placeholder_rationale_blind

@@ -506,7 +506,16 @@ port_is_free() {  # rc 0 = nothing is listening on 127.0.0.1:$1
   LC_ALL=C timeout 3 bash -c 'exec 3<>"/dev/tcp/127.0.0.1/$0"' "$1" 2>/dev/null || rc=$?
   [ "$rc" -ne 0 ]
 }
-dead_port=$(( 49152 + $$ % 10000 ))
+# BELOW the ephemeral range, and that is what makes the floor hold for the whole block. The floor
+# proves the port refuses ONCE; the assertions under it then run several `sdd` invocations over
+# minutes against that one measurement. Drawn from 49152-59171 the port sat INSIDE the kernel's
+# `ip_local_port_range` (32768-60999 by default), so it could be handed out mid-block and the
+# assertions would flip for a reason that has nothing to do with the runner. 20000-29999 is under
+# that floor. DECLARED LIMIT: a machine that lowered `ip_local_port_range` past 20000, or that
+# starts a real listener there mid-block, is back in the old window — the search loop below only
+# re-measures at the start, and re-measuring per assertion would buy a smaller window at the price
+# of a floor nobody can read.
+dead_port=$(( 20000 + $$ % 10000 ))
 app_floor_ok=1
 if ! command -v timeout >/dev/null 2>&1; then
   fail "dead-app floor" "timeout(1) on PATH" "timeout is missing — the APP_URL block was NOT measured"

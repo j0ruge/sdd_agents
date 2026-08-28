@@ -336,9 +336,16 @@ app_url_hostport() {
   # Only the two schemes whose default port is a fact. A `file://` or a bare `host:port` are not
   # refused because they are exotic; they are refused because guessing a port for them would make
   # the probe answer `down` about an address nobody wrote.
-  case "$url" in
-    http://*)  scheme=http;  rest="${url#http://}" ;;
-    https://*) scheme=https; rest="${url#https://}" ;;
+  #
+  # Matched case-INSENSITIVELY, because the scheme IS case-insensitive (RFC 3986 §3.1) and the
+  # failure of reading it otherwise is the silent kind: `APP_URL="HTTP://localhost:3000"` fell
+  # through to `unknown`, where nothing fails and nothing warns — the whole escalation simply
+  # stopped existing for a spelling nobody would think to check. The remainder is taken by OFFSET
+  # (7 for `http://`, 8 for `https://`) and never off `${url,,}`: folding the whole string would
+  # fold the HOST with it, and the host rides into the sentence an operator reads.
+  case "${url,,}" in
+    http://*)  scheme=http;  rest="${url:7}" ;;
+    https://*) scheme=https; rest="${url:8}" ;;
     *) return 1 ;;
   esac
   # Fragment, then query, then path — and ALL THREE before the userinfo. A path may legitimately
@@ -395,6 +402,15 @@ app_url_hostport() {
 # /dev/tcp, an absent timeout(1), an error string the kernel words differently — every one of them
 # lands in `unknown`, where the runner behaves byte for byte as it did before this existed. The
 # probe turns a red into a NAMED red; it can never turn a green into a red.
+#
+# DECLARED LIMIT — not memoised, on purpose. One lap of `cmd_run` can reach here twice: once inside
+# `$(current_phase)` and once at the gate call itself. The second connect is not free, and the
+# worst case is the one where nothing is refused and nothing answers — a firewall dropping the
+# packets — at $APP_PROBE_TIMEOUT seconds a call. It is left uncached because a cache here would
+# owe an invalidation contract: `invalidate_checks` exists precisely because a session can change
+# the world between two evaluations, and the operator starting the app IS that change. Buying a few
+# seconds with a verdict that can go stale across a session is the wrong side of that trade, and
+# the seconds are noise beside the E2E_CMD run that has to fail before this is reached at all.
 app_probe() {
   local url="${1:-${APP_URL:-}}" hp host port label err="" rc=0
   [ -n "$url" ] || { printf 'unknown|APP_URL is empty\n'; return 0; }
