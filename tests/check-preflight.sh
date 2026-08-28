@@ -492,6 +492,101 @@ assert_has "codereview is asked for whatever the config says" "codereview" "$out
 rm -f .jira-project
 mv .sdd/config.sh.bak .sdd/config.sh
 
+# --- is anything listening where APP_URL points? ----------------------------
+# preflight ran fifteen checks and never once touched APP_URL, so the one thing that costs a whole
+# opus session to discover — the app is not up — was the one thing it could not say. Measured on
+# the SQ-111 mission of 2026-08-27: US$ 14,16 for a QA phase reproved by the environment.
+#
+# FLOOR FIRST, and NOT written with the runner's own app_probe: a floor that reuses the function
+# under test measures the runner with the runner.
+echo "== is anything listening where APP_URL points =="
+cd "$FIX" || exit 1
+port_is_free() {  # rc 0 = nothing is listening on 127.0.0.1:$1
+  local rc=0
+  LC_ALL=C timeout 3 bash -c 'exec 3<>"/dev/tcp/127.0.0.1/$0"' "$1" 2>/dev/null || rc=$?
+  [ "$rc" -ne 0 ]
+}
+dead_port=$(( 49152 + $$ % 10000 ))
+app_floor_ok=1
+if ! command -v timeout >/dev/null 2>&1; then
+  fail "dead-app floor" "timeout(1) on PATH" "timeout is missing — the APP_URL block was NOT measured"
+  app_floor_ok=0
+else
+  tries=0
+  while ! port_is_free "$dead_port"; do
+    dead_port=$(( dead_port + 1 )); tries=$(( tries + 1 ))
+    if [ "$tries" -ge 20 ]; then
+      fail "dead-app floor" "a refused port on 127.0.0.1" \
+           "20 consecutive ports were all listening — the block would certify nothing"
+      app_floor_ok=0; break
+    fi
+  done
+fi
+
+if [ "$app_floor_ok" = "1" ]; then
+  pass "dead-app floor: 127.0.0.1:$dead_port refuses connections"
+  cp .sdd/config.sh .sdd/config.sh.bak
+  DEAD="http://127.0.0.1:$dead_port/"
+
+  # ⭐ THE PAIR, and APP_URL is held CONSTANT across it while E2E_CMD moves — the opposite of the
+  # pair in check-autonomy.sh, and for a reason. Every other APP_URL-sensitive check in preflight
+  # (the browser, the qa skills) keys on `E2E_CMD OR APP_URL`, so with APP_URL non-empty on both
+  # sides they fire identically and the ONLY thing that can move the failed count is the new
+  # check. Varying APP_URL instead would flip the browser check with it, and the +1 could not be
+  # attributed.
+  #
+  # And the direction is the whole policy: a dead app is a FAILURE only when E2E_CMD is
+  # configured, because that is the case where a gate is about to run a suite against an app that
+  # is not there. Without E2E_CMD nothing automatic runs against it, so the same fact is a warning
+  # for the human who is about to walk the journey — never a refusal to start the mission.
+  sed -i "s|^E2E_CMD=.*|E2E_CMD=\"npm run e2e\"|" .sdd/config.sh
+  printf 'APP_URL="%s"\n' "$DEAD" >> .sdd/config.sh
+  out_dead_e2e="$( "$SDD" preflight 2>&1 )"
+
+  sed -i 's|^E2E_CMD=.*|E2E_CMD=""|' .sdd/config.sh
+  out_dead_alone="$( "$SDD" preflight 2>&1 )"
+
+  n_e2e="$(failed_count "$out_dead_e2e")"
+  n_alone="$(failed_count "$out_dead_alone")"
+  assert_eq "a dead app with E2E_CMD set is one MORE failed check than the same dead app without it" \
+    "one more" \
+    "$( [ -n "$n_e2e" ] && [ -n "$n_alone" ] && [ "$n_e2e" -eq $(( n_alone + 1 )) ] \
+        && echo "one more" || echo "$n_alone -> $n_e2e" )"
+
+  assert_has "and it names the address, so the human knows what to start" \
+    "127.0.0.1:$dead_port" "$out_dead_e2e"
+  assert_has "the refusal says WHY a dead app is fatal here, not just that it is dead" \
+    "E2E_CMD" "$out_dead_e2e"
+  # The other half of the pair, and the one that keeps the fix from being wider than the defect:
+  # with no E2E_CMD the same dead app is still REPORTED, and still not a refusal.
+  assert_has "without E2E_CMD the dead app is still reported" \
+    "127.0.0.1:$dead_port" "$out_dead_alone"
+
+  # An APP_URL this cannot read is NOT a dead app, and saying so is the one-sided contract of the
+  # probe carried through to the human: `unknown` never becomes a refusal, whatever E2E_CMD says.
+  sed -i "s|^E2E_CMD=.*|E2E_CMD=\"npm run e2e\"|" .sdd/config.sh
+  sed -i 's|^APP_URL=.*|APP_URL="not a url"|' .sdd/config.sh
+  out_unknown="$( "$SDD" preflight 2>&1 )"
+  n_unknown="$(failed_count "$out_unknown")"
+  assert_eq "an APP_URL that cannot be read is a warning, never a refusal — even with E2E_CMD set" \
+    "no extra failure" \
+    "$( [ -n "$n_unknown" ] && [ -n "$n_alone" ] && [ "$n_unknown" -eq "$n_alone" ] \
+        && echo "no extra failure" || echo "$n_alone -> $n_unknown" )"
+  assert_has "and it says why it could not tell, instead of claiming the app is down" \
+    "not probed" "$out_unknown"
+  assert_lacks "an unreadable APP_URL never claims a dead app" \
+    "nothing is listening" "$out_unknown"
+
+  # Empty APP_URL: nothing to probe, and nothing said about listening either way. This is the
+  # regime EVERY repo without an interface is in, so a line here that fired would fire everywhere.
+  sed -i 's|^APP_URL=.*|APP_URL=""|' .sdd/config.sh
+  out_noapp="$( "$SDD" preflight 2>&1 )"
+  assert_lacks "an empty APP_URL claims nothing about listening" "nothing is listening" "$out_noapp"
+  assert_lacks "an empty APP_URL is not reported as unprobed either" "not probed" "$out_noapp"
+
+  mv .sdd/config.sh.bak .sdd/config.sh
+fi
+
 # --- install seeds the tree the runner cannot work without ------------------
 # `sdd install` made `.sdd/` and `.claude/agents/` and stopped. `resolve_mission` dies on the FIRST
 # command a new user types — "docs/handoffs/ does not exist in the target repo" — and `TODO_FILE`,

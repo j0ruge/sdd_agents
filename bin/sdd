@@ -2648,6 +2648,46 @@ cmd_preflight() {
     dim "  ---  agent-browser not checked (E2E_CMD and APP_URL empty)"
   fi
 
+  # --- is anything listening where APP_URL points? -------------------------
+  # Fifteen checks ran here and not one of them touched APP_URL, so the single fact that costs a
+  # whole opus session to discover — the app is not up — was the one preflight could not say.
+  # Measured on the SQ-111 mission of 2026-08-27: US$ 14,16 for a QA phase reproved by the
+  # environment. This is the same probe gate_QA uses, asked one step earlier and for free.
+  #
+  # A dead app is a REFUSAL only when E2E_CMD is set, and the asymmetry is the policy, not a
+  # convenience: with E2E_CMD configured a gate is about to run a suite against an app that is not
+  # there, which is precisely the loop this pays for. Without it nothing automatic runs against
+  # APP_URL at all, so the same fact is something the human walking the journey should know and
+  # never a reason to refuse to start the mission — the kit does not get to decide the app must be
+  # up before a human may plan.
+  #
+  # `unknown` is a warning in BOTH cases, and never a refusal. The probe is one-sided by
+  # construction (see app_probe) and the human-facing half has to keep that promise: refusing to
+  # start a mission because a URL could not be parsed would break every repo whose APP_URL this
+  # does not understand, which is the widest possible reading of the narrowest possible fact.
+  if [ -n "$APP_URL" ]; then
+    local app_verdict app_state app_label
+    app_verdict="$(app_probe "$APP_URL")"
+    app_state="${app_verdict%%|*}"; app_label="${app_verdict#*|}"
+    case "$app_state" in
+      up)   ok "something is listening at $app_label (APP_URL)" ;;
+      down)
+        if [ -n "$E2E_CMD" ]; then
+          _fail "nothing is listening at $app_label (APP_URL), and E2E_CMD is configured —
+        gate_QA would run that suite against an app that is not there, and no session in this
+        pipeline may start one. Start the app, or clear APP_URL if the e2e brings its own
+        server up."
+        else
+          warn "nothing is listening at $app_label (APP_URL) — with no E2E_CMD no gate runs
+        against it, but the exploratory QA session will need it up"
+        fi
+        ;;
+      *) warn "APP_URL not probed: $app_label" ;;
+    esac
+  else
+    dim "  ---  APP_URL not set — nothing to probe"
+  fi
+
   # --- config ---
   bash -n "$CONFIG_FILE" && ok "config syntax valid"
   case "$TEST_CMD" in
