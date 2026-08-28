@@ -166,7 +166,7 @@ assert_eq "increment-blocked labels the phase 'refez' even with zero dead sessio
 assert_eq "a clean pass labels the phase 'ok'" \
   "ok" "$(field '.latest.detail[] | select(.mission == "m3") | .label')"
 assert_eq "the label tally sums the detail" \
-  '{"ok":1,"leve":1,"refez":2}' "$(jq -c '.previous.labels' <<< "$SERIES_OUT")"
+  '{"ok":0,"leve":2,"refez":2}' "$(jq -c '.previous.labels' <<< "$SERIES_OUT")"
 assert_eq "escalations are counted by kind" '{"budget-exhausted":1,"increment-blocked":1}' \
   "$(jq -c '.previous.escalations' <<< "$SERIES_OUT")"
 # 6 of the 7 sessions of the previous version wrote to the disk (s1 is the one that did not).
@@ -188,6 +188,15 @@ assert_eq "each phase of the detail carries its own outcomes" \
 # cannot pass.
 assert_eq "advance_rate reads the gate and moved_rate reads the disk, and here they differ" \
   "0.57 0.86" "$(jq -r '"\(.previous.advance_rate) \(.previous.moved_rate)"' <<< "$SERIES_OUT")"
+# The churn clause of the rubric. A phase whose gate failed and then passed inside ONE run, with
+# no auto retry, no human retry and no escalation, used to read `ok` — frete-cif-fob EXEC, seven
+# sessions and five refusals, read `ok` to the judge. Any session of the phase with gate == fail is
+# at least `leve` now; `refez` does not change. Control beside it, on the same series: a phase that
+# passed on its first session still reads `ok`, so the clause is not "everything is leve".
+assert_eq "a phase that wrote, failed its gate and then passed reads leve, never ok" \
+  "leve" "$(field '.previous.detail[] | select(.mission == "m6" and .phase == "EXEC") | .label')"
+assert_eq "control: a single clean pass still reads ok" \
+  "ok" "$(field '.latest.detail[] | select(.mission == "m3") | .label')"
 assert_eq "one mission after the latest change" "1" "$(field '.guard.missions_after_change')"
 assert_eq "one mission is below the guard floor of 3" "false" "$(field '.guard.sufficient')"
 # The KAIZEN row shares the latest kit_sha on purpose: leaking into the group would inflate

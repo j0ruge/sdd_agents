@@ -4450,7 +4450,10 @@ cmd_autonomy() {
 # The label rubric, per mission×phase group:
 #   refez — any escalation, any human retry invocation, or the phase's last session still failing
 #           its gate: the work was pushed again, the strongest friction signal there is.
-#   leve  — an in-loop auto retry or a session that did not move the disk: friction, absorbed.
+#   leve  — an in-loop auto retry, a session that did not move the disk, or ANY session of the
+#           phase that failed its gate (churn: it wrote, the gate refused, the runner bought the
+#           next lap — frete-cif-fob EXEC was seven sessions, five refusals, and read `ok` until
+#           2026-08-28): friction, absorbed.
 #   ok    — none of the above.
 # Rows with a dirty kit or no kit_sha are non-comparable (counted, never mixed in), and the
 # KAIZEN meta row is excluded from the axis it would otherwise shift — the judge must never see
@@ -4628,7 +4631,7 @@ kaizen_series() {
          or (map(select(.event == "session" and .invocation == "retry")) | length) > 0
          or ((map(select(.event == "session")) | last | .gate) != "pass")
       then "refez"
-      elif (map(select(.event == "session" and (.auto_retry == true or .moved == false))) | length) > 0
+      elif (map(select(.event == "session" and (.auto_retry == true or .moved == false or .gate == "fail"))) | length) > 0
       then "leve"
       else "ok"
       end;

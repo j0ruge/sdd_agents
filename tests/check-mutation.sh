@@ -2079,6 +2079,13 @@ mut_AUTONOMY_waste_idle_only() {
   sed -i 's@((\$t\.churned + \$t\.idle) \* 100 / \$n)@($t.idle * 100 / $n)@' "$1"
 }
 
+# The rubric loses the churn clause: a phase of seven sessions and five refusals that ended up
+# passing reads `ok` to the judge again. Caught by the m6 group of the series fixture and by the
+# labels literal beside it.
+mut_KAIZEN_churn_reads_ok() {
+  sed -i 's@(.auto_retry == true or .moved == false or .gate == "fail")@(.auto_retry == true or .moved == false)@' "$1"
+}
+
 CATALOG=(
   PLAN_empty_approval
   PLAN_kaizen_born_blind
@@ -2249,6 +2256,7 @@ CATALOG=(
   AUTONOMY_outcome_reads_moved_only
   KAIZEN_outcome_inlined_old
   AUTONOMY_waste_idle_only
+  KAIZEN_churn_reads_ok
 )
 
 # Mutations that are NOT caught today, each with the increment that closes it. Ratchet in both
