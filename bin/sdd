@@ -883,7 +883,6 @@ gate_QA() {
     case "$state" in
       down)
         # The only arm that arms the marker, and the only one cmd_run acts on.
-        # shellcheck disable=SC2034  # no reader until app_down_escalation lands; delete then
         GATE_APP_DOWN=1
         GATE_WHY="E2E_CMD failed ($E2E_CMD) and nothing is listening at $label (APP_URL) — the app is down; no session can start it. See $e2e_log"
         ;;
@@ -3578,6 +3577,42 @@ handoff_blocked_escalation() {
   return 0
 }
 
+# Fourth Jidoka, and the sibling of the one above in every respect that matters: same marker
+# discipline, same two doors, same rc 3. What differs is WHO has to act. `handoff-blocked` says a
+# human owes the pipeline a decision; this one says a human owes it a MACHINE — the e2e came back
+# red and nothing is listening where APP_URL points, and no agent in this pipeline is allowed to
+# bring an environment up (config/schema.md declares that the operator's job, and this mission
+# deliberately did not change it: the runner learns to ASK, not to act).
+#
+# Without it the runner read a dead app as "QA still has work to do" and bought another opus
+# session, for ever: measured on the SQ-111 mission of 2026-08-27 at US$ 14,16 for one such QA,
+# plus US$ 7,61 for the lap that reopened a mission whose PR was already open.
+#
+# TWO DOORS, for exactly the reason the paragraph above GATE_APP_DOWN re-derives rather than
+# assumes: the first pass and the inline retry. With only the first, a retry whose gate armed the
+# marker would carry it into the next lap, where gate_EXEC — which never touches it — would let
+# this escalation fire for EXEC, printing an APP_URL diagnosis over a phase that never ran an e2e.
+# That is the F2 failure measured on the handoff-blocked sibling, one house along; the contract
+# above the marker says every new marker owes the derivation, and this is it.
+#
+# Returns 0 when it escalated and 1 when the marker is unset, and it is CALLED, never substituted
+# — a subshell would send the ledger row and the five lines a human is meant to act on into the
+# substitution instead of to the ledger and the terminal.
+app_down_escalation() {
+  local phase="$1"
+  [ "$GATE_APP_DOWN" = "1" ] || return 1
+  info ""
+  bad "BLOCKED in $phase — $GATE_WHY"
+  dim "  The line stopped on purpose: the e2e is red and the address in APP_URL refuses"
+  dim "  connections. No session in this pipeline may bring an environment up."
+  dim "  Another session would run the same e2e against the same dead address and refuse"
+  dim "  the same way."
+  dim "  Start the app and 'sdd run' — or, if the e2e brings its own server up, clear APP_URL."
+  pipeline_log_line "$(date -Iseconds)  BLOCKED  $phase  $GATE_WHY"
+  autonomy_blocked_row "app-down" "$phase" "$GATE_WHY"
+  return 0
+}
+
 cmd_run() {
   local mission_arg="" force_phase="" max_phases=0
   while [ $# -gt 0 ]; do
@@ -3858,6 +3893,10 @@ cmd_run() {
     # 20260826-o-laco-da-qa, differentially against the increment-blocked sibling (rc 3 + row)
     # under the same flag. The session row above is already written, so the ledger keeps its order.
     if handoff_blocked_escalation "$phase"; then return 3; fi
+    # DOOR 1 of the app-down escalation, on the same terms and in the same place: read right after
+    # the gate call that could have armed it, BEFORE `moved` is consulted, and ABOVE the
+    # `--max-phases` ceiling — a phase no session can satisfy must not answer a paced run with 0.
+    if app_down_escalation "$phase"; then return 3; fi
 
     phases_run=$((phases_run + 1))
     if [ "$max_phases" -gt 0 ] && [ "$phases_run" -ge "$max_phases" ]; then
@@ -3911,6 +3950,9 @@ cmd_run() {
     # after `moved2` is already settled, so it takes nothing away from the sampling window the
     # comment above defends — it only refuses to let `moved2` answer a question that is not its.
     if handoff_blocked_escalation "$phase"; then return 3; fi
+    # DOOR 2, and it is what keeps THIS marker from outliving the lap either. Placed after
+    # `moved2` is settled, so it takes nothing away from the sampling window.
+    if app_down_escalation "$phase"; then return 3; fi
 
     if [ "$moved2" = "false" ]; then
       info ""
