@@ -4312,6 +4312,14 @@ cmd_autonomy() {
     # between two launches is one new run_id, not two. An honest floor, where the prose
     # (`- intervention:` notes) was a ceiling nobody filled — the mission with three launches
     # (SQ-111) had zero notes.
+    # Three more limits, declared here because this is the program that prints the number:
+    #   - a launch that ended in an escalation before any session row (a run stopped by
+    #     handoff-blocked, for instance) is invisible: the population is the session rows, by the
+    #     spec, and an escalation row is not one of them — a second undercount, same direction;
+    #   - a mission whose sessions are ALL non-comparable prints no line at all and contributes
+    #     nothing to the accounting sentence below, exactly as before these two cells existed;
+    #   - neither cell enters the judge series: it groups by kit_sha, and a mission that crossed
+    #     two kit versions would count its launches twice (design §4.6).
     def launches: map(.run_id) | unique | length;
     # A session in a phase BELOW one whose gate had already PASSED, in $PHASES order — the pipeline
     # going backwards after it had gone forward. NOT "the phase index went down": that counts the
