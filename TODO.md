@@ -636,3 +636,11 @@ Achados sobre **repos-alvo** vão para o `TODO.md` daquele repo. Este arquivo é
 
 - [ ] **Destilar handoffs/`KAIZEN_LOG` para o vault Obsidian continua manual** — avaliar um
   `sdd digest` que gere o rascunho. — descoberto por `humano` no planejamento (2026-08-14)
+
+- [ ] **`sdd close` abre sessão e não escreve linha no ledger** — `bin/sdd:5278` — o
+  `docs/pipeline.md` promete "uma linha JSON por sessão gasta ou escalada" e esta sessão não tem
+  linha: `grep -n 'autonomy_.*_row' bin/sdd` não devolve nada dentro de `cmd_close`. Fail-open pela
+  régua D15, com consumidor fora da suíte (o juiz e a D12). Direção: `cmd_close` passa por
+  `run_phase` ou escreve a linha com `invocation: close`, e o enum de `invocation` no `pipeline.md`
+  aprende o valor no mesmo commit — o mesmo contrato de cauda aberta que `kind` carrega.
+  — descoberto por `humano` na missão `20260828-instrumento-honesto` (2026-08-28)
