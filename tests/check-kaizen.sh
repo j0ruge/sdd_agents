@@ -125,6 +125,8 @@ echo "== series =="
 # sha open a new group. The four label scenarios are the probe's: m1/QA leve (moved:false +
 # in-loop auto_retry), m1/REVIEW refez (budget-exhausted + human retry invocation), m2/EXEC
 # refez (increment-blocked, a Jidoka with no session at all), m3/EXEC ok.
+# m6/EXEC churn (fail/true then pass/true, one run, no retry, no escalation — ok under the old
+# rubric, leve since Task 4)
 localize > "$LEDGER" <<'EOF'
 {"v":1,"ts":"2026-08-15T10:00:00-03:00","event":"session","run_id":"r1","invocation":"run","kit_sha":"fff9999","kit_dirty":false,"project":"p1","repo":"/p1","mission":"m1","phase":"QA","step":"QA:close","agent":"sdd-qa","model":"opus","attempt":1,"auto_retry":false,"session":"s1","rc":0,"dur_s":10,"cost_usd":1.0,"moved":false,"gate":"fail","gate_why":"x"}
 {"v":1,"ts":"2026-08-15T10:01:00-03:00","event":"session","run_id":"r1","invocation":"run","kit_sha":"fff9999","kit_dirty":false,"project":"p1","repo":"/p1","mission":"m1","phase":"QA","step":"QA:close","agent":"sdd-qa","model":"opus","attempt":1,"auto_retry":true,"session":"s1","rc":0,"dur_s":10,"cost_usd":1.0,"moved":true,"gate":"pass","gate_why":"x"}
@@ -139,6 +141,8 @@ localize > "$LEDGER" <<'EOF'
 {"v":1,"ts":"2026-08-15T10:10:00-03:00","repo":"/p1"}
 {"v":1,"ts":"2026-08-15T10:10:30-03:00"}
 {"v":1,"ts":"2026-08-15T10:11:00-03:00","event":"session","run_id":"r8","invocation":"run","kit_sha":"aaa1111","kit_dirty":false,"project":"sdd_agents","repo":"/kit","mission":"20260815-kaizen","phase":"KAIZEN","step":"KAIZEN","agent":"sdd-kaizen","model":"opus","attempt":1,"auto_retry":false,"session":"s8","rc":0,"dur_s":10,"cost_usd":0.5,"moved":true,"gate":"pass","gate_why":"x"}
+{"v":1,"ts":"2026-08-15T10:12:00-03:00","event":"session","run_id":"r9","invocation":"run","kit_sha":"fff9999","kit_dirty":false,"project":"p1","repo":"/p1","mission":"m6","phase":"EXEC","step":"EXEC","agent":"sdd-executor","model":"opus","attempt":1,"auto_retry":false,"session":"s9","rc":0,"dur_s":10,"cost_usd":1.0,"moved":true,"gate":"fail","gate_why":"x"}
+{"v":1,"ts":"2026-08-15T10:13:00-03:00","event":"session","run_id":"r9","invocation":"run","kit_sha":"fff9999","kit_dirty":false,"project":"p1","repo":"/p1","mission":"m6","phase":"EXEC","step":"EXEC","agent":"sdd-executor","model":"opus","attempt":2,"auto_retry":false,"session":"s10","rc":0,"dur_s":10,"cost_usd":1.0,"moved":true,"gate":"pass","gate_why":"x"}
 EOF
 
 # From a plain directory that is NOT a git repository: the ledger is global and the series must
@@ -162,11 +166,28 @@ assert_eq "increment-blocked labels the phase 'refez' even with zero dead sessio
 assert_eq "a clean pass labels the phase 'ok'" \
   "ok" "$(field '.latest.detail[] | select(.mission == "m3") | .label')"
 assert_eq "the label tally sums the detail" \
-  '{"ok":0,"leve":1,"refez":2}' "$(jq -c '.previous.labels' <<< "$SERIES_OUT")"
+  '{"ok":1,"leve":1,"refez":2}' "$(jq -c '.previous.labels' <<< "$SERIES_OUT")"
 assert_eq "escalations are counted by kind" '{"budget-exhausted":1,"increment-blocked":1}' \
   "$(jq -c '.previous.escalations' <<< "$SERIES_OUT")"
-assert_eq "moved_rate is computed over the group's sessions" "0.8" \
+# 6 of the 7 sessions of the previous version wrote to the disk (s1 is the one that did not).
+assert_eq "moved_rate is computed over the group's sessions" "0.86" \
   "$(field '.previous.moved_rate')"
+# What the sessions DID — the headline since 20260828-instrumento-honesto. Over the previous
+# version: s1 wrote nothing and failed (idle); s2 and the first m6 session wrote and failed
+# (churned); the other four passed their gate (advanced). All three counts differ, so no two
+# swapped fields agree by coincidence.
+assert_eq "outcomes over the previous version: advanced · churned · idle" \
+  '{"advanced":4,"churned":2,"idle":1}' "$(jq -c '.previous.outcomes' <<< "$SERIES_OUT")"
+assert_eq "and over the latest, a single clean pass" \
+  '{"advanced":1,"churned":0,"idle":0}' "$(jq -c '.latest.outcomes' <<< "$SERIES_OUT")"
+assert_eq "each phase of the detail carries its own outcomes" \
+  '{"advanced":1,"churned":1,"idle":0}' \
+  "$(jq -c '.previous.detail[] | select(.mission == "m1" and .phase == "REVIEW") | .outcomes' <<< "$SERIES_OUT")"
+# advance_rate reads the gate, moved_rate reads the disk: 4 of 7 passed, 6 of 7 wrote. Asserted on
+# ONE line, on a fixture where the two numbers DIFFER, so a series that derived one from the other
+# cannot pass.
+assert_eq "advance_rate reads the gate and moved_rate reads the disk, and here they differ" \
+  "0.57 0.86" "$(jq -r '"\(.previous.advance_rate) \(.previous.moved_rate)"' <<< "$SERIES_OUT")"
 assert_eq "one mission after the latest change" "1" "$(field '.guard.missions_after_change')"
 assert_eq "one mission is below the guard floor of 3" "false" "$(field '.guard.sufficient')"
 # The KAIZEN row shares the latest kit_sha on purpose: leaking into the group would inflate

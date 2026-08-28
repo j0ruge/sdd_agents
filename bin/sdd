@@ -1732,6 +1732,39 @@ ledger_row_is_local() {
   printf '%s' 'def ledger_row_is_local: if ledger_row_no_repo then false elif (type == "object" and has("repo")) then .repo == $repo else true end;'
 }
 
+# ONE definition of "what did this session DO", spliced into both readers of the ledger the same
+# way ledger_row_is_local is — printed jq, received through `"$(ledger_outcome_defs)"`, never
+# spelled twice. `stalled` used to be `moved == false` ("the session wrote nothing"), which is not
+# "the phase did not advance": 68 of the 145 sessions in the real ledger wrote something, failed
+# their gate and bought the runner another session, and no reader could see them — the human
+# window said `0 stalled`, the judge said `ok`, on a phase of seven sessions and five refusals
+# (20260825-frete-cif-fob, EXEC). Measured 2026-08-28, before this function existed.
+#
+#   advanced — the gate passed. The gate is the artifact; `pass/false` does not occur in the
+#              ledger and is classified here without a fourth arm.
+#   churned  — the session wrote to the disk and the gate still failed: the runner reads "moved"
+#              as progress and buys the next lap. The bucket that was invisible.
+#   idle     — nothing on disk, gate failed: the old `stalled`, under the name that says what it is.
+#
+# Applied to the sessions each reader already admits — `comparable` in cmd_autonomy (which demands
+# `has("moved")`), the on_axis sessions in kaizen_series — never to escalation rows, which carry
+# neither field and would all read `idle`. Old-schema rows stay where they were.
+# `outcome_tally` lives here and not in each program because its three keys ARE the enum, and an
+# enum read in more than one place is one definition.
+#
+# `phase_index` reads the canonical phase order off $PHASES through `--arg phases`, so the order
+# has ONE owner. Both readers pass `--arg phases "$PHASES"` even though only cmd_autonomy calls
+# phase_index. Measured on jq 1.7: an unbound `$var` inside a def nobody calls COMPILES (`jq -n
+# 'def f: $x; 1'` prints 1), so the arg is not strictly required there today — it is passed anyway
+# because the emission is one and the day the series calls phase_index must not be the day it
+# learns about the arg. (No apostrophe inside the printed jq: it is spliced into single-quoted
+# shell strings.)
+ledger_outcome_defs() {   # printed jq, spliced into cmd_autonomy AND kaizen_series
+  printf '%s' 'def outcome: if .gate == "pass" then "advanced" elif .moved == true then "churned" else "idle" end;'
+  printf '%s' 'def outcome_tally: map(outcome) | reduce .[] as $o ({advanced: 0, churned: 0, idle: 0}; .[$o] += 1);'
+  printf '%s' 'def phase_index: . as $p | ($phases | split(" ")) | index($p);'
+}
+
 # Publishes AUTONOMY_KIT_STAMP as "<sha>|<true|false>", or "|" when SDD_HOME is not a git checkout.
 # This is the judge's before/after axis: without it, a change in the numbers gets attributed to the
 # calendar instead of to the kit change that caused it.
@@ -4117,6 +4150,7 @@ cmd_autonomy() {
   # would turn that sum into an accusation against the buckets instead of a measurement.
   local repo; repo="$(ledger_repo_root)"
   local def; def="$(ledger_row_is_local)"
+  local odefs; odefs="$(ledger_outcome_defs)"
   local total lines norepo
   lines="$(jq -s 'length' "$file")"
   norepo="$(jq -s --arg repo "$repo" "$def"' map(select(ledger_row_no_repo)) | length' "$file")"
@@ -4228,7 +4262,8 @@ cmd_autonomy() {
   # this command instead of leaking jq's own exit code.
   local out jq_rc=0
   out="$(jq -rs --arg repo "$repo" --argjson interventions "$interventions" \
-                --argjson by_mission "$by_mission" --arg allrepos "$LEDGER_ALL_REPOS" "$def"'
+                --argjson by_mission "$by_mission" --arg allrepos "$LEDGER_ALL_REPOS" \
+                --arg phases "$PHASES" "$def""$odefs"'
     # ⚠️ NO APOSTROPHE anywhere below, prose included: everything from here to the closing quote is
     # ONE single-quoted shell string, so a stray one ends it mid-jq and bash then reports a syntax
     # error dozens of lines away from the sentence that broke it. That is why every comment in here
@@ -4246,6 +4281,9 @@ cmd_autonomy() {
     # row nobody can attribute belongs in the non-comparable bucket, out loud. kaizen_series holds
     # the same definition for its own jq program; tests/check-autonomy.sh compares the readers to
     # each other so neither can be "improved" alone.
+    # outcome / outcome_tally / phase_index arrive spliced from ledger_outcome_defs: what a session
+    # DID is one definition for this program and for kaizen_series, and check-autonomy.sh compares
+    # the two histograms over one file so neither can be improved alone.
     def on_axis: .kit_dirty == false and .kit_sha != null;
     def comparable: .event == "session" and on_axis and (has("moved"));
     def is_session: .event == "session";
@@ -4321,14 +4359,14 @@ cmd_autonomy() {
               | (.[0].repo // "") as $r
               | (if $allrepos == "1" then "\($r | split("/") | last)/\($m)" else $m end) as $label
               | (length) as $n
-              | (map(select(.moved == false)) | length) as $stalled
+              | (outcome_tally) as $t
               | (map(.cost_usd // 0) | add) as $cost
               # `?` and not 0 for a mission of another repo: its checkpoint lives under a
               # HANDOFF_DIR this process never loaded, and a zero there would read as
               # "nobody intervened" when the truth is "nobody looked".
               | (if ($interventions | has($m)) then "\($interventions[$m]) intervention(s)"
                  else "? intervention(s)" end) as $iv
-              | "  \($label)  \($n) session(s) · \($stalled) stalled · \($iv) · US$ \($cost | usd)"
+              | "  \($label)  \($n) session(s) · \($t.advanced) advanced · \($t.churned) churned · \($t.idle) idle · \($iv) · US$ \($cost | usd)"
             ) | join("\n"))
         end)
       elif ($groups | length) == 0 then
@@ -4337,10 +4375,10 @@ cmd_autonomy() {
         ($groups | map(
             (.[0].kit_sha) as $sha
             | (length) as $n
-            | (map(select(.moved == false)) | length) as $stalled
+            | (outcome_tally) as $t
             | (map(mission_key) | unique | length) as $missions
             | (map(.cost_usd // 0) | add) as $cost
-            | "  \($sha)  \($n) session(s) · \($stalled) stalled · \(($stalled * 100 / $n) | floor)% waste · \($missions) mission(s) · US$ \($cost | usd)"
+            | "  \($sha)  \($n) session(s) · \($t.advanced) advanced · \($t.churned) churned · \($t.idle) idle · \(($t.idle * 100 / $n) | floor)% waste · \($missions) mission(s) · US$ \($cost | usd)"
           ) | join("\n"))
       end)
     , (map(select(is_escalation and on_axis)) | group_by(.kit_sha, .kind)
@@ -4457,7 +4495,7 @@ kaizen_series() {
     printf '{"v":1,"latest":null,"previous":null,"guard":{"missions_after_change":0,"missions_with_session":0,"sessions":0,"floor":%s,"sufficient":false,"degenerate_axis":false},"excluded":{"non_comparable":0,"unrecognized":0,"meta":0,"other_repo":0,"no_repo":0}}\n' "$KAIZEN_GUARD_FLOOR"
     return 0
   fi
-  jq -n --arg repo "$repo" --argjson floor "$KAIZEN_GUARD_FLOOR" "$(ledger_row_is_local)"'
+  jq -n --arg repo "$repo" --argjson floor "$KAIZEN_GUARD_FLOOR" --arg phases "$PHASES" "$(ledger_row_is_local)""$(ledger_outcome_defs)"'
     # ONE definition of "escalation" for the whole program, exactly as cmd_autonomy has one. The
     # two events state different facts (`blocked` stopped the line, `degraded` lowered the bar and
     # went on) but they answer this rubric the same way, and writing the pair out three times is
@@ -4584,6 +4622,7 @@ kaizen_series() {
       | ($rows | group_by(mission_key + [(.phase // "")])
                | map({repo: .[0].repo, mission: .[0].mission, phase: .[0].phase, label: phase_label,
                       sessions: (map(select(.event == "session")) | length),
+                      outcomes: (map(select(.event == "session")) | outcome_tally),
                       cost_usd: (map(.cost_usd // 0) | add)})) as $detail
       | {kit_sha: $rows[0].kit_sha,
          missions: ($rows | map(mission_key) | unique | length),
@@ -4624,6 +4663,15 @@ kaizen_series() {
                                       (map(select(.event == "session")) | map(mission_key) | unique | length)})
                              | sort_by(-.missions, .repo)),
          sessions: ($sess | length),
+         # What the sessions DID, and how often the gate passed — the headline since
+         # 20260828-instrumento-honesto (the judge prompt cites these two before moved_rate).
+         # moved_rate stays: its name says what it measures, and it has a consumer. Same yardstick
+         # as the human window BY CONSTRUCTION: both programs splice ledger_outcome_defs, and
+         # check-autonomy.sh compares the two histograms over one file, so a program that grew a
+         # local copy of the definition is caught by the comparison and not by a sentence here.
+         outcomes: ($sess | outcome_tally),
+         advance_rate: (if ($sess | length) == 0 then null
+                        else (($sess | map(select(.gate == "pass")) | length) / ($sess | length) * 100 | round / 100) end),
          moved_rate: (if ($sess | length) == 0 then null
                       else (($sess | map(select(.moved == true)) | length) / ($sess | length) * 100 | round / 100) end),
          labels: ($detail | reduce .[] as $d ({ok: 0, leve: 0, refez: 0}; .[$d.label] += 1)),

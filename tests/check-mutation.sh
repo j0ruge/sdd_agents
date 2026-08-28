@@ -2049,6 +2049,30 @@ mut_RUN_kit_guard_arms_projection() {
   sed -i '/^  if \[ "$DRY_RUN" = "1" \]; then KIT_GUARD_BEFORE=""; return 0; fi$/d' "$1"
 }
 
+# ---------------------------------------------------------------------------
+# 20260828-instrumento-honesto — what a session DID, one definition in two readers.
+# ---------------------------------------------------------------------------
+# The shared definition falls back to the OLD yardstick under the new names: `moved` alone decides,
+# and a session that wrote and failed its gate reads `advanced`. Both readers inherit it, so the
+# parity assertion stays green — which is exactly why check-autonomy.sh also pins the histogram of
+# a known fixture: `churned` has to come out 2 there, and this reads 0.
+mut_AUTONOMY_outcome_reads_moved_only() {
+  sed -i 's@def outcome: if .gate == "pass" then "advanced" elif .moved == true then "churned" else "idle" end;@def outcome: if .moved == true then "advanced" else "idle" end;@' "$1"
+}
+
+# The series stops splicing the shared definition and grows a LOCAL copy on the old yardstick —
+# the "same spelling in both programs" that CLAUDE.md measures as not-parity. Each reader is then
+# internally consistent and only the comparison between the two goes red (5.7), plus the exact
+# histogram of the series fixture (5.9). The copy carries outcome_tally too, because the splice it
+# replaces carried it: a mutant that dropped the tally would kill the suite with a jq compile error
+# instead of with the divergence it exists to reproduce. Held in a variable so the single quotes
+# it needs can sit inside a double-quoted sed script; the result is `"$(ledger_row_is_local)"'def
+# outcome: …;''` followed by the program — two adjacent single-quoted strings, one argument.
+mut_KAIZEN_outcome_inlined_old() {
+  local copy="'def outcome: if .moved == true then \"advanced\" else \"idle\" end; def outcome_tally: map(outcome) | reduce .[] as \$o ({advanced: 0, churned: 0, idle: 0}; .[\$o] += 1);'"
+  sed -i "/^kaizen_series() {/,/^}/ { s@\"\\\$(ledger_outcome_defs)\"@${copy}@ }" "$1"
+}
+
 CATALOG=(
   PLAN_empty_approval
   PLAN_kaizen_born_blind
@@ -2216,6 +2240,8 @@ CATALOG=(
   RUN_kit_touched_blind
   RUN_kit_guard_cries_wolf
   RUN_kit_guard_arms_projection
+  AUTONOMY_outcome_reads_moved_only
+  KAIZEN_outcome_inlined_old
 )
 
 # Mutations that are NOT caught today, each with the increment that closes it. Ratchet in both

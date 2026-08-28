@@ -1401,6 +1401,46 @@ assert_eq "the header states how many rows it read" "1" "$(grep -c '5 row(s)' <<
 # 5 rows the header says it read.
 assert_bucket_sum "the four buckets sum to the header total (mixed ledger)" "$out"
 
+# --- what the session DID, not only whether it wrote ------------------------------------------
+# `stalled` was `moved == false`: "the session wrote nothing", which is not "the phase did not
+# advance". On the real ledger 68 of 145 sessions wrote something, failed their gate and bought the
+# runner another session, and the window said `0 stalled` about all of them. Three outcomes now,
+# ONE definition (`ledger_outcome_defs` in bin/sdd) spliced into BOTH readers. The counts below are
+# all different on purpose, so two swapped fields cannot pass by coincidence.
+echo "== reader: advanced · churned · idle =="
+mkdir -p "$OUTSIDE/tristate"
+localize > "$OUTSIDE/tristate/autonomy-log.jsonl" <<'EOF'
+{"v":1,"ts":"2026-08-15T10:00:00-03:00","event":"session","run_id":"r1","invocation":"run","kit_sha":"ddddddd","kit_dirty":false,"project":"p1","repo":"/p1","mission":"m1","phase":"EXEC","step":"EXEC","agent":"sdd-executor","model":"opus","attempt":1,"auto_retry":false,"session":"s1","rc":0,"dur_s":10,"cost_usd":1.0,"moved":true,"gate":"pass","gate_why":"x"}
+{"v":1,"ts":"2026-08-15T10:01:00-03:00","event":"session","run_id":"r1","invocation":"run","kit_sha":"ddddddd","kit_dirty":false,"project":"p1","repo":"/p1","mission":"m1","phase":"QA","step":"QA:close","agent":"sdd-qa","model":"opus","attempt":1,"auto_retry":false,"session":"s2","rc":0,"dur_s":10,"cost_usd":1.0,"moved":true,"gate":"fail","gate_why":"x"}
+{"v":1,"ts":"2026-08-15T10:02:00-03:00","event":"session","run_id":"r1","invocation":"run","kit_sha":"ddddddd","kit_dirty":false,"project":"p1","repo":"/p1","mission":"m1","phase":"QA","step":"QA:close","agent":"sdd-qa","model":"opus","attempt":2,"auto_retry":false,"session":"s3","rc":0,"dur_s":10,"cost_usd":1.0,"moved":false,"gate":"fail","gate_why":"x"}
+{"v":1,"ts":"2026-08-15T10:03:00-03:00","event":"session","run_id":"r1","invocation":"run","kit_sha":"ddddddd","kit_dirty":false,"project":"p1","repo":"/p1","mission":"m1","phase":"QA","step":"QA:close","agent":"sdd-qa","model":"opus","attempt":3,"auto_retry":false,"session":"s4","rc":0,"dur_s":10,"cost_usd":1.0,"moved":true,"gate":"pass","gate_why":"x"}
+{"v":1,"ts":"2026-08-15T10:04:00-03:00","event":"session","run_id":"r2","invocation":"run","kit_sha":"ddddddd","kit_dirty":false,"project":"p1","repo":"/p1","mission":"m2","phase":"EXEC","step":"EXEC","agent":"sdd-executor","model":"opus","attempt":1,"auto_retry":false,"session":"s5","rc":0,"dur_s":10,"cost_usd":1.0,"moved":true,"gate":"fail","gate_why":"x"}
+{"v":1,"ts":"2026-08-15T10:05:00-03:00","event":"session","run_id":"r2","invocation":"run","kit_sha":"ddddddd","kit_dirty":false,"project":"p1","repo":"/p1","mission":"m2","phase":"EXEC","step":"EXEC","agent":"sdd-executor","model":"opus","attempt":2,"auto_retry":false,"session":"s6","rc":0,"dur_s":10,"cost_usd":1.0,"moved":true,"gate":"pass","gate_why":"x"}
+{"v":1,"ts":"2026-08-15T10:06:00-03:00","event":"session","run_id":"r3","invocation":"run","kit_sha":"ddddddd","kit_dirty":true,"project":"p1","repo":"/p1","mission":"m2","phase":"QA","step":"QA:close","agent":"sdd-qa","model":"opus","attempt":1,"auto_retry":false,"session":"s7","rc":0,"dur_s":10,"cost_usd":1.0,"moved":true,"gate":"pass","gate_why":"x"}
+{"v":1,"ts":"2026-08-15T10:07:00-03:00","event":"blocked","kind":"no-progress","run_id":"r3","invocation":"run","kit_sha":"ddddddd","kit_dirty":false,"project":"p1","repo":"/p1","mission":"m2","phase":"QA","gate_why":"x"}
+EOF
+out_tri="$( SDD_STATE_DIR="$OUTSIDE/tristate" "$SDD" autonomy 2>&1 )"; rc=$?
+assert_eq "a ledger of three outcomes is data (rc 0)" "0" "$rc"
+# 6 comparable sessions: the gate passed on 3 (advanced), 2 wrote and still failed (churned), 1
+# wrote nothing and failed (idle). The dirty row and the escalation are the other two buckets.
+assert_eq "the version line says what the sessions did, in the order advanced · churned · idle" "1" \
+  "$(grep -cE '^  ddddddd  6 session\(s\) · 3 advanced · 2 churned · 1 idle · ' <<< "$out_tri")"
+assert_eq "and the word stalled is gone — idle is the same number under the name that says what it is" "0" \
+  "$(grep -c 'stalled' <<< "$out_tri")"
+assert_bucket_sum "the four buckets still sum to the header total (three outcomes)" "$out_tri"
+
+# PARITY, measured and never asserted in prose. The judge series reads the SAME file through its
+# own jq program, and both programs splice ONE printed definition. A program that stopped splicing
+# it and grew a local copy on the old yardstick (mut_KAIZEN_outcome_inlined_old) stays internally
+# consistent — only the comparison between the two catches it, which is why this is not a
+# constant on the right-hand side.
+series_tri="$( SDD_STATE_DIR="$OUTSIDE/tristate" "$SDD" kaizen --series 2>/dev/null )"
+table_tri="$(sed -nE 's/^  ddddddd  [0-9]+ session\(s\) · ([0-9]+) advanced · ([0-9]+) churned · ([0-9]+) idle · .*/\1 \2 \3/p' <<< "$out_tri")"
+assert_eq "the human window and the judge count the outcomes of the latest version alike" \
+  "$(jq -r '.latest.outcomes | "\(.advanced) \(.churned) \(.idle)"' <<< "$series_tri")" "$table_tri"
+# ...and not by both being empty: the floor is the known histogram of this fixture.
+assert_eq "the parity is not vacuous — the table printed the three counts" "3 2 1" "$table_tri"
+
 # --- the reader gives a full accounting, never a silent gap --------------------------------------
 # Two findings from review, one root cause: a bucket the reader does not name is a bucket that can
 # vanish with no trace (finding 3 — the reviewer's ledger with no `event` key printed nothing and
