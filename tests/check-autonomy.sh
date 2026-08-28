@@ -1158,6 +1158,128 @@ chmod +x "$OUTSIDE/stub/claude"
 printf -- '---\nfase: QA\nstatus: done\n---\n' > "$MDIR/30-handoff-qa.md"
 git add -A && git commit -qm "chore: restore the handoff the retry regime replaced"
 
+# --- the app is down: the runner asks, and stops ---------------------------
+echo "== a dead app escalates on the first session, where a red e2e alone still spends two =="
+# A red e2e says nothing about WHOSE fault it is: a dead app, a stopped database, a missing
+# browser binary and a genuinely broken assertion all leave the same non-zero rc, and the runner
+# read every one of them as "QA still has work to do" — one gate failure, one more opus session,
+# for ever. Measured on the SQ-111 mission of 2026-08-27: US$ 14,16 for a QA reproved by the
+# environment, plus US$ 7,61 for the lap that reopened a mission whose PR was already open.
+#
+# FLOOR FIRST, and deliberately NOT written with the runner's own app_probe: a floor that reuses
+# the function under test measures the runner with the runner. This is a raw connect, and when it
+# cannot find a refused port it dies BY NAME rather than certifying a pair that proved nothing.
+port_is_free() {  # rc 0 = nothing is listening on 127.0.0.1:$1
+  local rc=0
+  LC_ALL=C timeout 3 bash -c 'exec 3<>"/dev/tcp/127.0.0.1/$0"' "$1" 2>/dev/null || rc=$?
+  [ "$rc" -ne 0 ]
+}
+dead_port=$(( 49152 + $$ % 10000 ))
+app_floor_ok=1
+if ! command -v timeout >/dev/null 2>&1; then
+  fail "dead-app floor" "timeout(1) on PATH" "timeout is missing — the app-down pair was NOT measured"
+  app_floor_ok=0
+else
+  tries=0
+  while ! port_is_free "$dead_port"; do
+    dead_port=$(( dead_port + 1 )); tries=$(( tries + 1 ))
+    if [ "$tries" -ge 20 ]; then
+      fail "dead-app floor" "a refused port on 127.0.0.1" \
+           "20 consecutive ports were all listening — the pair would certify nothing"
+      app_floor_ok=0; break
+    fi
+  done
+fi
+
+if [ "$app_floor_ok" = "1" ]; then
+  pass "dead-app floor: 127.0.0.1:$dead_port refuses connections"
+
+  # With E2E_CMD set, gate_QA takes the interface branch, so the dated report has to be there and
+  # closed — otherwise the gate refuses ABOVE the e2e and the probe is never reached, which is a
+  # pair that measures the report anchor while claiming to measure the probe.
+  # PROVENANCE: ~/.claude/skills/qa-execution/assets/report-template.md:6, same capture the
+  # equivalent fixture in tests/check-gates.sh carries — the `**Status:**` does not open the line
+  # and the enum legend rides in the comment.
+  mkdir -p "$FIX/docs/qa/reports"
+  cat > "$FIX/docs/qa/reports/2026-01-01-fixture.md" <<'RPT'
+# QA Run Report — 2026-01-01 — fixture
+- **Started:** 2026-01-01T10:00:00Z · **Status:** closed <!-- in-progress | closed -->
+| # | Charter | Status |
+|---|---|---|
+| 1 | CH-one | Pass |
+RPT
+  printf -- '---\nfase: QA\nstatus: done\n---\n' > "$MDIR/30-handoff-qa.md"
+
+  # ⭐ THE PAIR, and its control is the SAME fixture with APP_URL emptied — one line of config is
+  # the only difference between the two runs. That is what makes it isolate the PROBE and not the
+  # redness: E2E_CMD is `false` on both sides, so both gates refuse for a red e2e, and a runner
+  # that escalated on a red e2e alone would take the control half red. The dead stub moves
+  # nothing, so the control reaches `no-progress` — the two-session loop of today, which is
+  # exactly what this pair exists to delete.
+  sed -i 's|^E2E_CMD=.*|E2E_CMD="false"|' .sdd/config.sh
+  if grep -q '^APP_URL=' .sdd/config.sh; then
+    sed -i "s|^APP_URL=.*|APP_URL=\"http://127.0.0.1:$dead_port/\"|" .sdd/config.sh
+  else
+    printf 'APP_URL="http://127.0.0.1:%s/"\n' "$dead_port" >> .sdd/config.sh
+  fi
+  git add -A && git commit -qm "chore: a red e2e over an app nobody is serving"
+  : > "$LEDGER"
+  "$SDD" run "$MISSION" >/dev/null 2>&1; rc=$?
+  app_down="$(blocked_shape "$rc")"
+  # `kind == "app-down"` and NOT merely `event == "blocked"`: with the second spelling this line
+  # reads the `no-progress` row of today, whose gate_why already carries the address (the probe
+  # writes GATE_WHY one increment earlier than the escalation reads it) — so it would pass before
+  # the escalation existed AND after, which is an assertion that measures nothing.
+  why_down="$(jq -r -s '[.[] | select(.kind == "app-down")][0].gate_why' "$LEDGER")"
+
+  sed -i 's|^APP_URL=.*|APP_URL=""|' .sdd/config.sh
+  git add -A && git commit -qm "chore: control — the same red e2e, with no address to ask about"
+  : > "$LEDGER"
+  "$SDD" run "$MISSION" >/dev/null 2>&1; rc=$?
+  app_control="$(blocked_shape "$rc")"
+
+  assert_eq "a dead app escalates on the first session, where the same red e2e with no APP_URL still spends two" \
+    "3|1|blocked|app-down · 3|2|blocked|no-progress" \
+    "$app_down · $app_control"
+
+  # The row an operator acts on has to say WHERE nothing is listening. `app-down` in the `kind`
+  # field names the class; the address is what turns the escalation into an instruction, and it is
+  # the half a `kind` set by hand would leave empty. Read off the SAME run — no extra session.
+  assert_eq "and the escalation row names the address nothing is listening on" \
+    "names-it" \
+    "$(grep -qE "nothing is listening at 127\.0\.0\.1:$dead_port" <<< "$why_down" && echo names-it || echo "$why_down")"
+
+  # --- ...and a `--max-phases` ceiling does not turn that into rc 0 ----------
+  # The sibling of the ceiling assertion in the handoff-blocked family above, and it is owed by
+  # the same argument: door 1 sits ABOVE the ceiling check, so an operator or a CI wrapper pacing
+  # the pipeline one phase at a time must not get a SUCCESS exit code for a phase no session can
+  # satisfy. DIFFERENTIAL against the control, which under the same flag must still end 0 with no
+  # escalation row at all — a runner that escalated whenever --max-phases is set takes it red.
+  sed -i "s|^APP_URL=.*|APP_URL=\"http://127.0.0.1:$dead_port/\"|" .sdd/config.sh
+  git add -A && git commit -qm "chore: the dead app, under a ceiling"
+  : > "$LEDGER"
+  "$SDD" run "$MISSION" --max-phases 1 >/dev/null 2>&1; rc=$?
+  app_ceiling_down="$(blocked_shape "$rc")"
+
+  sed -i 's|^APP_URL=.*|APP_URL=""|' .sdd/config.sh
+  git add -A && git commit -qm "chore: control, under the same ceiling"
+  : > "$LEDGER"
+  "$SDD" run "$MISSION" --max-phases 1 >/dev/null 2>&1; rc=$?
+  app_ceiling_control="$(blocked_shape "$rc")"
+
+  assert_eq "a --max-phases ceiling does not turn a dead app into rc 0, where the same red e2e still ends 0" \
+    "3|1|blocked|app-down · 0|1|null|null" \
+    "$app_ceiling_down · $app_ceiling_control"
+fi
+
+# The fixture goes back to what the blocks below expect: no interface, and a QA handoff that is
+# `done` without the `gate:` evidence — the ordinary refusal the reader blocks are built on. An
+# E2E_CMD or an APP_URL left behind here would send every later gate_QA down the interface branch.
+sed -i 's|^E2E_CMD=.*|E2E_CMD=""|; s|^APP_URL=.*||' .sdd/config.sh
+rm -rf "$FIX/docs/qa"
+printf -- '---\nfase: QA\nstatus: done\n---\n' > "$MDIR/30-handoff-qa.md"
+git add -A && git commit -qm "chore: restore the fixture the app-down pair borrowed"
+
 # --- the reader ------------------------------------------------------------
 # Fixture ledger written by hand: this is OUR format, so there is no third-party source to copy
 # from (the provenance rule covers skill output). Every row here exists to prove one refusal.
