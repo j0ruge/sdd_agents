@@ -15,6 +15,18 @@ set -euo pipefail
 
 readonly SDD_VERSION="0.1.0"
 
+# Seconds a single TCP connect to APP_URL may take before the probe gives up. A CONSTANT and
+# deliberately NOT a load_config key: config/schema.md:40-41 forbids a key the runner does not
+# read, and five were deleted in c8070dc for exactly that. A key here would also have to be
+# documented in schema.md and mirrored in starter.conf, or checks 5 and 7 of `sdd health` would
+# report it — buying a knob nobody asked for with three places to keep in step.
+#
+# 3s and not 1s: the probe runs against a loopback address in the common case, where a refusal is
+# immediate, and the value only matters on the path where the connect HANGS — a firewall dropping
+# packets. There the answer is `unknown` whatever the number, so the number only decides how long
+# the gate waits before saying so.
+readonly APP_PROBE_TIMEOUT=3
+
 # Associative arrays (the sensor cache) need bash 4. macOS ships bash 3.2 as /bin/bash; failing
 # here beats failing with "bad substitution" halfway through a phase.
 #
@@ -297,6 +309,129 @@ checkpoint_rows() {
     }' "$file"
 }
 
+# ---------------------------------------------------------------------------
+# Is anything listening where APP_URL points?
+#
+# A red e2e says nothing about WHOSE fault it is: a dead app, a stopped database, a missing
+# browser binary and a genuinely broken assertion all leave the same non-zero rc. Until this
+# existed the runner read every one of them as "QA still has work to do" and bought another opus
+# session. Measured on the SQ-111 mission of 2026-08-27: US$ 14,16 for a QA reproved by the
+# environment, plus US$ 7,61 for the lap that reopened a mission whose PR was already open.
+#
+# The runner still does not START anything — bringing the app up is the operator's job, declared
+# in config/schema.md. What changes is that the runner now ASKS, and stops.
+# ---------------------------------------------------------------------------
+
+# app_url_hostport <url> — prints "host port"; prints nothing and returns 1 when it cannot decide.
+#
+# PURE: parameter expansion only. No fork, no subprocess, no network. That is what lets the
+# assertions in tests/check-gates.sh read the parser through the gate's own sentence instead of
+# calling the function directly, and what keeps the cost of asking zero when the answer is "no".
+#
+# The host comes out BARE — `::1`, not `[::1]` — because that is what bash's /dev/tcp wants.
+# Putting the brackets back for the human is app_probe's job, one level up.
+app_url_hostport() {
+  local url="${1:-}" scheme rest host port=""
+  [ -n "$url" ] || return 1
+  # Only the two schemes whose default port is a fact. A `file://` or a bare `host:port` are not
+  # refused because they are exotic; they are refused because guessing a port for them would make
+  # the probe answer `down` about an address nobody wrote.
+  case "$url" in
+    http://*)  scheme=http;  rest="${url#http://}" ;;
+    https://*) scheme=https; rest="${url#https://}" ;;
+    *) return 1 ;;
+  esac
+  # Fragment, then query, then path — and ALL THREE before the userinfo. A path may legitimately
+  # carry an `@` (`http://127.0.0.1:8080/a@b`), and stripping the userinfo first would take the
+  # host away with it, leaving `b` as the address the operator is told about.
+  rest="${rest%%#*}"
+  rest="${rest%%\?*}"
+  rest="${rest%%/*}"
+  # The LAST `@` wins: a password may contain one, and the userinfo may not.
+  rest="${rest##*@}"
+  [ -n "$rest" ] || return 1
+  case "$rest" in
+    # An IPv6 literal is bracketed precisely so its own colons stop looking like a port separator.
+    # The bracketed-with-port pattern is listed first for the reader; the two are disjoint, since
+    # only one of them ends in `]`.
+    \[*\]:*) host="${rest#\[}"; host="${host%%\]:*}"; port="${rest##*\]:}" ;;
+    \[*\])   host="${rest#\[}"; host="${host%\]}" ;;
+    *:*)     host="${rest%%:*}"; port="${rest##*:}" ;;
+    *)       host="$rest" ;;
+  esac
+  [ -n "$host" ] || return 1
+  # Whitespace in a host is not an address; letting it through would hand `/dev/tcp` a word that
+  # can only fail, and a failure this parser could have named would arrive as an unreadable one.
+  case "$host" in *[[:space:]]*) return 1 ;; esac
+  if [ -z "$port" ]; then
+    case "$scheme" in http) port=80 ;; https) port=443 ;; esac
+  fi
+  # Digits, and at most five of them. The length bound is not cosmetic: `$((10#$port))` below
+  # wraps silently on a 20-digit string, so a port nobody could listen on would come out as a
+  # small number the probe would happily connect to.
+  case "$port" in ''|*[!0-9]*) return 1 ;; esac
+  [ "${#port}" -le 5 ] || return 1
+  # `10#` and never a bare `[ "$port" -ge 1 ]`: `[` evaluates its operand arithmetically, where a
+  # leading zero means OCTAL — `http://h:080/` would abort the runner on "value too great for
+  # base" instead of reading as port 80.
+  port="$((10#$port))"
+  [ "$port" -ge 1 ] && [ "$port" -le 65535 ] || return 1
+  printf '%s %s\n' "$host" "$port"
+}
+
+# app_probe [url] — prints "state|label" and ALWAYS returns 0. State is one of:
+#
+#   down     nothing is listening there; label is the address
+#   up       something answered; label is the address
+#   unknown  no verdict either way; label is the REASON, in a sentence a human can act on
+#
+# rc 0 in every case, and no global touched, because this is the one function of the pair that has
+# to survive `$( )`. A function with a side effect on a global loses it to the subshell — the
+# family CLAUDE.md records against run_phase and autonomy_kit_stamp. Publishing on stdout is what
+# makes calling it from a substitution correct rather than merely convenient.
+#
+# ONE-SIDED BY CONSTRUCTION, and this is the whole compatibility story. `unknown` is the default
+# and it never escalates: an empty APP_URL, a URL this cannot parse, a bash built without
+# /dev/tcp, an absent timeout(1), an error string the kernel words differently — every one of them
+# lands in `unknown`, where the runner behaves byte for byte as it did before this existed. The
+# probe turns a red into a NAMED red; it can never turn a green into a red.
+app_probe() {
+  local url="${1:-${APP_URL:-}}" hp host port label err="" rc=0
+  [ -n "$url" ] || { printf 'unknown|APP_URL is empty\n'; return 0; }
+  # Declared first and assigned inside the `if`: `local hp="$(...)"` would swallow the rc, since
+  # `local` reports its OWN success and the parser's refusal would read as a parse.
+  if ! hp="$(app_url_hostport "$url")"; then
+    printf 'unknown|APP_URL (%s) carries no host:port this can read\n' "$url"; return 0
+  fi
+  host="${hp%% *}"; port="${hp##* }"
+  case "$host" in *:*) label="[$host]:$port" ;; *) label="$host:$port" ;; esac
+  if ! command -v timeout >/dev/null 2>&1; then
+    printf 'unknown|timeout(1) is not on PATH, and an unbounded connect could hang the gate\n'
+    return 0
+  fi
+  # Host and port as ARGUMENTS, never interpolated into the script text: APP_URL is a string from
+  # the target repo's config, and `bash -c "exec 3<>/dev/tcp/$host/$port"` would execute whatever
+  # it contains. `$BASH` and not `bash`: the runner already knows which interpreter it trusts.
+  # LC_ALL=C because the verdict below is read out of a strerror string.
+  err="$(LC_ALL=C timeout "$APP_PROBE_TIMEOUT" "${BASH:-bash}" -c \
+      'exec 3<>"/dev/tcp/$0/$1"' "$host" "$port" 2>&1)" || rc=$?
+  if [ "$rc" -eq 0 ]; then printf 'up|%s\n' "$label"; return 0; fi
+  # ECONNREFUSED, and NOTHING else, is what "the app is down" means here. A name that does not
+  # resolve, a route that is missing, a firewall that drops the packet: each of them is a machine
+  # this cannot speak for, and each of them lands below, in `unknown`. Herestring and never
+  # `printf | grep -q`, which returns 141 under pipefail when the grep MATCHES.
+  if grep -q 'Connection refused' <<< "$err"; then printf 'down|%s\n' "$label"; return 0; fi
+  if [ "$rc" -eq 124 ]; then
+    printf 'unknown|the connect at %s timed out after %ss, which is not a refusal\n' \
+      "$label" "$APP_PROBE_TIMEOUT"
+    return 0
+  fi
+  # First line only: bash prints the failed redirection over two lines on some builds, and a
+  # GATE_WHY carrying a newline arrives in the ledger as a broken record.
+  printf 'unknown|the connect at %s answered neither way: %s\n' "$label" "$(head -1 <<< "$err")"
+  return 0
+}
+
 # Runs a config command at the root of the target repo; returns its exit code.
 # Output goes to the mission log (when there is a mission) — it never pollutes the runner stdout.
 #
@@ -522,6 +657,28 @@ GATE_EXEC_DIRTY=0
 # can leave a lap with the marker still set has to re-derive that property, not assume it.
 GATE_HANDOFF_BLOCKED=0
 
+# Set by gate_QA when the e2e came back RED and a TCP connect to APP_URL was refused, read by
+# cmd_run to escalate instead of buying a session against a machine no session can fix. A GLOBAL
+# for the third time and for the reason the two above give — the rc is already spent on pass/fail
+# — and a MARKER rather than a grep of GATE_WHY, because GATE_WHY is prose: the sentence the arm
+# writes is one an operator may reword, and an early exit anchored on a substring of it would
+# start and stop escalating on an edit to an error message.
+#
+# CONTRACT, re-derived here and NOT inherited — the paragraph above says every new marker owes
+# this derivation rather than an assumption:
+#
+#   · reset at the ENTRY of gate_QA, which is also its only setter. `current_phase` walks every
+#     gate in order, so a marker armed by an evaluation two phases ago would escalate a phase
+#     whose own e2e never ran;
+#   · it does not outlive a LAP, and that is a property of the flow: BOTH doors of cmd_run's loop
+#     read it — the first pass and the inline retry — and every lap that finds it armed returns 3.
+#     Whoever adds a third door, a second setter, or a path that can leave a lap with it still set
+#     has to re-derive this, exactly as this comment had to.
+#
+# Armed ONLY in the `down` arm. `unknown` leaves it at 0 and the runner behaves as it did before
+# the probe existed, which is the whole compatibility story — see app_probe.
+GATE_APP_DOWN=0
+
 gate_EXEC() {
   GATE_EXEC_DIRTY=0
   local rows; rows="$(checkpoint_rows)"
@@ -581,6 +738,7 @@ gate_EXEC() {
 
 gate_QA() {
   GATE_HANDOFF_BLOCKED=0
+  GATE_APP_DOWN=0
   local h="$MISSION_DIR/30-handoff-qa.md" report=""
   [ -f "$h" ] || { GATE_WHY="missing 30-handoff-qa.md"; return 1; }
 
@@ -709,8 +867,39 @@ gate_QA() {
   if ! run_check_cmd "$TEST_CMD" "gate-qa-test"; then
     GATE_WHY="TEST_CMD failed ($TEST_CMD) — see $LAST_CHECK_LOG"; return 1
   fi
+  # The composed `if` above is left INTACT and the probe goes in the body, which is the whole
+  # design: the app is asked about only on the path where the e2e has ALREADY come back red.
+  # Probing earlier would be wider than the defect — a repo whose e2e brings its own server up, or
+  # whose APP_URL only answers while the test runs, would be blocked for a machine state that
+  # never mattered. A false BLOCKED costs a person; the loop only costs money. The fixture at
+  # tests/check-gates.sh with `APP_URL="http://example.invalid"` beside a GREEN E2E_CMD is what
+  # holds that line, and it is asserted as the other half of the dead-app pair.
   if [ -n "$E2E_CMD" ] && ! run_check_cmd "$E2E_CMD" "gate-qa-e2e"; then
-    GATE_WHY="E2E_CMD failed ($E2E_CMD) — see $LAST_CHECK_LOG"; return 1
+    # Held in a local before the probe runs: LAST_CHECK_LOG is the file this refusal sends the
+    # operator to READ, and it is a global that any later run_check_cmd would overwrite.
+    local e2e_log="$LAST_CHECK_LOG" probe state label
+    probe="$(app_probe "$APP_URL")"
+    state="${probe%%|*}"; label="${probe#*|}"
+    case "$state" in
+      down)
+        # The only arm that arms the marker, and the only one cmd_run acts on.
+        # shellcheck disable=SC2034  # no reader until app_down_escalation lands; delete then
+        GATE_APP_DOWN=1
+        GATE_WHY="E2E_CMD failed ($E2E_CMD) and nothing is listening at $label (APP_URL) — the app is down; no session can start it. See $e2e_log"
+        ;;
+      up)
+        # The WITNESS, and it is not decoration: without it "the app was never asked about" and
+        # "the app was asked about and answered" would read the same to whoever gets this
+        # sentence, and `down` would be a claim with no contrast behind it.
+        GATE_WHY="E2E_CMD failed ($E2E_CMD) with the app answering at $label — a real e2e failure, not the environment. See $e2e_log"
+        ;;
+      *)
+        # `*` and not `unknown)`: this is the arm that has to catch a state nobody has invented
+        # yet, since the two above are the only ones that may change what the runner DOES.
+        GATE_WHY="E2E_CMD failed ($E2E_CMD) — see $e2e_log (the app was not probed either way: $label)"
+        ;;
+    esac
+    return 1
   fi
   if [ -n "${report:-}" ]; then
     GATE_WHY="report $(basename "$report") closed, registry clean, suites green"
