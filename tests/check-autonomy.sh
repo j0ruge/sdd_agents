@@ -1270,6 +1270,89 @@ RPT
   assert_eq "a --max-phases ceiling does not turn a dead app into rc 0, where the same red e2e still ends 0" \
     "3|1|blocked|app-down · 0|1|null|null" \
     "$app_ceiling_down · $app_ceiling_control"
+
+  # NOT asserted here: "a projection over a dead app writes no ledger row". It was written, and
+  # then removed because no single sabotage could make it red — the house rule for a rule the
+  # sabotage cannot break, and the probes came BEFORE the removal rather than instead of it.
+  # Three worlds were built and measured:
+  #   · the escalation hoisted ABOVE cmd_run's projection early-exit  -> still green, because
+  #   · autonomy_append carries its own DRY_RUN guard, and removing THAT is already owned by
+  #     "the projection writes no ledger at all" at the top of this file (12 assertions go red);
+  #   · pipeline_log_line's guard is owned by tests/check-dry-run.sh (3 assertions go red).
+  # The escalation reaches the ledger only through autonomy_append, so a second assertion here
+  # would have measured that function's guard for the third time and this path not at all.
+  sed -i "s|^APP_URL=.*|APP_URL=\"http://127.0.0.1:$dead_port/\"|" .sdd/config.sh
+  git add -A && git commit -qm "chore: the dead app stays put for the retry regime"
+
+  # --- ...and the INLINE RETRY escalates on the same terms ------------------
+  # Everything above sits on the FIRST pass. The retry door is reached whenever the gate's FIRST
+  # evaluation refuses ABOVE the e2e — the probe is never run, so the marker is not armed — and
+  # the retry session then does the honest work that lets the gate get as far as the e2e and find
+  # the app dead. Reachable without contrivance: session 1 dying or writing nothing is what
+  # SUMMONS the retry, and the retry is the session that writes the report the gate was missing.
+  #
+  # Without door 2 the marker survives the LAP rather than the gate: the run carries on (the retry
+  # DID move the disk), the next lap derives EXEC from the `F<n> pending` row the retry opened,
+  # gate_EXEC never touches the marker, and door 1 fires for EXEC — an APP_URL diagnosis printed
+  # over a phase that never ran an e2e, and {phase: EXEC, kind: app-down} written into the ledger
+  # the kaizen judge reads. That is the F2 failure measured on the handoff-blocked sibling.
+  #
+  # DIFFERENTIAL, and the control is what stops it passing vacuously: BOTH regimes append the same
+  # `F<n> pending` row, so both genuinely offer EXEC as the next phase — "it escalates QA" alone
+  # would also pass on a fixture that never left QA. Only the APP_URL line of the config differs.
+  APP_CKPT_BEFORE_RETRY="$OUTSIDE/checkpoint-before-app-retry.md"
+  cp "$MDIR/checkpoint.md" "$APP_CKPT_BEFORE_RETRY"
+  APP_RETRY_MARKER="$FIX/.app-down-retry"
+  # ONE stub for both regimes: two hand-written stubs would be two places for the regimes to drift
+  # apart, and what the pair measures is that only the config line differs.
+  cat > "$OUTSIDE/stub/claude" <<STUB
+#!/usr/bin/env bash
+if [ ! -e "$APP_RETRY_MARKER" ]; then : > "$APP_RETRY_MARKER"; exit 1; fi
+if [ ! -e "$APP_RETRY_MARKER.2" ]; then
+  : > "$APP_RETRY_MARKER.2"
+  mkdir -p "$FIX/docs/qa/reports"
+  cat > "$FIX/docs/qa/reports/2026-01-01-fixture.md" <<'RPT'
+# QA Run Report — 2026-01-01 — fixture
+- **Started:** 2026-01-01T10:00:00Z · **Status:** closed <!-- in-progress | closed -->
+| # | Charter | Status |
+|---|---|---|
+| 1 | CH-one | Pass |
+RPT
+  printf -- '| F1 | the fix QA asked for | \`true\` → 0 | pending | — |\n' >> "$MDIR/checkpoint.md"
+  git -C "$FIX" add -A
+  git -C "$FIX" commit -qm "chore: the retry session files its report, and opens a fix increment"
+  exit 0
+fi
+exit 1
+STUB
+  chmod +x "$OUTSIDE/stub/claude"
+
+  # The report is REMOVED so the first evaluation refuses above the e2e: that is what leaves the
+  # marker unarmed on the first pass and sends the run to the retry door at all.
+  : > "$LEDGER"; rm -f "$APP_RETRY_MARKER" "$APP_RETRY_MARKER.2"; rm -rf "$FIX/docs/qa"
+  sed -i "s|^APP_URL=.*|APP_URL=\"http://127.0.0.1:$dead_port/\"|" .sdd/config.sh
+  git add -A && git commit -qm "chore: the report the retry session will file"
+  "$SDD" run "$MISSION" >/dev/null 2>&1
+  app_retry_where="$(blocked_where)"
+
+  : > "$LEDGER"; rm -f "$APP_RETRY_MARKER" "$APP_RETRY_MARKER.2"; rm -rf "$FIX/docs/qa"
+  cp "$APP_CKPT_BEFORE_RETRY" "$MDIR/checkpoint.md"
+  sed -i 's|^APP_URL=.*|APP_URL=""|' .sdd/config.sh
+  git add -A && git commit -qm "chore: control — the same retry, with no address to ask about"
+  "$SDD" run "$MISSION" >/dev/null 2>&1
+  app_retry_control="$(blocked_where)"
+
+  assert_eq "a retry that reaches a dead app escalates QA, never the phase the next lap would derive" \
+    "QA|app-down · EXEC|no-progress" \
+    "$app_retry_where · $app_retry_control"
+
+  cp "$APP_CKPT_BEFORE_RETRY" "$MDIR/checkpoint.md"
+  # Back to the dead stub the blocks below expect.
+  cat > "$OUTSIDE/stub/claude" <<'STUB'
+#!/usr/bin/env bash
+exit 1
+STUB
+  chmod +x "$OUTSIDE/stub/claude"
 fi
 
 # The fixture goes back to what the blocks below expect: no interface, and a QA handoff that is
