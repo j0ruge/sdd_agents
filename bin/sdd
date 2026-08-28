@@ -4377,13 +4377,15 @@ cmd_autonomy() {
       elif ($groups | length) == 0 then
         "  no comparable sessions in this ledger"
       else
+        # waste = churned + idle: every session that did not make the phase advance. It was idle
+        # alone (then called stalled) until 2026-08-28 — the approximation the name never meant.
         ($groups | map(
             (.[0].kit_sha) as $sha
             | (length) as $n
             | (outcome_tally) as $t
             | (map(mission_key) | unique | length) as $missions
             | (map(.cost_usd // 0) | add) as $cost
-            | "  \($sha)  \($n) session(s) · \($t.advanced) advanced · \($t.churned) churned · \($t.idle) idle · \(($t.idle * 100 / $n) | floor)% waste · \($missions) mission(s) · US$ \($cost | usd)"
+            | "  \($sha)  \($n) session(s) · \($t.advanced) advanced · \($t.churned) churned · \($t.idle) idle · \((($t.churned + $t.idle) * 100 / $n) | floor)% waste · \($missions) mission(s) · US$ \($cost | usd)"
           ) | join("\n"))
       end)
     , (map(select(is_escalation and on_axis)) | group_by(.kit_sha, .kind)

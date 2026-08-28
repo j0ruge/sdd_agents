@@ -1387,9 +1387,11 @@ EOF
 out="$( SDD_STATE_DIR="$OUTSIDE/read" "$SDD" autonomy 2>&1 )"; rc=$?
 
 assert_eq "the reader exits 0 with data" "0" "$rc"
-# 2 comparable sessions (rows 1 and 2), 1 of them stalled => 50%.
+# 2 comparable sessions (rows 1 and 2): row 1 wrote and failed its gate (churned), row 2 wrote
+# nothing (idle) — neither made the phase advance, so waste is 100%. This read 50% while waste was
+# the approximation `moved == false`; the yardstick moved on 2026-08-28 (KAIZEN_LOG.md).
 assert_eq "waste is computed over comparable sessions only" "1" \
-  "$(grep -c '50% waste' <<< "$out")"
+  "$(grep -c '100% waste' <<< "$out")"
 assert_eq "it says how many rows it excluded, and why" "1" \
   "$(grep -c '2 non-comparable' <<< "$out")"
 assert_eq "escalations are counted apart from sessions" "1" \
@@ -1433,6 +1435,13 @@ assert_eq "the version line says what the sessions did, in the order advanced ·
 assert_eq "and the word stalled is gone — idle is the same number under the name that says what it is" "0" \
   "$(grep -c 'stalled' <<< "$out_tri")"
 assert_bucket_sum "the four buckets still sum to the header total (three outcomes)" "$out_tri"
+
+# waste changed yardstick on 2026-08-28: churned + idle over the comparable sessions, floored. The
+# old yardstick (idle alone, then called stalled) is 1/6 = 16% on this fixture; the new one is
+# 3/6 = 50%. The line has to carry the second AND NOT the first — a differential on one fixture,
+# so no regime satisfies it by accident. The two sides of the change are in KAIZEN_LOG.md.
+assert_eq "waste counts churned and idle, not idle alone" "1 0" \
+  "$(grep -c ' 50% waste ' <<< "$out_tri") $(grep -c ' 16% waste ' <<< "$out_tri")"
 
 # PARITY, measured and never asserted in prose. The judge series reads the SAME file through its
 # own jq program, and both programs splice ONE printed definition. A program that stopped splicing

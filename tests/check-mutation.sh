@@ -2073,6 +2073,12 @@ mut_KAIZEN_outcome_inlined_old() {
   sed -i "/^kaizen_series() {/,/^}/ { s@\"\\\$(ledger_outcome_defs)\"@${copy}@ }" "$1"
 }
 
+# waste goes back to counting idle alone — the old approximation under the new name, and the
+# window prints 16% on a fixture whose churn is a third of its sessions.
+mut_AUTONOMY_waste_idle_only() {
+  sed -i 's@((\$t\.churned + \$t\.idle) \* 100 / \$n)@($t.idle * 100 / $n)@' "$1"
+}
+
 CATALOG=(
   PLAN_empty_approval
   PLAN_kaizen_born_blind
@@ -2242,6 +2248,7 @@ CATALOG=(
   RUN_kit_guard_arms_projection
   AUTONOMY_outcome_reads_moved_only
   KAIZEN_outcome_inlined_old
+  AUTONOMY_waste_idle_only
 )
 
 # Mutations that are NOT caught today, each with the increment that closes it. Ratchet in both
