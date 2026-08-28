@@ -165,9 +165,13 @@ In `tests/health-baseline.txt`, change the last line `todo-findings 77` to `todo
 
 - [ ] **Step 4: Prove the ratchet closes in both directions**
 
-Run: `./bin/sdd health 2>&1 | grep -E 'todo-findings|ratchet|FAIL' | head`
-Expected: no `FAIL` naming `todo-findings`. (Before Step 3 the same command reported the count
-rose without a record — that is the red this step turns green.)
+⚠️ `sdd health` takes no flag and ALWAYS runs the mutation catalogue (`cmd_health` calls
+`tests/run-all.sh --with-mutation` unconditionally — measured during execution: the "quick check"
+this step first asked for spawned 166 sandboxes and had to be killed). The ratchet is exercised
+once, in Task 7. Here the property is proved by its two halves agreeing:
+
+Run: `./tests/check-todo.sh 2>&1 | grep -oE '[0-9]+ finding'; grep '^todo-findings' tests/health-baseline.txt`
+Expected: `78 finding` and `todo-findings 78` — the two numbers `health_ratchet` compares.
 
 - [ ] **Step 5: Commit**
 
@@ -1113,7 +1117,12 @@ Expected: clean; `173`.
 
 - [ ] **Step 2: Run the catalogue through `sdd health`**
 
-Run: `./bin/sdd health --with-mutation 2>&1 | tee "$HOME/.sdd/measure/2026-08-28-instrumento-honesto/health.txt" | tail -20`
+`sdd health` always runs the catalogue — there is no flag (`cmd_health` ignores its arguments and
+calls `tests/run-all.sh --with-mutation` itself). It takes 10–20 minutes on this box: run it with a
+Bash timeout of 600000 ms, or in the background with the output redirected, and do not start a
+second one while it runs.
+
+Run: `./bin/sdd health 2>&1 | tee "$HOME/.sdd/measure/2026-08-28-instrumento-honesto/health.txt" | tail -20`
 Expected: `score: 173 caught, 0 known gap(s), of 173`, no `CATALOGUE-BROKEN`, no `is NOT caught`,
 `todo-findings 78` accepted by the ratchet, and the line saying the mutation stamp was written.
 
@@ -1251,8 +1260,9 @@ escalations, cost)`.
 - [ ] **Step 8: Language sensor, suite, commit**
 
 Run: `./tests/check-lang.sh 2>&1 | tail -2 && ./tests/run-all.sh 2>&1 | tail -3`
-Expected: both green (the stamp is NOT invalidated: none of these paths is in the key — confirm
-with `./bin/sdd health 2>&1 | grep -i stamp`).
+Expected: both green. The stamp is NOT invalidated because none of these paths is in the key —
+confirm by construction, never by re-running `sdd health` (that re-runs the whole catalogue):
+`git diff --stat <Task 6 commit>..HEAD -- bin tests templates config` must print nothing.
 
 ```bash
 git add docs/pipeline.md agents/sdd-kaizen.md .claude/agents/sdd-kaizen.md README.md docs/failure-modes.md
