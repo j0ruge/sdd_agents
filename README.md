@@ -58,8 +58,11 @@ sdd phase <mission>          # print only the current phase (or DONE) — for sc
 sdd retry <mission>          # retry the current phase with a fresh session
 sdd close <mission>          # post-merge: close the JIRA issue
 sdd health                   # KIT sensor (≠ preflight, which is about the target's environment)
-sdd autonomy                 # waste per kit version, for THIS repo, from the global ledger (~/.sdd/autonomy-log.jsonl)
+sdd autonomy                 # what the sessions did per kit version (advanced · churned · idle, waste), for THIS repo,
+                             #   from the global ledger (~/.sdd/autonomy-log.jsonl)
 sdd autonomy --all-repos     # ...for EVERY repo on this machine (the cross-project question; never the default)
+sdd autonomy --by-mission    # ...per mission: the same outcomes, launch(es) (distinct run_id — the intervention
+                             #   count), reopened phases, the checkpoint's intervention notes, and the mission cost
 sdd kaizen                   # judge the previous kit change and plan the next kit mission (kit repo only);
                              #   it reads EVERY repo (ADR 0005) — --all-repos is accepted and is a no-op here
 sdd kaizen --series          # the deterministic series (JSON) the judge cites, on its own, with the

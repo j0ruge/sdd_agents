@@ -78,7 +78,7 @@ concluded the change hurt. That is the loop's own Jidoka (ADR 0002): planning th
 top of a regression would compound it, so the verdict is written and the line stops.
 
 **What you do:** read the `05-verdict.md` the message points at — it cites the series' numbers
-(labels, `moved_rate`, escalations, cost) and the hypotheses. Decide: revert the kit change, fix
+(labels, `outcomes`, `advance_rate`, escalations, cost) and the hypotheses. Decide: revert the kit change, fix
 it, or overrule the judge with your own reasons. Then run `sdd kaizen` again — a new verdict for
 the new kit sha reopens the loop.
 

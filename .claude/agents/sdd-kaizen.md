@@ -38,7 +38,9 @@ construction — and the reading is what finally points the judge at that eviden
 accepted and decides nothing here; do not add it, and do not read its absence as a narrower slice.
 
 The JSON gives you, per kit version (`kit_sha`, file order, latest and previous):
-missions, sessions, `moved_rate`, the label tally (`ok` / `leve` / `refez` per repo×mission×phase),
+missions, sessions, `outcomes` (`{advanced, churned, idle}` — what the sessions did; cite it
+before anything else), `advance_rate` (the share whose gate passed), `moved_rate` (the share
+that wrote to the disk), the label tally (`ok` / `leve` / `refez` per repo×mission×phase),
 escalations by kind, cost, and the guard (`missions_after_change`, `missions_with_session`,
 `sessions`, `sufficient`, `degenerate_axis`). The floor is `missions_with_session`, not
 `missions_after_change`: a mission that stopped the line without spending a session left you
@@ -80,6 +82,13 @@ the repos it exists to expose.
 
 Every number in your verdict comes from this output. Cite them as they are.
 
+**The intervention count (D12) is NOT in the series**, and you do not invent it. The series groups
+by `kit_sha`, and a mission that spans two kit versions would count its launches twice. Read it from
+`"$SDD_HOME/bin/sdd" autonomy --all-repos --by-mission` — the `launch(es)` cell is distinct `run_id`
+per mission, and the reading is *interventions = launches − 1* (D16, amended 2026-08-28). Cite the
+command you read it from, beside the number. The `intervention note(s)` cell, when present, is the
+narrative of what the human did; it is not the count.
+
 ## 2. Interpret with git, not with memory
 
 The series' axis is the raw `kit_sha`. What a sha MEANS is your half:
@@ -103,7 +112,7 @@ date: YYYY-MM-DD
 ```
 
 The body is prose in `OUTPUT_LANG` (empty ⇒ follow the language the existing artifacts use). It
-must cite the series' numbers — labels, `moved_rate`, escalations, cost, the guard — and say WHY
+must cite the series' numbers — labels, `outcomes`, `advance_rate`, `moved_rate`, escalations, cost, the guard — and say WHY
 they add up to this verdict, comparing `latest` against `previous` when both exist.
 
 Hard rules, no judgement involved:
