@@ -2,11 +2,11 @@
 
 **Data:** 2026-08-28 · **Estado:** plano **executado ponta a ponta** — as Tarefas 1 a 10 estão
 commitadas (12 commits desta missão mais este handoff). Falta **abrir os dois PRs**: o desta branch
-e o da branch de baixo, que ainda não existe. Carimbo `667a87cc54751f564783c6bdfceaf4a4`,
-`score: 173 caught, 0 known gap(s), of 173`, catraca `todo-findings 78`. ⚠️ A revisão final da
-branch achou dois achados de código (§6, decisão 10) e disparou uma onda de correção que tocou
-`bin/sdd` e `tests/`: o carimbo acima é a chave de **antes** dela — **carimbo a reescrever após
-`efa10c9`** (commit A), pelo `sdd health` que o controlador roda depois deste handoff.
+e o da branch de baixo, que ainda não existe. Carimbo `ee334f2de3af5a1a23fd4d708d254c5b`,
+`score: 179 caught, 0 known gap(s), of 179`, catraca `todo-findings 78`. ⚠️ Dois carimbos
+ficaram para trás nesta branch: o `667a87cc…` (chave de antes da onda de correção de `efa10c9`) e
+o `78f4b6cb…` (chave de antes de `4a45295`, o último commit de código da revisão de código, que
+subiu o catálogo de 173 para 179). O de cima é o re-emitido pelo `sdd health` sobre `4a45295`.
 
 Auto-contido de propósito. A sessão que ler isto não participou da conversa que o gerou, e não
 precisa dela: o spec, o plano, o `git log` e este arquivo bastam. Onde há número, ele foi medido.
@@ -38,8 +38,8 @@ repo de cliente):
 
 ```bash
 ./tests/run-all.sh | tail -3                       # suite green (666 linhas `  ok    `; 663 antes da revisão final)
-cat .sdd/logs/mutation-stamp                       # 667a87cc54751f564783c6bdfceaf4a4
-git diff --stat 9122478..HEAD -- bin tests templates config   # VAZIO — a chave do carimbo
+cat .sdd/logs/mutation-stamp                       # ee334f2de3af5a1a23fd4d708d254c5b
+git diff --stat 4a45295..HEAD -- bin tests templates config   # VAZIO — a chave do carimbo
                                                    #   não foi tocada desde o último commit de código
 ./bin/sdd autonomy --all-repos --by-mission | grep condicoes-pagamento
 #   sales_quote/20260827-condicoes-pagamento-mesmo-cliente  6 session(s) · 5 advanced · 1 churned ·
@@ -279,7 +279,7 @@ com o que custa se estiver errada. Esta lista é a fonte, não um resumo dela:
 
 1. **Abrir os dois PRs.** A branch de baixo (`feat/o-gate-sabe-que-o-app-caiu`, 12 commits sobre
    `d30d199`) **ainda não tem PR**, e esta empilha nela. Hoje `gh pr list --state open` responde
-   vazio. Esta branch cita o carimbo `667a87cc…` e o score `173 caught of 173`.
+   vazio. Esta branch cita o carimbo re-emitido sobre `4a45295` e o score `179 caught of 179`.
 2. **Depois do merge da branch de baixo:** apagar o item `RESOLVIDO por 2ce6ce8` do `TODO.md` e
    baixar a catraca `todo-findings` no `tests/health-baseline.txt` — provado por
    `git merge-base --is-ancestor 2ce6ce8 main`, nunca pelo rótulo do PR (handoff anterior §8).
