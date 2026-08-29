@@ -3,7 +3,10 @@
 **Data:** 2026-08-28 · **Estado:** plano **executado ponta a ponta** — as Tarefas 1 a 10 estão
 commitadas (12 commits desta missão mais este handoff). Falta **abrir os dois PRs**: o desta branch
 e o da branch de baixo, que ainda não existe. Carimbo `667a87cc54751f564783c6bdfceaf4a4`,
-`score: 173 caught, 0 known gap(s), of 173`, catraca `todo-findings 78`.
+`score: 173 caught, 0 known gap(s), of 173`, catraca `todo-findings 78`. ⚠️ A revisão final da
+branch achou dois achados de código (§6, decisão 10) e disparou uma onda de correção que tocou
+`bin/sdd` e `tests/`: o carimbo acima é a chave de **antes** dela — **carimbo a reescrever após
+`efa10c9`** (commit A), pelo `sdd health` que o controlador roda depois deste handoff.
 
 Auto-contido de propósito. A sessão que ler isto não participou da conversa que o gerou, e não
 precisa dela: o spec, o plano, o `git log` e este arquivo bastam. Onde há número, ele foi medido.
@@ -96,6 +99,8 @@ esta missão funcionou."*
 | `443ce69` | T8: `pipeline.md`, `agents/sdd-kaizen.md` (+ espelho), `README.md`, `failure-modes.md` |
 | `a406112` | T9: `CONTEXT.md` (D16 emendada, verbete **Churn**) e a entrada do `KAIZEN_LOG` |
 | este commit | T10: a aceitação rodada e este handoff |
+| `efa10c9` | onda de correção da revisão final, commit A: `$order`/`comparable_row` alinhados (fixture D4c), `reopened` ganha asserção na fixture `population` |
+| este commit | onda de correção da revisão final, commit B: `KAIZEN_LOG.md` e este handoff |
 
 T7 (o carimbo) não tem commit: é uma corrida de verificação. T0 (a medição do "antes") também não —
 as saídas moram fora do git, em `~/.sdd/measure/2026-08-28-instrumento-honesto/`, porque carregam o
@@ -213,6 +218,23 @@ com o que custa se estiver errada. Esta lista é a fonte, não um resumo dela:
    carimbo. *Custa uma re-corrida do catálogo se um sensor de árvore viva ler um doc meio escrito
    durante a corrida* — não aconteceu: o `git diff --stat 9122478..HEAD -- bin tests templates
    config` sai vazio.
+10. **A revisão final achou que o alinhamento da T2 (`comparable_row`, decisão 6 acima) tinha
+    dividido a ORDEM das versões dos dois leitores, não só a classificação de uma linha.** O custo
+    que a Ruling 6 registrou — "uma sessão trocando de balde" (`idle` para o juiz, excluída para o
+    humano) — estava incompleto: `$order` de `cmd_autonomy` continuava admitindo toda linha
+    `on_axis`, sem exigir `has("moved")` de uma sessão, então uma sessão de schema velho sem
+    `moved` liderava a ordem da tabela enquanto `comparable_row` já a excluía da ordem da série.
+    Reproduzido na fixture D4c (`tests/check-autonomy.sh`): a tabela lia `bbbbbbb`, a série lia
+    `aaaaaaa`, sobre o mesmo arquivo. Consertado no commit A da onda de correção — `$order` passa
+    a ler `(is_session and comparable) or (is_escalation and on_axis)`, a mesma população que
+    `comparable_row` admite. E `reopened` sobre toda sessão da missão não tinha asserção nenhuma
+    até esse mesmo commit: a fixture `population` só tinha EXEC(pass)/QA(pass, dirty) e por isso
+    lia `0 reopened` nos dois lados sem nunca exercitar o campo — uma linha PR(pass) entrou entre
+    as duas e a asserção passou a medir `2 2 1` / `2 1 0`, confirmada por sabotagem em cópia do
+    mutante `AUTONOMY_reopened_comparable_only`. *Custa, se a onda de correção não tivesse rodado,
+    os dois leitores continuarem respondendo versões diferentes para "qual é a mais recente" toda
+    vez que uma sessão de schema velho aparecer primeiro, e `reopened` seguir sem prova nenhuma de
+    que mede o que diz medir.*
 
 ## 7. Armadilhas medidas
 
@@ -246,6 +268,12 @@ com o que custa se estiver errada. Esta lista é a fonte, não um resumo dela:
   o §9 do spec ordena as tarefas assim.
 - ⚠️ **`sdd health` custa ~15 minutos e não tem como pedir menos.** Duas corridas abortadas deixaram
   sandboxes órfãs em `/tmp/sdd-mut-*`.
+- ⚠️ **As contagens de `ok` que os implementadores reportaram por tarefa (728/730/737/742) vieram
+  de um grep mais frouxo do que o do controlador.** A medida canônica é `grep -cE '^  ok    '` — a
+  mesma âncora usada em toda parte do kit —, e por ela a suíte lê `637 → 663` (+26, exatamente as
+  asserções que as Tarefas 2 a 6 acrescentaram). Só os dois extremos são citados aqui e no
+  `KAIZEN_LOG.md`; os números intermediários que os relatórios de tarefa registram não fecham com
+  esta régua.
 
 ## 8. O que falta
 
@@ -271,7 +299,9 @@ As duas do handoff anterior §9 continuam de pé, com os números de lá:
 1. **Faxina D15.** ~12 itens do `TODO.md` são limites já declarados que deviam morar no cabeçalho
    do sensor, e os 3 de *Adiados por YAGNI* são roadmap inflando a catraca. O alvo de lá era
    `77 → ~62`; hoje o número é **78** (esta missão registrou o achado do `sdd close`). ⚠️ Alvo
-   escrito como número absoluto já falhou uma vez, medido — o `CLAUDE.md` guarda o caso.
+   escrito como número absoluto já falhou uma vez, medido — o `CONTEXT.md` guarda o caso (D14:
+   `20260818-lote-facil` prometeu `56 → 38`, entregou os 18 que prometeu, e o arquivo terminou em
+   `72`).
 2. **O REVIEW** — 49% do custo de uma missão, US$ 37,30, a US$ 2,70 do próprio teto.
 
 ⚠️ **O que ESTA missão muda na leitura das duas.** A janela de medição passa a imprimir

@@ -28,7 +28,7 @@ linhas se releem com a régua nova. D16 emendada no `CONTEXT.md`; achado do `sdd
 | | Antes (régua `moved`) | Depois (régua `gate` + `moved`) |
 |---|---|---|
 | `condicoes-pagamento` (SQ-111), por missão | `6 session(s) · 0 stalled · ? intervention(s) · US$ 68.87` | `6 session(s) · 5 advanced · 1 churned · 0 idle · 3 launch(es) · 1 reopened · US$ 68.87` |
-| `frete-cif-fob` · EXEC, no juiz | `ok` | `leve` |
+| `frete-cif-fob` · EXEC, no juiz | `ok` | `leve` — aplicando a rubrica à mão às 7 sessões (5 `fail`, 0 escaladas, 0 `sdd retry`, 0 `auto_retry`, 0 `moved:false`, último gate `pass` → `ok` antes, `leve` depois), como o handoff §5 já diz; a série (`sdd kaizen --series`) só expõe as duas últimas versões do kit e essa fase fica fora da janela |
 | `25d4e1c` (latest), série | `moved_rate: 1, labels: {ok:5, leve:0, refez:1}` | `outcomes: {advanced:5, churned:1, idle:0}, advance_rate: 0.83`; `labels` **não** muda — o único grupo com reprovação nesta fatia já lia `refez` pela última sessão |
 | `lote-facil` | `9 session(s)` | `4 launch(es) · 2 reopened` — bate com a contagem à mão de `20260828-o-gate-sabe-que-o-app-caiu-handoff.md` §9 |
 | `?` na tabela por missão (`--all-repos`) | **5** missões (`grep -c '?' before-by-mission.txt`: `jornada-qa`, `placeholder`, `cif-forma-pagamento`, `frete-cif-fob`, `condicoes-pagamento`) | **0** |
