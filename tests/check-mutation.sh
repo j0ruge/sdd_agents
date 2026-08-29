@@ -391,18 +391,23 @@ mut_QA_hostport_keeps_fragment() {
   sed -i 's@^  rest="${rest%%#\*}"$@  : # fragment kept@' "$1"
 }
 
-# The userinfo goes back to riding into the address: `user:CHANGE@ME@127.0.0.1:port` reads `user`
-# as the host and the rest as a port nothing can parse. Caught by `userinfo is stripped, and the
-# last @ is the separator` — the one fixture with an `@` in it. `|` as the delimiter, because the
-# anchor CONTAINS the `@` every other mutation here delimits with.
+# The userinfo goes back to riding into the address. The bare `host:port` arm splits the host at
+# the FIRST colon and the port at the LAST, so `user:CHANGE@ME@127.0.0.1:port` comes out as host
+# `user` with a perfectly valid port — it is the HOST that is wrong, and the label carries it:
+# `user:port` where the assertion demands `127.0.0.1:port`. Caught by `userinfo is stripped, and
+# the last @ is the separator` — the one fixture with an `@` in it. `|` as the delimiter, because
+# the anchor CONTAINS the `@` every other mutation here delimits with. (The first draft of this
+# comment claimed an unparseable port; the round-2 review ran the mutant and the sandbox said host.)
 mut_QA_hostport_keeps_userinfo() {
   sed -i 's|^  rest="${rest##\*@}"$|  : # userinfo kept|' "$1"
 }
 
-# The bracketed-with-port arm is gone, so `[::1]:port` falls through to the bare `host:port` arm and
-# splits at the FIRST colon: host `[`, port `:1]:port`. Caught by `an IPv6 literal reads as an
-# address`, the one bracketed fixture. The replacement is still a case arm, one no host can equal,
-# so the mutant parses and the point goes to the assertion rather than to the shell.
+# The bracketed-with-port arm is gone, so `[::1]:port` falls through to the bare `host:port` arm,
+# which splits the host at the FIRST colon and the port at the LAST: host `[`, and the port intact.
+# Again the HOST is what comes out wrong, and the label says `[:port` where the assertion demands
+# `[::1]:port`. Caught by `an IPv6 literal reads as an address`, the one bracketed fixture. The
+# replacement is still a case arm, one no host can equal, so the mutant parses and the point goes
+# to the assertion rather than to the shell.
 mut_QA_hostport_no_ipv6() {
   sed -i 's@^    \\\[\*\\]:\*) host="${rest#\\\[}"; host="${host%%\\]:\*}"; port="${rest##\*\\]:}" ;;$@    "no-bracketed-port-arm") : ;;@' "$1"
 }
