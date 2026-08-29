@@ -1874,24 +1874,29 @@ assert_eq "EXEC after a PASSED QA is a reopening; EXEC after a FAILED QA is the 
 # the sum this file closes against the version table. launches and reopened are drawn over EVERY
 # local session of the mission: a launch that landed on a dirty kit was a launch, and on SQ-111 the
 # post-PR QA row — the reopening that motivated the field — carries kit_dirty:true, so over the
-# comparable rows alone reopened read 0 exactly where it mattered. When the two populations differ
-# the accounting paragraph says so, once. Differential: the same mission with the dirty row removed
-# reads one launch, and the sentence is gone.
-echo "== reader: --by-mission draws launches over every session of the mission =="
+# comparable rows alone reopened read 0 exactly where it mattered. This fixture mirrors SQ-111
+# exactly: EXEC passes, PR passes (both comparable, clean kit), then QA runs AGAIN on a DIRTY kit
+# and also passes — a phase index below PR, which had already passed, which is exactly what
+# `reopened` exists to count, and the row `reopened` needs is the one row `comparable` refuses.
+# When the two populations differ the accounting paragraph says so, once. Differential: the same
+# mission with the dirty row removed reads one launch and zero reopened, and the sentence is gone.
+echo "== reader: --by-mission draws launches and reopened over every session of the mission =="
 mkdir -p "$OUTSIDE/population" "$OUTSIDE/populationclean"
 localize > "$OUTSIDE/population/autonomy-log.jsonl" <<'EOF'
 {"v":1,"ts":"2026-08-15T10:00:00-03:00","event":"session","run_id":"r1","invocation":"run","kit_sha":"eeeeeee","kit_dirty":false,"project":"p1","repo":"/p1","mission":"m1","phase":"EXEC","step":"EXEC","agent":"sdd-executor","model":"opus","attempt":1,"auto_retry":false,"session":"s1","rc":0,"dur_s":10,"cost_usd":1.0,"moved":true,"gate":"pass","gate_why":"x"}
+{"v":1,"ts":"2026-08-15T10:00:30-03:00","event":"session","run_id":"r1","invocation":"run","kit_sha":"eeeeeee","kit_dirty":false,"project":"p1","repo":"/p1","mission":"m1","phase":"PR","step":"PR","agent":"sdd-publisher","model":"sonnet","attempt":1,"auto_retry":false,"session":"s1b","rc":0,"dur_s":10,"cost_usd":1.0,"moved":true,"gate":"pass","gate_why":"x"}
 {"v":1,"ts":"2026-08-15T10:01:00-03:00","event":"session","run_id":"r2","invocation":"run","kit_sha":"eeeeeee","kit_dirty":true,"project":"p1","repo":"/p1","mission":"m1","phase":"QA","step":"QA:close","agent":"sdd-qa","model":"opus","attempt":1,"auto_retry":false,"session":"s2","rc":0,"dur_s":10,"cost_usd":1.0,"moved":true,"gate":"pass","gate_why":"x"}
 EOF
 grep -v '"kit_dirty":true' "$OUTSIDE/population/autonomy-log.jsonl" > "$OUTSIDE/populationclean/autonomy-log.jsonl"
 out_pop="$(  SDD_STATE_DIR="$OUTSIDE/population"      "$SDD" autonomy --by-mission 2>&1 )"
 out_popc="$( SDD_STATE_DIR="$OUTSIDE/populationclean" "$SDD" autonomy --by-mission 2>&1 )"
-assert_eq "one comparable session, two launches: the launch on a dirty kit was a launch" "1 2" \
-  "$(cell_of m1 "$out_pop" 'session') $(cell_of m1 "$out_pop" 'launch')"
+assert_eq "two comparable sessions, two launches, one reopened: the dirty QA below a passed PR reopens" \
+  "2 2 1" \
+  "$(cell_of m1 "$out_pop" 'session') $(cell_of m1 "$out_pop" 'launch') $(cell_of m1 "$out_pop" 'reopened')"
 assert_eq "and the accounting paragraph names the population difference, once" "1" \
   "$(grep -c '(launches and reopened are counted over every session of the mission, 1 of them non-comparable)' <<< "$out_pop")"
-assert_eq "without the dirty row: one launch, and the sentence is gone" "1 0" \
-  "$(cell_of m1 "$out_popc" 'launch') $(grep -c 'counted over every session' <<< "$out_popc")"
+assert_eq "without the dirty row: one launch, no reopening, and the sentence is gone" "1 0 0" \
+  "$(cell_of m1 "$out_popc" 'launch') $(cell_of m1 "$out_popc" 'reopened') $(grep -c 'counted over every session' <<< "$out_popc")"
 assert_bucket_sum "the four buckets still sum to the header total (--by-mission, a dirty launch)" "$out_pop"
 
 # --- the narrative cell, and the `?` that is gone --------------------------------------------------
@@ -2743,14 +2748,15 @@ assert_eq "output: the table's last version is the judge's latest, not the lexic
 
 # D4b — the SAME question, over the one file order where reading it off the wrong POPULATION still
 # splits the two answers. D4 above is satisfied by any first-appearance order, because its ledger
-# holds nothing but comparable sessions; the judge, though, reads first appearance off every
-# on_axis row, escalations included. So a version whose first on_axis row is an escalation is
-# already known to the series while the table has never heard of it — and a table that ordered by
-# its OWN population put that version last while the judge called another one latest. Found in the
-# r1 review by reproduction, not by reading: rows blocked(aaaaaaa), session(bbbbbbb),
-# session(aaaaaaa) answered `aaaaaaa` here and `bbbbbbb` there over one file. Written DIFFERENTIAL
-# for the same reason D4 is, and the escalation goes FIRST because that is the only placement in
-# which the two populations disagree at all.
+# holds nothing but comparable sessions; the judge, though, reads first appearance off the rows it
+# admits through `comparable_row` — comparable sessions and on_axis escalations — never every
+# on_axis row. So a version whose first admitted row is an escalation is already known to the
+# series while the table has never heard of it — and a table that ordered by its OWN population put
+# that version last while the judge called another one latest. Found in the r1 review by
+# reproduction, not by reading: rows blocked(aaaaaaa), session(bbbbbbb), session(aaaaaaa) answered
+# `aaaaaaa` here and `bbbbbbb` there over one file. Written DIFFERENTIAL for the same reason D4 is,
+# and the escalation goes FIRST because that is the only placement in which the two populations
+# disagree at all.
 esc_row() {   # esc_row <kit_sha> <mission> — same shape autonomy_escalation_row writes
   jq -cn --arg repo "$FIXROOT" --arg sha "$1" --arg mission "$2" \
     '{v:1, ts:"2026-08-16T13:00:00-03:00", event:"blocked", kind:"increment-blocked",
@@ -2767,6 +2773,26 @@ vseries2="$( SDD_STATE_DIR="$OUTSIDE/vorder2" "$SDD" kaizen --series 2>/dev/null
 assert_eq "output: the table orders versions off the judge's population, escalations included" \
   "bbbbbbb bbbbbbb 2" \
   "$(jq -r '.latest.kit_sha' <<< "$vseries2") $(awk '$3 == "session(s)" { sha = $1 } END { print sha }' <<< "$out") $(grep -cE '^  [a-z]{7}  [0-9]+ session\(s\)' <<< "$out")"
+
+# D4c — the placement D4b cannot reach: a SESSION missing `moved` (old schema), never an
+# escalation. D4b's only non-session row is an escalation, and BOTH readers admit an escalation
+# through the same `on_axis` test, so D4b cannot see a divergence there. The only placement where
+# the two populations disagree is a session missing `moved` FIRST: `on_axis` alone admits it
+# (kit_dirty:false, kit_sha set) while `comparable_row` in the judge does not, because a session
+# additionally needs `has("moved")`. Reproduced on session(aaaaaaa, no moved) ·
+# session(bbbbbbb) · session(aaaaaaa): the last row of the table read bbbbbbb while the judge's
+# `.latest.kit_sha` read aaaaaaa, over the same file.
+mkdir -p "$OUTSIDE/vorder3"
+localize > "$OUTSIDE/vorder3/autonomy-log.jsonl" <<'EOF'
+{"v":1,"ts":"2026-08-16T14:00:00-03:00","event":"session","run_id":"r1","invocation":"run","kit_sha":"aaaaaaa","kit_dirty":false,"project":"p1","repo":"/p1","mission":"m1","phase":"EXEC","step":"EXEC","agent":"sdd-executor","model":"opus","attempt":1,"auto_retry":false,"session":"s1","rc":0,"dur_s":10,"cost_usd":1.0,"gate":"fail","gate_why":"old schema, no moved"}
+{"v":1,"ts":"2026-08-16T14:01:00-03:00","event":"session","run_id":"r2","invocation":"run","kit_sha":"bbbbbbb","kit_dirty":false,"project":"p1","repo":"/p1","mission":"m2","phase":"EXEC","step":"EXEC","agent":"sdd-executor","model":"opus","attempt":1,"auto_retry":false,"session":"s2","rc":0,"dur_s":10,"cost_usd":1.0,"moved":true,"gate":"pass","gate_why":"x"}
+{"v":1,"ts":"2026-08-16T14:02:00-03:00","event":"session","run_id":"r3","invocation":"run","kit_sha":"aaaaaaa","kit_dirty":false,"project":"p1","repo":"/p1","mission":"m3","phase":"EXEC","step":"EXEC","agent":"sdd-executor","model":"opus","attempt":1,"auto_retry":false,"session":"s3","rc":0,"dur_s":10,"cost_usd":1.0,"moved":true,"gate":"pass","gate_why":"x"}
+EOF
+out="$( SDD_STATE_DIR="$OUTSIDE/vorder3" "$SDD" autonomy 2>&1 )"
+vseries3="$( SDD_STATE_DIR="$OUTSIDE/vorder3" "$SDD" kaizen --series 2>/dev/null )"
+assert_eq "output: a session missing moved cannot lead the table's order, only the judge's population does" \
+  "aaaaaaa aaaaaaa" \
+  "$(jq -r '.latest.kit_sha' <<< "$vseries3") $(awk '$3 == "session(s)" { sha = $1 } END { print sha }' <<< "$out")"
 
 # D5 — with no escalations and one unrecognized row, two blank lines opened between the table and
 # the exclusion line. Each exclusion string already begins with `\n` AND jq's `,` puts every output

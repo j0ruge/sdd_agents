@@ -4317,14 +4317,19 @@ cmd_autonomy() {
     # between two launches is one new run_id, not two. An honest floor, where the prose
     # (`- intervention:` notes) was a ceiling nobody filled — the mission with three launches
     # (SQ-111) had zero notes.
-    # Three more limits, declared here because this is the program that prints the number:
+    # Four more limits, declared here because this is the program that prints the number:
     #   - a launch that ended in an escalation before any session row (a run stopped by
     #     handoff-blocked, for instance) is invisible: the population is the session rows, by the
     #     spec, and an escalation row is not one of them — a second undercount, same direction;
+    #     measured: three increment-blocked rows of a /tmp fixture mission carry run_ids that never
+    #     got a session row;
     #   - a mission whose sessions are ALL non-comparable prints no line at all and contributes
     #     nothing to the accounting sentence below, exactly as before these two cells existed;
     #   - neither cell enters the judge series: it groups by kit_sha, and a mission that crossed
-    #     two kit versions would count its launches twice (design §4.6).
+    #     two kit versions would count its launches twice (design §4.6);
+    #   - a row with no run_id would count as one launch: `[{run_id:"a"},{run_id:"a"},{}]` reads 2,
+    #     not 1. The runner writes run_id on every row it emits and the real ledger has 0 such rows,
+    #     so this is declared, not filtered.
     def launches: map(.run_id) | unique | length;
     # A session in a phase BELOW one whose gate had already PASSED, in $PHASES order — the pipeline
     # going backwards after it had gone forward. NOT "the phase index went down": that counts the
@@ -4369,15 +4374,19 @@ cmd_autonomy() {
     # check-autonomy.sh compares the last table row to `.latest.kit_sha` of the series so neither
     # side can be "improved" alone. `index` returns 0 for the first element and 0 is truthy in jq,
     # which is what makes the reduce keep the first occurrence instead of appending it twice.
-    # The order is read off the SAME POPULATION the judge reads it off — every on_axis row, session
-    # or escalation — and not off the comparable sessions this table happens to draw. Getting that
-    # wrong is a second way to answer the same question differently: a version whose first on_axis
-    # row is an escalation is already known to the series when the table has never heard of it, so
-    # a sha that got blocked before it ever finished a session sorted after one that started later.
-    # Measured in the r1 review: rows blocked(aaaaaaa), session(bbbbbbb), session(aaaaaaa) put
-    # aaaaaaa last in the table while the series called bbbbbbb the latest. `comparable` implies
-    # on_axis by its own definition above, so every group here has a place in this list.
-    | (map(select(on_axis)) | map(.kit_sha)
+    # The order is read off every row the table and the escalations block admit — comparable
+    # sessions and on_axis escalations — which is exactly the population kaizen_series reads
+    # through `comparable_row`, and not off `on_axis` alone: a SESSION with no `moved` field (old
+    # schema) is on_axis but not comparable, so it lands on neither side of that population, and
+    # the earlier spelling of this clause admitted it anyway, putting the two readers on different
+    # versions again. Measured on a three-row ledger session(aaaaaaa, no moved) ·
+    # session(bbbbbbb) · session(aaaaaaa): the last row of the table read bbbbbbb while
+    # `.latest.kit_sha` of the series read aaaaaaa, over the same file (tests/check-autonomy.sh,
+    # fixture D4c). A version whose first admitted row is an escalation is the separate case this
+    # clause already covers: `comparable` implies `on_axis` by its own definition above, so an
+    # escalation reaches this list through the `is_escalation and on_axis` arm and a session
+    # through the other, and every group in $groups below still has a place in this list.
+    | (map(select((is_session and comparable) or (is_escalation and on_axis))) | map(.kit_sha)
        | reduce .[] as $s ([]; if index($s) then . else . + [$s] end)) as $order
     | (map(select(is_session and comparable))
        | group_by(.kit_sha) | sort_by(.[0].kit_sha as $s | $order | index($s))) as $groups

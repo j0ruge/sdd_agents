@@ -670,9 +670,10 @@ The judge is split in two (ADR 0001):
 the repo it runs in — the file is global, the reading is not, see above: `latest` and `previous`
 kit versions (by
 **file order** of first appearance, never by sort — and a reappearing old sha rejoins its old
-group; `sdd autonomy` orders its version table off the **same population**, every `on_axis` row
-and not just the sessions, because two readers disagreeing about which version is newest over one
-file is a defect and not a view), each with missions, `missions_with_session` (the subset that bought an observation — the
+group; `sdd autonomy` orders its version table off the **same population**, the rows both the
+table and the escalations block admit — comparable sessions and on-axis escalations — the
+population the series reads through `comparable_row`, because two readers disagreeing about which
+version is newest over one file is a defect and not a view), each with missions, `missions_with_session` (the subset that bought an observation — the
 guard below counts these, not the raw mission tally), sessions, `outcomes` (`{advanced, churned, idle}` — what the sessions did, the headline since
 2026-08-28; the same three buckets appear in every `detail[]` entry), `advance_rate` (the share
 whose gate passed), `moved_rate` (the share that wrote to the disk — kept, its name says what it

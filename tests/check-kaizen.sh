@@ -126,7 +126,7 @@ echo "== series =="
 # in-loop auto_retry), m1/REVIEW refez (budget-exhausted + human retry invocation), m2/EXEC
 # refez (increment-blocked, a Jidoka with no session at all), m3/EXEC ok.
 # m6/EXEC churn (fail/true then pass/true, one run, no retry, no escalation — ok under the old
-# rubric, leve since Task 4)
+# rubric, leve since 20260828-instrumento-honesto)
 localize > "$LEDGER" <<'EOF'
 {"v":1,"ts":"2026-08-15T10:00:00-03:00","event":"session","run_id":"r1","invocation":"run","kit_sha":"fff9999","kit_dirty":false,"project":"p1","repo":"/p1","mission":"m1","phase":"QA","step":"QA:close","agent":"sdd-qa","model":"opus","attempt":1,"auto_retry":false,"session":"s1","rc":0,"dur_s":10,"cost_usd":1.0,"moved":false,"gate":"fail","gate_why":"x"}
 {"v":1,"ts":"2026-08-15T10:01:00-03:00","event":"session","run_id":"r1","invocation":"run","kit_sha":"fff9999","kit_dirty":false,"project":"p1","repo":"/p1","mission":"m1","phase":"QA","step":"QA:close","agent":"sdd-qa","model":"opus","attempt":1,"auto_retry":true,"session":"s1","rc":0,"dur_s":10,"cost_usd":1.0,"moved":true,"gate":"pass","gate_why":"x"}

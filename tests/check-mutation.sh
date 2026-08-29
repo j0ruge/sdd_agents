@@ -2100,9 +2100,12 @@ mut_AUTONOMY_reopened_ignores_gate() {
 }
 
 # launches and reopened drawn over the COMPARABLE sessions of the mission instead of every local
-# one: SQ-111, whose post-PR QA row is on a dirty kit, reads `2 launch(es) · 0 reopened` as
-# `1 launch(es) · 0 reopened` — the population mistake that almost shipped. Caught by the
-# population pair, whose comparable population is exactly one row.
+# one. Measured on SQ-111 itself: its three run_ids all appear in comparable rows, so there the
+# mutant reads `3 launch(es) · 0 reopened` where the truth is `3 · 1` — launches survives,
+# reopened does not, because the post-PR QA row that motivated `reopened` is the one row
+# `comparable` refuses. The `2 → 1` numbers belong to the population FIXTURE instead, whose
+# second launch is the dirty row itself: caught by the population pair, whose comparable
+# population is exactly the clean rows — launches 2 → 1 and reopened 1 → 0.
 mut_AUTONOMY_reopened_comparable_only() {
   sed -i 's@| (\.\[0\] | mission_key | history_of) as \$every$@| . as $every@' "$1"
 }
