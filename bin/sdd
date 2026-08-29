@@ -376,6 +376,9 @@ app_url_hostport() {
   # Digits, and at most five of them. The length bound is not cosmetic: `$((10#$port))` below
   # wraps silently on a 20-digit string, so a port nobody could listen on would come out as a
   # small number the probe would happily connect to.
+  # DECLARED LIMIT: the bound is measured on the STRING, before `10#` below strips the zeros, so
+  # `http://h:000001/` — port 1 in six characters — is refused too, into `unknown`, where nothing
+  # escalates. A port spelled with more leading zeros than digits is not worth a sixth line here.
   case "$port" in ''|*[!0-9]*) return 1 ;; esac
   [ "${#port}" -le 5 ] || return 1
   # `10#` and never a bare `[ "$port" -ge 1 ]`: `[` evaluates its operand arithmetically, where a
@@ -386,7 +389,7 @@ app_url_hostport() {
   printf '%s %s\n' "$host" "$port"
 }
 
-# app_probe [url] — prints "state|label" and ALWAYS returns 0. State is one of:
+# app_probe <url> — prints "state|label" and ALWAYS returns 0. State is one of:
 #
 #   down     nothing is listening there; label is the address
 #   up       something answered; label is the address
@@ -412,7 +415,10 @@ app_url_hostport() {
 # seconds with a verdict that can go stale across a session is the wrong side of that trade, and
 # the seconds are noise beside the E2E_CMD run that has to fail before this is reached at all.
 app_probe() {
-  local url="${1:-${APP_URL:-}}" hp host port label err="" rc=0
+  # The URL is the ARGUMENT and never read off the global here: both callers pass "$APP_URL" by
+  # name, and a fallback to it was a default nothing exercised — a signature that says one thing
+  # and a body that quietly accepts another.
+  local url="${1:-}" hp host port label err="" rc=0
   [ -n "$url" ] || { printf 'unknown|APP_URL is empty\n'; return 0; }
   # Declared first and assigned inside the `if`: `local hp="$(...)"` would swallow the rc, since
   # `local` reports its OWN success and the parser's refusal would read as a parse.
@@ -905,8 +911,11 @@ gate_QA() {
       up)
         # The WITNESS, and it is not decoration: without it "the app was never asked about" and
         # "the app was asked about and answered" would read the same to whoever gets this
-        # sentence, and `down` would be a claim with no contrast behind it.
-        GATE_WHY="E2E_CMD failed ($E2E_CMD) with the app answering at $label — a real e2e failure, not the environment. See $e2e_log"
+        # sentence, and `down` would be a claim with no contrast behind it. A TCP accept is ALL the
+        # witness proves: it clears the address, never the environment behind it — a stopped
+        # database sits behind a port that answers — so the sentence names what it cleared and
+        # sends the reader to the log for the rest.
+        GATE_WHY="E2E_CMD failed ($E2E_CMD) with the app answering at $label — APP_URL is not the cause; whatever is (a broken assertion, or something behind the port, like a stopped database) is in the log. See $e2e_log"
         ;;
       *)
         # `*` and not `unknown)`: this is the arm that has to catch a state nobody has invented
@@ -4408,6 +4417,10 @@ cmd_autonomy() {
     # version table. When the two populations differ for a printed mission the accounting
     # paragraph says so, once, with the difference summed over the missions printed.
     | (map(select(is_session)) | group_by(mission_key)) as $every_session
+    # DECLARED LIMIT: history_of scans $every_session once per printed mission, so the by-mission
+    # table is quadratic in the number of missions the ledger holds. Unmeasured, on purpose: the
+    # real ledger is 145 rows over a dozen missions, and the scan that WAS measured (the
+    # degenerate_axis rewrite in kaizen_series) only earned its index at 750 versions over 3000 rows.
     | def history_of: . as $k | $every_session | map(select((.[0] | mission_key) == $k)) | .[0] // [];
       (if $by_mission == 1
        then ($mgroups | map((.[0] | mission_key | history_of | length) - length) | add // 0)

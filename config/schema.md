@@ -60,8 +60,8 @@ ever starts anything:
   for a state that did not matter.
 
 Anything the probe cannot decide reads as *unknown* and changes nothing: an empty value, a URL that
-is not `http://`/`https://` with a host, a bash without `/dev/tcp`, no `timeout(1)` on PATH. Only a
-connection actively **refused** counts as down.
+is not `http://`/`https://` with a host, a bash without `/dev/tcp`, no `timeout(1)` on PATH, a
+connect that times out instead of answering. Only a connection actively **refused** counts as down.
 
 ## Artifact paths
 
