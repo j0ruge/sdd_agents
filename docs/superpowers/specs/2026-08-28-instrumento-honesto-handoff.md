@@ -37,7 +37,7 @@ git status --porcelain                     # TEM de sair vazio
 repo de cliente):
 
 ```bash
-./tests/run-all.sh | tail -3                       # suite green (663 linhas `  ok    `)
+./tests/run-all.sh | tail -3                       # suite green (666 linhas `  ok    `; 663 antes da revisão final)
 cat .sdd/logs/mutation-stamp                       # 667a87cc54751f564783c6bdfceaf4a4
 git diff --stat 9122478..HEAD -- bin tests templates config   # VAZIO — a chave do carimbo
                                                    #   não foi tocada desde o último commit de código
@@ -143,9 +143,9 @@ que ela mora, com a ressalva de população por extenso. O resumo:
 | `?` na tabela por missão | **5** missões | **0** |
 | `waste` de `25d4e1c` | **0%** | **16%** (a régua mudou, não a sessão) |
 | tabela de versão, sessões **comparáveis** (133 de 145) | `8 stalled` | `64 advanced · 61 churned · 8 idle` |
-| asserções de `tests/run-all.sh` | 637 | **663** |
-| `check-autonomy.sh` / `check-kaizen.sh` | 202 / 137 | **222** / **143** |
-| catálogo de mutação | 166 de 166 | **173** de 173 |
+| asserções de `tests/run-all.sh` | 637 | **663** ao fechar a execução → **666** após a revisão final |
+| `check-autonomy.sh` / `check-kaizen.sh` | 202 / 137 | **222** / **143** → **223** / 143 (`efa10c9`) |
+| catálogo de mutação | 166 de 166 | **173** de 173 → **179** de 179 após a revisão final |
 | achados abertos no `TODO.md` | 77 | 78 |
 
 ⚠️ **Duas populações, e nenhuma célula mistura as duas.** A tabela de versão soma só as sessões

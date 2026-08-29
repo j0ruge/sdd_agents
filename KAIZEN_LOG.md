@@ -33,9 +33,9 @@ linhas se releem com a régua nova. D16 emendada no `CONTEXT.md`; achado do `sdd
 | `lote-facil` | `9 session(s)` | `4 launch(es) · 2 reopened` — bate com a contagem à mão de `20260828-o-gate-sabe-que-o-app-caiu-handoff.md` §9 |
 | `?` na tabela por missão (`--all-repos`) | **5** missões (`grep -c '?' before-by-mission.txt`: `jornada-qa`, `placeholder`, `cif-forma-pagamento`, `frete-cif-fob`, `condicoes-pagamento`) | **0** |
 | `waste` da versão mais recente do kit (`25d4e1c`) | **0%** (`idle`/`stalled` sozinho — a régua antiga) | **16%** (`churned + idle` = 1 + 0 sobre 6 sessões — a régua mudou, não a sessão) |
-| asserções de `tests/run-all.sh` | **637** | **663** |
-| `tests/check-autonomy.sh` / `check-kaizen.sh` | **202** / **137** | **222** / **143** |
-| catálogo de mutação | 166 de 166 | **173** de 173 |
+| asserções de `tests/run-all.sh` | **637** | **666** (663 ao fechar a execução; a revisão final acrescentou os dois fixtures de query e fragment sem path, e `efa10c9` já havia somado uma) |
+| `tests/check-autonomy.sh` / `check-kaizen.sh` | **202** / **137** | **223** / **143** |
+| catálogo de mutação | 166 de 166 | **179** de 179 (173 ao fechar a execução; a revisão final acrescentou um mutante por strip do parser de URL, o do braço IPv6, o do userinfo e o da guarda das notas) |
 | achados abertos no `TODO.md` | 77 | 78 (o `sdd close`) |
 | 145 sessões, todos os repos — tabela de versão do instrumento (`sdd autonomy --all-repos`, soma sobre as sessões **comparáveis**, 133 de 145) | `8 stalled` | `64 advanced · 61 churned · 8 idle` |
 

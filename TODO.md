@@ -40,7 +40,7 @@ Achados sobre **repos-alvo** vão para o `TODO.md` daquele repo. Este arquivo é
 ### Sensores que faltam
 
 - [ ] **`gate_QA` roda `E2E_CMD` sem checar se o app está de pé, e lê o vermelho como falha de QA** —
-  `bin/sdd:712` — app fora do ar dá um vermelho indistinguível de regressão, e o gate manda uma
+  `bin/sdd:899` — app fora do ar dá um vermelho indistinguível de regressão, e o gate manda uma
   missão FECHADA, com PR já aberto, de volta para uma sessão paga de opus. Custou US$ 14,16 +
   US$ 7,61 (o retorno pós-PR). ⚠️ O `config.sh` que comenta `DEV_READY_CMD`/`DEV_READY_TIMEOUT` é
   o `.sdd/config.sh` do **repo-alvo**, nunca o do kit — as chaves não existem aqui.
@@ -637,7 +637,7 @@ Achados sobre **repos-alvo** vão para o `TODO.md` daquele repo. Este arquivo é
 - [ ] **Destilar handoffs/`KAIZEN_LOG` para o vault Obsidian continua manual** — avaliar um
   `sdd digest` que gere o rascunho. — descoberto por `humano` no planejamento (2026-08-14)
 
-- [ ] **`sdd close` abre sessão e não escreve linha no ledger** — `bin/sdd:5278` — o
+- [ ] **`sdd close` abre sessão e não escreve linha no ledger** — `bin/sdd:5422` — o
   `docs/pipeline.md` promete "uma linha JSON por sessão gasta ou escalada" e esta sessão não tem
   linha: `grep -n 'autonomy_.*_row' bin/sdd` não devolve nada dentro de `cmd_close`. Fail-open pela
   régua D15, com consumidor fora da suíte (o juiz e a D12). Direção: `cmd_close` passa por
