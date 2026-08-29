@@ -364,6 +364,49 @@ mut_QA_hostport_folds_host() {
   sed -i 's@^    https://\*) scheme=https; rest="${url:8}" ;;$@    https://*) scheme=https; rest="${url,,}"; rest="${rest:8}" ;;@' "$1"
 }
 
+# The three STRIPS the parser runs before it reads the port — fragment, then query, then path — each
+# with its own mutant, and the ORDER is why. With a path in the URL the `/` strip swallows the query
+# and the fragment before their own strips ever run, so the one fixture that carried all three
+# (`/path?q=1#frag`) measured the path alone: neutralising either of the other two strips SURVIVED
+# it, found in the review round of 20260828-o-gate-sabe-que-o-app-caiu by sabotaging the parser by
+# hand. check-gates.sh now carries one fixture per component, each the last thing in its URL, and
+# each mutant below names the one that kills it. Every survivor degrades to `unknown` — the port
+# comes out with the leftover glued to it, fails the digits check, and the escalation silently
+# stops existing for a URL the operator wrote correctly.
+
+# Caught by `path, query and fragment are stripped` — and by every fixture with a trailing `/`,
+# which is most of them; over-determined, and the point is the last three words of its name.
+mut_QA_hostport_keeps_path() {
+  sed -i 's@^  rest="${rest%%/\*}"$@  : # path kept@' "$1"
+}
+
+# Caught by `a query with no path is stripped`, and by that one ALONE: every other fixture either
+# has no query or has a path in front of it.
+mut_QA_hostport_keeps_query() {
+  sed -i 's@^  rest="${rest%%\\?\*}"$@  : # query kept@' "$1"
+}
+
+# Caught by `a fragment with no path is stripped`, alone, for the same reason.
+mut_QA_hostport_keeps_fragment() {
+  sed -i 's@^  rest="${rest%%#\*}"$@  : # fragment kept@' "$1"
+}
+
+# The userinfo goes back to riding into the address: `user:CHANGE@ME@127.0.0.1:port` reads `user`
+# as the host and the rest as a port nothing can parse. Caught by `userinfo is stripped, and the
+# last @ is the separator` — the one fixture with an `@` in it. `|` as the delimiter, because the
+# anchor CONTAINS the `@` every other mutation here delimits with.
+mut_QA_hostport_keeps_userinfo() {
+  sed -i 's|^  rest="${rest##\*@}"$|  : # userinfo kept|' "$1"
+}
+
+# The bracketed-with-port arm is gone, so `[::1]:port` falls through to the bare `host:port` arm and
+# splits at the FIRST colon: host `[`, port `:1]:port`. Caught by `an IPv6 literal reads as an
+# address`, the one bracketed fixture. The replacement is still a case arm, one no host can equal,
+# so the mutant parses and the point goes to the assertion rather than to the shell.
+mut_QA_hostport_no_ipv6() {
+  sed -i 's@^    \\\[\*\\]:\*) host="${rest#\\\[}"; host="${host%%\\]:\*}"; port="${rest##\*\\]:}" ;;$@    "no-bracketed-port-arm") : ;;@' "$1"
+}
+
 mut_REVIEW_stops_at_h3() {
   sed -i 's|.*inside && /\^#{1,6}\[\[:space:\]\]/ { exit }.*|      inside \&\& /^###[[:space:]]/ { exit }|' "$1"
 }
@@ -975,6 +1018,17 @@ mut_RUN_app_down_not_escalated() {
 mut_RUN_app_down_retry_not_escalated() {
   sed -i '/^    if \[ "$gate_rc2" -eq 0 \]; then$/,/^    if \[ "$moved2" = "false" \]; then$/ s|^    if app_down_escalation "$phase"; then return 3; fi$|    if false; then return 3; fi|' "$1"
 }
+#
+# The RESET at the entry of gate_QA (`GATE_APP_DOWN=0`, its only setter) deliberately gets no mutant
+# either, and this too is a DECLARED limit rather than an oversight. Measured in the review round of
+# 20260828-o-gate-sabe-que-o-app-caiu: with both doors intact, the first lap that arms the marker
+# leaves the process through door 1 with rc 3, and `current_phase` walks the gates in a subshell
+# whose copy dies with it — so no second gate_QA call in one process ever finds the marker stale. A
+# mutant deleting the reset SURVIVES on its own; it dies only in the company of a door mutant, which
+# is strictly weaker evidence than the pair above. The same holds, unmeasured, for the sibling reset
+# of GATE_HANDOFF_BLOCKED one house up. The world in which the reset decides anything is a third
+# door or a second setter — the contract above the marker in bin/sdd names both — and that world is
+# the one its author builds, together with the probe that this comment could not.
 
 # Not a gate, and the exact bug I2 closed: `force_phase="PR"; continue` sat ABOVE both writers, so
 # the runner lowering its own bar — the single most interesting autonomy event a mission can
@@ -2110,6 +2164,16 @@ mut_AUTONOMY_reopened_comparable_only() {
   sed -i 's@| (\.\[0\] | mission_key | history_of) as \$every$@| . as $every@' "$1"
 }
 
+# The guard on the narrative cell goes: `intervention note(s)` is printed for ANY mission whose slug
+# has a checkpoint in this repo, so under --all-repos a foreign mission that merely shares the slug
+# borrows this repo notes. The map is keyed by slug alone — built from this repo rows — and the row
+# repo is the only thing standing between the two. Caught by `a mission of another repo never
+# borrows the notes of a same-slug mission of this one` in check-autonomy.sh, which reads "2 1 1"
+# under this mutant where it demands "2 1 0".
+mut_AUTONOMY_notes_borrowed_across_repos() {
+  sed -i 's@if \$r == \$repo and (\$interventions | has(\$m)) then@if ($interventions | has($m)) then@' "$1"
+}
+
 CATALOG=(
   PLAN_empty_approval
   PLAN_kaizen_born_blind
@@ -2139,6 +2203,11 @@ CATALOG=(
   QA_hostport_no_default_port
   QA_hostport_case_blind
   QA_hostport_folds_host
+  QA_hostport_keeps_path
+  QA_hostport_keeps_query
+  QA_hostport_keeps_fragment
+  QA_hostport_keeps_userinfo
+  QA_hostport_no_ipv6
   REVIEW_stops_at_h3
   REVIEW_accepts_B
   REVIEW_placeholder_rationale_blind
@@ -2284,6 +2353,7 @@ CATALOG=(
   AUTONOMY_launches_counts_rows
   AUTONOMY_reopened_ignores_gate
   AUTONOMY_reopened_comparable_only
+  AUTONOMY_notes_borrowed_across_repos
 )
 
 # Mutations that are NOT caught today, each with the increment that closes it. Ratchet in both

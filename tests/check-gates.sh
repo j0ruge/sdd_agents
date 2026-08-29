@@ -797,10 +797,21 @@ if [ "$floor_ok" = "1" ]; then
   sed -i 's|^E2E_CMD=.*|E2E_CMD="false"|' .sdd/config.sh
   sed -i "s|^APP_URL=.*|APP_URL=\"http://127.0.0.1:$dead_port/path?q=1#frag\"|" .sdd/config.sh
   assert_why "path, query and fragment are stripped" "QA" "at 127\.0\.0\.1:$dead_port"
-  sed -i "s|^APP_URL=.*|APP_URL=\"http://user:pw@127.0.0.1:$dead_port/\"|" .sdd/config.sh
-  assert_why "userinfo is stripped" "QA" "at 127\.0\.0\.1:$dead_port"
+  # A placeholder pair on loopback — nothing listens there and nothing is a credential — with an
+  # `@` INSIDE the password, because the LAST `@` is the separator: a fixture without one would
+  # pass a parser that cut at the first.
+  sed -i "s|^APP_URL=.*|APP_URL=\"http://user:CHANGE@ME@127.0.0.1:$dead_port/\"|" .sdd/config.sh
+  assert_why "userinfo is stripped, and the last @ is the separator" "QA" "at 127\.0\.0\.1:$dead_port"
   sed -i "s|^APP_URL=.*|APP_URL=\"http://[::1]:$dead_port/\"|" .sdd/config.sh
   assert_why "an IPv6 literal reads as an address" "QA" "at \[::1\]:$dead_port"
+  # Query and fragment WITHOUT a path, one fixture each: with a path in front of them the `/` strip
+  # swallows both before their own strips ever run, so `/path?q=1#frag` above measures the path
+  # alone — neutralising either of the other two strips survived it. Measured in the review round
+  # of 20260828-o-gate-sabe-que-o-app-caiu, and each of the three now has its own mutant.
+  sed -i "s|^APP_URL=.*|APP_URL=\"http://127.0.0.1:$dead_port?q=1\"|" .sdd/config.sh
+  assert_why "a query with no path is stripped" "QA" "at 127\.0\.0\.1:$dead_port"
+  sed -i "s|^APP_URL=.*|APP_URL=\"http://127.0.0.1:$dead_port#frag\"|" .sdd/config.sh
+  assert_why "a fragment with no path is stripped" "QA" "at 127\.0\.0\.1:$dead_port"
   # Address only, NOT the verdict: port 80 may well be open on the machine running this, and both
   # the up and the down sentence carry the label. Machine-independent by construction.
   sed -i 's|^APP_URL=.*|APP_URL="http://127.0.0.1/"|' .sdd/config.sh
