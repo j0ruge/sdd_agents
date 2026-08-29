@@ -84,15 +84,35 @@ precisa correr **depois** de `moved2` ser amostrado, e uma guarda dentro do `run
 dentro da janela. O preço é que a quinta porta nasce desguardada; ele é pago com um probe por
 porta (`tests/check-autonomy.sh`, regimes 1, 4, 5 e 7), então porta acrescentada sem probe é porta
 cuja remoção nenhuma asserção percebe.
-⚠️ **A forma tem uma SEGUNDA instância deliberada desde `20260826-o-laco-da-qa`**, e a frase acima
-("este arquivo a recusa em toda outra família") vale para as outras, não para esta: o
-`handoff_blocked_escalation` é UMA definição com DUAS portas no mesmo laço do `cmd_run` — a
-primeira passada e o retry inline. A conta é a mesma, um probe por porta. A segunda porta não é
-simetria: com só a primeira, o marcador sobrevivia à **volta** em vez de ao gate, e a escalada saía
-carimbada `{phase: EXEC}` sobre um handoff de EXEC que dizia `done`. A projeção (`--dry-run`) **não arma nada**: `sdd run
---dry-run` não abre sessão a que atribuir mudança, e armar mesmo assim fazia a projeção herdar o
-aviso de ledger do `autonomy_kit_stamp` — medido, 0 avisos antes e 1 depois, com o kit instalado
-como cópia simples.
+⚠️ **A forma tem hoje TRÊS instâncias deliberadas, e a frase acima ("este arquivo a recusa em toda
+outra família") vale para as outras, não para estas.** O censo sai do comando, nunca desta linha —
+é a mesma régua do `44 caught of 44`, conte a propriedade e não a palavra:
+
+```bash
+grep -cE '^[a-z_]+_escalation\(\) \{'                 bin/sdd   # definições de escalada → 2
+grep -cE '^ +if [a-z_]+_escalation "\$phase"; then'   bin/sdd   # portas delas           → 4
+grep -cE '^ *kit_guard_check "'                       bin/sdd   # portas da guarda de kit → 4
+```
+
+⚠️ O `-E` com âncora não é capricho: `grep -F 'escalation "$phase"'` responde **5**, porque conta a
+linha de comentário que exibe a grafia. A conta é sempre a mesma, **um probe por porta**, e porta
+acrescentada sem probe é porta cuja remoção nenhuma asserção percebe.
+
+- `handoff_blocked_escalation`, desde `20260826-o-laco-da-qa`: UMA definição com DUAS portas no
+  mesmo laço do `cmd_run` — a primeira passada e o retry inline. A segunda porta não é simetria:
+  com só a primeira, o marcador sobrevivia à **volta** em vez de ao gate, e a escalada saía
+  carimbada `{phase: EXEC}` sobre um handoff de EXEC que dizia `done`;
+- `app_down_escalation`, desde `20260828-o-gate-sabe-que-o-app-caiu`: o irmão voltado ao ambiente,
+  mesmas duas portas do mesmo laço, mesmo rc 3. A F2 do irmão foi **reproduzida em cópia** antes
+  de a porta 2 existir — `QA|app-down` virava `EXEC|app-down` —, e é o par
+  `mut_RUN_app_down_not_escalated` / `mut_RUN_app_down_retry_not_escalated` que a segura hoje.
+  ⚠️ Marcador novo **re-deriva** o contrato (reset na entrada do seu único setter, não sobrevive à
+  volta) em vez de herdá-lo: é o que o comentário sobre `GATE_APP_DOWN` faz, e é o que se cobra do
+  quarto.
+
+A projeção (`--dry-run`) **não arma nada** em nenhuma das duas: `sdd run --dry-run` não abre sessão
+a que atribuir mudança, e armar mesmo assim fazia a projeção herdar o aviso de ledger do
+`autonomy_kit_stamp` — medido, 0 avisos antes e 1 depois, com o kit instalado como cópia simples.
 
 O item **cabe em ~6 linhas** (teto duro de 8, medido por `tests/check-todo.sh`): o quê, a âncora
 em `arquivo:linha`, por que importa, a direção, quem descobriu. A análise longa mora no handoff

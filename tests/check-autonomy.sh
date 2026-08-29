@@ -1158,6 +1158,220 @@ chmod +x "$OUTSIDE/stub/claude"
 printf -- '---\nfase: QA\nstatus: done\n---\n' > "$MDIR/30-handoff-qa.md"
 git add -A && git commit -qm "chore: restore the handoff the retry regime replaced"
 
+# --- the app is down: the runner asks, and stops ---------------------------
+echo "== a dead app escalates on the first session, where a red e2e alone still spends two =="
+# A red e2e says nothing about WHOSE fault it is: a dead app, a stopped database, a missing
+# browser binary and a genuinely broken assertion all leave the same non-zero rc, and the runner
+# read every one of them as "QA still has work to do" — one gate failure, one more opus session,
+# for ever. Measured on the SQ-111 mission of 2026-08-27: US$ 14,16 for a QA reproved by the
+# environment, plus US$ 7,61 for the lap that reopened a mission whose PR was already open.
+#
+# FLOOR FIRST, and deliberately NOT written with the runner's own app_probe: a floor that reuses
+# the function under test measures the runner with the runner. This is a raw connect, and when it
+# cannot find a refused port it dies BY NAME rather than certifying a pair that proved nothing.
+port_is_free() {  # rc 0 = nothing is listening on 127.0.0.1:$1
+  local rc=0
+  LC_ALL=C timeout 3 bash -c 'exec 3<>"/dev/tcp/127.0.0.1/$0"' "$1" 2>/dev/null || rc=$?
+  [ "$rc" -ne 0 ]
+}
+# BELOW the ephemeral range, and that is what makes the floor hold for the whole block. The floor
+# proves the port refuses ONCE; the assertions under it then run several `sdd` invocations over
+# minutes against that one measurement. Drawn from 49152-59171 the port sat INSIDE the kernel's
+# `ip_local_port_range` (32768-60999 by default), so it could be handed out mid-block and the
+# assertions would flip for a reason that has nothing to do with the runner. 20000-29999, plus the
+# 19 steps the search below may take past it, is under that floor. DECLARED LIMIT: a machine that
+# lowered `ip_local_port_range` past 20000, or that starts a real listener there mid-block, is back
+# in the old window — the search loop below only re-measures at the start, and re-measuring per
+# assertion would buy a smaller window at the price of a floor nobody can read.
+dead_port=$(( 20000 + $$ % 10000 ))
+app_floor_ok=1
+if ! command -v timeout >/dev/null 2>&1; then
+  fail "dead-app floor" "timeout(1) on PATH" "timeout is missing — the app-down pair was NOT measured"
+  app_floor_ok=0
+else
+  tries=0
+  while ! port_is_free "$dead_port"; do
+    dead_port=$(( dead_port + 1 )); tries=$(( tries + 1 ))
+    if [ "$tries" -ge 20 ]; then
+      fail "dead-app floor" "a refused port on 127.0.0.1" \
+           "20 consecutive ports were all listening — the pair would certify nothing"
+      app_floor_ok=0; break
+    fi
+  done
+fi
+
+if [ "$app_floor_ok" = "1" ]; then
+  pass "dead-app floor: 127.0.0.1:$dead_port refuses connections"
+
+  # With E2E_CMD set, gate_QA takes the interface branch, so the dated report has to be there and
+  # closed — otherwise the gate refuses ABOVE the e2e and the probe is never reached, which is a
+  # pair that measures the report anchor while claiming to measure the probe.
+  # PROVENANCE: ~/.claude/skills/qa-execution/assets/report-template.md:6, same capture the
+  # equivalent fixture in tests/check-gates.sh carries — the `**Status:**` does not open the line
+  # and the enum legend rides in the comment.
+  mkdir -p "$FIX/docs/qa/reports"
+  cat > "$FIX/docs/qa/reports/2026-01-01-fixture.md" <<'RPT'
+# QA Run Report — 2026-01-01 — fixture
+- **Started:** 2026-01-01T10:00:00Z · **Status:** closed <!-- in-progress | closed -->
+| # | Charter | Status |
+|---|---|---|
+| 1 | CH-one | Pass |
+RPT
+  printf -- '---\nfase: QA\nstatus: done\n---\n' > "$MDIR/30-handoff-qa.md"
+
+  # ⭐ THE PAIR, and its control is the SAME fixture with APP_URL emptied — one line of config is
+  # the only difference between the two runs. That is what makes it isolate the PROBE and not the
+  # redness: E2E_CMD is `false` on both sides, so both gates refuse for a red e2e, and a runner
+  # that escalated on a red e2e alone would take the control half red. The dead stub moves
+  # nothing, so the control reaches `no-progress` — the two-session loop of today, which is
+  # exactly what this pair exists to delete.
+  sed -i 's|^E2E_CMD=.*|E2E_CMD="false"|' .sdd/config.sh
+  if grep -q '^APP_URL=' .sdd/config.sh; then
+    sed -i "s|^APP_URL=.*|APP_URL=\"http://127.0.0.1:$dead_port/\"|" .sdd/config.sh
+  else
+    printf 'APP_URL="http://127.0.0.1:%s/"\n' "$dead_port" >> .sdd/config.sh
+  fi
+  git add -A && git commit -qm "chore: a red e2e over an app nobody is serving"
+  : > "$LEDGER"
+  "$SDD" run "$MISSION" >/dev/null 2>&1; rc=$?
+  app_down="$(blocked_shape "$rc")"
+  # `kind == "app-down"` and NOT merely `event == "blocked"`: with the second spelling this line
+  # reads the `no-progress` row of today, whose gate_why already carries the address (the probe
+  # writes GATE_WHY one increment earlier than the escalation reads it) — so it would pass before
+  # the escalation existed AND after, which is an assertion that measures nothing.
+  why_down="$(jq -r -s '[.[] | select(.kind == "app-down")][0].gate_why' "$LEDGER")"
+
+  sed -i 's|^APP_URL=.*|APP_URL=""|' .sdd/config.sh
+  git add -A && git commit -qm "chore: control — the same red e2e, with no address to ask about"
+  : > "$LEDGER"
+  "$SDD" run "$MISSION" >/dev/null 2>&1; rc=$?
+  app_control="$(blocked_shape "$rc")"
+
+  assert_eq "a dead app escalates on the first session, where the same red e2e with no APP_URL still spends two" \
+    "3|1|blocked|app-down · 3|2|blocked|no-progress" \
+    "$app_down · $app_control"
+
+  # The row an operator acts on has to say WHERE nothing is listening. `app-down` in the `kind`
+  # field names the class; the address is what turns the escalation into an instruction, and it is
+  # the half a `kind` set by hand would leave empty. Read off the SAME run — no extra session.
+  assert_eq "and the escalation row names the address nothing is listening on" \
+    "names-it" \
+    "$(grep -qE "nothing is listening at 127\.0\.0\.1:$dead_port" <<< "$why_down" && echo names-it || echo "$why_down")"
+
+  # --- ...and a `--max-phases` ceiling does not turn that into rc 0 ----------
+  # The sibling of the ceiling assertion in the handoff-blocked family above, and it is owed by
+  # the same argument: door 1 sits ABOVE the ceiling check, so an operator or a CI wrapper pacing
+  # the pipeline one phase at a time must not get a SUCCESS exit code for a phase no session can
+  # satisfy. DIFFERENTIAL against the control, which under the same flag must still end 0 with no
+  # escalation row at all — a runner that escalated whenever --max-phases is set takes it red.
+  sed -i "s|^APP_URL=.*|APP_URL=\"http://127.0.0.1:$dead_port/\"|" .sdd/config.sh
+  git add -A && git commit -qm "chore: the dead app, under a ceiling"
+  : > "$LEDGER"
+  "$SDD" run "$MISSION" --max-phases 1 >/dev/null 2>&1; rc=$?
+  app_ceiling_down="$(blocked_shape "$rc")"
+
+  sed -i 's|^APP_URL=.*|APP_URL=""|' .sdd/config.sh
+  git add -A && git commit -qm "chore: control, under the same ceiling"
+  : > "$LEDGER"
+  "$SDD" run "$MISSION" --max-phases 1 >/dev/null 2>&1; rc=$?
+  app_ceiling_control="$(blocked_shape "$rc")"
+
+  assert_eq "a --max-phases ceiling does not turn a dead app into rc 0, where the same red e2e still ends 0" \
+    "3|1|blocked|app-down · 0|1|null|null" \
+    "$app_ceiling_down · $app_ceiling_control"
+
+  # NOT asserted here: "a projection over a dead app writes no ledger row". It was written, and
+  # then removed because no single sabotage could make it red — the house rule for a rule the
+  # sabotage cannot break, and the probes came BEFORE the removal rather than instead of it.
+  # Three worlds were built and measured:
+  #   · the escalation hoisted ABOVE cmd_run's projection early-exit  -> still green, because
+  #   · autonomy_append carries its own DRY_RUN guard, and removing THAT is already owned by
+  #     "the projection writes no ledger at all" at the top of this file (12 assertions go red);
+  #   · pipeline_log_line's guard is owned by tests/check-dry-run.sh (3 assertions go red).
+  # The escalation reaches the ledger only through autonomy_append, so a second assertion here
+  # would have measured that function's guard for the third time and this path not at all.
+  sed -i "s|^APP_URL=.*|APP_URL=\"http://127.0.0.1:$dead_port/\"|" .sdd/config.sh
+  git add -A && git commit -qm "chore: the dead app stays put for the retry regime"
+
+  # --- ...and the INLINE RETRY escalates on the same terms ------------------
+  # Everything above sits on the FIRST pass. The retry door is reached whenever the gate's FIRST
+  # evaluation refuses ABOVE the e2e — the probe is never run, so the marker is not armed — and
+  # the retry session then does the honest work that lets the gate get as far as the e2e and find
+  # the app dead. Reachable without contrivance: session 1 dying or writing nothing is what
+  # SUMMONS the retry, and the retry is the session that writes the report the gate was missing.
+  #
+  # Without door 2 the marker survives the LAP rather than the gate: the run carries on (the retry
+  # DID move the disk), the next lap derives EXEC from the `F<n> pending` row the retry opened,
+  # gate_EXEC never touches the marker, and door 1 fires for EXEC — an APP_URL diagnosis printed
+  # over a phase that never ran an e2e, and {phase: EXEC, kind: app-down} written into the ledger
+  # the kaizen judge reads. That is the F2 failure measured on the handoff-blocked sibling.
+  #
+  # DIFFERENTIAL, and the control is what stops it passing vacuously: BOTH regimes append the same
+  # `F<n> pending` row, so both genuinely offer EXEC as the next phase — "it escalates QA" alone
+  # would also pass on a fixture that never left QA. Only the APP_URL line of the config differs.
+  APP_CKPT_BEFORE_RETRY="$OUTSIDE/checkpoint-before-app-retry.md"
+  cp "$MDIR/checkpoint.md" "$APP_CKPT_BEFORE_RETRY"
+  APP_RETRY_MARKER="$FIX/.app-down-retry"
+  # ONE stub for both regimes: two hand-written stubs would be two places for the regimes to drift
+  # apart, and what the pair measures is that only the config line differs.
+  cat > "$OUTSIDE/stub/claude" <<STUB
+#!/usr/bin/env bash
+if [ ! -e "$APP_RETRY_MARKER" ]; then : > "$APP_RETRY_MARKER"; exit 1; fi
+if [ ! -e "$APP_RETRY_MARKER.2" ]; then
+  : > "$APP_RETRY_MARKER.2"
+  mkdir -p "$FIX/docs/qa/reports"
+  cat > "$FIX/docs/qa/reports/2026-01-01-fixture.md" <<'RPT'
+# QA Run Report — 2026-01-01 — fixture
+- **Started:** 2026-01-01T10:00:00Z · **Status:** closed <!-- in-progress | closed -->
+| # | Charter | Status |
+|---|---|---|
+| 1 | CH-one | Pass |
+RPT
+  printf -- '| F1 | the fix QA asked for | \`true\` → 0 | pending | — |\n' >> "$MDIR/checkpoint.md"
+  git -C "$FIX" add -A
+  git -C "$FIX" commit -qm "chore: the retry session files its report, and opens a fix increment"
+  exit 0
+fi
+exit 1
+STUB
+  chmod +x "$OUTSIDE/stub/claude"
+
+  # The report is REMOVED so the first evaluation refuses above the e2e: that is what leaves the
+  # marker unarmed on the first pass and sends the run to the retry door at all.
+  : > "$LEDGER"; rm -f "$APP_RETRY_MARKER" "$APP_RETRY_MARKER.2"; rm -rf "$FIX/docs/qa"
+  sed -i "s|^APP_URL=.*|APP_URL=\"http://127.0.0.1:$dead_port/\"|" .sdd/config.sh
+  git add -A && git commit -qm "chore: the report the retry session will file"
+  "$SDD" run "$MISSION" >/dev/null 2>&1
+  app_retry_where="$(blocked_where)"
+
+  : > "$LEDGER"; rm -f "$APP_RETRY_MARKER" "$APP_RETRY_MARKER.2"; rm -rf "$FIX/docs/qa"
+  cp "$APP_CKPT_BEFORE_RETRY" "$MDIR/checkpoint.md"
+  sed -i 's|^APP_URL=.*|APP_URL=""|' .sdd/config.sh
+  git add -A && git commit -qm "chore: control — the same retry, with no address to ask about"
+  "$SDD" run "$MISSION" >/dev/null 2>&1
+  app_retry_control="$(blocked_where)"
+
+  assert_eq "a retry that reaches a dead app escalates QA, never the phase the next lap would derive" \
+    "QA|app-down · EXEC|no-progress" \
+    "$app_retry_where · $app_retry_control"
+
+  cp "$APP_CKPT_BEFORE_RETRY" "$MDIR/checkpoint.md"
+  # Back to the dead stub the blocks below expect.
+  cat > "$OUTSIDE/stub/claude" <<'STUB'
+#!/usr/bin/env bash
+exit 1
+STUB
+  chmod +x "$OUTSIDE/stub/claude"
+fi
+
+# The fixture goes back to what the blocks below expect: no interface, and a QA handoff that is
+# `done` without the `gate:` evidence — the ordinary refusal the reader blocks are built on. An
+# E2E_CMD or an APP_URL left behind here would send every later gate_QA down the interface branch.
+sed -i 's|^E2E_CMD=.*|E2E_CMD=""|; s|^APP_URL=.*||' .sdd/config.sh
+rm -rf "$FIX/docs/qa"
+printf -- '---\nfase: QA\nstatus: done\n---\n' > "$MDIR/30-handoff-qa.md"
+git add -A && git commit -qm "chore: restore the fixture the app-down pair borrowed"
+
 # --- the reader ------------------------------------------------------------
 # Fixture ledger written by hand: this is OUR format, so there is no third-party source to copy
 # from (the provenance rule covers skill output). Every row here exists to prove one refusal.
@@ -1173,9 +1387,11 @@ EOF
 out="$( SDD_STATE_DIR="$OUTSIDE/read" "$SDD" autonomy 2>&1 )"; rc=$?
 
 assert_eq "the reader exits 0 with data" "0" "$rc"
-# 2 comparable sessions (rows 1 and 2), 1 of them stalled => 50%.
+# 2 comparable sessions (rows 1 and 2): row 1 wrote and failed its gate (churned), row 2 wrote
+# nothing (idle) — neither made the phase advance, so waste is 100%. This read 50% while waste was
+# the approximation `moved == false`; the yardstick moved on 2026-08-28 (KAIZEN_LOG.md).
 assert_eq "waste is computed over comparable sessions only" "1" \
-  "$(grep -c '50% waste' <<< "$out")"
+  "$(grep -c '100% waste' <<< "$out")"
 assert_eq "it says how many rows it excluded, and why" "1" \
   "$(grep -c '2 non-comparable' <<< "$out")"
 assert_eq "escalations are counted apart from sessions" "1" \
@@ -1186,6 +1402,67 @@ assert_eq "the header states how many rows it read" "1" "$(grep -c '5 row(s)' <<
 # The four buckets (2 comparable, 2 non-comparable, 1 escalation, 0 unrecognized) must sum to the
 # 5 rows the header says it read.
 assert_bucket_sum "the four buckets sum to the header total (mixed ledger)" "$out"
+
+# --- what the session DID, not only whether it wrote ------------------------------------------
+# `stalled` was `moved == false`: "the session wrote nothing", which is not "the phase did not
+# advance". On the real ledger 68 of 145 sessions wrote something, failed their gate and bought the
+# runner another session, and the window said `0 stalled` about all of them. Three outcomes now,
+# ONE definition (`ledger_outcome_defs` in bin/sdd) spliced into BOTH readers. The counts below are
+# all different on purpose, so two swapped fields cannot pass by coincidence.
+echo "== reader: advanced · churned · idle =="
+mkdir -p "$OUTSIDE/tristate"
+localize > "$OUTSIDE/tristate/autonomy-log.jsonl" <<'EOF'
+{"v":1,"ts":"2026-08-15T10:00:00-03:00","event":"session","run_id":"r1","invocation":"run","kit_sha":"ddddddd","kit_dirty":false,"project":"p1","repo":"/p1","mission":"m1","phase":"EXEC","step":"EXEC","agent":"sdd-executor","model":"opus","attempt":1,"auto_retry":false,"session":"s1","rc":0,"dur_s":10,"cost_usd":1.0,"moved":true,"gate":"pass","gate_why":"x"}
+{"v":1,"ts":"2026-08-15T10:01:00-03:00","event":"session","run_id":"r1","invocation":"run","kit_sha":"ddddddd","kit_dirty":false,"project":"p1","repo":"/p1","mission":"m1","phase":"QA","step":"QA:close","agent":"sdd-qa","model":"opus","attempt":1,"auto_retry":false,"session":"s2","rc":0,"dur_s":10,"cost_usd":1.0,"moved":true,"gate":"fail","gate_why":"x"}
+{"v":1,"ts":"2026-08-15T10:02:00-03:00","event":"session","run_id":"r1","invocation":"run","kit_sha":"ddddddd","kit_dirty":false,"project":"p1","repo":"/p1","mission":"m1","phase":"QA","step":"QA:close","agent":"sdd-qa","model":"opus","attempt":2,"auto_retry":false,"session":"s3","rc":0,"dur_s":10,"cost_usd":1.0,"moved":false,"gate":"fail","gate_why":"x"}
+{"v":1,"ts":"2026-08-15T10:03:00-03:00","event":"session","run_id":"r1","invocation":"run","kit_sha":"ddddddd","kit_dirty":false,"project":"p1","repo":"/p1","mission":"m1","phase":"QA","step":"QA:close","agent":"sdd-qa","model":"opus","attempt":3,"auto_retry":false,"session":"s4","rc":0,"dur_s":10,"cost_usd":1.0,"moved":true,"gate":"pass","gate_why":"x"}
+{"v":1,"ts":"2026-08-15T10:04:00-03:00","event":"session","run_id":"r2","invocation":"run","kit_sha":"ddddddd","kit_dirty":false,"project":"p1","repo":"/p1","mission":"m2","phase":"EXEC","step":"EXEC","agent":"sdd-executor","model":"opus","attempt":1,"auto_retry":false,"session":"s5","rc":0,"dur_s":10,"cost_usd":1.0,"moved":true,"gate":"fail","gate_why":"x"}
+{"v":1,"ts":"2026-08-15T10:05:00-03:00","event":"session","run_id":"r2","invocation":"run","kit_sha":"ddddddd","kit_dirty":false,"project":"p1","repo":"/p1","mission":"m2","phase":"EXEC","step":"EXEC","agent":"sdd-executor","model":"opus","attempt":2,"auto_retry":false,"session":"s6","rc":0,"dur_s":10,"cost_usd":1.0,"moved":true,"gate":"pass","gate_why":"x"}
+{"v":1,"ts":"2026-08-15T10:06:00-03:00","event":"session","run_id":"r3","invocation":"run","kit_sha":"ddddddd","kit_dirty":true,"project":"p1","repo":"/p1","mission":"m2","phase":"QA","step":"QA:close","agent":"sdd-qa","model":"opus","attempt":1,"auto_retry":false,"session":"s7","rc":0,"dur_s":10,"cost_usd":1.0,"moved":true,"gate":"pass","gate_why":"x"}
+{"v":1,"ts":"2026-08-15T10:07:00-03:00","event":"blocked","kind":"no-progress","run_id":"r3","invocation":"run","kit_sha":"ddddddd","kit_dirty":false,"project":"p1","repo":"/p1","mission":"m2","phase":"QA","gate_why":"x"}
+{"v":1,"ts":"2026-08-15T10:08:00-03:00","event":"session","run_id":"r3","invocation":"run","kit_sha":"ddddddd","kit_dirty":false,"project":"p1","repo":"/p1","mission":"m2","phase":"QA","step":"QA:close","agent":"sdd-qa","model":"opus","attempt":2,"auto_retry":false,"session":"s8","rc":0,"dur_s":10,"cost_usd":1.0,"gate":"fail","gate_why":"old schema, no moved"}
+EOF
+out_tri="$( SDD_STATE_DIR="$OUTSIDE/tristate" "$SDD" autonomy 2>&1 )"; rc=$?
+assert_eq "a ledger of three outcomes is data (rc 0)" "0" "$rc"
+# 6 comparable sessions: the gate passed on 3 (advanced), 2 wrote and still failed (churned), 1
+# wrote nothing and failed (idle). The dirty row (s7), the escalation, and the old-schema session
+# with no `moved` field (s8) are the other three rows — 9 total, 6 + 2 non-comparable + 1
+# escalation + 0 unrecognized. s8 is the row review found: an on-axis SESSION missing `moved` used
+# to be admitted by kaizen_series (on_axis alone) while cmd_autonomy already refused it
+# (`comparable` demands has("moved")) — 2 non-comparable here proves both readers refuse it now.
+assert_eq "the version line says what the sessions did, in the order advanced · churned · idle" "1" \
+  "$(grep -cE '^  ddddddd  6 session\(s\) · 3 advanced · 2 churned · 1 idle · ' <<< "$out_tri")"
+assert_eq "and the word stalled is gone — idle is the same number under the name that says what it is" "0" \
+  "$(grep -c 'stalled' <<< "$out_tri")"
+assert_bucket_sum "the four buckets still sum to the header total (three outcomes)" "$out_tri"
+
+# waste changed yardstick on 2026-08-28: churned + idle over the comparable sessions, floored. The
+# old yardstick (idle alone, then called stalled) is 1/6 = 16% on this fixture; the new one is
+# 3/6 = 50%. The line has to carry the second AND NOT the first — a differential on one fixture,
+# so no regime satisfies it by accident. The two sides of the change are in KAIZEN_LOG.md.
+assert_eq "waste counts churned and idle, not idle alone" "1 0" \
+  "$(grep -c ' 50% waste ' <<< "$out_tri") $(grep -c ' 16% waste ' <<< "$out_tri")"
+
+# PARITY, measured and never asserted in prose. The judge series reads the SAME file through its
+# own jq program, and both programs splice ONE printed definition. A program that stopped splicing
+# it and grew a local copy on the old yardstick (mut_KAIZEN_outcome_inlined_old) stays internally
+# consistent — only the comparison between the two catches it, which is why this is not a
+# constant on the right-hand side.
+series_tri="$( SDD_STATE_DIR="$OUTSIDE/tristate" "$SDD" kaizen --series 2>/dev/null )"
+table_tri="$(sed -nE 's/^  ddddddd  [0-9]+ session\(s\) · ([0-9]+) advanced · ([0-9]+) churned · ([0-9]+) idle · .*/\1 \2 \3/p' <<< "$out_tri")"
+assert_eq "the human window and the judge count the outcomes of the latest version alike" \
+  "$(jq -r '.latest.outcomes | "\(.advanced) \(.churned) \(.idle)"' <<< "$series_tri")" "$table_tri"
+# ...and not by both being empty: the floor is the known histogram of this fixture. This fixture
+# now carries the row shape (an on-axis session with no `moved` field) that made the two readers
+# disagree before this fix — s8 above — and the parity assertion above only holds because both
+# readers now refuse it the same way.
+assert_eq "the parity is not vacuous — the table printed the three counts" "3 2 1" "$table_tri"
+# The divergence review measured directly: the human count of excluded non-comparable rows and the
+# series' own excluded.non_comparable field, over the SAME fixture that carries the row shape that
+# used to split them (s7, dirty kit; s8, session with no moved). Both must read 2.
+human_noncomp_tri="$(num_before "$out_tri" 'non-comparable')"; human_noncomp_tri="${human_noncomp_tri:-0}"
+assert_eq "the judge excludes exactly the rows the human's reader excludes (session with no moved included)" \
+  "2 2" "$human_noncomp_tri $(jq -r '.excluded.non_comparable' <<< "$series_tri")"
 
 # --- the reader gives a full accounting, never a silent gap --------------------------------------
 # Two findings from review, one root cause: a bucket the reader does not name is a bucket that can
@@ -1507,7 +1784,7 @@ usd_cents() {
 # artifact (2 for h1, 0 for h2), and nothing from the other repo's three missions.
 assert_eq "--by-mission prints one line per mission of this repo, with the interventions the checkpoint records" \
   "2 h1:2 h2:0" \
-  "$(grep -cE '^  h[12]  ' <<< "$out_bm") h1:$(mission_line h1 "$out_bm" | grep -oE '[0-9]+ intervention' | grep -oE '^[0-9]+') h2:$(mission_line h2 "$out_bm" | grep -oE '[0-9]+ intervention' | grep -oE '^[0-9]+')"
+  "$(grep -cE '^  h[12]  ' <<< "$out_bm") h1:$(mission_line h1 "$out_bm" | grep -oE '[0-9]+ intervention note' | grep -oE '^[0-9]+') h2:$(mission_line h2 "$out_bm" | grep -oE '[0-9]+ intervention note' | grep -oE '^[0-9]+')"
 
 # The Check of the increment: two groupings of ONE population have to agree about the money. A
 # view that summed a different set of rows would be a second instrument disagreeing with the first
@@ -1538,9 +1815,121 @@ out_bm3="$( SDD_STATE_DIR="$OUTSIDE/bymission3" "$SDD" autonomy --by-mission 2>&
 # from the report would be one of the worlds this assertion calls green.
 assert_eq "a checkpoint born verbatim from the template owes no intervention" \
   "1 h3:0" \
-  "$(grep -cE '^  h3  ' <<< "$out_bm3") h3:$(mission_line h3 "$out_bm3" | grep -oE '[0-9]+ intervention' | grep -oE '^[0-9]+')"
+  "$(grep -cE '^  h3  ' <<< "$out_bm3") h3:$(mission_line h3 "$out_bm3" | grep -oE '[0-9]+ intervention note' | grep -oE '^[0-9]+')"
 
 rm -rf "$FIX/docs/handoffs/h1" "$FIX/docs/handoffs/h2" "$FIX/docs/handoffs/h3"
+
+# --- launches and reopenings: the intervention count comes from the ledger, not from prose --------
+# D16 read the D12 count off `- intervention:` notes, and the notes were never written: the
+# mission with three launches (SQ-111, 2026-08-27) had zero. `run_id` is on every row of every
+# repo, so the count is distinct run_id per mission — the FACT, never `launches - 1` ("interventions
+# = launches - 1" is the reading, written in CONTEXT.md; a `- 1` here would print 0 on a mission
+# abandoned after its first launch, which is an intervention).
+echo "== reader: --by-mission counts launches =="
+mkdir -p "$OUTSIDE/launches"
+localize > "$OUTSIDE/launches/autonomy-log.jsonl" <<'EOF'
+{"v":1,"ts":"2026-08-15T10:00:00-03:00","event":"session","run_id":"r1","invocation":"run","kit_sha":"eeeeeee","kit_dirty":false,"project":"p1","repo":"/p1","mission":"m1","phase":"EXEC","step":"EXEC","agent":"sdd-executor","model":"opus","attempt":1,"auto_retry":false,"session":"s1","rc":0,"dur_s":10,"cost_usd":1.0,"moved":true,"gate":"fail","gate_why":"x"}
+{"v":1,"ts":"2026-08-15T10:01:00-03:00","event":"session","run_id":"r1","invocation":"run","kit_sha":"eeeeeee","kit_dirty":false,"project":"p1","repo":"/p1","mission":"m1","phase":"EXEC","step":"EXEC","agent":"sdd-executor","model":"opus","attempt":2,"auto_retry":false,"session":"s2","rc":0,"dur_s":10,"cost_usd":1.0,"moved":true,"gate":"fail","gate_why":"x"}
+{"v":1,"ts":"2026-08-15T10:02:00-03:00","event":"session","run_id":"r1","invocation":"run","kit_sha":"eeeeeee","kit_dirty":false,"project":"p1","repo":"/p1","mission":"m1","phase":"EXEC","step":"EXEC","agent":"sdd-executor","model":"opus","attempt":3,"auto_retry":false,"session":"s3","rc":0,"dur_s":10,"cost_usd":1.0,"moved":true,"gate":"pass","gate_why":"x"}
+{"v":1,"ts":"2026-08-15T10:03:00-03:00","event":"session","run_id":"r2","invocation":"run","kit_sha":"eeeeeee","kit_dirty":false,"project":"p1","repo":"/p1","mission":"m2","phase":"EXEC","step":"EXEC","agent":"sdd-executor","model":"opus","attempt":1,"auto_retry":false,"session":"s4","rc":0,"dur_s":10,"cost_usd":1.0,"moved":true,"gate":"pass","gate_why":"x"}
+{"v":1,"ts":"2026-08-15T10:04:00-03:00","event":"session","run_id":"r3","invocation":"retry","kit_sha":"eeeeeee","kit_dirty":false,"project":"p1","repo":"/p1","mission":"m2","phase":"QA","step":"QA:close","agent":"sdd-qa","model":"opus","attempt":1,"auto_retry":false,"session":"s5","rc":0,"dur_s":10,"cost_usd":1.0,"moved":true,"gate":"pass","gate_why":"x"}
+{"v":1,"ts":"2026-08-15T10:05:00-03:00","event":"session","run_id":"r4","invocation":"run","kit_sha":"eeeeeee","kit_dirty":false,"project":"p1","repo":"/p1","mission":"m3","phase":"EXEC","step":"EXEC","agent":"sdd-executor","model":"opus","attempt":1,"auto_retry":false,"session":"s6","rc":0,"dur_s":10,"cost_usd":1.0,"moved":true,"gate":"pass","gate_why":"x"}
+EOF
+out_l="$( SDD_STATE_DIR="$OUTSIDE/launches" "$SDD" autonomy --by-mission 2>&1 )"
+# cell_of <mission> <output> <cell-word>  -> the integer in front of that cell word, or "".
+# The writer is mission_line (a grep over a herestring); the readers consume all of its output, so
+# nothing on the reading end exits early — the SIGPIPE trap this repo warns about needs a reader
+# that quits, and -o never does.
+cell_of() { mission_line "$1" "$2" | grep -oE "[0-9]+ $3" | grep -oE '^[0-9]+'; }
+assert_eq "launches count distinct run_id per mission: three rows of one run are one launch" \
+  "m1:1 m2:2 m3:1" \
+  "m1:$(cell_of m1 "$out_l" 'launch') m2:$(cell_of m2 "$out_l" 'launch') m3:$(cell_of m3 "$out_l" 'launch')"
+
+# reopened: a session in a phase BELOW one whose gate had already PASSED, in $PHASES order. NOT
+# "the phase index went down" — that counts the designed loop (QA fails, opens a fix increment,
+# EXEC runs it), which frete-cif-fob did three times with QA REFUSED, all of it the pipeline
+# working. The pair below is identical but for the gate of the QA row, so only the gate can
+# separate 1 from 0. The KAIZEN row after PR sits outside $PHASES: null index, counted on neither
+# side — jq orders null below every number, so with the null guard gone the pass twin reads 2.
+echo "== reader: --by-mission counts reopenings by the gate, not by the direction =="
+mkdir -p "$OUTSIDE/reopen_pass" "$OUTSIDE/reopen_fail"
+localize > "$OUTSIDE/reopen_pass/autonomy-log.jsonl" <<'EOF'
+{"v":1,"ts":"2026-08-15T10:00:00-03:00","event":"session","run_id":"r1","invocation":"run","kit_sha":"eeeeeee","kit_dirty":false,"project":"p1","repo":"/p1","mission":"m1","phase":"EXEC","step":"EXEC","agent":"sdd-executor","model":"opus","attempt":1,"auto_retry":false,"session":"s1","rc":0,"dur_s":10,"cost_usd":1.0,"moved":true,"gate":"pass","gate_why":"x"}
+{"v":1,"ts":"2026-08-15T10:01:00-03:00","event":"session","run_id":"r1","invocation":"run","kit_sha":"eeeeeee","kit_dirty":false,"project":"p1","repo":"/p1","mission":"m1","phase":"QA","step":"QA:close","agent":"sdd-qa","model":"opus","attempt":1,"auto_retry":false,"session":"s2","rc":0,"dur_s":10,"cost_usd":1.0,"moved":true,"gate":"pass","gate_why":"the QA row"}
+{"v":1,"ts":"2026-08-15T10:02:00-03:00","event":"session","run_id":"r2","invocation":"run","kit_sha":"eeeeeee","kit_dirty":false,"project":"p1","repo":"/p1","mission":"m1","phase":"EXEC","step":"EXEC","agent":"sdd-executor","model":"opus","attempt":1,"auto_retry":false,"session":"s3","rc":0,"dur_s":10,"cost_usd":1.0,"moved":true,"gate":"pass","gate_why":"x"}
+{"v":1,"ts":"2026-08-15T10:03:00-03:00","event":"session","run_id":"r2","invocation":"run","kit_sha":"eeeeeee","kit_dirty":false,"project":"p1","repo":"/p1","mission":"m1","phase":"PR","step":"PR","agent":"sdd-publisher","model":"sonnet","attempt":1,"auto_retry":false,"session":"s4","rc":0,"dur_s":10,"cost_usd":1.0,"moved":true,"gate":"pass","gate_why":"x"}
+{"v":1,"ts":"2026-08-15T10:04:00-03:00","event":"session","run_id":"r3","invocation":"run","kit_sha":"eeeeeee","kit_dirty":false,"project":"p1","repo":"/p1","mission":"m1","phase":"KAIZEN","step":"KAIZEN","agent":"sdd-kaizen","model":"opus","attempt":1,"auto_retry":false,"session":"s5","rc":0,"dur_s":10,"cost_usd":1.0,"moved":true,"gate":"pass","gate_why":"x"}
+EOF
+sed 's|"gate":"pass","gate_why":"the QA row"|"gate":"fail","gate_why":"the QA row"|' \
+  "$OUTSIDE/reopen_pass/autonomy-log.jsonl" > "$OUTSIDE/reopen_fail/autonomy-log.jsonl"
+# The twin has to differ, or the differential below compares a file with itself.
+assert_eq "the twin differs from its pair on exactly one row" "1" \
+  "$(diff "$OUTSIDE/reopen_pass/autonomy-log.jsonl" "$OUTSIDE/reopen_fail/autonomy-log.jsonl" | grep -c '^<')"
+out_rp="$( SDD_STATE_DIR="$OUTSIDE/reopen_pass" "$SDD" autonomy --by-mission 2>&1 )"
+out_rf="$( SDD_STATE_DIR="$OUTSIDE/reopen_fail" "$SDD" autonomy --by-mission 2>&1 )"
+assert_eq "EXEC after a PASSED QA is a reopening; EXEC after a FAILED QA is the loop working" \
+  "pass:1 fail:0" "pass:$(cell_of m1 "$out_rp" 'reopened') fail:$(cell_of m1 "$out_rf" 'reopened')"
+
+# The population. session(s), the outcomes and US$ are drawn over the COMPARABLE sessions — that is
+# the sum this file closes against the version table. launches and reopened are drawn over EVERY
+# local session of the mission: a launch that landed on a dirty kit was a launch, and on SQ-111 the
+# post-PR QA row — the reopening that motivated the field — carries kit_dirty:true, so over the
+# comparable rows alone reopened read 0 exactly where it mattered. This fixture mirrors SQ-111
+# exactly: EXEC passes, PR passes (both comparable, clean kit), then QA runs AGAIN on a DIRTY kit
+# and also passes — a phase index below PR, which had already passed, which is exactly what
+# `reopened` exists to count, and the row `reopened` needs is the one row `comparable` refuses.
+# When the two populations differ the accounting paragraph says so, once. Differential: the same
+# mission with the dirty row removed reads one launch and zero reopened, and the sentence is gone.
+echo "== reader: --by-mission draws launches and reopened over every session of the mission =="
+mkdir -p "$OUTSIDE/population" "$OUTSIDE/populationclean"
+localize > "$OUTSIDE/population/autonomy-log.jsonl" <<'EOF'
+{"v":1,"ts":"2026-08-15T10:00:00-03:00","event":"session","run_id":"r1","invocation":"run","kit_sha":"eeeeeee","kit_dirty":false,"project":"p1","repo":"/p1","mission":"m1","phase":"EXEC","step":"EXEC","agent":"sdd-executor","model":"opus","attempt":1,"auto_retry":false,"session":"s1","rc":0,"dur_s":10,"cost_usd":1.0,"moved":true,"gate":"pass","gate_why":"x"}
+{"v":1,"ts":"2026-08-15T10:00:30-03:00","event":"session","run_id":"r1","invocation":"run","kit_sha":"eeeeeee","kit_dirty":false,"project":"p1","repo":"/p1","mission":"m1","phase":"PR","step":"PR","agent":"sdd-publisher","model":"sonnet","attempt":1,"auto_retry":false,"session":"s1b","rc":0,"dur_s":10,"cost_usd":1.0,"moved":true,"gate":"pass","gate_why":"x"}
+{"v":1,"ts":"2026-08-15T10:01:00-03:00","event":"session","run_id":"r2","invocation":"run","kit_sha":"eeeeeee","kit_dirty":true,"project":"p1","repo":"/p1","mission":"m1","phase":"QA","step":"QA:close","agent":"sdd-qa","model":"opus","attempt":1,"auto_retry":false,"session":"s2","rc":0,"dur_s":10,"cost_usd":1.0,"moved":true,"gate":"pass","gate_why":"x"}
+EOF
+grep -v '"kit_dirty":true' "$OUTSIDE/population/autonomy-log.jsonl" > "$OUTSIDE/populationclean/autonomy-log.jsonl"
+out_pop="$(  SDD_STATE_DIR="$OUTSIDE/population"      "$SDD" autonomy --by-mission 2>&1 )"
+out_popc="$( SDD_STATE_DIR="$OUTSIDE/populationclean" "$SDD" autonomy --by-mission 2>&1 )"
+assert_eq "two comparable sessions, two launches, one reopened: the dirty QA below a passed PR reopens" \
+  "2 2 1" \
+  "$(cell_of m1 "$out_pop" 'session') $(cell_of m1 "$out_pop" 'launch') $(cell_of m1 "$out_pop" 'reopened')"
+assert_eq "and the accounting paragraph names the population difference, once" "1" \
+  "$(grep -c '(launches and reopened are counted over every session of the mission, 1 of them non-comparable)' <<< "$out_pop")"
+assert_eq "without the dirty row: one launch, no reopening, and the sentence is gone" "1 0 0" \
+  "$(cell_of m1 "$out_popc" 'launch') $(cell_of m1 "$out_popc" 'reopened') $(grep -c 'counted over every session' <<< "$out_popc")"
+assert_bucket_sum "the four buckets still sum to the header total (--by-mission, a dirty launch)" "$out_pop"
+
+# --- the narrative cell, and the `?` that is gone --------------------------------------------------
+# The official count is `launch(es)`, on every line. The `- intervention:` notes stay as what the
+# human DID, printed as `intervention note(s)` when the checkpoint is on disk and not printed at all
+# when it is not: `?` existed so that no false zero reached the official number, and the official
+# number no longer comes from the file. Measured on the real ledger: the three missions of the
+# pilot carried 0, 1 and 0 notes — the mission with three launches had none.
+echo "== reader: --by-mission prints the notes as narrative, and never a ? =="
+out_all_bm="$( SDD_STATE_DIR="$OUTSIDE/tworepos" "$SDD" autonomy --all-repos --by-mission 2>&1 )"
+assert_eq "no mission line carries a ? any more, this repo or another" "0 0" \
+  "$(grep -c '? intervention' <<< "$out_bm") $(grep -c '? intervention' <<< "$out_all_bm")"
+assert_eq "the notes print under the name that says what they are" "1" \
+  "$(mission_line h1 "$out_bm" | grep -c '2 intervention note(s)')"
+# The `launches` fixture has no docs/handoffs/m1 in $FIX at all: the cell is absent and the line
+# still exists — absent is not zero, and the line has to be there for absent to mean anything.
+assert_eq "with no checkpoint on disk the cell does not exist, and the line still does" "1 0" \
+  "$(grep -cE '^  m1  ' <<< "$out_l") $(mission_line m1 "$out_l" | grep -c 'intervention')"
+# The whole line once, in its final shape, every cell in order — so no reordering passes.
+assert_eq "the mission line, cell by cell" "1" \
+  "$(grep -cE '^  m1  3 session\(s\) · 1 advanced · 2 churned · 0 idle · 1 launch\(es\) · 0 reopened · US\$ 3\.00$' <<< "$out_l")"
+# A foreign mission that shares a SLUG with a mission of this repo must not borrow its notes: the
+# map of counts is keyed by slug alone (it is built from this repo rows), so the guard on the cell
+# is the row repo. Two missions named h1 — ours, with a checkpoint on disk, and theirs — read
+# together under --all-repos: both lines print (2), ours carries the cell (1), theirs does not (0).
+# Without the guard the third number is 1: the same slug, our notes, their line.
+mkdir -p "$OUTSIDE/noteclash" "$FIX/docs/handoffs/h1"
+printf -- '- intervention: ours\n' > "$FIX/docs/handoffs/h1/checkpoint.md"
+{ ledger_row "$FIXROOT" h1; ledger_row "$OTHER" h1; } > "$OUTSIDE/noteclash/autonomy-log.jsonl"
+out_clash="$( SDD_STATE_DIR="$OUTSIDE/noteclash" "$SDD" autonomy --all-repos --by-mission 2>&1 )"
+assert_eq "a mission of another repo never borrows the notes of a same-slug mission of this one" "2 1 0" \
+  "$(grep -cE '^  [^ ]+/h1  ' <<< "$out_clash") $(grep -E '^  [^ ]+/h1  ' <<< "$out_clash" | grep -vE '^  otherrepo/' | grep -c 'intervention note') $(grep -E '^  otherrepo/h1  ' <<< "$out_clash" | grep -c 'intervention note')"
+rm -rf "$FIX/docs/handoffs/h1"
 
 # The header has to name the SCOPE it actually read. Under the flag the rows below come from every
 # project on the machine, and a header still ending in one repo path reads as a claim ABOUT that
@@ -2359,14 +2748,15 @@ assert_eq "output: the table's last version is the judge's latest, not the lexic
 
 # D4b — the SAME question, over the one file order where reading it off the wrong POPULATION still
 # splits the two answers. D4 above is satisfied by any first-appearance order, because its ledger
-# holds nothing but comparable sessions; the judge, though, reads first appearance off every
-# on_axis row, escalations included. So a version whose first on_axis row is an escalation is
-# already known to the series while the table has never heard of it — and a table that ordered by
-# its OWN population put that version last while the judge called another one latest. Found in the
-# r1 review by reproduction, not by reading: rows blocked(aaaaaaa), session(bbbbbbb),
-# session(aaaaaaa) answered `aaaaaaa` here and `bbbbbbb` there over one file. Written DIFFERENTIAL
-# for the same reason D4 is, and the escalation goes FIRST because that is the only placement in
-# which the two populations disagree at all.
+# holds nothing but comparable sessions; the judge, though, reads first appearance off the rows it
+# admits through `comparable_row` — comparable sessions and on_axis escalations — never every
+# on_axis row. So a version whose first admitted row is an escalation is already known to the
+# series while the table has never heard of it — and a table that ordered by its OWN population put
+# that version last while the judge called another one latest. Found in the r1 review by
+# reproduction, not by reading: rows blocked(aaaaaaa), session(bbbbbbb), session(aaaaaaa) answered
+# `aaaaaaa` here and `bbbbbbb` there over one file. Written DIFFERENTIAL for the same reason D4 is,
+# and the escalation goes FIRST because that is the only placement in which the two populations
+# disagree at all.
 esc_row() {   # esc_row <kit_sha> <mission> — same shape autonomy_escalation_row writes
   jq -cn --arg repo "$FIXROOT" --arg sha "$1" --arg mission "$2" \
     '{v:1, ts:"2026-08-16T13:00:00-03:00", event:"blocked", kind:"increment-blocked",
@@ -2383,6 +2773,26 @@ vseries2="$( SDD_STATE_DIR="$OUTSIDE/vorder2" "$SDD" kaizen --series 2>/dev/null
 assert_eq "output: the table orders versions off the judge's population, escalations included" \
   "bbbbbbb bbbbbbb 2" \
   "$(jq -r '.latest.kit_sha' <<< "$vseries2") $(awk '$3 == "session(s)" { sha = $1 } END { print sha }' <<< "$out") $(grep -cE '^  [a-z]{7}  [0-9]+ session\(s\)' <<< "$out")"
+
+# D4c — the placement D4b cannot reach: a SESSION missing `moved` (old schema), never an
+# escalation. D4b's only non-session row is an escalation, and BOTH readers admit an escalation
+# through the same `on_axis` test, so D4b cannot see a divergence there. The only placement where
+# the two populations disagree is a session missing `moved` FIRST: `on_axis` alone admits it
+# (kit_dirty:false, kit_sha set) while `comparable_row` in the judge does not, because a session
+# additionally needs `has("moved")`. Reproduced on session(aaaaaaa, no moved) ·
+# session(bbbbbbb) · session(aaaaaaa): the last row of the table read bbbbbbb while the judge's
+# `.latest.kit_sha` read aaaaaaa, over the same file.
+mkdir -p "$OUTSIDE/vorder3"
+localize > "$OUTSIDE/vorder3/autonomy-log.jsonl" <<'EOF'
+{"v":1,"ts":"2026-08-16T14:00:00-03:00","event":"session","run_id":"r1","invocation":"run","kit_sha":"aaaaaaa","kit_dirty":false,"project":"p1","repo":"/p1","mission":"m1","phase":"EXEC","step":"EXEC","agent":"sdd-executor","model":"opus","attempt":1,"auto_retry":false,"session":"s1","rc":0,"dur_s":10,"cost_usd":1.0,"gate":"fail","gate_why":"old schema, no moved"}
+{"v":1,"ts":"2026-08-16T14:01:00-03:00","event":"session","run_id":"r2","invocation":"run","kit_sha":"bbbbbbb","kit_dirty":false,"project":"p1","repo":"/p1","mission":"m2","phase":"EXEC","step":"EXEC","agent":"sdd-executor","model":"opus","attempt":1,"auto_retry":false,"session":"s2","rc":0,"dur_s":10,"cost_usd":1.0,"moved":true,"gate":"pass","gate_why":"x"}
+{"v":1,"ts":"2026-08-16T14:02:00-03:00","event":"session","run_id":"r3","invocation":"run","kit_sha":"aaaaaaa","kit_dirty":false,"project":"p1","repo":"/p1","mission":"m3","phase":"EXEC","step":"EXEC","agent":"sdd-executor","model":"opus","attempt":1,"auto_retry":false,"session":"s3","rc":0,"dur_s":10,"cost_usd":1.0,"moved":true,"gate":"pass","gate_why":"x"}
+EOF
+out="$( SDD_STATE_DIR="$OUTSIDE/vorder3" "$SDD" autonomy 2>&1 )"
+vseries3="$( SDD_STATE_DIR="$OUTSIDE/vorder3" "$SDD" kaizen --series 2>/dev/null )"
+assert_eq "output: a session missing moved cannot lead the table's order, only the judge's population does" \
+  "aaaaaaa aaaaaaa" \
+  "$(jq -r '.latest.kit_sha' <<< "$vseries3") $(awk '$3 == "session(s)" { sha = $1 } END { print sha }' <<< "$out")"
 
 # D5 — with no escalations and one unrecognized row, two blank lines opened between the table and
 # the exclusion line. Each exclusion string already begins with `\n` AND jq's `,` puts every output

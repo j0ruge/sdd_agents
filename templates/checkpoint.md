@@ -42,9 +42,12 @@ atualizado: <YYYY-MM-DD HH:MM>
 - <YYYY-MM-DD HH:MM> · `<ID>` · <o que aconteceu>
 
 > **Toda vez que um humano precisou entrar na linha** — um `sdd retry`, um conserto à mão, um
-> `BLOCKED` assumido — sai uma linha com o marcador `intervention:`. É o que o
-> `sdd autonomy --by-mission` conta, e é a metade que o custo sozinho não mostra: US$ baixo não
-> distingue "rodou barato" de "rodou barato porque um humano fez metade".
+> `BLOCKED` assumido — sai uma linha com o marcador `intervention:`. É a **narrativa** do que o
+> humano fez. O **número** de intervenções o `sdd autonomy --by-mission` lê do ledger, em
+> `launch(es)` (`run_id` distintos — cada `sdd run`/`sdd retry`), e imprime estas notas ao lado
+> como `intervention note(s)`. Medido em 2026-08-28: a missão de três lançamentos tinha zero
+> notas — o contador não pode depender de alguém lembrar de escrever; a narrativa, sim, e é a
+> única fonte que diz o que o humano *fez*.
 >
 > ⚠️ O marcador é **inglês e minúsculo**, como `pending`/`done`/`blocked`: é contrato, não prosa.
 > O texto depois dos dois-pontos vai no idioma do `OUTPUT_LANG`, como o resto deste arquivo.

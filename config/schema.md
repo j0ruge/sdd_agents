@@ -42,10 +42,26 @@ one back means wiring the read in `bin/sdd` in the **same** commit.
 
 | Key | Required | Default | What it is |
 |---|---|---|---|
-| `APP_URL` | only with `E2E_CMD` | empty | URL `agent-browser` opens in the exploratory sessions. |
+| `APP_URL` | only with `E2E_CMD` | empty | URL `agent-browser` opens in the exploratory sessions — and the address the runner asks whether anything is listening on. |
 
 The runner does not bring the environment up: it assumes the app is already running. Starting it
 (`docker compose up -d` and friends) is a step for whoever runs `sdd`, or for `E2E_CMD` itself.
+
+What the runner does do is **ask**. Two places open a TCP connect to this address, and neither one
+ever starts anything:
+
+- `sdd preflight` — a dead app is a **failure** when `E2E_CMD` is set (a gate is about to run that
+  suite against an app that is not there) and a **warning** when it is not (nothing automatic runs
+  against it, but the exploratory session will still need it up);
+- `gate_QA`, but only **after** `E2E_CMD` has already come back non-zero. A red e2e over a refused
+  address stops the line with `kind: app-down` and the address named, instead of buying another
+  session for a machine no session can fix. The gate never probes ahead of the e2e, so a repo whose
+  e2e brings its own server up — or whose app only answers while the suite runs — is never blocked
+  for a state that did not matter.
+
+Anything the probe cannot decide reads as *unknown* and changes nothing: an empty value, a URL that
+is not `http://`/`https://` with a host, a bash without `/dev/tcp`, no `timeout(1)` on PATH, a
+connect that times out instead of answering. Only a connection actively **refused** counts as down.
 
 ## Artifact paths
 

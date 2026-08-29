@@ -285,6 +285,133 @@ mut_QA_bug_genre_fenced() {
 
 # Historical bug 3 (SQ-97 pilot, ~US$ 10): the parser exited only at `###`, kept swallowing the
 # report's following tables and failed an all-Grade-A review for finding a `Commit` column.
+# The probe is never called: the gate falls back to the ONE sentence every red e2e used to get,
+# where a dead app, a stopped database, a missing browser binary and a genuinely broken assertion
+# were indistinguishable — and `cmd_run` then read `moved=true` and bought another opus session.
+# US$ 14,16 for one such QA on the SQ-111 mission of 2026-08-27.
+#
+# Caught in TWO places, which is what says the probe reaches both consumers: the reason a human
+# reads (check-gates.sh, "the reason names the address nothing is listening on") and the
+# escalation a run produces (check-autonomy.sh, the app-down pair). Neither alone would say the
+# other still worked.
+mut_QA_e2e_red_never_probed() {
+  sed -i 's@^    probe="$(app_probe "$APP_URL")"$@    probe="unknown|the probe was never called"@' "$1"
+}
+
+# THE FAIL-OPEN, and the most dangerous edit in this family: `unknown` starts arming the marker.
+# The probe is one-sided by construction — it may turn a red into a NAMED red and never a green
+# into a red — and this is the single line that breaks that promise. Its blast radius is every
+# repo the kit has ever been installed in: an empty APP_URL, a URL the parser cannot read, a bash
+# with no /dev/tcp, an error string worded differently by another kernel — all of them land in
+# `unknown`, so all of them would begin stopping the line for a machine nobody asked about.
+#
+# Caught by the CONTROL half of check-autonomy.sh's pair, never by the positive half: the control
+# is the same fixture with `APP_URL=""`, which under this mutant escalates `app-down` on the first
+# session instead of reaching `no-progress` on the second. A catalogue entry aimed at the positive
+# half would have scored nothing here.
+mut_QA_app_down_on_unknown() {
+  sed -i '/^    case "$state" in$/,/^    esac$/ s@^      \*)$@      *) GATE_APP_DOWN=1;@' "$1"
+}
+
+# THE FIX THAT IS WIDER THAN THE DEFECT: the app is probed whatever the e2e answered, so the gate
+# refuses over an app it never needed. A repo whose e2e brings its own server up, or whose APP_URL
+# only answers while the suite runs, would be blocked for a machine state that never mattered —
+# and a false BLOCKED costs a person, where the loop only costs money.
+#
+# It takes TWELVE assertions red, measured, and that breadth is the point rather than a bonus:
+# probing unconditionally refuses every QA fixture whose e2e is green. The one named here is
+# `a dead app does NOT block a green e2e` in check-gates.sh, because it is the only one that is
+# red for THIS reason and not merely as collateral — which is why that fixture keeps a dead
+# APP_URL beside a GREEN E2E_CMD instead of the tidy pairing of both red.
+mut_QA_probe_ignores_e2e_rc() {
+  sed -i 's@^  if \[ -n "$E2E_CMD" \] && ! run_check_cmd "$E2E_CMD" "gate-qa-e2e"; then$@  if [ -n "$E2E_CMD" ]; then@' "$1"
+}
+
+# The parser stops defaulting the port, so `http://host/` — the spelling most `.sdd/config.sh`
+# files carry — becomes unreadable and every one of them silently degrades to `unknown`. Silently
+# is the word that earns this its own entry: nothing fails, nothing warns, the escalation simply
+# stops existing for the majority spelling of the key.
+#
+# Caught by `http with no port defaults to 80` in check-gates.sh, which asserts the ADDRESS and
+# never the verdict — port 80 may well be open on the machine running the suite.
+#
+# The arms are NEUTRALISED rather than the line DELETED: it is the whole body of an `if`, and
+# removing it leaves a mutant that does not parse. Every sensor kills that on sight, which scores
+# a point for the shell and none for the assertions the catalogue exists to measure.
+mut_QA_hostport_no_default_port() {
+  sed -i 's@^    case "$scheme" in http) port=80 ;; https) port=443 ;; esac$@    case "$scheme" in http) : ;; https) : ;; esac@' "$1"
+}
+
+# The scheme goes back to being matched LITERALLY, so `HTTP://` stops being a URL. Its own entry
+# and not a variant of the one above, because the two silences are different sizes: no-default-port
+# loses the majority spelling of the key, this one loses a spelling that is equally legal and that
+# no reader would think to check. Both degrade to `unknown`, where nothing fails and nothing warns.
+#
+# Caught by `an uppercase scheme reads as an address` in check-gates.sh, and by that one ALONE —
+# the sibling below is aimed at the other half of the same fix, and neither can score the other's
+# point. One mutant per half of the assertion.
+mut_QA_hostport_case_blind() {
+  sed -i 's@^  case "${url,,}" in$@  case "$url" in@' "$1"
+}
+
+# The CHEAP fix, and the reason the case pair is a pair: fold the whole URL instead of taking the
+# remainder by offset. It passes `an uppercase scheme reads as an address` perfectly — and folds
+# the HOST with it, so the address in the sentence is no longer the one the operator wrote and
+# went looking for. Mutating the `https` arm only, which is the arm the host assertion drives.
+#
+# Caught by `and the host keeps the case the operator wrote` in check-gates.sh.
+mut_QA_hostport_folds_host() {
+  sed -i 's@^    https://\*) scheme=https; rest="${url:8}" ;;$@    https://*) scheme=https; rest="${url,,}"; rest="${rest:8}" ;;@' "$1"
+}
+
+# The three STRIPS the parser runs before it reads the port — fragment, then query, then path — each
+# with its own mutant, and the ORDER is why. With a path in the URL the `/` strip swallows the query
+# and the fragment before their own strips ever run, so the one fixture that carried all three
+# (`/path?q=1#frag`) measured the path alone: neutralising either of the other two strips SURVIVED
+# it, found in the review round of 20260828-o-gate-sabe-que-o-app-caiu by sabotaging the parser by
+# hand. check-gates.sh now carries one fixture per component, each the last thing in its URL, and
+# each mutant below names the one that kills it. Every survivor degrades to `unknown` — the port
+# comes out with the leftover glued to it, fails the digits check, and the escalation silently
+# stops existing for a URL the operator wrote correctly.
+
+# Caught by `path, query and fragment are stripped` — and by every fixture with a trailing `/`,
+# which is most of them; over-determined, and the point is the last three words of its name.
+mut_QA_hostport_keeps_path() {
+  sed -i 's@^  rest="${rest%%/\*}"$@  : # path kept@' "$1"
+}
+
+# Caught by `a query with no path is stripped`, and by that one ALONE: every other fixture either
+# has no query or has a path in front of it.
+mut_QA_hostport_keeps_query() {
+  sed -i 's@^  rest="${rest%%\\?\*}"$@  : # query kept@' "$1"
+}
+
+# Caught by `a fragment with no path is stripped`, alone, for the same reason.
+mut_QA_hostport_keeps_fragment() {
+  sed -i 's@^  rest="${rest%%#\*}"$@  : # fragment kept@' "$1"
+}
+
+# The userinfo goes back to riding into the address. The bare `host:port` arm splits the host at
+# the FIRST colon and the port at the LAST, so `user:CHANGE@ME@127.0.0.1:port` comes out as host
+# `user` with a perfectly valid port — it is the HOST that is wrong, and the label carries it:
+# `user:port` where the assertion demands `127.0.0.1:port`. Caught by `userinfo is stripped, and
+# the last @ is the separator` — the one fixture with an `@` in it. `|` as the delimiter, because
+# the anchor CONTAINS the `@` every other mutation here delimits with. (The first draft of this
+# comment claimed an unparseable port; the round-2 review ran the mutant and the sandbox said host.)
+mut_QA_hostport_keeps_userinfo() {
+  sed -i 's|^  rest="${rest##\*@}"$|  : # userinfo kept|' "$1"
+}
+
+# The bracketed-with-port arm is gone, so `[::1]:port` falls through to the bare `host:port` arm,
+# which splits the host at the FIRST colon and the port at the LAST: host `[`, and the port intact.
+# Again the HOST is what comes out wrong, and the label says `[:port` where the assertion demands
+# `[::1]:port`. Caught by `an IPv6 literal reads as an address`, the one bracketed fixture. The
+# replacement is still a case arm, one no host can equal, so the mutant parses and the point goes
+# to the assertion rather than to the shell.
+mut_QA_hostport_no_ipv6() {
+  sed -i 's@^    \\\[\*\\]:\*) host="${rest#\\\[}"; host="${host%%\\]:\*}"; port="${rest##\*\\]:}" ;;$@    "no-bracketed-port-arm") : ;;@' "$1"
+}
+
 mut_REVIEW_stops_at_h3() {
   sed -i 's|.*inside && /\^#{1,6}\[\[:space:\]\]/ { exit }.*|      inside \&\& /^###[[:space:]]/ { exit }|' "$1"
 }
@@ -874,6 +1001,39 @@ mut_RUN_blocked_not_escalated() {
 mut_RUN_blocked_retry_not_escalated() {
   sed -i '/^    if \[ "\$gate_rc2" -eq 0 \]; then$/,/^    if \[ "\$moved2" = "false" \]; then$/ s|^    if handoff_blocked_escalation "\$phase"; then return 3; fi$|    if false; then return 3; fi|' "$1"
 }
+
+# Door 1 of the app-down escalation, and the sibling of RUN_blocked_not_escalated above in every
+# respect: same range, same neutralisation, and the line substituted is textually distinct so
+# neither mutant can apply to the other's door.
+#
+# Without it a dead app costs the SECOND session too and then lands on `no-progress` — the row the
+# kaizen judge reads says "two sessions moved nothing" about a machine that was never up, which
+# names neither the cause nor anyone who could act on it.
+mut_RUN_app_down_not_escalated() {
+  sed -i '/^      "$( \[ "$gate_rc" -eq 0 \] && echo pass || echo fail )" "$GATE_WHY"$/,/^    phases_run=$((phases_run + 1))$/ s|^    if app_down_escalation "$phase"; then return 3; fi$|    if false; then return 3; fi|' "$1"
+}
+
+# Door 2: the inline retry, and it is not symmetry. The marker is a global, `current_phase` runs in
+# a subshell and cannot clear the parent's copy, and every gate but gate_QA leaves it alone — so
+# without this door the marker outlives the LAP: the run carries on (the retry did move the disk),
+# the next lap derives EXEC, and door 1 fires there, printing an APP_URL diagnosis over a phase
+# that never ran an e2e and writing {phase: EXEC, kind: app-down} into the ledger. Measured on a
+# copy while this was being written: `QA|app-down` became `EXEC|app-down`, the exact shape the
+# handoff-blocked sibling paid for one house along.
+mut_RUN_app_down_retry_not_escalated() {
+  sed -i '/^    if \[ "$gate_rc2" -eq 0 \]; then$/,/^    if \[ "$moved2" = "false" \]; then$/ s|^    if app_down_escalation "$phase"; then return 3; fi$|    if false; then return 3; fi|' "$1"
+}
+#
+# The RESET at the entry of gate_QA (`GATE_APP_DOWN=0`, its only setter) deliberately gets no mutant
+# either, and this too is a DECLARED limit rather than an oversight. Measured in the review round of
+# 20260828-o-gate-sabe-que-o-app-caiu: with both doors intact, the first lap that arms the marker
+# leaves the process through door 1 with rc 3, and `current_phase` walks the gates in a subshell
+# whose copy dies with it — so no second gate_QA call in one process ever finds the marker stale. A
+# mutant deleting the reset SURVIVES on its own; it dies only in the company of a door mutant, which
+# is strictly weaker evidence than the pair above. The same holds, unmeasured, for the sibling reset
+# of GATE_HANDOFF_BLOCKED one house up. The world in which the reset decides anything is a third
+# door or a second setter — the contract above the marker in bin/sdd names both — and that world is
+# the one its author builds, together with the probe that this comment could not.
 
 # Not a gate, and the exact bug I2 closed: `force_phase="PR"; continue` sat ABOVE both writers, so
 # the runner lowering its own bar — the single most interesting autonomy event a mission can
@@ -1948,6 +2108,77 @@ mut_RUN_kit_guard_arms_projection() {
   sed -i '/^  if \[ "$DRY_RUN" = "1" \]; then KIT_GUARD_BEFORE=""; return 0; fi$/d' "$1"
 }
 
+# ---------------------------------------------------------------------------
+# 20260828-instrumento-honesto — what a session DID, one definition in two readers.
+# ---------------------------------------------------------------------------
+# The shared definition falls back to the OLD yardstick under the new names: `moved` alone decides,
+# and a session that wrote and failed its gate reads `advanced`. Both readers inherit it, so the
+# parity assertion stays green — which is exactly why check-autonomy.sh also pins the histogram of
+# a known fixture: `churned` has to come out 2 there, and this reads 0.
+mut_AUTONOMY_outcome_reads_moved_only() {
+  sed -i 's@def outcome: if .gate == "pass" then "advanced" elif .moved == true then "churned" else "idle" end;@def outcome: if .moved == true then "advanced" else "idle" end;@' "$1"
+}
+
+# The series stops splicing the shared definition and grows a LOCAL copy on the old yardstick —
+# the "same spelling in both programs" that CLAUDE.md measures as not-parity. Each reader is then
+# internally consistent and only the comparison between the two goes red (5.7), plus the exact
+# histogram of the series fixture (5.9). The copy carries outcome_tally too, because the splice it
+# replaces carried it: a mutant that dropped the tally would kill the suite with a jq compile error
+# instead of with the divergence it exists to reproduce. Held in a variable so the single quotes
+# it needs can sit inside a double-quoted sed script; the result is `"$(ledger_row_is_local)"'def
+# outcome: …;''` followed by the program — two adjacent single-quoted strings, one argument.
+mut_KAIZEN_outcome_inlined_old() {
+  local copy="'def outcome: if .moved == true then \"advanced\" else \"idle\" end; def outcome_tally: map(outcome) | reduce .[] as \$o ({advanced: 0, churned: 0, idle: 0}; .[\$o] += 1);'"
+  sed -i "/^kaizen_series() {/,/^}/ { s@\"\\\$(ledger_outcome_defs)\"@${copy}@ }" "$1"
+}
+
+# waste goes back to counting idle alone — the old approximation under the new name, and the
+# window prints 16% on a fixture whose churn is a third of its sessions.
+mut_AUTONOMY_waste_idle_only() {
+  sed -i 's@((\$t\.churned + \$t\.idle) \* 100 / \$n)@($t.idle * 100 / $n)@' "$1"
+}
+
+# The rubric loses the churn clause: a phase of seven sessions and five refusals that ended up
+# passing reads `ok` to the judge again. Caught by the m6 group of the series fixture and by the
+# labels literal beside it.
+mut_KAIZEN_churn_reads_ok() {
+  sed -i 's@(.auto_retry == true or .moved == false or .gate == "fail")@(.auto_retry == true or .moved == false)@' "$1"
+}
+
+# `unique` leaves `launches`: three rows of one run read as three launches, and the intervention
+# count the D12 metric reads becomes a session count with a new name.
+mut_AUTONOMY_launches_counts_rows() {
+  sed -i 's@def launches: map(.run_id) | unique | length;@def launches: map(.run_id) | length;@' "$1"
+}
+
+# `reopened` advances its high-water mark on ANY session, passed or not — "the phase index went
+# down", the definition the spec refused: frete-cif-fob (EXEC after a REFUSED QA, three times)
+# would read 3 where the truth is 0. Caught by the fail twin of the reopen pair.
+mut_AUTONOMY_reopened_ignores_gate() {
+  sed -i 's@(if \$i != null and \$r.gate == "pass" then .maxpass@(if $i != null then .maxpass@' "$1"
+}
+
+# launches and reopened drawn over the COMPARABLE sessions of the mission instead of every local
+# one. Measured on SQ-111 itself: its three run_ids all appear in comparable rows, so there the
+# mutant reads `3 launch(es) · 0 reopened` where the truth is `3 · 1` — launches survives,
+# reopened does not, because the post-PR QA row that motivated `reopened` is the one row
+# `comparable` refuses. The `2 → 1` numbers belong to the population FIXTURE instead, whose
+# second launch is the dirty row itself: caught by the population pair, whose comparable
+# population is exactly the clean rows — launches 2 → 1 and reopened 1 → 0.
+mut_AUTONOMY_reopened_comparable_only() {
+  sed -i 's@| (\.\[0\] | mission_key | history_of) as \$every$@| . as $every@' "$1"
+}
+
+# The guard on the narrative cell goes: `intervention note(s)` is printed for ANY mission whose slug
+# has a checkpoint in this repo, so under --all-repos a foreign mission that merely shares the slug
+# borrows this repo notes. The map is keyed by slug alone — built from this repo rows — and the row
+# repo is the only thing standing between the two. Caught by `a mission of another repo never
+# borrows the notes of a same-slug mission of this one` in check-autonomy.sh, which reads "2 1 1"
+# under this mutant where it demands "2 1 0".
+mut_AUTONOMY_notes_borrowed_across_repos() {
+  sed -i 's@if \$r == \$repo and (\$interventions | has(\$m)) then@if ($interventions | has($m)) then@' "$1"
+}
+
 CATALOG=(
   PLAN_empty_approval
   PLAN_kaizen_born_blind
@@ -1971,6 +2202,17 @@ CATALOG=(
   QA_bug_genre_prefix
   QA_bug_genre_anywhere
   QA_bug_genre_fenced
+  QA_e2e_red_never_probed
+  QA_app_down_on_unknown
+  QA_probe_ignores_e2e_rc
+  QA_hostport_no_default_port
+  QA_hostport_case_blind
+  QA_hostport_folds_host
+  QA_hostport_keeps_path
+  QA_hostport_keeps_query
+  QA_hostport_keeps_fragment
+  QA_hostport_keeps_userinfo
+  QA_hostport_no_ipv6
   REVIEW_stops_at_h3
   REVIEW_accepts_B
   REVIEW_placeholder_rationale_blind
@@ -2007,6 +2249,8 @@ CATALOG=(
   RUN_jidoka_pipefail
   RUN_blocked_not_escalated
   RUN_blocked_retry_not_escalated
+  RUN_app_down_not_escalated
+  RUN_app_down_retry_not_escalated
   RUN_degraded_row_dropped
   RUN_degraded_repeats
   RUN_escalations_no_axis
@@ -2107,6 +2351,14 @@ CATALOG=(
   RUN_kit_touched_blind
   RUN_kit_guard_cries_wolf
   RUN_kit_guard_arms_projection
+  AUTONOMY_outcome_reads_moved_only
+  KAIZEN_outcome_inlined_old
+  AUTONOMY_waste_idle_only
+  KAIZEN_churn_reads_ok
+  AUTONOMY_launches_counts_rows
+  AUTONOMY_reopened_ignores_gate
+  AUTONOMY_reopened_comparable_only
+  AUTONOMY_notes_borrowed_across_repos
 )
 
 # Mutations that are NOT caught today, each with the increment that closes it. Ratchet in both

@@ -15,6 +15,18 @@ set -euo pipefail
 
 readonly SDD_VERSION="0.1.0"
 
+# Seconds a single TCP connect to APP_URL may take before the probe gives up. A CONSTANT and
+# deliberately NOT a load_config key: config/schema.md:40-41 forbids a key the runner does not
+# read, and five were deleted in c8070dc for exactly that. A key here would also have to be
+# documented in schema.md and mirrored in starter.conf, or checks 5 and 7 of `sdd health` would
+# report it — buying a knob nobody asked for with three places to keep in step.
+#
+# 3s and not 1s: the probe runs against a loopback address in the common case, where a refusal is
+# immediate, and the value only matters on the path where the connect HANGS — a firewall dropping
+# packets. There the answer is `unknown` whatever the number, so the number only decides how long
+# the gate waits before saying so.
+readonly APP_PROBE_TIMEOUT=3
+
 # Associative arrays (the sensor cache) need bash 4. macOS ships bash 3.2 as /bin/bash; failing
 # here beats failing with "bad substitution" halfway through a phase.
 #
@@ -297,6 +309,151 @@ checkpoint_rows() {
     }' "$file"
 }
 
+# ---------------------------------------------------------------------------
+# Is anything listening where APP_URL points?
+#
+# A red e2e says nothing about WHOSE fault it is: a dead app, a stopped database, a missing
+# browser binary and a genuinely broken assertion all leave the same non-zero rc. Until this
+# existed the runner read every one of them as "QA still has work to do" and bought another opus
+# session. Measured on the SQ-111 mission of 2026-08-27: US$ 14,16 for a QA reproved by the
+# environment, plus US$ 7,61 for the lap that reopened a mission whose PR was already open.
+#
+# The runner still does not START anything — bringing the app up is the operator's job, declared
+# in config/schema.md. What changes is that the runner now ASKS, and stops.
+# ---------------------------------------------------------------------------
+
+# app_url_hostport <url> — prints "host port"; prints nothing and returns 1 when it cannot decide.
+#
+# PURE: parameter expansion only. No fork, no subprocess, no network. That is what lets the
+# assertions in tests/check-gates.sh read the parser through the gate's own sentence instead of
+# calling the function directly, and what keeps the cost of asking zero when the answer is "no".
+#
+# The host comes out BARE — `::1`, not `[::1]` — because that is what bash's /dev/tcp wants.
+# Putting the brackets back for the human is app_probe's job, one level up.
+app_url_hostport() {
+  local url="${1:-}" scheme rest host port=""
+  [ -n "$url" ] || return 1
+  # Only the two schemes whose default port is a fact. A `file://` or a bare `host:port` are not
+  # refused because they are exotic; they are refused because guessing a port for them would make
+  # the probe answer `down` about an address nobody wrote.
+  #
+  # Matched case-INSENSITIVELY, because the scheme IS case-insensitive (RFC 3986 §3.1) and the
+  # failure of reading it otherwise is the silent kind: `APP_URL="HTTP://localhost:3000"` fell
+  # through to `unknown`, where nothing fails and nothing warns — the whole escalation simply
+  # stopped existing for a spelling nobody would think to check. The remainder is taken by OFFSET
+  # (7 for `http://`, 8 for `https://`) and never off `${url,,}`: folding the whole string would
+  # fold the HOST with it, and the host rides into the sentence an operator reads.
+  case "${url,,}" in
+    http://*)  scheme=http;  rest="${url:7}" ;;
+    https://*) scheme=https; rest="${url:8}" ;;
+    *) return 1 ;;
+  esac
+  # Fragment, then query, then path — and ALL THREE before the userinfo. A path may legitimately
+  # carry an `@` (`http://127.0.0.1:8080/a@b`), and stripping the userinfo first would take the
+  # host away with it, leaving `b` as the address the operator is told about.
+  rest="${rest%%#*}"
+  rest="${rest%%\?*}"
+  rest="${rest%%/*}"
+  # The LAST `@` wins: a password may contain one, and the userinfo may not.
+  rest="${rest##*@}"
+  [ -n "$rest" ] || return 1
+  case "$rest" in
+    # An IPv6 literal is bracketed precisely so its own colons stop looking like a port separator.
+    # The bracketed-with-port pattern is listed first for the reader; the two are disjoint, since
+    # only one of them ends in `]`.
+    \[*\]:*) host="${rest#\[}"; host="${host%%\]:*}"; port="${rest##*\]:}" ;;
+    \[*\])   host="${rest#\[}"; host="${host%\]}" ;;
+    *:*)     host="${rest%%:*}"; port="${rest##*:}" ;;
+    *)       host="$rest" ;;
+  esac
+  [ -n "$host" ] || return 1
+  # Whitespace in a host is not an address; letting it through would hand `/dev/tcp` a word that
+  # can only fail, and a failure this parser could have named would arrive as an unreadable one.
+  case "$host" in *[[:space:]]*) return 1 ;; esac
+  if [ -z "$port" ]; then
+    case "$scheme" in http) port=80 ;; https) port=443 ;; esac
+  fi
+  # Digits, and at most five of them. The length bound is not cosmetic: `$((10#$port))` below
+  # wraps silently on a 20-digit string, so a port nobody could listen on would come out as a
+  # small number the probe would happily connect to.
+  # DECLARED LIMIT: the bound is measured on the STRING, before `10#` below strips the zeros, so
+  # `http://h:000001/` — port 1 in six characters — is refused too, into `unknown`, where nothing
+  # escalates. A port spelled with more leading zeros than digits is not worth a sixth line here.
+  case "$port" in ''|*[!0-9]*) return 1 ;; esac
+  [ "${#port}" -le 5 ] || return 1
+  # `10#` and never a bare `[ "$port" -ge 1 ]`: `[` evaluates its operand arithmetically, where a
+  # leading zero means OCTAL — `http://h:080/` would abort the runner on "value too great for
+  # base" instead of reading as port 80.
+  port="$((10#$port))"
+  [ "$port" -ge 1 ] && [ "$port" -le 65535 ] || return 1
+  printf '%s %s\n' "$host" "$port"
+}
+
+# app_probe <url> — prints "state|label" and ALWAYS returns 0. State is one of:
+#
+#   down     nothing is listening there; label is the address
+#   up       something answered; label is the address
+#   unknown  no verdict either way; label is the REASON, in a sentence a human can act on
+#
+# rc 0 in every case, and no global touched, because this is the one function of the pair that has
+# to survive `$( )`. A function with a side effect on a global loses it to the subshell — the
+# family CLAUDE.md records against run_phase and autonomy_kit_stamp. Publishing on stdout is what
+# makes calling it from a substitution correct rather than merely convenient.
+#
+# ONE-SIDED BY CONSTRUCTION, and this is the whole compatibility story. `unknown` is the default
+# and it never escalates: an empty APP_URL, a URL this cannot parse, a bash built without
+# /dev/tcp, an absent timeout(1), an error string the kernel words differently — every one of them
+# lands in `unknown`, where the runner behaves byte for byte as it did before this existed. The
+# probe turns a red into a NAMED red; it can never turn a green into a red.
+#
+# DECLARED LIMIT — not memoised, on purpose. One lap of `cmd_run` can reach here twice: once inside
+# `$(current_phase)` and once at the gate call itself. The second connect is not free, and the
+# worst case is the one where nothing is refused and nothing answers — a firewall dropping the
+# packets — at $APP_PROBE_TIMEOUT seconds a call. It is left uncached because a cache here would
+# owe an invalidation contract: `invalidate_checks` exists precisely because a session can change
+# the world between two evaluations, and the operator starting the app IS that change. Buying a few
+# seconds with a verdict that can go stale across a session is the wrong side of that trade, and
+# the seconds are noise beside the E2E_CMD run that has to fail before this is reached at all.
+app_probe() {
+  # The URL is the ARGUMENT and never read off the global here: both callers pass "$APP_URL" by
+  # name, and a fallback to it was a default nothing exercised — a signature that says one thing
+  # and a body that quietly accepts another.
+  local url="${1:-}" hp host port label err="" rc=0
+  [ -n "$url" ] || { printf 'unknown|APP_URL is empty\n'; return 0; }
+  # Declared first and assigned inside the `if`: `local hp="$(...)"` would swallow the rc, since
+  # `local` reports its OWN success and the parser's refusal would read as a parse.
+  if ! hp="$(app_url_hostport "$url")"; then
+    printf 'unknown|APP_URL (%s) carries no host:port this can read\n' "$url"; return 0
+  fi
+  host="${hp%% *}"; port="${hp##* }"
+  case "$host" in *:*) label="[$host]:$port" ;; *) label="$host:$port" ;; esac
+  if ! command -v timeout >/dev/null 2>&1; then
+    printf 'unknown|timeout(1) is not on PATH, and an unbounded connect could hang the gate\n'
+    return 0
+  fi
+  # Host and port as ARGUMENTS, never interpolated into the script text: APP_URL is a string from
+  # the target repo's config, and `bash -c "exec 3<>/dev/tcp/$host/$port"` would execute whatever
+  # it contains. `$BASH` and not `bash`: the runner already knows which interpreter it trusts.
+  # LC_ALL=C because the verdict below is read out of a strerror string.
+  err="$(LC_ALL=C timeout "$APP_PROBE_TIMEOUT" "${BASH:-bash}" -c \
+      'exec 3<>"/dev/tcp/$0/$1"' "$host" "$port" 2>&1)" || rc=$?
+  if [ "$rc" -eq 0 ]; then printf 'up|%s\n' "$label"; return 0; fi
+  # ECONNREFUSED, and NOTHING else, is what "the app is down" means here. A name that does not
+  # resolve, a route that is missing, a firewall that drops the packet: each of them is a machine
+  # this cannot speak for, and each of them lands below, in `unknown`. Herestring and never
+  # `printf | grep -q`, which returns 141 under pipefail when the grep MATCHES.
+  if grep -q 'Connection refused' <<< "$err"; then printf 'down|%s\n' "$label"; return 0; fi
+  if [ "$rc" -eq 124 ]; then
+    printf 'unknown|the connect at %s timed out after %ss, which is not a refusal\n' \
+      "$label" "$APP_PROBE_TIMEOUT"
+    return 0
+  fi
+  # First line only: bash prints the failed redirection over two lines on some builds, and a
+  # GATE_WHY carrying a newline arrives in the ledger as a broken record.
+  printf 'unknown|the connect at %s answered neither way: %s\n' "$label" "$(head -1 <<< "$err")"
+  return 0
+}
+
 # Runs a config command at the root of the target repo; returns its exit code.
 # Output goes to the mission log (when there is a mission) — it never pollutes the runner stdout.
 #
@@ -522,6 +679,28 @@ GATE_EXEC_DIRTY=0
 # can leave a lap with the marker still set has to re-derive that property, not assume it.
 GATE_HANDOFF_BLOCKED=0
 
+# Set by gate_QA when the e2e came back RED and a TCP connect to APP_URL was refused, read by
+# cmd_run to escalate instead of buying a session against a machine no session can fix. A GLOBAL
+# for the third time and for the reason the two above give — the rc is already spent on pass/fail
+# — and a MARKER rather than a grep of GATE_WHY, because GATE_WHY is prose: the sentence the arm
+# writes is one an operator may reword, and an early exit anchored on a substring of it would
+# start and stop escalating on an edit to an error message.
+#
+# CONTRACT, re-derived here and NOT inherited — the paragraph above says every new marker owes
+# this derivation rather than an assumption:
+#
+#   · reset at the ENTRY of gate_QA, which is also its only setter. `current_phase` walks every
+#     gate in order, so a marker armed by an evaluation two phases ago would escalate a phase
+#     whose own e2e never ran;
+#   · it does not outlive a LAP, and that is a property of the flow: BOTH doors of cmd_run's loop
+#     read it — the first pass and the inline retry — and every lap that finds it armed returns 3.
+#     Whoever adds a third door, a second setter, or a path that can leave a lap with it still set
+#     has to re-derive this, exactly as this comment had to.
+#
+# Armed ONLY in the `down` arm. `unknown` leaves it at 0 and the runner behaves as it did before
+# the probe existed, which is the whole compatibility story — see app_probe.
+GATE_APP_DOWN=0
+
 gate_EXEC() {
   GATE_EXEC_DIRTY=0
   local rows; rows="$(checkpoint_rows)"
@@ -581,6 +760,7 @@ gate_EXEC() {
 
 gate_QA() {
   GATE_HANDOFF_BLOCKED=0
+  GATE_APP_DOWN=0
   local h="$MISSION_DIR/30-handoff-qa.md" report=""
   [ -f "$h" ] || { GATE_WHY="missing 30-handoff-qa.md"; return 1; }
 
@@ -709,8 +889,41 @@ gate_QA() {
   if ! run_check_cmd "$TEST_CMD" "gate-qa-test"; then
     GATE_WHY="TEST_CMD failed ($TEST_CMD) — see $LAST_CHECK_LOG"; return 1
   fi
+  # The composed `if` above is left INTACT and the probe goes in the body, which is the whole
+  # design: the app is asked about only on the path where the e2e has ALREADY come back red.
+  # Probing earlier would be wider than the defect — a repo whose e2e brings its own server up, or
+  # whose APP_URL only answers while the test runs, would be blocked for a machine state that
+  # never mattered. A false BLOCKED costs a person; the loop only costs money. The fixture at
+  # tests/check-gates.sh with `APP_URL="http://example.invalid"` beside a GREEN E2E_CMD is what
+  # holds that line, and it is asserted as the other half of the dead-app pair.
   if [ -n "$E2E_CMD" ] && ! run_check_cmd "$E2E_CMD" "gate-qa-e2e"; then
-    GATE_WHY="E2E_CMD failed ($E2E_CMD) — see $LAST_CHECK_LOG"; return 1
+    # Held in a local before the probe runs: LAST_CHECK_LOG is the file this refusal sends the
+    # operator to READ, and it is a global that any later run_check_cmd would overwrite.
+    local e2e_log="$LAST_CHECK_LOG" probe state label
+    probe="$(app_probe "$APP_URL")"
+    state="${probe%%|*}"; label="${probe#*|}"
+    case "$state" in
+      down)
+        # The only arm that arms the marker, and the only one cmd_run acts on.
+        GATE_APP_DOWN=1
+        GATE_WHY="E2E_CMD failed ($E2E_CMD) and nothing is listening at $label (APP_URL) — the app is down; no session can start it. See $e2e_log"
+        ;;
+      up)
+        # The WITNESS, and it is not decoration: without it "the app was never asked about" and
+        # "the app was asked about and answered" would read the same to whoever gets this
+        # sentence, and `down` would be a claim with no contrast behind it. A TCP accept is ALL the
+        # witness proves: it clears the address, never the environment behind it — a stopped
+        # database sits behind a port that answers — so the sentence names what it cleared and
+        # sends the reader to the log for the rest.
+        GATE_WHY="E2E_CMD failed ($E2E_CMD) with the app answering at $label — APP_URL is not the cause; whatever is (a broken assertion, or something behind the port, like a stopped database) is in the log. See $e2e_log"
+        ;;
+      *)
+        # `*` and not `unknown)`: this is the arm that has to catch a state nobody has invented
+        # yet, since the two above are the only ones that may change what the runner DOES.
+        GATE_WHY="E2E_CMD failed ($E2E_CMD) — see $e2e_log (the app was not probed either way: $label)"
+        ;;
+    esac
+    return 1
   fi
   if [ -n "${report:-}" ]; then
     GATE_WHY="report $(basename "$report") closed, registry clean, suites green"
@@ -1526,6 +1739,44 @@ ledger_row_is_local() {
   printf '%s' 'def ledger_row_no_repo: type == "object" and ((.repo // "") == "");'
   if [ "$LEDGER_ALL_REPOS" = "1" ]; then printf '%s' 'def ledger_row_is_local: ledger_row_no_repo | not;'; return 0; fi
   printf '%s' 'def ledger_row_is_local: if ledger_row_no_repo then false elif (type == "object" and has("repo")) then .repo == $repo else true end;'
+}
+
+# ONE definition of "what did this session DO", spliced into both readers of the ledger the same
+# way ledger_row_is_local is — printed jq, received through `"$(ledger_outcome_defs)"`, never
+# spelled twice. `stalled` used to be `moved == false` ("the session wrote nothing"), which is not
+# "the phase did not advance": 68 of the 145 sessions in the real ledger wrote something, failed
+# their gate and bought the runner another session, and no reader could see them — the human
+# window said `0 stalled`, the judge said `ok`, on a phase of seven sessions and five refusals
+# (20260825-frete-cif-fob, EXEC). Measured 2026-08-28, before this function existed.
+#
+#   advanced — the gate passed. The gate is the artifact; `pass/false` does not occur in the
+#              ledger and is classified here without a fourth arm.
+#   churned  — the session wrote to the disk and the gate still failed: the runner reads "moved"
+#              as progress and buys the next lap. The bucket that was invisible.
+#   idle     — nothing on disk, gate failed: the old `stalled`, under the name that says what it is.
+#
+# Applied to the sessions each reader admits, and both admit a session only with `moved` present:
+# cmd_autonomy's `comparable` has demanded `has("moved")` all along, and kaizen_series now files a
+# session without it into `excluded.non_comparable` too — the same bucket, not a second one with
+# the same name. (Measured before that fix landed: a session row with no `moved` field read
+# on_axis in the series and non-comparable in the window, so a version of 2 comparable sessions on
+# the human table came back 3 sessions on the judge, with the extra one always landing `idle`.)
+# Never applied to escalation rows, which carry neither `gate` nor `moved` and would all read
+# `idle`. Old-schema rows stay where they were.
+# `outcome_tally` lives here and not in each program because its three keys ARE the enum, and an
+# enum read in more than one place is one definition.
+#
+# `phase_index` reads the canonical phase order off $PHASES through `--arg phases`, so the order
+# has ONE owner. Both readers pass `--arg phases "$PHASES"` even though only cmd_autonomy calls
+# phase_index. Measured on jq 1.7: an unbound `$var` inside a def nobody calls COMPILES (`jq -n
+# 'def f: $x; 1'` prints 1), so the arg is not strictly required there today — it is passed anyway
+# because the emission is one and the day the series calls phase_index must not be the day it
+# learns about the arg. (No apostrophe inside the printed jq: it is spliced into single-quoted
+# shell strings.)
+ledger_outcome_defs() {   # printed jq, spliced into cmd_autonomy AND kaizen_series
+  printf '%s' 'def outcome: if .gate == "pass" then "advanced" elif .moved == true then "churned" else "idle" end;'
+  printf '%s' 'def outcome_tally: map(outcome) | reduce .[] as $o ({advanced: 0, churned: 0, idle: 0}; .[$o] += 1);'
+  printf '%s' 'def phase_index: . as $p | ($phases | split(" ")) | index($p);'
 }
 
 # Publishes AUTONOMY_KIT_STAMP as "<sha>|<true|false>", or "|" when SDD_HOME is not a git checkout.
@@ -2460,6 +2711,46 @@ cmd_preflight() {
     dim "  ---  agent-browser not checked (E2E_CMD and APP_URL empty)"
   fi
 
+  # --- is anything listening where APP_URL points? -------------------------
+  # Fifteen checks ran here and not one of them touched APP_URL, so the single fact that costs a
+  # whole opus session to discover — the app is not up — was the one preflight could not say.
+  # Measured on the SQ-111 mission of 2026-08-27: US$ 14,16 for a QA phase reproved by the
+  # environment. This is the same probe gate_QA uses, asked one step earlier and for free.
+  #
+  # A dead app is a REFUSAL only when E2E_CMD is set, and the asymmetry is the policy, not a
+  # convenience: with E2E_CMD configured a gate is about to run a suite against an app that is not
+  # there, which is precisely the loop this pays for. Without it nothing automatic runs against
+  # APP_URL at all, so the same fact is something the human walking the journey should know and
+  # never a reason to refuse to start the mission — the kit does not get to decide the app must be
+  # up before a human may plan.
+  #
+  # `unknown` is a warning in BOTH cases, and never a refusal. The probe is one-sided by
+  # construction (see app_probe) and the human-facing half has to keep that promise: refusing to
+  # start a mission because a URL could not be parsed would break every repo whose APP_URL this
+  # does not understand, which is the widest possible reading of the narrowest possible fact.
+  if [ -n "$APP_URL" ]; then
+    local app_verdict app_state app_label
+    app_verdict="$(app_probe "$APP_URL")"
+    app_state="${app_verdict%%|*}"; app_label="${app_verdict#*|}"
+    case "$app_state" in
+      up)   ok "something is listening at $app_label (APP_URL)" ;;
+      down)
+        if [ -n "$E2E_CMD" ]; then
+          _fail "nothing is listening at $app_label (APP_URL), and E2E_CMD is configured —
+        gate_QA would run that suite against an app that is not there, and no session in this
+        pipeline may start one. Start the app, or clear APP_URL if the e2e brings its own
+        server up."
+        else
+          warn "nothing is listening at $app_label (APP_URL) — with no E2E_CMD no gate runs
+        against it, but the exploratory QA session will need it up"
+        fi
+        ;;
+      *) warn "APP_URL not probed: $app_label" ;;
+    esac
+  else
+    dim "  ---  APP_URL not set — nothing to probe"
+  fi
+
   # --- config ---
   bash -n "$CONFIG_FILE" && ok "config syntax valid"
   case "$TEST_CMD" in
@@ -3389,6 +3680,42 @@ handoff_blocked_escalation() {
   return 0
 }
 
+# Fourth Jidoka, and the sibling of the one above in every respect that matters: same marker
+# discipline, same two doors, same rc 3. What differs is WHO has to act. `handoff-blocked` says a
+# human owes the pipeline a decision; this one says a human owes it a MACHINE — the e2e came back
+# red and nothing is listening where APP_URL points, and no agent in this pipeline is allowed to
+# bring an environment up (config/schema.md declares that the operator's job, and this mission
+# deliberately did not change it: the runner learns to ASK, not to act).
+#
+# Without it the runner read a dead app as "QA still has work to do" and bought another opus
+# session, for ever: measured on the SQ-111 mission of 2026-08-27 at US$ 14,16 for one such QA,
+# plus US$ 7,61 for the lap that reopened a mission whose PR was already open.
+#
+# TWO DOORS, for exactly the reason the paragraph above GATE_APP_DOWN re-derives rather than
+# assumes: the first pass and the inline retry. With only the first, a retry whose gate armed the
+# marker would carry it into the next lap, where gate_EXEC — which never touches it — would let
+# this escalation fire for EXEC, printing an APP_URL diagnosis over a phase that never ran an e2e.
+# That is the F2 failure measured on the handoff-blocked sibling, one house along; the contract
+# above the marker says every new marker owes the derivation, and this is it.
+#
+# Returns 0 when it escalated and 1 when the marker is unset, and it is CALLED, never substituted
+# — a subshell would send the ledger row and the five lines a human is meant to act on into the
+# substitution instead of to the ledger and the terminal.
+app_down_escalation() {
+  local phase="$1"
+  [ "$GATE_APP_DOWN" = "1" ] || return 1
+  info ""
+  bad "BLOCKED in $phase — $GATE_WHY"
+  dim "  The line stopped on purpose: the e2e is red and the address in APP_URL refuses"
+  dim "  connections. No session in this pipeline may bring an environment up."
+  dim "  Another session would run the same e2e against the same dead address and refuse"
+  dim "  the same way."
+  dim "  Start the app and 'sdd run' — or, if the e2e brings its own server up, clear APP_URL."
+  pipeline_log_line "$(date -Iseconds)  BLOCKED  $phase  $GATE_WHY"
+  autonomy_blocked_row "app-down" "$phase" "$GATE_WHY"
+  return 0
+}
+
 cmd_run() {
   local mission_arg="" force_phase="" max_phases=0
   while [ $# -gt 0 ]; do
@@ -3669,6 +3996,10 @@ cmd_run() {
     # 20260826-o-laco-da-qa, differentially against the increment-blocked sibling (rc 3 + row)
     # under the same flag. The session row above is already written, so the ledger keeps its order.
     if handoff_blocked_escalation "$phase"; then return 3; fi
+    # DOOR 1 of the app-down escalation, on the same terms and in the same place: read right after
+    # the gate call that could have armed it, BEFORE `moved` is consulted, and ABOVE the
+    # `--max-phases` ceiling — a phase no session can satisfy must not answer a paced run with 0.
+    if app_down_escalation "$phase"; then return 3; fi
 
     phases_run=$((phases_run + 1))
     if [ "$max_phases" -gt 0 ] && [ "$phases_run" -ge "$max_phases" ]; then
@@ -3722,6 +4053,9 @@ cmd_run() {
     # after `moved2` is already settled, so it takes nothing away from the sampling window the
     # comment above defends — it only refuses to let `moved2` answer a question that is not its.
     if handoff_blocked_escalation "$phase"; then return 3; fi
+    # DOOR 2, and it is what keeps THIS marker from outliving the lap either. Placed after
+    # `moved2` is settled, so it takes nothing away from the sampling window.
+    if app_down_escalation "$phase"; then return 3; fi
 
     if [ "$moved2" = "false" ]; then
       info ""
@@ -3830,6 +4164,7 @@ cmd_autonomy() {
   # would turn that sum into an accusation against the buckets instead of a measurement.
   local repo; repo="$(ledger_repo_root)"
   local def; def="$(ledger_row_is_local)"
+  local odefs; odefs="$(ledger_outcome_defs)"
   local total lines norepo
   lines="$(jq -s 'length' "$file")"
   norepo="$(jq -s --arg repo "$repo" "$def"' map(select(ledger_row_no_repo)) | length' "$file")"
@@ -3872,10 +4207,14 @@ cmd_autonomy() {
   [ "$LEDGER_ALL_REPOS" = "1" ] && scope="all repos (--all-repos)"
   step "sdd autonomy — $file · $total row(s) · $scope"
 
-  # The human interventions D12 prescribes: one `- intervention:` line in the execution notes of the
-  # mission checkpoint, per time a human had to step in (a retry, a fix by hand, a BLOCKED taken
-  # over). Cost alone cannot tell "ran cheap" from "ran cheap because a human did half of it", and
-  # only the two halves together are the evidence I13.4 will ask for.
+  # The `- intervention:` notes of the mission checkpoint — what the human DID, in prose. Until
+  # 2026-08-28 this was the intervention COUNT the D12 metric read (D16), and it was measured to
+  # be a label the executor had to remember to write: the pilot missions carried 0, 1 and 0 notes,
+  # and the one with three launches had none. The count is `launch(es)` now, distinct run_id per
+  # mission, on every line of every repo; the notes are printed beside it as `intervention
+  # note(s)`, and ONLY when there is a checkpoint on disk to read them from. No `?`: it stood in
+  # for "nobody looked" so that no false zero reached the official number, and the official number
+  # no longer comes from this file. A mission with no checkpoint simply has no notes to show.
   #
   # The TOKEN is English and the prose after it is not, exactly like the status words the boot
   # prompt already tells every session to leave alone: pending, done, blocked, auto, skipped. D12
@@ -3884,10 +4223,10 @@ cmd_autonomy() {
   # `titulo`, and that tests/check-lang.sh refuses. The checkpoint is an OUTPUT_LANG artifact, so
   # what follows the colon is written in whatever language the repo declared.
   #
-  # Only for missions of THIS repo: the count comes from a file under `$repo/$HANDOFF_DIR/`, and
-  # HANDOFF_DIR is a key of the config of the repo the reader is standing in. Under --all-repos the
-  # rows of other projects are read from a config this process never loaded, so those missions
-  # answer `?` rather than a zero that would read as "nobody intervened".
+  # Only for missions of THIS repo: the file lives under `$repo/$HANDOFF_DIR/`, and HANDOFF_DIR is a
+  # key of the config of the repo the reader is standing in. Under --all-repos the missions of
+  # other projects print no cell — and the jq below also refuses to lend this repo notes to a
+  # foreign mission that merely shares the slug.
   local interventions="{}"
   if [ "$by_mission" = "1" ] && [ -n "$repo" ]; then
     local mlist m ck n hdir
@@ -3908,10 +4247,11 @@ cmd_autonomy() {
     while IFS= read -r m; do
       [ -n "$m" ] || continue
       ck="$repo/$hdir/$m/checkpoint.md"
-      n=0
-      # `|| true` on BOTH: grep exits 1 when it counts zero, and `set -e` would take the whole
-      # command down on the first mission that had no interventions — the common case.
-      [ -f "$ck" ] && n="$(grep -cE '^[[:space:]]*-[[:space:]]*intervention:' "$ck" || true)"
+      # A checkpoint that is not on disk contributes NO entry, so the cell does not print: absent
+      # is not zero. `|| true`: grep exits 1 when it counts zero, and `set -e` would take the whole
+      # command down on the first mission whose checkpoint has no note — the common case.
+      [ -f "$ck" ] || continue
+      n="$(grep -cE '^[[:space:]]*-[[:space:]]*intervention:' "$ck" || true)"
       interventions="$(jq -c --arg m "$m" --argjson n "${n:-0}" '. + {($m): $n}' <<< "$interventions")"
     done <<< "$mlist"
   fi
@@ -3941,7 +4281,8 @@ cmd_autonomy() {
   # this command instead of leaking jq's own exit code.
   local out jq_rc=0
   out="$(jq -rs --arg repo "$repo" --argjson interventions "$interventions" \
-                --argjson by_mission "$by_mission" --arg allrepos "$LEDGER_ALL_REPOS" "$def"'
+                --argjson by_mission "$by_mission" --arg allrepos "$LEDGER_ALL_REPOS" \
+                --arg phases "$PHASES" "$def""$odefs"'
     # ⚠️ NO APOSTROPHE anywhere below, prose included: everything from here to the closing quote is
     # ONE single-quoted shell string, so a stray one ends it mid-jq and bash then reports a syntax
     # error dozens of lines away from the sentence that broke it. That is why every comment in here
@@ -3959,6 +4300,9 @@ cmd_autonomy() {
     # row nobody can attribute belongs in the non-comparable bucket, out loud. kaizen_series holds
     # the same definition for its own jq program; tests/check-autonomy.sh compares the readers to
     # each other so neither can be "improved" alone.
+    # outcome / outcome_tally / phase_index arrive spliced from ledger_outcome_defs: what a session
+    # DID is one definition for this program and for kaizen_series, and check-autonomy.sh compares
+    # the two histograms over one file so neither can be improved alone.
     def on_axis: .kit_dirty == false and .kit_sha != null;
     def comparable: .event == "session" and on_axis and (has("moved"));
     def is_session: .event == "session";
@@ -3973,6 +4317,41 @@ cmd_autonomy() {
     # An ARRAY, for the same two reasons the twin states: a separator inside a value collides, and
     # `+` on a non-string value makes jq die and takes this whole command down with it.
     def mission_key: [(.repo // ""), (.mission // "")];
+    # The number the D12 metric reads, since D16 was amended on 2026-08-28: distinct run_id — how
+    # many times a human typed `sdd run` or `sdd retry` for this mission. The FACT, never
+    # `launches - 1`: "interventions = launches - 1" is the reading, written in CONTEXT.md and in
+    # the judge prompt, and a `- 1` here would be the first arithmetic of opinion inside an
+    # instrument that prints facts — and would read 0 on a mission abandoned after its first
+    # launch, which is an intervention. It UNDERCOUNTS by design: bringing the app up by hand
+    # between two launches is one new run_id, not two. An honest floor, where the prose
+    # (`- intervention:` notes) was a ceiling nobody filled — the mission with three launches
+    # (SQ-111) had zero notes.
+    # Four more limits, declared here because this is the program that prints the number:
+    #   - a launch that ended in an escalation before any session row (a run stopped by
+    #     handoff-blocked, for instance) is invisible: the population is the session rows, by the
+    #     spec, and an escalation row is not one of them — a second undercount, same direction;
+    #     measured: three increment-blocked rows of a /tmp fixture mission carry run_ids that never
+    #     got a session row;
+    #   - a mission whose sessions are ALL non-comparable prints no line at all and contributes
+    #     nothing to the accounting sentence below, exactly as before these two cells existed;
+    #   - neither cell enters the judge series: it groups by kit_sha, and a mission that crossed
+    #     two kit versions would count its launches twice (design §4.6);
+    #   - a row with no run_id would count as one launch: `[{run_id:"a"},{run_id:"a"},{}]` reads 2,
+    #     not 1. The runner writes run_id on every row it emits and the real ledger has 0 such rows,
+    #     so this is declared, not filtered.
+    def launches: map(.run_id) | unique | length;
+    # A session in a phase BELOW one whose gate had already PASSED, in $PHASES order — the pipeline
+    # going backwards after it had gone forward. NOT "the phase index went down": that counts the
+    # designed loop (QA fails, opens a fix increment, EXEC runs it), which frete-cif-fob did three
+    # times with QA REFUSED, all of it the pipeline working. With the gate in the clause that
+    # mission reads 0 and SQ-111, which ran QA after PR had passed, reads 1. A phase outside the
+    # order (KAIZEN) has a null index and counts on neither side — the `!= null` guards are
+    # load-bearing, because jq orders null below every number. Input in file order, which is
+    # write order: the ledger is append-only, and group_by keeps it (jq sorts stably).
+    def reopened: reduce .[] as $r ({maxpass: -1, n: 0};
+                    ($r.phase | phase_index) as $i
+                    | (if $i != null and $i < .maxpass then .n += 1 else . end)
+                    | (if $i != null and $r.gate == "pass" then .maxpass = ([.maxpass, $i] | max) else . end)) | .n;
     # Money is a COLUMN, and jq interpolates a NUMBER: 2.0 came out `US$ 2` in the column next to
     # `US$ 1.5`, the table stopped lining up, and a reader in a hurry reads "no cents were computed".
     # NOT printf, which is nowhere near this string: the whole row is built inside this one jq
@@ -4004,15 +4383,19 @@ cmd_autonomy() {
     # check-autonomy.sh compares the last table row to `.latest.kit_sha` of the series so neither
     # side can be "improved" alone. `index` returns 0 for the first element and 0 is truthy in jq,
     # which is what makes the reduce keep the first occurrence instead of appending it twice.
-    # The order is read off the SAME POPULATION the judge reads it off — every on_axis row, session
-    # or escalation — and not off the comparable sessions this table happens to draw. Getting that
-    # wrong is a second way to answer the same question differently: a version whose first on_axis
-    # row is an escalation is already known to the series when the table has never heard of it, so
-    # a sha that got blocked before it ever finished a session sorted after one that started later.
-    # Measured in the r1 review: rows blocked(aaaaaaa), session(bbbbbbb), session(aaaaaaa) put
-    # aaaaaaa last in the table while the series called bbbbbbb the latest. `comparable` implies
-    # on_axis by its own definition above, so every group here has a place in this list.
-    | (map(select(on_axis)) | map(.kit_sha)
+    # The order is read off every row the table and the escalations block admit — comparable
+    # sessions and on_axis escalations — which is exactly the population kaizen_series reads
+    # through `comparable_row`, and not off `on_axis` alone: a SESSION with no `moved` field (old
+    # schema) is on_axis but not comparable, so it lands on neither side of that population, and
+    # the earlier spelling of this clause admitted it anyway, putting the two readers on different
+    # versions again. Measured on a three-row ledger session(aaaaaaa, no moved) ·
+    # session(bbbbbbb) · session(aaaaaaa): the last row of the table read bbbbbbb while
+    # `.latest.kit_sha` of the series read aaaaaaa, over the same file (tests/check-autonomy.sh,
+    # fixture D4c). A version whose first admitted row is an escalation is the separate case this
+    # clause already covers: `comparable` implies `on_axis` by its own definition above, so an
+    # escalation reaches this list through the `is_escalation and on_axis` arm and a session
+    # through the other, and every group in $groups below still has a place in this list.
+    | (map(select((is_session and comparable) or (is_escalation and on_axis))) | map(.kit_sha)
        | reduce .[] as $s ([]; if index($s) then . else . + [$s] end)) as $order
     | (map(select(is_session and comparable))
        | group_by(.kit_sha) | sort_by(.[0].kit_sha as $s | $order | index($s))) as $groups
@@ -4025,6 +4408,23 @@ cmd_autonomy() {
     # escalations block below counts them.
     | (map(select(is_session and comparable))
        | group_by(mission_key) | sort_by(.[0].ts)) as $mgroups
+    # EVERY local session of each mission, comparable or not — the population launches and
+    # reopened are drawn over. They are facts about the human history of the mission and not about
+    # a kit version: a launch that landed on a dirty kit was a launch. Measured on SQ-111, the
+    # mission that motivated the two fields: its post-PR QA row carries kit_dirty:true, and over
+    # the comparable rows alone `reopened` read 0 exactly there. session(s), the outcomes and US$
+    # stay on the comparable rows, because that is the sum check-autonomy.sh closes against the
+    # version table. When the two populations differ for a printed mission the accounting
+    # paragraph says so, once, with the difference summed over the missions printed.
+    | (map(select(is_session)) | group_by(mission_key)) as $every_session
+    # DECLARED LIMIT: history_of scans $every_session once per printed mission, so the by-mission
+    # table is quadratic in the number of missions the ledger holds. Unmeasured, on purpose: the
+    # real ledger is 145 rows over a dozen missions, and the scan that WAS measured (the
+    # degenerate_axis rewrite in kaizen_series) only earned its index at 750 versions over 3000 rows.
+    | def history_of: . as $k | $every_session | map(select((.[0] | mission_key) == $k)) | .[0] // [];
+      (if $by_mission == 1
+       then ($mgroups | map((.[0] | mission_key | history_of | length) - length) | add // 0)
+       else 0 end) as $history_extra
     | (if $by_mission == 1 then
         (if ($mgroups | length) == 0 then
           "  no comparable sessions in this ledger"
@@ -4034,26 +4434,31 @@ cmd_autonomy() {
               | (.[0].repo // "") as $r
               | (if $allrepos == "1" then "\($r | split("/") | last)/\($m)" else $m end) as $label
               | (length) as $n
-              | (map(select(.moved == false)) | length) as $stalled
+              | (outcome_tally) as $t
               | (map(.cost_usd // 0) | add) as $cost
-              # `?` and not 0 for a mission of another repo: its checkpoint lives under a
-              # HANDOFF_DIR this process never loaded, and a zero there would read as
-              # "nobody intervened" when the truth is "nobody looked".
-              | (if ($interventions | has($m)) then "\($interventions[$m]) intervention(s)"
-                 else "? intervention(s)" end) as $iv
-              | "  \($label)  \($n) session(s) · \($stalled) stalled · \($iv) · US$ \($cost | usd)"
+              | (.[0] | mission_key | history_of) as $every
+              | ($every | launches) as $launches
+              | ($every | reopened) as $reopened
+              # The narrative, under the name that says what it is, and only when the checkpoint
+              # was readable: a mission of THIS repo with the file on disk. `$r == $repo` keeps a
+              # foreign mission that shares the slug (--all-repos) from borrowing this repo notes —
+              # the map is keyed by slug alone. Absent, the cell does not print: no `?`, no zero.
+              | (if $r == $repo and ($interventions | has($m)) then " · \($interventions[$m]) intervention note(s)" else "" end) as $iv
+              | "  \($label)  \($n) session(s) · \($t.advanced) advanced · \($t.churned) churned · \($t.idle) idle · \($launches) launch(es) · \($reopened) reopened\($iv) · US$ \($cost | usd)"
             ) | join("\n"))
         end)
       elif ($groups | length) == 0 then
         "  no comparable sessions in this ledger"
       else
+        # waste = churned + idle: every session that did not make the phase advance. It was idle
+        # alone (then called stalled) until 2026-08-28 — the approximation the name never meant.
         ($groups | map(
             (.[0].kit_sha) as $sha
             | (length) as $n
-            | (map(select(.moved == false)) | length) as $stalled
+            | (outcome_tally) as $t
             | (map(mission_key) | unique | length) as $missions
             | (map(.cost_usd // 0) | add) as $cost
-            | "  \($sha)  \($n) session(s) · \($stalled) stalled · \(($stalled * 100 / $n) | floor)% waste · \($missions) mission(s) · US$ \($cost | usd)"
+            | "  \($sha)  \($n) session(s) · \($t.advanced) advanced · \($t.churned) churned · \($t.idle) idle · \((($t.churned + $t.idle) * 100 / $n) | floor)% waste · \($missions) mission(s) · US$ \($cost | usd)"
           ) | join("\n"))
       end)
     , (map(select(is_escalation and on_axis)) | group_by(.kit_sha, .kind)
@@ -4083,6 +4488,7 @@ cmd_autonomy() {
     # only when there is something to disclaim.
     , ([ (if $skipped > 0 then "  (\($skipped) non-comparable row(s) excluded: dirty kit, no kit_sha, or no moved field)" else empty end)
        , (if $stray > 0 then "  (\($stray) unrecognized row(s) excluded: event missing or not one of session/blocked/degraded)" else empty end)
+       , (if $history_extra > 0 then "  (launches and reopened are counted over every session of the mission, \($history_extra) of them non-comparable)" else empty end)
        ] as $inside
        | [ (if $foreign > 0 then "  (\($foreign) row(s) excluded: born in another repo — the ledger is global, this reader is not)" else empty end)
          , (if $norepo > 0 then "  (\($norepo) row(s) excluded: no repo field — the row cannot say which project it came from)" else empty end)
@@ -4118,7 +4524,10 @@ cmd_autonomy() {
 # The label rubric, per mission×phase group:
 #   refez — any escalation, any human retry invocation, or the phase's last session still failing
 #           its gate: the work was pushed again, the strongest friction signal there is.
-#   leve  — an in-loop auto retry or a session that did not move the disk: friction, absorbed.
+#   leve  — an in-loop auto retry, a session that did not move the disk, or ANY session of the
+#           phase that failed its gate (churn: it wrote, the gate refused, the runner bought the
+#           next lap — frete-cif-fob EXEC was seven sessions, five refusals, and read `ok` until
+#           2026-08-28): friction, absorbed.
 #   ok    — none of the above.
 # Rows with a dirty kit or no kit_sha are non-comparable (counted, never mixed in), and the
 # KAIZEN meta row is excluded from the axis it would otherwise shift — the judge must never see
@@ -4170,7 +4579,7 @@ kaizen_series() {
     printf '{"v":1,"latest":null,"previous":null,"guard":{"missions_after_change":0,"missions_with_session":0,"sessions":0,"floor":%s,"sufficient":false,"degenerate_axis":false},"excluded":{"non_comparable":0,"unrecognized":0,"meta":0,"other_repo":0,"no_repo":0}}\n' "$KAIZEN_GUARD_FLOOR"
     return 0
   fi
-  jq -n --arg repo "$repo" --argjson floor "$KAIZEN_GUARD_FLOOR" "$(ledger_row_is_local)"'
+  jq -n --arg repo "$repo" --argjson floor "$KAIZEN_GUARD_FLOOR" --arg phases "$PHASES" "$(ledger_row_is_local)""$(ledger_outcome_defs)"'
     # ONE definition of "escalation" for the whole program, exactly as cmd_autonomy has one. The
     # two events state different facts (`blocked` stopped the line, `degraded` lowered the bar and
     # went on) but they answer this rubric the same way, and writing the pair out three times is
@@ -4183,12 +4592,22 @@ kaizen_series() {
 
     # ONE definition of the kit_sha axis for this program too — the third hand-written copy of the
     # same question lived here, as the complementary pair `.kit_dirty == true or .kit_sha == null`
-    # / `.kit_dirty != true and .kit_sha != null`. Same words as cmd_autonomy on purpose: the judge
-    # and the window the human reads take the SAME file, so a row one of them attributes to a
-    # version and the other does not is the divergence the ledger exists to prevent, merely moved
-    # from inside one command to between two. (No apostrophes in here: this jq program is a
-    # single-quoted shell string, and one would end it mid-comment.)
+    # / `.kit_dirty != true and .kit_sha != null`. `on_axis` alone is what an ESCALATION needs to be
+    # admitted — it never carries `moved`, and demanding one would exclude every escalation that
+    # ever happened. A SESSION needs more: `comparable_row` below adds `has("moved")` on top of
+    # `on_axis` for a session row, which is exactly the rule cmd_autonomy names `comparable`.
+    # Divergent for one measured row shape until this fix: a session with no `moved` field (old
+    # schema) read on_axis here and non-comparable there — 2 sessions on the human table read 3 on
+    # the judge series, 1 idle read 2 — so the judge and the window the human reads now admit the
+    # SAME rows from the SAME file, never merely the same kit_sha filter. (No apostrophes in here:
+    # this jq program is a single-quoted shell string, and one would end it mid-comment.)
     def on_axis: .kit_dirty == false and .kit_sha != null;
+    # SESSION admission is the human window rule named comparable (on_axis and has("moved"));
+    # ESCALATION admission stays bare `on_axis`, because .event != "session" short-circuits the
+    # has("moved") arm before it ever runs on a row that could never satisfy it. Used by BOTH
+    # bindings of the $noncomp/$ok partition below, so a session without `moved` cannot land in
+    # $ok through one binding while excluded through the other.
+    def comparable_row: on_axis and ((.event != "session") or has("moved"));
 
     # ONE definition of "this axis degenerated", same discipline as the two above, and the reason
     # the field below exists at all: a guard that says only `sufficient: false` cannot tell "not
@@ -4286,7 +4705,7 @@ kaizen_series() {
          or (map(select(.event == "session" and .invocation == "retry")) | length) > 0
          or ((map(select(.event == "session")) | last | .gate) != "pass")
       then "refez"
-      elif (map(select(.event == "session" and (.auto_retry == true or .moved == false))) | length) > 0
+      elif (map(select(.event == "session" and (.auto_retry == true or .moved == false or .gate == "fail"))) | length) > 0
       then "leve"
       else "ok"
       end;
@@ -4297,6 +4716,7 @@ kaizen_series() {
       | ($rows | group_by(mission_key + [(.phase // "")])
                | map({repo: .[0].repo, mission: .[0].mission, phase: .[0].phase, label: phase_label,
                       sessions: (map(select(.event == "session")) | length),
+                      outcomes: (map(select(.event == "session")) | outcome_tally),
                       cost_usd: (map(.cost_usd // 0) | add)})) as $detail
       | {kit_sha: $rows[0].kit_sha,
          missions: ($rows | map(mission_key) | unique | length),
@@ -4337,6 +4757,15 @@ kaizen_series() {
                                       (map(select(.event == "session")) | map(mission_key) | unique | length)})
                              | sort_by(-.missions, .repo)),
          sessions: ($sess | length),
+         # What the sessions DID, and how often the gate passed — the headline since
+         # 20260828-instrumento-honesto (the judge prompt cites these two before moved_rate).
+         # moved_rate stays: its name says what it measures, and it has a consumer. Same yardstick
+         # as the human window BY CONSTRUCTION: both programs splice ledger_outcome_defs, and
+         # check-autonomy.sh compares the two histograms over one file, so a program that grew a
+         # local copy of the definition is caught by the comparison and not by a sentence here.
+         outcomes: ($sess | outcome_tally),
+         advance_rate: (if ($sess | length) == 0 then null
+                        else (($sess | map(select(.gate == "pass")) | length) / ($sess | length) * 100 | round / 100) end),
          moved_rate: (if ($sess | length) == 0 then null
                       else (($sess | map(select(.moved == true)) | length) / ($sess | length) * 100 | round / 100) end),
          labels: ($detail | reduce .[] as $d ({ok: 0, leve: 0, refez: 0}; .[$d.label] += 1)),
@@ -4362,8 +4791,8 @@ kaizen_series() {
     | ($all | map(select(.phase == "KAIZEN"))) as $meta
     | ($all | map(select(.phase != "KAIZEN"))) as $rows
     | (($raw | length) - ($all | length)) as $unrec
-    | ($rows | map(select(on_axis | not))) as $noncomp
-    | ($rows | map(select(on_axis))) as $ok
+    | ($rows | map(select(comparable_row | not))) as $noncomp
+    | ($rows | map(select(comparable_row))) as $ok
     | ($ok | shas_in_file_order) as $shas
     | (if ($shas | length) >= 1 then ($ok | map(select(.kit_sha == $shas[-1])) | group_summary) else null end) as $latest
     | (if ($shas | length) >= 2 then ($ok | map(select(.kit_sha == $shas[-2])) | group_summary) else null end) as $previous
@@ -4811,10 +5240,12 @@ USAGE
   sdd run <mission>          run from the first unsatisfied phase through to the PR
   sdd retry <mission>        retry the current phase with a fresh session
   sdd close <mission>        post-merge: close the JIRA issue
-  sdd autonomy [--all-repos] waste per kit version, for this repo unless --all-repos, from the ledger
-             [--by-mission]  group by mission instead of by kit version: sessions, stalled,
-                             human interventions (the `- intervention:` notes of the checkpoint)
-                             and the mission cost. Same rows, same money, other unit.
+  sdd autonomy [--all-repos] what the sessions did per kit version — advanced · churned · idle, and
+                             waste = churned + idle — for this repo unless --all-repos, from the ledger
+             [--by-mission]  group by mission instead of by kit version: the same three outcomes,
+                             launch(es) (distinct run_id — the intervention count D12 reads),
+                             reopened phases, the `- intervention:` notes of the checkpoint when
+                             it is on disk, and the mission cost. Same rows, same money, other unit.
   sdd kaizen [--dry-run]     judge the previous kit change and give birth to the next kit
                              mission plan (kit repo only; exit 3 = the change made it worse)
   sdd kaizen --series        the deterministic series (JSON) the judge cites — EVERY repo in the

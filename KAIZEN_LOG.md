@@ -4,6 +4,62 @@ Registro de melhorias com **antes/depois medido**. Sem número, não entra.
 
 ---
 
+## 2026-08-28 — O ledger passa a dizer o que a sessão fez, não só se ela escreveu (missão `20260828-instrumento-honesto`)
+
+**Problema (Gemba):** a pergunta do dono do kit é *"está maduro para projeto real?"*, e o
+instrumento que deveria respondê-la respondia errado — **na direção que lisonjeia o kit**. `stalled`
+estava definido como `moved == false`: "a sessão não escreveu nada", que não é "a fase não avançou".
+Censo das 145 sessões do ledger real, antes de qualquer edição: 64 `pass/true`, **68 `fail/true`**
+(escreveu algo, o gate reprovou, o runner comprou outra sessão — **invisíveis**), 13 `fail/false`
+(`stalled`). Sobre `20260827-condicoes-pagamento-mesmo-cliente`, que o handoff descreve como
+*"~8 resgates humanos"*: `6 session(s) · 0 stalled · ? intervention(s)` — três `run_id` distintos
+na mesma missão, e `?` porque a contagem da D16 lia linhas `- intervention:` de um checkpoint que
+ninguém escreveu (0, 1 e 0 notas nas três missões do piloto). O juiz lia `ok` para o EXEC de
+`frete-cif-fob`: 7 sessões, 5 reprovações, cada uma commitando algo.
+
+**Contramedida:** uma definição de "o que a sessão fez" (`ledger_outcome_defs`, jq impresso),
+costurada nos dois leitores como `ledger_row_is_local` já era, com paridade provada por asserção
+diferencial; `launch(es)` (= `run_id` distintos) como o número da D12, sobre **todas** as sessões
+locais da missão; `reopened` pela definição "fase abaixo de outra cujo gate já passou"; a cláusula
+de churn na rubrica (`leve`). Nenhum campo novo na linha, `v` continua 1, zero migração — as 145
+linhas se releem com a régua nova. D16 emendada no `CONTEXT.md`; achado do `sdd close` no
+`TODO.md`. Spec em `docs/superpowers/specs/2026-08-28-instrumento-honesto-design.md`.
+
+| | Antes (régua `moved`) | Depois (régua `gate` + `moved`) |
+|---|---|---|
+| `condicoes-pagamento` (SQ-111), por missão | `6 session(s) · 0 stalled · ? intervention(s) · US$ 68.87` | `6 session(s) · 5 advanced · 1 churned · 0 idle · 3 launch(es) · 1 reopened · US$ 68.87` |
+| `frete-cif-fob` · EXEC, no juiz | `ok` | `leve` — aplicando a rubrica à mão às 7 sessões (5 `fail`, 0 escaladas, 0 `sdd retry`, 0 `auto_retry`, 0 `moved:false`, último gate `pass` → `ok` antes, `leve` depois), como o handoff §5 já diz; a série (`sdd kaizen --series`) só expõe as duas últimas versões do kit e essa fase fica fora da janela |
+| `25d4e1c` (latest), série | `moved_rate: 1, labels: {ok:5, leve:0, refez:1}` | `outcomes: {advanced:5, churned:1, idle:0}, advance_rate: 0.83`; `labels` **não** muda — o único grupo com reprovação nesta fatia já lia `refez` pela última sessão |
+| `lote-facil` | `9 session(s)` | `4 launch(es) · 2 reopened` — bate com a contagem à mão de `20260828-o-gate-sabe-que-o-app-caiu-handoff.md` §9 |
+| `?` na tabela por missão (`--all-repos`) | **5** missões (`grep -c '?' before-by-mission.txt`: `jornada-qa`, `placeholder`, `cif-forma-pagamento`, `frete-cif-fob`, `condicoes-pagamento`) | **0** |
+| `waste` da versão mais recente do kit (`25d4e1c`) | **0%** (`idle`/`stalled` sozinho — a régua antiga) | **16%** (`churned + idle` = 1 + 0 sobre 6 sessões — a régua mudou, não a sessão) |
+| asserções de `tests/run-all.sh` | **637** | **666** (663 ao fechar a execução; a revisão final acrescentou os dois fixtures de query e fragment sem path, e `efa10c9` já havia somado uma) |
+| `tests/check-autonomy.sh` / `check-kaizen.sh` | **202** / **137** | **223** / **143** |
+| catálogo de mutação | 166 de 166 | **179** de 179 (173 ao fechar a execução; a revisão final acrescentou um mutante por strip do parser de URL, o do braço IPv6, o do userinfo e o da guarda das notas) |
+| achados abertos no `TODO.md` | 77 | 78 (o `sdd close`) |
+| 145 sessões, todos os repos — tabela de versão do instrumento (`sdd autonomy --all-repos`, soma sobre as sessões **comparáveis**, 133 de 145) | `8 stalled` | `64 advanced · 61 churned · 8 idle` |
+
+⚠️ **A linha "145 sessões" mede duas populações, e nenhuma célula acima mistura as duas.** A
+tabela de versão do próprio instrumento só soma as sessões **comparáveis** — 133 das 145, excluindo
+kit sujo e `sha`/`moved` nulos — e é dela que saem os `8 stalled` / `64 advanced · 61 churned ·
+8 idle` acima. O censo do §2 da spec, sobre as **145** linhas do ledger real (comparáveis **e**
+não comparáveis), lê `13 fail/false · 68 fail/true · 64 pass/true` — a mesma leitura que abre esta
+entrada, em **Problema**. As duas contagens são medições corretas de populações diferentes; a
+tabela nunca soma 145 porque ela, por desenho, não é o censo.
+
+**Sete mutantes entram, cada um com o assassino nomeado:** `AUTONOMY_outcome_reads_moved_only` (o
+histograma exato de `check-autonomy.sh` — a paridade sozinha NÃO o pega, porque os dois leitores
+erram juntos), `KAIZEN_outcome_inlined_old` (a paridade — é o que prova que ela é medida e não
+afirmada), `KAIZEN_churn_reads_ok`, `AUTONOMY_waste_idle_only`, `AUTONOMY_launches_counts_rows`,
+`AUTONOMY_reopened_ignores_gate`, `AUTONOMY_reopened_comparable_only`.
+
+⚠️ **O que ISTO NÃO PROVA.** `launches` subconta por construção (piso, não teto). `pass/false` é
+classificado `advanced` sem fixture. A mudança da rubrica não é emenda da ADR 0001: é o caso que
+ela desenhou — régua mecânica é código, datada no histórico. E o `sdd close` continua fora do
+ledger — achado, não conserto.
+
+---
+
 ## 2026-08-26 — A ADR 0005 sai do papel, e o teto de fase passa a contar sessões (`60fe724`…`ee6404e`)
 
 **Problema (Gemba):** dois defeitos independentes, ambos medidos e nenhum deles visível de dentro.

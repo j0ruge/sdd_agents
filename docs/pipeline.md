@@ -573,7 +573,7 @@ present on both shapes.
 | `v` | integer | never | Schema version of the row, `1` today. Lets the reader tell "old shape" from "malformed" when a future field is added. |
 | `ts` | string | never | `date -Iseconds` timestamp of when the row was written. |
 | `event` | string enum: `session` \| `blocked` \| `degraded` | never | A spent session versus a no-session escalation. `blocked` means the line **stopped** (the runner returns 3 and a human has to act); `degraded` means the runner lowered its own bar and **carried on**. They are kept apart on purpose: reusing `blocked` for a degradation would have been cheaper — it inherits the `kit_sha` axis and the aggregation with no `jq` to touch — but it records "stopped" for a run that continued, and the ledger exists to record fact. |
-| `kind` | string enum: `increment-blocked` \| `handoff-blocked` \| `budget-exhausted` \| `no-progress` \| `review-to-draft` | on `event:"session"` rows | Which escalation path fired. `increment-blocked` and `handoff-blocked` are deliberate Jidoka (they can be a *good* sign); `budget-exhausted` and `no-progress` are pure friction. `handoff-blocked` arrived with `20260826-o-laco-da-qa`: the phase's own handoff declares `status: blocked`, which already meant "the line stopped and a human has to act", so the runner escalates on that declaration instead of charging the phase a second session to prove the same thing. It is written from both doors of `cmd_run`'s loop — the first pass and the inline retry — and names the phase whose handoff declared it. ⚠️ This column is a **documented enum with an open tail**: the runtime readers do not validate it (`is_escalation` is defined over `.event` alone and both aggregations `group_by(.kind)` dynamically), so a new kind is admitted, counted and printed rather than filed as `unrecognized` — which means a kind added to the code and not to this row goes unnoticed by every sensor. Adding one is a contract change: code and this table in the same commit. `review-to-draft` is the only `degraded` kind today: `PUBLISH_ON_REVIEW_BLOCKED=draft` and the review out of rounds, so the runner publishes a draft PR by itself instead of stopping. **At most one `review-to-draft` row per `run_id`**, and now at most one *jump*: the draft PR gets a single chance, and if its own gate fails the run ends on `blocked` / `budget-exhausted` in REVIEW rather than looping REVIEW→PR→REVIEW with the budget still blown. Before that, the branch was re-entered every lap and wrote a row every lap — both readers agreeing on a wrong number, which is worse than one of them being wrong. |
+| `kind` | string enum: `increment-blocked` \| `dirty-tree` \| `handoff-blocked` \| `app-down` \| `budget-exhausted` \| `no-progress` \| `review-to-draft` | on `event:"session"` rows | Which escalation path fired. `increment-blocked`, `dirty-tree` and `handoff-blocked` are deliberate Jidoka (they can be a *good* sign); `budget-exhausted` and `no-progress` are pure friction. `dirty-tree` is the oldest of the three and was **missing from this row** until `20260828-o-gate-sabe-que-o-app-caiu` went looking — the row that warns a kind can be added to the code and not to the table is the row that had one, which is exactly the open tail it describes. It fires from `cmd_run`'s EXEC pre-check and always names EXEC: a phase that died mid-way leaves the tree uncommitted, the suite then runs against changes nobody approved and comes back red, every increment still reads `done`, so EXEC is re-derived and another session opens against the same wall — about US$ 25 a lap, with no end condition, and no session may commit or discard on a human's behalf. `handoff-blocked` arrived with `20260826-o-laco-da-qa`: the phase's own handoff declares `status: blocked`, which already meant "the line stopped and a human has to act", so the runner escalates on that declaration instead of charging the phase a second session to prove the same thing. It is written from both doors of `cmd_run`'s loop — the first pass and the inline retry — and names the phase whose handoff declared it. `app-down` is its environment-facing sibling: the e2e came back red **and** a TCP connect to `APP_URL` was refused, so the line stops with the address named instead of charging QA a second opus session against a machine no session in this pipeline is allowed to start (bringing the environment up is the operator's job — see `config/schema.md`). Same two doors, same deliberate-Jidoka reading. What it never does is fire on doubt: an empty `APP_URL`, a URL the runner cannot parse, a bash built without `/dev/tcp`, an absent `timeout(1)` and an error string it does not recognise all read as *unknown*, and *unknown* escalates nothing — the probe may turn a red into a **named** red, never a green into a red. ⚠️ This column is a **documented enum with an open tail**: the runtime readers do not validate it (`is_escalation` is defined over `.event` alone and both aggregations `group_by(.kind)` dynamically), so a new kind is admitted, counted and printed rather than filed as `unrecognized` — which means a kind added to the code and not to this row goes unnoticed by every sensor. Adding one is a contract change: code and this table in the same commit. `review-to-draft` is the only `degraded` kind today: `PUBLISH_ON_REVIEW_BLOCKED=draft` and the review out of rounds, so the runner publishes a draft PR by itself instead of stopping. **At most one `review-to-draft` row per `run_id`**, and now at most one *jump*: the draft PR gets a single chance, and if its own gate fails the run ends on `blocked` / `budget-exhausted` in REVIEW rather than looping REVIEW→PR→REVIEW with the budget still blown. Before that, the branch was re-entered every lap and wrote a row every lap — both readers agreeing on a wrong number, which is worse than one of them being wrong. |
 | `run_id` | string (uuid) | never | One per `cmd_run`/`cmd_retry` invocation. Groups every row a single command call produced — "this mission needed N runs" is a `run_id` count. |
 | `invocation` | string enum: `run` \| `retry` | never | Which command opened the session: `sdd run` or `sdd retry`. Answers "who opened the session", not "was this an in-loop retry" — that is `auto_retry`. |
 | `kit_sha` | string \| `null` | never absent, but `null` | `null` when `$SDD_HOME` is not a git checkout. Short SHA of the kit's own HEAD when the row was written — the before/after axis the whole ledger exists for. |
@@ -591,7 +591,7 @@ present on both shapes.
 | `rc` | integer \| `null` | on escalation rows | The `claude` process's exit code. `null` when the session log carried none. |
 | `dur_s` | integer \| `null` | on escalation rows | Wall-clock seconds the session took. |
 | `cost_usd` | number \| `null` | on escalation rows | The session's cost in USD, `null` (never the string `"?"`) when the session's JSON log carried no cost field. |
-| `moved` | boolean | on escalation rows | ⚠️ The whole waste metric: `state_fingerprint` before ≠ after, and `state_fingerprint` is git HEAD + the mission directory listing + the checkpoint file's md5. `moved:false` is exactly what `sdd autonomy` counts as a stalled session. |
+| `moved` | boolean | on escalation rows | ⚠️ The whole waste metric: `state_fingerprint` before ≠ after, and `state_fingerprint` is git HEAD + the mission directory listing + the checkpoint file's md5. `moved` alone no longer names a bucket: since `20260828-instrumento-honesto` both readers classify a comparable session as `advanced` (the gate passed — the gate is the artifact), `churned` (`moved:true` and the gate failed: the session wrote and the runner bought another lap) or `idle` (`moved:false` and the gate failed — the old `stalled`, under the name that says what it is). ONE definition, `ledger_outcome_defs` in `bin/sdd`, spliced into `cmd_autonomy` and `kaizen_series`; `tests/check-autonomy.sh` compares the two histograms over one file. `waste = churned + idle`. |
 | `gate` | string enum: `pass` \| `fail` | on escalation rows | The gate's verdict, evaluated right after the session ended — the row is born after the gate, never before it. |
 | `gate_why` | string, truncated to 200 characters | never | The gate's stated reason (on an escalation row, the reason the phase was not satisfied when the runner gave up on it). |
 
@@ -621,15 +621,35 @@ which is what a pilot has to report and what the kit_sha axis cannot answer. Sam
 money: the two views sum to the same total, and a fixture in `tests/check-autonomy.sh` compares
 them to each other so neither can be changed alone.
 
-Its extra column is **human interventions**, and it is the half cost alone cannot show: a cheap
-mission and a mission that ran cheap because a human did half of it print the same number of
-dollars. Each one is a line in the execution notes of `checkpoint.md` opening with the marker
-`intervention:` — a `sdd retry`, a fix by hand, a `BLOCKED` taken over. The marker is **English and
-contract**, like `pending`/`done`/`blocked`; the text after the colon follows `OUTPUT_LANG` like the
-rest of the artifact, and the word in the middle of a sentence is prose and is not counted. A
-mission belonging to another repo (only reachable under `--all-repos`) answers `?` and never `0`:
-its checkpoint lives under a `HANDOFF_DIR` the reader never loaded, and a zero there would read as
-"nobody intervened" when the truth is "nobody looked".
+Its extra cells are **`launch(es)`** and **`reopened`**, and they are the half cost alone cannot
+show: a cheap mission and a mission that ran cheap because a human relaunched it three times print
+the same number of dollars. `launch(es)` is the count of distinct `run_id` in the mission — every
+`sdd run` or `sdd retry` a human typed. It is the number the D12 metric reads (D16, amended
+2026-08-28): the fact, never `launches − 1` — "interventions = launches − 1" is the reading, and a
+subtraction inside the instrument would print `0` on a mission abandoned after its first launch. It
+**undercounts** by design: bringing the app up by hand between two launches is one new `run_id`,
+not two. `reopened` counts sessions in a phase **below** one whose gate had already **passed**, in
+the canonical phase order — the pipeline going backwards after it had gone forward. Not "the phase
+index went down": that would count the designed loop (QA fails, opens a fix increment, EXEC runs
+it), which `20260825-frete-cif-fob` did three times with QA refused, all of it the pipeline working
+(reads 0); SQ-111 ran QA after PR had passed and reads 1. A phase outside the order (`KAIZEN`)
+counts on neither side.
+
+Both are drawn over **every** local session of the mission, comparable or not — a launch that
+landed on a dirty kit was a launch — while `session(s)`, the outcomes and `US$` stay on the
+comparable sessions, because that is the sum the sensor closes against the version table. When the
+two populations differ for a printed mission, the accounting paragraph says so once:
+*(launches and reopened are counted over every session of the mission, N of them non-comparable)*.
+A mission whose sessions are all non-comparable does not appear — as before.
+
+The `- intervention:` notes of `checkpoint.md` are **narrative**, not the count. They print as
+`N intervention note(s)` between `reopened` and `US$` when the mission belongs to this repo and its
+checkpoint is on disk, and not at all otherwise — no `?`, no zero: `?` existed so that no false
+zero reached the official number, and the official number no longer comes from the file. Measured
+before the change: the pilot missions carried 0, 1 and 0 notes; the one with three launches had
+none. The marker stays **English and contract**, like `pending`/`done`/`blocked`; the text after
+the colon follows `OUTPUT_LANG`, and the word in the middle of a sentence is prose and is not
+counted.
 
 **The accounting paragraph under the table is two paragraphs.** The first lists rows that were in
 the header total and then left a bucket — add them to the table and you get the header. The second
@@ -650,15 +670,22 @@ The judge is split in two (ADR 0001):
 the repo it runs in — the file is global, the reading is not, see above: `latest` and `previous`
 kit versions (by
 **file order** of first appearance, never by sort — and a reappearing old sha rejoins its old
-group; `sdd autonomy` orders its version table off the **same population**, every `on_axis` row
-and not just the sessions, because two readers disagreeing about which version is newest over one
-file is a defect and not a view), each with missions, `missions_with_session` (the subset that bought an observation — the
-guard below counts these, not the raw mission tally), sessions, `moved_rate`, cost, escalations
+group; `sdd autonomy` orders its version table off the **same population**, the rows both the
+table and the escalations block admit — comparable sessions and on-axis escalations — the
+population the series reads through `comparable_row`, because two readers disagreeing about which
+version is newest over one file is a defect and not a view), each with missions, `missions_with_session` (the subset that bought an observation — the
+guard below counts these, not the raw mission tally), sessions, `outcomes` (`{advanced, churned, idle}` — what the sessions did, the headline since
+2026-08-28; the same three buckets appear in every `detail[]` entry), `advance_rate` (the share
+whose gate passed), `moved_rate` (the share that wrote to the disk — kept, its name says what it
+measures), cost, escalations
 by kind, a per repo×mission×phase `detail` (each entry naming its `repo`), and a label per group:
 
 - `refez` — an escalation, a human `sdd retry`, or the phase's last session still failing its
   gate: the work was pushed again.
-- `leve` — an in-loop auto retry, or a session that did not move the disk: friction, absorbed.
+- `leve` — an in-loop auto retry, a session that did not move the disk, **or any session of the
+  phase that failed its gate** (churn: it wrote, the gate refused, the runner bought the next lap;
+  `frete-cif-fob` EXEC was seven sessions and five refusals and read `ok` until 2026-08-28):
+  friction, absorbed. Three labels, not four — the magnitude lives in `outcomes`.
 - `ok` — none of the above.
 
 Each of `latest` and `previous` also carries a **`composition`**

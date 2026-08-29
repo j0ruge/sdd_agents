@@ -732,6 +732,117 @@ assert_why_absent "the lexicographic pick is not the file the gate read" "QA" "2
 rm -f "$FIX/docs/qa/reports/2026-01-01-fixture-final.md"
 assert_phase "with the later report gone the gate advances again" "REVIEW"
 
+echo "== QA phase — the e2e is red, and WHOSE fault it is =="
+# A red e2e says nothing about whose fault it is: a dead app, a stopped database, a missing
+# browser binary and a genuine assertion failure all leave the same non-zero rc. Before this
+# block the runner read every one of them as "QA still has work to do" and bought another opus
+# session — measured at US$ 14.16 on the SQ-111 mission of 2026-08-27, plus US$ 7.61 for the
+# lap that reopened a mission whose PR was already open.
+#
+# FLOOR FIRST, and deliberately NOT written with the runner's own app_probe: a floor that reuses
+# the function under test measures the runner with the runner. This is a raw connect, and when it
+# cannot find a refused port it dies BY NAME rather than certifying a block that proved nothing.
+port_is_free() {  # rc 0 = nothing is listening on 127.0.0.1:$1
+  local rc=0
+  LC_ALL=C timeout 3 bash -c 'exec 3<>"/dev/tcp/127.0.0.1/$0"' "$1" 2>/dev/null || rc=$?
+  [ "$rc" -ne 0 ]
+}
+# BELOW the ephemeral range, and that is what makes the floor hold for the whole block. The floor
+# proves the port refuses ONCE; the assertions under it then run several `sdd` invocations over
+# minutes against that one measurement. Drawn from 49152-59171 the port sat INSIDE the kernel's
+# `ip_local_port_range` (32768-60999 by default), so it could be handed out mid-block and the
+# assertions would flip for a reason that has nothing to do with the runner. 20000-29999 is under
+# that floor. DECLARED LIMIT: a machine that lowered `ip_local_port_range` past 20000, or that
+# starts a real listener there mid-block, is back in the old window — the search loop below only
+# re-measures at the start, and re-measuring per assertion would buy a smaller window at the price
+# of a floor nobody can read.
+dead_port=$(( 20000 + $$ % 10000 ))
+floor_ok=1
+if ! command -v timeout >/dev/null 2>&1; then
+  fail "dead-app floor" "timeout(1) on PATH" "timeout is missing — the app-down block was NOT measured"
+  floor_ok=0
+else
+  tries=0
+  while ! port_is_free "$dead_port"; do
+    dead_port=$(( dead_port + 1 )); tries=$(( tries + 1 ))
+    if [ "$tries" -ge 20 ]; then
+      fail "dead-app floor" "a refused port on 127.0.0.1" \
+           "20 consecutive ports were all listening — the block would certify nothing"
+      floor_ok=0; break
+    fi
+  done
+fi
+
+if [ "$floor_ok" = "1" ]; then
+  pass "dead-app floor: 127.0.0.1:$dead_port refuses connections"
+
+  # ⭐ THE DIFFERENTIAL PAIR. Same closed APP_URL on both sides; only E2E_CMD moves. The red half
+  # alone would pass under a runner that probes unconditionally; the green half alone would pass
+  # under a runner that never probes. Neither half is the assertion — the pair is.
+  sed -i "s|^APP_URL=.*|APP_URL=\"http://127.0.0.1:$dead_port/\"|" .sdd/config.sh
+  sed -i 's|^E2E_CMD=.*|E2E_CMD="false"|' .sdd/config.sh
+  assert_phase "e2e red over a dead app does not advance" "QA"
+  assert_why   "the reason names the address nothing is listening on" "QA" \
+               "nothing is listening at 127\.0\.0\.1:$dead_port"
+  assert_why_absent "an app that WAS probed is not reported as unprobed" "QA" "not probed"
+
+  # The green half, and it is what protects the `example.invalid` fixture above — that one sits
+  # beside a GREEN E2E_CMD, and a runner that probed before the gate would block it for a machine
+  # state that never mattered. A false BLOCKED costs a person; the loop only costs money.
+  sed -i 's|^E2E_CMD=.*|E2E_CMD="true"|' .sdd/config.sh
+  assert_phase "a dead app does NOT block a green e2e" "REVIEW"
+
+  # Parser regimes, each read through `sdd why` so the assertion exercises the PATH and not just
+  # the function — the lesson check-todo.sh's --check mode paid for.
+  sed -i 's|^E2E_CMD=.*|E2E_CMD="false"|' .sdd/config.sh
+  sed -i "s|^APP_URL=.*|APP_URL=\"http://127.0.0.1:$dead_port/path?q=1#frag\"|" .sdd/config.sh
+  assert_why "path, query and fragment are stripped" "QA" "at 127\.0\.0\.1:$dead_port"
+  # A placeholder pair on loopback — nothing listens there and nothing is a credential — with an
+  # `@` INSIDE the password, because the LAST `@` is the separator: a fixture without one would
+  # pass a parser that cut at the first.
+  sed -i "s|^APP_URL=.*|APP_URL=\"http://user:CHANGE@ME@127.0.0.1:$dead_port/\"|" .sdd/config.sh
+  assert_why "userinfo is stripped, and the last @ is the separator" "QA" "at 127\.0\.0\.1:$dead_port"
+  sed -i "s|^APP_URL=.*|APP_URL=\"http://[::1]:$dead_port/\"|" .sdd/config.sh
+  assert_why "an IPv6 literal reads as an address" "QA" "at \[::1\]:$dead_port"
+  # Query and fragment WITHOUT a path, one fixture each: with a path in front of them the `/` strip
+  # swallows both before their own strips ever run, so `/path?q=1#frag` above measures the path
+  # alone — neutralising either of the other two strips survived it. Measured in the review round
+  # of 20260828-o-gate-sabe-que-o-app-caiu, and each of the three now has its own mutant.
+  sed -i "s|^APP_URL=.*|APP_URL=\"http://127.0.0.1:$dead_port?q=1\"|" .sdd/config.sh
+  assert_why "a query with no path is stripped" "QA" "at 127\.0\.0\.1:$dead_port"
+  sed -i "s|^APP_URL=.*|APP_URL=\"http://127.0.0.1:$dead_port#frag\"|" .sdd/config.sh
+  assert_why "a fragment with no path is stripped" "QA" "at 127\.0\.0\.1:$dead_port"
+  # Address only, NOT the verdict: port 80 may well be open on the machine running this, and both
+  # the up and the down sentence carry the label. Machine-independent by construction.
+  sed -i 's|^APP_URL=.*|APP_URL="http://127.0.0.1/"|' .sdd/config.sh
+  assert_why "http with no port defaults to 80" "QA" "127\.0\.0\.1:80"
+
+  # ⭐ THE CASE PAIR, and it is two assertions because the fix is two decisions. The scheme is
+  # case-insensitive (RFC 3986 §3.1), so `HTTP://` has to reach an address — a parser that reads
+  # it literally sends the majority-adjacent spelling to `unknown`, where NOTHING fails and
+  # nothing warns and the escalation simply stops existing. That is the first half.
+  sed -i "s|^APP_URL=.*|APP_URL=\"HTTP://127.0.0.1:$dead_port/\"|" .sdd/config.sh
+  assert_why "an uppercase scheme reads as an address" "QA" "at 127\.0\.0\.1:$dead_port"
+  # The second half, and it is what stops the cheap fix: folding the whole URL to lower case would
+  # also pass the line above, and would then fold the HOST — which rides into the sentence the
+  # operator reads and goes looking for. Asserted on a name that cannot resolve, so this measures
+  # the LABEL and never the verdict: all three arms carry it, exactly like the port-80 case above.
+  sed -i "s|^APP_URL=.*|APP_URL=\"HTTPS://EXAMPLE.INVALID:$dead_port/\"|" .sdd/config.sh
+  assert_why "and the host keeps the case the operator wrote" "QA" "EXAMPLE\.INVALID:$dead_port"
+
+  # The one-sided contract: what the probe cannot decide, it never escalates.
+  sed -i 's|^APP_URL=.*|APP_URL=""|' .sdd/config.sh
+  assert_why        "an empty APP_URL is not probed" "QA" "not probed"
+  assert_why_absent "an empty APP_URL never claims a dead app" "QA" "nothing is listening"
+  sed -i 's|^APP_URL=.*|APP_URL="not a url"|' .sdd/config.sh
+  assert_why        "an unparseable APP_URL is not probed" "QA" "not probed"
+  assert_why_absent "an unparseable APP_URL never claims a dead app" "QA" "nothing is listening"
+fi
+
+# Restore what the next block's sed expects to find.
+sed -i 's|^E2E_CMD=.*|E2E_CMD="true"|; s|^APP_URL=.*|APP_URL="http://example.invalid"|' .sdd/config.sh
+assert_phase "the fixture is back where the next block starts" "REVIEW"
+
 echo "== QA phase — project WITHOUT an interface =="
 # With no E2E_CMD and no APP_URL the docs/qa/ tree is never created by anyone. Here the gate
 # measures the handoff: `status: done` only passes together with the evidence of the journey.
