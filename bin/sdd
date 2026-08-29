@@ -4198,10 +4198,14 @@ cmd_autonomy() {
   [ "$LEDGER_ALL_REPOS" = "1" ] && scope="all repos (--all-repos)"
   step "sdd autonomy — $file · $total row(s) · $scope"
 
-  # The human interventions D12 prescribes: one `- intervention:` line in the execution notes of the
-  # mission checkpoint, per time a human had to step in (a retry, a fix by hand, a BLOCKED taken
-  # over). Cost alone cannot tell "ran cheap" from "ran cheap because a human did half of it", and
-  # only the two halves together are the evidence I13.4 will ask for.
+  # The `- intervention:` notes of the mission checkpoint — what the human DID, in prose. Until
+  # 2026-08-28 this was the intervention COUNT the D12 metric read (D16), and it was measured to
+  # be a label the executor had to remember to write: the pilot missions carried 0, 1 and 0 notes,
+  # and the one with three launches had none. The count is `launch(es)` now, distinct run_id per
+  # mission, on every line of every repo; the notes are printed beside it as `intervention
+  # note(s)`, and ONLY when there is a checkpoint on disk to read them from. No `?`: it stood in
+  # for "nobody looked" so that no false zero reached the official number, and the official number
+  # no longer comes from this file. A mission with no checkpoint simply has no notes to show.
   #
   # The TOKEN is English and the prose after it is not, exactly like the status words the boot
   # prompt already tells every session to leave alone: pending, done, blocked, auto, skipped. D12
@@ -4210,10 +4214,10 @@ cmd_autonomy() {
   # `titulo`, and that tests/check-lang.sh refuses. The checkpoint is an OUTPUT_LANG artifact, so
   # what follows the colon is written in whatever language the repo declared.
   #
-  # Only for missions of THIS repo: the count comes from a file under `$repo/$HANDOFF_DIR/`, and
-  # HANDOFF_DIR is a key of the config of the repo the reader is standing in. Under --all-repos the
-  # rows of other projects are read from a config this process never loaded, so those missions
-  # answer `?` rather than a zero that would read as "nobody intervened".
+  # Only for missions of THIS repo: the file lives under `$repo/$HANDOFF_DIR/`, and HANDOFF_DIR is a
+  # key of the config of the repo the reader is standing in. Under --all-repos the missions of
+  # other projects print no cell — and the jq below also refuses to lend this repo notes to a
+  # foreign mission that merely shares the slug.
   local interventions="{}"
   if [ "$by_mission" = "1" ] && [ -n "$repo" ]; then
     local mlist m ck n hdir
@@ -4234,10 +4238,11 @@ cmd_autonomy() {
     while IFS= read -r m; do
       [ -n "$m" ] || continue
       ck="$repo/$hdir/$m/checkpoint.md"
-      n=0
-      # `|| true` on BOTH: grep exits 1 when it counts zero, and `set -e` would take the whole
-      # command down on the first mission that had no interventions — the common case.
-      [ -f "$ck" ] && n="$(grep -cE '^[[:space:]]*-[[:space:]]*intervention:' "$ck" || true)"
+      # A checkpoint that is not on disk contributes NO entry, so the cell does not print: absent
+      # is not zero. `|| true`: grep exits 1 when it counts zero, and `set -e` would take the whole
+      # command down on the first mission whose checkpoint has no note — the common case.
+      [ -f "$ck" ] || continue
+      n="$(grep -cE '^[[:space:]]*-[[:space:]]*intervention:' "$ck" || true)"
       interventions="$(jq -c --arg m "$m" --argjson n "${n:-0}" '. + {($m): $n}' <<< "$interventions")"
     done <<< "$mlist"
   fi
@@ -4412,12 +4417,12 @@ cmd_autonomy() {
               | (.[0] | mission_key | history_of) as $every
               | ($every | launches) as $launches
               | ($every | reopened) as $reopened
-              # `?` and not 0 for a mission of another repo: its checkpoint lives under a
-              # HANDOFF_DIR this process never loaded, and a zero there would read as
-              # "nobody intervened" when the truth is "nobody looked".
-              | (if ($interventions | has($m)) then "\($interventions[$m]) intervention(s)"
-                 else "? intervention(s)" end) as $iv
-              | "  \($label)  \($n) session(s) · \($t.advanced) advanced · \($t.churned) churned · \($t.idle) idle · \($launches) launch(es) · \($reopened) reopened · \($iv) · US$ \($cost | usd)"
+              # The narrative, under the name that says what it is, and only when the checkpoint
+              # was readable: a mission of THIS repo with the file on disk. `$r == $repo` keeps a
+              # foreign mission that shares the slug (--all-repos) from borrowing this repo notes —
+              # the map is keyed by slug alone. Absent, the cell does not print: no `?`, no zero.
+              | (if $r == $repo and ($interventions | has($m)) then " · \($interventions[$m]) intervention note(s)" else "" end) as $iv
+              | "  \($label)  \($n) session(s) · \($t.advanced) advanced · \($t.churned) churned · \($t.idle) idle · \($launches) launch(es) · \($reopened) reopened\($iv) · US$ \($cost | usd)"
             ) | join("\n"))
         end)
       elif ($groups | length) == 0 then
@@ -5213,10 +5218,12 @@ USAGE
   sdd run <mission>          run from the first unsatisfied phase through to the PR
   sdd retry <mission>        retry the current phase with a fresh session
   sdd close <mission>        post-merge: close the JIRA issue
-  sdd autonomy [--all-repos] waste per kit version, for this repo unless --all-repos, from the ledger
-             [--by-mission]  group by mission instead of by kit version: sessions, stalled,
-                             human interventions (the `- intervention:` notes of the checkpoint)
-                             and the mission cost. Same rows, same money, other unit.
+  sdd autonomy [--all-repos] what the sessions did per kit version — advanced · churned · idle, and
+                             waste = churned + idle — for this repo unless --all-repos, from the ledger
+             [--by-mission]  group by mission instead of by kit version: the same three outcomes,
+                             launch(es) (distinct run_id — the intervention count D12 reads),
+                             reopened phases, the `- intervention:` notes of the checkpoint when
+                             it is on disk, and the mission cost. Same rows, same money, other unit.
   sdd kaizen [--dry-run]     judge the previous kit change and give birth to the next kit
                              mission plan (kit repo only; exit 3 = the change made it worse)
   sdd kaizen --series        the deterministic series (JSON) the judge cites — EVERY repo in the

@@ -1784,7 +1784,7 @@ usd_cents() {
 # artifact (2 for h1, 0 for h2), and nothing from the other repo's three missions.
 assert_eq "--by-mission prints one line per mission of this repo, with the interventions the checkpoint records" \
   "2 h1:2 h2:0" \
-  "$(grep -cE '^  h[12]  ' <<< "$out_bm") h1:$(mission_line h1 "$out_bm" | grep -oE '[0-9]+ intervention' | grep -oE '^[0-9]+') h2:$(mission_line h2 "$out_bm" | grep -oE '[0-9]+ intervention' | grep -oE '^[0-9]+')"
+  "$(grep -cE '^  h[12]  ' <<< "$out_bm") h1:$(mission_line h1 "$out_bm" | grep -oE '[0-9]+ intervention note' | grep -oE '^[0-9]+') h2:$(mission_line h2 "$out_bm" | grep -oE '[0-9]+ intervention note' | grep -oE '^[0-9]+')"
 
 # The Check of the increment: two groupings of ONE population have to agree about the money. A
 # view that summed a different set of rows would be a second instrument disagreeing with the first
@@ -1815,7 +1815,7 @@ out_bm3="$( SDD_STATE_DIR="$OUTSIDE/bymission3" "$SDD" autonomy --by-mission 2>&
 # from the report would be one of the worlds this assertion calls green.
 assert_eq "a checkpoint born verbatim from the template owes no intervention" \
   "1 h3:0" \
-  "$(grep -cE '^  h3  ' <<< "$out_bm3") h3:$(mission_line h3 "$out_bm3" | grep -oE '[0-9]+ intervention' | grep -oE '^[0-9]+')"
+  "$(grep -cE '^  h3  ' <<< "$out_bm3") h3:$(mission_line h3 "$out_bm3" | grep -oE '[0-9]+ intervention note' | grep -oE '^[0-9]+')"
 
 rm -rf "$FIX/docs/handoffs/h1" "$FIX/docs/handoffs/h2" "$FIX/docs/handoffs/h3"
 
@@ -1893,6 +1893,38 @@ assert_eq "and the accounting paragraph names the population difference, once" "
 assert_eq "without the dirty row: one launch, and the sentence is gone" "1 0" \
   "$(cell_of m1 "$out_popc" 'launch') $(grep -c 'counted over every session' <<< "$out_popc")"
 assert_bucket_sum "the four buckets still sum to the header total (--by-mission, a dirty launch)" "$out_pop"
+
+# --- the narrative cell, and the `?` that is gone --------------------------------------------------
+# The official count is `launch(es)`, on every line. The `- intervention:` notes stay as what the
+# human DID, printed as `intervention note(s)` when the checkpoint is on disk and not printed at all
+# when it is not: `?` existed so that no false zero reached the official number, and the official
+# number no longer comes from the file. Measured on the real ledger: the three missions of the
+# pilot carried 0, 1 and 0 notes — the mission with three launches had none.
+echo "== reader: --by-mission prints the notes as narrative, and never a ? =="
+out_all_bm="$( SDD_STATE_DIR="$OUTSIDE/tworepos" "$SDD" autonomy --all-repos --by-mission 2>&1 )"
+assert_eq "no mission line carries a ? any more, this repo or another" "0 0" \
+  "$(grep -c '? intervention' <<< "$out_bm") $(grep -c '? intervention' <<< "$out_all_bm")"
+assert_eq "the notes print under the name that says what they are" "1" \
+  "$(mission_line h1 "$out_bm" | grep -c '2 intervention note(s)')"
+# The `launches` fixture has no docs/handoffs/m1 in $FIX at all: the cell is absent and the line
+# still exists — absent is not zero, and the line has to be there for absent to mean anything.
+assert_eq "with no checkpoint on disk the cell does not exist, and the line still does" "1 0" \
+  "$(grep -cE '^  m1  ' <<< "$out_l") $(mission_line m1 "$out_l" | grep -c 'intervention')"
+# The whole line once, in its final shape, every cell in order — so no reordering passes.
+assert_eq "the mission line, cell by cell" "1" \
+  "$(grep -cE '^  m1  3 session\(s\) · 1 advanced · 2 churned · 0 idle · 1 launch\(es\) · 0 reopened · US\$ 3\.00$' <<< "$out_l")"
+# A foreign mission that shares a SLUG with a mission of this repo must not borrow its notes: the
+# map of counts is keyed by slug alone (it is built from this repo rows), so the guard on the cell
+# is the row repo. Two missions named h1 — ours, with a checkpoint on disk, and theirs — read
+# together under --all-repos: both lines print (2), ours carries the cell (1), theirs does not (0).
+# Without the guard the third number is 1: the same slug, our notes, their line.
+mkdir -p "$OUTSIDE/noteclash" "$FIX/docs/handoffs/h1"
+printf -- '- intervention: ours\n' > "$FIX/docs/handoffs/h1/checkpoint.md"
+{ ledger_row "$FIXROOT" h1; ledger_row "$OTHER" h1; } > "$OUTSIDE/noteclash/autonomy-log.jsonl"
+out_clash="$( SDD_STATE_DIR="$OUTSIDE/noteclash" "$SDD" autonomy --all-repos --by-mission 2>&1 )"
+assert_eq "a mission of another repo never borrows the notes of a same-slug mission of this one" "2 1 0" \
+  "$(grep -cE '^  [^ ]+/h1  ' <<< "$out_clash") $(grep -E '^  [^ ]+/h1  ' <<< "$out_clash" | grep -vE '^  otherrepo/' | grep -c 'intervention note') $(grep -E '^  otherrepo/h1  ' <<< "$out_clash" | grep -c 'intervention note')"
+rm -rf "$FIX/docs/handoffs/h1"
 
 # The header has to name the SCOPE it actually read. Under the flag the rows below come from every
 # project on the machine, and a header still ending in one repo path reads as a claim ABOUT that
