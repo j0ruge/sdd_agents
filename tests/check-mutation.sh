@@ -2124,16 +2124,23 @@ mut_AUTONOMY_outcome_reads_moved_only() {
   sed -i 's@def outcome: if .gate == "pass" then "advanced" elif (.pending_before != null and .pending_after != null and .pending_after < .pending_before) then "advanced" elif .moved == true then "churned" else "idle" end;@def outcome: if .moved == true then "advanced" else "idle" end;@' "$1"
 }
 
-# The series stops splicing the shared definition and grows a LOCAL copy on the old yardstick —
-# the "same spelling in both programs" that CLAUDE.md measures as not-parity. Each reader is then
-# internally consistent and only the comparison between the two goes red (5.7), plus the exact
-# histogram of the series fixture (5.9). The copy carries outcome_tally too, because the splice it
-# replaces carried it: a mutant that dropped the tally would kill the suite with a jq compile error
-# instead of with the divergence it exists to reproduce. Held in a variable so the single quotes
-# it needs can sit inside a double-quoted sed script; the result is `"$(ledger_row_is_local)"'def
-# outcome: …;''` followed by the program — two adjacent single-quoted strings, one argument.
+# The series grows a LOCAL copy of the yardstick on the OLD rule — the "same spelling in both
+# programs" that CLAUDE.md measures as not-parity. Each reader is then internally consistent and
+# only the comparison between the two goes red (5.7), plus the exact histogram of the series
+# fixture (5.9).
+#
+# It SHADOWS rather than replaces: the splice stays and the local copy is appended after it, so a
+# later `def outcome:` wins for every use below (jq keeps the last definition). The first spelling
+# deleted the splice outright and carried its own copy of everything it had to keep alive —
+# outcome_tally then, historic_progress from 2026-08-29 — and that is a mutant that re-arms itself
+# as a compile-error mutant every time ledger_outcome_defs grows a def. Measured: with
+# historic_progress added and the copy left alone, `kaizen --series` stopped compiling and this
+# mutant killed ten assertions across two files by CRASHING, not by the divergence it exists to
+# reproduce — the exact accident the outcome_tally sentence had already warned about once. Shadowing
+# reproduces the same divergence and cannot go stale. Held in a variable so the single quotes it
+# needs can sit inside a double-quoted sed script.
 mut_KAIZEN_outcome_inlined_old() {
-  local copy="'def outcome: if .moved == true then \"advanced\" else \"idle\" end; def outcome_tally: map(outcome) | reduce .[] as \$o ({advanced: 0, churned: 0, idle: 0}; .[\$o] += 1);'"
+  local copy="\"\$(ledger_outcome_defs)\"'def outcome: if .moved == true then \"advanced\" else \"idle\" end; def outcome_tally: map(outcome) | reduce .[] as \$o ({advanced: 0, churned: 0, idle: 0}; .[\$o] += 1);'"
   sed -i "/^kaizen_series() {/,/^}/ { s@\"\\\$(ledger_outcome_defs)\"@${copy}@ }" "$1"
 }
 
@@ -2241,6 +2248,46 @@ mut_AUTONOMY_progress_ignored() {
 # reads `1 1` (the 4·1·1 histogram and 33% waste) against the `0 0` it demands.
 mut_AUTONOMY_progress_null_blind() {
   sed -i 's@(.pending_before != null and .pending_after != null and .pending_after < .pending_before)@(.pending_after < .pending_before)@' "$1"
+}
+
+# The dated recovery of the pre-2026-08-29 rows becomes the identity: both readers stop looking at
+# `gate_why` and 49 of the 72 real EXEC rows fall back to the `moved` arm, which is the state that
+# had the human window reading `churned` over the whole history it exists to explain. Spliced from
+# ONE definition, so both readers lose it together and the parity assertion stays green — only the
+# differential between the two spellings of one history moves. Caught by `the historical path and
+# the fields agree on one history` in check-autonomy.sh, which reads `1 advanced · 4 churned · 1
+# idle · 83% waste` against the `3 · 2 · 1 · 50%` the same history prints through the fields.
+mut_AUTONOMY_historic_progress_dropped() {
+  sed -i 's@def historic_progress: reduce .*| .out;@def historic_progress: .;@' "$1"
+}
+
+# The recovery stops noticing that the DENOMINATOR moved. QA writes fix increments after a phase
+# passed, the checkpoint grows from 4 to 6, and the next old row says `2 of 6` — measured against a
+# memory that still says 2, the fix increment that ran reads churn. Caught by `a growing total is a
+# fix increment, not churn` in check-autonomy.sh (mission m4: `1 advanced · 3 churned` against the
+# `4 advanced · 0 churned` it demands).
+mut_AUTONOMY_historic_total_change_blind() {
+  sed -i 's@(if (.seen\[$k\] != null and .seen\[$k\].m == $p.m) then@(if (.seen[$k] != null) then@' "$1"
+}
+
+# A PASSING gate stops clearing the memory, so a session that reopened an increment is measured
+# against the count from before the phase closed instead of against the total. `3 of 4` after a
+# `4 increment(s) done` then reads 3 → 3 and the session that did the work reads churn. The M rule
+# cannot cover this one — M did not change — which is why the two rules have two fixtures. Caught
+# by `a passing gate clears the count the next session is measured against` (mission m5).
+mut_AUTONOMY_historic_pass_keeps_memory() {
+  sed -i 's@elif $r.gate == "pass" then .seen\[$k\] = null elif@elif false then .seen[$k] = null elif@' "$1"
+}
+
+# The guard that keeps the dated path off rows that carry the fields goes, and the path re-derives
+# `pending_before` from prose for rows that were MEASURED. No number a human reads moves on today's
+# ledger — the prose and the fields say the same thing — but the disclosure sentence does, and that
+# sentence is the deletion signal: it is what says when this compatibility path has no rows left to
+# serve. A path that keeps claiming rows it never needed never comes out. Caught by `the historical
+# path never touches a row that carries the fields` (4 instead of 2) and by `a ledger written
+# entirely in the new schema prints no historical sentence` (1 instead of 0).
+mut_AUTONOMY_historic_annotates_new_rows() {
+  sed -i 's@$k != null and $r.pending_before == null and@$k != null and@' "$1"
 }
 
 CATALOG=(
@@ -2428,6 +2475,10 @@ CATALOG=(
   LEDGER_progress_leaks_across_phases
   AUTONOMY_progress_ignored
   AUTONOMY_progress_null_blind
+  AUTONOMY_historic_progress_dropped
+  AUTONOMY_historic_total_change_blind
+  AUTONOMY_historic_pass_keeps_memory
+  AUTONOMY_historic_annotates_new_rows
 )
 
 # Mutations that are NOT caught today, each with the increment that closes it. Ratchet in both

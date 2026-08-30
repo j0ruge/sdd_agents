@@ -1665,6 +1665,122 @@ assert_eq "the human window and the judge agree on the increment that advanced" 
 assert_eq "that parity is not vacuous — the table printed the three counts" "3 2 1" "$table_prog"
 assert_bucket_sum "the four buckets sum to the header total (increment counts)" "$out_prog"
 
+# --- the historical path: a row older than the fields recovers its count from gate_why -----------
+# 49 of the 72 EXEC rows in the real ledger were written before the three pending fields existed,
+# and they carry the SAME fact in prose: gate_EXEC has always written `N of M increment(s) still to
+# execute` into gate_why. Migrating them is not an option (the ledger is append-only by contract),
+# and leaving them on the `moved` arm would have the human window reading `churned` over the whole
+# history it exists to explain — for ever, since nothing will ever rewrite those lines.
+#
+# So the readers recover it, and the assertions below are about the recovery being a reading of ONE
+# history rather than a second opinion about it. The fixture is the SAME six-session history the
+# block above just measured through the fields, respelled the way the runner wrote it in July:
+# no pending_* keys, the count in the prose, and the real gate_EXEC sentences — including the
+# passing one, `4 increment(s) done, suite green, handoff written`, which opens with a number and
+# must NOT be mistaken for a count (it has no `of`).
+echo "== reader: the historical path reads the count from gate_why =="
+mkdir -p "$OUTSIDE/historic"
+localize > "$OUTSIDE/historic/autonomy-log.jsonl" <<'EOF'
+{"v":1,"ts":"2026-08-29T10:00:00-03:00","event":"session","run_id":"r1","invocation":"run","kit_sha":"eeeeeee","kit_dirty":false,"project":"p1","repo":"/p1","mission":"m3","phase":"EXEC","step":"EXEC","agent":"sdd-executor","model":"opus","attempt":1,"auto_retry":false,"session":"s1","rc":0,"dur_s":10,"cost_usd":1.0,"moved":true,"gate":"fail","gate_why":"3 of 4 increment(s) still to execute"}
+{"v":1,"ts":"2026-08-29T10:01:00-03:00","event":"session","run_id":"r1","invocation":"run","kit_sha":"eeeeeee","kit_dirty":false,"project":"p1","repo":"/p1","mission":"m3","phase":"EXEC","step":"EXEC","agent":"sdd-executor","model":"opus","attempt":2,"auto_retry":false,"session":"s2","rc":0,"dur_s":10,"cost_usd":1.0,"moved":true,"gate":"fail","gate_why":"3 of 4 increment(s) still to execute"}
+{"v":1,"ts":"2026-08-29T10:02:00-03:00","event":"session","run_id":"r2","invocation":"run","kit_sha":"eeeeeee","kit_dirty":false,"project":"p1","repo":"/p1","mission":"m3","phase":"EXEC","step":"EXEC","agent":"sdd-executor","model":"opus","attempt":1,"auto_retry":false,"session":"s3","rc":0,"dur_s":10,"cost_usd":1.0,"moved":false,"gate":"fail","gate_why":"3 of 4 increment(s) still to execute"}
+{"v":1,"ts":"2026-08-29T10:03:00-03:00","event":"session","run_id":"r2","invocation":"run","kit_sha":"eeeeeee","kit_dirty":false,"project":"p1","repo":"/p1","mission":"m3","phase":"EXEC","step":"EXEC","agent":"sdd-executor","model":"opus","attempt":2,"auto_retry":false,"session":"s4","rc":0,"dur_s":10,"cost_usd":1.0,"moved":true,"gate":"fail","gate_why":"2 of 4 increment(s) still to execute"}
+{"v":1,"ts":"2026-08-29T10:04:00-03:00","event":"session","run_id":"r3","invocation":"run","kit_sha":"eeeeeee","kit_dirty":false,"project":"p1","repo":"/p1","mission":"m3","phase":"EXEC","step":"EXEC","agent":"sdd-executor","model":"opus","attempt":1,"auto_retry":false,"session":"s5","rc":0,"dur_s":10,"cost_usd":1.0,"moved":true,"gate":"fail","gate_why":"increment I3 is done with no commit"}
+{"v":1,"ts":"2026-08-29T10:05:00-03:00","event":"session","run_id":"r3","invocation":"run","kit_sha":"eeeeeee","kit_dirty":false,"project":"p1","repo":"/p1","mission":"m3","phase":"EXEC","step":"EXEC","agent":"sdd-executor","model":"opus","attempt":2,"auto_retry":false,"session":"s6","rc":0,"dur_s":10,"cost_usd":1.0,"moved":true,"gate":"pass","gate_why":"4 increment(s) done, suite green, handoff written"}
+EOF
+out_hist="$( SDD_STATE_DIR="$OUTSIDE/historic" "$SDD" autonomy 2>&1 )"; rc=$?
+assert_eq "a ledger written before the pending fields is data (rc 0)" "0" "$rc"
+
+# THE differential, and it is the whole increment: two ledgers, one history, two spellings of it.
+# The full version line is compared — sessions, the three outcomes, waste, missions and money — so
+# a recovery that agreed on the histogram by landing on some other regime still fails. Asserted
+# against the line the block above printed from the FIELDS, never against a literal: a literal
+# would let both sides drift together, which is the failure this comparison exists to catch.
+line_fields="$(grep -E '^  eeeeeee  ' <<< "$out_prog")"
+line_prose="$(grep -E '^  eeeeeee  ' <<< "$out_hist")"
+assert_eq "the historical path and the fields agree on one history" "$line_fields" "$line_prose"
+# Not vacuous: two empty strings are equal. The line has to be the one this fixture is about.
+assert_eq "that agreement is not vacuous — both lines carry the three counts" "1 1" \
+  "$(grep -c ' 3 advanced · 2 churned · 1 idle · 50% waste ' <<< "$line_fields") $(grep -c ' 3 advanced · 2 churned · 1 idle · 50% waste ' <<< "$line_prose")"
+
+# The path SAYS it ran, and how far it reached. A reader that silently reinterprets half its input
+# is the silent instrument this whole command was rewritten to stop being — and the sentence is
+# also the deletion signal: the day `sdd autonomy --all-repos` stops printing it, the code below
+# it in bin/sdd has no rows left to serve and comes out.
+assert_eq "the historical path says how many rows it read from prose" "1" \
+  "$(grep -c '(4 EXEC row(s) older than the pending fields read their progress from gate_why)' <<< "$out_hist")"
+
+# Parity again, over the ledger where the count is RECOVERED rather than read: the judge splices
+# the same printed defs, so a series that skipped the recovery shows up only here.
+series_hist="$( SDD_STATE_DIR="$OUTSIDE/historic" "$SDD" kaizen --series 2>/dev/null )"
+table_hist="$(sed -nE 's/^  eeeeeee  [0-9]+ session\(s\) · ([0-9]+) advanced · ([0-9]+) churned · ([0-9]+) idle · .*/\1 \2 \3/p' <<< "$out_hist")"
+assert_eq "the human window and the judge agree on the recovered history" \
+  "$(jq -r '.latest.outcomes | "\(.advanced) \(.churned) \(.idle)"' <<< "$series_hist")" "$table_hist"
+assert_eq "that parity is not vacuous — the recovered table printed the three counts" "3 2 1" "$table_hist"
+assert_bucket_sum "the four buckets sum to the header total (historical path)" "$out_hist"
+
+# --- the two memory rules of the historical path -------------------------------------------------
+# `pending_before` of an old row is the `pending_after` of the PREVIOUS EXEC row of the same
+# mission, and two rules say when that memory does not apply. Each gets a mission of its own, built
+# so that dropping the rule flips its outcome — a rule whose removal no fixture notices is a rule
+# with no probe.
+#
+#   m4  the total GREW between two FAILING sessions: the checkpoint went from 4 increments to 6
+#       (a fix increment appended to a phase still in flight, or a human amendment) and the next
+#       row says `3 of 6` after a memory of 2. Without the rule 3 is not below 2, and the session
+#       that did the work reads churn. With it, a changed M is a new denominator: count from M.
+#       No passing row anywhere in this mission, DELIBERATELY — the first shape of this fixture put
+#       a `pass` before the growth, the reset rule below cleared the memory first, and
+#       mut_AUTONOMY_historic_total_change_blind survived a probe that pointed at the right rule
+#       for the wrong reason.
+#   m5  a PASSING gate clears the memory. The phase closed at `4 increment(s) done`; a later session
+#       reopened one and left `3 of 4`. Without the reset the memory still says 3 from before the
+#       pass, M is unchanged so the M rule does not fire, and 3 → 3 reads churned.
+echo "== reader: the memory rules of the historical path =="
+mkdir -p "$OUTSIDE/histfix"
+localize > "$OUTSIDE/histfix/autonomy-log.jsonl" <<'EOF'
+{"v":1,"ts":"2026-08-29T11:00:00-03:00","event":"session","run_id":"r1","invocation":"run","kit_sha":"ddddddd","kit_dirty":false,"project":"p1","repo":"/p1","mission":"m4","phase":"EXEC","step":"EXEC","agent":"sdd-executor","model":"opus","attempt":1,"auto_retry":false,"session":"g1","rc":0,"dur_s":10,"cost_usd":1.0,"moved":true,"gate":"fail","gate_why":"3 of 4 increment(s) still to execute"}
+{"v":1,"ts":"2026-08-29T11:01:00-03:00","event":"session","run_id":"r1","invocation":"run","kit_sha":"ddddddd","kit_dirty":false,"project":"p1","repo":"/p1","mission":"m4","phase":"EXEC","step":"EXEC","agent":"sdd-executor","model":"opus","attempt":2,"auto_retry":false,"session":"g2","rc":0,"dur_s":10,"cost_usd":1.0,"moved":true,"gate":"fail","gate_why":"2 of 4 increment(s) still to execute"}
+{"v":1,"ts":"2026-08-29T11:02:00-03:00","event":"session","run_id":"r2","invocation":"run","kit_sha":"ddddddd","kit_dirty":false,"project":"p1","repo":"/p1","mission":"m4","phase":"EXEC","step":"EXEC","agent":"sdd-executor","model":"opus","attempt":1,"auto_retry":false,"session":"g3","rc":0,"dur_s":10,"cost_usd":1.0,"moved":true,"gate":"fail","gate_why":"3 of 6 increment(s) still to execute"}
+{"v":1,"ts":"2026-08-29T11:10:00-03:00","event":"session","run_id":"r4","invocation":"run","kit_sha":"ddddddd","kit_dirty":false,"project":"p1","repo":"/p1","mission":"m5","phase":"EXEC","step":"EXEC","agent":"sdd-executor","model":"opus","attempt":1,"auto_retry":false,"session":"h1","rc":0,"dur_s":10,"cost_usd":1.0,"moved":true,"gate":"fail","gate_why":"3 of 4 increment(s) still to execute"}
+{"v":1,"ts":"2026-08-29T11:11:00-03:00","event":"session","run_id":"r4","invocation":"run","kit_sha":"ddddddd","kit_dirty":false,"project":"p1","repo":"/p1","mission":"m5","phase":"EXEC","step":"EXEC","agent":"sdd-executor","model":"opus","attempt":2,"auto_retry":false,"session":"h2","rc":0,"dur_s":10,"cost_usd":1.0,"moved":true,"gate":"pass","gate_why":"4 increment(s) done, suite green, handoff written"}
+{"v":1,"ts":"2026-08-29T11:12:00-03:00","event":"session","run_id":"r5","invocation":"run","kit_sha":"ddddddd","kit_dirty":false,"project":"p1","repo":"/p1","mission":"m5","phase":"EXEC","step":"EXEC","agent":"sdd-executor","model":"opus","attempt":1,"auto_retry":false,"session":"h3","rc":0,"dur_s":10,"cost_usd":1.0,"moved":true,"gate":"fail","gate_why":"3 of 4 increment(s) still to execute"}
+EOF
+out_histfix="$( SDD_STATE_DIR="$OUTSIDE/histfix" "$SDD" autonomy --by-mission 2>&1 )"
+
+assert_eq "a growing total is a fix increment, not churn" "1" \
+  "$(grep -c '^  m4  3 session(s) · 3 advanced · 0 churned · 0 idle · ' <<< "$out_histfix")"
+assert_eq "a passing gate clears the count the next session is measured against" "1" \
+  "$(grep -c '^  m5  3 session(s) · 3 advanced · 0 churned · 0 idle · ' <<< "$out_histfix")"
+
+# --- the historical path never touches a row that carries the fields -----------------------------
+# The guard is `.pending_before == null` and NOT `has("pending_before")`: autonomy_session_row
+# builds the object with `($pbefore | tonumber? // null)`, so the KEY is on every row the runner has
+# written since I1 — `has` answers true for all 49 historical rows and the path would annotate none
+# of them. Measured on this mission's own first ledger row.
+#
+# The mirror image is this fixture: the same six-session history with s1 and s2 respelled in the new
+# schema, their prose left in place. A path that ignored the guard would annotate 4 rows instead of
+# 2 — and would ALSO have to be fed by those two rows to keep the histogram, which is the second
+# thing measured here: s3 reads its `pending_before` off s2, a row the path never annotated.
+echo "== reader: the historical path leaves a row with fields alone =="
+mkdir -p "$OUTSIDE/histmixed"
+localize > "$OUTSIDE/histmixed/autonomy-log.jsonl" <<'EOF'
+{"v":1,"ts":"2026-08-29T12:00:00-03:00","event":"session","run_id":"r1","invocation":"run","kit_sha":"ccccccc","kit_dirty":false,"project":"p1","repo":"/p1","mission":"m6","phase":"EXEC","step":"EXEC","agent":"sdd-executor","model":"opus","attempt":1,"auto_retry":false,"session":"s1","rc":0,"dur_s":10,"cost_usd":1.0,"moved":true,"pending_before":4,"pending_after":3,"increments_total":4,"gate":"fail","gate_why":"3 of 4 increment(s) still to execute"}
+{"v":1,"ts":"2026-08-29T12:01:00-03:00","event":"session","run_id":"r1","invocation":"run","kit_sha":"ccccccc","kit_dirty":false,"project":"p1","repo":"/p1","mission":"m6","phase":"EXEC","step":"EXEC","agent":"sdd-executor","model":"opus","attempt":2,"auto_retry":false,"session":"s2","rc":0,"dur_s":10,"cost_usd":1.0,"moved":true,"pending_before":3,"pending_after":3,"increments_total":4,"gate":"fail","gate_why":"3 of 4 increment(s) still to execute"}
+{"v":1,"ts":"2026-08-29T12:02:00-03:00","event":"session","run_id":"r2","invocation":"run","kit_sha":"ccccccc","kit_dirty":false,"project":"p1","repo":"/p1","mission":"m6","phase":"EXEC","step":"EXEC","agent":"sdd-executor","model":"opus","attempt":1,"auto_retry":false,"session":"s3","rc":0,"dur_s":10,"cost_usd":1.0,"moved":false,"gate":"fail","gate_why":"3 of 4 increment(s) still to execute"}
+{"v":1,"ts":"2026-08-29T12:03:00-03:00","event":"session","run_id":"r2","invocation":"run","kit_sha":"ccccccc","kit_dirty":false,"project":"p1","repo":"/p1","mission":"m6","phase":"EXEC","step":"EXEC","agent":"sdd-executor","model":"opus","attempt":2,"auto_retry":false,"session":"s4","rc":0,"dur_s":10,"cost_usd":1.0,"moved":true,"gate":"fail","gate_why":"2 of 4 increment(s) still to execute"}
+{"v":1,"ts":"2026-08-29T12:04:00-03:00","event":"session","run_id":"r3","invocation":"run","kit_sha":"ccccccc","kit_dirty":false,"project":"p1","repo":"/p1","mission":"m6","phase":"EXEC","step":"EXEC","agent":"sdd-executor","model":"opus","attempt":1,"auto_retry":false,"session":"s5","rc":0,"dur_s":10,"cost_usd":1.0,"moved":true,"gate":"fail","gate_why":"increment I3 is done with no commit"}
+{"v":1,"ts":"2026-08-29T12:05:00-03:00","event":"session","run_id":"r3","invocation":"run","kit_sha":"ccccccc","kit_dirty":false,"project":"p1","repo":"/p1","mission":"m6","phase":"EXEC","step":"EXEC","agent":"sdd-executor","model":"opus","attempt":2,"auto_retry":false,"session":"s6","rc":0,"dur_s":10,"cost_usd":1.0,"moved":true,"gate":"pass","gate_why":"4 increment(s) done, suite green, handoff written"}
+EOF
+out_mixed="$( SDD_STATE_DIR="$OUTSIDE/histmixed" "$SDD" autonomy 2>&1 )"
+assert_eq "the historical path never touches a row that carries the fields" "1 1" \
+  "$(grep -c '(2 EXEC row(s) older than the pending fields read their progress from gate_why)' <<< "$out_mixed") $(grep -c ' 3 advanced · 2 churned · 1 idle · 50% waste ' <<< "$out_mixed")"
+# The other half of that guard: over a ledger where EVERY row carries the fields, the path reaches
+# nothing and the sentence does not print at all.
+assert_eq "a ledger written entirely in the new schema prints no historical sentence" "0" \
+  "$(grep -c 'read their progress from gate_why' <<< "$out_prog")"
+
 # --- the reader gives a full accounting, never a silent gap --------------------------------------
 # Two findings from review, one root cause: a bucket the reader does not name is a bucket that can
 # vanish with no trace (finding 3 — the reviewer's ledger with no `event` key printed nothing and

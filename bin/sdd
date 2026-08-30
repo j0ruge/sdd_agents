@@ -1847,8 +1847,41 @@ ledger_row_is_local() {
 # because the emission is one and the day the series calls phase_index must not be the day it
 # learns about the arg. (No apostrophe inside the printed jq: it is spliced into single-quoted
 # shell strings.)
+#
+# `historic_progress` is the DATED path that lets `outcome` answer over rows written before the
+# fields existed, and it is the second half of the same change. Added 2026-08-29; on that day the
+# real ledger held 72 EXEC rows and 49 of them predate `pending_before`. Migrating them is not an
+# option — the ledger is append-only by contract — and leaving them on the `moved` arm would have
+# the human window reading `churned` over the whole history it exists to explain, for ever, since
+# nothing will ever rewrite those lines.
+#
+# It recovers the SAME fact from the SAME source the fields come from: gate_EXEC has always written
+# `N of M increment(s) still to execute` into GATE_WHY, and the row carries it verbatim. A row is
+# annotated only when it is an EXEC session, `.pending_before` is null, and the prose matches — and
+# the annotation carries `progress_source: "gate_why"` so the reading is never mistaken for a
+# measurement. cmd_autonomy prints how many rows it reached, which is also the DELETION SIGNAL:
+# the day `sdd autonomy --all-repos` stops printing that sentence, this def has no rows left to
+# serve and comes out.
+#
+# `.pending_before == null` and NOT `has("pending_before")`: autonomy_session_row builds the object
+# with `($pbefore | tonumber? // null)`, so the KEY is present on every row it has ever written —
+# `has` answers true for all 49 historical rows and would annotate none of them. Measured on the
+# first ledger row of 20260829-o-incremento-que-andou, written by the runner loaded before I1.
+#
+# `pending_before` is the `pending_after` of the previous EXEC row of the same (repo, mission) in
+# FILE order, which is write order, with two rules — each with a fixture of its own in
+# check-autonomy.sh, because a rule whose removal no fixture notices is a rule with no probe:
+#   · a changed M is a new denominator (QA wrote fix increments, so the phase grew): count from M;
+#   · a PASSING gate clears the memory, so a session that reopened an increment is measured against
+#     M and not against the count from before the phase closed.
+# The memory is fed by rows that carry the FIELDS too, and that is load-bearing on a mixed ledger:
+# a mission whose first sessions are new-schema and whose later ones are not would otherwise read
+# its first old row against M instead of against the row above it.
+# The key is `[repo, mission] | tostring` — an ARRAY rendered as JSON, for the reason mission_key
+# states in both readers: a separator chosen here would collide with one inside a repo path.
 ledger_outcome_defs() {   # printed jq, spliced into cmd_autonomy AND kaizen_series
   printf '%s' 'def outcome: if .gate == "pass" then "advanced" elif (.pending_before != null and .pending_after != null and .pending_after < .pending_before) then "advanced" elif .moved == true then "churned" else "idle" end;'
+  printf '%s' 'def historic_progress: reduce .[] as $r ({seen: {}, out: []}; (if ($r | type) == "object" and $r.event == "session" and $r.phase == "EXEC" then ([($r.repo // ""), ($r.mission // "")] | tostring) else null end) as $k | (if $k != null and $r.pending_before == null and (($r.gate_why // "") | test("^[0-9]+ of [0-9]+ increment")) then (($r.gate_why // "") | capture("^(?<n>[0-9]+) of (?<m>[0-9]+) increment") | {n: (.n | tonumber), m: (.m | tonumber)}) else null end) as $p | (if $p == null then $r else (if (.seen[$k] != null and .seen[$k].m == $p.m) then .seen[$k].p else $p.m end) as $before | $r + {pending_before: $before, pending_after: $p.n, increments_total: $p.m, progress_source: "gate_why"} end) as $row | .out += [$row] | (if $k == null then . elif $r.gate == "pass" then .seen[$k] = null elif $row.pending_after != null then .seen[$k] = {p: $row.pending_after, m: $row.increments_total} else . end)) | .out;'
   printf '%s' 'def outcome_tally: map(outcome) | reduce .[] as $o ({advanced: 0, churned: 0, idle: 0}; .[$o] += 1);'
   printf '%s' 'def phase_index: . as $p | ($phases | split(" ")) | index($p);'
 }
@@ -4481,6 +4514,13 @@ cmd_autonomy() {
     (map(select(ledger_row_no_repo)) | length) as $norepo
     | (map(select((ledger_row_is_local | not) and (ledger_row_no_repo | not))) | length) as $foreign
     | map(select(ledger_row_is_local))
+    # The dated recovery of the pre-2026-08-29 rows, applied ONCE, here, before any bucket sees the
+    # list — so every count below this line reads one history and not two. Length-preserving by
+    # construction: it annotates rows, it never adds or drops one, which is what keeps $local_total
+    # and assert_bucket_sum meaning what they meant. kaizen_series applies it at the same point of
+    # its own program, and check-autonomy.sh compares the two readers over one prose ledger.
+    | historic_progress
+    | (map(select(type == "object" and .progress_source == "gate_why")) | length) as $historic
     # The header total, re-derived here so the accounting paragraph can NAME it. The two exclusions
     # bound above were computed before this filter and were therefore never in it.
     | (length) as $local_total
@@ -4600,6 +4640,10 @@ cmd_autonomy() {
     , ([ (if $skipped > 0 then "  (\($skipped) non-comparable row(s) excluded: dirty kit, no kit_sha, or no moved field)" else empty end)
        , (if $stray > 0 then "  (\($stray) unrecognized row(s) excluded: event missing or not one of session/blocked/degraded)" else empty end)
        , (if $history_extra > 0 then "  (launches and reopened are counted over every session of the mission, \($history_extra) of them non-comparable)" else empty end)
+       # NOT an exclusion — nothing left a bucket — which is why it rides at the end of the first
+       # paragraph rather than among the four. It is the disclosure that half this ledger was read
+       # through a dated compatibility path, and the signal that says when that path can be deleted.
+       , (if $historic > 0 then "  (\($historic) EXEC row(s) older than the pending fields read their progress from gate_why)" else empty end)
        ] as $inside
        | [ (if $foreign > 0 then "  (\($foreign) row(s) excluded: born in another repo — the ledger is global, this reader is not)" else empty end)
          , (if $norepo > 0 then "  (\($norepo) row(s) excluded: no repo field — the row cannot say which project it came from)" else empty end)
@@ -4892,7 +4936,11 @@ kaizen_series() {
     # counted rather than dropped, because a number that moved with nothing explaining why is the
     # defect this filter exists to remove, not one to introduce one layer down.
     | ($file_rows | map(select(ledger_row_no_repo)) | length) as $no_repo
-    | ($file_rows | map(select(ledger_row_is_local))) as $raw
+    # historic_progress at the SAME point of this program as of cmd_autonomy: right after the repo
+    # filter, before any classification. One dated recovery, spliced from one definition, so the
+    # judge and the human window cannot end up reading two different histories out of one file —
+    # check-autonomy.sh compares them over a prose-only ledger for exactly that.
+    | ($file_rows | map(select(ledger_row_is_local)) | historic_progress) as $raw
     # Subtracted out, never lumped in: a row that names no project did not come from another repo,
     # and a bucket that said it did would be a wrong reason printed with the confidence of a right
     # one. The two counts partition what the filter removed, so the arithmetic still closes.
