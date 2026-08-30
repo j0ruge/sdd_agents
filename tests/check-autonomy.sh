@@ -266,6 +266,147 @@ assert_eq "sdd retry writes one session row" "1" "$(nrows)"
 assert_eq "and marks itself as a retry invocation" "retry" "$(rows '.invocation')"
 assert_eq "with its own run_id" "true" "$(rows '(.run_id | length) > 0')"
 
+# --- the EXEC row carries how many increments were left --------------------
+# `outcome` cannot tell the pipeline's DESIGNED loop (one session per increment, the gate red
+# until the last one) from real churn while the only facts on the row are the gate's verdict and
+# whether the disk moved. Measured on 2026-08-29 over the real ledger: 46 of 72 EXEC rows read
+# `churned` and about 5 of them were. The count gate_EXEC already computes for its own "N of M"
+# sentence is what closes the hole, and it has to reach the row as NUMBERS — prose in `gate_why`
+# is not a field, and parsing it back is the reader guessing at what the writer knew.
+#
+# The stub closes ONE of two increments on its first call and does nothing afterwards: the
+# designed loop in miniature. Session 1 advances (2 → 1) with the gate still red; session 2 and
+# its inline retry stand still, which is what churn actually looks like.
+echo "== the EXEC row carries how many increments were left =="
+: > "$LEDGER"
+CKPT_TALLY_SAVED="$OUTSIDE/checkpoint.tally-saved"
+cp "$MDIR/checkpoint.md" "$CKPT_TALLY_SAVED"
+cat > "$MDIR/checkpoint.md" <<'EOF'
+| ID | Incremento | Check (comando → esperado) | Status | Commit |
+|---|---|---|---|---|
+| I1 | slice one | `true` → 0 | pending | — |
+| I2 | slice two | `true` → 0 | pending | — |
+EOF
+git add -A && git commit -qm "chore: two pending increments"
+# OUTSIDE the fixture repo, like every other instrument in this file: a marker under $FIX would be
+# swept into the next block's `git add -A` and move `state_fingerprint` because the TEST wrote,
+# not because the session did.
+TALLY_MARKER="$OUTSIDE/tally-once"
+rm -f "$TALLY_MARKER"
+# The hash is read BEFORE the stub's own commit and a commit follows it, exactly like the
+# `done`-with-a-real-commit stub further down: gate_EXEC demands an ANCESTOR of HEAD, not merely
+# an object in the database, so a hash taken after the commit would be refused.
+cat > "$OUTSIDE/stub/claude" <<STUB
+#!/usr/bin/env bash
+if [ ! -e "$TALLY_MARKER" ]; then
+  : > "$TALLY_MARKER"
+  h=\$(git -C "$FIX" rev-parse --short HEAD)
+  sed -i "/^| I1 /s/| pending | — |/| done | \$h |/" "$MDIR/checkpoint.md"
+  git -C "$FIX" add -A
+  git -C "$FIX" commit -qm "chore: the session closed one increment"
+fi
+cat "$STREAM_SAMPLE"
+exit 0
+STUB
+chmod +x "$OUTSIDE/stub/claude"
+
+"$SDD" run "$MISSION" >/dev/null 2>&1
+assert_eq "an EXEC row carries pending_before, pending_after and increments_total" "2 1 2" \
+  "$(jq -r -s '.[0] | "\(.pending_before) \(.pending_after) \(.increments_total)"' "$LEDGER")"
+# The retry takes no snapshot of its own: the gate ran BETWEEN the two passes, so the first pass's
+# `pending_after` already is the retry's starting point. Reading the checkpoint again there would
+# sample a file the gate had judged one line earlier, and the retry would be credited with the
+# progress of the pass before it. The `!= null` term is the floor — without it two absent fields
+# satisfy the equality and the assertion measures nothing.
+assert_eq "the inline retry starts where the first pass ended" "true" \
+  "$(jq -s '.[2].auto_retry == true and .[1].pending_after != null
+            and .[2].pending_before == .[1].pending_after' "$LEDGER")"
+
+# --- a checkpoint the gate REFUSED publishes no count ----------------------
+# `pending_before` is a photograph, `pending_after` is a VERDICT: the gate publishes it only after
+# the validation loop, so a checkpoint marked `done` with no commit — the "a label is not an
+# artifact" refusal — cannot buy its session an `advanced`. The row keeps the honest before and
+# leaves the after null, which is exactly what makes the reader fall back to `moved`.
+echo "== a refused checkpoint publishes no count =="
+: > "$LEDGER"
+cat > "$MDIR/checkpoint.md" <<'EOF'
+| ID | Incremento | Check (comando → esperado) | Status | Commit |
+|---|---|---|---|---|
+| I1 | slice one | `true` → 0 | pending | — |
+| I2 | slice two | `true` → 0 | pending | — |
+EOF
+git add -A && git commit -qm "chore: two pending increments again"
+rm -f "$TALLY_MARKER"
+cat > "$OUTSIDE/stub/claude" <<STUB
+#!/usr/bin/env bash
+if [ ! -e "$TALLY_MARKER" ]; then
+  : > "$TALLY_MARKER"
+  sed -i "/^| I1 /s/| pending | — |/| done | — |/" "$MDIR/checkpoint.md"
+  git -C "$FIX" add -A
+  git -C "$FIX" commit -qm "chore: a label with no artifact"
+fi
+cat "$STREAM_SAMPLE"
+exit 0
+STUB
+chmod +x "$OUTSIDE/stub/claude"
+
+"$SDD" run "$MISSION" >/dev/null 2>&1
+assert_eq "a done without commit publishes no pending_after" "2 null null" \
+  "$(jq -r -s '.[0] | "\(.pending_before) \(.pending_after) \(.increments_total)"' "$LEDGER")"
+
+# --- the EXEC counts do not follow the run into the next phase -------------
+# GATE_EXEC_PENDING outlives the gate that set it BY DESIGN — cmd_run reads it one screen after
+# the call — so the phase guard at the read site is the only thing keeping the next phase's row
+# from inheriting it. This block builds the sequence where that is reachable, and it took a
+# sabotage pass to find out which sequence that is: `current_phase` runs as `$(...)`, so the
+# gate_EXEC it evaluates on every lap sets those globals in a SUBSHELL that dies immediately, and
+# the run→REVIEW fixture further down cannot reach the leak at all. The one that can is an EXEC
+# gate that PASSES in the parent shell — door 1's own `gate_"$phase"` call — followed by another
+# lap that opens a session for the next phase.
+#
+# A QA row carrying `pending_after: 0` would tell the judge QA advanced an increment it never had,
+# and `waste` would fall for free across every mission in the ledger.
+echo "== the EXEC counts do not follow the run into the next phase =="
+: > "$LEDGER"
+cp "$CKPT_TALLY_SAVED" "$MDIR/checkpoint.md"
+git add -A && git commit -qm "chore: back to the single pending increment"
+rm -f "$TALLY_MARKER"
+# One call closes the only increment AND writes the handoff, so gate_EXEC passes in the parent
+# shell on this very lap; the next lap finds QA unsatisfied and opens a session for it.
+cat > "$OUTSIDE/stub/claude" <<STUB
+#!/usr/bin/env bash
+if [ ! -e "$TALLY_MARKER" ]; then
+  : > "$TALLY_MARKER"
+  printf -- '---\nfase: EXEC\nstatus: done\n---\n' > "$MDIR/20-handoff-exec.md"
+  h=\$(git -C "$FIX" rev-parse --short HEAD)
+  sed -i "/^| I1 /s/| pending | — |/| done | \$h |/" "$MDIR/checkpoint.md"
+  git -C "$FIX" add -A
+  git -C "$FIX" commit -qm "chore: the last increment closed and the handoff written"
+fi
+cat "$STREAM_SAMPLE"
+exit 0
+STUB
+chmod +x "$OUTSIDE/stub/claude"
+
+"$SDD" run "$MISSION" >/dev/null 2>&1
+# The floor is the EXEC row itself: it proves the gate really did pass in the parent shell and
+# really did publish, so the nulls one row later are a guard doing its job and not an empty ledger.
+assert_eq "the EXEC row that closed the last increment says so" "EXEC pass 1 0 1" \
+  "$(jq -r -s '.[0] | "\(.phase) \(.gate) \(.pending_before) \(.pending_after) \(.increments_total)"' "$LEDGER")"
+assert_eq "a non-EXEC row carries the three as null" "QA true" \
+  "$(jq -r -s '.[1] | "\(.phase) \(.pending_before == null and .pending_after == null
+                                 and .increments_total == null)"' "$LEDGER")"
+
+cat > "$OUTSIDE/stub/claude" <<'STUB'
+#!/usr/bin/env bash
+exit 1
+STUB
+chmod +x "$OUTSIDE/stub/claude"
+rm -f "$MDIR/20-handoff-exec.md"
+cp "$CKPT_TALLY_SAVED" "$MDIR/checkpoint.md"
+git add -A && git commit -qm "chore: restore the single pending increment"
+rm -f "$TALLY_MARKER"
+
 # --- moved: true on a real change, false once nothing changes --------------
 # Task 2 review measured this by hand: mutating `[ "$before" != "$after" ] && moved="true"` into a
 # no-op left the whole suite GREEN, because every `claude` stub above is dead (rc 1) or dry — none

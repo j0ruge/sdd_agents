@@ -309,6 +309,27 @@ checkpoint_rows() {
     }' "$file"
 }
 
+# checkpoint_tally — "<pending>\t<total>\t<blocked>" over checkpoint_rows, and from now on the
+# runner's ONE count of increment status. Every number gate_EXEC states about the checkpoint comes
+# from here, and so does the photograph cmd_run takes before a session exists to be judged: two
+# readings of one file that disagreed would be the whole point of the metric, lost.
+#
+# PURE — no TEST_CMD, no git, no validation. It answers "how many rows say what", nothing else,
+# which is exactly what lets the same call serve a caller that has not run the session yet and a
+# gate that has already refused the checkpoint.
+#
+# `doing` counts as pending, as it always has in gate_EXEC's own sentence: an increment somebody
+# left mid-flight has not advanced, and reading it as done would credit the session that abandoned
+# it. `+ 0` on every field because an unmatched pattern leaves the variable unset, and mawk prints
+# an unset variable as the empty string — a row field the ledger would then read as null.
+checkpoint_tally() {
+  checkpoint_rows | awk -F'\t' '
+    { total++ }
+    $4 == "pending" || $4 == "doing" { pending++ }
+    $4 == "blocked" { blocked++ }
+    END { printf "%d\t%d\t%d\n", pending + 0, total + 0, blocked + 0 }'
+}
+
 # ---------------------------------------------------------------------------
 # Is anything listening where APP_URL points?
 #
@@ -701,14 +722,32 @@ GATE_HANDOFF_BLOCKED=0
 # the probe existed, which is the whole compatibility story — see app_probe.
 GATE_APP_DOWN=0
 
+# How many increments were still to execute when this gate last ANSWERED, and how many there are
+# in all. Empty until a gate_EXEC gets past its validation loop; read by cmd_run and cmd_retry to
+# build the EXEC row of the autonomy ledger, which is why they outlive the call that sets them.
+#
+# ⚠️ They outlive it across PHASES too — `current_phase` evaluates gate_EXEC on every lap of
+# cmd_run, so a REVIEW session opened after a passing EXEC gate is built with these still set. The
+# readers guard on the phase; see the call sites.
+GATE_EXEC_PENDING=""
+GATE_EXEC_TOTAL=""
+
 gate_EXEC() {
   GATE_EXEC_DIRTY=0
+  # Emptied on ENTRY, the same reset GATE_EXEC_DIRTY and GATE_APP_DOWN get one screen up and for
+  # the same reason: a gate that refuses below must not hand its caller the numbers of the gate
+  # before it.
+  GATE_EXEC_PENDING=""
+  GATE_EXEC_TOTAL=""
   local rows; rows="$(checkpoint_rows)"
   [ -n "$rows" ] || { GATE_WHY="checkpoint.md is empty"; return 1; }
 
-  local id status commit pending=0 blocked=0 total=0
+  # The loop VALIDATES and no longer counts: the numbers come from checkpoint_tally, called once
+  # below. Two counts of one file is the defect this whole mission is about — the ledger's
+  # `pending_after` and the gate's own "N of M" have to be the same reading or the judge is
+  # comparing a number against prose that disagrees with it.
+  local id status commit
   while IFS=$'\t' read -r id _ _ status commit; do
-    total=$((total + 1))
     case "$status" in
       done)
         if [ -z "$commit" ] || [ "$commit" = "—" ] || [ "$commit" = "-" ]; then
@@ -728,11 +767,23 @@ gate_EXEC() {
           return 1
         fi
         ;;
-      pending|doing) pending=$((pending + 1)) ;;
-      blocked)       blocked=$((blocked + 1)) ;;
+      # Valid and nothing to check — the arm exists so the enum stays exhaustive and the `*)` below
+      # keeps meaning "not one of the four". Counting them is checkpoint_tally's job, below.
+      pending|doing|blocked) ;;
       *) GATE_WHY="increment $id has invalid status '$status' (use pending|doing|done|blocked)"; return 1 ;;
     esac
   done <<< "$rows"
+
+  # AFTER the validation loop, deliberately, and this ordering is the assertion "a done without
+  # commit publishes no pending_after" in tests/check-autonomy.sh. `pending_before` on the ledger
+  # row is a PHOTOGRAPH — cmd_run takes it before the session opens — but `pending_after` is a
+  # VERDICT. A checkpoint refused for a label with no artifact must not be able to buy its session
+  # an `advanced`; leaving the pair empty makes the reader fall back to `moved`, exactly as it did
+  # before these fields existed.
+  local pending total blocked
+  IFS=$'\t' read -r pending total blocked <<< "$(checkpoint_tally)"
+  GATE_EXEC_PENDING="$pending"
+  GATE_EXEC_TOTAL="$total"
 
   if [ "$blocked" -gt 0 ]; then GATE_WHY="$blocked increment(s) 'blocked' — Jidoka: the line stops"; return 1; fi
   if [ "$pending" -gt 0 ]; then GATE_WHY="$pending of $total increment(s) still to execute"; return 1; fi
@@ -2055,7 +2106,12 @@ autonomy_degraded_row() { autonomy_escalation_row "degraded" "$1" "$2" "$3"; }
 
 # One row per session, written after the gate has been evaluated — the row carries the gate
 # result, so it cannot be born before it.
-autonomy_session_row() {  # <phase> <attempt> <auto_retry> <moved> <gate> <gate_why>
+# The last three are EXEC's alone and empty everywhere else (⇒ `null`, never 0: a zero would enter
+# the judge's arithmetic as an increment that stood still, the same reason an escalation row
+# carries no session fields at all). They are what lets `outcome` tell the pipeline's DESIGNED loop
+# — one session per increment, the gate red until the last one — from real churn, which the gate
+# verdict and `moved` alone cannot do.
+autonomy_session_row() {  # <phase> <attempt> <auto_retry> <moved> <gate> <gate_why> [<pending_before> <pending_after> <increments_total>]
   autonomy_have_jq || return 0
   # Called, never substituted: `$(autonomy_kit_stamp)` would reset its one-shot warning flag.
   autonomy_kit_stamp; local stamp="$AUTONOMY_KIT_STAMP"
@@ -2074,6 +2130,7 @@ autonomy_session_row() {  # <phase> <attempt> <auto_retry> <moved> <gate> <gate_
     --arg step "$LAST_PHASE_STEP" --arg agent "$LAST_PHASE_AGENT" \
     --arg model "$LAST_PHASE_MODEL" --arg session "$LAST_PHASE_SID" \
     --arg rc "$LAST_PHASE_RC" --arg dur "$LAST_PHASE_DUR" --arg cost "$LAST_PHASE_COST" \
+    --arg pbefore "${7:-}" --arg pafter "${8:-}" --arg itotal "${9:-}" \
     '{v: 1, ts: $ts, event: "session",
       run_id: $run_id, invocation: $invocation,
       kit_sha: (if $sha == "" then null else $sha end),
@@ -2086,6 +2143,9 @@ autonomy_session_row() {  # <phase> <attempt> <auto_retry> <moved> <gate> <gate_
       dur_s: ($dur | tonumber? // null),
       cost_usd: ($cost | tonumber? // null),
       moved: ($moved == "true"),
+      pending_before: ($pbefore | tonumber? // null),
+      pending_after: ($pafter | tonumber? // null),
+      increments_total: ($itotal | tonumber? // null),
       gate: $gate, gate_why: $why}' )"
 }
 
@@ -3947,6 +4007,12 @@ cmd_run() {
     fi
 
     before="$(state_fingerprint)"
+    # The photograph, and it has to be taken HERE: once run_phase returns, the checkpoint the
+    # session just edited is the only one left on disk and "how many were pending before" is
+    # unanswerable. Guarded on the phase because it is the only phase with increments to count,
+    # and empty is what the ledger writes as `null`.
+    local exec_before=""
+    if [ "$phase" = "EXEC" ]; then exec_before="$(checkpoint_tally | cut -f1)"; fi
     kit_guard_arm
     run_phase "$phase"
     after="$(state_fingerprint)"
@@ -3977,8 +4043,17 @@ cmd_run() {
     local gate_rc=0 moved="false"
     gate_"$phase" || gate_rc=$?
     [ "$before" != "$after" ] && moved="true"
+    # Captured into locals rather than read straight from the globals at the two call sites below,
+    # and the phase guard is why. GATE_EXEC_PENDING outlives its gate ON PURPOSE, and
+    # `current_phase` evaluates gate_EXEC on every lap: without the guard the REVIEW session that
+    # follows a PASSING EXEC gate would be born carrying EXEC's counts and read as a phase that
+    # advanced an increment it never had. Pinned by "a non-EXEC row carries the three as null" in
+    # tests/check-autonomy.sh, in the one fixture where that sequence is reachable.
+    local exec_after="" exec_total=""
+    if [ "$phase" = "EXEC" ]; then exec_after="$GATE_EXEC_PENDING"; exec_total="$GATE_EXEC_TOTAL"; fi
     autonomy_session_row "$phase" "${attempts[$phase]}" "false" "$moved" \
-      "$( [ "$gate_rc" -eq 0 ] && echo pass || echo fail )" "$GATE_WHY"
+      "$( [ "$gate_rc" -eq 0 ] && echo pass || echo fail )" "$GATE_WHY" \
+      "$exec_before" "$exec_after" "$exec_total"
     sessions["$phase"]="$(( ${sessions[$phase]:-0} + 1 ))"
 
     # DOOR 1 of the blocked escalation — see handoff_blocked_escalation above for why it exists.
@@ -4039,8 +4114,16 @@ cmd_run() {
     # sampled window means that stays true whatever the fingerprint learns to read tomorrow.
     kit_guard_check "$phase"
     gate_"$phase" || gate_rc2=$?
+    # The retry takes NO photograph of its own: the gate ran between the two passes, so the first
+    # pass's `pending_after` — `exec_after`, captured above and now already overwritten in the
+    # global by the call one line up — IS where this retry started. Reading checkpoint_tally here
+    # would sample a file the gate had judged one line earlier and credit the retry with the
+    # progress of the pass before it.
+    local exec_after2="" exec_total2=""
+    if [ "$phase" = "EXEC" ]; then exec_after2="$GATE_EXEC_PENDING"; exec_total2="$GATE_EXEC_TOTAL"; fi
     autonomy_session_row "$phase" "${attempts[$phase]}" "true" "$moved2" \
-      "$( [ "$gate_rc2" -eq 0 ] && echo pass || echo fail )" "$GATE_WHY"
+      "$( [ "$gate_rc2" -eq 0 ] && echo pass || echo fail )" "$GATE_WHY" \
+      "$exec_after" "$exec_after2" "$exec_total2"
     sessions["$phase"]="$(( ${sessions[$phase]:-0} + 1 ))"
 
     if [ "$gate_rc2" -eq 0 ]; then
@@ -4094,14 +4177,19 @@ cmd_retry() {
   step "retrying $phase with a FRESH session"
   local before after moved="false" gate_rc=0
   before="$(state_fingerprint)"
+  # Same photograph, same phase guard, same reasons as cmd_run's — see the two comments there.
+  local exec_before="" exec_after="" exec_total=""
+  if [ "$phase" = "EXEC" ]; then exec_before="$(checkpoint_tally | cut -f1)"; fi
   kit_guard_arm
   run_phase "$phase"
   after="$(state_fingerprint)"
   kit_guard_check "$phase"
   [ "$before" != "$after" ] && moved="true"
   gate_"$phase" || gate_rc=$?
+  if [ "$phase" = "EXEC" ]; then exec_after="$GATE_EXEC_PENDING"; exec_total="$GATE_EXEC_TOTAL"; fi
   autonomy_session_row "$phase" "1" "false" "$moved" \
-    "$( [ "$gate_rc" -eq 0 ] && echo pass || echo fail )" "$GATE_WHY"
+    "$( [ "$gate_rc" -eq 0 ] && echo pass || echo fail )" "$GATE_WHY" \
+    "$exec_before" "$exec_after" "$exec_total"
   if [ "$gate_rc" -eq 0 ]; then ok "gate $phase: $GATE_WHY"; return 0; fi
   bad "gate $phase not yet: $GATE_WHY"
   return 3

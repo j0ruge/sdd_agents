@@ -2179,6 +2179,44 @@ mut_AUTONOMY_notes_borrowed_across_repos() {
   sed -i 's@if \$r == \$repo and (\$interventions | has(\$m)) then@if ($interventions | has($m)) then@' "$1"
 }
 
+# ---------------------------------------------------------------------------
+# 20260829-o-incremento-que-andou — the row says whether the increment advanced.
+# ---------------------------------------------------------------------------
+# The three increment fields leave the row: the writer keeps its `--arg`s (jq accepts unused ones,
+# so this compiles and the harness cannot dismiss it as broken) and simply stops emitting them.
+# Every EXEC row is then back to carrying only the gate verdict and `moved`, which is the state
+# that read 46 of 72 real EXEC rows as `churned` when about 5 of them were. Caught by `an EXEC row
+# carries pending_before, pending_after and increments_total` in check-autonomy.sh, which reads
+# "null null null" against the "2 1 2" it demands.
+mut_LEDGER_progress_not_written() {
+  sed -i '\%pending_before: ($pbefore%d; \%pending_after: ($pafter%d; \%increments_total: ($itotal%d' "$1"
+}
+
+# The one count of increment status stops distinguishing `done`: every row is pending, so the
+# session that closed an increment reports the same number before and after itself. It is the
+# quiet half of the defect — the fields are all there, all populated, and all saying nothing moved
+# — and it sabotages gate_EXEC's own "N of M" sentence in the same stroke, which is the point of
+# the helper being ONE reading rather than two. Caught by the same assertion, which reads "2 2 2".
+mut_EXEC_tally_counts_done() {
+  sed -i '/^checkpoint_tally()/,/^}/ s@\$4 == "pending" || \$4 == "doing"@$4 != ""@' "$1"
+}
+
+# The phase guard at cmd_run's door 1 goes, and GATE_EXEC_PENDING — which outlives its gate by
+# design, one screen up the same function — follows the run into the next phase: the QA session
+# opened after a PASSING EXEC gate is born claiming an increment QA never had, and `waste` falls
+# for free across every mission in the ledger.
+#
+# ⚠️ The obvious fixture does NOT catch this, and finding that out is why the mutant exists.
+# `current_phase` runs as `$(...)`, so the gate_EXEC it evaluates on every lap sets those globals
+# in a subshell that dies at once — the run→REVIEW fixture cannot reach the leak at all, and a
+# sabotage pass against it came back green. The only sequence that reaches it is an EXEC gate
+# passing in the PARENT shell followed by another lap, which is the block `the EXEC counts do not
+# follow the run into the next phase` builds. Caught by `a non-EXEC row carries the three as null`
+# there, and by nothing else.
+mut_LEDGER_progress_leaks_across_phases() {
+  sed -i 's@^    if \[ "\$phase" = "EXEC" \]; then exec_after="\$GATE_EXEC_PENDING"; exec_total="\$GATE_EXEC_TOTAL"; fi$@    exec_after="$GATE_EXEC_PENDING"; exec_total="$GATE_EXEC_TOTAL"@' "$1"
+}
+
 CATALOG=(
   PLAN_empty_approval
   PLAN_kaizen_born_blind
@@ -2359,6 +2397,9 @@ CATALOG=(
   AUTONOMY_reopened_ignores_gate
   AUTONOMY_reopened_comparable_only
   AUTONOMY_notes_borrowed_across_repos
+  LEDGER_progress_not_written
+  EXEC_tally_counts_done
+  LEDGER_progress_leaks_across_phases
 )
 
 # Mutations that are NOT caught today, each with the increment that closes it. Ratchet in both
