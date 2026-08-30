@@ -978,8 +978,11 @@ mut_RUN_jidoka_pipefail() {
 # only after the fact. The new range brackets the door with the first pass's OWN session row
 # (`$gate_rc`, which the retry spells `$gate_rc2` — that is what makes it unique) and the
 # `phases_run` line the door now precedes. Both were measured to occur exactly once.
+# ⚠️ Re-anchored in 20260829-o-incremento-que-andou: the row call now carries three more arguments
+# on a continuation line, so the range starts on `"$GATE_WHY" \` — a line that ENDS in a backslash.
+# The plan listed the outcome mutants to re-anchor and forgot these two; the stamp caught it (rc 90).
 mut_RUN_blocked_not_escalated() {
-  sed -i '/^      "\$( \[ "\$gate_rc" -eq 0 \] && echo pass || echo fail )" "\$GATE_WHY"$/,/^    phases_run=\$((phases_run + 1))$/ s|^    if handoff_blocked_escalation "\$phase"; then return 3; fi$|    if false; then return 3; fi|' "$1"
+  sed -i '/^      "\$( \[ "\$gate_rc" -eq 0 \] && echo pass || echo fail )" "\$GATE_WHY" \\$/,/^    phases_run=\$((phases_run + 1))$/ s|^    if handoff_blocked_escalation "\$phase"; then return 3; fi$|    if false; then return 3; fi|' "$1"
 }
 #
 # The ORDER of door 1 against the `--max-phases` ceiling deliberately gets no mutant of its own,
@@ -1010,7 +1013,7 @@ mut_RUN_blocked_retry_not_escalated() {
 # kaizen judge reads says "two sessions moved nothing" about a machine that was never up, which
 # names neither the cause nor anyone who could act on it.
 mut_RUN_app_down_not_escalated() {
-  sed -i '/^      "$( \[ "$gate_rc" -eq 0 \] && echo pass || echo fail )" "$GATE_WHY"$/,/^    phases_run=$((phases_run + 1))$/ s|^    if app_down_escalation "$phase"; then return 3; fi$|    if false; then return 3; fi|' "$1"
+  sed -i '/^      "$( \[ "$gate_rc" -eq 0 \] && echo pass || echo fail )" "$GATE_WHY" \\$/,/^    phases_run=$((phases_run + 1))$/ s|^    if app_down_escalation "$phase"; then return 3; fi$|    if false; then return 3; fi|' "$1"
 }
 
 # Door 2: the inline retry, and it is not symmetry. The marker is a global, `current_phase` runs in
@@ -2121,7 +2124,7 @@ mut_RUN_kit_guard_arms_projection() {
 # have applied nothing and the harness would have refused it with rc 90 — a no-op that reads as a
 # catalogue failure, not as a silent gap. Same sabotage, new spelling of the same line.
 mut_AUTONOMY_outcome_reads_moved_only() {
-  sed -i 's@def outcome: if .gate == "pass" then "advanced" elif (.pending_before != null and .pending_after != null and .pending_after < .pending_before) then "advanced" elif .moved == true then "churned" else "idle" end;@def outcome: if .moved == true then "advanced" else "idle" end;@' "$1"
+  sed -i 's@def outcome: if .gate == "pass" then "advanced" elif (.pending_before != null and .pending_after != null and .pending_after < .pending_before and .moved != false) then "advanced" elif .moved == true then "churned" else "idle" end;@def outcome: if .moved == true then "advanced" else "idle" end;@' "$1"
 }
 
 # The series grows a LOCAL copy of the yardstick on the OLD rule — the "same spelling in both
@@ -2275,7 +2278,7 @@ mut_RUN_retry_pending_before_null() {
 # session that advanced its increment reads advanced, not churned` in check-autonomy.sh, which
 # reads `1 advanced · 4 churned · 1 idle` against the `3 · 2 · 1` it demands.
 mut_AUTONOMY_progress_ignored() {
-  sed -i 's@def outcome: if .gate == "pass" then "advanced" elif (.pending_before != null and .pending_after != null and .pending_after < .pending_before) then "advanced" elif .moved == true then "churned" else "idle" end;@def outcome: if .gate == "pass" then "advanced" elif .moved == true then "churned" else "idle" end;@' "$1"
+  sed -i 's@def outcome: if .gate == "pass" then "advanced" elif (.pending_before != null and .pending_after != null and .pending_after < .pending_before and .moved != false) then "advanced" elif .moved == true then "churned" else "idle" end;@def outcome: if .gate == "pass" then "advanced" elif .moved == true then "churned" else "idle" end;@' "$1"
 }
 
 # The null guard on the progress arm goes, and jq's own ordering does the rest: `null` sorts below
@@ -2286,7 +2289,7 @@ mut_AUTONOMY_progress_ignored() {
 # that published no pending_after is not an increment that advanced` in check-autonomy.sh, which
 # reads `1 1` (the 4·1·1 histogram and 33% waste) against the `0 0` it demands.
 mut_AUTONOMY_progress_null_blind() {
-  sed -i 's@(.pending_before != null and .pending_after != null and .pending_after < .pending_before)@(.pending_after < .pending_before)@' "$1"
+  sed -i 's@(.pending_before != null and .pending_after != null and .pending_after < .pending_before and .moved != false)@(.pending_after < .pending_before and .moved != false)@' "$1"
 }
 
 # The dated recovery of the pre-2026-08-29 rows becomes the identity: both readers stop looking at
