@@ -788,6 +788,14 @@ gate_EXEC() {
   # `moved`, exactly as it did before these fields existed.
   local pending total blocked
   IFS=$'\t' read -r pending total blocked <<< "$(checkpoint_tally)"
+  # The herestring SWALLOWS the producer's status — the compound's rc is `read`'s, always 0 — unlike
+  # the plain assignment one screen up, which propagates. With the three empty, BOTH refusals below
+  # are skipped (`[ "" -gt 0 ]` is rc 2, read as false) and the gate falls through to TEST_CMD and
+  # can answer `pass` over a checkpoint it never counted. Unreachable today only because `[ -n
+  # "$rows" ]` above refuses first — but that guard belongs to a DIFFERENT reading of the file, and
+  # a refusal that depends on a neighbour is a refusal nobody will notice losing.
+  [ -n "$pending" ] && [ -n "$total" ] && [ -n "$blocked" ] || \
+    { GATE_WHY="checkpoint.md tally unreadable"; return 1; }
 
   # Jidoka goes BEFORE the publication, by the same argument and for a defect measured end to end:
   # `checkpoint_tally` counts `pending|doing` and files `blocked` in a bucket of its own, so GIVING

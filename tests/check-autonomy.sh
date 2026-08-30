@@ -515,6 +515,16 @@ assert_eq "the EXEC row that closed the last increment says so" "EXEC pass 1 0 1
 assert_eq "a non-EXEC row carries the three as null" "QA true" \
   "$(jq -r -s '.[1] | "\(.phase) \(.pending_before == null and .pending_after == null
                                  and .increments_total == null)"' "$LEDGER")"
+# Row [2] is the same lap's INLINE RETRY of that QA session, and it is a THIRD read site of the
+# globals — a door of its own, guarded by its own `if [ "$phase" = "EXEC" ]`. It was unprobed: with
+# that guard removed the suite stayed green while the row came out carrying `pending_after: 0` and
+# `increments_total: 1`, EXEC's numbers on a QA row, which is the reading that would tell the judge
+# QA advanced an increment it never had. The fixture already wrote this row — the door cost a line
+# to probe, not a world to build. One probe per door, the shape CLAUDE.md already spells out for
+# handoff_blocked_escalation and app_down_escalation.
+assert_eq "and so does the inline retry of that same non-EXEC phase" "QA true true" \
+  "$(jq -r -s '.[2] | "\(.phase) \(.auto_retry) \(.pending_before == null and .pending_after == null
+                                 and .increments_total == null)"' "$LEDGER")"
 
 cat > "$OUTSIDE/stub/claude" <<'STUB'
 #!/usr/bin/env bash

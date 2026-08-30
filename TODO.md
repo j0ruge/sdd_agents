@@ -671,3 +671,37 @@ Achados sobre **repos-alvo** vão para o `TODO.md` daquele repo. Este arquivo é
   número que ninguém consegue reconciliar não serve para decidir apagar nada. Direção: ligar sobre
   `is_session and comparable`, ou dizer o resto como o `$history_extra` já faz.
   — descoberto por `sdd-reviewer` na missão `20260829-o-incremento-que-andou` (2026-08-30)
+
+- [ ] **A regra `doing` conta como pendente não tem probe, e sem ela o `gate_EXEC` fecha a fase por
+  cima de um incremento em voo** — `bin/sdd:328` — degradar `$4 == "pending" || $4 == "doing"` para
+  só `pending` deixa a suíte inteira VERDE, e o `sdd status` passa de `1 of 1 increment(s) still to
+  execute` para `1 increment(s) done, suite green` com `next phase: QA`. É herdada da `main`, mas
+  esta missão MOVEU a regra para uma função nova e a reafirmou no cabeçalho dela — que é
+  exatamente quando "gate novo entra com mutação" morde. Direção: fixture com uma linha `doing` e
+  `mut_EXEC_tally_doing_is_done`.
+  — descoberto por `sdd-reviewer` na missão `20260829-o-incremento-que-andou` (2026-08-30)
+
+- [ ] **Duas das cinco portas `if [ "$phase" = "EXEC" ]` seguem sem probe** — `bin/sdd:4291` — as
+  cinco portas do par `GATE_EXEC_PENDING`/`_TOTAL` são `4105`, `4144`, `4232`, `4291` e `4298`; as
+  três primeiras têm asserção (a terceira desde `d77f2ae`), as duas do `cmd_retry` não. Removida a
+  de `4291`, um `sdd retry` numa fase QA escreve `pending_before: 0` numa linha QA e a suíte fica
+  verde. Nenhum leitor move HOJE, então é quebra de contrato e não erro de número — mas é o mesmo
+  contrato que a asserção irmã nomeia. Direção: um `sdd retry` fora do EXEC no fixture que já
+  alcança esse estado, mais um mutante por porta.
+  — descoberto por `sdd-reviewer` na missão `20260829-o-incremento-que-andou` (2026-08-30)
+
+- [ ] **A metade `repo` da chave de memória do caminho histórico não tem probe** — `bin/sdd:1918` —
+  trocar `([$r.repo, $r.mission] | tostring)` por `($r.mission // "")` deixa a suíte verde, e sob
+  `--all-repos` duas missões de mesmo slug em repos diferentes colapsam numa identidade só:
+  `2 advanced · 0% waste` vira `1 advanced · 1 churned · 50% waste`. É a mesma classe do
+  `ledger_repo_root`/`CDPATH` que já custou uma CRITICAL — contaminação silenciosa entre repos.
+  Direção: um par de linhas de mesmo slug em dois repos na família de fixtures `--all-repos`.
+  — descoberto por `sdd-reviewer` na missão `20260829-o-incremento-que-andou` (2026-08-30)
+
+- [ ] **A guarda `$r.phase == "EXEC"` do `historic_progress` não tem probe e falha na direção da
+  lisonja** — `bin/sdd:1918` — removida, a suíte fica verde e uma linha NÃO-EXEC que passou o gate
+  passa a zerar a memória do EXEC, de modo que a próxima linha antiga é medida contra `M` em vez de
+  contra a linha acima dela: `EXEC(3 of 4) → QA(pass) → EXEC(3 of 4)` lê `2 advanced · 1 churned ·
+  33% waste` íntegro e `3 advanced · 0 churned · 0% waste` sabotado. Direção: uma linha QA `pass`
+  entre duas linhas EXEC de prosa no fixture `histfix` que já existe.
+  — descoberto por `sdd-reviewer` na missão `20260829-o-incremento-que-andou` (2026-08-30)
