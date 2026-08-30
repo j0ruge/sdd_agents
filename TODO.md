@@ -39,6 +39,14 @@ Achados sobre **repos-alvo** vão para o `TODO.md` daquele repo. Este arquivo é
 
 ### Sensores que faltam
 
+- [ ] **Âncora morta de mutante só aparece no catálogo inteiro (15–20 min), mas detectá-la custa
+  segundos** — `tests/check-mutation.sh:2647` — a guarda `cmp -s` (rc 90) só roda dentro do
+  `sdd health`; aplicar os 195 `sed` numa cópia de `bin/sdd` e comparar não roda suíte nenhuma.
+  Cinco mutantes apodreceram na missão (I1 e a REVIEW mexeram nas linhas ancoradas), a REVIEW
+  fechou Grade A sem ver, e só o carimbo pegou — ao preço de duas sessões de publisher. Direção:
+  um passo do `run-all.sh` que só prova que **cada mutante ainda aplica**, sem rodar mutante.
+  — descoberto por `humano` na missão `20260829-o-incremento-que-andou` (2026-08-30)
+
 - [ ] **`gate_QA` aceita relatório de QA de OUTRA missão** — `bin/sdd:614` — a Âncora 1 pega o
   relatório mais recente do glob por `latest_matching` e só exige `closed` sem linhas `Pending`;
   nada o amarra à missão corrente. Em `20260827-condicoes-pagamento-mesmo-cliente` o gate passou
@@ -588,6 +596,14 @@ Achados sobre **repos-alvo** vão para o `TODO.md` daquele repo. Este arquivo é
   `sdd health`/`check-lang` na missão `20260815-i13.5-kit-em-ingles` (2026-08-15)
 
 ### Custo e escala
+
+- [ ] **O `sdd-publisher` não consegue esperar o `sdd health` dentro de uma sessão headless** —
+  `agents/sdd-publisher.md:31-39` — o agente iniciou o health "em background" e encerrou o turno
+  "esperando a notificação": em `claude -p` encerrar o turno encerra a sessão, e o health morreu
+  com ela (US$ 1,46 por nada); a sessão seguinte rodou em primeiro plano e levou 82 min (US$ 2,73).
+  É a classe do *"waiting for the suite"* de `4c86712`, agora na fase PR. Direção: o **runner** roda
+  `sdd health` antes de abrir a sessão de PR quando o carimbo está inválido — é comando, não
+  julgamento. — descoberto por `humano` na missão `20260829-o-incremento-que-andou` (2026-08-30)
 
 - [ ] **A suíte segue acima do alvo "<30 s" da D7, mesmo depois do paralelismo** —
   `tests/run-all.sh` — a saída "subir o default" foi tomada e executada (pool + `min(núcleos, 8)`,
