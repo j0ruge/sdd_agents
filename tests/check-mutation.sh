@@ -2329,6 +2329,20 @@ mut_AUTONOMY_historic_annotates_new_rows() {
   sed -i 's@$k != null and $r.pending_before == null and@$k != null and@' "$1"
 }
 
+# The progress arm stops asking whether the session moved the disk, so an INFERRED count is allowed
+# to outrank the one thing the runner measured directly about that session. It only bites on the
+# recovered path — a measured pair with `moved: false` cannot exist, because closing an increment
+# edits the checkpoint and `state_fingerprint` hashes it — and there it is the flattering direction
+# once more: a phase that closed at `4 increment(s) done` and then reopened an increment reads
+# `1 of 5`, the empty memory hands it a `pending_before` of 5, and the session that never touched
+# the disk reads `advanced` at `0% waste`. Caught by `a recovered count never credits a session
+# that wrote nothing` in check-autonomy.sh (m11 reads `2 advanced · 0 idle` against the
+# `1 advanced · 1 idle` it demands), with the witness `and the row it declined to credit is one the
+# path did read` staying green beside it to prove the path still reaches that row at all.
+mut_AUTONOMY_progress_outranks_moved() {
+  sed -i 's@and .pending_after < .pending_before and .moved != false)@and .pending_after < .pending_before)@' "$1"
+}
+
 # The rubric goes back to reading the GATE VERDICT instead of what the session did — the exact
 # spelling 20260828 shipped, and the one that read `leve` over every EXEC phase of two or more
 # increments, because gate_EXEC refuses once per increment by design. Note this is NOT
@@ -2567,6 +2581,7 @@ CATALOG=(
   AUTONOMY_historic_total_change_blind
   AUTONOMY_historic_pass_keeps_memory
   AUTONOMY_historic_annotates_new_rows
+  AUTONOMY_progress_outranks_moved
   KAIZEN_label_reads_gate
   KAIZEN_advance_rate_reads_gate
   KAIZEN_label_auto_retry_blind

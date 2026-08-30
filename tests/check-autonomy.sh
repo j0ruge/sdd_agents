@@ -1872,6 +1872,39 @@ assert_eq "a growing total is a fix increment, not churn" "1" \
 assert_eq "a passing gate clears the count the next session is measured against" "1" \
   "$(grep -c '^  m5  3 session(s) · 3 advanced · 0 churned · 0 idle · ' <<< "$out_histfix")"
 
+# --- an inference never credits a session that provably wrote nothing -----------------------------
+# The historical path RECOVERS `pending_before` from prose; it does not measure it. Where the memory
+# is empty it recovers M, the largest value the field can take, so the `advanced` arm is satisfied by
+# any prose that is not `M of M` — and the memory is empty on the first row of a mission (where M is
+# right), but ALSO on the row after a passing gate, where it is not. A phase that closed at
+# `4 increment(s) done` and then reopened an increment reads `1 of 5`, is handed a `pending_before`
+# of 5, and reads `advanced` — over a session that never touched the disk. `0% waste` on a session
+# that did nothing is the flattering direction, the same family as the null guard and the Jidoka
+# block, and it is the one place an INFERENCE outranks a MEASUREMENT.
+#
+# The guard is `.moved != false`, and it is a tautology rather than a policy: `state_fingerprint`
+# hashes the checkpoint, and closing an increment means editing the checkpoint, so a session whose
+# fingerprint did not move CANNOT have lowered the count. It therefore costs the field path nothing
+# (a measured pair with `moved: false` is unreachable) and it does not touch which rows the path
+# annotates — the disclosure count and the two memory rules above are deliberately left alone, so
+# this assertion cannot be satisfied by the path simply failing to reach the row. Measured over the
+# real ledger on 2026-08-30: 53 recovered rows, 48 `advanced`, and the guard moves NONE of them.
+# `!= false` and not `== true`: an escalation row carries no `moved` at all, and `null != false`
+# leaves it exactly where the two readers already file it.
+echo "== reader: a recovered count never credits a session that wrote nothing =="
+mkdir -p "$OUTSIDE/histmoved"
+localize > "$OUTSIDE/histmoved/autonomy-log.jsonl" <<'EOF'
+{"v":1,"ts":"2026-08-29T13:00:00-03:00","event":"session","run_id":"r1","invocation":"run","kit_sha":"bbbbbbb","kit_dirty":false,"project":"p1","repo":"/p1","mission":"m11","phase":"EXEC","step":"EXEC","agent":"sdd-executor","model":"opus","attempt":1,"auto_retry":false,"session":"j1","rc":0,"dur_s":10,"cost_usd":1.0,"moved":true,"gate":"pass","gate_why":"4 increment(s) done, suite green, handoff written"}
+{"v":1,"ts":"2026-08-29T13:01:00-03:00","event":"session","run_id":"r2","invocation":"run","kit_sha":"bbbbbbb","kit_dirty":false,"project":"p1","repo":"/p1","mission":"m11","phase":"EXEC","step":"EXEC","agent":"sdd-executor","model":"opus","attempt":1,"auto_retry":false,"session":"j2","rc":0,"dur_s":10,"cost_usd":1.0,"moved":false,"gate":"fail","gate_why":"1 of 5 increment(s) still to execute"}
+EOF
+out_histmoved="$( SDD_STATE_DIR="$OUTSIDE/histmoved" "$SDD" autonomy --by-mission 2>&1 )"
+assert_eq "a recovered count never credits a session that wrote nothing" "1" \
+  "$(grep -c '^  m11  2 session(s) · 1 advanced · 0 churned · 1 idle · ' <<< "$out_histmoved")"
+# The witness, and without it the assertion above is satisfied by a path that never reached the row
+# at all — which is the cheapest way to make it green for the wrong reason.
+assert_eq "and the row it declined to credit is one the path did read" "1" \
+  "$(grep -c '1 EXEC row(s) older than the pending fields read their progress from gate_why' <<< "$out_histmoved")"
+
 # --- the historical path never touches a row that carries the fields -----------------------------
 # The guard is `.pending_before == null` and NOT `has("pending_before")`: autonomy_session_row
 # builds the object with `($pbefore | tonumber? // null)`, so the KEY is on every row the runner has

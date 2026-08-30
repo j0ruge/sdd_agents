@@ -1827,7 +1827,21 @@ ledger_row_is_local() {
 #              invisible, now with the designed loop taken out of it.
 #   idle     — nothing on disk, gate failed: the old `stalled`, under the name that says what it is.
 #
-# The progress arm is guarded on BOTH fields being non-null, and that guard is load-bearing rather
+# The progress arm carries a THIRD guard, `.moved != false`, and it is a tautology rather than a
+# policy: `state_fingerprint` hashes the checkpoint, and closing an increment means editing the
+# checkpoint, so a session whose fingerprint did not move cannot have lowered the count. It costs
+# the field path nothing — a MEASURED pair with `moved: false` is unreachable — and it exists for
+# the recovered path below, where `pending_before` is INFERRED from prose and an empty memory
+# infers M, the largest value the field can take. That is right on the first row of a mission and
+# wrong on the row after a passing gate: a phase that closed at `4 increment(s) done` and then
+# reopened an increment reads `1 of 5`, is handed 5, and read `advanced` over a session that never
+# touched the disk — `0% waste` on a session that did nothing, the flattering direction again, and
+# the one place an inference outranked a measurement. Measured over the real ledger 2026-08-30
+# before the guard: 53 recovered rows, 48 `advanced`, and the guard moves NONE of them, so it fixes
+# the reachable hole without restating any history. `!= false` and not `== true`, because an
+# escalation row carries no `moved` at all and must stay where both readers already file it.
+#
+# The other two guards are on BOTH fields being non-null, and they are load-bearing rather
 # than defensive: jq orders `null` below every number, so `null < 2` is TRUE. gate_EXEC publishes
 # `pending_after` only after it has validated the checkpoint, so a run it refused (a `done` with no
 # commit) writes null there — and without the guard that refusal would read as the loudest possible
@@ -1892,7 +1906,7 @@ ledger_row_is_local() {
 # The key is `[repo, mission] | tostring` — an ARRAY rendered as JSON, for the reason mission_key
 # states in both readers: a separator chosen here would collide with one inside a repo path.
 ledger_outcome_defs() {   # printed jq, spliced into cmd_autonomy AND kaizen_series
-  printf '%s' 'def outcome: if .gate == "pass" then "advanced" elif (.pending_before != null and .pending_after != null and .pending_after < .pending_before) then "advanced" elif .moved == true then "churned" else "idle" end;'
+  printf '%s' 'def outcome: if .gate == "pass" then "advanced" elif (.pending_before != null and .pending_after != null and .pending_after < .pending_before and .moved != false) then "advanced" elif .moved == true then "churned" else "idle" end;'
   printf '%s' 'def historic_progress: reduce .[] as $r ({seen: {}, out: []}; (if ($r | type) == "object" and $r.event == "session" and $r.phase == "EXEC" then ([($r.repo // ""), ($r.mission // "")] | tostring) else null end) as $k | (if $k != null and $r.pending_before == null and (($r.gate_why // "") | test("^[0-9]+ of [0-9]+ increment")) then (($r.gate_why // "") | capture("^(?<n>[0-9]+) of (?<m>[0-9]+) increment") | {n: (.n | tonumber), m: (.m | tonumber)}) else null end) as $p | (if $p == null then $r else (if (.seen[$k] != null and .seen[$k].m == $p.m) then .seen[$k].p else $p.m end) as $before | $r + {pending_before: $before, pending_after: $p.n, increments_total: $p.m, progress_source: "gate_why"} end) as $row | .out += [$row] | (if $k == null then . elif $r.gate == "pass" then .seen[$k] = null elif $row.pending_after != null then .seen[$k] = {p: $row.pending_after, m: $row.increments_total} else . end)) | .out;'
   printf '%s' 'def outcome_tally: map(outcome) | reduce .[] as $o ({advanced: 0, churned: 0, idle: 0}; .[$o] += 1);'
   printf '%s' 'def phase_index: . as $p | ($phases | split(" ")) | index($p);'
