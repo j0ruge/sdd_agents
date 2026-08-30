@@ -87,6 +87,35 @@ a judged regression that disappears from the record will be re-attempted.
 
 ---
 
+## The autonomy numbers contradict a handoff written last week
+
+**Symptom:** `sdd autonomy` reports a far lower waste — or a far higher `advance_rate` — than the
+number quoted for the same missions in a `KAIZEN_LOG` entry, a handoff or a PR body, and no session
+behaved any differently in between.
+
+**Cause:** the yardstick moved, and it moved **twice in two days**. Until 2026-08-28 a session was
+`stalled` when it wrote nothing to disk; `20260828-instrumento-honesto` replaced that with
+`advanced`/`churned`/`idle`; and `20260829-o-incremento-que-andou` made a session `advanced` when
+the **increment** moved (`pending_after < pending_before`) and not only when its gate passed. That
+last change alone took 46 of the 72 EXEC rows in the real ledger out of `churned`: `gate_EXEC`
+refuses by construction until the last increment, so the pipeline's own designed loop was being
+counted as waste. Every reading is computed by TODAY's binary over the whole ledger, so any single
+`sdd autonomy` run is internally consistent — what is not comparable is a number on your screen
+against a number frozen in prose.
+
+**What you do:** re-derive both sides with the same binary before concluding anything. The
+comparison the judge makes is already apples to apples (`sdd kaizen --series` grades before and
+after one `kit_sha`, both slices scored by the current rule). When you cite an older number, say
+which yardstick produced it: ADR 0001 makes the mechanical rule code, and code is dated in the
+history.
+
+**Do not:** "correct" an old handoff to match today's number. It was true under the rule of its
+day, and rewriting it destroys the only evidence that the rule changed. Field contract in
+[the autonomy ledger](pipeline.md#the-autonomy-ledger); the measured before/after in
+[`KAIZEN_LOG.md`](../KAIZEN_LOG.md).
+
+---
+
 ## `sdd autonomy` says the rows "were born in another repo"
 
 ⚠️ **This is no longer a way for the JUDGE's series to come back empty.** Since
