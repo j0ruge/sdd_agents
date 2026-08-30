@@ -4855,12 +4855,28 @@ kaizen_series() {
         and all($window[]; . as $sha | ($rows | missions_on($sha)) == 1)
         and $best_reach < guard_floor;
 
+    # The `leve` clause reads `outcome` — the SAME definition the histogram and the human window
+    # read, spliced from ledger_outcome_defs — and never `.gate` directly. Its previous spelling
+    # was `(.auto_retry == true or .moved == false or .gate == "fail")`, added by 20260828 so that
+    # a phase which failed five gates and then passed could not read `ok`; measured against the
+    # real ledger one day later, that spelling labelled `leve` EVERY EXEC phase of two or more
+    # increments, because gate_EXEC refuses once per increment BY DESIGN. A rubric that cannot
+    # tell the designed loop of the pipeline from a phase that spun is not stricter, it is blind
+    # in a new direction — and it was about to stamp `leve` on the mission that came to fix it.
+    #
+    # `outcome != "advanced"` keeps everything 20260828 bought: the session that wrote and moved
+    # no increment is `churned`, the one that wrote nothing is `idle`, and either one still makes
+    # the phase `leve`. What it stops charging for is the refusal that the design itself schedules.
+    # `.moved == false` is subsumed rather than dropped — a session that wrote nothing and passed
+    # its gate reads `advanced`, which is the honest answer for a phase whose artifact was already
+    # on disk. `refez` does not move: a phase whose last session did not pass has not closed, and
+    # that is a fact about the gate, not about an increment.
     def phase_label:
       if (map(select(is_escalation)) | length) > 0
          or (map(select(.event == "session" and .invocation == "retry")) | length) > 0
          or ((map(select(.event == "session")) | last | .gate) != "pass")
       then "refez"
-      elif (map(select(.event == "session" and (.auto_retry == true or .moved == false or .gate == "fail"))) | length) > 0
+      elif (map(select(.event == "session" and (.auto_retry == true or outcome != "advanced"))) | length) > 0
       then "leve"
       else "ok"
       end;
@@ -4919,8 +4935,14 @@ kaizen_series() {
          # check-autonomy.sh compares the two histograms over one file, so a program that grew a
          # local copy of the definition is caught by the comparison and not by a sentence here.
          outcomes: ($sess | outcome_tally),
+         # advance_rate is the `advanced` slice of `outcomes` and NOT a second count beside it —
+         # written as `.gate == "pass"` until 20260829 it disagreed with the histogram printed one
+         # line above it, and the disagreement was exactly the designed loop: the ten EXEC sessions
+         # of the 20260816 kit mission, each closing an increment, read `0.10` here while the phase
+         # had not tripped once. One yardstick, two readings of it, so the headline the judge quotes
+         # cannot contradict the tally the judge is looking at.
          advance_rate: (if ($sess | length) == 0 then null
-                        else (($sess | map(select(.gate == "pass")) | length) / ($sess | length) * 100 | round / 100) end),
+                        else (($sess | map(select(outcome == "advanced")) | length) / ($sess | length) * 100 | round / 100) end),
          moved_rate: (if ($sess | length) == 0 then null
                       else (($sess | map(select(.moved == true)) | length) / ($sess | length) * 100 | round / 100) end),
          labels: ($detail | reduce .[] as $d ({ok: 0, leve: 0, refez: 0}; .[$d.label] += 1)),

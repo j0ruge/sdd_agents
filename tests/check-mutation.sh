@@ -2153,8 +2153,14 @@ mut_AUTONOMY_waste_idle_only() {
 # The rubric loses the churn clause: a phase of seven sessions and five refusals that ended up
 # passing reads `ok` to the judge again. Caught by the m6 group of the series fixture and by the
 # labels literal beside it.
+#
+# ⚠️ RE-ANCHORED on 2026-08-29 (20260829-o-incremento-que-andou, I4), when the clause stopped
+# reading `.gate` and started reading `outcome`. The old anchor described a line that no longer
+# exists: the mutant would have applied nothing and the harness would have refused it with rc 90.
+# Same sabotage — the phase keeps only the auto-retry arm and every churned session stops counting
+# — under the new spelling of the same clause.
 mut_KAIZEN_churn_reads_ok() {
-  sed -i 's@(.auto_retry == true or .moved == false or .gate == "fail")@(.auto_retry == true or .moved == false)@' "$1"
+  sed -i 's@(.auto_retry == true or outcome != "advanced")@(.auto_retry == true)@' "$1"
 }
 
 # `unique` leaves `launches`: three rows of one run read as three launches, and the intervention
@@ -2288,6 +2294,53 @@ mut_AUTONOMY_historic_pass_keeps_memory() {
 # entirely in the new schema prints no historical sentence` (1 instead of 0).
 mut_AUTONOMY_historic_annotates_new_rows() {
   sed -i 's@$k != null and $r.pending_before == null and@$k != null and@' "$1"
+}
+
+# The rubric goes back to reading the GATE VERDICT instead of what the session did — the exact
+# spelling 20260828 shipped, and the one that read `leve` over every EXEC phase of two or more
+# increments, because gate_EXEC refuses once per increment by design. Note this is NOT
+# `churn_reads_ok` loosened: that one drops the clause and calls churn `ok`, this one keeps the
+# clause at full strength and merely aims it at the wrong fact, so it is stricter than the truth
+# rather than laxer. A mutant that only ever over-reports is still a mutant: `leve` on a clean
+# designed loop is what makes the judge open a remedy for a phase that has nothing wrong with it.
+# Caught by `a designed loop reads ok, and advance_rate counts the increments that advanced`
+# (m7 reads `leve 0.7` against the `ok 0.7` it demands).
+mut_KAIZEN_label_reads_gate() {
+  sed -i 's@(.auto_retry == true or outcome != "advanced")@(.auto_retry == true or .moved == false or .gate == "fail")@' "$1"
+}
+
+# The headline goes back to counting gates, leaving `outcomes` beside it counting sessions: the
+# judge then reads `advance_rate: 0.10` one line under `advanced: 9` and has to guess which of the
+# two its own prompt means. Its own mutant and not a rider on the label above, because the two are
+# separate reads of one yardstick and the day one of them was written by hand is the day they
+# disagreed. Caught by the same assertion (`ok 0.5` against `ok 0.7`) and by `advance_rate reads
+# what the sessions did and moved_rate reads the disk` (`0.5 0.9`).
+mut_KAIZEN_advance_rate_reads_gate() {
+  sed -i 's@($sess | map(select(outcome == "advanced")) | length) / ($sess | length)@($sess | map(select(.gate == "pass")) | length) / ($sess | length)@' "$1"
+}
+
+# The two arms of the `leve` clause, each removable on its own — and both WERE removable green
+# until 20260829, because the one fixture that named them (m1/QA) carries an idle session and an
+# in-loop auto retry at the same time and cannot say which one labelled it. That is the fail-open
+# shape this file exists to refuse: an assertion whose name promises an arm it never measured.
+#
+# `label_auto_retry_blind` drops the arm that reads "this phase needed a second try". It looks
+# subsumed by `outcome != "advanced"` and is not: in the repo that BUILDS the kit every session
+# commits, so the failing first pass and its in-loop retry land on different kit_sha and are graded
+# in different groups — the surviving retry row advanced, and alone in its group it would read `ok`.
+# `label_idle_blind` narrows the outcome arm to churn, so a session that produced NOTHING stops
+# marking the phase. Both caught by `each arm of the leve clause stands alone`, which grades three
+# isolated phases on one line and so cannot be satisfied by trading one arm for another.
+#
+# ⚠️ Four mutants now anchor on the same clause text (these two, `churn_reads_ok` and
+# `label_reads_gate`); an edit to it re-anchors all four, and the harness says so with rc 90 rather
+# than by going quiet.
+mut_KAIZEN_label_auto_retry_blind() {
+  sed -i 's@(.auto_retry == true or outcome != "advanced")@(outcome != "advanced")@' "$1"
+}
+
+mut_KAIZEN_label_idle_blind() {
+  sed -i 's@(.auto_retry == true or outcome != "advanced")@(.auto_retry == true or outcome == "churned")@' "$1"
 }
 
 CATALOG=(
@@ -2479,6 +2532,10 @@ CATALOG=(
   AUTONOMY_historic_total_change_blind
   AUTONOMY_historic_pass_keeps_memory
   AUTONOMY_historic_annotates_new_rows
+  KAIZEN_label_reads_gate
+  KAIZEN_advance_rate_reads_gate
+  KAIZEN_label_auto_retry_blind
+  KAIZEN_label_idle_blind
 )
 
 # Mutations that are NOT caught today, each with the increment that closes it. Ratchet in both

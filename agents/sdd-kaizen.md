@@ -39,7 +39,8 @@ accepted and decides nothing here; do not add it, and do not read its absence as
 
 The JSON gives you, per kit version (`kit_sha`, file order, latest and previous):
 missions, sessions, `outcomes` (`{advanced, churned, idle}` — what the sessions did; cite it
-before anything else), `advance_rate` (the share whose gate passed), `moved_rate` (the share
+before anything else), `advance_rate` (the `advanced` share of those same sessions — one
+yardstick read twice, so it can never contradict the tally beside it), `moved_rate` (the share
 that wrote to the disk), the label tally (`ok` / `leve` / `refez` per repo×mission×phase),
 escalations by kind, cost, and the guard (`missions_after_change`, `missions_with_session`,
 `sessions`, `sufficient`, `degenerate_axis`). The floor is `missions_with_session`, not
