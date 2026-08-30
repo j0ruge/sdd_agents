@@ -191,3 +191,21 @@ por decisão medida e não por não ter havido nada a dizer:
   achada dentro dela e fechada dentro dela.
 </content>
 </invoke>
+
+**Dois achados de kit que a fase PR desta missão expôs, registrados pelo operador humano
+(2026-08-30) e não pelo executor** — a mesma regra do carimbo os mantém fora do `TODO.md` até o
+merge; quem transporta é o humano, com a catraca no mesmo diff:
+
+- kit: **o `sdd-publisher` não consegue esperar o `sdd health` dentro de uma sessão headless** —
+  `agents/sdd-publisher.md:31-39` — o agente iniciou o health "em background" e encerrou o turno
+  "esperando a notificação"; em `claude -p` encerrar o turno encerra a sessão, e o health morreu
+  com ela (US$ 1,46 por nada). A segunda sessão rodou o health em primeiro plano e levou **82 min**
+  (US$ 2,73). É a classe do *"waiting for the suite"* de `4c86712`, agora na fase PR. Direção:
+  o **runner** roda `sdd health` antes de abrir a sessão de PR quando o carimbo está inválido — é
+  comando, não julgamento, e não cabe numa sessão paga.
+- kit: **âncora morta de mutante só aparece no catálogo inteiro (15–20 min), mas detectá-la custa
+  segundos** — `tests/check-mutation.sh:2647` — a guarda `cmp -s` (rc 90) só roda dentro do
+  `sdd health`; aplicar os 195 `sed` numa cópia de `bin/sdd` e comparar não roda suíte nenhuma.
+  Cinco mutantes desta missão apodreceram (I1 e REVIEW mexeram nas linhas ancoradas) e a REVIEW
+  fechou Grade A sem ver — o carimbo pegou, ao preço de duas sessões de publisher. Direção: um
+  passo do `run-all.sh` (ou do `gate_REVIEW`) que só prova que **cada mutante ainda aplica**.
