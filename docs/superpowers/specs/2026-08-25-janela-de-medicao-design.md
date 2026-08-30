@@ -1,8 +1,9 @@
 # A janela de medição — o primeiro veredito do juiz do kaizen
 
-**Data:** 2026-08-25 · **Estado (2026-08-26): JANELA ENCERRADA APÓS A MISSÃO 1, POR DECISÃO
-HUMANA.** Leia a seção 9 antes de qualquer outra coisa — o plano abaixo está **preservado como
-escrito**, e a seção 9 diz o que dele sobreviveu ao contato com a realidade.
+**Data:** 2026-08-25 · **Estado (2026-08-30): REABERTA COMO JANELA 2 — leia
+[`2026-08-30-janela-2-handoff.md`](2026-08-30-janela-2-handoff.md), não este arquivo.** A janela 1
+foi encerrada após a missão 1 (seção 9); os dois motivos foram consertados e a seção 10 diz o que
+mudou. O plano abaixo está **preservado como escrito**.
 
 Este documento é auto-contido de propósito. A sessão que o ler não participou da conversa que o
 gerou e não precisa dela. Leia inteiro antes de agir.
@@ -288,3 +289,14 @@ produto, receberam `wont-fix` assinado, e o `status:` do handoff foi virado à m
 2. **Implementar a ADR 0005** — as três partes. É o que torna a janela contável.
 3. **Reabrir a janela**, com as missões 2 e 3 do `sales_quote` (as âncoras da tabela do §4 seguem
    válidas; o item 3, SQ-98, segue com causa-raiz desconhecida e a armadilha do §3 segue de pé).
+
+## 10. Reabertura — 2026-08-30
+
+Os dois motivos do § 9 foram consertados (PR #25 e ADR 0006 para o laço da QA; ADR 0005
+implementada em `60fe724…f01c0bd` para o juiz), e a missão 2 rodou sozinha como medição de custo
+(US$ 68,87 contra os US$ 144,88 da missão 1). O passo 3 do § 9 — reabrir — é a **janela 2**, com
+três decisões novas (D18–D20 no `CONTEXT.md`): o eixo abre na `main` de 2026-08-30 sem mudança de
+código; "pronto" é o primeiro veredito com `sufficient: true` mais o plano nascido decidido pelo
+humano; as missões são duas baratas e o SQ-98 por último. Regras, comandos e armadilhas — inclusive
+a linha `kit_dirty: true` que a missão 2 já pagou — estão no handoff
+[`2026-08-30-janela-2-handoff.md`](2026-08-30-janela-2-handoff.md).
