@@ -636,3 +636,38 @@ Achados sobre **repos-alvo** vão para o `TODO.md` daquele repo. Este arquivo é
   `run_phase` ou escreve a linha com `invocation: close`, e o enum de `invocation` no `pipeline.md`
   aprende o valor no mesmo commit — o mesmo contrato de cauda aberta que `kind` carrega.
   — descoberto por `humano` na missão `20260828-instrumento-honesto` (2026-08-28)
+
+- [ ] **`gate_EXEC` valida por uma leitura e conta por outra, e uma célula vazia as separa** —
+  `bin/sdd:786` — o laço lê com `IFS=$'\t' read`, que COLAPSA tabs por serem whitespace de IFS; o
+  `checkpoint_tally` lê com `awk -F'\t' $4`, que não colapsa. Uma célula vazia e os dois caem em
+  colunas diferentes — o que desmente o cabeçalho da própria função ("the runner's ONE count").
+  Fail-open pela D15: diferencial sobre `| I1 | a |  | done | pending |` dá `MAIN rc=1` contra
+  `HEAD rc=0`, o gate passa onde recusava. Direção: o laço para de depender de IFS, e os dois
+  leitores são provados iguais por asserção DIFERENCIAL, nunca pelo comentário.
+  — descoberto por `sdd-reviewer` na missão `20260829-o-incremento-que-andou` (2026-08-30)
+
+- [ ] **O caminho histórico infere `M` quando a memória está vazia, e M é o maior valor possível** —
+  `bin/sdd:1896` — sem memória o braço `advanced` passa a ser satisfeito por qualquer prosa que não
+  seja `M of M`: certo na primeira linha de uma missão (14 linhas reais), fabricação depois de um
+  `pass` (4) ou com `M` mudado (2). A guarda `.moved != false` (`f00c2dc`) fechou o buraco
+  alcançável; a inferência segue para quem mexeu no disco. Direção prototipada e medida: memória
+  guarda o total FEITO, `pending_before := M - done_before` — um invariante que muda **0 de 158**
+  linhas do ledger real. Não aplicado: reescreve a decisão 3 do grill — julgamento humano.
+  — descoberto por `sdd-reviewer` na missão `20260829-o-incremento-que-andou` (2026-08-30)
+
+- [ ] **O ledger global real está contaminado por missões de fixture dos próprios testes** —
+  `~/.sdd/autonomy-log.jsonl` — `20260901-jornada-qa`, `20260903-placeholder`, `20260904-conflito` e
+  `20260101-fixture` moram no ledger que o `sdd autonomy` e o `sdd kaizen` leem para julgar o kit:
+  4 dos 6 grupos EXEC do número de controle desta missão são fixtures. Consumidor fora da suíte (o
+  juiz, a D12 e todo número que o kit publica sobre si), e é por isso que a mesma pergunta devolveu
+  quatro respostas diferentes durante esta revisão. Direção: todo teste exporta `SDD_STATE_DIR`, e
+  um probe recusa `bin/sdd` escrevendo no ledger de `$HOME` sob `SDD_MUTANT`/CI.
+  — descoberto por `sdd-reviewer` na missão `20260829-o-incremento-que-andou` (2026-08-30)
+
+- [ ] **A frase de divulgação do caminho datado conta linhas que nenhum balde mostra** —
+  `bin/sdd:4535` — `$historic` é ligado depois do filtro de repo e ANTES da comparabilidade, então
+  ele conta linhas anotadas que depois saem como não-comparáveis: medido, a frase diz "2 rows" sobre
+  uma tabela de 1 sessão. Fail-open brando — a frase é o SINAL DE APAGAMENTO do caminho datado, e um
+  número que ninguém consegue reconciliar não serve para decidir apagar nada. Direção: ligar sobre
+  `is_session and comparable`, ou dizer o resto como o `$history_extra` já faz.
+  — descoberto por `sdd-reviewer` na missão `20260829-o-incremento-que-andou` (2026-08-30)
