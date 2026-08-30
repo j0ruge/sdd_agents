@@ -127,6 +127,10 @@ echo "== series =="
 # refez (increment-blocked, a Jidoka with no session at all), m3/EXEC ok.
 # m6/EXEC churn (fail/true then pass/true, one run, no retry, no escalation — ok under the old
 # rubric, leve since 20260828-instrumento-honesto)
+# m7/EXEC the DESIGNED loop (three sessions of one run, each closing one increment: the gate
+# refuses twice by construction and the phase never churned once — `leve` until 20260829, `ok`
+# since). It stands beside m6 on the same version on purpose: both are "a phase whose gate failed
+# and then passed", and the ONLY thing that tells them apart is whether the pending count fell.
 localize > "$LEDGER" <<'EOF'
 {"v":1,"ts":"2026-08-15T10:00:00-03:00","event":"session","run_id":"r1","invocation":"run","kit_sha":"fff9999","kit_dirty":false,"project":"p1","repo":"/p1","mission":"m1","phase":"QA","step":"QA:close","agent":"sdd-qa","model":"opus","attempt":1,"auto_retry":false,"session":"s1","rc":0,"dur_s":10,"cost_usd":1.0,"moved":false,"gate":"fail","gate_why":"x"}
 {"v":1,"ts":"2026-08-15T10:01:00-03:00","event":"session","run_id":"r1","invocation":"run","kit_sha":"fff9999","kit_dirty":false,"project":"p1","repo":"/p1","mission":"m1","phase":"QA","step":"QA:close","agent":"sdd-qa","model":"opus","attempt":1,"auto_retry":true,"session":"s1","rc":0,"dur_s":10,"cost_usd":1.0,"moved":true,"gate":"pass","gate_why":"x"}
@@ -143,6 +147,9 @@ localize > "$LEDGER" <<'EOF'
 {"v":1,"ts":"2026-08-15T10:11:00-03:00","event":"session","run_id":"r8","invocation":"run","kit_sha":"aaa1111","kit_dirty":false,"project":"sdd_agents","repo":"/kit","mission":"20260815-kaizen","phase":"KAIZEN","step":"KAIZEN","agent":"sdd-kaizen","model":"opus","attempt":1,"auto_retry":false,"session":"s8","rc":0,"dur_s":10,"cost_usd":0.5,"moved":true,"gate":"pass","gate_why":"x"}
 {"v":1,"ts":"2026-08-15T10:12:00-03:00","event":"session","run_id":"r9","invocation":"run","kit_sha":"fff9999","kit_dirty":false,"project":"p1","repo":"/p1","mission":"m6","phase":"EXEC","step":"EXEC","agent":"sdd-executor","model":"opus","attempt":1,"auto_retry":false,"session":"s9","rc":0,"dur_s":10,"cost_usd":1.0,"moved":true,"gate":"fail","gate_why":"x"}
 {"v":1,"ts":"2026-08-15T10:13:00-03:00","event":"session","run_id":"r9","invocation":"run","kit_sha":"fff9999","kit_dirty":false,"project":"p1","repo":"/p1","mission":"m6","phase":"EXEC","step":"EXEC","agent":"sdd-executor","model":"opus","attempt":2,"auto_retry":false,"session":"s10","rc":0,"dur_s":10,"cost_usd":1.0,"moved":true,"gate":"pass","gate_why":"x"}
+{"v":1,"ts":"2026-08-15T10:14:00-03:00","event":"session","run_id":"r10","invocation":"run","kit_sha":"fff9999","kit_dirty":false,"project":"p1","repo":"/p1","mission":"m7","phase":"EXEC","step":"EXEC","agent":"sdd-executor","model":"opus","attempt":1,"auto_retry":false,"session":"s11","rc":0,"dur_s":10,"cost_usd":1.0,"moved":true,"pending_before":3,"pending_after":2,"increments_total":3,"gate":"fail","gate_why":"2 of 3 increment(s) still to execute"}
+{"v":1,"ts":"2026-08-15T10:15:00-03:00","event":"session","run_id":"r10","invocation":"run","kit_sha":"fff9999","kit_dirty":false,"project":"p1","repo":"/p1","mission":"m7","phase":"EXEC","step":"EXEC","agent":"sdd-executor","model":"opus","attempt":2,"auto_retry":false,"session":"s12","rc":0,"dur_s":10,"cost_usd":1.0,"moved":true,"pending_before":2,"pending_after":1,"increments_total":3,"gate":"fail","gate_why":"1 of 3 increment(s) still to execute"}
+{"v":1,"ts":"2026-08-15T10:16:00-03:00","event":"session","run_id":"r10","invocation":"run","kit_sha":"fff9999","kit_dirty":false,"project":"p1","repo":"/p1","mission":"m7","phase":"EXEC","step":"EXEC","agent":"sdd-executor","model":"opus","attempt":3,"auto_retry":false,"session":"s13","rc":0,"dur_s":10,"cost_usd":1.0,"moved":true,"pending_before":1,"pending_after":0,"increments_total":3,"gate":"pass","gate_why":"suite green"}
 EOF
 
 # From a plain directory that is NOT a git repository: the ledger is global and the series must
@@ -165,29 +172,37 @@ assert_eq "increment-blocked labels the phase 'refez' even with zero dead sessio
   "refez" "$(field '.previous.detail[] | select(.mission == "m2" and .phase == "EXEC") | .label')"
 assert_eq "a clean pass labels the phase 'ok'" \
   "ok" "$(field '.latest.detail[] | select(.mission == "m3") | .label')"
+# Five phase groups on the previous version: m1/QA leve, m1/REVIEW refez, m2/EXEC refez,
+# m6/EXEC leve, m7/EXEC ok. The `ok` is the designed loop and it was 0 until 20260829 — the tally
+# is what stops the new clause from being asserted only where it is convenient.
 assert_eq "the label tally sums the detail" \
-  '{"ok":0,"leve":2,"refez":2}' "$(jq -c '.previous.labels' <<< "$SERIES_OUT")"
+  '{"ok":1,"leve":2,"refez":2}' "$(jq -c '.previous.labels' <<< "$SERIES_OUT")"
 assert_eq "escalations are counted by kind" '{"budget-exhausted":1,"increment-blocked":1}' \
   "$(jq -c '.previous.escalations' <<< "$SERIES_OUT")"
-# 6 of the 7 sessions of the previous version wrote to the disk (s1 is the one that did not).
-assert_eq "moved_rate is computed over the group's sessions" "0.86" \
+# 9 of the 10 sessions of the previous version wrote to the disk (s1 is the one that did not).
+assert_eq "moved_rate is computed over the group's sessions" "0.9" \
   "$(field '.previous.moved_rate')"
 # What the sessions DID — the headline since 20260828-instrumento-honesto. Over the previous
-# version: s1 wrote nothing and failed (idle); s2 and the first m6 session wrote and failed
-# (churned); the other four passed their gate (advanced). All three counts differ, so no two
-# swapped fields agree by coincidence.
+# version: s1 wrote nothing and failed (idle); s2 and the first m6 session wrote and failed with
+# the pending count untouched (churned); four passed their gate and the two middle sessions of m7
+# closed an increment each (advanced, 4 + 3). All three counts differ, so no two swapped fields
+# agree by coincidence.
 assert_eq "outcomes over the previous version: advanced · churned · idle" \
-  '{"advanced":4,"churned":2,"idle":1}' "$(jq -c '.previous.outcomes' <<< "$SERIES_OUT")"
+  '{"advanced":7,"churned":2,"idle":1}' "$(jq -c '.previous.outcomes' <<< "$SERIES_OUT")"
 assert_eq "and over the latest, a single clean pass" \
   '{"advanced":1,"churned":0,"idle":0}' "$(jq -c '.latest.outcomes' <<< "$SERIES_OUT")"
 assert_eq "each phase of the detail carries its own outcomes" \
   '{"advanced":1,"churned":1,"idle":0}' \
   "$(jq -c '.previous.detail[] | select(.mission == "m1" and .phase == "REVIEW") | .outcomes' <<< "$SERIES_OUT")"
-# advance_rate reads the gate, moved_rate reads the disk: 4 of 7 passed, 6 of 7 wrote. Asserted on
-# ONE line, on a fixture where the two numbers DIFFER, so a series that derived one from the other
-# cannot pass.
-assert_eq "advance_rate reads the gate and moved_rate reads the disk, and here they differ" \
-  "0.57 0.86" "$(jq -r '"\(.previous.advance_rate) \(.previous.moved_rate)"' <<< "$SERIES_OUT")"
+# advance_rate reads what the session DID, moved_rate reads the disk: 7 of 10 advanced, 9 of 10
+# wrote. Asserted on ONE line, on a fixture where the two numbers DIFFER, so a series that derived
+# one from the other cannot pass. ⚠️ The name used to say "reads the gate", and it was true until
+# 20260829-o-incremento-que-andou: only 5 of these 10 sessions passed a gate (0.5), and the two m7
+# sessions the old spelling threw away are the designed loop this mission exists to stop
+# discarding. Three numbers, three different values — 0.5 gate, 0.7 outcome, 0.9 disk — so no
+# yardstick swap here is satisfiable by coincidence.
+assert_eq "advance_rate reads what the sessions did and moved_rate reads the disk, and here they differ" \
+  "0.7 0.9" "$(jq -r '"\(.previous.advance_rate) \(.previous.moved_rate)"' <<< "$SERIES_OUT")"
 # The churn clause of the rubric. A phase whose gate failed and then passed inside ONE run, with
 # no auto retry, no human retry and no escalation, used to read `ok` — frete-cif-fob EXEC, seven
 # sessions and five refusals, read `ok` to the judge. Any session of the phase with gate == fail is
@@ -197,6 +212,25 @@ assert_eq "a phase that wrote, failed its gate and then passed reads leve, never
   "leve" "$(field '.previous.detail[] | select(.mission == "m6" and .phase == "EXEC") | .label')"
 assert_eq "control: a single clean pass still reads ok" \
   "ok" "$(field '.latest.detail[] | select(.mission == "m3") | .label')"
+
+# --- the designed loop is not churn (20260829-o-incremento-que-andou) --------
+# The clause above ("any session with gate == fail is at least leve") was measured a day later
+# against the ledger it was written for and read `leve` over EVERY EXEC phase of 2+ increments:
+# the runner refuses the gate once per increment BY DESIGN, so `leve` had stopped separating the
+# pipeline's own loop from a phase that spun. m7 is that loop — three sessions, each closing one
+# increment, no auto retry, no human retry, no escalation — and it now reads `ok` because every
+# one of its sessions advanced. The rate is asserted on the SAME line as the label, because they
+# are one decision read twice: under the old rubric this reads `leve 0.5`.
+assert_eq "a designed loop reads ok, and advance_rate counts the increments that advanced" \
+  "ok 0.7" \
+  "$(jq -r '[(.previous.detail[] | select(.mission == "m7" and .phase == "EXEC") | .label), (.previous.advance_rate | tostring)] | join(" ")' <<< "$SERIES_OUT")"
+# The other half, and the reason the clause is not "EXEC is always ok": m6 is the same SHAPE as
+# m7 — one run, gate fail then gate pass, no retry, no escalation — and it stays `leve` because
+# its failing session moved no increment. Its own outcomes are read on the same line, so a rubric
+# that reached `leve` for some other reason (a gate token, a session count) cannot satisfy this.
+assert_eq "real churn still reads leve" \
+  'leve {"advanced":1,"churned":1,"idle":0}' \
+  "$(jq -r '[(.previous.detail[] | select(.mission == "m6" and .phase == "EXEC") | .label), (.previous.detail[] | select(.mission == "m6" and .phase == "EXEC") | .outcomes | tojson)] | join(" ")' <<< "$SERIES_OUT")"
 assert_eq "one mission after the latest change" "1" "$(field '.guard.missions_after_change')"
 assert_eq "one mission is below the guard floor of 3" "false" "$(field '.guard.sufficient')"
 # The KAIZEN row shares the latest kit_sha on purpose: leaking into the group would inflate
@@ -211,6 +245,40 @@ assert_eq "nor its missions" "1" "$(field '.latest.missions')"
 assert_eq "every excluded row is counted, by reason" \
   '{"non_comparable":2,"unrecognized":1,"meta":1,"other_repo":0,"no_repo":1}' \
   "$(jq -c '.excluded' <<< "$SERIES_OUT")"
+
+# --- each arm of the `leve` clause, ALONE ------------------------------------
+# Found by the sabotage pass of 20260829-o-incremento-que-andou, and it was a fail-open: with the
+# whole rubric anchored on the fixture above, `(.auto_retry == true or ...)` could be DELETED and
+# `outcome != "advanced"` narrowed to `outcome == "churned"` with the suite still green. The reason
+# is that m1/QA carries both facts at once — an idle session AND an in-loop auto retry — so the
+# assertion whose name promises the auto-retry arm cannot tell which of the two labelled it. A
+# fixture that satisfies an assertion for two possible reasons measures neither.
+#
+# One phase per arm, each with exactly ONE reason to be `leve`, plus a control that has none:
+#   m8  the auto retry ALONE — its single session passed its gate AND closed an increment, so
+#       `outcome` reads `advanced` and the arm is the only thing left. Reachable and not academic:
+#       in the repo that builds the kit every session commits, so the failing first pass and the
+#       in-loop retry land on DIFFERENT kit_sha and are graded in different groups — the retry is
+#       then alone in its group, and without this arm a phase that needed two tries reads `ok`.
+#   m9  the idle session ALONE — s1 wrote nothing and failed, s2 passed, no retry of any kind.
+#       Narrowed to `outcome == "churned"` this reads `ok`: a session that produced NOTHING would
+#       stop marking the phase, which is the older and worse blindness of the two.
+#   m10 the control — the designed loop again, in isolation: two sessions, each closing an
+#       increment, no retry. If this reads `leve` the clause is not stricter, it is just wrong.
+# Asserted on ONE line so no single arm can be traded for another.
+echo "== series: each arm of the leve clause, alone =="
+mkdir -p "$OUTSIDE/arms"
+localize > "$OUTSIDE/arms/autonomy-log.jsonl" <<'EOF'
+{"v":1,"ts":"2026-08-17T10:00:00-03:00","event":"session","run_id":"a1","invocation":"run","kit_sha":"eee5555","kit_dirty":false,"project":"p1","repo":"/p1","mission":"m8","phase":"EXEC","step":"EXEC","agent":"sdd-executor","model":"opus","attempt":1,"auto_retry":true,"session":"a1s","rc":0,"dur_s":10,"cost_usd":1.0,"moved":true,"pending_before":2,"pending_after":1,"increments_total":2,"gate":"pass","gate_why":"suite green"}
+{"v":1,"ts":"2026-08-17T10:01:00-03:00","event":"session","run_id":"a2","invocation":"run","kit_sha":"eee5555","kit_dirty":false,"project":"p1","repo":"/p1","mission":"m9","phase":"EXEC","step":"EXEC","agent":"sdd-executor","model":"opus","attempt":1,"auto_retry":false,"session":"a2s","rc":0,"dur_s":10,"cost_usd":1.0,"moved":false,"gate":"fail","gate_why":"no handoff"}
+{"v":1,"ts":"2026-08-17T10:02:00-03:00","event":"session","run_id":"a2","invocation":"run","kit_sha":"eee5555","kit_dirty":false,"project":"p1","repo":"/p1","mission":"m9","phase":"EXEC","step":"EXEC","agent":"sdd-executor","model":"opus","attempt":2,"auto_retry":false,"session":"a3s","rc":0,"dur_s":10,"cost_usd":1.0,"moved":true,"pending_before":2,"pending_after":0,"increments_total":2,"gate":"pass","gate_why":"suite green"}
+{"v":1,"ts":"2026-08-17T10:03:00-03:00","event":"session","run_id":"a3","invocation":"run","kit_sha":"eee5555","kit_dirty":false,"project":"p1","repo":"/p1","mission":"m10","phase":"EXEC","step":"EXEC","agent":"sdd-executor","model":"opus","attempt":1,"auto_retry":false,"session":"a4s","rc":0,"dur_s":10,"cost_usd":1.0,"moved":true,"pending_before":2,"pending_after":1,"increments_total":2,"gate":"fail","gate_why":"1 of 2 increment(s) still to execute"}
+{"v":1,"ts":"2026-08-17T10:04:00-03:00","event":"session","run_id":"a3","invocation":"run","kit_sha":"eee5555","kit_dirty":false,"project":"p1","repo":"/p1","mission":"m10","phase":"EXEC","step":"EXEC","agent":"sdd-executor","model":"opus","attempt":2,"auto_retry":false,"session":"a5s","rc":0,"dur_s":10,"cost_usd":1.0,"moved":true,"pending_before":1,"pending_after":0,"increments_total":2,"gate":"pass","gate_why":"suite green"}
+EOF
+ARMS_OUT="$( cd "$FIX" && SDD_STATE_DIR="$OUTSIDE/arms" "$SDD" kaizen --series 2>/dev/null )"
+arm_label() { jq -r --arg m "$1" '.latest.detail[] | select(.mission == $m and .phase == "EXEC") | .label' <<< "$ARMS_OUT"; }
+assert_eq "each arm of the leve clause stands alone: auto retry, idle session, and neither" \
+  "leve leve ok" "$(arm_label m8) $(arm_label m9) $(arm_label m10)"
 
 # --- a degradation is an escalation the series has to SEE --------------------
 # `PUBLISH_ON_REVIEW_BLOCKED=draft` makes the runner give up on reviewing and publish a draft PR

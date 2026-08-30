@@ -978,8 +978,11 @@ mut_RUN_jidoka_pipefail() {
 # only after the fact. The new range brackets the door with the first pass's OWN session row
 # (`$gate_rc`, which the retry spells `$gate_rc2` — that is what makes it unique) and the
 # `phases_run` line the door now precedes. Both were measured to occur exactly once.
+# ⚠️ Re-anchored in 20260829-o-incremento-que-andou: the row call now carries three more arguments
+# on a continuation line, so the range starts on `"$GATE_WHY" \` — a line that ENDS in a backslash.
+# The plan listed the outcome mutants to re-anchor and forgot these two; the stamp caught it (rc 90).
 mut_RUN_blocked_not_escalated() {
-  sed -i '/^      "\$( \[ "\$gate_rc" -eq 0 \] && echo pass || echo fail )" "\$GATE_WHY"$/,/^    phases_run=\$((phases_run + 1))$/ s|^    if handoff_blocked_escalation "\$phase"; then return 3; fi$|    if false; then return 3; fi|' "$1"
+  sed -i '/^      "\$( \[ "\$gate_rc" -eq 0 \] && echo pass || echo fail )" "\$GATE_WHY" \\$/,/^    phases_run=\$((phases_run + 1))$/ s|^    if handoff_blocked_escalation "\$phase"; then return 3; fi$|    if false; then return 3; fi|' "$1"
 }
 #
 # The ORDER of door 1 against the `--max-phases` ceiling deliberately gets no mutant of its own,
@@ -1010,7 +1013,7 @@ mut_RUN_blocked_retry_not_escalated() {
 # kaizen judge reads says "two sessions moved nothing" about a machine that was never up, which
 # names neither the cause nor anyone who could act on it.
 mut_RUN_app_down_not_escalated() {
-  sed -i '/^      "$( \[ "$gate_rc" -eq 0 \] && echo pass || echo fail )" "$GATE_WHY"$/,/^    phases_run=$((phases_run + 1))$/ s|^    if app_down_escalation "$phase"; then return 3; fi$|    if false; then return 3; fi|' "$1"
+  sed -i '/^      "$( \[ "$gate_rc" -eq 0 \] && echo pass || echo fail )" "$GATE_WHY" \\$/,/^    phases_run=$((phases_run + 1))$/ s|^    if app_down_escalation "$phase"; then return 3; fi$|    if false; then return 3; fi|' "$1"
 }
 
 # Door 2: the inline retry, and it is not symmetry. The marker is a global, `current_phase` runs in
@@ -2115,20 +2118,32 @@ mut_RUN_kit_guard_arms_projection() {
 # and a session that wrote and failed its gate reads `advanced`. Both readers inherit it, so the
 # parity assertion stays green — which is exactly why check-autonomy.sh also pins the histogram of
 # a known fixture: `churned` has to come out 2 there, and this reads 0.
+#
+# ⚠️ RE-ANCHORED on 2026-08-29 (20260829-o-incremento-que-andou, I2), when the definition grew its
+# progress arm. The old anchor still described a line that no longer exists, so the mutant would
+# have applied nothing and the harness would have refused it with rc 90 — a no-op that reads as a
+# catalogue failure, not as a silent gap. Same sabotage, new spelling of the same line.
 mut_AUTONOMY_outcome_reads_moved_only() {
-  sed -i 's@def outcome: if .gate == "pass" then "advanced" elif .moved == true then "churned" else "idle" end;@def outcome: if .moved == true then "advanced" else "idle" end;@' "$1"
+  sed -i 's@def outcome: if .gate == "pass" then "advanced" elif (.pending_before != null and .pending_after != null and .pending_after < .pending_before and .moved != false) then "advanced" elif .moved == true then "churned" else "idle" end;@def outcome: if .moved == true then "advanced" else "idle" end;@' "$1"
 }
 
-# The series stops splicing the shared definition and grows a LOCAL copy on the old yardstick —
-# the "same spelling in both programs" that CLAUDE.md measures as not-parity. Each reader is then
-# internally consistent and only the comparison between the two goes red (5.7), plus the exact
-# histogram of the series fixture (5.9). The copy carries outcome_tally too, because the splice it
-# replaces carried it: a mutant that dropped the tally would kill the suite with a jq compile error
-# instead of with the divergence it exists to reproduce. Held in a variable so the single quotes
-# it needs can sit inside a double-quoted sed script; the result is `"$(ledger_row_is_local)"'def
-# outcome: …;''` followed by the program — two adjacent single-quoted strings, one argument.
+# The series grows a LOCAL copy of the yardstick on the OLD rule — the "same spelling in both
+# programs" that CLAUDE.md measures as not-parity. Each reader is then internally consistent and
+# only the comparison between the two goes red (5.7), plus the exact histogram of the series
+# fixture (5.9).
+#
+# It SHADOWS rather than replaces: the splice stays and the local copy is appended after it, so a
+# later `def outcome:` wins for every use below (jq keeps the last definition). The first spelling
+# deleted the splice outright and carried its own copy of everything it had to keep alive —
+# outcome_tally then, historic_progress from 2026-08-29 — and that is a mutant that re-arms itself
+# as a compile-error mutant every time ledger_outcome_defs grows a def. Measured: with
+# historic_progress added and the copy left alone, `kaizen --series` stopped compiling and this
+# mutant killed ten assertions across two files by CRASHING, not by the divergence it exists to
+# reproduce — the exact accident the outcome_tally sentence had already warned about once. Shadowing
+# reproduces the same divergence and cannot go stale. Held in a variable so the single quotes it
+# needs can sit inside a double-quoted sed script.
 mut_KAIZEN_outcome_inlined_old() {
-  local copy="'def outcome: if .moved == true then \"advanced\" else \"idle\" end; def outcome_tally: map(outcome) | reduce .[] as \$o ({advanced: 0, churned: 0, idle: 0}; .[\$o] += 1);'"
+  local copy="\"\$(ledger_outcome_defs)\"'def outcome: if .moved == true then \"advanced\" else \"idle\" end; def outcome_tally: map(outcome) | reduce .[] as \$o ({advanced: 0, churned: 0, idle: 0}; .[\$o] += 1);'"
   sed -i "/^kaizen_series() {/,/^}/ { s@\"\\\$(ledger_outcome_defs)\"@${copy}@ }" "$1"
 }
 
@@ -2141,8 +2156,14 @@ mut_AUTONOMY_waste_idle_only() {
 # The rubric loses the churn clause: a phase of seven sessions and five refusals that ended up
 # passing reads `ok` to the judge again. Caught by the m6 group of the series fixture and by the
 # labels literal beside it.
+#
+# ⚠️ RE-ANCHORED on 2026-08-29 (20260829-o-incremento-que-andou, I4), when the clause stopped
+# reading `.gate` and started reading `outcome`. The old anchor described a line that no longer
+# exists: the mutant would have applied nothing and the harness would have refused it with rc 90.
+# Same sabotage — the phase keeps only the auto-retry arm and every churned session stops counting
+# — under the new spelling of the same clause.
 mut_KAIZEN_churn_reads_ok() {
-  sed -i 's@(.auto_retry == true or .moved == false or .gate == "fail")@(.auto_retry == true or .moved == false)@' "$1"
+  sed -i 's@(.auto_retry == true or outcome != "advanced")@(.auto_retry == true)@' "$1"
 }
 
 # `unique` leaves `launches`: three rows of one run read as three launches, and the intervention
@@ -2177,6 +2198,199 @@ mut_AUTONOMY_reopened_comparable_only() {
 # under this mutant where it demands "2 1 0".
 mut_AUTONOMY_notes_borrowed_across_repos() {
   sed -i 's@if \$r == \$repo and (\$interventions | has(\$m)) then@if ($interventions | has($m)) then@' "$1"
+}
+
+# ---------------------------------------------------------------------------
+# 20260829-o-incremento-que-andou — the row says whether the increment advanced.
+# ---------------------------------------------------------------------------
+# The three increment fields leave the row: the writer keeps its `--arg`s (jq accepts unused ones,
+# so this compiles and the harness cannot dismiss it as broken) and simply stops emitting them.
+# Every EXEC row is then back to carrying only the gate verdict and `moved`, which is the state
+# that read 46 of 72 real EXEC rows as `churned` when about 5 of them were. Caught by `an EXEC row
+# carries pending_before, pending_after and increments_total` in check-autonomy.sh, which reads
+# "null null null" against the "2 1 2" it demands.
+mut_LEDGER_progress_not_written() {
+  sed -i '\%pending_before: ($pbefore%d; \%pending_after: ($pafter%d; \%increments_total: ($itotal%d' "$1"
+}
+
+# The one count of increment status stops distinguishing `done`: every row is pending, so the
+# session that closed an increment reports the same number before and after itself. It is the
+# quiet half of the defect — the fields are all there, all populated, and all saying nothing moved
+# — and it sabotages gate_EXEC's own "N of M" sentence in the same stroke, which is the point of
+# the helper being ONE reading rather than two. Caught by the same assertion, which reads "2 2 2".
+mut_EXEC_tally_counts_done() {
+  sed -i '/^checkpoint_tally()/,/^}/ s@\$4 == "pending" || \$4 == "doing"@$4 != ""@' "$1"
+}
+
+# The phase guard at cmd_run's door 1 goes, and GATE_EXEC_PENDING — which outlives its gate by
+# design, one screen up the same function — follows the run into the next phase: the QA session
+# opened after a PASSING EXEC gate is born claiming an increment QA never had, and `waste` falls
+# for free across every mission in the ledger.
+#
+# ⚠️ The obvious fixture does NOT catch this, and finding that out is why the mutant exists.
+# `current_phase` runs as `$(...)`, so the gate_EXEC it evaluates on every lap sets those globals
+# in a subshell that dies at once — the run→REVIEW fixture cannot reach the leak at all, and a
+# sabotage pass against it came back green. The only sequence that reaches it is an EXEC gate
+# passing in the PARENT shell followed by another lap, which is the block `the EXEC counts do not
+# follow the run into the next phase` builds. Caught by `a non-EXEC row carries the three as null`
+# there, and by nothing else.
+mut_LEDGER_progress_leaks_across_phases() {
+  sed -i 's@^    if \[ "\$phase" = "EXEC" \]; then exec_after="\$GATE_EXEC_PENDING"; exec_total="\$GATE_EXEC_TOTAL"; fi$@    exec_after="$GATE_EXEC_PENDING"; exec_total="$GATE_EXEC_TOTAL"@' "$1"
+}
+
+# The publication climbs back ABOVE the Jidoka refusal — where it sat until 2026-08-30, and where
+# `checkpoint_tally`'s own bucketing turns it into flattery: the helper counts `pending|doing` and
+# files `blocked` apart, so GIVING UP on an increment lowers `pending` exactly as FINISHING it
+# does. The session that STOPPED THE LINE is then the one row in the ledger reading
+# `pending_before 2 · pending_after 1` ⇒ `advanced`, `0% waste`. Not a hypothesis: a real EXEC row
+# of `20260825-cif-forma-pagamento` is that session, and it reads honestly today only because it
+# predates the fields. Caught by `a blocked increment publishes no pending_after` in
+# check-autonomy.sh, which reads "2 1 2" against the "2 null null" it demands — and by nothing
+# else, the witness `and the refusal that produced it is the Jidoka one` staying green beside it to
+# prove the fixture still reaches the Jidoka arm rather than some other refusal.
+mut_EXEC_blocked_publishes_count() {
+  sed -i 's@^  if \[ "\$blocked" -gt 0 \]; then GATE_WHY=@  if [ "$blocked" -gt 0 ]; then GATE_EXEC_PENDING="$pending"; GATE_EXEC_TOTAL="$total"; GATE_WHY=@' "$1"
+}
+
+# The inline retry goes back to seeding its `pending_before` from `exec_after` ALONE — the spelling
+# that shipped until 2026-08-30. `exec_after` is empty whenever the first pass's gate refused
+# BEFORE publishing (a `done` with no commit, or the Jidoka arm above), so the retry row is born
+# with `pending_before: null`; and that null is not inert, because `historic_progress` annotates
+# any EXEC row whose `pending_before` is null and whose `gate_why` carries the `N of M` prose. A
+# row written by TODAY's runner then falls down the compatibility path built for rows written
+# before the fields existed, is handed a `pending_before` of M, and reads `advanced` over a retry
+# that advanced nothing — flattery again, and the third member of the family the two mutants above
+# already cover. It also made `sdd autonomy` count a minutes-old row in its "older than the pending
+# fields" disclosure, which is the very number that says when that path may be deleted.
+# Caught by `the inline retry records the count it started from` in check-autonomy.sh (it reads
+# "true null 1 2" against the "true 1 1 2" it demands) and by the reader-side witness beside it,
+# `and no row this runner wrote is read as one that predates the fields`. The floor
+# `the pass before the retry is the one that published nothing` stays green under the mutation,
+# which is what proves the fixture still reaches the inline retry at all.
+mut_RUN_retry_pending_before_null() {
+  sed -i 's@^      "\${exec_after:-\$exec_before}" "\$exec_after2" "\$exec_total2"$@      "$exec_after" "$exec_after2" "$exec_total2"@' "$1"
+}
+
+# The writer keeps filling the three fields and the reader stops looking at them: `outcome` goes
+# back to the gate-only yardstick, which is the state that read 46 of 72 real EXEC rows as churn
+# and printed `100% waste` over 49 of 107 kit versions. Both readers inherit it through the one
+# splice, so parity stays green and only the histogram of a known fixture moves — caught by `a
+# session that advanced its increment reads advanced, not churned` in check-autonomy.sh, which
+# reads `1 advanced · 4 churned · 1 idle` against the `3 · 2 · 1` it demands.
+mut_AUTONOMY_progress_ignored() {
+  sed -i 's@def outcome: if .gate == "pass" then "advanced" elif (.pending_before != null and .pending_after != null and .pending_after < .pending_before and .moved != false) then "advanced" elif .moved == true then "churned" else "idle" end;@def outcome: if .gate == "pass" then "advanced" elif .moved == true then "churned" else "idle" end;@' "$1"
+}
+
+# The null guard on the progress arm goes, and jq's own ordering does the rest: `null` sorts below
+# every number, so `.pending_after < .pending_before` is TRUE for a row whose gate REFUSED the
+# checkpoint and published nothing. The session that got told "increment I3 is done with no commit"
+# then reads as the loudest progress in the ledger. Fails open in the direction the whole rewrite
+# exists to stop — flattery — which is why the guard is asserted from both sides. Caught by `a gate
+# that published no pending_after is not an increment that advanced` in check-autonomy.sh, which
+# reads `1 1` (the 4·1·1 histogram and 33% waste) against the `0 0` it demands.
+mut_AUTONOMY_progress_null_blind() {
+  sed -i 's@(.pending_before != null and .pending_after != null and .pending_after < .pending_before and .moved != false)@(.pending_after < .pending_before and .moved != false)@' "$1"
+}
+
+# The dated recovery of the pre-2026-08-29 rows becomes the identity: both readers stop looking at
+# `gate_why` and 49 of the 72 real EXEC rows fall back to the `moved` arm, which is the state that
+# had the human window reading `churned` over the whole history it exists to explain. Spliced from
+# ONE definition, so both readers lose it together and the parity assertion stays green — only the
+# differential between the two spellings of one history moves. Caught by `the historical path and
+# the fields agree on one history` in check-autonomy.sh, which reads `1 advanced · 4 churned · 1
+# idle · 83% waste` against the `3 · 2 · 1 · 50%` the same history prints through the fields.
+mut_AUTONOMY_historic_progress_dropped() {
+  sed -i 's@def historic_progress: reduce .*| .out;@def historic_progress: .;@' "$1"
+}
+
+# The recovery stops noticing that the DENOMINATOR moved. QA writes fix increments after a phase
+# passed, the checkpoint grows from 4 to 6, and the next old row says `2 of 6` — measured against a
+# memory that still says 2, the fix increment that ran reads churn. Caught by `a growing total is a
+# fix increment, not churn` in check-autonomy.sh (mission m4: `1 advanced · 3 churned` against the
+# `4 advanced · 0 churned` it demands).
+mut_AUTONOMY_historic_total_change_blind() {
+  sed -i 's@(if (.seen\[$k\] != null and .seen\[$k\].m == $p.m) then@(if (.seen[$k] != null) then@' "$1"
+}
+
+# A PASSING gate stops clearing the memory, so a session that reopened an increment is measured
+# against the count from before the phase closed instead of against the total. `3 of 4` after a
+# `4 increment(s) done` then reads 3 → 3 and the session that did the work reads churn. The M rule
+# cannot cover this one — M did not change — which is why the two rules have two fixtures. Caught
+# by `a passing gate clears the count the next session is measured against` (mission m5).
+mut_AUTONOMY_historic_pass_keeps_memory() {
+  sed -i 's@elif $r.gate == "pass" then .seen\[$k\] = null elif@elif false then .seen[$k] = null elif@' "$1"
+}
+
+# The guard that keeps the dated path off rows that carry the fields goes, and the path re-derives
+# `pending_before` from prose for rows that were MEASURED. No number a human reads moves on today's
+# ledger — the prose and the fields say the same thing — but the disclosure sentence does, and that
+# sentence is the deletion signal: it is what says when this compatibility path has no rows left to
+# serve. A path that keeps claiming rows it never needed never comes out. Caught by `the historical
+# path never touches a row that carries the fields` (4 instead of 2) and by `a ledger written
+# entirely in the new schema prints no historical sentence` (1 instead of 0).
+mut_AUTONOMY_historic_annotates_new_rows() {
+  sed -i 's@$k != null and $r.pending_before == null and@$k != null and@' "$1"
+}
+
+# The progress arm stops asking whether the session moved the disk, so an INFERRED count is allowed
+# to outrank the one thing the runner measured directly about that session. It only bites on the
+# recovered path — a measured pair with `moved: false` cannot exist, because closing an increment
+# edits the checkpoint and `state_fingerprint` hashes it — and there it is the flattering direction
+# once more: a phase that closed at `4 increment(s) done` and then reopened an increment reads
+# `1 of 5`, the empty memory hands it a `pending_before` of 5, and the session that never touched
+# the disk reads `advanced` at `0% waste`. Caught by `a recovered count never credits a session
+# that wrote nothing` in check-autonomy.sh (m11 reads `2 advanced · 0 idle` against the
+# `1 advanced · 1 idle` it demands), with the witness `and the row it declined to credit is one the
+# path did read` staying green beside it to prove the path still reaches that row at all.
+mut_AUTONOMY_progress_outranks_moved() {
+  sed -i 's@and .pending_after < .pending_before and .moved != false)@and .pending_after < .pending_before)@' "$1"
+}
+
+# The rubric goes back to reading the GATE VERDICT instead of what the session did — the exact
+# spelling 20260828 shipped, and the one that read `leve` over every EXEC phase of two or more
+# increments, because gate_EXEC refuses once per increment by design. Note this is NOT
+# `churn_reads_ok` loosened: that one drops the clause and calls churn `ok`, this one keeps the
+# clause at full strength and merely aims it at the wrong fact, so it is stricter than the truth
+# rather than laxer. A mutant that only ever over-reports is still a mutant: `leve` on a clean
+# designed loop is what makes the judge open a remedy for a phase that has nothing wrong with it.
+# Caught by `a designed loop reads ok, and advance_rate counts the increments that advanced`
+# (m7 reads `leve 0.7` against the `ok 0.7` it demands).
+mut_KAIZEN_label_reads_gate() {
+  sed -i 's@(.auto_retry == true or outcome != "advanced")@(.auto_retry == true or .moved == false or .gate == "fail")@' "$1"
+}
+
+# The headline goes back to counting gates, leaving `outcomes` beside it counting sessions: the
+# judge then reads `advance_rate: 0.10` one line under `advanced: 9` and has to guess which of the
+# two its own prompt means. Its own mutant and not a rider on the label above, because the two are
+# separate reads of one yardstick and the day one of them was written by hand is the day they
+# disagreed. Caught by the same assertion (`ok 0.5` against `ok 0.7`) and by `advance_rate reads
+# what the sessions did and moved_rate reads the disk` (`0.5 0.9`).
+mut_KAIZEN_advance_rate_reads_gate() {
+  sed -i 's@($sess | map(select(outcome == "advanced")) | length) / ($sess | length)@($sess | map(select(.gate == "pass")) | length) / ($sess | length)@' "$1"
+}
+
+# The two arms of the `leve` clause, each removable on its own — and both WERE removable green
+# until 20260829, because the one fixture that named them (m1/QA) carries an idle session and an
+# in-loop auto retry at the same time and cannot say which one labelled it. That is the fail-open
+# shape this file exists to refuse: an assertion whose name promises an arm it never measured.
+#
+# `label_auto_retry_blind` drops the arm that reads "this phase needed a second try". It looks
+# subsumed by `outcome != "advanced"` and is not: in the repo that BUILDS the kit every session
+# commits, so the failing first pass and its in-loop retry land on different kit_sha and are graded
+# in different groups — the surviving retry row advanced, and alone in its group it would read `ok`.
+# `label_idle_blind` narrows the outcome arm to churn, so a session that produced NOTHING stops
+# marking the phase. Both caught by `each arm of the leve clause stands alone`, which grades three
+# isolated phases on one line and so cannot be satisfied by trading one arm for another.
+#
+# ⚠️ Four mutants now anchor on the same clause text (these two, `churn_reads_ok` and
+# `label_reads_gate`); an edit to it re-anchors all four, and the harness says so with rc 90 rather
+# than by going quiet.
+mut_KAIZEN_label_auto_retry_blind() {
+  sed -i 's@(.auto_retry == true or outcome != "advanced")@(outcome != "advanced")@' "$1"
+}
+
+mut_KAIZEN_label_idle_blind() {
+  sed -i 's@(.auto_retry == true or outcome != "advanced")@(.auto_retry == true or outcome == "churned")@' "$1"
 }
 
 CATALOG=(
@@ -2359,6 +2573,22 @@ CATALOG=(
   AUTONOMY_reopened_ignores_gate
   AUTONOMY_reopened_comparable_only
   AUTONOMY_notes_borrowed_across_repos
+  LEDGER_progress_not_written
+  EXEC_tally_counts_done
+  LEDGER_progress_leaks_across_phases
+  EXEC_blocked_publishes_count
+  RUN_retry_pending_before_null
+  AUTONOMY_progress_ignored
+  AUTONOMY_progress_null_blind
+  AUTONOMY_historic_progress_dropped
+  AUTONOMY_historic_total_change_blind
+  AUTONOMY_historic_pass_keeps_memory
+  AUTONOMY_historic_annotates_new_rows
+  AUTONOMY_progress_outranks_moved
+  KAIZEN_label_reads_gate
+  KAIZEN_advance_rate_reads_gate
+  KAIZEN_label_auto_retry_blind
+  KAIZEN_label_idle_blind
 )
 
 # Mutations that are NOT caught today, each with the increment that closes it. Ratchet in both

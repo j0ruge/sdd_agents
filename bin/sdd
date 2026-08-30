@@ -309,6 +309,27 @@ checkpoint_rows() {
     }' "$file"
 }
 
+# checkpoint_tally — "<pending>\t<total>\t<blocked>" over checkpoint_rows, and from now on the
+# runner's ONE count of increment status. Every number gate_EXEC states about the checkpoint comes
+# from here, and so does the photograph cmd_run takes before a session exists to be judged: two
+# readings of one file that disagreed would be the whole point of the metric, lost.
+#
+# PURE — no TEST_CMD, no git, no validation. It answers "how many rows say what", nothing else,
+# which is exactly what lets the same call serve a caller that has not run the session yet and a
+# gate that has already refused the checkpoint.
+#
+# `doing` counts as pending, as it always has in gate_EXEC's own sentence: an increment somebody
+# left mid-flight has not advanced, and reading it as done would credit the session that abandoned
+# it. `+ 0` on every field because an unmatched pattern leaves the variable unset, and mawk prints
+# an unset variable as the empty string — a row field the ledger would then read as null.
+checkpoint_tally() {
+  checkpoint_rows | awk -F'\t' '
+    { total++ }
+    $4 == "pending" || $4 == "doing" { pending++ }
+    $4 == "blocked" { blocked++ }
+    END { printf "%d\t%d\t%d\n", pending + 0, total + 0, blocked + 0 }'
+}
+
 # ---------------------------------------------------------------------------
 # Is anything listening where APP_URL points?
 #
@@ -701,14 +722,36 @@ GATE_HANDOFF_BLOCKED=0
 # the probe existed, which is the whole compatibility story — see app_probe.
 GATE_APP_DOWN=0
 
+# How many increments were still to execute when this gate last ANSWERED, and how many there are
+# in all. Empty until a gate_EXEC gets past its validation loop; read by cmd_run and cmd_retry to
+# build the EXEC row of the autonomy ledger, which is why they outlive the call that sets them.
+#
+# ⚠️ They outlive it across PHASES too, and the reason is NOT `current_phase`: that runs as
+# `$(...)`, so the gate_EXEC it evaluates sets these in a subshell that dies immediately. The live
+# vector is the DIRECT calls in the parent shell — `gate_EXEC || true` in cmd_status, and
+# `gate_"$phase"` in cmd_run's own two doors — after which a REVIEW session opened on the next lap
+# is built with these still set. The readers guard on the phase; see the call sites. (Measured
+# 2026-08-30: through `$(current_phase)` both come back empty, called directly they come back set.
+# The guard is required either way; only the mechanism named here was wrong.)
+GATE_EXEC_PENDING=""
+GATE_EXEC_TOTAL=""
+
 gate_EXEC() {
   GATE_EXEC_DIRTY=0
+  # Emptied on ENTRY, the same reset GATE_EXEC_DIRTY and GATE_APP_DOWN get one screen up and for
+  # the same reason: a gate that refuses below must not hand its caller the numbers of the gate
+  # before it.
+  GATE_EXEC_PENDING=""
+  GATE_EXEC_TOTAL=""
   local rows; rows="$(checkpoint_rows)"
   [ -n "$rows" ] || { GATE_WHY="checkpoint.md is empty"; return 1; }
 
-  local id status commit pending=0 blocked=0 total=0
+  # The loop VALIDATES and no longer counts: the numbers come from checkpoint_tally, called once
+  # below. Two counts of one file is the defect this whole mission is about — the ledger's
+  # `pending_after` and the gate's own "N of M" have to be the same reading or the judge is
+  # comparing a number against prose that disagrees with it.
+  local id status commit
   while IFS=$'\t' read -r id _ _ status commit; do
-    total=$((total + 1))
     case "$status" in
       done)
         if [ -z "$commit" ] || [ "$commit" = "—" ] || [ "$commit" = "-" ]; then
@@ -728,13 +771,45 @@ gate_EXEC() {
           return 1
         fi
         ;;
-      pending|doing) pending=$((pending + 1)) ;;
-      blocked)       blocked=$((blocked + 1)) ;;
+      # Valid and nothing to check — the arm exists so the enum stays exhaustive and the `*)` below
+      # keeps meaning "not one of the four". Counting them is checkpoint_tally's job, below.
+      pending|doing|blocked) ;;
       *) GATE_WHY="increment $id has invalid status '$status' (use pending|doing|done|blocked)"; return 1 ;;
     esac
   done <<< "$rows"
 
+  # The publication sits after the validation loop AND after the Jidoka refusal below, deliberately:
+  # TWO assertions in tests/check-autonomy.sh are that ordering, "a done without commit publishes
+  # no pending_after" and "a blocked increment publishes no pending_after". `pending_before` on the
+  # ledger row is a PHOTOGRAPH — cmd_run takes it before the session opens — but `pending_after` is
+  # a VERDICT, and a gate that is about to REFUSE has no verdict to give about how far the mission
+  # got. Neither the checkpoint refused for a label with no artifact nor the one that stopped the
+  # line may buy its session an `advanced`; leaving the pair empty makes the reader fall back to
+  # `moved`, exactly as it did before these fields existed.
+  local pending total blocked
+  IFS=$'\t' read -r pending total blocked <<< "$(checkpoint_tally)"
+  # The herestring SWALLOWS the producer's status — the compound's rc is `read`'s, always 0 — unlike
+  # the plain assignment one screen up, which propagates. With the three empty, BOTH refusals below
+  # are skipped (`[ "" -gt 0 ]` is rc 2, read as false) and the gate falls through to TEST_CMD and
+  # can answer `pass` over a checkpoint it never counted. Unreachable today only because `[ -n
+  # "$rows" ]` above refuses first — but that guard belongs to a DIFFERENT reading of the file, and
+  # a refusal that depends on a neighbour is a refusal nobody will notice losing.
+  [ -n "$pending" ] && [ -n "$total" ] && [ -n "$blocked" ] || \
+    { GATE_WHY="checkpoint.md tally unreadable"; return 1; }
+
+  # Jidoka goes BEFORE the publication, by the same argument and for a defect measured end to end:
+  # `checkpoint_tally` counts `pending|doing` and files `blocked` in a bucket of its own, so GIVING
+  # UP on an increment lowers `pending` exactly as FINISHING it does. Published here, the one
+  # session in the whole pipeline that STOPPED THE LINE read `pending_before 2 · pending_after 1`
+  # and the ledger called it `advanced` at `0% waste` — fail-open in the flattering direction,
+  # over a stopped line. Found by sdd-qa on 2026-08-30 with a real `sdd run`; the row it would have
+  # spoiled exists in the real ledger. Blocking is not closing, which is also what `sdd autonomy`'s
+  # own usage text promises.
   if [ "$blocked" -gt 0 ]; then GATE_WHY="$blocked increment(s) 'blocked' — Jidoka: the line stops"; return 1; fi
+
+  GATE_EXEC_PENDING="$pending"
+  GATE_EXEC_TOTAL="$total"
+
   if [ "$pending" -gt 0 ]; then GATE_WHY="$pending of $total increment(s) still to execute"; return 1; fi
 
   if ! run_check_cmd "$TEST_CMD" "gate-exec-test"; then
@@ -1749,11 +1824,48 @@ ledger_row_is_local() {
 # window said `0 stalled`, the judge said `ok`, on a phase of seven sessions and five refusals
 # (20260825-frete-cif-fob, EXEC). Measured 2026-08-28, before this function existed.
 #
-#   advanced — the gate passed. The gate is the artifact; `pass/false` does not occur in the
-#              ledger and is classified here without a fourth arm.
-#   churned  — the session wrote to the disk and the gate still failed: the runner reads "moved"
-#              as progress and buys the next lap. The bucket that was invisible.
+#   advanced — the gate passed, OR the row says the increment count went down. The gate is the
+#              artifact of the PHASE, and a phase of four increments only passes it on the last of
+#              its four sessions — so `gate == pass` alone read the pipeline's DESIGNED loop as
+#              waste. Measured on the real ledger 2026-08-29, the day after the three names above
+#              landed: 46 of the 72 EXEC rows read `churned` where the real churn is about 5, and
+#              49 of the 107 kit versions printed `100% waste`, each one a version whose only
+#              session was a middle increment of some mission. The instrument had stopped
+#              flattering (`0 stalled`) and started accusing — wrong in both directions.
+#              (`pass/false` does not occur in the ledger and is classified here without a fourth
+#              arm.)
+#   churned  — the session wrote to the disk, closed no increment, and the gate still failed: the
+#              runner reads "moved" as progress and buys the next lap. The bucket that was
+#              invisible, now with the designed loop taken out of it.
 #   idle     — nothing on disk, gate failed: the old `stalled`, under the name that says what it is.
+#
+# The progress arm carries a THIRD guard, `.moved != false`, and it is a tautology rather than a
+# policy: `state_fingerprint` hashes the checkpoint, and closing an increment means editing the
+# checkpoint, so a session whose fingerprint did not move cannot have lowered the count. It costs
+# the field path nothing — a MEASURED pair with `moved: false` is unreachable — and it exists for
+# the recovered path below, where `pending_before` is INFERRED from prose and an empty memory
+# infers M, the largest value the field can take. That is right on the first row of a mission and
+# wrong on the row after a passing gate: a phase that closed at `4 increment(s) done` and then
+# reopened an increment reads `1 of 5`, is handed 5, and read `advanced` over a session that never
+# touched the disk — `0% waste` on a session that did nothing, the flattering direction again, and
+# the one place an inference outranked a measurement. Measured over the real ledger 2026-08-30
+# before the guard: 53 recovered rows, 48 `advanced`, and the guard moves NONE of them, so it fixes
+# the reachable hole without restating any history. `!= false` and not `== true`, because an
+# escalation row carries no `moved` at all and must stay where both readers already file it.
+#
+# The other two guards are on BOTH fields being non-null, and they are load-bearing rather
+# than defensive: jq orders `null` below every number, so `null < 2` is TRUE. gate_EXEC publishes
+# `pending_after` only after it has validated the checkpoint, so a run it refused (a `done` with no
+# commit) writes null there — and without the guard that refusal would read as the loudest possible
+# progress, `4 → nothing left`. Measured by `a gate that published no pending_after is not an
+# increment that advanced` in check-autonomy.sh.
+#
+# DECLARED, because it is a real edge this arm accepts: a session that closes the LAST increment
+# over a red suite reads `advanced` on the count while its gate fails, and the lap it buys reads
+# `churned`. That is the honest split — the increment did advance, and the gate is the artifact of
+# the lap that follows. Rows written before 2026-08-29 carry neither field and fall through to the
+# `moved` arm exactly as they did; I3 is what teaches the readers to recover their count from
+# `gate_why`.
 #
 # Applied to the sessions each reader admits, and both admit a session only with `moved` present:
 # cmd_autonomy's `comparable` has demanded `has("moved")` all along, and kaizen_series now files a
@@ -1773,8 +1885,45 @@ ledger_row_is_local() {
 # because the emission is one and the day the series calls phase_index must not be the day it
 # learns about the arg. (No apostrophe inside the printed jq: it is spliced into single-quoted
 # shell strings.)
+#
+# `historic_progress` is the DATED path that lets `outcome` answer over rows written before the
+# fields existed, and it is the second half of the same change. Added 2026-08-29; on that day the
+# real ledger held 72 EXEC rows and 49 of them predate `pending_before`. Migrating them is not an
+# option — the ledger is append-only by contract — and leaving them on the `moved` arm would have
+# the human window reading `churned` over the whole history it exists to explain, for ever, since
+# nothing will ever rewrite those lines.
+#
+# It recovers the SAME fact from the SAME source the fields come from: gate_EXEC has always written
+# `N of M increment(s) still to execute` into GATE_WHY, and the row carries it verbatim. A row is
+# annotated only when it is an EXEC session, `.pending_before` is null, and the prose matches — and
+# the annotation carries `progress_source: "gate_why"` so the reading is never mistaken for a
+# measurement. cmd_autonomy prints how many rows it reached, which is also the DELETION SIGNAL:
+# the day `sdd autonomy --all-repos` stops printing that sentence, this def has no rows left to
+# serve and comes out.
+#
+# `.pending_before == null` and NOT `has("pending_before")`: autonomy_session_row builds the object
+# with `($pbefore | tonumber? // null)`, so the KEY is present on every row THIS runner writes, with
+# the value `null` outside EXEC — `has` answers true for all of those and would annotate none of
+# them. The rows written BEFORE the fields existed carry no key at all, so `has` is wrong about them
+# in the other direction. `== null` is the one spelling that covers both. Measured 2026-08-30 over
+# the real ledger, and the earlier version of this comment had the fact backwards — it claimed the
+# 49 historical rows carried the key, when `grep -c pending_before ~/.sdd/autonomy-log.jsonl`
+# answered 0 over all 158 of them. The choice was right; the reason recorded for it was not.
+#
+# `pending_before` is the `pending_after` of the previous EXEC row of the same (repo, mission) in
+# FILE order, which is write order, with two rules — each with a fixture of its own in
+# check-autonomy.sh, because a rule whose removal no fixture notices is a rule with no probe:
+#   · a changed M is a new denominator (QA wrote fix increments, so the phase grew): count from M;
+#   · a PASSING gate clears the memory, so a session that reopened an increment is measured against
+#     M and not against the count from before the phase closed.
+# The memory is fed by rows that carry the FIELDS too, and that is load-bearing on a mixed ledger:
+# a mission whose first sessions are new-schema and whose later ones are not would otherwise read
+# its first old row against M instead of against the row above it.
+# The key is `[repo, mission] | tostring` — an ARRAY rendered as JSON, for the reason mission_key
+# states in both readers: a separator chosen here would collide with one inside a repo path.
 ledger_outcome_defs() {   # printed jq, spliced into cmd_autonomy AND kaizen_series
-  printf '%s' 'def outcome: if .gate == "pass" then "advanced" elif .moved == true then "churned" else "idle" end;'
+  printf '%s' 'def outcome: if .gate == "pass" then "advanced" elif (.pending_before != null and .pending_after != null and .pending_after < .pending_before and .moved != false) then "advanced" elif .moved == true then "churned" else "idle" end;'
+  printf '%s' 'def historic_progress: reduce .[] as $r ({seen: {}, out: []}; (if ($r | type) == "object" and $r.event == "session" and $r.phase == "EXEC" then ([($r.repo // ""), ($r.mission // "")] | tostring) else null end) as $k | (if $k != null and $r.pending_before == null and (($r.gate_why // "") | test("^[0-9]+ of [0-9]+ increment")) then (($r.gate_why // "") | capture("^(?<n>[0-9]+) of (?<m>[0-9]+) increment") | {n: (.n | tonumber), m: (.m | tonumber)}) else null end) as $p | (if $p == null then $r else (if (.seen[$k] != null and .seen[$k].m == $p.m) then .seen[$k].p else $p.m end) as $before | $r + {pending_before: $before, pending_after: $p.n, increments_total: $p.m, progress_source: "gate_why"} end) as $row | .out += [$row] | (if $k == null then . elif $r.gate == "pass" then .seen[$k] = null elif $row.pending_after != null then .seen[$k] = {p: $row.pending_after, m: $row.increments_total} else . end)) | .out;'
   printf '%s' 'def outcome_tally: map(outcome) | reduce .[] as $o ({advanced: 0, churned: 0, idle: 0}; .[$o] += 1);'
   printf '%s' 'def phase_index: . as $p | ($phases | split(" ")) | index($p);'
 }
@@ -2055,7 +2204,12 @@ autonomy_degraded_row() { autonomy_escalation_row "degraded" "$1" "$2" "$3"; }
 
 # One row per session, written after the gate has been evaluated — the row carries the gate
 # result, so it cannot be born before it.
-autonomy_session_row() {  # <phase> <attempt> <auto_retry> <moved> <gate> <gate_why>
+# The last three are EXEC's alone and empty everywhere else (⇒ `null`, never 0: a zero would enter
+# the judge's arithmetic as an increment that stood still, the same reason an escalation row
+# carries no session fields at all). They are what lets `outcome` tell the pipeline's DESIGNED loop
+# — one session per increment, the gate red until the last one — from real churn, which the gate
+# verdict and `moved` alone cannot do.
+autonomy_session_row() {  # <phase> <attempt> <auto_retry> <moved> <gate> <gate_why> [<pending_before> <pending_after> <increments_total>]
   autonomy_have_jq || return 0
   # Called, never substituted: `$(autonomy_kit_stamp)` would reset its one-shot warning flag.
   autonomy_kit_stamp; local stamp="$AUTONOMY_KIT_STAMP"
@@ -2074,6 +2228,7 @@ autonomy_session_row() {  # <phase> <attempt> <auto_retry> <moved> <gate> <gate_
     --arg step "$LAST_PHASE_STEP" --arg agent "$LAST_PHASE_AGENT" \
     --arg model "$LAST_PHASE_MODEL" --arg session "$LAST_PHASE_SID" \
     --arg rc "$LAST_PHASE_RC" --arg dur "$LAST_PHASE_DUR" --arg cost "$LAST_PHASE_COST" \
+    --arg pbefore "${7:-}" --arg pafter "${8:-}" --arg itotal "${9:-}" \
     '{v: 1, ts: $ts, event: "session",
       run_id: $run_id, invocation: $invocation,
       kit_sha: (if $sha == "" then null else $sha end),
@@ -2086,6 +2241,9 @@ autonomy_session_row() {  # <phase> <attempt> <auto_retry> <moved> <gate> <gate_
       dur_s: ($dur | tonumber? // null),
       cost_usd: ($cost | tonumber? // null),
       moved: ($moved == "true"),
+      pending_before: ($pbefore | tonumber? // null),
+      pending_after: ($pafter | tonumber? // null),
+      increments_total: ($itotal | tonumber? // null),
       gate: $gate, gate_why: $why}' )"
 }
 
@@ -3947,6 +4105,12 @@ cmd_run() {
     fi
 
     before="$(state_fingerprint)"
+    # The photograph, and it has to be taken HERE: once run_phase returns, the checkpoint the
+    # session just edited is the only one left on disk and "how many were pending before" is
+    # unanswerable. Guarded on the phase because it is the only phase with increments to count,
+    # and empty is what the ledger writes as `null`.
+    local exec_before=""
+    if [ "$phase" = "EXEC" ]; then exec_before="$(checkpoint_tally | cut -f1)"; fi
     kit_guard_arm
     run_phase "$phase"
     after="$(state_fingerprint)"
@@ -3977,8 +4141,18 @@ cmd_run() {
     local gate_rc=0 moved="false"
     gate_"$phase" || gate_rc=$?
     [ "$before" != "$after" ] && moved="true"
+    # Captured into locals rather than read straight from the globals at the two call sites below,
+    # and the phase guard is why. GATE_EXEC_PENDING outlives its gate ON PURPOSE, and
+    # The vector is the DIRECT `gate_"$phase"` call one line up (and cmd_status's), never
+    # `$(current_phase)`, whose subshell throws the assignments away: without the guard the REVIEW
+    # session that follows a PASSING EXEC gate would be born carrying EXEC's counts and read as a
+    # phase that advanced an increment it never had. Pinned by "a non-EXEC row carries the three as null" in
+    # tests/check-autonomy.sh, in the one fixture where that sequence is reachable.
+    local exec_after="" exec_total=""
+    if [ "$phase" = "EXEC" ]; then exec_after="$GATE_EXEC_PENDING"; exec_total="$GATE_EXEC_TOTAL"; fi
     autonomy_session_row "$phase" "${attempts[$phase]}" "false" "$moved" \
-      "$( [ "$gate_rc" -eq 0 ] && echo pass || echo fail )" "$GATE_WHY"
+      "$( [ "$gate_rc" -eq 0 ] && echo pass || echo fail )" "$GATE_WHY" \
+      "$exec_before" "$exec_after" "$exec_total"
     sessions["$phase"]="$(( ${sessions[$phase]:-0} + 1 ))"
 
     # DOOR 1 of the blocked escalation — see handoff_blocked_escalation above for why it exists.
@@ -4039,8 +4213,34 @@ cmd_run() {
     # sampled window means that stays true whatever the fingerprint learns to read tomorrow.
     kit_guard_check "$phase"
     gate_"$phase" || gate_rc2=$?
+    # The retry takes NO photograph of its own: the gate ran between the two passes, so the first
+    # pass's `pending_after` — `exec_after`, captured above and now already overwritten in the
+    # global by the call one line up — IS where this retry started. Reading checkpoint_tally here
+    # would sample a file the gate had judged one line earlier and credit the retry with the
+    # progress of the pass before it.
+    #
+    # `:-$exec_before` and not a bare `$exec_after`, because `exec_after` is EMPTY whenever the
+    # first pass's gate refused before publishing — a `done` with no commit, or the Jidoka block —
+    # and an empty seventh argument writes `pending_before: null`. That null is not inert: the row
+    # then matches `historic_progress`, the dated path built for rows written BEFORE these fields
+    # existed, which hands it a `pending_before` of M and reads `advanced` over a retry that
+    # advanced nothing. Reproduced end to end on 2026-08-30 with a real `sdd run` (the fixture is
+    # the `== the inline retry records the count it started from ==` block of check-autonomy.sh):
+    # photograph 1, `pending_after` 1, answer `advanced` off a fabricated 2. Fail-open in the
+    # flattering direction, and it also made `sdd autonomy` count a minutes-old row in its
+    # "older than the pending fields" disclosure — the very number that says when that path may be
+    # deleted.
+    #
+    # The fallback is EXACT, not an approximation: this retry is reachable only through the
+    # `moved == "false"` guard a few lines up, so the first pass changed nothing, and
+    # `state_fingerprint` reads the checkpoint's md5 — the file the retry starts on is the same
+    # bytes the photograph read. When the first gate DID publish, `exec_after` is non-empty and
+    # wins, so no path that worked before changes.
+    local exec_after2="" exec_total2=""
+    if [ "$phase" = "EXEC" ]; then exec_after2="$GATE_EXEC_PENDING"; exec_total2="$GATE_EXEC_TOTAL"; fi
     autonomy_session_row "$phase" "${attempts[$phase]}" "true" "$moved2" \
-      "$( [ "$gate_rc2" -eq 0 ] && echo pass || echo fail )" "$GATE_WHY"
+      "$( [ "$gate_rc2" -eq 0 ] && echo pass || echo fail )" "$GATE_WHY" \
+      "${exec_after:-$exec_before}" "$exec_after2" "$exec_total2"
     sessions["$phase"]="$(( ${sessions[$phase]:-0} + 1 ))"
 
     if [ "$gate_rc2" -eq 0 ]; then
@@ -4094,14 +4294,19 @@ cmd_retry() {
   step "retrying $phase with a FRESH session"
   local before after moved="false" gate_rc=0
   before="$(state_fingerprint)"
+  # Same photograph, same phase guard, same reasons as cmd_run's — see the two comments there.
+  local exec_before="" exec_after="" exec_total=""
+  if [ "$phase" = "EXEC" ]; then exec_before="$(checkpoint_tally | cut -f1)"; fi
   kit_guard_arm
   run_phase "$phase"
   after="$(state_fingerprint)"
   kit_guard_check "$phase"
   [ "$before" != "$after" ] && moved="true"
   gate_"$phase" || gate_rc=$?
+  if [ "$phase" = "EXEC" ]; then exec_after="$GATE_EXEC_PENDING"; exec_total="$GATE_EXEC_TOTAL"; fi
   autonomy_session_row "$phase" "1" "false" "$moved" \
-    "$( [ "$gate_rc" -eq 0 ] && echo pass || echo fail )" "$GATE_WHY"
+    "$( [ "$gate_rc" -eq 0 ] && echo pass || echo fail )" "$GATE_WHY" \
+    "$exec_before" "$exec_after" "$exec_total"
   if [ "$gate_rc" -eq 0 ]; then ok "gate $phase: $GATE_WHY"; return 0; fi
   bad "gate $phase not yet: $GATE_WHY"
   return 3
@@ -4370,6 +4575,13 @@ cmd_autonomy() {
     (map(select(ledger_row_no_repo)) | length) as $norepo
     | (map(select((ledger_row_is_local | not) and (ledger_row_no_repo | not))) | length) as $foreign
     | map(select(ledger_row_is_local))
+    # The dated recovery of the pre-2026-08-29 rows, applied ONCE, here, before any bucket sees the
+    # list — so every count below this line reads one history and not two. Length-preserving by
+    # construction: it annotates rows, it never adds or drops one, which is what keeps $local_total
+    # and assert_bucket_sum meaning what they meant. kaizen_series applies it at the same point of
+    # its own program, and check-autonomy.sh compares the two readers over one prose ledger.
+    | historic_progress
+    | (map(select(type == "object" and .progress_source == "gate_why")) | length) as $historic
     # The header total, re-derived here so the accounting paragraph can NAME it. The two exclusions
     # bound above were computed before this filter and were therefore never in it.
     | (length) as $local_total
@@ -4489,6 +4701,10 @@ cmd_autonomy() {
     , ([ (if $skipped > 0 then "  (\($skipped) non-comparable row(s) excluded: dirty kit, no kit_sha, or no moved field)" else empty end)
        , (if $stray > 0 then "  (\($stray) unrecognized row(s) excluded: event missing or not one of session/blocked/degraded)" else empty end)
        , (if $history_extra > 0 then "  (launches and reopened are counted over every session of the mission, \($history_extra) of them non-comparable)" else empty end)
+       # NOT an exclusion — nothing left a bucket — which is why it rides at the end of the first
+       # paragraph rather than among the four. It is the disclosure that half this ledger was read
+       # through a dated compatibility path, and the signal that says when that path can be deleted.
+       , (if $historic > 0 then "  (\($historic) EXEC row(s) older than the pending fields read their progress from gate_why)" else empty end)
        ] as $inside
        | [ (if $foreign > 0 then "  (\($foreign) row(s) excluded: born in another repo — the ledger is global, this reader is not)" else empty end)
          , (if $norepo > 0 then "  (\($norepo) row(s) excluded: no repo field — the row cannot say which project it came from)" else empty end)
@@ -4700,12 +4916,28 @@ kaizen_series() {
         and all($window[]; . as $sha | ($rows | missions_on($sha)) == 1)
         and $best_reach < guard_floor;
 
+    # The `leve` clause reads `outcome` — the SAME definition the histogram and the human window
+    # read, spliced from ledger_outcome_defs — and never `.gate` directly. Its previous spelling
+    # was `(.auto_retry == true or .moved == false or .gate == "fail")`, added by 20260828 so that
+    # a phase which failed five gates and then passed could not read `ok`; measured against the
+    # real ledger one day later, that spelling labelled `leve` EVERY EXEC phase of two or more
+    # increments, because gate_EXEC refuses once per increment BY DESIGN. A rubric that cannot
+    # tell the designed loop of the pipeline from a phase that spun is not stricter, it is blind
+    # in a new direction — and it was about to stamp `leve` on the mission that came to fix it.
+    #
+    # `outcome != "advanced"` keeps everything 20260828 bought: the session that wrote and moved
+    # no increment is `churned`, the one that wrote nothing is `idle`, and either one still makes
+    # the phase `leve`. What it stops charging for is the refusal that the design itself schedules.
+    # `.moved == false` is subsumed rather than dropped — a session that wrote nothing and passed
+    # its gate reads `advanced`, which is the honest answer for a phase whose artifact was already
+    # on disk. `refez` does not move: a phase whose last session did not pass has not closed, and
+    # that is a fact about the gate, not about an increment.
     def phase_label:
       if (map(select(is_escalation)) | length) > 0
          or (map(select(.event == "session" and .invocation == "retry")) | length) > 0
          or ((map(select(.event == "session")) | last | .gate) != "pass")
       then "refez"
-      elif (map(select(.event == "session" and (.auto_retry == true or .moved == false or .gate == "fail"))) | length) > 0
+      elif (map(select(.event == "session" and (.auto_retry == true or outcome != "advanced"))) | length) > 0
       then "leve"
       else "ok"
       end;
@@ -4764,8 +4996,14 @@ kaizen_series() {
          # check-autonomy.sh compares the two histograms over one file, so a program that grew a
          # local copy of the definition is caught by the comparison and not by a sentence here.
          outcomes: ($sess | outcome_tally),
+         # advance_rate is the `advanced` slice of `outcomes` and NOT a second count beside it —
+         # written as `.gate == "pass"` until 20260829 it disagreed with the histogram printed one
+         # line above it, and the disagreement was exactly the designed loop: the ten EXEC sessions
+         # of the 20260816 kit mission, each closing an increment, read `0.10` here while the phase
+         # had not tripped once. One yardstick, two readings of it, so the headline the judge quotes
+         # cannot contradict the tally the judge is looking at.
          advance_rate: (if ($sess | length) == 0 then null
-                        else (($sess | map(select(.gate == "pass")) | length) / ($sess | length) * 100 | round / 100) end),
+                        else (($sess | map(select(outcome == "advanced")) | length) / ($sess | length) * 100 | round / 100) end),
          moved_rate: (if ($sess | length) == 0 then null
                       else (($sess | map(select(.moved == true)) | length) / ($sess | length) * 100 | round / 100) end),
          labels: ($detail | reduce .[] as $d ({ok: 0, leve: 0, refez: 0}; .[$d.label] += 1)),
@@ -4781,7 +5019,11 @@ kaizen_series() {
     # counted rather than dropped, because a number that moved with nothing explaining why is the
     # defect this filter exists to remove, not one to introduce one layer down.
     | ($file_rows | map(select(ledger_row_no_repo)) | length) as $no_repo
-    | ($file_rows | map(select(ledger_row_is_local))) as $raw
+    # historic_progress at the SAME point of this program as of cmd_autonomy: right after the repo
+    # filter, before any classification. One dated recovery, spliced from one definition, so the
+    # judge and the human window cannot end up reading two different histories out of one file —
+    # check-autonomy.sh compares them over a prose-only ledger for exactly that.
+    | ($file_rows | map(select(ledger_row_is_local)) | historic_progress) as $raw
     # Subtracted out, never lumped in: a row that names no project did not come from another repo,
     # and a bucket that said it did would be a wrong reason printed with the confidence of a right
     # one. The two counts partition what the filter removed, so the arithmetic still closes.
@@ -5242,6 +5484,8 @@ USAGE
   sdd close <mission>        post-merge: close the JIRA issue
   sdd autonomy [--all-repos] what the sessions did per kit version — advanced · churned · idle, and
                              waste = churned + idle — for this repo unless --all-repos, from the ledger
+                             advanced is the gate that passed OR the EXEC session that closed an
+                             increment: the pipeline's designed loop is not waste
              [--by-mission]  group by mission instead of by kit version: the same three outcomes,
                              launch(es) (distinct run_id — the intervention count D12 reads),
                              reopened phases, the `- intervention:` notes of the checkpoint when

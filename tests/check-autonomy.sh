@@ -266,6 +266,276 @@ assert_eq "sdd retry writes one session row" "1" "$(nrows)"
 assert_eq "and marks itself as a retry invocation" "retry" "$(rows '.invocation')"
 assert_eq "with its own run_id" "true" "$(rows '(.run_id | length) > 0')"
 
+# --- the EXEC row carries how many increments were left --------------------
+# `outcome` cannot tell the pipeline's DESIGNED loop (one session per increment, the gate red
+# until the last one) from real churn while the only facts on the row are the gate's verdict and
+# whether the disk moved. Measured on 2026-08-29 over the real ledger: 46 of 72 EXEC rows read
+# `churned` and about 5 of them were. The count gate_EXEC already computes for its own "N of M"
+# sentence is what closes the hole, and it has to reach the row as NUMBERS — prose in `gate_why`
+# is not a field, and parsing it back is the reader guessing at what the writer knew.
+#
+# The stub closes ONE of two increments on its first call and does nothing afterwards: the
+# designed loop in miniature. Session 1 advances (2 → 1) with the gate still red; session 2 and
+# its inline retry stand still, which is what churn actually looks like.
+echo "== the EXEC row carries how many increments were left =="
+: > "$LEDGER"
+CKPT_TALLY_SAVED="$OUTSIDE/checkpoint.tally-saved"
+cp "$MDIR/checkpoint.md" "$CKPT_TALLY_SAVED"
+cat > "$MDIR/checkpoint.md" <<'EOF'
+| ID | Incremento | Check (comando → esperado) | Status | Commit |
+|---|---|---|---|---|
+| I1 | slice one | `true` → 0 | pending | — |
+| I2 | slice two | `true` → 0 | pending | — |
+EOF
+git add -A && git commit -qm "chore: two pending increments"
+# OUTSIDE the fixture repo, like every other instrument in this file: a marker under $FIX would be
+# swept into the next block's `git add -A` and move `state_fingerprint` because the TEST wrote,
+# not because the session did.
+TALLY_MARKER="$OUTSIDE/tally-once"
+rm -f "$TALLY_MARKER"
+# The hash is read BEFORE the stub's own commit and a commit follows it, exactly like the
+# `done`-with-a-real-commit stub further down: gate_EXEC demands an ANCESTOR of HEAD, not merely
+# an object in the database, so a hash taken after the commit would be refused.
+cat > "$OUTSIDE/stub/claude" <<STUB
+#!/usr/bin/env bash
+if [ ! -e "$TALLY_MARKER" ]; then
+  : > "$TALLY_MARKER"
+  h=\$(git -C "$FIX" rev-parse --short HEAD)
+  sed -i "/^| I1 /s/| pending | — |/| done | \$h |/" "$MDIR/checkpoint.md"
+  git -C "$FIX" add -A
+  git -C "$FIX" commit -qm "chore: the session closed one increment"
+fi
+cat "$STREAM_SAMPLE"
+exit 0
+STUB
+chmod +x "$OUTSIDE/stub/claude"
+
+"$SDD" run "$MISSION" >/dev/null 2>&1
+assert_eq "an EXEC row carries pending_before, pending_after and increments_total" "2 1 2" \
+  "$(jq -r -s '.[0] | "\(.pending_before) \(.pending_after) \(.increments_total)"' "$LEDGER")"
+# The retry takes no snapshot of its own: the gate ran BETWEEN the two passes, so the first pass's
+# `pending_after` already is the retry's starting point. Reading the checkpoint again there would
+# sample a file the gate had judged one line earlier, and the retry would be credited with the
+# progress of the pass before it. The `!= null` term is the floor — without it two absent fields
+# satisfy the equality and the assertion measures nothing.
+assert_eq "the inline retry starts where the first pass ended" "true" \
+  "$(jq -s '.[2].auto_retry == true and .[1].pending_after != null
+            and .[2].pending_before == .[1].pending_after' "$LEDGER")"
+
+# --- a checkpoint the gate REFUSED publishes no count ----------------------
+# `pending_before` is a photograph, `pending_after` is a VERDICT: the gate publishes it only after
+# the validation loop, so a checkpoint marked `done` with no commit — the "a label is not an
+# artifact" refusal — cannot buy its session an `advanced`. The row keeps the honest before and
+# leaves the after null, which is exactly what makes the reader fall back to `moved`.
+echo "== a refused checkpoint publishes no count =="
+: > "$LEDGER"
+cat > "$MDIR/checkpoint.md" <<'EOF'
+| ID | Incremento | Check (comando → esperado) | Status | Commit |
+|---|---|---|---|---|
+| I1 | slice one | `true` → 0 | pending | — |
+| I2 | slice two | `true` → 0 | pending | — |
+EOF
+git add -A && git commit -qm "chore: two pending increments again"
+rm -f "$TALLY_MARKER"
+cat > "$OUTSIDE/stub/claude" <<STUB
+#!/usr/bin/env bash
+if [ ! -e "$TALLY_MARKER" ]; then
+  : > "$TALLY_MARKER"
+  sed -i "/^| I1 /s/| pending | — |/| done | — |/" "$MDIR/checkpoint.md"
+  git -C "$FIX" add -A
+  git -C "$FIX" commit -qm "chore: a label with no artifact"
+fi
+cat "$STREAM_SAMPLE"
+exit 0
+STUB
+chmod +x "$OUTSIDE/stub/claude"
+
+"$SDD" run "$MISSION" >/dev/null 2>&1
+assert_eq "a done without commit publishes no pending_after" "2 null null" \
+  "$(jq -r -s '.[0] | "\(.pending_before) \(.pending_after) \(.increments_total)"' "$LEDGER")"
+
+# --- blocking an increment is the line STOPPING, not an increment advancing ---
+# The sibling of the block above, and the one the ordering inside gate_EXEC missed. `blocked` is a
+# valid checkpoint status, so the validation loop lets it through; the counts are published, and
+# only THEN does the Jidoka refusal fire. But checkpoint_tally counts `pending|doing` and files
+# `blocked` in a bucket of its own, so a session that gave up on an increment lowers `pending` by
+# one exactly like a session that finished it: pending_before 2, pending_after 1, and `outcome`
+# reads `advanced` over the one session in the whole pipeline that stopped the line.
+#
+# Fail-open in the flattering direction, which is the failure this mission exists to prevent, and
+# it is not hypothetical: of the 2 EXEC rows still reading `churned` in the real ledger on
+# 2026-08-30, ONE is exactly this session (sales_quote/20260825-cif-forma-pagamento, gate_why
+# "1 increment(s) 'blocked' — Jidoka: the line stops"). It reads honestly today only because it
+# predates the fields; written by this runner it would read `advanced` at 0% waste, and the
+# instrument would lose its last accusation about a stopped line. The usage text of `sdd autonomy`
+# promises "the EXEC session that CLOSED an increment" — blocking one is not closing it.
+#
+# The refusal has to publish NOTHING, like the `done`-with-no-commit refusal above: `pending_after`
+# is a verdict, and there is no verdict to give about a checkpoint the gate is about to refuse for
+# Jidoka. `pending_before` stays — it is a photograph, taken before the session, and it is what
+# keeps this assertion from passing over an empty ledger.
+echo "== a blocked increment publishes no count =="
+: > "$LEDGER"
+cat > "$MDIR/checkpoint.md" <<'EOF'
+| ID | Incremento | Check (comando → esperado) | Status | Commit |
+|---|---|---|---|---|
+| I1 | slice one | `true` → 0 | pending | — |
+| I2 | slice two | `true` → 0 | pending | — |
+EOF
+git add -A && git commit -qm "chore: two pending increments, before the block"
+rm -f "$TALLY_MARKER"
+cat > "$OUTSIDE/stub/claude" <<STUB
+#!/usr/bin/env bash
+if [ ! -e "$TALLY_MARKER" ]; then
+  : > "$TALLY_MARKER"
+  sed -i "/^| I1 /s/| pending | — |/| blocked | — |/" "$MDIR/checkpoint.md"
+  git -C "$FIX" add -A
+  git -C "$FIX" commit -qm "chore: the session gave up on the increment"
+fi
+cat "$STREAM_SAMPLE"
+exit 0
+STUB
+chmod +x "$OUTSIDE/stub/claude"
+
+"$SDD" run "$MISSION" >/dev/null 2>&1
+assert_eq "a blocked increment publishes no pending_after" "2 null null" \
+  "$(jq -r -s '.[0] | "\(.pending_before) \(.pending_after) \(.increments_total)"' "$LEDGER")"
+# The witness, and it is not decoration: without it the assertion above is satisfied by ANY refusal
+# that publishes nothing — an invalid status token, a checkpoint the stub failed to write — and it
+# would go on passing over a fixture that stopped reaching the Jidoka path at all.
+assert_eq "and the refusal that produced it is the Jidoka one" "true" \
+  "$(jq -r -s '.[0].gate_why | test("Jidoka: the line stops")' "$LEDGER")"
+
+# --- the inline retry starts where the pass before it stopped ---------------
+# The third member of the family above, and the one the two blocks before it do NOT reach: they
+# both stop at the FIRST pass, whose `pending_before` is the photograph cmd_run takes before the
+# session opens. The inline retry gets its `pending_before` from a different place — `exec_after`,
+# the first pass's PUBLISHED count — and when that first gate refused before publishing (either of
+# the two refusals above) `exec_after` is the empty string, so the retry row was born with
+# `pending_before: null`.
+#
+# That null is not inert, and this is the measured harm: `historic_progress` fires on ANY EXEC row
+# whose `pending_before` is null and whose `gate_why` carries the `N of M` prose, so a row written
+# by TODAY's runner falls down the compatibility path built for rows written before the fields
+# existed. It is then handed a `pending_before` of M — the TOTAL, because the memory is empty —
+# and reads `advanced` over a retry that advanced nothing. Reproduced end to end on 2026-08-30 with
+# a real `sdd run` over this very fixture: the pass photographs `pending_before 1`, the retry
+# leaves `pending_after 1`, and the reader answered `advanced` off a fabricated `2`. Fail-open in
+# the flattering direction — the same family as the null guard of I2 and the Jidoka block above,
+# and the failure this whole mission exists to prevent.
+#
+# Two further consequences the fix closes: `sdd autonomy` counted that row in its
+# "older than the pending fields" disclosure, which is false about a row minutes old; and that
+# count is the DELETION SIGNAL for the compatibility path, so the path could never reach zero.
+#
+# The fix is sound because cmd_run reaches its inline retry ONLY when `moved == "false"` — the
+# first pass changed nothing, and `state_fingerprint` includes the checkpoint's md5 — so the file
+# the retry starts on is byte-identical to the one the photograph read.
+echo "== the inline retry records the count it started from =="
+: > "$LEDGER"
+cat > "$MDIR/checkpoint.md" <<'EOF'
+| ID | Incremento | Check (comando → esperado) | Status | Commit |
+|---|---|---|---|---|
+| I1 | slice one | `true` → 0 | done | — |
+| I2 | slice two | `true` → 0 | pending | — |
+EOF
+git add -A && git commit -qm "chore: a label with no artifact, and one increment still pending"
+rm -f "$TALLY_MARKER"
+# The FIRST session changes nothing — that is the only way to reach the inline retry, which is
+# guarded on `moved == false`. The SECOND gives I1 the commit it was missing, so the retry's gate
+# gets past validation and PUBLISHES a count while the pass before it did not.
+cat > "$OUTSIDE/stub/claude" <<STUB
+#!/usr/bin/env bash
+if [ ! -e "$TALLY_MARKER" ]; then
+  : > "$TALLY_MARKER"
+else
+  h=\$(git -C "$FIX" rev-parse --short HEAD)
+  sed -i "/^| I1 /s/| done | — |/| done | \$h |/" "$MDIR/checkpoint.md"
+  git -C "$FIX" add -A
+  git -C "$FIX" commit -qm "chore: the retry gives the increment its artifact"
+fi
+cat "$STREAM_SAMPLE"
+exit 0
+STUB
+chmod +x "$OUTSIDE/stub/claude"
+
+"$SDD" run "$MISSION" >/dev/null 2>&1
+# The floor, and it is what keeps the assertion below from passing over a run that never retried:
+# it names the FIRST pass, proves it is the non-retry one, and proves its gate published nothing.
+assert_eq "the pass before the retry is the one that published nothing" "false 1 null null" \
+  "$(jq -r -s '.[0] | "\(.auto_retry) \(.pending_before) \(.pending_after) \(.increments_total)"' "$LEDGER")"
+assert_eq "the inline retry records the count it started from" "true 1 1 2" \
+  "$(jq -r -s '.[1] | "\(.auto_retry) \(.pending_before) \(.pending_after) \(.increments_total)"' "$LEDGER")"
+# The harm, asserted where it lands rather than only at the writer: with a measured
+# `pending_before` no row of this run is eligible for the compatibility path, so the reader's
+# disclosure — which is also the signal that says when that path can be deleted — stays silent.
+autonomy_out="$("$SDD" autonomy --all-repos 2>/dev/null)"
+assert_eq "and no row this runner wrote is read as one that predates the fields" "0" \
+  "$(grep -c 'read their progress from gate_why' <<< "$autonomy_out" || true)"
+
+# --- the EXEC counts do not follow the run into the next phase -------------
+# GATE_EXEC_PENDING outlives the gate that set it BY DESIGN — cmd_run reads it one screen after
+# the call — so the phase guard at the read site is the only thing keeping the next phase's row
+# from inheriting it. This block builds the sequence where that is reachable, and it took a
+# sabotage pass to find out which sequence that is: `current_phase` runs as `$(...)`, so the
+# gate_EXEC it evaluates on every lap sets those globals in a SUBSHELL that dies immediately, and
+# the run→REVIEW fixture further down cannot reach the leak at all. The one that can is an EXEC
+# gate that PASSES in the parent shell — door 1's own `gate_"$phase"` call — followed by another
+# lap that opens a session for the next phase.
+#
+# A QA row carrying `pending_after: 0` would tell the judge QA advanced an increment it never had,
+# and `waste` would fall for free across every mission in the ledger.
+echo "== the EXEC counts do not follow the run into the next phase =="
+: > "$LEDGER"
+cp "$CKPT_TALLY_SAVED" "$MDIR/checkpoint.md"
+git add -A && git commit -qm "chore: back to the single pending increment"
+rm -f "$TALLY_MARKER"
+# One call closes the only increment AND writes the handoff, so gate_EXEC passes in the parent
+# shell on this very lap; the next lap finds QA unsatisfied and opens a session for it.
+cat > "$OUTSIDE/stub/claude" <<STUB
+#!/usr/bin/env bash
+if [ ! -e "$TALLY_MARKER" ]; then
+  : > "$TALLY_MARKER"
+  printf -- '---\nfase: EXEC\nstatus: done\n---\n' > "$MDIR/20-handoff-exec.md"
+  h=\$(git -C "$FIX" rev-parse --short HEAD)
+  sed -i "/^| I1 /s/| pending | — |/| done | \$h |/" "$MDIR/checkpoint.md"
+  git -C "$FIX" add -A
+  git -C "$FIX" commit -qm "chore: the last increment closed and the handoff written"
+fi
+cat "$STREAM_SAMPLE"
+exit 0
+STUB
+chmod +x "$OUTSIDE/stub/claude"
+
+"$SDD" run "$MISSION" >/dev/null 2>&1
+# The floor is the EXEC row itself: it proves the gate really did pass in the parent shell and
+# really did publish, so the nulls one row later are a guard doing its job and not an empty ledger.
+assert_eq "the EXEC row that closed the last increment says so" "EXEC pass 1 0 1" \
+  "$(jq -r -s '.[0] | "\(.phase) \(.gate) \(.pending_before) \(.pending_after) \(.increments_total)"' "$LEDGER")"
+assert_eq "a non-EXEC row carries the three as null" "QA true" \
+  "$(jq -r -s '.[1] | "\(.phase) \(.pending_before == null and .pending_after == null
+                                 and .increments_total == null)"' "$LEDGER")"
+# Row [2] is the same lap's INLINE RETRY of that QA session, and it is a THIRD read site of the
+# globals — a door of its own, guarded by its own `if [ "$phase" = "EXEC" ]`. It was unprobed: with
+# that guard removed the suite stayed green while the row came out carrying `pending_after: 0` and
+# `increments_total: 1`, EXEC's numbers on a QA row, which is the reading that would tell the judge
+# QA advanced an increment it never had. The fixture already wrote this row — the door cost a line
+# to probe, not a world to build. One probe per door, the shape CLAUDE.md already spells out for
+# handoff_blocked_escalation and app_down_escalation.
+assert_eq "and so does the inline retry of that same non-EXEC phase" "QA true true" \
+  "$(jq -r -s '.[2] | "\(.phase) \(.auto_retry) \(.pending_before == null and .pending_after == null
+                                 and .increments_total == null)"' "$LEDGER")"
+
+cat > "$OUTSIDE/stub/claude" <<'STUB'
+#!/usr/bin/env bash
+exit 1
+STUB
+chmod +x "$OUTSIDE/stub/claude"
+rm -f "$MDIR/20-handoff-exec.md"
+cp "$CKPT_TALLY_SAVED" "$MDIR/checkpoint.md"
+git add -A && git commit -qm "chore: restore the single pending increment"
+rm -f "$TALLY_MARKER"
+
 # --- moved: true on a real change, false once nothing changes --------------
 # Task 2 review measured this by hand: mutating `[ "$before" != "$after" ] && moved="true"` into a
 # no-op left the whole suite GREEN, because every `claude` stub above is dead (rc 1) or dry — none
@@ -1463,6 +1733,215 @@ assert_eq "the parity is not vacuous — the table printed the three counts" "3 
 human_noncomp_tri="$(num_before "$out_tri" 'non-comparable')"; human_noncomp_tri="${human_noncomp_tri:-0}"
 assert_eq "the judge excludes exactly the rows the human's reader excludes (session with no moved included)" \
   "2 2" "$human_noncomp_tri $(jq -r '.excluded.non_comparable' <<< "$series_tri")"
+
+# --- the increment that advanced is not churn ----------------------------------------------------
+# The gate is the artifact of the PHASE, and a phase of four increments only passes it on the last
+# session — so `gate == pass` alone read the pipeline's DESIGNED loop as waste. Measured on the real
+# ledger on 2026-08-29: 46 of the 72 EXEC rows read `churned` where the churn is about 5, and 49 of
+# the 107 kit versions printed `100% waste` — every one of them a version whose only session was a
+# middle increment of some mission. The row now carries the count gate_EXEC already had
+# (pending_before/pending_after/increments_total, written by I1), and `outcome` reads it.
+#
+# The fixture is one coherent EXEC history of four increments, and its six rows exist to make the
+# three regimes of this definition come out at three DIFFERENT histograms, so none is reachable by
+# accident:
+#   s1  4→3  moved, gate fail   the increment advanced; the phase did not          advanced
+#   s2  3→3  moved, gate fail   wrote, closed nothing — the churn that is real     churned
+#   s3  3→3  no move, fail      wrote nothing at all                               idle
+#   s4  3→2  moved, gate fail   advanced again                                     advanced
+#   s5  2→?  moved, gate fail   the gate REFUSED the checkpoint, so it published   churned
+#                               no pending_after: `null`, not "it went to zero"
+#   s6  2→0  moved, gate pass   the last increment closes the phase                advanced
+# new rule      3 advanced · 2 churned · 1 idle · 50% waste
+# gate-only     1 advanced · 4 churned · 1 idle · 83% waste   (mut_AUTONOMY_progress_ignored)
+# no null guard 4 advanced · 1 churned · 1 idle · 33% waste   (mut_AUTONOMY_progress_null_blind)
+#
+# s5 is not decoration: jq orders `null` BELOW every number, so `.pending_after < .pending_before`
+# with a null left-hand side is TRUE — a gate that refused the checkpoint would read as the loudest
+# possible progress. The guard against that is code, and this is the row that measures it.
+echo "== reader: the increment that advanced is not churn =="
+mkdir -p "$OUTSIDE/progress"
+localize > "$OUTSIDE/progress/autonomy-log.jsonl" <<'EOF'
+{"v":1,"ts":"2026-08-29T10:00:00-03:00","event":"session","run_id":"r1","invocation":"run","kit_sha":"eeeeeee","kit_dirty":false,"project":"p1","repo":"/p1","mission":"m3","phase":"EXEC","step":"EXEC","agent":"sdd-executor","model":"opus","attempt":1,"auto_retry":false,"session":"s1","rc":0,"dur_s":10,"cost_usd":1.0,"moved":true,"pending_before":4,"pending_after":3,"increments_total":4,"gate":"fail","gate_why":"3 of 4 increment(s) still to execute"}
+{"v":1,"ts":"2026-08-29T10:01:00-03:00","event":"session","run_id":"r1","invocation":"run","kit_sha":"eeeeeee","kit_dirty":false,"project":"p1","repo":"/p1","mission":"m3","phase":"EXEC","step":"EXEC","agent":"sdd-executor","model":"opus","attempt":2,"auto_retry":false,"session":"s2","rc":0,"dur_s":10,"cost_usd":1.0,"moved":true,"pending_before":3,"pending_after":3,"increments_total":4,"gate":"fail","gate_why":"3 of 4 increment(s) still to execute"}
+{"v":1,"ts":"2026-08-29T10:02:00-03:00","event":"session","run_id":"r2","invocation":"run","kit_sha":"eeeeeee","kit_dirty":false,"project":"p1","repo":"/p1","mission":"m3","phase":"EXEC","step":"EXEC","agent":"sdd-executor","model":"opus","attempt":1,"auto_retry":false,"session":"s3","rc":0,"dur_s":10,"cost_usd":1.0,"moved":false,"pending_before":3,"pending_after":3,"increments_total":4,"gate":"fail","gate_why":"3 of 4 increment(s) still to execute"}
+{"v":1,"ts":"2026-08-29T10:03:00-03:00","event":"session","run_id":"r2","invocation":"run","kit_sha":"eeeeeee","kit_dirty":false,"project":"p1","repo":"/p1","mission":"m3","phase":"EXEC","step":"EXEC","agent":"sdd-executor","model":"opus","attempt":2,"auto_retry":false,"session":"s4","rc":0,"dur_s":10,"cost_usd":1.0,"moved":true,"pending_before":3,"pending_after":2,"increments_total":4,"gate":"fail","gate_why":"2 of 4 increment(s) still to execute"}
+{"v":1,"ts":"2026-08-29T10:04:00-03:00","event":"session","run_id":"r3","invocation":"run","kit_sha":"eeeeeee","kit_dirty":false,"project":"p1","repo":"/p1","mission":"m3","phase":"EXEC","step":"EXEC","agent":"sdd-executor","model":"opus","attempt":1,"auto_retry":false,"session":"s5","rc":0,"dur_s":10,"cost_usd":1.0,"moved":true,"pending_before":2,"pending_after":null,"increments_total":null,"gate":"fail","gate_why":"increment I3 is done with no commit"}
+{"v":1,"ts":"2026-08-29T10:05:00-03:00","event":"session","run_id":"r3","invocation":"run","kit_sha":"eeeeeee","kit_dirty":false,"project":"p1","repo":"/p1","mission":"m3","phase":"EXEC","step":"EXEC","agent":"sdd-executor","model":"opus","attempt":2,"auto_retry":false,"session":"s6","rc":0,"dur_s":10,"cost_usd":1.0,"moved":true,"pending_before":2,"pending_after":0,"increments_total":4,"gate":"pass","gate_why":""}
+EOF
+out_prog="$( SDD_STATE_DIR="$OUTSIDE/progress" "$SDD" autonomy 2>&1 )"; rc=$?
+assert_eq "a ledger of increment counts is data (rc 0)" "0" "$rc"
+
+assert_eq "a session that advanced its increment reads advanced, not churned" "1" \
+  "$(grep -cE '^  eeeeeee  6 session\(s\) · 3 advanced · 2 churned · 1 idle · ' <<< "$out_prog")"
+
+# Differential on ONE fixture: the new number has to be there AND the gate-only number has to be
+# gone. A count asserted alone is satisfied by any regime that happens to land on it.
+assert_eq "waste counts only the increment that did not move" "1 0" \
+  "$(grep -c ' 50% waste ' <<< "$out_prog") $(grep -c ' 83% waste ' <<< "$out_prog")"
+
+# The null guard, measured and not asserted in prose: without it s5 reads `advanced` and the
+# histogram goes 4 · 1 · 1 at 33% waste. Both halves, so deleting the row cannot satisfy it.
+assert_eq "a gate that published no pending_after is not an increment that advanced" "0 0" \
+  "$(grep -c ' 4 advanced · 1 churned ' <<< "$out_prog") $(grep -c ' 33% waste ' <<< "$out_prog")"
+
+# Parity again, on the fixture where the definition CHANGED: the judge splices the same printed
+# defs, so a copy that stayed on the gate-only yardstick shows up only in the comparison.
+series_prog="$( SDD_STATE_DIR="$OUTSIDE/progress" "$SDD" kaizen --series 2>/dev/null )"
+table_prog="$(sed -nE 's/^  eeeeeee  [0-9]+ session\(s\) · ([0-9]+) advanced · ([0-9]+) churned · ([0-9]+) idle · .*/\1 \2 \3/p' <<< "$out_prog")"
+assert_eq "the human window and the judge agree on the increment that advanced" \
+  "$(jq -r '.latest.outcomes | "\(.advanced) \(.churned) \(.idle)"' <<< "$series_prog")" "$table_prog"
+assert_eq "that parity is not vacuous — the table printed the three counts" "3 2 1" "$table_prog"
+assert_bucket_sum "the four buckets sum to the header total (increment counts)" "$out_prog"
+
+# --- the historical path: a row older than the fields recovers its count from gate_why -----------
+# 49 of the 72 EXEC rows in the real ledger were written before the three pending fields existed,
+# and they carry the SAME fact in prose: gate_EXEC has always written `N of M increment(s) still to
+# execute` into gate_why. Migrating them is not an option (the ledger is append-only by contract),
+# and leaving them on the `moved` arm would have the human window reading `churned` over the whole
+# history it exists to explain — for ever, since nothing will ever rewrite those lines.
+#
+# So the readers recover it, and the assertions below are about the recovery being a reading of ONE
+# history rather than a second opinion about it. The fixture is the SAME six-session history the
+# block above just measured through the fields, respelled the way the runner wrote it in July:
+# no pending_* keys, the count in the prose, and the real gate_EXEC sentences — including the
+# passing one, `4 increment(s) done, suite green, handoff written`, which opens with a number and
+# must NOT be mistaken for a count (it has no `of`).
+echo "== reader: the historical path reads the count from gate_why =="
+mkdir -p "$OUTSIDE/historic"
+localize > "$OUTSIDE/historic/autonomy-log.jsonl" <<'EOF'
+{"v":1,"ts":"2026-08-29T10:00:00-03:00","event":"session","run_id":"r1","invocation":"run","kit_sha":"eeeeeee","kit_dirty":false,"project":"p1","repo":"/p1","mission":"m3","phase":"EXEC","step":"EXEC","agent":"sdd-executor","model":"opus","attempt":1,"auto_retry":false,"session":"s1","rc":0,"dur_s":10,"cost_usd":1.0,"moved":true,"gate":"fail","gate_why":"3 of 4 increment(s) still to execute"}
+{"v":1,"ts":"2026-08-29T10:01:00-03:00","event":"session","run_id":"r1","invocation":"run","kit_sha":"eeeeeee","kit_dirty":false,"project":"p1","repo":"/p1","mission":"m3","phase":"EXEC","step":"EXEC","agent":"sdd-executor","model":"opus","attempt":2,"auto_retry":false,"session":"s2","rc":0,"dur_s":10,"cost_usd":1.0,"moved":true,"gate":"fail","gate_why":"3 of 4 increment(s) still to execute"}
+{"v":1,"ts":"2026-08-29T10:02:00-03:00","event":"session","run_id":"r2","invocation":"run","kit_sha":"eeeeeee","kit_dirty":false,"project":"p1","repo":"/p1","mission":"m3","phase":"EXEC","step":"EXEC","agent":"sdd-executor","model":"opus","attempt":1,"auto_retry":false,"session":"s3","rc":0,"dur_s":10,"cost_usd":1.0,"moved":false,"gate":"fail","gate_why":"3 of 4 increment(s) still to execute"}
+{"v":1,"ts":"2026-08-29T10:03:00-03:00","event":"session","run_id":"r2","invocation":"run","kit_sha":"eeeeeee","kit_dirty":false,"project":"p1","repo":"/p1","mission":"m3","phase":"EXEC","step":"EXEC","agent":"sdd-executor","model":"opus","attempt":2,"auto_retry":false,"session":"s4","rc":0,"dur_s":10,"cost_usd":1.0,"moved":true,"gate":"fail","gate_why":"2 of 4 increment(s) still to execute"}
+{"v":1,"ts":"2026-08-29T10:04:00-03:00","event":"session","run_id":"r3","invocation":"run","kit_sha":"eeeeeee","kit_dirty":false,"project":"p1","repo":"/p1","mission":"m3","phase":"EXEC","step":"EXEC","agent":"sdd-executor","model":"opus","attempt":1,"auto_retry":false,"session":"s5","rc":0,"dur_s":10,"cost_usd":1.0,"moved":true,"gate":"fail","gate_why":"increment I3 is done with no commit"}
+{"v":1,"ts":"2026-08-29T10:05:00-03:00","event":"session","run_id":"r3","invocation":"run","kit_sha":"eeeeeee","kit_dirty":false,"project":"p1","repo":"/p1","mission":"m3","phase":"EXEC","step":"EXEC","agent":"sdd-executor","model":"opus","attempt":2,"auto_retry":false,"session":"s6","rc":0,"dur_s":10,"cost_usd":1.0,"moved":true,"gate":"pass","gate_why":"4 increment(s) done, suite green, handoff written"}
+EOF
+out_hist="$( SDD_STATE_DIR="$OUTSIDE/historic" "$SDD" autonomy 2>&1 )"; rc=$?
+assert_eq "a ledger written before the pending fields is data (rc 0)" "0" "$rc"
+
+# THE differential, and it is the whole increment: two ledgers, one history, two spellings of it.
+# The full version line is compared — sessions, the three outcomes, waste, missions and money — so
+# a recovery that agreed on the histogram by landing on some other regime still fails. Asserted
+# against the line the block above printed from the FIELDS, never against a literal: a literal
+# would let both sides drift together, which is the failure this comparison exists to catch.
+line_fields="$(grep -E '^  eeeeeee  ' <<< "$out_prog")"
+line_prose="$(grep -E '^  eeeeeee  ' <<< "$out_hist")"
+assert_eq "the historical path and the fields agree on one history" "$line_fields" "$line_prose"
+# Not vacuous: two empty strings are equal. The line has to be the one this fixture is about.
+assert_eq "that agreement is not vacuous — both lines carry the three counts" "1 1" \
+  "$(grep -c ' 3 advanced · 2 churned · 1 idle · 50% waste ' <<< "$line_fields") $(grep -c ' 3 advanced · 2 churned · 1 idle · 50% waste ' <<< "$line_prose")"
+
+# The path SAYS it ran, and how far it reached. A reader that silently reinterprets half its input
+# is the silent instrument this whole command was rewritten to stop being — and the sentence is
+# also the deletion signal: the day `sdd autonomy --all-repos` stops printing it, the code below
+# it in bin/sdd has no rows left to serve and comes out.
+assert_eq "the historical path says how many rows it read from prose" "1" \
+  "$(grep -c '(4 EXEC row(s) older than the pending fields read their progress from gate_why)' <<< "$out_hist")"
+
+# Parity again, over the ledger where the count is RECOVERED rather than read: the judge splices
+# the same printed defs, so a series that skipped the recovery shows up only here.
+series_hist="$( SDD_STATE_DIR="$OUTSIDE/historic" "$SDD" kaizen --series 2>/dev/null )"
+table_hist="$(sed -nE 's/^  eeeeeee  [0-9]+ session\(s\) · ([0-9]+) advanced · ([0-9]+) churned · ([0-9]+) idle · .*/\1 \2 \3/p' <<< "$out_hist")"
+assert_eq "the human window and the judge agree on the recovered history" \
+  "$(jq -r '.latest.outcomes | "\(.advanced) \(.churned) \(.idle)"' <<< "$series_hist")" "$table_hist"
+assert_eq "that parity is not vacuous — the recovered table printed the three counts" "3 2 1" "$table_hist"
+assert_bucket_sum "the four buckets sum to the header total (historical path)" "$out_hist"
+
+# --- the two memory rules of the historical path -------------------------------------------------
+# `pending_before` of an old row is the `pending_after` of the PREVIOUS EXEC row of the same
+# mission, and two rules say when that memory does not apply. Each gets a mission of its own, built
+# so that dropping the rule flips its outcome — a rule whose removal no fixture notices is a rule
+# with no probe.
+#
+#   m4  the total GREW between two FAILING sessions: the checkpoint went from 4 increments to 6
+#       (a fix increment appended to a phase still in flight, or a human amendment) and the next
+#       row says `3 of 6` after a memory of 2. Without the rule 3 is not below 2, and the session
+#       that did the work reads churn. With it, a changed M is a new denominator: count from M.
+#       No passing row anywhere in this mission, DELIBERATELY — the first shape of this fixture put
+#       a `pass` before the growth, the reset rule below cleared the memory first, and
+#       mut_AUTONOMY_historic_total_change_blind survived a probe that pointed at the right rule
+#       for the wrong reason.
+#   m5  a PASSING gate clears the memory. The phase closed at `4 increment(s) done`; a later session
+#       reopened one and left `3 of 4`. Without the reset the memory still says 3 from before the
+#       pass, M is unchanged so the M rule does not fire, and 3 → 3 reads churned.
+echo "== reader: the memory rules of the historical path =="
+mkdir -p "$OUTSIDE/histfix"
+localize > "$OUTSIDE/histfix/autonomy-log.jsonl" <<'EOF'
+{"v":1,"ts":"2026-08-29T11:00:00-03:00","event":"session","run_id":"r1","invocation":"run","kit_sha":"ddddddd","kit_dirty":false,"project":"p1","repo":"/p1","mission":"m4","phase":"EXEC","step":"EXEC","agent":"sdd-executor","model":"opus","attempt":1,"auto_retry":false,"session":"g1","rc":0,"dur_s":10,"cost_usd":1.0,"moved":true,"gate":"fail","gate_why":"3 of 4 increment(s) still to execute"}
+{"v":1,"ts":"2026-08-29T11:01:00-03:00","event":"session","run_id":"r1","invocation":"run","kit_sha":"ddddddd","kit_dirty":false,"project":"p1","repo":"/p1","mission":"m4","phase":"EXEC","step":"EXEC","agent":"sdd-executor","model":"opus","attempt":2,"auto_retry":false,"session":"g2","rc":0,"dur_s":10,"cost_usd":1.0,"moved":true,"gate":"fail","gate_why":"2 of 4 increment(s) still to execute"}
+{"v":1,"ts":"2026-08-29T11:02:00-03:00","event":"session","run_id":"r2","invocation":"run","kit_sha":"ddddddd","kit_dirty":false,"project":"p1","repo":"/p1","mission":"m4","phase":"EXEC","step":"EXEC","agent":"sdd-executor","model":"opus","attempt":1,"auto_retry":false,"session":"g3","rc":0,"dur_s":10,"cost_usd":1.0,"moved":true,"gate":"fail","gate_why":"3 of 6 increment(s) still to execute"}
+{"v":1,"ts":"2026-08-29T11:10:00-03:00","event":"session","run_id":"r4","invocation":"run","kit_sha":"ddddddd","kit_dirty":false,"project":"p1","repo":"/p1","mission":"m5","phase":"EXEC","step":"EXEC","agent":"sdd-executor","model":"opus","attempt":1,"auto_retry":false,"session":"h1","rc":0,"dur_s":10,"cost_usd":1.0,"moved":true,"gate":"fail","gate_why":"3 of 4 increment(s) still to execute"}
+{"v":1,"ts":"2026-08-29T11:11:00-03:00","event":"session","run_id":"r4","invocation":"run","kit_sha":"ddddddd","kit_dirty":false,"project":"p1","repo":"/p1","mission":"m5","phase":"EXEC","step":"EXEC","agent":"sdd-executor","model":"opus","attempt":2,"auto_retry":false,"session":"h2","rc":0,"dur_s":10,"cost_usd":1.0,"moved":true,"gate":"pass","gate_why":"4 increment(s) done, suite green, handoff written"}
+{"v":1,"ts":"2026-08-29T11:12:00-03:00","event":"session","run_id":"r5","invocation":"run","kit_sha":"ddddddd","kit_dirty":false,"project":"p1","repo":"/p1","mission":"m5","phase":"EXEC","step":"EXEC","agent":"sdd-executor","model":"opus","attempt":1,"auto_retry":false,"session":"h3","rc":0,"dur_s":10,"cost_usd":1.0,"moved":true,"gate":"fail","gate_why":"3 of 4 increment(s) still to execute"}
+EOF
+out_histfix="$( SDD_STATE_DIR="$OUTSIDE/histfix" "$SDD" autonomy --by-mission 2>&1 )"
+
+assert_eq "a growing total is a fix increment, not churn" "1" \
+  "$(grep -c '^  m4  3 session(s) · 3 advanced · 0 churned · 0 idle · ' <<< "$out_histfix")"
+assert_eq "a passing gate clears the count the next session is measured against" "1" \
+  "$(grep -c '^  m5  3 session(s) · 3 advanced · 0 churned · 0 idle · ' <<< "$out_histfix")"
+
+# --- an inference never credits a session that provably wrote nothing -----------------------------
+# The historical path RECOVERS `pending_before` from prose; it does not measure it. Where the memory
+# is empty it recovers M, the largest value the field can take, so the `advanced` arm is satisfied by
+# any prose that is not `M of M` — and the memory is empty on the first row of a mission (where M is
+# right), but ALSO on the row after a passing gate, where it is not. A phase that closed at
+# `4 increment(s) done` and then reopened an increment reads `1 of 5`, is handed a `pending_before`
+# of 5, and reads `advanced` — over a session that never touched the disk. `0% waste` on a session
+# that did nothing is the flattering direction, the same family as the null guard and the Jidoka
+# block, and it is the one place an INFERENCE outranks a MEASUREMENT.
+#
+# The guard is `.moved != false`, and it is a tautology rather than a policy: `state_fingerprint`
+# hashes the checkpoint, and closing an increment means editing the checkpoint, so a session whose
+# fingerprint did not move CANNOT have lowered the count. It therefore costs the field path nothing
+# (a measured pair with `moved: false` is unreachable) and it does not touch which rows the path
+# annotates — the disclosure count and the two memory rules above are deliberately left alone, so
+# this assertion cannot be satisfied by the path simply failing to reach the row. Measured over the
+# real ledger on 2026-08-30: 53 recovered rows, 48 `advanced`, and the guard moves NONE of them.
+# `!= false` and not `== true`: an escalation row carries no `moved` at all, and `null != false`
+# leaves it exactly where the two readers already file it.
+echo "== reader: a recovered count never credits a session that wrote nothing =="
+mkdir -p "$OUTSIDE/histmoved"
+localize > "$OUTSIDE/histmoved/autonomy-log.jsonl" <<'EOF'
+{"v":1,"ts":"2026-08-29T13:00:00-03:00","event":"session","run_id":"r1","invocation":"run","kit_sha":"bbbbbbb","kit_dirty":false,"project":"p1","repo":"/p1","mission":"m11","phase":"EXEC","step":"EXEC","agent":"sdd-executor","model":"opus","attempt":1,"auto_retry":false,"session":"j1","rc":0,"dur_s":10,"cost_usd":1.0,"moved":true,"gate":"pass","gate_why":"4 increment(s) done, suite green, handoff written"}
+{"v":1,"ts":"2026-08-29T13:01:00-03:00","event":"session","run_id":"r2","invocation":"run","kit_sha":"bbbbbbb","kit_dirty":false,"project":"p1","repo":"/p1","mission":"m11","phase":"EXEC","step":"EXEC","agent":"sdd-executor","model":"opus","attempt":1,"auto_retry":false,"session":"j2","rc":0,"dur_s":10,"cost_usd":1.0,"moved":false,"gate":"fail","gate_why":"1 of 5 increment(s) still to execute"}
+EOF
+out_histmoved="$( SDD_STATE_DIR="$OUTSIDE/histmoved" "$SDD" autonomy --by-mission 2>&1 )"
+assert_eq "a recovered count never credits a session that wrote nothing" "1" \
+  "$(grep -c '^  m11  2 session(s) · 1 advanced · 0 churned · 1 idle · ' <<< "$out_histmoved")"
+# The witness, and without it the assertion above is satisfied by a path that never reached the row
+# at all — which is the cheapest way to make it green for the wrong reason.
+assert_eq "and the row it declined to credit is one the path did read" "1" \
+  "$(grep -c '1 EXEC row(s) older than the pending fields read their progress from gate_why' <<< "$out_histmoved")"
+
+# --- the historical path never touches a row that carries the fields -----------------------------
+# The guard is `.pending_before == null` and NOT `has("pending_before")`: autonomy_session_row
+# builds the object with `($pbefore | tonumber? // null)`, so the KEY is on every row the runner has
+# written since I1 — `has` answers true for all 49 historical rows and the path would annotate none
+# of them. Measured on this mission's own first ledger row.
+#
+# The mirror image is this fixture: the same six-session history with s1 and s2 respelled in the new
+# schema, their prose left in place. A path that ignored the guard would annotate 4 rows instead of
+# 2 — and would ALSO have to be fed by those two rows to keep the histogram, which is the second
+# thing measured here: s3 reads its `pending_before` off s2, a row the path never annotated.
+echo "== reader: the historical path leaves a row with fields alone =="
+mkdir -p "$OUTSIDE/histmixed"
+localize > "$OUTSIDE/histmixed/autonomy-log.jsonl" <<'EOF'
+{"v":1,"ts":"2026-08-29T12:00:00-03:00","event":"session","run_id":"r1","invocation":"run","kit_sha":"ccccccc","kit_dirty":false,"project":"p1","repo":"/p1","mission":"m6","phase":"EXEC","step":"EXEC","agent":"sdd-executor","model":"opus","attempt":1,"auto_retry":false,"session":"s1","rc":0,"dur_s":10,"cost_usd":1.0,"moved":true,"pending_before":4,"pending_after":3,"increments_total":4,"gate":"fail","gate_why":"3 of 4 increment(s) still to execute"}
+{"v":1,"ts":"2026-08-29T12:01:00-03:00","event":"session","run_id":"r1","invocation":"run","kit_sha":"ccccccc","kit_dirty":false,"project":"p1","repo":"/p1","mission":"m6","phase":"EXEC","step":"EXEC","agent":"sdd-executor","model":"opus","attempt":2,"auto_retry":false,"session":"s2","rc":0,"dur_s":10,"cost_usd":1.0,"moved":true,"pending_before":3,"pending_after":3,"increments_total":4,"gate":"fail","gate_why":"3 of 4 increment(s) still to execute"}
+{"v":1,"ts":"2026-08-29T12:02:00-03:00","event":"session","run_id":"r2","invocation":"run","kit_sha":"ccccccc","kit_dirty":false,"project":"p1","repo":"/p1","mission":"m6","phase":"EXEC","step":"EXEC","agent":"sdd-executor","model":"opus","attempt":1,"auto_retry":false,"session":"s3","rc":0,"dur_s":10,"cost_usd":1.0,"moved":false,"gate":"fail","gate_why":"3 of 4 increment(s) still to execute"}
+{"v":1,"ts":"2026-08-29T12:03:00-03:00","event":"session","run_id":"r2","invocation":"run","kit_sha":"ccccccc","kit_dirty":false,"project":"p1","repo":"/p1","mission":"m6","phase":"EXEC","step":"EXEC","agent":"sdd-executor","model":"opus","attempt":2,"auto_retry":false,"session":"s4","rc":0,"dur_s":10,"cost_usd":1.0,"moved":true,"gate":"fail","gate_why":"2 of 4 increment(s) still to execute"}
+{"v":1,"ts":"2026-08-29T12:04:00-03:00","event":"session","run_id":"r3","invocation":"run","kit_sha":"ccccccc","kit_dirty":false,"project":"p1","repo":"/p1","mission":"m6","phase":"EXEC","step":"EXEC","agent":"sdd-executor","model":"opus","attempt":1,"auto_retry":false,"session":"s5","rc":0,"dur_s":10,"cost_usd":1.0,"moved":true,"gate":"fail","gate_why":"increment I3 is done with no commit"}
+{"v":1,"ts":"2026-08-29T12:05:00-03:00","event":"session","run_id":"r3","invocation":"run","kit_sha":"ccccccc","kit_dirty":false,"project":"p1","repo":"/p1","mission":"m6","phase":"EXEC","step":"EXEC","agent":"sdd-executor","model":"opus","attempt":2,"auto_retry":false,"session":"s6","rc":0,"dur_s":10,"cost_usd":1.0,"moved":true,"gate":"pass","gate_why":"4 increment(s) done, suite green, handoff written"}
+EOF
+out_mixed="$( SDD_STATE_DIR="$OUTSIDE/histmixed" "$SDD" autonomy 2>&1 )"
+assert_eq "the historical path never touches a row that carries the fields" "1 1" \
+  "$(grep -c '(2 EXEC row(s) older than the pending fields read their progress from gate_why)' <<< "$out_mixed") $(grep -c ' 3 advanced · 2 churned · 1 idle · 50% waste ' <<< "$out_mixed")"
+# The other half of that guard: over a ledger where EVERY row carries the fields, the path reaches
+# nothing and the sentence does not print at all.
+assert_eq "a ledger written entirely in the new schema prints no historical sentence" "0" \
+  "$(grep -c 'read their progress from gate_why' <<< "$out_prog")"
 
 # --- the reader gives a full accounting, never a silent gap --------------------------------------
 # Two findings from review, one root cause: a bucket the reader does not name is a bucket that can

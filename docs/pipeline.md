@@ -107,6 +107,15 @@ tells the two apart by a state fingerprint (HEAD + artifacts + checkpoint hash):
 session moved forward, carry on; it did not change ⇒ the session did nothing, gets one retry with
 the gate reason in the prompt and, if it still does not move, becomes `BLOCKED`.
 
+⚠️ The fingerprint answers *did this session write anything*, which is enough to decide the retry
+and **not** enough to grade the phase: a session that wrote and closed nothing looks exactly like
+one that closed an increment. Since `20260829-o-incremento-que-andou` the ledger carries the
+sharper fact — `pending_before`, photographed by `cmd_run`/`cmd_retry` before the session, and
+`pending_after`, published by `gate_EXEC` after its validation — so a session that made the
+increment move reads `advanced` even though its gate refused, which is what this paragraph says
+the normal case is. Until then the judge read the pipeline's designed loop as waste: 46 of the 72
+EXEC sessions in the real ledger. Field contract in [the autonomy ledger](#the-autonomy-ledger).
+
 ### QA — three sub-steps, one phase
 
 The phase is **three sessions**, and the current sub-step is **derived from the artifacts**
@@ -591,7 +600,10 @@ present on both shapes.
 | `rc` | integer \| `null` | on escalation rows | The `claude` process's exit code. `null` when the session log carried none. |
 | `dur_s` | integer \| `null` | on escalation rows | Wall-clock seconds the session took. |
 | `cost_usd` | number \| `null` | on escalation rows | The session's cost in USD, `null` (never the string `"?"`) when the session's JSON log carried no cost field. |
-| `moved` | boolean | on escalation rows | ⚠️ The whole waste metric: `state_fingerprint` before ≠ after, and `state_fingerprint` is git HEAD + the mission directory listing + the checkpoint file's md5. `moved` alone no longer names a bucket: since `20260828-instrumento-honesto` both readers classify a comparable session as `advanced` (the gate passed — the gate is the artifact), `churned` (`moved:true` and the gate failed: the session wrote and the runner bought another lap) or `idle` (`moved:false` and the gate failed — the old `stalled`, under the name that says what it is). ONE definition, `ledger_outcome_defs` in `bin/sdd`, spliced into `cmd_autonomy` and `kaizen_series`; `tests/check-autonomy.sh` compares the two histograms over one file. `waste = churned + idle`. |
+| `moved` | boolean | on escalation rows | ⚠️ The whole waste metric: `state_fingerprint` before ≠ after, and `state_fingerprint` is git HEAD + the mission directory listing + the checkpoint file's md5. `moved` alone no longer names a bucket: since `20260828-instrumento-honesto` both readers classify a comparable session as `advanced` (the gate passed — the gate is the artifact), `churned` (`moved:true` and the gate failed: the session wrote and the runner bought another lap) or `idle` (`moved:false` and the gate failed — the old `stalled`, under the name that says what it is). ⚠️ Since `20260829-o-incremento-que-andou` a session also reads `advanced` when `pending_after < pending_before` — **the increment moved**, which is the whole point of an EXEC session and something the gate cannot say, because `gate_EXEC` refuses by construction until the last increment. Both operands must be non-`null` for that arm to fire: `jq` sorts `null` below every number, so `null < 2` is true, and without the guard the session whose gate REFUSED the checkpoint (which publishes no `pending_after`) would have read as the highest progress in the ledger — a fail-open in the flattering direction. Declared limit, same place: the session that closes the last increment over a red suite reads `advanced` by the count while the lap it buys reads `churned` — the gate is the artifact of the NEXT lap. ONE definition, `ledger_outcome_defs` in `bin/sdd`, spliced into `cmd_autonomy` and `kaizen_series`; `tests/check-autonomy.sh` compares the two histograms over one file. `waste = churned + idle`. |
+| `pending_before` | integer \| `null` | on escalation rows; never absent on a session row, but `null` outside `EXEC` | How many increments the checkpoint still listed as `pending` or `doing` when the session opened — a PHOTOGRAPH, taken by `cmd_run`/`cmd_retry` before `run_phase`, because once the session has edited the checkpoint the question is unanswerable. `null` outside EXEC: no other phase has an increment to advance, and a `0` would enter the judge's arithmetic as a session that stood still. ⚠️ It is also `null` on every EXEC row written before `20260829-o-incremento-que-andou` added the three fields, and those rows are **not** left reading as churn: `historic_progress` in `ledger_outcome_defs` recovers the same fact from the prose `gate_why` already carried (`^N of M increment`), annotating `pending_after = N`, `increments_total = M`, `pending_before` = the previous EXEC row's `N` for the same `(repo, mission)` in FILE order, and `progress_source: "gate_why"`. Three rules earn their own mutants because each fails in a different direction: the first row of a mission (and any row where `M` changed, which is QA writing a fix increment, not churn) compares against `M`; a preceding `gate: pass` clears the memory; and the guard is `.pending_before == null` and never `has("pending_before")` — `autonomy_session_row` builds the object with `tonumber? // null`, so the KEY is present on every row and `has()` would annotate nothing. A dated read path, never a migration: the ledger is append-only, no line is ever rewritten. `sdd autonomy` prints how many rows it read that way (`(N EXEC row(s) older than the pending fields read their progress from gate_why)`) and the path is deletable the day that number reaches zero. |
+| `pending_after` | integer \| `null` | on escalation rows; never absent on a session row, but `null` outside `EXEC` | The same count as the gate saw it, from `GATE_EXEC_PENDING` — a VERDICT, not a photograph. `gate_EXEC` publishes it only *after* its validation loop **and after the Jidoka refusal**, so a gate that is about to refuse leaves the pair `null` and the reader falls back to `moved`. Two refusals, not one, and each cost its own bug: (a) a checkpoint refused for a label with no artifact (`done` with no commit, a commit outside the history of HEAD); (b) a checkpoint carrying a `blocked` increment. ⚠️ (b) was published until 2026-08-30 and was a fail-open in the flattering direction — `checkpoint_tally` counts `pending|doing` and files `blocked` in a bucket of its own, so **giving up** on an increment lowers `pending` exactly as **finishing** it does, and the one session in the pipeline that *stopped the line* read `advanced` at `0% waste`. A real EXEC row of `20260825-cif-forma-pagamento` is that session; it reads honestly today only because it predates these fields. Blocking is not closing. Both orderings are assertions in `tests/check-autonomy.sh` (`a done without commit publishes no pending_after`, `a blocked increment publishes no pending_after`) with a mutant each. |
+| `increments_total` | integer \| `null` | on escalation rows; never absent on a session row, but `null` outside `EXEC` | Every row of the checkpoint table, `GATE_EXEC_TOTAL`. It grows when QA writes a fix increment, which is why the pair above is read as a difference within one row and never as a running total across rows. |
 | `gate` | string enum: `pass` \| `fail` | on escalation rows | The gate's verdict, evaluated right after the session ended — the row is born after the gate, never before it. |
 | `gate_why` | string, truncated to 200 characters | never | The gate's stated reason (on an escalation row, the reason the phase was not satisfied when the runner gave up on it). |
 
@@ -675,17 +687,30 @@ table and the escalations block admit — comparable sessions and on-axis escala
 population the series reads through `comparable_row`, because two readers disagreeing about which
 version is newest over one file is a defect and not a view), each with missions, `missions_with_session` (the subset that bought an observation — the
 guard below counts these, not the raw mission tally), sessions, `outcomes` (`{advanced, churned, idle}` — what the sessions did, the headline since
-2026-08-28; the same three buckets appear in every `detail[]` entry), `advance_rate` (the share
-whose gate passed), `moved_rate` (the share that wrote to the disk — kept, its name says what it
+2026-08-28; the same three buckets appear in every `detail[]` entry), `advance_rate` (the
+`advanced` share of those same sessions — one yardstick read twice, so it can never contradict the
+tally beside it; it read "the share whose gate passed" until `20260829-o-incremento-que-andou`,
+which is why a nine-session EXEC that advanced nine increments used to print `0.10`),
+`moved_rate` (the share that wrote to the disk — kept, its name says what it
 measures), cost, escalations
 by kind, a per repo×mission×phase `detail` (each entry naming its `repo`), and a label per group:
 
 - `refez` — an escalation, a human `sdd retry`, or the phase's last session still failing its
   gate: the work was pushed again.
-- `leve` — an in-loop auto retry, a session that did not move the disk, **or any session of the
-  phase that failed its gate** (churn: it wrote, the gate refused, the runner bought the next lap;
-  `frete-cif-fob` EXEC was seven sessions and five refusals and read `ok` until 2026-08-28):
-  friction, absorbed. Three labels, not four — the magnitude lives in `outcomes`.
+- `leve` — an in-loop auto retry, **or any session of the phase whose `outcome` is not
+  `advanced`** (`churned`: it wrote, the gate refused, and the increment did not move, so the
+  runner bought a lap that produced nothing; `idle`: it did not even write): friction, absorbed.
+  Three labels, not four — the magnitude lives in `outcomes`.
+  ⚠️ The clause read **`.gate == "fail"`** until `20260829-o-incremento-que-andou`, and that is
+  a different claim: `gate_EXEC` refuses by design until the LAST increment, so every EXEC of two
+  or more increments was stamped `leve` for doing exactly what the pipeline asks. `frete-cif-fob`
+  EXEC — seven sessions, five refusals — is the worked example: it read `ok` until 2026-08-28,
+  `leve` from the churn clause, and reads `ok` again today, now because all seven sessions
+  advanced an increment. The two `ok`s are not the same answer; only the second one was measured.
+  ⚠️ The `.auto_retry == true` arm looks subsumed by the outcome arm and is **not**: in the repo
+  that builds the kit every session commits, so a failed first pass and its inline retry land on
+  different `kit_sha` and are graded in different groups — a surviving retry alone in its group
+  reads `advanced`, and without the arm its phase would read `ok`.
 - `ok` — none of the above.
 
 Each of `latest` and `previous` also carries a **`composition`**

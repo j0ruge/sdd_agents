@@ -4,6 +4,91 @@ Registro de melhorias com **antes/depois medido**. Sem número, não entra.
 
 ---
 
+## 2026-08-29 — O ledger diz se o incremento andou, e o laço desenhado deixa de ser desperdício (missão `20260829-o-incremento-que-andou`)
+
+**Problema (Gemba):** um dia depois de `20260828-instrumento-honesto` mergear a tri-estado
+`advanced · churned · idle`, o instrumento parou de lisonjear e passou a **acusar** — nas duas
+direções, errado. Uma sessão de EXEC executa **um** incremento e o `gate_EXEC` reprova com
+`"N of M increment(s) still to execute"` até o último: é o laço **desenhado** do pipeline. Como
+`outcome` lia o veredito do gate, cada uma dessas sessões caía em `churned`. Medido sobre o ledger
+real em 2026-08-29 (151 linhas, 13 missões com EXEC): das **72** sessões EXEC, `19 advanced ·
+46 churned · 7 idle`, enquanto o churn de verdade — o `N` que **não** caiu em relação à sessão EXEC
+anterior da missão — eram ~5 sessões em 13 missões, e a missão de 15 sessões
+`20260816-runner-sem-dividas` tinha **zero**. A tabela por versão imprimia **49 de 107 versões a
+`100% waste`**; a rubrica do juiz (`gate: fail` na fase ⇒ ao menos `leve`) carimbava `leve` em toda
+fase EXEC de 2+ incrementos, e `advance_rate` lia `0.10` sobre uma fase que andou dez vezes sem
+tropeçar. Raiz única: **o `outcome` não tinha como saber se o incremento andou** — o fato que o
+gate já calcula só saía como **prosa**, em `gate_why`.
+
+**Contramedida:** três campos na linha EXEC (`pending_before`, `pending_after`,
+`increments_total`), esquema **aditivo** com `v` ainda `1` e zero migração. O "antes" é uma
+**foto**, tirada pelo `cmd_run`/`cmd_retry` antes do `run_phase` (depois da sessão a pergunta é
+irrespondível — o executor já editou o checkpoint); o "depois" é um **veredito**, publicado pelo
+`gate_EXEC` só após a validação, para que rótulo sem artefato (`done` sem commit) deixe o par nulo.
+`checkpoint_tally()` passa a ser a **única** contagem de status do runner. `def outcome:` ganha o
+braço `pending_after < pending_before` **com guarda de não-nulo** (`jq` ordena `null` abaixo de todo
+número, então `null < 2` é verdade: sem a guarda, a sessão cujo gate recusou o checkpoint leria como
+o progresso mais alto do ledger — fail-open na direção da lisonja). As linhas anteriores ao esquema
+recuperam o mesmo fato do `gate_why` por `historic_progress`, caminho **datado, declarado e contado
+na tela**, nunca migração. O juiz lê `outcome` no rótulo e no `advance_rate` — uma régua, os mesmos
+dois leitores, paridade por asserção diferencial.
+
+| | Antes (régua `gate`, 2026-08-29 em `ebe9702`) | Depois (2026-08-30, I4 em `7cc0210`) |
+|---|---|---|
+| `runner-sem-dividas`, por missão | `15 session(s) · 5 advanced · 10 churned · 0 idle` | **`15 session(s) · 14 advanced · 1 churned · 0 idle`** — o alvo exato da métrica; o `1` é a r1 do REVIEW, reprovada por `Test Coverage = B`, churn de verdade |
+| `eixo-do-juiz`, por missão | `13 · 5 advanced · 8 churned · 0 idle` | `13 · 9 advanced · 4 churned · 0 idle` |
+| `frete-cif-fob` (SQ-108), por missão | `23 · 6 advanced · 13 churned · 4 idle` | `23 · 11 advanced · 8 churned · 4 idle` |
+| sessões EXEC lidas `churned`, todo o ledger | **46** de 72 (e `50` de 76 pela régua velha sobre o ledger de hoje, que cresceu 4 linhas) | **2** de 76 |
+| versões a `100% waste` (`sdd autonomy --all-repos`) | **49** de 107 | **10** de 111 |
+| linhas EXEC que leem o progresso da prosa | n/a (não existia) | **53**, impressas na tela pelo próprio comando |
+| `frete-cif-fob` · EXEC, no juiz | `leve` (7 sessões, 5 reprovações) | **`ok`** — `advanced: 7 · churned: 0`; ver ⚠️ abaixo |
+| grupos de fase com sessão não-`advanced` (⇒ `leve`) | n/a | **19 de 68** sobre o ledger global de **158 linhas**, agrupando por `[repo, mission, phase]` toda sessão que carrega `moved` — o controle continua de pé. Seis grupos EXEC, dos quais **dois são missões reais** (`cif-forma-pagamento`, `lote-facil`) e quatro são fixtures de teste que dividem o mesmo ledger global |
+| asserções de `tests/run-all.sh` | 666 | **700** (692 no I5, 694 na entrada da r1 do REVIEW, +6 na rodada) |
+| `tests/check-autonomy.sh` / `check-kaizen.sh` | 223 / 143 | **254** / **146** |
+| catálogo de mutação | 179 | **195** (192 no I5, 193 no F1, 195 depois da r1 do REVIEW) |
+| a própria missão, por missão | n/a | `4 session(s) · 4 advanced · 0 churned · 0 idle · 1 launch(es) · US$ 26.67` — a primeira medida pela régua que ela conserta |
+
+⚠️ **A segunda metade da métrica 3 do `00-missao.md` NÃO se confirmou, e é a lição desta missão.**
+O plano previa que a fase EXEC de `frete-cif-fob` continuaria `leve` por ter "1 churn real". Medida
+com a definição do próprio runner (`ledger_outcome_defs` extraída por `sed`, nunca uma cópia), ela
+lê `ok`: a linha que o planejador contou como churn é a de `22:30`, `7→2/7`, e o total havia crescido
+de 4 para 7 porque a QA escreveu incrementos de fix — a regra "`M` mudou ⇒ compara com o `M` novo"
+a lê como o incremento de fix que ela é. **A regra tem asserção e mutante; a contagem à mão do
+planejamento não tinha.** O que a métrica queria provar (que a régua nova ainda acusa) continua de
+pé pelos **19 de 68** grupos da linha acima — o mesmo número da tabela, e não outro: contagem de
+controle citada duas vezes com dois valores é o defeito que esta missão inteira existe para não
+cometer.
+
+**Treze mutantes entram (179 → 192), cada um com o assassino nomeado**, e a passada de sabotagem é
+quem os justificou: `LEDGER_progress_not_written`, `EXEC_tally_counts_done`,
+`LEDGER_progress_leaks_across_phases` (os três campos vazando para fora do EXEC — `GATE_EXEC_PENDING`
+sobrevive ao gate por construção), `AUTONOMY_progress_ignored`, `AUTONOMY_progress_null_blind` (o
+fail-open do `null < 2`), quatro do caminho histórico (o caminho inteiro; `M` mudou; `pass` zera a
+memória; a guarda `.pending_before == null`), `KAIZEN_label_reads_gate` e
+`KAIZEN_advance_rate_reads_gate` (**diferenciais entre si**: um move só o rótulo, o outro só a
+manchete — o que prova que são duas leituras de uma régua só), mais
+`KAIZEN_label_auto_retry_blind` e `KAIZEN_label_idle_blind`. Dois re-ancorados
+(`AUTONOMY_outcome_reads_moved_only`, `KAIZEN_churn_reads_ok`) e um re-escrito para **sombrear** em
+vez de apagar o splice (`KAIZEN_outcome_inlined_old`, que passara a matar dez asserções por CRASH).
+
+**Mais três depois do I5 (192 → 195), um por defeito que a suíte do próprio I5 não pegava:**
+`EXEC_blocked_publishes_count` (F1 — o `gate_EXEC` publicava o par sobre um checkpoint com
+incremento `blocked`, e desistir baixava `pending` igual a terminar), `RUN_retry_pending_before_null`
+e `AUTONOMY_progress_outranks_moved` (r1 do REVIEW — o retry inline nascia com `pending_before:
+null` e caía no caminho histórico; e a inferência do caminho histórico creditava até a sessão que
+não mexeu no disco). Os três falhavam **abertos, na direção da lisonja** — a mesma família que a
+missão existe para fechar, achada três vezes depois de o incremento que a fecha estar `done`.
+
+⚠️ **O que ISTO NÃO PROVA.** A sessão que fecha o último incremento sobre uma suíte vermelha lê
+`advanced` pela contagem enquanto a volta que ela compra lê `churned` — limite declarado, o gate é
+o artefato da volta seguinte. O caminho histórico depende de o `gate_EXEC` nunca mudar a frase
+`N of M`; é dado, não contrato, e sai do ar quando as 53 linhas saírem da janela. E a régua mudou
+pela **segunda vez em dois dias**: número desta entrada não é comparável com número de handoff
+anterior a 2026-08-29 sem dizer que o instrumento mudou (ADR 0001 — régua mecânica é código, datada
+no histórico).
+
+---
+
 ## 2026-08-28 — O ledger passa a dizer o que a sessão fez, não só se ela escreveu (missão `20260828-instrumento-honesto`)
 
 **Problema (Gemba):** a pergunta do dono do kit é *"está maduro para projeto real?"*, e o
