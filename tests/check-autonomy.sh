@@ -406,6 +406,73 @@ assert_eq "a blocked increment publishes no pending_after" "2 null null" \
 assert_eq "and the refusal that produced it is the Jidoka one" "true" \
   "$(jq -r -s '.[0].gate_why | test("Jidoka: the line stops")' "$LEDGER")"
 
+# --- the inline retry starts where the pass before it stopped ---------------
+# The third member of the family above, and the one the two blocks before it do NOT reach: they
+# both stop at the FIRST pass, whose `pending_before` is the photograph cmd_run takes before the
+# session opens. The inline retry gets its `pending_before` from a different place — `exec_after`,
+# the first pass's PUBLISHED count — and when that first gate refused before publishing (either of
+# the two refusals above) `exec_after` is the empty string, so the retry row was born with
+# `pending_before: null`.
+#
+# That null is not inert, and this is the measured harm: `historic_progress` fires on ANY EXEC row
+# whose `pending_before` is null and whose `gate_why` carries the `N of M` prose, so a row written
+# by TODAY's runner falls down the compatibility path built for rows written before the fields
+# existed. It is then handed a `pending_before` of M — the TOTAL, because the memory is empty —
+# and reads `advanced` over a retry that advanced nothing. Reproduced end to end on 2026-08-30 with
+# a real `sdd run` over this very fixture: the pass photographs `pending_before 1`, the retry
+# leaves `pending_after 1`, and the reader answered `advanced` off a fabricated `2`. Fail-open in
+# the flattering direction — the same family as the null guard of I2 and the Jidoka block above,
+# and the failure this whole mission exists to prevent.
+#
+# Two further consequences the fix closes: `sdd autonomy` counted that row in its
+# "older than the pending fields" disclosure, which is false about a row minutes old; and that
+# count is the DELETION SIGNAL for the compatibility path, so the path could never reach zero.
+#
+# The fix is sound because cmd_run reaches its inline retry ONLY when `moved == "false"` — the
+# first pass changed nothing, and `state_fingerprint` includes the checkpoint's md5 — so the file
+# the retry starts on is byte-identical to the one the photograph read.
+echo "== the inline retry records the count it started from =="
+: > "$LEDGER"
+cat > "$MDIR/checkpoint.md" <<'EOF'
+| ID | Incremento | Check (comando → esperado) | Status | Commit |
+|---|---|---|---|---|
+| I1 | slice one | `true` → 0 | done | — |
+| I2 | slice two | `true` → 0 | pending | — |
+EOF
+git add -A && git commit -qm "chore: a label with no artifact, and one increment still pending"
+rm -f "$TALLY_MARKER"
+# The FIRST session changes nothing — that is the only way to reach the inline retry, which is
+# guarded on `moved == false`. The SECOND gives I1 the commit it was missing, so the retry's gate
+# gets past validation and PUBLISHES a count while the pass before it did not.
+cat > "$OUTSIDE/stub/claude" <<STUB
+#!/usr/bin/env bash
+if [ ! -e "$TALLY_MARKER" ]; then
+  : > "$TALLY_MARKER"
+else
+  h=\$(git -C "$FIX" rev-parse --short HEAD)
+  sed -i "/^| I1 /s/| done | — |/| done | \$h |/" "$MDIR/checkpoint.md"
+  git -C "$FIX" add -A
+  git -C "$FIX" commit -qm "chore: the retry gives the increment its artifact"
+fi
+cat "$STREAM_SAMPLE"
+exit 0
+STUB
+chmod +x "$OUTSIDE/stub/claude"
+
+"$SDD" run "$MISSION" >/dev/null 2>&1
+# The floor, and it is what keeps the assertion below from passing over a run that never retried:
+# it names the FIRST pass, proves it is the non-retry one, and proves its gate published nothing.
+assert_eq "the pass before the retry is the one that published nothing" "false 1 null null" \
+  "$(jq -r -s '.[0] | "\(.auto_retry) \(.pending_before) \(.pending_after) \(.increments_total)"' "$LEDGER")"
+assert_eq "the inline retry records the count it started from" "true 1 1 2" \
+  "$(jq -r -s '.[1] | "\(.auto_retry) \(.pending_before) \(.pending_after) \(.increments_total)"' "$LEDGER")"
+# The harm, asserted where it lands rather than only at the writer: with a measured
+# `pending_before` no row of this run is eligible for the compatibility path, so the reader's
+# disclosure — which is also the signal that says when that path can be deleted — stays silent.
+autonomy_out="$("$SDD" autonomy --all-repos 2>/dev/null)"
+assert_eq "and no row this runner wrote is read as one that predates the fields" "0" \
+  "$(grep -c 'read their progress from gate_why' <<< "$autonomy_out" || true)"
+
 # --- the EXEC counts do not follow the run into the next phase -------------
 # GATE_EXEC_PENDING outlives the gate that set it BY DESIGN — cmd_run reads it one screen after
 # the call — so the phase guard at the read site is the only thing keeping the next phase's row

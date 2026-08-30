@@ -4187,11 +4187,29 @@ cmd_run() {
     # global by the call one line up — IS where this retry started. Reading checkpoint_tally here
     # would sample a file the gate had judged one line earlier and credit the retry with the
     # progress of the pass before it.
+    #
+    # `:-$exec_before` and not a bare `$exec_after`, because `exec_after` is EMPTY whenever the
+    # first pass's gate refused before publishing — a `done` with no commit, or the Jidoka block —
+    # and an empty seventh argument writes `pending_before: null`. That null is not inert: the row
+    # then matches `historic_progress`, the dated path built for rows written BEFORE these fields
+    # existed, which hands it a `pending_before` of M and reads `advanced` over a retry that
+    # advanced nothing. Reproduced end to end on 2026-08-30 with a real `sdd run` (the fixture is
+    # the `== the inline retry records the count it started from ==` block of check-autonomy.sh):
+    # photograph 1, `pending_after` 1, answer `advanced` off a fabricated 2. Fail-open in the
+    # flattering direction, and it also made `sdd autonomy` count a minutes-old row in its
+    # "older than the pending fields" disclosure — the very number that says when that path may be
+    # deleted.
+    #
+    # The fallback is EXACT, not an approximation: this retry is reachable only through the
+    # `moved == "false"` guard a few lines up, so the first pass changed nothing, and
+    # `state_fingerprint` reads the checkpoint's md5 — the file the retry starts on is the same
+    # bytes the photograph read. When the first gate DID publish, `exec_after` is non-empty and
+    # wins, so no path that worked before changes.
     local exec_after2="" exec_total2=""
     if [ "$phase" = "EXEC" ]; then exec_after2="$GATE_EXEC_PENDING"; exec_total2="$GATE_EXEC_TOTAL"; fi
     autonomy_session_row "$phase" "${attempts[$phase]}" "true" "$moved2" \
       "$( [ "$gate_rc2" -eq 0 ] && echo pass || echo fail )" "$GATE_WHY" \
-      "$exec_after" "$exec_after2" "$exec_total2"
+      "${exec_after:-$exec_before}" "$exec_after2" "$exec_total2"
     sessions["$phase"]="$(( ${sessions[$phase]:-0} + 1 ))"
 
     if [ "$gate_rc2" -eq 0 ]; then

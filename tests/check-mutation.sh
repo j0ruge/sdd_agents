@@ -2249,6 +2249,25 @@ mut_EXEC_blocked_publishes_count() {
   sed -i 's@^  if \[ "\$blocked" -gt 0 \]; then GATE_WHY=@  if [ "$blocked" -gt 0 ]; then GATE_EXEC_PENDING="$pending"; GATE_EXEC_TOTAL="$total"; GATE_WHY=@' "$1"
 }
 
+# The inline retry goes back to seeding its `pending_before` from `exec_after` ALONE — the spelling
+# that shipped until 2026-08-30. `exec_after` is empty whenever the first pass's gate refused
+# BEFORE publishing (a `done` with no commit, or the Jidoka arm above), so the retry row is born
+# with `pending_before: null`; and that null is not inert, because `historic_progress` annotates
+# any EXEC row whose `pending_before` is null and whose `gate_why` carries the `N of M` prose. A
+# row written by TODAY's runner then falls down the compatibility path built for rows written
+# before the fields existed, is handed a `pending_before` of M, and reads `advanced` over a retry
+# that advanced nothing — flattery again, and the third member of the family the two mutants above
+# already cover. It also made `sdd autonomy` count a minutes-old row in its "older than the pending
+# fields" disclosure, which is the very number that says when that path may be deleted.
+# Caught by `the inline retry records the count it started from` in check-autonomy.sh (it reads
+# "true null 1 2" against the "true 1 1 2" it demands) and by the reader-side witness beside it,
+# `and no row this runner wrote is read as one that predates the fields`. The floor
+# `the pass before the retry is the one that published nothing` stays green under the mutation,
+# which is what proves the fixture still reaches the inline retry at all.
+mut_RUN_retry_pending_before_null() {
+  sed -i 's@^      "\${exec_after:-\$exec_before}" "\$exec_after2" "\$exec_total2"$@      "$exec_after" "$exec_after2" "$exec_total2"@' "$1"
+}
+
 # The writer keeps filling the three fields and the reader stops looking at them: `outcome` goes
 # back to the gate-only yardstick, which is the state that read 46 of 72 real EXEC rows as churn
 # and printed `100% waste` over 49 of 107 kit versions. Both readers inherit it through the one
@@ -2541,6 +2560,7 @@ CATALOG=(
   EXEC_tally_counts_done
   LEDGER_progress_leaks_across_phases
   EXEC_blocked_publishes_count
+  RUN_retry_pending_before_null
   AUTONOMY_progress_ignored
   AUTONOMY_progress_null_blind
   AUTONOMY_historic_progress_dropped
