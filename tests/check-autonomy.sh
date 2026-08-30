@@ -354,6 +354,58 @@ chmod +x "$OUTSIDE/stub/claude"
 assert_eq "a done without commit publishes no pending_after" "2 null null" \
   "$(jq -r -s '.[0] | "\(.pending_before) \(.pending_after) \(.increments_total)"' "$LEDGER")"
 
+# --- blocking an increment is the line STOPPING, not an increment advancing ---
+# The sibling of the block above, and the one the ordering inside gate_EXEC missed. `blocked` is a
+# valid checkpoint status, so the validation loop lets it through; the counts are published, and
+# only THEN does the Jidoka refusal fire. But checkpoint_tally counts `pending|doing` and files
+# `blocked` in a bucket of its own, so a session that gave up on an increment lowers `pending` by
+# one exactly like a session that finished it: pending_before 2, pending_after 1, and `outcome`
+# reads `advanced` over the one session in the whole pipeline that stopped the line.
+#
+# Fail-open in the flattering direction, which is the failure this mission exists to prevent, and
+# it is not hypothetical: of the 2 EXEC rows still reading `churned` in the real ledger on
+# 2026-08-30, ONE is exactly this session (sales_quote/20260825-cif-forma-pagamento, gate_why
+# "1 increment(s) 'blocked' — Jidoka: the line stops"). It reads honestly today only because it
+# predates the fields; written by this runner it would read `advanced` at 0% waste, and the
+# instrument would lose its last accusation about a stopped line. The usage text of `sdd autonomy`
+# promises "the EXEC session that CLOSED an increment" — blocking one is not closing it.
+#
+# The refusal has to publish NOTHING, like the `done`-with-no-commit refusal above: `pending_after`
+# is a verdict, and there is no verdict to give about a checkpoint the gate is about to refuse for
+# Jidoka. `pending_before` stays — it is a photograph, taken before the session, and it is what
+# keeps this assertion from passing over an empty ledger.
+echo "== a blocked increment publishes no count =="
+: > "$LEDGER"
+cat > "$MDIR/checkpoint.md" <<'EOF'
+| ID | Incremento | Check (comando → esperado) | Status | Commit |
+|---|---|---|---|---|
+| I1 | slice one | `true` → 0 | pending | — |
+| I2 | slice two | `true` → 0 | pending | — |
+EOF
+git add -A && git commit -qm "chore: two pending increments, before the block"
+rm -f "$TALLY_MARKER"
+cat > "$OUTSIDE/stub/claude" <<STUB
+#!/usr/bin/env bash
+if [ ! -e "$TALLY_MARKER" ]; then
+  : > "$TALLY_MARKER"
+  sed -i "/^| I1 /s/| pending | — |/| blocked | — |/" "$MDIR/checkpoint.md"
+  git -C "$FIX" add -A
+  git -C "$FIX" commit -qm "chore: the session gave up on the increment"
+fi
+cat "$STREAM_SAMPLE"
+exit 0
+STUB
+chmod +x "$OUTSIDE/stub/claude"
+
+"$SDD" run "$MISSION" >/dev/null 2>&1
+assert_eq "a blocked increment publishes no pending_after" "2 null null" \
+  "$(jq -r -s '.[0] | "\(.pending_before) \(.pending_after) \(.increments_total)"' "$LEDGER")"
+# The witness, and it is not decoration: without it the assertion above is satisfied by ANY refusal
+# that publishes nothing — an invalid status token, a checkpoint the stub failed to write — and it
+# would go on passing over a fixture that stopped reaching the Jidoka path at all.
+assert_eq "and the refusal that produced it is the Jidoka one" "true" \
+  "$(jq -r -s '.[0].gate_why | test("Jidoka: the line stops")' "$LEDGER")"
+
 # --- the EXEC counts do not follow the run into the next phase -------------
 # GATE_EXEC_PENDING outlives the gate that set it BY DESIGN — cmd_run reads it one screen after
 # the call — so the phase guard at the read site is the only thing keeping the next phase's row
