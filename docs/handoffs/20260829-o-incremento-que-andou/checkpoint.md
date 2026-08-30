@@ -1,6 +1,6 @@
 ---
 missao: 20260829-o-incremento-que-andou
-atualizado: 2026-08-29 21:30
+atualizado: 2026-08-29 23:10
 ---
 
 # Checkpoint — o incremento que andou
@@ -31,7 +31,7 @@ atualizado: 2026-08-29 21:30
 
 | ID | Incremento | Check (comando → esperado) | Status | Commit |
 |---|---|---|---|---|
-| I1 | o runner escreve `pending_before`, `pending_after` e `increments_total` na linha EXEC | `bash -n bin/sdd; o=$(bash tests/check-autonomy.sh 2>&1); grep -c '^  ok    an EXEC row carries pending_before, pending_after and increments_total' <<< "$o"` → `1` | pending | — |
+| I1 | o runner escreve `pending_before`, `pending_after` e `increments_total` na linha EXEC | `bash -n bin/sdd; o=$(bash tests/check-autonomy.sh 2>&1); grep -c '^  ok    an EXEC row carries pending_before, pending_after and increments_total' <<< "$o"` → `1` | done | 4571faf |
 | I2 | `outcome` lê o fato: incremento que andou é `advanced`, não `churned` | `o=$(bash tests/check-autonomy.sh 2>&1); grep -c '^  ok    a session that advanced its increment reads advanced, not churned' <<< "$o"` → `1` | pending | — |
 | I3 | o caminho histórico: linha EXEC sem os campos lê o `N of M` do `gate_why`, declarado e contado | `o=$(bash tests/check-autonomy.sh 2>&1); grep -c '^  ok    the historical path and the fields agree on one history' <<< "$o"` → `1` | pending | — |
 | I4 | o juiz lê `outcome`: `leve` só com churn real, `advance_rate` conta os incrementos | `o=$(bash tests/check-kaizen.sh 2>&1); grep -c '^  ok    a designed loop reads ok, and advance_rate counts the increments that advanced' <<< "$o"` → `1` | pending | — |
@@ -43,6 +43,9 @@ atualizado: 2026-08-29 21:30
 > É o que a próxima sessão lê para não repetir um erro que já custou caro.
 
 - 2026-08-29 21:30 · `plan` · plano fechado com o humano presente (6 decisões, § Decisões do grill do `00-missao.md`); branch criada de `chore/o-item-fechado-sai-do-todo` (PR #29), que é `main` mais o chore pós-merge do PR #28.
+- 2026-08-29 23:10 · `I1` · **desvio do plano, com motivo medido: três mutantes em vez de dois.** O plano previa `LEDGER_progress_not_written` e `EXEC_tally_counts_done` e supunha que fora do EXEC os três campos ficariam vazios pelos defaults de `autonomy_session_row`. Não ficam: `GATE_EXEC_PENDING` sobrevive ao gate por construção (o `cmd_run` o lê uma tela depois da chamada), então os chamadores precisaram de guarda de fase — código novo, com modo de falha real, e mutante próprio (`LEDGER_progress_leaks_across_phases`). Catálogo 179 → 182.
+- 2026-08-29 23:10 · `I1` · **a passada de sabotagem trocou o fixture da guarda de fase, e essa é a lição que a próxima sessão não deve repetir.** A primeira asserção `a non-EXEC row carries the three as null` foi escrita sobre o fixture `review→draft`, com o argumento de que `current_phase` avalia `gate_EXEC` a cada volta. Sabotagem verde: `current_phase` roda como `$(...)`, e os globais que ela seta morrem no subshell. O único mundo alcançável é um gate EXEC que passa no shell **pai** (a chamada `gate_"$phase"` da porta 1) seguido de outra volta — fixture `the EXEC counts do not follow the run into the next phase`. Argumento de alcançabilidade sem sabotagem que o prove é palpite: aqui apontava para o lado certo pelo motivo errado.
+- 2026-08-29 23:10 · `I1` · o `mut_EXEC_tally_counts_done` mata 29 asserções e não só a nomeada, porque a contagem é UMA — sabotar o helper sabota junto a frase `N of M` do `gate_EXEC` e nenhum gate EXEC passa mais. É o desenho, não ruído: o assassino nomeado (`an EXEC row carries…`) reprova, e está declarado no comentário do mutante.
 
 > **Toda vez que um humano precisou entrar na linha** — um `sdd retry`, um conserto à mão, um
 > `BLOCKED` assumido — sai uma linha com o marcador `intervention:`. É a **narrativa** do que o
