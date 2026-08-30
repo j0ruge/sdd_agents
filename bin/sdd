@@ -774,18 +774,30 @@ gate_EXEC() {
     esac
   done <<< "$rows"
 
-  # AFTER the validation loop, deliberately, and this ordering is the assertion "a done without
-  # commit publishes no pending_after" in tests/check-autonomy.sh. `pending_before` on the ledger
-  # row is a PHOTOGRAPH — cmd_run takes it before the session opens — but `pending_after` is a
-  # VERDICT. A checkpoint refused for a label with no artifact must not be able to buy its session
-  # an `advanced`; leaving the pair empty makes the reader fall back to `moved`, exactly as it did
-  # before these fields existed.
+  # The publication sits after the validation loop AND after the Jidoka refusal below, deliberately:
+  # TWO assertions in tests/check-autonomy.sh are that ordering, "a done without commit publishes
+  # no pending_after" and "a blocked increment publishes no pending_after". `pending_before` on the
+  # ledger row is a PHOTOGRAPH — cmd_run takes it before the session opens — but `pending_after` is
+  # a VERDICT, and a gate that is about to REFUSE has no verdict to give about how far the mission
+  # got. Neither the checkpoint refused for a label with no artifact nor the one that stopped the
+  # line may buy its session an `advanced`; leaving the pair empty makes the reader fall back to
+  # `moved`, exactly as it did before these fields existed.
   local pending total blocked
   IFS=$'\t' read -r pending total blocked <<< "$(checkpoint_tally)"
+
+  # Jidoka goes BEFORE the publication, by the same argument and for a defect measured end to end:
+  # `checkpoint_tally` counts `pending|doing` and files `blocked` in a bucket of its own, so GIVING
+  # UP on an increment lowers `pending` exactly as FINISHING it does. Published here, the one
+  # session in the whole pipeline that STOPPED THE LINE read `pending_before 2 · pending_after 1`
+  # and the ledger called it `advanced` at `0% waste` — fail-open in the flattering direction,
+  # over a stopped line. Found by sdd-qa on 2026-08-30 with a real `sdd run`; the row it would have
+  # spoiled exists in the real ledger. Blocking is not closing, which is also what `sdd autonomy`'s
+  # own usage text promises.
+  if [ "$blocked" -gt 0 ]; then GATE_WHY="$blocked increment(s) 'blocked' — Jidoka: the line stops"; return 1; fi
+
   GATE_EXEC_PENDING="$pending"
   GATE_EXEC_TOTAL="$total"
 
-  if [ "$blocked" -gt 0 ]; then GATE_WHY="$blocked increment(s) 'blocked' — Jidoka: the line stops"; return 1; fi
   if [ "$pending" -gt 0 ]; then GATE_WHY="$pending of $total increment(s) still to execute"; return 1; fi
 
   if ! run_check_cmd "$TEST_CMD" "gate-exec-test"; then

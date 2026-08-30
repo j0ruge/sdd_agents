@@ -2235,6 +2235,20 @@ mut_LEDGER_progress_leaks_across_phases() {
   sed -i 's@^    if \[ "\$phase" = "EXEC" \]; then exec_after="\$GATE_EXEC_PENDING"; exec_total="\$GATE_EXEC_TOTAL"; fi$@    exec_after="$GATE_EXEC_PENDING"; exec_total="$GATE_EXEC_TOTAL"@' "$1"
 }
 
+# The publication climbs back ABOVE the Jidoka refusal — where it sat until 2026-08-30, and where
+# `checkpoint_tally`'s own bucketing turns it into flattery: the helper counts `pending|doing` and
+# files `blocked` apart, so GIVING UP on an increment lowers `pending` exactly as FINISHING it
+# does. The session that STOPPED THE LINE is then the one row in the ledger reading
+# `pending_before 2 · pending_after 1` ⇒ `advanced`, `0% waste`. Not a hypothesis: a real EXEC row
+# of `20260825-cif-forma-pagamento` is that session, and it reads honestly today only because it
+# predates the fields. Caught by `a blocked increment publishes no pending_after` in
+# check-autonomy.sh, which reads "2 1 2" against the "2 null null" it demands — and by nothing
+# else, the witness `and the refusal that produced it is the Jidoka one` staying green beside it to
+# prove the fixture still reaches the Jidoka arm rather than some other refusal.
+mut_EXEC_blocked_publishes_count() {
+  sed -i 's@^  if \[ "\$blocked" -gt 0 \]; then GATE_WHY=@  if [ "$blocked" -gt 0 ]; then GATE_EXEC_PENDING="$pending"; GATE_EXEC_TOTAL="$total"; GATE_WHY=@' "$1"
+}
+
 # The writer keeps filling the three fields and the reader stops looking at them: `outcome` goes
 # back to the gate-only yardstick, which is the state that read 46 of 72 real EXEC rows as churn
 # and printed `100% waste` over 49 of 107 kit versions. Both readers inherit it through the one
@@ -2526,6 +2540,7 @@ CATALOG=(
   LEDGER_progress_not_written
   EXEC_tally_counts_done
   LEDGER_progress_leaks_across_phases
+  EXEC_blocked_publishes_count
   AUTONOMY_progress_ignored
   AUTONOMY_progress_null_blind
   AUTONOMY_historic_progress_dropped
