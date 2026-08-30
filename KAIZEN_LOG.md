@@ -43,8 +43,8 @@ dois leitores, paridade por asserção diferencial.
 | linhas EXEC que leem o progresso da prosa | n/a (não existia) | **53**, impressas na tela pelo próprio comando |
 | `frete-cif-fob` · EXEC, no juiz | `leve` (7 sessões, 5 reprovações) | **`ok`** — `advanced: 7 · churned: 0`; ver ⚠️ abaixo |
 | grupos de fase com sessão não-`advanced` (⇒ `leve`) | n/a | **19 de 68** sobre o ledger global de **158 linhas**, agrupando por `[repo, mission, phase]` toda sessão que carrega `moved` — o controle continua de pé. Seis grupos EXEC, dos quais **dois são missões reais** (`cif-forma-pagamento`, `lote-facil`) e quatro são fixtures de teste que dividem o mesmo ledger global |
-| asserções de `tests/run-all.sh` | 666 | **699** (era 692 no I5; a r1 do REVIEW somou 7) |
-| `tests/check-autonomy.sh` / `check-kaizen.sh` | 223 / 143 | **253** / **146** |
+| asserções de `tests/run-all.sh` | 666 | **700** (692 no I5, 694 na entrada da r1 do REVIEW, +6 na rodada) |
+| `tests/check-autonomy.sh` / `check-kaizen.sh` | 223 / 143 | **254** / **146** |
 | catálogo de mutação | 179 | **195** (192 no I5, 193 no F1, 195 depois da r1 do REVIEW) |
 | a própria missão, por missão | n/a | `4 session(s) · 4 advanced · 0 churned · 0 idle · 1 launch(es) · US$ 26.67` — a primeira medida pela régua que ela conserta |
 
@@ -55,7 +55,9 @@ lê `ok`: a linha que o planejador contou como churn é a de `22:30`, `7→2/7`,
 de 4 para 7 porque a QA escreveu incrementos de fix — a regra "`M` mudou ⇒ compara com o `M` novo"
 a lê como o incremento de fix que ela é. **A regra tem asserção e mutante; a contagem à mão do
 planejamento não tinha.** O que a métrica queria provar (que a régua nova ainda acusa) continua de
-pé pelos 14 de 63 grupos acima.
+pé pelos **19 de 68** grupos da linha acima — o mesmo número da tabela, e não outro: contagem de
+controle citada duas vezes com dois valores é o defeito que esta missão inteira existe para não
+cometer.
 
 **Treze mutantes entram (179 → 192), cada um com o assassino nomeado**, e a passada de sabotagem é
 quem os justificou: `LEDGER_progress_not_written`, `EXEC_tally_counts_done`,
@@ -68,6 +70,14 @@ manchete — o que prova que são duas leituras de uma régua só), mais
 `KAIZEN_label_auto_retry_blind` e `KAIZEN_label_idle_blind`. Dois re-ancorados
 (`AUTONOMY_outcome_reads_moved_only`, `KAIZEN_churn_reads_ok`) e um re-escrito para **sombrear** em
 vez de apagar o splice (`KAIZEN_outcome_inlined_old`, que passara a matar dez asserções por CRASH).
+
+**Mais três depois do I5 (192 → 195), um por defeito que a suíte do próprio I5 não pegava:**
+`EXEC_blocked_publishes_count` (F1 — o `gate_EXEC` publicava o par sobre um checkpoint com
+incremento `blocked`, e desistir baixava `pending` igual a terminar), `RUN_retry_pending_before_null`
+e `AUTONOMY_progress_outranks_moved` (r1 do REVIEW — o retry inline nascia com `pending_before:
+null` e caía no caminho histórico; e a inferência do caminho histórico creditava até a sessão que
+não mexeu no disco). Os três falhavam **abertos, na direção da lisonja** — a mesma família que a
+missão existe para fechar, achada três vezes depois de o incremento que a fecha estar `done`.
 
 ⚠️ **O que ISTO NÃO PROVA.** A sessão que fecha o último incremento sobre uma suíte vermelha lê
 `advanced` pela contagem enquanto a volta que ela compra lê `churned` — limite declarado, o gate é

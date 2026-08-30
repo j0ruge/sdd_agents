@@ -107,6 +107,15 @@ tells the two apart by a state fingerprint (HEAD + artifacts + checkpoint hash):
 session moved forward, carry on; it did not change ⇒ the session did nothing, gets one retry with
 the gate reason in the prompt and, if it still does not move, becomes `BLOCKED`.
 
+⚠️ The fingerprint answers *did this session write anything*, which is enough to decide the retry
+and **not** enough to grade the phase: a session that wrote and closed nothing looks exactly like
+one that closed an increment. Since `20260829-o-incremento-que-andou` the ledger carries the
+sharper fact — `pending_before`, photographed by `cmd_run`/`cmd_retry` before the session, and
+`pending_after`, published by `gate_EXEC` after its validation — so a session that made the
+increment move reads `advanced` even though its gate refused, which is what this paragraph says
+the normal case is. Until then the judge read the pipeline's designed loop as waste: 46 of the 72
+EXEC sessions in the real ledger. Field contract in [the autonomy ledger](#the-autonomy-ledger).
+
 ### QA — three sub-steps, one phase
 
 The phase is **three sessions**, and the current sub-step is **derived from the artifacts**
