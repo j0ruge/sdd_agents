@@ -43,7 +43,24 @@ before anything else), `advance_rate` (the `advanced` share of those same sessio
 yardstick read twice, so it can never contradict the tally beside it), `moved_rate` (the share
 that wrote to the disk), the label tally (`ok` / `leve` / `refez` per repo×mission×phase),
 escalations by kind, cost, and the guard (`missions_after_change`, `missions_with_session`,
-`sessions`, `sufficient`, `degenerate_axis`). The floor is `missions_with_session`, not
+`sessions`, `sufficient`, `degenerate_axis`).
+
+⚠️ **`advanced` means "the gate passed OR the increment moved", and the second half is younger
+than most of the ledger** (`20260829-o-incremento-que-andou`). `gate_EXEC` refuses by construction
+until the LAST increment, so before that change every EXEC session but the final one was counted
+as waste and every EXEC phase of two or more increments was stamped at least `leve` — the
+pipeline's designed loop, read as friction. Two consequences for your verdict. First, do **not**
+compare a number you compute today against one quoted in a handoff or a `KAIZEN_LOG` entry written
+before 2026-08-29 without saying that the yardstick changed: the same sessions read
+`5 advanced · 10 churned` under the old rule and `14 advanced · 1 churned` under this one, and
+neither reading is a session behaving differently. Second, `leve` now costs something to earn — it
+means a session that wrote and moved no increment, a session that wrote nothing, or an in-loop
+auto retry — so a phase that reads `leve` deserves a sentence about WHICH of the three, not a
+shrug. The three fields the rule reads (`pending_before`, `pending_after`, `increments_total`) are
+on every EXEC row written since; older rows recover the same fact from `gate_why`, and
+`sdd autonomy` says how many rows it read that way.
+
+Back to the guard. The floor is `missions_with_session`, not
 `missions_after_change`: a mission that stopped the line without spending a session left you
 nothing to read. A mission is identified by `(repo, mission)` and never by the slug alone — slugs
 are dated and repeat across projects, and your slice spans every repo, so the repo is what keeps
