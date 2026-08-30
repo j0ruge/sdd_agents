@@ -1800,11 +1800,34 @@ ledger_row_is_local() {
 # window said `0 stalled`, the judge said `ok`, on a phase of seven sessions and five refusals
 # (20260825-frete-cif-fob, EXEC). Measured 2026-08-28, before this function existed.
 #
-#   advanced — the gate passed. The gate is the artifact; `pass/false` does not occur in the
-#              ledger and is classified here without a fourth arm.
-#   churned  — the session wrote to the disk and the gate still failed: the runner reads "moved"
-#              as progress and buys the next lap. The bucket that was invisible.
+#   advanced — the gate passed, OR the row says the increment count went down. The gate is the
+#              artifact of the PHASE, and a phase of four increments only passes it on the last of
+#              its four sessions — so `gate == pass` alone read the pipeline's DESIGNED loop as
+#              waste. Measured on the real ledger 2026-08-29, the day after the three names above
+#              landed: 46 of the 72 EXEC rows read `churned` where the real churn is about 5, and
+#              49 of the 107 kit versions printed `100% waste`, each one a version whose only
+#              session was a middle increment of some mission. The instrument had stopped
+#              flattering (`0 stalled`) and started accusing — wrong in both directions.
+#              (`pass/false` does not occur in the ledger and is classified here without a fourth
+#              arm.)
+#   churned  — the session wrote to the disk, closed no increment, and the gate still failed: the
+#              runner reads "moved" as progress and buys the next lap. The bucket that was
+#              invisible, now with the designed loop taken out of it.
 #   idle     — nothing on disk, gate failed: the old `stalled`, under the name that says what it is.
+#
+# The progress arm is guarded on BOTH fields being non-null, and that guard is load-bearing rather
+# than defensive: jq orders `null` below every number, so `null < 2` is TRUE. gate_EXEC publishes
+# `pending_after` only after it has validated the checkpoint, so a run it refused (a `done` with no
+# commit) writes null there — and without the guard that refusal would read as the loudest possible
+# progress, `4 → nothing left`. Measured by `a gate that published no pending_after is not an
+# increment that advanced` in check-autonomy.sh.
+#
+# DECLARED, because it is a real edge this arm accepts: a session that closes the LAST increment
+# over a red suite reads `advanced` on the count while its gate fails, and the lap it buys reads
+# `churned`. That is the honest split — the increment did advance, and the gate is the artifact of
+# the lap that follows. Rows written before 2026-08-29 carry neither field and fall through to the
+# `moved` arm exactly as they did; I3 is what teaches the readers to recover their count from
+# `gate_why`.
 #
 # Applied to the sessions each reader admits, and both admit a session only with `moved` present:
 # cmd_autonomy's `comparable` has demanded `has("moved")` all along, and kaizen_series now files a
@@ -1825,7 +1848,7 @@ ledger_row_is_local() {
 # learns about the arg. (No apostrophe inside the printed jq: it is spliced into single-quoted
 # shell strings.)
 ledger_outcome_defs() {   # printed jq, spliced into cmd_autonomy AND kaizen_series
-  printf '%s' 'def outcome: if .gate == "pass" then "advanced" elif .moved == true then "churned" else "idle" end;'
+  printf '%s' 'def outcome: if .gate == "pass" then "advanced" elif (.pending_before != null and .pending_after != null and .pending_after < .pending_before) then "advanced" elif .moved == true then "churned" else "idle" end;'
   printf '%s' 'def outcome_tally: map(outcome) | reduce .[] as $o ({advanced: 0, churned: 0, idle: 0}; .[$o] += 1);'
   printf '%s' 'def phase_index: . as $p | ($phases | split(" ")) | index($p);'
 }
@@ -5330,6 +5353,8 @@ USAGE
   sdd close <mission>        post-merge: close the JIRA issue
   sdd autonomy [--all-repos] what the sessions did per kit version — advanced · churned · idle, and
                              waste = churned + idle — for this repo unless --all-repos, from the ledger
+                             advanced is the gate that passed OR the EXEC session that closed an
+                             increment: the pipeline's designed loop is not waste
              [--by-mission]  group by mission instead of by kit version: the same three outcomes,
                              launch(es) (distinct run_id — the intervention count D12 reads),
                              reopened phases, the `- intervention:` notes of the checkpoint when

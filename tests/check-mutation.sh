@@ -2115,8 +2115,13 @@ mut_RUN_kit_guard_arms_projection() {
 # and a session that wrote and failed its gate reads `advanced`. Both readers inherit it, so the
 # parity assertion stays green — which is exactly why check-autonomy.sh also pins the histogram of
 # a known fixture: `churned` has to come out 2 there, and this reads 0.
+#
+# ⚠️ RE-ANCHORED on 2026-08-29 (20260829-o-incremento-que-andou, I2), when the definition grew its
+# progress arm. The old anchor still described a line that no longer exists, so the mutant would
+# have applied nothing and the harness would have refused it with rc 90 — a no-op that reads as a
+# catalogue failure, not as a silent gap. Same sabotage, new spelling of the same line.
 mut_AUTONOMY_outcome_reads_moved_only() {
-  sed -i 's@def outcome: if .gate == "pass" then "advanced" elif .moved == true then "churned" else "idle" end;@def outcome: if .moved == true then "advanced" else "idle" end;@' "$1"
+  sed -i 's@def outcome: if .gate == "pass" then "advanced" elif (.pending_before != null and .pending_after != null and .pending_after < .pending_before) then "advanced" elif .moved == true then "churned" else "idle" end;@def outcome: if .moved == true then "advanced" else "idle" end;@' "$1"
 }
 
 # The series stops splicing the shared definition and grows a LOCAL copy on the old yardstick —
@@ -2215,6 +2220,27 @@ mut_EXEC_tally_counts_done() {
 # there, and by nothing else.
 mut_LEDGER_progress_leaks_across_phases() {
   sed -i 's@^    if \[ "\$phase" = "EXEC" \]; then exec_after="\$GATE_EXEC_PENDING"; exec_total="\$GATE_EXEC_TOTAL"; fi$@    exec_after="$GATE_EXEC_PENDING"; exec_total="$GATE_EXEC_TOTAL"@' "$1"
+}
+
+# The writer keeps filling the three fields and the reader stops looking at them: `outcome` goes
+# back to the gate-only yardstick, which is the state that read 46 of 72 real EXEC rows as churn
+# and printed `100% waste` over 49 of 107 kit versions. Both readers inherit it through the one
+# splice, so parity stays green and only the histogram of a known fixture moves — caught by `a
+# session that advanced its increment reads advanced, not churned` in check-autonomy.sh, which
+# reads `1 advanced · 4 churned · 1 idle` against the `3 · 2 · 1` it demands.
+mut_AUTONOMY_progress_ignored() {
+  sed -i 's@def outcome: if .gate == "pass" then "advanced" elif (.pending_before != null and .pending_after != null and .pending_after < .pending_before) then "advanced" elif .moved == true then "churned" else "idle" end;@def outcome: if .gate == "pass" then "advanced" elif .moved == true then "churned" else "idle" end;@' "$1"
+}
+
+# The null guard on the progress arm goes, and jq's own ordering does the rest: `null` sorts below
+# every number, so `.pending_after < .pending_before` is TRUE for a row whose gate REFUSED the
+# checkpoint and published nothing. The session that got told "increment I3 is done with no commit"
+# then reads as the loudest progress in the ledger. Fails open in the direction the whole rewrite
+# exists to stop — flattery — which is why the guard is asserted from both sides. Caught by `a gate
+# that published no pending_after is not an increment that advanced` in check-autonomy.sh, which
+# reads `1 1` (the 4·1·1 histogram and 33% waste) against the `0 0` it demands.
+mut_AUTONOMY_progress_null_blind() {
+  sed -i 's@(.pending_before != null and .pending_after != null and .pending_after < .pending_before)@(.pending_after < .pending_before)@' "$1"
 }
 
 CATALOG=(
@@ -2400,6 +2426,8 @@ CATALOG=(
   LEDGER_progress_not_written
   EXEC_tally_counts_done
   LEDGER_progress_leaks_across_phases
+  AUTONOMY_progress_ignored
+  AUTONOMY_progress_null_blind
 )
 
 # Mutations that are NOT caught today, each with the increment that closes it. Ratchet in both

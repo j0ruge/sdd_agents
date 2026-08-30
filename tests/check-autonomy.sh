@@ -1605,6 +1605,66 @@ human_noncomp_tri="$(num_before "$out_tri" 'non-comparable')"; human_noncomp_tri
 assert_eq "the judge excludes exactly the rows the human's reader excludes (session with no moved included)" \
   "2 2" "$human_noncomp_tri $(jq -r '.excluded.non_comparable' <<< "$series_tri")"
 
+# --- the increment that advanced is not churn ----------------------------------------------------
+# The gate is the artifact of the PHASE, and a phase of four increments only passes it on the last
+# session — so `gate == pass` alone read the pipeline's DESIGNED loop as waste. Measured on the real
+# ledger on 2026-08-29: 46 of the 72 EXEC rows read `churned` where the churn is about 5, and 49 of
+# the 107 kit versions printed `100% waste` — every one of them a version whose only session was a
+# middle increment of some mission. The row now carries the count gate_EXEC already had
+# (pending_before/pending_after/increments_total, written by I1), and `outcome` reads it.
+#
+# The fixture is one coherent EXEC history of four increments, and its six rows exist to make the
+# three regimes of this definition come out at three DIFFERENT histograms, so none is reachable by
+# accident:
+#   s1  4→3  moved, gate fail   the increment advanced; the phase did not          advanced
+#   s2  3→3  moved, gate fail   wrote, closed nothing — the churn that is real     churned
+#   s3  3→3  no move, fail      wrote nothing at all                               idle
+#   s4  3→2  moved, gate fail   advanced again                                     advanced
+#   s5  2→?  moved, gate fail   the gate REFUSED the checkpoint, so it published   churned
+#                               no pending_after: `null`, not "it went to zero"
+#   s6  2→0  moved, gate pass   the last increment closes the phase                advanced
+# new rule      3 advanced · 2 churned · 1 idle · 50% waste
+# gate-only     1 advanced · 4 churned · 1 idle · 83% waste   (mut_AUTONOMY_progress_ignored)
+# no null guard 4 advanced · 1 churned · 1 idle · 33% waste   (mut_AUTONOMY_progress_null_blind)
+#
+# s5 is not decoration: jq orders `null` BELOW every number, so `.pending_after < .pending_before`
+# with a null left-hand side is TRUE — a gate that refused the checkpoint would read as the loudest
+# possible progress. The guard against that is code, and this is the row that measures it.
+echo "== reader: the increment that advanced is not churn =="
+mkdir -p "$OUTSIDE/progress"
+localize > "$OUTSIDE/progress/autonomy-log.jsonl" <<'EOF'
+{"v":1,"ts":"2026-08-29T10:00:00-03:00","event":"session","run_id":"r1","invocation":"run","kit_sha":"eeeeeee","kit_dirty":false,"project":"p1","repo":"/p1","mission":"m3","phase":"EXEC","step":"EXEC","agent":"sdd-executor","model":"opus","attempt":1,"auto_retry":false,"session":"s1","rc":0,"dur_s":10,"cost_usd":1.0,"moved":true,"pending_before":4,"pending_after":3,"increments_total":4,"gate":"fail","gate_why":"3 of 4 increment(s) still to execute"}
+{"v":1,"ts":"2026-08-29T10:01:00-03:00","event":"session","run_id":"r1","invocation":"run","kit_sha":"eeeeeee","kit_dirty":false,"project":"p1","repo":"/p1","mission":"m3","phase":"EXEC","step":"EXEC","agent":"sdd-executor","model":"opus","attempt":2,"auto_retry":false,"session":"s2","rc":0,"dur_s":10,"cost_usd":1.0,"moved":true,"pending_before":3,"pending_after":3,"increments_total":4,"gate":"fail","gate_why":"3 of 4 increment(s) still to execute"}
+{"v":1,"ts":"2026-08-29T10:02:00-03:00","event":"session","run_id":"r2","invocation":"run","kit_sha":"eeeeeee","kit_dirty":false,"project":"p1","repo":"/p1","mission":"m3","phase":"EXEC","step":"EXEC","agent":"sdd-executor","model":"opus","attempt":1,"auto_retry":false,"session":"s3","rc":0,"dur_s":10,"cost_usd":1.0,"moved":false,"pending_before":3,"pending_after":3,"increments_total":4,"gate":"fail","gate_why":"3 of 4 increment(s) still to execute"}
+{"v":1,"ts":"2026-08-29T10:03:00-03:00","event":"session","run_id":"r2","invocation":"run","kit_sha":"eeeeeee","kit_dirty":false,"project":"p1","repo":"/p1","mission":"m3","phase":"EXEC","step":"EXEC","agent":"sdd-executor","model":"opus","attempt":2,"auto_retry":false,"session":"s4","rc":0,"dur_s":10,"cost_usd":1.0,"moved":true,"pending_before":3,"pending_after":2,"increments_total":4,"gate":"fail","gate_why":"2 of 4 increment(s) still to execute"}
+{"v":1,"ts":"2026-08-29T10:04:00-03:00","event":"session","run_id":"r3","invocation":"run","kit_sha":"eeeeeee","kit_dirty":false,"project":"p1","repo":"/p1","mission":"m3","phase":"EXEC","step":"EXEC","agent":"sdd-executor","model":"opus","attempt":1,"auto_retry":false,"session":"s5","rc":0,"dur_s":10,"cost_usd":1.0,"moved":true,"pending_before":2,"pending_after":null,"increments_total":null,"gate":"fail","gate_why":"increment I3 is done with no commit"}
+{"v":1,"ts":"2026-08-29T10:05:00-03:00","event":"session","run_id":"r3","invocation":"run","kit_sha":"eeeeeee","kit_dirty":false,"project":"p1","repo":"/p1","mission":"m3","phase":"EXEC","step":"EXEC","agent":"sdd-executor","model":"opus","attempt":2,"auto_retry":false,"session":"s6","rc":0,"dur_s":10,"cost_usd":1.0,"moved":true,"pending_before":2,"pending_after":0,"increments_total":4,"gate":"pass","gate_why":""}
+EOF
+out_prog="$( SDD_STATE_DIR="$OUTSIDE/progress" "$SDD" autonomy 2>&1 )"; rc=$?
+assert_eq "a ledger of increment counts is data (rc 0)" "0" "$rc"
+
+assert_eq "a session that advanced its increment reads advanced, not churned" "1" \
+  "$(grep -cE '^  eeeeeee  6 session\(s\) · 3 advanced · 2 churned · 1 idle · ' <<< "$out_prog")"
+
+# Differential on ONE fixture: the new number has to be there AND the gate-only number has to be
+# gone. A count asserted alone is satisfied by any regime that happens to land on it.
+assert_eq "waste counts only the increment that did not move" "1 0" \
+  "$(grep -c ' 50% waste ' <<< "$out_prog") $(grep -c ' 83% waste ' <<< "$out_prog")"
+
+# The null guard, measured and not asserted in prose: without it s5 reads `advanced` and the
+# histogram goes 4 · 1 · 1 at 33% waste. Both halves, so deleting the row cannot satisfy it.
+assert_eq "a gate that published no pending_after is not an increment that advanced" "0 0" \
+  "$(grep -c ' 4 advanced · 1 churned ' <<< "$out_prog") $(grep -c ' 33% waste ' <<< "$out_prog")"
+
+# Parity again, on the fixture where the definition CHANGED: the judge splices the same printed
+# defs, so a copy that stayed on the gate-only yardstick shows up only in the comparison.
+series_prog="$( SDD_STATE_DIR="$OUTSIDE/progress" "$SDD" kaizen --series 2>/dev/null )"
+table_prog="$(sed -nE 's/^  eeeeeee  [0-9]+ session\(s\) · ([0-9]+) advanced · ([0-9]+) churned · ([0-9]+) idle · .*/\1 \2 \3/p' <<< "$out_prog")"
+assert_eq "the human window and the judge agree on the increment that advanced" \
+  "$(jq -r '.latest.outcomes | "\(.advanced) \(.churned) \(.idle)"' <<< "$series_prog")" "$table_prog"
+assert_eq "that parity is not vacuous — the table printed the three counts" "3 2 1" "$table_prog"
+assert_bucket_sum "the four buckets sum to the header total (increment counts)" "$out_prog"
+
 # --- the reader gives a full accounting, never a silent gap --------------------------------------
 # Two findings from review, one root cause: a bucket the reader does not name is a bucket that can
 # vanish with no trace (finding 3 — the reviewer's ledger with no `event` key printed nothing and
