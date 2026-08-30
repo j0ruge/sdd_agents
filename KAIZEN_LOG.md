@@ -42,10 +42,10 @@ dois leitores, paridade por asserção diferencial.
 | versões a `100% waste` (`sdd autonomy --all-repos`) | **49** de 107 | **10** de 111 |
 | linhas EXEC que leem o progresso da prosa | n/a (não existia) | **53**, impressas na tela pelo próprio comando |
 | `frete-cif-fob` · EXEC, no juiz | `leve` (7 sessões, 5 reprovações) | **`ok`** — `advanced: 7 · churned: 0`; ver ⚠️ abaixo |
-| grupos de fase com sessão não-`advanced` (⇒ `leve`), repos reais | n/a | **14 de 63**, dois deles EXEC (`cif-forma-pagamento`, `lote-facil`) — o controle continua de pé |
-| asserções de `tests/run-all.sh` | 666 | **692** |
-| `tests/check-autonomy.sh` / `check-kaizen.sh` | 223 / 143 | **246** / **146** |
-| catálogo de mutação | 179 | **192** |
+| grupos de fase com sessão não-`advanced` (⇒ `leve`) | n/a | **19 de 68** sobre o ledger global de **158 linhas**, agrupando por `[repo, mission, phase]` toda sessão que carrega `moved` — o controle continua de pé. Seis grupos EXEC, dos quais **dois são missões reais** (`cif-forma-pagamento`, `lote-facil`) e quatro são fixtures de teste que dividem o mesmo ledger global |
+| asserções de `tests/run-all.sh` | 666 | **699** (era 692 no I5; a r1 do REVIEW somou 7) |
+| `tests/check-autonomy.sh` / `check-kaizen.sh` | 223 / 143 | **253** / **146** |
+| catálogo de mutação | 179 | **195** (192 no I5, 193 no F1, 195 depois da r1 do REVIEW) |
 | a própria missão, por missão | n/a | `4 session(s) · 4 advanced · 0 churned · 0 idle · 1 launch(es) · US$ 26.67` — a primeira medida pela régua que ela conserta |
 
 ⚠️ **A segunda metade da métrica 3 do `00-missao.md` NÃO se confirmou, e é a lição desta missão.**

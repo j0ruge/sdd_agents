@@ -726,9 +726,13 @@ GATE_APP_DOWN=0
 # in all. Empty until a gate_EXEC gets past its validation loop; read by cmd_run and cmd_retry to
 # build the EXEC row of the autonomy ledger, which is why they outlive the call that sets them.
 #
-# ⚠️ They outlive it across PHASES too — `current_phase` evaluates gate_EXEC on every lap of
-# cmd_run, so a REVIEW session opened after a passing EXEC gate is built with these still set. The
-# readers guard on the phase; see the call sites.
+# ⚠️ They outlive it across PHASES too, and the reason is NOT `current_phase`: that runs as
+# `$(...)`, so the gate_EXEC it evaluates sets these in a subshell that dies immediately. The live
+# vector is the DIRECT calls in the parent shell — `gate_EXEC || true` in cmd_status, and
+# `gate_"$phase"` in cmd_run's own two doors — after which a REVIEW session opened on the next lap
+# is built with these still set. The readers guard on the phase; see the call sites. (Measured
+# 2026-08-30: through `$(current_phase)` both come back empty, called directly they come back set.
+# The guard is required either way; only the mechanism named here was wrong.)
 GATE_EXEC_PENDING=""
 GATE_EXEC_TOTAL=""
 
@@ -1890,9 +1894,13 @@ ledger_row_is_local() {
 # serve and comes out.
 #
 # `.pending_before == null` and NOT `has("pending_before")`: autonomy_session_row builds the object
-# with `($pbefore | tonumber? // null)`, so the KEY is present on every row it has ever written —
-# `has` answers true for all 49 historical rows and would annotate none of them. Measured on the
-# first ledger row of 20260829-o-incremento-que-andou, written by the runner loaded before I1.
+# with `($pbefore | tonumber? // null)`, so the KEY is present on every row THIS runner writes, with
+# the value `null` outside EXEC — `has` answers true for all of those and would annotate none of
+# them. The rows written BEFORE the fields existed carry no key at all, so `has` is wrong about them
+# in the other direction. `== null` is the one spelling that covers both. Measured 2026-08-30 over
+# the real ledger, and the earlier version of this comment had the fact backwards — it claimed the
+# 49 historical rows carried the key, when `grep -c pending_before ~/.sdd/autonomy-log.jsonl`
+# answered 0 over all 158 of them. The choice was right; the reason recorded for it was not.
 #
 # `pending_before` is the `pending_after` of the previous EXEC row of the same (repo, mission) in
 # FILE order, which is write order, with two rules — each with a fixture of its own in
@@ -4127,9 +4135,10 @@ cmd_run() {
     [ "$before" != "$after" ] && moved="true"
     # Captured into locals rather than read straight from the globals at the two call sites below,
     # and the phase guard is why. GATE_EXEC_PENDING outlives its gate ON PURPOSE, and
-    # `current_phase` evaluates gate_EXEC on every lap: without the guard the REVIEW session that
-    # follows a PASSING EXEC gate would be born carrying EXEC's counts and read as a phase that
-    # advanced an increment it never had. Pinned by "a non-EXEC row carries the three as null" in
+    # The vector is the DIRECT `gate_"$phase"` call one line up (and cmd_status's), never
+    # `$(current_phase)`, whose subshell throws the assignments away: without the guard the REVIEW
+    # session that follows a PASSING EXEC gate would be born carrying EXEC's counts and read as a
+    # phase that advanced an increment it never had. Pinned by "a non-EXEC row carries the three as null" in
     # tests/check-autonomy.sh, in the one fixture where that sequence is reachable.
     local exec_after="" exec_total=""
     if [ "$phase" = "EXEC" ]; then exec_after="$GATE_EXEC_PENDING"; exec_total="$GATE_EXEC_TOTAL"; fi
