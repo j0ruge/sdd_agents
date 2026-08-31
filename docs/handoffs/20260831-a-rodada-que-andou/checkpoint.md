@@ -239,6 +239,34 @@ atualizado: 2026-08-31 12:00
   frase de divulgação nova não aparece. O evento nasce aqui e povoa da próxima corrida em diante —
   a mesma propriedade que tornou o I1 seguro.
 
+- 2026-08-31 · `QA` · **As duas métricas foram RE-MEDIDAS pela QA, não aceitas do handoff de EXEC.**
+  (1) por diff dos dois `bin/sdd` (base `bf001fe` × árvore) sobre o MESMO ledger real: movem-se
+  exatamente `d89ea43`, `e9a3681` e `353b4b1`, e nada mais — nenhum custo, nenhuma contagem de
+  missão, `bf001fe` ausente do diff. Com piso: 121 linhas de tabela dos dois lados, então nenhum
+  leitor estava quebrado quando a conclusão saiu. (2) no leitor REAL e não só na suíte, via
+  `SDD_STATE_DIR` apontado para um ledger de fixture com o laço QA-reprova → EXEC → `gate_pass`:
+  a fase QA lê **`leve` com a linha e `refez` sem ela**, que é a promessa da Métrica (2) letra por
+  letra — e não o `ok` falso que ela proíbe.
+- 2026-08-31 · `QA` · **Aritmética dos cinco baldes fechada por `jq`, nos dois escopos.** Global
+  `173 + 15 + 4 + 0 + 0 = 192`; local `116 + 7 + 1 + 0 + 0 = 124`. Ambos batem com o total do
+  cabeçalho. O `15` da frase é 12 sessões + 3 escalações sujas — ela diz `row(s)`, não
+  `session(s)`, e está certa. `excluded.unrecognized` é `0` no ledger real **e** no fixture que de
+  fato contém a linha `gate_pass`, que é o teste que importa.
+- 2026-08-31 · `QA` · **O `19` da frase do I3 conferido linha a linha.** Das 25 linhas de REVIEW,
+  24 são anotadas (22 pela forma `40-review-r<N>.md`, 2 pela forma `no 40-review-r<N>.md`) e 1
+  escapa — a de `TEST_CMD failed`, uma das duas recusas declaradas irrecuperáveis. Das 24, cinco
+  saem como não-comparáveis (kit sujo). 24 − 5 = **19**: contado depois da comparabilidade, como
+  `7a34766` fez com o irmão do EXEC.
+- 2026-08-31 · `QA` · **Nenhum bug confirmado ⇒ nenhum `F<n>` e nenhuma spec nova.** Cinco jornadas
+  de linha de comando caminhadas, todas rc 0; suíte em 826 asserções, 0 FAIL; os quatro Checks
+  re-rodados um a um, `1` cada. A única coisa achada fora do caminho feliz — a assimetria
+  leitor × juiz numa linha `gate_pass` de kit sujo — **não** virou achado: o balde `$closed` é
+  incondicional de propósito (`bin/sdd:4904`, "senão a linha sai do total sem sair em lugar
+  nenhum") e o juiz declara a exclusão em `non_comparable`. Reprovada nas duas portas da régua D15,
+  está nos "Riscos" do `30-handoff-qa.md` com o comando de reprodução. ⚠️ A decisão foi pela régua,
+  **não** pelo carimbo de mutação — que a QA preservou por não tocar em código
+  (`829412c3ad9101d48b6c492b9cf42520` ainda válido ao entrar na REVIEW).
+
 > **Toda vez que um humano precisou entrar na linha** — um `sdd retry`, um conserto à mão, um
 > `BLOCKED` assumido — sai uma linha com o marcador `intervention:`. É a **narrativa** do que o
 > humano fez. O **número** de intervenções o `sdd autonomy --by-mission` lê do ledger, em
@@ -257,3 +285,6 @@ atualizado: 2026-08-31 12:00
 > `F<n>`, e o Check obrigatoriamente inclui **regression test passa** + **re-walk da jornada
 > impactada verde**. Bug que exige julgamento humano NÃO vira fix — vai para
 > "Decisions for a Human" no handoff de QA.
+
+**Nenhum.** A QA de 2026-08-31 caminhou cinco jornadas e não confirmou nenhum bug sanável — ver as
+quatro notas `QA` acima e o `30-handoff-qa.md`. A tabela de incrementos fica em 4 de 4 `done`.
