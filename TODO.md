@@ -681,15 +681,15 @@ Achados sobre **repos-alvo** vão para o `TODO.md` daquele repo. Este arquivo é
   — descoberto por `sdd-reviewer` na missão `20260829-o-incremento-que-andou` (2026-08-30)
 
 - [ ] **`reopened` é cego à closure, e a resposta depende de a fase ter CUSTADO dinheiro** —
-  `bin/sdd:4849` — o `def reopened` lê `.gate == "pass"` sobre `$every_session` (`:4942`,
+  `bin/sdd:4860` — o `def reopened` lê `.gate == "pass"` sobre `$every_session` (`:4954`,
   `map(select(is_session))`), e a closure é justamente o fato que `.gate == "pass"` representa.
   Medido, mesmo histórico de pipeline: closure gravada como `gate_pass` → `0 reopened`; a MESMA
   closure comprada com sessão → `1 reopened`. Não consertado aqui porque admitir closure em
-  `$every_session` move junto o `history_extra` (`:4949`), que é número de tela. Direção: população
+  `$every_session` move junto o `history_extra` (`:4962`), que é número de tela. Direção: população
   própria para o `reopened`, mais fixture diferencial. — descoberto por `sdd-reviewer` na missão `20260831-a-rodada-que-andou` (2026-08-31)
 
 - [ ] **A guarda de fase da foto de REVIEW no `cmd_retry` não tem probe, e sem ela a linha mente** —
-  `bin/sdd:4568` — apagar o `if [ "$phase" = "REVIEW" ]` deixa a suíte inteira verde, e a guarda NÃO
+  `bin/sdd:4587` — apagar o `if [ "$phase" = "REVIEW" ]` deixa a suíte inteira verde, e a guarda NÃO
   é inerte: `review_rounds_on_disk` nunca devolve vazio (imprime `0`), então todo `sdd retry <fase
   não-REVIEW>` nasceria com `rounds_before: 0` em vez de `null` — um zero entrando na aritmética do
   juiz. O irmão do `cmd_run` tem a asserção (`a non-REVIEW row carries the three round fields as
@@ -698,7 +698,7 @@ Achados sobre **repos-alvo** vão para o `TODO.md` daquele repo. Este arquivo é
   — descoberto por `sdd-reviewer` na missão `20260831-a-rodada-que-andou` (2026-08-31)
 
 - [ ] **A porta de `gate_failed` do retry inline não tem probe, e o comentário dela jura que tem** —
-  `bin/sdd:4509` — apagar a linha deixa a suíte verde. Consequência: retry inline que PASSA mantém o
+  `bin/sdd:4528` — apagar a linha deixa a suíte verde. Consequência: retry inline que PASSA mantém o
   `1` da primeira passada, e a volta seguinte grava um `gate_pass` dizendo que a fase fechou SEM
   sessão para uma fase que fechou COM a própria retry — linha falsa, permanente (ledger append-only),
   que alimenta o `phase_label` e o `$closed`. A asserção que proibiria isso existe mas o fixture dela
@@ -707,7 +707,7 @@ Achados sobre **repos-alvo** vão para o `TODO.md` daquele repo. Este arquivo é
   — descoberto por `sdd-reviewer` na missão `20260831-a-rodada-que-andou` (2026-08-31)
 
 - [ ] **O `$order` do `cmd_autonomy` e o `comparable_row` do `kaizen_series` divergem sobre a linha
-  `gate_pass`, e o comentário entre eles jura paridade** — `bin/sdd:4899` — o `$order` admite
+  `gate_pass`, e o comentário entre eles jura paridade** — `bin/sdd:4929` — o `$order` admite
   `(is_session and comparable) or (is_escalation and on_axis)` e NÃO vê o evento novo; o
   `comparable_row` é `on_axis and ((.event != "session") or has("moved"))` e vê. Com a closure como
   primeira linha de um sha, os dois respondem `latest`/`previous` INVERTIDOS — medido. Writer de hoje
@@ -716,8 +716,8 @@ Achados sobre **repos-alvo** vão para o `TODO.md` daquele repo. Este arquivo é
   — descoberto por `sdd-reviewer` na missão `20260831-a-rodada-que-andou` (2026-08-31)
 
 - [ ] **Missão que só tem `gate_pass` numa fatia entra em `missions` sem produzir célula** —
-  `bin/sdd:5318` — `missions:` conta sobre `$rows` cru, que agora inclui a closure, enquanto o
-  `$detail` (desde `dfe4d63`) exige sessão ou escalada. É a única forma de linha que conta no
+  `bin/sdd:5374` — `missions:` conta sobre `$rows` cru, que agora inclui a closure, enquanto o
+  `$detail` (`:5368`, desde `dfe4d63`) exige sessão ou escalada. É a única forma de linha que conta no
   `guard.missions_after_change` e no `composition` da ADR 0005 sem deixar rastro gradeável, então os
   dois deixam de reconciliar com o `detail` ao lado. `guard.sufficient` não se move (lê `$sess`).
   Alcançável pelo mundo (2) já declarado: sessão suja excluída, closure limpa sobrevivendo.
