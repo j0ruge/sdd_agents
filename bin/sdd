@@ -4052,6 +4052,13 @@ app_down_escalation() {
 # write would die with the subshell and the row would be re-emitted every lap. That is the
 # autonomy_kit_stamp scar, one function over.
 #
+# PRECONDITION, stated because dynamic scope does not state itself: the three `local -A` maps must
+# be in scope at the call site. `cmd_retry` calls `current_phase()` too and is the obvious next place
+# somebody adds a second call — without the maps, `set -u` reads `${sessions[$ph]:-0}` as an INDEXED
+# subscript and arithmetic-evaluates `PLAN`, so the runner dies with `PLAN: unbound variable` on the
+# first phase. Loud, which is the right direction, and named here so the next writer does not have
+# to discover it.
+#
 # THE ARGUMENT IS THE DERIVED PHASE, and it is what makes this cheap and provable at once.
 # `current_phase()` returns the FIRST phase of $PHASES whose gate fails, so every phase BEFORE its
 # answer has a gate that just passed — measured by the very derivation that produced `$upto`, in
@@ -5250,6 +5257,23 @@ kaizen_series() {
     # this rubric — over a phase that closed clean, with `escalations: {}`, ONE launch for the whole
     # mission and REVIEW/DOCS/PR all `ok` after it.
     #
+    # ⚠️ It reads the closure as a POSITION and never as set membership, and the difference is a
+    # measured defect rather than a style. Written `... != "pass" and (map(select(is_gate_pass)) |
+    # length) == 0`, ONE recorded closure disabled the clause for the whole life of that
+    # (repo, mission, phase) group: the ledger is append-only and the group spans every run, so a
+    # closure written on lap 3 outvoted every failing session AFTER it, for ever. The runner cannot
+    # correct that from its side — `gate_pass_logged` and `sessions` die with the process, so a
+    # phase that reopens and stays red writes no second row to argue with. Reproduced end to end on
+    # a real `sdd run`: QA closes for free, the REVIEW round reopens QA, three more QA sessions fail
+    # at US$ 21 and none passes, and the rubric read `leve` where it has to read `refez` — the same
+    # fail-open in the flattering direction this comment forbids two paragraphs down. All of it on
+    # ONE kit_sha, which is the NORMAL case in a target repo, so it was the common path and not an
+    # edge. Asking for the LAST of (sessions ∪ closures) answers "did the phase close?" at the point
+    # in time the group actually ends: a closure last means it closed, a failing session last means
+    # it did not, and with no closure at all the expression is the old one, term for term.
+    # `last` over an empty list is `null` and `null.event == "session"` is false, so a group of pure
+    # escalations still falls to the first arm exactly as before.
+    #
     # It reads a FACT the runner wrote (`event: "gate_pass"`, autonomy_gate_pass_row) and never the
     # absence of one: an inference over the phase order would have been cheaper and is the shape
     # f00c2dc refused, "an inference does not go in front of what the runner measured". What it does
@@ -5258,8 +5282,8 @@ kaizen_series() {
     def phase_label:
       if (map(select(is_escalation)) | length) > 0
          or (map(select(.event == "session" and .invocation == "retry")) | length) > 0
-         or ((map(select(.event == "session")) | last | .gate) != "pass"
-             and (map(select(is_gate_pass)) | length) == 0)
+         or ((map(select(.event == "session" or is_gate_pass)) | last
+              | (.event == "session" and .gate != "pass")))
       then "refez"
       elif (map(select(.event == "session" and (.auto_retry == true or outcome != "advanced"))) | length) > 0
       then "leve"

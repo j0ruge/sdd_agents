@@ -473,6 +473,44 @@ assert_eq "the recorded fact is not thrown away as unrecognized" "0" \
 assert_eq "is_escalation says no: a gate that passed is not an escalation" "{}" \
   "$(jq -c '.latest.escalations' <<< "$GP_OUT")"
 
+# --- the closure is a POSITION, not a membership -----------------------------
+# The ledger is append-only and the rubric groups over the WHOLE life of a (repo, mission, phase),
+# not per run. Asked as `(map(select(is_gate_pass)) | length) == 0`, one recorded closure disabled
+# the clause for ever: a closure written on lap 3 outvoted every failing session after it, and the
+# runner cannot argue back — `gate_pass_logged` and `sessions` die with the process, so a phase that
+# reopens and stays red writes no second row. Reproduced end to end on a real `sdd run`: QA closes
+# for free, the REVIEW round reopens QA, and the sessions that follow fail with nobody spending a
+# cent on the phase closing again.
+#
+# Every row here carries ONE kit_sha on purpose. That is the normal case in a target repo — the kit
+# does not change during a run — so this was the common path, not an edge.
+echo "== series: a closure does not outvote the sessions that came after it =="
+mkdir -p "$OUTSIDE/gpafter"
+localize > "$OUTSIDE/gpafter/autonomy-log.jsonl" <<'EOF'
+{"v":1,"ts":"2026-08-31T12:00:00-03:00","event":"session","run_id":"g1","invocation":"run","kit_sha":"aaa9999","kit_dirty":false,"project":"p1","repo":"/p1","mission":"m50","phase":"QA","step":"QA","agent":"sdd-qa","model":"opus","attempt":1,"auto_retry":false,"session":"k1s","rc":0,"dur_s":10,"cost_usd":3.0,"moved":true,"gate":"fail","gate_why":"1 bug(s) with Status: open in the registry"}
+{"v":1,"ts":"2026-08-31T12:01:00-03:00","event":"session","run_id":"g1","invocation":"run","kit_sha":"aaa9999","kit_dirty":false,"project":"p1","repo":"/p1","mission":"m50","phase":"EXEC","step":"EXEC","agent":"sdd-executor","model":"opus","attempt":1,"auto_retry":false,"session":"k2s","rc":0,"dur_s":10,"cost_usd":1.5,"moved":true,"pending_before":1,"pending_after":0,"increments_total":1,"gate":"pass","gate_why":"0 of 1 increment(s) still to execute"}
+{"v":1,"ts":"2026-08-31T12:02:00-03:00","event":"gate_pass","run_id":"g1","invocation":"run","kit_sha":"aaa9999","kit_dirty":false,"project":"p1","repo":"/p1","mission":"m50","phase":"QA"}
+{"v":1,"ts":"2026-08-31T12:03:00-03:00","event":"session","run_id":"g1","invocation":"run","kit_sha":"aaa9999","kit_dirty":false,"project":"p1","repo":"/p1","mission":"m50","phase":"REVIEW","step":"REVIEW","agent":"sdd-reviewer","model":"opus","attempt":1,"auto_retry":false,"session":"k3s","rc":0,"dur_s":10,"cost_usd":2.0,"moved":true,"rounds_before":0,"rounds_after":1,"rounds_max":3,"gate":"pass","gate_why":"40-review-r1.md: every criterion A"}
+{"v":1,"ts":"2026-08-31T12:04:00-03:00","event":"session","run_id":"g1","invocation":"run","kit_sha":"aaa9999","kit_dirty":false,"project":"p1","repo":"/p1","mission":"m50","phase":"QA","step":"QA","agent":"sdd-qa","model":"opus","attempt":1,"auto_retry":false,"session":"k4s","rc":0,"dur_s":10,"cost_usd":7.0,"moved":true,"gate":"fail","gate_why":"1 bug(s) with Status: open in the registry"}
+EOF
+AFTER_OUT="$( cd "$FIX" && SDD_STATE_DIR="$OUTSIDE/gpafter" "$SDD" kaizen --series 2>/dev/null )"
+# THE assertion: the phase reopened AFTER the closure and did not close again, so `refez` is the
+# true reading. A rubric that asks "is there a closure anywhere in this group" answers `leve` here.
+assert_eq "a closure does not outvote the sessions that came after it" "refez" \
+  "$(jq -r '.latest.detail[] | select(.mission == "m50" and .phase == "QA") | .label' <<< "$AFTER_OUT")"
+# The floor that stops the assertion above from being satisfied by a rubric that went back to
+# calling everything `refez`: the REVIEW of the same slice closed and still reads `ok`.
+assert_eq "floor: the phase that DID close in the same slice still reads ok" "ok" \
+  "$(jq -r '.latest.detail[] | select(.mission == "m50" and .phase == "REVIEW") | .label' <<< "$AFTER_OUT")"
+# ...and the other direction, in the same file: cut the trailing QA session and the very same
+# closure DOES speak, because now it is the last word about the phase. The two readings differ by
+# one row, so no rubric that reaches the assertion above by ignoring `gate_pass` survives here.
+mkdir -p "$OUTSIDE/gpafter2"
+grep -v '"session":"k4s"' "$OUTSIDE/gpafter/autonomy-log.jsonl" > "$OUTSIDE/gpafter2/autonomy-log.jsonl"
+BEFORE_OUT="$( cd "$FIX" && SDD_STATE_DIR="$OUTSIDE/gpafter2" "$SDD" kaizen --series 2>/dev/null )"
+assert_eq "and with nothing after it the same closure still speaks" "leve" \
+  "$(jq -r '.latest.detail[] | select(.mission == "m50" and .phase == "QA") | .label' <<< "$BEFORE_OUT")"
+
 # --- the closure that landed in ANOTHER slice --------------------------------
 # The fixture above is the TARGET-REPO shape: the kit does not change during the run, so the
 # closure and the session it explains carry the same `kit_sha` and land in the same slice. In the

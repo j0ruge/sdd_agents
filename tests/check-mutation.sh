@@ -2605,6 +2605,19 @@ mut_LEDGER_gate_pass_not_admitted() {
 # this mission has already had to re-anchor three times: the smallest fragment that still names the
 # sabotage. Caught by `a closure alone in a slice mints no cell` and `and the session that shares
 # the slice is still graded` in check-kaizen.sh, and by nothing else.
+# The closure goes back to being asked as SET MEMBERSHIP instead of as a position — the form the
+# mission shipped and the review reproduced end to end. The ledger is append-only and the rubric
+# groups over the whole life of a (repo, mission, phase), so one recorded closure then outvotes
+# every failing session AFTER it, for ever: QA closes for free, the REVIEW round reopens it, three
+# more QA sessions fail at US$ 21 and none passes, and the rubric reads `leve` where it has to read
+# `refez`. All on one kit_sha, which is the normal case in a target repo. Caught by `a closure does
+# not outvote the sessions that came after it` in check-kaizen.sh, and by nothing else — the two
+# floors beside it stay green under this sabotage, which is what makes it the owner of that one.
+mut_LEDGER_gate_pass_membership_not_position() {
+  sed -i 's@| (.event == "session" and .gate != "pass")))@| .gate) != "pass" and (map(select(is_gate_pass)) | length) == 0)@' "$1"
+  sed -i 's@or ((map(select(.event == "session" or is_gate_pass)) | last$@or ((map(select(.event == "session")) | last@' "$1"
+}
+
 mut_LEDGER_gate_pass_mints_a_cell() {
   sed -i 's@| map(select((map(select(.event == "session" or is_escalation)) | length) > 0))@@' "$1"
 }
@@ -2822,6 +2835,7 @@ CATALOG=(
   LEDGER_gate_pass_unrecognized
   LEDGER_gate_pass_not_admitted
   LEDGER_gate_pass_mints_a_cell
+  LEDGER_gate_pass_membership_not_position
 )
 
 # Mutations that are NOT caught today, each with the increment that closes it. Ratchet in both

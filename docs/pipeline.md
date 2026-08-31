@@ -638,7 +638,17 @@ pair written out by hand in three places is how they came to disagree in the fir
 `gate_pass` reaches `phase_label` too, and by the **other** door: it is deliberately kept OUT of
 `is_escalation` (a gate that closed is the opposite of the line stopping, and `escalations` is the
 map the judge cites first) and instead relaxes the rubric's third clause, which used to ask "did the
-last **session** pass its gate?" while meaning "did the **phase** close?". ⚠️ What it does *not* do
+last **session** pass its gate?" while meaning "did the **phase** close?". ⚠️ It is read as a
+**position** and never as set membership. The ledger is append-only and the rubric groups over the
+whole life of a `(repo, mission, phase)`, so "is there a closure anywhere in this group" let ONE
+recorded closure outvote every failing session *after* it, for ever — and the runner cannot argue
+back, because `gate_pass_logged` and `sessions` die with the process, so a phase that reopens and
+stays red writes no second row. Reproduced end to end on a real `sdd run`: QA closes for free, the
+REVIEW round reopens it, three more QA sessions fail at US$ 21 and none passes, and the rubric read
+`leve` where it has to read `refez` — on one `kit_sha`, which is the *normal* case in a target repo.
+The clause asks for the **last** of (sessions ∪ closures): a closure last means the phase closed, a
+failing session last means it did not, and with no closure at all the expression is the old one term
+for term. ⚠️ What it does *not* do
 is turn the cell green: the surviving session is still churn on its own count, so the cascade lands
 on `leve`. Trading a false `refez` for a false `ok` would be the same defect wearing the other sign.
 
