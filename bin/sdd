@@ -5166,7 +5166,34 @@ kaizen_series() {
     # ONE definition of "the distinct kit versions, in FILE order", used by the latest/previous
     # pair below and by the window here. group_by sorts by key and answers a different question;
     # two hand-written copies of this reduce is how the blocked/degraded pair came to disagree.
-    def shas_in_file_order: map(.kit_sha) | reduce .[] as $s ([]; if index($s) then . else . + [$s] end);
+    # ONE definition of the axis the whole judge stands on, and its population is a decision rather
+    # than a detail: a version is borne by a row that OBSERVED something — a session that ran, or an
+    # escalation that stopped the line. A `gate_pass` row observes nothing; it says a phase closed
+    # for free. It MODIFIES the cell of a version, and it must never BE one. Same sentence as the
+    # `$detail` filter in group_summary, one level up: that filter stops the phantom CELL, this
+    # select stops the phantom VERSION, and until 2026-08-31 only the first half existed.
+    #
+    # THE KIT REPO IS WHERE THIS BITES, and by construction rather than by luck: every session here
+    # commits, so the sha ADVANCES between the phase whose gate failed and the lap that closes it —
+    # the closure lands on a sha no session ever touched. Measured on the real reader, one row
+    # added: `latest` ccc3333 → ddd4444 (0 sessions), `previous` bbb2222 → ccc3333, `labels`
+    # {ok:1} → {ok:0}, `degenerate_axis` true → false. Downstream, `gate_KAIZEN` derives its
+    # expected sha from `latest.kit_sha`, so a verdict already written stopped satisfying the gate
+    # and `sdd kaizen` would buy an opus session to judge a slice with zero sessions — a phase no
+    # session can satisfy, the failure mode principle 1 of CLAUDE.md exists to forbid.
+    #
+    # Written POSITIVELY (`session or escalation`) and not as `is_gate_pass | not`, though the two
+    # agree on the population of today: a FOURTH event has to opt IN to minting a version, instead
+    # of minting one by default the day somebody adds it. Fail-safe is the direction the axis wants.
+    # Both callers — `$shas` below and the `$order` of degenerate_axis — ask this same question,
+    # which is why the filter lives in the definition and not at the two call sites.
+    #
+    # ⚠️ No apostrophe anywhere in this block, which is why the prose above says "the population of
+    # today" instead of the natural phrasing: the whole jq program is ONE single-quoted shell string
+    # opened at the `jq -n` far above, so a stray single quote closes it and bash dies at parse
+    # time — several screens away from the line that caused it. Caught by `bash -n`, never silent.
+    def shas_in_file_order: map(select(.event == "session" or is_escalation))
+                            | map(.kit_sha) | reduce .[] as $s ([]; if index($s) then . else . + [$s] end);
     # ONE definition of "which mission is this row about", and the repo is PART of it. The slug
     # alone was the first spelling, and it was a no-op bug until this mission opened --all-repos:
     # slugs are dated (`YYYYMMDD-<name>`) and cmd_kaizen mints `$(date +%Y%m%d)-kaizen`, identical

@@ -2622,6 +2622,20 @@ mut_LEDGER_gate_pass_mints_a_cell() {
   sed -i 's@| map(select((map(select(.event == "session" or is_escalation)) | length) > 0))@@' "$1"
 }
 
+# The other half of the same sentence, one level up from the cell: the version AXIS. Unfiltered,
+# `shas_in_file_order` lets a closure mint a `kit_sha` that observed nothing — and in the repo that
+# BUILDS the kit that is the normal case, because every session commits and the sha advances
+# between the phase whose gate failed and the lap that closes it for free. `latest` then points at
+# a slice with zero sessions, `previous` slides back one, and `guard.degenerate_axis` flips, which
+# silences the one sentence that explains why `indeterminado` is correct here. Downstream
+# `gate_KAIZEN` derives its expected sha from `latest.kit_sha`, so a verdict already written stops
+# satisfying its gate — a phase no session can satisfy. Caught by the DIFFERENTIAL assertion
+# `a closure on a sha of its own changes nothing about the axis` in check-kaizen.sh; the floor
+# beside it stays green under this sabotage, which is what makes that one the owner.
+mut_LEDGER_gate_pass_mints_a_version() {
+  sed -i 's@map(select(.event == "session" or is_escalation))$@map(select(true))@' "$1"
+}
+
 # `sdd retry` is the third writer of the six count fields and the last one without an assertion.
 # Unguarded, its REVIEW photograph runs for every phase — and `review_rounds_on_disk` prints `0`
 # rather than nothing, so the row is never merely odd: on a mission with a round already on disk a
@@ -2866,6 +2880,7 @@ CATALOG=(
   LEDGER_gate_pass_unrecognized
   LEDGER_gate_pass_not_admitted
   LEDGER_gate_pass_mints_a_cell
+  LEDGER_gate_pass_mints_a_version
   LEDGER_gate_pass_membership_not_position
   RUN_retry_photographs_every_phase
   RUN_retry_exec_photographs_every_phase

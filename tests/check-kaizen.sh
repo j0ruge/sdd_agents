@@ -555,6 +555,61 @@ assert_eq "floor: the failing session is still in the older slice, still refez" 
 assert_eq "dropping the cell does not drop the row into unrecognized" "0" \
   "$(jq -r '.excluded.unrecognized' <<< "$SPLIT_OUT")"
 
+# --- a closure never MINTS a version -----------------------------------------
+# The other half of "a closure MODIFIES a cell, it never is the subject of one", and the half the
+# `$detail` filter one block up cannot reach: that filter drops the phantom CELL, but the phantom
+# `kit_sha` was still minting a VERSION, because `shas_in_file_order` ran over `$ok` and
+# `comparable_row` admits a closure (`.event != "session"` short-circuits the `has("moved")` arm).
+# So the axis the whole judge stands on grew an entry that observed nothing.
+#
+# THIS IS THE KIT REPO'S NORMAL CASE, not an edge, and that is what makes it expensive: every
+# session here commits, so the sha ADVANCES between the phase that failed and the lap that closes
+# it for free — the closure lands on a sha of its own by construction. Measured on the real reader
+# before the fix, one added row: `latest.kit_sha` ccc3333 → ddd4444, `latest.sessions` 1 → 0,
+# `latest.labels` {ok:1} → {ok:0,leve:0,refez:0}, `previous` bbb2222 → ccc3333, and
+# `guard.degenerate_axis` true → false.
+#
+# WHAT THAT COSTS, downstream and reproduced: `gate_KAIZEN` computes its expected sha from
+# `latest.kit_sha`, so a verdict already written stops satisfying the gate and `sdd kaizen` buys an
+# opus session to judge a slice with ZERO sessions — a gate nobody can satisfy, which is the most
+# expensive failure mode this repo has measured (CLAUDE.md, principle 1). And `kaizen_axis_note`
+# goes silent in the one repository where its sentence is always true.
+#
+# THE ASSERTION IS DIFFERENTIAL — two ledgers, the outputs compared with each OTHER — because the
+# claim is "the closure changes nothing about the axis". No fixture regime satisfies that by
+# accident, and it fails whichever side moves. The three older `gate_pass` fixtures above all put
+# the closure on the SAME sha as the sessions, which is exactly the control that shows nothing.
+echo "== series: a closure does not mint a version of its own =="
+mkdir -p "$OUTSIDE/mintwith" "$OUTSIDE/mintwithout"
+localize > "$OUTSIDE/mintwith/autonomy-log.jsonl" <<'EOF'
+{"v":1,"ts":"2026-08-03T09:00:00-03:00","event":"session","run_id":"r-m1","invocation":"run","kit_sha":"aaa1111","kit_dirty":false,"project":"p1","repo":"/p1","mission":"m1","phase":"EXEC","step":"EXEC","agent":"sdd-executor","model":"opus","attempt":1,"auto_retry":false,"session":"s1","rc":0,"dur_s":10,"cost_usd":1.0,"moved":true,"pending_before":1,"pending_after":0,"increments_total":1,"gate":"pass","gate_why":"0 of 1 increment(s) still to execute"}
+{"v":1,"ts":"2026-08-03T10:00:00-03:00","event":"session","run_id":"r-m2","invocation":"run","kit_sha":"bbb2222","kit_dirty":false,"project":"p1","repo":"/p1","mission":"m2","phase":"EXEC","step":"EXEC","agent":"sdd-executor","model":"opus","attempt":1,"auto_retry":false,"session":"s2","rc":0,"dur_s":10,"cost_usd":1.0,"moved":true,"pending_before":1,"pending_after":0,"increments_total":1,"gate":"pass","gate_why":"0 of 1 increment(s) still to execute"}
+{"v":1,"ts":"2026-08-03T10:30:00-03:00","event":"session","run_id":"r-m3","invocation":"run","kit_sha":"ccc3333","kit_dirty":false,"project":"p1","repo":"/p1","mission":"m3","phase":"QA","step":"QA","agent":"sdd-qa","model":"opus","attempt":1,"auto_retry":false,"session":"s3","rc":0,"dur_s":10,"cost_usd":1.0,"moved":true,"gate":"pass","gate_why":"journey walked"}
+{"v":1,"ts":"2026-08-03T11:00:00-03:00","event":"gate_pass","run_id":"r-m3","invocation":"run","kit_sha":"ddd4444","kit_dirty":false,"project":"p1","repo":"/p1","mission":"m3","phase":"QA"}
+EOF
+# The control is the SAME file minus the one row, so nothing but the closure can explain a
+# difference between the two readings.
+grep -v '"event":"gate_pass"' "$OUTSIDE/mintwith/autonomy-log.jsonl" \
+  > "$OUTSIDE/mintwithout/autonomy-log.jsonl"
+MINT_WITH="$( cd "$FIX" && SDD_STATE_DIR="$OUTSIDE/mintwith" "$SDD" kaizen --series 2>/dev/null )"
+MINT_WITHOUT="$( cd "$FIX" && SDD_STATE_DIR="$OUTSIDE/mintwithout" "$SDD" kaizen --series 2>/dev/null )"
+mint_axis() { jq -Sc '{latest: .latest.kit_sha, previous: .previous.kit_sha,
+                       sessions: .latest.sessions, labels: .latest.labels,
+                       degenerate: .guard.degenerate_axis}' <<< "$1"; }
+# THE FLOOR, and it comes first: the control really did read a version with a session in it. Both
+# sides going `null` would satisfy the differential by vacuity, which is the trap this file spends
+# its floors refusing.
+assert_eq "floor: without the closure the axis ends on the sha that bought the session" \
+  '{"degenerate":true,"labels":{"leve":0,"ok":1,"refez":0},"latest":"ccc3333","previous":"bbb2222","sessions":1}' \
+  "$(mint_axis "$MINT_WITHOUT")"
+# THE assertion: the closure is invisible to the axis. Differential, so it fails whichever side moves.
+assert_eq "a closure on a sha of its own changes nothing about the axis" \
+  "$(mint_axis "$MINT_WITHOUT")" "$(mint_axis "$MINT_WITH")"
+# The row is not thrown away to buy that — dropping a version is not dropping a row, and a closure
+# filed as `unrecognized` would be the judge accusing the kit of writing something it cannot read.
+assert_eq "and the row is still read, not filed as unrecognized" "0" \
+  "$(jq -r '.excluded.unrecognized' <<< "$MINT_WITH")"
+
 # --- a degradation is an escalation the series has to SEE --------------------
 # `PUBLISH_ON_REVIEW_BLOCKED=draft` makes the runner give up on reviewing and publish a draft PR
 # by itself. It writes `event: "degraded"`, and the filter above only ever admitted `session` and
