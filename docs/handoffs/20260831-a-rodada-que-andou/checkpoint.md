@@ -21,7 +21,7 @@ atualizado: 2026-08-31 00:00
 | ID | Incremento | Check (comando → esperado) | Status | Commit |
 |---|---|---|---|---|
 | I1 | A linha de REVIEW carrega `rounds_before`, `rounds_after` e `rounds_max` | `o=$(bash tests/check-autonomy.sh 2>&1); grep -c '^  ok    the REVIEW row carries rounds_before, rounds_after and rounds_max' <<< "$o"` → `1` | done | 99f65bf |
-| I2 | `def outcome` aprende que a rodada andou, com guarda de não-nulo | `o=$(bash tests/check-kaizen.sh 2>&1); grep -c '^  ok    a REVIEW round that advanced reads advanced, never churned' <<< "$o"` → `1` | pending | — |
+| I2 | `def outcome` aprende que a rodada andou, com guarda de não-nulo | `o=$(bash tests/check-kaizen.sh 2>&1); grep -c '^  ok    a REVIEW round that advanced reads advanced, never churned' <<< "$o"` → `1` | done | 60d2c88 |
 | I3 | Caminho datado: linhas de REVIEW antigas recuperam a rodada do `gate_why` | `o=$(bash tests/check-autonomy.sh 2>&1); grep -c '^  ok    a pre-schema REVIEW row recovers its round from gate_why' <<< "$o"` → `1` | pending | — |
 | I4 | A fase que fechou sem gastar sessão para de ler `refez` | `o=$(bash tests/check-kaizen.sh 2>&1); grep -c '^  ok    a phase that closed without a session does not read refez' <<< "$o"` → `1` | pending | — |
 
@@ -68,6 +68,38 @@ atualizado: 2026-08-31 00:00
   `./bin/sdd autonomy --all-repos | grep bf001fe` →
   `23 session(s) · 21 advanced · 2 churned · 0 idle · 8% waste · 3 mission(s) · US$ 175.96`,
   idêntico ao estado registrado antes da missão. Nenhum leitor olha os campos novos até o I2.
+- 2026-08-31 · `I2` · **A passada de sabotagem achou TRÊS regras sem probe depois de o bloco já
+  estar verde.** O plano previa dois probes; os dois nasceram verdes e passaram. Degradando cada
+  regra do braço, só duas das cinco morriam: `.rounds_after != null`, a direção (`>` virando `!=`)
+  e `.moved != false` sobreviviam. Duas ganharam mundo (m23, sessão que não escreveu nada; m24,
+  contagem que DESCEU); a terceira foi **removida** — ver a nota seguinte.
+- 2026-08-31 · `I2` · **Uma regra escrita foi removida por sabotagem, com prova e não com
+  impressão.** `.rounds_after != null` é tautologia neste braço: o campo possivelmente nulo fica à
+  **esquerda** de `>`, e `null > 2` é FALSO em jq 1.7 (medido; no braço do EXEC ele fica à esquerda
+  de `<`, onde `null < 2` é VERDADEIRO — daí as duas guardas lá e uma só aqui). Com
+  `rounds_before` já guardado, nenhuma linha muda de `outcome`. O comentário diz o que a traria de
+  volta: trocar os operandos ou virar a comparação.
+- 2026-08-31 · `I2` · **Um probe de sabotagem foi descartado por sabotar a coisa errada.** A
+  primeira tentativa contra a guarda de não-nulo trocou `elif (` por `elif ((` e desbalanceou o
+  `jq`: **117 falhas** — erro de sintaxe, não medição. Refeita ancorada no braço inteiro, com
+  `bash -n` antes de concluir, deu as 3 falhas certas. Conclusão de probe que não sabotou o que
+  dizia sabotar não vale, nem quando aponta para o lado certo.
+- 2026-08-31 · `I2` · **Desvio do plano, declarado: QUATRO mutantes em vez de dois.** Entraram
+  `LEDGER_outcome_rounds_undirected` e `_moved_blind` além dos dois nomeados, porque são os probes
+  nascidos da sabotagem e probe que o catálogo não alcança apodrece — medido em
+  `20260818-lote-facil`. Cada um mata uma asserção que nenhum outro mata; nenhum é redundante.
+- 2026-08-31 · `I2` · ⚠️ **Âncora podre consertada no próprio diff.**
+  `mut_AUTONOMY_progress_ignored` ancorava na **linha inteira** do `def outcome:`. A linha cresceu
+  com o braço novo e a âncora parou de casar — no-op silencioso, que a guarda rc-90 `cmp -s` pega,
+  mas só depois de uma rodada inteira de catálogo. Re-ancorado no **braço**. Não virou item do
+  `TODO.md` pela régua D15: falha FECHADA e sem consumidor fora da suíte ⇒ dívida declarada, e ela
+  está no cabeçalho do mutante. (Registrar moveria `tests/health-baseline.txt` e mataria o carimbo.)
+- 2026-08-31 · `I2` · **Inércia no ledger real, medida e não suposta.**
+  `./bin/sdd autonomy --all-repos | grep bf001fe` →
+  `23 session(s) · 21 advanced · 2 churned · 0 idle · 8% waste · 3 mission(s) · US$ 175.96`,
+  idêntico ao estado antes da missão. O porquê está medido: o ledger tem **25 linhas de REVIEW e
+  `0` com `rounds_before`** — todas anteriores ao esquema. Quem move o número é o I3, e é lá que o
+  ponto de corte da métrica tem de ser aferido.
 - 2026-08-31 · `—` · ⚠️ **Ordem que custa 20 a 50 min quando se erra:** `./bin/sdd health`
   roda **depois do último commit de código**. Registrar achado no `TODO.md` move
   `tests/health-baseline.txt`, que mora dentro da chave do carimbo e o invalida.
