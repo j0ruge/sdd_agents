@@ -228,7 +228,9 @@ atualizado: 2026-08-31 12:00
   (`tests/run-all.sh`) estava e está **verde**, os quatro Checks passam, e o catálogo é opt-in fora
   do `TEST_CMD` desde `4c86712` exatamente para não trancar fase. Pela régua D15 também não vira
   item do backlog: falha **fechada** (quem a reportou foi a própria guarda) e sem consumidor fora
-  da suíte ⇒ dívida **declarada**, no cabeçalho de cada um dos três mutantes.
+  da suíte ⇒ dívida **declarada**, no cabeçalho de cada um dos três mutantes. **Re-medido depois
+  do conserto:** `./bin/sdd health --with-mutation` → `mutation: score: 211 caught, 0 known gap(s),
+  of 211`, `mutation stamp written`, `kit healthy` (carimbo `829412c3ad9101d48b6c492b9cf42520`).
 - 2026-08-31 · `I4` · **Métrica no ledger real, medida e não suposta.**
   `./bin/sdd autonomy --all-repos` → `d89ea43`, `e9a3681` e `353b4b1` em
   `1 advanced · 0 churned · 0% waste` (o que o I1–I3 entregou) e `bf001fe` inalterada em

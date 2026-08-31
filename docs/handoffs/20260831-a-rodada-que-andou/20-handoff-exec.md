@@ -4,7 +4,7 @@ fase: EXEC
 status: done
 sessao: 3bad3c60-be1d-4f7c-9266-f52c7ee7c4ca
 data: 2026-08-31 12:10
-gate: "tests/run-all.sh → `suite green`, 826 asserções ok, 0 FAIL (13 sensores; check-mutation.sh é opt-in desde 4c86712). Checkpoint: 4 de 4 incrementos `done`, cada um com hash presente no git log — 99f65bf, 60d2c88, c7c2e2e, 715da79."
+gate: "tests/run-all.sh → `suite green`, 826 asserções ok, 0 FAIL (13 sensores; check-mutation.sh é opt-in desde 4c86712). Checkpoint: 4 de 4 incrementos `done`, cada um com hash presente no git log — 99f65bf, 60d2c88, c7c2e2e, 715da79. `sdd status` → `✓ EXEC  4 increment(s) done, suite green, handoff written`. E o catálogo, depois do conserto 8322699: `./bin/sdd health --with-mutation` → `mutation: score: 211 caught, 0 known gap(s), of 211`, `mutation stamp written`, `kit healthy` (carimbo 829412c3ad9101d48b6c492b9cf42520)."
 ---
 
 # Handoff — EXEC — A rodada que andou
@@ -128,7 +128,8 @@ inteiro numa sandbox); a QA **não precisa dele** — quem o exige é o `gate_PR
   (`KAIZEN_series_escalations_dropped`). Re-ancorados no menor fragmento que ainda nomeia a
   sabotagem; medidos depois: aplicam, e matam 19, 32 e 1 asserções. **Nada foi marcado `blocked`**:
   o `TEST_CMD` estava verde o tempo todo, os quatro Checks passam, e o catálogo é opt-in fora do
-  `TEST_CMD` desde `4c86712` justamente para não trancar fase.
+  `TEST_CMD` desde `4c86712` justamente para não trancar fase. **Fechado e re-medido:**
+  `211 caught, 0 known gap(s), of 211` · `mutation stamp written` · `kit healthy`.
 - **O carimbo de mutação é invalidado por tudo que esta missão tocou** (`bin/`, `tests/`), e o
   último commit de código desta fase é `8322699`. ⚠️ Qualquer commit posterior em
   `bin/ tests/ templates/ config/` mata o carimbo e obriga a rodar de novo (20–50 min) — e a fase
