@@ -23,7 +23,7 @@ atualizado: 2026-08-31 12:00
 | I1 | A linha de REVIEW carrega `rounds_before`, `rounds_after` e `rounds_max` | `o=$(bash tests/check-autonomy.sh 2>&1); grep -c '^  ok    the REVIEW row carries rounds_before, rounds_after and rounds_max' <<< "$o"` → `1` | done | 99f65bf |
 | I2 | `def outcome` aprende que a rodada andou, com guarda de não-nulo | `o=$(bash tests/check-kaizen.sh 2>&1); grep -c '^  ok    a REVIEW round that advanced reads advanced, never churned' <<< "$o"` → `1` | done | 60d2c88 |
 | I3 | Caminho datado: linhas de REVIEW antigas recuperam a rodada do `gate_why` | `o=$(bash tests/check-autonomy.sh 2>&1); grep -c '^  ok    a pre-schema REVIEW row recovers its round from gate_why' <<< "$o"` → `1` | done | c7c2e2e |
-| I4 | A fase que fechou sem gastar sessão para de ler `refez` | `o=$(bash tests/check-kaizen.sh 2>&1); grep -c '^  ok    a phase that closed without a session does not read refez' <<< "$o"` → `1` | pending | — |
+| I4 | A fase que fechou sem gastar sessão para de ler `refez` | `o=$(bash tests/check-kaizen.sh 2>&1); grep -c '^  ok    a phase that closed without a session does not read refez' <<< "$o"` → `1` | done | 715da79 |
 
 ## Notas de execução
 
@@ -165,6 +165,60 @@ atualizado: 2026-08-31 12:00
   duas linhas anotadas que saíam depois como não-comparáveis. A catraca **não** desce: o item fica
   no arquivo até o PR mergear e `check-todo.sh` segue em `87 finding(s)`, igual ao baseline.
 - intervention: decisão do ponto de corte — o humano escolheu o caminho (a): a métrica (1) do `00-missao.md` foi reescrita para a medição real (as três fatias `d89ea43`/`e9a3681`/`353b4b1`; `bf001fe` inerte por mérito) e o I4 voltou a `pending` — EXEC — sem custo de sessão
+- 2026-08-31 · `I4` · **O Jidoka do I4 NÃO disparou: a asserção diferencial fecha.** Duas fatias
+  idênticas, uma com as linhas `gate_pass` e outra sem (o mesmo arquivo menos uma linha, via
+  `grep -v`), comparadas campo a campo: `outcomes`, `advance_rate`, `moved_rate`, `cost_usd`,
+  `sessions`, `missions`, `composition`, `escalations`, `guard` e os **cinco** baldes de `excluded`
+  saem idênticos; só `labels` difere. O risco nomeado no plano era real e foi medido antes do
+  conserto: sem a admissão na série, `excluded.unrecognized` respondia **1** — o juiz acusando bug
+  do próprio kit por uma linha que o runner escreveu de propósito.
+- 2026-08-31 · `I4` · **O mundo do writer teve de ser o laço QA⇄EXEC, e não uma bancada.** Não
+  existe estado que mude entre um gate que reprova e a derivação seguinte **a não ser** que uma
+  fase rode no meio — `run_check_cmd` memoiza e `current_phase` roda no mesmo shell. Logo "o gate
+  passou sem sessão" só é alcançável indo **para trás** primeiro: QA registra bug + incremento de
+  fix, `gate_QA` recusa, a derivação pousa em EXEC (fase anterior, incremento pendente), o EXEC
+  fecha os dois, e a derivação seguinte acha `gate_QA` verde. É o desenho do pipeline, não uma
+  contorção — e é letra por letra a história da célula `refez` da janela 2.
+- 2026-08-31 · `I4` · **Uma regra nasceu com probe decorativo por regime de fixture, e foi
+  consertada com um mundo e não com um remendo.** O one-shot (`gate_pass_logged`) sobreviveu à
+  sabotagem porque o fixture parava em `--max-phases 3`: a linha é escrita no topo da volta que
+  deriva REVIEW e `gate_failed[QA]` nunca é limpo, então uma corrida que para ali não diz nada
+  sobre o marcador. Com a quarta volta (REVIEW passa, deriva DOCS) o mutante mata 2 asserções.
+- 2026-08-31 · `I4` · **A regra do ramo derivado ganhou probe no fixture da DEGRADAÇÃO, que já
+  existia.** Mover a chamada para fora do `else` deixava a suíte verde — nenhuma asserção olhava.
+  O mundo que importa é o único caminho em que `force_phase` sobrevive para uma volta com fase
+  reprovada atrás: o `PUBLISH_ON_REVIEW_BLOCKED=draft`, que pula para PR sobre um REVIEW cujo gate
+  ainda reprova. Sem a regra, o runner grava que a fase que ele **desistiu de revisar** fechou
+  limpa. Asserção nova lá, medida 0 → 1.
+- 2026-08-31 · `I4` · **Uma asserção era vacuamente verde e o `. != null` é que a torna medição.**
+  Em jq 1.7 `null | has("rc")` responde **false**, não erro (medido), então "e nenhum campo de
+  sessão" passava sobre um ledger sem a linha. Mesma família do piso que este arquivo cobra em toda
+  parte.
+- 2026-08-31 · `I4` · **Uma regra ficou sem probe e está DECLARADA, não escondida.** O teste
+  `sessions[$ph] > 0` — a condição que o humano nomeou no grill — é redundante hoje: `gate_failed`
+  só é escrito nos dois sítios que incrementam `sessions`, então o teste seguinte já o implica, e
+  sabotá-lo deixa a suíte verde. Fica porque decide **qual falha** o próximo escritor de
+  `gate_failed` produz — armar o marcador no ramo `over_ceiling` (fase cujo teto veio do DISCO não
+  abre sessão nenhuma) gravaria, sem ele, que uma fase fechou de graça numa corrida em que ela
+  nunca rodou. O comentário diz qual mundo não consegui construir, nunca que ele não existe.
+- 2026-08-31 · `I4` · **Desvio do plano, declarado: CINCO mutantes, e o que caiu foi o
+  `phase_label`.** O plano nomeia `mut_RUN_gate_pass_row_missing` e
+  `mut_LEDGER_phase_label_last_session_blind`; o segundo **não entrou**, por medição e não por
+  gosto: as asserções que ele mata são subconjunto estrito das que `LEDGER_gate_pass_not_admitted`
+  mata (os dois tiram o rótulo de `refez`; só o segundo move `unrecognized`). Mutante que não mata
+  nada que outro não mate é a redundância que o `CLAUDE.md` manda remover. Entraram no lugar
+  `RUN_gate_pass_ignores_own_session`, `RUN_gate_pass_off_the_derived_branch` e
+  `LEDGER_gate_pass_unrecognized` — cada um é o **único** dono de uma asserção nomeada no seu
+  cabeçalho. Um sexto (`is_escalation` aprendendo `gate_pass`) foi **recusado por sabotar a coisa
+  errada**: ele mata o `jq` (chave `null` em `group_by(.kind)`), 7 asserções morrem de erro de
+  sintaxe e não de medição.
+- 2026-08-31 · `I4` · **Métrica no ledger real, medida e não suposta.**
+  `./bin/sdd autonomy --all-repos` → `d89ea43`, `e9a3681` e `353b4b1` em
+  `1 advanced · 0 churned · 0% waste` (o que o I1–I3 entregou) e `bf001fe` inalterada em
+  `23 session(s) · 21 advanced · 2 churned · 0 idle · 8% waste · 3 mission(s) · US$ 175.96`, como
+  a métrica (1) reescrita manda. O I4 é **inerte hoje**: `0` linhas `gate_pass` no ledger real, a
+  frase de divulgação nova não aparece. O evento nasce aqui e povoa da próxima corrida em diante —
+  a mesma propriedade que tornou o I1 seguro.
 
 > **Toda vez que um humano precisou entrar na linha** — um `sdd retry`, um conserto à mão, um
 > `BLOCKED` assumido — sai uma linha com o marcador `intervention:`. É a **narrativa** do que o
