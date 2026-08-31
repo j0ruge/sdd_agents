@@ -23,7 +23,7 @@ atualizado: 2026-08-31 12:00
 | I1 | A linha de REVIEW carrega `rounds_before`, `rounds_after` e `rounds_max` | `o=$(bash tests/check-autonomy.sh 2>&1); grep -c '^  ok    the REVIEW row carries rounds_before, rounds_after and rounds_max' <<< "$o"` → `1` | done | 99f65bf |
 | I2 | `def outcome` aprende que a rodada andou, com guarda de não-nulo | `o=$(bash tests/check-kaizen.sh 2>&1); grep -c '^  ok    a REVIEW round that advanced reads advanced, never churned' <<< "$o"` → `1` | done | 60d2c88 |
 | I3 | Caminho datado: linhas de REVIEW antigas recuperam a rodada do `gate_why` | `o=$(bash tests/check-autonomy.sh 2>&1); grep -c '^  ok    a pre-schema REVIEW row recovers its round from gate_why' <<< "$o"` → `1` | done | c7c2e2e |
-| I4 | A fase que fechou sem gastar sessão para de ler `refez` | `o=$(bash tests/check-kaizen.sh 2>&1); grep -c '^  ok    a phase that closed without a session does not read refez' <<< "$o"` → `1` | blocked | — |
+| I4 | A fase que fechou sem gastar sessão para de ler `refez` | `o=$(bash tests/check-kaizen.sh 2>&1); grep -c '^  ok    a phase that closed without a session does not read refez' <<< "$o"` → `1` | pending | — |
 
 ## Notas de execução
 
@@ -164,6 +164,7 @@ atualizado: 2026-08-31 12:00
   passou a contar sobre `comparable`. Medido no ledger real, a do EXEC caiu de **53 para 51** — as
   duas linhas anotadas que saíam depois como não-comparáveis. A catraca **não** desce: o item fica
   no arquivo até o PR mergear e `check-todo.sh` segue em `87 finding(s)`, igual ao baseline.
+- intervention: decisão do ponto de corte — o humano escolheu o caminho (a): a métrica (1) do `00-missao.md` foi reescrita para a medição real (as três fatias `d89ea43`/`e9a3681`/`353b4b1`; `bf001fe` inerte por mérito) e o I4 voltou a `pending` — EXEC — sem custo de sessão
 
 > **Toda vez que um humano precisou entrar na linha** — um `sdd retry`, um conserto à mão, um
 > `BLOCKED` assumido — sai uma linha com o marcador `intervention:`. É a **narrativa** do que o

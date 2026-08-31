@@ -191,9 +191,13 @@ fecha o item aberto de graça; registre `RESOLVIDO por <hash>` nele.
 **Reversível por:** reverter o commit. As linhas antigas voltam ao braço `moved`; nada é perdido,
 porque nada foi reescrito.
 
-> **Ponto de corte da métrica.** Com I1+I2+I3 a métrica (1) do `00-missao.md` tem de fechar:
-> `bf001fe` passa a `22 advanced · 1 churned · 4% waste`. Meça **aqui**, antes do I4, e registre no
-> `checkpoint.md`. Se o número não fechar, **pare** — não avance para o I4 com a métrica em aberto.
+> **Ponto de corte da métrica — MEDIDO em 2026-08-31, e a linha parou aqui como mandava.** A
+> previsão original (`bf001fe` → `22 advanced · 1 churned`) tinha a premissa factual errada; a
+> medição real (diff dos dois `bin/sdd` contra o MESMO ledger) move as fatias `d89ea43`,
+> `e9a3681` e `353b4b1` e deixa `bf001fe` inerte **por mérito** (a churn dela não pousou rodada).
+> O humano decidiu pelo caminho (a): a métrica (1) do `00-missao.md` foi reescrita para a medição
+> real e o I4 voltou a `pending`. **Não re-litigar** — o relato completo está nas notas do
+> `checkpoint.md`.
 
 ### I4 — A fase que fechou sem gastar sessão para de ler `refez`
 

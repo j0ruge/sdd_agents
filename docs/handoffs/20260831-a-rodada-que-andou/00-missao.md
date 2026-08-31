@@ -63,10 +63,17 @@ carimba o sinal mais forte da rubrica sobre uma fase que fechou limpa, com zero 
 
 Três fatos verificáveis, nesta ordem:
 
-1. **(a), no ledger real.** `"$SDD_HOME/bin/sdd" autonomy --all-repos` na linha `bf001fe` lê hoje
-   `23 session(s) · 21 advanced · 2 churned · 0 idle · 8% waste`. Depois de I1–I3 tem de ler
-   `22 advanced · 1 churned · 0 idle · 4% waste`, sobre **as mesmas 23 linhas do ledger** — nenhuma
-   migração, nenhuma linha reescrita.
+1. **(a), no ledger real — REESCRITA em 2026-08-31, decisão humana no ponto de corte.** A
+   previsão original (*"`bf001fe` passa a `22 advanced · 1 churned · 4% waste`"*) errava a
+   premissa sobre qual linha é a churn daquela fatia: a única REVIEW reprovada de `bf001fe` tem
+   `gate_why: "no 40-review-r<N>.md"` — não pousou rodada nenhuma, é churn **por mérito**, e
+   fazê-la ler `advanced` violaria a métrica (2). O que I1–I3 têm de mover — e moveram, medido
+   por diff dos dois `bin/sdd` contra o MESMO ledger (nota de 2026-08-31 no `checkpoint.md`) —
+   são exatamente as fatias `d89ea43`, `e9a3681` e `353b4b1`, cada uma de
+   `0 advanced · 1 churned · 100% waste` para `1 advanced · 0 churned · 0% waste`: as três da
+   forma `40-review-r<N>.md` com grade abaixo de A. Nenhuma outra célula, custo ou contagem de
+   missão se move; `bf001fe` fica **inalterada em `21 advanced · 2 churned`**, e isso é o
+   esperado — não a falha.
 2. **(b), por sensor.** Um mundo de fixture em que uma fase gasta uma sessão que reprova o gate e
    o gate passa depois **sem sessão** deixa de rotular a fase `refez`. ⚠️ A promessa é **`refez`
    deixar de ser afirmado**, e não a célula ficar verde: a sessão sobrevivente continua `churned`
