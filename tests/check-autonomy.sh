@@ -525,6 +525,13 @@ assert_eq "a non-EXEC row carries the three as null" "QA true" \
 assert_eq "and so does the inline retry of that same non-EXEC phase" "QA true true" \
   "$(jq -r -s '.[2] | "\(.phase) \(.auto_retry) \(.pending_before == null and .pending_after == null
                                  and .increments_total == null)"' "$LEDGER")"
+# The REVIEW half of the same door is NOT asserted here, and the reason is measured rather than
+# assumed: `current_phase` evaluates its gates in a `$(...)` subshell, so no gate_REVIEW ever runs
+# in the parent shell of this fixture and GATE_REVIEW_ROUNDS is still the empty string it was born
+# with. Removing the `[ "$phase" = "REVIEW" ]` guard at both read sites leaves this block GREEN —
+# measured, 258 assertions, no failure. The world where the leak is reachable is a REVIEW gate that
+# PASSES in the parent shell followed by a lap that opens a DOCS session, and it is built in
+# `== a REVIEW round that passed does not follow the run into the next phase ==` below.
 
 cat > "$OUTSIDE/stub/claude" <<'STUB'
 #!/usr/bin/env bash
@@ -1009,6 +1016,140 @@ assert_eq "a kit with no .git yields kit_sha:null on every row" "true" \
   "$(jq -s 'all(.kit_sha == null)' "$LEDGER")"
 assert_eq "and the warning appeared exactly once" "1" \
   "$(grep -c 'is not a git checkout' <<< "$err")"
+
+# --- the REVIEW row carries the round it advanced ---------------------------
+# The defect 20260829-o-incremento-que-andou closed for EXEC, one phase further on. REVIEW is a
+# LOOP BY DESIGN — REVIEW_MAX_ITER rounds, each landing its own 40-review-r<N>.md — and `outcome`
+# knew a single arm of progress, `pending_after < pending_before`, which exists for EXEC alone. An
+# r1 that landed with real findings and did not reach Grade A therefore read `churned`. Measured on
+# the real ledger of window 2: the REVIEW of 20260830-a-tela-que-mente-o-pagamento is the most
+# expensive cell of the whole slice at US$ 47.81, labelled `leve` off `1 advanced · 1 churned`.
+#
+# `rounds_max` is a third field and not decoration: without it "3 of 3, the phase is out of budget"
+# is indistinguishable from "3 of 10" — the reading the `increments_total` of EXEC exists to close.
+#
+# `--phase REVIEW`, and that is the point of this fixture rather than a shortcut to reach the
+# phase. The ceiling check that already calls review_rounds_on_disk sits behind
+# `[ "$phase" = "REVIEW" ] && [ -z "$force_phase" ]`, so a photograph taken THERE would write
+# `rounds_before: null` on every round a human forces — and forcing a round is exactly how a human
+# unblocks a mission, the case where the number matters most. Taken outside that guard, this run
+# proves it.
+#
+# `--max-phases 1` keeps the run to the one session this block is about: the gate refuses (Grade B),
+# the disk moved, and without the ceiling the loop would take another lap and another phase.
+echo "== the REVIEW row carries the round it advanced =="
+: > "$LEDGER"
+printf -- '---\nfase: EXEC\nstatus: done\n---\n' > "$MDIR/20-handoff-exec.md"
+printf -- '---\nfase: QA\nstatus: skipped\n---\n' > "$MDIR/30-handoff-qa.md"
+git add -A && git commit -qm "chore: exec handoff and a skipped QA, for the review round"
+# Same ordering as every other done-increment fixture in this file: the hash is read BEFORE the
+# commit that carries it, and a commit follows — gate_EXEC demands an ANCESTOR of HEAD.
+REV_DONE_HASH="$(git rev-parse --short HEAD)"
+cat > "$MDIR/checkpoint.md" <<EOF
+| ID | Incremento | Check (comando → esperado) | Status | Commit |
+|---|---|---|---|---|
+| I1 | slice one | \`true\` → 0 | done | $REV_DONE_HASH |
+EOF
+git add -A && git commit -qm "chore: the increment is done, the mission is in REVIEW"
+# Grade B, on purpose. A round that lands and PASSES is already `advanced` by the first arm of
+# `outcome` (`gate == "pass"`), so a fixture whose gate passes cannot tell the new arm from the old
+# one — the "red for the right reason" rule this repo pays for in CLAUDE.md. Here the gate refuses
+# and the round still advanced, which is the only regime where the three fields mean anything.
+cat > "$OUTSIDE/stub/claude" <<STUB
+#!/usr/bin/env bash
+cat > "$MDIR/40-review-r1.md" <<'MD'
+---
+fase: REVIEW
+gate: r1 landed with one real finding
+---
+### Overall Grade
+
+| Criterion | Grade | Rationale |
+|---|---|---|
+| Correctness | B | One real finding, fixed next round. |
+MD
+git -C "$FIX" add -A
+git -C "$FIX" commit -qm "chore: round one landed"
+cat "$STREAM_SAMPLE"
+exit 0
+STUB
+chmod +x "$OUTSIDE/stub/claude"
+
+"$SDD" run "$MISSION" --phase REVIEW --max-phases 1 >/dev/null 2>&1
+# The floor rides in the same assertion as the property: `REVIEW fail` proves the row is a REVIEW
+# session whose gate REFUSED, so the round below is the designed loop advancing and not a passing
+# gate wearing new fields. Read as three bare numbers this would go green over a gate that passed,
+# where `outcome` never needed the new arm at all.
+assert_eq "the REVIEW row carries rounds_before, rounds_after and rounds_max" "REVIEW fail 0 1 3" \
+  "$(jq -r -s '.[0] | "\(.phase) \(.gate) \(.rounds_before) \(.rounds_after) \(.rounds_max)"' "$LEDGER")"
+# Anti-vacuity of the regime: one lap, one session. A run that took a second lap would put another
+# row here and the reading above would be about a session this block never described.
+assert_eq "and --max-phases held the run to the one session this block is about" "1" "$(nrows)"
+
+# --- a REVIEW round that passed does not follow the run into the next phase ---
+# GATE_REVIEW_ROUNDS outlives the gate that set it BY DESIGN — cmd_run reads it one screen after the
+# call — so the phase guard at the read site is the only thing keeping the next phase's row from
+# inheriting a round count. A DOCS row carrying `rounds_after 1` over `rounds_before null` would
+# tell the judge DOCS advanced a review round it never had.
+#
+# WHICH sequence reaches the leak took a sabotage pass to find out, exactly as it did for the EXEC
+# sibling above: `current_phase` runs as `$(...)`, so every gate_REVIEW it evaluates sets the global
+# in a subshell that dies immediately, and the `--phase REVIEW` block above cannot reach the leak at
+# all. The one that can is a REVIEW gate that PASSES in the parent shell — door 1's own
+# `gate_"$phase"` call — followed by another lap that opens a session for DOCS.
+echo "== a REVIEW round that passed does not follow the run into the next phase =="
+: > "$LEDGER"
+rm -f "$MDIR"/40-review-r*.md
+git add -A && git commit -qm "chore: no round on disk, so REVIEW is derived again"
+# Call 1 lands a round that satisfies the gate — all Grade A, a real Rationale, a filled `gate:`
+# field — and commits, so the tree is clean when gate_REVIEW reads it. Every later call does
+# nothing: DOCS then spends a session and its inline retry without moving the disk, which is the
+# cheapest way to get two non-REVIEW rows out of the lap that follows a passing REVIEW.
+REVIEW_PASS_MARKER="$OUTSIDE/review-pass-once"
+rm -f "$REVIEW_PASS_MARKER"
+cat > "$OUTSIDE/stub/claude" <<STUB
+#!/usr/bin/env bash
+if [ ! -e "$REVIEW_PASS_MARKER" ]; then
+  : > "$REVIEW_PASS_MARKER"
+  cat > "$MDIR/40-review-r1.md" <<'MD'
+---
+fase: REVIEW
+gate: suite green, tree clean, every criterion A
+---
+### Overall Grade
+
+| Criterion | Grade | Rationale |
+|---|---|---|
+| Correctness | A | Read the diff line by line; no finding survived verification. |
+MD
+  git -C "$FIX" add -A
+  git -C "$FIX" commit -qm "chore: round one landed clean"
+fi
+cat "$STREAM_SAMPLE"
+exit 0
+STUB
+chmod +x "$OUTSIDE/stub/claude"
+
+"$SDD" run "$MISSION" >/dev/null 2>&1
+# The floor is the REVIEW row itself: it proves the gate really did pass in the parent shell and
+# really did publish, so the nulls one row later are a guard doing its job and not an empty ledger.
+assert_eq "the REVIEW row of the round that satisfied the gate says so" "REVIEW pass 0 1 3" \
+  "$(jq -r -s '.[0] | "\(.phase) \(.gate) \(.rounds_before) \(.rounds_after) \(.rounds_max)"' "$LEDGER")"
+assert_eq "a non-REVIEW row carries the three round fields as null" "DOCS true" \
+  "$(jq -r -s '.[1] | "\(.phase) \(.rounds_before == null and .rounds_after == null
+                                 and .rounds_max == null)"' "$LEDGER")"
+# The inline retry is a read site of its own — a second door, with its own `if [ "$phase" = "REVIEW" ]`
+# — and this fixture already writes the row, so probing it costs a line rather than a world. One
+# probe per door, the shape CLAUDE.md spells out for handoff_blocked_escalation.
+assert_eq "and so does the inline retry of that same non-REVIEW phase" "DOCS true true" \
+  "$(jq -r -s '.[2] | "\(.phase) \(.auto_retry) \(.rounds_before == null and .rounds_after == null
+                                 and .rounds_max == null)"' "$LEDGER")"
+
+# The fixture is restored before the block below: a 40-review-r<N>.md left on disk is a round the
+# NEXT block's REVIEW_MAX_ITER=1 ceiling would count, and its whole regime (the runner re-entering
+# the draft branch lap after lap) depends on the ceiling not firing before the first session.
+rm -f "$MDIR"/40-review-r*.md
+git add -A && git commit -qm "chore: the round is off the disk again"
 
 # --- the self-degradation review→draft leaves a trace -----------------------
 # PUBLISH_ON_REVIEW_BLOCKED=draft is the runner deciding, ALONE, to stop reviewing and publish a

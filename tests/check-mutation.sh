@@ -2389,6 +2389,40 @@ mut_KAIZEN_label_auto_retry_blind() {
   sed -i 's@(.auto_retry == true or outcome != "advanced")@(outcome != "advanced")@' "$1"
 }
 
+# ---------------------------------------------------------------------------
+# 20260831-a-rodada-que-andou — the row says whether the REVIEW round advanced.
+# ---------------------------------------------------------------------------
+# The photograph is never taken, so `rounds_before` is `null` on every REVIEW row and the arm that
+# reads "the round advanced" can never fire — REVIEW goes back to the gate-only yardstick that read
+# the most expensive cell of window 2 (`US$ 47.81`, `1 advanced · 1 churned`) as churn over a phase
+# that is a LOOP BY DESIGN. Caught by `the REVIEW row carries rounds_before, rounds_after and
+# rounds_max` in check-autonomy.sh, which reads "REVIEW fail null 1 3" against the "REVIEW fail
+# 0 1 3" it demands.
+#
+# ONE mutant and not two: the other way to get this wrong is to take the photograph INSIDE the
+# `[ -z "$force_phase" ]` guard the round ceiling sits behind, where `sdd run --phase REVIEW` — the
+# way a human forces the round that unblocks a mission — writes `null`. The fixture runs exactly
+# that path, so the same assertion reads the same "null 1 3" for both spellings; a second mutant
+# would buy no information and cost a full suite run.
+mut_RUN_review_rounds_photo_missing() {
+  sed -i 's@^    if \[ "\$phase" = "REVIEW" \]; then review_before="\$(review_rounds_on_disk)"; fi$@    :@' "$1"
+}
+
+# The phase guard at cmd_run's door 1 goes, and GATE_REVIEW_ROUNDS — which outlives its gate by
+# design, one screen up the same function — follows the run into the next phase: the DOCS session
+# opened after a PASSING REVIEW gate is born claiming a review round DOCS never had.
+#
+# ⚠️ Same trap as its EXEC sibling, and it was walked again rather than assumed. `current_phase`
+# runs as `$(...)`, so the gate_REVIEW it evaluates on every lap sets the global in a subshell that
+# dies at once, and the `--phase REVIEW` fixture cannot reach the leak at all — a sabotage pass
+# against it came back green, 258 assertions, no failure. The only sequence that reaches it is a
+# REVIEW gate passing in the PARENT shell followed by another lap, which is the block `a REVIEW
+# round that passed does not follow the run into the next phase` builds. Caught by `a non-REVIEW row
+# carries the three round fields as null` there, and by nothing else.
+mut_LEDGER_rounds_leak_across_phases() {
+  sed -i 's@^    if \[ "\$phase" = "REVIEW" \]; then review_after="\$GATE_REVIEW_ROUNDS"; review_max="\$GATE_REVIEW_MAX"; fi$@    review_after="$GATE_REVIEW_ROUNDS"; review_max="$GATE_REVIEW_MAX"@' "$1"
+}
+
 mut_KAIZEN_label_idle_blind() {
   sed -i 's@(.auto_retry == true or outcome != "advanced")@(.auto_retry == true or outcome == "churned")@' "$1"
 }
@@ -2589,6 +2623,8 @@ CATALOG=(
   KAIZEN_advance_rate_reads_gate
   KAIZEN_label_auto_retry_blind
   KAIZEN_label_idle_blind
+  RUN_review_rounds_photo_missing
+  LEDGER_rounds_leak_across_phases
 )
 
 # Mutations that are NOT caught today, each with the increment that closes it. Ratchet in both

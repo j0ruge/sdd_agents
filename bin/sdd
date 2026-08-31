@@ -1008,8 +1008,39 @@ gate_QA() {
   return 0
 }
 
+# How many REVIEW rounds are on disk once the phase has run, and the ceiling they run against.
+# Empty until a gate_REVIEW has resolved the round file; read by cmd_run and cmd_retry to build the
+# REVIEW row of the autonomy ledger, exactly like GATE_EXEC_PENDING one screen up — including the
+# hazard: they outlive the call that sets them, so every read site guards on the phase.
+GATE_REVIEW_ROUNDS=""
+GATE_REVIEW_MAX=""
+
 gate_REVIEW() {
+  # NO reset-on-entry, and that is a decision with a measurement behind it. GATE_EXEC_PENDING needs
+  # one because gate_EXEC publishes CONDITIONALLY, below its validation loop, so a refusal above the
+  # publication would hand the caller the previous gate's numbers. Here the publication is
+  # unconditional and sits above every `return` in the function, so no path can leave a stale value
+  # visible: a reset written here is overwritten three lines later, and sabotaging it away leaves
+  # the suite green — measured. Redundant rules get removed rather than probed (CLAUDE.md). Move
+  # the publication below a `return` and this comment stops being true; the reset comes back with it.
   local last; last="$(latest_matching "$MISSION_DIR/40-review-r*.md")"
+  # PUBLISHED HERE, as soon as the round file is resolved — and the asymmetry with EXEC's
+  # `pending_after`, which is published only after the gate has validated, is deliberate. EXEC's
+  # count is a VERDICT because the checkpoint is a label the executor writes about itself (`done`
+  # with no commit), so a gate about to refuse has no verdict to give. The `N` of `40-review-r<N>.md`
+  # is STRUCTURAL: it is the file name, resolved by the same `latest_matching` the refusal below
+  # reads, and nobody self-declares it. Publishing at the resolve is precisely what lets an r1 that
+  # landed with real findings and did NOT reach Grade A count as a round that advanced — which is
+  # the whole reason these fields exist. Do not "fix" this into symmetry.
+  #
+  # `review_rounds_on_disk` and not a second parse of `$last`: one definition, so the ceiling in
+  # cmd_run and the number on the ledger row cannot disagree about which round is latest.
+  GATE_REVIEW_ROUNDS="$(review_rounds_on_disk)"
+  GATE_REVIEW_MAX="$REVIEW_MAX_ITER"
+  # `0`, not empty: no round file at all IS a measurement — zero rounds on disk — and it is the
+  # honest reading for a phase whose session wrote nothing. With `rounds_before` also 0 the reader's
+  # `rounds_after > rounds_before` is false, so the row falls back to `moved`, as it did before
+  # these fields existed.
   [ -n "$last" ] || { GATE_WHY="no 40-review-r<N>.md"; return 1; }
 
   # Documented anchor: the "### Overall Grade" section of the codereview skill (contract
@@ -2204,12 +2235,15 @@ autonomy_degraded_row() { autonomy_escalation_row "degraded" "$1" "$2" "$3"; }
 
 # One row per session, written after the gate has been evaluated — the row carries the gate
 # result, so it cannot be born before it.
-# The last three are EXEC's alone and empty everywhere else (⇒ `null`, never 0: a zero would enter
+# Arguments 7–9 are EXEC's alone and empty everywhere else (⇒ `null`, never 0: a zero would enter
 # the judge's arithmetic as an increment that stood still, the same reason an escalation row
 # carries no session fields at all). They are what lets `outcome` tell the pipeline's DESIGNED loop
 # — one session per increment, the gate red until the last one — from real churn, which the gate
 # verdict and `moved` alone cannot do.
-autonomy_session_row() {  # <phase> <attempt> <auto_retry> <moved> <gate> <gate_why> [<pending_before> <pending_after> <increments_total>]
+# Arguments 10–12 are the same fact for REVIEW, which is a loop by design too: REVIEW_MAX_ITER
+# rounds, each landing its own `40-review-r<N>.md`. Same rule, same reason — empty outside REVIEW,
+# and `rounds_max` is there so "3 of 3, the phase is out of budget" cannot be read as "3 of 10".
+autonomy_session_row() {  # <phase> <attempt> <auto_retry> <moved> <gate> <gate_why> [<pending_before> <pending_after> <increments_total> <rounds_before> <rounds_after> <rounds_max>]
   autonomy_have_jq || return 0
   # Called, never substituted: `$(autonomy_kit_stamp)` would reset its one-shot warning flag.
   autonomy_kit_stamp; local stamp="$AUTONOMY_KIT_STAMP"
@@ -2229,6 +2263,7 @@ autonomy_session_row() {  # <phase> <attempt> <auto_retry> <moved> <gate> <gate_
     --arg model "$LAST_PHASE_MODEL" --arg session "$LAST_PHASE_SID" \
     --arg rc "$LAST_PHASE_RC" --arg dur "$LAST_PHASE_DUR" --arg cost "$LAST_PHASE_COST" \
     --arg pbefore "${7:-}" --arg pafter "${8:-}" --arg itotal "${9:-}" \
+    --arg rbefore "${10:-}" --arg rafter "${11:-}" --arg rmax "${12:-}" \
     '{v: 1, ts: $ts, event: "session",
       run_id: $run_id, invocation: $invocation,
       kit_sha: (if $sha == "" then null else $sha end),
@@ -2244,6 +2279,9 @@ autonomy_session_row() {  # <phase> <attempt> <auto_retry> <moved> <gate> <gate_
       pending_before: ($pbefore | tonumber? // null),
       pending_after: ($pafter | tonumber? // null),
       increments_total: ($itotal | tonumber? // null),
+      rounds_before: ($rbefore | tonumber? // null),
+      rounds_after: ($rafter | tonumber? // null),
+      rounds_max: ($rmax | tonumber? // null),
       gate: $gate, gate_why: $why}' )"
 }
 
@@ -4111,6 +4149,16 @@ cmd_run() {
     # and empty is what the ledger writes as `null`.
     local exec_before=""
     if [ "$phase" = "EXEC" ]; then exec_before="$(checkpoint_tally | cut -f1)"; fi
+    # The same photograph for REVIEW, and for the same reason: once the reviewer has written
+    # `40-review-r<N>.md` the question "how many rounds were there before" is unanswerable.
+    #
+    # ⚠️ OUTSIDE the `[ -z "$force_phase" ]` guard the ceiling check above sits behind, and that is
+    # the placement, not an oversight. `sdd run --phase REVIEW` is how a human asks for one specific
+    # round with their eyes on it — the round that unblocks a mission — and a photograph taken
+    # inside that guard would write `rounds_before: null` on exactly those. Pinned by the
+    # `--phase REVIEW` fixture in tests/check-autonomy.sh.
+    local review_before=""
+    if [ "$phase" = "REVIEW" ]; then review_before="$(review_rounds_on_disk)"; fi
     kit_guard_arm
     run_phase "$phase"
     after="$(state_fingerprint)"
@@ -4150,9 +4198,15 @@ cmd_run() {
     # tests/check-autonomy.sh, in the one fixture where that sequence is reachable.
     local exec_after="" exec_total=""
     if [ "$phase" = "EXEC" ]; then exec_after="$GATE_EXEC_PENDING"; exec_total="$GATE_EXEC_TOTAL"; fi
+    # Same door, same guard, for the REVIEW pair: GATE_REVIEW_ROUNDS outlives its gate the way
+    # GATE_EXEC_PENDING does, so without the phase test the QA session that follows a REVIEW gate
+    # would be born carrying a round count it never had.
+    local review_after="" review_max=""
+    if [ "$phase" = "REVIEW" ]; then review_after="$GATE_REVIEW_ROUNDS"; review_max="$GATE_REVIEW_MAX"; fi
     autonomy_session_row "$phase" "${attempts[$phase]}" "false" "$moved" \
       "$( [ "$gate_rc" -eq 0 ] && echo pass || echo fail )" "$GATE_WHY" \
-      "$exec_before" "$exec_after" "$exec_total"
+      "$exec_before" "$exec_after" "$exec_total" \
+      "$review_before" "$review_after" "$review_max"
     sessions["$phase"]="$(( ${sessions[$phase]:-0} + 1 ))"
 
     # DOOR 1 of the blocked escalation — see handoff_blocked_escalation above for why it exists.
@@ -4238,9 +4292,18 @@ cmd_run() {
     # wins, so no path that worked before changes.
     local exec_after2="" exec_total2=""
     if [ "$phase" = "EXEC" ]; then exec_after2="$GATE_EXEC_PENDING"; exec_total2="$GATE_EXEC_TOTAL"; fi
+    # The REVIEW pair on the same terms, `:-` fallback included. `review_after` is where this retry
+    # started — the gate ran between the two passes — and it is non-empty whenever the first pass's
+    # gate ran at all, because gate_REVIEW publishes at the RESOLVE and answers 0 for no round file.
+    # The fallback is what keeps a row from being born with `rounds_before: null` should a future
+    # refusal ever return before that publication, which is the null the EXEC sibling one screen up
+    # paid for end to end.
+    local review_after2="" review_max2=""
+    if [ "$phase" = "REVIEW" ]; then review_after2="$GATE_REVIEW_ROUNDS"; review_max2="$GATE_REVIEW_MAX"; fi
     autonomy_session_row "$phase" "${attempts[$phase]}" "true" "$moved2" \
       "$( [ "$gate_rc2" -eq 0 ] && echo pass || echo fail )" "$GATE_WHY" \
-      "${exec_after:-$exec_before}" "$exec_after2" "$exec_total2"
+      "${exec_after:-$exec_before}" "$exec_after2" "$exec_total2" \
+      "${review_after:-$review_before}" "$review_after2" "$review_max2"
     sessions["$phase"]="$(( ${sessions[$phase]:-0} + 1 ))"
 
     if [ "$gate_rc2" -eq 0 ]; then
@@ -4296,7 +4359,11 @@ cmd_retry() {
   before="$(state_fingerprint)"
   # Same photograph, same phase guard, same reasons as cmd_run's — see the two comments there.
   local exec_before="" exec_after="" exec_total=""
+  local review_before="" review_after="" review_max=""
   if [ "$phase" = "EXEC" ]; then exec_before="$(checkpoint_tally | cut -f1)"; fi
+  # `sdd retry REVIEW` is the other way a human forces a round, and it has no `--phase` guard to
+  # sit outside of: the photograph belongs here for the same reason it belongs in cmd_run.
+  if [ "$phase" = "REVIEW" ]; then review_before="$(review_rounds_on_disk)"; fi
   kit_guard_arm
   run_phase "$phase"
   after="$(state_fingerprint)"
@@ -4304,9 +4371,11 @@ cmd_retry() {
   [ "$before" != "$after" ] && moved="true"
   gate_"$phase" || gate_rc=$?
   if [ "$phase" = "EXEC" ]; then exec_after="$GATE_EXEC_PENDING"; exec_total="$GATE_EXEC_TOTAL"; fi
+  if [ "$phase" = "REVIEW" ]; then review_after="$GATE_REVIEW_ROUNDS"; review_max="$GATE_REVIEW_MAX"; fi
   autonomy_session_row "$phase" "1" "false" "$moved" \
     "$( [ "$gate_rc" -eq 0 ] && echo pass || echo fail )" "$GATE_WHY" \
-    "$exec_before" "$exec_after" "$exec_total"
+    "$exec_before" "$exec_after" "$exec_total" \
+    "$review_before" "$review_after" "$review_max"
   if [ "$gate_rc" -eq 0 ]; then ok "gate $phase: $GATE_WHY"; return 0; fi
   bad "gate $phase not yet: $GATE_WHY"
   return 3
