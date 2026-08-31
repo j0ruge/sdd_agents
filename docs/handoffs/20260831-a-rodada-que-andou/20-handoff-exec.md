@@ -50,6 +50,9 @@ diff **não tem nada visível ao usuário**: é um script bash sem interface.
   alcançou** — que é o sinal de apagamento desta `def`.
 - `7a34766` — de lambuja, fechou um item do `TODO.md`: a frase de divulgação passou a contar sobre
   `is_session and comparable`. Medido no ledger real, a do EXEC caiu de 53 para 51.
+- `8322699` — **conserto do sensor, não incremento.** Três âncoras de mutante que os incrementos
+  desta missão tornaram no-op (uma por incremento: I1, I2, I4), re-ancoradas no menor fragmento que
+  ainda nomeia a sabotagem. Detalhe na nota 🛠️ do `checkpoint.md`.
 - `715da79` — **I4.** O runner **grava o fato** de que uma fase fechou sem gastar sessão
   (`event: "gate_pass"`), e a cláusula 3 do `phase_label` passa a ler "a fase fechou?" em vez de "a
   última sessão passou?". Os dois leitores e o `docs/pipeline.md` no mesmo commit — o enum de
@@ -118,12 +121,25 @@ inteiro numa sandbox); a QA **não precisa dele** — quem o exige é o `gate_PR
 
 ## Riscos e não-feitos
 
-- **O carimbo de mutação é invalidado por tudo que esta missão tocou** (`bin/`, `tests/`). O
-  `./bin/sdd health --with-mutation` foi disparado **depois** do commit `715da79` — que é o último
-  commit de código desta fase — e o resultado está registrado abaixo. ⚠️ Qualquer commit posterior
-  em `bin/ tests/ templates/ config/` mata o carimbo e obriga a rodar de novo (20–50 min). O
-  `checkpoint.md`, este handoff, `docs/` e `KAIZEN_LOG.md` **não** invalidam; o
-  `tests/health-baseline.txt` **invalida** — então registrar achado no `TODO.md` mata o carimbo.
+- **O `sdd health` achou três âncoras podres, e elas já estão consertadas (`8322699`).**
+  `208 caught of 211`, três `CATALOGUE-BROKEN` — mutantes cujo `sed` virou no-op porque os quatro
+  incrementos desta missão fizeram crescer as linhas que eles citavam inteiras. Um por incremento:
+  I1 (`RUN_retry_pending_before_null`), I2 (`AUTONOMY_outcome_reads_moved_only`), I4
+  (`KAIZEN_series_escalations_dropped`). Re-ancorados no menor fragmento que ainda nomeia a
+  sabotagem; medidos depois: aplicam, e matam 19, 32 e 1 asserções. **Nada foi marcado `blocked`**:
+  o `TEST_CMD` estava verde o tempo todo, os quatro Checks passam, e o catálogo é opt-in fora do
+  `TEST_CMD` desde `4c86712` justamente para não trancar fase.
+- **O carimbo de mutação é invalidado por tudo que esta missão tocou** (`bin/`, `tests/`), e o
+  último commit de código desta fase é `8322699`. ⚠️ Qualquer commit posterior em
+  `bin/ tests/ templates/ config/` mata o carimbo e obriga a rodar de novo (20–50 min) — e a fase
+  REVIEW conserta dentro da própria sessão, então é **quase certo** que ela o mate. Quem tem de
+  rodar `./bin/sdd health --with-mutation` é a última fase que commitar código antes do `gate_PR`
+  (na prática, a DOCS). O `checkpoint.md`, este handoff, `docs/` e `KAIZEN_LOG.md` **não**
+  invalidam; o `tests/health-baseline.txt` **invalida** — então registrar achado no `TODO.md` mata
+  o carimbo.
+- **A lição que a próxima missão paga se ignorar:** mutante novo ancora no **fragmento**, nunca na
+  linha inteira. Três dos quinze mutantes desta missão apodreceram em quatro incrementos, e a
+  guarda `cmp -s` só os reporta depois de uma rodada inteira de catálogo (~45 min).
 - **Uma regra ficou sem probe, e está declarada no código, não escondida.** O teste
   `sessions[$ph] > 0` do `gate_pass_rows` é redundante hoje (`gate_failed` só é escrito nos dois
   sítios que incrementam `sessions`) e sobrevive à sabotagem. Fica porque decide qual falha o

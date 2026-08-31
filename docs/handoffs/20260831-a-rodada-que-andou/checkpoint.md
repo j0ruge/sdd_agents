@@ -212,6 +212,23 @@ atualizado: 2026-08-31 12:00
   cabeçalho. Um sexto (`is_escalation` aprendendo `gate_pass`) foi **recusado por sabotar a coisa
   errada**: ele mata o `jq` (chave `null` em `group_by(.kind)`), 7 asserções morrem de erro de
   sintaxe e não de medição.
+- 2026-08-31 · `I4` · 🛠️ **O `sdd health` achou TRÊS âncoras podres, uma por incremento desta
+  missão, e elas foram consertadas no commit `8322699` — não viraram achado do `TODO.md`.**
+  `208 caught of 211`, `3 problem(s)`, e os três são `CATALOGUE-BROKEN` (rc 90, a guarda `cmp -s`):
+  mutantes que **deixaram de mutar**, que é pior que sobreviver, porque pontuam zero em silêncio
+  lendo na tela como mutante que funciona. `KAIZEN_series_escalations_dropped` ancorava a linha
+  inteira da admissão da série (o I4 lhe acrescentou `or is_gate_pass`);
+  `AUTONOMY_outcome_reads_moved_only` citava o `def outcome:` braço a braço (o I2 lhe acrescentou o
+  braço da rodada); `RUN_retry_pending_before_null` ancorava a linha de argumentos do retry com `$`
+  no fim (o I1 lhe acrescentou os três argumentos de REVIEW, e com eles a continuação `\`). O
+  conserto é o mesmo dos três e já tinha sido ensinado pelo `mut_AUTONOMY_progress_ignored` dois
+  incrementos atrás: **ancorar no menor fragmento que ainda nomeia a sabotagem**. Medido depois:
+  os três aplicam, deixam o `bin/sdd` válido e matam 19, 32 e 1 asserções.
+  ⚠️ **Nenhum incremento virou `blocked` e a razão é a régua, não a conveniência:** o `TEST_CMD`
+  (`tests/run-all.sh`) estava e está **verde**, os quatro Checks passam, e o catálogo é opt-in fora
+  do `TEST_CMD` desde `4c86712` exatamente para não trancar fase. Pela régua D15 também não vira
+  item do backlog: falha **fechada** (quem a reportou foi a própria guarda) e sem consumidor fora
+  da suíte ⇒ dívida **declarada**, no cabeçalho de cada um dos três mutantes.
 - 2026-08-31 · `I4` · **Métrica no ledger real, medida e não suposta.**
   `./bin/sdd autonomy --all-repos` → `d89ea43`, `e9a3681` e `353b4b1` em
   `1 advanced · 0 churned · 0% waste` (o que o I1–I3 entregou) e `bf001fe` inalterada em
