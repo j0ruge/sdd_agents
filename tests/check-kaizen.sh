@@ -400,12 +400,19 @@ assert_eq "that parity is not vacuous — the table printed the three counts" "6
 # from an absence, and the rubric reads the fact. ⚠️ The promise is that `refez` stops being
 # ASSERTED, never that the cell turns green: the surviving session is churn on its own count, and
 # the cascade lands on `leve`. Promising `ok` would trade one false label for another.
+#
+# ⚠️ The `gate_pass` rows below carry EXACTLY the eleven keys `autonomy_gate_pass_row` builds —
+# no `kind` and no `gate_why`, because the gate that closed was evaluated inside `current_phase()`,
+# which runs as `$( )`, so GATE_WHY died with the subshell. A fixture that hands the reader a field
+# the writer never writes is the shape CLAUDE.md names: writer and fixture sharing an author and an
+# assumption, so a green suite CONFIRMS the assumption instead of measuring it. Copied from the
+# constructor, never from memory.
 echo "== series: a phase that closed without a session does not read refez =="
 mkdir -p "$OUTSIDE/gatepass" "$OUTSIDE/nogatepass"
 localize > "$OUTSIDE/gatepass/autonomy-log.jsonl" <<'EOF'
 {"v":1,"ts":"2026-08-31T12:00:00-03:00","event":"session","run_id":"g1","invocation":"run","kit_sha":"ddd8888","kit_dirty":false,"project":"p1","repo":"/p1","mission":"m30","phase":"QA","step":"QA","agent":"sdd-qa","model":"opus","attempt":1,"auto_retry":false,"session":"g1s","rc":0,"dur_s":10,"cost_usd":3.0,"moved":true,"gate":"fail","gate_why":"1 bug(s) with Status: open in the registry"}
 {"v":1,"ts":"2026-08-31T12:01:00-03:00","event":"session","run_id":"g1","invocation":"run","kit_sha":"ddd8888","kit_dirty":false,"project":"p1","repo":"/p1","mission":"m30","phase":"EXEC","step":"EXEC","agent":"sdd-executor","model":"opus","attempt":1,"auto_retry":false,"session":"g2s","rc":0,"dur_s":10,"cost_usd":1.5,"moved":true,"pending_before":1,"pending_after":0,"increments_total":1,"gate":"pass","gate_why":"0 of 1 increment(s) still to execute"}
-{"v":1,"ts":"2026-08-31T12:02:00-03:00","event":"gate_pass","run_id":"g1","invocation":"run","kit_sha":"ddd8888","kit_dirty":false,"project":"p1","repo":"/p1","mission":"m30","phase":"QA","gate_why":"report closed, registry clean, suites green"}
+{"v":1,"ts":"2026-08-31T12:02:00-03:00","event":"gate_pass","run_id":"g1","invocation":"run","kit_sha":"ddd8888","kit_dirty":false,"project":"p1","repo":"/p1","mission":"m30","phase":"QA"}
 {"v":1,"ts":"2026-08-31T12:03:00-03:00","event":"session","run_id":"g1","invocation":"run","kit_sha":"ddd8888","kit_dirty":false,"project":"p1","repo":"/p1","mission":"m30","phase":"REVIEW","step":"REVIEW","agent":"sdd-reviewer","model":"opus","attempt":1,"auto_retry":false,"session":"g3s","rc":0,"dur_s":10,"cost_usd":2.0,"moved":true,"rounds_before":0,"rounds_after":1,"rounds_max":3,"gate":"pass","gate_why":"40-review-r1.md: every criterion A"}
 {"v":1,"ts":"2026-08-31T12:04:00-03:00","event":"session","run_id":"g2","invocation":"run","kit_sha":"ddd8888","kit_dirty":false,"project":"p1","repo":"/p1","mission":"m31","phase":"QA","step":"QA","agent":"sdd-qa","model":"opus","attempt":1,"auto_retry":false,"session":"g4s","rc":0,"dur_s":10,"cost_usd":3.0,"moved":true,"gate":"fail","gate_why":"1 bug(s) with Status: open in the registry"}
 EOF
