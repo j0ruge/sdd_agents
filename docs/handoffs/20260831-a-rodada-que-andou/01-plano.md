@@ -61,6 +61,14 @@ Cada linha abaixo foi confirmada nesta sessão por leitura de código ou saída 
   sessão aponta `bin/sdd:1080`; `pipeline_log_line()` está hoje em **`bin/sdd:1618`**. É o achado
   *"22 das 33 âncoras do `TODO.md` apontam para a linha errada"*, já aberto. Não conserte aqui —
   use `1618`.
+- **`current_phase()` re-avalia todos os gates a cada derivação** (`bin/sdd:1357`) — medido no
+  grill de revisão de 2026-08-31. Consequência para o I4: "gate que passa sem sessão" é o estado
+  NORMAL de toda fase já fechada em toda retomada, e `sdd status` chama os mesmos gates. O
+  contador que separa o caso interessante já existe no laço: `sessions[$phase]`, incrementado a
+  cada `autonomy_session_row`. É ele que governa o escritor do I4.
+- **O ledger real reforça o I3 além do que o plano previa**: 25 linhas de REVIEW hoje, **24
+  recuperáveis** pela regex ancorada (15 `pass` + 8 `fail` com `40-review-r<N>.md`/`no
+  40-review-r<N>.md`); a única fora é 1 `TEST_CMD failed`. O motivo "dirty tree" tem zero linhas.
 
 ## Arquitetura da mudança
 
@@ -189,10 +197,20 @@ porque nada foi reescrito.
 
 ### I4 — A fase que fechou sem gastar sessão para de ler `refez`
 
-**O quê:** quando o laço do `cmd_run` encontra um gate que **passa sem que a fase tenha gasto
-sessão naquela volta**, o runner **grava o fato** — uma linha `event: "gate_pass"`, sem custo, sem
-sessão, nomeando `phase` e `mission`. A cláusula 3 do `refez` (`bin/sdd:4938`) passa a ler
-"a fase fechou?" em vez de "a última sessão passou?".
+**O quê:** o runner **grava o fato** de que uma fase fechou de graça — uma linha
+`event: "gate_pass"`, sem custo, sem sessão, nomeando `phase` e `mission`. A cláusula 3 do `refez`
+(`bin/sdd:4938`) passa a ler "a fase fechou?" em vez de "a última sessão passou?".
+
+⚠️ **A condição de escrita é ESTREITA, e foi decidida pelo humano no grill de 2026-08-31** (ver
+Contexto verificado: `current_phase()` re-avalia TODOS os gates a cada derivação, então "gate que
+passa sem sessão" acontece para toda fase já fechada, em toda retomada — e também em `sdd status`).
+A linha só nasce **no laço do `cmd_run`**, e só quando `sessions[$phase] > 0` nesta invocação — a
+fase comprou ao menos uma sessão nesta corrida, reprovou o gate, e ele fechou depois sem gastar
+outra. No máximo **uma** linha por fase por corrida; `sdd status` e todo comando de leitura
+continuam só-leitura. **Limite declarado** (vai no comentário do escritor): a fase que fecha de
+graça numa corrida FUTURA — sessão paga na corrida N, gate fechando sozinho na N+1 — não gera
+linha; o `refez` dela se corrige na primeira corrida em que o padrão se repete, e a alternativa
+(gravar em toda derivação) despejava até 6 linhas por retomada num ledger append-only.
 
 **Onde:** `bin/sdd` — o laço do `cmd_run`, um construtor de linha irmão do `autonomy_blocked_row`,
 `def phase_label` (`:4935`), e **`docs/pipeline.md:584`** (o enum de `event`) no mesmo commit.

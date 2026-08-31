@@ -115,7 +115,7 @@ destrava nada: plano kaizen-born nunca carrega `aprovacao: auto` (`plan_approves
 
 | # | Critério | Status | Evidência |
 |---|---|---|---|
-| a | Grill sem perguntas abertas não endereçadas (🚩 vazia ou itens deferidos com dono) | ✗ | **Não houve grill** — sessão headless do `sdd kaizen`, sem humano na sala. E há uma pergunta genuinamente aberta: o I4 escolhe entre **evento novo no ledger** (artefato) e **inferência no `phase_label`** (ordem das fases), e o `01-plano.md` § I4 recomenda a primeira com o raio de alcance enumerado. É exatamente o que um grill decidiria. |
+| a | Grill sem perguntas abertas não endereçadas (🚩 vazia ou itens deferidos com dono) | ✅ | **Grill humano em 2026-08-31** (posterior ao nascimento headless): 5 perguntas, 5 decisões — a escolha do I4 fechada com condição estreita medida na Gemba (`current_phase()` re-avalia gates), D11 confirmada, assimetria aceita, D7 direcionada à triagem. Registrado em "Decisões do grill". ⚠️ `aprovacao:` segue vazia mesmo assim — plano kaizen-born só destrava por `sdd approve`. |
 | b | Checklist kaizen 100% ✅ e checklist DDD 100% ✅ ou `n/a` justificado | ✅ | Tabela K1–K8 abaixo, 8/8; DDD `n/a` justificado abaixo |
 | c | Plano passa no teste de autocontenção (sessão nova só com 00/01/checkpoint executa) | ✅ | `01-plano.md` § "Contexto verificado" carrega os 9 fatos com `arquivo:linha` e saída de comando; nenhum incremento depende de ler o `05-verdict.md` |
 | d | Todo incremento do `checkpoint.md` tem Check executável (comando → esperado) | ✅ | 4 de 4, todos ancorados em `^  ok    ` com herestring, sem `\|` na célula (`templates/checkpoint.md:21`) |
@@ -142,9 +142,11 @@ módulos de negócio.`
 
 ## Decisões do grill (não re-litigar)
 
-> Não houve grill. As decisões abaixo foram tomadas **por esta sessão** a partir dos artefatos, e
-> estão listadas para que a execução não as re-abra — **não** para blindá-las do humano, que é
-> quem aprova.
+> O plano nasceu headless, e **o grill aconteceu depois, com o humano — 2026-08-31**, orquestrado
+> por `kaizen-software` (Gemba antes de opinar) com `brainstorming` + `grill-with-docs`: 5
+> perguntas, 5 decisões, e uma re-Gemba que confirmou as alegações factuais do plano e achou o
+> fato do `current_phase()` que a decisão 3 abaixo incorpora. As decisões 1–3 originais da sessão
+> headless foram mantidas (1, 2) ou tornadas precisas (3); as 4–6 são do grill.
 
 1. **A régua muda no meio da janela, de propósito.** Consertar depois da janela 3 significaria uma
    segunda janela medida com instrumento sabidamente errado. Mitigação é a que `20260829` já usou e
@@ -156,24 +158,23 @@ módulos de negócio.`
    um **veredito** porque o checkpoint é um rótulo que o executor escreve sobre si mesmo
    (`done` sem commit), enquanto o `N` de `40-review-r<N>.md` é **estrutural** — está no nome do
    arquivo, ninguém o auto-declara. O porquê vai no comentário da função.
-3. **O I4 grava o fato, não o infere.** A alternativa barata (deduzir que a fase fechou porque uma
-   fase POSTERIOR gastou sessão) usa o `def phase_index` que já existe e não muda contrato nenhum —
-   e é exatamente a forma que `f00c2dc` recusou com a frase *"uma inferência não passa na frente do
-   que o runner mediu"*. Recomendada a gravação; a inferência fica escrita como plano B **com a
-   condição de Jidoka do K6**.
+3. **O I4 grava o fato, não o infere — com condição ESTREITA, decidida pelo humano no grill.**
+   A linha `gate_pass` só nasce no laço do `cmd_run` e só quando `sessions[$phase] > 0` na
+   corrida (1 linha por fase por corrida; `sdd status` nunca escreve; limite declarado no
+   `01-plano.md` § I4). A inferência via `phase_index` segue como plano B apenas sob o Jidoka do
+   K6 — é a forma que `f00c2dc` recusou com *"uma inferência não passa na frente do que o runner
+   mediu"*.
+4. **A assimetria do `rounds_after` está aceita** (grill, 2026-08-31): o `N` é estrutural (nome do
+   arquivo, `latest_matching` compartilhado com o gate), publicar no resolve é o que faz a r1
+   reprovada contar como rodada que andou. O porquê vai no comentário + mutante.
+5. **D11 confirmada pelo humano** (grill, 2026-08-31): `event: "degraded"` próprio, como já opera
+   no código desde o laço da QA. A 🚩 sai do `CONTEXT.md` no commit deste grill.
+6. **Os 6 mutantes entram; o destino do alvo "suíte < 30 s" da D7** (subir × aposentar) **fica
+   para a triagem do próximo `sdd kaizen`**, com o número medido na mesa. Não se corta mutação
+   para ganhar relógio.
 
 ## Pendências para o humano
 
-1. **A escolha do I4 (decisão 3) é a única com sangue genuíno neste plano.** Um `event` novo no
-   ledger é mudança de contrato: `docs/pipeline.md` documenta o enum, e `is_escalation`,
-   `outcome`, `phase_label`, `composition` e os cinco baldes de `excluded` são os cinco leitores.
-   O `01-plano.md` argumenta que quatro deles **já ignoram** o que não é `session` nem escalada e
-   que só o `phase_label` precisa aprender — mas isso é uma **previsão desta sessão, não uma
-   medição**, e está marcada como risco. Se o humano preferir a inferência, o I4 encolhe para uma
-   mudança de `jq` e a decisão 3 se inverte.
-2. **A D11 continua esperando confirmação humana** (`CONTEXT.md` § 🚩): `event: "degraded"` próprio
-   contra reusar `blocked` com `kind` novo. Esta missão **acrescenta** um valor ao mesmo enum, então
-   é a hora natural de fechar a D11 junto — ou de decidir explicitamente que ela continua aberta.
-3. **O alvo "suíte < 30 s" da D7 segue não atingido e esta missão acrescenta mutantes**, que é o
-   multiplicador que o `TODO.md` já mede. Não bloqueia; entra na conta de quem decidir entre subir
-   o alvo ou aposentá-lo por escrito.
+**Todas as três originais foram resolvidas no grill de 2026-08-31** — viraram as decisões 3, 5 e 6
+acima (I4 com condição estreita; D11 confirmada e a 🚩 removida do `CONTEXT.md` no commit do
+grill; D7 direcionada à triagem do próximo kaizen). Nada pendente além do próprio `sdd approve`.
