@@ -730,9 +730,18 @@ the repo it runs in — the file is global, the reading is not, see above: `late
 kit versions (by
 **file order** of first appearance, never by sort — and a reappearing old sha rejoins its old
 group; `sdd autonomy` orders its version table off the **same population**, the rows both the
-table and the escalations block admit — comparable sessions and on-axis escalations — the
-population the series reads through `comparable_row`, because two readers disagreeing about which
-version is newest over one file is a defect and not a view), each with missions, `missions_with_session` (the subset that bought an observation — the
+table and the escalations block admit — comparable sessions and on-axis escalations — which the
+series states once as `shas_in_file_order`, because two readers disagreeing about which version is
+newest over one file is a defect and not a view. ⚠️ That predicate is written **positively**
+(`session or escalation`) rather than as "not a gate closure", though the two agree on today's
+population: a recorded closure must not mint a version — `latest` would point at a slice with
+`sessions: 0`, `previous` would slide, and `gate_KAIZEN` derives its expected sha from
+`latest.kit_sha`, so the gate would become unsatisfiable — and written positively a **fourth**
+event has to opt in instead of minting one by omission. ⚠️ The parity is **not** total and the
+gap is registered rather than claimed away: `comparable_row`, which partitions `$ok`, still admits
+the closure, so a closure as the first row of a sha can still make the two readers name a different
+`latest`. Today's writer cannot reach that state; the finding is open in `TODO.md` against
+`bin/sdd:4929`), each with missions, `missions_with_session` (the subset that bought an observation — the
 guard below counts these, not the raw mission tally), sessions, `outcomes` (`{advanced, churned, idle}` — what the sessions did, the headline since
 2026-08-28; the same three buckets appear in every `detail[]` entry), `advance_rate` (the
 `advanced` share of those same sessions — one yardstick read twice, so it can never contradict the
@@ -742,8 +751,14 @@ which is why a nine-session EXEC that advanced nine increments used to print `0.
 measures), cost, escalations
 by kind, a per repo×mission×phase `detail` (each entry naming its `repo`), and a label per group:
 
-- `refez` — an escalation, a human `sdd retry`, or the phase's last session still failing its
-  gate: the work was pushed again.
+- `refez` — an escalation, a human `sdd retry`, or the phase not having closed: the work was pushed
+  again.
+  ⚠️ The third clause asked "did the phase's last **session** fail its gate?" until
+  `20260831-a-rodada-que-andou`, and that is only the same question while every gate that passes
+  costs a session — which is false whenever the QA⇄EXEC fix loop closes a phase for free. It now
+  reads the **last** of (sessions ∪ recorded closures), a position and never set membership; with
+  no closure in the group the expression is the old one, term for term. Worked example and the
+  declared limits are two sections up, under the third row shape.
 - `leve` — an in-loop auto retry, **or any session of the phase whose `outcome` is not
   `advanced`** (`churned`: it wrote, the gate refused, and the increment did not move, so the
   runner bought a lap that produced nothing; `idle`: it did not even write): friction, absorbed.
