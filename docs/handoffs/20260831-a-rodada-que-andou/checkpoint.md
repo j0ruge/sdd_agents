@@ -20,7 +20,7 @@ atualizado: 2026-08-31 00:00
 
 | ID | Incremento | Check (comando → esperado) | Status | Commit |
 |---|---|---|---|---|
-| I1 | A linha de REVIEW carrega `rounds_before`, `rounds_after` e `rounds_max` | `o=$(bash tests/check-autonomy.sh 2>&1); grep -c '^  ok    the REVIEW row carries rounds_before, rounds_after and rounds_max' <<< "$o"` → `1` | pending | — |
+| I1 | A linha de REVIEW carrega `rounds_before`, `rounds_after` e `rounds_max` | `o=$(bash tests/check-autonomy.sh 2>&1); grep -c '^  ok    the REVIEW row carries rounds_before, rounds_after and rounds_max' <<< "$o"` → `1` | done | 99f65bf |
 | I2 | `def outcome` aprende que a rodada andou, com guarda de não-nulo | `o=$(bash tests/check-kaizen.sh 2>&1); grep -c '^  ok    a REVIEW round that advanced reads advanced, never churned' <<< "$o"` → `1` | pending | — |
 | I3 | Caminho datado: linhas de REVIEW antigas recuperam a rodada do `gate_why` | `o=$(bash tests/check-autonomy.sh 2>&1); grep -c '^  ok    a pre-schema REVIEW row recovers its round from gate_why' <<< "$o"` → `1` | pending | — |
 | I4 | A fase que fechou sem gastar sessão para de ler `refez` | `o=$(bash tests/check-kaizen.sh 2>&1); grep -c '^  ok    a phase that closed without a session does not read refez' <<< "$o"` → `1` | pending | — |
@@ -45,7 +45,30 @@ atualizado: 2026-08-31 00:00
 - 2026-08-31 00:00 · `I4` · **Condição de Jidoka escrita.** Se a asserção diferencial do I4 acusar
   diferença em qualquer campo além de `labels` — em especial nos cinco baldes de `excluded` —, o
   I4 vira `blocked` e missão própria. I1–I3 já entregam a métrica sozinhos.
-- 2026-08-31 00:00 · `—` · ⚠️ **Ordem que custa 20 a 50 min quando se erra:** `./bin/sdd health`
+- 2026-08-31 · `I1` · **A guarda de fase precisou de um mundo próprio, e o plano não previa isso.**
+  Os dois primeiros probes que escrevi para ela (`a non-REVIEW row carries the three round fields
+  as null`) nasceram verdes E sobreviveram à sabotagem: com a guarda removida nos dois sítios de
+  leitura, a suíte ficou verde — 258 asserções, zero falha. Motivo medido: `current_phase()` avalia
+  os gates em `$(...)`, então o `GATE_REVIEW_ROUNDS` do subshell morre e nenhum `gate_REVIEW` roda
+  no shell pai daquele fixture. É a **mesma** armadilha que o irmão do EXEC documenta em
+  `bin/sdd:4477`. Em vez de apagar a guarda, construí o mundo que a alcança — bloco
+  `== a REVIEW round that passed does not follow the run into the next phase ==`, um gate de REVIEW
+  que PASSA no shell pai seguido de uma volta que abre sessão de DOCS —, e aí os dois probes morrem.
+- 2026-08-31 · `I1` · **Desvio do plano, declarado: DOIS mutantes em vez de um.** O plano nomeia
+  `mut_RUN_review_rounds_photo_missing`; entrou também `mut_LEDGER_rounds_leak_across_phases`,
+  porque a nota acima mostra que a guarda de fase é justamente a regra cujo probe nasce decorativo.
+  Um terceiro (o escritor deixar de emitir os três campos) foi **recusado por redundância**: a mesma
+  asserção o pega, e mutante custa uma suíte inteira.
+- 2026-08-31 · `I1` · **Uma regra escrita foi removida por sabotagem, não por gosto.** O
+  reset-on-entry de `GATE_REVIEW_ROUNDS`/`GATE_REVIEW_MAX` (irmão do que `gate_EXEC` tem) é
+  inalcançável: a publicação é incondicional e fica acima de todo `return` da função, então
+  sabotá-lo deixa a suíte verde. Removido, com o comentário dizendo **o que** o torna redundante e
+  **o que** o traria de volta (mover a publicação para baixo de um `return`).
+- 2026-08-31 · `I1` · **Inércia confirmada, que é a propriedade que torna o I1 seguro.**
+  `./bin/sdd autonomy --all-repos | grep bf001fe` →
+  `23 session(s) · 21 advanced · 2 churned · 0 idle · 8% waste · 3 mission(s) · US$ 175.96`,
+  idêntico ao estado registrado antes da missão. Nenhum leitor olha os campos novos até o I2.
+- 2026-08-31 · `—` · ⚠️ **Ordem que custa 20 a 50 min quando se erra:** `./bin/sdd health`
   roda **depois do último commit de código**. Registrar achado no `TODO.md` move
   `tests/health-baseline.txt`, que mora dentro da chave do carimbo e o invalida.
 
