@@ -2622,6 +2622,37 @@ mut_LEDGER_gate_pass_mints_a_cell() {
   sed -i 's@| map(select((map(select(.event == "session" or is_escalation)) | length) > 0))@@' "$1"
 }
 
+# `sdd retry` is the third writer of the six count fields and the last one without an assertion.
+# Unguarded, its REVIEW photograph runs for every phase — and `review_rounds_on_disk` prints `0`
+# rather than nothing, so the row is never merely odd: on a mission with a round already on disk a
+# `sdd retry DOCS` is born claiming `rounds_before: 1`, a count that phase never had, feeding the
+# judge's `rounds_after > rounds_before` arithmetic. The anchor is the comment line above the guard
+# because the guard itself is byte-identical to cmd_run's (bin/sdd:4361), and a `perl -0` without
+# /g would have silently sabotaged the sibling and concluded about the wrong function. Caught by
+# `and its row carries all six count fields as null` in check-autonomy.sh.
+mut_RUN_retry_photographs_every_phase() {
+  perl -0pi -e 's/# sit outside of: the photograph belongs here for the same reason it belongs in cmd_run\.\n  if \[ "\$phase" = "REVIEW" \]; then review_before="\$\(review_rounds_on_disk\)"; fi/# sit outside of: the photograph belongs here for the same reason it belongs in cmd_run.\n  review_before="\$(review_rounds_on_disk)"/' "$1"
+}
+
+# The EXEC half of the same door, and it fails in the same direction: `checkpoint_tally` always
+# tallies, so an unguarded photograph writes `pending_before: 0` onto a non-EXEC row — a zero that
+# reads as "a session that ran and advanced nothing" instead of "this phase has no increments".
+# Same assertion owns it, because the assertion reads all six fields at once: one row, one contract.
+mut_RUN_retry_exec_photographs_every_phase() {
+  perl -0pi -e 's/  if \[ "\$phase" = "EXEC" \]; then exec_before="\$\(checkpoint_tally \| cut -f1\)"; fi\n  # `sdd retry REVIEW`/  exec_before="\$(checkpoint_tally | cut -f1)"\n  # `sdd retry REVIEW`/' "$1"
+}
+
+# The inline retry stops overwriting the first pass's gate verdict. The retry that PASSES then
+# leaves `gate_failed[$phase]` at 1, and the next lap's gate_pass_rows writes a `gate_pass` row
+# claiming the phase closed WITHOUT a session — about a phase that closed with the very retry
+# sitting one row above it in the same ledger. Permanent, in an append-only file, and it feeds both
+# `phase_label` and the `$closed` count. Every other inline-retry fixture in the suite ends on a
+# retry that FAILS, where this sabotage is invisible; caught by `the phase whose inline retry
+# passed gets no closure row` in check-autonomy.sh, and by nothing else.
+mut_RUN_inline_retry_keeps_the_failed_verdict() {
+  perl -0pi -e 's/    gate_failed\["\$phase"\]="\$\( \[ "\$gate_rc2" -eq 0 \] && echo 0 \|\| echo 1 \)"\n//' "$1"
+}
+
 CATALOG=(
   PLAN_empty_approval
   PLAN_kaizen_born_blind
@@ -2836,6 +2867,9 @@ CATALOG=(
   LEDGER_gate_pass_not_admitted
   LEDGER_gate_pass_mints_a_cell
   LEDGER_gate_pass_membership_not_position
+  RUN_retry_photographs_every_phase
+  RUN_retry_exec_photographs_every_phase
+  RUN_inline_retry_keeps_the_failed_verdict
 )
 
 # Mutations that are NOT caught today, each with the increment that closes it. Ratchet in both

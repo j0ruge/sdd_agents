@@ -1301,14 +1301,106 @@ assert_eq "it names the closure instead, so nothing leaves the accounting in sil
   "$(num_before "$gp_out" 'gate\(s\) closed without a session')"
 assert_bucket_sum "the buckets still sum to the header total (a recorded closure)" "$gp_out"
 
+# --- cmd_retry photographs only the phase it is retrying --------------------
+# `sdd retry` is the THIRD writer of the six count fields, beside cmd_run's first pass and cmd_run's
+# inline retry, and it was the one with no assertion at all: the sibling probes above ("a non-REVIEW
+# row carries the three round fields as null" and its EXEC twin) live in cmd_run and say nothing
+# about this function. Sabotaged — either photograph guard deleted — the whole suite stayed green,
+# and neither guard is inert: `review_rounds_on_disk` prints `0` rather than nothing, and
+# `checkpoint_tally` always tallies. The row then carries counts the phase never had into the
+# judge's arithmetic, which is the same contract break the cmd_run twin exists to refuse.
+#
+# THE FIXTURE IS FREE AT EXACTLY THIS POINT OF THE FILE, and that is why the block sits here rather
+# than building a world of its own. The gate_pass block above leaves a mission whose EXEC, QA and
+# REVIEW gates all pass, with a ROUND FILE and a full checkpoint still on disk — the one state where
+# the sabotage is LOUD (`rounds_before: 1` on a DOCS row) instead of a `0` a reader could mistake for
+# a count that was honestly taken.
+#
+# DECLARED, NO PROBE, and measured rather than assumed: the OTHER two guards of this function — the
+# `review_after`/`review_max` and `exec_after`/`exec_total` pairs, read AFTER the gate call — are
+# unreachable today. `cmd_retry` calls `gate_"$phase"` only for the phase it is retrying, and
+# `current_phase()` runs its gates inside `$( )`, whose assignments die with the subshell; so
+# `GATE_REVIEW_ROUNDS` and `GATE_EXEC_PENDING` still hold the empty string their declarations gave
+# them (bin/sdd:736, :1015) and deleting those two guards changes no byte of the row. They stay
+# because they decide WHICH failure the next writer gets the day a second gate call in the parent
+# shell is added here. That is a world this fixture cannot build, NOT a claim that none exists —
+# the distinction this repo paid for in d4deb35/7cbc8e2.
+echo "== sdd retry photographs only the phase it is retrying =="
+: > "$LEDGER"
+# THE FLOOR, and it is what makes the sabotage loud instead of ambiguous: the round file lap 3 of
+# the block above landed is still on disk, so an unguarded photograph reads 1 and not 0. Without it
+# this block would assert `null != 0` over a world where the guarded and unguarded readings agree.
+assert_eq "the world has a round on disk for an unguarded photograph to find" "1" \
+  "$(find "$MDIR" -maxdepth 1 -name '40-review-r*.md' | wc -l)"
+"$SDD" retry "$MISSION" >/dev/null 2>&1 || true
+# The second floor: the phase actually retried is DOCS. If the derivation ever lands somewhere else
+# the assertion below would be measuring the guard of the phase it is supposed to exempt.
+assert_eq "the retried phase is DOCS, which is neither EXEC nor REVIEW" "DOCS retry 1" \
+  "$(jq -r -s '"\(.[0].phase) \(.[0].invocation) \(length)"' "$LEDGER")"
+assert_eq "and its row carries all six count fields as null" "true" \
+  "$(jq -r -s '.[0] | .rounds_before == null and .rounds_after == null and .rounds_max == null
+                      and .pending_before == null and .pending_after == null
+                      and .increments_total == null' "$LEDGER")"
+
+# --- an inline retry that PASSES leaves no false closure --------------------
+# `gate_failed[$phase]` is written at both session sites of cmd_run, and until now only the FIRST
+# had a probe: deleting the retry's own write left the suite green under a comment that invokes "one
+# probe per door". The consequence is not cosmetic. It is a FALSE `gate_pass` row — permanent, in a
+# file that is append-only by contract — saying a phase closed WITHOUT a session about a phase that
+# closed with the very retry sitting one row above it. It then feeds `phase_label` (where a closure
+# outvotes the sessions before it) and the `$closed` count the human reader prints.
+#
+# THE WORLD IS THE ONE EVERY OTHER FIXTURE IN THIS FILE MISSES, and that is why it was still open:
+# every inline-retry fixture here ends on a retry that FAILS, and a failing retry writes the same
+# `1` the first pass already wrote, so the sabotage is invisible. The retry has to PASS — and then
+# the run has to take ANOTHER lap, because gate_pass_rows speaks only from the derived branch.
+echo "== an inline retry that passes leaves no false closure =="
+: > "$LEDGER"
+DOCS_CALLS="$OUTSIDE/docs-retry-calls"
+: > "$DOCS_CALLS"
+# Call 1 is the DOCS session and does NOTHING on purpose: cmd_run reaches its inline retry only
+# through the `moved == "false"` guard. Call 2 IS that retry, and it lands the drift checklist that
+# makes gate_DOCS pass, so the phase closes by BUYING a second session.
+cat > "$OUTSIDE/stub/claude" <<STUB
+#!/usr/bin/env bash
+echo x >> "$DOCS_CALLS"
+n=\$(wc -l < "$DOCS_CALLS")
+if [ "\$n" = "2" ]; then
+  printf '# Docs\n\ndrift checklist\n\n| Area | Doc | Status | Evidence |\n|---|---|---|---|\n| runner | README | ✅ | commit abc1234 |\n' \
+    > "$MDIR/45-docs.md"
+  git -C "$FIX" add -A
+  git -C "$FIX" commit -qm "chore: the retry landed the docs the first pass did not"
+fi
+cat "$STREAM_SAMPLE"
+exit 0
+STUB
+chmod +x "$OUTSIDE/stub/claude"
+
+"$SDD" run "$MISSION" --max-phases 2 >/dev/null 2>&1 || true
+# FLOOR 1: the world was actually built. DOCS bought two sessions; the first failed its gate without
+# moving the disk (the only route to the inline retry) and the second is the retry, which PASSED.
+# Without this the assertion below goes green over any run that never reached a retry at all.
+assert_eq "DOCS failed without moving, retried inline, and the retry passed" "2 fail false true pass" \
+  "$(jq -r -s '[.[] | select(.event == "session" and .phase == "DOCS")]
+               | "\(length) \(.[0].gate) \(.[0].moved) \(.[1].auto_retry) \(.[1].gate)"' "$LEDGER")"
+# FLOOR 2: the run took the lap that ASKS. gate_pass_rows is called from the derived branch only, so
+# a run that stopped on the passing retry would prove nothing about the verdict it left behind.
+assert_eq "and the run took the next lap, so the writer was asked about DOCS" "DOCS DOCS PR" \
+  "$(jq -r -s '[.[] | select(.event == "session") | .phase] | join(" ")' "$LEDGER")"
+# THE assertion: a phase that closed WITH its own retry session did not close for free.
+assert_eq "the phase whose inline retry passed gets no closure row" "0" \
+  "$(jq -s '[.[] | select(.event == "gate_pass")] | length' "$LEDGER")"
+
 # The fixture is restored for the block below, which needs a mission sitting in REVIEW: the QA
 # tree, the QA handoff and — the one that bites — the round file lap 3 landed. A 40-review-r<N>.md
 # left here is a round the next block's REVIEW_MAX_ITER=1 ceiling counts BEFORE its first session,
 # and its whole regime (the runner re-entering the draft branch lap after lap) depends on the
 # ceiling not firing that early. Measured: 15 assertions of that block died on the leftover file.
 rm -rf "$FIX/docs/qa"
-rm -f "$MDIR/30-handoff-qa.md" "$MDIR"/40-review-r*.md
-git add -A && git commit -qm "chore: the qa artifacts and the round are off the disk again"
+# `45-docs.md` joins the sweep because the block just above landed one: left on disk it makes
+# gate_DOCS pass, and the degradation block below derives its phase from the same gates.
+rm -f "$MDIR/30-handoff-qa.md" "$MDIR/45-docs.md" "$MDIR"/40-review-r*.md
+git add -A && git commit -qm "chore: the qa artifacts, the round and the docs are off the disk again"
 
 # --- the self-degradation review→draft leaves a trace -----------------------
 # PUBLISH_ON_REVIEW_BLOCKED=draft is the runner deciding, ALONE, to stop reviewing and publish a

@@ -4579,6 +4579,16 @@ cmd_retry() {
   kit_guard_check "$phase"
   [ "$before" != "$after" ] && moved="true"
   gate_"$phase" || gate_rc=$?
+  # DECLARED, NO PROBE — and MEASURED, not assumed. These two guards are inert today: this function
+  # calls `gate_"$phase"` only for the phase it is retrying, and `current_phase()` runs its gates
+  # inside `$( )`, whose assignments die with the subshell. So both globals still hold the empty
+  # string their declarations gave them (:736, :1015), and deleting either guard changes no byte of
+  # the row — sabotaged one at a time, the suite stays green, where the two PHOTOGRAPH guards above
+  # turn it red (both pinned by "sdd retry photographs only the phase it is retrying" in
+  # tests/check-autonomy.sh). They stay because they decide WHICH failure the next writer gets the
+  # day a second gate call in the parent shell is added here — the world this fixture could not
+  # build, NOT a claim that none exists. That distinction is what d4deb35 got wrong and 7cbc8e2
+  # had to undo.
   if [ "$phase" = "EXEC" ]; then exec_after="$GATE_EXEC_PENDING"; exec_total="$GATE_EXEC_TOTAL"; fi
   if [ "$phase" = "REVIEW" ]; then review_after="$GATE_REVIEW_ROUNDS"; review_max="$GATE_REVIEW_MAX"; fi
   autonomy_session_row "$phase" "1" "false" "$moved" \
