@@ -1008,8 +1008,39 @@ gate_QA() {
   return 0
 }
 
+# How many REVIEW rounds are on disk once the phase has run, and the ceiling they run against.
+# Empty until a gate_REVIEW has resolved the round file; read by cmd_run and cmd_retry to build the
+# REVIEW row of the autonomy ledger, exactly like GATE_EXEC_PENDING one screen up — including the
+# hazard: they outlive the call that sets them, so every read site guards on the phase.
+GATE_REVIEW_ROUNDS=""
+GATE_REVIEW_MAX=""
+
 gate_REVIEW() {
+  # NO reset-on-entry, and that is a decision with a measurement behind it. GATE_EXEC_PENDING needs
+  # one because gate_EXEC publishes CONDITIONALLY, below its validation loop, so a refusal above the
+  # publication would hand the caller the previous gate's numbers. Here the publication is
+  # unconditional and sits above every `return` in the function, so no path can leave a stale value
+  # visible: a reset written here is overwritten three lines later, and sabotaging it away leaves
+  # the suite green — measured. Redundant rules get removed rather than probed (CLAUDE.md). Move
+  # the publication below a `return` and this comment stops being true; the reset comes back with it.
   local last; last="$(latest_matching "$MISSION_DIR/40-review-r*.md")"
+  # PUBLISHED HERE, as soon as the round file is resolved — and the asymmetry with EXEC's
+  # `pending_after`, which is published only after the gate has validated, is deliberate. EXEC's
+  # count is a VERDICT because the checkpoint is a label the executor writes about itself (`done`
+  # with no commit), so a gate about to refuse has no verdict to give. The `N` of `40-review-r<N>.md`
+  # is STRUCTURAL: it is the file name, resolved by the same `latest_matching` the refusal below
+  # reads, and nobody self-declares it. Publishing at the resolve is precisely what lets an r1 that
+  # landed with real findings and did NOT reach Grade A count as a round that advanced — which is
+  # the whole reason these fields exist. Do not "fix" this into symmetry.
+  #
+  # `review_rounds_on_disk` and not a second parse of `$last`: one definition, so the ceiling in
+  # cmd_run and the number on the ledger row cannot disagree about which round is latest.
+  GATE_REVIEW_ROUNDS="$(review_rounds_on_disk)"
+  GATE_REVIEW_MAX="$REVIEW_MAX_ITER"
+  # `0`, not empty: no round file at all IS a measurement — zero rounds on disk — and it is the
+  # honest reading for a phase whose session wrote nothing. With `rounds_before` also 0 the reader's
+  # `rounds_after > rounds_before` is false, so the row falls back to `moved`, as it did before
+  # these fields existed.
   [ -n "$last" ] || { GATE_WHY="no 40-review-r<N>.md"; return 1; }
 
   # Documented anchor: the "### Overall Grade" section of the codereview skill (contract
@@ -1867,6 +1898,36 @@ ledger_row_is_local() {
 # `moved` arm exactly as they did; I3 is what teaches the readers to recover their count from
 # `gate_why`.
 #
+# THE ROUND ARM is the same fact for REVIEW, added 2026-08-31, and the reason it is a THIRD arm and
+# not a generalisation of the second is that the two counts move in opposite directions: EXEC counts
+# increments still to do and goes DOWN, REVIEW counts rounds already landed and goes UP. One arm
+# reading "the number changed" would call a checkpoint that GREW — the fix increments QA writes —
+# progress, which is the opposite of what it is.
+#
+# REVIEW is a loop by design too: REVIEW_MAX_ITER rounds, each landing its own `40-review-r<N>.md`.
+# With `pending_after < pending_before` as the only progress the readers knew, an r1 that landed
+# with real findings and did not reach Grade A read `churned` — the runner charging the phase for
+# the refusal its own design schedules, which is letter for letter the defect the arm above closed
+# for EXEC. Measured on window 2 (kit_sha bf001fe): the REVIEW of
+# 20260830-a-tela-que-mente-o-pagamento is the most expensive cell of the whole slice, US$ 47.81,
+# labelled `leve` off `1 advanced · 1 churned`, in the phase that consumes 41% of the spend.
+#
+# The non-null guard is reachable by a route the EXEC sibling does not have: `rounds_before` is a
+# PHOTOGRAPH taken before run_phase, so a row born on a path that never took it carries null there
+# while `rounds_after` carries a real count — and `2 > null` is TRUE. Without the guard that row
+# reads as the loudest progress in the ledger, and `mut_RUN_review_rounds_photo_missing` (which
+# produces exactly that shape) would stop moving the histogram at all. Measured by `a REVIEW row
+# with no round before it is not a round that advanced` in check-kaizen.sh.
+#
+# ONE non-null guard here and TWO one arm up, and the asymmetry is the operand order, not an
+# oversight. The EXEC arm puts the possibly-null `pending_after` on the LEFT of `<`, where jq's
+# ordering makes `null < 2` TRUE; this arm puts the possibly-null `rounds_after` on the LEFT of `>`,
+# where `null > 2` is FALSE — and with `rounds_before` already guarded, `.rounds_after != null` can
+# change no row's outcome. Measured on jq 1.7 (`null > 5` => false, `null < 5` => true), and the
+# sabotage pass agrees: written out, deleting it left the whole suite green, while deleting either
+# guard of the EXEC arm kills an assertion. A rule no sabotage can break is redundant, so it is not
+# here — CLAUDE.md. Swap the operands or flip the comparison and it comes back with them.
+#
 # Applied to the sessions each reader admits, and both admit a session only with `moved` present:
 # cmd_autonomy's `comparable` has demanded `has("moved")` all along, and kaizen_series now files a
 # session without it into `excluded.non_comparable` too — the same bucket, not a second one with
@@ -1921,9 +1982,85 @@ ledger_row_is_local() {
 # its first old row against M instead of against the row above it.
 # The key is `[repo, mission] | tostring` — an ARRAY rendered as JSON, for the reason mission_key
 # states in both readers: a separator chosen here would collide with one inside a repo path.
+#
+# `historic_rounds` is the same second half for REVIEW, added 2026-08-31, and it exists for the
+# same reason measured over the same file: on that day the real ledger held 25 REVIEW rows and ZERO
+# of them carried `rounds_before`. Without it the round arm above serves nothing but rows written
+# from here on, and the whole REVIEW history the window exists to explain stays on the `moved` arm
+# reading `churned` for ever.
+#
+# It recovers the SAME fact from the SAME source the field comes from: gate_REVIEW writes the round
+# file's own name into GATE_WHY, so the row carries `40-review-r<N>.md` verbatim, and the `N` is
+# STRUCTURAL — it is the file name resolved by `latest_matching`, not a number anybody declared.
+# Two spellings, and the second is not a special case but the zero: the fixed string
+# `no 40-review-r<N>.md` means the session landed no round file at all, and it recovers 0 — where
+# `<N>` is not a digit, so the anchored regex separates the two with no ambiguity. Measured over
+# the real ledger: 24 of 25 rows reachable, the one that is not being a `TEST_CMD failed` refusal.
+# DECLARED LIMIT, and it is the honest half of the same fact: two of gate_REVIEW's eight refusals
+# name no file (`TEST_CMD failed`, `working tree dirty after the review`), and those rows are left
+# where they were rather than guessed at.
+# DECLARED, no probe: the `^` of the two regexes. The sabotage pass of 2026-08-31 unanchored the
+# `test` and the whole suite stayed green, and the world it would take to make that matter is one no
+# gate_REVIEW writes today — a `gate_why` naming `40-review-r<N>.md` somewhere other than its first
+# character. That is the world I could not build, NOT a claim that none exists, and the anchor stays
+# because it decides WHICH failure a future one produces: `test` alone unanchored, with `capture`
+# still anchored, makes `capture` return nothing and `null | tonumber` kills the reader outright.
+# The `test` itself is NOT redundant and does have a probe — replacing it with `true` makes `capture`
+# emit empty on a non-matching row, and empty inside the `as $n` binding DROPS the row: 7 assertions
+# in check-autonomy.sh die, the bucket sums among them. `rounds_max` is not recovered at all — it is
+# REVIEW_MAX_ITER, a config constant that appears nowhere in the prose, and `outcome` does not read
+# it; a recovered row carries the round it landed and no ceiling to read it against.
+#
+# THE GUARD IS TWO CONDITIONS, `.rounds_before == null AND .rounds_after == null`, and the second is
+# where this def deliberately does NOT copy its EXEC sibling. A row carrying `rounds_after` with a
+# null `rounds_before` is not pre-schema — it is a row this runner wrote whose PHOTOGRAPH went
+# missing, which is exactly the shape `mut_RUN_review_rounds_photo_missing` produces and exactly
+# what the non-null guard in `outcome` exists to catch. Repairing it from prose would launder the
+# sabotage and leave that mutant scoring a point for nothing. It is also the measured harm the EXEC
+# sibling already paid for once and fixed at the WRITER (see the `:-$exec_before` comment in
+# cmd_retry): a retry born with `pending_before: null` was annotated by `historic_progress`, handed
+# a fabricated count, and read `advanced` over a retry that advanced nothing.
+# `== null` and not `has(...)`, for the reason spelled out for the EXEC sibling above: the key is
+# on every row this runner writes and absent from every row written before the fields existed.
+#
+# `rounds_before` is the `rounds_after` of the previous REVIEW row of the same (repo, mission) in
+# FILE order, seeded at 0 — and 0 is a MEASUREMENT, not a fallback: a fresh mission dir holds no
+# `40-review-r*.md`, so the first REVIEW session of a mission genuinely starts at zero rounds. The
+# repo filter runs before this path and a mission belongs to one repo, so the filter cannot truncate
+# a mission's history and leave the seed reading a middle row as a first one. A hand-truncated
+# ledger can; that is the same declared edge the EXEC sibling's empty memory has, behind the same
+# `.moved != false` guard in `outcome`.
+#
+# NEITHER of the EXEC memory rules is inherited, and that is a decision with a world behind it:
+#   · no `M`-changed rule, because there is no M in the prose — the ceiling is config, not disk;
+#   · NO RESET ON A PASSING GATE, which is the one that looks like an oversight and is not.
+#     EXEC's memory clears on a pass because `pending` resets to M when a closed phase is reopened.
+#     REVIEW rounds do the opposite: `review_rounds_on_disk` counts FILES, files are never deleted,
+#     and cmd_run deliberately does not reset the ceiling against them. So the count carries ACROSS
+#     a pass, and copying the reset over would be a fail-open in the flattering direction — r1
+#     passes, the phase is reopened, a session spins on the same r1, and a cleared memory reads
+#     `1 > 0` as the loudest progress in the ledger over a session that landed nothing. The world
+#     that proves it is the `m10` fixture of the `memory rules of the dated REVIEW path` block in
+#     check-autonomy.sh, which goes red the day somebody "restores" the symmetry.
+# The memory is fed by rows that carry the FIELD too (`$row.rounds_after`, which is the annotation
+# on a recovered row and the written value on a new-schema one), and that is load-bearing on a
+# mixed ledger for the same reason it is one screen up.
+#
+# DECLARED LIMIT, and it is declared rather than filed because the write order forbids it: a
+# `gate_pass` row does NOT clear `historic_progress`'s memory, because it carries no `.gate` and
+# the reset arm reads `$r.gate == "pass"`. A free EXEC closure therefore leaves `.seen[$k]` stale
+# and the next dated-path row computes `pending_before` off it instead of `increments_total`.
+# Measured (r2 of 20260831-a-rodada-que-andou): the same history reads `2 advanced · 1 churned`
+# with the closure and `4 advanced · 0 churned` when the same closure is bought with a session.
+# It is unreachable by construction, not merely unobserved: the dated path only annotates rows
+# whose `pending_before` is null, which since 2026-08-29 means rows written BEFORE that date, and
+# `gate_pass` was born on 2026-08-31 — no writer can put a dated-path row AFTER a closure. Kept as
+# a limit here, by the D15 rule, instead of a backlog line pointing at a world nothing can build.
+# The fix if a future writer ever makes it reachable: reset the memory on `is_gate_pass` too.
 ledger_outcome_defs() {   # printed jq, spliced into cmd_autonomy AND kaizen_series
-  printf '%s' 'def outcome: if .gate == "pass" then "advanced" elif (.pending_before != null and .pending_after != null and .pending_after < .pending_before and .moved != false) then "advanced" elif .moved == true then "churned" else "idle" end;'
+  printf '%s' 'def outcome: if .gate == "pass" then "advanced" elif (.pending_before != null and .pending_after != null and .pending_after < .pending_before and .moved != false) then "advanced" elif (.rounds_before != null and .rounds_after > .rounds_before and .moved != false) then "advanced" elif .moved == true then "churned" else "idle" end;'
   printf '%s' 'def historic_progress: reduce .[] as $r ({seen: {}, out: []}; (if ($r | type) == "object" and $r.event == "session" and $r.phase == "EXEC" then ([($r.repo // ""), ($r.mission // "")] | tostring) else null end) as $k | (if $k != null and $r.pending_before == null and (($r.gate_why // "") | test("^[0-9]+ of [0-9]+ increment")) then (($r.gate_why // "") | capture("^(?<n>[0-9]+) of (?<m>[0-9]+) increment") | {n: (.n | tonumber), m: (.m | tonumber)}) else null end) as $p | (if $p == null then $r else (if (.seen[$k] != null and .seen[$k].m == $p.m) then .seen[$k].p else $p.m end) as $before | $r + {pending_before: $before, pending_after: $p.n, increments_total: $p.m, progress_source: "gate_why"} end) as $row | .out += [$row] | (if $k == null then . elif $r.gate == "pass" then .seen[$k] = null elif $row.pending_after != null then .seen[$k] = {p: $row.pending_after, m: $row.increments_total} else . end)) | .out;'
+  printf '%s' 'def historic_rounds: reduce .[] as $r ({seen: {}, out: []}; (if ($r | type) == "object" and $r.event == "session" and $r.phase == "REVIEW" then ([($r.repo // ""), ($r.mission // "")] | tostring) else null end) as $k | (if $k != null and $r.rounds_before == null and $r.rounds_after == null then (($r.gate_why // "") | if test("^40-review-r[0-9]+\\.md") then (capture("^40-review-r(?<n>[0-9]+)\\.md") | .n | tonumber) elif test("^no 40-review-r<N>\\.md") then 0 else null end) else null end) as $n | (if $n == null then $r else $r + {rounds_before: (.seen[$k] // 0), rounds_after: $n, rounds_source: "gate_why"} end) as $row | .out += [$row] | (if $k == null then . elif $row.rounds_after != null then .seen[$k] = $row.rounds_after else . end)) | .out;'
   printf '%s' 'def outcome_tally: map(outcome) | reduce .[] as $o ({advanced: 0, churned: 0, idle: 0}; .[$o] += 1);'
   printf '%s' 'def phase_index: . as $p | ($phases | split(" ")) | index($p);'
 }
@@ -2202,14 +2339,56 @@ autonomy_escalation_row() {   # autonomy_escalation_row <event> <kind> <phase> <
 autonomy_blocked_row()  { autonomy_escalation_row "blocked"  "$1" "$2" "$3"; }
 autonomy_degraded_row() { autonomy_escalation_row "degraded" "$1" "$2" "$3"; }
 
+# The FACT that a phase closed without buying a session. Not an escalation — nothing went wrong,
+# the pipeline moved forward — and not a session, because none was spent; a third event, and the
+# first addition to an enum `docs/pipeline.md` documents as closed, so that file changes in the
+# same commit.
+#
+# WHY A ROW AT ALL. A gate that passes for free writes nothing anywhere, so every reader has to
+# infer the closure from an absence, and `phase_label` infers it wrong: its third clause asks "did
+# the last SESSION pass its gate?" while meaning "did the PHASE close?", and stamps `refez` — the
+# loudest friction signal in the rubric — on a phase that closed clean. Measured on window 2: the
+# QA of 20260830-o-rascunho-fantasma-do-mount, one session, `escalations: {}`, one launch for the
+# whole mission, and REVIEW/DOCS/PR all `ok` after it. The runner MEASURED that closure and threw
+# the measurement away; this writes it down instead. Same argument f00c2dc made refusing to infer
+# what the runner could record.
+#
+# NO `gate_why`, and it is a declared limit rather than an omission: the gate that closed was
+# evaluated inside `current_phase()`, which runs as `$( )`, so GATE_WHY died with the subshell.
+# Re-running the gate here to recover the sentence would run TEST_CMD a second time for prose.
+# The session fields are absent for the same reason an escalation row has none — a zeroed `rc` or
+# `cost_usd` would enter the judge's arithmetic as a session that ran.
+autonomy_gate_pass_row() {   # autonomy_gate_pass_row <phase>
+  autonomy_have_jq || return 0
+  # Called, never substituted: `$(autonomy_kit_stamp)` would reset its one-shot warning flag.
+  autonomy_kit_stamp; local stamp="$AUTONOMY_KIT_STAMP"
+  # Substituted and not called, exactly as the escalation row does it: ledger_repo_root only
+  # prints, so there is no global for the subshell to eat. No `#` inside the `\`-continued block
+  # below — a comment there breaks the command in silence and `bash -n` says nothing.
+  local repo; repo="$(ledger_repo_root)"
+  autonomy_append "$( jq -cn \
+    --arg ts "$(date -Iseconds)" --arg phase "$1" \
+    --arg run_id "$AUTONOMY_RUN_ID" --arg invocation "$AUTONOMY_INVOCATION" \
+    --arg sha "${stamp%%|*}" --arg dirty "${stamp#*|}" \
+    --arg project "$PROJECT_NAME" --arg repo "$repo" --arg mission "$MISSION" \
+    '{v: 1, ts: $ts, event: "gate_pass",
+      run_id: $run_id, invocation: $invocation,
+      kit_sha: (if $sha == "" then null else $sha end),
+      kit_dirty: (if $dirty == "" then null else ($dirty == "true") end),
+      project: $project, repo: $repo, mission: $mission, phase: $phase}' )"
+}
+
 # One row per session, written after the gate has been evaluated — the row carries the gate
 # result, so it cannot be born before it.
-# The last three are EXEC's alone and empty everywhere else (⇒ `null`, never 0: a zero would enter
+# Arguments 7–9 are EXEC's alone and empty everywhere else (⇒ `null`, never 0: a zero would enter
 # the judge's arithmetic as an increment that stood still, the same reason an escalation row
 # carries no session fields at all). They are what lets `outcome` tell the pipeline's DESIGNED loop
 # — one session per increment, the gate red until the last one — from real churn, which the gate
 # verdict and `moved` alone cannot do.
-autonomy_session_row() {  # <phase> <attempt> <auto_retry> <moved> <gate> <gate_why> [<pending_before> <pending_after> <increments_total>]
+# Arguments 10–12 are the same fact for REVIEW, which is a loop by design too: REVIEW_MAX_ITER
+# rounds, each landing its own `40-review-r<N>.md`. Same rule, same reason — empty outside REVIEW,
+# and `rounds_max` is there so "3 of 3, the phase is out of budget" cannot be read as "3 of 10".
+autonomy_session_row() {  # <phase> <attempt> <auto_retry> <moved> <gate> <gate_why> [<pending_before> <pending_after> <increments_total> <rounds_before> <rounds_after> <rounds_max>]
   autonomy_have_jq || return 0
   # Called, never substituted: `$(autonomy_kit_stamp)` would reset its one-shot warning flag.
   autonomy_kit_stamp; local stamp="$AUTONOMY_KIT_STAMP"
@@ -2229,6 +2408,7 @@ autonomy_session_row() {  # <phase> <attempt> <auto_retry> <moved> <gate> <gate_
     --arg model "$LAST_PHASE_MODEL" --arg session "$LAST_PHASE_SID" \
     --arg rc "$LAST_PHASE_RC" --arg dur "$LAST_PHASE_DUR" --arg cost "$LAST_PHASE_COST" \
     --arg pbefore "${7:-}" --arg pafter "${8:-}" --arg itotal "${9:-}" \
+    --arg rbefore "${10:-}" --arg rafter "${11:-}" --arg rmax "${12:-}" \
     '{v: 1, ts: $ts, event: "session",
       run_id: $run_id, invocation: $invocation,
       kit_sha: (if $sha == "" then null else $sha end),
@@ -2244,6 +2424,9 @@ autonomy_session_row() {  # <phase> <attempt> <auto_retry> <moved> <gate> <gate_
       pending_before: ($pbefore | tonumber? // null),
       pending_after: ($pafter | tonumber? // null),
       increments_total: ($itotal | tonumber? // null),
+      rounds_before: ($rbefore | tonumber? // null),
+      rounds_after: ($rafter | tonumber? // null),
+      rounds_max: ($rmax | tonumber? // null),
       gate: $gate, gate_why: $why}' )"
 }
 
@@ -3874,6 +4057,64 @@ app_down_escalation() {
   return 0
 }
 
+# Writes one `gate_pass` row for every phase that bought a session in THIS run, failed its gate,
+# and has since closed without buying another. Called from the derived branch of cmd_run's loop and
+# from nowhere else — it reads cmd_run's own `sessions`, `gate_failed` and `gate_pass_logged` maps
+# through dynamic scope, so it is CALLED and never `$( )`: substituted, the `gate_pass_logged`
+# write would die with the subshell and the row would be re-emitted every lap. That is the
+# autonomy_kit_stamp scar, one function over.
+#
+# PRECONDITION, stated because dynamic scope does not state itself: the three `local -A` maps must
+# be in scope at the call site. `cmd_retry` calls `current_phase()` too and is the obvious next place
+# somebody adds a second call — without the maps, `set -u` reads `${sessions[$ph]:-0}` as an INDEXED
+# subscript and arithmetic-evaluates `PLAN`, so the runner dies with `PLAN: unbound variable` on the
+# first phase. Loud, which is the right direction, and named here so the next writer does not have
+# to discover it.
+#
+# THE ARGUMENT IS THE DERIVED PHASE, and it is what makes this cheap and provable at once.
+# `current_phase()` returns the FIRST phase of $PHASES whose gate fails, so every phase BEFORE its
+# answer has a gate that just passed — measured by the very derivation that produced `$upto`, in
+# this same lap. An empty `$upto` means the pipeline is complete and every phase passed. No gate is
+# re-run here: doing so would run TEST_CMD again to learn what the derivation already knew.
+#
+# THE CONDITION IS NARROW, and deliberately so (decided with the human, grill of 2026-08-31).
+# `current_phase()` re-evaluates every gate on every derivation, so "a gate passed without a
+# session" is the NORMAL state of every already-closed phase of every resumed run, and `sdd status`
+# asks the same question. Without it this would append up to six rows a lap to a file that is
+# append-only by contract. With it, the row exists only where the judge was about to be wrong: the
+# phase paid for a session, that session failed the gate, and the gate closed later for free.
+#
+# DECLARED, NO PROBE: the `sessions > 0` test is redundant TODAY and is kept anyway. `gate_failed`
+# is written at exactly the two sites that increment `sessions`, so the test below it already
+# implies this one — sabotaged away, the whole suite stays green, and that is stated here rather
+# than dressed up as coverage. It stays because it decides WHICH failure the next writer of
+# `gate_failed` produces, and one is a line away: arming the marker in the `over_ceiling` branch
+# (a phase whose ceiling came off the DISK opens no session in this invocation) would, without this
+# test, record that a phase closed for free in a run where it never ran at all. That is the world I
+# could not build with today's code, NOT a claim that none exists — the distinction this repo paid
+# for in d4deb35 and had to undo in 7cbc8e2.
+#
+# DECLARED LIMIT: a phase whose session was paid for in run N and whose gate closes for free in run
+# N+1 gets no row — `sessions` dies with the process. Its `refez` corrects itself on the first run
+# where the whole pattern happens again. The alternative, writing on every derivation, is the six
+# rows a lap above.
+#
+# NOT reachable from the projection: `--dry-run` returns before `autonomy_session_row`, so
+# `sessions` is empty on every lap and this loop writes nothing. Pinned from the outside by
+# "the projection writes no ledger at all" in tests/check-autonomy.sh rather than by a DRY_RUN
+# branch here — a guard whose removal no probe could notice is a guard this repo does not keep.
+gate_pass_rows() {   # gate_pass_rows <derived-phase, empty when the pipeline is complete>
+  local upto="$1" ph
+  for ph in $PHASES; do
+    if [ "$ph" = "$upto" ]; then break; fi
+    if [ "${sessions[$ph]:-0}" -eq 0 ]; then continue; fi
+    if [ "${gate_failed[$ph]:-0}" -eq 0 ]; then continue; fi
+    if [ -n "${gate_pass_logged[$ph]:-}" ]; then continue; fi
+    gate_pass_logged["$ph"]=1
+    autonomy_gate_pass_row "$ph"
+  done
+}
+
 cmd_run() {
   local mission_arg="" force_phase="" max_phases=0
   while [ $# -gt 0 ]; do
@@ -3921,6 +4162,11 @@ cmd_run() {
   # Incremented beside `autonomy_session_row` and nowhere else, so the number the terminal says and
   # the rows the ledger holds cannot drift: one writer, one counter, same two places.
   local -A sessions=()
+  # The last gate verdict of each phase in THIS run, and the one-shot marker of the row that says
+  # the gate closed afterwards for free. Written beside `sessions` at both session sites and read
+  # by gate_pass_rows alone, so the three maps cannot drift out of step: one writer, one reader.
+  local -A gate_failed=()
+  local -A gate_pass_logged=()
   local phases_run=0 phase before after budget
   # One-shot per `sdd run`, in the spirit of AUTONOMY_SHA_WARNED above: the runner lowers its own
   # bar ONCE, and both trails have to say so once. A plain local of cmd_run is enough here — the
@@ -3932,7 +4178,11 @@ cmd_run() {
   while :; do
     if [ -n "$dry_next" ]; then phase="$dry_next"
     elif [ -n "$force_phase" ]; then phase="$force_phase"
-    else phase="$(current_phase)"; fi
+    # The DERIVED branch alone, and that is the whole licence gate_pass_rows has to speak: this
+    # `current_phase()` call is what proves every earlier phase's gate passed. `--phase X` and the
+    # dry-run cursor never consult the derivation, so under either of them the runner knows nothing
+    # about the other phases and says nothing about them. Called, never `$( )` — see the function.
+    else phase="$(current_phase)"; gate_pass_rows "$phase"; fi
 
     if [ -z "$phase" ]; then
       info ""
@@ -4111,6 +4361,16 @@ cmd_run() {
     # and empty is what the ledger writes as `null`.
     local exec_before=""
     if [ "$phase" = "EXEC" ]; then exec_before="$(checkpoint_tally | cut -f1)"; fi
+    # The same photograph for REVIEW, and for the same reason: once the reviewer has written
+    # `40-review-r<N>.md` the question "how many rounds were there before" is unanswerable.
+    #
+    # ⚠️ OUTSIDE the `[ -z "$force_phase" ]` guard the ceiling check above sits behind, and that is
+    # the placement, not an oversight. `sdd run --phase REVIEW` is how a human asks for one specific
+    # round with their eyes on it — the round that unblocks a mission — and a photograph taken
+    # inside that guard would write `rounds_before: null` on exactly those. Pinned by the
+    # `--phase REVIEW` fixture in tests/check-autonomy.sh.
+    local review_before=""
+    if [ "$phase" = "REVIEW" ]; then review_before="$(review_rounds_on_disk)"; fi
     kit_guard_arm
     run_phase "$phase"
     after="$(state_fingerprint)"
@@ -4150,10 +4410,21 @@ cmd_run() {
     # tests/check-autonomy.sh, in the one fixture where that sequence is reachable.
     local exec_after="" exec_total=""
     if [ "$phase" = "EXEC" ]; then exec_after="$GATE_EXEC_PENDING"; exec_total="$GATE_EXEC_TOTAL"; fi
+    # Same door, same guard, for the REVIEW pair: GATE_REVIEW_ROUNDS outlives its gate the way
+    # GATE_EXEC_PENDING does, so without the phase test the QA session that follows a REVIEW gate
+    # would be born carrying a round count it never had.
+    local review_after="" review_max=""
+    if [ "$phase" = "REVIEW" ]; then review_after="$GATE_REVIEW_ROUNDS"; review_max="$GATE_REVIEW_MAX"; fi
     autonomy_session_row "$phase" "${attempts[$phase]}" "false" "$moved" \
       "$( [ "$gate_rc" -eq 0 ] && echo pass || echo fail )" "$GATE_WHY" \
-      "$exec_before" "$exec_after" "$exec_total"
+      "$exec_before" "$exec_after" "$exec_total" \
+      "$review_before" "$review_after" "$review_max"
     sessions["$phase"]="$(( ${sessions[$phase]:-0} + 1 ))"
+    # Beside the counter and never anywhere else, the discipline `sessions` itself is held to: the
+    # gate verdict the ledger row carries and the one gate_pass_rows reads are the same quantity,
+    # sampled once. Overwritten rather than accumulated — what the writer needs is the LAST verdict
+    # of this phase, so a phase that failed twice and then passed correctly says nothing.
+    gate_failed["$phase"]="$( [ "$gate_rc" -eq 0 ] && echo 0 || echo 1 )"
 
     # DOOR 1 of the blocked escalation — see handoff_blocked_escalation above for why it exists.
     # It is read immediately after the `gate_"$phase"` call that could have set the marker, and
@@ -4238,10 +4509,23 @@ cmd_run() {
     # wins, so no path that worked before changes.
     local exec_after2="" exec_total2=""
     if [ "$phase" = "EXEC" ]; then exec_after2="$GATE_EXEC_PENDING"; exec_total2="$GATE_EXEC_TOTAL"; fi
+    # The REVIEW pair on the same terms, `:-` fallback included. `review_after` is where this retry
+    # started — the gate ran between the two passes — and it is non-empty whenever the first pass's
+    # gate ran at all, because gate_REVIEW publishes at the RESOLVE and answers 0 for no round file.
+    # The fallback is what keeps a row from being born with `rounds_before: null` should a future
+    # refusal ever return before that publication, which is the null the EXEC sibling one screen up
+    # paid for end to end.
+    local review_after2="" review_max2=""
+    if [ "$phase" = "REVIEW" ]; then review_after2="$GATE_REVIEW_ROUNDS"; review_max2="$GATE_REVIEW_MAX"; fi
     autonomy_session_row "$phase" "${attempts[$phase]}" "true" "$moved2" \
       "$( [ "$gate_rc2" -eq 0 ] && echo pass || echo fail )" "$GATE_WHY" \
-      "${exec_after:-$exec_before}" "$exec_after2" "$exec_total2"
+      "${exec_after:-$exec_before}" "$exec_after2" "$exec_total2" \
+      "${review_after:-$review_before}" "$review_after2" "$review_max2"
     sessions["$phase"]="$(( ${sessions[$phase]:-0} + 1 ))"
+    # The retry is a session site of its own, so it is a `gate_failed` site of its own — one probe
+    # per door, the shape CLAUDE.md spells out. Its verdict is the later one and overwrites the
+    # first pass's, which is exactly what "the LAST verdict of this phase" means.
+    gate_failed["$phase"]="$( [ "$gate_rc2" -eq 0 ] && echo 0 || echo 1 )"
 
     if [ "$gate_rc2" -eq 0 ]; then
       ok "gate $phase (on the retry): $GATE_WHY"
@@ -4296,17 +4580,33 @@ cmd_retry() {
   before="$(state_fingerprint)"
   # Same photograph, same phase guard, same reasons as cmd_run's — see the two comments there.
   local exec_before="" exec_after="" exec_total=""
+  local review_before="" review_after="" review_max=""
   if [ "$phase" = "EXEC" ]; then exec_before="$(checkpoint_tally | cut -f1)"; fi
+  # `sdd retry REVIEW` is the other way a human forces a round, and it has no `--phase` guard to
+  # sit outside of: the photograph belongs here for the same reason it belongs in cmd_run.
+  if [ "$phase" = "REVIEW" ]; then review_before="$(review_rounds_on_disk)"; fi
   kit_guard_arm
   run_phase "$phase"
   after="$(state_fingerprint)"
   kit_guard_check "$phase"
   [ "$before" != "$after" ] && moved="true"
   gate_"$phase" || gate_rc=$?
+  # DECLARED, NO PROBE — and MEASURED, not assumed. These two guards are inert today: this function
+  # calls `gate_"$phase"` only for the phase it is retrying, and `current_phase()` runs its gates
+  # inside `$( )`, whose assignments die with the subshell. So both globals still hold the empty
+  # string their declarations gave them (:736, :1015), and deleting either guard changes no byte of
+  # the row — sabotaged one at a time, the suite stays green, where the two PHOTOGRAPH guards above
+  # turn it red (both pinned by "sdd retry photographs only the phase it is retrying" in
+  # tests/check-autonomy.sh). They stay because they decide WHICH failure the next writer gets the
+  # day a second gate call in the parent shell is added here — the world this fixture could not
+  # build, NOT a claim that none exists. That distinction is what d4deb35 got wrong and 7cbc8e2
+  # had to undo.
   if [ "$phase" = "EXEC" ]; then exec_after="$GATE_EXEC_PENDING"; exec_total="$GATE_EXEC_TOTAL"; fi
+  if [ "$phase" = "REVIEW" ]; then review_after="$GATE_REVIEW_ROUNDS"; review_max="$GATE_REVIEW_MAX"; fi
   autonomy_session_row "$phase" "1" "false" "$moved" \
     "$( [ "$gate_rc" -eq 0 ] && echo pass || echo fail )" "$GATE_WHY" \
-    "$exec_before" "$exec_after" "$exec_total"
+    "$exec_before" "$exec_after" "$exec_total" \
+    "$review_before" "$review_after" "$review_max"
   if [ "$gate_rc" -eq 0 ]; then ok "gate $phase: $GATE_WHY"; return 0; fi
   bad "gate $phase not yet: $GATE_WHY"
   return 3
@@ -4512,7 +4812,11 @@ cmd_autonomy() {
     def comparable: .event == "session" and on_axis and (has("moved"));
     def is_session: .event == "session";
     def is_escalation: .event == "blocked" or .event == "degraded";
-    def is_unrecognized: (is_session or is_escalation) | not;
+    # ONE definition of the third event for this program, on the same terms as the pair above. It
+    # is NOT an escalation and must never be folded into that pair: a gate that closed is the
+    # pipeline working, and `escalations` is the map a human reads to find where it did not.
+    def is_gate_pass: .event == "gate_pass";
+    def is_unrecognized: (is_session or is_escalation or is_gate_pass) | not;
     # ONE definition of "which mission is this row about" for this program too, exactly as
     # kaizen_series holds one: the repo is part of the identity, because two projects run the same
     # dated slug on the same day and --all-repos puts their rows in one reading. Counting by slug
@@ -4581,7 +4885,21 @@ cmd_autonomy() {
     # and assert_bucket_sum meaning what they meant. kaizen_series applies it at the same point of
     # its own program, and check-autonomy.sh compares the two readers over one prose ledger.
     | historic_progress
-    | (map(select(type == "object" and .progress_source == "gate_why")) | length) as $historic
+    # The REVIEW half of the same dated recovery, applied at the same point and for the same
+    # reason. Two defs and not one because the two counts move in opposite directions and read
+    # different prose; both are length-preserving, so $local_total and assert_bucket_sum keep
+    # meaning what they meant.
+    | historic_rounds
+    # Bound over `comparable` and NOT over the bare annotation, which is the fix for a measured
+    # fail-open: these two sentences are DELETION SIGNALS — they say how much of the window was
+    # read through a dated path, and therefore when that path may come out — and a count taken
+    # before the comparability filter counts rows that then leave as non-comparable, so the number
+    # reconciles with nothing on screen. Measured on the real ledger: the EXEC sentence said
+    # "2 rows" over a table of one session. `comparable` already demands `.event == "session"`, so
+    # no second conjunct for it; `type == "object"` comes first because historic_progress preserves
+    # non-object rows and `.event` on a number is an error, not a false.
+    | (map(select(type == "object" and comparable and .progress_source == "gate_why")) | length) as $historic
+    | (map(select(type == "object" and comparable and .rounds_source == "gate_why")) | length) as $historic_rounds
     # The header total, re-derived here so the accounting paragraph can NAME it. The two exclusions
     # bound above were computed before this filter and were therefore never in it.
     | (length) as $local_total
@@ -4612,6 +4930,11 @@ cmd_autonomy() {
     | (map(select(is_session and comparable))
        | group_by(.kit_sha) | sort_by(.[0].kit_sha as $s | $order | index($s))) as $groups
     | (map(select(is_unrecognized)) | length) as $stray
+    # The fifth bucket, and it exists because RECOGNISING a row is not the same as accounting for
+    # it: without a count of its own the recorded closures would leave the header total without
+    # leaving any line, which is `unrecognized` with the alarm switched off. tests/check-autonomy.sh
+    # closes the sum over all five.
+    | (map(select(is_gate_pass)) | length) as $closed
     # The SAME population the kit_sha table draws, regrouped. Not a second reading of the file: two
     # instruments over one ledger that disagreed about the money would corrode the trust the whole
     # kaizen loop runs on, which is the argument that already bent this reader onto the series axis.
@@ -4699,12 +5022,18 @@ cmd_autonomy() {
     # stop being. A sentence that says they were never counted holds both at once, and it appears
     # only when there is something to disclaim.
     , ([ (if $skipped > 0 then "  (\($skipped) non-comparable row(s) excluded: dirty kit, no kit_sha, or no moved field)" else empty end)
-       , (if $stray > 0 then "  (\($stray) unrecognized row(s) excluded: event missing or not one of session/blocked/degraded)" else empty end)
+       , (if $closed > 0 then "  (\($closed) gate(s) closed without a session — the pipeline moved on for free, recorded rather than inferred)" else empty end)
+       , (if $stray > 0 then "  (\($stray) unrecognized row(s) excluded: event missing or not one of session/blocked/degraded/gate_pass)" else empty end)
        , (if $history_extra > 0 then "  (launches and reopened are counted over every session of the mission, \($history_extra) of them non-comparable)" else empty end)
        # NOT an exclusion — nothing left a bucket — which is why it rides at the end of the first
        # paragraph rather than among the four. It is the disclosure that half this ledger was read
        # through a dated compatibility path, and the signal that says when that path can be deleted.
        , (if $historic > 0 then "  (\($historic) EXEC row(s) older than the pending fields read their progress from gate_why)" else empty end)
+       # Its REVIEW twin, and a SECOND sentence rather than one summed line: the two paths are
+       # deleted independently — the day every EXEC row carries the pending fields is not the day
+       # every REVIEW row carries the round ones — and a single number could never say which of
+       # them is finally empty.
+       , (if $historic_rounds > 0 then "  (\($historic_rounds) REVIEW row(s) older than the round fields read their round from gate_why)" else empty end)
        ] as $inside
        | [ (if $foreign > 0 then "  (\($foreign) row(s) excluded: born in another repo — the ledger is global, this reader is not)" else empty end)
          , (if $norepo > 0 then "  (\($norepo) row(s) excluded: no repo field — the row cannot say which project it came from)" else empty end)
@@ -4805,6 +5134,14 @@ kaizen_series() {
     # REVIEW passes made the one mission that degraded read `ok`. An escalation outlives the
     # session that provoked it; that is why `blocked` was in the clause to begin with.
     def is_escalation: .event == "blocked" or .event == "degraded";
+    # ONE definition of the third event for this program too, and kept OUT of the pair above on
+    # purpose: `escalations` is the map the judge prompt cites first, and a gate that closed is the
+    # opposite of the line stopping. It is admitted alongside them (see the $all binding at the
+    # bottom) rather than dropped, because a row this reader does not admit lands in
+    # `excluded.unrecognized`, which the judge is told to read as a bug in the kit itself — the
+    # runner accusing itself of a row it wrote on purpose. Measured before this line existed:
+    # `unrecognized: 1` over a ledger of four sessions and one recorded closure.
+    def is_gate_pass: .event == "gate_pass";
 
     # ONE definition of the kit_sha axis for this program too — the third hand-written copy of the
     # same question lived here, as the complementary pair `.kit_dirty == true or .kit_sha == null`
@@ -4841,7 +5178,34 @@ kaizen_series() {
     # ONE definition of "the distinct kit versions, in FILE order", used by the latest/previous
     # pair below and by the window here. group_by sorts by key and answers a different question;
     # two hand-written copies of this reduce is how the blocked/degraded pair came to disagree.
-    def shas_in_file_order: map(.kit_sha) | reduce .[] as $s ([]; if index($s) then . else . + [$s] end);
+    # ONE definition of the axis the whole judge stands on, and its population is a decision rather
+    # than a detail: a version is borne by a row that OBSERVED something — a session that ran, or an
+    # escalation that stopped the line. A `gate_pass` row observes nothing; it says a phase closed
+    # for free. It MODIFIES the cell of a version, and it must never BE one. Same sentence as the
+    # `$detail` filter in group_summary, one level up: that filter stops the phantom CELL, this
+    # select stops the phantom VERSION, and until 2026-08-31 only the first half existed.
+    #
+    # THE KIT REPO IS WHERE THIS BITES, and by construction rather than by luck: every session here
+    # commits, so the sha ADVANCES between the phase whose gate failed and the lap that closes it —
+    # the closure lands on a sha no session ever touched. Measured on the real reader, one row
+    # added: `latest` ccc3333 → ddd4444 (0 sessions), `previous` bbb2222 → ccc3333, `labels`
+    # {ok:1} → {ok:0}, `degenerate_axis` true → false. Downstream, `gate_KAIZEN` derives its
+    # expected sha from `latest.kit_sha`, so a verdict already written stopped satisfying the gate
+    # and `sdd kaizen` would buy an opus session to judge a slice with zero sessions — a phase no
+    # session can satisfy, the failure mode principle 1 of CLAUDE.md exists to forbid.
+    #
+    # Written POSITIVELY (`session or escalation`) and not as `is_gate_pass | not`, though the two
+    # agree on the population of today: a FOURTH event has to opt IN to minting a version, instead
+    # of minting one by default the day somebody adds it. Fail-safe is the direction the axis wants.
+    # Both callers — `$shas` below and the `$order` of degenerate_axis — ask this same question,
+    # which is why the filter lives in the definition and not at the two call sites.
+    #
+    # ⚠️ No apostrophe anywhere in this block, which is why the prose above says "the population of
+    # today" instead of the natural phrasing: the whole jq program is ONE single-quoted shell string
+    # opened at the `jq -n` far above, so a stray single quote closes it and bash dies at parse
+    # time — several screens away from the line that caused it. Caught by `bash -n`, never silent.
+    def shas_in_file_order: map(select(.event == "session" or is_escalation))
+                            | map(.kit_sha) | reduce .[] as $s ([]; if index($s) then . else . + [$s] end);
     # ONE definition of "which mission is this row about", and the repo is PART of it. The slug
     # alone was the first spelling, and it was a no-op bug until this mission opened --all-repos:
     # slugs are dated (`YYYYMMDD-<name>`) and cmd_kaizen mints `$(date +%Y%m%d)-kaizen`, identical
@@ -4932,10 +5296,43 @@ kaizen_series() {
     # its gate reads `advanced`, which is the honest answer for a phase whose artifact was already
     # on disk. `refez` does not move: a phase whose last session did not pass has not closed, and
     # that is a fact about the gate, not about an increment.
+    #
+    # THE THIRD CLAUSE asks "did the PHASE close?", and until 2026-08-31 it could only ask "did the
+    # last SESSION pass its gate?" — the same question only while every gate that ever passes costs
+    # a session, which is false. The QA⇄EXEC fix loop closes QA for free: QA files a bug and the fix
+    # increment for it, gate_QA refuses, the derivation goes BACK to EXEC, EXEC closes both, and the
+    # next derivation finds gate_QA green with no second QA session anywhere. Measured on window 2:
+    # the QA of 20260830-o-rascunho-fantasma-do-mount read `refez` — the loudest friction signal in
+    # this rubric — over a phase that closed clean, with `escalations: {}`, ONE launch for the whole
+    # mission and REVIEW/DOCS/PR all `ok` after it.
+    #
+    # ⚠️ It reads the closure as a POSITION and never as set membership, and the difference is a
+    # measured defect rather than a style. Written `... != "pass" and (map(select(is_gate_pass)) |
+    # length) == 0`, ONE recorded closure disabled the clause for the whole life of that
+    # (repo, mission, phase) group: the ledger is append-only and the group spans every run, so a
+    # closure written on lap 3 outvoted every failing session AFTER it, for ever. The runner cannot
+    # correct that from its side — `gate_pass_logged` and `sessions` die with the process, so a
+    # phase that reopens and stays red writes no second row to argue with. Reproduced end to end on
+    # a real `sdd run`: QA closes for free, the REVIEW round reopens QA, three more QA sessions fail
+    # at US$ 21 and none passes, and the rubric read `leve` where it has to read `refez` — the same
+    # fail-open in the flattering direction this comment forbids two paragraphs down. All of it on
+    # ONE kit_sha, which is the NORMAL case in a target repo, so it was the common path and not an
+    # edge. Asking for the LAST of (sessions ∪ closures) answers "did the phase close?" at the point
+    # in time the group actually ends: a closure last means it closed, a failing session last means
+    # it did not, and with no closure at all the expression is the old one, term for term.
+    # `last` over an empty list is `null` and `null.event == "session"` is false, so a group of pure
+    # escalations still falls to the first arm exactly as before.
+    #
+    # It reads a FACT the runner wrote (`event: "gate_pass"`, autonomy_gate_pass_row) and never the
+    # absence of one: an inference over the phase order would have been cheaper and is the shape
+    # f00c2dc refused, "an inference does not go in front of what the runner measured". What it does
+    # NOT do is turn the cell green — the surviving session is still churn on its own count, so the
+    # cascade lands on `leve`. Trading a false `refez` for a false `ok` would be the same defect.
     def phase_label:
       if (map(select(is_escalation)) | length) > 0
          or (map(select(.event == "session" and .invocation == "retry")) | length) > 0
-         or ((map(select(.event == "session")) | last | .gate) != "pass")
+         or ((map(select(.event == "session" or is_gate_pass)) | last
+              | (.event == "session" and .gate != "pass")))
       then "refez"
       elif (map(select(.event == "session" and (.auto_retry == true or outcome != "advanced"))) | length) > 0
       then "leve"
@@ -4946,6 +5343,29 @@ kaizen_series() {
       . as $rows
       | ($rows | map(select(.event == "session"))) as $sess
       | ($rows | group_by(mission_key + [(.phase // "")])
+               # A `gate_pass` row MODIFIES a cell; it never is the subject of one. It says a phase
+               # closed for free — and a phase that spent nothing in this slice is not a phase this
+               # slice can grade. Without this filter a group whose ONLY row is the closure falls
+               # through every arm of phase_label (no escalation, no retry, and `map(select(.event
+               # == "session")) | last` is `null`, so `null | .gate != "pass"` is true but the new
+               # second conjunct is false) and lands on the `else`, minting a phantom `ok` cell with
+               # `sessions: 0` and `cost_usd: 0` — a clean grade for a phase this slice never saw.
+               # Measured on two worlds, both reachable: (1) the closure and the session it explains
+               # land on different `kit_sha`, which is EVERY run in the repo that BUILDS the kit,
+               # because each session commits and the sha advances between the phase that failed and
+               # the lap that closes it; (2) the session was written with a dirty kit and the closure
+               # clean, which drops the session into `non_comparable` and leaves the closure alone.
+               # Before `gate_pass` existed no session-less group could read `ok`: the only other
+               # row shape is an escalation, and an escalation-only group reads `refez` off the
+               # first arm. That is why the filter admits escalations too and removes nothing that
+               # was ever counted.
+               #
+               # DECLARED LIMIT, and it is the honest half of the same fact: in world (1) the cell
+               # of the session itself, one slice back, still reads `refez`. The closure cannot reach
+               # it — the rubric grades one `kit_sha` at a time and the row is not in that slice.
+               # This line stops the false `ok`; moving the false `refez` needs the closure to be
+               # readable ACROSS slices, which is a decision about the axis and not about this line.
+               | map(select((map(select(.event == "session" or is_escalation)) | length) > 0))
                | map({repo: .[0].repo, mission: .[0].mission, phase: .[0].phase, label: phase_label,
                       sessions: (map(select(.event == "session")) | length),
                       outcomes: (map(select(.event == "session")) | outcome_tally),
@@ -5023,13 +5443,13 @@ kaizen_series() {
     # filter, before any classification. One dated recovery, spliced from one definition, so the
     # judge and the human window cannot end up reading two different histories out of one file —
     # check-autonomy.sh compares them over a prose-only ledger for exactly that.
-    | ($file_rows | map(select(ledger_row_is_local)) | historic_progress) as $raw
+    | ($file_rows | map(select(ledger_row_is_local)) | historic_progress | historic_rounds) as $raw
     # Subtracted out, never lumped in: a row that names no project did not come from another repo,
     # and a bucket that said it did would be a wrong reason printed with the confidence of a right
     # one. The two counts partition what the filter removed, so the arithmetic still closes.
     | (($file_rows | length) - ($raw | length) - $no_repo) as $other_repo
     | ($raw | map(select(type == "object" and .v == 1
-                         and (.event == "session" or is_escalation)))) as $all
+                         and (.event == "session" or is_escalation or is_gate_pass)))) as $all
     | ($all | map(select(.phase == "KAIZEN"))) as $meta
     | ($all | map(select(.phase != "KAIZEN"))) as $rows
     | (($raw | length) - ($all | length)) as $unrec

@@ -1921,8 +1921,14 @@ mut_AUTONOMY_is_escalation_blind() {
 # `mut_AUTONOMY_is_escalation_blind` above (the reader's predicate) and `mut_RUN_degraded_label_blind`
 # (phase_label's use of this same program's predicate): each of the three stays caught with the other
 # two intact, and each names a different consumer of the escalation pair.
+# ⚠️ RE-ANCHORED on 2026-08-31, on the OPERAND and no longer on the whole line. The old spelling
+# pinned `and (.event == "session" or is_escalation)))) as $all` end to end, so the day the
+# admission learned a third event (`gate_pass`) it stopped matching — a silent no-op that the
+# catalogue's own rc-90 `cmp -s` guard reports as CATALOGUE-BROKEN, but only after a full round.
+# Same class, same mission, same fix as `mut_AUTONOMY_progress_ignored` two increments earlier:
+# anchor on the smallest fragment that still names the sabotage.
 mut_KAIZEN_series_escalations_dropped() {
-  sed -i 's|^                         and (.event == "session" or is_escalation)))) as $all$|                         and (.event == "session")))) as $all|' "$1"
+  sed -i 's|"session" or is_escalation or is_gate_pass|"session" or is_gate_pass|' "$1"
 }
 
 # The blocked line goes back to counting LAPS OF THE LOOP and calling them sessions. `attempts`
@@ -2123,8 +2129,14 @@ mut_RUN_kit_guard_arms_projection() {
 # progress arm. The old anchor still described a line that no longer exists, so the mutant would
 # have applied nothing and the harness would have refused it with rc 90 — a no-op that reads as a
 # catalogue failure, not as a silent gap. Same sabotage, new spelling of the same line.
+# ⚠️ RE-ANCHORED on 2026-08-31, and the shape is the point: `def outcome: .*end;` rather than the
+# definition written out arm by arm. The old spelling quoted the whole two-arm body, so the round
+# arm added for REVIEW one increment earlier made it a silent no-op — and a mutation that no longer
+# mutates scores nothing while reading exactly like a mutation that does. `.*` is safe here because
+# the definition is emitted by a printf of its own and carries exactly one `end;`; the greedy match
+# therefore cannot run past it into a neighbour.
 mut_AUTONOMY_outcome_reads_moved_only() {
-  sed -i 's@def outcome: if .gate == "pass" then "advanced" elif (.pending_before != null and .pending_after != null and .pending_after < .pending_before and .moved != false) then "advanced" elif .moved == true then "churned" else "idle" end;@def outcome: if .moved == true then "advanced" else "idle" end;@' "$1"
+  sed -i 's@def outcome: .*end;@def outcome: if .moved == true then "advanced" else "idle" end;@' "$1"
 }
 
 # The series grows a LOCAL copy of the yardstick on the OLD rule — the "same spelling in both
@@ -2267,8 +2279,12 @@ mut_EXEC_blocked_publishes_count() {
 # `and no row this runner wrote is read as one that predates the fields`. The floor
 # `the pass before the retry is the one that published nothing` stays green under the mutation,
 # which is what proves the fixture still reaches the inline retry at all.
+# ⚠️ RE-ANCHORED on 2026-08-31, on the FALLBACK alone. The old spelling pinned the whole argument
+# line and ended it with `$`, so the REVIEW round arguments appended to the same call one increment
+# earlier — which put a `\` continuation where the anchor demanded end-of-line — turned it into a
+# silent no-op. The fallback is what this mutation is about; the arguments beside it are not.
 mut_RUN_retry_pending_before_null() {
-  sed -i 's@^      "\${exec_after:-\$exec_before}" "\$exec_after2" "\$exec_total2"$@      "$exec_after" "$exec_after2" "$exec_total2"@' "$1"
+  sed -i 's@"\${exec_after:-\$exec_before}"@"$exec_after"@' "$1"
 }
 
 # The writer keeps filling the three fields and the reader stops looking at them: `outcome` goes
@@ -2277,8 +2293,12 @@ mut_RUN_retry_pending_before_null() {
 # splice, so parity stays green and only the histogram of a known fixture moves — caught by `a
 # session that advanced its increment reads advanced, not churned` in check-autonomy.sh, which
 # reads `1 advanced · 4 churned · 1 idle` against the `3 · 2 · 1` it demands.
+# ⚠️ Anchored on the ARM and not on the whole `def outcome:` line, which is how it was written on
+# 2026-08-29. The line grew a third arm on 2026-08-31 (the REVIEW round) and the full-line anchor
+# stopped matching — a silent no-op that the rc-90 `cmp -s` guard would have caught, but only after
+# a full catalogue run. One arm, one anchor: the line will grow again.
 mut_AUTONOMY_progress_ignored() {
-  sed -i 's@def outcome: if .gate == "pass" then "advanced" elif (.pending_before != null and .pending_after != null and .pending_after < .pending_before and .moved != false) then "advanced" elif .moved == true then "churned" else "idle" end;@def outcome: if .gate == "pass" then "advanced" elif .moved == true then "churned" else "idle" end;@' "$1"
+  sed -i 's@ elif (.pending_before != null and .pending_after != null and .pending_after < .pending_before and .moved != false) then "advanced"@@' "$1"
 }
 
 # The null guard on the progress arm goes, and jq's own ordering does the rest: `null` sorts below
@@ -2389,8 +2409,271 @@ mut_KAIZEN_label_auto_retry_blind() {
   sed -i 's@(.auto_retry == true or outcome != "advanced")@(outcome != "advanced")@' "$1"
 }
 
+# ---------------------------------------------------------------------------
+# 20260831-a-rodada-que-andou — the row says whether the REVIEW round advanced.
+# ---------------------------------------------------------------------------
+# The photograph is never taken, so `rounds_before` is `null` on every REVIEW row and the arm that
+# reads "the round advanced" can never fire — REVIEW goes back to the gate-only yardstick that read
+# the most expensive cell of window 2 (`US$ 47.81`, `1 advanced · 1 churned`) as churn over a phase
+# that is a LOOP BY DESIGN. Caught by `the REVIEW row carries rounds_before, rounds_after and
+# rounds_max` in check-autonomy.sh, which reads "REVIEW fail null 1 3" against the "REVIEW fail
+# 0 1 3" it demands.
+#
+# ONE mutant and not two: the other way to get this wrong is to take the photograph INSIDE the
+# `[ -z "$force_phase" ]` guard the round ceiling sits behind, where `sdd run --phase REVIEW` — the
+# way a human forces the round that unblocks a mission — writes `null`. The fixture runs exactly
+# that path, so the same assertion reads the same "null 1 3" for both spellings; a second mutant
+# would buy no information and cost a full suite run.
+mut_RUN_review_rounds_photo_missing() {
+  sed -i 's@^    if \[ "\$phase" = "REVIEW" \]; then review_before="\$(review_rounds_on_disk)"; fi$@    :@' "$1"
+}
+
+# The phase guard at cmd_run's door 1 goes, and GATE_REVIEW_ROUNDS — which outlives its gate by
+# design, one screen up the same function — follows the run into the next phase: the DOCS session
+# opened after a PASSING REVIEW gate is born claiming a review round DOCS never had.
+#
+# ⚠️ Same trap as its EXEC sibling, and it was walked again rather than assumed. `current_phase`
+# runs as `$(...)`, so the gate_REVIEW it evaluates on every lap sets the global in a subshell that
+# dies at once, and the `--phase REVIEW` fixture cannot reach the leak at all — a sabotage pass
+# against it came back green, 258 assertions, no failure. The only sequence that reaches it is a
+# REVIEW gate passing in the PARENT shell followed by another lap, which is the block `a REVIEW
+# round that passed does not follow the run into the next phase` builds. Caught by `a non-REVIEW row
+# carries the three round fields as null` there, and by nothing else.
+mut_LEDGER_rounds_leak_across_phases() {
+  sed -i 's@^    if \[ "\$phase" = "REVIEW" \]; then review_after="\$GATE_REVIEW_ROUNDS"; review_max="\$GATE_REVIEW_MAX"; fi$@    review_after="$GATE_REVIEW_ROUNDS"; review_max="$GATE_REVIEW_MAX"@' "$1"
+}
+
+# The writer keeps filling the three round fields (I1) and the reader stops looking at them: REVIEW
+# goes back to the gate-only yardstick that read the most expensive cell of window 2 — US$ 47.81,
+# `1 advanced · 1 churned` — as churn over a phase that is a LOOP BY DESIGN. Spliced from ONE
+# definition, so both readers lose it together and the parity assertion stays green; only the
+# histogram of a known fixture moves. Caught by `a REVIEW round that advanced reads advanced, never
+# churned` in check-kaizen.sh, which reads `leve {"advanced":1,"churned":1,"idle":0}` — letter for
+# letter the window-2 cell — against the `ok {"advanced":2,...}` it demands.
+mut_LEDGER_outcome_rounds_blind() {
+  sed -i 's@ elif (.rounds_before != null and .rounds_after > .rounds_before and .moved != false) then "advanced"@@' "$1"
+}
+
+# The non-null guard on the round arm goes, and jq's ordering does the rest: `null` sorts below
+# every number, so `2 > null` is TRUE and a REVIEW row whose `rounds_before` photograph was never
+# taken reads as the loudest progress in the ledger. Fails open in the direction of flattery, the
+# same way its EXEC sibling would. It is also what makes mut_RUN_review_rounds_photo_missing
+# detectable at all — that mutant produces exactly this row shape, so with the guard gone the two
+# defects would cancel and neither would move a number. Caught by `a REVIEW row with no round
+# before it is not a round that advanced` in check-kaizen.sh, which reads `ok
+# {"advanced":2,"churned":0,"idle":0}` against the `leve {"advanced":1,"churned":1,...}` it demands.
+mut_LEDGER_outcome_rounds_unguarded() {
+  sed -i 's@(.rounds_before != null and .rounds_after > .rounds_before and .moved != false)@(.rounds_after > .rounds_before and .moved != false)@' "$1"
+}
+
+# The DIRECTION of the round arm becomes "the number changed", and a round file that DISAPPEARED
+# reads as progress. It is the mutation that says why this is a third arm and not a generalisation
+# of the EXEC one: the two counts move in opposite directions — EXEC counts what is still to do and
+# goes DOWN, REVIEW counts what has landed and goes UP — so a single "it moved" arm would also call
+# a checkpoint that GREW progress, which is QA writing fix increments. Caught by `a REVIEW round
+# count that went DOWN is not a round that advanced` in check-kaizen.sh.
+mut_LEDGER_outcome_rounds_undirected() {
+  sed -i 's@.rounds_after > .rounds_before and .moved != false@.rounds_after != .rounds_before and .moved != false@' "$1"
+}
+
+# The `.moved` half of the round arm goes, and a session that wrote NOTHING gets credited with a
+# round an earlier session landed. Found by the sabotage pass rather than by the plan: written
+# without it the suite stayed green, because no fixture had reached that world — the shape CLAUDE.md
+# demands of a new rule before it is called probed. Caught by `a REVIEW session that wrote nothing
+# did not advance the round` in check-kaizen.sh, which reads `ok {"advanced":2,"churned":0,"idle":0}`
+# against the `leve {"advanced":1,"churned":0,"idle":1}` it demands.
+mut_LEDGER_outcome_rounds_moved_blind() {
+  sed -i 's@and .rounds_after > .rounds_before and .moved != false) then "advanced"@and .rounds_after > .rounds_before) then "advanced"@' "$1"
+}
+
+# The dated REVIEW path stops annotating, so the round arm one screen up serves only rows written
+# from 2026-08-31 on. Measured on the real ledger that day: 25 REVIEW rows, ZERO carrying
+# `rounds_before` — the arm would move nothing at all and the whole REVIEW history would stay on the
+# `moved` arm reading `churned`. Caught by five assertions in check-autonomy.sh, the headline being
+# `a pre-schema REVIEW row recovers its round from gate_why`.
+mut_LEDGER_historic_rounds_blind() {
+  sed -i 's@(if $n == null then $r else@(if true then $r else@' "$1"
+}
+
+# Half the guard goes and the path starts REPAIRING rows this runner wrote whose photograph went
+# missing — which is precisely the shape mut_RUN_review_rounds_photo_missing produces, so this
+# mutation would launder that one and leave it scoring a point for nothing. Same measured harm the
+# EXEC sibling paid for once (a retry born with `pending_before: null` read `advanced` off a
+# fabricated count) and fixed at the writer. Caught by `a REVIEW row whose photograph went missing
+# is not repaired from prose` in check-autonomy.sh.
+mut_LEDGER_historic_rounds_repairs_photo() {
+  sed -i 's@$r.rounds_before == null and $r.rounds_after == null@$r.rounds_before == null@' "$1"
+}
+
+# `no 40-review-r<N>.md` — the session landed NO round file — starts recovering 1 instead of 0, and
+# the one row shape that genuinely spun reads as the loudest progress in the ledger. Not academic:
+# it is exactly the row the most expensive cell of window 2 is made of (the REVIEW of
+# 20260830-a-tela-que-mente-o-pagamento, US$ 47.81). Caught by `a REVIEW session that landed no
+# round file did not advance a round`.
+mut_LEDGER_historic_rounds_no_file_is_a_round() {
+  sed -i 's@then 0 else null end) else null end) as $n@then 1 else null end) else null end) as $n@' "$1"
+}
+
+# The memory dies and every recovered row is measured against a seed of 0, so any round file at all
+# reads as a round that advanced. It kills the two rules the REVIEW path deliberately does NOT
+# inherit from EXEC at once — the count carrying across a passing gate, and the memory being fed by
+# rows that carry the fields. The reset-restoring edit a future reader is likelier to actually make
+# (`elif $r.gate == "pass" then .seen[$k] = null`) was measured separately on 2026-08-31 and dies on
+# the same first assertion, so it is not a second entry here. Caught by `a passing REVIEW gate does
+# NOT clear the round the next session is measured against` and `the round memory is fed by the rows
+# that carry the fields too`.
+mut_LEDGER_historic_rounds_memory_blind() {
+  sed -i 's@{rounds_before: (.seen\[$k\] // 0)@{rounds_before: (0)@' "$1"
+}
+
+# The disclosure sentence goes back to counting the bare annotation instead of the comparable rows,
+# and starts naming rows no bucket on screen shows. It is a soft fail-open with a sharp consequence:
+# the sentence is the DELETION SIGNAL for the dated path, and a number nobody can reconcile with the
+# table is no basis for deciding to delete anything. Measured on the real ledger before the fix —
+# "2 rows" over a table of one session. Caught by `the EXEC sentence counts only the rows the table
+# is made of`; its REVIEW twin is the same binding two lines down.
+mut_AUTONOMY_historic_sentence_before_comparability() {
+  sed -i 's@type == "object" and comparable and .progress_source@type == "object" and .progress_source@' "$1"
+}
+
 mut_KAIZEN_label_idle_blind() {
   sed -i 's@(.auto_retry == true or outcome != "advanced")@(.auto_retry == true or outcome == "churned")@' "$1"
+}
+
+# The runner stops RECORDING that a phase closed without buying a session, and every reader is back
+# to inferring the closure from an absence — which is how `phase_label` came to stamp `refez`, the
+# loudest friction signal in the rubric, on a QA phase that closed clean (window 2, the QA of
+# 20260830-o-rascunho-fantasma-do-mount). Caught by `it carries the run, the mission and the kit
+# stamp` in check-autonomy.sh, and by nothing else: the two assertions beside it die here too, but
+# each of them has another owner below.
+mut_RUN_gate_pass_row_missing() {
+  sed -i '/^    gate_pass_logged\["\$ph"\]=1$/,+1d' "$1"
+}
+
+# The writer stops asking whether the phase's own session FAILED its gate, so a phase that closed
+# with the session it paid for gets a row saying it closed for free. Not merely noise: the row would
+# be written for every phase of every run that ever passed a gate, and the ledger is append-only by
+# contract. Caught by `a phase that closed WITH its own session gets no row` in check-autonomy.sh,
+# and by nothing else — the fixture's EXEC phase is exactly that shape.
+mut_RUN_gate_pass_ignores_own_session() {
+  sed -i 's@^    if \[ "\${gate_failed\[\$ph\]:-0}" -eq 0 \]; then continue; fi$@    :@' "$1"
+}
+
+# The writer moves OUT of the derived branch of cmd_run's loop, and starts speaking about a
+# derivation that never happened. The one path that reaches it is `PUBLISH_ON_REVIEW_BLOCKED=draft`:
+# the runner gives up on a REVIEW whose gate is still failing, sets `force_phase="PR"`, and the
+# mutant then records that REVIEW closed cleanly — the loudest possible lie in a ledger built to
+# hold what the runner measured. Caught by `the phase the runner gave up on records no gate closure`
+# in check-autonomy.sh, and by nothing else.
+mut_RUN_gate_pass_off_the_derived_branch() {
+  sed -i 's@^    else phase="\$(current_phase)"; gate_pass_rows "\$phase"; fi$@    else phase="$(current_phase)"; fi\n    gate_pass_rows "$phase"@' "$1"
+}
+
+# The human reader files a row the runner itself wrote under "unrecognized" — the same defect the
+# `degraded` event bought once already, and the same sentence: an operator told the runner emitted
+# something it does not understand. It also breaks the five-bucket arithmetic, because the row then
+# leaves the header total through a bucket whose name is a lie about it. Caught by `the human reader
+# does not call the recorded closure unrecognized` in check-autonomy.sh, and by nothing else.
+mut_LEDGER_gate_pass_unrecognized() {
+  sed -i 's@def is_unrecognized: (is_session or is_escalation or is_gate_pass) | not;@def is_unrecognized: (is_session or is_escalation) | not;@' "$1"
+}
+
+# The JUDGE stops admitting the row, and it lands in `excluded.unrecognized` — the bucket the judge
+# is told to read as a bug in the kit itself, so the runner ends up accusing itself of a row it
+# wrote on purpose. Measured before the admission existed: `unrecognized: 1` over a ledger of four
+# sessions and one recorded closure.
+#
+# ⚠️ It is ALSO the owner of the rubric assertions, and that is measured rather than assumed: the
+# plan named a separate `phase_label` mutant for them, and the sabotage pass showed its kills are a
+# strict SUBSET of this one's (both take the label off `refez`; only this one moves `unrecognized`).
+# A mutant that kills nothing another does not is the redundancy CLAUDE.md says to remove rather
+# than to write a probe for, so it is not in this catalogue. Caught by `the recorded fact moves the
+# label and NOTHING else in the series` and `the recorded fact is not thrown away as unrecognized`
+# in check-kaizen.sh, and by nothing else.
+mut_LEDGER_gate_pass_not_admitted() {
+  sed -i 's@and (.event == "session" or is_escalation or is_gate_pass)@and (.event == "session" or is_escalation)@' "$1"
+}
+
+# The rubric goes back to letting a recorded closure be the SUBJECT of a cell instead of a modifier
+# of one. A group holding nothing but the closure falls through every arm of `phase_label` — no
+# escalation, no retry, and `last | .gate` over an empty list is null, so the second conjunct of the
+# third clause is false — and the `else` mints a phantom `ok`: a clean grade, `sessions: 0`,
+# `cost_usd: 0`, for a phase the slice never saw, in the histogram the judge is told to cite first.
+# It is reachable on EVERY run of the repo that builds the kit (each session commits, so the closure
+# carries a `kit_sha` the failing session never had) and on any run whose failing session was
+# written with a dirty kit. Anchored on the `select` and not on the `group_by` line above it, which
+# this mission has already had to re-anchor three times: the smallest fragment that still names the
+# sabotage. Caught by `a closure alone in a slice mints no cell` and `and the session that shares
+# the slice is still graded` in check-kaizen.sh, and by nothing else.
+# The closure goes back to being asked as SET MEMBERSHIP instead of as a position — the form the
+# mission shipped and the review reproduced end to end. The ledger is append-only and the rubric
+# groups over the whole life of a (repo, mission, phase), so one recorded closure then outvotes
+# every failing session AFTER it, for ever: QA closes for free, the REVIEW round reopens it, three
+# more QA sessions fail at US$ 21 and none passes, and the rubric reads `leve` where it has to read
+# `refez`. All on one kit_sha, which is the normal case in a target repo. Caught by `a closure does
+# not outvote the sessions that came after it` in check-kaizen.sh, and by nothing else — the two
+# floors beside it stay green under this sabotage, which is what makes it the owner of that one.
+mut_LEDGER_gate_pass_membership_not_position() {
+  sed -i 's@| (.event == "session" and .gate != "pass")))@| .gate) != "pass" and (map(select(is_gate_pass)) | length) == 0)@' "$1"
+  sed -i 's@or ((map(select(.event == "session" or is_gate_pass)) | last$@or ((map(select(.event == "session")) | last@' "$1"
+}
+
+mut_LEDGER_gate_pass_mints_a_cell() {
+  sed -i 's@| map(select((map(select(.event == "session" or is_escalation)) | length) > 0))@@' "$1"
+}
+
+# The other half of the same sentence, one level up from the cell: the version AXIS. Unfiltered,
+# `shas_in_file_order` lets a closure mint a `kit_sha` that observed nothing — and in the repo that
+# BUILDS the kit that is the normal case, because every session commits and the sha advances
+# between the phase whose gate failed and the lap that closes it for free. `latest` then points at
+# a slice with zero sessions, `previous` slides back one, and `guard.degenerate_axis` flips, which
+# silences the one sentence that explains why `indeterminado` is correct here. Downstream
+# `gate_KAIZEN` derives its expected sha from `latest.kit_sha`, so a verdict already written stops
+# satisfying its gate — a phase no session can satisfy. Caught by the DIFFERENTIAL assertion
+# `a closure on a sha of its own changes nothing about the axis` in check-kaizen.sh; the floor
+# beside it stays green under this sabotage, which is what makes that one the owner.
+# The closure counted as a SESSION in the per-cell tally: a phase that bought one session is
+# reported as two, in the very cell the judge cites first. It survived until r2 because the
+# assertion that says "the recorded fact moves the label and NOTHING else" compared ten hand-picked
+# SLICE-level keys and left `.latest.detail` out entirely — an assertion affirming more than it
+# measured. Caught by that same assertion now that `detail` is in its shape.
+mut_LEDGER_gate_pass_counted_as_session() {
+  sed -i 's@sessions: (map(select(.event == "session")) | length),@sessions: (map(select(.event == "session" or is_gate_pass)) | length),@' "$1"
+}
+
+mut_LEDGER_gate_pass_mints_a_version() {
+  sed -i 's@map(select(.event == "session" or is_escalation))$@map(select(true))@' "$1"
+}
+
+# `sdd retry` is the third writer of the six count fields and the last one without an assertion.
+# Unguarded, its REVIEW photograph runs for every phase — and `review_rounds_on_disk` prints `0`
+# rather than nothing, so the row is never merely odd: on a mission with a round already on disk a
+# `sdd retry DOCS` is born claiming `rounds_before: 1`, a count that phase never had, feeding the
+# judge's `rounds_after > rounds_before` arithmetic. The anchor is the comment line above the guard
+# because the guard itself is byte-identical to cmd_run's (bin/sdd:4361), and a `perl -0` without
+# /g would have silently sabotaged the sibling and concluded about the wrong function. Caught by
+# `and its row carries all six count fields as null` in check-autonomy.sh.
+mut_RUN_retry_photographs_every_phase() {
+  perl -0pi -e 's/# sit outside of: the photograph belongs here for the same reason it belongs in cmd_run\.\n  if \[ "\$phase" = "REVIEW" \]; then review_before="\$\(review_rounds_on_disk\)"; fi/# sit outside of: the photograph belongs here for the same reason it belongs in cmd_run.\n  review_before="\$(review_rounds_on_disk)"/' "$1"
+}
+
+# The EXEC half of the same door, and it fails in the same direction: `checkpoint_tally` always
+# tallies, so an unguarded photograph writes `pending_before: 0` onto a non-EXEC row — a zero that
+# reads as "a session that ran and advanced nothing" instead of "this phase has no increments".
+# Same assertion owns it, because the assertion reads all six fields at once: one row, one contract.
+mut_RUN_retry_exec_photographs_every_phase() {
+  perl -0pi -e 's/  if \[ "\$phase" = "EXEC" \]; then exec_before="\$\(checkpoint_tally \| cut -f1\)"; fi\n  # `sdd retry REVIEW`/  exec_before="\$(checkpoint_tally | cut -f1)"\n  # `sdd retry REVIEW`/' "$1"
+}
+
+# The inline retry stops overwriting the first pass's gate verdict. The retry that PASSES then
+# leaves `gate_failed[$phase]` at 1, and the next lap's gate_pass_rows writes a `gate_pass` row
+# claiming the phase closed WITHOUT a session — about a phase that closed with the very retry
+# sitting one row above it in the same ledger. Permanent, in an append-only file, and it feeds both
+# `phase_label` and the `$closed` count. Every other inline-retry fixture in the suite ends on a
+# retry that FAILS, where this sabotage is invisible; caught by `the phase whose inline retry
+# passed gets no closure row` in check-autonomy.sh, and by nothing else.
+mut_RUN_inline_retry_keeps_the_failed_verdict() {
+  perl -0pi -e 's/    gate_failed\["\$phase"\]="\$\( \[ "\$gate_rc2" -eq 0 \] && echo 0 \|\| echo 1 \)"\n//' "$1"
 }
 
 CATALOG=(
@@ -2589,6 +2872,29 @@ CATALOG=(
   KAIZEN_advance_rate_reads_gate
   KAIZEN_label_auto_retry_blind
   KAIZEN_label_idle_blind
+  RUN_review_rounds_photo_missing
+  LEDGER_rounds_leak_across_phases
+  LEDGER_outcome_rounds_blind
+  LEDGER_outcome_rounds_unguarded
+  LEDGER_outcome_rounds_undirected
+  LEDGER_outcome_rounds_moved_blind
+  LEDGER_historic_rounds_blind
+  LEDGER_historic_rounds_repairs_photo
+  LEDGER_historic_rounds_no_file_is_a_round
+  LEDGER_historic_rounds_memory_blind
+  AUTONOMY_historic_sentence_before_comparability
+  RUN_gate_pass_row_missing
+  RUN_gate_pass_ignores_own_session
+  RUN_gate_pass_off_the_derived_branch
+  LEDGER_gate_pass_unrecognized
+  LEDGER_gate_pass_not_admitted
+  LEDGER_gate_pass_mints_a_cell
+  LEDGER_gate_pass_counted_as_session
+  LEDGER_gate_pass_mints_a_version
+  LEDGER_gate_pass_membership_not_position
+  RUN_retry_photographs_every_phase
+  RUN_retry_exec_photographs_every_phase
+  RUN_inline_retry_keeps_the_failed_verdict
 )
 
 # Mutations that are NOT caught today, each with the increment that closes it. Ratchet in both

@@ -4,6 +4,139 @@ Registro de melhorias com **antes/depois medido**. Sem número, não entra.
 
 ---
 
+## 2026-08-31 — O ledger diz se a rodada andou, e a fase que fechou de graça para de ler `refez` (missão `20260831-a-rodada-que-andou`)
+
+**Problema (Gemba):** a janela de medição 2 fechou e produziu a **primeira fatia da história do kit
+com `guard.sufficient: true`** — `kit_sha bf001fe`, 3 missões do `sales_quote`, 23 sessões,
+US$ 175,96, `escalations: {}`. Dezoito células de rótulo, **16 `ok`**. As **duas** que não eram `ok`
+não descreviam fricção nenhuma: eram as duas metades do mesmo defeito, **o instrumento não sabia ler
+o que aconteceu**.
+**(a)** Célula `leve`, REVIEW de `20260830-a-tela-que-mente-o-pagamento`: 2 sessões,
+`1 advanced · 1 churned`, **US$ 47,81** — a célula mais cara da fatia inteira, na fase que consome
+**41% de todo o gasto** (US$ 72,39 de US$ 175,96). O REVIEW é laço **por desenho**
+(`REVIEW_MAX_ITER=3`, rodadas derivadas do disco por `review_rounds_on_disk()`), e uma r1 que pousou
+`40-review-r1.md` com achados reais sem alcançar Grade A **avançou uma rodada** — mas o único braço
+de progresso que o `def outcome` conhecia era o `pending_after < pending_before` do EXEC. É, letra
+por letra, o defeito que `20260829-o-incremento-que-andou` consertou uma fase antes, vivo na fase
+mais cara do pipeline.
+**(b)** Célula `refez`, QA de `20260830-o-rascunho-fantasma-do-mount`: 1 sessão,
+`0 advanced · 1 churned`. `refez` é o sinal de fricção **mais forte** da rubrica, e ali era falso —
+`escalations: {}`, **1** lançamento na missão inteira, REVIEW/DOCS/PR todos com sessão e todos `ok`
+depois dela. O `gate_QA` passou mais tarde **sem gastar sessão**, e passagem que não compra sessão
+não escreve linha nenhuma: a rubrica perguntava *"a última **sessão** passou no gate?"* querendo
+dizer *"a **fase** fechou?"*.
+
+**Contramedida:** três campos aditivos na linha REVIEW (`rounds_before` — foto tirada pelo
+`cmd_run`/`cmd_retry` **antes** do `run_phase`, fora da guarda `[ -z "$force_phase" ]`;
+`rounds_after` e `rounds_max`, publicados pelo `gate_REVIEW` assim que o arquivo da rodada é
+**resolvido**, assimetria deliberada com o `pending_after` porque o `N` está no nome do arquivo e
+ninguém o auto-declara). `def outcome:` ganha o braço da rodada com a **mesma guarda de não-nulo**
+do EXEC (`jq` ordena `null` abaixo de todo número, então sem ela `2 > null` é verdade e a sessão
+cujo gate recusou o artefato leria como o progresso mais alto do ledger). `def historic_rounds:`
+recupera a rodada do `gate_why` das linhas anteriores ao esquema, por caminho **datado, declarado e
+contado na tela**. E o runner passou a **gravar o fato** de que uma fase fechou de graça —
+`event: "gate_pass"`, terceira forma de linha —, em vez de deixar o juiz inferi-lo da ausência.
+`v` continua `1`; nada é migrado, nada é reescrito.
+
+**A régua, reprodutível — os dois comandos e as duas saídas.** Mesmo ledger real (195 linhas), dois
+binários:
+
+```
+$ git show bf001fe:bin/sdd > /tmp/sdd-base.sh
+$ bash /tmp/sdd-base.sh autonomy --all-repos > antes.txt    # 134 linhas
+$ ./bin/sdd     autonomy --all-repos         > depois.txt   # 135 linhas
+$ diff antes.txt depois.txt
+22c22
+<   d89ea43  1 session(s) · 0 advanced · 1 churned · 0 idle · 100% waste · 1 mission(s) · US$ 15.11
+---
+>   d89ea43  1 session(s) · 1 advanced · 0 churned · 0 idle · 0% waste · 1 mission(s) · US$ 15.11
+56,57c56,57
+<   e9a3681  1 session(s) · 0 advanced · 1 churned · 0 idle · 100% waste · 1 mission(s) · US$ 19.91
+<   353b4b1  1 session(s) · 0 advanced · 1 churned · 0 idle · 100% waste · 1 mission(s) · US$ 25.16
+---
+>   e9a3681  1 session(s) · 1 advanced · 0 churned · 0 idle · 0% waste · 1 mission(s) · US$ 19.91
+>   353b4b1  1 session(s) · 1 advanced · 0 churned · 0 idle · 0% waste · 1 mission(s) · US$ 25.16
+124c124
+<   080f503  1 session(s) · 0 advanced · 1 churned · 0 idle · 100% waste · 1 mission(s) · US$ 37.10
+---
+>   080f503  1 session(s) · 1 advanced · 0 churned · 0 idle · 0% waste · 1 mission(s) · US$ 37.10
+134c134,135
+<   (53 EXEC row(s) older than the pending fields read their progress from gate_why)
+---
+>   (51 EXEC row(s) older than the pending fields read their progress from gate_why)
+>   (19 REVIEW row(s) older than the round fields read their round from gate_why)
+```
+
+**O diff inteiro tem cinco hunks e é a medição** — as 128 linhas de tabela batem dos dois lados, o
+que é o piso contra "um dos leitores quebrou".
+
+| Medida | Antes (`bf001fe`, régua de 2026-08-29) | Depois (`d337c25`) |
+|---|---|---|
+| `d89ea43` (US$ 15,11) — REVIEW `40-review-r1.md`, `Test Coverage = B` | `0 advanced · 1 churned · 100% waste` | **`1 advanced · 0 churned · 0% waste`** |
+| `e9a3681` (US$ 19,91) — `40-review-r1.md`, `Code Quality (Zen) = C` | `0 advanced · 1 churned · 100% waste` | **`1 advanced · 0 churned · 0% waste`** |
+| `353b4b1` (US$ 25,16) — `40-review-r2.md`, `Code Quality (Zen) = C` | `0 advanced · 1 churned · 100% waste` | **`1 advanced · 0 churned · 0% waste`** |
+| `080f503` (US$ 37,10) — **a r1 do REVIEW desta própria missão**, gate reprovado em Grade B | `0 advanced · 1 churned · 100% waste` | **`1 advanced · 0 churned · 0% waste`** |
+| `bf001fe` — a fatia julgada da janela 2 | `23 session(s) · 21 advanced · 2 churned · 0 idle · 8% waste · 3 mission(s) · US$ 175.96` | **idêntica** — e é o esperado; ver ⚠️ abaixo |
+| `churned`, somado em todo o ledger | 23 | **19** |
+| `advanced`, somado em todo o ledger | 144 | **148** |
+| versões a `100% waste` | **14** de 128 | **10** de 128 |
+| linhas de tabela que se movem | — | **4**, e nenhuma das outras 124 |
+| linhas REVIEW que leem a rodada da prosa | n/a (não existia) | **19**, impressas na tela pelo próprio comando |
+| a frase do caminho datado do EXEC | `(53 EXEC row(s) …)` | `(51 EXEC row(s) …)` — ligada sobre `comparable`, fechando o item aberto do `TODO.md` (`c7c2e2e`) |
+| asserções de `tests/run-all.sh` | 779 | **842** |
+| `check-autonomy.sh` / `check-kaizen.sh` | 254 / 146 | **291** / **172** |
+| catálogo de mutação | 195 | **218** (+23) |
+| a própria missão, por missão | n/a | `7 session(s) · 6 advanced · 1 churned · 0 idle · 2 launch(es) · 0 reopened · US$ 117.96` — medida pela régua que ela conserta |
+
+**A métrica (2), por sensor**, que é a metade que o ledger real **não** consegue provar hoje:
+
+```
+$ o=$(bash tests/check-kaizen.sh 2>&1)
+$ grep -c '^  ok    a phase that closed without a session does not read refez' <<< "$o"
+1
+```
+
+A QA re-mediu a mesma promessa no leitor **real** (não só na suíte), com `SDD_STATE_DIR` apontado
+para um ledger de fixture carregando o laço QA-reprova → EXEC → `gate_pass`: a fase QA lê **`leve`
+com a linha e `refez` sem ela**. É a promessa letra por letra — `refez` deixa de ser **afirmado** —,
+e não o `ok` falso que a métrica proíbe: a sessão sobrevivente continua churn pela sua própria
+conta. Trocar um rótulo falso por outro seria o mesmo defeito com o sinal invertido.
+
+⚠️ **A métrica (1) como o plano a escreveu foi FALSIFICADA, e a linha parou para o humano decidir.**
+A previsão era `bf001fe` → `22 advanced · 1 churned · 4% waste`. Medida no ponto de corte do I3, a
+fatia não se moveu **um dígito** — e o I3 não falhou: a única REVIEW reprovada de `bf001fe` tem
+`gate_why: "no 40-review-r<N>.md"`, ou seja **não pousou rodada nenhuma**. Recupera 0, `0 > 0` é
+falso, e ela segue `churned` **por mérito**. Fazê-la ler `advanced` violaria a métrica (2) do
+próprio plano. O I4 virou `blocked` no ponto de corte, o humano escolheu reescrever o alvo para a
+medição real, e o `00-missao.md`/`01-plano.md` foram corrigidos em `e320d21`/`5eb6de7` **antes** de
+a linha andar. Mexer no alvo *depois* de saber o resultado seria o modo de falha que a métrica (2)
+existe para nomear; mexer nele com a medição na mesa e a decisão registrada é outra coisa.
+
+**Vinte e três mutantes entram (195 → 218)**, e a passada de sabotagem é quem os justificou:
+`RUN_review_rounds_photo_missing` e `LEDGER_rounds_leak_across_phases` (a foto e o vazamento dos
+três campos para fora do REVIEW), quatro do braço do `outcome` — incluindo
+`LEDGER_outcome_rounds_unguarded`, que é o fail-open do `null` na direção da **lisonja** —, quatro
+do caminho datado, `AUTONOMY_historic_sentence_before_comparability`, três das portas do escritor
+(`RUN_gate_pass_row_missing`, `_ignores_own_session`, `_off_the_derived_branch`), seis dos leitores
+do evento novo e três das portas do `cmd_retry` que a r1 deixou passar. **Sete** deles nasceram de
+achado de revisão e não do plano — dois na r1, cinco na r2.
+
+⚠️ **O que ISTO NÃO PROVA.** (1) O I4 é **inerte hoje**: há `0` linhas `gate_pass` no ledger real, a
+métrica (2) só existe por fixture, e os dois `bin/sdd` respondem idêntico sobre produção. É
+exatamente por isso que as **duas HIGH da r2** teriam embarcado caladas — uma linha `gate_pass`
+**cunhava uma versão** no eixo do juiz (`latest` numa fatia de `sessions: 0`, `gate_KAIZEN`
+derivando dali o sha esperado: gate insatisfazível) e só acordaria na primeira fase que fechasse de
+graça, com o eixo já errado. (2) O caminho datado depende de o `gate_REVIEW` não mudar a frase que
+carrega `40-review-r<N>.md`: é **dado**, não contrato, e sai do ar quando as 19 linhas saírem da
+janela — a frase na tela é o sinal de apagamento. (3) A rubrica ainda **não** conserta o `refez` da
+sessão reprovada quando ela e a closure caem em `kit_sha` diferentes, que é o caso normal no repo
+que constrói o kit; limite declarado no `bin/sdd` e no `docs/pipeline.md`. (4) E a régua mudou pela
+**terceira vez em quatro dias** (2026-08-28, 08-29, 08-31): número desta entrada não é comparável
+com número de handoff anterior sem dizer com qual `bin/sdd` foi lido — inclusive os da janela 2, cujo
+aviso já está escrito no `05-verdict.md` da missão.
+
+---
+
 ## 2026-08-29 — O ledger diz se o incremento andou, e o laço desenhado deixa de ser desperdício (missão `20260829-o-incremento-que-andou`)
 
 **Problema (Gemba):** um dia depois de `20260828-instrumento-honesto` mergear a tri-estado

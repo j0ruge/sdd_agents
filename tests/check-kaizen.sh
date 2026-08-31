@@ -280,6 +280,352 @@ arm_label() { jq -r --arg m "$1" '.latest.detail[] | select(.mission == $m and .
 assert_eq "each arm of the leve clause stands alone: auto retry, idle session, and neither" \
   "leve leve ok" "$(arm_label m8) $(arm_label m9) $(arm_label m10)"
 
+# --- the REVIEW round that advanced is not churn (20260831-a-rodada-que-andou) ----
+# The same defect as m7 above, one phase further on. REVIEW is a LOOP BY DESIGN —
+# REVIEW_MAX_ITER rounds, each landing its own `40-review-r<N>.md` — and `outcome` knew a single
+# arm of progress, `pending_after < pending_before`, which exists for EXEC alone. So an r1 that
+# landed with real findings and did not reach Grade A read `churned`, and the runner charged the
+# phase for the refusal its own design schedules. Measured on the real ledger of window 2: the
+# REVIEW of 20260830-a-tela-que-mente-o-pagamento is the most expensive cell of the whole slice —
+# US$ 47.81, labelled `leve` off `1 advanced · 1 churned` — in the phase that consumes 41% of the
+# spend the judge is asked to explain.
+#
+# FIVE missions, one per rule of the arm, because a rule whose removal no fixture notices is a rule
+# with no probe. Each pairs the interesting session with a passing one so the phase closes and the
+# cell is graded on the outcome rather than on `refez`:
+#   m20  0→1 fail · 1→2 pass     the designed loop: both sessions advanced          ok
+#   m21  1→1 fail · 1→2 pass     real churn: a session that landed NO new round     leve
+#   m22  null→2 fail · 2→3 pass  no photograph of the round before                  leve
+#   m23  0→1 fail · 1→2 pass     the round moved but the session wrote NOTHING      leve
+#        (moved:false)
+#   m24  2→1 fail · 1→2 pass     the round count went DOWN                          leve
+#
+# Every degrade of the arm lands somewhere different, and the values below were READ OFF the
+# sabotage pass rather than predicted:
+#   new rule            6 advanced · 3 churned · 1 idle   labels {ok: 1, leve: 4}
+#   whole arm gone      5 advanced · 4 churned · 1 idle   {ok: 0, leve: 5}  mut_LEDGER_outcome_rounds_blind
+#   no null guard       7 advanced · 2 churned · 1 idle   {ok: 2, leve: 3}  mut_LEDGER_outcome_rounds_unguarded, m22 turns ok
+#   `>` becomes `!=`    7 advanced · 2 churned · 1 idle   {ok: 2, leve: 3}  m24 turns ok
+#   no `.moved` guard   7 advanced · 3 churned · 0 idle   {ok: 2, leve: 3}  m23 turns ok
+# The middle three share a slice tally, which is precisely why each rule also has its own CELL
+# assertion below: the tally alone could not tell them apart, and a rule distinguished only by a
+# number two other rules also produce is not measured.
+#
+# ⚠️ EVERY failing session here has `gate: "fail"` on purpose. A fixture where the round advanced
+# AND the gate passed is satisfied by the FIRST arm of `outcome` and measures nothing about this
+# one — the "red for the right reason" rule this repo pays for in CLAUDE.md.
+#
+# m22 is not academic. `jq` orders `null` below every number, so `.rounds_after > .rounds_before`
+# with a null RIGHT-hand side is TRUE, and a REVIEW row whose photograph was never taken would read
+# as the loudest progress in the ledger — fail-open in the direction of flattery, the exact error
+# the EXEC sibling paid for. It is also the row shape `mut_RUN_review_rounds_photo_missing`
+# produces, so without the guard that mutant would stop moving the histogram at all.
+echo "== series: the REVIEW round that advanced is not churn =="
+mkdir -p "$OUTSIDE/rounds"
+localize > "$OUTSIDE/rounds/autonomy-log.jsonl" <<'EOF'
+{"v":1,"ts":"2026-08-31T10:00:00-03:00","event":"session","run_id":"b1","invocation":"run","kit_sha":"bbb7777","kit_dirty":false,"project":"p1","repo":"/p1","mission":"m20","phase":"REVIEW","step":"REVIEW","agent":"sdd-reviewer","model":"opus","attempt":1,"auto_retry":false,"session":"b1s","rc":0,"dur_s":10,"cost_usd":2.0,"moved":true,"rounds_before":0,"rounds_after":1,"rounds_max":3,"gate":"fail","gate_why":"40-review-r1.md: Correctness = B"}
+{"v":1,"ts":"2026-08-31T10:01:00-03:00","event":"session","run_id":"b1","invocation":"run","kit_sha":"bbb7777","kit_dirty":false,"project":"p1","repo":"/p1","mission":"m20","phase":"REVIEW","step":"REVIEW","agent":"sdd-reviewer","model":"opus","attempt":2,"auto_retry":false,"session":"b2s","rc":0,"dur_s":10,"cost_usd":2.0,"moved":true,"rounds_before":1,"rounds_after":2,"rounds_max":3,"gate":"pass","gate_why":"40-review-r2.md: every criterion A"}
+{"v":1,"ts":"2026-08-31T10:02:00-03:00","event":"session","run_id":"b2","invocation":"run","kit_sha":"bbb7777","kit_dirty":false,"project":"p1","repo":"/p1","mission":"m21","phase":"REVIEW","step":"REVIEW","agent":"sdd-reviewer","model":"opus","attempt":1,"auto_retry":false,"session":"b3s","rc":0,"dur_s":10,"cost_usd":2.0,"moved":true,"rounds_before":1,"rounds_after":1,"rounds_max":3,"gate":"fail","gate_why":"40-review-r1.md: Correctness = B"}
+{"v":1,"ts":"2026-08-31T10:03:00-03:00","event":"session","run_id":"b2","invocation":"run","kit_sha":"bbb7777","kit_dirty":false,"project":"p1","repo":"/p1","mission":"m21","phase":"REVIEW","step":"REVIEW","agent":"sdd-reviewer","model":"opus","attempt":2,"auto_retry":false,"session":"b4s","rc":0,"dur_s":10,"cost_usd":2.0,"moved":true,"rounds_before":1,"rounds_after":2,"rounds_max":3,"gate":"pass","gate_why":"40-review-r2.md: every criterion A"}
+{"v":1,"ts":"2026-08-31T10:04:00-03:00","event":"session","run_id":"b3","invocation":"run","kit_sha":"bbb7777","kit_dirty":false,"project":"p1","repo":"/p1","mission":"m22","phase":"REVIEW","step":"REVIEW","agent":"sdd-reviewer","model":"opus","attempt":1,"auto_retry":false,"session":"b5s","rc":0,"dur_s":10,"cost_usd":2.0,"moved":true,"rounds_before":null,"rounds_after":2,"rounds_max":3,"gate":"fail","gate_why":"40-review-r2.md: Correctness = B"}
+{"v":1,"ts":"2026-08-31T10:05:00-03:00","event":"session","run_id":"b3","invocation":"run","kit_sha":"bbb7777","kit_dirty":false,"project":"p1","repo":"/p1","mission":"m22","phase":"REVIEW","step":"REVIEW","agent":"sdd-reviewer","model":"opus","attempt":2,"auto_retry":false,"session":"b6s","rc":0,"dur_s":10,"cost_usd":2.0,"moved":true,"rounds_before":2,"rounds_after":3,"rounds_max":3,"gate":"pass","gate_why":"40-review-r3.md: every criterion A"}
+{"v":1,"ts":"2026-08-31T10:06:00-03:00","event":"session","run_id":"b4","invocation":"run","kit_sha":"bbb7777","kit_dirty":false,"project":"p1","repo":"/p1","mission":"m23","phase":"REVIEW","step":"REVIEW","agent":"sdd-reviewer","model":"opus","attempt":1,"auto_retry":false,"session":"b7s","rc":0,"dur_s":10,"cost_usd":2.0,"moved":false,"rounds_before":0,"rounds_after":1,"rounds_max":3,"gate":"fail","gate_why":"40-review-r1.md: Correctness = B"}
+{"v":1,"ts":"2026-08-31T10:07:00-03:00","event":"session","run_id":"b4","invocation":"run","kit_sha":"bbb7777","kit_dirty":false,"project":"p1","repo":"/p1","mission":"m23","phase":"REVIEW","step":"REVIEW","agent":"sdd-reviewer","model":"opus","attempt":2,"auto_retry":false,"session":"b8s","rc":0,"dur_s":10,"cost_usd":2.0,"moved":true,"rounds_before":1,"rounds_after":2,"rounds_max":3,"gate":"pass","gate_why":"40-review-r2.md: every criterion A"}
+{"v":1,"ts":"2026-08-31T10:08:00-03:00","event":"session","run_id":"b5","invocation":"run","kit_sha":"bbb7777","kit_dirty":false,"project":"p1","repo":"/p1","mission":"m24","phase":"REVIEW","step":"REVIEW","agent":"sdd-reviewer","model":"opus","attempt":1,"auto_retry":false,"session":"b9s","rc":0,"dur_s":10,"cost_usd":2.0,"moved":true,"rounds_before":2,"rounds_after":1,"rounds_max":3,"gate":"fail","gate_why":"40-review-r1.md: Correctness = B"}
+{"v":1,"ts":"2026-08-31T10:09:00-03:00","event":"session","run_id":"b5","invocation":"run","kit_sha":"bbb7777","kit_dirty":false,"project":"p1","repo":"/p1","mission":"m24","phase":"REVIEW","step":"REVIEW","agent":"sdd-reviewer","model":"opus","attempt":2,"auto_retry":false,"session":"b10s","rc":0,"dur_s":10,"cost_usd":2.0,"moved":true,"rounds_before":1,"rounds_after":2,"rounds_max":3,"gate":"pass","gate_why":"40-review-r2.md: every criterion A"}
+EOF
+ROUNDS_OUT="$( cd "$FIX" && SDD_STATE_DIR="$OUTSIDE/rounds" "$SDD" kaizen --series 2>/dev/null )"
+round_cell() { jq -r --arg m "$1" '.latest.detail[] | select(.mission == $m and .phase == "REVIEW")
+                                   | "\(.label) \(.outcomes | tojson)"' <<< "$ROUNDS_OUT"; }
+# THE assertion of this increment. Label and histogram on ONE line, because they are one decision
+# read twice: under the old rubric this reads `leve {"advanced":1,"churned":1,"idle":0}`, which is
+# letter for letter the cell window 2 charged US$ 47.81 for.
+assert_eq "a REVIEW round that advanced reads advanced, never churned" \
+  'ok {"advanced":2,"churned":0,"idle":0}' "$(round_cell m20)"
+# The control, and the reason the clause is not "REVIEW is always ok": m21 has the same SHAPE as
+# m20 — one run, gate fail then gate pass, no retry, no escalation — and stays `leve` because its
+# failing session landed no new round. It reads the same under all three spellings, which is what
+# a control is for.
+assert_eq "control: a REVIEW session that landed no new round is still churn" \
+  'leve {"advanced":1,"churned":1,"idle":0}' "$(round_cell m21)"
+# The null guard, measured and not asserted in prose: without it b5s reads `advanced`, m22 turns
+# `ok`, and a REVIEW row whose photograph was never taken becomes the loudest progress in the
+# ledger.
+assert_eq "a REVIEW row with no round before it is not a round that advanced" \
+  'leve {"advanced":1,"churned":1,"idle":0}' "$(round_cell m22)"
+# The `.moved != false` half of the arm, which no fixture reached until the sabotage pass said so.
+# A session that wrote NOTHING has not advanced a round, whatever the disk says — the round it
+# would be credited with is one an earlier session landed. Same guard, same direction and same
+# reason as the EXEC arm one line up in bin/sdd.
+assert_eq "a REVIEW session that wrote nothing did not advance the round" \
+  'leve {"advanced":1,"churned":0,"idle":1}' "$(round_cell m23)"
+# The DIRECTION, which is the whole reason this is a third arm and not a generalisation of the
+# second: EXEC counts what is still to do and goes DOWN, REVIEW counts what has landed and goes UP.
+# Spelled `!=` — "the number changed" — a round file that DISAPPEARED reads as progress. It is also
+# what a single shared arm would do to the checkpoint that GREW, which is QA writing fix increments.
+assert_eq "a REVIEW round count that went DOWN is not a round that advanced" \
+  'leve {"advanced":1,"churned":1,"idle":0}' "$(round_cell m24)"
+# The whole slice, so a rubric that reached the cells above by some other route still fails.
+# ⚠️ It does NOT stand alone: three of the five degrades land on `7 · 2 · 1` or share a label
+# tally, which is why every rule above also has its own cell.
+assert_eq "and the slice tallies to the histogram only the new arm produces" \
+  '{"advanced":6,"churned":3,"idle":1} {"ok":1,"leve":4,"refez":0}' \
+  "$(jq -r '"\(.latest.outcomes | tojson) \(.latest.labels | tojson)"' <<< "$ROUNDS_OUT")"
+
+# PARITY, measured and never asserted in prose — the second probe of this increment and the one
+# that matters. `outcome` is ONE printed definition (`ledger_outcome_defs` in bin/sdd) spliced into
+# BOTH readers, and a program that stopped splicing it and grew a local copy on the old yardstick
+# stays internally consistent: only the comparison of the two OUTPUTS catches it. The house does
+# not accept "same spelling in both programs" as proof of parity — the `$order` of cmd_autonomy and
+# the `on_axis` of kaizen_series diverged once under a comment swearing the opposite
+# (20260817-catraca-do-backlog, r1).
+rounds_win="$( cd "$FIX" && SDD_STATE_DIR="$OUTSIDE/rounds" "$SDD" autonomy 2>&1 )"
+rounds_table="$(sed -nE 's/^  bbb7777  [0-9]+ session\(s\) · ([0-9]+) advanced · ([0-9]+) churned · ([0-9]+) idle · .*/\1 \2 \3/p' <<< "$rounds_win")"
+assert_eq "the human window and the judge count the REVIEW round alike" \
+  "$(jq -r '.latest.outcomes | "\(.advanced) \(.churned) \(.idle)"' <<< "$ROUNDS_OUT")" "$rounds_table"
+# ...and not by both being empty: two empty strings are equal. The floor is the known histogram of
+# this fixture, so the parity above is about the numbers this block describes.
+assert_eq "that parity is not vacuous — the table printed the three counts" "6 3 1" "$rounds_table"
+
+# --- the phase that closed WITHOUT buying a session --------------------------
+# The third clause of `phase_label` asks "did the last SESSION pass its gate?" while meaning "did
+# the PHASE close?", and the two are the same question only while every gate that ever passes
+# costs a session. It does not: the QA⇄EXEC fix loop closes QA for free — QA files a bug and a
+# fix increment, EXEC closes both, and the next derivation finds gate_QA green with no second QA
+# session anywhere. Measured on window 2: the QA of 20260830-o-rascunho-fantasma-do-mount read
+# `refez` — the LOUDEST friction signal in the rubric — over a phase that closed clean, with
+# `escalations: {}`, one launch for the whole mission, and REVIEW/DOCS/PR all `ok` after it.
+#
+# So the runner writes the FACT (`event: "gate_pass"`) instead of leaving the judge to infer it
+# from an absence, and the rubric reads the fact. ⚠️ The promise is that `refez` stops being
+# ASSERTED, never that the cell turns green: the surviving session is churn on its own count, and
+# the cascade lands on `leve`. Promising `ok` would trade one false label for another.
+#
+# ⚠️ The `gate_pass` rows below carry EXACTLY the eleven keys `autonomy_gate_pass_row` builds —
+# no `kind` and no `gate_why`, because the gate that closed was evaluated inside `current_phase()`,
+# which runs as `$( )`, so GATE_WHY died with the subshell. A fixture that hands the reader a field
+# the writer never writes is the shape CLAUDE.md names: writer and fixture sharing an author and an
+# assumption, so a green suite CONFIRMS the assumption instead of measuring it. Copied from the
+# constructor, never from memory.
+echo "== series: a phase that closed without a session does not read refez =="
+mkdir -p "$OUTSIDE/gatepass" "$OUTSIDE/nogatepass"
+localize > "$OUTSIDE/gatepass/autonomy-log.jsonl" <<'EOF'
+{"v":1,"ts":"2026-08-31T12:00:00-03:00","event":"session","run_id":"g1","invocation":"run","kit_sha":"ddd8888","kit_dirty":false,"project":"p1","repo":"/p1","mission":"m30","phase":"QA","step":"QA","agent":"sdd-qa","model":"opus","attempt":1,"auto_retry":false,"session":"g1s","rc":0,"dur_s":10,"cost_usd":3.0,"moved":true,"gate":"fail","gate_why":"1 bug(s) with Status: open in the registry"}
+{"v":1,"ts":"2026-08-31T12:01:00-03:00","event":"session","run_id":"g1","invocation":"run","kit_sha":"ddd8888","kit_dirty":false,"project":"p1","repo":"/p1","mission":"m30","phase":"EXEC","step":"EXEC","agent":"sdd-executor","model":"opus","attempt":1,"auto_retry":false,"session":"g2s","rc":0,"dur_s":10,"cost_usd":1.5,"moved":true,"pending_before":1,"pending_after":0,"increments_total":1,"gate":"pass","gate_why":"0 of 1 increment(s) still to execute"}
+{"v":1,"ts":"2026-08-31T12:02:00-03:00","event":"gate_pass","run_id":"g1","invocation":"run","kit_sha":"ddd8888","kit_dirty":false,"project":"p1","repo":"/p1","mission":"m30","phase":"QA"}
+{"v":1,"ts":"2026-08-31T12:03:00-03:00","event":"session","run_id":"g1","invocation":"run","kit_sha":"ddd8888","kit_dirty":false,"project":"p1","repo":"/p1","mission":"m30","phase":"REVIEW","step":"REVIEW","agent":"sdd-reviewer","model":"opus","attempt":1,"auto_retry":false,"session":"g3s","rc":0,"dur_s":10,"cost_usd":2.0,"moved":true,"rounds_before":0,"rounds_after":1,"rounds_max":3,"gate":"pass","gate_why":"40-review-r1.md: every criterion A"}
+{"v":1,"ts":"2026-08-31T12:04:00-03:00","event":"session","run_id":"g2","invocation":"run","kit_sha":"ddd8888","kit_dirty":false,"project":"p1","repo":"/p1","mission":"m31","phase":"QA","step":"QA","agent":"sdd-qa","model":"opus","attempt":1,"auto_retry":false,"session":"g4s","rc":0,"dur_s":10,"cost_usd":3.0,"moved":true,"gate":"fail","gate_why":"1 bug(s) with Status: open in the registry"}
+EOF
+# The control world is the SAME file with the one row cut out, so nothing else can explain a
+# difference between the two readings.
+grep -v '"event":"gate_pass"' "$OUTSIDE/gatepass/autonomy-log.jsonl" \
+  > "$OUTSIDE/nogatepass/autonomy-log.jsonl"
+GP_OUT="$( cd "$FIX" && SDD_STATE_DIR="$OUTSIDE/gatepass" "$SDD" kaizen --series 2>/dev/null )"
+NOGP_OUT="$( cd "$FIX" && SDD_STATE_DIR="$OUTSIDE/nogatepass" "$SDD" kaizen --series 2>/dev/null )"
+gp_label() { jq -r --arg m "$1" --arg p "$2" \
+  '.latest.detail[] | select(.mission == $m and .phase == $p) | .label' <<< "$3"; }
+# THE assertion of this increment, stated as the metric states it: `refez` stops being asserted.
+assert_eq "a phase that closed without a session does not read refez" "true" \
+  "$([ "$(gp_label m30 QA "$GP_OUT")" != "refez" ] && echo true || echo false)"
+# ...and where it lands instead, so the assertion above cannot be satisfied by a rubric that
+# stopped labelling anything at all. `leve`, not `ok`: the one session QA bought is churn by its
+# own count, and that fact did not change.
+assert_eq "and it lands on leve, because the surviving session is still churn" "leve" \
+  "$(gp_label m30 QA "$GP_OUT")"
+# THE REPRODUCTION, and it is the same file minus one row: without the recorded fact the very same
+# QA phase reads `refez`. Any rubric that reaches the two lines above by some other route fails
+# here, because this control has to keep answering `refez`.
+assert_eq "the same phase without the recorded fact still reads refez" "refez" \
+  "$(gp_label m30 QA "$NOGP_OUT")"
+# The in-slice control: m31/QA has the SAME shape as m30/QA — one session, gate failed, moved —
+# and no gate_pass row of its own. A phase whose gate never closed is still `refez`, in the world
+# where the feature is ON. This is what keeps the clause from degenerating into "QA is never refez".
+assert_eq "a phase whose gate never closed is still refez, in the same slice" "refez" \
+  "$(gp_label m31 QA "$GP_OUT")"
+
+# THE DIFFERENTIAL, and it is the heart of this increment: a new event in an enum documented as
+# closed reaches 15 readers of `.event` in bin/sdd, and "13 of them select `session` explicitly and
+# the other 2 are the is_escalation pair" is a measurement of SITES, never of behaviour. So the two
+# series above are compared field by field with only `labels` allowed to differ. The five `excluded`
+# buckets are in the comparison BY NAME and not by accident: `unrecognized > 0` is what the judge
+# reads as a bug in the kit itself, so an event the series does not admit would make `sdd kaizen
+# --series` accuse the runner that wrote it.
+# ⚠️ `detail` is in the list, and it is the key that makes the assertion below deserve the word
+# NOTHING. Without it the comparison was ten SLICE-level keys hand-picked by the same author as the
+# writer — so it said "nothing else moved" while measuring a subset, and the new event reaches
+# per-CELL fields that were outside it. Measured (r2 of 20260831-a-rodada-que-andou): teaching the
+# cell to count a closure as a session (`sessions: map(select(.event == "session" or is_gate_pass))`
+# in group_summary) left BOTH sensors green at rc 0 while `m30/QA` went from 1 session to 2 — a
+# phase that bought one session reported as two, in the very cell the judge cites. An assertion
+# that AFFIRMS more than it measures is the fail-open this file spends its floors refusing.
+# `del(.label)` and not the whole cell: the label is the ONE thing the closure is supposed to move,
+# and it is what the three assertions above already pin, name by name.
+# ⚠️ `cost_usd` is compared IN CENTS, and that is a real jq subtlety rather than sloppiness. The sum
+# is `map(.cost_usd // 0) | add`, so a closure in the group contributes a `0` — numerically inert,
+# but `[3.0] | add` renders `3.0` while `[3.0, 0] | add` renders `3`. Same number, different text,
+# and a comparison of JSON TEXT would have failed on the representation while the money was
+# identical. Rounding to the cent states what this key means and compares the value.
+gp_shape() { jq -Sc '{outcomes: .latest.outcomes, advance_rate: .latest.advance_rate,
+                      moved_rate: .latest.moved_rate, cost_usd: .latest.cost_usd,
+                      sessions: .latest.sessions, missions: .latest.missions,
+                      composition: .latest.composition, escalations: .latest.escalations,
+                      detail: (.latest.detail | map(del(.label) | .cost_usd |= (. * 100 | round))),
+                      guard: .guard, excluded: .excluded}' <<< "$1"; }
+assert_eq "the recorded fact moves the label and NOTHING else in the series" \
+  "$(gp_shape "$NOGP_OUT")" "$(gp_shape "$GP_OUT")"
+# ...and not by both being empty. The floor is this fixture's known numbers, so the equality above
+# is about a series that actually said something.
+assert_eq "that differential is not vacuous — the slice has its four sessions and its money" \
+  '{"advanced":2,"churned":2,"idle":0} 9.5 4' \
+  "$(jq -r '"\(.latest.outcomes | tojson) \(.latest.cost_usd) \(.latest.sessions)"' <<< "$GP_OUT")"
+# Spelled out on its own, because it is the bucket with a CONSUMER: the judge is told to read
+# `unrecognized > 0` as a kit bug. The differential above would also catch this, but only as one
+# of ten fields, and this is the one whose failure has a name.
+assert_eq "the recorded fact is not thrown away as unrecognized" "0" \
+  "$(jq -r '.excluded.unrecognized' <<< "$GP_OUT")"
+# `is_escalation` answers false, in the judge's program. A gate that PASSED is the opposite of an
+# escalation, and a new event that fell into that pair would poison `escalations` — the map the
+# judge cites first — with a row that says the line stopped when it did not.
+assert_eq "is_escalation says no: a gate that passed is not an escalation" "{}" \
+  "$(jq -c '.latest.escalations' <<< "$GP_OUT")"
+
+# --- the closure is a POSITION, not a membership -----------------------------
+# The ledger is append-only and the rubric groups over the WHOLE life of a (repo, mission, phase),
+# not per run. Asked as `(map(select(is_gate_pass)) | length) == 0`, one recorded closure disabled
+# the clause for ever: a closure written on lap 3 outvoted every failing session after it, and the
+# runner cannot argue back — `gate_pass_logged` and `sessions` die with the process, so a phase that
+# reopens and stays red writes no second row. Reproduced end to end on a real `sdd run`: QA closes
+# for free, the REVIEW round reopens QA, and the sessions that follow fail with nobody spending a
+# cent on the phase closing again.
+#
+# Every row here carries ONE kit_sha on purpose. That is the normal case in a target repo — the kit
+# does not change during a run — so this was the common path, not an edge.
+echo "== series: a closure does not outvote the sessions that came after it =="
+mkdir -p "$OUTSIDE/gpafter"
+localize > "$OUTSIDE/gpafter/autonomy-log.jsonl" <<'EOF'
+{"v":1,"ts":"2026-08-31T12:00:00-03:00","event":"session","run_id":"g1","invocation":"run","kit_sha":"aaa9999","kit_dirty":false,"project":"p1","repo":"/p1","mission":"m50","phase":"QA","step":"QA","agent":"sdd-qa","model":"opus","attempt":1,"auto_retry":false,"session":"k1s","rc":0,"dur_s":10,"cost_usd":3.0,"moved":true,"gate":"fail","gate_why":"1 bug(s) with Status: open in the registry"}
+{"v":1,"ts":"2026-08-31T12:01:00-03:00","event":"session","run_id":"g1","invocation":"run","kit_sha":"aaa9999","kit_dirty":false,"project":"p1","repo":"/p1","mission":"m50","phase":"EXEC","step":"EXEC","agent":"sdd-executor","model":"opus","attempt":1,"auto_retry":false,"session":"k2s","rc":0,"dur_s":10,"cost_usd":1.5,"moved":true,"pending_before":1,"pending_after":0,"increments_total":1,"gate":"pass","gate_why":"0 of 1 increment(s) still to execute"}
+{"v":1,"ts":"2026-08-31T12:02:00-03:00","event":"gate_pass","run_id":"g1","invocation":"run","kit_sha":"aaa9999","kit_dirty":false,"project":"p1","repo":"/p1","mission":"m50","phase":"QA"}
+{"v":1,"ts":"2026-08-31T12:03:00-03:00","event":"session","run_id":"g1","invocation":"run","kit_sha":"aaa9999","kit_dirty":false,"project":"p1","repo":"/p1","mission":"m50","phase":"REVIEW","step":"REVIEW","agent":"sdd-reviewer","model":"opus","attempt":1,"auto_retry":false,"session":"k3s","rc":0,"dur_s":10,"cost_usd":2.0,"moved":true,"rounds_before":0,"rounds_after":1,"rounds_max":3,"gate":"pass","gate_why":"40-review-r1.md: every criterion A"}
+{"v":1,"ts":"2026-08-31T12:04:00-03:00","event":"session","run_id":"g1","invocation":"run","kit_sha":"aaa9999","kit_dirty":false,"project":"p1","repo":"/p1","mission":"m50","phase":"QA","step":"QA","agent":"sdd-qa","model":"opus","attempt":1,"auto_retry":false,"session":"k4s","rc":0,"dur_s":10,"cost_usd":7.0,"moved":true,"gate":"fail","gate_why":"1 bug(s) with Status: open in the registry"}
+EOF
+AFTER_OUT="$( cd "$FIX" && SDD_STATE_DIR="$OUTSIDE/gpafter" "$SDD" kaizen --series 2>/dev/null )"
+# THE assertion: the phase reopened AFTER the closure and did not close again, so `refez` is the
+# true reading. A rubric that asks "is there a closure anywhere in this group" answers `leve` here.
+assert_eq "a closure does not outvote the sessions that came after it" "refez" \
+  "$(jq -r '.latest.detail[] | select(.mission == "m50" and .phase == "QA") | .label' <<< "$AFTER_OUT")"
+# The floor that stops the assertion above from being satisfied by a rubric that went back to
+# calling everything `refez`: the REVIEW of the same slice closed and still reads `ok`.
+assert_eq "floor: the phase that DID close in the same slice still reads ok" "ok" \
+  "$(jq -r '.latest.detail[] | select(.mission == "m50" and .phase == "REVIEW") | .label' <<< "$AFTER_OUT")"
+# ...and the other direction, in the same file: cut the trailing QA session and the very same
+# closure DOES speak, because now it is the last word about the phase. The two readings differ by
+# one row, so no rubric that reaches the assertion above by ignoring `gate_pass` survives here.
+mkdir -p "$OUTSIDE/gpafter2"
+grep -v '"session":"k4s"' "$OUTSIDE/gpafter/autonomy-log.jsonl" > "$OUTSIDE/gpafter2/autonomy-log.jsonl"
+BEFORE_OUT="$( cd "$FIX" && SDD_STATE_DIR="$OUTSIDE/gpafter2" "$SDD" kaizen --series 2>/dev/null )"
+assert_eq "and with nothing after it the same closure still speaks" "leve" \
+  "$(jq -r '.latest.detail[] | select(.mission == "m50" and .phase == "QA") | .label' <<< "$BEFORE_OUT")"
+
+# --- the closure that landed in ANOTHER slice --------------------------------
+# The fixture above is the TARGET-REPO shape: the kit does not change during the run, so the
+# closure and the session it explains carry the same `kit_sha` and land in the same slice. In the
+# repo that BUILDS the kit every session commits, so the sha advances between the phase that failed
+# and the lap that closes it — the closure is stamped with a sha the failing session never had.
+#
+# The rubric grades one slice at a time, so in that world the closure arrives ALONE in its group:
+# no escalation, no retry, and `map(select(.event == "session")) | last` is null. Every arm of
+# phase_label is false and the `else` mints a phantom `ok` — a clean grade for a phase that spent
+# nothing in this slice, in the histogram the judge is told to cite first. Measured before the
+# filter in group_summary existed: `labels {ok: 2}` over a slice holding ONE session.
+#
+# Same shape, second world, no split sha needed: the failing session written with a dirty kit goes
+# to `non_comparable` and the clean closure stays. That is why the assertion below is stated over
+# the GROUP and not over the sha — it is the session-less group that is the defect, whatever put it
+# there.
+echo "== series: a closure alone in a slice mints no cell =="
+mkdir -p "$OUTSIDE/gpsplit"
+localize > "$OUTSIDE/gpsplit/autonomy-log.jsonl" <<'EOF'
+{"v":1,"ts":"2026-08-31T12:00:00-03:00","event":"session","run_id":"g1","invocation":"run","kit_sha":"eee1111","kit_dirty":false,"project":"p1","repo":"/p1","mission":"m40","phase":"QA","step":"QA","agent":"sdd-qa","model":"opus","attempt":1,"auto_retry":false,"session":"h1s","rc":0,"dur_s":10,"cost_usd":3.0,"moved":true,"gate":"fail","gate_why":"1 bug(s) with Status: open in the registry"}
+{"v":1,"ts":"2026-08-31T12:01:00-03:00","event":"session","run_id":"g1","invocation":"run","kit_sha":"fff2222","kit_dirty":false,"project":"p1","repo":"/p1","mission":"m40","phase":"EXEC","step":"EXEC","agent":"sdd-executor","model":"opus","attempt":1,"auto_retry":false,"session":"h2s","rc":0,"dur_s":10,"cost_usd":1.5,"moved":true,"pending_before":1,"pending_after":0,"increments_total":1,"gate":"pass","gate_why":"0 of 1 increment(s) still to execute"}
+{"v":1,"ts":"2026-08-31T12:02:00-03:00","event":"gate_pass","run_id":"g1","invocation":"run","kit_sha":"fff2222","kit_dirty":false,"project":"p1","repo":"/p1","mission":"m40","phase":"QA"}
+EOF
+SPLIT_OUT="$( cd "$FIX" && SDD_STATE_DIR="$OUTSIDE/gpsplit" "$SDD" kaizen --series 2>/dev/null )"
+# THE assertion: the QA group of the newer slice holds nothing but the closure, so it is not a cell.
+# `empty` and not `"ok"` — a phase this slice never saw has no grade to give.
+assert_eq "a closure alone in a slice mints no cell" "" \
+  "$(jq -r '.latest.detail[] | select(.mission == "m40" and .phase == "QA") | .label' <<< "$SPLIT_OUT")"
+# ...and the assertion above is not satisfied by a slice that lost every cell: the EXEC session
+# that shares the sha with the closure is still graded, so the filter removed the phantom and only
+# the phantom.
+assert_eq "and the session that shares the slice is still graded" '{"ok":1,"leve":0,"refez":0} 1' \
+  "$(jq -r '"\(.latest.labels | tojson) \(.latest.sessions)"' <<< "$SPLIT_OUT")"
+# The floor that keeps the two assertions above from being about an empty reading: the older slice
+# still carries the failing QA session. ⚠️ It reads `refez`, and that is the DECLARED limit rather
+# than a promise broken — the closure is not in this slice and cannot speak for it. What this block
+# forbids is the FALSE `ok`; moving this `refez` needs the closure to be readable across slices.
+assert_eq "floor: the failing session is still in the older slice, still refez" "refez" \
+  "$(jq -r '.previous.detail[] | select(.mission == "m40" and .phase == "QA") | .label' <<< "$SPLIT_OUT")"
+# The arithmetic still closes over the row the filter dropped from the histogram: dropping a cell
+# is not dropping a row, and a closure filed as `unrecognized` is the judge accusing the kit.
+assert_eq "dropping the cell does not drop the row into unrecognized" "0" \
+  "$(jq -r '.excluded.unrecognized' <<< "$SPLIT_OUT")"
+
+# --- a closure never MINTS a version -----------------------------------------
+# The other half of "a closure MODIFIES a cell, it never is the subject of one", and the half the
+# `$detail` filter one block up cannot reach: that filter drops the phantom CELL, but the phantom
+# `kit_sha` was still minting a VERSION, because `shas_in_file_order` ran over `$ok` and
+# `comparable_row` admits a closure (`.event != "session"` short-circuits the `has("moved")` arm).
+# So the axis the whole judge stands on grew an entry that observed nothing.
+#
+# THIS IS THE KIT REPO'S NORMAL CASE, not an edge, and that is what makes it expensive: every
+# session here commits, so the sha ADVANCES between the phase that failed and the lap that closes
+# it for free — the closure lands on a sha of its own by construction. Measured on the real reader
+# before the fix, one added row: `latest.kit_sha` ccc3333 → ddd4444, `latest.sessions` 1 → 0,
+# `latest.labels` {ok:1} → {ok:0,leve:0,refez:0}, `previous` bbb2222 → ccc3333, and
+# `guard.degenerate_axis` true → false.
+#
+# WHAT THAT COSTS, downstream and reproduced: `gate_KAIZEN` computes its expected sha from
+# `latest.kit_sha`, so a verdict already written stops satisfying the gate and `sdd kaizen` buys an
+# opus session to judge a slice with ZERO sessions — a gate nobody can satisfy, which is the most
+# expensive failure mode this repo has measured (CLAUDE.md, principle 1). And `kaizen_axis_note`
+# goes silent in the one repository where its sentence is always true.
+#
+# THE ASSERTION IS DIFFERENTIAL — two ledgers, the outputs compared with each OTHER — because the
+# claim is "the closure changes nothing about the axis". No fixture regime satisfies that by
+# accident, and it fails whichever side moves. The three older `gate_pass` fixtures above all put
+# the closure on the SAME sha as the sessions, which is exactly the control that shows nothing.
+echo "== series: a closure does not mint a version of its own =="
+mkdir -p "$OUTSIDE/mintwith" "$OUTSIDE/mintwithout"
+localize > "$OUTSIDE/mintwith/autonomy-log.jsonl" <<'EOF'
+{"v":1,"ts":"2026-08-03T09:00:00-03:00","event":"session","run_id":"r-m1","invocation":"run","kit_sha":"aaa1111","kit_dirty":false,"project":"p1","repo":"/p1","mission":"m1","phase":"EXEC","step":"EXEC","agent":"sdd-executor","model":"opus","attempt":1,"auto_retry":false,"session":"s1","rc":0,"dur_s":10,"cost_usd":1.0,"moved":true,"pending_before":1,"pending_after":0,"increments_total":1,"gate":"pass","gate_why":"0 of 1 increment(s) still to execute"}
+{"v":1,"ts":"2026-08-03T10:00:00-03:00","event":"session","run_id":"r-m2","invocation":"run","kit_sha":"bbb2222","kit_dirty":false,"project":"p1","repo":"/p1","mission":"m2","phase":"EXEC","step":"EXEC","agent":"sdd-executor","model":"opus","attempt":1,"auto_retry":false,"session":"s2","rc":0,"dur_s":10,"cost_usd":1.0,"moved":true,"pending_before":1,"pending_after":0,"increments_total":1,"gate":"pass","gate_why":"0 of 1 increment(s) still to execute"}
+{"v":1,"ts":"2026-08-03T10:30:00-03:00","event":"session","run_id":"r-m3","invocation":"run","kit_sha":"ccc3333","kit_dirty":false,"project":"p1","repo":"/p1","mission":"m3","phase":"QA","step":"QA","agent":"sdd-qa","model":"opus","attempt":1,"auto_retry":false,"session":"s3","rc":0,"dur_s":10,"cost_usd":1.0,"moved":true,"gate":"pass","gate_why":"journey walked"}
+{"v":1,"ts":"2026-08-03T11:00:00-03:00","event":"gate_pass","run_id":"r-m3","invocation":"run","kit_sha":"ddd4444","kit_dirty":false,"project":"p1","repo":"/p1","mission":"m3","phase":"QA"}
+EOF
+# The control is the SAME file minus the one row, so nothing but the closure can explain a
+# difference between the two readings.
+grep -v '"event":"gate_pass"' "$OUTSIDE/mintwith/autonomy-log.jsonl" \
+  > "$OUTSIDE/mintwithout/autonomy-log.jsonl"
+MINT_WITH="$( cd "$FIX" && SDD_STATE_DIR="$OUTSIDE/mintwith" "$SDD" kaizen --series 2>/dev/null )"
+MINT_WITHOUT="$( cd "$FIX" && SDD_STATE_DIR="$OUTSIDE/mintwithout" "$SDD" kaizen --series 2>/dev/null )"
+mint_axis() { jq -Sc '{latest: .latest.kit_sha, previous: .previous.kit_sha,
+                       sessions: .latest.sessions, labels: .latest.labels,
+                       degenerate: .guard.degenerate_axis}' <<< "$1"; }
+# THE FLOOR, and it comes first: the control really did read a version with a session in it. Both
+# sides going `null` would satisfy the differential by vacuity, which is the trap this file spends
+# its floors refusing.
+assert_eq "floor: without the closure the axis ends on the sha that bought the session" \
+  '{"degenerate":true,"labels":{"leve":0,"ok":1,"refez":0},"latest":"ccc3333","previous":"bbb2222","sessions":1}' \
+  "$(mint_axis "$MINT_WITHOUT")"
+# THE assertion: the closure is invisible to the axis. Differential, so it fails whichever side moves.
+assert_eq "a closure on a sha of its own changes nothing about the axis" \
+  "$(mint_axis "$MINT_WITHOUT")" "$(mint_axis "$MINT_WITH")"
+# The row is not thrown away to buy that — dropping a version is not dropping a row, and a closure
+# filed as `unrecognized` would be the judge accusing the kit of writing something it cannot read.
+assert_eq "and the row is still read, not filed as unrecognized" "0" \
+  "$(jq -r '.excluded.unrecognized' <<< "$MINT_WITH")"
+
 # --- a degradation is an escalation the series has to SEE --------------------
 # `PUBLISH_ON_REVIEW_BLOCKED=draft` makes the runner give up on reviewing and publish a draft PR
 # by itself. It writes `event: "degraded"`, and the filter above only ever admitted `session` and
