@@ -1921,8 +1921,14 @@ mut_AUTONOMY_is_escalation_blind() {
 # `mut_AUTONOMY_is_escalation_blind` above (the reader's predicate) and `mut_RUN_degraded_label_blind`
 # (phase_label's use of this same program's predicate): each of the three stays caught with the other
 # two intact, and each names a different consumer of the escalation pair.
+# ⚠️ RE-ANCHORED on 2026-08-31, on the OPERAND and no longer on the whole line. The old spelling
+# pinned `and (.event == "session" or is_escalation)))) as $all` end to end, so the day the
+# admission learned a third event (`gate_pass`) it stopped matching — a silent no-op that the
+# catalogue's own rc-90 `cmp -s` guard reports as CATALOGUE-BROKEN, but only after a full round.
+# Same class, same mission, same fix as `mut_AUTONOMY_progress_ignored` two increments earlier:
+# anchor on the smallest fragment that still names the sabotage.
 mut_KAIZEN_series_escalations_dropped() {
-  sed -i 's|^                         and (.event == "session" or is_escalation)))) as $all$|                         and (.event == "session")))) as $all|' "$1"
+  sed -i 's|"session" or is_escalation or is_gate_pass|"session" or is_gate_pass|' "$1"
 }
 
 # The blocked line goes back to counting LAPS OF THE LOOP and calling them sessions. `attempts`
@@ -2123,8 +2129,14 @@ mut_RUN_kit_guard_arms_projection() {
 # progress arm. The old anchor still described a line that no longer exists, so the mutant would
 # have applied nothing and the harness would have refused it with rc 90 — a no-op that reads as a
 # catalogue failure, not as a silent gap. Same sabotage, new spelling of the same line.
+# ⚠️ RE-ANCHORED on 2026-08-31, and the shape is the point: `def outcome: .*end;` rather than the
+# definition written out arm by arm. The old spelling quoted the whole two-arm body, so the round
+# arm added for REVIEW one increment earlier made it a silent no-op — and a mutation that no longer
+# mutates scores nothing while reading exactly like a mutation that does. `.*` is safe here because
+# the definition is emitted by a printf of its own and carries exactly one `end;`; the greedy match
+# therefore cannot run past it into a neighbour.
 mut_AUTONOMY_outcome_reads_moved_only() {
-  sed -i 's@def outcome: if .gate == "pass" then "advanced" elif (.pending_before != null and .pending_after != null and .pending_after < .pending_before and .moved != false) then "advanced" elif .moved == true then "churned" else "idle" end;@def outcome: if .moved == true then "advanced" else "idle" end;@' "$1"
+  sed -i 's@def outcome: .*end;@def outcome: if .moved == true then "advanced" else "idle" end;@' "$1"
 }
 
 # The series grows a LOCAL copy of the yardstick on the OLD rule — the "same spelling in both
@@ -2267,8 +2279,12 @@ mut_EXEC_blocked_publishes_count() {
 # `and no row this runner wrote is read as one that predates the fields`. The floor
 # `the pass before the retry is the one that published nothing` stays green under the mutation,
 # which is what proves the fixture still reaches the inline retry at all.
+# ⚠️ RE-ANCHORED on 2026-08-31, on the FALLBACK alone. The old spelling pinned the whole argument
+# line and ended it with `$`, so the REVIEW round arguments appended to the same call one increment
+# earlier — which put a `\` continuation where the anchor demanded end-of-line — turned it into a
+# silent no-op. The fallback is what this mutation is about; the arguments beside it are not.
 mut_RUN_retry_pending_before_null() {
-  sed -i 's@^      "\${exec_after:-\$exec_before}" "\$exec_after2" "\$exec_total2"$@      "$exec_after" "$exec_after2" "$exec_total2"@' "$1"
+  sed -i 's@"\${exec_after:-\$exec_before}"@"$exec_after"@' "$1"
 }
 
 # The writer keeps filling the three fields and the reader stops looking at them: `outcome` goes
