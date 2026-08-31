@@ -685,7 +685,8 @@ Achados sobre **repos-alvo** vão para o `TODO.md` daquele repo. Este arquivo é
   é inerte: `review_rounds_on_disk` nunca devolve vazio (imprime `0`), então todo `sdd retry <fase
   não-REVIEW>` nasceria com `rounds_before: 0` em vez de `null` — um zero entrando na aritmética do
   juiz. O irmão do `cmd_run` tem a asserção (`a non-REVIEW row carries the three round fields as
-  null`); esta porta não tem, e nada declara o buraco. Direção: fixture de retry no `check-autonomy.sh`.
+  null`); esta porta não tem, e nada declara o buraco. RESOLVIDO por `594ef07`: probe
+  `sdd retry photographs only the phase it is retrying` mais `mut_RUN_retry_photographs_every_phase`.
   — descoberto por `sdd-reviewer` na missão `20260831-a-rodada-que-andou` (2026-08-31)
 
 - [ ] **A porta de `gate_failed` do retry inline não tem probe, e o comentário dela jura que tem** —
@@ -693,7 +694,8 @@ Achados sobre **repos-alvo** vão para o `TODO.md` daquele repo. Este arquivo é
   `1` da primeira passada, e a volta seguinte grava um `gate_pass` dizendo que a fase fechou SEM
   sessão para uma fase que fechou COM a própria retry — linha falsa, permanente (ledger append-only),
   que alimenta o `phase_label` e o `$closed`. A asserção que proibiria isso existe mas o fixture dela
-  só alcança a porta 1. Direção: segunda volta no fixture, com retry que passa.
+  só alcança a porta 1. RESOLVIDO por `594ef07`: probe `an inline retry that passes leaves no false
+  closure` mais `mut_RUN_inline_retry_keeps_the_failed_verdict`.
   — descoberto por `sdd-reviewer` na missão `20260831-a-rodada-que-andou` (2026-08-31)
 
 - [ ] **O `$order` do `cmd_autonomy` e o `comparable_row` do `kaizen_series` divergem sobre a linha
@@ -732,12 +734,10 @@ Achados sobre **repos-alvo** vão para o `TODO.md` daquele repo. Este arquivo é
   — descoberto por `sdd-reviewer` na missão `20260829-o-incremento-que-andou` (2026-08-30)
 
 - [ ] **Duas das cinco portas `if [ "$phase" = "EXEC" ]` seguem sem probe** — `bin/sdd:4291` — as
-  cinco portas do par `GATE_EXEC_PENDING`/`_TOTAL` são `4105`, `4144`, `4232`, `4291` e `4298`; as
-  três primeiras têm asserção (a terceira desde `d77f2ae`), as duas do `cmd_retry` não. Removida a
-  de `4291`, um `sdd retry` numa fase QA escreve `pending_before: 0` numa linha QA e a suíte fica
-  verde. Nenhum leitor move HOJE, então é quebra de contrato e não erro de número — mas é o mesmo
-  contrato que a asserção irmã nomeia. Direção: um `sdd retry` fora do EXEC no fixture que já
-  alcança esse estado, mais um mutante por porta.
+  três do `cmd_run` têm asserção, as duas do `cmd_retry` não: removida a da foto, um `sdd retry`
+  fora do EXEC escreve `pending_before: 0` e a suíte fica verde. RESOLVIDO por `594ef07`, as duas
+  metades — a foto ganhou probe + `mut_RUN_retry_exec_photographs_every_phase`; a leitura pós-gate
+  foi MEDIDA inerte (sabotada, a suíte fica verde) e virou limite declarado no `bin/sdd`, pela D15.
   — descoberto por `sdd-reviewer` na missão `20260829-o-incremento-que-andou` (2026-08-30)
 
 - [ ] **A metade `repo` da chave de memória do caminho histórico não tem probe** — `bin/sdd:1918` —
