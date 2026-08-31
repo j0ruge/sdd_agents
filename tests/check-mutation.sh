@@ -2470,6 +2470,56 @@ mut_LEDGER_outcome_rounds_moved_blind() {
   sed -i 's@and .rounds_after > .rounds_before and .moved != false) then "advanced"@and .rounds_after > .rounds_before) then "advanced"@' "$1"
 }
 
+# The dated REVIEW path stops annotating, so the round arm one screen up serves only rows written
+# from 2026-08-31 on. Measured on the real ledger that day: 25 REVIEW rows, ZERO carrying
+# `rounds_before` — the arm would move nothing at all and the whole REVIEW history would stay on the
+# `moved` arm reading `churned`. Caught by five assertions in check-autonomy.sh, the headline being
+# `a pre-schema REVIEW row recovers its round from gate_why`.
+mut_LEDGER_historic_rounds_blind() {
+  sed -i 's@(if $n == null then $r else@(if true then $r else@' "$1"
+}
+
+# Half the guard goes and the path starts REPAIRING rows this runner wrote whose photograph went
+# missing — which is precisely the shape mut_RUN_review_rounds_photo_missing produces, so this
+# mutation would launder that one and leave it scoring a point for nothing. Same measured harm the
+# EXEC sibling paid for once (a retry born with `pending_before: null` read `advanced` off a
+# fabricated count) and fixed at the writer. Caught by `a REVIEW row whose photograph went missing
+# is not repaired from prose` in check-autonomy.sh.
+mut_LEDGER_historic_rounds_repairs_photo() {
+  sed -i 's@$r.rounds_before == null and $r.rounds_after == null@$r.rounds_before == null@' "$1"
+}
+
+# `no 40-review-r<N>.md` — the session landed NO round file — starts recovering 1 instead of 0, and
+# the one row shape that genuinely spun reads as the loudest progress in the ledger. Not academic:
+# it is exactly the row the most expensive cell of window 2 is made of (the REVIEW of
+# 20260830-a-tela-que-mente-o-pagamento, US$ 47.81). Caught by `a REVIEW session that landed no
+# round file did not advance a round`.
+mut_LEDGER_historic_rounds_no_file_is_a_round() {
+  sed -i 's@then 0 else null end) else null end) as $n@then 1 else null end) else null end) as $n@' "$1"
+}
+
+# The memory dies and every recovered row is measured against a seed of 0, so any round file at all
+# reads as a round that advanced. It kills the two rules the REVIEW path deliberately does NOT
+# inherit from EXEC at once — the count carrying across a passing gate, and the memory being fed by
+# rows that carry the fields. The reset-restoring edit a future reader is likelier to actually make
+# (`elif $r.gate == "pass" then .seen[$k] = null`) was measured separately on 2026-08-31 and dies on
+# the same first assertion, so it is not a second entry here. Caught by `a passing REVIEW gate does
+# NOT clear the round the next session is measured against` and `the round memory is fed by the rows
+# that carry the fields too`.
+mut_LEDGER_historic_rounds_memory_blind() {
+  sed -i 's@{rounds_before: (.seen\[$k\] // 0)@{rounds_before: (0)@' "$1"
+}
+
+# The disclosure sentence goes back to counting the bare annotation instead of the comparable rows,
+# and starts naming rows no bucket on screen shows. It is a soft fail-open with a sharp consequence:
+# the sentence is the DELETION SIGNAL for the dated path, and a number nobody can reconcile with the
+# table is no basis for deciding to delete anything. Measured on the real ledger before the fix —
+# "2 rows" over a table of one session. Caught by `the EXEC sentence counts only the rows the table
+# is made of`; its REVIEW twin is the same binding two lines down.
+mut_AUTONOMY_historic_sentence_before_comparability() {
+  sed -i 's@type == "object" and comparable and .progress_source@type == "object" and .progress_source@' "$1"
+}
+
 mut_KAIZEN_label_idle_blind() {
   sed -i 's@(.auto_retry == true or outcome != "advanced")@(.auto_retry == true or outcome == "churned")@' "$1"
 }
@@ -2676,6 +2726,11 @@ CATALOG=(
   LEDGER_outcome_rounds_unguarded
   LEDGER_outcome_rounds_undirected
   LEDGER_outcome_rounds_moved_blind
+  LEDGER_historic_rounds_blind
+  LEDGER_historic_rounds_repairs_photo
+  LEDGER_historic_rounds_no_file_is_a_round
+  LEDGER_historic_rounds_memory_blind
+  AUTONOMY_historic_sentence_before_comparability
 )
 
 # Mutations that are NOT caught today, each with the increment that closes it. Ratchet in both

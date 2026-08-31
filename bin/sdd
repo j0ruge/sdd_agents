@@ -1982,9 +1982,73 @@ ledger_row_is_local() {
 # its first old row against M instead of against the row above it.
 # The key is `[repo, mission] | tostring` — an ARRAY rendered as JSON, for the reason mission_key
 # states in both readers: a separator chosen here would collide with one inside a repo path.
+#
+# `historic_rounds` is the same second half for REVIEW, added 2026-08-31, and it exists for the
+# same reason measured over the same file: on that day the real ledger held 25 REVIEW rows and ZERO
+# of them carried `rounds_before`. Without it the round arm above serves nothing but rows written
+# from here on, and the whole REVIEW history the window exists to explain stays on the `moved` arm
+# reading `churned` for ever.
+#
+# It recovers the SAME fact from the SAME source the field comes from: gate_REVIEW writes the round
+# file's own name into GATE_WHY, so the row carries `40-review-r<N>.md` verbatim, and the `N` is
+# STRUCTURAL — it is the file name resolved by `latest_matching`, not a number anybody declared.
+# Two spellings, and the second is not a special case but the zero: the fixed string
+# `no 40-review-r<N>.md` means the session landed no round file at all, and it recovers 0 — where
+# `<N>` is not a digit, so the anchored regex separates the two with no ambiguity. Measured over
+# the real ledger: 24 of 25 rows reachable, the one that is not being a `TEST_CMD failed` refusal.
+# DECLARED LIMIT, and it is the honest half of the same fact: two of gate_REVIEW's eight refusals
+# name no file (`TEST_CMD failed`, `working tree dirty after the review`), and those rows are left
+# where they were rather than guessed at.
+# DECLARED, no probe: the `^` of the two regexes. The sabotage pass of 2026-08-31 unanchored the
+# `test` and the whole suite stayed green, and the world it would take to make that matter is one no
+# gate_REVIEW writes today — a `gate_why` naming `40-review-r<N>.md` somewhere other than its first
+# character. That is the world I could not build, NOT a claim that none exists, and the anchor stays
+# because it decides WHICH failure a future one produces: `test` alone unanchored, with `capture`
+# still anchored, makes `capture` return nothing and `null | tonumber` kills the reader outright.
+# The `test` itself is NOT redundant and does have a probe — replacing it with `true` makes `capture`
+# emit empty on a non-matching row, and empty inside the `as $n` binding DROPS the row: 7 assertions
+# in check-autonomy.sh die, the bucket sums among them. `rounds_max` is not recovered at all — it is
+# REVIEW_MAX_ITER, a config constant that appears nowhere in the prose, and `outcome` does not read
+# it; a recovered row carries the round it landed and no ceiling to read it against.
+#
+# THE GUARD IS TWO CONDITIONS, `.rounds_before == null AND .rounds_after == null`, and the second is
+# where this def deliberately does NOT copy its EXEC sibling. A row carrying `rounds_after` with a
+# null `rounds_before` is not pre-schema — it is a row this runner wrote whose PHOTOGRAPH went
+# missing, which is exactly the shape `mut_RUN_review_rounds_photo_missing` produces and exactly
+# what the non-null guard in `outcome` exists to catch. Repairing it from prose would launder the
+# sabotage and leave that mutant scoring a point for nothing. It is also the measured harm the EXEC
+# sibling already paid for once and fixed at the WRITER (see the `:-$exec_before` comment in
+# cmd_retry): a retry born with `pending_before: null` was annotated by `historic_progress`, handed
+# a fabricated count, and read `advanced` over a retry that advanced nothing.
+# `== null` and not `has(...)`, for the reason spelled out for the EXEC sibling above: the key is
+# on every row this runner writes and absent from every row written before the fields existed.
+#
+# `rounds_before` is the `rounds_after` of the previous REVIEW row of the same (repo, mission) in
+# FILE order, seeded at 0 — and 0 is a MEASUREMENT, not a fallback: a fresh mission dir holds no
+# `40-review-r*.md`, so the first REVIEW session of a mission genuinely starts at zero rounds. The
+# repo filter runs before this path and a mission belongs to one repo, so the filter cannot truncate
+# a mission's history and leave the seed reading a middle row as a first one. A hand-truncated
+# ledger can; that is the same declared edge the EXEC sibling's empty memory has, behind the same
+# `.moved != false` guard in `outcome`.
+#
+# NEITHER of the EXEC memory rules is inherited, and that is a decision with a world behind it:
+#   · no `M`-changed rule, because there is no M in the prose — the ceiling is config, not disk;
+#   · NO RESET ON A PASSING GATE, which is the one that looks like an oversight and is not.
+#     EXEC's memory clears on a pass because `pending` resets to M when a closed phase is reopened.
+#     REVIEW rounds do the opposite: `review_rounds_on_disk` counts FILES, files are never deleted,
+#     and cmd_run deliberately does not reset the ceiling against them. So the count carries ACROSS
+#     a pass, and copying the reset over would be a fail-open in the flattering direction — r1
+#     passes, the phase is reopened, a session spins on the same r1, and a cleared memory reads
+#     `1 > 0` as the loudest progress in the ledger over a session that landed nothing. The world
+#     that proves it is the `m10` fixture of the `memory rules of the dated REVIEW path` block in
+#     check-autonomy.sh, which goes red the day somebody "restores" the symmetry.
+# The memory is fed by rows that carry the FIELD too (`$row.rounds_after`, which is the annotation
+# on a recovered row and the written value on a new-schema one), and that is load-bearing on a
+# mixed ledger for the same reason it is one screen up.
 ledger_outcome_defs() {   # printed jq, spliced into cmd_autonomy AND kaizen_series
   printf '%s' 'def outcome: if .gate == "pass" then "advanced" elif (.pending_before != null and .pending_after != null and .pending_after < .pending_before and .moved != false) then "advanced" elif (.rounds_before != null and .rounds_after > .rounds_before and .moved != false) then "advanced" elif .moved == true then "churned" else "idle" end;'
   printf '%s' 'def historic_progress: reduce .[] as $r ({seen: {}, out: []}; (if ($r | type) == "object" and $r.event == "session" and $r.phase == "EXEC" then ([($r.repo // ""), ($r.mission // "")] | tostring) else null end) as $k | (if $k != null and $r.pending_before == null and (($r.gate_why // "") | test("^[0-9]+ of [0-9]+ increment")) then (($r.gate_why // "") | capture("^(?<n>[0-9]+) of (?<m>[0-9]+) increment") | {n: (.n | tonumber), m: (.m | tonumber)}) else null end) as $p | (if $p == null then $r else (if (.seen[$k] != null and .seen[$k].m == $p.m) then .seen[$k].p else $p.m end) as $before | $r + {pending_before: $before, pending_after: $p.n, increments_total: $p.m, progress_source: "gate_why"} end) as $row | .out += [$row] | (if $k == null then . elif $r.gate == "pass" then .seen[$k] = null elif $row.pending_after != null then .seen[$k] = {p: $row.pending_after, m: $row.increments_total} else . end)) | .out;'
+  printf '%s' 'def historic_rounds: reduce .[] as $r ({seen: {}, out: []}; (if ($r | type) == "object" and $r.event == "session" and $r.phase == "REVIEW" then ([($r.repo // ""), ($r.mission // "")] | tostring) else null end) as $k | (if $k != null and $r.rounds_before == null and $r.rounds_after == null then (($r.gate_why // "") | if test("^40-review-r[0-9]+\\.md") then (capture("^40-review-r(?<n>[0-9]+)\\.md") | .n | tonumber) elif test("^no 40-review-r<N>\\.md") then 0 else null end) else null end) as $n | (if $n == null then $r else $r + {rounds_before: (.seen[$k] // 0), rounds_after: $n, rounds_source: "gate_why"} end) as $row | .out += [$row] | (if $k == null then . elif $row.rounds_after != null then .seen[$k] = $row.rounds_after else . end)) | .out;'
   printf '%s' 'def outcome_tally: map(outcome) | reduce .[] as $o ({advanced: 0, churned: 0, idle: 0}; .[$o] += 1);'
   printf '%s' 'def phase_index: . as $p | ($phases | split(" ")) | index($p);'
 }
@@ -4680,7 +4744,21 @@ cmd_autonomy() {
     # and assert_bucket_sum meaning what they meant. kaizen_series applies it at the same point of
     # its own program, and check-autonomy.sh compares the two readers over one prose ledger.
     | historic_progress
-    | (map(select(type == "object" and .progress_source == "gate_why")) | length) as $historic
+    # The REVIEW half of the same dated recovery, applied at the same point and for the same
+    # reason. Two defs and not one because the two counts move in opposite directions and read
+    # different prose; both are length-preserving, so $local_total and assert_bucket_sum keep
+    # meaning what they meant.
+    | historic_rounds
+    # Bound over `comparable` and NOT over the bare annotation, which is the fix for a measured
+    # fail-open: these two sentences are DELETION SIGNALS — they say how much of the window was
+    # read through a dated path, and therefore when that path may come out — and a count taken
+    # before the comparability filter counts rows that then leave as non-comparable, so the number
+    # reconciles with nothing on screen. Measured on the real ledger: the EXEC sentence said
+    # "2 rows" over a table of one session. `comparable` already demands `.event == "session"`, so
+    # no second conjunct for it; `type == "object"` comes first because historic_progress preserves
+    # non-object rows and `.event` on a number is an error, not a false.
+    | (map(select(type == "object" and comparable and .progress_source == "gate_why")) | length) as $historic
+    | (map(select(type == "object" and comparable and .rounds_source == "gate_why")) | length) as $historic_rounds
     # The header total, re-derived here so the accounting paragraph can NAME it. The two exclusions
     # bound above were computed before this filter and were therefore never in it.
     | (length) as $local_total
@@ -4804,6 +4882,11 @@ cmd_autonomy() {
        # paragraph rather than among the four. It is the disclosure that half this ledger was read
        # through a dated compatibility path, and the signal that says when that path can be deleted.
        , (if $historic > 0 then "  (\($historic) EXEC row(s) older than the pending fields read their progress from gate_why)" else empty end)
+       # Its REVIEW twin, and a SECOND sentence rather than one summed line: the two paths are
+       # deleted independently — the day every EXEC row carries the pending fields is not the day
+       # every REVIEW row carries the round ones — and a single number could never say which of
+       # them is finally empty.
+       , (if $historic_rounds > 0 then "  (\($historic_rounds) REVIEW row(s) older than the round fields read their round from gate_why)" else empty end)
        ] as $inside
        | [ (if $foreign > 0 then "  (\($foreign) row(s) excluded: born in another repo — the ledger is global, this reader is not)" else empty end)
          , (if $norepo > 0 then "  (\($norepo) row(s) excluded: no repo field — the row cannot say which project it came from)" else empty end)
@@ -5122,7 +5205,7 @@ kaizen_series() {
     # filter, before any classification. One dated recovery, spliced from one definition, so the
     # judge and the human window cannot end up reading two different histories out of one file —
     # check-autonomy.sh compares them over a prose-only ledger for exactly that.
-    | ($file_rows | map(select(ledger_row_is_local)) | historic_progress) as $raw
+    | ($file_rows | map(select(ledger_row_is_local)) | historic_progress | historic_rounds) as $raw
     # Subtracted out, never lumped in: a row that names no project did not come from another repo,
     # and a bucket that said it did would be a wrong reason printed with the confidence of a right
     # one. The two counts partition what the filter removed, so the arithmetic still closes.

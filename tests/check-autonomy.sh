@@ -2084,6 +2084,153 @@ assert_eq "the historical path never touches a row that carries the fields" "1 1
 assert_eq "a ledger written entirely in the new schema prints no historical sentence" "0" \
   "$(grep -c 'read their progress from gate_why' <<< "$out_prog")"
 
+# --- the dated path for REVIEW: a row older than the round fields recovers it from gate_why -------
+# The same change, one phase on, and the same reason: on 2026-08-31 the real ledger held 25 REVIEW
+# rows and ZERO of them carried `rounds_before` — every one predates the fields. Migrating them is
+# not an option (the ledger is append-only by contract) and leaving them on the `moved` arm keeps
+# the human window and the judge reading `churned` over the whole REVIEW history they exist to
+# explain. gate_REVIEW has always written the round file's own name into GATE_WHY, so the row
+# carries `40-review-r<N>.md` verbatim and the count is recoverable from it: measured over that
+# ledger, 24 of the 25 rows are reachable, the one that is not being a `TEST_CMD failed` refusal
+# that names no file. Which is why the third assertion of this block is about that row STAYING out.
+#
+# `rounds_before` is the recovered `rounds_after` of the previous REVIEW row of the same
+# (repo, mission) in FILE order, seeded at 0 — and 0 is a MEASUREMENT and not a default: a fresh
+# mission dir holds no `40-review-r*.md`, so the first REVIEW session of a mission genuinely starts
+# at zero rounds. The repo filter runs before this path and a mission belongs to one repo, so the
+# filter cannot truncate a mission's history and leave the seed reading a middle row as a first one.
+# DECLARED LIMIT: a ledger file truncated by hand mid-mission can, and the row after the cut then
+# reads its round against 0. Same shape as the EXEC sibling's empty-memory case, same guard
+# (`.moved != false`, in `outcome`), and the same remedy — do not truncate the ledger.
+echo "== reader: the dated path reads the REVIEW round from gate_why =="
+mkdir -p "$OUTSIDE/histrounds"
+localize > "$OUTSIDE/histrounds/autonomy-log.jsonl" <<'EOF'
+{"v":1,"ts":"2026-08-31T09:00:00-03:00","event":"session","run_id":"q1","invocation":"run","kit_sha":"fff0000","kit_dirty":false,"project":"p1","repo":"/p1","mission":"m7","phase":"REVIEW","step":"REVIEW","agent":"sdd-reviewer","model":"opus","attempt":1,"auto_retry":false,"session":"q1s","rc":0,"dur_s":10,"cost_usd":1.0,"moved":true,"gate":"fail","gate_why":"40-review-r1.md: Code Quality (Zen) = B — the gate requires Grade A on every criterion"}
+{"v":1,"ts":"2026-08-31T09:01:00-03:00","event":"session","run_id":"q1","invocation":"run","kit_sha":"fff0000","kit_dirty":false,"project":"p1","repo":"/p1","mission":"m7","phase":"REVIEW","step":"REVIEW","agent":"sdd-reviewer","model":"opus","attempt":2,"auto_retry":false,"session":"q2s","rc":0,"dur_s":10,"cost_usd":1.0,"moved":true,"gate":"fail","gate_why":"40-review-r1.md: Test Coverage = B — the gate requires Grade A on every criterion"}
+{"v":1,"ts":"2026-08-31T09:02:00-03:00","event":"session","run_id":"q2","invocation":"run","kit_sha":"fff0000","kit_dirty":false,"project":"p1","repo":"/p1","mission":"m7","phase":"REVIEW","step":"REVIEW","agent":"sdd-reviewer","model":"opus","attempt":1,"auto_retry":false,"session":"q3s","rc":0,"dur_s":10,"cost_usd":1.0,"moved":true,"gate":"pass","gate_why":"40-review-r2.md all Grade A, suite green, tree clean"}
+{"v":1,"ts":"2026-08-31T09:03:00-03:00","event":"session","run_id":"q3","invocation":"run","kit_sha":"fff0000","kit_dirty":false,"project":"p1","repo":"/p1","mission":"m8","phase":"REVIEW","step":"REVIEW","agent":"sdd-reviewer","model":"opus","attempt":1,"auto_retry":false,"session":"q4s","rc":0,"dur_s":10,"cost_usd":1.0,"moved":true,"gate":"fail","gate_why":"no 40-review-r<N>.md"}
+{"v":1,"ts":"2026-08-31T09:04:00-03:00","event":"session","run_id":"q4","invocation":"run","kit_sha":"fff0000","kit_dirty":false,"project":"p1","repo":"/p1","mission":"m9","phase":"REVIEW","step":"REVIEW","agent":"sdd-reviewer","model":"opus","attempt":1,"auto_retry":false,"session":"q5s","rc":0,"dur_s":10,"cost_usd":1.0,"moved":true,"gate":"fail","gate_why":"TEST_CMD failed (tests/run-all.sh) — see /tmp/gate-review-test.log"}
+EOF
+out_rounds="$( SDD_STATE_DIR="$OUTSIDE/histrounds" "$SDD" autonomy 2>&1 )"; rc=$?
+out_rounds_bym="$( SDD_STATE_DIR="$OUTSIDE/histrounds" "$SDD" autonomy --by-mission 2>&1 )"
+assert_eq "a REVIEW ledger written before the round fields is data (rc 0)" "0" "$rc"
+
+# THE assertion of this increment. The r1 that landed with real findings and did not reach Grade A
+# advanced a round; the second session on the SAME r1 did not. One fixture, both readings, so a
+# path that simply annotated everything cannot satisfy it: 2 advanced (q1s off the recovered round,
+# q3s off its passing gate) · 3 churned (q2s, q4s, q5s) · 0 idle.
+assert_eq "a pre-schema REVIEW row recovers its round from gate_why" "1" \
+  "$(grep -c ' 5 session(s) · 2 advanced · 3 churned · 0 idle · 60% waste ' <<< "$out_rounds")"
+
+# The row the real ledger's most expensive cell is actually made of, and it must NOT move. `no
+# 40-review-r<N>.md` means the session landed no round file at all, so it recovers ZERO rounds and
+# 0 > 0 is false. A recovery that read the sentence as "a round" would turn the one shape that
+# genuinely spun into the loudest progress in the ledger — the flattering direction this whole
+# family of guards exists to refuse.
+assert_eq "a REVIEW session that landed no round file did not advance a round" "1" \
+  "$(grep -c '^  m8  1 session(s) · 0 advanced · 1 churned · 0 idle · ' <<< "$out_rounds_bym")"
+# The DECLARED limit, asserted rather than promised: two of gate_REVIEW's eight refusals name no
+# file (`TEST_CMD failed`, `working tree dirty after the review`), and those rows stay where they
+# were instead of being guessed at. Measured over the real ledger: 1 row of 25.
+assert_eq "a REVIEW refusal that names no round file is not annotated" "1" \
+  "$(grep -c '^  m9  1 session(s) · 0 advanced · 1 churned · 0 idle · ' <<< "$out_rounds_bym")"
+
+# The path SAYS it ran, and how far it reached — the same deletion signal the EXEC sibling carries:
+# the day this sentence stops printing, the def below it in bin/sdd has no rows left to serve.
+# FOUR and not five: q3s (the passing gate) is annotated too, and q5s is the `TEST_CMD failed` row
+# that is not.
+assert_eq "the dated REVIEW path says how many rows it read from prose" "1" \
+  "$(grep -c '(4 REVIEW row(s) older than the round fields read their round from gate_why)' <<< "$out_rounds")"
+
+# Parity, over a ledger where the round is RECOVERED and not read: the judge splices the same
+# printed defs, so a series that skipped the recovery shows up only here. Asserted against the
+# window's own line, never against a literal — a literal lets both sides drift together.
+series_rounds="$( SDD_STATE_DIR="$OUTSIDE/histrounds" "$SDD" kaizen --series 2>/dev/null )"
+table_rounds="$(sed -nE 's/^  fff0000  [0-9]+ session\(s\) · ([0-9]+) advanced · ([0-9]+) churned · ([0-9]+) idle · .*/\1 \2 \3/p' <<< "$out_rounds")"
+assert_eq "the human window and the judge agree on the recovered REVIEW history" \
+  "$(jq -r '.latest.outcomes | "\(.advanced) \(.churned) \(.idle)"' <<< "$series_rounds")" "$table_rounds"
+assert_eq "that parity is not vacuous — the recovered REVIEW table printed the three counts" "2 3 0" "$table_rounds"
+assert_bucket_sum "the four buckets sum to the header total (dated REVIEW path)" "$out_rounds"
+
+# --- the two memory rules the REVIEW path does NOT inherit ----------------------------------------
+# The EXEC sibling clears its memory on a PASSING gate, because `pending` resets to M when a closed
+# phase is reopened. REVIEW rounds do the opposite: `review_rounds_on_disk` counts FILES, the files
+# are never deleted, and `sdd run` deliberately does not reset the ceiling against them
+# (bin/sdd, the round-ceiling block of cmd_run). So the count carries ACROSS a passing gate, and
+# copying the reset over would be a fail-open in the flattering direction — this fixture is the
+# world that proves it, and it is here so that the next reader who notices the asymmetry and
+# "restores" it gets a red suite instead of a plausible commit.
+#
+#   m10  r1 lands and the gate PASSES; the phase is reopened and a session spins on the same r1.
+#        Memory carried: 1 → 1 is not progress, `churned`. Memory reset: 1 > 0 reads `advanced`
+#        over a session that landed nothing.
+#   m11  the memory is fed by rows that carry the FIELDS too, which is load-bearing on a mixed
+#        ledger: the new-schema row publishes rounds_after 1, and the pre-schema row after it must
+#        be measured against that 1 and not against an empty seed of 0.
+echo "== reader: the memory rules of the dated REVIEW path =="
+mkdir -p "$OUTSIDE/histroundfix"
+localize > "$OUTSIDE/histroundfix/autonomy-log.jsonl" <<'EOF'
+{"v":1,"ts":"2026-08-31T09:10:00-03:00","event":"session","run_id":"w1","invocation":"run","kit_sha":"fff1111","kit_dirty":false,"project":"p1","repo":"/p1","mission":"m10","phase":"REVIEW","step":"REVIEW","agent":"sdd-reviewer","model":"opus","attempt":1,"auto_retry":false,"session":"w1s","rc":0,"dur_s":10,"cost_usd":1.0,"moved":true,"gate":"pass","gate_why":"40-review-r1.md all Grade A, suite green, tree clean"}
+{"v":1,"ts":"2026-08-31T09:11:00-03:00","event":"session","run_id":"w2","invocation":"run","kit_sha":"fff1111","kit_dirty":false,"project":"p1","repo":"/p1","mission":"m10","phase":"REVIEW","step":"REVIEW","agent":"sdd-reviewer","model":"opus","attempt":1,"auto_retry":false,"session":"w2s","rc":0,"dur_s":10,"cost_usd":1.0,"moved":true,"gate":"fail","gate_why":"40-review-r1.md: Correctness = B — the gate requires Grade A on every criterion"}
+{"v":1,"ts":"2026-08-31T09:12:00-03:00","event":"session","run_id":"w3","invocation":"run","kit_sha":"fff1111","kit_dirty":false,"project":"p1","repo":"/p1","mission":"m11","phase":"REVIEW","step":"REVIEW","agent":"sdd-reviewer","model":"opus","attempt":1,"auto_retry":false,"session":"w3s","rc":0,"dur_s":10,"cost_usd":1.0,"moved":true,"rounds_before":0,"rounds_after":1,"rounds_max":3,"gate":"fail","gate_why":"40-review-r1.md: Correctness = B — the gate requires Grade A on every criterion"}
+{"v":1,"ts":"2026-08-31T09:13:00-03:00","event":"session","run_id":"w3","invocation":"run","kit_sha":"fff1111","kit_dirty":false,"project":"p1","repo":"/p1","mission":"m11","phase":"REVIEW","step":"REVIEW","agent":"sdd-reviewer","model":"opus","attempt":2,"auto_retry":false,"session":"w4s","rc":0,"dur_s":10,"cost_usd":1.0,"moved":true,"gate":"fail","gate_why":"40-review-r1.md: Test Coverage = B — the gate requires Grade A on every criterion"}
+EOF
+out_roundfix="$( SDD_STATE_DIR="$OUTSIDE/histroundfix" "$SDD" autonomy --by-mission 2>&1 )"
+assert_eq "a passing REVIEW gate does NOT clear the round the next session is measured against" "1" \
+  "$(grep -c '^  m10  2 session(s) · 1 advanced · 1 churned · 0 idle · ' <<< "$out_roundfix")"
+assert_eq "the round memory is fed by the rows that carry the fields too" "1" \
+  "$(grep -c '^  m11  2 session(s) · 1 advanced · 1 churned · 0 idle · ' <<< "$out_roundfix")"
+# The witness: both assertions above are satisfiable by a path that never reached those rows at
+# all, which is the cheapest way to be green for the wrong reason. THREE rows recovered of the four
+# — w1s and w2s of m10, w4s of m11 — and w3s left alone because it was born with the fields.
+assert_eq "and the rows they judge are rows the dated path did read" "1" \
+  "$(grep -c '3 REVIEW row(s) older than the round fields read their round from gate_why' <<< "$out_roundfix")"
+
+# --- the dated REVIEW path never touches a row born with the fields ------------------------------
+# The guard is `.rounds_before == null AND .rounds_after == null`, and the second half is the one
+# with a measurement behind it. A row carrying `rounds_after` with a null `rounds_before` is not a
+# pre-schema row — it is a row this runner wrote whose PHOTOGRAPH went missing, which is exactly
+# the shape `mut_RUN_review_rounds_photo_missing` produces and exactly what the non-null guard in
+# `outcome` exists to catch. Recovering it from prose would repair the sabotage and leave that
+# mutant scoring a point for nothing, which is the measured harm bin/sdd records for the EXEC
+# sibling one screen up (a retry born with `pending_before: null` read `advanced` off a fabricated
+# count). The dated path serves rows written before the fields existed, and those carry NEITHER.
+echo "== reader: the dated REVIEW path leaves a row born with the fields alone =="
+mkdir -p "$OUTSIDE/histroundmixed"
+localize > "$OUTSIDE/histroundmixed/autonomy-log.jsonl" <<'EOF'
+{"v":1,"ts":"2026-08-31T09:20:00-03:00","event":"session","run_id":"y1","invocation":"run","kit_sha":"fff2222","kit_dirty":false,"project":"p1","repo":"/p1","mission":"m12","phase":"REVIEW","step":"REVIEW","agent":"sdd-reviewer","model":"opus","attempt":1,"auto_retry":false,"session":"y1s","rc":0,"dur_s":10,"cost_usd":1.0,"moved":true,"rounds_before":null,"rounds_after":2,"rounds_max":3,"gate":"fail","gate_why":"40-review-r2.md: Correctness = B — the gate requires Grade A on every criterion"}
+EOF
+out_roundmixed="$( SDD_STATE_DIR="$OUTSIDE/histroundmixed" "$SDD" autonomy --by-mission 2>&1 )"
+assert_eq "a REVIEW row whose photograph went missing is not repaired from prose" "1" \
+  "$(grep -c '^  m12  1 session(s) · 0 advanced · 1 churned · 0 idle · ' <<< "$out_roundmixed")"
+assert_eq "and the dated path says it reached nothing, rather than saying nothing" "0" \
+  "$(grep -c 'read their round from gate_why' <<< "$out_roundmixed")"
+
+# --- the disclosure sentences count what the table shows -----------------------------------------
+# Both sentences are DELETION SIGNALS: they say how much of the window was read through a dated
+# compatibility path, and therefore when that path may come out. A count bound before the
+# comparability filter counts rows that then leave as non-comparable, and the number cannot be
+# reconciled with anything on screen — measured on the real ledger, the EXEC sentence said "2 rows"
+# over a table of 1 session. Both counts are bound over `is_session and comparable`, which is the
+# population the table above them is made of. The fixture carries one annotated row of each phase
+# on a DIRTY kit_sha, so a count bound too early says 2 where the table says 1.
+echo "== reader: the dated-path sentences count only rows the table shows =="
+mkdir -p "$OUTSIDE/histdisclose"
+localize > "$OUTSIDE/histdisclose/autonomy-log.jsonl" <<'EOF'
+{"v":1,"ts":"2026-08-31T09:30:00-03:00","event":"session","run_id":"z1","invocation":"run","kit_sha":"fff3333","kit_dirty":false,"project":"p1","repo":"/p1","mission":"m13","phase":"EXEC","step":"EXEC","agent":"sdd-executor","model":"opus","attempt":1,"auto_retry":false,"session":"z1s","rc":0,"dur_s":10,"cost_usd":1.0,"moved":true,"gate":"fail","gate_why":"3 of 4 increment(s) still to execute"}
+{"v":1,"ts":"2026-08-31T09:31:00-03:00","event":"session","run_id":"z1","invocation":"run","kit_sha":"fff3333","kit_dirty":true,"project":"p1","repo":"/p1","mission":"m13","phase":"EXEC","step":"EXEC","agent":"sdd-executor","model":"opus","attempt":2,"auto_retry":false,"session":"z2s","rc":0,"dur_s":10,"cost_usd":1.0,"moved":true,"gate":"fail","gate_why":"2 of 4 increment(s) still to execute"}
+{"v":1,"ts":"2026-08-31T09:32:00-03:00","event":"session","run_id":"z2","invocation":"run","kit_sha":"fff3333","kit_dirty":false,"project":"p1","repo":"/p1","mission":"m13","phase":"REVIEW","step":"REVIEW","agent":"sdd-reviewer","model":"opus","attempt":1,"auto_retry":false,"session":"z3s","rc":0,"dur_s":10,"cost_usd":1.0,"moved":true,"gate":"fail","gate_why":"40-review-r1.md: Correctness = B — the gate requires Grade A on every criterion"}
+{"v":1,"ts":"2026-08-31T09:33:00-03:00","event":"session","run_id":"z2","invocation":"run","kit_sha":"fff3333","kit_dirty":true,"project":"p1","repo":"/p1","mission":"m13","phase":"REVIEW","step":"REVIEW","agent":"sdd-reviewer","model":"opus","attempt":2,"auto_retry":false,"session":"z4s","rc":0,"dur_s":10,"cost_usd":1.0,"moved":true,"gate":"fail","gate_why":"40-review-r2.md: Correctness = B — the gate requires Grade A on every criterion"}
+EOF
+out_disclose="$( SDD_STATE_DIR="$OUTSIDE/histdisclose" "$SDD" autonomy 2>&1 )"
+# Not vacuous: the fixture really does hold rows the table does not show, and says so.
+assert_eq "the fixture really does hide two rows behind the comparability filter" "1" \
+  "$(grep -c '2 non-comparable row(s) excluded' <<< "$out_disclose")"
+assert_eq "the EXEC sentence counts only the rows the table is made of" "1" \
+  "$(grep -c '(1 EXEC row(s) older than the pending fields read their progress from gate_why)' <<< "$out_disclose")"
+assert_eq "the REVIEW sentence counts only the rows the table is made of" "1" \
+  "$(grep -c '(1 REVIEW row(s) older than the round fields read their round from gate_why)' <<< "$out_disclose")"
+
 # --- the reader gives a full accounting, never a silent gap --------------------------------------
 # Two findings from review, one root cause: a bucket the reader does not name is a bucket that can
 # vanish with no trace (finding 3 — the reviewer's ledger with no `event` key printed nothing and
