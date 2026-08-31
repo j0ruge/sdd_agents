@@ -133,7 +133,7 @@ destrava nada: plano kaizen-born nunca carrega `aprovacao: auto` (`plan_approves
 | # | Item | Status | Nota |
 |---|---|---|---|
 | K1 | Gemba — fui ver onde o trabalho acontece | ✅ | Série real lida (`sdd kaizen --series`), `review_rounds_on_disk` lido em `bin/sdd:2512`, rubrica em `:4935-4943`, `ledger_outcome_defs` em `:1926`, os 7 `GATE_WHY` de `gate_REVIEW` enumerados |
-| K2 | Problema declarado com métrica | ✅ | `21 advanced · 2 churned · 8% waste` → `22 advanced · 1 churned · 4% waste` na linha `bf001fe`, sobre as mesmas 23 linhas |
+| K2 | Problema declarado com métrica | ✅ | ⚠️ **Reescrito em 2026-08-31 junto com a Métrica (1)** — a forma original (`bf001fe`: `21 advanced · 2 churned · 8% waste` → `22 advanced · 1 churned · 4% waste`) foi falsificada pelo ponto de corte do I3 e não pode ficar de pé ao lado da métrica corrigida. O número medido: `d89ea43`, `e9a3681` e `353b4b1`, cada uma de `0 advanced · 1 churned · 100% waste` para `1 advanced · 0 churned · 0% waste`, com `bf001fe` inalterada por mérito |
 | K3 | Desperdícios identificados e cortados | ✅ | O desperdício **medido** é o do instrumento, não o do pipeline: 2 de 18 células mentem. Cortar custo do REVIEW fica fora de escopo, declarado |
 | K4 | Fatiamento incremental, cada fatia verificável | ✅ | I1 (campos) → I2 (leitura) → I3 (caminho datado) → I4 (a fase que fechou); I1–I3 entregam a métrica sozinhos se o I4 parar a linha |
 | K5 | Check por artefato (rótulo ≠ artefato) | ✅ | Os 4 Checks leem a linha `^  ok` de um sensor da suíte; a verificação E2E lê o ledger real, nunca a prosa da sessão |

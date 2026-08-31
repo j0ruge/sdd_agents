@@ -306,11 +306,19 @@ cabem juntos"* já descreve; não tente resolvê-la aqui.
 
 Com os quatro incrementos `done`:
 
-1. **A métrica (1), no ledger real.**
-   `"$SDD_HOME/bin/sdd" autonomy --all-repos | grep bf001fe`
-   → tem de conter `22 advanced · 1 churned · 0 idle · 4% waste` (hoje: `21 advanced · 2 churned ·
-   0 idle · 8% waste`), com `3 mission(s) · US$ 175.96` **inalterados** — se o custo ou a contagem
-   de missões se mexerem, a mudança não foi aditiva e a verificação **falhou**.
+1. **A métrica (1), no ledger real — REESCRITA em 2026-08-31 junto com a do `00-missao.md`.** Este
+   item pedia `bf001fe` → `22 advanced · 1 churned · 4% waste`, e essa era a previsão que o ponto de
+   corte do I3 **falsificou**: a única REVIEW reprovada daquela fatia tem
+   `gate_why: "no 40-review-r<N>.md"` — não pousou rodada nenhuma, é churn por mérito, e fazê-la ler
+   `advanced` violaria a Métrica (2). O humano decidiu pelo caminho (a) (nota `intervention:` do
+   `checkpoint.md`), e deixar o número antigo aqui deixaria a missão com **dois critérios de
+   aceitação contraditórios** — o de cima falsificado, o de baixo medido. O critério real:
+   `"$SDD_HOME/bin/sdd" autonomy --all-repos`
+   → `d89ea43`, `e9a3681` e `353b4b1` em `1 advanced · 0 churned · 0% waste` (hoje, cada uma em
+   `0 advanced · 1 churned · 100% waste`), e `bf001fe` **inalterada** em `23 session(s) ·
+   21 advanced · 2 churned · 0 idle · 8% waste · 3 mission(s) · US$ 175.96`. Se qualquer outra
+   célula, custo ou contagem de missão se mexer, a mudança não foi aditiva e a verificação
+   **falhou**.
 2. **A métrica (2), por sensor.** Os quatro Checks do `checkpoint.md` verdes, que é o que prova que
    a mudança tem juiz depois que esta missão acabar.
 3. **A suíte inteira e o catálogo.** `./tests/run-all.sh` verde e `./bin/sdd health` carimbando
