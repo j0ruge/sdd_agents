@@ -5,7 +5,7 @@ rodada: 2
 status: done
 sessao: f15ba486-81f2-4fec-bf7e-1e0f5093a9d6
 data: 2026-08-31 17:05
-gate: "`tests/run-all.sh` → `suite green`, **842 asserções `ok`, 0 FAIL, rc 0**, ~100 s, rodado depois de cada commit desta rodada e uma última vez em `d4886e6`. Árvore limpa (`git status --short` vazio). Os 4 mutantes novos medidos como o catálogo mede — sandbox fiel (`bin tests templates config agents CLAUDE.md TODO.md docs/adr`), **controle íntegro rc 0** e cada mutante rc 1 matando exatamente a asserção nomeada no seu cabeçalho; catálogo em `217 entradas / 217 funções`, sem órfão, e **varredura de âncora podre sobre os 217 contra o `bin/sdd` de hoje: `ok=217 noop=0 syntax=0`** — nem a r1 nem esta rodada apodreceram âncora nenhuma. Os dois mutantes que a r1 criou foram **re-medidos** depois do conserto do eixo (rc 1 nos dois, matando as mesmas asserções): o conserto desta rodada não deixou órfão o da r1. `./bin/sdd preflight` verde ponta a ponta, incluindo `7 kit agent(s) checked` e `working tree clean`. As duas HIGH reproduzidas ANTES do conserto em fixture de ledger real (`SDD_STATE_DIR`) e re-lidas depois: os dois ledgers passam a responder idêntico. Métrica (1) re-conferida no ledger real: `d89ea43`, `e9a3681` e `353b4b1` em `1 advanced · 0 churned · 0% waste`, `bf001fe` inalterada em `23 session(s) · 21 advanced · 2 churned · 0 idle · 8% waste · 3 mission(s) · US$ 175.96`. ⚠️ O carimbo de mutação segue MORTO — esta rodada commitou em `bin/`, `tests/` e `tests/health-baseline.txt`; quem re-carimba é a DOCS, antes do `gate_PR`."
+gate: "`tests/run-all.sh` → `suite green`, **842 asserções `ok`, 0 FAIL, rc 0**, ~100 s, rodado depois de cada commit desta rodada e uma última vez em `d4886e6`. Árvore limpa (`git status --short` vazio). Os **5** mutantes novos desta rodada medidos como o catálogo mede — sandbox fiel (`bin tests templates config agents CLAUDE.md TODO.md docs/adr`), **controle íntegro rc 0** e cada mutante rc 1 matando exatamente a asserção nomeada no seu cabeçalho; catálogo em `218 entradas / 218 funções`, sem órfão, e **varredura de âncora podre sobre o catálogo contra o `bin/sdd` de hoje: `ok=217 noop=0 syntax=0`** (antes do 218º, que nasceu medido) — nem a r1 nem esta rodada apodreceram âncora nenhuma. Os dois mutantes que a r1 criou foram **re-medidos** depois do conserto do eixo (rc 1 nos dois, matando as mesmas asserções): o conserto desta rodada não deixou órfão o da r1. `./bin/sdd preflight` verde ponta a ponta, incluindo `7 kit agent(s) checked` e `working tree clean`. As duas HIGH reproduzidas ANTES do conserto em fixture de ledger real (`SDD_STATE_DIR`) e re-lidas depois: os dois ledgers passam a responder idêntico. Métrica (1) re-conferida no ledger real: `d89ea43`, `e9a3681` e `353b4b1` em `1 advanced · 0 churned · 0% waste`, `bf001fe` inalterada em `23 session(s) · 21 advanced · 2 churned · 0 idle · 8% waste · 3 mission(s) · US$ 175.96`. ⚠️ O carimbo de mutação segue MORTO — esta rodada commitou em `bin/`, `tests/` e `tests/health-baseline.txt`; quem re-carimba é a DOCS, antes do `gate_PR`."
 ---
 
 # Review — rodada r2 — A rodada que andou
@@ -17,8 +17,11 @@ As duas foram fechadas nesta sessão com sabotagem **medida** (`594ef07`), e jun
 irmão de `20260829`. Depois disso a r2 atacou o ângulo que a r1 **não** tomou — os *outros*
 consumidores do evento novo — e achou **duas HIGH da mesma raiz**: a r1 impediu a CÉLULA fantasma
 e deixou passar a **VERSÃO** fantasma, no eixo em que o juiz inteiro se apoia. Corrigidas em
-`c4a114e` com asserção diferencial. **Seis achados: três consertados, um no `TODO.md`, um como
-limite declarado, um refutado.** Todos os critérios em `A`.
+`c4a114e` com asserção diferencial. Uma passada de sabotagem adversarial sobre as **60 asserções
+novas** da missão fechou a rodada e achou mais duas — incluindo uma justificativa falsa escrita por
+**esta própria rodada**, e uma asserção que dizia "NOTHING else" medindo um subconjunto.
+**Nove achados: cinco consertados, um no `TODO.md`, um como limite declarado, dois refutados.**
+Todos os critérios em `A`.
 
 ## Nota da rodada
 
@@ -31,7 +34,7 @@ limite declarado, um refutado.** Todos os critérios em `A`.
 | Error Handling | A | `set -euo pipefail` varrido nos sítios novos; o bloco `jq` é uma string shell de aspas simples e a única violação (uma apóstrofe minha) morreu alto em `bash -n`, não em silêncio — o limite passou a estar declarado no próprio comentário. |
 | Security | A | Varredura determinística sobre o diff completo (`scan_secrets.sh`): `{"findings": [], "errors": []}`. Nenhuma entrada externa entra em shell; todo valor chega ao `jq` por `--arg`. |
 | Performance | A | O conserto do eixo acrescenta um `select` a um `reduce` que já percorria a mesma lista — mesma ordem de grandeza, medido idêntico no ledger real (121 versões). Nenhum gate a mais roda. |
-| Test Coverage | A | As duas portas que compraram o `B` da r1 fecharam com sabotagem medida sítio a sítio, e as outras duas da mesma função foram MEDIDAS inertes (suíte verde sabotada) e viraram limite declarado em vez de cobertura alegada. 9 asserções e 4 mutantes novos, cada mutante provado em sandbox com controle verde. |
+| Test Coverage | A | As duas portas que compraram o `B` da r1 fecharam com sabotagem medida sítio a sítio, e as outras duas da mesma função foram MEDIDAS inertes (suíte verde sabotada) e viraram limite declarado em vez de cobertura alegada. Uma passada de sabotagem adversarial sobre as **60 asserções novas** da missão rodou 34 sabotagens ancoradas e achou duas frouxas — as duas consertadas aqui, uma delas escrita por esta mesma rodada. **9 asserções novas** (6 em `check-autonomy.sh`, 3 em `check-kaizen.sh`, contadas do diff) mais uma existente que passou a medir o que afirma, e **5 mutantes novos** — cada mutante provado em sandbox com controle íntegro verde. |
 | Documentation | A | A tabela de campos do contrato foi conferida chave a chave contra o construtor da linha `gate_pass` e está correta — a prosa acima dela define "on escalation rows" como cobrindo a closure e nomeia as duas exceções. Os dois limites novos entraram no comentário do código, com o mundo nomeado. |
 | **Overall** | **A** | Duas HIGH da mesma raiz reproduzidas, consertadas por uma definição e presas por asserção diferencial; o laço fecha porque o que sobra está medido e declarado, não alegado. |
 
@@ -45,6 +48,9 @@ limite declarado, um refutado.** Todos os critérios em `A`.
 | 4 | MEDIUM | A escrita de `gate_failed` no retry inline sobrevive à sabotagem, sob comentário que invoca "um probe por porta" (herdado da r1, achado #7) | `bin/sdd:4516` |
 | 5 | MEDIUM | `reopened` é cego à closure: mesma história de pipeline responde `0` ou `1` conforme a fase ter CUSTADO dinheiro | `bin/sdd:4849` |
 | 6 | LOW | `historic_progress` não limpa a memória numa closure — inconstruível por ordem de escrita | `bin/sdd:2050` |
+| 7 | MEDIUM | A asserção que diz "the recorded fact moves the label and **NOTHING else**" comparava dez chaves de FATIA e deixava `.latest.detail` de fora — afirmava mais do que media | `tests/check-kaizen.sh:458` |
+| 8 | MEDIUM | Justificativa falsa **desta própria rodada**: o piso do bloco do `cmd_retry` alegava um motivo que a medição desmente | `tests/check-autonomy.sh:1333` |
+| 9 | MEDIUM | A guarda `sessions[$ph] > 0` do `gate_pass_rows` sobrevive à sabotagem — **refutada**, está declarada verbatim | `bin/sdd:4110` |
 
 ## O que foi corrigido
 
@@ -74,6 +80,27 @@ limite declarado, um refutado.** Todos os critérios em `A`.
   cada um medido em sandbox com controle íntegro verde.
 - **A metade EXEC do irmão de `20260829` fechou no mesmo commit** (`594ef07`): a foto ganhou probe
   e mutante próprios; a leitura pós-gate foi medida inerte e virou limite declarado.
+- **#7 — a asserção que afirmava mais do que media — corrigido em `dccf3a7`.** O `gp_shape`
+  comparava **dez chaves de nível de FATIA**, escolhidas à mão pelo mesmo autor do escritor, e
+  deixava `.latest.detail` inteiramente de fora — enquanto a asserção dizia *"NOTHING else in the
+  series"*. O evento novo alcança campo de **célula**, que estava fora dessa lista. Reproduzido:
+  ensinar a célula a contar closure como sessão deixava os **dois** sensores verdes em rc 0
+  enquanto `m30/QA` ia de 1 sessão para 2 — fase que comprou uma sessão reportada como duas, na
+  célula que o juiz cita primeiro. `del(.label)` porque o rótulo é a única coisa que a closure
+  **deve** mover. Sensor: a mesma asserção, agora com `detail` na forma, mais
+  `mut_LEDGER_gate_pass_counted_as_session` (catálogo 217 → **218**). ⚠️ O conserto revelou uma
+  sutileza de jq que virou comentário: a soma é `map(.cost_usd // 0) | add`, então a closure
+  contribui um `0` inerte — mas `[3.0] | add` imprime `3.0` e `[3.0, 0] | add` imprime `3`. Mesmo
+  número, texto diferente; a comparação passou a ser em **centavos**, que é o que a chave significa.
+- **#8 — a justificativa falsa era minha, escrita nesta mesma rodada — corrigido em `dccf3a7`.**
+  O piso `the world has a round on disk` alegava que, sem o arquivo, *"as leituras guardada e
+  não-guardada concordam"*. É **medivelmente falso**: `review_rounds_on_disk` imprime `0`, só a
+  string vazia vira `null`, e `0 == null` é `false` em jq — a asserção irmã pegaria a sabotagem de
+  qualquer jeito. O que o arquivo protege de verdade é a **identidade do bloco**: sem ele a
+  derivação cai em REVIEW e não em DOCS, e as três asserções abaixo silenciosamente deixam de falar
+  de uma linha não-REVIEW do `cmd_retry` (medido: quatro asserções morrem assim). Piso mantido,
+  razão reescrita. Razão declarada que não é a razão real é exatamente o que `d4deb35`/`7cbc8e2`
+  custaram a este repo — e eu a escrevi de novo, dentro da rodada que cita aquele par.
 
 ## O que foi refutado
 
@@ -92,6 +119,16 @@ limite declarado, um refutado.** Todos os critérios em `A`.
   os dois globais na string vazia da declaração. Ficam porque decidem QUAL falha o próximo escritor
   recebe. Está escrito no comentário como *"o mundo que este fixture não constrói"*, e nunca como
   *"esse mundo não existe"* — a distinção que `d4deb35` errou e `7cbc8e2` teve de desfazer.
+- **#9 — a guarda `sessions[$ph] > 0` do `gate_pass_rows` NÃO é achado, e a recusa é textual.**
+  A passada de sabotagem a levantou dizendo que *"a redundância é não-declarada"* e que o
+  comentário *"lê como se as três condições estivessem cobertas"*. **Verificado, e é o contrário**:
+  o comentário diz, verbatim, *"DECLARED, NO PROBE: the `sessions > 0` test is redundant TODAY and
+  is kept anyway (…) sabotaged away, the whole suite stays green, and that is stated here rather
+  than dressed up as coverage"*, e segue nomeando o mundo que a torna relevante (armar o marcador
+  no ramo `over_ceiling`) e citando `d4deb35`/`7cbc8e2`. É o mesmo achado que a **r1 já refutou**
+  pelo mesmo motivo. Mudar o código para agradar a crítica teria removido uma guarda cuja ausência
+  de probe já está declarada — dívida declarada é limite, e concordar performaticamente com uma
+  crítica equivocada é pior que o achado original.
 - **O `sdd health` NÃO foi rodado nesta sessão, e isso é decisão e não omissão.** O catálogo leva
   20–50 min e a chave do carimbo inclui `tests/health-baseline.txt`, que esta rodada mexeu: rodá-lo
   aqui produziria um carimbo que o próximo commit mataria. Quem carimba é a última fase que commita
@@ -126,7 +163,7 @@ limite declarado, um refutado.** Todos os critérios em `A`.
   eixo já estaria errado.
 - **O carimbo de mutação está morto e a DOCS é quem re-carimba.** `./bin/sdd health --with-mutation`
   (20–50 min) roda **depois do último commit de código** e antes do `gate_PR`; o catálogo tem agora
-  **217** mutantes. ⚠️ Registrar qualquer achado novo no `TODO.md` mata o carimbo de novo.
+  **218** mutantes. ⚠️ Registrar qualquer achado novo no `TODO.md` mata o carimbo de novo.
 - **A régua mudou mais uma vez dentro da janela** (grill de 2026-08-31, decisão 1): o eixo de hoje
   não é o de `080f503`. Quem citar rótulo ou contagem de versão depois desta missão tem de dizer com
   qual `bin/sdd` leu — e o achado #1 significa que qualquer leitura de `latest`/`previous` feita
