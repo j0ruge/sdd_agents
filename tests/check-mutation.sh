@@ -2524,6 +2524,60 @@ mut_KAIZEN_label_idle_blind() {
   sed -i 's@(.auto_retry == true or outcome != "advanced")@(.auto_retry == true or outcome == "churned")@' "$1"
 }
 
+# The runner stops RECORDING that a phase closed without buying a session, and every reader is back
+# to inferring the closure from an absence — which is how `phase_label` came to stamp `refez`, the
+# loudest friction signal in the rubric, on a QA phase that closed clean (window 2, the QA of
+# 20260830-o-rascunho-fantasma-do-mount). Caught by `it carries the run, the mission and the kit
+# stamp` in check-autonomy.sh, and by nothing else: the two assertions beside it die here too, but
+# each of them has another owner below.
+mut_RUN_gate_pass_row_missing() {
+  sed -i '/^    gate_pass_logged\["\$ph"\]=1$/,+1d' "$1"
+}
+
+# The writer stops asking whether the phase's own session FAILED its gate, so a phase that closed
+# with the session it paid for gets a row saying it closed for free. Not merely noise: the row would
+# be written for every phase of every run that ever passed a gate, and the ledger is append-only by
+# contract. Caught by `a phase that closed WITH its own session gets no row` in check-autonomy.sh,
+# and by nothing else — the fixture's EXEC phase is exactly that shape.
+mut_RUN_gate_pass_ignores_own_session() {
+  sed -i 's@^    if \[ "\${gate_failed\[\$ph\]:-0}" -eq 0 \]; then continue; fi$@    :@' "$1"
+}
+
+# The writer moves OUT of the derived branch of cmd_run's loop, and starts speaking about a
+# derivation that never happened. The one path that reaches it is `PUBLISH_ON_REVIEW_BLOCKED=draft`:
+# the runner gives up on a REVIEW whose gate is still failing, sets `force_phase="PR"`, and the
+# mutant then records that REVIEW closed cleanly — the loudest possible lie in a ledger built to
+# hold what the runner measured. Caught by `the phase the runner gave up on records no gate closure`
+# in check-autonomy.sh, and by nothing else.
+mut_RUN_gate_pass_off_the_derived_branch() {
+  sed -i 's@^    else phase="\$(current_phase)"; gate_pass_rows "\$phase"; fi$@    else phase="$(current_phase)"; fi\n    gate_pass_rows "$phase"@' "$1"
+}
+
+# The human reader files a row the runner itself wrote under "unrecognized" — the same defect the
+# `degraded` event bought once already, and the same sentence: an operator told the runner emitted
+# something it does not understand. It also breaks the five-bucket arithmetic, because the row then
+# leaves the header total through a bucket whose name is a lie about it. Caught by `the human reader
+# does not call the recorded closure unrecognized` in check-autonomy.sh, and by nothing else.
+mut_LEDGER_gate_pass_unrecognized() {
+  sed -i 's@def is_unrecognized: (is_session or is_escalation or is_gate_pass) | not;@def is_unrecognized: (is_session or is_escalation) | not;@' "$1"
+}
+
+# The JUDGE stops admitting the row, and it lands in `excluded.unrecognized` — the bucket the judge
+# is told to read as a bug in the kit itself, so the runner ends up accusing itself of a row it
+# wrote on purpose. Measured before the admission existed: `unrecognized: 1` over a ledger of four
+# sessions and one recorded closure.
+#
+# ⚠️ It is ALSO the owner of the rubric assertions, and that is measured rather than assumed: the
+# plan named a separate `phase_label` mutant for them, and the sabotage pass showed its kills are a
+# strict SUBSET of this one's (both take the label off `refez`; only this one moves `unrecognized`).
+# A mutant that kills nothing another does not is the redundancy CLAUDE.md says to remove rather
+# than to write a probe for, so it is not in this catalogue. Caught by `the recorded fact moves the
+# label and NOTHING else in the series` and `the recorded fact is not thrown away as unrecognized`
+# in check-kaizen.sh, and by nothing else.
+mut_LEDGER_gate_pass_not_admitted() {
+  sed -i 's@and (.event == "session" or is_escalation or is_gate_pass)@and (.event == "session" or is_escalation)@' "$1"
+}
+
 CATALOG=(
   PLAN_empty_approval
   PLAN_kaizen_born_blind
@@ -2731,6 +2785,11 @@ CATALOG=(
   LEDGER_historic_rounds_no_file_is_a_round
   LEDGER_historic_rounds_memory_blind
   AUTONOMY_historic_sentence_before_comparability
+  RUN_gate_pass_row_missing
+  RUN_gate_pass_ignores_own_session
+  RUN_gate_pass_off_the_derived_branch
+  LEDGER_gate_pass_unrecognized
+  LEDGER_gate_pass_not_admitted
 )
 
 # Mutations that are NOT caught today, each with the increment that closes it. Ratchet in both

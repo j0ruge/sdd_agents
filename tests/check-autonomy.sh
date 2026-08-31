@@ -70,18 +70,23 @@ sum_escalations() {
 }
 
 # assert_bucket_sum <description> <reader output>
-# Every row lands in exactly one of four buckets: comparable session, non-comparable session,
-# escalation, unrecognized. If the filter drops a row (finding 3) or double-counts one, this sum
-# drifts from the header total — an anti-vacuity check a broken filter cannot pass by accident,
-# unlike any single count in isolation.
+# Every row lands in exactly one of FIVE buckets: comparable session, non-comparable session,
+# escalation, recorded gate closure, unrecognized. If the filter drops a row (finding 3) or
+# double-counts one, this sum drifts from the header total — an anti-vacuity check a broken filter
+# cannot pass by accident, unlike any single count in isolation.
+#
+# It was four until 2026-08-31, and the fifth is what an event added to the enum costs: a row the
+# reader recognises has to be NAMED somewhere the arithmetic closes over, or "recognised" degrades
+# into "silently dropped" — which is the same defect as `unrecognized`, only quieter.
 assert_bucket_sum() {
-  local desc="$1" out="$2" total comparable noncomp escal stray sum
+  local desc="$1" out="$2" total comparable noncomp escal closed stray sum
   total="$(num_before "$out" 'row\(s\)')"; total="${total:-0}"
   comparable="$(sum_sessions "$out")"
   noncomp="$(num_before "$out" 'non-comparable')"; noncomp="${noncomp:-0}"
   escal="$(sum_escalations "$out")"
+  closed="$(num_before "$out" 'gate\(s\) closed without a session')"; closed="${closed:-0}"
   stray="$(num_before "$out" 'unrecognized')"; stray="${stray:-0}"
-  sum=$((comparable + noncomp + escal + stray))
+  sum=$((comparable + noncomp + escal + closed + stray))
   assert_eq "$desc" "$total" "$sum"
 }
 
@@ -1151,6 +1156,160 @@ assert_eq "and so does the inline retry of that same non-REVIEW phase" "DOCS tru
 rm -f "$MDIR"/40-review-r*.md
 git add -A && git commit -qm "chore: the round is off the disk again"
 
+# --- the phase that closed WITHOUT buying a session -------------------------
+# A gate that passes spending no session writes nothing anywhere, so the judge has to infer the
+# closure from an ABSENCE — and it infers wrong: `phase_label`'s third clause asks "did the last
+# SESSION pass?" and stamps `refez`, the loudest friction signal in the rubric, on a phase that
+# closed clean. Measured on window 2, the QA of 20260830-o-rascunho-fantasma-do-mount. The runner
+# records the FACT instead; check-kaizen.sh measures what the rubric then does with it.
+#
+# THE WORLD IS THE QA⇄EXEC FIX LOOP, and it is the one the pipeline is designed around rather than
+# a contrivance: no state changes between a failing gate and the next derivation UNLESS a phase
+# runs in between, so "the gate passed without a session" is reachable only by going BACKWARDS
+# first. QA files a bug and the fix increment for it, gate_QA refuses; the next derivation lands on
+# EXEC (an earlier phase, with an increment pending); EXEC closes both; the derivation after that
+# finds gate_QA green with no second QA session anywhere.
+#
+# FOUR laps and not three, and the fourth is not padding: the row is written at the TOP of the lap
+# that derives REVIEW, and `gate_failed[QA]` is never cleared, so a run that stops there proves
+# nothing about the one-shot marker — the fixture's regime would be standing in for the property.
+# Lap 4 derives DOCS with QA still carrying its failed verdict, which is the only world where a
+# second row can be born. `--max-phases 4` then ends the run on the DOCS session, sparing the
+# fixture the no-progress escalation a dead DOCS stub would otherwise reach.
+echo "== the gate that closed without a session is recorded, not inferred =="
+: > "$LEDGER"
+rm -rf "$FIX/docs/qa"
+rm -f "$MDIR/30-handoff-qa.md"
+printf -- '---\nfase: EXEC\nstatus: done\n---\n' > "$MDIR/20-handoff-exec.md"
+git add -A && git commit -qm "chore: exec handoff, no QA artifact yet"
+# The hash goes in only after its own commit exists, and a second commit follows: gate_EXEC demands
+# the commit be an ANCESTOR of HEAD, not merely an object in the database.
+GP_HASH="$(git rev-parse --short HEAD)"
+cat > "$MDIR/checkpoint.md" <<EOF
+| ID | Incremento | Check (comando → esperado) | Status | Commit |
+|---|---|---|---|---|
+| I1 | slice one | true → 0 | done | $GP_HASH |
+EOF
+git add -A && git commit -qm "chore: the increment is done, so QA is what is derived"
+
+GP_CALLS="$OUTSIDE/gatepass-calls"
+: > "$GP_CALLS"
+cat > "$OUTSIDE/stub/claude" <<STUB
+#!/usr/bin/env bash
+echo x >> "$GP_CALLS"
+n=\$(wc -l < "$GP_CALLS")
+if [ "\$n" = "1" ]; then
+  # The QA session: the handoff, one open bug an agent could close (anchor 3 refuses on it), and
+  # the fix increment that will send the run BACKWARDS to EXEC.
+  mkdir -p "$FIX/docs/qa/bugs"
+  cat > "$FIX/docs/qa/bugs/b1.md" <<'MD'
+# b1 — the mount draws a ghost
+- **Status:** open
+- **Closable by:** agent
+MD
+  printf -- '---\nfase: QA\nstatus: done\ngate: journey walked, evidence in the handoff\n---\n' \
+    > "$MDIR/30-handoff-qa.md"
+  cat > "$MDIR/checkpoint.md" <<'MD'
+| ID | Incremento | Check (comando → esperado) | Status | Commit |
+|---|---|---|---|---|
+| I1 | slice one | true → 0 | done | HASH1 |
+| F1 | fix the ghost | true → 0 | pending | — |
+MD
+  sed -i "s/HASH1/$GP_HASH/" "$MDIR/checkpoint.md"
+  git -C "$FIX" add -A
+  git -C "$FIX" commit -qm "chore: qa filed one bug and one fix increment"
+elif [ "\$n" = "2" ]; then
+  # The EXEC session: it closes the bug, which is what makes gate_QA pass later without QA ever
+  # opening a second session — the whole point of this fixture.
+  sed -i 's/Status:\*\* open/Status:** closed/' "$FIX/docs/qa/bugs/b1.md"
+  git -C "$FIX" add -A
+  git -C "$FIX" commit -qm "chore: the fix increment landed"
+  h2=\$(git -C "$FIX" rev-parse --short HEAD)
+  sed -i "s/| F1 | fix the ghost | true → 0 | pending | — |/| F1 | fix the ghost | true → 0 | done | \$h2 |/" \
+    "$MDIR/checkpoint.md"
+  git -C "$FIX" add -A
+  git -C "$FIX" commit -qm "chore: F1 is done"
+elif [ "\$n" = "3" ]; then
+  # The REVIEW session lands a round that satisfies its gate, so the run takes a FOURTH lap and
+  # gate_pass_rows is asked a second time with QA's failed verdict still on the books.
+  cat > "$MDIR/40-review-r1.md" <<'MD'
+---
+fase: REVIEW
+gate: suite green, tree clean, every criterion A
+---
+### Overall Grade
+
+| Criterion | Grade | Rationale |
+|---|---|---|
+| Correctness | A | Read the diff line by line; no finding survived verification. |
+MD
+  git -C "$FIX" add -A
+  git -C "$FIX" commit -qm "chore: round one landed clean"
+fi
+cat "$STREAM_SAMPLE"
+exit 0
+STUB
+chmod +x "$OUTSIDE/stub/claude"
+
+"$SDD" run "$MISSION" --max-phases 4 >/dev/null 2>&1
+# THE FLOOR, and it comes first: without the QA→EXEC→REVIEW→DOCS sequence on disk every assertion
+# below would be measuring an empty ledger and would pass by vacuity. The fourth phase is what
+# makes "exactly one row" a statement about the one-shot marker instead of about the ceiling.
+assert_eq "the fixture walked QA, back to EXEC, then on through REVIEW to DOCS" "QA EXEC REVIEW DOCS" \
+  "$(jq -r -s '[.[] | select(.event == "session") | .phase] | join(" ")' "$LEDGER")"
+# THE assertion of this increment: the closure is a row, not an absence.
+assert_eq "the gate that closed without a session leaves a row naming the phase" "gate_pass QA" \
+  "$(jq -r -s '[.[] | select(.event == "gate_pass")] | "\(.[0].event) \(.[0].phase)"' "$LEDGER")"
+# THE ONE-SHOT, and it needs lap 4 to mean anything: `gate_failed[QA]` is never cleared, so every
+# later derivation re-satisfies every other condition of the writer. Without the marker this reads
+# 2 — one row per lap, into a file that is append-only by contract.
+assert_eq "exactly one row: the closure is recorded once, not once per lap" "1" \
+  "$(jq -s '[.[] | select(.event == "gate_pass")] | length' "$LEDGER")"
+# THE NARROW CONDITION, and it is the assertion that keeps this writer from firing on every
+# derivation. EXEC also closed its gate in this run — but it BOUGHT the session that closed it, so
+# there is nothing here the ledger did not already say. `current_phase()` re-evaluates every gate
+# on every derivation, so a writer without this condition would emit a row for every already-closed
+# phase of every resumed run: up to six rows a lap, into a file that is append-only by contract.
+assert_eq "a phase that closed WITH its own session gets no row" "0" \
+  "$(jq -s '[.[] | select(.event == "gate_pass" and .phase == "EXEC")] | length' "$LEDGER")"
+# The row belongs to the run and to the version, or the judge cannot put it on any axis. Same
+# identity fields the escalation row carries, from the same three helpers.
+assert_eq "it carries the run, the mission and the kit stamp" "true" \
+  "$(jq -r -s --arg m "$MISSION" '[.[] | select(.event == "gate_pass")][0]
+               | (.run_id | length) > 0 and .mission == $m
+                 and .project == "fixture" and .invocation == "run"
+                 and has("kit_sha") and has("kit_dirty")' "$LEDGER")"
+# Session fields ABSENT, never zeroed — the same rule an escalation row obeys, for the same reason:
+# a 0 here would enter the judge's arithmetic as a session that ran and did nothing.
+# `. != null` is load-bearing and not belt-and-braces: jq 1.7 answers `null | has("rc")` with
+# FALSE rather than an error (measured), so every conjunct below is satisfied by the absence of the
+# row — the assertion would go green over an empty ledger, which is the vacuity this file spends
+# its floors refusing.
+assert_eq "and no session fields, because it spent no session" "true" \
+  "$(jq -r -s '[.[] | select(.event == "gate_pass")][0]
+               | . != null
+                 and has("rc") == false and has("cost_usd") == false and has("moved") == false
+                 and has("session") == false and has("gate") == false' "$LEDGER")"
+
+# The human reader must not file a row the runner itself wrote under "unrecognized" — the same
+# rule the `degraded` event bought one screen down, and the same failure it is: a disclosure line
+# telling the operator the runner emitted something it does not understand.
+gp_out="$("$SDD" autonomy 2>&1)"
+assert_eq "the human reader does not call the recorded closure unrecognized" "0" \
+  "$(grep -c 'unrecognized' <<< "$gp_out")"
+assert_eq "it names the closure instead, so nothing leaves the accounting in silence" "1" \
+  "$(num_before "$gp_out" 'gate\(s\) closed without a session')"
+assert_bucket_sum "the buckets still sum to the header total (a recorded closure)" "$gp_out"
+
+# The fixture is restored for the block below, which needs a mission sitting in REVIEW: the QA
+# tree, the QA handoff and — the one that bites — the round file lap 3 landed. A 40-review-r<N>.md
+# left here is a round the next block's REVIEW_MAX_ITER=1 ceiling counts BEFORE its first session,
+# and its whole regime (the runner re-entering the draft branch lap after lap) depends on the
+# ceiling not firing that early. Measured: 15 assertions of that block died on the leftover file.
+rm -rf "$FIX/docs/qa"
+rm -f "$MDIR/30-handoff-qa.md" "$MDIR"/40-review-r*.md
+git add -A && git commit -qm "chore: the qa artifacts and the round are off the disk again"
+
 # --- the self-degradation review→draft leaves a trace -----------------------
 # PUBLISH_ON_REVIEW_BLOCKED=draft is the runner deciding, ALONE, to stop reviewing and publish a
 # draft PR anyway — the most interesting autonomy event a mission can produce. Until this
@@ -1254,6 +1413,15 @@ assert_eq "the run came BACK to the blown REVIEW budget — the lap the old runn
 # and writing the row on the fall-through as well as in the branch.
 assert_eq "and it ends on the pair that already existed, with no new event in the enum" \
   "budget-exhausted" "$(jq -r -s '[.[] | select(.event == "blocked")][0].kind' "$LEDGER")"
+# The DERIVED-BRANCH-ONLY rule of gate_pass_rows, and THIS is the fixture that reaches it — the
+# only path in cmd_run where `force_phase` survives into a lap that already has a failed phase
+# behind it. The degradation jumps to PR over a REVIEW whose gate is still failing; a writer
+# running on that lap would read "every phase before PR has closed" off a derivation that never
+# happened, and record that the phase the runner GAVE UP ON closed cleanly. That is the loudest
+# possible lie in a ledger whose whole purpose is to hold what the runner measured, and it is one
+# `else` away: measured by moving the call out of the derived branch, this reads 1.
+assert_eq "the phase the runner gave up on records no gate closure" "0" \
+  "$(jq -s '[.[] | select(.event == "gate_pass")] | length' "$LEDGER")"
 assert_eq "exactly one blocked row: a run ends once" "1" \
   "$(jq -s '[.[] | select(.event == "blocked")] | length' "$LEDGER")"
 # Kept from F1: a PR session with the REVIEW gate still failing can only exist BECAUSE the runner

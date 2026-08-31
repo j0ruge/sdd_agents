@@ -572,16 +572,21 @@ the judge cannot count missions per kit version to answer "not enough data yet".
 This is the whole interface the judge (`sdd kaizen --series`) is written against — every field a
 row can carry, one row per field.
 
-There are **two row shapes**, not three: a *session* row (`event:"session"`) and an *escalation*
-row, which is any row that spent no session — `event:"blocked"` or `event:"degraded"`. Escalation
-rows carry only the columns marked "on escalation rows" in "absent when"; everything else is
-present on both shapes.
+There are **three row shapes**: a *session* row (`event:"session"`), an *escalation* row — any row
+that spent no session because something went wrong, `event:"blocked"` or `event:"degraded"` — and,
+since `20260831-a-rodada-que-andou`, a *recorded gate closure* (`event:"gate_pass"`), which also
+spends no session but records the pipeline moving **forward** for free. Escalation and gate-closure
+rows carry only the columns marked "on escalation rows" in "absent when"; everything else is present
+on the session shape. The gate closure carries less still: no `kind` and no `gate_why`, because the
+gate that closed was evaluated inside `current_phase()`, which runs as `$( )`, so its reason died
+with the subshell — and re-running the gate to recover a sentence would run `TEST_CMD` again for
+prose.
 
 | Field | Type | Absent when | Meaning |
 |---|---|---|---|
 | `v` | integer | never | Schema version of the row, `1` today. Lets the reader tell "old shape" from "malformed" when a future field is added. |
 | `ts` | string | never | `date -Iseconds` timestamp of when the row was written. |
-| `event` | string enum: `session` \| `blocked` \| `degraded` | never | A spent session versus a no-session escalation. `blocked` means the line **stopped** (the runner returns 3 and a human has to act); `degraded` means the runner lowered its own bar and **carried on**. They are kept apart on purpose: reusing `blocked` for a degradation would have been cheaper — it inherits the `kit_sha` axis and the aggregation with no `jq` to touch — but it records "stopped" for a run that continued, and the ledger exists to record fact. |
+| `event` | string enum: `session` \| `blocked` \| `degraded` \| `gate_pass` | never | A spent session, a no-session escalation, or a no-session **closure**. `blocked` means the line **stopped** (the runner returns 3 and a human has to act); `degraded` means the runner lowered its own bar and **carried on**. They are kept apart on purpose: reusing `blocked` for a degradation would have been cheaper — it inherits the `kit_sha` axis and the aggregation with no `jq` to touch — but it records "stopped" for a run that continued, and the ledger exists to record fact. `gate_pass` is the third value and the same argument one step further: a gate that closes without buying a session writes nothing, so every reader had to infer the closure from an **absence** — and `phase_label` inferred it wrong, stamping `refez` (the loudest friction signal in the rubric) on a phase that closed clean. Measured on window 2: the QA of `20260830-o-rascunho-fantasma-do-mount`, one session, `escalations: {}`, one launch for the whole mission, REVIEW/DOCS/PR all `ok` after it. It is written **only** from the derived branch of `cmd_run`'s loop, and only for a phase that bought a session in *this* run whose gate then failed — at most one per phase per run. `current_phase()` re-evaluates every gate on every derivation, so without that condition every resumed run would append a row per already-closed phase per lap. ⚠️ Declared limit: a phase whose session was paid for in run *N* and whose gate closes for free in run *N+1* gets no row; its `refez` corrects itself the first time the whole pattern happens inside one run. |
 | `kind` | string enum: `increment-blocked` \| `dirty-tree` \| `handoff-blocked` \| `app-down` \| `budget-exhausted` \| `no-progress` \| `review-to-draft` | on `event:"session"` rows | Which escalation path fired. `increment-blocked`, `dirty-tree` and `handoff-blocked` are deliberate Jidoka (they can be a *good* sign); `budget-exhausted` and `no-progress` are pure friction. `dirty-tree` is the oldest of the three and was **missing from this row** until `20260828-o-gate-sabe-que-o-app-caiu` went looking — the row that warns a kind can be added to the code and not to the table is the row that had one, which is exactly the open tail it describes. It fires from `cmd_run`'s EXEC pre-check and always names EXEC: a phase that died mid-way leaves the tree uncommitted, the suite then runs against changes nobody approved and comes back red, every increment still reads `done`, so EXEC is re-derived and another session opens against the same wall — about US$ 25 a lap, with no end condition, and no session may commit or discard on a human's behalf. `handoff-blocked` arrived with `20260826-o-laco-da-qa`: the phase's own handoff declares `status: blocked`, which already meant "the line stopped and a human has to act", so the runner escalates on that declaration instead of charging the phase a second session to prove the same thing. It is written from both doors of `cmd_run`'s loop — the first pass and the inline retry — and names the phase whose handoff declared it. `app-down` is its environment-facing sibling: the e2e came back red **and** a TCP connect to `APP_URL` was refused, so the line stops with the address named instead of charging QA a second opus session against a machine no session in this pipeline is allowed to start (bringing the environment up is the operator's job — see `config/schema.md`). Same two doors, same deliberate-Jidoka reading. What it never does is fire on doubt: an empty `APP_URL`, a URL the runner cannot parse, a bash built without `/dev/tcp`, an absent `timeout(1)` and an error string it does not recognise all read as *unknown*, and *unknown* escalates nothing — the probe may turn a red into a **named** red, never a green into a red. ⚠️ This column is a **documented enum with an open tail**: the runtime readers do not validate it (`is_escalation` is defined over `.event` alone and both aggregations `group_by(.kind)` dynamically), so a new kind is admitted, counted and printed rather than filed as `unrecognized` — which means a kind added to the code and not to this row goes unnoticed by every sensor. Adding one is a contract change: code and this table in the same commit. `review-to-draft` is the only `degraded` kind today: `PUBLISH_ON_REVIEW_BLOCKED=draft` and the review out of rounds, so the runner publishes a draft PR by itself instead of stopping. **At most one `review-to-draft` row per `run_id`**, and now at most one *jump*: the draft PR gets a single chance, and if its own gate fails the run ends on `blocked` / `budget-exhausted` in REVIEW rather than looping REVIEW→PR→REVIEW with the budget still blown. Before that, the branch was re-entered every lap and wrote a row every lap — both readers agreeing on a wrong number, which is worse than one of them being wrong. |
 | `run_id` | string (uuid) | never | One per `cmd_run`/`cmd_retry` invocation. Groups every row a single command call produced — "this mission needed N runs" is a `run_id` count. |
 | `invocation` | string enum: `run` \| `retry` | never | Which command opened the session: `sdd run` or `sdd retry`. Answers "who opened the session", not "was this an in-loop retry" — that is `auto_retry`. |
@@ -615,6 +620,12 @@ blind spot for another: `kaizen_series`'s `select` counts anything it does not a
 `excluded.unrecognized`, and `cmd_autonomy`'s `is_escalation` does the same for the human. A row
 the runner itself wrote and its own reader files as "unrecognized" is the defect, just moved.
 
+And admitting it is not enough either: a recognised row still has to be **accounted for**. The
+human reader closes an arithmetic over five buckets (comparable session, non-comparable session,
+escalation, recorded gate closure, unrecognized) and prints a line for each that is non-empty, so a
+row nobody counts leaves the header total without leaving a trace — which is `unrecognized` with the
+alarm switched off. `tests/check-autonomy.sh` closes that sum over all five.
+
 Admitting the row is **not enough** — a new escalation `event` also has to reach `phase_label`,
 the rubric behind the `labels` histogram the judge is told to cite. The rubric groups by
 `(mission, phase)` over the whole `kit_sha` slice, **not per run**: "the failing session in that
@@ -623,6 +634,13 @@ gate. That is why `blocked` is a clause of the rubric rather than being left to 
 around it — an escalation outlives the session that provoked it — and `degraded` is an escalation.
 Both readers now share one `is_escalation` definition per program for exactly this reason: the
 pair written out by hand in three places is how they came to disagree in the first place.
+
+`gate_pass` reaches `phase_label` too, and by the **other** door: it is deliberately kept OUT of
+`is_escalation` (a gate that closed is the opposite of the line stopping, and `escalations` is the
+map the judge cites first) and instead relaxes the rubric's third clause, which used to ask "did the
+last **session** pass its gate?" while meaning "did the **phase** close?". ⚠️ What it does *not* do
+is turn the cell green: the surviving session is still churn on its own count, so the cascade lands
+on `leve`. Trading a false `refez` for a false `ok` would be the same defect wearing the other sign.
 
 `sdd autonomy` prints the human view. The judge reads the JSONL with `jq` — never that table.
 Both readers group escalations on the **same axis**, `kit_sha`, and both drop a row with a dirty

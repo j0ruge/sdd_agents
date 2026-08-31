@@ -387,6 +387,85 @@ assert_eq "the human window and the judge count the REVIEW round alike" \
 # this fixture, so the parity above is about the numbers this block describes.
 assert_eq "that parity is not vacuous — the table printed the three counts" "6 3 1" "$rounds_table"
 
+# --- the phase that closed WITHOUT buying a session --------------------------
+# The third clause of `phase_label` asks "did the last SESSION pass its gate?" while meaning "did
+# the PHASE close?", and the two are the same question only while every gate that ever passes
+# costs a session. It does not: the QA⇄EXEC fix loop closes QA for free — QA files a bug and a
+# fix increment, EXEC closes both, and the next derivation finds gate_QA green with no second QA
+# session anywhere. Measured on window 2: the QA of 20260830-o-rascunho-fantasma-do-mount read
+# `refez` — the LOUDEST friction signal in the rubric — over a phase that closed clean, with
+# `escalations: {}`, one launch for the whole mission, and REVIEW/DOCS/PR all `ok` after it.
+#
+# So the runner writes the FACT (`event: "gate_pass"`) instead of leaving the judge to infer it
+# from an absence, and the rubric reads the fact. ⚠️ The promise is that `refez` stops being
+# ASSERTED, never that the cell turns green: the surviving session is churn on its own count, and
+# the cascade lands on `leve`. Promising `ok` would trade one false label for another.
+echo "== series: a phase that closed without a session does not read refez =="
+mkdir -p "$OUTSIDE/gatepass" "$OUTSIDE/nogatepass"
+localize > "$OUTSIDE/gatepass/autonomy-log.jsonl" <<'EOF'
+{"v":1,"ts":"2026-08-31T12:00:00-03:00","event":"session","run_id":"g1","invocation":"run","kit_sha":"ddd8888","kit_dirty":false,"project":"p1","repo":"/p1","mission":"m30","phase":"QA","step":"QA","agent":"sdd-qa","model":"opus","attempt":1,"auto_retry":false,"session":"g1s","rc":0,"dur_s":10,"cost_usd":3.0,"moved":true,"gate":"fail","gate_why":"1 bug(s) with Status: open in the registry"}
+{"v":1,"ts":"2026-08-31T12:01:00-03:00","event":"session","run_id":"g1","invocation":"run","kit_sha":"ddd8888","kit_dirty":false,"project":"p1","repo":"/p1","mission":"m30","phase":"EXEC","step":"EXEC","agent":"sdd-executor","model":"opus","attempt":1,"auto_retry":false,"session":"g2s","rc":0,"dur_s":10,"cost_usd":1.5,"moved":true,"pending_before":1,"pending_after":0,"increments_total":1,"gate":"pass","gate_why":"0 of 1 increment(s) still to execute"}
+{"v":1,"ts":"2026-08-31T12:02:00-03:00","event":"gate_pass","run_id":"g1","invocation":"run","kit_sha":"ddd8888","kit_dirty":false,"project":"p1","repo":"/p1","mission":"m30","phase":"QA","gate_why":"report closed, registry clean, suites green"}
+{"v":1,"ts":"2026-08-31T12:03:00-03:00","event":"session","run_id":"g1","invocation":"run","kit_sha":"ddd8888","kit_dirty":false,"project":"p1","repo":"/p1","mission":"m30","phase":"REVIEW","step":"REVIEW","agent":"sdd-reviewer","model":"opus","attempt":1,"auto_retry":false,"session":"g3s","rc":0,"dur_s":10,"cost_usd":2.0,"moved":true,"rounds_before":0,"rounds_after":1,"rounds_max":3,"gate":"pass","gate_why":"40-review-r1.md: every criterion A"}
+{"v":1,"ts":"2026-08-31T12:04:00-03:00","event":"session","run_id":"g2","invocation":"run","kit_sha":"ddd8888","kit_dirty":false,"project":"p1","repo":"/p1","mission":"m31","phase":"QA","step":"QA","agent":"sdd-qa","model":"opus","attempt":1,"auto_retry":false,"session":"g4s","rc":0,"dur_s":10,"cost_usd":3.0,"moved":true,"gate":"fail","gate_why":"1 bug(s) with Status: open in the registry"}
+EOF
+# The control world is the SAME file with the one row cut out, so nothing else can explain a
+# difference between the two readings.
+grep -v '"event":"gate_pass"' "$OUTSIDE/gatepass/autonomy-log.jsonl" \
+  > "$OUTSIDE/nogatepass/autonomy-log.jsonl"
+GP_OUT="$( cd "$FIX" && SDD_STATE_DIR="$OUTSIDE/gatepass" "$SDD" kaizen --series 2>/dev/null )"
+NOGP_OUT="$( cd "$FIX" && SDD_STATE_DIR="$OUTSIDE/nogatepass" "$SDD" kaizen --series 2>/dev/null )"
+gp_label() { jq -r --arg m "$1" --arg p "$2" \
+  '.latest.detail[] | select(.mission == $m and .phase == $p) | .label' <<< "$3"; }
+# THE assertion of this increment, stated as the metric states it: `refez` stops being asserted.
+assert_eq "a phase that closed without a session does not read refez" "true" \
+  "$([ "$(gp_label m30 QA "$GP_OUT")" != "refez" ] && echo true || echo false)"
+# ...and where it lands instead, so the assertion above cannot be satisfied by a rubric that
+# stopped labelling anything at all. `leve`, not `ok`: the one session QA bought is churn by its
+# own count, and that fact did not change.
+assert_eq "and it lands on leve, because the surviving session is still churn" "leve" \
+  "$(gp_label m30 QA "$GP_OUT")"
+# THE REPRODUCTION, and it is the same file minus one row: without the recorded fact the very same
+# QA phase reads `refez`. Any rubric that reaches the two lines above by some other route fails
+# here, because this control has to keep answering `refez`.
+assert_eq "the same phase without the recorded fact still reads refez" "refez" \
+  "$(gp_label m30 QA "$NOGP_OUT")"
+# The in-slice control: m31/QA has the SAME shape as m30/QA — one session, gate failed, moved —
+# and no gate_pass row of its own. A phase whose gate never closed is still `refez`, in the world
+# where the feature is ON. This is what keeps the clause from degenerating into "QA is never refez".
+assert_eq "a phase whose gate never closed is still refez, in the same slice" "refez" \
+  "$(gp_label m31 QA "$GP_OUT")"
+
+# THE DIFFERENTIAL, and it is the heart of this increment: a new event in an enum documented as
+# closed reaches 15 readers of `.event` in bin/sdd, and "13 of them select `session` explicitly and
+# the other 2 are the is_escalation pair" is a measurement of SITES, never of behaviour. So the two
+# series above are compared field by field with only `labels` allowed to differ. The five `excluded`
+# buckets are in the comparison BY NAME and not by accident: `unrecognized > 0` is what the judge
+# reads as a bug in the kit itself, so an event the series does not admit would make `sdd kaizen
+# --series` accuse the runner that wrote it.
+gp_shape() { jq -Sc '{outcomes: .latest.outcomes, advance_rate: .latest.advance_rate,
+                      moved_rate: .latest.moved_rate, cost_usd: .latest.cost_usd,
+                      sessions: .latest.sessions, missions: .latest.missions,
+                      composition: .latest.composition, escalations: .latest.escalations,
+                      guard: .guard, excluded: .excluded}' <<< "$1"; }
+assert_eq "the recorded fact moves the label and NOTHING else in the series" \
+  "$(gp_shape "$NOGP_OUT")" "$(gp_shape "$GP_OUT")"
+# ...and not by both being empty. The floor is this fixture's known numbers, so the equality above
+# is about a series that actually said something.
+assert_eq "that differential is not vacuous — the slice has its four sessions and its money" \
+  '{"advanced":2,"churned":2,"idle":0} 9.5 4' \
+  "$(jq -r '"\(.latest.outcomes | tojson) \(.latest.cost_usd) \(.latest.sessions)"' <<< "$GP_OUT")"
+# Spelled out on its own, because it is the bucket with a CONSUMER: the judge is told to read
+# `unrecognized > 0` as a kit bug. The differential above would also catch this, but only as one
+# of ten fields, and this is the one whose failure has a name.
+assert_eq "the recorded fact is not thrown away as unrecognized" "0" \
+  "$(jq -r '.excluded.unrecognized' <<< "$GP_OUT")"
+# `is_escalation` answers false, in the judge's program. A gate that PASSED is the opposite of an
+# escalation, and a new event that fell into that pair would poison `escalations` — the map the
+# judge cites first — with a row that says the line stopped when it did not.
+assert_eq "is_escalation says no: a gate that passed is not an escalation" "{}" \
+  "$(jq -c '.latest.escalations' <<< "$GP_OUT")"
+
 # --- a degradation is an escalation the series has to SEE --------------------
 # `PUBLISH_ON_REVIEW_BLOCKED=draft` makes the runner give up on reviewing and publish a draft PR
 # by itself. It writes `event: "degraded"`, and the filter above only ever admitted `session` and
