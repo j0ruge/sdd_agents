@@ -4,7 +4,7 @@ titulo: O ledger diz se a rodada de REVIEW andou, e a fase que fechou de graça 
 data: 2026-08-31
 versao:
 branch: feat/a-rodada-que-andou
-aprovacao:
+aprovacao: humano-2026-08-31
 ddd: n/a
 ---
 
