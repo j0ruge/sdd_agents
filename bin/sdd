@@ -1898,6 +1898,36 @@ ledger_row_is_local() {
 # `moved` arm exactly as they did; I3 is what teaches the readers to recover their count from
 # `gate_why`.
 #
+# THE ROUND ARM is the same fact for REVIEW, added 2026-08-31, and the reason it is a THIRD arm and
+# not a generalisation of the second is that the two counts move in opposite directions: EXEC counts
+# increments still to do and goes DOWN, REVIEW counts rounds already landed and goes UP. One arm
+# reading "the number changed" would call a checkpoint that GREW — the fix increments QA writes —
+# progress, which is the opposite of what it is.
+#
+# REVIEW is a loop by design too: REVIEW_MAX_ITER rounds, each landing its own `40-review-r<N>.md`.
+# With `pending_after < pending_before` as the only progress the readers knew, an r1 that landed
+# with real findings and did not reach Grade A read `churned` — the runner charging the phase for
+# the refusal its own design schedules, which is letter for letter the defect the arm above closed
+# for EXEC. Measured on window 2 (kit_sha bf001fe): the REVIEW of
+# 20260830-a-tela-que-mente-o-pagamento is the most expensive cell of the whole slice, US$ 47.81,
+# labelled `leve` off `1 advanced · 1 churned`, in the phase that consumes 41% of the spend.
+#
+# The non-null guard is reachable by a route the EXEC sibling does not have: `rounds_before` is a
+# PHOTOGRAPH taken before run_phase, so a row born on a path that never took it carries null there
+# while `rounds_after` carries a real count — and `2 > null` is TRUE. Without the guard that row
+# reads as the loudest progress in the ledger, and `mut_RUN_review_rounds_photo_missing` (which
+# produces exactly that shape) would stop moving the histogram at all. Measured by `a REVIEW row
+# with no round before it is not a round that advanced` in check-kaizen.sh.
+#
+# ONE non-null guard here and TWO one arm up, and the asymmetry is the operand order, not an
+# oversight. The EXEC arm puts the possibly-null `pending_after` on the LEFT of `<`, where jq's
+# ordering makes `null < 2` TRUE; this arm puts the possibly-null `rounds_after` on the LEFT of `>`,
+# where `null > 2` is FALSE — and with `rounds_before` already guarded, `.rounds_after != null` can
+# change no row's outcome. Measured on jq 1.7 (`null > 5` => false, `null < 5` => true), and the
+# sabotage pass agrees: written out, deleting it left the whole suite green, while deleting either
+# guard of the EXEC arm kills an assertion. A rule no sabotage can break is redundant, so it is not
+# here — CLAUDE.md. Swap the operands or flip the comparison and it comes back with them.
+#
 # Applied to the sessions each reader admits, and both admit a session only with `moved` present:
 # cmd_autonomy's `comparable` has demanded `has("moved")` all along, and kaizen_series now files a
 # session without it into `excluded.non_comparable` too — the same bucket, not a second one with
@@ -1953,7 +1983,7 @@ ledger_row_is_local() {
 # The key is `[repo, mission] | tostring` — an ARRAY rendered as JSON, for the reason mission_key
 # states in both readers: a separator chosen here would collide with one inside a repo path.
 ledger_outcome_defs() {   # printed jq, spliced into cmd_autonomy AND kaizen_series
-  printf '%s' 'def outcome: if .gate == "pass" then "advanced" elif (.pending_before != null and .pending_after != null and .pending_after < .pending_before and .moved != false) then "advanced" elif .moved == true then "churned" else "idle" end;'
+  printf '%s' 'def outcome: if .gate == "pass" then "advanced" elif (.pending_before != null and .pending_after != null and .pending_after < .pending_before and .moved != false) then "advanced" elif (.rounds_before != null and .rounds_after > .rounds_before and .moved != false) then "advanced" elif .moved == true then "churned" else "idle" end;'
   printf '%s' 'def historic_progress: reduce .[] as $r ({seen: {}, out: []}; (if ($r | type) == "object" and $r.event == "session" and $r.phase == "EXEC" then ([($r.repo // ""), ($r.mission // "")] | tostring) else null end) as $k | (if $k != null and $r.pending_before == null and (($r.gate_why // "") | test("^[0-9]+ of [0-9]+ increment")) then (($r.gate_why // "") | capture("^(?<n>[0-9]+) of (?<m>[0-9]+) increment") | {n: (.n | tonumber), m: (.m | tonumber)}) else null end) as $p | (if $p == null then $r else (if (.seen[$k] != null and .seen[$k].m == $p.m) then .seen[$k].p else $p.m end) as $before | $r + {pending_before: $before, pending_after: $p.n, increments_total: $p.m, progress_source: "gate_why"} end) as $row | .out += [$row] | (if $k == null then . elif $r.gate == "pass" then .seen[$k] = null elif $row.pending_after != null then .seen[$k] = {p: $row.pending_after, m: $row.increments_total} else . end)) | .out;'
   printf '%s' 'def outcome_tally: map(outcome) | reduce .[] as $o ({advanced: 0, churned: 0, idle: 0}; .[$o] += 1);'
   printf '%s' 'def phase_index: . as $p | ($phases | split(" ")) | index($p);'

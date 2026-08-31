@@ -2277,8 +2277,12 @@ mut_RUN_retry_pending_before_null() {
 # splice, so parity stays green and only the histogram of a known fixture moves — caught by `a
 # session that advanced its increment reads advanced, not churned` in check-autonomy.sh, which
 # reads `1 advanced · 4 churned · 1 idle` against the `3 · 2 · 1` it demands.
+# ⚠️ Anchored on the ARM and not on the whole `def outcome:` line, which is how it was written on
+# 2026-08-29. The line grew a third arm on 2026-08-31 (the REVIEW round) and the full-line anchor
+# stopped matching — a silent no-op that the rc-90 `cmp -s` guard would have caught, but only after
+# a full catalogue run. One arm, one anchor: the line will grow again.
 mut_AUTONOMY_progress_ignored() {
-  sed -i 's@def outcome: if .gate == "pass" then "advanced" elif (.pending_before != null and .pending_after != null and .pending_after < .pending_before and .moved != false) then "advanced" elif .moved == true then "churned" else "idle" end;@def outcome: if .gate == "pass" then "advanced" elif .moved == true then "churned" else "idle" end;@' "$1"
+  sed -i 's@ elif (.pending_before != null and .pending_after != null and .pending_after < .pending_before and .moved != false) then "advanced"@@' "$1"
 }
 
 # The null guard on the progress arm goes, and jq's own ordering does the rest: `null` sorts below
@@ -2421,6 +2425,49 @@ mut_RUN_review_rounds_photo_missing() {
 # carries the three round fields as null` there, and by nothing else.
 mut_LEDGER_rounds_leak_across_phases() {
   sed -i 's@^    if \[ "\$phase" = "REVIEW" \]; then review_after="\$GATE_REVIEW_ROUNDS"; review_max="\$GATE_REVIEW_MAX"; fi$@    review_after="$GATE_REVIEW_ROUNDS"; review_max="$GATE_REVIEW_MAX"@' "$1"
+}
+
+# The writer keeps filling the three round fields (I1) and the reader stops looking at them: REVIEW
+# goes back to the gate-only yardstick that read the most expensive cell of window 2 — US$ 47.81,
+# `1 advanced · 1 churned` — as churn over a phase that is a LOOP BY DESIGN. Spliced from ONE
+# definition, so both readers lose it together and the parity assertion stays green; only the
+# histogram of a known fixture moves. Caught by `a REVIEW round that advanced reads advanced, never
+# churned` in check-kaizen.sh, which reads `leve {"advanced":1,"churned":1,"idle":0}` — letter for
+# letter the window-2 cell — against the `ok {"advanced":2,...}` it demands.
+mut_LEDGER_outcome_rounds_blind() {
+  sed -i 's@ elif (.rounds_before != null and .rounds_after > .rounds_before and .moved != false) then "advanced"@@' "$1"
+}
+
+# The non-null guard on the round arm goes, and jq's ordering does the rest: `null` sorts below
+# every number, so `2 > null` is TRUE and a REVIEW row whose `rounds_before` photograph was never
+# taken reads as the loudest progress in the ledger. Fails open in the direction of flattery, the
+# same way its EXEC sibling would. It is also what makes mut_RUN_review_rounds_photo_missing
+# detectable at all — that mutant produces exactly this row shape, so with the guard gone the two
+# defects would cancel and neither would move a number. Caught by `a REVIEW row with no round
+# before it is not a round that advanced` in check-kaizen.sh, which reads `ok
+# {"advanced":2,"churned":0,"idle":0}` against the `leve {"advanced":1,"churned":1,...}` it demands.
+mut_LEDGER_outcome_rounds_unguarded() {
+  sed -i 's@(.rounds_before != null and .rounds_after > .rounds_before and .moved != false)@(.rounds_after > .rounds_before and .moved != false)@' "$1"
+}
+
+# The DIRECTION of the round arm becomes "the number changed", and a round file that DISAPPEARED
+# reads as progress. It is the mutation that says why this is a third arm and not a generalisation
+# of the EXEC one: the two counts move in opposite directions — EXEC counts what is still to do and
+# goes DOWN, REVIEW counts what has landed and goes UP — so a single "it moved" arm would also call
+# a checkpoint that GREW progress, which is QA writing fix increments. Caught by `a REVIEW round
+# count that went DOWN is not a round that advanced` in check-kaizen.sh.
+mut_LEDGER_outcome_rounds_undirected() {
+  sed -i 's@.rounds_after > .rounds_before and .moved != false@.rounds_after != .rounds_before and .moved != false@' "$1"
+}
+
+# The `.moved` half of the round arm goes, and a session that wrote NOTHING gets credited with a
+# round an earlier session landed. Found by the sabotage pass rather than by the plan: written
+# without it the suite stayed green, because no fixture had reached that world — the shape CLAUDE.md
+# demands of a new rule before it is called probed. Caught by `a REVIEW session that wrote nothing
+# did not advance the round` in check-kaizen.sh, which reads `ok {"advanced":2,"churned":0,"idle":0}`
+# against the `leve {"advanced":1,"churned":0,"idle":1}` it demands.
+mut_LEDGER_outcome_rounds_moved_blind() {
+  sed -i 's@and .rounds_after > .rounds_before and .moved != false) then "advanced"@and .rounds_after > .rounds_before) then "advanced"@' "$1"
 }
 
 mut_KAIZEN_label_idle_blind() {
@@ -2625,6 +2672,10 @@ CATALOG=(
   KAIZEN_label_idle_blind
   RUN_review_rounds_photo_missing
   LEDGER_rounds_leak_across_phases
+  LEDGER_outcome_rounds_blind
+  LEDGER_outcome_rounds_unguarded
+  LEDGER_outcome_rounds_undirected
+  LEDGER_outcome_rounds_moved_blind
 )
 
 # Mutations that are NOT caught today, each with the increment that closes it. Ratchet in both

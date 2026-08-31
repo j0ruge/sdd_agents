@@ -280,6 +280,113 @@ arm_label() { jq -r --arg m "$1" '.latest.detail[] | select(.mission == $m and .
 assert_eq "each arm of the leve clause stands alone: auto retry, idle session, and neither" \
   "leve leve ok" "$(arm_label m8) $(arm_label m9) $(arm_label m10)"
 
+# --- the REVIEW round that advanced is not churn (20260831-a-rodada-que-andou) ----
+# The same defect as m7 above, one phase further on. REVIEW is a LOOP BY DESIGN —
+# REVIEW_MAX_ITER rounds, each landing its own `40-review-r<N>.md` — and `outcome` knew a single
+# arm of progress, `pending_after < pending_before`, which exists for EXEC alone. So an r1 that
+# landed with real findings and did not reach Grade A read `churned`, and the runner charged the
+# phase for the refusal its own design schedules. Measured on the real ledger of window 2: the
+# REVIEW of 20260830-a-tela-que-mente-o-pagamento is the most expensive cell of the whole slice —
+# US$ 47.81, labelled `leve` off `1 advanced · 1 churned` — in the phase that consumes 41% of the
+# spend the judge is asked to explain.
+#
+# FIVE missions, one per rule of the arm, because a rule whose removal no fixture notices is a rule
+# with no probe. Each pairs the interesting session with a passing one so the phase closes and the
+# cell is graded on the outcome rather than on `refez`:
+#   m20  0→1 fail · 1→2 pass     the designed loop: both sessions advanced          ok
+#   m21  1→1 fail · 1→2 pass     real churn: a session that landed NO new round     leve
+#   m22  null→2 fail · 2→3 pass  no photograph of the round before                  leve
+#   m23  0→1 fail · 1→2 pass     the round moved but the session wrote NOTHING      leve
+#        (moved:false)
+#   m24  2→1 fail · 1→2 pass     the round count went DOWN                          leve
+#
+# Every degrade of the arm lands somewhere different, and the values below were READ OFF the
+# sabotage pass rather than predicted:
+#   new rule            6 advanced · 3 churned · 1 idle   labels {ok: 1, leve: 4}
+#   whole arm gone      5 advanced · 4 churned · 1 idle   {ok: 0, leve: 5}  mut_LEDGER_outcome_rounds_blind
+#   no null guard       7 advanced · 2 churned · 1 idle   {ok: 2, leve: 3}  mut_LEDGER_outcome_rounds_unguarded, m22 turns ok
+#   `>` becomes `!=`    7 advanced · 2 churned · 1 idle   {ok: 2, leve: 3}  m24 turns ok
+#   no `.moved` guard   7 advanced · 3 churned · 0 idle   {ok: 2, leve: 3}  m23 turns ok
+# The middle three share a slice tally, which is precisely why each rule also has its own CELL
+# assertion below: the tally alone could not tell them apart, and a rule distinguished only by a
+# number two other rules also produce is not measured.
+#
+# ⚠️ EVERY failing session here has `gate: "fail"` on purpose. A fixture where the round advanced
+# AND the gate passed is satisfied by the FIRST arm of `outcome` and measures nothing about this
+# one — the "red for the right reason" rule this repo pays for in CLAUDE.md.
+#
+# m22 is not academic. `jq` orders `null` below every number, so `.rounds_after > .rounds_before`
+# with a null RIGHT-hand side is TRUE, and a REVIEW row whose photograph was never taken would read
+# as the loudest progress in the ledger — fail-open in the direction of flattery, the exact error
+# the EXEC sibling paid for. It is also the row shape `mut_RUN_review_rounds_photo_missing`
+# produces, so without the guard that mutant would stop moving the histogram at all.
+echo "== series: the REVIEW round that advanced is not churn =="
+mkdir -p "$OUTSIDE/rounds"
+localize > "$OUTSIDE/rounds/autonomy-log.jsonl" <<'EOF'
+{"v":1,"ts":"2026-08-31T10:00:00-03:00","event":"session","run_id":"b1","invocation":"run","kit_sha":"bbb7777","kit_dirty":false,"project":"p1","repo":"/p1","mission":"m20","phase":"REVIEW","step":"REVIEW","agent":"sdd-reviewer","model":"opus","attempt":1,"auto_retry":false,"session":"b1s","rc":0,"dur_s":10,"cost_usd":2.0,"moved":true,"rounds_before":0,"rounds_after":1,"rounds_max":3,"gate":"fail","gate_why":"40-review-r1.md: Correctness = B"}
+{"v":1,"ts":"2026-08-31T10:01:00-03:00","event":"session","run_id":"b1","invocation":"run","kit_sha":"bbb7777","kit_dirty":false,"project":"p1","repo":"/p1","mission":"m20","phase":"REVIEW","step":"REVIEW","agent":"sdd-reviewer","model":"opus","attempt":2,"auto_retry":false,"session":"b2s","rc":0,"dur_s":10,"cost_usd":2.0,"moved":true,"rounds_before":1,"rounds_after":2,"rounds_max":3,"gate":"pass","gate_why":"40-review-r2.md: every criterion A"}
+{"v":1,"ts":"2026-08-31T10:02:00-03:00","event":"session","run_id":"b2","invocation":"run","kit_sha":"bbb7777","kit_dirty":false,"project":"p1","repo":"/p1","mission":"m21","phase":"REVIEW","step":"REVIEW","agent":"sdd-reviewer","model":"opus","attempt":1,"auto_retry":false,"session":"b3s","rc":0,"dur_s":10,"cost_usd":2.0,"moved":true,"rounds_before":1,"rounds_after":1,"rounds_max":3,"gate":"fail","gate_why":"40-review-r1.md: Correctness = B"}
+{"v":1,"ts":"2026-08-31T10:03:00-03:00","event":"session","run_id":"b2","invocation":"run","kit_sha":"bbb7777","kit_dirty":false,"project":"p1","repo":"/p1","mission":"m21","phase":"REVIEW","step":"REVIEW","agent":"sdd-reviewer","model":"opus","attempt":2,"auto_retry":false,"session":"b4s","rc":0,"dur_s":10,"cost_usd":2.0,"moved":true,"rounds_before":1,"rounds_after":2,"rounds_max":3,"gate":"pass","gate_why":"40-review-r2.md: every criterion A"}
+{"v":1,"ts":"2026-08-31T10:04:00-03:00","event":"session","run_id":"b3","invocation":"run","kit_sha":"bbb7777","kit_dirty":false,"project":"p1","repo":"/p1","mission":"m22","phase":"REVIEW","step":"REVIEW","agent":"sdd-reviewer","model":"opus","attempt":1,"auto_retry":false,"session":"b5s","rc":0,"dur_s":10,"cost_usd":2.0,"moved":true,"rounds_before":null,"rounds_after":2,"rounds_max":3,"gate":"fail","gate_why":"40-review-r2.md: Correctness = B"}
+{"v":1,"ts":"2026-08-31T10:05:00-03:00","event":"session","run_id":"b3","invocation":"run","kit_sha":"bbb7777","kit_dirty":false,"project":"p1","repo":"/p1","mission":"m22","phase":"REVIEW","step":"REVIEW","agent":"sdd-reviewer","model":"opus","attempt":2,"auto_retry":false,"session":"b6s","rc":0,"dur_s":10,"cost_usd":2.0,"moved":true,"rounds_before":2,"rounds_after":3,"rounds_max":3,"gate":"pass","gate_why":"40-review-r3.md: every criterion A"}
+{"v":1,"ts":"2026-08-31T10:06:00-03:00","event":"session","run_id":"b4","invocation":"run","kit_sha":"bbb7777","kit_dirty":false,"project":"p1","repo":"/p1","mission":"m23","phase":"REVIEW","step":"REVIEW","agent":"sdd-reviewer","model":"opus","attempt":1,"auto_retry":false,"session":"b7s","rc":0,"dur_s":10,"cost_usd":2.0,"moved":false,"rounds_before":0,"rounds_after":1,"rounds_max":3,"gate":"fail","gate_why":"40-review-r1.md: Correctness = B"}
+{"v":1,"ts":"2026-08-31T10:07:00-03:00","event":"session","run_id":"b4","invocation":"run","kit_sha":"bbb7777","kit_dirty":false,"project":"p1","repo":"/p1","mission":"m23","phase":"REVIEW","step":"REVIEW","agent":"sdd-reviewer","model":"opus","attempt":2,"auto_retry":false,"session":"b8s","rc":0,"dur_s":10,"cost_usd":2.0,"moved":true,"rounds_before":1,"rounds_after":2,"rounds_max":3,"gate":"pass","gate_why":"40-review-r2.md: every criterion A"}
+{"v":1,"ts":"2026-08-31T10:08:00-03:00","event":"session","run_id":"b5","invocation":"run","kit_sha":"bbb7777","kit_dirty":false,"project":"p1","repo":"/p1","mission":"m24","phase":"REVIEW","step":"REVIEW","agent":"sdd-reviewer","model":"opus","attempt":1,"auto_retry":false,"session":"b9s","rc":0,"dur_s":10,"cost_usd":2.0,"moved":true,"rounds_before":2,"rounds_after":1,"rounds_max":3,"gate":"fail","gate_why":"40-review-r1.md: Correctness = B"}
+{"v":1,"ts":"2026-08-31T10:09:00-03:00","event":"session","run_id":"b5","invocation":"run","kit_sha":"bbb7777","kit_dirty":false,"project":"p1","repo":"/p1","mission":"m24","phase":"REVIEW","step":"REVIEW","agent":"sdd-reviewer","model":"opus","attempt":2,"auto_retry":false,"session":"b10s","rc":0,"dur_s":10,"cost_usd":2.0,"moved":true,"rounds_before":1,"rounds_after":2,"rounds_max":3,"gate":"pass","gate_why":"40-review-r2.md: every criterion A"}
+EOF
+ROUNDS_OUT="$( cd "$FIX" && SDD_STATE_DIR="$OUTSIDE/rounds" "$SDD" kaizen --series 2>/dev/null )"
+round_cell() { jq -r --arg m "$1" '.latest.detail[] | select(.mission == $m and .phase == "REVIEW")
+                                   | "\(.label) \(.outcomes | tojson)"' <<< "$ROUNDS_OUT"; }
+# THE assertion of this increment. Label and histogram on ONE line, because they are one decision
+# read twice: under the old rubric this reads `leve {"advanced":1,"churned":1,"idle":0}`, which is
+# letter for letter the cell window 2 charged US$ 47.81 for.
+assert_eq "a REVIEW round that advanced reads advanced, never churned" \
+  'ok {"advanced":2,"churned":0,"idle":0}' "$(round_cell m20)"
+# The control, and the reason the clause is not "REVIEW is always ok": m21 has the same SHAPE as
+# m20 — one run, gate fail then gate pass, no retry, no escalation — and stays `leve` because its
+# failing session landed no new round. It reads the same under all three spellings, which is what
+# a control is for.
+assert_eq "control: a REVIEW session that landed no new round is still churn" \
+  'leve {"advanced":1,"churned":1,"idle":0}' "$(round_cell m21)"
+# The null guard, measured and not asserted in prose: without it b5s reads `advanced`, m22 turns
+# `ok`, and a REVIEW row whose photograph was never taken becomes the loudest progress in the
+# ledger.
+assert_eq "a REVIEW row with no round before it is not a round that advanced" \
+  'leve {"advanced":1,"churned":1,"idle":0}' "$(round_cell m22)"
+# The `.moved != false` half of the arm, which no fixture reached until the sabotage pass said so.
+# A session that wrote NOTHING has not advanced a round, whatever the disk says — the round it
+# would be credited with is one an earlier session landed. Same guard, same direction and same
+# reason as the EXEC arm one line up in bin/sdd.
+assert_eq "a REVIEW session that wrote nothing did not advance the round" \
+  'leve {"advanced":1,"churned":0,"idle":1}' "$(round_cell m23)"
+# The DIRECTION, which is the whole reason this is a third arm and not a generalisation of the
+# second: EXEC counts what is still to do and goes DOWN, REVIEW counts what has landed and goes UP.
+# Spelled `!=` — "the number changed" — a round file that DISAPPEARED reads as progress. It is also
+# what a single shared arm would do to the checkpoint that GREW, which is QA writing fix increments.
+assert_eq "a REVIEW round count that went DOWN is not a round that advanced" \
+  'leve {"advanced":1,"churned":1,"idle":0}' "$(round_cell m24)"
+# The whole slice, so a rubric that reached the cells above by some other route still fails.
+# ⚠️ It does NOT stand alone: three of the five degrades land on `7 · 2 · 1` or share a label
+# tally, which is why every rule above also has its own cell.
+assert_eq "and the slice tallies to the histogram only the new arm produces" \
+  '{"advanced":6,"churned":3,"idle":1} {"ok":1,"leve":4,"refez":0}' \
+  "$(jq -r '"\(.latest.outcomes | tojson) \(.latest.labels | tojson)"' <<< "$ROUNDS_OUT")"
+
+# PARITY, measured and never asserted in prose — the second probe of this increment and the one
+# that matters. `outcome` is ONE printed definition (`ledger_outcome_defs` in bin/sdd) spliced into
+# BOTH readers, and a program that stopped splicing it and grew a local copy on the old yardstick
+# stays internally consistent: only the comparison of the two OUTPUTS catches it. The house does
+# not accept "same spelling in both programs" as proof of parity — the `$order` of cmd_autonomy and
+# the `on_axis` of kaizen_series diverged once under a comment swearing the opposite
+# (20260817-catraca-do-backlog, r1).
+rounds_win="$( cd "$FIX" && SDD_STATE_DIR="$OUTSIDE/rounds" "$SDD" autonomy 2>&1 )"
+rounds_table="$(sed -nE 's/^  bbb7777  [0-9]+ session\(s\) · ([0-9]+) advanced · ([0-9]+) churned · ([0-9]+) idle · .*/\1 \2 \3/p' <<< "$rounds_win")"
+assert_eq "the human window and the judge count the REVIEW round alike" \
+  "$(jq -r '.latest.outcomes | "\(.advanced) \(.churned) \(.idle)"' <<< "$ROUNDS_OUT")" "$rounds_table"
+# ...and not by both being empty: two empty strings are equal. The floor is the known histogram of
+# this fixture, so the parity above is about the numbers this block describes.
+assert_eq "that parity is not vacuous — the table printed the three counts" "6 3 1" "$rounds_table"
+
 # --- a degradation is an escalation the series has to SEE --------------------
 # `PUBLISH_ON_REVIEW_BLOCKED=draft` makes the runner give up on reviewing and publish a draft PR
 # by itself. It writes `event: "degraded"`, and the filter above only ever admitted `session` and
