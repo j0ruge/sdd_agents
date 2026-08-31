@@ -682,10 +682,11 @@ Achados sobre **repos-alvo** vão para o `TODO.md` daquele repo. Este arquivo é
 
 - [ ] **A frase de divulgação do caminho datado conta linhas que nenhum balde mostra** —
   `bin/sdd:4535` — `$historic` é ligado depois do filtro de repo e ANTES da comparabilidade, então
-  ele conta linhas anotadas que depois saem como não-comparáveis: medido, a frase diz "2 rows" sobre
-  uma tabela de 1 sessão. Fail-open brando — a frase é o SINAL DE APAGAMENTO do caminho datado, e um
-  número que ninguém consegue reconciliar não serve para decidir apagar nada. Direção: ligar sobre
-  `is_session and comparable`, ou dizer o resto como o `$history_extra` já faz.
+  conta linhas anotadas que depois saem como não-comparáveis. Fail-open brando, mas a frase é o
+  SINAL DE APAGAMENTO do caminho datado, e número que não reconcilia com a tela não decide apagar
+  nada. RESOLVIDO por `c7c2e2e` — ligado sobre `comparable`; no ledger real a frase do EXEC caiu de
+  53 para 51, que é o que a tabela mostra. Mutante
+  `AUTONOMY_historic_sentence_before_comparability`.
   — descoberto por `sdd-reviewer` na missão `20260829-o-incremento-que-andou` (2026-08-30)
 
 - [ ] **A regra `doing` conta como pendente não tem probe, e sem ela o `gate_EXEC` fecha a fase por
