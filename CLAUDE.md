@@ -184,6 +184,19 @@ templates. Se a solução pede infraestrutura, provavelmente é a solução erra
   programs"*. Com uma escalada como primeira linha de uma versão, as duas janelas respondiam
   diferente sobre o MESMO arquivo. Quem prova paridade é asserção **diferencial** — as duas saídas
   comparadas entre si —, nunca a frase.
+  ⚠️ **Terceira instância, e ela acrescenta uma cláusula: predicado de admissão se escreve
+  POSITIVAMENTE.** Medida em `20260831-a-rodada-que-andou` (`bin/sdd:5207`), quando o ledger ganhou
+  o terceiro evento (`gate_pass`). O `is_escalation` estava certo — uma definição por programa, e o
+  evento novo ficou **fora** dele de propósito. Quem o admitia por **omissão** era o eixo do juiz:
+  `shas_in_file_order` rodava sobre `$ok`, e o `comparable_row` deixa passar toda linha que não é
+  sessão. Resultado reproduzido com UMA linha acrescentada a um ledger de fixture: a closure
+  **cunhava uma versão** — `latest` numa fatia de `sessions: 0`, `previous` deslizando,
+  `degenerate_axis` de `true` para `false` — e o `gate_KAIZEN` deriva o sha esperado de
+  `latest.kit_sha`, então um veredito já escrito deixava de satisfazer o gate: **gate
+  insatisfazível**, a classe que o princípio 1 proíbe. Uma definição (`session or escalation`)
+  fechou os dois chamadores. Escrevê-la como `is_gate_pass | not` concordaria sobre a população de
+  hoje e faria o **quarto** evento cunhar versão por omissão: `not <o que sai>` admite todo evento
+  futuro, `<o que entra>` obriga o próximo a optar. Fail-safe é a direção que o eixo quer.
 - **Captura na região do `sdd health` é guardada, ou a suíte reprova na linha que você escreveu.**
   `bin/sdd` roda sob `set -euo pipefail`, então `x="$(cmd)"` mata o processo **na atribuição** no
   instante em que `cmd` devolve não-zero — e para `grep`, `find` e pipeline com `pipefail`,
