@@ -288,3 +288,19 @@ atualizado: 2026-08-31 12:00
 
 **Nenhum.** A QA de 2026-08-31 caminhou cinco jornadas e não confirmou nenhum bug sanável — ver as
 quatro notas `QA` acima e o `30-handoff-qa.md`. A tabela de incrementos fica em 4 de 4 `done`.
+
+- 2026-08-31 · `REVIEW r1` · **Dois defeitos do evento novo, os dois na direção da lisonja, os dois
+  reproduzidos antes de consertados.** (1) `dfe4d63`: grupo cujo único membro é a closure cunhava
+  `ok` fantasma com `sessions: 0` — alcançável em TODA corrida do repo que constrói o kit (cada
+  sessão commita, então a closure carrega um `kit_sha` que a sessão reprovada nunca teve) e em
+  qualquer corrida com sessão suja + closure limpa. (2) `d17aca6`: a cláusula lia PERTINÊNCIA e não
+  posição, então UMA closure derrubava o `refez` de toda sessão reprovada depois dela, para sempre
+  — num `sdd run` real, três sessões de QA reprovando a US$ 21 liam `leve`, e a variante de REVIEW
+  lia **`ok`**. Tudo com um `kit_sha` só, que é o caso normal de repo-alvo.
+- 2026-08-31 · `REVIEW r1` · **A rodada fecha em `B`, e é a nota real.** Duas portas do escritor do
+  I4 sobrevivem à sabotagem sem estarem declaradas (foto de REVIEW no `cmd_retry`; `gate_failed` no
+  retry inline, cuja consequência é linha `gate_pass` falsa e permanente). Registradas no `TODO.md`
+  com direção; a r2 as fecha com fixture de duas voltas, em que o retry PASSA. Catraca 87 → 91.
+- 2026-08-31 · `REVIEW r1` · ⚠️ **O carimbo de mutação `829412c3…` está MORTO** — esta rodada
+  commitou em `bin/` e `tests/`, e o `tests/health-baseline.txt` também está dentro da chave. O
+  catálogo tem **213** mutantes; quem re-carimba é a DOCS, depois do último commit de código.
