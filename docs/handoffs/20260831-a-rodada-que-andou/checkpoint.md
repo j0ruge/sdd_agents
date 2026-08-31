@@ -1,6 +1,6 @@
 ---
 missao: 20260831-a-rodada-que-andou
-atualizado: 2026-08-31 00:00
+atualizado: 2026-08-31 12:00
 ---
 
 # Checkpoint — A rodada que andou
@@ -22,8 +22,8 @@ atualizado: 2026-08-31 00:00
 |---|---|---|---|---|
 | I1 | A linha de REVIEW carrega `rounds_before`, `rounds_after` e `rounds_max` | `o=$(bash tests/check-autonomy.sh 2>&1); grep -c '^  ok    the REVIEW row carries rounds_before, rounds_after and rounds_max' <<< "$o"` → `1` | done | 99f65bf |
 | I2 | `def outcome` aprende que a rodada andou, com guarda de não-nulo | `o=$(bash tests/check-kaizen.sh 2>&1); grep -c '^  ok    a REVIEW round that advanced reads advanced, never churned' <<< "$o"` → `1` | done | 60d2c88 |
-| I3 | Caminho datado: linhas de REVIEW antigas recuperam a rodada do `gate_why` | `o=$(bash tests/check-autonomy.sh 2>&1); grep -c '^  ok    a pre-schema REVIEW row recovers its round from gate_why' <<< "$o"` → `1` | pending | — |
-| I4 | A fase que fechou sem gastar sessão para de ler `refez` | `o=$(bash tests/check-kaizen.sh 2>&1); grep -c '^  ok    a phase that closed without a session does not read refez' <<< "$o"` → `1` | pending | — |
+| I3 | Caminho datado: linhas de REVIEW antigas recuperam a rodada do `gate_why` | `o=$(bash tests/check-autonomy.sh 2>&1); grep -c '^  ok    a pre-schema REVIEW row recovers its round from gate_why' <<< "$o"` → `1` | done | c7c2e2e |
+| I4 | A fase que fechou sem gastar sessão para de ler `refez` | `o=$(bash tests/check-kaizen.sh 2>&1); grep -c '^  ok    a phase that closed without a session does not read refez' <<< "$o"` → `1` | blocked | — |
 
 ## Notas de execução
 
@@ -103,6 +103,67 @@ atualizado: 2026-08-31 00:00
 - 2026-08-31 · `—` · ⚠️ **Ordem que custa 20 a 50 min quando se erra:** `./bin/sdd health`
   roda **depois do último commit de código**. Registrar achado no `TODO.md` move
   `tests/health-baseline.txt`, que mora dentro da chave do carimbo e o invalida.
+- 2026-08-31 · `I3` · 🛑 **PONTO DE CORTE DA MÉTRICA: NÃO FECHOU. O I4 está `blocked` por isso, e
+  a decisão que destrava é humana.** O que o plano mandava medir, medido:
+  `./bin/sdd autonomy --all-repos | grep bf001fe` →
+  `23 session(s) · 21 advanced · 2 churned · 0 idle · 8% waste · 3 mission(s) · US$ 175.96` —
+  **idêntico ao estado antes da missão**, contra o `22 advanced · 1 churned · 4% waste` prometido.
+  O I3 **não** falhou: o mecanismo funciona e está provado no ledger real. O que está errado é a
+  **premissa factual do `00-missao.md` sobre qual linha é a churn de `bf001fe`**.
+- 2026-08-31 · `I3` · **A prova, por diff e não por prosa.** Rodando o `bin/sdd` do HEAD anterior e
+  o da árvore contra o MESMO ledger, exatamente três fatias se movem, todas de
+  `0 advanced · 1 churned · 100% waste` para `1 advanced · 0 churned · 0% waste`: `d89ea43`,
+  `e9a3681` e `353b4b1`. São, uma a uma, a forma que o `00-missao.md` descreve — `40-review-r1.md:
+  Test Coverage = B`, `40-review-r1.md: Code Quality (Zen) = C`, `40-review-r2.md: Code Quality
+  (Zen) = C`. Nenhuma outra célula, nenhum custo e nenhuma contagem de missão se moveram.
+- 2026-08-31 · `I3` · **Por que `bf001fe` não se move, e é a leitura HONESTA.** A única linha de
+  REVIEW reprovada da fatia tem `gate_why: "no 40-review-r<N>.md"` — a sessão não pousou arquivo de
+  rodada **nenhum**. Recupera 0 rodadas, `0 > 0` é falso, e ela continua `churned` por mérito
+  próprio: uma sessão que não pousou rodada não avançou rodada. Fazê-la ler `advanced` seria trocar
+  um rótulo falso por outro, que é o que o próprio `00-missao.md` § Métrica (2) proíbe. A outra
+  churn da fatia é a **QA** de `o-rascunho-fantasma-do-mount`, fora do alcance do I1–I3 por
+  construção. Ou seja: a fatia `bf001fe` não contém nenhuma linha da forma que esta missão conserta.
+- 2026-08-31 · `I3` · **A decisão do humano, em uma frase.** O instrumento está consertado e o
+  número-alvo estava errado; escolher entre (a) reescrever a métrica (1) do `00-missao.md` para a
+  medição real — as três fatias acima — e seguir para o I4, ou (b) outra coisa. Não é decisão de
+  sessão headless: mexer no alvo para bater o alvo é o modo de falha que a Métrica (2) nomeia.
+  I1–I3 estão entregues e são reversíveis por revert; o I4 é independente deles.
+- 2026-08-31 · `I3` · **Desvio do plano, declarado: CINCO mutantes em vez de um.** Além do
+  `LEDGER_historic_rounds_blind` que o plano nomeia, entraram `_repairs_photo`,
+  `_no_file_is_a_round`, `_memory_blind` e `AUTONOMY_historic_sentence_before_comparability` —
+  todos nascidos da passada de sabotagem, e cada um mata asserção que nenhum outro mata (medido:
+  5, 2, 3, 4 e 1 asserções). Um sexto, o reset-restaurado, foi **recusado por redundância**: morre
+  na mesma asserção do `_memory_blind`, que também mata a segunda.
+- 2026-08-31 · `I3` · **DUAS regras do irmão do EXEC foram recusadas com mundo construído, não com
+  gosto.** O plano dizia "as mesmas duas regras do EXEC, cada uma com fixture próprio"; a Gemba
+  mostrou que nenhuma das duas transfere. Não há regra de `M` (o teto é config, não sai da prosa),
+  e o reset num gate que passa é **ativamente nocivo**: as rodadas contam ARQUIVOS, arquivos nunca
+  somem, então a contagem atravessa o pass — com reset, uma fase reaberta cuja sessão não pousou
+  nada leria `1 > 0` como o progresso mais alto do ledger. O fixture `m10` é esse mundo e fica
+  vermelho no dia em que alguém "restaurar" a simetria (medido: 1 asserção, exatamente ela).
+- 2026-08-31 · `I3` · **A guarda ganhou uma segunda condição que o plano não previa.** É
+  `rounds_before == null` **E** `rounds_after == null`. Sem a segunda, o caminho datado repara a
+  linha cuja FOTO sumiu — que é a forma exata do `mut_RUN_review_rounds_photo_missing` — e deixa
+  aquele mutante pontuando de graça. É a mesma classe de dano que o irmão do EXEC já pagou uma vez
+  e consertou no escritor.
+- 2026-08-31 · `I3` · ⚠️ **Três conclusões de sabotagem foram descartadas por não terem sabotado o
+  que diziam sabotar**, e todas pela mesma armadilha: `perl -0pi -e` **interpola `$r`, `$k`, `$n`
+  no lado de SUBSTITUIÇÃO**, o que desbalanceia o `jq` e produz 105 falhas — erro de sintaxe com
+  fantasia de medição. A quarta e as seguintes usam `sed` (sem interpolação, que é o que o próprio
+  `check-mutation.sh` já usa) mais um **piso**: o leitor tem de continuar imprimindo uma tabela
+  sobre um ledger trivial antes de qualquer conclusão. Um **controle sem sabotagem nenhuma**
+  explicou de quebra o `kaizen_fails=1` que aparecia em toda rodada — era `adr 0003`, artefato de
+  a sandbox não copiar `docs/`, e não medição.
+- 2026-08-31 · `I3` · **Uma regra ficou sem probe e está declarada, não escondida.** O `^` das duas
+  regexes: desancorar o `test` deixa a suíte inteira verde, e o mundo que faria isso importar —
+  `gate_why` nomeando `40-review-r<N>.md` fora do primeiro caractere — nenhum `gate_REVIEW` escreve
+  hoje. O cabeçalho diz **qual mundo não consegui construir**, nunca que ele não existe, e por que
+  a âncora fica (com `capture` ancorado, desancorar só o `test` mata o leitor em vez de errar a
+  conta). Já o `test` em si NÃO é redundante e tem probe: trocado por `true`, 7 asserções morrem.
+- 2026-08-31 · `I3` · **De lambuja, um item do `TODO.md` fechou** (`7a34766`): a frase de divulgação
+  passou a contar sobre `comparable`. Medido no ledger real, a do EXEC caiu de **53 para 51** — as
+  duas linhas anotadas que saíam depois como não-comparáveis. A catraca **não** desce: o item fica
+  no arquivo até o PR mergear e `check-todo.sh` segue em `87 finding(s)`, igual ao baseline.
 
 > **Toda vez que um humano precisou entrar na linha** — um `sdd retry`, um conserto à mão, um
 > `BLOCKED` assumido — sai uma linha com o marcador `intervention:`. É a **narrativa** do que o
