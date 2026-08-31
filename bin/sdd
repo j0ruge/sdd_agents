@@ -2045,6 +2045,18 @@ ledger_row_is_local() {
 # The memory is fed by rows that carry the FIELD too (`$row.rounds_after`, which is the annotation
 # on a recovered row and the written value on a new-schema one), and that is load-bearing on a
 # mixed ledger for the same reason it is one screen up.
+#
+# DECLARED LIMIT, and it is declared rather than filed because the write order forbids it: a
+# `gate_pass` row does NOT clear `historic_progress`'s memory, because it carries no `.gate` and
+# the reset arm reads `$r.gate == "pass"`. A free EXEC closure therefore leaves `.seen[$k]` stale
+# and the next dated-path row computes `pending_before` off it instead of `increments_total`.
+# Measured (r2 of 20260831-a-rodada-que-andou): the same history reads `2 advanced · 1 churned`
+# with the closure and `4 advanced · 0 churned` when the same closure is bought with a session.
+# It is unreachable by construction, not merely unobserved: the dated path only annotates rows
+# whose `pending_before` is null, which since 2026-08-29 means rows written BEFORE that date, and
+# `gate_pass` was born on 2026-08-31 — no writer can put a dated-path row AFTER a closure. Kept as
+# a limit here, by the D15 rule, instead of a backlog line pointing at a world nothing can build.
+# The fix if a future writer ever makes it reachable: reset the memory on `is_gate_pass` too.
 ledger_outcome_defs() {   # printed jq, spliced into cmd_autonomy AND kaizen_series
   printf '%s' 'def outcome: if .gate == "pass" then "advanced" elif (.pending_before != null and .pending_after != null and .pending_after < .pending_before and .moved != false) then "advanced" elif (.rounds_before != null and .rounds_after > .rounds_before and .moved != false) then "advanced" elif .moved == true then "churned" else "idle" end;'
   printf '%s' 'def historic_progress: reduce .[] as $r ({seen: {}, out: []}; (if ($r | type) == "object" and $r.event == "session" and $r.phase == "EXEC" then ([($r.repo // ""), ($r.mission // "")] | tostring) else null end) as $k | (if $k != null and $r.pending_before == null and (($r.gate_why // "") | test("^[0-9]+ of [0-9]+ increment")) then (($r.gate_why // "") | capture("^(?<n>[0-9]+) of (?<m>[0-9]+) increment") | {n: (.n | tonumber), m: (.m | tonumber)}) else null end) as $p | (if $p == null then $r else (if (.seen[$k] != null and .seen[$k].m == $p.m) then .seen[$k].p else $p.m end) as $before | $r + {pending_before: $before, pending_after: $p.n, increments_total: $p.m, progress_source: "gate_why"} end) as $row | .out += [$row] | (if $k == null then . elif $r.gate == "pass" then .seen[$k] = null elif $row.pending_after != null then .seen[$k] = {p: $row.pending_after, m: $row.increments_total} else . end)) | .out;'

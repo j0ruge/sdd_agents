@@ -680,6 +680,14 @@ Achados sobre **repos-alvo** vão para o `TODO.md` daquele repo. Este arquivo é
   um probe recusa `bin/sdd` escrevendo no ledger de `$HOME` sob `SDD_MUTANT`/CI.
   — descoberto por `sdd-reviewer` na missão `20260829-o-incremento-que-andou` (2026-08-30)
 
+- [ ] **`reopened` é cego à closure, e a resposta depende de a fase ter CUSTADO dinheiro** —
+  `bin/sdd:4849` — o `def reopened` lê `.gate == "pass"` sobre `$every_session` (`:4942`,
+  `map(select(is_session))`), e a closure é justamente o fato que `.gate == "pass"` representa.
+  Medido, mesmo histórico de pipeline: closure gravada como `gate_pass` → `0 reopened`; a MESMA
+  closure comprada com sessão → `1 reopened`. Não consertado aqui porque admitir closure em
+  `$every_session` move junto o `history_extra` (`:4949`), que é número de tela. Direção: população
+  própria para o `reopened`, mais fixture diferencial. — descoberto por `sdd-reviewer` na missão `20260831-a-rodada-que-andou` (2026-08-31)
+
 - [ ] **A guarda de fase da foto de REVIEW no `cmd_retry` não tem probe, e sem ela a linha mente** —
   `bin/sdd:4568` — apagar o `if [ "$phase" = "REVIEW" ]` deixa a suíte inteira verde, e a guarda NÃO
   é inerte: `review_rounds_on_disk` nunca devolve vazio (imprime `0`), então todo `sdd retry <fase
