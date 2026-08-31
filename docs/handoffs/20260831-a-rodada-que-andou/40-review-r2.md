@@ -5,7 +5,7 @@ rodada: 2
 status: done
 sessao: f15ba486-81f2-4fec-bf7e-1e0f5093a9d6
 data: 2026-08-31 17:05
-gate: "`tests/run-all.sh` → `suite green`, **842 asserções `ok`, 0 FAIL, rc 0**, ~100 s, rodado depois de cada commit desta rodada e uma última vez em `d4886e6`. Árvore limpa (`git status --short` vazio). Os 4 mutantes novos medidos como o catálogo mede — sandbox fiel (`bin tests templates config agents CLAUDE.md TODO.md docs/adr`), **controle íntegro rc 0** e cada mutante rc 1 matando exatamente a asserção nomeada no seu cabeçalho; catálogo em `217 entradas / 217 funções`, sem órfão. As duas HIGH reproduzidas ANTES do conserto em fixture de ledger real (`SDD_STATE_DIR`) e re-lidas depois: os dois ledgers passam a responder idêntico. Métrica (1) re-conferida no ledger real: `d89ea43`, `e9a3681` e `353b4b1` em `1 advanced · 0 churned · 0% waste`, `bf001fe` inalterada em `23 session(s) · 21 advanced · 2 churned · 0 idle · 8% waste · 3 mission(s) · US$ 175.96`. ⚠️ O carimbo de mutação segue MORTO — esta rodada commitou em `bin/`, `tests/` e `tests/health-baseline.txt`; quem re-carimba é a DOCS, antes do `gate_PR`."
+gate: "`tests/run-all.sh` → `suite green`, **842 asserções `ok`, 0 FAIL, rc 0**, ~100 s, rodado depois de cada commit desta rodada e uma última vez em `d4886e6`. Árvore limpa (`git status --short` vazio). Os 4 mutantes novos medidos como o catálogo mede — sandbox fiel (`bin tests templates config agents CLAUDE.md TODO.md docs/adr`), **controle íntegro rc 0** e cada mutante rc 1 matando exatamente a asserção nomeada no seu cabeçalho; catálogo em `217 entradas / 217 funções`, sem órfão, e **varredura de âncora podre sobre os 217 contra o `bin/sdd` de hoje: `ok=217 noop=0 syntax=0`** — nem a r1 nem esta rodada apodreceram âncora nenhuma. Os dois mutantes que a r1 criou foram **re-medidos** depois do conserto do eixo (rc 1 nos dois, matando as mesmas asserções): o conserto desta rodada não deixou órfão o da r1. `./bin/sdd preflight` verde ponta a ponta, incluindo `7 kit agent(s) checked` e `working tree clean`. As duas HIGH reproduzidas ANTES do conserto em fixture de ledger real (`SDD_STATE_DIR`) e re-lidas depois: os dois ledgers passam a responder idêntico. Métrica (1) re-conferida no ledger real: `d89ea43`, `e9a3681` e `353b4b1` em `1 advanced · 0 churned · 0% waste`, `bf001fe` inalterada em `23 session(s) · 21 advanced · 2 churned · 0 idle · 8% waste · 3 mission(s) · US$ 175.96`. ⚠️ O carimbo de mutação segue MORTO — esta rodada commitou em `bin/`, `tests/` e `tests/health-baseline.txt`; quem re-carimba é a DOCS, antes do `gate_PR`."
 ---
 
 # Review — rodada r2 — A rodada que andou
@@ -131,5 +131,10 @@ limite declarado, um refutado.** Todos os critérios em `A`.
   não é o de `080f503`. Quem citar rótulo ou contagem de versão depois desta missão tem de dizer com
   qual `bin/sdd` leu — e o achado #1 significa que qualquer leitura de `latest`/`previous` feita
   entre `715da79` e `c4a114e`, num ledger que já contivesse uma closure, pode nomear a fatia errada.
+- **A métrica (3) é da DOCS e continua em aberto — e os números dela não mudaram nesta rodada.**
+  O `KAIZEN_LOG.md` ainda não tem a entrada desta missão; o `20-handoff-exec.md:110` e o
+  `agents/sdd-docs.md:44` já atribuem isso à DOCS, então não é defeito. O que a r2 acrescenta é a
+  garantia de que a DOCS **não precisa re-medir**: os dois `bin/sdd` (antes e depois do conserto do
+  eixo) respondem **idêntico** sobre o ledger real, em `autonomy --all-repos` e em `kaizen --series`.
 - **`sdd approve 20260831-a-rodada-que-andou`** segue sendo o único destravamento do plano
   kaizen-born — contrato do `gate_PLAN`, não pendência desta fase.
