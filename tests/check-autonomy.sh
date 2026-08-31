@@ -1327,10 +1327,18 @@ assert_bucket_sum "the buckets still sum to the header total (a recorded closure
 # the distinction this repo paid for in d4deb35/7cbc8e2.
 echo "== sdd retry photographs only the phase it is retrying =="
 : > "$LEDGER"
-# THE FLOOR, and it is what makes the sabotage loud instead of ambiguous: the round file lap 3 of
-# the block above landed is still on disk, so an unguarded photograph reads 1 and not 0. Without it
-# this block would assert `null != 0` over a world where the guarded and unguarded readings agree.
-assert_eq "the world has a round on disk for an unguarded photograph to find" "1" \
+# THE FLOOR, and it is a BLOCK-ORDERING CANARY rather than a probe of the guard — the distinction
+# matters, and the first version of this comment got it wrong. It claimed that without the round
+# file "the guarded and unguarded readings agree", which is measurably false: `review_rounds_on_disk`
+# prints `0` when the glob matches nothing (bin/sdd:2686), `autonomy_session_row` maps `"0"` to the
+# number 0 while `""` becomes null, and `0 == null` is FALSE in jq — so the sibling assertion below
+# would catch the sabotage with or without this file. What the file actually protects is the
+# IDENTITY of the block: remove it with an intact runner and the derivation lands on REVIEW instead
+# of DOCS, so the three assertions below quietly stop being about a non-REVIEW `cmd_retry` row at
+# all. Measured: four assertions of this block and the next go red that way. A floor whose stated
+# reason is not its real reason is the false rationale this repo paid for in d4deb35/7cbc8e2, so the
+# reason is written here as what it is.
+assert_eq "the world has a round on disk, so the derived phase below is DOCS and not REVIEW" "1" \
   "$(find "$MDIR" -maxdepth 1 -name '40-review-r*.md' | wc -l)"
 "$SDD" retry "$MISSION" >/dev/null 2>&1 || true
 # The second floor: the phase actually retried is DOCS. If the derivation ever lands somewhere else

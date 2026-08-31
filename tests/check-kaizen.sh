@@ -450,10 +450,26 @@ assert_eq "a phase whose gate never closed is still refez, in the same slice" "r
 # buckets are in the comparison BY NAME and not by accident: `unrecognized > 0` is what the judge
 # reads as a bug in the kit itself, so an event the series does not admit would make `sdd kaizen
 # --series` accuse the runner that wrote it.
+# ⚠️ `detail` is in the list, and it is the key that makes the assertion below deserve the word
+# NOTHING. Without it the comparison was ten SLICE-level keys hand-picked by the same author as the
+# writer — so it said "nothing else moved" while measuring a subset, and the new event reaches
+# per-CELL fields that were outside it. Measured (r2 of 20260831-a-rodada-que-andou): teaching the
+# cell to count a closure as a session (`sessions: map(select(.event == "session" or is_gate_pass))`
+# in group_summary) left BOTH sensors green at rc 0 while `m30/QA` went from 1 session to 2 — a
+# phase that bought one session reported as two, in the very cell the judge cites. An assertion
+# that AFFIRMS more than it measures is the fail-open this file spends its floors refusing.
+# `del(.label)` and not the whole cell: the label is the ONE thing the closure is supposed to move,
+# and it is what the three assertions above already pin, name by name.
+# ⚠️ `cost_usd` is compared IN CENTS, and that is a real jq subtlety rather than sloppiness. The sum
+# is `map(.cost_usd // 0) | add`, so a closure in the group contributes a `0` — numerically inert,
+# but `[3.0] | add` renders `3.0` while `[3.0, 0] | add` renders `3`. Same number, different text,
+# and a comparison of JSON TEXT would have failed on the representation while the money was
+# identical. Rounding to the cent states what this key means and compares the value.
 gp_shape() { jq -Sc '{outcomes: .latest.outcomes, advance_rate: .latest.advance_rate,
                       moved_rate: .latest.moved_rate, cost_usd: .latest.cost_usd,
                       sessions: .latest.sessions, missions: .latest.missions,
                       composition: .latest.composition, escalations: .latest.escalations,
+                      detail: (.latest.detail | map(del(.label) | .cost_usd |= (. * 100 | round))),
                       guard: .guard, excluded: .excluded}' <<< "$1"; }
 assert_eq "the recorded fact moves the label and NOTHING else in the series" \
   "$(gp_shape "$NOGP_OUT")" "$(gp_shape "$GP_OUT")"

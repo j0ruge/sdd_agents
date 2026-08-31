@@ -2632,6 +2632,15 @@ mut_LEDGER_gate_pass_mints_a_cell() {
 # satisfying its gate — a phase no session can satisfy. Caught by the DIFFERENTIAL assertion
 # `a closure on a sha of its own changes nothing about the axis` in check-kaizen.sh; the floor
 # beside it stays green under this sabotage, which is what makes that one the owner.
+# The closure counted as a SESSION in the per-cell tally: a phase that bought one session is
+# reported as two, in the very cell the judge cites first. It survived until r2 because the
+# assertion that says "the recorded fact moves the label and NOTHING else" compared ten hand-picked
+# SLICE-level keys and left `.latest.detail` out entirely — an assertion affirming more than it
+# measured. Caught by that same assertion now that `detail` is in its shape.
+mut_LEDGER_gate_pass_counted_as_session() {
+  sed -i 's@sessions: (map(select(.event == "session")) | length),@sessions: (map(select(.event == "session" or is_gate_pass)) | length),@' "$1"
+}
+
 mut_LEDGER_gate_pass_mints_a_version() {
   sed -i 's@map(select(.event == "session" or is_escalation))$@map(select(true))@' "$1"
 }
@@ -2880,6 +2889,7 @@ CATALOG=(
   LEDGER_gate_pass_unrecognized
   LEDGER_gate_pass_not_admitted
   LEDGER_gate_pass_mints_a_cell
+  LEDGER_gate_pass_counted_as_session
   LEDGER_gate_pass_mints_a_version
   LEDGER_gate_pass_membership_not_position
   RUN_retry_photographs_every_phase
