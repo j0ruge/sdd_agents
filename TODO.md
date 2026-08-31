@@ -680,6 +680,39 @@ Achados sobre **repos-alvo** vão para o `TODO.md` daquele repo. Este arquivo é
   um probe recusa `bin/sdd` escrevendo no ledger de `$HOME` sob `SDD_MUTANT`/CI.
   — descoberto por `sdd-reviewer` na missão `20260829-o-incremento-que-andou` (2026-08-30)
 
+- [ ] **A guarda de fase da foto de REVIEW no `cmd_retry` não tem probe, e sem ela a linha mente** —
+  `bin/sdd:4568` — apagar o `if [ "$phase" = "REVIEW" ]` deixa a suíte inteira verde, e a guarda NÃO
+  é inerte: `review_rounds_on_disk` nunca devolve vazio (imprime `0`), então todo `sdd retry <fase
+  não-REVIEW>` nasceria com `rounds_before: 0` em vez de `null` — um zero entrando na aritmética do
+  juiz. O irmão do `cmd_run` tem a asserção (`a non-REVIEW row carries the three round fields as
+  null`); esta porta não tem, e nada declara o buraco. Direção: fixture de retry no `check-autonomy.sh`.
+  — descoberto por `sdd-reviewer` na missão `20260831-a-rodada-que-andou` (2026-08-31)
+
+- [ ] **A porta de `gate_failed` do retry inline não tem probe, e o comentário dela jura que tem** —
+  `bin/sdd:4509` — apagar a linha deixa a suíte verde. Consequência: retry inline que PASSA mantém o
+  `1` da primeira passada, e a volta seguinte grava um `gate_pass` dizendo que a fase fechou SEM
+  sessão para uma fase que fechou COM a própria retry — linha falsa, permanente (ledger append-only),
+  que alimenta o `phase_label` e o `$closed`. A asserção que proibiria isso existe mas o fixture dela
+  só alcança a porta 1. Direção: segunda volta no fixture, com retry que passa.
+  — descoberto por `sdd-reviewer` na missão `20260831-a-rodada-que-andou` (2026-08-31)
+
+- [ ] **O `$order` do `cmd_autonomy` e o `comparable_row` do `kaizen_series` divergem sobre a linha
+  `gate_pass`, e o comentário entre eles jura paridade** — `bin/sdd:4899` — o `$order` admite
+  `(is_session and comparable) or (is_escalation and on_axis)` e NÃO vê o evento novo; o
+  `comparable_row` é `on_axis and ((.event != "session") or has("moved"))` e vê. Com a closure como
+  primeira linha de um sha, os dois respondem `latest`/`previous` INVERTIDOS — medido. Writer de hoje
+  não chega lá, mas é a classe da r1 de `20260817`: o comentário afirma paridade que o código perdeu.
+  Direção: quarto caso na D4 do `check-autonomy.sh`.
+  — descoberto por `sdd-reviewer` na missão `20260831-a-rodada-que-andou` (2026-08-31)
+
+- [ ] **Missão que só tem `gate_pass` numa fatia entra em `missions` sem produzir célula** —
+  `bin/sdd:5318` — `missions:` conta sobre `$rows` cru, que agora inclui a closure, enquanto o
+  `$detail` (desde `dfe4d63`) exige sessão ou escalada. É a única forma de linha que conta no
+  `guard.missions_after_change` e no `composition` da ADR 0005 sem deixar rastro gradeável, então os
+  dois deixam de reconciliar com o `detail` ao lado. `guard.sufficient` não se move (lê `$sess`).
+  Alcançável pelo mundo (2) já declarado: sessão suja excluída, closure limpa sobrevivendo.
+  — descoberto por `sdd-reviewer` na missão `20260831-a-rodada-que-andou` (2026-08-31)
+
 - [ ] **A frase de divulgação do caminho datado conta linhas que nenhum balde mostra** —
   `bin/sdd:4535` — `$historic` é ligado depois do filtro de repo e ANTES da comparabilidade, então
   conta linhas anotadas que depois saem como não-comparáveis. Fail-open brando, mas a frase é o
