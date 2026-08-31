@@ -5270,6 +5270,29 @@ kaizen_series() {
       . as $rows
       | ($rows | map(select(.event == "session"))) as $sess
       | ($rows | group_by(mission_key + [(.phase // "")])
+               # A `gate_pass` row MODIFIES a cell; it never is the subject of one. It says a phase
+               # closed for free — and a phase that spent nothing in this slice is not a phase this
+               # slice can grade. Without this filter a group whose ONLY row is the closure falls
+               # through every arm of phase_label (no escalation, no retry, and `map(select(.event
+               # == "session")) | last` is `null`, so `null | .gate != "pass"` is true but the new
+               # second conjunct is false) and lands on the `else`, minting a phantom `ok` cell with
+               # `sessions: 0` and `cost_usd: 0` — a clean grade for a phase this slice never saw.
+               # Measured on two worlds, both reachable: (1) the closure and the session it explains
+               # land on different `kit_sha`, which is EVERY run in the repo that BUILDS the kit,
+               # because each session commits and the sha advances between the phase that failed and
+               # the lap that closes it; (2) the session was written with a dirty kit and the closure
+               # clean, which drops the session into `non_comparable` and leaves the closure alone.
+               # Before `gate_pass` existed no session-less group could read `ok`: the only other
+               # row shape is an escalation, and an escalation-only group reads `refez` off the
+               # first arm. That is why the filter admits escalations too and removes nothing that
+               # was ever counted.
+               #
+               # DECLARED LIMIT, and it is the honest half of the same fact: in world (1) the cell
+               # of the session itself, one slice back, still reads `refez`. The closure cannot reach
+               # it — the rubric grades one `kit_sha` at a time and the row is not in that slice.
+               # This line stops the false `ok`; moving the false `refez` needs the closure to be
+               # readable ACROSS slices, which is a decision about the axis and not about this line.
+               | map(select((map(select(.event == "session" or is_escalation)) | length) > 0))
                | map({repo: .[0].repo, mission: .[0].mission, phase: .[0].phase, label: phase_label,
                       sessions: (map(select(.event == "session")) | length),
                       outcomes: (map(select(.event == "session")) | outcome_tally),

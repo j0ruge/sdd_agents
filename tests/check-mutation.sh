@@ -2594,6 +2594,21 @@ mut_LEDGER_gate_pass_not_admitted() {
   sed -i 's@and (.event == "session" or is_escalation or is_gate_pass)@and (.event == "session" or is_escalation)@' "$1"
 }
 
+# The rubric goes back to letting a recorded closure be the SUBJECT of a cell instead of a modifier
+# of one. A group holding nothing but the closure falls through every arm of `phase_label` — no
+# escalation, no retry, and `last | .gate` over an empty list is null, so the second conjunct of the
+# third clause is false — and the `else` mints a phantom `ok`: a clean grade, `sessions: 0`,
+# `cost_usd: 0`, for a phase the slice never saw, in the histogram the judge is told to cite first.
+# It is reachable on EVERY run of the repo that builds the kit (each session commits, so the closure
+# carries a `kit_sha` the failing session never had) and on any run whose failing session was
+# written with a dirty kit. Anchored on the `select` and not on the `group_by` line above it, which
+# this mission has already had to re-anchor three times: the smallest fragment that still names the
+# sabotage. Caught by `a closure alone in a slice mints no cell` and `and the session that shares
+# the slice is still graded` in check-kaizen.sh, and by nothing else.
+mut_LEDGER_gate_pass_mints_a_cell() {
+  sed -i 's@| map(select((map(select(.event == "session" or is_escalation)) | length) > 0))@@' "$1"
+}
+
 CATALOG=(
   PLAN_empty_approval
   PLAN_kaizen_born_blind
@@ -2806,6 +2821,7 @@ CATALOG=(
   RUN_gate_pass_off_the_derived_branch
   LEDGER_gate_pass_unrecognized
   LEDGER_gate_pass_not_admitted
+  LEDGER_gate_pass_mints_a_cell
 )
 
 # Mutations that are NOT caught today, each with the increment that closes it. Ratchet in both

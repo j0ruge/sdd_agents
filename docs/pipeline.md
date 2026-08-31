@@ -642,6 +642,22 @@ last **session** pass its gate?" while meaning "did the **phase** close?". ⚠�
 is turn the cell green: the surviving session is still churn on its own count, so the cascade lands
 on `leve`. Trading a false `refez` for a false `ok` would be the same defect wearing the other sign.
 
+⚠️ And it MODIFIES a cell — it never is the subject of one. The rubric grades one `(repo, mission,
+phase)` group at a time inside one `kit_sha` slice, and a group holding nothing but a closure falls
+through every arm of `phase_label` (no escalation, no retry, and `last | .gate` over no sessions is
+`null`, so the third clause's second conjunct is false) straight onto the `else` — minting a
+phantom `ok`, `sessions: 0`, for a phase the slice never saw. So `group_summary` keeps only the
+groups that hold a session or an escalation, which removes nothing that was ever counted: before
+`gate_pass` no session-less group could read `ok`, because an escalation-only group reads `refez`
+off the first arm. Two worlds reach it and both are real — the closure and the session it explains
+land on **different** `kit_sha` (every run in the repo that *builds* the kit: each session commits,
+so the sha advances between the phase that failed and the lap that closes it), or the session was
+written with a dirty kit and the closure clean, which files the session under `non_comparable` and
+leaves the closure alone. ⚠️ **Declared limit**, the honest half: in the split-sha world the failing
+session's own cell, one slice back, still reads `refez` — the closure is not in that slice and
+cannot speak for it. Dropping the *cell* is not dropping the *row*: the closure is still admitted,
+still counted in the fifth bucket, and `excluded.unrecognized` stays `0`.
+
 `sdd autonomy` prints the human view. The judge reads the JSONL with `jq` — never that table.
 Both readers group escalations on the **same axis**, `kit_sha`, and both drop a row with a dirty
 kit or no sha into a counted-and-excluded bucket. Two instruments over one file that report

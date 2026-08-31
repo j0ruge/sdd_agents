@@ -466,6 +466,50 @@ assert_eq "the recorded fact is not thrown away as unrecognized" "0" \
 assert_eq "is_escalation says no: a gate that passed is not an escalation" "{}" \
   "$(jq -c '.latest.escalations' <<< "$GP_OUT")"
 
+# --- the closure that landed in ANOTHER slice --------------------------------
+# The fixture above is the TARGET-REPO shape: the kit does not change during the run, so the
+# closure and the session it explains carry the same `kit_sha` and land in the same slice. In the
+# repo that BUILDS the kit every session commits, so the sha advances between the phase that failed
+# and the lap that closes it — the closure is stamped with a sha the failing session never had.
+#
+# The rubric grades one slice at a time, so in that world the closure arrives ALONE in its group:
+# no escalation, no retry, and `map(select(.event == "session")) | last` is null. Every arm of
+# phase_label is false and the `else` mints a phantom `ok` — a clean grade for a phase that spent
+# nothing in this slice, in the histogram the judge is told to cite first. Measured before the
+# filter in group_summary existed: `labels {ok: 2}` over a slice holding ONE session.
+#
+# Same shape, second world, no split sha needed: the failing session written with a dirty kit goes
+# to `non_comparable` and the clean closure stays. That is why the assertion below is stated over
+# the GROUP and not over the sha — it is the session-less group that is the defect, whatever put it
+# there.
+echo "== series: a closure alone in a slice mints no cell =="
+mkdir -p "$OUTSIDE/gpsplit"
+localize > "$OUTSIDE/gpsplit/autonomy-log.jsonl" <<'EOF'
+{"v":1,"ts":"2026-08-31T12:00:00-03:00","event":"session","run_id":"g1","invocation":"run","kit_sha":"eee1111","kit_dirty":false,"project":"p1","repo":"/p1","mission":"m40","phase":"QA","step":"QA","agent":"sdd-qa","model":"opus","attempt":1,"auto_retry":false,"session":"h1s","rc":0,"dur_s":10,"cost_usd":3.0,"moved":true,"gate":"fail","gate_why":"1 bug(s) with Status: open in the registry"}
+{"v":1,"ts":"2026-08-31T12:01:00-03:00","event":"session","run_id":"g1","invocation":"run","kit_sha":"fff2222","kit_dirty":false,"project":"p1","repo":"/p1","mission":"m40","phase":"EXEC","step":"EXEC","agent":"sdd-executor","model":"opus","attempt":1,"auto_retry":false,"session":"h2s","rc":0,"dur_s":10,"cost_usd":1.5,"moved":true,"pending_before":1,"pending_after":0,"increments_total":1,"gate":"pass","gate_why":"0 of 1 increment(s) still to execute"}
+{"v":1,"ts":"2026-08-31T12:02:00-03:00","event":"gate_pass","run_id":"g1","invocation":"run","kit_sha":"fff2222","kit_dirty":false,"project":"p1","repo":"/p1","mission":"m40","phase":"QA"}
+EOF
+SPLIT_OUT="$( cd "$FIX" && SDD_STATE_DIR="$OUTSIDE/gpsplit" "$SDD" kaizen --series 2>/dev/null )"
+# THE assertion: the QA group of the newer slice holds nothing but the closure, so it is not a cell.
+# `empty` and not `"ok"` — a phase this slice never saw has no grade to give.
+assert_eq "a closure alone in a slice mints no cell" "" \
+  "$(jq -r '.latest.detail[] | select(.mission == "m40" and .phase == "QA") | .label' <<< "$SPLIT_OUT")"
+# ...and the assertion above is not satisfied by a slice that lost every cell: the EXEC session
+# that shares the sha with the closure is still graded, so the filter removed the phantom and only
+# the phantom.
+assert_eq "and the session that shares the slice is still graded" '{"ok":1,"leve":0,"refez":0} 1' \
+  "$(jq -r '"\(.latest.labels | tojson) \(.latest.sessions)"' <<< "$SPLIT_OUT")"
+# The floor that keeps the two assertions above from being about an empty reading: the older slice
+# still carries the failing QA session. ⚠️ It reads `refez`, and that is the DECLARED limit rather
+# than a promise broken — the closure is not in this slice and cannot speak for it. What this block
+# forbids is the FALSE `ok`; moving this `refez` needs the closure to be readable across slices.
+assert_eq "floor: the failing session is still in the older slice, still refez" "refez" \
+  "$(jq -r '.previous.detail[] | select(.mission == "m40" and .phase == "QA") | .label' <<< "$SPLIT_OUT")"
+# The arithmetic still closes over the row the filter dropped from the histogram: dropping a cell
+# is not dropping a row, and a closure filed as `unrecognized` is the judge accusing the kit.
+assert_eq "dropping the cell does not drop the row into unrecognized" "0" \
+  "$(jq -r '.excluded.unrecognized' <<< "$SPLIT_OUT")"
+
 # --- a degradation is an escalation the series has to SEE --------------------
 # `PUBLISH_ON_REVIEW_BLOCKED=draft` makes the runner give up on reviewing and publish a draft PR
 # by itself. It writes `event: "degraded"`, and the filter above only ever admitted `session` and
