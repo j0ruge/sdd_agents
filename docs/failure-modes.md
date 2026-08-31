@@ -93,15 +93,28 @@ a judged regression that disappears from the record will be re-attempted.
 number quoted for the same missions in a `KAIZEN_LOG` entry, a handoff or a PR body, and no session
 behaved any differently in between.
 
-**Cause:** the yardstick moved, and it moved **twice in two days**. Until 2026-08-28 a session was
-`stalled` when it wrote nothing to disk; `20260828-instrumento-honesto` replaced that with
-`advanced`/`churned`/`idle`; and `20260829-o-incremento-que-andou` made a session `advanced` when
-the **increment** moved (`pending_after < pending_before`) and not only when its gate passed. That
-last change alone took 46 of the 72 EXEC rows in the real ledger out of `churned`: `gate_EXEC`
-refuses by construction until the last increment, so the pipeline's own designed loop was being
-counted as waste. Every reading is computed by TODAY's binary over the whole ledger, so any single
-`sdd autonomy` run is internally consistent — what is not comparable is a number on your screen
-against a number frozen in prose.
+**Cause:** the yardstick moved, and it has now moved **three times in four days**. Until 2026-08-28
+a session was `stalled` when it wrote nothing to disk; `20260828-instrumento-honesto` replaced that
+with `advanced`/`churned`/`idle`; `20260829-o-incremento-que-andou` made a session `advanced` when
+the **increment** moved (`pending_after < pending_before`) and not only when its gate passed; and
+`20260831-a-rodada-que-andou` carried the same reading one phase on, making a REVIEW session
+`advanced` when the **round** moved (`rounds_after > rounds_before`). The 2026-08-29 change alone
+took 46 of the 72 EXEC rows in the real ledger out of `churned`; the 2026-08-31 one moved four
+`kit_sha` slices from `0 advanced · 1 churned · 100% waste` to `1 advanced · 0 churned · 0% waste`
+(`churned` across the whole ledger 23 → 19, versions at `100% waste` 14 → 10) — measured by running
+both binaries over the same 195 rows. The reason is the same one twice: a gate that refuses **by
+design** until the phase is done (`gate_EXEC` until the last increment, `gate_REVIEW` until Grade A
+within `REVIEW_MAX_ITER`) had the pipeline's own designed loop counted as waste. Every reading is
+computed by TODAY's binary over the whole ledger, so any single `sdd autonomy` run is internally
+consistent — what is not comparable is a number on your screen against a number frozen in prose.
+
+⚠️ A second, quieter version of the same trap since 2026-08-31: the ledger has **three row shapes**,
+not two. The header's `N row(s)` is the whole file — sessions, escalations **and**, from the first
+run after 2026-08-31, recorded gate closures — so a row total quoted as a session count was never
+one and is now wrong by a wider margin. Under the table `sdd autonomy` closes an arithmetic over
+five buckets (comparable session, non-comparable session, escalation, recorded gate closure,
+unrecognized) and prints a line for each that is **non-empty**: a bucket you cannot see is a bucket
+at zero, not a bucket nobody counted. Read those lines, not the header.
 
 **What you do:** re-derive both sides with the same binary before concluding anything. The
 comparison the judge makes is already apples to apples (`sdd kaizen --series` grades before and
