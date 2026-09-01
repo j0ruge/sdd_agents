@@ -126,7 +126,7 @@ check checkpoint.md 'pending'                 "status token 'pending'"
 check checkpoint.md '`done`'                  "status token 'done'"
 check checkpoint.md '`blocked`'               "status token 'blocked'"
 check checkpoint.md '^## Notas de execução'   "section 'Notas de execução'"
-check checkpoint.md '^## Incrementos de fix'  "section 'Incrementos de fix (QA)'"
+check checkpoint.md '^## Incrementos de fix'  "section 'Incrementos de fix (QA e REVIEW)'"
 
 echo "== templates/handoff.md =="
 for k in missao fase status sessao data gate; do
@@ -207,15 +207,26 @@ done
 review_check '^## TL;DR'               "section 'TL;DR'"
 review_check '^## Pendências / Decisions for a Human' "section 'Pendências / Decisions for a Human'"
 review_check '^## Achados da rodada'   "section 'Achados da rodada'"
-review_check '^## O que foi corrigido' "section 'O que foi corrigido'"
 review_check '^## O que foi refutado'  "section 'O que foi refutado'"
 review_check '^## Achados fora de escopo' "section 'Achados fora de escopo'"
+# Since `20260901-o-revisor-so-acha` the round does not fix: every finding that must be fixed is
+# written into the checkpoint as an `R<n>` increment and the EXEC phase closes it. The section is
+# what the reviewer copies the row shape from, and a round that lost it has nowhere to record the
+# increments it wrote — the ball never goes back to EXEC and the finding dies in the prose.
+review_check '^## Incrementos de conserto' "section 'Incrementos de conserto (R<n>)'"
+# And the section it replaced, asserted by its NEW name. `## O que foi corrigido` is what a round
+# that fixed in place wrote; keeping the old heading beside the new one would let a template ship
+# both and a session pick either, which is how a contract stops being one.
+review_check '^## O que virou incremento' "section 'O que virou incremento'"
 
 # The floor is what turns "no assertion failed" into "the assertions ran". Deleting the loops above
 # would otherwise leave this file green while measuring nothing about the file it names — the
 # vacuity every sensor in this suite carries a floor against.
 REVIEW_ASSERTIONS=$((CHECKS_RUN - REVIEW_MARK))
-REVIEW_FLOOR=23
+# 23 → 24 in `20260901-o-revisor-so-acha`, with the `## Incrementos de conserto` section. A floor
+# left behind still PASSES while describing a smaller surface than the one it reads, which is the
+# same fail-open as a floor of zero — recounted in the commit that adds the rule, never later.
+REVIEW_FLOOR=24
 if [ "$REVIEW_ASSERTIONS" -lt "$REVIEW_FLOOR" ]; then
   printf '  FAIL review.md: only %d assertion(s) ran, expected at least %d — a clean report over\n' \
     "$REVIEW_ASSERTIONS" "$REVIEW_FLOOR" >&2

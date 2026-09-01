@@ -2702,6 +2702,21 @@ mut_AUTONOMY_review_loop_counts_every_exec() {
   sed -i 's@(\.value\.phase == "EXEC" and \.key > \$fr)@.value.phase == "EXEC"@' "$1"
 }
 
+# Not a gate: the REVIEW session is told to fix in place again. The whole contract of this mission
+# travels in ONE sentence of the boot prompt — nothing in `gate_REVIEW`, `current_phase()` or the
+# checkpoint parser changed, so this line is the entire mechanism, and a runner that lost it goes on
+# passing every gate while paying for the loop the split removed. The agent file would still say
+# "you do not fix", which is the expensive shape: two instructions disagreeing inside one session.
+# Caught by `the REVIEW boot prompt sends findings to R increments and never fixes in-session` in
+# check-dry-run.sh, whose second half reads the ABSENCE of this exact sentence.
+#
+# Anchored on the FUNCTION range and not on the indentation of the arm: `phase_agent` and
+# `phase_model` carry a `REVIEW)` line each, one of them a keystroke away from this one, and a
+# whitespace-anchored pattern that drifted would sabotage the wrong arm while still looking applied.
+mut_RUN_review_fixes_inline() {
+  sed -i '/^phase_task()/,/^}/ s@^\( *REVIEW).*printf .%s.n. \).*$@\1"review and fix, INSIDE this session, until every criterion is Grade A" ;;@' "$1"
+}
+
 CATALOG=(
   PLAN_empty_approval
   PLAN_kaizen_born_blind
@@ -2923,6 +2938,7 @@ CATALOG=(
   RUN_inline_retry_keeps_the_failed_verdict
   LEDGER_turns_not_written
   AUTONOMY_review_loop_counts_every_exec
+  RUN_review_fixes_inline
 )
 
 # Mutations that are NOT caught today, each with the increment that closes it. Ratchet in both

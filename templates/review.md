@@ -68,12 +68,29 @@ inclusive o campo escrito e deixado em branco.
 |---|---|---|---|
 | 1 | <CRITICAL \| HIGH \| MEDIUM \| LOW> | <o quê> | `<arquivo:linha>` |
 
-## O que foi corrigido
+## Incrementos de conserto (R<n>)
 
-> Um hash por item. Correção sem hash é rótulo — o gate exige árvore limpa, então tudo que foi
-> corrigido está commitado.
+> **Esta rodada não conserta.** Cada achado que precisa de conserto vira uma linha `R<n>` na tabela
+> de incrementos do `checkpoint.md`, e o `sdd-executor` a fecha em TDD, numa sessão de contexto
+> próprio; a rodada seguinte re-avalia sem ter escrito o conserto. CRITICAL/HIGH → um `R<n>` cada;
+> MEDIUM/LOW baratos → **um** `R<n>` de lote na rodada; caros → `TODO_FILE`; o que exige julgamento
+> humano → seção de pendências, nunca `R<n>`.
+>
+> ⚠️ Nada de `|` cru na célula do Check — a tabela é lida com `awk -F'|'`. Herestring, como abaixo.
 
-- <achado> — corrigido em `<hash>` — <como se prova que fechou>
+| R<n> | Achado | Check escrito no checkpoint |
+|---|---|---|
+| R1 | <achado #1> | `o=$(bash tests/check-x.sh 2>&1); grep -c '^  ok    <asserção>' <<< "$o"` → `1` |
+
+## O que virou incremento
+
+> Um `R<n>` por item, com a linha exata que foi para o `checkpoint.md`. Achado "resolvido" sem
+> incremento é rótulo: quem prova que fechou é o commit do executor, na rodada seguinte.
+>
+> Achado de rodada anterior já fechado entra aqui com o hash do executor e como se prova que fechou.
+
+- <achado> — virou `R<n>` — <o que o Check exige para fechar>
+- <achado da rodada anterior> — fechado em `<hash do sdd-executor>` — <como se prova que fechou>
 
 ## O que foi refutado
 

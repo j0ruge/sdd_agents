@@ -172,8 +172,36 @@ types, build, docs) has no journey to walk. Inventing a journey just to "have QA
 
 ### REVIEW — Grade A on every criterion
 
+**The round finds; the EXEC phase fixes.** Since `20260901-o-revisor-so-acha` `sdd-reviewer` is
+read-only over the code: it reproduces, refutes with evidence, grades honestly, and every finding
+that must be fixed becomes an `R<n>` row in the mission's `checkpoint.md` — one per CRITICAL/HIGH,
+one batch row for the cheap MEDIUM/LOW, `TODO_FILE` for the expensive ones, a pendency for whatever
+needs a human. The session commits **only** the round report, the checkpoint and `TODO_FILE`.
+
+Nothing in the runner had to learn about the prefix. `current_phase()` walks
+`PLAN TICKET EXEC QA REVIEW DOCS PR` and returns the first red gate, so a pending `R<n>` fails
+`gate_EXEC` two phases before `gate_REVIEW` is read, `sdd-executor` closes it in TDD with a context
+of its own, and the next round re-grades **without** having written the fix. It is the QA⇄EXEC loop
+one phase later, and the `F<n>` of `20260829-o-incremento-que-andou` had already proved the route.
+
+Two things were bought with that split, and only one of them is money. The reviewer used to grade
+its own fixes — an `A` on r1 was the same session certifying its own work — and now the grade comes
+from a round that did not write the patch. The money: while review and fix shared a session, 70–95%
+of a round's cache-read was spent **after** the first edit (the whole review's exploration re-sent
+every turn, and cache-read grows with turns², corr 0.94), and REVIEW was 39,4% of everything the
+pipeline had ever spent — US$ 636,66 of US$ 1.614,87 over 27 sessions, more than EXEC's 89.
+
+Two readings change with it, both declared: **r1 grading `B` is the healthy round now**, not a
+failure, and `REVIEW_MAX_ITER` counts rounds of **finding** — the normal mission uses two. The
+`review loop` figure of `sdd autonomy --by-mission` is what measures the whole thing, REVIEW rows
+plus the EXEC rows that come after the first one.
+
+A REVIEW session that commits a code file anyway is not stopped — it is **recorded**:
+`REVIEW-EDITED-CODE` in `.sdd/logs/<mission>/pipeline.log`, next to the kit guard's `KIT-TOUCHED`.
+
 **Passes when:** the most recent `40-review-r<N>.md` carries the `### Overall Grade` section with
-**A on every row**; `TEST_CMD` exits 0; and the working tree is clean.
+**A on every row**; `TEST_CMD` exits 0; and the working tree is clean. The gate itself did **not**
+change with the split: same table, same `Rationale` rule, same ceiling.
 
 A criterion graded `—` (not analysed) fails too: a partial review is not a review.
 
@@ -201,8 +229,9 @@ independent rounds derived the heading as `## Overall Grade` and collected `NO-T
 reads the literal `^###[[:space:]]+Overall Grade`. `tests/check-templates.sh` derives its
 assertions from that same regex rather than restating it.
 
-The review→fix→re-review loop happens **inside** the session. If it ends without closing, the
-runner opens a fresh session to continue, up to `REVIEW_MAX_ITER` in total. Blown →
+The find→`R<n>`→fix→re-review loop happens **across** sessions: the round ends when the report is
+committed, EXEC closes the increments, and the runner opens a fresh round, up to `REVIEW_MAX_ITER`
+rounds in total. Blown →
 `BLOCKED`, or a draft PR when `PUBLISH_ON_REVIEW_BLOCKED=draft` — the one place the runner lowers
 its **own** bar instead of stopping, and it records the fact once per run (`event:"degraded"`, in
 the ledger's field reference below).

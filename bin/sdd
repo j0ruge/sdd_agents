@@ -1520,7 +1520,7 @@ phase_task() {
     QA:plan)  printf '%s\n' "plan the QA cycle for this mission: personas, journeys, scenarios and charters" ;;
     QA:exec)  printf '%s\n' "walk the journeys in persona and write the dated report + the bug registry" ;;
     QA:close|QA) printf '%s\n' "close the QA cycle: a confirmed finding becomes an e2e spec, a fixable bug becomes a fix increment, and write 30-handoff-qa.md" ;;
-    REVIEW)   printf '%s\n' "review and fix, INSIDE this session, until every criterion is Grade A" ;;
+    REVIEW)   printf '%s\n' "review, reproduce and grade honestly; every finding that must be fixed becomes an R<n> increment in the checkpoint — you do NOT fix the code" ;;
     DOCS)     printf '%s\n' "sync the repo's living documentation with what this mission changed" ;;
     PR)       printf '%s\n' "push and open the PR carrying the evidence from the earlier phases" ;;
     TICKET)   printf '%s\n' "open the mission's JIRA issue, already in the active sprint, and record 10-ticket.md" ;;
@@ -1534,12 +1534,14 @@ phase_extra() {
   case "$1" in
     REVIEW) cat <<'EOF'
 
-Drive the review → fix → re-review loop INSIDE this session, with the QA report in hand, until
-the "### Overall Grade" table closes with A on EVERY criterion. (The `/goal` command does NOT
-exist in this environment — verified; the loop is yours.) Fixes go committed: the gate requires
-a clean working tree. If the session ends without closing, write 40-review-r<N>.md with the REAL
-grade — the runner opens a fresh session to continue. A grade inflated to pass the gate switches
-off the mission's only quality sensor.
+Drive the FINDING loop inside this session, with the QA report in hand: run the review, reproduce
+what you raise and refute with evidence what is wrong. (The `/goal` command does NOT exist in this
+environment — verified; the loop is yours.) You do NOT fix the code: every finding that must be
+fixed becomes an R<n> increment in checkpoint.md, and the EXEC phase closes it in TDD with a
+context of its own. This session commits ONLY 40-review-r<N>.md, checkpoint.md and the findings
+file — a source file in your diff means the hat slipped. Write the REAL grade; a B on r1 with
+increments written is the normal, healthy round, and the next round re-grades independently. A
+grade inflated to pass the gate switches off the mission's only quality sensor.
 EOF
     ;;
     QA:plan|QA:exec) cat <<'EOF'

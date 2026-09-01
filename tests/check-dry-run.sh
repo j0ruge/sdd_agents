@@ -248,6 +248,43 @@ assert_eq "REVIEW carries --max-budget-usd 40 while PR carries 15" \
 assert_eq "EXEC and QA carry their own ceiling, DOCS falls back to the global" \
   "25 25 15" "$(budget_of EXEC) $(budget_of QA:close) $(budget_of DOCS)"
 
+# --- the REVIEW session is told which hat it wears -------------------------
+# Since `20260901-o-revisor-so-acha` the reviewer FINDS and the executor FIXES. The whole contract
+# travels in the boot prompt — `phase_task REVIEW` plus `phase_extra REVIEW` — and the projection is
+# the only place in this suite where that prompt is readable as text: every other path either stubs
+# the session away or reads the artifact the session left behind.
+#
+# Both halves are asserted, and the second is the load-bearing one. A runner that ADDED the sentence
+# about `R<n>` increments while leaving `review and fix, INSIDE this session` in place satisfies a
+# presence-only assertion and still orders the session to do exactly what this mission removed —
+# the same shape as `--output-format json` surviving next to the streaming flags above.
+prompt_of() { # prompt_of <phase> — the "  │ " boot-prompt block the projection prints for <phase>
+  awk -v want="$1" '
+    /^--- DRY RUN: phase .* ---$/ { blk = $5; next }
+    blk == want && /^  │ / { print }
+  ' <<< "$out"
+}
+echo "== the REVIEW boot prompt carries the contract of the phase =="
+review_prompt="$(prompt_of REVIEW)"
+# Anti-vacuity: with an empty block the `grep -q` below answers "the old sentence is absent" and the
+# assertion passes while having read nothing at all — the fail-open this floor exists to refuse.
+if [ -n "$review_prompt" ]; then
+  pass "the projection prints a REVIEW boot prompt for the assertion below to read"
+else
+  fail "the projection prints a REVIEW boot prompt" "a non-empty prompt block" "nothing"
+fi
+if grep -q 'R<n> increment' <<< "$review_prompt"; then
+  if grep -q 'review and fix, INSIDE' <<< "$review_prompt"; then
+    fail "the REVIEW boot prompt sends findings to R increments and never fixes in-session" \
+         "no order to fix in-session" "the prompt still says 'review and fix, INSIDE'"
+  else
+    pass "the REVIEW boot prompt sends findings to R increments and never fixes in-session"
+  fi
+else
+  fail "the REVIEW boot prompt sends findings to R increments and never fixes in-session" \
+       "a prompt naming the R<n> increment the finding becomes" "no mention of an R<n> increment"
+fi
+
 # --- OUTPUT_LANG reaches the boot prompt -----------------------------------
 # Anchored on the VALUE of the key, never on the prose of the prompt: the runner text is English
 # and the artifacts may be in any language, and an assertion tied to the prose would die at the
