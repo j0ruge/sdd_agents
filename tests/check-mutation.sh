@@ -2732,6 +2732,22 @@ mut_RUN_review_scope_blind() {
   sed -i '/^review_scope_check()/,/^}/ s@^  \[ "\$phase" = "REVIEW" \] || return 0$@  return 0@' "$1"
 }
 
+# The guard above, still firing, still logging — and now NOISE. `$HANDOFF_DIR` goes back to being
+# matched verbatim, which is how it was written until the QA of 20260901-o-revisor-so-acha
+# reproduced it: the key arrives from the target repo's config exactly as a human typed it, and
+# `docs/handoffs/` makes the allowlist pattern `docs/handoffs//<mission>/*`, matching no path git
+# ever prints. Every healthy round then reports its OWN report as code, which is worse than a
+# silent guard: a warning that fires when nothing is wrong teaches its only reader to scroll past
+# the one time something is. Caught by `a trailing slash in HANDOFF_DIR does not turn a healthy
+# round into a warning` in check-autonomy.sh — the regime whose config carries the slash.
+#
+# Anchored on the FUNCTION range, like its siblings: `$MISSION` and `$HANDOFF_DIR` appear together
+# elsewhere in this runner, and a pattern that drifted would sabotage a path expression somewhere
+# else while still looking applied.
+mut_RUN_review_scope_handoff_dir_verbatim() {
+  sed -i '/^review_scope_check()/,/^}/ s@^      "\$mission_dir"/\*) continue ;;$@      "$HANDOFF_DIR/$MISSION"/*) continue ;;@' "$1"
+}
+
 CATALOG=(
   PLAN_empty_approval
   PLAN_kaizen_born_blind
@@ -2955,6 +2971,7 @@ CATALOG=(
   AUTONOMY_review_loop_counts_every_exec
   RUN_review_fixes_inline
   RUN_review_scope_blind
+  RUN_review_scope_handoff_dir_verbatim
 )
 
 # Mutations that are NOT caught today, each with the increment that closes it. Ratchet in both

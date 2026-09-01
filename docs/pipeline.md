@@ -425,6 +425,13 @@ first pass, its inline retry, and `sdd retry`. (`sdd close` is the fourth, and i
 It diffs the `HEAD` the session opened against with the one it left behind, and every path that is
 neither the mission's own directory, nor `TODO_FILE`, nor `tests/health-baseline.txt` gets one
 `warn` and one `REVIEW-EDITED-CODE` line in `.sdd/logs/<mission>/pipeline.log`, naming the files.
+Trailing slashes are stripped off `HANDOFF_DIR` before that comparison, because the allowlist is a
+glob matched against what `git diff --name-only` prints and the key arrives from your
+`.sdd/config.sh` exactly as you typed it — `HANDOFF_DIR="docs/handoffs/"` would otherwise make
+every healthy round warn about its own report. The `tests/health-baseline.txt` arm is
+**unconditional**: it exists for the kit's own repo, and a target repo that happens to carry that
+path has a reviewer's edit to it waved through. That is the allowlist's one fail-open, and it is
+written down here and in the function's header rather than left to be discovered.
 
 It **warns and records; it does not stop the line** — a reviewer that edited a file has already
 spent the money, and refusing the session would throw away the round report with it. It reads

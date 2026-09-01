@@ -4277,10 +4277,15 @@ chmod +x "$OUTSIDE/stub/claude"
 # cmd_run ever spends its retry), and a run that takes several laps would leave $FIX in a state the
 # assertions after this block describe.
 
-# reviewscope_world <dir> — a target repo sitting at REVIEW with nothing left pending: the
-# increment is `done` and its commit is an ancestor of HEAD, the EXEC handoff is on disk and QA is
-# skipped, so `current_phase` derives REVIEW without being told. CALLED, never substituted: it cds
-# and writes, and there is nothing here worth losing to a subshell.
+# reviewscope_world <dir> [HANDOFF_DIR, as the target repo spells it] — a target repo sitting at
+# REVIEW with nothing left pending: the increment is `done` and its commit is an ancestor of HEAD,
+# the EXEC handoff is on disk and QA is skipped, so `current_phase` derives REVIEW without being
+# told. CALLED, never substituted: it cds and writes, and there is nothing here worth losing to a
+# subshell.
+#
+# The second argument is the SPELLING of the key and never the directory: the mission always lands
+# in `docs/handoffs/$MISSION` on disk, because a trailing slash resolves to the same directory and
+# regime 5 is about the string the allowlist matches, not about where the files are.
 reviewscope_world() {
   mkdir -p "$1"
   ( cd "$1" || exit 1
@@ -4292,12 +4297,12 @@ reviewscope_world() {
     printf 'sensor 1\n' > tests/health-baseline.txt
     : > TODO.md
     "$SDD" install >/dev/null
-    cat > .sdd/config.sh <<'CFG'
+    cat > .sdd/config.sh <<CFG
 PROJECT_NAME="reviewscope"
 DEFAULT_BRANCH="main"
 TEST_CMD="true"
 E2E_CMD=""
-HANDOFF_DIR="docs/handoffs"
+HANDOFF_DIR="${2:-docs/handoffs}"
 QA_DOCS_PATH="docs/qa"
 TODO_FILE="TODO.md"
 JIRA_ENABLED=false
@@ -4442,6 +4447,32 @@ RS4_LOG="$(cat "$RS4/.sdd/logs/$MISSION/pipeline.log" 2>/dev/null || true)"
 assert_eq "sdd retry is another door that opens a REVIEW session, and it is guarded too" \
   "sessions:1 lines:1 warns:1 files:bin/tool.sh" \
   "sessions:$(reviewscope_sessions) lines:$(grep -c 'REVIEW-EDITED-CODE' <<< "$RS4_LOG") warns:$(grep -c 'the reviewer finds and the executor fixes' <<< "$RS4_ERR") files:$(reviewscope_files "$RS4_LOG")"
+
+# 5. THE ALLOWLIST IS A GLOB MATCHED AGAINST A STRING, and the two sides of that match come from
+#    different worlds: `git diff --name-only` prints a path git has already normalised, while
+#    `$HANDOFF_DIR` arrives VERBATIM from the target repo's .sdd/config.sh. `HANDOFF_DIR=
+#    "docs/handoffs/"` — a spelling nothing in the kit forbids, documents against, or normalises —
+#    makes the pattern `docs/handoffs//<mission>/*`, which matches no path git ever prints. The
+#    round's OWN report is then counted as code, and the guard warns on EVERY healthy round: the
+#    noise the allowlist exists to prevent, reachable through a config key rather than a bug.
+#
+#    `slash:1` is the floor that the venom is ARMED. Without it a world whose config quietly lost
+#    the trailing slash would satisfy this regime by being regime 2 over again — a probe concluding
+#    about a world it never built, which is the failure this file has already paid for twice.
+#
+#    The expectation string after that floor is regime 2's, character for character, ON PURPOSE:
+#    the two regimes are the differential ("the slash reads the same as no slash"), and writing it
+#    out literally on both sides is what stops them from drifting into agreement by moving together.
+rm -f "$REVIEWSCOPE_COUNT"
+RS5="$OUTSIDE/reviewscope-trailing-slash"
+reviewscope_world "$RS5" "docs/handoffs/"
+reviewscope_stub "$RS5" 1 clean
+RS5_HEAD_BEFORE="$(git -C "$RS5" rev-parse HEAD)"
+RS5_ERR="$( cd "$RS5" && "$SDD" run "$MISSION" --phase REVIEW --max-phases 1 2>&1 >/dev/null )"
+RS5_LOG="$(cat "$RS5/.sdd/logs/$MISSION/pipeline.log" 2>/dev/null || true)"
+assert_eq "a trailing slash in HANDOFF_DIR does not turn a healthy round into a warning" \
+  "slash:1 sessions:1 committed:1 lines:0 warns:0" \
+  "slash:$(grep -c 'HANDOFF_DIR="docs/handoffs/"$' "$RS5/.sdd/config.sh") sessions:$(reviewscope_sessions) committed:$([ "$RS5_HEAD_BEFORE" != "$(git -C "$RS5" rev-parse HEAD)" ] && echo 1 || echo 0) lines:$(grep -c 'REVIEW-EDITED-CODE' <<< "$RS5_LOG") warns:$(grep -c 'the reviewer finds and the executor fixes' <<< "$RS5_ERR")"
 
 # The stub goes back the way it was found, for the reason spelled out one screen up.
 cat > "$OUTSIDE/stub/claude" <<'STUB'

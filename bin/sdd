@@ -2228,8 +2228,20 @@ kit_guard_check() {
 #    during a projection, so there is no warning for a dry run to inherit. That is the world this
 #    author could build; a `DRY_RUN` early return would be a rule no sabotage of mine turns a probe
 #    red, which d4deb35 is the scar for asserting too confidently.
+#  · THE `tests/health-baseline.txt` ARM IS UNCONDITIONAL. Its comment below scopes it "in the
+#    kit's own repo", but nothing in the code asks whether this repo IS the kit: a target repo that
+#    happens to carry that path gets a reviewer's edit to it waved through in silence. It is the
+#    allowlist's one FAIL-OPEN, it is narrow (one exact path, in a guard that only warns), and it
+#    is written here rather than left implied because a limit nobody declared is the thing this
+#    whole header exists to separate from a limit that is known. Conditioning it on
+#    `kit_root = REPO_ROOT` is a behaviour change with no probe today; declared, not guessed.
+#  · ONLY TRAILING SLASHES are normalised out of `$HANDOFF_DIR` below, because that is the spelling
+#    that was reproduced and the one regime 5 of check-autonomy.sh holds. A leading `./`, a `//` in
+#    the middle, or an absolute `$HANDOFF_DIR` would each miss the same way and none has a probe —
+#    a rule written for a world this author did not build would be exactly the over-confidence the
+#    bullet above is the scar for.
 review_scope_check() {
-  local phase="${1:-}" before="${2:-}" head_now changed f outside="" n=0
+  local phase="${1:-}" before="${2:-}" head_now changed f outside="" n=0 mission_dir
   [ "$phase" = "REVIEW" ] || return 0
   # `-` is what state_fingerprint answers for a path with no git, and the empty string is what a
   # caller that forgot the argument would pass. Neither is a commit this can diff against.
@@ -2240,6 +2252,17 @@ review_scope_check() {
   # above is a real world, not a hypothetical, and a runner that died there would turn a warning
   # into an outage.
   changed="$( git -C "$REPO_ROOT" diff --name-only "$before" "$head_now" 2>/dev/null || true )"
+  # THE TWO SIDES OF THE MATCH BELOW COME FROM DIFFERENT WORLDS, and this line is what makes them
+  # comparable: `git diff --name-only` prints a path git has already normalised, while
+  # `$HANDOFF_DIR` arrives VERBATIM from the target repo's .sdd/config.sh and is never normalised
+  # anywhere else in this runner. `HANDOFF_DIR="docs/handoffs/"` — a spelling nothing forbids or
+  # documents against — would make the pattern `docs/handoffs//<mission>/*`, which matches no path
+  # git ever prints: the round's OWN report reads as code and the guard warns on every healthy
+  # round, which is precisely the noise the allowlist exists to prevent. A LOOP and not
+  # `${HANDOFF_DIR%/}`, which strips exactly one slash and leaves `docs/handoffs//` broken.
+  mission_dir="$HANDOFF_DIR"
+  while [ "${mission_dir%/}" != "$mission_dir" ]; do mission_dir="${mission_dir%/}"; done
+  mission_dir="$mission_dir/$MISSION"
   while IFS= read -r f; do
     [ -n "$f" ] || continue
     case "$f" in
@@ -2247,7 +2270,7 @@ review_scope_check() {
       # report and the checkpoint the `R<n>` lines go into), the backlog file, and — in the kit's
       # own repo — the ratchet that backlog moves. Flagging these would fire on every healthy
       # round and train the guard's only reader to scroll past it.
-      "$HANDOFF_DIR/$MISSION"/*) continue ;;
+      "$mission_dir"/*) continue ;;
       "$TODO_FILE") continue ;;
       tests/health-baseline.txt) continue ;;
     esac
