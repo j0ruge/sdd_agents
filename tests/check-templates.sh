@@ -167,7 +167,16 @@ check checkpoint.md 'pending'                 "status token 'pending'"
 check checkpoint.md '`done`'                  "status token 'done'"
 check checkpoint.md '`blocked`'               "status token 'blocked'"
 check checkpoint.md '^## Notas de execução'   "section 'Notas de execução'"
-check checkpoint.md '^## Incrementos de fix'  "section 'Incrementos de fix (QA e REVIEW)'"
+# The qualifier is IN the regex, and it is the whole assertion. `20260901-o-revisor-so-acha` widened
+# this section from `(QA)` to `(QA e REVIEW)` — the R<n> increments the review round now writes live
+# beside the QA's F<n> — and a regex that stopped at `de fix` served the heading it replaced exactly
+# as well as the one it names, while the description beside it swore to pin the new one. Measured in the
+# QA phase of that same mission: reverting the template's heading to `(QA)` left this sensor at rc 0,
+# printing `template contract intact` over a template that had lost the contract. Same reasoning and
+# same shape as `## O que virou incremento` below — a heading that REPLACED another is asserted by
+# its new name in full, or the sensor certifies the old one.
+check checkpoint.md '^## Incrementos de fix \(QA e REVIEW\)' \
+  "section 'Incrementos de fix (QA e REVIEW)'"
 
 echo "== templates/handoff.md =="
 for k in missao fase status sessao data gate; do
