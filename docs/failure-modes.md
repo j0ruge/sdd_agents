@@ -420,6 +420,22 @@ what it used to do: 4 REVIEW sessions over 3 invocations, ~US$ 107, and no `BLOC
 the headline can name **0 sessions**: this invocation opened none, because the ceiling refused
 before it could. The line under it names the count that actually refused.
 
+**Since `20260901-o-revisor-so-acha`, a round only finds** — so read the two artifacts the loop
+now runs on before blaming the slicing. In the last `40-review-r<N>.md`, `## Incrementos de conserto
+(R<n>)` says what that round handed to EXEC; in `checkpoint.md`, the `R<n>` rows say what came back.
+Three shapes and three different diagnoses:
+
+- **`R<n>` rows still `pending`** — the loop never closed, it stalled. `current_phase()` sends a
+  pending row back to EXEC before `gate_REVIEW` is ever read, so a `BLOCKED in REVIEW` with pending
+  `R<n>` means the ceiling was reached by rounds that kept *finding*, never by a fix that failed.
+- **`R<n>` rows `done`, and the next round found the same defect again** — the fix did not fix it.
+  That is the honest "badly sliced" case, and the report of the later round says so in its own words.
+- **A round that fixed instead of finding** — `grep REVIEW-EDITED-CODE .sdd/logs/<mission>/pipeline.log`.
+  The runner writes that line when a REVIEW session commits anything outside the mission directory
+  (plus `TODO_FILE` and `tests/health-baseline.txt`). It is a **warning, not a boundary**: the line
+  stops nothing, it only tells you the round paid for a second hat and its Grade A is the reviewer
+  certifying its own repair.
+
 **What you do:** read the last `40-review-r<N>.md` — the real grade is there. If the findings are
 legitimate and large, the mission was badly sliced. If you want the PR anyway, set
 `PUBLISH_ON_REVIEW_BLOCKED="draft"`: out comes a **draft** PR with the current grade and the open
