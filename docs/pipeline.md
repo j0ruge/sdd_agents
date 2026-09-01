@@ -414,6 +414,27 @@ attributed to.
 Where the finding itself should go — the handoff, never a commit into the kit — is in
 [`../CLAUDE.md`](../CLAUDE.md) and in the executor's own instructions.
 
+## The review scope guard
+
+The same idea one phase further on, and the same shape. Since the REVIEW session stopped fixing
+what it finds, the only thing that can say a round honoured that contract is a measurement: the
+contract travels in a boot prompt, and a prompt is a request.
+
+`review_scope_check` runs on `REVIEW` sessions only, at three of the four doors above — `sdd run`'s
+first pass, its inline retry, and `sdd retry`. (`sdd close` is the fourth, and it runs as `CLOSE`.)
+It diffs the `HEAD` the session opened against with the one it left behind, and every path that is
+neither the mission's own directory, nor `TODO_FILE`, nor `tests/health-baseline.txt` gets one
+`warn` and one `REVIEW-EDITED-CODE` line in `.sdd/logs/<mission>/pipeline.log`, naming the files.
+
+It **warns and records; it does not stop the line** — a reviewer that edited a file has already
+spent the money, and refusing the session would throw away the round report with it. It reads
+commits and not the working tree, and it says nothing when the diff cannot be computed (a
+`commit --amend` over the head the session started from), because a guard that accuses on a
+question it could not answer is a guard nobody reads.
+
+`grep -c REVIEW-EDITED-CODE .sdd/logs/<mission>/pipeline.log` answering `0` is what a healthy
+mission looks like.
+
 ## Models per phase
 
 Opus where there is judgement (EXEC, QA, REVIEW, DOCS), Sonnet where the task is mechanical (PR,

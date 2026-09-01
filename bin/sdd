@@ -2195,6 +2195,70 @@ kit_guard_check() {
   KIT_GUARD_BEFORE="$kit_after"
 }
 
+# review_scope_check <phase> <head before the session> — the REVIEW half of the same idea.
+#
+# Since 20260901-o-revisor-so-acha the reviewer is READ-ONLY over the code: it reproduces, grades
+# honestly, and turns every finding that must be fixed into an `R<n>` increment the EXEC phase
+# closes in a session of its own. The prompt is what ASKS for that; this is what MEASURES it. A
+# session that carried the whole review in its context and then fixed inside itself is the cost
+# this mission exists to delete, and it leaves exactly one trace: a commit touching code.
+#
+# A WARN AND A JOURNAL LINE, never a boundary — the same call the kit guard makes, for the same
+# reason. The reviewer that edits a file has already spent the money; refusing the session here
+# would throw away the round report along with it, which is strictly worse than saying so out loud.
+#
+# THREE CALL SITES, placed by hand for the ordering constraint kit_guard_check documents above:
+# cmd_run's first pass, cmd_run's inline retry (with the FIRST pass's head — the retry is reached
+# only when nothing moved, so that head is still HEAD when the retry starts), and cmd_retry.
+# `cmd_close` is the kit guard's fourth door and deliberately not a fourth here: it runs with
+# `phase=CLOSE`, and the first line below answers only to REVIEW. One probe per door, in the
+# `== the REVIEW scope guard ==` block of tests/check-autonomy.sh.
+#
+# ⚠️ DECLARED LIMITS:
+#  · it reads COMMITS, not the working tree. A reviewer that edited a file and left it uncommitted
+#    is invisible here — and also invisible to the gate, which demands a clean tree, so the run
+#    stops for a different reason.
+#  · `commit --amend` on the head the session started from leaves `<before>` unreachable. `git
+#    diff` then fails, the capture is empty, and this function says nothing rather than accusing a
+#    session over a diff it could not compute.
+#  · THE PROJECTION reaches this function — the call sits above cmd_run's DRY_RUN branch, next to
+#    kit_guard_check's — and is silent BY CONSTRUCTION rather than by a guard of its own:
+#    `run_phase` returns before opening a session under DRY_RUN, so both heads are the same commit
+#    and the diff is empty. Unlike `kit_guard_arm`, nothing here is reached from nowhere else
+#    during a projection, so there is no warning for a dry run to inherit. That is the world this
+#    author could build; a `DRY_RUN` early return would be a rule no sabotage of mine turns a probe
+#    red, which d4deb35 is the scar for asserting too confidently.
+review_scope_check() {
+  local phase="${1:-}" before="${2:-}" head_now changed f outside="" n=0
+  [ "$phase" = "REVIEW" ] || return 0
+  # `-` is what state_fingerprint answers for a path with no git, and the empty string is what a
+  # caller that forgot the argument would pass. Neither is a commit this can diff against.
+  [ -n "$before" ] && [ "$before" != "-" ] || return 0
+  head_now="$( git -C "$REPO_ROOT" rev-parse HEAD 2>/dev/null || echo "-" )"
+  [ "$head_now" != "-" ] && [ "$head_now" != "$before" ] || return 0
+  # `|| true` because `set -e` kills the shell AT THE ASSIGNMENT when git refuses — the amend case
+  # above is a real world, not a hypothetical, and a runner that died there would turn a warning
+  # into an outage.
+  changed="$( git -C "$REPO_ROOT" diff --name-only "$before" "$head_now" 2>/dev/null || true )"
+  while IFS= read -r f; do
+    [ -n "$f" ] || continue
+    case "$f" in
+      # The three paths the new contract expects a round to touch: its own mission directory (the
+      # report and the checkpoint the `R<n>` lines go into), the backlog file, and — in the kit's
+      # own repo — the ratchet that backlog moves. Flagging these would fire on every healthy
+      # round and train the guard's only reader to scroll past it.
+      "$HANDOFF_DIR/$MISSION"/*) continue ;;
+      "$TODO_FILE") continue ;;
+      tests/health-baseline.txt) continue ;;
+    esac
+    n=$(( n + 1 ))
+    outside="${outside:+$outside }$f"
+  done <<< "$changed"
+  [ "$n" -gt 0 ] || return 0
+  warn "the $phase session committed $n file(s) outside its mission directory — the reviewer finds and the executor fixes, so a finding belongs in the checkpoint as an R<n> increment: $outside"
+  pipeline_log_line "$(date -Iseconds)  REVIEW-EDITED-CODE  $phase  $n file(s) outside the mission directory: $outside"
+}
+
 # ONE definition of "this path is a throwaway checkout" — ADR 0005, part 3.
 #
 # ⚠️ DECLARED LIMITS, and they are exactly why this is a ratchet against the leak that actually
@@ -4395,6 +4459,11 @@ cmd_run() {
     run_phase "$phase"
     after="$(state_fingerprint)"
     kit_guard_check "$phase"
+    # DOOR 1 of the review scope guard, beside its sibling and on the same terms: it writes only to
+    # pipeline.log, none of state_fingerprint's three inputs, and `after` is already sampled one
+    # line up. `${before%%|*}` is the first field of the fingerprint — the HEAD this session opened
+    # against.
+    review_scope_check "$phase" "${before%%|*}"
 
     # The projection branch stays FIRST, exactly where it is today. This is belt-and-suspenders,
     # not a cost saver: `run_check_cmd` memoizes and `run_phase`'s own dry-run branch returns
@@ -4503,6 +4572,11 @@ cmd_run() {
     # to pipeline.log — none of state_fingerprint's three inputs — but keeping it outside the
     # sampled window means that stays true whatever the fingerprint learns to read tomorrow.
     kit_guard_check "$phase"
+    # DOOR 2, after `moved2` is settled for the same reason. `$before` and NOT `$after`: this retry
+    # is reachable only through the `moved == "false"` guard above, so the first pass changed
+    # nothing and the two heads are the same commit — but reading the one the LAP opened against
+    # keeps that true the day a first pass can move the disk and still land here.
+    review_scope_check "$phase" "${before%%|*}"
     gate_"$phase" || gate_rc2=$?
     # The retry takes NO photograph of its own: the gate ran between the two passes, so the first
     # pass's `pending_after` — `exec_after`, captured above and now already overwritten in the
@@ -4609,6 +4683,9 @@ cmd_retry() {
   run_phase "$phase"
   after="$(state_fingerprint)"
   kit_guard_check "$phase"
+  # DOOR 3. `sdd retry REVIEW` opens a FRESH session that commits and never goes through cmd_run's
+  # loop, so it needs its own call exactly as the kit guard does.
+  review_scope_check "$phase" "${before%%|*}"
   [ "$before" != "$after" ] && moved="true"
   gate_"$phase" || gate_rc=$?
   # DECLARED, NO PROBE — and MEASURED, not assumed. These two guards are inert today: this function

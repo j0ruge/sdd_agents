@@ -2717,6 +2717,21 @@ mut_RUN_review_fixes_inline() {
   sed -i '/^phase_task()/,/^}/ s@^\( *REVIEW).*printf .%s.n. \).*$@\1"review and fix, INSIDE this session, until every criterion is Grade A" ;;@' "$1"
 }
 
+# Not a gate either: the guard that says whether the sentence above was OBEYED goes blind. The
+# mutant returns on the function's own first line, so all three call sites keep calling it and the
+# runner keeps working — it just never notices a reviewer that fixed in place. That is the whole
+# failure mode this instrument exists for: the contract lives in a prompt, and a prompt is a
+# request, so the only thing that can say a round honoured it is the journal line.
+#
+# `return 0` in place of the phase test, and not a deleted call site: a deleted call would measure
+# one of the three doors, and each door already has a probe of its own (the sabotage pass that found
+# the cmd_retry door missing one is written up in check-autonomy.sh). This kills the DEFINITION, so
+# it is the four regimes together that answer. Caught by `a REVIEW session that edited code outside
+# the mission directory is logged REVIEW-EDITED-CODE`.
+mut_RUN_review_scope_blind() {
+  sed -i '/^review_scope_check()/,/^}/ s@^  \[ "\$phase" = "REVIEW" \] || return 0$@  return 0@' "$1"
+}
+
 CATALOG=(
   PLAN_empty_approval
   PLAN_kaizen_born_blind
@@ -2939,6 +2954,7 @@ CATALOG=(
   LEDGER_turns_not_written
   AUTONOMY_review_loop_counts_every_exec
   RUN_review_fixes_inline
+  RUN_review_scope_blind
 )
 
 # Mutations that are NOT caught today, each with the increment that closes it. Ratchet in both

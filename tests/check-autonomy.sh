@@ -4259,6 +4259,198 @@ exit 97
 STUB
 chmod +x "$OUTSIDE/stub/claude"
 
+# =============================================================================
+# THE REVIEW SCOPE GUARD — the reviewer finds, the executor fixes
+# =============================================================================
+# Since 20260901-o-revisor-so-acha the REVIEW session is READ-ONLY over the code: it reproduces,
+# grades honestly, and turns every finding that must be fixed into an `R<n>` increment the EXEC
+# phase closes in a session of its own. `review_scope_check` is the instrument that says whether
+# the contract held — a WARN and a journal line, never a boundary, exactly like the kit guard one
+# screen up. The prompt is what asks; this is what measures.
+#
+# THREE DOORS, one probe each, the shape CLAUDE.md spells out: cmd_run's first pass, cmd_run's
+# inline retry, and cmd_retry. `cmd_close` is the fourth kit-guard door and deliberately NOT a
+# fourth here — it runs with `phase=CLOSE`, and the function's first line answers only to REVIEW.
+#
+# The regimes below are built on a world of their own rather than on $FIX: this block has to derive
+# REVIEW with no `--phase` flag (the retry door lives past `--max-phases`, which returns before
+# cmd_run ever spends its retry), and a run that takes several laps would leave $FIX in a state the
+# assertions after this block describe.
+
+# reviewscope_world <dir> — a target repo sitting at REVIEW with nothing left pending: the
+# increment is `done` and its commit is an ancestor of HEAD, the EXEC handoff is on disk and QA is
+# skipped, so `current_phase` derives REVIEW without being told. CALLED, never substituted: it cds
+# and writes, and there is nothing here worth losing to a subshell.
+reviewscope_world() {
+  mkdir -p "$1"
+  ( cd "$1" || exit 1
+    git init -q -b main
+    git config user.email "fixture@example.com"
+    git config user.name "Fixture"
+    mkdir -p bin tests
+    printf 'echo hello\n' > bin/tool.sh
+    printf 'sensor 1\n' > tests/health-baseline.txt
+    : > TODO.md
+    "$SDD" install >/dev/null
+    cat > .sdd/config.sh <<'CFG'
+PROJECT_NAME="reviewscope"
+DEFAULT_BRANCH="main"
+TEST_CMD="true"
+E2E_CMD=""
+HANDOFF_DIR="docs/handoffs"
+QA_DOCS_PATH="docs/qa"
+TODO_FILE="TODO.md"
+JIRA_ENABLED=false
+CFG
+    mkdir -p "docs/handoffs/$MISSION"
+    cat > "docs/handoffs/$MISSION/00-missao.md" <<'MIS'
+---
+missao: 20260101-fixture
+aprovacao: auto
+---
+# Mission
+MIS
+    : > "docs/handoffs/$MISSION/01-plano.md"
+    printf -- '---\nfase: EXEC\nstatus: done\n---\n' > "docs/handoffs/$MISSION/20-handoff-exec.md"
+    printf -- '---\nfase: QA\nstatus: skipped\n---\n' > "docs/handoffs/$MISSION/30-handoff-qa.md"
+    git add -A && git commit -qm "chore: fixture mission"
+    # Same ordering as every other done-increment fixture in this file: the hash is read BEFORE the
+    # commit that carries it, and a commit follows — gate_EXEC demands an ANCESTOR of HEAD.
+    cat > "docs/handoffs/$MISSION/checkpoint.md" <<EOF
+| ID | Incremento | Check (comando → esperado) | Status | Commit |
+|---|---|---|---|---|
+| I1 | slice one | \`true\` → 0 | done | $(git rev-parse --short HEAD) |
+EOF
+    git add -A && git commit -qm "chore: the increment is done, the mission is in REVIEW" ) >/dev/null 2>&1
+}
+
+# reviewscope_stub <dir> <invocation to fire on> <code|clean> — the REVIEW session.
+#
+# On the chosen invocation it lands `40-review-r1.md` graded B and rewrites the checkpoint with an
+# `R1` line, which is precisely what the new contract asks of the reviewer; in `code` mode it also
+# edits a tracked source file, which is precisely what it must not do. Every other invocation does
+# NOTHING, and that is what makes the retry regime reachable: cmd_run spends its inline retry only
+# when the first pass moved no disk at all.
+#
+# TARGETED `git add`, never `-A`: a blanket add inside the world would sweep up whatever else the
+# run happened to drop there, and the assertion would stop being about the files the session
+# actually wrote. `clean` mode writes all THREE allowed paths — the mission directory, $TODO_FILE
+# and tests/health-baseline.txt — so the control is a statement about the allowlist rather than
+# about one entry of it.
+REVIEWSCOPE_COUNT="$OUTSIDE/reviewscope-count"
+reviewscope_stub() {   # <dir> <fire on> <code|clean>
+  cat > "$OUTSIDE/stub/claude" <<STUB
+#!/usr/bin/env bash
+n=\$(( \$(cat "$REVIEWSCOPE_COUNT" 2>/dev/null || echo 0) + 1 ))
+printf '%s\n' "\$n" > "$REVIEWSCOPE_COUNT"
+if [ "\$n" -eq $2 ]; then
+  cat > "$1/docs/handoffs/$MISSION/40-review-r1.md" <<'MD'
+---
+fase: REVIEW
+gate: r1 landed with one real finding
+---
+### Overall Grade
+
+| Criterion | Grade | Rationale |
+|---|---|---|
+| Correctness | B | One real finding, handed to EXEC as R1. |
+MD
+  cat > "$1/docs/handoffs/$MISSION/checkpoint.md" <<'CK'
+| ID | Incremento | Check (comando → esperado) | Status | Commit |
+|---|---|---|---|---|
+| R1 | finding one | \`true\` → 0 | pending | — |
+CK
+  printf 'a finding for the executor\n' >> "$1/TODO.md"
+  printf 'sensor 2\n' > "$1/tests/health-baseline.txt"
+  git -C "$1" add "docs/handoffs/$MISSION/40-review-r1.md" "docs/handoffs/$MISSION/checkpoint.md" TODO.md tests/health-baseline.txt
+  if [ "$3" = "code" ]; then
+    printf 'echo fixed by the reviewer\n' > "$1/bin/tool.sh"
+    git -C "$1" add bin/tool.sh
+  fi
+  git -C "$1" commit -qm "chore: round one landed"
+fi
+cat "$STREAM_SAMPLE"
+exit 0
+STUB
+  chmod +x "$OUTSIDE/stub/claude"
+}
+
+reviewscope_sessions() { cat "$REVIEWSCOPE_COUNT" 2>/dev/null || printf 0; }
+# The names the journal line reports, or "" when there is no line. `-F': '` (colon SPACE) and not
+# `-F:`: the ISO timestamp that opens every journal line is full of bare colons and none of them is
+# followed by a space.
+reviewscope_files() { awk -F': ' '/REVIEW-EDITED-CODE/ { print $NF; exit }' <<< "$1"; }
+
+# 1. DOOR 1 — the first pass of cmd_run's loop. `--phase REVIEW --max-phases 1` holds the run to the
+#    one session this regime is about; the ceiling returns before the inline retry, which is why
+#    regime 2 below cannot use it. `phase:REVIEW` is demanded so a call copied from the kit guard
+#    with the wrong label still fails, and `files:bin/tool.sh` so a line that fired over the
+#    reviewer's OWN artifacts — the failure mode that would make the guard noise — still fails.
+echo "== the REVIEW scope guard =="
+rm -f "$REVIEWSCOPE_COUNT"
+RS1="$OUTSIDE/reviewscope-door1"
+reviewscope_world "$RS1"
+reviewscope_stub "$RS1" 1 code
+RS1_ERR="$( cd "$RS1" && "$SDD" run "$MISSION" --phase REVIEW --max-phases 1 2>&1 >/dev/null )"
+RS1_LOG="$(cat "$RS1/.sdd/logs/$MISSION/pipeline.log" 2>/dev/null || true)"
+assert_eq "a REVIEW session that edited code outside the mission directory is logged REVIEW-EDITED-CODE" \
+  "sessions:1 lines:1 warns:1 phase:REVIEW n:1 files:bin/tool.sh" \
+  "sessions:$(reviewscope_sessions) lines:$(grep -c 'REVIEW-EDITED-CODE' <<< "$RS1_LOG") warns:$(grep -c 'the reviewer finds and the executor fixes' <<< "$RS1_ERR") phase:$(grep -oE 'REVIEW-EDITED-CODE[[:space:]]+[A-Z]+' <<< "$RS1_LOG" | head -1 | awk '{print $2}') n:$(num_before "$RS1_LOG" 'file\(s\) outside') files:$(reviewscope_files "$RS1_LOG")"
+
+# 2. CONTROL, and it carries the whole allowlist. The same world, the same session count, a session
+#    that COMMITS — `committed:1` is the floor, without which `lines:0` is also the answer of a run
+#    that never opened anything — writing the round, the checkpoint, $TODO_FILE and the health
+#    baseline. Every one of those is a path the new contract expects the reviewer to touch, so a
+#    guard that flagged them would fire on every healthy round and train its only reader to scroll.
+rm -f "$REVIEWSCOPE_COUNT"
+RS2="$OUTSIDE/reviewscope-control"
+reviewscope_world "$RS2"
+reviewscope_stub "$RS2" 1 clean
+RS2_HEAD_BEFORE="$(git -C "$RS2" rev-parse HEAD)"
+RS2_ERR="$( cd "$RS2" && "$SDD" run "$MISSION" --phase REVIEW --max-phases 1 2>&1 >/dev/null )"
+RS2_LOG="$(cat "$RS2/.sdd/logs/$MISSION/pipeline.log" 2>/dev/null || true)"
+assert_eq "a REVIEW session that only wrote the round and the checkpoint is not flagged" \
+  "sessions:1 committed:1 lines:0 warns:0" \
+  "sessions:$(reviewscope_sessions) committed:$([ "$RS2_HEAD_BEFORE" != "$(git -C "$RS2" rev-parse HEAD)" ] && echo 1 || echo 0) lines:$(grep -c 'REVIEW-EDITED-CODE' <<< "$RS2_LOG") warns:$(grep -c 'the reviewer finds and the executor fixes' <<< "$RS2_ERR")"
+
+# 3. DOOR 2 — cmd_run's INLINE RETRY has a check of its own, and only it can see this: the first
+#    session moves nothing (which is exactly what makes the runner spend the retry), the RETRY is
+#    the one that commits into bin/, and door 1 of that lap had already looked and found an
+#    unchanged HEAD. Measured the same way as the kit guard's sibling regime — delete the retry
+#    call site and regimes 1 and 2 stay green while this one reports nothing.
+rm -f "$REVIEWSCOPE_COUNT"
+RS3="$OUTSIDE/reviewscope-retry"
+reviewscope_world "$RS3"
+reviewscope_stub "$RS3" 2 code
+RS3_ERR="$( cd "$RS3" && "$SDD" run "$MISSION" 2>&1 >/dev/null )"
+RS3_LOG="$(cat "$RS3/.sdd/logs/$MISSION/pipeline.log" 2>/dev/null || true)"
+assert_eq "the retry door logs REVIEW-EDITED-CODE too" \
+  "retried:1 lines:1 warns:1 files:bin/tool.sh" \
+  "retried:$([ "$(reviewscope_sessions)" -ge 2 ] && echo 1 || echo 0) lines:$(grep -c 'REVIEW-EDITED-CODE' <<< "$RS3_LOG") warns:$(grep -c 'the reviewer finds and the executor fixes' <<< "$RS3_ERR") files:$(reviewscope_files "$RS3_LOG")"
+
+# 4. DOOR 3 — `sdd retry` is another door that opens a session which commits, and it does not go
+#    through cmd_run's loop at all: its call is its own. THIS REGIME WAS MISSING when the guard
+#    first went green, and the sabotage pass is what said so: deleting the cmd_retry call left
+#    regimes 1-3 green and the suite at rc 0, which is the definition of a door whose removal no
+#    assertion notices. Written the moment that was measured, never after.
+rm -f "$REVIEWSCOPE_COUNT"
+RS4="$OUTSIDE/reviewscope-retry-cmd"
+reviewscope_world "$RS4"
+reviewscope_stub "$RS4" 1 code
+RS4_ERR="$( cd "$RS4" && "$SDD" retry "$MISSION" 2>&1 >/dev/null )"
+RS4_LOG="$(cat "$RS4/.sdd/logs/$MISSION/pipeline.log" 2>/dev/null || true)"
+assert_eq "sdd retry is another door that opens a REVIEW session, and it is guarded too" \
+  "sessions:1 lines:1 warns:1 files:bin/tool.sh" \
+  "sessions:$(reviewscope_sessions) lines:$(grep -c 'REVIEW-EDITED-CODE' <<< "$RS4_LOG") warns:$(grep -c 'the reviewer finds and the executor fixes' <<< "$RS4_ERR") files:$(reviewscope_files "$RS4_LOG")"
+
+# The stub goes back the way it was found, for the reason spelled out one screen up.
+cat > "$OUTSIDE/stub/claude" <<'STUB'
+#!/usr/bin/env bash
+echo "ERROR: the test invoked the real claude" >&2
+exit 97
+STUB
+chmod +x "$OUTSIDE/stub/claude"
+
 # --- the instrument never lands inside the thing it measures ----------------
 # Pins the $OUTSIDE decision at the top of this file. If the ledger, a reader fixture or the kit
 # copy ever moves back under $FIX, the moving stub's `git add -A` commits it into the repo under
