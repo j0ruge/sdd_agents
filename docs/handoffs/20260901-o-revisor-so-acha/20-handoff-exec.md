@@ -2,9 +2,9 @@
 missao: 20260901-o-revisor-so-acha
 fase: EXEC
 status: done
-sessao: ab979cf8-7817-4a40-a40e-461d4ade8a11
-data: 2026-09-01 23:59
-gate: "tests/run-all.sh → 855 asserções `ok`, última linha `suite green`, rc 0 (era 842 em `35863d9`); checkpoint sem linha `pending|doing` — I1 `88432ee`, I2 `03187e8`, I3 `c8c8ec7`, I4 `a84adeb`, todos ancestrais de HEAD; working tree limpa"
+sessao: 4a9e2693-f11f-4976-939a-66179c443b09
+data: 2026-09-02 01:10
+gate: "tests/run-all.sh → 858 asserções `ok`, última linha `suite green`, rc 0 (era 842 em `35863d9`, 855 ao fim dos I1–I4); checkpoint sem linha `pending|doing` — I1 `88432ee`, I2 `03187e8`, I3 `c8c8ec7`, I4 `a84adeb` e o ciclo QA 1 `384e36c` (F1), `48097cd` (F2), `c05b43b` (F3), `b1cfc27` (F4), todos ancestrais de HEAD; working tree limpa"
 ---
 
 # Handoff — EXEC — O revisor só acha
@@ -22,13 +22,21 @@ voltou a consertar (I3), e a documentação + o "antes" do `KAIZEN_LOG` estão e
 re-emite é a fase DOCS, depois do último commit de código. A fase REVIEW desta missão é o
 **primeiro teste real** do desenho novo, e é dela que sai a coluna "Depois" do `KAIZEN_LOG`.
 
+**Ciclo QA 1 (atualização de 2026-09-02):** os quatro `F<n>` que a QA levantou também fecharam —
+`384e36c`, `48097cd`, `c05b43b`, `b1cfc27`. Suíte **858**, catálogo **223**. Detalhe na seção
+`## Ciclo QA 1` abaixo; o resto deste arquivo descreve os I1–I4 e continua válido.
+
 ## Estado do repo
 
-- **Branch:** `feat/o-revisor-so-acha` — 9 commits à frente de `main` (`35863d9`); **não** há push
+> ⚠️ Atualizado em 2026-09-02, no fim do ciclo QA 1. Os números abaixo são os de agora; os do fim
+> dos I1–I4 (9 commits, `a84adeb`, 855 asserções) estão no `git log` e no `gate:` anterior deste
+> arquivo, recuperável por `git log -p` neste caminho.
+
+- **Branch:** `feat/o-revisor-so-acha` — 19 commits à frente de `main` (`35863d9`); **não** há push
   nesta fase.
-- **Último commit:** `a84adeb` `docs(review): o contrato novo entra no schema, nos modos de falha e no KAIZEN_LOG`
+- **Último commit de código:** `b1cfc27` `fix(runner): a barra final em HANDOFF_DIR nao faz a guarda gritar em toda rodada`
 - **Working tree:** limpo (só falta o commit de checkpoint desta sessão, que acompanha este arquivo).
-- **Suíte:** `tests/run-all.sh` → **verde**, 855 asserções `ok`, rc 0 (~85 s).
+- **Suíte:** `tests/run-all.sh` → **verde**, 858 asserções `ok`, rc 0 (~85 s).
 - **E2E:** `E2E_CMD=""` — o kit não tem interface; não rodou por não existir.
 
 ## O que foi feito
@@ -57,6 +65,53 @@ re-emite é a fase DOCS, depois do último commit de código. A fase REVIEW dest
   conferido contra o que pousou), `KAIZEN_LOG.md` (entrada no topo, coluna Depois em aberto) e
   `tests/check-lang.sh` (`docs/graphify.md` entra na superfície; piso 37 → **41**).
 
+## Ciclo QA 1 — os quatro `F<n>`, um commit cada
+
+> Seção acrescentada em 2026-09-02, quando o último `F<n>` fechou. A fase QA
+> (`30-handoff-qa.md`) caminhou 9 jornadas de terminal, confirmou 4 defeitos **reproduzindo cada um
+> antes de virar linha**, e não consertou nenhum — é o mesmo desenho que o I2 acabou de dar à
+> REVIEW, exercitado uma fase antes. Nenhum `BUG-<id>` foi aberto: o registry `docs/qa/bugs/` é das
+> skills e não tem uma linha `Status: open`.
+
+- `384e36c` — **F1, o template parava de contradizer o contrato que o I2 acabou de escrever.**
+  `templates/review.md:19` mandava o TL;DR dizer "o que foi corrigido" e `:64-65` mandavam o achado
+  que "virou correção" reaparecer com hash — apontando para uma seção cuja primeira frase é
+  *"Esta rodada não conserta."* e que não tem coluna de hash. Era o mais urgente dos quatro porque
+  a REVIEW **desta** missão é a primeira a ler esse arquivo. O conserto **não foi só de prosa**:
+  `tests/check-templates.sh` ganhou `refute()`, o espelho de `check()` que passa quando a regex
+  **não** casa — nenhuma asserção positiva enxerga prosa deixada para trás, e o sensor imprimia
+  `template contract intact` sobre um arquivo que mandava fazer o contrário do contrato.
+  `REVIEW_FLOOR` 24 → 26 no mesmo diff.
+- `48097cd` — **F2, um fail-open medido nos dois sentidos.** A asserção do heading do checkpoint
+  casava `'^## Incrementos de fix'`, que serve ao nome **antigo** tão bem quanto ao novo, enquanto
+  o rótulo jurava pinar `Incrementos de fix (QA e REVIEW)`. Reproduzido: revertendo o heading do
+  template para o antigo o sensor respondia `rc=0` — afirmava medir o que não media. A regex
+  apertou; nenhuma asserção nova (857 antes e depois), então nenhum piso se moveu.
+- `c05b43b` — **F3, o sexto lugar do contrato que o I2 mudou em cinco.** `README.md:152` ainda
+  prometia que o `sdd-reviewer` entrega `+ fixes`. A célula do Check pina a **palavra** e não a
+  promessa, o que mordeu no meio da sessão: a primeira redação (`never fixes`) dizia o contrato
+  certo e deixava o Check vermelho. A linha passou a dizer `read-only over the code`, que é a
+  frase do frontmatter do agente — a fonte, não uma paráfrase.
+- `b1cfc27` — **F4, a allowlist da guarda normaliza `HANDOFF_DIR`.** A allowlist de
+  `review_scope_check` casa um **glob** contra o que `git diff --name-only` imprime, e os dois
+  lados vinham de mundos diferentes: o git já normalizou, mas a chave chega **verbatim** do
+  `.sdd/config.sh` do repo-alvo. Com `HANDOFF_DIR="docs/handoffs/"` o padrão virava
+  `docs/handoffs//<missão>/*`, que não casa nada, e a guarda gritava `REVIEW-EDITED-CODE` sobre o
+  próprio `40-review-r<N>.md` em **toda rodada saudável** — o aviso que dispara quando nada está
+  errado ensina seu único leitor a rolar por cima da vez em que algo está. Um **laço** e não
+  `${HANDOFF_DIR%/}`, que tiraria uma barra só. Junto veio a segunda metade da linha: o braço
+  `tests/health-baseline.txt` é **incondicional** embora o comentário o escope "in the kit's own
+  repo" — declarado agora no cabeçalho da função **e** em `docs/pipeline.md`, porque condicioná-lo
+  seria mudança de comportamento sem probe. Regime 5 novo em `check-autonomy.sh`, com o piso
+  `slash:1` provado por sabotagem; mutante `mut_RUN_review_scope_handoff_dir_verbatim`; catálogo
+  222 → 223.
+
+**O que o ciclo custou e o que ele diz:** quatro sessões, quatro commits de conserto, e os quatro
+defeitos são da **mesma família** — contrato mudado em N lugares e sobrevivendo em N+1. Três deles
+(`F1`, `F3` e o achado do diagrama abaixo) só apareceram porque um agente caminhou o artefato à
+mão; a suíte estava verde nos quatro casos. É o achado de instrumento mais forte desta missão e
+está registrado abaixo.
+
 ## Artefatos
 
 | Arquivo | O que contém |
@@ -69,9 +124,13 @@ re-emite é a fase DOCS, depois do último commit de código. A fase REVIEW dest
 
 ## Boot da próxima fase
 
-A próxima fase derivada do disco é **QA**. No kit não há interface: `E2E_CMD` é vazio, `docs/qa/`
-não existe e o runner só abre `QA:close` — a sessão de QA caminha a jornada ela mesma, e a jornada
-aqui é **de linha de comando**.
+> ⚠️ **Atualizado em 2026-09-02.** Quando esta seção foi escrita a próxima fase era a QA; ela
+> rodou (`30-handoff-qa.md`), levantou `F1`–`F4`, e o laço QA⇄EXEC os fechou. Com o checkpoint sem
+> nenhuma linha `pending`, a fase derivada do disco agora é a **REVIEW** — e é ela o primeiro teste
+> real do contrato que esta missão escreveu. O que segue vale para as duas: descreve o diff.
+
+A QA já rodou. No kit não há interface: `E2E_CMD` é vazio, o runner só abre `QA:close` — a sessão
+de QA caminhou a jornada ela mesma, e a jornada aqui é **de linha de comando**.
 
 **O que no diff é visível ao usuário do kit** (o humano que roda `sdd`):
 
@@ -84,7 +143,9 @@ aqui é **de linha de comando**.
 3. `./bin/sdd run <missão> --phase REVIEW --dry-run` imprime um boot prompt **diferente**: manda
    achar e escrever `R<n>`, e não contém mais `review and fix, INSIDE`.
 4. Uma sessão REVIEW que commitar código fora do diretório da missão passa a emitir um `warn` na
-   stderr e uma linha `REVIEW-EDITED-CODE` em `.sdd/logs/<missão>/pipeline.log`.
+   stderr e uma linha `REVIEW-EDITED-CODE` em `.sdd/logs/<missão>/pipeline.log`. **Desde `b1cfc27`
+   isso vale também para quem escreveu `HANDOFF_DIR` com barra final** — antes, esse repo-alvo
+   receberia o aviso em toda rodada saudável, sobre o relatório da própria rodada.
 5. `sdd install --force` re-sincroniza dois agentes (`sdd-reviewer`, `sdd-executor`); os espelhos
    já estão em dia nesta branch (`diff -q` vazio para os sete).
 
@@ -119,13 +180,18 @@ laço de revisão inteiro (REVIEW + EXEC dos `R<n>`) **≤ US$ 40**. A M3 é inv
   `tests/` e `templates/` mudaram. `gate_PR` o exige. Re-emitir é tarefa da DOCS, **depois** do
   último commit de código — e registrar achado no `TODO.md` invalida a chave outra vez
   (`tests/health-baseline.txt` está dentro dela). Ordem: achados → catraca → `./bin/sdd health`.
-- **O catálogo de mutação (222) não foi rodado ponta a ponta nesta fase** — é opt-in desde
-  `4c86712` e seguraria a árvore por >10 min por gate. Cada um dos quatro mutantes novos foi
-  provado numa cópia da árvore (aplica, `cmp` acusa diferença, `bash -n` compila, e o sensor
-  nomeado fica vermelho **só** na asserção nomeada), mas a verificação do catálogo inteiro é da
-  DOCS.
-- **A guarda `REVIEW-EDITED-CODE` avisa, não impede**, e é cega a um `commit --amend` que
-  reescreva o HEAD anterior — limite declarado no cabeçalho da própria função.
+- **O catálogo de mutação (223 depois do `F4`) não foi rodado ponta a ponta nesta fase** — é
+  opt-in desde `4c86712` e seguraria a árvore por >10 min por gate. Cada um dos **cinco** mutantes
+  novos foi provado numa cópia da árvore (aplica, `cmp` acusa diferença, `bash -n` compila, e o
+  sensor nomeado fica vermelho **só** na asserção nomeada), mas a verificação do catálogo inteiro
+  é da DOCS. ⚠️ `b1cfc27` é o **último commit de código** do ciclo — é depois dele que o
+  `./bin/sdd health` re-emite o carimbo, e só depois de a DOCS já ter transportado os achados para
+  o `TODO.md` (a catraca está na chave).
+- **A guarda `REVIEW-EDITED-CODE` avisa, não impede**, e tem três cegueiras declaradas no
+  cabeçalho da própria função: um `commit --amend` que reescreva o HEAD anterior, o braço
+  `tests/health-baseline.txt` que é **incondicional** apesar de existir só para o repo do kit, e a
+  normalização de `HANDOFF_DIR` que tira só barra **final** (um `./` na frente ou um caminho
+  absoluto ainda erram, e nenhum tem probe).
 - **`turns` é um contador do harness, não uma medida de contexto.** Correlaciona com o cache-read
   (corr 0,94 sobre 28 rodadas, R² 0,36 — ordem de grandeza) e não o substitui.
 - **O desenho novo gasta duas rodadas no caminho normal** (r1 é B por desenho quando há o que
@@ -194,3 +260,16 @@ laço de revisão inteiro (REVIEW + EXEC dos `R<n>`) **≤ US$ 40**. A M3 é inv
   frontmatter de `agents/*.md`. Tem consumidor **fora** da suíte do kit (quem adota o kit lê o
   README), então passa a régua de admissão do D15 → `TODO.md` (descoberto por `sdd-executor` na
   missão `20260901-o-revisor-so-acha`, 2026-09-01)
+- **Achado novo desta fase (F4):** **nenhuma chave de caminho do `.sdd/config.sh` é normalizada
+  antes de virar padrão de `case`, e o `F4` fechou só uma delas.** `review_scope_check` compara
+  `$TODO_FILE` **literalmente** contra a saída de `git diff --name-only`; um repo-alvo que escreva
+  `TODO_FILE="./TODO.md"` — ou `HANDOFF_DIR="./docs/handoffs"`, que a normalização nova também não
+  pega — reproduz exatamente o defeito que o `F4` acabou de consertar, com um raio menor.
+  `grep -c 'TODO_FILE#\./' bin/sdd` → `0`; o mesmo vale para toda outra chave de caminho lida do
+  config. Ficou **fora** do diff porque a linha do `F4` nomeia a barra final de `HANDOFF_DIR`, que
+  foi a grafia reproduzida, e porque uma regra escrita para um mundo que este autor não construiu é
+  a sobre-confiança que o `d4deb35`/`7cbc8e2` é a cicatriz — o limite está **declarado** no
+  cabeçalho da função em vez de adivinhado. Passa a régua de admissão do D15 por **consumidor fora
+  da suíte do kit** (é a config de qualquer repo adotante), e o conserto certo é provavelmente uma
+  normalização **única** na leitura do config, com um probe por chave — não um `%/` espalhado
+  → `TODO.md` (descoberto por `sdd-executor` na missão `20260901-o-revisor-so-acha`, 2026-09-02)
