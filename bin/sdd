@@ -2388,6 +2388,10 @@ autonomy_gate_pass_row() {   # autonomy_gate_pass_row <phase>
 # Arguments 10–12 are the same fact for REVIEW, which is a loop by design too: REVIEW_MAX_ITER
 # rounds, each landing its own `40-review-r<N>.md`. Same rule, same reason — empty outside REVIEW,
 # and `rounds_max` is there so "3 of 3, the phase is out of budget" cannot be read as "3 of 10".
+# `turns` is NOT among them: it rides in from LAST_PHASE_TURNS exactly as `cost` does, so the
+# signature and its four callers stay as they are. The escalation and gate_pass constructors do
+# not carry it, for the same reason arguments 7–9 are null outside EXEC — a row that spent no
+# session spent no turns, and a 0 there would be counted as one that ran and said nothing.
 autonomy_session_row() {  # <phase> <attempt> <auto_retry> <moved> <gate> <gate_why> [<pending_before> <pending_after> <increments_total> <rounds_before> <rounds_after> <rounds_max>]
   autonomy_have_jq || return 0
   # Called, never substituted: `$(autonomy_kit_stamp)` would reset its one-shot warning flag.
@@ -2407,6 +2411,7 @@ autonomy_session_row() {  # <phase> <attempt> <auto_retry> <moved> <gate> <gate_
     --arg step "$LAST_PHASE_STEP" --arg agent "$LAST_PHASE_AGENT" \
     --arg model "$LAST_PHASE_MODEL" --arg session "$LAST_PHASE_SID" \
     --arg rc "$LAST_PHASE_RC" --arg dur "$LAST_PHASE_DUR" --arg cost "$LAST_PHASE_COST" \
+    --arg turns "$LAST_PHASE_TURNS" \
     --arg pbefore "${7:-}" --arg pafter "${8:-}" --arg itotal "${9:-}" \
     --arg rbefore "${10:-}" --arg rafter "${11:-}" --arg rmax "${12:-}" \
     '{v: 1, ts: $ts, event: "session",
@@ -2420,6 +2425,7 @@ autonomy_session_row() {  # <phase> <attempt> <auto_retry> <moved> <gate> <gate_
       rc: ($rc | tonumber? // null),
       dur_s: ($dur | tonumber? // null),
       cost_usd: ($cost | tonumber? // null),
+      turns: ($turns | tonumber? // null),
       moved: ($moved == "true"),
       pending_before: ($pbefore | tonumber? // null),
       pending_after: ($pafter | tonumber? // null),
@@ -2490,7 +2496,7 @@ stream_watch() { # stream_watch <stream.jsonl> — background; killed by run_pha
 # the gate passed — the gate judges that, always afterwards).
 run_phase() {
   local phase="$1" resume_sid="${2:-}"
-  local pstep model agent sid prompt logfile streamfile started ended cost
+  local pstep model agent sid prompt logfile streamfile started ended cost turns
   # QA is three sessions (plan, walk, close); the step comes from the artifacts, not a counter.
   pstep="$(phase_step "$phase")"
   model="$(phase_model "$phase")"
@@ -2582,6 +2588,16 @@ missing and write the artifacts. The gate will be re-evaluated."
   # unknown cost to every caller", and this is the caller that has to make that sentence true.
   cost="$(jq -r '.total_cost_usd // .cost_usd // "?"' "$logfile" 2>/dev/null || echo "?")"
   [ -n "$cost" ] || cost="?"
+  # The other half of what a session cost, out of the same distilled summary and on the same
+  # terms. Money alone cannot separate a phase that got cheaper by spending FEWER TURNS from one
+  # that got cheaper by luck, and the two ask for opposite next moves: cache-read grows with
+  # turns² (corr 0.94 over 28 real REVIEW rounds, 2026-09-01) and is about 30% of the bill, so the
+  # turn count is the lever the money is a shadow of. `// ""` and not `// "?"`: the ledger maps
+  # both to null through `tonumber?`, and unlike `cost` this value is never journalled as prose,
+  # so there is no line for a `?` to make readable. Same `|| echo` guard as the cost above, for
+  # the jq that FAILS; the jq that succeeds over an empty summary prints nothing and the empty
+  # string is already the answer this one wants.
+  turns="$(jq -r '.num_turns // ""' "$logfile" 2>/dev/null || echo "")"
   local dur=$((ended - started))
   pipeline_log_line "$(date -Iseconds)  $phase  agent=$agent  model=$model  session=${resume_sid:-$sid}  rc=$rc  dur=${dur}s  cost_usd=$cost  log=$logfile"
 
@@ -2589,6 +2605,7 @@ missing and write the artifacts. The gate will be re-evaluated."
   # result known, and the row carries it.
   LAST_PHASE_RC="$rc"
   LAST_PHASE_COST="$cost"
+  LAST_PHASE_TURNS="$turns"
   LAST_PHASE_DUR="$dur"
   LAST_PHASE_STEP="$pstep"
   LAST_PHASE_AGENT="$agent"
@@ -2610,6 +2627,7 @@ missing and write the artifacts. The gate will be re-evaluated."
 LAST_PHASE_SID=""
 LAST_PHASE_RC=""
 LAST_PHASE_COST=""
+LAST_PHASE_TURNS=""
 LAST_PHASE_DUR=""
 LAST_PHASE_STEP=""
 LAST_PHASE_AGENT=""
@@ -4979,7 +4997,31 @@ cmd_autonomy() {
               # foreign mission that shares the slug (--all-repos) from borrowing this repo notes —
               # the map is keyed by slug alone. Absent, the cell does not print: no `?`, no zero.
               | (if $r == $repo and ($interventions | has($m)) then " · \($interventions[$m]) intervention note(s)" else "" end) as $iv
-              | "  \($label)  \($n) session(s) · \($t.advanced) advanced · \($t.churned) churned · \($t.idle) idle · \($launches) launch(es) · \($reopened) reopened\($iv) · US$ \($cost | usd)"
+              # The review LOOP, which is not the REVIEW phase: it is that phase plus every EXEC
+              # session it sent back — the `R<n>` increments a round writes. Summing the REVIEW
+              # rows alone would call a change that merely MOVED money into the phase next door a
+              # cut. The index of the first REVIEW session is the frontier: EXEC before it is the
+              # mission doing its own work, EXEC after it is the loop. DOCS and PR after the round
+              # are not in it either — they are the pipeline moving on, not the review going round
+              # again. Same shape as $iv above: a mission with no round prints no cell, rather
+              # than a `0%` that would read as a loop that cost nothing.
+              # DECLARED LIMITS, both of them belonging to the metric and written down where the
+              # number is printed: a QA that re-blocks AFTER the first round puts its EXEC rows in
+              # here (they are indistinguishable from an `R<n>` on the ledger alone), and the
+              # percentage is over the COMPARABLE sessions of the mission, the same population the
+              # US$ cell sums — a mission whose rows are half non-comparable reports the share of
+              # the half that is here.
+              | (map(.phase) | index("REVIEW")) as $fr
+              | (if $fr == null then "" else
+                   ([to_entries[]
+                     | select(.value.phase == "REVIEW" or (.value.phase == "EXEC" and .key > $fr))
+                     | .value.cost_usd // 0] | add // 0) as $loop
+                   # The zero guard is not decoration: jq DIES on a division by zero and takes the
+                   # whole command with it, and a mission whose every session cost null sums to 0
+                   # here — the `cost_usd: null` a session that died before its `result` writes.
+                   | " · review loop US$ \($loop | usd)\(if $cost > 0 then " (\(($loop * 100 / $cost) | round)%)" else "" end)"
+                 end) as $rl
+              | "  \($label)  \($n) session(s) · \($t.advanced) advanced · \($t.churned) churned · \($t.idle) idle · \($launches) launch(es) · \($reopened) reopened\($iv)\($rl) · US$ \($cost | usd)"
             ) | join("\n"))
         end)
       elif ($groups | length) == 0 then
@@ -5910,6 +5952,10 @@ USAGE
                              launch(es) (distinct run_id — the intervention count D12 reads),
                              reopened phases, the `- intervention:` notes of the checkpoint when
                              it is on disk, and the mission cost. Same rows, same money, other unit.
+                             `review loop US$ X (N%)` rides along on a mission that had a REVIEW
+                             session: the rounds PLUS the EXEC sessions after the first one — the
+                             R<n> increments a round writes — over the mission cost. Absent, and
+                             never 0%, on a mission that never reviewed.
   sdd kaizen [--dry-run]     judge the previous kit change and give birth to the next kit
                              mission plan (kit repo only; exit 3 = the change made it worse)
   sdd kaizen --series        the deterministic series (JSON) the judge cites — EVERY repo in the

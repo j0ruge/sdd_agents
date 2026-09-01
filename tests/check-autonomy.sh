@@ -221,15 +221,33 @@ sed -i 's/^aprovacao:$/aprovacao: auto/' "$MDIR/00-missao.md"
 # --- real sessions, still offline -------------------------------------------
 # The stub `claude` exits non-zero, so the session does nothing: the gate fails, the disk did not
 # move, the runner retries once and escalates with `no-progress`. Three real rows, no token.
+#
+# It DOES answer with a stream, and that is what makes `turns` reachable here: run_phase reads the
+# turn count out of the same distilled summary it reads the cost from, so a stub that prints
+# nothing measures neither. The sample is the capture MINUS its money and WITH a turn count of its
+# own, derived with jq and never pasted — the provenance rule at the top of this file covers this
+# line too. Costless on purpose, so `unknown cost is null, not a string` below still measures the
+# world it names; 7 and not the capture's own 1, so a writer that hard-coded a 1 (or wrote the
+# `attempt`, which is also 1 on the first row) could not pass by coincidence.
 echo "== session rows =="
 : > "$LEDGER"
+TURNS_SAMPLE="$OUTSIDE/stream-turns.jsonl"
+jq -c 'del(.total_cost_usd, .cost_usd) | if .type == "result" then .num_turns = 7 else . end' \
+  "$STREAM_SAMPLE" > "$TURNS_SAMPLE"
+# The floor of the world this block asserts over: one result object, seven turns in it, no money
+# anywhere. Without it the sample could stop being the sample the assertions name and the two
+# verdicts below would go on agreeing with whatever it became.
+turns_floor="$(jq -rs '[.[] | select(.type == "result")]
+                       | "\(length) \(.[0].num_turns) \([.[] | select(has("total_cost_usd") or has("cost_usd"))] | length)"' \
+                       "$TURNS_SAMPLE")"
 cat > "$MDIR/checkpoint.md" <<'EOF'
 | ID | Incremento | Check (comando → esperado) | Status | Commit |
 |---|---|---|---|---|
 | I1 | slice one | `true` → 0 | pending | — |
 EOF
-cat > "$OUTSIDE/stub/claude" <<'STUB'
+cat > "$OUTSIDE/stub/claude" <<STUB
 #!/usr/bin/env bash
+cat "$TURNS_SAMPLE"
 exit 1
 STUB
 git add -A && git commit -qm "chore: pending increment"
@@ -260,6 +278,18 @@ assert_eq "unknown cost is null, not a string" "true" "$(jq -s '.[0].cost_usd ==
 assert_eq "all three rows share one run_id" "1" \
   "$(jq -s '[.[].run_id] | unique | length' "$LEDGER")"
 assert_eq "the escalation is no-progress" "no-progress" "$(jq -r -s '.[2].kind' "$LEDGER")"
+# How many turns a session spent is the OTHER half of what it cost — cache-read grows with turns²
+# (corr 0.94 over 28 real rounds), so a phase that got cheaper by spending fewer turns and one
+# that got cheaper by luck read the same on money alone. The floor rides beside the verdict for
+# the reason the block header gives.
+assert_eq "a session row carries the turns the session spent" \
+  "1 7 0 7" "$turns_floor $(jq -r -s '.[0].turns' "$LEDGER")"
+# ABSENT, never zeroed — the rule every other session field on an escalation already follows: an
+# escalation spent no session, and a 0 here would enter the judge's arithmetic as a session that
+# ran and said nothing. The event term is this assertion's own floor: `.[2]` has to BE the
+# escalation, or "no turns" is a fact about the wrong row.
+assert_eq "an escalation row carries no turns" "blocked false" \
+  "$(jq -r -s '.[2].event' "$LEDGER") $(jq -r -s '.[2] | has("turns")' "$LEDGER")"
 
 # --- sdd retry is a human-forced session, and that is a first-class signal ---
 # It is literally the rubric's "refez": the human looked at the result and pushed the phase
@@ -2853,6 +2883,42 @@ assert_eq "a checkpoint born verbatim from the template owes no intervention" \
   "$(grep -cE '^  h3  ' <<< "$out_bm3") h3:$(mission_line h3 "$out_bm3" | grep -oE '[0-9]+ intervention note' | grep -oE '^[0-9]+')"
 
 rm -rf "$FIX/docs/handoffs/h1" "$FIX/docs/handoffs/h2" "$FIX/docs/handoffs/h3"
+
+# --- ...and the review loop is a cell of its own ----------------------------
+# The metric of `20260901-o-revisor-so-acha`: what the REVIEW phase costs is not the REVIEW rows
+# alone. Every EXEC session the review sends back — the `R<n>` increments a round writes — is part
+# of the same loop, and summing only the REVIEW rows would report a cut that merely MOVED money
+# into the phase next door. The EXEC sessions BEFORE the first round are the mission's own work
+# and are not in it.
+#
+# DIFFERENTIAL, because one reading cannot tell "counts the loop" from "counts every EXEC": over
+# the same four sessions, the honest cell reads 16.00 (REVIEW 10 + the EXEC after it 6), a reader
+# that dropped the index filter reads 20.00 (the EXEC before it too), and one that summed
+# everything after the round reads 18.00 (the DOCS row rides along). The twin without the round
+# pins the other direction: no REVIEW row, no cell at all — a suffix printed unconditionally would
+# be a "review loop" on a mission that never had one.
+echo "== reader: --by-mission prints the review loop =="
+mkdir -p "$OUTSIDE/reviewloop" "$OUTSIDE/reviewloop_norev"
+localize > "$OUTSIDE/reviewloop/autonomy-log.jsonl" <<'EOF'
+{"v":1,"ts":"2026-09-01T10:00:00-03:00","event":"session","run_id":"r1","invocation":"run","kit_sha":"fffffff","kit_dirty":false,"project":"p1","repo":"/p1","mission":"rl1","phase":"EXEC","step":"EXEC","agent":"sdd-executor","model":"opus","attempt":1,"auto_retry":false,"session":"s1","rc":0,"dur_s":10,"cost_usd":4.0,"moved":true,"gate":"pass","gate_why":"x"}
+{"v":1,"ts":"2026-09-01T10:01:00-03:00","event":"session","run_id":"r1","invocation":"run","kit_sha":"fffffff","kit_dirty":false,"project":"p1","repo":"/p1","mission":"rl1","phase":"REVIEW","step":"REVIEW","agent":"sdd-reviewer","model":"opus","attempt":1,"auto_retry":false,"session":"s2","rc":0,"dur_s":10,"cost_usd":10.0,"moved":true,"gate":"fail","gate_why":"x"}
+{"v":1,"ts":"2026-09-01T10:02:00-03:00","event":"session","run_id":"r1","invocation":"run","kit_sha":"fffffff","kit_dirty":false,"project":"p1","repo":"/p1","mission":"rl1","phase":"EXEC","step":"EXEC","agent":"sdd-executor","model":"opus","attempt":1,"auto_retry":false,"session":"s3","rc":0,"dur_s":10,"cost_usd":6.0,"moved":true,"gate":"pass","gate_why":"x"}
+{"v":1,"ts":"2026-09-01T10:03:00-03:00","event":"session","run_id":"r1","invocation":"run","kit_sha":"fffffff","kit_dirty":false,"project":"p1","repo":"/p1","mission":"rl1","phase":"DOCS","step":"DOCS","agent":"sdd-docs","model":"opus","attempt":1,"auto_retry":false,"session":"s4","rc":0,"dur_s":10,"cost_usd":2.0,"moved":true,"gate":"pass","gate_why":"x"}
+EOF
+# The twin is DERIVED from the first file, never a second hand-written ledger: two hand-written
+# fixtures drift, and the one that drifted would still be green.
+grep -v '"phase":"REVIEW"' "$OUTSIDE/reviewloop/autonomy-log.jsonl" \
+  > "$OUTSIDE/reviewloop_norev/autonomy-log.jsonl"
+out_rl="$(  SDD_STATE_DIR="$OUTSIDE/reviewloop"       "$SDD" autonomy --by-mission 2>&1 )"
+out_rl0="$( SDD_STATE_DIR="$OUTSIDE/reviewloop_norev" "$SDD" autonomy --by-mission 2>&1 )"
+# `|| echo none` covers the whole pipeline, which is the point: "the cell is not there" is an
+# ANSWER here, and the fallback has to name it instead of letting an empty field pass for it.
+rl_cell() { mission_line rl1 "$1" | grep -oE 'review loop US\$ [0-9]+\.[0-9][0-9] \([0-9]+%\)' || echo none; }
+# The presence term comes first, and for the reason the h3 assertion above states: a reader that
+# printed no rl1 line at all would leave the cell field empty, and "absent" is not "none".
+assert_eq "the review loop counts REVIEW and the EXEC sessions after it, never the EXEC before" \
+  "1 review loop US\$ 16.00 (73%) 1 none" \
+  "$(grep -cE '^  rl1  ' <<< "$out_rl") $(rl_cell "$out_rl") $(grep -cE '^  rl1  ' <<< "$out_rl0") $(rl_cell "$out_rl0")"
 
 # --- launches and reopenings: the intervention count comes from the ledger, not from prose --------
 # D16 read the D12 count off `- intervention:` notes, and the notes were never written: the

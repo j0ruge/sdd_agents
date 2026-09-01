@@ -2676,6 +2676,32 @@ mut_RUN_inline_retry_keeps_the_failed_verdict() {
   perl -0pi -e 's/    gate_failed\["\$phase"\]="\$\( \[ "\$gate_rc2" -eq 0 \] && echo 0 \|\| echo 1 \)"\n//' "$1"
 }
 
+# ---------------------------------------------------------------------------
+# 20260901-o-revisor-so-acha — the row says how many turns it spent, and the
+# mission line says what the review LOOP cost.
+# ---------------------------------------------------------------------------
+# `turns` leaves the row. The writer keeps its `--arg` (jq accepts unused ones, so this compiles
+# and the harness cannot dismiss it as broken) and simply stops emitting the field, which is the
+# exact shape `mut_LEDGER_progress_not_written` sabotages one screen up. Every row is then back to
+# money alone — and money alone cannot tell a phase that got cheaper by spending fewer turns from
+# one that got cheaper by luck, which is the whole reason the field exists. Caught by `a session
+# row carries the turns the session spent` in check-autonomy.sh, which reads `null` against the
+# `7` its stub put in the stream.
+mut_LEDGER_turns_not_written() {
+  sed -i '/^      turns: (\$turns/d' "$1"
+}
+
+# The frontier of the review loop goes: every EXEC session of the mission joins it, not just the
+# ones AFTER the first round. The cell then reports work the review never caused — on the fixture,
+# US$ 20.00 (91%) where the honest reading is 16.00 (73%) — and the metric of this very mission
+# would congratulate itself for the EXEC sessions that built the thing. Caught by `the review loop
+# counts REVIEW and the EXEC sessions after it, never the EXEC before` in check-autonomy.sh, whose
+# other half (the twin ledger with no round at all) is blind to this one on purpose: it pins the
+# opposite direction.
+mut_AUTONOMY_review_loop_counts_every_exec() {
+  sed -i 's@(\.value\.phase == "EXEC" and \.key > \$fr)@.value.phase == "EXEC"@' "$1"
+}
+
 CATALOG=(
   PLAN_empty_approval
   PLAN_kaizen_born_blind
@@ -2895,6 +2921,8 @@ CATALOG=(
   RUN_retry_photographs_every_phase
   RUN_retry_exec_photographs_every_phase
   RUN_inline_retry_keeps_the_failed_verdict
+  LEDGER_turns_not_written
+  AUTONOMY_review_loop_counts_every_exec
 )
 
 # Mutations that are NOT caught today, each with the increment that closes it. Ratchet in both
