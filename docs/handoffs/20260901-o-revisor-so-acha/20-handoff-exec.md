@@ -174,3 +174,23 @@ laço de revisão inteiro (REVIEW + EXEC dos `R<n>`) **≤ US$ 40**. A M3 é inv
   que esta fase recusa. Uma varredura da família inteira do arquivo devolve **só** essa (`grep -nE
   '^ *(check\|review_check\|refute) ' tests/check-templates.sh` filtrando parêntese não escapado)
   → `TODO.md` (descoberto por `sdd-executor` na missão `20260901-o-revisor-so-acha`, 2026-09-01)
+- **Achado novo desta fase (F3):** os dois diagramas de ordem canônica — `README.md:12`
+  (`TICKET → EXEC → QA ⇄ EXEC → REVIEW → DOCS → PR`) e `docs/pipeline.md:26`
+  (`PLAN → TICKET → EXEC ⇄ QA → REVIEW → DOCS → PR`) — desenham o laço da QA e deixam `REVIEW` em
+  linha reta, mas desde o I2 o laço `REVIEW ⇄ EXEC` é o **espelho** dele: achado vira `R<n>`
+  `pending`, `gate_EXEC` volta a reprovar e o runner devolve a bola ao executor. O leitor do README
+  sai hoje com o modelo mental que esta missão existe para apagar. Ficou fora do diff do `F3`
+  porque a linha nomeia `README.md:152` e porque consertar só o README o poria **à frente** do doc
+  de referência — é sync de documentação viva, isto é, decisão da fase DOCS desta mesma missão
+  → `TODO.md` se a DOCS não o fizer (descoberto por `sdd-executor` na missão
+  `20260901-o-revisor-so-acha`, 2026-09-01)
+- **Achado novo desta fase (F3):** **nenhum instrumento mede prosa de contrato fora de
+  `templates/`.** O `refute()` que o `F1` acabou de criar (`tests/check-templates.sh`) só lê
+  `templates/`; `README.md` e `docs/*.md` entram na `surface()` do `tests/check-lang.sh`, que mede
+  **idioma** e nada mais. Consequência medida nesta missão: o I2 mudou o contrato em cinco lugares,
+  o sexto (`README.md:152`) sobreviveu à suíte verde e só apareceu numa jornada de QA caminhada por
+  um agente — e o sétimo (o diagrama, acima) sobreviveu à própria QA. Candidato: um `refute()`
+  sobre a superfície de docs, ou uma regra que ligue a tabela dos 6 agentes do `README.md` ao
+  frontmatter de `agents/*.md`. Tem consumidor **fora** da suíte do kit (quem adota o kit lê o
+  README), então passa a régua de admissão do D15 → `TODO.md` (descoberto por `sdd-executor` na
+  missão `20260901-o-revisor-so-acha`, 2026-09-01)
