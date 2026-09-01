@@ -164,3 +164,13 @@ laço de revisão inteiro (REVIEW + EXEC dos `R<n>`) **≤ US$ 40**. A M3 é inv
   que recontar. Candidato: derivar o piso, ou um sensor que compare piso × superfície real em
   todos os sensores que têm um → `TODO.md` (descoberto por `sdd-executor` na missão
   `20260901-o-revisor-so-acha`, 2026-09-01)
+- **Achado novo desta fase (F2):** a asserção vizinha `review_check '^## Incrementos de conserto'`
+  (`tests/check-templates.sh`) tem o **mesmo formato** do defeito que o `F2` acabou de fechar — o
+  rótulo promete `Incrementos de conserto (R<n>)` e a regex para em `conserto`. **Medido** nesta
+  sessão: com o heading do template trocado para `## Incrementos de conserto (F<n>)`, o sensor
+  responde `rc=0`. É um caso mais fraco que o do `F2` — nenhum heading foi *substituído* aqui, então
+  a regex frouxa não certifica um contrato antigo, só admite um sufixo que nunca existiu —, e por
+  isso ficou **fora** do diff: o `F2` nomeia uma linha, e apertar a vizinha é o "já que estou aqui"
+  que esta fase recusa. Uma varredura da família inteira do arquivo devolve **só** essa (`grep -nE
+  '^ *(check\|review_check\|refute) ' tests/check-templates.sh` filtrando parêntese não escapado)
+  → `TODO.md` (descoberto por `sdd-executor` na missão `20260901-o-revisor-so-acha`, 2026-09-01)
