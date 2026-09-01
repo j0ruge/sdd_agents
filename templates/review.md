@@ -16,7 +16,8 @@ gate: <a evidência de que o gate desta rodada passou — TEST_CMD resumido e á
 
 ## TL;DR
 
-<No máximo 5 linhas. O que foi revisado, quantos achados, o que foi corrigido, o que sobrou.>
+<No máximo 5 linhas. O que foi revisado, quantos achados, quantos viraram `R<n>`, o que sobrou.
+Esta rodada não conserta: o que ela entrega é a nota, os achados e os incrementos.>
 
 ## Nota da rodada
 
@@ -61,8 +62,9 @@ inclusive o campo escrito e deixado em branco.
 
 ## Achados da rodada
 
-> Um item por achado, com severidade e âncora em `arquivo:linha`. O achado que virou correção
-> aparece de novo na seção seguinte, com hash; o que foi refutado, na de baixo, com evidência.
+> Um item por achado, com severidade e âncora em `arquivo:linha`. O achado que precisa de conserto
+> aparece de novo na seção seguinte, como incremento `R<n>` — nunca com hash: quem conserta é o
+> executor, na sessão de depois. O que foi refutado vai para `## O que foi refutado`, com evidência.
 
 | # | Severidade | Achado | Onde |
 |---|---|---|---|

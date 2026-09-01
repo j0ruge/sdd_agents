@@ -49,6 +49,31 @@ check() { # check <file> <regex> <description>
   fi
 }
 
+# The mirror of check(), and the half of the contract check() cannot express: what a template must
+# NOT carry. Prose left behind is invisible to every positive assertion in this file — the sections
+# are all there, the gate parses, the sensor says `intact` — while the template goes on instructing
+# the session to do the thing the mission deleted. Measured in `20260901-o-revisor-so-acha`: the
+# round stopped fixing in I2, and templates/review.md kept telling the TL;DR to say "o que foi
+# corrigido" and the finding that "virou correção" to reappear "com hash" in a section whose first
+# sentence is "Esta rodada não conserta." — a template that argues with itself, aimed at the very
+# first round to read it.
+#
+# grep rc is THREE-valued here and the case below reads all three: 1 (absent) is the only pass.
+# `grep -q ... || rc=1` would have folded rc 2 into the pass and let a missing or unreadable file
+# certify every refutation in this file — the fail-open check() pays a probe to avoid one line up.
+refute() { # refute <file> <regex> <description> — passes when the regex does NOT match
+  local rc=0
+  grep -qE "$2" "$T/$1" 2>/dev/null || rc=$?
+  CHECKS_RUN=$((CHECKS_RUN + 1))
+  case "$rc" in
+    1) printf '  ok   %s: does not carry %s\n' "$1" "$3" ;;
+    0) printf '  FAIL %s: still carries %s (regex: %s)\n' "$1" "$3" "$2" >&2
+       fails=$((fails + 1)) ;;
+    *) printf '  FAIL %s: could not be read to refute %s (grep rc=%s)\n' "$1" "$3" "$rc" >&2
+       fails=$((fails + 1)) ;;
+  esac
+}
+
 # --- selftest ----------------------------------------------------------------------------------
 # The debt CLAUDE.md names for this file, paid. Four of the five sensors the mutation catalogue
 # cannot reach carry a selftest; this one carried REVIEW_FLOOR and a declared adversarial pass
@@ -82,9 +107,25 @@ selftest() {
   [ "$fails" -eq "$((fails_keep + 2))" ] \
     || broken "check() stayed silent over a file that does not exist"
 
-  # And the counter the floor reads counts GREPS, not calls: three checks above, three counted.
-  [ "$CHECKS_RUN" -eq "$((run_keep + 3))" ] \
-    || broken "CHECKS_RUN moved by $((CHECKS_RUN - run_keep)) over 3 checks — the floor is counting something other than the greps it performed"
+  # refute() gets the same treatment, and it needs it more: a primitive whose pass is the SILENCE
+  # of a grep degrades into a no-op without changing a single line of output. Neutered, every
+  # `does not carry` line below becomes a claim about a grep nobody ran.
+  refute probe.md '^nope' 'a regex that does not match' >/dev/null 2>&1
+  [ "$fails" -eq "$((fails_keep + 2))" ] \
+    || broken "refute() counted a failure over a regex that does NOT match — a refutation that refuses every world refutes nothing"
+
+  refute probe.md '^hello' 'a regex that DOES match' >/dev/null 2>&1
+  [ "$fails" -eq "$((fails_keep + 3))" ] \
+    || broken "refute() stayed silent over prose that IS there — the forbidden-prose rules are decoration"
+
+  # rc 2, the fail-open that the case in refute() exists to close: no file, no verdict.
+  refute absent.md '^anything' 'a file that is not there' >/dev/null 2>&1
+  [ "$fails" -eq "$((fails_keep + 4))" ] \
+    || broken "refute() passed over a file it could not read — an unreadable template refutes everything for free"
+
+  # And the counter the floor reads counts GREPS, not calls: six probes above, six counted.
+  [ "$CHECKS_RUN" -eq "$((run_keep + 6))" ] \
+    || broken "CHECKS_RUN moved by $((CHECKS_RUN - run_keep)) over 6 checks — the floor is counting something other than the greps it performed"
 
   rm -rf "$box"
   T="$T_KEEP"; fails="$fails_keep"; CHECKS_RUN="$run_keep"
@@ -218,15 +259,27 @@ review_check '^## Incrementos de conserto' "section 'Incrementos de conserto (R<
 # that fixed in place wrote; keeping the old heading beside the new one would let a template ship
 # both and a session pick either, which is how a contract stops being one.
 review_check '^## O que virou incremento' "section 'O que virou incremento'"
+# The other half of the same contract, and the half the sections above cannot see. Both headings
+# can be present and correct while the PROSE between them still sends the round back to fixing:
+# the TL;DR asking what it corrected, and the findings table promising the fixed one reappears
+# "com hash" in a section that opens with "Esta rodada não conserta." and has no hash column. That
+# is what shipped in I2 and what the QA phase caught reading the template as a reviewer would.
+# Anchored on the words the prose used, not on a whole sentence: a rewrite that keeps the
+# instruction keeps the words, and a rewrite that drops the instruction has no reason to keep them.
+refute review.md 'o que foi corrigido' \
+  "the TL;DR field 'o que foi corrigido' — a round that does not fix has no correction to summarise"
+refute review.md 'virou correção' \
+  "the pointer sending a finding that 'virou correção' to a next section with a hash column"
 
 # The floor is what turns "no assertion failed" into "the assertions ran". Deleting the loops above
 # would otherwise leave this file green while measuring nothing about the file it names — the
 # vacuity every sensor in this suite carries a floor against.
 REVIEW_ASSERTIONS=$((CHECKS_RUN - REVIEW_MARK))
-# 23 → 24 in `20260901-o-revisor-so-acha`, with the `## Incrementos de conserto` section. A floor
-# left behind still PASSES while describing a smaller surface than the one it reads, which is the
-# same fail-open as a floor of zero — recounted in the commit that adds the rule, never later.
-REVIEW_FLOOR=24
+# 23 → 24 in `20260901-o-revisor-so-acha`, with the `## Incrementos de conserto` section, then
+# 24 → 26 in the F1 of the same mission, with the two `refute` rules above. A floor left behind
+# still PASSES while describing a smaller surface than the one it reads, which is the same
+# fail-open as a floor of zero — recounted in the commit that adds the rule, never later.
+REVIEW_FLOOR=26
 if [ "$REVIEW_ASSERTIONS" -lt "$REVIEW_FLOOR" ]; then
   printf '  FAIL review.md: only %d assertion(s) ran, expected at least %d — a clean report over\n' \
     "$REVIEW_ASSERTIONS" "$REVIEW_FLOOR" >&2
@@ -237,7 +290,7 @@ elif [ "$fails" -ne "$REVIEW_FAILS_BEFORE" ]; then
   # verdicts share a stream cannot be read by a grep, and this one IS read by a grep.
   :
 else
-  printf '  ok    rule: the review template carries the heading and table gate_REVIEW parses (%d assertion(s))\n' \
+  printf '  ok    rule: the review template carries the heading and table gate_REVIEW parses, and none of the prose the round no longer honours (%d assertion(s))\n' \
     "$REVIEW_ASSERTIONS"
 fi
 
