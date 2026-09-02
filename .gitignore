@@ -16,3 +16,9 @@
 # QA living docs — generated views & bulky evidence (source of truth: docs/qa/scenarios/ etc.)
 docs/qa/state.csv
 docs/qa/evidence/
+
+# Graphify — the knowledge graph is a GENERATED artifact and stays out of git entirely (the
+# sales_quote pilot versioned 11.5 MB and its post-commit hook dirtied the tree after every
+# commit — a dirty tree fails gate_REVIEW and sdd preflight). Rebuild: `graphify update .`
+# (~1 s, AST only, zero API). `.graphifyignore` stays VERSIONED: it defines the scope.
+graphify-out/

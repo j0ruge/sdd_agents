@@ -221,15 +221,33 @@ sed -i 's/^aprovacao:$/aprovacao: auto/' "$MDIR/00-missao.md"
 # --- real sessions, still offline -------------------------------------------
 # The stub `claude` exits non-zero, so the session does nothing: the gate fails, the disk did not
 # move, the runner retries once and escalates with `no-progress`. Three real rows, no token.
+#
+# It DOES answer with a stream, and that is what makes `turns` reachable here: run_phase reads the
+# turn count out of the same distilled summary it reads the cost from, so a stub that prints
+# nothing measures neither. The sample is the capture MINUS its money and WITH a turn count of its
+# own, derived with jq and never pasted — the provenance rule at the top of this file covers this
+# line too. Costless on purpose, so `unknown cost is null, not a string` below still measures the
+# world it names; 7 and not the capture's own 1, so a writer that hard-coded a 1 (or wrote the
+# `attempt`, which is also 1 on the first row) could not pass by coincidence.
 echo "== session rows =="
 : > "$LEDGER"
+TURNS_SAMPLE="$OUTSIDE/stream-turns.jsonl"
+jq -c 'del(.total_cost_usd, .cost_usd) | if .type == "result" then .num_turns = 7 else . end' \
+  "$STREAM_SAMPLE" > "$TURNS_SAMPLE"
+# The floor of the world this block asserts over: one result object, seven turns in it, no money
+# anywhere. Without it the sample could stop being the sample the assertions name and the two
+# verdicts below would go on agreeing with whatever it became.
+turns_floor="$(jq -rs '[.[] | select(.type == "result")]
+                       | "\(length) \(.[0].num_turns) \([.[] | select(has("total_cost_usd") or has("cost_usd"))] | length)"' \
+                       "$TURNS_SAMPLE")"
 cat > "$MDIR/checkpoint.md" <<'EOF'
 | ID | Incremento | Check (comando → esperado) | Status | Commit |
 |---|---|---|---|---|
 | I1 | slice one | `true` → 0 | pending | — |
 EOF
-cat > "$OUTSIDE/stub/claude" <<'STUB'
+cat > "$OUTSIDE/stub/claude" <<STUB
 #!/usr/bin/env bash
+cat "$TURNS_SAMPLE"
 exit 1
 STUB
 git add -A && git commit -qm "chore: pending increment"
@@ -260,6 +278,18 @@ assert_eq "unknown cost is null, not a string" "true" "$(jq -s '.[0].cost_usd ==
 assert_eq "all three rows share one run_id" "1" \
   "$(jq -s '[.[].run_id] | unique | length' "$LEDGER")"
 assert_eq "the escalation is no-progress" "no-progress" "$(jq -r -s '.[2].kind' "$LEDGER")"
+# How many turns a session spent is the OTHER half of what it cost — cache-read grows with turns²
+# (corr 0.94 over 28 real rounds), so a phase that got cheaper by spending fewer turns and one
+# that got cheaper by luck read the same on money alone. The floor rides beside the verdict for
+# the reason the block header gives.
+assert_eq "a session row carries the turns the session spent" \
+  "1 7 0 7" "$turns_floor $(jq -r -s '.[0].turns' "$LEDGER")"
+# ABSENT, never zeroed — the rule every other session field on an escalation already follows: an
+# escalation spent no session, and a 0 here would enter the judge's arithmetic as a session that
+# ran and said nothing. The event term is this assertion's own floor: `.[2]` has to BE the
+# escalation, or "no turns" is a fact about the wrong row.
+assert_eq "an escalation row carries no turns" "blocked false" \
+  "$(jq -r -s '.[2].event' "$LEDGER") $(jq -r -s '.[2] | has("turns")' "$LEDGER")"
 
 # --- sdd retry is a human-forced session, and that is a first-class signal ---
 # It is literally the rubric's "refez": the human looked at the result and pushed the phase
@@ -2854,6 +2884,42 @@ assert_eq "a checkpoint born verbatim from the template owes no intervention" \
 
 rm -rf "$FIX/docs/handoffs/h1" "$FIX/docs/handoffs/h2" "$FIX/docs/handoffs/h3"
 
+# --- ...and the review loop is a cell of its own ----------------------------
+# The metric of `20260901-o-revisor-so-acha`: what the REVIEW phase costs is not the REVIEW rows
+# alone. Every EXEC session the review sends back — the `R<n>` increments a round writes — is part
+# of the same loop, and summing only the REVIEW rows would report a cut that merely MOVED money
+# into the phase next door. The EXEC sessions BEFORE the first round are the mission's own work
+# and are not in it.
+#
+# DIFFERENTIAL, because one reading cannot tell "counts the loop" from "counts every EXEC": over
+# the same four sessions, the honest cell reads 16.00 (REVIEW 10 + the EXEC after it 6), a reader
+# that dropped the index filter reads 20.00 (the EXEC before it too), and one that summed
+# everything after the round reads 18.00 (the DOCS row rides along). The twin without the round
+# pins the other direction: no REVIEW row, no cell at all — a suffix printed unconditionally would
+# be a "review loop" on a mission that never had one.
+echo "== reader: --by-mission prints the review loop =="
+mkdir -p "$OUTSIDE/reviewloop" "$OUTSIDE/reviewloop_norev"
+localize > "$OUTSIDE/reviewloop/autonomy-log.jsonl" <<'EOF'
+{"v":1,"ts":"2026-09-01T10:00:00-03:00","event":"session","run_id":"r1","invocation":"run","kit_sha":"fffffff","kit_dirty":false,"project":"p1","repo":"/p1","mission":"rl1","phase":"EXEC","step":"EXEC","agent":"sdd-executor","model":"opus","attempt":1,"auto_retry":false,"session":"s1","rc":0,"dur_s":10,"cost_usd":4.0,"moved":true,"gate":"pass","gate_why":"x"}
+{"v":1,"ts":"2026-09-01T10:01:00-03:00","event":"session","run_id":"r1","invocation":"run","kit_sha":"fffffff","kit_dirty":false,"project":"p1","repo":"/p1","mission":"rl1","phase":"REVIEW","step":"REVIEW","agent":"sdd-reviewer","model":"opus","attempt":1,"auto_retry":false,"session":"s2","rc":0,"dur_s":10,"cost_usd":10.0,"moved":true,"gate":"fail","gate_why":"x"}
+{"v":1,"ts":"2026-09-01T10:02:00-03:00","event":"session","run_id":"r1","invocation":"run","kit_sha":"fffffff","kit_dirty":false,"project":"p1","repo":"/p1","mission":"rl1","phase":"EXEC","step":"EXEC","agent":"sdd-executor","model":"opus","attempt":1,"auto_retry":false,"session":"s3","rc":0,"dur_s":10,"cost_usd":6.0,"moved":true,"gate":"pass","gate_why":"x"}
+{"v":1,"ts":"2026-09-01T10:03:00-03:00","event":"session","run_id":"r1","invocation":"run","kit_sha":"fffffff","kit_dirty":false,"project":"p1","repo":"/p1","mission":"rl1","phase":"DOCS","step":"DOCS","agent":"sdd-docs","model":"opus","attempt":1,"auto_retry":false,"session":"s4","rc":0,"dur_s":10,"cost_usd":2.0,"moved":true,"gate":"pass","gate_why":"x"}
+EOF
+# The twin is DERIVED from the first file, never a second hand-written ledger: two hand-written
+# fixtures drift, and the one that drifted would still be green.
+grep -v '"phase":"REVIEW"' "$OUTSIDE/reviewloop/autonomy-log.jsonl" \
+  > "$OUTSIDE/reviewloop_norev/autonomy-log.jsonl"
+out_rl="$(  SDD_STATE_DIR="$OUTSIDE/reviewloop"       "$SDD" autonomy --by-mission 2>&1 )"
+out_rl0="$( SDD_STATE_DIR="$OUTSIDE/reviewloop_norev" "$SDD" autonomy --by-mission 2>&1 )"
+# `|| echo none` covers the whole pipeline, which is the point: "the cell is not there" is an
+# ANSWER here, and the fallback has to name it instead of letting an empty field pass for it.
+rl_cell() { mission_line rl1 "$1" | grep -oE 'review loop US\$ [0-9]+\.[0-9][0-9] \([0-9]+%\)' || echo none; }
+# The presence term comes first, and for the reason the h3 assertion above states: a reader that
+# printed no rl1 line at all would leave the cell field empty, and "absent" is not "none".
+assert_eq "the review loop counts REVIEW and the EXEC sessions after it, never the EXEC before" \
+  "1 review loop US\$ 16.00 (73%) 1 none" \
+  "$(grep -cE '^  rl1  ' <<< "$out_rl") $(rl_cell "$out_rl") $(grep -cE '^  rl1  ' <<< "$out_rl0") $(rl_cell "$out_rl0")"
+
 # --- launches and reopenings: the intervention count comes from the ledger, not from prose --------
 # D16 read the D12 count off `- intervention:` notes, and the notes were never written: the
 # mission with three launches (SQ-111, 2026-08-27) had zero. `run_id` is on every row of every
@@ -4186,6 +4252,368 @@ assert_eq "kit-guard: sdd close opens a session too, and it is guarded like ever
 # anything and an `acli` that answers `[]` to every question, and would never see why their new
 # assertion passed.
 rm -f "$OUTSIDE/stub/acli"
+cat > "$OUTSIDE/stub/claude" <<'STUB'
+#!/usr/bin/env bash
+echo "ERROR: the test invoked the real claude" >&2
+exit 97
+STUB
+chmod +x "$OUTSIDE/stub/claude"
+
+# =============================================================================
+# THE REVIEW SCOPE GUARD — the reviewer finds, the executor fixes
+# =============================================================================
+# Since 20260901-o-revisor-so-acha the REVIEW session is READ-ONLY over the code: it reproduces,
+# grades honestly, and turns every finding that must be fixed into an `R<n>` increment the EXEC
+# phase closes in a session of its own. `review_scope_check` is the instrument that says whether
+# the contract held — a WARN and a journal line, never a boundary, exactly like the kit guard one
+# screen up. The prompt is what asks; this is what measures.
+#
+# THREE DOORS, one probe each, the shape CLAUDE.md spells out: cmd_run's first pass, cmd_run's
+# inline retry, and cmd_retry. `cmd_close` is the fourth kit-guard door and deliberately NOT a
+# fourth here — it runs with `phase=CLOSE`, and the function's first line answers only to REVIEW.
+#
+# The regimes below are built on a world of their own rather than on $FIX: this block has to derive
+# REVIEW with no `--phase` flag (the retry door lives past `--max-phases`, which returns before
+# cmd_run ever spends its retry), and a run that takes several laps would leave $FIX in a state the
+# assertions after this block describe.
+
+# reviewscope_world <dir> [HANDOFF_DIR, as the target repo spells it] — a target repo sitting at
+# REVIEW with nothing left pending: the increment is `done` and its commit is an ancestor of HEAD,
+# the EXEC handoff is on disk and QA is skipped, so `current_phase` derives REVIEW without being
+# told. CALLED, never substituted: it cds and writes, and there is nothing here worth losing to a
+# subshell.
+#
+# The second argument is the SPELLING of the key and never the directory: the mission always lands
+# in `docs/handoffs/$MISSION` on disk, because a trailing slash resolves to the same directory and
+# regime 5 is about the string the allowlist matches, not about where the files are.
+reviewscope_world() {
+  mkdir -p "$1"
+  ( cd "$1" || exit 1
+    git init -q -b main
+    git config user.email "fixture@example.com"
+    git config user.name "Fixture"
+    # core.quotePath is git's OWN DEFAULT; it is pinned here so regime 6 measures the world it
+    # names on a machine whose ~/.gitconfig turned it off — a probe whose venom depends on the
+    # reader's global config is a probe that quietly stops being one. Regimes 1-5 are all-ASCII,
+    # so for them this line is a no-op.
+    git config core.quotePath true
+    mkdir -p bin tests
+    printf 'echo hello\n' > bin/tool.sh
+    printf 'sensor 1\n' > tests/health-baseline.txt
+    : > TODO.md
+    "$SDD" install >/dev/null
+    cat > .sdd/config.sh <<CFG
+PROJECT_NAME="reviewscope"
+DEFAULT_BRANCH="main"
+TEST_CMD="true"
+E2E_CMD=""
+HANDOFF_DIR="${2:-docs/handoffs}"
+QA_DOCS_PATH="docs/qa"
+TODO_FILE="TODO.md"
+JIRA_ENABLED=false
+CFG
+    mkdir -p "docs/handoffs/$MISSION"
+    cat > "docs/handoffs/$MISSION/00-missao.md" <<'MIS'
+---
+missao: 20260101-fixture
+aprovacao: auto
+---
+# Mission
+MIS
+    : > "docs/handoffs/$MISSION/01-plano.md"
+    printf -- '---\nfase: EXEC\nstatus: done\n---\n' > "docs/handoffs/$MISSION/20-handoff-exec.md"
+    printf -- '---\nfase: QA\nstatus: skipped\n---\n' > "docs/handoffs/$MISSION/30-handoff-qa.md"
+    git add -A && git commit -qm "chore: fixture mission"
+    # Same ordering as every other done-increment fixture in this file: the hash is read BEFORE the
+    # commit that carries it, and a commit follows — gate_EXEC demands an ANCESTOR of HEAD.
+    cat > "docs/handoffs/$MISSION/checkpoint.md" <<EOF
+| ID | Incremento | Check (comando → esperado) | Status | Commit |
+|---|---|---|---|---|
+| I1 | slice one | \`true\` → 0 | done | $(git rev-parse --short HEAD) |
+EOF
+    git add -A && git commit -qm "chore: the increment is done, the mission is in REVIEW" ) >/dev/null 2>&1
+}
+
+# reviewscope_stub <dir> <invocation to fire on> <code|clean> — the REVIEW session.
+#
+# On the chosen invocation it lands `40-review-r1.md` graded B and rewrites the checkpoint with an
+# `R1` line, which is precisely what the new contract asks of the reviewer; in `code` mode it also
+# edits a tracked source file, which is precisely what it must not do. Every other invocation does
+# NOTHING, and that is what makes the retry regime reachable: cmd_run spends its inline retry only
+# when the first pass moved no disk at all.
+#
+# TARGETED `git add`, never `-A`: a blanket add inside the world would sweep up whatever else the
+# run happened to drop there, and the assertion would stop being about the files the session
+# actually wrote. `clean` mode writes all THREE allowed paths — the mission directory, $TODO_FILE
+# and tests/health-baseline.txt — so the control is a statement about the allowlist rather than
+# about one entry of it.
+#
+# The optional FOURTH argument is one more file the round drops inside its own mission directory,
+# named by the caller. Regime 6 uses it for a name that is not ASCII; it is empty everywhere else,
+# and then the block below is written into the stub as a dead `if [ -n "" ]`.
+REVIEWSCOPE_COUNT="$OUTSIDE/reviewscope-count"
+reviewscope_stub() {   # <dir> <fire on> <code|clean> [extra file inside the mission directory]
+  local extra="${4:-}"
+  cat > "$OUTSIDE/stub/claude" <<STUB
+#!/usr/bin/env bash
+n=\$(( \$(cat "$REVIEWSCOPE_COUNT" 2>/dev/null || echo 0) + 1 ))
+printf '%s\n' "\$n" > "$REVIEWSCOPE_COUNT"
+if [ "\$n" -eq $2 ]; then
+  cat > "$1/docs/handoffs/$MISSION/40-review-r1.md" <<'MD'
+---
+fase: REVIEW
+gate: r1 landed with one real finding
+---
+### Overall Grade
+
+| Criterion | Grade | Rationale |
+|---|---|---|
+| Correctness | B | One real finding, handed to EXEC as R1. |
+MD
+  cat > "$1/docs/handoffs/$MISSION/checkpoint.md" <<'CK'
+| ID | Incremento | Check (comando → esperado) | Status | Commit |
+|---|---|---|---|---|
+| R1 | finding one | \`true\` → 0 | pending | — |
+CK
+  printf 'a finding for the executor\n' >> "$1/TODO.md"
+  printf 'sensor 2\n' > "$1/tests/health-baseline.txt"
+  git -C "$1" add "docs/handoffs/$MISSION/40-review-r1.md" "docs/handoffs/$MISSION/checkpoint.md" TODO.md tests/health-baseline.txt
+  if [ -n "$extra" ]; then
+    printf 'one more artifact of the round\n' > "$1/docs/handoffs/$MISSION/$extra"
+    git -C "$1" add "docs/handoffs/$MISSION/$extra"
+  fi
+  if [ "$3" = "code" ]; then
+    printf 'echo fixed by the reviewer\n' > "$1/bin/tool.sh"
+    git -C "$1" add bin/tool.sh
+  fi
+  git -C "$1" commit -qm "chore: round one landed"
+fi
+cat "$STREAM_SAMPLE"
+exit 0
+STUB
+  chmod +x "$OUTSIDE/stub/claude"
+}
+
+reviewscope_sessions() { cat "$REVIEWSCOPE_COUNT" 2>/dev/null || printf 0; }
+# The names the journal line reports, or "" when there is no line. `-F': '` (colon SPACE) and not
+# `-F:`: the ISO timestamp that opens every journal line is full of bare colons and none of them is
+# followed by a space.
+reviewscope_files() { awk -F': ' '/REVIEW-EDITED-CODE/ { print $NF; exit }' <<< "$1"; }
+
+# 1. DOOR 1 — the first pass of cmd_run's loop. `--phase REVIEW --max-phases 1` holds the run to the
+#    one session this regime is about; the ceiling returns before the inline retry, which is why
+#    regime 2 below cannot use it. `phase:REVIEW` is demanded so a call copied from the kit guard
+#    with the wrong label still fails, and `files:bin/tool.sh` so a line that fired over the
+#    reviewer's OWN artifacts — the failure mode that would make the guard noise — still fails.
+echo "== the REVIEW scope guard =="
+rm -f "$REVIEWSCOPE_COUNT"
+RS1="$OUTSIDE/reviewscope-door1"
+reviewscope_world "$RS1"
+reviewscope_stub "$RS1" 1 code
+RS1_ERR="$( cd "$RS1" && "$SDD" run "$MISSION" --phase REVIEW --max-phases 1 2>&1 >/dev/null )"
+RS1_LOG="$(cat "$RS1/.sdd/logs/$MISSION/pipeline.log" 2>/dev/null || true)"
+assert_eq "a REVIEW session that edited code outside the mission directory is logged REVIEW-EDITED-CODE" \
+  "sessions:1 lines:1 warns:1 phase:REVIEW n:1 files:bin/tool.sh" \
+  "sessions:$(reviewscope_sessions) lines:$(grep -c 'REVIEW-EDITED-CODE' <<< "$RS1_LOG") warns:$(grep -c 'the reviewer finds and the executor fixes' <<< "$RS1_ERR") phase:$(grep -oE 'REVIEW-EDITED-CODE[[:space:]]+[A-Z]+' <<< "$RS1_LOG" | head -1 | awk '{print $2}') n:$(num_before "$RS1_LOG" 'file\(s\) outside') files:$(reviewscope_files "$RS1_LOG")"
+
+# 2. CONTROL, and it carries the whole allowlist. The same world, the same session count, a session
+#    that COMMITS — `committed:1` is the floor, without which `lines:0` is also the answer of a run
+#    that never opened anything — writing the round, the checkpoint, $TODO_FILE and the health
+#    baseline. Every one of those is a path the new contract expects the reviewer to touch, so a
+#    guard that flagged them would fire on every healthy round and train its only reader to scroll.
+rm -f "$REVIEWSCOPE_COUNT"
+RS2="$OUTSIDE/reviewscope-control"
+reviewscope_world "$RS2"
+reviewscope_stub "$RS2" 1 clean
+RS2_HEAD_BEFORE="$(git -C "$RS2" rev-parse HEAD)"
+RS2_ERR="$( cd "$RS2" && "$SDD" run "$MISSION" --phase REVIEW --max-phases 1 2>&1 >/dev/null )"
+RS2_LOG="$(cat "$RS2/.sdd/logs/$MISSION/pipeline.log" 2>/dev/null || true)"
+assert_eq "a REVIEW session that only wrote the round and the checkpoint is not flagged" \
+  "sessions:1 committed:1 lines:0 warns:0" \
+  "sessions:$(reviewscope_sessions) committed:$([ "$RS2_HEAD_BEFORE" != "$(git -C "$RS2" rev-parse HEAD)" ] && echo 1 || echo 0) lines:$(grep -c 'REVIEW-EDITED-CODE' <<< "$RS2_LOG") warns:$(grep -c 'the reviewer finds and the executor fixes' <<< "$RS2_ERR")"
+
+# 3. DOOR 2 — cmd_run's INLINE RETRY has a check of its own, and only it can see this: the first
+#    session moves nothing (which is exactly what makes the runner spend the retry), the RETRY is
+#    the one that commits into bin/, and door 1 of that lap had already looked and found an
+#    unchanged HEAD. Measured the same way as the kit guard's sibling regime — delete the retry
+#    call site and regimes 1 and 2 stay green while this one reports nothing.
+rm -f "$REVIEWSCOPE_COUNT"
+RS3="$OUTSIDE/reviewscope-retry"
+reviewscope_world "$RS3"
+reviewscope_stub "$RS3" 2 code
+RS3_ERR="$( cd "$RS3" && "$SDD" run "$MISSION" 2>&1 >/dev/null )"
+RS3_LOG="$(cat "$RS3/.sdd/logs/$MISSION/pipeline.log" 2>/dev/null || true)"
+assert_eq "the retry door logs REVIEW-EDITED-CODE too" \
+  "retried:1 lines:1 warns:1 files:bin/tool.sh" \
+  "retried:$([ "$(reviewscope_sessions)" -ge 2 ] && echo 1 || echo 0) lines:$(grep -c 'REVIEW-EDITED-CODE' <<< "$RS3_LOG") warns:$(grep -c 'the reviewer finds and the executor fixes' <<< "$RS3_ERR") files:$(reviewscope_files "$RS3_LOG")"
+
+# 4. DOOR 3 — `sdd retry` is another door that opens a session which commits, and it does not go
+#    through cmd_run's loop at all: its call is its own. THIS REGIME WAS MISSING when the guard
+#    first went green, and the sabotage pass is what said so: deleting the cmd_retry call left
+#    regimes 1-3 green and the suite at rc 0, which is the definition of a door whose removal no
+#    assertion notices. Written the moment that was measured, never after.
+rm -f "$REVIEWSCOPE_COUNT"
+RS4="$OUTSIDE/reviewscope-retry-cmd"
+reviewscope_world "$RS4"
+reviewscope_stub "$RS4" 1 code
+RS4_ERR="$( cd "$RS4" && "$SDD" retry "$MISSION" 2>&1 >/dev/null )"
+RS4_LOG="$(cat "$RS4/.sdd/logs/$MISSION/pipeline.log" 2>/dev/null || true)"
+assert_eq "sdd retry is another door that opens a REVIEW session, and it is guarded too" \
+  "sessions:1 lines:1 warns:1 files:bin/tool.sh" \
+  "sessions:$(reviewscope_sessions) lines:$(grep -c 'REVIEW-EDITED-CODE' <<< "$RS4_LOG") warns:$(grep -c 'the reviewer finds and the executor fixes' <<< "$RS4_ERR") files:$(reviewscope_files "$RS4_LOG")"
+
+# 5. THE ALLOWLIST IS A GLOB MATCHED AGAINST A STRING, and the two sides of that match come from
+#    different worlds: `git diff --name-only` prints a path git has already normalised, while
+#    `$HANDOFF_DIR` arrives VERBATIM from the target repo's .sdd/config.sh. `HANDOFF_DIR=
+#    "docs/handoffs/"` — a spelling nothing in the kit forbids, documents against, or normalises —
+#    makes the pattern `docs/handoffs//<mission>/*`, which matches no path git ever prints. The
+#    round's OWN report is then counted as code, and the guard warns on EVERY healthy round: the
+#    noise the allowlist exists to prevent, reachable through a config key rather than a bug.
+#
+#    `slash:1` is the floor that the venom is ARMED. Without it a world whose config quietly lost
+#    the trailing slash would satisfy this regime by being regime 2 over again — a probe concluding
+#    about a world it never built, which is the failure this file has already paid for twice.
+#
+#    The expectation string after that floor is regime 2's, character for character, ON PURPOSE:
+#    the two regimes are the differential ("the slash reads the same as no slash"), and writing it
+#    out literally on both sides is what stops them from drifting into agreement by moving together.
+rm -f "$REVIEWSCOPE_COUNT"
+RS5="$OUTSIDE/reviewscope-trailing-slash"
+reviewscope_world "$RS5" "docs/handoffs/"
+reviewscope_stub "$RS5" 1 clean
+RS5_HEAD_BEFORE="$(git -C "$RS5" rev-parse HEAD)"
+RS5_ERR="$( cd "$RS5" && "$SDD" run "$MISSION" --phase REVIEW --max-phases 1 2>&1 >/dev/null )"
+RS5_LOG="$(cat "$RS5/.sdd/logs/$MISSION/pipeline.log" 2>/dev/null || true)"
+assert_eq "a trailing slash in HANDOFF_DIR does not turn a healthy round into a warning" \
+  "slash:1 sessions:1 committed:1 lines:0 warns:0" \
+  "slash:$(grep -c 'HANDOFF_DIR="docs/handoffs/"$' "$RS5/.sdd/config.sh") sessions:$(reviewscope_sessions) committed:$([ "$RS5_HEAD_BEFORE" != "$(git -C "$RS5" rev-parse HEAD)" ] && echo 1 || echo 0) lines:$(grep -c 'REVIEW-EDITED-CODE' <<< "$RS5_LOG") warns:$(grep -c 'the reviewer finds and the executor fixes' <<< "$RS5_ERR")"
+
+# 6. THE OTHER SIDE OF THAT SAME MATCH — and this one is git's doing, not the config key's. With
+#    `core.quotePath` (git's DEFAULT) a tracked path carrying one byte outside ASCII leaves
+#    `git diff --name-only` C-quoted and octal-escaped: `"docs/handoffs/<mission>/round\302\267
+#    one.md"`. It OPENS WITH A `"`, so it matches no arm of the allowlist, and a file the round
+#    wrote INSIDE its own mission directory is counted as code — the guard shouting on a healthy
+#    round, which is regime 2's failure reached by a filename instead of by a config key.
+#
+#    THE NAME BELOW CARRIES A MIDDLE DOT AND NOT AN ACCENT, and that is a constraint of this file
+#    rather than of the property. git quotes PER BYTE: every byte >= 0x80 goes the same way, so the
+#    real-world instance — a mission artifact named in pt-BR, in the repo whose OUTPUT_LANG is
+#    pt-BR — travels this exact code path. It cannot be typed here: tests/ is the kit's ENGLISH
+#    surface and check-lang.sh reads a Latin-1 LETTER class, so an accented filename would fail the
+#    language sensor, and rewording a file to quiet a detector is what that sensor's own header
+#    forbids. `·` is non-ASCII (C2 B7), is not a Latin-1 letter, and is punctuation the kit already
+#    writes on nearly every page. Verified by hand that the two spellings quote identically.
+#
+#    `nonascii:1` is the floor that the venom is ARMED. It reads the RAW diff of the fixture, where
+#    core.quotePath is pinned on, so the runner's command-line override cannot reach it, and it
+#    demands the ESCAPED spelling — without that floor a world where git printed the literal path
+#    would satisfy this regime by being regime 2 over again, which is the vacuous probe this file
+#    has already paid for twice.
+#
+#    The expectation after the floor is regime 2's, character for character, for regime 5's reason:
+#    the claim is "a non-ASCII name reads the same as an ASCII one", and that is a differential.
+rm -f "$REVIEWSCOPE_COUNT"
+RS6="$OUTSIDE/reviewscope-nonascii"
+reviewscope_world "$RS6"
+reviewscope_stub "$RS6" 1 clean "round·one.md"
+RS6_HEAD_BEFORE="$(git -C "$RS6" rev-parse HEAD)"
+RS6_ERR="$( cd "$RS6" && "$SDD" run "$MISSION" --phase REVIEW --max-phases 1 2>&1 >/dev/null )"
+RS6_LOG="$(cat "$RS6/.sdd/logs/$MISSION/pipeline.log" 2>/dev/null || true)"
+RS6_RAW="$(git -C "$RS6" diff --name-only "$RS6_HEAD_BEFORE" HEAD 2>/dev/null || true)"
+assert_eq "a mission-directory file whose name is not ASCII is not flagged REVIEW-EDITED-CODE" \
+  "nonascii:1 sessions:1 committed:1 lines:0 warns:0" \
+  "nonascii:$(grep -cF 'round\302\267one.md' <<< "$RS6_RAW") sessions:$(reviewscope_sessions) committed:$([ "$RS6_HEAD_BEFORE" != "$(git -C "$RS6" rev-parse HEAD)" ] && echo 1 || echo 0) lines:$(grep -c 'REVIEW-EDITED-CODE' <<< "$RS6_LOG") warns:$(grep -c 'the reviewer finds and the executor fixes' <<< "$RS6_ERR")"
+
+# 7. THE WARNING BRANCH CANNOT STOP THE LINE. Every regime above measures what the guard SAYS;
+#    this one measures what saying it COSTS. The warn is followed by `pipeline_log_line`, whose
+#    last act is a `printf` redirected into a file the runner does not own — and under `set -e` a
+#    failed redirection kills the shell where it happens, so the sentence three places of this kit
+#    repeat ("it warns and records; it does not stop the line") stopped being true the moment
+#    `.sdd/logs/<mission>/pipeline.log` could not be written.
+#
+#    THE FIRST VICTIM IS NOT THE GUARD, which is why the fix is not a `|| true` at the guard's call
+#    site. Measured in exactly this world before the fix: `sdd run` died inside `pipeline_log_line`
+#    on run_phase's OWN session line — one caller earlier — with `rc=1`, no ledger row and the
+#    guard never reached. Guarding only the guard would have left the runner dying one line up
+#    while its header claimed the property. So the guard lives in the ONE definition, beside the
+#    DRY_RUN and empty-path guards already there and for the reason that function's header gives:
+#    a caller added tomorrow is born with it.
+#
+#    `armed:1` is the floor that the venom is ARMED — as root, or on a filesystem that ignores the
+#    mode, this regime would quietly be regime 1 under another name. `warns:1` is the floor that
+#    the GUARD FIRED: a run that never triggered it would reach the ledger trivially. `journal:1`
+#    and not 2 pins the announcement as ONE-SHOT — two journal writes fail in this run (run_phase's
+#    line and the guard's), and a warning repeated per line would train its only reader to scroll,
+#    which is what the allowlist above exists to prevent. `rc:0 rows:1` is the property itself: the
+#    run ended cleanly and reached the line AFTER the guard, which is the ledger row.
+rm -f "$REVIEWSCOPE_COUNT"
+RS7="$OUTSIDE/reviewscope-nojournal"
+reviewscope_world "$RS7"
+reviewscope_stub "$RS7" 1 code
+mkdir -p "$RS7/.sdd/logs/$MISSION"
+: > "$RS7/.sdd/logs/$MISSION/pipeline.log"
+chmod 000 "$RS7/.sdd/logs/$MISSION/pipeline.log"
+RS7_ARMED=0
+( printf 'x' >> "$RS7/.sdd/logs/$MISSION/pipeline.log" ) 2>/dev/null || RS7_ARMED=1
+RS7_ROWS_BEFORE="$(nrows)"
+RS7_RC=0
+RS7_ERR="$( cd "$RS7" && "$SDD" run "$MISSION" --phase REVIEW --max-phases 1 2>&1 >/dev/null )" || RS7_RC=$?
+assert_eq "the scope guard warns without stopping the line when the pipeline log cannot be written" \
+  "armed:1 sessions:1 warns:1 journal:1 rc:0 rows:1" \
+  "armed:$RS7_ARMED sessions:$(reviewscope_sessions) warns:$(grep -c 'the reviewer finds and the executor fixes' <<< "$RS7_ERR") journal:$(grep -c 'the pipeline journal at' <<< "$RS7_ERR") rc:$RS7_RC rows:$(( $(nrows) - RS7_ROWS_BEFORE ))"
+
+# 8. THE SAME FAILURE, IN THE CHANNEL THE HUMAN ACTUALLY READS. Regime 7 measured that the run
+#    SURVIVES an unwritable journal, and stopped there — the evidence for this regime was already
+#    sitting in `RS7_ERR` and no assertion looked at it. `2>/dev/null` was written to the RIGHT of
+#    the `>>` in both writers, and bash applies redirections LEFT TO RIGHT: when the `open` of the
+#    append fails, the shell's own complaint goes to an fd 2 that has not been redirected yet. So
+#    the curated one-shot regime 7 pins with `journal:1` arrived escorted by one raw
+#    `Permission denied` PER journal line, in the same stderr — the one-shot defeated where its
+#    only reader stands. Reproduced before this regime was written, in a throwaway script: three
+#    calls, `2>` on the right ⇒ 3 raw lines; `2>` on the left ⇒ 0, with the guard branch still
+#    firing.
+#
+#    ONE ASSERTION, BOTH WRITERS, and that is not tidiness. `pipeline_log_line` and
+#    `autonomy_append` carry the same spelling because the R8 of `20260901-o-revisor-so-acha`
+#    aligned them on purpose ("one rule, one spelling, in both writers"); two assertions that can
+#    be closed one at a time are how the two spellings drift apart a third time. Hence a world in
+#    which BOTH files are unwritable, with a floor per venom.
+#
+#    THE RAW COUNT IS A SUBTRACTION AND NOT A MESSAGE MATCH, deliberately: the shell's complaint is
+#    `<script>: line N: <path>: <strerror>`, and both halves after the path are LOCALE-dependent —
+#    neither the word before the line number nor the `strerror` is English on a machine whose
+#    locale is not (measured on this one, whose two words cannot be written on the kit's English
+#    surface — the constraint regime 6 above spells out). What is stable is the PATH, which every raw
+#    line names and which both curated warnings embed. So `named - curated` counts exactly the
+#    lines that mention a journal path without being one of the kit's own sentences, in any locale.
+#
+#    `jarmed:1 larmed:1` are the floors that each venom is ARMED — as root, or on a filesystem that
+#    ignores the mode, this regime would quietly become regime 1 with a longer name. `journal:1`
+#    and `ledger:1` are the floor that each writer was actually REACHED and warned: `raw:0` over a
+#    run where neither write failed is the answer of a world nobody built. `rc:0` keeps regime 7's
+#    property from regressing here — the ledger row cannot be the witness in this world, because
+#    the ledger is the second thing this regime breaks.
+rm -f "$REVIEWSCOPE_COUNT"
+RS8="$OUTSIDE/reviewscope-rawerror"
+reviewscope_world "$RS8"
+reviewscope_stub "$RS8" 1 code
+mkdir -p "$RS8/.sdd/logs/$MISSION" "$RS8/state"
+: > "$RS8/.sdd/logs/$MISSION/pipeline.log"
+: > "$RS8/state/autonomy-log.jsonl"
+chmod 000 "$RS8/.sdd/logs/$MISSION/pipeline.log" "$RS8/state/autonomy-log.jsonl"
+RS8_JARMED=0
+RS8_LARMED=0
+( printf 'x' >> "$RS8/.sdd/logs/$MISSION/pipeline.log" ) 2>/dev/null || RS8_JARMED=1
+( printf 'x' >> "$RS8/state/autonomy-log.jsonl" ) 2>/dev/null || RS8_LARMED=1
+RS8_RC=0
+RS8_ERR="$( cd "$RS8" && SDD_STATE_DIR="$RS8/state" "$SDD" run "$MISSION" --phase REVIEW --max-phases 1 2>&1 >/dev/null )" || RS8_RC=$?
+RS8_NAMED="$(grep -cE 'pipeline\.log|autonomy-log\.jsonl' <<< "$RS8_ERR")"
+RS8_CURATED="$(grep -cE 'the pipeline journal at|could not write the autonomy ledger at' <<< "$RS8_ERR")"
+assert_eq "neither journal writer leaks a raw redirection error when its file cannot be written" \
+  "jarmed:1 larmed:1 sessions:1 journal:1 ledger:1 raw:0 rc:0" \
+  "jarmed:$RS8_JARMED larmed:$RS8_LARMED sessions:$(reviewscope_sessions) journal:$(grep -c 'the pipeline journal at' <<< "$RS8_ERR") ledger:$(grep -c 'could not write the autonomy ledger at' <<< "$RS8_ERR") raw:$(( RS8_NAMED - RS8_CURATED )) rc:$RS8_RC"
+
+# The stub goes back the way it was found, for the reason spelled out one screen up.
 cat > "$OUTSIDE/stub/claude" <<'STUB'
 #!/usr/bin/env bash
 echo "ERROR: the test invoked the real claude" >&2

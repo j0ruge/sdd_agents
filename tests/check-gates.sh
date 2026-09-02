@@ -886,6 +886,34 @@ EOF
 assert_phase "a review graded B does not pass" "REVIEW"
 assert_why   "REVIEW reports the exact grade" "REVIEW" "Security = B"
 
+# The REVIEW⇄EXEC loop, in both directions. Since `20260901-o-revisor-so-acha` a round that found
+# something does not fix it in place: it writes an `R<n>` row into the SAME checkpoint table and
+# ends. Nothing in the runner had to learn about the prefix — `current_phase()` walks
+# `PLAN TICKET EXEC QA REVIEW …` and returns the first red gate, so a pending row fails `gate_EXEC`
+# two phases before `gate_REVIEW` is ever read. That is the route the QA's `F<n>` already takes; the
+# assertions below pin it for the reviewer's rows too, because a checkpoint parser taught to
+# recognise `I`/`F` would silently strand every round of every future mission.
+#
+# Both directions, and the second is why the first is not vacuous: a runner that simply never leaves
+# EXEC satisfies the first assertion whatever it reads.
+cp "$MDIR/checkpoint.md" "$MDIR/checkpoint.rn.bak"
+printf '%s\n' '| R1 | finding #1 of r1 becomes an increment | `true` → 0 | pending | — |' >> "$MDIR/checkpoint.md"
+assert_phase "a review graded B with a pending R1 hands the ball to EXEC" "EXEC"
+
+git add -A && git commit -qm "chore: r1 with a pending R1"
+R1_HASH="$(git rev-parse --short HEAD)"
+sed -i "s@| R1 | finding #1 of r1 becomes an increment | \`true\` → 0 | pending | — |@| R1 | finding #1 of r1 becomes an increment | \`true\` → 0 | done | $R1_HASH |@" \
+  "$MDIR/checkpoint.md"
+# Dies loud if it sabotaged nothing: a `sed` whose pattern rotted would leave the row `pending` and
+# the assertion below would then be measuring the line above it a second time.
+if grep -qF "| R1 | finding #1 of r1 becomes an increment | \`true\` → 0 | done | $R1_HASH |" "$MDIR/checkpoint.md"; then
+  pass "fixture: the R1 row really closed with a commit that is in the history"
+else
+  fail "R1-done fixture" "an R1 row marked done with a real hash" "$(grep '^| R1' "$MDIR/checkpoint.md")"
+fi
+assert_phase "and once R1 is done the ball comes back to REVIEW" "REVIEW"
+mv "$MDIR/checkpoint.rn.bak" "$MDIR/checkpoint.md"
+
 # The `—` with "Not analyzed" is what the skill emits on a focused review
 # (report-template.md:156): a partial review is not a review, and the gate fails it. Copied from
 # there, wording included.

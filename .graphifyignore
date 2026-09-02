@@ -1,0 +1,39 @@
+# .graphifyignore — what stays OUT of the kit's knowledge graph (graphify, AST only, zero API).
+#
+# gitignore syntax, negation with `!` included. One criterion: the graph exists to answer
+# STRUCTURAL questions (who defines / calls what, direct radius of a change). Process history,
+# generated views and agent tooling only dilute the hubs and inflate every query.
+#
+# What the graph KEEPS (never filter):
+#   bin/sdd            · the runner — bash functions and their DIRECT statement calls
+#   agents/*.md        · the agent contracts
+#   tests/*.sh         · the sensors (functions + direct calls)
+#   templates/*.md     · the artifact contracts
+#   config/            · schema and starter config
+#   docs/pipeline.md docs/failure-modes.md docs/adr/*.md docs/graphify.md
+#   CLAUDE.md README.md CONTEXT.md
+#
+# Measured zone for bash (2026-09-01, docs/graphify.md § Competence zone): the extractor sees
+# function DEFINITIONS and calls written as a statement (`f args`, `if f; then`, `f || rc=$?`).
+# It does NOT see `$(f)` command substitution, dynamic dispatch (`gate_"$phase"`), and it collapses
+# N call sites of one pair into ONE edge — so it never answers a door census. Orientation only.
+
+# ── Runner state, logs, agent tooling ───────────────────────────────────────
+.sdd/**
+.claude/**
+.superpowers/**
+.github/**
+graphify-out/**
+
+# ── Process history: handoffs, QA tree, specs, backlog, kaizen log ──────────
+# Valuable to people, noise to a dependency graph: a 2026-08-17 review round outranked
+# config/schema.md on a query about the REVIEW budget when these were indexed (measured).
+docs/handoffs/**
+docs/qa/**
+docs/superpowers/**
+TODO.md
+KAIZEN_LOG.md
+
+# ── Fixtures and text data ──────────────────────────────────────────────────
+tests/fixtures/**
+tests/*.txt

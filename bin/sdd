@@ -1186,7 +1186,16 @@ gate_REVIEW() {
     GATE_WHY="TEST_CMD failed ($TEST_CMD) — see $LAST_CHECK_LOG"; return 1
   fi
   if [ -n "$(cd "$REPO_ROOT" && git status --porcelain)" ]; then
-    GATE_WHY="working tree dirty after the review — fixes must be committed"; return 1
+    # The CHECK is unchanged and so is the behaviour — only the sentence moved, because since
+    # `20260901-o-revisor-so-acha` this phase does not fix: what a REVIEW session leaves behind is
+    # its round report and the `R<n>` rows it wrote into the checkpoint. ⚠️ The words BEFORE the
+    # dash are load-bearing and stay verbatim: `historic_rounds` declares this refusal as one of the
+    # two that name no round file, and the prose is quoted as that declared limit in three places
+    # (the def's own comment above, `docs/pipeline.md § Field reference`, `tests/check-autonomy.sh`).
+    # For the same reason the tail must NOT name `40-review-r<N>.md`: the recovery's regexes are
+    # anchored at `^`, and the world its comment says it could not build is precisely a `gate_why`
+    # carrying that name somewhere other than the first character.
+    GATE_WHY="working tree dirty after the review — the round and its R<n> rows must be committed"; return 1
   fi
   GATE_WHY="$(basename "$last") all Grade A, suite green, tree clean"
   return 0
@@ -1520,7 +1529,7 @@ phase_task() {
     QA:plan)  printf '%s\n' "plan the QA cycle for this mission: personas, journeys, scenarios and charters" ;;
     QA:exec)  printf '%s\n' "walk the journeys in persona and write the dated report + the bug registry" ;;
     QA:close|QA) printf '%s\n' "close the QA cycle: a confirmed finding becomes an e2e spec, a fixable bug becomes a fix increment, and write 30-handoff-qa.md" ;;
-    REVIEW)   printf '%s\n' "review and fix, INSIDE this session, until every criterion is Grade A" ;;
+    REVIEW)   printf '%s\n' "review, reproduce and grade honestly; every finding that must be fixed becomes an R<n> increment in the checkpoint — you do NOT fix the code" ;;
     DOCS)     printf '%s\n' "sync the repo's living documentation with what this mission changed" ;;
     PR)       printf '%s\n' "push and open the PR carrying the evidence from the earlier phases" ;;
     TICKET)   printf '%s\n' "open the mission's JIRA issue, already in the active sprint, and record 10-ticket.md" ;;
@@ -1534,12 +1543,14 @@ phase_extra() {
   case "$1" in
     REVIEW) cat <<'EOF'
 
-Drive the review → fix → re-review loop INSIDE this session, with the QA report in hand, until
-the "### Overall Grade" table closes with A on EVERY criterion. (The `/goal` command does NOT
-exist in this environment — verified; the loop is yours.) Fixes go committed: the gate requires
-a clean working tree. If the session ends without closing, write 40-review-r<N>.md with the REAL
-grade — the runner opens a fresh session to continue. A grade inflated to pass the gate switches
-off the mission's only quality sensor.
+Drive the FINDING loop inside this session, with the QA report in hand: run the review, reproduce
+what you raise and refute with evidence what is wrong. (The `/goal` command does NOT exist in this
+environment — verified; the loop is yours.) You do NOT fix the code: every finding that must be
+fixed becomes an R<n> increment in checkpoint.md, and the EXEC phase closes it in TDD with a
+context of its own. This session commits ONLY 40-review-r<N>.md, checkpoint.md and the findings
+file — a source file in your diff means the hat slipped. Write the REAL grade; a B on r1 with
+increments written is the normal, healthy round, and the next round re-grades independently. A
+grade inflated to pass the gate switches off the mission's only quality sensor.
 EOF
     ;;
     QA:plan|QA:exec) cat <<'EOF'
@@ -1644,6 +1655,11 @@ EOF
 }
 
 PIPELINE_LOG=""
+# The path this process has already complained about, so the warning below is one-shot per
+# journal. Keyed on the PATH and not on a boolean: a reset would have to be maintained at each of
+# the four sites that assign `PIPELINE_LOG`, and a marker maintained by its callers is the shape
+# this kit keeps paying for — derived, the day a second journal is opened it announces itself.
+PIPELINE_LOG_WARNED=""
 DRY_RUN=0
 
 pipeline_log_line() {
@@ -1661,8 +1677,73 @@ pipeline_log_line() {
   # Found by the QA phase of mission 20260814-dry-run-completo (F1).
   [ "$DRY_RUN" = "1" ] && return 0
   [ -n "$PIPELINE_LOG" ] || return 0
-  mkdir -p "$(dirname "$PIPELINE_LOG")"
-  printf '%s\n' "$*" >> "$PIPELINE_LOG"
+  # A JOURNAL WRITE CANNOT STOP THE LINE, and this is the guard's second tenant for the reason the
+  # paragraph above already gives: it holds for EVERY caller, and the one added tomorrow is born
+  # with it. ⚠️ THE CENSUS IS THE COMMAND, NEVER THIS SENTENCE. Both paragraphs of this block used
+  # to name a count instead, and it was already wrong on the day r3 of `20260901-o-revisor-so-acha`
+  # counted — the `44 caught of 44` rubric of CLAUDE.md cashing in right here, because a number
+  # written into prose is stale at the next call site, not at the next release. Count, do not read:
+  #     grep -cE '^ *pipeline_log_line "' bin/sdd                   # call sites, as statements
+  #     grep -E '\$\(pipeline_log_line' bin/sdd | grep -cv '^ *#'   # substituted → must be 0
+  # The second one drops comment lines DELIBERATELY: this block displays the forbidden spelling one
+  # paragraph down, and the bare grep counts the display — the same one-too-many that rubric names.
+  # Under `set -e` a failed redirection kills the shell AT THE REDIRECTION, so with the journal
+  # unwritable — a `chmod`, a read-only mount, a full disk, a quota — every caller became a place
+  # the runner dies. Two of them advertise the opposite in so many words: `review_scope_check` and
+  # `kit_guard_check` are warnings that three pages of this kit describe as stopping nothing, and
+  # the sister's trailing ASSIGNMENT does not save her — the shell is already gone one line up,
+  # inside here. Measured end to end (regime 7 of the guard's block in tests/check-autonomy.sh):
+  # with the journal at mode 000 the run died on run_phase's OWN session line, rc 1, no ledger row
+  # and the scope guard never reached — one caller BEFORE the guard, which is why guarding the
+  # guard's call site would have fixed the sentence and not the runner.
+  #
+  # ⚠️ The line is then LOST, and that is a third reason a `grep -c` over this journal answers 0 —
+  # next to "the round behaved" and "the guard was not in the running process". The warning is what
+  # keeps that from being silent; it is one-shot per journal path because two writes fail per run
+  # here already, and a warning repeated per line trains its only reader to scroll past the run it
+  # finally mattered on. CALLED at every site and SUBSTITUTED AT NONE (`$(pipeline_log_line …)`
+  # would run this in a subshell and lose the flag, the scar `autonomy_kit_stamp` left) — and what
+  # holds that property is the second census command above answering 0, never this sentence.
+  #
+  # THE SHAPE IS `autonomy_append`'s, two screens down, and copied rather than invented: that
+  # function has carried `mkdir … || true` plus a guarded `>>` with a warn since it was written
+  # ("a ledger the mission dies for is worse than a gap in the ledger"), and the journal — the
+  # older writer of the two — never got it. One rule, one spelling, in both writers. The ONE
+  # divergence is the one-shot above, and it is divergence with a number: this journal takes
+  # several lines per session where the ledger takes one row, and the probe pins `journal:1` over
+  # a run in which two writes fail.
+  #
+  # ⚠️ DECLARED, NO PROBE — and the world WAS built, so this is not "I could not imagine it":
+  #  · THE `mkdir` ARM. Sabotaged (the `|| true` removed) the suite stays green, because the world
+  #    it answers to is dominated by an earlier death: with `.sdd/logs` at mode 500 the run dies in
+  #    `run_phase`'s own `mkdir` for the session's log directory, rc 1 and no ledger row, guarded
+  #    or not — measured both ways. So this arm decides WHICH failure an operator reads on the day
+  #    the directory becomes writable again between those two calls, never whether the run
+  #    survives. It stays for that, and because `autonomy_append` carries the identical unprobed
+  #    arm: removing one of two aligned writers' halves is how the spellings drift apart again.
+  #  · KEYING THE ONE-SHOT ON THE PATH rather than on a boolean is unobservable today. The four
+  #    sites that assign `PIPELINE_LOG` belong to four different `cmd_*`, and `main` dispatches one
+  #    per process — no command in this file calls another, so no process opens two journals. It is
+  #    written this way because the alternative needs a reset maintained at each of those four
+  #    sites, and a marker its callers maintain is the shape this kit has already paid for.
+  mkdir -p "$(dirname "$PIPELINE_LOG")" 2>/dev/null || true
+  # ⚠️ `2>/dev/null` STANDS TO THE LEFT OF THE `>>`, and the order is the whole point: bash applies
+  # redirections LEFT TO RIGHT, so with it on the right the shell's own complaint about the failed
+  # `open` goes to an fd 2 that has not been redirected yet. That is r3 finding #1 of
+  # `20260901-o-revisor-so-acha`: the curated one-shot below arrived escorted by one raw
+  # `Permission denied` PER line, in the same stderr — the one-shot defeated in the only channel
+  # its reader stands in. Measured both ways in a throwaway script: three calls, `2>` on the right
+  # ⇒ 3 raw lines; on the left ⇒ 0, with this branch still firing. `autonomy_append` carries the
+  # identical spelling, for the reason the paragraph above gives: one rule, one spelling, in both
+  # writers. The sensor is regime 8 of the guard's block in tests/check-autonomy.sh, which breaks
+  # BOTH files in one world so neither half can be closed alone.
+  printf '%s\n' "$*" 2>/dev/null >> "$PIPELINE_LOG" || {
+    if [ "$PIPELINE_LOG_WARNED" != "$PIPELINE_LOG" ]; then
+      PIPELINE_LOG_WARNED="$PIPELINE_LOG"
+      warn "the pipeline journal at $PIPELINE_LOG cannot be written — the run carries on, and every line it would have recorded from here on is lost"
+    fi
+    return 0
+  }
 }
 
 # ---------------------------------------------------------------------------
@@ -2193,6 +2274,142 @@ kit_guard_check() {
   KIT_GUARD_BEFORE="$kit_after"
 }
 
+# review_scope_check <phase> <head before the session> — the REVIEW half of the same idea.
+#
+# Since 20260901-o-revisor-so-acha the reviewer is READ-ONLY over the code: it reproduces, grades
+# honestly, and turns every finding that must be fixed into an `R<n>` increment the EXEC phase
+# closes in a session of its own. The prompt is what ASKS for that; this is what MEASURES it. A
+# session that carried the whole review in its context and then fixed inside itself is the cost
+# this mission exists to delete, and it leaves exactly one trace: a commit touching code.
+#
+# A WARN AND A JOURNAL LINE, never a boundary — the same call the kit guard makes, for the same
+# reason. The reviewer that edits a file has already spent the money; refusing the session here
+# would throw away the round report along with it, which is strictly worse than saying so out loud.
+#
+# THREE CALL SITES, placed by hand for the ordering constraint kit_guard_check documents above:
+# cmd_run's first pass, cmd_run's inline retry (with the FIRST pass's head — the retry is reached
+# only when nothing moved, so that head is still HEAD when the retry starts), and cmd_retry.
+# `cmd_close` is the kit guard's fourth door and deliberately not a fourth here: it runs with
+# `phase=CLOSE`, and the first line below answers only to REVIEW. One probe per door, in the
+# `== the REVIEW scope guard ==` block of tests/check-autonomy.sh.
+#
+# ⚠️ DECLARED LIMITS:
+#  · A `grep -c REVIEW-EDITED-CODE <log>` ANSWERING 0 IS NOT EVIDENCE THAT THE ROUND BEHAVED. It
+#    says "no line was written", and the loudest way to write no line is for this function not to
+#    exist: bash parses a definition when it reads past it, so a function that was not in the file
+#    at read time is not in the process. (The entrypoint guard on the last line of this script is
+#    the neighbouring scar — it stops bash re-reading a file the run itself edited — and neither
+#    guard puts a function into a process that started without it.) So a `sdd run` process that
+#    predates this guard runs the bin/sdd it parsed at startup, and a mission whose OWN EXEC phase
+#    lands the guard is measured by a runner in which the guard is absent. Not hypothetical: on
+#    20260901-o-revisor-so-acha the conducting `sdd run` started 17:56:48 and c8c8ec7 — the commit
+#    that created this function — landed at 18:58:11, so that mission's REVIEW round reads 0 for the
+#    wrong reason. What CAN be computed after the fact is the round's own diff, which is what
+#    docs/pipeline.md now teaches to cite. Closing the window for real (comparing bin/sdd's hash at
+#    entry and warning, or stopping) is a behaviour change that can fail a healthy mission in
+#    flight: a human decision, recorded in that mission's round report, not something this header
+#    can fix. Declared, not solved.
+#  · it reads COMMITS, not the working tree. A reviewer that edited a file and left it uncommitted
+#    is invisible here — and also invisible to the gate, which demands a clean tree, so the run
+#    stops for a different reason.
+#  · `commit --amend` on the head the session started from leaves `<before>` UNREACHABLE BUT STILL
+#    READABLE, and the difference is the whole bullet. The object stays in the ODB until something
+#    prunes it, so `git diff <before> HEAD` exits 0 with the right list and this guard WARNS
+#    correctly. Measured in a throwaway repo, both halves: `merge-base --is-ancestor <before> HEAD`
+#    answers 1 (gone from the graph) while `diff --name-only <before> HEAD` answers 0 and names the
+#    file. The world where the capture really does come back empty is the one AFTER that object is
+#    dropped — `git reflog expire --expire=now --all && git gc --prune=now`, measured in the same
+#    repo: `git diff` exits 128 with `fatal: bad object`, the `|| true` below swallows it, and this
+#    function says nothing rather than accusing a session over a diff it could not compute. That is
+#    the world this author could build by hand; whether a real mission reaches it between the
+#    session's first commit and this call — a gc has to run in that window — is NOT measured here.
+#  · THE PROJECTION reaches this function — the call sits above cmd_run's DRY_RUN branch, next to
+#    kit_guard_check's — and is silent BY CONSTRUCTION rather than by a guard of its own:
+#    `run_phase` returns before opening a session under DRY_RUN, so both heads are the same commit
+#    and the diff is empty. Unlike `kit_guard_arm`, nothing here is reached from nowhere else
+#    during a projection, so there is no warning for a dry run to inherit. That is the world this
+#    author could build; a `DRY_RUN` early return would be a rule no sabotage of mine turns a probe
+#    red, which d4deb35 is the scar for asserting too confidently.
+#  · THE `tests/health-baseline.txt` ARM IS UNCONDITIONAL. Its comment below scopes it "in the
+#    kit's own repo", but nothing in the code asks whether this repo IS the kit: a target repo that
+#    happens to carry that path gets a reviewer's edit to it waved through in silence. It is the
+#    allowlist's one FAIL-OPEN, it is narrow (one exact path, in a guard that only warns), and it
+#    is written here rather than left implied because a limit nobody declared is the thing this
+#    whole header exists to separate from a limit that is known. Conditioning it on
+#    `kit_root = REPO_ROOT` is a behaviour change with no probe today; declared, not guessed.
+#  · `core.quotePath=false` BUYS BACK THE NON-ASCII NAME AND NOT EVERY NAME. Measured in a scratch
+#    repo: with it, a path holding a byte >= 0x80 comes out literal, while one holding a double
+#    quote or a backslash is STILL C-quoted by git, as is any path holding a control character or a
+#    newline. Such a path inside the mission directory would still be counted as outside it and
+#    warned about. That world was NOT built here: the fix is one flag, while the residue needs `-z`
+#    with a NUL split, which `changed="$( … )"` cannot carry (command substitution drops NUL bytes)
+#    and which would rewrite the read loop for a filename nobody has typed yet. Declared, not
+#    solved.
+#  · ONLY TRAILING SLASHES are normalised out of `$HANDOFF_DIR` below, because that is the spelling
+#    that was reproduced and the one regime 5 of check-autonomy.sh holds. A leading `./`, a `//` in
+#    the middle, or an absolute `$HANDOFF_DIR` would each miss the same way and none has a probe —
+#    a rule written for a world this author did not build would be exactly the over-confidence the
+#    bullet above is the scar for.
+review_scope_check() {
+  local phase="${1:-}" before="${2:-}" head_now changed f outside="" n=0 mission_dir
+  [ "$phase" = "REVIEW" ] || return 0
+  # `-` is what state_fingerprint answers for a path with no git, and the empty string is what a
+  # caller that forgot the argument would pass. Neither is a commit this can diff against.
+  [ -n "$before" ] && [ "$before" != "-" ] || return 0
+  head_now="$( git -C "$REPO_ROOT" rev-parse HEAD 2>/dev/null || echo "-" )"
+  [ "$head_now" != "-" ] && [ "$head_now" != "$before" ] || return 0
+  # `|| true` because `set -e` kills the shell AT THE ASSIGNMENT when git refuses — and it still
+  # earns its place after the amend bullet above was corrected: the world where git refuses is the
+  # PRUNED one (`bad object`, rc 128, measured), not the amend itself, which answers fine. A runner
+  # that died on a question it could not answer would turn a warning into an outage.
+  #
+  # `-c core.quotePath=false` because the allowlist below matches STRINGS git wrote, and with that
+  # key on — GIT'S OWN DEFAULT — a tracked path holding one byte outside ASCII comes back C-quoted
+  # and octal-escaped: a mission artifact named in pt-BR, in a repo whose OUTPUT_LANG is pt-BR,
+  # arrives as `"docs/handoffs/<mission>/relat\303\263rio.md"`. It opens with a `"`, so it matches
+  # no arm, and the round's own report reads as code. On the command line and not `git config`, so
+  # it holds whatever the target repo set. Regime 6 of the guard's block in
+  # tests/check-autonomy.sh, with the escaped spelling as its floor.
+  changed="$( git -C "$REPO_ROOT" -c core.quotePath=false diff --name-only "$before" "$head_now" 2>/dev/null || true )"
+  # THE TWO SIDES OF THE MATCH BELOW COME FROM DIFFERENT WORLDS, and this line is what makes them
+  # comparable: `git diff --name-only` prints a path git has already normalised, while
+  # `$HANDOFF_DIR` arrives VERBATIM from the target repo's .sdd/config.sh and is never normalised
+  # anywhere else in this runner. `HANDOFF_DIR="docs/handoffs/"` — a spelling nothing forbids or
+  # documents against — would make the pattern `docs/handoffs//<mission>/*`, which matches no path
+  # git ever prints: the round's OWN report reads as code and the guard warns on every healthy
+  # round, which is precisely the noise the allowlist exists to prevent. A LOOP and not
+  # `${HANDOFF_DIR%/}`, which strips exactly one slash and leaves `docs/handoffs//` broken.
+  mission_dir="$HANDOFF_DIR"
+  while [ "${mission_dir%/}" != "$mission_dir" ]; do mission_dir="${mission_dir%/}"; done
+  mission_dir="$mission_dir/$MISSION"
+  while IFS= read -r f; do
+    [ -n "$f" ] || continue
+    case "$f" in
+      # The three paths the new contract expects a round to touch: its own mission directory (the
+      # report and the checkpoint the `R<n>` lines go into), the backlog file, and — in the kit's
+      # own repo — the ratchet that backlog moves. Flagging these would fire on every healthy
+      # round and train the guard's only reader to scroll past it.
+      "$mission_dir"/*) continue ;;
+      "$TODO_FILE") continue ;;
+      tests/health-baseline.txt) continue ;;
+    esac
+    n=$(( n + 1 ))
+    outside="${outside:+$outside }$f"
+  done <<< "$changed"
+  [ "$n" -gt 0 ] || return 0
+  warn "the $phase session committed $n file(s) outside its mission directory — the reviewer finds and the executor fixes, so a finding belongs in the checkpoint as an R<n> increment: $outside"
+  # ⚠️ THE ABSENCE OF THE LINE BELOW IS NOT A MEASUREMENT. Counting this marker in the log answers
+  # 0 both when the round behaved and when this function never ran — a `sdd run` process that
+  # predates this guard carries the bin/sdd it parsed at startup, and never calls it. First bullet
+  # of the DECLARED LIMITS above, with the mission it was measured on; the evidence that survives
+  # that window is the round's own `git diff --name-only <head the session opened with> HEAD`.
+  # THIRD reading of that 0, since the r2 of the same mission: a journal that could not be written.
+  # That one is announced — `pipeline_log_line` warns once naming the file — because the write no
+  # longer stops the line, and a dropped line nobody was told about is the fail-open this whole
+  # header exists to separate from a limit that is known.
+  pipeline_log_line "$(date -Iseconds)  REVIEW-EDITED-CODE  $phase  $n file(s) outside the mission directory: $outside"
+}
+
 # ONE definition of "this path is a throwaway checkout" — ADR 0005, part 3.
 #
 # ⚠️ DECLARED LIMITS, and they are exactly why this is a ratchet against the leak that actually
@@ -2264,7 +2481,12 @@ autonomy_append() {   # autonomy_append <one json object, already built>
   # disk warns and lets the phase carry on. Under `set -e` a failing `>>` would abort the runner.
   # One printf = one write(2) on an O_APPEND fd, which is what keeps two repos running at once
   # from interleaving. jq never writes to the file directly: its stdio may split the output.
-  printf '%s\n' "$1" >> "$file" 2>/dev/null || {
+  # `2>/dev/null` to the LEFT of the `>>`, the same spelling and the same reason as
+  # `pipeline_log_line`: redirections apply left to right, so on the right the shell's raw
+  # complaint about the failed `open` escapes to an un-redirected stderr and rides along beside the
+  # curated warning below. Both writers were aligned on purpose (R8), and are corrected together
+  # (r3 finding #1) so they do not drift apart a third time.
+  printf '%s\n' "$1" 2>/dev/null >> "$file" || {
     warn "could not write the autonomy ledger at $file — the mission goes on, the row is lost"
     return 0
   }
@@ -2388,6 +2610,10 @@ autonomy_gate_pass_row() {   # autonomy_gate_pass_row <phase>
 # Arguments 10–12 are the same fact for REVIEW, which is a loop by design too: REVIEW_MAX_ITER
 # rounds, each landing its own `40-review-r<N>.md`. Same rule, same reason — empty outside REVIEW,
 # and `rounds_max` is there so "3 of 3, the phase is out of budget" cannot be read as "3 of 10".
+# `turns` is NOT among them: it rides in from LAST_PHASE_TURNS exactly as `cost` does, so the
+# signature and its four callers stay as they are. The escalation and gate_pass constructors do
+# not carry it, for the same reason arguments 7–9 are null outside EXEC — a row that spent no
+# session spent no turns, and a 0 there would be counted as one that ran and said nothing.
 autonomy_session_row() {  # <phase> <attempt> <auto_retry> <moved> <gate> <gate_why> [<pending_before> <pending_after> <increments_total> <rounds_before> <rounds_after> <rounds_max>]
   autonomy_have_jq || return 0
   # Called, never substituted: `$(autonomy_kit_stamp)` would reset its one-shot warning flag.
@@ -2407,6 +2633,7 @@ autonomy_session_row() {  # <phase> <attempt> <auto_retry> <moved> <gate> <gate_
     --arg step "$LAST_PHASE_STEP" --arg agent "$LAST_PHASE_AGENT" \
     --arg model "$LAST_PHASE_MODEL" --arg session "$LAST_PHASE_SID" \
     --arg rc "$LAST_PHASE_RC" --arg dur "$LAST_PHASE_DUR" --arg cost "$LAST_PHASE_COST" \
+    --arg turns "$LAST_PHASE_TURNS" \
     --arg pbefore "${7:-}" --arg pafter "${8:-}" --arg itotal "${9:-}" \
     --arg rbefore "${10:-}" --arg rafter "${11:-}" --arg rmax "${12:-}" \
     '{v: 1, ts: $ts, event: "session",
@@ -2420,6 +2647,7 @@ autonomy_session_row() {  # <phase> <attempt> <auto_retry> <moved> <gate> <gate_
       rc: ($rc | tonumber? // null),
       dur_s: ($dur | tonumber? // null),
       cost_usd: ($cost | tonumber? // null),
+      turns: ($turns | tonumber? // null),
       moved: ($moved == "true"),
       pending_before: ($pbefore | tonumber? // null),
       pending_after: ($pafter | tonumber? // null),
@@ -2490,7 +2718,7 @@ stream_watch() { # stream_watch <stream.jsonl> — background; killed by run_pha
 # the gate passed — the gate judges that, always afterwards).
 run_phase() {
   local phase="$1" resume_sid="${2:-}"
-  local pstep model agent sid prompt logfile streamfile started ended cost
+  local pstep model agent sid prompt logfile streamfile started ended cost turns
   # QA is three sessions (plan, walk, close); the step comes from the artifacts, not a counter.
   pstep="$(phase_step "$phase")"
   model="$(phase_model "$phase")"
@@ -2582,6 +2810,16 @@ missing and write the artifacts. The gate will be re-evaluated."
   # unknown cost to every caller", and this is the caller that has to make that sentence true.
   cost="$(jq -r '.total_cost_usd // .cost_usd // "?"' "$logfile" 2>/dev/null || echo "?")"
   [ -n "$cost" ] || cost="?"
+  # The other half of what a session cost, out of the same distilled summary and on the same
+  # terms. Money alone cannot separate a phase that got cheaper by spending FEWER TURNS from one
+  # that got cheaper by luck, and the two ask for opposite next moves: cache-read grows with
+  # turns² (corr 0.94 over 28 real REVIEW rounds, 2026-09-01) and is about 30% of the bill, so the
+  # turn count is the lever the money is a shadow of. `// ""` and not `// "?"`: the ledger maps
+  # both to null through `tonumber?`, and unlike `cost` this value is never journalled as prose,
+  # so there is no line for a `?` to make readable. Same `|| echo` guard as the cost above, for
+  # the jq that FAILS; the jq that succeeds over an empty summary prints nothing and the empty
+  # string is already the answer this one wants.
+  turns="$(jq -r '.num_turns // ""' "$logfile" 2>/dev/null || echo "")"
   local dur=$((ended - started))
   pipeline_log_line "$(date -Iseconds)  $phase  agent=$agent  model=$model  session=${resume_sid:-$sid}  rc=$rc  dur=${dur}s  cost_usd=$cost  log=$logfile"
 
@@ -2589,6 +2827,7 @@ missing and write the artifacts. The gate will be re-evaluated."
   # result known, and the row carries it.
   LAST_PHASE_RC="$rc"
   LAST_PHASE_COST="$cost"
+  LAST_PHASE_TURNS="$turns"
   LAST_PHASE_DUR="$dur"
   LAST_PHASE_STEP="$pstep"
   LAST_PHASE_AGENT="$agent"
@@ -2610,6 +2849,7 @@ missing and write the artifacts. The gate will be re-evaluated."
 LAST_PHASE_SID=""
 LAST_PHASE_RC=""
 LAST_PHASE_COST=""
+LAST_PHASE_TURNS=""
 LAST_PHASE_DUR=""
 LAST_PHASE_STEP=""
 LAST_PHASE_AGENT=""
@@ -4375,6 +4615,11 @@ cmd_run() {
     run_phase "$phase"
     after="$(state_fingerprint)"
     kit_guard_check "$phase"
+    # DOOR 1 of the review scope guard, beside its sibling and on the same terms: it writes only to
+    # pipeline.log, none of state_fingerprint's three inputs, and `after` is already sampled one
+    # line up. `${before%%|*}` is the first field of the fingerprint — the HEAD this session opened
+    # against.
+    review_scope_check "$phase" "${before%%|*}"
 
     # The projection branch stays FIRST, exactly where it is today. This is belt-and-suspenders,
     # not a cost saver: `run_check_cmd` memoizes and `run_phase`'s own dry-run branch returns
@@ -4483,6 +4728,11 @@ cmd_run() {
     # to pipeline.log — none of state_fingerprint's three inputs — but keeping it outside the
     # sampled window means that stays true whatever the fingerprint learns to read tomorrow.
     kit_guard_check "$phase"
+    # DOOR 2, after `moved2` is settled for the same reason. `$before` and NOT `$after`: this retry
+    # is reachable only through the `moved == "false"` guard above, so the first pass changed
+    # nothing and the two heads are the same commit — but reading the one the LAP opened against
+    # keeps that true the day a first pass can move the disk and still land here.
+    review_scope_check "$phase" "${before%%|*}"
     gate_"$phase" || gate_rc2=$?
     # The retry takes NO photograph of its own: the gate ran between the two passes, so the first
     # pass's `pending_after` — `exec_after`, captured above and now already overwritten in the
@@ -4589,6 +4839,9 @@ cmd_retry() {
   run_phase "$phase"
   after="$(state_fingerprint)"
   kit_guard_check "$phase"
+  # DOOR 3. `sdd retry REVIEW` opens a FRESH session that commits and never goes through cmd_run's
+  # loop, so it needs its own call exactly as the kit guard does.
+  review_scope_check "$phase" "${before%%|*}"
   [ "$before" != "$after" ] && moved="true"
   gate_"$phase" || gate_rc=$?
   # DECLARED, NO PROBE — and MEASURED, not assumed. These two guards are inert today: this function
@@ -4979,7 +5232,31 @@ cmd_autonomy() {
               # foreign mission that shares the slug (--all-repos) from borrowing this repo notes —
               # the map is keyed by slug alone. Absent, the cell does not print: no `?`, no zero.
               | (if $r == $repo and ($interventions | has($m)) then " · \($interventions[$m]) intervention note(s)" else "" end) as $iv
-              | "  \($label)  \($n) session(s) · \($t.advanced) advanced · \($t.churned) churned · \($t.idle) idle · \($launches) launch(es) · \($reopened) reopened\($iv) · US$ \($cost | usd)"
+              # The review LOOP, which is not the REVIEW phase: it is that phase plus every EXEC
+              # session it sent back — the `R<n>` increments a round writes. Summing the REVIEW
+              # rows alone would call a change that merely MOVED money into the phase next door a
+              # cut. The index of the first REVIEW session is the frontier: EXEC before it is the
+              # mission doing its own work, EXEC after it is the loop. DOCS and PR after the round
+              # are not in it either — they are the pipeline moving on, not the review going round
+              # again. Same shape as $iv above: a mission with no round prints no cell, rather
+              # than a `0%` that would read as a loop that cost nothing.
+              # DECLARED LIMITS, both of them belonging to the metric and written down where the
+              # number is printed: a QA that re-blocks AFTER the first round puts its EXEC rows in
+              # here (they are indistinguishable from an `R<n>` on the ledger alone), and the
+              # percentage is over the COMPARABLE sessions of the mission, the same population the
+              # US$ cell sums — a mission whose rows are half non-comparable reports the share of
+              # the half that is here.
+              | (map(.phase) | index("REVIEW")) as $fr
+              | (if $fr == null then "" else
+                   ([to_entries[]
+                     | select(.value.phase == "REVIEW" or (.value.phase == "EXEC" and .key > $fr))
+                     | .value.cost_usd // 0] | add // 0) as $loop
+                   # The zero guard is not decoration: jq DIES on a division by zero and takes the
+                   # whole command with it, and a mission whose every session cost null sums to 0
+                   # here — the `cost_usd: null` a session that died before its `result` writes.
+                   | " · review loop US$ \($loop | usd)\(if $cost > 0 then " (\(($loop * 100 / $cost) | round)%)" else "" end)"
+                 end) as $rl
+              | "  \($label)  \($n) session(s) · \($t.advanced) advanced · \($t.churned) churned · \($t.idle) idle · \($launches) launch(es) · \($reopened) reopened\($iv)\($rl) · US$ \($cost | usd)"
             ) | join("\n"))
         end)
       elif ($groups | length) == 0 then
@@ -5910,6 +6187,10 @@ USAGE
                              launch(es) (distinct run_id — the intervention count D12 reads),
                              reopened phases, the `- intervention:` notes of the checkpoint when
                              it is on disk, and the mission cost. Same rows, same money, other unit.
+                             `review loop US$ X (N%)` rides along on a mission that had a REVIEW
+                             session: the rounds PLUS the EXEC sessions after the first one — the
+                             R<n> increments a round writes — over the mission cost. Absent, and
+                             never 0%, on a mission that never reviewed.
   sdd kaizen [--dry-run]     judge the previous kit change and give birth to the next kit
                              mission plan (kit repo only; exit 3 = the change made it worse)
   sdd kaizen --series        the deterministic series (JSON) the judge cites — EVERY repo in the

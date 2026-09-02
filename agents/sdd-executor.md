@@ -29,6 +29,18 @@ Re-exploring what has already been verified is the waste this pipeline exists to
 
 The **first** one with `Status: pending` in the `checkpoint.md` table, top to bottom. Exactly one.
 
+**The ID prefix tells you where the detail lives**, and only that — the work is the same:
+
+- `I<n>` — a slice of the plan; the *why* is in `01-plano.md § Incrementos`;
+- `F<n>` — a fix the QA phase asked for; the bug is in the registry file the execution notes name;
+- `R<n>` — a finding the REVIEW phase raised; the detail is in the **most recent**
+  `40-review-r<N>.md`, under the findings table and `## Incrementos de conserto (R<n>)`. Read the
+  finding there before writing the test: the Check names the sensor, the report names the defect.
+
+A batch `R<n>` (`"achados #4–#7 da r1"`) carries several Checks in one cell — all of them have to be
+green. If the batch is genuinely too large for one session, split the row in two and mark the second
+`blocked` with the reason in the notes: Jidoka, not a heroic session.
+
 Before touching anything, run `TEST_CMD`.
 
 - **Red because of an earlier increment** → you do not fix it and you do not carry on. Mark that
@@ -112,6 +124,11 @@ boot prompt names — a bare `templates/` resolves to nothing in a target repo �
 - honest **open questions**, **risks and not-dones**, **out-of-scope findings**.
 
 Commit the handoff.
+
+**If the increments you just closed were `F<n>` or `R<n>`, `20-handoff-exec.md` already exists**:
+**update** it instead of starting over — a new section naming the round or the QA cycle, what each
+increment fixed and its hash, so the phase that comes next reads one file and not a history. The
+precedent is the `F1` of `20260829-o-incremento-que-andou` (commit `f35ad97`).
 
 ## 7. Finish
 

@@ -60,9 +60,18 @@ atualizado: <YYYY-MM-DD HH:MM>
 >
 > - intervention: <o que o humano teve de fazer> — <fase> — <custo, se houver>
 
-## Incrementos de fix (QA)
+## Incrementos de fix (QA e REVIEW)
 
-> Escritos pelo `sdd-qa` quando um bug sanável é reprovado. Entram na mesma tabela acima com ID
-> `F<n>`, e o Check obrigatoriamente inclui **regression test passa** + **re-walk da jornada
-> impactada verde**. Bug que exige julgamento humano NÃO vira fix — vai para
-> "Decisions for a Human" no handoff de QA.
+> Duas fases escrevem na tabela acima depois do EXEC, pelo mesmo motivo e pela mesma rota: quem
+> **acha** não conserta, e o `current_phase()` devolve a bola ao EXEC sozinho porque uma linha
+> `pending` reprova o `gate_EXEC` antes de o gate da fase que a escreveu ser lido.
+>
+> **`F<n>` — `sdd-qa`**, quando um bug sanável é reprovado. O Check obrigatoriamente inclui
+> **regression test passa** + **re-walk da jornada impactada verde**. Bug que exige julgamento
+> humano NÃO vira fix — vai para "Decisions for a Human" no handoff de QA.
+>
+> **`R<n>` — `sdd-reviewer`**, um por achado CRITICAL/HIGH da rodada; os MEDIUM/LOW baratos entram
+> num único `R<n>` de lote por rodada (`"achados #4–#7 da r1"`), com um Check por achado dentro da
+> célula. Caro demais vai para o `TODO_FILE`; o que exige julgamento humano vai para as pendências
+> do `40-review-r<N>.md`, sem `R<n>`. O detalhe de cada achado mora na rodada mais recente, e a nota
+> dela é honesta: um `B` com incrementos escritos é a rodada saudável.

@@ -420,6 +420,28 @@ what it used to do: 4 REVIEW sessions over 3 invocations, ~US$ 107, and no `BLOC
 the headline can name **0 sessions**: this invocation opened none, because the ceiling refused
 before it could. The line under it names the count that actually refused.
 
+**Since `20260901-o-revisor-so-acha`, a round only finds** — so read the two artifacts the loop
+now runs on before blaming the slicing. In the last `40-review-r<N>.md`, `## Incrementos de conserto
+(R<n>)` says what that round handed to EXEC; in `checkpoint.md`, the `R<n>` rows say what came back.
+Three shapes and three different diagnoses:
+
+- **`R<n>` rows still `pending`** — the loop never closed, it stalled. `current_phase()` sends a
+  pending row back to EXEC before `gate_REVIEW` is ever read, so a `BLOCKED in REVIEW` with pending
+  `R<n>` means the ceiling was reached by rounds that kept *finding*, never by a fix that failed.
+- **`R<n>` rows `done`, and the next round found the same defect again** — the fix did not fix it.
+  That is the honest "badly sliced" case, and the report of the later round says so in its own words.
+- **A round that fixed instead of finding** — `grep REVIEW-EDITED-CODE .sdd/logs/<mission>/pipeline.log`.
+  The runner writes that line when a REVIEW session commits anything outside the mission directory
+  (plus `TODO_FILE` and `tests/health-baseline.txt`). It is a **warning, not a boundary**: the line
+  stops nothing, it only tells you the round paid for a second hat and its Grade A is the reviewer
+  certifying its own repair. ⚠️ **The absence of the marker is not a measurement.** That grep
+  answers `0` both when the round behaved and when the guard never ran: bash parses this script's
+  functions as it reads the file, so a `sdd run` process that predates this guard carries the
+  `bin/sdd` it parsed at startup and never calls it — which is how `20260901-o-revisor-so-acha`,
+  the mission that added the guard, measured itself. The evidence that survives that window is the
+  round's own `git diff --name-only <head the session opened with> HEAD`; `docs/pipeline.md § The
+  review scope guard` spells it out.
+
 **What you do:** read the last `40-review-r<N>.md` — the real grade is there. If the findings are
 legitimate and large, the mission was badly sliced. If you want the PR anyway, set
 `PUBLISH_ON_REVIEW_BLOCKED="draft"`: out comes a **draft** PR with the current grade and the open
@@ -588,7 +610,14 @@ you start it:
 - editing `CLAUDE.md`, `CONTEXT.md`, `docs/` or `TODO.md` does **not** invalidate the stamp, so the
   DOCS phase can work freely — but `tests/health-baseline.txt` **does**, and that is where the
   backlog ratchet lives. Recording an out-of-scope finding therefore costs the stamp. The collision
-  is a known item in `TODO.md`, with its direction;
+  is a known item in `TODO.md`, with its direction — and the **route around it** is the one
+  `20260901-o-revisor-so-acha` walked six times: EXEC, QA and each REVIEW round write the finding
+  into their own handoff, under `## Achados fora de escopo`, and the DOCS phase transports the lot
+  into `TODO.md` with the ratchet line moving in the **same commit**, before running `health`. Two
+  things make that route work rather than lose findings. The line has to be **complete** where it
+  is first written — a pointer to an entry nobody created yet is a lost finding; and a round that
+  routes nothing new still says which earlier ones are still standing, or the transport carries
+  half. Both were paid for here: seventeen findings, six phases, one commit;
 - do not start it on a tree you are still committing to. The window guard will refuse the round and
   you will have spent the wall-clock for nothing.
 

@@ -24,8 +24,14 @@ report, calling `gh`. The text the session returns satisfies no gate.
 ## Canonical order
 
 ```
-PLAN → TICKET → EXEC ⇄ QA → REVIEW → DOCS → PR → (merge: human)
+PLAN → TICKET → EXEC ⇄ QA → REVIEW ⇄ EXEC → DOCS → PR → (merge: human)
 ```
+
+Both `⇄` are the **same** mechanism, and no loop code was ever written for either: the phase writes
+a `pending` increment into `checkpoint.md` (`F<n>` from QA, `R<n>` from REVIEW since
+`20260901-o-revisor-so-acha`), `gate_EXEC` goes back to failing, and EXEC comes earlier in the
+order, so the derived phase lands there. The `⇄` after `REVIEW` is what makes the grade independent
+— the round that re-grades did not write the fix.
 
 ## Who measures the gates
 
@@ -172,8 +178,45 @@ types, build, docs) has no journey to walk. Inventing a journey just to "have QA
 
 ### REVIEW — Grade A on every criterion
 
+**The round finds; the EXEC phase fixes.** Since `20260901-o-revisor-so-acha` `sdd-reviewer` is
+read-only over the code: it reproduces, refutes with evidence, grades honestly, and every finding
+that must be fixed becomes an `R<n>` row in the mission's `checkpoint.md` — one per CRITICAL/HIGH,
+one batch row for the cheap MEDIUM/LOW, `TODO_FILE` for the expensive ones, a pendency for whatever
+needs a human. The session commits **only** the round report, the checkpoint and `TODO_FILE`.
+
+Nothing in the runner had to learn about the prefix. `current_phase()` walks
+`PLAN TICKET EXEC QA REVIEW DOCS PR` and returns the first red gate, so a pending `R<n>` fails
+`gate_EXEC` two phases before `gate_REVIEW` is read, `sdd-executor` closes it in TDD with a context
+of its own, and the next round re-grades **without** having written the fix. It is the QA⇄EXEC loop
+one phase later, and the `F<n>` of `20260829-o-incremento-que-andou` had already proved the route.
+
+Two things were bought with that split, and only one of them is money. The reviewer used to grade
+its own fixes — an `A` on r1 was the same session certifying its own work — and now the grade comes
+from a round that did not write the patch. The money: while review and fix shared a session, 70–95%
+of a round's cache-read was spent **after** the first edit (the whole review's exploration re-sent
+every turn, and cache-read grows with turns², corr 0.94), and REVIEW was 38,9% of everything the
+pipeline had ever spent — US$ 636,66 of US$ 1.635,48 over 27 sessions, more than EXEC's 92.
+
+That figure is **dated 2026-09-01**, and the date is the point. This line and
+`agents/sdd-reviewer.md` used to carry a higher share over a smaller total — the same gemba read a
+few hours earlier in the same mission, internally consistent and simply older, because the ledger
+grows under whoever is reading it. Both were true when written and neither said when; that is the
+defect, and the fix is the date rather than a fresher number, which would rot the same way. The
+older pair is not repeated here on purpose: the entry that exists to explain it is the one that
+should carry it (`KAIZEN_LOG.md`, which also holds the reading this line is aligned to), and
+`sdd autonomy --all-repos` recomputes today's.
+
+Two readings change with it, both declared: **r1 grading `B` is the healthy round now**, not a
+failure, and `REVIEW_MAX_ITER` counts rounds of **finding** — the normal mission uses two. The
+`review loop` figure of `sdd autonomy --by-mission` is what measures the whole thing, REVIEW rows
+plus the EXEC rows that come after the first one.
+
+A REVIEW session that commits a code file anyway is not stopped — it is **recorded**:
+`REVIEW-EDITED-CODE` in `.sdd/logs/<mission>/pipeline.log`, next to the kit guard's `KIT-TOUCHED`.
+
 **Passes when:** the most recent `40-review-r<N>.md` carries the `### Overall Grade` section with
-**A on every row**; `TEST_CMD` exits 0; and the working tree is clean.
+**A on every row**; `TEST_CMD` exits 0; and the working tree is clean. The gate itself did **not**
+change with the split: same table, same `Rationale` rule, same ceiling.
 
 A criterion graded `—` (not analysed) fails too: a partial review is not a review.
 
@@ -201,8 +244,9 @@ independent rounds derived the heading as `## Overall Grade` and collected `NO-T
 reads the literal `^###[[:space:]]+Overall Grade`. `tests/check-templates.sh` derives its
 assertions from that same regex rather than restating it.
 
-The review→fix→re-review loop happens **inside** the session. If it ends without closing, the
-runner opens a fresh session to continue, up to `REVIEW_MAX_ITER` in total. Blown →
+The find→`R<n>`→fix→re-review loop happens **across** sessions: the round ends when the report is
+committed, EXEC closes the increments, and the runner opens a fresh round, up to `REVIEW_MAX_ITER`
+rounds in total. Blown →
 `BLOCKED`, or a draft PR when `PUBLISH_ON_REVIEW_BLOCKED=draft` — the one place the runner lowers
 its **own** bar instead of stopping, and it records the fact once per run (`event:"degraded"`, in
 the ledger's field reference below).
@@ -384,6 +428,74 @@ attributed to.
 
 Where the finding itself should go — the handoff, never a commit into the kit — is in
 [`../CLAUDE.md`](../CLAUDE.md) and in the executor's own instructions.
+
+## The review scope guard
+
+The same idea one phase further on, and the same shape. Since the REVIEW session stopped fixing
+what it finds, the only thing that can say a round honoured that contract is a measurement: the
+contract travels in a boot prompt, and a prompt is a request.
+
+`review_scope_check` runs on `REVIEW` sessions only, at three of the four doors above — `sdd run`'s
+first pass, its inline retry, and `sdd retry`. (`sdd close` is the fourth, and it runs as `CLOSE`.)
+It diffs the `HEAD` the session opened against with the one it left behind, and every path that is
+neither the mission's own directory, nor `TODO_FILE`, nor `tests/health-baseline.txt` gets one
+`warn` and one `REVIEW-EDITED-CODE` line in `.sdd/logs/<mission>/pipeline.log`, naming the files.
+Trailing slashes are stripped off `HANDOFF_DIR` before that comparison, because the allowlist is a
+glob matched against what `git diff --name-only` prints and the key arrives from your
+`.sdd/config.sh` exactly as you typed it — `HANDOFF_DIR="docs/handoffs/"` would otherwise make
+every healthy round warn about its own report. The other side of that same match is git's: the
+diff is taken with `-c core.quotePath=false`, because with git's default a tracked path holding
+one byte outside ASCII comes back C-quoted and octal-escaped —
+`"docs/handoffs/<mission>/relat\303\263rio.md"` for a report named in a repo whose `OUTPUT_LANG`
+is pt-BR — and a string opening with `"` matches no arm. That flag buys back the non-ASCII name
+and not every name: a path carrying a double quote, a backslash or a control character is still
+quoted by git and would still be counted as outside the mission directory. The
+`tests/health-baseline.txt` arm is
+**unconditional**: it exists for the kit's own repo, and a target repo that happens to carry that
+path has a reviewer's edit to it waved through. That is the allowlist's one fail-open, and it is
+written down here and in the function's header rather than left to be discovered.
+
+It **warns and records; it does not stop the line** — a reviewer that edited a file has already
+spent the money, and refusing the session would throw away the round report with it. It reads
+commits and not the working tree, and it says nothing when the diff cannot be computed, because a
+guard that accuses on a question it could not answer is a guard nobody reads. ⚠️ That world is
+**narrower than a `commit --amend`** over the head the session started from: measured, the
+rewritten `<before>` leaves the graph but stays readable in the object database, so `git diff`
+exits 0 with the right list and the guard warns correctly. The diff only becomes uncomputable once
+something has since dropped that object — `git gc --prune=now`, after which `git diff` exits 128
+with `bad object`.
+
+`grep -c REVIEW-EDITED-CODE .sdd/logs/<mission>/pipeline.log` answering `0` is what a healthy
+mission looks like — **and also what a mission looks like when the guard never ran.** That number
+alone does not tell the two apart. Bash parses this script's function definitions once, as it reads
+the file, so a `sdd run` process that predates this guard runs the `bin/sdd` it parsed at startup:
+a mission whose own EXEC phase lands the guard is measured by a runner in which the guard does not
+exist. It is how `20260901-o-revisor-so-acha`, the mission that added it, measured itself.
+
+There is a **third** reading of that `0`, and the runner says it out loud rather than leaving you
+to guess: a journal it cannot write. `pipeline_log_line()` no longer lets a failed write stop the
+run — an unwritable `pipeline.log` used to kill the runner at the redirection, which made "warns
+and records; does not stop the line" false for both guards at once — so the run carries on, the
+`warn` still reaches your terminal, and the line is simply lost. The first time it happens you get
+one warning naming the file, once per journal and not once per line — **and only that warning.**
+The `2>/dev/null` stands to the left of the append in both journal writers, because bash applies
+redirections left to right and the right-hand spelling let the shell's own complaint about the
+failed write escape to an fd 2 nobody had redirected yet: the one-shot was true of the runner's
+intent and false in the channel you actually read, one raw line per write. The sensor is regime 8
+of the scope guard's block in `tests/check-autonomy.sh`, which breaks the journal **and** the
+ledger in one world, so neither writer can be fixed alone.
+
+What can be computed after the fact is the round's own diff, and that is the evidence to cite:
+
+```bash
+git -c core.quotePath=false diff --name-only <the head the REVIEW session opened with> HEAD
+```
+
+Every path there outside `<HANDOFF_DIR>/<mission>/`, `TODO_FILE` and `tests/health-baseline.txt` is
+what the guard would have warned about. Closing the window for real — having `sdd run` compare the
+hash of `bin/sdd` at entry against the one on disk, and warn or stop — is a behaviour change that
+can fail a healthy mission in flight, so it is a human decision and not a limit this guard can lift
+by itself.
 
 ## Models per phase
 
@@ -605,6 +717,7 @@ prose.
 | `rc` | integer \| `null` | on escalation rows | The `claude` process's exit code. `null` when the session log carried none. |
 | `dur_s` | integer \| `null` | on escalation rows | Wall-clock seconds the session took. |
 | `cost_usd` | number \| `null` | on escalation rows | The session's cost in USD, `null` (never the string `"?"`) when the session's JSON log carried no cost field. |
+| `turns` | integer \| `null` | on escalation rows and on `event:"gate_pass"` rows; `null` when the session's JSON log carried no `num_turns` | How many turns the session spent, from the same distilled `result` object `cost_usd` comes out of. The other half of what a session cost, and the half money alone cannot separate: a phase that got cheaper by spending **fewer turns** and one that got cheaper by luck read the same in dollars, and they ask for opposite next moves. Cache-read grows with turns² (corr 0.94 over the 28 real REVIEW rounds measured on 2026-09-01) and is about 30% of the bill, so the turn count is the lever the money is a shadow of. Added by `20260901-o-revisor-so-acha` to size the sessions of a REVIEW phase that no longer fixes in place; `null` on every row written before it, and no reader guesses it back from prose — unlike `pending_before` and `rounds_before`, the fact was never written anywhere else. |
 | `moved` | boolean | on escalation rows | ⚠️ The whole waste metric: `state_fingerprint` before ≠ after, and `state_fingerprint` is git HEAD + the mission directory listing + the checkpoint file's md5. `moved` alone no longer names a bucket: since `20260828-instrumento-honesto` both readers classify a comparable session as `advanced` (the gate passed — the gate is the artifact), `churned` (`moved:true` and the gate failed: the session wrote and the runner bought another lap) or `idle` (`moved:false` and the gate failed — the old `stalled`, under the name that says what it is). ⚠️ Since `20260829-o-incremento-que-andou` a session also reads `advanced` when `pending_after < pending_before` — **the increment moved**, which is the whole point of an EXEC session and something the gate cannot say, because `gate_EXEC` refuses by construction until the last increment. Both operands must be non-`null` for that arm to fire: `jq` sorts `null` below every number, so `null < 2` is true, and without the guard the session whose gate REFUSED the checkpoint (which publishes no `pending_after`) would have read as the highest progress in the ledger — a fail-open in the flattering direction. Declared limit, same place: the session that closes the last increment over a red suite reads `advanced` by the count while the lap it buys reads `churned` — the gate is the artifact of the NEXT lap. ⚠️ Since `20260831-a-rodada-que-andou` a **third** arm says the same about `REVIEW`, which is a loop by design too: a session reads `advanced` when `rounds_after > rounds_before` — **the round landed** — so an r1 that arrived with real findings and did not reach Grade A stops reading as churn. A separate arm and not a generalisation of the second, because the two counts move in **opposite directions**: `EXEC` counts what is still to do and goes down, `REVIEW` counts what has landed and goes up, and a single "the number changed" arm would call a checkpoint that *grew* (the fix increments QA writes) progress. It carries **one** non-`null` guard against EXEC's two, and the asymmetry is the operand order rather than an oversight: the possibly-`null` field sits on the LEFT of `>`, where `null > 2` is false, so `rounds_before != null` alone closes the hole — a redundant guard is removed here rather than probed. `waste = churned + idle`. ONE definition, `ledger_outcome_defs` in `bin/sdd`, spliced into `cmd_autonomy` and `kaizen_series`; `tests/check-autonomy.sh` and `tests/check-kaizen.sh` compare the two histograms over one file. |
 | `pending_before` | integer \| `null` | on escalation rows; never absent on a session row, but `null` outside `EXEC` | How many increments the checkpoint still listed as `pending` or `doing` when the session opened — a PHOTOGRAPH, taken by `cmd_run`/`cmd_retry` before `run_phase`, because once the session has edited the checkpoint the question is unanswerable. `null` outside EXEC: no other phase has an increment to advance, and a `0` would enter the judge's arithmetic as a session that stood still. ⚠️ It is also `null` on every EXEC row written before `20260829-o-incremento-que-andou` added the three fields, and those rows are **not** left reading as churn: `historic_progress` in `ledger_outcome_defs` recovers the same fact from the prose `gate_why` already carried (`^N of M increment`), annotating `pending_after = N`, `increments_total = M`, `pending_before` = the previous EXEC row's `N` for the same `(repo, mission)` in FILE order, and `progress_source: "gate_why"`. Three rules earn their own mutants because each fails in a different direction: the first row of a mission (and any row where `M` changed, which is QA writing a fix increment, not churn) compares against `M`; a preceding `gate: pass` clears the memory; and the guard is `.pending_before == null` and never `has("pending_before")` — `autonomy_session_row` builds the object with `tonumber? // null`, so the KEY is present on every row and `has()` would annotate nothing. A dated read path, never a migration: the ledger is append-only, no line is ever rewritten. `sdd autonomy` prints how many rows it read that way (`(N EXEC row(s) older than the pending fields read their progress from gate_why)`) and the path is deletable the day that number reaches zero. |
 | `pending_after` | integer \| `null` | on escalation rows; never absent on a session row, but `null` outside `EXEC` | The same count as the gate saw it, from `GATE_EXEC_PENDING` — a VERDICT, not a photograph. `gate_EXEC` publishes it only *after* its validation loop **and after the Jidoka refusal**, so a gate that is about to refuse leaves the pair `null` and the reader falls back to `moved`. Two refusals, not one, and each cost its own bug: (a) a checkpoint refused for a label with no artifact (`done` with no commit, a commit outside the history of HEAD); (b) a checkpoint carrying a `blocked` increment. ⚠️ (b) was published until 2026-08-30 and was a fail-open in the flattering direction — `checkpoint_tally` counts `pending|doing` and files `blocked` in a bucket of its own, so **giving up** on an increment lowers `pending` exactly as **finishing** it does, and the one session in the pipeline that *stopped the line* read `advanced` at `0% waste`. A real EXEC row of `20260825-cif-forma-pagamento` is that session; it reads honestly today only because it predates these fields. Blocking is not closing. Both orderings are assertions in `tests/check-autonomy.sh` (`a done without commit publishes no pending_after`, `a blocked increment publishes no pending_after`) with a mutant each. |
@@ -694,10 +807,24 @@ it), which `20260825-frete-cif-fob` did three times with QA refused, all of it t
 (reads 0); SQ-111 ran QA after PR had passed and reads 1. A phase outside the order (`KAIZEN`)
 counts on neither side.
 
-Both are drawn over **every** local session of the mission, comparable or not — a launch that
-landed on a dirty kit was a launch — while `session(s)`, the outcomes and `US$` stay on the
-comparable sessions, because that is the sum the sensor closes against the version table. When the
-two populations differ for a printed mission, the accounting paragraph says so once:
+A third cell, **`review loop US$ X (N%)`**, arrived with `20260901-o-revisor-so-acha` and is the
+metric that mission is judged by. It is the REVIEW sessions **plus** the EXEC sessions that come
+after the first round — the `R<n>` increments a round writes and the executor runs — over the
+mission's cost. Not the REVIEW rows alone: since the reviewer stopped fixing in place, summing the
+phase would call a change that merely **moved** money into the phase next door a cut. The EXEC
+sessions *before* the first round are the mission doing its own work and are not in it; DOCS and PR
+after it are the pipeline moving on, not the review going round again. The cell is **absent** on a
+mission that never reviewed, rather than `0%` — the same rule the `intervention note(s)` cell
+follows, and for the same reason: a zero reads as a loop that cost nothing. Two declared limits,
+both written beside the code that prints it: a QA that re-blocks *after* the first round puts its
+EXEC sessions in the loop (nothing on the ledger tells an `R<n>` from an `F<n>`), and the
+percentage is over the comparable sessions — the same population the `US$` cell sums.
+
+`launch(es)` and `reopened` are drawn over **every** local session of the mission, comparable or
+not — a launch that landed on a dirty kit was a launch — while `session(s)`, the outcomes, `US$`
+and the review loop stay on the comparable sessions, because that is the sum the sensor closes
+against the version table. When the two populations differ for a printed mission, the accounting
+paragraph says so once:
 *(launches and reopened are counted over every session of the mission, N of them non-comparable)*.
 A mission whose sessions are all non-comparable does not appear — as before.
 

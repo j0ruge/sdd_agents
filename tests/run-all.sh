@@ -9,6 +9,23 @@
 
 set -uo pipefail
 
+# SDD_TPL_SELFTEST_CHILD IN THIS ENVIRONMENT IS REFUSED, never ignored, and the reason is `run()`
+# below: it reads the step's exit status and NOTHING else. That variable is check-templates.sh's
+# anti-recursion switch — set, that sensor skips every probe over its own primitives and still
+# exits 0 when the template rules pass, a limit its own header declares. THIS FILE is the reader
+# that limit was about, and it is TEST_CMD: every gate of every mission runs it, so a stale export
+# in someone's shell bought `suite green` over a sensor that had proved nothing about itself.
+# Measured (r3 finding #3 of `20260901-o-revisor-so-acha`): with the variable set, that step exits
+# 0 with every `ok    self-test:` line missing, and run() counts it green.
+#
+# Same shape and same reason as check-mutation.sh's SDD_MUTANT guard: dying loudly beats a green
+# nobody earned. It stands ABOVE the argument loop on purpose, so `--list` is refused too — that is
+# what lets check-templates.sh probe this refusal without running the suite it belongs to.
+if [ -n "${SDD_TPL_SELFTEST_CHILD:-}" ]; then
+  echo "tests/run-all.sh: SDD_TPL_SELFTEST_CHILD is set in this environment — check-templates.sh would skip its own selftest and this suite would read the skip as green. Unset it: the variable is that sensor's anti-recursion mechanism, not a user option." >&2
+  exit 1
+fi
+
 # Every test that runs bin/sdd could write to the autonomy ledger — check-dry-run already
 # exercises the real escalation path. Without this, each suite run would inject fixture rows into
 # the developer's ~/.sdd/autonomy-log.jsonl, and the judge would read fixtures as missions. The

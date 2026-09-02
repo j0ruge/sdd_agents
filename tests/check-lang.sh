@@ -49,7 +49,7 @@ trap 'rm -rf "$WORK"' EXIT
 # the script pure English logic — recorded in TODO.md, not done here.
 surface() {
   ( cd "$ROOT" && ls -1 bin/sdd agents/sdd-*.md .claude/agents/sdd-*.md \
-      docs/pipeline.md docs/failure-modes.md docs/adr/*.md README.md \
+      docs/pipeline.md docs/failure-modes.md docs/graphify.md docs/adr/*.md README.md \
       config/schema.md config/starter.conf \
       tests/*.sh tests/health-baseline.txt tests/lang-allowlist.txt 2>/dev/null ) \
     | grep -vxF -e 'tests/check-lang.sh' -e 'tests/check-templates.sh'
@@ -122,18 +122,23 @@ files="$(surface)"
 
 # Explicit floor, same reason as the "exactly 8 gates" floor in cmd_health: a glob that stops
 # matching (a renamed directory, a moved file) would leave the loop with nothing to read and the
-# check would report "0 new" — clean by vacuity. 36 paths today; the floor moves only on purpose,
-# and it moved six times already: tests/check-preflight.sh took it from 24 to 25,
+# check would report "0 new" — clean by vacuity. 41 paths today; the floor moves only on purpose,
+# and it moved seven times already: tests/check-preflight.sh took it from 24 to 25,
 # tests/check-autonomy.sh from 25 to 26, I13.3 from 26 to 31 (check-kaizen.sh, the two
 # sdd-kaizen.md copies, and the docs/adr/*.md glob with its ADRs), check-todo.sh to 32,
 # check-pipefail.sh to 33, then check-entrypoint.sh and check-checkpoint.sh to 35, ADR 0003
-# to 36, and tests/check-health.sh to 37.
+# to 36, tests/check-health.sh to 37, and docs/graphify.md to 41.
 # ⚠️ Three of those arrived without moving the floor, so it sat at 33 against a real 36 and
 # carried three paths of slack — a vacuity guard with slack is a vacuity guard that does not
 # guard. Re-counted against the real surface in the r1 review of 20260817-eixo-do-juiz.
+# ⚠️ And it happened AGAIN, which is why the last hop is 37 → 41 and not 37 → 38: ADRs 0004, 0005
+# and 0006 each joined the docs/adr/*.md glob without touching this number, so the floor described
+# 37 paths while the surface was already 40. A floor that lags keeps PASSING while measuring a
+# smaller surface than the one it reads — the same failure this comment already names once.
+# Re-counted against the real surface in I4 of 20260901-o-revisor-so-acha (40 + docs/graphify.md).
 n_surface="$(grep -c . <<< "$files")"
-if [ "$n_surface" -lt 37 ]; then
-  printf '  FAIL  surface shrank to %d path(s), expected at least 37 — did something move?\n' \
+if [ "$n_surface" -lt 41 ]; then
+  printf '  FAIL  surface shrank to %d path(s), expected at least 41 — did something move?\n' \
     "$n_surface" >&2
   exit 93
 fi

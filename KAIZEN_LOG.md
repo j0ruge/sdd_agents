@@ -4,6 +4,106 @@ Registro de melhorias com **antes/depois medido**. Sem número, não entra.
 
 ---
 
+## 2026-09-01 — O revisor só acha, e o executor conserta (missão `20260901-o-revisor-so-acha`)
+
+> ✅ **Coluna Depois preenchida em 2026-09-02 pela fase DOCS**, com os comandos e as saídas no
+> `45-docs.md` desta missão. O aviso abaixo fica de pé porque explica **por que** ela nasceu vazia.
+>
+> ⚠️ **Entrada com a coluna Depois em aberto, de propósito.** O "antes" abaixo foi medido no I4,
+> **antes** de a fase REVIEW desta missão rodar — e é a REVIEW desta própria missão o primeiro
+> teste real do desenho novo (M2 do `00-missao.md`). Quem preenche o Depois é a fase DOCS, com os
+> comandos de `01-plano.md § Para a fase DOCS`. Preenchê-lo aqui agora seria previsão com roupa de
+> medição, que é exatamente o que este arquivo recusa.
+
+**Problema (Gemba):** a fase REVIEW é a mais cara do pipeline e ninguém sabia dizer **onde** o
+dinheiro ia. Medido em 2026-09-01 sobre o ledger real (`~/.sdd/autonomy-log.jsonl`, todos os
+repos): **REVIEW = 27 sessões, US$ 636,66 de US$ 1.635,48 — 38,9%**, mais que o EXEC (92 sessões,
+US$ 563,34) com **um terço** das sessões. Por rodada (`.sdd/logs/*/REVIEW-*.json` + `.stream.jsonl`,
+6 rodadas lidas turno a turno): US$ 29–37, 100–170 turnos, 135–345 chamadas `Bash`, 11–46 execuções
+da suíte, pico de contexto 263–366k tokens e **zero compactações** em qualquer fase. O corte que
+importa: **tudo depois do primeiro `Edit`** — o laço de **conserto** — responde por **70–95% do
+cache-read da rodada**; achar responde por 5–30%. A saída da suíte é só **1–7%** dos bytes de
+`tool_result` (as sessões já fazem `tail`), então "disciplina de suíte" foi **medida e refutada**
+antes de virar plano. A causa raiz é um **chapéu duplo**: `phase_task REVIEW` mandava *"review and
+fix, INSIDE this session"*, então cada conserto carregava a exploração inteira da revisão em cada
+turno — e a nota A da r1 era o revisor dando A ao próprio conserto.
+
+**Contramedida:** um chapéu por agente, espelhando o laço QA⇄EXEC que o kit já tinha uma fase
+antes. O `sdd-reviewer` vira **read-only sobre o código**: roda `codereview`, reproduz, refuta com
+evidência, escreve `40-review-r<N>.md` com a nota **honesta** e transforma cada achado a consertar
+num incremento `R<n>` do `checkpoint.md`; o `sdd-executor` conserta em TDD numa sessão de contexto
+**zerado**; a rodada seguinte re-avalia de forma independente. Nada muda em `gate_*`,
+`current_phase()`, `checkpoint_tally` ou no teto de rodadas — `gate_EXEC` já é agnóstico ao prefixo
+do ID e o executor já pega a primeira linha `pending`. Entram **dois instrumentos e uma guarda**:
+`turns` na linha do ledger (`88432ee`), `review loop US$ X (N%)` por missão no
+`sdd autonomy --by-mission` (mesmo commit), e o aviso `REVIEW-EDITED-CODE` no `pipeline.log`
+(`c8c8ec7`) — guarda, **não** fronteira: registra a rodada que voltou a consertar, e não a impede.
+
+**A régua, reprodutível — os comandos e as saídas de hoje.** O instrumento do `review loop` nasceu
+neste diff, então ele já lê a janela 2 inteira, retroativamente:
+
+```
+$ ./bin/sdd autonomy --all-repos --by-mission | grep 'review loop'
+  sales_quote/20260830-invariante-do-frete-no-agregado   … review loop US$ 11.09 (25%) · US$ 44.43
+  sales_quote/20260830-o-rascunho-fantasma-do-mount      … review loop US$ 13.49 (29%) · US$ 47.11
+  sales_quote/20260830-a-tela-que-mente-o-pagamento      … review loop US$ 47.81 (57%) · US$ 84.42
+  sdd_agents/20260829-o-incremento-que-andou             … review loop US$ 35.98 (39%) · US$ 91.56
+  sdd_agents/20260831-a-rodada-que-andou                 … review loop US$ 66.34 (50%) · US$ 132.57
+```
+
+⚠️ **Uma correção de número, registrada antes de o resultado ser conhecido:** o `00-missao.md`
+cita a janela 2 como `25 · 29 · 60` (mediana 29%, máximo **60**%), com o 60% calculado à mão sobre
+um denominador de US$ 79,00. O instrumento lê **57%** para a mesma missão, porque o denominador
+dele é o custo de **todas** as sessões da missão (US$ 84,42). O alvo da M1 é lido pelo instrumento,
+então a linha de base honesta da janela 2 é **mediana 29%, máximo 57%** — e o alvo (mediana ≤ 25%,
+máximo ≤ 50%) **não se move** por causa disso.
+
+| Medida | Antes (`35863d9`, 2026-09-01) | Depois |
+|---|---|---|
+| Contrato da sessão REVIEW (`phase_task`) | `review and fix, INSIDE this session, until every criterion is Grade A` | `review, reproduce and grade honestly; every finding that must be fixed becomes an R<n> increment in the checkpoint — you do NOT fix the code` (`03187e8`) |
+| `review loop` da janela 2 (mediana · máximo), pelo instrumento | **29% · 57%** (25 · 29 · 57) | **inalterado, e é o ponto:** a janela 2 é histórica e a M1 só fecha na **janela 3**, que abre no sha do merge desta missão (D19). O que a missão entrega para ela é o instrumento que lê a célula — o próprio número do "Antes" foi lido por ele, retroativamente. |
+| REVIEW no ledger inteiro | 27 sessões · US$ 636,66 · **38,9%** de US$ 1.635,48 | **31 sessões · US$ 684,51 · 38,8%** de US$ 1.765,28 (medido 2026-09-02, com as 4 rodadas desta missão dentro). A parcela **não se moveu**, e a razão está nas duas linhas abaixo: o que saiu da fase REVIEW entrou na EXEC — o laço mudou de lugar antes de mudar de tamanho. |
+| Turnos por sessão REVIEW (6 rodadas recentes) | 27 · 97 · 104 · 140 · 150 · 154 (mediana **122**) | **48 · 107 · 63 · 66** (r1–r4, mediana **64,5**) — alvo M2 (**≤ 60**) fecha só na r1. ⚠️ Lido de `.num_turns` em `.sdd/logs/<missão>/REVIEW-*.json`, **não** do ledger: 3 das 4 linhas trazem `turns: null` pela janela cega do runner velho, e só a r4 — que um `sdd run` novo lançou — carrega o campo (66, idêntico ao JSON). A r4 chamou esta metade de "inaferível por construção"; ela é inaferível **no ledger**, e a fonte de onde o ledger a lê estava em disco o tempo todo. |
+| US$ por sessão REVIEW (as mesmas 6) | 16,90 · 29,24 · 30,91 · 35,98 · 37,10 · 37,30 (média **31,24**) | **17,92 · 16,38 · 6,71 · 6,83** (média **11,96**, −62%) — alvo M2 (**≤ 15**) fecha em **2 de 4**, e a trajetória cai monotonicamente depois da r2. É a metade da M2 que o desenho novo entregou. |
+| `review loop` da missão do kit anterior (`20260831`) | **US$ 66,34 (50%)** | esta missão: **US$ 102,39 (68%)** de US$ 150,42 — alvo M2 (**≤ US$ 40**) **não fecha, e piorou**. O que move o número não é a rodada de achar: são as **10 sessões EXEC posteriores à 1ª linha REVIEW, US$ 54,55, média US$ 5,46 por incremento** — 3 a 5× o "US$ 1–2 por boot" com que a decisão 6 do grill desenhou a régua de lote. A alavanca dominante passa a ser **quantas linhas `R<n>` uma rodada escreve**. |
+| Cache-read gasto **depois** do 1º `Edit` da rodada | **70–95%** | **5% · 76% · 33% · 17%** (r1–r4) — ⚠️ e o **corte mudou de significado**, então o número sozinho engana: o 1º `Edit` de cada rodada é agora o próprio relatório (r1, r3, r4) ou um harness de reprodução em `/tmp` (r2), nunca um conserto. O proxy morreu junto com a causa que ele media; quem o substitui é a linha abaixo, que mede o fato em vez de estimá-lo. |
+| Arquivos de **código** tocados por uma rodada de REVIEW | por contrato, a rodada consertava — ninguém contava | **0, em 4 de 4 rodadas.** `git diff --name-only <head de abertura> <head de fechamento>` devolve só `40-review-r<N>.md` e `checkpoint.md` nas quatro; nos streams, todo `Edit`/`Write` das 4 sessões caiu no diretório da missão, mais **um** arquivo em `/tmp` (o harness da r2). É a evidência direta de que o contrato pegou, e não uma inferência do custo. |
+| Campos da linha de sessão do ledger | sem `turns` | **`turns`**, lido de `LAST_PHASE_TURNS` como o `cost`; escalada e `gate_pass` não o carregam |
+| Sessão REVIEW que commita fora do diretório da missão | ninguém registrava | `REVIEW-EDITED-CODE` no `pipeline.log`, em **três** portas (`cmd_run` ×2 + `cmd_retry`) |
+| Asserções de `tests/run-all.sh` | 842 | **866** (+24), `suite green`, rc 0, 106,65 s de relógio |
+| Catálogo de mutação | 218 | **227** (+9): `LEDGER_turns_not_written`, `AUTONOMY_review_loop_counts_every_exec`, `RUN_review_fixes_inline`, `RUN_review_scope_blind`, `RUN_review_scope_handoff_dir_verbatim`, `RUN_review_scope_quotepath_default`, `RUN_journal_write_stops_the_line`, `RUN_journal_raw_redirection_error`, `RUN_ledger_raw_redirection_error` |
+| Superfície do `tests/check-lang.sh` | piso 37 contra 40 reais (3 de folga) | piso **41** sobre 41 reais, com `docs/graphify.md` dentro |
+
+**O veredito imediato (M2), preenchido pela fase DOCS — e ele está partido ao meio.** O contrato
+**pegou**: 4 rodadas, 0 arquivos de código tocados, a nota da r4 dada por quem não escreveu o
+patch. A rodada de achar **ficou barata**: média US$ 11,96 contra 31,24, com r3 e r4 abaixo do teto
+de US$ 15. E o laço inteiro **piorou**: US$ 102,39 (68%) contra os US$ 66,34 (50%) da missão de kit
+anterior, contra um alvo de US$ 40. As duas metades não se contradizem — elas dizem onde a próxima
+missão tem de mexer. O custo não estava na fase REVIEW, estava no **laço de conserto**, e movê-lo
+para a EXEC o tornou visível em vez de menor: 10 sessões `R<n>`, US$ 5,46 cada, contra os US$ 1–2
+por boot com que a decisão 6 do grill dimensionou a régua de lote. **A alavanca que sobra é quantas
+linhas `R<n>` uma rodada escreve**, e é isso que a janela 3 tem de medir. Registrado aqui, e não só
+no relatório da rodada, para que ninguém reescreva o alvo depois de saber o resultado.
+
+**O que ISTO NÃO PROVA.** (1) Nenhum número de custo tinha mudado quando esta entrada foi escrita:
+o diff é contrato, instrumento e guarda — o efeito é a **próxima** rodada de REVIEW, e a M1 só fecha
+na janela 3, com 2–3 missões reais do `sales_quote` sobre o sha do merge desta missão. ⚠️ **A DOCS
+mediu a M2 e o parágrafo acima é a emenda, não a substituição:** os números desta missão são de
+**uma** missão de kit, no repo que constrói o kit, com um `sdd run` cujo processo carregava o
+runner pré-`88432ee` — nenhum deles é a M1, e a linha de base de comparação (`20260831`) é uma
+missão só. (2) A estimativa declarada no grill é
+**20–35%** no laço, não 50%: missão que já fechava em A na r1 não tem laço para cortar, e por isso
+a M1 mede **mediana e máximo**, não a média. (3) O desenho novo gasta **duas rodadas** no caminho
+normal (r1 é B por desenho quando há o que consertar), então `rounds` entre janelas deixa de ser
+comparável — régua declarada aqui, no `CONTEXT.md` (D22) e no `config/schema.md`. (4) A guarda
+`REVIEW-EDITED-CODE` **avisa**, não impede; e o que ela não consegue computar é o diff contra um
+HEAD anterior **já podado** do ODB — não o `commit --amend` em si, que responde certo (medido nos
+dois sentidos; limite declarado no cabeçalho da função). (5) `turns` é um contador do harness, não uma
+medida de contexto: ele correlaciona com o cache-read (a regressão do gemba deu corr 0,94 sobre 28
+rodadas, R² 0,36 — ordem de grandeza), e não o substitui.
+
+---
+
 ## 2026-08-31 — O ledger diz se a rodada andou, e a fase que fechou de graça para de ler `refez` (missão `20260831-a-rodada-que-andou`)
 
 **Problema (Gemba):** a janela de medição 2 fechou e produziu a **primeira fatia da história do kit

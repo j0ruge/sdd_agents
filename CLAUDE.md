@@ -458,3 +458,34 @@ dois gits comparados um com o outro. Detalhe em `docs/handoffs/20260818-lote-fac
 
 Melhoria com antes/depois **medido** vai para o [`KAIZEN_LOG.md`](KAIZEN_LOG.md). Sem número,
 não é kaizen — é opinião.
+
+## Graphify — grafo de conhecimento (consultas estruturais)
+
+Para pergunta **estrutural** sobre o `bin/sdd` e os sensores — quem define X, quem chama X
+**diretamente**, o raio direto de uma mudança — consulte o grafo antes do grep, **só dentro da
+zona medida**. Para bash o extrator vê definições de função e chamadas escritas como statement
+(`f args`, `if f; then`, `f || rc=$?`). **Não vê**: `$(f)` (substituição de comando — é como
+`gate_REVIEW` lê `review_rounds_on_disk` e como `run_phase` lê `phase_model`: 0 de 4 e 0 de 1
+chamadores), despacho dinâmico (`gate_"$phase"`, os 4 sítios que chamam todo gate), e colapsa N
+sítios do mesmo par em **uma** aresta — logo **nunca responde censo de portas**: os `grep -cE`
+deste arquivo continuam sendo o instrumento. Docs estão indexados, mas `query` é ruidoso (5 KB e
+2 de 6 arquivos numa pergunta sobre `BUDGET_REVIEW_USD`); grep dirigido ganha. Medido em
+2026-09-01 sobre 11 perguntas reais — zona, runbook e ledger pareado em
+[`docs/graphify.md`](docs/graphify.md).
+
+```bash
+graphify explain "run_phase"                              # 1ª escolha p/ símbolo conhecido (~20 linhas; recusa ambíguo)
+graphify affected "run_phase" --relation calls --depth 1  # quem chama X DIRETAMENTE (funções, não sítios)
+graphify god-nodes --top 10                               # orientação; aqui os hubs são docs e sensores
+graphify update .                                         # rebuild (~1 s, honra .graphifyignore, zero API)
+```
+
+- Binário isolado em `~/.local/bin/graphify` (0.9.48). `graphify-out/` é **gerado** e está no
+  `.gitignore` inteiro; `.graphifyignore` é versionado e define o escopo (código + docs de
+  arquitetura; handoffs, `docs/qa/`, `TODO.md` e `KAIZEN_LOG.md` ficam fora de propósito — uma
+  rodada de review de 2026-08-17 passou na frente do `config/schema.md` quando entravam).
+- Sem hooks de git (rebuild manual de 1 s). **Nunca** `graphify extract --mode deep` nem
+  `graphify label` — consomem API. Subcomando não tem `--help` (`query --help` executa a pergunta
+  literal `"--help"`).
+- Lição de **uso** (grafo × grep) vira linha pareada no ledger de `docs/graphify.md`; lição sobre a
+  **ferramenta** vai por retrofit lean para a skill viva `graphify` do `sales_quote`, onde ela mora.

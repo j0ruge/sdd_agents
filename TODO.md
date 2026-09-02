@@ -437,6 +437,51 @@ Achados sobre **repos-alvo** vão para o `TODO.md` daquele repo. Este arquivo é
   Direção: exigir que cada caminho de `MUTATION_STAMP_PATHS` exista, ou carimbar a lista na chave.
   — descoberto por `sdd-reviewer` na missão `20260819-fecho-que-nao-mente` (2026-08-19)
 
+- [ ] **Piso anti-vacuidade que fica para trás continua PASSANDO, e nada avisa** —
+  `tests/check-lang.sh:123` — o piso dizia 37 caminhos contra 40 reais: as ADRs 0004–0006 entraram
+  pelo glob `docs/adr/*.md` sem tocar o número, e piso menor que a superfície certifica menos do
+  que lê. Corrigido para 41 no I4, mas a **classe** segue viva — todo piso que convive com um glob
+  (`REVIEW_FLOOR`, `LINT_FLOOR`, os de `check-pipefail.sh`) falha igual, e é a segunda vez que este
+  mesmo piso paga. Direção: derivar o piso, ou um sensor que compare piso × superfície real.
+  — descoberto por `sdd-executor` na missão `20260901-o-revisor-so-acha` (2026-09-01)
+
+- [ ] **Nenhum instrumento mede prosa de CONTRATO fora de `templates/`** — `README.md:152` — o
+  `refute()` do `tests/check-templates.sh` só lê `templates/`, e `README.md`/`docs/*.md` entram na
+  `surface()` do `check-lang.sh`, que mede **idioma** e nada mais. Medido nesta missão: o I2 mudou
+  o contrato do revisor em cinco lugares, o sexto sobreviveu à suíte verde e caiu numa jornada de
+  QA; o sétimo (os diagramas de ordem canônica) sobreviveu à própria QA e só a DOCS o pegou.
+  Direção: um `refute()` sobre a superfície de docs, ou ligar a tabela de agentes ao frontmatter.
+  — descoberto por `sdd-executor` na missão `20260901-o-revisor-so-acha` (2026-09-01)
+
+- [ ] **O braço `else ""` da célula do laço de revisão não tem fixture** — `bin/sdd:5257` — a
+  guarda contra a divisão por zero do `jq` (`$cost > 0`) está correta e **não é medida**: uma
+  frouxidão futura (`$cost >= 0`) abortaria o `--by-mission` inteiro sobre um ledger real com
+  missão de custo nulo, e nada nesta suíte avisaria. Direção: fixture diferencial de missão de
+  custo todo nulo **com** rodada REVIEW.
+  — descoberto por `sdd-reviewer` na missão `20260901-o-revisor-so-acha` (2026-09-02)
+
+- [ ] **Comentário afirma que a segunda asserção é o que torna a primeira não-vácua, e não é** —
+  `tests/check-gates.sh:897` — medido sob a sabotagem realista (`checkpoint_rows` cego a `R<n>`):
+  só a primeira cai, e a segunda fica verde por um motivo diferente do alegado. É a classe
+  *"comentário que afirma paridade não é paridade"* que o `CLAUDE.md` já nomeia. Direção: ou o
+  comentário baixa a alegação, ou a asserção ganha o mundo que a distingue.
+  — descoberto por `sdd-reviewer` na missão `20260901-o-revisor-so-acha` (2026-09-02)
+
+- [ ] **A suíte não tem `timeout` em lugar nenhum** — `tests/run-all.sh:82` — regra quebrada que
+  recursa sai como **travamento sem mensagem**, e não como vermelho; medido em `rc=124` sob
+  `timeout 20` na r2 desta missão. É a classe que já custou três sessões de REVIEW deste repo
+  (`4c86712`), e o probe de ponta a ponta do `check-templates.sh` está a uma edição dela.
+  Direção: barato, mas o número tem de ser escolhido a dedo por passo.
+  — descoberto por `sdd-reviewer` na missão `20260901-o-revisor-so-acha` (2026-09-02)
+
+- [ ] **A âncora `^  ok    ` do Check não alcança 82 das 866 asserções da suíte** —
+  `tests/check-templates.sh:64` — as primitivas `check()`/`refute()` imprimem `ok` com **três**
+  espaços enquanto `tests/check-checkpoint.sh:111` cobra quatro em todo repo adotante, e o
+  `calibrate()` que existe para casar as duas pontas é cego a elas: lê só linhas com `pass() {`,
+  logo enxerga 7 de 13 sensores e deixa 2 dos 8 comportamentais de fora prometendo "every
+  behavioural sensor". Direção: unificar em quatro espaços **e** dar cobertura ao `calibrate()`.
+  — descoberto por `sdd-reviewer` na missão `20260901-o-revisor-so-acha` (2026-09-02)
+
 ### Contrato e configuração
 
 - [ ] **Fase interrompida depois do REVIEW faz o pipeline REGREDIR para o REVIEW** —
@@ -533,6 +578,42 @@ Achados sobre **repos-alvo** vão para o `TODO.md` daquele repo. Este arquivo é
   instância no kit hoje. Direção: casar por comando, o que pede parser de shell.
   — descoberto por `sdd-executor` na missão `20260818-lote-facil` (2026-08-18)
 
+- [ ] **`run_phase` não limpa o ambiente do harness antes do `claude -p`** — `bin/sdd:2735` — um
+  `sdd run` lançado de dentro de uma sessão do Claude Code herda `CLAUDE_CODE_CHILD_SESSION`,
+  `CLAUDE_CODE_MESSAGING_SOCKET` e afins, e é morto pelo harness sem ação humana (2× em
+  2026-08-30). A saída é `env -u CLAUDECODE -u CLAUDE_CODE_* …` no próprio `run_phase`, com o probe
+  correspondente. Enquanto não entra, todo `sdd run` tem de sair do terminal do humano.
+  — descoberto por `humano` na missão `20260830-invariante-do-frete-no-agregado` (2026-08-30)
+
+- [ ] **Nenhuma chave de caminho do `.sdd/config.sh` é normalizada antes de virar padrão de `case`**
+  — `bin/sdd:2393` — `review_scope_check` compara `$TODO_FILE` **literalmente** contra a saída de
+  `git diff --name-only`; um repo-alvo com `TODO_FILE="./TODO.md"` — ou `HANDOFF_DIR="./docs/handoffs"`,
+  que a normalização do `F4` também não pega — reproduz o defeito que o `F4` acabou de consertar,
+  com raio menor. Direção: normalização **única** na leitura do config, com um probe por chave.
+  — descoberto por `sdd-executor` na missão `20260901-o-revisor-so-acha` (2026-09-02)
+
+- [ ] **`run_phase` cria o diretório de log da sessão sem guarda nenhuma** — `bin/sdd:2774` — é a
+  irmã, um nível acima, da escrita que o `R8` guardou: com `.sdd/logs` em modo 500 o `sdd run`
+  morre com um `mkdir: Permissão negada` cru, **rc 1, zero linha de ledger e zero `warn` do kit**.
+  Não é remendo de escopo: o log da sessão **é** a evidência da fase, então talvez a resposta certa
+  seja um `die` com frase e não um `warn` que segue — decisão que merece achado próprio.
+  — descoberto por `sdd-executor` na missão `20260901-o-revisor-so-acha` (2026-09-02)
+
+- [ ] **Uma sessão escreve o ledger com o `bin/sdd` que tinha em MEMÓRIA ao ser lançada** —
+  `bin/sdd:2650` — logo a missão que ACRESCENTA um campo é, por construção, a única que não o
+  registra: 3 das 4 rodadas desta missão saíram com `turns: null`. Duas superfícies, consequências
+  diferentes: no ledger o campo falta; em `review_scope_check` um `grep -c REVIEW-EDITED-CODE`
+  responde `0` sem distinguir "medido limpo" de "não medido" — fail-open de leitura. Direção: o
+  `sdd run` avisar quando o `bin/sdd` mudou sob ele; a métrica citar `.sdd/logs/` na estreia.
+  — descoberto por `sdd-qa` na missão `20260901-o-revisor-so-acha` (2026-09-01)
+
+- [ ] **A fronteira do laço de revisão é calculada sobre o subconjunto `comparable`** —
+  `bin/sdd:5249` — uma rodada não-comparável esconde as sessões EXEC que ela mesma gerou, então a
+  M1 — a métrica primária desta missão — sub-reporta exatamente o que existe para contar, e no
+  limite a célula some numa missão que laçou. Os limites declarados ao lado cobrem o denominador,
+  não a fronteira. Direção: declarar o limite, ou calcular a fronteira sobre todas as linhas.
+  — descoberto por `sdd-qa` na missão `20260901-o-revisor-so-acha` (2026-09-01)
+
 ### Saída humana e cosmética
 
 - [ ] **43% do `docs/pipeline.md` é um subsistema só, e ele cresce toda missão do ledger** —
@@ -549,6 +630,12 @@ Achados sobre **repos-alvo** vão para o `TODO.md` daquele repo. Este arquivo é
   repo`, tabela somando 73 sessões — 75 − 2 − 11 ≠ 73. Direção: **decisão humana** entre o cabeçalho
   contar o arquivo (quebra as 7 asserções `assert_bucket_sum`) ou as duas linhas fora de escopo
   saírem do parágrafo. — descoberto por `sdd-qa` na missão `20260818-lote-facil` (2026-08-18)
+
+- [ ] **`turns` não aparece em nenhuma view humana** — `bin/sdd:2650` — o campo está na tabela de
+  campos do `docs/pipeline.md` e é lido só por `jq` ad-hoc, então quem instala o kit não descobre
+  que ele existe — e ele é metade da M2 desta missão. Direção: dizer no `§ Field reference` que é
+  instrumento cru, ou pendurá-lo na célula do `review loop` do `--by-mission`.
+  — descoberto por `sdd-reviewer` na missão `20260901-o-revisor-so-acha` (2026-09-02)
 
 ### Comentário e registro
 
@@ -585,6 +672,35 @@ Achados sobre **repos-alvo** vão para o `TODO.md` daquele repo. Este arquivo é
   do próprio sensor e em nenhum lugar da regra. Direção: admitir a quinta com o porquê, ou dar-lhe
   o auto-teste. — descoberto por `sdd-reviewer` na missão `20260818-lote-facil` (2026-08-18)
 
+- [ ] **`tests/check-entrypoint.sh` diz "all ten assertions" contra 14 probes** —
+  `tests/check-entrypoint.sh:419` — `grep -cE '^ *probe '` responde **14**, todas acima daquela
+  linha; é a segunda casa da classe que o `R10` fechou no `pipeline_log_line`, num arquivo que o
+  `CLAUDE.md` cita como exemplo da régua. ⚠️ As outras duas ocorrências (`:60`, `:329`) são
+  **história honesta** e não se tocam. Direção: a frase fala de **todas** e carrega o `grep` ao
+  lado — nunca escrever 14, que nasce velho no próximo probe acrescentado.
+  — descoberto por `sdd-executor` na missão `20260901-o-revisor-so-acha` (2026-09-02)
+
+- [ ] **`reviewscope_files()` não declara o limite dele na fórmula do arquivo** —
+  `tests/check-autonomy.sh:4401` — o `awk -F': ' … $NF` trunca o diagnóstico em silêncio quando o
+  caminho contém `": "`; o arquivo usa `DECLARED LIMIT:` em três outros pontos e este não usa.
+  Direção: declarar, ou recuperar a lista por um separador que o caminho não possa conter.
+  — descoberto por `sdd-reviewer` na missão `20260901-o-revisor-so-acha` (2026-09-02)
+
+- [ ] **Refutação de handoff cita evidência que não existe** —
+  `docs/handoffs/20260901-o-revisor-so-acha/30-handoff-qa.md:79` — a refutação R2 afirma que "o
+  prompt nomeia `TODO.md` explicitamente", e nem `phase_extra REVIEW` nem `agents/sdd-reviewer.md`
+  contêm essa string (só a variável `TODO_FILE`). A **conclusão** segue certa e tem probe; a
+  evidência citada é que não existe. Imprecisão em artefato de trilha de auditoria: não se conserta
+  reescrevendo o handoff de uma fase encerrada, e sim registrando aqui.
+  — descoberto por `sdd-reviewer` na missão `20260901-o-revisor-so-acha` (2026-09-02)
+
+- [ ] **O `TODO.md` carrega 4 itens já fechados e mergeados que a própria regra manda apagar** —
+  `TODO.md:696` — `RESOLVIDO por 594ef07` ×3 e `c7c2e2e` ×1, os dois ancestrais de `main` por
+  `git merge-base --is-ancestor`. **Pré-existente**, não nasceu nesta branch, e é ocorrência da
+  lacuna já declarada em `TODO.md:482` (a catraca conta `- [ ]` e não conhece `RESOLVIDO por`).
+  Direção: a faxina cabe na triagem do `sdd kaizen`, com a baseline movendo no mesmo diff.
+  — descoberto por `sdd-reviewer` na missão `20260901-o-revisor-so-acha` (2026-09-02)
+
 ### Idioma
 
 - [ ] **Dois arquivos ficam fora do sensor de idioma** — `tests/check-lang.sh` (função
@@ -594,6 +710,13 @@ Achados sobre **repos-alvo** vão para o `TODO.md` daquele repo. Este arquivo é
   contrato dos templates para `tests/template-contract.txt` (dados), deixando a lógica inglesa;
   sobra o `check-lang.sh`, irredutível e por isso com `selftest()`. — descoberto por
   `sdd health`/`check-lang` na missão `20260815-i13.5-kit-em-ingles` (2026-08-15)
+
+- [ ] **`surface()` do `check-lang.sh` ENUMERA arquivos em vez de casar `docs/*.md`** —
+  `tests/check-lang.sh:50` — um doc novo em `docs/` nasce **fora** da régua de idioma enquanto o
+  `CLAUDE.md § Idioma` promete `docs/` inteiro; o I4 cobriu `docs/graphify.md` **um arquivo por
+  vez**, que é o remendo e não o conserto. Direção: glob, com o piso derivado junto — é decisão,
+  porque glob e piso enumerado são a mesma discussão do item do piso acima.
+  — descoberto por `sdd-planner` na missão `20260901-o-revisor-so-acha` (2026-09-01)
 
 ### Custo e escala
 

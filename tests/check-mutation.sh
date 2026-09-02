@@ -2676,6 +2676,139 @@ mut_RUN_inline_retry_keeps_the_failed_verdict() {
   perl -0pi -e 's/    gate_failed\["\$phase"\]="\$\( \[ "\$gate_rc2" -eq 0 \] && echo 0 \|\| echo 1 \)"\n//' "$1"
 }
 
+# ---------------------------------------------------------------------------
+# 20260901-o-revisor-so-acha — the row says how many turns it spent, and the
+# mission line says what the review LOOP cost.
+# ---------------------------------------------------------------------------
+# `turns` leaves the row. The writer keeps its `--arg` (jq accepts unused ones, so this compiles
+# and the harness cannot dismiss it as broken) and simply stops emitting the field, which is the
+# exact shape `mut_LEDGER_progress_not_written` sabotages one screen up. Every row is then back to
+# money alone — and money alone cannot tell a phase that got cheaper by spending fewer turns from
+# one that got cheaper by luck, which is the whole reason the field exists. Caught by `a session
+# row carries the turns the session spent` in check-autonomy.sh, which reads `null` against the
+# `7` its stub put in the stream.
+mut_LEDGER_turns_not_written() {
+  sed -i '/^      turns: (\$turns/d' "$1"
+}
+
+# The frontier of the review loop goes: every EXEC session of the mission joins it, not just the
+# ones AFTER the first round. The cell then reports work the review never caused — on the fixture,
+# US$ 20.00 (91%) where the honest reading is 16.00 (73%) — and the metric of this very mission
+# would congratulate itself for the EXEC sessions that built the thing. Caught by `the review loop
+# counts REVIEW and the EXEC sessions after it, never the EXEC before` in check-autonomy.sh, whose
+# other half (the twin ledger with no round at all) is blind to this one on purpose: it pins the
+# opposite direction.
+mut_AUTONOMY_review_loop_counts_every_exec() {
+  sed -i 's@(\.value\.phase == "EXEC" and \.key > \$fr)@.value.phase == "EXEC"@' "$1"
+}
+
+# Not a gate: the REVIEW session is told to fix in place again. The whole contract of this mission
+# travels in ONE sentence of the boot prompt — nothing in `gate_REVIEW`, `current_phase()` or the
+# checkpoint parser changed, so this line is the entire mechanism, and a runner that lost it goes on
+# passing every gate while paying for the loop the split removed. The agent file would still say
+# "you do not fix", which is the expensive shape: two instructions disagreeing inside one session.
+# Caught by `the REVIEW boot prompt sends findings to R increments and never fixes in-session` in
+# check-dry-run.sh, whose second half reads the ABSENCE of this exact sentence.
+#
+# Anchored on the FUNCTION range and not on the indentation of the arm: `phase_agent` and
+# `phase_model` carry a `REVIEW)` line each, one of them a keystroke away from this one, and a
+# whitespace-anchored pattern that drifted would sabotage the wrong arm while still looking applied.
+mut_RUN_review_fixes_inline() {
+  sed -i '/^phase_task()/,/^}/ s@^\( *REVIEW).*printf .%s.n. \).*$@\1"review and fix, INSIDE this session, until every criterion is Grade A" ;;@' "$1"
+}
+
+# Not a gate either: the guard that says whether the sentence above was OBEYED goes blind. The
+# mutant returns on the function's own first line, so all three call sites keep calling it and the
+# runner keeps working — it just never notices a reviewer that fixed in place. That is the whole
+# failure mode this instrument exists for: the contract lives in a prompt, and a prompt is a
+# request, so the only thing that can say a round honoured it is the journal line.
+#
+# `return 0` in place of the phase test, and not a deleted call site: a deleted call would measure
+# one of the three doors, and each door already has a probe of its own (the sabotage pass that found
+# the cmd_retry door missing one is written up in check-autonomy.sh). This kills the DEFINITION, so
+# it is the four regimes together that answer. Caught by `a REVIEW session that edited code outside
+# the mission directory is logged REVIEW-EDITED-CODE`.
+mut_RUN_review_scope_blind() {
+  sed -i '/^review_scope_check()/,/^}/ s@^  \[ "\$phase" = "REVIEW" \] || return 0$@  return 0@' "$1"
+}
+
+# The guard above, still firing, still logging — and now NOISE. `$HANDOFF_DIR` goes back to being
+# matched verbatim, which is how it was written until the QA of 20260901-o-revisor-so-acha
+# reproduced it: the key arrives from the target repo's config exactly as a human typed it, and
+# `docs/handoffs/` makes the allowlist pattern `docs/handoffs//<mission>/*`, matching no path git
+# ever prints. Every healthy round then reports its OWN report as code, which is worse than a
+# silent guard: a warning that fires when nothing is wrong teaches its only reader to scroll past
+# the one time something is. Caught by `a trailing slash in HANDOFF_DIR does not turn a healthy
+# round into a warning` in check-autonomy.sh — the regime whose config carries the slash.
+#
+# Anchored on the FUNCTION range, like its siblings: `$MISSION` and `$HANDOFF_DIR` appear together
+# elsewhere in this runner, and a pattern that drifted would sabotage a path expression somewhere
+# else while still looking applied.
+mut_RUN_review_scope_handoff_dir_verbatim() {
+  sed -i '/^review_scope_check()/,/^}/ s@^      "\$mission_dir"/\*) continue ;;$@      "$HANDOFF_DIR/$MISSION"/*) continue ;;@' "$1"
+}
+
+# The same noise, reached from the OTHER side of the same match — and this time it is git writing
+# the string, not a human writing the config key. Dropping `-c core.quotePath=false` restores git's
+# default, under which a tracked path holding one byte outside ASCII comes back C-quoted and
+# octal-escaped; it opens with a `"`, matches no arm of the allowlist, and an artifact the round
+# wrote inside its OWN mission directory — a report named in pt-BR, in a repo whose OUTPUT_LANG is
+# pt-BR — is reported as code on a healthy round. Caught by `a mission-directory file whose name is
+# not ASCII is not flagged REVIEW-EDITED-CODE` in check-autonomy.sh — regime 6, whose fixture pins
+# core.quotePath on so the venom does not depend on the reader's ~/.gitconfig.
+#
+# Anchored on the FUNCTION range for its sibling's reason: `git -C "$REPO_ROOT" diff` is a shape
+# this runner writes in several places, and a pattern that drifted would sabotage one of those
+# while still looking applied.
+mut_RUN_review_scope_quotepath_default() {
+  sed -i '/^review_scope_check()/,/^}/ s@ -c core\.quotePath=false diff --name-only @ diff --name-only @' "$1"
+}
+
+# The guard above, firing correctly — and taking the runner down with it. `pipeline_log_line` ends
+# in a redirection, and under `set -e` a redirection that fails kills the shell where it happens:
+# with `.sdd/logs/<mission>/pipeline.log` unwritable (a chmod, a read-only mount, a full disk), the
+# journal call that three pages of this kit describe as "warns and records; stops nothing" becomes
+# the place the run dies. This restores that: the write goes back to being unguarded and the
+# announcement branch is left unreachable, which is byte for byte the world measured before the fix
+# — `sdd run` died on run_phase's OWN session line, one caller before the scope guard, rc 1 and no
+# ledger row. Caught by `the scope guard warns without stopping the line when the pipeline log
+# cannot be written` in check-autonomy.sh — regime 7, whose floor `armed:1` proves the venom is on.
+#
+# Anchored on the FUNCTION range like the scope guard's siblings: `mkdir -p "$(dirname …)"` is a
+# shape this runner writes in several places, and a pattern that drifted would sabotage one of
+# those while still looking applied.
+mut_RUN_journal_write_stops_the_line() {
+  # ⚠️ The anchor moved with r3 finding #1: `2>/dev/null` now stands to the LEFT of the `>>`, and
+  # this pattern was written against the old order. It ROTTED silently — sed matched nothing, the
+  # mutant applied nothing — and was caught by re-applying every catalogue entry after the edit,
+  # never by reading it. A neighbour's anchor is what a line rewrite breaks first.
+  sed -i '/^pipeline_log_line()/,/^}/ s@ 2>/dev/null >> "\$PIPELINE_LOG" || {@ >> "$PIPELINE_LOG"; true || {@' "$1"
+}
+
+# r3 finding #1 of `20260901-o-revisor-so-acha`. `2>/dev/null` goes back to the RIGHT of the `>>`,
+# which is where it was written: bash applies redirections LEFT TO RIGHT, so the failed `open` of
+# the append complains to an fd 2 that has not been redirected yet. The curated one-shot still
+# fires — what comes back beside it is the shell's own `Permission denied`, once per line, in the
+# operator's channel. Caught by `neither journal writer leaks a raw redirection error when its file
+# cannot be written` in check-autonomy.sh, regime 8, whose floors `jarmed:1 larmed:1` prove the
+# venom is on and whose `journal:1 ledger:1` prove both writers were reached.
+#
+# TWO ENTRIES AND NOT ONE, because the assertion is one and speaks about BOTH writers: a single
+# mutant reverting both halves would score the same point for either of them, and half a fix would
+# still look caught. This pair is the "one mutant per half of the assertion" rule — measured, they
+# report `raw:2` and `raw:1` respectively, so the two halves are told apart by the sensor as well.
+#
+# Anchored on the FUNCTION range like the scope guard's siblings: `printf '%s\n'` followed by an
+# appending redirection is a shape this runner writes in several places, and a pattern that drifted
+# would sabotage one of those while still looking applied.
+mut_RUN_journal_raw_redirection_error() {
+  sed -i '/^pipeline_log_line()/,/^}/ s@ 2>/dev/null >> "\$PIPELINE_LOG" || {@ >> "$PIPELINE_LOG" 2>/dev/null || {@' "$1"
+}
+
+mut_RUN_ledger_raw_redirection_error() {
+  sed -i '/^autonomy_append()/,/^}/ s@ 2>/dev/null >> "\$file" || {@ >> "$file" 2>/dev/null || {@' "$1"
+}
+
 CATALOG=(
   PLAN_empty_approval
   PLAN_kaizen_born_blind
@@ -2895,6 +3028,15 @@ CATALOG=(
   RUN_retry_photographs_every_phase
   RUN_retry_exec_photographs_every_phase
   RUN_inline_retry_keeps_the_failed_verdict
+  LEDGER_turns_not_written
+  AUTONOMY_review_loop_counts_every_exec
+  RUN_review_fixes_inline
+  RUN_review_scope_blind
+  RUN_review_scope_handoff_dir_verbatim
+  RUN_review_scope_quotepath_default
+  RUN_journal_write_stops_the_line
+  RUN_journal_raw_redirection_error
+  RUN_ledger_raw_redirection_error
 )
 
 # Mutations that are NOT caught today, each with the increment that closes it. Ratchet in both

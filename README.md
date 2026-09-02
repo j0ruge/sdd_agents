@@ -9,7 +9,7 @@ The human takes part in two things: **planning** and **merging**. Everything els
 ```
 [you] ──approve plan──▶ sdd-planner ──▶ bin/sdd run <mission>
                                              │
-             TICKET → EXEC → QA ⇄ EXEC → REVIEW → DOCS → PR
+     TICKET → EXEC → QA ⇄ EXEC → REVIEW ⇄ EXEC → DOCS → PR
                                              │
                                         [you] ──▶ merge
 ```
@@ -62,7 +62,8 @@ sdd autonomy                 # what the sessions did per kit version (advanced �
                              #   from the global ledger (~/.sdd/autonomy-log.jsonl)
 sdd autonomy --all-repos     # ...for EVERY repo on this machine (the cross-project question; never the default)
 sdd autonomy --by-mission    # ...per mission: the same outcomes, launch(es) (distinct run_id — the intervention
-                             #   count), reopened phases, the checkpoint's intervention notes, and the mission cost
+                             #   count), reopened phases, the checkpoint's intervention notes, the review loop
+                             #   (REVIEW plus the EXEC sessions after it, in US$ and as a share), and the mission cost
 sdd kaizen                   # judge the previous kit change and plan the next kit mission (kit repo only);
                              #   it reads EVERY repo (ADR 0005) — --all-repos is accepted and is a no-op here
 sdd kaizen --series          # the deterministic series (JSON) the judge cites, on its own, with the
@@ -149,7 +150,7 @@ the directory `docs/handoffs/<YYYYMMDD>-<slug>/`.
 | `sdd-planner` | plan | Fable (interactive) | `00-missao.md`, `01-plano.md`, `checkpoint.md` |
 | `sdd-executor` | TDD execution, 1 session per increment | Opus | commits + updated `checkpoint.md` |
 | `sdd-qa` | closes the QA cycle (sub-step `QA:close`) | Opus | e2e specs, fix increments, `30-handoff-qa.md` |
-| `sdd-reviewer` | code review until Grade A | Opus | `40-review-r<N>.md` + fixes |
+| `sdd-reviewer` | code review until Grade A, read-only over the code | Opus | `40-review-r<N>.md` + `R<n>` increments |
 | `sdd-docs` | living documentation | Opus | target docs synced + `45-docs.md` |
 | `sdd-publisher` | TICKET (opens the issue) and PR (push + opens the PR) | Sonnet | `10-ticket.md`, open PR + `50-pr.md` |
 
