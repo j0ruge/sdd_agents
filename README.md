@@ -9,7 +9,7 @@ The human takes part in two things: **planning** and **merging**. Everything els
 ```
 [you] ──approve plan──▶ sdd-planner ──▶ bin/sdd run <mission>
                                              │
-             TICKET → EXEC → QA ⇄ EXEC → REVIEW → DOCS → PR
+     TICKET → EXEC → QA ⇄ EXEC → REVIEW ⇄ EXEC → DOCS → PR
                                              │
                                         [you] ──▶ merge
 ```

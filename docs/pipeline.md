@@ -24,8 +24,14 @@ report, calling `gh`. The text the session returns satisfies no gate.
 ## Canonical order
 
 ```
-PLAN → TICKET → EXEC ⇄ QA → REVIEW → DOCS → PR → (merge: human)
+PLAN → TICKET → EXEC ⇄ QA → REVIEW ⇄ EXEC → DOCS → PR → (merge: human)
 ```
+
+Both `⇄` are the **same** mechanism, and no loop code was ever written for either: the phase writes
+a `pending` increment into `checkpoint.md` (`F<n>` from QA, `R<n>` from REVIEW since
+`20260901-o-revisor-so-acha`), `gate_EXEC` goes back to failing, and EXEC comes earlier in the
+order, so the derived phase lands there. The `⇄` after `REVIEW` is what makes the grade independent
+— the round that re-grades did not write the fix.
 
 ## Who measures the gates
 
