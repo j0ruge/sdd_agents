@@ -44,6 +44,9 @@ atualizado: 2026-09-01 22:40
 | R3 | achado #3 da r1: a linha D22 do `CONTEXT.md` carrega duas vezes o `60%` da janela 2 que o `KAIZEN_LOG.md` refutou para `57%` — o alvo (mediana 25%, máximo 50%) NÃO se move | `s=$(grep 'D22' CONTEXT.md); grep -c '29% e 57%' <<< "$s"; grep -c '60%' <<< "$s"` → `1` e `0` | done | 24ee7bf |
 | R4 | achado #4 da r1: declarar o terceiro fail-open de `review_scope_check` — sessão `sdd run` anterior ao commit da guarda carrega o `bin/sdd` velho em memória, e o `grep -c REVIEW-EDITED-CODE` responde `0` por não estar carregada | `h=$(sed -n '/^review_scope_check()/,/^}/p' bin/sdd); grep -c 'predates this guard' <<< "$h"; grep -c 'predates this guard' docs/pipeline.md; bash tests/run-all.sh >/dev/null 2>/dev/null; echo rc=$?` → `1`, `1` e `rc=0` | done | bffc79f |
 | R5 | lote dos achados #5, #6, #8 e #9 da r1 (MEDIUM/LOW baratos): o `review_check` ganha o qualificador `(R<n>)`; o `GATE_WHY` para de dizer "fixes must be committed"; a fixture PT-BR do `check-gates.sh` vira inglês; o denominador `1.614,87` é reconciliado com o `KAIZEN_LOG` | `cp templates/review.md /tmp/r5.bak; sed -i 's/ (R<n>)//' templates/review.md; SDD_TPL_SELFTEST_CHILD=1 bash tests/check-templates.sh >/dev/null 2>/dev/null; echo qual=$?; cp /tmp/r5.bak templates/review.md; grep -c 'fixes must be committed' bin/sdd; grep -c 'achado #1 da r1' tests/check-gates.sh; o=$(cat agents/sdd-reviewer.md docs/pipeline.md); grep -c '1.614,87' <<< "$o"` → `qual=1`, `0`, `0` e `0` | done | 541b524 |
+| R6 | achado #1 da r2 (HIGH): `SDD_TPL_SELFTEST_CHILD` setada no ambiente pula o `selftest()` inteiro do `check-templates.sh` E força `SELFTEST_RAN=1`, satisfazendo a guarda de vacuidade de `:409` — o sensor imprime `template contract intact` sem ter verificado nada sobre si. O filho do probe end-to-end PRECISA seguir pulando (senão recursa): o que muda é que pular deixa de satisfazer a guarda e passa a dizer alto que pulou | `o=$(bash tests/check-templates.sh 2>&1); grep -c '^  ok    self-test: the probes cannot be skipped from the environment' <<< "$o"; grep -c '^  ok    self-test: skipping the probes is announced, never silent' <<< "$o"` → `1` e `1` | pending | — |
+| R7 | lote dos achados #2, #3, #4 e #7 da r2 (2 MEDIUM + 1 MEDIUM + 1 LOW, todos texto): o limite declarado do `commit --amend` para de afirmar o que foi medido falso; `docs/failure-modes.md` ganha a ressalva que o `R4` pôs nos outros dois sítios; as duas células "Depois" do `KAIZEN_LOG` viram auto-declarantes como as seis irmãs (NÃO um número novo, que nasceria velho de novo); o agente para de prometer que "the runner notices" | `grep -c 'predates this guard' docs/failure-modes.md; grep -c 'then fails, the capture is empty' bin/sdd; grep -c 'medido pela fase DOCS' KAIZEN_LOG.md; grep -c 'the runner notices and logs' agents/sdd-reviewer.md; bash tests/run-all.sh >/dev/null 2>/dev/null; echo rc=$?` → `1`, `0`, `8`, `0` e `rc=0` | pending | — |
+| R8 | achado #5 da r2 (LOW): o ramo de aviso de `review_scope_check` termina em `pipeline_log_line`, cujo status sobe para as três portas — todas chamadas sem guarda sob `set -e` —, então um `pipeline.log` sem permissão de escrita derruba o runner numa guarda que três lugares do kit descrevem como "stops nothing"; a irmã `kit_guard_check` termina em atribuição e não consegue. Linha própria porque é a única do lote que precisa de asserção nova, com o mundo montado | `o=$(bash tests/check-autonomy.sh 2>&1); grep -c '^  ok    the scope guard warns without stopping the line when the pipeline log cannot be written' <<< "$o"` → `1` | pending | — |
 
 ## Notas de execução
 
@@ -167,6 +170,29 @@ atualizado: 2026-09-01 22:40
 > fora da citação ao registrar uma intervenção de verdade.
 >
 > - intervention: <o que o humano teve de fazer> — <fase> — <custo, se houver>
+
+- **REVIEW r2 (2026-09-02)** — rodada de **achar**, nada consertado aqui. Os `R1`–`R5` da r1 foram
+  re-verificados de fora, um a um, com o Check da própria linha: **5 de 5 passam**, e os dois piores
+  foram reproduzidos nos dois sentidos (a guarda com nome não-ASCII; a grafia maiúscula do heading
+  antigo, que agora sai `FAIL`). Suíte **861** `ok`, `suite green`, rc 0; árvore limpa; secrets
+  pre-scan `{"findings":[]}`.
+- **REVIEW r2 → `R6`** — achado **#1 da r2** (HIGH), `tests/check-templates.sh:219`: fail-open no
+  auto-teste do próprio sensor. Linha própria por ser HIGH e por ser fail-open de sensor. ⚠️ O
+  Check do `R5` (linha acima, já `done`) usa `SDD_TPL_SELFTEST_CHILD=1` como atalho — ou ele muda
+  no mesmo diff, ou o conserto quebra um Check já fechado.
+- **REVIEW r2 → `R7`** — lote dos achados **#2, #3, #4, #5 e #7 da r2** (3 MEDIUM + 2 LOW, todos
+  baratos), pela decisão 6 do `00-missao.md`. ⚠️ O termo do `KAIZEN_LOG` **não** é "escrever 861 e
+  224": o `R6` mexe em `tests/`, então número escrito agora nasce velho outra vez — foi por isso que
+  a r1 recusou fazer disso um `R<n>`. As duas células viram auto-declarantes como as seis irmãs, e
+  quem preenche é a DOCS, uma vez, no fim (por isso o Check espera `8` e não `6`).
+- **REVIEW r2 — achados #6 e #8 NÃO viraram `R<n>`**: vão para o `TODO.md` pela fase DOCS, com os
+  seis que a r1 já deixou lá. Nada foi escrito no `TODO.md` nesta rodada de propósito —
+  `tests/health-baseline.txt` está na chave do carimbo de mutação.
+- **REVIEW r2 — M2 medida e não fecha**: r1 = 48 turnos (teto 60 ✅) e US$ 17,92 (teto 15 ❌); laço
+  de revisão da missão = US$ 40,92 (46%) de US$ 88,94 contra o teto de US$ 40, já estourado antes
+  desta sessão. Registrado antes de o resultado do laço ser conhecido, para que o alvo não seja
+  reescrito depois. Contra a missão de kit anterior (US$ 66,34 / 50%) o desenho novo derrubou o
+  absoluto em 38%.
 
 ## Incrementos de fix (QA e REVIEW)
 
