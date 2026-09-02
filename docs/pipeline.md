@@ -451,9 +451,13 @@ written down here and in the function's header rather than left to be discovered
 
 It **warns and records; it does not stop the line** — a reviewer that edited a file has already
 spent the money, and refusing the session would throw away the round report with it. It reads
-commits and not the working tree, and it says nothing when the diff cannot be computed (a
-`commit --amend` over the head the session started from), because a guard that accuses on a
-question it could not answer is a guard nobody reads.
+commits and not the working tree, and it says nothing when the diff cannot be computed, because a
+guard that accuses on a question it could not answer is a guard nobody reads. ⚠️ That world is
+**narrower than a `commit --amend`** over the head the session started from: measured, the
+rewritten `<before>` leaves the graph but stays readable in the object database, so `git diff`
+exits 0 with the right list and the guard warns correctly. The diff only becomes uncomputable once
+something has since dropped that object — `git gc --prune=now`, after which `git diff` exits 128
+with `bad object`.
 
 `grep -c REVIEW-EDITED-CODE .sdd/logs/<mission>/pipeline.log` answering `0` is what a healthy
 mission looks like — **and also what a mission looks like when the guard never ran.** That number

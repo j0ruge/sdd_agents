@@ -2242,9 +2242,17 @@ kit_guard_check() {
 #  · it reads COMMITS, not the working tree. A reviewer that edited a file and left it uncommitted
 #    is invisible here — and also invisible to the gate, which demands a clean tree, so the run
 #    stops for a different reason.
-#  · `commit --amend` on the head the session started from leaves `<before>` unreachable. `git
-#    diff` then fails, the capture is empty, and this function says nothing rather than accusing a
-#    session over a diff it could not compute.
+#  · `commit --amend` on the head the session started from leaves `<before>` UNREACHABLE BUT STILL
+#    READABLE, and the difference is the whole bullet. The object stays in the ODB until something
+#    prunes it, so `git diff <before> HEAD` exits 0 with the right list and this guard WARNS
+#    correctly. Measured in a throwaway repo, both halves: `merge-base --is-ancestor <before> HEAD`
+#    answers 1 (gone from the graph) while `diff --name-only <before> HEAD` answers 0 and names the
+#    file. The world where the capture really does come back empty is the one AFTER that object is
+#    dropped — `git reflog expire --expire=now --all && git gc --prune=now`, measured in the same
+#    repo: `git diff` exits 128 with `fatal: bad object`, the `|| true` below swallows it, and this
+#    function says nothing rather than accusing a session over a diff it could not compute. That is
+#    the world this author could build by hand; whether a real mission reaches it between the
+#    session's first commit and this call — a gc has to run in that window — is NOT measured here.
 #  · THE PROJECTION reaches this function — the call sits above cmd_run's DRY_RUN branch, next to
 #    kit_guard_check's — and is silent BY CONSTRUCTION rather than by a guard of its own:
 #    `run_phase` returns before opening a session under DRY_RUN, so both heads are the same commit
@@ -2280,9 +2288,10 @@ review_scope_check() {
   [ -n "$before" ] && [ "$before" != "-" ] || return 0
   head_now="$( git -C "$REPO_ROOT" rev-parse HEAD 2>/dev/null || echo "-" )"
   [ "$head_now" != "-" ] && [ "$head_now" != "$before" ] || return 0
-  # `|| true` because `set -e` kills the shell AT THE ASSIGNMENT when git refuses — the amend case
-  # above is a real world, not a hypothetical, and a runner that died there would turn a warning
-  # into an outage.
+  # `|| true` because `set -e` kills the shell AT THE ASSIGNMENT when git refuses — and it still
+  # earns its place after the amend bullet above was corrected: the world where git refuses is the
+  # PRUNED one (`bad object`, rc 128, measured), not the amend itself, which answers fine. A runner
+  # that died on a question it could not answer would turn a warning into an outage.
   #
   # `-c core.quotePath=false` because the allowlist below matches STRINGS git wrote, and with that
   # key on — GIT'S OWN DEFAULT — a tracked path holding one byte outside ASCII comes back C-quoted

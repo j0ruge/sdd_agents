@@ -434,7 +434,13 @@ Three shapes and three different diagnoses:
   The runner writes that line when a REVIEW session commits anything outside the mission directory
   (plus `TODO_FILE` and `tests/health-baseline.txt`). It is a **warning, not a boundary**: the line
   stops nothing, it only tells you the round paid for a second hat and its Grade A is the reviewer
-  certifying its own repair.
+  certifying its own repair. ⚠️ **The absence of the marker is not a measurement.** That grep
+  answers `0` both when the round behaved and when the guard never ran: bash parses this script's
+  functions as it reads the file, so a `sdd run` process that predates this guard carries the
+  `bin/sdd` it parsed at startup and never calls it — which is how `20260901-o-revisor-so-acha`,
+  the mission that added the guard, measured itself. The evidence that survives that window is the
+  round's own `git diff --name-only <head the session opened with> HEAD`; `docs/pipeline.md § The
+  review scope guard` spells it out.
 
 **What you do:** read the last `40-review-r<N>.md` — the real grade is there. If the findings are
 legitimate and large, the mission was badly sliced. If you want the PR anyway, set

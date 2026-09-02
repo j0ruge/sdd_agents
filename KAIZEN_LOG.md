@@ -66,8 +66,8 @@ máximo ≤ 50%) **não se move** por causa disso.
 | Cache-read gasto **depois** do 1º `Edit` da rodada | **70–95%** | *(medido pela fase DOCS desta missão — ver `01-plano.md § Para a fase DOCS`)* |
 | Campos da linha de sessão do ledger | sem `turns` | **`turns`**, lido de `LAST_PHASE_TURNS` como o `cost`; escalada e `gate_pass` não o carregam |
 | Sessão REVIEW que commita fora do diretório da missão | ninguém registrava | `REVIEW-EDITED-CODE` no `pipeline.log`, em **três** portas (`cmd_run` ×2 + `cmd_retry`) |
-| Asserções de `tests/run-all.sh` | 842 | **855** |
-| Catálogo de mutação | 218 | **222** (+4: `LEDGER_turns_not_written`, `AUTONOMY_review_loop_counts_every_exec`, `RUN_review_fixes_inline`, `RUN_review_scope_blind`) |
+| Asserções de `tests/run-all.sh` | 842 | *(medido pela fase DOCS desta missão — ver `01-plano.md § Para a fase DOCS`)* |
+| Catálogo de mutação | 218 | *(medido pela fase DOCS desta missão — ver `01-plano.md § Para a fase DOCS`)* — a DOCS nomeia junto os mutantes que a missão acrescentou |
 | Superfície do `tests/check-lang.sh` | piso 37 contra 40 reais (3 de folga) | piso **41** sobre 41 reais, com `docs/graphify.md` dentro |
 
 **O que ISTO NÃO PROVA.** (1) Nenhum número de custo mudou ainda: o diff é contrato, instrumento e
@@ -77,8 +77,9 @@ reais do `sales_quote` sobre o sha do merge desta missão. (2) A estimativa decl
 a M1 mede **mediana e máximo**, não a média. (3) O desenho novo gasta **duas rodadas** no caminho
 normal (r1 é B por desenho quando há o que consertar), então `rounds` entre janelas deixa de ser
 comparável — régua declarada aqui, no `CONTEXT.md` (D22) e no `config/schema.md`. (4) A guarda
-`REVIEW-EDITED-CODE` **avisa**, não impede; e ela é cega a um `commit --amend` que reescreva o HEAD
-anterior, limite declarado no cabeçalho da função. (5) `turns` é um contador do harness, não uma
+`REVIEW-EDITED-CODE` **avisa**, não impede; e o que ela não consegue computar é o diff contra um
+HEAD anterior **já podado** do ODB — não o `commit --amend` em si, que responde certo (medido nos
+dois sentidos; limite declarado no cabeçalho da função). (5) `turns` é um contador do harness, não uma
 medida de contexto: ele correlaciona com o cache-read (a regressão do gemba deu corr 0,94 sobre 28
 rodadas, R² 0,36 — ordem de grandeza), e não o substitui.
 
