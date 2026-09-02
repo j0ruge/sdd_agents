@@ -2764,6 +2764,23 @@ mut_RUN_review_scope_quotepath_default() {
   sed -i '/^review_scope_check()/,/^}/ s@ -c core\.quotePath=false diff --name-only @ diff --name-only @' "$1"
 }
 
+# The guard above, firing correctly — and taking the runner down with it. `pipeline_log_line` ends
+# in a redirection, and under `set -e` a redirection that fails kills the shell where it happens:
+# with `.sdd/logs/<mission>/pipeline.log` unwritable (a chmod, a read-only mount, a full disk), the
+# journal call that three pages of this kit describe as "warns and records; stops nothing" becomes
+# the place the run dies. This restores that: the write goes back to being unguarded and the
+# announcement branch is left unreachable, which is byte for byte the world measured before the fix
+# — `sdd run` died on run_phase's OWN session line, one caller before the scope guard, rc 1 and no
+# ledger row. Caught by `the scope guard warns without stopping the line when the pipeline log
+# cannot be written` in check-autonomy.sh — regime 7, whose floor `armed:1` proves the venom is on.
+#
+# Anchored on the FUNCTION range like the scope guard's siblings: `mkdir -p "$(dirname …)"` is a
+# shape this runner writes in several places, and a pattern that drifted would sabotage one of
+# those while still looking applied.
+mut_RUN_journal_write_stops_the_line() {
+  sed -i '/^pipeline_log_line()/,/^}/ s@ >> "\$PIPELINE_LOG" 2>/dev/null || {@ >> "$PIPELINE_LOG"; true || {@' "$1"
+}
+
 CATALOG=(
   PLAN_empty_approval
   PLAN_kaizen_born_blind
@@ -2989,6 +3006,7 @@ CATALOG=(
   RUN_review_scope_blind
   RUN_review_scope_handoff_dir_verbatim
   RUN_review_scope_quotepath_default
+  RUN_journal_write_stops_the_line
 )
 
 # Mutations that are NOT caught today, each with the increment that closes it. Ratchet in both

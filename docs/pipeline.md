@@ -466,6 +466,13 @@ the file, so a `sdd run` process that predates this guard runs the `bin/sdd` it 
 a mission whose own EXEC phase lands the guard is measured by a runner in which the guard does not
 exist. It is how `20260901-o-revisor-so-acha`, the mission that added it, measured itself.
 
+There is a **third** reading of that `0`, and the runner says it out loud rather than leaving you
+to guess: a journal it cannot write. `pipeline_log_line()` no longer lets a failed write stop the
+run — an unwritable `pipeline.log` used to kill the runner at the redirection, which made "warns
+and records; does not stop the line" false for both guards at once — so the run carries on, the
+`warn` still reaches your terminal, and the line is simply lost. The first time it happens you get
+one warning naming the file, once per journal and not once per line.
+
 What can be computed after the fact is the round's own diff, and that is the evidence to cite:
 
 ```bash

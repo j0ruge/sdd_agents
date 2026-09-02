@@ -4524,6 +4524,44 @@ assert_eq "a mission-directory file whose name is not ASCII is not flagged REVIE
   "nonascii:1 sessions:1 committed:1 lines:0 warns:0" \
   "nonascii:$(grep -cF 'round\302\267one.md' <<< "$RS6_RAW") sessions:$(reviewscope_sessions) committed:$([ "$RS6_HEAD_BEFORE" != "$(git -C "$RS6" rev-parse HEAD)" ] && echo 1 || echo 0) lines:$(grep -c 'REVIEW-EDITED-CODE' <<< "$RS6_LOG") warns:$(grep -c 'the reviewer finds and the executor fixes' <<< "$RS6_ERR")"
 
+# 7. THE WARNING BRANCH CANNOT STOP THE LINE. Every regime above measures what the guard SAYS;
+#    this one measures what saying it COSTS. The warn is followed by `pipeline_log_line`, whose
+#    last act is a `printf` redirected into a file the runner does not own — and under `set -e` a
+#    failed redirection kills the shell where it happens, so the sentence three places of this kit
+#    repeat ("it warns and records; it does not stop the line") stopped being true the moment
+#    `.sdd/logs/<mission>/pipeline.log` could not be written.
+#
+#    THE FIRST VICTIM IS NOT THE GUARD, which is why the fix is not a `|| true` at the guard's call
+#    site. Measured in exactly this world before the fix: `sdd run` died inside `pipeline_log_line`
+#    on run_phase's OWN session line — one caller earlier — with `rc=1`, no ledger row and the
+#    guard never reached. Guarding only the guard would have left the runner dying one line up
+#    while its header claimed the property. So the guard lives in the ONE definition, beside the
+#    DRY_RUN and empty-path guards already there and for the reason that function's header gives:
+#    a caller added tomorrow is born with it.
+#
+#    `armed:1` is the floor that the venom is ARMED — as root, or on a filesystem that ignores the
+#    mode, this regime would quietly be regime 1 under another name. `warns:1` is the floor that
+#    the GUARD FIRED: a run that never triggered it would reach the ledger trivially. `journal:1`
+#    and not 2 pins the announcement as ONE-SHOT — two journal writes fail in this run (run_phase's
+#    line and the guard's), and a warning repeated per line would train its only reader to scroll,
+#    which is what the allowlist above exists to prevent. `rc:0 rows:1` is the property itself: the
+#    run ended cleanly and reached the line AFTER the guard, which is the ledger row.
+rm -f "$REVIEWSCOPE_COUNT"
+RS7="$OUTSIDE/reviewscope-nojournal"
+reviewscope_world "$RS7"
+reviewscope_stub "$RS7" 1 code
+mkdir -p "$RS7/.sdd/logs/$MISSION"
+: > "$RS7/.sdd/logs/$MISSION/pipeline.log"
+chmod 000 "$RS7/.sdd/logs/$MISSION/pipeline.log"
+RS7_ARMED=0
+( printf 'x' >> "$RS7/.sdd/logs/$MISSION/pipeline.log" ) 2>/dev/null || RS7_ARMED=1
+RS7_ROWS_BEFORE="$(nrows)"
+RS7_RC=0
+RS7_ERR="$( cd "$RS7" && "$SDD" run "$MISSION" --phase REVIEW --max-phases 1 2>&1 >/dev/null )" || RS7_RC=$?
+assert_eq "the scope guard warns without stopping the line when the pipeline log cannot be written" \
+  "armed:1 sessions:1 warns:1 journal:1 rc:0 rows:1" \
+  "armed:$RS7_ARMED sessions:$(reviewscope_sessions) warns:$(grep -c 'the reviewer finds and the executor fixes' <<< "$RS7_ERR") journal:$(grep -c 'the pipeline journal at' <<< "$RS7_ERR") rc:$RS7_RC rows:$(( $(nrows) - RS7_ROWS_BEFORE ))"
+
 # The stub goes back the way it was found, for the reason spelled out one screen up.
 cat > "$OUTSIDE/stub/claude" <<'STUB'
 #!/usr/bin/env bash
