@@ -610,7 +610,14 @@ you start it:
 - editing `CLAUDE.md`, `CONTEXT.md`, `docs/` or `TODO.md` does **not** invalidate the stamp, so the
   DOCS phase can work freely — but `tests/health-baseline.txt` **does**, and that is where the
   backlog ratchet lives. Recording an out-of-scope finding therefore costs the stamp. The collision
-  is a known item in `TODO.md`, with its direction;
+  is a known item in `TODO.md`, with its direction — and the **route around it** is the one
+  `20260901-o-revisor-so-acha` walked six times: EXEC, QA and each REVIEW round write the finding
+  into their own handoff, under `## Achados fora de escopo`, and the DOCS phase transports the lot
+  into `TODO.md` with the ratchet line moving in the **same commit**, before running `health`. Two
+  things make that route work rather than lose findings. The line has to be **complete** where it
+  is first written — a pointer to an entry nobody created yet is a lost finding; and a round that
+  routes nothing new still says which earlier ones are still standing, or the transport carries
+  half. Both were paid for here: seventeen findings, six phases, one commit;
 - do not start it on a tree you are still committing to. The window guard will refuse the round and
   you will have spent the wall-clock for nothing.
 
