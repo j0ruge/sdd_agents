@@ -261,3 +261,20 @@ atualizado: 2026-09-02 06:45
 - 2026-09-02 · `REVIEW r4` · **1 achado (LOW) e ele NÃO virou `R<n>`, de propósito.** A âncora `^  ok    ` que o `CLAUDE.md` exige não alcança **82 das 866** asserções (o `check-templates.sh` imprime `ok` com três espaços), e o `calibrate()` do `check-checkpoint.sh` é cego a elas — lê só linhas `pass() { printf '`, logo enxerga 7 de 13 sensores e deixa de fora 2 dos 8 comportamentais, enquanto promete "every behavioural sensor". **Nasceu em `54ae6c9`, ancestral de `35863d9`**, num arquivo que este diff não toca: fora de escopo, rota `TODO.md` pela DOCS. Consertar só a grafia que a missão acrescentou (`:101`, 4 asserções) deixaria o arquivo internamente inconsistente sem tornar Check-ável nenhuma das 82 — conserto que piora a leitura, ao preço medido de US$ 5,46 por sessão EXEC.
 - 2026-09-02 · `REVIEW r4` · ⚠️ **um achado foi refutado antes de virar acusação, e o erro era meu:** "o instrumento `turns` do I1 não existe" nasceu de um `grep … | head -6` que truncou a resposta. Sem o truncamento o instrumento está lá (`bin/sdd:2822` lê `.num_turns`, `:2650` o emite, `--by-mission` em `:4895`, `review loop` em `:5257`, 30 menções em `check-autonomy.sh`). A ausência do campo nas linhas desta missão é a **janela cega do runner velho** já declarada cinco vezes — o `kit_sha` avança porque descreve a árvore, não o processo. Consequência que faltava dizer: a metade "≤ 60 turnos" da M2 é **inaferível nesta missão por construção**.
 - 2026-09-02 · `REVIEW r4` · M2 recontada com `jq` (**e não com `awk`**: sob locale pt-BR o `mawk` lê `17.92` como `17` e a soma sai 39 no lugar de 41,01 — a mesma família de armadilha de locale que o `CLAUDE.md` documenta para o `mawk`). Laço de revisão **US$ 95,57 = 67%** de US$ 143,59, contra o teto de US$ 40; por rodada, **17,92 → 16,38 → 6,71**, a r3 já **abaixo** do teto de US$ 15. As 10 sessões EXEC posteriores à primeira linha REVIEW somam US$ 54,55, **média US$ 5,46** por incremento — a alavanca dominante é quantas linhas `R<n>` a rodada escreve.
+- intervention: `sdd run --phase REVIEW` para destravar o teto de rodadas — REVIEW (r4) — US$ 6,83.
+  O `BLOCKED` da r3 foi **assumido, não contornado**: `REVIEW_MAX_ITER=3` com 3 rodadas em disco, e
+  a porta usada foi a isenta por construção (`bin/sdd:4511`), não um aumento do teto — o
+  `config/schema.md` pede o campo `turns` do ledger na mão para levantá-lo, e ele é inaferível nesta
+  missão pela janela cega do runner velho. A r4 fechou tudo em Grade A e **não escreveu incremento**.
+- intervention: runner parado à mão logo após `ok gate DOCS`, antes de a fase PR abrir sessão —
+  DOCS→PR — US$ 0. O `--phase` força o **ponto de partida** e o runner segue em frente, então a PR
+  emendaria com o carimbo de mutação vencido desde `88432ee` e o `gate_PR` a reprovaria depois de
+  gastar a sessão. Parar entre fases é seguro por construção: não há arquivo de estado, a fase é
+  derivada. ⚠️ `kill` pelo **PID literal** do líder do setsid — `pgrep -f 'bin/sdd run…'` casa o
+  próprio shell que o executa e derruba o grupo errado (aconteceu, sem dano ao runner).
+- intervention: `./bin/sdd health` rodado à mão para reemitir o carimbo — pré-gate do PR — 27 min.
+  `227 caught of 227`, `kit healthy`, catraca sem dívida nova. A ordem **DOCS → health → run** não é
+  preferência: a DOCS commitou os 17 achados no `TODO.md` (`bd71f48`) e isso move o
+  `tests/health-baseline.txt`, que está na chave do carimbo — carimbar antes teria sido carimbar duas vezes.
+- intervention: `sdd run` relançado com só o PR pela frente — PR — US$ 2,51. `ok gate PR`, PR #34
+  aberto. Terceiro `run_id` da missão, e é ele que o `launch(es)` conta.
