@@ -27,7 +27,12 @@
 set -uo pipefail
 
 ROOT="$(CDPATH='' cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
-T="$ROOT/templates"
+# Overridable for ONE reader: the selftest, which re-runs this very file over a doctored copy of
+# templates/ to prove the whole path goes red — not just that a primitive does. `CDPATH=''` because
+# the operand is relative and the bash that finds it through $CDPATH prints the resolved directory
+# straight into the substitution (the CRITICAL of 20260817-eixo-do-juiz, RULE 2 of check-pipefail).
+SELF_PATH="$(CDPATH='' cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)/$(basename "${BASH_SOURCE[0]}")"
+T="${SDD_TEMPLATES_DIR:-$ROOT/templates}"
 fails=0
 
 # Every grep this file performs, counted HERE and nowhere else. The counter used to live in the
@@ -61,9 +66,22 @@ check() { # check <file> <regex> <description>
 # grep rc is THREE-valued here and the case below reads all three: 1 (absent) is the only pass.
 # `grep -q ... || rc=1` would have folded rc 2 into the pass and let a missing or unreadable file
 # certify every refutation in this file — the fail-open check() pays a probe to avoid one line up.
+#
+# `-i`, and check() deliberately WITHOUT it: the two primitives want opposite directions. A heading
+# is a byte contract the runner greps, so check() must refuse a capital that gate_REVIEW would not
+# accept; a refutation is fail-safe when it is broader, and the r1 of `20260901-o-revisor-so-acha`
+# measured the cost of the narrow version — `## O que foi corrigido` beside the new section, rc 0,
+# `template contract intact`.
+#
+# Declared limit, MEASURED on GNU grep 3.11 and not reasoned about: `-i` folds ASCII in every
+# locale, so the two spellings that matter here fold under `LC_ALL=C` too (`O que foi corrigido`
+# and `Virou correção` both answer 0 — the differing letters are `O` and `V`). A spelling that
+# capitalises the ACCENTED letter does not: `VIROU CORREÇÃO` answers 1 under `LC_ALL=C` and 0 under
+# `C.UTF-8`. No probe covers that world — no template writes a heading in caps — so it is named
+# here rather than denied, which is the shape `d4deb35`/`7cbc8e2` cost this repo to learn.
 refute() { # refute <file> <regex> <description> — passes when the regex does NOT match
   local rc=0
-  grep -qE "$2" "$T/$1" 2>/dev/null || rc=$?
+  grep -qiE "$2" "$T/$1" 2>/dev/null || rc=$?
   CHECKS_RUN=$((CHECKS_RUN + 1))
   case "$rc" in
     1) printf '  ok   %s: does not carry %s\n' "$1" "$3" ;;
@@ -73,6 +91,14 @@ refute() { # refute <file> <regex> <description> — passes when the regex does 
        fails=$((fails + 1)) ;;
   esac
 }
+
+# The two forbidden-prose regexes, ONE definition each. The rules at the bottom of this file apply
+# them to the real `templates/review.md`; the selftest probe below applies the SAME two variables to
+# a world that carries the capitalised spelling. A probe with its own hand-written copy would agree
+# with a rule it never read — a constant wearing the clothes of a measurement, which is the failure
+# this repo already paid for once in `check-kaizen.sh`.
+FORBIDDEN_TLDR='o que foi corrigido'
+FORBIDDEN_POINTER='virou correção'
 
 # --- selftest ----------------------------------------------------------------------------------
 # The debt CLAUDE.md names for this file, paid. Four of the five sensors the mutation catalogue
@@ -123,16 +149,78 @@ selftest() {
   [ "$fails" -eq "$((fails_keep + 4))" ] \
     || broken "refute() passed over a file it could not read — an unreadable template refutes everything for free"
 
-  # And the counter the floor reads counts GREPS, not calls: six probes above, six counted.
-  [ "$CHECKS_RUN" -eq "$((run_keep + 6))" ] \
-    || broken "CHECKS_RUN moved by $((CHECKS_RUN - run_keep)) over 6 checks — the floor is counting something other than the greps it performed"
+  # r1 of `20260901-o-revisor-so-acha`, finding #2: both forbidden-prose rules were case-sensitive,
+  # so the old section `## O que foi corrigido` — capital O, the very heading the comment beside the
+  # rules says it fears — could be reintroduced BESIDE the new one and this sensor still printed
+  # `template contract intact` and exited 0. Reproduced before this probe was written: that section
+  # appended to the real template left `bash tests/check-templates.sh` at rc 0.
+  #
+  # The probe reads the SAME two variables the rules read; a hand-written copy of the regex would
+  # agree with a rule it never saw. The world carries the spelling in the shape the defect had — a
+  # heading and a sentence, not a bare lowercase phrase.
+  printf '## O que foi corrigido\n\nO achado #3 Virou correção nesta rodada, com hash.\n' \
+    > "$box/capitalised.md"
+  refute capitalised.md "$FORBIDDEN_TLDR"    'the capitalised TL;DR field' > "$box/cap1.out" 2>&1
+  refute capitalised.md "$FORBIDDEN_POINTER" 'the capitalised pointer'     > "$box/cap2.out" 2>&1
+  # Counting the failures is NOT enough, and this is the fail-open the first draft of this probe
+  # carried: refute() bumps `fails` for rc 0 (prose is there) AND for rc 2 (file unreadable), so a
+  # world whose printf never landed would satisfy a counter and prove nothing. The floor is the
+  # WORDING of the branch — `still carries` is the rc-0 line and nothing else prints it.
+  grep -q 'still carries' "$box/cap1.out" && grep -q 'still carries' "$box/cap2.out" \
+    || broken "the forbidden-prose rules read past the capitalised spelling — '## O que foi corrigido' can be shipped beside the new section and this sensor still says the template contract is intact"
+  printf '  ok    self-test: the forbidden-prose rules catch the capitalised spelling too\n'
+
+  # And the counter the floor reads counts GREPS, not calls: eight probes above, eight counted.
+  [ "$CHECKS_RUN" -eq "$((run_keep + 8))" ] \
+    || broken "CHECKS_RUN moved by $((CHECKS_RUN - run_keep)) over 8 checks — the floor is counting something other than the greps it performed"
+
+  # The probes above measure the PRIMITIVE. The finding was about the SENSOR: `rc 0` over a
+  # templates/ that ships both sections. A rule rewritten to inline its own case-sensitive literal
+  # would leave every probe above green, because none of them runs the rules. So this one re-runs
+  # the whole file over a doctored copy — the `--check <file>` shape CLAUDE.md names, with an env
+  # guard instead of a flag so the child does not selftest itself into a recursion.
+  cp -r "$T_KEEP" "$box/tpl" || broken "could not copy templates/ — the end-to-end probe never ran"
+  local ctl_rc=0 poison_rc=0 poison_out
+  # Negative control FIRST, and it is not ceremony — the sabotage pass measured what it buys. With
+  # the control deleted and the copy replaced by an empty directory, the poison run still finds its
+  # own `>>`-appended heading, the case below reads `still carries`, and this whole sensor exits 0
+  # over a probe that never touched templates/ at all. Control back in: rc 92. So the probe that
+  # would otherwise certify itself is the one thing the control refuses.
+  #
+  # When the control IS red the honest answer is "I cannot tell which", and the two candidates are far apart
+  # — templates/ is genuinely broken, or this probe is decoration — so the child's own complaint is
+  # replayed instead of swallowed. Measured: without this, a real forbidden-prose regression exits
+  # 92 quoting the control and never names the line the reader has to fix.
+  SDD_TPL_SELFTEST_CHILD=1 SDD_TEMPLATES_DIR="$box/tpl" bash "$SELF_PATH" > "$box/ctl.out" 2>&1 || ctl_rc=$?
+  if [ "$ctl_rc" -ne 0 ]; then
+    printf '  --- what the end-to-end child said about the real templates/ ---\n' >&2
+    cat "$box/ctl.out" >&2
+    broken "the end-to-end child is red (rc=$ctl_rc) over an untouched copy of templates/ — either templates/ is genuinely broken (its complaint is above, and the rules further down say the same) or this probe would have 'caught' the poison by failing at everything"
+  fi
+  printf '\n## O que foi corrigido\n\n| Achado | Hash |\n|---|---|\n' >> "$box/tpl/review.md"
+  poison_out="$(SDD_TPL_SELFTEST_CHILD=1 SDD_TEMPLATES_DIR="$box/tpl" bash "$SELF_PATH" 2>&1)" \
+    || poison_rc=$?
+  case "$poison_rc:$poison_out" in
+    0:*) broken "a templates/review.md shipping '## O que foi corrigido' beside the new section exits 0 — the very rc the r1 of 20260901-o-revisor-so-acha reproduced" ;;
+    *"still carries the TL;DR field"*) : ;;
+    *) broken "the doctored templates/ turned this sensor red (rc=$poison_rc) but not through the forbidden-prose rule — a red for the wrong reason is not a measurement" ;;
+  esac
+  printf '  ok    self-test: templates/ shipping the old section beside the new one turns this sensor red\n'
 
   rm -rf "$box"
   T="$T_KEEP"; fails="$fails_keep"; CHECKS_RUN="$run_keep"
   SELFTEST_RAN=1
 }
 SELFTEST_RAN=0
-selftest
+# The child spawned by the end-to-end probe skips the selftest — it exists to answer one question
+# ("does this file go red over that templates/?") and running the probes again would recurse. The
+# guard is an env var and not a flag on purpose: a flag is kit surface a human could pass, and a
+# human passing it would silently disarm every probe above.
+if [ -n "${SDD_TPL_SELFTEST_CHILD:-}" ]; then
+  SELFTEST_RAN=1
+else
+  selftest
+fi
 
 echo "== templates/missao.md =="
 for k in missao titulo data versao branch aprovacao ddd; do
@@ -266,7 +354,11 @@ review_check '^## Achados fora de escopo' "section 'Achados fora de escopo'"
 review_check '^## Incrementos de conserto' "section 'Incrementos de conserto (R<n>)'"
 # And the section it replaced, asserted by its NEW name. `## O que foi corrigido` is what a round
 # that fixed in place wrote; keeping the old heading beside the new one would let a template ship
-# both and a session pick either, which is how a contract stops being one.
+# both and a session pick either, which is how a contract stops being one. That heading is refuted
+# below, by the TL;DR rule and not by an anchored rule of its own: `-i` makes `o que foi corrigido`
+# match inside `## O que foi corrigido`, so a `^## [Oo] que foi corrigido` rule could not be broken
+# by any world the TL;DR rule does not already refuse. Measured, then not written — this repo asks
+# for the probe before the deletion, and here the probe says the second rule would be decoration.
 review_check '^## O que virou incremento' "section 'O que virou incremento'"
 # The other half of the same contract, and the half the sections above cannot see. Both headings
 # can be present and correct while the PROSE between them still sends the round back to fixing:
@@ -275,9 +367,9 @@ review_check '^## O que virou incremento' "section 'O que virou incremento'"
 # is what shipped in I2 and what the QA phase caught reading the template as a reviewer would.
 # Anchored on the words the prose used, not on a whole sentence: a rewrite that keeps the
 # instruction keeps the words, and a rewrite that drops the instruction has no reason to keep them.
-refute review.md 'o que foi corrigido' \
+refute review.md "$FORBIDDEN_TLDR" \
   "the TL;DR field 'o que foi corrigido' — a round that does not fix has no correction to summarise"
-refute review.md 'virou correção' \
+refute review.md "$FORBIDDEN_POINTER" \
   "the pointer sending a finding that 'virou correção' to a next section with a hash column"
 
 # The floor is what turns "no assertion failed" into "the assertions ran". Deleting the loops above
