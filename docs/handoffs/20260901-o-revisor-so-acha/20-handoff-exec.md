@@ -3,8 +3,8 @@ missao: 20260901-o-revisor-so-acha
 fase: EXEC
 status: done
 sessao: 4a9e2693-f11f-4976-939a-66179c443b09
-data: 2026-09-02 01:10
-gate: "tests/run-all.sh → 858 asserções `ok`, última linha `suite green`, rc 0 (era 842 em `35863d9`, 855 ao fim dos I1–I4); checkpoint sem linha `pending|doing` — I1 `88432ee`, I2 `03187e8`, I3 `c8c8ec7`, I4 `a84adeb` e o ciclo QA 1 `384e36c` (F1), `48097cd` (F2), `c05b43b` (F3), `b1cfc27` (F4), todos ancestrais de HEAD; working tree limpa"
+data: 2026-09-02 02:40
+gate: "tests/run-all.sh → 861 asserções `ok`, última linha `suite green`, rc 0 (era 842 em `35863d9`, 855 ao fim dos I1–I4, 858 ao fim do ciclo QA 1); checkpoint sem linha `pending|doing` — I1 `88432ee`, I2 `03187e8`, I3 `c8c8ec7`, I4 `a84adeb`, o ciclo QA 1 `384e36c` (F1), `48097cd` (F2), `c05b43b` (F3), `b1cfc27` (F4) e a rodada REVIEW r1 `d06840a` (R1), `045d8dd` (R2), `24ee7bf` (R3), `bffc79f` (R4), `541b524` (R5), todos ancestrais de HEAD (`git merge-base --is-ancestor` ok em 13 de 13); working tree limpa"
 ---
 
 # Handoff — EXEC — O revisor só acha
@@ -26,17 +26,25 @@ re-emite é a fase DOCS, depois do último commit de código. A fase REVIEW dest
 `384e36c`, `48097cd`, `c05b43b`, `b1cfc27`. Suíte **858**, catálogo **223**. Detalhe na seção
 `## Ciclo QA 1` abaixo; o resto deste arquivo descreve os I1–I4 e continua válido.
 
+**Rodada REVIEW r1 (atualização de 2026-09-02):** a primeira rodada do contrato novo **achou e não
+consertou** — 12 achados, nota `B`, cinco linhas `R<n>` `pending` e zero conserto na sessão dela.
+Os cinco fecharam em cinco sessões de contexto próprio: `d06840a`, `045d8dd`, `24ee7bf`, `bffc79f`,
+`541b524`. Suíte **861**, catálogo **224**. Detalhe na seção `## Rodada REVIEW r1` abaixo. O laço
+que esta missão existe para criar **rodou de ponta a ponta pela primeira vez**, e o que ele produziu
+é a evidência da M2/M3 — a próxima rodada (r2) re-avalia sem ter escrito nenhum destes consertos.
+
 ## Estado do repo
 
-> ⚠️ Atualizado em 2026-09-02, no fim do ciclo QA 1. Os números abaixo são os de agora; os do fim
-> dos I1–I4 (9 commits, `a84adeb`, 855 asserções) estão no `git log` e no `gate:` anterior deste
-> arquivo, recuperável por `git log -p` neste caminho.
+> ⚠️ Atualizado em 2026-09-02, no fim da **rodada REVIEW r1**. Os números abaixo são os de agora;
+> os do fim dos I1–I4 (9 commits, `a84adeb`, 855 asserções) e os do fim do ciclo QA 1 (19 commits,
+> `b1cfc27`, 858) estão no `git log` e nos `gate:` anteriores deste arquivo, recuperáveis por
+> `git log -p` neste caminho.
 
-- **Branch:** `feat/o-revisor-so-acha` — 19 commits à frente de `main` (`35863d9`); **não** há push
+- **Branch:** `feat/o-revisor-so-acha` — 31 commits à frente de `main` (`35863d9`); **não** há push
   nesta fase.
-- **Último commit de código:** `b1cfc27` `fix(runner): a barra final em HANDOFF_DIR nao faz a guarda gritar em toda rodada`
+- **Último commit de código:** `541b524` `fix(review): o lote MEDIUM/LOW da r1 — o sensor deixa de certificar o que não mede`
 - **Working tree:** limpo (só falta o commit de checkpoint desta sessão, que acompanha este arquivo).
-- **Suíte:** `tests/run-all.sh` → **verde**, 858 asserções `ok`, rc 0 (~85 s).
+- **Suíte:** `tests/run-all.sh` → **verde**, 861 asserções `ok`, rc 0 (~85 s).
 - **E2E:** `E2E_CMD=""` — o kit não tem interface; não rodou por não existir.
 
 ## O que foi feito
@@ -112,11 +120,67 @@ defeitos são da **mesma família** — contrato mudado em N lugares e sobrevive
 mão; a suíte estava verde nos quatro casos. É o achado de instrumento mais forte desta missão e
 está registrado abaixo.
 
+## Rodada REVIEW r1 — os cinco `R<n>`, um commit cada
+
+> Seção acrescentada em 2026-09-02, quando o último `R<n>` fechou. É a **primeira** rodada do
+> desenho que esta missão escreveu: `40-review-r1.md` registra 12 achados (4 HIGH, 3 MEDIUM, 5 LOW),
+> nota `B`, e a sessão da rodada **não editou código nenhum** — cinco achados viraram linha `R<n>`
+> no checkpoint, quatro foram para os achados fora de escopo e três foram **refutados com
+> evidência**. A r1 em `B` é a rodada saudável do desenho novo, não uma falha.
+
+- `d06840a` — **R1, achado #1 (HIGH): a guarda acusava arquivo acentuado da própria missão.**
+  `review_scope_check` casava a allowlist contra a saída de `git diff --name-only`, e o
+  `core.quotePath` padrão do git devolve `"docs/handoffs/M/relat\303\263rio.md"` — entre aspas e em
+  octal — para qualquer nome não-ASCII. Num repo de `OUTPUT_LANG=pt-BR` isso é o caso **normal**, e
+  a rodada saudável levava `REVIEW-EDITED-CODE` sobre o próprio relatório. Conserto:
+  `-c core.quotePath=false`. Regime 6 do bloco da guarda, com o veneno **armado** pela fixture
+  (`git config core.quotePath true`) em vez de herdado do `~/.gitconfig` de quem roda. Mutante
+  `RUN_review_scope_quotepath_default`; catálogo 223 → 224.
+- `045d8dd` — **R2, achado #2 (HIGH): as regras `refute()` do `F1` eram cegas à maiúscula.**
+  Reintroduzir `## O que foi corrigido` (O maiúsculo) **ao lado** da seção nova deixava o sensor em
+  `rc=0` — o cenário que o comentário três linhas acima delas dizia temer. `-i` no `refute()` e não
+  no `check()` (heading é contrato de byte; refutação é fail-safe quando é mais larga), duas probes
+  novas — uma unitária e uma de **ponta a ponta** que roda o sensor inteiro sobre um `templates/`
+  adulterado —, mais o **controle negativo** que impede a probe de certificar a si mesma. A
+  terceira regra que o relatório pediu **não** entrou, com medição: sob `-i` ela seria decoração.
+- `24ee7bf` — **R3, achado #3 (HIGH): a D22 do `CONTEXT.md` carregava o `60%` já refutado.** É a
+  linha de base contra a qual a janela 3 vai julgar esta missão, e estava errada na direção que faz
+  o alvo parecer mais fácil. O número novo foi **lido do instrumento** (`sdd autonomy --all-repos
+  --by-mission` → `25 · 29 · 57`), não copiado da prosa do achado — achado e conserto com fontes
+  independentes. O alvo (mediana ≤ 25%, máximo ≤ 50%) **não** se moveu.
+- `bffc79f` — **R4, achado #4 (HIGH): a verificação da própria guarda era vácua.** O
+  `grep -c REVIEW-EDITED-CODE → 0` que o plano manda ler como saúde responde `0` idêntico quando a
+  guarda **não está carregada** — que é o caso desta missão, medido: o processo `sdd run` (PID
+  3080293) começou `17:56:48` e o commit que criou a guarda pousou `18:58:11`, então ele carrega o
+  `bin/sdd` anterior em memória. Terceiro fail-open **declarado** no cabeçalho da função e em
+  `docs/pipeline.md`; o conserto durável (o `sdd run` comparar o hash do `bin/sdd` na entrada) é
+  decisão humana e está em `40-review-r1.md § Pendências`.
+- `541b524` — **R5, o lote dos achados #5, #6, #8 e #9 (MEDIUM/LOW baratos).** Um `R<n>` de lote,
+  pela decisão 6 do `00-missao.md`. **#5** era a irmã exata do `F2`: `review_check '^## Incrementos
+  de conserto'` parava antes do qualificador que a descrição promete, e sem ele no template o
+  sensor imprimia o `ok` e saía **rc 0**. **#6**, o `GATE_WHY` de árvore suja ainda dizia "fixes
+  must be committed" sobre a fase que não conserta mais — a checagem não muda e o comportamento é
+  idêntico (`gate_REVIEW` sem comentários difere de `main` em **exatamente uma linha**, a da
+  frase), e as palavras antes do travessão ficam verbatim porque três lugares as citam como uma das
+  duas recusas que não nomeiam arquivo. **#8**, prosa PT-BR numa fixture de `tests/`, superfície
+  declarada inglesa; as três linhas mudam juntas e a guarda `grep -qF` prova o acoplamento (meia
+  tradução ⇒ `FAIL R1-done fixture`, medido). **#9**, duas contas do mesmo gemba sem reconciliação
+  — o conserto é a **data** e não um número mais novo, porque o ledger lido hoje já dá um
+  **terceiro** par (US$ 654,59 de US$ 1.697,75, 28 sessões).
+
+**O que a rodada custou e o que ela prova.** O laço REVIEW⇄EXEC rodou como desenhado: a sessão que
+achou não escreveu conserto nenhum, e cada conserto nasceu em contexto zerado com Red próprio,
+commit isolado e reversível. Dois dos cinco achados HIGH eram **fail-opens de sensor** (`R1` e
+`R2`) — sensores que afirmavam medir o que não mediam —, e nenhum deles é o tipo de coisa que a
+suíte verde acusa: apareceram porque um revisor **reproduziu** cada um à mão antes de escrever a
+linha. É a mesma família do ciclo QA 1, e a terceira instância seguida em três fases diferentes.
+
 ## Artefatos
 
 | Arquivo | O que contém |
 |---|---|
-| `docs/handoffs/20260901-o-revisor-so-acha/checkpoint.md` | I1–I4 `done` com hash; notas de execução com cada desvio do plano e o porquê medido |
+| `docs/handoffs/20260901-o-revisor-so-acha/checkpoint.md` | I1–I4, F1–F4 e R1–R5 `done` com hash; notas de execução com cada desvio do plano e o porquê medido |
+| `docs/handoffs/20260901-o-revisor-so-acha/40-review-r1.md` | a primeira rodada do desenho novo: 12 achados, nota `B`, 5 `R<n>`, 3 refutações com evidência — e **nenhum** conserto escrito pela própria rodada |
 | `KAIZEN_LOG.md` (entrada de 2026-09-01) | o "antes" medido, a régua reprodutível, a correção do 60% → 57% da janela 2, e a coluna **Depois em aberto** |
 | `CONTEXT.md` (verbete *Laço REVIEW⇄EXEC*, D22, D23) | o desenho novo e como ele pousou, um hash por fatia |
 | `config/schema.md` · `docs/failure-modes.md` · `docs/pipeline.md § REVIEW` | o contrato onde alguém procura quando algo dá errado |
@@ -154,6 +218,22 @@ e `tests/run-all.sh` são o mundo inteiro. ⚠️ **Não rodar `./bin/sdd health
 ele leva 15–50 min (roda o catálogo de mutação) e o carimbo pertence à fase DOCS, depois do último
 commit de código.
 
+⚠️ **Atualização de 2026-09-02 — a próxima fase é a rodada `r2`.** Os cinco `R<n>` da r1 fecharam,
+o checkpoint não tem linha `pending`, e a bola volta para a REVIEW. O que a r2 precisa saber, e que
+não está em nenhum outro lugar:
+
+1. **Ela re-avalia consertos que não escreveu** — é exatamente para isso que o desenho existe. Os
+   cinco commits a auditar são `d06840a`, `045d8dd`, `24ee7bf`, `bffc79f` e `541b524`; o que cada um
+   fez está na seção `## Rodada REVIEW r1` acima, e o que a r1 alegou está em `40-review-r1.md`.
+2. **Dois consertos mexeram em SENSOR, não em código de produção** (`R2` e o `#5` do `R5`, ambos em
+   `tests/check-templates.sh`), e sensor consertado por quem leu o achado é o lugar clássico de um
+   fail-open novo. O `R5` mediu o seu nos dois sentidos, com o mundo isolado por
+   `SDD_TPL_SELFTEST_CHILD=1` — a forma está na célula do Check e o porquê nas notas do checkpoint.
+3. **O `R4` não consertou nada de comportamento, de propósito** — declarou um limite. Se a r2
+   discordar de que declarar bastava, o lugar da discordância é um achado, não um `R<n>` silencioso.
+4. **Achado que só um humano pode fechar continua não virando `R<n>`** (Jidoka): vai para
+   `## Pendências`, a nota fica honesta e a linha para. Duas dessas já existem na r1.
+
 ⚠️ **Para a fase REVIEW, que é a primeira a rodar o contrato novo:** o desenho que ela deve seguir
 está no seu próprio boot prompt e em `agents/sdd-reviewer.md`. Duas coisas que a M2 do
 `00-missao.md` mede sobre esta própria missão: cada sessão REVIEW **≤ 60 turnos e ≤ US$ 15**, e o
@@ -180,13 +260,18 @@ laço de revisão inteiro (REVIEW + EXEC dos `R<n>`) **≤ US$ 40**. A M3 é inv
   `tests/` e `templates/` mudaram. `gate_PR` o exige. Re-emitir é tarefa da DOCS, **depois** do
   último commit de código — e registrar achado no `TODO.md` invalida a chave outra vez
   (`tests/health-baseline.txt` está dentro dela). Ordem: achados → catraca → `./bin/sdd health`.
-- **O catálogo de mutação (223 depois do `F4`) não foi rodado ponta a ponta nesta fase** — é
-  opt-in desde `4c86712` e seguraria a árvore por >10 min por gate. Cada um dos **cinco** mutantes
+- **O catálogo de mutação (224 depois do `R1`) não foi rodado ponta a ponta nesta fase** — é
+  opt-in desde `4c86712` e seguraria a árvore por >10 min por gate. Cada um dos **seis** mutantes
   novos foi provado numa cópia da árvore (aplica, `cmp` acusa diferença, `bash -n` compila, e o
   sensor nomeado fica vermelho **só** na asserção nomeada), mas a verificação do catálogo inteiro
-  é da DOCS. ⚠️ `b1cfc27` é o **último commit de código** do ciclo — é depois dele que o
+  é da DOCS. ⚠️ `541b524` é o **último commit de código** até aqui — é depois dele que o
   `./bin/sdd health` re-emite o carimbo, e só depois de a DOCS já ter transportado os achados para
-  o `TODO.md` (a catraca está na chave).
+  o `TODO.md` (a catraca está na chave). ⚠️ Se a **r2 achar algo**, cada `R<n>` novo empurra esse
+  ponto para a frente: o carimbo pertence ao último commit de código da missão, não ao desta fase.
+  O `R5` acrescentou uma verificação que vale repetir na DOCS: os **8** mutantes endereçados a
+  `gate_REVIEW` foram reaplicados numa cópia **depois** da inserção dos comentários novos e todos
+  os 8 continuam aplicando e compilando — comentário inserido perto de âncora de mutante é
+  exatamente como uma âncora apodrece em silêncio.
 - **A guarda `REVIEW-EDITED-CODE` avisa, não impede**, e tem três cegueiras declaradas no
   cabeçalho da própria função: um `commit --amend` que reescreva o HEAD anterior, o braço
   `tests/health-baseline.txt` que é **incondicional** apesar de existir só para o repo do kit, e a
@@ -197,8 +282,14 @@ laço de revisão inteiro (REVIEW + EXEC dos `R<n>`) **≤ US$ 40**. A M3 é inv
 - **O desenho novo gasta duas rodadas no caminho normal** (r1 é B por desenho quando há o que
   consertar), então `rounds` deixa de ser comparável entre janelas. Régua declarada no
   `KAIZEN_LOG.md`, no `CONTEXT.md` (D22) e no `config/schema.md`.
-- **Não verificado:** nenhuma sessão REVIEW real rodou ainda no contrato novo. O que existe é o
-  prompt projetado pelo dry-run e a máquina de estados medida por fixture.
+- ~~**Não verificado:** nenhuma sessão REVIEW real rodou ainda no contrato novo.~~ **Verificado na
+  r1** (`40-review-r1.md`): a sessão achou 12 defeitos, escreveu cinco `R<n>` e **não editou
+  código**. ⚠️ Com um limite que a própria rodada mediu e que a M2 precisa saber: aquele processo
+  `sdd run` carrega o `bin/sdd` **pré-I1** em memória (achado #4 / `R4`), então o prompt de boot que
+  a r1 recebeu ainda dizia `review and fix, INSIDE` — o chapéu novo chegou por
+  `agents/sdd-reviewer.md`, que é lido do disco a cada sessão. A rodada seguiu o contrato novo
+  **apesar** do prompt velho, o que é evidência mais forte para o agente e **nenhuma** evidência
+  para o `phase_task`: o caminho do prompt continua verificado só pelo dry-run.
 
 ## Achados fora de escopo
 
@@ -238,16 +329,14 @@ laço de revisão inteiro (REVIEW + EXEC dos `R<n>`) **≤ US$ 40**. A M3 é inv
   que recontar. Candidato: derivar o piso, ou um sensor que compare piso × superfície real em
   todos os sensores que têm um → `TODO.md` (descoberto por `sdd-executor` na missão
   `20260901-o-revisor-so-acha`, 2026-09-01)
-- **Achado novo desta fase (F2):** a asserção vizinha `review_check '^## Incrementos de conserto'`
-  (`tests/check-templates.sh`) tem o **mesmo formato** do defeito que o `F2` acabou de fechar — o
-  rótulo promete `Incrementos de conserto (R<n>)` e a regex para em `conserto`. **Medido** nesta
-  sessão: com o heading do template trocado para `## Incrementos de conserto (F<n>)`, o sensor
-  responde `rc=0`. É um caso mais fraco que o do `F2` — nenhum heading foi *substituído* aqui, então
-  a regex frouxa não certifica um contrato antigo, só admite um sufixo que nunca existiu —, e por
-  isso ficou **fora** do diff: o `F2` nomeia uma linha, e apertar a vizinha é o "já que estou aqui"
-  que esta fase recusa. Uma varredura da família inteira do arquivo devolve **só** essa (`grep -nE
-  '^ *(check\|review_check\|refute) ' tests/check-templates.sh` filtrando parêntese não escapado)
-  → `TODO.md` (descoberto por `sdd-executor` na missão `20260901-o-revisor-so-acha`, 2026-09-01)
+- ~~**Achado novo desta fase (F2):** a asserção vizinha `review_check '^## Incrementos de
+  conserto'` para antes do qualificador que o rótulo promete.~~ **RESOLVIDO por `541b524`, NÃO
+  transportar para o `TODO.md`.** O item foi escrito aqui pelo `F2` por ser "o já que estou aqui
+  que aquela fase recusa"; a rodada r1 o achou de forma independente (achado #5), ele virou parte
+  do lote `R5`, e o conserto está em disco com a medição nos dois sentidos. Fica registrado
+  riscado, e não apagado, porque a **rota** é a lição: um achado deixado fora de escopo com o
+  motivo escrito foi encontrado outra vez pelo instrumento seguinte, que é o comportamento que se
+  quer de um pipeline com fases de chapéu único.
 - **Achado novo desta fase (F3):** os dois diagramas de ordem canônica — `README.md:12`
   (`TICKET → EXEC → QA ⇄ EXEC → REVIEW → DOCS → PR`) e `docs/pipeline.md:26`
   (`PLAN → TICKET → EXEC ⇄ QA → REVIEW → DOCS → PR`) — desenham o laço da QA e deixam `REVIEW` em
