@@ -169,6 +169,23 @@ Nota **B**. `tests/check-autonomy.sh` e o catálogo de mutação passaram uma sa
   `main` e HEAD (237 SC2317, 10 SC2015, 9 SC2016, 7 SC2031, 4 SC2295, 2 SC2012, 1 SC2002); nos
   sensores as contagens escalam com o código acrescentado, sem categoria nova.
 
+### A pergunta da guarda, respondida à mão (para a fase DOCS)
+
+⚠️ **Não leia o `grep -c REVIEW-EDITED-CODE` desta missão como evidência** — ele responde `0`
+porque a guarda não está carregada no processo (achado #4). A evidência que **pode** ser computada
+é o diff dos commits desta rodada contra o HEAD com que ela abriu:
+
+```
+$ git -c core.quotePath=false diff --name-only 2d974e3 HEAD
+docs/handoffs/20260901-o-revisor-so-acha/40-review-r1.md
+docs/handoffs/20260901-o-revisor-so-acha/checkpoint.md
+```
+
+Rodando o `case` da allowlist de `review_scope_check` verbatim sobre essas duas linhas:
+**`n=0` arquivos fora de `<HANDOFF_DIR>/<missão>/`, `$TODO_FILE` e `tests/health-baseline.txt`**.
+A rodada só achou. É este número — e não o `0` do `pipeline.log` — que a coluna "Depois" do
+`KAIZEN_LOG.md` deve citar.
+
 ### M3 — a invariante que o EXEC pediu que esta rodada conferisse, com o comando
 
 - **`gate_REVIEW` não mudou.** `git diff main...HEAD -- bin/sdd | grep -E '^[-+].*gate_REVIEW'` →
