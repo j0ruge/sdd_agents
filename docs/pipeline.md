@@ -428,7 +428,14 @@ neither the mission's own directory, nor `TODO_FILE`, nor `tests/health-baseline
 Trailing slashes are stripped off `HANDOFF_DIR` before that comparison, because the allowlist is a
 glob matched against what `git diff --name-only` prints and the key arrives from your
 `.sdd/config.sh` exactly as you typed it — `HANDOFF_DIR="docs/handoffs/"` would otherwise make
-every healthy round warn about its own report. The `tests/health-baseline.txt` arm is
+every healthy round warn about its own report. The other side of that same match is git's: the
+diff is taken with `-c core.quotePath=false`, because with git's default a tracked path holding
+one byte outside ASCII comes back C-quoted and octal-escaped —
+`"docs/handoffs/<mission>/relat\303\263rio.md"` for a report named in a repo whose `OUTPUT_LANG`
+is pt-BR — and a string opening with `"` matches no arm. That flag buys back the non-ASCII name
+and not every name: a path carrying a double quote, a backslash or a control character is still
+quoted by git and would still be counted as outside the mission directory. The
+`tests/health-baseline.txt` arm is
 **unconditional**: it exists for the kit's own repo, and a target repo that happens to carry that
 path has a reviewer's edit to it waved through. That is the allowlist's one fail-open, and it is
 written down here and in the function's header rather than left to be discovered.

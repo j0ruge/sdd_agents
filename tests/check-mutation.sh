@@ -2748,6 +2748,22 @@ mut_RUN_review_scope_handoff_dir_verbatim() {
   sed -i '/^review_scope_check()/,/^}/ s@^      "\$mission_dir"/\*) continue ;;$@      "$HANDOFF_DIR/$MISSION"/*) continue ;;@' "$1"
 }
 
+# The same noise, reached from the OTHER side of the same match — and this time it is git writing
+# the string, not a human writing the config key. Dropping `-c core.quotePath=false` restores git's
+# default, under which a tracked path holding one byte outside ASCII comes back C-quoted and
+# octal-escaped; it opens with a `"`, matches no arm of the allowlist, and an artifact the round
+# wrote inside its OWN mission directory — a report named in pt-BR, in a repo whose OUTPUT_LANG is
+# pt-BR — is reported as code on a healthy round. Caught by `a mission-directory file whose name is
+# not ASCII is not flagged REVIEW-EDITED-CODE` in check-autonomy.sh — regime 6, whose fixture pins
+# core.quotePath on so the venom does not depend on the reader's ~/.gitconfig.
+#
+# Anchored on the FUNCTION range for its sibling's reason: `git -C "$REPO_ROOT" diff` is a shape
+# this runner writes in several places, and a pattern that drifted would sabotage one of those
+# while still looking applied.
+mut_RUN_review_scope_quotepath_default() {
+  sed -i '/^review_scope_check()/,/^}/ s@ -c core\.quotePath=false diff --name-only @ diff --name-only @' "$1"
+}
+
 CATALOG=(
   PLAN_empty_approval
   PLAN_kaizen_born_blind
@@ -2972,6 +2988,7 @@ CATALOG=(
   RUN_review_fixes_inline
   RUN_review_scope_blind
   RUN_review_scope_handoff_dir_verbatim
+  RUN_review_scope_quotepath_default
 )
 
 # Mutations that are NOT caught today, each with the increment that closes it. Ratchet in both

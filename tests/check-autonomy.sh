@@ -4292,6 +4292,11 @@ reviewscope_world() {
     git init -q -b main
     git config user.email "fixture@example.com"
     git config user.name "Fixture"
+    # core.quotePath is git's OWN DEFAULT; it is pinned here so regime 6 measures the world it
+    # names on a machine whose ~/.gitconfig turned it off — a probe whose venom depends on the
+    # reader's global config is a probe that quietly stops being one. Regimes 1-5 are all-ASCII,
+    # so for them this line is a no-op.
+    git config core.quotePath true
     mkdir -p bin tests
     printf 'echo hello\n' > bin/tool.sh
     printf 'sensor 1\n' > tests/health-baseline.txt
@@ -4342,8 +4347,13 @@ EOF
 # actually wrote. `clean` mode writes all THREE allowed paths — the mission directory, $TODO_FILE
 # and tests/health-baseline.txt — so the control is a statement about the allowlist rather than
 # about one entry of it.
+#
+# The optional FOURTH argument is one more file the round drops inside its own mission directory,
+# named by the caller. Regime 6 uses it for a name that is not ASCII; it is empty everywhere else,
+# and then the block below is written into the stub as a dead `if [ -n "" ]`.
 REVIEWSCOPE_COUNT="$OUTSIDE/reviewscope-count"
-reviewscope_stub() {   # <dir> <fire on> <code|clean>
+reviewscope_stub() {   # <dir> <fire on> <code|clean> [extra file inside the mission directory]
+  local extra="${4:-}"
   cat > "$OUTSIDE/stub/claude" <<STUB
 #!/usr/bin/env bash
 n=\$(( \$(cat "$REVIEWSCOPE_COUNT" 2>/dev/null || echo 0) + 1 ))
@@ -4368,6 +4378,10 @@ CK
   printf 'a finding for the executor\n' >> "$1/TODO.md"
   printf 'sensor 2\n' > "$1/tests/health-baseline.txt"
   git -C "$1" add "docs/handoffs/$MISSION/40-review-r1.md" "docs/handoffs/$MISSION/checkpoint.md" TODO.md tests/health-baseline.txt
+  if [ -n "$extra" ]; then
+    printf 'one more artifact of the round\n' > "$1/docs/handoffs/$MISSION/$extra"
+    git -C "$1" add "docs/handoffs/$MISSION/$extra"
+  fi
   if [ "$3" = "code" ]; then
     printf 'echo fixed by the reviewer\n' > "$1/bin/tool.sh"
     git -C "$1" add bin/tool.sh
@@ -4473,6 +4487,42 @@ RS5_LOG="$(cat "$RS5/.sdd/logs/$MISSION/pipeline.log" 2>/dev/null || true)"
 assert_eq "a trailing slash in HANDOFF_DIR does not turn a healthy round into a warning" \
   "slash:1 sessions:1 committed:1 lines:0 warns:0" \
   "slash:$(grep -c 'HANDOFF_DIR="docs/handoffs/"$' "$RS5/.sdd/config.sh") sessions:$(reviewscope_sessions) committed:$([ "$RS5_HEAD_BEFORE" != "$(git -C "$RS5" rev-parse HEAD)" ] && echo 1 || echo 0) lines:$(grep -c 'REVIEW-EDITED-CODE' <<< "$RS5_LOG") warns:$(grep -c 'the reviewer finds and the executor fixes' <<< "$RS5_ERR")"
+
+# 6. THE OTHER SIDE OF THAT SAME MATCH — and this one is git's doing, not the config key's. With
+#    `core.quotePath` (git's DEFAULT) a tracked path carrying one byte outside ASCII leaves
+#    `git diff --name-only` C-quoted and octal-escaped: `"docs/handoffs/<mission>/round\302\267
+#    one.md"`. It OPENS WITH A `"`, so it matches no arm of the allowlist, and a file the round
+#    wrote INSIDE its own mission directory is counted as code — the guard shouting on a healthy
+#    round, which is regime 2's failure reached by a filename instead of by a config key.
+#
+#    THE NAME BELOW CARRIES A MIDDLE DOT AND NOT AN ACCENT, and that is a constraint of this file
+#    rather than of the property. git quotes PER BYTE: every byte >= 0x80 goes the same way, so the
+#    real-world instance — a mission artifact named in pt-BR, in the repo whose OUTPUT_LANG is
+#    pt-BR — travels this exact code path. It cannot be typed here: tests/ is the kit's ENGLISH
+#    surface and check-lang.sh reads a Latin-1 LETTER class, so an accented filename would fail the
+#    language sensor, and rewording a file to quiet a detector is what that sensor's own header
+#    forbids. `·` is non-ASCII (C2 B7), is not a Latin-1 letter, and is punctuation the kit already
+#    writes on nearly every page. Verified by hand that the two spellings quote identically.
+#
+#    `nonascii:1` is the floor that the venom is ARMED. It reads the RAW diff of the fixture, where
+#    core.quotePath is pinned on, so the runner's command-line override cannot reach it, and it
+#    demands the ESCAPED spelling — without that floor a world where git printed the literal path
+#    would satisfy this regime by being regime 2 over again, which is the vacuous probe this file
+#    has already paid for twice.
+#
+#    The expectation after the floor is regime 2's, character for character, for regime 5's reason:
+#    the claim is "a non-ASCII name reads the same as an ASCII one", and that is a differential.
+rm -f "$REVIEWSCOPE_COUNT"
+RS6="$OUTSIDE/reviewscope-nonascii"
+reviewscope_world "$RS6"
+reviewscope_stub "$RS6" 1 clean "round·one.md"
+RS6_HEAD_BEFORE="$(git -C "$RS6" rev-parse HEAD)"
+RS6_ERR="$( cd "$RS6" && "$SDD" run "$MISSION" --phase REVIEW --max-phases 1 2>&1 >/dev/null )"
+RS6_LOG="$(cat "$RS6/.sdd/logs/$MISSION/pipeline.log" 2>/dev/null || true)"
+RS6_RAW="$(git -C "$RS6" diff --name-only "$RS6_HEAD_BEFORE" HEAD 2>/dev/null || true)"
+assert_eq "a mission-directory file whose name is not ASCII is not flagged REVIEW-EDITED-CODE" \
+  "nonascii:1 sessions:1 committed:1 lines:0 warns:0" \
+  "nonascii:$(grep -cF 'round\302\267one.md' <<< "$RS6_RAW") sessions:$(reviewscope_sessions) committed:$([ "$RS6_HEAD_BEFORE" != "$(git -C "$RS6" rev-parse HEAD)" ] && echo 1 || echo 0) lines:$(grep -c 'REVIEW-EDITED-CODE' <<< "$RS6_LOG") warns:$(grep -c 'the reviewer finds and the executor fixes' <<< "$RS6_ERR")"
 
 # The stub goes back the way it was found, for the reason spelled out one screen up.
 cat > "$OUTSIDE/stub/claude" <<'STUB'

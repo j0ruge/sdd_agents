@@ -2235,6 +2235,14 @@ kit_guard_check() {
 #    is written here rather than left implied because a limit nobody declared is the thing this
 #    whole header exists to separate from a limit that is known. Conditioning it on
 #    `kit_root = REPO_ROOT` is a behaviour change with no probe today; declared, not guessed.
+#  · `core.quotePath=false` BUYS BACK THE NON-ASCII NAME AND NOT EVERY NAME. Measured in a scratch
+#    repo: with it, a path holding a byte >= 0x80 comes out literal, while one holding a double
+#    quote or a backslash is STILL C-quoted by git, as is any path holding a control character or a
+#    newline. Such a path inside the mission directory would still be counted as outside it and
+#    warned about. That world was NOT built here: the fix is one flag, while the residue needs `-z`
+#    with a NUL split, which `changed="$( … )"` cannot carry (command substitution drops NUL bytes)
+#    and which would rewrite the read loop for a filename nobody has typed yet. Declared, not
+#    solved.
 #  · ONLY TRAILING SLASHES are normalised out of `$HANDOFF_DIR` below, because that is the spelling
 #    that was reproduced and the one regime 5 of check-autonomy.sh holds. A leading `./`, a `//` in
 #    the middle, or an absolute `$HANDOFF_DIR` would each miss the same way and none has a probe —
@@ -2251,7 +2259,15 @@ review_scope_check() {
   # `|| true` because `set -e` kills the shell AT THE ASSIGNMENT when git refuses — the amend case
   # above is a real world, not a hypothetical, and a runner that died there would turn a warning
   # into an outage.
-  changed="$( git -C "$REPO_ROOT" diff --name-only "$before" "$head_now" 2>/dev/null || true )"
+  #
+  # `-c core.quotePath=false` because the allowlist below matches STRINGS git wrote, and with that
+  # key on — GIT'S OWN DEFAULT — a tracked path holding one byte outside ASCII comes back C-quoted
+  # and octal-escaped: a mission artifact named in pt-BR, in a repo whose OUTPUT_LANG is pt-BR,
+  # arrives as `"docs/handoffs/<mission>/relat\303\263rio.md"`. It opens with a `"`, so it matches
+  # no arm, and the round's own report reads as code. On the command line and not `git config`, so
+  # it holds whatever the target repo set. Regime 6 of the guard's block in
+  # tests/check-autonomy.sh, with the escaped spelling as its floor.
+  changed="$( git -C "$REPO_ROOT" -c core.quotePath=false diff --name-only "$before" "$head_now" 2>/dev/null || true )"
   # THE TWO SIDES OF THE MATCH BELOW COME FROM DIFFERENT WORLDS, and this line is what makes them
   # comparable: `git diff --name-only` prints a path git has already normalised, while
   # `$HANDOFF_DIR` arrives VERBATIM from the target repo's .sdd/config.sh and is never normalised
