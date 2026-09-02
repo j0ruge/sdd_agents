@@ -22,6 +22,13 @@
 # measured: deleting the `selftest` call AND the SELFTEST_RAN guard that follows it; or neutering
 # check() AND the negative controls that would catch it. Each alone turns this file red.
 #
+# DECLARED LIMIT, since the r2 finding of `20260901-o-revisor-so-acha`: a run with
+# SDD_TPL_SELFTEST_CHILD set still EXITS 0 when the rules pass. It has to — the end-to-end probe
+# reads its child's rc, and a red child there means templates/ is genuinely broken. What that run no
+# longer buys is the word `intact` and the silence; it announces the skip on stderr and says so on
+# its last stdout line, and both halves carry their own probe. So the residue is a reader who sets
+# the variable, ignores two loud lines, and reads rc alone — not a sensor that certifies itself.
+#
 # Usage: tests/check-templates.sh   (exit 0 = contract intact)
 
 set -uo pipefail
@@ -197,6 +204,39 @@ selftest() {
     cat "$box/ctl.out" >&2
     broken "the end-to-end child is red (rc=$ctl_rc) over an untouched copy of templates/ — either templates/ is genuinely broken (its complaint is above, and the rules further down say the same) or this probe would have 'caught' the poison by failing at everything"
   fi
+  # r2 of `20260901-o-revisor-so-acha`, finding #1 (HIGH), and it is about the env guard at the
+  # bottom of this file rather than about any rule below it. That branch used to answer the
+  # recursion problem by setting `SELFTEST_RAN=1` — the exact value the vacuity guard at the end
+  # reads — so `SDD_TPL_SELFTEST_CHILD=1 bash tests/check-templates.sh` printed
+  # `template contract intact` at rc 0 having run ZERO probes over its own primitives. Reproduced
+  # before these two probes were written: rc 0, one `template contract intact`, zero `self-test:`
+  # lines. The comment that stood by the guard argued a flag would be worse because "a human could
+  # pass it", while the Check of the R5 line in this repo's own checkpoint.md was teaching a human
+  # to pass THIS one. An env var was never harder to type — only harder to see.
+  #
+  # `ctl.out` IS that world, and that is why it is read back instead of built again: the control run
+  # above is a top-level run of this file with the variable set, over an untouched copy of
+  # templates/. A second fixture would be a hand-written copy of a world the child never saw.
+  #
+  # Floor first, and it is not ceremony: `grep -q` over an empty file answers "absent", so the
+  # second probe would pass for free over a child that never printed anything — the vacuity this
+  # whole block exists to refuse. Measured: pointed at an empty file, the floor goes red instead.
+  grep -q '^== templates/missao.md ==' "$box/ctl.out" \
+    || broken "the skipped child printed none of the rules — the two probes below would be reading an empty world, and both would pass"
+  grep -q 'template contract intact' "$box/ctl.out" \
+    && broken "a run with SDD_TPL_SELFTEST_CHILD set certifies the template contract while skipping every probe above it — the environment buys the clean bill of health the selftest exists to earn"
+  printf '  ok    self-test: the probes cannot be skipped from the environment\n'
+
+  # Half two, and it needs its own probe because it has its own sabotage: the first probe only
+  # demands that the word `intact` is gone. Silence would satisfy it, and silence is how a reader
+  # fails to notice that this run proved nothing about itself. The two carriers are deliberately
+  # different strings — this token prints on stderr and fires even when the rules FAIL, while the
+  # terminal stdout line only replaces `intact` on the clean run — so neither probe can pass on the
+  # other one's evidence.
+  grep -q 'SELF-TEST SKIPPED' "$box/ctl.out" \
+    || broken "the skipped child said nothing about having skipped — a reader cannot tell a run that proved its primitives from one that proved nothing"
+  printf '  ok    self-test: skipping the probes is announced, never silent\n'
+
   printf '\n## O que foi corrigido\n\n| Achado | Hash |\n|---|---|\n' >> "$box/tpl/review.md"
   poison_out="$(SDD_TPL_SELFTEST_CHILD=1 SDD_TEMPLATES_DIR="$box/tpl" bash "$SELF_PATH" 2>&1)" \
     || poison_rc=$?
@@ -212,12 +252,22 @@ selftest() {
   SELFTEST_RAN=1
 }
 SELFTEST_RAN=0
+SELFTEST_SKIPPED=0
 # The child spawned by the end-to-end probe skips the selftest — it exists to answer one question
-# ("does this file go red over that templates/?") and running the probes again would recurse. The
-# guard is an env var and not a flag on purpose: a flag is kit surface a human could pass, and a
-# human passing it would silently disarm every probe above.
+# ("does this file go red over that templates/?") and running the probes again would recurse.
+#
+# What it must NOT do is write SELFTEST_RAN, and that is finding #1 (HIGH) of the r2 of
+# `20260901-o-revisor-so-acha`. This branch used to set exactly the value the vacuity guard at the
+# end of this file reads, so the variable bought `template contract intact` at rc 0 over zero
+# probes. The comment that stood here defended the env var over a flag because "a human could pass"
+# a flag — and the R5 Check in this repo's own checkpoint.md had a human passing this variable as a
+# shortcut. Skipping is therefore its own state now, and the two states are read separately below.
+#
+# It still exits 0 when the rules pass, and that is a DECLARED limit rather than an oversight: the
+# control run reads the child's rc, and a red child there means "templates/ is genuinely broken".
+# What the run loses is the word `intact` and the silence — never the exit code the parent needs.
 if [ -n "${SDD_TPL_SELFTEST_CHILD:-}" ]; then
-  SELFTEST_RAN=1
+  SELFTEST_SKIPPED=1
 else
   selftest
 fi
@@ -406,9 +456,23 @@ echo
 # prove nothing, and deleting the `selftest` call is one line. Deleting THIS as well is a second
 # edit — stated as two edits and not as "unreachable in one", because r2 measured that stronger
 # sentence to be false where a sensor header claimed it.
-[ "$SELFTEST_RAN" -eq 1 ] \
-  || broken "the selftest never ran — every ok line above is a claim about an assertion primitive nothing checked"
+#
+# THREE states, not two, since the r2 finding: ran, skipped-and-said-so, and neither. Folding the
+# middle one back into the first is what the environment used to buy for free.
+if [ "$SELFTEST_SKIPPED" -eq 1 ]; then
+  printf '  SELF-TEST SKIPPED  SDD_TPL_SELFTEST_CHILD is set, so the probes over this file own\n' >&2
+  printf '                     assertion primitives did NOT run. This run says nothing about\n' >&2
+  printf '                     whether the rules above are able to fail at all.\n' >&2
+elif [ "$SELFTEST_RAN" -ne 1 ]; then
+  broken "the selftest never ran — every ok line above is a claim about an assertion primitive nothing checked"
+fi
 if [ "$fails" -eq 0 ]; then
+  # The word `intact` is earned by the probes, so the run that skipped them does not get to print
+  # it. Same rc, because the end-to-end control above reads the rc and nothing else.
+  if [ "$SELFTEST_SKIPPED" -eq 1 ]; then
+    echo "template rules checked, self-test NOT run — this run proved nothing about itself"
+    exit 0
+  fi
   echo "template contract intact"
   exit 0
 fi
