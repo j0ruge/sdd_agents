@@ -447,7 +447,23 @@ commits and not the working tree, and it says nothing when the diff cannot be co
 question it could not answer is a guard nobody reads.
 
 `grep -c REVIEW-EDITED-CODE .sdd/logs/<mission>/pipeline.log` answering `0` is what a healthy
-mission looks like.
+mission looks like — **and also what a mission looks like when the guard never ran.** That number
+alone does not tell the two apart. Bash parses this script's function definitions once, as it reads
+the file, so a `sdd run` process that predates this guard runs the `bin/sdd` it parsed at startup:
+a mission whose own EXEC phase lands the guard is measured by a runner in which the guard does not
+exist. It is how `20260901-o-revisor-so-acha`, the mission that added it, measured itself.
+
+What can be computed after the fact is the round's own diff, and that is the evidence to cite:
+
+```bash
+git -c core.quotePath=false diff --name-only <the head the REVIEW session opened with> HEAD
+```
+
+Every path there outside `<HANDOFF_DIR>/<mission>/`, `TODO_FILE` and `tests/health-baseline.txt` is
+what the guard would have warned about. Closing the window for real — having `sdd run` compare the
+hash of `bin/sdd` at entry against the one on disk, and warn or stop — is a behaviour change that
+can fail a healthy mission in flight, so it is a human decision and not a limit this guard can lift
+by itself.
 
 ## Models per phase
 

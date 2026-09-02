@@ -2215,6 +2215,21 @@ kit_guard_check() {
 # `== the REVIEW scope guard ==` block of tests/check-autonomy.sh.
 #
 # ⚠️ DECLARED LIMITS:
+#  · A `grep -c REVIEW-EDITED-CODE <log>` ANSWERING 0 IS NOT EVIDENCE THAT THE ROUND BEHAVED. It
+#    says "no line was written", and the loudest way to write no line is for this function not to
+#    exist: bash parses a definition when it reads past it, so a function that was not in the file
+#    at read time is not in the process. (The entrypoint guard on the last line of this script is
+#    the neighbouring scar — it stops bash re-reading a file the run itself edited — and neither
+#    guard puts a function into a process that started without it.) So a `sdd run` process that
+#    predates this guard runs the bin/sdd it parsed at startup, and a mission whose OWN EXEC phase
+#    lands the guard is measured by a runner in which the guard is absent. Not hypothetical: on
+#    20260901-o-revisor-so-acha the conducting `sdd run` started 17:56:48 and c8c8ec7 — the commit
+#    that created this function — landed at 18:58:11, so that mission's REVIEW round reads 0 for the
+#    wrong reason. What CAN be computed after the fact is the round's own diff, which is what
+#    docs/pipeline.md now teaches to cite. Closing the window for real (comparing bin/sdd's hash at
+#    entry and warning, or stopping) is a behaviour change that can fail a healthy mission in
+#    flight: a human decision, recorded in that mission's round report, not something this header
+#    can fix. Declared, not solved.
 #  · it reads COMMITS, not the working tree. A reviewer that edited a file and left it uncommitted
 #    is invisible here — and also invisible to the gate, which demands a clean tree, so the run
 #    stops for a different reason.
@@ -2295,6 +2310,11 @@ review_scope_check() {
   done <<< "$changed"
   [ "$n" -gt 0 ] || return 0
   warn "the $phase session committed $n file(s) outside its mission directory — the reviewer finds and the executor fixes, so a finding belongs in the checkpoint as an R<n> increment: $outside"
+  # ⚠️ THE ABSENCE OF THE LINE BELOW IS NOT A MEASUREMENT. Counting this marker in the log answers
+  # 0 both when the round behaved and when this function never ran — a `sdd run` process that
+  # predates this guard carries the bin/sdd it parsed at startup, and never calls it. First bullet
+  # of the DECLARED LIMITS above, with the mission it was measured on; the evidence that survives
+  # that window is the round's own `git diff --name-only <head the session opened with> HEAD`.
   pipeline_log_line "$(date -Iseconds)  REVIEW-EDITED-CODE  $phase  $n file(s) outside the mission directory: $outside"
 }
 

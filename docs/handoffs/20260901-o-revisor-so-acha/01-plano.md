@@ -337,7 +337,12 @@ A fase REVIEW **desta** missão é a primeira a rodar no contrato novo; os núme
 ```bash
 ./bin/sdd autonomy --by-mission | grep o-revisor-so-acha            # · review loop US$ X (N%)
 jq -rs 'map(select(.event=="session" and .mission=="20260901-o-revisor-so-acha" and (.phase=="REVIEW" or .phase=="EXEC"))) | .[] | "\(.phase) \(.step) \(.turns) turns · US$ \(.cost_usd) · rounds \(.rounds_before)→\(.rounds_after) · pending \(.pending_before)→\(.pending_after)"' ~/.sdd/autonomy-log.jsonl
-grep -c REVIEW-EDITED-CODE .sdd/logs/20260901-o-revisor-so-acha/pipeline.log   # 0 esperado
+# ⚠️ NÃO leia o pipeline.log como evidência da guarda NESTA missão (achado #4 da r1, virou R4): o
+# processo `sdd run` que a conduz começou 17:56:48 e a guarda nasceu em c8c8ec7, 18:58:11 — o bash
+# já tinha lido o arquivo, então `review_scope_check` não existe nesse processo e um `grep -c`
+# responde 0 por não ter medido. O que se computa é o diff da própria rodada:
+git -c core.quotePath=false diff --name-only 2d974e3 8f9113d   # r1: head de abertura → head de fechamento
+# esperado: só caminhos em docs/handoffs/20260901-o-revisor-so-acha/ (rodada seguinte: os shas dela)
 ```
 
 Preencher a coluna Depois do `KAIZEN_LOG.md` com essas linhas (turnos e US$ por sessão REVIEW; o
@@ -384,7 +389,9 @@ tests/run-all.sh | tail -2                                              # suite 
 jq -rs 'map(select(.event=="session" and .mission=="20260901-o-revisor-so-acha" and .phase=="REVIEW")) | .[] | "\(.turns) turns · US$ \(.cost_usd) · rounds \(.rounds_before)→\(.rounds_after)"' ~/.sdd/autonomy-log.jsonl   # cada uma ≤ 60 turnos, ≤ US$ 15
 grep -c '^| R' docs/handoffs/20260901-o-revisor-so-acha/checkpoint.md   # os R<n> que a r1 escreveu
 grep -cE '^\| [0-9]+ \| (CRITICAL|HIGH|MEDIUM|LOW)' docs/handoffs/20260901-o-revisor-so-acha/40-review-r1.md   # achados por severidade (M3)
-grep REVIEW-EDITED-CODE .sdd/logs/20260901-o-revisor-so-acha/pipeline.log; echo "rc=$? (1 = nenhuma sessão REVIEW editou código)"
+# ⚠️ o pipeline.log NÃO responde por esta missão (R4): o processo que a conduz é anterior à guarda,
+# e 0 ali não distingue "medido limpo" de "não medido". A evidência que se computa é o diff:
+git -c core.quotePath=false diff --name-only <head com que cada sessão REVIEW abriu> HEAD   # só docs/handoffs/<missão>/
 ```
 
 ## Como rodar (humano)

@@ -208,6 +208,14 @@ laço de revisão inteiro (REVIEW + EXEC dos `R<n>`) **≤ US$ 40**. A M3 é inv
 > ao `TODO.md` **com a catraca no mesmo diff**, antes do `./bin/sdd health`. Este repo **é** o kit,
 > então o destino é o `TODO.md` daqui — nenhum item precisa da rota `kit:`.
 
+- ⚠️ **Widening do item que a QA já escreveu (janela cega do runner velho), não item novo:** o
+  `R4` mediu a mesma janela numa **segunda** superfície — `review_scope_check` (`bin/sdd`), e não
+  só o ledger. O item que a DOCS transportar deve citar as duas âncoras, porque a consequência é
+  diferente em cada uma: no ledger o campo novo não é escrito; na guarda o `grep -c
+  REVIEW-EDITED-CODE` responde `0` **sem** distinguir "medido limpo" de "não medido", que é um
+  fail-open de leitura. O limite já está **declarado** no cabeçalho da função e em
+  `docs/pipeline.md` (é o que o `R4` fez); o que segue pendente e é decisão humana é o conserto
+  durável (r1 § Pendências).
 - `run_phase` não limpa o ambiente do harness antes do `claude -p` — `bin/sdd` (função
   `run_phase`) — um `sdd run` lançado de dentro de uma sessão do Claude Code herda
   `CLAUDE_CODE_CHILD_SESSION`, `CLAUDE_CODE_MESSAGING_SOCKET` e afins e é morto pelo harness sem
