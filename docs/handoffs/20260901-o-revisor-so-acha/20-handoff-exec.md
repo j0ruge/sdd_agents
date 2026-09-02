@@ -3,8 +3,8 @@ missao: 20260901-o-revisor-so-acha
 fase: EXEC
 status: done
 sessao: 4f9b8b16-dc64-41d4-a9bc-df5b66469fa1
-data: 2026-09-02 04:15
-gate: "tests/run-all.sh → 864 asserções `ok`, última linha `suite green`, rc 0 (era 842 em `35863d9`, 855 ao fim dos I1–I4, 858 ao fim do ciclo QA 1, 861 ao fim da rodada r1); checkpoint sem linha `pending|doing` — I1 `88432ee`, I2 `03187e8`, I3 `c8c8ec7`, I4 `a84adeb`, o ciclo QA 1 `384e36c` (F1), `48097cd` (F2), `c05b43b` (F3), `b1cfc27` (F4), a rodada REVIEW r1 `d06840a` (R1), `045d8dd` (R2), `24ee7bf` (R3), `bffc79f` (R4), `541b524` (R5) e a rodada REVIEW r2 `348a80f` (R6), `8cdec98` (R7), `6ebed3a` (R8), todos ancestrais de HEAD (`git merge-base --is-ancestor` ok em 16 de 16); working tree limpa"
+data: 2026-09-02 06:40
+gate: "tests/run-all.sh → 866 asserções `ok`, última linha `suite green`, rc 0 (era 842 em `35863d9`, 855 ao fim dos I1–I4, 858 ao fim do ciclo QA 1, 861 ao fim da rodada r1, 864 ao fim da r2); checkpoint sem linha `pending|doing` — I1 `88432ee`, I2 `03187e8`, I3 `c8c8ec7`, I4 `a84adeb`, o ciclo QA 1 `384e36c` (F1), `48097cd` (F2), `c05b43b` (F3), `b1cfc27` (F4), a rodada REVIEW r1 `d06840a` (R1), `045d8dd` (R2), `24ee7bf` (R3), `bffc79f` (R4), `541b524` (R5), a rodada REVIEW r2 `348a80f` (R6), `8cdec98` (R7), `6ebed3a` (R8) e a rodada REVIEW r3 `604d280` (R9), `f8fcb49` (R10), todos ancestrais de HEAD (`git merge-base --is-ancestor` ok em 18 de 18); working tree limpa"
 ---
 
 # Handoff — EXEC — O revisor só acha
@@ -40,18 +40,29 @@ HIGH, 3 MEDIUM, 4 LOW, nota `B`, três linhas `R<n>`. As três fecharam: `348a80
 abaixo. Duas rodadas seguidas acharam sem consertar, e a segunda achou um fail-open **no próprio
 sensor** que a primeira tinha usado como atalho de conferência.
 
+**Rodada REVIEW r3 (atualização de 2026-09-02):** a r3 re-julgou os três consertos que **não**
+escreveu (3 de 3 passam, e o mutante do `R8` foi aplicado numa cópia para matar exatamente uma
+asserção, a nomeada), achou **3** novos e não fechou — 2 MEDIUM, 1 LOW, nota `B`, duas linhas
+`R<n>`. As duas fecharam: `604d280` (R9), `f8fcb49` (R10). Suíte **866**, catálogo **227**. Detalhe
+na seção `## Rodada REVIEW r3` abaixo. ⚠️ **Aqui a série muda de assunto:** os três achados da r3
+**nasceram do ciclo de conserto da r2**, a curva é `12 → 8 → 3` sem HIGH pela primeira vez, e o
+teto de rodadas foi alcançado — a próxima coisa que o runner faz é encerrar em `BLOCKED` com a
+`ceiling_note`, o que é Jidoka e não gate insatisfazível. As três portas do humano estão no
+`§ Boot da próxima fase`.
+
 ## Estado do repo
 
-> ⚠️ Atualizado em 2026-09-02, no fim da **rodada REVIEW r2**. Os números abaixo são os de agora;
+> ⚠️ Atualizado em 2026-09-02, no fim da **rodada REVIEW r3**. Os números abaixo são os de agora;
 > os do fim dos I1–I4 (9 commits, `a84adeb`, 855 asserções), os do fim do ciclo QA 1 (19 commits,
-> `b1cfc27`, 858) e os do fim da r1 (31 commits, `541b524`, 861) estão no `git log` e nos `gate:`
-> anteriores deste arquivo, recuperáveis por `git log -p` neste caminho.
+> `b1cfc27`, 858), os do fim da r1 (31 commits, `541b524`, 861) e os do fim da r2 (38 commits,
+> `6ebed3a`, 864) estão no `git log` e nos `gate:` anteriores deste arquivo, recuperáveis por
+> `git log -p` neste caminho.
 
-- **Branch:** `feat/o-revisor-so-acha` — 38 commits à frente de `main` (`35863d9`); **não** há push
+- **Branch:** `feat/o-revisor-so-acha` — 43 commits à frente de `main` (`35863d9`); **não** há push
   nesta fase.
-- **Último commit de código:** `6ebed3a` `fix(runner): a linha do journal deixa de derrubar o runner que ela diz nunca parar`
+- **Último commit de código:** `f8fcb49` `docs(runner): o censo de pipeline_log_line vira comando, e a frase passa a falar de todo chamador` — é **dele** que o carimbo de mutação depende.
 - **Working tree:** limpo (só falta o commit de checkpoint desta sessão, que acompanha este arquivo).
-- **Suíte:** `tests/run-all.sh` → **verde**, 864 asserções `ok`, rc 0 (~85 s).
+- **Suíte:** `tests/run-all.sh` → **verde**, 866 asserções `ok`, rc 0 (~85 s).
 - **E2E:** `E2E_CMD=""` — o kit não tem interface; não rodou por não existir.
 
 ## O que foi feito
@@ -225,6 +236,49 @@ terceiro caso seguido em que **reproduzir antes de escrever a linha** derrubou p
 a originou: o conserto que foi para o disco não é o que o relatório pediu, é o que o mundo montado
 mostrou ser necessário.
 
+## Rodada REVIEW r3 — os dois `R<n>`, um commit cada
+
+> Seção acrescentada em 2026-09-02, quando o último `R<n>` da r3 fechou. ⚠️ **É a última rodada
+> que o caminho derivado abre:** `review_rounds_on_disk` conta arquivos, e com `40-review-r3.md`
+> em disco a contagem chega a 3 = `REVIEW_MAX_ITER`. A r3 achou **3** (2 MEDIUM, 1 LOW), nota `B`,
+> sem editar código — e os **três nasceram do ciclo de conserto da r2**, o que é a primeira vez
+> que a série tem essa propriedade inteira.
+
+- `604d280` — **R9, o lote dos achados #1 e #3 (MEDIUM + LOW, os dois que precisavam de asserção
+  nova).** O `2>/dev/null` do `>> "$PIPELINE_LOG"` estava **à direita** da redirecção que falha, e
+  o bash aplica redirecção da esquerda para a direita: quando o `open` do journal falhava, a
+  queixa do shell saía numa fd 2 ainda não redirigida. O one-shot que o `R8` construiu era, no
+  canal que o humano lê, derrotado por um `Permissão negada` cru por linha de journal. Consertado
+  nos **dois** escritores (`pipeline_log_line` e `autonomy_append`), porque o `R8` os alinhou de
+  propósito e consertar um só é fazê-los derivar pela terceira vez. Junto, o resíduo declarado do
+  `R6` ganhou o consumidor que faltava: `tests/run-all.sh` **recusa** a corrida com
+  `SDD_TPL_SELFTEST_CHILD` no ambiente, como já recusa `SDD_MUTANT`.
+- `f8fcb49` — **R10, achado #2 (MEDIUM): o censo de dez contra os 13 medidos.** O cabeçalho de
+  `pipeline_log_line` dizia "it holds for all ten callers, and the eleventh is born with it" e
+  "CALLED and never substituted at all ten sites"; medidos, são **13 sítios em 8 funções**, e
+  nenhuma das duas leituras — nem chamadores, nem funções — dá dez. A segunda frase não é
+  ornamento: é a asserção de que o global `PIPELINE_LOG_WARNED` nunca morre num subshell, escrita
+  sobre uma população menor que a real. ⚠️ **O conserto não é escrever 13** — número em rubrica
+  nasce velho no próximo chamador, que é como este mesmo cabeçalho chegou a dez. É a forma do
+  `CLAUDE.md` para o `44 caught of 44`: a frase fala de **todo** chamador e carrega ao lado o
+  comando que conta.
+
+**O que o `R10` acrescenta à série, e que nenhum `R<n>` anterior tinha.** O segundo censo embutido
+derruba linha de comentário **de propósito**, e isso foi medido em vez de suposto: o bloco exibe a
+grafia proibida (`$(pipeline_log_line …)`) um parágrafo abaixo, então o `grep` cru responde `1` e
+não `0` — exatamente o um-a-mais que a rubrica do `CLAUDE.md` nomeia com o `44 caught of 44`. Um
+censo que caísse nessa armadilha teria trocado um número podre por um comando mentiroso, que é
+estritamente pior: o número podre pelo menos não se diz medição. Os dois comandos foram copiados
+do comentário e rodados verbatim — `13` e `0`.
+
+**O que a r3 prova.** Terceira rodada seguida em que o desenho novo se sustenta: a r3 re-verificou
+de fora os três consertos que não escreveu (`R6`, `R7`, `R8` — 3 de 3 passam pelo Check da própria
+linha, e o mutante do `R8` foi **aplicado** numa cópia da caixa do `check-mutation.sh` para matar
+exatamente uma asserção, a nomeada). A curva de achados é `12 → 8 → 3`, sem CRITICAL desde sempre
+e **sem HIGH pela primeira vez**. ⚠️ O que a série também mostra é o custo do laço: os três
+achados da r3 **nasceram do ciclo de conserto da r2** — consertar cria trabalho de revisão, e é
+essa a alavanca que a M2 mede e não fecha.
+
 ## Artefatos
 
 | Arquivo | O que contém |
@@ -232,6 +286,7 @@ mostrou ser necessário.
 | `docs/handoffs/20260901-o-revisor-so-acha/checkpoint.md` | I1–I4, F1–F4 e R1–R5 `done` com hash; notas de execução com cada desvio do plano e o porquê medido |
 | `docs/handoffs/20260901-o-revisor-so-acha/40-review-r1.md` | a primeira rodada do desenho novo: 12 achados, nota `B`, 5 `R<n>`, 3 refutações com evidência — e **nenhum** conserto escrito pela própria rodada |
 | `docs/handoffs/20260901-o-revisor-so-acha/40-review-r2.md` | a segunda rodada: re-julga os cinco consertos que não escreveu (5 de 5 passam), acha 8 novos, nota `B`, 3 `R<n>` — e a medição da M2 registrada **antes** de o resultado do laço ser conhecido |
+| `docs/handoffs/20260901-o-revisor-so-acha/40-review-r3.md` | a terceira e **última** rodada que o teto permite: re-julga os três consertos da r2 (3 de 3 passam), acha 3 novos — todos nascidos do ciclo de conserto anterior —, nota `B`, 2 `R<n>`; a M2 medida nas duas metades (por rodada melhorou 48%, por laço piorou) e as três opções do humano no `§ Pendências` |
 | `KAIZEN_LOG.md` (entrada de 2026-09-01) | o "antes" medido, a régua reprodutível, a correção do 60% → 57% da janela 2, e a coluna **Depois em aberto** |
 | `CONTEXT.md` (verbete *Laço REVIEW⇄EXEC*, D22, D23) | o desenho novo e como ele pousou, um hash por fatia |
 | `config/schema.md` · `docs/failure-modes.md` · `docs/pipeline.md § REVIEW` | o contrato onde alguém procura quando algo dá errado |
@@ -308,6 +363,39 @@ O que a r3 precisa saber, além do que já está acima:
    alvo depois de conhecer o resultado não é** — é o modo de falha que o `KAIZEN_LOG` de
    2026-08-31 nomeia.
 
+⚠️ **Atualizado em 2026-09-02, com o `R10` fechado: a próxima coisa que acontece NÃO é uma r4, e a
+sequência é determinada.** A r3 rodou, achou 3, deu `B`, e com `40-review-r3.md` em disco
+`review_rounds_on_disk` = 3 = `REVIEW_MAX_ITER`. Com o checkpoint agora sem nenhuma linha
+`pending`, `gate_EXEC` passa, `gate_REVIEW` lê a nota `B` da r3 e reprova, e o runner bate no teto
+e encerra em **`BLOCKED` com a `ceiling_note`**. **Isso é Jidoka, não gate insatisfazível** — a r3
+refutou essa hipótese com a leitura do código (`bin/sdd:4511`, o caminho `--phase REVIEW` é
+**isento** do teto por construção, "refusing that would leave no way to run the round that unblocks
+the mission"). O artefato tem dono e o humano tem porta. As três portas, em ordem de preço e com a
+recomendação da própria r3, estão em `40-review-r3.md § Pendências`: **(a)** `sdd run <missão>
+--phase REVIEW`, isento do teto, abre uma r4 que re-julga `R9`/`R10` — **recomendada**, custa uma
+rodada de achar (US$ 16–18 nesta missão); **(b)** `REVIEW_MAX_ITER=4`, que muda a régua de toda
+missão futura e por isso é a mais cara; **(c)** aceitar o `B` e seguir para o PR com
+`PUBLISH_ON_REVIEW_BLOCKED=draft`.
+
+**Se a porta escolhida for (a), o que a r4 precisa saber além do que já está acima:**
+
+1. **Os dois commits a auditar são `604d280` (R9) e `f8fcb49` (R10)**, e o que cada um fez está na
+   seção `## Rodada REVIEW r3` acima; o que a r3 alegou está em `40-review-r3.md`.
+2. **O `R10` é o primeiro `R<n>` desta missão que não move comportamento nenhum** — `git diff -U0
+   bin/sdd` filtrado por linha não-comentário devolve **vazio**, e por isso não traz asserção nem
+   mutante novo (régua de admissão do D15: probe ali sondaria a existência de um comentário). O que
+   ele traz para ser auditado é **o texto de dois censos executáveis**: rode-os verbatim, copiados
+   do comentário, e confira que respondem `13` e `0`. Censo que mente é pior que número podre.
+3. **O `R9` mexeu em `bin/sdd` E em `tests/`, e apodreceu a âncora de um mutante vizinho** —
+   `mut_RUN_journal_write_stops_the_line` casava exatamente a grafia que o conserto trocou, e
+   passou a aplicar **zero**. Foi reancorado no mesmo commit e os 227 do catálogo foram reaplicados
+   um a um (`checked=227 rotten=0`). O `R10` refez a conferência na vizinhança que tocou: os
+   **cinco** mutantes ancorados na faixa de `pipeline_log_line` continuam aplicando, mudando 1
+   linha cada e compilando.
+4. **A M2 não fecha e as duas metades apontam para lados diferentes** — está medido e registrado em
+   `40-review-r3.md` **antes** de a janela 3 abrir. Medir de novo é útil; reescrever o alvo depois
+   de conhecer o resultado não é.
+
 ⚠️ **Para a fase REVIEW, que é a primeira a rodar o contrato novo:** o desenho que ela deve seguir
 está no seu próprio boot prompt e em `agents/sdd-reviewer.md`. Duas coisas que a M2 do
 `00-missao.md` mede sobre esta própria missão: cada sessão REVIEW **≤ 60 turnos e ≤ US$ 15**, e o
@@ -334,6 +422,14 @@ laço de revisão inteiro (REVIEW + EXEC dos `R<n>`) **≤ US$ 40**. A M3 é inv
   `tests/` e `templates/` mudaram. `gate_PR` o exige. Re-emitir é tarefa da DOCS, **depois** do
   último commit de código — e registrar achado no `TODO.md` invalida a chave outra vez
   (`tests/health-baseline.txt` está dentro dela). Ordem: achados → catraca → `./bin/sdd health`.
+- ⚠️ **Atualizado em 2026-09-02 (`R10`): o último commit de código da missão é agora `f8fcb49`,
+  e o catálogo está em 227.** O `R9` acrescentou dois mutantes (um por metade da asserção) e
+  **reancorou** um terceiro cuja âncora o próprio conserto tinha apodrecido; o `R10` não
+  acrescentou nenhum, porque não mudou comportamento nenhum. É depois de `f8fcb49` que o
+  `./bin/sdd health` re-emite o carimbo — e só depois de a DOCS ter transportado os achados para o
+  `TODO.md`, porque a catraca está na chave. ⚠️ **Se o humano escolher a porta (a) e a r4 achar
+  algo**, cada `R<n>` novo empurra esse ponto para a frente outra vez: o carimbo pertence ao último
+  commit de código **da missão**, nunca ao da fase corrente.
 - **O catálogo de mutação (225 depois do `R8`) não foi rodado ponta a ponta nesta fase** — é
   opt-in desde `4c86712` e seguraria a árvore por >10 min por gate. Cada um dos **sete** mutantes
   novos foi provado numa cópia da árvore (aplica, `cmp` acusa diferença, `bash -n` compila, e o
@@ -381,6 +477,20 @@ laço de revisão inteiro (REVIEW + EXEC dos `R<n>`) **≤ US$ 40**. A M3 é inv
   fail-open de leitura. O limite já está **declarado** no cabeçalho da função e em
   `docs/pipeline.md` (é o que o `R4` fez); o que segue pendente e é decisão humana é o conserto
   durável (r1 § Pendências).
+- **Achado novo desta fase (`R10`): o censo de dez tem uma segunda casa, e a varredura que fechou
+  a primeira a encontrou.** `tests/check-entrypoint.sh:419` diz *"makes all ten assertions above
+  pass at once and none of them can notice"* sobre as asserções acima dela; medido agora,
+  `grep -cE '^ *probe ' ` responde **14**, e as 14 estão todas acima daquela linha. É a mesma
+  classe do achado #2 da r3 — censo escrito em prosa, que envelhece no próximo probe acrescentado
+  — num arquivo que o `CLAUDE.md` cita nominalmente como exemplo da régua. ⚠️ **Duas ressalvas que
+  a triagem precisa, para não abrir item maior que o defeito:** (i) é mais **fraco** que o do
+  `pipeline_log_line`, porque ali o número guardava uma propriedade viva ("nunca substituída em
+  `$( )`") e aqui ele descreve uma sabotagem que já foi medida; (ii) as outras duas ocorrências
+  (`:60` e `:329`) são **história honesta** e não devem ser tocadas — dizem que a versão frouxa
+  passou nos dez probes **que existiam então**, e a frase seguinte de `:60` já anuncia "Probes 11
+  and 12 close it". Conserto sugerido: a forma do `R10` — a frase fala de **todas** as asserções e
+  carrega ao lado `grep -cE '^ *probe ' tests/check-entrypoint.sh` —, nunca escrever 14 → `TODO.md`
+  (descoberto por `sdd-executor` na missão `20260901-o-revisor-so-acha`, 2026-09-02)
 - `run_phase` não limpa o ambiente do harness antes do `claude -p` — `bin/sdd` (função
   `run_phase`) — um `sdd run` lançado de dentro de uma sessão do Claude Code herda
   `CLAUDE_CODE_CHILD_SESSION`, `CLAUDE_CODE_MESSAGING_SOCKET` e afins e é morto pelo harness sem
