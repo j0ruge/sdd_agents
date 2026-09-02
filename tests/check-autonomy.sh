@@ -4562,6 +4562,57 @@ assert_eq "the scope guard warns without stopping the line when the pipeline log
   "armed:1 sessions:1 warns:1 journal:1 rc:0 rows:1" \
   "armed:$RS7_ARMED sessions:$(reviewscope_sessions) warns:$(grep -c 'the reviewer finds and the executor fixes' <<< "$RS7_ERR") journal:$(grep -c 'the pipeline journal at' <<< "$RS7_ERR") rc:$RS7_RC rows:$(( $(nrows) - RS7_ROWS_BEFORE ))"
 
+# 8. THE SAME FAILURE, IN THE CHANNEL THE HUMAN ACTUALLY READS. Regime 7 measured that the run
+#    SURVIVES an unwritable journal, and stopped there — the evidence for this regime was already
+#    sitting in `RS7_ERR` and no assertion looked at it. `2>/dev/null` was written to the RIGHT of
+#    the `>>` in both writers, and bash applies redirections LEFT TO RIGHT: when the `open` of the
+#    append fails, the shell's own complaint goes to an fd 2 that has not been redirected yet. So
+#    the curated one-shot regime 7 pins with `journal:1` arrived escorted by one raw
+#    `Permission denied` PER journal line, in the same stderr — the one-shot defeated where its
+#    only reader stands. Reproduced before this regime was written, in a throwaway script: three
+#    calls, `2>` on the right ⇒ 3 raw lines; `2>` on the left ⇒ 0, with the guard branch still
+#    firing.
+#
+#    ONE ASSERTION, BOTH WRITERS, and that is not tidiness. `pipeline_log_line` and
+#    `autonomy_append` carry the same spelling because the R8 of `20260901-o-revisor-so-acha`
+#    aligned them on purpose ("one rule, one spelling, in both writers"); two assertions that can
+#    be closed one at a time are how the two spellings drift apart a third time. Hence a world in
+#    which BOTH files are unwritable, with a floor per venom.
+#
+#    THE RAW COUNT IS A SUBTRACTION AND NOT A MESSAGE MATCH, deliberately: the shell's complaint is
+#    `<script>: line N: <path>: <strerror>`, and both halves after the path are LOCALE-dependent —
+#    neither the word before the line number nor the `strerror` is English on a machine whose
+#    locale is not (measured on this one, whose two words cannot be written on the kit's English
+#    surface — the constraint regime 6 above spells out). What is stable is the PATH, which every raw
+#    line names and which both curated warnings embed. So `named - curated` counts exactly the
+#    lines that mention a journal path without being one of the kit's own sentences, in any locale.
+#
+#    `jarmed:1 larmed:1` are the floors that each venom is ARMED — as root, or on a filesystem that
+#    ignores the mode, this regime would quietly become regime 1 with a longer name. `journal:1`
+#    and `ledger:1` are the floor that each writer was actually REACHED and warned: `raw:0` over a
+#    run where neither write failed is the answer of a world nobody built. `rc:0` keeps regime 7's
+#    property from regressing here — the ledger row cannot be the witness in this world, because
+#    the ledger is the second thing this regime breaks.
+rm -f "$REVIEWSCOPE_COUNT"
+RS8="$OUTSIDE/reviewscope-rawerror"
+reviewscope_world "$RS8"
+reviewscope_stub "$RS8" 1 code
+mkdir -p "$RS8/.sdd/logs/$MISSION" "$RS8/state"
+: > "$RS8/.sdd/logs/$MISSION/pipeline.log"
+: > "$RS8/state/autonomy-log.jsonl"
+chmod 000 "$RS8/.sdd/logs/$MISSION/pipeline.log" "$RS8/state/autonomy-log.jsonl"
+RS8_JARMED=0
+RS8_LARMED=0
+( printf 'x' >> "$RS8/.sdd/logs/$MISSION/pipeline.log" ) 2>/dev/null || RS8_JARMED=1
+( printf 'x' >> "$RS8/state/autonomy-log.jsonl" ) 2>/dev/null || RS8_LARMED=1
+RS8_RC=0
+RS8_ERR="$( cd "$RS8" && SDD_STATE_DIR="$RS8/state" "$SDD" run "$MISSION" --phase REVIEW --max-phases 1 2>&1 >/dev/null )" || RS8_RC=$?
+RS8_NAMED="$(grep -cE 'pipeline\.log|autonomy-log\.jsonl' <<< "$RS8_ERR")"
+RS8_CURATED="$(grep -cE 'the pipeline journal at|could not write the autonomy ledger at' <<< "$RS8_ERR")"
+assert_eq "neither journal writer leaks a raw redirection error when its file cannot be written" \
+  "jarmed:1 larmed:1 sessions:1 journal:1 ledger:1 raw:0 rc:0" \
+  "jarmed:$RS8_JARMED larmed:$RS8_LARMED sessions:$(reviewscope_sessions) journal:$(grep -c 'the pipeline journal at' <<< "$RS8_ERR") ledger:$(grep -c 'could not write the autonomy ledger at' <<< "$RS8_ERR") raw:$(( RS8_NAMED - RS8_CURATED )) rc:$RS8_RC"
+
 # The stub goes back the way it was found, for the reason spelled out one screen up.
 cat > "$OUTSIDE/stub/claude" <<'STUB'
 #!/usr/bin/env bash

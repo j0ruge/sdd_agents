@@ -2778,7 +2778,35 @@ mut_RUN_review_scope_quotepath_default() {
 # shape this runner writes in several places, and a pattern that drifted would sabotage one of
 # those while still looking applied.
 mut_RUN_journal_write_stops_the_line() {
-  sed -i '/^pipeline_log_line()/,/^}/ s@ >> "\$PIPELINE_LOG" 2>/dev/null || {@ >> "$PIPELINE_LOG"; true || {@' "$1"
+  # ⚠️ The anchor moved with r3 finding #1: `2>/dev/null` now stands to the LEFT of the `>>`, and
+  # this pattern was written against the old order. It ROTTED silently — sed matched nothing, the
+  # mutant applied nothing — and was caught by re-applying every catalogue entry after the edit,
+  # never by reading it. A neighbour's anchor is what a line rewrite breaks first.
+  sed -i '/^pipeline_log_line()/,/^}/ s@ 2>/dev/null >> "\$PIPELINE_LOG" || {@ >> "$PIPELINE_LOG"; true || {@' "$1"
+}
+
+# r3 finding #1 of `20260901-o-revisor-so-acha`. `2>/dev/null` goes back to the RIGHT of the `>>`,
+# which is where it was written: bash applies redirections LEFT TO RIGHT, so the failed `open` of
+# the append complains to an fd 2 that has not been redirected yet. The curated one-shot still
+# fires — what comes back beside it is the shell's own `Permission denied`, once per line, in the
+# operator's channel. Caught by `neither journal writer leaks a raw redirection error when its file
+# cannot be written` in check-autonomy.sh, regime 8, whose floors `jarmed:1 larmed:1` prove the
+# venom is on and whose `journal:1 ledger:1` prove both writers were reached.
+#
+# TWO ENTRIES AND NOT ONE, because the assertion is one and speaks about BOTH writers: a single
+# mutant reverting both halves would score the same point for either of them, and half a fix would
+# still look caught. This pair is the "one mutant per half of the assertion" rule — measured, they
+# report `raw:2` and `raw:1` respectively, so the two halves are told apart by the sensor as well.
+#
+# Anchored on the FUNCTION range like the scope guard's siblings: `printf '%s\n'` followed by an
+# appending redirection is a shape this runner writes in several places, and a pattern that drifted
+# would sabotage one of those while still looking applied.
+mut_RUN_journal_raw_redirection_error() {
+  sed -i '/^pipeline_log_line()/,/^}/ s@ 2>/dev/null >> "\$PIPELINE_LOG" || {@ >> "$PIPELINE_LOG" 2>/dev/null || {@' "$1"
+}
+
+mut_RUN_ledger_raw_redirection_error() {
+  sed -i '/^autonomy_append()/,/^}/ s@ 2>/dev/null >> "\$file" || {@ >> "$file" 2>/dev/null || {@' "$1"
 }
 
 CATALOG=(
@@ -3007,6 +3035,8 @@ CATALOG=(
   RUN_review_scope_handoff_dir_verbatim
   RUN_review_scope_quotepath_default
   RUN_journal_write_stops_the_line
+  RUN_journal_raw_redirection_error
+  RUN_ledger_raw_redirection_error
 )
 
 # Mutations that are NOT caught today, each with the increment that closes it. Ratchet in both

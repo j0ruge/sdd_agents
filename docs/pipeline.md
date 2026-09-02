@@ -471,7 +471,13 @@ to guess: a journal it cannot write. `pipeline_log_line()` no longer lets a fail
 run — an unwritable `pipeline.log` used to kill the runner at the redirection, which made "warns
 and records; does not stop the line" false for both guards at once — so the run carries on, the
 `warn` still reaches your terminal, and the line is simply lost. The first time it happens you get
-one warning naming the file, once per journal and not once per line.
+one warning naming the file, once per journal and not once per line — **and only that warning.**
+The `2>/dev/null` stands to the left of the append in both journal writers, because bash applies
+redirections left to right and the right-hand spelling let the shell's own complaint about the
+failed write escape to an fd 2 nobody had redirected yet: the one-shot was true of the runner's
+intent and false in the channel you actually read, one raw line per write. The sensor is regime 8
+of the scope guard's block in `tests/check-autonomy.sh`, which breaks the journal **and** the
+ledger in one world, so neither writer can be fixed alone.
 
 What can be computed after the fact is the round's own diff, and that is the evidence to cite:
 

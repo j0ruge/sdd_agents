@@ -1718,7 +1718,17 @@ pipeline_log_line() {
   #    written this way because the alternative needs a reset maintained at each of those four
   #    sites, and a marker its callers maintain is the shape this kit has already paid for.
   mkdir -p "$(dirname "$PIPELINE_LOG")" 2>/dev/null || true
-  printf '%s\n' "$*" >> "$PIPELINE_LOG" 2>/dev/null || {
+  # ⚠️ `2>/dev/null` STANDS TO THE LEFT OF THE `>>`, and the order is the whole point: bash applies
+  # redirections LEFT TO RIGHT, so with it on the right the shell's own complaint about the failed
+  # `open` goes to an fd 2 that has not been redirected yet. That is r3 finding #1 of
+  # `20260901-o-revisor-so-acha`: the curated one-shot below arrived escorted by one raw
+  # `Permission denied` PER line, in the same stderr — the one-shot defeated in the only channel
+  # its reader stands in. Measured both ways in a throwaway script: three calls, `2>` on the right
+  # ⇒ 3 raw lines; on the left ⇒ 0, with this branch still firing. `autonomy_append` carries the
+  # identical spelling, for the reason the paragraph above gives: one rule, one spelling, in both
+  # writers. The sensor is regime 8 of the guard's block in tests/check-autonomy.sh, which breaks
+  # BOTH files in one world so neither half can be closed alone.
+  printf '%s\n' "$*" 2>/dev/null >> "$PIPELINE_LOG" || {
     if [ "$PIPELINE_LOG_WARNED" != "$PIPELINE_LOG" ]; then
       PIPELINE_LOG_WARNED="$PIPELINE_LOG"
       warn "the pipeline journal at $PIPELINE_LOG cannot be written — the run carries on, and every line it would have recorded from here on is lost"
@@ -2462,7 +2472,12 @@ autonomy_append() {   # autonomy_append <one json object, already built>
   # disk warns and lets the phase carry on. Under `set -e` a failing `>>` would abort the runner.
   # One printf = one write(2) on an O_APPEND fd, which is what keeps two repos running at once
   # from interleaving. jq never writes to the file directly: its stdio may split the output.
-  printf '%s\n' "$1" >> "$file" 2>/dev/null || {
+  # `2>/dev/null` to the LEFT of the `>>`, the same spelling and the same reason as
+  # `pipeline_log_line`: redirections apply left to right, so on the right the shell's raw
+  # complaint about the failed `open` escapes to an un-redirected stderr and rides along beside the
+  # curated warning below. Both writers were aligned on purpose (R8), and are corrected together
+  # (r3 finding #1) so they do not drift apart a third time.
+  printf '%s\n' "$1" 2>/dev/null >> "$file" || {
     warn "could not write the autonomy ledger at $file — the mission goes on, the row is lost"
     return 0
   }

@@ -29,6 +29,13 @@
 # its last stdout line, and both halves carry their own probe. So the residue is a reader who sets
 # the variable, ignores two loud lines, and reads rc alone — not a sensor that certifies itself.
 #
+# THAT RESIDUE HAD A NAME, and r3 finding #3 of the same mission is who said it: `run()` in
+# tests/run-all.sh reads the rc and nothing else, and that file is TEST_CMD, so the abstract
+# "a reader" was every gate of every mission. It is closed at the source — run-all.sh now REFUSES
+# to run with the variable in its environment, the shape check-mutation.sh already uses for
+# SDD_MUTANT — and the refusal carries its own probe in the selftest below. What is left is a
+# reader OUTSIDE this kit doing the same thing, which no sensor here can reach.
+#
 # Usage: tests/check-templates.sh   (exit 0 = contract intact)
 
 set -uo pipefail
@@ -237,6 +244,39 @@ selftest() {
     || broken "the skipped child said nothing about having skipped — a reader cannot tell a run that proved its primitives from one that proved nothing"
   printf '  ok    self-test: skipping the probes is announced, never silent\n'
 
+  # THE RESIDUE OF THE TWO PROBES ABOVE HAD A CONSUMER, and this closes it. r3 of
+  # `20260901-o-revisor-so-acha`, finding #3: the limit this file's header declares — "a reader who
+  # sets the variable, ignores two loud lines, and reads rc alone" — was not hypothetical. `run()`
+  # in tests/run-all.sh reads the exit status and NOTHING else, and that file is TEST_CMD, so a
+  # stale export in a shell bought `suite green` over a sensor that had proved nothing about
+  # itself, at every gate of every mission. Measured before this probe was written:
+  # `SDD_TPL_SELFTEST_CHILD=1 bash tests/check-templates.sh` ⇒ rc 0, zero `self-test:` lines, and
+  # `run-all.sh --list` exiting 0 with all 14 steps. The fix is over there, in run-all.sh's own
+  # shape for SDD_MUTANT; this is the probe that it exists.
+  #
+  # `--list` AND NOT A REAL RUN, for two reasons that both matter. Cost is the small one. The big
+  # one is recursion: this file is a step of that suite, so a probe that ran the suite for real
+  # would fork-bomb the machine of whoever deleted the refusal — the exact edit this probe exists
+  # to catch. `--list` executes no step, so the sabotaged world is merely green and reported,
+  # never a bomb.
+  #
+  # THE CLEAN `--list` IS THE FLOOR, and it is not ceremony: without it a run-all.sh broken for any
+  # other reason would exit non-zero with the variable set too, and this probe would read someone
+  # else's failure as the refusal. The floor demands the same command answer 0 when the environment
+  # is clean, so what is measured is the DIFFERENCE the variable makes. The refusal is demanded BY
+  # NAME as well as by rc, for the same reason: a suite that died of anything else also exits 1.
+  local list_rc=0 refuse_rc=0 refuse_out
+  bash "$ROOT/tests/run-all.sh" --list >/dev/null 2>&1 || list_rc=$?
+  [ "$list_rc" -eq 0 ] \
+    || broken "tests/run-all.sh --list is red (rc=$list_rc) with a clean environment — the probe below would read that failure as the refusal it is trying to measure"
+  refuse_out="$(SDD_TPL_SELFTEST_CHILD=1 bash "$ROOT/tests/run-all.sh" --list 2>&1)" || refuse_rc=$?
+  if [ "$refuse_rc" -eq 0 ]; then
+    broken "tests/run-all.sh runs with SDD_TPL_SELFTEST_CHILD in its environment — this sensor would skip every probe above, exit 0 anyway, and run() reads nothing but that rc: the suite every gate calls would report green over a self-test that never happened"
+  fi
+  grep -q 'SDD_TPL_SELFTEST_CHILD' <<< "$refuse_out" \
+    || broken "tests/run-all.sh exited non-zero with the variable set but never named it (rc=$refuse_rc) — a suite that died of something else is not a refusal, and the reader has nothing to unset"
+  printf '  ok    self-test: the suite refuses to run with the selftest skip variable set\n'
+
   printf '\n## O que foi corrigido\n\n| Achado | Hash |\n|---|---|\n' >> "$box/tpl/review.md"
   poison_out="$(SDD_TPL_SELFTEST_CHILD=1 SDD_TEMPLATES_DIR="$box/tpl" bash "$SELF_PATH" 2>&1)" \
     || poison_rc=$?
@@ -266,6 +306,8 @@ SELFTEST_SKIPPED=0
 # It still exits 0 when the rules pass, and that is a DECLARED limit rather than an oversight: the
 # control run reads the child's rc, and a red child there means "templates/ is genuinely broken".
 # What the run loses is the word `intact` and the silence — never the exit code the parent needs.
+# The one reader that limit could still fool inside this kit — run-all.sh, which is TEST_CMD and
+# reads the rc alone — refuses to start with this variable set (r3 finding #3); see the header.
 if [ -n "${SDD_TPL_SELFTEST_CHILD:-}" ]; then
   SELFTEST_SKIPPED=1
 else
