@@ -273,3 +273,21 @@ laço de revisão inteiro (REVIEW + EXEC dos `R<n>`) **≤ US$ 40**. A M3 é inv
   da suíte do kit** (é a config de qualquer repo adotante), e o conserto certo é provavelmente uma
   normalização **única** na leitura do config, com um probe por chave — não um `%/` espalhado
   → `TODO.md` (descoberto por `sdd-executor` na missão `20260901-o-revisor-so-acha`, 2026-09-02)
+- **Achado novo desta fase (R3):** **o `templates/checkpoint.md` afirma um universal que o próprio
+  kit viola — `check-templates.sh` imprime `  ok   ` com TRÊS espaços.** O template diz, em tantas
+  palavras, *"Todo sensor da suíte imprime `  ok    <asserção>` na stdout"*, e
+  `tests/check-checkpoint.sh:111` transforma isso em `OK_ANCHOR='^  ok    '` **cobrado** nos
+  checkpoints do repo-alvo. Mas `tests/check-templates.sh:50` e `:87` (as primitivas `check()` e
+  `refute()`) imprimem três espaços; só o `selftest()` do mesmo arquivo (`:171`, `:208`) imprime
+  quatro. Medido nesta sessão: `779` linhas casam `^  ok    ` contra `861` asserções reais — **82**
+  linhas fora do universal. A `R2` desta missão escapou por acidente, não por desenho: o Check dela
+  ancora numa linha de `selftest()`, que é do lado de quatro espaços; `F1` e `F2` ancoraram em
+  `rc=$?` e nenhuma nota registra que a razão era essa. Falha **fechada** (o Check responde `0`
+  parecendo vermelho), então não é o fail-open do D15 — entra pela **outra** metade da régua:
+  `templates/checkpoint.md` é embarcado em todo repo adotante e ensina a regra como universal, e
+  `check-checkpoint.sh` a cobra lá. Conserto candidato: alinhar as duas primitivas do
+  `check-templates.sh` em quatro espaços (diff de dois caracteres, mas move 82 linhas de saída e
+  quer conferência dos Checks vivos), **ou** o template deixar de afirmar o universal e nomear a
+  exceção. Não entrou neste diff porque a linha do `R3` nomeia o número da D22 e porque a escolha
+  entre os dois consertos é da fase DOCS, dona do contrato do template
+  → `TODO.md` (descoberto por `sdd-executor` na missão `20260901-o-revisor-so-acha`, 2026-09-02)
