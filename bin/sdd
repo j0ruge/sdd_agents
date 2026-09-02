@@ -1678,7 +1678,15 @@ pipeline_log_line() {
   [ "$DRY_RUN" = "1" ] && return 0
   [ -n "$PIPELINE_LOG" ] || return 0
   # A JOURNAL WRITE CANNOT STOP THE LINE, and this is the guard's second tenant for the reason the
-  # paragraph above already gives: it holds for all ten callers, and the eleventh is born with it.
+  # paragraph above already gives: it holds for EVERY caller, and the one added tomorrow is born
+  # with it. ⚠️ THE CENSUS IS THE COMMAND, NEVER THIS SENTENCE. Both paragraphs of this block used
+  # to name a count instead, and it was already wrong on the day r3 of `20260901-o-revisor-so-acha`
+  # counted — the `44 caught of 44` rubric of CLAUDE.md cashing in right here, because a number
+  # written into prose is stale at the next call site, not at the next release. Count, do not read:
+  #     grep -cE '^ *pipeline_log_line "' bin/sdd                   # call sites, as statements
+  #     grep -E '\$\(pipeline_log_line' bin/sdd | grep -cv '^ *#'   # substituted → must be 0
+  # The second one drops comment lines DELIBERATELY: this block displays the forbidden spelling one
+  # paragraph down, and the bare grep counts the display — the same one-too-many that rubric names.
   # Under `set -e` a failed redirection kills the shell AT THE REDIRECTION, so with the journal
   # unwritable — a `chmod`, a read-only mount, a full disk, a quota — every caller became a place
   # the runner dies. Two of them advertise the opposite in so many words: `review_scope_check` and
@@ -1693,8 +1701,9 @@ pipeline_log_line() {
   # next to "the round behaved" and "the guard was not in the running process". The warning is what
   # keeps that from being silent; it is one-shot per journal path because two writes fail per run
   # here already, and a warning repeated per line trains its only reader to scroll past the run it
-  # finally mattered on. CALLED and never substituted at all ten sites (`$(pipeline_log_line …)`
-  # would run this in a subshell and lose the flag, the scar `autonomy_kit_stamp` left).
+  # finally mattered on. CALLED at every site and SUBSTITUTED AT NONE (`$(pipeline_log_line …)`
+  # would run this in a subshell and lose the flag, the scar `autonomy_kit_stamp` left) — and what
+  # holds that property is the second census command above answering 0, never this sentence.
   #
   # THE SHAPE IS `autonomy_append`'s, two screens down, and copied rather than invented: that
   # function has carried `mkdir … || true` plus a guarded `>>` with a warn since it was written
