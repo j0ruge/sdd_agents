@@ -1186,7 +1186,16 @@ gate_REVIEW() {
     GATE_WHY="TEST_CMD failed ($TEST_CMD) — see $LAST_CHECK_LOG"; return 1
   fi
   if [ -n "$(cd "$REPO_ROOT" && git status --porcelain)" ]; then
-    GATE_WHY="working tree dirty after the review — fixes must be committed"; return 1
+    # The CHECK is unchanged and so is the behaviour — only the sentence moved, because since
+    # `20260901-o-revisor-so-acha` this phase does not fix: what a REVIEW session leaves behind is
+    # its round report and the `R<n>` rows it wrote into the checkpoint. ⚠️ The words BEFORE the
+    # dash are load-bearing and stay verbatim: `historic_rounds` declares this refusal as one of the
+    # two that name no round file, and the prose is quoted as that declared limit in three places
+    # (the def's own comment above, `docs/pipeline.md § Field reference`, `tests/check-autonomy.sh`).
+    # For the same reason the tail must NOT name `40-review-r<N>.md`: the recovery's regexes are
+    # anchored at `^`, and the world its comment says it could not build is precisely a `gate_why`
+    # carrying that name somewhere other than the first character.
+    GATE_WHY="working tree dirty after the review — the round and its R<n> rows must be committed"; return 1
   fi
   GATE_WHY="$(basename "$last") all Grade A, suite green, tree clean"
   return 0

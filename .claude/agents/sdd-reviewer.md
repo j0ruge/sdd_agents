@@ -22,8 +22,10 @@ phases in order and returns the first red gate, so a pending row fails `gate_EXE
 
 **Measured, and the reason this changed:** while review and fix shared a session, the fix loop
 carried the whole review's exploration into every turn — 70–95% of a round's cache-read was spent
-*after* the first edit, and cache-read grows with turns². REVIEW was 39,4% of everything the
-pipeline had ever spent (US$ 636,66 of US$ 1.614,87 across 27 sessions).
+*after* the first edit, and cache-read grows with turns². REVIEW was 38,9% of everything the
+pipeline had ever spent — US$ 636,66 of US$ 1.635,48 across 27 sessions, **measured 2026-09-01**,
+the reading `KAIZEN_LOG.md` carries. The share is dated and never live: the ledger grows underneath
+it, so a figure here that claims to be current is only a figure nobody re-measured.
 
 ## 1. Load the state
 

@@ -188,8 +188,17 @@ Two things were bought with that split, and only one of them is money. The revie
 its own fixes — an `A` on r1 was the same session certifying its own work — and now the grade comes
 from a round that did not write the patch. The money: while review and fix shared a session, 70–95%
 of a round's cache-read was spent **after** the first edit (the whole review's exploration re-sent
-every turn, and cache-read grows with turns², corr 0.94), and REVIEW was 39,4% of everything the
-pipeline had ever spent — US$ 636,66 of US$ 1.614,87 over 27 sessions, more than EXEC's 89.
+every turn, and cache-read grows with turns², corr 0.94), and REVIEW was 38,9% of everything the
+pipeline had ever spent — US$ 636,66 of US$ 1.635,48 over 27 sessions, more than EXEC's 92.
+
+That figure is **dated 2026-09-01**, and the date is the point. This line and
+`agents/sdd-reviewer.md` used to carry a higher share over a smaller total — the same gemba read a
+few hours earlier in the same mission, internally consistent and simply older, because the ledger
+grows under whoever is reading it. Both were true when written and neither said when; that is the
+defect, and the fix is the date rather than a fresher number, which would rot the same way. The
+older pair is not repeated here on purpose: the entry that exists to explain it is the one that
+should carry it (`KAIZEN_LOG.md`, which also holds the reading this line is aligned to), and
+`sdd autonomy --all-repos` recomputes today's.
 
 Two readings change with it, both declared: **r1 grading `B` is the healthy round now**, not a
 failure, and `REVIEW_MAX_ITER` counts rounds of **finding** — the normal mission uses two. The

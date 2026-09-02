@@ -351,7 +351,13 @@ review_check '^## Achados fora de escopo' "section 'Achados fora de escopo'"
 # written into the checkpoint as an `R<n>` increment and the EXEC phase closes it. The section is
 # what the reviewer copies the row shape from, and a round that lost it has nowhere to record the
 # increments it wrote — the ball never goes back to EXEC and the finding dies in the prose.
-review_check '^## Incrementos de conserto' "section 'Incrementos de conserto (R<n>)'"
+# The qualifier is IN the regex, for the reason its sibling in checkpoint.md spells out at length:
+# a regex that stops at `de conserto` serves a heading the description does not name, while the
+# description swears to pin `(R<n>)`. Measured in the r1 of this same mission (finding #5): with the
+# qualifier removed from the template this file printed `ok   review.md: section 'Incrementos de
+# conserto (R<n>)'` and exited 0 — the sensor asserting it measured what it did not. The qualifier
+# is not decoration in the heading either: it is where the reviewer reads the row ID from.
+review_check '^## Incrementos de conserto \(R<n>\)' "section 'Incrementos de conserto (R<n>)'"
 # And the section it replaced, asserted by its NEW name. `## O que foi corrigido` is what a round
 # that fixed in place wrote; keeping the old heading beside the new one would let a template ship
 # both and a session pick either, which is how a contract stops being one. That heading is refuted
