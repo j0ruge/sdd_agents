@@ -154,6 +154,13 @@ mais, porque conta a linha de exemplo do cabeçalho.
 **6. YAGNI.** Sem daemon, sem UI, sem banco, sem servidor. Um script bash, seis markdowns e
 templates. Se a solução pede infraestrutura, provavelmente é a solução errada.
 
+**Os sete componentes de um agente têm rule própria.** System prompt, ferramentas, contexto,
+verificação, memória, sandbox e hooks — o que o kit faz em cada um e o que declara como dívida
+está em [`.claude/rules/anatomia-do-agente.md`](.claude/rules/anatomia-do-agente.md), carregada
+em toda sessão deste repo. Mudança no runner que toca um desses componentes atualiza a seção
+correspondente **no mesmo commit**; a auditoria que a fundou, com os números, é
+`docs/superpowers/specs/2026-09-03-anatomia-do-agente.md`.
+
 ## Ao mexer no runner (`bin/sdd`)
 
 - `set -euo pipefail` sempre; `bash -n bin/sdd` é o smoke test mínimo.
