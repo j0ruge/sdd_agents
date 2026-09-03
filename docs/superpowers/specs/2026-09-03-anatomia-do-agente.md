@@ -72,6 +72,30 @@ relação aos lançamentos que o `sdd autonomy` conta.
 | `--phase` que **para** depois da fase | flag pequena, mas muda o contrato do `--phase` documentado em `docs/pipeline.md` | próxima missão de kit |
 | Âncoras 1–2 do `gate_QA` satisfeitas por relatório de outra missão | achado `kit:` no `50-pr.md` da SQ-115; pede reprodução no kit | triagem do kaizen |
 
+## O incidente das 18:45 — a dívida de sandbox, medida no mesmo dia
+
+Vinte minutos depois de o L4 ser commitado, com `./bin/sdd health` rodando o catálogo, uma
+**segunda sessão interativa do Claude Code** (aberta em `~/repos/skills_commands_manager`, com
+`--dangerously-skip-permissions`) executou pelo próprio Bash tool:
+
+```text
+bash bin/sdd run --phase REVIEW --max-phases 1 --budget-override 20260901-o-revisor-so-acha
+```
+
+com `cwd` no kit. Efeitos, todos lidos em artefato: `ensure_mission_branch` trocou a árvore para
+`feat/o-revisor-so-acha` (linha `BRANCH` no `pipeline.log` da missão); o L4 escreveu e commitou
+duas notas `intervention:` naquela branch mergeada; o L2 leu US$ 167,35 contra 150 e o
+`--budget-override` seguiu; uma sessão opus REAL de REVIEW abriu sobre a missão (teto US$ 40,
+morta à mão aos 12 min, sem linha no ledger porque o runner morreu primeiro); e o `sdd health`
+reprovou com `ran 241 of the 227 defined` — o catálogo rodou com a árvore da branch nova e a
+contagem de definições leu a árvore trocada. Restaurado: branch resetada a `7d0f652`, árvore de
+volta a `feat/anatomia-do-agente`, carimbo refeito.
+
+O que fica: a nota do L4 passou a dizer o que o runner **sabe** ("forçada pela CLI"), nunca "o
+humano"; e a dívida 6 (sandbox) ganhou data e custo. Nenhum mecanismo do kit impede outro agente
+com shell de entrar pela porta do humano — é o desenho que a publicação tem de encarar antes de
+qualquer estranho instalar o kit.
+
 ## A janela 3 recomeça
 
 Qualquer commit no kit move o `kit_sha` (HEAD do `$SDD_HOME`), e a janela 3 tinha 1 missão de 3

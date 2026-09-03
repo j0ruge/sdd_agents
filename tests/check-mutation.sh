@@ -1062,10 +1062,10 @@ mut_RUN_harness_env_inherited() {
 # tree it promised not to touch. The probes are in tests/check-autonomy.sh (retry block and the
 # `--phase` block right after it), each reading count AND cleanliness as a pair.
 mut_RUN_intervention_unwritten_on_phase() {
-  sed -i 's|^  \[ -n "$force_phase" \] && checkpoint_note_intervention "sdd run --phase $force_phase (the human forced the starting phase)" "$force_phase"$|  :|' "$1"
+  sed -i 's|^  \[ -n "$force_phase" \] && checkpoint_note_intervention "sdd run --phase $force_phase (the starting phase was forced from the CLI)" "$force_phase"$|  :|' "$1"
 }
 mut_RUN_intervention_unwritten_on_retry() {
-  sed -i 's|^  checkpoint_note_intervention "sdd retry (the human relaunched the phase with a fresh session)" "$phase"$|  :|' "$1"
+  sed -i 's|^  checkpoint_note_intervention "sdd retry (the phase was relaunched from the CLI with a fresh session)" "$phase"$|  :|' "$1"
 }
 mut_RUN_intervention_written_on_dry_run() {
   sed -i '/^checkpoint_note_intervention() {/,/^}/ s|^  \[ "$DRY_RUN" = "1" \] && return 0$|  :|' "$1"

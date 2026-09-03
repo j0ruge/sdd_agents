@@ -104,13 +104,21 @@ harness é apagado por `run_phase()` antes do `claude -p` (L5 da auditoria).
 a guarda de kit é aviso, não fronteira — furada em `2d28d13`. Sem worktree nem container: o ledger
 carimba caminho e um worktree já confundiu a identidade do repo (comentários `WORKTREE` do
 `bin/sdd`). Fechar pede desenho próprio, não um `git worktree add` no laço.
+⚠️ **Medido em 2026-09-03 18:45, vinte minutos depois de o L4 pousar:** uma segunda sessão
+interativa do Claude Code, aberta em outro repo, rodou `sdd run --phase REVIEW --budget-override`
+sobre a missão já mergeada do próprio kit — trocou a branch da árvore de trabalho **debaixo de um
+`sdd health` em curso** (invalidando o carimbo), abriu uma sessão opus real (morta à mão aos 12
+min) e commitou duas notas `intervention:` numa branch mergeada. Nada no kit impede: a CLI é a
+porta do humano, e qualquer agente com shell entra por ela. A nota passou a dizer só o que o
+runner sabe ("forçada pela CLI"), nunca "o humano".
 
 ## 7. Hooks — pontos de intervenção humana
 
 **Regra.** Toda decisão de **abrir mais uma volta ou gastar mais** tem uma porta humana com
 artefato: teto por missão, aviso no bloqueio, e a linha `- intervention:` escrita **pelo runner**
-quando é ele quem recebe o comando humano (`--phase`, `retry`, `--budget-override`). O humano
-que precisa vigiar um `tail -F` para saber que a linha parou não tem hook — tem vigília.
+quando é ele quem recebe o comando pela CLI (`--phase`, `retry`, `--budget-override`) — dizendo o
+que ele sabe, nunca quem estava na CLI. O humano que precisa vigiar um `tail -F` para saber que a
+linha parou não tem hook — tem vigília.
 
 **Onde mora hoje.** `aprovacao:` + `sdd approve` (gate PLAN); rc 3 em
 `handoff_blocked_escalation`, `app_down_escalation`, `increment-blocked`, `dirty-tree`,

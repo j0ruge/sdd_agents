@@ -57,7 +57,9 @@ atualizado: <YYYY-MM-DD HH:MM>
 > `sdd run --phase X`, `sdd retry`, `--budget-override` — e a commita sozinha, na hora, para a
 > árvore chegar limpa ao gate da fase seguinte. A linha escrita à mão continua valendo para o que
 > o runner não vê: conserto manual, fase feita à mão, `BLOCKED` assumido. `sdd approve` não
-> escreve nenhuma: aprovar o plano é o gate humano desenhado, não uma entrada na linha.
+> escreve nenhuma: aprovar o plano é o gate humano desenhado, não uma entrada na linha. A nota
+> diz o que o runner **sabe** ("forçada pela CLI"), nunca quem estava na CLI: outro agente com
+> shell entra pela mesma porta, e o runner não distingue — medido em 2026-09-03.
 >
 > O exemplo abaixo mora **dentro** desta citação de propósito: o `>` quebra o casamento com
 > `^[[:space:]]*-`, e sem ele o exemplo era contado verbatim — todo checkpoint recém-instanciado
