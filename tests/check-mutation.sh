@@ -1071,6 +1071,26 @@ mut_RUN_escalation_hook_silent() {
 mut_RUN_escalation_hook_on_dry_run() {
   sed -i '/^escalation_hook() {/,/^}/ s|^  \[ "$DRY_RUN" = "1" \] && return 0$|  :|' "$1"
 }
+
+# L2 of the 2026-09-03 audit: the mission ceiling. Five mutants, because the door has five sides
+# the probes of tests/check-autonomy.sh read one by one: the check unplugged from cmd_run, unplugged
+# from cmd_retry, `0` read as a ceiling of zero (every fixture then blocks at 0.00 >= 0), the
+# override going on WITHOUT writing its intervention note, and the projection stopping the run.
+mut_RUN_mission_budget_ignored() {
+  sed -i 's|^    if mission_budget_blown "$phase"; then return 3; fi$|    if false; then return 3; fi|' "$1"
+}
+mut_RUN_mission_budget_ignored_on_retry() {
+  sed -i 's|^  if mission_budget_blown "$phase"; then return 3; fi$|  if false; then return 3; fi|' "$1"
+}
+mut_RUN_mission_budget_zero_is_a_ceiling() {
+  sed -i 's|^  case "$ceiling" in 0\|0\.\*) return 1 ;; esac$|  :|' "$1"
+}
+mut_RUN_mission_budget_override_unnoted() {
+  sed -i '/^mission_budget_blown() {/,/^}/ s|^      checkpoint_note_intervention "sdd $AUTONOMY_INVOCATION --budget-override .*$|      :|' "$1"
+}
+mut_RUN_mission_budget_stops_projection() {
+  sed -i '/^mission_budget_blown() {/,/^}/ s|^  if \[ "$DRY_RUN" = "1" \]; then$|  if false; then|' "$1"
+}
 #
 # The RESET at the entry of gate_QA (`GATE_APP_DOWN=0`, its only setter) deliberately gets no mutant
 # either, and this too is a DECLARED limit rather than an oversight. Measured in the review round of
@@ -2933,6 +2953,11 @@ CATALOG=(
   RUN_intervention_written_on_dry_run
   RUN_escalation_hook_silent
   RUN_escalation_hook_on_dry_run
+  RUN_mission_budget_ignored
+  RUN_mission_budget_ignored_on_retry
+  RUN_mission_budget_zero_is_a_ceiling
+  RUN_mission_budget_override_unnoted
+  RUN_mission_budget_stops_projection
   RUN_degraded_row_dropped
   RUN_degraded_repeats
   RUN_escalations_no_axis

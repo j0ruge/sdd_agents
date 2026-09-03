@@ -336,6 +336,47 @@ assert_eq "sdd run --phase --dry-run writes none and leaves the tree clean" "2 c
   "$(notes) $( [ -z "$(git -C "$FIX" status --porcelain)" ] && echo clean || echo dirty)"
 : > "$LEDGER"
 
+echo "== the mission ceiling stops the line before a phase opens =="
+# L2 of the 2026-09-03 audit. Measured: 20260902-o-rascunho-legado-fala-cru cost US$ 174.11 against
+# a ceiling of US$ 150 that lived in the plan's prose — the runner had a cap per SESSION
+# (--max-budget-usd) and none per mission, so a loop of cheap rounds never met a number. The sum is
+# read off the mission journal (`cost_usd=` per line; `?` counts as nothing), BEFORE a phase opens,
+# so the money that stops the line is money already spent, never a session cut mid-way. The
+# fixture seeds three journal lines (100.5 + ? + 49.5 = 150.00) against a ceiling of 150.
+: > "$LEDGER"
+PLOG="$FIX/.sdd/logs/$MISSION/pipeline.log"; mkdir -p "$(dirname "$PLOG")"
+if [ -f "$PLOG" ]; then cp "$PLOG" "$OUTSIDE/plog.bak"; else : > "$OUTSIDE/plog.bak"; fi
+printf '%s\n' \
+  "2026-01-01T10:00:00-03:00  EXEC  agent=sdd-executor  model=opus  session=a  rc=0  dur=1s  cost_usd=100.5  log=/dev/null" \
+  "2026-01-01T10:01:00-03:00  REVIEW  agent=sdd-reviewer  model=opus  session=b  rc=1  dur=1s  cost_usd=?  log=/dev/null" \
+  "2026-01-01T10:02:00-03:00  EXEC  agent=sdd-executor  model=opus  session=c  rc=0  dur=1s  cost_usd=49.5  log=/dev/null" >> "$PLOG"
+printf 'BUDGET_MISSION_USD=150\n' >> .sdd/config.sh
+"$SDD" run "$MISSION" >/dev/null 2>&1; rc=$?
+assert_eq "US\$ 150.00 spent against a ceiling of 150 stops with rc 3: one budget-exhausted row, no session" \
+  "3 1 blocked budget-exhausted EXEC yes" \
+  "$rc $(nrows) $(rows '.event') $(rows '.kind') $(rows '.phase') $(rows '(.gate_why | test("mission budget"))' | sed 's/true/yes/;s/false/no/')"
+assert_eq "and the journal says why, naming the phase that did not open" "1" \
+  "$(grep -c 'BLOCKED  EXEC  mission budget' "$PLOG")"
+: > "$LEDGER"
+"$SDD" retry "$MISSION" >/dev/null 2>&1; rc=$?
+assert_eq "sdd retry is stopped by the same ceiling (second door)" "3 budget-exhausted" "$rc $(rows '.kind')"
+: > "$LEDGER"
+dry_budget="$( "$SDD" run "$MISSION" --dry-run 2>&1 )"; rc=$?
+assert_eq "the projection says how much is spent and never stops there" "0 0 1" \
+  "$rc $(nrows) $(grep -c 'mission budget: US\$ 150.00 of 150' <<< "$dry_budget")"
+n_before="$(notes)"
+"$SDD" run "$MISSION" --budget-override --max-phases 1 >/dev/null 2>&1 || true
+assert_eq "--budget-override goes on, and the runner notes it as an intervention, once" "$((n_before + 1)) 1" \
+  "$(notes) $(grep -c 'intervention: sdd run --budget-override' "$MDIR/checkpoint.md")"
+sed -i 's/^BUDGET_MISSION_USD=150$/BUDGET_MISSION_USD=0/' .sdd/config.sh
+: > "$LEDGER"
+"$SDD" run "$MISSION" --max-phases 1 >/dev/null 2>&1 || true
+assert_eq "BUDGET_MISSION_USD=0 means no ceiling: no budget-exhausted row, a session opens" "0 yes" \
+  "$(grep -c . <<< "$(rows 'select(.kind == "budget-exhausted") | .kind')") $(grep -q . <<< "$(rows 'select(.event == "session") | .event')" && echo yes || echo no)"
+sed -i '/^BUDGET_MISSION_USD=/d' .sdd/config.sh
+cp "$OUTSIDE/plog.bak" "$PLOG"
+: > "$LEDGER"
+
 # --- the EXEC row carries how many increments were left --------------------
 # `outcome` cannot tell the pipeline's DESIGNED loop (one session per increment, the gate red
 # until the last one) from real churn while the only facts on the row are the gate's verdict and

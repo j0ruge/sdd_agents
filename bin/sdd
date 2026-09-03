@@ -122,6 +122,13 @@ load_config() {
   # high for PR, where it stopped capping anything. The global stays for the cheap phases; raising
   # it does NOT raise these three, which is the trade-off config/schema.md declares.
   : "${BUDGET_EXEC_USD:=25}"; : "${BUDGET_QA_USD:=25}"; : "${BUDGET_REVIEW_USD:=40}"
+  # The MISSION ceiling (L2 of the 2026-09-03 audit): the sum of what the journal says was spent,
+  # read before a phase opens. `0` ⇒ no ceiling. Refused by name when it is not a number: a cap
+  # that silently became "no cap" is the fail-open the audit exists to stop.
+  : "${BUDGET_MISSION_USD:=150}"
+  case "$BUDGET_MISSION_USD" in
+    ''|*[!0-9.]*|.|*.*.*) die "BUDGET_MISSION_USD must be a number in USD (0 = no ceiling), got: '$BUDGET_MISSION_USD'" ;;
+  esac
   : "${PERMISSION_MODE:=acceptEdits}"; : "${JIRA_ENABLED:=false}"
   # `acceptEdits` auto-approves FILE EDITS, not `Bash`. Without this allowlist the phase session
   # cannot run TEST_CMD, cannot run `git add`/`git commit`, and the EXEC phase is unsatisfiable
@@ -1728,6 +1735,12 @@ PIPELINE_LOG=""
 # this kit keeps paying for — derived, the day a second journal is opened it announces itself.
 PIPELINE_LOG_WARNED=""
 DRY_RUN=0
+# `--budget-override` (L2 of the 2026-09-03 audit): the human lifting the mission ceiling for ONE
+# run. Global, like DRY_RUN, because the door that reads it (mission_budget_blown) is called from
+# two commands. Noted as an intervention the first time it actually lifts something, never before.
+BUDGET_OVERRIDE=0
+BUDGET_OVERRIDE_NOTED=0
+MISSION_BUDGET_PROJECTED=0
 
 pipeline_log_line() {
   # The projection does not write to the journal. Precision matters here, because the easy
@@ -3042,6 +3055,54 @@ review_rounds_on_disk() {
 }
 
 # How many sessions a phase may consume before turning BLOCKED.
+# L2 (2026-09-03 audit) — the mission ceiling. Measured: 20260902-o-rascunho-legado-fala-cru cost
+# US$ 174.11 against a ceiling of US$ 150 that lived in the PLAN'S PROSE; the runner capped each
+# session (--max-budget-usd) and never the mission, so a loop of cheap rounds never met a number.
+# The sum is read off the mission journal — the `cost_usd=` field of every session line, `?`
+# counting as nothing — and read BEFORE a phase opens: the money that stops the line is money
+# already spent, never a session cut mid-way with nothing on disk (the argument config/schema.md
+# already makes for BUDGET_REVIEW_USD). Same ledger kind as the phase ceiling, `budget-exhausted`:
+# the enum names the friction, and `gate_why` says which ceiling. The projection prints the sum
+# and never stops there; `--budget-override` goes on and is written down as the intervention it is.
+# LC_ALL=C on BOTH awk calls, and it is not cosmetic: under a pt_BR locale mawk's strtod stops at
+# the dot, so `100.5 + 49.5` read 149 and printed `149,00` — a ceiling of 150 never met on a
+# machine whose journal said 150.00. Measured on this house's own locale while L2 was written.
+# A journal the runner cannot READ sums to 0.00 (no ceiling knowledge, the behaviour before L2)
+# and says nothing here: the journal WRITER is the one that names an unwritable file, once.
+mission_cost_usd() {   # the journal's sum, 2 decimals; a journal that does not exist is 0.00
+  [ -r "$PIPELINE_LOG" ] || { printf '0.00\n'; return 0; }
+  LC_ALL=C awk '{ for (i = 1; i <= NF; i++) if ($i ~ /^cost_usd=[0-9.]+$/) s += substr($i, 10) }
+       END { printf "%.2f\n", s + 0 }' "$PIPELINE_LOG" 2>/dev/null || printf '0.00\n'
+}
+mission_budget_blown() {   # mission_budget_blown <phase> — rc 0 = STOP (row written), rc 1 = go on
+  local phase="$1" spent ceiling="$BUDGET_MISSION_USD"
+  case "$ceiling" in 0|0.*) return 1 ;; esac
+  spent="$(mission_cost_usd)"
+  if [ "$DRY_RUN" = "1" ]; then
+    if [ "$MISSION_BUDGET_PROJECTED" = "0" ]; then
+      MISSION_BUDGET_PROJECTED=1
+      dim "  mission budget: US\$ $spent of $ceiling spent so far (the projection never stops here)"
+    fi
+    return 1
+  fi
+  if ! LC_ALL=C awk -v s="$spent" -v c="$ceiling" 'BEGIN { exit !(s + 0 >= c + 0) }'; then return 1; fi
+  if [ "$BUDGET_OVERRIDE" = "1" ]; then
+    if [ "$BUDGET_OVERRIDE_NOTED" = "0" ]; then
+      BUDGET_OVERRIDE_NOTED=1
+      warn "mission budget blown (US\$ $spent of $ceiling) — going on under --budget-override"
+      checkpoint_note_intervention "sdd $AUTONOMY_INVOCATION --budget-override (US\$ $spent spent against BUDGET_MISSION_USD=$ceiling)" "$phase"
+    fi
+    return 1
+  fi
+  GATE_WHY="mission budget: US\$ $spent spent against BUDGET_MISSION_USD=$ceiling — the line stops before opening $phase"
+  info ""
+  bad "BLOCKED in $phase — $GATE_WHY"
+  dim "  Raise BUDGET_MISSION_USD in .sdd/config.sh, or go on once with --budget-override (noted as an intervention)."
+  pipeline_log_line "$(date -Iseconds)  BLOCKED  $phase  $GATE_WHY"
+  autonomy_blocked_row "budget-exhausted" "$phase" "$GATE_WHY"
+  return 0
+}
+
 phase_budget() {
   case "$1" in
     EXEC)   printf '%s\n' "$(( $(checkpoint_rows | wc -l) + EXEC_MAX_RETRY + 2 ))" ;;
@@ -4459,6 +4520,7 @@ cmd_run() {
       --dry-run)     DRY_RUN=1 ;;
       --phase)       force_phase="${2:-}"; shift ;;
       --max-phases)  max_phases="${2:-0}"; shift ;;
+      --budget-override) BUDGET_OVERRIDE=1 ;;
       -*)            die "unknown run option: $1" ;;
       *)             mission_arg="$1" ;;
     esac
@@ -4598,6 +4660,8 @@ cmd_run() {
       fi
     fi
 
+    # L2: the mission ceiling comes before the phase ceiling — money already spent, before a session.
+    if mission_budget_blown "$phase"; then return 3; fi
     budget="$(phase_budget "$phase")"
     # `attempts` is the LAP number and it stays exactly that: it is what the ledger's `attempt`
     # field carries, and the retry inside a lap is told apart by `auto_retry` rather than by a
@@ -4904,8 +4968,17 @@ cmd_run() {
 }
 
 cmd_retry() {
+  local mission_arg=""
+  while [ $# -gt 0 ]; do
+    case "$1" in
+      --budget-override) BUDGET_OVERRIDE=1 ;;
+      -*)                die "unknown retry option: $1" ;;
+      *)                 mission_arg="$1" ;;
+    esac
+    shift
+  done
   load_config
-  resolve_mission "${1:-}"
+  resolve_mission "$mission_arg"
   PIPELINE_LOG="$(log_dir)/pipeline.log"
   AUTONOMY_RUN_ID="$(uuidgen)"
   AUTONOMY_INVOCATION="retry"
@@ -4928,6 +5001,8 @@ cmd_retry() {
   [ "$phase" = "PLAN" ] && die "PLAN is interactive — there is nothing to retry headless"
   # L4 (2026-09-03 audit): a retry IS the human's hand — the template's own first example of one.
   checkpoint_note_intervention "sdd retry (the human relaunched the phase with a fresh session)" "$phase"
+  # L2: the second door of the mission ceiling — a retry is a session too.
+  if mission_budget_blown "$phase"; then return 3; fi
   step "retrying $phase with a FRESH session"
   local before after moved="false" gate_rc=0
   before="$(state_fingerprint)"
