@@ -1571,6 +1571,16 @@ EOF
 # there is no other route).
 boot_prompt() {
   local step="$1" slash agent lang_line=""
+  # ONE definition, read by every phase — including KAIZEN, which has a heredoc of its own below.
+  # Measured 2026-09-02 (20260902-o-rascunho-legado-fala-cru, phase PR): two sdd-publisher sessions
+  # ended the turn "waiting for the background task to finish", US$ 2.71 and a PR phase done by
+  # hand. In `claude -p` ending the turn ends the session, so nothing resumes. The sentence lived in
+  # agents/sdd-reviewer.md alone; a rule that every phase needs is written here, once, never copied
+  # into seven agents (the enum rule of CLAUDE.md). tests/check-dry-run.sh reads it per phase.
+  local turn_rule
+  turn_rule="Never end the turn with a command or a task still running in the background: in a headless
+session ending the turn ends the session, and \"I will resume when it finishes\" resumes nothing.
+Wait for it, read its result, then write the artifacts and commit."
   slash="$(phase_slash "$step")"
   agent="$(phase_agent "$step")"
   # The kit is English; the ARTIFACT speaks whatever language the target repo declared. Empty ⇒
@@ -1625,6 +1635,8 @@ escalation section: no plan is born from a regression. Otherwise triage $TODO_FI
 00-missao.md (with \`aprovacao:\` EMPTY — the human approves, never you), 01-plano.md and
 checkpoint.md beside the verdict, from the templates.
 
+$turn_rule
+
 Write the artifacts to disk and commit. The runner re-evaluates the gate from outside — it reads
 the files and the frontmatter. Your answer in text proves nothing and satisfies no gate. A
 finding that does not fit this mission goes to $TODO_FILE, never to the diff.
@@ -1647,6 +1659,8 @@ before. Read, in this order, before anything else:
 $lang_line
 Your task in this session: $(phase_task "$step").
 $(phase_extra "$step")
+$turn_rule
+
 Write the artifacts to disk and commit. The runner re-evaluates the gate from outside — it runs
 the tests, checks the hashes in the git log, reads the files. Your answer in text proves nothing
 and satisfies no gate. A finding that does not fit this mission goes to $TODO_FILE, never to the

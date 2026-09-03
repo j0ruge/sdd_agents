@@ -285,6 +285,24 @@ else
        "a prompt naming the R<n> increment the finding becomes" "no mention of an R<n> increment"
 fi
 
+echo "== the turn rule reaches every phase, from one definition =="
+# Measured 2026-09-02 (20260902-o-rascunho-legado-fala-cru, phase PR): two sdd-publisher sessions
+# ended the turn "waiting for the background task to finish". In `claude -p` ending the turn ends
+# the session, so the disk never moved, and the rule saying exactly that lived in ONE of the seven
+# agents (sdd-reviewer.md). It now lives in boot_prompt(), once — L3 of the 2026-09-03 audit — and
+# this probe reads it in EVERY projected phase instead of in the one that already had it. Counted
+# per phase and compared as a pair, so "5 phases, 4 hits" fails by name rather than by absence.
+turn_phases=0; turn_hits=0
+while IFS= read -r ph; do
+  [ -n "$ph" ] || continue
+  turn_phases=$((turn_phases + 1))
+  if grep -q 'Never end the turn with a command' <<< "$(prompt_of "$ph")"; then
+    turn_hits=$((turn_hits + 1))
+  fi
+done <<< "$(awk '/^--- DRY RUN: phase .* ---$/ { print $5 }' <<< "$out")"
+assert_eq "the turn rule is in the boot prompt of every projected phase (one definition, five readers)" \
+  "5 5" "$turn_phases $turn_hits"
+
 # --- OUTPUT_LANG reaches the boot prompt -----------------------------------
 # Anchored on the VALUE of the key, never on the prose of the prompt: the runner text is English
 # and the artifacts may be in any language, and an assertion tied to the prose would die at the

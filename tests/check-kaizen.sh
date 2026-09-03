@@ -1228,6 +1228,8 @@ assert_eq "which cites the series command as the source of truth" "yes" \
   "$(grep -q 'kaizen --series' <<< "$out" && echo yes || echo no)"
 assert_eq "driven by the sdd-kaizen agent" "yes" \
   "$(grep -q 'sdd-kaizen' <<< "$out" && echo yes || echo no)"
+assert_eq "and carries the turn rule the other six phases read from the same definition" "yes" \
+  "$(grep -q 'Never end the turn with a command' <<< "$out" && echo yes || echo no)"
 assert_eq "the projection creates no mission directory" \
   "$dirs_before" "$(ls -1 "$FIX/docs/handoffs" | sort)"
 assert_eq "and writes no row to the main ledger" "$before_rows" "$(krows)"

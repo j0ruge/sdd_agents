@@ -1026,6 +1026,16 @@ mut_RUN_app_down_not_escalated() {
 mut_RUN_app_down_retry_not_escalated() {
   sed -i '/^    if \[ "$gate_rc2" -eq 0 \]; then$/,/^    if \[ "$moved2" = "false" \]; then$/ s|^    if app_down_escalation "$phase"; then return 3; fi$|    if false; then return 3; fi|' "$1"
 }
+
+# L3 of the 2026-09-03 audit: the turn rule ("never end the turn with a task still running") is ONE
+# definition in boot_prompt(), read by the general heredoc and by KAIZEN's. Dropping the reader from
+# the general heredoc leaves KAIZEN with the rule and the five projected phases without it — the
+# dry-run probe counts hits per phase and dies at "5 5" vs "5 0". Anchored on the reader line, not on
+# the definition: deleting the definition would leave `$turn_rule` expanding to nothing in BOTH
+# heredocs, which is the same red by a different road, and the road is what a mutant names.
+mut_RUN_turn_rule_dropped() {
+  perl -0pi -e 's/\$turn_rule\n\n(Write the artifacts to disk and commit\. The runner re-evaluates the gate from outside — it runs)/$1/' "$1"
+}
 #
 # The RESET at the entry of gate_QA (`GATE_APP_DOWN=0`, its only setter) deliberately gets no mutant
 # either, and this too is a DECLARED limit rather than an oversight. Measured in the review round of
@@ -2881,6 +2891,7 @@ CATALOG=(
   RUN_blocked_retry_not_escalated
   RUN_app_down_not_escalated
   RUN_app_down_retry_not_escalated
+  RUN_turn_rule_dropped
   RUN_degraded_row_dropped
   RUN_degraded_repeats
   RUN_escalations_no_axis

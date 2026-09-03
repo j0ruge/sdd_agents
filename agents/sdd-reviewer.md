@@ -230,7 +230,6 @@ translated.
   is a good round.
 - The loop stops on a plateau or a regression against the previous round's table — never on a
   round count, and never while the letters are still rising.
-- Never end the turn with a command still running: in a headless session that ends the session.
 - The report and the checkpoint committed together, before the turn ends — the gate requires a
   clean tree, and the next phase pays for the commit you did not make.
 - A refused finding needs written evidence, not an opinion. Reproduce before you conclude.
