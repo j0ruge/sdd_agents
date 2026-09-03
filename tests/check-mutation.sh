@@ -1060,6 +1060,17 @@ mut_RUN_intervention_unwritten_on_retry() {
 mut_RUN_intervention_written_on_dry_run() {
   sed -i '/^checkpoint_note_intervention() {/,/^}/ s|^  \[ "$DRY_RUN" = "1" \] && return 0$|  :|' "$1"
 }
+
+# L6 of the 2026-09-03 audit: ON_ESCALATION_CMD runs on every rc 3 through the one door every
+# blocked row takes (autonomy_blocked_row), and never on a projection. Two mutants: the pager
+# unplugged from the door, and the DRY_RUN guard of the hook removed — the fixture of
+# tests/check-autonomy.sh reads the hook's log as an artefact in both blocks.
+mut_RUN_escalation_hook_silent() {
+  sed -i 's|^autonomy_blocked_row()  { escalation_hook "$1" "$2" "$3"; autonomy_escalation_row "blocked"  "$1" "$2" "$3"; }$|autonomy_blocked_row()  { autonomy_escalation_row "blocked"  "$1" "$2" "$3"; }|' "$1"
+}
+mut_RUN_escalation_hook_on_dry_run() {
+  sed -i '/^escalation_hook() {/,/^}/ s|^  \[ "$DRY_RUN" = "1" \] && return 0$|  :|' "$1"
+}
 #
 # The RESET at the entry of gate_QA (`GATE_APP_DOWN=0`, its only setter) deliberately gets no mutant
 # either, and this too is a DECLARED limit rather than an oversight. Measured in the review round of
@@ -2920,6 +2931,8 @@ CATALOG=(
   RUN_intervention_unwritten_on_phase
   RUN_intervention_unwritten_on_retry
   RUN_intervention_written_on_dry_run
+  RUN_escalation_hook_silent
+  RUN_escalation_hook_on_dry_run
   RUN_degraded_row_dropped
   RUN_degraded_repeats
   RUN_escalations_no_axis

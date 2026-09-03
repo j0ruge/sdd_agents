@@ -160,6 +160,14 @@ HANDOFF_DIR="docs/handoffs"
 QA_DOCS_PATH="docs/qa"
 JIRA_ENABLED=false
 EOF
+# L6 of the 2026-09-03 audit: ON_ESCALATION_CMD is the human's pager — every rc 3 runs it with
+# SDD_REASON, SDD_PHASE, SDD_MISSION and SDD_GATE_WHY in its env. Measured before it: zero
+# notification sites in bin/sdd, and a human watching `tail -F` to learn the line had stopped.
+# The fixture's hook appends one line per escalation; the blocks below read it as an artefact.
+HOOK_LOG="$OUTSIDE/hook.log"
+cat >> .sdd/config.sh <<EOF
+ON_ESCALATION_CMD='printf "%s|%s|%s|%s\n" "\$SDD_REASON" "\$SDD_PHASE" "\$SDD_MISSION" "\$SDD_GATE_WHY" >> $HOOK_LOG'
+EOF
 
 MDIR="$FIX/docs/handoffs/$MISSION"
 mkdir -p "$MDIR"
@@ -184,11 +192,17 @@ git add -A && git commit -qm "chore: fixture mission"
 echo "== dry-run =="
 "$SDD" run "$MISSION" --dry-run >/dev/null 2>&1
 assert_eq "the projection writes no ledger at all" "0" "$(nrows)"
+assert_eq "and runs no ON_ESCALATION_CMD — the pager is for escalations, not for projections" "absent" \
+  "$( [ -e "$HOOK_LOG" ] && echo present || echo absent)"
 
 # --- the real escalation writes one honest row ------------------------------
 echo "== blocked escalation =="
 "$SDD" run "$MISSION" >/dev/null 2>&1; rc=$?
 assert_eq "the blocked increment escalates with rc 3" "3" "$rc"
+assert_eq "the escalation ran ON_ESCALATION_CMD once, with reason, phase, mission and gate_why in its env" \
+  "1 increment-blocked|EXEC|$MISSION yes" \
+  "$(grep -c . "$HOOK_LOG" 2>/dev/null || echo 0) $(cut -d'|' -f1-3 "$HOOK_LOG" 2>/dev/null) $(grep -q Jidoka "$HOOK_LOG" 2>/dev/null && echo yes || echo no)"
+rm -f "$HOOK_LOG"
 assert_eq "exactly one row was written" "1" "$(nrows)"
 assert_eq "every row is valid JSON" "1" "$(jq -e . "$LEDGER" >/dev/null 2>&1 && echo 1 || echo 0)"
 assert_eq "schema version" "1" "$(rows '.v')"

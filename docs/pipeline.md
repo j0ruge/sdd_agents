@@ -52,6 +52,15 @@ Two practical consequences for anyone working here:
 measures?". It belongs to the **kit**; `sdd preflight` belongs to the **target repo's
 environment** — do not confuse them.
 
+**When the line stops, the runner can page you.** Every escalation that ends the run with rc 3 —
+`increment-blocked`, `dirty-tree`, `handoff-blocked`, `app-down`, `budget-exhausted`, `no-progress`
+— runs `ON_ESCALATION_CMD` from `.sdd/config.sh`, when set, with `SDD_REASON`, `SDD_PHASE`,
+`SDD_MISSION`, `SDD_PROJECT` and `SDD_GATE_WHY` in its environment (a `notify-send`, an `ntfy`
+curl, whatever reaches you). The projection never runs it, and a hook that fails is a warning, never
+a second failure: the escalation is already in the journal and the ledger. L6 of the 2026-09-03
+audit — before it the kit had zero notification sites, and the human learned the line had stopped
+by watching `tail -F`. The key is documented in `config/schema.md`.
+
 ## The gates
 
 ### PLAN — the only one the runner does not execute
