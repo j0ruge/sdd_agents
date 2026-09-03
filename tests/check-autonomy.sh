@@ -300,6 +300,27 @@ echo "== retry invocation =="
 assert_eq "sdd retry writes one session row" "1" "$(nrows)"
 assert_eq "and marks itself as a retry invocation" "retry" "$(rows '.invocation')"
 assert_eq "with its own run_id" "true" "$(rows '(.run_id | length) > 0')"
+# L4 of the 2026-09-03 audit: the human's hand is written by the RUNNER, not remembered by the
+# human. Measured: three launches and zero `- intervention:` notes on 20260901-o-revisor-so-acha,
+# three interventions and zero notes on 20260902-o-rascunho-legado-fala-cru. The reader did not
+# change — `sdd autonomy --by-mission` still counts `^- intervention:` in the checkpoint — only who
+# writes did. Committed ALONE and at once (the cmd_approve precedent), so the clean-tree gates of
+# the phase that follows still hold. Read as a pair: "1 dirty" fails by name.
+notes() { grep -cE '^[[:space:]]*-[[:space:]]*intervention:' "$MDIR/checkpoint.md" || true; }
+ck_clean() { [ -z "$(git -C "$FIX" status --porcelain -- "docs/handoffs/$MISSION/checkpoint.md")" ] && echo clean || echo dirty; }
+assert_eq "sdd retry writes the intervention note in the checkpoint and commits it alone" "1 clean" \
+  "$(notes) $(ck_clean)"
+assert_eq "the note names the command, the phase and the date, in the form the template shows" "1" \
+  "$(grep -cE '^- intervention: sdd retry .* — EXEC — [0-9]{4}-[0-9]{2}-[0-9]{2} [0-9]{2}:[0-9]{2} · written by the runner$' "$MDIR/checkpoint.md" || true)"
+
+echo "== --phase is the human's hand too, and the projection writes none =="
+: > "$LEDGER"
+"$SDD" run "$MISSION" --phase EXEC --max-phases 1 >/dev/null 2>&1 || true
+assert_eq "sdd run --phase writes a second note, committed alone" "2 clean" "$(notes) $(ck_clean)"
+"$SDD" run "$MISSION" --phase EXEC --dry-run >/dev/null 2>&1 || true
+assert_eq "sdd run --phase --dry-run writes none and leaves the tree clean" "2 clean" \
+  "$(notes) $( [ -z "$(git -C "$FIX" status --porcelain)" ] && echo clean || echo dirty)"
+: > "$LEDGER"
 
 # --- the EXEC row carries how many increments were left --------------------
 # `outcome` cannot tell the pipeline's DESIGNED loop (one session per increment, the gate red

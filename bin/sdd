@@ -274,6 +274,57 @@ frontmatter_write() {
 # `mut_EXEC_escaped_pipe_blind`), and a shared helper would collapse both anchors into one — the
 # class the mutation stamp caught between PRs #12 and #13. Change one, change the other, and check
 # the neighbour's comment says so too.
+# The `- intervention:` note, written by the RUNNER when it is the runner that receives the
+# human's hand: `sdd run --phase X`, `sdd retry`, `--budget-override`. Until L4 of the 2026-09-03
+# audit the template asked the HUMAN to write it, and the artefact measured what that is worth:
+# three launches and zero notes on 20260901-o-revisor-so-acha, three interventions and zero notes
+# on 20260902-o-rascunho-legado-fala-cru. The reader (`sdd autonomy --by-mission`) is unchanged —
+# it counts `^- intervention:` lines in the checkpoint — so a note the runner writes is counted by
+# the same instrument as one the human writes, and the hand-written note keeps its place for what
+# the runner cannot see (a fix by hand, a phase done by hand, a BLOCKED taken over).
+# Placement: last line of the execution-notes section (`## Notas de execu…`, the heading the
+# template fixes), before the next heading; at the end of the file
+# when the checkpoint has no such section (fixtures, checkpoints written before the template had
+# it). Committed ALONE and at once, by the cmd_approve precedent — the phase session that follows
+# commits its own files, and an uncommitted checkpoint would fail the clean-tree gates. A
+# checkpoint that is ALREADY dirty gets the note and NOT the commit: committing would carry
+# whatever the tree holds, and that is somebody else's work.
+# `sdd approve` writes none, on purpose: approving the plan is the human gate the pipeline is
+# designed around, it happens before any run_id exists, and counting it would inflate the notes
+# against the launches the reader counts beside them. The projection writes nothing.
+checkpoint_note_intervention() {   # checkpoint_note_intervention <what the human did> <phase>
+  [ "$DRY_RUN" = "1" ] && return 0
+  local ck="$MISSION_DIR/checkpoint.md" what="$1" phase="$2" line rel dirty_before tmp
+  [ -f "$ck" ] || return 0
+  rel="${ck#"$REPO_ROOT/"}"
+  line="- intervention: $what — $phase — $(date '+%Y-%m-%d %H:%M') · written by the runner"
+  dirty_before="$(cd "$REPO_ROOT" && git status --porcelain -- "$rel" 2>/dev/null)" || dirty_before=""
+  tmp="$(mktemp "${TMPDIR:-/tmp}/sdd-ck-XXXXXX")"
+  # Blank lines inside the notes section are buffered, so the note lands after the last note and
+  # the blank line that separated the section from the next heading is printed after it, intact.
+  # `mawk` is byte-oriented: the heading is matched on its ASCII prefix, never on the accented word.
+  awk -v line="$line" '
+    BEGIN { nb = 0; in_notes = 0; done = 0 }
+    !done && !in_notes && /^## Notas de execu/ { in_notes = 1; print; next }
+    in_notes && /^[[:space:]]*$/ { buf[nb++] = $0; next }
+    in_notes && /^## / { print line; for (i = 0; i < nb; i++) print buf[i]; nb = 0; in_notes = 0; done = 1; print; next }
+    in_notes { for (i = 0; i < nb; i++) print buf[i]; nb = 0; print; next }
+    { print }
+    END {
+      if (in_notes) { print line; for (i = 0; i < nb; i++) print buf[i]; done = 1 }
+      if (!done) { print ""; print line }
+    }' "$ck" > "$tmp" && mv "$tmp" "$ck"
+  if [ -n "$dirty_before" ]; then
+    warn "intervention noted in checkpoint.md but NOT committed — the file was already dirty; commit it with the work it carries"
+    return 0
+  fi
+  if ( cd "$REPO_ROOT" && git add -- "$rel" && git commit -q -m "chore(checkpoint): intervention — $what — $phase" ); then
+    dim "  intervention noted in checkpoint.md and committed: $what — $phase"
+  else
+    warn "intervention noted in checkpoint.md but the commit failed — commit $rel by hand"
+  fi
+}
+
 checkpoint_rows() {
   local file="$MISSION_DIR/checkpoint.md"
   [ -f "$file" ] || return 0
@@ -4419,6 +4470,10 @@ cmd_run() {
   # in a dry run too: the projection is where you look BEFORE spending sessions, which makes it the
   # cheapest moment to learn you are about to commit into the base branch.
   warn_if_on_base_branch
+  # L4 (2026-09-03 audit): `--phase` is the human forcing the starting point. The note is written
+  # HERE, off the CLI value and before the loop — inside it, force_phase is also set by the runner
+  # itself (PUBLISH_ON_REVIEW_BLOCKED=draft), and that is the runner's hand, not the human's.
+  [ -n "$force_phase" ] && checkpoint_note_intervention "sdd run --phase $force_phase (the human forced the starting phase)" "$force_phase"
 
   local -A attempts=()
   # SESSIONS, which is not the same grandeza as `attempts` and was being printed as if it were.
@@ -4851,6 +4906,8 @@ cmd_retry() {
   local phase; phase="$(current_phase)"
   [ -n "$phase" ] || { info "pipeline complete — nothing to retry"; return 0; }
   [ "$phase" = "PLAN" ] && die "PLAN is interactive — there is nothing to retry headless"
+  # L4 (2026-09-03 audit): a retry IS the human's hand — the template's own first example of one.
+  checkpoint_note_intervention "sdd retry (the human relaunched the phase with a fresh session)" "$phase"
   step "retrying $phase with a FRESH session"
   local before after moved="false" gate_rc=0
   before="$(state_fingerprint)"

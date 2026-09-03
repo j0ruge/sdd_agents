@@ -1044,6 +1044,22 @@ mut_RUN_turn_rule_dropped() {
 mut_RUN_harness_env_inherited() {
   sed -i 's|^  local -a cmd=(env "${HARNESS_ENV_UNSET\[@\]}" claude -p "$prompt"$|  local -a cmd=(claude -p "$prompt"|' "$1"
 }
+
+# L4 of the 2026-09-03 audit: the `- intervention:` note is written by the runner at two doors —
+# `sdd run --phase` and `sdd retry` — and never by the projection. One mutant per door, by the
+# rule of CLAUDE.md (a door added without a probe is a door whose removal no assertion notices),
+# and a third for the DRY_RUN guard of the helper: a projection that writes the note dirties the
+# tree it promised not to touch. The probes are in tests/check-autonomy.sh (retry block and the
+# `--phase` block right after it), each reading count AND cleanliness as a pair.
+mut_RUN_intervention_unwritten_on_phase() {
+  sed -i 's|^  \[ -n "$force_phase" \] && checkpoint_note_intervention "sdd run --phase $force_phase (the human forced the starting phase)" "$force_phase"$|  :|' "$1"
+}
+mut_RUN_intervention_unwritten_on_retry() {
+  sed -i 's|^  checkpoint_note_intervention "sdd retry (the human relaunched the phase with a fresh session)" "$phase"$|  :|' "$1"
+}
+mut_RUN_intervention_written_on_dry_run() {
+  sed -i '/^checkpoint_note_intervention() {/,/^}/ s|^  \[ "$DRY_RUN" = "1" \] && return 0$|  :|' "$1"
+}
 #
 # The RESET at the entry of gate_QA (`GATE_APP_DOWN=0`, its only setter) deliberately gets no mutant
 # either, and this too is a DECLARED limit rather than an oversight. Measured in the review round of
@@ -2901,6 +2917,9 @@ CATALOG=(
   RUN_app_down_retry_not_escalated
   RUN_turn_rule_dropped
   RUN_harness_env_inherited
+  RUN_intervention_unwritten_on_phase
+  RUN_intervention_unwritten_on_retry
+  RUN_intervention_written_on_dry_run
   RUN_degraded_row_dropped
   RUN_degraded_repeats
   RUN_escalations_no_axis

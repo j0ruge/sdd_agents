@@ -828,7 +828,10 @@ paragraph says so once:
 *(launches and reopened are counted over every session of the mission, N of them non-comparable)*.
 A mission whose sessions are all non-comparable does not appear — as before.
 
-The `- intervention:` notes of `checkpoint.md` are **narrative**, not the count. They print as
+The `- intervention:` notes of `checkpoint.md` are **narrative**, not the count. Since 2026-09-03
+the runner writes one itself, and commits it alone at once, whenever it is the runner that
+receives the human's hand — `sdd run --phase X`, `sdd retry`, `--budget-override`; the hand-written
+note stays for what the runner cannot see (a fix by hand, a phase done by hand). They print as
 `N intervention note(s)` between `reopened` and `US$` when the mission belongs to this repo and its
 checkpoint is on disk, and not at all otherwise — no `?`, no zero: `?` existed so that no false
 zero reached the official number, and the official number no longer comes from the file. Measured
