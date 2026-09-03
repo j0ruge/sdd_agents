@@ -28,8 +28,12 @@ não fecha — duas sessões independentes já derivaram esse erro, e este templ
 delas. Não renomeie as colunas, não traduza os critérios: eles são contrato do skill, inglês em
 qualquer repo.
 
-Qualquer critério com nota diferente de `A` reprova — inclusive `—` para "não analisado". Revisão
-parcial não é revisão: se um critério não foi analisado, analise.
+Qualquer critério com nota diferente de `A` reprova, **exceto** os nomeados em
+`REVIEW_PROSE_CRITERIA` (`Documentation` e `Overall`), que passam com `REVIEW_PROSE_MIN_GRADE`
+(`B`) ou melhor — ali a nota é sobre a prosa da própria missão, e conserto de prosa escreve prosa
+nova para a rodada seguinte medir. Critério que a config não nomeia é estrito, inclusive nome que
+ninguém conhece. `—` para "não analisado" reprova em qualquer linha. Revisão parcial não é
+revisão: se um critério não foi analisado, analise.
 
 ⚠️ **A coluna `Rationale` também é lida, e placeholder nela reprova.** Célula vazia, célula
 inteira entre `<` e `>` (é assim que os `<…>` abaixo vêm), célula que é só pontuação (`-`, `?`,
@@ -76,7 +80,8 @@ inclusive o campo escrito e deixado em branco.
 > de incrementos do `checkpoint.md`, e o `sdd-executor` a fecha em TDD, numa sessão de contexto
 > próprio; a rodada seguinte re-avalia sem ter escrito o conserto. CRITICAL/HIGH → um `R<n>` cada;
 > MEDIUM/LOW baratos → **um** `R<n>` de lote na rodada; caros → `TODO_FILE`; o que exige julgamento
-> humano → seção de pendências, nunca `R<n>`.
+> humano → seção de pendências, nunca `R<n>`; achado **só de prosa** (`Documentation` abaixo de A)
+> → `TODO_FILE`, nunca `R<n>` — o gate tolera B ali, e foi esse laço que custou quatro rodadas.
 >
 > ⚠️ Nada de `|` cru na célula do Check — a tabela é lida com `awk -F'|'`. Herestring, como abaixo.
 

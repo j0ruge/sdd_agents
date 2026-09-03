@@ -420,6 +420,16 @@ mut_REVIEW_accepts_B() {      # any grade passes — the gate stops requiring Gr
   sed -i 's|if (grade != "A")|if (grade == "ZZZ")|' "$1"
 }
 
+# L1 of the 2026-09-03 audit: A on every criterion, a floor on the rows graded on prose. Two mutants
+# for the two halves — every row read as prose (Security at B falls to the floor and passes), and
+# the floor forgotten (Documentation at C passes). tests/check-gates.sh probes both letters both ways.
+mut_REVIEW_every_row_as_prose() {
+  sed -i '/^gate_REVIEW()/,/^}/ s|if (crit in prose) {|if (1) {|' "$1"
+}
+mut_REVIEW_floor_ignored() {
+  sed -i '/^gate_REVIEW()/,/^}/ s#rank(grade) < rank(floor)#0#' "$1"
+}
+
 # Historical bug 4 (reproduced 2026-08-19, in the planning session of the mission that fixed it —
 # the slug is not spelled out here because tests/ is English surface): the extractor took
 # `crit = f[2]; grade = f[3]` and never touched `f[4]`, so `A` on every row with the literal
@@ -2910,6 +2920,8 @@ CATALOG=(
   QA_hostport_no_ipv6
   REVIEW_stops_at_h3
   REVIEW_accepts_B
+  REVIEW_every_row_as_prose
+  REVIEW_floor_ignored
   REVIEW_placeholder_rationale_blind
   REVIEW_gate_field_blind
   REVIEW_blank_gate_field_blind

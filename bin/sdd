@@ -114,6 +114,20 @@ load_config() {
   : "${MODEL_DOCS:=opus}"; : "${MODEL_PUBLISH:=sonnet}"; : "${MODEL_TICKET:=sonnet}"
   : "${MODEL_KAIZEN:=opus}"
   : "${QA_MAX_ITER:=3}"; : "${REVIEW_MAX_ITER:=3}"; : "${EXEC_MAX_RETRY:=1}"
+  # L1 of the 2026-09-03 audit: Grade A is required where the codereview skill has a SENSOR (code,
+  # types, errors, security, performance, tests) and a floor is tolerated where it grades PROSE.
+  # Measured on 20260902-o-rascunho-legado-fala-cru: four rounds, ~US$ 133, zero functional findings,
+  # every round blocked on `Documentation = B` — each prose fix wrote new prose for the next round.
+  # Written POSITIVELY, by the CLAUDE.md rule for admission predicates: the config names what is
+  # TOLERATED (the rows graded on prose), and every other row — including a criterion name nobody
+  # knows — keeps requiring A. A first draft named the strict six instead, and a fixture with a
+  # row called `Correctness` fell through to the floor and passed: the fail-open a typo would buy.
+  : "${REVIEW_PROSE_CRITERIA:=Documentation,Overall}"
+  : "${REVIEW_PROSE_MIN_GRADE:=B}"
+  case "$REVIEW_PROSE_MIN_GRADE" in
+    A|B|C|D|F) ;;
+    *) die "REVIEW_PROSE_MIN_GRADE must be one letter of A B C D F, got: '$REVIEW_PROSE_MIN_GRADE'" ;;
+  esac
   : "${BUDGET_PER_PHASE_USD:=15}"; : "${PUBLISH_ON_REVIEW_BLOCKED:=off}"
   # The pager (L6 of the 2026-09-03 audit): empty ⇒ the line stops in silence, as it always did.
   : "${ON_ESCALATION_CMD:=}"
@@ -1130,8 +1144,20 @@ gate_REVIEW() {
   # The `\b`s are gone, and the same corrupted string is what the GATE-FIELD branch echoes back at
   # the operator — a refusal quoting text that is not what is on disk. ENVIRON is handed over byte
   # for byte. `gate_present` stays on `-v`: it is one digit, and it has to arrive as a NUMBER.
-  offending="$(SDD_GATE_FIELD="$gate_field" awk -v gate_present="$gate_present" '
-      BEGIN { gate_field = ENVIRON["SDD_GATE_FIELD"] }
+  offending="$(SDD_GATE_FIELD="$gate_field" SDD_PROSE_CRITERIA="$REVIEW_PROSE_CRITERIA" \
+               SDD_PROSE_MIN_GRADE="$REVIEW_PROSE_MIN_GRADE" awk -v gate_present="$gate_present" '
+      BEGIN {
+        gate_field = ENVIRON["SDD_GATE_FIELD"]
+        # The tolerated set and its floor come from config through ENVIRON, like the gate field:
+        # a row named in REVIEW_PROSE_CRITERIA passes at REVIEW_PROSE_MIN_GRADE or better; EVERY
+        # other row — a criterion name nobody knows included — must read A. Ranked by first letter,
+        # so "B+" is a B; anything that is not a letter A-F (a `—`, an empty cell) ranks 0 and
+        # fails on every row, tolerated or not.
+        nprose = split(ENVIRON["SDD_PROSE_CRITERIA"], pl, ",")
+        for (k = 1; k <= nprose; k++) { pc = pl[k]; gsub(/^[ \t]+|[ \t]+$/, "", pc); if (pc != "") prose[pc] = 1 }
+        floor = ENVIRON["SDD_PROSE_MIN_GRADE"]
+      }
+      function rank(g) { return index("FDCBA", substr(g, 1, 1)) }
       # The refused set, written here so the next reader does not have to guess it: an EMPTY cell;
       # the whole cell wrapped in angle brackets, which is how the `### Overall Grade` table of
       # templates/review.md ships its fill-ins (named by SECTION and not by line number: the two
@@ -1206,7 +1232,12 @@ gate_REVIEW() {
         rows++
         # Grade first, on purpose: a row that is both off-A and unjustified is reported by its
         # grade, which is the older and more specific message.
-        if (grade != "A") { verdict = crit " = " (grade == "" ? "<empty>" : grade); exit }
+        g = (grade == "" ? "<empty>" : grade)
+        if (crit in prose) {
+          if (grade !~ /^[A-F][+-]?$/ || rank(grade) < rank(floor)) { verdict = "FLOOR\t" crit " = " g; exit }
+        } else if (grade != "A") {
+          verdict = "STRICT\t" crit " = " g; exit
+        }
         if (placeholder(rat)) { verdict = "PLACEHOLDER\t" crit "\t" (rat == "" ? "<empty>" : rat); exit }
       }
       END {
@@ -1238,6 +1269,12 @@ gate_REVIEW() {
     GATE-FIELD"$TAB"*)
       GATE_WHY="$(basename "$last"): the 'gate:' frontmatter is still a placeholder (${offending#GATE-FIELD$TAB}) — that field carries the evidence the round closed, not the shape of it"
       return 1 ;;
+    STRICT"$TAB"*)
+      GATE_WHY="$(basename "$last"): ${offending#STRICT$TAB} — the gate requires Grade A on every criterion outside REVIEW_PROSE_CRITERIA"
+      return 1 ;;
+    FLOOR"$TAB"*)
+      GATE_WHY="$(basename "$last"): ${offending#FLOOR$TAB} — below the floor for the criteria graded on prose (REVIEW_PROSE_CRITERIA, REVIEW_PROSE_MIN_GRADE=$REVIEW_PROSE_MIN_GRADE)"
+      return 1 ;;
   esac
   if [ -n "$offending" ]; then
     GATE_WHY="$(basename "$last"): $offending — the gate requires Grade A on every criterion"; return 1
@@ -1257,7 +1294,7 @@ gate_REVIEW() {
     # carrying that name somewhere other than the first character.
     GATE_WHY="working tree dirty after the review — the round and its R<n> rows must be committed"; return 1
   fi
-  GATE_WHY="$(basename "$last") all Grade A, suite green, tree clean"
+  GATE_WHY="$(basename "$last") Grade A on every criterion, at least $REVIEW_PROSE_MIN_GRADE on the prose ones, suite green, tree clean"
   return 0
 }
 
@@ -1610,7 +1647,10 @@ fixed becomes an R<n> increment in checkpoint.md, and the EXEC phase closes it i
 context of its own. This session commits ONLY 40-review-r<N>.md, checkpoint.md and the findings
 file — a source file in your diff means the hat slipped. Write the REAL grade; a B on r1 with
 increments written is the normal, healthy round, and the next round re-grades independently. A
-grade inflated to pass the gate switches off the mission's only quality sensor.
+grade inflated to pass the gate switches off the mission's only quality sensor. The gate requires
+Grade A on every criterion and tolerates B on the ones graded on prose (REVIEW_PROSE_CRITERIA:
+Documentation, Overall): a finding that is prose alone goes to the TODO_FILE, never to an R<n> —
+a prose fix writes new prose for the next round to grade, and that loop does not converge.
 EOF
     ;;
     QA:plan|QA:exec) cat <<'EOF'

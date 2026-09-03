@@ -60,8 +60,8 @@ cache-read já estão no ledger — medir quanto do custo é releitura vem antes
 ## 4. Mecanismos de verificação — como checa o próprio trabalho
 
 **Regra.** É o princípio 1: gate lê **artefato**, nunca rótulo — e **nota de revisão é rótulo**
-que o próprio modelo escreve. O gate de REVIEW exige A onde há sensor (código, tipos, erros,
-segurança, performance, testes) e tolera B onde só há prosa; achado de prosa vai para o
+que o próprio modelo escreve. O gate de REVIEW exige A em todo critério e tolera B só nos que
+julgam prosa (`Documentation`, `Overall`), nomeados positivamente; achado de prosa vai para o
 `TODO_FILE`, não compra rodada.
 
 **Onde mora hoje.** O componente mais forte do kit: `gate_<FASE>` por artefato (`TEST_CMD`, grep
@@ -69,10 +69,11 @@ no checkpoint, `git log`, `gh pr view`); Check por incremento; treze sensores em
 `tests/run-all.sh`; catálogo de mutação com carimbo no `sdd health`; guarda de kit em quatro
 portas.
 
-**Dívida declarada.** `gate_REVIEW` exige Grade A em **todos** os sete critérios, inclusive
-`Documentation` — foi o que girou quatro rodadas em 2026-09-02 (L1 da auditoria fecha). As
-Âncoras 1 e 2 do `gate_QA` foram satisfeitas por relatório de **outra** missão (achado `kit:` no
-`50-pr.md` daquela missão; aberto).
+**Dívida declarada.** A nota de revisão continua sendo rótulo; o que L1 fechou foi que rótulo
+sem sensor comprava rodada — hoje `gate_REVIEW` tolera `REVIEW_PROSE_MIN_GRADE` só nas linhas
+de `REVIEW_PROSE_CRITERIA` (prosa) e exige A em todo o resto, nome desconhecido incluído. As
+Âncoras 1 e 2 do `gate_QA` foram satisfeitas por relatório
+de **outra** missão (achado `kit:` no `50-pr.md` daquela missão; aberto).
 
 ## 5. Memória — o que persiste entre sessões
 

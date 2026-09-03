@@ -54,7 +54,7 @@ catálogo e os N lugares do contrato editados no mesmo commit.
 | L4 | o runner escreve `- intervention:` no checkpoint quando recebe `--phase`, `retry` ou `--budget-override` | "0 notas contra 3 lançamentos" |
 | L6 | `ON_ESCALATION_CMD` roda em todo rc 3, com `SDD_PHASE`, `SDD_REASON`, `SDD_MISSION`, `SDD_GATE_WHY` | a vigília do `tail -F` |
 | L2 | `BUDGET_MISSION_USD` (150): soma de `cost_usd=` do `pipeline.log` antes de cada fase; acima ⇒ `budget-exhausted`, rc 3; `--budget-override` fura e escreve `intervention:` | 174 contra 150 só em prosa |
-| L1 | `gate_REVIEW` exige A só nos critérios com sensor (`REVIEW_GRADE_A_CRITERIA`) e tolera `REVIEW_GRADE_MIN_OTHERS=B` no resto; achado abaixo de A num critério tolerado vai para o `TODO_FILE`, não para `R<n>` | as quatro rodadas (~US$ 133) |
+| L1 | `gate_REVIEW` tolera `REVIEW_PROSE_MIN_GRADE=B` só nas linhas de `REVIEW_PROSE_CRITERIA` (`Documentation`, `Overall`) e exige A em todo o resto, nome desconhecido incluído; achado só de prosa vai para o `TODO_FILE`, não para `R<n>` | as quatro rodadas (~US$ 133) |
 
 `sdd approve` **não** escreve `intervention:`, e o plano original o listava: o template define
 intervenção como o humano **entrando na linha** depois que ela começou; aprovar o plano é o gate

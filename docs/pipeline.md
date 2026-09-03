@@ -185,7 +185,7 @@ anyway, and every honest finding bought another lap. Measured in `20260825-frete
 `qa: skipped` is a legitimate and expected answer: a diff with no user-visible change (refactor,
 types, build, docs) has no journey to walk. Inventing a journey just to "have QA" is waste.
 
-### REVIEW — Grade A on every criterion
+### REVIEW — Grade A where a sensor exists, B tolerated on prose
 
 **The round finds; the EXEC phase fixes.** Since `20260901-o-revisor-so-acha` `sdd-reviewer` is
 read-only over the code: it reproduces, refutes with evidence, grades honestly, and every finding
@@ -224,8 +224,18 @@ A REVIEW session that commits a code file anyway is not stopped — it is **reco
 `REVIEW-EDITED-CODE` in `.sdd/logs/<mission>/pipeline.log`, next to the kit guard's `KIT-TOUCHED`.
 
 **Passes when:** the most recent `40-review-r<N>.md` carries the `### Overall Grade` section with
-**A on every row**; `TEST_CMD` exits 0; and the working tree is clean. The gate itself did **not**
-change with the split: same table, same `Rationale` rule, same ceiling.
+**A on every criterion**, except the rows named in `REVIEW_PROSE_CRITERIA` — `Documentation` and
+`Overall`, graded on the mission's own prose — which pass at **`REVIEW_PROSE_MIN_GRADE`** (`B`) or
+better; `TEST_CMD` exits 0; and the working tree is clean. The tolerated set is named positively,
+so a row the config does not know (a renamed criterion, a typo) stays strict. Same table, same
+`Rationale` rule, same ceiling.
+
+The floor is L1 of the 2026-09-03 audit, and it is measured: `20260902-o-rascunho-legado-fala-cru`
+spent four rounds and ~US$ 133 — 76% of the mission — with **zero functional findings**, every
+round blocked on `Documentation = B`, because a prose fix writes new prose for the next round to
+grade. A grade is a label the model writes; the gate keeps requiring A where the label has a sensor
+behind it and stops buying rounds where it has only prose. A prose finding goes to `TODO_FILE`,
+never to an `R<n>`.
 
 A criterion graded `—` (not analysed) fails too: a partial review is not a review.
 
