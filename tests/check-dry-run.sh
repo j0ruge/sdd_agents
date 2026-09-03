@@ -178,6 +178,13 @@ blocks="$(grep -c -- '^--- DRY RUN: phase ' <<< "$argv")"
 assert_eq "the projection has the five phase blocks the assertions below count over" "5" "$blocks"
 assert_eq "every projected phase asks for stream-json WITH --verbose" "$blocks" \
   "$(grep -c -- '--output-format stream-json --verbose' <<< "$argv")"
+# L5 of the 2026-09-03 audit. Measured 2026-08-30: two `sdd run` launched from inside an
+# interactive Claude session were killed mid-phase with no human action — the nested `claude -p`
+# inherited CLAUDE_CODE_CHILD_SESSION and the messaging socket and became a child of the
+# interactive session, which the harness tears down as a tree. The incantation lived at the human's
+# terminal; it now lives in run_phase(), once, and every projected command carries it.
+assert_eq "every projected phase opens claude with the harness env unset (env -u, one definition)" "$blocks" \
+  "$(grep -c -- 'env -u CLAUDECODE -u CLAUDE_CODE_CHILD_SESSION -u CLAUDE_CODE_MESSAGING_SOCKET -u CLAUDE_CODE_MESSAGING_TOKEN -u CLAUDE_PID -u CLAUDE_CODE_SESSION_ID -u CLAUDE_CODE_BRIDGE_SESSION_ID claude -p' <<< "$argv")"
 
 # --- the artifact templates reach every phase, not only KAIZEN --------------
 # The agents are told to start from `templates/review.md`, `templates/handoff.md` and the rest —
@@ -284,6 +291,24 @@ else
   fail "the REVIEW boot prompt sends findings to R increments and never fixes in-session" \
        "a prompt naming the R<n> increment the finding becomes" "no mention of an R<n> increment"
 fi
+
+echo "== the turn rule reaches every phase, from one definition =="
+# Measured 2026-09-02 (20260902-o-rascunho-legado-fala-cru, phase PR): two sdd-publisher sessions
+# ended the turn "waiting for the background task to finish". In `claude -p` ending the turn ends
+# the session, so the disk never moved, and the rule saying exactly that lived in ONE of the seven
+# agents (sdd-reviewer.md). It now lives in boot_prompt(), once — L3 of the 2026-09-03 audit — and
+# this probe reads it in EVERY projected phase instead of in the one that already had it. Counted
+# per phase and compared as a pair, so "5 phases, 4 hits" fails by name rather than by absence.
+turn_phases=0; turn_hits=0
+while IFS= read -r ph; do
+  [ -n "$ph" ] || continue
+  turn_phases=$((turn_phases + 1))
+  if grep -q 'Never end the turn with a command' <<< "$(prompt_of "$ph")"; then
+    turn_hits=$((turn_hits + 1))
+  fi
+done <<< "$(awk '/^--- DRY RUN: phase .* ---$/ { print $5 }' <<< "$out")"
+assert_eq "the turn rule is in the boot prompt of every projected phase (one definition, five readers)" \
+  "5 5" "$turn_phases $turn_hits"
 
 # --- OUTPUT_LANG reaches the boot prompt -----------------------------------
 # Anchored on the VALUE of the key, never on the prose of the prompt: the runner text is English

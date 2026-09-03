@@ -52,6 +52,15 @@ Two practical consequences for anyone working here:
 measures?". It belongs to the **kit**; `sdd preflight` belongs to the **target repo's
 environment** — do not confuse them.
 
+**When the line stops, the runner can page you.** Every escalation that ends the run with rc 3 —
+`increment-blocked`, `dirty-tree`, `handoff-blocked`, `app-down`, `budget-exhausted`, `no-progress`
+— runs `ON_ESCALATION_CMD` from `.sdd/config.sh`, when set, with `SDD_REASON`, `SDD_PHASE`,
+`SDD_MISSION`, `SDD_PROJECT` and `SDD_GATE_WHY` in its environment (a `notify-send`, an `ntfy`
+curl, whatever reaches you). The projection never runs it, and a hook that fails is a warning, never
+a second failure: the escalation is already in the journal and the ledger. L6 of the 2026-09-03
+audit — before it the kit had zero notification sites, and the human learned the line had stopped
+by watching `tail -F`. The key is documented in `config/schema.md`.
+
 ## The gates
 
 ### PLAN — the only one the runner does not execute
@@ -176,7 +185,7 @@ anyway, and every honest finding bought another lap. Measured in `20260825-frete
 `qa: skipped` is a legitimate and expected answer: a diff with no user-visible change (refactor,
 types, build, docs) has no journey to walk. Inventing a journey just to "have QA" is waste.
 
-### REVIEW — Grade A on every criterion
+### REVIEW — Grade A where a sensor exists, B tolerated on prose
 
 **The round finds; the EXEC phase fixes.** Since `20260901-o-revisor-so-acha` `sdd-reviewer` is
 read-only over the code: it reproduces, refutes with evidence, grades honestly, and every finding
@@ -215,8 +224,18 @@ A REVIEW session that commits a code file anyway is not stopped — it is **reco
 `REVIEW-EDITED-CODE` in `.sdd/logs/<mission>/pipeline.log`, next to the kit guard's `KIT-TOUCHED`.
 
 **Passes when:** the most recent `40-review-r<N>.md` carries the `### Overall Grade` section with
-**A on every row**; `TEST_CMD` exits 0; and the working tree is clean. The gate itself did **not**
-change with the split: same table, same `Rationale` rule, same ceiling.
+**A on every criterion**, except the rows named in `REVIEW_PROSE_CRITERIA` — `Documentation` and
+`Overall`, graded on the mission's own prose — which pass at **`REVIEW_PROSE_MIN_GRADE`** (`B`) or
+better; `TEST_CMD` exits 0; and the working tree is clean. The tolerated set is named positively,
+so a row the config does not know (a renamed criterion, a typo) stays strict. Same table, same
+`Rationale` rule, same ceiling.
+
+The floor is L1 of the 2026-09-03 audit, and it is measured: `20260902-o-rascunho-legado-fala-cru`
+spent four rounds and ~US$ 133 — 76% of the mission — with **zero functional findings**, every
+round blocked on `Documentation = B`, because a prose fix writes new prose for the next round to
+grade. A grade is a label the model writes; the gate keeps requiring A where the label has a sensor
+behind it and stops buying rounds where it has only prose. A prose finding goes to `TODO_FILE`,
+never to an `R<n>`.
 
 A criterion graded `—` (not analysed) fails too: a partial review is not a review.
 
@@ -530,6 +549,15 @@ Every session becomes a line in `.sdd/logs/<mission>/pipeline.log` (phase, agent
 id, exit code, duration, cost in USD) and two files alongside it, in the same
 `.sdd/logs/<mission>/`:
 
+That journal is also where the **mission ceiling** is read. Before opening any phase the runner
+sums the `cost_usd=` field of every session line (`?` counts as nothing) and compares it with
+`BUDGET_MISSION_USD` (`150` by default, `0` = no ceiling): at or above it the run stops with rc 3
+and a `budget-exhausted` row whose `gate_why` names the mission ceiling, so the money that stops
+the line is money already spent, never a session cut mid-way. `sdd run --budget-override` and
+`sdd retry --budget-override` go on for that one run, and the runner writes the `- intervention:`
+note itself. The projection prints the sum and never stops there. L2 of the 2026-09-03 audit —
+the mission before it cost US$ 174 against a ceiling of US$ 150 that lived only in the plan's prose.
+
 - `<PHASE>-<ts>.stream.jsonl` — the session's whole event stream, one JSON object per line,
   written **as it happens**. This is what you `tail -f` to watch a headless phase that is still
   running, and what is left behind by one that was killed halfway. The runner asks the CLI for
@@ -699,7 +727,7 @@ prose.
 | `v` | integer | never | Schema version of the row, `1` today. Lets the reader tell "old shape" from "malformed" when a future field is added. |
 | `ts` | string | never | `date -Iseconds` timestamp of when the row was written. |
 | `event` | string enum: `session` \| `blocked` \| `degraded` \| `gate_pass` | never | A spent session, a no-session escalation, or a no-session **closure**. `blocked` means the line **stopped** (the runner returns 3 and a human has to act); `degraded` means the runner lowered its own bar and **carried on**. They are kept apart on purpose: reusing `blocked` for a degradation would have been cheaper — it inherits the `kit_sha` axis and the aggregation with no `jq` to touch — but it records "stopped" for a run that continued, and the ledger exists to record fact. `gate_pass` is the third value and the same argument one step further: a gate that closes without buying a session writes nothing, so every reader had to infer the closure from an **absence** — and `phase_label` inferred it wrong, stamping `refez` (the loudest friction signal in the rubric) on a phase that closed clean. Measured on window 2: the QA of `20260830-o-rascunho-fantasma-do-mount`, one session, `escalations: {}`, one launch for the whole mission, REVIEW/DOCS/PR all `ok` after it. It is written **only** from the derived branch of `cmd_run`'s loop, and only for a phase that bought a session in *this* run whose gate then failed — at most one per phase per run. `current_phase()` re-evaluates every gate on every derivation, so without that condition every resumed run would append a row per already-closed phase per lap. ⚠️ Declared limit: a phase whose session was paid for in run *N* and whose gate closes for free in run *N+1* gets no row; its `refez` corrects itself the first time the whole pattern happens inside one run. |
-| `kind` | string enum: `increment-blocked` \| `dirty-tree` \| `handoff-blocked` \| `app-down` \| `budget-exhausted` \| `no-progress` \| `review-to-draft` | on `event:"session"` rows **and on `event:"gate_pass"` rows** | Which escalation path fired. `increment-blocked`, `dirty-tree` and `handoff-blocked` are deliberate Jidoka (they can be a *good* sign); `budget-exhausted` and `no-progress` are pure friction. `dirty-tree` is the oldest of the three and was **missing from this row** until `20260828-o-gate-sabe-que-o-app-caiu` went looking — the row that warns a kind can be added to the code and not to the table is the row that had one, which is exactly the open tail it describes. It fires from `cmd_run`'s EXEC pre-check and always names EXEC: a phase that died mid-way leaves the tree uncommitted, the suite then runs against changes nobody approved and comes back red, every increment still reads `done`, so EXEC is re-derived and another session opens against the same wall — about US$ 25 a lap, with no end condition, and no session may commit or discard on a human's behalf. `handoff-blocked` arrived with `20260826-o-laco-da-qa`: the phase's own handoff declares `status: blocked`, which already meant "the line stopped and a human has to act", so the runner escalates on that declaration instead of charging the phase a second session to prove the same thing. It is written from both doors of `cmd_run`'s loop — the first pass and the inline retry — and names the phase whose handoff declared it. `app-down` is its environment-facing sibling: the e2e came back red **and** a TCP connect to `APP_URL` was refused, so the line stops with the address named instead of charging QA a second opus session against a machine no session in this pipeline is allowed to start (bringing the environment up is the operator's job — see `config/schema.md`). Same two doors, same deliberate-Jidoka reading. What it never does is fire on doubt: an empty `APP_URL`, a URL the runner cannot parse, a bash built without `/dev/tcp`, an absent `timeout(1)` and an error string it does not recognise all read as *unknown*, and *unknown* escalates nothing — the probe may turn a red into a **named** red, never a green into a red. ⚠️ This column is a **documented enum with an open tail**: the runtime readers do not validate it (`is_escalation` is defined over `.event` alone and both aggregations `group_by(.kind)` dynamically), so a new kind is admitted, counted and printed rather than filed as `unrecognized` — which means a kind added to the code and not to this row goes unnoticed by every sensor. Adding one is a contract change: code and this table in the same commit. `review-to-draft` is the only `degraded` kind today: `PUBLISH_ON_REVIEW_BLOCKED=draft` and the review out of rounds, so the runner publishes a draft PR by itself instead of stopping. **At most one `review-to-draft` row per `run_id`**, and now at most one *jump*: the draft PR gets a single chance, and if its own gate fails the run ends on `blocked` / `budget-exhausted` in REVIEW rather than looping REVIEW→PR→REVIEW with the budget still blown. Before that, the branch was re-entered every lap and wrote a row every lap — both readers agreeing on a wrong number, which is worse than one of them being wrong. |
+| `kind` | string enum: `increment-blocked` \| `dirty-tree` \| `handoff-blocked` \| `app-down` \| `budget-exhausted` \| `no-progress` \| `review-to-draft` | on `event:"session"` rows **and on `event:"gate_pass"` rows** | Which escalation path fired. `increment-blocked`, `dirty-tree` and `handoff-blocked` are deliberate Jidoka (they can be a *good* sign); `budget-exhausted` and `no-progress` are pure friction. Since 2026-09-03 `budget-exhausted` also fires from the **mission** ceiling (`BUDGET_MISSION_USD`, before a phase opens, `gate_why` starting with `mission budget:`), not only from the phase ceiling. `dirty-tree` is the oldest of the three and was **missing from this row** until `20260828-o-gate-sabe-que-o-app-caiu` went looking — the row that warns a kind can be added to the code and not to the table is the row that had one, which is exactly the open tail it describes. It fires from `cmd_run`'s EXEC pre-check and always names EXEC: a phase that died mid-way leaves the tree uncommitted, the suite then runs against changes nobody approved and comes back red, every increment still reads `done`, so EXEC is re-derived and another session opens against the same wall — about US$ 25 a lap, with no end condition, and no session may commit or discard on a human's behalf. `handoff-blocked` arrived with `20260826-o-laco-da-qa`: the phase's own handoff declares `status: blocked`, which already meant "the line stopped and a human has to act", so the runner escalates on that declaration instead of charging the phase a second session to prove the same thing. It is written from both doors of `cmd_run`'s loop — the first pass and the inline retry — and names the phase whose handoff declared it. `app-down` is its environment-facing sibling: the e2e came back red **and** a TCP connect to `APP_URL` was refused, so the line stops with the address named instead of charging QA a second opus session against a machine no session in this pipeline is allowed to start (bringing the environment up is the operator's job — see `config/schema.md`). Same two doors, same deliberate-Jidoka reading. What it never does is fire on doubt: an empty `APP_URL`, a URL the runner cannot parse, a bash built without `/dev/tcp`, an absent `timeout(1)` and an error string it does not recognise all read as *unknown*, and *unknown* escalates nothing — the probe may turn a red into a **named** red, never a green into a red. ⚠️ This column is a **documented enum with an open tail**: the runtime readers do not validate it (`is_escalation` is defined over `.event` alone and both aggregations `group_by(.kind)` dynamically), so a new kind is admitted, counted and printed rather than filed as `unrecognized` — which means a kind added to the code and not to this row goes unnoticed by every sensor. Adding one is a contract change: code and this table in the same commit. `review-to-draft` is the only `degraded` kind today: `PUBLISH_ON_REVIEW_BLOCKED=draft` and the review out of rounds, so the runner publishes a draft PR by itself instead of stopping. **At most one `review-to-draft` row per `run_id`**, and now at most one *jump*: the draft PR gets a single chance, and if its own gate fails the run ends on `blocked` / `budget-exhausted` in REVIEW rather than looping REVIEW→PR→REVIEW with the budget still blown. Before that, the branch was re-entered every lap and wrote a row every lap — both readers agreeing on a wrong number, which is worse than one of them being wrong. |
 | `run_id` | string (uuid) | never | One per `cmd_run`/`cmd_retry` invocation. Groups every row a single command call produced — "this mission needed N runs" is a `run_id` count. |
 | `invocation` | string enum: `run` \| `retry` | never | Which command opened the session: `sdd run` or `sdd retry`. Answers "who opened the session", not "was this an in-loop retry" — that is `auto_retry`. |
 | `kit_sha` | string \| `null` | never absent, but `null` | `null` when `$SDD_HOME` is not a git checkout. Short SHA of the kit's own HEAD when the row was written — the before/after axis the whole ledger exists for. |
@@ -828,7 +856,10 @@ paragraph says so once:
 *(launches and reopened are counted over every session of the mission, N of them non-comparable)*.
 A mission whose sessions are all non-comparable does not appear — as before.
 
-The `- intervention:` notes of `checkpoint.md` are **narrative**, not the count. They print as
+The `- intervention:` notes of `checkpoint.md` are **narrative**, not the count. Since 2026-09-03
+the runner writes one itself, and commits it alone at once, whenever it is the runner that
+receives the human's hand — `sdd run --phase X`, `sdd retry`, `--budget-override`; the hand-written
+note stays for what the runner cannot see (a fix by hand, a phase done by hand). They print as
 `N intervention note(s)` between `reopened` and `US$` when the mission belongs to this repo and its
 checkpoint is on disk, and not at all otherwise — no `?`, no zero: `?` existed so that no false
 zero reached the official number, and the official number no longer comes from the file. Measured

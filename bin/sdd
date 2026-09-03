@@ -114,12 +114,35 @@ load_config() {
   : "${MODEL_DOCS:=opus}"; : "${MODEL_PUBLISH:=sonnet}"; : "${MODEL_TICKET:=sonnet}"
   : "${MODEL_KAIZEN:=opus}"
   : "${QA_MAX_ITER:=3}"; : "${REVIEW_MAX_ITER:=3}"; : "${EXEC_MAX_RETRY:=1}"
+  # L1 of the 2026-09-03 audit: Grade A is required where the codereview skill has a SENSOR (code,
+  # types, errors, security, performance, tests) and a floor is tolerated where it grades PROSE.
+  # Measured on 20260902-o-rascunho-legado-fala-cru: four rounds, ~US$ 133, zero functional findings,
+  # every round blocked on `Documentation = B` — each prose fix wrote new prose for the next round.
+  # Written POSITIVELY, by the CLAUDE.md rule for admission predicates: the config names what is
+  # TOLERATED (the rows graded on prose), and every other row — including a criterion name nobody
+  # knows — keeps requiring A. A first draft named the strict six instead, and a fixture with a
+  # row called `Correctness` fell through to the floor and passed: the fail-open a typo would buy.
+  : "${REVIEW_PROSE_CRITERIA:=Documentation,Overall}"
+  : "${REVIEW_PROSE_MIN_GRADE:=B}"
+  case "$REVIEW_PROSE_MIN_GRADE" in
+    A|B|C|D|F) ;;
+    *) die "REVIEW_PROSE_MIN_GRADE must be one letter of A B C D F, got: '$REVIEW_PROSE_MIN_GRADE'" ;;
+  esac
   : "${BUDGET_PER_PHASE_USD:=15}"; : "${PUBLISH_ON_REVIEW_BLOCKED:=off}"
+  # The pager (L6 of the 2026-09-03 audit): empty ⇒ the line stops in silence, as it always did.
+  : "${ON_ESCALATION_CMD:=}"
   # The cap is per phase because the phases do not cost the same. One number was either too low
   # for REVIEW — the session dies mid-round and the money is spent with nothing on disk — or too
   # high for PR, where it stopped capping anything. The global stays for the cheap phases; raising
   # it does NOT raise these three, which is the trade-off config/schema.md declares.
   : "${BUDGET_EXEC_USD:=25}"; : "${BUDGET_QA_USD:=25}"; : "${BUDGET_REVIEW_USD:=40}"
+  # The MISSION ceiling (L2 of the 2026-09-03 audit): the sum of what the journal says was spent,
+  # read before a phase opens. `0` ⇒ no ceiling. Refused by name when it is not a number: a cap
+  # that silently became "no cap" is the fail-open the audit exists to stop.
+  : "${BUDGET_MISSION_USD:=150}"
+  case "$BUDGET_MISSION_USD" in
+    ''|*[!0-9.]*|.|*.*.*) die "BUDGET_MISSION_USD must be a number in USD (0 = no ceiling), got: '$BUDGET_MISSION_USD'" ;;
+  esac
   : "${PERMISSION_MODE:=acceptEdits}"; : "${JIRA_ENABLED:=false}"
   # `acceptEdits` auto-approves FILE EDITS, not `Bash`. Without this allowlist the phase session
   # cannot run TEST_CMD, cannot run `git add`/`git commit`, and the EXEC phase is unsatisfiable
@@ -274,6 +297,64 @@ frontmatter_write() {
 # `mut_EXEC_escaped_pipe_blind`), and a shared helper would collapse both anchors into one — the
 # class the mutation stamp caught between PRs #12 and #13. Change one, change the other, and check
 # the neighbour's comment says so too.
+# The `- intervention:` note, written by the RUNNER when it is the runner that receives the
+# human's hand: `sdd run --phase X`, `sdd retry`, `--budget-override`. Until L4 of the 2026-09-03
+# audit the template asked the HUMAN to write it, and the artefact measured what that is worth:
+# three launches and zero notes on 20260901-o-revisor-so-acha, three interventions and zero notes
+# on 20260902-o-rascunho-legado-fala-cru. The reader (`sdd autonomy --by-mission`) is unchanged —
+# it counts `^- intervention:` lines in the checkpoint — so a note the runner writes is counted by
+# the same instrument as one the human writes, and the hand-written note keeps its place for what
+# the runner cannot see (a fix by hand, a phase done by hand, a BLOCKED taken over).
+# Placement: last line of the execution-notes section (`## Notas de execu…`, the heading the
+# template fixes), before the next heading; at the end of the file
+# when the checkpoint has no such section (fixtures, checkpoints written before the template had
+# it). Committed ALONE and at once, by the cmd_approve precedent — the phase session that follows
+# commits its own files, and an uncommitted checkpoint would fail the clean-tree gates. A
+# checkpoint that is ALREADY dirty gets the note and NOT the commit: committing would carry
+# whatever the tree holds, and that is somebody else's work.
+# `sdd approve` writes none, on purpose: approving the plan is the human gate the pipeline is
+# designed around, it happens before any run_id exists, and counting it would inflate the notes
+# against the launches the reader counts beside them. The projection writes nothing.
+# The note says what the runner KNOWS — "forced from the CLI", never "the human forced": the CLI
+# is the human's door, and the runner cannot tell a human from another agent with a shell.
+# Measured 2026-09-03 18:45, twenty minutes after this function landed: a second interactive
+# Claude session ran `sdd run --phase REVIEW --budget-override` on this kit's own merged mission,
+# switched the working tree's branch under a running `sdd health`, opened a real opus session, and
+# the first draft of this note wrote "the human forced the starting phase". That is the sandbox
+# debt of .claude/rules/anatomia-do-agente.md, with a date on it.
+checkpoint_note_intervention() {   # checkpoint_note_intervention <what the human did> <phase>
+  [ "$DRY_RUN" = "1" ] && return 0
+  local ck="$MISSION_DIR/checkpoint.md" what="$1" phase="$2" line rel dirty_before tmp
+  [ -f "$ck" ] || return 0
+  rel="${ck#"$REPO_ROOT/"}"
+  line="- intervention: $what — $phase — $(date '+%Y-%m-%d %H:%M') · written by the runner"
+  dirty_before="$(cd "$REPO_ROOT" && git status --porcelain -- "$rel" 2>/dev/null)" || dirty_before=""
+  tmp="$(mktemp "${TMPDIR:-/tmp}/sdd-ck-XXXXXX")"
+  # Blank lines inside the notes section are buffered, so the note lands after the last note and
+  # the blank line that separated the section from the next heading is printed after it, intact.
+  # `mawk` is byte-oriented: the heading is matched on its ASCII prefix, never on the accented word.
+  awk -v line="$line" '
+    BEGIN { nb = 0; in_notes = 0; done = 0 }
+    !done && !in_notes && /^## Notas de execu/ { in_notes = 1; print; next }
+    in_notes && /^[[:space:]]*$/ { buf[nb++] = $0; next }
+    in_notes && /^## / { print line; for (i = 0; i < nb; i++) print buf[i]; nb = 0; in_notes = 0; done = 1; print; next }
+    in_notes { for (i = 0; i < nb; i++) print buf[i]; nb = 0; print; next }
+    { print }
+    END {
+      if (in_notes) { print line; for (i = 0; i < nb; i++) print buf[i]; done = 1 }
+      if (!done) { print ""; print line }
+    }' "$ck" > "$tmp" && mv "$tmp" "$ck"
+  if [ -n "$dirty_before" ]; then
+    warn "intervention noted in checkpoint.md but NOT committed — the file was already dirty; commit it with the work it carries"
+    return 0
+  fi
+  if ( cd "$REPO_ROOT" && git add -- "$rel" && git commit -q -m "chore(checkpoint): intervention — $what — $phase" ); then
+    dim "  intervention noted in checkpoint.md and committed: $what — $phase"
+  else
+    warn "intervention noted in checkpoint.md but the commit failed — commit $rel by hand"
+  fi
+}
+
 checkpoint_rows() {
   local file="$MISSION_DIR/checkpoint.md"
   [ -f "$file" ] || return 0
@@ -1070,8 +1151,20 @@ gate_REVIEW() {
   # The `\b`s are gone, and the same corrupted string is what the GATE-FIELD branch echoes back at
   # the operator — a refusal quoting text that is not what is on disk. ENVIRON is handed over byte
   # for byte. `gate_present` stays on `-v`: it is one digit, and it has to arrive as a NUMBER.
-  offending="$(SDD_GATE_FIELD="$gate_field" awk -v gate_present="$gate_present" '
-      BEGIN { gate_field = ENVIRON["SDD_GATE_FIELD"] }
+  offending="$(SDD_GATE_FIELD="$gate_field" SDD_PROSE_CRITERIA="$REVIEW_PROSE_CRITERIA" \
+               SDD_PROSE_MIN_GRADE="$REVIEW_PROSE_MIN_GRADE" awk -v gate_present="$gate_present" '
+      BEGIN {
+        gate_field = ENVIRON["SDD_GATE_FIELD"]
+        # The tolerated set and its floor come from config through ENVIRON, like the gate field:
+        # a row named in REVIEW_PROSE_CRITERIA passes at REVIEW_PROSE_MIN_GRADE or better; EVERY
+        # other row — a criterion name nobody knows included — must read A. Ranked by first letter,
+        # so "B+" is a B; anything that is not a letter A-F (a `—`, an empty cell) ranks 0 and
+        # fails on every row, tolerated or not.
+        nprose = split(ENVIRON["SDD_PROSE_CRITERIA"], pl, ",")
+        for (k = 1; k <= nprose; k++) { pc = pl[k]; gsub(/^[ \t]+|[ \t]+$/, "", pc); if (pc != "") prose[pc] = 1 }
+        floor = ENVIRON["SDD_PROSE_MIN_GRADE"]
+      }
+      function rank(g) { return index("FDCBA", substr(g, 1, 1)) }
       # The refused set, written here so the next reader does not have to guess it: an EMPTY cell;
       # the whole cell wrapped in angle brackets, which is how the `### Overall Grade` table of
       # templates/review.md ships its fill-ins (named by SECTION and not by line number: the two
@@ -1146,7 +1239,12 @@ gate_REVIEW() {
         rows++
         # Grade first, on purpose: a row that is both off-A and unjustified is reported by its
         # grade, which is the older and more specific message.
-        if (grade != "A") { verdict = crit " = " (grade == "" ? "<empty>" : grade); exit }
+        g = (grade == "" ? "<empty>" : grade)
+        if (crit in prose) {
+          if (grade !~ /^[A-F][+-]?$/ || rank(grade) < rank(floor)) { verdict = "FLOOR\t" crit " = " g; exit }
+        } else if (grade != "A") {
+          verdict = "STRICT\t" crit " = " g; exit
+        }
         if (placeholder(rat)) { verdict = "PLACEHOLDER\t" crit "\t" (rat == "" ? "<empty>" : rat); exit }
       }
       END {
@@ -1178,6 +1276,12 @@ gate_REVIEW() {
     GATE-FIELD"$TAB"*)
       GATE_WHY="$(basename "$last"): the 'gate:' frontmatter is still a placeholder (${offending#GATE-FIELD$TAB}) — that field carries the evidence the round closed, not the shape of it"
       return 1 ;;
+    STRICT"$TAB"*)
+      GATE_WHY="$(basename "$last"): ${offending#STRICT$TAB} — the gate requires Grade A on every criterion outside REVIEW_PROSE_CRITERIA"
+      return 1 ;;
+    FLOOR"$TAB"*)
+      GATE_WHY="$(basename "$last"): ${offending#FLOOR$TAB} — below the floor for the criteria graded on prose (REVIEW_PROSE_CRITERIA, REVIEW_PROSE_MIN_GRADE=$REVIEW_PROSE_MIN_GRADE)"
+      return 1 ;;
   esac
   if [ -n "$offending" ]; then
     GATE_WHY="$(basename "$last"): $offending — the gate requires Grade A on every criterion"; return 1
@@ -1197,7 +1301,7 @@ gate_REVIEW() {
     # carrying that name somewhere other than the first character.
     GATE_WHY="working tree dirty after the review — the round and its R<n> rows must be committed"; return 1
   fi
-  GATE_WHY="$(basename "$last") all Grade A, suite green, tree clean"
+  GATE_WHY="$(basename "$last") Grade A on every criterion, at least $REVIEW_PROSE_MIN_GRADE on the prose ones, suite green, tree clean"
   return 0
 }
 
@@ -1550,7 +1654,10 @@ fixed becomes an R<n> increment in checkpoint.md, and the EXEC phase closes it i
 context of its own. This session commits ONLY 40-review-r<N>.md, checkpoint.md and the findings
 file — a source file in your diff means the hat slipped. Write the REAL grade; a B on r1 with
 increments written is the normal, healthy round, and the next round re-grades independently. A
-grade inflated to pass the gate switches off the mission's only quality sensor.
+grade inflated to pass the gate switches off the mission's only quality sensor. The gate requires
+Grade A on every criterion and tolerates B on the ones graded on prose (REVIEW_PROSE_CRITERIA:
+Documentation, Overall): a finding that is prose alone goes to the TODO_FILE, never to an R<n> —
+a prose fix writes new prose for the next round to grade, and that loop does not converge.
 EOF
     ;;
     QA:plan|QA:exec) cat <<'EOF'
@@ -1571,6 +1678,16 @@ EOF
 # there is no other route).
 boot_prompt() {
   local step="$1" slash agent lang_line=""
+  # ONE definition, read by every phase — including KAIZEN, which has a heredoc of its own below.
+  # Measured 2026-09-02 (20260902-o-rascunho-legado-fala-cru, phase PR): two sdd-publisher sessions
+  # ended the turn "waiting for the background task to finish", US$ 2.71 and a PR phase done by
+  # hand. In `claude -p` ending the turn ends the session, so nothing resumes. The sentence lived in
+  # agents/sdd-reviewer.md alone; a rule that every phase needs is written here, once, never copied
+  # into seven agents (the enum rule of CLAUDE.md). tests/check-dry-run.sh reads it per phase.
+  local turn_rule
+  turn_rule="Never end the turn with a command or a task still running in the background: in a headless
+session ending the turn ends the session, and \"I will resume when it finishes\" resumes nothing.
+Wait for it, read its result, then write the artifacts and commit."
   slash="$(phase_slash "$step")"
   agent="$(phase_agent "$step")"
   # The kit is English; the ARTIFACT speaks whatever language the target repo declared. Empty ⇒
@@ -1625,6 +1742,8 @@ escalation section: no plan is born from a regression. Otherwise triage $TODO_FI
 00-missao.md (with \`aprovacao:\` EMPTY — the human approves, never you), 01-plano.md and
 checkpoint.md beside the verdict, from the templates.
 
+$turn_rule
+
 Write the artifacts to disk and commit. The runner re-evaluates the gate from outside — it reads
 the files and the frontmatter. Your answer in text proves nothing and satisfies no gate. A
 finding that does not fit this mission goes to $TODO_FILE, never to the diff.
@@ -1647,6 +1766,8 @@ before. Read, in this order, before anything else:
 $lang_line
 Your task in this session: $(phase_task "$step").
 $(phase_extra "$step")
+$turn_rule
+
 Write the artifacts to disk and commit. The runner re-evaluates the gate from outside — it runs
 the tests, checks the hashes in the git log, reads the files. Your answer in text proves nothing
 and satisfies no gate. A finding that does not fit this mission goes to $TODO_FILE, never to the
@@ -1661,6 +1782,12 @@ PIPELINE_LOG=""
 # this kit keeps paying for — derived, the day a second journal is opened it announces itself.
 PIPELINE_LOG_WARNED=""
 DRY_RUN=0
+# `--budget-override` (L2 of the 2026-09-03 audit): the human lifting the mission ceiling for ONE
+# run. Global, like DRY_RUN, because the door that reads it (mission_budget_blown) is called from
+# two commands. Noted as an intervention the first time it actually lifts something, never before.
+BUDGET_OVERRIDE=0
+BUDGET_OVERRIDE_NOTED=0
+MISSION_BUDGET_PROJECTED=0
 
 pipeline_log_line() {
   # The projection does not write to the journal. Precision matters here, because the easy
@@ -2558,7 +2685,25 @@ autonomy_escalation_row() {   # autonomy_escalation_row <event> <kind> <phase> <
 
 # Called, never substituted, for the same reason the body above says: the kit stamp's one-shot
 # warning flag is a global, and a subshell would reset it once per row.
-autonomy_blocked_row()  { autonomy_escalation_row "blocked"  "$1" "$2" "$3"; }
+# L6 (2026-09-03 audit) — the human's pager. Every escalation that ends the run with rc 3 runs
+# ON_ESCALATION_CMD from .sdd/config.sh, when set, with the reason (the ledger `kind`), the phase,
+# the mission, the project and the gate's sentence in its environment. Measured before it: zero
+# notification sites in this file, and a human watching `tail -F` for hours to learn the line had
+# stopped. ONE definition, and it sits in autonomy_blocked_row rather than at the eight call sites,
+# because that is the one door every rc 3 goes through — the degraded row is not an rc 3 and gets
+# no pager. The projection never runs it. A hook that fails is a warning, never a second failure:
+# the escalation is already in the journal and the ledger, and a pager that could stop the run
+# from stopping would be the wrong way round. `bash -c` with stdin closed, so a hook that reads
+# its terminal cannot hang the runner on a machine with nobody at the keyboard.
+escalation_hook() {   # escalation_hook <kind> <phase> <gate_why> — never fails the run
+  [ "$DRY_RUN" = "1" ] && return 0
+  [ -n "$ON_ESCALATION_CMD" ] || return 0
+  if ! SDD_REASON="$1" SDD_PHASE="$2" SDD_GATE_WHY="$3" SDD_MISSION="${MISSION:-}" SDD_PROJECT="${PROJECT_NAME:-}" \
+       bash -c "$ON_ESCALATION_CMD" </dev/null >&2; then
+    warn "ON_ESCALATION_CMD exited non-zero — the escalation is recorded either way"
+  fi
+}
+autonomy_blocked_row()  { escalation_hook "$1" "$2" "$3"; autonomy_escalation_row "blocked"  "$1" "$2" "$3"; }
 autonomy_degraded_row() { autonomy_escalation_row "degraded" "$1" "$2" "$3"; }
 
 # The FACT that a phase closed without buying a session. Not an escalation — nothing went wrong,
@@ -2716,6 +2861,18 @@ stream_watch() { # stream_watch <stream.jsonl> — background; killed by run_pha
 
 # Runs a phase in a fresh headless session. Returns 0 when claude exited 0 (which does NOT mean
 # the gate passed — the gate judges that, always afterwards).
+# The env a phase session must NOT inherit — ONE definition, read by run_phase below.
+# Measured 2026-08-30 (20260830-invariante-do-frete-no-agregado): `sdd run` launched from the Bash
+# tool of an interactive Claude session was killed twice with no human action, 1 s after a phase
+# started and again mid-REVIEW. The nested `claude -p` had inherited CLAUDECODE,
+# CLAUDE_CODE_CHILD_SESSION and CLAUDE_CODE_MESSAGING_SOCKET from the harness and became a child of
+# the interactive session, which the harness tears down as a tree. Until L5 of the 2026-09-03 audit
+# the incantation lived at the human's terminal (`env -u … setsid nohup …`); a rule the runner needs
+# every time is written in the runner. `env -u` of an unset name is a no-op, so a terminal launch
+# pays nothing. The dry-run prints the prefix, and tests/check-dry-run.sh counts it per phase.
+HARNESS_ENV_UNSET=(-u CLAUDECODE -u CLAUDE_CODE_CHILD_SESSION -u CLAUDE_CODE_MESSAGING_SOCKET
+  -u CLAUDE_CODE_MESSAGING_TOKEN -u CLAUDE_PID -u CLAUDE_CODE_SESSION_ID -u CLAUDE_CODE_BRIDGE_SESSION_ID)
+
 run_phase() {
   local phase="$1" resume_sid="${2:-}"
   local pstep model agent sid prompt logfile streamfile started ended cost turns
@@ -2732,7 +2889,7 @@ Fix exactly that. Do not restart the phase: read what is already on disk, comple
 missing and write the artifacts. The gate will be re-evaluated."
   fi
 
-  local -a cmd=(claude -p "$prompt"
+  local -a cmd=(env "${HARNESS_ENV_UNSET[@]}" claude -p "$prompt"
     --model "$model"
     --permission-mode "$PERMISSION_MODE"
     --output-format stream-json --verbose
@@ -2945,6 +3102,54 @@ review_rounds_on_disk() {
 }
 
 # How many sessions a phase may consume before turning BLOCKED.
+# L2 (2026-09-03 audit) — the mission ceiling. Measured: 20260902-o-rascunho-legado-fala-cru cost
+# US$ 174.11 against a ceiling of US$ 150 that lived in the PLAN'S PROSE; the runner capped each
+# session (--max-budget-usd) and never the mission, so a loop of cheap rounds never met a number.
+# The sum is read off the mission journal — the `cost_usd=` field of every session line, `?`
+# counting as nothing — and read BEFORE a phase opens: the money that stops the line is money
+# already spent, never a session cut mid-way with nothing on disk (the argument config/schema.md
+# already makes for BUDGET_REVIEW_USD). Same ledger kind as the phase ceiling, `budget-exhausted`:
+# the enum names the friction, and `gate_why` says which ceiling. The projection prints the sum
+# and never stops there; `--budget-override` goes on and is written down as the intervention it is.
+# LC_ALL=C on BOTH awk calls, and it is not cosmetic: under a pt_BR locale mawk's strtod stops at
+# the dot, so `100.5 + 49.5` read 149 and printed `149,00` — a ceiling of 150 never met on a
+# machine whose journal said 150.00. Measured on this house's own locale while L2 was written.
+# A journal the runner cannot READ sums to 0.00 (no ceiling knowledge, the behaviour before L2)
+# and says nothing here: the journal WRITER is the one that names an unwritable file, once.
+mission_cost_usd() {   # the journal's sum, 2 decimals; a journal that does not exist is 0.00
+  [ -r "$PIPELINE_LOG" ] || { printf '0.00\n'; return 0; }
+  LC_ALL=C awk '{ for (i = 1; i <= NF; i++) if ($i ~ /^cost_usd=[0-9.]+$/) s += substr($i, 10) }
+       END { printf "%.2f\n", s + 0 }' "$PIPELINE_LOG" 2>/dev/null || printf '0.00\n'
+}
+mission_budget_blown() {   # mission_budget_blown <phase> — rc 0 = STOP (row written), rc 1 = go on
+  local phase="$1" spent ceiling="$BUDGET_MISSION_USD"
+  case "$ceiling" in 0|0.*) return 1 ;; esac
+  spent="$(mission_cost_usd)"
+  if [ "$DRY_RUN" = "1" ]; then
+    if [ "$MISSION_BUDGET_PROJECTED" = "0" ]; then
+      MISSION_BUDGET_PROJECTED=1
+      dim "  mission budget: US\$ $spent of $ceiling spent so far (the projection never stops here)"
+    fi
+    return 1
+  fi
+  if ! LC_ALL=C awk -v s="$spent" -v c="$ceiling" 'BEGIN { exit !(s + 0 >= c + 0) }'; then return 1; fi
+  if [ "$BUDGET_OVERRIDE" = "1" ]; then
+    if [ "$BUDGET_OVERRIDE_NOTED" = "0" ]; then
+      BUDGET_OVERRIDE_NOTED=1
+      warn "mission budget blown (US\$ $spent of $ceiling) — going on under --budget-override"
+      checkpoint_note_intervention "sdd $AUTONOMY_INVOCATION --budget-override (US\$ $spent spent against BUDGET_MISSION_USD=$ceiling)" "$phase"
+    fi
+    return 1
+  fi
+  GATE_WHY="mission budget: US\$ $spent spent against BUDGET_MISSION_USD=$ceiling — the line stops before opening $phase"
+  info ""
+  bad "BLOCKED in $phase — $GATE_WHY"
+  dim "  Raise BUDGET_MISSION_USD in .sdd/config.sh, or go on once with --budget-override (noted as an intervention)."
+  pipeline_log_line "$(date -Iseconds)  BLOCKED  $phase  $GATE_WHY"
+  autonomy_blocked_row "budget-exhausted" "$phase" "$GATE_WHY"
+  return 0
+}
+
 phase_budget() {
   case "$1" in
     EXEC)   printf '%s\n' "$(( $(checkpoint_rows | wc -l) + EXEC_MAX_RETRY + 2 ))" ;;
@@ -4362,6 +4567,7 @@ cmd_run() {
       --dry-run)     DRY_RUN=1 ;;
       --phase)       force_phase="${2:-}"; shift ;;
       --max-phases)  max_phases="${2:-0}"; shift ;;
+      --budget-override) BUDGET_OVERRIDE=1 ;;
       -*)            die "unknown run option: $1" ;;
       *)             mission_arg="$1" ;;
     esac
@@ -4393,6 +4599,10 @@ cmd_run() {
   # in a dry run too: the projection is where you look BEFORE spending sessions, which makes it the
   # cheapest moment to learn you are about to commit into the base branch.
   warn_if_on_base_branch
+  # L4 (2026-09-03 audit): `--phase` is the human forcing the starting point. The note is written
+  # HERE, off the CLI value and before the loop — inside it, force_phase is also set by the runner
+  # itself (PUBLISH_ON_REVIEW_BLOCKED=draft), and that is the runner's hand, not the human's.
+  [ -n "$force_phase" ] && checkpoint_note_intervention "sdd run --phase $force_phase (the starting phase was forced from the CLI)" "$force_phase"
 
   local -A attempts=()
   # SESSIONS, which is not the same grandeza as `attempts` and was being printed as if it were.
@@ -4497,6 +4707,8 @@ cmd_run() {
       fi
     fi
 
+    # L2: the mission ceiling comes before the phase ceiling — money already spent, before a session.
+    if mission_budget_blown "$phase"; then return 3; fi
     budget="$(phase_budget "$phase")"
     # `attempts` is the LAP number and it stays exactly that: it is what the ledger's `attempt`
     # field carries, and the retry inside a lap is told apart by `auto_retry` rather than by a
@@ -4803,8 +5015,17 @@ cmd_run() {
 }
 
 cmd_retry() {
+  local mission_arg=""
+  while [ $# -gt 0 ]; do
+    case "$1" in
+      --budget-override) BUDGET_OVERRIDE=1 ;;
+      -*)                die "unknown retry option: $1" ;;
+      *)                 mission_arg="$1" ;;
+    esac
+    shift
+  done
   load_config
-  resolve_mission "${1:-}"
+  resolve_mission "$mission_arg"
   PIPELINE_LOG="$(log_dir)/pipeline.log"
   AUTONOMY_RUN_ID="$(uuidgen)"
   AUTONOMY_INVOCATION="retry"
@@ -4825,6 +5046,10 @@ cmd_retry() {
   local phase; phase="$(current_phase)"
   [ -n "$phase" ] || { info "pipeline complete — nothing to retry"; return 0; }
   [ "$phase" = "PLAN" ] && die "PLAN is interactive — there is nothing to retry headless"
+  # L4 (2026-09-03 audit): a retry IS the human's hand — the template's own first example of one.
+  checkpoint_note_intervention "sdd retry (the phase was relaunched from the CLI with a fresh session)" "$phase"
+  # L2: the second door of the mission ceiling — a retry is a session too.
+  if mission_budget_blown "$phase"; then return 3; fi
   step "retrying $phase with a FRESH session"
   local before after moved="false" gate_rc=0
   before="$(state_fingerprint)"

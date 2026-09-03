@@ -42,13 +42,14 @@ it, so a figure here that claims to be current is only a figure nobody re-measur
 Invoke `/codereview:codereview` over the mission diff. The skill routes the model by severity
 internally — do not try to guess what it will do.
 
-If the runner booted this session with `/goal /codereview:codereview until every item is Grade A`,
-the loop is already driven: review → fix → re-review until it closes. If not, **drive the loop
-yourself**, with the same stopping criterion.
+The stopping criterion is the gate's: Grade A on every criterion, except the ones graded on the
+mission's own **prose** (`REVIEW_PROSE_CRITERIA` — Documentation and Overall), which pass at
+`REVIEW_PROSE_MIN_GRADE` (`B`) or better. Drive the loop yourself with that criterion — the `/goal`
+command does not exist here.
 
 ### When to keep going, and when to stop
 
-"Until every item is Grade A" says when the loop is DONE. It does not say when to give up, and a
+"A where a sensor exists, B where it is prose" says when the loop is DONE. It does not say when to give up, and a
 round count is the wrong answer to that — it stops a loop that is working and it keeps paying for
 one that is not. The criterion is **movement**, read off the artifacts:
 
@@ -88,6 +89,7 @@ handed to the executor as an `R<n>` buys a session to chase nothing.
 | CRITICAL or HIGH | one `R<n>` row each — own Red, own commit, revertible on its own |
 | MEDIUM/LOW, cheap | **one** batch `R<n>` row for the whole round (`"achados #4–#7 da r1"`), a Check per finding inside the cell |
 | MEDIUM/LOW, expensive | a line in the repo's `TODO_FILE`, carrying the finding's text |
+| prose alone (Documentation below A) | a line in the repo's `TODO_FILE` — **never** an `R<n>`. The gate tolerates B there, and a prose fix writes new prose for the next round to grade: `20260902-o-rascunho-legado-fala-cru` spent four rounds and ~US$ 133 on exactly that, with zero functional findings |
 | needs human judgement | the report's "Decisions for a Human" section — **never** an `R<n>` |
 
 The batch row is not laziness: booting an EXEC session costs about US$ 1–2, so six sessions for six
@@ -113,7 +115,8 @@ column after it. Use a herestring, as above.
 Record in the checkpoint's execution notes which finding of which round gave rise to each `R<n>`.
 
 The runner sees a pending increment and hands the ball to `sdd-executor` on its own. It repeats
-until a round closes at Grade A, capped at `REVIEW_MAX_ITER` rounds **of finding**.
+until a round closes at Grade A on every criterion with a sensor and at least B on the rest,
+capped at `REVIEW_MAX_ITER` rounds **of finding**.
 
 **Receive criticism with rigour, not with deference.** A finding you believe is wrong is not
 resolved by writing an `R<n>` to please it: verify, and if it is wrong, record in the round's
@@ -172,9 +175,12 @@ closes:
 | **Overall** | **A** | <…> |
 ```
 
-**The runner parses this table.** Any criterion graded other than `A` — including a `—` for "not
-analysed" — fails the gate. A partial review is not a review: if a criterion was not analysed,
-analyse it.
+**The runner parses this table.** Every criterion graded other than `A` fails the gate, except the
+rows named in `REVIEW_PROSE_CRITERIA` (`Documentation` and `Overall` — graded on the mission's own
+prose), which pass at `REVIEW_PROSE_MIN_GRADE` (`B`) or better. A row the config does not name —
+a renamed criterion, a typo — is strict. A `—` for "not analysed" fails on every row. A partial review is not a review: if
+a criterion was not analysed, analyse it. Write the REAL letter on Documentation — a B there is
+the honest grade of a mission whose prose still generalises, and it does not buy a round.
 
 **It parses the `Rationale` column too, and a placeholder there fails the gate.** An empty cell,
 the whole cell between angle brackets (which is how the template above ships it), a cell that is
@@ -230,7 +236,6 @@ translated.
   is a good round.
 - The loop stops on a plateau or a regression against the previous round's table — never on a
   round count, and never while the letters are still rising.
-- Never end the turn with a command still running: in a headless session that ends the session.
 - The report and the checkpoint committed together, before the turn ends — the gate requires a
   clean tree, and the next phase pays for the commit you did not make.
 - A refused finding needs written evidence, not an opinion. Reproduce before you conclude.

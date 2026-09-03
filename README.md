@@ -150,7 +150,7 @@ the directory `docs/handoffs/<YYYYMMDD>-<slug>/`.
 | `sdd-planner` | plan | Fable (interactive) | `00-missao.md`, `01-plano.md`, `checkpoint.md` |
 | `sdd-executor` | TDD execution, 1 session per increment | Opus | commits + updated `checkpoint.md` |
 | `sdd-qa` | closes the QA cycle (sub-step `QA:close`) | Opus | e2e specs, fix increments, `30-handoff-qa.md` |
-| `sdd-reviewer` | code review until Grade A, read-only over the code | Opus | `40-review-r<N>.md` + `R<n>` increments |
+| `sdd-reviewer` | code review until Grade A where a sensor exists (B tolerated on prose), read-only over the code | Opus | `40-review-r<N>.md` + `R<n>` increments |
 | `sdd-docs` | living documentation | Opus | target docs synced + `45-docs.md` |
 | `sdd-publisher` | TICKET (opens the issue) and PR (push + opens the PR) | Sonnet | `10-ticket.md`, open PR + `50-pr.md` |
 

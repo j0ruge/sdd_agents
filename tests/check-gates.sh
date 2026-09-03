@@ -886,6 +886,67 @@ EOF
 assert_phase "a review graded B does not pass" "REVIEW"
 assert_why   "REVIEW reports the exact grade" "REVIEW" "Security = B"
 
+# L1 of the 2026-09-03 audit: Grade A is required on every criterion, except the rows named in
+# REVIEW_PROSE_CRITERIA (Documentation, Overall — graded on the mission's own prose), which pass at
+# REVIEW_PROSE_MIN_GRADE (B). Measured on
+# 20260902-o-rascunho-legado-fala-cru: four rounds, ~US$ 133, zero functional findings, every round
+# blocked on `Documentation = B`, each prose fix writing new prose for the next round to grade. The
+# floor is a config key and the list is a config key, so both are probed both ways below.
+review_with() { # review_with <Security grade> <Documentation grade> — r1 in the template's shape
+  cat > "$MDIR/40-review-r1.md" <<EOF
+### Overall Grade
+
+| Criterion | Grade | Rationale |
+|-----------|-------|-----------|
+| Code Quality (Zen) | A | clean |
+| Type Safety | A | clean |
+| Error Handling | A | clean |
+| Security | $1 | measured |
+| Performance | A | clean |
+| Test Coverage | A | clean |
+| Documentation | $2 | two docstrings still generalise |
+| **Overall** | **B** | prose only |
+EOF
+}
+review_with A B
+git add -A && git commit -qm "chore: r1 with Documentation at B"
+assert_phase "Documentation at B, A everywhere a sensor exists: the round is over" "DOCS"
+review_with A C
+git add -A && git commit -qm "chore: r1 with Documentation at C"
+assert_phase "Documentation at C is below the floor and does not pass" "REVIEW"
+assert_why   "REVIEW names the criterion, the grade and the floor" "REVIEW" "Documentation = C.*REVIEW_PROSE_MIN_GRADE=B"
+review_with A B
+printf 'REVIEW_PROSE_CRITERIA="Overall"\n' >> .sdd/config.sh
+git add -A && git commit -qm "chore: Documentation no longer tolerated"
+assert_phase "taking Documentation out of REVIEW_PROSE_CRITERIA makes its B fail again" "REVIEW"
+assert_why   "and the reason names the strict rule" "REVIEW" "Documentation = B.*outside REVIEW_PROSE_CRITERIA"
+sed -i '/^REVIEW_PROSE_CRITERIA=/d' .sdd/config.sh
+# The tolerated set is named POSITIVELY: a row the config does not know is strict, so a renamed
+# criterion or a typo cannot buy the floor. Found by the check-autonomy fixture whose only row is
+# `Correctness | B`, which a first draft (naming the strict six instead) let through.
+cat > "$MDIR/40-review-r1.md" <<'EOF'
+### Overall Grade
+
+| Criterion | Grade | Rationale |
+|-----------|-------|-----------|
+| Code Quality (Zen) | A | clean |
+| Securlty | B | a typo in the name would have bought the floor |
+| Documentation | A | clean |
+EOF
+git add -A && git commit -qm "chore: a criterion nobody knows, at B"
+assert_phase "a criterion name the config does not know stays strict at B" "REVIEW"
+assert_why   "and is named as such" "REVIEW" "Securlty = B.*outside REVIEW_PROSE_CRITERIA"
+review_with A C
+printf 'REVIEW_PROSE_MIN_GRADE="C"\n' >> .sdd/config.sh
+git add -A && git commit -qm "chore: floor lowered to C"
+assert_phase "REVIEW_PROSE_MIN_GRADE=C lowers the floor and the C passes" "DOCS"
+sed -i '/^REVIEW_PROSE_MIN_GRADE=/d' .sdd/config.sh
+review_with A —
+git add -A && git commit -qm "chore: Documentation not analysed"
+assert_phase "a '—' on a tolerated criterion still fails: not analysed is not a grade" "REVIEW"
+review_with B A
+git add -A && git commit -qm "chore: back to Security at B"
+
 # The REVIEW⇄EXEC loop, in both directions. Since `20260901-o-revisor-so-acha` a round that found
 # something does not fix it in place: it writes an `R<n>` row into the SAME checkpoint table and
 # ends. Nothing in the runner had to learn about the prefix — `current_phase()` walks

@@ -53,6 +53,14 @@ atualizado: <YYYY-MM-DD HH:MM>
 > O texto depois dos dois-pontos vai no idioma do `OUTPUT_LANG`, como o resto deste arquivo.
 > Só conta quando abre a linha — `intervention` no meio de uma frase é prosa e não é contado.
 >
+> Desde 2026-09-03 o **runner escreve a linha sozinho** quando é ele quem recebe a mão do humano —
+> `sdd run --phase X`, `sdd retry`, `--budget-override` — e a commita sozinha, na hora, para a
+> árvore chegar limpa ao gate da fase seguinte. A linha escrita à mão continua valendo para o que
+> o runner não vê: conserto manual, fase feita à mão, `BLOCKED` assumido. `sdd approve` não
+> escreve nenhuma: aprovar o plano é o gate humano desenhado, não uma entrada na linha. A nota
+> diz o que o runner **sabe** ("forçada pela CLI"), nunca quem estava na CLI: outro agente com
+> shell entra pela mesma porta, e o runner não distingue — medido em 2026-09-03.
+>
 > O exemplo abaixo mora **dentro** desta citação de propósito: o `>` quebra o casamento com
 > `^[[:space:]]*-`, e sem ele o exemplo era contado verbatim — todo checkpoint recém-instanciado
 > nascia devendo uma intervenção fantasma ao instrumento que mede autonomia. Copie a forma para

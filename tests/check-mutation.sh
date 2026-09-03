@@ -420,6 +420,16 @@ mut_REVIEW_accepts_B() {      # any grade passes — the gate stops requiring Gr
   sed -i 's|if (grade != "A")|if (grade == "ZZZ")|' "$1"
 }
 
+# L1 of the 2026-09-03 audit: A on every criterion, a floor on the rows graded on prose. Two mutants
+# for the two halves — every row read as prose (Security at B falls to the floor and passes), and
+# the floor forgotten (Documentation at C passes). tests/check-gates.sh probes both letters both ways.
+mut_REVIEW_every_row_as_prose() {
+  sed -i '/^gate_REVIEW()/,/^}/ s|if (crit in prose) {|if (1) {|' "$1"
+}
+mut_REVIEW_floor_ignored() {
+  sed -i '/^gate_REVIEW()/,/^}/ s#rank(grade) < rank(floor)#0#' "$1"
+}
+
 # Historical bug 4 (reproduced 2026-08-19, in the planning session of the mission that fixed it —
 # the slug is not spelled out here because tests/ is English surface): the extractor took
 # `crit = f[2]; grade = f[3]` and never touched `f[4]`, so `A` on every row with the literal
@@ -1025,6 +1035,71 @@ mut_RUN_app_down_not_escalated() {
 # handoff-blocked sibling paid for one house along.
 mut_RUN_app_down_retry_not_escalated() {
   sed -i '/^    if \[ "$gate_rc2" -eq 0 \]; then$/,/^    if \[ "$moved2" = "false" \]; then$/ s|^    if app_down_escalation "$phase"; then return 3; fi$|    if false; then return 3; fi|' "$1"
+}
+
+# L3 of the 2026-09-03 audit: the turn rule ("never end the turn with a task still running") is ONE
+# definition in boot_prompt(), read by the general heredoc and by KAIZEN's. Dropping the reader from
+# the general heredoc leaves KAIZEN with the rule and the five projected phases without it — the
+# dry-run probe counts hits per phase and dies at "5 5" vs "5 0". Anchored on the reader line, not on
+# the definition: deleting the definition would leave `$turn_rule` expanding to nothing in BOTH
+# heredocs, which is the same red by a different road, and the road is what a mutant names.
+mut_RUN_turn_rule_dropped() {
+  perl -0pi -e 's/\$turn_rule\n\n(Write the artifacts to disk and commit\. The runner re-evaluates the gate from outside — it runs)/$1/' "$1"
+}
+
+# L5 of the 2026-09-03 audit: the phase session is opened through `env -u <harness vars>`, one
+# definition (HARNESS_ENV_UNSET) read by run_phase. Opening `claude` directly is the runner of
+# 2026-08-30, whose sessions the harness killed as children of the interactive one. The dry-run
+# prints the command per phase and tests/check-dry-run.sh counts the prefix: 5 expected, 0 found.
+mut_RUN_harness_env_inherited() {
+  sed -i 's|^  local -a cmd=(env "${HARNESS_ENV_UNSET\[@\]}" claude -p "$prompt"$|  local -a cmd=(claude -p "$prompt"|' "$1"
+}
+
+# L4 of the 2026-09-03 audit: the `- intervention:` note is written by the runner at two doors —
+# `sdd run --phase` and `sdd retry` — and never by the projection. One mutant per door, by the
+# rule of CLAUDE.md (a door added without a probe is a door whose removal no assertion notices),
+# and a third for the DRY_RUN guard of the helper: a projection that writes the note dirties the
+# tree it promised not to touch. The probes are in tests/check-autonomy.sh (retry block and the
+# `--phase` block right after it), each reading count AND cleanliness as a pair.
+mut_RUN_intervention_unwritten_on_phase() {
+  sed -i 's|^  \[ -n "$force_phase" \] && checkpoint_note_intervention "sdd run --phase $force_phase (the starting phase was forced from the CLI)" "$force_phase"$|  :|' "$1"
+}
+mut_RUN_intervention_unwritten_on_retry() {
+  sed -i 's|^  checkpoint_note_intervention "sdd retry (the phase was relaunched from the CLI with a fresh session)" "$phase"$|  :|' "$1"
+}
+mut_RUN_intervention_written_on_dry_run() {
+  sed -i '/^checkpoint_note_intervention() {/,/^}/ s|^  \[ "$DRY_RUN" = "1" \] && return 0$|  :|' "$1"
+}
+
+# L6 of the 2026-09-03 audit: ON_ESCALATION_CMD runs on every rc 3 through the one door every
+# blocked row takes (autonomy_blocked_row), and never on a projection. Two mutants: the pager
+# unplugged from the door, and the DRY_RUN guard of the hook removed — the fixture of
+# tests/check-autonomy.sh reads the hook's log as an artefact in both blocks.
+mut_RUN_escalation_hook_silent() {
+  sed -i 's|^autonomy_blocked_row()  { escalation_hook "$1" "$2" "$3"; autonomy_escalation_row "blocked"  "$1" "$2" "$3"; }$|autonomy_blocked_row()  { autonomy_escalation_row "blocked"  "$1" "$2" "$3"; }|' "$1"
+}
+mut_RUN_escalation_hook_on_dry_run() {
+  sed -i '/^escalation_hook() {/,/^}/ s|^  \[ "$DRY_RUN" = "1" \] && return 0$|  :|' "$1"
+}
+
+# L2 of the 2026-09-03 audit: the mission ceiling. Five mutants, because the door has five sides
+# the probes of tests/check-autonomy.sh read one by one: the check unplugged from cmd_run, unplugged
+# from cmd_retry, `0` read as a ceiling of zero (every fixture then blocks at 0.00 >= 0), the
+# override going on WITHOUT writing its intervention note, and the projection stopping the run.
+mut_RUN_mission_budget_ignored() {
+  sed -i 's|^    if mission_budget_blown "$phase"; then return 3; fi$|    if false; then return 3; fi|' "$1"
+}
+mut_RUN_mission_budget_ignored_on_retry() {
+  sed -i 's|^  if mission_budget_blown "$phase"; then return 3; fi$|  if false; then return 3; fi|' "$1"
+}
+mut_RUN_mission_budget_zero_is_a_ceiling() {
+  sed -i 's|^  case "$ceiling" in 0\|0\.\*) return 1 ;; esac$|  :|' "$1"
+}
+mut_RUN_mission_budget_override_unnoted() {
+  sed -i '/^mission_budget_blown() {/,/^}/ s|^      checkpoint_note_intervention "sdd $AUTONOMY_INVOCATION --budget-override .*$|      :|' "$1"
+}
+mut_RUN_mission_budget_stops_projection() {
+  sed -i '/^mission_budget_blown() {/,/^}/ s|^  if \[ "$DRY_RUN" = "1" \]; then$|  if false; then|' "$1"
 }
 #
 # The RESET at the entry of gate_QA (`GATE_APP_DOWN=0`, its only setter) deliberately gets no mutant
@@ -2845,6 +2920,8 @@ CATALOG=(
   QA_hostport_no_ipv6
   REVIEW_stops_at_h3
   REVIEW_accepts_B
+  REVIEW_every_row_as_prose
+  REVIEW_floor_ignored
   REVIEW_placeholder_rationale_blind
   REVIEW_gate_field_blind
   REVIEW_blank_gate_field_blind
@@ -2881,6 +2958,18 @@ CATALOG=(
   RUN_blocked_retry_not_escalated
   RUN_app_down_not_escalated
   RUN_app_down_retry_not_escalated
+  RUN_turn_rule_dropped
+  RUN_harness_env_inherited
+  RUN_intervention_unwritten_on_phase
+  RUN_intervention_unwritten_on_retry
+  RUN_intervention_written_on_dry_run
+  RUN_escalation_hook_silent
+  RUN_escalation_hook_on_dry_run
+  RUN_mission_budget_ignored
+  RUN_mission_budget_ignored_on_retry
+  RUN_mission_budget_zero_is_a_ceiling
+  RUN_mission_budget_override_unnoted
+  RUN_mission_budget_stops_projection
   RUN_degraded_row_dropped
   RUN_degraded_repeats
   RUN_escalations_no_axis
