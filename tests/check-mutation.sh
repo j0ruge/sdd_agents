@@ -1036,6 +1036,14 @@ mut_RUN_app_down_retry_not_escalated() {
 mut_RUN_turn_rule_dropped() {
   perl -0pi -e 's/\$turn_rule\n\n(Write the artifacts to disk and commit\. The runner re-evaluates the gate from outside — it runs)/$1/' "$1"
 }
+
+# L5 of the 2026-09-03 audit: the phase session is opened through `env -u <harness vars>`, one
+# definition (HARNESS_ENV_UNSET) read by run_phase. Opening `claude` directly is the runner of
+# 2026-08-30, whose sessions the harness killed as children of the interactive one. The dry-run
+# prints the command per phase and tests/check-dry-run.sh counts the prefix: 5 expected, 0 found.
+mut_RUN_harness_env_inherited() {
+  sed -i 's|^  local -a cmd=(env "${HARNESS_ENV_UNSET\[@\]}" claude -p "$prompt"$|  local -a cmd=(claude -p "$prompt"|' "$1"
+}
 #
 # The RESET at the entry of gate_QA (`GATE_APP_DOWN=0`, its only setter) deliberately gets no mutant
 # either, and this too is a DECLARED limit rather than an oversight. Measured in the review round of
@@ -2892,6 +2900,7 @@ CATALOG=(
   RUN_app_down_not_escalated
   RUN_app_down_retry_not_escalated
   RUN_turn_rule_dropped
+  RUN_harness_env_inherited
   RUN_degraded_row_dropped
   RUN_degraded_repeats
   RUN_escalations_no_axis

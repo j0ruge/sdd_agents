@@ -2730,6 +2730,18 @@ stream_watch() { # stream_watch <stream.jsonl> — background; killed by run_pha
 
 # Runs a phase in a fresh headless session. Returns 0 when claude exited 0 (which does NOT mean
 # the gate passed — the gate judges that, always afterwards).
+# The env a phase session must NOT inherit — ONE definition, read by run_phase below.
+# Measured 2026-08-30 (20260830-invariante-do-frete-no-agregado): `sdd run` launched from the Bash
+# tool of an interactive Claude session was killed twice with no human action, 1 s after a phase
+# started and again mid-REVIEW. The nested `claude -p` had inherited CLAUDECODE,
+# CLAUDE_CODE_CHILD_SESSION and CLAUDE_CODE_MESSAGING_SOCKET from the harness and became a child of
+# the interactive session, which the harness tears down as a tree. Until L5 of the 2026-09-03 audit
+# the incantation lived at the human's terminal (`env -u … setsid nohup …`); a rule the runner needs
+# every time is written in the runner. `env -u` of an unset name is a no-op, so a terminal launch
+# pays nothing. The dry-run prints the prefix, and tests/check-dry-run.sh counts it per phase.
+HARNESS_ENV_UNSET=(-u CLAUDECODE -u CLAUDE_CODE_CHILD_SESSION -u CLAUDE_CODE_MESSAGING_SOCKET
+  -u CLAUDE_CODE_MESSAGING_TOKEN -u CLAUDE_PID -u CLAUDE_CODE_SESSION_ID -u CLAUDE_CODE_BRIDGE_SESSION_ID)
+
 run_phase() {
   local phase="$1" resume_sid="${2:-}"
   local pstep model agent sid prompt logfile streamfile started ended cost turns
@@ -2746,7 +2758,7 @@ Fix exactly that. Do not restart the phase: read what is already on disk, comple
 missing and write the artifacts. The gate will be re-evaluated."
   fi
 
-  local -a cmd=(claude -p "$prompt"
+  local -a cmd=(env "${HARNESS_ENV_UNSET[@]}" claude -p "$prompt"
     --model "$model"
     --permission-mode "$PERMISSION_MODE"
     --output-format stream-json --verbose

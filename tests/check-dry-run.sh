@@ -178,6 +178,13 @@ blocks="$(grep -c -- '^--- DRY RUN: phase ' <<< "$argv")"
 assert_eq "the projection has the five phase blocks the assertions below count over" "5" "$blocks"
 assert_eq "every projected phase asks for stream-json WITH --verbose" "$blocks" \
   "$(grep -c -- '--output-format stream-json --verbose' <<< "$argv")"
+# L5 of the 2026-09-03 audit. Measured 2026-08-30: two `sdd run` launched from inside an
+# interactive Claude session were killed mid-phase with no human action — the nested `claude -p`
+# inherited CLAUDE_CODE_CHILD_SESSION and the messaging socket and became a child of the
+# interactive session, which the harness tears down as a tree. The incantation lived at the human's
+# terminal; it now lives in run_phase(), once, and every projected command carries it.
+assert_eq "every projected phase opens claude with the harness env unset (env -u, one definition)" "$blocks" \
+  "$(grep -c -- 'env -u CLAUDECODE -u CLAUDE_CODE_CHILD_SESSION -u CLAUDE_CODE_MESSAGING_SOCKET -u CLAUDE_CODE_MESSAGING_TOKEN -u CLAUDE_PID -u CLAUDE_CODE_SESSION_ID -u CLAUDE_CODE_BRIDGE_SESSION_ID claude -p' <<< "$argv")"
 
 # --- the artifact templates reach every phase, not only KAIZEN --------------
 # The agents are told to start from `templates/review.md`, `templates/handoff.md` and the rest —
