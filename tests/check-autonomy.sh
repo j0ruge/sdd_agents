@@ -136,6 +136,29 @@ cat > "$STREAM_SAMPLE" <<'EOF'
 {"is_error":false,"duration_api_ms":14208,"num_turns":1,"stop_reason":"end_turn","session_id":"3b628c65-6068-442e-aedb-bc76c2e508b1","total_cost_usd":0.0362104,"usage":{"input_tokens":10,"cache_creation_input_tokens":15451,"cache_read_input_tokens":18134,"output_tokens":697,"output_tokens_details":{"thinking_tokens":690},"server_tool_use":{"web_search_requests":0,"web_fetch_requests":0},"service_tier":"standard","cache_creation":{"ephemeral_1h_input_tokens":15451,"ephemeral_5m_input_tokens":0},"inference_geo":"not_available","iterations":[{"input_tokens":10,"output_tokens":697,"cache_read_input_tokens":18134,"cache_creation_input_tokens":15451,"cache_creation":{"ephemeral_5m_input_tokens":0,"ephemeral_1h_input_tokens":15451},"type":"message"}],"speed":"standard"},"modelUsage":{"claude-haiku-4-5-20251001":{"inputTokens":10,"outputTokens":697,"cacheReadInputTokens":18134,"cacheCreationInputTokens":15451,"webSearchRequests":0,"costUSD":0.0362104,"contextWindow":200000,"maxOutputTokens":32000,"canonicalModel":"claude-haiku-4-5","provider":"firstParty"}},"permission_denials":[],"terminal_reason":"completed","fast_mode_state":"off","fast_mode_disabled_reason":"sdk_opt_in_required","subtype":"success","api_error_status":null,"result":"OK","ttft_ms":14187,"ttft_stream_ms":1324,"time_to_request_ms":28,"type":"result","duration_ms":14238,"uuid":"09a7a31e-9833-426b-8fdd-293522a57a35"}
 EOF
 
+# The `init` line the hat sensor reads — tools and mcp_servers as the session saw them.
+# PROVENANCE: captured on 2026-09-04 with
+#     claude -p 'Reply with exactly: OK' --model haiku --max-turns 1 --output-format stream-json --verbose \
+#       --permission-mode acceptEdits --allowedTools Bash --strict-mcp-config --setting-sources project,local \
+#       --disallowedTools "<HAT_DENY_BASE of bin/sdd>, Bash(git push:*), Bash(gh pr create:*), Bash(gh pr merge:*), ScheduleWakeup, Monitor" \
+#       --max-budget-usd 1
+# — the exact flags run_phase passes the EXEC hat — in an empty scratch repo on Claude Code
+# 2.1.260, first line pasted VERBATIM. Under --strict-mcp-config the list has no MCP server, every
+# denied tool is absent from `tools` (a first capture denying only two of them listed the other
+# fifteen, and the clean probe read tools_leaked:14 — the fixture has to be born under the real
+# flags),
+# and the subagent tool is spelt `Task` here where the deny flag spells `Agent` (a second capture
+# with `Agent` denied lost exactly that entry — the alias in bin/sdd's hat_init_facts is this
+# measurement). The leaking fixtures below are DERIVED from this line with jq, never typed.
+INIT_SAMPLE="$OUTSIDE/init-sample.jsonl"
+cat > "$INIT_SAMPLE" <<'EOF'
+{"type":"system","subtype":"init","cwd":"/tmp/tmp.blYioysMoW","session_id":"5400b3e9-db58-47db-a360-5080d5c3571a","tools":["Task","Bash","Edit","ListAgents","Read","Skill","TaskCreate","TaskGet","TaskList","TaskOutput","TaskStop","TaskUpdate","ToolSearch","Write"],"mcp_servers":[],"model":"claude-haiku-4-5-20251001","permissionMode":"acceptEdits","slash_commands":["deep-research","design-sync","dataviz","update-config","verify","debug","code-review","simplify","batch","fewer-permission-prompts","doctor","loop","schedule","claude-api","workflow-authoring","run","run-skill-generator","advisor","agents","auto-mode-setup","autocompact","clear","color","compact","config","context","effort","fast","heapdump","init","mcp","import","model","__remote-workflow","workflow-launch-exec","reload-plugins","reload-skills","rename","ultrareview","security-review","usage-credits","extra-usage","usage","insights","recap","skill-doctor","goal","design","design-consent","design-revoke","list-agents","team-onboarding"],"terminal_slash_commands":["doctor","color","reload-plugins"],"apiKeySource":"none","claude_code_version":"2.1.260","output_style":"default","agents":["claude","Explore","general-purpose","Plan","statusline-setup"],"skills":["deep-research","design-sync","dataviz","update-config","verify","debug","code-review","simplify","batch","fewer-permission-prompts","doctor","loop","schedule","claude-api","workflow-authoring","run","run-skill-generator"],"plugins":[],"capabilities":["interrupt_receipt_v1","interrupt_cancel_queued_v1","msg_lifecycle_v1"],"analytics_disabled":false,"product_feedback_disabled":false,"uuid":"70c30b5e-604a-4d7d-ab06-daae31a31453","memory_paths":{"auto":"/home/joruge/.claude/projects/-tmp-tmp-blYioysMoW/memory/"},"messaging_socket_path":"/run/user/1001/cc-socks/1456978.sock","fast_mode_state":"off","fast_mode_disabled_reason":"sdk_opt_in_required"}
+EOF
+INIT_CLEAN="$OUTSIDE/stream-init-clean.jsonl"
+{ cat "$INIT_SAMPLE"; cat "$STREAM_SAMPLE"; } > "$INIT_CLEAN"
+INIT_LEAK="$OUTSIDE/stream-init-leak.jsonl"
+{ jq -c '.mcp_servers = [{"name":"atlassian","status":"connected"}] | .tools += ["WebSearch"]' "$INIT_SAMPLE"; cat "$STREAM_SAMPLE"; } > "$INIT_LEAK"
+
 git init -q -b main
 git config user.email "fixture@example.com"
 git config user.name "Fixture"
@@ -4105,6 +4128,46 @@ assert_eq "output: the axis note quotes the guard floor instead of keeping a cop
 # in the world where `kitguard_world` quietly failed and no run happened at all — measured, by
 # deleting the control world and its run and watching the assertion still say ok. `kitguard_world`
 # silences its own subshell, so nothing else would have said a word.
+# --- the hat's boundary: what the session SAW is read off the init line into the ledger ------
+# Three fields on every session row — mcp_seen, tools_leaked, denials — read from the stream's
+# `init` line and the result's `permission_denials`. A server the hat did not declare, or a denied
+# tool still listed, is the same hat-crossed stop with its own reason. A stream with no init line
+# (a session dead before it) records null: unmeasured is not zero.
+echo "== hat boundary: what the session saw is read off the init line =="
+: > "$LEDGER"
+cat > "$OUTSIDE/stub/claude" <<STUB
+cat "$INIT_CLEAN"
+exit 0
+STUB
+chmod +x "$OUTSIDE/stub/claude"
+"$SDD" run "$MISSION" >/dev/null 2>&1 || true
+assert_eq "init: a clean session records 0 MCP seen, 0 tools leaked, 0 denials" "0 0 0" \
+  "$(jq -r -s '.[0] | "\(.mcp_seen) \(.tools_leaked) \(.denials)"' "$LEDGER")"
+assert_eq "init: nothing crossed" "0" "$(jq -r -s '[.[] | select(.kind == "hat-crossed")] | length' "$LEDGER")"
+: > "$LEDGER"
+cat > "$OUTSIDE/stub/claude" <<STUB
+cat "$INIT_LEAK"
+exit 0
+STUB
+"$SDD" run "$MISSION" >/dev/null 2>&1; rc=$?
+assert_eq "init: an MCP server the hat did not declare, and a denied tool still visible, stop the line" \
+  "3 1 1 hat-crossed" \
+  "$rc $(jq -r -s '.[0] | "\(.mcp_seen) \(.tools_leaked)"' "$LEDGER") $(jq -r -s '[.[] | select(.event=="blocked") | .kind] | join(",")' "$LEDGER")"
+assert_eq "init: the reason names what leaked" "1" "$(grep -c 'atlassian' <<< "$(jq -r -s '.[1].gate_why' "$LEDGER")")"
+: > "$LEDGER"
+cat > "$OUTSIDE/stub/claude" <<STUB
+cat "$STREAM_SAMPLE"
+exit 0
+STUB
+"$SDD" run "$MISSION" >/dev/null 2>&1 || true
+assert_eq "init: a stream without an init line (a session dead before it) records null, not 0" "null null null" \
+  "$(jq -r -s '.[0] | "\(.mcp_seen) \(.tools_leaked) \(.denials)"' "$LEDGER")"
+cat > "$OUTSIDE/stub/claude" <<'STUB'
+echo "ERROR: the test invoked the real claude" >&2
+exit 97
+STUB
+chmod +x "$OUTSIDE/stub/claude"
+
 # --- the hat's boundary: a session that writes outside its writes: stops the line ------------
 # The reviewer of SQ-115 wrote a scratch test into the code tree three times and the runner only
 # warned (REVIEW-EDITED-CODE). Since the 2026-09-03 spec the runner reads the hat's `writes:` and

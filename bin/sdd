@@ -2529,6 +2529,15 @@ hat_guard_check() {   # hat_guard_check <phase> <HEAD before the session> — ar
   [ "$DRY_RUN" = "1" ] && return 0
   step="$LAST_PHASE_STEP"; [ -n "$step" ] || step="$phase"
   hat="$(phase_hat "$step")"; [ -n "$hat" ] || return 0
+  # What the session SAW comes first, and it applies to every hat — the executor writes anywhere
+  # and still has no business seeing the human's Jira. Read from the facts hat_init_facts
+  # published for this very session, never from the stream again.
+  if [ "${LAST_PHASE_MCP_SEEN:-0}" -gt 0 ] || [ "${LAST_PHASE_TOOLS_LEAKED:-0}" -gt 0 ]; then
+    HAT_CROSSED_WHY="the $step session ($hat) saw what it did not declare — ${LAST_PHASE_MCP_SEEN:-0} MCP server(s), ${LAST_PHASE_TOOLS_LEAKED:-0} denied tool(s) still listed: $LAST_PHASE_LEAK_NAMES"
+    warn "$HAT_CROSSED_WHY"
+    pipeline_log_line "$(date -Iseconds)  HAT-CROSSED  $phase  $HAT_CROSSED_WHY"
+    return 0
+  fi
   globs="$(hat_writes "$step")"
   [ -n "$globs" ] || return 0
   changed=""
@@ -2807,6 +2816,8 @@ autonomy_session_row() {  # <phase> <attempt> <auto_retry> <moved> <gate> <gate_
     --arg model "$LAST_PHASE_MODEL" --arg session "$LAST_PHASE_SID" \
     --arg rc "$LAST_PHASE_RC" --arg dur "$LAST_PHASE_DUR" --arg cost "$LAST_PHASE_COST" \
     --arg turns "$LAST_PHASE_TURNS" \
+    --arg mcp_seen "$LAST_PHASE_MCP_SEEN" --arg tools_leaked "$LAST_PHASE_TOOLS_LEAKED" \
+    --arg denials "$LAST_PHASE_DENIALS" \
     --arg pbefore "${7:-}" --arg pafter "${8:-}" --arg itotal "${9:-}" \
     --arg rbefore "${10:-}" --arg rafter "${11:-}" --arg rmax "${12:-}" \
     '{v: 1, ts: $ts, event: "session",
@@ -2821,6 +2832,9 @@ autonomy_session_row() {  # <phase> <attempt> <auto_retry> <moved> <gate> <gate_
       dur_s: ($dur | tonumber? // null),
       cost_usd: ($cost | tonumber? // null),
       turns: ($turns | tonumber? // null),
+      mcp_seen: ($mcp_seen | tonumber? // null),
+      tools_leaked: ($tools_leaked | tonumber? // null),
+      denials: ($denials | tonumber? // null),
       moved: ($moved == "true"),
       pending_before: ($pbefore | tonumber? // null),
       pending_after: ($pafter | tonumber? // null),
@@ -2851,6 +2865,39 @@ autonomy_session_row() {  # <phase> <attempt> <auto_retry> <moved> <gate> <gate_
 stream_summary() { # stream_summary <stream.jsonl>
   jq -c 'select(.type == "result")' "$1" 2>/dev/null | tail -1 || true
 }
+
+# What the session could SEE, read off the stream's `init` line, and what it was refused, read
+# off the result's `permission_denials`. Published like the other LAST_PHASE_* facts and written
+# into the session row; a stream without an init line (a session that died before it) publishes
+# "" and the row carries null — unmeasured is not zero.
+#
+# Naming: the init line spells the subagent tool `Task` where the deny flag spells `Agent`
+# (measured 2026-09-04 on Claude Code 2.1.260 — denying `Agent` removed exactly the `Task` entry;
+# see INIT_SAMPLE's provenance in tests/check-autonomy.sh). The alias below is that one
+# measurement, not a guess. Deny items with a pattern (`Bash(git push:*)`) are not tool names and
+# are skipped: they narrow a tool, they do not remove it from the list.
+hat_init_facts() {   # hat_init_facts <stream> <result json> <deny list> <declared mcp>
+  local stream="$1" result="$2" deny="$3" declared="$4" init facts
+  LAST_PHASE_MCP_SEEN=""; LAST_PHASE_TOOLS_LEAKED=""; LAST_PHASE_DENIALS=""; LAST_PHASE_LEAK_NAMES=""
+  autonomy_have_jq || return 0
+  init="$( jq -c 'select(.type == "system" and .subtype == "init")' "$stream" 2>/dev/null | head -1 )" || init=""
+  [ -n "$init" ] || return 0
+  facts="$( jq -r --arg deny "$deny" --arg declared "$declared" '
+      def names($s): [ $s | split(",")[] | gsub("^\\s+|\\s+$"; "") | select(. != "" and (contains("(") | not)) ];
+      (names($deny) | map(if . == "Agent" then "Task" else . end)) as $deny_names
+      | names($declared) as $ok_mcp
+      | ((.mcp_servers // []) | map(.name) | map(select(. as $n | ($ok_mcp | index($n)) == null))) as $mcp_leak
+      | ((.tools // []) | map(select(. as $t | ($deny_names | index($t)) != null))) as $tool_leak
+      | "\($mcp_leak | length)\t\($tool_leak | length)\t\(($mcp_leak + $tool_leak) | join(" "))"
+    ' <<< "$init" )" || facts=""
+  [ -n "$facts" ] || return 0
+  IFS=$'\t' read -r LAST_PHASE_MCP_SEEN LAST_PHASE_TOOLS_LEAKED LAST_PHASE_LEAK_NAMES <<< "$facts"
+  LAST_PHASE_DENIALS="$( jq -r '.permission_denials // [] | length' "$result" 2>/dev/null )" || LAST_PHASE_DENIALS=""
+}
+LAST_PHASE_MCP_SEEN=""
+LAST_PHASE_TOOLS_LEAKED=""
+LAST_PHASE_DENIALS=""
+LAST_PHASE_LEAK_NAMES=""
 
 # The stream closed the blind spot for whoever runs `tail -f` on the file; this closes it for the
 # person watching the run. `> "$streamfile"` takes claude's stdout off the terminal, so a phase
@@ -2996,6 +3043,7 @@ missing and write the artifacts. The gate will be re-evaluated."
   # Reading the raw stream instead would hand jq one answer PER LINE and `tonumber?` would refuse
   # the multi-line string — the ledger going quiet about money with nothing going red.
   stream_summary "$streamfile" > "$logfile"
+  hat_init_facts "$streamfile" "$logfile" "$disallowed" "$mcp"
 
   # The `|| echo "?"` covers a jq that FAILS; it does not cover a jq that succeeds silently, and
   # that is the case stream_summary() produces most: over an EMPTY $logfile — a session killed

@@ -1078,6 +1078,13 @@ mut_RUN_kit_touched_silent() {
   sed -i '/^kit_guard_check() {/,/^}/ s|^  KIT_TOUCHED_WHY="the kit at |  : "the kit at |' "$1"
 }
 
+# The init line goes unread: mcp_seen/tools_leaked are always "" (null in the row), and a
+# session that saw the human's Jira is indistinguishable from one that saw nothing. Dies on
+# "an MCP server the hat did not declare … stop the line".
+mut_RUN_init_blind() {
+  sed -i '/^hat_init_facts() {/,/^}/ s|^  \[ -n "\$init" \] \|\| return 0$|  return 0|' "$1"
+}
+
 # L3 of the 2026-09-03 audit: the turn rule ("never end the turn with a task still running") is ONE
 # definition in boot_prompt(), read by the general heredoc and by KAIZEN's. Dropping the reader from
 # the general heredoc leaves KAIZEN with the rule and the five projected phases without it — the
@@ -3007,6 +3014,7 @@ CATALOG=(
   RUN_hat_retry_door_missing
   RUN_hat_close_door_missing
   RUN_kit_touched_silent
+  RUN_init_blind
   RUN_turn_rule_dropped
   RUN_harness_env_inherited
   RUN_intervention_unwritten_on_phase
