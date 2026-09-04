@@ -540,6 +540,16 @@ The runner passes `--permission-mode acceptEdits` **and** `--allowedTools "$ALLO
 without the allowlist the session cannot run the suite nor commit, and the EXEC phase becomes
 unsatisfiable by construction. `bypassPermissions` is never the kit's default.
 
+Since the 2026-09-03 spec every phase also gets **the hat's boundary**: `--disallowedTools` with
+`HAT_DENY_BASE` (the tools no phase used in 43 measured sessions — cron, worktree, remote trigger,
+web search…) plus the `disallowedTools:` line of the phase's `agents/<hat>.md`, and
+`--strict-mcp-config` whenever the hat's `mcp:` is empty — which is every hat today. A deny beats
+an allow, so `Bash` stays allowed while `Bash(git push:*)` is denied to every hat but the
+publisher. `sdd run --dry-run` prints a `boundary:` line per phase with exactly what will be
+passed; `tests/check-dry-run.sh` asserts it. The frontmatter keys are the declaration, the flag is
+the rule: in a `-p` session the harness reads only `model`, `permissionMode` and `skills` from an
+agent file.
+
 `sdd preflight` proves this by firing a real headless session with the same flags and demanding it
 **execute** a command. "claude answers" does not cover this failure mode.
 

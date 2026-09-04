@@ -1617,6 +1617,57 @@ phase_agent() {
   esac
 }
 
+# --- the hat's boundary --------------------------------------------------------------------------
+# The hat DECLARES (agents/<hat>.md: disallowedTools:, writes:, mcp:), the runner APPLIES
+# (--disallowedTools, --strict-mcp-config, hat_guard_check) and the artifact PROVES (the stream's
+# init line and the result's permission_denials, read into the ledger). In a `-p` session the
+# harness honours only model/permissionMode/skills from the --agent file's frontmatter
+# (code.claude.com/docs/en/sub-agents.md, checked 2026-09-03), so a `disallowedTools:` line that
+# only lived in the file would be a phrase; the flag is the rule. Spec:
+# docs/superpowers/specs/2026-09-03-a-fronteira-do-chapeu-design.md.
+#
+# HAT_DENY_BASE: what NO phase used across the 43 sessions the spec measured (§ 2.1). A property of
+# the pipeline, defined once; each hat adds its own line. `Agent` is NOT here: the reviewer's
+# codereview skill dispatches subagents and the executor's prompt asks for them.
+HAT_DENY_BASE="CronCreate, CronDelete, CronList, DesignSync, EnterWorktree, ExitWorktree, RemoteTrigger, SendMessage, PushNotification, Workflow, NotebookEdit, ReportFindings, ListMcpResourcesTool, ReadMcpResourceTool, ReadMcpResourceDirTool, WebSearch, WebFetch"
+# HAT_WRITES_BASE: what EVERY hat may touch — principle 5 sends any agent's finding to TODO_FILE,
+# and in the kit that moves the backlog ratchet in tests/health-baseline.txt.
+HAT_WRITES_BASE='$TODO_FILE, tests/health-baseline.txt'
+
+hat_field() { frontmatter "$SDD_HOME/agents/$1.md" "$2"; }   # hat_field <hat> <key> — "" when absent
+
+hat_disallowed() {   # hat_disallowed <step> — the base plus the hat's own line, comma-separated
+  local hat own=""
+  hat="$(phase_hat "$1")"
+  if [ -n "$hat" ]; then own="$(hat_field "$hat" disallowedTools)"; fi
+  printf '%s%s\n' "$HAT_DENY_BASE" "${own:+, $own}"
+}
+
+hat_mcp() {   # hat_mcp <step> — the MCP servers the hat may see; "" ⇒ --strict-mcp-config
+  local hat
+  hat="$(phase_hat "$1")"
+  if [ -n "$hat" ]; then hat_field "$hat" mcp; else printf '\n'; fi
+}
+
+hat_expand() {   # hat_expand <globs> — $HANDOFF_DIR $MISSION $TODO_FILE $QA_DOCS_PATH $E2E_DIR
+  local s="$1" hd="$HANDOFF_DIR"
+  while [ "${hd%/}" != "$hd" ]; do hd="${hd%/}"; done
+  s="${s//\$HANDOFF_DIR/$hd}"
+  s="${s//\$MISSION/$MISSION}"
+  s="${s//\$TODO_FILE/$TODO_FILE}"
+  s="${s//\$QA_DOCS_PATH/${QA_DOCS_PATH%/}}"
+  s="${s//\$E2E_DIR/${E2E_DIR%/}}"
+  printf '%s\n' "$s"
+}
+
+hat_writes() {   # hat_writes <step> — expanded globs; "" when the hat may write anywhere
+  local hat own=""
+  hat="$(phase_hat "$1")"
+  if [ -n "$hat" ]; then own="$(hat_field "$hat" writes)"; fi
+  if [ -z "$own" ]; then printf '\n'; return 0; fi
+  hat_expand "$HAT_WRITES_BASE, $own"
+}
+
 # Literal slash that opens the session, when the phase is driven by a third-party skill.
 #
 # ONLY where the skill cannot be reached any other way. The `qa-report` and `qa-execution` skills
@@ -2890,6 +2941,10 @@ run_phase() {
   agent="$(phase_agent "$pstep")"
   sid="$(uuidgen)"
   prompt="$(boot_prompt "$pstep")"
+  local disallowed mcp writes
+  disallowed="$(hat_disallowed "$pstep")"
+  mcp="$(hat_mcp "$pstep")"
+  writes="$(hat_writes "$pstep")"
   if [ -n "$resume_sid" ]; then
     prompt="The gate for phase $phase failed: ${GATE_WHY}
 
@@ -2903,8 +2958,14 @@ missing and write the artifacts. The gate will be re-evaluated."
     --output-format stream-json --verbose
     --setting-sources "user,project,local"
     --allowedTools "$ALLOWED_TOOLS"
+    --disallowedTools "$disallowed"
     --max-budget-usd "$(phase_budget_usd "$phase")")
   if [ -n "$agent" ]; then cmd+=(--agent "$agent"); fi
+  # Empty mcp: ⇒ the session sees no MCP server at all. A hat that declares some sees the whole
+  # set (a declared exception, measured by hat_init_facts against its list) — carving the human's
+  # servers into a --mcp-config of our own is YAGNI until a hat needs one.
+  local mcp_mode="$mcp"
+  if [ -z "$mcp" ]; then cmd+=(--strict-mcp-config); mcp_mode="<none: --strict-mcp-config>"; fi
   if [ -n "$resume_sid" ]; then cmd+=(--resume "$resume_sid" --fork-session)
   else cmd+=(--session-id "$sid"); fi
 
@@ -2915,6 +2976,8 @@ missing and write the artifacts. The gate will be re-evaluated."
     printf '%smodel:%s %s   %sagent:%s %s   %ssession:%s %s\n' \
       "$C_DIM" "$C_RESET" "$model" "$C_DIM" "$C_RESET" "${agent:-<none>}" \
       "$C_DIM" "$C_RESET" "${resume_sid:-$sid}"
+    printf '%sboundary:%s deny=%s | writes=%s | mcp=%s\n' "$C_DIM" "$C_RESET" \
+      "$disallowed" "${writes:-<anywhere>}" "$mcp_mode"
     printf '%scommand:%s\n' "$C_DIM" "$C_RESET"
     printf '  %q' "${cmd[@]}"; printf '\n'
     printf '%sboot prompt:%s\n' "$C_DIM" "$C_RESET"

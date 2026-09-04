@@ -1037,6 +1037,21 @@ mut_RUN_app_down_retry_not_escalated() {
   sed -i '/^    if \[ "$gate_rc2" -eq 0 \]; then$/,/^    if \[ "$moved2" = "false" \]; then$/ s|^    if app_down_escalation "$phase"; then return 3; fi$|    if false; then return 3; fi|' "$1"
 }
 
+# The hat's boundary (2026-09-03 spec). Two flags, one mutant each: dropping either one leaves the
+# session with the human's whole harness — 9 MCP servers including Gmail and Jira, 104 tools —
+# which is the measured "before". The projection prints what run_phase passes FROM THE SAME
+# VARIABLES that go into the command, and check-dry-run.sh reads that `boundary:` line, so each
+# of these dies there. The projection's `mcp=` field is the DECISION (mcp_mode is set on the same
+# line that appends the flag), so one `if false` drops the flag and the label together; the
+# second one swaps the deny list for the allow list rather than deleting the line, because
+# `boundary:` is printed from $disallowed and not from the array.
+mut_RUN_strict_mcp_dropped() {
+  sed -i 's|^  if \[ -z "\$mcp" \]; then cmd+=(--strict-mcp-config); mcp_mode="<none: --strict-mcp-config>"; fi$|  if false; then cmd+=(--strict-mcp-config); mcp_mode="<none: --strict-mcp-config>"; fi|' "$1"
+}
+mut_RUN_disallowed_dropped() {
+  sed -i '/^run_phase() {/,/^}/ s|^  disallowed="\$(hat_disallowed "\$pstep")"$|  disallowed="$ALLOWED_TOOLS"|' "$1"
+}
+
 # L3 of the 2026-09-03 audit: the turn rule ("never end the turn with a task still running") is ONE
 # definition in boot_prompt(), read by the general heredoc and by KAIZEN's. Dropping the reader from
 # the general heredoc leaves KAIZEN with the rule and the five projected phases without it — the
@@ -2958,6 +2973,8 @@ CATALOG=(
   RUN_blocked_retry_not_escalated
   RUN_app_down_not_escalated
   RUN_app_down_retry_not_escalated
+  RUN_strict_mcp_dropped
+  RUN_disallowed_dropped
   RUN_turn_rule_dropped
   RUN_harness_env_inherited
   RUN_intervention_unwritten_on_phase

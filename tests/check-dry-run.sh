@@ -56,6 +56,13 @@ projected() {
 }
 
 # Fingerprint of everything in the fixture except .git. The dry-run must not touch any of it.
+# boundary_of <phase> — the `boundary:` line the projection prints under that phase's `agent:`
+boundary_of() {
+  awk -v want="$1" '
+    /^--- DRY RUN: phase .* ---$/ { ph = $5; next }
+    ph == want && /boundary:/ { sub(/^.*boundary:[ \t]*/, ""); print; exit }
+  '
+}
 tree_snapshot() {
   ( cd "$FIX" && find . -path ./.git -prune -o -print | LC_ALL=C sort )
 }
@@ -139,6 +146,25 @@ want="$(printf '%s\n' \
   "PR=sdd-publisher")"
 got="$(printf '%s\n' "$out" | projected)"
 assert_eq "projects EXEC→QA→REVIEW→DOCS→PR, in order, each with its agent" "$want" "$got"
+echo "== every projected phase carries the hat's boundary =="
+# The hat DECLARES, run_phase APPLIES, and the projection prints what it will pass from the SAME
+# variables that go into the command — so this is where a dropped flag dies (the two RUN_*_dropped
+# mutants). Spec: docs/superpowers/specs/2026-09-03-a-fronteira-do-chapeu-design.md § 5.1.
+for ph in EXEC QA:close REVIEW DOCS PR; do
+  b="$(printf '%s\n' "$out" | boundary_of "$ph")"
+  assert_eq "$ph: the deny list starts with the base no phase ever used" "1" \
+    "$(grep -c 'deny=CronCreate, CronDelete' <<< "$b")"
+  assert_eq "$ph: MCP is strict when the hat declares none" "1" "$(grep -c 'mcp=<none: --strict-mcp-config>' <<< "$b")"
+done
+assert_eq "REVIEW denies the push the hat never needs" "1" \
+  "$(printf '%s\n' "$out" | boundary_of REVIEW | grep -c 'Bash(git push:\*)')"
+assert_eq "REVIEW writes only under the mission directory (plus the base)" "1" \
+  "$(printf '%s\n' "$out" | boundary_of REVIEW | grep -c "writes=TODO.md, tests/health-baseline.txt, docs/handoffs/$MISSION/\*\*")"
+assert_eq "EXEC writes anywhere" "1" "$(printf '%s\n' "$out" | boundary_of EXEC | grep -c 'writes=<anywhere>')"
+assert_eq "DOCS denies the subagent it never used" "1" "$(printf '%s\n' "$out" | boundary_of DOCS | grep -c ', Agent, ListAgents, Skill')"
+assert_eq "PR keeps push and gh pr create, denies merge" "1" \
+  "$(printf '%s\n' "$out" | boundary_of PR | grep -c 'Bash(gh pr merge:\*)' )"
+assert_eq "PR does not deny push" "0" "$(printf '%s\n' "$out" | boundary_of PR | grep -c 'git push')"
 
 # TICKET has its gate satisfied (JIRA_ENABLED=false): a satisfied phase is not in the projection.
 if grep -q '^--- DRY RUN: phase TICKET ---$' <<< "$out"; then
