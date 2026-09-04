@@ -144,6 +144,51 @@ census_probes() {
   rm -rf "$box"
 }
 
+# --- sdd health --release: the six lines of ADR 0007 read artifacts, never labels ---------------
+# The probes read the verdict off the printed line: `ok` prefix = green, the same line without it
+# = red. They never run the suite — line 6 reads the mutation stamp, the suite's own artifact.
+rel_green() { grep -cE "ok[^ ]*[[:space:]]+line $2 ·" <<< "$1"; }   # rel_green <out> <n>
+rel_red()   { grep -E "line $2 ·" <<< "$1" | grep -vcE "ok[^ ]*[[:space:]]+line $2 ·"; }
+release_probes() {
+  local box ledger out rc
+  box="$(mktemp -d "${TMPDIR:-/tmp}/sdd-release-XXXXXX")"
+  ledger="$box/state/autonomy-log.jsonl"; mkdir -p "$box/state"
+  cp -r "$ROOT/bin" "$ROOT/templates" "$ROOT/config" "$ROOT/agents" "$ROOT/tests" "$box/"
+  mkdir -p "$box/.sdd"
+  # The forbidden word is BUILT here, never written whole: this file is on the surface line 5
+  # greps, so a literal would be found in the sensor itself and the green probe could never pass.
+  local forb; forb="$(printf 'acme%s' '_corp')"
+  printf 'PROJECT_NAME="kit"\nDEFAULT_BRANCH="main"\nTEST_CMD="tests/run-all.sh"\nRELEASE_FORBIDDEN_WORDS="%s"\n' "$forb" > "$box/.sdd/config.sh"
+  printf '# kit\n' > "$box/README.md"
+  ( cd "$box" && git init -q -b main && git config user.email f@x && git config user.name f && git add -A && git commit -qm kit ) >/dev/null
+  release() { ( cd "$box" && SDD_STATE_DIR="$box/state" "$box/bin/sdd" health --release 2>&1 ); }
+  : > "$ledger"
+  out="$(release)"; rc=$?
+  if [ "$rc" = 1 ] && [ "$(grep -cE 'line [1-6] ·' <<< "$out")" -eq 6 ]; then pass "release: prints six lines and exits 1 while red"
+  else fail "release: expected rc 1 and six verdict lines — got rc $rc: $(tr '\n' '|' <<< "$out" | cut -c1-240)"; fi
+  if [ "$(rel_red "$out" 1)" = 1 ] && grep -qE 'line 1 ·.*0 of 2' <<< "$out"; then pass "release: line 1 red — 0 of 2 target repos in an empty ledger"; else fail "release: line 1 should be red with '0 of 2'"; fi
+  if [ "$(rel_red "$out" 3)" = 1 ]; then pass "release: line 3 red with no target mission"; else fail "release: line 3 should be red on an empty ledger"; fi
+  if [ "$(rel_red "$out" 5)" = 1 ] && grep -qE 'line 5 ·.*LICENSE' <<< "$out"; then pass "release: line 5 red and wants a LICENSE"; else fail "release: line 5 should name LICENSE"; fi
+  # a ledger with two target repos, a PR in the second, and a last mission whose rows saw nothing
+  cat > "$ledger" <<'EOF'
+{"v":1,"ts":"2026-09-01T10:00:00-03:00","event":"session","run_id":"a","invocation":"run","kit_sha":"abc1234","kit_dirty":false,"project":"one","repo":"/repos/one","mission":"20260901-x","phase":"EXEC","step":"EXEC","agent":"sdd-executor","model":"opus","attempt":1,"auto_retry":false,"session":"s1","rc":0,"dur_s":1,"cost_usd":1,"turns":3,"moved":true,"mcp_seen":9,"tools_leaked":0,"denials":0,"gate":"pass","gate_why":""}
+{"v":1,"ts":"2026-09-01T11:00:00-03:00","event":"session","run_id":"a","invocation":"run","kit_sha":"abc1234","kit_dirty":false,"project":"one","repo":"/repos/one","mission":"20260901-x","phase":"PR","step":"PR","agent":"sdd-publisher","model":"sonnet","attempt":1,"auto_retry":false,"session":"s1b","rc":0,"dur_s":1,"cost_usd":1,"turns":3,"moved":true,"mcp_seen":9,"tools_leaked":0,"denials":0,"gate":"pass","gate_why":""}
+{"v":1,"ts":"2026-09-02T10:00:00-03:00","event":"session","run_id":"b","invocation":"run","kit_sha":"abc1234","kit_dirty":false,"project":"two","repo":"/repos/two","mission":"20260902-y","phase":"EXEC","step":"EXEC","agent":"sdd-executor","model":"opus","attempt":1,"auto_retry":false,"session":"s2","rc":0,"dur_s":1,"cost_usd":1,"turns":3,"moved":true,"mcp_seen":0,"tools_leaked":0,"denials":0,"gate":"pass","gate_why":""}
+{"v":1,"ts":"2026-09-02T11:00:00-03:00","event":"session","run_id":"b","invocation":"run","kit_sha":"abc1234","kit_dirty":false,"project":"two","repo":"/repos/two","mission":"20260902-y","phase":"PR","step":"PR","agent":"sdd-publisher","model":"sonnet","attempt":1,"auto_retry":false,"session":"s3","rc":0,"dur_s":1,"cost_usd":1,"turns":3,"moved":true,"mcp_seen":0,"tools_leaked":0,"denials":0,"gate":"pass","gate_why":""}
+EOF
+  printf '%s\n' '{"v":1,"ts":"2026-09-03T10:00:00-03:00","event":"session","run_id":"t","invocation":"run","kit_sha":"abc1234","kit_dirty":false,"project":"tmp","repo":"/tmp/sdd-fixture-clone","mission":"20260903-t","phase":"PR","step":"PR","agent":"sdd-publisher","model":"sonnet","attempt":1,"auto_retry":false,"session":"s9","rc":0,"dur_s":1,"cost_usd":1,"turns":3,"moved":true,"mcp_seen":0,"tools_leaked":0,"denials":0,"gate":"pass","gate_why":""}' >> "$ledger"
+  printf 'MIT\n' > "$box/LICENSE"
+  out="$(release)"
+  if [ "$(rel_green "$out" 1)" = 1 ] && grep -qE 'line 1 ·.*2 of 2' <<< "$out"; then pass "release: line 1 green with two target repos — and a /tmp clone is not a third"; else fail "release: line 1 should be green with exactly 2 — $(grep 'line 1' <<< "$out")"; fi
+  if [ "$(rel_green "$out" 3)" = 1 ]; then pass "release: line 3 green when the last mission saw nothing it did not declare"; else fail "release: line 3 should be green — $(grep 'line 3' <<< "$out")"; fi
+  if [ "$(rel_green "$out" 4)" = 1 ]; then pass "release: line 4 green with a PR phase in the second repo"; else fail "release: line 4 should be green — $(grep 'line 4' <<< "$out")"; fi
+  if [ "$(rel_green "$out" 5)" = 1 ]; then pass "release: line 5 green with a LICENSE and a clean surface"; else fail "release: line 5 should be green — $(grep 'line 5' <<< "$out")"; fi
+  printf 'the client %s\n' "$forb" >> "$box/README.md"
+  out="$(release)"
+  if [ "$(rel_red "$out" 5)" = 1 ] && grep -qF "$forb" <<< "$(grep 'line 5 ·' <<< "$out")"; then pass "release: line 5 names the forbidden word it found"; else fail "release: line 5 should name the word — $(grep 'line 5' <<< "$out")"; fi
+  rm -rf "$box"
+}
+
 case "${1:-}" in
   selftest) selftest; exit $? ;;
   --check)  check_file "$2"; exit $? ;;
@@ -160,6 +205,7 @@ if [ "$n" -lt "$HAT_FLOOR" ]; then
   exit 93
 fi
 census_probes
+release_probes
 selftest || exit $?
 if [ "$fails" -eq 0 ]; then printf '  ok    %d hat(s) declare their boundary\n' "$n"; exit 0; fi
 printf '%d hat check(s) failed\n' "$fails" >&2

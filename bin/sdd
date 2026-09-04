@@ -148,6 +148,10 @@ load_config() {
   # cannot run TEST_CMD, cannot run `git add`/`git commit`, and the EXEC phase is unsatisfiable
   # by construction. Found by the fixture mission 20260814-dry-run-completo, which stalled on it.
   : "${ALLOWED_TOOLS:=Bash}"
+  # Words that must not appear on the kit's surface — client and target identifiers, read by
+  # `sdd health --release` line 5 (ADR 0007). Set in the KIT's own .sdd/config.sh; a target never
+  # needs it. Empty ⇒ line 5 checks only the LICENSE.
+  : "${RELEASE_FORBIDDEN_WORDS:=}"
   # Language of the mission ARTIFACTS (handoffs, checkpoint, commits, PR body) — not of the kit,
   # which is English. Empty ⇒ the boot prompt says nothing about language, which is exactly the
   # behaviour of every already-installed repo. Set ("pt-BR", "en", "es") ⇒ one extra paragraph.
@@ -3794,7 +3798,109 @@ health_default_keys() {
     | grep -oE '\$\{[A-Z0-9_]+:=' | tr -d '${:=' | sort -u
 }
 
+# Where each third-party skill the pipeline boots comes from. ONE table: the preflight names the
+# missing ones with it, and release line 2 is green only when every origin is a URL a stranger can
+# install from — `local` is the honest word for "lives in the author's ~/.claude" (mission 3 of
+# the roadmap is what replaces these with URLs).
+skill_origin() {   # skill_origin <skill> — a URL, or `local`
+  case "$1" in
+    *) printf '%s\n' "local" ;;
+  esac
+}
+
+# The six lines of ADR 0007 — "apt for another repo of the organisation" as artifacts, never as a
+# label. Reads the global ledger, the skill table, the tree and the mutation stamp; never runs the
+# suite (the stamp IS the suite's artifact). Red is a finding, and four were red on the day it was
+# born. Every capture below is guarded: a red line has to be a verdict, never an abort.
+health_release() {   # rc 0 = six green lines
+  local kit ledger reds=0 rows n_repos pr_repos last_ok wanted sk origin bad_origin="" hits="" w key stamp
+  kit="$(health_kit_root || true)"
+  ledger="$(autonomy_log_path)" || ledger=""
+  step "sdd health --release — apt for another repo? (ADR 0007)"
+  line() {   # line <n> <ok|bad> <text>
+    if [ "$2" = ok ]; then ok "line $1 · $3"; else bad "line $1 · $3"; reds=$((reds + 1)); fi
+  }
+  rows="$( jq -s . "$ledger" 2>/dev/null )" || rows="[]"
+  [ -n "$rows" ] || rows="[]"
+  # A target is a repo that is not the kit and not a temp checkout — the ledger carries rows from
+  # fixture clones under /tmp (the real ledger on 2026-09-04 answered "3 of 2" with two of them),
+  # and ledger_repo_is_temp is the one definition of "temp" this file already has. Lines 1, 3
+  # and 4 read only the rows of these repos.
+  local targets keep="[]" r
+  targets="$( jq -r --arg kit "$kit" '[ .[] | select(.repo != null and .repo != $kit) | .repo ] | unique[]' <<< "$rows" 2>/dev/null )" || targets=""
+  while IFS= read -r r; do
+    [ -n "$r" ] || continue
+    ledger_repo_is_temp "$r" && continue
+    keep="$( jq -cn --argjson a "$keep" --arg r "$r" '$a + [$r]' 2>/dev/null )" || keep="[]"
+  done <<< "$targets"
+  rows="$( jq -c --argjson keep "$keep" '[ .[] | select(.repo != null and (.repo as $r | $keep | index($r)) != null) ]' <<< "$rows" 2>/dev/null )" || rows="[]"
+  # 1 — a second target repo has run sessions
+  n_repos="$( jq -r '[ .[] | select(.event == "session") | .repo ] | unique | length' <<< "$rows" 2>/dev/null )" || n_repos=0
+  [ -n "$n_repos" ] || n_repos=0
+  if [ "$n_repos" -ge 2 ]; then line 1 ok "installed and run in a second repo ($n_repos of 2 target repos in the ledger)"
+  else line 1 bad "second repo: $n_repos of 2 target repos have sessions in the ledger — the kit has one target"; fi
+  # 2 — every third-party skill has an origin a stranger can install from
+  wanted="codereview ticket qa-report qa-execution grill-with-docs kaizen-software ddd"
+  for sk in $wanted; do
+    origin="$(skill_origin "$sk")" || origin="local"
+    case "$origin" in http://*|https://*) ;; *) bad_origin="$bad_origin $sk" ;; esac
+  done
+  if [ -z "$bad_origin" ]; then line 2 ok "every third-party skill has an installable origin"
+  else line 2 bad "skills without an installable origin (local to this machine):$bad_origin"; fi
+  # 3 — the last target mission's sessions saw nothing they did not declare
+  local q3='[ .[] | select(.event == "session") ] as $s
+      | if ($s | length) == 0 then "none"
+        else ($s[-1].mission) as $m
+          | ([ $s[] | select(.mission == $m) ]) as $rows
+          | ($rows | map(select(.mcp_seen == null or .tools_leaked == null))) as $unmeasured
+          | ($rows | map(select((.mcp_seen // 0) > 0 or (.tools_leaked // 0) > 0))) as $leaks
+          | if ($unmeasured | length) > 0 then "unmeasured \($m)"
+            elif ($leaks | length) > 0 then "leaked \($m) \($leaks | length)"
+            else "ok \($m)" end
+        end'
+  last_ok="$( jq -r "$q3" <<< "$rows" 2>/dev/null )" || last_ok="none"
+  [ -n "$last_ok" ] || last_ok="none"
+  case "$last_ok" in
+    ok\ *)   line 3 ok "the last target mission (${last_ok#ok }) saw only what its hats declare" ;;
+    none)    line 3 bad "no target mission in the ledger yet" ;;
+    *)       line 3 bad "the last target mission: $last_ok (mcp_seen / tools_leaked in its session rows)" ;;
+  esac
+  # 4 — a PR phase in a second target repo
+  pr_repos="$( jq -r '[ .[] | select(.phase == "PR" and (.event == "session" or .event == "gate_pass")) | .repo ] | unique | length' <<< "$rows" 2>/dev/null )" || pr_repos=0
+  [ -n "$pr_repos" ] || pr_repos=0
+  if [ "$pr_repos" -ge 2 ]; then line 4 ok "a mission reached its PR phase in $pr_repos target repos"
+  else line 4 bad "end-to-end mission in a second repo: PR phase seen in $pr_repos of 2 target repos"; fi
+  # 5 — LICENSE, and no client identifier on the surface
+  for w in $RELEASE_FORBIDDEN_WORDS; do
+    if [ -n "$( cd "$kit" && grep -rlF -- "$w" bin agents docs/adr docs/pipeline.md docs/failure-modes.md README.md config templates tests 2>/dev/null | head -1 )" ]; then
+      hits="$hits $w"
+    fi
+  done
+  if [ -f "$kit/LICENSE" ] && [ -z "$hits" ]; then line 5 ok "LICENSE present, surface free of client identifiers"
+  elif [ ! -f "$kit/LICENSE" ]; then line 5 bad "no LICENSE at the kit root${hits:+; and client identifiers on the surface:$hits}"
+  else line 5 bad "client identifiers on the surface:$hits"; fi
+  # 6 — the mutation stamp matches this content (the suite's artifact; never re-run here)
+  key="$(mutation_stamp_key "$kit" || true)"
+  stamp="$(cat "$kit/$MUTATION_STAMP_REL" 2>/dev/null || true)"
+  if [ -n "$key" ] && [ "$stamp" = "$key" ]; then line 6 ok "suite, ratchet and mutation catalogue green for this content (stamp matches)"
+  else line 6 bad "mutation stamp absent or stale — run ./bin/sdd health after the last code commit"; fi
+  if [ "$reds" -eq 0 ]; then ok "apt for another repo of the organisation: 6 of 6"; return 0; fi
+  bad "apt for another repo: $reds line(s) red — each is a finding with an owner in ADR 0007"
+  return 1
+}
+
 cmd_health() {
+  # `--release` is the placar of ADR 0007 and ONLY that: it never runs the suite. Parsed before
+  # anything else so a typo cannot fall into the fifteen-minute path.
+  local release=0
+  while [ $# -gt 0 ]; do
+    case "$1" in
+      --release) release=1 ;;
+      *) die "sdd health: unknown option '$1' (only --release is accepted)" ;;
+    esac
+    shift
+  done
+  if [ "$release" = 1 ]; then load_config; health_release; return $?; fi
   # `catalogue_green` is the ONE thing check 2c reads out of checks 1 and 2, and it is a variable
   # rather than a re-reading of the output because the stamp has to mean BOTH: a green
   # `--with-mutation` run (check 1) AND a score whose two numbers agree (check 2). Either one alone
@@ -6532,6 +6638,8 @@ USAGE
   sdd install [--force]      install the kit into the target repo (.sdd/config.sh + .claude/agents/)
   sdd preflight              environment sensor: tools, auth, config, plugins, git
   sdd health                 KIT sensor: suite, mutation, doc and config drift
+             [--release]   the six lines of ADR 0007 — apt for another repo of the organisation? —
+                           read from artifacts; never runs the suite
   sdd status <mission>       where the mission stands, gate by gate, and what is missing
   sdd approve <mission>      show the plan and, on an explicit y, write the human approval into
                              00-missao.md and commit it (the PLAN gate — never a session)

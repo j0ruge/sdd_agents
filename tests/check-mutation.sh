@@ -1092,6 +1092,12 @@ mut_CENSUS_tools_blind() {
   sed -i '/^cmd_census() {/,/^}/ s|select(.type == "tool_use") \| .name'"'"' \$streams|select(.type == "never") \| .name'"'"' $streams|' "$1"
 }
 
+# Release line 3 goes green whatever the ledger says — the one line THIS mission closes, read as
+# a label. check-hat.sh's "line 3 red with no target mission" dies.
+mut_HEALTH_release_line3_blind() {
+  sed -i '/^health_release() {/,/^}/ s|^    none)    line 3 bad "no target mission in the ledger yet" ;;$|    none)    line 3 ok "no target mission in the ledger yet" ;;|' "$1"
+}
+
 # L3 of the 2026-09-03 audit: the turn rule ("never end the turn with a task still running") is ONE
 # definition in boot_prompt(), read by the general heredoc and by KAIZEN's. Dropping the reader from
 # the general heredoc leaves KAIZEN with the rule and the five projected phases without it — the
@@ -3023,6 +3029,7 @@ CATALOG=(
   RUN_kit_touched_silent
   RUN_init_blind
   CENSUS_tools_blind
+  HEALTH_release_line3_blind
   RUN_turn_rule_dropped
   RUN_harness_env_inherited
   RUN_intervention_unwritten_on_phase

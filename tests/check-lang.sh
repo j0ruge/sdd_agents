@@ -139,8 +139,8 @@ files="$(surface)"
 # Re-counted on 2026-09-03 (20260903-a-fronteira-do-chapeu): 41 + tests/check-hat.sh +
 # agents/sdd-ticket.md + its .claude/agents copy = 44; docs/adr/0007 makes it 45 in the same mission.
 n_surface="$(grep -c . <<< "$files")"
-if [ "$n_surface" -lt 44 ]; then
-  printf '  FAIL  surface shrank to %d path(s), expected at least 44 — did something move?\n' \
+if [ "$n_surface" -lt 45 ]; then
+  printf '  FAIL  surface shrank to %d path(s), expected at least 45 — did something move?\n' \
     "$n_surface" >&2
   exit 93
 fi
