@@ -4,6 +4,46 @@ Registro de melhorias com **antes/depois medido**. Sem número, não entra.
 
 ---
 
+## 2026-09-04 — A janela 3 partiu antes do piso, e o veredito é `indeterminado` por escrito (chore `20260904-faxina-do-backlog`)
+
+**Problema (Gemba):** a janela 3 (D22) abriu em `2e48a87` com a missão
+`20260902-o-rascunho-legado-fala-cru` e nunca recebeu a segunda. Medido em 2026-09-04, tudo
+read-only:
+
+| O que | Medido | Comando |
+|---|---|---|
+| missões sobre o eixo `2e48a87` | **1** (18 sessões, US$ 174,11, 76% no laço de revisão), piso 3 | `./bin/sdd kaizen --series \| jq .guard` → `sufficient: false` |
+| commits do kit depois da primeira linha | **24** (anatomia do agente + fronteira do chapéu) | `git log --oneline 2e48a87..main \| wc -l` |
+| `codereview`, que roda dentro de toda REVIEW (`agents/sdd-reviewer.md:45`) | **1.17.x → 1.19.0** em 2026-09-03 | `~/.claude/plugins/installed_plugins.json` |
+| custo de uma invocação da `codereview` | **US$ 11–16 → 5,92–6,62**, medido pela loja sobre 16 sessões REVIEW deste pipeline | `CHANGELOG.md` da 1.19.0 |
+| `guard.degenerate_axis` | `false` — o guard não vê nada disso | idem à primeira linha |
+
+Pela regra do verbete *Janela de medição* do `CONTEXT.md`, commit no kit depois da primeira linha
+parte a janela em dois e o piso de 3 não fecha em nenhum lado. E o instrumento mudou de unidade
+no meio: a base da janela 2 (29% · 57%) foi lida com a `codereview` 1.17.x, e toda missão nova
+rodaria na 1.19.0, que corta 45–60% de um custo que mora dentro da sessão de REVIEW. Uma melhora
+lida agora seria atribuída à D22 quando parte dela vem de um terceiro — a classe que este arquivo
+já nomeia (mexer no que se mede depois de saber o resultado), só que aqui quem mexeu foi um insumo
+externo, sem ninguém do kit decidir nada.
+
+**Decisão (humana, 2026-09-04, entre quatro opções escritas):** aceitar e declarar. Veredito da
+métrica da D22 sobre a janela 3: **`indeterminado`** — eixo partido e instrumento de unidade nova.
+O alvo **não se move** (mediana ≤ 25%, máximo ≤ 50%). A janela 4 abre no `kit_sha` que a próxima
+missão do `sales_quote` carimbar depois do merge deste chore, com a 1.19.0 dos dois lados desde a
+primeira linha. Emenda na linha da D22 e no verbete da janela, no `CONTEXT.md`.
+
+Recusadas, com o porquê: **re-congelar** e rodar três missões (US$ 45–175 cada) para responder o
+que a janela 4 responde de graça; **descontar o termo da `codereview`** no instrumento, que
+redefine a métrica depois de conhecer o resultado; **aposentar a janela**, que pede ADR e não é o
+que os dados dizem — a régua não falhou por desenho, falhou por disciplina.
+
+**O que aprendemos:** a janela é uma regra escrita em prosa sem sensor. Dois lotes do kit foram
+mergeados dentro dela (PRs #35 e #36) e nenhum instrumento disse — `guard.degenerate_axis` fala
+do recorte, nunca de uma janela declarada; quem viu foi um humano lendo `git log`. O achado está
+no `TODO.md` (a série carregar o sha de abertura e contar commits do kit entre ele e cada linha).
+Não há número de "depois" nesta entrada, e é o ponto: ela existe para que o próximo veredito não
+leia `ok` sobre uma base contaminada.
+
 ## 2026-09-03 — A fronteira do chapéu (missão `20260903-a-fronteira-do-chapeu`)
 
 **Problema (Gemba):** a sessão headless herda o harness inteiro do humano. Medido nos logs de 43
