@@ -269,13 +269,20 @@ sed -i 's/^aprovacao:$/aprovacao: auto/' "$MDIR/00-missao.md"
 echo "== session rows =="
 : > "$LEDGER"
 TURNS_SAMPLE="$OUTSIDE/stream-turns.jsonl"
-jq -c 'del(.total_cost_usd, .cost_usd) | if .type == "result" then .num_turns = 7 else . end' \
+jq -c 'del(.total_cost_usd, .cost_usd)
+       | if .type == "result" then .num_turns = 7 | .usage.cache_read_input_tokens = 4242 else . end' \
   "$STREAM_SAMPLE" > "$TURNS_SAMPLE"
 # The floor of the world this block asserts over: one result object, seven turns in it, no money
 # anywhere. Without it the sample could stop being the sample the assertions name and the two
 # verdicts below would go on agreeing with whatever it became.
 turns_floor="$(jq -rs '[.[] | select(.type == "result")]
                        | "\(length) \(.[0].num_turns) \([.[] | select(has("total_cost_usd") or has("cost_usd"))] | length)"' \
+                       "$TURNS_SAMPLE")"
+# The second floor of the same world, kept apart from `turns_floor` on purpose: gluing the two
+# would change the string the turns assertion already asserts, and a floor that moves with the
+# thing it guards guards nothing.
+cache_floor="$(jq -rs '[.[] | select(.type == "result")]
+                       | "\(length) \(.[0].usage.cache_read_input_tokens)"' \
                        "$TURNS_SAMPLE")"
 cat > "$MDIR/checkpoint.md" <<'EOF'
 | ID | Incremento | Check (comando → esperado) | Status | Commit |
@@ -327,6 +334,15 @@ assert_eq "a session row carries the turns the session spent" \
 # escalation, or "no turns" is a fact about the wrong row.
 assert_eq "an escalation row carries no turns" "blocked false" \
   "$(jq -r -s '.[2].event' "$LEDGER") $(jq -r -s '.[2] | has("turns")' "$LEDGER")"
+# Cache-read is HALF the bill (51-53%, measured 2026-09-03) and the only durable house it has is
+# this row: .sdd/logs/ is gitignored, so before this field the judge could watch a mission get
+# cheaper without being able to see whether it got cheaper by RE-READING LESS. The floor rides
+# beside the verdict for the same reason the turns one does.
+assert_eq "a session row carries the cache-read tokens the session burned" \
+  "1 4242 4242" "$cache_floor $(jq -r -s '.[0].cache_read' "$LEDGER")"
+# ABSENT, never zeroed — the same rule, and the same reason, as the turns assertion above.
+assert_eq "an escalation row carries no cache_read" "blocked false" \
+  "$(jq -r -s '.[2].event' "$LEDGER") $(jq -r -s '.[2] | has("cache_read")' "$LEDGER")"
 
 # --- sdd retry is a human-forced session, and that is a first-class signal ---
 # It is literally the rubric's "refez": the human looked at the result and pushed the phase

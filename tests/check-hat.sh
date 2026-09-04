@@ -141,6 +141,38 @@ census_probes() {
   else fail "census: tool census missing Read=1"; fi
   if grep -qE '^  EXEC .*handoff_read [1-9][0-9]*B' <<< "$out"; then pass "census: bytes read under docs/handoffs are counted"
   else fail "census: handoff_read is 0 or absent"; fi
+  # The aggregate one line up cannot say WHICH file, and a diet aimed at "1.4 MB somewhere under
+  # docs/handoffs" is aimed at nothing. The capture holds exactly one Read of 00-missao.md, so
+  # both terms are pinned: a break-down that lost the count would print reads 0, one that lost the
+  # correlation between tool_use and tool_result would print bytes 0.
+  if grep -qE '^ +file +00-missao\.md reads 1 bytes [1-9][0-9]*$' <<< "$out"; then pass "census: the per-file break-down names the file, its reads and its bytes"
+  else fail "census: per-file line for 00-missao.md missing — got: $(grep -c ' file ' <<< "$out") file line(s)"; fi
+  # `handoff_read` needs a session to have already run; the boot bill is the same question asked
+  # of the disk, so a cut can be read before and after for free. Templates alone make it non-zero
+  # in this box, which is what the assertion pins.
+  if grep -qE '^  boot bill .*templates [1-9][0-9]*B  total [1-9][0-9]*B$' <<< "$out"; then pass "census: the boot bill adds up what the boot points at"
+  else fail "census: boot bill line missing or zero — got: $(grep '^  boot bill' <<< "$out" | cut -c1-140)"; fi
+  # Differential, and the reason it exists: `latest=` is a four-stage pipeline under
+  # `set -o pipefail`, and on a mission with no handoff yet EVERY stage exits non-zero for having
+  # found nothing. Without the `|| true` inside the substitution the assignment kills sdd census
+  # outright — so this pair asserts both that the empty world is survived AND that the non-empty
+  # one is answered, which no single fixture can do.
+  local out2
+  printf 'x\n' > "$box/docs/handoffs/20260101-fixture/20-handoff-exec.md"
+  out2="$( cd "$box" && "$ROOT/bin/sdd" census 20260101-fixture 2>&1 )" || true
+  if grep -qE '^  boot bill .*\(no handoff yet\) 0B' <<< "$out"; then pass "census: the boot bill survives a mission with no handoff yet"
+  else fail "census: boot bill did not report an absent handoff"; fi
+  if grep -qE '^  boot bill .*20-handoff-exec\.md [1-9][0-9]*B' <<< "$out2"; then pass "census: and names the most recent handoff once there is one"
+  else fail "census: boot bill did not name 20-handoff-exec.md — got: $(grep '^  boot bill' <<< "$out2" | cut -c1-140)"; fi
+  # The reason the resolution is `sort -V` and not the glob's own order, written as an assertion
+  # instead of a comment: on text, r2 sorts ABOVE r10, and a mission that reached a two-digit
+  # review round would have its boot measured against a handoff two rounds stale.
+  local out3
+  printf 'x\n' > "$box/docs/handoffs/20260101-fixture/40-review-r2.md"
+  printf 'xx\n' > "$box/docs/handoffs/20260101-fixture/40-review-r10.md"
+  out3="$( cd "$box" && "$ROOT/bin/sdd" census 20260101-fixture 2>&1 )" || true
+  if grep -qE '^  boot bill .*40-review-r10\.md [1-9][0-9]*B' <<< "$out3"; then pass "census: and prefers r10 to r2 — version order, not text order"
+  else fail "census: boot bill picked text order — got: $(grep '^  boot bill' <<< "$out3" | cut -c1-140)"; fi
   rm -rf "$box"
 }
 

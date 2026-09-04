@@ -1103,6 +1103,43 @@ mut_RUN_init_blind() {
   sed -i '/^hat_init_facts() {/,/^}/ s|^  \[ -n "\$init" \] \|\| return 0$|  return 0|' "$1"
 }
 
+# The per-file break-down goes blind: every phase prints its aggregate and not one `file` line, so
+# `sdd census` is back to answering "1.4 MB somewhere under docs/handoffs" — the number a context
+# diet cannot be aimed with. The match is degraded rather than the printf deleted, because what
+# has to be measured is the correlation, not the presence of an output line. Caught by "the
+# per-file break-down names the file, its reads and its bytes" in check-hat.sh.
+mut_CENSUS_per_file_blind() {
+  sed -i '/^census_files() {/,/^}/ s@| select($ref | contains($hds))@| select($ref | contains("never/"))@' "$1"
+}
+
+# Items 1 and 2 of the boot stop being excluded from the search for item 4, so on a mission that
+# has produced no handoff yet the bill reports `00-missao.md` AS the most recent handoff and
+# counts its bytes twice. The lie is the shape a boot bill can least afford: it inflates the
+# "before" of a diet with a file the cut will never touch. Caught by "the boot bill survives a
+# mission with no handoff yet" in check-hat.sh.
+mut_CENSUS_boot_bill_counts_the_plan() {
+  sed -i '/^census_boot_bill() {/,/^}/ s@case "$b" in 00-\*|01-\*) continue ;; esac@case "$b" in zz-*) continue ;; esac@' "$1"
+}
+
+# Version order becomes the glob's own lexicographic order — the exact defect the `sort -V` was
+# written against, and one that only appears on a mission that reached a two-digit review round:
+# `40-review-r2.md` sorts ABOVE `40-review-r10.md` on text, so the bill measures a handoff two
+# rounds stale and every cut is compared against the wrong "before". Caught by "and prefers
+# r10 to r2 — version order, not text order" in check-hat.sh.
+mut_CENSUS_boot_bill_lexicographic() {
+  sed -i '/^census_boot_bill() {/,/^}/ s@| sort -V | tail -1)"@| sort | tail -1)"@' "$1"
+}
+
+# The session row stops carrying cache-read. It is HALF a mission's bill (51-53%, measured
+# 2026-09-03) and .sdd/logs/ is gitignored, so with this field gone the ledger is once more unable
+# to tell a mission that got cheaper by RE-READING LESS from one that got cheaper by luck — which
+# is the single thing the context diet is asking the judge to verify. Renamed rather than deleted
+# so the jq stays valid and the failure is the missing FACT, never a syntax error. Caught by "a
+# session row carries the cache-read tokens the session burned" in check-autonomy.sh.
+mut_AUTONOMY_cache_read_dropped() {
+  sed -i '/^autonomy_session_row() {/,/^}/ s@cache_read: ($cache_read@cache_readx: ($cache_read@' "$1"
+}
+
 # The census stops reading tool_use names — the line that turns the "before" of the 2026-09-03
 # spec into a command prints "(none)" for every phase. check-hat.sh's "the tool census names
 # Read once" dies.
@@ -3059,6 +3096,9 @@ CATALOG=(
   RUN_kit_touched_silent
   RUN_init_blind
   CENSUS_tools_blind
+  CENSUS_per_file_blind
+  CENSUS_boot_bill_counts_the_plan
+  CENSUS_boot_bill_lexicographic
   HEALTH_release_line3_blind
   RUN_hat_guard_ignores_prior_dirt
   HEALTH_with_mutation_refused
@@ -3192,6 +3232,7 @@ CATALOG=(
   EXEC_blocked_publishes_count
   RUN_retry_pending_before_null
   AUTONOMY_progress_ignored
+  AUTONOMY_cache_read_dropped
   AUTONOMY_progress_null_blind
   AUTONOMY_historic_progress_dropped
   AUTONOMY_historic_total_change_blind

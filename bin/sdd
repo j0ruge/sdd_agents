@@ -2838,10 +2838,11 @@ autonomy_gate_pass_row() {   # autonomy_gate_pass_row <phase>
 # Arguments 10–12 are the same fact for REVIEW, which is a loop by design too: REVIEW_MAX_ITER
 # rounds, each landing its own `40-review-r<N>.md`. Same rule, same reason — empty outside REVIEW,
 # and `rounds_max` is there so "3 of 3, the phase is out of budget" cannot be read as "3 of 10".
-# `turns` is NOT among them: it rides in from LAST_PHASE_TURNS exactly as `cost` does, so the
-# signature and its four callers stay as they are. The escalation and gate_pass constructors do
-# not carry it, for the same reason arguments 7–9 are null outside EXEC — a row that spent no
-# session spent no turns, and a 0 there would be counted as one that ran and said nothing.
+# `turns` and `cache_read` are NOT among them: they ride in from LAST_PHASE_TURNS and
+# LAST_PHASE_CACHE_READ exactly as `cost` does, so the signature and its four callers stay as they
+# are. The escalation and gate_pass constructors do not carry them, for the same reason arguments
+# 7–9 are null outside EXEC — a row that spent no session spent no turns and burned no cache, and
+# a 0 there would be counted as one that ran and said nothing.
 autonomy_session_row() {  # <phase> <attempt> <auto_retry> <moved> <gate> <gate_why> [<pending_before> <pending_after> <increments_total> <rounds_before> <rounds_after> <rounds_max>]
   autonomy_have_jq || return 0
   # Called, never substituted: `$(autonomy_kit_stamp)` would reset its one-shot warning flag.
@@ -2861,7 +2862,7 @@ autonomy_session_row() {  # <phase> <attempt> <auto_retry> <moved> <gate> <gate_
     --arg step "$LAST_PHASE_STEP" --arg agent "$LAST_PHASE_AGENT" \
     --arg model "$LAST_PHASE_MODEL" --arg session "$LAST_PHASE_SID" \
     --arg rc "$LAST_PHASE_RC" --arg dur "$LAST_PHASE_DUR" --arg cost "$LAST_PHASE_COST" \
-    --arg turns "$LAST_PHASE_TURNS" \
+    --arg turns "$LAST_PHASE_TURNS" --arg cache_read "$LAST_PHASE_CACHE_READ" \
     --arg mcp_seen "$LAST_PHASE_MCP_SEEN" --arg tools_leaked "$LAST_PHASE_TOOLS_LEAKED" \
     --arg denials "$LAST_PHASE_DENIALS" \
     --arg pbefore "${7:-}" --arg pafter "${8:-}" --arg itotal "${9:-}" \
@@ -2878,6 +2879,7 @@ autonomy_session_row() {  # <phase> <attempt> <auto_retry> <moved> <gate> <gate_
       dur_s: ($dur | tonumber? // null),
       cost_usd: ($cost | tonumber? // null),
       turns: ($turns | tonumber? // null),
+      cache_read: ($cache_read | tonumber? // null),
       mcp_seen: ($mcp_seen | tonumber? // null),
       tools_leaked: ($tools_leaked | tonumber? // null),
       denials: ($denials | tonumber? // null),
@@ -2996,7 +2998,7 @@ HARNESS_ENV_UNSET=(-u CLAUDECODE -u CLAUDE_CODE_CHILD_SESSION -u CLAUDE_CODE_MES
 
 run_phase() {
   local phase="$1" resume_sid="${2:-}"
-  local pstep model agent sid prompt logfile streamfile started ended cost turns
+  local pstep model agent sid prompt logfile streamfile started ended cost turns cache_read
   # QA is three sessions (plan, walk, close); the step comes from the artifacts, not a counter.
   pstep="$(phase_step "$phase")"
   model="$(phase_model "$phase")"
@@ -3131,6 +3133,13 @@ missing and write the artifacts. The gate will be re-evaluated."
   # the jq that FAILS; the jq that succeeds over an empty summary prints nothing and the empty
   # string is already the answer this one wants.
   turns="$(jq -r '.num_turns // ""' "$logfile" 2>/dev/null || echo "")"
+  # The other half of the same summary, and the half the ledger had no house for. Cache-read is
+  # 51-53% of a mission's bill (176M tokens on SQ-115, 178M on the kit's own, both measured
+  # 2026-09-03 at US$ 0.50/M) and until now it lived ONLY in .sdd/logs/*.json, which is gitignored
+  # and therefore per-machine and effectively ephemeral. A diet that cuts what a session RE-READS
+  # moves this number and little else, so a judge asked to verify the cut could not see it. Same
+  # `// ""` and same `|| echo` guard as `turns` above, for the same two reasons written there.
+  cache_read="$(jq -r '.usage.cache_read_input_tokens // ""' "$logfile" 2>/dev/null || echo "")"
   local dur=$((ended - started))
   pipeline_log_line "$(date -Iseconds)  $phase  agent=$agent  model=$model  session=${resume_sid:-$sid}  rc=$rc  dur=${dur}s  cost_usd=$cost  log=$logfile"
 
@@ -3139,6 +3148,7 @@ missing and write the artifacts. The gate will be re-evaluated."
   LAST_PHASE_RC="$rc"
   LAST_PHASE_COST="$cost"
   LAST_PHASE_TURNS="$turns"
+  LAST_PHASE_CACHE_READ="$cache_read"
   LAST_PHASE_DUR="$dur"
   LAST_PHASE_STEP="$pstep"
   LAST_PHASE_AGENT="$agent"
@@ -3161,6 +3171,7 @@ LAST_PHASE_SID=""
 LAST_PHASE_RC=""
 LAST_PHASE_COST=""
 LAST_PHASE_TURNS=""
+LAST_PHASE_CACHE_READ=""
 LAST_PHASE_DUR=""
 LAST_PHASE_STEP=""
 LAST_PHASE_AGENT=""
@@ -5397,6 +5408,80 @@ cmd_retry() {
 # "corrupt ledger", and a second voice for it would send the reader hunting for a writer that never
 # ran when the rows are merely unreadable. It PRINTS and nothing else: the `return 1` stays at each
 # call site, where the control flow is readable, and there is no global to lose in a subshell.
+# What the boot prompt POINTS AT, in bytes, without opening a session: items 1-4 of the reading
+# order in boot_prompt() plus the templates of item 6. It is the one number a context cut moves
+# that can be read before and after for free — `handoff_read` above needs a session to have run,
+# and on a mission nobody has run yet it is silent about a boot that already costs 200 KB.
+#
+# "The most recent handoff" is resolved the way item 4 leaves the SESSION to resolve it: highest
+# numeric prefix, 00- and 01- excluded because they are items 1 and 2 already. `sort -V` and not
+# the glob's lexicographic order, so a mission that reached `40-review-r10.md` does not answer
+# `40-review-r2.md`. The `|| true` inside the substitution is load-bearing under `set -o
+# pipefail`: on a mission with no handoff yet every stage of that pipeline exits non-zero for
+# having found nothing, and the assignment would kill the command instead of printing a zero.
+census_boot_bill() {
+  local mdir="$HANDOFF_DIR/$MISSION" latest="" line="" total=0 b f
+  local -a hs=()
+  for f in 00-missao.md 01-plano.md checkpoint.md; do
+    b=0; [ -f "$mdir/$f" ] && b="$(wc -c < "$mdir/$f")"
+    line="$line  $f ${b}B"; total=$((total + b))
+  done
+  # A glob loop and not `ls | grep` (SC2010), which also spares this the `set -o pipefail` trap a
+  # mission with no handoff yet would otherwise spring: an unmatched glob leaves the pattern
+  # literal, `[ -f ]` rejects it, and the empty case falls out with no pipeline to fail. `sort -V`
+  # and not the glob's own lexicographic order, so a mission that reached `40-review-r10.md` does
+  # not answer `40-review-r2.md`.
+  for f in "$mdir"/[0-9][0-9]-*.md; do
+    [ -f "$f" ] || continue
+    b="${f##*/}"
+    case "$b" in 00-*|01-*) continue ;; esac   # items 1 and 2 of the boot, already counted above
+    hs+=("$b")
+  done
+  [ "${#hs[@]}" -eq 0 ] || latest="$(printf '%s\n' "${hs[@]}" | sort -V | tail -1)"
+  if [ -n "$latest" ]; then
+    b="$(wc -c < "$mdir/$latest")"; line="$line  $latest ${b}B"; total=$((total + b))
+  else
+    line="$line  (no handoff yet) 0B"
+  fi
+  b=0
+  for f in "$SDD_HOME"/templates/*.md; do [ -f "$f" ] || continue; b=$((b + $(wc -c < "$f"))); done
+  line="$line  templates ${b}B"; total=$((total + b))
+  printf '  boot bill%s  total %sB\n' "$line" "$total"
+}
+
+# The census aggregate answers "this phase re-read 1.4 MB"; it cannot answer WHICH file, and that
+# is the question a context diet has to be aimed with. Same population and same $hd match as the
+# aggregate, grouped by the last path segment of the reference: `reads` is how many times a tool
+# touched it, `bytes` is what came back in the tool_result.
+#
+# Splitting on the LITERAL "$hd/" instead of building a regex out of it is deliberate: a
+# HANDOFF_DIR carrying a regex metacharacter (a dot is enough) would over-match and bucket two
+# files as one. The trailing class is a fixed ASCII set, so a Bash command's path token is cut at
+# the first quote, space or shell operator. Declared limit (D15): a real path segment holding a
+# character outside [A-Za-z0-9._/-] is truncated at it rather than dropped, so it reads as a
+# shorter name — visible in the output, never silently merged into the aggregate.
+census_files() {   # census_files <handoff-dir-with-slash> <stream>...
+  local hds="$1"; shift
+  jq -rs --arg hds "$hds" '
+      ( [ .[] | select(.type == "assistant") | .message.content[]? | select(.type == "tool_use")
+            | ((.input.file_path // .input.command // "")) as $ref
+            | select($ref | contains($hds))
+            | ( ($ref | split($hds))[1]
+                | match("^[A-Za-z0-9._/-]*").string
+                | split("/") | map(select(length > 0)) | last ) as $f
+            | select($f != null)
+            | { id: .id, f: $f } ] ) as $refs
+      | ( [ .[] | select(.type == "user") | .message.content[]? | select(.type == "tool_result")
+            | { id: .tool_use_id,
+                n: ((.content | if type == "array" then map(.text // "") | join("") else (. // "") end) | length) } ]
+          | INDEX(.id) ) as $res
+      | [ $refs[] | { f: .f, n: ( $res[.id].n // 0 ) } ]
+      | group_by(.f)
+      | map({ f: .[0].f, reads: length, bytes: ([ .[].n ] | add // 0) })
+      | sort_by(-.bytes)
+      | .[] | "          file  \(.f) reads \(.reads) bytes \(.bytes)"' "$@" 2>/dev/null || true
+}
+
 # sdd census <mission> — what each phase's sessions used and re-read, from .sdd/logs. The
 # instrument the 2026-09-03 spec measured its "before" with (0 denials, 9 MCP servers, 104 tools
 # in 43 sessions), now a command so the "after" is one line and not a scratchpad: tools by name,
@@ -5434,7 +5519,9 @@ cmd_census() {
     printf '  %-7s sessions %-3s turns %-5s cost %-8s cache_read %sM  mcp_seen %s  denials %s  handoff_read %sB\n' \
       "$ph" "$n_sess" "$n_turns" "$cost" "$cache" "${mcp:-?}" "$denials" "${kb:-0}"
     printf '          tools: %s\n' "${tools:-(none)}"
+    census_files "$hd/" "${streams[@]}"
   done
+  census_boot_bill
 }
 
 autonomy_no_data() {   # autonomy_no_data <ledger path>
