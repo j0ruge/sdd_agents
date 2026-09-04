@@ -1120,7 +1120,7 @@ mut_HEALTH_release_line3_blind() {
 # first REVIEW of a mission stops on a file the reviewer never touched. Dies on "a file the human
 # left untracked BEFORE the session is not the hat's crossing".
 mut_RUN_hat_guard_ignores_prior_dirt() {
-  sed -i '/^hat_guard_arm() {/,/^}/ s|^  HAT_STATUS_BEFORE="\$( git -C "\$REPO_ROOT"|  HAT_STATUS_BEFORE=""; : "$( git -C "$REPO_ROOT"|' "$1"
+  sed -i '/^hat_guard_arm() {/,/^}/ s|^  HAT_STATUS_BEFORE="\$(hat_status_lines)"$|  HAT_STATUS_BEFORE=""|' "$1"
 }
 # The habit is refused again: `sdd health --with-mutation` dies as an unknown option. Dies on
 # check-hat.sh's "--with-mutation is accepted as a synonym".
