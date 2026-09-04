@@ -59,8 +59,14 @@ handoff, `.sdd/config.sh` e os templates; `--fork-session` no retry.
 
 **Dívida declarada.** Sem dieta. A missão de 2026-09-02 terminou com 280 KB de artefatos
 (checkpoint 67 KB, handoff EXEC 46 KB, quatro revisões 87 KB) e o custo da rodada de REVIEW subiu
-de US$ 18 para US$ 28 acompanhando o tamanho; o boot do executor mediu US$ 5,46. `turns` e
-cache-read já estão no ledger — medir quanto do custo é releitura vem antes de qualquer digest.
+de US$ 18 para US$ 28 acompanhando o tamanho; o boot do executor mediu US$ 5,46.
+⚠️ A frase anterior desta linha dizia *"`turns` e cache-read já estão no ledger"*, e a metade do
+cache-read estava errada: ele só existia no `.sdd/logs/<missão>/*.json`, que é gitignored e
+portanto por máquina — a métrica da dieta não tinha casa durável. Desde 2026-09-04 a linha de
+sessão carrega `cache_read`, e o `sdd census` quebra o `handoff_read` **por arquivo** mais a linha
+`boot bill` (o que o boot aponta, em bytes, sem abrir sessão). Falta o corte: medido em
+`20260901-o-revisor-so-acha`, o `checkpoint.md` sozinho respondeu por **111 releituras e 710 KB**
+dos 1,47 MB que a fase EXEC releu — 48% da fase num arquivo só.
 
 ## 4. Mecanismos de verificação — como checa o próprio trabalho
 
