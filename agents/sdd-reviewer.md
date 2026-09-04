@@ -5,6 +5,9 @@ description: >-
   evidence, grades honestly, and turns every finding that must be fixed into an R<n> increment the
   EXEC phase closes. Produces 40-review-r<N>.md with the Overall Grade table. Never fixes, never
   opens a PR, never merges.
+disallowedTools: "Bash(git push:*), Bash(gh pr create:*), Bash(gh pr merge:*), ScheduleWakeup, Monitor"
+writes: "$HANDOFF_DIR/$MISSION/**"
+mcp: ""
 ---
 
 # sdd-reviewer
@@ -75,9 +78,10 @@ Measured, mission `20260818-lote-facil`: r1 blocked without ever grading, r2 fou
 The only files this session writes are `docs/handoffs/<mission>/40-review-r<N>.md`, the mission's
 `checkpoint.md`, the repo's `TODO_FILE`, and whatever the ledger/baseline of your own repo requires.
 A source file in your diff means the hat slipped — a runner new enough to carry the guard logs
-`REVIEW-EDITED-CODE` in `.sdd/logs/<mission>/pipeline.log`. One that predates it logs nothing (bash
-parsed `bin/sdd` at startup), so an empty log is no certificate of anything: the evidence is your
-own `git diff --name-only <head this session opened with> HEAD`.
+`HAT-CROSSED` in `.sdd/logs/<mission>/pipeline.log` and **stops the line** (a `hat-crossed` row in
+the ledger, rc 3): your `writes:` is the mission directory plus the backlog. One that predates it
+logs nothing (bash parsed `bin/sdd` at startup), so an empty log is no certificate of anything: the
+evidence is your own `git diff --name-only <head this session opened with> HEAD`.
 
 Reproduce before you conclude. A finding you cannot reproduce is a hypothesis, and a hypothesis
 handed to the executor as an `R<n>` buys a session to chase nothing.

@@ -136,6 +136,29 @@ cat > "$STREAM_SAMPLE" <<'EOF'
 {"is_error":false,"duration_api_ms":14208,"num_turns":1,"stop_reason":"end_turn","session_id":"3b628c65-6068-442e-aedb-bc76c2e508b1","total_cost_usd":0.0362104,"usage":{"input_tokens":10,"cache_creation_input_tokens":15451,"cache_read_input_tokens":18134,"output_tokens":697,"output_tokens_details":{"thinking_tokens":690},"server_tool_use":{"web_search_requests":0,"web_fetch_requests":0},"service_tier":"standard","cache_creation":{"ephemeral_1h_input_tokens":15451,"ephemeral_5m_input_tokens":0},"inference_geo":"not_available","iterations":[{"input_tokens":10,"output_tokens":697,"cache_read_input_tokens":18134,"cache_creation_input_tokens":15451,"cache_creation":{"ephemeral_5m_input_tokens":0,"ephemeral_1h_input_tokens":15451},"type":"message"}],"speed":"standard"},"modelUsage":{"claude-haiku-4-5-20251001":{"inputTokens":10,"outputTokens":697,"cacheReadInputTokens":18134,"cacheCreationInputTokens":15451,"webSearchRequests":0,"costUSD":0.0362104,"contextWindow":200000,"maxOutputTokens":32000,"canonicalModel":"claude-haiku-4-5","provider":"firstParty"}},"permission_denials":[],"terminal_reason":"completed","fast_mode_state":"off","fast_mode_disabled_reason":"sdk_opt_in_required","subtype":"success","api_error_status":null,"result":"OK","ttft_ms":14187,"ttft_stream_ms":1324,"time_to_request_ms":28,"type":"result","duration_ms":14238,"uuid":"09a7a31e-9833-426b-8fdd-293522a57a35"}
 EOF
 
+# The `init` line the hat sensor reads — tools and mcp_servers as the session saw them.
+# PROVENANCE: captured on 2026-09-04 with
+#     claude -p 'Reply with exactly: OK' --model haiku --max-turns 1 --output-format stream-json --verbose \
+#       --permission-mode acceptEdits --allowedTools Bash --strict-mcp-config --setting-sources project,local \
+#       --disallowedTools "<HAT_DENY_BASE of bin/sdd>, Bash(git push:*), Bash(gh pr create:*), Bash(gh pr merge:*), ScheduleWakeup, Monitor" \
+#       --max-budget-usd 1
+# — the exact flags run_phase passes the EXEC hat — in an empty scratch repo on Claude Code
+# 2.1.260, first line pasted VERBATIM. Under --strict-mcp-config the list has no MCP server, every
+# denied tool is absent from `tools` (a first capture denying only two of them listed the other
+# fifteen, and the clean probe read tools_leaked:14 — the fixture has to be born under the real
+# flags),
+# and the subagent tool is spelt `Task` here where the deny flag spells `Agent` (a second capture
+# with `Agent` denied lost exactly that entry — the alias in bin/sdd's hat_init_facts is this
+# measurement). The leaking fixtures below are DERIVED from this line with jq, never typed.
+INIT_SAMPLE="$OUTSIDE/init-sample.jsonl"
+cat > "$INIT_SAMPLE" <<'EOF'
+{"type":"system","subtype":"init","cwd":"/tmp/tmp.blYioysMoW","session_id":"5400b3e9-db58-47db-a360-5080d5c3571a","tools":["Task","Bash","Edit","ListAgents","Read","Skill","TaskCreate","TaskGet","TaskList","TaskOutput","TaskStop","TaskUpdate","ToolSearch","Write"],"mcp_servers":[],"model":"claude-haiku-4-5-20251001","permissionMode":"acceptEdits","slash_commands":["deep-research","design-sync","dataviz","update-config","verify","debug","code-review","simplify","batch","fewer-permission-prompts","doctor","loop","schedule","claude-api","workflow-authoring","run","run-skill-generator","advisor","agents","auto-mode-setup","autocompact","clear","color","compact","config","context","effort","fast","heapdump","init","mcp","import","model","__remote-workflow","workflow-launch-exec","reload-plugins","reload-skills","rename","ultrareview","security-review","usage-credits","extra-usage","usage","insights","recap","skill-doctor","goal","design","design-consent","design-revoke","list-agents","team-onboarding"],"terminal_slash_commands":["doctor","color","reload-plugins"],"apiKeySource":"none","claude_code_version":"2.1.260","output_style":"default","agents":["claude","Explore","general-purpose","Plan","statusline-setup"],"skills":["deep-research","design-sync","dataviz","update-config","verify","debug","code-review","simplify","batch","fewer-permission-prompts","doctor","loop","schedule","claude-api","workflow-authoring","run","run-skill-generator"],"plugins":[],"capabilities":["interrupt_receipt_v1","interrupt_cancel_queued_v1","msg_lifecycle_v1"],"analytics_disabled":false,"product_feedback_disabled":false,"uuid":"70c30b5e-604a-4d7d-ab06-daae31a31453","memory_paths":{"auto":"/home/joruge/.claude/projects/-tmp-tmp-blYioysMoW/memory/"},"messaging_socket_path":"/run/user/1001/cc-socks/1456978.sock","fast_mode_state":"off","fast_mode_disabled_reason":"sdk_opt_in_required"}
+EOF
+INIT_CLEAN="$OUTSIDE/stream-init-clean.jsonl"
+{ cat "$INIT_SAMPLE"; cat "$STREAM_SAMPLE"; } > "$INIT_CLEAN"
+INIT_LEAK="$OUTSIDE/stream-init-leak.jsonl"
+{ jq -c '.mcp_servers = [{"name":"atlassian","status":"connected"}] | .tools += ["WebSearch"]' "$INIT_SAMPLE"; cat "$STREAM_SAMPLE"; } > "$INIT_LEAK"
+
 git init -q -b main
 git config user.email "fixture@example.com"
 git config user.name "Fixture"
@@ -1113,7 +1136,9 @@ echo "== a kit that is not a git checkout warns once, not once per row =="
 : > "$LEDGER"
 KIT="$OUTSIDE/kit"
 mkdir -p "$KIT"
-cp -r "$ROOT/bin" "$ROOT/templates" "$ROOT/config" "$KIT/"
+# agents/ too: since the hat's boundary a kit copy without its hats is refused before any session
+# (the hat's source file is a precondition of run_phase), and this regime is about the kit_sha.
+cp -r "$ROOT/bin" "$ROOT/templates" "$ROOT/config" "$ROOT/agents" "$KIT/"
 # Back to the dead stub: two sessions that change nothing, so the run writes three rows (two
 # sessions plus the no-progress escalation) and the warning gets three chances to repeat.
 cat > "$OUTSIDE/stub/claude" <<'STUB'
@@ -1560,7 +1585,7 @@ DRAFT_LAPS="$OUTSIDE/draft-laps"
 cat > "$OUTSIDE/stub/claude" <<STUB
 #!/usr/bin/env bash
 echo x >> "$DRAFT_LAPS"
-wc -l < "$DRAFT_LAPS" > "$FIX/churn.txt"
+wc -l < "$DRAFT_LAPS" > "$MDIR/churn.txt"
 git -C "$FIX" add -A
 git -C "$FIX" commit -qm "chore: the session changed something"
 cat "$STREAM_SAMPLE"
@@ -1821,7 +1846,7 @@ assert_eq "a --max-phases ceiling does not turn a blocked handoff into rc 0, whe
 # Asserting the retry shape alone would be satisfied by a runner that escalates every retry, which
 # is the over-broad fix and would take the `no-progress` half of the block above red with it.
 : > "$LEDGER"
-RETRY_MARKER="$FIX/.retry-declares-blocked"
+RETRY_MARKER="$OUTSIDE/.retry-declares-blocked"
 rm -f "$RETRY_MARKER" "$RETRY_MARKER.2"
 printf -- '---\nfase: QA\nstatus: done\n---\n' > "$MDIR/30-handoff-qa.md"
 git add -A && git commit -qm "chore: QA handoff the retry session will replace"
@@ -2096,7 +2121,7 @@ RPT
   # would also pass on a fixture that never left QA. Only the APP_URL line of the config differs.
   APP_CKPT_BEFORE_RETRY="$OUTSIDE/checkpoint-before-app-retry.md"
   cp "$MDIR/checkpoint.md" "$APP_CKPT_BEFORE_RETRY"
-  APP_RETRY_MARKER="$FIX/.app-down-retry"
+  APP_RETRY_MARKER="$OUTSIDE/.app-down-retry"
   # ONE stub for both regimes: two hand-written stubs would be two places for the regimes to drift
   # apart, and what the pair measures is that only the config line differs.
   cat > "$OUTSIDE/stub/claude" <<STUB
@@ -4105,6 +4130,173 @@ assert_eq "output: the axis note quotes the guard floor instead of keeping a cop
 # in the world where `kitguard_world` quietly failed and no run happened at all — measured, by
 # deleting the control world and its run and watching the assertion still say ok. `kitguard_world`
 # silences its own subshell, so nothing else would have said a word.
+# --- the hat's boundary: what the session SAW is read off the init line into the ledger ------
+# Three fields on every session row — mcp_seen, tools_leaked, denials — read from the stream's
+# `init` line and the result's `permission_denials`. A server the hat did not declare, or a denied
+# tool still listed, is the same hat-crossed stop with its own reason. A stream with no init line
+# (a session dead before it) records null: unmeasured is not zero.
+echo "== hat boundary: what the session saw is read off the init line =="
+: > "$LEDGER"
+cat > "$OUTSIDE/stub/claude" <<STUB
+cat "$INIT_CLEAN"
+exit 0
+STUB
+chmod +x "$OUTSIDE/stub/claude"
+"$SDD" run "$MISSION" >/dev/null 2>&1 || true
+assert_eq "init: a clean session records 0 MCP seen, 0 tools leaked, 0 denials" "0 0 0" \
+  "$(jq -r -s '.[0] | "\(.mcp_seen) \(.tools_leaked) \(.denials)"' "$LEDGER")"
+assert_eq "init: nothing crossed" "0" "$(jq -r -s '[.[] | select(.kind == "hat-crossed")] | length' "$LEDGER")"
+: > "$LEDGER"
+cat > "$OUTSIDE/stub/claude" <<STUB
+cat "$INIT_LEAK"
+exit 0
+STUB
+"$SDD" run "$MISSION" >/dev/null 2>&1; rc=$?
+assert_eq "init: an MCP server the hat did not declare, and a denied tool still visible, stop the line" \
+  "3 1 1 hat-crossed" \
+  "$rc $(jq -r -s '.[0] | "\(.mcp_seen) \(.tools_leaked)"' "$LEDGER") $(jq -r -s '[.[] | select(.event=="blocked") | .kind] | join(",")' "$LEDGER")"
+assert_eq "init: the reason names what leaked" "1" "$(grep -c 'atlassian' <<< "$(jq -r -s '.[1].gate_why' "$LEDGER")")"
+: > "$LEDGER"
+cat > "$OUTSIDE/stub/claude" <<STUB
+cat "$STREAM_SAMPLE"
+exit 0
+STUB
+"$SDD" run "$MISSION" >/dev/null 2>&1 || true
+assert_eq "init: a stream without an init line (a session dead before it) records null, not 0" "null null null" \
+  "$(jq -r -s '.[0] | "\(.mcp_seen) \(.tools_leaked) \(.denials)"' "$LEDGER")"
+cat > "$OUTSIDE/stub/claude" <<'STUB'
+echo "ERROR: the test invoked the real claude" >&2
+exit 97
+STUB
+chmod +x "$OUTSIDE/stub/claude"
+
+# --- the hat's boundary: a session that writes outside its writes: stops the line ------------
+# The reviewer of SQ-115 wrote a scratch test into the code tree three times and the runner only
+# warned (REVIEW-EDITED-CODE). Since the 2026-09-03 spec the runner reads the hat's `writes:` and
+# a path outside it — committed OR left dirty — arms HAT_CROSSED_WHY, which the one door
+# (hat_crossed_escalation) turns into rc 3 and a `hat-crossed` ledger row AFTER the session row.
+# `--phase REVIEW` forces the phase: the fixture is stalled at EXEC and the reviewer is the hat
+# whose writes: is narrow (the executor writes anywhere).
+echo "== hat boundary: the reviewer that edits code stops the line =="
+: > "$LEDGER"
+HAT_PLOG="$FIX/.sdd/logs/$MISSION/pipeline.log"
+hat_stub() {   # hat_stub <path the session writes, relative to the repo> <commit|leave> [fire on]
+  local fire="${3:-1}"
+  cat > "$OUTSIDE/stub/claude" <<STUB
+n=\$(( \$(cat "$OUTSIDE/hat-count" 2>/dev/null || echo 0) + 1 ))
+printf '%s\n' "\$n" > "$OUTSIDE/hat-count"
+if [ "\$n" -eq $fire ]; then
+  mkdir -p "\$(dirname "$1")"
+  printf 'probe\n' > "$1"
+  if [ "$2" = commit ]; then git add -- "$1"; git commit -qm "chore: the session wrote $1"; fi
+fi
+cat "$STREAM_SAMPLE"
+exit 0
+STUB
+  chmod +x "$OUTSIDE/stub/claude"
+}
+hat_rows() { jq -r -s '[.[] | select(.event == "blocked") | .kind] | join(",")' "$LEDGER" 2>/dev/null; }
+hat_reset() { rm -f "$OUTSIDE/hat-count"; : > "$LEDGER"; : > "$HAT_PLOG" 2>/dev/null || true; }
+hat_reset
+hat_stub "src/zz-scratch-probe.test.ts" commit
+"$SDD" run "$MISSION" --phase REVIEW >/dev/null 2>&1; rc=$?
+assert_eq "hat: a REVIEW session that commits a code file stops the line with rc 3" "3" "$rc"
+assert_eq "hat: the escalation row is hat-crossed and comes after the session row" "session,blocked hat-crossed" \
+  "$(jq -r -s '[.[0].event, .[1].event] | join(",")' "$LEDGER") $(hat_rows)"
+assert_eq "hat: the pipeline log names the file" "1" \
+  "$(grep -c 'HAT-CROSSED  REVIEW .*src/zz-scratch-probe.test.ts' "$HAT_PLOG")"
+assert_eq "hat: one session, not two — the door is read before the inline retry" "1" "$(cat "$OUTSIDE/hat-count" 2>/dev/null || echo 0)"
+git -C "$FIX" reset -q --hard HEAD~1; git -C "$FIX" clean -qfd
+
+hat_reset
+hat_stub "src/zz-scratch-probe.test.ts" leave
+"$SDD" run "$MISSION" --phase REVIEW >/dev/null 2>&1; rc=$?
+assert_eq "hat: a file LEFT in the tree outside writes: is a crossing too" "3 hat-crossed" "$rc $(hat_rows)"
+git -C "$FIX" clean -qfd; git -C "$FIX" checkout -q -- .
+
+hat_reset
+hat_stub "docs/handoffs/$MISSION/40-review-r1.md" commit
+"$SDD" run "$MISSION" --phase REVIEW >/dev/null 2>&1; rc=$?
+assert_eq "hat: a review that writes only its own artifact is not accused" "0" "$(grep -c 'hat-crossed' <<< "$(hat_rows)")"
+assert_eq "hat: …and the pipeline log carries no HAT-CROSSED" "0" "$(grep -c HAT-CROSSED "$HAT_PLOG")"
+git -C "$FIX" reset -q --hard HEAD~1 2>/dev/null || true; git -C "$FIX" clean -qfd
+
+# The human's own dirt is not the hat's crossing. hat_guard_arm snapshots `git status` before the
+# session and hat_guard_check reads only what is NEW — a file left untracked before the phase
+# opened must not stop the line and blame the reviewer. Committing that same file IS the hat's
+# doing (it lands in the diff half), and the second half of the pair proves the guard still sees it.
+hat_reset
+printf 'the human was here first\n' > "$FIX/human-wip.txt"
+hat_stub "docs/handoffs/$MISSION/40-review-r1.md" commit
+"$SDD" run "$MISSION" --phase REVIEW >/dev/null 2>&1; rc=$?
+assert_eq "hat: a file the human left untracked BEFORE the session is not the hat's crossing" "0 0" \
+  "$(grep -c 'hat-crossed' <<< "$(hat_rows)") $(grep -c HAT-CROSSED "$HAT_PLOG")"
+git -C "$FIX" reset -q --hard HEAD~1 2>/dev/null || true; git -C "$FIX" clean -qfd -e human-wip.txt
+hat_reset
+printf 'the human was here first\n' > "$FIX/human-wip.txt"
+cat > "$OUTSIDE/stub/claude" <<STUB
+git add -A
+git commit -qm "chore: the session swept the human's file into its commit"
+cat "$STREAM_SAMPLE"
+exit 0
+STUB
+chmod +x "$OUTSIDE/stub/claude"
+"$SDD" run "$MISSION" --phase REVIEW >/dev/null 2>&1; rc=$?
+assert_eq "hat: …but the session that COMMITS that file crossed — the diff half still sees it" "3 hat-crossed" "$rc $(hat_rows)"
+git -C "$FIX" reset -q --hard HEAD~1; git -C "$FIX" clean -qfd
+# Door 2 sits BEFORE the gate-pass branch: a retry that crosses its hat AND satisfies the gate
+# still stops (the review of this branch found the door after the `continue`). DOCS is the phase:
+# gate_DOCS reads one artifact, so the stub can satisfy it and cross in the same commit.
+hat_reset
+cat > "$OUTSIDE/stub/claude" <<STUB
+n=\$(( \$(cat "$OUTSIDE/hat-count" 2>/dev/null || echo 0) + 1 ))
+printf '%s\n' "\$n" > "$OUTSIDE/hat-count"
+if [ "\$n" -eq 2 ]; then
+  printf -- '---\nfase: DOCS\nstatus: done\n---\n# drift checklist\n| Area | Doc | Status | Evidence |\n|---|---|---|---|\n| code | README | ✅ | abc |\n' > "docs/handoffs/$MISSION/45-docs.md"
+  mkdir -p src; printf 'probe\n' > src/zz-door2.ts
+  git add -A; git commit -qm "chore: the retry crossed and passed"
+fi
+cat "$STREAM_SAMPLE"
+exit 0
+STUB
+chmod +x "$OUTSIDE/stub/claude"
+"$SDD" run "$MISSION" --phase DOCS >/dev/null 2>&1; rc=$?
+assert_eq "hat: door 2 — a retry that crosses AND passes the gate still stops" "3 2 session,session,blocked hat-crossed" \
+  "$rc $(cat "$OUTSIDE/hat-count" 2>/dev/null || echo 0) $(jq -r -s '[.[].event] | join(",")' "$LEDGER") $(hat_rows)"
+git -C "$FIX" reset -q --hard HEAD~1; git -C "$FIX" clean -qfd
+
+# The status half reads names LITERAL: a mission-directory file with a space in its name, left
+# uncommitted, must not read as outside (the line-mode porcelain C-quotes it; -z does not).
+hat_reset
+hat_stub "docs/handoffs/$MISSION/nota de drift.md" leave
+"$SDD" run "$MISSION" --phase REVIEW >/dev/null 2>&1; rc=$?
+assert_eq "hat: a mission-directory file whose name has a SPACE, left uncommitted, is not a crossing" "0 0" \
+  "$(grep -c 'hat-crossed' <<< "$(hat_rows)") $(grep -c HAT-CROSSED "$HAT_PLOG")"
+git -C "$FIX" clean -qfd; git -C "$FIX" checkout -q -- .
+
+# A hat the target never installed: the harness refuses an unknown --agent at startup, so the
+# runner refuses first, names the fix, and spends no session.
+hat_reset
+rm -f "$FIX/.claude/agents/sdd-reviewer.md"
+out="$( "$SDD" run "$MISSION" --phase REVIEW 2>&1 >/dev/null )"; rc=$?
+assert_eq "hat: a hat missing from .claude/agents/ refuses the phase, names sdd install --force, spends nothing" "1 1 0" \
+  "$rc $(grep -c 'sdd install --force' <<< "$out") $(cat "$OUTSIDE/hat-count" 2>/dev/null || echo 0)"
+"$SDD" install --force >/dev/null 2>&1
+git -C "$FIX" checkout -q -- . 2>/dev/null; git -C "$FIX" clean -qfd
+
+hat_reset
+hat_stub "src/zz-scratch-probe.test.ts" commit 2
+"$SDD" run "$MISSION" --phase REVIEW >/dev/null 2>&1; rc=$?
+assert_eq "hat: door 2 — the inline retry's crossing is caught by the retry's own read" "3 2 session,session,blocked" \
+  "$rc $(cat "$OUTSIDE/hat-count" 2>/dev/null || echo 0) $(jq -r -s '[.[].event] | join(",")' "$LEDGER")"
+git -C "$FIX" reset -q --hard HEAD~1; git -C "$FIX" clean -qfd
+hat_reset
+cat > "$OUTSIDE/stub/claude" <<'STUB'
+echo "ERROR: the test invoked the real claude" >&2
+exit 97
+STUB
+chmod +x "$OUTSIDE/stub/claude"
+
 echo "== reader: a target-repo session that edits the kit =="
 FAKEKIT="$OUTSIDE/fakekit"
 mkdir -p "$FAKEKIT"
@@ -4194,7 +4386,7 @@ STUB
   chmod +x "$OUTSIDE/stub/claude"
 }
 
-kitguard_reset()    { rm -f "$KIT_SESSION_COUNT" "$KIT_COMMIT_MARK"; }
+kitguard_reset()    { rm -f "$KIT_SESSION_COUNT" "$KIT_COMMIT_MARK"; : > "$LEDGER"; }
 kitguard_touched()  { if [ -e "$KIT_COMMIT_MARK" ]; then printf 1; else printf 0; fi }
 kitguard_sessions() { cat "$KIT_SESSION_COUNT" 2>/dev/null || printf 0; }
 # kitguard_has <text> <fixed string> -> 1|0. A boolean and not a count, wherever the number is not
@@ -4210,13 +4402,13 @@ kitguard_reset
 KGT="$OUTSIDE/kitguard-target"
 kitguard_world "$KGT"
 kitguard_stub "$FAKEKIT"
-KG1_ERR="$( cd "$KGT" && "$FAKEKIT/bin/sdd" run "$MISSION" 2>&1 >/dev/null )"
+KG1_ERR="$( cd "$KGT" && "$FAKEKIT/bin/sdd" run "$MISSION" 2>&1 >/dev/null )"; KG1_RC=$?
 KG1_LOG="$(cat "$KGT/.sdd/logs/$MISSION/pipeline.log" 2>/dev/null || true)"
 KG1_BEFORE="$(grep -oE 'kit_before=[^ ]+' <<< "$KG1_LOG" | head -1)"
 KG1_AFTER="$(grep -oE 'kit_after=[^ ]+' <<< "$KG1_LOG" | head -1)"
 assert_eq "kit-guard: a session that edits the kit during another repo's mission is warned once and journalled once" \
-  "sessions:2 moved:1 lines:1 warns:1 phase:EXEC differ:1" \
-  "sessions:$(kitguard_sessions) moved:$(kitguard_touched) lines:$(grep -c 'KIT-TOUCHED' <<< "$KG1_LOG") warns:$(grep -c 'changed during' <<< "$KG1_ERR") phase:$(grep -oE 'KIT-TOUCHED[[:space:]]+[A-Z]+' <<< "$KG1_LOG" | head -1 | awk '{print $2}') differ:$([ "${KG1_BEFORE#kit_before=}" != "${KG1_AFTER#kit_after=}" ] && echo 1 || echo 0)"
+  "sessions:1 moved:1 lines:1 warns:1 phase:EXEC differ:1 rc:3 kind:kit-touched" \
+  "sessions:$(kitguard_sessions) moved:$(kitguard_touched) lines:$(grep -c 'KIT-TOUCHED' <<< "$KG1_LOG") warns:$(grep -c 'changed during' <<< "$KG1_ERR") phase:$(grep -oE 'KIT-TOUCHED[[:space:]]+[A-Z]+' <<< "$KG1_LOG" | head -1 | awk '{print $2}') differ:$([ "${KG1_BEFORE#kit_before=}" != "${KG1_AFTER#kit_after=}" ] && echo 1 || echo 0) rc:$KG1_RC kind:$(hat_rows)"
 
 # 2. CONTROL. The same run, same sessions, same everything — with a session that leaves the kit
 #    alone. Without this term the guard could be a line printed unconditionally; without the
@@ -4254,11 +4446,11 @@ kitguard_reset
 KGR="$OUTSIDE/kitguard-inline-retry"
 kitguard_world "$KGR"
 kitguard_stub "$FAKEKIT" 2
-KG4_ERR="$( cd "$KGR" && "$FAKEKIT/bin/sdd" run "$MISSION" 2>&1 >/dev/null )"
+KG4_ERR="$( cd "$KGR" && "$FAKEKIT/bin/sdd" run "$MISSION" 2>&1 >/dev/null )"; KG4_RC=$?
 KG4_LOG="$(cat "$KGR/.sdd/logs/$MISSION/pipeline.log" 2>/dev/null || true)"
 assert_eq "kit-guard: the kit edited by the inline RETRY is caught by the retry's own check" \
-  "sessions:2 moved:1 lines:1 warns:1" \
-  "sessions:$(kitguard_sessions) moved:$(kitguard_touched) lines:$(grep -c 'KIT-TOUCHED' <<< "$KG4_LOG") warns:$(grep -c 'changed during' <<< "$KG4_ERR")"
+  "sessions:2 moved:1 lines:1 warns:1 rc:3 kind:kit-touched" \
+  "sessions:$(kitguard_sessions) moved:$(kitguard_touched) lines:$(grep -c 'KIT-TOUCHED' <<< "$KG4_LOG") warns:$(grep -c 'changed during' <<< "$KG4_ERR") rc:$KG4_RC kind:$(hat_rows)"
 
 # 5. `sdd retry` is ANOTHER door that opens a session which commits, and it does not go through
 #    cmd_run's loop at all: its arm/check pair is its own. Measured the same way — delete that pair
@@ -4267,11 +4459,11 @@ kitguard_reset
 KGT2="$OUTSIDE/kitguard-retry-cmd"
 kitguard_world "$KGT2"
 kitguard_stub "$FAKEKIT" 1
-KG5_ERR="$( cd "$KGT2" && "$FAKEKIT/bin/sdd" retry "$MISSION" 2>&1 >/dev/null )"
+KG5_ERR="$( cd "$KGT2" && "$FAKEKIT/bin/sdd" retry "$MISSION" 2>&1 >/dev/null )"; KG5_RC=$?
 KG5_LOG="$(cat "$KGT2/.sdd/logs/$MISSION/pipeline.log" 2>/dev/null || true)"
 assert_eq "kit-guard: sdd retry is another door that opens a session, and it is guarded too" \
-  "sessions:1 moved:1 lines:1 warns:1" \
-  "sessions:$(kitguard_sessions) moved:$(kitguard_touched) lines:$(grep -c 'KIT-TOUCHED' <<< "$KG5_LOG") warns:$(grep -c 'changed during' <<< "$KG5_ERR")"
+  "sessions:1 moved:1 lines:1 warns:1 rc:3 kind:kit-touched" \
+  "sessions:$(kitguard_sessions) moved:$(kitguard_touched) lines:$(grep -c 'KIT-TOUCHED' <<< "$KG5_LOG") warns:$(grep -c 'changed during' <<< "$KG5_ERR") rc:$KG5_RC kind:$(hat_rows)"
 
 # 6. THE PROJECTION IS DISARMED, and this regime exists because the first round of this work argued
 #    the opposite and shipped it. It reasoned that a dry run opens no session, so no window exists
@@ -4317,17 +4509,38 @@ printf '[]\n'
 STUB
 chmod +x "$OUTSIDE/stub/acli"
 kitguard_stub "$FAKEKIT" 1
-KG7_ERR="$( cd "$KGCL" && "$FAKEKIT/bin/sdd" close "$MISSION" 2>&1 >/dev/null )"
+KG7_ERR="$( cd "$KGCL" && "$FAKEKIT/bin/sdd" close "$MISSION" 2>&1 >/dev/null )"; KG7_RC=$?
 KG7_LOG="$(cat "$KGCL/.sdd/logs/$MISSION/pipeline.log" 2>/dev/null || true)"
 assert_eq "kit-guard: sdd close opens a session too, and it is guarded like every other door" \
-  "sessions:1 moved:1 lines:1 warns:1 phase:CLOSE" \
-  "sessions:$(kitguard_sessions) moved:$(kitguard_touched) lines:$(grep -c 'KIT-TOUCHED' <<< "$KG7_LOG") warns:$(grep -c 'changed during' <<< "$KG7_ERR") phase:$(grep -oE 'KIT-TOUCHED[[:space:]]+[A-Z]+' <<< "$KG7_LOG" | head -1 | awk '{print $2}')"
+  "sessions:1 moved:1 lines:1 warns:1 phase:CLOSE rc:3 kind:kit-touched" \
+  "sessions:$(kitguard_sessions) moved:$(kitguard_touched) lines:$(grep -c 'KIT-TOUCHED' <<< "$KG7_LOG") warns:$(grep -c 'changed during' <<< "$KG7_ERR") phase:$(grep -oE 'KIT-TOUCHED[[:space:]]+[A-Z]+' <<< "$KG7_LOG" | head -1 | awk '{print $2}') rc:$KG7_RC kind:$(hat_rows)"
 
 # The stubs go back the way they were found. "This block runs last" is not a property a sensor can
 # hold: a future author appending below would inherit a `claude` that returns success without doing
 # anything and an `acli` that answers `[]` to every question, and would never see why their new
 # assertion passed.
 rm -f "$OUTSIDE/stub/acli"
+# The close session wears the ticket hat: a close that edits code stops the line with hat-crossed
+# (the review of this branch found cmd_close armed but never checked).
+kitguard_reset
+KGCL2="$OUTSIDE/kitguard-close-hat"
+kitguard_world "$KGCL2"
+sed -i 's/^JIRA_ENABLED=false$/JIRA_ENABLED=true/' "$KGCL2/.sdd/config.sh"
+printf -- '---\nfase: TICKET\nissue: SQ-1\n---\n# TICKET\n' > "$KGCL2/docs/handoffs/$MISSION/10-ticket.md"
+( cd "$KGCL2" && git add -A && git commit -qm "chore: ticket" ) >/dev/null
+cat > "$OUTSIDE/stub/acli" <<'STUB'
+printf '[]\n'
+STUB
+chmod +x "$OUTSIDE/stub/acli"
+cat > "$OUTSIDE/stub/claude" <<STUB
+mkdir -p "$KGCL2/src"; printf 'probe\n' > "$KGCL2/src/close-wrote-this.ts"
+git -C "$KGCL2" add -A; git -C "$KGCL2" commit -qm "chore: the close session edited code"
+cat "$STREAM_SAMPLE"
+exit 0
+STUB
+chmod +x "$OUTSIDE/stub/claude"
+( cd "$KGCL2" && "$FAKEKIT/bin/sdd" close "$MISSION" >/dev/null 2>&1 ); KG8_RC=$?
+assert_eq "hat: sdd close wears the ticket hat — a close session that edits code stops the line" "3 hat-crossed" "$KG8_RC $(hat_rows)"
 cat > "$OUTSIDE/stub/claude" <<'STUB'
 #!/usr/bin/env bash
 echo "ERROR: the test invoked the real claude" >&2
@@ -4474,23 +4687,26 @@ reviewscope_sessions() { cat "$REVIEWSCOPE_COUNT" 2>/dev/null || printf 0; }
 # The names the journal line reports, or "" when there is no line. `-F': '` (colon SPACE) and not
 # `-F:`: the ISO timestamp that opens every journal line is full of bare colons and none of them is
 # followed by a space.
-reviewscope_files() { awk -F': ' '/REVIEW-EDITED-CODE/ { print $NF; exit }' <<< "$1"; }
+reviewscope_files() { awk -F': ' '/HAT-CROSSED/ { print $NF; exit }' <<< "$1"; }
+# The warn and the BLOCKED line both carry the reason; `warns` counts the warn alone.
+reviewscope_warns() { grep -v 'BLOCKED' <<< "$1" | grep -c 'outside its writes'; }
 
 # 1. DOOR 1 — the first pass of cmd_run's loop. `--phase REVIEW --max-phases 1` holds the run to the
 #    one session this regime is about; the ceiling returns before the inline retry, which is why
 #    regime 2 below cannot use it. `phase:REVIEW` is demanded so a call copied from the kit guard
 #    with the wrong label still fails, and `files:bin/tool.sh` so a line that fired over the
 #    reviewer's OWN artifacts — the failure mode that would make the guard noise — still fails.
-echo "== the REVIEW scope guard =="
+echo "== the hat crossed its boundary: the reviewer that edits code stops the line =="
 rm -f "$REVIEWSCOPE_COUNT"
 RS1="$OUTSIDE/reviewscope-door1"
 reviewscope_world "$RS1"
 reviewscope_stub "$RS1" 1 code
-RS1_ERR="$( cd "$RS1" && "$SDD" run "$MISSION" --phase REVIEW --max-phases 1 2>&1 >/dev/null )"
+: > "$LEDGER"
+RS1_ERR="$( cd "$RS1" && "$SDD" run "$MISSION" --phase REVIEW --max-phases 1 2>&1 >/dev/null )"; RS1_RC=$?
 RS1_LOG="$(cat "$RS1/.sdd/logs/$MISSION/pipeline.log" 2>/dev/null || true)"
-assert_eq "a REVIEW session that edited code outside the mission directory is logged REVIEW-EDITED-CODE" \
-  "sessions:1 lines:1 warns:1 phase:REVIEW n:1 files:bin/tool.sh" \
-  "sessions:$(reviewscope_sessions) lines:$(grep -c 'REVIEW-EDITED-CODE' <<< "$RS1_LOG") warns:$(grep -c 'the reviewer finds and the executor fixes' <<< "$RS1_ERR") phase:$(grep -oE 'REVIEW-EDITED-CODE[[:space:]]+[A-Z]+' <<< "$RS1_LOG" | head -1 | awk '{print $2}') n:$(num_before "$RS1_LOG" 'file\(s\) outside') files:$(reviewscope_files "$RS1_LOG")"
+assert_eq "a REVIEW session that edited code outside its writes: is logged HAT-CROSSED, and the line stops" \
+  "sessions:1 lines:1 warns:1 phase:REVIEW n:1 files:bin/tool.sh rc:3 kind:hat-crossed" \
+  "sessions:$(reviewscope_sessions) lines:$(grep -c 'HAT-CROSSED' <<< "$RS1_LOG") warns:$(reviewscope_warns "$RS1_ERR") phase:$(grep -oE 'HAT-CROSSED[[:space:]]+[A-Z]+' <<< "$RS1_LOG" | head -1 | awk '{print $2}') n:$(num_before "$RS1_LOG" 'path\(s\) outside') files:$(reviewscope_files "$RS1_LOG") rc:$RS1_RC kind:$(hat_rows)"
 
 # 2. CONTROL, and it carries the whole allowlist. The same world, the same session count, a session
 #    that COMMITS — `committed:1` is the floor, without which `lines:0` is also the answer of a run
@@ -4506,7 +4722,7 @@ RS2_ERR="$( cd "$RS2" && "$SDD" run "$MISSION" --phase REVIEW --max-phases 1 2>&
 RS2_LOG="$(cat "$RS2/.sdd/logs/$MISSION/pipeline.log" 2>/dev/null || true)"
 assert_eq "a REVIEW session that only wrote the round and the checkpoint is not flagged" \
   "sessions:1 committed:1 lines:0 warns:0" \
-  "sessions:$(reviewscope_sessions) committed:$([ "$RS2_HEAD_BEFORE" != "$(git -C "$RS2" rev-parse HEAD)" ] && echo 1 || echo 0) lines:$(grep -c 'REVIEW-EDITED-CODE' <<< "$RS2_LOG") warns:$(grep -c 'the reviewer finds and the executor fixes' <<< "$RS2_ERR")"
+  "sessions:$(reviewscope_sessions) committed:$([ "$RS2_HEAD_BEFORE" != "$(git -C "$RS2" rev-parse HEAD)" ] && echo 1 || echo 0) lines:$(grep -c 'HAT-CROSSED' <<< "$RS2_LOG") warns:$(reviewscope_warns "$RS2_ERR")"
 
 # 3. DOOR 2 — cmd_run's INLINE RETRY has a check of its own, and only it can see this: the first
 #    session moves nothing (which is exactly what makes the runner spend the retry), the RETRY is
@@ -4517,11 +4733,12 @@ rm -f "$REVIEWSCOPE_COUNT"
 RS3="$OUTSIDE/reviewscope-retry"
 reviewscope_world "$RS3"
 reviewscope_stub "$RS3" 2 code
-RS3_ERR="$( cd "$RS3" && "$SDD" run "$MISSION" 2>&1 >/dev/null )"
+: > "$LEDGER"
+RS3_ERR="$( cd "$RS3" && "$SDD" run "$MISSION" 2>&1 >/dev/null )"; RS3_RC=$?
 RS3_LOG="$(cat "$RS3/.sdd/logs/$MISSION/pipeline.log" 2>/dev/null || true)"
-assert_eq "the retry door logs REVIEW-EDITED-CODE too" \
-  "retried:1 lines:1 warns:1 files:bin/tool.sh" \
-  "retried:$([ "$(reviewscope_sessions)" -ge 2 ] && echo 1 || echo 0) lines:$(grep -c 'REVIEW-EDITED-CODE' <<< "$RS3_LOG") warns:$(grep -c 'the reviewer finds and the executor fixes' <<< "$RS3_ERR") files:$(reviewscope_files "$RS3_LOG")"
+assert_eq "the inline retry door logs HAT-CROSSED too, and stops" \
+  "retried:1 lines:1 warns:1 files:bin/tool.sh rc:3 kind:hat-crossed" \
+  "retried:$([ "$(reviewscope_sessions)" -ge 2 ] && echo 1 || echo 0) lines:$(grep -c 'HAT-CROSSED' <<< "$RS3_LOG") warns:$(reviewscope_warns "$RS3_ERR") files:$(reviewscope_files "$RS3_LOG") rc:$RS3_RC kind:$(hat_rows)"
 
 # 4. DOOR 3 — `sdd retry` is another door that opens a session which commits, and it does not go
 #    through cmd_run's loop at all: its call is its own. THIS REGIME WAS MISSING when the guard
@@ -4532,11 +4749,12 @@ rm -f "$REVIEWSCOPE_COUNT"
 RS4="$OUTSIDE/reviewscope-retry-cmd"
 reviewscope_world "$RS4"
 reviewscope_stub "$RS4" 1 code
-RS4_ERR="$( cd "$RS4" && "$SDD" retry "$MISSION" 2>&1 >/dev/null )"
+: > "$LEDGER"
+RS4_ERR="$( cd "$RS4" && "$SDD" retry "$MISSION" 2>&1 >/dev/null )"; RS4_RC=$?
 RS4_LOG="$(cat "$RS4/.sdd/logs/$MISSION/pipeline.log" 2>/dev/null || true)"
 assert_eq "sdd retry is another door that opens a REVIEW session, and it is guarded too" \
-  "sessions:1 lines:1 warns:1 files:bin/tool.sh" \
-  "sessions:$(reviewscope_sessions) lines:$(grep -c 'REVIEW-EDITED-CODE' <<< "$RS4_LOG") warns:$(grep -c 'the reviewer finds and the executor fixes' <<< "$RS4_ERR") files:$(reviewscope_files "$RS4_LOG")"
+  "sessions:1 lines:1 warns:1 files:bin/tool.sh rc:3 kind:hat-crossed" \
+  "sessions:$(reviewscope_sessions) lines:$(grep -c 'HAT-CROSSED' <<< "$RS4_LOG") warns:$(reviewscope_warns "$RS4_ERR") files:$(reviewscope_files "$RS4_LOG") rc:$RS4_RC kind:$(hat_rows)"
 
 # 5. THE ALLOWLIST IS A GLOB MATCHED AGAINST A STRING, and the two sides of that match come from
 #    different worlds: `git diff --name-only` prints a path git has already normalised, while
@@ -4562,7 +4780,7 @@ RS5_ERR="$( cd "$RS5" && "$SDD" run "$MISSION" --phase REVIEW --max-phases 1 2>&
 RS5_LOG="$(cat "$RS5/.sdd/logs/$MISSION/pipeline.log" 2>/dev/null || true)"
 assert_eq "a trailing slash in HANDOFF_DIR does not turn a healthy round into a warning" \
   "slash:1 sessions:1 committed:1 lines:0 warns:0" \
-  "slash:$(grep -c 'HANDOFF_DIR="docs/handoffs/"$' "$RS5/.sdd/config.sh") sessions:$(reviewscope_sessions) committed:$([ "$RS5_HEAD_BEFORE" != "$(git -C "$RS5" rev-parse HEAD)" ] && echo 1 || echo 0) lines:$(grep -c 'REVIEW-EDITED-CODE' <<< "$RS5_LOG") warns:$(grep -c 'the reviewer finds and the executor fixes' <<< "$RS5_ERR")"
+  "slash:$(grep -c 'HANDOFF_DIR="docs/handoffs/"$' "$RS5/.sdd/config.sh") sessions:$(reviewscope_sessions) committed:$([ "$RS5_HEAD_BEFORE" != "$(git -C "$RS5" rev-parse HEAD)" ] && echo 1 || echo 0) lines:$(grep -c 'HAT-CROSSED' <<< "$RS5_LOG") warns:$(reviewscope_warns "$RS5_ERR")"
 
 # 6. THE OTHER SIDE OF THAT SAME MATCH — and this one is git's doing, not the config key's. With
 #    `core.quotePath` (git's DEFAULT) a tracked path carrying one byte outside ASCII leaves
@@ -4596,9 +4814,9 @@ RS6_HEAD_BEFORE="$(git -C "$RS6" rev-parse HEAD)"
 RS6_ERR="$( cd "$RS6" && "$SDD" run "$MISSION" --phase REVIEW --max-phases 1 2>&1 >/dev/null )"
 RS6_LOG="$(cat "$RS6/.sdd/logs/$MISSION/pipeline.log" 2>/dev/null || true)"
 RS6_RAW="$(git -C "$RS6" diff --name-only "$RS6_HEAD_BEFORE" HEAD 2>/dev/null || true)"
-assert_eq "a mission-directory file whose name is not ASCII is not flagged REVIEW-EDITED-CODE" \
+assert_eq "a mission-directory file whose name is not ASCII is not flagged HAT-CROSSED" \
   "nonascii:1 sessions:1 committed:1 lines:0 warns:0" \
-  "nonascii:$(grep -cF 'round\302\267one.md' <<< "$RS6_RAW") sessions:$(reviewscope_sessions) committed:$([ "$RS6_HEAD_BEFORE" != "$(git -C "$RS6" rev-parse HEAD)" ] && echo 1 || echo 0) lines:$(grep -c 'REVIEW-EDITED-CODE' <<< "$RS6_LOG") warns:$(grep -c 'the reviewer finds and the executor fixes' <<< "$RS6_ERR")"
+  "nonascii:$(grep -cF 'round\302\267one.md' <<< "$RS6_RAW") sessions:$(reviewscope_sessions) committed:$([ "$RS6_HEAD_BEFORE" != "$(git -C "$RS6" rev-parse HEAD)" ] && echo 1 || echo 0) lines:$(grep -c 'HAT-CROSSED' <<< "$RS6_LOG") warns:$(reviewscope_warns "$RS6_ERR")"
 
 # 7. THE WARNING BRANCH CANNOT STOP THE LINE. Every regime above measures what the guard SAYS;
 #    this one measures what saying it COSTS. The warn is followed by `pipeline_log_line`, whose
@@ -4631,12 +4849,13 @@ mkdir -p "$RS7/.sdd/logs/$MISSION"
 chmod 000 "$RS7/.sdd/logs/$MISSION/pipeline.log"
 RS7_ARMED=0
 ( printf 'x' >> "$RS7/.sdd/logs/$MISSION/pipeline.log" ) 2>/dev/null || RS7_ARMED=1
+: > "$LEDGER"
 RS7_ROWS_BEFORE="$(nrows)"
 RS7_RC=0
 RS7_ERR="$( cd "$RS7" && "$SDD" run "$MISSION" --phase REVIEW --max-phases 1 2>&1 >/dev/null )" || RS7_RC=$?
-assert_eq "the scope guard warns without stopping the line when the pipeline log cannot be written" \
-  "armed:1 sessions:1 warns:1 journal:1 rc:0 rows:1" \
-  "armed:$RS7_ARMED sessions:$(reviewscope_sessions) warns:$(grep -c 'the reviewer finds and the executor fixes' <<< "$RS7_ERR") journal:$(grep -c 'the pipeline journal at' <<< "$RS7_ERR") rc:$RS7_RC rows:$(( $(nrows) - RS7_ROWS_BEFORE ))"
+assert_eq "the hat guard still stops the line when the pipeline log cannot be written — the ledger row is the artifact" \
+  "armed:1 sessions:1 warns:1 journal:1 rc:3 rows:2 kind:hat-crossed" \
+  "armed:$RS7_ARMED sessions:$(reviewscope_sessions) warns:$(reviewscope_warns "$RS7_ERR") journal:$(grep -c 'the pipeline journal at' <<< "$RS7_ERR") rc:$RS7_RC rows:$(( $(nrows) - RS7_ROWS_BEFORE )) kind:$(hat_rows)"
 
 # 8. THE SAME FAILURE, IN THE CHANNEL THE HUMAN ACTUALLY READS. Regime 7 measured that the run
 #    SURVIVES an unwritable journal, and stopped there — the evidence for this regime was already
@@ -4673,20 +4892,22 @@ rm -f "$REVIEWSCOPE_COUNT"
 RS8="$OUTSIDE/reviewscope-rawerror"
 reviewscope_world "$RS8"
 reviewscope_stub "$RS8" 1 code
-mkdir -p "$RS8/.sdd/logs/$MISSION" "$RS8/state"
+mkdir -p "$RS8/.sdd/logs/$MISSION" "$OUTSIDE/rs8-state"
 : > "$RS8/.sdd/logs/$MISSION/pipeline.log"
-: > "$RS8/state/autonomy-log.jsonl"
-chmod 000 "$RS8/.sdd/logs/$MISSION/pipeline.log" "$RS8/state/autonomy-log.jsonl"
+: > "$OUTSIDE/rs8-state/autonomy-log.jsonl"
+chmod 000 "$RS8/.sdd/logs/$MISSION/pipeline.log" "$OUTSIDE/rs8-state/autonomy-log.jsonl"
 RS8_JARMED=0
 RS8_LARMED=0
 ( printf 'x' >> "$RS8/.sdd/logs/$MISSION/pipeline.log" ) 2>/dev/null || RS8_JARMED=1
-( printf 'x' >> "$RS8/state/autonomy-log.jsonl" ) 2>/dev/null || RS8_LARMED=1
+( printf 'x' >> "$OUTSIDE/rs8-state/autonomy-log.jsonl" ) 2>/dev/null || RS8_LARMED=1
 RS8_RC=0
-RS8_ERR="$( cd "$RS8" && SDD_STATE_DIR="$RS8/state" "$SDD" run "$MISSION" --phase REVIEW --max-phases 1 2>&1 >/dev/null )" || RS8_RC=$?
+RS8_ERR="$( cd "$RS8" && SDD_STATE_DIR="$OUTSIDE/rs8-state" "$SDD" run "$MISSION" --phase REVIEW --max-phases 1 2>&1 >/dev/null )" || RS8_RC=$?
 RS8_NAMED="$(grep -cE 'pipeline\.log|autonomy-log\.jsonl' <<< "$RS8_ERR")"
 RS8_CURATED="$(grep -cE 'the pipeline journal at|could not write the autonomy ledger at' <<< "$RS8_ERR")"
+# ledger:2 since the hat guard stops the line: the session row AND the blocked row both try the
+# unwritable file, and each is refused with the curated sentence — never the raw redirection.
 assert_eq "neither journal writer leaks a raw redirection error when its file cannot be written" \
-  "jarmed:1 larmed:1 sessions:1 journal:1 ledger:1 raw:0 rc:0" \
+  "jarmed:1 larmed:1 sessions:1 journal:1 ledger:2 raw:0 rc:3" \
   "jarmed:$RS8_JARMED larmed:$RS8_LARMED sessions:$(reviewscope_sessions) journal:$(grep -c 'the pipeline journal at' <<< "$RS8_ERR") ledger:$(grep -c 'could not write the autonomy ledger at' <<< "$RS8_ERR") raw:$(( RS8_NAMED - RS8_CURATED )) rc:$RS8_RC"
 
 # The stub goes back the way it was found, for the reason spelled out one screen up.

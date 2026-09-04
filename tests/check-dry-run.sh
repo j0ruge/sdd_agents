@@ -56,6 +56,13 @@ projected() {
 }
 
 # Fingerprint of everything in the fixture except .git. The dry-run must not touch any of it.
+# boundary_of <phase> — the `boundary:` line the projection prints under that phase's `agent:`
+boundary_of() {
+  awk -v want="$1" '
+    /^--- DRY RUN: phase .* ---$/ { ph = $5; next }
+    ph == want && /boundary:/ { sub(/^.*boundary:[ \t]*/, ""); print; exit }
+  '
+}
 tree_snapshot() {
   ( cd "$FIX" && find . -path ./.git -prune -o -print | LC_ALL=C sort )
 }
@@ -139,6 +146,25 @@ want="$(printf '%s\n' \
   "PR=sdd-publisher")"
 got="$(printf '%s\n' "$out" | projected)"
 assert_eq "projects EXEC→QA→REVIEW→DOCS→PR, in order, each with its agent" "$want" "$got"
+echo "== every projected phase carries the hat's boundary =="
+# The hat DECLARES, run_phase APPLIES, and the projection prints what it will pass from the SAME
+# variables that go into the command — so this is where a dropped flag dies (the two RUN_*_dropped
+# mutants). Spec: docs/superpowers/specs/2026-09-03-a-fronteira-do-chapeu-design.md § 5.1.
+for ph in EXEC QA:close REVIEW DOCS PR; do
+  b="$(printf '%s\n' "$out" | boundary_of "$ph")"
+  assert_eq "$ph: the deny list starts with the base no phase ever used" "1" \
+    "$(grep -c 'deny=CronCreate, CronDelete' <<< "$b")"
+  assert_eq "$ph: MCP is strict when the hat declares none" "1" "$(grep -c 'mcp=<none: --strict-mcp-config>' <<< "$b")"
+done
+assert_eq "REVIEW denies the push the hat never needs" "1" \
+  "$(printf '%s\n' "$out" | boundary_of REVIEW | grep -c 'Bash(git push:\*)')"
+assert_eq "REVIEW writes only under the mission directory (plus the base)" "1" \
+  "$(printf '%s\n' "$out" | boundary_of REVIEW | grep -c "writes=TODO.md, tests/health-baseline.txt, docs/handoffs/$MISSION/\*\*")"
+assert_eq "EXEC writes anywhere" "1" "$(printf '%s\n' "$out" | boundary_of EXEC | grep -c 'writes=<anywhere>')"
+assert_eq "DOCS denies the subagent it never used" "1" "$(printf '%s\n' "$out" | boundary_of DOCS | grep -c ', Agent, ListAgents, Skill')"
+assert_eq "PR keeps push and gh pr create, denies merge" "1" \
+  "$(printf '%s\n' "$out" | boundary_of PR | grep -c 'Bash(gh pr merge:\*)' )"
+assert_eq "PR does not deny push" "0" "$(printf '%s\n' "$out" | boundary_of PR | grep -c 'git push')"
 
 # TICKET has its gate satisfied (JIRA_ENABLED=false): a satisfied phase is not in the projection.
 if grep -q '^--- DRY RUN: phase TICKET ---$' <<< "$out"; then
@@ -151,6 +177,24 @@ fi
 echo "== the dry-run does not touch the disk =="
 assert_eq "file tree identical before and after" "$before" "$after"
 assert_eq "working tree still clean" "" "$(git status --porcelain)"
+echo "== the projection does not accuse the human's dirty tree =="
+# hat_guard_check reads `git status` since the 2026-09-03 spec, and the projection reaches it: a
+# dry-run over a checkout with the human's own uncommitted edits must neither stop nor write a
+# HAT-CROSSED line. The DRY_RUN return at the top of that function is the rule this probes.
+printf 'wip\n' > "$FIX/src-wip.txt"
+"$SDD" run "$MISSION" --dry-run --phase REVIEW >/dev/null 2>&1; rcd=$?
+assert_eq "a dry-run over a dirty tree still exits 0" "0" "$rcd"
+n_crossed="$(grep -c 'HAT-CROSSED' "$PIPELINE_LOG" 2>/dev/null)"
+assert_eq "…and arms no HAT-CROSSED" "0" "${n_crossed:-0}"
+rm -f "$FIX/src-wip.txt"
+echo "== a & in a config path survives hat_expand =="
+# bash 5.2 patsub_replacement: an unquoted replacement re-inserts the match on `&`, and every hat's
+# writes: begins with $TODO_FILE (HAT_WRITES_BASE) — measured by the review of this branch.
+sed -i '/^TODO_FILE=/d' .sdd/config.sh; printf 'TODO_FILE="R&D/TODO.md"\n' >> .sdd/config.sh
+outamp="$( "$SDD" run "$MISSION" --dry-run --phase REVIEW 2>&1 )"
+assert_eq "hat: an & in TODO_FILE is expanded literally, not as the matched placeholder" "1" \
+  "$(printf '%s\n' "$outamp" | boundary_of REVIEW | grep -cF 'writes=R&D/TODO.md, ')"
+sed -i '/^TODO_FILE=/d' .sdd/config.sh
 
 # --- the phase session is projected as a STREAM ----------------------------
 # `--output-format stream-json` and `--verbose` are ONE flag, not two. Without the second, the
@@ -415,7 +459,7 @@ assert_eq "a project with no interface is not told about a spec directory it has
 # it — the QA sub-steps driven by a skill answer `<none>`. TICKET declared BOTH: the `sdd-publisher`
 # agent AND a prepended `/ticket open`. The slash is what goes: the `ticket` skill has no
 # `disable-model-invocation`, so it does not need to be the first line of the prompt to load, and
-# agents/sdd-publisher.md already instructs the session to invoke it.
+# agents/sdd-ticket.md already instructs the session to invoke it.
 #
 # Differential, and both halves are needed: the agent alone would pass on a runner that also kept
 # the slash, and the absent slash alone would pass on a runner that booted TICKET with no driver at
@@ -425,7 +469,7 @@ sed -i 's|^JIRA_ENABLED=false|JIRA_ENABLED=true|' .sdd/config.sh
 printf 'PROJECT=FX\nBOARD=1\n' > .jira-project
 outt="$( "$SDD" run "$MISSION" --dry-run --phase TICKET 2>&1 )"
 assert_eq "TICKET boots the agent without a prepended slash" \
-  "TICKET=sdd-publisher" "$(printf '%s\n' "$outt" | projected)"
+  "TICKET=sdd-ticket" "$(printf '%s\n' "$outt" | projected)"
 if grep -q '│ /ticket open' <<< "$outt"; then
   fail "the TICKET boot prompt does not open with a slash" \
        "no '/ticket open' first line" "$(grep -m1 '│' <<< "$outt")"

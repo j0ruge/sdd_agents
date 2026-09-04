@@ -888,7 +888,9 @@ echo "== gate fixture (a kit-shaped repo: SDD_HOME == REPO_ROOT) =="
 cd "$FIX" || exit 1
 git config user.email "fixture@example.com"
 git config user.name "Fixture"
-cp -r "$ROOT/bin" "$ROOT/templates" "$ROOT/config" "$FIX/"
+# agents/ too: since the hat's boundary run_phase refuses a kit whose hats are missing, before
+# any session — and `sdd install` below mirrors them into .claude/agents/ as a real install does.
+cp -r "$ROOT/bin" "$ROOT/templates" "$ROOT/config" "$ROOT/agents" "$FIX/"
 KSDD="$FIX/bin/sdd"
 echo "kit" > kit.txt
 git add -A && git commit -qm "init kit fixture"

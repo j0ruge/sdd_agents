@@ -1037,6 +1037,97 @@ mut_RUN_app_down_retry_not_escalated() {
   sed -i '/^    if \[ "$gate_rc2" -eq 0 \]; then$/,/^    if \[ "$moved2" = "false" \]; then$/ s|^    if app_down_escalation "$phase"; then return 3; fi$|    if false; then return 3; fi|' "$1"
 }
 
+# The hat's boundary (2026-09-03 spec). Two flags, one mutant each: dropping either one leaves the
+# session with the human's whole harness — 9 MCP servers including Gmail and Jira, 104 tools —
+# which is the measured "before". The projection prints what run_phase passes FROM THE SAME
+# VARIABLES that go into the command, and check-dry-run.sh reads that `boundary:` line, so each
+# of these dies there. The projection's `mcp=` field is the DECISION (mcp_mode is set on the same
+# line that appends the flag), so one `if false` drops the flag and the label together; the
+# second one swaps the deny list for the allow list rather than deleting the line, because
+# `boundary:` is printed from $disallowed and not from the array.
+mut_RUN_strict_mcp_dropped() {
+  sed -i 's|^  if \[ -z "\$mcp" \]; then cmd+=(--strict-mcp-config); mcp_mode="<none: --strict-mcp-config>"; fi$|  if false; then cmd+=(--strict-mcp-config); mcp_mode="<none: --strict-mcp-config>"; fi|' "$1"
+}
+mut_RUN_disallowed_dropped() {
+  sed -i '/^run_phase() {/,/^}/ s|^  disallowed="\$(hat_disallowed "\$pstep")"$|  disallowed="$ALLOWED_TOOLS"|' "$1"
+}
+
+# hat_guard_check goes blind: it still resets the marker and returns, so the door has nothing to
+# read. check-autonomy.sh's "commits a code file stops the line" dies.
+mut_RUN_hat_guard_blind() {
+  sed -i '/^hat_guard_check() {/,/^}/ s|^  \[ -n "\$globs" \] \|\| return 0$|  return 0|' "$1"
+}
+# One probe per door, the rule this file's CLAUDE.md states for every port: a door removed is a
+# lap the marker survives, and only the probe of THAT door notices. Range-addressed so each sed
+# touches exactly one of the four identical lines.
+mut_RUN_hat_door1_missing() {   # `0,/re/`: the FIRST door in file order, and only it (a range that re-opened deleted door 2 too)
+  sed -i '0,/^    if hat_crossed_escalation "\$phase"; then return 3; fi$/ s||    :|' "$1"
+}
+mut_RUN_hat_door2_missing() {   # between the retry's gate_failed line and its gate-pass branch — where door 2 lives now
+  sed -i '/^    gate_failed\["\$phase"\]="\$( \[ "\$gate_rc2" -eq 0 \]/,/^    if \[ "\$gate_rc2" -eq 0 \]; then$/ s|^    if hat_crossed_escalation "\$phase"; then return 3; fi$|    :|' "$1"
+}
+mut_RUN_hat_retry_door_missing() {
+  sed -i '/^cmd_retry() {/,/^}/ s|^  if hat_crossed_escalation "\$phase"; then return 3; fi$|  :|' "$1"
+}
+mut_RUN_hat_close_door_missing() {
+  sed -i '/^cmd_close() {/,/^}/ s|^  if hat_crossed_escalation "\$phase"; then return 3; fi$|  :|' "$1"
+}
+# The five findings the review of this branch turned into rules, one mutant each, each anchored on
+# the line that IS the rule:
+#  · the status half back to line mode — a name with a space is C-quoted and reads as outside
+mut_RUN_hat_status_not_nul() {
+  sed -i '/^hat_status_lines() {/,/^}/ s| status --porcelain -z --untracked-files=all | status --porcelain --untracked-files=all |' "$1"
+}
+#  · the replacement unquoted — `&` in TODO_FILE re-inserts the placeholder
+mut_RUN_hat_expand_unquoted() {
+  sed -i 's|^  s="\${s//\\\$TODO_FILE/"\$TODO_FILE"}"$|  s="${s//\\$TODO_FILE/$TODO_FILE}"|' "$1"
+}
+#  · the missing mirror ignored — the harness refuses the --agent and the run pays a no-progress
+mut_RUN_hat_missing_mirror_ignored() {
+  sed -i '/^run_phase() {/,/^}/ s|^  if \[ -n "\$agent" \] && \[ ! -f "\$REPO_ROOT/.claude/agents/\$agent.md" \]; then$|  if false; then|' "$1"
+}
+#  · the close session armed but never checked
+mut_RUN_hat_close_unchecked() {
+  sed -i '/^cmd_close() {/,/^}/ s|^  hat_guard_check "\$phase" "\$close_before"$|  :|' "$1"
+}
+# The kit guard back to a warning: the marker is never armed, so KIT-TOUCHED is a line and not a
+# stop — the 2d28d13 world. KG1's "rc:3 kind:kit-touched" dies.
+mut_RUN_kit_touched_silent() {
+  sed -i '/^kit_guard_check() {/,/^}/ s|^  KIT_TOUCHED_WHY="the kit at |  : "the kit at |' "$1"
+}
+
+# The init line goes unread: mcp_seen/tools_leaked are always "" (null in the row), and a
+# session that saw the human's Jira is indistinguishable from one that saw nothing. Dies on
+# "an MCP server the hat did not declare … stop the line".
+mut_RUN_init_blind() {
+  sed -i '/^hat_init_facts() {/,/^}/ s|^  \[ -n "\$init" \] \|\| return 0$|  return 0|' "$1"
+}
+
+# The census stops reading tool_use names — the line that turns the "before" of the 2026-09-03
+# spec into a command prints "(none)" for every phase. check-hat.sh's "the tool census names
+# Read once" dies.
+mut_CENSUS_tools_blind() {
+  sed -i '/^cmd_census() {/,/^}/ s|select(.type == "tool_use") \| .name'"'"' "\${streams\[@\]}"|select(.type == "never") \| .name'"'"' "${streams[@]}"|' "$1"
+}
+
+# Release line 3 goes green whatever the ledger says — the one line THIS mission closes, read as
+# a label. check-hat.sh's "line 3 red with no target mission" dies.
+mut_HEALTH_release_line3_blind() {
+  sed -i '/^health_release() {/,/^}/ s|^    none)    line 3 bad "no target mission in the ledger yet" ;;$|    none)    line 3 ok "no target mission in the ledger yet" ;;|' "$1"
+}
+
+# The snapshot is never taken: the human's own untracked file reads as the hat's crossing, and the
+# first REVIEW of a mission stops on a file the reviewer never touched. Dies on "a file the human
+# left untracked BEFORE the session is not the hat's crossing".
+mut_RUN_hat_guard_ignores_prior_dirt() {
+  sed -i '/^hat_guard_arm() {/,/^}/ s|^  HAT_STATUS_BEFORE="\$(hat_status_lines)"$|  HAT_STATUS_BEFORE=""|' "$1"
+}
+# The habit is refused again: `sdd health --with-mutation` dies as an unknown option. Dies on
+# check-hat.sh's "--with-mutation is accepted as a synonym".
+mut_HEALTH_with_mutation_refused() {
+  sed -i '/^cmd_health() {/,/^}/ s|^      --with-mutation) : ;;$|      --with-mutation-gone) : ;;|' "$1"
+}
+
 # L3 of the 2026-09-03 audit: the turn rule ("never end the turn with a task still running") is ONE
 # definition in boot_prompt(), read by the general heredoc and by KAIZEN's. Dropping the reader from
 # the general heredoc leaves KAIZEN with the rule and the five projected phases without it — the
@@ -2176,8 +2267,8 @@ mut_RUN_close_unverified_conflated() {
 #
 # The CHECK and not the arm: an arm left behind with no check is the same silence, and this way the
 # mutant also proves the check is what reports rather than the arm being decorative.
-mut_RUN_close_unguarded() {
-  sed -i '/^  kit_guard_check "CLOSE"$/d' "$1"
+mut_RUN_close_unguarded() {   # range-addressed since the close door reads $phase like every other
+  sed -i '/^cmd_close() {/,/^}/ { /^  kit_guard_check "\$phase"$/d; }' "$1"
 }
 
 # The projection arms the kit guard again — the shape the first round of this work shipped and
@@ -2802,9 +2893,9 @@ mut_RUN_review_fixes_inline() {
 # one of the three doors, and each door already has a probe of its own (the sabotage pass that found
 # the cmd_retry door missing one is written up in check-autonomy.sh). This kills the DEFINITION, so
 # it is the four regimes together that answer. Caught by `a REVIEW session that edited code outside
-# the mission directory is logged REVIEW-EDITED-CODE`.
-mut_RUN_review_scope_blind() {
-  sed -i '/^review_scope_check()/,/^}/ s@^  \[ "\$phase" = "REVIEW" \] || return 0$@  return 0@' "$1"
+# the mission directory is logged REVIEW-EDITED-CODE` — since the hat's boundary, its successor `a REVIEW session that edited code outside its writes: is logged HAT-CROSSED, and the line stops`, plus the `hat:` probes.
+mut_RUN_review_scope_blind() {   # since the hat's boundary: every path reads as inside its hat
+  sed -i '/^hat_path_allowed() {/,/^}/ s@^  \[ -n "\$globs" \] || return 0$@  return 0@' "$1"
 }
 
 # The guard above, still firing, still logging — and now NOISE. `$HANDOFF_DIR` goes back to being
@@ -2819,8 +2910,8 @@ mut_RUN_review_scope_blind() {
 # Anchored on the FUNCTION range, like its siblings: `$MISSION` and `$HANDOFF_DIR` appear together
 # elsewhere in this runner, and a pattern that drifted would sabotage a path expression somewhere
 # else while still looking applied.
-mut_RUN_review_scope_handoff_dir_verbatim() {
-  sed -i '/^review_scope_check()/,/^}/ s@^      "\$mission_dir"/\*) continue ;;$@      "$HANDOFF_DIR/$MISSION"/*) continue ;;@' "$1"
+mut_RUN_review_scope_handoff_dir_verbatim() {   # since the hat's boundary: hat_expand keeps the slash
+  sed -i '/^hat_expand() {/,/^}/ s@^  while \[ "\${hd%/}" != "\$hd" \]; do hd="\${hd%/}"; done$@  :@' "$1"
 }
 
 # The same noise, reached from the OTHER side of the same match — and this time it is git writing
@@ -2829,14 +2920,14 @@ mut_RUN_review_scope_handoff_dir_verbatim() {
 # octal-escaped; it opens with a `"`, matches no arm of the allowlist, and an artifact the round
 # wrote inside its OWN mission directory — a report named in pt-BR, in a repo whose OUTPUT_LANG is
 # pt-BR — is reported as code on a healthy round. Caught by `a mission-directory file whose name is
-# not ASCII is not flagged REVIEW-EDITED-CODE` in check-autonomy.sh — regime 6, whose fixture pins
+# not ASCII is not flagged HAT-CROSSED` in check-autonomy.sh — regime 6, whose fixture pins
 # core.quotePath on so the venom does not depend on the reader's ~/.gitconfig.
 #
 # Anchored on the FUNCTION range for its sibling's reason: `git -C "$REPO_ROOT" diff` is a shape
 # this runner writes in several places, and a pattern that drifted would sabotage one of those
 # while still looking applied.
-mut_RUN_review_scope_quotepath_default() {
-  sed -i '/^review_scope_check()/,/^}/ s@ -c core\.quotePath=false diff --name-only @ diff --name-only @' "$1"
+mut_RUN_review_scope_quotepath_default() {   # since the hat's boundary: the diff half of hat_guard_check
+  sed -i '/^hat_guard_check() {/,/^}/ s@ -c core\.quotePath=false diff --name-only @ diff --name-only @' "$1"
 }
 
 # The guard above, firing correctly — and taking the runner down with it. `pipeline_log_line` ends
@@ -2958,6 +3049,23 @@ CATALOG=(
   RUN_blocked_retry_not_escalated
   RUN_app_down_not_escalated
   RUN_app_down_retry_not_escalated
+  RUN_strict_mcp_dropped
+  RUN_disallowed_dropped
+  RUN_hat_guard_blind
+  RUN_hat_door1_missing
+  RUN_hat_door2_missing
+  RUN_hat_retry_door_missing
+  RUN_hat_close_door_missing
+  RUN_kit_touched_silent
+  RUN_init_blind
+  CENSUS_tools_blind
+  HEALTH_release_line3_blind
+  RUN_hat_guard_ignores_prior_dirt
+  HEALTH_with_mutation_refused
+  RUN_hat_status_not_nul
+  RUN_hat_expand_unquoted
+  RUN_hat_missing_mirror_ignored
+  RUN_hat_close_unchecked
   RUN_turn_rule_dropped
   RUN_harness_env_inherited
   RUN_intervention_unwritten_on_phase

@@ -98,7 +98,7 @@ many open findings `TODO.md` carries**, as `todo-findings <N>`, so the backlog c
 silence: growing stays allowed, growing undeclared does not. Known debt lives frozen in
 `tests/health-baseline.txt` — almost every line owned by the `TODO.md` entry that will pay it off,
 and one, the count itself, owned by the file: a new finding fails, and so does a baseline line
-that stopped being a finding. It spends no paid session and does not need `.sdd/config.sh`.
+that stopped being a finding. It spends no paid session and does not need `.sdd/config.sh`. `sdd health --release` is the scoreboard of ADR 0007 — six lines that say whether the kit is apt for another repo of the organisation, read from artifacts and never from the suite — and `sdd census <mission>` reads a mission's logs back: tools by name, MCP seen, denials, bytes re-read per phase.
 
 **In the kit repo it is also a gate, not only a report.** Since the catalogue became opt-in it had
 no automatic owner, and the base branch once carried a live survivor for days because nobody typed
@@ -137,13 +137,13 @@ the directory `docs/handoffs/<YYYYMMDD>-<slug>/`.
 | [`docs/adr/`](docs/adr/) | the architectural decisions taken, and the alternatives discarded with them |
 | [`config/schema.md`](config/schema.md) | every `.sdd/config.sh` key, with its default and why |
 | [`CONTEXT.md`](CONTEXT.md) | glossary of the kit's own vocabulary, and the decisions resolved in interview |
-| [`agents/`](agents/) | the 6 agents (open markdown — portable to other harnesses) |
+| [`agents/`](agents/) | the 8 agents (open markdown — portable to other harnesses) |
 | [`templates/`](templates/) | mission, plan, handoff, checkpoint, review, PR body |
 | [`CLAUDE.md`](CLAUDE.md) | conventions for whoever (human or agent) works on **this** kit |
 | [`KAIZEN_LOG.md`](KAIZEN_LOG.md) | history of improvements with a measured before/after |
 | [`TODO.md`](TODO.md) | findings about the kit itself, recorded by any agent |
 
-## The 6 agents
+## The 8 agents
 
 | Agent | Phase | Model | Delivers |
 |---|---|---|---|
@@ -152,7 +152,9 @@ the directory `docs/handoffs/<YYYYMMDD>-<slug>/`.
 | `sdd-qa` | closes the QA cycle (sub-step `QA:close`) | Opus | e2e specs, fix increments, `30-handoff-qa.md` |
 | `sdd-reviewer` | code review until Grade A where a sensor exists (B tolerated on prose), read-only over the code | Opus | `40-review-r<N>.md` + `R<n>` increments |
 | `sdd-docs` | living documentation | Opus | target docs synced + `45-docs.md` |
-| `sdd-publisher` | TICKET (opens the issue) and PR (push + opens the PR) | Sonnet | `10-ticket.md`, open PR + `50-pr.md` |
+| `sdd-publisher` | PR (push + opens the PR) | Sonnet | open PR + `50-pr.md` |
+| `sdd-ticket` | TICKET (opens the issue, in the active sprint) | Sonnet | `10-ticket.md`, the mission branch |
+| `sdd-kaizen` | KAIZEN — the kit judging its own last change (`sdd kaizen`, kit repo only) | Opus | `05-verdict.md` + the next mission's plan |
 
 The `docs/qa/` tree is **not** delivered by `sdd-qa`: it is written by the `qa-report` and
 `qa-execution` skills, in the `QA:plan` and `QA:exec` sub-steps — two sessions of their own, with

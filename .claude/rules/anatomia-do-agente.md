@@ -24,7 +24,7 @@ ferramenta ou de gate, não frase de prompt — frase é lembrete, gate é regra
 acrescenta restrição só para REVIEW e QA.
 
 **Dívida declarada.** "O revisor não toca código" e "o publisher não mergeia" são frases; o
-runner **avisa** (`REVIEW-EDITED-CODE`) e não para. A regra "nunca encerre o turno com trabalho em
+runner avisava (`REVIEW-EDITED-CODE`); desde `20260903-a-fronteira-do-chapeu` ele **para** (`hat-crossed`). A regra "nunca encerre o turno com trabalho em
 background" vivia só no `sdd-reviewer.md` e custou duas sessões do publisher em 2026-09-02 —
 fechada movendo-a para `boot_prompt()` (L3 da auditoria).
 
@@ -35,12 +35,17 @@ fechada movendo-a para `boot_prompt()` (L3 da auditoria).
 só o executor edita código. Ferramenta a mais é superfície de erro que nenhum gate mede.
 
 **Onde mora hoje.** `ALLOWED_TOOLS` e `PERMISSION_MODE` são chaves de config
-(`config/starter.conf`), teto `acceptEdits`, `bypassPermissions` recusado por `load_config`.
+(`config/starter.conf`), teto `acceptEdits`, `bypassPermissions` recusado por `load_config`;
+`phase_hat()` é a única tabela passo → chapéu, `hat_disallowed()`/`hat_mcp()` montam as flags em
+`run_phase()`, `HAT_DENY_BASE` é o que nenhuma fase usou, e `sdd census <missão>` mede o depois.
 
-**Dívida declarada.** Nenhum `agents/*.md` declara `tools:` (ausente = todas), e toda fase recebe
-o **mesmo** `--allowedTools "$ALLOWED_TOOLS"`: revisor e publisher têm o poder do executor.
-`--setting-sources user,project,local` carrega hooks e plugins **do humano** na sessão headless.
-Fechar pede medir qual mínimo cada gate exige antes de cortar — é a próxima missão desta rule.
+**Dívida declarada.** Fechada em `20260903-a-fronteira-do-chapeu`: cada `agents/*.md` declara
+`disallowedTools:`, `writes:` e `mcp:`, o runner passa `--disallowedTools` e `--strict-mcp-config`
+por fase, e a linha `init` do stream prova no ledger (`mcp_seen`, `tools_leaked`). Medido antes:
+0 negações em 43 sessões, 9 servidores MCP e 104 ferramentas em toda fase; depois, o executor vê
+14. O que fica: `--setting-sources user,project,local` continua carregando as skills do humano —
+medido, é 2% do prefixo e três fases dependem delas (`codereview`, `ticket`, `qa-*`); a rota é a
+linha 2 do ADR 0007, não uma flag.
 
 ## 3. Gestão de contexto — o que o agente sabe agora
 
@@ -97,11 +102,15 @@ fronteira nas fases de alvo. Credencial real entra só na fase cujo gate a exige
 PR no `gh`).
 
 **Onde mora hoje.** `ensure_mission_branch`; `kit_guard_arm`/`kit_guard_check` em quatro portas
-(aviso `KIT-TOUCHED`); o catálogo de mutação sabota **uma cópia** em `mktemp -d`; o env do
-harness é apagado por `run_phase()` antes do `claude -p` (L5 da auditoria).
+(`KIT-TOUCHED`, e desde a fronteira do chapéu uma parada); `hat_guard_check` nos três sítios onde
+o `review_scope_check` só avisava, lendo commits **e** árvore contra `writes:`; o catálogo de
+mutação sabota **uma cópia** em `mktemp -d`; o env do harness é apagado por `run_phase()` antes do
+`claude -p` (L5 da auditoria).
 
 **Dívida declarada.** As fases rodam **no checkout do humano**, com `.env.idp`, Jira e push reais;
-a guarda de kit é aviso, não fronteira — furada em `2d28d13`. Sem worktree nem container: o ledger
+a guarda de kit **para a linha** desde `20260903-a-fronteira-do-chapeu` (`kind: kit-touched`), e o
+chapéu que escreve fora de `writes:` também (`hat-crossed`) — as duas pela mesma porta,
+`hat_crossed_escalation`, em quatro sítios. Sem worktree nem container: o ledger
 carimba caminho e um worktree já confundiu a identidade do repo (comentários `WORKTREE` do
 `bin/sdd`). Fechar pede desenho próprio, não um `git worktree add` no laço.
 ⚠️ **Medido em 2026-09-03 18:45, vinte minutos depois de o L4 pousar:** uma segunda sessão
@@ -127,5 +136,7 @@ fase (`phase_budget_usd`); merge do PR é humano; `sdd close`. Desde a auditoria
 (`BUDGET_MISSION_USD`), `ON_ESCALATION_CMD` em todo rc 3, e a linha `- intervention:` escrita pelo
 runner (L2, L6 e L4).
 
-**Dívida declarada.** `--phase X` força o ponto de partida e o runner **segue em frente** — não
-existe "pare depois desta fase" (a DOCS emendou sozinha depois da r4 em 2026-09-02).
+**Dívida declarada.** "Pare depois desta fase" existe: `--phase X --max-phases 1` — a linha
+anterior desta seção dizia que não existia, e estava errada (foi o comando do incidente das 18:45).
+O que falta é o inverso: `--phase X` sem `--max-phases` segue em frente, e a DOCS emendou sozinha
+depois da r4 em 2026-09-02.

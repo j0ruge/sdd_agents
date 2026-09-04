@@ -31,3 +31,6 @@ ALLOWED_TOOLS="Bash"
 
 # Os artefatos deste repo sao PT-BR; a superficie do kit e ingles. Ver CLAUDE.md, secao Idioma.
 OUTPUT_LANG="pt-BR"
+
+# Words that must not appear on the kit surface — sdd health --release, line 5 (ADR 0007)
+RELEASE_FORBIDDEN_WORDS="sales_quote SQ- JRC jrcbrasil"

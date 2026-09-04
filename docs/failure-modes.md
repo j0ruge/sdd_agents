@@ -430,11 +430,12 @@ Three shapes and three different diagnoses:
   `R<n>` means the ceiling was reached by rounds that kept *finding*, never by a fix that failed.
 - **`R<n>` rows `done`, and the next round found the same defect again** — the fix did not fix it.
   That is the honest "badly sliced" case, and the report of the later round says so in its own words.
-- **A round that fixed instead of finding** — `grep REVIEW-EDITED-CODE .sdd/logs/<mission>/pipeline.log`.
-  The runner writes that line when a REVIEW session commits anything outside the mission directory
-  (plus `TODO_FILE` and `tests/health-baseline.txt`). It is a **warning, not a boundary**: the line
-  stops nothing, it only tells you the round paid for a second hat and its Grade A is the reviewer
-  certifying its own repair. ⚠️ **The absence of the marker is not a measurement.** That grep
+- **A round that fixed instead of finding** — `grep HAT-CROSSED .sdd/logs/<mission>/pipeline.log`,
+  and a `hat-crossed` row in the ledger. The runner writes both when a REVIEW session commits or
+  leaves dirty anything outside its hat's `writes:` (the mission directory, plus `TODO_FILE` and
+  `tests/health-baseline.txt`), and since `20260903-a-fronteira-do-chapeu` it is a **boundary**:
+  the line stops with rc 3, because the round paid for a second hat and its Grade A would be the
+  reviewer certifying its own repair. ⚠️ **The absence of the marker is not a measurement.** That grep
   answers `0` both when the round behaved and when the guard never ran: bash parses this script's
   functions as it reads the file, so a `sdd run` process that predates this guard carries the
   `bin/sdd` it parsed at startup and never calls it — which is how `20260901-o-revisor-so-acha`,

@@ -75,8 +75,8 @@ repositório do kit: a linha completa do achado vai na seção de achados fora d
 marcada `kit:`, e quem transporta é o humano ou a triagem do `sdd kaizen`. Medido em `2d28d13` —
 uma sessão de EXEC cujo alvo era outro repo commitou um achado de kit direto na `main` daqui, com
 a suíte vermelha e fora de qualquer revisão, e as linhas de ledger da própria corrida passaram a
-carimbar o sha do commit que a corrida acabara de fazer. O runner hoje avisa e registra
-(`KIT-TOUCHED` no `pipeline.log`), mas **não para a linha** — guarda de aviso, não fronteira.
+carimbar o sha do commit que a corrida acabara de fazer. Desde `20260903-a-fronteira-do-chapeu` o runner **para a linha** (`KIT-TOUCHED` no
+`pipeline.log`, linha `kit-touched` no ledger, rc 3), pela mesma porta da fronteira do chapéu.
 ⚠️ A guarda mora nos **chamadores**, e são quatro portas: as duas do laço do `cmd_run`, o
 `cmd_retry` e o `cmd_close`. É a forma que este arquivo recusa em toda outra família (o `journal`
 tem UMA definição de escalada justamente por isso), e aqui ela é deliberada — o `kit_guard_check`
@@ -84,13 +84,13 @@ precisa correr **depois** de `moved2` ser amostrado, e uma guarda dentro do `run
 dentro da janela. O preço é que a quinta porta nasce desguardada; ele é pago com um probe por
 porta (`tests/check-autonomy.sh`, regimes 1, 4, 5 e 7), então porta acrescentada sem probe é porta
 cuja remoção nenhuma asserção percebe.
-⚠️ **A forma tem hoje TRÊS instâncias deliberadas, e a frase acima ("este arquivo a recusa em toda
+⚠️ **A forma tem hoje QUATRO instâncias deliberadas, e a frase acima ("este arquivo a recusa em toda
 outra família") vale para as outras, não para estas.** O censo sai do comando, nunca desta linha —
 é a mesma régua do `44 caught of 44`, conte a propriedade e não a palavra:
 
 ```bash
-grep -cE '^[a-z_]+_escalation\(\) \{'                 bin/sdd   # definições de escalada → 2
-grep -cE '^ +if [a-z_]+_escalation "\$phase"; then'   bin/sdd   # portas delas           → 4
+grep -cE '^[a-z_]+_escalation\(\) \{'                 bin/sdd   # definições de escalada → 3
+grep -cE '^ +if [a-z_]+_escalation "\$phase"; then'   bin/sdd   # portas delas           → 8
 grep -cE '^ *kit_guard_check "'                       bin/sdd   # portas da guarda de kit → 4
 ```
 
@@ -109,6 +109,13 @@ acrescentada sem probe é porta cuja remoção nenhuma asserção percebe.
   ⚠️ Marcador novo **re-deriva** o contrato (reset na entrada do seu único setter, não sobrevive à
   volta) em vez de herdá-lo: é o que o comentário sobre `GATE_APP_DOWN` faz, e é o que se cobra do
   quarto.
+- `hat_crossed_escalation`, desde `20260903-a-fronteira-do-chapeu`: UMA definição, DOIS marcadores
+  (`HAT_CROSSED_WHY`, armado por `hat_guard_check` quando a sessão tocou caminho fora do `writes:`
+  do chapéu ou viu MCP/ferramenta que não declarou; `KIT_TOUCHED_WHY`, armado por
+  `kit_guard_check`) e QUATRO portas — as duas do laço do `cmd_run`, `cmd_retry` e `cmd_close` —,
+  todas lidas **depois** da linha de sessão do ledger. Cada marcador tem um setter só, que o zera
+  na entrada; um probe por porta em `check-autonomy.sh` e um mutante por porta no catálogo. É o
+  quarto marcador, e ele **re-derivou** o contrato em vez de herdá-lo.
 
 A projeção (`--dry-run`) **não arma nada** em nenhuma das duas: `sdd run --dry-run` não abre sessão
 a que atribuir mudança, e armar mesmo assim fazia a projeção herdar o aviso de ledger do

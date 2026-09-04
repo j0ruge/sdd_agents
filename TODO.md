@@ -39,6 +39,12 @@ Achados sobre **repos-alvo** vão para o `TODO.md` daquele repo. Este arquivo é
 
 ### Sensores que faltam
 
+- [ ] **O prompt do executor manda levar análise para subagentes, e o censo mede zero usos** —
+  `agents/sdd-executor.md:71` — 27 sessões EXEC em duas missões (`sdd census`), `Agent=0`; a
+  instrução custa tokens em todo turno e nenhum gate a exige. Direção: decidir na dieta (missão 2)
+  se a frase sai ou se o chapéu ganha `Agent` de verdade; hoje `Agent` fica permitido ao executor
+  só por causa dela. — descoberto por `sdd-planner` na missão `20260903-a-fronteira-do-chapeu` (2026-09-03)
+
 - [ ] **Âncora morta de mutante só aparece no catálogo inteiro (15–20 min), mas detectá-la custa
   segundos** — `tests/check-mutation.sh:2647` — a guarda `cmp -s` (rc 90) só roda dentro do
   `sdd health`; aplicar os 195 `sed` numa cópia de `bin/sdd` e comparar não roda suíte nenhuma.
@@ -663,7 +669,8 @@ Achados sobre **repos-alvo** vão para o `TODO.md` daquele repo. Este arquivo é
 - [ ] **O `README.md` diz "the 6 agents" e existem 7** — `README.md:111` — o `sdd-kaizen` não
   aparece nem no rótulo nem na tabela de `agents/`, embora o `sdd preflight` conte `7 kit
   agent(s) checked`. Pré-existente (nasceu com o agente, fora do diff desta missão). Direção:
-  derivar o número de `ls agents/*.md` em vez de escrevê-lo à mão.
+  derivar o número de `ls agents/*.md` em vez de escrevê-lo à mão. RESOLVIDO por `ff433fd`
+  (a tabela lista os 8, `sdd-ticket` incluído; o número continua escrito à mão).
   — descoberto por `sdd-reviewer` na missão `20260818-lote-facil` (2026-08-18)
 
 - [ ] **O `CLAUDE.md` chama de "quatro" os sensores fora do alcance da mutação e agora são cinco**

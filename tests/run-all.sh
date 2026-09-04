@@ -128,7 +128,7 @@ run "entry point cannot fall through into itself" "$ROOT/tests/check-entrypoint.
 # purpose: left behind it would still pass, and would go on describing a surface one file smaller
 # than the one it reads — the label-instead-of-artifact shape this whole mission is about.
 LINT_SEVERITY=warning
-LINT_FLOOR=15
+LINT_FLOOR=16
 
 lint_surface() {
   local files=("$ROOT/bin/sdd") f
@@ -232,6 +232,7 @@ run "sdd health discriminates" "$ROOT/tests/check-health.sh"
 # `agents/` or this sensor passes vacuously in every mutant. sandbox() copies it, and says why.
 # Cost of letting it in, measured: 0.14 s per run, ~0.6 s of wall clock across the whole pool.
 run "preflight and the install guard" "$ROOT/tests/check-preflight.sh"
+run "every hat declares its boundary" "$ROOT/tests/check-hat.sh"
 
 # Sensor of the sensor. TWO conditions, and they answer different questions — collapsing them into
 # one would reopen something the other was holding shut:

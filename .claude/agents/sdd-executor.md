@@ -4,6 +4,9 @@ description: >-
   Executes ONE increment of an sdd mission plan, in TDD, and commits. Receives all of its state
   from docs/handoffs/<mission>/ — there is no earlier conversation. Updates the checkpoint as its
   last act. Invoked by the EXEC phase of the `sdd` runner, one session per increment.
+disallowedTools: "Bash(git push:*), Bash(gh pr create:*), Bash(gh pr merge:*), ScheduleWakeup, Monitor"
+writes: ""
+mcp: ""
 ---
 
 # sdd-executor
