@@ -136,9 +136,11 @@ files="$(surface)"
 # 37 paths while the surface was already 40. A floor that lags keeps PASSING while measuring a
 # smaller surface than the one it reads — the same failure this comment already names once.
 # Re-counted against the real surface in I4 of 20260901-o-revisor-so-acha (40 + docs/graphify.md).
+# Re-counted on 2026-09-03 (20260903-a-fronteira-do-chapeu): 41 + tests/check-hat.sh +
+# agents/sdd-ticket.md + its .claude/agents copy = 44; docs/adr/0007 makes it 45 in the same mission.
 n_surface="$(grep -c . <<< "$files")"
-if [ "$n_surface" -lt 41 ]; then
-  printf '  FAIL  surface shrank to %d path(s), expected at least 41 — did something move?\n' \
+if [ "$n_surface" -lt 44 ]; then
+  printf '  FAIL  surface shrank to %d path(s), expected at least 44 — did something move?\n' \
     "$n_surface" >&2
   exit 93
 fi

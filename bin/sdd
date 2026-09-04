@@ -1594,18 +1594,26 @@ phase_step() {
 
 # Agent responsible for the step. Empty ⇒ the slash skill drives, not a kit agent
 # (two system prompts fighting over one session is noise, not reinforcement).
+# The ONE table step → hat (the agents/<hat>.md whose boundary the phase inherits). phase_agent()
+# derives from it: the two skill-driven QA steps boot WITHOUT --agent (the slash IS their prompt,
+# see phase_slash below) but still wear sdd-qa's boundary. Two `case`s over the same enum was the
+# thing CLAUDE.md forbids; this is the definition, and the other one is a filter over it.
+phase_hat() {
+  case "$1" in
+    EXEC)        printf '%s\n' "sdd-executor" ;;
+    QA|QA:*)     printf '%s\n' "sdd-qa" ;;
+    REVIEW)      printf '%s\n' "sdd-reviewer" ;;
+    DOCS)        printf '%s\n' "sdd-docs" ;;
+    PR)          printf '%s\n' "sdd-publisher" ;;
+    TICKET)      printf '%s\n' "sdd-ticket" ;;
+    KAIZEN)      printf '%s\n' "sdd-kaizen" ;;
+    *)           printf '%s\n' "" ;;
+  esac
+}
 phase_agent() {
   case "$1" in
-    EXEC)      printf '%s\n' "sdd-executor" ;;
-    QA:plan)   printf '%s\n' "" ;;
-    QA:exec)   printf '%s\n' "" ;;
-    QA:close|QA) printf '%s\n' "sdd-qa" ;;
-    REVIEW)    printf '%s\n' "sdd-reviewer" ;;
-    DOCS)      printf '%s\n' "sdd-docs" ;;
-    PR)        printf '%s\n' "sdd-publisher" ;;
-    TICKET)    printf '%s\n' "sdd-publisher" ;;
-    KAIZEN)    printf '%s\n' "sdd-kaizen" ;;
-    *)         printf '%s\n' "" ;;
+    QA:plan|QA:exec) printf '%s\n' "" ;;
+    *)               phase_hat "$1" ;;
   esac
 }
 
@@ -1616,7 +1624,7 @@ phase_agent() {
 # only route — and both answer `<none>` in phase_agent, exactly as the invariant above it requires.
 # TICKET used to be listed here as well, WITH `sdd-publisher` as its agent: two system prompts over
 # one session, which is the thing that invariant refuses. The slash was the half that went, because
-# the `ticket` skill has no `disable-model-invocation` and agents/sdd-publisher.md already tells the
+# the `ticket` skill has no `disable-model-invocation` and agents/sdd-ticket.md already tells the
 # session to invoke `/ticket open`. It also took one read of the PT-BR frontmatter key `titulo` out
 # of the runner; the remaining one is `cmd_approve`, which only prints it for the human.
 phase_slash() {

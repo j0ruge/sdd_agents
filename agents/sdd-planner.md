@@ -4,6 +4,9 @@ description: >-
   Plans an sdd mission WITH the human present: brainstorm, grill, kaizen/DDD validation and the
   self-contained plan. Produces 00-missao.md, 01-plano.md and checkpoint.md — the three artifacts
   every headless phase depends on. Runs on Fable, interactive. Never implements.
+disallowedTools: "Bash(git push:*), Bash(gh pr create:*), Bash(gh pr merge:*), ScheduleWakeup, Monitor"
+writes: "$HANDOFF_DIR/$MISSION/**"
+mcp: ""
 ---
 
 # sdd-planner

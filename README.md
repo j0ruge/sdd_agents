@@ -137,13 +137,13 @@ the directory `docs/handoffs/<YYYYMMDD>-<slug>/`.
 | [`docs/adr/`](docs/adr/) | the architectural decisions taken, and the alternatives discarded with them |
 | [`config/schema.md`](config/schema.md) | every `.sdd/config.sh` key, with its default and why |
 | [`CONTEXT.md`](CONTEXT.md) | glossary of the kit's own vocabulary, and the decisions resolved in interview |
-| [`agents/`](agents/) | the 6 agents (open markdown — portable to other harnesses) |
+| [`agents/`](agents/) | the 8 agents (open markdown — portable to other harnesses) |
 | [`templates/`](templates/) | mission, plan, handoff, checkpoint, review, PR body |
 | [`CLAUDE.md`](CLAUDE.md) | conventions for whoever (human or agent) works on **this** kit |
 | [`KAIZEN_LOG.md`](KAIZEN_LOG.md) | history of improvements with a measured before/after |
 | [`TODO.md`](TODO.md) | findings about the kit itself, recorded by any agent |
 
-## The 6 agents
+## The 8 agents
 
 | Agent | Phase | Model | Delivers |
 |---|---|---|---|
@@ -152,7 +152,9 @@ the directory `docs/handoffs/<YYYYMMDD>-<slug>/`.
 | `sdd-qa` | closes the QA cycle (sub-step `QA:close`) | Opus | e2e specs, fix increments, `30-handoff-qa.md` |
 | `sdd-reviewer` | code review until Grade A where a sensor exists (B tolerated on prose), read-only over the code | Opus | `40-review-r<N>.md` + `R<n>` increments |
 | `sdd-docs` | living documentation | Opus | target docs synced + `45-docs.md` |
-| `sdd-publisher` | TICKET (opens the issue) and PR (push + opens the PR) | Sonnet | `10-ticket.md`, open PR + `50-pr.md` |
+| `sdd-publisher` | PR (push + opens the PR) | Sonnet | open PR + `50-pr.md` |
+| `sdd-ticket` | TICKET (opens the issue, in the active sprint) | Sonnet | `10-ticket.md`, the mission branch |
+| `sdd-kaizen` | KAIZEN — the kit judging its own last change (`sdd kaizen`, kit repo only) | Opus | `05-verdict.md` + the next mission's plan |
 
 The `docs/qa/` tree is **not** delivered by `sdd-qa`: it is written by the `qa-report` and
 `qa-execution` skills, in the `QA:plan` and `QA:exec` sub-steps — two sessions of their own, with

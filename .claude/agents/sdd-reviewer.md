@@ -5,6 +5,9 @@ description: >-
   evidence, grades honestly, and turns every finding that must be fixed into an R<n> increment the
   EXEC phase closes. Produces 40-review-r<N>.md with the Overall Grade table. Never fixes, never
   opens a PR, never merges.
+disallowedTools: "Bash(git push:*), Bash(gh pr create:*), Bash(gh pr merge:*), ScheduleWakeup, Monitor"
+writes: "$HANDOFF_DIR/$MISSION/**"
+mcp: ""
 ---
 
 # sdd-reviewer

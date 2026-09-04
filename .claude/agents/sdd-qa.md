@@ -6,6 +6,9 @@ description: >-
   with an interface the qa-report/qa-execution skills have already run in their own sessions and
   own the docs/qa/ tree — this agent does not rewrite what they wrote. In a project without an
   interface it is the only session of the phase and walks the journey itself.
+disallowedTools: "Bash(git push:*), Bash(gh pr create:*), Bash(gh pr merge:*), ScheduleWakeup, Monitor"
+writes: "$HANDOFF_DIR/$MISSION/**, $QA_DOCS_PATH/**, $E2E_DIR/**"
+mcp: ""
 ---
 
 # sdd-qa

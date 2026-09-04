@@ -415,7 +415,7 @@ assert_eq "a project with no interface is not told about a spec directory it has
 # it — the QA sub-steps driven by a skill answer `<none>`. TICKET declared BOTH: the `sdd-publisher`
 # agent AND a prepended `/ticket open`. The slash is what goes: the `ticket` skill has no
 # `disable-model-invocation`, so it does not need to be the first line of the prompt to load, and
-# agents/sdd-publisher.md already instructs the session to invoke it.
+# agents/sdd-ticket.md already instructs the session to invoke it.
 #
 # Differential, and both halves are needed: the agent alone would pass on a runner that also kept
 # the slash, and the absent slash alone would pass on a runner that booted TICKET with no driver at
@@ -425,7 +425,7 @@ sed -i 's|^JIRA_ENABLED=false|JIRA_ENABLED=true|' .sdd/config.sh
 printf 'PROJECT=FX\nBOARD=1\n' > .jira-project
 outt="$( "$SDD" run "$MISSION" --dry-run --phase TICKET 2>&1 )"
 assert_eq "TICKET boots the agent without a prepended slash" \
-  "TICKET=sdd-publisher" "$(printf '%s\n' "$outt" | projected)"
+  "TICKET=sdd-ticket" "$(printf '%s\n' "$outt" | projected)"
 if grep -q '│ /ticket open' <<< "$outt"; then
   fail "the TICKET boot prompt does not open with a slash" \
        "no '/ticket open' first line" "$(grep -m1 '│' <<< "$outt")"
