@@ -2237,8 +2237,8 @@ mut_RUN_close_unverified_conflated() {
 #
 # The CHECK and not the arm: an arm left behind with no check is the same silence, and this way the
 # mutant also proves the check is what reports rather than the arm being decorative.
-mut_RUN_close_unguarded() {
-  sed -i '/^  kit_guard_check "CLOSE"$/d' "$1"
+mut_RUN_close_unguarded() {   # range-addressed since the close door reads $phase like every other
+  sed -i '/^cmd_close() {/,/^}/ { /^  kit_guard_check "\$phase"$/d; }' "$1"
 }
 
 # The projection arms the kit guard again — the shape the first round of this work shipped and
