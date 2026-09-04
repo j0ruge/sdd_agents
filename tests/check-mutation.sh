@@ -2863,9 +2863,9 @@ mut_RUN_review_fixes_inline() {
 # one of the three doors, and each door already has a probe of its own (the sabotage pass that found
 # the cmd_retry door missing one is written up in check-autonomy.sh). This kills the DEFINITION, so
 # it is the four regimes together that answer. Caught by `a REVIEW session that edited code outside
-# the mission directory is logged REVIEW-EDITED-CODE`.
-mut_RUN_review_scope_blind() {
-  sed -i '/^review_scope_check()/,/^}/ s@^  \[ "\$phase" = "REVIEW" \] || return 0$@  return 0@' "$1"
+# the mission directory is logged REVIEW-EDITED-CODE` — since the hat's boundary, its successor `a REVIEW session that edited code outside its writes: is logged HAT-CROSSED, and the line stops`, plus the `hat:` probes.
+mut_RUN_review_scope_blind() {   # since the hat's boundary: every path reads as inside its hat
+  sed -i '/^hat_path_allowed() {/,/^}/ s@^  \[ -n "\$globs" \] || return 0$@  return 0@' "$1"
 }
 
 # The guard above, still firing, still logging — and now NOISE. `$HANDOFF_DIR` goes back to being
@@ -2880,8 +2880,8 @@ mut_RUN_review_scope_blind() {
 # Anchored on the FUNCTION range, like its siblings: `$MISSION` and `$HANDOFF_DIR` appear together
 # elsewhere in this runner, and a pattern that drifted would sabotage a path expression somewhere
 # else while still looking applied.
-mut_RUN_review_scope_handoff_dir_verbatim() {
-  sed -i '/^review_scope_check()/,/^}/ s@^      "\$mission_dir"/\*) continue ;;$@      "$HANDOFF_DIR/$MISSION"/*) continue ;;@' "$1"
+mut_RUN_review_scope_handoff_dir_verbatim() {   # since the hat's boundary: hat_expand keeps the slash
+  sed -i '/^hat_expand() {/,/^}/ s@^  while \[ "\${hd%/}" != "\$hd" \]; do hd="\${hd%/}"; done$@  :@' "$1"
 }
 
 # The same noise, reached from the OTHER side of the same match — and this time it is git writing
@@ -2890,14 +2890,14 @@ mut_RUN_review_scope_handoff_dir_verbatim() {
 # octal-escaped; it opens with a `"`, matches no arm of the allowlist, and an artifact the round
 # wrote inside its OWN mission directory — a report named in pt-BR, in a repo whose OUTPUT_LANG is
 # pt-BR — is reported as code on a healthy round. Caught by `a mission-directory file whose name is
-# not ASCII is not flagged REVIEW-EDITED-CODE` in check-autonomy.sh — regime 6, whose fixture pins
+# not ASCII is not flagged HAT-CROSSED` in check-autonomy.sh — regime 6, whose fixture pins
 # core.quotePath on so the venom does not depend on the reader's ~/.gitconfig.
 #
 # Anchored on the FUNCTION range for its sibling's reason: `git -C "$REPO_ROOT" diff` is a shape
 # this runner writes in several places, and a pattern that drifted would sabotage one of those
 # while still looking applied.
-mut_RUN_review_scope_quotepath_default() {
-  sed -i '/^review_scope_check()/,/^}/ s@ -c core\.quotePath=false diff --name-only @ diff --name-only @' "$1"
+mut_RUN_review_scope_quotepath_default() {   # since the hat's boundary: the diff half of hat_guard_check
+  sed -i '/^hat_guard_check() {/,/^}/ s@ -c core\.quotePath=false diff --name-only @ diff --name-only @' "$1"
 }
 
 # The guard above, firing correctly — and taking the runner down with it. `pipeline_log_line` ends

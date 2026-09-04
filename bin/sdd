@@ -2505,8 +2505,10 @@ kit_guard_check() {
 #    exact path, declared rather than conditioned on `kit_root = REPO_ROOT` without a probe.
 #  · `core.quotePath=false` BUYS BACK THE NON-ASCII NAME AND NOT EVERY NAME: a path holding a
 #    double quote, a backslash, a control character or a newline is still C-quoted by git and
-#    would be counted as outside its hat. The residue needs `-z` with a NUL split, which a `$( )`
-#    capture cannot carry. Declared, not solved.
+#    would be counted as outside its hat. The quotes are deliberately NOT stripped here: stripping
+#    them made the flag redundant for the match (a quoted non-ASCII name matched the glob anyway)
+#    and its mutant survived — the flag is the rule, the residue is declared, not solved. The
+#    residue needs `-z` with a NUL split, which a `$( )` capture cannot carry.
 #  · ONLY TRAILING SLASHES are normalised out of `$HANDOFF_DIR` (hat_expand); a leading `./`, a
 #    `//` in the middle or an absolute `$HANDOFF_DIR` would each miss the same way and none has a
 #    probe.
@@ -2552,7 +2554,7 @@ hat_guard_check() {   # hat_guard_check <phase> <HEAD before the session> — ar
   status="$( git -C "$REPO_ROOT" -c core.quotePath=false status --porcelain --untracked-files=all 2>/dev/null | cut -c4- || true )"
   while IFS= read -r f; do
     [ -n "$f" ] || continue
-    f="${f##* -> }"; f="${f#\"}"; f="${f%\"}"
+    f="${f##* -> }"
     hat_path_allowed "$f" "$globs" && continue
     n=$((n + 1)); outside="${outside:+$outside }$f"
   done <<< "$changed"$'\n'"$status"
