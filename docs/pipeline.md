@@ -595,6 +595,12 @@ handoffs. If it moved back into the committed tree it would dirty `git status` â
 fails `gate_REVIEW` and `sdd preflight`. `--max-budget-usd` per session is a damage cap, not a
 budget.
 
+`sdd census <mission>` reads those logs back: per phase, sessions, turns, cost, cache-read tokens,
+MCP servers the sessions saw, permission denials, bytes re-read under `HANDOFF_DIR`, and every tool
+by name with its count. It is the instrument the 2026-09-03 spec measured its "before" with (0
+denials, 9 MCP servers, 104 tools in 43 sessions); the "after" of the hat's boundary is this command
+on the first mission after it.
+
 ### Context is not the bottleneck â€” measured, not assumed
 
 One session per phase is also what keeps the context window off the critical path, and until the

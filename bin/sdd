@@ -5195,6 +5195,49 @@ cmd_retry() {
 # "corrupt ledger", and a second voice for it would send the reader hunting for a writer that never
 # ran when the rows are merely unreadable. It PRINTS and nothing else: the `return 1` stays at each
 # call site, where the control flow is readable, and there is no global to lose in a subshell.
+# sdd census <mission> — what each phase's sessions used and re-read, from .sdd/logs. The
+# instrument the 2026-09-03 spec measured its "before" with (0 denials, 9 MCP servers, 104 tools
+# in 43 sessions), now a command so the "after" is one line and not a scratchpad: tools by name,
+# MCP seen, denials, bytes re-read under HANDOFF_DIR. Reads only; never a gate.
+cmd_census() {
+  load_config
+  resolve_mission "${1:-}"
+  autonomy_have_jq || die "sdd census needs jq"
+  local dir ph streams jsons agg tools mcp denials kb hd n_sess n_turns cost cache
+  dir="$(log_dir)"
+  hd="$HANDOFF_DIR"; while [ "${hd%/}" != "$hd" ]; do hd="${hd%/}"; done
+  step "sdd census — $MISSION ($dir)"
+  for ph in TICKET EXEC QA REVIEW DOCS PR KAIZEN; do
+    streams="$( ls -1 "$dir"/"$ph"-*.stream.jsonl 2>/dev/null || true )"
+    [ -n "$streams" ] || continue
+    jsons="$( ls -1 "$dir"/"$ph"-*.json 2>/dev/null || true )"
+    agg="0 0 0 0"; denials="?"
+    if [ -n "$jsons" ]; then
+      # shellcheck disable=SC2086
+      agg="$( jq -rs '"\(length) \(map(.num_turns // 0) | add) \(map(.total_cost_usd // 0) | add | . * 100 | round / 100) \(map(.usage.cache_read_input_tokens // 0) | add / 1e6 | . * 10 | round / 10)"' $jsons 2>/dev/null )" || agg="0 0 0 0"
+      # shellcheck disable=SC2086
+      denials="$( jq -rs 'map(.permission_denials // [] | length) | add' $jsons 2>/dev/null )" || denials="?"
+    fi
+    # shellcheck disable=SC2086
+    tools="$( jq -r 'select(.type == "assistant") | .message.content[]? | select(.type == "tool_use") | .name' $streams 2>/dev/null \
+              | sort | uniq -c | sort -rn | awk '{ printf "%s%s=%s", (NR > 1 ? ", " : ""), $2, $1 } END { print "" }' )" || tools=""
+    # shellcheck disable=SC2086
+    mcp="$( jq -r 'select(.type == "system" and .subtype == "init") | (.mcp_servers // []) | length' $streams 2>/dev/null | sort -n | tail -1 )" || mcp=""
+    # shellcheck disable=SC2086
+    kb="$( jq -rs --arg hd "$hd/" '
+        ( [ .[] | select(.type == "assistant") | .message.content[]? | select(.type == "tool_use")
+              | select(((.input.file_path // .input.command // "") | contains($hd))) | .id ] ) as $ids
+        | [ .[] | select(.type == "user") | .message.content[]? | select(.type == "tool_result")
+            | select((.tool_use_id as $i | $ids | index($i)) != null)
+            | (.content | if type == "array" then map(.text // "") | join("") else (. // "") end) | length ]
+        | add // 0' $streams 2>/dev/null )" || kb="0"
+    read -r n_sess n_turns cost cache <<< "$agg"
+    printf '  %-7s sessions %-3s turns %-5s cost %-8s cache_read %sM  mcp_seen %s  denials %s  handoff_read %sB\n' \
+      "$ph" "$n_sess" "$n_turns" "$cost" "$cache" "${mcp:-?}" "$denials" "${kb:-0}"
+    printf '          tools: %s\n' "${tools:-(none)}"
+  done
+}
+
 autonomy_no_data() {   # autonomy_no_data <ledger path>
   warn "no data: the ledger at $1 does not exist yet (or has no rows)"
   dim "  It is written by 'sdd run' and 'sdd retry'. Nothing has been recorded on this machine."
@@ -6507,6 +6550,8 @@ USAGE
                              session: the rounds PLUS the EXEC sessions after the first one — the
                              R<n> increments a round writes — over the mission cost. Absent, and
                              never 0%, on a mission that never reviewed.
+  sdd census <mission>       what each phase's sessions used and re-read, from .sdd/logs: tools by
+                             name, MCP seen, denials, bytes re-read under HANDOFF_DIR
   sdd kaizen [--dry-run]     judge the previous kit change and give birth to the next kit
                              mission plan (kit repo only; exit 3 = the change made it worse)
   sdd kaizen --series        the deterministic series (JSON) the judge cites — EVERY repo in the
@@ -6564,6 +6609,7 @@ main() {
     retry)     cmd_retry "$@" ;;
     close)     cmd_close "$@" ;;
     autonomy)  cmd_autonomy "$@" ;;
+    census)    cmd_census "$@" ;;
     kaizen)    cmd_kaizen "$@" ;;
     version|--version|-v) cmd_version ;;
     help|--help|-h) cmd_help ;;

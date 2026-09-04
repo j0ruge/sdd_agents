@@ -1085,6 +1085,13 @@ mut_RUN_init_blind() {
   sed -i '/^hat_init_facts() {/,/^}/ s|^  \[ -n "\$init" \] \|\| return 0$|  return 0|' "$1"
 }
 
+# The census stops reading tool_use names — the line that turns the "before" of the 2026-09-03
+# spec into a command prints "(none)" for every phase. check-hat.sh's "the tool census names
+# Read once" dies.
+mut_CENSUS_tools_blind() {
+  sed -i '/^cmd_census() {/,/^}/ s|select(.type == "tool_use") \| .name'"'"' \$streams|select(.type == "never") \| .name'"'"' $streams|' "$1"
+}
+
 # L3 of the 2026-09-03 audit: the turn rule ("never end the turn with a task still running") is ONE
 # definition in boot_prompt(), read by the general heredoc and by KAIZEN's. Dropping the reader from
 # the general heredoc leaves KAIZEN with the rule and the five projected phases without it — the
@@ -3015,6 +3022,7 @@ CATALOG=(
   RUN_hat_close_door_missing
   RUN_kit_touched_silent
   RUN_init_blind
+  CENSUS_tools_blind
   RUN_turn_rule_dropped
   RUN_harness_env_inherited
   RUN_intervention_unwritten_on_phase
