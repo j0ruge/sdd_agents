@@ -1875,7 +1875,7 @@ pipeline_log_line() {
   # paragraph down, and the bare grep counts the display — the same one-too-many that rubric names.
   # Under `set -e` a failed redirection kills the shell AT THE REDIRECTION, so with the journal
   # unwritable — a `chmod`, a read-only mount, a full disk, a quota — every caller became a place
-  # the runner dies. Two of them advertise the opposite in so many words: `review_scope_check` and
+  # the runner dies. Two of them advertise the opposite in so many words: `hat_guard_check` and
   # `kit_guard_check` are warnings that three pages of this kit describe as stopping nothing, and
   # the sister's trailing ASSIGNMENT does not save her — the shell is already gone one line up,
   # inside here. Measured end to end (regime 7 of the guard's block in tests/check-autonomy.sh):
@@ -2429,6 +2429,7 @@ kit_guard_arm() {
 # kit_guard_check <phase> — one warn and one journal line per DIVERGENCE, never per session.
 kit_guard_check() {
   local phase="${1:-}" kit_root kit_after
+  KIT_TOUCHED_WHY=""
   # DISARMED, and it is the projection that gets here that way — kit_guard_arm clears the baseline
   # under DRY_RUN and this is the line that reads the clearing. It is also the honest answer for an
   # arm that ran inside a subshell that ate the assignment: say nothing, rather than compare against
@@ -2454,146 +2455,114 @@ kit_guard_check() {
   [ "$kit_after" = "$KIT_GUARD_BEFORE" ] && return 0
   warn "the kit at $kit_root changed during $phase, and this mission's repo is $REPO_ROOT — a session that edits the kit is committing outside its own mission (if that was you working on the kit in another terminal, this is that)"
   pipeline_log_line "$(date -Iseconds)  KIT-TOUCHED  $phase  kit_before=$KIT_GUARD_BEFORE  kit_after=$kit_after"
+  KIT_TOUCHED_WHY="the kit at $kit_root was edited while $phase ran (kit_before=$KIT_GUARD_BEFORE kit_after=$kit_after) — a session committing outside its mission's repo"
   # Re-armed on the new value, so one divergence is reported ONCE. Left un-rearmed, every later
   # phase of the run would compare against the original baseline and repeat the same warning to
   # the end of the pipeline.
   KIT_GUARD_BEFORE="$kit_after"
 }
 
-# review_scope_check <phase> <head before the session> — the REVIEW half of the same idea.
-#
-# Since 20260901-o-revisor-so-acha the reviewer is READ-ONLY over the code: it reproduces, grades
-# honestly, and turns every finding that must be fixed into an `R<n>` increment the EXEC phase
-# closes in a session of its own. The prompt is what ASKS for that; this is what MEASURES it. A
-# session that carried the whole review in its context and then fixed inside itself is the cost
-# this mission exists to delete, and it leaves exactly one trace: a commit touching code.
-#
-# A WARN AND A JOURNAL LINE, never a boundary — the same call the kit guard makes, for the same
-# reason. The reviewer that edits a file has already spent the money; refusing the session here
-# would throw away the round report along with it, which is strictly worse than saying so out loud.
-#
-# THREE CALL SITES, placed by hand for the ordering constraint kit_guard_check documents above:
-# cmd_run's first pass, cmd_run's inline retry (with the FIRST pass's head — the retry is reached
-# only when nothing moved, so that head is still HEAD when the retry starts), and cmd_retry.
-# `cmd_close` is the kit guard's fourth door and deliberately not a fourth here: it runs with
-# `phase=CLOSE`, and the first line below answers only to REVIEW. One probe per door, in the
-# `== the REVIEW scope guard ==` block of tests/check-autonomy.sh.
+# --- the hat crossed its boundary --------------------------------------------------------------
+# hat_guard_check used to WARN when a REVIEW session committed outside the mission directory
+# (REVIEW-EDITED-CODE). Since 20260903-a-fronteira-do-chapeu it is the general case for every hat,
+# and it STOPS: the hat's `writes:` (agents/<hat>.md, expanded by hat_writes) says where the phase
+# may have left a mark, committed OR dirty, and a path outside it arms HAT_CROSSED_WHY. The marker
+# follows the contract every marker in this file follows — reset at the entry of its ONLY setter,
+# read by the doors AFTER the session's ledger row, never surviving the lap — and
+# hat_crossed_escalation is the ONE door for it and for KIT_TOUCHED_WHY alike: two markers, two
+# ledger kinds (`hat-crossed`, `kit-touched`), one definition of "the line stops because a session
+# went where its hat does not reach". Four doors: cmd_run's first pass and its inline retry (after
+# the row, next to the other two escalations), cmd_retry (after its row) and cmd_close (no row
+# there, so right after the kit guard). One probe per door and one mutant per door.
 #
 # ⚠️ DECLARED LIMITS:
-#  · A `grep -c REVIEW-EDITED-CODE <log>` ANSWERING 0 IS NOT EVIDENCE THAT THE ROUND BEHAVED. It
-#    says "no line was written", and the loudest way to write no line is for this function not to
-#    exist: bash parses a definition when it reads past it, so a function that was not in the file
-#    at read time is not in the process. (The entrypoint guard on the last line of this script is
-#    the neighbouring scar — it stops bash re-reading a file the run itself edited — and neither
-#    guard puts a function into a process that started without it.) So a `sdd run` process that
-#    predates this guard runs the bin/sdd it parsed at startup, and a mission whose OWN EXEC phase
-#    lands the guard is measured by a runner in which the guard is absent. Not hypothetical: on
-#    20260901-o-revisor-so-acha the conducting `sdd run` started 17:56:48 and c8c8ec7 — the commit
-#    that created this function — landed at 18:58:11, so that mission's REVIEW round reads 0 for the
-#    wrong reason. What CAN be computed after the fact is the round's own diff, which is what
-#    docs/pipeline.md now teaches to cite. Closing the window for real (comparing bin/sdd's hash at
-#    entry and warning, or stopping) is a behaviour change that can fail a healthy mission in
-#    flight: a human decision, recorded in that mission's round report, not something this header
-#    can fix. Declared, not solved.
-#  · it reads COMMITS, not the working tree. A reviewer that edited a file and left it uncommitted
-#    is invisible here — and also invisible to the gate, which demands a clean tree, so the run
-#    stops for a different reason.
+#  · A `grep -c HAT-CROSSED <pipeline.log>` ANSWERING 0 IS NOT EVIDENCE THAT THE SESSION BEHAVED.
+#    It says "no line was written", and the loudest way to write no line is for this function not
+#    to exist: bash parses a definition when it reads past it, so a `sdd run` process that predates
+#    this guard runs the bin/sdd it parsed at startup (measured on 20260901-o-revisor-so-acha for the
+#    guard this one replaces). The ledger row is the artifact; the log line is the diagnosis.
+#  · It reads COMMITS AND THE WORKING TREE (`git status --porcelain --untracked-files=all`), which
+#    closes the limit its predecessor declared ("a reviewer that edited a file and left it
+#    uncommitted is invisible here"). Ignored paths stay invisible — `.sdd/logs/` is ignored by
+#    `sdd install`, which is what keeps the runner's own log out of its own accusation.
 #  · `commit --amend` on the head the session started from leaves `<before>` UNREACHABLE BUT STILL
-#    READABLE, and the difference is the whole bullet. The object stays in the ODB until something
-#    prunes it, so `git diff <before> HEAD` exits 0 with the right list and this guard WARNS
-#    correctly. Measured in a throwaway repo, both halves: `merge-base --is-ancestor <before> HEAD`
-#    answers 1 (gone from the graph) while `diff --name-only <before> HEAD` answers 0 and names the
-#    file. The world where the capture really does come back empty is the one AFTER that object is
-#    dropped — `git reflog expire --expire=now --all && git gc --prune=now`, measured in the same
-#    repo: `git diff` exits 128 with `fatal: bad object`, the `|| true` below swallows it, and this
-#    function says nothing rather than accusing a session over a diff it could not compute. That is
-#    the world this author could build by hand; whether a real mission reaches it between the
-#    session's first commit and this call — a gc has to run in that window — is NOT measured here.
-#  · THE PROJECTION reaches this function — the call sits above cmd_run's DRY_RUN branch, next to
-#    kit_guard_check's — and is silent BY CONSTRUCTION rather than by a guard of its own:
-#    `run_phase` returns before opening a session under DRY_RUN, so both heads are the same commit
-#    and the diff is empty. Unlike `kit_guard_arm`, nothing here is reached from nowhere else
-#    during a projection, so there is no warning for a dry run to inherit. That is the world this
-#    author could build; a `DRY_RUN` early return would be a rule no sabotage of mine turns a probe
-#    red, which d4deb35 is the scar for asserting too confidently.
-#  · THE `tests/health-baseline.txt` ARM IS UNCONDITIONAL. Its comment below scopes it "in the
-#    kit's own repo", but nothing in the code asks whether this repo IS the kit: a target repo that
-#    happens to carry that path gets a reviewer's edit to it waved through in silence. It is the
-#    allowlist's one FAIL-OPEN, it is narrow (one exact path, in a guard that only warns), and it
-#    is written here rather than left implied because a limit nobody declared is the thing this
-#    whole header exists to separate from a limit that is known. Conditioning it on
-#    `kit_root = REPO_ROOT` is a behaviour change with no probe today; declared, not guessed.
-#  · `core.quotePath=false` BUYS BACK THE NON-ASCII NAME AND NOT EVERY NAME. Measured in a scratch
-#    repo: with it, a path holding a byte >= 0x80 comes out literal, while one holding a double
-#    quote or a backslash is STILL C-quoted by git, as is any path holding a control character or a
-#    newline. Such a path inside the mission directory would still be counted as outside it and
-#    warned about. That world was NOT built here: the fix is one flag, while the residue needs `-z`
-#    with a NUL split, which `changed="$( … )"` cannot carry (command substitution drops NUL bytes)
-#    and which would rewrite the read loop for a filename nobody has typed yet. Declared, not
-#    solved.
-#  · ONLY TRAILING SLASHES are normalised out of `$HANDOFF_DIR` below, because that is the spelling
-#    that was reproduced and the one regime 5 of check-autonomy.sh holds. A leading `./`, a `//` in
-#    the middle, or an absolute `$HANDOFF_DIR` would each miss the same way and none has a probe —
-#    a rule written for a world this author did not build would be exactly the over-confidence the
-#    bullet above is the scar for.
-review_scope_check() {
-  local phase="${1:-}" before="${2:-}" head_now changed f outside="" n=0 mission_dir
-  [ "$phase" = "REVIEW" ] || return 0
-  # `-` is what state_fingerprint answers for a path with no git, and the empty string is what a
-  # caller that forgot the argument would pass. Neither is a commit this can diff against.
-  [ -n "$before" ] && [ "$before" != "-" ] || return 0
+#    READABLE: `git diff <before> HEAD` exits 0 with the right list until something prunes the
+#    object (`git gc --prune=now`), after which it exits 128, the `|| true` swallows it, and this
+#    function says nothing about the diff — the status half still speaks. Measured for the
+#    predecessor in a throwaway repo; whether a real mission reaches the pruned world between the
+#    session's first commit and this call is NOT measured.
+#  · THE PROJECTION reaches this function (the call sits above cmd_run's DRY_RUN branch) and the
+#    `DRY_RUN` return at the top is LOAD-BEARING, not decoration: `run_phase` opens no session, so
+#    the diff half is empty by construction, but the status half would read the HUMAN's dirty tree
+#    and accuse a projection. Probed in tests/check-dry-run.sh ("the projection does not accuse the
+#    human's dirty tree") — the d4deb35 scar says write the probe before trusting the rule.
+#  · HAT_WRITES_BASE (`$TODO_FILE, tests/health-baseline.txt`) IS UNCONDITIONAL: a target repo that
+#    happens to carry `tests/health-baseline.txt` gets an edit to it waved through. Narrow, one
+#    exact path, declared rather than conditioned on `kit_root = REPO_ROOT` without a probe.
+#  · `core.quotePath=false` BUYS BACK THE NON-ASCII NAME AND NOT EVERY NAME: a path holding a
+#    double quote, a backslash, a control character or a newline is still C-quoted by git and
+#    would be counted as outside its hat. The residue needs `-z` with a NUL split, which a `$( )`
+#    capture cannot carry. Declared, not solved.
+#  · ONLY TRAILING SLASHES are normalised out of `$HANDOFF_DIR` (hat_expand); a leading `./`, a
+#    `//` in the middle or an absolute `$HANDOFF_DIR` would each miss the same way and none has a
+#    probe.
+HAT_CROSSED_WHY=""
+KIT_TOUCHED_WHY=""
+
+hat_path_allowed() {   # hat_path_allowed <path> <expanded globs, comma-separated> — rc 0 = inside
+  local f="$1" globs="$2" g
+  [ -n "$globs" ] || return 0
+  local -a arr
+  IFS=',' read -r -a arr <<< "$globs"
+  for g in "${arr[@]}"; do
+    g="${g#"${g%%[![:space:]]*}"}"; g="${g%"${g##*[![:space:]]}"}"
+    [ -n "$g" ] || continue
+    # shellcheck disable=SC2254
+    case "$f" in $g) return 0 ;; esac
+  done
+  return 1
+}
+
+hat_guard_check() {   # hat_guard_check <phase> <HEAD before the session> — arms, never stops
+  local phase="${1:-}" before="${2:-}" step hat globs head_now changed status f outside="" n=0
+  HAT_CROSSED_WHY=""
+  [ "$DRY_RUN" = "1" ] && return 0
+  step="$LAST_PHASE_STEP"; [ -n "$step" ] || step="$phase"
+  hat="$(phase_hat "$step")"; [ -n "$hat" ] || return 0
+  globs="$(hat_writes "$step")"
+  [ -n "$globs" ] || return 0
+  changed=""
   head_now="$( git -C "$REPO_ROOT" rev-parse HEAD 2>/dev/null || echo "-" )"
-  [ "$head_now" != "-" ] && [ "$head_now" != "$before" ] || return 0
-  # `|| true` because `set -e` kills the shell AT THE ASSIGNMENT when git refuses — and it still
-  # earns its place after the amend bullet above was corrected: the world where git refuses is the
-  # PRUNED one (`bad object`, rc 128, measured), not the amend itself, which answers fine. A runner
-  # that died on a question it could not answer would turn a warning into an outage.
-  #
-  # `-c core.quotePath=false` because the allowlist below matches STRINGS git wrote, and with that
-  # key on — GIT'S OWN DEFAULT — a tracked path holding one byte outside ASCII comes back C-quoted
-  # and octal-escaped: a mission artifact named in pt-BR, in a repo whose OUTPUT_LANG is pt-BR,
-  # arrives as `"docs/handoffs/<mission>/relat\303\263rio.md"`. It opens with a `"`, so it matches
-  # no arm, and the round's own report reads as code. On the command line and not `git config`, so
-  # it holds whatever the target repo set. Regime 6 of the guard's block in
-  # tests/check-autonomy.sh, with the escaped spelling as its floor.
-  changed="$( git -C "$REPO_ROOT" -c core.quotePath=false diff --name-only "$before" "$head_now" 2>/dev/null || true )"
-  # THE TWO SIDES OF THE MATCH BELOW COME FROM DIFFERENT WORLDS, and this line is what makes them
-  # comparable: `git diff --name-only` prints a path git has already normalised, while
-  # `$HANDOFF_DIR` arrives VERBATIM from the target repo's .sdd/config.sh and is never normalised
-  # anywhere else in this runner. `HANDOFF_DIR="docs/handoffs/"` — a spelling nothing forbids or
-  # documents against — would make the pattern `docs/handoffs//<mission>/*`, which matches no path
-  # git ever prints: the round's OWN report reads as code and the guard warns on every healthy
-  # round, which is precisely the noise the allowlist exists to prevent. A LOOP and not
-  # `${HANDOFF_DIR%/}`, which strips exactly one slash and leaves `docs/handoffs//` broken.
-  mission_dir="$HANDOFF_DIR"
-  while [ "${mission_dir%/}" != "$mission_dir" ]; do mission_dir="${mission_dir%/}"; done
-  mission_dir="$mission_dir/$MISSION"
+  if [ -n "$before" ] && [ "$before" != "-" ] && [ "$head_now" != "-" ] && [ "$head_now" != "$before" ]; then
+    changed="$( git -C "$REPO_ROOT" -c core.quotePath=false diff --name-only "$before" "$head_now" 2>/dev/null || true )"
+  fi
+  status="$( git -C "$REPO_ROOT" -c core.quotePath=false status --porcelain --untracked-files=all 2>/dev/null | cut -c4- || true )"
   while IFS= read -r f; do
     [ -n "$f" ] || continue
-    case "$f" in
-      # The three paths the new contract expects a round to touch: its own mission directory (the
-      # report and the checkpoint the `R<n>` lines go into), the backlog file, and — in the kit's
-      # own repo — the ratchet that backlog moves. Flagging these would fire on every healthy
-      # round and train the guard's only reader to scroll past it.
-      "$mission_dir"/*) continue ;;
-      "$TODO_FILE") continue ;;
-      tests/health-baseline.txt) continue ;;
-    esac
-    n=$(( n + 1 ))
-    outside="${outside:+$outside }$f"
-  done <<< "$changed"
+    f="${f##* -> }"; f="${f#\"}"; f="${f%\"}"
+    hat_path_allowed "$f" "$globs" && continue
+    n=$((n + 1)); outside="${outside:+$outside }$f"
+  done <<< "$changed"$'\n'"$status"
   [ "$n" -gt 0 ] || return 0
-  warn "the $phase session committed $n file(s) outside its mission directory — the reviewer finds and the executor fixes, so a finding belongs in the checkpoint as an R<n> increment: $outside"
-  # ⚠️ THE ABSENCE OF THE LINE BELOW IS NOT A MEASUREMENT. Counting this marker in the log answers
-  # 0 both when the round behaved and when this function never ran — a `sdd run` process that
-  # predates this guard carries the bin/sdd it parsed at startup, and never calls it. First bullet
-  # of the DECLARED LIMITS above, with the mission it was measured on; the evidence that survives
-  # that window is the round's own `git diff --name-only <head the session opened with> HEAD`.
-  # THIRD reading of that 0, since the r2 of the same mission: a journal that could not be written.
-  # That one is announced — `pipeline_log_line` warns once naming the file — because the write no
-  # longer stops the line, and a dropped line nobody was told about is the fail-open this whole
-  # header exists to separate from a limit that is known.
-  pipeline_log_line "$(date -Iseconds)  REVIEW-EDITED-CODE  $phase  $n file(s) outside the mission directory: $outside"
+  HAT_CROSSED_WHY="the $step session ($hat) touched $n path(s) outside its writes: $outside"
+  warn "$HAT_CROSSED_WHY"
+  pipeline_log_line "$(date -Iseconds)  HAT-CROSSED  $phase  $HAT_CROSSED_WHY"
+}
+
+hat_crossed_escalation() {   # hat_crossed_escalation <phase> — rc 0 = STOP (row written), rc 1 = go on
+  local phase="$1" kind why
+  if [ -n "$HAT_CROSSED_WHY" ]; then kind="hat-crossed"; why="$HAT_CROSSED_WHY"
+  elif [ -n "$KIT_TOUCHED_WHY" ]; then kind="kit-touched"; why="$KIT_TOUCHED_WHY"
+  else return 1; fi
+  GATE_WHY="$why"
+  info ""
+  bad "BLOCKED in $phase — $why"
+  dim "  The hat declares what it may write (agents/<hat>.md, key writes:) and the kit is never a"
+  dim "  target's to edit. Restore or move by hand what belongs elsewhere; to widen a hat, edit it"
+  dim "  in the kit and 'sdd install --force'. Then 'sdd run' again."
+  pipeline_log_line "$(date -Iseconds)  BLOCKED  $phase  $why"
+  autonomy_blocked_row "$kind" "$phase" "$why"
+  return 0
 }
 
 # ONE definition of "this path is a throwaway checkout" — ADR 0005, part 3.
@@ -4902,7 +4871,7 @@ cmd_run() {
     # pipeline.log, none of state_fingerprint's three inputs, and `after` is already sampled one
     # line up. `${before%%|*}` is the first field of the fingerprint — the HEAD this session opened
     # against.
-    review_scope_check "$phase" "${before%%|*}"
+    hat_guard_check "$phase" "${before%%|*}"
 
     # The projection branch stays FIRST, exactly where it is today. This is belt-and-suspenders,
     # not a cost saver: `run_check_cmd` memoizes and `run_phase`'s own dry-run branch returns
@@ -4973,6 +4942,7 @@ cmd_run() {
     # the gate call that could have armed it, BEFORE `moved` is consulted, and ABOVE the
     # `--max-phases` ceiling — a phase no session can satisfy must not answer a paced run with 0.
     if app_down_escalation "$phase"; then return 3; fi
+    if hat_crossed_escalation "$phase"; then return 3; fi
 
     phases_run=$((phases_run + 1))
     if [ "$max_phases" -gt 0 ] && [ "$phases_run" -ge "$max_phases" ]; then
@@ -5015,7 +4985,7 @@ cmd_run() {
     # is reachable only through the `moved == "false"` guard above, so the first pass changed
     # nothing and the two heads are the same commit — but reading the one the LAP opened against
     # keeps that true the day a first pass can move the disk and still land here.
-    review_scope_check "$phase" "${before%%|*}"
+    hat_guard_check "$phase" "${before%%|*}"
     gate_"$phase" || gate_rc2=$?
     # The retry takes NO photograph of its own: the gate ran between the two passes, so the first
     # pass's `pending_after` — `exec_after`, captured above and now already overwritten in the
@@ -5073,6 +5043,7 @@ cmd_run() {
     # DOOR 2, and it is what keeps THIS marker from outliving the lap either. Placed after
     # `moved2` is settled, so it takes nothing away from the sampling window.
     if app_down_escalation "$phase"; then return 3; fi
+    if hat_crossed_escalation "$phase"; then return 3; fi
 
     if [ "$moved2" = "false" ]; then
       info ""
@@ -5137,7 +5108,7 @@ cmd_retry() {
   kit_guard_check "$phase"
   # DOOR 3. `sdd retry REVIEW` opens a FRESH session that commits and never goes through cmd_run's
   # loop, so it needs its own call exactly as the kit guard does.
-  review_scope_check "$phase" "${before%%|*}"
+  hat_guard_check "$phase" "${before%%|*}"
   [ "$before" != "$after" ] && moved="true"
   gate_"$phase" || gate_rc=$?
   # DECLARED, NO PROBE — and MEASURED, not assumed. These two guards are inert today: this function
@@ -5156,6 +5127,7 @@ cmd_retry() {
     "$( [ "$gate_rc" -eq 0 ] && echo pass || echo fail )" "$GATE_WHY" \
     "$exec_before" "$exec_after" "$exec_total" \
     "$review_before" "$review_after" "$review_max"
+  if hat_crossed_escalation "$phase"; then return 3; fi
   if [ "$gate_rc" -eq 0 ]; then ok "gate $phase: $GATE_WHY"; return 0; fi
   bad "gate $phase not yet: $GATE_WHY"
   return 3
@@ -6659,12 +6631,14 @@ To see what it saw:  $acli_bin jira workitem search --jql \"key = $issue AND sta
   # The fourth arm/check pair. `sdd close` opens a session with the same --allowedTools and the same
   # --permission-mode every phase gets, so "a target-repo session has no business editing the kit"
   # either covers it or is a claim wider than the guard. Probed by kit-guard regime 7.
+  local phase="CLOSE"
   kit_guard_arm
   ( cd "$REPO_ROOT" && claude -p "/ticket close $issue" \
       --model "$MODEL_TICKET" --permission-mode "$PERMISSION_MODE" --output-format json \
       --setting-sources "user,project,local" --allowedTools "$ALLOWED_TOOLS" \
       --session-id "$sid" --max-budget-usd "$BUDGET_PER_PHASE_USD" ) > "$logfile" 2>&1 || rc=$?
-  kit_guard_check "CLOSE"
+  kit_guard_check "$phase"
+  if hat_crossed_escalation "$phase"; then return 3; fi
   # The session's rc decides NOTHING here. It is one exit code shared by two branches — the session
   # that closed the issue exits 0, and so does the session that only ASKED whether to close it — so
   # reading it was reading a label. Measured on 2026-08-25: `ok SQ-108 closed` printed over an issue

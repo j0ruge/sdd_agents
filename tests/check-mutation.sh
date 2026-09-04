@@ -1052,6 +1052,32 @@ mut_RUN_disallowed_dropped() {
   sed -i '/^run_phase() {/,/^}/ s|^  disallowed="\$(hat_disallowed "\$pstep")"$|  disallowed="$ALLOWED_TOOLS"|' "$1"
 }
 
+# hat_guard_check goes blind: it still resets the marker and returns, so the door has nothing to
+# read. check-autonomy.sh's "commits a code file stops the line" dies.
+mut_RUN_hat_guard_blind() {
+  sed -i '/^hat_guard_check() {/,/^}/ s|^  \[ -n "\$globs" \] \|\| return 0$|  return 0|' "$1"
+}
+# One probe per door, the rule this file's CLAUDE.md states for every port: a door removed is a
+# lap the marker survives, and only the probe of THAT door notices. Range-addressed so each sed
+# touches exactly one of the four identical lines.
+mut_RUN_hat_door1_missing() {
+  sed -i '/^    gate_failed\["\$phase"\]=/,/^    phases_run=\$((phases_run + 1))$/ s|^    if hat_crossed_escalation "\$phase"; then return 3; fi$|    :|' "$1"
+}
+mut_RUN_hat_door2_missing() {
+  sed -i '/^    if \[ "\$gate_rc2" -eq 0 \]; then$/,/^    if \[ "\$moved2" = "false" \]; then$/ s|^    if hat_crossed_escalation "\$phase"; then return 3; fi$|    :|' "$1"
+}
+mut_RUN_hat_retry_door_missing() {
+  sed -i '/^cmd_retry() {/,/^}/ s|^  if hat_crossed_escalation "\$phase"; then return 3; fi$|  :|' "$1"
+}
+mut_RUN_hat_close_door_missing() {
+  sed -i '/^cmd_close() {/,/^}/ s|^  if hat_crossed_escalation "\$phase"; then return 3; fi$|  :|' "$1"
+}
+# The kit guard back to a warning: the marker is never armed, so KIT-TOUCHED is a line and not a
+# stop — the 2d28d13 world. KG1's "rc:3 kind:kit-touched" dies.
+mut_RUN_kit_touched_silent() {
+  sed -i '/^kit_guard_check() {/,/^}/ s|^  KIT_TOUCHED_WHY="the kit at |  : "the kit at |' "$1"
+}
+
 # L3 of the 2026-09-03 audit: the turn rule ("never end the turn with a task still running") is ONE
 # definition in boot_prompt(), read by the general heredoc and by KAIZEN's. Dropping the reader from
 # the general heredoc leaves KAIZEN with the rule and the five projected phases without it — the
@@ -2975,6 +3001,12 @@ CATALOG=(
   RUN_app_down_retry_not_escalated
   RUN_strict_mcp_dropped
   RUN_disallowed_dropped
+  RUN_hat_guard_blind
+  RUN_hat_door1_missing
+  RUN_hat_door2_missing
+  RUN_hat_retry_door_missing
+  RUN_hat_close_door_missing
+  RUN_kit_touched_silent
   RUN_turn_rule_dropped
   RUN_harness_env_inherited
   RUN_intervention_unwritten_on_phase

@@ -177,6 +177,16 @@ fi
 echo "== the dry-run does not touch the disk =="
 assert_eq "file tree identical before and after" "$before" "$after"
 assert_eq "working tree still clean" "" "$(git status --porcelain)"
+echo "== the projection does not accuse the human's dirty tree =="
+# hat_guard_check reads `git status` since the 2026-09-03 spec, and the projection reaches it: a
+# dry-run over a checkout with the human's own uncommitted edits must neither stop nor write a
+# HAT-CROSSED line. The DRY_RUN return at the top of that function is the rule this probes.
+printf 'wip\n' > "$FIX/src-wip.txt"
+"$SDD" run "$MISSION" --dry-run --phase REVIEW >/dev/null 2>&1; rcd=$?
+assert_eq "a dry-run over a dirty tree still exits 0" "0" "$rcd"
+n_crossed="$(grep -c 'HAT-CROSSED' "$PIPELINE_LOG" 2>/dev/null)"
+assert_eq "…and arms no HAT-CROSSED" "0" "${n_crossed:-0}"
+rm -f "$FIX/src-wip.txt"
 
 # --- the phase session is projected as a STREAM ----------------------------
 # `--output-format stream-json` and `--verbose` are ONE flag, not two. Without the second, the
