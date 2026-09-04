@@ -4,6 +4,58 @@ Registro de melhorias com **antes/depois medido**. Sem número, não entra.
 
 ---
 
+## 2026-09-03 — A fronteira do chapéu (missão `20260903-a-fronteira-do-chapeu`)
+
+**Problema (Gemba):** a sessão headless herda o harness inteiro do humano. Medido nos logs de 43
+sessões de duas missões (`sdd census`, apêndice da spec): **0 negações de permissão**, **9
+servidores MCP** visíveis a toda fase — `atlassian` com escrita em Jira e Confluence, `playwright`,
+`stitch`, e os conectores da conta claude.ai do humano: Gmail, Google Drive, Google Calendar —,
+**104 ferramentas** (29 nativas + 75 MCP), nenhum MCP usado por fase nenhuma; o revisor read-only
+escreveu 3× um teste de rascunho na árvore de código e o runner só avisou (`REVIEW-EDITED-CODE`).
+`--tools`/`disallowedTools:` no frontmatter valem só para subagente na sessão principal.
+
+**Contramedida:** cada `agents/sdd-*.md` declara `disallowedTools:`, `writes:` e `mcp:`; o runner
+passa `--disallowedTools` (base + chapéu) e `--strict-mcp-config` por fase; `hat_guard_check` lê
+commits e árvore contra `writes:` e `hat_crossed_escalation` para a linha em quatro portas
+(`hat-crossed`; `KIT-TOUCHED` vira `kit-touched`); a linha `init` do stream entra no ledger
+(`mcp_seen`, `tools_leaked`, `denials`); `sdd-ticket` nasce; `sdd census <missão>` é o
+instrumento; ADR 0007 + `sdd health --release` são o placar da aptidão.
+
+| Medida | Antes | Depois | Comando |
+|---|---|---|---|
+| servidores MCP por sessão | 9 | **0** (probe sob as flags do executor) | `sdd census <missão>` → `mcp_seen`; `init` do stream |
+| ferramentas nativas visíveis ao executor | 28 | **14** | idem, `.tools \| length` na `init` |
+| negações registradas | 0 em 43 sessões | em aberto — `denials` no ledger da 1ª missão pós-merge | `sdd census`, `sdd autonomy` |
+| arquivos tocados fora do chapéu | 1 (revisor, 3 escritas), aviso | **a linha para** (`hat-crossed`) | `grep HAT-CROSSED .sdd/logs/<missão>/pipeline.log` |
+| prefixo fixo por turno (haiku, `sales_quote`) | 70 718 tokens | 66 537 (−6%, probe J) | apêndice da spec |
+
+⚠️ **Coluna "depois" em aberto para a missão real, de propósito:** os números de MCP e ferramentas
+saíram de probes sob as flags reais, não de uma missão; quem preenche é `sdd census` na primeira
+missão do `sales_quote` depois do merge, e a linha 3 do `sdd health --release`.
+
+## 2026-09-03 — Hipótese refutada por medição: tirar `user` do `--setting-sources` (missão `20260903-a-fronteira-do-chapeu`)
+
+**Problema (Gemba):** a auditoria da anatomia (seção 2) apontava `--setting-sources
+user,project,local` como a porta por onde as skills e plugins do humano entram na sessão headless,
+e a hipótese natural era cortá-lo.
+
+**Medição antes de qualquer plano** (probe `claude -p "Reply with the single word: ok" --model
+haiku --max-turns 1`, `sales_quote`, env do harness apagado):
+
+| Flags | Tokens no 1º turno |
+|---|---|
+| hoje (`user,project,local`, `--agent sdd-executor`) | 70 718 |
+| `project,local` | 69 268 (**−2%**) |
+| `--safe-mode` (piso do harness) | 17 874 |
+| diretório vazio (skills + plugins + MCP do humano) | 23 520 |
+
+Tirar `user` poupa 1,4K tokens e **quebra três fases**: `codereview` (REVIEW), `ticket` (TICKET) e
+`qa-report`/`qa-execution` (QA) moram no escopo `user`. O prefixo é 73% `CLAUDE.md` + rules do
+**alvo**, que o kit não corta — vira sensor no preflight, na missão da dieta.
+
+**Decisão:** não mexer; a rota é a linha 2 do ADR 0007 (origem instalável de cada skill). Uma
+hipótese refutada por US$ 0,25 de probes, antes de virar incremento.
+
 ## 2026-09-01 — O revisor só acha, e o executor conserta (missão `20260901-o-revisor-so-acha`)
 
 > ✅ **Coluna Depois preenchida em 2026-09-02 pela fase DOCS**, com os comandos e as saídas no

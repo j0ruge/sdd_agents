@@ -98,7 +98,7 @@ many open findings `TODO.md` carries**, as `todo-findings <N>`, so the backlog c
 silence: growing stays allowed, growing undeclared does not. Known debt lives frozen in
 `tests/health-baseline.txt` — almost every line owned by the `TODO.md` entry that will pay it off,
 and one, the count itself, owned by the file: a new finding fails, and so does a baseline line
-that stopped being a finding. It spends no paid session and does not need `.sdd/config.sh`.
+that stopped being a finding. It spends no paid session and does not need `.sdd/config.sh`. `sdd health --release` is the placar of ADR 0007 — six lines that say whether the kit is apt for another repo of the organisation, read from artifacts and never from the suite — and `sdd census <mission>` reads a mission's logs back: tools by name, MCP seen, denials, bytes re-read per phase.
 
 **In the kit repo it is also a gate, not only a report.** Since the catalogue became opt-in it had
 no automatic owner, and the base branch once carried a live survivor for days because nobody typed
