@@ -24,7 +24,7 @@ ferramenta ou de gate, não frase de prompt — frase é lembrete, gate é regra
 acrescenta restrição só para REVIEW e QA.
 
 **Dívida declarada.** "O revisor não toca código" e "o publisher não mergeia" são frases; o
-runner **avisa** (`REVIEW-EDITED-CODE`) e não para. A regra "nunca encerre o turno com trabalho em
+runner avisava (`REVIEW-EDITED-CODE`); desde `20260903-a-fronteira-do-chapeu` ele **para** (`hat-crossed`). A regra "nunca encerre o turno com trabalho em
 background" vivia só no `sdd-reviewer.md` e custou duas sessões do publisher em 2026-09-02 —
 fechada movendo-a para `boot_prompt()` (L3 da auditoria).
 

@@ -1060,17 +1060,35 @@ mut_RUN_hat_guard_blind() {
 # One probe per door, the rule this file's CLAUDE.md states for every port: a door removed is a
 # lap the marker survives, and only the probe of THAT door notices. Range-addressed so each sed
 # touches exactly one of the four identical lines.
-mut_RUN_hat_door1_missing() {
-  sed -i '/^    gate_failed\["\$phase"\]=/,/^    phases_run=\$((phases_run + 1))$/ s|^    if hat_crossed_escalation "\$phase"; then return 3; fi$|    :|' "$1"
+mut_RUN_hat_door1_missing() {   # `0,/re/`: the FIRST door in file order, and only it (a range that re-opened deleted door 2 too)
+  sed -i '0,/^    if hat_crossed_escalation "\$phase"; then return 3; fi$/ s||    :|' "$1"
 }
-mut_RUN_hat_door2_missing() {
-  sed -i '/^    if \[ "\$gate_rc2" -eq 0 \]; then$/,/^    if \[ "\$moved2" = "false" \]; then$/ s|^    if hat_crossed_escalation "\$phase"; then return 3; fi$|    :|' "$1"
+mut_RUN_hat_door2_missing() {   # between the retry's gate_failed line and its gate-pass branch — where door 2 lives now
+  sed -i '/^    gate_failed\["\$phase"\]="\$( \[ "\$gate_rc2" -eq 0 \]/,/^    if \[ "\$gate_rc2" -eq 0 \]; then$/ s|^    if hat_crossed_escalation "\$phase"; then return 3; fi$|    :|' "$1"
 }
 mut_RUN_hat_retry_door_missing() {
   sed -i '/^cmd_retry() {/,/^}/ s|^  if hat_crossed_escalation "\$phase"; then return 3; fi$|  :|' "$1"
 }
 mut_RUN_hat_close_door_missing() {
   sed -i '/^cmd_close() {/,/^}/ s|^  if hat_crossed_escalation "\$phase"; then return 3; fi$|  :|' "$1"
+}
+# The five findings the review of this branch turned into rules, one mutant each, each anchored on
+# the line that IS the rule:
+#  · the status half back to line mode — a name with a space is C-quoted and reads as outside
+mut_RUN_hat_status_not_nul() {
+  sed -i '/^hat_status_lines() {/,/^}/ s| status --porcelain -z --untracked-files=all | status --porcelain --untracked-files=all |' "$1"
+}
+#  · the replacement unquoted — `&` in TODO_FILE re-inserts the placeholder
+mut_RUN_hat_expand_unquoted() {
+  sed -i 's|^  s="\${s//\\\$TODO_FILE/"\$TODO_FILE"}"$|  s="${s//\\$TODO_FILE/$TODO_FILE}"|' "$1"
+}
+#  · the missing mirror ignored — the harness refuses the --agent and the run pays a no-progress
+mut_RUN_hat_missing_mirror_ignored() {
+  sed -i '/^run_phase() {/,/^}/ s|^  if \[ -n "\$agent" \] && \[ ! -f "\$REPO_ROOT/.claude/agents/\$agent.md" \]; then$|  if false; then|' "$1"
+}
+#  · the close session armed but never checked
+mut_RUN_hat_close_unchecked() {
+  sed -i '/^cmd_close() {/,/^}/ s|^  hat_guard_check "\$phase" "\$close_before"$|  :|' "$1"
 }
 # The kit guard back to a warning: the marker is never armed, so KIT-TOUCHED is a line and not a
 # stop — the 2d28d13 world. KG1's "rc:3 kind:kit-touched" dies.
@@ -1089,7 +1107,7 @@ mut_RUN_init_blind() {
 # spec into a command prints "(none)" for every phase. check-hat.sh's "the tool census names
 # Read once" dies.
 mut_CENSUS_tools_blind() {
-  sed -i '/^cmd_census() {/,/^}/ s|select(.type == "tool_use") \| .name'"'"' \$streams|select(.type == "never") \| .name'"'"' $streams|' "$1"
+  sed -i '/^cmd_census() {/,/^}/ s|select(.type == "tool_use") \| .name'"'"' "\${streams\[@\]}"|select(.type == "never") \| .name'"'"' "${streams[@]}"|' "$1"
 }
 
 # Release line 3 goes green whatever the ledger says — the one line THIS mission closes, read as
@@ -3044,6 +3062,10 @@ CATALOG=(
   HEALTH_release_line3_blind
   RUN_hat_guard_ignores_prior_dirt
   HEALTH_with_mutation_refused
+  RUN_hat_status_not_nul
+  RUN_hat_expand_unquoted
+  RUN_hat_missing_mirror_ignored
+  RUN_hat_close_unchecked
   RUN_turn_rule_dropped
   RUN_harness_env_inherited
   RUN_intervention_unwritten_on_phase

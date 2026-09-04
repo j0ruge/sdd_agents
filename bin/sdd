@@ -1609,7 +1609,7 @@ phase_hat() {
     REVIEW)      printf '%s\n' "sdd-reviewer" ;;
     DOCS)        printf '%s\n' "sdd-docs" ;;
     PR)          printf '%s\n' "sdd-publisher" ;;
-    TICKET)      printf '%s\n' "sdd-ticket" ;;
+    TICKET|CLOSE) printf '%s\n' "sdd-ticket" ;;
     KAIZEN)      printf '%s\n' "sdd-kaizen" ;;
     *)           printf '%s\n' "" ;;
   esac
@@ -1656,11 +1656,13 @@ hat_mcp() {   # hat_mcp <step> — the MCP servers the hat may see; "" ⇒ --str
 hat_expand() {   # hat_expand <globs> — $HANDOFF_DIR $MISSION $TODO_FILE $QA_DOCS_PATH $E2E_DIR
   local s="$1" hd="$HANDOFF_DIR"
   while [ "${hd%/}" != "$hd" ]; do hd="${hd%/}"; done
-  s="${s//\$HANDOFF_DIR/$hd}"
-  s="${s//\$MISSION/$MISSION}"
-  s="${s//\$TODO_FILE/$TODO_FILE}"
-  s="${s//\$QA_DOCS_PATH/${QA_DOCS_PATH%/}}"
-  s="${s//\$E2E_DIR/${E2E_DIR%/}}"
+  # Replacements QUOTED: under bash 5.2's patsub_replacement an unquoted `&` in the value
+  # re-inserts the matched placeholder (measured: TODO_FILE='R&D/TODO.md' → R$TODO_FILED/TODO.md).
+  s="${s//\$HANDOFF_DIR/"$hd"}"
+  s="${s//\$MISSION/"$MISSION"}"
+  s="${s//\$TODO_FILE/"$TODO_FILE"}"
+  s="${s//\$QA_DOCS_PATH/"${QA_DOCS_PATH%/}"}"
+  s="${s//\$E2E_DIR/"${E2E_DIR%/}"}"
   printf '%s\n' "$s"
 }
 
@@ -2506,12 +2508,17 @@ kit_guard_check() {
 #  · HAT_WRITES_BASE (`$TODO_FILE, tests/health-baseline.txt`) IS UNCONDITIONAL: a target repo that
 #    happens to carry `tests/health-baseline.txt` gets an edit to it waved through. Narrow, one
 #    exact path, declared rather than conditioned on `kit_root = REPO_ROOT` without a probe.
-#  · `core.quotePath=false` BUYS BACK THE NON-ASCII NAME AND NOT EVERY NAME: a path holding a
-#    double quote, a backslash, a control character or a newline is still C-quoted by git and
-#    would be counted as outside its hat. The quotes are deliberately NOT stripped here: stripping
-#    them made the flag redundant for the match (a quoted non-ASCII name matched the glob anyway)
-#    and its mutant survived — the flag is the rule, the residue is declared, not solved. The
-#    residue needs `-z` with a NUL split, which a `$( )` capture cannot carry.
+#  · `core.quotePath=false` BUYS BACK THE NON-ASCII NAME IN THE DIFF HALF AND NOT EVERY NAME: a
+#    path holding a double quote, a backslash, a control character or a newline is still C-quoted
+#    by `git diff --name-only` and would be counted as outside its hat. The quotes are deliberately
+#    NOT stripped here: stripping them made the flag redundant for the match and its mutant
+#    survived — the flag is the rule, the residue is declared, not solved. The STATUS half reads
+#    `-z` through hat_status_lines, so a space or a quote in a name is literal there; a newline in
+#    a name is the residue of both halves.
+#  · cmd_kaizen OPENS A SESSION OUTSIDE THESE DOORS. It runs only in the kit repo, where the kit
+#    guard is silent by design, and tests/check-kaizen.sh has no stub-session harness to probe a
+#    door with — so the sdd-kaizen hat's writes: is declared, not guarded. A door added there
+#    without its probe would be the port CLAUDE.md forbids.
 #  · ONLY TRAILING SLASHES are normalised out of `$HANDOFF_DIR` (hat_expand); a leading `./`, a
 #    `//` in the middle or an absolute `$HANDOFF_DIR` would each miss the same way and none has a
 #    probe.
@@ -2527,7 +2534,21 @@ HAT_STATUS_BEFORE=""
 hat_guard_arm() {
   HAT_STATUS_BEFORE=""
   [ "$DRY_RUN" = "1" ] && return 0
-  HAT_STATUS_BEFORE="$( git -C "$REPO_ROOT" -c core.quotePath=false status --porcelain --untracked-files=all 2>/dev/null || true )"
+  HAT_STATUS_BEFORE="$(hat_status_lines)"
+}
+
+# `git status --porcelain -z`, one `XY path` line per entry with the NAME LITERAL — the line-mode
+# porcelain C-quotes a path holding a space (measured: `?? "docs/handoffs/m/a b.md"`) while `git
+# diff --name-only` prints it bare, and the two halves of the guard disagreed on one name. The
+# ORIG_PATH entry that follows a rename/copy is folded away. A newline inside a name is the one
+# residue left (declared in the header above).
+hat_status_lines() {
+  local entry skip=0
+  while IFS= read -r -d '' entry; do
+    if [ "$skip" = 1 ]; then skip=0; continue; fi
+    case "${entry:0:2}" in R?|C?|?R|?C) skip=1 ;; esac
+    printf '%s\n' "$entry"
+  done < <( git -C "$REPO_ROOT" status --porcelain -z --untracked-files=all 2>/dev/null || true )
 }
 
 hat_path_allowed() {   # hat_path_allowed <path> <expanded globs, comma-separated> — rc 0 = inside
@@ -2566,7 +2587,7 @@ hat_guard_check() {   # hat_guard_check <phase> <HEAD before the session> — ar
   if [ -n "$before" ] && [ "$before" != "-" ] && [ "$head_now" != "-" ] && [ "$head_now" != "$before" ]; then
     changed="$( git -C "$REPO_ROOT" -c core.quotePath=false diff --name-only "$before" "$head_now" 2>/dev/null || true )"
   fi
-  status="$( git -C "$REPO_ROOT" -c core.quotePath=false status --porcelain --untracked-files=all 2>/dev/null || true )"
+  status="$(hat_status_lines)"
   if [ -n "$HAT_STATUS_BEFORE" ]; then
     status="$( grep -vxF -f <(printf '%s\n' "$HAT_STATUS_BEFORE") <<< "$status" || true )"
   fi
@@ -2982,9 +3003,29 @@ run_phase() {
   agent="$(phase_agent "$pstep")"
   sid="$(uuidgen)"
   prompt="$(boot_prompt "$pstep")"
+  # Three preconditions that fail LOUD, outside any capture (a die inside `$( )` ends the subshell
+  # and the parent goes on): the hat's source file exists (absent, hat_writes reads "anywhere"),
+  # its mirror is installed in the target (the harness loads the copy and refuses an unknown
+  # --agent at startup — a kit that gains a hat needs `sdd install --force` in every target), and
+  # it declares no MCP server (a --mcp-config carved from the human's is not built yet; under the
+  # whole set every undeclared server would stop the line).
+  local hat; hat="$(phase_hat "$pstep")"
+  if [ -n "$hat" ] && [ ! -f "$SDD_HOME/agents/$hat.md" ]; then
+    die "hat $hat has no agents/$hat.md under $SDD_HOME — a missing hat would write anywhere"
+  fi
+  if [ -n "$agent" ] && [ ! -f "$REPO_ROOT/.claude/agents/$agent.md" ]; then
+    if [ "$DRY_RUN" = "1" ]; then
+      warn "agent $agent is not installed in $REPO_ROOT/.claude/agents/ — the real run would refuse this phase; run 'sdd install --force'"
+    else
+      die "agent $agent is not installed in $REPO_ROOT/.claude/agents/ — the harness loads the copy and refuses an unknown --agent. Run 'sdd install --force' (the kit gained a hat since this repo was installed)."
+    fi
+  fi
   local disallowed mcp writes
   disallowed="$(hat_disallowed "$pstep")"
   mcp="$(hat_mcp "$pstep")"
+  if [ -n "$mcp" ]; then
+    die "hat $hat declares mcp: '$mcp' — carving those servers into a --mcp-config is not implemented; leave mcp: empty (every phase runs under --strict-mcp-config)"
+  fi
   writes="$(hat_writes "$pstep")"
   if [ -n "$resume_sid" ]; then
     prompt="The gate for phase $phase failed: ${GATE_WHY}
@@ -3002,9 +3043,9 @@ missing and write the artifacts. The gate will be re-evaluated."
     --disallowedTools "$disallowed"
     --max-budget-usd "$(phase_budget_usd "$phase")")
   if [ -n "$agent" ]; then cmd+=(--agent "$agent"); fi
-  # Empty mcp: ⇒ the session sees no MCP server at all. A hat that declares some sees the whole
-  # set (a declared exception, measured by hat_init_facts against its list) — carving the human's
-  # servers into a --mcp-config of our own is YAGNI until a hat needs one.
+  # Empty mcp: ⇒ the session sees no MCP server at all — and empty is the only value run_phase
+  # accepts today (see the precondition above); hat_init_facts still compares against the list so
+  # the day a --mcp-config is carved the sensor is already there.
   local mcp_mode="$mcp"
   if [ -z "$mcp" ]; then cmd+=(--strict-mcp-config); mcp_mode="<none: --strict-mcp-config>"; fi
   if [ -n "$resume_sid" ]; then cmd+=(--resume "$resume_sid" --fork-session)
@@ -3713,9 +3754,14 @@ cmd_preflight() {
   # pipeline will not use is how an operator learns to skip reading warnings.
   local sk skills_root missing_skills=""
   skills_root="${SDD_SKILLS_ROOT:-$HOME/.claude}"
+  # The subset of KIT_THIRD_PARTY_SKILLS this config boots headless (the planner's three are
+  # interactive); the full list is what `sdd health --release` line 2 asks an origin for.
   local -a wanted=(codereview)   # REVIEW runs in every mission
   [ "$JIRA_ENABLED" = "true" ] && wanted+=(ticket)
   { [ -n "$E2E_CMD" ] || [ -n "$APP_URL" ]; } && wanted+=(qa-report qa-execution)
+  for sk in "${wanted[@]}"; do
+    case " $KIT_THIRD_PARTY_SKILLS " in *" $sk "*) ;; *) die "preflight wants skill '$sk', which KIT_THIRD_PARTY_SKILLS does not list" ;; esac
+  done
   for sk in "${wanted[@]}"; do
     skill_findable "$sk" || missing_skills="$missing_skills $sk"
   done
@@ -3823,6 +3869,7 @@ health_default_keys() {
 # missing ones with it, and release line 2 is green only when every origin is a URL a stranger can
 # install from — `local` is the honest word for "lives in the author's ~/.claude" (mission 3 of
 # the roadmap is what replaces these with URLs).
+KIT_THIRD_PARTY_SKILLS="codereview ticket qa-report qa-execution grill-with-docs kaizen-software ddd"
 skill_origin() {   # skill_origin <skill> — a URL, or `local`
   case "$1" in
     *) printf '%s\n' "local" ;;
@@ -3834,9 +3881,17 @@ skill_origin() {   # skill_origin <skill> — a URL, or `local`
 # suite (the stamp IS the suite's artifact). Red is a finding, and four were red on the day it was
 # born. Every capture below is guarded: a red line has to be a verdict, never an abort.
 health_release() {   # rc 0 = six green lines
-  local kit ledger reds=0 rows n_repos pr_repos last_ok wanted sk origin bad_origin="" hits="" w key stamp
+  local kit kit_id ledger reds=0 rows n_repos pr_repos last_ok sk origin bad_origin="" hits="" w key stamp words
   kit="$(health_kit_root || true)"
+  # The kit's identity in the ledger is what ledger_repo_root writes — the common dir, never the
+  # cwd's toplevel: from a linked worktree the two differ and the kit's own sessions would count as
+  # the second target (reproduced by the review of this very branch). ONE definition, reused.
+  kit_id="$( REPO_ROOT="$kit" ledger_repo_root 2>/dev/null )" || kit_id=""
+  [ -n "$kit_id" ] || kit_id="$kit"
   ledger="$(autonomy_log_path)" || ledger=""
+  # The forbidden words are the KIT's, read from its own .sdd/config.sh wherever the operator
+  # stands — load_config would read the cwd's and die outside an installed repo.
+  words="$( ( RELEASE_FORBIDDEN_WORDS=""; [ -f "$kit/.sdd/config.sh" ] && . "$kit/.sdd/config.sh"; printf '%s' "${RELEASE_FORBIDDEN_WORDS:-}" ) 2>/dev/null )" || words=""
   step "sdd health --release — apt for another repo? (ADR 0007)"
   line() {   # line <n> <ok|bad> <text>
     if [ "$2" = ok ]; then ok "line $1 · $3"; else bad "line $1 · $3"; reds=$((reds + 1)); fi
@@ -3848,7 +3903,7 @@ health_release() {   # rc 0 = six green lines
   # and ledger_repo_is_temp is the one definition of "temp" this file already has. Lines 1, 3
   # and 4 read only the rows of these repos.
   local targets keep="[]" r
-  targets="$( jq -r --arg kit "$kit" '[ .[] | select(.repo != null and .repo != $kit) | .repo ] | unique[]' <<< "$rows" 2>/dev/null )" || targets=""
+  targets="$( jq -r --arg kit "$kit_id" '[ .[] | select(.repo != null and .repo != $kit) | .repo ] | unique[]' <<< "$rows" 2>/dev/null )" || targets=""
   while IFS= read -r r; do
     [ -n "$r" ] || continue
     ledger_repo_is_temp "$r" && continue
@@ -3861,8 +3916,7 @@ health_release() {   # rc 0 = six green lines
   if [ "$n_repos" -ge 2 ]; then line 1 ok "installed and run in a second repo ($n_repos of 2 target repos in the ledger)"
   else line 1 bad "second repo: $n_repos of 2 target repos have sessions in the ledger — the kit has one target"; fi
   # 2 — every third-party skill has an origin a stranger can install from
-  wanted="codereview ticket qa-report qa-execution grill-with-docs kaizen-software ddd"
-  for sk in $wanted; do
+  for sk in $KIT_THIRD_PARTY_SKILLS; do
     origin="$(skill_origin "$sk")" || origin="local"
     case "$origin" in http://*|https://*) ;; *) bad_origin="$bad_origin $sk" ;; esac
   done
@@ -3892,8 +3946,10 @@ health_release() {   # rc 0 = six green lines
   if [ "$pr_repos" -ge 2 ]; then line 4 ok "a mission reached its PR phase in $pr_repos target repos"
   else line 4 bad "end-to-end mission in a second repo: PR phase seen in $pr_repos of 2 target repos"; fi
   # 5 — LICENSE, and no client identifier on the surface
-  for w in $RELEASE_FORBIDDEN_WORDS; do
-    if [ -n "$( cd "$kit" && grep -rlF -- "$w" bin agents docs/adr docs/pipeline.md docs/failure-modes.md README.md config templates tests 2>/dev/null | head -1 )" ]; then
+  # The surface CLAUDE.md declares, minus what is mission content in OUTPUT_LANG (handoffs, qa,
+  # superpowers) and minus CLAUDE.md itself — those name the client by design.
+  for w in $words; do
+    if [ -n "$( cd "$kit" && grep -rlF -- "$w" bin agents docs/*.md docs/adr README.md config templates tests 2>/dev/null | head -1 )" ]; then
       hits="$hits $w"
     fi
   done
@@ -3911,7 +3967,7 @@ health_release() {   # rc 0 = six green lines
 }
 
 cmd_health() {
-  # `--release` is the placar of ADR 0007 and ONLY that: it never runs the suite. Parsed before
+  # `--release` is the scoreboard of ADR 0007 and ONLY that: it never runs the suite. Parsed before
   # anything else so a typo cannot fall into the fifteen-minute path.
   local release=0
   while [ $# -gt 0 ]; do
@@ -3924,7 +3980,7 @@ cmd_health() {
     esac
     shift
   done
-  if [ "$release" = 1 ]; then load_config; health_release; return $?; fi
+  if [ "$release" = 1 ]; then health_release; return $?; fi
   # `catalogue_green` is the ONE thing check 2c reads out of checks 1 and 2, and it is a variable
   # rather than a re-reading of the output because the stamp has to mean BOTH: a green
   # `--with-mutation` run (check 1) AND a score whose two numbers agree (check 2). Either one alone
@@ -5142,6 +5198,16 @@ cmd_run() {
 
     warn "gate $phase failed and the session changed nothing: $GATE_WHY"
     warn "  retrying once with the gate reason in the prompt"
+    # Re-armed: the gate ran between the first pass and this retry, and a TEST_CMD/E2E_CMD that
+    # drops a coverage/ or a report is the runner's doing, never the retry's. kit_guard_check
+    # re-arms itself on every read; the hat snapshot has to be retaken here.
+    # ⚠️ NO PROBE, DECLARED: the world where the gate drops a NEW file between the two passes
+    # could not be built in check-autonomy.sh's dead-app fixture — four instrumented runs showed
+    # that in it the QA hat's checks never see the E2E command's directory, so the command's file
+    # appears only after the retry's read, and a probe over that world passed with and without
+    # this line. Which mechanism orders it that way was not identified. The direction of the
+    # failure without this line is a FALSE hat-crossed stop, loud and not silent.
+    hat_guard_arm
     run_phase "$phase" "$LAST_PHASE_SID"
     # The retry gets its own pair of fingerprints. Until now it ran with no measurement at all,
     # and `moved/total` is precisely the metric that needs it.
@@ -5208,6 +5274,11 @@ cmd_run() {
     # per door, the shape CLAUDE.md spells out. Its verdict is the later one and overwrites the
     # first pass's, which is exactly what "the LAST verdict of this phase" means.
     gate_failed["$phase"]="$( [ "$gate_rc2" -eq 0 ] && echo 0 || echo 1 )"
+    # DOOR 2 of the hat, and BEFORE the gate-pass branch below, unlike its two siblings: those
+    # only arm when the gate FAILS, this one arms on what the session touched, and a retry that
+    # crosses its hat and still satisfies the gate must not `continue` into the next phase (the
+    # review of 20260903-a-fronteira-do-chapeu found it sitting after the `continue`).
+    if hat_crossed_escalation "$phase"; then return 3; fi
 
     if [ "$gate_rc2" -eq 0 ]; then
       ok "gate $phase (on the retry): $GATE_WHY"
@@ -5222,7 +5293,6 @@ cmd_run() {
     # DOOR 2, and it is what keeps THIS marker from outliving the lap either. Placed after
     # `moved2` is settled, so it takes nothing away from the sampling window.
     if app_down_escalation "$phase"; then return 3; fi
-    if hat_crossed_escalation "$phase"; then return 3; fi
 
     if [ "$moved2" = "false" ]; then
       info ""
@@ -5335,34 +5405,31 @@ cmd_census() {
   load_config
   resolve_mission "${1:-}"
   autonomy_have_jq || die "sdd census needs jq"
-  local dir ph streams jsons agg tools mcp denials kb hd n_sess n_turns cost cache
+  local dir ph agg tools mcp denials kb hd n_sess n_turns cost cache
+  local -a streams jsons
   dir="$(log_dir)"
   hd="$HANDOFF_DIR"; while [ "${hd%/}" != "$hd" ]; do hd="${hd%/}"; done
   step "sdd census — $MISSION ($dir)"
   for ph in TICKET EXEC QA REVIEW DOCS PR KAIZEN; do
-    streams="$( ls -1 "$dir"/"$ph"-*.stream.jsonl 2>/dev/null || true )"
-    [ -n "$streams" ] || continue
-    jsons="$( ls -1 "$dir"/"$ph"-*.json 2>/dev/null || true )"
+    streams=(); jsons=()
+    mapfile -t streams < <( ls -1 "$dir"/"$ph"-*.stream.jsonl 2>/dev/null || true )
+    [ "${#streams[@]}" -gt 0 ] || continue
+    mapfile -t jsons < <( ls -1 "$dir"/"$ph"-*.json 2>/dev/null || true )
     agg="0 0 0 0"; denials="?"
-    if [ -n "$jsons" ]; then
-      # shellcheck disable=SC2086
-      agg="$( jq -rs '"\(length) \(map(.num_turns // 0) | add) \(map(.total_cost_usd // 0) | add | . * 100 | round / 100) \(map(.usage.cache_read_input_tokens // 0) | add / 1e6 | . * 10 | round / 10)"' $jsons 2>/dev/null )" || agg="0 0 0 0"
-      # shellcheck disable=SC2086
-      denials="$( jq -rs 'map(.permission_denials // [] | length) | add' $jsons 2>/dev/null )" || denials="?"
+    if [ "${#jsons[@]}" -gt 0 ]; then
+      agg="$( jq -rs '"\(length) \(map(.num_turns // 0) | add) \(map(.total_cost_usd // 0) | add | . * 100 | round / 100) \(map(.usage.cache_read_input_tokens // 0) | add / 1e6 | . * 10 | round / 10)"' "${jsons[@]}" 2>/dev/null )" || agg="0 0 0 0"
+      denials="$( jq -rs 'map(.permission_denials // [] | length) | add' "${jsons[@]}" 2>/dev/null )" || denials="?"
     fi
-    # shellcheck disable=SC2086
-    tools="$( jq -r 'select(.type == "assistant") | .message.content[]? | select(.type == "tool_use") | .name' $streams 2>/dev/null \
+    tools="$( jq -r 'select(.type == "assistant") | .message.content[]? | select(.type == "tool_use") | .name' "${streams[@]}" 2>/dev/null \
               | sort | uniq -c | sort -rn | awk '{ printf "%s%s=%s", (NR > 1 ? ", " : ""), $2, $1 } END { print "" }' )" || tools=""
-    # shellcheck disable=SC2086
-    mcp="$( jq -r 'select(.type == "system" and .subtype == "init") | (.mcp_servers // []) | length' $streams 2>/dev/null | sort -n | tail -1 )" || mcp=""
-    # shellcheck disable=SC2086
+    mcp="$( jq -r 'select(.type == "system" and .subtype == "init") | (.mcp_servers // []) | length' "${streams[@]}" 2>/dev/null | sort -n | tail -1 )" || mcp=""
     kb="$( jq -rs --arg hd "$hd/" '
         ( [ .[] | select(.type == "assistant") | .message.content[]? | select(.type == "tool_use")
               | select(((.input.file_path // .input.command // "") | contains($hd))) | .id ] ) as $ids
         | [ .[] | select(.type == "user") | .message.content[]? | select(.type == "tool_result")
             | select((.tool_use_id as $i | $ids | index($i)) != null)
             | (.content | if type == "array" then map(.text // "") | join("") else (. // "") end) | length ]
-        | add // 0' $streams 2>/dev/null )" || kb="0"
+        | add // 0' "${streams[@]}" 2>/dev/null )" || kb="0"
     read -r n_sess n_turns cost cache <<< "$agg"
     printf '  %-7s sessions %-3s turns %-5s cost %-8s cache_read %sM  mcp_seen %s  denials %s  handoff_read %sB\n' \
       "$ph" "$n_sess" "$n_turns" "$cost" "$cache" "${mcp:-?}" "$denials" "${kb:-0}"
@@ -6859,14 +6926,23 @@ To see what it saw:  $acli_bin jira workitem search --jql \"key = $issue AND sta
   # The fourth arm/check pair. `sdd close` opens a session with the same --allowedTools and the same
   # --permission-mode every phase gets, so "a target-repo session has no business editing the kit"
   # either covers it or is a claim wider than the guard. Probed by kit-guard regime 7.
-  local phase="CLOSE"
+  local phase="CLOSE" close_before
+  # The close session wears the ticket hat: same deny list, no MCP, and the same guard — the
+  # review of 20260903-a-fronteira-do-chapeu found it armed but never checked, and booted with
+  # none of the flags every phase gets. A run_id of its own, so a row written here (kit-touched,
+  # hat-crossed) does not land in cmd_autonomy's empty bucket.
+  AUTONOMY_RUN_ID="$(uuidgen)"
+  AUTONOMY_INVOCATION="close"
   kit_guard_arm
   hat_guard_arm
+  close_before="$( git -C "$REPO_ROOT" rev-parse HEAD 2>/dev/null || echo "-" )"
   ( cd "$REPO_ROOT" && claude -p "/ticket close $issue" \
       --model "$MODEL_TICKET" --permission-mode "$PERMISSION_MODE" --output-format json \
       --setting-sources "user,project,local" --allowedTools "$ALLOWED_TOOLS" \
+      --disallowedTools "$(hat_disallowed "$phase")" --strict-mcp-config \
       --session-id "$sid" --max-budget-usd "$BUDGET_PER_PHASE_USD" ) > "$logfile" 2>&1 || rc=$?
   kit_guard_check "$phase"
+  hat_guard_check "$phase" "$close_before"
   if hat_crossed_escalation "$phase"; then return 3; fi
   # The session's rc decides NOTHING here. It is one exit code shared by two branches — the session
   # that closed the issue exits 0, and so does the session that only ASKED whether to close it — so

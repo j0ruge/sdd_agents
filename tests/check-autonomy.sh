@@ -1136,7 +1136,9 @@ echo "== a kit that is not a git checkout warns once, not once per row =="
 : > "$LEDGER"
 KIT="$OUTSIDE/kit"
 mkdir -p "$KIT"
-cp -r "$ROOT/bin" "$ROOT/templates" "$ROOT/config" "$KIT/"
+# agents/ too: since the hat's boundary a kit copy without its hats is refused before any session
+# (the hat's source file is a precondition of run_phase), and this regime is about the kit_sha.
+cp -r "$ROOT/bin" "$ROOT/templates" "$ROOT/config" "$ROOT/agents" "$KIT/"
 # Back to the dead stub: two sessions that change nothing, so the run writes three rows (two
 # sessions plus the no-progress escalation) and the warning gets three chances to repeat.
 cat > "$OUTSIDE/stub/claude" <<'STUB'
@@ -4242,6 +4244,46 @@ chmod +x "$OUTSIDE/stub/claude"
 "$SDD" run "$MISSION" --phase REVIEW >/dev/null 2>&1; rc=$?
 assert_eq "hat: …but the session that COMMITS that file crossed — the diff half still sees it" "3 hat-crossed" "$rc $(hat_rows)"
 git -C "$FIX" reset -q --hard HEAD~1; git -C "$FIX" clean -qfd
+# Door 2 sits BEFORE the gate-pass branch: a retry that crosses its hat AND satisfies the gate
+# still stops (the review of this branch found the door after the `continue`). DOCS is the phase:
+# gate_DOCS reads one artifact, so the stub can satisfy it and cross in the same commit.
+hat_reset
+cat > "$OUTSIDE/stub/claude" <<STUB
+n=\$(( \$(cat "$OUTSIDE/hat-count" 2>/dev/null || echo 0) + 1 ))
+printf '%s\n' "\$n" > "$OUTSIDE/hat-count"
+if [ "\$n" -eq 2 ]; then
+  printf -- '---\nfase: DOCS\nstatus: done\n---\n# drift checklist\n| Area | Doc | Status | Evidence |\n|---|---|---|---|\n| code | README | ✅ | abc |\n' > "docs/handoffs/$MISSION/45-docs.md"
+  mkdir -p src; printf 'probe\n' > src/zz-door2.ts
+  git add -A; git commit -qm "chore: the retry crossed and passed"
+fi
+cat "$STREAM_SAMPLE"
+exit 0
+STUB
+chmod +x "$OUTSIDE/stub/claude"
+"$SDD" run "$MISSION" --phase DOCS >/dev/null 2>&1; rc=$?
+assert_eq "hat: door 2 — a retry that crosses AND passes the gate still stops" "3 2 session,session,blocked hat-crossed" \
+  "$rc $(cat "$OUTSIDE/hat-count" 2>/dev/null || echo 0) $(jq -r -s '[.[].event] | join(",")' "$LEDGER") $(hat_rows)"
+git -C "$FIX" reset -q --hard HEAD~1; git -C "$FIX" clean -qfd
+
+# The status half reads names LITERAL: a mission-directory file with a space in its name, left
+# uncommitted, must not read as outside (the line-mode porcelain C-quotes it; -z does not).
+hat_reset
+hat_stub "docs/handoffs/$MISSION/nota de drift.md" leave
+"$SDD" run "$MISSION" --phase REVIEW >/dev/null 2>&1; rc=$?
+assert_eq "hat: a mission-directory file whose name has a SPACE, left uncommitted, is not a crossing" "0 0" \
+  "$(grep -c 'hat-crossed' <<< "$(hat_rows)") $(grep -c HAT-CROSSED "$HAT_PLOG")"
+git -C "$FIX" clean -qfd; git -C "$FIX" checkout -q -- .
+
+# A hat the target never installed: the harness refuses an unknown --agent at startup, so the
+# runner refuses first, names the fix, and spends no session.
+hat_reset
+rm -f "$FIX/.claude/agents/sdd-reviewer.md"
+out="$( "$SDD" run "$MISSION" --phase REVIEW 2>&1 >/dev/null )"; rc=$?
+assert_eq "hat: a hat missing from .claude/agents/ refuses the phase, names sdd install --force, spends nothing" "1 1 0" \
+  "$rc $(grep -c 'sdd install --force' <<< "$out") $(cat "$OUTSIDE/hat-count" 2>/dev/null || echo 0)"
+"$SDD" install --force >/dev/null 2>&1
+git -C "$FIX" checkout -q -- . 2>/dev/null; git -C "$FIX" clean -qfd
+
 hat_reset
 hat_stub "src/zz-scratch-probe.test.ts" commit 2
 "$SDD" run "$MISSION" --phase REVIEW >/dev/null 2>&1; rc=$?
@@ -4478,6 +4520,27 @@ assert_eq "kit-guard: sdd close opens a session too, and it is guarded like ever
 # anything and an `acli` that answers `[]` to every question, and would never see why their new
 # assertion passed.
 rm -f "$OUTSIDE/stub/acli"
+# The close session wears the ticket hat: a close that edits code stops the line with hat-crossed
+# (the review of this branch found cmd_close armed but never checked).
+kitguard_reset
+KGCL2="$OUTSIDE/kitguard-close-hat"
+kitguard_world "$KGCL2"
+sed -i 's/^JIRA_ENABLED=false$/JIRA_ENABLED=true/' "$KGCL2/.sdd/config.sh"
+printf -- '---\nfase: TICKET\nissue: SQ-1\n---\n# TICKET\n' > "$KGCL2/docs/handoffs/$MISSION/10-ticket.md"
+( cd "$KGCL2" && git add -A && git commit -qm "chore: ticket" ) >/dev/null
+cat > "$OUTSIDE/stub/acli" <<'STUB'
+printf '[]\n'
+STUB
+chmod +x "$OUTSIDE/stub/acli"
+cat > "$OUTSIDE/stub/claude" <<STUB
+mkdir -p "$KGCL2/src"; printf 'probe\n' > "$KGCL2/src/close-wrote-this.ts"
+git -C "$KGCL2" add -A; git -C "$KGCL2" commit -qm "chore: the close session edited code"
+cat "$STREAM_SAMPLE"
+exit 0
+STUB
+chmod +x "$OUTSIDE/stub/claude"
+( cd "$KGCL2" && "$FAKEKIT/bin/sdd" close "$MISSION" >/dev/null 2>&1 ); KG8_RC=$?
+assert_eq "hat: sdd close wears the ticket hat — a close session that edits code stops the line" "3 hat-crossed" "$KG8_RC $(hat_rows)"
 cat > "$OUTSIDE/stub/claude" <<'STUB'
 #!/usr/bin/env bash
 echo "ERROR: the test invoked the real claude" >&2

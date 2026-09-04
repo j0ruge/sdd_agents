@@ -893,7 +893,7 @@ scan_surface() {
   # tests/check-health.sh did, and it tracks the real count rather than staying at a number that
   # would still pass while describing a smaller surface than the one actually scanned.
   if [ "$n_files" -lt 15 ]; then
-    printf '  FAIL  surface shrank to %d path(s), expected at least 14 — did something move?\n' \
+    printf '  FAIL  surface shrank to %d path(s), expected at least 15 — did something move?\n' \
       "$n_files" >&2
     return 93
   fi

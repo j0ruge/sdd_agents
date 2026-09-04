@@ -1465,7 +1465,7 @@ health_captures() {
 # capture. Guarded INSIDE with `|| true`, though the function it calls cannot fail: the ratchet
 # counts every capture in the region, and a capture whose guard depends on the callee staying
 # infallible is a guard that rots the day somebody adds a branch to it.
-CAPTURE_FLOOR=34
+CAPTURE_FLOOR=36
 
 capture_report() {
   local out total safe offenders
