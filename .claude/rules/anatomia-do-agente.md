@@ -70,7 +70,7 @@ julgam prosa (`Documentation`, `Overall`), nomeados positivamente; achado de pro
 `TODO_FILE`, não compra rodada.
 
 **Onde mora hoje.** O componente mais forte do kit: `gate_<FASE>` por artefato (`TEST_CMD`, grep
-no checkpoint, `git log`, `gh pr view`); Check por incremento; treze sensores em
+no checkpoint, `git log`, `gh pr view`); Check por incremento; catorze sensores em
 `tests/run-all.sh`; catálogo de mutação com carimbo no `sdd health`; guarda de kit em quatro
 portas.
 

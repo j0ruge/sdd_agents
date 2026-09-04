@@ -254,12 +254,12 @@ regras estão em `templates/checkpoint.md`, com o porquê medido, e quem as cobr
 `tests/check-checkpoint.sh`.
 
 A suíte é `tests/run-all.sh` — é ela o `TEST_CMD` deste repo, e é ela que os gates rodam. Sensor
-novo entra lá. Os treze de hoje: `check-templates.sh`, `check-gates.sh`, `check-dry-run.sh`,
+novo entra lá. Os catorze de hoje: `check-templates.sh`, `check-gates.sh`, `check-dry-run.sh`,
 `check-mutation.sh`, `check-lang.sh`, `check-autonomy.sh`, `check-kaizen.sh`, `check-preflight.sh`,
-`check-todo.sh`, `check-pipefail.sh`, `check-entrypoint.sh`, `check-checkpoint.sh` e
-`check-health.sh`.
+`check-todo.sh`, `check-pipefail.sh`, `check-entrypoint.sh`, `check-checkpoint.sh`,
+`check-health.sh` e `check-hat.sh`.
 
-⚠️ **Doze dos treze rodam no `TEST_CMD`; o `check-mutation.sh` é opt-in desde `4c86712`.** Ele
+⚠️ **Treze dos catorze rodam no `TEST_CMD`; o `check-mutation.sh` é opt-in desde `4c86712`.** Ele
 verifica CADA mutante rodando a suíte inteira numa sandbox, e isso segurava a árvore por mais de
 dez minutos por gate — até tornar uma FASE insatisfazível: três sessões de REVIEW seguidas
 encerraram o turno com as palavras *"waiting for the suite"*, e em `claude -p` encerrar o turno é
@@ -295,14 +295,15 @@ exatamente no piso: deixá-lo um curto fez três probes falharem com `surface sh
 medirem o que nomeiam.
 
 **Sensor que o catálogo de mutação não alcança carrega um auto-teste.** São duas situações, e
-hoje há **cinco** sensores nelas. `check-lang.sh` e `check-pipefail.sh` não podem se escanear (o
+hoje há **seis** sensores nelas. `check-lang.sh` e `check-pipefail.sh` não podem se escanear (o
 dicionário de um É português; as probes do outro TÊM de conter o que ele detecta). `check-todo.sh`,
-`check-checkpoint.sh` e `check-templates.sh` medem markdown, não o `bin/sdd`, então nenhuma
-sabotagem do runner os faria morrer — `check-pipefail.sh` está nas duas situações, porque também
-mede `tests/`. Onde a regra está paga quem mede o sensor é um `selftest()` com probes e rc
+`check-checkpoint.sh`, `check-templates.sh` e `check-hat.sh` medem markdown, não o `bin/sdd`, então
+nenhuma sabotagem do runner os faria morrer — `check-pipefail.sh` está nas duas situações, porque
+também mede `tests/`. Onde a regra está paga quem mede o sensor é um `selftest()` com probes e rc
 próprios — 90, 91, 92 — mais um piso contra vacuidade. Sem isso, regex quebrada reporta "tudo
 limpo" para sempre.
-⚠️ **Os cinco pagam — o último a pagar foi o `check-templates.sh`, em `6aa2a16`.** Por duas
+⚠️ **Os seis pagam — o último a pagar foi o `check-templates.sh`, em `6aa2a16` (o `check-hat.sh`
+já nasceu pago).** Por duas
 missões ele foi a exceção declarada: no lugar do auto-teste tinha o `REVIEW_FLOOR` mais uma passada
 adversarial nomeada no cabeçalho, e a r2 de `20260818-lote-facil` mediu quanto isso valia — o piso
 contava **chamadas**, então uma linha apagada o fazia certificar um `templates/review.md` de zero
@@ -313,13 +314,14 @@ conhecida e exigir que ela a diga. O `REVIEW_FLOOR=23` continua lá, agora como 
 álibi. Sensor sem auto-teste que declara o buraco é dívida; sensor sem auto-teste que jura estar
 coberto é o fail-open que esta seção inteira existe para impedir.
 ⚠️ A rubrica é "a mutação não alcança", **não** "tem `selftest()`": `grep -l '^selftest()' tests/*`
-hoje devolve **seis** — os cinco acima mais o `check-entrypoint.sh`, que carrega um por escolha
+hoje devolve **sete** — os seis acima mais o `check-entrypoint.sh`, que carrega um por escolha
 própria (o catálogo o alcança via `mut_RUN_entrypoint_unguarded`, mas o parser dele é fino demais
 para depender só disso). Sensor a mais com auto-teste nunca é o defeito; sensor **sem** ele, estando
 nas duas situações, é.
-⚠️ A âncora `^selftest()` **é** o instrumento; `selftest` solto responde **sete**, somando o
+⚠️ A âncora `^selftest()` **é** o instrumento; `selftest` solto responde **nove**, somando o
 `jobs_selftest()` do escalonador (`tests/check-mutation.sh:63`), que mede o pool de jobs e não
-regra de sensor nenhuma. Número em rubrica sem o comando ao lado é a mesma classe do
+regra de sensor nenhuma, e o `tests/run-all.sh`, que só os invoca. Número em rubrica sem o
+comando ao lado é a mesma classe do
 `44 caught of 44` que já venceu neste arquivo — conte a propriedade, não a palavra.
 
 ⚠️ **O selftest tem de exercitar o CAMINHO, não só a função.** Achado consertando o

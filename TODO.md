@@ -488,6 +488,22 @@ Achados sobre **repos-alvo** vão para o `TODO.md` daquele repo. Este arquivo é
   behavioural sensor". Direção: unificar em quatro espaços **e** dar cobertura ao `calibrate()`.
   — descoberto por `sdd-reviewer` na missão `20260901-o-revisor-so-acha` (2026-09-02)
 
+- [ ] **A proveniência do `sdd health` lê "a mais nova em cache", não "a que roda"** —
+  `bin/sdd:4395` — o `report-template.md` da `codereview` sai de `find … | sort -V | tail -1` sobre
+  `~/.claude/plugins/cache`, e o resumo promete `fixtures match the installed skills` (`:4436`); quem
+  fixa a versão que a fase REVIEW carrega é o `installPath` de `~/.claude/plugins/installed_plugins.json`.
+  Com uma 1.19.0 em cache e a 1.18.0 fixada, o health confere o fixture contra um arquivo que a sessão
+  nunca lê — e diz que conferiu. Fail-open (D15). Direção: ler o `installPath` do registro, `find` só
+  como fallback, mutante no catálogo. — descoberto por `claude` na faxina `20260904-faxina-do-backlog` (2026-09-04)
+
+- [ ] **A janela de medição não tem instrumento que perceba a própria ruptura** — `bin/sdd:6070` —
+  `degenerate_axis` respondeu `false` para a janela 3 partida: `2e48a87` com **1** missão, **24**
+  commits do kit depois dela e a `codereview` de 1.17.x para 1.19.0 no meio — entrada de 2026-09-04
+  do `KAIZEN_LOG.md`. As cláusulas do guard falam do recorte (`sessions`, `missions_with_session`,
+  piso), nunca da janela declarada em prosa no `CONTEXT.md`; quem viu foi um humano lendo `git log`.
+  Direção: a série carrega o sha de abertura declarado e conta commits do kit entre ele e cada linha,
+  e `sufficient: false` ganha um motivo. — descoberto por `claude` na faxina `20260904-faxina-do-backlog` (2026-09-04)
+
 ### Contrato e configuração
 
 - [ ] **Fase interrompida depois do REVIEW faz o pipeline REGREDIR para o REVIEW** —
@@ -666,19 +682,6 @@ Achados sobre **repos-alvo** vão para o `TODO.md` daquele repo. Este arquivo é
   evidência não reproduz. Direção: recontar com o extrator, ou dizer qual variante foi usada.
   — descoberto por `sdd-reviewer` na missão `20260818-lote-facil` (2026-08-18)
 
-- [ ] **O `README.md` diz "the 6 agents" e existem 7** — `README.md:111` — o `sdd-kaizen` não
-  aparece nem no rótulo nem na tabela de `agents/`, embora o `sdd preflight` conte `7 kit
-  agent(s) checked`. Pré-existente (nasceu com o agente, fora do diff desta missão). Direção:
-  derivar o número de `ls agents/*.md` em vez de escrevê-lo à mão. RESOLVIDO por `ff433fd`
-  (a tabela lista os 8, `sdd-ticket` incluído; o número continua escrito à mão).
-  — descoberto por `sdd-reviewer` na missão `20260818-lote-facil` (2026-08-18)
-
-- [ ] **O `CLAUDE.md` chama de "quatro" os sensores fora do alcance da mutação e agora são cinco**
-  — `CLAUDE.md:163` — o `check-templates.sh` mede `templates/`, o catálogo sabota o `bin/sdd`, e
-  ele não tem `selftest()` — a rubrica da casa exigiria um. A exceção está declarada no cabeçalho
-  do próprio sensor e em nenhum lugar da regra. Direção: admitir a quinta com o porquê, ou dar-lhe
-  o auto-teste. — descoberto por `sdd-reviewer` na missão `20260818-lote-facil` (2026-08-18)
-
 - [ ] **`tests/check-entrypoint.sh` diz "all ten assertions" contra 14 probes** —
   `tests/check-entrypoint.sh:419` — `grep -cE '^ *probe '` responde **14**, todas acima daquela
   linha; é a segunda casa da classe que o `R10` fechou no `pipeline_log_line`, num arquivo que o
@@ -699,13 +702,6 @@ Achados sobre **repos-alvo** vão para o `TODO.md` daquele repo. Este arquivo é
   contêm essa string (só a variável `TODO_FILE`). A **conclusão** segue certa e tem probe; a
   evidência citada é que não existe. Imprecisão em artefato de trilha de auditoria: não se conserta
   reescrevendo o handoff de uma fase encerrada, e sim registrando aqui.
-  — descoberto por `sdd-reviewer` na missão `20260901-o-revisor-so-acha` (2026-09-02)
-
-- [ ] **O `TODO.md` carrega 4 itens já fechados e mergeados que a própria regra manda apagar** —
-  `TODO.md:696` — `RESOLVIDO por 594ef07` ×3 e `c7c2e2e` ×1, os dois ancestrais de `main` por
-  `git merge-base --is-ancestor`. **Pré-existente**, não nasceu nesta branch, e é ocorrência da
-  lacuna já declarada em `TODO.md:482` (a catraca conta `- [ ]` e não conhece `RESOLVIDO por`).
-  Direção: a faxina cabe na triagem do `sdd kaizen`, com a baseline movendo no mesmo diff.
   — descoberto por `sdd-reviewer` na missão `20260901-o-revisor-so-acha` (2026-09-02)
 
 ### Idioma
@@ -818,24 +814,6 @@ Achados sobre **repos-alvo** vão para o `TODO.md` daquele repo. Este arquivo é
   `$every_session` move junto o `history_extra` (`:4962`), que é número de tela. Direção: população
   própria para o `reopened`, mais fixture diferencial. — descoberto por `sdd-reviewer` na missão `20260831-a-rodada-que-andou` (2026-08-31)
 
-- [ ] **A guarda de fase da foto de REVIEW no `cmd_retry` não tem probe, e sem ela a linha mente** —
-  `bin/sdd:4587` — apagar o `if [ "$phase" = "REVIEW" ]` deixa a suíte inteira verde, e a guarda NÃO
-  é inerte: `review_rounds_on_disk` nunca devolve vazio (imprime `0`), então todo `sdd retry <fase
-  não-REVIEW>` nasceria com `rounds_before: 0` em vez de `null` — um zero entrando na aritmética do
-  juiz. O irmão do `cmd_run` tem a asserção (`a non-REVIEW row carries the three round fields as
-  null`); esta porta não tem, e nada declara o buraco. RESOLVIDO por `594ef07`: probe
-  `sdd retry photographs only the phase it is retrying` mais `mut_RUN_retry_photographs_every_phase`.
-  — descoberto por `sdd-reviewer` na missão `20260831-a-rodada-que-andou` (2026-08-31)
-
-- [ ] **A porta de `gate_failed` do retry inline não tem probe, e o comentário dela jura que tem** —
-  `bin/sdd:4528` — apagar a linha deixa a suíte verde. Consequência: retry inline que PASSA mantém o
-  `1` da primeira passada, e a volta seguinte grava um `gate_pass` dizendo que a fase fechou SEM
-  sessão para uma fase que fechou COM a própria retry — linha falsa, permanente (ledger append-only),
-  que alimenta o `phase_label` e o `$closed`. A asserção que proibiria isso existe mas o fixture dela
-  só alcança a porta 1. RESOLVIDO por `594ef07`: probe `an inline retry that passes leaves no false
-  closure` mais `mut_RUN_inline_retry_keeps_the_failed_verdict`.
-  — descoberto por `sdd-reviewer` na missão `20260831-a-rodada-que-andou` (2026-08-31)
-
 - [ ] **O `$order` do `cmd_autonomy` e o `comparable_row` do `kaizen_series` divergem sobre a linha
   `gate_pass`, e o comentário entre eles jura paridade** — `bin/sdd:4929` — o `$order` admite
   `(is_session and comparable) or (is_escalation and on_axis)` e NÃO vê o evento novo; o
@@ -853,15 +831,6 @@ Achados sobre **repos-alvo** vão para o `TODO.md` daquele repo. Este arquivo é
   Alcançável pelo mundo (2) já declarado: sessão suja excluída, closure limpa sobrevivendo.
   — descoberto por `sdd-reviewer` na missão `20260831-a-rodada-que-andou` (2026-08-31)
 
-- [ ] **A frase de divulgação do caminho datado conta linhas que nenhum balde mostra** —
-  `bin/sdd:4535` — `$historic` é ligado depois do filtro de repo e ANTES da comparabilidade, então
-  conta linhas anotadas que depois saem como não-comparáveis. Fail-open brando, mas a frase é o
-  SINAL DE APAGAMENTO do caminho datado, e número que não reconcilia com a tela não decide apagar
-  nada. RESOLVIDO por `c7c2e2e` — ligado sobre `comparable`; no ledger real a frase do EXEC caiu de
-  53 para 51, que é o que a tabela mostra. Mutante
-  `AUTONOMY_historic_sentence_before_comparability`.
-  — descoberto por `sdd-reviewer` na missão `20260829-o-incremento-que-andou` (2026-08-30)
-
 - [ ] **A regra `doing` conta como pendente não tem probe, e sem ela o `gate_EXEC` fecha a fase por
   cima de um incremento em voo** — `bin/sdd:328` — degradar `$4 == "pending" || $4 == "doing"` para
   só `pending` deixa a suíte inteira VERDE, e o `sdd status` passa de `1 of 1 increment(s) still to
@@ -869,13 +838,6 @@ Achados sobre **repos-alvo** vão para o `TODO.md` daquele repo. Este arquivo é
   esta missão MOVEU a regra para uma função nova e a reafirmou no cabeçalho dela — que é
   exatamente quando "gate novo entra com mutação" morde. Direção: fixture com uma linha `doing` e
   `mut_EXEC_tally_doing_is_done`.
-  — descoberto por `sdd-reviewer` na missão `20260829-o-incremento-que-andou` (2026-08-30)
-
-- [ ] **Duas das cinco portas `if [ "$phase" = "EXEC" ]` seguem sem probe** — `bin/sdd:4291` — as
-  três do `cmd_run` têm asserção, as duas do `cmd_retry` não: removida a da foto, um `sdd retry`
-  fora do EXEC escreve `pending_before: 0` e a suíte fica verde. RESOLVIDO por `594ef07`, as duas
-  metades — a foto ganhou probe + `mut_RUN_retry_exec_photographs_every_phase`; a leitura pós-gate
-  foi MEDIDA inerte (sabotada, a suíte fica verde) e virou limite declarado no `bin/sdd`, pela D15.
   — descoberto por `sdd-reviewer` na missão `20260829-o-incremento-que-andou` (2026-08-30)
 
 - [ ] **A metade `repo` da chave de memória do caminho histórico não tem probe** — `bin/sdd:1918` —
