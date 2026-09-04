@@ -4186,7 +4186,7 @@ printf '%s\n' "\$n" > "$OUTSIDE/hat-count"
 if [ "\$n" -eq $fire ]; then
   mkdir -p "\$(dirname "$1")"
   printf 'probe\n' > "$1"
-  if [ "$2" = commit ]; then git add -A; git commit -qm "chore: the session wrote $1"; fi
+  if [ "$2" = commit ]; then git add -- "$1"; git commit -qm "chore: the session wrote $1"; fi
 fi
 cat "$STREAM_SAMPLE"
 exit 0
@@ -4219,6 +4219,29 @@ assert_eq "hat: a review that writes only its own artifact is not accused" "0" "
 assert_eq "hat: …and the pipeline log carries no HAT-CROSSED" "0" "$(grep -c HAT-CROSSED "$HAT_PLOG")"
 git -C "$FIX" reset -q --hard HEAD~1 2>/dev/null || true; git -C "$FIX" clean -qfd
 
+# The human's own dirt is not the hat's crossing. hat_guard_arm snapshots `git status` before the
+# session and hat_guard_check reads only what is NEW — a file left untracked before the phase
+# opened must not stop the line and blame the reviewer. Committing that same file IS the hat's
+# doing (it lands in the diff half), and the second half of the pair proves the guard still sees it.
+hat_reset
+printf 'the human was here first\n' > "$FIX/human-wip.txt"
+hat_stub "docs/handoffs/$MISSION/40-review-r1.md" commit
+"$SDD" run "$MISSION" --phase REVIEW >/dev/null 2>&1; rc=$?
+assert_eq "hat: a file the human left untracked BEFORE the session is not the hat's crossing" "0 0" \
+  "$(grep -c 'hat-crossed' <<< "$(hat_rows)") $(grep -c HAT-CROSSED "$HAT_PLOG")"
+git -C "$FIX" reset -q --hard HEAD~1 2>/dev/null || true; git -C "$FIX" clean -qfd -e human-wip.txt
+hat_reset
+printf 'the human was here first\n' > "$FIX/human-wip.txt"
+cat > "$OUTSIDE/stub/claude" <<STUB
+git add -A
+git commit -qm "chore: the session swept the human's file into its commit"
+cat "$STREAM_SAMPLE"
+exit 0
+STUB
+chmod +x "$OUTSIDE/stub/claude"
+"$SDD" run "$MISSION" --phase REVIEW >/dev/null 2>&1; rc=$?
+assert_eq "hat: …but the session that COMMITS that file crossed — the diff half still sees it" "3 hat-crossed" "$rc $(hat_rows)"
+git -C "$FIX" reset -q --hard HEAD~1; git -C "$FIX" clean -qfd
 hat_reset
 hat_stub "src/zz-scratch-probe.test.ts" commit 2
 "$SDD" run "$MISSION" --phase REVIEW >/dev/null 2>&1; rc=$?

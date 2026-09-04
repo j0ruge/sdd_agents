@@ -169,6 +169,11 @@ release_probes() {
   if [ "$(rel_red "$out" 1)" = 1 ] && grep -qE 'line 1 ·.*0 of 2' <<< "$out"; then pass "release: line 1 red — 0 of 2 target repos in an empty ledger"; else fail "release: line 1 should be red with '0 of 2'"; fi
   if [ "$(rel_red "$out" 3)" = 1 ]; then pass "release: line 3 red with no target mission"; else fail "release: line 3 should be red on an empty ledger"; fi
   if [ "$(rel_red "$out" 5)" = 1 ] && grep -qE 'line 5 ·.*LICENSE' <<< "$out"; then pass "release: line 5 red and wants a LICENSE"; else fail "release: line 5 should name LICENSE"; fi
+  # `sdd health --with-mutation` is a habit written in ten handoffs; the catalogue always runs, so
+  # the flag is accepted as a synonym and never refused as an unknown option.
+  out="$( cd "$box" && SDD_STATE_DIR="$box/state" "$box/bin/sdd" health --with-mutation --release 2>&1 )" || true
+  if ! grep -q 'unknown option' <<< "$out" && grep -qE 'line 1 ·' <<< "$out"; then pass "health: --with-mutation is accepted as a synonym, not refused"
+  else fail "health: --with-mutation should be accepted — got: $(head -2 <<< "$out" | tr '\n' '|' | cut -c1-160)"; fi
   # a ledger with two target repos, a PR in the second, and a last mission whose rows saw nothing
   cat > "$ledger" <<'EOF'
 {"v":1,"ts":"2026-09-01T10:00:00-03:00","event":"session","run_id":"a","invocation":"run","kit_sha":"abc1234","kit_dirty":false,"project":"one","repo":"/repos/one","mission":"20260901-x","phase":"EXEC","step":"EXEC","agent":"sdd-executor","model":"opus","attempt":1,"auto_retry":false,"session":"s1","rc":0,"dur_s":1,"cost_usd":1,"turns":3,"moved":true,"mcp_seen":9,"tools_leaked":0,"denials":0,"gate":"pass","gate_why":""}

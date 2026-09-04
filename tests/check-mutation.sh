@@ -1098,6 +1098,18 @@ mut_HEALTH_release_line3_blind() {
   sed -i '/^health_release() {/,/^}/ s|^    none)    line 3 bad "no target mission in the ledger yet" ;;$|    none)    line 3 ok "no target mission in the ledger yet" ;;|' "$1"
 }
 
+# The snapshot is never taken: the human's own untracked file reads as the hat's crossing, and the
+# first REVIEW of a mission stops on a file the reviewer never touched. Dies on "a file the human
+# left untracked BEFORE the session is not the hat's crossing".
+mut_RUN_hat_guard_ignores_prior_dirt() {
+  sed -i '/^hat_guard_arm() {/,/^}/ s|^  HAT_STATUS_BEFORE="\$( git -C "\$REPO_ROOT"|  HAT_STATUS_BEFORE=""; : "$( git -C "$REPO_ROOT"|' "$1"
+}
+# The habit is refused again: `sdd health --with-mutation` dies as an unknown option. Dies on
+# check-hat.sh's "--with-mutation is accepted as a synonym".
+mut_HEALTH_with_mutation_refused() {
+  sed -i '/^cmd_health() {/,/^}/ s|^      --with-mutation) : ;;$|      --with-mutation-gone) : ;;|' "$1"
+}
+
 # L3 of the 2026-09-03 audit: the turn rule ("never end the turn with a task still running") is ONE
 # definition in boot_prompt(), read by the general heredoc and by KAIZEN's. Dropping the reader from
 # the general heredoc leaves KAIZEN with the rule and the five projected phases without it — the
@@ -3030,6 +3042,8 @@ CATALOG=(
   RUN_init_blind
   CENSUS_tools_blind
   HEALTH_release_line3_blind
+  RUN_hat_guard_ignores_prior_dirt
+  HEALTH_with_mutation_refused
   RUN_turn_rule_dropped
   RUN_harness_env_inherited
   RUN_intervention_unwritten_on_phase

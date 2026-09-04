@@ -2487,7 +2487,10 @@ kit_guard_check() {
 #    guard this one replaces). The ledger row is the artifact; the log line is the diagnosis.
 #  · It reads COMMITS AND THE WORKING TREE (`git status --porcelain --untracked-files=all`), which
 #    closes the limit its predecessor declared ("a reviewer that edited a file and left it
-#    uncommitted is invisible here"). Ignored paths stay invisible — `.sdd/logs/` is ignored by
+#    uncommitted is invisible here"). The tree half is a DELTA against hat_guard_arm's snapshot:
+#    the human's own untracked file, present before the phase opened, is never the hat's crossing
+#    (probed: "a file the human left untracked BEFORE the session"), while the session that commits
+#    it is caught by the diff half. Ignored paths stay invisible — `.sdd/logs/` is ignored by
 #    `sdd install`, which is what keeps the runner's own log out of its own accusation.
 #  · `commit --amend` on the head the session started from leaves `<before>` UNREACHABLE BUT STILL
 #    READABLE: `git diff <before> HEAD` exits 0 with the right list until something prunes the
@@ -2514,6 +2517,18 @@ kit_guard_check() {
 #    probe.
 HAT_CROSSED_WHY=""
 KIT_TOUCHED_WHY=""
+HAT_STATUS_BEFORE=""
+
+# The human's own dirt is not the hat's crossing. Armed next to kit_guard_arm, before the session
+# opens: a file left untracked or modified BEFORE the phase is filtered out of the status half
+# below, so only what the session left behind is read. A file the session COMMITS still lands in
+# the diff half — sweeping the human's file into a round's commit is the hat's doing. Empty under
+# DRY_RUN, like the kit guard's baseline.
+hat_guard_arm() {
+  HAT_STATUS_BEFORE=""
+  [ "$DRY_RUN" = "1" ] && return 0
+  HAT_STATUS_BEFORE="$( git -C "$REPO_ROOT" -c core.quotePath=false status --porcelain --untracked-files=all 2>/dev/null || true )"
+}
 
 hat_path_allowed() {   # hat_path_allowed <path> <expanded globs, comma-separated> — rc 0 = inside
   local f="$1" globs="$2" g
@@ -2551,7 +2566,11 @@ hat_guard_check() {   # hat_guard_check <phase> <HEAD before the session> — ar
   if [ -n "$before" ] && [ "$before" != "-" ] && [ "$head_now" != "-" ] && [ "$head_now" != "$before" ]; then
     changed="$( git -C "$REPO_ROOT" -c core.quotePath=false diff --name-only "$before" "$head_now" 2>/dev/null || true )"
   fi
-  status="$( git -C "$REPO_ROOT" -c core.quotePath=false status --porcelain --untracked-files=all 2>/dev/null | cut -c4- || true )"
+  status="$( git -C "$REPO_ROOT" -c core.quotePath=false status --porcelain --untracked-files=all 2>/dev/null || true )"
+  if [ -n "$HAT_STATUS_BEFORE" ]; then
+    status="$( grep -vxF -f <(printf '%s\n' "$HAT_STATUS_BEFORE") <<< "$status" || true )"
+  fi
+  status="$( cut -c4- <<< "$status" )"
   while IFS= read -r f; do
     [ -n "$f" ] || continue
     f="${f##* -> }"
@@ -3898,7 +3917,10 @@ cmd_health() {
   while [ $# -gt 0 ]; do
     case "$1" in
       --release) release=1 ;;
-      *) die "sdd health: unknown option '$1' (only --release is accepted)" ;;
+      # A habit written in ten handoffs. The catalogue ALWAYS runs here (that is the whole point of
+      # the stamp), so the flag is a synonym for the default, accepted and never refused.
+      --with-mutation) : ;;
+      *) die "sdd health: unknown option '$1' (accepted: --release, --with-mutation)" ;;
     esac
     shift
   done
@@ -5020,6 +5042,7 @@ cmd_run() {
     local review_before=""
     if [ "$phase" = "REVIEW" ]; then review_before="$(review_rounds_on_disk)"; fi
     kit_guard_arm
+    hat_guard_arm
     run_phase "$phase"
     after="$(state_fingerprint)"
     kit_guard_check "$phase"
@@ -5259,6 +5282,7 @@ cmd_retry() {
   # sit outside of: the photograph belongs here for the same reason it belongs in cmd_run.
   if [ "$phase" = "REVIEW" ]; then review_before="$(review_rounds_on_disk)"; fi
   kit_guard_arm
+  hat_guard_arm
   run_phase "$phase"
   after="$(state_fingerprint)"
   kit_guard_check "$phase"
@@ -6837,6 +6861,7 @@ To see what it saw:  $acli_bin jira workitem search --jql \"key = $issue AND sta
   # either covers it or is a claim wider than the guard. Probed by kit-guard regime 7.
   local phase="CLOSE"
   kit_guard_arm
+  hat_guard_arm
   ( cd "$REPO_ROOT" && claude -p "/ticket close $issue" \
       --model "$MODEL_TICKET" --permission-mode "$PERMISSION_MODE" --output-format json \
       --setting-sources "user,project,local" --allowedTools "$ALLOWED_TOOLS" \

@@ -462,7 +462,9 @@ contract travels in a boot prompt, and a prompt is a request.
 `hat_guard_check` runs after every session with a hat, at the same three sites where the old
 `review_scope_check` warned the REVIEW alone — `sdd run`'s first pass, its inline retry, and `sdd
 retry`. It diffs the `HEAD` the session opened against with the one it left behind **and** reads
-`git status --porcelain --untracked-files=all`, and every path outside the hat's `writes:` (the
+`git status --porcelain --untracked-files=all` as a **delta** against the snapshot `hat_guard_arm`
+took before the session opened — the human's own untracked file is never the hat's crossing, while
+a session that commits it is caught by the diff half — and every path outside the hat's `writes:` (the
 frontmatter globs of `agents/<hat>.md`, expanded, plus `HAT_WRITES_BASE`: `TODO_FILE` and
 `tests/health-baseline.txt`) gets one `warn`, one `HAT-CROSSED` line in
 `.sdd/logs/<mission>/pipeline.log` naming the files, and arms `HAT_CROSSED_WHY`.
