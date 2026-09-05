@@ -14,7 +14,7 @@
 | I3 | ✅ `38f3b17` | boot nomeia o handoff e inlina TL;DR (teto 20 linhas, no gate) + Boot da próxima fase |
 | I3b | ✅ `56cb6de` | boot nomeia o template da FASE em vez do diretório |
 | I4 | ✅ `7902ee5` | linha de sensor no `sdd preflight` (bytes do `CLAUDE.md` + rules do alvo) |
-| I6 | 🔄 docs ✅, health/PR | `sdd boot`; probes; docs, kaizen, carimbo, PR |
+| I6 | ✅ PR #38 · health 277/277 | `sdd boot`; probes; docs, kaizen, carimbo, PR |
 
 ---
 
