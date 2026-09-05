@@ -618,6 +618,32 @@ it. If some future phase does start crowding its window, that is the knob to rea
 numbers above are the baseline it has to be compared against. Reach for it on a measurement, never
 on a hunch — the whole point of writing this down is that the next person does not have to guess.
 
+### …but the bill is — and the boot is where it is paid
+
+The paragraph above is true about the **window** and misleading about the **bill**, and the two
+were conflated until 2026-09-04. Cache-read is 51-53% of what a mission costs, and `sdd census`
+broke it down per file: on `20260901-o-revisor-so-acha` items 1-3 of the boot's reading order
+were **72.6%** of every byte the mission re-read, and `checkpoint.md` alone was read **6.2 times
+per EXEC session** — against a mechanical floor of 1 (in headless `claude -p`, `Edit` refuses a
+file that was not `Read` first; in an interactive session it does not, which is why the floor was
+measured and not assumed). Nothing was overflowing. Everything was being paid for again.
+
+Since `20260904-a-dieta-de-contexto` the boot prompt **applies a budget** instead of pointing at
+the mission whole:
+
+| Item | Before | Now |
+|---|---|---|
+| 3 · `checkpoint.md` | the whole file, notes included (69% of it) | the table only; the notes live in `checkpoint-notas.md` (append-only) and the boot **inlines the last `BOOT_NOTES_TAIL=10`** and says not to open the file |
+| 4 · the handoff | "the most recent handoff in `<dir>`" — resolved by the session, then read whole | **named** by the runner (`mission_latest_handoff`) with only `## TL;DR` (capped at 20 lines by the gate of the phase that writes it) and the boot section inlined |
+| 6 · templates | the whole directory, seven files | the templates **this phase** writes from (`phase_templates`) |
+
+A mission started before the split keeps its notes inside `checkpoint.md` and is never migrated:
+the presence of the sibling file is the whole switch. `sdd boot <mission> <PHASE>` prints the
+prompt a phase would get, without a session, and the `boot bill` line of `sdd census` is the
+number the change is held to — **214 222 → 102 016 B at the worst point** of the same mission,
+against a ceiling of 105 000 B fixed before any cut existed. What is deliberately not cut: the
+target's own `CLAUDE.md` (the preflight's `context bill` line is a sensor, never a refusal).
+
 ## The autonomy ledger
 
 Two records, different jobs. `.sdd/logs/<mission>/pipeline.log` is the **journal of one mission**,

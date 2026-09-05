@@ -2,19 +2,19 @@
 
 > Spec: [`../specs/2026-09-04-a-dieta-de-contexto-design.md`](../specs/2026-09-04-a-dieta-de-contexto-design.md).
 > Branch `feat/a-dieta-de-contexto` a partir de `main` = `314de35`.
-> **Alvo (não se move): `boot bill` ≤ 105 000 B no pior ponto.** Hoje: 214 222 B.
+> **Alvo (não se move): `boot bill` ≤ 105 000 B no pior ponto.** Antes: 214 222 B. **Depois: 102 016 B ✓** (−52,4%).
 > Cada Check é escrito **antes** do incremento. TDD da casa: probe antes, mutante depois.
 
 | ID | Estado | Incremento |
 |---|---|---|
 | I1 | ✅ `7eac87e` | censo por arquivo, `boot bill`, `cache_read` no ledger |
 | I1b | ✅ `5b6d6ca` | `boot bill` no pior ponto |
-| I5 | | a frase dos subagentes sai; `Agent` no deny do executor |
-| I2 | | notas fora do `checkpoint.md`; `BOOT_NOTES_TAIL=10`; boot inlina as últimas 10 |
-| I3 | | boot nomeia o handoff e inlina TL;DR (teto 20 linhas, no gate) + Boot da próxima fase |
-| I3b | | boot nomeia o template da FASE em vez do diretório |
-| I4 | | linha de sensor no `sdd preflight` (bytes do `CLAUDE.md` + rules do alvo) |
-| I6 | | `sdd boot`; probes; docs, kaizen, carimbo, PR |
+| I5 | ✅ `8ecf2a1` | a frase dos subagentes sai; `Agent` no deny do executor |
+| I2 | ✅ `e68be5f` | notas fora do `checkpoint.md`; `BOOT_NOTES_TAIL=10`; boot inlina as últimas 10 |
+| I3 | ✅ `38f3b17` | boot nomeia o handoff e inlina TL;DR (teto 20 linhas, no gate) + Boot da próxima fase |
+| I3b | ✅ `56cb6de` | boot nomeia o template da FASE em vez do diretório |
+| I4 | ✅ `7902ee5` | linha de sensor no `sdd preflight` (bytes do `CLAUDE.md` + rules do alvo) |
+| I6 | 🔄 docs ✅, health/PR | `sdd boot`; probes; docs, kaizen, carimbo, PR |
 
 ---
 

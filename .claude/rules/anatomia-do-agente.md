@@ -54,19 +54,31 @@ checkpoint, o último handoff, nunca as rodadas anteriores inteiras. Artefato qu
 teto ou digest; sessão que relê a missão inteira paga a missão inteira de novo.
 
 **Onde mora hoje.** Estado em disco (princípio 3 do `CLAUDE.md`); sessão nova por fase e por
-incremento; `boot_prompt()` ordena `00-missao.md`, `01-plano.md`, `checkpoint.md`, o último
-handoff, `.sdd/config.sh` e os templates; `--fork-session` no retry.
+incremento; `--fork-session` no retry. Desde `20260904-a-dieta-de-contexto` o `boot_prompt()`
+**aplica o orçamento** em vez de apontar a missão inteira: nomeia `00-missao.md` e `01-plano.md`;
+o `checkpoint.md` é só a tabela, e as notas moram em `checkpoint-notas.md` (append-only), das quais
+o boot **inlina** as últimas `BOOT_NOTES_TAIL=10` (`boot_notes_tail`) e manda não abrir o arquivo;
+**nomeia** o handoff mais recente (`mission_latest_handoff`, sobre a mesma `latest_matching` do gate
+de REVIEW) e inlina só `## TL;DR` + a seção de boot (`handoff_boot_sections`); nomeia os templates
+da fase (`phase_templates`). O TL;DR tem teto de 20 linhas (`handoff_tldr_ok`), cobrado pelos gates
+de EXEC, QA e REVIEW — as três fases cujo chapéu **escreve** o arquivo, senão o gate giraria a
+linha. Quem mede: `sdd census` (por arquivo; `boot bill` no último handoff **e no pior ponto**),
+`sdd boot <missão> <FASE>` (o prompt, sem sessão), `cache_read` na linha do ledger e a linha
+`context bill` do `sdd preflight`. Spec:
+`docs/superpowers/specs/2026-09-04-a-dieta-de-contexto-design.md`.
 
-**Dívida declarada.** Sem dieta. A missão de 2026-09-02 terminou com 280 KB de artefatos
-(checkpoint 67 KB, handoff EXEC 46 KB, quatro revisões 87 KB) e o custo da rodada de REVIEW subiu
-de US$ 18 para US$ 28 acompanhando o tamanho; o boot do executor mediu US$ 5,46.
-⚠️ A frase anterior desta linha dizia *"`turns` e cache-read já estão no ledger"*, e a metade do
-cache-read estava errada: ele só existia no `.sdd/logs/<missão>/*.json`, que é gitignored e
-portanto por máquina — a métrica da dieta não tinha casa durável. Desde 2026-09-04 a linha de
-sessão carrega `cache_read`, e o `sdd census` quebra o `handoff_read` **por arquivo** mais a linha
-`boot bill` (o que o boot aponta, em bytes, sem abrir sessão). Falta o corte: medido em
-`20260901-o-revisor-so-acha`, o `checkpoint.md` sozinho respondeu por **111 releituras e 710 KB**
-dos 1,47 MB que a fase EXEC releu — 48% da fase num arquivo só.
+**Dívida declarada.** Medido sobre o **mesmo conteúdo** de `20260901-o-revisor-so-acha` nos dois
+layouts: `boot bill` no pior ponto **214 222 → 102 016 B** (−52,4%), contra o teto de 105 000 B
+fixado antes de qualquer corte existir. O que sobra, por escrito e não calado: (1) a seção
+`## Boot da próxima fase` (8 829 B, 112 linhas) virou o terceiro maior termo do boot e **não tem
+teto** — o alvo fechou sem ele, capá-la é missão futura; (2) o `CLAUDE.md` do alvo (~73% do prefixo
+fixo por turno; 50 180 B aqui) não é cortado **por decisão** — o kit não corta o livro de regras de
+ninguém, só o mede; (3) missão começada antes do split **não migra**: as duas formas convivem, e o
+writer e o leitor da `- intervention:` leem os dois mundos; (4) o dólar real por missão fica para a
+**janela 4** — o "depois" desta rule é o instrumento e os probes, não a conta. ⚠️ Medido nesta
+missão e válido além dela: `Edit` sem `Read` prévio **passa** em sessão interativa e é **recusado**
+em `claude -p` headless, que é o regime de toda fase — intuição colhida interativamente não
+transfere para a fase (US$ 0,045 para descobrir).
 
 ## 4. Mecanismos de verificação — como checa o próprio trabalho
 

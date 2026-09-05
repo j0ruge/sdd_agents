@@ -4,6 +4,60 @@ Registro de melhorias com **antes/depois medido**. Sem número, não entra.
 
 ---
 
+## 2026-09-04 — A dieta de contexto: o boot manda um orçamento, o runner aplica (missão `20260904-a-dieta-de-contexto`)
+
+**Problema (Gemba):** a rule 3 da anatomia declarava "sem dieta", e o instrumento para medi-la não
+existia — a frase *"`turns` e cache-read já estão no ledger"* estava meio errada (cache-read só
+vivia no `.sdd/logs/`, gitignored). Medido em 2026-09-04, depois de o I1 entrar:
+
+| O que | Medido | Comando |
+|---|---|---|
+| relido de `docs/handoffs/` em `20260901-o-revisor-so-acha` | **2 494 272 B** de um diretório de 327 KB | `sdd census` (por arquivo, novo) |
+| `checkpoint.md` sozinho | **1 114 571 B, 160 leituras, 44,7%** de tudo; 6,2× por sessão de EXEC | idem |
+| itens 1–3 do boot (00 + 01 + checkpoint) | **72,6%** de tudo que a missão releu | idem |
+| notas dentro do `checkpoint.md` | **67 166 B de 97 865 (69%)**, 128 notas, 524 B cada | `awk` sobre a seção |
+| `boot bill` no pior ponto (`20-handoff-exec.md`, 49 641 B) | **214 222 B** | `sdd census` → `boot bill  worst point` |
+| piso mecânico da releitura | **1 por sessão**: em `claude -p` headless o `Edit` recusa arquivo não lido; em sessão interativa **passa** | probe haiku, US$ 0,045 |
+| `CLAUDE.md` + rules do alvo, por turno | **50 180 B** aqui (~73% do prefixo fixo) | `sdd preflight` → `context bill` (novo) |
+
+**Contramedida (cinco alavancas, todas no runner):** notas fora do checkpoint
+(`checkpoint-notas.md`, append-only; o boot inlina as últimas `BOOT_NOTES_TAIL=10`); handoff
+**nomeado** (`mission_latest_handoff`) com só `## TL;DR` + seção de boot inlinadas e teto de 20
+linhas cobrado pelos gates de EXEC/QA/REVIEW; templates da **fase** (`phase_templates` — a quinta
+alavanca, admitida na sessão porque sem ela o desenho dava 112 891 B e perdia o teto por 7,5 KB);
+sensor do `CLAUDE.md` do alvo no preflight, nunca corte; frase dos subagentes fora do executor,
+`Agent` negado. Alvo fixado **depois** da baseline e **antes** do corte: `boot bill` ≤ 105 000 B no
+pior ponto, vinculante. Dois mundos: missão começada antes do split não migra.
+
+**Antes/Depois, sobre o MESMO conteúdo** (a `20260901` copiada para dois fixtures, um por layout):
+
+| Métrica | Antes | Depois | Δ | Regime |
+|---|---|---|---|---|
+| `boot bill`, pior ponto | 214 222 B | **102 016 B** | **−52,4%** | estático, `sdd census`, grátis — **o alvo** (teto 105 000, margem 2 984 B) |
+| `checkpoint.md` | 97 865 B | **30 699 B** | −68,6% | idem |
+| `cache_read`, 1 sessão EXEC | 270 432 tok | **116 529 tok** | **−57%** | probe haiku, n=1 por braço, kit da `main` × este |
+| turnos / custo da mesma sessão | 9 / US$ 0,224 | 7 / US$ 0,179 | −22% / −20% | idem |
+| bytes relidos sob `docs/handoffs/`, mesma sessão | 143 364 B | 148 141 B | **+3%** | idem — o depois abriu o `20-handoff-exec.md` inteiro porque o TL;DR o mandou lá; o antes nunca achou o handoff |
+| `checkpoint-notas.md` aberto pela sessão? | — | **0 vezes** | | o "não leia" segurou |
+| US$ por missão | — | — | **aberto** | **janela 4**, como a fronteira |
+
+A coluna de dólar fica declaradamente aberta: a janela 4 abre no `kit_sha` que a primeira missão
+do `sales_quote` carimbar, e julga o pacote D22 + anatomia + fronteira + dieta.
+
+**O que a missão achou no caminho, e onde ficou:** (1) o `Edit` interativo × headless — verbete
+*Dieta de contexto* e rule 3; (2) a RULE 1 do `check-pipefail.sh` lê `a || grep -q` como pipe —
+falso positivo, fail-closed, cabeçalho do sensor (D15); (3) dois números da spec nasceram
+estimados e foram corrigidos por medição antes do commit (`0098371`); (4) **sete mutantes
+escaparam na primeira rodada** — cada um achou um probe frouxo meu, e cada probe foi apertado
+até o mutante morrer (a lição do `CLAUDE.md` sobre asserção que aceita os dois mundos, medida
+sete vezes numa missão só); (5) a linha do pior ponto somava o PLAN, e descrevia um boot que não
+existe — corrigida com o porquê no comentário.
+
+**O que fica aberto (declarado):** `## Boot da próxima fase` (8 829 B, terceiro maior termo) sem
+teto; as 318 pendências mudaram de dono por escrito para a triagem do `sdd kaizen` (rule 5); o
+espelho do `sales_quote` está stale em quatro chapéus — PR de espelho lá antes da próxima missão
+do alvo.
+
 ## 2026-09-04 — A janela 3 partiu antes do piso, e o veredito é `indeterminado` por escrito (chore `20260904-faxina-do-backlog`)
 
 **Problema (Gemba):** a janela 3 (D22) abriu em `2e48a87` com a missão
