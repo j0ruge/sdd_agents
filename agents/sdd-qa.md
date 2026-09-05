@@ -89,7 +89,7 @@ Add a row to the `checkpoint.md` table, with ID `F<n>`:
 The Check **must** include both things: the regression test passes **and** the impacted journey
 walks again. A fix that passes the test and breaks the journey is not a fix.
 
-Also record in the checkpoint's execution notes which `BUG-<id>` gave rise to each `F<n>`.
+Also append to `docs/handoffs/<mission>/checkpoint-notas.md` (APPEND one line with `>>` — never rewrite the file, never read it whole) which `BUG-<id>` gave rise to each `F<n>`.
 
 The runner sees a pending increment and hands the ball back to `sdd-executor` on its own — that is
 the QA⇄EXEC loop. It repeats until no **agent-closable** bug is left `open`, capped at

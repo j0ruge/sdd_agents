@@ -346,7 +346,12 @@ check checkpoint.md '^\| ID \| Incremento \| Check \(comando → esperado\) \| S
 check checkpoint.md 'pending'                 "status token 'pending'"
 check checkpoint.md '`done`'                  "status token 'done'"
 check checkpoint.md '`blocked`'               "status token 'blocked'"
-check checkpoint.md '^## Notas de execução'   "section 'Notas de execução'"
+# The section MOVED in 20260904-a-dieta-de-contexto and this assertion moved with it, to the
+# templates/checkpoint-notas.md block below. What stays here is the pointer, and it is asserted for
+# a reason that is not tidiness: the split is what makes writing a note cost zero reads, and a
+# checkpoint template that silently stopped naming the sibling would send the next planner back to
+# one file — the whole 67 KB, re-read on every session that updates the table.
+check checkpoint.md 'checkpoint-notas\.md'    "pointer to the sibling notes file"
 # The qualifier is IN the regex, and it is the whole assertion. `20260901-o-revisor-so-acha` widened
 # this section from `(QA)` to `(QA e REVIEW)` — the R<n> increments the review round now writes live
 # beside the QA's F<n> — and a regex that stopped at `de fix` served the heading it replaced exactly
@@ -357,6 +362,15 @@ check checkpoint.md '^## Notas de execução'   "section 'Notas de execução'"
 # its new name in full, or the sensor certifies the old one.
 check checkpoint.md '^## Incrementos de fix \(QA e REVIEW\)' \
   "section 'Incrementos de fix (QA e REVIEW)'"
+
+echo "== templates/checkpoint-notas.md =="
+# The heading the runner's old-world awk still matches, now in the file that owns it. The
+# `intervention:` marker is contract (English, lower-case, opening the line) and is asserted as
+# such: `sdd autonomy` counts `^[[:space:]]*-[[:space:]]*intervention:` in BOTH files, and a
+# template that stopped shipping the form would leave the narrative to memory.
+check checkpoint-notas.md '^## Notas de execução'  "section 'Notas de execução'"
+check checkpoint-notas.md 'intervention:'          "the intervention: marker, contract and lower-case"
+check checkpoint-notas.md 'Append-only'            "the append-only rule, which is the whole point of the split"
 
 echo "== templates/handoff.md =="
 for k in missao fase status sessao data gate; do

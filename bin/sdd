@@ -328,15 +328,27 @@ frontmatter_write() {
 # debt of .claude/rules/anatomia-do-agente.md, with a date on it.
 checkpoint_note_intervention() {   # checkpoint_note_intervention <what the human did> <phase>
   [ "$DRY_RUN" = "1" ] && return 0
-  local ck="$MISSION_DIR/checkpoint.md" what="$1" phase="$2" line rel dirty_before tmp
+  local ck="$MISSION_DIR/checkpoint.md" nf="$MISSION_DIR/checkpoint-notas.md"
+  local what="$1" phase="$2" line rel dirty_before tmp target
   [ -f "$ck" ] || return 0
-  rel="${ck#"$REPO_ROOT/"}"
+  # Two worlds, and the notes file wins WHEN IT IS THERE. A mission written before this layout
+  # keeps its notes inside checkpoint.md and is never migrated: a mission in flight would have its
+  # own artifact rewritten under it, and the gates parse that file. The presence of the sibling is
+  # the whole switch — no flag, no config key, nothing to keep in sync.
+  target="$ck"; [ -f "$nf" ] && target="$nf"
+  rel="${target#"$REPO_ROOT/"}"
   line="- intervention: $what — $phase — $(date '+%Y-%m-%d %H:%M') · written by the runner"
   dirty_before="$(cd "$REPO_ROOT" && git status --porcelain -- "$rel" 2>/dev/null)" || dirty_before=""
   tmp="$(mktemp "${TMPDIR:-/tmp}/sdd-ck-XXXXXX")"
   # Blank lines inside the notes section are buffered, so the note lands after the last note and
   # the blank line that separated the section from the next heading is printed after it, intact.
   # `mawk` is byte-oriented: the heading is matched on its ASCII prefix, never on the accented word.
+  # The append path: one line, no rewrite, no read. It is the whole point of the split — the awk
+  # below has to read the file to write into the middle of it, and in a headless session `Edit`
+  # cannot touch a file that was not read first. Appending costs neither.
+  if [ "$target" = "$nf" ]; then
+    printf '%s\n' "$line" >> "$nf"
+  else
   awk -v line="$line" '
     BEGIN { nb = 0; in_notes = 0; done = 0 }
     !done && !in_notes && /^## Notas de execu/ { in_notes = 1; print; next }
@@ -348,14 +360,15 @@ checkpoint_note_intervention() {   # checkpoint_note_intervention <what the huma
       if (in_notes) { print line; for (i = 0; i < nb; i++) print buf[i]; done = 1 }
       if (!done) { print ""; print line }
     }' "$ck" > "$tmp" && mv "$tmp" "$ck"
+  fi
   if [ -n "$dirty_before" ]; then
-    warn "intervention noted in checkpoint.md but NOT committed — the file was already dirty; commit it with the work it carries"
+    warn "intervention noted in $rel but NOT committed — the file was already dirty; commit it with the work it carries"
     return 0
   fi
   if ( cd "$REPO_ROOT" && git add -- "$rel" && git commit -q -m "chore(checkpoint): intervention — $what — $phase" ); then
-    dim "  intervention noted in checkpoint.md and committed: $what — $phase"
+    dim "  intervention noted in $rel and committed: $what — $phase"
   else
-    warn "intervention noted in checkpoint.md but the commit failed — commit $rel by hand"
+    warn "intervention noted in $rel but the commit failed — commit $rel by hand"
   fi
 }
 
@@ -1744,7 +1757,52 @@ EOF
 # When the phase is driven by a third-party skill, the literal slash has to be the FIRST line of
 # the prompt: that is how it expands headless (the QA skills carry disable-model-invocation, so
 # there is no other route).
+# How many execution notes the boot inlines. A constant and not a config key: the fronteira
+# already refused a button nobody would turn, and YAGNI (principle 6) — a target that needs a
+# different number will say so and this becomes a key then, not before.
+#
+# 10 is measured, not chosen: on 20260901-o-revisor-so-acha the 128 notes average 524 B, the last
+# ten weigh 5 044 B, and the arithmetic of the mission's target (boot bill <= 105 000 B at the
+# worst point) closes at 100 946 B with exactly this number. Fifteen puts it over.
+readonly BOOT_NOTES_TAIL=10
+
+# The tail of the notes file, already indented for the boot prompt, or nothing. Every capture is
+# guarded: `grep` exits 1 when it counts nothing, and under `set -o pipefail` that would take the
+# whole run down on the first mission whose notes file is still empty — the common case on a
+# mission that just started.
+boot_notes_tail() {   # boot_notes_tail [<mission dir>]
+  local nfile="${1:-$MISSION_DIR}/checkpoint-notas.md" body=""
+  [ -f "$nfile" ] || return 0
+  body="$(grep -E '^[[:space:]]*-[[:space:]]' "$nfile" 2>/dev/null | tail -n "$BOOT_NOTES_TAIL" || true)"
+  [ -n "$body" ] || return 0
+  printf '%s\n' "$body"
+}
+
 boot_prompt() {
+  # The execution notes, inlined instead of pointed at. Item 3 used to be the whole checkpoint,
+  # and on 20260901-o-revisor-so-acha 69% of that file was notes the session paid to re-read on
+  # every one of its 6.2 reads per EXEC session. Nothing is emitted when the notes file is absent:
+  # a mission written before this layout keeps its notes inside checkpoint.md, the session reads
+  # them there as it always did, and NOTHING about it changes. Two worlds, and the old one is the
+  # default — missions in flight do not migrate.
+  #
+  # `ck_note` rides with it, and is conditional for the same reason: on a mission from BEFORE the
+  # split the notes really are inside checkpoint.md, and an item 3 that said otherwise
+  # unconditionally would make the prompt LIE to every mission in flight — telling the session the
+  # notes are elsewhere while they sit in the very file it was just told to read.
+  local notes_block="" notes_tail="" ck_note=""
+  if [ -f "$MISSION_DIR/checkpoint-notas.md" ]; then
+    ck_note=" — the execution notes are NOT in it; the last $BOOT_NOTES_TAIL are inlined below"
+    notes_tail="$(boot_notes_tail)"
+    notes_block="
+The last $BOOT_NOTES_TAIL execution notes of this mission, inlined so that you never open the file:
+${notes_tail:-  (none yet)}
+
+Do NOT read \$HANDOFF_DIR/\$MISSION/checkpoint-notas.md. The lines above are its tail; the rest is
+history you are not paid to re-read. To record a note, APPEND one line to that file — it is
+append-only, and rewriting it is exactly the cost this pipeline removed.
+"
+  fi
   local step="$1" slash agent lang_line=""
   # ONE definition, read by every phase — including KAIZEN, which has a heredoc of its own below.
   # Measured 2026-09-02 (20260902-o-rascunho-legado-fala-cru, phase PR): two sdd-publisher sessions
@@ -1826,12 +1884,12 @@ All of your state comes from disk. There was NO earlier conversation — nothing
 before. Read, in this order, before anything else:
   1. $HANDOFF_DIR/$MISSION/00-missao.md   (the intent and the metric)
   2. $HANDOFF_DIR/$MISSION/01-plano.md    (the how, and the context already verified — trust it)
-  3. $HANDOFF_DIR/$MISSION/checkpoint.md  (the increment table)
+  3. $HANDOFF_DIR/$MISSION/checkpoint.md  (the increment table$ck_note)
   4. the most recent handoff in $HANDOFF_DIR/$MISSION/ (what already happened)
   5. .sdd/config.sh (TEST_CMD="$TEST_CMD"${E2E_CMD:+, E2E_CMD=\"$E2E_CMD\", E2E_DIR=\"$E2E_DIR\"})
   6. the artifact templates in $SDD_HOME/templates/ — start every artifact from the template that
      names it, NEVER from memory: their headings are the contract the gates parse
-$lang_line
+$notes_block$lang_line
 Your task in this session: $(phase_task "$step").
 $(phase_extra "$step")
 $turn_rule
@@ -5457,6 +5515,16 @@ census_boot_bill() {
   else
     line="$line  (no handoff yet) 0B"
   fi
+  # The notes the boot INLINES. Counted because the bill answers "bytes the boot makes the session
+  # ingest", and a cut that moved 67 KB out of a pointed-at file into 5 KB of inlined text has to
+  # be read as the 5 KB it still costs — otherwise the instrument reports the saving twice and the
+  # target is met on paper. Same `boot_notes_tail` the prompt uses, called with this mission's
+  # directory: one definition, two callers, which is what keeps the number and the prompt honest
+  # about each other.
+  if [ -f "$mdir/checkpoint-notas.md" ]; then
+    b="$(boot_notes_tail "$mdir" | wc -c)"
+    line="$line  notes(last $BOOT_NOTES_TAIL) ${b}B"; total=$((total + b))
+  fi
   b=0
   for f in "$SDD_HOME"/templates/*.md; do [ -f "$f" ] || continue; b=$((b + $(wc -c < "$f"))); done
   line="$line  templates ${b}B"; total=$((total + b))
@@ -5502,6 +5570,28 @@ census_files() {   # census_files <handoff-dir-with-slash> <stream>...
       | map({ f: .[0].f, reads: length, bytes: ([ .[].n ] | add // 0) })
       | sort_by(-.bytes)
       | .[] | "          file  \(.f) reads \(.reads) bytes \(.bytes)"' "$@" 2>/dev/null || true
+}
+
+# sdd boot <mission> <PHASE> — print the boot prompt that PHASE would be given, and exit. Reads
+# only; opens no session, writes nothing, spends nothing.
+#
+# It exists because of a hole this repo already pays for elsewhere: until now `boot_prompt()` had
+# exactly ONE caller (`run_phase`), so the only way to see what a phase is actually told was to
+# spend a session — and the only way to assert on it was to rebuild the prompt by hand in a test.
+# A fixture written from memory is the failure mode CLAUDE.md forbids by name; it has already cost
+# this kit three gate bugs, because fixture and gate shared an author and therefore a wrong
+# assumption. With this, the assertion reads the real thing.
+#
+# Second use, and the reason it earns its keep beyond the tests: it is the instrument that answers
+# "what does this phase cost before it starts", beside `sdd census`'s boot bill.
+cmd_boot() {
+  load_config
+  resolve_mission "${1:-}"
+  local phase="${2:-}"
+  [ -n "$phase" ] || die "usage: sdd boot <mission> <PHASE>"
+  phase="$(printf '%s' "$phase" | tr '[:lower:]' '[:upper:]')"
+  case " $PHASES " in *" $phase "*) ;; *) die "unknown phase '$phase' (one of: $PHASES)" ;; esac
+  boot_prompt "$phase" "$(phase_hat "$phase")"
 }
 
 # sdd census <mission> — what each phase's sessions used and re-read, from .sdd/logs. The
@@ -5654,7 +5744,7 @@ cmd_autonomy() {
   # foreign mission that merely shares the slug.
   local interventions="{}"
   if [ "$by_mission" = "1" ] && [ -n "$repo" ]; then
-    local mlist m ck n hdir
+    local mlist m ck n hdir nf nsrc
     # SOURCED in a subshell, the way check 2b of cmd_health reads TEST_CMD, and NOT through
     # load_config: `sdd autonomy` has never required a .sdd/config.sh — it has a branch for "this is
     # not a git repository" — and making it demand one to answer a question about the ledger would
@@ -5676,7 +5766,17 @@ cmd_autonomy() {
       # is not zero. `|| true`: grep exits 1 when it counts zero, and `set -e` would take the whole
       # command down on the first mission whose checkpoint has no note — the common case.
       [ -f "$ck" ] || continue
-      n="$(grep -cE '^[[:space:]]*-[[:space:]]*intervention:' "$ck" || true)"
+      # BOTH files, because the writer has two worlds: a mission from before the split keeps its
+      # notes in checkpoint.md, one from after keeps them in the sibling, and a reader that knew
+      # only one of them would report zero interventions for half the missions on disk — the
+      # silent kind of wrong, since absent and zero already mean different things here. Each grep
+      # is guarded on its own: it exits 1 when it counts nothing, which is the common case.
+      nf="$repo/$hdir/$m/checkpoint-notas.md"
+      n=0
+      for nsrc in "$ck" "$nf"; do
+        [ -f "$nsrc" ] || continue
+        n=$(( n + $(grep -cE '^[[:space:]]*-[[:space:]]*intervention:' "$nsrc" || true) ))
+      done
       interventions="$(jq -c --arg m "$m" --argjson n "${n:-0}" '. + {($m): $n}' <<< "$interventions")"
     done <<< "$mlist"
   fi
@@ -6861,7 +6961,11 @@ USAGE
                              R<n> increments a round writes — over the mission cost. Absent, and
                              never 0%, on a mission that never reviewed.
   sdd census <mission>       what each phase's sessions used and re-read, from .sdd/logs: tools by
-                             name, MCP seen, denials, bytes re-read under HANDOFF_DIR
+                             name, MCP seen, denials, bytes re-read under HANDOFF_DIR, per file,
+                             plus the boot bill — what the boot points at, before and at the worst
+                             point of the mission
+  sdd boot <mission> <PHASE> print the boot prompt that phase would be given, and exit. Reads
+                             only: no session, no writes, no cost
   sdd kaizen [--dry-run]     judge the previous kit change and give birth to the next kit
                              mission plan (kit repo only; exit 3 = the change made it worse)
   sdd kaizen --series        the deterministic series (JSON) the judge cites — EVERY repo in the
@@ -6920,6 +7024,7 @@ main() {
     close)     cmd_close "$@" ;;
     autonomy)  cmd_autonomy "$@" ;;
     census)    cmd_census "$@" ;;
+    boot)      cmd_boot "$@" ;;
     kaizen)    cmd_kaizen "$@" ;;
     version|--version|-v) cmd_version ;;
     help|--help|-h) cmd_help ;;

@@ -59,6 +59,14 @@
 # defect, same fix, one message. The declared cost is a line with two greps, where rule 1 answers
 # for a `-m` that belongs to the other command — see maxc_violations().
 #
+# DECLARED LIMIT (D15), fail-CLOSED and therefore a limit and not a backlog item: PIPE_RE and
+# MAXC_RE match a single `|`, so a LOGICAL OR followed by grep — `a || grep -q x <<< "$v"` — is
+# refused even though nothing is piped into it and no writer can be killed by SIGPIPE. It cost
+# nothing for three missions because the tree held zero of them; the first one written, in the
+# boot probes of 20260904-a-dieta-de-contexto, was rewritten as one grep with an alternation
+# rather than waived. The fix is a lookbehind this ERE has no way to spell, and the noise pushes
+# toward the shape the rule wants anyway — so it stays, written down instead of rediscovered.
+#
 # NOT measured either: a quiet flag separated from `grep` by a shell metacharacter, e.g. a pattern
 # containing an unquoted-looking `|` (`| grep "a|b" -q`). The boundary set that kills the false
 # positives above cannot tell a metacharacter inside a quoted operand from a real one without

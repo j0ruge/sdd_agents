@@ -105,6 +105,50 @@ selftest() {
   printf '  ok    check-hat selftest: %d probes\n' "$PROBES"
 }
 
+# --- sdd boot: the boot prompt is an artifact, so it is asserted like one -----------------------
+# Until 20260904-a-dieta-de-contexto `boot_prompt()` had ONE caller (`run_phase`), so the only way
+# to see what a phase is told was to spend a session, and the only way to assert on it was to
+# rebuild the prompt by hand — the fixture-from-memory that CLAUDE.md forbids and that has already
+# cost this kit three gate bugs. `sdd boot` made the real thing readable, and these probes read it.
+boot_probes() {
+  local box out out2 mdir
+  box="$(mktemp -d "${TMPDIR:-/tmp}/sdd-boot-XXXXXX")"
+  mdir="$box/docs/handoffs/20260101-n"
+  mkdir -p "$mdir" "$box/.sdd"
+  ( cd "$box" && git init -q -b main . ) >/dev/null 2>&1
+  printf 'PROJECT_NAME="n"\nDEFAULT_BRANCH="main"\nTEST_CMD="true"\nHANDOFF_DIR="docs/handoffs"\n' > "$box/.sdd/config.sh"
+  : > "$mdir/00-missao.md"; : > "$mdir/01-plano.md"
+  printf '| ID | Incremento | Check | Status | Commit |\n' > "$mdir/checkpoint.md"
+  awk 'BEGIN{for(i=1;i<=30;i++) printf "- 2026-01-01 · I%d · NOTA_NUMERO_%02d\n", i, i}' > "$mdir/checkpoint-notas.md"
+  out="$( cd "$box" && SDD_HOME="$ROOT" "$ROOT/bin/sdd" boot 20260101-n EXEC 2>&1 )" || true
+
+  # BOTH terms, and neither alone is the assertion. "Ten notes" alone passes on a boot that inlines
+  # the FIRST ten — the wrong end, and the one a tail written as `head` would give. "Not the first"
+  # alone passes on a boot that inlines nothing at all.
+  if [ "$(grep -c 'NOTA_NUMERO_' <<< "$out")" = 10 ] && grep -q 'NOTA_NUMERO_30' <<< "$out" \
+       && ! grep -q 'NOTA_NUMERO_01' <<< "$out"; then pass "boot: exactly the last 10 notes are inlined, and not the first"
+  else fail "boot: wanted 10 notes ending at 30 — got $(grep -c 'NOTA_NUMERO_' <<< "$out"), first present: $(grep -q 'NOTA_NUMERO_01' <<< "$out" && echo yes || echo no)"; fi
+  if grep -q 'Do NOT read' <<< "$out"; then pass "boot: and the session is told not to open the notes file"
+  else fail "boot: the do-not-read instruction is missing — inlining without it just adds a second copy"; fi
+
+  # The differential, and the bug it was written against: the qualifier on item 3 was
+  # unconditional for one commit, which made the prompt tell EVERY mission in flight that its notes
+  # had moved while they sat in the very file item 3 sends it to read. A mission from before the
+  # split has to come out of here indistinguishable from what it got yesterday.
+  rm -f "$mdir/checkpoint-notas.md"
+  out2="$( cd "$box" && SDD_HOME="$ROOT" "$ROOT/bin/sdd" boot 20260101-n EXEC 2>&1 )" || true
+  if grep -qE '^  3\..*NOT in it' <<< "$out" && ! grep -qE '^  3\.' <<< "$(grep 'NOT in it' <<< "$out2")"; then
+    pass "boot: item 3 claims the notes moved only when they did — a pre-split mission is not lied to"
+  else fail "boot: item 3 qualifier is not conditional on the notes file"; fi
+  # One grep and one alternation, not two greps joined by `||`: RULE 1 of check-pipefail.sh reads
+  # the second `|` of a logical or as a pipe into `grep -q` and refuses the line. Declared limit,
+  # written in that sensor's header — the shape below is the one the rule was built for anyway.
+  if grep -qE 'NOTA_NUMERO_|Do NOT read' <<< "$out2"; then
+    fail "boot: a pre-split mission got a notes block it has no file for"
+  else pass "boot: and a pre-split mission gets no notes block at all"; fi
+  rm -rf "$box"
+}
+
 # --- the executor and the Agent tool ------------------------------------------------------------
 # `Agent` is deliberately NOT in HAT_DENY_BASE, and the reason is a single hat: the reviewer's
 # codereview skill dispatches subagents. The executor's prompt used to ask for them too, and
@@ -275,6 +319,7 @@ if [ "$n" -lt "$HAT_FLOOR" ]; then
 fi
 census_probes
 executor_agent_probes
+boot_probes
 release_probes
 selftest || exit $?
 if [ "$fails" -eq 0 ]; then printf '  ok    %d hat(s) declare their boundary\n' "$n"; exit 0; fi

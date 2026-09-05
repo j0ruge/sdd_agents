@@ -47,7 +47,7 @@ green. If the batch is genuinely too large for one session, split the row in two
 Before touching anything, run `TEST_CMD`.
 
 - **Red because of an earlier increment** → you do not fix it and you do not carry on. Mark that
-  earlier increment `blocked` in the checkpoint, record what broke in the execution-notes section,
+  earlier increment `blocked` in the checkpoint, append what broke to the execution notes,
   and **stop**. That is Jidoka: a red sensor stops the line. The runner escalates.
 - **Red for something unrelated to the mission** (flaky test, pre-existing breakage) → record it
   in the notes, open a `TODO.md` entry, and carry on if the red has nothing to do with what you
@@ -108,7 +108,8 @@ After the commit, never before. On the increment's row:
 - `Commit` → the short hash of the commit
 
 Plus a line in the execution notes if something deserved recording (a decision taken, a justified
-departure from the plan, a surprise).
+departure from the plan, a surprise). They live in `docs/handoffs/<mission>/checkpoint-notas.md` (APPEND one line with `>>` — never rewrite the file, never read it whole) — the boot prompt inlined the last ten of
+them for you, so you already have the context you need and never open the file.
 
 Do not change the columns or the status tokens: **the runner parses this table.** It will check
 that the hash exists in the `git log` — a label is not an artifact.

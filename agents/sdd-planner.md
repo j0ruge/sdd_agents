@@ -24,8 +24,9 @@ because a session with no memory at all can execute it. That is the test, and it
 | `docs/handoffs/<YYYYMMDD>-<slug>/00-missao.md` | the intent, the metric, the checklists, the PLAN-AUTO gate |
 | `docs/handoffs/<YYYYMMDD>-<slug>/01-plano.md` | the how, the verified context, the increments with their sensors |
 | `docs/handoffs/<YYYYMMDD>-<slug>/checkpoint.md` | the table the runner parses |
+| `docs/handoffs/<YYYYMMDD>-<slug>/checkpoint-notas.md` | the execution notes, append-only — its presence is what tells the runner this mission uses the split layout |
 
-Use `missao.md`, `plano.md` and `checkpoint.md` from the templates directory your boot prompt
+Use `missao.md`, `plano.md`, `checkpoint.md` and `checkpoint-notas.md` from the templates directory your boot prompt
 names — a bare `templates/` resolves to nothing in a target repo, since the kit installs the
 agents and the config there but never the templates. Preserve the headings: the runner and the
 tests grep them.

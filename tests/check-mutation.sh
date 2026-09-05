@@ -1103,6 +1103,45 @@ mut_RUN_init_blind() {
   sed -i '/^hat_init_facts() {/,/^}/ s|^  \[ -n "\$init" \] \|\| return 0$|  return 0|' "$1"
 }
 
+# The boot stops inlining the notes: the session is told the notes are elsewhere and never shown
+# one, so it either works blind or opens the file the prompt just forbade — the worst of both
+# layouts. Caught by "exactly the last 10 notes are inlined, and not the first" in check-hat.sh.
+mut_BOOT_notes_not_inlined() {
+  sed -i '/^boot_notes_tail() {/,/^}/ s@\[ -f "$nfile" \] || return 0@[ -f "$nfile" ] || return 0; return 0@' "$1"
+}
+
+# The tail becomes a head: ten notes are inlined, but the ten OLDEST — the session boots with the
+# history of the mission and none of what just happened. A probe that only counted ten would call
+# this green, which is why the check-hat assertion pins the END of the range too.
+mut_BOOT_notes_head_not_tail() {
+  sed -i '/^boot_notes_tail() {/,/^}/ s@| tail -n "$BOOT_NOTES_TAIL"@| head -n "$BOOT_NOTES_TAIL"@' "$1"
+}
+
+# The qualifier on item 3 goes unconditional — the shape the code actually had for one commit
+# during 20260904-a-dieta-de-contexto. Every mission from BEFORE the split is then told its
+# execution notes are not in checkpoint.md while they sit in the very file item 3 sends it to
+# read. Caught by "item 3 claims the notes moved only when they did" in check-hat.sh.
+mut_BOOT_ck_note_unconditional() {
+  sed -i 's@^  local notes_block="" notes_tail="" ck_note=""$@  local notes_block="" notes_tail="" ck_note=" — the execution notes are NOT in it"@' "$1"
+}
+
+# The runner writes its `- intervention:` note into checkpoint.md even on a mission that has the
+# sibling file — the note lands in a file whose notes section no longer exists, so the awk falls
+# through to its END arm and appends it after the fix-increments table. The narrative of what the
+# human did splits across two files by accident. Caught by "the interventions are counted in the
+# sibling notes file" in check-autonomy.sh.
+mut_RUN_intervention_ignores_notes_file() {
+  sed -i '/^checkpoint_note_intervention() {/,/^}/ s@^  target="$ck"; \[ -f "$nf" \] && target="$nf"$@  target="$ck"@' "$1"
+}
+
+# The reader goes back to one world: `sdd autonomy --by-mission` counts interventions only in
+# checkpoint.md, so every mission written after the split reports ZERO no matter how many times a
+# human had to step in — and zero is the answer this report reserves for "a human never did".
+# Caught by "the interventions are counted in the sibling notes file" in check-autonomy.sh.
+mut_AUTONOMY_intervention_one_world() {
+  sed -i 's@^      for nsrc in "$ck" "$nf"; do$@      for nsrc in "$ck"; do@' "$1"
+}
+
 # The per-file break-down goes blind: every phase prints its aggregate and not one `file` line, so
 # `sdd census` is back to answering "1.4 MB somewhere under docs/handoffs" — the number a context
 # diet cannot be aimed with. The match is degraded rather than the printf deleted, because what
@@ -3106,6 +3145,9 @@ CATALOG=(
   RUN_init_blind
   CENSUS_tools_blind
   CENSUS_per_file_blind
+  BOOT_notes_not_inlined
+  BOOT_notes_head_not_tail
+  BOOT_ck_note_unconditional
   CENSUS_boot_bill_counts_the_plan
   CENSUS_boot_bill_lexicographic
   CENSUS_boot_bill_worst_inverted
@@ -3243,6 +3285,8 @@ CATALOG=(
   RUN_retry_pending_before_null
   AUTONOMY_progress_ignored
   AUTONOMY_cache_read_dropped
+  AUTONOMY_intervention_one_world
+  RUN_intervention_ignores_notes_file
   AUTONOMY_progress_null_blind
   AUTONOMY_historic_progress_dropped
   AUTONOMY_historic_total_change_blind
