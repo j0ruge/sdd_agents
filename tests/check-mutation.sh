@@ -1103,6 +1103,24 @@ mut_RUN_init_blind() {
   sed -i '/^hat_init_facts() {/,/^}/ s|^  \[ -n "\$init" \] \|\| return 0$|  return 0|' "$1"
 }
 
+# The context bill goes silent. The target's CLAUDE.md plus its .claude/rules/ is ~73% of the fixed
+# prefix every turn of every phase carries, and it is the one term the kit deliberately does not
+# cut — so making it VISIBLE is the entire contribution, and a preflight that stopped printing it
+# would leave a repo whose rulebook doubled to find out from an invoice. Caught by "the context
+# bill is reported" in check-preflight.sh.
+mut_PREFLIGHT_context_bill_silent() {
+  sed -i '/^cmd_preflight() {/,/^}/ s@^  ok "context bill: @  : "@' "$1"
+}
+
+# The `[ -f "$cb" ] || continue` guard comes off the loop. On a repo with no .claude/rules/ the
+# glob stays literal, `wc -c` fails on a path that does not exist, and under `set -o pipefail` the
+# arithmetic that consumes it takes the WHOLE preflight down — on the repo shape most targets have.
+# It is the `guard:` class CLAUDE.md names, here in the preflight rather than in health. Caught by
+# "the context bill is reported" in check-preflight.sh, whose fixture has neither file.
+mut_PREFLIGHT_context_bill_unguarded() {
+  sed -i '/^cmd_preflight() {/,/^}/ s@^    \[ -f "$cb" \] || continue$@    :@' "$1"
+}
+
 # Item 6 goes back to pointing at the whole templates directory: seven files, 22 480 B, in every
 # session of every phase, when a phase writes one or two artifacts. The fifth lever of the diet is
 # undone and the boot bill goes on reporting the cut, because the fallback arm it lands in is the
@@ -3197,6 +3215,8 @@ CATALOG=(
   BOOT_handoff_not_named
   BOOT_handoff_whole_file
   BOOT_templates_whole_dir
+  PREFLIGHT_context_bill_silent
+  PREFLIGHT_context_bill_unguarded
   CENSUS_templates_count_plan
   GATE_tldr_uncapped_EXEC
   GATE_tldr_uncapped_QA

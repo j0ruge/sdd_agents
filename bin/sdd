@@ -4006,6 +4006,26 @@ cmd_preflight() {
     ok "working tree clean"
   fi
 
+  # --- the context bill of the TARGET repo ---
+  # A SENSOR, never a `_fail`, and the distinction is the whole design: the kit does not cut
+  # anybody's rulebook. Measured on 2026-09-03 across two repos, the fixed prefix a session carries
+  # into every turn is ~70K tokens, and ~52K of it (73%) is the target's CLAUDE.md plus its
+  # .claude/rules/ — the single biggest term in the bill and the one term the kit has no business
+  # touching. What it can do is make it VISIBLE, so a repo whose rulebook doubled learns it from a
+  # line rather than from an invoice.
+  #
+  # Bytes and not tokens, because the ratio is not a constant and pretending otherwise would be the
+  # kind of number this repo refuses: 48 KB answered ~48K tokens in the kit and 130 KB answered
+  # ~52K in the target. Every capture is guarded — `find` and the loop exit non-zero on an empty
+  # match, and under `set -o pipefail` an unguarded one would take the whole preflight down on a
+  # repo with no rules directory, which is most of them.
+  local cb_files=0 cb_bytes=0 cb
+  for cb in "$REPO_ROOT/CLAUDE.md" "$REPO_ROOT/.claude/rules"/*.md; do
+    [ -f "$cb" ] || continue
+    cb_files=$((cb_files + 1)); cb_bytes=$((cb_bytes + $(wc -c < "$cb")))
+  done
+  ok "context bill: $cb_files file(s), $cb_bytes bytes of CLAUDE.md + .claude/rules/ — carried into EVERY turn of every phase (bytes, not tokens: the ratio is not constant)"
+
   info ""
   if [ "$fails" -eq 0 ]; then
     printf '%spreflight ok%s\n' "$C_GREEN$C_BOLD" "$C_RESET"; return 0
