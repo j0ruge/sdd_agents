@@ -5421,6 +5421,7 @@ cmd_retry() {
 # having found nothing, and the assignment would kill the command instead of printing a zero.
 census_boot_bill() {
   local mdir="$HANDOFF_DIR/$MISSION" latest="" line="" total=0 b f
+  local worst="" worst_b=0 base=0
   local -a hs=()
   for f in 00-missao.md 01-plano.md checkpoint.md; do
     b=0; [ -f "$mdir/$f" ] && b="$(wc -c < "$mdir/$f")"
@@ -5438,6 +5439,16 @@ census_boot_bill() {
     hs+=("$b")
   done
   [ "${#hs[@]}" -eq 0 ] || latest="$(printf '%s\n' "${hs[@]}" | sort -V | tail -1)"
+  # The HEAVIEST handoff the mission produced, which is a different question from the last one and
+  # the only one a target can be held to. "Most recent" depends on the state the disk happens to be
+  # in: on a mission already closed it resolves to `50-pr.md`, the smallest artifact there is, and
+  # a diet measured there flatters itself. A phase really boots against whatever handoff its
+  # predecessor left — on 20260901-o-revisor-so-acha that is `20-handoff-exec.md` at 49 641 B
+  # against `50-pr.md` at 5 606 B, a 44 KB difference in what the same design is judged on.
+  for f in "${hs[@]}"; do
+    b="$(wc -c < "$mdir/$f")"
+    [ "$b" -le "$worst_b" ] || { worst_b="$b"; worst="$f"; }
+  done
   if [ -n "$latest" ]; then
     b="$(wc -c < "$mdir/$latest")"; line="$line  $latest ${b}B"; total=$((total + b))
   else
@@ -5447,6 +5458,14 @@ census_boot_bill() {
   for f in "$SDD_HOME"/templates/*.md; do [ -f "$f" ] || continue; b=$((b + $(wc -c < "$f"))); done
   line="$line  templates ${b}B"; total=$((total + b))
   printf '  boot bill%s  total %sB\n' "$line" "$total"
+  # Printed only when the two points disagree: on a mission whose heaviest handoff IS the last one
+  # the second line would just repeat the first, and a line that is always there stops being read.
+  # `base` is the bill with the handoff term removed, so the worst point is the same sum with the
+  # other handoff in it — never a second, independently computed total that could drift from it.
+  if [ -n "$worst" ] && [ "$worst" != "$latest" ]; then
+    base=$((total - ${latest:+$(wc -c < "$mdir/$latest")}))
+    printf '  boot bill  worst point  %s %sB  total %sB\n' "$worst" "$worst_b" "$((base + worst_b))"
+  fi
 }
 
 # The census aggregate answers "this phase re-read 1.4 MB"; it cannot answer WHICH file, and that

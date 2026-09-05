@@ -1130,6 +1130,15 @@ mut_CENSUS_boot_bill_lexicographic() {
   sed -i '/^census_boot_bill() {/,/^}/ s@| sort -V | tail -1)"@| sort | tail -1)"@' "$1"
 }
 
+# The worst point stops being computed and becomes the last file again: the comparison that keeps
+# the heaviest handoff is inverted, so the loop keeps the LIGHTEST. A diet is then measured at the
+# point that flatters it most — on a closed mission, against `50-pr.md`, the smallest artifact the
+# mission produced. Caught by "the worst point names the heaviest handoff, not the newest" in
+# check-hat.sh, and the differential half above keeps a mutant from passing by printing nothing.
+mut_CENSUS_boot_bill_worst_inverted() {
+  sed -i '/^census_boot_bill() {/,/^}/ s@\[ "$b" -le "$worst_b" \] ||@[ "$b" -ge "$worst_b" ] ||@' "$1"
+}
+
 # The session row stops carrying cache-read. It is HALF a mission's bill (51-53%, measured
 # 2026-09-03) and .sdd/logs/ is gitignored, so with this field gone the ledger is once more unable
 # to tell a mission that got cheaper by RE-READING LESS from one that got cheaper by luck — which
@@ -3099,6 +3108,7 @@ CATALOG=(
   CENSUS_per_file_blind
   CENSUS_boot_bill_counts_the_plan
   CENSUS_boot_bill_lexicographic
+  CENSUS_boot_bill_worst_inverted
   HEALTH_release_line3_blind
   RUN_hat_guard_ignores_prior_dirt
   HEALTH_with_mutation_refused

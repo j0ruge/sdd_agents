@@ -158,7 +158,7 @@ census_probes() {
   # outright — so this pair asserts both that the empty world is survived AND that the non-empty
   # one is answered, which no single fixture can do.
   local out2
-  printf 'x\n' > "$box/docs/handoffs/20260101-fixture/20-handoff-exec.md"
+  head -c 500 /dev/zero | tr '\0' 'h' > "$box/docs/handoffs/20260101-fixture/20-handoff-exec.md"
   out2="$( cd "$box" && "$ROOT/bin/sdd" census 20260101-fixture 2>&1 )" || true
   if grep -qE '^  boot bill .*\(no handoff yet\) 0B' <<< "$out"; then pass "census: the boot bill survives a mission with no handoff yet"
   else fail "census: boot bill did not report an absent handoff"; fi
@@ -173,6 +173,16 @@ census_probes() {
   out3="$( cd "$box" && "$ROOT/bin/sdd" census 20260101-fixture 2>&1 )" || true
   if grep -qE '^  boot bill .*40-review-r10\.md [1-9][0-9]*B' <<< "$out3"; then pass "census: and prefers r10 to r2 — version order, not text order"
   else fail "census: boot bill picked text order — got: $(grep '^  boot bill' <<< "$out3" | cut -c1-140)"; fi
+  # "Most recent" and "heaviest" are different questions, and only the second one a target can be
+  # held to: on a closed mission the most recent handoff is the smallest artifact there is. The
+  # pair is differential on purpose — the line has to be ABSENT when the two points agree (out2,
+  # where the only handoff is both) and PRESENT naming the heavier one when they disagree (out3,
+  # where the newest is a 3-byte review round and the heaviest a 500-byte exec handoff). Neither
+  # half alone separates "computes the worst point" from "always prints the last file again".
+  if grep -qE '^  boot bill  worst point' <<< "$out2"; then fail "census: worst-point line printed when it repeats the first"
+  else pass "census: no worst-point line when the heaviest handoff IS the most recent"; fi
+  if grep -qE '^  boot bill  worst point  20-handoff-exec\.md 500B  total [1-9][0-9]*B$' <<< "$out3"; then pass "census: the worst point names the heaviest handoff, not the newest"
+  else fail "census: worst point wrong — got: $(grep 'worst point' <<< "$out3" | cut -c1-140)"; fi
   rm -rf "$box"
 }
 
