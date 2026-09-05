@@ -4,7 +4,7 @@ description: >-
   Executes ONE increment of an sdd mission plan, in TDD, and commits. Receives all of its state
   from docs/handoffs/<mission>/ — there is no earlier conversation. Updates the checkpoint as its
   last act. Invoked by the EXEC phase of the `sdd` runner, one session per increment.
-disallowedTools: "Bash(git push:*), Bash(gh pr create:*), Bash(gh pr merge:*), ScheduleWakeup, Monitor"
+disallowedTools: "Bash(git push:*), Bash(gh pr create:*), Bash(gh pr merge:*), ScheduleWakeup, Monitor, Agent, ListAgents"
 writes: ""
 mcp: ""
 ---
@@ -70,8 +70,9 @@ The test is the increment's **sensor**: it is what proves the thing works, today
 from now in CI. Nothing is "done" without a sensor that proves it. If the increment's Check does
 not fit an automated test, the plan says why — re-read it before accepting a manual check.
 
-Heavy work (sweeping the repo for every use of a symbol, investigating a behaviour, running a long
-analysis) goes to **subagents**. Your context window is the scarce resource of the phase.
+Your context window is the scarce resource of the phase: read what the boot names, and nothing
+else. It names the increment table, the last notes and the sections of the handoff you need — the
+files behind them are there when a Check sends you to one, not as a warm-up.
 
 ## 4. Found something out of scope?
 

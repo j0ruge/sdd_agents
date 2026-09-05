@@ -105,6 +105,28 @@ selftest() {
   printf '  ok    check-hat selftest: %d probes\n' "$PROBES"
 }
 
+# --- the executor and the Agent tool ------------------------------------------------------------
+# `Agent` is deliberately NOT in HAT_DENY_BASE, and the reason is a single hat: the reviewer's
+# codereview skill dispatches subagents. The executor's prompt used to ask for them too, and
+# `sdd census` measured `Agent=0` across 27 EXEC sessions of two missions — the phrase came out in
+# 20260904-a-dieta-de-contexto and the executor now denies the tool by name.
+#
+# Differential on purpose. "The executor denies Agent" alone would stay green if someone closed the
+# hole by putting Agent into HAT_DENY_BASE, which is the one fix that silently breaks the reviewer;
+# "the reviewer allows Agent" alone would stay green if the executor's line rotted away. Only the
+# pair says what the design actually is. The catalogue cannot reach either half — it sabotages
+# bin/sdd and this lives in agents/*.md — so this probe is the whole sensor, and that limit is
+# declared here rather than left silent.
+executor_agent_probes() {
+  local ex="$ROOT/agents/sdd-executor.md" rv="$ROOT/agents/sdd-reviewer.md"
+  if grep -qE '^disallowedTools:.*(^|[ ,"])Agent([,"]|$)' "$ex"; then pass "hat: the executor denies Agent — the census measured 0 uses in 27 EXEC sessions"
+  else fail "hat: sdd-executor no longer denies Agent"; fi
+  if grep -qE '^disallowedTools:.*(^|[ ,"])Agent([,"]|$)' "$rv"; then fail "hat: sdd-reviewer denies Agent — its codereview skill dispatches subagents and would break"
+  else pass "hat: and the reviewer still may use it, which is why Agent is not in HAT_DENY_BASE"; fi
+  if grep -qi 'subagent' "$ex"; then fail "hat: the executor prompt still asks for subagents while the tool is denied"
+  else pass "hat: and the executor prompt no longer asks for what it cannot do"; fi
+}
+
 # --- sdd census: the instrument reads the logs, never memory ------------------------------------
 # PROVENANCE: the three lines below were captured on 2026-09-04 on Claude Code 2.1.260 with
 #     claude -p 'Read docs/handoffs/x/00-missao.md with the Read tool, then reply with exactly: OK' \
@@ -252,6 +274,7 @@ if [ "$n" -lt "$HAT_FLOOR" ]; then
   exit 93
 fi
 census_probes
+executor_agent_probes
 release_probes
 selftest || exit $?
 if [ "$fails" -eq 0 ]; then printf '  ok    %d hat(s) declare their boundary\n' "$n"; exit 0; fi

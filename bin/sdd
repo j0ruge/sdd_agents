@@ -1631,8 +1631,11 @@ phase_agent() {
 # docs/superpowers/specs/2026-09-03-a-fronteira-do-chapeu-design.md.
 #
 # HAT_DENY_BASE: what NO phase used across the 43 sessions the spec measured (§ 2.1). A property of
-# the pipeline, defined once; each hat adds its own line. `Agent` is NOT here: the reviewer's
-# codereview skill dispatches subagents and the executor's prompt asks for them.
+# the pipeline, defined once; each hat adds its own line. `Agent` is NOT here because the
+# reviewer's codereview skill dispatches subagents — and ONLY for that reason since
+# 20260904-a-dieta-de-contexto: the executor's prompt used to ask for them too, and `sdd census`
+# measured `Agent=0` across 27 EXEC sessions of two missions. The phrase came out and the executor
+# denies the tool by name, so the base stays the property of the pipeline it claims to be.
 HAT_DENY_BASE="CronCreate, CronDelete, CronList, DesignSync, EnterWorktree, ExitWorktree, RemoteTrigger, SendMessage, PushNotification, Workflow, NotebookEdit, ReportFindings, ListMcpResourcesTool, ReadMcpResourceTool, ReadMcpResourceDirTool, WebSearch, WebFetch"
 # HAT_WRITES_BASE: what EVERY hat may touch — principle 5 sends any agent's finding to TODO_FILE,
 # and in the kit that moves the backlog ratchet in tests/health-baseline.txt.
