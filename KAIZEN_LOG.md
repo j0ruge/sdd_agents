@@ -58,6 +58,8 @@ teto; as 318 pendências mudaram de dono por escrito para a triagem do `sdd kaiz
 espelho do `sales_quote` está stale em quatro chapéus — PR de espelho lá antes da próxima missão
 do alvo.
 
+---
+
 ## 2026-09-04 — A janela 3 partiu antes do piso, e o veredito é `indeterminado` por escrito (chore `20260904-faxina-do-backlog`)
 
 **Problema (Gemba):** a janela 3 (D22) abriu em `2e48a87` com a missão
