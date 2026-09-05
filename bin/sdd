@@ -926,6 +926,7 @@ gate_EXEC() {
   fi
   [ -f "$MISSION_DIR/20-handoff-exec.md" ] \
     || { GATE_WHY="every increment done and the suite green, but 20-handoff-exec.md is missing"; return 1; }
+  handoff_tldr_ok "$MISSION_DIR/20-handoff-exec.md" || return 1
 
   GATE_WHY="$total increment(s) done, suite green, handoff written"
   return 0
@@ -936,6 +937,7 @@ gate_QA() {
   GATE_APP_DOWN=0
   local h="$MISSION_DIR/30-handoff-qa.md" report=""
   [ -f "$h" ] || { GATE_WHY="missing 30-handoff-qa.md"; return 1; }
+  handoff_tldr_ok "$h" || return 1
 
   local st; st="$(frontmatter "$h" status)"
   if [ "$st" = "skipped" ]; then GATE_WHY="qa: skipped (diff has no user-visible change)"; return 0; fi
@@ -1140,6 +1142,7 @@ gate_REVIEW() {
   # `rounds_after > rounds_before` is false, so the row falls back to `moved`, as it did before
   # these fields existed.
   [ -n "$last" ] || { GATE_WHY="no 40-review-r<N>.md"; return 1; }
+  handoff_tldr_ok "$last" || return 1
 
   # Documented anchor: the "### Overall Grade" section of the codereview skill (contract
   # v1.13.0+), table | Criterion | Grade | Rationale | on an A–F scale. The gate requires A on
@@ -1757,6 +1760,62 @@ EOF
 # When the phase is driven by a third-party skill, the literal slash has to be the FIRST line of
 # the prompt: that is how it expands headless (the QA skills carry disable-model-invocation, so
 # there is no other route).
+# The cap the boot's inlining pays for, and the only new rule I3 asks a gate to enforce. Since the
+# boot inlines `## TL;DR` verbatim into EVERY session of the next phase, a TL;DR that grows is a
+# cost multiplied by every turn of that phase — unlike the rest of the handoff, which the gate read
+# once from disk and nobody re-reads. Measured on 20260901-o-revisor-so-acha: 38 lines, 2 994 B;
+# at this cap, 1 603 B.
+#
+# Satisfiable BY CONSTRUCTION, which is the half of principle 1 that is easy to miss: the handoff
+# is written by the hat of the very phase whose gate this is, so the agent that fails the check is
+# the agent allowed to fix it. A cap enforced by a gate whose phase does not own the file would not
+# stop the line — it would spin it, which is the class the ADR 0006 refuses.
+#
+# Non-blank lines, so a blank line is never the difference between pass and fail and the number in
+# the message is the number a human counts. `index($0, h) == 1` for the same mawk reason as
+# handoff_boot_sections.
+readonly HANDOFF_TLDR_MAX_LINES=20
+handoff_tldr_ok() {   # handoff_tldr_ok <file> — sets GATE_WHY and returns 1 when over the cap
+  local f="$1" n
+  [ -f "$f" ] || return 0
+  n="$(awk 'index($0, "## TL;DR") == 1 { p = 1; next } /^## / { p = 0 } p && NF { c++ } END { print c + 0 }' "$f")"
+  [ "$n" -le "$HANDOFF_TLDR_MAX_LINES" ] && return 0
+  GATE_WHY="${f##*/}: the TL;DR is $n lines, over the cap of $HANDOFF_TLDR_MAX_LINES — the boot inlines it into every session of the next phase"
+  return 1
+}
+
+# ONE definition of "the mission's most recent handoff", read by the boot prompt AND by the boot
+# bill. Before this the boot did not resolve it at all — item 4 said "the most recent handoff" and
+# left the SESSION to work it out, which is a decision paid for in turns and got the 49 641 B file
+# opened whole. `[1-9][0-9]-` and not `[0-9][0-9]-`: 00-missao.md and 01-plano.md are items 1 and
+# 2 of the reading order, never item 4. `latest_matching` sorts by version, so a mission that
+# reached 40-review-r10.md does not answer 40-review-r2.md.
+mission_latest_handoff() {   # mission_latest_handoff [<mission dir>]
+  latest_matching "${1:-$MISSION_DIR}/[1-9][0-9]-*.md"
+}
+
+# The two sections of a handoff the next phase actually boots on: what happened (`## TL;DR`) and
+# what to do now (the boot section). The rest is evidence — for a human reading back, and
+# for the gate that already read it from disk. Measured on 20260901-o-revisor-so-acha: the two
+# sections are 11 823 B of the 49 641 B item 4 used to point at.
+#
+# `index($0, h) == 1` and never a regex or a negated class: this machine's awk is mawk, which is
+# byte-oriented in every locale, and one of the two headings carries accented characters that a
+# negated class would split mid-codepoint — the failure mode CLAUDE.md documents for head_of().
+#
+# And the ASCII PREFIX (`## Boot da pr`), the same shape checkpoint_note_intervention already uses
+# for `## Notas de execu`, for a second reason: bin/sdd is kit surface and check-lang.sh refuses
+# Portuguese prose there. The full heading is DATA, and the one file allowed to spell it is
+# tests/check-templates.sh, whose regexes ARE the template contract — which is where the canonical
+# spelling therefore lives, and where a heading rename is caught.
+handoff_boot_sections() {   # handoff_boot_sections <file>
+  [ -f "$1" ] || return 0
+  awk '
+    /^## / { keep = (index($0, "## TL;DR") == 1 || index($0, "## Boot da pr") == 1) }
+    keep { print }
+  ' "$1"
+}
+
 # How many execution notes the boot inlines. A constant and not a config key: the fronteira
 # already refused a button nobody would turn, and YAGNI (principle 6) — a target that needs a
 # different number will say so and this becomes a key then, not before.
@@ -1790,6 +1849,24 @@ boot_prompt() {
   # split the notes really are inside checkpoint.md, and an item 3 that said otherwise
   # unconditionally would make the prompt LIE to every mission in flight — telling the session the
   # notes are elsewhere while they sit in the very file it was just told to read.
+  # Item 4 used to be "the most recent handoff in <dir>" — a lookup the SESSION performed, and
+  # then paid for by opening the whole file. The runner resolves it (one definition, shared with
+  # the boot bill) and inlines the two sections the next phase boots on; the file is named so the
+  # session can still open it when the TL;DR sends it there, which is the point of naming it.
+  local item4 hf hname handoff_block="" hsec=""
+  hf="$(mission_latest_handoff)"
+  if [ -n "$hf" ]; then
+    hname="${hf##*/}"
+    item4="$HANDOFF_DIR/$MISSION/$hname — its TL;DR and its boot section are inlined below; open
+     the file itself ONLY if they send you there"
+    hsec="$(handoff_boot_sections "$hf")"
+    handoff_block="
+From $hname, the two sections the next phase boots on:
+${hsec:-  (the handoff carries neither section — read the file)}
+"
+  else
+    item4="(no handoff yet — this is the first phase of the mission)"
+  fi
   local notes_block="" notes_tail="" ck_note=""
   if [ -f "$MISSION_DIR/checkpoint-notas.md" ]; then
     ck_note=" — the execution notes are NOT in it; the last $BOOT_NOTES_TAIL are inlined below"
@@ -1885,11 +1962,11 @@ before. Read, in this order, before anything else:
   1. $HANDOFF_DIR/$MISSION/00-missao.md   (the intent and the metric)
   2. $HANDOFF_DIR/$MISSION/01-plano.md    (the how, and the context already verified — trust it)
   3. $HANDOFF_DIR/$MISSION/checkpoint.md  (the increment table$ck_note)
-  4. the most recent handoff in $HANDOFF_DIR/$MISSION/ (what already happened)
+  4. $item4
   5. .sdd/config.sh (TEST_CMD="$TEST_CMD"${E2E_CMD:+, E2E_CMD=\"$E2E_CMD\", E2E_DIR=\"$E2E_DIR\"})
   6. the artifact templates in $SDD_HOME/templates/ — start every artifact from the template that
      names it, NEVER from memory: their headings are the contract the gates parse
-$notes_block$lang_line
+$handoff_block$notes_block$lang_line
 Your task in this session: $(phase_task "$step").
 $(phase_extra "$step")
 $turn_rule
@@ -5493,25 +5570,27 @@ census_boot_bill() {
   # literal, `[ -f ]` rejects it, and the empty case falls out with no pipeline to fail. `sort -V`
   # and not the glob's own lexicographic order, so a mission that reached `40-review-r10.md` does
   # not answer `40-review-r2.md`.
-  for f in "$mdir"/[0-9][0-9]-*.md; do
+  for f in "$mdir"/[1-9][0-9]-*.md; do
     [ -f "$f" ] || continue
-    b="${f##*/}"
-    case "$b" in 00-*|01-*) continue ;; esac   # items 1 and 2 of the boot, already counted above
-    hs+=("$b")
+    hs+=("${f##*/}")
   done
-  [ "${#hs[@]}" -eq 0 ] || latest="$(printf '%s\n' "${hs[@]}" | sort -V | tail -1)"
+  latest="$(mission_latest_handoff "$mdir")"; latest="${latest##*/}"
   # The HEAVIEST handoff the mission produced, which is a different question from the last one and
   # the only one a target can be held to. "Most recent" depends on the state the disk happens to be
   # in: on a mission already closed it resolves to `50-pr.md`, the smallest artifact there is, and
   # a diet measured there flatters itself. A phase really boots against whatever handoff its
   # predecessor left — on 20260901-o-revisor-so-acha that is `20-handoff-exec.md` at 49 641 B
   # against `50-pr.md` at 5 606 B, a 44 KB difference in what the same design is judged on.
+  # Measured on the SECTIONS and not on the file: since I3 the boot inlines `## TL;DR` and
+  # the handoff's boot section, and points at the rest by name, so what a handoff costs the boot is
+  # those two sections. Ranking whole files here would name a heavy handoff whose boot sections are
+  # short as the worst point, and the bill would answer a question the prompt stopped asking.
   for f in "${hs[@]}"; do
-    b="$(wc -c < "$mdir/$f")"
+    b="$(handoff_boot_sections "$mdir/$f" | wc -c)"
     [ "$b" -le "$worst_b" ] || { worst_b="$b"; worst="$f"; }
   done
   if [ -n "$latest" ]; then
-    b="$(wc -c < "$mdir/$latest")"; line="$line  $latest ${b}B"; total=$((total + b))
+    b="$(handoff_boot_sections "$mdir/$latest" | wc -c)"; line="$line  $latest ${b}B"; total=$((total + b))
   else
     line="$line  (no handoff yet) 0B"
   fi
@@ -5534,7 +5613,7 @@ census_boot_bill() {
   # `base` is the bill with the handoff term removed, so the worst point is the same sum with the
   # other handoff in it — never a second, independently computed total that could drift from it.
   if [ -n "$worst" ] && [ "$worst" != "$latest" ]; then
-    base=$((total - ${latest:+$(wc -c < "$mdir/$latest")}))
+    base=$((total - ${latest:+$(handoff_boot_sections "$mdir/$latest" | wc -c)}))
     printf '  boot bill  worst point  %s %sB  total %sB\n' "$worst" "$worst_b" "$((base + worst_b))"
   fi
 }

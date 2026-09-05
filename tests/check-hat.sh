@@ -146,6 +146,22 @@ boot_probes() {
   if grep -qE 'NOTA_NUMERO_|Do NOT read' <<< "$out2"; then
     fail "boot: a pre-split mission got a notes block it has no file for"
   else pass "boot: and a pre-split mission gets no notes block at all"; fi
+  # --- item 4: the runner resolves the handoff and inlines two sections of it ---
+  # Three terms, and none of them is the assertion alone. "Names the file" alone passes on a boot
+  # that names it and then inlines the whole thing; "inlines the TL;DR" alone passes on a boot that
+  # inlines everything; "does not carry the ignored section" alone passes on a boot that inlines
+  # nothing at all. The mutants BOOT_handoff_not_named and BOOT_handoff_whole_file both survived a
+  # suite that had only the first two ideas in it.
+  local out4
+  { printf '## TL;DR\n\nINLINED_MARKER\n\n## Evidence\n\nNOT_INLINED_MARKER\n'; } \
+    > "$mdir/20-handoff-exec.md"
+  out4="$( cd "$box" && SDD_HOME="$ROOT" "$ROOT/bin/sdd" boot 20260101-n EXEC 2>&1 )" || true
+  if grep -q '20-handoff-exec.md' <<< "$out4"; then pass "boot: item 4 names the handoff instead of leaving the session to find it"
+  else fail "boot: the handoff is not named in the prompt"; fi
+  if grep -q 'INLINED_MARKER' <<< "$out4"; then pass "boot: and inlines its TL;DR"
+  else fail "boot: the TL;DR is not inlined"; fi
+  if grep -q 'NOT_INLINED_MARKER' <<< "$out4"; then fail "boot: the whole handoff was inlined — the rest of the file is evidence, not boot"
+  else pass "boot: and carries none of the sections it only points at"; fi
   rm -rf "$box"
 }
 
@@ -224,7 +240,14 @@ census_probes() {
   # outright — so this pair asserts both that the empty world is survived AND that the non-empty
   # one is answered, which no single fixture can do.
   local out2
-  head -c 500 /dev/zero | tr '\0' 'h' > "$box/docs/handoffs/20260101-fixture/20-handoff-exec.md"
+  # The bill measures the two sections the boot inlines, not the file, so the fixture has to carry
+  # them: a 500-byte blob with no headings costs the boot nothing and would make every term zero.
+  # The ignored section is deliberately LARGER than the inlined one: with both small, "counts the
+  # sections" and "counts the whole file" land in the same range and an assertion cannot tell them
+  # apart — the mutant BOOT_handoff_whole_file escaped exactly that way before this line grew.
+  { printf '## TL;DR\n\n'; head -c 400 /dev/zero | tr '\0' 'h'
+    printf '\n\n## Evidence\n\n'; head -c 3000 /dev/zero | tr '\0' 'z'; printf '\n'; } \
+    > "$box/docs/handoffs/20260101-fixture/20-handoff-exec.md"
   out2="$( cd "$box" && "$ROOT/bin/sdd" census 20260101-fixture 2>&1 )" || true
   if grep -qE '^  boot bill .*\(no handoff yet\) 0B' <<< "$out"; then pass "census: the boot bill survives a mission with no handoff yet"
   else fail "census: boot bill did not report an absent handoff"; fi
@@ -234,8 +257,8 @@ census_probes() {
   # instead of a comment: on text, r2 sorts ABOVE r10, and a mission that reached a two-digit
   # review round would have its boot measured against a handoff two rounds stale.
   local out3
-  printf 'x\n' > "$box/docs/handoffs/20260101-fixture/40-review-r2.md"
-  printf 'xx\n' > "$box/docs/handoffs/20260101-fixture/40-review-r10.md"
+  printf '## TL;DR\nx\n' > "$box/docs/handoffs/20260101-fixture/40-review-r2.md"
+  printf '## TL;DR\nxx\n' > "$box/docs/handoffs/20260101-fixture/40-review-r10.md"
   out3="$( cd "$box" && "$ROOT/bin/sdd" census 20260101-fixture 2>&1 )" || true
   if grep -qE '^  boot bill .*40-review-r10\.md [1-9][0-9]*B' <<< "$out3"; then pass "census: and prefers r10 to r2 — version order, not text order"
   else fail "census: boot bill picked text order — got: $(grep '^  boot bill' <<< "$out3" | cut -c1-140)"; fi
@@ -247,7 +270,7 @@ census_probes() {
   # half alone separates "computes the worst point" from "always prints the last file again".
   if grep -qE '^  boot bill  worst point' <<< "$out2"; then fail "census: worst-point line printed when it repeats the first"
   else pass "census: no worst-point line when the heaviest handoff IS the most recent"; fi
-  if grep -qE '^  boot bill  worst point  20-handoff-exec\.md 500B  total [1-9][0-9]*B$' <<< "$out3"; then pass "census: the worst point names the heaviest handoff, not the newest"
+  if grep -qE '^  boot bill  worst point  20-handoff-exec\.md 4[0-9][0-9]B  total [1-9][0-9]*B$' <<< "$out3"; then pass "census: the worst point costs the two inlined sections, not the whole handoff"
   else fail "census: worst point wrong — got: $(grep 'worst point' <<< "$out3" | cut -c1-140)"; fi
   rm -rf "$box"
 }

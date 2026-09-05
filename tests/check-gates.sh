@@ -259,6 +259,22 @@ printf -- '---\nfase: EXEC\nstatus: done\n---\n' > "$MDIR/20-handoff-exec.md"
 git add -A && git commit -qm "chore: handoff"
 assert_phase "handoff written, suite green" "QA"
 
+# --- the TL;DR cap, port 1 of 3 -----------------------------------------------
+# Since 20260904-a-dieta-de-contexto the boot inlines `## TL;DR` verbatim into every session of the
+# NEXT phase, so a TL;DR that grows is a cost multiplied by every turn of that phase. The cap is
+# enforced by the gate of the phase that WRITES the file — the agent that fails it is the agent
+# allowed to fix it, which is what keeps this from spinning the line instead of stopping it.
+#
+# Both sides, and neither alone is the assertion: "21 fails" alone passes on a gate that refuses
+# every TL;DR there is, and "20 passes" alone passes on a gate that counts nothing at all.
+{ printf -- '---\nfase: EXEC\nstatus: done\n---\n## TL;DR\n'; awk 'BEGIN{for(i=1;i<=21;i++) print "l" i}'; } > "$MDIR/20-handoff-exec.md"
+git add -A && git commit -qm "chore: a TL;DR over the cap"
+assert_phase "a TL;DR over the cap fails the EXEC gate" "EXEC"
+assert_why   "EXEC names the count and the cap" "EXEC" "TL;DR is 21 lines"
+{ printf -- '---\nfase: EXEC\nstatus: done\n---\n## TL;DR\n'; awk 'BEGIN{for(i=1;i<=20;i++) print "l" i}'; } > "$MDIR/20-handoff-exec.md"
+git add -A && git commit -qm "chore: a TL;DR exactly at the cap"
+assert_phase "and exactly at the cap it passes" "QA"
+
 # A RED suite fails the gate. It looks too obvious to test, and that is exactly why nobody tested
 # it: the fixture runs `TEST_CMD="true"`, which cannot fail, so a gate that discarded the suite's
 # rc would go unnoticed forever. Measured by the `EXEC_ignores_TEST_CMD` mutation, which survived
@@ -454,6 +470,15 @@ sed -i 's|^E2E_CMD=""|E2E_CMD="true"\nAPP_URL="http://example.invalid"|' .sdd/co
 printf -- '---\nfase: QA\nstatus: done\n---\n' > "$MDIR/30-handoff-qa.md"
 assert_phase "QA handoff with no report in docs/qa/reports/" "QA"
 assert_why   "QA reports the missing report" "QA" "no report in"
+
+# --- the TL;DR cap, port 2 of 3 ------------------------------------------------
+# One probe per port, the rule this file already follows for the escalations: a port added without
+# one is a port whose removal no assertion notices. The pair is also a restore check — the second
+# half proves the fixture went back to the world the block below it assumes.
+{ printf -- '---\nfase: QA\nstatus: done\n---\n## TL;DR\n'; awk 'BEGIN{for(i=1;i<=21;i++) print "l" i}'; } > "$MDIR/30-handoff-qa.md"
+assert_why   "QA refuses a TL;DR over the cap, ahead of everything else it checks" "QA" "TL;DR is 21 lines"
+printf -- '---\nfase: QA\nstatus: done\n---\n' > "$MDIR/30-handoff-qa.md"
+assert_why   "and back under the cap QA goes back to reporting the missing report" "QA" "no report in"
 
 # PROVENANCE: ~/.claude/skills/qa-execution/assets/report-template.md:6, verbatim (only the
 # `<ISO timestamp>` was made concrete). The `**Status:**` does NOT open the line and the enum
@@ -885,6 +910,17 @@ cat > "$MDIR/40-review-r1.md" <<'EOF'
 EOF
 assert_phase "a review graded B does not pass" "REVIEW"
 assert_why   "REVIEW reports the exact grade" "REVIEW" "Security = B"
+
+# --- the TL;DR cap, port 3 of 3 ------------------------------------------------
+# `## Fim` closes the section on purpose: without a following `## ` heading the count would run to
+# the end of the file and this assertion would be about a number nobody chose. `### Overall Grade`
+# does NOT close it — `^## ` wants a space in the third column — which is exactly the kind of thing
+# a fixture written from memory gets wrong.
+cp "$MDIR/40-review-r1.md" "$MDIR/40.bak"
+{ printf '## TL;DR\n'; awk 'BEGIN{for(i=1;i<=21;i++) print "l" i}'; printf '## Fim\n'; cat "$MDIR/40.bak"; } > "$MDIR/40-review-r1.md"
+assert_why   "REVIEW refuses a TL;DR over the cap" "REVIEW" "TL;DR is 21 lines"
+mv "$MDIR/40.bak" "$MDIR/40-review-r1.md"
+assert_why   "and back under the cap REVIEW goes back to reporting the grade" "REVIEW" "Security = B"
 
 # L1 of the 2026-09-03 audit: Grade A is required on every criterion, except the rows named in
 # REVIEW_PROSE_CRITERIA (Documentation, Overall — graded on the mission's own prose), which pass at

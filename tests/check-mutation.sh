@@ -1103,6 +1103,35 @@ mut_RUN_init_blind() {
   sed -i '/^hat_init_facts() {/,/^}/ s|^  \[ -n "\$init" \] \|\| return 0$|  return 0|' "$1"
 }
 
+# One per port, the rule this repo applies to every guard that lives in its callers: a port whose
+# removal no assertion notices is a port that will be removed. The three gates are the three phases
+# whose hat WRITES a handoff — EXEC, QA and REVIEW — and each probe pairs the refusal with the
+# reason the gate goes back to giving once the file is under the cap.
+mut_GATE_tldr_uncapped_EXEC() {
+  sed -i 's@^  handoff_tldr_ok "$MISSION_DIR/20-handoff-exec.md" || return 1$@  :@' "$1"
+}
+mut_GATE_tldr_uncapped_QA() {
+  sed -i 's@^  handoff_tldr_ok "$h" || return 1$@  :@' "$1"
+}
+mut_GATE_tldr_uncapped_REVIEW() {
+  sed -i 's@^  handoff_tldr_ok "$last" || return 1$@  :@' "$1"
+}
+
+# Item 4 goes back to "the most recent handoff in <dir>" — a lookup the SESSION performs and then
+# pays for by opening the whole file, which is the 49 641 B this increment removed. Nothing is
+# inlined, so the next phase boots on a name it has to resolve itself.
+mut_BOOT_handoff_not_named() {
+  sed -i '/^boot_prompt() {/,/^}/ s@^  hf="$(mission_latest_handoff)"$@  hf=""@' "$1"
+}
+
+# The boot inlines the WHOLE handoff instead of its two sections: the cut is undone silently, the
+# boot bill goes back to counting the file, and the target of the mission is missed with every
+# assertion about naming still green. Caught by the worst-point line in check-hat.sh, which counts
+# what the boot ingests and not what it points at.
+mut_BOOT_handoff_whole_file() {
+  sed -i '/^handoff_boot_sections() {/,/^}/ s@keep = (index($0, "## TL;DR") == 1 || index($0, "## Boot da pr") == 1)@keep = 1@' "$1"
+}
+
 # The boot stops inlining the notes: the session is told the notes are elsewhere and never shown
 # one, so it either works blind or opens the file the prompt just forbade — the worst of both
 # layouts. Caught by "exactly the last 10 notes are inlined, and not the first" in check-hat.sh.
@@ -1157,7 +1186,7 @@ mut_CENSUS_per_file_blind() {
 # "before" of a diet with a file the cut will never touch. Caught by "the boot bill survives a
 # mission with no handoff yet" in check-hat.sh.
 mut_CENSUS_boot_bill_counts_the_plan() {
-  sed -i '/^census_boot_bill() {/,/^}/ s@case "$b" in 00-\*|01-\*) continue ;; esac@case "$b" in zz-*) continue ;; esac@' "$1"
+  sed -i '/^mission_latest_handoff() {/,/^}/ s@\[1-9\]\[0-9\]-\*\.md@[0-9][0-9]-*.md@' "$1"
 }
 
 # Version order becomes the glob's own lexicographic order — the exact defect the `sort -V` was
@@ -1166,7 +1195,7 @@ mut_CENSUS_boot_bill_counts_the_plan() {
 # rounds stale and every cut is compared against the wrong "before". Caught by "and prefers
 # r10 to r2 — version order, not text order" in check-hat.sh.
 mut_CENSUS_boot_bill_lexicographic() {
-  sed -i '/^census_boot_bill() {/,/^}/ s@| sort -V | tail -1)"@| sort | tail -1)"@' "$1"
+  sed -i '/^latest_matching() {/,/^}/ s@| sort -V | tail -1 || true@| sort | tail -1 || true@' "$1"
 }
 
 # The worst point stops being computed and becomes the last file again: the comparison that keeps
@@ -3146,6 +3175,11 @@ CATALOG=(
   CENSUS_tools_blind
   CENSUS_per_file_blind
   BOOT_notes_not_inlined
+  BOOT_handoff_not_named
+  BOOT_handoff_whole_file
+  GATE_tldr_uncapped_EXEC
+  GATE_tldr_uncapped_QA
+  GATE_tldr_uncapped_REVIEW
   BOOT_notes_head_not_tail
   BOOT_ck_note_unconditional
   CENSUS_boot_bill_counts_the_plan
