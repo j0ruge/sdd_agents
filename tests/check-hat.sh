@@ -162,6 +162,22 @@ boot_probes() {
   else fail "boot: the TL;DR is not inlined"; fi
   if grep -q 'NOT_INLINED_MARKER' <<< "$out4"; then fail "boot: the whole handoff was inlined — the rest of the file is evidence, not boot"
   else pass "boot: and carries none of the sections it only points at"; fi
+
+  # --- item 6: the templates of THIS phase, not the directory ---
+  # Differential across two phases of the same mission, which is the only shape that separates
+  # "names the phase's templates" from "names a fixed subset" or "names them all": the file each
+  # one must have is the file the other must not.
+  local out5
+  out5="$( cd "$box" && SDD_HOME="$ROOT" "$ROOT/bin/sdd" boot 20260101-n REVIEW 2>&1 )" || true
+  # The first term is not decoration: the fallback arm names the DIRECTORY and lists nothing, so
+  # "review.md is absent" is true there too — the mutant BOOT_templates_whole_dir escaped a probe
+  # that had only the absence in it. What separates the two worlds is that item 6 NAMES files.
+  if grep -q 'templates this phase writes from' <<< "$out4" && grep -q 'checkpoint\.md' <<< "$out4" \
+       && ! grep -q 'review\.md' <<< "$out4"; then pass "boot: item 6 names the EXEC templates and not the reviewer's"
+  else fail "boot: EXEC item 6 is wrong — named: $(grep -c 'this phase writes from' <<< "$out4"), review.md: $(grep -c 'review\.md' <<< "$out4")"; fi
+  if grep -q 'templates this phase writes from' <<< "$out5" && grep -q 'review\.md' <<< "$out5" \
+       && ! grep -q 'pr-body\.md' <<< "$out5"; then pass "boot: and the REVIEW templates and not the publisher's"
+  else fail "boot: REVIEW item 6 is wrong — named: $(grep -c 'this phase writes from' <<< "$out5"), pr-body.md: $(grep -c 'pr-body\.md' <<< "$out5")"; fi
   rm -rf "$box"
 }
 
@@ -232,8 +248,17 @@ census_probes() {
   # `handoff_read` needs a session to have already run; the boot bill is the same question asked
   # of the disk, so a cut can be read before and after for free. Templates alone make it non-zero
   # in this box, which is what the assertion pins.
-  if grep -qE '^  boot bill .*templates [1-9][0-9]*B  total [1-9][0-9]*B$' <<< "$out"; then pass "census: the boot bill adds up what the boot points at"
-  else fail "census: boot bill line missing or zero — got: $(grep '^  boot bill' <<< "$out" | cut -c1-140)"; fi
+  # The EXPECTED number, computed here from the same templates the bill reads — not a wildcard.
+  # `[1-9][0-9]*B` accepted both the honest answer and the one that folds PLAN into the maximum
+  # (12 132 against 9 830), and the mutant CENSUS_templates_count_plan walked straight through it.
+  # PLAN is excluded from the bill because it is the first phase: it has no predecessor handoff, so
+  # summing its four templates with the worst handoff describes a boot that cannot happen.
+  local want_t=0 t
+  for t in checkpoint.md checkpoint-notas.md handoff.md; do
+    [ -f "$ROOT/templates/$t" ] && want_t=$((want_t + $(wc -c < "$ROOT/templates/$t")))
+  done
+  if grep -qE "^  boot bill .*templates\(worst booting phase\) ${want_t}B  total [1-9][0-9]*B\$" <<< "$out"; then pass "census: the boot bill charges the heaviest BOOTING phase's templates, and PLAN is not one"
+  else fail "census: templates term should be ${want_t}B (EXEC's set) — got: $(grep -o 'templates(worst booting phase) [0-9]*B' <<< "$out")"; fi
   # Differential, and the reason it exists: `latest=` is a four-stage pipeline under
   # `set -o pipefail`, and on a mission with no handoff yet EVERY stage exits non-zero for having
   # found nothing. Without the `|| true` inside the substitution the assignment kills sdd census

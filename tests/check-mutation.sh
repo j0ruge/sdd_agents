@@ -1103,6 +1103,25 @@ mut_RUN_init_blind() {
   sed -i '/^hat_init_facts() {/,/^}/ s|^  \[ -n "\$init" \] \|\| return 0$|  return 0|' "$1"
 }
 
+# Item 6 goes back to pointing at the whole templates directory: seven files, 22 480 B, in every
+# session of every phase, when a phase writes one or two artifacts. The fifth lever of the diet is
+# undone and the boot bill goes on reporting the cut, because the fallback arm it lands in is the
+# one written for an UNKNOWN phase. Caught by "item 6 names the EXEC templates and not the
+# reviewer's" in check-hat.sh.
+mut_BOOT_templates_whole_dir() {
+  sed -i '/^phase_templates() {/,/^}/ s@^    EXEC)         printf@    EXECX)        printf@' "$1"
+}
+
+# PLAN comes back into the worst-phase maximum, and the bill starts describing a boot that cannot
+# happen: PLAN is the first phase, it has no predecessor handoff, and its four templates are what
+# it is about to WRITE. Summed with the worst handoff — the term immediately above — the line
+# invents the most expensive session of the mission out of two halves that never meet, and
+# over-reports by 2 302 B on 20260901-o-revisor-so-acha. Caught by the boot-bill total assertions
+# in check-hat.sh, whose fixture has a PLAN-only template set heavier than every other phase's.
+mut_CENSUS_templates_count_plan() {
+  sed -i '/^census_boot_bill() {/,/^}/ s@^    \[ "$ph" = "PLAN" \] && continue$@    :@' "$1"
+}
+
 # One per port, the rule this repo applies to every guard that lives in its callers: a port whose
 # removal no assertion notices is a port that will be removed. The three gates are the three phases
 # whose hat WRITES a handoff — EXEC, QA and REVIEW — and each probe pairs the refusal with the
@@ -3177,6 +3196,8 @@ CATALOG=(
   BOOT_notes_not_inlined
   BOOT_handoff_not_named
   BOOT_handoff_whole_file
+  BOOT_templates_whole_dir
+  CENSUS_templates_count_plan
   GATE_tldr_uncapped_EXEC
   GATE_tldr_uncapped_QA
   GATE_tldr_uncapped_REVIEW

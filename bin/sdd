@@ -1760,6 +1760,27 @@ EOF
 # When the phase is driven by a third-party skill, the literal slash has to be the FIRST line of
 # the prompt: that is how it expands headless (the QA skills carry disable-model-invocation, so
 # there is no other route).
+# The templates a phase actually writes from, and the fifth lever of the diet. Item 6 of the boot
+# used to point at the WHOLE directory — seven files, 22 480 B — when a phase produces one or two
+# artifacts: REVIEW never writes a pr-body, PR never writes a review. Measured per phase, the set
+# is 2 808 B (a phase that only writes a handoff) to 12 132 B (PLAN, which writes four).
+#
+# The same table shape as phase_hat(), and beside it on purpose: both answer "what does THIS phase
+# get", and a second shape for the same question is how the two drift apart. A phase absent from
+# the case gets the whole directory — the old behaviour, which is the safe direction for a lever
+# that decides what a session is allowed to see.
+phase_templates() {   # phase_templates <phase> — the template basenames, or "" for all of them
+  case "$1" in
+    PLAN)         printf '%s\n' "missao.md plano.md checkpoint.md checkpoint-notas.md" ;;
+    EXEC)         printf '%s\n' "checkpoint.md checkpoint-notas.md handoff.md" ;;
+    REVIEW)       printf '%s\n' "review.md handoff.md" ;;
+    PR)           printf '%s\n' "pr-body.md handoff.md" ;;
+    QA|QA:*)      printf '%s\n' "handoff.md checkpoint-notas.md" ;;
+    TICKET|DOCS)  printf '%s\n' "handoff.md" ;;
+    *)            printf '%s\n' "" ;;
+  esac
+}
+
 # The cap the boot's inlining pays for, and the only new rule I3 asks a gate to enforce. Since the
 # boot inlines `## TL;DR` verbatim into EVERY session of the next phase, a TL;DR that grows is a
 # cost multiplied by every turn of that phase — unlike the rest of the handoff, which the gate read
@@ -1881,6 +1902,20 @@ append-only, and rewriting it is exactly the cost this pipeline removed.
 "
   fi
   local step="$1" slash agent lang_line=""
+  # Item 6 names the templates THIS phase writes from, instead of the directory. A phase produces
+  # one or two artifacts and item 6 was pointing at seven files; the wording still forbids memory,
+  # because that is what the item is for. Unknown phase falls back to the directory: the safe
+  # direction for a lever that decides what a session may see.
+  local item6 tset
+  tset="$(phase_templates "$step")"
+  if [ -n "$tset" ]; then
+    item6="the artifact templates this phase writes from, in $SDD_HOME/templates/: $tset — start
+     every artifact from the template that names it, NEVER from memory: their headings are the
+     contract the gates parse"
+  else
+    item6="the artifact templates in $SDD_HOME/templates/ — start every artifact from the template
+     that names it, NEVER from memory: their headings are the contract the gates parse"
+  fi
   # ONE definition, read by every phase — including KAIZEN, which has a heredoc of its own below.
   # Measured 2026-09-02 (20260902-o-rascunho-legado-fala-cru, phase PR): two sdd-publisher sessions
   # ended the turn "waiting for the background task to finish", US$ 2.71 and a PR phase done by
@@ -1964,8 +1999,7 @@ before. Read, in this order, before anything else:
   3. $HANDOFF_DIR/$MISSION/checkpoint.md  (the increment table$ck_note)
   4. $item4
   5. .sdd/config.sh (TEST_CMD="$TEST_CMD"${E2E_CMD:+, E2E_CMD=\"$E2E_CMD\", E2E_DIR=\"$E2E_DIR\"})
-  6. the artifact templates in $SDD_HOME/templates/ — start every artifact from the template that
-     names it, NEVER from memory: their headings are the contract the gates parse
+  6. $item6
 $handoff_block$notes_block$lang_line
 Your task in this session: $(phase_task "$step").
 $(phase_extra "$step")
@@ -5604,9 +5638,33 @@ census_boot_bill() {
     b="$(boot_notes_tail "$mdir" | wc -c)"
     line="$line  notes(last $BOOT_NOTES_TAIL) ${b}B"; total=$((total + b))
   fi
+  # The WORST phase, on the same terms as the worst handoff above: since I3b item 6 names the
+  # templates of the phase being booted, the directory total stopped being what any session
+  # ingests. The max and not an average, so the bill stays an upper bound instead of a number no
+  # phase pays — an average lets one heavy phase hide behind six light ones.
+  #
+  # PLAN is excluded, and the reason is that including it describes a boot that CANNOT HAPPEN.
+  # PLAN is the first phase: there is no predecessor handoff for it to read, and 00-missao.md,
+  # 01-plano.md and the checkpoint are what it is about to WRITE, not what it reads. Its four
+  # templates are the heaviest set (12 132 B) but its whole boot is those templates and nothing
+  # else. Summing them with the worst handoff — the term right above this one — would invent the
+  # most expensive session in the mission out of two halves that never meet, and a bill that
+  # over-reports is refused here for the same reason one that under-reports is: it stops being the
+  # thing a target can be held to.
+  local ph tset tb
   b=0
-  for f in "$SDD_HOME"/templates/*.md; do [ -f "$f" ] || continue; b=$((b + $(wc -c < "$f"))); done
-  line="$line  templates ${b}B"; total=$((total + b))
+  for ph in $PHASES; do
+    [ "$ph" = "PLAN" ] && continue
+    tset="$(phase_templates "$ph")"
+    tb=0
+    if [ -n "$tset" ]; then
+      for f in $tset; do [ -f "$SDD_HOME/templates/$f" ] && tb=$((tb + $(wc -c < "$SDD_HOME/templates/$f"))); done
+    else
+      for f in "$SDD_HOME"/templates/*.md; do [ -f "$f" ] || continue; tb=$((tb + $(wc -c < "$f"))); done
+    fi
+    [ "$tb" -le "$b" ] || b="$tb"
+  done
+  line="$line  templates(worst booting phase) ${b}B"; total=$((total + b))
   printf '  boot bill%s  total %sB\n' "$line" "$total"
   # Printed only when the two points disagree: on a mission whose heaviest handoff IS the last one
   # the second line would just repeat the first, and a line that is always there stops being read.
