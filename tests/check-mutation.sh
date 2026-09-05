@@ -576,7 +576,12 @@ mut_RUN_check_log_time_only() {
 # Anchored on the ITEM the prompt lists and not on the prose beside it: the number is what the
 # projection reads, and prose gets rewritten.
 mut_RUN_templates_kaizen_only() {
-  sed -i 's|^  6\. the artifact templates in \$SDD_HOME/templates/.*|  6. (nothing)|' "$1"
+  # Re-anchored in 20260904-a-dieta-de-contexto: item 6 stopped being a literal line and became
+  # `$item6`, built by phase_templates() — the same sabotage ("the boot names no template at all")
+  # now lands on the variable's one site in the heredoc, which is the shape the old anchor rotted
+  # into. CATALOGUE-BROKEN caught it in the first health run of that mission, as designed. Still
+  # caught by "the artifact templates reach every phase" in check-dry-run.sh.
+  sed -i 's|^  6\. \$item6$|  6. (nothing)|' "$1"
 }
 
 # The same loss, reached by the door the entry above cannot see. `mut_RUN_templates_kaizen_only`
