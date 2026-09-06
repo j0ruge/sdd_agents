@@ -39,13 +39,6 @@ Achados sobre **repos-alvo** vão para o `TODO.md` daquele repo. Este arquivo é
 
 ### Sensores que faltam
 
-- [ ] **O prompt do executor manda levar análise para subagentes, e o censo mede zero usos** —
-  `agents/sdd-executor.md:71` — 27 sessões EXEC em duas missões (`sdd census`), `Agent=0`; a
-  instrução custa tokens em todo turno e nenhum gate a exige. Direção: decidir na dieta (missão 2)
-  se a frase sai ou se o chapéu ganha `Agent` de verdade; hoje `Agent` fica permitido ao executor
-  só por causa dela. **RESOLVIDO por `8ecf2a1`**: a frase saiu, `Agent`+`ListAgents` no deny do
-  executor, probe diferencial. — descoberto por `sdd-planner` na missão `20260903-a-fronteira-do-chapeu` (2026-09-03)
-
 - [ ] **Âncora morta de mutante só aparece no catálogo inteiro (15–20 min), mas detectá-la custa
   segundos** — `tests/check-mutation.sh:2647` — a guarda `cmp -s` (rc 90) só roda dentro do
   `sdd health`; aplicar os 195 `sed` numa cópia de `bin/sdd` e comparar não roda suíte nenhuma.
