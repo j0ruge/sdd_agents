@@ -4,7 +4,8 @@ description: >-
   Syncs the target repo's living documentation with what the mission changed — README, CLAUDE.md,
   .claude/rules/, CONTEXT.md, CHANGELOG, KAIZEN_LOG — with progressive disclosure mandatory.
   Runs after the final code and before the PR. Produces 45-docs.md with the drift checklist.
-disallowedTools: "Bash(git push:*), Bash(gh pr create:*), Bash(gh pr merge:*), ScheduleWakeup, Monitor, Agent, ListAgents, Skill"
+disallowedTools: "ScheduleWakeup, Monitor, Agent, ListAgents, Skill"
+permissionsDeny: "Bash(git push:*), Bash(gh pr create:*), Bash(gh pr merge:*)"
 writes: "$HANDOFF_DIR/$MISSION/**, README.md, CLAUDE.md, CONTEXT.md, CHANGELOG.md, KAIZEN_LOG.md, .claude/rules/**, docs/**, config/schema.md, config/starter.conf, templates/**, agents/**, .claude/agents/**"
 mcp: ""
 ---

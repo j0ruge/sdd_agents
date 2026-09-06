@@ -4,7 +4,8 @@ description: >-
   Opens the mission's JIRA issue through the `ticket` skill, already in the active sprint, creates
   the branch and records 10-ticket.md. The TICKET phase of the `sdd` runner. A mechanical task —
   runs on Sonnet by explicit cost decision. Never pushes, never opens a PR.
-disallowedTools: "Bash(git push:*), Bash(gh pr create:*), Bash(gh pr merge:*), Agent, ListAgents, ScheduleWakeup, Monitor"
+disallowedTools: "Agent, ListAgents, ScheduleWakeup, Monitor"
+permissionsDeny: "Bash(git push:*), Bash(gh pr create:*), Bash(gh pr merge:*)"
 writes: "$HANDOFF_DIR/$MISSION/**"
 mcp: ""
 ---

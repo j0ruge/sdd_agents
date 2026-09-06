@@ -1638,13 +1638,24 @@ phase_agent() {
 }
 
 # --- the hat's boundary --------------------------------------------------------------------------
-# The hat DECLARES (agents/<hat>.md: disallowedTools:, writes:, mcp:), the runner APPLIES
-# (--disallowedTools, --strict-mcp-config, hat_guard_check) and the artifact PROVES (the stream's
-# init line and the result's permission_denials, read into the ledger). In a `-p` session the
-# harness honours only model/permissionMode/skills from the --agent file's frontmatter
-# (code.claude.com/docs/en/sub-agents.md, checked 2026-09-03), so a `disallowedTools:` line that
-# only lived in the file would be a phrase; the flag is the rule. Spec:
+# The hat DECLARES (agents/<hat>.md: disallowedTools:, permissionsDeny:, writes:, mcp:), the runner
+# APPLIES (--disallowedTools, --strict-mcp-config, hat_guard_check) and the artifact PROVES (the
+# stream's init line and the result's permission_denials, read into the ledger). The flag is the
+# rule: the harness reads `disallowedTools:` from the --agent file too since Claude Code 2.1.263
+# (it ignored it on 2.1.259 — measured both ways on 2026-09-06), and the file alone would still be
+# a phrase for any harness that does not. Spec:
 # docs/superpowers/specs/2026-09-03-a-fronteira-do-chapeu-design.md.
+#
+# ⚠️ TWO keys for one deny list, and the split is measured, not taste. The harness reads
+# `disallowedTools:` as tool NAMES (the docs: names and `mcp__<server>` patterns), so a permission
+# RULE written there — `Bash(git push:*)` — removes `Bash` whole from the session: five headless
+# probes on 2.1.263, and the first mission of the fourth window, three TICKET sessions and US$ 3,39
+# spent by a hat that had no shell. The same rule on the CLI flag keeps Bash and denies the push
+# (`permission_denials: 1`). So names live in `disallowedTools:` (the harness enforces them as
+# well) and rules live in `permissionsDeny:` (a kit key no harness reads), and hat_disallowed
+# joins the two onto the flag. tests/check-hat.sh R3/R4 refuse a rule in the names key and a name
+# in the rules key; `sdd preflight` fires the executor hat under these flags and reads `Bash` off
+# the init line, because a sensor on the DECLARATION cannot see what the harness does with it.
 #
 # HAT_DENY_BASE: what NO phase used across the 43 sessions the spec measured (§ 2.1). A property of
 # the pipeline, defined once; each hat adds its own line. `Agent` is NOT here because the
@@ -1659,11 +1670,14 @@ HAT_WRITES_BASE='$TODO_FILE, tests/health-baseline.txt'
 
 hat_field() { frontmatter "$SDD_HOME/agents/$1.md" "$2"; }   # hat_field <hat> <key> — "" when absent
 
-hat_disallowed() {   # hat_disallowed <step> — the base plus the hat's own line, comma-separated
-  local hat own=""
+hat_disallowed() {   # hat_disallowed <step> — the base, the hat's names, the hat's rules; comma-separated
+  local hat own="" rules=""
   hat="$(phase_hat "$1")"
-  if [ -n "$hat" ]; then own="$(hat_field "$hat" disallowedTools)"; fi
-  printf '%s%s\n' "$HAT_DENY_BASE" "${own:+, $own}"
+  if [ -n "$hat" ]; then
+    own="$(hat_field "$hat" disallowedTools)"
+    rules="$(hat_field "$hat" permissionsDeny)"
+  fi
+  printf '%s%s%s\n' "$HAT_DENY_BASE" "${own:+, $own}" "${rules:+, $rules}"
 }
 
 hat_mcp() {   # hat_mcp <step> — the MCP servers the hat may see; "" ⇒ --strict-mcp-config
