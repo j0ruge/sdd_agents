@@ -1126,6 +1126,21 @@ mut_PREFLIGHT_context_bill_unguarded() {
   sed -i '/^cmd_preflight() {/,/^}/ s@^    \[ -f "$cb" \] || continue$@    :@' "$1"
 }
 
+# The auth probe of preflight, back to its 2026-09-05 shape: no --agent, so the session it fires
+# is not the one run_phase fires, and a hat that boots without Bash reads green. check-preflight's
+# flag-sensitive stub B answers WITH Bash when nobody asks as the hat, so "a hat that boots without
+# Bash is named by the probe" dies.
+mut_PREFLIGHT_hat_probe_without_agent() {
+  sed -i 's|^    if \[ -n "\$hat" \] && \[ -f "\$REPO_ROOT/.claude/agents/\$hat.md" \]; then probe_agent=(--agent "\$hat"); fi$|    probe_agent=()|' "$1"
+}
+
+# The init line is fetched and never read: the branch that names a hat without Bash is gone, and
+# the marker in the answer buys the green again. Same stub B; "and the marker in the answer does
+# not buy a green over a missing tool" dies.
+mut_PREFLIGHT_bash_in_init_unchecked() {
+  sed -i 's|^    elif \[ -n "\$probe_init" \] && ! jq -e '"'"'.tools // \[\] \| index("Bash") != null'"'"' <<< "\$probe_init" >/dev/null 2>&1; then$|    elif false; then|' "$1"
+}
+
 # Item 6 goes back to pointing at the whole templates directory: seven files, 22 480 B, in every
 # session of every phase, when a phase writes one or two artifacts. The fifth lever of the diet is
 # undone and the boot bill goes on reporting the cut, because the fallback arm it lands in is the
@@ -3222,6 +3237,8 @@ CATALOG=(
   BOOT_templates_whole_dir
   PREFLIGHT_context_bill_silent
   PREFLIGHT_context_bill_unguarded
+  PREFLIGHT_hat_probe_without_agent
+  PREFLIGHT_bash_in_init_unchecked
   CENSUS_templates_count_plan
   GATE_tldr_uncapped_EXEC
   GATE_tldr_uncapped_QA

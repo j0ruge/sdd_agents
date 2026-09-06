@@ -3809,26 +3809,48 @@ cmd_preflight() {
         previous one, and the runner escalates phases that were in fact making progress."
   fi
 
-  # --- authentication ---
-  # Sanity + permission in one shot. "claude -p answers" does NOT cover the failure mode that
-  # matters: the phase session has to EXECUTE (run the suite, commit), and `acceptEdits` alone
-  # does not unlock `Bash`. This check fires a real headless session with THE SAME flags as
-  # run_phase and demands that it manage to execute a command.
+  # --- authentication + the hat's shell ---
+  # Sanity, permission and the hat in one shot. "claude -p answers" does NOT cover the failure
+  # mode that matters: the phase session has to EXECUTE (run the suite, commit); `acceptEdits`
+  # alone does not unlock `Bash`, and neither does the flag when the hat's frontmatter takes the
+  # tool away. Until 2026-09-06 this probe ran WITHOUT --agent while its comment claimed "THE SAME
+  # flags as run_phase", and it was green over a kit whose every phase booted without a shell —
+  # three TICKET sessions and US$ 3,39 on Claude Code 2.1.263, which reads the hat's
+  # `disallowedTools:` and strips `Bash` for a rule written there (see hat_disallowed). A comment
+  # that asserts parity is not parity, so the probe now fires the executor hat under the flags
+  # run_phase composes for it — the mirror in .claude/agents/ when installed, because that is the
+  # copy the harness loads — and reads TWO artifacts: `Bash` on the stream's init line (the tool
+  # list the session actually got) and the marker in the result (the permission to run it). No
+  # init line and no answer is the old "did not answer"; an init line without Bash names the hat.
   if command -v claude >/dev/null 2>&1; then
-    local probe
-    probe="$( cd "$REPO_ROOT" && claude -p "Run exactly: bash -c 'echo sdd-preflight-ok'. Answer with the command output only." \
-        --model haiku --permission-mode "$PERMISSION_MODE" --output-format json \
+    local hat probe_stream probe_init probe_answer probe_tools
+    local -a probe_agent=()
+    hat="$(phase_hat EXEC)"
+    if [ -n "$hat" ] && [ -f "$REPO_ROOT/.claude/agents/$hat.md" ]; then probe_agent=(--agent "$hat"); fi
+    probe_stream="$( cd "$REPO_ROOT" && claude -p "Run exactly: bash -c 'echo sdd-preflight-ok'. Answer with the command output only." \
+        --model haiku --permission-mode "$PERMISSION_MODE" --output-format stream-json --verbose \
         --setting-sources "user,project,local" --allowedTools "$ALLOWED_TOOLS" \
-        --max-budget-usd 1 2>/dev/null | jq -r '.result // ""' 2>/dev/null || true )"
-    # Herestring for the same reason as the Jidoka in cmd_run: `printf | grep -q` returns 141
+        --disallowedTools "$(hat_disallowed EXEC)" --strict-mcp-config \
+        ${probe_agent[@]+"${probe_agent[@]}"} \
+        --max-budget-usd 1 2>/dev/null || true )"
+    probe_init="$( jq -c 'select(.type == "system" and .subtype == "init")' <<< "$probe_stream" 2>/dev/null | head -1 )" || probe_init=""
+    probe_answer="$( jq -r 'select(.type == "result") | .result // ""' <<< "$probe_stream" 2>/dev/null | tail -1 )" || probe_answer=""
+    probe_tools="$( jq -r '.tools // [] | join(" ")' <<< "$probe_init" 2>/dev/null )" || probe_tools=""
+    # Herestrings for the same reason as the Jidoka in cmd_run: `printf | grep -q` returns 141
     # under `pipefail` when the grep MATCHES, so the success branch is the one that loses the race.
-    if grep -q 'sdd-preflight-ok' <<< "$probe"; then
-      ok "headless session executes commands (OAuth + permission)"
-    elif [ -z "$probe" ]; then
+    if [ -z "$probe_init" ] && [ -z "$probe_answer" ]; then
       _fail "claude -p did not answer — expired session? run 'claude login'"
+    elif [ -n "$probe_init" ] && ! jq -e '.tools // [] | index("Bash") != null' <<< "$probe_init" >/dev/null 2>&1; then
+      _fail "the headless session under the ${hat:-<no>} hat has NO Bash — the phases cannot run the suite
+        nor commit. Tools it got: ${probe_tools:-(none)}
+        A permission rule such as Bash(git push:*) in the hat's disallowedTools: strips the tool whole on
+        Claude Code 2.1.263+; rules belong in permissionsDeny: (tests/check-hat.sh R3), and the mirror in
+        .claude/agents/ has to carry the fix ('sdd install --force')."
+    elif grep -q 'sdd-preflight-ok' <<< "$probe_answer"; then
+      ok "headless session under the ${hat:-<no>} hat executes commands (OAuth + Bash in the tool list + permission)"
     else
       _fail "the headless session CANNOT execute commands — the phases will not run the suite
-        nor commit. Answer received: $(printf '%s' "$probe" | head -c 120)
+        nor commit. Answer received: $(printf '%s' "$probe_answer" | head -c 120)
         Adjust ALLOWED_TOOLS in .sdd/config.sh (default: Bash)."
     fi
   fi
