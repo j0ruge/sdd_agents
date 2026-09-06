@@ -849,3 +849,9 @@ Achados sobre **repos-alvo** vão para o `TODO.md` daquele repo. Este arquivo é
   33% waste` íntegro e `3 advanced · 0 churned · 0% waste` sabotado. Direção: uma linha QA `pass`
   entre duas linhas EXEC de prosa no fixture `histfix` que já existe.
   — descoberto por `sdd-reviewer` na missão `20260829-o-incremento-que-andou` (2026-08-30)
+- [ ] **O juiz vê duas versões de harness numa fatia e não recusa** — `bin/sdd:6680` — a linha
+  `session` carrega `harness:` desde 2026-09-06 e a série o lista por fatia, mas `guard.sufficient`
+  segue `true` sobre uma fatia que rodou em 2.1.259 e 2.1.263: o veredito compara kit_sha como se
+  a máquina parasse, e o bump que tirou o Bash de toda fase entraria no "piorou" do kit. Direção:
+  `guard.harness_mixed` + `sufficient: false`, com par diferencial no `check-kaizen.sh`.
+  — descoberto por `sdd-executor` na missão `fix/o-chapeu-sem-bash` (2026-09-06)
