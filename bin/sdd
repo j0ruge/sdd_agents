@@ -3050,7 +3050,7 @@ autonomy_session_row() {  # <phase> <attempt> <auto_retry> <moved> <gate> <gate_
     --arg rc "$LAST_PHASE_RC" --arg dur "$LAST_PHASE_DUR" --arg cost "$LAST_PHASE_COST" \
     --arg turns "$LAST_PHASE_TURNS" --arg cache_read "$LAST_PHASE_CACHE_READ" \
     --arg mcp_seen "$LAST_PHASE_MCP_SEEN" --arg tools_leaked "$LAST_PHASE_TOOLS_LEAKED" \
-    --arg denials "$LAST_PHASE_DENIALS" \
+    --arg denials "$LAST_PHASE_DENIALS" --arg harness "$LAST_PHASE_HARNESS" \
     --arg pbefore "${7:-}" --arg pafter "${8:-}" --arg itotal "${9:-}" \
     --arg rbefore "${10:-}" --arg rafter "${11:-}" --arg rmax "${12:-}" \
     '{v: 1, ts: $ts, event: "session",
@@ -3069,6 +3069,7 @@ autonomy_session_row() {  # <phase> <attempt> <auto_retry> <moved> <gate> <gate_
       mcp_seen: ($mcp_seen | tonumber? // null),
       tools_leaked: ($tools_leaked | tonumber? // null),
       denials: ($denials | tonumber? // null),
+      harness: (if $harness == "" then null else $harness end),
       moved: ($moved == "true"),
       pending_before: ($pbefore | tonumber? // null),
       pending_after: ($pafter | tonumber? // null),
@@ -3113,9 +3114,17 @@ stream_summary() { # stream_summary <stream.jsonl>
 hat_init_facts() {   # hat_init_facts <stream> <result json> <deny list> <declared mcp>
   local stream="$1" result="$2" deny="$3" declared="$4" init facts
   LAST_PHASE_MCP_SEEN=""; LAST_PHASE_TOOLS_LEAKED=""; LAST_PHASE_DENIALS=""; LAST_PHASE_LEAK_NAMES=""
+  LAST_PHASE_HARNESS=""
   autonomy_have_jq || return 0
   init="$( jq -c 'select(.type == "system" and .subtype == "init")' "$stream" 2>/dev/null | head -1 )" || init=""
   [ -n "$init" ] || return 0
+  # The harness version, off the same line. A bump of the harness is a change of the machine the
+  # kit runs on, and the kaizen window compares kit versions as if that machine stood still: on
+  # 2026-09-06 Claude Code went 2.1.259 -> 2.1.263 inside the fourth window, started reading the
+  # hat's `disallowedTools:` and stripped Bash from every phase — three TICKET sessions, US$ 3,39 —
+  # and no row said so. Recorded here, shown per slice by `sdd kaizen --series`; whether the judge
+  # refuses a mixed slice is a separate decision (TODO.md), this only stops the bump being invisible.
+  LAST_PHASE_HARNESS="$( jq -r '.claude_code_version // ""' <<< "$init" 2>/dev/null )" || LAST_PHASE_HARNESS=""
   facts="$( jq -r --arg deny "$deny" --arg declared "$declared" '
       def names($s): [ $s | split(",")[] | gsub("^\\s+|\\s+$"; "") | select(. != "" and (contains("(") | not)) ];
       (names($deny) | map(if . == "Agent" then "Task" else . end)) as $deny_names
@@ -3132,6 +3141,7 @@ LAST_PHASE_MCP_SEEN=""
 LAST_PHASE_TOOLS_LEAKED=""
 LAST_PHASE_DENIALS=""
 LAST_PHASE_LEAK_NAMES=""
+LAST_PHASE_HARNESS=""
 
 # The stream closed the blind spot for whoever runs `tail -f` on the file; this closes it for the
 # person watching the run. `> "$streamfile"` takes claude's stdout off the terminal, so a phase
@@ -6646,6 +6656,7 @@ kaizen_series() {
                                       (map(select(.event == "session")) | map(mission_key) | unique | length)})
                              | sort_by(-.missions, .repo)),
          sessions: ($sess | length),
+         harness: ($sess | map(.harness // empty) | unique),
          # What the sessions DID, and how often the gate passed — the headline since
          # 20260828-instrumento-honesto (the judge prompt cites these two before moved_rate).
          # moved_rate stays: its name says what it measures, and it has a consumer. Same yardstick

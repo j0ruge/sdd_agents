@@ -1108,6 +1108,21 @@ mut_RUN_init_blind() {
   sed -i '/^hat_init_facts() {/,/^}/ s|^  \[ -n "\$init" \] \|\| return 0$|  return 0|' "$1"
 }
 
+# The harness version is fetched from the init line and dropped: every session row reads
+# `harness: null`, the way it did until 2026-09-06, when a 2.1.259 -> 2.1.263 bump inside a window
+# took Bash from every hat and no row said so. check-autonomy's "the harness version is read off
+# the init line into the row" dies on the fixture's own value.
+mut_RUN_harness_blind() {
+  sed -i 's|^  LAST_PHASE_HARNESS="$( jq -r '"'"'.claude_code_version // ""'"'"' <<< "$init" 2>/dev/null )" \|\| LAST_PHASE_HARNESS=""$|  LAST_PHASE_HARNESS=""|' "$1"
+}
+
+# The row carries the version and the slice the judge reads does not: `sdd kaizen --series`
+# answers an empty list for every version. Its sibling is the mutant above; what this one
+# isolates is the READER. "series: the slice lists the harness versions its sessions ran on" dies.
+mut_RUN_series_harness_blind() {
+  sed -i 's|^         harness: ($sess \| map(.harness // empty) \| unique),$|         harness: [],|' "$1"
+}
+
 # The context bill goes silent. The target's CLAUDE.md plus its .claude/rules/ is ~73% of the fixed
 # prefix every turn of every phase carries, and it is the one term the kit deliberately does not
 # cut — so making it VISIBLE is the entire contribution, and a preflight that stopped printing it
@@ -3229,6 +3244,8 @@ CATALOG=(
   RUN_hat_close_door_missing
   RUN_kit_touched_silent
   RUN_init_blind
+  RUN_harness_blind
+  RUN_series_harness_blind
   CENSUS_tools_blind
   CENSUS_per_file_blind
   BOOT_notes_not_inlined

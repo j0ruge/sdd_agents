@@ -4216,6 +4216,15 @@ chmod +x "$OUTSIDE/stub/claude"
 assert_eq "init: a clean session records 0 MCP seen, 0 tools leaked, 0 denials" "0 0 0" \
   "$(jq -r -s '.[0] | "\(.mcp_seen) \(.tools_leaked) \(.denials)"' "$LEDGER")"
 assert_eq "init: nothing crossed" "0" "$(jq -r -s '[.[] | select(.kind == "hat-crossed")] | length' "$LEDGER")"
+# The harness version rides the same line into the row, and from the row into the slice the judge
+# reads. On 2026-09-06 the harness went 2.1.259 -> 2.1.263 inside a window and took Bash away from
+# every hat; the series showed one kit_sha and nothing else. The value is the fixture's own
+# (`claude_code_version` of INIT_SAMPLE), so a reader that invented a default could not match it.
+assert_eq "init: the harness version is read off the init line into the row" "2.1.260" \
+  "$(jq -r -s '.[0].harness' "$LEDGER")"
+jq -c '.kit_sha = "deadbee" | .kit_dirty = false' "$LEDGER" > "$LEDGER.norm" && mv "$LEDGER.norm" "$LEDGER"
+assert_eq "series: the slice lists the harness versions its sessions ran on" "2.1.260" \
+  "$(jq -r '.latest.harness | join(",")' <<< "$( "$SDD" kaizen --series 2>/dev/null )")"
 : > "$LEDGER"
 cat > "$OUTSIDE/stub/claude" <<STUB
 cat "$INIT_LEAK"
@@ -4234,6 +4243,8 @@ STUB
 "$SDD" run "$MISSION" >/dev/null 2>&1 || true
 assert_eq "init: a stream without an init line (a session dead before it) records null, not 0" "null null null" \
   "$(jq -r -s '.[0] | "\(.mcp_seen) \(.tools_leaked) \(.denials)"' "$LEDGER")"
+assert_eq "init: and a null harness, for the same reason — unmeasured is not a version" "null" \
+  "$(jq -r -s '.[0].harness' "$LEDGER")"
 cat > "$OUTSIDE/stub/claude" <<'STUB'
 echo "ERROR: the test invoked the real claude" >&2
 exit 97
