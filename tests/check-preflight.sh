@@ -134,6 +134,33 @@ assert_has "preflight got as far as the tool checks" "git present" "$out"
 assert_has "GNU userland reported ok" "$OK_LINE" "$out"
 assert_lacks "no GNU complaint on a GNU machine" "the kit assumes the GNU userland" "$out"
 
+# --- the context bill: a SENSOR, and never a refusal ------------------------
+# The target's CLAUDE.md plus its .claude/rules/ is ~73% of the fixed prefix every turn of every
+# phase carries (measured 2026-09-03, two repos). The kit does not cut anybody's rulebook, so this
+# line only has to make the number visible — and the second assertion is the one that matters,
+# because a preflight that started REFUSING a repo for having many rules would be the kit deciding
+# how a target documents itself.
+#
+# The fixture repo has no CLAUDE.md and no .claude/rules/, so `0 file(s), 0 bytes` is the honest
+# answer AND the world where the guard is load-bearing: `find`/glob on an absent directory exits
+# non-zero, and under `set -o pipefail` an unguarded capture would take the whole preflight down on
+# exactly the repo shape most targets have.
+assert_has "the context bill is reported" "context bill: 0 file(s), 0 bytes" "$out"
+assert_has "and it is an ok line, never a refusal" "ok   context bill" "$out"
+{ printf '# rules\n'; head -c 1234 /dev/zero | tr '\0' 'r'; } > "$FIX/CLAUDE.md"
+mkdir -p "$FIX/.claude/rules" && printf '# r\n' > "$FIX/.claude/rules/one.md"
+out_cb="$( "$SDD" preflight 2>&1 )"
+# Differential: the count and the bytes both have to move, and the rules file has to be found under
+# a directory the first world did not have. Counting only files would pass on a bill that reports
+# a constant; counting only bytes would pass on one that never looks inside .claude/rules/.
+# The expected byte count is COMPUTED from the two files just written, never typed: a literal here
+# is a number that goes stale the first time the fixture changes by a byte, and a stale expectation
+# in a passing test is worse than no test.
+cb_want=$(( $(wc -c < "$FIX/CLAUDE.md") + $(wc -c < "$FIX/.claude/rules/one.md") ))
+assert_has "the bill counts CLAUDE.md and the rules directory, in files and in bytes" \
+  "context bill: 2 file(s), $cb_want bytes" "$out_cb"
+rm -rf "$FIX/CLAUDE.md" "$FIX/.claude/rules"
+
 # --- the userland is BSD: the probe names all three -------------------------
 echo "== BSD userland (shimmed) =="
 out="$( PATH="$FIX/.bsd:$PATH" "$SDD" preflight 2>&1 )"

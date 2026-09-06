@@ -576,7 +576,12 @@ mut_RUN_check_log_time_only() {
 # Anchored on the ITEM the prompt lists and not on the prose beside it: the number is what the
 # projection reads, and prose gets rewritten.
 mut_RUN_templates_kaizen_only() {
-  sed -i 's|^  6\. the artifact templates in \$SDD_HOME/templates/.*|  6. (nothing)|' "$1"
+  # Re-anchored in 20260904-a-dieta-de-contexto: item 6 stopped being a literal line and became
+  # `$item6`, built by phase_templates() — the same sabotage ("the boot names no template at all")
+  # now lands on the variable's one site in the heredoc, which is the shape the old anchor rotted
+  # into. CATALOGUE-BROKEN caught it in the first health run of that mission, as designed. Still
+  # caught by "the artifact templates reach every phase" in check-dry-run.sh.
+  sed -i 's|^  6\. \$item6$|  6. (nothing)|' "$1"
 }
 
 # The same loss, reached by the door the entry above cannot see. `mut_RUN_templates_kaizen_only`
@@ -1101,6 +1106,157 @@ mut_RUN_kit_touched_silent() {
 # "an MCP server the hat did not declare … stop the line".
 mut_RUN_init_blind() {
   sed -i '/^hat_init_facts() {/,/^}/ s|^  \[ -n "\$init" \] \|\| return 0$|  return 0|' "$1"
+}
+
+# The context bill goes silent. The target's CLAUDE.md plus its .claude/rules/ is ~73% of the fixed
+# prefix every turn of every phase carries, and it is the one term the kit deliberately does not
+# cut — so making it VISIBLE is the entire contribution, and a preflight that stopped printing it
+# would leave a repo whose rulebook doubled to find out from an invoice. Caught by "the context
+# bill is reported" in check-preflight.sh.
+mut_PREFLIGHT_context_bill_silent() {
+  sed -i '/^cmd_preflight() {/,/^}/ s@^  ok "context bill: @  : "@' "$1"
+}
+
+# The `[ -f "$cb" ] || continue` guard comes off the loop. On a repo with no .claude/rules/ the
+# glob stays literal, `wc -c` fails on a path that does not exist, and under `set -o pipefail` the
+# arithmetic that consumes it takes the WHOLE preflight down — on the repo shape most targets have.
+# It is the `guard:` class CLAUDE.md names, here in the preflight rather than in health. Caught by
+# "the context bill is reported" in check-preflight.sh, whose fixture has neither file.
+mut_PREFLIGHT_context_bill_unguarded() {
+  sed -i '/^cmd_preflight() {/,/^}/ s@^    \[ -f "$cb" \] || continue$@    :@' "$1"
+}
+
+# Item 6 goes back to pointing at the whole templates directory: seven files, 22 480 B, in every
+# session of every phase, when a phase writes one or two artifacts. The fifth lever of the diet is
+# undone and the boot bill goes on reporting the cut, because the fallback arm it lands in is the
+# one written for an UNKNOWN phase. Caught by "item 6 names the EXEC templates and not the
+# reviewer's" in check-hat.sh.
+mut_BOOT_templates_whole_dir() {
+  sed -i '/^phase_templates() {/,/^}/ s@^    EXEC)         printf@    EXECX)        printf@' "$1"
+}
+
+# PLAN comes back into the worst-phase maximum, and the bill starts describing a boot that cannot
+# happen: PLAN is the first phase, it has no predecessor handoff, and its four templates are what
+# it is about to WRITE. Summed with the worst handoff — the term immediately above — the line
+# invents the most expensive session of the mission out of two halves that never meet, and
+# over-reports by 2 302 B on 20260901-o-revisor-so-acha. Caught by the boot-bill total assertions
+# in check-hat.sh, whose fixture has a PLAN-only template set heavier than every other phase's.
+mut_CENSUS_templates_count_plan() {
+  sed -i '/^census_boot_bill() {/,/^}/ s@^    \[ "$ph" = "PLAN" \] && continue$@    :@' "$1"
+}
+
+# One per port, the rule this repo applies to every guard that lives in its callers: a port whose
+# removal no assertion notices is a port that will be removed. The three gates are the three phases
+# whose hat WRITES a handoff — EXEC, QA and REVIEW — and each probe pairs the refusal with the
+# reason the gate goes back to giving once the file is under the cap.
+mut_GATE_tldr_uncapped_EXEC() {
+  sed -i 's@^  handoff_tldr_ok "$MISSION_DIR/20-handoff-exec.md" || return 1$@  :@' "$1"
+}
+mut_GATE_tldr_uncapped_QA() {
+  sed -i 's@^  handoff_tldr_ok "$h" || return 1$@  :@' "$1"
+}
+mut_GATE_tldr_uncapped_REVIEW() {
+  sed -i 's@^  handoff_tldr_ok "$last" || return 1$@  :@' "$1"
+}
+
+# Item 4 goes back to "the most recent handoff in <dir>" — a lookup the SESSION performs and then
+# pays for by opening the whole file, which is the 49 641 B this increment removed. Nothing is
+# inlined, so the next phase boots on a name it has to resolve itself.
+mut_BOOT_handoff_not_named() {
+  sed -i '/^boot_prompt() {/,/^}/ s@^  hf="$(mission_latest_handoff)"$@  hf=""@' "$1"
+}
+
+# The boot inlines the WHOLE handoff instead of its two sections: the cut is undone silently, the
+# boot bill goes back to counting the file, and the target of the mission is missed with every
+# assertion about naming still green. Caught by the worst-point line in check-hat.sh, which counts
+# what the boot ingests and not what it points at.
+mut_BOOT_handoff_whole_file() {
+  sed -i '/^handoff_boot_sections() {/,/^}/ s@keep = (index($0, "## TL;DR") == 1 || index($0, "## Boot da pr") == 1)@keep = 1@' "$1"
+}
+
+# The boot stops inlining the notes: the session is told the notes are elsewhere and never shown
+# one, so it either works blind or opens the file the prompt just forbade — the worst of both
+# layouts. Caught by "exactly the last 10 notes are inlined, and not the first" in check-hat.sh.
+mut_BOOT_notes_not_inlined() {
+  sed -i '/^boot_notes_tail() {/,/^}/ s@\[ -f "$nfile" \] || return 0@[ -f "$nfile" ] || return 0; return 0@' "$1"
+}
+
+# The tail becomes a head: ten notes are inlined, but the ten OLDEST — the session boots with the
+# history of the mission and none of what just happened. A probe that only counted ten would call
+# this green, which is why the check-hat assertion pins the END of the range too.
+mut_BOOT_notes_head_not_tail() {
+  sed -i '/^boot_notes_tail() {/,/^}/ s@| tail -n "$BOOT_NOTES_TAIL"@| head -n "$BOOT_NOTES_TAIL"@' "$1"
+}
+
+# The qualifier on item 3 goes unconditional — the shape the code actually had for one commit
+# during 20260904-a-dieta-de-contexto. Every mission from BEFORE the split is then told its
+# execution notes are not in checkpoint.md while they sit in the very file item 3 sends it to
+# read. Caught by "item 3 claims the notes moved only when they did" in check-hat.sh.
+mut_BOOT_ck_note_unconditional() {
+  sed -i 's@^  local notes_block="" notes_tail="" ck_note=""$@  local notes_block="" notes_tail="" ck_note=" — the execution notes are NOT in it"@' "$1"
+}
+
+# The runner writes its `- intervention:` note into checkpoint.md even on a mission that has the
+# sibling file — the note lands in a file whose notes section no longer exists, so the awk falls
+# through to its END arm and appends it after the fix-increments table. The narrative of what the
+# human did splits across two files by accident. Caught by "the interventions are counted in the
+# sibling notes file" in check-autonomy.sh.
+mut_RUN_intervention_ignores_notes_file() {
+  sed -i '/^checkpoint_note_intervention() {/,/^}/ s@^  target="$ck"; \[ -f "$nf" \] && target="$nf"$@  target="$ck"@' "$1"
+}
+
+# The reader goes back to one world: `sdd autonomy --by-mission` counts interventions only in
+# checkpoint.md, so every mission written after the split reports ZERO no matter how many times a
+# human had to step in — and zero is the answer this report reserves for "a human never did".
+# Caught by "the interventions are counted in the sibling notes file" in check-autonomy.sh.
+mut_AUTONOMY_intervention_one_world() {
+  sed -i 's@^      for nsrc in "$ck" "$nf"; do$@      for nsrc in "$ck"; do@' "$1"
+}
+
+# The per-file break-down goes blind: every phase prints its aggregate and not one `file` line, so
+# `sdd census` is back to answering "1.4 MB somewhere under docs/handoffs" — the number a context
+# diet cannot be aimed with. The match is degraded rather than the printf deleted, because what
+# has to be measured is the correlation, not the presence of an output line. Caught by "the
+# per-file break-down names the file, its reads and its bytes" in check-hat.sh.
+mut_CENSUS_per_file_blind() {
+  sed -i '/^census_files() {/,/^}/ s@| select($ref | contains($hds))@| select($ref | contains("never/"))@' "$1"
+}
+
+# Items 1 and 2 of the boot stop being excluded from the search for item 4, so on a mission that
+# has produced no handoff yet the bill reports `00-missao.md` AS the most recent handoff and
+# counts its bytes twice. The lie is the shape a boot bill can least afford: it inflates the
+# "before" of a diet with a file the cut will never touch. Caught by "the boot bill survives a
+# mission with no handoff yet" in check-hat.sh.
+mut_CENSUS_boot_bill_counts_the_plan() {
+  sed -i '/^mission_latest_handoff() {/,/^}/ s@\[1-9\]\[0-9\]-\*\.md@[0-9][0-9]-*.md@' "$1"
+}
+
+# Version order becomes the glob's own lexicographic order — the exact defect the `sort -V` was
+# written against, and one that only appears on a mission that reached a two-digit review round:
+# `40-review-r2.md` sorts ABOVE `40-review-r10.md` on text, so the bill measures a handoff two
+# rounds stale and every cut is compared against the wrong "before". Caught by "and prefers
+# r10 to r2 — version order, not text order" in check-hat.sh.
+mut_CENSUS_boot_bill_lexicographic() {
+  sed -i '/^latest_matching() {/,/^}/ s@| sort -V | tail -1 || true@| sort | tail -1 || true@' "$1"
+}
+
+# The worst point stops being computed and becomes the last file again: the comparison that keeps
+# the heaviest handoff is inverted, so the loop keeps the LIGHTEST. A diet is then measured at the
+# point that flatters it most — on a closed mission, against `50-pr.md`, the smallest artifact the
+# mission produced. Caught by "the worst point names the heaviest handoff, not the newest" in
+# check-hat.sh, and the differential half above keeps a mutant from passing by printing nothing.
+mut_CENSUS_boot_bill_worst_inverted() {
+  sed -i '/^census_boot_bill() {/,/^}/ s@\[ "$b" -le "$worst_b" \] ||@[ "$b" -ge "$worst_b" ] ||@' "$1"
+}
+
+# The session row stops carrying cache-read. It is HALF a mission's bill (51-53%, measured
+# 2026-09-03) and .sdd/logs/ is gitignored, so with this field gone the ledger is once more unable
+# to tell a mission that got cheaper by RE-READING LESS from one that got cheaper by luck — which
+# is the single thing the context diet is asking the judge to verify. Renamed rather than deleted
+# so the jq stays valid and the failure is the missing FACT, never a syntax error. Caught by "a
+# session row carries the cache-read tokens the session burned" in check-autonomy.sh.
+mut_AUTONOMY_cache_read_dropped() {
+  sed -i '/^autonomy_session_row() {/,/^}/ s@cache_read: ($cache_read@cache_readx: ($cache_read@' "$1"
 }
 
 # The census stops reading tool_use names — the line that turns the "before" of the 2026-09-03
@@ -3059,6 +3215,22 @@ CATALOG=(
   RUN_kit_touched_silent
   RUN_init_blind
   CENSUS_tools_blind
+  CENSUS_per_file_blind
+  BOOT_notes_not_inlined
+  BOOT_handoff_not_named
+  BOOT_handoff_whole_file
+  BOOT_templates_whole_dir
+  PREFLIGHT_context_bill_silent
+  PREFLIGHT_context_bill_unguarded
+  CENSUS_templates_count_plan
+  GATE_tldr_uncapped_EXEC
+  GATE_tldr_uncapped_QA
+  GATE_tldr_uncapped_REVIEW
+  BOOT_notes_head_not_tail
+  BOOT_ck_note_unconditional
+  CENSUS_boot_bill_counts_the_plan
+  CENSUS_boot_bill_lexicographic
+  CENSUS_boot_bill_worst_inverted
   HEALTH_release_line3_blind
   RUN_hat_guard_ignores_prior_dirt
   HEALTH_with_mutation_refused
@@ -3192,6 +3364,9 @@ CATALOG=(
   EXEC_blocked_publishes_count
   RUN_retry_pending_before_null
   AUTONOMY_progress_ignored
+  AUTONOMY_cache_read_dropped
+  AUTONOMY_intervention_one_world
+  RUN_intervention_ignores_notes_file
   AUTONOMY_progress_null_blind
   AUTONOMY_historic_progress_dropped
   AUTONOMY_historic_total_change_blind

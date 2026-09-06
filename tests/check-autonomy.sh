@@ -269,13 +269,20 @@ sed -i 's/^aprovacao:$/aprovacao: auto/' "$MDIR/00-missao.md"
 echo "== session rows =="
 : > "$LEDGER"
 TURNS_SAMPLE="$OUTSIDE/stream-turns.jsonl"
-jq -c 'del(.total_cost_usd, .cost_usd) | if .type == "result" then .num_turns = 7 else . end' \
+jq -c 'del(.total_cost_usd, .cost_usd)
+       | if .type == "result" then .num_turns = 7 | .usage.cache_read_input_tokens = 4242 else . end' \
   "$STREAM_SAMPLE" > "$TURNS_SAMPLE"
 # The floor of the world this block asserts over: one result object, seven turns in it, no money
 # anywhere. Without it the sample could stop being the sample the assertions name and the two
 # verdicts below would go on agreeing with whatever it became.
 turns_floor="$(jq -rs '[.[] | select(.type == "result")]
                        | "\(length) \(.[0].num_turns) \([.[] | select(has("total_cost_usd") or has("cost_usd"))] | length)"' \
+                       "$TURNS_SAMPLE")"
+# The second floor of the same world, kept apart from `turns_floor` on purpose: gluing the two
+# would change the string the turns assertion already asserts, and a floor that moves with the
+# thing it guards guards nothing.
+cache_floor="$(jq -rs '[.[] | select(.type == "result")]
+                       | "\(length) \(.[0].usage.cache_read_input_tokens)"' \
                        "$TURNS_SAMPLE")"
 cat > "$MDIR/checkpoint.md" <<'EOF'
 | ID | Incremento | Check (comando → esperado) | Status | Commit |
@@ -327,6 +334,15 @@ assert_eq "a session row carries the turns the session spent" \
 # escalation, or "no turns" is a fact about the wrong row.
 assert_eq "an escalation row carries no turns" "blocked false" \
   "$(jq -r -s '.[2].event' "$LEDGER") $(jq -r -s '.[2] | has("turns")' "$LEDGER")"
+# Cache-read is HALF the bill (51-53%, measured 2026-09-03) and the only durable house it has is
+# this row: .sdd/logs/ is gitignored, so before this field the judge could watch a mission get
+# cheaper without being able to see whether it got cheaper by RE-READING LESS. The floor rides
+# beside the verdict for the same reason the turns one does.
+assert_eq "a session row carries the cache-read tokens the session burned" \
+  "1 4242 4242" "$cache_floor $(jq -r -s '.[0].cache_read' "$LEDGER")"
+# ABSENT, never zeroed — the same rule, and the same reason, as the turns assertion above.
+assert_eq "an escalation row carries no cache_read" "blocked false" \
+  "$(jq -r -s '.[2].event' "$LEDGER") $(jq -r -s '.[2] | has("cache_read")' "$LEDGER")"
 
 # --- sdd retry is a human-forced session, and that is a first-class signal ---
 # It is literally the rubric's "refez": the human looked at the result and pushed the phase
@@ -349,6 +365,28 @@ assert_eq "sdd retry writes the intervention note in the checkpoint and commits 
   "$(notes) $(ck_clean)"
 assert_eq "the note names the command, the phase and the date, in the form the template shows" "1" \
   "$(grep -cE '^- intervention: sdd retry .* — EXEC — [0-9]{4}-[0-9]{2}-[0-9]{2} [0-9]{2}:[0-9]{2} · written by the runner$' "$MDIR/checkpoint.md" || true)"
+
+# --- and when the sibling notes file exists, the note goes THERE ------------
+# The writer picks its target by the presence of `checkpoint-notas.md`, which is the whole switch
+# of the 20260904 split — no flag, no key. Differential, because neither half is the assertion:
+# "the note is in the sibling" alone passes on a writer that puts it in BOTH, and "checkpoint.md
+# did not grow" alone passes on a writer that wrote nowhere at all. The mutant
+# RUN_intervention_ignores_notes_file survived a suite that asserted only the old world.
+echo "== the sibling notes file takes the note when it is there =="
+nnotes() { grep -cE '^[[:space:]]*-[[:space:]]*intervention:' "$MDIR/checkpoint-notas.md" 2>/dev/null || true; }
+ck_before="$(notes)"
+: > "$MDIR/checkpoint-notas.md"
+( cd "$FIX" && git add -A && git commit -qm "chore: split the notes out" ) >/dev/null 2>&1
+: > "$LEDGER"
+"$SDD" retry "$MISSION" >/dev/null 2>&1 || true
+assert_eq "the intervention note lands in the sibling file, and the checkpoint does not grow" \
+  "1 $ck_before" "$(nnotes) $(notes)"
+# Committed alone, on the same terms as the checkpoint path: the gate of the next phase reads a
+# clean tree, and a note left uncommitted would knock it down.
+assert_eq "and it is committed alone, like the checkpoint one" "clean" \
+  "$( [ -z "$(git -C "$FIX" status --porcelain -- "docs/handoffs/$MISSION/checkpoint-notas.md")" ] && echo clean || echo dirty )"
+rm -f "$MDIR/checkpoint-notas.md"
+( cd "$FIX" && git add -A && git commit -qm "chore: back to one file for the rest of the block" ) >/dev/null 2>&1
 
 echo "== --phase is the human's hand too, and the projection writes none =="
 : > "$LEDGER"
@@ -2983,7 +3021,39 @@ assert_eq "a checkpoint born verbatim from the template owes no intervention" \
   "1 h3:0" \
   "$(grep -cE '^  h3  ' <<< "$out_bm3") h3:$(mission_line h3 "$out_bm3" | grep -oE '[0-9]+ intervention note' | grep -oE '^[0-9]+')"
 
-rm -rf "$FIX/docs/handoffs/h1" "$FIX/docs/handoffs/h2" "$FIX/docs/handoffs/h3"
+
+# --- the notes moved out of the checkpoint, and the reader has TWO worlds -----
+# 20260904-a-dieta-de-contexto split the execution notes into a sibling file, and did NOT migrate
+# missions in flight: the writer picks its target by the presence of that file, so on disk both
+# layouts exist at once. A reader that knew only one of them would report zero interventions for
+# half the missions — the silent kind of wrong, since this report already gives "absent" and "zero"
+# different meanings. h1 and h2 above are the old world; these two are the new one.
+#
+# h5 is the same trap h3 catches, one file over: the notes TEMPLATE also ships an `- intervention:`
+# stub to show the form of the marker, inside a blockquote so it cannot be counted. `cp` of the
+# real template and never an imitation, for the reason written above h3.
+mkdir -p "$FIX/docs/handoffs/h4" "$FIX/docs/handoffs/h5" "$OUTSIDE/bymission4"
+printf '| ID | Incremento | Check | Status | Commit |\n' > "$FIX/docs/handoffs/h4/checkpoint.md"
+cat > "$FIX/docs/handoffs/h4/checkpoint-notas.md" <<'EOF'
+- intervention: the human redid the REVIEW phase by hand — REVIEW — US$ 12.40
+- 2026-01-01 10:00 · `I1` · no intervention was needed here, and this line is prose
+- intervention: the human fixed the branch by hand — PR
+EOF
+printf '| ID | Incremento | Check | Status | Commit |\n' > "$FIX/docs/handoffs/h5/checkpoint.md"
+cp "$ROOT/templates/checkpoint-notas.md" "$FIX/docs/handoffs/h5/checkpoint-notas.md"
+{ ledger_row "$FIXROOT" h4; ledger_row "$FIXROOT" h5; } > "$OUTSIDE/bymission4/autonomy-log.jsonl"
+out_bm4="$( SDD_STATE_DIR="$OUTSIDE/bymission4" "$SDD" autonomy --by-mission 2>&1 )"
+# Presence first, for the reason h3 gives: a reader that dropped the line entirely would leave the
+# count empty, and empty is not zero.
+assert_eq "the interventions are counted in the sibling notes file, and prose is still not a marker" \
+  "1 h4:2" \
+  "$(grep -cE '^  h4  ' <<< "$out_bm4") h4:$(mission_line h4 "$out_bm4" | grep -oE '[0-9]+ intervention note' | grep -oE '^[0-9]+')"
+assert_eq "a notes file born verbatim from its template owes no intervention either" \
+  "1 h5:0" \
+  "$(grep -cE '^  h5  ' <<< "$out_bm4") h5:$(mission_line h5 "$out_bm4" | grep -oE '[0-9]+ intervention note' | grep -oE '^[0-9]+')"
+
+rm -rf "$FIX/docs/handoffs/h1" "$FIX/docs/handoffs/h2" "$FIX/docs/handoffs/h3" \
+       "$FIX/docs/handoffs/h4" "$FIX/docs/handoffs/h5"
 
 # --- ...and the review loop is a cell of its own ----------------------------
 # The metric of `20260901-o-revisor-so-acha`: what the REVIEW phase costs is not the REVIEW rows

@@ -4,7 +4,7 @@ description: >-
   Executes ONE increment of an sdd mission plan, in TDD, and commits. Receives all of its state
   from docs/handoffs/<mission>/ — there is no earlier conversation. Updates the checkpoint as its
   last act. Invoked by the EXEC phase of the `sdd` runner, one session per increment.
-disallowedTools: "Bash(git push:*), Bash(gh pr create:*), Bash(gh pr merge:*), ScheduleWakeup, Monitor"
+disallowedTools: "Bash(git push:*), Bash(gh pr create:*), Bash(gh pr merge:*), ScheduleWakeup, Monitor, Agent, ListAgents"
 writes: ""
 mcp: ""
 ---
@@ -47,7 +47,7 @@ green. If the batch is genuinely too large for one session, split the row in two
 Before touching anything, run `TEST_CMD`.
 
 - **Red because of an earlier increment** → you do not fix it and you do not carry on. Mark that
-  earlier increment `blocked` in the checkpoint, record what broke in the execution-notes section,
+  earlier increment `blocked` in the checkpoint, append what broke to the execution notes,
   and **stop**. That is Jidoka: a red sensor stops the line. The runner escalates.
 - **Red for something unrelated to the mission** (flaky test, pre-existing breakage) → record it
   in the notes, open a `TODO.md` entry, and carry on if the red has nothing to do with what you
@@ -70,8 +70,9 @@ The test is the increment's **sensor**: it is what proves the thing works, today
 from now in CI. Nothing is "done" without a sensor that proves it. If the increment's Check does
 not fit an automated test, the plan says why — re-read it before accepting a manual check.
 
-Heavy work (sweeping the repo for every use of a symbol, investigating a behaviour, running a long
-analysis) goes to **subagents**. Your context window is the scarce resource of the phase.
+Your context window is the scarce resource of the phase: read what the boot names, and nothing
+else. It names the increment table, the last notes and the sections of the handoff you need — the
+files behind them are there when a Check sends you to one, not as a warm-up.
 
 ## 4. Found something out of scope?
 
@@ -107,7 +108,8 @@ After the commit, never before. On the increment's row:
 - `Commit` → the short hash of the commit
 
 Plus a line in the execution notes if something deserved recording (a decision taken, a justified
-departure from the plan, a surprise).
+departure from the plan, a surprise). They live in `docs/handoffs/<mission>/checkpoint-notas.md` (APPEND one line with `>>` — never rewrite the file, never read it whole) — the boot prompt inlined the last ten of
+them for you, so you already have the context you need and never open the file.
 
 Do not change the columns or the status tokens: **the runner parses this table.** It will check
 that the hash exists in the `git log` — a label is not an artifact.

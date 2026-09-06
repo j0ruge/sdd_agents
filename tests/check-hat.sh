@@ -105,6 +105,104 @@ selftest() {
   printf '  ok    check-hat selftest: %d probes\n' "$PROBES"
 }
 
+# --- sdd boot: the boot prompt is an artifact, so it is asserted like one -----------------------
+# Until 20260904-a-dieta-de-contexto `boot_prompt()` had ONE caller (`run_phase`), so the only way
+# to see what a phase is told was to spend a session, and the only way to assert on it was to
+# rebuild the prompt by hand — the fixture-from-memory that CLAUDE.md forbids and that has already
+# cost this kit three gate bugs. `sdd boot` made the real thing readable, and these probes read it.
+boot_probes() {
+  local box out out2 mdir
+  box="$(mktemp -d "${TMPDIR:-/tmp}/sdd-boot-XXXXXX")"
+  mdir="$box/docs/handoffs/20260101-n"
+  mkdir -p "$mdir" "$box/.sdd"
+  ( cd "$box" && git init -q -b main . ) >/dev/null 2>&1
+  printf 'PROJECT_NAME="n"\nDEFAULT_BRANCH="main"\nTEST_CMD="true"\nHANDOFF_DIR="docs/handoffs"\n' > "$box/.sdd/config.sh"
+  : > "$mdir/00-missao.md"; : > "$mdir/01-plano.md"
+  printf '| ID | Incremento | Check | Status | Commit |\n' > "$mdir/checkpoint.md"
+  awk 'BEGIN{for(i=1;i<=30;i++) printf "- 2026-01-01 · I%d · NOTA_NUMERO_%02d\n", i, i}' > "$mdir/checkpoint-notas.md"
+  out="$( cd "$box" && SDD_HOME="$ROOT" "$ROOT/bin/sdd" boot 20260101-n EXEC 2>&1 )" || true
+
+  # BOTH terms, and neither alone is the assertion. "Ten notes" alone passes on a boot that inlines
+  # the FIRST ten — the wrong end, and the one a tail written as `head` would give. "Not the first"
+  # alone passes on a boot that inlines nothing at all.
+  if [ "$(grep -c 'NOTA_NUMERO_' <<< "$out")" = 10 ] && grep -q 'NOTA_NUMERO_30' <<< "$out" \
+       && ! grep -q 'NOTA_NUMERO_01' <<< "$out"; then pass "boot: exactly the last 10 notes are inlined, and not the first"
+  else fail "boot: wanted 10 notes ending at 30 — got $(grep -c 'NOTA_NUMERO_' <<< "$out"), first present: $(grep -q 'NOTA_NUMERO_01' <<< "$out" && echo yes || echo no)"; fi
+  if grep -q 'Do NOT read' <<< "$out"; then pass "boot: and the session is told not to open the notes file"
+  else fail "boot: the do-not-read instruction is missing — inlining without it just adds a second copy"; fi
+
+  # The differential, and the bug it was written against: the qualifier on item 3 was
+  # unconditional for one commit, which made the prompt tell EVERY mission in flight that its notes
+  # had moved while they sat in the very file item 3 sends it to read. A mission from before the
+  # split has to come out of here indistinguishable from what it got yesterday.
+  rm -f "$mdir/checkpoint-notas.md"
+  out2="$( cd "$box" && SDD_HOME="$ROOT" "$ROOT/bin/sdd" boot 20260101-n EXEC 2>&1 )" || true
+  if grep -qE '^  3\..*NOT in it' <<< "$out" && ! grep -qE '^  3\.' <<< "$(grep 'NOT in it' <<< "$out2")"; then
+    pass "boot: item 3 claims the notes moved only when they did — a pre-split mission is not lied to"
+  else fail "boot: item 3 qualifier is not conditional on the notes file"; fi
+  # One grep and one alternation, not two greps joined by `||`: RULE 1 of check-pipefail.sh reads
+  # the second `|` of a logical or as a pipe into `grep -q` and refuses the line. Declared limit,
+  # written in that sensor's header — the shape below is the one the rule was built for anyway.
+  if grep -qE 'NOTA_NUMERO_|Do NOT read' <<< "$out2"; then
+    fail "boot: a pre-split mission got a notes block it has no file for"
+  else pass "boot: and a pre-split mission gets no notes block at all"; fi
+  # --- item 4: the runner resolves the handoff and inlines two sections of it ---
+  # Three terms, and none of them is the assertion alone. "Names the file" alone passes on a boot
+  # that names it and then inlines the whole thing; "inlines the TL;DR" alone passes on a boot that
+  # inlines everything; "does not carry the ignored section" alone passes on a boot that inlines
+  # nothing at all. The mutants BOOT_handoff_not_named and BOOT_handoff_whole_file both survived a
+  # suite that had only the first two ideas in it.
+  local out4
+  { printf '## TL;DR\n\nINLINED_MARKER\n\n## Evidence\n\nNOT_INLINED_MARKER\n'; } \
+    > "$mdir/20-handoff-exec.md"
+  out4="$( cd "$box" && SDD_HOME="$ROOT" "$ROOT/bin/sdd" boot 20260101-n EXEC 2>&1 )" || true
+  if grep -q '20-handoff-exec.md' <<< "$out4"; then pass "boot: item 4 names the handoff instead of leaving the session to find it"
+  else fail "boot: the handoff is not named in the prompt"; fi
+  if grep -q 'INLINED_MARKER' <<< "$out4"; then pass "boot: and inlines its TL;DR"
+  else fail "boot: the TL;DR is not inlined"; fi
+  if grep -q 'NOT_INLINED_MARKER' <<< "$out4"; then fail "boot: the whole handoff was inlined — the rest of the file is evidence, not boot"
+  else pass "boot: and carries none of the sections it only points at"; fi
+
+  # --- item 6: the templates of THIS phase, not the directory ---
+  # Differential across two phases of the same mission, which is the only shape that separates
+  # "names the phase's templates" from "names a fixed subset" or "names them all": the file each
+  # one must have is the file the other must not.
+  local out5
+  out5="$( cd "$box" && SDD_HOME="$ROOT" "$ROOT/bin/sdd" boot 20260101-n REVIEW 2>&1 )" || true
+  # The first term is not decoration: the fallback arm names the DIRECTORY and lists nothing, so
+  # "review.md is absent" is true there too — the mutant BOOT_templates_whole_dir escaped a probe
+  # that had only the absence in it. What separates the two worlds is that item 6 NAMES files.
+  if grep -q 'templates this phase writes from' <<< "$out4" && grep -q 'checkpoint\.md' <<< "$out4" \
+       && ! grep -q 'review\.md' <<< "$out4"; then pass "boot: item 6 names the EXEC templates and not the reviewer's"
+  else fail "boot: EXEC item 6 is wrong — named: $(grep -c 'this phase writes from' <<< "$out4"), review.md: $(grep -c 'review\.md' <<< "$out4")"; fi
+  if grep -q 'templates this phase writes from' <<< "$out5" && grep -q 'review\.md' <<< "$out5" \
+       && ! grep -q 'pr-body\.md' <<< "$out5"; then pass "boot: and the REVIEW templates and not the publisher's"
+  else fail "boot: REVIEW item 6 is wrong — named: $(grep -c 'this phase writes from' <<< "$out5"), pr-body.md: $(grep -c 'pr-body\.md' <<< "$out5")"; fi
+  rm -rf "$box"
+}
+
+# --- the executor and the Agent tool ------------------------------------------------------------
+# `Agent` is deliberately NOT in HAT_DENY_BASE, and the reason is a single hat: the reviewer's
+# codereview skill dispatches subagents. The executor's prompt used to ask for them too, and
+# `sdd census` measured `Agent=0` across 27 EXEC sessions of two missions — the phrase came out in
+# 20260904-a-dieta-de-contexto and the executor now denies the tool by name.
+#
+# Differential on purpose. "The executor denies Agent" alone would stay green if someone closed the
+# hole by putting Agent into HAT_DENY_BASE, which is the one fix that silently breaks the reviewer;
+# "the reviewer allows Agent" alone would stay green if the executor's line rotted away. Only the
+# pair says what the design actually is. The catalogue cannot reach either half — it sabotages
+# bin/sdd and this lives in agents/*.md — so this probe is the whole sensor, and that limit is
+# declared here rather than left silent.
+executor_agent_probes() {
+  local ex="$ROOT/agents/sdd-executor.md" rv="$ROOT/agents/sdd-reviewer.md"
+  if grep -qE '^disallowedTools:.*(^|[ ,"])Agent([,"]|$)' "$ex"; then pass "hat: the executor denies Agent — the census measured 0 uses in 27 EXEC sessions"
+  else fail "hat: sdd-executor no longer denies Agent"; fi
+  if grep -qE '^disallowedTools:.*(^|[ ,"])Agent([,"]|$)' "$rv"; then fail "hat: sdd-reviewer denies Agent — its codereview skill dispatches subagents and would break"
+  else pass "hat: and the reviewer still may use it, which is why Agent is not in HAT_DENY_BASE"; fi
+  if grep -qi 'subagent' "$ex"; then fail "hat: the executor prompt still asks for subagents while the tool is denied"
+  else pass "hat: and the executor prompt no longer asks for what it cannot do"; fi
+}
+
 # --- sdd census: the instrument reads the logs, never memory ------------------------------------
 # PROVENANCE: the three lines below were captured on 2026-09-04 on Claude Code 2.1.260 with
 #     claude -p 'Read docs/handoffs/x/00-missao.md with the Read tool, then reply with exactly: OK' \
@@ -141,6 +239,64 @@ census_probes() {
   else fail "census: tool census missing Read=1"; fi
   if grep -qE '^  EXEC .*handoff_read [1-9][0-9]*B' <<< "$out"; then pass "census: bytes read under docs/handoffs are counted"
   else fail "census: handoff_read is 0 or absent"; fi
+  # The aggregate one line up cannot say WHICH file, and a diet aimed at "1.4 MB somewhere under
+  # docs/handoffs" is aimed at nothing. The capture holds exactly one Read of 00-missao.md, so
+  # both terms are pinned: a break-down that lost the count would print reads 0, one that lost the
+  # correlation between tool_use and tool_result would print bytes 0.
+  if grep -qE '^ +file +00-missao\.md reads 1 bytes [1-9][0-9]*$' <<< "$out"; then pass "census: the per-file break-down names the file, its reads and its bytes"
+  else fail "census: per-file line for 00-missao.md missing — got: $(grep -c ' file ' <<< "$out") file line(s)"; fi
+  # `handoff_read` needs a session to have already run; the boot bill is the same question asked
+  # of the disk, so a cut can be read before and after for free. Templates alone make it non-zero
+  # in this box, which is what the assertion pins.
+  # The EXPECTED number, computed here from the same templates the bill reads — not a wildcard.
+  # `[1-9][0-9]*B` accepted both the honest answer and the one that folds PLAN into the maximum
+  # (12 132 against 9 830), and the mutant CENSUS_templates_count_plan walked straight through it.
+  # PLAN is excluded from the bill because it is the first phase: it has no predecessor handoff, so
+  # summing its four templates with the worst handoff describes a boot that cannot happen.
+  local want_t=0 t
+  for t in checkpoint.md checkpoint-notas.md handoff.md; do
+    [ -f "$ROOT/templates/$t" ] && want_t=$((want_t + $(wc -c < "$ROOT/templates/$t")))
+  done
+  if grep -qE "^  boot bill .*templates\(worst booting phase\) ${want_t}B  total [1-9][0-9]*B\$" <<< "$out"; then pass "census: the boot bill charges the heaviest BOOTING phase's templates, and PLAN is not one"
+  else fail "census: templates term should be ${want_t}B (EXEC's set) — got: $(grep -o 'templates(worst booting phase) [0-9]*B' <<< "$out")"; fi
+  # Differential, and the reason it exists: `latest=` is a four-stage pipeline under
+  # `set -o pipefail`, and on a mission with no handoff yet EVERY stage exits non-zero for having
+  # found nothing. Without the `|| true` inside the substitution the assignment kills sdd census
+  # outright — so this pair asserts both that the empty world is survived AND that the non-empty
+  # one is answered, which no single fixture can do.
+  local out2
+  # The bill measures the two sections the boot inlines, not the file, so the fixture has to carry
+  # them: a 500-byte blob with no headings costs the boot nothing and would make every term zero.
+  # The ignored section is deliberately LARGER than the inlined one: with both small, "counts the
+  # sections" and "counts the whole file" land in the same range and an assertion cannot tell them
+  # apart — the mutant BOOT_handoff_whole_file escaped exactly that way before this line grew.
+  { printf '## TL;DR\n\n'; head -c 400 /dev/zero | tr '\0' 'h'
+    printf '\n\n## Evidence\n\n'; head -c 3000 /dev/zero | tr '\0' 'z'; printf '\n'; } \
+    > "$box/docs/handoffs/20260101-fixture/20-handoff-exec.md"
+  out2="$( cd "$box" && "$ROOT/bin/sdd" census 20260101-fixture 2>&1 )" || true
+  if grep -qE '^  boot bill .*\(no handoff yet\) 0B' <<< "$out"; then pass "census: the boot bill survives a mission with no handoff yet"
+  else fail "census: boot bill did not report an absent handoff"; fi
+  if grep -qE '^  boot bill .*20-handoff-exec\.md [1-9][0-9]*B' <<< "$out2"; then pass "census: and names the most recent handoff once there is one"
+  else fail "census: boot bill did not name 20-handoff-exec.md — got: $(grep '^  boot bill' <<< "$out2" | cut -c1-140)"; fi
+  # The reason the resolution is `sort -V` and not the glob's own order, written as an assertion
+  # instead of a comment: on text, r2 sorts ABOVE r10, and a mission that reached a two-digit
+  # review round would have its boot measured against a handoff two rounds stale.
+  local out3
+  printf '## TL;DR\nx\n' > "$box/docs/handoffs/20260101-fixture/40-review-r2.md"
+  printf '## TL;DR\nxx\n' > "$box/docs/handoffs/20260101-fixture/40-review-r10.md"
+  out3="$( cd "$box" && "$ROOT/bin/sdd" census 20260101-fixture 2>&1 )" || true
+  if grep -qE '^  boot bill .*40-review-r10\.md [1-9][0-9]*B' <<< "$out3"; then pass "census: and prefers r10 to r2 — version order, not text order"
+  else fail "census: boot bill picked text order — got: $(grep '^  boot bill' <<< "$out3" | cut -c1-140)"; fi
+  # "Most recent" and "heaviest" are different questions, and only the second one a target can be
+  # held to: on a closed mission the most recent handoff is the smallest artifact there is. The
+  # pair is differential on purpose — the line has to be ABSENT when the two points agree (out2,
+  # where the only handoff is both) and PRESENT naming the heavier one when they disagree (out3,
+  # where the newest is a 3-byte review round and the heaviest a 500-byte exec handoff). Neither
+  # half alone separates "computes the worst point" from "always prints the last file again".
+  if grep -qE '^  boot bill  worst point' <<< "$out2"; then fail "census: worst-point line printed when it repeats the first"
+  else pass "census: no worst-point line when the heaviest handoff IS the most recent"; fi
+  if grep -qE '^  boot bill  worst point  20-handoff-exec\.md 4[0-9][0-9]B  total [1-9][0-9]*B$' <<< "$out3"; then pass "census: the worst point costs the two inlined sections, not the whole handoff"
+  else fail "census: worst point wrong — got: $(grep 'worst point' <<< "$out3" | cut -c1-140)"; fi
   rm -rf "$box"
 }
 
@@ -210,6 +366,8 @@ if [ "$n" -lt "$HAT_FLOOR" ]; then
   exit 93
 fi
 census_probes
+executor_agent_probes
+boot_probes
 release_probes
 selftest || exit $?
 if [ "$fails" -eq 0 ]; then printf '  ok    %d hat(s) declare their boundary\n' "$n"; exit 0; fi

@@ -116,7 +116,7 @@ touches a journey carries the same double Check the QA's `F<n>` does: the regres
 ⚠️ **No raw `|` in the Check cell** — the table is read with `awk -F'|'` and a raw pipe shifts every
 column after it. Use a herestring, as above.
 
-Record in the checkpoint's execution notes which finding of which round gave rise to each `R<n>`.
+Append to `docs/handoffs/<mission>/checkpoint-notas.md` (APPEND one line with `>>` — never rewrite the file, never read it whole) which finding of which round gave rise to each `R<n>`.
 
 The runner sees a pending increment and hands the ball to `sdd-executor` on its own. It repeats
 until a round closes at Grade A on every criterion with a sensor and at least B on the rest,
