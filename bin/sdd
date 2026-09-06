@@ -728,9 +728,23 @@ gate_PLAN() {
 }
 
 gate_TICKET() {
+  GATE_HANDOFF_BLOCKED=0
   if [ "$JIRA_ENABLED" != "true" ]; then GATE_WHY="JIRA_ENABLED=false — phase skipped"; return 0; fi
   local t="$MISSION_DIR/10-ticket.md"
   [ -f "$t" ] || { GATE_WHY="missing 10-ticket.md"; return 1; }
+  # `blocked` here is the ticket hat saying no issue could be opened — no sprint, no acli, no
+  # shell. The marker is what cmd_run's doors read to stop on the spot; without it the phase went
+  # through the fingerprint heuristic like any failing gate, one session per lap, each re-reading
+  # the same refusal: 2026-09-06, three TICKET sessions without Bash, US$ 3,39, `no-progress`.
+  # The artifact has an owner inside the pipeline — sdd-ticket writes 10-ticket.md — so the gate
+  # that stops here is satisfiable, which is the half of the rule the QA anchors once missed.
+  # BEFORE the issue/sprint checks: a blocked ticket has neither, and refusing it for the missing
+  # sprint would spin exactly the loop the marker exists to end.
+  local st; st="$(frontmatter "$t" status)"
+  if [ "$st" = "blocked" ]; then
+    GATE_HANDOFF_BLOCKED=1
+    GATE_WHY="10-ticket.md has status: blocked"; return 1
+  fi
   local issue; issue="$(frontmatter "$t" issue)"
   [ -n "$issue" ] || { GATE_WHY="10-ticket.md has no 'issue:' in the frontmatter"; return 1; }
   if ! grep -qiE '^sprint:[[:space:]]*\S' "$t"; then
@@ -783,8 +797,12 @@ GATE_EXEC_DIRTY=0
 #
 # CONTRACT for whoever teaches a second gate the token: reset it at the entry of THAT gate, never
 # at a call site. `current_phase` walks every gate in order, so a marker left set by an evaluation
-# two phases ago would escalate a phase whose own handoff says nothing of the kind. Today gate_QA
-# is the only setter, and the only reader is handoff_blocked_escalation.
+# two phases ago would escalate a phase whose own handoff says nothing of the kind. Two setters
+# today — gate_QA, and gate_TICKET since 2026-09-06 — each resetting it on entry, and the only
+# reader is handoff_blocked_escalation. The second setter RE-DERIVES the property below rather
+# than inheriting it: the walk visits TICKET before QA; a gate that passes leaves the marker 0; a
+# gate that arms it fails, and the walk stops at the first failure, so no later gate runs over an
+# armed marker; and every lap that finds it armed returns 3. No new path leaves a lap with it set.
 #
 # That reader is called from BOTH doors of cmd_run's loop — the first pass and the inline retry —
 # and the second door is not symmetry for its own sake. With only the first, the marker outlived
@@ -1638,13 +1656,24 @@ phase_agent() {
 }
 
 # --- the hat's boundary --------------------------------------------------------------------------
-# The hat DECLARES (agents/<hat>.md: disallowedTools:, writes:, mcp:), the runner APPLIES
-# (--disallowedTools, --strict-mcp-config, hat_guard_check) and the artifact PROVES (the stream's
-# init line and the result's permission_denials, read into the ledger). In a `-p` session the
-# harness honours only model/permissionMode/skills from the --agent file's frontmatter
-# (code.claude.com/docs/en/sub-agents.md, checked 2026-09-03), so a `disallowedTools:` line that
-# only lived in the file would be a phrase; the flag is the rule. Spec:
+# The hat DECLARES (agents/<hat>.md: disallowedTools:, permissionsDeny:, writes:, mcp:), the runner
+# APPLIES (--disallowedTools, --strict-mcp-config, hat_guard_check) and the artifact PROVES (the
+# stream's init line and the result's permission_denials, read into the ledger). The flag is the
+# rule: the harness reads `disallowedTools:` from the --agent file too since Claude Code 2.1.263
+# (it ignored it on 2.1.259 — measured both ways on 2026-09-06), and the file alone would still be
+# a phrase for any harness that does not. Spec:
 # docs/superpowers/specs/2026-09-03-a-fronteira-do-chapeu-design.md.
+#
+# ⚠️ TWO keys for one deny list, and the split is measured, not taste. The harness reads
+# `disallowedTools:` as tool NAMES (the docs: names and `mcp__<server>` patterns), so a permission
+# RULE written there — `Bash(git push:*)` — removes `Bash` whole from the session: five headless
+# probes on 2.1.263, and the first mission of the fourth window, three TICKET sessions and US$ 3,39
+# spent by a hat that had no shell. The same rule on the CLI flag keeps Bash and denies the push
+# (`permission_denials: 1`). So names live in `disallowedTools:` (the harness enforces them as
+# well) and rules live in `permissionsDeny:` (a kit key no harness reads), and hat_disallowed
+# joins the two onto the flag. tests/check-hat.sh R3/R4 refuse a rule in the names key and a name
+# in the rules key; `sdd preflight` fires the executor hat under these flags and reads `Bash` off
+# the init line, because a sensor on the DECLARATION cannot see what the harness does with it.
 #
 # HAT_DENY_BASE: what NO phase used across the 43 sessions the spec measured (§ 2.1). A property of
 # the pipeline, defined once; each hat adds its own line. `Agent` is NOT here because the
@@ -1659,11 +1688,14 @@ HAT_WRITES_BASE='$TODO_FILE, tests/health-baseline.txt'
 
 hat_field() { frontmatter "$SDD_HOME/agents/$1.md" "$2"; }   # hat_field <hat> <key> — "" when absent
 
-hat_disallowed() {   # hat_disallowed <step> — the base plus the hat's own line, comma-separated
-  local hat own=""
+hat_disallowed() {   # hat_disallowed <step> — the base, the hat's names, the hat's rules; comma-separated
+  local hat own="" rules=""
   hat="$(phase_hat "$1")"
-  if [ -n "$hat" ]; then own="$(hat_field "$hat" disallowedTools)"; fi
-  printf '%s%s\n' "$HAT_DENY_BASE" "${own:+, $own}"
+  if [ -n "$hat" ]; then
+    own="$(hat_field "$hat" disallowedTools)"
+    rules="$(hat_field "$hat" permissionsDeny)"
+  fi
+  printf '%s%s%s\n' "$HAT_DENY_BASE" "${own:+, $own}" "${rules:+, $rules}"
 }
 
 hat_mcp() {   # hat_mcp <step> — the MCP servers the hat may see; "" ⇒ --strict-mcp-config
@@ -3036,7 +3068,7 @@ autonomy_session_row() {  # <phase> <attempt> <auto_retry> <moved> <gate> <gate_
     --arg rc "$LAST_PHASE_RC" --arg dur "$LAST_PHASE_DUR" --arg cost "$LAST_PHASE_COST" \
     --arg turns "$LAST_PHASE_TURNS" --arg cache_read "$LAST_PHASE_CACHE_READ" \
     --arg mcp_seen "$LAST_PHASE_MCP_SEEN" --arg tools_leaked "$LAST_PHASE_TOOLS_LEAKED" \
-    --arg denials "$LAST_PHASE_DENIALS" \
+    --arg denials "$LAST_PHASE_DENIALS" --arg harness "$LAST_PHASE_HARNESS" \
     --arg pbefore "${7:-}" --arg pafter "${8:-}" --arg itotal "${9:-}" \
     --arg rbefore "${10:-}" --arg rafter "${11:-}" --arg rmax "${12:-}" \
     '{v: 1, ts: $ts, event: "session",
@@ -3055,6 +3087,7 @@ autonomy_session_row() {  # <phase> <attempt> <auto_retry> <moved> <gate> <gate_
       mcp_seen: ($mcp_seen | tonumber? // null),
       tools_leaked: ($tools_leaked | tonumber? // null),
       denials: ($denials | tonumber? // null),
+      harness: (if $harness == "" then null else $harness end),
       moved: ($moved == "true"),
       pending_before: ($pbefore | tonumber? // null),
       pending_after: ($pafter | tonumber? // null),
@@ -3099,9 +3132,17 @@ stream_summary() { # stream_summary <stream.jsonl>
 hat_init_facts() {   # hat_init_facts <stream> <result json> <deny list> <declared mcp>
   local stream="$1" result="$2" deny="$3" declared="$4" init facts
   LAST_PHASE_MCP_SEEN=""; LAST_PHASE_TOOLS_LEAKED=""; LAST_PHASE_DENIALS=""; LAST_PHASE_LEAK_NAMES=""
+  LAST_PHASE_HARNESS=""
   autonomy_have_jq || return 0
   init="$( jq -c 'select(.type == "system" and .subtype == "init")' "$stream" 2>/dev/null | head -1 )" || init=""
   [ -n "$init" ] || return 0
+  # The harness version, off the same line. A bump of the harness is a change of the machine the
+  # kit runs on, and the kaizen window compares kit versions as if that machine stood still: on
+  # 2026-09-06 Claude Code went 2.1.259 -> 2.1.263 inside the fourth window, started reading the
+  # hat's `disallowedTools:` and stripped Bash from every phase — three TICKET sessions, US$ 3,39 —
+  # and no row said so. Recorded here, shown per slice by `sdd kaizen --series`; whether the judge
+  # refuses a mixed slice is a separate decision (TODO.md), this only stops the bump being invisible.
+  LAST_PHASE_HARNESS="$( jq -r '.claude_code_version // ""' <<< "$init" 2>/dev/null )" || LAST_PHASE_HARNESS=""
   facts="$( jq -r --arg deny "$deny" --arg declared "$declared" '
       def names($s): [ $s | split(",")[] | gsub("^\\s+|\\s+$"; "") | select(. != "" and (contains("(") | not)) ];
       (names($deny) | map(if . == "Agent" then "Task" else . end)) as $deny_names
@@ -3118,6 +3159,7 @@ LAST_PHASE_MCP_SEEN=""
 LAST_PHASE_TOOLS_LEAKED=""
 LAST_PHASE_DENIALS=""
 LAST_PHASE_LEAK_NAMES=""
+LAST_PHASE_HARNESS=""
 
 # The stream closed the blind spot for whoever runs `tail -f` on the file; this closes it for the
 # person watching the run. `> "$streamfile"` takes claude's stdout off the terminal, so a phase
@@ -3795,26 +3837,51 @@ cmd_preflight() {
         previous one, and the runner escalates phases that were in fact making progress."
   fi
 
-  # --- authentication ---
-  # Sanity + permission in one shot. "claude -p answers" does NOT cover the failure mode that
-  # matters: the phase session has to EXECUTE (run the suite, commit), and `acceptEdits` alone
-  # does not unlock `Bash`. This check fires a real headless session with THE SAME flags as
-  # run_phase and demands that it manage to execute a command.
+  # --- authentication + the hat's shell ---
+  # Sanity, permission and the hat in one shot. "claude -p answers" does NOT cover the failure
+  # mode that matters: the phase session has to EXECUTE (run the suite, commit); `acceptEdits`
+  # alone does not unlock `Bash`, and neither does the flag when the hat's frontmatter takes the
+  # tool away. Until 2026-09-06 this probe ran WITHOUT --agent while its comment claimed "THE SAME
+  # flags as run_phase", and it was green over a kit whose every phase booted without a shell —
+  # three TICKET sessions and US$ 3,39 on Claude Code 2.1.263, which reads the hat's
+  # `disallowedTools:` and strips `Bash` for a rule written there (see hat_disallowed). A comment
+  # that asserts parity is not parity, so the probe now fires the executor hat under the flags
+  # run_phase composes for it — the mirror in .claude/agents/ when installed, because that is the
+  # copy the harness loads — and reads TWO artifacts: `Bash` on the stream's init line (the tool
+  # list the session actually got) and the marker in the result (the permission to run it). No
+  # init line and no answer is the old "did not answer"; an init line without Bash names the hat.
+  # ONE hat, the executor's, by cost: eight sessions per preflight is not a preflight. The other
+  # seven declare the same key shape, and tests/check-hat.sh R3 refuses the mix-up in every file;
+  # what this probe adds is the harness's reading of it, which no sensor on the declaration can see.
   if command -v claude >/dev/null 2>&1; then
-    local probe
-    probe="$( cd "$REPO_ROOT" && claude -p "Run exactly: bash -c 'echo sdd-preflight-ok'. Answer with the command output only." \
-        --model haiku --permission-mode "$PERMISSION_MODE" --output-format json \
+    local hat probe_stream probe_init probe_answer probe_tools
+    local -a probe_agent=()
+    hat="$(phase_hat EXEC)"
+    if [ -n "$hat" ] && [ -f "$REPO_ROOT/.claude/agents/$hat.md" ]; then probe_agent=(--agent "$hat"); fi
+    probe_stream="$( cd "$REPO_ROOT" && claude -p "Run exactly: bash -c 'echo sdd-preflight-ok'. Answer with the command output only." \
+        --model haiku --permission-mode "$PERMISSION_MODE" --output-format stream-json --verbose \
         --setting-sources "user,project,local" --allowedTools "$ALLOWED_TOOLS" \
-        --max-budget-usd 1 2>/dev/null | jq -r '.result // ""' 2>/dev/null || true )"
-    # Herestring for the same reason as the Jidoka in cmd_run: `printf | grep -q` returns 141
+        --disallowedTools "$(hat_disallowed EXEC)" --strict-mcp-config \
+        ${probe_agent[@]+"${probe_agent[@]}"} \
+        --max-budget-usd 1 2>/dev/null || true )"
+    probe_init="$( jq -c 'select(.type == "system" and .subtype == "init")' <<< "$probe_stream" 2>/dev/null | head -1 )" || probe_init=""
+    probe_answer="$( jq -r 'select(.type == "result") | .result // ""' <<< "$probe_stream" 2>/dev/null | tail -1 )" || probe_answer=""
+    probe_tools="$( jq -r '.tools // [] | join(" ")' <<< "$probe_init" 2>/dev/null )" || probe_tools=""
+    # Herestrings for the same reason as the Jidoka in cmd_run: `printf | grep -q` returns 141
     # under `pipefail` when the grep MATCHES, so the success branch is the one that loses the race.
-    if grep -q 'sdd-preflight-ok' <<< "$probe"; then
-      ok "headless session executes commands (OAuth + permission)"
-    elif [ -z "$probe" ]; then
+    if [ -z "$probe_init" ] && [ -z "$probe_answer" ]; then
       _fail "claude -p did not answer — expired session? run 'claude login'"
+    elif [ -n "$probe_init" ] && ! jq -e '.tools // [] | index("Bash") != null' <<< "$probe_init" >/dev/null 2>&1; then
+      _fail "the headless session under the ${hat:-<no>} hat has NO Bash — the phases cannot run the suite
+        nor commit. Tools it got: ${probe_tools:-(none)}
+        A permission rule such as Bash(git push:*) in the hat's disallowedTools: strips the tool whole on
+        Claude Code 2.1.263+; rules belong in permissionsDeny: (tests/check-hat.sh R3), and the mirror in
+        .claude/agents/ has to carry the fix ('sdd install --force')."
+    elif grep -q 'sdd-preflight-ok' <<< "$probe_answer"; then
+      ok "headless session under the ${hat:-<no>} hat executes commands (OAuth + Bash in the tool list + permission)"
     else
       _fail "the headless session CANNOT execute commands — the phases will not run the suite
-        nor commit. Answer received: $(printf '%s' "$probe" | head -c 120)
+        nor commit. Answer received: $(printf '%s' "$probe_answer" | head -c 120)
         Adjust ALLOWED_TOOLS in .sdd/config.sh (default: Bash)."
     fi
   fi
@@ -6610,6 +6677,7 @@ kaizen_series() {
                                       (map(select(.event == "session")) | map(mission_key) | unique | length)})
                              | sort_by(-.missions, .repo)),
          sessions: ($sess | length),
+         harness: ($sess | map(.harness // empty) | unique),
          # What the sessions DID, and how often the gate passed — the headline since
          # 20260828-instrumento-honesto (the judge prompt cites these two before moved_rate).
          # moved_rate stays: its name says what it measures, and it has a consumer. Same yardstick

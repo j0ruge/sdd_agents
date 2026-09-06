@@ -1,19 +1,32 @@
 #!/usr/bin/env bash
 # Sensor for the hat's boundary DECLARATIONS — the frontmatter of agents/sdd-*.md.
 #
-# Every hat carries three keys: `disallowedTools:` (what it denies beyond HAT_DENY_BASE — a
-# harness key), `writes:` (globs of what the phase may have touched when it ends — a kit key) and
-# `mcp:` (MCP servers it may see — a kit key; empty ⇒ --strict-mcp-config). The runner reads them
-# with frontmatter() and applies them by flag (bin/sdd: hat_disallowed, hat_writes, hat_mcp);
-# what this file measures is the DECLARATION, because a hat that declares nothing is a hat that
-# gets everything, silently. Spec: docs/superpowers/specs/2026-09-03-a-fronteira-do-chapeu-design.md.
+# Every hat carries four keys: `disallowedTools:` (tool NAMES it denies beyond HAT_DENY_BASE — a
+# harness key, and the harness reads it), `permissionsDeny:` (permission RULES such as
+# `Bash(git push:*)` — a kit key the runner passes on the CLI), `writes:` (globs of what the phase
+# may have touched when it ends — a kit key) and `mcp:` (MCP servers it may see — a kit key; empty
+# ⇒ --strict-mcp-config). The runner reads them with frontmatter() and applies them by flag
+# (bin/sdd: hat_disallowed, hat_writes, hat_mcp); what this file measures is the DECLARATION,
+# because a hat that declares nothing is a hat that gets everything, silently.
+# Spec: docs/superpowers/specs/2026-09-03-a-fronteira-do-chapeu-design.md.
+#
+# Why two keys for one deny list, measured 2026-09-06 (Claude Code 2.1.263, five headless probes):
+# `--agent` now honours the file's `disallowedTools:`, and the harness reads that key as tool
+# names — `Bash(git push:*)` there removes `Bash` WHOLE from the session's tool list (the docs
+# define the key as names plus `mcp__<server>` patterns; the rule syntax is the CLI's and the
+# settings'). The first mission of the fourth window spent three TICKET sessions, US$ 3,39, in
+# sessions that had no Bash at all. The same rule on the CLI flag keeps Bash and denies the push,
+# so a rule lives in `permissionsDeny:` and never in `disallowedTools:`; R3 and R4 are that line.
 #
 # Rules, each with a selftest probe below:
-#   R1  every agents/sdd-*.md carries the three keys (present; empty is a legal value)
+#   R1  every agents/sdd-*.md carries the four keys (present; empty is a legal value)
 #   R2  every `$name` in `writes:` is one of the placeholders the runner expands — an unknown one
 #       would never match a path and the whole hat would read as "writes nowhere"
-#   R3  every `disallowedTools:` item is `Name` or `Name(pattern)` — a stray quote or a bare `(`
-#       is a token the harness would neither deny nor refuse
+#   R3  every `disallowedTools:` item is a bare `Name` or an `mcp__server` / `mcp__server__*`
+#       pattern — a `Name(pattern)` there strips `Name` from the session (see above), and a stray
+#       quote or a bare `(` is a token the harness would neither deny nor refuse
+#   R4  every `permissionsDeny:` item is `Name(pattern)` — a bare name there is a tool, not a
+#       rule, and it belongs in `disallowedTools:` where the harness also enforces it
 # Floor: at least 8 hats on disk, or the glob stopped matching and this sensor reads nothing.
 #
 # This file measures markdown, so no sabotage of bin/sdd can make it die: it carries a selftest
@@ -50,7 +63,7 @@ fm_value() {
 check_file() {
   local f="$1" name key v item bad=0
   name="$(basename "$f")"
-  for key in disallowedTools writes mcp; do
+  for key in disallowedTools permissionsDeny writes mcp; do
     v="$(fm_value "$f" "$key")"
     if [ "$v" = "$ABSENT" ]; then fail "R1 $name: no '$key:' in the frontmatter"; bad=1; fi
   done
@@ -68,12 +81,24 @@ check_file() {
     while IFS= read -r item; do
       item="${item#"${item%%[![:space:]]*}"}"; item="${item%"${item##*[![:space:]]}"}"
       [ -n "$item" ] || continue
-      if ! grep -qE '^[A-Za-z][A-Za-z0-9_]*(\([^()"]+\))?$' <<< "$item"; then
-        fail "R3 $name: disallowedTools item '$item' is not Name or Name(pattern)"; bad=1
+      if grep -qE '^[A-Za-z][A-Za-z0-9_]*\([^()"]+\)$' <<< "$item"; then
+        fail "R3 $name: disallowedTools item '$item' is a permission rule — the harness reads this key as tool names and would strip '${item%%(*}' whole; move it to permissionsDeny:"; bad=1
+      elif ! grep -qE '^[A-Za-z][A-Za-z0-9_]*(__\*)?$' <<< "$item"; then
+        fail "R3 $name: disallowedTools item '$item' is not a tool name or an mcp__server pattern"; bad=1
       fi
     done <<< "$(tr ',' '\n' <<< "$v")"
   fi
-  [ "$bad" -eq 0 ] && pass "$name declares disallowedTools, writes and mcp"
+  v="$(fm_value "$f" permissionsDeny)"
+  if [ "$v" != "$ABSENT" ] && [ -n "$v" ]; then
+    while IFS= read -r item; do
+      item="${item#"${item%%[![:space:]]*}"}"; item="${item%"${item##*[![:space:]]}"}"
+      [ -n "$item" ] || continue
+      if ! grep -qE '^[A-Za-z][A-Za-z0-9_]*\([^()"]+\)$' <<< "$item"; then
+        fail "R4 $name: permissionsDeny item '$item' is not Name(pattern) — a bare name is a tool and belongs in disallowedTools:"; bad=1
+      fi
+    done <<< "$(tr ',' '\n' <<< "$v")"
+  fi
+  [ "$bad" -eq 0 ] && pass "$name declares disallowedTools, permissionsDeny, writes and mcp"
   return "$bad"
 }
 
@@ -81,26 +106,40 @@ selftest() {
   local box PROBES=0 FAILS=0
   box="$(mktemp -d "${TMPDIR:-/tmp}/sdd-hat-selftest-XXXXXX")"
   trap 'rm -rf "$box"' RETURN
-  # probe <description> <expected rc> <file body> — through --check, the reporting path
+  # probe <description> <expected rc> <file body> [<needle>] — through --check, the reporting
+  # path. The optional needle has to appear in what --check printed: a verdict alone cannot tell
+  # the branch that NAMES the repair from the one that only refuses, and the R3 rule branch is
+  # exactly that — drop it and `Bash(git push:*)` still fails, as "not a tool name", which sends
+  # the reader to fix the spelling of the one item whose spelling is right (sabotage measured).
   probe() {
-    local desc="$1" want="$2" body="$3" got
+    local desc="$1" want="$2" body="$3" needle="${4-}" got out
     printf '%s\n' "$body" > "$box/sdd-probe.md"
-    "$ROOT/tests/check-hat.sh" --check "$box/sdd-probe.md" >/dev/null 2>&1; got=$?
+    out="$("$ROOT/tests/check-hat.sh" --check "$box/sdd-probe.md" 2>&1)"; got=$?
     PROBES=$((PROBES + 1))
-    if [ "$got" = "$want" ]; then printf '  ok    %s\n' "$desc"
-    else printf '  FAIL  %s (rc %s, wanted %s)\n' "$desc" "$got" "$want" >&2; FAILS=$((FAILS + 1)); fi
+    local named=1
+    if [ -n "$needle" ] && ! grep -qF -- "$needle" <<< "$out"; then named=0; fi
+    if [ "$got" = "$want" ] && [ "$named" -eq 1 ]; then
+      printf '  ok    %s\n' "$desc"
+    else printf '  FAIL  %s (rc %s, wanted %s%s)\n' "$desc" "$got" "$want" \
+           "${needle:+, and the output had to name: $needle}" >&2; FAILS=$((FAILS + 1)); fi
   }
-  probe 'a hat with the three keys passes' 0 $'---\nname: x\ndisallowedTools: "Agent, Bash(git push:*)"\nwrites: "$HANDOFF_DIR/$MISSION/**, $TODO_FILE"\nmcp: ""\n---\nbody'
-  probe 'empty values are legal' 0 $'---\nname: x\ndisallowedTools: ""\nwrites: ""\nmcp: ""\n---\nbody'
-  probe 'R1: a hat without writes: fails' 1 $'---\nname: x\ndisallowedTools: ""\nmcp: ""\n---\nbody'
-  probe 'R1: a hat without mcp: fails' 1 $'---\nname: x\ndisallowedTools: ""\nwrites: ""\n---\nbody'
-  probe 'R1: a hat without disallowedTools: fails' 1 $'---\nname: x\nwrites: ""\nmcp: ""\n---\nbody'
-  probe 'R2: a placeholder with a digit ($E2E_DIR) is read whole — a regex stopping at the digit read it as $E' 0 $'---\nname: x\ndisallowedTools: ""\nwrites: "$E2E_DIR/**"\nmcp: ""\n---\nbody'
-  probe 'R2: an unknown placeholder fails' 1 $'---\nname: x\ndisallowedTools: ""\nwrites: "$HANDOFFS/**"\nmcp: ""\n---\nbody'
-  probe 'R3: a stray quote in a deny item fails' 1 $'---\nname: x\ndisallowedTools: "Agent, \\"Bash(git push:*)"\nwrites: ""\nmcp: ""\n---\nbody'
-  probe 'R3: a bare pattern without a tool name fails' 1 $'---\nname: x\ndisallowedTools: "(git push:*)"\nwrites: ""\nmcp: ""\n---\nbody'
-  probe 'negative control: a key AFTER the closing --- is body, not frontmatter' 1 $'---\nname: x\ndisallowedTools: ""\nwrites: ""\n---\nmcp: ""'
-  if [ "$PROBES" -lt 10 ]; then printf '  probe floor shrank: %d < 10\n' "$PROBES" >&2; return 93; fi
+  probe 'a hat with the four keys passes' 0 $'---\nname: x\ndisallowedTools: "Agent, Monitor"\npermissionsDeny: "Bash(git push:*), Bash(gh pr merge:*)"\nwrites: "$HANDOFF_DIR/$MISSION/**, $TODO_FILE"\nmcp: ""\n---\nbody'
+  probe 'empty values are legal' 0 $'---\nname: x\ndisallowedTools: ""\npermissionsDeny: ""\nwrites: ""\nmcp: ""\n---\nbody'
+  probe 'R1: a hat without writes: fails' 1 $'---\nname: x\ndisallowedTools: ""\npermissionsDeny: ""\nmcp: ""\n---\nbody'
+  probe 'R1: a hat without mcp: fails' 1 $'---\nname: x\ndisallowedTools: ""\npermissionsDeny: ""\nwrites: ""\n---\nbody'
+  probe 'R1: a hat without disallowedTools: fails' 1 $'---\nname: x\npermissionsDeny: ""\nwrites: ""\nmcp: ""\n---\nbody'
+  probe 'R1: a hat without permissionsDeny: fails — the key the rules moved to has to exist to be read' 1 $'---\nname: x\ndisallowedTools: ""\nwrites: ""\nmcp: ""\n---\nbody'
+  probe 'R2: a placeholder with a digit ($E2E_DIR) is read whole — a regex stopping at the digit read it as $E' 0 $'---\nname: x\ndisallowedTools: ""\npermissionsDeny: ""\nwrites: "$E2E_DIR/**"\nmcp: ""\n---\nbody'
+  probe 'R2: an unknown placeholder fails' 1 $'---\nname: x\ndisallowedTools: ""\npermissionsDeny: ""\nwrites: "$HANDOFFS/**"\nmcp: ""\n---\nbody'
+  probe 'R3: a permission rule in disallowedTools fails — it would strip the tool whole (measured, 2.1.263)' 1 $'---\nname: x\ndisallowedTools: "Agent, Bash(git push:*)"\npermissionsDeny: ""\nwrites: ""\nmcp: ""\n---\nbody'
+  probe 'R3: ...and the verdict names the repair, not a misspelling' 1 $'---\nname: x\ndisallowedTools: "Agent, Bash(git push:*)"\npermissionsDeny: ""\nwrites: ""\nmcp: ""\n---\nbody' "would strip 'Bash' whole; move it to permissionsDeny:"
+  probe 'R3: an mcp__server__* pattern is a legal name' 0 $'---\nname: x\ndisallowedTools: "mcp__github, mcp__atlassian__*"\npermissionsDeny: ""\nwrites: ""\nmcp: ""\n---\nbody'
+  probe 'R3: a stray quote in a deny item fails' 1 $'---\nname: x\ndisallowedTools: "Agent, \\"Monitor"\npermissionsDeny: ""\nwrites: ""\nmcp: ""\n---\nbody'
+  probe 'R4: a bare name in permissionsDeny fails — a tool is not a rule' 1 $'---\nname: x\ndisallowedTools: ""\npermissionsDeny: "Bash(git push:*), Agent"\nwrites: ""\nmcp: ""\n---\nbody'
+  probe 'R4: a bare pattern without a tool name fails' 1 $'---\nname: x\ndisallowedTools: ""\npermissionsDeny: "(git push:*)"\nwrites: ""\nmcp: ""\n---\nbody'
+  probe 'R4: a stray quote in a rule fails' 1 $'---\nname: x\ndisallowedTools: ""\npermissionsDeny: "\\"Bash(git push:*)"\nwrites: ""\nmcp: ""\n---\nbody'
+  probe 'negative control: a key AFTER the closing --- is body, not frontmatter' 1 $'---\nname: x\ndisallowedTools: ""\npermissionsDeny: ""\nwrites: ""\n---\nmcp: ""'
+  if [ "$PROBES" -lt 16 ]; then printf '  probe floor shrank: %d < 16\n' "$PROBES" >&2; return 93; fi
   [ "$FAILS" -eq 0 ] || return 90
   printf '  ok    check-hat selftest: %d probes\n' "$PROBES"
 }

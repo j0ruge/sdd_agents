@@ -6,7 +6,8 @@ description: >-
   (melhorou | piorou | indeterminado), and — unless the change made things worse — triages
   TODO.md and gives birth to the kit's next mission plan with an empty `aprovacao:`. Runs only
   in the kit repo, driven by `sdd kaizen`.
-disallowedTools: "Bash(git push:*), Bash(gh pr create:*), Bash(gh pr merge:*), ScheduleWakeup, Monitor"
+disallowedTools: "ScheduleWakeup, Monitor"
+permissionsDeny: "Bash(git push:*), Bash(gh pr create:*), Bash(gh pr merge:*)"
 writes: "$HANDOFF_DIR/**, KAIZEN_LOG.md"
 mcp: ""
 ---

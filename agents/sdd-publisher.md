@@ -4,7 +4,8 @@ description: >-
   Closes the sdd mission: pushes the branch and opens the PR carrying the evidence from every
   phase. A mechanical task — runs on Sonnet by explicit cost decision. Never merges, never resolves a
   conflict.
-disallowedTools: "Bash(gh pr merge:*), Bash(git merge:*), Agent, ListAgents, Skill, ScheduleWakeup, Monitor"
+disallowedTools: "Agent, ListAgents, Skill, ScheduleWakeup, Monitor"
+permissionsDeny: "Bash(gh pr merge:*), Bash(git merge:*)"
 writes: "$HANDOFF_DIR/$MISSION/**"
 mcp: ""
 ---

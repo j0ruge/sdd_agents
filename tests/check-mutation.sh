@@ -1020,6 +1020,14 @@ mut_RUN_blocked_retry_not_escalated() {
   sed -i '/^    if \[ "\$gate_rc2" -eq 0 \]; then$/,/^    if \[ "\$moved2" = "false" \]; then$/ s|^    if handoff_blocked_escalation "\$phase"; then return 3; fi$|    if false; then return 3; fi|' "$1"
 }
 
+# gate_TICKET reads `blocked` and does not arm the marker — the shape until 2026-09-06, when a
+# blocked ticket spun to `no-progress` at one dead session per lap. The range keeps it off gate_QA's
+# identical line. check-autonomy's "a blocked ticket escalates on the first session" reads
+# `3|2|blocked|no-progress` on the blocked half and dies.
+mut_RUN_ticket_blocked_not_armed() {
+  sed -i '/^gate_TICKET() {$/,/^}$/ s|^    GATE_HANDOFF_BLOCKED=1$|    GATE_HANDOFF_BLOCKED=0|' "$1"
+}
+
 # Door 1 of the app-down escalation, and the sibling of RUN_blocked_not_escalated above in every
 # respect: same range, same neutralisation, and the line substituted is textually distinct so
 # neither mutant can apply to the other's door.
@@ -1108,6 +1116,21 @@ mut_RUN_init_blind() {
   sed -i '/^hat_init_facts() {/,/^}/ s|^  \[ -n "\$init" \] \|\| return 0$|  return 0|' "$1"
 }
 
+# The harness version is fetched from the init line and dropped: every session row reads
+# `harness: null`, the way it did until 2026-09-06, when a 2.1.259 -> 2.1.263 bump inside a window
+# took Bash from every hat and no row said so. check-autonomy's "the harness version is read off
+# the init line into the row" dies on the fixture's own value.
+mut_RUN_harness_blind() {
+  sed -i 's|^  LAST_PHASE_HARNESS="$( jq -r '"'"'.claude_code_version // ""'"'"' <<< "$init" 2>/dev/null )" \|\| LAST_PHASE_HARNESS=""$|  LAST_PHASE_HARNESS=""|' "$1"
+}
+
+# The row carries the version and the slice the judge reads does not: `sdd kaizen --series`
+# answers an empty list for every version. Its sibling is the mutant above; what this one
+# isolates is the READER. "series: the slice lists the harness versions its sessions ran on" dies.
+mut_RUN_series_harness_blind() {
+  sed -i 's|^         harness: ($sess \| map(.harness // empty) \| unique),$|         harness: [],|' "$1"
+}
+
 # The context bill goes silent. The target's CLAUDE.md plus its .claude/rules/ is ~73% of the fixed
 # prefix every turn of every phase carries, and it is the one term the kit deliberately does not
 # cut — so making it VISIBLE is the entire contribution, and a preflight that stopped printing it
@@ -1124,6 +1147,21 @@ mut_PREFLIGHT_context_bill_silent() {
 # "the context bill is reported" in check-preflight.sh, whose fixture has neither file.
 mut_PREFLIGHT_context_bill_unguarded() {
   sed -i '/^cmd_preflight() {/,/^}/ s@^    \[ -f "$cb" \] || continue$@    :@' "$1"
+}
+
+# The auth probe of preflight, back to its 2026-09-05 shape: no --agent, so the session it fires
+# is not the one run_phase fires, and a hat that boots without Bash reads green. check-preflight's
+# flag-sensitive stub B answers WITH Bash when nobody asks as the hat, so "a hat that boots without
+# Bash is named by the probe" dies.
+mut_PREFLIGHT_hat_probe_without_agent() {
+  sed -i 's|^    if \[ -n "\$hat" \] && \[ -f "\$REPO_ROOT/.claude/agents/\$hat.md" \]; then probe_agent=(--agent "\$hat"); fi$|    probe_agent=()|' "$1"
+}
+
+# The init line is fetched and never read: the branch that names a hat without Bash is gone, and
+# the marker in the answer buys the green again. Same stub B; "and the marker in the answer does
+# not buy a green over a missing tool" dies.
+mut_PREFLIGHT_bash_in_init_unchecked() {
+  sed -i 's|^    elif \[ -n "\$probe_init" \] && ! jq -e '"'"'.tools // \[\] \| index("Bash") != null'"'"' <<< "\$probe_init" >/dev/null 2>&1; then$|    elif false; then|' "$1"
 }
 
 # Item 6 goes back to pointing at the whole templates directory: seven files, 22 480 B, in every
@@ -3203,6 +3241,7 @@ CATALOG=(
   RUN_jidoka_pipefail
   RUN_blocked_not_escalated
   RUN_blocked_retry_not_escalated
+  RUN_ticket_blocked_not_armed
   RUN_app_down_not_escalated
   RUN_app_down_retry_not_escalated
   RUN_strict_mcp_dropped
@@ -3214,6 +3253,8 @@ CATALOG=(
   RUN_hat_close_door_missing
   RUN_kit_touched_silent
   RUN_init_blind
+  RUN_harness_blind
+  RUN_series_harness_blind
   CENSUS_tools_blind
   CENSUS_per_file_blind
   BOOT_notes_not_inlined
@@ -3222,6 +3263,8 @@ CATALOG=(
   BOOT_templates_whole_dir
   PREFLIGHT_context_bill_silent
   PREFLIGHT_context_bill_unguarded
+  PREFLIGHT_hat_probe_without_agent
+  PREFLIGHT_bash_in_init_unchecked
   CENSUS_templates_count_plan
   GATE_tldr_uncapped_EXEC
   GATE_tldr_uncapped_QA

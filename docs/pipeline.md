@@ -102,6 +102,12 @@ the **same** branch.
 Requiring `sprint:` is deliberate: a card created in the backlog is invisible work for the team.
 The `ticket` skill creates it straight into the active sprint and confirms it left the backlog.
 
+`status: blocked` in `10-ticket.md` stops the line on the **first** session, like QA's handoff:
+the ticket hat saying no issue could be opened (no sprint, no `acli`, no shell) is a human's
+decision to take, and re-reading the same refusal at one session per lap until `no-progress` is
+what it cost before 2026-09-06 (three sessions, US$ 3,39). The check runs before the `issue:` and
+`sprint:` ones, because a blocked ticket has neither.
+
 The `branch:` check exists because the runner honours `branch:` from `00-missao.md` and from
 nowhere else. The session writes the name back and commits both files; a `10-ticket.md` that
 declares a branch nobody copied over means every later phase runs on whatever branch the human is
@@ -554,16 +560,27 @@ unsatisfiable by construction. `bypassPermissions` is never the kit's default.
 
 Since the 2026-09-03 spec every phase also gets **the hat's boundary**: `--disallowedTools` with
 `HAT_DENY_BASE` (the tools no phase used in 43 measured sessions — cron, worktree, remote trigger,
-web search…) plus the `disallowedTools:` line of the phase's `agents/<hat>.md`, and
+web search…) plus the `disallowedTools:` line of the phase's `agents/<hat>.md` (tool **names**)
+plus its `permissionsDeny:` line (permission **rules**, `Bash(git push:*)`), and
 `--strict-mcp-config` whenever the hat's `mcp:` is empty — which is every hat today. A deny beats
 an allow, so `Bash` stays allowed while `Bash(git push:*)` is denied to every hat but the
 publisher. `sdd run --dry-run` prints a `boundary:` line per phase with exactly what will be
-passed; `tests/check-dry-run.sh` asserts it. The frontmatter keys are the declaration, the flag is
-the rule: in a `-p` session the harness reads only `model`, `permissionMode` and `skills` from an
-agent file.
+passed; `tests/check-dry-run.sh` asserts it.
 
-`sdd preflight` proves this by firing a real headless session with the same flags and demanding it
-**execute** a command. "claude answers" does not cover this failure mode.
+⚠️ **Two keys for one list, and the split is measured (2026-09-06, Claude Code 2.1.263).** The
+harness reads the agent file's `disallowedTools:` as tool names — the documented contract, names
+plus `mcp__<server>` patterns — so a permission rule written there removes the tool **whole**:
+`Bash(git push:*)` in the frontmatter booted every phase without a shell (three TICKET sessions,
+US$ 3,39, `no-progress`). On 2.1.259 the file was ignored in `-p` sessions and the flag carried
+everything, which is what let the rules sit in the wrong key for two missions. Names go in
+`disallowedTools:` (the harness enforces them too); rules go in `permissionsDeny:`, a kit key no
+harness reads; `hat_disallowed` joins both onto the flag, where a rule is a permission and keeps
+`Bash`. `tests/check-hat.sh` R3/R4 refuse the two mix-ups.
+
+`sdd preflight` proves this by firing a real headless session **as the executor hat**, under the
+flags `run_phase` composes for it, and reading two artifacts: `Bash` on the stream's `init` line
+and the marker in the answer. "claude answers" does not cover this failure mode, and neither did
+a probe without `--agent` — it was green on the day every hat had no shell.
 
 ## Costs and logs
 
@@ -803,6 +820,7 @@ prose.
 | `mcp_seen` | number \| null | on `event:"session"` rows | MCP servers the session could see that its hat did not declare (`mcp:`), read off the stream's `init` line. `null` = no init line (the session died before one). Any value above 0 stops the line (`hat-crossed`). |
 | `tools_leaked` | number \| null | idem | tools from the deny list still listed in `init` — the harness did not honour `--disallowedTools`. Above 0 stops the line. |
 | `denials` | number \| null | idem | `permission_denials` of the result: how often the session asked for what its hat denies. Not an escalation — a fact about the hat's fit. |
+| `harness` | string \| null | idem | `claude_code_version` of the `init` line — the machine the kit ran on. `null` = no init line. `sdd kaizen --series` lists the versions of each `kit_sha` slice; a bump inside a window is a confounder the judge can now see (2.1.259 → 2.1.263 took `Bash` from every hat on 2026-09-06, and no row said so). |
 | `moved` | boolean | on escalation rows | ⚠️ The whole waste metric: `state_fingerprint` before ≠ after, and `state_fingerprint` is git HEAD + the mission directory listing + the checkpoint file's md5. `moved` alone no longer names a bucket: since `20260828-instrumento-honesto` both readers classify a comparable session as `advanced` (the gate passed — the gate is the artifact), `churned` (`moved:true` and the gate failed: the session wrote and the runner bought another lap) or `idle` (`moved:false` and the gate failed — the old `stalled`, under the name that says what it is). ⚠️ Since `20260829-o-incremento-que-andou` a session also reads `advanced` when `pending_after < pending_before` — **the increment moved**, which is the whole point of an EXEC session and something the gate cannot say, because `gate_EXEC` refuses by construction until the last increment. Both operands must be non-`null` for that arm to fire: `jq` sorts `null` below every number, so `null < 2` is true, and without the guard the session whose gate REFUSED the checkpoint (which publishes no `pending_after`) would have read as the highest progress in the ledger — a fail-open in the flattering direction. Declared limit, same place: the session that closes the last increment over a red suite reads `advanced` by the count while the lap it buys reads `churned` — the gate is the artifact of the NEXT lap. ⚠️ Since `20260831-a-rodada-que-andou` a **third** arm says the same about `REVIEW`, which is a loop by design too: a session reads `advanced` when `rounds_after > rounds_before` — **the round landed** — so an r1 that arrived with real findings and did not reach Grade A stops reading as churn. A separate arm and not a generalisation of the second, because the two counts move in **opposite directions**: `EXEC` counts what is still to do and goes down, `REVIEW` counts what has landed and goes up, and a single "the number changed" arm would call a checkpoint that *grew* (the fix increments QA writes) progress. It carries **one** non-`null` guard against EXEC's two, and the asymmetry is the operand order rather than an oversight: the possibly-`null` field sits on the LEFT of `>`, where `null > 2` is false, so `rounds_before != null` alone closes the hole — a redundant guard is removed here rather than probed. `waste = churned + idle`. ONE definition, `ledger_outcome_defs` in `bin/sdd`, spliced into `cmd_autonomy` and `kaizen_series`; `tests/check-autonomy.sh` and `tests/check-kaizen.sh` compare the two histograms over one file. |
 | `pending_before` | integer \| `null` | on escalation rows; never absent on a session row, but `null` outside `EXEC` | How many increments the checkpoint still listed as `pending` or `doing` when the session opened — a PHOTOGRAPH, taken by `cmd_run`/`cmd_retry` before `run_phase`, because once the session has edited the checkpoint the question is unanswerable. `null` outside EXEC: no other phase has an increment to advance, and a `0` would enter the judge's arithmetic as a session that stood still. ⚠️ It is also `null` on every EXEC row written before `20260829-o-incremento-que-andou` added the three fields, and those rows are **not** left reading as churn: `historic_progress` in `ledger_outcome_defs` recovers the same fact from the prose `gate_why` already carried (`^N of M increment`), annotating `pending_after = N`, `increments_total = M`, `pending_before` = the previous EXEC row's `N` for the same `(repo, mission)` in FILE order, and `progress_source: "gate_why"`. Three rules earn their own mutants because each fails in a different direction: the first row of a mission (and any row where `M` changed, which is QA writing a fix increment, not churn) compares against `M`; a preceding `gate: pass` clears the memory; and the guard is `.pending_before == null` and never `has("pending_before")` — `autonomy_session_row` builds the object with `tonumber? // null`, so the KEY is present on every row and `has()` would annotate nothing. A dated read path, never a migration: the ledger is append-only, no line is ever rewritten. `sdd autonomy` prints how many rows it read that way (`(N EXEC row(s) older than the pending fields read their progress from gate_why)`) and the path is deletable the day that number reaches zero. |
 | `pending_after` | integer \| `null` | on escalation rows; never absent on a session row, but `null` outside `EXEC` | The same count as the gate saw it, from `GATE_EXEC_PENDING` — a VERDICT, not a photograph. `gate_EXEC` publishes it only *after* its validation loop **and after the Jidoka refusal**, so a gate that is about to refuse leaves the pair `null` and the reader falls back to `moved`. Two refusals, not one, and each cost its own bug: (a) a checkpoint refused for a label with no artifact (`done` with no commit, a commit outside the history of HEAD); (b) a checkpoint carrying a `blocked` increment. ⚠️ (b) was published until 2026-08-30 and was a fail-open in the flattering direction — `checkpoint_tally` counts `pending|doing` and files `blocked` in a bucket of its own, so **giving up** on an increment lowers `pending` exactly as **finishing** it does, and the one session in the pipeline that *stopped the line* read `advanced` at `0% waste`. A real EXEC row of `20260825-cif-forma-pagamento` is that session; it reads honestly today only because it predates these fields. Blocking is not closing. Both orderings are assertions in `tests/check-autonomy.sh` (`a done without commit publishes no pending_after`, `a blocked increment publishes no pending_after`) with a mutant each. |
