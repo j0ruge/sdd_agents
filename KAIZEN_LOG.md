@@ -4,6 +4,35 @@ Registro de melhorias com **antes/depois medido**. Sem número, não entra.
 
 ---
 
+## 2026-09-06 — O chapéu sem Bash: o harness passou a ler o frontmatter, e o kit não sabia
+
+**Problema (Gemba):** o Claude Code subiu de 2.1.259 para 2.1.263 dentro da janela 4 e passou a
+honrar o `disallowedTools:` do arquivo do agente — como **nomes** de ferramenta, que é o contrato
+documentado. As três regras `Bash(git push:*)`/`Bash(gh pr …:*)` que os oito chapéus carregavam
+ali tiraram o **Bash inteiro** de toda fase com `--agent`. Medido em 2026-09-06:
+
+| O que | Medido | Comando |
+|---|---|---|
+| sessões de TICKET sem Bash na `20260906-o-contato-sobrevive-ao-notfound` | **3** (US$ 1,26 + 1,21 + 0,92 = **US$ 3,39**), parada por `no-progress` e não por `blocked` | ledger `~/.sdd/autonomy-log.jsonl` |
+| `tools` da linha `init` sob `--agent sdd-ticket` | 7 (`Edit Read Skill TaskOutput TaskStop ToolSearch Write`), **sem Bash** | `jq` no `TICKET-*.stream.jsonl` |
+| `sdd preflight` na madrugada | **verde** — o probe rodava sem `--agent` e dizia "the same flags as run_phase" | `bin/sdd:3805` (antes) |
+| probes headless (haiku, projeto temporário) | frontmatter `Bash(git push:*)` → Bash **não**; só na CLI → Bash **sim** e `permission_denials: 1` | F1–F5, ver `docs/pipeline.md` |
+
+**Contramedida:** `permissionsDeny:` (chave do kit) para as regras, `disallowedTools:` só com nomes,
+`hat_disallowed` junta as duas na flag; `tests/check-hat.sh` R3/R4 recusam a mistura (16 probes,
+sabotagem medida nas três regras); o `sdd preflight` dispara o chapéu do executor com as flags reais
+e lê `Bash` na `init` (par diferencial com a `init` real de 2.1.263, 2 mutantes); `gate_TICKET` arma
+o marcador de bloqueio (1 mutante); a linha `session` do ledger e a série carregam `harness:`
+(2 mutantes).
+
+**Depois, medido:** sessão real sob `--agent sdd-executor` em 2.1.263 lista **12** ferramentas com
+Bash, sem Monitor, sem Task, sem MCP; `sdd preflight` no kit responde `ok headless session under
+the sdd-executor hat executes commands`; no fixture, um `10-ticket.md` bloqueado para em **1**
+sessão (`handoff-blocked`, fase `TICKET`) onde antes gastava 2 e caía em `no-progress`. O que fica
+para o `TODO.md`: o juiz ainda não recusa uma fatia com duas versões de harness — só a vê.
+
+---
+
 ## 2026-09-04 — A dieta de contexto: o boot manda um orçamento, o runner aplica (missão `20260904-a-dieta-de-contexto`)
 
 **Problema (Gemba):** a rule 3 da anatomia declarava "sem dieta", e o instrumento para medi-la não

@@ -43,9 +43,15 @@ só o executor edita código. Ferramenta a mais é superfície de erro que nenhu
 `disallowedTools:`, `writes:` e `mcp:`, o runner passa `--disallowedTools` e `--strict-mcp-config`
 por fase, e a linha `init` do stream prova no ledger (`mcp_seen`, `tools_leaked`). Medido antes:
 0 negações em 43 sessões, 9 servidores MCP e 104 ferramentas em toda fase; depois, o executor vê
-14. O que fica: `--setting-sources user,project,local` continua carregando as skills do humano —
-medido, é 2% do prefixo e três fases dependem delas (`codereview`, `ticket`, `qa-*`); a rota é a
-linha 2 do ADR 0007, não uma flag.
+14. ⚠️ Reaberta e fechada de novo em 2026-09-06: o Claude Code 2.1.263 passou a **ler** o
+`disallowedTools:` do arquivo do agente, como nomes, e as três regras `Bash(…)` que moravam ali
+tiraram o Bash inteiro de toda fase (3 sessões de TICKET, US$ 3,39). As regras vivem em
+`permissionsDeny:` (chave do kit), os nomes em `disallowedTools:`, `hat_disallowed` junta as duas na
+flag, `tests/check-hat.sh` R3/R4 recusam a mistura, o `sdd preflight` dispara o chapéu do executor e
+lê `Bash` na `init`, e a linha `session` do ledger carrega `harness:` para o bump deixar de ser
+invisível. O que fica: `--setting-sources user,project,local` continua carregando as skills do
+humano — medido, é 2% do prefixo e três fases dependem delas (`codereview`, `ticket`, `qa-*`); a
+rota é a linha 2 do ADR 0007, não uma flag.
 
 ## 3. Gestão de contexto — o que o agente sabe agora
 
