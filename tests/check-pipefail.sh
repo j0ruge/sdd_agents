@@ -78,6 +78,13 @@
 # the shape people actually write, because every generalisation tried on the neighbouring sensors
 # fired on legitimate lines first.
 #
+# FALSE POSITIVE, declared (2026-09-06): the logical OR `|| grep -q …` is read as a pipe, because
+# the second bar of `||` followed by a space and `grep` is exactly the shape RULE 1 keys on. It
+# fired on a legitimate `{ [ -z "$x" ] || grep -qF -- "$x" <<< "$out"; }` in tests/check-hat.sh,
+# which was rewritten rather than the rule loosened: a `(^|[^|])\|` prefix would fix it, but every
+# change to PIPE_RE has to re-run the sabotage pass in selftest() first, and the cost of the
+# rewrite was one line. Errs toward flagging, which is the safe direction for this rule.
+#
 # The waiver is a real hole and worth naming: a genuine bug on a marked line is invisible. What
 # bounds it is that the marker is grep-able, self-documenting, and shows up in the summary count,
 # so growth is visible in the diff rather than in nobody's memory.

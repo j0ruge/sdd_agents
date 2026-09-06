@@ -3850,6 +3850,9 @@ cmd_preflight() {
   # copy the harness loads — and reads TWO artifacts: `Bash` on the stream's init line (the tool
   # list the session actually got) and the marker in the result (the permission to run it). No
   # init line and no answer is the old "did not answer"; an init line without Bash names the hat.
+  # ONE hat, the executor's, by cost: eight sessions per preflight is not a preflight. The other
+  # seven declare the same key shape, and tests/check-hat.sh R3 refuses the mix-up in every file;
+  # what this probe adds is the harness's reading of it, which no sensor on the declaration can see.
   if command -v claude >/dev/null 2>&1; then
     local hat probe_stream probe_init probe_answer probe_tools
     local -a probe_agent=()
