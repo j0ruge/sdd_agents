@@ -728,9 +728,23 @@ gate_PLAN() {
 }
 
 gate_TICKET() {
+  GATE_HANDOFF_BLOCKED=0
   if [ "$JIRA_ENABLED" != "true" ]; then GATE_WHY="JIRA_ENABLED=false — phase skipped"; return 0; fi
   local t="$MISSION_DIR/10-ticket.md"
   [ -f "$t" ] || { GATE_WHY="missing 10-ticket.md"; return 1; }
+  # `blocked` here is the ticket hat saying no issue could be opened — no sprint, no acli, no
+  # shell. The marker is what cmd_run's doors read to stop on the spot; without it the phase went
+  # through the fingerprint heuristic like any failing gate, one session per lap, each re-reading
+  # the same refusal: 2026-09-06, three TICKET sessions without Bash, US$ 3,39, `no-progress`.
+  # The artifact has an owner inside the pipeline — sdd-ticket writes 10-ticket.md — so the gate
+  # that stops here is satisfiable, which is the half of the rule the QA anchors once missed.
+  # BEFORE the issue/sprint checks: a blocked ticket has neither, and refusing it for the missing
+  # sprint would spin exactly the loop the marker exists to end.
+  local st; st="$(frontmatter "$t" status)"
+  if [ "$st" = "blocked" ]; then
+    GATE_HANDOFF_BLOCKED=1
+    GATE_WHY="10-ticket.md has status: blocked"; return 1
+  fi
   local issue; issue="$(frontmatter "$t" issue)"
   [ -n "$issue" ] || { GATE_WHY="10-ticket.md has no 'issue:' in the frontmatter"; return 1; }
   if ! grep -qiE '^sprint:[[:space:]]*\S' "$t"; then
@@ -783,8 +797,12 @@ GATE_EXEC_DIRTY=0
 #
 # CONTRACT for whoever teaches a second gate the token: reset it at the entry of THAT gate, never
 # at a call site. `current_phase` walks every gate in order, so a marker left set by an evaluation
-# two phases ago would escalate a phase whose own handoff says nothing of the kind. Today gate_QA
-# is the only setter, and the only reader is handoff_blocked_escalation.
+# two phases ago would escalate a phase whose own handoff says nothing of the kind. Two setters
+# today — gate_QA, and gate_TICKET since 2026-09-06 — each resetting it on entry, and the only
+# reader is handoff_blocked_escalation. The second setter RE-DERIVES the property below rather
+# than inheriting it: the walk visits TICKET before QA; a gate that passes leaves the marker 0; a
+# gate that arms it fails, and the walk stops at the first failure, so no later gate runs over an
+# armed marker; and every lap that finds it armed returns 3. No new path leaves a lap with it set.
 #
 # That reader is called from BOTH doors of cmd_run's loop — the first pass and the inline retry —
 # and the second door is not symmetry for its own sake. With only the first, the marker outlived

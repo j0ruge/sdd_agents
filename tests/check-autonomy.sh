@@ -1838,6 +1838,43 @@ assert_eq "status: blocked escalates on the first session, where an ordinary gat
   "3|1|blocked|handoff-blocked · 3|2|blocked|no-progress" \
   "$qa_blocked · $qa_ordinary"
 
+# --- ...and the TICKET phase stops on the same word ---------------------------
+# gate_TICKET never armed the marker: a 10-ticket.md declaring `blocked` (no issue could be
+# opened — no sprint, no acli, no shell) went through the fingerprint heuristic like any failing
+# gate, one dead session per lap, until `no-progress`. 2026-09-06, the first mission of the
+# fourth window: three TICKET sessions without Bash, US$ 3,39, and a `no-progress` row that named
+# neither the cause nor anyone who could act. Same pair as QA's, same dead stub, JIRA on for the
+# two runs only; the ordinary half is a ticket that fails for the missing sprint and still spends
+# its two sessions — so a gate that escalated on ANY failure takes that half red.
+echo "== status: blocked in 10-ticket.md escalates on the first session too =="
+# JIRA on makes gate_PLAN demand `versao:` in 00-missao.md (a human decision, never headless), so
+# the mission file gets one for the pair and comes back byte for byte after it.
+cp "$MDIR/00-missao.md" "$OUTSIDE/00-missao.before-ticket"
+sed -i '2i versao: 0.0.1' "$MDIR/00-missao.md"
+sed -i 's/^JIRA_ENABLED=false$/JIRA_ENABLED=true/' .sdd/config.sh
+: > "$LEDGER"
+printf -- '---\nfase: TICKET\nstatus: blocked\nissue: SQ-0\nsprint: none\n---\n' > "$MDIR/10-ticket.md"
+git add -A && git commit -qm "chore: ticket declares blocked, JIRA on"
+"$SDD" run "$MISSION" >/dev/null 2>&1; rc=$?
+ticket_blocked="$(blocked_shape "$rc")"
+ticket_blocked_phase="$(jq -r -s '[.[] | select(.event == "blocked")][0].phase' "$LEDGER")"
+
+: > "$LEDGER"
+printf -- '---\nfase: TICKET\nstatus: done\nissue: SQ-0\n---\n' > "$MDIR/10-ticket.md"
+git add -A && git commit -qm "chore: ticket without a sprint, JIRA on"
+"$SDD" run "$MISSION" >/dev/null 2>&1; rc=$?
+ticket_ordinary="$(blocked_shape "$rc")"
+
+assert_eq "a blocked ticket escalates on the first session, where a ticket without a sprint still spends two" \
+  "3|1|blocked|handoff-blocked · 3|2|blocked|no-progress" \
+  "$ticket_blocked · $ticket_ordinary"
+assert_eq "and the escalation names TICKET, not the phase after it" "TICKET" "$ticket_blocked_phase"
+
+sed -i 's/^JIRA_ENABLED=true$/JIRA_ENABLED=false/' .sdd/config.sh
+cp "$OUTSIDE/00-missao.before-ticket" "$MDIR/00-missao.md"
+rm -f "$MDIR/10-ticket.md"
+git add -A && git commit -qm "chore: JIRA off again, ticket gone"
+
 # --- ...and a `--max-phases` ceiling does not turn that into rc 0 -----------
 # Door 1 used to sit BELOW the ceiling check, so `sdd run --max-phases 1` against this very
 # handoff opened and paid for a QA session, armed the marker, and returned **0**: no ledger row,

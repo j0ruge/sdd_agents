@@ -1020,6 +1020,14 @@ mut_RUN_blocked_retry_not_escalated() {
   sed -i '/^    if \[ "\$gate_rc2" -eq 0 \]; then$/,/^    if \[ "\$moved2" = "false" \]; then$/ s|^    if handoff_blocked_escalation "\$phase"; then return 3; fi$|    if false; then return 3; fi|' "$1"
 }
 
+# gate_TICKET reads `blocked` and does not arm the marker — the shape until 2026-09-06, when a
+# blocked ticket spun to `no-progress` at one dead session per lap. The range keeps it off gate_QA's
+# identical line. check-autonomy's "a blocked ticket escalates on the first session" reads
+# `3|2|blocked|no-progress` on the blocked half and dies.
+mut_RUN_ticket_blocked_not_armed() {
+  sed -i '/^gate_TICKET() {$/,/^}$/ s|^    GATE_HANDOFF_BLOCKED=1$|    GATE_HANDOFF_BLOCKED=0|' "$1"
+}
+
 # Door 1 of the app-down escalation, and the sibling of RUN_blocked_not_escalated above in every
 # respect: same range, same neutralisation, and the line substituted is textually distinct so
 # neither mutant can apply to the other's door.
@@ -3233,6 +3241,7 @@ CATALOG=(
   RUN_jidoka_pipefail
   RUN_blocked_not_escalated
   RUN_blocked_retry_not_escalated
+  RUN_ticket_blocked_not_armed
   RUN_app_down_not_escalated
   RUN_app_down_retry_not_escalated
   RUN_strict_mcp_dropped
