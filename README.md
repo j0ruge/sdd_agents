@@ -35,6 +35,11 @@ $EDITOR .sdd/config.sh # set TEST_CMD, E2E_CMD, APP_URL, OUTPUT_LANG, JIRA_ENABL
 sdd preflight          # environment sensor: claude, gh, GNU userland, git 2.31+, agent-browser, clean tree
 ```
 
+Adopting **only** the planning half — the three artifacts, executed by an interactive session
+instead of `sdd run` — is a supported tier with a lighter setup (no budgets, no `TEST_CMD` the
+gates depend on, no preflight). See [`docs/plan-only.md`](docs/plan-only.md); the agents there are
+symlinked to this kit with `sdd-link-agents`, so an improvement here reaches every target at once.
+
 `sdd install` is idempotent: running it again shows the agent diff instead of overwriting.
 `sdd preflight` compares the installed copies with the kit source **byte for byte** and fails on a
 stale one: the harness loads `.claude/agents/`, so a corrected source proves nothing on its own.
@@ -134,6 +139,7 @@ the directory `docs/handoffs/<YYYYMMDD>-<slug>/`.
 |---|---|
 | [`docs/pipeline.md`](docs/pipeline.md) | state machine, gates per phase, what each agent reads and writes |
 | [`docs/failure-modes.md`](docs/failure-modes.md) | what breaks, how the kit reacts, how to get unstuck |
+| [`docs/plan-only.md`](docs/plan-only.md) | adopting the planning half alone, and setting up a new project for it |
 | [`docs/adr/`](docs/adr/) | the architectural decisions taken, and the alternatives discarded with them |
 | [`config/schema.md`](config/schema.md) | every `.sdd/config.sh` key, with its default and why |
 | [`CONTEXT.md`](CONTEXT.md) | glossary of the kit's own vocabulary, and the decisions resolved in interview |

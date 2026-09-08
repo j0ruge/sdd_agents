@@ -1,0 +1,103 @@
+#!/usr/bin/env bash
+# sdd-link-agents — point a target repo's agents at this kit instead of copying them.
+#
+# `sdd install` copies the agents and refuses to overwrite a copy that differs. That is right for a
+# target pinned to a known-good version and wrong for a kit under active development, where every
+# improvement needs a `--force` per repository. This replaces the copies with symlinks, so the kit
+# is the single source and a change reaches every target at once.
+#
+# It costs the runner nothing: `sdd install` and `sdd preflight` compare with `cmp -s`, which reads
+# THROUGH the link and compares content, so a symlink reports as identical to the source. No change
+# to bin/sdd was needed for this.
+#
+# The links are gitignored, never committed: they carry this machine's absolute path, and a
+# committed symlink is dangling in every other checkout — broken in silence, the worst shape.
+#
+# Idempotent: run it twice and the second run changes nothing and adds no duplicate .gitignore line.
+set -euo pipefail
+
+if [ "${BASH_VERSINFO[0]:-0}" -lt 4 ]; then
+  printf 'error: sdd-link-agents needs bash 4+ (found: %s).\n' "${BASH_VERSION:-unknown}" >&2
+  exit 1
+fi
+
+# Same resolution as bin/sdd, and `CDPATH=''` for the same reason: bash searches $CDPATH for any
+# operand not starting with / . or .. and prints what it found on stdout, straight into the capture.
+_resolve_self() {
+  local src="${BASH_SOURCE[0]}" dir
+  while [ -L "$src" ]; do
+    dir="$(CDPATH='' cd -P "$(dirname "$src")" && pwd)"
+    src="$(readlink "$src")"
+    if [[ $src != /* ]]; then src="$dir/$src"; fi
+  done
+  CDPATH='' cd -P "$(dirname "$src")/.." && pwd
+}
+SDD_HOME="$(_resolve_self)"
+readonly SDD_HOME
+
+if [ -t 1 ] && [ -z "${NO_COLOR:-}" ]; then
+  C_RESET=$'\033[0m'; C_DIM=$'\033[2m'; C_GREEN=$'\033[32m'; C_YELLOW=$'\033[33m'; C_RED=$'\033[31m'
+else
+  C_RESET=''; C_DIM=''; C_GREEN=''; C_YELLOW=''; C_RED=''
+fi
+ok()   { printf '%s  ok%s    %s\n' "$C_GREEN" "$C_RESET" "$1"; }
+info() { printf '%s\n' "$1"; }
+dim()  { printf '%s%s%s\n' "$C_DIM" "$1" "$C_RESET"; }
+warn() { printf '%s  warn%s  %s\n' "$C_YELLOW" "$C_RESET" "$1" >&2; }
+die()  { printf '%s  error%s %s\n' "$C_RED" "$C_RESET" "$1" >&2; exit 1; }
+
+REPO_ROOT="$(git rev-parse --show-toplevel 2>/dev/null)" \
+  || die "not inside a git repository."
+
+# The config is the sensor for "this repo was installed". Linking agents into a repo that never ran
+# `sdd install` would leave it with hats and no config — a repo that looks adopted and is not.
+[ -f "$REPO_ROOT/.sdd/config.sh" ] \
+  || die "no .sdd/config.sh in $REPO_ROOT — run 'sdd install' first (see docs/plan-only.md)."
+
+[ "$REPO_ROOT" != "$SDD_HOME" ] \
+  || die "refusing to link the kit to itself — $REPO_ROOT is the kit."
+
+mkdir -p "$REPO_ROOT/.claude/agents"
+
+linked=0; already=0; untracked=0
+for src in "$SDD_HOME"/agents/sdd-*.md; do
+  name="$(basename "$src")"
+  target="$REPO_ROOT/.claude/agents/$name"
+
+  # Drop it from the index BEFORE replacing it: a tracked path that becomes a symlink shows up as a
+  # content change, and the whole point is that these stop being versioned.
+  if git -C "$REPO_ROOT" ls-files --error-unmatch ".claude/agents/$name" >/dev/null 2>&1; then
+    git -C "$REPO_ROOT" rm --cached --quiet ".claude/agents/$name"
+    untracked=$((untracked + 1))
+  fi
+
+  if [ -L "$target" ] && [ "$(readlink -f "$target")" = "$(readlink -f "$src")" ]; then
+    already=$((already + 1))
+    continue
+  fi
+  ln -sfn "$src" "$target"
+  linked=$((linked + 1))
+done
+
+[ "$linked"  -gt 0 ] && ok "$linked agent(s) linked to $SDD_HOME/agents/"
+[ "$already" -gt 0 ] && dim "  $already already linked"
+[ "$untracked" -gt 0 ] && ok "$untracked agent(s) removed from the git index (now local-only)"
+
+# `.gitignore`, appended once. The marker line is what makes the second run a no-op.
+IGNORE="$REPO_ROOT/.gitignore"
+MARKER='.claude/agents/sdd-*.md'
+if ! grep -qxF "$MARKER" "$IGNORE" 2>/dev/null; then
+  {
+    [ -s "$IGNORE" ] && printf '\n'
+    printf '# Agentes do kit sdd: symlinks para ~/repos/sdd_agents/agents/, criados por\n'
+    printf '# `sdd install && sdd-link-agents`. Fora do git de propósito — o link carrega o\n'
+    printf '# caminho absoluto desta máquina e ficaria pendurado em qualquer outro checkout.\n'
+    printf '%s\n' "$MARKER"
+  } >> "$IGNORE"
+  ok ".gitignore updated"
+else
+  dim "  .gitignore already carries the rule"
+fi
+
+info ""
+dim "Next: $ /sdd-plan   (see $SDD_HOME/docs/plan-only.md)"
