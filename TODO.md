@@ -11,6 +11,10 @@ Formato:
 
 Achados sobre **repos-alvo** vão para o `TODO.md` daquele repo. Este arquivo é só sobre o kit.
 
+## Plano de evolução da equipe de agentes
+
+O plano consolidado pelo Codex Astra, baseado no artigo de @0xCodez e nas referências de harness do Second Brain, está em [`sdd-agents-team-harness-raft.md`](file:///home/joruge/repos/obsidian/03%20Resources/IA%20e%20Agentes/sdd-agents-team-harness-raft.md). A primeira missão é **um checkout, um dono de execução**: exclusão mútua, proprietário identificável e recuperação após queda, antes de claims, agenda ou coordenação distribuída.
+
 ## Aberto
 
 > **Ciclo de vida.** Um item cujo corpo traz **RESOLVIDO por `<hash>`** já está fechado: fica

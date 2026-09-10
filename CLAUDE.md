@@ -3,6 +3,10 @@
 Instruções para quem trabalha **neste repositório** (o kit). Para o que os agentes fazem nos
 repos-alvo, veja [`docs/pipeline.md`](docs/pipeline.md).
 
+## Plano de evolução da equipe de agentes
+
+O plano consolidado pelo Codex Astra, baseado no artigo de @0xCodez e nas referências de harness do Second Brain, está em [`sdd-agents-team-harness-raft.md`](file:///home/joruge/repos/obsidian/03%20Resources/IA%20e%20Agentes/sdd-agents-team-harness-raft.md). A primeira missão é **um checkout, um dono de execução**: exclusão mútua, proprietário identificável e recuperação após queda, antes de claims, agenda ou coordenação distribuída. Hooks são posteriores e complementares; não substituem gates, locks ou permissões.
+
 ## Idioma
 
 Duas audiências, duas regras. A regra antiga ("PT-BR em tudo que é lido por humano") misturava as
