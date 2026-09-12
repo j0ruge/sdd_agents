@@ -2,9 +2,9 @@
 missao: 20260911-o-juiz-nao-mente-sobre-a-janela
 fase: EXEC
 status: done
-sessao: 06eb0f2c-sdd-exec-r7
-data: 2026-09-12 17:55
-gate: "tests/run-all.sh -> 'suite green', 14 sensores, 1058 asseracoes ok, 0 FAIL (1057 antes do R7; a nova e o piso do R7); os 13 hashes (I1-I6, R1-R7) existem no git log. ./bin/sdd health -> 'kit healthy', rodado DEPOIS do ultimo commit de codigo (bde643d): 'ok suite green', 'ok mutation: score: 301 caught, 0 known gap(s), of 301', 'ok mutation stamp written - gate_PR can see that THIS content ran green' (.sdd/logs/mutation-stamp = 79484a242bdfd073a6169581d3bffd4a), 'ok all 8 gates have a mutation in the catalogue', 'ok provenance: all 3 fixtures match the installed skills', 'ok ratchet: 1 known debt(s), none new'. Check do R7: 111 (a=1 piso novo, b=1 comentario adjacente, c=1 quarto escritor). Nenhuma linha pending no checkpoint."
+sessao: 10d842b1-sdd-exec-r8
+data: 2026-09-12 22:10
+gate: "tests/run-all.sh -> 'suite green', 14 sensores, 1061 asseracoes ok, 0 FAIL (1058 antes do R8; as tres novas sao o piso do leitor humano, a assercao das mensagens de close e a dos escritores do no_data); os 14 hashes (I1-I6, R1-R8) existem no git log. Check do R8: 1111 (a=1 piso novo, b=1 mensagens de close, c=1 escritores, d==e com 304 mutantes definidos e 304 matriculados). ./bin/sdd health -> 'kit healthy', rodado DEPOIS do ultimo commit de codigo (12b15b8): 'ok suite green', 'ok mutation: score: 304 caught, 0 known gap(s), of 304', 'ok mutation stamp written - gate_PR can see that THIS content ran green' (.sdd/logs/mutation-stamp = 784f83349f8eb5b45f54d505a441e715), 'ok all 8 gates have a mutation in the catalogue', 'ok provenance: all 3 fixtures match the installed skills', 'ok ratchet: 1 known debt(s), none new'. Os quatro vermelhos do R8 foram observados ANTES em sandbox fiel (SDD_MUTANT=1, md5 provando a entrada da sabotagem), cada um matando exatamente a assercao que o nomeia. Nenhuma linha pending no checkpoint."
 ---
 
 # Handoff — EXEC — o juiz não mente sobre a janela
@@ -14,29 +14,35 @@ gate: "tests/run-all.sh -> 'suite green', 14 sensores, 1058 asseracoes ok, 0 FAI
 
 ## TL;DR
 
-✅ **A EXEC está `done`: 13 incrementos (I1–I6 + R1–R7), nenhuma linha `pending`, suíte verde
-(1058 ok / 0 FAIL) e `./bin/sdd health` → `kit healthy` com `301 caught of 301` carimbado.**
-As duas rodadas de REVIEW foram absorvidas: r1 virou `R1`–`R5`, r2 virou `R6` (o HIGH do stderr
-dentro do stream) e `R7` (o lote #2/#4/#5). O carimbo `79484a24…` foi escrito **depois** do último
-commit de código, que é a ordem que o `gate_PR` exige.
-⚠️ O `sdd health` do `R7` achou um defeito que nenhuma rodada viu: o mutante do `R6` estava
-**definido e não matriculado** no `CATALOG` (301 definidos, 300 rodados) — consertado em `bde643d`.
+✅ **A EXEC está `done`: 14 incrementos (I1–I6 + R1–R8), nenhuma linha `pending`, suíte verde
+(1061 ok / 0 FAIL) e `./bin/sdd health` → `kit healthy` com `304 caught of 304` carimbado
+(`784f8334…`), escrito **depois** do último commit de código (`12b15b8`).**
+As três rodadas de REVIEW foram absorvidas: r1 virou `R1`–`R5`, r2 virou `R6`/`R7`, r3 virou o lote
+`R8`. O `R8` fechou as duas asserções que **afirmavam medir mais do que mediam** — um `human:` que
+era constante por causa do cwd e um conserto de mensagem que nada segurava —, cada vermelho
+observado antes em sandbox fiel.
+⚠️ **`REVIEW_MAX_ITER=3` e a r3 foi a terceira: o `R8` não terá re-avaliação independente sem a
+porta humana** (`sdd run --phase REVIEW`). A decisão, com os dois lados escritos, é a pendência 1
+do `40-review-r3.md` e está repetida nas pendências deste arquivo.
 A seção *Por que a linha parou* fica no arquivo como **histórico**: descreve um estado que já não
-é o do disco. O estado de hoje é o desta seção e o das seções *Rodada r1* e *Rodada r2* abaixo.
+é o do disco. O estado de hoje é o desta seção e o das seções *Rodada r1*, *r2* e *r3* abaixo.
 
 ## Estado do repo
 
-> ⚠️ Esta seção foi **reescrita** ao fim do `R7`. Os números do parágrafo de Jidoka mais abaixo
+> ⚠️ Esta seção foi **reescrita** ao fim do `R8`. Os números do parágrafo de Jidoka mais abaixo
 > (`286 of 289`, "sem carimbo") são o retrato de 12/09 06:40 e não descrevem o disco de hoje.
 
 - **Branch:** `feat/o-juiz-nao-mente-sobre-a-janela` — local, **sem upstream** (nunca empurrada).
-- **Último commit de código:** `bde643d` `fix(mutation): matricula o mutante do stderr no CATALOG —
-  definido por R6 e nunca rodado`.
+- **Último commit de código:** `12b15b8` `fix(tests): R8 — as duas asserções que prometiam medir
+  mais do que mediam`.
 - **Working tree:** limpo.
-- **Suíte:** `tests/run-all.sh` → **verde**, 14 sensores, **1058** asserções `ok`, 0 `FAIL`.
-- **Catálogo de mutação:** **301** mutantes definidos e **301** listados no `CATALOG=(` — a
-  igualdade é o que o `R7` restabeleceu, e é a asserção de tamanho do `sdd health` que a cobra.
-  Evidência do carimbo no `gate:` do frontmatter.
+- **Suíte:** `tests/run-all.sh` → **verde**, 14 sensores, **1061** asserções `ok`, 0 `FAIL`.
+- **Catálogo de mutação:** **304** mutantes definidos e **304** listados no `CATALOG=(` — a
+  igualdade que o `R7` restabeleceu e que o `R8` manteve ao matricular os três no mesmo commit em
+  que os definiu. Evidência do carimbo no `gate:` do frontmatter.
+- **Backlog:** `TODO.md` com **96** achados; `tests/health-baseline.txt` em `todo-findings 96`. O
+  achado novo é o da r3 (grafia do `ok` do `check-templates.sh`), que a própria r3 deixou para este
+  commit porque a catraca mora dentro da chave do carimbo.
 - **E2E:** `E2E_CMD=""` no `.sdd/config.sh` — o kit não tem jornada de navegador; a "jornada" deste
   repo é a linha de comando, e é por ela que a QA tem de andar (ver boot abaixo).
 
@@ -202,32 +208,107 @@ ainda enumeram **cinco** buckets (hoje são sete), e a tabela de schema do `docs
 (`:829-830`) diz `on escalation rows` para `cost_usd`/`turns` sem nomear as linhas `event:"close"`,
 que passaram a carregá-los. Prosa não compra rodada, e o gate tolera `B` em `Documentation`.
 
+## Rodada r3 da REVIEW — R8 (acrescentado ao fim do `R8`)
+
+A r3 fechou em **B** com 7 achados (2 MEDIUM, 5 LOW), nenhuma letra regredida contra a r2 e duas
+subidas (`Error Handling` C→A, `Code Quality` B→A). Cinco viraram um `R<n>` de lote; os dois de
+prosa (#6 e #7) foram endereçados à fase DOCS, ao lado dos #6/#7 da r2.
+
+| `R<n>` | Achado | O que consertou | Commit |
+|---|---|---|---|
+| R8 | #1 e #2 (MEDIUM) + #3, #4 e #5 (LOW) — duas asserções que afirmavam medir mais do que mediam, e três de robustez na mesma vizinhança | Abaixo, achado a achado | `12b15b8` |
+
+**Os dois MEDIUM eram a mesma classe que a missão inteira persegue: instrumento que afirma medir o
+que não mede.**
+
+- **#1 (MEDIUM) — o `human:` era uma CONSTANTE.** O `R7` fechou metade do achado #2 da r2: mudar o
+  par de admissão para o mundo `$CLW3` tornou o termo `judge:` real, mas o `human:` não. A causa é o
+  **cwd**: `sdd autonomy` rodava do `$FIX` enquanto a linha de `close` nasce em `$CLW3`, então
+  `ledger_row_is_local` a descartava como `other_repo` **antes** de qualquer classificação e o
+  comando caía no ramo *"none of the N row(s) … were born in this repo"*, que não imprime linha de
+  `unrecognized` haja o que houver. Numa asserção cujo título diz *"both readers"* e cujo comentário
+  jura *"in both programs, over the SAME file"*. Conserto de uma linha — o leitor humano roda dentro
+  do repo da linha — mais um **segundo piso**, `floor: the human reader reads the repo the close row
+  was born in`, que existe porque uma mudança futura de cwd devolveria o termo à condição de
+  constante em silêncio.
+- **#2 (MEDIUM) — a outra metade do `R6`, entregue sem sensor nenhum.** As três mensagens de falha
+  do `cmd_close` que passaram a nomear os três arquivos não tinham probe: revertê-las para
+  `see $logfile` deixava **a suíte inteira verde, rc 0**. A asserção nova mede o **conteúdo** e não
+  o marcador (`check-gates.sh` já tinha os mundos em que a mensagem sai), e dos seus três termos
+  só `raw:` e `err:` decidem algo — `summary:` era verdadeiro sob as duas formas, por isso é piso.
+- **#3 (LOW) — o piso `armed:` não era independente da propriedade que guardava.**
+  `CLOSE_DIRTY_ARMED` lia o `.err`, que **só existe por causa do conserto**, então sob o mutante
+  respondia `armed:false` — *"o veneno nunca foi armado"* exatamente no mundo em que ele disparou —,
+  e o par `armed:true pure:false` que o comentário promete era inalcançável. A testemunha passou
+  para o lado do **stub** (um marcador que ele escreve na linha antes de imprimir em stderr, num
+  diretório que nenhuma redireção do `cmd_close` alcança). Medido: sob
+  `mut_RUN_close_stderr_into_stream` a asserção agora lê `armed:true pure:false`, onde antes lia
+  `armed:false`.
+- **#4 (LOW) — o quarto escritor do `autonomy_no_data` também não tinha sensor.** A única asserção
+  sobre a frase lia o **prefixo** (`no data: the ledger at `) e nada do corpo. A nova colhe os nomes
+  da **saída** e não da fonte, com `grep -oE "'sdd [a-z]+'" | sort -u`, de modo que um escritor
+  perdido **e** um escritor inventado movem o termo.
+- **#5 (LOW) — `jq -e` era a pergunta errada.** O `-e` faz o rc depender do **último valor**: um
+  arquivo 100% JSON terminado em `null`/`false` sai 1, indistinguível do 5 de um arquivo sujo, que é
+  o único rc que a linha quer. Falhava **fechada** hoje (o fixture termina no objeto `result`), logo
+  era robustez e não fail-open. Sem `-e`, o rc diz "parseável" e nada mais.
+
+**Os quatro vermelhos foram observados ANTES**, em sandbox fiel (`bin tests templates config
+agents` + `CLAUDE.md TODO.md` + `docs/adr`, rodada com `SDD_MUTANT=1`), com `md5sum` provando que a
+sabotagem entrou no arquivo — e cada um matou **exatamente** a asserção que o nomeia:
+
+| Sabotagem | O que morreu |
+|---|---|
+| `is_close` só no `cmd_autonomy` (primeira das duas ocorrências, `perl -0pi` sem `/g`) | as duas asserções vizinhas **mais** `both readers admit the close row`, que era a que a r3 mediu **`ok`** |
+| `see $close_logs` → `see $logfile` | `close names the raw stream and the stderr beside the summary` |
+| a frase perde `and 'sdd kaizen'` | `autonomy_no_data names every writer the runner has` |
+| o leitor humano volta a rodar do `$FIX` | `floor: the human reader reads the repo the close row was born in` |
+
+⚠️ **A régua que o `R7` deixou foi cumprida: definir não é matricular.** Os três mutantes novos
+(`RUN_close_admission_human_reader_only`, `RUN_close_logs_summary_only`,
+`RUN_no_data_drops_a_writer`) entraram no `CATALOG` no mesmo commit, e a conta bate nos dois lados —
+`grep -cE '^mut_'` → **304**, tamanho do `CATALOG` → **304** —, com o `sdd health` confirmando
+`304 caught, 0 known gap(s), of 304` numa passada só. A quarta sabotagem da tabela acima não vira
+mutante de catálogo **por construção**: ela degrada o arquivo de teste, e o catálogo muta o
+`bin/sdd`. Ela vive no comentário do piso, como limite declarado.
+
 ## Artefatos
 
 | Arquivo | O que contém |
 |---|---|
-| `docs/handoffs/20260911-o-juiz-nao-mente-sobre-a-janela/checkpoint.md` | A tabela: as **13 linhas** (I1–I6, R1–R7) `done`, nenhuma `pending` |
+| `docs/handoffs/20260911-o-juiz-nao-mente-sobre-a-janela/checkpoint.md` | A tabela: as **14 linhas** (I1–I6, R1–R8) `done`, nenhuma `pending` |
 | `docs/handoffs/20260911-o-juiz-nao-mente-sobre-a-janela/checkpoint-notas.md` | As notas de execução (append-only); as de I6 explicam o corte do décimo item |
 | `docs/pipeline.md` | Contrato da **forma de linha** do ledger — quarto evento `close` — e da **forma da série** (`harness`, `window_broken`) |
 | `CONTEXT.md` | Nova tabela **Decisões adiadas por YAGNI** (Y1–Y3), cada uma com o evento que a reabre |
 | `KAIZEN_LOG.md` | Entrada de 2026-09-12: a régua D15 aplicada, 105 → 95 com a tabela item a item |
-| `TODO.md` | 95 achados; a seção que se chamava "Adiados por YAGNI" foi renomeada porque ficou sem adiamentos |
-| `tests/health-baseline.txt` | `todo-findings 95` — a catraca que morde nos dois sentidos |
+| `TODO.md` | **96** achados (o 96º é o da r3, a grafia do `ok` do `check-templates.sh`); a seção que se chamava "Adiados por YAGNI" foi renomeada porque ficou sem adiamentos |
+| `tests/health-baseline.txt` | `todo-findings 96` — a catraca que morde nos dois sentidos |
 | `docs/handoffs/20260911-o-juiz-nao-mente-sobre-a-janela/40-review-r1.md` | A rodada r1: os 12 achados, os 4 refutados e as pendências humanas |
 | `tests/check-kaizen.sh` | Os dois regimes de `close` (`closein`, `closeaway`) e as três asserções do `R5` |
-| `tests/check-mutation.sh` | **301** mutantes; os três estreitos de `close` do `R5` e o do stderr (`R6`, matriculado no `R7`) |
+| `tests/check-mutation.sh` | **304** mutantes, 304 matriculados; os três estreitos de `close` do `R5`, o do stderr (`R6`, matriculado no `R7`) e os três do `R8` |
 | `docs/handoffs/20260911-o-juiz-nao-mente-sobre-a-janela/40-review-r2.md` | A rodada r2: os 7 achados, os 5 refutados e o sinal de laço (`Error Handling` B→C) |
-| `tests/check-autonomy.sh` | O mundo `$CLW3` (stub sujo) e, desde o `R7`, o par de admissão do `close` com o piso que prova a entrada |
+| `tests/check-autonomy.sh` | O mundo `$CLW3` (stub sujo) e, desde o `R8`, o par de admissão do `close` com **dois** pisos: o que prova a linha no arquivo e o que prova que o leitor humano lê o repo em que ela nasceu |
+| `docs/handoffs/20260911-o-juiz-nao-mente-sobre-a-janela/40-review-r3.md` | A rodada r3: os 7 achados, as 6 refutações e a pendência do teto de rodadas |
+| `tests/check-gates.sh` | Os nove regimes de `close` e, desde o `R8`, a asserção que lê o **conteúdo** das mensagens de falha (stream cru e `.err`), não só o marcador |
 
 ## Boot da próxima fase
 
 ✅ **A próxima fase é a QA.** A ressalva que ocupava este lugar ("a próxima fase é EXEC de novo")
 foi resolvida: nenhuma linha do checkpoint está `blocked` ou `pending`, e o carimbo de mutação
-existe (`301 caught of 301`, carimbo `79484a24…`). O que segue é o boot da QA, atualizado ao fim
-do `R7`.
+existe (`304 caught of 304`, carimbo `784f8334…`, escrito depois de `12b15b8`). O que segue é o
+boot da QA, atualizado ao fim do `R8`.
 
-⚠️ **O que mudou no diff DEPOIS que este boot foi escrito** (rodadas r1 e r2, `R1`–`R7`) e que a QA
-tem de andar junto com os quatro pontos abaixo:
+⚠️ **A decisão que a QA tem de saber que está pendurada, porque ela decide se existe uma r4:**
+`REVIEW_MAX_ITER=3` e a r3 foi a terceira. O `R8` — os dois MEDIUM da r3 — foi escrito **depois**
+da última rodada de nota, então nenhum revisor que não o escreveu o avaliou. A r3 deixou os dois
+lados na sua pendência 1; a porta é `sdd run --phase REVIEW`, e a foto de `rounds_before` é tirada
+fora da guarda do teto justamente para esse caso. A alternativa legítima é aceitar a r3 como a
+última rodada de nota e registrar no PR que o `R8` não teve re-avaliação independente.
+
+⚠️ **O que mudou no diff DEPOIS que este boot foi escrito** (rodadas r1, r2 e r3, `R1`–`R8`) e que
+a QA tem de andar junto com os quatro pontos abaixo — do `R8`, três superfícies de linha de comando
+seguem **idênticas** ao que o `R7` deixou (o `R8` é só sensor, com uma exceção: nenhuma mensagem do
+`cmd_close` mudou de texto, apenas passou a ser medida):
 
 5. **`sdd autonomy` — o cabeçalho volta a fechar com os buckets.** Eram cinco buckets e o total do
    cabeçalho contava linhas que nenhum deles nomeava (`close` e a exclusão `$meta` do juiz). Hoje
