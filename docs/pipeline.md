@@ -918,17 +918,22 @@ phase would call a change that merely **moved** money into the phase next door a
 sessions *before* the first round are the mission doing its own work and are not in it; DOCS and PR
 after it are the pipeline moving on, not the review going round again. The cell is **absent** on a
 mission that never reviewed, rather than `0%` — the same rule the `intervention note(s)` cell
-follows, and for the same reason: a zero reads as a loop that cost nothing. Two declared limits,
-both written beside the code that prints it: a QA that re-blocks *after* the first round puts its
-EXEC sessions in the loop (nothing on the ledger tells an `R<n>` from an `F<n>`), and the
-percentage is over the comparable sessions — the same population the `US$` cell sums.
+follows, and for the same reason: a zero reads as a loop that cost nothing. One declared limit,
+written beside the code that prints it: a QA that re-blocks *after* the first round puts its
+EXEC sessions in the loop (nothing on the ledger tells an `R<n>` from an `F<n>`).
 
-`launch(es)` and `reopened` are drawn over **every** local session of the mission, comparable or
-not — a launch that landed on a dirty kit was a launch — while `session(s)`, the outcomes, `US$`
-and the review loop stay on the comparable sessions, because that is the sum the sensor closes
-against the version table. When the two populations differ for a printed mission, the accounting
+`launch(es)`, `reopened` and the review loop — numerator **and** percentage denominator — are drawn
+over **every** local session of the mission, comparable or not: a launch that landed on a dirty kit
+was a launch, and a round that did was still a round. Until 2026-09-11 the loop was drawn over
+the comparable subset alone, which hid the EXEC sessions a non-comparable
+round had sent back and, in the limit, made the cell **vanish** from a mission that had laced.
+`reopened` reads a recorded closure (`event: "gate_pass"`) as the pass it is, so the answer no
+longer depends on whether the phase cost money. `session(s)`, the outcomes and `US$` stay on the
+comparable sessions, because that is the sum the sensor closes against the version table — so on a
+mission with non-comparable rows the loop percentage is **not** a share of the `US$` printed beside
+it, and the accounting paragraph is what says so. When the two populations differ for a printed mission, the accounting
 paragraph says so once:
-*(launches and reopened are counted over every session of the mission, N of them non-comparable)*.
+*(launches, reopened and the review loop are counted over every session of the mission, N of them non-comparable)*.
 A mission whose sessions are all non-comparable does not appear — as before.
 
 The `- intervention:` notes of `checkpoint.md` are **narrative**, not the count. Since 2026-09-03

@@ -3203,10 +3203,94 @@ assert_eq "two comparable sessions, two launches, one reopened: the dirty QA bel
   "2 2 1" \
   "$(cell_of m1 "$out_pop" 'session') $(cell_of m1 "$out_pop" 'launch') $(cell_of m1 "$out_pop" 'reopened')"
 assert_eq "and the accounting paragraph names the population difference, once" "1" \
-  "$(grep -c '(launches and reopened are counted over every session of the mission, 1 of them non-comparable)' <<< "$out_pop")"
+  "$(grep -c '(launches, reopened and the review loop are counted over every session of the mission, 1 of them non-comparable)' <<< "$out_pop")"
 assert_eq "without the dirty row: one launch, no reopening, and the sentence is gone" "1 0 0" \
   "$(cell_of m1 "$out_popc" 'launch') $(cell_of m1 "$out_popc" 'reopened') $(grep -c 'counted over every session' <<< "$out_popc")"
 assert_bucket_sum "the four buckets still sum to the header total (--by-mission, a dirty launch)" "$out_pop"
+
+# --- one population decision, two defects: the closure and the loop frontier -------------------
+# Both halves were TODO items of the same shape — a cell drawn over a population narrower than the
+# fact it names — and one decision closes them: the mission HISTORY is every local row of the
+# mission, comparable or not, session or recorded closure.
+#
+# (a) `reopened` was blind to the closure. It reads "a phase whose gate had already PASSED", and
+# since 2026-08-31 a gate can pass WITHOUT buying a session: `gate_pass_rows` writes an
+# `event: "gate_pass"` row when the pipeline moves on for free. Over `is_session` alone that
+# closure is invisible, so the same pipeline history answered 0 or 1 depending on whether the phase
+# had COST MONEY. The pair below is exactly that: the same five phases, the two closures recorded
+# once as free rows and once as paid sessions.
+#
+# WITNESS, because the property is universal and one fixture walks one regime: the closure ledger
+# carries TWO reopenings, not one. A reader that entered the branch once by accident reads 1; only
+# a reader that carries `maxpass` across both closures reads 2.
+echo "== reader: --by-mission sees a closure as a pass, whether or not it cost money =="
+mkdir -p "$OUTSIDE/reopen_free" "$OUTSIDE/reopen_paid"
+localize > "$OUTSIDE/reopen_free/autonomy-log.jsonl" <<'EOF'
+{"v":1,"ts":"2026-09-05T10:00:00-03:00","event":"session","run_id":"r1","invocation":"run","kit_sha":"eeeeeee","kit_dirty":false,"project":"p1","repo":"/p1","mission":"m1","phase":"EXEC","step":"EXEC","agent":"sdd-executor","model":"opus","attempt":1,"auto_retry":false,"session":"s1","rc":0,"dur_s":10,"cost_usd":1.0,"moved":true,"gate":"pass","gate_why":"x"}
+{"v":1,"ts":"2026-09-05T10:01:00-03:00","event":"gate_pass","run_id":"r1","invocation":"run","kit_sha":"eeeeeee","kit_dirty":false,"project":"p1","repo":"/p1","mission":"m1","phase":"QA"}
+{"v":1,"ts":"2026-09-05T10:02:00-03:00","event":"session","run_id":"r2","invocation":"run","kit_sha":"eeeeeee","kit_dirty":false,"project":"p1","repo":"/p1","mission":"m1","phase":"EXEC","step":"EXEC","agent":"sdd-executor","model":"opus","attempt":1,"auto_retry":false,"session":"s2","rc":0,"dur_s":10,"cost_usd":1.0,"moved":true,"gate":"pass","gate_why":"x"}
+{"v":1,"ts":"2026-09-05T10:03:00-03:00","event":"gate_pass","run_id":"r2","invocation":"run","kit_sha":"eeeeeee","kit_dirty":false,"project":"p1","repo":"/p1","mission":"m1","phase":"PR"}
+{"v":1,"ts":"2026-09-05T10:04:00-03:00","event":"session","run_id":"r3","invocation":"run","kit_sha":"eeeeeee","kit_dirty":false,"project":"p1","repo":"/p1","mission":"m1","phase":"EXEC","step":"EXEC","agent":"sdd-executor","model":"opus","attempt":1,"auto_retry":false,"session":"s3","rc":0,"dur_s":10,"cost_usd":1.0,"moved":true,"gate":"pass","gate_why":"x"}
+EOF
+# The twin is DERIVED, never hand-written twice: the two free closures become paid sessions of the
+# same phase and the same order. Only the EVENT of those two rows differs between the files.
+# `localize` rewrites the repo field, so the sed anchors on the EVENT and the PHASE alone — a
+# pattern carrying the literal `/p1` matched nothing and left two identical files, which is why
+# the floor assertion below counts the rows it expects to have changed.
+sed -e 's|"event":"gate_pass"\(.*\)"phase":"QA"|"event":"session"\1"phase":"QA","step":"QA:close","agent":"sdd-qa","model":"opus","attempt":1,"auto_retry":false,"session":"p1s","rc":0,"dur_s":10,"cost_usd":0.0,"moved":true,"gate":"pass","gate_why":"x"|' \
+    -e 's|"event":"gate_pass"\(.*\)"phase":"PR"|"event":"session"\1"phase":"PR","step":"PR","agent":"sdd-publisher","model":"sonnet","attempt":1,"auto_retry":false,"session":"p2s","rc":0,"dur_s":10,"cost_usd":0.0,"moved":true,"gate":"pass","gate_why":"x"|' \
+    "$OUTSIDE/reopen_free/autonomy-log.jsonl" > "$OUTSIDE/reopen_paid/autonomy-log.jsonl"
+# The twin has to DIFFER, and on exactly the two rows the argument is about — a sed whose pattern
+# stopped matching would leave two identical files and the differential would compare a file
+# with itself, green and empty.
+assert_eq "the paid twin differs from the free one on exactly the two closure rows" "2 0 2" \
+  "$(diff "$OUTSIDE/reopen_free/autonomy-log.jsonl" "$OUTSIDE/reopen_paid/autonomy-log.jsonl" | grep -c '^<') $(grep -c '"event":"gate_pass"' "$OUTSIDE/reopen_paid/autonomy-log.jsonl") $(grep -c '"event":"gate_pass"' "$OUTSIDE/reopen_free/autonomy-log.jsonl")"
+out_rfree="$( SDD_STATE_DIR="$OUTSIDE/reopen_free" "$SDD" autonomy --by-mission 2>&1 )"
+out_rpaid="$( SDD_STATE_DIR="$OUTSIDE/reopen_paid" "$SDD" autonomy --by-mission 2>&1 )"
+assert_eq "reopened reads the same history whether the closure was free or paid, and counts BOTH" \
+  "free:2 paid:2" \
+  "free:$(cell_of m1 "$out_rfree" 'reopened') paid:$(cell_of m1 "$out_rpaid" 'reopened')"
+# The other half of the population promise: admitting the closure into the reopened history must
+# NOT move `session(s)`, the outcomes or US$, which are the comparable sum this file closes against
+# the version table — and must not move `launch(es)` either, which is distinct run_id over sessions.
+assert_eq "and the comparable cells do not move: three sessions, US\$ 3.00, three launches" "1" \
+  "$(grep -cE '^  m1  3 session\(s\) · 3 advanced · 0 churned · 0 idle · 3 launch\(es\) · 2 reopened · US\$ 3\.00$' <<< "$out_rfree")"
+assert_bucket_sum "the four buckets still sum to the header total (a free closure in the history)" "$out_rfree"
+
+# (b) the review loop FRONTIER was computed over the comparable subset, so a non-comparable round
+# hid the EXEC sessions that round itself had sent back — and in the limit the cell VANISHED from a
+# mission that had laced. It is the metric the janela-4 verdict quotes (52%, 23%, 66%), so it
+# sub-reported exactly what it exists to count. Same decision as (a): the frontier and the loop are
+# drawn over every local session of the mission, and so is the percentage denominator — a numerator
+# over one population and a denominator over another is how a cell reads 160%.
+#
+# DIFFERENTIAL, and the strongest shape available here: the SAME three sessions, once with the
+# REVIEW row clean and once with it dirty. The cell has to be identical — a round that landed on a
+# dirty kit was still a round.
+echo "== reader: --by-mission draws the review loop over every session of the mission =="
+mkdir -p "$OUTSIDE/loopclean" "$OUTSIDE/loopdirty"
+localize > "$OUTSIDE/loopclean/autonomy-log.jsonl" <<'EOF'
+{"v":1,"ts":"2026-09-05T11:00:00-03:00","event":"session","run_id":"r1","invocation":"run","kit_sha":"eeeeeee","kit_dirty":false,"project":"p1","repo":"/p1","mission":"m1","phase":"EXEC","step":"EXEC","agent":"sdd-executor","model":"opus","attempt":1,"auto_retry":false,"session":"s1","rc":0,"dur_s":10,"cost_usd":4.0,"moved":true,"gate":"pass","gate_why":"x"}
+{"v":1,"ts":"2026-09-05T11:01:00-03:00","event":"session","run_id":"r1","invocation":"run","kit_sha":"eeeeeee","kit_dirty":false,"project":"p1","repo":"/p1","mission":"m1","phase":"REVIEW","step":"REVIEW","agent":"sdd-reviewer","model":"opus","attempt":1,"auto_retry":false,"session":"s2","rc":0,"dur_s":10,"cost_usd":10.0,"moved":true,"gate":"fail","gate_why":"x"}
+{"v":1,"ts":"2026-09-05T11:02:00-03:00","event":"session","run_id":"r1","invocation":"run","kit_sha":"eeeeeee","kit_dirty":false,"project":"p1","repo":"/p1","mission":"m1","phase":"EXEC","step":"EXEC","agent":"sdd-executor","model":"opus","attempt":1,"auto_retry":false,"session":"s3","rc":0,"dur_s":10,"cost_usd":6.0,"moved":true,"gate":"pass","gate_why":"x"}
+EOF
+sed '/"phase":"REVIEW"/s|"kit_dirty":false|"kit_dirty":true|' \
+  "$OUTSIDE/loopclean/autonomy-log.jsonl" > "$OUTSIDE/loopdirty/autonomy-log.jsonl"
+assert_eq "the dirty twin differs from the clean one on exactly the REVIEW row" "1 1" \
+  "$(diff "$OUTSIDE/loopclean/autonomy-log.jsonl" "$OUTSIDE/loopdirty/autonomy-log.jsonl" | grep -c '^<') $(grep -c '"kit_dirty":true' "$OUTSIDE/loopdirty/autonomy-log.jsonl")"
+out_lc="$( SDD_STATE_DIR="$OUTSIDE/loopclean" "$SDD" autonomy --by-mission 2>&1 )"
+out_ld="$( SDD_STATE_DIR="$OUTSIDE/loopdirty" "$SDD" autonomy --by-mission 2>&1 )"
+# rl_cell above is bound to the rl1 fixture; this one takes the mission, same shape and same
+# `|| echo none` covering the whole pipeline — "the cell is not there" is an ANSWER below.
+loop_cell() { mission_line "$1" "$2" | grep -oE 'review loop US\$ [0-9]+\.[0-9][0-9] \([0-9]+%\)' || echo none; }
+assert_eq "the review loop cell is the same whether the round was comparable or not" \
+  "clean:review loop US\$ 16.00 (80%) dirty:review loop US\$ 16.00 (80%)" \
+  "clean:$(loop_cell m1 "$out_lc") dirty:$(loop_cell m1 "$out_ld")"
+# And the cell does not VANISH: with the frontier over the comparable subset alone the dirty
+# ledger had no REVIEW row to index, so `$fr` was null and the whole suffix went missing — the
+# limit case the TODO item named. `none` is what rl_cell answers then, and it must not appear.
+assert_eq "a mission that laced on a dirty kit still prints the cell" "1 0" \
+  "$(grep -cE '^  m1  ' <<< "$out_ld") $(loop_cell m1 "$out_ld" | grep -c '^none$')"
 
 # --- the narrative cell, and the `?` that is gone --------------------------------------------------
 # The official count is `launch(es)`, on every line. The `- intervention:` notes stay as what the

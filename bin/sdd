@@ -6101,10 +6101,19 @@ cmd_autonomy() {
     # order (KAIZEN) has a null index and counts on neither side — the `!= null` guards are
     # load-bearing, because jq orders null below every number. Input in file order, which is
     # write order: the ledger is append-only, and group_by keeps it (jq sorts stably).
+# A gate can pass WITHOUT buying a session since 2026-08-31: gate_pass_rows writes an
+# `event: "gate_pass"` row when the pipeline moves on for free, and that row carries no `.gate` —
+# it IS the pass. Read over sessions alone, the same pipeline history answered 0 or 1 depending on
+# whether the phase had COST MONEY, which is a fact about the invoice and not about the mission.
+# Written POSITIVELY (`.gate == "pass" or is_gate_pass`) and never as "not a failure": a fourth
+# event would then close a phase by omission, the fail-open CLAUDE.md names over the judge axis.
+# The counting clause stays on the index alone — a closure of a phase is a pass of that phase, and
+# a row BELOW it is the reopening, whoever paid for it — no guard on the event, because a
+# recorded closure of an EARLIER phase is the pipeline going backwards just as loudly.
     def reopened: reduce .[] as $r ({maxpass: -1, n: 0};
                     ($r.phase | phase_index) as $i
                     | (if $i != null and $i < .maxpass then .n += 1 else . end)
-                    | (if $i != null and $r.gate == "pass" then .maxpass = ([.maxpass, $i] | max) else . end)) | .n;
+                    | (if $i != null and ($r.gate == "pass" or ($r | is_gate_pass)) then .maxpass = ([.maxpass, $i] | max) else . end)) | .n;
     # Money is a COLUMN, and jq interpolates a NUMBER: 2.0 came out `US$ 2` in the column next to
     # `US$ 1.5`, the table stopped lining up, and a reader in a hurry reads "no cents were computed".
     # NOT printf, which is nowhere near this string: the whole row is built inside this one jq
@@ -6213,11 +6222,19 @@ cmd_autonomy() {
     # version table. When the two populations differ for a printed mission the accounting
     # paragraph says so, once, with the difference summed over the missions printed.
     | (map(select(is_session)) | group_by(mission_key)) as $every_session
+    # The SAME history plus the recorded closures, and a population of its own because the two
+    # readers want different things from it: `launches` counts distinct run_id over SESSIONS (a
+    # closure is not a launch, and $history_extra — a number on screen — is the difference between
+    # the comparable rows and THAT population, so admitting the closure there would move a printed
+    # count that means something else). `reopened` wants the closures, because a closure IS the
+    # pass it looks for. One extra binding, not one blurred population.
+    | (map(select(is_session or is_gate_pass)) | group_by(mission_key)) as $every_row
     # DECLARED LIMIT: history_of scans $every_session once per printed mission, so the by-mission
     # table is quadratic in the number of missions the ledger holds. Unmeasured, on purpose: the
     # real ledger is 145 rows over a dozen missions, and the scan that WAS measured (the
     # degenerate_axis rewrite in kaizen_series) only earned its index at 750 versions over 3000 rows.
     | def history_of: . as $k | $every_session | map(select((.[0] | mission_key) == $k)) | .[0] // [];
+      def history_rows_of: . as $k | $every_row | map(select((.[0] | mission_key) == $k)) | .[0] // [];
       (if $by_mission == 1
        then ($mgroups | map((.[0] | mission_key | history_of | length) - length) | add // 0)
        else 0 end) as $history_extra
@@ -6234,7 +6251,7 @@ cmd_autonomy() {
               | (map(.cost_usd // 0) | add) as $cost
               | (.[0] | mission_key | history_of) as $every
               | ($every | launches) as $launches
-              | ($every | reopened) as $reopened
+              | ((.[0] | mission_key | history_rows_of) | reopened) as $reopened
               # The narrative, under the name that says what it is, and only when the checkpoint
               # was readable: a mission of THIS repo with the file on disk. `$r == $repo` keeps a
               # foreign mission that shares the slug (--all-repos) from borrowing this repo notes —
@@ -6248,21 +6265,29 @@ cmd_autonomy() {
               # are not in it either — they are the pipeline moving on, not the review going round
               # again. Same shape as $iv above: a mission with no round prints no cell, rather
               # than a `0%` that would read as a loop that cost nothing.
-              # DECLARED LIMITS, both of them belonging to the metric and written down where the
-              # number is printed: a QA that re-blocks AFTER the first round puts its EXEC rows in
-              # here (they are indistinguishable from an `R<n>` on the ledger alone), and the
-              # percentage is over the COMPARABLE sessions of the mission, the same population the
-              # US$ cell sums — a mission whose rows are half non-comparable reports the share of
-              # the half that is here.
-              | (map(.phase) | index("REVIEW")) as $fr
+              # POPULATION: $every, the whole local history of the mission, exactly as launches and
+              # reopened. It was the COMPARABLE subset, and that hid the sessions a round had sent
+              # back — a round that landed on a dirty kit was still a round, and in the limit a
+              # non-comparable REVIEW left `$fr` null and the cell VANISHED from a mission that had
+              # laced. The metric the janela-4 verdict quotes (52%, 23%, 66%) sub-reported exactly
+              # what it exists to count. The DENOMINATOR moves with it, and that is not a detail:
+              # a numerator over every session and a denominator over the comparable ones is how a
+              # cell reads 160%. It is therefore NOT the US$ cell printed on the same line, which
+              # stays comparable because that is the sum check-autonomy.sh closes against the
+              # version table — the accounting paragraph names the difference when there is one.
+              # DECLARED LIMIT, belonging to the metric and written where the number is printed: a
+              # QA that re-blocks AFTER the first round puts its EXEC rows in here, indistinguishable
+              # from an `R<n>` on the ledger alone.
+              | ($every | map(.phase) | index("REVIEW")) as $fr
               | (if $fr == null then "" else
-                   ([to_entries[]
+                   ($every | [to_entries[]
                      | select(.value.phase == "REVIEW" or (.value.phase == "EXEC" and .key > $fr))
                      | .value.cost_usd // 0] | add // 0) as $loop
+                   | ($every | map(.cost_usd // 0) | add // 0) as $whole
                    # The zero guard is not decoration: jq DIES on a division by zero and takes the
                    # whole command with it, and a mission whose every session cost null sums to 0
                    # here — the `cost_usd: null` a session that died before its `result` writes.
-                   | " · review loop US$ \($loop | usd)\(if $cost > 0 then " (\(($loop * 100 / $cost) | round)%)" else "" end)"
+                   | " · review loop US$ \($loop | usd)\(if $whole > 0 then " (\(($loop * 100 / $whole) | round)%)" else "" end)"
                  end) as $rl
               | "  \($label)  \($n) session(s) · \($t.advanced) advanced · \($t.churned) churned · \($t.idle) idle · \($launches) launch(es) · \($reopened) reopened\($iv)\($rl) · US$ \($cost | usd)"
             ) | join("\n"))
@@ -6309,7 +6334,7 @@ cmd_autonomy() {
     , ([ (if $skipped > 0 then "  (\($skipped) non-comparable row(s) excluded: dirty kit, no kit_sha, or no moved field)" else empty end)
        , (if $closed > 0 then "  (\($closed) gate(s) closed without a session — the pipeline moved on for free, recorded rather than inferred)" else empty end)
        , (if $stray > 0 then "  (\($stray) unrecognized row(s) excluded: event missing or not one of session/blocked/degraded/gate_pass)" else empty end)
-       , (if $history_extra > 0 then "  (launches and reopened are counted over every session of the mission, \($history_extra) of them non-comparable)" else empty end)
+       , (if $history_extra > 0 then "  (launches, reopened and the review loop are counted over every session of the mission, \($history_extra) of them non-comparable)" else empty end)
        # NOT an exclusion — nothing left a bucket — which is why it rides at the end of the first
        # paragraph rather than among the four. It is the disclosure that half this ledger was read
        # through a dated compatibility path, and the signal that says when that path can be deleted.

@@ -2548,7 +2548,17 @@ mut_AUTONOMY_launches_counts_rows() {
 # down", the definition the spec refused: frete-cif-fob (EXEC after a REFUSED QA, three times)
 # would read 3 where the truth is 0. Caught by the fail twin of the reopen pair.
 mut_AUTONOMY_reopened_ignores_gate() {
-  sed -i 's@(if \$i != null and \$r.gate == "pass" then .maxpass@(if $i != null then .maxpass@' "$1"
+  sed -i 's@(if \$i != null and (\$r.gate == "pass" or (\$r | is_gate_pass)) then .maxpass@(if $i != null then .maxpass@' "$1"
+}
+
+# `reopened` goes blind to the RECORDED CLOSURE again: only a pass that bought a session counts, so
+# the same pipeline history answers 0 or 1 depending on whether the phase cost money — the defect
+# `20260831-a-rodada-que-andou` measured and this mission closed. Caught by `reopened reads the same
+# history whether the closure was free or paid, and counts BOTH` in check-autonomy.sh, which reads
+# `free:0 paid:2` under this mutant where it demands `free:2 paid:2`; the paid half is deliberately
+# blind to it and is what proves the free half is not measuring an empty file.
+mut_AUTONOMY_reopened_closure_blind() {
+  sed -i 's@(\$r.gate == "pass" or (\$r | is_gate_pass))@$r.gate == "pass"@' "$1"
 }
 
 # launches and reopened drawn over the COMPARABLE sessions of the mission instead of every local
@@ -3085,6 +3095,25 @@ mut_AUTONOMY_review_loop_counts_every_exec() {
   sed -i 's@(\.value\.phase == "EXEC" and \.key > \$fr)@.value.phase == "EXEC"@' "$1"
 }
 
+# The frontier of the review loop goes back onto the COMPARABLE subset: a non-comparable round has
+# no REVIEW row to index, `$fr` reads null and the whole cell VANISHES from a mission that laced —
+# the metric the janela-4 verdict quotes, sub-reporting exactly what it exists to count. Caught by
+# `the review loop cell is the same whether the round was comparable or not` in check-autonomy.sh
+# (`dirty:none` against `dirty:review loop US$ 16.00 (80%)`), and by its twin `a mission that laced
+# on a dirty kit still prints the cell`.
+mut_AUTONOMY_review_loop_frontier_comparable() {
+  sed -i 's@(\$every | map(\.phase) | index("REVIEW")) as \$fr@(map(.phase) | index("REVIEW")) as $fr@' "$1"
+}
+
+# The percentage denominator goes back to the comparable `$cost` while the numerator stays on every
+# session: two populations in one fraction, which is how a cell reads 160%. NOT cosmetic — the
+# number is a share, and a share of the wrong whole is a wrong number, not a rounding. Caught by
+# `the review loop cell is the same whether the round was comparable or not`, which reads
+# `dirty:review loop US$ 16.00 (160%)` under this mutant.
+mut_AUTONOMY_review_loop_denominator_split() {
+  sed -i 's@if \$whole > 0 then " (\\((\$loop \* 100 / \$whole) | round)%)"@if $cost > 0 then " (\\(($loop * 100 / $cost) | round)%)"@' "$1"
+}
+
 # Not a gate: the REVIEW session is told to fix in place again. The whole contract of this mission
 # travels in ONE sentence of the boot prompt — nothing in `gate_REVIEW`, `current_phase()` or the
 # checkpoint parser changed, so this line is the entire mechanism, and a runner that lost it goes on
@@ -3422,6 +3451,7 @@ CATALOG=(
   KAIZEN_churn_reads_ok
   AUTONOMY_launches_counts_rows
   AUTONOMY_reopened_ignores_gate
+  AUTONOMY_reopened_closure_blind
   AUTONOMY_reopened_comparable_only
   AUTONOMY_notes_borrowed_across_repos
   LEDGER_progress_not_written
@@ -3470,6 +3500,8 @@ CATALOG=(
   RUN_inline_retry_keeps_the_failed_verdict
   LEDGER_turns_not_written
   AUTONOMY_review_loop_counts_every_exec
+  AUTONOMY_review_loop_frontier_comparable
+  AUTONOMY_review_loop_denominator_split
   RUN_review_fixes_inline
   RUN_review_scope_blind
   RUN_review_scope_handoff_dir_verbatim
