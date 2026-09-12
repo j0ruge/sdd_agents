@@ -2572,6 +2572,29 @@ mut_AUTONOMY_reopened_comparable_only() {
   sed -i 's@| (\.\[0\] | mission_key | history_of) as \$every$@| . as $every@' "$1"
 }
 
+# I4, DOOR 1 of 2. `sdd close` goes back to spending a paid session and writing nothing to the
+# ledger — the state `docs/pipeline.md` has promised against since the file existed, and the reason
+# every close in the kit history was invisible to the judge that counts `launches`. Removing the
+# CALL and not the constructor is deliberate: the defect this increment closes IS an absent call
+# site, and emptying `autonomy_close_row` would let a future writer delete the call while the
+# mutant still died on the body. Caught by `close writes one row naming the issue, the session it
+# spent and its own invocation` in check-autonomy.sh, which reads `rows:0` under this mutant where
+# it demands `rows:1`.
+mut_RUN_close_writes_no_row() {
+  sed -i 's@^  autonomy_close_row "\$issue" "\$sid" "\$rc" "\$verified"$@  :@' "$1"
+}
+
+# I4, DOOR 2 of 2, and a DIFFERENT door of the same promise: `sdd retry` goes back to returning 3
+# in silence — the human relaunched the phase, the gate stayed red, the line stopped, and neither
+# the journal nor the ledger said so. The pair is one mutant per door, the shape CLAUDE.md spells
+# out, and neither kills the other: this sed touches cmd_retry only, and the close mutant above
+# leaves every escalation site alone. Caught by `sdd retry that leaves the gate red escalates: a
+# ledger row and a journal line` in check-autonomy.sh, which reads `kind: journal:+0` under this
+# mutant where it demands `kind:retry-gate-red journal:+1`.
+mut_RETRY_gate_red_silent() {
+  sed -i 's@^  autonomy_blocked_row "retry-gate-red" "\$phase" "\$GATE_WHY"$@  :@' "$1"
+}
+
 # The guard on the narrative cell goes: `intervention note(s)` is printed for ANY mission whose slug
 # has a checkpoint in this repo, so under --all-repos a foreign mission that merely shares the slug
 # borrows this repo notes. The map is keyed by slug alone — built from this repo rows — and the row
@@ -3453,6 +3476,8 @@ CATALOG=(
   AUTONOMY_reopened_ignores_gate
   AUTONOMY_reopened_closure_blind
   AUTONOMY_reopened_comparable_only
+  RUN_close_writes_no_row
+  RETRY_gate_red_silent
   AUTONOMY_notes_borrowed_across_repos
   LEDGER_progress_not_written
   EXEC_tally_counts_done

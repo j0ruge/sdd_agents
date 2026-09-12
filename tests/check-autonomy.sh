@@ -349,10 +349,28 @@ assert_eq "an escalation row carries no cache_read" "blocked false" \
 # again. Leaving it out of the ledger would hide the strongest friction signal there is.
 echo "== retry invocation =="
 : > "$LEDGER"
-"$SDD" retry "$MISSION" >/dev/null 2>&1
-assert_eq "sdd retry writes one session row" "1" "$(nrows)"
-assert_eq "and marks itself as a retry invocation" "retry" "$(rows '.invocation')"
-assert_eq "with its own run_id" "true" "$(rows '(.run_id | length) > 0')"
+RETRY_LOG_BEFORE="$(grep -c 'BLOCKED' "$FIX/.sdd/logs/$MISSION/pipeline.log" 2>/dev/null || true)"
+"$SDD" retry "$MISSION" >/dev/null 2>&1; RETRY_RC=$?
+RETRY_LOG_AFTER="$(grep -c 'BLOCKED' "$FIX/.sdd/logs/$MISSION/pipeline.log" 2>/dev/null || true)"
+assert_eq "sdd retry writes one session row" "1" "$(rows 'select(.event == "session") | 1' | grep -c .)"
+assert_eq "and marks itself as a retry invocation" "retry" "$(rows 'select(.event == "session") | .invocation')"
+assert_eq "with its own run_id" "true" "$(rows 'select(.event == "session") | (.run_id | length) > 0')"
+# I4 — `sdd retry` that leaves the gate RED ends the run with rc 3, and an rc 3 is an escalation:
+# `docs/pipeline.md` promises one JSON line per session spent OR escalation, and this door used to
+# return 3 in silence — no ledger row, no BLOCKED line in the journal. The judge counts escalations
+# by `kind`, so a human-forced retry that ended stopped simply did not exist for it, and `sdd
+# autonomy` read the mission as one quiet session.
+#
+# READ AS A GROUP, and each term is a floor for the others: `rc:3` proves the run really ended
+# stopped (on a green gate there is nothing to escalate and the assertion would be about the wrong
+# world); the journal delta proves the human-facing half moved in the SAME invocation rather than
+# having been there all along; and `kind` proves WHICH escalation, so a row copied from the
+# no-progress site next door still fails by name.
+assert_eq "sdd retry that leaves the gate red escalates: a ledger row and a journal line" \
+  "rc:3 kind:retry-gate-red journal:+1" \
+  "rc:$RETRY_RC kind:$(rows 'select(.event == "blocked") | .kind') journal:+$(( ${RETRY_LOG_AFTER:-0} - ${RETRY_LOG_BEFORE:-0} ))"
+assert_eq "and the escalation names the phase the human relaunched" "EXEC" \
+  "$(rows 'select(.event == "blocked") | .phase')"
 # L4 of the 2026-09-03 audit: the human's hand is written by the RUNNER, not remembered by the
 # human. Measured: three launches and zero `- intervention:` notes on 20260901-o-revisor-so-acha,
 # three interventions and zero notes on 20260902-o-rascunho-legado-fala-cru. The reader did not
@@ -772,7 +790,10 @@ rm -f "$MOVE_MARKER"
 git -C "$FIX" add -A
 git -C "$FIX" commit -qm "chore: reset move marker for the sdd-retry scenario"
 "$SDD" retry "$MISSION" >/dev/null 2>&1
-assert_eq "sdd retry that changed the disk records moved:true" "true" "$(rows '.moved')"
+# Scoped to the session row: since I4 the escalation beside it carries no `moved` at all (the rule
+# every non-session row here follows), and an unscoped filter would compare "true" against two lines.
+assert_eq "sdd retry that changed the disk records moved:true" "true" \
+  "$(rows 'select(.event == "session") | .moved')"
 
 # --- the phase session stops being a blind spot while it runs ---------------
 # `--output-format json` prints ONE blob, and only once the session is already over: the log file
@@ -1512,8 +1533,11 @@ assert_eq "the world has a round on disk, so the derived phase below is DOCS and
 "$SDD" retry "$MISSION" >/dev/null 2>&1 || true
 # The second floor: the phase actually retried is DOCS. If the derivation ever lands somewhere else
 # the assertion below would be measuring the guard of the phase it is supposed to exempt.
+# `length` counts the SESSION rows and not the file: since I4 a `sdd retry` that leaves the gate
+# red also writes its escalation, so "one row" would be a claim about the escalation existing
+# rather than about this retry having spent exactly one session.
 assert_eq "the retried phase is DOCS, which is neither EXEC nor REVIEW" "DOCS retry 1" \
-  "$(jq -r -s '"\(.[0].phase) \(.[0].invocation) \(length)"' "$LEDGER")"
+  "$(jq -r -s '[.[] | select(.event == "session")] | "\(.[0].phase) \(.[0].invocation) \(length)"' "$LEDGER")"
 assert_eq "and its row carries all six count fields as null" "true" \
   "$(jq -r -s '.[0] | .rounds_before == null and .rounds_after == null and .rounds_max == null
                       and .pending_before == null and .pending_after == null
@@ -4743,6 +4767,94 @@ STUB
 chmod +x "$OUTSIDE/stub/claude"
 ( cd "$KGCL2" && "$FAKEKIT/bin/sdd" close "$MISSION" >/dev/null 2>&1 ); KG8_RC=$?
 assert_eq "hat: sdd close wears the ticket hat — a close session that edits code stops the line" "3 hat-crossed" "$KG8_RC $(hat_rows)"
+cat > "$OUTSIDE/stub/claude" <<'STUB'
+#!/usr/bin/env bash
+echo "ERROR: the test invoked the real claude" >&2
+exit 97
+STUB
+chmod +x "$OUTSIDE/stub/claude"
+
+# =============================================================================
+# I4 — `sdd close` SPENDS a session, so it writes a row
+# =============================================================================
+# `docs/pipeline.md` promises one JSON line per session spent or escalation, and `sdd close` was
+# the one door that spent a paid session and wrote nothing: only a CLOSE line in the journal, which
+# is per-mission and per-machine and which no reader of the ledger ever opens. The judge's D12
+# counts `launches`, and every close in the kit's history was invisible to it.
+#
+# A FOURTH event, `close`, and not a `session` row wearing `phase: "CLOSE"`: a session row carries
+# `moved` and `gate` and enters the judge's arithmetic as a graded phase, and CLOSE is not a phase —
+# it has no gate, it derives nothing, and `current_phase()` never mentions it. The readers learn
+# the event in the same commit, through the ONE definition each program keeps.
+#
+# THE FLOOR IS DIFFERENTIAL, and it is the whole assertion rather than decoration: `sdd close` has
+# two arms, and only one of them buys a session. The already-Done arm returns before `claude` is
+# ever launched (the journal says `session=none`), so a writer that emitted the row from the top of
+# the function — the obvious wrong fix — would record a session nobody spent, which is the exact
+# class of lie `event: "gate_pass"` exists to avoid. One arm writes one row, the other writes none,
+# and neither half alone says that.
+echo "== sdd close spends a session, so it writes a row =="
+kitguard_reset
+CLW="$OUTSIDE/close-ledger"
+kitguard_world "$CLW"
+sed -i 's/^JIRA_ENABLED=false$/JIRA_ENABLED=true/' "$CLW/.sdd/config.sh"
+printf -- '---\nfase: TICKET\nissue: SQ-9\n---\n# TICKET\n' > "$CLW/docs/handoffs/$MISSION/10-ticket.md"
+# An issue that is NOT Done: the pre-check finds acli reachable, so the session runs.
+cat > "$OUTSIDE/stub/acli" <<'STUB'
+#!/usr/bin/env bash
+printf '[]\n'
+STUB
+chmod +x "$OUTSIDE/stub/acli"
+# A benign session — the empty first argument is `kitguard_stub`'s own "commit nothing anywhere",
+# so nothing here is about the kit guard and a hat-crossed row cannot be mistaken for the row
+# under test.
+kitguard_stub "" 1
+( cd "$CLW" && "$FAKEKIT/bin/sdd" close "$MISSION" >/dev/null 2>&1 ) || true
+CLOSE_ROWS="$(rows 'select(.event == "close") | 1' | grep -c . || true)"
+CLOSE_SID="$(rows 'select(.event == "close") | .session')"
+# The row has to name the SESSION the runner handed `claude` via `--session-id`, or it records a
+# closure without saying which paid session produced it — the same defect `032c09c` fixed for the
+# forked retry row. The journal is the independent witness: it already carried that id before this
+# row existed, so agreement between the two is a fact neither writer can fake alone.
+CLOSE_JOURNAL_SID="$(grep -oE 'CLOSE .*session=[^ ]+' "$CLW/.sdd/logs/$MISSION/pipeline.log" 2>/dev/null | tail -1 | grep -oE 'session=[^ ]+' | cut -d= -f2 || true)"
+assert_eq "close writes one row naming the issue, the session it spent and its own invocation" \
+  "rows:1 issue:SQ-9 invocation:close verified:false sid-agrees:true" \
+  "rows:$CLOSE_ROWS issue:$(rows 'select(.event == "close") | .issue') invocation:$(rows 'select(.event == "close") | .invocation') verified:$(rows 'select(.event == "close") | .verified') sid-agrees:$( [ -n "$CLOSE_SID" ] && [ "$CLOSE_SID" = "$CLOSE_JOURNAL_SID" ] && echo true || echo false )"
+# NO session fields, on the rule every non-session row in this file already follows: a close spent
+# no gate and moved no increment, and a zeroed `moved` or `gate` would enter the judge's arithmetic
+# as a phase that ran and said nothing.
+assert_eq "close writes a row that is not a session row wearing a CLOSE label" "close false false" \
+  "$(rows 'select(.event == "close") | .event') $(rows 'select(.event == "close") | has("moved")') $(rows 'select(.event == "close") | has("gate")')"
+# THE OTHER HALF of the differential: an issue JIRA already reports Done returns before any session
+# is bought, and a closure nobody paid for is not a row.
+kitguard_reset
+CLW2="$OUTSIDE/close-ledger-already-done"
+kitguard_world "$CLW2"
+sed -i 's/^JIRA_ENABLED=false$/JIRA_ENABLED=true/' "$CLW2/.sdd/config.sh"
+printf -- '---\nfase: TICKET\nissue: SQ-9\n---\n# TICKET\n' > "$CLW2/docs/handoffs/$MISSION/10-ticket.md"
+cat > "$OUTSIDE/stub/acli" <<'STUB'
+#!/usr/bin/env bash
+printf '[{"key":"SQ-9","fields":{"status":{"name":"Done"}}}]\n'
+STUB
+chmod +x "$OUTSIDE/stub/acli"
+kitguard_stub "" 1
+( cd "$CLW2" && "$FAKEKIT/bin/sdd" close "$MISSION" >/dev/null 2>&1 ); CLOSE_DONE_RC=$?
+# `sessions:0` is this half's own floor: without it "no row" is also the answer of a world where
+# the close never ran at all, and the assertion would be about nothing.
+assert_eq "close writes no row when no session was spent — the already-Done arm" \
+  "rc:0 sessions:0 rows:0" \
+  "rc:$CLOSE_DONE_RC sessions:$(kitguard_sessions) rows:$(rows 'select(.event == "close") | 1' | grep -c . || true)"
+# Both readers have to ADMIT the fourth event, or a row the runner wrote on purpose lands in
+# `excluded.unrecognized` — which the judge prompt is told to read as a bug in the kit itself. This
+# is the measured regression `gate_pass` already paid for once (`unrecognized: 1` over a ledger of
+# four sessions and one recorded closure); the pair below is what stops the fourth event repeating
+# it, in both programs, over the SAME file.
+CLOSE_AUT="$( "$SDD" autonomy 2>&1 || true )"
+CLOSE_SER="$( "$SDD" kaizen --series 2>/dev/null || true )"
+assert_eq "both readers admit the close row instead of filing it as unrecognized" \
+  "human:0 judge:0" \
+  "human:$(grep -cE '[0-9]+ unrecognized row' <<< "$CLOSE_AUT" || true) judge:$(jq -r '.excluded.unrecognized // 0' <<< "$CLOSE_SER" 2>/dev/null || echo ?)"
+rm -f "$OUTSIDE/stub/acli"
 cat > "$OUTSIDE/stub/claude" <<'STUB'
 #!/usr/bin/env bash
 echo "ERROR: the test invoked the real claude" >&2

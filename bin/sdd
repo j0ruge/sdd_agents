@@ -3032,6 +3032,49 @@ autonomy_gate_pass_row() {   # autonomy_gate_pass_row <phase>
       project: $project, repo: $repo, mission: $mission, phase: $phase}' )"
 }
 
+# THE FOURTH EVENT. `sdd close` buys a real paid session — same --allowedTools, same
+# --permission-mode, same --max-budget-usd as any phase — and until now it wrote nothing but a
+# CLOSE line in the per-mission journal. `docs/pipeline.md` promises one JSON line per session
+# spent or escalation, and this was the one door that spent one and stayed silent: the judge counts
+# `launches` off this file, so every close the kit ever ran was invisible to it.
+#
+# NOT A SESSION ROW WEARING `phase: "CLOSE"`, and the distinction is the design. A session row
+# carries `moved` and `gate`, and those are what the judge grades a PHASE by; CLOSE is not a phase
+# — it has no gate, `current_phase()` never derives it, and no increment moves. A row with those
+# fields zeroed would enter the arithmetic as a graded phase that ran and said nothing, which is
+# exactly the reason `autonomy_gate_pass_row` two screens up refuses them too.
+#
+# WRITTEN ONLY WHERE A SESSION WAS ACTUALLY SPENT, which is why this is not called from the top of
+# the function: the already-Done arm returns before `claude` is ever launched (its journal line says
+# `session=none`), and a closure nobody paid for is not a row. Both halves are pinned, differentially,
+# by "close writes ... the already-Done arm" in tests/check-autonomy.sh.
+#
+# `verified` is the artifact JIRA answered and never the session rc — the rc is one exit code shared
+# by the session that closed the issue and the session that only asked about it, which is the label
+# cmd_close stopped believing in 2026-08-25.
+autonomy_close_row() {   # autonomy_close_row <issue> <session id> <rc> <verified>
+  autonomy_have_jq || return 0
+  # Called, never substituted: `$(autonomy_kit_stamp)` would reset its one-shot warning flag.
+  autonomy_kit_stamp; local stamp="$AUTONOMY_KIT_STAMP"
+  # Substituted and not called, exactly as the two constructors above do it: ledger_repo_root only
+  # prints, so there is no global for the subshell to eat. No `#` inside the `\`-continued block
+  # below — a comment there breaks the command in silence and `bash -n` says nothing.
+  local repo; repo="$(ledger_repo_root)"
+  autonomy_append "$( jq -cn \
+    --arg ts "$(date -Iseconds)" --arg issue "$1" --arg session "$2" \
+    --arg rc "$3" --arg verified "$4" \
+    --arg run_id "$AUTONOMY_RUN_ID" --arg invocation "$AUTONOMY_INVOCATION" \
+    --arg sha "${stamp%%|*}" --arg dirty "${stamp#*|}" \
+    --arg project "$PROJECT_NAME" --arg repo "$repo" --arg mission "$MISSION" \
+    '{v: 1, ts: $ts, event: "close",
+      run_id: $run_id, invocation: $invocation,
+      kit_sha: (if $sha == "" then null else $sha end),
+      kit_dirty: (if $dirty == "" then null else ($dirty == "true") end),
+      project: $project, repo: $repo, mission: $mission,
+      issue: $issue, session: $session,
+      rc: ($rc | tonumber? // null), verified: ($verified == "true")}' )"
+}
+
 # One row per session, written after the gate has been evaluated — the row carries the gate
 # result, so it cannot be born before it.
 # Arguments 7–9 are EXEC's alone and empty everywhere else (⇒ `null`, never 0: a zero would enter
@@ -5649,7 +5692,19 @@ cmd_retry() {
     "$review_before" "$review_after" "$review_max"
   if hat_crossed_escalation "$phase"; then return 3; fi
   if [ "$gate_rc" -eq 0 ]; then ok "gate $phase: $GATE_WHY"; return 0; fi
+  # AN rc 3 IS AN ESCALATION, and this door used to be the only one that returned 3 in silence: no
+  # BLOCKED line in the journal, no row in the ledger. `docs/pipeline.md` promises one JSON line per
+  # session spent or escalation, and the human-forced retry that ended STOPPED — the loudest
+  # friction signal the rubric has, since it means the human pushed the phase again and it still did
+  # not close — reached the judge as one quiet session with a failing gate.
+  #
+  # Its OWN kind and not `no-progress`, which is the kind one screen up in cmd_run: that one means
+  # "two sessions and the disk never moved", a claim this site cannot make. `sdd retry` spends ONE
+  # session and it may well have moved the disk (`moved` rides on the row above); what it says is
+  # narrower and true — the human relaunched the phase and the gate is still red.
   bad "gate $phase not yet: $GATE_WHY"
+  pipeline_log_line "$(date -Iseconds)  BLOCKED  $phase  $GATE_WHY"
+  autonomy_blocked_row "retry-gate-red" "$phase" "$GATE_WHY"
   return 3
 }
 
@@ -6060,7 +6115,13 @@ cmd_autonomy() {
     # is NOT an escalation and must never be folded into that pair: a gate that closed is the
     # pipeline working, and `escalations` is the map a human reads to find where it did not.
     def is_gate_pass: .event == "gate_pass";
-    def is_unrecognized: (is_session or is_escalation or is_gate_pass) | not;
+    # ONE definition of the FOURTH event for this program, on the same terms as the three above and
+    # kept out of all of them: a close is neither a graded phase nor a stop of the line. It is here
+    # so it is ADMITTED — a row this reader does not know lands in `unrecognized`, and the runner
+    # would be reporting as a stray a line it wrote on purpose. It appears in no count of this
+    # table: `sdd autonomy` grades phases, and a close closes a ticket.
+    def is_close: .event == "close";
+    def is_unrecognized: (is_session or is_escalation or is_gate_pass or is_close) | not;
     # ONE definition of "which mission is this row about" for this program too, exactly as
     # kaizen_series holds one: the repo is part of the identity, because two projects run the same
     # dated slug on the same day and --all-repos puts their rows in one reading. Counting by slug
@@ -6333,7 +6394,7 @@ cmd_autonomy() {
     # only when there is something to disclaim.
     , ([ (if $skipped > 0 then "  (\($skipped) non-comparable row(s) excluded: dirty kit, no kit_sha, or no moved field)" else empty end)
        , (if $closed > 0 then "  (\($closed) gate(s) closed without a session — the pipeline moved on for free, recorded rather than inferred)" else empty end)
-       , (if $stray > 0 then "  (\($stray) unrecognized row(s) excluded: event missing or not one of session/blocked/degraded/gate_pass)" else empty end)
+       , (if $stray > 0 then "  (\($stray) unrecognized row(s) excluded: event missing or not one of session/blocked/degraded/gate_pass/close)" else empty end)
        , (if $history_extra > 0 then "  (launches, reopened and the review loop are counted over every session of the mission, \($history_extra) of them non-comparable)" else empty end)
        # NOT an exclusion — nothing left a bucket — which is why it rides at the end of the first
        # paragraph rather than among the four. It is the disclosure that half this ledger was read
@@ -6453,6 +6514,13 @@ kaizen_series() {
     # runner accusing itself of a row it wrote on purpose. Measured before this line existed:
     # `unrecognized: 1` over a ledger of four sessions and one recorded closure.
     def is_gate_pass: .event == "gate_pass";
+    # ONE definition of the FOURTH event for this program too, and admitted by the `$all` binding
+    # at the bottom for exactly the reason the sentence above gives: a row this reader refuses
+    # lands in `excluded.unrecognized`, which the judge prompt is told to read as a bug in the kit.
+    # It grades NOTHING — `graded_row` and `shas_in_file_order` are both written positively and
+    # neither names it, so a close can never mint a version nor count as a mission, which is the
+    # failure mode the comment at graded_row predicted for the day a fourth event arrived.
+    def is_close: .event == "close";
 
     # ONE definition of the kit_sha axis for this program too — the third hand-written copy of the
     # same question lived here, as the complementary pair `.kit_dirty == true or .kit_sha == null`
@@ -6780,7 +6848,7 @@ kaizen_series() {
     # one. The two counts partition what the filter removed, so the arithmetic still closes.
     | (($file_rows | length) - ($raw | length) - $no_repo) as $other_repo
     | ($raw | map(select(type == "object" and .v == 1
-                         and (.event == "session" or is_escalation or is_gate_pass)))) as $all
+                         and (.event == "session" or is_escalation or is_gate_pass or is_close)))) as $all
     | ($all | map(select(.phase == "KAIZEN"))) as $meta
     | ($all | map(select(.phase != "KAIZEN"))) as $rows
     | (($raw | length) - ($all | length)) as $unrec
@@ -7457,6 +7525,11 @@ To see what it saw:  $acli_bin jira workitem search --jql \"key = $issue AND sta
   close_query "$acli_bin" "$issue"
   local verified="$CLOSE_VERIFIED"
   pipeline_log_line "$(date -Iseconds)  CLOSE  issue=$issue  session=$sid  rc=$rc  verified=$verified  reachable=$CLOSE_REACHABLE  log=$logfile"
+  # Beside the journal line and never instead of it: the journal is per-mission and per-machine, and
+  # the ledger is the file every reader of autonomy opens. Placed HERE, past the session and past
+  # the second `close_query`, so the row carries the verdict the artifact gave rather than the one
+  # the runner hoped for — and so the arm that spends no session cannot reach it.
+  autonomy_close_row "$issue" "$sid" "$rc" "$verified"
   if [ "$verified" = true ]; then
     # The artifact outranks the rc in BOTH directions, or it is not the artifact deciding — it is a
     # second label ANDed onto the first. A session that fell over after closing the issue closed it.
