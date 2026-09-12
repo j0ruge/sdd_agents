@@ -3021,6 +3021,18 @@ mut_LEDGER_gate_pass_unrecognized() {
   sed -i 's@def is_unrecognized: (is_session or is_escalation or is_gate_pass or is_close) | not;@def is_unrecognized: (is_session or is_escalation) | not;@' "$1"
 }
 
+# The close row goes back to being ADMITTED but never NAMED: it enters the header total (the shell
+# `total=` counts every local row) and leaves no line, so a human adding the printed buckets to the
+# table lands one short of the header with nothing saying why. It is `unrecognized` with the alarm
+# switched off — r1 finding #1 of the 2026-09-11 judge mission, measured as header 2
+# against buckets 1. The counterpart mutant above moves the row into the WRONG bucket out loud;
+# this one removes it from the arithmetic in silence, which is the quieter half of the same defect.
+# Caught by `the buckets still sum to the header total (a close row)` and by `it names the closure
+# instead, so nothing leaves the accounting in silence` in check-autonomy.sh, and by nothing else.
+mut_LEDGER_close_bucket_unnamed() {
+  sed -i '/ticket closure(s) recorded/d' "$1"
+}
+
 # The JUDGE stops admitting the row, and it lands in `excluded.unrecognized` — the bucket the judge
 # is told to read as a bug in the kit itself, so the runner ends up accusing itself of a row it
 # wrote on purpose. Measured before the admission existed: `unrecognized: 1` over a ledger of four
@@ -3546,6 +3558,7 @@ CATALOG=(
   RUN_gate_pass_ignores_own_session
   RUN_gate_pass_off_the_derived_branch
   LEDGER_gate_pass_unrecognized
+  LEDGER_close_bucket_unnamed
   LEDGER_gate_pass_not_admitted
   LEDGER_gate_pass_mints_a_cell
   LEDGER_gate_pass_counted_as_session

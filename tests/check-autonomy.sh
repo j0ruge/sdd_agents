@@ -70,23 +70,30 @@ sum_escalations() {
 }
 
 # assert_bucket_sum <description> <reader output>
-# Every row lands in exactly one of FIVE buckets: comparable session, non-comparable session,
-# escalation, recorded gate closure, unrecognized. If the filter drops a row (finding 3) or
+# Every row lands in exactly one of SIX buckets: comparable session, non-comparable session,
+# escalation, recorded gate closure, recorded ticket closure, unrecognized. If the filter drops a row (finding 3) or
 # double-counts one, this sum drifts from the header total — an anti-vacuity check a broken filter
 # cannot pass by accident, unlike any single count in isolation.
 #
 # It was four until 2026-08-31, and the fifth is what an event added to the enum costs: a row the
 # reader recognises has to be NAMED somewhere the arithmetic closes over, or "recognised" degrades
 # into "silently dropped" — which is the same defect as `unrecognized`, only quieter.
+#
+# The SIXTH landed with r1 finding #1 of the 2026-09-11 judge mission, and it is the
+# same sentence collected a second time: `event:"close"` was admitted to the enum (so it stopped
+# being a stray) without being named anywhere this sum closes over. Measured on a two-row fixture —
+# header 2, buckets 1 — and invisible to the whole suite because no fixture next to an
+# assert_bucket_sum carried a close row.
 assert_bucket_sum() {
-  local desc="$1" out="$2" total comparable noncomp escal closed stray sum
+  local desc="$1" out="$2" total comparable noncomp escal closed closes stray sum
   total="$(num_before "$out" 'row\(s\)')"; total="${total:-0}"
   comparable="$(sum_sessions "$out")"
   noncomp="$(num_before "$out" 'non-comparable')"; noncomp="${noncomp:-0}"
   escal="$(sum_escalations "$out")"
   closed="$(num_before "$out" 'gate\(s\) closed without a session')"; closed="${closed:-0}"
+  closes="$(num_before "$out" 'ticket closure\(s\) recorded')"; closes="${closes:-0}"
   stray="$(num_before "$out" 'unrecognized')"; stray="${stray:-0}"
-  sum=$((comparable + noncomp + escal + closed + stray))
+  sum=$((comparable + noncomp + escal + closed + closes + stray))
   assert_eq "$desc" "$total" "$sum"
 }
 
@@ -2751,6 +2758,36 @@ assert_eq "and never prints a percentage when there is nothing to compute one ov
 assert_eq "the escalations are still both named" "1" "$(grep -c 'no-progress: 1' <<< "$out")"
 assert_eq "the second kind too" "1" "$(grep -c 'increment-blocked: 1' <<< "$out")"
 assert_bucket_sum "the four buckets sum to the header total (escalations only)" "$out"
+
+# --- a recorded ticket closure is NAMED, not silently dropped ------------------------------------
+# r1 finding #1. `is_close` was added to the enum so a row the runner writes on purpose would stop
+# landing in `unrecognized` — and admitting it there was only half the job: the row entered the
+# header total (computed by the shell `total=` over ledger_row_is_local, which knows nothing about
+# any filter inside the big program) and then fell into no bucket at all. "Recognised" degraded
+# into "silently dropped", which is the same defect as `unrecognized`, only quieter — the exact
+# sentence the assert_bucket_sum header warns about.
+#
+# Why no fixture caught it: every probe of `close` above measures the WRITER (autonomy_close_row
+# emits the right row); none measured the READER. `grep -c '"event":"close"'` over this file read 0
+# before this block existed, so no ledger carrying a close row ever reached assert_bucket_sum.
+echo "== reader: a recorded ticket closure lands in a bucket of its own =="
+mkdir -p "$OUTSIDE/closerow"
+localize > "$OUTSIDE/closerow/autonomy-log.jsonl" <<'EOF'
+{"v":1,"ts":"2026-09-12T10:00:00-03:00","event":"session","run_id":"c1","invocation":"run","kit_sha":"ccc1111","kit_dirty":false,"project":"p1","repo":"/p1","mission":"m20","phase":"EXEC","step":"EXEC","agent":"sdd-executor","model":"opus","attempt":1,"auto_retry":false,"session":"c1s","rc":0,"dur_s":10,"cost_usd":1.0,"moved":true,"gate":"pass","gate_why":""}
+{"v":1,"ts":"2026-09-12T10:05:00-03:00","event":"close","run_id":"c1","invocation":"close","kit_sha":"ccc1111","kit_dirty":false,"project":"p1","repo":"/p1","mission":"m20","issue":"SQ-999","session":"c2s","rc":0,"verified":true}
+EOF
+out_close="$( SDD_STATE_DIR="$OUTSIDE/closerow" "$SDD" autonomy 2>&1 )"
+# THE FLOOR, and it comes first: without it every assertion below would be measuring a reader that
+# never saw a close row, and the bucket sum would close by vacuity over a one-row ledger.
+assert_eq "the fixture really does put a close row in the header total" "2" \
+  "$(num_before "$out_close" 'row\(s\)')"
+# The row the runner wrote on purpose is still not a stray — the half of the enum that already
+# worked, pinned here so a fix to the bucket cannot be made by demoting the row back.
+assert_eq "the human reader does not call the recorded closure unrecognized" "0" \
+  "$(grep -c 'unrecognized' <<< "$out_close")"
+assert_eq "it names the closure instead, so nothing leaves the accounting in silence" "1" \
+  "$(num_before "$out_close" 'ticket closure\(s\) recorded')"
+assert_bucket_sum "the buckets still sum to the header total (a close row)" "$out_close"
 
 # --- the two readers of the ledger agree on the axis -------------------------
 # `sdd autonomy` (the human's window) and `sdd kaizen --series` (the judge's source of truth) read

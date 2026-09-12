@@ -6118,8 +6118,10 @@ cmd_autonomy() {
     # ONE definition of the FOURTH event for this program, on the same terms as the three above and
     # kept out of all of them: a close is neither a graded phase nor a stop of the line. It is here
     # so it is ADMITTED — a row this reader does not know lands in `unrecognized`, and the runner
-    # would be reporting as a stray a line it wrote on purpose. It appears in no count of this
-    # table: `sdd autonomy` grades phases, and a close closes a ticket.
+    # would be reporting as a stray a line it wrote on purpose. It feeds no GRADE in this table —
+    # `sdd autonomy` grades phases, and a close closes a ticket — but it does get a bucket of its
+    # own ($closes, below): admitting a row without naming it anywhere the arithmetic closes over
+    # is `unrecognized` with the alarm switched off, which is what r1 finding #1 measured.
     def is_close: .event == "close";
     def is_unrecognized: (is_session or is_escalation or is_gate_pass or is_close) | not;
     # ONE definition of "which mission is this row about" for this program too, exactly as
@@ -6264,8 +6266,13 @@ cmd_autonomy() {
     # The fifth bucket, and it exists because RECOGNISING a row is not the same as accounting for
     # it: without a count of its own the recorded closures would leave the header total without
     # leaving any line, which is `unrecognized` with the alarm switched off. tests/check-autonomy.sh
-    # closes the sum over all five.
+    # closes the sum over all six.
     | (map(select(is_gate_pass)) | length) as $closed
+    # The SIXTH bucket, and it exists for exactly the reason the fifth does, one event later: the
+    # header total is the shell `total=` above, computed over ledger_row_is_local, which knows
+    # nothing about any filter inside this program. A close row therefore ENTERED that total and,
+    # until r1 finding #1, left no line — measured on a two-row fixture: header 2, buckets 1.
+    | (map(select(is_close)) | length) as $closes
     # The SAME population the kit_sha table draws, regrouped. Not a second reading of the file: two
     # instruments over one ledger that disagreed about the money would corrode the trust the whole
     # kaizen loop runs on, which is the argument that already bent this reader onto the series axis.
@@ -6394,6 +6401,11 @@ cmd_autonomy() {
     # only when there is something to disclaim.
     , ([ (if $skipped > 0 then "  (\($skipped) non-comparable row(s) excluded: dirty kit, no kit_sha, or no moved field)" else empty end)
        , (if $closed > 0 then "  (\($closed) gate(s) closed without a session — the pipeline moved on for free, recorded rather than inferred)" else empty end)
+       # NOT an exclusion either — the row is local, counted in the header, and simply not a graded
+       # phase. It rides among the four because the arithmetic has to close over it: a reader
+       # adding the table to the named lines has to arrive at the header, and before r1 finding #1
+       # this row was the one term with no line to add.
+       , (if $closes > 0 then "  (\($closes) ticket closure(s) recorded: `sdd close` wrote the row — a closure grades no phase)" else empty end)
        , (if $stray > 0 then "  (\($stray) unrecognized row(s) excluded: event missing or not one of session/blocked/degraded/gate_pass/close)" else empty end)
        , (if $history_extra > 0 then "  (launches, reopened and the review loop are counted over every session of the mission, \($history_extra) of them non-comparable)" else empty end)
        # NOT an exclusion — nothing left a bucket — which is why it rides at the end of the first
