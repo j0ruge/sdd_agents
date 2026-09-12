@@ -4,7 +4,7 @@ titulo: o juiz do kaizen para de afirmar medidas que não faz, e o ledger que el
 data: 2026-09-11
 versao:
 branch: feat/o-juiz-nao-mente-sobre-a-janela
-aprovacao:
+aprovacao: humano-2026-09-11
 ddd: n/a
 ---
 
