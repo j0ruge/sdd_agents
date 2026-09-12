@@ -2896,6 +2896,29 @@ mut_AUTONOMY_historic_sentence_before_comparability() {
   sed -i 's@type == "object" and comparable and .progress_source@type == "object" and .progress_source@' "$1"
 }
 
+# ONE mutant per SIDE of the parity, because one would let the other half rot with the catalogue
+# green — the same argument that split every other pair in this file. Both are caught by the
+# `differential:` block of check-kaizen.sh and by nothing else: no assertion that reads a single
+# reader against a hard-coded number can see two readers disagreeing with each OTHER.
+#
+# Side A — the human window forgets to take the judge own sessions off the axis, so a `sdd kaizen`
+# row (mission `<date>-kaizen`, phase KAIZEN, a real row from a real writer) is counted as an
+# observation of the version it was judging, and in the kit repo — where it lands on a sha of its
+# own — it MINTS a version the judge series never heard of. Measured before the fix: the last line
+# of the table read `bbbbbbb` while `.latest.kit_sha` read `ccccccc`, over one file.
+mut_AUTONOMY_meta_row_on_the_axis() {
+  sed -i 's@^    | map(select((type == "object" and .phase == "KAIZEN") | not))$@    | map(select(true))@' "$1"
+}
+
+# Side B — the judge counts missions over every row of the slice again, so a mission whose only
+# trace on this version is a `gate_pass` enters `missions` and the ADR 0005 `composition` without
+# leaving a cell for the judge to read, and the two numbers of the judge stop reconciling with each
+# other. `guard.sufficient` reads `missions_with_session` and does NOT move — which is exactly what
+# kept the defect quiet for a whole window.
+mut_KAIZEN_missions_count_ungraded_rows() {
+  sed -i 's@^    def graded_row: .event == "session" or is_escalation;$@    def graded_row: true;@' "$1"
+}
+
 mut_KAIZEN_label_idle_blind() {
   sed -i 's@(.auto_retry == true or outcome != "advanced")@(.auto_retry == true or outcome == "churned")@' "$1"
 }
@@ -3420,6 +3443,8 @@ CATALOG=(
   KAIZEN_advance_rate_reads_gate
   KAIZEN_label_auto_retry_blind
   KAIZEN_label_idle_blind
+  AUTONOMY_meta_row_on_the_axis
+  KAIZEN_missions_count_ungraded_rows
   RUN_review_rounds_photo_missing
   LEDGER_rounds_leak_across_phases
   LEDGER_outcome_rounds_blind

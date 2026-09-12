@@ -6123,6 +6123,23 @@ cmd_autonomy() {
     (map(select(ledger_row_no_repo)) | length) as $norepo
     | (map(select((ledger_row_is_local | not) and (ledger_row_no_repo | not))) | length) as $foreign
     | map(select(ledger_row_is_local))
+    # The JUDGE own sessions leave the axis here, exactly as they leave kaizen_series one program
+    # down (`$meta`, surfaced as `excluded.meta`): a row `sdd kaizen` wrote ABOUT a kit version is
+    # not an observation OF that version, and counting it as one lets the instrument grade itself.
+    # This split had no counterpart here, and it was not a cosmetic gap — it put the two readers on
+    # DIFFERENT latest versions over one file, which is the class CLAUDE.md names "a comment
+    # asserting parity between two programs is not parity". Measured on three rows, the KAIZEN one
+    # leading: the last line of this table read `bbbbbbb` while `.latest.kit_sha` of the series read
+    # `ccccccc`. Reachable by the normal writer, not by a hand-edited row — `cmd_kaizen` mints
+    # mission `<date>-kaizen` on phase KAIZEN, and in the kit repo it lands on a sha of its own.
+    #
+    # Bound and filtered BEFORE $local_total, so these rows were never in the header total and the
+    # five buckets still close over it — which is why the sentence below rides with $foreign and
+    # $norepo in the `$outside` group rather than among the exclusions that left a bucket.
+    # `type == "object"` guards the same way every filter around here does: historic_progress
+    # preserves non-object rows and `.phase` on a number is an error, not a false.
+    | (map(select(type == "object" and .phase == "KAIZEN")) | length) as $meta
+    | map(select((type == "object" and .phase == "KAIZEN") | not))
     # The dated recovery of the pre-2026-08-29 rows, applied ONCE, here, before any bucket sees the
     # list — so every count below this line reads one history and not two. Length-preserving by
     # construction: it annotates rows, it never adds or drops one, which is what keeps $local_total
@@ -6303,7 +6320,8 @@ cmd_autonomy() {
        # them is finally empty.
        , (if $historic_rounds > 0 then "  (\($historic_rounds) REVIEW row(s) older than the round fields read their round from gate_why)" else empty end)
        ] as $inside
-       | [ (if $foreign > 0 then "  (\($foreign) row(s) excluded: born in another repo — the ledger is global, this reader is not)" else empty end)
+       | [ (if $meta > 0 then "  (\($meta) row(s) excluded: written by the judge — `sdd kaizen` observes a version, it is never an observation of one)" else empty end)
+         , (if $foreign > 0 then "  (\($foreign) row(s) excluded: born in another repo — the ledger is global, this reader is not)" else empty end)
          , (if $norepo > 0 then "  (\($norepo) row(s) excluded: no repo field — the row cannot say which project it came from)" else empty end)
          ] as $outside
        | ($inside
@@ -6607,9 +6625,28 @@ kaizen_series() {
       else "ok"
       end;
 
+    # ONE definition of "this row is about a mission this slice can grade", and the same rule that
+    # gave is_escalation and shas_in_file_order one home each. `missions` and `composition[]
+    # .missions` both count missions on the axis; the `$detail` filter inside group_summary admits
+    # `session or escalation`; the three were written out by hand and the closure event taught only
+    # one of them. A mission whose ONLY row in a slice is a `gate_pass` therefore entered both
+    # counts WITHOUT leaving a cell the judge could read, so the two numbers of the judge stopped
+    # reconciling with each other (measured: `missions: 2` over `detail: 1`, one session and one
+    # closure on one sha) and the ADR 0005 composition — the field that makes reading every repo
+    # safe — reported a mission that contributed nothing gradeable to this version.
+    #
+    # Written POSITIVELY (`session or escalation`) and never `is_gate_pass | not`, for the reason
+    # already paid for one screen up at shas_in_file_order: the two agree on the population of
+    # today, and the negative form makes a FOURTH event count as a mission by default the day
+    # somebody adds it. `guard.sufficient` reads `missions_with_session` off `$sess` and does not
+    # move here — which is exactly what kept this quiet.
+    def graded_row: .event == "session" or is_escalation;
     def group_summary:
       . as $rows
       | ($rows | map(select(.event == "session"))) as $sess
+      # The mission population of this slice, bound ONCE: `missions` and `composition` below both
+      # read it, and two spellings of one question is the defect this binding removes.
+      | ($rows | map(select(graded_row))) as $graded
       | ($rows | group_by(mission_key + [(.phase // "")])
                # A `gate_pass` row MODIFIES a cell; it never is the subject of one. It says a phase
                # closed for free — and a phase that spent nothing in this slice is not a phase this
@@ -6639,7 +6676,7 @@ kaizen_series() {
                       outcomes: (map(select(.event == "session")) | outcome_tally),
                       cost_usd: (map(.cost_usd // 0) | add)})) as $detail
       | {kit_sha: $rows[0].kit_sha,
-         missions: ($rows | map(mission_key) | unique | length),
+         missions: ($graded | map(mission_key) | unique | length),
          # The floor of the guard, and NOT the same number as `missions` above: that one counts
          # every mission on the axis, escalations included, which is right for the display and
          # wrong for the floor. A mission that stopped the line without spending a session left
@@ -6654,7 +6691,7 @@ kaizen_series() {
          # verdict about nothing, and under a silent filter nobody could tell. Contamination
          # becomes a thing you SEE rather than a thing the runner guesses at.
          #
-         # Derived from $rows and NEVER from $sess. The rows the guard admits are sessions AND
+         # Derived from $graded and NEVER from $sess. The rows the guard admits are sessions AND
          # escalations, and three of the seven repositories in the real ledger contribute
          # escalations only — counted over sessions this field reports a clean slice over a
          # contaminated one, which is the mistake the first draft of the ADR made (it answered
@@ -6670,7 +6707,7 @@ kaizen_series() {
          # delimiter nobody chose. sort_by is what makes the order a fact of the data rather than
          # of jq — group_by already sorts by key, and leaning on that would publish an order no
          # line of this program states.
-         composition: ($rows | group_by(.repo // "")
+         composition: ($graded | group_by(.repo // "")
                              | map({repo: (.[0].repo // ""),
                                     missions: (map(mission_key) | unique | length),
                                     missions_with_session:

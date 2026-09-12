@@ -1921,6 +1921,94 @@ assert_eq "corrupt ledger: and the same ledger without the broken line still rea
         "$( [ "$r" = 0 ] && echo reaches-gate || echo "refused:$r" )" \
         "$(grep -q 'could not be read' <<< "$o" && echo unreadable-claim || echo no-unreadable-claim)" )"
 
+# =============================================================================
+# the two windows over one file — DIFFERENTIAL, never a comment claiming parity
+# =============================================================================
+# `cmd_autonomy` prints the window a HUMAN reads; `kaizen_series` derives the axis the JUDGE
+# stands on. CLAUDE.md already carries the rule these two broke twice ("a comment asserting parity
+# between two programs is not parity"), and the only instrument that can hold them together is an
+# assertion that reads BOTH programs over ONE fixture and compares the outputs with each other.
+# Each side against a hard-coded number cannot: it is satisfied by two readers that are each
+# self-consistently wrong, which is exactly how the divergences below survived their own comments.
+#
+# The fixture ledgers here are written in the two regimes the r1 finding named, and in no other:
+# a row that is NOT a comparable session leading a version, and a mission whose only trace in a
+# slice is something that mints no cell. Any other file order is satisfied by chance.
+echo "== differential: the human window and the judge series over one ledger =="
+
+# --- regime 1: a KAIZEN meta row leads a version -----------------------------
+# `kaizen_series` splits the judge's OWN sessions out of the axis (`$meta`, reported in
+# `excluded.meta`): a row the judge wrote about a version is not an observation OF that version.
+# `cmd_autonomy` had no such split, so a `sdd kaizen` session — a real row, written by
+# `cmd_kaizen` on mission `<date>-kaizen` — entered the human window as an observation and MINTED
+# A VERSION in its `$order`. Measured on the three rows below, before the fix: the last line of
+# the human table read `bbbbbbb` while `.latest.kit_sha` of the series read `ccccccc` — the two
+# readers naming DIFFERENT latest versions over one file, which is the r1 class verbatim.
+#
+# The meta row goes FIRST on purpose: it is the only placement where the two populations disagree
+# about the ORDER rather than merely about a count.
+mkdir -p "$OUTSIDE/twowin1"
+localize > "$OUTSIDE/twowin1/autonomy-log.jsonl" <<'EOF'
+{"v":1,"ts":"2026-09-11T10:00:00-03:00","event":"session","run_id":"k1","invocation":"kaizen","kit_sha":"ccccccc","kit_dirty":false,"project":"p1","repo":"/p1","mission":"20260911-kaizen","phase":"KAIZEN","step":"KAIZEN","agent":"sdd-kaizen","model":"opus","attempt":1,"auto_retry":false,"session":"k1s","rc":0,"dur_s":10,"cost_usd":1.0,"moved":true,"gate":"pass","gate_why":"x"}
+{"v":1,"ts":"2026-09-11T10:01:00-03:00","event":"session","run_id":"r1","invocation":"run","kit_sha":"bbbbbbb","kit_dirty":false,"project":"p1","repo":"/p1","mission":"m1","phase":"EXEC","step":"EXEC","agent":"sdd-executor","model":"opus","attempt":1,"auto_retry":false,"session":"s1","rc":0,"dur_s":10,"cost_usd":1.0,"moved":true,"gate":"pass","gate_why":"x"}
+{"v":1,"ts":"2026-09-11T10:02:00-03:00","event":"session","run_id":"r2","invocation":"run","kit_sha":"ccccccc","kit_dirty":false,"project":"p1","repo":"/p1","mission":"m2","phase":"EXEC","step":"EXEC","agent":"sdd-executor","model":"opus","attempt":1,"auto_retry":false,"session":"s2","rc":0,"dur_s":10,"cost_usd":1.0,"moved":true,"gate":"pass","gate_why":"x"}
+EOF
+TW1_TABLE="$( cd "$FIX" && SDD_STATE_DIR="$OUTSIDE/twowin1" "$SDD" autonomy 2>&1 )"
+TW1_SERIES="$( cd "$FIX" && SDD_STATE_DIR="$OUTSIDE/twowin1" "$SDD" kaizen --series 2>/dev/null )"
+# awk and not `grep | tail`, for the reason check-autonomy.sh already spells out at its D4: $3 is
+# "session(s)" on the version lines and a count on the escalation lines, so one field test keeps
+# them apart with no pipe to trip pipefail over. An output with NO table leaves `sha` empty, which
+# fails against the judge's answer instead of accidentally matching it.
+tw1_last="$(awk '$3 == "session(s)" { sha = $1 } END { print sha }' <<< "$TW1_TABLE")"
+assert_eq "differential: a KAIZEN meta row leading a version does not split the two readers" \
+  "$(jq -r '.latest.kit_sha' <<< "$TW1_SERIES")" "$tw1_last"
+# The anti-vacuity floor, and it is load-bearing: the line above is satisfied by two readers that
+# both went blind, and by a human window that lost its table. TWO version lines have to remain,
+# and the meta row has to be NAMED as excluded on both sides — dropping a row without naming it is
+# the silent filter this whole reader was rewritten to stop being.
+assert_eq "differential: ...and the meta row is excluded by NAME on both sides, table intact" \
+  "2 1 1" \
+  "$( printf '%s %s %s' \
+       "$(grep -cE '^  [a-z]{7}  [0-9]+ session\(s\)' <<< "$TW1_TABLE")" \
+       "$(jq -r '.excluded.meta' <<< "$TW1_SERIES")" \
+       "$(grep -c 'row(s) excluded: written by the judge' <<< "$TW1_TABLE")" )"
+
+# --- regime 2: a mission whose only row in the slice is a closure ------------
+# `missions` counted over every row of the slice while `$detail` — the cells the judge grades —
+# admits only `session or escalation`. So a mission that did nothing on this version but let a
+# gate close for free entered `missions` (and `composition[].missions`, the ADR 0005 field that
+# makes reading every repo safe) WITHOUT leaving a gradeable cell, and the judge's own two numbers
+# stopped reconciling with each other. `guard.sufficient` never moved, which is what kept it quiet.
+#
+# Differential in the same sense as regime 1: the human window counts missions over the sessions
+# it can show, so the two readers had to be asked the same question over the same file.
+mkdir -p "$OUTSIDE/twowin2"
+localize > "$OUTSIDE/twowin2/autonomy-log.jsonl" <<'EOF'
+{"v":1,"ts":"2026-09-11T11:00:00-03:00","event":"session","run_id":"r1","invocation":"run","kit_sha":"ddddddd","kit_dirty":false,"project":"p1","repo":"/p1","mission":"m1","phase":"EXEC","step":"EXEC","agent":"sdd-executor","model":"opus","attempt":1,"auto_retry":false,"session":"s1","rc":0,"dur_s":10,"cost_usd":1.0,"moved":true,"gate":"pass","gate_why":"x"}
+{"v":1,"ts":"2026-09-11T11:01:00-03:00","event":"gate_pass","run_id":"r2","invocation":"run","kit_sha":"ddddddd","kit_dirty":false,"project":"p1","repo":"/p1","mission":"m2","phase":"QA"}
+EOF
+TW2_TABLE="$( cd "$FIX" && SDD_STATE_DIR="$OUTSIDE/twowin2" "$SDD" autonomy 2>&1 )"
+TW2_SERIES="$( cd "$FIX" && SDD_STATE_DIR="$OUTSIDE/twowin2" "$SDD" kaizen --series 2>/dev/null )"
+# Four numbers, one question: `missions`, the missions the cells actually name, the ADR 0005
+# composition field, and the count the human table prints for the same version. The second is what
+# makes this more than a field read against itself — a `missions` that learned to count cells but
+# a `composition` that did not would still fail here.
+assert_eq "differential: a mission whose only row in the slice is a closure counts on neither reader" \
+  "1 1 1 1" \
+  "$( printf '%s %s %s %s' \
+       "$(jq -r '.latest.missions' <<< "$TW2_SERIES")" \
+       "$(jq -r '[.latest.detail[].mission] | unique | length' <<< "$TW2_SERIES")" \
+       "$(jq -r '[.latest.composition[].missions] | add' <<< "$TW2_SERIES")" \
+       "$(awk '$3 == "session(s)" { for (i = 1; i < NF; i++) if ($(i+1) ~ /^mission/) print $i }' <<< "$TW2_TABLE")" )"
+# The floor: the closure is still RECOGNISED and still counted where it belongs. An implementation
+# that filed it as unrecognized, or dropped it out of the arithmetic, would satisfy the assertion
+# above by deleting the row — which is the louder version of the same defect.
+assert_eq "differential: ...and the closure is still a recognised row, counted where it belongs" \
+  "0 1" \
+  "$( printf '%s %s' \
+       "$(jq -r '.excluded.unrecognized' <<< "$TW2_SERIES")" \
+       "$(grep -c 'gate(s) closed without a session' <<< "$TW2_TABLE")" )"
+
 echo "== hygiene =="
 assert_eq "the fixture kit tree ends clean" "" "$(git -C "$FIX" status --porcelain)"
 assert_eq "the ledger is never tracked by the fixture kit" "0" \
