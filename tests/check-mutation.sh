@@ -3033,6 +3033,29 @@ mut_LEDGER_close_bucket_unnamed() {
   sed -i '/ticket closure(s) recorded/d' "$1"
 }
 
+# The same defect one filter over — r1 finding #2 of the 2026-09-11 judge mission. The judge's own
+# rows leave the AXIS (a row `sdd kaizen` wrote ABOUT a version is not an observation OF it), but
+# they are LOCAL, so the shell `total=` had already counted them into the header. Deleting the line
+# that names them puts the count back out of the arithmetic's reach: header 2, buckets 1, and
+# nothing on screen saying where the row went. Caught by `the buckets still sum to the header total
+# (a judge KAIZEN row)` and by `and it is named where the arithmetic can reach it` in
+# check-autonomy.sh, and — measured, not assumed — also by the `differential: ...and the meta row is
+# excluded by NAME on both sides` anti-vacuity floor in check-kaizen.sh, which pins the same
+# sentence from the judge's side. Three assertions, two sensors, and nothing else.
+mut_LEDGER_meta_bucket_unnamed() {
+  sed -i '/row(s) written by the judge excluded from the axis/d' "$1"
+}
+
+# The OTHER half of that finding, and a mutant of its own because it breaks a different sentence:
+# $local_total is what the "never part of the N counted above" line quotes to introduce the rows
+# that truly left before the header ($foreign, $norepo). Dropping the judge rows from it makes that
+# line name a number the header never printed — over a three-row ledger it read "never part of the
+# 1" under a header of "2 row(s)", a subtraction no reader can make. Caught by `the outside group
+# quotes the header total, judge row included`, and by nothing else.
+mut_LEDGER_meta_off_the_local_total() {
+  sed -i 's@| (length + $meta) as $local_total@| (length) as $local_total@' "$1"
+}
+
 # The JUDGE stops admitting the row, and it lands in `excluded.unrecognized` — the bucket the judge
 # is told to read as a bug in the kit itself, so the runner ends up accusing itself of a row it
 # wrote on purpose. Measured before the admission existed: `unrecognized: 1` over a ledger of four
@@ -3559,6 +3582,8 @@ CATALOG=(
   RUN_gate_pass_off_the_derived_branch
   LEDGER_gate_pass_unrecognized
   LEDGER_close_bucket_unnamed
+  LEDGER_meta_bucket_unnamed
+  LEDGER_meta_off_the_local_total
   LEDGER_gate_pass_not_admitted
   LEDGER_gate_pass_mints_a_cell
   LEDGER_gate_pass_counted_as_session

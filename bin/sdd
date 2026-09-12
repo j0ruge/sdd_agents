@@ -6205,9 +6205,13 @@ cmd_autonomy() {
     # `ccccccc`. Reachable by the normal writer, not by a hand-edited row — `cmd_kaizen` mints
     # mission `<date>-kaizen` on phase KAIZEN, and in the kit repo it lands on a sha of its own.
     #
-    # Bound and filtered BEFORE $local_total, so these rows were never in the header total and the
-    # five buckets still close over it — which is why the sentence below rides with $foreign and
-    # $norepo in the `$outside` group rather than among the exclusions that left a bucket.
+    # The row leaves the AXIS here, and it does NOT leave the header: the header total is the shell
+    # `total=` above, computed over ledger_row_is_local, and a judge row is local. Until r1 finding
+    # #2 of the 2026-09-11 judge mission this comment claimed the opposite, and the sentence printed
+    # rode in the `$outside` group under "never part of the N counted above" — true of $foreign and
+    # $norepo, which ledger_row_is_local had already dropped, and false of this one. Measured on a
+    # two-row fixture: header 2, buckets 1. So it is named among the `$inside` lines, it is a term
+    # of assert_bucket_sum, and $local_total below adds it back to stay equal to the header.
     # `type == "object"` guards the same way every filter around here does: historic_progress
     # preserves non-object rows and `.phase` on a number is an error, not a false.
     | (map(select(type == "object" and .phase == "KAIZEN")) | length) as $meta
@@ -6233,9 +6237,11 @@ cmd_autonomy() {
     # non-object rows and `.event` on a number is an error, not a false.
     | (map(select(type == "object" and comparable and .progress_source == "gate_why")) | length) as $historic
     | (map(select(type == "object" and comparable and .rounds_source == "gate_why")) | length) as $historic_rounds
-    # The header total, re-derived here so the accounting paragraph can NAME it. The two exclusions
-    # bound above were computed before this filter and were therefore never in it.
-    | (length) as $local_total
+    # The header total, re-derived here so the accounting paragraph can NAME it. $foreign and
+    # $norepo were computed before the repo filter and were therefore never in it; $meta WAS —
+    # a judge row is local — so it is added back, or the sentence "never part of the N counted
+    # above" would name a number the header never printed (r1 finding #2).
+    | (length + $meta) as $local_total
     | (map(select((is_session and (comparable | not))
                 or (is_escalation and (on_axis | not)))) | length) as $skipped
     # group_by SORTS BY KEY, and a kit sha is hex: "the last line of the table" was the lexically
@@ -6417,9 +6423,13 @@ cmd_autonomy() {
        # every REVIEW row carries the round ones — and a single number could never say which of
        # them is finally empty.
        , (if $historic_rounds > 0 then "  (\($historic_rounds) REVIEW row(s) older than the round fields read their round from gate_why)" else empty end)
+       # It rides INSIDE for the same reason $closes does: the row is local, the header counted it,
+       # and it only leaves the axis. `sdd kaizen` observes a version — it is never an observation
+       # of one — so it grades nothing, but a term the arithmetic cannot reach is the quiet half of
+       # `unrecognized` all over again (r1 finding #2).
+       , (if $meta > 0 then "  (\($meta) row(s) written by the judge excluded from the axis: `sdd kaizen` observes a version, it is never an observation of one)" else empty end)
        ] as $inside
-       | [ (if $meta > 0 then "  (\($meta) row(s) excluded: written by the judge — `sdd kaizen` observes a version, it is never an observation of one)" else empty end)
-         , (if $foreign > 0 then "  (\($foreign) row(s) excluded: born in another repo — the ledger is global, this reader is not)" else empty end)
+       | [ (if $foreign > 0 then "  (\($foreign) row(s) excluded: born in another repo — the ledger is global, this reader is not)" else empty end)
          , (if $norepo > 0 then "  (\($norepo) row(s) excluded: no repo field — the row cannot say which project it came from)" else empty end)
          ] as $outside
        | ($inside

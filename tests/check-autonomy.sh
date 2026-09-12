@@ -70,8 +70,8 @@ sum_escalations() {
 }
 
 # assert_bucket_sum <description> <reader output>
-# Every row lands in exactly one of SIX buckets: comparable session, non-comparable session,
-# escalation, recorded gate closure, recorded ticket closure, unrecognized. If the filter drops a row (finding 3) or
+# Every row lands in exactly one of SEVEN buckets: comparable session, non-comparable session,
+# escalation, recorded gate closure, recorded ticket closure, judge row, unrecognized. If the filter drops a row (finding 3) or
 # double-counts one, this sum drifts from the header total — an anti-vacuity check a broken filter
 # cannot pass by accident, unlike any single count in isolation.
 #
@@ -84,16 +84,22 @@ sum_escalations() {
 # being a stray) without being named anywhere this sum closes over. Measured on a two-row fixture —
 # header 2, buckets 1 — and invisible to the whole suite because no fixture next to an
 # assert_bucket_sum carried a close row.
+#
+# The SEVENTH landed with r1 finding #2 of the same round, one filter over: the `$meta` split
+# drops every KAIZEN row before the buckets, but those rows are LOCAL, so the shell `total=` had
+# already counted them. Same header 2 against buckets 1, and the comment beside the split asserted
+# the opposite — which is why the property lives here and not in prose.
 assert_bucket_sum() {
-  local desc="$1" out="$2" total comparable noncomp escal closed closes stray sum
+  local desc="$1" out="$2" total comparable noncomp escal closed closes meta stray sum
   total="$(num_before "$out" 'row\(s\)')"; total="${total:-0}"
   comparable="$(sum_sessions "$out")"
   noncomp="$(num_before "$out" 'non-comparable')"; noncomp="${noncomp:-0}"
   escal="$(sum_escalations "$out")"
   closed="$(num_before "$out" 'gate\(s\) closed without a session')"; closed="${closed:-0}"
   closes="$(num_before "$out" 'ticket closure\(s\) recorded')"; closes="${closes:-0}"
+  meta="$(num_before "$out" 'row\(s\) written by the judge')"; meta="${meta:-0}"
   stray="$(num_before "$out" 'unrecognized')"; stray="${stray:-0}"
-  sum=$((comparable + noncomp + escal + closed + closes + stray))
+  sum=$((comparable + noncomp + escal + closed + closes + meta + stray))
   assert_eq "$desc" "$total" "$sum"
 }
 
@@ -2788,6 +2794,44 @@ assert_eq "the human reader does not call the recorded closure unrecognized" "0"
 assert_eq "it names the closure instead, so nothing leaves the accounting in silence" "1" \
   "$(num_before "$out_close" 'ticket closure\(s\) recorded')"
 assert_bucket_sum "the buckets still sum to the header total (a close row)" "$out_close"
+
+# --- a judge row leaves the AXIS, never the header ------------------------------------------------
+# r1 finding #2 of the 2026-09-11 judge mission, and it is finding #1 collected one filter over: the
+# `$meta` split drops every `phase == "KAIZEN"` row before the buckets (the judge must never grade
+# the version it is observing), but the header total is the shell `total=`, computed over
+# ledger_row_is_local — which knows nothing about any filter inside the big program. A judge row is
+# LOCAL, so it entered that total and then left no line: header 2, buckets 1.
+#
+# What made it worse than a missing count is that the comment beside the split ASSERTED the
+# opposite ("these rows were never in the header total"), and the sentence printed rode in the
+# `$outside` group under "never part of the N counted above" — which is true of $foreign and
+# $norepo, because ledger_row_is_local already dropped those, and false of this one. A comment
+# asserting a property is not the property; this block is.
+echo "== reader: a judge row leaves the axis but stays in the header =="
+mkdir -p "$OUTSIDE/metarow"
+localize > "$OUTSIDE/metarow/autonomy-log.jsonl" <<'EOF'
+{"v":1,"ts":"2026-09-12T10:00:00-03:00","event":"session","run_id":"k1","invocation":"run","kit_sha":"kkk1111","kit_dirty":false,"project":"p1","repo":"/p1","mission":"m21","phase":"EXEC","step":"EXEC","agent":"sdd-executor","model":"opus","attempt":1,"auto_retry":false,"session":"k1s","rc":0,"dur_s":10,"cost_usd":1.0,"moved":true,"gate":"pass","gate_why":""}
+{"v":1,"ts":"2026-09-12T10:05:00-03:00","event":"session","run_id":"k2","invocation":"kaizen","kit_sha":"kkk1111","kit_dirty":false,"project":"p1","repo":"/p1","mission":"2026-09-12-kaizen","phase":"KAIZEN","step":"KAIZEN","agent":"sdd-kaizen","model":"opus","attempt":1,"auto_retry":false,"session":"k2s","rc":0,"dur_s":10,"cost_usd":2.0,"moved":true,"gate":"pass","gate_why":""}
+{"v":1,"ts":"2026-09-12T10:06:00-03:00","event":"session","run_id":"k3","invocation":"run","kit_sha":"kkk1111","kit_dirty":false,"project":"other","repo":"/elsewhere","mission":"m22","phase":"EXEC","step":"EXEC","agent":"sdd-executor","model":"opus","attempt":1,"auto_retry":false,"session":"k3s","rc":0,"dur_s":10,"cost_usd":1.0,"moved":true,"gate":"pass","gate_why":""}
+EOF
+out_meta="$( SDD_STATE_DIR="$OUTSIDE/metarow" "$SDD" autonomy 2>&1 )"
+# THE FLOOR, first: without it every assertion below would close by vacuity over a ledger whose
+# judge row the reader never saw at all.
+assert_eq "the fixture really does put a judge row in the header total" "2" \
+  "$(num_before "$out_meta" 'row\(s\)')"
+# The half that already worked, pinned so the bucket cannot be fixed by putting the judge row back
+# on the axis it must never grade.
+assert_eq "the judge row still does not grade the version it observes" "1" \
+  "$(sum_sessions "$out_meta")"
+assert_eq "and it is named where the arithmetic can reach it" "1" \
+  "$(num_before "$out_meta" 'row\(s\) written by the judge')"
+# The OTHER half of the same finding, and it needs the foreign row above to be reachable at all:
+# the sentence that introduces the truly-outside rows quotes a total, and that total has to be the
+# one the header printed. $meta had left it, so over this ledger it said "never part of the 1" under
+# a header reading "2 row(s)" — a subtraction the reader cannot make.
+assert_eq "the outside group quotes the header total, judge row included" "1" \
+  "$(grep -c 'never part of the 2 counted above' <<< "$out_meta")"
+assert_bucket_sum "the buckets still sum to the header total (a judge KAIZEN row)" "$out_meta"
 
 # --- the two readers of the ledger agree on the axis -------------------------
 # `sdd autonomy` (the human's window) and `sdd kaizen --series` (the judge's source of truth) read

@@ -1971,7 +1971,7 @@ assert_eq "differential: ...and the meta row is excluded by NAME on both sides, 
   "$( printf '%s %s %s' \
        "$(grep -cE '^  [a-z]{7}  [0-9]+ session\(s\)' <<< "$TW1_TABLE")" \
        "$(jq -r '.excluded.meta' <<< "$TW1_SERIES")" \
-       "$(grep -c 'row(s) excluded: written by the judge' <<< "$TW1_TABLE")" )"
+       "$(grep -c 'row(s) written by the judge excluded from the axis' <<< "$TW1_TABLE")" )"
 
 # --- regime 2: a mission whose only row in the slice is a closure ------------
 # `missions` counted over every row of the slice while `$detail` — the cells the judge grades —
