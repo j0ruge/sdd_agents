@@ -4979,6 +4979,25 @@ if [ -n "$CLOSE_DIRTY_STREAM" ] && jq -e . "$CLOSE_DIRTY_STREAM" >/dev/null 2>&1
 assert_eq "close keeps stderr out of the stream it parses, so a noisy session still carries its money" \
   "armed:true pure:true 0.0362104 2.1.260" \
   "armed:$CLOSE_DIRTY_ARMED pure:$CLOSE_DIRTY_PURE $(rows 'select(.event == "close") | "\(.cost_usd) \(.harness)"')"
+# Both readers have to ADMIT the fourth event, or a row the runner wrote on purpose lands in
+# `excluded.unrecognized` — which the judge prompt is told to read as a bug in the kit itself. This
+# is the measured regression `gate_pass` already paid for once (`unrecognized: 1` over a ledger of
+# four sessions and one recorded closure); the pair below is what stops the fourth event repeating
+# it, in both programs, over the SAME file.
+#
+# ⚠️ It lives HERE, and the position is the assertion. r2 finding #2: the pair used to sit in the
+# already-Done arm below — three lines after `kitguard_reset` truncates the ledger and right after
+# the assertion that PROVES `rows:0` — so it asked two readers to admit a row that was not in the
+# file. Both answer `0 unrecognized` over an empty ledger no matter what they admit, and sabotaging
+# `is_close` alone in both programs left it green while its neighbours died. An admission assertion
+# whose input carries nothing of what it admits is an assertion about nothing.
+CLOSE_ADMIT_ROWS="$(rows 'select(.event == "close") | 1' | grep -c . || true)"
+assert_eq "floor: the close admission pair reads a ledger carrying a close row" "1" "$CLOSE_ADMIT_ROWS"
+CLOSE_AUT="$( "$SDD" autonomy 2>&1 || true )"
+CLOSE_SER="$( "$SDD" kaizen --series 2>/dev/null || true )"
+assert_eq "both readers admit the close row instead of filing it as unrecognized" \
+  "human:0 judge:0" \
+  "human:$(grep -cE '[0-9]+ unrecognized row' <<< "$CLOSE_AUT" || true) judge:$(jq -r '.excluded.unrecognized // 0' <<< "$CLOSE_SER" 2>/dev/null || echo ?)"
 # THE OTHER HALF of the differential: an issue JIRA already reports Done returns before any session
 # is bought, and a closure nobody paid for is not a row.
 kitguard_reset
@@ -4998,16 +5017,6 @@ kitguard_stub "" 1
 assert_eq "close writes no row when no session was spent — the already-Done arm" \
   "rc:0 sessions:0 rows:0" \
   "rc:$CLOSE_DONE_RC sessions:$(kitguard_sessions) rows:$(rows 'select(.event == "close") | 1' | grep -c . || true)"
-# Both readers have to ADMIT the fourth event, or a row the runner wrote on purpose lands in
-# `excluded.unrecognized` — which the judge prompt is told to read as a bug in the kit itself. This
-# is the measured regression `gate_pass` already paid for once (`unrecognized: 1` over a ledger of
-# four sessions and one recorded closure); the pair below is what stops the fourth event repeating
-# it, in both programs, over the SAME file.
-CLOSE_AUT="$( "$SDD" autonomy 2>&1 || true )"
-CLOSE_SER="$( "$SDD" kaizen --series 2>/dev/null || true )"
-assert_eq "both readers admit the close row instead of filing it as unrecognized" \
-  "human:0 judge:0" \
-  "human:$(grep -cE '[0-9]+ unrecognized row' <<< "$CLOSE_AUT" || true) judge:$(jq -r '.excluded.unrecognized // 0' <<< "$CLOSE_SER" 2>/dev/null || echo ?)"
 rm -f "$OUTSIDE/stub/acli"
 cat > "$OUTSIDE/stub/claude" <<'STUB'
 #!/usr/bin/env bash

@@ -5932,7 +5932,12 @@ cmd_census() {
 
 autonomy_no_data() {   # autonomy_no_data <ledger path>
   warn "no data: the ledger at $1 does not exist yet (or has no rows)"
-  dim "  It is written by 'sdd run', 'sdd retry' and 'sdd close'. Nothing has been recorded on this machine."
+  # FOUR writers, and the fourth is the one an operator would never guess: `sdd kaizen` runs a
+  # real phase (KAIZEN) through `run_phase`, so it writes a session row like any other. Naming
+  # three of four made this line tell a human "you have never run those three" over a ledger the
+  # judge's own loop had already written into — r2 finding #5 of the 2026-09-11 judge mission, and
+  # the same class as r1 #9. Writer added to the runner ⇒ writer added to this sentence.
+  dim "  It is written by 'sdd run', 'sdd retry', 'sdd close' and 'sdd kaizen'. Nothing has been recorded on this machine."
 }
 cmd_autonomy() {
   # The kit_sha table answers "did this VERSION get better". D12 asks a different question — US$ per

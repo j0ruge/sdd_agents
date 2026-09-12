@@ -3057,15 +3057,6 @@ mut_LEDGER_close_bucket_unnamed() {
   sed -i '/ticket closure(s) recorded/d' "$1"
 }
 
-# The same defect one filter over — r1 finding #2 of the 2026-09-11 judge mission. The judge's own
-# rows leave the AXIS (a row `sdd kaizen` wrote ABOUT a version is not an observation OF it), but
-# they are LOCAL, so the shell `total=` had already counted them into the header. Deleting the line
-# that names them puts the count back out of the arithmetic's reach: header 2, buckets 1, and
-# nothing on screen saying where the row went. Caught by `the buckets still sum to the header total
-# (a judge KAIZEN row)` and by `and it is named where the arithmetic can reach it` in
-# check-autonomy.sh, and — measured, not assumed — also by the `differential: ...and the meta row is
-# excluded by NAME on both sides` anti-vacuity floor in check-kaizen.sh, which pins the same
-# sentence from the judge's side. Three assertions, two sensors, and nothing else.
 # `window_missions_stranded` goes back to the subtraction of unique counts. It answers the same
 # number as the positive spelling on every window whose missions sit on ONE sha each — which is why
 # both fixtures the field was born with (`winbroken`, `winwhole`) pass under it — and it answers
@@ -3078,6 +3069,15 @@ mut_LEDGER_stranded_by_subtraction() {
   sed -i 's@| ($window_rows | map(select(.kit_sha != ($shas\[-1\] // null))) | map(mission_key) | unique | length) as $stranded@| (($window_rows | map(mission_key) | unique | length) - ($window_rows | map(select(.kit_sha == ($shas[-1] // null))) | map(mission_key) | unique | length)) as $stranded@' "$1"
 }
 
+# The same defect one filter over — r1 finding #2 of the 2026-09-11 judge mission. The judge's own
+# rows leave the AXIS (a row `sdd kaizen` wrote ABOUT a version is not an observation OF it), but
+# they are LOCAL, so the shell `total=` had already counted them into the header. Deleting the line
+# that names them puts the count back out of the arithmetic's reach: header 2, buckets 1, and
+# nothing on screen saying where the row went. Caught by `the buckets still sum to the header total
+# (a judge KAIZEN row)` and by `and it is named where the arithmetic can reach it` in
+# check-autonomy.sh, and — measured, not assumed — also by the `differential: ...and the meta row is
+# excluded by NAME on both sides` anti-vacuity floor in check-kaizen.sh, which pins the same
+# sentence from the judge's side. Three assertions, two sensors, and nothing else.
 mut_LEDGER_meta_bucket_unnamed() {
   sed -i '/row(s) written by the judge excluded from the axis/d' "$1"
 }
