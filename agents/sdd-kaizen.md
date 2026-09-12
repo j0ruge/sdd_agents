@@ -47,7 +47,8 @@ before anything else), `advance_rate` (the `advanced` share of those same sessio
 yardstick read twice, so it can never contradict the tally beside it), `moved_rate` (the share
 that wrote to the disk), the label tally (`ok` / `leve` / `refez` per repo×mission×phase),
 escalations by kind, cost, and the guard (`missions_after_change`, `missions_with_session`,
-`sessions`, `sufficient`, `degenerate_axis`).
+`sessions`, `floor`, `sufficient`, `why`, `harness`, `window_missions_stranded`, `window_broken`,
+`degenerate_axis`).
 
 ⚠️ **`advanced` means "the gate passed OR the increment moved", and the second half is younger
 than most of the ledger** (`20260829-o-incremento-que-andou`). `gate_EXEC` refuses by construction
@@ -77,7 +78,34 @@ where each session commits and the next lands
 on a fresh sha. That second clause is deliberate: a repo that once reached the floor and is merely
 quiet right now has a working axis, and the field must not call it broken.
 Then `sufficient: false` is structural, not a matter of waiting: say so in the
-verdict and cite ADR 0003, instead of writing "a few more missions and we will know". It also counts
+verdict and cite ADR 0003, instead of writing "a few more missions and we will know".
+
+⚠️ **Never read `sufficient` as a bare boolean — read `why`, which names the reasons.** The
+boolean is SHARED by causes with nothing in common but the word `false`, and it is empty exactly
+when `sufficient` is true. Two entries exist today, and each demands a different sentence from you:
+
+- `"floor"` — fewer missions WITH a session than `floor`. Waiting helps **unless**
+  `degenerate_axis` is also true, in which case it never will (above);
+- `"harness_mixed"` — the slice ran on more than one harness version, which `harness` lists. A
+  verdict compares `kit_sha` against `kit_sha` as if the MACHINE stood still, and here it did not:
+  more missions on this slice cannot cure it, because the slice is pinned to its `kit_sha`. Say
+  which versions, say that the mixture attributes the machine to the kit, and answer
+  `indeterminado` — the same honesty a contaminated composition demands.
+
+A reason you do not recognise is not a reason you may drop: name it in the verdict and answer
+`indeterminado`, because a judge that ignores what it cannot read is a label.
+
+⚠️ **`window_broken` / `window_missions_stranded` do NOT veto, and reading them as a veto is as
+wrong as ignoring them.** `window_missions_stranded` counts the missions of the window under
+judgement whose evidence landed on a kit version OTHER than the one you are grading — bought, and
+not in your slice. `window_broken` is `> 0`. The window is then **smaller than it looks**: say how
+many missions were stranded and weigh the verdict accordingly, exactly as you weigh a mixed
+composition. A stranded mission does not make the slice unanswerable; it makes it narrower, and
+the two have different remedies. A window that reads `window_broken: true` and is still reported
+as if whole is the reading this field was added to stop — window 3 was one mission and then 24 kit
+commits, and a human had to read the rupture out of `git log`.
+
+It also counts
 what it excluded, in **five** buckets — dirty-kit rows, unrecognized rows, the meta rows your own
 sessions write, `other_repo` and `no_repo`. ⚠️ `other_repo` is **0** in your slice and stays 0
 since ADR 0005: nothing in the ledger is foreign to the judge any more, so a non-zero there is a
