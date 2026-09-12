@@ -1,10 +1,10 @@
 ---
 missao: 20260911-o-juiz-nao-mente-sobre-a-janela
 fase: EXEC
-status: blocked
-sessao: ad29a09e-616e-47f5-9f60-d02a9f9dd3c7
-data: 2026-09-12 06:40
-gate: "tests/run-all.sh → suite green (14 sensores, 0 FAIL) e os 6 hashes existem no git log; MAS ./bin/sdd health → RED: 'score: 286 caught, 0 known gap(s), of 289' + 'the catalogue ran 289 of the 293 mutant(s) tests/check-mutation.sh defines'. Sem carimbo de mutação (.sdd/logs/mutation-stamp ausente), logo gate_PR insatisfazível. I2, I4 e I5 marcados blocked."
+status: done
+sessao: c69f9d23-22a1-4545-a4fa-b871c72ad2a6
+data: 2026-09-12 15:35
+gate: "tests/run-all.sh -> 'suite green', 14 sensores, 0 FAIL; os 11 hashes (I1-I6, R1-R5) existem no git log. ./bin/sdd health -> 'kit healthy': 'ok suite green', 'ok mutation: score: 300 caught, 0 known gap(s), of 300', 'ok mutation stamp written - gate_PR can see that THIS content ran green' (.sdd/logs/mutation-stamp = 724f5ce243685dea61e2feddf51cae6e), 'ok all 8 gates have a mutation in the catalogue', 'ok provenance: all 3 fixtures match the installed skills', 'ok ratchet: 1 known debt(s), none new'. Check do R5: 111. Nenhuma linha pending no checkpoint."
 ---
 
 # Handoff — EXEC — o juiz não mente sobre a janela
@@ -14,24 +14,25 @@ gate: "tests/run-all.sh → suite green (14 sensores, 0 FAIL) e os 6 hashes exis
 
 ## TL;DR
 
-🛑 **A linha PAROU (Jidoka) e a EXEC não está `done`.** Os seis incrementos rodaram e a suíte
-está verde, mas o `./bin/sdd health` que o plano manda rodar ao fim do I6 voltou **vermelho**:
-três âncoras de mutante apodreceram (I2 e I4) e quatro mutantes do I5 nunca entraram no
-`CATALOG=(`. Sem carimbo de mutação o `gate_PR` é insatisfazível, então **I2, I4 e I5 estão
-`blocked`** no checkpoint e a próxima sessão de EXEC conserta — não é QA.
-Nada precisa ser revertido: o código dos três incrementos está certo e verde; o que falta é o
-**registro** deles no catálogo. Detalhe e direção na seção *Por que a linha parou*.
+✅ **A EXEC está `done`: 11 incrementos (I1–I6 + R1–R5), nenhuma linha `pending`, suíte verde.**
+A Jidoka descrita abaixo em *Por que a linha parou* ACONTECEU e foi **destravada** — I2, I4 e I5
+voltaram a `done` e o catálogo hoje tem 300 mutantes. Depois vieram as cinco linhas `R<n>` da
+rodada r1 da REVIEW, fechadas uma por sessão; a última (`R5`) é o lote dos achados #6–#9.
+A seção *Por que a linha parou* fica no arquivo como **histórico** — ela descreve um estado que
+já não é o do disco. O estado de hoje é o desta seção e o da *Rodada r1* abaixo.
 
 ## Estado do repo
 
+> ⚠️ Esta seção foi **reescrita** ao fim do `R5`. Os números do parágrafo de Jidoka mais abaixo
+> (`286 of 289`, "sem carimbo") são o retrato de 12/09 06:40 e não descrevem o disco de hoje.
+
 - **Branch:** `feat/o-juiz-nao-mente-sobre-a-janela` — local, **sem upstream** (nunca empurrada).
-- **Último commit:** `19fec24` `chore(checkpoint): I6 done em 4d9b7b8 — catraca 105 → 95`
+- **Último commit de código:** `ed8e1ec` `fix(tests): a âncora do mutante de close deixa de
+  soletrar a lista de argumentos`.
 - **Working tree:** limpo.
 - **Suíte:** `tests/run-all.sh` → **verde**, 14 sensores, 0 `FAIL`.
-- **Catálogo de mutação:** `./bin/sdd health` → **VERMELHO**, 2 checks falhos.
-  `score: 286 caught, 0 known gap(s), of 289` e
-  `the catalogue ran 289 of the 293 mutant(s) tests/check-mutation.sh defines (floor 8)`.
-  **Sem carimbo:** `.sdd/logs/mutation-stamp` não existe (o anterior era de 08/09 e foi invalidado).
+- **Catálogo de mutação:** 300 mutantes definidos, 300 listados no `CATALOG=(`.
+  Evidência do carimbo no `gate:` do frontmatter.
 - **E2E:** `E2E_CMD=""` no `.sdd/config.sh` — o kit não tem jornada de navegador; a "jornada" deste
   repo é a linha de comando, e é por ela que a QA tem de andar (ver boot abaixo).
 
@@ -101,24 +102,79 @@ a primeira.
   reabertura no `CONTEXT.md` (três, Y1–Y3). Catraca `todo-findings 105 → 95`, entrada de
   antes/depois no `KAIZEN_LOG.md`.
 
+## Rodada r1 da REVIEW — R1 a R5 (acrescentado ao fim do `R5`)
+
+A r1 achou 12 defeitos (4 HIGH, 3 MEDIUM, 5 LOW) e escreveu cinco linhas `R<n>`; cada uma foi
+fechada por uma sessão de EXEC própria, em TDD, com o vermelho observado antes do conserto.
+
+| `R<n>` | Achado | O que consertou | Commit |
+|---|---|---|---|
+| R1 | #1 — a linha `close` entrava no total do cabeçalho de `sdd autonomy` e não caía em bucket nenhum | Sexto bucket (`$closes`) com frase própria; `assert_bucket_sum` passou a somar seis termos | `1563bc8` |
+| R2 | #2 — a exclusão `$meta` (KAIZEN) inflava o mesmo total, e o comentário ao lado afirmava o contrário | Sétimo termo + `$local_total` somando `$meta` de volta; comentário reescrito para dizer o que o código faz | `a26d489` |
+| R3 | #3 — `window_missions_stranded` falhava aberto na missão que atravessa o sha julgado | Grafia positiva (`select(.kit_sha != $latest)`) e o regime de fixture `winstraddle`, que não existia | `154f58f` |
+| R4 | #4 — os quatro campos novos da guarda não tinham leitor | `agents/sdd-kaizen.md` aprendeu a ler `why`, `harness`, `window_missions_stranded` e `window_broken`; espelho por `sdd install --force` | `477cb9a` |
+| R5 | lote #6–#9 — custo na linha de `close`, porta do chapéu, regime de `close` no juiz, contagens podres | Abaixo | `c78b167` |
+| R5 | o defeito que o `sdd health` do próprio R5 revelou | Âncora do `mut_RUN_close_writes_no_row` deixou de soletrar a lista de argumentos | `ed8e1ec` |
+
+**O que o `R5` mudou, achado a achado:**
+
+- **#6** — em `cmd_close`, o `return 3` do chapéu cruzado corria **entre** a sessão paga e o
+  `autonomy_close_row`: o close que mais vale contar, aquele cuja sessão cruzou o próprio chapéu,
+  era o único que o ledger nunca via. O `return 3` passou para depois da linha; o rc não mudou.
+- **#7** — a linha de close dizia **qual** sessão foi gasta e calava **quanto** custou, então a D12
+  (US$ por PR mergeado) lia todo close da história do kit como grátis. O braço passou a streamar
+  como toda outra sessão e lê `stream_summary` + `hat_init_facts` — as **mesmas duas definições**
+  do `run_phase`, nunca um segundo parser. Entram `cost_usd`, `dur_s`, `turns`, `cache_read` e
+  `harness`; vazio vira `null` por `tonumber?`, nunca `0`.
+- **#8** — não havia fixture de `close` no `check-kaizen.sh`, e os dois mutantes existentes
+  arrancavam `is_close` **junto** com `is_gate_pass`: quem os matava era a metade `gate_pass`.
+  Entram três mutantes estreitos — um por **definição** que a closure atravessa — e **dois
+  regimes**, porque as três definições leem populações diferentes.
+- **#9** — quatro frases que o próprio branch invalidou (a quarta achada ao medir, não listada pela
+  r1): `the eight call sites` (são dez — o número saiu do comentário e virou `grep`), `written by
+  'sdd run' and 'sdd retry'` (o `sdd close` também escreve), um comentário citando item de backlog
+  que o I6 apagou, e o `mut_LEDGER_gate_pass_not_admitted` jurando ser pego por duas asserções "e
+  por mais nada" quando são dez.
+
+**Os cinco achados que NÃO viraram `R<n>`** continuam registrados no `40-review-r1.md` e em lugar
+nenhum mais: #5 é decisão humana (abaixo, em Pendências) e #10, #11 e #12 são LOW de baixo valor. A
+rota normal seria o `TODO.md`, e ela foi fechada **de propósito** nesta missão pelo preço do
+carimbo — item novo move `tests/health-baseline.txt`, que está dentro da chave.
+
 ## Artefatos
 
 | Arquivo | O que contém |
 |---|---|
-| `docs/handoffs/20260911-o-juiz-nao-mente-sobre-a-janela/checkpoint.md` | A tabela: I1, I3 e I6 `done`; **I2, I4 e I5 `blocked`** com o hash real preservado |
+| `docs/handoffs/20260911-o-juiz-nao-mente-sobre-a-janela/checkpoint.md` | A tabela: as **11 linhas** (I1–I6, R1–R5) `done`, nenhuma `pending` |
 | `docs/handoffs/20260911-o-juiz-nao-mente-sobre-a-janela/checkpoint-notas.md` | As notas de execução (append-only); as de I6 explicam o corte do décimo item |
 | `docs/pipeline.md` | Contrato da **forma de linha** do ledger — quarto evento `close` — e da **forma da série** (`harness`, `window_broken`) |
 | `CONTEXT.md` | Nova tabela **Decisões adiadas por YAGNI** (Y1–Y3), cada uma com o evento que a reabre |
 | `KAIZEN_LOG.md` | Entrada de 2026-09-12: a régua D15 aplicada, 105 → 95 com a tabela item a item |
 | `TODO.md` | 95 achados; a seção que se chamava "Adiados por YAGNI" foi renomeada porque ficou sem adiamentos |
 | `tests/health-baseline.txt` | `todo-findings 95` — a catraca que morde nos dois sentidos |
+| `docs/handoffs/20260911-o-juiz-nao-mente-sobre-a-janela/40-review-r1.md` | A rodada r1: os 12 achados, os 4 refutados e as pendências humanas |
+| `tests/check-kaizen.sh` | Os dois regimes de `close` (`closein`, `closeaway`) e as três asserções do `R5` |
+| `tests/check-mutation.sh` | 300 mutantes; os três estreitos de `close` do `R5` |
 
 ## Boot da próxima fase
 
-⚠️ **A próxima fase é EXEC de novo, não QA** — três linhas do checkpoint estão `blocked`, e a
-tarefa dela são os 5 passos da seção *Por que a linha parou*. O que segue abaixo é o boot da **QA**,
-escrito agora porque o diff já está pronto e não muda com o conserto do catálogo: quando as três
-linhas voltarem a `done` e o carimbo existir, esta seção é o que a QA lê.
+✅ **A próxima fase é a QA.** A ressalva que ocupava este lugar ("a próxima fase é EXEC de novo")
+foi resolvida: nenhuma linha do checkpoint está `blocked` ou `pending`, e o carimbo de mutação
+existe (`300 caught of 300`). O que segue é o boot da QA, atualizado ao fim do `R5`.
+
+⚠️ **O que mudou no diff DEPOIS que este boot foi escrito** (rodada r1, `R1`–`R5`) e que a QA tem
+de andar junto com os quatro pontos abaixo:
+
+5. **`sdd autonomy` — o cabeçalho volta a fechar com os buckets.** Eram cinco buckets e o total do
+   cabeçalho contava linhas que nenhum deles nomeava (`close` e a exclusão `$meta` do juiz). Hoje
+   são **sete termos** e a soma fecha. Confira somando os buckets impressos e comparando com o
+   `N row(s)` do cabeçalho, sobre um ledger que tenha uma linha `close`.
+6. **A linha de `close` carrega dinheiro.** `sdd close` agora streama como toda outra sessão:
+   `cost_usd`, `dur_s`, `turns`, `cache_read` e `harness` entram na linha. Consequência para a QA:
+   o log de close em `.sdd/logs/<missão>/CLOSE-*.json` passou a ter um **irmão** `.stream.jsonl`
+   ao lado (o bruto), e o `.json` agora é o `result` destilado, não o blob do `--output-format
+   json`. Quem lê aquele arquivo à mão vê uma forma diferente.
+7. **`sdd close` que cruza o chapéu escreve a linha ANTES de parar a linha.** O rc continua 3.
 
 **O que é user-visible neste diff.** Nada de navegador: o produto é a CLI `bin/sdd` e os artefatos
 que ela escreve. As superfícies que mudaram, e que é por onde a jornada anda:
@@ -157,6 +213,18 @@ hermética.
   (`05-verdict.md`, já no diretório da missão). Nada nesta missão o reescreve, de propósito: mudar
   a régua depois de conhecer o resultado é o modo de falha que o `KAIZEN_LOG.md` nomeia. Se o
   veredito deve ser **reemitido** com o instrumento novo, é decisão do humano, não do pipeline.
+- ⚠️ **`harness_mixed` veta `guard.sufficient` para SEMPRE, e isso foi o que o plano pediu** —
+  achado #5 da r1, MEDIUM, deliberadamente **sem** `R<n>`. Reproduzido: uma fatia que atravessa um
+  bump de harness responde `sufficient: false, why: ["harness_mixed"]` com o piso já batido, e
+  missões novas na versão nova **não curam** (`$harness` é `unique` sobre a fatia, que é presa ao
+  `kit_sha`). Consequência: `gate_KAIZEN` só aceita `indeterminado` nesse estado, logo esse
+  `kit_sha` nunca é graduado. O gate continua **satisfazível**, então não é a classe do princípio 1
+  — é um veredito permanentemente mudo sobre uma versão. Os dois irmãos estruturais não vetam
+  (`degenerate_axis` nunca entrou em `sufficient`; `window_broken` foi escrito para não vetar), e a
+  assimetria não está argumentada em lugar nenhum. Três saídas no `40-review-r1.md`: (a) manter;
+  (b) rebaixar a anotação, como `window_broken`; (c) manter o veto com override humano registrado
+  em artefato. **É decisão de desenho, e reverter a métrica que o humano aprovou em
+  `aprovacao: humano-2026-09-11` não é coisa que o executor faz sozinho.**
 - **O alvo "<30 s" da D7 continua não atingido e sem dono.** Os dois itens de custo da suíte foram
   deliberadamente **mantidos** no `TODO.md` no I6: não são fail-open, mas são decisão humana
   pendente (subir o alvo ou aposentá-lo por escrito), e cabeçalho de sensor não é lugar de decisão
@@ -164,7 +232,13 @@ hermética.
 
 ## Riscos e não-feitos
 
-- **NÃO HÁ carimbo de mutação, e é por isso que a linha parou.** `tests/health-baseline.txt` está
+- ✅ **RESOLVIDO ao fim do `R5`: o carimbo existe** (`.sdd/logs/mutation-stamp` =
+  `724f5ce243685dea61e2feddf51cae6e`, `300 caught of 300`, `kit healthy`). O parágrafo abaixo fica
+  como histórico — e o aviso dele continua valendo: **qualquer** commit em
+  `bin/ tests/ templates/ config/` invalida o carimbo, e registrar achado no `TODO.md` também,
+  porque `tests/health-baseline.txt` está entre esses caminhos. Custo de re-carimbar hoje: **45
+  min** por passada, medido duas vezes nesta sessão.
+- **[histórico] NÃO HÁ carimbo de mutação, e é por isso que a linha parou.** `tests/health-baseline.txt` está
   dentro da chave do carimbo e o I6 mexeu nele, então esta sessão rodou `./bin/sdd health` depois
   do último commit de código (`4d9b7b8`), na ordem certa — e ele voltou vermelho. O
   `.sdd/logs/mutation-stamp` não existe (fica fora do git, então não aparece no diff). Enquanto os
@@ -172,9 +246,19 @@ hermética.
   passar**: é gate insatisfazível, e o kit prefere parar a fingir.
   ⚠️ Depois do conserto: qualquer commit em `bin/ tests/ templates/ config/` invalida o carimbo de
   novo, e registrar achado no `TODO.md` também, porque o baseline está entre esses caminhos.
-- **A EXEC volta a ser chamada, e a próxima fase NÃO é a QA.** Três linhas do checkpoint estão
-  `blocked`; o `gate_EXEC` reprova antes de qualquer gate posterior ser lido, e o runner escala
-  (`increment-blocked`, rc 3). Isso é o desenho funcionando, não um acidente.
+- **[histórico, resolvido] A EXEC voltou a ser chamada e destravou as três linhas `blocked`.** Foi
+  o desenho funcionando, não um acidente.
+- ⚠️ **A lição do `R5` para quem tocar `bin/sdd` daqui em diante: âncora de mutante que soletra
+  argumento apodrece.** O `R5` deu quatro argumentos novos ao `autonomy_close_row`, e o
+  `mut_RUN_close_writes_no_row` foi a `CATALOGUE-BROKEN` — o `sed` dele listava os quatro
+  argumentos originais. Isso custou **uma passada inteira de catálogo (45 min)**. Âncora morta
+  **não** aparece como `NOT caught` e **não** derruba o `score:` (`caught == of` continua
+  verdadeiro); só a passada completa a vê. Ancore na **chamada** (`autonomy_close_row .*`), nunca
+  na lista de argumentos.
+- ⚠️ **Alegação de exclusividade em comentário de mutante ("caught by X, and by nothing else") só
+  vale MEDIDA**, rodando a suíte inteira sob a sabotagem. Duas dessas frases estavam falsas neste
+  arquivo — uma delas desde o dia em que foi escrita (jurava duas asserções; são dez). As três
+  novas do `R5` foram medidas uma a uma antes de a frase ser escrita.
 - **Custou duas passadas de catálogo (≈100 min) para nomear três mutantes**, e a segunda foi
   evitável: `./bin/sdd health 2>&1 | tail -25` **come a lista** — os `fail` saem em stderr no meio
   da saída. Redirecione para arquivo e grepe `CATALOGUE-BROKEN|NOT caught`.
