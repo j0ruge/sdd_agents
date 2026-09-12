@@ -3620,6 +3620,7 @@ CATALOG=(
   AUTONOMY_reopened_closure_blind
   AUTONOMY_reopened_comparable_only
   RUN_close_writes_no_row
+  RUN_close_stderr_into_stream
   RETRY_gate_red_silent
   AUTONOMY_notes_borrowed_across_repos
   LEDGER_progress_not_written
