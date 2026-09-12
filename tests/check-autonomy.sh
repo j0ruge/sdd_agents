@@ -4848,6 +4848,14 @@ STUB
 chmod +x "$OUTSIDE/stub/claude"
 ( cd "$KGCL2" && "$FAKEKIT/bin/sdd" close "$MISSION" >/dev/null 2>&1 ); KG8_RC=$?
 assert_eq "hat: sdd close wears the ticket hat — a close session that edits code stops the line" "3 hat-crossed" "$KG8_RC $(hat_rows)"
+# r1 finding #6 of the 2026-09-11 judge mission. The `return 3` used to run BETWEEN the paid session
+# and `autonomy_close_row`, so the one close in the kit's history most worth counting — the one that
+# crossed its hat — was the one the ledger never saw. The escalation row alone does not replace it:
+# it carries no issue, no session id and no money, so D12 would read a mission whose close cost
+# nothing. Both rows, in that order, and the rc unchanged — the line still stops.
+assert_eq "close writes its row even when the hat guard fires, and still stops the line" \
+  "3 1 1 SQ-1" \
+  "$KG8_RC $(rows 'select(.event == "close") | 1' | grep -c . || true) $(rows 'select(.event == "blocked") | 1' | grep -c . || true) $(rows 'select(.event == "close") | .issue')"
 cat > "$OUTSIDE/stub/claude" <<'STUB'
 #!/usr/bin/env bash
 echo "ERROR: the test invoked the real claude" >&2
@@ -4889,7 +4897,19 @@ chmod +x "$OUTSIDE/stub/acli"
 # A benign session — the empty first argument is `kitguard_stub`'s own "commit nothing anywhere",
 # so nothing here is about the kit guard and a hat-crossed row cannot be mistaken for the row
 # under test.
-kitguard_stub "" 1
+# The stream this world replays carries the `init` line as well as the terminal `result`, which
+# `kitguard_stub` omits: r1 finding #7 of the 2026-09-11 judge mission is that the close row knew
+# WHICH session was spent and not what it COST, and the harness version lives on the init line.
+# Same two captured fixtures every other stub in this file replays, concatenated by $INIT_CLEAN —
+# nothing typed from memory here either.
+cat > "$OUTSIDE/stub/claude" <<STUB
+#!/usr/bin/env bash
+n=\$(( \$(cat "$KIT_SESSION_COUNT" 2>/dev/null || echo 0) + 1 ))
+printf '%s\n' "\$n" > "$KIT_SESSION_COUNT"
+cat "$INIT_CLEAN"
+exit 0
+STUB
+chmod +x "$OUTSIDE/stub/claude"
 ( cd "$CLW" && "$FAKEKIT/bin/sdd" close "$MISSION" >/dev/null 2>&1 ) || true
 CLOSE_ROWS="$(rows 'select(.event == "close") | 1' | grep -c . || true)"
 CLOSE_SID="$(rows 'select(.event == "close") | .session')"
@@ -4906,6 +4926,17 @@ assert_eq "close writes one row naming the issue, the session it spent and its o
 # as a phase that ran and said nothing.
 assert_eq "close writes a row that is not a session row wearing a CLOSE label" "close false false" \
   "$(rows 'select(.event == "close") | .event') $(rows 'select(.event == "close") | has("moved")') $(rows 'select(.event == "close") | has("gate")')"
+# r1 finding #7. The row named the session and stayed silent about the money: `sdd close` buys an
+# opus-class session per mission, and D12 — US$ per merged PR — read every one of them as free. The
+# four numbers come from the SAME two definitions run_phase uses (`stream_summary` for the terminal
+# result, `hat_init_facts` for the harness the session ran on), never from a second parser written
+# here, which is why the close arm now streams like every other session this file replays.
+# The values are the captured fixture's own: 0.0362104 USD, 1 turn, 18134 cache-read tokens, harness
+# 2.1.260. `dur_s` is wall clock, so it is asked as "a number, not null" — pinning a duration would
+# be pinning the machine the suite runs on.
+assert_eq "close row carries cost_usd, and the turns, cache and harness beside it" \
+  "0.0362104 1 18134 2.1.260 true" \
+  "$(rows 'select(.event == "close") | "\(.cost_usd) \(.turns) \(.cache_read) \(.harness) \(.dur_s != null and (.dur_s | type) == "number")"')"
 # THE OTHER HALF of the differential: an issue JIRA already reports Done returns before any session
 # is bought, and a closure nobody paid for is not a row.
 kitguard_reset

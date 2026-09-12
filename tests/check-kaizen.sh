@@ -2097,6 +2097,72 @@ hseq=0
 assert_eq "guard: a mission straddling the kit change is stranded — a subtraction of unique counts cancels it to zero" \
   "true  true 1" "$(guard_read "$OUTSIDE/winstraddle")"
 
+# --- the close row, in the judge's program -----------------------------------
+# r1 finding #8 of the 2026-09-11 judge mission. `sdd close` writes `event:"close"`, and this file
+# had no fixture carrying one: the judge's admission list (`session or escalation or gate_pass or
+# is_close`) was reachable only through the two mutants that strip `is_close` TOGETHER with
+# `is_gate_pass`, so a narrow sabotage of `is_close` alone survived the whole suite. A row the
+# runner writes on purpose, with no assertion of its own, is the fail-open this file exists against.
+#
+# TWO properties and two witnesses, because a closure can go wrong in two opposite directions and
+# one assertion would only see one of them:
+#   (a) it must not MINT — a closure is not a session, so it may not coin a version, a mission or a
+#       detail cell. Asked DIFFERENTIALLY (the same slice with and without the row, compared field
+#       by field), which is the form this file already uses for the `gate_pass` event above and the
+#       only one no fixture regime satisfies by accident;
+#   (b) it must not be THROWN AWAY — `excluded.unrecognized > 0` is what `agents/sdd-kaizen.md`
+#       tells the judge to read as a bug in the kit itself, so a closure the series does not admit
+#       makes `sdd kaizen --series` accuse the runner that wrote it.
+# The close row below is copied from the shape `autonomy_close_row` builds in bin/sdd (no `phase`,
+# no `moved`, no `gate` — those are what a SESSION carries), never written from memory.
+#
+# ⚠️ THE REGIME IS THE ASSERTION, and TWO regimes are needed because "mint" happens through two
+# different definitions that read two different populations. Both were measured, not reasoned:
+#   * a close row sharing mission AND sha with the sessions survives BOTH sabotages — whatever it
+#     mints is absorbed by a mission that already exists. That was the first draft of this block;
+#   * `graded_row` (missions and detail cells) reads the rows of the GRADED slice, so the sabotage
+#     that teaches it `is_close` is only visible when the close row sits on the graded sha and is
+#     ALONE in its mission — regime `closein` (`ccc0001`, `m61`);
+#   * `shas_in_file_order` (which sha is `latest`) reads the whole axis, so the sabotage that
+#     teaches IT `is_close` is only visible when the close row sits on a sha no session touched —
+#     regime `closeaway` (`ccc0002`), where minting slides `latest` off the sha `gate_KAIZEN`
+#     derives its expected verdict from, onto a slice with zero sessions.
+# One regime would have certified the other half by silence.
+echo "== series: a close row is recognized and mints nothing =="
+mkdir -p "$OUTSIDE/closeoff" "$OUTSIDE/closein" "$OUTSIDE/closeaway"
+close_base() { cat <<'EOF'
+{"v":1,"ts":"2026-09-11T12:00:00-03:00","event":"session","run_id":"c1","invocation":"run","kit_sha":"ccc0001","kit_dirty":false,"project":"p1","repo":"/p1","mission":"m60","phase":"EXEC","step":"EXEC","agent":"sdd-executor","model":"opus","attempt":1,"auto_retry":false,"session":"c1s","rc":0,"dur_s":10,"cost_usd":2.0,"moved":true,"pending_before":1,"pending_after":0,"increments_total":1,"gate":"pass","gate_why":"0 of 1 increment(s) still to execute"}
+{"v":1,"ts":"2026-09-11T12:01:00-03:00","event":"session","run_id":"c1","invocation":"run","kit_sha":"ccc0001","kit_dirty":false,"project":"p1","repo":"/p1","mission":"m60","phase":"REVIEW","step":"REVIEW","agent":"sdd-reviewer","model":"opus","attempt":1,"auto_retry":false,"session":"c2s","rc":0,"dur_s":10,"cost_usd":4.0,"moved":true,"rounds_before":0,"rounds_after":1,"rounds_max":3,"gate":"pass","gate_why":"40-review-r1.md: every criterion A"}
+EOF
+}
+# The one line that differs between the two regimes is the `kit_sha`, so the pair also reads as a
+# statement about WHICH definition each one reaches.
+close_row() { printf '{"v":1,"ts":"2026-09-11T12:02:00-03:00","event":"close","run_id":"c2","invocation":"close","kit_sha":"%s","kit_dirty":false,"project":"p1","repo":"/p1","mission":"m61","issue":"ISSUE-999","session":"c3s","rc":0,"verified":true}\n' "$1"; }
+close_base | localize > "$OUTSIDE/closeoff/autonomy-log.jsonl"
+{ close_base; close_row ccc0001; } | localize > "$OUTSIDE/closein/autonomy-log.jsonl"
+{ close_base; close_row ccc0002; } | localize > "$OUTSIDE/closeaway/autonomy-log.jsonl"
+CLOSEOFF_OUT="$( cd "$FIX" && SDD_STATE_DIR="$OUTSIDE/closeoff" "$SDD" kaizen --series 2>/dev/null )"
+CLOSEIN_OUT="$( cd "$FIX" && SDD_STATE_DIR="$OUTSIDE/closein" "$SDD" kaizen --series 2>/dev/null )"
+CLOSEAWAY_OUT="$( cd "$FIX" && SDD_STATE_DIR="$OUTSIDE/closeaway" "$SDD" kaizen --series 2>/dev/null )"
+# The WHOLE series and not a hand-picked subset, for the reason written at gp_shape above: a
+# comparison of ten keys chosen by the same author as the writer says "nothing moved" while
+# measuring a fraction. `latest.detail` rides in whole here — a closure has no label to move, so
+# unlike the `gate_pass` differential there is nothing this one has to forgive.
+assert_eq "guard: a close row mints no version and no mission" \
+  "$(jq -S . <<< "$CLOSEOFF_OUT")$(jq -S . <<< "$CLOSEOFF_OUT")" \
+  "$(jq -S . <<< "$CLOSEIN_OUT")$(jq -S . <<< "$CLOSEAWAY_OUT")"
+# ...and not by both being empty. The floor is this fixture's known numbers, so the equality above
+# is about a series that actually said something — and it names the sha, which is the field the
+# `closeaway` half of the differential is about.
+assert_eq "floor: that close differential is not vacuous — one version, one mission, two cells" \
+  "ccc0001 1 2 6" \
+  "$(jq -r '"\(.latest.kit_sha) \(.latest.missions) \(.latest.detail | length) \(.latest.cost_usd)"' <<< "$CLOSEIN_OUT")"
+# Spelled out on its own, because it is the bucket with a CONSUMER: the judge is told to read
+# `unrecognized > 0` as a kit bug, and the differential above would only catch this as one field
+# among many. This is the witness that dies when `is_close` alone leaves the admission list.
+assert_eq "guard: a close row is recognized, never counted as unrecognized" "0 0 0 0" \
+  "$(jq -r '"\(.excluded.unrecognized) \(.excluded.non_comparable)"' <<< "$CLOSEIN_OUT") $(jq -r '"\(.excluded.unrecognized) \(.excluded.non_comparable)"' <<< "$CLOSEAWAY_OUT")"
+
 echo "== hygiene =="
 assert_eq "the fixture kit tree ends clean" "" "$(git -C "$FIX" status --porcelain)"
 assert_eq "the ledger is never tracked by the fixture kit" "0" \

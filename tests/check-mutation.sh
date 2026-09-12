@@ -807,8 +807,10 @@ mut_KAIZEN_degenerate_axis_window_sorted() {
 # Caught by `composition: a repo that only ESCALATED is still in it` in check-kaizen.sh, and by
 # the sum assertion beside it — the `missions` half stops closing against
 # guard.missions_after_change the moment escalation-only missions leave.
-# The harness stops being read and `sufficient` goes back to the floor alone — the fail-open of
-# TODO:856, where a slice that ran on 2.1.259 AND 2.1.263 is graded as if the machine had stood
+# The harness stops being read and `sufficient` goes back to the floor alone — the fail-open the
+# I5 of the 2026-09-11 judge mission closed (the backlog item it came from is gone, which is why
+# this comment no longer cites a line number), where a slice that ran on 2.1.259 AND 2.1.263 is
+# graded as if the machine had stood
 # still. The bump that stripped Bash from every phase would enter the kit's "piorou" on this path.
 mut_KAIZEN_guard_harness_blind() {
   sed -i 's@sufficient: (($observed >= guard_floor) and $harness_ok),@sufficient: ($observed >= guard_floor),@' "$1"
@@ -3077,11 +3079,52 @@ mut_LEDGER_meta_off_the_local_total() {
 # plan named a separate `phase_label` mutant for them, and the sabotage pass showed its kills are a
 # strict SUBSET of this one's (both take the label off `refez`; only this one moves `unrecognized`).
 # A mutant that kills nothing another does not is the redundancy CLAUDE.md says to remove rather
-# than to write a probe for, so it is not in this catalogue. Caught by `the recorded fact moves the
-# label and NOTHING else in the series` and `the recorded fact is not thrown away as unrecognized`
-# in check-kaizen.sh, and by nothing else.
+# than to write a probe for, so it is not in this catalogue.
+# ⚠️ This comment used to end "caught by <two assertions> and by nothing else", and the claim was
+# already false when it was written: the sabotage strips TWO events at once, so it kills ten
+# assertions across check-kaizen.sh and check-autonomy.sh, not two. Measured while closing r1
+# finding #9 of the 2026-09-11 judge mission — the same class of hand-written claim the three
+# stale phrases of that finding were. The exclusivity it wanted belongs to the narrow mutants
+# below, which strip ONE event and were measured one sabotage at a time.
 mut_LEDGER_gate_pass_not_admitted() {
   sed -i 's@and (.event == "session" or is_escalation or is_gate_pass or is_close)@and (.event == "session" or is_escalation)@' "$1"
+}
+
+# --- the three NARROW close mutants -----------------------------------------
+# r1 finding #8 of the 2026-09-11 judge mission. Every mutant above that touches `is_close` strips
+# it TOGETHER with `is_gate_pass`, so the assertions that killed them were killing the `gate_pass`
+# half and saying nothing about the closure — and check-kaizen.sh had no close fixture at all. Three
+# mutants, one per DEFINITION the closure passes through, because the three read three different
+# populations and one regime certified the other two by silence (measured: the first draft of the
+# fixture, with the close row sharing mission and sha with the sessions, survived all three).
+
+# The closure leaves the judge's admission list ALONE, without `is_gate_pass` for company: the row
+# the runner wrote on purpose lands in `excluded.unrecognized`, which agents/sdd-kaizen.md tells the
+# judge to read as a bug in the kit itself. Caught by `guard: a close row is recognized, never
+# counted as unrecognized` and `guard: a close row mints no version and no mission` in
+# check-kaizen.sh, and by nothing else.
+mut_KAIZEN_close_not_admitted() {
+  sed -i 's@and (.event == "session" or is_escalation or is_gate_pass or is_close)@and (.event == "session" or is_escalation or is_gate_pass)@' "$1"
+}
+
+# `graded_row` admits the closure, so a mission whose ONLY row in the graded slice is its `sdd close`
+# becomes a mission the slice bought and a detail cell with `sessions: 0` — the phantom clean grade
+# that `LEDGER_gate_pass_mints_a_cell` already refuses for the sibling event, here through the door
+# the closure opens. Only visible on the GRADED sha: off it, the row is not in the slice at all.
+# Caught by `guard: a close row mints no version and no mission` and the floor beside it, in
+# check-kaizen.sh, and by nothing else.
+mut_KAIZEN_close_mints_a_mission() {
+  sed -i 's@def graded_row: .event == "session" or is_escalation;@def graded_row: .event == "session" or is_escalation or is_close;@' "$1"
+}
+
+# `shas_in_file_order` admits the closure, so a `sdd close` written on a sha no session ever touched
+# COINS A VERSION: `latest` slides onto a slice with zero sessions, `previous` slides one down, and
+# `gate_KAIZEN` derives its expected sha from `latest.kit_sha` — a verdict already on disk stops
+# satisfying the gate. That is the reachable world in the repo that builds the kit, where the sha
+# advances between the session and the closure. Caught by `guard: a close row mints no version and
+# no mission` in check-kaizen.sh, and by nothing else.
+mut_KAIZEN_close_mints_a_version() {
+  sed -i 's@def shas_in_file_order: map(select(.event == "session" or is_escalation))@def shas_in_file_order: map(select(.event == "session" or is_escalation or is_close))@' "$1"
 }
 
 # The rubric goes back to letting a recorded closure be the SUBJECT of a cell instead of a modifier
@@ -3598,6 +3641,9 @@ CATALOG=(
   LEDGER_meta_bucket_unnamed
   LEDGER_meta_off_the_local_total
   LEDGER_gate_pass_not_admitted
+  KAIZEN_close_not_admitted
+  KAIZEN_close_mints_a_mission
+  KAIZEN_close_mints_a_version
   LEDGER_gate_pass_mints_a_cell
   LEDGER_gate_pass_counted_as_session
   LEDGER_gate_pass_mints_a_version

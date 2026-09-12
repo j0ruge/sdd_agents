@@ -2976,7 +2976,9 @@ autonomy_escalation_row() {   # autonomy_escalation_row <event> <kind> <phase> <
 # ON_ESCALATION_CMD from .sdd/config.sh, when set, with the reason (the ledger `kind`), the phase,
 # the mission, the project and the gate's sentence in its environment. Measured before it: zero
 # notification sites in this file, and a human watching `tail -F` for hours to learn the line had
-# stopped. ONE definition, and it sits in autonomy_blocked_row rather than at the eight call sites,
+# stopped. ONE definition, and it sits in autonomy_blocked_row rather than at each of its call
+# sites (count them, never read a number off this comment: `grep -cE '^ +autonomy_blocked_row '`
+# — the r1 of the 2026-09-11 judge mission found the hand-written number two behind the file),
 # because that is the one door every rc 3 goes through — the degraded row is not an rc 3 and gets
 # no pager. The projection never runs it. A hook that fails is a warning, never a second failure:
 # the escalation is already in the journal and the ledger, and a pager that could stop the run
@@ -3052,7 +3054,15 @@ autonomy_gate_pass_row() {   # autonomy_gate_pass_row <phase>
 # `verified` is the artifact JIRA answered and never the session rc — the rc is one exit code shared
 # by the session that closed the issue and the session that only asked about it, which is the label
 # cmd_close stopped believing in 2026-08-25.
-autonomy_close_row() {   # autonomy_close_row <issue> <session id> <rc> <verified>
+#
+# Arguments 5–8 are what the session COST, and they arrive as arguments rather than through the
+# LAST_PHASE_* globals because cmd_close does not go through run_phase — it reads the same two
+# definitions (stream_summary, hat_init_facts) at its own call site. Until r1 finding #7 of the
+# 2026-09-11 judge mission this row said which session was spent and nothing about the money, so
+# D12 — US$ per merged PR — counted every close in the kit's history as free. `harness` is the one
+# field that still comes off a global: hat_init_facts publishes it, exactly as it does for a phase.
+# Empty maps to null through `tonumber?`, never to 0: unmeasured is not free.
+autonomy_close_row() {   # autonomy_close_row <issue> <session id> <rc> <verified> <dur_s> <cost> <turns> <cache_read>
   autonomy_have_jq || return 0
   # Called, never substituted: `$(autonomy_kit_stamp)` would reset its one-shot warning flag.
   autonomy_kit_stamp; local stamp="$AUTONOMY_KIT_STAMP"
@@ -3063,6 +3073,8 @@ autonomy_close_row() {   # autonomy_close_row <issue> <session id> <rc> <verifie
   autonomy_append "$( jq -cn \
     --arg ts "$(date -Iseconds)" --arg issue "$1" --arg session "$2" \
     --arg rc "$3" --arg verified "$4" \
+    --arg dur "${5:-}" --arg cost "${6:-}" --arg turns "${7:-}" --arg cache "${8:-}" \
+    --arg harness "$LAST_PHASE_HARNESS" \
     --arg run_id "$AUTONOMY_RUN_ID" --arg invocation "$AUTONOMY_INVOCATION" \
     --arg sha "${stamp%%|*}" --arg dirty "${stamp#*|}" \
     --arg project "$PROJECT_NAME" --arg repo "$repo" --arg mission "$MISSION" \
@@ -3072,6 +3084,9 @@ autonomy_close_row() {   # autonomy_close_row <issue> <session id> <rc> <verifie
       kit_dirty: (if $dirty == "" then null else ($dirty == "true") end),
       project: $project, repo: $repo, mission: $mission,
       issue: $issue, session: $session,
+      dur_s: ($dur | tonumber? // null), cost_usd: ($cost | tonumber? // null),
+      turns: ($turns | tonumber? // null), cache_read: ($cache | tonumber? // null),
+      harness: (if $harness == "" then null else $harness end),
       rc: ($rc | tonumber? // null), verified: ($verified == "true")}' )"
 }
 
@@ -5917,7 +5932,7 @@ cmd_census() {
 
 autonomy_no_data() {   # autonomy_no_data <ledger path>
   warn "no data: the ledger at $1 does not exist yet (or has no rows)"
-  dim "  It is written by 'sdd run' and 'sdd retry'. Nothing has been recorded on this machine."
+  dim "  It is written by 'sdd run', 'sdd retry' and 'sdd close'. Nothing has been recorded on this machine."
 }
 cmd_autonomy() {
   # The kit_sha table answers "did this VERSION get better". D12 asks a different question — US$ per
@@ -7574,14 +7589,32 @@ To see what it saw:  $acli_bin jira workitem search --jql \"key = $issue AND sta
   kit_guard_arm
   hat_guard_arm
   close_before="$( git -C "$REPO_ROOT" rev-parse HEAD 2>/dev/null || echo "-" )"
+  # `stream-json` and no longer the single `json` blob, for ONE reason: the close row knew which
+  # session was spent and not what it cost (r1 finding #7 of the 2026-09-11 judge mission), and the
+  # money, the turns, the cache and the harness version are read by two definitions that already
+  # exist — stream_summary() for the terminal `result`, hat_init_facts() for the `init` line. A
+  # second cost parser written here would be a second spelling of a question run_phase already
+  # answers, which is the divergence this file closes wherever it finds it. The raw stream stays on
+  # disk beside the distilled summary, exactly as run_phase leaves it for a mangled session.
+  local streamfile="${logfile%.json}.stream.jsonl" started ended
+  started=$(date +%s)
   ( cd "$REPO_ROOT" && claude -p "/ticket close $issue" \
-      --model "$MODEL_TICKET" --permission-mode "$PERMISSION_MODE" --output-format json \
+      --model "$MODEL_TICKET" --permission-mode "$PERMISSION_MODE" \
+      --output-format stream-json --verbose \
       --setting-sources "user,project,local" --allowedTools "$ALLOWED_TOOLS" \
       --disallowedTools "$(hat_disallowed "$phase")" --strict-mcp-config \
-      --session-id "$sid" --max-budget-usd "$BUDGET_PER_PHASE_USD" ) > "$logfile" 2>&1 || rc=$?
+      --session-id "$sid" --max-budget-usd "$BUDGET_PER_PHASE_USD" ) > "$streamfile" 2>&1 || rc=$?
+  ended=$(date +%s)
+  stream_summary "$streamfile" > "$logfile"
+  hat_init_facts "$streamfile" "$logfile" "$(hat_disallowed "$phase")" "$(hat_mcp "$phase")"
+  # Same `|| echo` guard and same `// ""` as run_phase, for the two reasons written there: the jq
+  # that FAILS, and the jq that succeeds over an empty summary having printed nothing.
+  local close_cost close_turns close_cache
+  close_cost="$(jq -r '.total_cost_usd // .cost_usd // ""' "$logfile" 2>/dev/null || echo "")"
+  close_turns="$(jq -r '.num_turns // ""' "$logfile" 2>/dev/null || echo "")"
+  close_cache="$(jq -r '.usage.cache_read_input_tokens // ""' "$logfile" 2>/dev/null || echo "")"
   kit_guard_check "$phase"
   hat_guard_check "$phase" "$close_before"
-  if hat_crossed_escalation "$phase"; then return 3; fi
   # The session's rc decides NOTHING here. It is one exit code shared by two branches — the session
   # that closed the issue exits 0, and so does the session that only ASKED whether to close it — so
   # reading it was reading a label. Measured on 2026-08-25: `ok SQ-108 closed` printed over an issue
@@ -7598,7 +7631,13 @@ To see what it saw:  $acli_bin jira workitem search --jql \"key = $issue AND sta
   # the ledger is the file every reader of autonomy opens. Placed HERE, past the session and past
   # the second `close_query`, so the row carries the verdict the artifact gave rather than the one
   # the runner hoped for — and so the arm that spends no session cannot reach it.
-  autonomy_close_row "$issue" "$sid" "$rc" "$verified"
+  autonomy_close_row "$issue" "$sid" "$rc" "$verified" "$((ended - started))" "$close_cost" "$close_turns" "$close_cache"
+  # PAST the row and never before it — r1 finding #6. This `return 3` used to run between the paid
+  # session and the row, so the one close most worth counting, the one whose session crossed its
+  # hat, was the one close the ledger never saw. The escalation row `hat_crossed_escalation` writes
+  # is not a substitute: it carries no issue, no session id and no money, so D12 would read the
+  # mission as having closed for free. The line still stops, and the rc is unchanged.
+  if hat_crossed_escalation "$phase"; then return 3; fi
   if [ "$verified" = true ]; then
     # The artifact outranks the rc in BOTH directions, or it is not the artifact deciding — it is a
     # second label ANDed onto the first. A session that fell over after closing the issue closed it.
