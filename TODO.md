@@ -61,10 +61,10 @@ O plano consolidado pelo Codex Astra, baseado no artigo de @0xCodez e nas refer�
 
 - [ ] **`sdd retry` devolve 3 sem escrever linha de escalada no ledger** — `bin/sdd:3653` — o
   `cmd_retry` chama o gate e sai 3 em qualquer reprovação, mas nunca chama `autonomy_blocked_row`
-  nem escreve `BLOCKED` no `pipeline.log`, e nenhuma das cinco linhas que um humano deve agir sai
-  no terminal. Reproduzido com handoff `status: blocked`: rc 3, ledger só com a linha de sessão.
-  Vale para TODA escalada, não só a nova — o juiz do kaizen lê um ledger sem eventos que
-  aconteceram. Direção: a quinta porta do `handoff_blocked_escalation`, ou um escalador comum.
+  nem escreve `BLOCKED` no `pipeline.log`. O juiz lê um ledger sem eventos que aconteceram.
+  RESOLVIDO por `aa3c0a2`: `kind: retry-gate-red`, próprio e não `no-progress` — aquele afirma
+  duas sessões sem mover o disco, e um retry gasta UMA e pode ter movido. Mutante
+  `RETRY_gate_red_silent`.
   — descoberto por `sdd-reviewer` na missão `20260826-o-laco-da-qa` (2026-08-26)
 
 - [ ] **Citação NÃO-cercada acima do cabeçalho ainda vira o gênero do bug** — `bin/sdd:686` — o
@@ -771,10 +771,9 @@ O plano consolidado pelo Codex Astra, baseado no artigo de @0xCodez e nas refer�
 
 - [ ] **`sdd close` abre sessão e não escreve linha no ledger** — `bin/sdd:5422` — o
   `docs/pipeline.md` promete "uma linha JSON por sessão gasta ou escalada" e esta sessão não tem
-  linha: `grep -n 'autonomy_.*_row' bin/sdd` não devolve nada dentro de `cmd_close`. Fail-open pela
-  régua D15, com consumidor fora da suíte (o juiz e a D12). Direção: `cmd_close` passa por
-  `run_phase` ou escreve a linha com `invocation: close`, e o enum de `invocation` no `pipeline.md`
-  aprende o valor no mesmo commit — o mesmo contrato de cauda aberta que `kind` carrega.
+  linha. Fail-open pela régua D15, com consumidor fora da suíte (o juiz e a D12).
+  RESOLVIDO por `aa3c0a2`: quarto evento `event: "close"`, escrito só onde a sessão foi gasta, e
+  os dois leitores o admitem por `is_close` no mesmo commit. Mutante `RUN_close_writes_no_row`.
   — descoberto por `humano` na missão `20260828-instrumento-honesto` (2026-08-28)
 
 - [ ] **`gate_EXEC` valida por uma leitura e conta por outra, e uma célula vazia as separa** —
