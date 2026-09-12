@@ -2009,6 +2009,83 @@ assert_eq "differential: ...and the closure is still a recognised row, counted w
        "$(jq -r '.excluded.unrecognized' <<< "$TW2_SERIES")" \
        "$(grep -c 'gate(s) closed without a session' <<< "$TW2_TABLE")" )"
 
+echo "== guard: the slice the judge cannot answer over =="
+# Two refusals the guard did not make. Both come out of the same gemba: the sha judged in window 4
+# (`a0e34df`) is the one that REPAIRED a harness bump which stripped Bash from every phase — so the
+# slice where "two machines, one verdict" matters most is the slice that was just graded `true`.
+#
+# `sufficient: false` is SHARED with "not enough missions", so every assertion below reads the
+# reason list and demands the marker of the right branch AND the absence of the other's. A probe
+# on the boolean alone distinguishes nothing, which is the rule this file already applies to rc.
+
+# hrow <mission> <kit_sha> <harness> — one clean session of THIS repo, floor-eligible.
+hrow() {
+  printf '{"v":1,"ts":"2026-09-11T1%s:00:00-03:00","event":"session","run_id":"h%s","invocation":"run","kit_sha":"%s","kit_dirty":false,"project":"p1","repo":"/p1","mission":"%s","phase":"EXEC","step":"EXEC","agent":"sdd-executor","model":"opus","attempt":1,"auto_retry":false,"session":"h%ss","rc":0,"dur_s":10,"cost_usd":1.0,"moved":true,"gate":"pass","gate_why":"x","harness":"%s"}\n' \
+    "$((hseq % 10))" "$hseq" "$2" "$1" "$hseq" "$3"
+  hseq=$((hseq + 1))
+}
+hseq=0
+# A meta row (phase KAIZEN) is where the PREVIOUS verdict was written, so it is where the window
+# under judgement opens. The fixtures below put missions on both sides of it on purpose.
+hmeta() {
+  printf '{"v":1,"ts":"2026-09-11T09:59:00-03:00","event":"session","run_id":"hk","invocation":"kaizen","kit_sha":"%s","kit_dirty":false,"project":"p1","repo":"/p1","mission":"20260911-kaizen","phase":"KAIZEN","step":"KAIZEN","agent":"sdd-kaizen","model":"opus","attempt":1,"auto_retry":false,"session":"hks","rc":0,"dur_s":10,"cost_usd":1.0,"moved":true,"gate":"pass","gate_why":"x"}\n' "$1"
+}
+# guard_read <state dir> -> "<sufficient> <why joined> <window_broken> <stranded>"
+guard_read() {
+  local s; s="$( cd "$FIX" && SDD_STATE_DIR="$1" "$KSDD" kaizen --series 2>/dev/null )"
+  jq -r '[(.guard.sufficient|tostring), (.guard.why // ["MISSING"] | sort | join(",")),
+          (.guard.window_broken|tostring), (.guard.window_missions_stranded|tostring)] | join(" ")' <<< "$s"
+}
+
+mkdir -p "$OUTSIDE/hmixed" "$OUTSIDE/hone" "$OUTSIDE/hfloor" "$OUTSIDE/winbroken" "$OUTSIDE/winwhole"
+
+# A — three missions on ONE kit version, and TWO harness versions across them. The floor is MET,
+# so nothing but the harness can be the reason.
+{ hrow h1 ddddddd "2.1.259"; hrow h2 ddddddd "2.1.263"; hrow h3 ddddddd "2.1.263"; } \
+  | localize > "$OUTSIDE/hmixed/autonomy-log.jsonl"
+# B — its twin, one keystroke away: the SAME rows on the SAME sha with ONE harness version.
+hseq=0
+{ hrow h1 ddddddd "2.1.263"; hrow h2 ddddddd "2.1.263"; hrow h3 ddddddd "2.1.263"; } \
+  | localize > "$OUTSIDE/hone/autonomy-log.jsonl"
+# C — one harness, floor NOT met: the other branch of the shared `false`, so the two reasons can be
+# told apart instead of being read off one boolean.
+hseq=0
+{ hrow h1 ddddddd "2.1.263"; hrow h2 ddddddd "2.1.263"; } \
+  | localize > "$OUTSIDE/hfloor/autonomy-log.jsonl"
+
+# The differential pair. Every field of the two ledgers is identical but the harness of one row.
+assert_eq "guard: two harness versions in one slice make it unanswerable — sufficient false, and the reason is named" \
+  "false harness_mixed false 0" "$(guard_read "$OUTSIDE/hmixed")"
+assert_eq "guard: ...and its twin, one harness version apart, is answerable — no reason at all" \
+  "true  false 0" "$(guard_read "$OUTSIDE/hone")"
+assert_eq "guard: a slice short of the floor names the FLOOR and not the harness — the shared false is split" \
+  "false floor false 0" "$(guard_read "$OUTSIDE/hfloor")"
+# Anti-vacuity: the harness composition the guard accepts is stated positively, and it is VISIBLE,
+# so a guard that answered `false` by losing the rows would fail here instead of passing quietly.
+HMIX_SERIES="$( cd "$FIX" && SDD_STATE_DIR="$OUTSIDE/hmixed" "$KSDD" kaizen --series 2>/dev/null )"
+assert_eq "guard: that refusal is not vacuous — the slice still carries its three missions and both versions" \
+  "3 2.1.259,2.1.263" \
+  "$(jq -r '[(.guard.missions_with_session|tostring), (.guard.harness | sort | join(","))] | join(" ")' <<< "$HMIX_SERIES")"
+
+# D — the broken window. A verdict was written (the KAIZEN row), then missions were spent on
+# `eee0001`, and THEN the kit moved to `eee0002`, which is the only slice the judge grades. Window 3
+# was exactly this and `degenerate_axis` answered `false` about it; a human reading `git log` saw it.
+hseq=0
+{ hmeta ccccccc; hrow w0 eee0001 "2.1.263"; hrow w1 eee0002 "2.1.263"; hrow w2 eee0002 "2.1.263"
+  hrow w3 eee0002 "2.1.263"; } | localize > "$OUTSIDE/winbroken/autonomy-log.jsonl"
+# E — its twin, and the mission on the older sha sits BEFORE the meta row: it belongs to the window
+# the previous verdict already closed, so it strands nothing. This is what makes the pair a
+# differential rather than a count — an implementation that reads from the start of the FILE
+# instead of from the last verdict answers `true 1` here and passes D by luck.
+hseq=0
+{ hrow w9 eee0000 "2.1.263"; hmeta ccccccc; hrow w1 eee0002 "2.1.263"; hrow w2 eee0002 "2.1.263"
+  hrow w3 eee0002 "2.1.263"; } | localize > "$OUTSIDE/winwhole/autonomy-log.jsonl"
+
+assert_eq "guard: a window whose missions were stranded on an earlier kit version says so" \
+  "true  true 1" "$(guard_read "$OUTSIDE/winbroken")"
+assert_eq "guard: ...and the same mission BEFORE the last verdict belongs to the closed window, stranding nothing" \
+  "true  false 0" "$(guard_read "$OUTSIDE/winwhole")"
+
 echo "== hygiene =="
 assert_eq "the fixture kit tree ends clean" "" "$(git -C "$FIX" status --porcelain)"
 assert_eq "the ledger is never tracked by the fixture kit" "0" \

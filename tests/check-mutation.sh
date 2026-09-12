@@ -807,6 +807,33 @@ mut_KAIZEN_degenerate_axis_window_sorted() {
 # Caught by `composition: a repo that only ESCALATED is still in it` in check-kaizen.sh, and by
 # the sum assertion beside it — the `missions` half stops closing against
 # guard.missions_after_change the moment escalation-only missions leave.
+# The harness stops being read and `sufficient` goes back to the floor alone — the fail-open of
+# TODO:856, where a slice that ran on 2.1.259 AND 2.1.263 is graded as if the machine had stood
+# still. The bump that stripped Bash from every phase would enter the kit's "piorou" on this path.
+mut_KAIZEN_guard_harness_blind() {
+  sed -i 's@sufficient: (($observed >= guard_floor) and $harness_ok),@sufficient: ($observed >= guard_floor),@' "$1"
+}
+
+# `why` collapses back to the bare boolean the branch above cannot be told from: a reader that sees
+# only `sufficient: false` waits for missions that cannot help, because the machine — not the
+# mission count — is what made the slice unanswerable.
+mut_KAIZEN_guard_why_silent() {
+  sed -i 's@why: (\[(if $observed >= guard_floor then empty else "floor" end),@why: ([(if true then empty else "floor" end),@' "$1"
+}
+
+# The window opens at the start of the FILE instead of at the last verdict, so missions the
+# previous window already spent and closed are counted as stranded by this one. `window_broken`
+# then reads `true` over a whole history and stops separating anything.
+mut_KAIZEN_window_ignores_verdict() {
+  sed -i 's@| (\[range(0; ($all | length)) | select($all\[.\].phase == "KAIZEN")\] | last) as $meta_at@| null as $meta_at@' "$1"
+}
+
+# The rupture goes blind: `window_broken` is hardcoded false, which is the answer window 3 got out
+# of `degenerate_axis` while one mission sat on `2e48a87` and the kit moved 24 commits past it.
+mut_KAIZEN_window_break_blind() {
+  sed -i 's@window_broken: ($stranded > 0),@window_broken: false,@' "$1"
+}
+
 mut_KAIZEN_composition_session_unit() {
   sed -i 's@composition: ($rows | group_by(.repo // "")@composition: ($rows | map(select(.event == "session")) | group_by(.repo // "")@' "$1"
 }

@@ -1050,8 +1050,25 @@ rather than a second set of numbers standing beside it.
 Plus a `guard` (`missions_after_change`, `missions_with_session`, `sessions`,
 `floor` — the number of missions with a session a version needs, published because the runner also
 says it out loud to the human and a second copy of it would drift the day it moves;
-`sufficient: missions_with_session >= floor` — a mission that only escalated ran, and is counted as
-one, but bought the judge no observation and so does not raise the floor;
+`sufficient: missions_with_session >= floor` **and** the slice ran on one harness version — a
+mission that only escalated ran, and is counted as one, but bought the judge no observation and so
+does not raise the floor;
+`why`, the list of reasons it is false — `"floor"`, `"harness_mixed"`, empty exactly when
+`sufficient` is true, because the boolean alone is shared between two states with nothing in
+common but the word `false` and a reader that sees only the boolean waits for missions that cannot
+help; `harness`, the harness versions the graded slice ran on — a verdict compares `kit_sha`
+against `kit_sha` as if the machine stood still, and 2.1.263 reading `disallowedTools:` as names
+stripped `Bash` from every phase, so a slice straddling that bump charges the harness to the kit.
+The accepted compositions are enumerated positively (one version, or none for rows older than
+2026-09-06 that carry no `harness` and are honestly silent rather than mixed), never as a refusal:
+written `length > 1 | not`, the next composition nobody has thought of is admitted by omission;
+`window_missions_stranded` and `window_broken`, the missions spent since the **last verdict**
+(the last `KAIZEN` row — where the previous window closed is where this one opens) that landed on
+a kit version other than the one being graded. Window 3 was one mission on `2e48a87` and then 24
+kit commits, and nothing in the series said so: `degenerate_axis` speaks of the *slice* and never
+of the declared window, so the rupture was read out of `git log` by a human. It does **not** veto —
+a stranded mission makes the window smaller than it looks, it does not make the slice unanswerable,
+and the two have different remedies;
 `degenerate_axis`, true when the **last `floor`** kit versions in the slice — the same number, read
 from the same owner, never a second copy of it — each bought exactly one
 *mission* — the same unit the floor counts, never sessions — there is more than one of them, **and

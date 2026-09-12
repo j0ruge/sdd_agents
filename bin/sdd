@@ -6493,7 +6493,7 @@ kaizen_series() {
     # Second producer of the same shape, and it cannot share the jq above (there is no input to
     # run it on), so the key set is kept in step by hand and check-kaizen.sh compares the two as
     # key sets. A consumer reading `null` where the real series gives a number is the drift.
-    printf '{"v":1,"latest":null,"previous":null,"guard":{"missions_after_change":0,"missions_with_session":0,"sessions":0,"floor":%s,"sufficient":false,"degenerate_axis":false},"excluded":{"non_comparable":0,"unrecognized":0,"meta":0,"other_repo":0,"no_repo":0}}\n' "$KAIZEN_GUARD_FLOOR"
+    printf '{"v":1,"latest":null,"previous":null,"guard":{"missions_after_change":0,"missions_with_session":0,"sessions":0,"floor":%s,"sufficient":false,"why":["floor"],"harness":[],"window_missions_stranded":0,"window_broken":false,"degenerate_axis":false},"excluded":{"non_comparable":0,"unrecognized":0,"meta":0,"other_repo":0,"no_repo":0}}\n' "$KAIZEN_GUARD_FLOOR"
     return 0
   fi
   jq -n --arg repo "$repo" --argjson floor "$KAIZEN_GUARD_FLOOR" --arg phases "$PHASES" "$(ledger_row_is_local)""$(ledger_outcome_defs)"'
@@ -6867,6 +6867,38 @@ kaizen_series() {
     # $observed above reads, never sessions), which no single group can state about itself. It adds
     # no fact to the ledger and changes no verdict — it explains one.
     | ($ok | degenerate_axis) as $degenerate
+    # The harness versions the judged slice ran on. A verdict compares kit_sha against kit_sha as
+    # if the MACHINE stood still, and it does not: 2.1.263 started reading `disallowedTools:` off
+    # the agent file as names, which stripped Bash from every phase. A slice straddling that bump
+    # attributes the harness to the kit — and the sha graded in window 4 is precisely the one that
+    # repaired it, so the slice where this matters most was the slice already graded `true`.
+    | (($latest.harness) // []) as $harness
+    # POSITIVE, never `length > 1 | not`: the accepted compositions are ENUMERATED — one version
+    # (the slice ran on one machine) or none (rows older than 2026-09-06, which carry no `harness`
+    # and are honestly silent rather than mixed). Written as a refusal, a third composition nobody
+    # has thought of yet — a version list carrying a null, say — would be admitted by omission, and
+    # this program has paid for that spelling once already (the `is_gate_pass | not` of I4).
+    # ⚠️ NO mutant, and the honest reason is not "that world does not exist": over the integers
+    # `($n == 0 or $n == 1)` and `($n > 1 | not)` are the SAME function, so the world I could not
+    # build is a slice whose harness list has a length the two spellings answer differently — none
+    # does. What the positive form buys is the day the ACCEPTED set stops being a length (a list
+    # carrying a null, two builds of one version), when it must be extended by naming what enters
+    # instead of silently admitting it. Declared here per D15 rather than defended by a mutant that
+    # can only survive.
+    | (($harness | length) as $n | ($n == 0 or $n == 1)) as $harness_ok
+    # Where the window under judgement OPENS: the last KAIZEN row is where the previous verdict was
+    # written, so everything after it is the evidence this verdict is supposed to stand on. File
+    # order, like $shas — the ledger is append-only and its order IS the history.
+    | ([range(0; ($all | length)) | select($all[.].phase == "KAIZEN")] | last) as $meta_at
+    | (if $meta_at == null then $rows else ($all[($meta_at + 1):] | map(select(.phase != "KAIZEN"))) end
+       | map(select(comparable_row and .event == "session"))) as $window_rows
+    # The missions of this window that landed on a kit version OTHER than the one being graded.
+    # They were spent and they are not in the verdict — window 3 was one mission on `2e48a87` and
+    # then 24 kit commits, and `degenerate_axis` answered `false` about it while a human read the
+    # rupture out of `git log`. It does NOT veto: a stranded mission makes the window smaller than
+    # it looks, it does not make the slice unanswerable, and the two are different remedies.
+    | (($window_rows | map(mission_key) | unique | length)
+       - ($window_rows | map(select(.kit_sha == ($shas[-1] // null))) | map(mission_key) | unique | length)) as $stranded
     | {v: 1,
        latest: $latest,
        previous: $previous,
@@ -6882,7 +6914,17 @@ kaizen_series() {
                # a comment swearing it did not — the one voice of this floor a human reads out
                # loud, and the one that would have drifted in silence the day the floor moved.
                floor: guard_floor,
-               sufficient: ($observed >= guard_floor),  # missions WITH a session (D4); I13.4 revisits
+               sufficient: (($observed >= guard_floor) and $harness_ok),  # missions WITH a session (D4); I13.4 revisits
+               # WHY it is false, because the boolean is SHARED: "not enough missions" and "two
+               # machines in one slice" have nothing in common but the word `false`, and a reader —
+               # human or gate — that sees only the boolean waits for missions that cannot help. An
+               # array and not a string: the two reasons co-occur, and a joined sentence would make
+               # the caller parse prose. Empty exactly when `sufficient` is true.
+               why: ([(if $observed >= guard_floor then empty else "floor" end),
+                      (if $harness_ok then empty else "harness_mixed" end)]),
+               harness: $harness,
+               window_missions_stranded: $stranded,
+               window_broken: ($stranded > 0),
                degenerate_axis: $degenerate},
        excluded: {non_comparable: ($noncomp | length), unrecognized: $unrec,
                   meta: ($meta | length), other_repo: $other_repo, no_repo: $no_repo}}
