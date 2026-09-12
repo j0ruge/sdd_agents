@@ -4226,6 +4226,17 @@ out_norows="$( SDD_STATE_DIR="$OUTSIDE/blanklines" "$SDD" autonomy 2>&1 )"
 assert_eq "output: the two empty-ledger refusals are one sentence, written once" \
   "1 $(norm_ledger "$out_nofile")" \
   "$(grep -cF 'no data: the ledger at ' "$SDD") $(norm_ledger "$out_norows")"
+# r3 finding #4. The assertion above reads the PREFIX of the refusal and nothing of its body, so the
+# second line — the one that tells a human which commands would have written a row — had no probe at
+# all: dropping a writer from it passed green, while the comment beside it in bin/sdd declares the
+# rule "writer added to the runner ⇒ writer added to this sentence". Read from the OUTPUT and not
+# from the source, because what a human is told is the thing that can be wrong; the names are
+# harvested rather than grepped one by one so that a writer dropped OR a writer invented both move
+# the term. Four today: `sdd run`, `sdd retry`, `sdd close` and `sdd kaizen` — the fourth runs a
+# real KAIZEN phase through run_phase and writes a session row like any other.
+assert_eq "autonomy_no_data names every writer the runner has" \
+  "'sdd close' 'sdd kaizen' 'sdd retry' 'sdd run'" \
+  "$(grep -oE "'sdd [a-z]+'" <<< "$out_nofile" | sort -u | tr '\n' ' ' | sed 's/ $//')"
 
 # D4 — `group_by(.kit_sha)` sorts by KEY, so "the last line of the table" was the lexically-largest
 # version and not the most recent one. `kaizen_series` has always ordered by first appearance in the
@@ -4956,10 +4967,13 @@ STUB
 chmod +x "$OUTSIDE/stub/acli"
 # The SAME stream every other stub replays, plus one ordinary notice on stderr — the kind a real
 # `claude` prints (a deprecation, an update notice). Nothing else about this world differs.
+CLOSE_STDERR_MARK="$OUTSIDE/close-stderr-was-written"
+rm -f "$CLOSE_STDERR_MARK"
 cat > "$OUTSIDE/stub/claude" <<STUB
 #!/usr/bin/env bash
 n=\$(( \$(cat "$KIT_SESSION_COUNT" 2>/dev/null || echo 0) + 1 ))
 printf '%s\n' "\$n" > "$KIT_SESSION_COUNT"
+printf 'armed\n' > "$CLOSE_STDERR_MARK"
 printf 'Warning: some notice on stderr\n' >&2
 cat "$INIT_CLEAN"
 exit 0
@@ -4968,14 +4982,27 @@ chmod +x "$OUTSIDE/stub/claude"
 ( cd "$CLW3" && "$FAKEKIT/bin/sdd" close "$MISSION" >/dev/null 2>&1 ) || true
 # FLOOR, and it is the whole assertion: without proof that the stub actually printed to stderr,
 # a green here would only mean "the poison was never armed" — the regime this file refuses.
+#
+# ⚠️ r3 finding #3, and the floor used to be dependent on the very property it guards: `armed:` read
+# the `.err` file, which exists ONLY because of the fix, so under the mutant it answered
+# `armed:false` — "the poison was never armed" in exactly the world where it went off, and the pair
+# `armed:true pure:false` the comment promises was unreachable. The witness now comes from the
+# STUB's own side: a marker the stub writes on the line before it prints to stderr, in a directory
+# no redirection of `cmd_close` can reach. It says the same thing under both shapes of the code,
+# which is what makes it a floor and not a second reading of the fix.
 CLOSE_DIRTY_STREAM="$(find "$CLW3/.sdd/logs/$MISSION" -name '*.stream.jsonl' 2>/dev/null | tail -1 || true)"
-CLOSE_DIRTY_ERR="$(find "$CLW3/.sdd/logs/$MISSION" -name '*.err' 2>/dev/null | tail -1 || true)"
 CLOSE_DIRTY_ARMED=false
-if [ -n "$CLOSE_DIRTY_ERR" ] && grep -q 'some notice on stderr' "$CLOSE_DIRTY_ERR" 2>/dev/null; then CLOSE_DIRTY_ARMED=true; fi
+if [ -s "$CLOSE_STDERR_MARK" ]; then CLOSE_DIRTY_ARMED=true; fi
 # The stream file has to be PURE JSON — every line parseable — which is the property the `.err`
 # sibling buys and `2>&1` destroys. Asked of the file itself, not of the row, so it names the cause.
+#
+# ⚠️ r3 finding #5: `jq -e` was the wrong question. `-e` makes the rc depend on the LAST value, so a
+# file that is 100% JSON whose final value is `null`/`false` exits 1 — indistinguishable from the 5
+# that a parse error gives, which is the only rc this line wants. Failed CLOSED today (the fixture
+# ends on the `result` object), so it was robustness and not a fail-open; without `-e` the rc says
+# "parseable" and nothing else.
 CLOSE_DIRTY_PURE=false
-if [ -n "$CLOSE_DIRTY_STREAM" ] && jq -e . "$CLOSE_DIRTY_STREAM" >/dev/null 2>&1; then CLOSE_DIRTY_PURE=true; fi
+if [ -n "$CLOSE_DIRTY_STREAM" ] && jq . "$CLOSE_DIRTY_STREAM" >/dev/null 2>&1; then CLOSE_DIRTY_PURE=true; fi
 assert_eq "close keeps stderr out of the stream it parses, so a noisy session still carries its money" \
   "armed:true pure:true 0.0362104 2.1.260" \
   "armed:$CLOSE_DIRTY_ARMED pure:$CLOSE_DIRTY_PURE $(rows 'select(.event == "close") | "\(.cost_usd) \(.harness)"')"
@@ -4993,7 +5020,19 @@ assert_eq "close keeps stderr out of the stream it parses, so a noisy session st
 # whose input carries nothing of what it admits is an assertion about nothing.
 CLOSE_ADMIT_ROWS="$(rows 'select(.event == "close") | 1' | grep -c . || true)"
 assert_eq "floor: the close admission pair reads a ledger carrying a close row" "1" "$CLOSE_ADMIT_ROWS"
-CLOSE_AUT="$( "$SDD" autonomy 2>&1 || true )"
+# ⚠️ SECOND FLOOR, and r3 finding #1 is why there are two. The row being in the FILE is not the row
+# being in the READING: `sdd autonomy` shows only the rows born in the repo it is invoked from
+# (`ledger_row_is_local`), and this close row is born in `$CLW3` while the command used to run from
+# `$FIX`. It was discarded as `other_repo` BEFORE any classification, the command fell into the
+# "none of the N row(s) ... were born in this repo" arm — which prints no `unrecognized` line no
+# matter what the reader admits — and the `human:` term of the pair below was a CONSTANT. Measured:
+# sabotaging `is_close` in cmd_autonomy alone killed the two neighbouring assertions and left the
+# one whose title says "both readers" green. Running the human reader inside the row's own repo is
+# the fix; this floor is what keeps it honest, because a future cwd change puts the term back to a
+# constant in silence.
+CLOSE_AUT="$( CDPATH='' cd "$CLW3" && "$SDD" autonomy 2>&1 || true )"
+assert_eq "floor: the human reader reads the repo the close row was born in" "0" \
+  "$(grep -cF 'were born in this repo' <<< "$CLOSE_AUT" || true)"
 CLOSE_SER="$( "$SDD" kaizen --series 2>/dev/null || true )"
 assert_eq "both readers admit the close row instead of filing it as unrecognized" \
   "human:0 judge:0" \

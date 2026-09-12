@@ -800,3 +800,9 @@ O plano consolidado pelo Codex Astra, baseado no artigo de @0xCodez e nas refer�
   RESOLVIDO por 5e3c427 — responde `sufficient: false` com `why: ["harness_mixed"]`, composição
   aceita enumerada positivamente, par diferencial e mutante próprios.
   — descoberto por `sdd-executor` na missão `fix/o-chapeu-sem-bash` (2026-09-06)
+- [ ] **`check-templates.sh` imprime `ok` com três espaços, contra os quatro que todo Check ancora**
+  — `tests/check-templates.sh` — o `CLAUDE.md` e o `templates/checkpoint.md` declaram `  ok    ` (4)
+  como a âncora obrigatória de todo Check que lê sensor, e 85 das 1058 asserções da suíte não casam
+  com ela. Falha FECHADA (o Check dá 0 e o incremento reprova), mas quem escrever Check sobre esse
+  sensor perde a sessão achando que a asserção sumiu. Direção: alinhar a grafia do sensor.
+  — descoberto por `sdd-reviewer` na missão `20260911-o-juiz-nao-mente-sobre-a-janela` (2026-09-12)

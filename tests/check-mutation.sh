@@ -2642,6 +2642,40 @@ mut_RUN_close_stderr_into_stream() {
 # leaves every escalation site alone. Caught by `sdd retry that leaves the gate red escalates: a
 # ledger row and a journal line` in check-autonomy.sh, which reads `kind: journal:+0` under this
 # mutant where it demands `kind:retry-gate-red journal:+1`.
+# r3 finding #1, and the mutant is the whole point of the fix: sabotage ONE of the two readers and
+# demand that the assertion whose title says "both readers" goes red. `def is_close` is written
+# twice in bin/sdd — cmd_autonomy first (the human reader), kaizen_series second (the judge) — and
+# the perl below slurps the file and substitutes WITHOUT /g, so only the first, the human's, moves.
+# Before the fix this mutant scored nothing: the human reader ran from a repo the close row was not
+# born in, `ledger_row_is_local` discarded it as `other_repo`, and the command never reached the arm
+# that could print `unrecognized`. Caught by `both readers admit the close row instead of filing it
+# as unrecognized` in check-autonomy.sh, alongside the two neighbours that already measured the
+# human reader — three FAILs, and the middle one is the one this mutant exists for.
+mut_RUN_close_admission_human_reader_only() {
+  perl -0pi -e 's/def is_close: \.event == "close";/def is_close: .event == "zzzz";/' "$1"
+}
+
+# r3 finding #2: the messages of `cmd_close` go back to naming the DISTILLED summary alone. Since
+# that arm streams, `$logfile` holds 0 bytes in exactly the case a human opens it for — a session
+# that died before its terminal `result` — so the two files carrying the evidence lose their only
+# mention. The fix shipped with no sensor at all (reverting it left the whole suite green, rc 0);
+# caught now by `close names the raw stream and the stderr beside the summary` in check-gates.sh,
+# whose `raw:` and `err:` terms are the two that move — `summary:` was always true, under both
+# shapes, which is why it is a floor and not the measurement.
+mut_RUN_close_logs_summary_only() {
+  sed -i 's/see \$close_logs/see $logfile/g' "$1"
+}
+
+# r3 finding #4: `autonomy_no_data` goes back to naming three of the four commands that write the
+# ledger, which is how the sentence told a human "you have never run those" over a file the judge's
+# own loop had already written into. The comment beside it declares the rule "writer added to the
+# runner ⇒ writer added to this sentence" and had nothing behind it. Caught by `autonomy_no_data
+# names every writer the runner has` in check-autonomy.sh, which harvests the names from the OUTPUT
+# rather than grepping them one by one, so a writer invented moves the term as well as one dropped.
+mut_RUN_no_data_drops_a_writer() {
+  sed -i "s/'sdd close' and 'sdd kaizen'/'sdd close'/" "$1"
+}
+
 mut_RETRY_gate_red_silent() {
   sed -i 's@^  autonomy_blocked_row "retry-gate-red" "\$phase" "\$GATE_WHY"$@  :@' "$1"
 }
@@ -3621,6 +3655,9 @@ CATALOG=(
   AUTONOMY_reopened_comparable_only
   RUN_close_writes_no_row
   RUN_close_stderr_into_stream
+  RUN_close_admission_human_reader_only
+  RUN_close_logs_summary_only
+  RUN_no_data_drops_a_writer
   RETRY_gate_red_silent
   AUTONOMY_notes_borrowed_across_repos
   LEDGER_progress_not_written
