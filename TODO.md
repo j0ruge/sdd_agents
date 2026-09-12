@@ -495,12 +495,13 @@ O plano consolidado pelo Codex Astra, baseado no artigo de @0xCodez e nas refer�
   como fallback, mutante no catálogo. — descoberto por `claude` na faxina `20260904-faxina-do-backlog` (2026-09-04)
 
 - [ ] **A janela de medição não tem instrumento que perceba a própria ruptura** — `bin/sdd:6070` —
-  `degenerate_axis` respondeu `false` para a janela 3 partida: `2e48a87` com **1** missão, **24**
-  commits do kit depois dela e a `codereview` de 1.17.x para 1.19.0 no meio — entrada de 2026-09-04
-  do `KAIZEN_LOG.md`. As cláusulas do guard falam do recorte (`sessions`, `missions_with_session`,
-  piso), nunca da janela declarada em prosa no `CONTEXT.md`; quem viu foi um humano lendo `git log`.
-  Direção: a série carrega o sha de abertura declarado e conta commits do kit entre ele e cada linha,
-  e `sufficient: false` ganha um motivo. — descoberto por `claude` na faxina `20260904-faxina-do-backlog` (2026-09-04)
+  `degenerate_axis` respondeu `false` para a janela 3 partida: `2e48a87` com **1** missão e **24**
+  commits do kit depois dela (entrada de 2026-09-04 do `KAIZEN_LOG.md`). As cláusulas do guard falam
+  do recorte, nunca da janela; quem viu foi um humano lendo `git log`.
+  RESOLVIDO por 5e3c427 — `window_broken`/`window_missions_stranded` contam as missões gastas desde
+  a última linha `KAIZEN` que caíram noutra versão do kit; no recorte real da janela 4, `true` com 3
+  encalhadas. Não veta, e `guard.why` nomeia o motivo.
+  — descoberto por `claude` na faxina `20260904-faxina-do-backlog` (2026-09-04)
 
 ### Contrato e configuração
 
@@ -854,5 +855,6 @@ O plano consolidado pelo Codex Astra, baseado no artigo de @0xCodez e nas refer�
   `session` carrega `harness:` desde 2026-09-06 e a série o lista por fatia, mas `guard.sufficient`
   segue `true` sobre uma fatia que rodou em 2.1.259 e 2.1.263: o veredito compara kit_sha como se
   a máquina parasse, e o bump que tirou o Bash de toda fase entraria no "piorou" do kit. Direção:
-  `guard.harness_mixed` + `sufficient: false`, com par diferencial no `check-kaizen.sh`.
+  RESOLVIDO por 5e3c427 — responde `sufficient: false` com `why: ["harness_mixed"]`, composição
+  aceita enumerada positivamente, par diferencial e mutante próprios.
   — descoberto por `sdd-executor` na missão `fix/o-chapeu-sem-bash` (2026-09-06)
