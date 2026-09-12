@@ -4937,6 +4937,48 @@ assert_eq "close writes a row that is not a session row wearing a CLOSE label" "
 assert_eq "close row carries cost_usd, and the turns, cache and harness beside it" \
   "0.0362104 1 18134 2.1.260 true" \
   "$(rows 'select(.event == "close") | "\(.cost_usd) \(.turns) \(.cache_read) \(.harness) \(.dur_s != null and (.dur_s | type) == "number")"')"
+# r2 finding #1, and the reason the assertion ABOVE could not see it: no `claude` stub in this file
+# ever wrote a byte to stderr, so "the close row carries the money" was true over a stream that was
+# never dirty. `jq` ABORTS on the first line that is not JSON — it does not skip it — so a single
+# notice printed ahead of the stream empties both `stream_summary` and `hat_init_facts`, the two
+# `2>/dev/null || echo ""` guards swallow the rc, and the four numbers fall back to `null`: r1
+# finding #7 back, now with a green sensor on top of it. The fix is the shape `run_phase` already
+# uses (stderr to a sibling `.err`), and THIS is the world that tells the two shapes apart.
+kitguard_reset
+CLW3="$OUTSIDE/close-ledger-dirty-stderr"
+kitguard_world "$CLW3"
+sed -i 's/^JIRA_ENABLED=false$/JIRA_ENABLED=true/' "$CLW3/.sdd/config.sh"
+printf -- '---\nfase: TICKET\nissue: SQ-9\n---\n# TICKET\n' > "$CLW3/docs/handoffs/$MISSION/10-ticket.md"
+cat > "$OUTSIDE/stub/acli" <<'STUB'
+#!/usr/bin/env bash
+printf '[]\n'
+STUB
+chmod +x "$OUTSIDE/stub/acli"
+# The SAME stream every other stub replays, plus one ordinary notice on stderr — the kind a real
+# `claude` prints (a deprecation, an update notice). Nothing else about this world differs.
+cat > "$OUTSIDE/stub/claude" <<STUB
+#!/usr/bin/env bash
+n=\$(( \$(cat "$KIT_SESSION_COUNT" 2>/dev/null || echo 0) + 1 ))
+printf '%s\n' "\$n" > "$KIT_SESSION_COUNT"
+printf 'Warning: some notice on stderr\n' >&2
+cat "$INIT_CLEAN"
+exit 0
+STUB
+chmod +x "$OUTSIDE/stub/claude"
+( cd "$CLW3" && "$FAKEKIT/bin/sdd" close "$MISSION" >/dev/null 2>&1 ) || true
+# FLOOR, and it is the whole assertion: without proof that the stub actually printed to stderr,
+# a green here would only mean "the poison was never armed" — the regime this file refuses.
+CLOSE_DIRTY_STREAM="$(find "$CLW3/.sdd/logs/$MISSION" -name '*.stream.jsonl' 2>/dev/null | tail -1 || true)"
+CLOSE_DIRTY_ERR="$(find "$CLW3/.sdd/logs/$MISSION" -name '*.err' 2>/dev/null | tail -1 || true)"
+CLOSE_DIRTY_ARMED=false
+if [ -n "$CLOSE_DIRTY_ERR" ] && grep -q 'some notice on stderr' "$CLOSE_DIRTY_ERR" 2>/dev/null; then CLOSE_DIRTY_ARMED=true; fi
+# The stream file has to be PURE JSON — every line parseable — which is the property the `.err`
+# sibling buys and `2>&1` destroys. Asked of the file itself, not of the row, so it names the cause.
+CLOSE_DIRTY_PURE=false
+if [ -n "$CLOSE_DIRTY_STREAM" ] && jq -e . "$CLOSE_DIRTY_STREAM" >/dev/null 2>&1; then CLOSE_DIRTY_PURE=true; fi
+assert_eq "close keeps stderr out of the stream it parses, so a noisy session still carries its money" \
+  "armed:true pure:true 0.0362104 2.1.260" \
+  "armed:$CLOSE_DIRTY_ARMED pure:$CLOSE_DIRTY_PURE $(rows 'select(.event == "close") | "\(.cost_usd) \(.harness)"')"
 # THE OTHER HALF of the differential: an issue JIRA already reports Done returns before any session
 # is bought, and a closure nobody paid for is not a row.
 kitguard_reset

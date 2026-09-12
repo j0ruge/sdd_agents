@@ -2620,6 +2620,21 @@ mut_RUN_close_writes_no_row() {
   sed -i 's@^  autonomy_close_row .*$@  :@' "$1"
 }
 
+# R6 of the 2026-09-11 judge mission, and the regression it exists to keep buried: `cmd_close` sends
+# the session's stderr back INTO the `.jsonl` it then parses. `jq` aborts on the first non-JSON line
+# rather than skipping it, so one ordinary notice ahead of the stream empties `stream_summary` and
+# `hat_init_facts` both, the `2>/dev/null || echo ""` guards swallow the rc, and cost, turns, cache
+# and harness go back to `null` — r1 finding #7 undone with a green sensor on top of it. It is a
+# fail-open, which is why the mutant is narrow: it changes the redirection and nothing else, and the
+# assertion that must die is the only one in the file whose stub writes to stderr. Measured under
+# the sabotage rather than counted by hand: `close keeps stderr out of the stream it parses, so a
+# noisy session still carries its money` reads `armed:false pure:false null null` where it demands
+# `armed:true pure:true 0.0362104 2.1.260` — and it is the ONLY assertion of the whole suite that
+# moves, which is the point: every clean-stub world stays green, exactly as it did before the fix.
+mut_RUN_close_stderr_into_stream() {
+  sed -i 's@) > "\$streamfile" 2>"\$errfile" || rc=\$?@) > "$streamfile" 2>\&1 || rc=$?@' "$1"
+}
+
 # I4, DOOR 2 of 2, and a DIFFERENT door of the same promise: `sdd retry` goes back to returning 3
 # in silence — the human relaunched the phase, the gate stayed red, the line stopped, and neither
 # the journal nor the ledger said so. The pair is one mutant per door, the shape CLAUDE.md spells

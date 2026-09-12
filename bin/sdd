@@ -7596,14 +7596,20 @@ To see what it saw:  $acli_bin jira workitem search --jql \"key = $issue AND sta
   # second cost parser written here would be a second spelling of a question run_phase already
   # answers, which is the divergence this file closes wherever it finds it. The raw stream stays on
   # disk beside the distilled summary, exactly as run_phase leaves it for a mangled session.
-  local streamfile="${logfile%.json}.stream.jsonl" started ended
+  #
+  # stderr goes to a SIBLING `.err`, never into `$streamfile` — the shape run_phase uses, and r2
+  # finding #1 is what `2>&1` here cost: `jq` aborts on the first line that is not JSON rather than
+  # skipping it, so one ordinary notice printed ahead of the stream empties both readers, the
+  # `2>/dev/null || echo ""` guards below swallow the rc, and cost, turns, cache and harness fall
+  # back to `null` — r1 finding #7 undone in silence, with a green assertion over it.
+  local streamfile="${logfile%.json}.stream.jsonl" errfile="${logfile%.json}.err" started ended
   started=$(date +%s)
   ( cd "$REPO_ROOT" && claude -p "/ticket close $issue" \
       --model "$MODEL_TICKET" --permission-mode "$PERMISSION_MODE" \
       --output-format stream-json --verbose \
       --setting-sources "user,project,local" --allowedTools "$ALLOWED_TOOLS" \
       --disallowedTools "$(hat_disallowed "$phase")" --strict-mcp-config \
-      --session-id "$sid" --max-budget-usd "$BUDGET_PER_PHASE_USD" ) > "$streamfile" 2>&1 || rc=$?
+      --session-id "$sid" --max-budget-usd "$BUDGET_PER_PHASE_USD" ) > "$streamfile" 2>"$errfile" || rc=$?
   ended=$(date +%s)
   stream_summary "$streamfile" > "$logfile"
   hat_init_facts "$streamfile" "$logfile" "$(hat_disallowed "$phase")" "$(hat_mcp "$phase")"
@@ -7613,6 +7619,11 @@ To see what it saw:  $acli_bin jira workitem search --jql \"key = $issue AND sta
   close_cost="$(jq -r '.total_cost_usd // .cost_usd // ""' "$logfile" 2>/dev/null || echo "")"
   close_turns="$(jq -r '.num_turns // ""' "$logfile" 2>/dev/null || echo "")"
   close_cache="$(jq -r '.usage.cache_read_input_tokens // ""' "$logfile" 2>/dev/null || echo "")"
+  # r2 finding #3. The three messages below used to send a human to `$logfile` alone, and since this
+  # arm streams, `$logfile` is the DISTILLED summary — 0 bytes exactly in the case a human reads it
+  # for, a session that died before its terminal `result`. The two files that do carry the evidence
+  # then had no name anywhere. All three are named, once, here.
+  local close_logs="$logfile (raw stream: $streamfile; stderr: $errfile)"
   kit_guard_check "$phase"
   hat_guard_check "$phase" "$close_before"
   # The session's rc decides NOTHING here. It is one exit code shared by two branches — the session
@@ -7641,7 +7652,7 @@ To see what it saw:  $acli_bin jira workitem search --jql \"key = $issue AND sta
   if [ "$verified" = true ]; then
     # The artifact outranks the rc in BOTH directions, or it is not the artifact deciding — it is a
     # second label ANDed onto the first. A session that fell over after closing the issue closed it.
-    if [ "$rc" -ne 0 ]; then dim "  (the close session exited $rc — see $logfile — but the issue is Done, so the artifact decides)"; fi
+    if [ "$rc" -ne 0 ]; then dim "  (the close session exited $rc — see $close_logs — but the issue is Done, so the artifact decides)"; fi
     ok "$issue closed — JIRA confirms it is Done"
     return 0
   fi
@@ -7650,10 +7661,10 @@ To see what it saw:  $acli_bin jira workitem search --jql \"key = $issue AND sta
   # confirmation when what actually happened is that acli stopped answering sends them to read the
   # wrong log. Both fall closed — the direction never changes — but the sentence has to name which.
   if [ "$CLOSE_REACHABLE" != true ]; then
-    bad "$issue is UNVERIFIED — the session ran, but '$acli_bin' stopped answering JSON afterwards (auth expiring mid-session is the ordinary way), so this command cannot say whether the close landed; see $logfile"
+    bad "$issue is UNVERIFIED — the session ran, but '$acli_bin' stopped answering JSON afterwards (auth expiring mid-session is the ordinary way), so this command cannot say whether the close landed; see $close_logs"
     return 1
   fi
-  bad "$issue is still open — JIRA does not confirm the close (the session may have only asked for confirmation); see $logfile"
+  bad "$issue is still open — JIRA does not confirm the close (the session may have only asked for confirmation); see $close_logs"
   return 1
 }
 
