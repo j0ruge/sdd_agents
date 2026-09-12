@@ -835,7 +835,7 @@ mut_KAIZEN_window_break_blind() {
 }
 
 mut_KAIZEN_composition_session_unit() {
-  sed -i 's@composition: ($rows | group_by(.repo // "")@composition: ($rows | map(select(.event == "session")) | group_by(.repo // "")@' "$1"
+  sed -i 's@composition: ($graded | group_by(.repo // "")@composition: ($graded | map(select(.event == "session")) | group_by(.repo // "")@' "$1"
 }
 
 # The human stops being shown the mixture. The series keeps the field, so every JSON assertion in
@@ -3018,7 +3018,7 @@ mut_RUN_gate_pass_off_the_derived_branch() {
 # leaves the header total through a bucket whose name is a lie about it. Caught by `the human reader
 # does not call the recorded closure unrecognized` in check-autonomy.sh, and by nothing else.
 mut_LEDGER_gate_pass_unrecognized() {
-  sed -i 's@def is_unrecognized: (is_session or is_escalation or is_gate_pass) | not;@def is_unrecognized: (is_session or is_escalation) | not;@' "$1"
+  sed -i 's@def is_unrecognized: (is_session or is_escalation or is_gate_pass or is_close) | not;@def is_unrecognized: (is_session or is_escalation) | not;@' "$1"
 }
 
 # The JUDGE stops admitting the row, and it lands in `excluded.unrecognized` — the bucket the judge
@@ -3034,7 +3034,7 @@ mut_LEDGER_gate_pass_unrecognized() {
 # label and NOTHING else in the series` and `the recorded fact is not thrown away as unrecognized`
 # in check-kaizen.sh, and by nothing else.
 mut_LEDGER_gate_pass_not_admitted() {
-  sed -i 's@and (.event == "session" or is_escalation or is_gate_pass)@and (.event == "session" or is_escalation)@' "$1"
+  sed -i 's@and (.event == "session" or is_escalation or is_gate_pass or is_close)@and (.event == "session" or is_escalation)@' "$1"
 }
 
 # The rubric goes back to letting a recorded closure be the SUBJECT of a cell instead of a modifier
@@ -3487,6 +3487,10 @@ CATALOG=(
   AUTONOMY_exclusions_glued
   KAIZEN_axis_note_own_floor
   KAIZEN_guard_floor_unpublished
+  KAIZEN_guard_harness_blind
+  KAIZEN_guard_why_silent
+  KAIZEN_window_break_blind
+  KAIZEN_window_ignores_verdict
   RUN_close_believes_rc
   RUN_close_precheck_blind
   RUN_close_already_done_spends
