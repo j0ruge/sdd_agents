@@ -628,10 +628,10 @@ O plano consolidado pelo Codex Astra, baseado no artigo de @0xCodez e nas refer�
   — descoberto por `sdd-qa` na missão `20260901-o-revisor-so-acha` (2026-09-01)
 
 - [ ] **A fronteira do laço de revisão é calculada sobre o subconjunto `comparable`** —
-  `bin/sdd:5249` — uma rodada não-comparável esconde as sessões EXEC que ela mesma gerou, então a
-  M1 — a métrica primária desta missão — sub-reporta exatamente o que existe para contar, e no
-  limite a célula some numa missão que laçou. Os limites declarados ao lado cobrem o denominador,
-  não a fronteira. Direção: declarar o limite, ou calcular a fronteira sobre todas as linhas.
+  `bin/sdd:5249` — uma rodada não-comparável esconde as sessões EXEC que ela mesma gerou, e no
+  limite a célula some numa missão que laçou. RESOLVIDO por `392f526`: fronteira, numerador e
+  denominador passam para `$every`, a população de `launches`/`reopened`. Medido no ledger real:
+  `lote-facil` 28% -> 62%, `portas-do-humano` 24% -> 42%. Dois mutantes novos.
   — descoberto por `sdd-qa` na missão `20260901-o-revisor-so-acha` (2026-09-01)
 
 ### Saída humana e cosmética
@@ -804,12 +804,11 @@ O plano consolidado pelo Codex Astra, baseado no artigo de @0xCodez e nas refer�
   — descoberto por `sdd-reviewer` na missão `20260829-o-incremento-que-andou` (2026-08-30)
 
 - [ ] **`reopened` é cego à closure, e a resposta depende de a fase ter CUSTADO dinheiro** —
-  `bin/sdd:4860` — o `def reopened` lê `.gate == "pass"` sobre `$every_session` (`:4954`,
-  `map(select(is_session))`), e a closure é justamente o fato que `.gate == "pass"` representa.
-  Medido, mesmo histórico de pipeline: closure gravada como `gate_pass` → `0 reopened`; a MESMA
-  closure comprada com sessão → `1 reopened`. Não consertado aqui porque admitir closure em
-  `$every_session` move junto o `history_extra` (`:4962`), que é número de tela. Direção: população
-  própria para o `reopened`, mais fixture diferencial. — descoberto por `sdd-reviewer` na missão `20260831-a-rodada-que-andou` (2026-08-31)
+  `bin/sdd:4860` — o `def reopened` lia `.gate == "pass"` sobre `$every_session`, e a closure é
+  justamente o fato que `.gate == "pass"` representa. RESOLVIDO por `392f526`: população própria
+  (`$every_row` = sessões + closures), passe escrito positivamente, `$every_session` intacto para
+  `launches`/`history_extra`. Par diferencial livre x paga (`free:0 paid:2` -> `2 2`) e um mutante
+  novo. — descoberto por `sdd-reviewer` na missão `20260831-a-rodada-que-andou` (2026-08-31)
 
 - [ ] **O `$order` do `cmd_autonomy` e o `comparable_row` do `kaizen_series` divergem sobre a linha
   `gate_pass`, e o comentário entre eles jura paridade** — `bin/sdd:4929` — o `$order` admite
