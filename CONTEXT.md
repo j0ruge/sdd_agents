@@ -66,6 +66,20 @@
 | D23 | Graphify entra no kit? | **Enxuto, com a zona medida ANTES de escrita** (grill de 2026-09-01): `graphify-out/` fora do git, `.graphifyignore` versionado, seção no `CLAUDE.md`, runbook + ledger pareado em inglês em `docs/graphify.md` (`docs/` é superfície). Sem hooks (rebuild de 1 s), sem cópia da skill (a lição sobre a ferramenta volta por retrofit lean à skill viva do `sales_quote`). Régua GANHA/PERDE copiada do piloto SQ-106; janela ainda aberta. | 11 perguntas reais do próprio planejamento: dentro da zona escrita, 7 `complete`, 0 `wrong`; fora dela, 4 `incomplete` previstos pelas regras e 1 controle negativo previsto. A zona bash é estreita (orientação, nunca censo) e copiar a do piloto TypeScript teria repetido o erro medido lá. | — |
 | D24 | O que a dieta de contexto corta, e o que deliberadamente não corta? | **Cinco alavancas, todas no runner, nenhuma no prompt como frase** (decisões humanas de 2026-09-04): notas fora do checkpoint com as últimas 10 inlinadas; handoff nomeado + TL;DR capado em 20 linhas pelo gate + seção de boot; templates da fase (a quinta, admitida na sessão porque sem ela o desenho dava 112 891 B e perdia o teto por 7,5 KB); sensor do `CLAUDE.md` do alvo no preflight — **nunca corte**; a frase dos subagentes fora do executor, com `Agent` negado. Alvo **`boot bill` ≤ 105 000 B no pior ponto**, vinculante, fixado DEPOIS da baseline (I1) e antes do corte — `handoff_read` e a fatia do checkpoint são evidência sem veto. Não corta: o `CLAUDE.md` do alvo, missão em voo, `## Boot da próxima fase`, as 318 pendências (rule 5, não 3), `--autocompact` (a janela não estoura; a conta sim). | Baseline por arquivo (`sdd census`): itens 1–3 do boot = 72,6% de tudo que a missão releu; `checkpoint.md` lido 6,2× por sessão de EXEC com piso mecânico de 1. Resultado: 214 222 → 102 016 B (−52,4%). Spec `docs/superpowers/specs/2026-09-04-a-dieta-de-contexto-design.md`. | — |
 
+## Decisões adiadas por YAGNI
+
+> Não são achados — são **ausência de consumidor**, e por isso não moram no `TODO.md` (régua D15:
+> nenhuma é fail-open, nenhuma tem consumidor fora do kit). Ficam aqui, ao lado das decisões que
+> as motivaram, e cada uma nomeia **o evento que a reabre**. Reabrir é escrever a decisão na
+> tabela acima; enquanto o evento não acontecer, construir qualquer uma delas é a infraestrutura
+> que o princípio 6 recusa.
+
+| Adiada | O quê | Reabre quando | Origem |
+|---|---|---|---|
+| Y1 | **Espelho global de vereditos legível por máquina** — JSONL em `~/.sdd/`, para responder "vereditos ao longo do tempo" sem varrer `docs/handoffs/*/05-verdict.md`. | O **I13.4 pedir** — a graduação é o primeiro consumidor de uma série de vereditos. Criar junto com ela, nunca antes. | D3 desta tabela; registrado na execução do `i13.3-sdd-kaizen` (2026-08-15) |
+| Y2 | **Multi-missão concorrente por `git worktree`** — hoje é uma missão por branch por vez, e o runner não tem nada que impeça duas. | Aparecer **demanda real** de duas missões em voo. ⚠️ Não é só `git worktree add` no laço: o ledger carimba caminho e um worktree já confundiu a identidade do repo (comentários `WORKTREE` do `bin/sdd`), então reabrir pede desenho próprio. | YAGNI declarado no plano original (`humano`, 2026-08-14) |
+| Y3 | **`sdd digest`** — destilar handoffs e `KAIZEN_LOG.md` para o vault Obsidian continua manual. | Alguém destilar **à mão pela terceira vez** e a forma do rascunho já estar estável. | YAGNI declarado no plano original (`humano`, 2026-08-14) |
+
 ## 🚩 Perguntas abertas
 
 - **O critério (4) da D7 — "suíte < 30 s no default" — segue não atingido, e o estouro deixou de

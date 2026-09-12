@@ -5001,6 +5001,12 @@ reviewscope_sessions() { cat "$REVIEWSCOPE_COUNT" 2>/dev/null || printf 0; }
 # The names the journal line reports, or "" when there is no line. `-F': '` (colon SPACE) and not
 # `-F:`: the ISO timestamp that opens every journal line is full of bare colons and none of them is
 # followed by a space.
+# DECLARED LIMIT (D15): `$NF` keeps the LAST field, so a reported path that itself contains
+# `": "` is truncated to whatever follows the final one, silently and in the diagnostic only.
+# Not a fail-open — the assertions that read this helper compare it against a fixture whose paths
+# are house-style (no colon), so a truncation here changes the compared value and turns the probe
+# RED rather than green; what degrades is the message a human reads on the way to the cause. The
+# honest fix is to recover the list by a separator a path cannot hold, not to widen the split.
 reviewscope_files() { awk -F': ' '/HAT-CROSSED/ { print $NF; exit }' <<< "$1"; }
 # The warn and the BLOCKED line both carry the reason; `warns` counts the warn alone.
 reviewscope_warns() { grep -v 'BLOCKED' <<< "$1" | grep -c 'outside its writes'; }

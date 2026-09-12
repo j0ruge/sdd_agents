@@ -4,6 +4,46 @@ Registro de melhorias com **antes/depois medido**. Sem número, não entra.
 
 ---
 
+## 2026-09-12 — A régua D15 aplicada: dez verdades saem do backlog e viram limite declarado
+
+**Problema (Gemba):** o `TODO.md` cresce por acúmulo de **verdades**, não de problemas — 16 itens
+fechados contra 29 nascidos em duas missões, e o arquivo em 105 achados. A régua D15 já estava
+escrita (`CLAUDE.md`): um item entra quando o sensor **afirma medir o que não mede** (fail-open) ou
+quando o defeito tem **consumidor fora da suíte do kit**. Fora disso é dívida **declarada**, e o
+lugar dela é o cabeçalho do sensor dono. A régua ataca a taxa de nascimento; o estoque só desce
+quando alguém a aplica num diff com autor.
+
+**Contramedida:** dez itens auditados um a um contra os dois casos da D15 e movidos para onde quem
+lê o código os encontra — nenhum apagado, nenhum perdido:
+
+| Item | Por que não é achado | Foi para |
+|---|---|---|
+| `pushd "$(…)"` tem o bug de CDPATH | zero população; `grep` no comentário re-deriva | `tests/check-pipefail.sh`, `NOT MEASURED (3)` do `CD_RE` |
+| `cdpath:` não vê `cd --` nem quebra com `\` | zero população; as **três** regras leem linha física, por desenho | idem, `NOT MEASURED (4)` |
+| regra 3 nomeia o comando errado com dois greps | a linha **é** reportada (fail-closed); separar os comandos pede parser de shell | comentário de `maxc_violations()` |
+| "the four silent aborts" contra cinco mutantes | os dois mutantes são pegos; o cabeçalho é que subconta | cabeçalho de `tests/check-health.sh`, asserções 8-11 |
+| censo `guard:` conta captura em COMENTÁRIO | falha **fechada** — não certifica nada de errado | bloco de limites declarados do `guard:` |
+| "all ten assertions" contra 14 probes | a frase fala de **todas**; número escrito nasce velho | comentário do cross-check de `tests/check-entrypoint.sh`, com o `grep` ao lado |
+| `reviewscope_files()` sem limite declarado | trunca o **diagnóstico**, e a asserção fica vermelha, não verde | `DECLARED LIMIT:` sobre a função, forma que o arquivo já usa |
+| espelho global de vereditos (JSONL) | YAGNI: ausência de consumidor | `CONTEXT.md`, Y1 da tabela **Decisões adiadas por YAGNI** |
+| multi-missão por `git worktree` | idem | `CONTEXT.md`, Y2 |
+| `sdd digest` para o vault Obsidian | idem | `CONTEXT.md`, Y3 |
+
+**Depois, medido:**
+
+| O que | Antes | Depois | Comando |
+|---|---|---|---|
+| achados abertos no `TODO.md` | **105** | **95** (−9,5%) | `bash tests/check-todo.sh` |
+| catraca do backlog | `todo-findings 105` | `todo-findings 95` | `tests/health-baseline.txt` |
+| adiamentos por YAGNI com **evento que os reabre** escrito | 0 de 3 | **3 de 3** | tabela Y1–Y3 do `CONTEXT.md` |
+
+⚠️ Nada foi afrouxado: os 95 que ficam incluem todo fail-open e todo item com consumidor externo,
+e a catraca segue mordendo nos dois sentidos. A seção que se chamava *"Adiados por YAGNI"* ficou
+sem nenhum adiamento e foi renomeada dizendo isso — heading que mente sobre o próprio conteúdo é a
+mesma classe de defeito que os dez itens acima descrevem.
+
+---
+
 ## 2026-09-06 — O chapéu sem Bash: o harness passou a ler o frontmatter, e o kit não sabia
 
 **Problema (Gemba):** o Claude Code subiu de 2.1.259 para 2.1.263 dentro da janela 4 e passou a

@@ -31,6 +31,12 @@
 #   8-11. the four silent aborts, prefixed `abort:` — cmd_health may not DIE where it was written
 #      to speak. Each demands the sentence of the right branch AND that a check after the site
 #      still appears; see the block header down the file for why the rc alone proves nothing.
+#      ⚠️ DECLARED LIMIT (D15), not a backlog item: the CATALOGUE carries FIVE mut_HEALTH_* aimed
+#      at this family, not four. The fifth, mut_HEALTH_ratchet_eats_verdict, has no assertion of
+#      its own — it dies in assertion 11's fixture, which produces the other defect as a side
+#      effect. Both mutants are caught, so nothing fails open; what is short by one is this
+#      header, and this header is what a reader uses to map mutant onto assertion. Re-derive
+#      before trusting either number: `grep -c '^mut_HEALTH_' tests/check-mutation.sh`.
 #   12. the ratchet policy is written where the next mission meets it — CLAUDE.md and TODO.md. The
 #      one rule here that no mut_HEALTH_* can reach, since none of them can make a document say
 #      less, so it carries probes of its own over all three of its layers.
@@ -1357,6 +1363,17 @@ fi
 # reads as unguarded (loud, and there are none in the region); a here-doc BODY carrying an
 # assignment would be censused as code (loud; the region has only `<<<` herestrings, checked); and
 # two captures on one line are read as one.
+#
+# A fourth, same rubric — DECLARED LIMIT (D15), fail-CLOSED and therefore a limit and not a
+# backlog item: the census does not tell CODE from COMMENT, so a capture written inside a `#`
+# line of cmd_health counts. Measured on 2026-08-19 (the mission whose slug this comment may not
+# spell — the language sensor owns this surface): a reproduction example
+# pasted into a comment, in the shape `o="$( … )"`, became the 23rd capture and the two-handed
+# ratchet turned the suite red. Nothing is certified wrongly — the failure is on the loud side —
+# but it forbids documenting the trap with the command that demonstrates it, which is exactly how
+# this house documents. Skipping a line whose first non-blank is `#` is a one-line change with a
+# probe in both directions; until someone needs it, the workaround is to write the example with a
+# broken spelling, and the cost is one sentence in a comment instead of one item in the backlog.
 # ---------------------------------------------------------------------------
 CAPTURE_DESC='guard: every capture in the `sdd health` region is protected from set -e'
 

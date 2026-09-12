@@ -416,8 +416,14 @@ selftest() {
   probe_composition check_runner
 
   # Cross-check on the HARNESS itself. Replacing probe()'s body with `out="$want_txt";
-  # rc="$want_rc"` makes all ten assertions above pass at once and none of them can notice — in
-  # the adversarial pass it was the one sabotage that survived, and it cost a single edit.
+  # rc="$want_rc"` makes EVERY probe above pass at once and none of them can notice — in the
+  # adversarial pass it was the one sabotage that survived, and it cost a single edit.
+  # The claim is about ALL of them on purpose, never about a count: the count is
+  # `grep -cE '^ *probe ' "$SELF_PATH"`, it moves with the next probe added, and a number written
+  # here would be born stale. (An earlier spelling said "all ten" against a census that already
+  # answered 14 — the same class the R10 closed in pipeline_log_line. The two other occurrences of
+  # a number in this file, at the head and in the composition block, are honest HISTORY of a
+  # measurement taken on a named day and are not this claim.)
   #
   # The witness closes it from the OTHER side: the real `--check` entry point appends a line every
   # time it is invoked, so a probe harness that never spawns the child leaves a count that does not
