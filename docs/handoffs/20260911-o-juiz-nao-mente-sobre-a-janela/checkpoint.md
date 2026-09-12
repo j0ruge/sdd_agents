@@ -1,6 +1,6 @@
 ---
 missao: 20260911-o-juiz-nao-mente-sobre-a-janela
-atualizado: 2026-09-12 10:08
+atualizado: 2026-09-12 10:23
 ---
 
 # Checkpoint — o juiz não mente sobre a janela
@@ -34,7 +34,7 @@ atualizado: 2026-09-12 10:08
 | I4 | `sdd close` e `sdd retry` escrevem a linha de ledger que devem | `o=$(bash tests/check-autonomy.sh 2>&1); grep -c '^  ok    close writes' <<< "$o"` → `1` ou mais | done | aa3c0a2 |
 | I5 | A guarda recusa fatia com duas versões de harness e percebe janela rompida | `o=$(bash tests/check-kaizen.sh 2>&1); grep -c '^  ok    guard: two harness' <<< "$o"` → `1` ou mais | done | 5e3c427 |
 | I6 | Dez itens de dívida declarada saem para o cabeçalho do sensor dono; catraca 105 → 95 | `o=$(bash tests/check-todo.sh 2>&1); grep -c '^  ok    95 finding(s)' <<< "$o"` → `1` | done | 4d9b7b8 |
-| R1 | r1 #1 — a linha `event:"close"` entra no total do cabeçalho de `sdd autonomy` e não cai em bucket nenhum | `o=$(bash tests/check-autonomy.sh 2>&1); grep -c '^  ok    the buckets still sum to the header total (a close row)' <<< "$o"` → `1` ou mais | pending | — |
+| R1 | r1 #1 — a linha `event:"close"` entra no total do cabeçalho de `sdd autonomy` e não cai em bucket nenhum | `o=$(bash tests/check-autonomy.sh 2>&1); grep -c '^  ok    the buckets still sum to the header total (a close row)' <<< "$o"` → `1` ou mais | done | 1563bc8 |
 | R2 | r1 #2 — a exclusão `$meta` (KAIZEN) infla o mesmo total, e o comentário ao lado afirma o contrário | `o=$(bash tests/check-autonomy.sh 2>&1); grep -c '^  ok    the buckets still sum to the header total (a judge KAIZEN row)' <<< "$o"` → `1` ou mais | pending | — |
 | R3 | r1 #3 — `window_missions_stranded` falha aberto na missão que atravessa o sha julgado | `o=$(bash tests/check-kaizen.sh 2>&1); grep -c '^  ok    guard: a mission straddling the kit change is stranded' <<< "$o"` → `1` ou mais | pending | — |
 | R4 | r1 #4 — o juiz aprende a ler `why`, `harness` e a janela rompida; espelho por `sdd install --force` | `grep -c 'window_broken' agents/sdd-kaizen.md` → `1` ou mais | pending | — |
