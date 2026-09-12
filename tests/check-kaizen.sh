@@ -2037,7 +2037,7 @@ guard_read() {
           (.guard.window_broken|tostring), (.guard.window_missions_stranded|tostring)] | join(" ")' <<< "$s"
 }
 
-mkdir -p "$OUTSIDE/hmixed" "$OUTSIDE/hone" "$OUTSIDE/hfloor" "$OUTSIDE/winbroken" "$OUTSIDE/winwhole"
+mkdir -p "$OUTSIDE/hmixed" "$OUTSIDE/hone" "$OUTSIDE/hfloor" "$OUTSIDE/winbroken" "$OUTSIDE/winwhole" "$OUTSIDE/winstraddle"
 
 # A — three missions on ONE kit version, and TWO harness versions across them. The floor is MET,
 # so nothing but the harness can be the reason.
@@ -2085,6 +2085,17 @@ assert_eq "guard: a window whose missions were stranded on an earlier kit versio
   "true  true 1" "$(guard_read "$OUTSIDE/winbroken")"
 assert_eq "guard: ...and the same mission BEFORE the last verdict belongs to the closed window, stranding nothing" \
   "true  false 0" "$(guard_read "$OUTSIDE/winwhole")"
+
+# F — the regime neither D nor E covers: ONE mission with rows on BOTH shas. Half of its evidence
+# was bought on `eee0001` and half on the sha being graded, which is precisely what the field
+# exists to reveal. A subtraction of unique counts answers 0 here, because the straddling mission
+# is counted on BOTH sides and cancels itself out — the positive spelling ("rows outside the sha
+# judged") counts it once and answers 1. Measured red before the fix: `true  false 0`.
+hseq=0
+{ hmeta ccccccc; hrow w1 eee0001 "2.1.263"; hrow w1 eee0002 "2.1.263"; hrow w2 eee0002 "2.1.263"
+  hrow w3 eee0002 "2.1.263"; } | localize > "$OUTSIDE/winstraddle/autonomy-log.jsonl"
+assert_eq "guard: a mission straddling the kit change is stranded — a subtraction of unique counts cancels it to zero" \
+  "true  true 1" "$(guard_read "$OUTSIDE/winstraddle")"
 
 echo "== hygiene =="
 assert_eq "the fixture kit tree ends clean" "" "$(git -C "$FIX" status --porcelain)"

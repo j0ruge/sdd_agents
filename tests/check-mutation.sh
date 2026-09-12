@@ -3042,6 +3042,18 @@ mut_LEDGER_close_bucket_unnamed() {
 # check-autonomy.sh, and — measured, not assumed — also by the `differential: ...and the meta row is
 # excluded by NAME on both sides` anti-vacuity floor in check-kaizen.sh, which pins the same
 # sentence from the judge's side. Three assertions, two sensors, and nothing else.
+# `window_missions_stranded` goes back to the subtraction of unique counts. It answers the same
+# number as the positive spelling on every window whose missions sit on ONE sha each — which is why
+# both fixtures the field was born with (`winbroken`, `winwhole`) pass under it — and it answers
+# ZERO on the one window the field exists for: a mission with rows on both shas is counted in each
+# term and cancels itself out, so half the evidence of the verdict was bought on another kit
+# version and the field that reveals exactly that says `broken: false`. Fail-open, and the judge
+# reads the boolean. Caught by `guard: a mission straddling the kit change is stranded` in
+# check-kaizen.sh, and by nothing else — the two older window assertions survive it by construction.
+mut_LEDGER_stranded_by_subtraction() {
+  sed -i 's@| ($window_rows | map(select(.kit_sha != ($shas\[-1\] // null))) | map(mission_key) | unique | length) as $stranded@| (($window_rows | map(mission_key) | unique | length) - ($window_rows | map(select(.kit_sha == ($shas[-1] // null))) | map(mission_key) | unique | length)) as $stranded@' "$1"
+}
+
 mut_LEDGER_meta_bucket_unnamed() {
   sed -i '/row(s) written by the judge excluded from the axis/d' "$1"
 }
@@ -3582,6 +3594,7 @@ CATALOG=(
   RUN_gate_pass_off_the_derived_branch
   LEDGER_gate_pass_unrecognized
   LEDGER_close_bucket_unnamed
+  LEDGER_stranded_by_subtraction
   LEDGER_meta_bucket_unnamed
   LEDGER_meta_off_the_local_total
   LEDGER_gate_pass_not_admitted

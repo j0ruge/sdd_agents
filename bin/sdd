@@ -6919,8 +6919,13 @@ kaizen_series() {
     # then 24 kit commits, and `degenerate_axis` answered `false` about it while a human read the
     # rupture out of `git log`. It does NOT veto: a stranded mission makes the window smaller than
     # it looks, it does not make the slice unanswerable, and the two are different remedies.
-    | (($window_rows | map(mission_key) | unique | length)
-       - ($window_rows | map(select(.kit_sha == ($shas[-1] // null))) | map(mission_key) | unique | length)) as $stranded
+    # Written POSITIVELY — what IS stranded — and that is not style. The subtraction it replaces
+    # (`unique(window) - unique(on the sha judged)`) counts a mission that has rows on BOTH shas in
+    # each term, so it cancels itself to zero: the mission whose evidence was bought half on one
+    # kit version and half on the other is exactly the one the field exists to reveal, and the
+    # subtraction was silent about it. Same rule the `is_gate_pass | not` of I4 paid for: a
+    # predicate says what enters, never what is left over.
+    | ($window_rows | map(select(.kit_sha != ($shas[-1] // null))) | map(mission_key) | unique | length) as $stranded
     | {v: 1,
        latest: $latest,
        previous: $previous,
