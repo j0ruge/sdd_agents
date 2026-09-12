@@ -2,9 +2,9 @@
 missao: 20260911-o-juiz-nao-mente-sobre-a-janela
 fase: EXEC
 status: done
-sessao: c69f9d23-22a1-4545-a4fa-b871c72ad2a6
-data: 2026-09-12 15:35
-gate: "tests/run-all.sh -> 'suite green', 14 sensores, 0 FAIL; os 11 hashes (I1-I6, R1-R5) existem no git log. ./bin/sdd health -> 'kit healthy': 'ok suite green', 'ok mutation: score: 300 caught, 0 known gap(s), of 300', 'ok mutation stamp written - gate_PR can see that THIS content ran green' (.sdd/logs/mutation-stamp = 724f5ce243685dea61e2feddf51cae6e), 'ok all 8 gates have a mutation in the catalogue', 'ok provenance: all 3 fixtures match the installed skills', 'ok ratchet: 1 known debt(s), none new'. Check do R5: 111. Nenhuma linha pending no checkpoint."
+sessao: 06eb0f2c-sdd-exec-r7
+data: 2026-09-12 17:55
+gate: "tests/run-all.sh -> 'suite green', 14 sensores, 1058 asseracoes ok, 0 FAIL (1057 antes do R7; a nova e o piso do R7); os 13 hashes (I1-I6, R1-R7) existem no git log. ./bin/sdd health -> 'kit healthy', rodado DEPOIS do ultimo commit de codigo (bde643d): 'ok suite green', 'ok mutation: score: 301 caught, 0 known gap(s), of 301', 'ok mutation stamp written - gate_PR can see that THIS content ran green' (.sdd/logs/mutation-stamp = 79484a242bdfd073a6169581d3bffd4a), 'ok all 8 gates have a mutation in the catalogue', 'ok provenance: all 3 fixtures match the installed skills', 'ok ratchet: 1 known debt(s), none new'. Check do R7: 111 (a=1 piso novo, b=1 comentario adjacente, c=1 quarto escritor). Nenhuma linha pending no checkpoint."
 ---
 
 # Handoff — EXEC — o juiz não mente sobre a janela
@@ -14,24 +14,28 @@ gate: "tests/run-all.sh -> 'suite green', 14 sensores, 0 FAIL; os 11 hashes (I1-
 
 ## TL;DR
 
-✅ **A EXEC está `done`: 11 incrementos (I1–I6 + R1–R5), nenhuma linha `pending`, suíte verde.**
-A Jidoka descrita abaixo em *Por que a linha parou* ACONTECEU e foi **destravada** — I2, I4 e I5
-voltaram a `done` e o catálogo hoje tem 300 mutantes. Depois vieram as cinco linhas `R<n>` da
-rodada r1 da REVIEW, fechadas uma por sessão; a última (`R5`) é o lote dos achados #6–#9.
-A seção *Por que a linha parou* fica no arquivo como **histórico** — ela descreve um estado que
-já não é o do disco. O estado de hoje é o desta seção e o da *Rodada r1* abaixo.
+✅ **A EXEC está `done`: 13 incrementos (I1–I6 + R1–R7), nenhuma linha `pending`, suíte verde
+(1058 ok / 0 FAIL) e `./bin/sdd health` → `kit healthy` com `301 caught of 301` carimbado.**
+As duas rodadas de REVIEW foram absorvidas: r1 virou `R1`–`R5`, r2 virou `R6` (o HIGH do stderr
+dentro do stream) e `R7` (o lote #2/#4/#5). O carimbo `79484a24…` foi escrito **depois** do último
+commit de código, que é a ordem que o `gate_PR` exige.
+⚠️ O `sdd health` do `R7` achou um defeito que nenhuma rodada viu: o mutante do `R6` estava
+**definido e não matriculado** no `CATALOG` (301 definidos, 300 rodados) — consertado em `bde643d`.
+A seção *Por que a linha parou* fica no arquivo como **histórico**: descreve um estado que já não
+é o do disco. O estado de hoje é o desta seção e o das seções *Rodada r1* e *Rodada r2* abaixo.
 
 ## Estado do repo
 
-> ⚠️ Esta seção foi **reescrita** ao fim do `R5`. Os números do parágrafo de Jidoka mais abaixo
+> ⚠️ Esta seção foi **reescrita** ao fim do `R7`. Os números do parágrafo de Jidoka mais abaixo
 > (`286 of 289`, "sem carimbo") são o retrato de 12/09 06:40 e não descrevem o disco de hoje.
 
 - **Branch:** `feat/o-juiz-nao-mente-sobre-a-janela` — local, **sem upstream** (nunca empurrada).
-- **Último commit de código:** `ed8e1ec` `fix(tests): a âncora do mutante de close deixa de
-  soletrar a lista de argumentos`.
+- **Último commit de código:** `bde643d` `fix(mutation): matricula o mutante do stderr no CATALOG —
+  definido por R6 e nunca rodado`.
 - **Working tree:** limpo.
-- **Suíte:** `tests/run-all.sh` → **verde**, 14 sensores, 0 `FAIL`.
-- **Catálogo de mutação:** 300 mutantes definidos, 300 listados no `CATALOG=(`.
+- **Suíte:** `tests/run-all.sh` → **verde**, 14 sensores, **1058** asserções `ok`, 0 `FAIL`.
+- **Catálogo de mutação:** **301** mutantes definidos e **301** listados no `CATALOG=(` — a
+  igualdade é o que o `R7` restabeleceu, e é a asserção de tamanho do `sdd health` que a cobra.
   Evidência do carimbo no `gate:` do frontmatter.
 - **E2E:** `E2E_CMD=""` no `.sdd/config.sh` — o kit não tem jornada de navegador; a "jornada" deste
   repo é a linha de comando, e é por ela que a QA tem de andar (ver boot abaixo).
@@ -141,11 +145,68 @@ nenhum mais: #5 é decisão humana (abaixo, em Pendências) e #10, #11 e #12 sã
 rota normal seria o `TODO.md`, e ela foi fechada **de propósito** nesta missão pelo preço do
 carimbo — item novo move `tests/health-baseline.txt`, que está dentro da chave.
 
+## Rodada r2 da REVIEW — R6 e R7 (acrescentado ao fim do `R7`)
+
+A r2 achou 7 defeitos (1 HIGH, 2 MEDIUM, 4 LOW) e escreveu duas linhas `R<n>`. Os quatro Checks
+foram medidos **vermelhos** pela própria rodada antes de virarem linha (`0 0 0 0`).
+
+| `R<n>` | Achado | O que consertou | Commit |
+|---|---|---|---|
+| R6 | #1 (HIGH) e #3 — `cmd_close` jogava `2>&1` dentro do `.jsonl` que ele mesmo parseia; uma linha de stderr aborta o `jq` e a linha de `close` voltava a `null` em custo, turns, cache e harness | `.err` irmão, a forma que o `run_phase` já usa; `$close_logs` nomeia os três arquivos nas mensagens de falha | `12012a5` |
+| R7 | #2, #4 e #5 — asserção de admissão vazia, comentário órfão do mutante `meta`, `autonomy_no_data` com um escritor a menos | Abaixo | `6a8310a` |
+| R7 | o defeito que o `sdd health` do próprio `R7` revelou | `mut_RUN_close_stderr_into_stream` matriculado no `CATALOG` | `bde643d` |
+
+**O que o `R7` mudou, achado a achado:**
+
+- **#2 (MEDIUM, fail-open)** — `both readers admit the close row instead of filing it as
+  unrecognized` morava no braço *já-Done*, três linhas depois de o `kitguard_reset` truncar o
+  ledger e logo **abaixo** da asserção que prova `rows:0`: pedia aos dois leitores que admitissem
+  uma linha que não estava no arquivo. Sobre um ledger vazio os dois respondem `0 unrecognized`
+  independentemente do que admitam. O par mudou para o mundo `$CLW3` (o do stderr sujo, cujo ledger
+  **carrega** a linha) e ganhou um piso que o diz —
+  `floor: the close admission pair reads a ledger carrying a close row`.
+  **Medido nos dois sentidos**, que é a metade que faltava: sob a sabotagem estreita de `is_close`
+  nos dois programas (`is_unrecognized` e o eixo do juiz, sem `is_gate_pass` junto, com o md5
+  provando antes que o `perl` mudou o arquivo) a asserção agora responde **`FAIL`** onde a r2 a
+  mediu **`ok`**, e o piso segue `ok` — o vermelho nomeia a causa em vez de o sensor sumir.
+- **#4 (LOW)** — o comentário de `mut_LEDGER_meta_bucket_unnamed` estava colado acima do par
+  comentário+função de `mut_LEDGER_stranded_by_subtraction`: lido de cima para baixo, o catálogo
+  descrevia um mutante com a prosa de outro. Voltou para cima da própria função, sem mudar palavra.
+- **#5 (LOW)** — `autonomy_no_data` nomeava três escritores do ledger e há **quatro**: `sdd kaizen`
+  roda a fase KAIZEN pelo `run_phase`, que escreve `autonomy_session_row` como qualquer outra. A
+  frase dizia a um humano *"você nunca rodou esses três"* sobre um ledger em que o próprio laço do
+  juiz já havia escrito. Mesma classe do #9 da r1, reintroduzida no commit que a fechou.
+
+### ⚠️ O achado que o `sdd health` do `R7` produziu (e a régua que ele deixa)
+
+Ao carimbar depois do último commit de código, a **primeira** passada reprovou:
+`mutation: the catalogue ran 300 of the 301 mutant(s) tests/check-mutation.sh defines`.
+
+`mut_RUN_close_stderr_into_stream` nasceu **completo** no `R6` — função, âncora viva e comentário
+medindo a sabotagem — e ficou **fora do `CATALOG`**. O laço itera o `CATALOG`, então o mutante
+nunca correu e o `score:` seguia dizendo `300 caught of 300`: a única asserção que prova o conserto
+do HIGH da r2 não tinha nada, no CI, exigindo que ela morresse sob sabotagem. **Definir não é
+matricular**, e é a mesma classe que a missão inteira persegue — o instrumento afirmando medir o
+que não mede. O `R6` mediu o mutante à mão numa sandbox e concluiu dali: a conclusão estava certa,
+a matrícula é que não aconteceu. Quem viu foi a checagem de **TAMANHO** do `sdd health`
+(`total != defined`), que existe exatamente para o catálogo estreitado continuar imprimindo
+`caught == of`. A âncora foi re-conferida contra o `bin/sdd` de hoje **antes** da matrícula (o
+`sed` muda a árvore), para ela não entrar morta.
+
+> **Régua para a próxima sessão que escrever mutante:**
+> `grep -cE '^mut_' tests/check-mutation.sh` tem de bater com o tamanho do `CATALOG`.
+
+**Os dois achados que NÃO viraram `R<n>`** — #6 e #7 da r2 — são **drift de documentação** e estão
+endereçados à fase **DOCS** com âncora exata: `docs/pipeline.md:851` e `docs/failure-modes.md:115`
+ainda enumeram **cinco** buckets (hoje são sete), e a tabela de schema do `docs/pipeline.md`
+(`:829-830`) diz `on escalation rows` para `cost_usd`/`turns` sem nomear as linhas `event:"close"`,
+que passaram a carregá-los. Prosa não compra rodada, e o gate tolera `B` em `Documentation`.
+
 ## Artefatos
 
 | Arquivo | O que contém |
 |---|---|
-| `docs/handoffs/20260911-o-juiz-nao-mente-sobre-a-janela/checkpoint.md` | A tabela: as **11 linhas** (I1–I6, R1–R5) `done`, nenhuma `pending` |
+| `docs/handoffs/20260911-o-juiz-nao-mente-sobre-a-janela/checkpoint.md` | A tabela: as **13 linhas** (I1–I6, R1–R7) `done`, nenhuma `pending` |
 | `docs/handoffs/20260911-o-juiz-nao-mente-sobre-a-janela/checkpoint-notas.md` | As notas de execução (append-only); as de I6 explicam o corte do décimo item |
 | `docs/pipeline.md` | Contrato da **forma de linha** do ledger — quarto evento `close` — e da **forma da série** (`harness`, `window_broken`) |
 | `CONTEXT.md` | Nova tabela **Decisões adiadas por YAGNI** (Y1–Y3), cada uma com o evento que a reabre |
@@ -154,16 +215,19 @@ carimbo — item novo move `tests/health-baseline.txt`, que está dentro da chav
 | `tests/health-baseline.txt` | `todo-findings 95` — a catraca que morde nos dois sentidos |
 | `docs/handoffs/20260911-o-juiz-nao-mente-sobre-a-janela/40-review-r1.md` | A rodada r1: os 12 achados, os 4 refutados e as pendências humanas |
 | `tests/check-kaizen.sh` | Os dois regimes de `close` (`closein`, `closeaway`) e as três asserções do `R5` |
-| `tests/check-mutation.sh` | 300 mutantes; os três estreitos de `close` do `R5` |
+| `tests/check-mutation.sh` | **301** mutantes; os três estreitos de `close` do `R5` e o do stderr (`R6`, matriculado no `R7`) |
+| `docs/handoffs/20260911-o-juiz-nao-mente-sobre-a-janela/40-review-r2.md` | A rodada r2: os 7 achados, os 5 refutados e o sinal de laço (`Error Handling` B→C) |
+| `tests/check-autonomy.sh` | O mundo `$CLW3` (stub sujo) e, desde o `R7`, o par de admissão do `close` com o piso que prova a entrada |
 
 ## Boot da próxima fase
 
 ✅ **A próxima fase é a QA.** A ressalva que ocupava este lugar ("a próxima fase é EXEC de novo")
 foi resolvida: nenhuma linha do checkpoint está `blocked` ou `pending`, e o carimbo de mutação
-existe (`300 caught of 300`). O que segue é o boot da QA, atualizado ao fim do `R5`.
+existe (`301 caught of 301`, carimbo `79484a24…`). O que segue é o boot da QA, atualizado ao fim
+do `R7`.
 
-⚠️ **O que mudou no diff DEPOIS que este boot foi escrito** (rodada r1, `R1`–`R5`) e que a QA tem
-de andar junto com os quatro pontos abaixo:
+⚠️ **O que mudou no diff DEPOIS que este boot foi escrito** (rodadas r1 e r2, `R1`–`R7`) e que a QA
+tem de andar junto com os quatro pontos abaixo:
 
 5. **`sdd autonomy` — o cabeçalho volta a fechar com os buckets.** Eram cinco buckets e o total do
    cabeçalho contava linhas que nenhum deles nomeava (`close` e a exclusão `$meta` do juiz). Hoje
@@ -175,6 +239,16 @@ de andar junto com os quatro pontos abaixo:
    ao lado (o bruto), e o `.json` agora é o `result` destilado, não o blob do `--output-format
    json`. Quem lê aquele arquivo à mão vê uma forma diferente.
 7. **`sdd close` que cruza o chapéu escreve a linha ANTES de parar a linha.** O rc continua 3.
+8. **(r2/`R6`) O stderr do `sdd close` mudou de arquivo.** Ele ia para dentro do `.stream.jsonl` e
+   agora vai para um `.err` **irmão**, a forma que o `run_phase` já usava. Consequência prática
+   para a QA: quem for ler o diretório `.sdd/logs/<missão>/` de um close vê **três** arquivos
+   (`CLOSE-*.json` destilado, `*.stream.jsonl` bruto e `*.err`), e as mensagens de falha do
+   `sdd close` passaram a **nomear os três** em vez de mandar "see $logfile" — que tinha 0 byte
+   quando a sessão morria antes do `result`.
+9. **(r2/`R7`) `sdd autonomy` sobre um ledger vazio nomeia QUATRO escritores**, não três: a linha
+   `no data:` passou a citar `sdd kaizen` junto de `sdd run`, `sdd retry` e `sdd close`. É texto
+   que um humano lê, então é jornada: rode `SDD_STATE_DIR=$(mktemp -d) ./bin/sdd autonomy` e
+   confira a frase.
 
 **O que é user-visible neste diff.** Nada de navegador: o produto é a CLI `bin/sdd` e os artefatos
 que ela escreve. As superfícies que mudaram, e que é por onde a jornada anda:
@@ -197,10 +271,11 @@ que ela escreve. As superfícies que mudaram, e que é por onde a jornada anda:
 
 ```bash
 cd /home/joruge/repos/sdd_agents
-git log --oneline main..HEAD          # os 10 commits da missão
+git log --oneline main..HEAD          # os commits da missão (13 incrementos)
 tests/run-all.sh                      # ~45 s, tem de sair verde
 bash tests/check-todo.sh              # ok 95 finding(s)
 ./bin/sdd autonomy --series           # a forma da série, com harness e window_broken
+SDD_STATE_DIR=$(mktemp -d) ./bin/sdd autonomy   # a linha 'no data:' e os quatro escritores (R7)
 sed -n '/event/,/window_broken/p' docs/pipeline.md   # o contrato que a QA confere contra a saída
 ```
 
@@ -225,6 +300,12 @@ hermética.
   (b) rebaixar a anotação, como `window_broken`; (c) manter o veto com override humano registrado
   em artefato. **É decisão de desenho, e reverter a métrica que o humano aprovou em
   `aprovacao: humano-2026-09-11` não é coisa que o executor faz sozinho.**
+- ⚠️ **(r2) `Error Handling` regrediu B → C e a r2 recomendou rodar a r3.** A régua manda parar o
+  laço quando uma letra desce, e a rodada registrou os dois fatos: a regressão era **real e local**
+  (o caminho que o `R5` escolheu para entregar o dinheiro o desfazia em silêncio) e o resto do laço
+  andou (12 → 7 achados, 4 → 1 HIGH, `Type Safety` C → A). `R6` e `R7` fecharam exatamente essa
+  regressão, então a r3 tem por onde re-medir. `REVIEW_MAX_ITER=3`: resta **uma** rodada de
+  orçamento, e a decisão de gastá-la ou ir ao PR é humana.
 - **O alvo "<30 s" da D7 continua não atingido e sem dono.** Os dois itens de custo da suíte foram
   deliberadamente **mantidos** no `TODO.md` no I6: não são fail-open, mas são decisão humana
   pendente (subir o alvo ou aposentá-lo por escrito), e cabeçalho de sensor não é lugar de decisão
@@ -232,8 +313,10 @@ hermética.
 
 ## Riscos e não-feitos
 
-- ✅ **RESOLVIDO ao fim do `R5`: o carimbo existe** (`.sdd/logs/mutation-stamp` =
-  `724f5ce243685dea61e2feddf51cae6e`, `300 caught of 300`, `kit healthy`). O parágrafo abaixo fica
+- ✅ **RESOLVIDO ao fim do `R7`: o carimbo existe e é o de hoje** (`.sdd/logs/mutation-stamp` =
+  `79484a242bdfd073a6169581d3bffd4a`, `301 caught of 301`, `kit healthy`), escrito **depois** do
+  último commit de código (`bde643d`). O valor `724f5ce2…` que esta linha citava era o do `R5` e
+  morreu com `R6`/`R7`. O parágrafo abaixo fica
   como histórico — e o aviso dele continua valendo: **qualquer** commit em
   `bin/ tests/ templates/ config/` invalida o carimbo, e registrar achado no `TODO.md` também,
   porque `tests/health-baseline.txt` está entre esses caminhos. Custo de re-carimbar hoje: **45
