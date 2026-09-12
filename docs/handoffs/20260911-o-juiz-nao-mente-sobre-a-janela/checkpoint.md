@@ -29,10 +29,10 @@ atualizado: 2026-09-12 06:40
 | ID | Incremento | Check (comando → esperado) | Status | Commit |
 |---|---|---|---|---|
 | I1 | Ledger real inescrivível por fixture, e as 11 linhas `/tmp` saem | `grep -c '"repo":"/tmp' ~/.sdd/autonomy-log.jsonl` → `0` | done | 5956e80 |
-| I2 | `$order` e `comparable_row` concordam por asserção diferencial | `o=$(bash tests/check-kaizen.sh 2>&1); grep -c '^  ok    differential' <<< "$o"` → `1` ou mais | blocked | 7e6b3f5 |
+| I2 | `$order` e `comparable_row` concordam por asserção diferencial | `o=$(bash tests/check-kaizen.sh 2>&1); grep -c '^  ok    differential' <<< "$o"` → `1` ou mais | done | `7e6b3f5` + `e748c97` (catálogo re-ancorado) |
 | I3 | `reopened` e a fronteira do laço de revisão leem a população que prometem | `o=$(bash tests/check-autonomy.sh 2>&1); grep -c '^  ok    reopened' <<< "$o"` → `1` ou mais | done | 392f526 |
-| I4 | `sdd close` e `sdd retry` escrevem a linha de ledger que devem | `o=$(bash tests/check-autonomy.sh 2>&1); grep -c '^  ok    close writes' <<< "$o"` → `1` ou mais | blocked | aa3c0a2 |
-| I5 | A guarda recusa fatia com duas versões de harness e percebe janela rompida | `o=$(bash tests/check-kaizen.sh 2>&1); grep -c '^  ok    guard: two harness' <<< "$o"` → `1` ou mais | blocked | 5e3c427 |
+| I4 | `sdd close` e `sdd retry` escrevem a linha de ledger que devem | `o=$(bash tests/check-autonomy.sh 2>&1); grep -c '^  ok    close writes' <<< "$o"` → `1` ou mais | done | `aa3c0a2` + `e748c97` (catálogo re-ancorado) |
+| I5 | A guarda recusa fatia com duas versões de harness e percebe janela rompida | `o=$(bash tests/check-kaizen.sh 2>&1); grep -c '^  ok    guard: two harness' <<< "$o"` → `1` ou mais | done | `5e3c427` + `e748c97` (catálogo re-ancorado) |
 | I6 | Dez itens de dívida declarada saem para o cabeçalho do sensor dono; catraca 105 → 95 | `o=$(bash tests/check-todo.sh 2>&1); grep -c '^  ok    95 finding(s)' <<< "$o"` → `1` | done | 4d9b7b8 |
 
 > **As notas de execução não moram aqui.** Elas ficam em `checkpoint-notas.md`, ao lado deste
