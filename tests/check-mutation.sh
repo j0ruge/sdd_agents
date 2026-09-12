@@ -2606,11 +2606,18 @@ mut_AUTONOMY_reopened_comparable_only() {
 # every close in the kit history was invisible to the judge that counts `launches`. Removing the
 # CALL and not the constructor is deliberate: the defect this increment closes IS an absent call
 # site, and emptying `autonomy_close_row` would let a future writer delete the call while the
-# mutant still died on the body. Caught by `close writes one row naming the issue, the session it
-# spent and its own invocation` in check-autonomy.sh, which reads `rows:0` under this mutant where
-# it demands `rows:1`.
+# mutant still died on the body. Caught by the four `close ...` assertions of check-autonomy.sh —
+# measured under the sabotage, not counted by hand: `close writes one row naming the issue, the
+# session it spent and its own invocation` (reads `rows:0` where it demands `rows:1`), `close
+# writes a row that is not a session row wearing a CLOSE label`, `close row carries cost_usd, and
+# the turns, cache and harness beside it`, and `close writes its row even when the hat guard fires,
+# and still stops the line`.
 mut_RUN_close_writes_no_row() {
-  sed -i 's@^  autonomy_close_row "\$issue" "\$sid" "\$rc" "\$verified"$@  :@' "$1"
+  # Anchored on the CALL and never on its argument list: the r1 of the 2026-09-11 judge mission
+  # gave the row four more arguments (the money), the old anchor spelled all four of the original
+  # ones, and the mutant went CATALOGUE-BROKEN — an anchor that rots is a mutant that stops
+  # measuring while the score still says 300. `.*` over the arguments so the next one costs nothing.
+  sed -i 's@^  autonomy_close_row .*$@  :@' "$1"
 }
 
 # I4, DOOR 2 of 2, and a DIFFERENT door of the same promise: `sdd retry` goes back to returning 3

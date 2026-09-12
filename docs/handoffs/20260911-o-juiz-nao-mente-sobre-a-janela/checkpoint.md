@@ -1,6 +1,6 @@
 ---
 missao: 20260911-o-juiz-nao-mente-sobre-a-janela
-atualizado: 2026-09-12 12:20
+atualizado: 2026-09-12 13:05
 ---
 
 # Checkpoint — o juiz não mente sobre a janela
@@ -38,7 +38,7 @@ atualizado: 2026-09-12 12:20
 | R2 | r1 #2 — a exclusão `$meta` (KAIZEN) infla o mesmo total, e o comentário ao lado afirma o contrário | `o=$(bash tests/check-autonomy.sh 2>&1); grep -c '^  ok    the buckets still sum to the header total (a judge KAIZEN row)' <<< "$o"` → `1` ou mais | done | a26d489 |
 | R3 | r1 #3 — `window_missions_stranded` falha aberto na missão que atravessa o sha julgado | `o=$(bash tests/check-kaizen.sh 2>&1); grep -c '^  ok    guard: a mission straddling the kit change is stranded' <<< "$o"` → `1` ou mais | done | 154f58f |
 | R4 | r1 #4 — o juiz aprende a ler `why`, `harness` e a janela rompida; espelho por `sdd install --force` | `grep -c 'window_broken' agents/sdd-kaizen.md` → `1` ou mais | done | 477cb9a |
-| R5 | r1 lote dos achados #6–#9 — custo na linha de `close`, porta do chapéu cruzado, regime de `close` no juiz, contagens podres | `o=$(bash tests/run-all.sh 2>&1); a=$(grep -c '^  ok    close row carries cost_usd' <<< "$o"); b=$(grep -c '^  ok    close writes its row even when the hat guard fires' <<< "$o"); c=$(grep -c '^  ok    guard: a close row mints no version and no mission' <<< "$o"); echo "$a$b$c"` → `111` | pending | — |
+| R5 | r1 lote dos achados #6–#9 — custo na linha de `close`, porta do chapéu cruzado, regime de `close` no juiz, contagens podres | `o=$(bash tests/run-all.sh 2>&1); a=$(grep -c '^  ok    close row carries cost_usd' <<< "$o"); b=$(grep -c '^  ok    close writes its row even when the hat guard fires' <<< "$o"); c=$(grep -c '^  ok    guard: a close row mints no version and no mission' <<< "$o"); echo "$a$b$c"` → `111` | done | c78b167 |
 
 > **As notas de execução não moram aqui.** Elas ficam em `checkpoint-notas.md`, ao lado deste
 > arquivo, append-only, e o prompt de boot inlina as últimas 10 — a sessão nunca abre aquele
