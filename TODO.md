@@ -815,17 +815,17 @@ O plano consolidado pelo Codex Astra, baseado no artigo de @0xCodez e nas refer�
   `gate_pass`, e o comentário entre eles jura paridade** — `bin/sdd:4929` — o `$order` admite
   `(is_session and comparable) or (is_escalation and on_axis)` e NÃO vê o evento novo; o
   `comparable_row` é `on_axis and ((.event != "session") or has("moved"))` e vê. Com a closure como
-  primeira linha de um sha, os dois respondem `latest`/`previous` INVERTIDOS — medido. Writer de hoje
-  não chega lá, mas é a classe da r1 de `20260817`: o comentário afirma paridade que o código perdeu.
-  Direção: quarto caso na D4 do `check-autonomy.sh`.
+  primeira linha de um sha, os dois respondem `latest`/`previous` INVERTIDOS — medido.
+  RESOLVIDO por `7e6b3f5` — a rota da closure já estava fechada pelo `shas_in_file_order` positivo;
+  a divergência viva era a linha KAIZEN liderando uma versão (tabela `bbbbbbb` × série `ccccccc`).
   — descoberto por `sdd-reviewer` na missão `20260831-a-rodada-que-andou` (2026-08-31)
 
 - [ ] **Missão que só tem `gate_pass` numa fatia entra em `missions` sem produzir célula** —
   `bin/sdd:5374` — `missions:` conta sobre `$rows` cru, que agora inclui a closure, enquanto o
   `$detail` (`:5368`, desde `dfe4d63`) exige sessão ou escalada. É a única forma de linha que conta no
-  `guard.missions_after_change` e no `composition` da ADR 0005 sem deixar rastro gradeável, então os
-  dois deixam de reconciliar com o `detail` ao lado. `guard.sufficient` não se move (lê `$sess`).
-  Alcançável pelo mundo (2) já declarado: sessão suja excluída, closure limpa sobrevivendo.
+  `guard.missions_after_change` e no `composition` da ADR 0005 sem deixar rastro gradeável.
+  RESOLVIDO por `7e6b3f5` — `graded_row` (`session or escalation`), uma definição para os três
+  leitores; `missions: 2` sobre `detail: 1` reproduzido antes e fechado depois.
   — descoberto por `sdd-reviewer` na missão `20260831-a-rodada-que-andou` (2026-08-31)
 
 - [ ] **A regra `doing` conta como pendente não tem probe, e sem ela o `gate_EXEC` fecha a fase por
