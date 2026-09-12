@@ -1,6 +1,6 @@
 ---
 missao: 20260911-o-juiz-nao-mente-sobre-a-janela
-atualizado: 2026-09-12 17:55
+atualizado: 2026-09-12 19:40
 ---
 
 # Checkpoint — o juiz não mente sobre a janela
@@ -41,6 +41,7 @@ atualizado: 2026-09-12 17:55
 | R5 | r1 lote dos achados #6–#9 — custo na linha de `close`, porta do chapéu cruzado, regime de `close` no juiz, contagens podres | `o=$(bash tests/run-all.sh 2>&1); a=$(grep -c '^  ok    close row carries cost_usd' <<< "$o"); b=$(grep -c '^  ok    close writes its row even when the hat guard fires' <<< "$o"); c=$(grep -c '^  ok    guard: a close row mints no version and no mission' <<< "$o"); echo "$a$b$c"` → `111` | done | c78b167 |
 | R6 | r2 #1 — `cmd_close` joga stderr dentro do `.jsonl` que ele mesmo parseia (`2>&1`), e uma linha de stderr faz o `jq` abortar: a linha de `close` perde custo, turns, cache e harness em silêncio | `o=$(bash tests/check-autonomy.sh 2>&1); grep -c '^  ok    close keeps stderr out of the stream it parses' <<< "$o"` → `1` ou mais | done | 12012a5 |
 | R7 | r2 lote dos achados #2, #4 e #5 — asserção vazia de admissão do `close`, comentário órfão do mutante `meta`, e `autonomy_no_data` com um escritor a menos | `o=$(bash tests/check-autonomy.sh 2>&1); a=$(grep -c '^  ok    floor: the close admission pair reads a ledger carrying a close row' <<< "$o"); b=$(awk '/^mut_LEDGER_meta_bucket_unnamed/{print (p ~ /^#/)?1:0} {p=$0}' tests/check-mutation.sh); c=$(awk '/It is written by/ && /sdd kaizen/{n++} END{print n+0}' bin/sdd); echo "$a$b$c"` → `111` | done | 6a8310a |
+| R8 | r3 lote dos achados #1 e #2 (MEDIUM) e #3, #4 e #5 (LOW) — o `human:` da asserção de admissão é uma constante (sabotar só `bin/sdd:6145` a deixa verde), e as duas metades de prosa do `R6`/`R7` (`$close_logs`, o quarto escritor) não têm sensor nenhum | `o=$(bash tests/run-all.sh 2>&1); a=$(grep -c '^  ok    floor: the human reader reads the repo the close row was born in' <<< "$o"); b=$(grep -c '^  ok    close names the raw stream and the stderr beside the summary' <<< "$o"); c=$(grep -c '^  ok    autonomy_no_data names every writer the runner has' <<< "$o"); d=$(awk '/^mut_[A-Za-z0-9_]+\(\) \{/{n++} END{print n+0}' tests/check-mutation.sh); e=$(awk '/^CATALOG=\(/{f=1;next} /^\)/{f=0} f&&/^  [A-Z]/{n++} END{print n+0}' tests/check-mutation.sh); echo "$a$b$c$((d==e))"` → `1111` | pending | — |
 
 > **As notas de execução não moram aqui.** Elas ficam em `checkpoint-notas.md`, ao lado deste
 > arquivo, append-only, e o prompt de boot inlina as últimas 10 — a sessão nunca abre aquele
