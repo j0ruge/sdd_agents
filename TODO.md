@@ -796,12 +796,11 @@ O plano consolidado pelo Codex Astra, baseado no artigo de @0xCodez e nas refer�
   — descoberto por `sdd-reviewer` na missão `20260829-o-incremento-que-andou` (2026-08-30)
 
 - [ ] **O ledger global real está contaminado por missões de fixture dos próprios testes** —
-  `~/.sdd/autonomy-log.jsonl` — `20260901-jornada-qa`, `20260903-placeholder`, `20260904-conflito` e
-  `20260101-fixture` moram no ledger que o `sdd autonomy` e o `sdd kaizen` leem para julgar o kit:
-  4 dos 6 grupos EXEC do número de controle desta missão são fixtures. Consumidor fora da suíte (o
-  juiz, a D12 e todo número que o kit publica sobre si), e é por isso que a mesma pergunta devolveu
-  quatro respostas diferentes durante esta revisão. Direção: todo teste exporta `SDD_STATE_DIR`, e
-  um probe recusa `bin/sdd` escrevendo no ledger de `$HOME` sob `SDD_MUTANT`/CI.
+  `~/.sdd/autonomy-log.jsonl` — missões de fixture moravam no ledger que o `sdd autonomy` e o
+  `sdd kaizen` leem para julgar o kit, e por isso a mesma pergunta devolvia respostas diferentes.
+  RESOLVIDO por `5956e80`: a escrita nova já era recusada pela ADR 0005 parte 3 (`28af7ea`, quatro
+  asserções `writer:` + `mut_LEDGER_tmp_repo_allowed`); faltava o resíduo, e as 11 linhas sob
+  `/tmp` saíram (292 → 281), com backup em `autonomy-log.jsonl.bak-2026-09-11`.
   — descoberto por `sdd-reviewer` na missão `20260829-o-incremento-que-andou` (2026-08-30)
 
 - [ ] **`reopened` é cego à closure, e a resposta depende de a fase ter CUSTADO dinheiro** —
