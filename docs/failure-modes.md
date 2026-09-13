@@ -108,13 +108,16 @@ within `REVIEW_MAX_ITER`) had the pipeline's own designed loop counted as waste.
 computed by TODAY's binary over the whole ledger, so any single `sdd autonomy` run is internally
 consistent — what is not comparable is a number on your screen against a number frozen in prose.
 
-⚠️ A second, quieter version of the same trap since 2026-08-31: the ledger has **three row shapes**,
-not two. The header's `N row(s)` is the whole file — sessions, escalations **and**, from the first
-run after 2026-08-31, recorded gate closures — so a row total quoted as a session count was never
-one and is now wrong by a wider margin. Under the table `sdd autonomy` closes an arithmetic over
-five buckets (comparable session, non-comparable session, escalation, recorded gate closure,
-unrecognized) and prints a line for each that is **non-empty**: a bucket you cannot see is a bucket
-at zero, not a bucket nobody counted. Read those lines, not the header.
+⚠️ A second, quieter version of the same trap since 2026-08-31: the ledger has **four row shapes**,
+not two. The header's `N row(s)` is the whole file — sessions, escalations, recorded gate closures
+(from the first run after 2026-08-31) **and**, since 2026-09-11, recorded ticket closures
+(`event:"close"`, written by `sdd close`) — so a row total quoted as a session count was never one
+and is now wrong by a wider margin. Under the table `sdd autonomy` closes an arithmetic over
+**seven** buckets (comparable session, non-comparable session, escalation, recorded gate closure,
+ticket closure, judge row and unrecognized) and prints a line for each that is **non-empty**: a
+bucket you cannot see is a bucket at zero, not a bucket nobody counted. Read those lines, not the
+header — and count the buckets off `cmd_autonomy`, never off this sentence, which has already been
+left behind twice (`docs/pipeline.md` says why).
 
 **What you do:** re-derive both sides with the same binary before concluding anything. The
 comparison the judge makes is already apples to apples (`sdd kaizen --series` grades before and

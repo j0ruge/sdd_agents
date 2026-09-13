@@ -6292,9 +6292,14 @@ cmd_autonomy() {
     # The fifth bucket, and it exists because RECOGNISING a row is not the same as accounting for
     # it: without a count of its own the recorded closures would leave the header total without
     # leaving any line, which is `unrecognized` with the alarm switched off. tests/check-autonomy.sh
-    # closes the sum over all six.
+    # closes the sum over ALL SEVEN terms, and seven is the number to read off the code and never
+    # off this comment: comparable sessions (the table), $skipped, the escalations, $closed,
+    # $closes, $stray and $meta. It said "six" until r3 finding #6 of the 2026-09-11 judge mission —
+    # the $meta bucket that R2 of that same mission added to the sum never reached the sentence, and
+    # a count written by hand beside a sum that grows is the third rotten anchor of one phrase.
     | (map(select(is_gate_pass)) | length) as $closed
-    # The SIXTH bucket, and it exists for exactly the reason the fifth does, one event later: the
+    # The SIXTH bucket BY BIRTH — the sum it joins has seven terms since $meta, and the two numbers
+    # are different questions — and it exists for exactly the reason the fifth does, one event later: the
     # header total is the shell `total=` above, computed over ledger_row_is_local, which knows
     # nothing about any filter inside this program. A close row therefore ENTERED that total and,
     # until r1 finding #1, left no line — measured on a two-row fixture: header 2, buckets 1.
