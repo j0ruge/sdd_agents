@@ -628,6 +628,9 @@ O plano consolidado pelo Codex Astra, baseado no artigo de @0xCodez e nas refer�
 
 ### Comentário e registro
 
+- [ ] **O chapéu da DOCS não pode escrever comentário de código, e a REVIEW endereça drift de comentário a ela** — `agents/sdd-docs.md:9` — o `writes:` da DOCS lista `docs/**`, `README.md`, `CLAUDE.md` e as rules, mas não `bin/sdd`; comentário de código É documentação viva, e a r2/r3 desta missão mandaram consertar uma frase podre em `cmd_autonomy`. A DOCS consertou (só comentário, zero linha de código) e o `hat_guard_check` parou a linha com `hat-crossed` depois da sessão paga. Reincide toda missão que apodrecer um comentário. Direção: decidir se o drift de comentário é da DOCS (e o `writes:` diz isso) ou da EXEC (e a REVIEW para de endereçá-lo à DOCS).
+  — descoberto por `sdd-docs` na missão `20260911-o-juiz-nao-mente-sobre-a-janela` (2026-09-12)
+
 - [ ] **22 das 33 âncoras do `TODO.md` apontam para a linha errada** —
   `tests/check-todo.sh:1` — auditadas uma a uma contra o HEAD: várias erram por centenas de
   linhas e uma cai fora do arquivo (`tests/run-all.sh:180`, num arquivo de 173). O sensor mede
