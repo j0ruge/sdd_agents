@@ -6144,6 +6144,19 @@ cmd_autonomy() {
     # is `unrecognized` with the alarm switched off, which is what r1 finding #1 measured.
     def is_close: .event == "close";
     def is_unrecognized: (is_session or is_escalation or is_gate_pass or is_close) | not;
+    # ONE definition of "this row is the judge observing, not a row to grade" — read in TWO places
+    # below (the count and the removal), which is exactly the shape CLAUDE.md demands of a predicate
+    # with more than one reader: spelled twice, the two drift and the row leaves the list without
+    # being counted, which breaks assert_bucket_sum rather than merely mis-reporting.
+    # ⚠️ `is_unrecognized | not` is the load-bearing conjunct and it is written POSITIVELY on
+    # purpose: `.phase == "KAIZEN"` alone admitted a row whose `event` this reader does not know,
+    # reporting a MALFORMED row as a legitimate judge session while kaizen_series filed the same
+    # row under `excluded.unrecognized` — two readers, one file, opposite answers, with the human
+    # view hiding the defect. kaizen_series derives its own $meta from $all (rows already admitted
+    # by event), so this conjunct is what makes the two spellings mean the same thing.
+    # `type == "object"` comes first because `and` short-circuits and `.phase` on a number is an
+    # error, not a false — the same guard every filter around here carries.
+    def is_meta: type == "object" and .phase == "KAIZEN" and (is_unrecognized | not);
     # ONE definition of "which mission is this row about" for this program too, exactly as
     # kaizen_series holds one: the repo is part of the identity, because two projects run the same
     # dated slug on the same day and --all-repos puts their rows in one reading. Counting by slug
@@ -6234,8 +6247,8 @@ cmd_autonomy() {
     # of assert_bucket_sum, and $local_total below adds it back to stay equal to the header.
     # `type == "object"` guards the same way every filter around here does: historic_progress
     # preserves non-object rows and `.phase` on a number is an error, not a false.
-    | (map(select(type == "object" and .phase == "KAIZEN")) | length) as $meta
-    | map(select((type == "object" and .phase == "KAIZEN") | not))
+    | (map(select(is_meta)) | length) as $meta
+    | map(select(is_meta | not))
     # The dated recovery of the pre-2026-08-29 rows, applied ONCE, here, before any bucket sees the
     # list — so every count below this line reads one history and not two. Length-preserving by
     # construction: it annotates rows, it never adds or drops one, which is what keeps $local_total
@@ -6304,6 +6317,24 @@ cmd_autonomy() {
     # nothing about any filter inside this program. A close row therefore ENTERED that total and,
     # until r1 finding #1, left no line — measured on a two-row fixture: header 2, buckets 1.
     | (map(select(is_close)) | length) as $closes
+    # The MONEY a recorded closure cost, which until r? of this review the ledger recorded and no
+    # view ever spent. `sdd close` buys a real paid session, and `cost_usd` was put on the close row
+    # in this very mission so D12 (US$ per merged PR) could include it — but both groupings drew
+    # their US$ from `comparable` session rows alone, so a mission with a US$2 phase and a US$3
+    # close reported US$ 2.00. Recorded and unspent is the same class as admitted-and-unnamed that
+    # $closes itself was born to close, one column over.
+    #
+    # ⚠️ Attribution CANNOT be left to "whatever group happens to match", and this is the whole
+    # reason the remainder below exists. The two views group ONE population by different keys — the
+    # table by kit_sha, --by-mission by mission — so a close row whose mission has no comparable
+    # session lands on a printed line in one view and on nothing in the other. That is silent
+    # divergence between two instruments over one file: exactly what the header comment of this
+    # function says check-autonomy.sh compares the two sums to prevent. So every close row is
+    # attributed to its line WHERE ONE EXISTS, and whatever matched no printed line is carried as
+    # an explicit remainder on the closures bucket below. Both views therefore total the same
+    # number — graded session money plus ALL close money — whichever key they grouped by.
+    | (map(select(is_close))) as $closerows
+    | ($closerows | map(.cost_usd // 0) | add // 0) as $close_total
     # The SAME population the kit_sha table draws, regrouped. Not a second reading of the file: two
     # instruments over one ledger that disagreed about the money would corrode the trust the whole
     # kaizen loop runs on, which is the argument that already bent this reader onto the series axis.
@@ -6312,6 +6343,25 @@ cmd_autonomy() {
     # escalations block below counts them.
     | (map(select(is_session and comparable))
        | group_by(mission_key) | sort_by(.[0].ts)) as $mgroups
+    # The keys each view actually PRINTS a line for. Read off $mgroups/$groups and never rebuilt
+    # from the raw list: a second spelling of "which lines exist" is how the remainder would come
+    # to disagree with the lines it is the complement of.
+    | ($mgroups | map(.[0] | mission_key)) as $printed_missions
+    | ($groups | map(.[0].kit_sha)) as $printed_shas
+    # `any(. == $k)` and NEVER `index($k)`: mission_key is an ARRAY ([repo, mission]), and index/1
+    # on an array-of-arrays searches for a SUBSEQUENCE, not an element — it answers null for a key
+    # that is plainly present. Measured while writing this: the by-mission view attributed US$ 0.00,
+    # so the closure money was printed on the mission line AND claimed as unattributed beside it,
+    # totalling US$ 8.00 against US$ 5.00 on the table — the very divergence this remainder exists
+    # to prevent, introduced by the remainder itself. The sha path reads strings, where index/1
+    # would have worked; it is spelled the same way so the two cannot drift.
+    # (No apostrophes in here: this jq program is a single-quoted shell string, and one would end
+    # it mid-comment — which is exactly how the first draft of this block died.)
+    | (if $by_mission == 1
+       then ($closerows | map(select(mission_key as $k | $printed_missions | any(. == $k))))
+       else ($closerows | map(select(.kit_sha as $k | $printed_shas | any(. == $k))))
+       end | map(.cost_usd // 0) | add // 0) as $close_attributed
+    | ($close_total - $close_attributed) as $close_unattributed
     # EVERY local session of each mission, comparable or not — the population launches and
     # reopened are drawn over. They are facts about the human history of the mission and not about
     # a kit version: a launch that landed on a dirty kit was a launch. Measured on SQ-111, the
@@ -6347,7 +6397,15 @@ cmd_autonomy() {
               | (if $allrepos == "1" then "\($r | split("/") | last)/\($m)" else $m end) as $label
               | (length) as $n
               | (outcome_tally) as $t
-              | (map(.cost_usd // 0) | add) as $cost
+              # Session money PLUS the money the closures of this mission cost. The two terms are
+              # summed and not printed apart on purpose: the cell answers "what did this mission
+              # cost", and D12 reads US$ per merged PR off it. The closure is deliberately absent
+              # from every OTHER cell on the line — session(s), the three outcomes, launches,
+              # reopened — because a closure grades no phase, which is the distinction $closes has
+              # drawn since r1 finding #1.
+              | ((map(.cost_usd // 0) | add)
+                 + ((.[0] | mission_key) as $k
+                    | $closerows | map(select(mission_key == $k)) | map(.cost_usd // 0) | add // 0)) as $cost
               | (.[0] | mission_key | history_of) as $every
               | ($every | launches) as $launches
               | ((.[0] | mission_key | history_rows_of) | reopened) as $reopened
@@ -6401,7 +6459,12 @@ cmd_autonomy() {
             | (length) as $n
             | (outcome_tally) as $t
             | (map(mission_key) | unique | length) as $missions
-            | (map(.cost_usd // 0) | add) as $cost
+            # Same sum as the by-mission cell, grouped by the other key — and it has to be the
+            # same sum, or the two groupings of one population disagree about the money, which is
+            # the divergence check-autonomy.sh compares these two views to catch.
+            | ((map(.cost_usd // 0) | add)
+               + (.[0].kit_sha as $k
+                  | $closerows | map(select(.kit_sha == $k)) | map(.cost_usd // 0) | add // 0)) as $cost
             | "  \($sha)  \($n) session(s) · \($t.advanced) advanced · \($t.churned) churned · \($t.idle) idle · \((($t.churned + $t.idle) * 100 / $n) | floor)% waste · \($missions) mission(s) · US$ \($cost | usd)"
           ) | join("\n"))
       end)
@@ -6436,7 +6499,12 @@ cmd_autonomy() {
        # phase. It rides among the four because the arithmetic has to close over it: a reader
        # adding the table to the named lines has to arrive at the header, and before r1 finding #1
        # this row was the one term with no line to add.
-       , (if $closes > 0 then "  (\($closes) ticket closure(s) recorded: `sdd close` wrote the row — a closure grades no phase)" else empty end)
+       # The remainder rides HERE, and only when there is one: a closure whose mission (or whose
+       # kit_sha, in the other view) has no comparable session gets no line of its own, and its
+       # money would otherwise be the one term of the sum with nowhere to land — `unrecognized`
+       # with the alarm switched off, in dollars. Exactly ONE US$ figure on this line, never the
+       # close total beside it: the money already on the printed lines would be counted twice.
+       , (if $closes > 0 then "  (\($closes) ticket closure(s) recorded: `sdd close` wrote the row — a closure grades no phase\(if $close_unattributed > 0 then ", US$ \($close_unattributed | usd) of it on no line above" else "" end))" else empty end)
        , (if $stray > 0 then "  (\($stray) unrecognized row(s) excluded: event missing or not one of session/blocked/degraded/gate_pass/close)" else empty end)
        , (if $history_extra > 0 then "  (launches, reopened and the review loop are counted over every session of the mission, \($history_extra) of them non-comparable)" else empty end)
        # NOT an exclusion — nothing left a bucket — which is why it rides at the end of the first

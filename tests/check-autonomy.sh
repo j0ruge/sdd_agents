@@ -2833,6 +2833,51 @@ assert_eq "the outside group quotes the header total, judge row included" "1" \
   "$(grep -c 'never part of the 2 counted above' <<< "$out_meta")"
 assert_bucket_sum "the buckets still sum to the header total (a judge KAIZEN row)" "$out_meta"
 
+# --- a MALFORMED judge row is a stray, never a judge session -------------------------------------
+# The `$meta` split read `.phase == "KAIZEN"` and nothing else, so a row carrying that phase with an
+# `event` this reader does not know was filed as a legitimate judge session and left the list before
+# `is_unrecognized` ever ran. `kaizen_series` derives ITS $meta from $all — rows already admitted by
+# event — so the same row landed in `excluded.unrecognized` there. Two readers, one file, opposite
+# answers, and the human view was the one hiding the defect: the judge said "the kit wrote a row it
+# does not understand", the table said "the judge observed a version".
+#
+# DIFFERENTIAL, per CLAUDE.md: the two sides are compared to EACH OTHER, never each to a literal.
+# A fixture regime cannot satisfy that by accident, and it fails whichever side drifts.
+echo "== reader: a KAIZEN row with an unknown event is a stray in BOTH readers =="
+mkdir -p "$OUTSIDE/metabad"
+localize > "$OUTSIDE/metabad/autonomy-log.jsonl" <<'EOF'
+{"v":1,"ts":"2026-09-12T10:00:00-03:00","event":"session","run_id":"b1","invocation":"run","kit_sha":"bbb1111","kit_dirty":false,"project":"p1","repo":"/p1","mission":"m31","phase":"EXEC","step":"EXEC","agent":"sdd-executor","model":"opus","attempt":1,"auto_retry":false,"session":"b1s","rc":0,"dur_s":10,"cost_usd":1.0,"moved":true,"gate":"pass","gate_why":""}
+{"v":1,"ts":"2026-09-12T10:05:00-03:00","event":"future_event","run_id":"b2","invocation":"run","kit_sha":"bbb1111","kit_dirty":false,"project":"p1","repo":"/p1","mission":"2026-09-12-kaizen","phase":"KAIZEN","session":"b2s","rc":0}
+EOF
+out_metabad="$( SDD_STATE_DIR="$OUTSIDE/metabad" "$SDD" autonomy 2>&1 )"
+series_metabad="$( SDD_STATE_DIR="$OUTSIDE/metabad" "$SDD" kaizen --series 2>/dev/null )"
+# THE FLOOR: both readers have to have SEEN the row, or the agreement below is two silences matching.
+assert_eq "the fixture really does put the malformed judge row in the header total" "2"   "$(num_before "$out_metabad" 'row\(s\)')"
+# The differential itself: stray on the left, judge-row on the right, one pair of numbers per reader.
+# TRULY differential: the series on the left, the TABLE on the right — never series on both sides.
+# The first draft of this line read `.excluded` for both terms and survived the sabotage that put
+# the bug back, because a term that cannot vary between the two worlds is a constant wearing the
+# clothes of a measurement. The two literal assertions below are its floor.
+tbl_stray="$(num_before "$out_metabad" 'unrecognized row\(s\)')"; tbl_stray="${tbl_stray:-0}"
+assert_eq "the two readers classify the malformed judge row the same way" \
+  "stray=$(jq -r '.excluded.unrecognized' <<< "$series_metabad") meta=$(jq -r '.excluded.meta' <<< "$series_metabad")" \
+  "stray=$tbl_stray meta=$(grep -c 'row(s) written by the judge' <<< "$out_metabad")"
+assert_eq "the human table files it as unrecognized" "1"   "$(num_before "$out_metabad" 'unrecognized row\(s\)')"
+assert_eq "and NOT as a judge row — the half that was wrong" "0"   "$(grep -c 'row(s) written by the judge' <<< "$out_metabad")"
+assert_bucket_sum "the buckets still sum to the header total (a malformed judge row)" "$out_metabad"
+
+# The POSITIVE control, and it is what stops the fix above from being "call every KAIZEN row a
+# stray": a well-formed judge session must still be $meta in both readers. Without this, deleting
+# the phase test entirely would pass every assertion above.
+mkdir -p "$OUTSIDE/metagood"
+localize > "$OUTSIDE/metagood/autonomy-log.jsonl" <<'EOF'
+{"v":1,"ts":"2026-09-12T10:00:00-03:00","event":"session","run_id":"g1","invocation":"run","kit_sha":"ggg1111","kit_dirty":false,"project":"p1","repo":"/p1","mission":"m32","phase":"EXEC","step":"EXEC","agent":"sdd-executor","model":"opus","attempt":1,"auto_retry":false,"session":"g1s","rc":0,"dur_s":10,"cost_usd":1.0,"moved":true,"gate":"pass","gate_why":""}
+{"v":1,"ts":"2026-09-12T10:05:00-03:00","event":"session","run_id":"g2","invocation":"kaizen","kit_sha":"ggg1111","kit_dirty":false,"project":"p1","repo":"/p1","mission":"2026-09-12-kaizen","phase":"KAIZEN","step":"KAIZEN","agent":"sdd-kaizen","model":"opus","attempt":1,"auto_retry":false,"session":"g2s","rc":0,"dur_s":10,"cost_usd":2.0,"moved":true,"gate":"pass","gate_why":""}
+EOF
+out_metagood="$( SDD_STATE_DIR="$OUTSIDE/metagood" "$SDD" autonomy 2>&1 )"
+series_metagood="$( SDD_STATE_DIR="$OUTSIDE/metagood" "$SDD" kaizen --series 2>/dev/null )"
+assert_eq "a WELL-FORMED judge session is still meta in both readers"   "series=0/1 table=1/0"   "series=$(jq -r '.excluded.unrecognized' <<< "$series_metagood")/$(jq -r '.excluded.meta' <<< "$series_metagood") table=$(grep -c 'row(s) written by the judge' <<< "$out_metagood")/$(grep -c 'unrecognized row(s)' <<< "$out_metagood")"
+
 # --- the two readers of the ledger agree on the axis -------------------------
 # `sdd autonomy` (the human's window) and `sdd kaizen --series` (the judge's source of truth) read
 # the SAME file. The series has always sliced escalations INSIDE a kit_sha group; this reader
@@ -3140,6 +3185,58 @@ assert_eq "--by-mission prints one line per mission of this repo, with the inter
 assert_eq "the money adds up the same however the rows are grouped" \
   "$(usd_cents "$out_here") over-zero" \
   "$(usd_cents "$out_bm") $([ "$(usd_cents "$out_here")" -gt 0 ] && echo over-zero || echo 'both sides are zero')"
+
+# --- a recorded closure costs money, and BOTH groupings have to spend it -------------------------
+# `cost_usd` was put on the close row so D12 (US$ per merged PR) could include it, and then neither
+# view spent it: both drew their US$ from `comparable` session rows alone, so a mission with a US$2
+# phase and a US$3 close reported US$ 2.00. Recorded and unspent is the same class as
+# admitted-and-unnamed that $closes itself was born to close, one column over.
+echo "== reader: closure money lands on the mission AND on the version =="
+mkdir -p "$OUTSIDE/closemoney"
+localize > "$OUTSIDE/closemoney/autonomy-log.jsonl" <<'EOF'
+{"v":1,"ts":"2026-09-12T10:00:00-03:00","event":"session","run_id":"z1","invocation":"run","kit_sha":"zzz1111","kit_dirty":false,"project":"p1","repo":"/p1","mission":"m40","phase":"EXEC","step":"EXEC","agent":"sdd-executor","model":"opus","attempt":1,"auto_retry":false,"session":"z1s","rc":0,"dur_s":10,"cost_usd":2.0,"moved":true,"gate":"pass","gate_why":""}
+{"v":1,"ts":"2026-09-12T10:05:00-03:00","event":"close","run_id":"z1","invocation":"close","kit_sha":"zzz1111","kit_dirty":false,"project":"p1","repo":"/p1","mission":"m40","issue":"SQ-40","session":"z2s","dur_s":30,"cost_usd":3.0,"turns":5,"cache_read":1,"harness":"2.1.263","rc":0,"verified":true}
+EOF
+out_cm="$( SDD_STATE_DIR="$OUTSIDE/closemoney" "$SDD" autonomy 2>&1 )"
+out_cm_bm="$( SDD_STATE_DIR="$OUTSIDE/closemoney" "$SDD" autonomy --by-mission 2>&1 )"
+# THE FLOOR: the close row has to be in the ledger at all, or both cells below read US$ 2.00 for
+# the honest reason and the assertions pass over a world with no closure in it.
+assert_eq "the fixture really does record a paid closure" "1" \
+  "$(num_before "$out_cm" 'ticket closure\(s\)')"
+# US$ 5.00 and not US$ 2.00: the session plus the closure, on BOTH keys.
+assert_eq "the version line spends the closure money" "1" \
+  "$(grep -c 'US\$ 5\.00' <<< "$out_cm")"
+assert_eq "the mission line spends the same closure money" "1" \
+  "$(grep -c 'US\$ 5\.00' <<< "$out_cm_bm")"
+# The closure is money, never a graded phase: every OTHER cell on the line must be unmoved. Without
+# this, folding the close row into $mgroups outright would satisfy the two assertions above and
+# quietly turn a ticket closure into a session that advanced.
+assert_eq "and it grades nothing — one session, one advanced, on both views" \
+  "1 session(s) · 1 advanced|1 session(s) · 1 advanced" \
+  "$(grep -oE '1 session\(s\) · 1 advanced' <<< "$out_cm" | head -1)|$(grep -oE '1 session\(s\) · 1 advanced' <<< "$out_cm_bm" | head -1)"
+
+# The ASYMMETRIC case, and it is the one the remainder exists for: the two views group ONE
+# population by different keys, so a closure can be attributable in one and orphaned in the other.
+# Here the mission (m41) HAS a comparable session and the closure sha (qqq9999) has none — so
+# --by-mission puts the money on the line while the table has to carry it as a remainder. If the
+# remainder were missing, or double-counted, the two totals diverge: that is the whole invariant.
+mkdir -p "$OUTSIDE/closeasym"
+localize > "$OUTSIDE/closeasym/autonomy-log.jsonl" <<'EOF'
+{"v":1,"ts":"2026-09-12T10:00:00-03:00","event":"session","run_id":"y1","invocation":"run","kit_sha":"yyy1111","kit_dirty":false,"project":"p1","repo":"/p1","mission":"m41","phase":"EXEC","step":"EXEC","agent":"sdd-executor","model":"opus","attempt":1,"auto_retry":false,"session":"y1s","rc":0,"dur_s":10,"cost_usd":2.0,"moved":true,"gate":"pass","gate_why":""}
+{"v":1,"ts":"2026-09-12T10:05:00-03:00","event":"close","run_id":"y1","invocation":"close","kit_sha":"qqq9999","kit_dirty":false,"project":"p1","repo":"/p1","mission":"m41","issue":"SQ-41","session":"y2s","dur_s":30,"cost_usd":4.0,"turns":5,"cache_read":1,"harness":"2.1.263","rc":0,"verified":true}
+EOF
+out_ca="$( SDD_STATE_DIR="$OUTSIDE/closeasym" "$SDD" autonomy 2>&1 )"
+out_ca_bm="$( SDD_STATE_DIR="$OUTSIDE/closeasym" "$SDD" autonomy --by-mission 2>&1 )"
+# The floor for THIS block: the two views really did attribute the row differently, or the equality
+# below is two identical worlds agreeing and measures nothing.
+assert_eq "the fixture really does split the two views: orphaned on the table, on the line by mission" \
+  "table=1 bymission=0" \
+  "table=$(grep -c 'on no line above' <<< "$out_ca") bymission=$(grep -c 'on no line above' <<< "$out_ca_bm")"
+# The invariant itself, in integer cents for the locale reason usd_cents already documents.
+assert_eq "the money adds up the same however the rows are grouped (a closure on neither key)" \
+  "$(usd_cents "$out_ca") over-zero" \
+  "$(usd_cents "$out_ca_bm") $([ "$(usd_cents "$out_ca")" -gt 0 ] && echo over-zero || echo 'both sides are zero')"
+assert_bucket_sum "the buckets still sum to the header total (an orphaned closure)" "$out_ca"
 
 # The fixture repo has to end clean — the two assertions at the bottom of this file say so, and
 # these handoff directories are this block's own litter.

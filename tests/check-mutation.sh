@@ -3417,7 +3417,53 @@ mut_RUN_ledger_raw_redirection_error() {
   sed -i '/^autonomy_append()/,/^}/ s@ 2>/dev/null >> "\$file" || {@ >> "$file" 2>/dev/null || {@' "$1"
 }
 
+# The `$meta` split goes back to reading the phase alone, so a row carrying `phase:"KAIZEN"` with an
+# event this reader does not know is filed as a legitimate judge session and leaves the list before
+# `is_unrecognized` can see it — while `kaizen_series`, which derives its own $meta from rows already
+# admitted BY EVENT, files the same row under `excluded.unrecognized`. Two readers, one file,
+# opposite answers, with the human view hiding the malformed row. Caught by "the two readers classify
+# the malformed judge row the same way" in check-autonomy.sh.
+mut_AUTONOMY_meta_ignores_event() {
+  sed -i 's@^    def is_meta: type == "object" and .phase == "KAIZEN" and (is_unrecognized | not);$@    def is_meta: type == "object" and .phase == "KAIZEN";@' "$1"
+}
+
+# The by-mission cell goes back to summing comparable sessions alone, so the money `sdd close`
+# recorded on the close row is never spent by the view D12 reads US$-per-merged-PR off. Caught by
+# "the mission line spends the same closure money" in check-autonomy.sh.
+mut_AUTONOMY_mission_drops_close_money() {
+  sed -i '/| ((map(.cost_usd \/\/ 0) | add)$/,/| \$closerows | map(select(mission_key == \$k)) | map(.cost_usd \/\/ 0) | add \/\/ 0)) as \$cost$/ s@^                 + ((.\[0\] | mission_key) as \$k$@                 + (0 as $k@' "$1"
+}
+
+# The kit_sha cell drops the same term, so the two groupings of one population disagree about the
+# money — the divergence the header comment of cmd_autonomy names check-autonomy.sh as the guard
+# against. Caught by "the version line spends the closure money" in check-autonomy.sh.
+mut_AUTONOMY_version_drops_close_money() {
+  sed -i 's@^                  | \$closerows | map(select(.kit_sha == \$k)) | map(.cost_usd \/\/ 0) | add \/\/ 0)) as \$cost$@                  | [] | map(.cost_usd // 0) | add // 0)) as $cost@' "$1"
+}
+
+# The remainder is pinned to zero, so a closure whose mission (or kit_sha) has no comparable session
+# has its money land on no line at all in the view that cannot attribute it — `unrecognized` with the
+# alarm switched off, in dollars, and the two views stop totalling the same number. Caught by "the
+# money adds up the same however the rows are grouped (a closure on neither key)" in check-autonomy.sh.
+mut_AUTONOMY_close_remainder_silent() {
+  sed -i 's@^    | (\$close_total - \$close_attributed) as \$close_unattributed$@    | 0 as $close_unattributed@' "$1"
+}
+
+# `any(. == $k)` goes back to `index($k)`, which on an array-of-arrays searches for a SUBSEQUENCE and
+# answers null for a key that is plainly present — so every closure reads as unattributed on the
+# by-mission side, printed on the line AND claimed as a remainder beside it. A real regression,
+# introduced and measured while the remainder was being written: US$ 8.00 against US$ 5.00. Caught by
+# "the money adds up the same however the rows are grouped (a closure on neither key)".
+mut_AUTONOMY_close_key_subsequence() {
+  sed -i 's@^       then (\$closerows | map(select(mission_key as \$k | \$printed_missions | any(. == \$k))))$@       then ($closerows | map(select(mission_key as $k | $printed_missions | index($k) != null)))@' "$1"
+}
+
 CATALOG=(
+  AUTONOMY_meta_ignores_event
+  AUTONOMY_mission_drops_close_money
+  AUTONOMY_version_drops_close_money
+  AUTONOMY_close_remainder_silent
+  AUTONOMY_close_key_subsequence
   PLAN_empty_approval
   PLAN_kaizen_born_blind
   PLAN_remedy_unnamed
