@@ -3324,6 +3324,18 @@ assert_eq "close: acli that dies after the session is UNVERIFIED, not 'the sessi
   "rc:1 unverified:1 still-open:0 confirms:0 session-spent:1 journal:1" \
   "rc:$CLOSE_RC_OUT unverified:$(has "$CLOSE_OUT" 'UNVERIFIED') still-open:$(has "$CLOSE_OUT" 'is still open') confirms:$(has "$CLOSE_OUT" 'JIRA confirms') session-spent:$(spent) journal:$(has "$(cat "$CLOSE_JOURNAL" 2>/dev/null || true)" 'reachable=false')"
 
+# 7b. r3 finding #2: the CONTENT of the pointer, not the marker. The assertion above reads
+#     `UNVERIFIED` and `is still open` — both untouched by the fix that made these messages useful —
+#     so the fix itself had no sensor: reverting `see $close_logs` to `see $logfile` left the whole
+#     suite green, rc 0. The `summary:` term alone would be that same green, because `$logfile` was
+#     always named; the two terms that decide anything are `raw:` and `err:`. They matter because
+#     since this arm streams, `$logfile` is the DISTILLED summary — 0 bytes in exactly the case a
+#     human opens it for, a session that died before its terminal `result` — and the two files that
+#     do carry the evidence are the ones a message has to name.
+assert_eq "close names the raw stream and the stderr beside the summary" \
+  "summary:1 raw:1 err:1" \
+  "summary:$(has "$CLOSE_OUT" '.json') raw:$(has "$CLOSE_OUT" 'raw stream:') err:$(has "$CLOSE_OUT" 'stderr:')"
+
 # 8. Already Done before anything is spent. The pre-check is the verification query, so this costs
 #    ONE acli call and no session — it used to cost a whole one to learn the issue was shut. The
 #    `acli-calls:1` term is what pins that: a second call would mean the query ran after a session

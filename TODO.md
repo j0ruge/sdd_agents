@@ -61,10 +61,10 @@ O plano consolidado pelo Codex Astra, baseado no artigo de @0xCodez e nas refer�
 
 - [ ] **`sdd retry` devolve 3 sem escrever linha de escalada no ledger** — `bin/sdd:3653` — o
   `cmd_retry` chama o gate e sai 3 em qualquer reprovação, mas nunca chama `autonomy_blocked_row`
-  nem escreve `BLOCKED` no `pipeline.log`, e nenhuma das cinco linhas que um humano deve agir sai
-  no terminal. Reproduzido com handoff `status: blocked`: rc 3, ledger só com a linha de sessão.
-  Vale para TODA escalada, não só a nova — o juiz do kaizen lê um ledger sem eventos que
-  aconteceram. Direção: a quinta porta do `handoff_blocked_escalation`, ou um escalador comum.
+  nem escreve `BLOCKED` no `pipeline.log`. O juiz lê um ledger sem eventos que aconteceram.
+  RESOLVIDO por `aa3c0a2`: `kind: retry-gate-red`, próprio e não `no-progress` — aquele afirma
+  duas sessões sem mover o disco, e um retry gasta UMA e pode ter movido. Mutante
+  `RETRY_gate_red_silent`.
   — descoberto por `sdd-reviewer` na missão `20260826-o-laco-da-qa` (2026-08-26)
 
 - [ ] **Citação NÃO-cercada acima do cabeçalho ainda vira o gênero do bug** — `bin/sdd:686` — o
@@ -140,14 +140,6 @@ O plano consolidado pelo Codex Astra, baseado no artigo de @0xCodez e nas refer�
   um doc de quase-acerto (`awk` sem `-F'|'`).
   — descoberto por `sdd-reviewer` na missão `20260818-lote-facil` (2026-08-19)
 
-- [ ] **O `pushd "$(…)"` tem o mesmo bug de CDPATH e não é medido nem declarado** —
-  `tests/check-pipefail.sh:252` — `pushd` consulta `$CDPATH` e ecoa o diretório resolvido
-  exatamente como `cd`. Medido: `tests/check-pipefail.sh --check` sobre um arquivo com
-  `pushd "$(dirname "$0")"` responde rc 0. Não está entre os dois limites que o comentário do
-  `CD_RE` declara nem entre os do `TODO.md`. Nenhuma instância viva hoje. Direção: `(cd|pushd)` no
-  `CD_RE`, ou entrar no bloco de limites declarados.
-  — descoberto por `sdd-reviewer` na missão `20260818-lote-facil` (2026-08-19)
-
 - [ ] **O braço 1 da guarda de forma do `ledger_repo_root` não tem probe, e a mutação junta os
   dois** — `bin/sdd:946` — sob o shim pré-2.31 o valor não começa com `/`, então quem dispara é
   sempre o braço 2; o braço 1 (uma linha só, caminho absoluto) só é alcançado por um repo cujo
@@ -192,13 +184,6 @@ O plano consolidado pelo Codex Astra, baseado no artigo de @0xCodez e nas refer�
   A forma aguda virou conserto; a que sobra é REGRESSÃO desta missão, medida em diferencial (o
   sensor do merge-base recusa o item, este aceita). Fechar exige a re-derivação semântica posta
   fora de escopo: toda regra sintática tentada inventa 5 violações no arquivo real.
-  — descoberto por `sdd-reviewer` na missão `20260818-lote-facil` (2026-08-18)
-
-- [ ] **A regra `cdpath:` não vê `cd --` nem comando quebrado com `\`** —
-  `tests/check-pipefail.sh:252` — o grupo de flags é `-[[:alpha:]]+`, e `--` não tem alfa
-  nenhum depois do segundo traço, então `cd -- "$(...)"` sem guarda passa limpo; e as três
-  regras leem linha física, então operando na linha seguinte a um `\` é invisível. Nenhuma
-  instância viva hoje. Direção: alargar para `(--|-[[:alpha:]]+)` e declarar a continuação.
   — descoberto por `sdd-reviewer` na missão `20260818-lote-facil` (2026-08-18)
 
 - [ ] **O `moved2` do `cmd_kaizen` não tem asserção que morra ao apagá-lo** —
@@ -424,15 +409,6 @@ O plano consolidado pelo Codex Astra, baseado no artigo de @0xCodez e nas refer�
   Direção: um mundo para cada, ou tirá-las da lista.
   — descoberto por `sdd-executor` na missão `20260819-fecho-que-nao-mente` (2026-08-19)
 
-- [ ] **O censo `guard:` conta captura escrita dentro de COMENTÁRIO** —
-  `tests/check-health.sh:1352` — a regra varre a região do `sdd health` linha a linha e não sabe
-  distinguir código de comentário. Medido nesta rodada: um exemplo de reprodução colado num
-  comentário do `cmd_health`, na forma `o="$( … )"`, virou a 23ª captura e a catraca de duas mãos
-  reprovou a suíte. Falha FECHADA, então não certifica nada de errado — mas proíbe documentar a
-  armadilha com o comando que a demonstra, que é justamente como esta casa documenta.
-  Direção: pular linha cujo primeiro caractere não-branco é `#`, com probe nos dois sentidos.
-  — descoberto por `sdd-reviewer` na missão `20260819-fecho-que-nao-mente` (2026-08-19)
-
 - [ ] **A guarda de vazio do `mutation_stamp_key` só cobre a ausência TOTAL dos quatro caminhos** —
   `bin/sdd:806` — com `tests/` presente e `bin/` ausente, o `find` imprime o que achou, sai não-zero,
   o `2>/dev/null` engole o aviso e a chave sai de uma listagem PARCIAL, sem sinal nenhum de que
@@ -495,12 +471,13 @@ O plano consolidado pelo Codex Astra, baseado no artigo de @0xCodez e nas refer�
   como fallback, mutante no catálogo. — descoberto por `claude` na faxina `20260904-faxina-do-backlog` (2026-09-04)
 
 - [ ] **A janela de medição não tem instrumento que perceba a própria ruptura** — `bin/sdd:6070` —
-  `degenerate_axis` respondeu `false` para a janela 3 partida: `2e48a87` com **1** missão, **24**
-  commits do kit depois dela e a `codereview` de 1.17.x para 1.19.0 no meio — entrada de 2026-09-04
-  do `KAIZEN_LOG.md`. As cláusulas do guard falam do recorte (`sessions`, `missions_with_session`,
-  piso), nunca da janela declarada em prosa no `CONTEXT.md`; quem viu foi um humano lendo `git log`.
-  Direção: a série carrega o sha de abertura declarado e conta commits do kit entre ele e cada linha,
-  e `sufficient: false` ganha um motivo. — descoberto por `claude` na faxina `20260904-faxina-do-backlog` (2026-09-04)
+  `degenerate_axis` respondeu `false` para a janela 3 partida: `2e48a87` com **1** missão e **24**
+  commits do kit depois dela (entrada de 2026-09-04 do `KAIZEN_LOG.md`). As cláusulas do guard falam
+  do recorte, nunca da janela; quem viu foi um humano lendo `git log`.
+  RESOLVIDO por 5e3c427 — `window_broken`/`window_missions_stranded` contam as missões gastas desde
+  a última linha `KAIZEN` que caíram noutra versão do kit; no recorte real da janela 4, `true` com 3
+  encalhadas. Não veta, e `guard.why` nomeia o motivo.
+  — descoberto por `claude` na faxina `20260904-faxina-do-backlog` (2026-09-04)
 
 ### Contrato e configuração
 
@@ -590,14 +567,6 @@ O plano consolidado pelo Codex Astra, baseado no artigo de @0xCodez e nas refer�
   mais custou é a que o sensor não vê. Direção: medir em runtime, não por linha.
   — descoberto por `sdd-executor` na missão `20260818-lote-facil` (2026-08-18)
 
-- [ ] **A regra 3 nomeia o comando errado quando a linha tem DOIS greps** —
-  `tests/check-pipefail.sh` (o comentário de `maxc_violations` declara o limite) — linha que
-  carrega quiet **e** `-m<N>` é reportada só pela regra 1, de propósito: mesmo defeito, mesmo
-  conserto, uma mensagem. Só que em `foo | grep -q a | grep -m1 b` os dois flags são de comandos
-  diferentes, e o leitor recebe a mensagem da regra 1 apontando para o `-m` do outro. Nenhuma
-  instância no kit hoje. Direção: casar por comando, o que pede parser de shell.
-  — descoberto por `sdd-executor` na missão `20260818-lote-facil` (2026-08-18)
-
 - [ ] **`run_phase` não limpa o ambiente do harness antes do `claude -p`** — `bin/sdd:2735` — um
   `sdd run` lançado de dentro de uma sessão do Claude Code herda `CLAUDE_CODE_CHILD_SESSION`,
   `CLAUDE_CODE_MESSAGING_SOCKET` e afins, e é morto pelo harness sem ação humana (2× em
@@ -628,10 +597,10 @@ O plano consolidado pelo Codex Astra, baseado no artigo de @0xCodez e nas refer�
   — descoberto por `sdd-qa` na missão `20260901-o-revisor-so-acha` (2026-09-01)
 
 - [ ] **A fronteira do laço de revisão é calculada sobre o subconjunto `comparable`** —
-  `bin/sdd:5249` — uma rodada não-comparável esconde as sessões EXEC que ela mesma gerou, então a
-  M1 — a métrica primária desta missão — sub-reporta exatamente o que existe para contar, e no
-  limite a célula some numa missão que laçou. Os limites declarados ao lado cobrem o denominador,
-  não a fronteira. Direção: declarar o limite, ou calcular a fronteira sobre todas as linhas.
+  `bin/sdd:5249` — uma rodada não-comparável esconde as sessões EXEC que ela mesma gerou, e no
+  limite a célula some numa missão que laçou. RESOLVIDO por `392f526`: fronteira, numerador e
+  denominador passam para `$every`, a população de `launches`/`reopened`. Medido no ledger real:
+  `lote-facil` 28% -> 62%, `portas-do-humano` 24% -> 42%. Dois mutantes novos.
   — descoberto por `sdd-qa` na missão `20260901-o-revisor-so-acha` (2026-09-01)
 
 ### Saída humana e cosmética
@@ -659,18 +628,14 @@ O plano consolidado pelo Codex Astra, baseado no artigo de @0xCodez e nas refer�
 
 ### Comentário e registro
 
+- [ ] **O chapéu da DOCS não pode escrever comentário de código, e a REVIEW endereça drift de comentário a ela** — `agents/sdd-docs.md:9` — o `writes:` da DOCS lista `docs/**`, `README.md`, `CLAUDE.md` e as rules, mas não `bin/sdd`; comentário de código É documentação viva, e a r2/r3 desta missão mandaram consertar uma frase podre em `cmd_autonomy`. A DOCS consertou (só comentário, zero linha de código) e o `hat_guard_check` parou a linha com `hat-crossed` depois da sessão paga. Reincide toda missão que apodrecer um comentário. Direção: decidir se o drift de comentário é da DOCS (e o `writes:` diz isso) ou da EXEC (e a REVIEW para de endereçá-lo à DOCS).
+  — descoberto por `sdd-docs` na missão `20260911-o-juiz-nao-mente-sobre-a-janela` (2026-09-12)
+
 - [ ] **22 das 33 âncoras do `TODO.md` apontam para a linha errada** —
   `tests/check-todo.sh:1` — auditadas uma a uma contra o HEAD: várias erram por centenas de
   linhas e uma cai fora do arquivo (`tests/run-all.sh:180`, num arquivo de 173). O sensor mede
   **forma**, nunca se a âncora ainda acerta o alvo, então o número não se move sozinho — e esta
   missão empurrou parte delas ao crescer o `bin/sdd` em 162 linhas. Direção: re-derivar em lote.
-  — descoberto por `sdd-reviewer` na missão `20260818-lote-facil` (2026-08-18)
-
-- [ ] **O `check-health.sh` diz "the four silent aborts" e o catálogo tem cinco** —
-  `tests/check-health.sh:31` — o `mut_HEALTH_ratchet_eats_verdict` não tem asserção própria: ele
-  morre no fixture da asserção 11, que produz o outro defeito por tabela. Os dois mutantes são
-  pegos, então não é fail-open — é o cabeçalho subcontando, e é ele que um leitor usa para mapear
-  mutação em asserção. Direção: dizer os cinco e por que dois dividem um fixture.
   — descoberto por `sdd-reviewer` na missão `20260818-lote-facil` (2026-08-18)
 
 - [ ] **O `rows=13` do `gate:` da QA não sai do extrator do `gate_REVIEW`** —
@@ -679,20 +644,6 @@ O plano consolidado pelo Codex Astra, baseado no artigo de @0xCodez e nas refer�
   da J6 está certa e foi refeita nesta rodada (`##` devolve `NO-TABLE`), mas o número citado como
   evidência não reproduz. Direção: recontar com o extrator, ou dizer qual variante foi usada.
   — descoberto por `sdd-reviewer` na missão `20260818-lote-facil` (2026-08-18)
-
-- [ ] **`tests/check-entrypoint.sh` diz "all ten assertions" contra 14 probes** —
-  `tests/check-entrypoint.sh:419` — `grep -cE '^ *probe '` responde **14**, todas acima daquela
-  linha; é a segunda casa da classe que o `R10` fechou no `pipeline_log_line`, num arquivo que o
-  `CLAUDE.md` cita como exemplo da régua. ⚠️ As outras duas ocorrências (`:60`, `:329`) são
-  **história honesta** e não se tocam. Direção: a frase fala de **todas** e carrega o `grep` ao
-  lado — nunca escrever 14, que nasce velho no próximo probe acrescentado.
-  — descoberto por `sdd-executor` na missão `20260901-o-revisor-so-acha` (2026-09-02)
-
-- [ ] **`reviewscope_files()` não declara o limite dele na fórmula do arquivo** —
-  `tests/check-autonomy.sh:4401` — o `awk -F': ' … $NF` trunca o diagnóstico em silêncio quando o
-  caminho contém `": "`; o arquivo usa `DECLARED LIMIT:` em três outros pontos e este não usa.
-  Direção: declarar, ou recuperar a lista por um separador que o caminho não possa conter.
-  — descoberto por `sdd-reviewer` na missão `20260901-o-revisor-so-acha` (2026-09-02)
 
 - [ ] **Refutação de handoff cita evidência que não existe** —
   `docs/handoffs/20260901-o-revisor-so-acha/30-handoff-qa.md:79` — a refutação R2 afirma que "o
@@ -755,26 +706,20 @@ O plano consolidado pelo Codex Astra, baseado no artigo de @0xCodez e nas refer�
   sobre o `run`. Direção: publicar num global, como `run_phase` faz com `LAST_PHASE_*`.
   — descoberto por `sdd-executor` na missão `m1-20260824` (2026-08-24)
 
-### Adiados por YAGNI
+### Sem seção — chegaram depois da última classificação
 
-- [ ] **Espelho global de vereditos legível por máquina (JSONL em `~/.sdd/`)** — D3 do
-  `CONTEXT.md` adiou até o I13.4 pedir: hoje o veredito vive só no handoff da missão nascida, e
-  "vereditos ao longo do tempo" exige varrer `docs/handoffs/*/05-verdict.md`. Criar junto com a
-  graduação, nunca antes. — registrado na execução do `i13.3-sdd-kaizen` (2026-08-15)
-
-- [ ] **Multi-missão concorrente exigiria `git worktree` por missão** — hoje é 1 missão por
-  branch por vez (YAGNI declarado no plano). Reavaliar se aparecer demanda real. — descoberto por
-  `humano` no planejamento (2026-08-14)
-
-- [ ] **Destilar handoffs/`KAIZEN_LOG` para o vault Obsidian continua manual** — avaliar um
-  `sdd digest` que gere o rascunho. — descoberto por `humano` no planejamento (2026-08-14)
+> ⚠️ Esta seção **chamava-se "Adiados por YAGNI"** e não guarda mais nenhum adiamento: os três que
+> havia (espelho global de vereditos, multi-missão por `git worktree`, `sdd digest`) viraram Y1–Y3
+> da tabela **Decisões adiadas por YAGNI** do [`CONTEXT.md`](CONTEXT.md), onde cada um nomeia o
+> evento que o reabre — pela régua D15, ausência de consumidor é decisão adiada, não achado. Os
+> itens abaixo são achados de verdade que foram apendados ao fim do arquivo e nunca classificados;
+> quem mexer num deles o move para a seção a que ele pertence.
 
 - [ ] **`sdd close` abre sessão e não escreve linha no ledger** — `bin/sdd:5422` — o
   `docs/pipeline.md` promete "uma linha JSON por sessão gasta ou escalada" e esta sessão não tem
-  linha: `grep -n 'autonomy_.*_row' bin/sdd` não devolve nada dentro de `cmd_close`. Fail-open pela
-  régua D15, com consumidor fora da suíte (o juiz e a D12). Direção: `cmd_close` passa por
-  `run_phase` ou escreve a linha com `invocation: close`, e o enum de `invocation` no `pipeline.md`
-  aprende o valor no mesmo commit — o mesmo contrato de cauda aberta que `kind` carrega.
+  linha. Fail-open pela régua D15, com consumidor fora da suíte (o juiz e a D12).
+  RESOLVIDO por `aa3c0a2`: quarto evento `event: "close"`, escrito só onde a sessão foi gasta, e
+  os dois leitores o admitem por `is_close` no mesmo commit. Mutante `RUN_close_writes_no_row`.
   — descoberto por `humano` na missão `20260828-instrumento-honesto` (2026-08-28)
 
 - [ ] **`gate_EXEC` valida por uma leitura e conta por outra, e uma célula vazia as separa** —
@@ -796,37 +741,35 @@ O plano consolidado pelo Codex Astra, baseado no artigo de @0xCodez e nas refer�
   — descoberto por `sdd-reviewer` na missão `20260829-o-incremento-que-andou` (2026-08-30)
 
 - [ ] **O ledger global real está contaminado por missões de fixture dos próprios testes** —
-  `~/.sdd/autonomy-log.jsonl` — `20260901-jornada-qa`, `20260903-placeholder`, `20260904-conflito` e
-  `20260101-fixture` moram no ledger que o `sdd autonomy` e o `sdd kaizen` leem para julgar o kit:
-  4 dos 6 grupos EXEC do número de controle desta missão são fixtures. Consumidor fora da suíte (o
-  juiz, a D12 e todo número que o kit publica sobre si), e é por isso que a mesma pergunta devolveu
-  quatro respostas diferentes durante esta revisão. Direção: todo teste exporta `SDD_STATE_DIR`, e
-  um probe recusa `bin/sdd` escrevendo no ledger de `$HOME` sob `SDD_MUTANT`/CI.
+  `~/.sdd/autonomy-log.jsonl` — missões de fixture moravam no ledger que o `sdd autonomy` e o
+  `sdd kaizen` leem para julgar o kit, e por isso a mesma pergunta devolvia respostas diferentes.
+  RESOLVIDO por `5956e80`: a escrita nova já era recusada pela ADR 0005 parte 3 (`28af7ea`, quatro
+  asserções `writer:` + `mut_LEDGER_tmp_repo_allowed`); faltava o resíduo, e as 11 linhas sob
+  `/tmp` saíram (292 → 281), com backup em `autonomy-log.jsonl.bak-2026-09-11`.
   — descoberto por `sdd-reviewer` na missão `20260829-o-incremento-que-andou` (2026-08-30)
 
 - [ ] **`reopened` é cego à closure, e a resposta depende de a fase ter CUSTADO dinheiro** —
-  `bin/sdd:4860` — o `def reopened` lê `.gate == "pass"` sobre `$every_session` (`:4954`,
-  `map(select(is_session))`), e a closure é justamente o fato que `.gate == "pass"` representa.
-  Medido, mesmo histórico de pipeline: closure gravada como `gate_pass` → `0 reopened`; a MESMA
-  closure comprada com sessão → `1 reopened`. Não consertado aqui porque admitir closure em
-  `$every_session` move junto o `history_extra` (`:4962`), que é número de tela. Direção: população
-  própria para o `reopened`, mais fixture diferencial. — descoberto por `sdd-reviewer` na missão `20260831-a-rodada-que-andou` (2026-08-31)
+  `bin/sdd:4860` — o `def reopened` lia `.gate == "pass"` sobre `$every_session`, e a closure é
+  justamente o fato que `.gate == "pass"` representa. RESOLVIDO por `392f526`: população própria
+  (`$every_row` = sessões + closures), passe escrito positivamente, `$every_session` intacto para
+  `launches`/`history_extra`. Par diferencial livre x paga (`free:0 paid:2` -> `2 2`) e um mutante
+  novo. — descoberto por `sdd-reviewer` na missão `20260831-a-rodada-que-andou` (2026-08-31)
 
 - [ ] **O `$order` do `cmd_autonomy` e o `comparable_row` do `kaizen_series` divergem sobre a linha
   `gate_pass`, e o comentário entre eles jura paridade** — `bin/sdd:4929` — o `$order` admite
   `(is_session and comparable) or (is_escalation and on_axis)` e NÃO vê o evento novo; o
   `comparable_row` é `on_axis and ((.event != "session") or has("moved"))` e vê. Com a closure como
-  primeira linha de um sha, os dois respondem `latest`/`previous` INVERTIDOS — medido. Writer de hoje
-  não chega lá, mas é a classe da r1 de `20260817`: o comentário afirma paridade que o código perdeu.
-  Direção: quarto caso na D4 do `check-autonomy.sh`.
+  primeira linha de um sha, os dois respondem `latest`/`previous` INVERTIDOS — medido.
+  RESOLVIDO por `7e6b3f5` — a rota da closure já estava fechada pelo `shas_in_file_order` positivo;
+  a divergência viva era a linha KAIZEN liderando uma versão (tabela `bbbbbbb` × série `ccccccc`).
   — descoberto por `sdd-reviewer` na missão `20260831-a-rodada-que-andou` (2026-08-31)
 
 - [ ] **Missão que só tem `gate_pass` numa fatia entra em `missions` sem produzir célula** —
   `bin/sdd:5374` — `missions:` conta sobre `$rows` cru, que agora inclui a closure, enquanto o
   `$detail` (`:5368`, desde `dfe4d63`) exige sessão ou escalada. É a única forma de linha que conta no
-  `guard.missions_after_change` e no `composition` da ADR 0005 sem deixar rastro gradeável, então os
-  dois deixam de reconciliar com o `detail` ao lado. `guard.sufficient` não se move (lê `$sess`).
-  Alcançável pelo mundo (2) já declarado: sessão suja excluída, closure limpa sobrevivendo.
+  `guard.missions_after_change` e no `composition` da ADR 0005 sem deixar rastro gradeável.
+  RESOLVIDO por `7e6b3f5` — `graded_row` (`session or escalation`), uma definição para os três
+  leitores; `missions: 2` sobre `detail: 1` reproduzido antes e fechado depois.
   — descoberto por `sdd-reviewer` na missão `20260831-a-rodada-que-andou` (2026-08-31)
 
 - [ ] **A regra `doing` conta como pendente não tem probe, e sem ela o `gate_EXEC` fecha a fase por
@@ -857,5 +800,12 @@ O plano consolidado pelo Codex Astra, baseado no artigo de @0xCodez e nas refer�
   `session` carrega `harness:` desde 2026-09-06 e a série o lista por fatia, mas `guard.sufficient`
   segue `true` sobre uma fatia que rodou em 2.1.259 e 2.1.263: o veredito compara kit_sha como se
   a máquina parasse, e o bump que tirou o Bash de toda fase entraria no "piorou" do kit. Direção:
-  `guard.harness_mixed` + `sufficient: false`, com par diferencial no `check-kaizen.sh`.
+  RESOLVIDO por 5e3c427 — responde `sufficient: false` com `why: ["harness_mixed"]`, composição
+  aceita enumerada positivamente, par diferencial e mutante próprios.
   — descoberto por `sdd-executor` na missão `fix/o-chapeu-sem-bash` (2026-09-06)
+- [ ] **`check-templates.sh` imprime `ok` com três espaços, contra os quatro que todo Check ancora**
+  — `tests/check-templates.sh` — o `CLAUDE.md` e o `templates/checkpoint.md` declaram `  ok    ` (4)
+  como a âncora obrigatória de todo Check que lê sensor, e 85 das 1058 asserções da suíte não casam
+  com ela. Falha FECHADA (o Check dá 0 e o incremento reprova), mas quem escrever Check sobre esse
+  sensor perde a sessão achando que a asserção sumiu. Direção: alinhar a grafia do sensor.
+  — descoberto por `sdd-reviewer` na missão `20260911-o-juiz-nao-mente-sobre-a-janela` (2026-09-12)

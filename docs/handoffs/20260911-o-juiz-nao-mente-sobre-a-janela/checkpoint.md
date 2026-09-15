@@ -1,6 +1,6 @@
 ---
 missao: 20260911-o-juiz-nao-mente-sobre-a-janela
-atualizado: 2026-09-11 19:08
+atualizado: 2026-09-12 22:10
 ---
 
 # Checkpoint — o juiz não mente sobre a janela
@@ -28,12 +28,20 @@ atualizado: 2026-09-11 19:08
 
 | ID | Incremento | Check (comando → esperado) | Status | Commit |
 |---|---|---|---|---|
-| I1 | Ledger real inescrivível por fixture, e as 11 linhas `/tmp` saem | `grep -c '"repo":"/tmp' ~/.sdd/autonomy-log.jsonl` → `0` | pending | — |
-| I2 | `$order` e `comparable_row` concordam por asserção diferencial | `o=$(bash tests/check-kaizen.sh 2>&1); grep -c '^  ok    differential' <<< "$o"` → `1` ou mais | pending | — |
-| I3 | `reopened` e a fronteira do laço de revisão leem a população que prometem | `o=$(bash tests/check-autonomy.sh 2>&1); grep -c '^  ok    reopened' <<< "$o"` → `1` ou mais | pending | — |
-| I4 | `sdd close` e `sdd retry` escrevem a linha de ledger que devem | `o=$(bash tests/check-autonomy.sh 2>&1); grep -c '^  ok    close writes' <<< "$o"` → `1` ou mais | pending | — |
-| I5 | A guarda recusa fatia com duas versões de harness e percebe janela rompida | `o=$(bash tests/check-kaizen.sh 2>&1); grep -c '^  ok    guard: two harness' <<< "$o"` → `1` ou mais | pending | — |
-| I6 | Dez itens de dívida declarada saem para o cabeçalho do sensor dono; catraca 105 → 95 | `o=$(bash tests/check-todo.sh 2>&1); grep -c '^  ok    95 finding(s)' <<< "$o"` → `1` | pending | — |
+| I1 | Ledger real inescrivível por fixture, e as 11 linhas `/tmp` saem | `grep -c '"repo":"/tmp' ~/.sdd/autonomy-log.jsonl` → `0` | done | 5956e80 |
+| I2 | `$order` e `comparable_row` concordam por asserção diferencial | `o=$(bash tests/check-kaizen.sh 2>&1); grep -c '^  ok    differential' <<< "$o"` → `1` ou mais | done | 7e6b3f5 |
+| I3 | `reopened` e a fronteira do laço de revisão leem a população que prometem | `o=$(bash tests/check-autonomy.sh 2>&1); grep -c '^  ok    reopened' <<< "$o"` → `1` ou mais | done | 392f526 |
+| I4 | `sdd close` e `sdd retry` escrevem a linha de ledger que devem | `o=$(bash tests/check-autonomy.sh 2>&1); grep -c '^  ok    close writes' <<< "$o"` → `1` ou mais | done | aa3c0a2 |
+| I5 | A guarda recusa fatia com duas versões de harness e percebe janela rompida | `o=$(bash tests/check-kaizen.sh 2>&1); grep -c '^  ok    guard: two harness' <<< "$o"` → `1` ou mais | done | 5e3c427 |
+| I6 | Dez itens de dívida declarada saem para o cabeçalho do sensor dono; catraca 105 → 95 | `o=$(bash tests/check-todo.sh 2>&1); grep -c '^  ok    95 finding(s)' <<< "$o"` → `1` | done | 4d9b7b8 |
+| R1 | r1 #1 — a linha `event:"close"` entra no total do cabeçalho de `sdd autonomy` e não cai em bucket nenhum | `o=$(bash tests/check-autonomy.sh 2>&1); grep -c '^  ok    the buckets still sum to the header total (a close row)' <<< "$o"` → `1` ou mais | done | 1563bc8 |
+| R2 | r1 #2 — a exclusão `$meta` (KAIZEN) infla o mesmo total, e o comentário ao lado afirma o contrário | `o=$(bash tests/check-autonomy.sh 2>&1); grep -c '^  ok    the buckets still sum to the header total (a judge KAIZEN row)' <<< "$o"` → `1` ou mais | done | a26d489 |
+| R3 | r1 #3 — `window_missions_stranded` falha aberto na missão que atravessa o sha julgado | `o=$(bash tests/check-kaizen.sh 2>&1); grep -c '^  ok    guard: a mission straddling the kit change is stranded' <<< "$o"` → `1` ou mais | done | 154f58f |
+| R4 | r1 #4 — o juiz aprende a ler `why`, `harness` e a janela rompida; espelho por `sdd install --force` | `grep -c 'window_broken' agents/sdd-kaizen.md` → `1` ou mais | done | 477cb9a |
+| R5 | r1 lote dos achados #6–#9 — custo na linha de `close`, porta do chapéu cruzado, regime de `close` no juiz, contagens podres | `o=$(bash tests/run-all.sh 2>&1); a=$(grep -c '^  ok    close row carries cost_usd' <<< "$o"); b=$(grep -c '^  ok    close writes its row even when the hat guard fires' <<< "$o"); c=$(grep -c '^  ok    guard: a close row mints no version and no mission' <<< "$o"); echo "$a$b$c"` → `111` | done | c78b167 |
+| R6 | r2 #1 — `cmd_close` joga stderr dentro do `.jsonl` que ele mesmo parseia (`2>&1`), e uma linha de stderr faz o `jq` abortar: a linha de `close` perde custo, turns, cache e harness em silêncio | `o=$(bash tests/check-autonomy.sh 2>&1); grep -c '^  ok    close keeps stderr out of the stream it parses' <<< "$o"` → `1` ou mais | done | 12012a5 |
+| R7 | r2 lote dos achados #2, #4 e #5 — asserção vazia de admissão do `close`, comentário órfão do mutante `meta`, e `autonomy_no_data` com um escritor a menos | `o=$(bash tests/check-autonomy.sh 2>&1); a=$(grep -c '^  ok    floor: the close admission pair reads a ledger carrying a close row' <<< "$o"); b=$(awk '/^mut_LEDGER_meta_bucket_unnamed/{print (p ~ /^#/)?1:0} {p=$0}' tests/check-mutation.sh); c=$(awk '/It is written by/ && /sdd kaizen/{n++} END{print n+0}' bin/sdd); echo "$a$b$c"` → `111` | done | 6a8310a |
+| R8 | r3 lote dos achados #1 e #2 (MEDIUM) e #3, #4 e #5 (LOW) — o `human:` da asserção de admissão é uma constante (sabotar só `bin/sdd:6145` a deixa verde), e as duas metades de prosa do `R6`/`R7` (`$close_logs`, o quarto escritor) não têm sensor nenhum | `o=$(bash tests/run-all.sh 2>&1); a=$(grep -c '^  ok    floor: the human reader reads the repo the close row was born in' <<< "$o"); b=$(grep -c '^  ok    close names the raw stream and the stderr beside the summary' <<< "$o"); c=$(grep -c '^  ok    autonomy_no_data names every writer the runner has' <<< "$o"); d=$(awk '/^mut_[A-Za-z0-9_]+\(\) \{/{n++} END{print n+0}' tests/check-mutation.sh); e=$(awk '/^CATALOG=\(/{f=1;next} /^\)/{f=0} f&&/^  [A-Z]/{n++} END{print n+0}' tests/check-mutation.sh); echo "$a$b$c$((d==e))"` → `1111` | done | 12b15b8 |
 
 > **As notas de execução não moram aqui.** Elas ficam em `checkpoint-notas.md`, ao lado deste
 > arquivo, append-only, e o prompt de boot inlina as últimas 10 — a sessão nunca abre aquele

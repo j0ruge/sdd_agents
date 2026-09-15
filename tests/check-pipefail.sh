@@ -264,6 +264,22 @@ MAXC_RE='\|[[:space:]]*grep([[:space:]]+[^[:space:]|;&()<>`#]+)*[[:space:]]+(-[[
 # answers with prose only — the words "cd into a capture", "cd rule", "cd prints" inside probe and
 # assert_eq DESCRIPTIONS. Zero of the hits are a `cd` command. Re-derive before trusting that
 # sentence: it is a count, and counts rot.
+#
+# NOT MEASURED (3) — `pushd "$(…)"`. DECLARED LIMIT (D15), not a backlog item: `pushd` consults
+# $CDPATH and echoes the resolved directory exactly as `cd` does, and `--check` over a file
+# carrying `pushd "$(dirname "$0")"` answers rc 0. It is not a fail-open by population: the tree
+# holds zero `pushd` today, and the count is measured and not asserted —
+#     grep -nE '(^|[^[:alnum:]_./$-])pushd[[:space:]]' bin/sdd tests/*.sh
+# answers with this comment and nothing else. Widening CD_RE to `(cd|pushd)` is a one-token
+# change the day the first one is written; writing it before then buys a rule with no population.
+#
+# NOT MEASURED (4) — `cd -- "$(…)"`, and any `cd` whose operand sits on the line AFTER a `\`.
+# DECLARED LIMIT (D15), same rubric, same zero population. The flag group is `-[[:alpha:]]+` and
+# `--` carries no alpha, so the end-of-options spelling reads clean; and all three rules read a
+# PHYSICAL line, by design, so a backslash-continued operand is invisible to every one of them —
+# widening this one rule would leave the other two describing a surface they do not read. The
+# direction, when a first instance appears, is `(--|-[[:alpha:]]+)` plus joining continuations for
+# the whole file, never for CD_RE alone.
 CD_RE='(^|[^[:alnum:]_./$-])cd([[:space:]]+-[[:alpha:]]+)*[[:space:]]+"?(\$\(|`)'
 CD_GUARD="CDPATH='' cd"
 # A token with no `cd` in it: what is left after the guarded ones are blanked is what CD_RE reads.
@@ -292,9 +308,14 @@ violations() {
 #
 # Lines rule 1 already reports are skipped, and that is the ONE place the two rules are coupled:
 # they describe the same defect with the same fix, so a line carrying both flags is named once.
-# The declared cost is a line with TWO greps — `| grep -q a | grep -m1 b` — where rule 1 answers
-# first and rule 3 stays quiet. A line scanner cannot tell the two commands apart, and this errs
-# toward one honest message instead of two, one of which would point at the wrong command.
+# DECLARED LIMIT (D15), not a backlog item: the cost is a line with TWO greps —
+# `| grep -q a | grep -m1 b` — where rule 1 answers first and rule 3 stays quiet. The two flags
+# then belong to DIFFERENT commands, so the reader gets rule 1's message naming the `-q` while the
+# `-m` that triggered the skip sits on the other grep: the message is not wrong about the defect,
+# it is wrong about which command carries it. It is not a fail-open — the line IS reported, and
+# the fix (a herestring) is the same for both — and it has zero population in the kit today.
+# Telling the two commands apart needs a shell parser, and this file is a line scanner by design;
+# it errs toward one honest message instead of two, one of which would point at the wrong command.
 maxc_violations() {
   local hit no text
   while IFS= read -r hit; do

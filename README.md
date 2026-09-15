@@ -61,7 +61,8 @@ sdd status <mission>         # where it stands, what is missing, why it stalled
 sdd why <mission> [PHASE]    # why that phase's gate did not pass — start any diagnosis here
 sdd phase <mission>          # print only the current phase (or DONE) — for scripts
 sdd retry <mission>          # retry the current phase with a fresh session
-sdd close <mission>          # post-merge: close the JIRA issue
+sdd close <mission>          # post-merge: close the JIRA issue (a real paid session — since 2026-09-11
+                             #   it writes its own ledger row, `event:"close"`, cost included)
 sdd health                   # KIT sensor (≠ preflight, which is about the target's environment)
 sdd autonomy                 # what the sessions did per kit version (advanced · churned · idle, waste), for THIS repo,
                              #   from the global ledger (~/.sdd/autonomy-log.jsonl)
@@ -72,7 +73,10 @@ sdd autonomy --by-mission    # ...per mission: the same outcomes, launch(es) (di
 sdd kaizen                   # judge the previous kit change and plan the next kit mission (kit repo only);
                              #   it reads EVERY repo (ADR 0005) — --all-repos is accepted and is a no-op here
 sdd kaizen --series          # the deterministic series (JSON) the judge cites, on its own, with the
-                             #   composition of the slice it read: how many missions came from which repo
+                             #   composition of the slice it read: how many missions came from which repo,
+                             #   and the guard that REFUSES a slice it cannot answer for (`guard.sufficient`
+                             #   false with `why` naming the reason: too few missions, or two harness
+                             #   versions in one slice) — see docs/pipeline.md
 
 sdd run <mission> --dry-run         # project the whole pipeline without spending tokens
 sdd run <mission> --phase EXEC      # force one specific phase

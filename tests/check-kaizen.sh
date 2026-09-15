@@ -1921,6 +1921,248 @@ assert_eq "corrupt ledger: and the same ledger without the broken line still rea
         "$( [ "$r" = 0 ] && echo reaches-gate || echo "refused:$r" )" \
         "$(grep -q 'could not be read' <<< "$o" && echo unreadable-claim || echo no-unreadable-claim)" )"
 
+# =============================================================================
+# the two windows over one file — DIFFERENTIAL, never a comment claiming parity
+# =============================================================================
+# `cmd_autonomy` prints the window a HUMAN reads; `kaizen_series` derives the axis the JUDGE
+# stands on. CLAUDE.md already carries the rule these two broke twice ("a comment asserting parity
+# between two programs is not parity"), and the only instrument that can hold them together is an
+# assertion that reads BOTH programs over ONE fixture and compares the outputs with each other.
+# Each side against a hard-coded number cannot: it is satisfied by two readers that are each
+# self-consistently wrong, which is exactly how the divergences below survived their own comments.
+#
+# The fixture ledgers here are written in the two regimes the r1 finding named, and in no other:
+# a row that is NOT a comparable session leading a version, and a mission whose only trace in a
+# slice is something that mints no cell. Any other file order is satisfied by chance.
+echo "== differential: the human window and the judge series over one ledger =="
+
+# --- regime 1: a KAIZEN meta row leads a version -----------------------------
+# `kaizen_series` splits the judge's OWN sessions out of the axis (`$meta`, reported in
+# `excluded.meta`): a row the judge wrote about a version is not an observation OF that version.
+# `cmd_autonomy` had no such split, so a `sdd kaizen` session — a real row, written by
+# `cmd_kaizen` on mission `<date>-kaizen` — entered the human window as an observation and MINTED
+# A VERSION in its `$order`. Measured on the three rows below, before the fix: the last line of
+# the human table read `bbbbbbb` while `.latest.kit_sha` of the series read `ccccccc` — the two
+# readers naming DIFFERENT latest versions over one file, which is the r1 class verbatim.
+#
+# The meta row goes FIRST on purpose: it is the only placement where the two populations disagree
+# about the ORDER rather than merely about a count.
+mkdir -p "$OUTSIDE/twowin1"
+localize > "$OUTSIDE/twowin1/autonomy-log.jsonl" <<'EOF'
+{"v":1,"ts":"2026-09-11T10:00:00-03:00","event":"session","run_id":"k1","invocation":"kaizen","kit_sha":"ccccccc","kit_dirty":false,"project":"p1","repo":"/p1","mission":"20260911-kaizen","phase":"KAIZEN","step":"KAIZEN","agent":"sdd-kaizen","model":"opus","attempt":1,"auto_retry":false,"session":"k1s","rc":0,"dur_s":10,"cost_usd":1.0,"moved":true,"gate":"pass","gate_why":"x"}
+{"v":1,"ts":"2026-09-11T10:01:00-03:00","event":"session","run_id":"r1","invocation":"run","kit_sha":"bbbbbbb","kit_dirty":false,"project":"p1","repo":"/p1","mission":"m1","phase":"EXEC","step":"EXEC","agent":"sdd-executor","model":"opus","attempt":1,"auto_retry":false,"session":"s1","rc":0,"dur_s":10,"cost_usd":1.0,"moved":true,"gate":"pass","gate_why":"x"}
+{"v":1,"ts":"2026-09-11T10:02:00-03:00","event":"session","run_id":"r2","invocation":"run","kit_sha":"ccccccc","kit_dirty":false,"project":"p1","repo":"/p1","mission":"m2","phase":"EXEC","step":"EXEC","agent":"sdd-executor","model":"opus","attempt":1,"auto_retry":false,"session":"s2","rc":0,"dur_s":10,"cost_usd":1.0,"moved":true,"gate":"pass","gate_why":"x"}
+EOF
+TW1_TABLE="$( cd "$FIX" && SDD_STATE_DIR="$OUTSIDE/twowin1" "$SDD" autonomy 2>&1 )"
+TW1_SERIES="$( cd "$FIX" && SDD_STATE_DIR="$OUTSIDE/twowin1" "$SDD" kaizen --series 2>/dev/null )"
+# awk and not `grep | tail`, for the reason check-autonomy.sh already spells out at its D4: $3 is
+# "session(s)" on the version lines and a count on the escalation lines, so one field test keeps
+# them apart with no pipe to trip pipefail over. An output with NO table leaves `sha` empty, which
+# fails against the judge's answer instead of accidentally matching it.
+tw1_last="$(awk '$3 == "session(s)" { sha = $1 } END { print sha }' <<< "$TW1_TABLE")"
+assert_eq "differential: a KAIZEN meta row leading a version does not split the two readers" \
+  "$(jq -r '.latest.kit_sha' <<< "$TW1_SERIES")" "$tw1_last"
+# The anti-vacuity floor, and it is load-bearing: the line above is satisfied by two readers that
+# both went blind, and by a human window that lost its table. TWO version lines have to remain,
+# and the meta row has to be NAMED as excluded on both sides — dropping a row without naming it is
+# the silent filter this whole reader was rewritten to stop being.
+assert_eq "differential: ...and the meta row is excluded by NAME on both sides, table intact" \
+  "2 1 1" \
+  "$( printf '%s %s %s' \
+       "$(grep -cE '^  [a-z]{7}  [0-9]+ session\(s\)' <<< "$TW1_TABLE")" \
+       "$(jq -r '.excluded.meta' <<< "$TW1_SERIES")" \
+       "$(grep -c 'row(s) written by the judge excluded from the axis' <<< "$TW1_TABLE")" )"
+
+# --- regime 2: a mission whose only row in the slice is a closure ------------
+# `missions` counted over every row of the slice while `$detail` — the cells the judge grades —
+# admits only `session or escalation`. So a mission that did nothing on this version but let a
+# gate close for free entered `missions` (and `composition[].missions`, the ADR 0005 field that
+# makes reading every repo safe) WITHOUT leaving a gradeable cell, and the judge's own two numbers
+# stopped reconciling with each other. `guard.sufficient` never moved, which is what kept it quiet.
+#
+# Differential in the same sense as regime 1: the human window counts missions over the sessions
+# it can show, so the two readers had to be asked the same question over the same file.
+mkdir -p "$OUTSIDE/twowin2"
+localize > "$OUTSIDE/twowin2/autonomy-log.jsonl" <<'EOF'
+{"v":1,"ts":"2026-09-11T11:00:00-03:00","event":"session","run_id":"r1","invocation":"run","kit_sha":"ddddddd","kit_dirty":false,"project":"p1","repo":"/p1","mission":"m1","phase":"EXEC","step":"EXEC","agent":"sdd-executor","model":"opus","attempt":1,"auto_retry":false,"session":"s1","rc":0,"dur_s":10,"cost_usd":1.0,"moved":true,"gate":"pass","gate_why":"x"}
+{"v":1,"ts":"2026-09-11T11:01:00-03:00","event":"gate_pass","run_id":"r2","invocation":"run","kit_sha":"ddddddd","kit_dirty":false,"project":"p1","repo":"/p1","mission":"m2","phase":"QA"}
+EOF
+TW2_TABLE="$( cd "$FIX" && SDD_STATE_DIR="$OUTSIDE/twowin2" "$SDD" autonomy 2>&1 )"
+TW2_SERIES="$( cd "$FIX" && SDD_STATE_DIR="$OUTSIDE/twowin2" "$SDD" kaizen --series 2>/dev/null )"
+# Four numbers, one question: `missions`, the missions the cells actually name, the ADR 0005
+# composition field, and the count the human table prints for the same version. The second is what
+# makes this more than a field read against itself — a `missions` that learned to count cells but
+# a `composition` that did not would still fail here.
+assert_eq "differential: a mission whose only row in the slice is a closure counts on neither reader" \
+  "1 1 1 1" \
+  "$( printf '%s %s %s %s' \
+       "$(jq -r '.latest.missions' <<< "$TW2_SERIES")" \
+       "$(jq -r '[.latest.detail[].mission] | unique | length' <<< "$TW2_SERIES")" \
+       "$(jq -r '[.latest.composition[].missions] | add' <<< "$TW2_SERIES")" \
+       "$(awk '$3 == "session(s)" { for (i = 1; i < NF; i++) if ($(i+1) ~ /^mission/) print $i }' <<< "$TW2_TABLE")" )"
+# The floor: the closure is still RECOGNISED and still counted where it belongs. An implementation
+# that filed it as unrecognized, or dropped it out of the arithmetic, would satisfy the assertion
+# above by deleting the row — which is the louder version of the same defect.
+assert_eq "differential: ...and the closure is still a recognised row, counted where it belongs" \
+  "0 1" \
+  "$( printf '%s %s' \
+       "$(jq -r '.excluded.unrecognized' <<< "$TW2_SERIES")" \
+       "$(grep -c 'gate(s) closed without a session' <<< "$TW2_TABLE")" )"
+
+echo "== guard: the slice the judge cannot answer over =="
+# Two refusals the guard did not make. Both come out of the same gemba: the sha judged in window 4
+# (`a0e34df`) is the one that REPAIRED a harness bump which stripped Bash from every phase — so the
+# slice where "two machines, one verdict" matters most is the slice that was just graded `true`.
+#
+# `sufficient: false` is SHARED with "not enough missions", so every assertion below reads the
+# reason list and demands the marker of the right branch AND the absence of the other's. A probe
+# on the boolean alone distinguishes nothing, which is the rule this file already applies to rc.
+
+# hrow <mission> <kit_sha> <harness> — one clean session of THIS repo, floor-eligible.
+hrow() {
+  printf '{"v":1,"ts":"2026-09-11T1%s:00:00-03:00","event":"session","run_id":"h%s","invocation":"run","kit_sha":"%s","kit_dirty":false,"project":"p1","repo":"/p1","mission":"%s","phase":"EXEC","step":"EXEC","agent":"sdd-executor","model":"opus","attempt":1,"auto_retry":false,"session":"h%ss","rc":0,"dur_s":10,"cost_usd":1.0,"moved":true,"gate":"pass","gate_why":"x","harness":"%s"}\n' \
+    "$((hseq % 10))" "$hseq" "$2" "$1" "$hseq" "$3"
+  hseq=$((hseq + 1))
+}
+hseq=0
+# A meta row (phase KAIZEN) is where the PREVIOUS verdict was written, so it is where the window
+# under judgement opens. The fixtures below put missions on both sides of it on purpose.
+hmeta() {
+  printf '{"v":1,"ts":"2026-09-11T09:59:00-03:00","event":"session","run_id":"hk","invocation":"kaizen","kit_sha":"%s","kit_dirty":false,"project":"p1","repo":"/p1","mission":"20260911-kaizen","phase":"KAIZEN","step":"KAIZEN","agent":"sdd-kaizen","model":"opus","attempt":1,"auto_retry":false,"session":"hks","rc":0,"dur_s":10,"cost_usd":1.0,"moved":true,"gate":"pass","gate_why":"x"}\n' "$1"
+}
+# guard_read <state dir> -> "<sufficient> <why joined> <window_broken> <stranded>"
+guard_read() {
+  local s; s="$( cd "$FIX" && SDD_STATE_DIR="$1" "$KSDD" kaizen --series 2>/dev/null )"
+  jq -r '[(.guard.sufficient|tostring), (.guard.why // ["MISSING"] | sort | join(",")),
+          (.guard.window_broken|tostring), (.guard.window_missions_stranded|tostring)] | join(" ")' <<< "$s"
+}
+
+mkdir -p "$OUTSIDE/hmixed" "$OUTSIDE/hone" "$OUTSIDE/hfloor" "$OUTSIDE/winbroken" "$OUTSIDE/winwhole" "$OUTSIDE/winstraddle"
+
+# A — three missions on ONE kit version, and TWO harness versions across them. The floor is MET,
+# so nothing but the harness can be the reason.
+{ hrow h1 ddddddd "2.1.259"; hrow h2 ddddddd "2.1.263"; hrow h3 ddddddd "2.1.263"; } \
+  | localize > "$OUTSIDE/hmixed/autonomy-log.jsonl"
+# B — its twin, one keystroke away: the SAME rows on the SAME sha with ONE harness version.
+hseq=0
+{ hrow h1 ddddddd "2.1.263"; hrow h2 ddddddd "2.1.263"; hrow h3 ddddddd "2.1.263"; } \
+  | localize > "$OUTSIDE/hone/autonomy-log.jsonl"
+# C — one harness, floor NOT met: the other branch of the shared `false`, so the two reasons can be
+# told apart instead of being read off one boolean.
+hseq=0
+{ hrow h1 ddddddd "2.1.263"; hrow h2 ddddddd "2.1.263"; } \
+  | localize > "$OUTSIDE/hfloor/autonomy-log.jsonl"
+
+# The differential pair. Every field of the two ledgers is identical but the harness of one row.
+assert_eq "guard: two harness versions in one slice make it unanswerable — sufficient false, and the reason is named" \
+  "false harness_mixed false 0" "$(guard_read "$OUTSIDE/hmixed")"
+assert_eq "guard: ...and its twin, one harness version apart, is answerable — no reason at all" \
+  "true  false 0" "$(guard_read "$OUTSIDE/hone")"
+assert_eq "guard: a slice short of the floor names the FLOOR and not the harness — the shared false is split" \
+  "false floor false 0" "$(guard_read "$OUTSIDE/hfloor")"
+# Anti-vacuity: the harness composition the guard accepts is stated positively, and it is VISIBLE,
+# so a guard that answered `false` by losing the rows would fail here instead of passing quietly.
+HMIX_SERIES="$( cd "$FIX" && SDD_STATE_DIR="$OUTSIDE/hmixed" "$KSDD" kaizen --series 2>/dev/null )"
+assert_eq "guard: that refusal is not vacuous — the slice still carries its three missions and both versions" \
+  "3 2.1.259,2.1.263" \
+  "$(jq -r '[(.guard.missions_with_session|tostring), (.guard.harness | sort | join(","))] | join(" ")' <<< "$HMIX_SERIES")"
+
+# D — the broken window. A verdict was written (the KAIZEN row), then missions were spent on
+# `eee0001`, and THEN the kit moved to `eee0002`, which is the only slice the judge grades. Window 3
+# was exactly this and `degenerate_axis` answered `false` about it; a human reading `git log` saw it.
+hseq=0
+{ hmeta ccccccc; hrow w0 eee0001 "2.1.263"; hrow w1 eee0002 "2.1.263"; hrow w2 eee0002 "2.1.263"
+  hrow w3 eee0002 "2.1.263"; } | localize > "$OUTSIDE/winbroken/autonomy-log.jsonl"
+# E — its twin, and the mission on the older sha sits BEFORE the meta row: it belongs to the window
+# the previous verdict already closed, so it strands nothing. This is what makes the pair a
+# differential rather than a count — an implementation that reads from the start of the FILE
+# instead of from the last verdict answers `true 1` here and passes D by luck.
+hseq=0
+{ hrow w9 eee0000 "2.1.263"; hmeta ccccccc; hrow w1 eee0002 "2.1.263"; hrow w2 eee0002 "2.1.263"
+  hrow w3 eee0002 "2.1.263"; } | localize > "$OUTSIDE/winwhole/autonomy-log.jsonl"
+
+assert_eq "guard: a window whose missions were stranded on an earlier kit version says so" \
+  "true  true 1" "$(guard_read "$OUTSIDE/winbroken")"
+assert_eq "guard: ...and the same mission BEFORE the last verdict belongs to the closed window, stranding nothing" \
+  "true  false 0" "$(guard_read "$OUTSIDE/winwhole")"
+
+# F — the regime neither D nor E covers: ONE mission with rows on BOTH shas. Half of its evidence
+# was bought on `eee0001` and half on the sha being graded, which is precisely what the field
+# exists to reveal. A subtraction of unique counts answers 0 here, because the straddling mission
+# is counted on BOTH sides and cancels itself out — the positive spelling ("rows outside the sha
+# judged") counts it once and answers 1. Measured red before the fix: `true  false 0`.
+hseq=0
+{ hmeta ccccccc; hrow w1 eee0001 "2.1.263"; hrow w1 eee0002 "2.1.263"; hrow w2 eee0002 "2.1.263"
+  hrow w3 eee0002 "2.1.263"; } | localize > "$OUTSIDE/winstraddle/autonomy-log.jsonl"
+assert_eq "guard: a mission straddling the kit change is stranded — a subtraction of unique counts cancels it to zero" \
+  "true  true 1" "$(guard_read "$OUTSIDE/winstraddle")"
+
+# --- the close row, in the judge's program -----------------------------------
+# r1 finding #8 of the 2026-09-11 judge mission. `sdd close` writes `event:"close"`, and this file
+# had no fixture carrying one: the judge's admission list (`session or escalation or gate_pass or
+# is_close`) was reachable only through the two mutants that strip `is_close` TOGETHER with
+# `is_gate_pass`, so a narrow sabotage of `is_close` alone survived the whole suite. A row the
+# runner writes on purpose, with no assertion of its own, is the fail-open this file exists against.
+#
+# TWO properties and two witnesses, because a closure can go wrong in two opposite directions and
+# one assertion would only see one of them:
+#   (a) it must not MINT — a closure is not a session, so it may not coin a version, a mission or a
+#       detail cell. Asked DIFFERENTIALLY (the same slice with and without the row, compared field
+#       by field), which is the form this file already uses for the `gate_pass` event above and the
+#       only one no fixture regime satisfies by accident;
+#   (b) it must not be THROWN AWAY — `excluded.unrecognized > 0` is what `agents/sdd-kaizen.md`
+#       tells the judge to read as a bug in the kit itself, so a closure the series does not admit
+#       makes `sdd kaizen --series` accuse the runner that wrote it.
+# The close row below is copied from the shape `autonomy_close_row` builds in bin/sdd (no `phase`,
+# no `moved`, no `gate` — those are what a SESSION carries), never written from memory.
+#
+# ⚠️ THE REGIME IS THE ASSERTION, and TWO regimes are needed because "mint" happens through two
+# different definitions that read two different populations. Both were measured, not reasoned:
+#   * a close row sharing mission AND sha with the sessions survives BOTH sabotages — whatever it
+#     mints is absorbed by a mission that already exists. That was the first draft of this block;
+#   * `graded_row` (missions and detail cells) reads the rows of the GRADED slice, so the sabotage
+#     that teaches it `is_close` is only visible when the close row sits on the graded sha and is
+#     ALONE in its mission — regime `closein` (`ccc0001`, `m61`);
+#   * `shas_in_file_order` (which sha is `latest`) reads the whole axis, so the sabotage that
+#     teaches IT `is_close` is only visible when the close row sits on a sha no session touched —
+#     regime `closeaway` (`ccc0002`), where minting slides `latest` off the sha `gate_KAIZEN`
+#     derives its expected verdict from, onto a slice with zero sessions.
+# One regime would have certified the other half by silence.
+echo "== series: a close row is recognized and mints nothing =="
+mkdir -p "$OUTSIDE/closeoff" "$OUTSIDE/closein" "$OUTSIDE/closeaway"
+close_base() { cat <<'EOF'
+{"v":1,"ts":"2026-09-11T12:00:00-03:00","event":"session","run_id":"c1","invocation":"run","kit_sha":"ccc0001","kit_dirty":false,"project":"p1","repo":"/p1","mission":"m60","phase":"EXEC","step":"EXEC","agent":"sdd-executor","model":"opus","attempt":1,"auto_retry":false,"session":"c1s","rc":0,"dur_s":10,"cost_usd":2.0,"moved":true,"pending_before":1,"pending_after":0,"increments_total":1,"gate":"pass","gate_why":"0 of 1 increment(s) still to execute"}
+{"v":1,"ts":"2026-09-11T12:01:00-03:00","event":"session","run_id":"c1","invocation":"run","kit_sha":"ccc0001","kit_dirty":false,"project":"p1","repo":"/p1","mission":"m60","phase":"REVIEW","step":"REVIEW","agent":"sdd-reviewer","model":"opus","attempt":1,"auto_retry":false,"session":"c2s","rc":0,"dur_s":10,"cost_usd":4.0,"moved":true,"rounds_before":0,"rounds_after":1,"rounds_max":3,"gate":"pass","gate_why":"40-review-r1.md: every criterion A"}
+EOF
+}
+# The one line that differs between the two regimes is the `kit_sha`, so the pair also reads as a
+# statement about WHICH definition each one reaches.
+close_row() { printf '{"v":1,"ts":"2026-09-11T12:02:00-03:00","event":"close","run_id":"c2","invocation":"close","kit_sha":"%s","kit_dirty":false,"project":"p1","repo":"/p1","mission":"m61","issue":"ISSUE-999","session":"c3s","rc":0,"verified":true}\n' "$1"; }
+close_base | localize > "$OUTSIDE/closeoff/autonomy-log.jsonl"
+{ close_base; close_row ccc0001; } | localize > "$OUTSIDE/closein/autonomy-log.jsonl"
+{ close_base; close_row ccc0002; } | localize > "$OUTSIDE/closeaway/autonomy-log.jsonl"
+CLOSEOFF_OUT="$( cd "$FIX" && SDD_STATE_DIR="$OUTSIDE/closeoff" "$SDD" kaizen --series 2>/dev/null )"
+CLOSEIN_OUT="$( cd "$FIX" && SDD_STATE_DIR="$OUTSIDE/closein" "$SDD" kaizen --series 2>/dev/null )"
+CLOSEAWAY_OUT="$( cd "$FIX" && SDD_STATE_DIR="$OUTSIDE/closeaway" "$SDD" kaizen --series 2>/dev/null )"
+# The WHOLE series and not a hand-picked subset, for the reason written at gp_shape above: a
+# comparison of ten keys chosen by the same author as the writer says "nothing moved" while
+# measuring a fraction. `latest.detail` rides in whole here — a closure has no label to move, so
+# unlike the `gate_pass` differential there is nothing this one has to forgive.
+assert_eq "guard: a close row mints no version and no mission" \
+  "$(jq -S . <<< "$CLOSEOFF_OUT")$(jq -S . <<< "$CLOSEOFF_OUT")" \
+  "$(jq -S . <<< "$CLOSEIN_OUT")$(jq -S . <<< "$CLOSEAWAY_OUT")"
+# ...and not by both being empty. The floor is this fixture's known numbers, so the equality above
+# is about a series that actually said something — and it names the sha, which is the field the
+# `closeaway` half of the differential is about.
+assert_eq "floor: that close differential is not vacuous — one version, one mission, two cells" \
+  "ccc0001 1 2 6" \
+  "$(jq -r '"\(.latest.kit_sha) \(.latest.missions) \(.latest.detail | length) \(.latest.cost_usd)"' <<< "$CLOSEIN_OUT")"
+# Spelled out on its own, because it is the bucket with a CONSUMER: the judge is told to read
+# `unrecognized > 0` as a kit bug, and the differential above would only catch this as one field
+# among many. This is the witness that dies when `is_close` alone leaves the admission list.
+assert_eq "guard: a close row is recognized, never counted as unrecognized" "0 0 0 0" \
+  "$(jq -r '"\(.excluded.unrecognized) \(.excluded.non_comparable)"' <<< "$CLOSEIN_OUT") $(jq -r '"\(.excluded.unrecognized) \(.excluded.non_comparable)"' <<< "$CLOSEAWAY_OUT")"
+
 echo "== hygiene =="
 assert_eq "the fixture kit tree ends clean" "" "$(git -C "$FIX" status --porcelain)"
 assert_eq "the ledger is never tracked by the fixture kit" "0" \

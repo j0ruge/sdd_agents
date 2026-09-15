@@ -807,8 +807,37 @@ mut_KAIZEN_degenerate_axis_window_sorted() {
 # Caught by `composition: a repo that only ESCALATED is still in it` in check-kaizen.sh, and by
 # the sum assertion beside it — the `missions` half stops closing against
 # guard.missions_after_change the moment escalation-only missions leave.
+# The harness stops being read and `sufficient` goes back to the floor alone — the fail-open the
+# I5 of the 2026-09-11 judge mission closed (the backlog item it came from is gone, which is why
+# this comment no longer cites a line number), where a slice that ran on 2.1.259 AND 2.1.263 is
+# graded as if the machine had stood
+# still. The bump that stripped Bash from every phase would enter the kit's "piorou" on this path.
+mut_KAIZEN_guard_harness_blind() {
+  sed -i 's@sufficient: (($observed >= guard_floor) and $harness_ok),@sufficient: ($observed >= guard_floor),@' "$1"
+}
+
+# `why` collapses back to the bare boolean the branch above cannot be told from: a reader that sees
+# only `sufficient: false` waits for missions that cannot help, because the machine — not the
+# mission count — is what made the slice unanswerable.
+mut_KAIZEN_guard_why_silent() {
+  sed -i 's@why: (\[(if $observed >= guard_floor then empty else "floor" end),@why: ([(if true then empty else "floor" end),@' "$1"
+}
+
+# The window opens at the start of the FILE instead of at the last verdict, so missions the
+# previous window already spent and closed are counted as stranded by this one. `window_broken`
+# then reads `true` over a whole history and stops separating anything.
+mut_KAIZEN_window_ignores_verdict() {
+  sed -i 's@| (\[range(0; ($all | length)) | select($all\[.\].phase == "KAIZEN")\] | last) as $meta_at@| null as $meta_at@' "$1"
+}
+
+# The rupture goes blind: `window_broken` is hardcoded false, which is the answer window 3 got out
+# of `degenerate_axis` while one mission sat on `2e48a87` and the kit moved 24 commits past it.
+mut_KAIZEN_window_break_blind() {
+  sed -i 's@window_broken: ($stranded > 0),@window_broken: false,@' "$1"
+}
+
 mut_KAIZEN_composition_session_unit() {
-  sed -i 's@composition: ($rows | group_by(.repo // "")@composition: ($rows | map(select(.event == "session")) | group_by(.repo // "")@' "$1"
+  sed -i 's@composition: ($graded | group_by(.repo // "")@composition: ($graded | map(select(.event == "session")) | group_by(.repo // "")@' "$1"
 }
 
 # The human stops being shown the mixture. The series keeps the field, so every JSON assertion in
@@ -2548,7 +2577,17 @@ mut_AUTONOMY_launches_counts_rows() {
 # down", the definition the spec refused: frete-cif-fob (EXEC after a REFUSED QA, three times)
 # would read 3 where the truth is 0. Caught by the fail twin of the reopen pair.
 mut_AUTONOMY_reopened_ignores_gate() {
-  sed -i 's@(if \$i != null and \$r.gate == "pass" then .maxpass@(if $i != null then .maxpass@' "$1"
+  sed -i 's@(if \$i != null and (\$r.gate == "pass" or (\$r | is_gate_pass)) then .maxpass@(if $i != null then .maxpass@' "$1"
+}
+
+# `reopened` goes blind to the RECORDED CLOSURE again: only a pass that bought a session counts, so
+# the same pipeline history answers 0 or 1 depending on whether the phase cost money — the defect
+# `20260831-a-rodada-que-andou` measured and this mission closed. Caught by `reopened reads the same
+# history whether the closure was free or paid, and counts BOTH` in check-autonomy.sh, which reads
+# `free:0 paid:2` under this mutant where it demands `free:2 paid:2`; the paid half is deliberately
+# blind to it and is what proves the free half is not measuring an empty file.
+mut_AUTONOMY_reopened_closure_blind() {
+  sed -i 's@(\$r.gate == "pass" or (\$r | is_gate_pass))@$r.gate == "pass"@' "$1"
 }
 
 # launches and reopened drawn over the COMPARABLE sessions of the mission instead of every local
@@ -2560,6 +2599,85 @@ mut_AUTONOMY_reopened_ignores_gate() {
 # population is exactly the clean rows — launches 2 → 1 and reopened 1 → 0.
 mut_AUTONOMY_reopened_comparable_only() {
   sed -i 's@| (\.\[0\] | mission_key | history_of) as \$every$@| . as $every@' "$1"
+}
+
+# I4, DOOR 1 of 2. `sdd close` goes back to spending a paid session and writing nothing to the
+# ledger — the state `docs/pipeline.md` has promised against since the file existed, and the reason
+# every close in the kit history was invisible to the judge that counts `launches`. Removing the
+# CALL and not the constructor is deliberate: the defect this increment closes IS an absent call
+# site, and emptying `autonomy_close_row` would let a future writer delete the call while the
+# mutant still died on the body. Caught by the four `close ...` assertions of check-autonomy.sh —
+# measured under the sabotage, not counted by hand: `close writes one row naming the issue, the
+# session it spent and its own invocation` (reads `rows:0` where it demands `rows:1`), `close
+# writes a row that is not a session row wearing a CLOSE label`, `close row carries cost_usd, and
+# the turns, cache and harness beside it`, and `close writes its row even when the hat guard fires,
+# and still stops the line`.
+mut_RUN_close_writes_no_row() {
+  # Anchored on the CALL and never on its argument list: the r1 of the 2026-09-11 judge mission
+  # gave the row four more arguments (the money), the old anchor spelled all four of the original
+  # ones, and the mutant went CATALOGUE-BROKEN — an anchor that rots is a mutant that stops
+  # measuring while the score still says 300. `.*` over the arguments so the next one costs nothing.
+  sed -i 's@^  autonomy_close_row .*$@  :@' "$1"
+}
+
+# R6 of the 2026-09-11 judge mission, and the regression it exists to keep buried: `cmd_close` sends
+# the session's stderr back INTO the `.jsonl` it then parses. `jq` aborts on the first non-JSON line
+# rather than skipping it, so one ordinary notice ahead of the stream empties `stream_summary` and
+# `hat_init_facts` both, the `2>/dev/null || echo ""` guards swallow the rc, and cost, turns, cache
+# and harness go back to `null` — r1 finding #7 undone with a green sensor on top of it. It is a
+# fail-open, which is why the mutant is narrow: it changes the redirection and nothing else, and the
+# assertion that must die is the only one in the file whose stub writes to stderr. Measured under
+# the sabotage rather than counted by hand: `close keeps stderr out of the stream it parses, so a
+# noisy session still carries its money` reads `armed:false pure:false null null` where it demands
+# `armed:true pure:true 0.0362104 2.1.260` — and it is the ONLY assertion of the whole suite that
+# moves, which is the point: every clean-stub world stays green, exactly as it did before the fix.
+mut_RUN_close_stderr_into_stream() {
+  sed -i 's@) > "\$streamfile" 2>"\$errfile" || rc=\$?@) > "$streamfile" 2>\&1 || rc=$?@' "$1"
+}
+
+# I4, DOOR 2 of 2, and a DIFFERENT door of the same promise: `sdd retry` goes back to returning 3
+# in silence — the human relaunched the phase, the gate stayed red, the line stopped, and neither
+# the journal nor the ledger said so. The pair is one mutant per door, the shape CLAUDE.md spells
+# out, and neither kills the other: this sed touches cmd_retry only, and the close mutant above
+# leaves every escalation site alone. Caught by `sdd retry that leaves the gate red escalates: a
+# ledger row and a journal line` in check-autonomy.sh, which reads `kind: journal:+0` under this
+# mutant where it demands `kind:retry-gate-red journal:+1`.
+# r3 finding #1, and the mutant is the whole point of the fix: sabotage ONE of the two readers and
+# demand that the assertion whose title says "both readers" goes red. `def is_close` is written
+# twice in bin/sdd — cmd_autonomy first (the human reader), kaizen_series second (the judge) — and
+# the perl below slurps the file and substitutes WITHOUT /g, so only the first, the human's, moves.
+# Before the fix this mutant scored nothing: the human reader ran from a repo the close row was not
+# born in, `ledger_row_is_local` discarded it as `other_repo`, and the command never reached the arm
+# that could print `unrecognized`. Caught by `both readers admit the close row instead of filing it
+# as unrecognized` in check-autonomy.sh, alongside the two neighbours that already measured the
+# human reader — three FAILs, and the middle one is the one this mutant exists for.
+mut_RUN_close_admission_human_reader_only() {
+  perl -0pi -e 's/def is_close: \.event == "close";/def is_close: .event == "zzzz";/' "$1"
+}
+
+# r3 finding #2: the messages of `cmd_close` go back to naming the DISTILLED summary alone. Since
+# that arm streams, `$logfile` holds 0 bytes in exactly the case a human opens it for — a session
+# that died before its terminal `result` — so the two files carrying the evidence lose their only
+# mention. The fix shipped with no sensor at all (reverting it left the whole suite green, rc 0);
+# caught now by `close names the raw stream and the stderr beside the summary` in check-gates.sh,
+# whose `raw:` and `err:` terms are the two that move — `summary:` was always true, under both
+# shapes, which is why it is a floor and not the measurement.
+mut_RUN_close_logs_summary_only() {
+  sed -i 's/see \$close_logs/see $logfile/g' "$1"
+}
+
+# r3 finding #4: `autonomy_no_data` goes back to naming three of the four commands that write the
+# ledger, which is how the sentence told a human "you have never run those" over a file the judge's
+# own loop had already written into. The comment beside it declares the rule "writer added to the
+# runner ⇒ writer added to this sentence" and had nothing behind it. Caught by `autonomy_no_data
+# names every writer the runner has` in check-autonomy.sh, which harvests the names from the OUTPUT
+# rather than grepping them one by one, so a writer invented moves the term as well as one dropped.
+mut_RUN_no_data_drops_a_writer() {
+  sed -i "s/'sdd close' and 'sdd kaizen'/'sdd close'/" "$1"
+}
+
+mut_RETRY_gate_red_silent() {
+  sed -i 's@^  autonomy_blocked_row "retry-gate-red" "\$phase" "\$GATE_WHY"$@  :@' "$1"
 }
 
 # The guard on the narrative cell goes: `intervention note(s)` is printed for ANY mission whose slug
@@ -2896,6 +3014,29 @@ mut_AUTONOMY_historic_sentence_before_comparability() {
   sed -i 's@type == "object" and comparable and .progress_source@type == "object" and .progress_source@' "$1"
 }
 
+# ONE mutant per SIDE of the parity, because one would let the other half rot with the catalogue
+# green — the same argument that split every other pair in this file. Both are caught by the
+# `differential:` block of check-kaizen.sh and by nothing else: no assertion that reads a single
+# reader against a hard-coded number can see two readers disagreeing with each OTHER.
+#
+# Side A — the human window forgets to take the judge own sessions off the axis, so a `sdd kaizen`
+# row (mission `<date>-kaizen`, phase KAIZEN, a real row from a real writer) is counted as an
+# observation of the version it was judging, and in the kit repo — where it lands on a sha of its
+# own — it MINTS a version the judge series never heard of. Measured before the fix: the last line
+# of the table read `bbbbbbb` while `.latest.kit_sha` read `ccccccc`, over one file.
+mut_AUTONOMY_meta_row_on_the_axis() {
+  sed -i 's@^    | map(select((type == "object" and .phase == "KAIZEN") | not))$@    | map(select(true))@' "$1"
+}
+
+# Side B — the judge counts missions over every row of the slice again, so a mission whose only
+# trace on this version is a `gate_pass` enters `missions` and the ADR 0005 `composition` without
+# leaving a cell for the judge to read, and the two numbers of the judge stop reconciling with each
+# other. `guard.sufficient` reads `missions_with_session` and does NOT move — which is exactly what
+# kept the defect quiet for a whole window.
+mut_KAIZEN_missions_count_ungraded_rows() {
+  sed -i 's@^    def graded_row: .event == "session" or is_escalation;$@    def graded_row: true;@' "$1"
+}
+
 mut_KAIZEN_label_idle_blind() {
   sed -i 's@(.auto_retry == true or outcome != "advanced")@(.auto_retry == true or outcome == "churned")@' "$1"
 }
@@ -2935,7 +3076,54 @@ mut_RUN_gate_pass_off_the_derived_branch() {
 # leaves the header total through a bucket whose name is a lie about it. Caught by `the human reader
 # does not call the recorded closure unrecognized` in check-autonomy.sh, and by nothing else.
 mut_LEDGER_gate_pass_unrecognized() {
-  sed -i 's@def is_unrecognized: (is_session or is_escalation or is_gate_pass) | not;@def is_unrecognized: (is_session or is_escalation) | not;@' "$1"
+  sed -i 's@def is_unrecognized: (is_session or is_escalation or is_gate_pass or is_close) | not;@def is_unrecognized: (is_session or is_escalation) | not;@' "$1"
+}
+
+# The close row goes back to being ADMITTED but never NAMED: it enters the header total (the shell
+# `total=` counts every local row) and leaves no line, so a human adding the printed buckets to the
+# table lands one short of the header with nothing saying why. It is `unrecognized` with the alarm
+# switched off — r1 finding #1 of the 2026-09-11 judge mission, measured as header 2
+# against buckets 1. The counterpart mutant above moves the row into the WRONG bucket out loud;
+# this one removes it from the arithmetic in silence, which is the quieter half of the same defect.
+# Caught by `the buckets still sum to the header total (a close row)` and by `it names the closure
+# instead, so nothing leaves the accounting in silence` in check-autonomy.sh, and by nothing else.
+mut_LEDGER_close_bucket_unnamed() {
+  sed -i '/ticket closure(s) recorded/d' "$1"
+}
+
+# `window_missions_stranded` goes back to the subtraction of unique counts. It answers the same
+# number as the positive spelling on every window whose missions sit on ONE sha each — which is why
+# both fixtures the field was born with (`winbroken`, `winwhole`) pass under it — and it answers
+# ZERO on the one window the field exists for: a mission with rows on both shas is counted in each
+# term and cancels itself out, so half the evidence of the verdict was bought on another kit
+# version and the field that reveals exactly that says `broken: false`. Fail-open, and the judge
+# reads the boolean. Caught by `guard: a mission straddling the kit change is stranded` in
+# check-kaizen.sh, and by nothing else — the two older window assertions survive it by construction.
+mut_LEDGER_stranded_by_subtraction() {
+  sed -i 's@| ($window_rows | map(select(.kit_sha != ($shas\[-1\] // null))) | map(mission_key) | unique | length) as $stranded@| (($window_rows | map(mission_key) | unique | length) - ($window_rows | map(select(.kit_sha == ($shas[-1] // null))) | map(mission_key) | unique | length)) as $stranded@' "$1"
+}
+
+# The same defect one filter over — r1 finding #2 of the 2026-09-11 judge mission. The judge's own
+# rows leave the AXIS (a row `sdd kaizen` wrote ABOUT a version is not an observation OF it), but
+# they are LOCAL, so the shell `total=` had already counted them into the header. Deleting the line
+# that names them puts the count back out of the arithmetic's reach: header 2, buckets 1, and
+# nothing on screen saying where the row went. Caught by `the buckets still sum to the header total
+# (a judge KAIZEN row)` and by `and it is named where the arithmetic can reach it` in
+# check-autonomy.sh, and — measured, not assumed — also by the `differential: ...and the meta row is
+# excluded by NAME on both sides` anti-vacuity floor in check-kaizen.sh, which pins the same
+# sentence from the judge's side. Three assertions, two sensors, and nothing else.
+mut_LEDGER_meta_bucket_unnamed() {
+  sed -i '/row(s) written by the judge excluded from the axis/d' "$1"
+}
+
+# The OTHER half of that finding, and a mutant of its own because it breaks a different sentence:
+# $local_total is what the "never part of the N counted above" line quotes to introduce the rows
+# that truly left before the header ($foreign, $norepo). Dropping the judge rows from it makes that
+# line name a number the header never printed — over a three-row ledger it read "never part of the
+# 1" under a header of "2 row(s)", a subtraction no reader can make. Caught by `the outside group
+# quotes the header total, judge row included`, and by nothing else.
+mut_LEDGER_meta_off_the_local_total() {
+  sed -i 's@| (length + $meta) as $local_total@| (length) as $local_total@' "$1"
 }
 
 # The JUDGE stops admitting the row, and it lands in `excluded.unrecognized` — the bucket the judge
@@ -2947,11 +3135,52 @@ mut_LEDGER_gate_pass_unrecognized() {
 # plan named a separate `phase_label` mutant for them, and the sabotage pass showed its kills are a
 # strict SUBSET of this one's (both take the label off `refez`; only this one moves `unrecognized`).
 # A mutant that kills nothing another does not is the redundancy CLAUDE.md says to remove rather
-# than to write a probe for, so it is not in this catalogue. Caught by `the recorded fact moves the
-# label and NOTHING else in the series` and `the recorded fact is not thrown away as unrecognized`
-# in check-kaizen.sh, and by nothing else.
+# than to write a probe for, so it is not in this catalogue.
+# ⚠️ This comment used to end "caught by <two assertions> and by nothing else", and the claim was
+# already false when it was written: the sabotage strips TWO events at once, so it kills ten
+# assertions across check-kaizen.sh and check-autonomy.sh, not two. Measured while closing r1
+# finding #9 of the 2026-09-11 judge mission — the same class of hand-written claim the three
+# stale phrases of that finding were. The exclusivity it wanted belongs to the narrow mutants
+# below, which strip ONE event and were measured one sabotage at a time.
 mut_LEDGER_gate_pass_not_admitted() {
-  sed -i 's@and (.event == "session" or is_escalation or is_gate_pass)@and (.event == "session" or is_escalation)@' "$1"
+  sed -i 's@and (.event == "session" or is_escalation or is_gate_pass or is_close)@and (.event == "session" or is_escalation)@' "$1"
+}
+
+# --- the three NARROW close mutants -----------------------------------------
+# r1 finding #8 of the 2026-09-11 judge mission. Every mutant above that touches `is_close` strips
+# it TOGETHER with `is_gate_pass`, so the assertions that killed them were killing the `gate_pass`
+# half and saying nothing about the closure — and check-kaizen.sh had no close fixture at all. Three
+# mutants, one per DEFINITION the closure passes through, because the three read three different
+# populations and one regime certified the other two by silence (measured: the first draft of the
+# fixture, with the close row sharing mission and sha with the sessions, survived all three).
+
+# The closure leaves the judge's admission list ALONE, without `is_gate_pass` for company: the row
+# the runner wrote on purpose lands in `excluded.unrecognized`, which agents/sdd-kaizen.md tells the
+# judge to read as a bug in the kit itself. Caught by `guard: a close row is recognized, never
+# counted as unrecognized` and `guard: a close row mints no version and no mission` in
+# check-kaizen.sh, and by nothing else.
+mut_KAIZEN_close_not_admitted() {
+  sed -i 's@and (.event == "session" or is_escalation or is_gate_pass or is_close)@and (.event == "session" or is_escalation or is_gate_pass)@' "$1"
+}
+
+# `graded_row` admits the closure, so a mission whose ONLY row in the graded slice is its `sdd close`
+# becomes a mission the slice bought and a detail cell with `sessions: 0` — the phantom clean grade
+# that `LEDGER_gate_pass_mints_a_cell` already refuses for the sibling event, here through the door
+# the closure opens. Only visible on the GRADED sha: off it, the row is not in the slice at all.
+# Caught by `guard: a close row mints no version and no mission` and the floor beside it, in
+# check-kaizen.sh, and by nothing else.
+mut_KAIZEN_close_mints_a_mission() {
+  sed -i 's@def graded_row: .event == "session" or is_escalation;@def graded_row: .event == "session" or is_escalation or is_close;@' "$1"
+}
+
+# `shas_in_file_order` admits the closure, so a `sdd close` written on a sha no session ever touched
+# COINS A VERSION: `latest` slides onto a slice with zero sessions, `previous` slides one down, and
+# `gate_KAIZEN` derives its expected sha from `latest.kit_sha` — a verdict already on disk stops
+# satisfying the gate. That is the reachable world in the repo that builds the kit, where the sha
+# advances between the session and the closure. Caught by `guard: a close row mints no version and
+# no mission` in check-kaizen.sh, and by nothing else.
+mut_KAIZEN_close_mints_a_version() {
+  sed -i 's@def shas_in_file_order: map(select(.event == "session" or is_escalation))@def shas_in_file_order: map(select(.event == "session" or is_escalation or is_close))@' "$1"
 }
 
 # The rubric goes back to letting a recorded closure be the SUBJECT of a cell instead of a modifier
@@ -3060,6 +3289,25 @@ mut_LEDGER_turns_not_written() {
 # opposite direction.
 mut_AUTONOMY_review_loop_counts_every_exec() {
   sed -i 's@(\.value\.phase == "EXEC" and \.key > \$fr)@.value.phase == "EXEC"@' "$1"
+}
+
+# The frontier of the review loop goes back onto the COMPARABLE subset: a non-comparable round has
+# no REVIEW row to index, `$fr` reads null and the whole cell VANISHES from a mission that laced —
+# the metric the janela-4 verdict quotes, sub-reporting exactly what it exists to count. Caught by
+# `the review loop cell is the same whether the round was comparable or not` in check-autonomy.sh
+# (`dirty:none` against `dirty:review loop US$ 16.00 (80%)`), and by its twin `a mission that laced
+# on a dirty kit still prints the cell`.
+mut_AUTONOMY_review_loop_frontier_comparable() {
+  sed -i 's@(\$every | map(\.phase) | index("REVIEW")) as \$fr@(map(.phase) | index("REVIEW")) as $fr@' "$1"
+}
+
+# The percentage denominator goes back to the comparable `$cost` while the numerator stays on every
+# session: two populations in one fraction, which is how a cell reads 160%. NOT cosmetic — the
+# number is a share, and a share of the wrong whole is a wrong number, not a rounding. Caught by
+# `the review loop cell is the same whether the round was comparable or not`, which reads
+# `dirty:review loop US$ 16.00 (160%)` under this mutant.
+mut_AUTONOMY_review_loop_denominator_split() {
+  sed -i 's@if \$whole > 0 then " (\\((\$loop \* 100 / \$whole) | round)%)"@if $cost > 0 then " (\\(($loop * 100 / $cost) | round)%)"@' "$1"
 }
 
 # Not a gate: the REVIEW session is told to fix in place again. The whole contract of this mission
@@ -3385,6 +3633,10 @@ CATALOG=(
   AUTONOMY_exclusions_glued
   KAIZEN_axis_note_own_floor
   KAIZEN_guard_floor_unpublished
+  KAIZEN_guard_harness_blind
+  KAIZEN_guard_why_silent
+  KAIZEN_window_break_blind
+  KAIZEN_window_ignores_verdict
   RUN_close_believes_rc
   RUN_close_precheck_blind
   RUN_close_already_done_spends
@@ -3399,7 +3651,14 @@ CATALOG=(
   KAIZEN_churn_reads_ok
   AUTONOMY_launches_counts_rows
   AUTONOMY_reopened_ignores_gate
+  AUTONOMY_reopened_closure_blind
   AUTONOMY_reopened_comparable_only
+  RUN_close_writes_no_row
+  RUN_close_stderr_into_stream
+  RUN_close_admission_human_reader_only
+  RUN_close_logs_summary_only
+  RUN_no_data_drops_a_writer
+  RETRY_gate_red_silent
   AUTONOMY_notes_borrowed_across_repos
   LEDGER_progress_not_written
   EXEC_tally_counts_done
@@ -3420,6 +3679,8 @@ CATALOG=(
   KAIZEN_advance_rate_reads_gate
   KAIZEN_label_auto_retry_blind
   KAIZEN_label_idle_blind
+  AUTONOMY_meta_row_on_the_axis
+  KAIZEN_missions_count_ungraded_rows
   RUN_review_rounds_photo_missing
   LEDGER_rounds_leak_across_phases
   LEDGER_outcome_rounds_blind
@@ -3435,7 +3696,14 @@ CATALOG=(
   RUN_gate_pass_ignores_own_session
   RUN_gate_pass_off_the_derived_branch
   LEDGER_gate_pass_unrecognized
+  LEDGER_close_bucket_unnamed
+  LEDGER_stranded_by_subtraction
+  LEDGER_meta_bucket_unnamed
+  LEDGER_meta_off_the_local_total
   LEDGER_gate_pass_not_admitted
+  KAIZEN_close_not_admitted
+  KAIZEN_close_mints_a_mission
+  KAIZEN_close_mints_a_version
   LEDGER_gate_pass_mints_a_cell
   LEDGER_gate_pass_counted_as_session
   LEDGER_gate_pass_mints_a_version
@@ -3445,6 +3713,8 @@ CATALOG=(
   RUN_inline_retry_keeps_the_failed_verdict
   LEDGER_turns_not_written
   AUTONOMY_review_loop_counts_every_exec
+  AUTONOMY_review_loop_frontier_comparable
+  AUTONOMY_review_loop_denominator_split
   RUN_review_fixes_inline
   RUN_review_scope_blind
   RUN_review_scope_handoff_dir_verbatim

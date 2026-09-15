@@ -70,23 +70,36 @@ sum_escalations() {
 }
 
 # assert_bucket_sum <description> <reader output>
-# Every row lands in exactly one of FIVE buckets: comparable session, non-comparable session,
-# escalation, recorded gate closure, unrecognized. If the filter drops a row (finding 3) or
+# Every row lands in exactly one of SEVEN buckets: comparable session, non-comparable session,
+# escalation, recorded gate closure, recorded ticket closure, judge row, unrecognized. If the filter drops a row (finding 3) or
 # double-counts one, this sum drifts from the header total — an anti-vacuity check a broken filter
 # cannot pass by accident, unlike any single count in isolation.
 #
 # It was four until 2026-08-31, and the fifth is what an event added to the enum costs: a row the
 # reader recognises has to be NAMED somewhere the arithmetic closes over, or "recognised" degrades
 # into "silently dropped" — which is the same defect as `unrecognized`, only quieter.
+#
+# The SIXTH landed with r1 finding #1 of the 2026-09-11 judge mission, and it is the
+# same sentence collected a second time: `event:"close"` was admitted to the enum (so it stopped
+# being a stray) without being named anywhere this sum closes over. Measured on a two-row fixture —
+# header 2, buckets 1 — and invisible to the whole suite because no fixture next to an
+# assert_bucket_sum carried a close row.
+#
+# The SEVENTH landed with r1 finding #2 of the same round, one filter over: the `$meta` split
+# drops every KAIZEN row before the buckets, but those rows are LOCAL, so the shell `total=` had
+# already counted them. Same header 2 against buckets 1, and the comment beside the split asserted
+# the opposite — which is why the property lives here and not in prose.
 assert_bucket_sum() {
-  local desc="$1" out="$2" total comparable noncomp escal closed stray sum
+  local desc="$1" out="$2" total comparable noncomp escal closed closes meta stray sum
   total="$(num_before "$out" 'row\(s\)')"; total="${total:-0}"
   comparable="$(sum_sessions "$out")"
   noncomp="$(num_before "$out" 'non-comparable')"; noncomp="${noncomp:-0}"
   escal="$(sum_escalations "$out")"
   closed="$(num_before "$out" 'gate\(s\) closed without a session')"; closed="${closed:-0}"
+  closes="$(num_before "$out" 'ticket closure\(s\) recorded')"; closes="${closes:-0}"
+  meta="$(num_before "$out" 'row\(s\) written by the judge')"; meta="${meta:-0}"
   stray="$(num_before "$out" 'unrecognized')"; stray="${stray:-0}"
-  sum=$((comparable + noncomp + escal + closed + stray))
+  sum=$((comparable + noncomp + escal + closed + closes + meta + stray))
   assert_eq "$desc" "$total" "$sum"
 }
 
@@ -349,10 +362,28 @@ assert_eq "an escalation row carries no cache_read" "blocked false" \
 # again. Leaving it out of the ledger would hide the strongest friction signal there is.
 echo "== retry invocation =="
 : > "$LEDGER"
-"$SDD" retry "$MISSION" >/dev/null 2>&1
-assert_eq "sdd retry writes one session row" "1" "$(nrows)"
-assert_eq "and marks itself as a retry invocation" "retry" "$(rows '.invocation')"
-assert_eq "with its own run_id" "true" "$(rows '(.run_id | length) > 0')"
+RETRY_LOG_BEFORE="$(grep -c 'BLOCKED' "$FIX/.sdd/logs/$MISSION/pipeline.log" 2>/dev/null || true)"
+"$SDD" retry "$MISSION" >/dev/null 2>&1; RETRY_RC=$?
+RETRY_LOG_AFTER="$(grep -c 'BLOCKED' "$FIX/.sdd/logs/$MISSION/pipeline.log" 2>/dev/null || true)"
+assert_eq "sdd retry writes one session row" "1" "$(rows 'select(.event == "session") | 1' | grep -c .)"
+assert_eq "and marks itself as a retry invocation" "retry" "$(rows 'select(.event == "session") | .invocation')"
+assert_eq "with its own run_id" "true" "$(rows 'select(.event == "session") | (.run_id | length) > 0')"
+# I4 — `sdd retry` that leaves the gate RED ends the run with rc 3, and an rc 3 is an escalation:
+# `docs/pipeline.md` promises one JSON line per session spent OR escalation, and this door used to
+# return 3 in silence — no ledger row, no BLOCKED line in the journal. The judge counts escalations
+# by `kind`, so a human-forced retry that ended stopped simply did not exist for it, and `sdd
+# autonomy` read the mission as one quiet session.
+#
+# READ AS A GROUP, and each term is a floor for the others: `rc:3` proves the run really ended
+# stopped (on a green gate there is nothing to escalate and the assertion would be about the wrong
+# world); the journal delta proves the human-facing half moved in the SAME invocation rather than
+# having been there all along; and `kind` proves WHICH escalation, so a row copied from the
+# no-progress site next door still fails by name.
+assert_eq "sdd retry that leaves the gate red escalates: a ledger row and a journal line" \
+  "rc:3 kind:retry-gate-red journal:+1" \
+  "rc:$RETRY_RC kind:$(rows 'select(.event == "blocked") | .kind') journal:+$(( ${RETRY_LOG_AFTER:-0} - ${RETRY_LOG_BEFORE:-0} ))"
+assert_eq "and the escalation names the phase the human relaunched" "EXEC" \
+  "$(rows 'select(.event == "blocked") | .phase')"
 # L4 of the 2026-09-03 audit: the human's hand is written by the RUNNER, not remembered by the
 # human. Measured: three launches and zero `- intervention:` notes on 20260901-o-revisor-so-acha,
 # three interventions and zero notes on 20260902-o-rascunho-legado-fala-cru. The reader did not
@@ -772,7 +803,10 @@ rm -f "$MOVE_MARKER"
 git -C "$FIX" add -A
 git -C "$FIX" commit -qm "chore: reset move marker for the sdd-retry scenario"
 "$SDD" retry "$MISSION" >/dev/null 2>&1
-assert_eq "sdd retry that changed the disk records moved:true" "true" "$(rows '.moved')"
+# Scoped to the session row: since I4 the escalation beside it carries no `moved` at all (the rule
+# every non-session row here follows), and an unscoped filter would compare "true" against two lines.
+assert_eq "sdd retry that changed the disk records moved:true" "true" \
+  "$(rows 'select(.event == "session") | .moved')"
 
 # --- the phase session stops being a blind spot while it runs ---------------
 # `--output-format json` prints ONE blob, and only once the session is already over: the log file
@@ -1512,8 +1546,11 @@ assert_eq "the world has a round on disk, so the derived phase below is DOCS and
 "$SDD" retry "$MISSION" >/dev/null 2>&1 || true
 # The second floor: the phase actually retried is DOCS. If the derivation ever lands somewhere else
 # the assertion below would be measuring the guard of the phase it is supposed to exempt.
+# `length` counts the SESSION rows and not the file: since I4 a `sdd retry` that leaves the gate
+# red also writes its escalation, so "one row" would be a claim about the escalation existing
+# rather than about this retry having spent exactly one session.
 assert_eq "the retried phase is DOCS, which is neither EXEC nor REVIEW" "DOCS retry 1" \
-  "$(jq -r -s '"\(.[0].phase) \(.[0].invocation) \(length)"' "$LEDGER")"
+  "$(jq -r -s '[.[] | select(.event == "session")] | "\(.[0].phase) \(.[0].invocation) \(length)"' "$LEDGER")"
 assert_eq "and its row carries all six count fields as null" "true" \
   "$(jq -r -s '.[0] | .rounds_before == null and .rounds_after == null and .rounds_max == null
                       and .pending_before == null and .pending_after == null
@@ -2728,6 +2765,74 @@ assert_eq "the escalations are still both named" "1" "$(grep -c 'no-progress: 1'
 assert_eq "the second kind too" "1" "$(grep -c 'increment-blocked: 1' <<< "$out")"
 assert_bucket_sum "the four buckets sum to the header total (escalations only)" "$out"
 
+# --- a recorded ticket closure is NAMED, not silently dropped ------------------------------------
+# r1 finding #1. `is_close` was added to the enum so a row the runner writes on purpose would stop
+# landing in `unrecognized` — and admitting it there was only half the job: the row entered the
+# header total (computed by the shell `total=` over ledger_row_is_local, which knows nothing about
+# any filter inside the big program) and then fell into no bucket at all. "Recognised" degraded
+# into "silently dropped", which is the same defect as `unrecognized`, only quieter — the exact
+# sentence the assert_bucket_sum header warns about.
+#
+# Why no fixture caught it: every probe of `close` above measures the WRITER (autonomy_close_row
+# emits the right row); none measured the READER. `grep -c '"event":"close"'` over this file read 0
+# before this block existed, so no ledger carrying a close row ever reached assert_bucket_sum.
+echo "== reader: a recorded ticket closure lands in a bucket of its own =="
+mkdir -p "$OUTSIDE/closerow"
+localize > "$OUTSIDE/closerow/autonomy-log.jsonl" <<'EOF'
+{"v":1,"ts":"2026-09-12T10:00:00-03:00","event":"session","run_id":"c1","invocation":"run","kit_sha":"ccc1111","kit_dirty":false,"project":"p1","repo":"/p1","mission":"m20","phase":"EXEC","step":"EXEC","agent":"sdd-executor","model":"opus","attempt":1,"auto_retry":false,"session":"c1s","rc":0,"dur_s":10,"cost_usd":1.0,"moved":true,"gate":"pass","gate_why":""}
+{"v":1,"ts":"2026-09-12T10:05:00-03:00","event":"close","run_id":"c1","invocation":"close","kit_sha":"ccc1111","kit_dirty":false,"project":"p1","repo":"/p1","mission":"m20","issue":"SQ-999","session":"c2s","rc":0,"verified":true}
+EOF
+out_close="$( SDD_STATE_DIR="$OUTSIDE/closerow" "$SDD" autonomy 2>&1 )"
+# THE FLOOR, and it comes first: without it every assertion below would be measuring a reader that
+# never saw a close row, and the bucket sum would close by vacuity over a one-row ledger.
+assert_eq "the fixture really does put a close row in the header total" "2" \
+  "$(num_before "$out_close" 'row\(s\)')"
+# The row the runner wrote on purpose is still not a stray — the half of the enum that already
+# worked, pinned here so a fix to the bucket cannot be made by demoting the row back.
+assert_eq "the human reader does not call the recorded closure unrecognized" "0" \
+  "$(grep -c 'unrecognized' <<< "$out_close")"
+assert_eq "it names the closure instead, so nothing leaves the accounting in silence" "1" \
+  "$(num_before "$out_close" 'ticket closure\(s\) recorded')"
+assert_bucket_sum "the buckets still sum to the header total (a close row)" "$out_close"
+
+# --- a judge row leaves the AXIS, never the header ------------------------------------------------
+# r1 finding #2 of the 2026-09-11 judge mission, and it is finding #1 collected one filter over: the
+# `$meta` split drops every `phase == "KAIZEN"` row before the buckets (the judge must never grade
+# the version it is observing), but the header total is the shell `total=`, computed over
+# ledger_row_is_local — which knows nothing about any filter inside the big program. A judge row is
+# LOCAL, so it entered that total and then left no line: header 2, buckets 1.
+#
+# What made it worse than a missing count is that the comment beside the split ASSERTED the
+# opposite ("these rows were never in the header total"), and the sentence printed rode in the
+# `$outside` group under "never part of the N counted above" — which is true of $foreign and
+# $norepo, because ledger_row_is_local already dropped those, and false of this one. A comment
+# asserting a property is not the property; this block is.
+echo "== reader: a judge row leaves the axis but stays in the header =="
+mkdir -p "$OUTSIDE/metarow"
+localize > "$OUTSIDE/metarow/autonomy-log.jsonl" <<'EOF'
+{"v":1,"ts":"2026-09-12T10:00:00-03:00","event":"session","run_id":"k1","invocation":"run","kit_sha":"kkk1111","kit_dirty":false,"project":"p1","repo":"/p1","mission":"m21","phase":"EXEC","step":"EXEC","agent":"sdd-executor","model":"opus","attempt":1,"auto_retry":false,"session":"k1s","rc":0,"dur_s":10,"cost_usd":1.0,"moved":true,"gate":"pass","gate_why":""}
+{"v":1,"ts":"2026-09-12T10:05:00-03:00","event":"session","run_id":"k2","invocation":"kaizen","kit_sha":"kkk1111","kit_dirty":false,"project":"p1","repo":"/p1","mission":"2026-09-12-kaizen","phase":"KAIZEN","step":"KAIZEN","agent":"sdd-kaizen","model":"opus","attempt":1,"auto_retry":false,"session":"k2s","rc":0,"dur_s":10,"cost_usd":2.0,"moved":true,"gate":"pass","gate_why":""}
+{"v":1,"ts":"2026-09-12T10:06:00-03:00","event":"session","run_id":"k3","invocation":"run","kit_sha":"kkk1111","kit_dirty":false,"project":"other","repo":"/elsewhere","mission":"m22","phase":"EXEC","step":"EXEC","agent":"sdd-executor","model":"opus","attempt":1,"auto_retry":false,"session":"k3s","rc":0,"dur_s":10,"cost_usd":1.0,"moved":true,"gate":"pass","gate_why":""}
+EOF
+out_meta="$( SDD_STATE_DIR="$OUTSIDE/metarow" "$SDD" autonomy 2>&1 )"
+# THE FLOOR, first: without it every assertion below would close by vacuity over a ledger whose
+# judge row the reader never saw at all.
+assert_eq "the fixture really does put a judge row in the header total" "2" \
+  "$(num_before "$out_meta" 'row\(s\)')"
+# The half that already worked, pinned so the bucket cannot be fixed by putting the judge row back
+# on the axis it must never grade.
+assert_eq "the judge row still does not grade the version it observes" "1" \
+  "$(sum_sessions "$out_meta")"
+assert_eq "and it is named where the arithmetic can reach it" "1" \
+  "$(num_before "$out_meta" 'row\(s\) written by the judge')"
+# The OTHER half of the same finding, and it needs the foreign row above to be reachable at all:
+# the sentence that introduces the truly-outside rows quotes a total, and that total has to be the
+# one the header printed. $meta had left it, so over this ledger it said "never part of the 1" under
+# a header reading "2 row(s)" — a subtraction the reader cannot make.
+assert_eq "the outside group quotes the header total, judge row included" "1" \
+  "$(grep -c 'never part of the 2 counted above' <<< "$out_meta")"
+assert_bucket_sum "the buckets still sum to the header total (a judge KAIZEN row)" "$out_meta"
+
 # --- the two readers of the ledger agree on the axis -------------------------
 # `sdd autonomy` (the human's window) and `sdd kaizen --series` (the judge's source of truth) read
 # the SAME file. The series has always sliced escalations INSIDE a kit_sha group; this reader
@@ -3203,10 +3308,94 @@ assert_eq "two comparable sessions, two launches, one reopened: the dirty QA bel
   "2 2 1" \
   "$(cell_of m1 "$out_pop" 'session') $(cell_of m1 "$out_pop" 'launch') $(cell_of m1 "$out_pop" 'reopened')"
 assert_eq "and the accounting paragraph names the population difference, once" "1" \
-  "$(grep -c '(launches and reopened are counted over every session of the mission, 1 of them non-comparable)' <<< "$out_pop")"
+  "$(grep -c '(launches, reopened and the review loop are counted over every session of the mission, 1 of them non-comparable)' <<< "$out_pop")"
 assert_eq "without the dirty row: one launch, no reopening, and the sentence is gone" "1 0 0" \
   "$(cell_of m1 "$out_popc" 'launch') $(cell_of m1 "$out_popc" 'reopened') $(grep -c 'counted over every session' <<< "$out_popc")"
 assert_bucket_sum "the four buckets still sum to the header total (--by-mission, a dirty launch)" "$out_pop"
+
+# --- one population decision, two defects: the closure and the loop frontier -------------------
+# Both halves were TODO items of the same shape — a cell drawn over a population narrower than the
+# fact it names — and one decision closes them: the mission HISTORY is every local row of the
+# mission, comparable or not, session or recorded closure.
+#
+# (a) `reopened` was blind to the closure. It reads "a phase whose gate had already PASSED", and
+# since 2026-08-31 a gate can pass WITHOUT buying a session: `gate_pass_rows` writes an
+# `event: "gate_pass"` row when the pipeline moves on for free. Over `is_session` alone that
+# closure is invisible, so the same pipeline history answered 0 or 1 depending on whether the phase
+# had COST MONEY. The pair below is exactly that: the same five phases, the two closures recorded
+# once as free rows and once as paid sessions.
+#
+# WITNESS, because the property is universal and one fixture walks one regime: the closure ledger
+# carries TWO reopenings, not one. A reader that entered the branch once by accident reads 1; only
+# a reader that carries `maxpass` across both closures reads 2.
+echo "== reader: --by-mission sees a closure as a pass, whether or not it cost money =="
+mkdir -p "$OUTSIDE/reopen_free" "$OUTSIDE/reopen_paid"
+localize > "$OUTSIDE/reopen_free/autonomy-log.jsonl" <<'EOF'
+{"v":1,"ts":"2026-09-05T10:00:00-03:00","event":"session","run_id":"r1","invocation":"run","kit_sha":"eeeeeee","kit_dirty":false,"project":"p1","repo":"/p1","mission":"m1","phase":"EXEC","step":"EXEC","agent":"sdd-executor","model":"opus","attempt":1,"auto_retry":false,"session":"s1","rc":0,"dur_s":10,"cost_usd":1.0,"moved":true,"gate":"pass","gate_why":"x"}
+{"v":1,"ts":"2026-09-05T10:01:00-03:00","event":"gate_pass","run_id":"r1","invocation":"run","kit_sha":"eeeeeee","kit_dirty":false,"project":"p1","repo":"/p1","mission":"m1","phase":"QA"}
+{"v":1,"ts":"2026-09-05T10:02:00-03:00","event":"session","run_id":"r2","invocation":"run","kit_sha":"eeeeeee","kit_dirty":false,"project":"p1","repo":"/p1","mission":"m1","phase":"EXEC","step":"EXEC","agent":"sdd-executor","model":"opus","attempt":1,"auto_retry":false,"session":"s2","rc":0,"dur_s":10,"cost_usd":1.0,"moved":true,"gate":"pass","gate_why":"x"}
+{"v":1,"ts":"2026-09-05T10:03:00-03:00","event":"gate_pass","run_id":"r2","invocation":"run","kit_sha":"eeeeeee","kit_dirty":false,"project":"p1","repo":"/p1","mission":"m1","phase":"PR"}
+{"v":1,"ts":"2026-09-05T10:04:00-03:00","event":"session","run_id":"r3","invocation":"run","kit_sha":"eeeeeee","kit_dirty":false,"project":"p1","repo":"/p1","mission":"m1","phase":"EXEC","step":"EXEC","agent":"sdd-executor","model":"opus","attempt":1,"auto_retry":false,"session":"s3","rc":0,"dur_s":10,"cost_usd":1.0,"moved":true,"gate":"pass","gate_why":"x"}
+EOF
+# The twin is DERIVED, never hand-written twice: the two free closures become paid sessions of the
+# same phase and the same order. Only the EVENT of those two rows differs between the files.
+# `localize` rewrites the repo field, so the sed anchors on the EVENT and the PHASE alone — a
+# pattern carrying the literal `/p1` matched nothing and left two identical files, which is why
+# the floor assertion below counts the rows it expects to have changed.
+sed -e 's|"event":"gate_pass"\(.*\)"phase":"QA"|"event":"session"\1"phase":"QA","step":"QA:close","agent":"sdd-qa","model":"opus","attempt":1,"auto_retry":false,"session":"p1s","rc":0,"dur_s":10,"cost_usd":0.0,"moved":true,"gate":"pass","gate_why":"x"|' \
+    -e 's|"event":"gate_pass"\(.*\)"phase":"PR"|"event":"session"\1"phase":"PR","step":"PR","agent":"sdd-publisher","model":"sonnet","attempt":1,"auto_retry":false,"session":"p2s","rc":0,"dur_s":10,"cost_usd":0.0,"moved":true,"gate":"pass","gate_why":"x"|' \
+    "$OUTSIDE/reopen_free/autonomy-log.jsonl" > "$OUTSIDE/reopen_paid/autonomy-log.jsonl"
+# The twin has to DIFFER, and on exactly the two rows the argument is about — a sed whose pattern
+# stopped matching would leave two identical files and the differential would compare a file
+# with itself, green and empty.
+assert_eq "the paid twin differs from the free one on exactly the two closure rows" "2 0 2" \
+  "$(diff "$OUTSIDE/reopen_free/autonomy-log.jsonl" "$OUTSIDE/reopen_paid/autonomy-log.jsonl" | grep -c '^<') $(grep -c '"event":"gate_pass"' "$OUTSIDE/reopen_paid/autonomy-log.jsonl") $(grep -c '"event":"gate_pass"' "$OUTSIDE/reopen_free/autonomy-log.jsonl")"
+out_rfree="$( SDD_STATE_DIR="$OUTSIDE/reopen_free" "$SDD" autonomy --by-mission 2>&1 )"
+out_rpaid="$( SDD_STATE_DIR="$OUTSIDE/reopen_paid" "$SDD" autonomy --by-mission 2>&1 )"
+assert_eq "reopened reads the same history whether the closure was free or paid, and counts BOTH" \
+  "free:2 paid:2" \
+  "free:$(cell_of m1 "$out_rfree" 'reopened') paid:$(cell_of m1 "$out_rpaid" 'reopened')"
+# The other half of the population promise: admitting the closure into the reopened history must
+# NOT move `session(s)`, the outcomes or US$, which are the comparable sum this file closes against
+# the version table — and must not move `launch(es)` either, which is distinct run_id over sessions.
+assert_eq "and the comparable cells do not move: three sessions, US\$ 3.00, three launches" "1" \
+  "$(grep -cE '^  m1  3 session\(s\) · 3 advanced · 0 churned · 0 idle · 3 launch\(es\) · 2 reopened · US\$ 3\.00$' <<< "$out_rfree")"
+assert_bucket_sum "the four buckets still sum to the header total (a free closure in the history)" "$out_rfree"
+
+# (b) the review loop FRONTIER was computed over the comparable subset, so a non-comparable round
+# hid the EXEC sessions that round itself had sent back — and in the limit the cell VANISHED from a
+# mission that had laced. It is the metric the janela-4 verdict quotes (52%, 23%, 66%), so it
+# sub-reported exactly what it exists to count. Same decision as (a): the frontier and the loop are
+# drawn over every local session of the mission, and so is the percentage denominator — a numerator
+# over one population and a denominator over another is how a cell reads 160%.
+#
+# DIFFERENTIAL, and the strongest shape available here: the SAME three sessions, once with the
+# REVIEW row clean and once with it dirty. The cell has to be identical — a round that landed on a
+# dirty kit was still a round.
+echo "== reader: --by-mission draws the review loop over every session of the mission =="
+mkdir -p "$OUTSIDE/loopclean" "$OUTSIDE/loopdirty"
+localize > "$OUTSIDE/loopclean/autonomy-log.jsonl" <<'EOF'
+{"v":1,"ts":"2026-09-05T11:00:00-03:00","event":"session","run_id":"r1","invocation":"run","kit_sha":"eeeeeee","kit_dirty":false,"project":"p1","repo":"/p1","mission":"m1","phase":"EXEC","step":"EXEC","agent":"sdd-executor","model":"opus","attempt":1,"auto_retry":false,"session":"s1","rc":0,"dur_s":10,"cost_usd":4.0,"moved":true,"gate":"pass","gate_why":"x"}
+{"v":1,"ts":"2026-09-05T11:01:00-03:00","event":"session","run_id":"r1","invocation":"run","kit_sha":"eeeeeee","kit_dirty":false,"project":"p1","repo":"/p1","mission":"m1","phase":"REVIEW","step":"REVIEW","agent":"sdd-reviewer","model":"opus","attempt":1,"auto_retry":false,"session":"s2","rc":0,"dur_s":10,"cost_usd":10.0,"moved":true,"gate":"fail","gate_why":"x"}
+{"v":1,"ts":"2026-09-05T11:02:00-03:00","event":"session","run_id":"r1","invocation":"run","kit_sha":"eeeeeee","kit_dirty":false,"project":"p1","repo":"/p1","mission":"m1","phase":"EXEC","step":"EXEC","agent":"sdd-executor","model":"opus","attempt":1,"auto_retry":false,"session":"s3","rc":0,"dur_s":10,"cost_usd":6.0,"moved":true,"gate":"pass","gate_why":"x"}
+EOF
+sed '/"phase":"REVIEW"/s|"kit_dirty":false|"kit_dirty":true|' \
+  "$OUTSIDE/loopclean/autonomy-log.jsonl" > "$OUTSIDE/loopdirty/autonomy-log.jsonl"
+assert_eq "the dirty twin differs from the clean one on exactly the REVIEW row" "1 1" \
+  "$(diff "$OUTSIDE/loopclean/autonomy-log.jsonl" "$OUTSIDE/loopdirty/autonomy-log.jsonl" | grep -c '^<') $(grep -c '"kit_dirty":true' "$OUTSIDE/loopdirty/autonomy-log.jsonl")"
+out_lc="$( SDD_STATE_DIR="$OUTSIDE/loopclean" "$SDD" autonomy --by-mission 2>&1 )"
+out_ld="$( SDD_STATE_DIR="$OUTSIDE/loopdirty" "$SDD" autonomy --by-mission 2>&1 )"
+# rl_cell above is bound to the rl1 fixture; this one takes the mission, same shape and same
+# `|| echo none` covering the whole pipeline — "the cell is not there" is an ANSWER below.
+loop_cell() { mission_line "$1" "$2" | grep -oE 'review loop US\$ [0-9]+\.[0-9][0-9] \([0-9]+%\)' || echo none; }
+assert_eq "the review loop cell is the same whether the round was comparable or not" \
+  "clean:review loop US\$ 16.00 (80%) dirty:review loop US\$ 16.00 (80%)" \
+  "clean:$(loop_cell m1 "$out_lc") dirty:$(loop_cell m1 "$out_ld")"
+# And the cell does not VANISH: with the frontier over the comparable subset alone the dirty
+# ledger had no REVIEW row to index, so `$fr` was null and the whole suffix went missing — the
+# limit case the TODO item named. `none` is what rl_cell answers then, and it must not appear.
+assert_eq "a mission that laced on a dirty kit still prints the cell" "1 0" \
+  "$(grep -cE '^  m1  ' <<< "$out_ld") $(loop_cell m1 "$out_ld" | grep -c '^none$')"
 
 # --- the narrative cell, and the `?` that is gone --------------------------------------------------
 # The official count is `launch(es)`, on every line. The `- intervention:` notes stay as what the
@@ -4037,6 +4226,17 @@ out_norows="$( SDD_STATE_DIR="$OUTSIDE/blanklines" "$SDD" autonomy 2>&1 )"
 assert_eq "output: the two empty-ledger refusals are one sentence, written once" \
   "1 $(norm_ledger "$out_nofile")" \
   "$(grep -cF 'no data: the ledger at ' "$SDD") $(norm_ledger "$out_norows")"
+# r3 finding #4. The assertion above reads the PREFIX of the refusal and nothing of its body, so the
+# second line — the one that tells a human which commands would have written a row — had no probe at
+# all: dropping a writer from it passed green, while the comment beside it in bin/sdd declares the
+# rule "writer added to the runner ⇒ writer added to this sentence". Read from the OUTPUT and not
+# from the source, because what a human is told is the thing that can be wrong; the names are
+# harvested rather than grepped one by one so that a writer dropped OR a writer invented both move
+# the term. Four today: `sdd run`, `sdd retry`, `sdd close` and `sdd kaizen` — the fourth runs a
+# real KAIZEN phase through run_phase and writes a session row like any other.
+assert_eq "autonomy_no_data names every writer the runner has" \
+  "'sdd close' 'sdd kaizen' 'sdd retry' 'sdd run'" \
+  "$(grep -oE "'sdd [a-z]+'" <<< "$out_nofile" | sort -u | tr '\n' ' ' | sed 's/ $//')"
 
 # D4 — `group_by(.kit_sha)` sorts by KEY, so "the last line of the table" was the lexically-largest
 # version and not the most recent one. `kaizen_series` has always ordered by first appearance in the
@@ -4659,6 +4859,204 @@ STUB
 chmod +x "$OUTSIDE/stub/claude"
 ( cd "$KGCL2" && "$FAKEKIT/bin/sdd" close "$MISSION" >/dev/null 2>&1 ); KG8_RC=$?
 assert_eq "hat: sdd close wears the ticket hat — a close session that edits code stops the line" "3 hat-crossed" "$KG8_RC $(hat_rows)"
+# r1 finding #6 of the 2026-09-11 judge mission. The `return 3` used to run BETWEEN the paid session
+# and `autonomy_close_row`, so the one close in the kit's history most worth counting — the one that
+# crossed its hat — was the one the ledger never saw. The escalation row alone does not replace it:
+# it carries no issue, no session id and no money, so D12 would read a mission whose close cost
+# nothing. Both rows, in that order, and the rc unchanged — the line still stops.
+assert_eq "close writes its row even when the hat guard fires, and still stops the line" \
+  "3 1 1 SQ-1" \
+  "$KG8_RC $(rows 'select(.event == "close") | 1' | grep -c . || true) $(rows 'select(.event == "blocked") | 1' | grep -c . || true) $(rows 'select(.event == "close") | .issue')"
+cat > "$OUTSIDE/stub/claude" <<'STUB'
+#!/usr/bin/env bash
+echo "ERROR: the test invoked the real claude" >&2
+exit 97
+STUB
+chmod +x "$OUTSIDE/stub/claude"
+
+# =============================================================================
+# I4 — `sdd close` SPENDS a session, so it writes a row
+# =============================================================================
+# `docs/pipeline.md` promises one JSON line per session spent or escalation, and `sdd close` was
+# the one door that spent a paid session and wrote nothing: only a CLOSE line in the journal, which
+# is per-mission and per-machine and which no reader of the ledger ever opens. The judge's D12
+# counts `launches`, and every close in the kit's history was invisible to it.
+#
+# A FOURTH event, `close`, and not a `session` row wearing `phase: "CLOSE"`: a session row carries
+# `moved` and `gate` and enters the judge's arithmetic as a graded phase, and CLOSE is not a phase —
+# it has no gate, it derives nothing, and `current_phase()` never mentions it. The readers learn
+# the event in the same commit, through the ONE definition each program keeps.
+#
+# THE FLOOR IS DIFFERENTIAL, and it is the whole assertion rather than decoration: `sdd close` has
+# two arms, and only one of them buys a session. The already-Done arm returns before `claude` is
+# ever launched (the journal says `session=none`), so a writer that emitted the row from the top of
+# the function — the obvious wrong fix — would record a session nobody spent, which is the exact
+# class of lie `event: "gate_pass"` exists to avoid. One arm writes one row, the other writes none,
+# and neither half alone says that.
+echo "== sdd close spends a session, so it writes a row =="
+kitguard_reset
+CLW="$OUTSIDE/close-ledger"
+kitguard_world "$CLW"
+sed -i 's/^JIRA_ENABLED=false$/JIRA_ENABLED=true/' "$CLW/.sdd/config.sh"
+printf -- '---\nfase: TICKET\nissue: SQ-9\n---\n# TICKET\n' > "$CLW/docs/handoffs/$MISSION/10-ticket.md"
+# An issue that is NOT Done: the pre-check finds acli reachable, so the session runs.
+cat > "$OUTSIDE/stub/acli" <<'STUB'
+#!/usr/bin/env bash
+printf '[]\n'
+STUB
+chmod +x "$OUTSIDE/stub/acli"
+# A benign session — the empty first argument is `kitguard_stub`'s own "commit nothing anywhere",
+# so nothing here is about the kit guard and a hat-crossed row cannot be mistaken for the row
+# under test.
+# The stream this world replays carries the `init` line as well as the terminal `result`, which
+# `kitguard_stub` omits: r1 finding #7 of the 2026-09-11 judge mission is that the close row knew
+# WHICH session was spent and not what it COST, and the harness version lives on the init line.
+# Same two captured fixtures every other stub in this file replays, concatenated by $INIT_CLEAN —
+# nothing typed from memory here either.
+cat > "$OUTSIDE/stub/claude" <<STUB
+#!/usr/bin/env bash
+n=\$(( \$(cat "$KIT_SESSION_COUNT" 2>/dev/null || echo 0) + 1 ))
+printf '%s\n' "\$n" > "$KIT_SESSION_COUNT"
+cat "$INIT_CLEAN"
+exit 0
+STUB
+chmod +x "$OUTSIDE/stub/claude"
+( cd "$CLW" && "$FAKEKIT/bin/sdd" close "$MISSION" >/dev/null 2>&1 ) || true
+CLOSE_ROWS="$(rows 'select(.event == "close") | 1' | grep -c . || true)"
+CLOSE_SID="$(rows 'select(.event == "close") | .session')"
+# The row has to name the SESSION the runner handed `claude` via `--session-id`, or it records a
+# closure without saying which paid session produced it — the same defect `032c09c` fixed for the
+# forked retry row. The journal is the independent witness: it already carried that id before this
+# row existed, so agreement between the two is a fact neither writer can fake alone.
+CLOSE_JOURNAL_SID="$(grep -oE 'CLOSE .*session=[^ ]+' "$CLW/.sdd/logs/$MISSION/pipeline.log" 2>/dev/null | tail -1 | grep -oE 'session=[^ ]+' | cut -d= -f2 || true)"
+assert_eq "close writes one row naming the issue, the session it spent and its own invocation" \
+  "rows:1 issue:SQ-9 invocation:close verified:false sid-agrees:true" \
+  "rows:$CLOSE_ROWS issue:$(rows 'select(.event == "close") | .issue') invocation:$(rows 'select(.event == "close") | .invocation') verified:$(rows 'select(.event == "close") | .verified') sid-agrees:$( [ -n "$CLOSE_SID" ] && [ "$CLOSE_SID" = "$CLOSE_JOURNAL_SID" ] && echo true || echo false )"
+# NO session fields, on the rule every non-session row in this file already follows: a close spent
+# no gate and moved no increment, and a zeroed `moved` or `gate` would enter the judge's arithmetic
+# as a phase that ran and said nothing.
+assert_eq "close writes a row that is not a session row wearing a CLOSE label" "close false false" \
+  "$(rows 'select(.event == "close") | .event') $(rows 'select(.event == "close") | has("moved")') $(rows 'select(.event == "close") | has("gate")')"
+# r1 finding #7. The row named the session and stayed silent about the money: `sdd close` buys an
+# opus-class session per mission, and D12 — US$ per merged PR — read every one of them as free. The
+# four numbers come from the SAME two definitions run_phase uses (`stream_summary` for the terminal
+# result, `hat_init_facts` for the harness the session ran on), never from a second parser written
+# here, which is why the close arm now streams like every other session this file replays.
+# The values are the captured fixture's own: 0.0362104 USD, 1 turn, 18134 cache-read tokens, harness
+# 2.1.260. `dur_s` is wall clock, so it is asked as "a number, not null" — pinning a duration would
+# be pinning the machine the suite runs on.
+assert_eq "close row carries cost_usd, and the turns, cache and harness beside it" \
+  "0.0362104 1 18134 2.1.260 true" \
+  "$(rows 'select(.event == "close") | "\(.cost_usd) \(.turns) \(.cache_read) \(.harness) \(.dur_s != null and (.dur_s | type) == "number")"')"
+# r2 finding #1, and the reason the assertion ABOVE could not see it: no `claude` stub in this file
+# ever wrote a byte to stderr, so "the close row carries the money" was true over a stream that was
+# never dirty. `jq` ABORTS on the first line that is not JSON — it does not skip it — so a single
+# notice printed ahead of the stream empties both `stream_summary` and `hat_init_facts`, the two
+# `2>/dev/null || echo ""` guards swallow the rc, and the four numbers fall back to `null`: r1
+# finding #7 back, now with a green sensor on top of it. The fix is the shape `run_phase` already
+# uses (stderr to a sibling `.err`), and THIS is the world that tells the two shapes apart.
+kitguard_reset
+CLW3="$OUTSIDE/close-ledger-dirty-stderr"
+kitguard_world "$CLW3"
+sed -i 's/^JIRA_ENABLED=false$/JIRA_ENABLED=true/' "$CLW3/.sdd/config.sh"
+printf -- '---\nfase: TICKET\nissue: SQ-9\n---\n# TICKET\n' > "$CLW3/docs/handoffs/$MISSION/10-ticket.md"
+cat > "$OUTSIDE/stub/acli" <<'STUB'
+#!/usr/bin/env bash
+printf '[]\n'
+STUB
+chmod +x "$OUTSIDE/stub/acli"
+# The SAME stream every other stub replays, plus one ordinary notice on stderr — the kind a real
+# `claude` prints (a deprecation, an update notice). Nothing else about this world differs.
+CLOSE_STDERR_MARK="$OUTSIDE/close-stderr-was-written"
+rm -f "$CLOSE_STDERR_MARK"
+cat > "$OUTSIDE/stub/claude" <<STUB
+#!/usr/bin/env bash
+n=\$(( \$(cat "$KIT_SESSION_COUNT" 2>/dev/null || echo 0) + 1 ))
+printf '%s\n' "\$n" > "$KIT_SESSION_COUNT"
+printf 'armed\n' > "$CLOSE_STDERR_MARK"
+printf 'Warning: some notice on stderr\n' >&2
+cat "$INIT_CLEAN"
+exit 0
+STUB
+chmod +x "$OUTSIDE/stub/claude"
+( cd "$CLW3" && "$FAKEKIT/bin/sdd" close "$MISSION" >/dev/null 2>&1 ) || true
+# FLOOR, and it is the whole assertion: without proof that the stub actually printed to stderr,
+# a green here would only mean "the poison was never armed" — the regime this file refuses.
+#
+# ⚠️ r3 finding #3, and the floor used to be dependent on the very property it guards: `armed:` read
+# the `.err` file, which exists ONLY because of the fix, so under the mutant it answered
+# `armed:false` — "the poison was never armed" in exactly the world where it went off, and the pair
+# `armed:true pure:false` the comment promises was unreachable. The witness now comes from the
+# STUB's own side: a marker the stub writes on the line before it prints to stderr, in a directory
+# no redirection of `cmd_close` can reach. It says the same thing under both shapes of the code,
+# which is what makes it a floor and not a second reading of the fix.
+CLOSE_DIRTY_STREAM="$(find "$CLW3/.sdd/logs/$MISSION" -name '*.stream.jsonl' 2>/dev/null | tail -1 || true)"
+CLOSE_DIRTY_ARMED=false
+if [ -s "$CLOSE_STDERR_MARK" ]; then CLOSE_DIRTY_ARMED=true; fi
+# The stream file has to be PURE JSON — every line parseable — which is the property the `.err`
+# sibling buys and `2>&1` destroys. Asked of the file itself, not of the row, so it names the cause.
+#
+# ⚠️ r3 finding #5: `jq -e` was the wrong question. `-e` makes the rc depend on the LAST value, so a
+# file that is 100% JSON whose final value is `null`/`false` exits 1 — indistinguishable from the 5
+# that a parse error gives, which is the only rc this line wants. Failed CLOSED today (the fixture
+# ends on the `result` object), so it was robustness and not a fail-open; without `-e` the rc says
+# "parseable" and nothing else.
+CLOSE_DIRTY_PURE=false
+if [ -n "$CLOSE_DIRTY_STREAM" ] && jq . "$CLOSE_DIRTY_STREAM" >/dev/null 2>&1; then CLOSE_DIRTY_PURE=true; fi
+assert_eq "close keeps stderr out of the stream it parses, so a noisy session still carries its money" \
+  "armed:true pure:true 0.0362104 2.1.260" \
+  "armed:$CLOSE_DIRTY_ARMED pure:$CLOSE_DIRTY_PURE $(rows 'select(.event == "close") | "\(.cost_usd) \(.harness)"')"
+# Both readers have to ADMIT the fourth event, or a row the runner wrote on purpose lands in
+# `excluded.unrecognized` — which the judge prompt is told to read as a bug in the kit itself. This
+# is the measured regression `gate_pass` already paid for once (`unrecognized: 1` over a ledger of
+# four sessions and one recorded closure); the pair below is what stops the fourth event repeating
+# it, in both programs, over the SAME file.
+#
+# ⚠️ It lives HERE, and the position is the assertion. r2 finding #2: the pair used to sit in the
+# already-Done arm below — three lines after `kitguard_reset` truncates the ledger and right after
+# the assertion that PROVES `rows:0` — so it asked two readers to admit a row that was not in the
+# file. Both answer `0 unrecognized` over an empty ledger no matter what they admit, and sabotaging
+# `is_close` alone in both programs left it green while its neighbours died. An admission assertion
+# whose input carries nothing of what it admits is an assertion about nothing.
+CLOSE_ADMIT_ROWS="$(rows 'select(.event == "close") | 1' | grep -c . || true)"
+assert_eq "floor: the close admission pair reads a ledger carrying a close row" "1" "$CLOSE_ADMIT_ROWS"
+# ⚠️ SECOND FLOOR, and r3 finding #1 is why there are two. The row being in the FILE is not the row
+# being in the READING: `sdd autonomy` shows only the rows born in the repo it is invoked from
+# (`ledger_row_is_local`), and this close row is born in `$CLW3` while the command used to run from
+# `$FIX`. It was discarded as `other_repo` BEFORE any classification, the command fell into the
+# "none of the N row(s) ... were born in this repo" arm — which prints no `unrecognized` line no
+# matter what the reader admits — and the `human:` term of the pair below was a CONSTANT. Measured:
+# sabotaging `is_close` in cmd_autonomy alone killed the two neighbouring assertions and left the
+# one whose title says "both readers" green. Running the human reader inside the row's own repo is
+# the fix; this floor is what keeps it honest, because a future cwd change puts the term back to a
+# constant in silence.
+CLOSE_AUT="$( CDPATH='' cd "$CLW3" && "$SDD" autonomy 2>&1 || true )"
+assert_eq "floor: the human reader reads the repo the close row was born in" "0" \
+  "$(grep -cF 'were born in this repo' <<< "$CLOSE_AUT" || true)"
+CLOSE_SER="$( "$SDD" kaizen --series 2>/dev/null || true )"
+assert_eq "both readers admit the close row instead of filing it as unrecognized" \
+  "human:0 judge:0" \
+  "human:$(grep -cE '[0-9]+ unrecognized row' <<< "$CLOSE_AUT" || true) judge:$(jq -r '.excluded.unrecognized // 0' <<< "$CLOSE_SER" 2>/dev/null || echo ?)"
+# THE OTHER HALF of the differential: an issue JIRA already reports Done returns before any session
+# is bought, and a closure nobody paid for is not a row.
+kitguard_reset
+CLW2="$OUTSIDE/close-ledger-already-done"
+kitguard_world "$CLW2"
+sed -i 's/^JIRA_ENABLED=false$/JIRA_ENABLED=true/' "$CLW2/.sdd/config.sh"
+printf -- '---\nfase: TICKET\nissue: SQ-9\n---\n# TICKET\n' > "$CLW2/docs/handoffs/$MISSION/10-ticket.md"
+cat > "$OUTSIDE/stub/acli" <<'STUB'
+#!/usr/bin/env bash
+printf '[{"key":"SQ-9","fields":{"status":{"name":"Done"}}}]\n'
+STUB
+chmod +x "$OUTSIDE/stub/acli"
+kitguard_stub "" 1
+( cd "$CLW2" && "$FAKEKIT/bin/sdd" close "$MISSION" >/dev/null 2>&1 ); CLOSE_DONE_RC=$?
+# `sessions:0` is this half's own floor: without it "no row" is also the answer of a world where
+# the close never ran at all, and the assertion would be about nothing.
+assert_eq "close writes no row when no session was spent — the already-Done arm" \
+  "rc:0 sessions:0 rows:0" \
+  "rc:$CLOSE_DONE_RC sessions:$(kitguard_sessions) rows:$(rows 'select(.event == "close") | 1' | grep -c . || true)"
+rm -f "$OUTSIDE/stub/acli"
 cat > "$OUTSIDE/stub/claude" <<'STUB'
 #!/usr/bin/env bash
 echo "ERROR: the test invoked the real claude" >&2
@@ -4805,6 +5203,12 @@ reviewscope_sessions() { cat "$REVIEWSCOPE_COUNT" 2>/dev/null || printf 0; }
 # The names the journal line reports, or "" when there is no line. `-F': '` (colon SPACE) and not
 # `-F:`: the ISO timestamp that opens every journal line is full of bare colons and none of them is
 # followed by a space.
+# DECLARED LIMIT (D15): `$NF` keeps the LAST field, so a reported path that itself contains
+# `": "` is truncated to whatever follows the final one, silently and in the diagnostic only.
+# Not a fail-open — the assertions that read this helper compare it against a fixture whose paths
+# are house-style (no colon), so a truncation here changes the compared value and turns the probe
+# RED rather than green; what degrades is the message a human reads on the way to the cause. The
+# honest fix is to recover the list by a separator a path cannot hold, not to widen the split.
 reviewscope_files() { awk -F': ' '/HAT-CROSSED/ { print $NF; exit }' <<< "$1"; }
 # The warn and the BLOCKED line both carry the reason; `warns` counts the warn alone.
 reviewscope_warns() { grep -v 'BLOCKED' <<< "$1" | grep -c 'outside its writes'; }
