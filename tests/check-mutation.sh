@@ -3024,8 +3024,14 @@ mut_AUTONOMY_historic_sentence_before_comparability() {
 # observation of the version it was judging, and in the kit repo — where it lands on a sha of its
 # own — it MINTS a version the judge series never heard of. Measured before the fix: the last line
 # of the table read `bbbbbbb` while `.latest.kit_sha` read `ccccccc`, over one file.
+# ⚠️ The anchor moved on 2026-09-15: the two hand-written spellings of "this row is the judge
+# observing" became ONE `is_meta`, and this sed went on naming the old one — which the catalogue
+# reports as CATALOGUE-BROKEN (rc 90) and not as a survivor, because a mutation that does not apply
+# is a rotted anchor, not a missing assertion. Anchored on the REMOVAL and not on the definition:
+# the definition has its own mutant (`AUTONOMY_meta_ignores_event`), and one per side is what keeps
+# the other half from rotting green.
 mut_AUTONOMY_meta_row_on_the_axis() {
-  sed -i 's@^    | map(select((type == "object" and .phase == "KAIZEN") | not))$@    | map(select(true))@' "$1"
+  sed -i 's@^    | map(select(is_meta | not))$@    | map(select(true))@' "$1"
 }
 
 # Side B — the judge counts missions over every row of the slice again, so a mission whose only
