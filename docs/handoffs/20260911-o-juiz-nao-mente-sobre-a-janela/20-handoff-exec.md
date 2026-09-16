@@ -341,11 +341,14 @@ que ela escreve. As superfícies que mudaram, e que é por onde a jornada anda:
    ⚠️ **Não rodar `sdd kaizen` de verdade nesta branch** — o piso é 3 e ele commita na branch
    corrente. Para exercitar, use um ledger de fixture, como os probes fazem.
 2. **`sdd autonomy`** — `reopened`, a fronteira do laço de revisão e a admissão da série agora leem
-   a mesma população. Compare `sdd autonomy --by-mission` com `--series` sobre o mesmo arquivo: a
+   a mesma população. Compare `sdd autonomy --by-mission` com `sdd kaizen --series` sobre o mesmo arquivo: a
    divergência que o I2 fechou aparecia exatamente aí.
 3. **O ledger `~/.sdd/autonomy-log.jsonl`** — quarto evento `event: "close"`, e o arquivo real foi
-   limpo de 11 linhas de fixture (backup ao lado). Toda view humana que conta linhas tem de
-   escopar por `.event == "session"`; foi assim que dois probes vizinhos quebraram no I4.
+   limpo de 11 linhas de fixture (backup ao lado). Toda view humana que conta **sessões** tem de
+   escopar por `.event == "session"`; foi assim que dois probes vizinhos quebraram no I4. O total do
+   cabeçalho e a soma dos baldes fazem o contrário **de propósito** — contam toda linha local, close,
+   escalada, fechamento de gate, juiz e não reconhecida inclusive —, e escopá-los por sessão quebraria
+   o `assert_bucket_sum` do `check-autonomy.sh`, que fecha a soma dos sete termos contra esse total.
 4. **`sdd health`** — a catraca do backlog passou a 95.
 
 **Por onde começar, concretamente:**
@@ -355,7 +358,7 @@ cd /home/joruge/repos/sdd_agents
 git log --oneline main..HEAD          # os commits da missão (13 incrementos)
 tests/run-all.sh                      # ~45 s, tem de sair verde
 bash tests/check-todo.sh              # ok 95 finding(s)
-./bin/sdd autonomy --series           # a forma da série, com harness e window_broken
+./bin/sdd kaizen --series             # a forma da série, com harness e window_broken
 SDD_STATE_DIR=$(mktemp -d) ./bin/sdd autonomy   # a linha 'no data:' e os quatro escritores (R7)
 sed -n '/event/,/window_broken/p' docs/pipeline.md   # o contrato que a QA confere contra a saída
 ```
