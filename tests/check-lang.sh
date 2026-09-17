@@ -138,9 +138,11 @@ files="$(surface)"
 # Re-counted against the real surface in I4 of 20260901-o-revisor-so-acha (40 + docs/graphify.md).
 # Re-counted on 2026-09-03 (20260903-a-fronteira-do-chapeu): 41 + tests/check-hat.sh +
 # agents/sdd-ticket.md + its .claude/agents copy = 44; docs/adr/0007 makes it 45 in the same mission.
+# Re-counted on 2026-09-17 (20260917-o-numero-do-adr-nao-e-prosa): tests/check-adr.sh makes it 46,
+# and docs/adr/0008 will make it 47 in the same mission — two hops, two commits, on purpose.
 n_surface="$(grep -c . <<< "$files")"
-if [ "$n_surface" -lt 45 ]; then
-  printf '  FAIL  surface shrank to %d path(s), expected at least 45 — did something move?\n' \
+if [ "$n_surface" -lt 46 ]; then
+  printf '  FAIL  surface shrank to %d path(s), expected at least 46 — did something move?\n' \
     "$n_surface" >&2
   exit 93
 fi

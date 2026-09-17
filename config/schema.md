@@ -71,6 +71,23 @@ connect that times out instead of answering. Only a connection actively **refuse
 | `QA_DOCS_PATH` | no | `docs/qa` | Where the `qa-report`/`qa-execution` skills write. The runner does not write here — the skills own it. |
 | `TODO_FILE` | no | `TODO.md` | Destination for out-of-scope findings. |
 
+## ADR traceability
+
+| Key | Required | Default | What it is |
+|---|---|---|---|
+| `ADR_CHECK` | no | `off` | How hard the PLAN and EXEC gates ask for the mission's `adr:` line. `off` ⇒ nothing. `warn` ⇒ the phase derives as usual and the run leaves one `degraded` row of kind `adr-check` in the autonomy ledger. `block` ⇒ `gate_PLAN` refuses a mission whose `adr:` is empty, `TBD` or still the template placeholder. Anything else is refused with rc 2 — the value is admitted positively, so a fourth mode has to be taught rather than arrive by omission. |
+| `ADR_DIR` | no | `docs/adr` | Where the numbered ADRs live, relative to the repo root. `sdd adr new` reserves the next free id here; `sdd adr check` reads them back. Never `/` and never empty: the value is substituted into the `sdd-planner` hat's `writes:` glob, where it would expand to `/**`. |
+
+Why the default is `off` and not `warn`: every repo that already installed the kit has no `adr:`
+key in any mission on disk, so a default that spoke would make the kit's own arrival look like a
+finding in someone else's backlog. The adoption path is the target's decision and it is gradual —
+install, run `warn` until `sdd adr check` is quiet, then `block`.
+
+⚠️ Declared limit. The scan reaches `ADR_DIR` and, when `SPEC_DIR` is set, `<SPEC_DIR>/*/spec.md`.
+A repo that also keeps a **local** ADR namespace beside a spec — `specs/023/adr/001-…` in the pilot
+target — is not seen by either scope, and `sdd adr check` says nothing about it. Unifying the two
+namespaces or declaring the local one out of scope is that repo's decision; the kit does not guess.
+
 ## Models per phase
 
 Opus by default in the judgement phases; Sonnet where Opus would be waste — an **explicit

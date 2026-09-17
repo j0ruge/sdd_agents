@@ -156,6 +156,22 @@ load_config() {
   # which is English. Empty ⇒ the boot prompt says nothing about language, which is exactly the
   # behaviour of every already-installed repo. Set ("pt-BR", "en", "es") ⇒ one extra paragraph.
   : "${OUTPUT_LANG:=}"
+  # ADR traceability. How hard the PLAN and EXEC gates ask for the mission's `adr:` line:
+  # `off` ⇒ nothing at all; `warn` ⇒ the line derives as usual and the run leaves one
+  # `degraded kind:adr-check` row in the ledger; `block` ⇒ gate_PLAN refuses a mission whose
+  # `adr:` is empty, `TBD` or still the template placeholder. Validated POSITIVELY and exactly
+  # once, in adr_mode() — a fourth mode has to opt in there rather than arrive admitted by
+  # omission (the `is_gate_pass | not` scar in CLAUDE.md).
+  #
+  # Default `off` and not `warn`: every repo that already installed the kit has no `adr:` key in
+  # any mission on disk, and a default that spoke would make the kit's own arrival look like a
+  # finding. Adoption is `warn` → fix → `block`, and it is the target's decision, not the kit's.
+  : "${ADR_CHECK:=off}"
+  # Where the numbered ADRs live, relative to the repo root. NEVER empty: it is substituted into
+  # the planner hat's `writes:` glob by hat_expand, where an empty value would expand `$ADR_DIR/**`
+  # to `/**` — a hat declaring it may write the whole filesystem. adr_mode() refuses the empty
+  # value rather than leaving the expansion to discover it.
+  : "${ADR_DIR:=docs/adr}"
 
   [ -n "$PROJECT_NAME" ]   || die "PROJECT_NAME is empty in $CONFIG_FILE"
   [ -n "$DEFAULT_BRANCH" ] || die "DEFAULT_BRANCH is empty in $CONFIG_FILE"
@@ -4869,6 +4885,118 @@ cmd_why() {
   printf '%s: %s\n' "$ph" "$GATE_WHY"
 }
 
+# ---------------------------------------------------------------------------
+# ADR traceability — the number is allocated by a command, the link is read by a sensor.
+#
+# The problem, measured on 2026-09-17 and not supposed: nothing in this kit, and nothing in the
+# pilot target, allocated an ADR id. A note written on 2026-08-25 declared "ADR 0030" in prose;
+# on 2026-08-26 the real `docs/adr/0030-…` of that repo was accepted for a DIFFERENT decision.
+# The collision stayed latent only because the note never reached the repo, and it materialises
+# the day somebody implements against it. `grep -c traceab bin/sdd` answered 0: the 40 ADRs of
+# the target and the 7 here were all numbered by hand.
+#
+# Two verbs and one rule:
+#   sdd adr new    reserves the next id with O_EXCL and writes the header. The reservation IS the
+#                  poka-yoke — two writers racing for the same number get one file and one error,
+#                  never two files and a silent overwrite.
+#   sdd adr check  reads the links back. `--mission` asks about one mission's `adr:` line;
+#                  no scope asks the whole repo.
+#
+# WHERE THIS SECTION SITS is load-bearing, and it is why it follows cmd_why instead of joining
+# the other commands above: the census region of `sdd health` runs from `# Sensor of the KIT`
+# down to `cmd_status() {`, and tests/check-health.sh counts every `x="$(…)"` inside it against
+# a CAPTURE_FLOOR that is exact in BOTH directions. A library landing in there fails the suite on
+# the line it was written, for a reason that has nothing to do with what it does.
+# ---------------------------------------------------------------------------
+
+# adr_mode — prints the validated ADR_CHECK on stdout; rc 2 when the configuration is not usable.
+#
+# POSITIVE admission, never `not <what is refused>`: a fourth mode added tomorrow has to opt in
+# here instead of arriving admitted by omission. That is the same lesson `is_gate_pass | not`
+# taught the ledger axis, where a third event minted a version nobody asked for.
+#
+# rc 2 and not `die`: the gates call this too, and a gate that exits the process cannot write
+# GATE_WHY. Callers capture with `|| rc=$?`, never with a bare `m="$(adr_mode)"` — under
+# `set -e` the bare form kills the runner ON THE ASSIGNMENT, which is the whole subject of the
+# `guard:` rule in tests/check-health.sh.
+adr_mode() {
+  case "$ADR_CHECK" in
+    off|warn|block) : ;;
+    *) printf 'ADR_CHECK=%s is not one of off|warn|block — fix it in %s\n' \
+         "${ADR_CHECK:-<empty>}" "${CONFIG_FILE:-.sdd/config.sh}" >&2; return 2 ;;
+  esac
+  # ADR_DIR is substituted into the planner hat's `writes:` glob by hat_expand. Empty, `$ADR_DIR/**`
+  # expands to `/**` and the hat silently declares it may write the whole filesystem — so the
+  # refusal lives here, where it can still be read, rather than in the expansion, where it cannot.
+  case "$ADR_DIR" in
+    ''|/) printf 'ADR_DIR=%s is not a directory path — it is expanded into the planner hat writes: glob\n' \
+            "${ADR_DIR:-<empty>}" >&2; return 2 ;;
+  esac
+  printf '%s\n' "$ADR_CHECK"
+}
+
+adr_usage() {
+  cat <<'USAGE'
+usage: sdd adr new   --slug <slug> [--ticket <id>] [--spec <path>] [--dry-run]
+       sdd adr check [--repo <root>] [--mission <mission>] [--phase plan|exec]
+
+  new    reserves the next free id in $ADR_DIR and writes the header stub.
+  check  reads the traceability links back; rc 0 clean, 1 violation, 2 bad configuration.
+USAGE
+}
+
+cmd_adr() {
+  local verb="${1:-}"
+  case "$verb" in
+    new|check) shift ;;
+    *) adr_usage >&2; return 2 ;;
+  esac
+
+  # The flag loop stands BEFORE load_config, like cmd_health's: a typo in an option has to be
+  # refused by the command itself, not by whatever the runner happens to do with a config it did
+  # not need to read yet.
+  local slug="" ticket="" spec="" mission="" phase="" repo="" dry=0
+  while [ $# -gt 0 ]; do
+    case "$1" in
+      --slug)    slug="${2:-}";    shift 2 || die "sdd adr: --slug needs a value" ;;
+      --ticket)  ticket="${2:-}";  shift 2 || die "sdd adr: --ticket needs a value" ;;
+      --spec)    spec="${2:-}";    shift 2 || die "sdd adr: --spec needs a value" ;;
+      --mission) mission="${2:-}"; shift 2 || die "sdd adr: --mission needs a value" ;;
+      --phase)   phase="${2:-}";   shift 2 || die "sdd adr: --phase needs a value" ;;
+      --repo)    repo="${2:-}";    shift 2 || die "sdd adr: --repo needs a value" ;;
+      --dry-run) dry=1; shift ;;
+      *) die "unknown 'sdd adr $verb' option: $1 (see 'sdd help')" ;;
+    esac
+  done
+
+  load_config
+  local mode rc=0
+  mode="$(adr_mode)" || rc=$?
+  [ "$rc" -eq 0 ] || return "$rc"
+
+  case "$verb" in
+    # The allocator lands two increments from here. It REFUSES rather than no-opping: a verb that
+    # printed nothing and exited 0 would let a caller believe a number had been reserved, and an
+    # unreserved number is the whole defect this section exists to close.
+    new)
+      [ -n "$slug" ] || die "sdd adr new: --slug is required (see 'sdd help')"
+      die "sdd adr new is not wired in this build — only 'sdd adr check' answers (slug '$slug', ticket '${ticket:-none}', spec '${spec:-none}', dry-run $dry)"
+      ;;
+    check)
+      # I1 answers only what it can answer honestly: the mode is legal and the directory exists.
+      # The mission scope arrives in I2, the repo scope in I3; until then this prints the state a
+      # reader needs to know which of the three modes their repo is running under.
+      local dir="${repo:-$REPO_ROOT}/${ADR_DIR#/}" n=0
+      if [ -d "$dir" ]; then
+        n="$(find "$dir" -maxdepth 1 -type f -name '*.md' 2>/dev/null | wc -l)" || n=0
+      fi
+      printf '  ok    ADR_CHECK=%s, %s ADR(s) in %s%s\n' "$mode" "$n" "${ADR_DIR%/}" \
+        "${mission:+ (mission scope for $mission lands in I2)}${phase:+ (phase $phase)}"
+      return 0
+      ;;
+  esac
+}
+
 # `sdd approve <mission>` — the human gate of the PLAN phase gets a command.
 #
 # Until this existed, unlocking gate_PLAN meant opening 00-missao.md and typing
@@ -7487,6 +7615,16 @@ USAGE
                              mission plan (kit repo only; exit 3 = the change made it worse)
   sdd kaizen --series        the deterministic series (JSON) the judge cites — EVERY repo in the
                              ledger, with the composition of the slice beside the numbers
+  sdd adr new --slug <s> [--ticket <id>] [--spec <path>] [--dry-run]
+                             reserve the next free id in ADR_DIR and write the header stub. The
+                             reservation is O_EXCL: a number is never handed out twice, and an
+                             existing file is never overwritten. --spec writes BOTH sides of the
+                             link — the ADR's `Spec:` line and the spec's `adr:` key
+  sdd adr check [--repo <root>] [--mission <m>] [--phase plan|exec]
+                             read the traceability links back. No scope ⇒ the whole repo; --mission
+                             ⇒ that mission's `adr:` line alone. rc 0 clean, 1 violation, 2 bad
+                             configuration. What the PLAN and EXEC gates ask is governed by
+                             ADR_CHECK (off|warn|block), never by this command
   sdd help | sdd version
 
 LEDGER OPTIONS (`autonomy` and `kaizen`)
@@ -7543,6 +7681,7 @@ main() {
     census)    cmd_census "$@" ;;
     boot)      cmd_boot "$@" ;;
     kaizen)    cmd_kaizen "$@" ;;
+    adr)       cmd_adr "$@" ;;
     version|--version|-v) cmd_version ;;
     help|--help|-h) cmd_help ;;
     *) die "unknown command: $subcmd (see 'sdd help')" ;;

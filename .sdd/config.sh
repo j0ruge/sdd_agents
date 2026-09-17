@@ -10,6 +10,11 @@ HANDOFF_DIR="docs/handoffs"
 QA_DOCS_PATH="docs/qa"
 TODO_FILE="TODO.md"
 
+# O kit adota o proprio mecanismo em duas etapas, na missao 20260917-o-numero-do-adr-nao-e-prosa:
+# `warn` enquanto o ADR 0008 ainda nao existe, `block` no I9, depois de ele nascer do comando.
+ADR_CHECK="warn"
+ADR_DIR="docs/adr"
+
 MODEL_EXEC="opus"
 MODEL_QA="opus"
 MODEL_REVIEW="opus"
