@@ -327,7 +327,7 @@ check missao.md '^## Checklist kaizen'        "kaizen checklist"
 check missao.md '^## Checklist DDD'           "DDD checklist"
 check missao.md '^## Decisões do grill'       "grill decisions"
 check missao.md '^## Pendências para o humano' "open questions for the human"
-for c in a b c d e; do
+for c in a b c d e f; do
   check missao.md "^\| ${c} \|" "PLAN-AUTO criterion '${c}'"
 done
 

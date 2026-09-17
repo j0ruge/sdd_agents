@@ -1740,6 +1740,9 @@ hat_expand() {   # hat_expand <globs> — $HANDOFF_DIR $MISSION $TODO_FILE $QA_D
   s="${s//\$TODO_FILE/"$TODO_FILE"}"
   s="${s//\$QA_DOCS_PATH/"${QA_DOCS_PATH%/}"}"
   s="${s//\$E2E_DIR/"${E2E_DIR%/}"}"
+  # ADR_DIR can never be empty here: adr_mode() refuses that value, and `$ADR_DIR/**` expanded
+  # from an empty one would read as `/**` — a hat declaring it may write the whole filesystem.
+  s="${s//\$ADR_DIR/"${ADR_DIR%/}"}"
   printf '%s\n' "$s"
 }
 
@@ -4177,6 +4180,32 @@ cmd_preflight() {
   done
   ok "context bill: $cb_files file(s), $cb_bytes bytes of CLAUDE.md + .claude/rules/ — carried into EVERY turn of every phase (bytes, not tokens: the ratio is not constant)"
 
+  # --- ADR traceability ---
+  # A SENSOR and never a `_fail`, on the same argument as the context bill above: a repo that has
+  # just installed the kit has no `adr:` in any mission on disk, and a preflight that went red on
+  # arrival would be a preflight people learn to ignore. Findings here are MIGRATION DEBT — the
+  # thing `warn` exists to let a repo count — and the gate is where they stop the line, not here.
+  #
+  # Under `off` it asks nothing and only reports the mode, because running the repo scan would
+  # spend the walk to report a number nobody asked for.
+  if [ "$ADR_CHECK" = off ]; then
+    # No count under `off`, and that is not laziness: the only thing that counts ADRs is the repo
+    # scan, and running the walk to report a number nobody asked for would be spending it twice.
+    # A second counter living here would be a second answer to "how many ADRs", which is the shape
+    # that had cmd_adr reading two verdicts earlier in this same mission.
+    ok "adr check: ADR_CHECK=off, the PLAN and EXEC gates ask nothing"
+  else
+    # CALLED with its output thrown away, never `$( )`: it publishes ADR_FAILS and ADR_COUNT, and
+    # a subshell would take both with it. The preflight wants the numbers, not the listing.
+    ADR_FAILS=0; ADR_FIRST_WHY=""
+    adr_check_repo "$REPO_ROOT" >/dev/null 2>&1 || true
+    if [ "$ADR_FAILS" -eq 0 ]; then
+      ok "adr check: ADR_CHECK=$ADR_CHECK, $ADR_COUNT ADR(s) in ${ADR_DIR%/}, no finding"
+    else
+      warn "adr check: ADR_CHECK=$ADR_CHECK, $ADR_COUNT ADR(s) in ${ADR_DIR%/}, $ADR_FAILS finding(s) — run 'sdd adr check' to read them"
+    fi
+  fi
+
   info ""
   if [ "$fails" -eq 0 ]; then
     printf '%spreflight ok%s\n' "$C_GREEN$C_BOLD" "$C_RESET"; return 0
@@ -4948,6 +4977,10 @@ ADR_FILE_RE='^[0-9]{4}-[a-z0-9-]+\.md$'
 # caller of this family is CALLED and never `$( )`, where both globals would die with the subshell.
 ADR_FAILS=0
 ADR_FIRST_WHY=""
+# How many well-formed ADRs the last repo scan saw. Published rather than recomputed by the
+# preflight: two counters for one fact is how the two sides end up disagreeing in silence, and
+# this file has already paid for that once this mission (cmd_adr reading both ADR_FAILS and an rc).
+ADR_COUNT=0
 adr_fail() {   # adr_fail <file> <line> <reason> <remedy>
   ADR_FAILS=$((ADR_FAILS + 1))
   [ -n "$ADR_FIRST_WHY" ] || ADR_FIRST_WHY="$1:$2 — $3 — $4"
@@ -5125,6 +5158,7 @@ adr_check_repo() {
   local root="$1" f base id line n
   local dir="$root/${ADR_DIR%/}"
   local -A seen_id=()
+  ADR_COUNT=0
   local n_adr=0 n_undeclared=0 n_nospec=0 n_stub=0 n_bare_prose=0
 
   # --- a. the directory ---------------------------------------------------
@@ -5209,6 +5243,7 @@ adr_check_repo() {
   fi
 
   # --- the report ---------------------------------------------------------
+  ADR_COUNT="$n_adr"
   printf '  ok    ADR_CHECK=%s, %s ADR(s) in %s\n' "$ADR_CHECK" "$n_adr" "${ADR_DIR%/}"
   [ "$n_undeclared" -eq 0 ]  || adr_info "$n_undeclared mission(s) declare no ADR path — none/TBD/absent, counted and not failed"
   [ "$n_nospec" -eq 0 ]      || adr_info "$n_nospec spec(s) in $SPEC_DIR carry no ADR line"

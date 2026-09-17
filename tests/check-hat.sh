@@ -39,7 +39,7 @@
 set -uo pipefail
 ROOT="$(CDPATH='' cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 HAT_FLOOR=8
-PLACEHOLDERS='HANDOFF_DIR|MISSION|TODO_FILE|QA_DOCS_PATH|E2E_DIR'
+PLACEHOLDERS='HANDOFF_DIR|MISSION|TODO_FILE|QA_DOCS_PATH|E2E_DIR|ADR_DIR'
 fails=0
 pass() { printf '  ok    %s\n' "$1"; }
 fail() { printf '  FAIL  %s\n' "$1" >&2; fails=$((fails + 1)); }
@@ -131,6 +131,7 @@ selftest() {
   probe 'R1: a hat without permissionsDeny: fails — the key the rules moved to has to exist to be read' 1 $'---\nname: x\ndisallowedTools: ""\nwrites: ""\nmcp: ""\n---\nbody'
   probe 'R2: a placeholder with a digit ($E2E_DIR) is read whole — a regex stopping at the digit read it as $E' 0 $'---\nname: x\ndisallowedTools: ""\npermissionsDeny: ""\nwrites: "$E2E_DIR/**"\nmcp: ""\n---\nbody'
   probe 'R2: an unknown placeholder fails' 1 $'---\nname: x\ndisallowedTools: ""\npermissionsDeny: ""\nwrites: "$HANDOFFS/**"\nmcp: ""\n---\nbody'
+  probe 'R2: $ADR_DIR is a placeholder the runner expands' 0 $'---\nname: x\ndisallowedTools: ""\npermissionsDeny: ""\nwrites: "$ADR_DIR/**"\nmcp: ""\n---\nbody'
   probe 'R3: a permission rule in disallowedTools fails — it would strip the tool whole (measured, 2.1.263)' 1 $'---\nname: x\ndisallowedTools: "Agent, Bash(git push:*)"\npermissionsDeny: ""\nwrites: ""\nmcp: ""\n---\nbody'
   probe 'R3: ...and the verdict names the repair, not a misspelling' 1 $'---\nname: x\ndisallowedTools: "Agent, Bash(git push:*)"\npermissionsDeny: ""\nwrites: ""\nmcp: ""\n---\nbody' "would strip 'Bash' whole; move it to permissionsDeny:"
   probe 'R3: an mcp__server__* pattern is a legal name' 0 $'---\nname: x\ndisallowedTools: "mcp__github, mcp__atlassian__*"\npermissionsDeny: ""\nwrites: ""\nmcp: ""\n---\nbody'
@@ -139,7 +140,7 @@ selftest() {
   probe 'R4: a bare pattern without a tool name fails' 1 $'---\nname: x\ndisallowedTools: ""\npermissionsDeny: "(git push:*)"\nwrites: ""\nmcp: ""\n---\nbody'
   probe 'R4: a stray quote in a rule fails' 1 $'---\nname: x\ndisallowedTools: ""\npermissionsDeny: "\\"Bash(git push:*)"\nwrites: ""\nmcp: ""\n---\nbody'
   probe 'negative control: a key AFTER the closing --- is body, not frontmatter' 1 $'---\nname: x\ndisallowedTools: ""\npermissionsDeny: ""\nwrites: ""\n---\nmcp: ""'
-  if [ "$PROBES" -lt 16 ]; then printf '  probe floor shrank: %d < 16\n' "$PROBES" >&2; return 93; fi
+  if [ "$PROBES" -lt 17 ]; then printf '  probe floor shrank: %d < 17\n' "$PROBES" >&2; return 93; fi
   [ "$FAILS" -eq 0 ] || return 90
   printf '  ok    check-hat selftest: %d probes\n' "$PROBES"
 }

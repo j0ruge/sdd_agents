@@ -46,6 +46,8 @@
 #  R24  `adr: none` derives EXEC: deciding nothing architectural is a decision, written down
 #  R25  EXEC asks the one thing PLAN cannot — DRIFT. An ADR on disk when the human approved the
 #       plan and gone now stops the line
+#  R28  `$ADR_DIR` is a placeholder the RUNNER expands — check-hat.sh asserts it is on the list of
+#       legal names, which is a different claim from "hat_expand substitutes it"
 #  R27  `warn` leaves exactly one `degraded` row of kind `adr-check` per run, written on the way
 #       past the gate and BEFORE the session; `--dry-run` writes none, and `off` writes none
 #  R26  off, warn and block are three states of ONE fixture, asserted differentially; and a bogus
@@ -122,6 +124,11 @@
 #        return had NO probe when it was written, and the gap was declared here until this
 #        differential closed it — which is the discipline, not an accident.
 #
+#  R28 → the `$ADR_DIR` substitution removed from hat_expand: red. It was NOT red before this
+#        probe — check-hat.sh and check-preflight.sh both stayed green, because the only hat that
+#        declares `$ADR_DIR` is the planner and PLAN never runs through run_phase. That is why
+#        sdd-docs now declares it too: DOCS does, so the hat guard can see it.
+#
 # ⚠️ THREE rules in cmd_run survive every sabotage, and the honest thing is to name the world that
 # could not be built rather than to claim it does not exist — CLAUDE.md paid for that difference
 # with a regression (a DRY_RUN guard deleted as "unbreakable", restored in the review of the same
@@ -162,7 +169,7 @@ fails=0
 
 # Anti-vacuity. A file whose probes stop being dispatched prints exactly what a clean kit prints;
 # the floor is what refuses that, and it is checked at the very bottom, after everything ran.
-PROBE_FLOOR=53
+PROBE_FLOOR=55
 
 pass() { PROBES=$((PROBES + 1)); printf '  ok    %s\n' "$1"; }
 fail() { PROBES=$((PROBES + 1))
@@ -663,6 +670,38 @@ run_ledger "$W" "$WLEDGER" "$WM"
 if [ "$ADR_RC" = 3 ] && [ "$(rows_of adr-check)" = 0 ]; then
   pass 'off writes no degraded row — the same run, the same disk, one config line apart'
 else fail 'off writes no degraded row' 'rc 3 and 0 adr-check rows' "rc $ADR_RC, $(rows_of adr-check) row(s)"; fi
+
+# --- R28: $ADR_DIR is a placeholder the RUNNER expands ------------------------------------------
+# Two different claims, and check-hat.sh only makes the first: that `$ADR_DIR` is on the list of
+# names a hat may use. Whether hat_expand actually SUBSTITUTES it is this file's question, and
+# nothing else asks it — the planner is the only hat that declares `$ADR_DIR`, and PLAN never goes
+# through run_phase, so no hat guard would ever notice. Measured: removing the substitution line
+# left check-hat.sh and check-preflight.sh both green.
+#
+# Sourced minus the last line, like the reservation probe: this is a pure string function and a
+# fixture repo would prove nothing about it that a direct call does not.
+PROBES=$((PROBES + 1))
+cat > "$BOX/expand-probe.sh" <<'EXPAND'
+set -uo pipefail
+sdd="$1"
+# shellcheck disable=SC1090
+source <(sed '$d' "$sdd") >/dev/null 2>&1
+set +e
+declare -F hat_expand >/dev/null || { echo NOFUNC; exit 3; }
+HANDOFF_DIR="docs/handoffs"; MISSION="m"; TODO_FILE="TODO.md"
+QA_DOCS_PATH="docs/qa"; E2E_DIR="e2e"; ADR_DIR="decisions/"
+hat_expand '$ADR_DIR/**'
+EXPAND
+EXPANDED="$(bash "$BOX/expand-probe.sh" "$SDD" 2>/dev/null)"
+# BOTH terms. "decisions/**" alone passes on a function that happens to strip the dollar; "no
+# literal $ADR_DIR left" alone passes on one that deletes the placeholder altogether — which is
+# the shape that would expand a hat's glob to `/**`.
+if [ "$EXPANDED" = 'decisions/**' ]; then
+  pass 'hat_expand substitutes $ADR_DIR, trailing slash trimmed — an unexpanded one would read as /**'
+else
+  fail 'hat_expand substitutes $ADR_DIR, trailing slash trimmed — an unexpanded one would read as /**' \
+    'decisions/**' "${EXPANDED:-<nothing>}"
+fi
 
 # --- verdict ------------------------------------------------------------------------------------
 if [ "$PROBES" -lt "$PROBE_FLOOR" ]; then
