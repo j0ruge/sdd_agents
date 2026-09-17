@@ -235,7 +235,7 @@ run "sdd health discriminates" "$ROOT/tests/check-health.sh"
 run "preflight and the install guard" "$ROOT/tests/check-preflight.sh"
 run "every hat declares its boundary" "$ROOT/tests/check-hat.sh"
 
-# Deliberately NOT guarded by SDD_MUTANT, for the reason the two steps above carry: the eleven
+# Deliberately NOT guarded by SDD_MUTANT, for the reason the two steps above carry: the fifteen
 # `mut_ADR_*`/`mut_PLAN_adr_*`/`mut_EXEC_adr_*`/`mut_RUN_adr_*` entries of the catalogue are caught
 # HERE or nowhere — every assertion in that file drives bin/sdd as a subprocess, which is exactly
 # what a mutant sabotages. Guarded, those entries would score points nothing had measured. It

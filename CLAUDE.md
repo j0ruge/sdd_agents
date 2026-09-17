@@ -322,7 +322,7 @@ coberto é o fail-open que esta seção inteira existe para impedir.
 ⚠️ A rubrica é "a mutação não alcança", **não** "tem `selftest()`": `grep -l '^selftest()' tests/*`
 hoje devolve **oito** — os seis acima mais o `check-entrypoint.sh` e o `check-adr.sh`, que carregam
 um por escolha própria (o catálogo alcança os dois — `mut_RUN_entrypoint_unguarded` num,
-os onze `mut_*ADR*` no outro —, mas o parser do primeiro é fino demais para depender só disso e o
+os quinze `mut_*ADR*` no outro —, mas o parser do primeiro é fino demais para depender só disso e o
 segundo quis o **controle negativo**: rodar a primitiva de asserção contra um mundo de resposta
 conhecida). Sensor a mais com auto-teste nunca é o defeito; sensor **sem** ele, estando
 nas duas situações, é.

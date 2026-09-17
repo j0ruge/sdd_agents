@@ -4188,7 +4188,22 @@ cmd_preflight() {
   #
   # Under `off` it asks nothing and only reports the mode, because running the repo scan would
   # spend the walk to report a number nobody asked for.
-  if [ "$ADR_CHECK" = off ]; then
+  # The CONFIGURATION first, through the same validator the gates call. Reading $ADR_CHECK raw and
+  # branching on `off` let every other spelling fall through to the scan: measured 2026-09-17 by
+  # the Codex review of PR #45, ADR_CHECK=bogus reported `ok  adr check: ADR_CHECK=bogus, ... no
+  # finding` and the command ended `preflight ok`, while gate_PLAN refused the very same value with
+  # rc 2. A preflight that certifies a configuration the pipeline then refuses is not a weaker
+  # sensor, it is a wrong one — its whole job is to answer "will the phases run here?" before a
+  # session is paid for. `_fail` and not `warn`, unlike the findings below: migration debt is a
+  # number to count, an unusable config is a door that will not open.
+  #
+  # `|| rc=$?`, never a bare capture: under `set -e` the assignment form kills the runner ON the
+  # assignment the moment adr_mode returns 2 — the `guard:` class tests/check-health.sh enumerates.
+  local adr_rc=0
+  adr_mode >/dev/null 2>&1 || adr_rc=$?
+  if [ "$adr_rc" -ne 0 ]; then
+    _fail "adr check: $(adr_mode 2>&1 >/dev/null || true)"
+  elif [ "$ADR_CHECK" = off ]; then
     # No count under `off`, and that is not laziness: the only thing that counts ADRs is the repo
     # scan, and running the walk to report a number nobody asked for would be spending it twice.
     # A second counter living here would be a second answer to "how many ADRs", which is the shape
@@ -5133,6 +5148,19 @@ adr_check_link() {
       "rename it, or let 'sdd adr new' allocate the number"
     return 1
   fi
+  # ...and it has to live in ADR_DIR. The name alone was the whole test, and a name is not a
+  # NAMESPACE: measured 2026-09-17 by the Codex review of PR #45, a mission declaring
+  # `elsewhere/0001-x.md` passed BOTH directions while the repo scan counted `0 ADR(s)` in
+  # ADR_DIR — so the next `sdd adr new` allocated a SECOND 0001 and the id meant two decisions at
+  # once. That is this mission's own Gemba (the vault note citing an "ADR 0030" that belonged to
+  # another decision) reproduced inside the mechanism built to end it. Uniqueness is a property of
+  # the namespace, so the namespace is what gets checked.
+  local dir; dir="$(dirname -- "${v#./}")"
+  if [ "$dir" != "${ADR_DIR%/}" ]; then
+    adr_fail "$rel" "$line" "'$key: $v' is outside ADR_DIR (${ADR_DIR%/}) — an id is only unique inside the namespace that allocates it" \
+      "move it under ${ADR_DIR%/}/, or point the link at the ADR that already lives there"
+    return 1
+  fi
   if [ ! -f "$root/$v" ]; then
     adr_fail "$rel" "$line" "'$key: $v' points at a file that does not exist" \
       "create it with 'sdd adr new --slug ${base%.md}' — the number it hands out is the next free one, which may not be this one"
@@ -5341,8 +5369,10 @@ adr_reserve() {
 # documented at its own definition. So the absent case is inserted here, by awk with index(), never
 # sed: a path carrying `&` or `/` would go through sed's own syntax and land corrupted in an
 # artifact that is already committed.
+ADR_DECLARE_WHY=""
 adr_declare() {
   local spec="$1" path="$2" tmp
+  ADR_DECLARE_WHY=""
   if [ "$(head -n 1 "$spec")" = '---' ]; then
     if frontmatter_has "$spec" adr; then
       frontmatter_write "$spec" adr "$path"
@@ -5357,9 +5387,9 @@ adr_declare() {
       inside && $0=="---" { print "adr: " v; print; inside=0; done=1; next }
       { print }
       END { if (!done) exit 1 }' "$spec" > "$tmp" \
-      || { rm -f "$tmp"; die "sdd adr new: $spec has no frontmatter block to write into"; }
+      || { rm -f "$tmp"; ADR_DECLARE_WHY="$spec opens a frontmatter block that is never closed, so there is nowhere to write 'adr:'"; return 1; }
     chmod --reference="$spec" "$tmp" 2>/dev/null || true
-    mv -f "$tmp" "$spec" || { rm -f "$tmp"; die "sdd adr new: could not replace $spec"; }
+    mv -f "$tmp" "$spec" || { rm -f "$tmp"; ADR_DECLARE_WHY="could not replace $spec"; return 1; }
     return 0
   fi
   tmp="$(mktemp "${spec}.XXXXXX")" || die "sdd adr new: could not create a temporary beside $spec"
@@ -5376,9 +5406,9 @@ adr_declare() {
     !done && $0 ~ re { print "**ADR**: " v; done=1; next }
     { print }
     END { if (!done) print "\n**ADR**: " v }' "$spec" > "$tmp" \
-    || { rm -f "$tmp"; die "sdd adr new: awk failed on $spec"; }
+    || { rm -f "$tmp"; ADR_DECLARE_WHY="awk failed on $spec"; return 1; }
   chmod --reference="$spec" "$tmp" 2>/dev/null || true
-  mv -f "$tmp" "$spec" || { rm -f "$tmp"; die "sdd adr new: could not replace $spec"; }
+  mv -f "$tmp" "$spec" || { rm -f "$tmp"; ADR_DECLARE_WHY="could not replace $spec"; return 1; }
 }
 
 # adr_new <root> <slug> <ticket> <spec> <dry-run> — reserve the id and write the header.
@@ -5437,7 +5467,21 @@ adr_new() {
     printf '     heading above a real title, and follow the shape of the newest ADR in %s. -->\n' "${ADR_DIR%/}"
   } > "$path"
 
-  [ -z "$spec_rel" ] || adr_declare "$root/$spec_rel" "$rel"
+  # The reservation is the only irreversible step, and the declaration comes AFTER it — so a
+  # declaration that fails has to UNDO it, or the pair persists half-written. Measured 2026-09-17
+  # by the Codex review of PR #45: a --spec whose frontmatter is opened and never closed left
+  # docs/adr/0001-*.md on disk pointing one way at a spec that declared nothing, and the retry
+  # advanced to 0002 — every attempt burning an id that `adr_next_id` will never hand out again,
+  # because a freed number is deliberately never reused.
+  #
+  # Rollback rather than a pre-flight validation of the spec: a pre-check answers only the failure
+  # it was taught, and the property wanted here is "no half pair, whatever went wrong" — a full
+  # disk and a read-only tree reach the same line. adr_declare publishes ADR_DECLARE_WHY and is
+  # CALLED, never `$( )`, so the reason survives the rollback.
+  if [ -n "$spec_rel" ] && ! adr_declare "$root/$spec_rel" "$rel"; then
+    rm -f "$path"
+    die "sdd adr new: ${ADR_DECLARE_WHY:-could not write the spec side of the link} — $rel was NOT reserved, so the id stays free"
+  fi
   ok "$rel reserved${spec_rel:+, and $spec_rel now declares it}"
 }
 
@@ -5508,11 +5552,38 @@ adr_mode() {
   # ADR_DIR is substituted into the planner hat's `writes:` glob by hat_expand. Empty, `$ADR_DIR/**`
   # expands to `/**` and the hat silently declares it may write the whole filesystem — so the
   # refusal lives here, where it can still be read, rather than in the expansion, where it cannot.
-  case "$ADR_DIR" in
-    ''|/) printf 'ADR_DIR=%s is not a directory path — it is expanded into the planner hat writes: glob\n' \
-            "${ADR_DIR:-<empty>}" >&2; return 2 ;;
-  esac
+  #
+  # `''|/` was the whole guard, and it named two values where the property is "stays inside the
+  # repo". Measured 2026-09-17 by the Codex review of PR #45: with ADR_DIR=../escaped the mode was
+  # accepted and `sdd adr new --slug escape` wrote $REPO_ROOT/../escaped/0001-escape.md — outside
+  # the repository, through the same door `/` was already refused at, and past hat_guard_check,
+  # which compares a session's writes against a `writes:` glob this value BUILDS. A guard that
+  # enumerates values instead of deciding the property is a guard with a list of holes.
+  adr_dir_ok "$ADR_DIR" || {
+    printf 'ADR_DIR=%s is not a repo-relative directory — it is expanded into a hat writes: glob, so it may not be empty, absolute, or climb out with ..\n' \
+      "${ADR_DIR:-<empty>}" >&2; return 2; }
   printf '%s\n' "$ADR_CHECK"
+}
+
+# adr_dir_ok <value> — 0 when the value names a directory INSIDE the repo. The property, not a list.
+#
+# Written POSITIVELY, by the CLAUDE.md rule for admission predicates: every component has to be a
+# plain name, so `..`, `.`, an absolute path and an empty component are refused by CONSTRUCTION
+# rather than by being remembered. `not <what is refused>` is what admitted `../escaped` while
+# naming `/`, and it is what would admit the next spelling nobody listed.
+#
+# Trailing slashes are stripped first because the kit already supports them — `ADR_DIR=decisions/`
+# is a tested fixture, and hat_expand trims on the way out.
+adr_dir_ok() {
+  local d="$1"
+  while [ "${d%/}" != "$d" ]; do d="${d%/}"; done
+  [ -n "$d" ] || return 1
+  case "$d" in /*) return 1 ;; esac
+  local IFS=/ comp
+  for comp in $d; do
+    case "$comp" in ''|.|..) return 1 ;; esac
+  done
+  return 0
 }
 
 adr_usage() {

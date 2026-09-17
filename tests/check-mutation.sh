@@ -3557,6 +3557,35 @@ mut_ADR_phase_scope_ignored() {
   sed -i 's@^      \[ -z "$phase" \] || \[ -n "$mission" \] \\$@      [ -z "$phase" ] || [ -n "$phase" ] \\@' "$1"
 }
 
+# --- ADR: the four the Codex review of PR #45 found -------------------------------------------
+# ADR_DIR builds a hat's `writes:` glob, so it decides where a session may write. Back to a LIST of
+# refused values, `../escaped` is accepted and the allocator writes above REPO_ROOT, past
+# hat_guard_check — the guard that named only `/` while the property was "stays inside the repo".
+mut_ADR_dir_escapes_repo() {
+  sed -i "/^adr_dir_ok() {/,/^}/ s@^    case \"\$comp\" in ''|.|..) return 1 ;; esac\$@    case \"\$comp\" in '') return 1 ;; esac@" "$1"
+}
+
+# An id is unique inside the namespace that allocates it. Checking only the basename, a link to
+# `elsewhere/0001-x.md` satisfies both directions while the scan counts zero ADRs in ADR_DIR — and
+# the next allocation mints a second 0001. This mission's own Gemba, inside the mechanism.
+mut_ADR_link_outside_namespace() {
+  sed -i '/^adr_check_link() {/,/^}/ s@^  if \[ "$dir" != "${ADR_DIR%/}" \]; then$@  if false; then@' "$1"
+}
+
+# The reservation is the only irreversible step and it runs first, so a failed declaration has to
+# undo it. Without the rollback the ADR stays on disk pointing one way and the retry advances the
+# id — every attempt burning a number adr_next_id will never hand out again.
+mut_ADR_no_rollback_on_declare_fail() {
+  sed -i '/^adr_new() {/,/^}/ s@^    rm -f "$path"$@    :@' "$1"
+}
+
+# The preflight exists to answer "will the phases run here?" before a session is paid for. Reading
+# $ADR_CHECK raw instead of through the shared validator, it certifies `ADR_CHECK=bogus` with
+# `no finding` and ends `preflight ok`, while gate_PLAN refuses the same value with rc 2.
+mut_ADR_preflight_skips_validation() {
+  sed -i '/^cmd_preflight() {/,/^}/ s@^  adr_mode >/dev/null 2>&1 || adr_rc=$?$@  adr_rc=0@' "$1"
+}
+
 CATALOG=(
   AUTONOMY_meta_ignores_event
   AUTONOMY_mission_drops_close_money
@@ -3871,6 +3900,10 @@ CATALOG=(
   ADR_spec_dialect_blind
   ADR_undecided_lumped
   ADR_phase_scope_ignored
+  ADR_dir_escapes_repo
+  ADR_link_outside_namespace
+  ADR_no_rollback_on_declare_fail
+  ADR_preflight_skips_validation
   ADR_number_mismatch_blind
   ADR_bare_number_blind
   ADR_alloc_no_excl

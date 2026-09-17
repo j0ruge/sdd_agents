@@ -9,9 +9,15 @@
 #
 # Rules, each with a probe below:
 #   R1  ADR_CHECK is admitted POSITIVELY — off|warn|block and nothing else, rc 2 on anything else
-#   R2  ADR_DIR never degenerates to the root: it is substituted into the planner hat's `writes:`
-#       glob, and a value of `/` expands `$ADR_DIR/**` to `/**` — a hat declaring it may write the
-#       whole filesystem
+#   R2  ADR_DIR is a REPO-RELATIVE directory, decided as a PROPERTY and never as a list of refused
+#       values: it is substituted into a hat's `writes:` glob, so `/` expands `$ADR_DIR/**` to
+#       `/**`, and `../x` puts the glob — and the allocator — outside the repository entirely
+#  R30  ...and the allocator honours the same refusal: nothing is written above REPO_ROOT, while a
+#       nested relative directory, trailing slash and all, stays legal
+#  R31  an ADR link points INSIDE ADR_DIR. A name is not a namespace, and an id is only unique
+#       inside the namespace that allocates it
+#  R32  a declaration that fails leaves NO half pair: the reservation is rolled back and the id
+#       stays free, so a retry does not advance past it
 #   R3  `sdd adr` with no verb prints the usage and exits 2 — never a silent no-op
 #   R4  a legal mode names itself and counts what is on disk
 #   R5  a mission with no `adr:` key, or an empty one, FAILS — absence is the defect in the scope
@@ -102,6 +108,13 @@
 #        the file for an unrelated reason.
 #   R29 → the guard replaced by `:`: red, and it is the SENTENCE that catches it, not the rc —
 #        rc 1 is also what a real violation returns.
+#   R30 → adr_dir_ok accepting any non-empty component: red on BOTH halves — the refusal and the
+#        "nothing written above REPO_ROOT" pair, because a guard that refuses and still writes
+#        satisfies the rc alone.
+#   R31 → the ADR_DIR comparison replaced by `false`: red, and the differential neighbour is what
+#        keeps it from passing on a reader that refuses every link it is given.
+#   R32 → the rollback replaced by `:`: red — three terms (rc, the unchanged listing, and the
+#        message naming the freed id), because a rollback that deleted the wrong file satisfies two.
 #   R8 → the name pattern test replaced by `false`: red. → the `-f` test replaced by `false`: red.
 #   R9 → the back-link comparison replaced by `false`: red. → the missing-`Spec:` arm never
 #        firing: red. Both are also catalogue entries (mut_ADR_backlink_blind,
@@ -188,7 +201,7 @@ fails=0
 # fail() are the only writers. Two blocks below used to bump it by hand AND then call pass/fail,
 # so two probes counted twice and the floor was pinned to a number two higher than the assertions
 # it was standing for — an instrument off by exactly the amount nobody could see.
-PROBE_FLOOR=59
+PROBE_FLOOR=66
 
 pass() { PROBES=$((PROBES + 1)); printf '  ok    %s\n' "$1"; }
 fail() { PROBES=$((PROBES + 1))
@@ -318,7 +331,30 @@ assert_adr 'ADR_CHECK=bogus is refused with rc 2' "$BOGUS" 2 'not one of off\|wa
 # hat_expand strips the trailing slash, so `$ADR_DIR/**` becomes `/**`.
 ROOTDIR="$(fixture rootdir ADR_CHECK=\"warn\" ADR_DIR=\"/\")" || { echo "fixture failed" >&2; exit 1; }
 assert_adr 'ADR_DIR=/ is refused with rc 2 — it would expand the hat glob to /**' \
-  "$ROOTDIR" 2 'ADR_DIR=/ is not a directory path' check
+  "$ROOTDIR" 2 'ADR_DIR=/ is not a repo-relative directory' check
+
+# R30: and the value that made `''|/` a LIST instead of a property. Measured 2026-09-17 (Codex
+# review of PR #45): `ADR_DIR=../escaped` was accepted and `sdd adr new` wrote the file at
+# $REPO_ROOT/../escaped/ — outside the repository, past hat_guard_check, which compares a session's
+# writes against a glob this value builds.
+ESCAPE="$(fixture escape ADR_CHECK=\"warn\" ADR_DIR=\"../escaped\")" || { echo "fixture failed" >&2; exit 1; }
+assert_adr 'ADR_DIR that climbs out with .. is refused — the guard decides the property, not a list' \
+  "$ESCAPE" 2 'ADR_DIR=\.\./escaped is not a repo-relative directory' check
+# ...and the allocator never reaches the filesystem. BOTH terms: a refusal that still wrote the
+# file would satisfy the rc above on its own.
+run_adr "$ESCAPE" new --slug escape
+if [ "$ADR_RC" = 2 ] && [ ! -e "$ESCAPE/../escaped/0001-escape.md" ]; then
+  pass '...and sdd adr new writes nothing outside the repo root'
+else
+  fail '...and sdd adr new writes nothing outside the repo root' \
+    'rc 2 and no file above the repo root' \
+    "rc $ADR_RC, escaped file present: $([ -e "$ESCAPE/../escaped/0001-escape.md" ] && echo yes || echo no)"
+fi
+# The neighbour that keeps the guard from being "refuse everything": a nested relative dir is legal,
+# and a trailing slash stays legal because hat_expand and the R28 fixture both rely on it.
+NESTED="$(fixture nested ADR_CHECK=\"warn\" ADR_DIR=\"docs/decisions/\")" || { echo "fixture failed" >&2; exit 1; }
+assert_adr '...while a nested relative ADR_DIR with a trailing slash is accepted' "$NESTED" 0 \
+  '^  ok    ADR_CHECK=warn, 0 ADR\(s\) in docs/decisions$' check
 
 # --- R3: no verb is never a silent no-op --------------------------------------------------------
 OFF="$(fixture off ADR_CHECK=\"off\")" || { echo "fixture failed" >&2; exit 1; }
@@ -484,6 +520,24 @@ assert_adr 'the repo scope runs the full mission check on every mission that dec
   "FAIL +docs/adr/0004-decl\\.md:[0-9]+ — 'Spec: docs/handoffs/20260101-other/00-missao\\.md' points somewhere else" check
 adr_file "$R" 0004-decl.md docs/handoffs/20260101-decl/00-missao.md
 
+# R31: the id is unique inside the NAMESPACE that allocates it, so the link has to point there.
+# The name alone was the whole test, and a name is not a namespace: measured 2026-09-17 (Codex
+# review of PR #45) a mission declaring `elsewhere/0001-x.md` passed BOTH directions while the scan
+# counted 0 ADRs in ADR_DIR, so the next allocation minted a second 0001. That is this mission's own
+# Gemba reproduced inside the mechanism built to end it.
+mission "$R" 20260101-outside elsewhere/0001-x.md
+mkdir -p "$R/elsewhere"
+printf '# 0001 — x\n\nSpec: docs/handoffs/20260101-outside/00-missao.md\n' > "$R/elsewhere/0001-x.md"
+assert_adr 'an ADR link outside ADR_DIR fails, however well it points back' "$R" 1 \
+  "FAIL +docs/handoffs/20260101-outside/00-missao\\.md:[0-9]+ — 'adr: elsewhere/0001-x\\.md' is outside ADR_DIR \\(docs/adr\\)" check
+# The differential: the SAME file, the same back-link, moved inside the namespace. Without it the
+# assertion above also passes on a reader that refuses every link it is given.
+rm -rf "$R/elsewhere"
+mission "$R" 20260101-outside docs/adr/0006-inside.md
+adr_file "$R" 0006-inside.md docs/handoffs/20260101-outside/00-missao.md
+assert_adr '...and the same link inside ADR_DIR passes' "$R" 0 \
+  '^  ok    docs/handoffs/20260101-outside/00-missao\.md: adr: docs/adr/0006-inside\.md — and that ADR points back' check
+
 # SPEC_DIR empty scans NOTHING — never the repo root. The differential is the assertion: the same
 # tree, one config line apart, has to stop naming the spec tree entirely.
 RE="$(fixture repo_nospec ADR_CHECK=\"warn\")" || { echo "fixture failed" >&2; exit 1; }
@@ -553,6 +607,37 @@ assert_adr '...and that mission passes the check too' "$N" 0 \
 assert_adr '--spec refuses a spec that already declares a path — choosing between two ADRs is a human decision' \
   "$N" 1 "already declares 'docs/adr/0004-decided\.md'" \
   new --slug again --spec docs/handoffs/20260101-tbd/00-missao.md
+
+# R32: a declaration that fails must leave NO half pair. The reservation is the only irreversible
+# step and it happens first, so measured 2026-09-17 (Codex review of PR #45) a --spec whose
+# frontmatter is opened and never closed left docs/adr/0001-*.md on disk pointing one way, and the
+# retry advanced to 0002 — every attempt burning an id that adr_next_id will never hand out again.
+mkdir -p "$N/specs/002-broken"
+printf -- '---\ntitle: broken\n\n# the block is never closed\n' > "$N/specs/002-broken/spec.md"
+BEFORE_IDS="$(ls "$N/docs/adr" 2>/dev/null | sort | tr '\n' ' ')"
+run_adr "$N" new --slug doomed --spec specs/002-broken/spec.md
+AFTER_IDS="$(ls "$N/docs/adr" 2>/dev/null | sort | tr '\n' ' ')"
+# THREE terms, and none of them alone is the property: the rc says it refused, the listing says it
+# reserved nothing, and the message says WHICH id stayed free. A rollback that removed the wrong
+# file would satisfy the first two.
+if [ "$ADR_RC" != 0 ] && [ "$AFTER_IDS" = "$BEFORE_IDS" ] && grep -q 'was NOT reserved, so the id stays free' <<< "$ADR_OUT"; then
+  pass 'a failed declaration reserves nothing — no half pair, and the id stays free'
+else
+  fail 'a failed declaration reserves nothing — no half pair, and the id stays free' \
+    "rc non-zero, ADR_DIR unchanged ($BEFORE_IDS), and the message naming the freed id" \
+    "rc $ADR_RC, after: ($AFTER_IDS) — $ADR_OUT"
+fi
+# ...and the id really is still free: the NEXT allocation takes the number the failed one would
+# have burned. Without this the probe above passes on a runner that deletes the file and advances
+# the counter anyway.
+mkdir -p "$N/specs/003-ok"; printf '# OK\n\nbody\n' > "$N/specs/003-ok/spec.md"
+run_adr "$N" new --slug recovered --spec specs/003-ok/spec.md
+if [ "$ADR_RC" = 0 ] && grep -qE 'docs/adr/[0-9]{4}-recovered\.md reserved' <<< "$ADR_OUT"; then
+  pass '...and the next allocation is not pushed past the id the failure would have burned'
+else
+  fail '...and the next allocation is not pushed past the id the failure would have burned' \
+    'rc 0 and a reserved NNNN-recovered.md' "rc $ADR_RC — $ADR_OUT"
+fi
 
 # The SpecKit layout: no frontmatter, so the link is a `**ADR**:` line.
 mkdir -p "$N/specs/001-x"; printf '# X\n\n**Status**: Draft\n' > "$N/specs/001-x/spec.md"
