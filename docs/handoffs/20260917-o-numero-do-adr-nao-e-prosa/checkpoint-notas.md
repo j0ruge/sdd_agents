@@ -47,3 +47,6 @@
 > fora da citação ao registrar uma intervenção de verdade.
 >
 > - intervention: <o que o humano teve de fazer> — <fase> — <custo, se houver>
+- 2026-09-17 · `I1` · desvio declarado: o `check-adr.sh` **não** tem modo `--check <arquivo>`. O selftest canônico existe para sensor que a mutação não alcança; este dirige o `bin/sdd` por subprocesso, então o catálogo o alcança. No lugar dele, piso de probes + controle negativo, com o porquê no cabeçalho do sensor.
+- 2026-09-17 · `I1` · o `shellcheck` reprovou o esqueleto do plano: `ADR_LINK_RE`/`ADR_FILE_RE` nascidos sem leitor são SC2034. Foram adiados para o I2, que os lê — a regra "chave nova entra no commit que a lê" vale para constante também.
+- 2026-09-17 · `I1` · `ADR_DIR=""` é inalcançável pela config (`: "${ADR_DIR:=docs/adr}"` dispara no vazio). O probe usa `ADR_DIR="/"`, que é alcançável e é o mesmo defeito (`hat_expand` corta a barra ⇒ `/**`); o mundo não construído está declarado no cabeçalho do sensor, nunca como "esse mundo não existe".
