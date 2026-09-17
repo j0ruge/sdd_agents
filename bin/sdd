@@ -4909,6 +4909,165 @@ cmd_why() {
 # the line it was written, for a reason that has nothing to do with what it does.
 # ---------------------------------------------------------------------------
 
+# The ONE spelling of a traceability line, in two halves plus the function that joins them.
+#
+# It serves two dialects that already exist on disk, and neither is being rewritten: this kit
+# writes `Date: … · Status: accepted` under `# NNNN — title`, the pilot target writes
+# `- **Status**: aceito (…)` under `# ADR NNNN — title`. So the pattern reads the list dash and
+# the bold markers as optional decoration and anchors on the KEY, never on the prose around it.
+#
+# One definition, because it is read from the mission scope, the repo scope and the spec scan, and
+# the CLAUDE.md rule about an enum read in more than one point covers a regex just as much: spelled
+# out three times, the day one of them learns a new dialect the other two go blind in silence.
+ADR_LINK_PRE='^(- )?(\*\*)?'
+ADR_LINK_POST='(\*\*)?:[[:space:]]*'
+adr_key_re() { printf '%s%s%s' "$ADR_LINK_PRE" "$1" "$ADR_LINK_POST"; }
+
+# The id is read from the FILE NAME and never from the title: the two dialects disagree about the
+# title (`# 0007 — x` here, `# ADR 0007 — x` there) and agree about the name.
+ADR_FILE_RE='^[0-9]{4}-[a-z0-9-]+\.md$'
+
+# A violation, in ONE spelling — `<file>:<line> — <reason> — <remedy>`, on stderr.
+#
+# The remedy is not decoration and it is not optional. `gate_PLAN` already learned this the
+# expensive way: a reason that names no command reads as an instruction to hand-edit frontmatter,
+# which is the failure the command exists to end. Naming a remedy also OBLIGES the remedy to work,
+# and that obligation is what tests/check-adr.sh asserts by invoking it.
+#
+# PUBLISHES ADR_FAILS and ADR_FIRST_WHY, which adr_gate_verdict lifts into GATE_WHY — so every
+# caller of this family is CALLED and never `$( )`, where both globals would die with the subshell.
+ADR_FAILS=0
+ADR_FIRST_WHY=""
+adr_fail() {   # adr_fail <file> <line> <reason> <remedy>
+  ADR_FAILS=$((ADR_FAILS + 1))
+  [ -n "$ADR_FIRST_WHY" ] || ADR_FIRST_WHY="$1:$2 — $3 — $4"
+  printf '  FAIL  %s:%s — %s — %s\n' "$1" "$2" "$3" "$4" >&2
+}
+adr_info() { printf '  info  %s\n' "$*"; }
+
+# adr_fm_line <file> <key> — the 1-based line of <key> inside the frontmatter; 1 when absent.
+#
+# Scoped to the block between the first two `---`, like frontmatter() itself: a mission body is
+# prose that legitimately quotes its own frontmatter, and a file-wide grep would point the reader
+# at the sentence instead of at the key.
+adr_fm_line() {
+  awk -v k="$2" '
+    NR==1 && $0=="---" { inside=1; next }
+    inside && $0=="---" { exit }
+    inside {
+      idx = index($0, ":"); if (idx == 0) next
+      name = substr($0, 1, idx-1); gsub(/^[ \t]+|[ \t]+$/, "", name)
+      if (name == k) { print NR; found=1; exit }
+    }
+    END { if (!found) print 1 }' "$1" 2>/dev/null || printf '1\n'
+}
+
+# adr_link <file> <key> — PUBLISHES ADR_LINK_NO and ADR_LINK_VALUE for the FIRST `<key>:` line.
+# rc 1 when the file carries none. CALLED, never `$( )`: it publishes two globals.
+ADR_LINK_NO=0
+ADR_LINK_VALUE=""
+adr_link() {
+  local f="$1" k="$2" hit re
+  ADR_LINK_NO=0; ADR_LINK_VALUE=""
+  [ -f "$f" ] || return 1
+  re="$(adr_key_re "$k")"
+  # `grep … || true` and then the first line by parameter expansion, NEVER `grep … | head -1`:
+  # under `set -o pipefail` head closes the pipe on the first match and grep dies of SIGPIPE, so
+  # the capture returns 141 on a long file and 0 on a short one — the CLAUDE.md scar, inverted
+  # logic that depends on the size of the input.
+  hit="$(grep -nE "$re" "$f" || true)"
+  hit="${hit%%$'\n'*}"
+  [ -n "$hit" ] || return 1
+  ADR_LINK_NO="${hit%%:*}"
+  ADR_LINK_VALUE="$(sed -E "s@${re}@@" <<< "${hit#*:}")"
+  # Both dialects write the value as prose that may carry a trailing period, a parenthesis or a
+  # markdown link. Only the leading path is the claim; the rest is the sentence around it.
+  ADR_LINK_VALUE="${ADR_LINK_VALUE%%[[:space:]]*}"
+  ADR_LINK_VALUE="${ADR_LINK_VALUE#\(}"; ADR_LINK_VALUE="${ADR_LINK_VALUE%\)}"
+  ADR_LINK_VALUE="${ADR_LINK_VALUE%.}"
+  [ -n "$ADR_LINK_VALUE" ]
+}
+
+# adr_check_mission <root> <mission> [plan|exec] — the mission scope.
+#
+# ABSENCE is a failure HERE and counted as information in the repo scope, and the asymmetry is the
+# design: a mission the kit is running right now is the one place where "nobody decided" is itself
+# the defect, and every other mission on disk predates the mechanism. Reversed, the repo scope
+# would fail every repo on the day it installed the kit.
+#
+# The phase argument is what turns `TBD` from a note into a refusal, and it is passed ONLY by
+# gate_PLAN and gate_EXEC. `TBD` means "the human has not decided yet", and the PLAN phase is the
+# one phase with a human in the room. Refusing it in EXEC and nowhere else would be the
+# unsatisfiable gate CLAUDE.md's principle 1 forbids — the class that cost US$ 73,32 in
+# 20260825-frete-cif-fob, because no agent in the kit may decide an architectural trade-off.
+#
+# CALLED, never `$( )`. rc 0 clean, 1 violation.
+adr_check_mission() {
+  local root="$1" m="$2" phase="${3:-}"
+  local rel="${HANDOFF_DIR%/}/$m/00-missao.md"
+  local mfile="$root/$rel"
+  if [ ! -f "$mfile" ]; then
+    adr_fail "$rel" 1 "no 00-missao.md to read" "run the PLAN phase first"
+    return 1
+  fi
+  local v line
+  v="$(frontmatter "$mfile" adr "$FRONTMATTER_ABSENT")"
+  line="$(adr_fm_line "$mfile" adr)"
+  local remedy="run 'sdd adr new --slug <slug> --spec $rel', or write 'adr: none' when the mission decides nothing architectural"
+
+  case "$v" in
+    "$FRONTMATTER_ABSENT")
+      adr_fail "$rel" "$line" "no 'adr:' key in the frontmatter" "$remedy"; return 1 ;;
+    "")
+      adr_fail "$rel" "$line" "'adr:' is empty" "$remedy"; return 1 ;;
+    none)
+      printf '  ok    %s: adr: none — the mission declares no architectural decision\n' "$m"; return 0 ;;
+    # The template placeholder is TBD wearing another hat: `adr: <none | TBD | docs/adr/NNNN-slug.md>`
+    # is what templates/missao.md ships, and a mission that never touched the line has decided
+    # exactly as much as one that wrote TBD. Reading them as two states would let the untouched
+    # template pass the gate the written TBD fails.
+    TBD|\<*)
+      if [ -n "$phase" ]; then
+        adr_fail "$rel" "$line" "'adr: $v' is not a decision, and the $phase gate is where it has to become one" "$remedy"
+        return 1
+      fi
+      adr_info "$m: adr: $v — not decided yet; $remedy"
+      return 0 ;;
+  esac
+
+  # From here `$v` claims to be a path. Three questions, and the order is deliberate: the name
+  # before the file, because a number read out of a title instead of out of the name is the exact
+  # defect this section exists to close, and a reader whose FIRST message is "no such file" would
+  # go looking for the file rather than for the spelling.
+  local base; base="$(basename -- "$v")"
+  if ! grep -qE "$ADR_FILE_RE" <<< "$base"; then
+    adr_fail "$rel" "$line" "'adr: $v' does not name an ADR — the id is read from the FILE NAME, which has to be NNNN-slug.md" \
+      "rename it, or let 'sdd adr new' allocate the number"
+    return 1
+  fi
+  if [ ! -f "$root/$v" ]; then
+    adr_fail "$rel" "$line" "'adr: $v' points at a file that does not exist" \
+      "create it with 'sdd adr new --slug ${base%.md}' — the number it hands out is the next free one, which may not be this one"
+    return 1
+  fi
+  # The back-link, and it is the whole point of the pair. The vault note that started this mission
+  # declared an ADR number in prose; the number existed and belonged to another decision. One
+  # direction proves nothing — an `adr:` pointing at a real file is satisfied by EVERY real file.
+  # What distinguishes the right one is that the ADR points BACK.
+  if ! adr_link "$root/$v" Spec; then
+    adr_fail "$v" 1 "has no 'Spec:' line, so nothing points back at $rel" \
+      "add 'Spec: $rel' under the header"
+    return 1
+  fi
+  if [ "$ADR_LINK_VALUE" != "$rel" ]; then
+    adr_fail "$v" "$ADR_LINK_NO" "'Spec: $ADR_LINK_VALUE' points somewhere else, not at $rel" \
+      "one ADR, one spec: fix whichever side is wrong, or allocate a new number with 'sdd adr new'"
+    return 1
+  fi
+  printf '  ok    %s: adr: %s — and that ADR points back at the mission\n' "$m" "$v"
+  return 0
+}
+
 # adr_mode — prints the validated ADR_CHECK on stdout; rc 2 when the configuration is not usable.
 #
 # POSITIVE admission, never `not <what is refused>`: a fourth mode added tomorrow has to opt in
@@ -4983,15 +5142,26 @@ cmd_adr() {
       die "sdd adr new is not wired in this build — only 'sdd adr check' answers (slug '$slug', ticket '${ticket:-none}', spec '${spec:-none}', dry-run $dry)"
       ;;
     check)
-      # I1 answers only what it can answer honestly: the mode is legal and the directory exists.
-      # The mission scope arrives in I2, the repo scope in I3; until then this prints the state a
-      # reader needs to know which of the three modes their repo is running under.
-      local dir="${repo:-$REPO_ROOT}/${ADR_DIR#/}" n=0
-      if [ -d "$dir" ]; then
-        n="$(find "$dir" -maxdepth 1 -type f -name '*.md' 2>/dev/null | wc -l)" || n=0
+      local root="${repo:-$REPO_ROOT}"
+      case "$phase" in
+        ''|plan|exec) : ;;
+        *) die "sdd adr check: --phase takes 'plan' or 'exec', not '$phase'" ;;
+      esac
+      ADR_FAILS=0; ADR_FIRST_WHY=""
+      if [ -n "$mission" ]; then
+        # CALLED, never `$( )`: it publishes ADR_FAILS and ADR_FIRST_WHY, and both would die with
+        # the subshell a command substitution opens.
+        adr_check_mission "$root" "$mission" "$phase" || true
+      else
+        # The repo scope arrives in I3. Until then this answers the one question it can answer
+        # honestly — which of the three modes the repo runs under, and how many ADRs are on disk.
+        local dir="$root/${ADR_DIR#/}" n=0
+        if [ -d "$dir" ]; then
+          n="$(find "$dir" -maxdepth 1 -type f -name '*.md' 2>/dev/null | wc -l)" || n=0
+        fi
+        printf '  ok    ADR_CHECK=%s, %s ADR(s) in %s\n' "$mode" "$n" "${ADR_DIR%/}"
       fi
-      printf '  ok    ADR_CHECK=%s, %s ADR(s) in %s%s\n' "$mode" "$n" "${ADR_DIR%/}" \
-        "${mission:+ (mission scope for $mission lands in I2)}${phase:+ (phase $phase)}"
+      [ "$ADR_FAILS" -eq 0 ] || return 1
       return 0
       ;;
   esac

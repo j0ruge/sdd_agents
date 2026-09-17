@@ -3464,6 +3464,22 @@ mut_AUTONOMY_close_key_subsequence() {
   sed -i 's@^       then (\$closerows | map(select(mission_key as \$k | \$printed_missions | any(. == \$k))))$@       then ($closerows | map(select(mission_key as $k | $printed_missions | index($k) != null)))@' "$1"
 }
 
+# --- ADR traceability -------------------------------------------------------------------------
+# The back-link is the half of the pair that tells the RIGHT ADR from any real one: an `adr:`
+# pointing at an existing file is satisfied by EVERY existing file, which is precisely the vault
+# note that started this mission — the number was real and belonged to another decision. Blind,
+# `sdd adr check` certifies a mission wired to somebody else's ADR.
+mut_ADR_backlink_blind() {
+  sed -i '/^adr_check_mission() {/,/^}/ s@if \[ "$ADR_LINK_VALUE" != "$rel" \]; then@if false; then@' "$1"
+}
+
+# The id is read from the FILE NAME and never from the title, because the two dialects on disk
+# disagree about the title and agree about the name. With the pattern gone, `adr: docs/adr/notes.md`
+# reads as a legal ADR and the number the whole mechanism exists to allocate stops being required.
+mut_ADR_number_mismatch_blind() {
+  sed -i '/^adr_check_mission() {/,/^}/ s@if ! grep -qE "$ADR_FILE_RE" <<< "$base"; then@if false; then@' "$1"
+}
+
 CATALOG=(
   AUTONOMY_meta_ignores_event
   AUTONOMY_mission_drops_close_money
@@ -3774,6 +3790,8 @@ CATALOG=(
   RUN_journal_write_stops_the_line
   RUN_journal_raw_redirection_error
   RUN_ledger_raw_redirection_error
+  ADR_backlink_blind
+  ADR_number_mismatch_blind
 )
 
 # Mutations that are NOT caught today, each with the increment that closes it. Ratchet in both
