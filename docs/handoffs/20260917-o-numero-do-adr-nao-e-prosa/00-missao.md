@@ -4,7 +4,7 @@ titulo: o ADR nasce com número alocado por comando e o vínculo spec ↔ ADR �
 data: 2026-09-17
 versao:
 branch: feat/o-numero-do-adr-nao-e-prosa
-aprovacao:
+aprovacao: humano-2026-09-17
 ddd: n/a
 adr: TBD
 ---
