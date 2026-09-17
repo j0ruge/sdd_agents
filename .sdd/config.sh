@@ -12,7 +12,9 @@ TODO_FILE="TODO.md"
 
 # O kit adota o proprio mecanismo em duas etapas, na missao 20260917-o-numero-do-adr-nao-e-prosa:
 # `warn` enquanto o ADR 0008 ainda nao existe, `block` no I9, depois de ele nascer do comando.
-ADR_CHECK="warn"
+# Etapa 2 concluida: o ADR 0008 existe, `sdd adr check` responde rc 0 sobre o repo inteiro, e o
+# gate de PLAN passa a cobrar `adr:` de toda missao nova deste repo.
+ADR_CHECK="block"
 ADR_DIR="docs/adr"
 
 MODEL_EXEC="opus"
