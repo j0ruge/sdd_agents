@@ -3508,6 +3508,12 @@ mut_PLAN_adr_check_ignored() {
 # `TBD` and `none` are NOT the same state: `none` is a decision written down, `TBD` is the absence
 # of one. Collapsed, every mission the planner left mid-grill walks past the gate that exists to
 # catch exactly that — and the untouched template placeholder walks past with it.
+# The anchor is the case ARM of adr_check_mission, which reads in bin/sdd exactly as:
+#     TBD|\<*)
+# — a literal `TBD`, the alternation bar, a backslash-escaped `<` and a `*`, closing paren. Every
+# other mutant in this block anchors on ordinary code; this one cannot, so the fragment is written
+# out here. Reformat that arm and the anchor stops matching — loudly, through the `cmp` guard in
+# run_mutant, never silently, but the reader still needs to know what to preserve.
 mut_PLAN_adr_tbd_accepted() {
   sed -i '/^adr_check_mission() {/,/^}/ s@^    TBD|\\<\*)$@    never-matches)@' "$1"
 }
@@ -3525,6 +3531,30 @@ mut_EXEC_adr_drift_blind() {
 # is looking" are the same sentence.
 mut_RUN_adr_warn_silent() {
   sed -i '/^cmd_run() {/,/^}/ s@^        autonomy_degraded_row "adr-check" "EXEC" "$GATE_ADR_WARN_WHY"$@        :@' "$1"
+}
+
+# adr_declare picks the dialect from what is on DISK and adr_spec_link is the reader of the same
+# rule. Blind to the frontmatter half, `sdd adr new --spec` writes `adr:` into a spec.md, says "now
+# declares it", and the scan counts that very file under "carry no ADR line" — the two-way check
+# never runs, and it comes out as an `info` instead of a FAIL. Measured 2026-09-17, which is why
+# the probe that catches this is the FAILING half of the pair and not the count.
+mut_ADR_spec_dialect_blind() {
+  sed -i '/^adr_spec_link() {/,/^}/ s@^  if \[ "$(head -n 1 "$f" 2>/dev/null)" = '"'"'---'"'"' \] && frontmatter_has "$f" adr; then$@  if false; then@' "$1"
+}
+
+# The two counters are the migration instrument: `adr: none` is a decision ADR_CHECK=block ACCEPTS
+# and absent/empty/TBD is what it REFUSES. Lumped back into one number, `sdd adr check` answers a
+# question the gate does not ask — rc 0 and "counted and not failed" over a corpus the PLAN gate
+# sends back to PLAN, which is how this kit flipped its own key and nothing said so.
+mut_ADR_undecided_lumped() {
+  sed -i '/^adr_check_repo() {/,/^}/ s@^        none) n_none=$((n_none + 1)); continue ;;$@        none) n_undecided=$((n_undecided + 1)); continue ;;@' "$1"
+}
+
+# `--phase` is read by adr_check_mission alone. Accepted and discarded, `sdd adr check --phase plan`
+# prints a whole-repo report that reads as an answer about a phase — a flag that does nothing is the
+# one nobody notices, and the rc it returns is shared with a real violation.
+mut_ADR_phase_scope_ignored() {
+  sed -i 's@^      \[ -z "$phase" \] || \[ -n "$mission" \] \\$@      [ -z "$phase" ] || [ -n "$phase" ] \\@' "$1"
 }
 
 CATALOG=(
@@ -3838,6 +3868,9 @@ CATALOG=(
   RUN_journal_raw_redirection_error
   RUN_ledger_raw_redirection_error
   ADR_backlink_blind
+  ADR_spec_dialect_blind
+  ADR_undecided_lumped
+  ADR_phase_scope_ignored
   ADR_number_mismatch_blind
   ADR_bare_number_blind
   ADR_alloc_no_excl

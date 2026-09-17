@@ -1730,7 +1730,7 @@ hat_mcp() {   # hat_mcp <step> — the MCP servers the hat may see; "" ⇒ --str
   if [ -n "$hat" ]; then hat_field "$hat" mcp; else printf '\n'; fi
 }
 
-hat_expand() {   # hat_expand <globs> — $HANDOFF_DIR $MISSION $TODO_FILE $QA_DOCS_PATH $E2E_DIR
+hat_expand() {   # hat_expand <globs> — $HANDOFF_DIR $MISSION $TODO_FILE $QA_DOCS_PATH $E2E_DIR $ADR_DIR
   local s="$1" hd="$HANDOFF_DIR"
   while [ "${hd%/}" != "$hd" ]; do hd="${hd%/}"; done
   # Replacements QUOTED: under bash 5.2's patsub_replacement an unquoted `&` in the value
@@ -5031,6 +5031,39 @@ adr_link() {
   [ -n "$ADR_LINK_VALUE" ]
 }
 
+# adr_spec_link <file> — the spec side of the link, in whichever dialect the file carries.
+#
+# ONE reader for what adr_declare is the ONE writer for. That function picks the dialect from what
+# is on DISK — the frontmatter `adr:` when the file opens with `---`, a `**ADR**:` line otherwise —
+# and the repo scan used to know only the prose half. Measured on 2026-09-17 against a spec.md
+# carrying YAML frontmatter: `sdd adr new --spec` wrote the key, said "now declares it", and
+# `sdd adr check` counted the very same file under "carry no ADR line" one command later. The
+# two-way check never ran on it, and it came out as an `info` count rather than a FAIL — a writer
+# and a reader disagreeing in silence, which is the shape this whole mission exists to refuse.
+#
+# The `--spec` refusal in adr_new was the third place that knew the rule and the only one that had
+# it right; it now reads through here too, so the dialect is decided once for the whole family.
+#
+# Publishes ADR_LINK_VALUE and ADR_LINK_NO like adr_link, plus ADR_LINK_KEY — the key the file
+# ACTUALLY used, so adr_check_link names `adr:` or `ADR:` as the reader found it instead of
+# printing one dialect over the other. CALLED, never `$( )`, for the same reason adr_link is.
+ADR_LINK_KEY=""
+adr_spec_link() {
+  local f="$1"
+  ADR_LINK_NO=0; ADR_LINK_VALUE=""; ADR_LINK_KEY=adr
+  if [ "$(head -n 1 "$f" 2>/dev/null)" = '---' ] && frontmatter_has "$f" adr; then
+    ADR_LINK_VALUE="$(frontmatter "$f" adr)"
+    ADR_LINK_NO="$(adr_fm_line "$f" adr)"
+    if [ -n "$ADR_LINK_VALUE" ]; then return 0; fi
+    return 1
+  fi
+  # A `---` file with no `adr:` key still falls through to the prose dialect: it may carry an
+  # `**ADR**:` line written before it grew frontmatter, and reading only the key would let
+  # adr_new overwrite a link that is already there.
+  ADR_LINK_KEY=ADR
+  adr_link "$f" ADR
+}
+
 # adr_check_mission <root> <mission> [plan|exec] — the mission scope.
 #
 # ABSENCE is a failure HERE and counted as information in the repo scope, and the asymmetry is the
@@ -5159,7 +5192,7 @@ adr_check_repo() {
   local dir="$root/${ADR_DIR%/}"
   local -A seen_id=()
   ADR_COUNT=0
-  local n_adr=0 n_undeclared=0 n_nospec=0 n_stub=0 n_bare_prose=0
+  local n_adr=0 n_none=0 n_undecided=0 n_nospec=0 n_stub=0 n_bare_prose=0
 
   # --- a. the directory ---------------------------------------------------
   if [ -d "$dir" ]; then
@@ -5193,7 +5226,15 @@ adr_check_repo() {
       m="$(basename -- "$(dirname -- "$f")")"
       v="$(frontmatter "$f" adr "$FRONTMATTER_ABSENT")"
       case "$v" in
-        "$FRONTMATTER_ABSENT"|''|none|TBD|\<*) n_undeclared=$((n_undeclared + 1)); continue ;;
+        # TWO counters and not one. Lumped, they answered the question `block` does not ask:
+        # `adr: none` is a decision the PLAN gate ACCEPTS, and absent/empty/TBD is what it
+        # REFUSES, so a single "counted and not failed" number stayed quiet on a repo where
+        # flipping to `block` sends every mission on disk back to PLAN. Measured 2026-09-17 in
+        # this kit: `sdd adr check` rc 0 and `sdd preflight` "no finding" over 14 missions the
+        # gate refuses. The undecided count reaching zero is what says step 3 of the adoption
+        # path in README.md is done — which is the whole job of a migration instrument.
+        none) n_none=$((n_none + 1)); continue ;;
+        "$FRONTMATTER_ABSENT"|''|TBD|\<*) n_undecided=$((n_undecided + 1)); continue ;;
       esac
       adr_check_mission "$root" "$m" || true
     done < <(find "$hdir" -mindepth 2 -maxdepth 2 -type f -name '00-missao.md' 2>/dev/null | sort)
@@ -5219,8 +5260,8 @@ adr_check_repo() {
       while IFS= read -r f; do
         [ -n "$f" ] || continue
         rel="${f#"$root"/}"
-        if adr_link "$f" ADR; then
-          adr_check_link "$root" "$rel" ADR "$ADR_LINK_VALUE" "$ADR_LINK_NO" || true
+        if adr_spec_link "$f"; then
+          adr_check_link "$root" "$rel" "$ADR_LINK_KEY" "$ADR_LINK_VALUE" "$ADR_LINK_NO" || true
         else
           n_nospec=$((n_nospec + 1))
         fi
@@ -5245,7 +5286,8 @@ adr_check_repo() {
   # --- the report ---------------------------------------------------------
   ADR_COUNT="$n_adr"
   printf '  ok    ADR_CHECK=%s, %s ADR(s) in %s\n' "$ADR_CHECK" "$n_adr" "${ADR_DIR%/}"
-  [ "$n_undeclared" -eq 0 ]  || adr_info "$n_undeclared mission(s) declare no ADR path — none/TBD/absent, counted and not failed"
+  [ "$n_none" -eq 0 ]        || adr_info "$n_none mission(s) declare 'adr: none' — a decision, written down"
+  [ "$n_undecided" -eq 0 ]   || adr_info "$n_undecided mission(s) have no decided 'adr:' — absent, empty or TBD; ADR_CHECK=block refuses each of them at the PLAN gate, so declare them with 'sdd adr new --spec <mission>' or 'adr: none' before flipping the key"
   [ "$n_nospec" -eq 0 ]      || adr_info "$n_nospec spec(s) in $SPEC_DIR carry no ADR line"
   [ "$n_bare_prose" -eq 0 ]  || adr_info "$n_bare_prose bare 'ADR NNNN' citation(s) in handoff prose with no file in $ADR_DIR"
   [ "$n_stub" -eq 0 ]        || adr_info "$n_stub ADR(s) still carry the unfilled 'sdd adr new' stub"
@@ -5321,8 +5363,17 @@ adr_declare() {
     return 0
   fi
   tmp="$(mktemp "${spec}.XXXXXX")" || die "sdd adr new: could not create a temporary beside $spec"
-  awk -v v="$path" '
-    !done && $0 ~ "^(- )?(\\*\\*)?ADR(\\*\\*)?:" { print "**ADR**: " v; done=1; next }
+  # The pattern comes from adr_key_re and is never hand-written here: ADR_LINK_PRE/POST exist so
+  # that the day one dialect is added the other readers do not go blind, and a fourth spelling
+  # inside an awk string is exactly how that happens — this one would append a SECOND `**ADR**:`
+  # line instead of replacing the one already there.
+  #
+  # Through ENVIRON and never `awk -v`: `-v` runs the value through escape processing, so the
+  # `\*` of the pattern arrives as a bare `*` and the regex changes meaning. Measured — with `-v`
+  # the same pattern matched `- **ADR**: x` and stopped matching `ADR: y`.
+  ADR_KEY_RE="$(adr_key_re ADR)" awk -v v="$path" '
+    BEGIN { re = ENVIRON["ADR_KEY_RE"] }
+    !done && $0 ~ re { print "**ADR**: " v; done=1; next }
     { print }
     END { if (!done) print "\n**ADR**: " v }' "$spec" > "$tmp" \
     || { rm -f "$tmp"; die "sdd adr new: awk failed on $spec"; }
@@ -5362,11 +5413,7 @@ adr_new() {
     # decided or pointing at the wrong one, and both are decisions a human makes. Silently
     # overwriting the link would be the kit choosing between two ADRs on its own.
     local cur=""
-    if [ "$(head -n 1 "$root/$spec_rel")" = '---' ]; then
-      cur="$(frontmatter "$root/$spec_rel" adr)"
-    elif adr_link "$root/$spec_rel" ADR; then
-      cur="$ADR_LINK_VALUE"
-    fi
+    if adr_spec_link "$root/$spec_rel"; then cur="$ADR_LINK_VALUE"; fi
     case "$cur" in
       ''|TBD|none|\<*) : ;;
       *) die "sdd adr new: $spec_rel already declares '$cur' — change it by hand, or point --spec somewhere else" ;;
@@ -5521,6 +5568,12 @@ cmd_adr() {
         ''|plan|exec) : ;;
         *) die "sdd adr check: --phase takes 'plan' or 'exec', not '$phase'" ;;
       esac
+      # `--phase` is what turns TBD from a note into a refusal, and only adr_check_mission reads
+      # it — the repo scan never receives it. Accepted and discarded, `sdd adr check --phase plan`
+      # printed a clean repo report and looked like it had answered a question about a phase.
+      # Refusing beats documenting: the flag that does nothing is the one nobody notices.
+      [ -z "$phase" ] || [ -n "$mission" ] \
+        || die "sdd adr check: --phase is scoped to one mission — pass --mission <mission> with it"
       ADR_FAILS=0; ADR_FIRST_WHY=""
       local vrc=0
       # CALLED, never `$( )`: both publish ADR_FAILS and ADR_FIRST_WHY, and both globals would die

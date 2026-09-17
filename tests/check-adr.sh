@@ -26,8 +26,13 @@
 #  R11  ADR_DIR holds one file per id, and every name reads as NNNN-slug.md
 #  R12  the repo scope runs the FULL mission check on every mission that declares a path, and
 #       COUNTS the ones that declare none — absence fails in the running mission and nowhere else,
-#       or a check would be red on the day a repo installed the kit
-#  R13  a SpecKit spec that declares an ADR gets the same two-way check, back-link included
+#       or a check would be red on the day a repo installed the kit. The count is TWO numbers and
+#       not one: `adr: none` is a decision the PLAN gate accepts, absent/empty/TBD is what
+#       ADR_CHECK=block refuses, and the undecided number reaching zero is the signal that step 3
+#       of README.md's adoption path is done
+#  R13  a SpecKit spec that declares an ADR gets the same two-way check, back-link included — in
+#       EITHER dialect, because adr_declare picks the dialect from what is on disk and a reader
+#       that knew only the prose half counted a file it had just written as undeclared
 #  R14  a bare `ADR NNNN` with no file is a FAILURE inside SPEC_DIR and a COUNT in a handoff
 #  R15  SPEC_DIR empty scans NOTHING — it never falls back to the repo root
 #  R16  an unfilled `sdd adr new` stub is counted
@@ -53,6 +58,9 @@
 #  R26  off, warn and block are three states of ONE fixture, asserted differentially; and a bogus
 #       ADR_CHECK refuses at the gate instead of quietly degrading to off
 #  R10  both dialects are read by the same rule (`Spec:` here, `- **Spec**:` in the pilot target)
+#  R29  `--phase` is scoped to `--mission` and is REFUSED without it — only adr_check_mission reads
+#       it, so accepted and discarded it printed a whole-repo report that read as an answer about
+#       a phase
 #
 # Declared limits (D15 of CLAUDE.md — debt written is a limit, debt kept quiet is the fail-open):
 #   - The pilot target keeps a LOCAL namespace at `specs/023/adr/001-…`, outside ADR_DIR. This
@@ -88,6 +96,12 @@
 #        `sdd health` check 7 (`var-never-read ADR_DIR`) honest in the same commit as the key.
 #   R5 → the absent-key arm returning 0: red.
 #   R7 → `TBD` falling into the `none` arm: red. → the `--phase` arm never firing: red.
+#   R12 → the two counters merged back into one: red, on BOTH lines of the pair.
+#   R13 → adr_spec_link reading only the prose dialect: red on the frontmatter pair, and the
+#        failing half is what catches it — the info count alone also drops when the reader skips
+#        the file for an unrelated reason.
+#   R29 → the guard replaced by `:`: red, and it is the SENTENCE that catches it, not the rc —
+#        rc 1 is also what a real violation returns.
 #   R8 → the name pattern test replaced by `false`: red. → the `-f` test replaced by `false`: red.
 #   R9 → the back-link comparison replaced by `false`: red. → the missing-`Spec:` arm never
 #        firing: red. Both are also catalogue entries (mut_ADR_backlink_blind,
@@ -169,7 +183,12 @@ fails=0
 
 # Anti-vacuity. A file whose probes stop being dispatched prints exactly what a clean kit prints;
 # the floor is what refuses that, and it is checked at the very bottom, after everything ran.
-PROBE_FLOOR=55
+#
+# One unit of PROBES is one assertion OUTCOME, and nothing else touches the counter: pass() and
+# fail() are the only writers. Two blocks below used to bump it by hand AND then call pass/fail,
+# so two probes counted twice and the floor was pinned to a number two higher than the assertions
+# it was standing for — an instrument off by exactly the amount nobody could see.
+PROBE_FLOOR=59
 
 pass() { PROBES=$((PROBES + 1)); printf '  ok    %s\n' "$1"; }
 fail() { PROBES=$((PROBES + 1))
@@ -312,6 +331,17 @@ printf '# 0002 — two\n' > "$OFF/docs/adr/0002-two.md"
 assert_adr 'off names the mode and counts what is on disk' \
   "$OFF" 0 '^  ok    ADR_CHECK=off, 2 ADR\(s\) in docs/adr$' check
 
+# --- R29: --phase is scoped to --mission -------------------------------------------------------
+# Only adr_check_mission reads the phase; the repo scan never receives it. Accepted and discarded,
+# `--phase plan` printed a clean repo report and read as an answer about a phase nobody had asked
+# about. BOTH terms: the rc AND the sentence, because rc 1 is also what a real violation returns.
+assert_adr '--phase without --mission is refused, not silently discarded' "$OFF" 1 \
+  '^error: sdd adr check: --phase is scoped to one mission' check --phase plan
+# The neighbour that keeps the refusal from being "always refuse": with a mission it is legal.
+mission "$OFF" 20260101-scoped none
+assert_adr '...and the same flag with --mission is accepted' "$OFF" 0 \
+  '^  ok    20260101-scoped: adr: none' check --phase plan --mission 20260101-scoped
+
 # --- R5..R10: the mission scope --------------------------------------------------------------
 M="$(fixture mission ADR_CHECK=\"warn\")" || { echo "fixture failed" >&2; exit 1; }
 
@@ -423,6 +453,28 @@ printf '# Other\n\nno decision here\n' > "$R/specs/002-plain/spec.md"
 assert_adr 'spec.md without an ADR line is counted as info, rc 0' "$R" 0 \
   '^  info  1 spec\(s\) in specs carry no ADR line$' check
 
+# A spec that opens with `---` declares through the frontmatter `adr:` key, because that is what
+# adr_declare WRITES into it — the dialect is chosen from what is on disk. Read through the prose
+# key alone, `sdd adr new --spec` said "now declares it" and `sdd adr check` counted the same file
+# under "carry no ADR line" one command later: the two-way check never ran, and it came out as an
+# info count instead of a FAIL. Reproduced 2026-09-17 against a real spec.md.
+#
+# The FAILING half first, and it is the load-bearing one: an assertion that only watched the info
+# count drop to zero would also pass on a reader that skipped the file for some other reason. This
+# one can only go green if the back-link check actually RAN on the frontmatter spec.
+mkdir -p "$R/specs/003-front"
+printf -- '---\ntitle: front\nadr: docs/adr/0005-front.md\n---\n\n# Front\n' > "$R/specs/003-front/spec.md"
+adr_file "$R" 0005-front.md specs/999-nowhere/spec.md
+assert_adr 'a frontmatter spec gets the two-way check — a wrong back-link fails it' "$R" 1 \
+  "FAIL +docs/adr/0005-front\\.md:[0-9]+ — 'Spec: specs/999-nowhere/spec\\.md' points somewhere else, not at specs/003-front/spec\\.md" check
+
+# ...and green once it points back, naming the key the FILE used and not the one the reader
+# prefers. `adr:` here against `ADR:` on 001-thing two probes above is the differential: one
+# spelling for both dialects would satisfy exactly one of the two lines.
+adr_file "$R" 0005-front.md specs/003-front/spec.md
+assert_adr '...and passes once the ADR points back, named in the dialect the file carries' "$R" 0 \
+  '^  ok    specs/003-front/spec\.md: adr: docs/adr/0005-front\.md — and that ADR points back' check
+
 # The repo scope hands every mission that DECLARES a path to the full mission scope, back-link and
 # all. Without this the whole (b) branch could be replaced by `:` and nothing would notice — which
 # is exactly what the sabotage pass found, and the reason this probe exists.
@@ -449,6 +501,19 @@ adr_file "$R" 0003-stub.md specs/001-thing/spec.md
 printf '<!-- sdd adr new: body in OUTPUT_LANG=en -->\n' >> "$R/docs/adr/0003-stub.md"
 assert_adr 'an unfilled sdd adr new stub is counted as info' "$R" 0 \
   "^  info  1 ADR\\(s\\) still carry the unfilled 'sdd adr new' stub$" check
+
+# TWO counters, asserted DIFFERENTIALLY over one fixture that holds both states at once. Lumped
+# into a single "counted and not failed" number, the repo scan answered a question ADR_CHECK=block
+# does not ask: `adr: none` is a decision the PLAN gate ACCEPTS, absent/empty/TBD is what it
+# REFUSES. Measured in this kit on 2026-09-17 — `sdd adr check` rc 0 and `sdd preflight` "no
+# finding" over 14 missions the gate sends back to PLAN. Neither line alone is the assertion: the
+# `none` count passes on a reader that calls everything decided, the undecided count on one that
+# calls everything undecided. Together, whichever side moves goes red.
+mission "$R" 20260101-nokey '@none@'
+assert_adr 'a mission with no adr: key is counted as UNDECIDED, and the count names the gate' "$R" 0 \
+  "^  info  1 mission\\(s\\) have no decided 'adr:' — absent, empty or TBD; ADR_CHECK=block refuses each of them" check
+assert_adr '...while adr: none is counted apart from it, as a decision' "$R" 0 \
+  "^  info  1 mission\\(s\\) declare 'adr: none' — a decision, written down$" check
 
 # --- R17..R22: the allocator --------------------------------------------------------------------
 N="$(fixture new ADR_CHECK=\"warn\")" || { echo "fixture failed" >&2; exit 1; }
@@ -503,7 +568,6 @@ assert_adr '--spec writes a **ADR**: line into a spec with no frontmatter' "$N" 
 # `sed '$d'` drops the last line, which is `{ main "$@"; exit $?; }`: sourced whole, bin/sdd would
 # run main and take this file with it. The `declare -F` control is what keeps the probe from
 # passing because the source silently did nothing.
-PROBES=$((PROBES + 1))
 cat > "$BOX/reserve-probe.sh" <<'RESERVE'
 set -uo pipefail
 sdd="$1"; victim="$2"
@@ -515,13 +579,17 @@ adr_reserve "$victim" && { echo RESERVED_AN_EXISTING_PATH; exit 4; }
 exit 0
 RESERVE
 printf 'original bytes\n' > "$BOX/victim.md"
-if bash "$BOX/reserve-probe.sh" "$SDD" "$BOX/victim.md" >/dev/null 2>&1 \
-     && [ "$(cat "$BOX/victim.md")" = 'original bytes' ]; then
+# Captured ONCE, output kept. The probe distinguishes three worlds by marker — NOFUNC (the source
+# silently did nothing), RESERVED_AN_EXISTING_PATH (O_EXCL is gone), and a silent rc 0 — and both
+# call sites used to throw that text away, then RE-RUN the probe just to recover an rc they had
+# already had. A red run said "probe rc 3" and left the reader to re-invoke it by hand.
+RESERVE_OUT="$(bash "$BOX/reserve-probe.sh" "$SDD" "$BOX/victim.md" 2>&1)"; RESERVE_RC=$?
+if [ "$RESERVE_RC" = 0 ] && [ "$(cat "$BOX/victim.md")" = 'original bytes' ]; then
   pass 'the reservation primitive refuses an existing path and keeps its bytes'
 else
   fail 'the reservation primitive refuses an existing path and keeps its bytes' \
     'rc 0 from the probe and the file unchanged' \
-    "probe rc $(bash "$BOX/reserve-probe.sh" "$SDD" "$BOX/victim.md" >/dev/null 2>&1; echo $?), content: $(cat "$BOX/victim.md")"
+    "probe rc $RESERVE_RC ${RESERVE_OUT:+(}${RESERVE_OUT}${RESERVE_OUT:+)}, content: $(cat "$BOX/victim.md")"
 fi
 
 # --- R23..R26: the gates ------------------------------------------------------------------------
@@ -680,7 +748,6 @@ else fail 'off writes no degraded row' 'rc 3 and 0 adr-check rows' "rc $ADR_RC, 
 #
 # Sourced minus the last line, like the reservation probe: this is a pure string function and a
 # fixture repo would prove nothing about it that a direct call does not.
-PROBES=$((PROBES + 1))
 cat > "$BOX/expand-probe.sh" <<'EXPAND'
 set -uo pipefail
 sdd="$1"
