@@ -202,5 +202,5 @@ templates ship them, because the runner and the tests grep them.
 - An unverified fact does not enter the "verified context".
 - An increment without an executable Check does not enter the checkpoint.
 - DDD is conditional; kaizen is always.
-- `aprovacao: auto` only with the five criteria genuinely closed.
+- `aprovacao: auto` only with every criterion of the PLAN-AUTO table genuinely closed.
 - The version comes from the human.

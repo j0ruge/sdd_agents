@@ -23,7 +23,7 @@ trust every time somebody follows it and gets burned.
 1. The mission's full diff — it is what defines where drift can have happened.
 2. `docs/handoffs/<mission>/*` — the mission, the plan, the EXEC, QA and REVIEW handoffs.
 3. The repo's candidate documents: `README.md`, `CLAUDE.md`, `.claude/rules/*`, `CONTEXT.md`
-   (glossary), `CHANGELOG.md`, `KAIZEN_LOG.md`, `docs/adr/*`, and any docs specific to the areas
+   (glossary), `CHANGELOG.md`, `KAIZEN_LOG.md`, `$ADR_DIR/*`, and any docs specific to the areas
    touched.
 
 ## 2. Progressive disclosure — mandatory
@@ -46,7 +46,7 @@ An index file **routes**; depth lives in `references/` or in specific docs.
 | `CONTEXT.md` (glossary) | a domain term entered or changed | the term only appeared in a variable name |
 | `CHANGELOG.md` | the mission ships something user-visible | internal refactor with no external effect |
 | `KAIZEN_LOG.md` | the mission measures a before/after | there is no number to show |
-| `docs/adr/*` | an architectural decision was taken or reversed | the decision is already recorded and still holds |
+| `$ADR_DIR/*` | an architectural decision was taken or reversed | the decision is already recorded and still holds |
 
 On rules and `CLAUDE.md`: **SDCA** — standardising requires confirming in the file that the change
 is there. Did the convention really change? Write it. Did it not? Do not write it. A rule invented

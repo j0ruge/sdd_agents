@@ -926,7 +926,8 @@ scan_surface() {
   # loop with nothing to read and the sensor reports "0 violations" — clean by vacuity. 14 paths
   # today (bin/sdd + thirteen suite scripts, minus this file); it was 11 until
   # tests/check-entrypoint.sh landed, 12 until tests/check-checkpoint.sh did and 13 until
-  # tests/check-health.sh did and 14 until tests/check-adr.sh did, and it tracks the real count rather than staying at a number that
+  # tests/check-health.sh did, and 15 until tests/check-adr.sh did, and it tracks the real count
+# rather than staying at a number that
   # would still pass while describing a smaller surface than the one actually scanned.
   if [ "$n_files" -lt 16 ]; then
     printf '  FAIL  surface shrank to %d path(s), expected at least 16 — did something move?\n' \
