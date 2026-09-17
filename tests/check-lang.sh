@@ -70,7 +70,18 @@ STOPWORDS='falta|sem|para|pelo|pela|quando|onde|nada|este|esta|isso|pois|cada|ap
 # pattern is anchored on the key, so only the contract line loses its content — every other line of
 # the ADR is scanned exactly as before. The tempting wider rule — "ignore anything that looks like a
 # path" — is the fail-open this sensor exists to refuse.
-ADR_LINK_LINE='^(- )?(\*\*)?(ADR|Spec)(\*\*)?:'
+#
+# TWO halves, and the second is the one that keeps the first honest. Anchoring on the key alone
+# blanked the WHOLE remainder of the line, so `Spec: <any Portuguese sentence>` disappeared before
+# has_portuguese() ever saw it — a strip of every scanned file, one key wide, that the sensor
+# claimed to be reading. It is the fail-open this file exists to refuse, written by the very
+# comment above it. So the exemption fires only when the remainder is ONE path token running to
+# end of line: a slash is required (a bare `TBD` is not a path) and a space is not in the class, so
+# prose never satisfies it. Probed in both directions in selftest() — the path exempted, and a
+# sentence behind the same key still caught.
+ADR_LINK_KEY='^(- )?(\*\*)?(ADR|Spec)(\*\*)?:[[:space:]]*'
+ADR_LINK_PATH='[A-Za-z0-9._-]*(/[A-Za-z0-9._-]+)+[[:space:]]*$'
+ADR_LINK_LINE="${ADR_LINK_KEY}${ADR_LINK_PATH}"
 
 # has_portuguese <file> — prints the offending lines, returns 0 when it found any.
 #
@@ -86,7 +97,7 @@ ADR_LINK_LINE='^(- )?(\*\*)?(ADR|Spec)(\*\*)?:'
 has_portuguese() {
   local f="$1" hits body
   [ -f "$f" ] || return 1
-  body="$(sed -E "s@${ADR_LINK_LINE}.*@@" "$f")"
+  body="$(sed -E "s@${ADR_LINK_LINE}@@" "$f")"
   hits="$( { grep -nP '[\x{00C0}-\x{00D6}\x{00D8}-\x{00F6}\x{00F8}-\x{00FF}]' <<< "$body" || true
              grep -nwiE "$STOPWORDS" <<< "$body" || true; } | sort -t: -k1,1n -u )"
   [ -n "$hits" ] || return 1
@@ -122,6 +133,21 @@ selftest() {
   if ! has_portuguese "$t" >/dev/null; then
     echo "SENSOR-BROKEN: the same path in PROSE was not caught — the hole is wider than the key" >&2
     exit 95
+  fi
+  # The THIRD spelling, and the one that measures the exemption's width rather than its existence.
+  # With the rule anchored on the key alone this sentence was blanked whole and the sensor reported
+  # a clean file: the two probes above both stayed green through it, because neither asks what
+  # happens to a remainder that is NOT a path. Prose behind the key is still prose.
+  printf 'Spec: aqui nao tem caminho nenhum, e apenas uma frase escondida atras da chave\n' > "$t"
+  if ! has_portuguese "$t" >/dev/null; then
+    echo "SENSOR-BROKEN: Portuguese prose behind a Spec: key was blanked — the exemption is not scoped to a path" >&2
+    exit 95
+  fi
+  # And the neighbour that proves the scoping did not simply switch the exemption off: a bare
+  # value with no slash is not a path, so the line is scanned — and a clean one stays clean.
+  printf 'Spec: TBD\n' > "$t"
+  if has_portuguese "$t" >/dev/null; then
+    echo "SENSOR-BROKEN: 'Spec: TBD' read as Portuguese" >&2; exit 92
   fi
 }
 
