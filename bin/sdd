@@ -5374,8 +5374,18 @@ adr_new() {
 # nobody to make it is the unsatisfiable gate of principle 1, the class that turned 7 of 12 QA
 # sessions of 20260825-frete-cif-fob into US$ 73,32 of laps. EXEC re-reads the same thing for
 # DRIFT: the ADR was there when the plan was approved and is not there now.
+# The marker `warn` leaves behind, read ONCE per run by cmd_run and nowhere else.
+#
+# ONE setter, reset on ENTRY — the contract every side marker in this runner RE-DERIVES rather than
+# inherits (GATE_APP_DOWN, HAT_CROSSED_WHY, KIT_TOUCHED_WHY, and the comment on GATE_APP_DOWN is
+# the one this copies). A marker that survived the lap would carry a warning about the phase before
+# it, which is exactly how handoff_blocked_escalation once stamped `{phase: EXEC}` on a handoff
+# that said `done`.
+GATE_ADR_WARN_WHY=""
+
 adr_gate_verdict() {
   local phase="$1" rc=0 mode
+  GATE_ADR_WARN_WHY=""
   # `|| rc=$?`, never a bare capture: under `set -e` the assignment form kills the RUNNER the
   # moment adr_mode returns 2, inside a gate, which is the one place that can neither report nor
   # recover.
@@ -5388,9 +5398,11 @@ adr_gate_verdict() {
   ADR_FAILS=0; ADR_FIRST_WHY=""
   adr_check_mission "$REPO_ROOT" "$MISSION" "$phase" >/dev/null 2>&1 || true
   [ "$ADR_FAILS" -gt 0 ] || return 0
-  # `warn` derives the phase anyway, and says so in the ledger rather than here — a gate is the
-  # wrong place to narrate, and the row is what an operator can count afterwards.
-  [ "$mode" = block ] || return 0
+  # `warn` derives the phase anyway, and says so in the LEDGER rather than here — a gate is the
+  # wrong place to narrate, and a row is what an operator can count afterwards. `off` never reaches
+  # this line (it returned above), which is what makes that early return load-bearing: without it
+  # a repo that asked for nothing would start writing rows.
+  [ "$mode" = block ] || { GATE_ADR_WARN_WHY="$ADR_FIRST_WHY"; return 0; }
   GATE_WHY="adr: $ADR_FIRST_WHY"
   return 1
 }
@@ -5849,6 +5861,11 @@ cmd_run() {
   # degradation branch runs in this very shell, never through `$( )`, so the CLAUDE.md lesson that
   # killed the kit stamp's guard (a global assigned inside a subshell dies with it) does not bite.
   local degraded_logged=0
+  # A second one-shot, and deliberately NOT the same variable: the two degradations are different
+  # facts about different things (a review that ran out of rounds; a repo running ADR_CHECK=warn),
+  # and a run can produce both. Shared, whichever fired first would silence the other and the
+  # ledger would carry one row for two events.
+  local adr_degraded_logged=0
   local dry_next=""   # dry-run projection cursor (distinct from --phase, which prints just one)
 
   while :; do
@@ -5921,6 +5938,25 @@ cmd_run() {
     # the gate failing is the whole point here.
     if [ "$phase" = "EXEC" ]; then
       gate_EXEC || true
+      # ADR_CHECK=warn leaves a trail, once per run. The gate has already answered by here, so
+      # GATE_ADR_WARN_WHY is armed or it is not; writing it from inside the gate would put a
+      # ledger row behind every `sdd status` and every `sdd phase`, which re-evaluate gates.
+      #
+      # Declared limits, because the row is a count somebody will read: a lap that stops at the
+      # `blocked` Jidoka above never reaches this line, and a run that never derives EXEC never
+      # writes one. So the row says "this run reached EXEC under warn with an unsatisfied `adr:`",
+      # which is exactly what it is worth — never "this repo is running warn".
+      #
+      # `--dry-run` is excluded for the reason the kit guard already re-learned once: a projection
+      # opens no session to attribute anything to, and arming it anyway made the dry run inherit a
+      # ledger warning it had no business inheriting (measured, 0 warnings before and 1 after).
+      if [ "$DRY_RUN" != "1" ] && [ -n "$GATE_ADR_WARN_WHY" ] && [ "$adr_degraded_logged" = 0 ]; then
+        adr_degraded_logged=1
+        warn "ADR_CHECK=warn — $GATE_ADR_WARN_WHY"
+        pipeline_log_line "$(date -Iseconds)  DEGRADED  EXEC  ADR_CHECK=warn — $GATE_ADR_WARN_WHY"
+        # CALLED, never substituted: it writes the ledger and publishes nothing worth capturing.
+        autonomy_degraded_row "adr-check" "EXEC" "$GATE_ADR_WARN_WHY"
+      fi
       if [ "$GATE_EXEC_DIRTY" = "1" ]; then
         info ""
         bad "BLOCKED in EXEC — $GATE_WHY"

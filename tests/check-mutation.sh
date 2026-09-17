@@ -3519,6 +3519,14 @@ mut_EXEC_adr_drift_blind() {
   sed -i '/^gate_EXEC() {/,/^}/ s@^  adr_gate_verdict exec || return 1$@  :@' "$1"
 }
 
+# `warn` that says nothing is `off` with a config key that reads as set — the label without the
+# artifact, which principle 1 of CLAUDE.md refuses. The row is the only thing that makes a repo's
+# migration countable: without it, "we are on warn and it is quiet" and "we are on warn and nobody
+# is looking" are the same sentence.
+mut_RUN_adr_warn_silent() {
+  sed -i '/^cmd_run() {/,/^}/ s@^        autonomy_degraded_row "adr-check" "EXEC" "$GATE_ADR_WARN_WHY"$@        :@' "$1"
+}
+
 CATALOG=(
   AUTONOMY_meta_ignores_event
   AUTONOMY_mission_drops_close_money
@@ -3836,6 +3844,7 @@ CATALOG=(
   PLAN_adr_check_ignored
   PLAN_adr_tbd_accepted
   EXEC_adr_drift_blind
+  RUN_adr_warn_silent
 )
 
 # Mutations that are NOT caught today, each with the increment that closes it. Ratchet in both

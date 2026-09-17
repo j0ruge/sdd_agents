@@ -46,6 +46,8 @@
 #  R24  `adr: none` derives EXEC: deciding nothing architectural is a decision, written down
 #  R25  EXEC asks the one thing PLAN cannot — DRIFT. An ADR on disk when the human approved the
 #       plan and gone now stops the line
+#  R27  `warn` leaves exactly one `degraded` row of kind `adr-check` per run, written on the way
+#       past the gate and BEFORE the session; `--dry-run` writes none, and `off` writes none
 #  R26  off, warn and block are three states of ONE fixture, asserted differentially; and a bogus
 #       ADR_CHECK refuses at the gate instead of quietly degrading to off
 #  R10  both dialects are read by the same rule (`Spec:` here, `- **Spec**:` in the pilot target)
@@ -115,13 +117,33 @@
 #  R25 → `adr_gate_verdict exec` replaced by `:`: red (also mut_EXEC_adr_drift_blind).
 #  R26 → warn behaving like block: red. → block behaving like warn: red. → a bogus mode degrading
 #        to satisfied: red.
-#   ⚠️ → the `off` early return of adr_gate_verdict SURVIVES every sabotage here, and the ONLY
-#        honest thing to say is which world could not be built rather than that it does not exist.
-#        At the gate, `off` and `warn` are observationally the same: both derive the phase. The
-#        difference is the ledger row `warn` leaves and `off` does not, which arrives in the next
-#        increment — and the differential probe named `off writes no degraded row` is what makes
-#        that line load-bearing. Until it lands, this rule has no probe and the gap is written
-#        here rather than kept quiet (D15).
+#  R27 → `autonomy_degraded_row "adr-check"` replaced by `:`: red (also mut_RUN_adr_warn_silent).
+#        → `[ "$mode" != off ] || return 0` removed, so `off` arms the marker: red. That early
+#        return had NO probe when it was written, and the gap was declared here until this
+#        differential closed it — which is the discipline, not an accident.
+#
+# ⚠️ THREE rules in cmd_run survive every sabotage, and the honest thing is to name the world that
+# could not be built rather than to claim it does not exist — CLAUDE.md paid for that difference
+# with a regression (a DRY_RUN guard deleted as "unbreakable", restored in the review of the same
+# PR). All three were MEASURED, not assumed, and all three decide WHICH failure a future defect
+# produces, which is the D15 category that keeps a rule with its absence declared:
+#
+#   the one-shot `[ "$adr_degraded_logged" = 0 ]`. Removing it still writes exactly ONE row here,
+#     because the EXEC pre-check is entered at most once per run in every world this fixture can
+#     reach: under warn the row goes out, and the lap then either escalates on the spot or moves
+#     on to QA. The world where it repeats is real — QA or REVIEW writes an F<n>/R<n> increment
+#     and current_phase hands EXEC back — and it needs real sessions, which no probe here may
+#     spend. That is the world I could not build. (Its sibling, degraded_logged for
+#     review-to-draft, HAS a witness in check-autonomy.sh because REVIEW→PR→REVIEW re-enters.)
+#   the `[ "$DRY_RUN" != "1" ]` guard. Measured: `sdd run --dry-run` over this same fixture never
+#     reaches the site at all — 0 mentions of ADR_CHECK=warn in its output, 0 rows with the guard
+#     and 0 without. It stays because the kit has already deleted one DRY_RUN guard on exactly
+#     this reasoning and had to put it back.
+#   `GATE_ADR_WARN_WHY=""` on entry. The marker is armed and read within ONE derivation of ONE
+#     mission, so there is no second reader to inherit a stale value. It stays because a marker
+#     that re-derives its contract instead of inheriting it is what CLAUDE.md demands of every new
+#     one, and because the world where it matters is the same unreachable one as the one-shot: a
+#     second EXEC lap whose mission became clean in between.
 #   -- → the last line of adr_check_repo replaced by `return 0`: red — and it SURVIVED the first
 #        sweep because cmd_adr read ADR_FAILS a second time. Two readers of one fact means either
 #        one can be sabotaged while the other answers, and NEITHER is catchable; cmd_adr reads the
@@ -140,7 +162,7 @@ fails=0
 
 # Anti-vacuity. A file whose probes stop being dispatched prints exactly what a clean kit prints;
 # the floor is what refuses that, and it is checked at the very bottom, after everything ran.
-PROBE_FLOOR=50
+PROBE_FLOOR=53
 
 pass() { PROBES=$((PROBES + 1)); printf '  ok    %s\n' "$1"; }
 fail() { PROBES=$((PROBES + 1))
@@ -568,6 +590,79 @@ assert_at 'off: a mission with no adr: key at all derives EXEC' "$G" '^EXEC$' ph
 sed -i 's@^ADR_CHECK="off"@ADR_CHECK="bogus"@' "$G/.sdd/config.sh"
 assert_at 'a bogus ADR_CHECK refuses at the gate instead of degrading to off' "$G" \
   '^PLAN: ADR_CHECK=bogus is not one of off\|warn\|block' why "$GM" PLAN
+
+# --- R27: warn leaves a trail ------------------------------------------------------------------
+# Through the DETERMINISTIC dirty-tree Jidoka, which escapes before any run_phase — so this drives a
+# real `sdd run` and spends nothing. The stub `claude` on PATH makes that a property of the fixture
+# and not of the assertion happening to escape in time.
+#
+# A ledger of its own per fixture: rows from a throwaway checkout are what the judge reads as
+# missions (ADR 0005), and the runner refuses to write the real one from under $TMPDIR anyway.
+W="$(fixture warnrun ADR_CHECK=\"warn\")" || { echo "fixture failed" >&2; exit 1; }
+WM=20260101-warn
+WLEDGER="$BOX/warn-state"
+mkdir -p "$WLEDGER" "$W/docs/handoffs/$WM"
+{ printf -- '---\nmissao: %s\naprovacao: auto\nadr: TBD\n---\n\n# Mission\n' "$WM"; } > "$W/docs/handoffs/$WM/00-missao.md"
+: > "$W/docs/handoffs/$WM/01-plano.md"
+( cd "$W" && git add -A && git commit -qm "mission" ) >/dev/null 2>&1
+WSHA="$( cd "$W" && git rev-parse --short HEAD )"
+{ printf '| ID | Incremento | Check (comando → esperado) | Status | Commit |\n'
+  printf -- '|---|---|---|---|---|\n'
+  # The Commit cell is read VERBATIM by gate_EXEC — no backticks around the sha. With them the
+  # gate reports "points at commit '`abc1234`', which does not exist" and the run escalates for
+  # the wrong reason, which is how this fixture first behaved: rc 3 with no dirty-tree row at all.
+  printf '| I1 | slice one | `true` → 0 | done | %s |\n' "$WSHA"; } > "$W/docs/handoffs/$WM/checkpoint.md"
+: > "$W/docs/handoffs/$WM/20-handoff-exec.md"
+( cd "$W" && git add -A && git commit -qm "increment" ) >/dev/null 2>&1
+# TEST_CMD red over a dirty tree is the dirty-tree Jidoka: rc 3, and no session.
+sed -i 's@^TEST_CMD=.*@TEST_CMD="false"@' "$W/.sdd/config.sh"
+printf 'uncommitted\n' > "$W/dirty.txt"
+
+# run_ledger <fixture> <state dir> <extra sdd args...> — PUBLISHES ADR_RC and the ledger path.
+LEDGER_FILE=""
+run_ledger() {
+  local d="$1" st="$2"; shift 2
+  rm -f "$st/autonomy-log.jsonl"
+  ( cd "$d" && PATH="$d/.stub:$PATH" SDD_STATE_DIR="$st" "$SDD" run "$@" ) >/dev/null 2>&1
+  ADR_RC=$?
+  LEDGER_FILE="$st/autonomy-log.jsonl"
+}
+# rows_of <kind> — how many degraded rows of that kind the last run wrote
+# Captured and defaulted, never `grep -c … || true` and never `… || echo 0`. On a MISSING file
+# grep -c prints nothing (the empty string compared against "0" fails with a blank in the "got"
+# column); on a file with no match it prints 0 AND exits 1, so an `|| echo 0` appends a SECOND
+# line and the comparison sees "0\n0". Both spellings were tried here, in that order.
+rows_of() {
+  local n; n="$(grep -c "\"kind\":\"$1\"" "$LEDGER_FILE" 2>/dev/null)" || n=0
+  printf '%s\n' "${n:-0}"
+}
+
+run_ledger "$W" "$WLEDGER" "$WM"
+# THREE terms, and none of them is the assertion alone. "rc 3" passes on a run that escalated for
+# any reason; "one adr-check row" passes on a run that wrote it and then never reached the Jidoka;
+# "before the dirty-tree row" is what says the warning was written on the way past the gate rather
+# than as part of the escalation.
+if [ "$ADR_RC" = 3 ] && [ "$(rows_of adr-check)" = 1 ] && [ "$(rows_of dirty-tree)" = 1 ] \
+     && [ "$(grep -n '"kind":"adr-check"' "$LEDGER_FILE" | cut -d: -f1)" -lt \
+          "$(grep -n '"kind":"dirty-tree"' "$LEDGER_FILE" | cut -d: -f1)" ]; then
+  pass 'warn: one degraded adr-check row per run, before the session'
+else
+  fail 'warn: one degraded adr-check row per run, before the session' \
+    'rc 3, exactly one adr-check row, and it precedes the dirty-tree row' \
+    "rc $ADR_RC, adr-check $(rows_of adr-check), dirty-tree $(rows_of dirty-tree)"
+fi
+
+# The two differentials. Same fixture, same disk: one flag apart and one config line apart, so no
+# regime of the fixture satisfies them by accident and whichever side moves turns red.
+run_ledger "$W" "$WLEDGER" "$WM" --dry-run
+if [ "$(rows_of adr-check)" = 0 ]; then pass 'warn: --dry-run writes no adr-check row — a projection opens no session to attribute one to'
+else fail 'warn: --dry-run writes no adr-check row' '0 rows' "$(rows_of adr-check)"; fi
+
+sed -i 's@^ADR_CHECK="warn"@ADR_CHECK="off"@' "$W/.sdd/config.sh"
+run_ledger "$W" "$WLEDGER" "$WM"
+if [ "$ADR_RC" = 3 ] && [ "$(rows_of adr-check)" = 0 ]; then
+  pass 'off writes no degraded row — the same run, the same disk, one config line apart'
+else fail 'off writes no degraded row' 'rc 3 and 0 adr-check rows' "rc $ADR_RC, $(rows_of adr-check) row(s)"; fi
 
 # --- verdict ------------------------------------------------------------------------------------
 if [ "$PROBES" -lt "$PROBE_FLOOR" ]; then
