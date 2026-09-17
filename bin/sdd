@@ -172,6 +172,10 @@ load_config() {
   # to `/**` — a hat declaring it may write the whole filesystem. adr_mode() refuses the empty
   # value rather than leaving the expansion to discover it.
   : "${ADR_DIR:=docs/adr}"
+  # The SpecKit tree, when the repo has one: `<SPEC_DIR>/<NNN-slug>/spec.md` with `plan.md` beside
+  # it. EMPTY means "this repo has no spec tree" and must scan NOTHING — an empty value falling
+  # back to the repo root would walk the whole checkout looking for a spec.md.
+  : "${SPEC_DIR:=}"
 
   [ -n "$PROJECT_NAME" ]   || die "PROJECT_NAME is empty in $CONFIG_FILE"
   [ -n "$DEFAULT_BRANCH" ] || die "DEFAULT_BRANCH is empty in $CONFIG_FILE"
@@ -5035,25 +5039,37 @@ adr_check_mission() {
       return 0 ;;
   esac
 
-  # From here `$v` claims to be a path. Three questions, and the order is deliberate: the name
-  # before the file, because a number read out of a title instead of out of the name is the exact
-  # defect this section exists to close, and a reader whose FIRST message is "no such file" would
-  # go looking for the file rather than for the spelling.
+  adr_check_link "$root" "$rel" adr "$v"  "$line"
+}
+
+# adr_check_link <root> <declaring file, repo-relative> <key> <claimed path> <line of the claim>
+#
+# ONE definition, shared by the mission scope and the spec scope. They declare through different
+# keys in different dialects — `adr:` in a mission's frontmatter, `**ADR**:` in a SpecKit spec —
+# and ask exactly the same three questions, so the questions live here. Written twice, the day one
+# copy learned about the back-link the other would go on certifying half a pair.
+#
+# CALLED, never `$( )`: it reports through adr_fail, which publishes ADR_FAILS.
+adr_check_link() {
+  local root="$1" rel="$2" key="$3" v="$4" line="$5"
+  # The order is deliberate: the NAME before the file. A number read out of a title instead of out
+  # of the file name is the exact defect this section exists to close, and a reader whose first
+  # message is "no such file" goes looking for the file rather than for the spelling.
   local base; base="$(basename -- "$v")"
   if ! grep -qE "$ADR_FILE_RE" <<< "$base"; then
-    adr_fail "$rel" "$line" "'adr: $v' does not name an ADR — the id is read from the FILE NAME, which has to be NNNN-slug.md" \
+    adr_fail "$rel" "$line" "'$key: $v' does not name an ADR — the id is read from the FILE NAME, which has to be NNNN-slug.md" \
       "rename it, or let 'sdd adr new' allocate the number"
     return 1
   fi
   if [ ! -f "$root/$v" ]; then
-    adr_fail "$rel" "$line" "'adr: $v' points at a file that does not exist" \
+    adr_fail "$rel" "$line" "'$key: $v' points at a file that does not exist" \
       "create it with 'sdd adr new --slug ${base%.md}' — the number it hands out is the next free one, which may not be this one"
     return 1
   fi
   # The back-link, and it is the whole point of the pair. The vault note that started this mission
   # declared an ADR number in prose; the number existed and belonged to another decision. One
-  # direction proves nothing — an `adr:` pointing at a real file is satisfied by EVERY real file.
-  # What distinguishes the right one is that the ADR points BACK.
+  # direction proves nothing — a claim pointing at a real file is satisfied by EVERY real file.
+  # What tells the right one apart is that the ADR points BACK.
   if ! adr_link "$root/$v" Spec; then
     adr_fail "$v" 1 "has no 'Spec:' line, so nothing points back at $rel" \
       "add 'Spec: $rel' under the header"
@@ -5064,8 +5080,135 @@ adr_check_mission() {
       "one ADR, one spec: fix whichever side is wrong, or allocate a new number with 'sdd adr new'"
     return 1
   fi
-  printf '  ok    %s: adr: %s — and that ADR points back at the mission\n' "$m" "$v"
+  printf '  ok    %s: %s: %s — and that ADR points back\n' "$rel" "$key" "$v"
   return 0
+}
+
+# adr_check_repo <root> — the whole-repo scope. CALLED, never `$( )`.
+#
+# The asymmetry with the mission scope is the design, and it is decision 4 of this mission's grill:
+# ABSENCE fails in the mission the kit is running right now and is COUNTED everywhere else. Every
+# mission already on disk predates the mechanism, so a repo scope that failed on absence would
+# fail every repo on the day it installed the kit — and a check that is red from the first run is
+# a check people turn off.
+#
+# Five things it reads:
+#   a. ADR_DIR — every name reads as NNNN-slug.md, and no two files claim the same number
+#   b. every mission that DECLARES a path gets the full mission scope, back-link included
+#   c. every $SPEC_DIR/*/spec.md that declares an ADR gets the same treatment, with the back-link
+#      pointing at the spec itself
+#   d. a bare `ADR NNNN` with no file behind it — a FAILURE inside SPEC_DIR, a COUNT in a handoff
+#   e. a stub `sdd adr new` left unfilled
+#
+# ⚠️ Why (d) is split, measured on this very repo on 2026-09-17 rather than argued. Inside a
+# SpecKit tree a number is a CLAIM by construction: that tree carries `**ADR**:` lines and a spec
+# citing `ADR 0042` is asserting that 0042 is the decision behind it. A handoff is NARRATIVE — the
+# 01-plano.md of the mission that built this function cites `ADR 0042` (the name of a probe) and
+# `ADR 0030` (the pilot target's ADR, the one the whole mission is about), and neither has a file
+# here, nor should. Failing on those would have made `sdd adr check` red on the kit on the day it
+# was written, and the repair would have been to reword an approved artifact until the detector
+# went quiet — weakening the content to please the instrument, which check-lang.sh's own header
+# names as the wrong move.
+#
+# ⚠️ Declared limit, same measurement. The plan also asked for "a co-located plan citing an id
+# different from the declared one fails". It is NOT implemented and this is why: a plan legitimately
+# cites other decisions. The 01-plano.md of this mission declares 0008 and cites 0003, 0004 and
+# 0007, all of them correctly. The rule would have been a false-positive generator, and a rule that
+# cries wolf under `block` makes the whole gate noise.
+adr_check_repo() {
+  local root="$1" f base id line n
+  local dir="$root/${ADR_DIR%/}"
+  local -A seen_id=()
+  local n_adr=0 n_undeclared=0 n_nospec=0 n_stub=0 n_bare_prose=0
+
+  # --- a. the directory ---------------------------------------------------
+  if [ -d "$dir" ]; then
+    while IFS= read -r f; do
+      [ -n "$f" ] || continue
+      base="$(basename -- "$f")"
+      if ! grep -qE "$ADR_FILE_RE" <<< "$base"; then
+        adr_fail "${ADR_DIR%/}/$base" 1 "the name does not read as NNNN-slug.md, so the file carries no id" \
+          "rename it, or move it out of $ADR_DIR"
+        continue
+      fi
+      n_adr=$((n_adr + 1))
+      id="${base%%-*}"
+      if [ -n "${seen_id[$id]:-}" ]; then
+        # BOTH files named, never just the newcomer: the reader has to decide which of the two
+        # keeps the number, and a message naming one of them hides half the decision.
+        adr_fail "${ADR_DIR%/}/$base" 1 "id $id is already taken by ${seen_id[$id]}" \
+          "renumber one of them — 'sdd adr new' hands out the next free id and never reuses a gap"
+      else
+        seen_id[$id]="$base"
+      fi
+      if grep -q '<!-- sdd adr new:' "$f"; then n_stub=$((n_stub + 1)); fi
+    done < <(find "$dir" -maxdepth 1 -type f -name '*.md' 2>/dev/null | sort)
+  fi
+
+  # --- b. the missions ----------------------------------------------------
+  local hdir="$root/${HANDOFF_DIR%/}" m v
+  if [ -d "$hdir" ]; then
+    while IFS= read -r f; do
+      [ -n "$f" ] || continue
+      m="$(basename -- "$(dirname -- "$f")")"
+      v="$(frontmatter "$f" adr "$FRONTMATTER_ABSENT")"
+      case "$v" in
+        "$FRONTMATTER_ABSENT"|''|none|TBD|\<*) n_undeclared=$((n_undeclared + 1)); continue ;;
+      esac
+      adr_check_mission "$root" "$m" || true
+    done < <(find "$hdir" -mindepth 2 -maxdepth 2 -type f -name '00-missao.md' 2>/dev/null | sort)
+
+    # d, the counted half: a citation in a handoff is narrative until something says otherwise.
+    while IFS= read -r f; do
+      [ -n "$f" ] || continue
+      while IFS= read -r line; do
+        [ -n "$line" ] || continue
+        id="$(printf '%04d' "$((10#${line##*ADR }))" 2>/dev/null)" || continue
+        [ -z "$(find "$dir" -maxdepth 1 -name "$id-*.md" 2>/dev/null)" ] || continue
+        n_bare_prose=$((n_bare_prose + 1))
+      done < <(grep -noE '\bADR [0-9]{4}\b' "$f" 2>/dev/null || true)
+    done < <(find "$hdir" -mindepth 2 -maxdepth 2 -type f -name '01-plano.md' 2>/dev/null | sort)
+  fi
+
+  # --- c + d. the SpecKit tree -------------------------------------------
+  # SPEC_DIR empty means "this repo has no spec tree", and an empty value must scan NOTHING rather
+  # than fall back to the repo root — `find "$root/" -name spec.md` would walk the whole checkout.
+  if [ -n "$SPEC_DIR" ]; then
+    local sdir="$root/${SPEC_DIR%/}" rel
+    if [ -d "$sdir" ]; then
+      while IFS= read -r f; do
+        [ -n "$f" ] || continue
+        rel="${f#"$root"/}"
+        if adr_link "$f" ADR; then
+          adr_check_link "$root" "$rel" ADR "$ADR_LINK_VALUE" "$ADR_LINK_NO" || true
+        else
+          n_nospec=$((n_nospec + 1))
+        fi
+      done < <(find "$sdir" -mindepth 2 -maxdepth 2 -type f -name 'spec.md' 2>/dev/null | sort)
+
+      # d, the failing half: inside a spec tree a number IS a claim.
+      while IFS= read -r f; do
+        [ -n "$f" ] || continue
+        rel="${f#"$root"/}"
+        while IFS= read -r line; do
+          [ -n "$line" ] || continue
+          n="${line%%:*}"
+          id="$(printf '%04d' "$((10#${line##*ADR }))" 2>/dev/null)" || continue
+          [ -z "$(find "$dir" -maxdepth 1 -name "$id-*.md" 2>/dev/null)" ] || continue
+          adr_fail "$rel" "$n" "cites 'ADR $id', and no file in $ADR_DIR carries that id" \
+            "allocate it with 'sdd adr new', or cite the path of the ADR you mean"
+        done < <(grep -noE '\bADR [0-9]{4}\b' "$f" 2>/dev/null || true)
+      done < <(find "$sdir" -mindepth 2 -maxdepth 2 -type f \( -name 'spec.md' -o -name 'plan.md' \) 2>/dev/null | sort)
+    fi
+  fi
+
+  # --- the report ---------------------------------------------------------
+  printf '  ok    ADR_CHECK=%s, %s ADR(s) in %s\n' "$ADR_CHECK" "$n_adr" "${ADR_DIR%/}"
+  [ "$n_undeclared" -eq 0 ]  || adr_info "$n_undeclared mission(s) declare no ADR path — none/TBD/absent, counted and not failed"
+  [ "$n_nospec" -eq 0 ]      || adr_info "$n_nospec spec(s) in $SPEC_DIR carry no ADR line"
+  [ "$n_bare_prose" -eq 0 ]  || adr_info "$n_bare_prose bare 'ADR NNNN' citation(s) in handoff prose with no file in $ADR_DIR"
+  [ "$n_stub" -eq 0 ]        || adr_info "$n_stub ADR(s) still carry the unfilled 'sdd adr new' stub"
+  [ "$ADR_FAILS" -eq 0 ]
 }
 
 # adr_mode — prints the validated ADR_CHECK on stdout; rc 2 when the configuration is not usable.
@@ -5129,9 +5272,12 @@ cmd_adr() {
   done
 
   load_config
-  local mode rc=0
-  mode="$(adr_mode)" || rc=$?
-  [ "$rc" -eq 0 ] || return "$rc"
+  # Called for its REFUSAL, and the value thrown away: adr_check_repo prints ADR_CHECK itself, and
+  # a second copy of the mode carried down from here would be a second answer to one question.
+  # `|| return $?`, never a bare capture: under `set -e` the assignment form kills the runner ON
+  # THE ASSIGNMENT the moment adr_mode returns 2, and the refusal it wrote would be the last thing
+  # printed by a command that looked like it had crashed.
+  adr_mode >/dev/null || return $?
 
   case "$verb" in
     # The allocator lands two increments from here. It REFUSES rather than no-opping: a verb that
@@ -5148,21 +5294,20 @@ cmd_adr() {
         *) die "sdd adr check: --phase takes 'plan' or 'exec', not '$phase'" ;;
       esac
       ADR_FAILS=0; ADR_FIRST_WHY=""
+      local vrc=0
+      # CALLED, never `$( )`: both publish ADR_FAILS and ADR_FIRST_WHY, and both globals would die
+      # with the subshell a command substitution opens.
+      #
+      # The RC is what this reads, and not ADR_FAILS a second time. Read both, and whichever of the
+      # two says "clean" is decoration — a sabotage of either would leave the other answering, and
+      # neither could be caught. The counter is load-bearing one level down, where adr_check_repo
+      # turns it into its own rc.
       if [ -n "$mission" ]; then
-        # CALLED, never `$( )`: it publishes ADR_FAILS and ADR_FIRST_WHY, and both would die with
-        # the subshell a command substitution opens.
-        adr_check_mission "$root" "$mission" "$phase" || true
+        adr_check_mission "$root" "$mission" "$phase" || vrc=1
       else
-        # The repo scope arrives in I3. Until then this answers the one question it can answer
-        # honestly — which of the three modes the repo runs under, and how many ADRs are on disk.
-        local dir="$root/${ADR_DIR#/}" n=0
-        if [ -d "$dir" ]; then
-          n="$(find "$dir" -maxdepth 1 -type f -name '*.md' 2>/dev/null | wc -l)" || n=0
-        fi
-        printf '  ok    ADR_CHECK=%s, %s ADR(s) in %s\n' "$mode" "$n" "${ADR_DIR%/}"
+        adr_check_repo "$root" || vrc=1
       fi
-      [ "$ADR_FAILS" -eq 0 ] || return 1
-      return 0
+      return "$vrc"
       ;;
   esac
 }

@@ -78,10 +78,20 @@ connect that times out instead of answering. Only a connection actively **refuse
 | `ADR_CHECK` | no | `off` | How hard the PLAN and EXEC gates ask for the mission's `adr:` line. `off` ⇒ nothing. `warn` ⇒ the phase derives as usual and the run leaves one `degraded` row of kind `adr-check` in the autonomy ledger. `block` ⇒ `gate_PLAN` refuses a mission whose `adr:` is empty, `TBD` or still the template placeholder. Anything else is refused with rc 2 — the value is admitted positively, so a fourth mode has to be taught rather than arrive by omission. |
 | `ADR_DIR` | no | `docs/adr` | Where the numbered ADRs live, relative to the repo root. `sdd adr new` reserves the next free id here; `sdd adr check` reads them back. Never `/` and never empty: the value is substituted into the `sdd-planner` hat's `writes:` glob, where it would expand to `/**`. |
 
+| `SPEC_DIR` | no | empty | Root of a SpecKit-style tree — `<SPEC_DIR>/<NNN-slug>/spec.md` with `plan.md` beside it. Empty ⇒ the repo has no spec tree and `sdd adr check` scans none. A spec that declares an `ADR` line gets the same two-way check a mission gets; one that declares none is counted, not failed. |
+
 Why the default is `off` and not `warn`: every repo that already installed the kit has no `adr:`
 key in any mission on disk, so a default that spoke would make the kit's own arrival look like a
 finding in someone else's backlog. The adoption path is the target's decision and it is gradual —
 install, run `warn` until `sdd adr check` is quiet, then `block`.
+
+⚠️ A bare `ADR NNNN` written with no file behind it is read **differently** in the two trees, and
+the asymmetry was measured rather than argued. Inside `SPEC_DIR` a number is a **claim** — that
+tree carries `**ADR**:` lines — so it fails. In a handoff it is **narrative**: the `01-plano.md` of
+the mission that built this check cites `ADR 0042` (the name of a probe) and `ADR 0030` (another
+repo's ADR, the one the mission is about), and neither has a file here, nor should. Those are
+counted. Failing on them would have made `sdd adr check` red on the kit on the day it was written,
+and the only repair would have been to reword an approved artifact until the detector went quiet.
 
 ⚠️ Declared limit. The scan reaches `ADR_DIR` and, when `SPEC_DIR` is set, `<SPEC_DIR>/*/spec.md`.
 A repo that also keeps a **local** ADR namespace beside a spec — `specs/023/adr/001-…` in the pilot

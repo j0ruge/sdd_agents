@@ -3470,14 +3470,23 @@ mut_AUTONOMY_close_key_subsequence() {
 # note that started this mission — the number was real and belonged to another decision. Blind,
 # `sdd adr check` certifies a mission wired to somebody else's ADR.
 mut_ADR_backlink_blind() {
-  sed -i '/^adr_check_mission() {/,/^}/ s@if \[ "$ADR_LINK_VALUE" != "$rel" \]; then@if false; then@' "$1"
+  sed -i '/^adr_check_link() {/,/^}/ s@if \[ "$ADR_LINK_VALUE" != "$rel" \]; then@if false; then@' "$1"
 }
 
 # The id is read from the FILE NAME and never from the title, because the two dialects on disk
 # disagree about the title and agree about the name. With the pattern gone, `adr: docs/adr/notes.md`
 # reads as a legal ADR and the number the whole mechanism exists to allocate stops being required.
 mut_ADR_number_mismatch_blind() {
-  sed -i '/^adr_check_mission() {/,/^}/ s@if ! grep -qE "$ADR_FILE_RE" <<< "$base"; then@if false; then@' "$1"
+  sed -i '/^adr_check_link() {/,/^}/ s@if ! grep -qE "$ADR_FILE_RE" <<< "$base"; then@if false; then@' "$1"
+}
+
+# A bare `ADR NNNN` inside a SpecKit spec is a CLAIM — that tree carries `**ADR**:` lines, so a
+# spec citing a number asserts that number is the decision behind it. Blind, the check certifies a
+# spec built on an ADR that does not exist, which is the vault note of 2026-08-25 with the file
+# missing instead of taken. The same citation in a handoff stays a COUNT, and the probe pair that
+# holds the asymmetry is differential — whichever side drifts turns red.
+mut_ADR_bare_number_blind() {
+  sed -i '/^adr_check_repo() {/,/^}/ s@ADR \[0-9\]{4}@ADR NEVER@g' "$1"
 }
 
 CATALOG=(
@@ -3792,6 +3801,7 @@ CATALOG=(
   RUN_ledger_raw_redirection_error
   ADR_backlink_blind
   ADR_number_mismatch_blind
+  ADR_bare_number_blind
 )
 
 # Mutations that are NOT caught today, each with the increment that closes it. Ratchet in both

@@ -23,6 +23,14 @@
 #   R8  a path is a path: the file name carries the id (NNNN-slug.md) and the file exists
 #   R9  the ADR points BACK at the mission. One direction proves nothing — an `adr:` pointing at a
 #       real file is satisfied by EVERY real file, which is exactly the vault note of 2026-08-25
+#  R11  ADR_DIR holds one file per id, and every name reads as NNNN-slug.md
+#  R12  the repo scope runs the FULL mission check on every mission that declares a path, and
+#       COUNTS the ones that declare none — absence fails in the running mission and nowhere else,
+#       or a check would be red on the day a repo installed the kit
+#  R13  a SpecKit spec that declares an ADR gets the same two-way check, back-link included
+#  R14  a bare `ADR NNNN` with no file is a FAILURE inside SPEC_DIR and a COUNT in a handoff
+#  R15  SPEC_DIR empty scans NOTHING — it never falls back to the repo root
+#  R16  an unfilled `sdd adr new` stub is counted
 #  R10  both dialects are read by the same rule (`Spec:` here, `- **Spec**:` in the pilot target)
 #
 # Declared limits (D15 of CLAUDE.md — debt written is a limit, debt kept quiet is the fail-open):
@@ -64,6 +72,23 @@
 #        firing: red. Both are also catalogue entries (mut_ADR_backlink_blind,
 #        mut_ADR_number_mismatch_blind), which is what proves them from outside this file.
 #  R10 → narrowing ADR_LINK_PRE to the bold dialect alone: red.
+#  R11 → the duplicate-id arm replaced by `false`: red. → the name arm replaced by `false`: red.
+#  R12 → the whole mission branch replaced by `:`: red — and it SURVIVED the first sweep, because
+#        no probe drove a mission with a declared path through the repo scope. The probe that
+#        closes it is the one naming 20260101-decl.
+#  R13 → the spec's adr_check_link call replaced by `:`: red. → the no-ADR-line counter: red.
+#  R14 → the handoff counter replaced by `:`: red. → `ADR [0-9]{4}` → `ADR NEVER` inside
+#        adr_check_repo: red (also mut_ADR_bare_number_blind).
+#  R15 → `[ -n "$SPEC_DIR" ]` replaced by `true`: red — and it SURVIVED the first sweep too, for a
+#        reason worth writing down: the fixture kept its spec at `specs/001-thing/spec.md`, one
+#        level below what the fallback `find "$root/" -mindepth 2 -maxdepth 2` reaches, so the
+#        probe was asserting the shape of the fixture and not the presence of the guard. It plants
+#        the spec at `thing/spec.md` now.
+#  R16 → the stub counter replaced by `:`: red.
+#   -- → the last line of adr_check_repo replaced by `return 0`: red — and it SURVIVED the first
+#        sweep because cmd_adr read ADR_FAILS a second time. Two readers of one fact means either
+#        one can be sabotaged while the other answers, and NEITHER is catchable; cmd_adr reads the
+#        rc now, which is what makes that line load-bearing.
 #   -- → adr_fail() no longer counting: red, and it has to be, or every rule above reports a
 #        violation the command then exits 0 on.
 #
@@ -78,7 +103,7 @@ fails=0
 
 # Anti-vacuity. A file whose probes stop being dispatched prints exactly what a clean kit prints;
 # the floor is what refuses that, and it is checked at the very bottom, after everything ran.
-PROBE_FLOOR=15
+PROBE_FLOOR=26
 
 pass() { PROBES=$((PROBES + 1)); printf '  ok    %s\n' "$1"; }
 fail() { PROBES=$((PROBES + 1))
@@ -270,7 +295,7 @@ assert_adr 'ADR with no Spec: line at all fails' "$M" 1 \
 mission "$M" 20260101-good docs/adr/0012-good.md
 adr_file "$M" 0012-good.md docs/handoffs/20260101-good/00-missao.md
 assert_adr 'ADR with the back-link passes rc 0' "$M" 0 \
-  '^  ok    20260101-good: adr: docs/adr/0012-good\.md — and that ADR points back' \
+  '^  ok    docs/handoffs/20260101-good/00-missao\.md: adr: docs/adr/0012-good\.md — and that ADR points back' \
   check --mission 20260101-good
 
 # The other dialect, read by the same rule: the pilot target writes the link as a bold list item.
@@ -280,7 +305,84 @@ mkdir -p "$M/docs/adr"
 printf '# ADR 0013 — fixture\n\n- **Status**: aceito\n- **Spec**: docs/handoffs/20260101-dialect/00-missao.md\n' \
   > "$M/docs/adr/0013-dialect.md"
 assert_adr 'the `- **Spec**:` dialect is read by the same rule' "$M" 0 \
-  '^  ok    20260101-dialect: adr: docs/adr/0013-dialect\.md' check --mission 20260101-dialect
+  '^  ok    docs/handoffs/20260101-dialect/00-missao\.md: adr: docs/adr/0013-dialect\.md' check --mission 20260101-dialect
+
+# --- R11..R16: the repo scope -----------------------------------------------------------------
+# A fixture of its own, because the repo scope reads EVERYTHING on disk and the mission fixture
+# above is deliberately full of broken links.
+R="$(fixture repo ADR_CHECK=\"warn\" SPEC_DIR=\"specs\")" || { echo "fixture failed" >&2; exit 1; }
+adr_file "$R" 0001-one.md '@none@'
+assert_adr 'a clean repo with no mission and no spec passes' "$R" 0 \
+  '^  ok    ADR_CHECK=warn, 1 ADR\(s\) in docs/adr$' check
+
+# Two files, one number. BOTH named in the verdict: the reader has to decide which of the two keeps
+# it, and a message naming only the newcomer hides half the decision.
+adr_file "$R" 0001-two.md '@none@'
+assert_adr 'duplicate ADR number fails both files' "$R" 1 \
+  'FAIL +docs/adr/0001-two\.md:[0-9]+ — id 0001 is already taken by 0001-one\.md' check
+rm -f "$R/docs/adr/0001-two.md"
+
+printf 'notes\n' > "$R/docs/adr/loose.md"
+assert_adr 'a file in ADR_DIR whose name carries no id fails' "$R" 1 \
+  'FAIL +docs/adr/loose\.md:[0-9]+ — the name does not read as NNNN-slug\.md' check
+rm -f "$R/docs/adr/loose.md"
+
+# d, the failing half: inside a spec tree a number is a CLAIM.
+mkdir -p "$R/specs/001-thing"
+printf '# Thing\n\nSee ADR 0042 for the rationale.\n' > "$R/specs/001-thing/spec.md"
+assert_adr 'a bare ADR 0042 in a spec with no file fails' "$R" 1 \
+  "FAIL +specs/001-thing/spec\\.md:3 — cites 'ADR 0042', and no file in docs/adr carries that id" check
+
+# ...and the differential that gives the asymmetry teeth: the SAME sentence in a handoff is
+# narrative and is COUNTED. Written as two separate assertions over two fixtures, either side could
+# drift to match the other and both would stay green; compared here, whichever side moves goes red.
+mission "$R" 20260101-prose none
+printf '# Plan\n\nSee ADR 0042 for the rationale.\n' > "$R/docs/handoffs/20260101-prose/01-plano.md"
+rm -f "$R/specs/001-thing/spec.md"
+assert_adr 'a bare ADR 0042 in 01-plano.md is counted as info, not a failure' "$R" 0 \
+  "^  info  1 bare 'ADR NNNN' citation\\(s\\) in handoff prose with no file in docs/adr$" check
+
+# A spec that declares an ADR gets the two-way check a mission gets — including the vault case.
+printf '# Thing\n\n**ADR**: docs/adr/0002-elsewhere.md\n' > "$R/specs/001-thing/spec.md"
+adr_file "$R" 0002-elsewhere.md specs/999-other/spec.md
+assert_adr 'a spec whose ADR points back at another spec fails' "$R" 1 \
+  "FAIL +docs/adr/0002-elsewhere\\.md:[0-9]+ — 'Spec: specs/999-other/spec\\.md' points somewhere else, not at specs/001-thing/spec\\.md" check
+
+adr_file "$R" 0002-elsewhere.md specs/001-thing/spec.md
+assert_adr '...and passes once the ADR points back at it' "$R" 0 \
+  '^  ok    specs/001-thing/spec\.md: ADR: docs/adr/0002-elsewhere\.md — and that ADR points back' check
+
+mkdir -p "$R/specs/002-plain"
+printf '# Other\n\nno decision here\n' > "$R/specs/002-plain/spec.md"
+assert_adr 'spec.md without an ADR line is counted as info, rc 0' "$R" 0 \
+  '^  info  1 spec\(s\) in specs carry no ADR line$' check
+
+# The repo scope hands every mission that DECLARES a path to the full mission scope, back-link and
+# all. Without this the whole (b) branch could be replaced by `:` and nothing would notice — which
+# is exactly what the sabotage pass found, and the reason this probe exists.
+mission "$R" 20260101-decl docs/adr/0004-decl.md
+adr_file "$R" 0004-decl.md docs/handoffs/20260101-other/00-missao.md
+assert_adr 'the repo scope runs the full mission check on every mission that declares a path' "$R" 1 \
+  "FAIL +docs/adr/0004-decl\\.md:[0-9]+ — 'Spec: docs/handoffs/20260101-other/00-missao\\.md' points somewhere else" check
+adr_file "$R" 0004-decl.md docs/handoffs/20260101-decl/00-missao.md
+
+# SPEC_DIR empty scans NOTHING — never the repo root. The differential is the assertion: the same
+# tree, one config line apart, has to stop naming the spec tree entirely.
+RE="$(fixture repo_nospec ADR_CHECK=\"warn\")" || { echo "fixture failed" >&2; exit 1; }
+# Planted at the depth the FALLBACK would reach — `find "$root/" -mindepth 2 -maxdepth 2` — and not
+# at `specs/001-thing/spec.md`, which that fallback misses by one level. Measured: with the spec a
+# level deeper the probe passed against a runner whose guard had been removed, so it was asserting
+# the shape of the fixture rather than the presence of the guard.
+mkdir -p "$RE/thing"
+printf '# Thing\n\nSee ADR 0042 for the rationale.\n' > "$RE/thing/spec.md"
+assert_adr 'SPEC_DIR empty scans no specs — an empty value must not fall back to the repo root' \
+  "$RE" 0 '^  ok    ADR_CHECK=warn, 0 ADR\(s\) in docs/adr$' check
+
+# The stub the allocator writes is information until somebody fills it in.
+adr_file "$R" 0003-stub.md specs/001-thing/spec.md
+printf '<!-- sdd adr new: body in OUTPUT_LANG=en -->\n' >> "$R/docs/adr/0003-stub.md"
+assert_adr 'an unfilled sdd adr new stub is counted as info' "$R" 0 \
+  "^  info  1 ADR\\(s\\) still carry the unfilled 'sdd adr new' stub$" check
 
 # --- verdict ------------------------------------------------------------------------------------
 if [ "$PROBES" -lt "$PROBE_FLOOR" ]; then
