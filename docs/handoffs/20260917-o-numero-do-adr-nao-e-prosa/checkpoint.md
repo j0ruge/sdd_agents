@@ -1,6 +1,6 @@
 ---
 missao: 20260917-o-numero-do-adr-nao-e-prosa
-atualizado: 2026-09-17 15:55
+atualizado: 2026-09-17 16:04
 ---
 
 # Checkpoint — o número do ADR não é prosa
@@ -34,7 +34,7 @@ atualizado: 2026-09-17 15:55
 | I1 | Chaves `ADR_CHECK`/`ADR_DIR`, esqueleto `cmd_adr`, `adr)` no main, help, `tests/check-adr.sh` + 5 registros, kit `warn` | `o=$(bash tests/check-adr.sh 2>&1); grep -c '^  ok    ADR_CHECK=bogus is refused with rc 2' <<< "$o"` → `1` | done | `b026875` |
 | I2 | `sdd adr check --mission` + 2 mutantes | `o=$(bash tests/check-adr.sh 2>&1); grep -c '^  ok    ADR whose Spec: points elsewhere fails' <<< "$o"` → `1` | done | `27156b0` |
 | I3 | Escopo repo: `SPEC_DIR`, specs SpecKit, número solto, duplicata, stub não preenchido + 1 mutante | `o=$(bash tests/check-adr.sh 2>&1); grep -c '^  ok    a bare ADR 0042 in a spec with no file fails' <<< "$o"` → `1` | done | `34fadb3` |
-| I4 | `sdd adr new` (max+1, O_EXCL, stub, `--spec`, `--dry-run`) + 1 mutante + ADR 0008 criado pelo comando + check-lang 46→47 | `./bin/sdd adr check --mission 20260917-o-numero-do-adr-nao-e-prosa; echo rc=$?` → `rc=0` | pending | — |
+| I4 | `sdd adr new` (max+1, O_EXCL, stub, `--spec`, `--dry-run`) + 1 mutante + ADR 0008 criado pelo comando + check-lang 46→47 | `./bin/sdd adr check --mission 20260917-o-numero-do-adr-nao-e-prosa; echo rc=$?` → `rc=0` | done | `004ed1d` |
 | I5 | `adr_gate_verdict` em `gate_PLAN`/`gate_EXEC`, `adr:` no template + check-templates + 3 mutantes | `o=$(bash tests/check-adr.sh 2>&1); grep -c '^  ok    block: ADR file removed after approval makes EXEC refuse' <<< "$o"` → `1` | pending | — |
 | I6 | `warn` = uma linha `degraded kind:adr-check` por corrida + 1 mutante + enum em pipeline.md e CONTEXT.md | `o=$(bash tests/check-adr.sh 2>&1); grep -c '^  ok    warn: one degraded adr-check row per run, before the session' <<< "$o"` → `1` | pending | — |
 | I7 | Preflight `adr check:`, `$ADR_DIR` em `hat_expand` e `PLACEHOLDERS`, chapéus planner/kaizen, `sdd install --force` | `o=$(bash tests/check-hat.sh selftest 2>&1); grep -c '^  ok    R2: \$ADR_DIR is a placeholder the runner expands' <<< "$o"` → `1` | pending | — |
