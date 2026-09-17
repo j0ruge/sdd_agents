@@ -42,6 +42,12 @@
 #  R21  `--spec` REFUSES a spec that already declares a path: choosing between two ADRs is a human
 #       decision, and silently overwriting the link would be the kit making it
 #  R22  the reservation refuses an existing path and keeps its bytes (O_EXCL)
+#  R23  under `block` an undecided `adr:` stalls at PLAN — and the reason NAMES `sdd adr new`
+#  R24  `adr: none` derives EXEC: deciding nothing architectural is a decision, written down
+#  R25  EXEC asks the one thing PLAN cannot — DRIFT. An ADR on disk when the human approved the
+#       plan and gone now stops the line
+#  R26  off, warn and block are three states of ONE fixture, asserted differentially; and a bogus
+#       ADR_CHECK refuses at the gate instead of quietly degrading to off
 #  R10  both dialects are read by the same rule (`Spec:` here, `- **Spec**:` in the pilot target)
 #
 # Declared limits (D15 of CLAUDE.md — debt written is a limit, debt kept quiet is the fail-open):
@@ -103,6 +109,19 @@
 #        → adr_declare() returning early, so the SpecKit line is never written: red.
 #  R21 → the already-declares arm never firing: red.
 #  R22 → `( set -C; … )` replaced by a plain `>`: red (also mut_ADR_alloc_no_excl).
+#  R23 → `adr_gate_verdict plan` replaced by `:`: red (also mut_PLAN_adr_check_ignored).
+#        → `TBD|<*` moved off the arm so TBD lands in `none`: red (mut_PLAN_adr_tbd_accepted).
+#        → GATE_WHY carrying no reason: red. → `$phase` not passed down: red.
+#  R25 → `adr_gate_verdict exec` replaced by `:`: red (also mut_EXEC_adr_drift_blind).
+#  R26 → warn behaving like block: red. → block behaving like warn: red. → a bogus mode degrading
+#        to satisfied: red.
+#   ⚠️ → the `off` early return of adr_gate_verdict SURVIVES every sabotage here, and the ONLY
+#        honest thing to say is which world could not be built rather than that it does not exist.
+#        At the gate, `off` and `warn` are observationally the same: both derive the phase. The
+#        difference is the ledger row `warn` leaves and `off` does not, which arrives in the next
+#        increment — and the differential probe named `off writes no degraded row` is what makes
+#        that line load-bearing. Until it lands, this rule has no probe and the gap is written
+#        here rather than kept quiet (D15).
 #   -- → the last line of adr_check_repo replaced by `return 0`: red — and it SURVIVED the first
 #        sweep because cmd_adr read ADR_FAILS a second time. Two readers of one fact means either
 #        one can be sabotaged while the other answers, and NEITHER is catchable; cmd_adr reads the
@@ -121,7 +140,7 @@ fails=0
 
 # Anti-vacuity. A file whose probes stop being dispatched prints exactly what a clean kit prints;
 # the floor is what refuses that, and it is checked at the very bottom, after everything ran.
-PROBE_FLOOR=38
+PROBE_FLOOR=50
 
 pass() { PROBES=$((PROBES + 1)); printf '  ok    %s\n' "$1"; }
 fail() { PROBES=$((PROBES + 1))
@@ -475,6 +494,80 @@ else
     'rc 0 from the probe and the file unchanged' \
     "probe rc $(bash "$BOX/reserve-probe.sh" "$SDD" "$BOX/victim.md" >/dev/null 2>&1; echo $?), content: $(cat "$BOX/victim.md")"
 fi
+
+# --- R23..R26: the gates ------------------------------------------------------------------------
+# Through `sdd phase` and `sdd why`, which is the only way to assert on a gate: the runner derives
+# the phase from the artifacts, so a probe that called gate_PLAN directly would be asserting on a
+# function rather than on what the pipeline does.
+#
+# ONE fixture for all of them, config lines apart, so the off/warn/block triple is DIFFERENTIAL.
+# Three fixtures would let any one of them drift to match the others and all three stay green;
+# here, whichever mode moves turns red next to the two that did not.
+G="$(fixture gates ADR_CHECK=\"block\")" || { echo "fixture failed" >&2; exit 1; }
+GM=20260101-gate
+mkdir -p "$G/docs/handoffs/$GM"
+{ printf -- '---\nmissao: %s\naprovacao: auto\n---\n\n# Mission\n' "$GM"; } > "$G/docs/handoffs/$GM/00-missao.md"
+: > "$G/docs/handoffs/$GM/01-plano.md"
+{ printf '| ID | Incremento | Check (comando → esperado) | Status | Commit |\n'
+  printf -- '|---|---|---|---|---|\n'
+  printf '| I1 | slice one | `true` → 0 | pending | — |\n'; } > "$G/docs/handoffs/$GM/checkpoint.md"
+
+# adr_phase <fixture> <mission> — PUBLISHES ADR_OUT/ADR_RC from `sdd phase`. CALLED, never `$( )`
+# at the call site for the same reason run_adr is.
+sdd_at() {
+  local d="$1"; shift
+  ADR_OUT="$( cd "$d" && PATH="$d/.stub:$PATH" "$SDD" "$@" 2>&1 )"; ADR_RC=$?
+}
+assert_at() {   # assert_at <desc> <fixture> <regex> <args...>
+  local desc="$1" d="$2" re="$3"; shift 3
+  sdd_at "$d" "$@"
+  if grep -qE "$re" <<< "$ADR_OUT"; then pass "$desc"
+  else fail "$desc" "output matching /$re/" "$ADR_OUT"; fi
+}
+assert_at_absent() {   # the other half: rc and text are shared between branches, absence is not
+  local desc="$1" d="$2" re="$3"; shift 3
+  sdd_at "$d" "$@"
+  if grep -qE "$re" <<< "$ADR_OUT"; then fail "$desc" "output WITHOUT /$re/" "$ADR_OUT"
+  else pass "$desc"; fi
+}
+
+assert_at 'block: a mission with no adr: key stalls at PLAN' "$G" '^PLAN$' phase "$GM"
+# ...and the reason NAMES the command that ends the stall. A refusal that does not is an
+# instruction to hand-edit frontmatter, which is the failure the allocator exists to end — the
+# same rule gate_PLAN's approval branch already carries.
+assert_at 'block: ...and the reason names sdd adr new' "$G" "sdd adr new --slug" why "$GM" PLAN
+
+sed -i 's@^aprovacao: auto@aprovacao: auto\nadr: TBD@' "$G/docs/handoffs/$GM/00-missao.md"
+assert_at 'block: adr: TBD stalls at PLAN' "$G" '^PLAN$' phase "$GM"
+sed -i 's@^adr: TBD@adr: <none | TBD | docs/adr/NNNN-slug.md>@' "$G/docs/handoffs/$GM/00-missao.md"
+assert_at 'block: the untouched template placeholder stalls at PLAN too' "$G" '^PLAN$' phase "$GM"
+
+sed -i 's@^adr: .*@adr: none@' "$G/docs/handoffs/$GM/00-missao.md"
+assert_at 'block: adr: none derives EXEC — deciding nothing is a decision, written down' "$G" '^EXEC$' phase "$GM"
+
+# Drift, which is the one thing EXEC asks that PLAN cannot: the ADR was on disk when the human
+# approved the plan and is not on disk now.
+adr_file "$G" 0001-gate.md "docs/handoffs/$GM/00-missao.md"
+sed -i 's@^adr: none@adr: docs/adr/0001-gate.md@' "$G/docs/handoffs/$GM/00-missao.md"
+assert_at 'block: a mission whose ADR is on disk derives EXEC' "$G" '^EXEC$' phase "$GM"
+rm -f "$G/docs/adr/0001-gate.md"
+assert_at 'block: ADR file removed after approval makes EXEC refuse' "$G" 'points at a file that does not exist' why "$GM" EXEC
+adr_file "$G" 0001-gate.md "docs/handoffs/$GM/00-missao.md"
+
+# The differential. Same mission, same disk, one config line apart.
+sed -i 's@^adr: .*@adr: TBD@' "$G/docs/handoffs/$GM/00-missao.md"
+assert_at 'block: TBD refuses, and the refusal is the ADR one' "$G" '^PLAN: adr: ' why "$GM" PLAN
+sed -i 's@^ADR_CHECK="block"@ADR_CHECK="warn"@' "$G/.sdd/config.sh"
+assert_at 'warn: the SAME mission derives EXEC' "$G" '^EXEC$' phase "$GM"
+assert_at_absent 'warn: ...and PLAN says nothing about the adr:' "$G" '^PLAN: adr: ' why "$GM" PLAN
+sed -i 's@^ADR_CHECK="warn"@ADR_CHECK="off"@' "$G/.sdd/config.sh"
+sed -i '/^adr: /d' "$G/docs/handoffs/$GM/00-missao.md"
+assert_at 'off: a mission with no adr: key at all derives EXEC' "$G" '^EXEC$' phase "$GM"
+
+# A config the runner cannot read must stop the gate, not be silently treated as off.
+sed -i 's@^ADR_CHECK="off"@ADR_CHECK="bogus"@' "$G/.sdd/config.sh"
+assert_at 'a bogus ADR_CHECK refuses at the gate instead of degrading to off' "$G" \
+  '^PLAN: ADR_CHECK=bogus is not one of off\|warn\|block' why "$GM" PLAN
 
 # --- verdict ------------------------------------------------------------------------------------
 if [ "$PROBES" -lt "$PROBE_FLOOR" ]; then

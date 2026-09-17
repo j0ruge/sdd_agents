@@ -741,6 +741,9 @@ gate_PLAN() {
       return 1
     fi
   fi
+  # Under ADR_CHECK=block this is where an undecided `adr:` stops the line, and PLAN is the only
+  # phase where it can: the artifact's owner is `sdd-planner`, running with the human in the room.
+  adr_gate_verdict plan || return 1
   local n; n="$(checkpoint_rows | wc -l)"
   [ "$n" -gt 0 ] || { GATE_WHY="checkpoint.md has no parseable increment row"; return 1; }
   GATE_WHY="plan approved ($approval), $n increment(s)"
@@ -879,6 +882,9 @@ gate_EXEC() {
   # before it.
   GATE_EXEC_PENDING=""
   GATE_EXEC_TOTAL=""
+  # DRIFT, and only drift: PLAN already refused an undecided `adr:`, so what reaches here is a
+  # mission whose ADR was on disk when the human approved the plan. This asks whether it still is.
+  adr_gate_verdict exec || return 1
   local rows; rows="$(checkpoint_rows)"
   [ -n "$rows" ] || { GATE_WHY="checkpoint.md is empty"; return 1; }
 
@@ -5351,6 +5357,42 @@ adr_new() {
 
   [ -z "$spec_rel" ] || adr_declare "$root/$spec_rel" "$rel"
   ok "$rel reserved${spec_rel:+, and $spec_rel now declares it}"
+}
+
+# adr_gate_verdict <plan|exec> — what a gate asks about the mission's ADR. 0 satisfied, 1 refused.
+#
+# It writes GATE_WHY and NOTHING to stdout, which is the gate contract: adr_check_mission reports
+# for a human and this reads it for a gate, so its whole output goes to /dev/null and only the
+# first violation survives, in ADR_FIRST_WHY. Redirection and not `$( )` — a command substitution
+# would run it in a subshell where ADR_FAILS and ADR_FIRST_WHY die, which is the autonomy_kit_stamp
+# scar, and the gate would read "clean" for every mission.
+#
+# The OWNER of the artifact this asks for is named here because CLAUDE.md obliges a new gate to
+# name one: it is `sdd-planner`, running with the human in the room. That is also why the refusal
+# lands in PLAN and not in EXEC. `TBD` means "the human has not decided yet", and no agent in this
+# kit may decide an architectural trade-off — a gate demanding a decision from a phase that has
+# nobody to make it is the unsatisfiable gate of principle 1, the class that turned 7 of 12 QA
+# sessions of 20260825-frete-cif-fob into US$ 73,32 of laps. EXEC re-reads the same thing for
+# DRIFT: the ADR was there when the plan was approved and is not there now.
+adr_gate_verdict() {
+  local phase="$1" rc=0 mode
+  # `|| rc=$?`, never a bare capture: under `set -e` the assignment form kills the RUNNER the
+  # moment adr_mode returns 2, inside a gate, which is the one place that can neither report nor
+  # recover.
+  mode="$(adr_mode 2>/dev/null)" || rc=$?
+  if [ "$rc" -ne 0 ]; then
+    GATE_WHY="ADR_CHECK=${ADR_CHECK:-<empty>} is not one of off|warn|block — fix it in $CONFIG_FILE"
+    return 1
+  fi
+  [ "$mode" != off ] || return 0
+  ADR_FAILS=0; ADR_FIRST_WHY=""
+  adr_check_mission "$REPO_ROOT" "$MISSION" "$phase" >/dev/null 2>&1 || true
+  [ "$ADR_FAILS" -gt 0 ] || return 0
+  # `warn` derives the phase anyway, and says so in the ledger rather than here — a gate is the
+  # wrong place to narrate, and the row is what an operator can count afterwards.
+  [ "$mode" = block ] || return 0
+  GATE_WHY="adr: $ADR_FIRST_WHY"
+  return 1
 }
 
 # adr_mode — prints the validated ADR_CHECK on stdout; rc 2 when the configuration is not usable.

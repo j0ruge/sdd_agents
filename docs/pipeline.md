@@ -71,6 +71,17 @@ instructs.
 **Passes when:** `00-missao.md`, `01-plano.md` and `checkpoint.md` exist; the mission frontmatter
 carries `aprovacao: auto` or `aprovacao: humano-<date>`; with `JIRA_ENABLED=true`, `versao:` is
 filled in; and `checkpoint.md` has at least one parseable row.
+With `ADR_CHECK=block`, the mission's `adr:` is also a **decision**: a path to a real ADR whose
+`Spec:` line points back at `00-missao.md`, or the literal `none`. Empty, `TBD` and the untouched
+template placeholder all stall here, and the reason names `sdd adr new --slug <s> --spec <path>`.
+
+**Why the ADR refusal lands in PLAN and nowhere else.** `TBD` means "the human has not decided
+yet", and no agent in this kit may decide an architectural trade-off — PLAN is the one phase with a
+human in the room, and the artifact's owner is `sdd-planner`. A gate demanding a decision from a
+phase that has nobody to make it is the unsatisfiable gate principle 1 forbids: the class that
+turned 7 of 12 QA sessions of one mission into US$ 73,32 of laps. Under `warn` the phase derives as
+usual and the run leaves one `degraded` row of kind `adr-check` in the ledger; under `off` nothing
+is asked at all. See [ADR 0008](adr/0008-adr-ids-are-allocated-and-links-are-checked.md).
 
 **PLAN-AUTO:** `aprovacao: auto` means `sdd-planner` closed the five criteria (grill with nothing
 open, checklists, self-containment, a Check per increment, the version) **with evidence**. A
@@ -118,6 +129,10 @@ field existed.
 
 **Passes when:** every row of `checkpoint.md` is `done`; each `done` has a hash that really exists
 in the `git log` and is reachable from HEAD; `TEST_CMD` exits 0; and `20-handoff-exec.md` exists.
+With `ADR_CHECK=block` it re-reads the mission's `adr:`, and what it asks for is **drift**: PLAN
+already refused an undecided one, so what reaches here is a mission whose ADR was on disk when the
+human approved the plan. This asks whether it still is — an ADR deleted or renamed after approval
+stops the line instead of leaving the pipeline building against a decision that no longer exists.
 
 **Jidoka:** any `blocked` increment escalates **on the spot** — no retry, no consuming the phase's
 session budget. The executor marks `blocked` when the suite is red because of an earlier

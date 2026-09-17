@@ -5,6 +5,7 @@ data: <YYYY-MM-DD>
 versao: <ex.: 0.7.0 — obrigatório quando JIRA_ENABLED=true; confirmado pelo humano no planejamento>
 branch: <nome da branch de trabalho — sdd run/retry faz checkout dela, criando-a da atual se não existir; placeholder entre <> = não troca nada>
 aprovacao: <auto | humano-YYYY-MM-DD>
+adr: <none | TBD | docs/adr/NNNN-slug.md — allocate it with `sdd adr new --slug <s> --spec <este arquivo>`; sob ADR_CHECK=block o gate de PLAN recusa vazio, TBD e este placeholder>
 ddd: <aplicado | n/a>
 ---
 

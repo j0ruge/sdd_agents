@@ -3498,6 +3498,27 @@ mut_ADR_alloc_no_excl() {
   sed -i '/^adr_reserve() {/,/^}/ s@( set -C; : > "$1" )@( : ; : > "$1" )@' "$1"
 }
 
+# PLAN is the ONE phase that can refuse an undecided `adr:`, because it is the one phase with a
+# human in the room. Blind, `block` is a config key that reads as set and asks nothing — the label
+# without the artifact behind it, which is what principle 1 of CLAUDE.md forbids.
+mut_PLAN_adr_check_ignored() {
+  sed -i '/^gate_PLAN() {/,/^}/ s@^  adr_gate_verdict plan || return 1$@  :@' "$1"
+}
+
+# `TBD` and `none` are NOT the same state: `none` is a decision written down, `TBD` is the absence
+# of one. Collapsed, every mission the planner left mid-grill walks past the gate that exists to
+# catch exactly that — and the untouched template placeholder walks past with it.
+mut_PLAN_adr_tbd_accepted() {
+  sed -i '/^adr_check_mission() {/,/^}/ s@^    TBD|\\<\*)$@    never-matches)@' "$1"
+}
+
+# EXEC asks the one thing PLAN cannot: the ADR was on disk when the human approved the plan and is
+# not on disk now. Blind, an ADR deleted or renamed after approval leaves the pipeline running
+# against a decision that no longer exists, and nothing anywhere reads it again.
+mut_EXEC_adr_drift_blind() {
+  sed -i '/^gate_EXEC() {/,/^}/ s@^  adr_gate_verdict exec || return 1$@  :@' "$1"
+}
+
 CATALOG=(
   AUTONOMY_meta_ignores_event
   AUTONOMY_mission_drops_close_money
@@ -3812,6 +3833,9 @@ CATALOG=(
   ADR_number_mismatch_blind
   ADR_bare_number_blind
   ADR_alloc_no_excl
+  PLAN_adr_check_ignored
+  PLAN_adr_tbd_accepted
+  EXEC_adr_drift_blind
 )
 
 # Mutations that are NOT caught today, each with the increment that closes it. Ratchet in both

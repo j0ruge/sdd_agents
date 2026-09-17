@@ -315,7 +315,7 @@ else
 fi
 
 echo "== templates/missao.md =="
-for k in missao titulo data versao branch aprovacao ddd; do
+for k in missao titulo data versao branch aprovacao ddd adr; do
   check missao.md "^${k}:" "frontmatter key '${k}'"
 done
 check missao.md '^## Problema \(Gemba\)'      "section 'Problema (Gemba)'"
