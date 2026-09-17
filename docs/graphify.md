@@ -110,6 +110,7 @@ measured.
 | 2026-09-01 | idem | Which mutant covers `gate_REVIEW`? (**negative control**) | `query` + `explain "mut_REVIEW_escaped_pipe"` | 40 lines / 4.5 KB | `grep -nE '^mut_REVIEW' tests/check-mutation.sh` → 10 | 1 grep | **out-of-scope**, as the rules predict: mutant↔gate is a `sed`-string relation, no edge exists |
 | 2026-09-01 | idem | What does `cmd_run` depend on? | `explain "cmd_run"` | 31 lines / 1.3 KB (26 edges) | — | — | **complete** as a map of direct callees (`run_phase`, `kit_guard_check`, both escalations, the ledger rows, `ensure_mission_branch`) |
 | 2026-09-01 | idem | Hubs | `god-nodes --top 15` | 17 lines | — | — | orientation: the hubs are docs and sensors |
+| 2026-09-17 | planning the ADR-allocator mission (`20260917`) | Who calls `load_config`, `gate_PLAN`, `cmd_install`? What does `main` dispatch? | `explain` ×6 (`load_config`, `cmd_preflight`, `gate_PLAN`, `gate_EXEC`, `cmd_install`, `main`) | ~120 lines / 4 KB | Explore agent over `bin/sdd` at HEAD `923bc72`: `gate_PLAN` ← `cmd_run`, `cmd_approve` (2 sites, `:5252` and `:4900`); `main` → 16 arms | 1 grep per symbol | **complete** on the caller/callee sets of all 6; ⚠️ every line number was **stale** (`gate_PLAN` L590 vs `:688`, `main` L5955 vs `:7528`) — `graphify-out/` dated 2026-09-01, never rebuilt; the graph answers *who*, the grep answers *where* |
 
 Tally after the first session, with the zone of § 1 in force: 7 `complete` of the 7 questions
 inside the zone (1, 6, 7, 10, 11 — plus 2 and 3 read as "the statement-call half is complete");
