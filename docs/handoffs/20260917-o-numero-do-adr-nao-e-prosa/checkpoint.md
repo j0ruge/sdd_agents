@@ -1,6 +1,6 @@
 ---
 missao: 20260917-o-numero-do-adr-nao-e-prosa
-atualizado: 2026-09-17 16:18
+atualizado: 2026-09-17 16:26
 ---
 
 # Checkpoint — o número do ADR não é prosa
@@ -37,7 +37,7 @@ atualizado: 2026-09-17 16:18
 | I4 | `sdd adr new` (max+1, O_EXCL, stub, `--spec`, `--dry-run`) + 1 mutante + ADR 0008 criado pelo comando + check-lang 46→47 | `./bin/sdd adr check --mission 20260917-o-numero-do-adr-nao-e-prosa; echo rc=$?` → `rc=0` | done | `004ed1d` |
 | I5 | `adr_gate_verdict` em `gate_PLAN`/`gate_EXEC`, `adr:` no template + check-templates + 3 mutantes | `o=$(bash tests/check-adr.sh 2>&1); grep -c '^  ok    block: ADR file removed after approval makes EXEC refuse' <<< "$o"` → `1` | done | `3e6c4a8` |
 | I6 | `warn` = uma linha `degraded kind:adr-check` por corrida + 1 mutante + enum em pipeline.md e CONTEXT.md | `o=$(bash tests/check-adr.sh 2>&1); grep -c '^  ok    warn: one degraded adr-check row per run, before the session' <<< "$o"` → `1` | done | `e79b5fd` |
-| I7 | Preflight `adr check:`, `$ADR_DIR` em `hat_expand` e `PLACEHOLDERS`, chapéus planner/kaizen, `sdd install --force` | `o=$(bash tests/check-hat.sh selftest 2>&1); grep -c '^  ok    R2: \$ADR_DIR is a placeholder the runner expands' <<< "$o"` → `1` | pending | — |
+| I7 | Preflight `adr check:`, `$ADR_DIR` em `hat_expand` e `PLACEHOLDERS`, chapéus planner/kaizen, `sdd install --force` | `o=$(bash tests/check-hat.sh selftest 2>&1); grep -c '^  ok    R2: \$ADR_DIR is a placeholder the runner expands' <<< "$o"` → `1` | done | `759187b` |
 | I8 | Docs: README, pipeline (receitas CI/SpecKit), schema, rule anatomia §4/§5, CONTEXT verbete, KAIZEN_LOG, TODO (`--json`) + baseline 97→98 | `o=$(bash tests/check-todo.sh 2>&1); grep -c '^  ok    98 finding(s)' <<< "$o"` → `1` | pending | — |
 | I9 | Kit `ADR_CHECK=block`; carimbo do `sdd health` | `./bin/sdd why 20260917-o-numero-do-adr-nao-e-prosa PLAN` → `plan approved` | pending | — |
 
