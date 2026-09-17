@@ -10,11 +10,24 @@ HANDOFF_DIR="docs/handoffs"
 QA_DOCS_PATH="docs/qa"
 TODO_FILE="TODO.md"
 
-# O kit adota o proprio mecanismo em duas etapas, na missao 20260917-o-numero-do-adr-nao-e-prosa:
-# `warn` enquanto o ADR 0008 ainda nao existe, `block` no I9, depois de ele nascer do comando.
-# Etapa 2 concluida: o ADR 0008 existe, `sdd adr check` responde rc 0 sobre o repo inteiro, e o
-# gate de PLAN passa a cobrar `adr:` de toda missao nova deste repo.
-ADR_CHECK="block"
+# O kit adota o proprio mecanismo em etapas, na missao 20260917-o-numero-do-adr-nao-e-prosa,
+# seguindo o caminho que o README.md prescreve para qualquer repo-alvo: off, warn, ETAPA 3 (fix ou
+# declare), block. O I9 pulou a etapa 3 e foi direto para `block` -- e a revisao pre-PR mediu o
+# preco: as 14 missoes anteriores deste repo nao tem chave `adr:`, entao TODAS voltaram a derivar
+# PLAN. Diferencial, mesma missao e mesmo disco: `off` da EXEC, `block` da PLAN. Isso e a classe
+# "estado mente sobre o disco" que o principio 4 existe para eliminar, e era silenciosa -- o
+# `sdd adr check` respondia rc 0 e o `sdd preflight`, "no finding", porque o contador juntava
+# `adr: none` (decisao que o gate ACEITA) com ausente/TBD (o que ele RECUSA).
+#
+# Hoje o contador separa os dois, entao a etapa 3 tem instrumento: o numero de "no decided `adr:`"
+# chegando a zero e o sinal de que este repo pode voltar para `block`. Ate la, `warn` -- que deriva
+# a fase como sempre e deixa uma linha `degraded kind:adr-check` por corrida.
+#
+# Nao se escreveu `adr: none` nas 14 por decisao humana de 2026-09-17: as ADRs 0001-0007 nao tem
+# linha `Spec:` e nenhum commit as liga a uma missao, entao declarar "esta missao nao decidiu nada
+# de arquitetura" seria um rotulo que nenhum artefato sustenta -- exatamente o que o principio 1
+# recusa. Mapear as sete e trabalho de humano, e e o que destrava `block`.
+ADR_CHECK="warn"
 ADR_DIR="docs/adr"
 
 MODEL_EXEC="opus"
