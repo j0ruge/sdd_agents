@@ -59,6 +59,19 @@ surface() {
 # TODO.md and `# TODO`. Measured against a real English markdown file: zero false positives.
 STOPWORDS='falta|sem|para|pelo|pela|quando|onde|nada|este|esta|isso|pois|cada|apenas|ainda|depois|antes|porque|assim|sobre|mesmo|outro|outra|nao|entao'
 
+# The THIRD thing punched out of the scan, and the same argument as the × and the ÷ above: a
+# traceability line is DATA, not prose. `Spec: docs/handoffs/<mission>/00-missao.md` in an ADR is
+# the exact string `sdd adr check` reads back, and `docs/handoffs/` is out of this sensor's scope
+# by the declaration at the top of the allowlist — so the mission slug in it is written in the
+# repo's OUTPUT_LANG on purpose. Measured on 2026-09-17: ADR 0008 of this kit, English throughout,
+# was reported as Portuguese for the word "nao" inside its own Spec: path.
+#
+# The line is BLANKED and not dropped, so grep -n goes on reporting the real line numbers; and the
+# pattern is anchored on the key, so only the contract line loses its content — every other line of
+# the ADR is scanned exactly as before. The tempting wider rule — "ignore anything that looks like a
+# path" — is the fail-open this sensor exists to refuse.
+ADR_LINK_LINE='^(- )?(\*\*)?(ADR|Spec)(\*\*)?:'
+
 # has_portuguese <file> — prints the offending lines, returns 0 when it found any.
 #
 # Two proxies, because either alone is blind: the accent class misses "falta o handoff", the word
@@ -71,10 +84,11 @@ STOPWORDS='falta|sem|para|pelo|pela|quando|onde|nada|este|esta|isso|pois|cada|ap
 # the tempting move is to reword the doc until the detector goes quiet, which is weakening the
 # content to please a broken instrument.
 has_portuguese() {
-  local f="$1" hits
+  local f="$1" hits body
   [ -f "$f" ] || return 1
-  hits="$( { grep -nP '[\x{00C0}-\x{00D6}\x{00D8}-\x{00F6}\x{00F8}-\x{00FF}]' "$f" || true
-             grep -nwiE "$STOPWORDS" "$f" || true; } | sort -t: -k1,1n -u )"
+  body="$(sed -E "s@${ADR_LINK_LINE}.*@@" "$f")"
+  hits="$( { grep -nP '[\x{00C0}-\x{00D6}\x{00D8}-\x{00F6}\x{00F8}-\x{00FF}]' <<< "$body" || true
+             grep -nwiE "$STOPWORDS" <<< "$body" || true; } | sort -t: -k1,1n -u )"
   [ -n "$hits" ] || return 1
   printf '%s\n' "$hits"
 }
@@ -96,10 +110,23 @@ selftest() {
   if has_portuguese "$t" >/dev/null; then
     echo "SENSOR-BROKEN: clean English flagged as Portuguese" >&2; exit 92
   fi
+  # The traceability line is data. DIFFERENTIAL, and neither half is the assertion alone: "the
+  # Spec: line is ignored" passes on a sensor that ignores everything, and "prose is still caught"
+  # passes on one that ignores nothing. The two spellings differ by the key in front of the path.
+  printf 'Spec: docs/handoffs/20260917-o-numero-do-adr-nao-e-prosa/00-missao.md\n' > "$t"
+  if has_portuguese "$t" >/dev/null; then
+    echo "SENSOR-BROKEN: a Spec: path read as prose — the mission slug in it is OUTPUT_LANG by design" >&2
+    exit 95
+  fi
+  printf 'See docs/handoffs/20260917-o-numero-do-adr-nao-e-prosa/00-missao.md for the rest.\n' > "$t"
+  if ! has_portuguese "$t" >/dev/null; then
+    echo "SENSOR-BROKEN: the same path in PROSE was not caught — the hole is wider than the key" >&2
+    exit 95
+  fi
 }
 
 selftest
-echo "  ok    self-test: the sensor detects Portuguese and clears English"
+echo "  ok    self-test: the sensor detects Portuguese, clears English, and reads a traceability line as data"
 
 # Checked before the surface floor below, and not after: the allowlist is itself a surface path,
 # so a missing file trips the floor first and reports "did something move?" — loud, but the wrong
@@ -139,10 +166,10 @@ files="$(surface)"
 # Re-counted on 2026-09-03 (20260903-a-fronteira-do-chapeu): 41 + tests/check-hat.sh +
 # agents/sdd-ticket.md + its .claude/agents copy = 44; docs/adr/0007 makes it 45 in the same mission.
 # Re-counted on 2026-09-17 (20260917-o-numero-do-adr-nao-e-prosa): tests/check-adr.sh makes it 46,
-# and docs/adr/0008 will make it 47 in the same mission — two hops, two commits, on purpose.
+# and docs/adr/0008 makes it 47 in the same mission — two hops, two commits, on purpose.
 n_surface="$(grep -c . <<< "$files")"
-if [ "$n_surface" -lt 46 ]; then
-  printf '  FAIL  surface shrank to %d path(s), expected at least 46 — did something move?\n' \
+if [ "$n_surface" -lt 47 ]; then
+  printf '  FAIL  surface shrank to %d path(s), expected at least 47 — did something move?\n' \
     "$n_surface" >&2
   exit 93
 fi

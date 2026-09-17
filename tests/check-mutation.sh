@@ -3489,6 +3489,15 @@ mut_ADR_bare_number_blind() {
   sed -i '/^adr_check_repo() {/,/^}/ s@ADR \[0-9\]{4}@ADR NEVER@g' "$1"
 }
 
+# `set -C` is O_EXCL, and it is the one line in this whole family that MAKES a state instead of
+# reporting on one: create-and-truncate as a single syscall, so two writers racing for the same
+# number get one file and one error rather than two files and a silent overwrite. Without it
+# `sdd adr new` truncates whatever already carries the path it picked — an accepted decision
+# replaced by an empty stub, and no gate anywhere reads the bytes of an ADR.
+mut_ADR_alloc_no_excl() {
+  sed -i '/^adr_reserve() {/,/^}/ s@( set -C; : > "$1" )@( : ; : > "$1" )@' "$1"
+}
+
 CATALOG=(
   AUTONOMY_meta_ignores_event
   AUTONOMY_mission_drops_close_money
@@ -3802,6 +3811,7 @@ CATALOG=(
   ADR_backlink_blind
   ADR_number_mismatch_blind
   ADR_bare_number_blind
+  ADR_alloc_no_excl
 )
 
 # Mutations that are NOT caught today, each with the increment that closes it. Ratchet in both

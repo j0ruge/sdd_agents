@@ -31,6 +31,17 @@
 #  R14  a bare `ADR NNNN` with no file is a FAILURE inside SPEC_DIR and a COUNT in a handoff
 #  R15  SPEC_DIR empty scans NOTHING — it never falls back to the repo root
 #  R16  an unfilled `sdd adr new` stub is counted
+#  R17  an empty ADR_DIR allocates 0001, and a gap is NEVER reused — a reused number would point
+#       an already-written citation at a different decision, the same defect inverted
+#  R18  `--dry-run` prints the path and creates nothing
+#  R19  a slug is lower-case letters, digits and hyphens
+#  R20  `--spec` writes BOTH sides, in whichever of the two layouts the file is in, and ADDS the
+#       `adr:` key when the mission has none — frontmatter_write() leaves an absent key absent by
+#       design, so without this half every mission planned before the key existed would get one
+#       side of the link and no complaint
+#  R21  `--spec` REFUSES a spec that already declares a path: choosing between two ADRs is a human
+#       decision, and silently overwriting the link would be the kit making it
+#  R22  the reservation refuses an existing path and keeps its bytes (O_EXCL)
 #  R10  both dialects are read by the same rule (`Spec:` here, `- **Spec**:` in the pilot target)
 #
 # Declared limits (D15 of CLAUDE.md — debt written is a limit, debt kept quiet is the fail-open):
@@ -85,6 +96,13 @@
 #        probe was asserting the shape of the fixture and not the presence of the guard. It plants
 #        the spec at `thing/spec.md` now.
 #  R16 → the stub counter replaced by `:`: red.
+#  R17 → `max` taking every id instead of the largest: red. → the allocator always returning 1: red.
+#  R18 → the `--dry-run` arm never firing: red.
+#  R19 → the slug pattern widened to `.`: red.
+#  R20 → `frontmatter_has` replaced by `true`, so the absent key is never inserted: red.
+#        → adr_declare() returning early, so the SpecKit line is never written: red.
+#  R21 → the already-declares arm never firing: red.
+#  R22 → `( set -C; … )` replaced by a plain `>`: red (also mut_ADR_alloc_no_excl).
 #   -- → the last line of adr_check_repo replaced by `return 0`: red — and it SURVIVED the first
 #        sweep because cmd_adr read ADR_FAILS a second time. Two readers of one fact means either
 #        one can be sabotaged while the other answers, and NEITHER is catchable; cmd_adr reads the
@@ -103,7 +121,7 @@ fails=0
 
 # Anti-vacuity. A file whose probes stop being dispatched prints exactly what a clean kit prints;
 # the floor is what refuses that, and it is checked at the very bottom, after everything ran.
-PROBE_FLOOR=26
+PROBE_FLOOR=38
 
 pass() { PROBES=$((PROBES + 1)); printf '  ok    %s\n' "$1"; }
 fail() { PROBES=$((PROBES + 1))
@@ -383,6 +401,80 @@ adr_file "$R" 0003-stub.md specs/001-thing/spec.md
 printf '<!-- sdd adr new: body in OUTPUT_LANG=en -->\n' >> "$R/docs/adr/0003-stub.md"
 assert_adr 'an unfilled sdd adr new stub is counted as info' "$R" 0 \
   "^  info  1 ADR\\(s\\) still carry the unfilled 'sdd adr new' stub$" check
+
+# --- R17..R22: the allocator --------------------------------------------------------------------
+N="$(fixture new ADR_CHECK=\"warn\")" || { echo "fixture failed" >&2; exit 1; }
+assert_adr 'an empty ADR_DIR allocates 0001' "$N" 0 '^docs/adr/0001-first\.md$' new --slug first --dry-run
+# ...and the dry run touched NOTHING. Both terms, and neither alone is the assertion: "prints the
+# path" passes on a projection that also creates the file, and "creates nothing" passes on one
+# that prints nothing at all.
+if [ -e "$N/docs/adr" ]; then fail '--dry-run prints the path and creates nothing' 'no docs/adr' 'the directory exists'
+else pass '--dry-run prints the path and creates nothing'; fi
+
+mkdir -p "$N/docs/adr"; : > "$N/docs/adr/0001-a.md"; : > "$N/docs/adr/0003-c.md"
+assert_adr 'a gap is never reused (0001, 0003 allocate 0004)' "$N" 0 '^docs/adr/0004-d\.md$' new --slug d --dry-run
+
+assert_adr 'a slug that is not lower-case-and-hyphens is refused' "$N" 1 \
+  "is not lower-case letters, digits and hyphens" new --slug 'Not A Slug'
+
+# --spec, the two layouts, told apart by what is on disk rather than by a flag.
+mission "$N" 20260101-tbd TBD
+assert_adr '--spec replaces adr: TBD with the path it just reserved' "$N" 0 \
+  '^  ok +docs/adr/0004-decided\.md reserved, and docs/handoffs/20260101-tbd/00-missao\.md now declares it$' \
+  new --slug decided --spec docs/handoffs/20260101-tbd/00-missao.md
+assert_adr '...and the pair it wrote satisfies the check it will be asked for' "$N" 0 \
+  '^  ok    docs/handoffs/20260101-tbd/00-missao\.md: adr: docs/adr/0004-decided\.md — and that ADR points back' \
+  check --mission 20260101-tbd
+
+# frontmatter_write() rewrites an existing key and leaves an absent one absent — by design. So the
+# absent case has a probe of its own, or `sdd adr new --spec` would silently write only one half of
+# the link on every mission planned before the key existed.
+mission "$N" 20260101-nokey '@none@'
+assert_adr '--spec adds adr: to a mission that lacks the key entirely' "$N" 0 \
+  'docs/handoffs/20260101-nokey/00-missao\.md now declares it' \
+  new --slug nokey --spec docs/handoffs/20260101-nokey/00-missao.md
+assert_adr '...and that mission passes the check too' "$N" 0 \
+  '^  ok    docs/handoffs/20260101-nokey/00-missao\.md: adr: docs/adr/0005-nokey\.md — and that ADR points back' \
+  check --mission 20260101-nokey
+
+assert_adr '--spec refuses a spec that already declares a path — choosing between two ADRs is a human decision' \
+  "$N" 1 "already declares 'docs/adr/0004-decided\.md'" \
+  new --slug again --spec docs/handoffs/20260101-tbd/00-missao.md
+
+# The SpecKit layout: no frontmatter, so the link is a `**ADR**:` line.
+mkdir -p "$N/specs/001-x"; printf '# X\n\n**Status**: Draft\n' > "$N/specs/001-x/spec.md"
+assert_adr '--spec writes a **ADR**: line into a spec with no frontmatter' "$N" 0 \
+  'specs/001-x/spec\.md now declares it' new --slug speckit --spec specs/001-x/spec.md
+
+# --- the reservation primitive -----------------------------------------------------------------
+# DETERMINISTIC, and not a race. Two processes fighting for the same number would assert a
+# scheduling accident: green on a fast machine, red under load, and red means nothing either way.
+# What O_EXCL promises is testable without a second process — an existing path is refused and its
+# bytes are untouched — and that is what is asserted here.
+#
+# `sed '$d'` drops the last line, which is `{ main "$@"; exit $?; }`: sourced whole, bin/sdd would
+# run main and take this file with it. The `declare -F` control is what keeps the probe from
+# passing because the source silently did nothing.
+PROBES=$((PROBES + 1))
+cat > "$BOX/reserve-probe.sh" <<'RESERVE'
+set -uo pipefail
+sdd="$1"; victim="$2"
+# shellcheck disable=SC1090
+source <(sed '$d' "$sdd") >/dev/null 2>&1
+set +e
+declare -F adr_reserve >/dev/null || { echo NOFUNC; exit 3; }
+adr_reserve "$victim" && { echo RESERVED_AN_EXISTING_PATH; exit 4; }
+exit 0
+RESERVE
+printf 'original bytes\n' > "$BOX/victim.md"
+if bash "$BOX/reserve-probe.sh" "$SDD" "$BOX/victim.md" >/dev/null 2>&1 \
+     && [ "$(cat "$BOX/victim.md")" = 'original bytes' ]; then
+  pass 'the reservation primitive refuses an existing path and keeps its bytes'
+else
+  fail 'the reservation primitive refuses an existing path and keeps its bytes' \
+    'rc 0 from the probe and the file unchanged' \
+    "probe rc $(bash "$BOX/reserve-probe.sh" "$SDD" "$BOX/victim.md" >/dev/null 2>&1; echo $?), content: $(cat "$BOX/victim.md")"
+fi
 
 # --- verdict ------------------------------------------------------------------------------------
 if [ "$PROBES" -lt "$PROBE_FLOOR" ]; then

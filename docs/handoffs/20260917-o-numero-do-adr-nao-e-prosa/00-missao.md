@@ -6,7 +6,7 @@ versao:
 branch: feat/o-numero-do-adr-nao-e-prosa
 aprovacao: humano-2026-09-17
 ddd: n/a
-adr: TBD
+adr: docs/adr/0008-adr-ids-are-allocated-and-links-are-checked.md
 ---
 
 # Missão — o número do ADR não é prosa

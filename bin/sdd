@@ -5211,6 +5211,148 @@ adr_check_repo() {
   [ "$ADR_FAILS" -eq 0 ]
 }
 
+# adr_next_id <dir> — the next free id, zero-padded to four. Empty directory ⇒ 0001.
+#
+# MAX+1, and a gap is never reused. Reusing one would hand out a number that a merged branch, a
+# handoff, a commit message or somebody's notes may already cite — the ADR would be gone and the
+# citation would silently point at a different decision, which is the whole defect this section
+# exists to close, inverted.
+adr_next_id() {
+  local dir="$1" f base max=0 id
+  if [ -d "$dir" ]; then
+    while IFS= read -r f; do
+      [ -n "$f" ] || continue
+      base="$(basename -- "$f")"
+      grep -qE "$ADR_FILE_RE" <<< "$base" || continue
+      # `10#` because 0008 is not octal — without it 0008 and 0009 are arithmetic errors, which is
+      # the ordinary way this family of bug arrives and the reason the padding is applied on the
+      # way OUT and never carried through the arithmetic.
+      id=$((10#${base%%-*}))
+      [ "$id" -le "$max" ] || max="$id"
+    done < <(find "$dir" -maxdepth 1 -type f -name '*.md' 2>/dev/null)
+  fi
+  printf '%04d\n' "$((max + 1))"
+}
+
+# adr_reserve <path> — create the file, or fail. THE poka-yoke of this whole mission.
+#
+# `set -C` is O_EXCL: the create-and-truncate is one syscall, so two writers racing for the same
+# number get one file and one error instead of two files and a silent overwrite. Everything else
+# here — the check, the gate, the sensor — reports on a state; this is the only line that MAKES the
+# state, and it is why the allocator is a command rather than a convention in a document.
+#
+# In a subshell, so noclobber never leaks into the caller: the runner's own `>` redirections are
+# everywhere, and a stray `set -C` would turn a harmless overwrite into a runtime failure in an
+# unrelated command.
+adr_reserve() {
+  ( set -C; : > "$1" ) 2>/dev/null || return 1
+}
+
+# adr_declare <spec file> <path to write> — writes the spec side of the link. rc 1 when it refuses.
+#
+# Two layouts, told apart by what is on disk rather than by a flag: a file that opens with `---`
+# declares through its frontmatter `adr:` key, anything else through a `**ADR**:` line. A flag
+# would be a third thing to get wrong, and the answer is already written in the file.
+#
+# frontmatter_write() rewrites an EXISTING key and leaves an absent one absent — by design, and
+# documented at its own definition. So the absent case is inserted here, by awk with index(), never
+# sed: a path carrying `&` or `/` would go through sed's own syntax and land corrupted in an
+# artifact that is already committed.
+adr_declare() {
+  local spec="$1" path="$2" tmp
+  if [ "$(head -n 1 "$spec")" = '---' ]; then
+    if frontmatter_has "$spec" adr; then
+      frontmatter_write "$spec" adr "$path"
+      return 0
+    fi
+    tmp="$(mktemp "${spec}.XXXXXX")" || die "sdd adr new: could not create a temporary beside $spec"
+    # At the END of the block, not the top: a reader diffing the artifact expects the keys it
+    # already had to stay where they were, and a new one appended is one line of diff instead of
+    # a reshuffle.
+    awk -v v="$path" '
+      NR==1 && $0=="---" { inside=1; print; next }
+      inside && $0=="---" { print "adr: " v; print; inside=0; done=1; next }
+      { print }
+      END { if (!done) exit 1 }' "$spec" > "$tmp" \
+      || { rm -f "$tmp"; die "sdd adr new: $spec has no frontmatter block to write into"; }
+    chmod --reference="$spec" "$tmp" 2>/dev/null || true
+    mv -f "$tmp" "$spec" || { rm -f "$tmp"; die "sdd adr new: could not replace $spec"; }
+    return 0
+  fi
+  tmp="$(mktemp "${spec}.XXXXXX")" || die "sdd adr new: could not create a temporary beside $spec"
+  awk -v v="$path" '
+    !done && $0 ~ "^(- )?(\\*\\*)?ADR(\\*\\*)?:" { print "**ADR**: " v; done=1; next }
+    { print }
+    END { if (!done) print "\n**ADR**: " v }' "$spec" > "$tmp" \
+    || { rm -f "$tmp"; die "sdd adr new: awk failed on $spec"; }
+  chmod --reference="$spec" "$tmp" 2>/dev/null || true
+  mv -f "$tmp" "$spec" || { rm -f "$tmp"; die "sdd adr new: could not replace $spec"; }
+}
+
+# adr_new <root> <slug> <ticket> <spec> <dry-run> — reserve the id and write the header.
+#
+# The ORDER is the contract: refuse first, reserve second, write both sides third. Reserving before
+# the refusals would leave an allocated, empty ADR behind every rejected call, and the gaps it left
+# are exactly what adr_next_id refuses to reuse — the command would slowly eat its own numbering.
+#
+# The stub is the HEADER and nothing else, deliberately. The body is an architectural decision
+# written in the repo's OUTPUT_LANG by whoever is making it; a template would be the kit dictating
+# prose in a language it does not know, and a body nobody wrote is a decision nobody made.
+#
+# ⚠️ Declared limit (D15): the stub names OUTPUT_LANG, and in THIS repo that is pt-BR while
+# `docs/adr/*.md` sits on the kit's English surface — so here the two disagree and the surface
+# wins. It is not a finding by the D15 rule: no sensor claims to measure what it does not, and in
+# a target repo, where docs/adr is scanned by nothing, OUTPUT_LANG is the right answer. A kit
+# writing its own ADRs reads tests/check-lang.sh, which is the sensor that actually decides.
+adr_new() {
+  local root="$1" slug="$2" ticket="$3" spec="$4" dry="$5"
+  grep -qE '^[a-z0-9-]+$' <<< "$slug" \
+    || die "sdd adr new: --slug '$slug' is not lower-case letters, digits and hyphens"
+  local dir="$root/${ADR_DIR%/}" rel id path
+  id="$(adr_next_id "$dir")"
+  rel="${ADR_DIR%/}/$id-$slug.md"
+  path="$root/$rel"
+
+  local spec_rel=""
+  if [ -n "$spec" ]; then
+    spec_rel="${spec#"$root"/}"; spec_rel="${spec_rel#./}"
+    [ -f "$root/$spec_rel" ] || die "sdd adr new: --spec $spec_rel does not exist"
+    # Refused BEFORE anything is created: a spec that already names an ADR is either already
+    # decided or pointing at the wrong one, and both are decisions a human makes. Silently
+    # overwriting the link would be the kit choosing between two ADRs on its own.
+    local cur=""
+    if [ "$(head -n 1 "$root/$spec_rel")" = '---' ]; then
+      cur="$(frontmatter "$root/$spec_rel" adr)"
+    elif adr_link "$root/$spec_rel" ADR; then
+      cur="$ADR_LINK_VALUE"
+    fi
+    case "$cur" in
+      ''|TBD|none|\<*) : ;;
+      *) die "sdd adr new: $spec_rel already declares '$cur' — change it by hand, or point --spec somewhere else" ;;
+    esac
+  fi
+
+  if [ "$dry" = 1 ]; then
+    printf '%s\n' "$rel"
+    return 0
+  fi
+
+  mkdir -p "$dir"
+  adr_reserve "$path" \
+    || die "sdd adr new: $rel already exists — nothing was written (the id is reserved with O_EXCL, never overwritten)"
+
+  {
+    printf '# ADR %s — %s\n\n' "$id" "$slug"
+    printf -- '- **Status**: proposed (%s, %s)\n' "${ticket:-—}" "$(date +%F)"
+    printf -- '- **Spec**: %s\n' "${spec_rel:-TBD}"
+    printf '\n<!-- sdd adr new: replace this line with the decision, in OUTPUT_LANG=%s. Give the\n' "${OUTPUT_LANG:-<unset>}"
+    printf '     heading above a real title, and follow the shape of the newest ADR in %s. -->\n' "${ADR_DIR%/}"
+  } > "$path"
+
+  [ -z "$spec_rel" ] || adr_declare "$root/$spec_rel" "$rel"
+  ok "$rel reserved${spec_rel:+, and $spec_rel now declares it}"
+}
+
 # adr_mode — prints the validated ADR_CHECK on stdout; rc 2 when the configuration is not usable.
 #
 # POSITIVE admission, never `not <what is refused>`: a fourth mode added tomorrow has to opt in
@@ -5280,12 +5422,9 @@ cmd_adr() {
   adr_mode >/dev/null || return $?
 
   case "$verb" in
-    # The allocator lands two increments from here. It REFUSES rather than no-opping: a verb that
-    # printed nothing and exited 0 would let a caller believe a number had been reserved, and an
-    # unreserved number is the whole defect this section exists to close.
     new)
       [ -n "$slug" ] || die "sdd adr new: --slug is required (see 'sdd help')"
-      die "sdd adr new is not wired in this build — only 'sdd adr check' answers (slug '$slug', ticket '${ticket:-none}', spec '${spec:-none}', dry-run $dry)"
+      adr_new "${repo:-$REPO_ROOT}" "$slug" "$ticket" "$spec" "$dry"
       ;;
     check)
       local root="${repo:-$REPO_ROOT}"
