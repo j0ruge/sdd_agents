@@ -626,6 +626,13 @@ O plano consolidado pelo Codex Astra, baseado no artigo de @0xCodez e nas refer�
   instrumento cru, ou pendurá-lo na célula do `review loop` do `--by-mission`.
   — descoberto por `sdd-reviewer` na missão `20260901-o-revisor-so-acha` (2026-09-02)
 
+- [ ] **`sdd adr check` só fala texto + rc; não existe `--json`** — `bin/sdd:5250` — quem quiser
+  mais que "passou/não passou" (um job de CI que anota o PR, um painel de migração contando o que
+  falta num repo em `warn`) hoje parseia a saída humana, que não é contrato. Direção: acrescentar
+  `--format json` **quando houver consumidor** — sem um, é superprodução, e a decisão 8 do grill
+  recusou construí-lo agora. — descoberto por `sdd-planner` na missão
+  `20260917-o-numero-do-adr-nao-e-prosa` (2026-09-17)
+
 ### Comentário e registro
 
 - [ ] **O chapéu da DOCS não pode escrever comentário de código, e a REVIEW endereça drift de comentário a ela** — `agents/sdd-docs.md:9` — o `writes:` da DOCS lista `docs/**`, `README.md`, `CLAUDE.md` e as rules, mas não `bin/sdd`; comentário de código É documentação viva, e a r2/r3 desta missão mandaram consertar uma frase podre em `cmd_autonomy`. A DOCS consertou (só comentário, zero linha de código) e o `hat_guard_check` parou a linha com `hat-crossed` depois da sessão paga. Reincide toda missão que apodrecer um comentário. Direção: decidir se o drift de comentário é da DOCS (e o `writes:` diz isso) ou da EXEC (e a REVIEW para de endereçá-lo à DOCS).

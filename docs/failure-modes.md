@@ -40,6 +40,50 @@ suite; you would only lose the next session.
 
 ---
 
+## PLAN will not pass: `adr:` under `ADR_CHECK=block`
+
+**Symptom:** `sdd phase <mission>` keeps answering `PLAN`, and `sdd why <mission> PLAN` says
+`adr: … — 'adr: TBD' is not a decision`, or names the untouched template placeholder, or says the
+key is missing altogether.
+
+**Cause:** the repo runs `ADR_CHECK=block`, and the mission's `adr:` is not a decision. This is the
+gate working, and it stops HERE on purpose: PLAN is the only phase with a human in the room, and no
+agent in this kit may decide an architectural trade-off on your behalf. A gate that demanded the
+decision from EXEC would be unsatisfiable.
+
+**What you do:** decide. If the mission takes an architectural trade-off, allocate the number with
+the command — never by reading the directory and adding one — and then write the body:
+
+```bash
+sdd adr new --slug <short-kebab-slug> --spec docs/handoffs/<mission>/00-missao.md
+```
+
+If it takes none, write `adr: none`. That is a decision too, and it passes. Check yourself with
+`sdd adr check --mission <mission> --phase plan`.
+
+**Do not:** point `adr:` at an ADR that already belongs to another decision to get moving. The gate
+reads the ADR's `Spec:` line back and will say so — and if it did not, you would have created
+exactly the collision the mechanism exists to prevent.
+
+---
+
+## EXEC refuses: the ADR drifted
+
+**Symptom:** the mission passed PLAN days ago and now `sdd why <mission> EXEC` says
+`adr: … points at a file that does not exist`, or that the ADR's `Spec:` points somewhere else.
+
+**Cause:** drift. The ADR was on disk when the human approved the plan and is not on disk now —
+renamed, deleted, or its `Spec:` line rewritten. EXEC re-reads what PLAN accepted, which is the one
+thing PLAN cannot ask.
+
+**What you do:** restore the file, or repair whichever side of the pair is wrong, then `sdd run`.
+`sdd adr check` names the file and the line.
+
+**Do not:** drop the repo to `warn` to get past it. That converts a broken link into one ledger row
+per run and the pipeline goes on building against a decision that no longer exists.
+
+---
+
 ## A handoff that declares `status: blocked`
 
 **Symptom:** `sdd run` exits with code 3 and `BLOCKED in <PHASE> — <handoff> has status: blocked`,

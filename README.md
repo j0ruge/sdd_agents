@@ -81,6 +81,9 @@ sdd kaizen --series          # the deterministic series (JSON) the judge cites, 
 sdd run <mission> --dry-run         # project the whole pipeline without spending tokens
 sdd run <mission> --phase EXEC      # force one specific phase
 sdd run <mission> --max-phases 2    # stop after N phases
+
+sdd adr new --slug <s> --spec <path>  # reserve the next free ADR id (O_EXCL) and write both sides of the link
+sdd adr check [--mission <m>]         # read the links back; rc 0 clean, 1 violation, 2 bad configuration
 ```
 
 `sdd approve <mission>` is the human gate with a command instead of a hand edit. It prints what you
@@ -90,6 +93,29 @@ file. It never opens a session: approving is the one decision in the pipeline th
 outside it. On a plan born of `sdd kaizen` it is the **only** way through the gate — `auto` is
 refused there, because nobody was in the room
 ([why](docs/pipeline.md#plan--the-only-one-the-runner-does-not-execute)).
+
+`sdd adr new` is the only way a number should be handed out. It reserves the file under `set -C`
+— O_EXCL, one syscall — so two writers racing for the same id get one file and one error instead
+of two files and a silent overwrite, and a freed number is never reused: it may already be cited
+by a merged branch, a handoff or somebody's notes. `--spec` writes **both** sides in one call, the
+mission's `adr:` and the ADR's `Spec:`, because one direction proves nothing — an `adr:` pointing
+at a real file is satisfied by *every* real file.
+
+**Adoption is gradual, and it is your repo's decision.** `ADR_CHECK` ships as `off`: a repo that
+just installed the kit has no `adr:` in any mission on disk, and a default that spoke would make
+the kit's arrival look like a finding in somebody else's backlog. The path is
+
+1. `off` → install, and read `sdd adr check` when you feel like it;
+2. `warn` → the phases derive as usual and each run leaves one `degraded` row of kind `adr-check`
+   in the ledger, so you can **count** what is still undeclared instead of guessing;
+3. fix or declare — `sdd adr new` for the decisions that exist, `adr: none` for the missions that
+   take none;
+4. `block` → the PLAN gate refuses an undecided `adr:`, and EXEC refuses one that drifted.
+
+Set `SPEC_DIR` if the repo keeps a SpecKit-style tree, and the same two-way check reaches
+`<SPEC_DIR>/*/spec.md`. The grammar, the two scopes and the CI/SpecKit recipes are in
+[`docs/pipeline.md`](docs/pipeline.md#adr-traceability); the decision itself is
+[ADR 0008](docs/adr/0008-adr-ids-are-allocated-and-links-are-checked.md).
 
 `sdd run` and `sdd retry` put you on the branch the plan declares (`branch:` in `00-missao.md`)
 before the first gate — checking it out, or cutting it from where you stand. A `<…>` placeholder or

@@ -450,6 +450,96 @@ human to different logs.
 `sdd close` is the only invocation of `claude` outside `run_phase()` besides the `sdd preflight`
 probe — neither of them runs a phase. It carries the kit guard anyway, for the reason below.
 
+## ADR traceability
+
+Nothing here allocated an ADR id until 2026-09-17, and a convention is only as good as the last
+person who followed it: a note declared "ADR 0030" for one decision the day before the real
+`docs/adr/0030-…` was accepted for another. [ADR 0008](adr/0008-adr-ids-are-allocated-and-links-are-checked.md)
+is the decision; this is how to use it.
+
+**One grammar, two dialects.** The rule is a KEY on a line, never a section:
+`^(- )?(\*\*)?(ADR|Spec)(\*\*)?:`. That reads `Spec: <path>` and `- **Spec**: <path>` the same
+way, so a repo already writing either keeps writing it. The **id comes from the file name** —
+`NNNN-slug.md` — because the two dialects disagree about the title (`# 0007 — x` here,
+`# ADR 0007 — x` elsewhere) and agree about the name.
+
+**One pair, both directions.** The mission's frontmatter carries `adr: <path | none>`; the ADR
+carries `Spec: <path back to 00-missao.md>`. A spec in a SpecKit tree carries `**ADR**: <path>`
+instead, and the ADR points back at the `spec.md`. One direction proves nothing: an `adr:` pointing
+at a real file is satisfied by *every* real file.
+
+**Two scopes.**
+
+| Command | Reads | Absence of `adr:` |
+|---|---|---|
+| `sdd adr check --mission <m>` | that mission alone | **fails** — it is the mission being run, and "nobody decided" is the defect |
+| `sdd adr check` | `ADR_DIR`, every mission, and `<SPEC_DIR>/*/spec.md` | **counted**, never failed |
+
+The asymmetry is deliberate. Every mission already on disk predates the mechanism, so a repo scope
+that failed on absence would be red on the day a repo installed the kit — and a check that is red
+from the first run is a check people turn off.
+
+**Three modes**, in `ADR_CHECK`: `off` asks nothing; `warn` derives the phase and leaves one
+`degraded` row of kind `adr-check` per run; `block` makes `gate_PLAN` refuse an undecided `adr:`
+and `gate_EXEC` refuse one that drifted. The refusal lands in PLAN because PLAN is the only phase
+with a human in the room — see [the PLAN gate](#plan--the-only-one-the-runner-does-not-execute).
+
+**A bare `ADR NNNN` is read by where it is written.** In `<SPEC_DIR>` it is a *claim* — that tree
+carries `**ADR**:` lines — so a number with no file behind it fails. In a handoff it is *narrative*
+and is counted. A plan legitimately cites decisions that are not its own.
+
+### Recipe: a CI job in the target repo
+
+The kit ships no workflow of its own — it has no `.github/` by decision (ADR 0004), and a reusable
+workflow cannot cross owners with a private repository. What a target adds is thin:
+
+```yaml
+# .github/workflows/adr.yml — in the TARGET repo, not in the kit
+name: adr
+on: [pull_request]
+jobs:
+  adr:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: install the kit
+        run: |
+          git clone --depth 1 "$SDD_REPO" "$RUNNER_TEMP/sdd"
+          echo "$RUNNER_TEMP/sdd/bin" >> "$GITHUB_PATH"
+        env:
+          SDD_REPO: ${{ secrets.SDD_REPO_URL }}   # or a PATH entry, if the kit is vendored
+      - run: sdd adr check
+```
+
+`sdd adr check` needs no session, no token and no network — it reads files and exits 0, 1 or 2. Run
+it under `ADR_CHECK=warn` first and let it be informational; move the repo to `block` once it is
+quiet.
+
+### Recipe: a SpecKit hook
+
+A repo driving its specs through SpecKit already has `.specify/extensions.yml`, where every hook
+takes a free `condition:`. Two entries put the check where the work happens:
+
+```yaml
+hooks:
+  before_plan:
+    - run: sdd adr check --phase plan
+  before_implement:
+    - run: sdd adr check --phase exec
+```
+
+`--phase` is what turns `TBD` from a note into a refusal, so `before_plan` is where a spec is made
+to decide and `before_implement` is where drift is caught.
+
+### Declared limits
+
+- A **local** ADR namespace beside a spec (`specs/<NNN-slug>/adr/001-…`) is reached by neither
+  scope. Unifying it or declaring it is the repo's decision, not the kit's.
+- A tree that is not laid out as `<SPEC_DIR>/<dir>/spec.md` is not scanned — `docs/superpowers/`
+  in this repo, for one.
+- `sdd adr check` speaks text and an exit code; there is no `--json` until something needs more
+  than the rc (`TODO.md`).
+
 ## The kit guard
 
 The kit is not the target repo, and a session running a mission for some other repo has no business

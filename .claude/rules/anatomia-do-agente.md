@@ -94,9 +94,13 @@ julgam prosa (`Documentation`, `Overall`), nomeados positivamente; achado de pro
 `TODO_FILE`, não compra rodada.
 
 **Onde mora hoje.** O componente mais forte do kit: `gate_<FASE>` por artefato (`TEST_CMD`, grep
-no checkpoint, `git log`, `gh pr view`); Check por incremento; catorze sensores em
-`tests/run-all.sh`; catálogo de mutação com carimbo no `sdd health`; guarda de kit em quatro
-portas.
+no checkpoint, `git log`, `gh pr view`); Check por incremento; **quinze** sensores em
+`tests/run-all.sh` (o décimo quinto é `check-adr.sh`); catálogo de mutação com carimbo no
+`sdd health`; guarda de kit em quatro portas. Desde `20260917-o-numero-do-adr-nao-e-prosa` o
+`gate_PLAN` também cobra o `adr:` sob `ADR_CHECK=block`, e o comentário do gate **nomeia o dono do
+artefato** — `sdd-planner`, com o humano na sala —, que é a segunda metade da régua do princípio 1.
+É por isso que a recusa mora no PLAN e não no EXEC: nenhum agente do kit decide trade-off
+arquitetural, então cobrar a decisão de uma fase sem humano seria o gate insatisfazível.
 
 **Dívida declarada.** A nota de revisão continua sendo rótulo; o que L1 fechou foi que rótulo
 sem sensor comprava rodada — hoje `gate_REVIEW` tolera `REVIEW_PROSE_MIN_GRADE` só nas linhas
@@ -113,8 +117,15 @@ Memória sem rota é prosa que a próxima sessão paga para reler e não usa.
 
 **Onde mora hoje.** Handoffs por missão, checkpoint, `TODO.md`, `KAIZEN_LOG.md`, `CONTEXT.md`,
 `docs/adr/`, ledger de autonomia (`autonomy_log_path`), logs JSON por sessão em `.sdd/logs/`.
+O `docs/adr/` deixou de ser memória **sem rota**: `sdd adr new` aloca o número com O_EXCL e escreve
+os dois lados do vínculo; `sdd adr check` lê de volta, em dois escopos. A rota do ADR é o
+`sdd-planner` com o humano, e o gate de PLAN é quem cobra.
 
-**Dívida declarada.** 318 pendências em 82 handoffs sem instrumento (`CONTEXT.md`, verbete das
+**Dívida declarada.** O namespace local `specs/*/adr/` do repo-alvo não é alcançado por nenhum dos
+dois escopos do `sdd adr check` — unificar ou declarar é decisão daquele repo, e o limite está
+escrito no cabeçalho do `tests/check-adr.sh` e no `config/schema.md`. Árvore que não tem o formato
+`<SPEC_DIR>/<dir>/spec.md` também não é varrida (o `docs/superpowers/` deste repo).
+318 pendências em 82 handoffs sem instrumento (`CONTEXT.md`, verbete das
 pendências); três achados `kit:` esperando transporte humano; `CLAUDE.md` em 491 linhas (já esteve
 em 861). A memória do harness (`~/.claude/projects/…/memory`) não é do kit e ficou um dia
 atrasada em 2026-09-03 — o que o kit precisa lembrar mora no kit.
