@@ -3562,7 +3562,7 @@ mut_ADR_phase_scope_ignored() {
 # refused values, `../escaped` is accepted and the allocator writes above REPO_ROOT, past
 # hat_guard_check — the guard that named only `/` while the property was "stays inside the repo".
 mut_ADR_dir_escapes_repo() {
-  sed -i "/^adr_dir_ok() {/,/^}/ s@^    case \"\$comp\" in ''|.|..) return 1 ;; esac\$@    case \"\$comp\" in '') return 1 ;; esac@" "$1"
+  sed -i "/^adr_dir_ok() {/,/^}/ s@^      ''|\.|\.\.) return 1 ;;\$@      '') return 1 ;;@" "$1"
 }
 
 # An id is unique inside the namespace that allocates it. Checking only the basename, a link to
