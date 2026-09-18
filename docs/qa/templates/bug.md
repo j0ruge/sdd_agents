@@ -1,7 +1,7 @@
 # BUG-<YYYYMMDD>-<slug>: <one-line title, user-first>
 
 - **Status:** open <!-- open | fixed | verified | wont-fix | invalid -->
-- **Closable by:** agent <!-- agent | human -->
+- **Closable by:** agent <!-- agent | human | deferred -->
 - **Impact (user-side):** <Blocks-Completion | Data-Loss | Trust-Damage | Friction | Cosmetic>
 - **Severity:** <Critical | High | Medium | Low> · **Priority:** <P0 | P1 | P2 | P3>
 - **Persona Affected:** <persona name>

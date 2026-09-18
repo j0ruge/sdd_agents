@@ -3966,6 +3966,52 @@ SEED
       diff -u "$target" "$a" | sed 's/^/      /' >&2 || true
     fi
   done
+  # --- the qa bug template gains the genre field ------------------------------
+  # Anchor 3 of gate_QA reads `Closable by:` and an ABSENT genre BLOCKS, which is fail-safe and
+  # right: every bug written before the field existed lacks it. But NOTHING on disk ever puts the
+  # field there — `grep -rn Closable ~/.claude/skills/qa-*` answers 0, and the pilot target's own
+  # docs/qa/templates/bug.md has no such line either. So in a fresh target every bug the skills
+  # write is born blocking, and a QA lap is paid before anyone works out why. The field has to
+  # exist BEFORE the first bug, and the installer is the one thing that runs before the first bug.
+  #
+  # The QA tree belongs to the qa-report/qa-execution skills, which is why this touches exactly one
+  # line of one file and only the line the KIT's gate reads. Diff-first like the agent mirrors:
+  # bare `install` shows what is missing, `--force` adopts.
+  local bugtpl="$REPO_ROOT/${QA_DOCS_PATH:-docs/qa}/templates/bug.md"
+  local genre_seed='- **Closable by:** agent <!-- agent | human | deferred -->'
+  if [ ! -f "$bugtpl" ]; then
+    ok "qa bug template not there yet (the qa-report skill seeds the tree on its first run)"
+  elif grep -qE '^- \*\*Closable by:\*\*' "$bugtpl"; then
+    # ⚠️ DECLARED LIMIT: the field is looked for, never the LEGEND behind it. A repo installed
+    # before ADR 0009 carries `<!-- agent | human -->`, and this line leaves it alone — gate_QA
+    # reads the VALUE and never the comment, and rewriting a legend inside somebody else's
+    # template is a larger licence than seeding a line the gate demands. The three values are in
+    # agents/sdd-qa.md § 5.1, which is where the agent reads them.
+    ok "qa bug template already carries 'Closable by:'"
+  elif ! grep -qE '^- \*\*Status:\*\*' "$bugtpl"; then
+    # No anchor, no write. A template that is not the skill's shape is somebody else's file, and
+    # guessing where the field goes in it is how an installer corrupts a document it does not
+    # understand. Say it and leave the bytes alone.
+    warn "qa bug template has no '- **Status:**' line — it is not the shape the qa-report skill writes, so the 'Closable by:' field was NOT inserted. Add it by hand below the status line: $genre_seed"
+  elif [ "$force" = "1" ]; then
+    # BELOW the first Status: line, and the position is not cosmetic — gate_QA reads the FIRST
+    # field-shaped line outside a fence, so a seed appended at the end would work today and stop
+    # working the day the template grows a fenced example above it. `0,/re/` so a template that
+    # repeats the status line in an example gets exactly one insertion.
+    # `@` and NEVER `|` as the s/// delimiter: $genre_seed carries the enum legend
+    # `<!-- agent | human | deferred -->`, so a `|`-delimited script ends inside the replacement
+    # and sed refuses it — the same one-character trap that made a mutant of this mission apply to
+    # nothing while the catalogue went on calling it caught.
+    sed -i "0,/^- \*\*Status:\*\*/s@^- \*\*Status:\*\*.*@&\n$genre_seed@" "$bugtpl"
+    ok "qa bug template: 'Closable by:' inserted below 'Status:' (--force)"
+  else
+    warn "qa bug template lacks 'Closable by:' — every bug it births blocks Anchor 3 of the QA gate until somebody marks it by hand. The line, below 'Status:':"
+    dim "      $genre_seed"
+    changed=$((changed + 1))
+  fi
+
+  # "the kit version" covers the agent mirrors AND the bug template's one line: both are the kit's
+  # side of a file the target owns, and both are adopted by the same flag.
   if [ "$changed" -gt 0 ]; then warn "run 'sdd install --force' to adopt the kit version"; fi
 
   local gitignore="$REPO_ROOT/.gitignore"
@@ -4366,6 +4412,24 @@ cmd_preflight() {
   # Only claims "checked" when no agent failed — saying it right after six failure lines is the
   # output contradicting itself, which is the kind of lie the kit forbids in the gates.
   if [ "$n" -gt 0 ] && [ "$fails" -eq 0 ]; then ok "$n kit agent(s) checked"; fi
+
+  # --- the qa bug template carries the genre field ----------------------------
+  # Anchor 3 of gate_QA blocks on an ABSENT `Closable by:`, and nothing but `sdd install` ever
+  # writes that field into the template the qa-report skill copies from. Without this line a fresh
+  # target discovers the contract by paying a QA lap for it. `_fail` and not `warn`: the phase
+  # WILL stall, so this is a prediction the preflight can make for free.
+  local _pf_bugtpl="$REPO_ROOT/${QA_DOCS_PATH:-docs/qa}/templates/bug.md"
+  if [ ! -f "$_pf_bugtpl" ]; then
+    # The skill is not NAMED on this line on purpose. check-preflight.sh asserts that a repo with
+    # no interface never sees `qa-report` in this output — the kit must not ask for a skill it does
+    # not need — and that assertion reads the bare token. Widening someone else's sensor to fit a
+    # line of prose is the wrong direction; the sentence says the same thing without it.
+    dim "  ---  qa bug template not found (no QA docs tree yet — the QA skills create it on their first run)"
+  elif grep -qE '^- \*\*Closable by:\*\*' "$_pf_bugtpl"; then
+    ok "qa bug template carries 'Closable by:'"
+  else
+    _fail "qa bug template lacks 'Closable by:' — every bug it births blocks Anchor 3 of the QA gate until somebody marks it by hand; run 'sdd install --force'"
+  fi
 
   # --- HAT_WRITES_EXTRA entries that nothing will ever read -------------------
   # A hat whose own `writes:` is empty writes ANYWHERE (sdd-executor), so hat_writes returns early

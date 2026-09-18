@@ -81,3 +81,13 @@
   ⚠️ Dívida DECLARADA no comentário do gate: a forma do campo está escrita duas vezes, a três
   linhas de distância. É a regex que duplica, nunca a decisão — o enum é decidido nesse único laço
   — e o ramo novo ganhou mutante próprio (`QA_bug_genre_deferred_prefix`) em vez de pegar carona.
+- I4 — cinco regimes RED antes do código. O `sed` do seed nasceu com `|` de delimitador e o valor
+  semeado CARREGA `|` (a legenda do enum) — mesma família do mutante do I3, terceira vez na missão.
+  ⚠️ Correção de FATO do plano: o kit **tem** `docs/qa/templates/bug.md` (nasceu em `525b216`), então
+  o `sdd preflight` daqui cai no ramo `ok` e não no `---` que o plano previa. Preflight segue verde,
+  e a idempotência ficou provada num arquivo real: o install não tocou nele.
+  ⚠️ A legenda daquele arquivo estava velha (`<!-- agent | human -->`); atualizada à mão. O
+  instalador **não** reescreve legenda — limite declarado no comentário: o gate lê o VALOR.
+  ⚠️ Uma frase do `preflight` foi reescrita para não conter `qa-report`: o `check-preflight.sh`
+  afirma que um repo sem interface nunca vê esse token na saída, e alargar o sensor alheio para
+  caber uma linha de prosa é a direção errada.

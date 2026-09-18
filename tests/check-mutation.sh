@@ -1234,6 +1234,18 @@ mut_RUN_hat_close_unchecked() {
 # while staying green. The second and third matter most: this key WIDENS a permission and its value
 # is dropped into hat_path_allowed's `case "$f" in $g)`, a shell GLOB — the direction `ADR_DIR=*`
 # took when it built `*/**` and handed a hat most of the repo (CWE-863, PR #45).
+# The qa bug template's genre field. Anchor 3 blocks on an ABSENT `Closable by:` and nothing but
+# the installer ever writes that field into the template the qa-report skill copies from — so a
+# fresh target discovers the contract by paying a QA lap for it. Two mutants, because the seeder
+# and the check fail open independently: a seeder that stopped inserting leaves preflight red (the
+# operator at least hears about it), while a check that stopped asking leaves a repo silently
+# shipping blocking bugs.
+mut_INSTALL_bug_template_not_seeded() {
+  sed -i 's%^    sed -i "0,/.*bugtpl"$%    :%' "$1"
+}
+mut_PREFLIGHT_bug_template_blind() {
+  sed -i 's%^    _fail "qa bug template lacks.*%    :%' "$1"
+}
 mut_RUN_hat_extra_ignored() {   # the sum never happens: the key parses, validates, and is dropped
   sed -i '/^hat_writes() {/,/^}/ s|^  extra="\$(hat_writes_extra_for "\$hat")"$|  extra=""|' "$1"
 }
@@ -3809,6 +3821,8 @@ CATALOG=(
   RUN_hat_door2_missing
   RUN_hat_retry_door_missing
   RUN_hat_close_door_missing
+  INSTALL_bug_template_not_seeded
+  PREFLIGHT_bug_template_blind
   RUN_hat_extra_ignored
   RUN_hat_extra_unguarded
   RUN_hat_extra_glob_chars
