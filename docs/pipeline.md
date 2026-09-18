@@ -523,13 +523,20 @@ takes a free `condition:`. Two entries put the check where the work happens:
 ```yaml
 hooks:
   before_plan:
-    - run: sdd adr check --phase plan
+    - run: sdd adr check --mission "$SDD_MISSION" --phase plan
   before_implement:
-    - run: sdd adr check --phase exec
+    - run: sdd adr check --mission "$SDD_MISSION" --phase exec
 ```
 
 `--phase` is what turns `TBD` from a note into a refusal, so `before_plan` is where a spec is made
 to decide and `before_implement` is where drift is caught.
+
+⚠️ **`--phase` is scoped to `--mission` and is refused without it** — only the mission scope reads
+the phase, and a whole-repo report printed in answer to a question about a phase is the flag that
+does nothing. So the hook has to name the mission: substitute whatever identifier the tree carries
+for `$SDD_MISSION`. If SpecKit gives the hook no such identifier, drop these two entries and keep
+the CI recipe above — running them without `--mission` fails the hook before it validates anything,
+which is worse than not running it.
 
 ### Declared limits
 

@@ -3586,6 +3586,20 @@ mut_ADR_preflight_skips_validation() {
   sed -i '/^cmd_preflight() {/,/^}/ s@^  adr_mode >/dev/null 2>&1 || adr_rc=$?$@  adr_rc=0@' "$1"
 }
 
+# ADR_DIR goes into `$ADR_DIR/**` and hat_path_allowed reads that as a shell GLOB. Without the
+# character allowlist, `ADR_DIR=*` builds `*/**` and widens a hat's write scope to most of the
+# repo — and hat_guard_check, reading the same matcher, never notices. CWE-863.
+mut_ADR_dir_glob_chars() {
+  sed -i '/^adr_dir_ok() {/,/^}/ s@^      \*\[!A-Za-z0-9._-\]\*) return 1 ;;$@      @' "$1"
+}
+
+# The spelling and the filesystem are different questions. Without the physical containment check,
+# a symlinked component of ADR_DIR puts the allocator outside REPO_ROOT while every lexical test
+# passes — `ok docs/adr/0001-….md reserved`, bytes somewhere else entirely.
+mut_ADR_dir_symlink_escape() {
+  sed -i '/^adr_new() {/,/^}/ s@^  adr_dir_contained "$root" "${ADR_DIR%/}" \\$@  true \\@' "$1"
+}
+
 CATALOG=(
   AUTONOMY_meta_ignores_event
   AUTONOMY_mission_drops_close_money
@@ -3904,6 +3918,8 @@ CATALOG=(
   ADR_link_outside_namespace
   ADR_no_rollback_on_declare_fail
   ADR_preflight_skips_validation
+  ADR_dir_glob_chars
+  ADR_dir_symlink_escape
   ADR_number_mismatch_blind
   ADR_bare_number_blind
   ADR_alloc_no_excl

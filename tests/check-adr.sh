@@ -201,7 +201,7 @@ fails=0
 # fail() are the only writers. Two blocks below used to bump it by hand AND then call pass/fail,
 # so two probes counted twice and the floor was pinned to a number two higher than the assertions
 # it was standing for — an instrument off by exactly the amount nobody could see.
-PROBE_FLOOR=66
+PROBE_FLOOR=69
 
 pass() { PROBES=$((PROBES + 1)); printf '  ok    %s\n' "$1"; }
 fail() { PROBES=$((PROBES + 1))
@@ -355,6 +355,40 @@ fi
 NESTED="$(fixture nested ADR_CHECK=\"warn\" ADR_DIR=\"docs/decisions/\")" || { echo "fixture failed" >&2; exit 1; }
 assert_adr '...while a nested relative ADR_DIR with a trailing slash is accepted' "$NESTED" 0 \
   '^  ok    ADR_CHECK=warn, 0 ADR\(s\) in docs/decisions$' check
+
+# R33: a component is a LITERAL name. hat_expand drops ADR_DIR straight into `$ADR_DIR/**` and
+# hat_path_allowed matches that as a shell GLOB, so `ADR_DIR=*` builds `*/**` and widens a hat's
+# write scope to most of the repo — with hat_guard_check reading the same widened matcher, so it
+# never notices. Measured 2026-09-17 (CodeRabbit on PR #45, CWE-863).
+#
+# The fixture is a real repo with real files in it, which is the point: the first version of the
+# guard split the value with an unquoted `for comp in $d`, so `*` was pathname-expanded into the
+# CWD's file names — every one of them legal — and the check passed while reading the directory the
+# runner stood in instead of the value it was handed. A probe run in an empty directory would have
+# agreed with the bug.
+GLOBDIR="$(fixture globdir ADR_CHECK=\"warn\" ADR_DIR=\"*\")" || { echo "fixture failed" >&2; exit 1; }
+assert_adr 'ADR_DIR with a glob metacharacter is refused — it would widen a hat writes: glob' \
+  "$GLOBDIR" 2 'ADR_DIR=\* is not a repo-relative directory' check
+QDIR="$(fixture qdir ADR_CHECK=\"warn\" ADR_DIR=\"docs/ad?\")" || { echo "fixture failed" >&2; exit 1; }
+assert_adr '...and so is a single-character wildcard, which no list of refused values would name' \
+  "$QDIR" 2 'is not a repo-relative directory' check
+
+# R34: the SPELLING and the FILESYSTEM are different questions, and passing one implies nothing
+# about the other. With docs/adr symlinked out of the tree the value is lexically perfect and the
+# allocator still wrote outside REPO_ROOT — `ok docs/adr/0001-….md reserved`, bytes elsewhere.
+SYMDIR="$(fixture symdir ADR_CHECK=\"warn\" ADR_DIR=\"docs/adr\")" || { echo "fixture failed" >&2; exit 1; }
+mkdir -p "$SYMDIR/docs" "$BOX/outside-the-repo"
+ln -s "$BOX/outside-the-repo" "$SYMDIR/docs/adr"
+run_adr "$SYMDIR" new --slug via-symlink
+# BOTH terms: the refusal AND the empty target. A guard that refused and still wrote would satisfy
+# the rc on its own, which is the shape this file keeps finding in its own probes.
+if [ "$ADR_RC" != 0 ] && [ -z "$(ls -A "$BOX/outside-the-repo" 2>/dev/null)" ]; then
+  pass 'a symlinked ADR_DIR is refused and the allocator writes nothing outside the repo'
+else
+  fail 'a symlinked ADR_DIR is refused and the allocator writes nothing outside the repo' \
+    'non-zero rc and an empty directory outside the repo' \
+    "rc $ADR_RC, outside: [$(ls -A "$BOX/outside-the-repo" 2>/dev/null | tr '\n' ' ')] — $ADR_OUT"
+fi
 
 # --- R3: no verb is never a silent no-op --------------------------------------------------------
 OFF="$(fixture off ADR_CHECK=\"off\")" || { echo "fixture failed" >&2; exit 1; }

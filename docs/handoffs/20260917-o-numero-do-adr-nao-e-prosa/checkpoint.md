@@ -39,7 +39,7 @@ atualizado: 2026-09-17 17:32
 | I6 | `warn` = uma linha `degraded kind:adr-check` por corrida + 1 mutante + enum em pipeline.md e CONTEXT.md | `o=$(bash tests/check-adr.sh 2>&1); grep -c '^  ok    warn: one degraded adr-check row per run, before the session' <<< "$o"` → `1` | done | `e79b5fd` |
 | I7 | Preflight `adr check:`, `$ADR_DIR` em `hat_expand` e `PLACEHOLDERS`, chapéus planner/kaizen, `sdd install --force` | `o=$(bash tests/check-hat.sh selftest 2>&1); grep -c '^  ok    R2: \$ADR_DIR is a placeholder the runner expands' <<< "$o"` → `1` | done | `759187b` |
 | I8 | Docs: README, pipeline (receitas CI/SpecKit), schema, rule anatomia §4/§5, CONTEXT verbete, KAIZEN_LOG, TODO (`--json`) + baseline 97→98 | `o=$(bash tests/check-todo.sh 2>&1); grep -c '^  ok    98 finding(s)' <<< "$o"` → `1` | done | `99c0e53` |
-| I9 | Kit `ADR_CHECK=block`; carimbo do `sdd health` | `./bin/sdd why 20260917-o-numero-do-adr-nao-e-prosa PLAN` → `plan approved` | done | `36433f6` |
+| I9 | Kit `ADR_CHECK=warn` (o `block` do I9 foi revertido na revisão pré-PR); carimbo do `sdd health` | `./bin/sdd why 20260917-o-numero-do-adr-nao-e-prosa PLAN` → `plan approved` | done | `36433f6` |
 
 > **As notas de execução não moram aqui.** Elas ficam em `checkpoint-notas.md`, ao lado deste
 > arquivo, append-only, e o prompt de boot inlina as últimas 10 — a sessão nunca abre aquele

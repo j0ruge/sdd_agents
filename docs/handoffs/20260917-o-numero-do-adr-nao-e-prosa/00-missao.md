@@ -65,7 +65,9 @@ da spec num comando só) e `sdd adr check` (valida a missão corrente ou o repo 
 rc). Três chaves novas — `ADR_CHECK=off|warn|block`, `ADR_DIR`, `SPEC_DIR` — governam o quanto
 os gates de PLAN e EXEC cobram; `block` recusa `TBD` na **saída** do PLAN, a única fase com
 humano. Um sensor novo com selftest e oito mutantes provam que o mecanismo mede o que diz. O
-próprio kit passa a rodar `block`, com o ADR 0008 criado pelo comando. A adoção em repos-alvo é
+próprio kit passa a rodar `warn`, com o ADR 0008 criado pelo comando — o I9 chegou a pôr `block`,
+e a revisão pré-PR mediu o preço: as 14 missões anteriores, todas sem `adr:`, voltaram a derivar
+PLAN. `block` vira etapa futura, destravada pelo mapeamento das ADRs 0001–0007 (`TODO.md`). A adoção em repos-alvo é
 gradual e documentada (`warn` → corrigir → `block`), com receitas de CI e de hook SpecKit em vez
 de código fora do kit.
 
@@ -126,7 +128,10 @@ sozinho. Qualquer ✗ → `aprovacao` fica vazio e o runner para pedindo aprova�
    check 6 parseia o `case` com `[a-z|+-]+\)`; verbos dentro de `cmd_adr`.
 3. **Gramática = uma regex de linha-chave** `^(- )?(\*\*)?(ADR|Spec)(\*\*)?:`; `adr: none | TBD |
    <caminho>` na spec/missão, `Spec: <caminho>` no ADR; ID lido do **nome do arquivo**
-   (`^[0-9]{4}-[a-z0-9-]+\.md$`), servindo aos dois dialetos; plano co-localizado.
+   (`^[0-9]{4}-[a-z0-9-]+\.md$`), servindo aos dois dialetos.
+   ⚠️ A segunda metade da regra (d) — plano co-localizado citando ID diferente do declarado ⇒ FAIL
+   — **não foi implementada**, com o porquê no cabeçalho do sensor (plano cita outras decisões
+   legitimamente). Fica **adiada**, e o sensor não a mede: ver `checkpoint-notas.md` do I3.
 4. **Dois escopos; ausência só falha na missão corrente**: `--mission` exige `adr:`; repo inteiro
    valida quem declara, conta quem não declara (`info`), reprova duplicata e número solto.
 5. **`ADR_CHECK` recusa TBD na SAÍDA do PLAN** (só ali há humano; recusar em EXEC seria gate
@@ -136,7 +141,8 @@ sozinho. Qualquer ✗ → `aprovacao` fica vazio e o runner para pedindo aprova�
    (duas injeções do humano); `--spec` escreve os dois lados e recusa caminho já declarado.
 7. **`specs/*/adr/` fora de escopo**, limite declarado (D15).
 8. **Saída texto + rc** (`  ok/FAIL/info`, rc 0/1/2); `--json` só com consumidor.
-9. **Dogfood sem corrida**: `adr: TBD` aqui, ADR 0008 nasce do I4 pelo comando; kit `warn` → `block`.
+9. **Dogfood sem corrida**: `adr: TBD` aqui, ADR 0008 nasce do I4 pelo comando; kit fica em `warn`
+   (o `block` foi revertido na revisão pré-PR — ver `.sdd/config.sh` e `TODO.md`).
 10. **Execução interativa (Opus), não `sdd run` no kit** — reticência do humano em usar o kit
     para melhorar ele mesmo.
 

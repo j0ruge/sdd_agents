@@ -106,8 +106,11 @@ just installed the kit has no `adr:` in any mission on disk, and a default that 
 the kit's arrival look like a finding in somebody else's backlog. The path is
 
 1. `off` → install, and read `sdd adr check` when you feel like it;
-2. `warn` → the phases derive as usual and each run leaves one `degraded` row of kind `adr-check`
-   in the ledger, so you can **count** what is still undeclared instead of guessing;
+2. `warn` → the phases derive as usual, and a run that reaches the EXEC gate with the `adr:`
+   unsatisfied leaves one `degraded` row of kind `adr-check` in the ledger, so you can **count**
+   what is still undeclared instead of guessing. A run that stops earlier writes none, so an
+   absent row means "this run did not get there", never "the migration is done" — the number that
+   answers that question is the undecided count in `sdd adr check`;
 3. fix or declare — `sdd adr new` for the decisions that exist, `adr: none` for the missions that
    take none;
 4. `block` → the PLAN gate refuses an undecided `adr:`, and EXEC refuses one that drifted.

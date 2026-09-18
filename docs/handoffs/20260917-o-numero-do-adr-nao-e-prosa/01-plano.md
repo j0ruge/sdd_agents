@@ -186,8 +186,9 @@ acusa); `adr_check_repo <root>`: (a) IDs únicos + padrão em `ADR_DIR` (duplica
 arquivos); (b) todo `$HANDOFF_DIR/*/00-missao.md` com `adr:` caminho → `adr_check_mission`; (c)
 `SPEC_DIR` não vazio → todo `$SPEC_DIR/*/spec.md` com linha `ADR` → mesma validação com back-link
 == o próprio `spec.md`; sem linha → `info: N spec(s) without an ADR line`; (d) `\bADR [0-9]{4}\b`
-solto em `01-plano.md`/`spec.md`/`plan.md` sem arquivo em `ADR_DIR` → FAIL; plano co-localizado
-citando ID diferente do declarado → FAIL; (e) stub com `<!-- sdd adr new:` → `info: unfilled stub`.
+solto em `01-plano.md`/`spec.md`/`plan.md` sem arquivo em `ADR_DIR` → FAIL; ~~plano co-localizado
+citando ID diferente do declarado → FAIL~~ (**adiada**, não implementada — ver `checkpoint-notas.md`
+do I3); (e) stub com `<!-- sdd adr new:` → `info: unfilled stub`.
 **Como (TDD):** probes `duplicate ADR number fails both files`, `a bare ADR 0042 in 01-plano.md
 with no file fails`, `spec.md without an ADR line is counted as info, rc 0`, `SPEC_DIR empty scans
 no specs`. Mutante `mut_ADR_bare_number_blind` (`ADR [0-9]{4}` → `ADR NEVER`).
@@ -293,6 +294,9 @@ mesmo commit; `docs/failure-modes.md` sintoma "PLAN parada por `adr:` sob block"
 
 **Antes de editar:** `./bin/sdd adr check --mission 20260917-o-numero-do-adr-nao-e-prosa; echo $?`
 → `0`; `./bin/sdd adr check; echo $?` → `0`. **Editar** `.sdd/config.sh` → `ADR_CHECK="block"`.
+⚠️ **Revertido na revisão pré-PR:** o kit ficou em `warn`. Com `block` as 14 missões anteriores,
+todas sem `adr:`, voltaram a derivar PLAN — a etapa 3 do caminho do README (declarar as legadas)
+não tinha sido feita. Ver `.sdd/config.sh` e o item do `TODO.md`.
 **Depois:** `sdd why <m> PLAN` → `plan approved`; `sdd phase <m>` ≠ `PLAN`.
 **Último passo:** `./bin/sdd health` (~15 min; chave = `bin tests templates config`; a baseline do
 I8 já está commitada) → carimbo; `./bin/sdd health --release` 6/6.
@@ -314,6 +318,11 @@ I8 já está commitada) → carimbo; `./bin/sdd health --release` 6/6.
 | Check com pipe cru na célula do checkpoint | — | todos em herestring |
 
 ## Verificação end-to-end
+
+⚠️ As linhas abaixo são **expectativas escritas antes da execução**, não resultados registrados. O
+que de fato aconteceu está em `checkpoint-notas.md`, e duas divergiram: `sdd health --release` deu
+**2 de 6** (as quatro vermelhas são pré-existentes, com dono no ADR 0007), e o clone do repo-alvo
+respondeu **rc 0**, com os `ADR 0030` soltos apontando para arquivos que existem.
 
 1. `bash -n bin/sdd && tests/run-all.sh` → `suite green`; `tests/run-all.sh --list` com 15 sensores.
 2. `./bin/sdd health` → `score: 317 caught, 0 known gap(s), of 317`, carimbo escrito;

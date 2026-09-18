@@ -5455,6 +5455,12 @@ adr_new() {
     return 0
   fi
 
+  # BEFORE the mkdir, because the mkdir is what would follow the symlink. adr_mode already cleared
+  # the spelling at config load; this is the other half, and it lives here rather than in adr_mode
+  # because it is a question about the filesystem of THIS repo, which a config validator does not
+  # have in front of it.
+  adr_dir_contained "$root" "${ADR_DIR%/}" \
+    || die "sdd adr new: ADR_DIR=${ADR_DIR%/} resolves outside the repository — a symlinked component would put the ADR outside $root, and nothing was written"
   mkdir -p "$dir"
   adr_reserve "$path" \
     || die "sdd adr new: $rel already exists — nothing was written (the id is reserved with O_EXCL, never overwritten)"
@@ -5579,11 +5585,53 @@ adr_dir_ok() {
   while [ "${d%/}" != "$d" ]; do d="${d%/}"; done
   [ -n "$d" ] || return 1
   case "$d" in /*) return 1 ;; esac
-  local IFS=/ comp
-  for comp in $d; do
-    case "$comp" in ''|.|..) return 1 ;; esac
+  # Split by parameter expansion and NEVER `for comp in $d` with IFS=/: an unquoted expansion in a
+  # `for` list is word-split AND pathname-expanded, so `ADR_DIR=*` was replaced by the CWD's file
+  # names before any component was inspected — every one of them a legal name, so the check passed
+  # and reported the value clean. The guard read the DIRECTORY the runner happened to stand in
+  # instead of the value it was handed. Found while verifying the fix for the metacharacter hole
+  # below, which the same bug was hiding.
+  local rest="$d" comp
+  while [ -n "$rest" ]; do
+    comp="${rest%%/*}"
+    case "$comp" in
+      ''|.|..) return 1 ;;
+      # ...and a LITERAL name. `''|.|..` refused traversal and still admitted `*`, `doc?` and
+      # `docs/[a-z]dr`: hat_expand drops those straight into `$ADR_DIR/**` and hat_path_allowed
+      # matches the result as a shell GLOB, so `ADR_DIR=*` builds the pattern `*/**` and widens a
+      # hat's write scope to most of the repo — with hat_guard_check reading the same widened
+      # matcher, so it never notices. Measured 2026-09-17 (CodeRabbit on PR #45, CWE-863).
+      #
+      # This is the CHARACTER-level half of the rule the comment above already claimed: refusing
+      # three spellings is a list, and a list has holes. `*[!set]*` is the positive form shell
+      # gives us — "contains something outside the set" — so a metacharacter nobody listed is
+      # refused by construction rather than by being remembered.
+      *[!A-Za-z0-9._-]*) return 1 ;;
+    esac
+    if [ "$comp" = "$rest" ]; then rest=""; else rest="${rest#*/}"; fi
   done
   return 0
+}
+
+# adr_dir_contained <root> <dir> — 0 when <root>/<dir> PHYSICALLY resolves inside <root>.
+#
+# adr_dir_ok decides the SPELLING; this decides the filesystem, and neither implies the other. A
+# component of ADR_DIR that is a symlink out of the tree passes every lexical test and still puts
+# the allocator outside the repository: measured 2026-09-17 (CodeRabbit on PR #45) with docs/adr
+# symlinked to a sibling directory, where `sdd adr new` reported `docs/adr/0001-….md reserved` and
+# the bytes landed outside REPO_ROOT.
+#
+# `realpath -m`: the directory legitimately may not exist yet — adr_new creates it — and -m
+# resolves the components that do exist while staying lexical for the rest, which is the only form
+# that can answer BEFORE the mkdir it guards.
+adr_dir_contained() {
+  local root dir
+  root="$(realpath -m -- "$1" 2>/dev/null)" || return 1
+  dir="$(realpath -m -- "$1/$2" 2>/dev/null)" || return 1
+  case "$dir" in
+    "$root"/*) return 0 ;;
+  esac
+  return 1
 }
 
 adr_usage() {
