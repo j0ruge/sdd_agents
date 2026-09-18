@@ -4,6 +4,75 @@ Registro de melhorias com **antes/depois medido**. Sem número, não entra.
 
 ---
 
+## 2026-09-18 — A sessão morreu e o gate levou a culpa: o runner mede o que a sessão SOFREU
+
+**Problema (Gemba):** todo campo que o `run_phase` destila do `result` terminal nasceu no dia em
+que um consumidor apareceu — `cost_usd` pela D12, `turns` pela dieta — e a **causa da morte** nunca
+teve um. Então uma sessão que o ambiente matou chegava ao operador como `warn claude exited 1`,
+uma linha entre dezenas; o gate recusava pelo motivo **dele**; o runner comprava um retry cego; e o
+ledger registrava `kind: no-progress`, que o `docs/pipeline.md` classifica como *pure friction* e a
+D12/D16 leem como o kit girando em falso. **Um token expirado entrava no instrumento do juiz como
+desperdício do próprio kit** — fail-open com consumidor fora da suíte, a classe que a régua D15
+manda consertar.
+
+Medido em 2026-09-16 no `sales_quote`: 35 turnos e **US$ 4,56**, mais o retry que morreu em 1 turno
+por US$ 0, mais o operador que leu a recusa do gate como a última palavra da tela e passou a tarde
+fechando **cinco bugs do registry que não tinham nada a ver**. E mais **US$ 0,86 + 43 s** por
+invocação do `sdd close`, que parava para perguntar a um humano que não estava lá; e duas esperas
+de **120 s** só para responder *"em que fase estou?"*.
+
+**A conta dos regimes, que é o que decidiu a regra.** As 11 sessões com `is_error: true` dos quatro
+repos-alvo caem em exatamente três grupos, e a morte que a missão existe para pegar chega com
+`subtype: "success"`:
+
+| regime | n | `subtype` | `result` | o que o runner faz hoje |
+|---|---|---|---|---|
+| morte com causa nomeada | 2 | **`success`** | 72 chars | **para a linha** (`session-died`) |
+| teto de orçamento | 3 | `error_max_budget_usd` | `null` | segue — é o laço **normal** do kit |
+| morte sem causa | 6 | `error_during_execution` | `null` | segue, e o campo diz `null` |
+
+Logo, regra ancorada em "subtype de erro" erraria o primeiro grupo **e** dispararia no segundo.
+Escrita como `not <o teto>`, o quarto regime entraria por omissão no dia em que o harness inventar
+um. Está escrita **positivamente**: `is_error == true` **e** `result` string não-vazia.
+
+| | Antes | Depois |
+|---|---|---|
+| Sessões compradas numa morte nomeada (fixture) | 2 | **1** |
+| `kind` no ledger para essa morte | `no-progress` | **`session-died`** |
+| O mesmo para o teto de orçamento (controle) | `no-progress`, 2 sessões | **inalterado** |
+| Campos do `result` que o runner lê | 3 (custo, turnos, cache) | **4** (`session_error`) |
+| Causa da morte na tela | ausente | antes do ponteiro para os arquivos |
+| `TEST_CMD` rodado por uma pergunta de estado | 1 (a suíte + a e2e) | **0** (`sdd status --no-gates`) |
+| Portas da escalada, com probe e mutante cada | — | **2** |
+| Prompt do `sdd close` | `/ticket close <issue>` nu | carrega a autorização já dada |
+| Achados abertos no `TODO.md` | 99 | **105** |
+| Catálogo de mutação | 326 | **331** |
+
+**O que foi medido fora da suíte, porque nenhum stub podia responder.** O conserto do CLOSE punha
+prosa **depois** de um slash command, e uma expansão que guardasse só o comando apagaria cada
+palavra dela em silêncio. Um `claude -p` real com `/ticket close ZZZ-0` na primeira linha e uma
+instrução quatro linhas abaixo **obedeceu a instrução** (US$ 0,0475, haiku, um turno). A prosa
+chega; o fallback `--append-system-prompt` que o plano nomeava não é preciso, e o comentário no
+código guarda a medição em vez do palpite.
+
+**O que ficou declarado em vez de calado.** O `SESSION_DIED_WHY=""` na entrada do `run_phase` **não
+tem mutante**: removê-lo foi medido numa cópia e a suíte inteira ficou verde, porque o setter roda
+em toda sessão real e as portas só são alcançáveis depois de uma. A linha fica — ela decide *qual*
+falha uma porta futura produz — com a ausência de probe escrita na própria linha, e o catálogo diz
+por que ela não está lá. Registrar um mutante que nada pega seria um sobrevivente permanente no
+score. Pelo mesmo critério, `cmd_retry` e `cmd_close` ficam **sem porta**, com o limite no cabeçalho
+da função.
+
+**O que a régua D15 mandou para o `TODO.md` em vez de para esta missão:** os cinco achados não
+escolhidos (#2, #3, #4, #6, #7), a observação do revisor (`Test Coverage = A` não implica caso
+negativo) e um achado estrutural nascido no gemba — `grep -rn Closable ~/.claude/skills/qa-*`
+responde **zero**, então em repo-alvo novo a Âncora 3 do `gate_QA` roda inteira em regime
+"ausente ⇒ bloqueia". O #4 foi **fundido** com o irmão vivo sobre `writes:`, não duplicado; o #2
+registra por escrito que a direção dele **contradiz a ADR 0006/D17**, senão a próxima missão
+implementa contra uma decisão já tomada.
+
+---
+
 ## 2026-09-17 — O número do ADR deixa de ser prosa: alocado por comando, lido por sensor
 
 **Problema (Gemba):** **nada** alocava id de ADR, aqui ou no repo-alvo. `grep -c traceab bin/sdd`

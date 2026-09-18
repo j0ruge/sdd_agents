@@ -3156,6 +3156,7 @@ autonomy_session_row() {  # <phase> <attempt> <auto_retry> <moved> <gate> <gate_
     --arg turns "$LAST_PHASE_TURNS" --arg cache_read "$LAST_PHASE_CACHE_READ" \
     --arg mcp_seen "$LAST_PHASE_MCP_SEEN" --arg tools_leaked "$LAST_PHASE_TOOLS_LEAKED" \
     --arg denials "$LAST_PHASE_DENIALS" --arg harness "$LAST_PHASE_HARNESS" \
+    --arg died "${LAST_PHASE_DIED:0:200}" \
     --arg pbefore "${7:-}" --arg pafter "${8:-}" --arg itotal "${9:-}" \
     --arg rbefore "${10:-}" --arg rafter "${11:-}" --arg rmax "${12:-}" \
     '{v: 1, ts: $ts, event: "session",
@@ -3175,6 +3176,7 @@ autonomy_session_row() {  # <phase> <attempt> <auto_retry> <moved> <gate> <gate_
       tools_leaked: ($tools_leaked | tonumber? // null),
       denials: ($denials | tonumber? // null),
       harness: (if $harness == "" then null else $harness end),
+      session_error: (if $died == "" then null else $died end),
       moved: ($moved == "true"),
       pending_before: ($pbefore | tonumber? // null),
       pending_after: ($pafter | tonumber? // null),
@@ -3299,6 +3301,22 @@ HARNESS_ENV_UNSET=(-u CLAUDECODE -u CLAUDE_CODE_CHILD_SESSION -u CLAUDE_CODE_MES
 
 run_phase() {
   local phase="$1" resume_sid="${2:-}"
+  # ZEROED ON ENTRY, above every other statement of this function — above the `die`
+  # preconditions and above the DRY_RUN early return. This is the contract every marker in this
+  # file owes and RE-DERIVES rather than inherits from GATE_APP_DOWN: the only setter is the one
+  # that clears it, so the marker can say "the session I just ran died" and nothing else. Above
+  # the projection because `sdd run --dry-run` opens no session to attribute a death to, and
+  # above the preconditions because a `die` there is not a death of the session either.
+  #
+  # ⚠️ NO PROBE, DECLARED, and the house rule says to name the world rather than deny it: with
+  # door 1 sitting ABOVE cmd_run's gate-pass branch, every lap that can read this marker has just
+  # called run_phase, so no fixture built for this file leaves a stale value anywhere a door can
+  # see it. The world I could not build is one where a lap reaches a door WITHOUT having run a
+  # session; whether one exists was not determined. The line stays because it decides WHICH
+  # failure a future door produces — a stale marker would escalate the wrong phase, which is the
+  # F2 the handoff-blocked sibling actually paid for — and a rule that survives by being
+  # unreachable today keeps its missing probe written down instead of being deleted on a claim.
+  SESSION_DIED_WHY=""
   local pstep model agent sid prompt logfile streamfile started ended cost turns cache_read
   # QA is three sessions (plan, walk, close); the step comes from the artifacts, not a counter.
   pstep="$(phase_step "$phase")"
@@ -3441,6 +3459,36 @@ missing and write the artifacts. The gate will be re-evaluated."
   # moves this number and little else, so a judge asked to verify the cut could not see it. Same
   # `// ""` and same `|| echo` guard as `turns` above, for the same two reasons written there.
   cache_read="$(jq -r '.usage.cache_read_input_tokens // ""' "$logfile" 2>/dev/null || echo "")"
+  # WHAT THE SESSION SUFFERED, out of the same distilled summary the three reads above take what
+  # it SPENT from. Until now the runner measured only the spending: every field here was added
+  # the day a consumer appeared (cost -> D12, turns -> the diet), and the cause of death never
+  # had one — so a session killed by the environment reached the operator as `warn claude exited
+  # 1` among dozens of lines, the gate then refused for a reason of its own, and the ledger filed
+  # the whole episode as the pipeline spinning.
+  #
+  # THE RULE IS WRITTEN POSITIVELY — what comes IN, never `not <what goes out>` — and it is
+  # narrow on purpose. Measured 2026-09-18 over the 11 sessions with `is_error: true` in the four
+  # target repos, which fall into exactly three regimes:
+  #   · 2  the death this exists to name: `subtype: "success"`, `result` a 72-char sentence
+  #        ("Failed to authenticate: OAuth session expired and could not be refreshed");
+  #   · 3  `error_max_budget_usd`, `result: null` — the kit's NORMAL loop, which must not stop;
+  #   · 6  `error_during_execution`, `result: null` — died, cause unknown.
+  # So a rule anchored on "an error subtype" would miss the first regime AND fire on the second.
+  # The only pair that separates all three is `is_error` together with a non-empty string
+  # `result`; the 6 unknown deaths stay exactly as they are today, visible to the judge through
+  # the ledger field but escalating nothing — "unknown escalates nothing" is the same literal
+  # rule app_probe keeps. Written as `not <the budget ceiling>` this would concede the FOURTH
+  # regime by omission the day the harness invents one; written positively, the fourth has to
+  # opt in.
+  #
+  # Same `2>/dev/null || echo ""` guard as its three neighbours, and for the same reason: under
+  # this file's `set -euo pipefail` a jq that fails inside `x="$(…)"` kills the run at the
+  # assignment.
+  local died
+  died="$(jq -r 'if (.is_error == true) and (((.result // "") | type) == "string")
+                    and ((.result // "") != "")
+                 then .result else "" end' "$logfile" 2>/dev/null || echo "")"
+  SESSION_DIED_WHY="${died:0:200}"
   local dur=$((ended - started))
   pipeline_log_line "$(date -Iseconds)  $phase  agent=$agent  model=$model  session=${resume_sid:-$sid}  rc=$rc  dur=${dur}s  cost_usd=$cost  log=$logfile"
 
@@ -3454,8 +3502,17 @@ missing and write the artifacts. The gate will be re-evaluated."
   LAST_PHASE_STEP="$pstep"
   LAST_PHASE_AGENT="$agent"
   LAST_PHASE_MODEL="$model"
+  LAST_PHASE_DIED="$died"
 
   if [ "$rc" -ne 0 ]; then
+    # The cause FIRST and the file pointer second, when there is a cause to give. The order is
+    # the whole fix: the operator of the 2026-09-16 death read `warn claude exited 1`, went on
+    # reading, and met the gate's own refusal — five open bugs in the registry — as the last word
+    # on the screen. They spent the afternoon closing those five. Truncated at 200 like gate_why,
+    # under the same locale caveat (characters in a multibyte locale, bytes under C/POSIX).
+    if [ -n "$died" ]; then
+      bad "the $phase session died: ${died:0:200}"
+    fi
     warn "claude exited $rc in phase $phase (see $logfile and ${logfile%.json}.err)"
   else
     dim "  session ended in ${dur}s, cost $cost USD"
@@ -3477,6 +3534,8 @@ LAST_PHASE_DUR=""
 LAST_PHASE_STEP=""
 LAST_PHASE_AGENT=""
 LAST_PHASE_MODEL=""
+LAST_PHASE_DIED=""
+SESSION_DIED_WHY=""
 
 # Fingerprint of the mission state. It answers "did this session do ANYTHING?" when the gate has
 # not passed yet — the normal case for the EXEC phase, which runs one increment at a time.
@@ -4879,11 +4938,60 @@ health_ratchet() {
   fi
 }
 
+# WHERE AM I, for free. Deriving the phase IS the gate loop — `current_phase()` runs every gate,
+# and a gate runs TEST_CMD and E2E_CMD — so the ordinary `sdd status` costs a whole suite plus a
+# whole e2e every time somebody asks which phase a mission is in. Measured on 2026-09-16 in a
+# real target: two waits of 120 s apiece, for a question the disk can answer.
+#
+# `--no-gates` is ADDITIVE and deliberately does not pretend: it reports what is ON DISK and says
+# in so many words that no gate was evaluated, and it NEVER prints a next phase. Two shapes were
+# refused in the 2026-09-18 grill. Deriving the phase from the artifacts instead would create a
+# SECOND derivation of the most-read enum in the kit, and the kit's own rule is one definition per
+# program. Inverting the default — cheap unless asked — would leave the cheap answer being read
+# as a verdict, which is the failure this flag exists to avoid rather than to spread.
 cmd_status() {
+  local mission_arg="" no_gates=0
+  # The same parse shape `cmd_run` keeps, and the `-*` arm is the load-bearing half: without it
+  # `sdd status <mission> --no-gate` (a typo) is resolved as a MISSION, and the command answers
+  # confidently about the wrong thing with rc 0.
+  while [ $# -gt 0 ]; do
+    case "$1" in
+      --no-gates) no_gates=1 ;;
+      -*)         die "unknown status option: $1" ;;
+      *)          mission_arg="$1" ;;
+    esac
+    shift
+  done
   load_config
-  resolve_mission "${1:-}"
+  resolve_mission "$mission_arg"
   step "mission $MISSION — $PROJECT_NAME"
   info ""
+
+  if [ "$no_gates" = "1" ]; then
+    local f names=""
+    for f in "$MISSION_DIR"/*; do [ -e "$f" ] && names="$names ${f##*/}"; done
+    info "  artifacts:"
+    if [ -n "$names" ]; then
+      printf '    %s%s%s\n' "$C_DIM" "${names# }" "$C_RESET"
+    else
+      printf '    %s(none)%s\n' "$C_DIM" "$C_RESET"
+    fi
+    info ""
+    status_increments
+    info ""
+    local jrnl="$REPO_ROOT/.sdd/logs/$MISSION/pipeline.log"
+    if [ -f "$jrnl" ]; then
+      info "  last journal lines:"
+      tail -5 "$jrnl" | sed "s/^/    /"
+      info ""
+    fi
+    # The disclaimer is the whole reason the absence of a next phase above is readable. Without
+    # it the output is indistinguishable from a pipeline that is complete, which is the one
+    # reading a cheap answer must never be allowed to carry.
+    printf '  %sno gate was evaluated — this is the disk, not a verdict%s\n' "$C_YELLOW" "$C_RESET"
+    printf '  %sfor the phase, run: sdd status %s%s\n' "$C_DIM" "$MISSION" "$C_RESET"
+    return 0
+  fi
 
   local ph state why
   for ph in $PHASES; do
@@ -4893,20 +5001,7 @@ cmd_status() {
   done
 
   info ""
-  local rows; rows="$(checkpoint_rows)"
-  if [ -n "$rows" ]; then
-    info "  increments:"
-    local id title _c st commit mark
-    while IFS=$'\t' read -r id title _c st commit; do
-      case "$st" in
-        done)    mark="${C_GREEN}✓${C_RESET}" ;;
-        blocked) mark="${C_RED}✗${C_RESET}" ;;
-        doing)   mark="${C_YELLOW}▸${C_RESET}" ;;
-        *)       mark="${C_DIM}·${C_RESET}" ;;
-      esac
-      printf '    %b %-4s %-46s %s%s%s\n' "$mark" "$id" "${title:0:46}" "$C_DIM" "${commit:0:8}" "$C_RESET"
-    done <<< "$rows"
-  fi
+  status_increments
 
   info ""
   local next; next="$(current_phase)"
@@ -4917,6 +5012,31 @@ cmd_status() {
     printf '  next phase: %s%s%s — %s\n' "$C_BOLD" "$next" "$C_RESET" "$GATE_WHY"
     printf '  %srun: sdd run %s%s\n' "$C_DIM" "$MISSION" "$C_RESET"
   fi
+}
+
+# ⚠️ DEFINED BELOW `cmd_status` ON PURPOSE, not for reading order. `tests/check-health.sh`
+# anchors the END of the `sdd health` census region on the text `cmd_status() {`, so a helper
+# placed above it drags its capture into a region it has nothing to do with and moves a ratchet
+# that is supposed to record growth in the health sensor. Bash binds function names at parse
+# time, so the call site above is satisfied either way.
+# The increment table, printed by both faces of `sdd status`. ONE definition rather than two: it
+# reads `checkpoint_rows` — itself the single checkpoint reader — and a second copy of this loop
+# is the shape this repo refuses everywhere else (a second reader learns a status token late, and
+# the two faces of one command disagree about the same file).
+status_increments() {
+  local rows; rows="$(checkpoint_rows)"
+  [ -n "$rows" ] || return 0
+  info "  increments:"
+  local id title _c st commit mark
+  while IFS=$'\t' read -r id title _c st commit; do
+    case "$st" in
+      done)    mark="${C_GREEN}✓${C_RESET}" ;;
+      blocked) mark="${C_RED}✗${C_RESET}" ;;
+      doing)   mark="${C_YELLOW}▸${C_RESET}" ;;
+      *)       mark="${C_DIM}·${C_RESET}" ;;
+    esac
+    printf '    %b %-4s %-46s %s%s%s\n' "$mark" "$id" "${title:0:46}" "$C_DIM" "${commit:0:8}" "$C_RESET"
+  done <<< "$rows"
 }
 
 # Prints only the name of the current phase (or DONE). It exists for scripts and for the kit's
@@ -5947,6 +6067,54 @@ app_down_escalation() {
   return 0
 }
 
+# FIFTH Jidoka, and the one that fires EARLIEST: its marker is armed by run_phase itself rather
+# than by a gate, so it knows the session is dead before anything has asked whether the gate is
+# happy. That ordering IS the fix. Measured on 2026-09-16 in sales_quote: an expired OAuth token
+# killed a QA session after 35 turns and US$ 4,56; `run_phase` said `warn claude exited 1` among
+# dozens of lines; the gate then refused for a reason entirely its own (five open bugs in the
+# registry); the runner bought a blind retry that died in one turn for US$ 0; and the run ended
+# `two sessions without moving the disk` with `kind: no-progress` in the ledger — which
+# docs/pipeline.md classes as pure friction and D12/D16 read as the kit spinning. An expired
+# credential was filed as the kit's own waste, and the operator, reading the gate's refusal as
+# the last word on the screen, spent the afternoon closing the five bugs.
+#
+# So it sits ABOVE handoff_blocked_escalation in both doors: the cause of death beats the
+# gate's reason, because the gate's reason is what sent the operator the wrong way. BOTH doors
+# also sit above their own gate-PASS branch — a session the environment killed is worth stopping
+# for even on the rare lap whose gate is satisfied by artefacts an earlier run left behind, and
+# the fail-safe direction is to stop. ⚠️ "Both" is load-bearing and was not free: this sentence
+# originally said "it also sits", was true of door 1, and was asserted of the family while door 2
+# sat BELOW its branch. r1 of PR #46 found it. A comment that claims a property for two sites and
+# holds at one is the shape this file refuses everywhere else; the probe that now pins it is
+# "a dying retry whose gate PASSES…" in tests/check-autonomy.sh, with a mutant per door.
+#
+# TWO DOORS, the same census as its two siblings — the first pass and the inline retry — and the
+# doors are what keep the marker from outliving the LAP as well as the gate. Both are ABOVE the
+# retry that the whole escalation exists not to buy.
+#
+# DECLARED LIMIT (G4 of the 2026-09-18 grill): `cmd_retry` and `cmd_close` get no door. `sdd
+# retry` is the human's hand already on the phase with their eyes on it, and its single session
+# ends on `retry-gate-red` rather than on a second guess; `cmd_close` does not go through
+# run_phase at all, so the marker is never armed there. Both are reachable, neither is covered,
+# and a third door is a decision with its own probe and its own mutant — not a line added here.
+#
+# Returns 0 when it escalated and 1 when the marker is unset, and it is CALLED, never substituted
+# — a subshell would send the ledger row and the lines a human is meant to act on into the
+# substitution instead of to the ledger and the terminal.
+session_died_escalation() {
+  local phase="$1"
+  [ -n "$SESSION_DIED_WHY" ] || return 1
+  info ""
+  bad "BLOCKED in $phase — the $phase session died: $SESSION_DIED_WHY"
+  dim "  The line stopped on purpose: the harness said why the session ended, and it was not"
+  dim "  the agent's doing. Whatever the gate says below is about something else."
+  dim "  Another session would meet the same environment and die the same way, so none is bought."
+  dim "  Fix what the sentence above names — a credential, a quota, a machine — and 'sdd run'."
+  pipeline_log_line "$(date -Iseconds)  BLOCKED  $phase  session died: $SESSION_DIED_WHY"
+  autonomy_blocked_row "session-died" "$phase" "$SESSION_DIED_WHY"
+  return 0
+}
+
 # Writes one `gate_pass` row for every phase that bought a session in THIS run, failed its gate,
 # and has since closed without buying another. Called from the derived branch of cmd_run's loop and
 # from nowhere else — it reads cmd_run's own `sessions`, `gate_failed` and `gate_pass_logged` maps
@@ -6367,6 +6535,13 @@ cmd_run() {
     # very loop this mission exists to delete, wearing a green rc. Found in the REVIEW round of
     # 20260826-o-laco-da-qa, differentially against the increment-blocked sibling (rc 3 + row)
     # under the same flag. The session row above is already written, so the ledger keeps its order.
+    # DOOR 1 of the death escalation, and it is FIRST of the three on purpose — see
+    # session_died_escalation above. The marker was armed by run_phase, before any gate ran, so
+    # this door answers "did the environment kill the session" before the gate is allowed to
+    # answer "am I happy", and long before `moved` is consulted. ABOVE `--max-phases` for the
+    # same reason as its siblings: a phase no session can satisfy must not answer a paced run
+    # with 0. And ABOVE the retry below, which is the session this whole family exists not to buy.
+    if session_died_escalation "$phase"; then return 3; fi
     if handoff_blocked_escalation "$phase"; then return 3; fi
     # DOOR 1 of the app-down escalation, on the same terms and in the same place: read right after
     # the gate call that could have armed it, BEFORE `moved` is consulted, and ABOVE the
@@ -6474,6 +6649,20 @@ cmd_run() {
     # crosses its hat and still satisfies the gate must not `continue` into the next phase (the
     # review of 20260903-a-fronteira-do-chapeu found it sitting after the `continue`).
     if hat_crossed_escalation "$phase"; then return 3; fi
+    # DOOR 2 of the death escalation, reading the RETRY's own session: run_phase zeroed the marker
+    # on entry, so what it says is whether the SECOND session died, never whether the first did.
+    # Placed after `moved2` is settled, so it takes nothing away from the sampling window the
+    # comment above defends.
+    #
+    # ABOVE the gate-pass branch, beside the hat door and for the identical reason — this is r1 of
+    # PR #46 and it was a real defect. Below the `continue`, a retry the environment killed whose
+    # gate happened to pass slipped through: measured on the fixture, the run swallowed the death,
+    # derived QA, and bought TWO MORE sessions against the same dead environment before blocking
+    # there as `no-progress` — the wrong kind, on the wrong phase, at twice the price. Door 1 has
+    # always sat above its own gate-pass branch and the function header claims that placement for
+    # the FAMILY, so the comment was true of one door and asserted of two. Same bug, one
+    # escalation later, that the review of 20260903-a-fronteira-do-chapeu found in the hat door.
+    if session_died_escalation "$phase"; then return 3; fi
 
     if [ "$gate_rc2" -eq 0 ]; then
       ok "gate $phase (on the retry): $GATE_WHY"
@@ -8327,6 +8516,7 @@ USAGE
              [--release]   the six lines of ADR 0007 — apt for another repo of the organisation? —
                            read from artifacts; never runs the suite
   sdd status <mission>       where the mission stands, gate by gate, and what is missing
+    --no-gates               the same page off the DISK alone: no suite, no e2e, no next phase
   sdd approve <mission>      show the plan and, on an explicit y, write the human approval into
                              00-missao.md and commit it (the PLAN gate — never a session)
   sdd run <mission>          run from the first unsatisfied phase through to the PR
@@ -8560,7 +8750,28 @@ To see what it saw:  $acli_bin jira workitem search --jql \"key = $issue AND sta
   # back to `null` — r1 finding #7 undone in silence, with a green assertion over it.
   local streamfile="${logfile%.json}.stream.jsonl" errfile="${logfile%.json}.err" started ended
   started=$(date +%s)
-  ( cd "$REPO_ROOT" && claude -p "/ticket close $issue" \
+  # THE PROMPT CARRIES THE AUTHORIZATION, and that is the whole of this fix. `sdd close` runs
+  # after the merge and is typed by a human — the permission IS the command. The `ticket` skill
+  # writes twice in its own SKILL.md that it must confirm with a developer before transitioning,
+  # and it is right to, in the interactive session it was written for; here there is no developer
+  # in the room to answer. Measured 2026-09-16: the bare `/ticket close <issue>` opened a session
+  # that stopped to ask, spent US$ 0,86 and 43 s, and closed nothing. Running it again asks again
+  # — the question is in the skill, so the answer has to be in the prompt.
+  #
+  # THE HALF THE SENSOR CANNOT REACH WAS MEASURED, not assumed. `tests/check-gates.sh` proves
+  # the sentence leaves this repo and reaches the process; whether the HARNESS delivers prose
+  # that follows a slash command is a question no stub can answer, and the risk was real — an
+  # expansion that kept only the command would have dropped every word of this. Measured
+  # 2026-09-18 on Claude Code with a real `claude -p` carrying `/ticket close ZZZ-0` on its first
+  # line and an instruction four lines down: the session obeyed the instruction (US$ 0,0475,
+  # haiku, one turn). So the prose arrives, and `--append-system-prompt` — the fallback this
+  # comment used to name — is not needed. Re-measure the same way if the harness majors.
+  local close_prompt="/ticket close $issue
+The human running this has already authorised the close: they typed \`sdd close\` after the PR was
+merged, which is the approval step of this pipeline. There is no developer in this session to
+confirm with, so post the summary and transition the issue without asking. If something genuinely
+blocks the transition, say what it is and stop — but do not stop to request permission."
+  ( cd "$REPO_ROOT" && claude -p "$close_prompt" \
       --model "$MODEL_TICKET" --permission-mode "$PERMISSION_MODE" \
       --output-format stream-json --verbose \
       --setting-sources "user,project,local" --allowedTools "$ALLOWED_TOOLS" \

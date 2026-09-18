@@ -505,6 +505,74 @@ the repo, which is a decision about the project and not about this mission.
 
 ---
 
+## The session died and the gate took the blame
+
+**Symptom:** `BLOCKED in <PHASE> — the <PHASE> session died: <a sentence from the harness>`, rc 3,
+and a `kind: "session-died"` row in the ledger. **One session** was bought when the first pass
+died; **two** when it was the inline retry that died, because the first one came back alive. What
+never happens any more is a third.
+
+**What it means:** the harness said why the session ended, and it was not the agent's doing — an
+expired credential, a revoked token, a quota, a machine. The runner reads that sentence off the
+same distilled `result` object it takes `cost_usd` and `turns` from, publishes it as
+`session_error` on the session row, and stops **before** buying the retry.
+
+**Why it stops instead of carrying on.** Measured on 2026-09-16 in `sales_quote`, before this
+existed. An expired OAuth token killed a QA session after 35 turns and US$ 4,56. The runner said
+`warn claude exited 1` — one line among dozens — the gate then refused for a reason entirely its
+own (five open bugs in the registry), the runner bought a blind retry that died in one turn for
+US$ 0, and the run ended `two sessions without moving the disk` with `kind: no-progress`. That
+kind is what this pipeline calls pure friction and what D12/D16 read as the kit spinning, so an
+expired credential was charged to the kit in the judge's own instrument. The operator, reading
+the gate's refusal as the last word on the screen, spent the afternoon closing the five bugs.
+
+**What you do:** fix what the sentence names, then `sdd run <mission>` again. Nothing on disk is
+damaged and nothing needs undoing — the phase is derived from the artifacts, so the run resumes
+where it stopped. For an expired login that is `claude` in your own terminal, not in the
+pipeline.
+
+**What it never does is fire on doubt.** Only a session whose summary carries `is_error: true`
+**and** a non-empty `result` string escalates. A session that died with no cause (6 of the 11
+errored sessions measured across the four target repos on 2026-09-18) behaves exactly as it
+always did — `session_error` is `null` and the ordinary retry is still bought. So is the budget
+ceiling (`error_max_budget_usd`, `result: null`), which is the kit's **designed** loop and must
+never stop the line.
+
+**Two doors, and the limit is declared.** The first pass and the inline retry, both in `cmd_run`'s
+loop, and both **above their own gate-pass branch**: a session the environment killed stops the
+line even on the rare lap whose gate is satisfied by artifacts an earlier run left behind. That
+placement is the whole of it — with the retry door below the branch, a dying retry whose gate
+passed walked on into the next phase and bought two more sessions against the same dead
+environment before blocking there under the wrong kind. `sdd retry` is the human's hand already on the phase and ends on `retry-gate-red` instead;
+`sdd close` does not go through `run_phase`, so nothing arms the marker there.
+
+---
+
+## The `sdd run` process itself disappeared
+
+**Symptom:** no `BLOCKED`, no rc, no last line — the run is simply not there any more. `ps -eo
+pid,etime,cmd | grep 'bin/sdd run'` comes back empty and `pipeline.log` stops mid-mission.
+
+**What it is:** memory pressure killing the process from outside, not anything the pipeline did.
+Measured three times on 2026-09-16, all three when the run had been launched as a **background
+task of another agent's shell**; the same missions run in the **foreground**, one phase at a time
+with `sdd run <mission> --max-phases 1`, went nine phases without a single death.
+
+**What you do:** run it in the foreground, or detach it properly with `setsid nohup` and an
+environment cleaned of the parent harness (`env -u CLAUDECODE …`) — never as a background job of
+an agent session, which is what a memory watchdog reaps first. Then `sdd run <mission>` again.
+
+**What is worth knowing before you panic — and it is design, not luck.** None of the three deaths
+corrupted anything. The tree was clean, no artifact was half-written, and the next `sdd run`
+picked up at exactly the right phase. That falls out of two principles this kit does not trade
+away: state lives on disk and never in a session's context (principle 3), and the current phase is
+**derived** from the artifacts rather than stored (principle 4). There is no state file to be left
+lying about a disk that moved on, so *any* death of the runner — a kill, a reboot, a closed
+laptop — is recoverable by rerunning the same command. `sdd status <mission> --no-gates` tells you
+where it stopped without paying for a suite to find out.
+
+---
+
 ## The runner published a draft PR by itself
 
 **Symptom:** the mission ends with a **draft** PR and a review that never reached Grade A.

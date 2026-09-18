@@ -3157,9 +3157,11 @@ mkdir -p "$FIX/.sdd/logs/$MISSION"
 
 # The close session, reproduced: it spends a session, leaves a marker so "was a session spent?" is
 # ASSERTED and not assumed, exits with whatever the control file says — and never closes anything.
+CLOSE_ARGV="$FIX/.sdd/logs/close-session-argv"
 cat > "$FIX/.stub/claude" <<STUB
 #!/usr/bin/env bash
 : > "$CLOSE_MARK"
+printf '%s\\n' "\$@" > "$CLOSE_ARGV"
 exit "\$(cat "$CLOSE_RCFILE" 2>/dev/null || echo 0)"
 STUB
 chmod +x "$FIX/.stub/claude"
@@ -3345,6 +3347,30 @@ assert_eq "close: an issue already Done is confirmed without spending a session 
   "rc:0 already:1 confirms:1 session-spent:0 acli-calls:1 journal:1" \
   "rc:$CLOSE_RC_OUT already:$(has "$CLOSE_OUT" 'already Done') confirms:$(has "$CLOSE_OUT" 'JIRA confirms') session-spent:$(spent) acli-calls:$(acli_calls) journal:$(has "$(cat "$CLOSE_JOURNAL" 2>/dev/null || true)" 'session=none')"
 
+# 8b. The prompt carries the AUTHORIZATION. `sdd close` is post-merge and is typed by a human:
+#     the permission has already been given by the act of running the command. The `ticket` skill
+#     nevertheless writes, twice in its own SKILL.md, that it must confirm with a developer before
+#     transitioning — so the bare `/ticket close <issue>` opened a session that stopped to ask a
+#     human who is not in the room, burned US$ 0,86 and 43 s, and closed nothing. Measured
+#     2026-09-16. Repeating the session repeats the question, which is why the fix is the prompt
+#     and not a retry.
+#
+#     ⚠️ WHAT THIS PROVES, AND WHERE THE OTHER HALF WAS MEASURED. The argv is the RUNNER's side of
+#     the boundary: it says the sentence left this repo and reached the process. It cannot say the
+#     harness delivers prose that follows a slash command to the model, and that risk was real —
+#     an expansion keeping only the command would drop every word. Measured outside this suite on
+#     2026-09-18, because no stub can answer it: a real `claude -p` carrying `/ticket close ZZZ-0`
+#     on its first line and an instruction four lines down obeyed the instruction (US$ 0,0475,
+#     haiku, one turn). The fallback that measurement made unnecessary is `--append-system-prompt`.
+#     Same helper and same control word as regime 4, which is the cheapest regime that actually
+#     spends a session: the issue is open before it and Done after it.
+rm -f "$CLOSE_ARGV"
+close_run "notdone done" 0
+CLOSE_ARGV_TEXT="$(cat "$CLOSE_ARGV" 2>/dev/null || echo "")"
+assert_eq "close: the prompt tells the session the human already authorised it, and no dev is here to ask" \
+  "slash:1 authorised:1 nobody:1 dont-ask:1" \
+  "slash:$(has "$CLOSE_ARGV_TEXT" '/ticket close') authorised:$(has "$CLOSE_ARGV_TEXT" 'already authorised') nobody:$(has "$CLOSE_ARGV_TEXT" 'no developer') dont-ask:$(has "$CLOSE_ARGV_TEXT" 'without asking')"
+
 # 9. Control. With JIRA off the command asks nothing of anyone — and the two `:0` terms are the
 #    half that matters: a guard that ran acli anyway would still print "nothing to close".
 sed -i 's/^JIRA_ENABLED=true$/JIRA_ENABLED=false/' "$FIX/.sdd/config.sh"
@@ -3359,13 +3385,69 @@ assert_eq "close: with JIRA off nothing is asked of anyone — no session, no ac
 # only defence, and it is not one a sensor can hold: a future author appending below would inherit
 # a `gh` that answers MERGED to everything and a `claude` that returns success without doing
 # anything, and would never see why their new assertion passed. Restoring costs four lines.
-rm -f "$MDIR/10-ticket.md" "$MDIR/50-pr.md" "$FIX/.stub/gh" "$FIX/.stub/acli" "$CLOSE_JOURNAL"
+rm -f "$MDIR/10-ticket.md" "$MDIR/50-pr.md" "$FIX/.stub/gh" "$FIX/.stub/acli" "$CLOSE_JOURNAL" "$CLOSE_ARGV"
 cat > "$FIX/.stub/claude" <<'STUB'
 #!/usr/bin/env bash
 echo "ERROR: the test invoked the real claude — the escalation path did not escape before the session" >&2
 exit 97
 STUB
 chmod +x "$FIX/.stub/claude"
+
+echo "== sdd status --no-gates =="
+# The cheap answer to "where am I". `sdd status` derives the phase, and deriving the phase IS the
+# gate loop — `current_phase()` runs every gate, and a gate runs TEST_CMD and E2E_CMD. Measured
+# on 2026-09-16 in a real target: two waits of 120 s apiece, spent to be told which phase the
+# mission was in. The flag is ADDITIVE and says so: it does not pretend to measure what it does
+# not measure, and it never prints a next phase.
+#
+# THE PROPERTY IS AN ARTIFACT, NOT A CLOCK. The plan for this increment asked for `< 1 s`, and a
+# wall-clock threshold here would be vacuous in both directions: this fixture runs `TEST_CMD="true"`
+# and an empty E2E_CMD, so BOTH halves answer in well under a second and the assertion would pass
+# with the flag doing nothing at all. A TEST_CMD that leaves a mark behind is the same question
+# asked of the disk — it goes red the moment --no-gates runs one gate, and it cannot be satisfied
+# by a fast machine.
+NO_GATES_MARK="$SDD_STATE_FIX/test-cmd-calls"
+: > "$NO_GATES_MARK"
+# An explicit branch, never `grep -c . f || echo 0`: on an EXISTING but empty file `grep -c`
+# prints "0" AND exits 1 (no match), so the fallback fires too and the helper answers "0\n0" —
+# a two-line value that turns every assertion built on it into a multi-line string whose failure
+# report shows only its first line. Same reason check-autonomy.sh's `nrows` is written this way.
+test_cmd_calls() { [ -s "$NO_GATES_MARK" ] || { echo 0; return; }; grep -c . "$NO_GATES_MARK"; }
+sed -i "s|^TEST_CMD=\"true\"|TEST_CMD=\"echo call >> $NO_GATES_MARK\"|" .sdd/config.sh
+
+: > "$NO_GATES_MARK"
+NG_OUT="$( "$SDD" status "$MISSION" --no-gates 2>&1 )"; NG_RC=$?
+NG_CALLS="$(test_cmd_calls)"
+
+: > "$NO_GATES_MARK"
+FULL_OUT="$( "$SDD" status "$MISSION" 2>&1 )"; FULL_RC=$?
+FULL_CALLS="$(test_cmd_calls)"
+
+sed -i "s|^TEST_CMD=.*|TEST_CMD=\"true\"|" .sdd/config.sh
+
+# ⭐ DIFFERENTIAL, and the two halves are what make it mean anything. The flag half must run the
+# suite ZERO times and name no next phase; the plain half must still do both, or the assertion
+# would also pass on a `sdd status` that silently stopped deriving for everyone.
+assert_eq "--no-gates runs no gate and names no next phase, where plain status still does both" \
+  "rc:0 calls:0 next:0 · rc:0 calls:1 next:1" \
+  "rc:$NG_RC calls:$NG_CALLS next:$(has "$NG_OUT" 'next phase') · rc:$FULL_RC calls:$FULL_CALLS next:$(has "$FULL_OUT" 'next phase')"
+
+# What it does answer has to be worth the call, or the flag is just a faster way of learning
+# nothing: the mission's own name, the increments off the checkpoint (through `checkpoint_rows`,
+# the one reader — a second one would be the second definition this repo refuses), and a line
+# saying in so many words that no phase was derived, so the absence of `next phase` above reads
+# as a declaration rather than as a hole.
+assert_eq "--no-gates still answers the mission, its increments and why there is no verdict" \
+  "mission:1 increment:1 disclaimer:1" \
+  "mission:$(has "$NG_OUT" "$MISSION") increment:$(has "$NG_OUT" 'increments:') disclaimer:$(has "$NG_OUT" 'no gate was evaluated')"
+
+# An unknown option is refused rather than swallowed as a mission name — the shape `cmd_run`
+# already keeps. Without the loop below, `sdd status --no-gate` (a typo) would be resolved as a
+# MISSION and answer about the wrong thing, or about nothing, with rc 0.
+NG_TYPO_RC=0
+"$SDD" status "$MISSION" --no-gate >/dev/null 2>&1 || NG_TYPO_RC=$?
+assert_eq "a misspelt status option is refused, never read as a mission name" "1" \
+  "$( [ "$NG_TYPO_RC" -ne 0 ] && echo 1 || echo 0 )"
 
 # ---------------------------------------------------------------------------
 echo
