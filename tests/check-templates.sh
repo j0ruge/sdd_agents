@@ -315,7 +315,7 @@ else
 fi
 
 echo "== templates/missao.md =="
-for k in missao titulo data versao branch aprovacao ddd; do
+for k in missao titulo data versao branch aprovacao ddd adr; do
   check missao.md "^${k}:" "frontmatter key '${k}'"
 done
 check missao.md '^## Problema \(Gemba\)'      "section 'Problema (Gemba)'"
@@ -327,7 +327,7 @@ check missao.md '^## Checklist kaizen'        "kaizen checklist"
 check missao.md '^## Checklist DDD'           "DDD checklist"
 check missao.md '^## Decisões do grill'       "grill decisions"
 check missao.md '^## Pendências para o humano' "open questions for the human"
-for c in a b c d e; do
+for c in a b c d e f; do
   check missao.md "^\| ${c} \|" "PLAN-AUTO criterion '${c}'"
 done
 

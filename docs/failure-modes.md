@@ -40,6 +40,50 @@ suite; you would only lose the next session.
 
 ---
 
+## PLAN will not pass: `adr:` under `ADR_CHECK=block`
+
+**Symptom:** `sdd phase <mission>` keeps answering `PLAN`, and `sdd why <mission> PLAN` says
+`adr: … — 'adr: TBD' is not a decision`, or names the untouched template placeholder, or says the
+key is missing altogether.
+
+**Cause:** the repo runs `ADR_CHECK=block`, and the mission's `adr:` is not a decision. This is the
+gate working, and it stops HERE on purpose: PLAN is the only phase with a human in the room, and no
+agent in this kit may decide an architectural trade-off on your behalf. A gate that demanded the
+decision from EXEC would be unsatisfiable.
+
+**What you do:** decide. If the mission takes an architectural trade-off, allocate the number with
+the command — never by reading the directory and adding one — and then write the body:
+
+```bash
+sdd adr new --slug <short-kebab-slug> --spec docs/handoffs/<mission>/00-missao.md
+```
+
+If it takes none, write `adr: none`. That is a decision too, and it passes. Check yourself with
+`sdd adr check --mission <mission> --phase plan`.
+
+**Do not:** point `adr:` at an ADR that already belongs to another decision to get moving. The gate
+reads the ADR's `Spec:` line back and will say so — and if it did not, you would have created
+exactly the collision the mechanism exists to prevent.
+
+---
+
+## EXEC refuses: the ADR drifted
+
+**Symptom:** the mission passed PLAN days ago and now `sdd why <mission> EXEC` says
+`adr: … points at a file that does not exist`, or that the ADR's `Spec:` points somewhere else.
+
+**Cause:** drift. The ADR was on disk when the human approved the plan and is not on disk now —
+renamed, deleted, or its `Spec:` line rewritten. EXEC re-reads what PLAN accepted, which is the one
+thing PLAN cannot ask.
+
+**What you do:** restore the file, or repair whichever side of the pair is wrong, then `sdd run`.
+`sdd adr check` names the file and the line.
+
+**Do not:** drop the repo to `warn` to get past it. That converts a broken link into one ledger row
+per run and the pipeline goes on building against a decision that no longer exists.
+
+---
+
 ## A handoff that declares `status: blocked`
 
 **Symptom:** `sdd run` exits with code 3 and `BLOCKED in <PHASE> — <handoff> has status: blocked`,
@@ -627,6 +671,56 @@ you start it:
 
 Design, and why this is a stamp rather than CI, is
 [ADR 0004](adr/0004-mutation-catalogue-owner-stamp-not-ci.md).
+
+---
+
+## `sdd health` ran three times for one branch
+
+**Symptom:** nothing fails. The branch is fine, every round is green, and the stamp is valid at the
+end. It just cost an hour and a quarter instead of twenty-five minutes, because the catalogue was
+run once per review round instead of once per branch.
+
+**Measured**, on PR #45 of this kit: three rounds of ~22 min. The first stamped the author's own
+review fixes; Codex then posted four findings, all valid, and the fixes killed the stamp; CodeRabbit
+then posted ten, eight valid, and two of those touched `bin/sdd` and killed it again. One round
+would have covered all three, for the same final content.
+
+**Cause:** the stamp is keyed on the **content** of `bin/ tests/ templates/ config/`, so it is worth
+exactly as much as the promise that the code will not change again. Stamping while review is still
+in flight is stamping a draft. And the reviewers cannot be consulted earlier — the PR bots (Codex,
+CodeRabbit, Copilot) only run **after** the pull request exists, so opening the PR is what starts
+them, not what ends the work.
+
+**What you do** — collect every review source first, fix in one batch, stamp last:
+
+1. open the PR (this is what triggers the bots) and **do not stamp yet**;
+2. run the local `codereview` pass in parallel, while they work;
+3. wait for all of them to post — a bot that is silent has not necessarily finished, and one that
+   reports a quota limit has not reviewed at all, which is a coverage gap rather than an approval;
+4. verify and fix everything in **one** pass;
+5. run `./bin/sdd health` **once**, after the last commit that touches the four stamped directories;
+6. resolve the threads and merge.
+
+Two things that keep the rule from becoming folklore:
+
+- **A review round that only touches documentation does not cost a stamp.** Of the ten CodeRabbit
+  findings above, six were prose; only the two in `bin/sdd` forced the re-run. Ask before you
+  reach for the command, rather than re-running it on suspicion:
+
+  ```bash
+  find bin tests templates config -type f -print0 | LC_ALL=C sort -z \
+    | xargs -0 -r md5sum | md5sum | cut -d' ' -f1      # compare with .sdd/logs/mutation-stamp
+  ```
+
+- **An open PR carrying a stale stamp is only safe while nobody merges it.** `gate_PR` reads the
+  stamp when the gate runs, which for a hand-opened PR is at merge time — so the protection is
+  holding the merge, and the belt-and-braces version is opening the PR as a **draft** and marking it
+  ready only once the final round is green. The same ordering that saves the wall-clock is what
+  keeps unmeasured content off `main`, which is the whole subject of the section above.
+
+⚠️ Recording the out-of-scope findings this ordering produces runs straight into the collision
+named above: `tests/health-baseline.txt` is inside the stamp key, so the `TODO.md` entry has to
+land **before** the single round, never after it.
 
 ---
 

@@ -156,6 +156,26 @@ load_config() {
   # which is English. Empty ⇒ the boot prompt says nothing about language, which is exactly the
   # behaviour of every already-installed repo. Set ("pt-BR", "en", "es") ⇒ one extra paragraph.
   : "${OUTPUT_LANG:=}"
+  # ADR traceability. How hard the PLAN and EXEC gates ask for the mission's `adr:` line:
+  # `off` ⇒ nothing at all; `warn` ⇒ the line derives as usual and the run leaves one
+  # `degraded kind:adr-check` row in the ledger; `block` ⇒ gate_PLAN refuses a mission whose
+  # `adr:` is empty, `TBD` or still the template placeholder. Validated POSITIVELY and exactly
+  # once, in adr_mode() — a fourth mode has to opt in there rather than arrive admitted by
+  # omission (the `is_gate_pass | not` scar in CLAUDE.md).
+  #
+  # Default `off` and not `warn`: every repo that already installed the kit has no `adr:` key in
+  # any mission on disk, and a default that spoke would make the kit's own arrival look like a
+  # finding. Adoption is `warn` → fix → `block`, and it is the target's decision, not the kit's.
+  : "${ADR_CHECK:=off}"
+  # Where the numbered ADRs live, relative to the repo root. NEVER empty: it is substituted into
+  # the planner hat's `writes:` glob by hat_expand, where an empty value would expand `$ADR_DIR/**`
+  # to `/**` — a hat declaring it may write the whole filesystem. adr_mode() refuses the empty
+  # value rather than leaving the expansion to discover it.
+  : "${ADR_DIR:=docs/adr}"
+  # The SpecKit tree, when the repo has one: `<SPEC_DIR>/<NNN-slug>/spec.md` with `plan.md` beside
+  # it. EMPTY means "this repo has no spec tree" and must scan NOTHING — an empty value falling
+  # back to the repo root would walk the whole checkout looking for a spec.md.
+  : "${SPEC_DIR:=}"
 
   [ -n "$PROJECT_NAME" ]   || die "PROJECT_NAME is empty in $CONFIG_FILE"
   [ -n "$DEFAULT_BRANCH" ] || die "DEFAULT_BRANCH is empty in $CONFIG_FILE"
@@ -721,6 +741,9 @@ gate_PLAN() {
       return 1
     fi
   fi
+  # Under ADR_CHECK=block this is where an undecided `adr:` stops the line, and PLAN is the only
+  # phase where it can: the artifact's owner is `sdd-planner`, running with the human in the room.
+  adr_gate_verdict plan || return 1
   local n; n="$(checkpoint_rows | wc -l)"
   [ "$n" -gt 0 ] || { GATE_WHY="checkpoint.md has no parseable increment row"; return 1; }
   GATE_WHY="plan approved ($approval), $n increment(s)"
@@ -859,6 +882,9 @@ gate_EXEC() {
   # before it.
   GATE_EXEC_PENDING=""
   GATE_EXEC_TOTAL=""
+  # DRIFT, and only drift: PLAN already refused an undecided `adr:`, so what reaches here is a
+  # mission whose ADR was on disk when the human approved the plan. This asks whether it still is.
+  adr_gate_verdict exec || return 1
   local rows; rows="$(checkpoint_rows)"
   [ -n "$rows" ] || { GATE_WHY="checkpoint.md is empty"; return 1; }
 
@@ -1704,7 +1730,7 @@ hat_mcp() {   # hat_mcp <step> — the MCP servers the hat may see; "" ⇒ --str
   if [ -n "$hat" ]; then hat_field "$hat" mcp; else printf '\n'; fi
 }
 
-hat_expand() {   # hat_expand <globs> — $HANDOFF_DIR $MISSION $TODO_FILE $QA_DOCS_PATH $E2E_DIR
+hat_expand() {   # hat_expand <globs> — $HANDOFF_DIR $MISSION $TODO_FILE $QA_DOCS_PATH $E2E_DIR $ADR_DIR
   local s="$1" hd="$HANDOFF_DIR"
   while [ "${hd%/}" != "$hd" ]; do hd="${hd%/}"; done
   # Replacements QUOTED: under bash 5.2's patsub_replacement an unquoted `&` in the value
@@ -1714,6 +1740,9 @@ hat_expand() {   # hat_expand <globs> — $HANDOFF_DIR $MISSION $TODO_FILE $QA_D
   s="${s//\$TODO_FILE/"$TODO_FILE"}"
   s="${s//\$QA_DOCS_PATH/"${QA_DOCS_PATH%/}"}"
   s="${s//\$E2E_DIR/"${E2E_DIR%/}"}"
+  # ADR_DIR can never be empty here: adr_mode() refuses that value, and `$ADR_DIR/**` expanded
+  # from an empty one would read as `/**` — a hat declaring it may write the whole filesystem.
+  s="${s//\$ADR_DIR/"${ADR_DIR%/}"}"
   printf '%s\n' "$s"
 }
 
@@ -4151,6 +4180,47 @@ cmd_preflight() {
   done
   ok "context bill: $cb_files file(s), $cb_bytes bytes of CLAUDE.md + .claude/rules/ — carried into EVERY turn of every phase (bytes, not tokens: the ratio is not constant)"
 
+  # --- ADR traceability ---
+  # A SENSOR and never a `_fail`, on the same argument as the context bill above: a repo that has
+  # just installed the kit has no `adr:` in any mission on disk, and a preflight that went red on
+  # arrival would be a preflight people learn to ignore. Findings here are MIGRATION DEBT — the
+  # thing `warn` exists to let a repo count — and the gate is where they stop the line, not here.
+  #
+  # Under `off` it asks nothing and only reports the mode, because running the repo scan would
+  # spend the walk to report a number nobody asked for.
+  # The CONFIGURATION first, through the same validator the gates call. Reading $ADR_CHECK raw and
+  # branching on `off` let every other spelling fall through to the scan: measured 2026-09-17 by
+  # the Codex review of PR #45, ADR_CHECK=bogus reported `ok  adr check: ADR_CHECK=bogus, ... no
+  # finding` and the command ended `preflight ok`, while gate_PLAN refused the very same value with
+  # rc 2. A preflight that certifies a configuration the pipeline then refuses is not a weaker
+  # sensor, it is a wrong one — its whole job is to answer "will the phases run here?" before a
+  # session is paid for. `_fail` and not `warn`, unlike the findings below: migration debt is a
+  # number to count, an unusable config is a door that will not open.
+  #
+  # `|| rc=$?`, never a bare capture: under `set -e` the assignment form kills the runner ON the
+  # assignment the moment adr_mode returns 2 — the `guard:` class tests/check-health.sh enumerates.
+  local adr_rc=0
+  adr_mode >/dev/null 2>&1 || adr_rc=$?
+  if [ "$adr_rc" -ne 0 ]; then
+    _fail "adr check: $(adr_mode 2>&1 >/dev/null || true)"
+  elif [ "$ADR_CHECK" = off ]; then
+    # No count under `off`, and that is not laziness: the only thing that counts ADRs is the repo
+    # scan, and running the walk to report a number nobody asked for would be spending it twice.
+    # A second counter living here would be a second answer to "how many ADRs", which is the shape
+    # that had cmd_adr reading two verdicts earlier in this same mission.
+    ok "adr check: ADR_CHECK=off, the PLAN and EXEC gates ask nothing"
+  else
+    # CALLED with its output thrown away, never `$( )`: it publishes ADR_FAILS and ADR_COUNT, and
+    # a subshell would take both with it. The preflight wants the numbers, not the listing.
+    ADR_FAILS=0; ADR_FIRST_WHY=""
+    adr_check_repo "$REPO_ROOT" >/dev/null 2>&1 || true
+    if [ "$ADR_FAILS" -eq 0 ]; then
+      ok "adr check: ADR_CHECK=$ADR_CHECK, $ADR_COUNT ADR(s) in ${ADR_DIR%/}, no finding"
+    else
+      warn "adr check: ADR_CHECK=$ADR_CHECK, $ADR_COUNT ADR(s) in ${ADR_DIR%/}, $ADR_FAILS finding(s) — run 'sdd adr check' to read them"
+    fi
+  fi
+
   info ""
   if [ "$fails" -eq 0 ]; then
     printf '%spreflight ok%s\n' "$C_GREEN$C_BOLD" "$C_RESET"; return 0
@@ -4869,6 +4939,779 @@ cmd_why() {
   printf '%s: %s\n' "$ph" "$GATE_WHY"
 }
 
+# ---------------------------------------------------------------------------
+# ADR traceability — the number is allocated by a command, the link is read by a sensor.
+#
+# The problem, measured on 2026-09-17 and not supposed: nothing in this kit, and nothing in the
+# pilot target, allocated an ADR id. A note written on 2026-08-25 declared "ADR 0030" in prose;
+# on 2026-08-26 the real `docs/adr/0030-…` of that repo was accepted for a DIFFERENT decision.
+# The collision stayed latent only because the note never reached the repo, and it materialises
+# the day somebody implements against it. `grep -c traceab bin/sdd` answered 0: the 40 ADRs of
+# the target and the 7 here were all numbered by hand.
+#
+# Two verbs and one rule:
+#   sdd adr new    reserves the next id with O_EXCL and writes the header. The reservation IS the
+#                  poka-yoke — two writers racing for the same number get one file and one error,
+#                  never two files and a silent overwrite.
+#   sdd adr check  reads the links back. `--mission` asks about one mission's `adr:` line;
+#                  no scope asks the whole repo.
+#
+# WHERE THIS SECTION SITS is load-bearing, and it is why it follows cmd_why instead of joining
+# the other commands above: the census region of `sdd health` runs from `# Sensor of the KIT`
+# down to `cmd_status() {`, and tests/check-health.sh counts every `x="$(…)"` inside it against
+# a CAPTURE_FLOOR that is exact in BOTH directions. A library landing in there fails the suite on
+# the line it was written, for a reason that has nothing to do with what it does.
+# ---------------------------------------------------------------------------
+
+# The ONE spelling of a traceability line, in two halves plus the function that joins them.
+#
+# It serves two dialects that already exist on disk, and neither is being rewritten: this kit
+# writes `Date: … · Status: accepted` under `# NNNN — title`, the pilot target writes
+# `- **Status**: aceito (…)` under `# ADR NNNN — title`. So the pattern reads the list dash and
+# the bold markers as optional decoration and anchors on the KEY, never on the prose around it.
+#
+# One definition, because it is read from the mission scope, the repo scope and the spec scan, and
+# the CLAUDE.md rule about an enum read in more than one point covers a regex just as much: spelled
+# out three times, the day one of them learns a new dialect the other two go blind in silence.
+ADR_LINK_PRE='^(- )?(\*\*)?'
+ADR_LINK_POST='(\*\*)?:[[:space:]]*'
+adr_key_re() { printf '%s%s%s' "$ADR_LINK_PRE" "$1" "$ADR_LINK_POST"; }
+
+# The id is read from the FILE NAME and never from the title: the two dialects disagree about the
+# title (`# 0007 — x` here, `# ADR 0007 — x` there) and agree about the name.
+ADR_FILE_RE='^[0-9]{4}-[a-z0-9-]+\.md$'
+
+# A violation, in ONE spelling — `<file>:<line> — <reason> — <remedy>`, on stderr.
+#
+# The remedy is not decoration and it is not optional. `gate_PLAN` already learned this the
+# expensive way: a reason that names no command reads as an instruction to hand-edit frontmatter,
+# which is the failure the command exists to end. Naming a remedy also OBLIGES the remedy to work,
+# and that obligation is what tests/check-adr.sh asserts by invoking it.
+#
+# PUBLISHES ADR_FAILS and ADR_FIRST_WHY, which adr_gate_verdict lifts into GATE_WHY — so every
+# caller of this family is CALLED and never `$( )`, where both globals would die with the subshell.
+ADR_FAILS=0
+ADR_FIRST_WHY=""
+# How many well-formed ADRs the last repo scan saw. Published rather than recomputed by the
+# preflight: two counters for one fact is how the two sides end up disagreeing in silence, and
+# this file has already paid for that once this mission (cmd_adr reading both ADR_FAILS and an rc).
+ADR_COUNT=0
+adr_fail() {   # adr_fail <file> <line> <reason> <remedy>
+  ADR_FAILS=$((ADR_FAILS + 1))
+  [ -n "$ADR_FIRST_WHY" ] || ADR_FIRST_WHY="$1:$2 — $3 — $4"
+  printf '  FAIL  %s:%s — %s — %s\n' "$1" "$2" "$3" "$4" >&2
+}
+adr_info() { printf '  info  %s\n' "$*"; }
+
+# adr_fm_line <file> <key> — the 1-based line of <key> inside the frontmatter; 1 when absent.
+#
+# Scoped to the block between the first two `---`, like frontmatter() itself: a mission body is
+# prose that legitimately quotes its own frontmatter, and a file-wide grep would point the reader
+# at the sentence instead of at the key.
+adr_fm_line() {
+  awk -v k="$2" '
+    NR==1 && $0=="---" { inside=1; next }
+    inside && $0=="---" { exit }
+    inside {
+      idx = index($0, ":"); if (idx == 0) next
+      name = substr($0, 1, idx-1); gsub(/^[ \t]+|[ \t]+$/, "", name)
+      if (name == k) { print NR; found=1; exit }
+    }
+    END { if (!found) print 1 }' "$1" 2>/dev/null || printf '1\n'
+}
+
+# adr_link <file> <key> — PUBLISHES ADR_LINK_NO and ADR_LINK_VALUE for the FIRST `<key>:` line.
+# rc 1 when the file carries none. CALLED, never `$( )`: it publishes two globals.
+ADR_LINK_NO=0
+ADR_LINK_VALUE=""
+adr_link() {
+  local f="$1" k="$2" hit re
+  ADR_LINK_NO=0; ADR_LINK_VALUE=""
+  [ -f "$f" ] || return 1
+  re="$(adr_key_re "$k")"
+  # `grep … || true` and then the first line by parameter expansion, NEVER `grep … | head -1`:
+  # under `set -o pipefail` head closes the pipe on the first match and grep dies of SIGPIPE, so
+  # the capture returns 141 on a long file and 0 on a short one — the CLAUDE.md scar, inverted
+  # logic that depends on the size of the input.
+  hit="$(grep -nE "$re" "$f" || true)"
+  hit="${hit%%$'\n'*}"
+  [ -n "$hit" ] || return 1
+  ADR_LINK_NO="${hit%%:*}"
+  ADR_LINK_VALUE="$(sed -E "s@${re}@@" <<< "${hit#*:}")"
+  # Both dialects write the value as prose that may carry a trailing period, a parenthesis or a
+  # markdown link. Only the leading path is the claim; the rest is the sentence around it.
+  ADR_LINK_VALUE="${ADR_LINK_VALUE%%[[:space:]]*}"
+  ADR_LINK_VALUE="${ADR_LINK_VALUE#\(}"; ADR_LINK_VALUE="${ADR_LINK_VALUE%\)}"
+  ADR_LINK_VALUE="${ADR_LINK_VALUE%.}"
+  [ -n "$ADR_LINK_VALUE" ]
+}
+
+# adr_spec_link <file> — the spec side of the link, in whichever dialect the file carries.
+#
+# ONE reader for what adr_declare is the ONE writer for. That function picks the dialect from what
+# is on DISK — the frontmatter `adr:` when the file opens with `---`, a `**ADR**:` line otherwise —
+# and the repo scan used to know only the prose half. Measured on 2026-09-17 against a spec.md
+# carrying YAML frontmatter: `sdd adr new --spec` wrote the key, said "now declares it", and
+# `sdd adr check` counted the very same file under "carry no ADR line" one command later. The
+# two-way check never ran on it, and it came out as an `info` count rather than a FAIL — a writer
+# and a reader disagreeing in silence, which is the shape this whole mission exists to refuse.
+#
+# The `--spec` refusal in adr_new was the third place that knew the rule and the only one that had
+# it right; it now reads through here too, so the dialect is decided once for the whole family.
+#
+# Publishes ADR_LINK_VALUE and ADR_LINK_NO like adr_link, plus ADR_LINK_KEY — the key the file
+# ACTUALLY used, so adr_check_link names `adr:` or `ADR:` as the reader found it instead of
+# printing one dialect over the other. CALLED, never `$( )`, for the same reason adr_link is.
+ADR_LINK_KEY=""
+adr_spec_link() {
+  local f="$1"
+  ADR_LINK_NO=0; ADR_LINK_VALUE=""; ADR_LINK_KEY=adr
+  if [ "$(head -n 1 "$f" 2>/dev/null)" = '---' ] && frontmatter_has "$f" adr; then
+    ADR_LINK_VALUE="$(frontmatter "$f" adr)"
+    ADR_LINK_NO="$(adr_fm_line "$f" adr)"
+    if [ -n "$ADR_LINK_VALUE" ]; then return 0; fi
+    return 1
+  fi
+  # A `---` file with no `adr:` key still falls through to the prose dialect: it may carry an
+  # `**ADR**:` line written before it grew frontmatter, and reading only the key would let
+  # adr_new overwrite a link that is already there.
+  ADR_LINK_KEY=ADR
+  adr_link "$f" ADR
+}
+
+# adr_check_mission <root> <mission> [plan|exec] — the mission scope.
+#
+# ABSENCE is a failure HERE and counted as information in the repo scope, and the asymmetry is the
+# design: a mission the kit is running right now is the one place where "nobody decided" is itself
+# the defect, and every other mission on disk predates the mechanism. Reversed, the repo scope
+# would fail every repo on the day it installed the kit.
+#
+# The phase argument is what turns `TBD` from a note into a refusal, and it is passed ONLY by
+# gate_PLAN and gate_EXEC. `TBD` means "the human has not decided yet", and the PLAN phase is the
+# one phase with a human in the room. Refusing it in EXEC and nowhere else would be the
+# unsatisfiable gate CLAUDE.md's principle 1 forbids — the class that cost US$ 73,32 in
+# 20260825-frete-cif-fob, because no agent in the kit may decide an architectural trade-off.
+#
+# CALLED, never `$( )`. rc 0 clean, 1 violation.
+adr_check_mission() {
+  local root="$1" m="$2" phase="${3:-}"
+  local rel="${HANDOFF_DIR%/}/$m/00-missao.md"
+  local mfile="$root/$rel"
+  if [ ! -f "$mfile" ]; then
+    adr_fail "$rel" 1 "no 00-missao.md to read" "run the PLAN phase first"
+    return 1
+  fi
+  local v line
+  v="$(frontmatter "$mfile" adr "$FRONTMATTER_ABSENT")"
+  line="$(adr_fm_line "$mfile" adr)"
+  local remedy="run 'sdd adr new --slug <slug> --spec $rel', or write 'adr: none' when the mission decides nothing architectural"
+
+  case "$v" in
+    "$FRONTMATTER_ABSENT")
+      adr_fail "$rel" "$line" "no 'adr:' key in the frontmatter" "$remedy"; return 1 ;;
+    "")
+      adr_fail "$rel" "$line" "'adr:' is empty" "$remedy"; return 1 ;;
+    none)
+      printf '  ok    %s: adr: none — the mission declares no architectural decision\n' "$m"; return 0 ;;
+    # The template placeholder is TBD wearing another hat: `adr: <none | TBD | docs/adr/NNNN-slug.md>`
+    # is what templates/missao.md ships, and a mission that never touched the line has decided
+    # exactly as much as one that wrote TBD. Reading them as two states would let the untouched
+    # template pass the gate the written TBD fails.
+    TBD|\<*)
+      if [ -n "$phase" ]; then
+        adr_fail "$rel" "$line" "'adr: $v' is not a decision, and the $phase gate is where it has to become one" "$remedy"
+        return 1
+      fi
+      adr_info "$m: adr: $v — not decided yet; $remedy"
+      return 0 ;;
+  esac
+
+  adr_check_link "$root" "$rel" adr "$v"  "$line"
+}
+
+# adr_check_link <root> <declaring file, repo-relative> <key> <claimed path> <line of the claim>
+#
+# ONE definition, shared by the mission scope and the spec scope. They declare through different
+# keys in different dialects — `adr:` in a mission's frontmatter, `**ADR**:` in a SpecKit spec —
+# and ask exactly the same three questions, so the questions live here. Written twice, the day one
+# copy learned about the back-link the other would go on certifying half a pair.
+#
+# CALLED, never `$( )`: it reports through adr_fail, which publishes ADR_FAILS.
+adr_check_link() {
+  local root="$1" rel="$2" key="$3" v="$4" line="$5"
+  # The order is deliberate: the NAME before the file. A number read out of a title instead of out
+  # of the file name is the exact defect this section exists to close, and a reader whose first
+  # message is "no such file" goes looking for the file rather than for the spelling.
+  local base; base="$(basename -- "$v")"
+  if ! grep -qE "$ADR_FILE_RE" <<< "$base"; then
+    adr_fail "$rel" "$line" "'$key: $v' does not name an ADR — the id is read from the FILE NAME, which has to be NNNN-slug.md" \
+      "rename it, or let 'sdd adr new' allocate the number"
+    return 1
+  fi
+  # ...and it has to live in ADR_DIR. The name alone was the whole test, and a name is not a
+  # NAMESPACE: measured 2026-09-17 by the Codex review of PR #45, a mission declaring
+  # `elsewhere/0001-x.md` passed BOTH directions while the repo scan counted `0 ADR(s)` in
+  # ADR_DIR — so the next `sdd adr new` allocated a SECOND 0001 and the id meant two decisions at
+  # once. That is this mission's own Gemba (the vault note citing an "ADR 0030" that belonged to
+  # another decision) reproduced inside the mechanism built to end it. Uniqueness is a property of
+  # the namespace, so the namespace is what gets checked.
+  local dir; dir="$(dirname -- "${v#./}")"
+  if [ "$dir" != "${ADR_DIR%/}" ]; then
+    adr_fail "$rel" "$line" "'$key: $v' is outside ADR_DIR (${ADR_DIR%/}) — an id is only unique inside the namespace that allocates it" \
+      "move it under ${ADR_DIR%/}/, or point the link at the ADR that already lives there"
+    return 1
+  fi
+  if [ ! -f "$root/$v" ]; then
+    adr_fail "$rel" "$line" "'$key: $v' points at a file that does not exist" \
+      "create it with 'sdd adr new --slug ${base%.md}' — the number it hands out is the next free one, which may not be this one"
+    return 1
+  fi
+  # The back-link, and it is the whole point of the pair. The vault note that started this mission
+  # declared an ADR number in prose; the number existed and belonged to another decision. One
+  # direction proves nothing — a claim pointing at a real file is satisfied by EVERY real file.
+  # What tells the right one apart is that the ADR points BACK.
+  if ! adr_link "$root/$v" Spec; then
+    adr_fail "$v" 1 "has no 'Spec:' line, so nothing points back at $rel" \
+      "add 'Spec: $rel' under the header"
+    return 1
+  fi
+  if [ "$ADR_LINK_VALUE" != "$rel" ]; then
+    adr_fail "$v" "$ADR_LINK_NO" "'Spec: $ADR_LINK_VALUE' points somewhere else, not at $rel" \
+      "one ADR, one spec: fix whichever side is wrong, or allocate a new number with 'sdd adr new'"
+    return 1
+  fi
+  printf '  ok    %s: %s: %s — and that ADR points back\n' "$rel" "$key" "$v"
+  return 0
+}
+
+# adr_check_repo <root> — the whole-repo scope. CALLED, never `$( )`.
+#
+# The asymmetry with the mission scope is the design, and it is decision 4 of this mission's grill:
+# ABSENCE fails in the mission the kit is running right now and is COUNTED everywhere else. Every
+# mission already on disk predates the mechanism, so a repo scope that failed on absence would
+# fail every repo on the day it installed the kit — and a check that is red from the first run is
+# a check people turn off.
+#
+# Five things it reads:
+#   a. ADR_DIR — every name reads as NNNN-slug.md, and no two files claim the same number
+#   b. every mission that DECLARES a path gets the full mission scope, back-link included
+#   c. every $SPEC_DIR/*/spec.md that declares an ADR gets the same treatment, with the back-link
+#      pointing at the spec itself
+#   d. a bare `ADR NNNN` with no file behind it — a FAILURE inside SPEC_DIR, a COUNT in a handoff
+#   e. a stub `sdd adr new` left unfilled
+#
+# ⚠️ Why (d) is split, measured on this very repo on 2026-09-17 rather than argued. Inside a
+# SpecKit tree a number is a CLAIM by construction: that tree carries `**ADR**:` lines and a spec
+# citing `ADR 0042` is asserting that 0042 is the decision behind it. A handoff is NARRATIVE — the
+# 01-plano.md of the mission that built this function cites `ADR 0042` (the name of a probe) and
+# `ADR 0030` (the pilot target's ADR, the one the whole mission is about), and neither has a file
+# here, nor should. Failing on those would have made `sdd adr check` red on the kit on the day it
+# was written, and the repair would have been to reword an approved artifact until the detector
+# went quiet — weakening the content to please the instrument, which check-lang.sh's own header
+# names as the wrong move.
+#
+# ⚠️ Declared limit, same measurement. The plan also asked for "a co-located plan citing an id
+# different from the declared one fails". It is NOT implemented and this is why: a plan legitimately
+# cites other decisions. The 01-plano.md of this mission declares 0008 and cites 0003, 0004 and
+# 0007, all of them correctly. The rule would have been a false-positive generator, and a rule that
+# cries wolf under `block` makes the whole gate noise.
+adr_check_repo() {
+  local root="$1" f base id line n
+  local dir="$root/${ADR_DIR%/}"
+  local -A seen_id=()
+  ADR_COUNT=0
+  local n_adr=0 n_none=0 n_undecided=0 n_nospec=0 n_stub=0 n_bare_prose=0
+
+  # --- a. the directory ---------------------------------------------------
+  if [ -d "$dir" ]; then
+    while IFS= read -r f; do
+      [ -n "$f" ] || continue
+      base="$(basename -- "$f")"
+      if ! grep -qE "$ADR_FILE_RE" <<< "$base"; then
+        adr_fail "${ADR_DIR%/}/$base" 1 "the name does not read as NNNN-slug.md, so the file carries no id" \
+          "rename it, or move it out of $ADR_DIR"
+        continue
+      fi
+      n_adr=$((n_adr + 1))
+      id="${base%%-*}"
+      if [ -n "${seen_id[$id]:-}" ]; then
+        # BOTH files named, never just the newcomer: the reader has to decide which of the two
+        # keeps the number, and a message naming one of them hides half the decision.
+        adr_fail "${ADR_DIR%/}/$base" 1 "id $id is already taken by ${seen_id[$id]}" \
+          "renumber one of them — 'sdd adr new' hands out the next free id and never reuses a gap"
+      else
+        seen_id[$id]="$base"
+      fi
+      if grep -q '<!-- sdd adr new:' "$f"; then n_stub=$((n_stub + 1)); fi
+    done < <(find "$dir" -maxdepth 1 -type f -name '*.md' 2>/dev/null | sort)
+  fi
+
+  # --- b. the missions ----------------------------------------------------
+  local hdir="$root/${HANDOFF_DIR%/}" m v
+  if [ -d "$hdir" ]; then
+    while IFS= read -r f; do
+      [ -n "$f" ] || continue
+      m="$(basename -- "$(dirname -- "$f")")"
+      v="$(frontmatter "$f" adr "$FRONTMATTER_ABSENT")"
+      case "$v" in
+        # TWO counters and not one. Lumped, they answered the question `block` does not ask:
+        # `adr: none` is a decision the PLAN gate ACCEPTS, and absent/empty/TBD is what it
+        # REFUSES, so a single "counted and not failed" number stayed quiet on a repo where
+        # flipping to `block` sends every mission on disk back to PLAN. Measured 2026-09-17 in
+        # this kit: `sdd adr check` rc 0 and `sdd preflight` "no finding" over 14 missions the
+        # gate refuses. The undecided count reaching zero is what says step 3 of the adoption
+        # path in README.md is done — which is the whole job of a migration instrument.
+        none) n_none=$((n_none + 1)); continue ;;
+        "$FRONTMATTER_ABSENT"|''|TBD|\<*) n_undecided=$((n_undecided + 1)); continue ;;
+      esac
+      adr_check_mission "$root" "$m" || true
+    done < <(find "$hdir" -mindepth 2 -maxdepth 2 -type f -name '00-missao.md' 2>/dev/null | sort)
+
+    # d, the counted half: a citation in a handoff is narrative until something says otherwise.
+    while IFS= read -r f; do
+      [ -n "$f" ] || continue
+      while IFS= read -r line; do
+        [ -n "$line" ] || continue
+        id="$(printf '%04d' "$((10#${line##*ADR }))" 2>/dev/null)" || continue
+        [ -z "$(find "$dir" -maxdepth 1 -name "$id-*.md" 2>/dev/null)" ] || continue
+        n_bare_prose=$((n_bare_prose + 1))
+      done < <(grep -noE '\bADR [0-9]{4}\b' "$f" 2>/dev/null || true)
+    done < <(find "$hdir" -mindepth 2 -maxdepth 2 -type f -name '01-plano.md' 2>/dev/null | sort)
+  fi
+
+  # --- c + d. the SpecKit tree -------------------------------------------
+  # SPEC_DIR empty means "this repo has no spec tree", and an empty value must scan NOTHING rather
+  # than fall back to the repo root — `find "$root/" -name spec.md` would walk the whole checkout.
+  if [ -n "$SPEC_DIR" ]; then
+    local sdir="$root/${SPEC_DIR%/}" rel
+    if [ -d "$sdir" ]; then
+      while IFS= read -r f; do
+        [ -n "$f" ] || continue
+        rel="${f#"$root"/}"
+        if adr_spec_link "$f"; then
+          adr_check_link "$root" "$rel" "$ADR_LINK_KEY" "$ADR_LINK_VALUE" "$ADR_LINK_NO" || true
+        else
+          n_nospec=$((n_nospec + 1))
+        fi
+      done < <(find "$sdir" -mindepth 2 -maxdepth 2 -type f -name 'spec.md' 2>/dev/null | sort)
+
+      # d, the failing half: inside a spec tree a number IS a claim.
+      while IFS= read -r f; do
+        [ -n "$f" ] || continue
+        rel="${f#"$root"/}"
+        while IFS= read -r line; do
+          [ -n "$line" ] || continue
+          n="${line%%:*}"
+          id="$(printf '%04d' "$((10#${line##*ADR }))" 2>/dev/null)" || continue
+          [ -z "$(find "$dir" -maxdepth 1 -name "$id-*.md" 2>/dev/null)" ] || continue
+          adr_fail "$rel" "$n" "cites 'ADR $id', and no file in $ADR_DIR carries that id" \
+            "allocate it with 'sdd adr new', or cite the path of the ADR you mean"
+        done < <(grep -noE '\bADR [0-9]{4}\b' "$f" 2>/dev/null || true)
+      done < <(find "$sdir" -mindepth 2 -maxdepth 2 -type f \( -name 'spec.md' -o -name 'plan.md' \) 2>/dev/null | sort)
+    fi
+  fi
+
+  # --- the report ---------------------------------------------------------
+  ADR_COUNT="$n_adr"
+  printf '  ok    ADR_CHECK=%s, %s ADR(s) in %s\n' "$ADR_CHECK" "$n_adr" "${ADR_DIR%/}"
+  [ "$n_none" -eq 0 ]        || adr_info "$n_none mission(s) declare 'adr: none' — a decision, written down"
+  [ "$n_undecided" -eq 0 ]   || adr_info "$n_undecided mission(s) have no decided 'adr:' — absent, empty or TBD; ADR_CHECK=block refuses each of them at the PLAN gate, so declare them with 'sdd adr new --spec <mission>' or 'adr: none' before flipping the key"
+  [ "$n_nospec" -eq 0 ]      || adr_info "$n_nospec spec(s) in $SPEC_DIR carry no ADR line"
+  [ "$n_bare_prose" -eq 0 ]  || adr_info "$n_bare_prose bare 'ADR NNNN' citation(s) in handoff prose with no file in $ADR_DIR"
+  [ "$n_stub" -eq 0 ]        || adr_info "$n_stub ADR(s) still carry the unfilled 'sdd adr new' stub"
+  [ "$ADR_FAILS" -eq 0 ]
+}
+
+# adr_next_id <dir> — the next free id, zero-padded to four. Empty directory ⇒ 0001.
+#
+# MAX+1, and a gap is never reused. Reusing one would hand out a number that a merged branch, a
+# handoff, a commit message or somebody's notes may already cite — the ADR would be gone and the
+# citation would silently point at a different decision, which is the whole defect this section
+# exists to close, inverted.
+adr_next_id() {
+  local dir="$1" f base max=0 id
+  if [ -d "$dir" ]; then
+    while IFS= read -r f; do
+      [ -n "$f" ] || continue
+      base="$(basename -- "$f")"
+      grep -qE "$ADR_FILE_RE" <<< "$base" || continue
+      # `10#` because 0008 is not octal — without it 0008 and 0009 are arithmetic errors, which is
+      # the ordinary way this family of bug arrives and the reason the padding is applied on the
+      # way OUT and never carried through the arithmetic.
+      id=$((10#${base%%-*}))
+      [ "$id" -le "$max" ] || max="$id"
+    done < <(find "$dir" -maxdepth 1 -type f -name '*.md' 2>/dev/null)
+  fi
+  printf '%04d\n' "$((max + 1))"
+}
+
+# adr_reserve <path> — create the file, or fail. THE poka-yoke of this whole mission.
+#
+# `set -C` is O_EXCL: the create-and-truncate is one syscall, so two writers racing for the same
+# number get one file and one error instead of two files and a silent overwrite. Everything else
+# here — the check, the gate, the sensor — reports on a state; this is the only line that MAKES the
+# state, and it is why the allocator is a command rather than a convention in a document.
+#
+# In a subshell, so noclobber never leaks into the caller: the runner's own `>` redirections are
+# everywhere, and a stray `set -C` would turn a harmless overwrite into a runtime failure in an
+# unrelated command.
+adr_reserve() {
+  ( set -C; : > "$1" ) 2>/dev/null || return 1
+}
+
+# adr_declare <spec file> <path to write> — writes the spec side of the link. rc 1 when it refuses.
+#
+# Two layouts, told apart by what is on disk rather than by a flag: a file that opens with `---`
+# declares through its frontmatter `adr:` key, anything else through a `**ADR**:` line. A flag
+# would be a third thing to get wrong, and the answer is already written in the file.
+#
+# frontmatter_write() rewrites an EXISTING key and leaves an absent one absent — by design, and
+# documented at its own definition. So the absent case is inserted here, by awk with index(), never
+# sed: a path carrying `&` or `/` would go through sed's own syntax and land corrupted in an
+# artifact that is already committed.
+ADR_DECLARE_WHY=""
+adr_declare() {
+  local spec="$1" path="$2" tmp
+  ADR_DECLARE_WHY=""
+  if [ "$(head -n 1 "$spec")" = '---' ]; then
+    if frontmatter_has "$spec" adr; then
+      frontmatter_write "$spec" adr "$path"
+      return 0
+    fi
+    tmp="$(mktemp "${spec}.XXXXXX")" || die "sdd adr new: could not create a temporary beside $spec"
+    # At the END of the block, not the top: a reader diffing the artifact expects the keys it
+    # already had to stay where they were, and a new one appended is one line of diff instead of
+    # a reshuffle.
+    awk -v v="$path" '
+      NR==1 && $0=="---" { inside=1; print; next }
+      inside && $0=="---" { print "adr: " v; print; inside=0; done=1; next }
+      { print }
+      END { if (!done) exit 1 }' "$spec" > "$tmp" \
+      || { rm -f "$tmp"; ADR_DECLARE_WHY="$spec opens a frontmatter block that is never closed, so there is nowhere to write 'adr:'"; return 1; }
+    chmod --reference="$spec" "$tmp" 2>/dev/null || true
+    mv -f "$tmp" "$spec" || { rm -f "$tmp"; ADR_DECLARE_WHY="could not replace $spec"; return 1; }
+    return 0
+  fi
+  tmp="$(mktemp "${spec}.XXXXXX")" || die "sdd adr new: could not create a temporary beside $spec"
+  # The pattern comes from adr_key_re and is never hand-written here: ADR_LINK_PRE/POST exist so
+  # that the day one dialect is added the other readers do not go blind, and a fourth spelling
+  # inside an awk string is exactly how that happens — this one would append a SECOND `**ADR**:`
+  # line instead of replacing the one already there.
+  #
+  # Through ENVIRON and never `awk -v`: `-v` runs the value through escape processing, so the
+  # `\*` of the pattern arrives as a bare `*` and the regex changes meaning. Measured — with `-v`
+  # the same pattern matched `- **ADR**: x` and stopped matching `ADR: y`.
+  ADR_KEY_RE="$(adr_key_re ADR)" awk -v v="$path" '
+    BEGIN { re = ENVIRON["ADR_KEY_RE"] }
+    !done && $0 ~ re { print "**ADR**: " v; done=1; next }
+    { print }
+    END { if (!done) print "\n**ADR**: " v }' "$spec" > "$tmp" \
+    || { rm -f "$tmp"; ADR_DECLARE_WHY="awk failed on $spec"; return 1; }
+  chmod --reference="$spec" "$tmp" 2>/dev/null || true
+  mv -f "$tmp" "$spec" || { rm -f "$tmp"; ADR_DECLARE_WHY="could not replace $spec"; return 1; }
+}
+
+# adr_new <root> <slug> <ticket> <spec> <dry-run> — reserve the id and write the header.
+#
+# The ORDER is the contract: refuse first, reserve second, write both sides third. Reserving before
+# the refusals would leave an allocated, empty ADR behind every rejected call, and the gaps it left
+# are exactly what adr_next_id refuses to reuse — the command would slowly eat its own numbering.
+#
+# The stub is the HEADER and nothing else, deliberately. The body is an architectural decision
+# written in the repo's OUTPUT_LANG by whoever is making it; a template would be the kit dictating
+# prose in a language it does not know, and a body nobody wrote is a decision nobody made.
+#
+# ⚠️ Declared limit (D15): the stub names OUTPUT_LANG, and in THIS repo that is pt-BR while
+# `docs/adr/*.md` sits on the kit's English surface — so here the two disagree and the surface
+# wins. It is not a finding by the D15 rule: no sensor claims to measure what it does not, and in
+# a target repo, where docs/adr is scanned by nothing, OUTPUT_LANG is the right answer. A kit
+# writing its own ADRs reads tests/check-lang.sh, which is the sensor that actually decides.
+adr_new() {
+  local root="$1" slug="$2" ticket="$3" spec="$4" dry="$5"
+  grep -qE '^[a-z0-9-]+$' <<< "$slug" \
+    || die "sdd adr new: --slug '$slug' is not lower-case letters, digits and hyphens"
+  local dir="$root/${ADR_DIR%/}" rel id path
+  id="$(adr_next_id "$dir")"
+  rel="${ADR_DIR%/}/$id-$slug.md"
+  path="$root/$rel"
+
+  local spec_rel=""
+  if [ -n "$spec" ]; then
+    spec_rel="${spec#"$root"/}"; spec_rel="${spec_rel#./}"
+    [ -f "$root/$spec_rel" ] || die "sdd adr new: --spec $spec_rel does not exist"
+    # Refused BEFORE anything is created: a spec that already names an ADR is either already
+    # decided or pointing at the wrong one, and both are decisions a human makes. Silently
+    # overwriting the link would be the kit choosing between two ADRs on its own.
+    local cur=""
+    if adr_spec_link "$root/$spec_rel"; then cur="$ADR_LINK_VALUE"; fi
+    case "$cur" in
+      ''|TBD|none|\<*) : ;;
+      *) die "sdd adr new: $spec_rel already declares '$cur' — change it by hand, or point --spec somewhere else" ;;
+    esac
+  fi
+
+  if [ "$dry" = 1 ]; then
+    printf '%s\n' "$rel"
+    return 0
+  fi
+
+  # BEFORE the mkdir, because the mkdir is what would follow the symlink. adr_mode already cleared
+  # the spelling at config load; this is the other half, and it lives here rather than in adr_mode
+  # because it is a question about the filesystem of THIS repo, which a config validator does not
+  # have in front of it.
+  adr_dir_contained "$root" "${ADR_DIR%/}" \
+    || die "sdd adr new: ADR_DIR=${ADR_DIR%/} resolves outside the repository — a symlinked component would put the ADR outside $root, and nothing was written"
+  mkdir -p "$dir"
+  adr_reserve "$path" \
+    || die "sdd adr new: $rel already exists — nothing was written (the id is reserved with O_EXCL, never overwritten)"
+
+  {
+    printf '# ADR %s — %s\n\n' "$id" "$slug"
+    printf -- '- **Status**: proposed (%s, %s)\n' "${ticket:-—}" "$(date +%F)"
+    printf -- '- **Spec**: %s\n' "${spec_rel:-TBD}"
+    printf '\n<!-- sdd adr new: replace this line with the decision, in OUTPUT_LANG=%s. Give the\n' "${OUTPUT_LANG:-<unset>}"
+    printf '     heading above a real title, and follow the shape of the newest ADR in %s. -->\n' "${ADR_DIR%/}"
+  } > "$path"
+
+  # The reservation is the only irreversible step, and the declaration comes AFTER it — so a
+  # declaration that fails has to UNDO it, or the pair persists half-written. Measured 2026-09-17
+  # by the Codex review of PR #45: a --spec whose frontmatter is opened and never closed left
+  # docs/adr/0001-*.md on disk pointing one way at a spec that declared nothing, and the retry
+  # advanced to 0002 — every attempt burning an id that `adr_next_id` will never hand out again,
+  # because a freed number is deliberately never reused.
+  #
+  # Rollback rather than a pre-flight validation of the spec: a pre-check answers only the failure
+  # it was taught, and the property wanted here is "no half pair, whatever went wrong" — a full
+  # disk and a read-only tree reach the same line. adr_declare publishes ADR_DECLARE_WHY and is
+  # CALLED, never `$( )`, so the reason survives the rollback.
+  if [ -n "$spec_rel" ] && ! adr_declare "$root/$spec_rel" "$rel"; then
+    rm -f "$path"
+    die "sdd adr new: ${ADR_DECLARE_WHY:-could not write the spec side of the link} — $rel was NOT reserved, so the id stays free"
+  fi
+  ok "$rel reserved${spec_rel:+, and $spec_rel now declares it}"
+}
+
+# adr_gate_verdict <plan|exec> — what a gate asks about the mission's ADR. 0 satisfied, 1 refused.
+#
+# It writes GATE_WHY and NOTHING to stdout, which is the gate contract: adr_check_mission reports
+# for a human and this reads it for a gate, so its whole output goes to /dev/null and only the
+# first violation survives, in ADR_FIRST_WHY. Redirection and not `$( )` — a command substitution
+# would run it in a subshell where ADR_FAILS and ADR_FIRST_WHY die, which is the autonomy_kit_stamp
+# scar, and the gate would read "clean" for every mission.
+#
+# The OWNER of the artifact this asks for is named here because CLAUDE.md obliges a new gate to
+# name one: it is `sdd-planner`, running with the human in the room. That is also why the refusal
+# lands in PLAN and not in EXEC. `TBD` means "the human has not decided yet", and no agent in this
+# kit may decide an architectural trade-off — a gate demanding a decision from a phase that has
+# nobody to make it is the unsatisfiable gate of principle 1, the class that turned 7 of 12 QA
+# sessions of 20260825-frete-cif-fob into US$ 73,32 of laps. EXEC re-reads the same thing for
+# DRIFT: the ADR was there when the plan was approved and is not there now.
+# The marker `warn` leaves behind, read ONCE per run by cmd_run and nowhere else.
+#
+# ONE setter, reset on ENTRY — the contract every side marker in this runner RE-DERIVES rather than
+# inherits (GATE_APP_DOWN, HAT_CROSSED_WHY, KIT_TOUCHED_WHY, and the comment on GATE_APP_DOWN is
+# the one this copies). A marker that survived the lap would carry a warning about the phase before
+# it, which is exactly how handoff_blocked_escalation once stamped `{phase: EXEC}` on a handoff
+# that said `done`.
+GATE_ADR_WARN_WHY=""
+
+adr_gate_verdict() {
+  local phase="$1" rc=0 mode
+  GATE_ADR_WARN_WHY=""
+  # `|| rc=$?`, never a bare capture: under `set -e` the assignment form kills the RUNNER the
+  # moment adr_mode returns 2, inside a gate, which is the one place that can neither report nor
+  # recover.
+  mode="$(adr_mode 2>/dev/null)" || rc=$?
+  if [ "$rc" -ne 0 ]; then
+    GATE_WHY="ADR_CHECK=${ADR_CHECK:-<empty>} is not one of off|warn|block — fix it in $CONFIG_FILE"
+    return 1
+  fi
+  [ "$mode" != off ] || return 0
+  ADR_FAILS=0; ADR_FIRST_WHY=""
+  adr_check_mission "$REPO_ROOT" "$MISSION" "$phase" >/dev/null 2>&1 || true
+  [ "$ADR_FAILS" -gt 0 ] || return 0
+  # `warn` derives the phase anyway, and says so in the LEDGER rather than here — a gate is the
+  # wrong place to narrate, and a row is what an operator can count afterwards. `off` never reaches
+  # this line (it returned above), which is what makes that early return load-bearing: without it
+  # a repo that asked for nothing would start writing rows.
+  [ "$mode" = block ] || { GATE_ADR_WARN_WHY="$ADR_FIRST_WHY"; return 0; }
+  GATE_WHY="adr: $ADR_FIRST_WHY"
+  return 1
+}
+
+# adr_mode — prints the validated ADR_CHECK on stdout; rc 2 when the configuration is not usable.
+#
+# POSITIVE admission, never `not <what is refused>`: a fourth mode added tomorrow has to opt in
+# here instead of arriving admitted by omission. That is the same lesson `is_gate_pass | not`
+# taught the ledger axis, where a third event minted a version nobody asked for.
+#
+# rc 2 and not `die`: the gates call this too, and a gate that exits the process cannot write
+# GATE_WHY. Callers capture with `|| rc=$?`, never with a bare `m="$(adr_mode)"` — under
+# `set -e` the bare form kills the runner ON THE ASSIGNMENT, which is the whole subject of the
+# `guard:` rule in tests/check-health.sh.
+adr_mode() {
+  case "$ADR_CHECK" in
+    off|warn|block) : ;;
+    *) printf 'ADR_CHECK=%s is not one of off|warn|block — fix it in %s\n' \
+         "${ADR_CHECK:-<empty>}" "${CONFIG_FILE:-.sdd/config.sh}" >&2; return 2 ;;
+  esac
+  # ADR_DIR is substituted into the planner hat's `writes:` glob by hat_expand. Empty, `$ADR_DIR/**`
+  # expands to `/**` and the hat silently declares it may write the whole filesystem — so the
+  # refusal lives here, where it can still be read, rather than in the expansion, where it cannot.
+  #
+  # `''|/` was the whole guard, and it named two values where the property is "stays inside the
+  # repo". Measured 2026-09-17 by the Codex review of PR #45: with ADR_DIR=../escaped the mode was
+  # accepted and `sdd adr new --slug escape` wrote $REPO_ROOT/../escaped/0001-escape.md — outside
+  # the repository, through the same door `/` was already refused at, and past hat_guard_check,
+  # which compares a session's writes against a `writes:` glob this value BUILDS. A guard that
+  # enumerates values instead of deciding the property is a guard with a list of holes.
+  adr_dir_ok "$ADR_DIR" || {
+    printf 'ADR_DIR=%s is not a repo-relative directory — it is expanded into a hat writes: glob, so it may not be empty, absolute, or climb out with ..\n' \
+      "${ADR_DIR:-<empty>}" >&2; return 2; }
+  printf '%s\n' "$ADR_CHECK"
+}
+
+# adr_dir_ok <value> — 0 when the value names a directory INSIDE the repo. The property, not a list.
+#
+# Written POSITIVELY, by the CLAUDE.md rule for admission predicates: every component has to be a
+# plain name, so `..`, `.`, an absolute path and an empty component are refused by CONSTRUCTION
+# rather than by being remembered. `not <what is refused>` is what admitted `../escaped` while
+# naming `/`, and it is what would admit the next spelling nobody listed.
+#
+# Trailing slashes are stripped first because the kit already supports them — `ADR_DIR=decisions/`
+# is a tested fixture, and hat_expand trims on the way out.
+adr_dir_ok() {
+  local d="$1"
+  while [ "${d%/}" != "$d" ]; do d="${d%/}"; done
+  [ -n "$d" ] || return 1
+  case "$d" in /*) return 1 ;; esac
+  # Split by parameter expansion and NEVER `for comp in $d` with IFS=/: an unquoted expansion in a
+  # `for` list is word-split AND pathname-expanded, so `ADR_DIR=*` was replaced by the CWD's file
+  # names before any component was inspected — every one of them a legal name, so the check passed
+  # and reported the value clean. The guard read the DIRECTORY the runner happened to stand in
+  # instead of the value it was handed. Found while verifying the fix for the metacharacter hole
+  # below, which the same bug was hiding.
+  local rest="$d" comp
+  while [ -n "$rest" ]; do
+    comp="${rest%%/*}"
+    case "$comp" in
+      ''|.|..) return 1 ;;
+      # ...and a LITERAL name. `''|.|..` refused traversal and still admitted `*`, `doc?` and
+      # `docs/[a-z]dr`: hat_expand drops those straight into `$ADR_DIR/**` and hat_path_allowed
+      # matches the result as a shell GLOB, so `ADR_DIR=*` builds the pattern `*/**` and widens a
+      # hat's write scope to most of the repo — with hat_guard_check reading the same widened
+      # matcher, so it never notices. Measured 2026-09-17 (CodeRabbit on PR #45, CWE-863).
+      #
+      # This is the CHARACTER-level half of the rule the comment above already claimed: refusing
+      # three spellings is a list, and a list has holes. `*[!set]*` is the positive form shell
+      # gives us — "contains something outside the set" — so a metacharacter nobody listed is
+      # refused by construction rather than by being remembered.
+      *[!A-Za-z0-9._-]*) return 1 ;;
+    esac
+    if [ "$comp" = "$rest" ]; then rest=""; else rest="${rest#*/}"; fi
+  done
+  return 0
+}
+
+# adr_dir_contained <root> <dir> — 0 when <root>/<dir> PHYSICALLY resolves inside <root>.
+#
+# adr_dir_ok decides the SPELLING; this decides the filesystem, and neither implies the other. A
+# component of ADR_DIR that is a symlink out of the tree passes every lexical test and still puts
+# the allocator outside the repository: measured 2026-09-17 (CodeRabbit on PR #45) with docs/adr
+# symlinked to a sibling directory, where `sdd adr new` reported `docs/adr/0001-….md reserved` and
+# the bytes landed outside REPO_ROOT.
+#
+# `realpath -m`: the directory legitimately may not exist yet — adr_new creates it — and -m
+# resolves the components that do exist while staying lexical for the rest, which is the only form
+# that can answer BEFORE the mkdir it guards.
+adr_dir_contained() {
+  local root dir
+  root="$(realpath -m -- "$1" 2>/dev/null)" || return 1
+  dir="$(realpath -m -- "$1/$2" 2>/dev/null)" || return 1
+  case "$dir" in
+    "$root"/*) return 0 ;;
+  esac
+  return 1
+}
+
+adr_usage() {
+  cat <<'USAGE'
+usage: sdd adr new   --slug <slug> [--ticket <id>] [--spec <path>] [--dry-run]
+       sdd adr check [--repo <root>] [--mission <mission>] [--phase plan|exec]
+
+  new    reserves the next free id in $ADR_DIR and writes the header stub.
+  check  reads the traceability links back; rc 0 clean, 1 violation, 2 bad configuration.
+USAGE
+}
+
+cmd_adr() {
+  local verb="${1:-}"
+  case "$verb" in
+    new|check) shift ;;
+    *) adr_usage >&2; return 2 ;;
+  esac
+
+  # The flag loop stands BEFORE load_config, like cmd_health's: a typo in an option has to be
+  # refused by the command itself, not by whatever the runner happens to do with a config it did
+  # not need to read yet.
+  local slug="" ticket="" spec="" mission="" phase="" repo="" dry=0
+  while [ $# -gt 0 ]; do
+    case "$1" in
+      --slug)    slug="${2:-}";    shift 2 || die "sdd adr: --slug needs a value" ;;
+      --ticket)  ticket="${2:-}";  shift 2 || die "sdd adr: --ticket needs a value" ;;
+      --spec)    spec="${2:-}";    shift 2 || die "sdd adr: --spec needs a value" ;;
+      --mission) mission="${2:-}"; shift 2 || die "sdd adr: --mission needs a value" ;;
+      --phase)   phase="${2:-}";   shift 2 || die "sdd adr: --phase needs a value" ;;
+      --repo)    repo="${2:-}";    shift 2 || die "sdd adr: --repo needs a value" ;;
+      --dry-run) dry=1; shift ;;
+      *) die "unknown 'sdd adr $verb' option: $1 (see 'sdd help')" ;;
+    esac
+  done
+
+  load_config
+  # Called for its REFUSAL, and the value thrown away: adr_check_repo prints ADR_CHECK itself, and
+  # a second copy of the mode carried down from here would be a second answer to one question.
+  # `|| return $?`, never a bare capture: under `set -e` the assignment form kills the runner ON
+  # THE ASSIGNMENT the moment adr_mode returns 2, and the refusal it wrote would be the last thing
+  # printed by a command that looked like it had crashed.
+  adr_mode >/dev/null || return $?
+
+  case "$verb" in
+    new)
+      [ -n "$slug" ] || die "sdd adr new: --slug is required (see 'sdd help')"
+      adr_new "${repo:-$REPO_ROOT}" "$slug" "$ticket" "$spec" "$dry"
+      ;;
+    check)
+      local root="${repo:-$REPO_ROOT}"
+      case "$phase" in
+        ''|plan|exec) : ;;
+        *) die "sdd adr check: --phase takes 'plan' or 'exec', not '$phase'" ;;
+      esac
+      # `--phase` is what turns TBD from a note into a refusal, and only adr_check_mission reads
+      # it — the repo scan never receives it. Accepted and discarded, `sdd adr check --phase plan`
+      # printed a clean repo report and looked like it had answered a question about a phase.
+      # Refusing beats documenting: the flag that does nothing is the one nobody notices.
+      [ -z "$phase" ] || [ -n "$mission" ] \
+        || die "sdd adr check: --phase is scoped to one mission — pass --mission <mission> with it"
+      ADR_FAILS=0; ADR_FIRST_WHY=""
+      local vrc=0
+      # CALLED, never `$( )`: both publish ADR_FAILS and ADR_FIRST_WHY, and both globals would die
+      # with the subshell a command substitution opens.
+      #
+      # The RC is what this reads, and not ADR_FAILS a second time. Read both, and whichever of the
+      # two says "clean" is decoration — a sabotage of either would leave the other answering, and
+      # neither could be caught. The counter is load-bearing one level down, where adr_check_repo
+      # turns it into its own rc.
+      if [ -n "$mission" ]; then
+        adr_check_mission "$root" "$mission" "$phase" || vrc=1
+      else
+        adr_check_repo "$root" || vrc=1
+      fi
+      return "$vrc"
+      ;;
+  esac
+}
+
 # `sdd approve <mission>` — the human gate of the PLAN phase gets a command.
 #
 # Until this existed, unlocking gate_PLAN meant opening 00-missao.md and typing
@@ -5225,6 +6068,11 @@ cmd_run() {
   # degradation branch runs in this very shell, never through `$( )`, so the CLAUDE.md lesson that
   # killed the kit stamp's guard (a global assigned inside a subshell dies with it) does not bite.
   local degraded_logged=0
+  # A second one-shot, and deliberately NOT the same variable: the two degradations are different
+  # facts about different things (a review that ran out of rounds; a repo running ADR_CHECK=warn),
+  # and a run can produce both. Shared, whichever fired first would silence the other and the
+  # ledger would carry one row for two events.
+  local adr_degraded_logged=0
   local dry_next=""   # dry-run projection cursor (distinct from --phase, which prints just one)
 
   while :; do
@@ -5297,6 +6145,25 @@ cmd_run() {
     # the gate failing is the whole point here.
     if [ "$phase" = "EXEC" ]; then
       gate_EXEC || true
+      # ADR_CHECK=warn leaves a trail, once per run. The gate has already answered by here, so
+      # GATE_ADR_WARN_WHY is armed or it is not; writing it from inside the gate would put a
+      # ledger row behind every `sdd status` and every `sdd phase`, which re-evaluate gates.
+      #
+      # Declared limits, because the row is a count somebody will read: a lap that stops at the
+      # `blocked` Jidoka above never reaches this line, and a run that never derives EXEC never
+      # writes one. So the row says "this run reached EXEC under warn with an unsatisfied `adr:`",
+      # which is exactly what it is worth — never "this repo is running warn".
+      #
+      # `--dry-run` is excluded for the reason the kit guard already re-learned once: a projection
+      # opens no session to attribute anything to, and arming it anyway made the dry run inherit a
+      # ledger warning it had no business inheriting (measured, 0 warnings before and 1 after).
+      if [ "$DRY_RUN" != "1" ] && [ -n "$GATE_ADR_WARN_WHY" ] && [ "$adr_degraded_logged" = 0 ]; then
+        adr_degraded_logged=1
+        warn "ADR_CHECK=warn — $GATE_ADR_WARN_WHY"
+        pipeline_log_line "$(date -Iseconds)  DEGRADED  EXEC  ADR_CHECK=warn — $GATE_ADR_WARN_WHY"
+        # CALLED, never substituted: it writes the ledger and publishes nothing worth capturing.
+        autonomy_degraded_row "adr-check" "EXEC" "$GATE_ADR_WARN_WHY"
+      fi
       if [ "$GATE_EXEC_DIRTY" = "1" ]; then
         info ""
         bad "BLOCKED in EXEC — $GATE_WHY"
@@ -7487,6 +8354,16 @@ USAGE
                              mission plan (kit repo only; exit 3 = the change made it worse)
   sdd kaizen --series        the deterministic series (JSON) the judge cites — EVERY repo in the
                              ledger, with the composition of the slice beside the numbers
+  sdd adr new --slug <s> [--ticket <id>] [--spec <path>] [--dry-run]
+                             reserve the next free id in ADR_DIR and write the header stub. The
+                             reservation is O_EXCL: a number is never handed out twice, and an
+                             existing file is never overwritten. --spec writes BOTH sides of the
+                             link — the ADR's `Spec:` line and the spec's `adr:` key
+  sdd adr check [--repo <root>] [--mission <m>] [--phase plan|exec]
+                             read the traceability links back. No scope ⇒ the whole repo; --mission
+                             ⇒ that mission's `adr:` line alone. rc 0 clean, 1 violation, 2 bad
+                             configuration. What the PLAN and EXEC gates ask is governed by
+                             ADR_CHECK (off|warn|block), never by this command
   sdd help | sdd version
 
 LEDGER OPTIONS (`autonomy` and `kaizen`)
@@ -7543,6 +8420,7 @@ main() {
     census)    cmd_census "$@" ;;
     boot)      cmd_boot "$@" ;;
     kaizen)    cmd_kaizen "$@" ;;
+    adr)       cmd_adr "$@" ;;
     version|--version|-v) cmd_version ;;
     help|--help|-h) cmd_help ;;
     *) die "unknown command: $subcmd (see 'sdd help')" ;;

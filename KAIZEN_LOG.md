@@ -4,6 +4,73 @@ Registro de melhorias com **antes/depois medido**. Sem número, não entra.
 
 ---
 
+## 2026-09-17 — O número do ADR deixa de ser prosa: alocado por comando, lido por sensor
+
+**Problema (Gemba):** **nada** alocava id de ADR, aqui ou no repo-alvo. `grep -c traceab bin/sdd`
+respondia `0`; a única menção a `docs/adr` no runner era a varredura de `RELEASE_FORBIDDEN_WORDS`.
+Os 7 ADRs daqui e os 40 de lá foram numerados **à mão**, lendo o diretório e somando um — uma
+convenção, e convenção vale o que valeu a última pessoa que a seguiu. A conta chegou: uma nota
+declarou "ADR 0030" em 2026-08-25 e o `docs/adr/0030-…` real foi aceito para **outra** decisão em
+2026-08-26. O vínculo, onde existia, corria num sentido só: ADR → spec no alvo, spec → ADR **zero**;
+aqui, 2 de 13 specs citavam ADR, uma por caminho e outra por número solto. O kit já tinha pago a
+classe uma vez (`CONTEXT.md:55`, referências penduradas a "ADR 0004" consertadas à mão).
+
+**Contramedida:** dois verbos e um par. `sdd adr new` reserva o próximo id livre sob `set -C`
+(O_EXCL, uma syscall) e escreve **os dois lados** do vínculo numa chamada; `sdd adr check` lê de
+volta, em dois escopos, com **uma** gramática que serve aos dois dialetos já em disco. Três chaves
+(`ADR_CHECK`, `ADR_DIR`, `SPEC_DIR`) governam o quanto os gates cobram, e a recusa mora no **PLAN**
+— a única fase com humano na sala.
+
+| | Antes | Depois |
+|---|---|---|
+| Alocadores de id no kit | 0 | 1 (`sdd adr new`, O_EXCL) |
+| Sensores em `tests/run-all.sh` | 14 | 15 |
+| Probes de rastreabilidade | 0 | 55 |
+| Catálogo de mutação | 309 | 317 |
+| Missões do kit com `adr:` declarado | 0 de 16 | 1 de 16 (esta; as 15 anteriores são contadas, não reprovadas) |
+| Vínculo spec → ADR neste repo | 0 | 1, e o sensor reprova se ele apontar para outro lugar |
+
+**Como a regra (d) foi decidida — e por que não pelo caminho fácil.** A especificação dizia que um
+`ADR NNNN` solto sem arquivo reprova em `01-plano.md`. Medido no próprio repo: o `01-plano.md`
+**desta** missão cita `ADR 0042` (nome de um probe) e `ADR 0030` (o ADR do outro repo, o assunto da
+missão). A regra teria deixado o `sdd adr check` vermelho no kit no dia em que nasceu, e o conserto
+teria sido reescrever um artefato **aprovado** até o detector calar. Decisão humana: reprova dentro
+do `SPEC_DIR` (onde o número é reivindicação, porque aquela árvore carrega linhas `**ADR**:`) e
+conta num handoff (onde é narrativa). A segunda metade da regra — "plano co-localizado citando id
+diferente do declarado reprova" — **não** foi implementada, com o porquê no cabeçalho do sensor:
+este plano declara 0008 e cita 0003, 0004 e 0007, todos corretamente.
+
+**Limite declarado, não calado:** `docs/superpowers/{specs,plans}` deste repo **não** é varrido —
+o layout não é `<SPEC_DIR>/<dir>/spec.md`. Está no cabeçalho do `tests/check-adr.sh`, no
+`config/schema.md` e na seção de limites do `docs/pipeline.md`. O namespace local `specs/*/adr/`
+do repo-alvo, idem: unificar ou declarar é decisão daquele repo.
+
+**O que a passada adversarial pagou.** Trinta e poucas sabotagens, e **seis** regras passaram sem
+probe na primeira rodada — todas viraram probe ou limite escrito:
+
+- o ramo de missões do escopo de repo podia virar `:` inteiro (nenhum probe levava missão declarada
+  por ali);
+- `[ -n "$SPEC_DIR" ]` podia virar `true` porque o fixture guardava a spec um nível abaixo do que o
+  fallback alcança — o probe media a **forma do fixture**, não a guarda;
+- a última linha do `adr_check_repo` podia virar `return 0` porque o `cmd_adr` lia `ADR_FAILS` uma
+  **segunda** vez: dois leitores de um fato só ⇒ sabotar um deixa o outro respondendo, e **nenhum**
+  dos dois é pegável;
+- o `hat_expand` **não tinha leitor nenhum** — o planner era o único chapéu a declarar `$ADR_DIR` e
+  o PLAN não passa por `run_phase`. Fechado dando o placeholder também ao `sdd-docs` (que passa) e
+  escrevendo um probe que chama a função direto;
+- três regras do `cmd_run` (one-shot, guarda de `--dry-run`, reset do marcador) sobrevivem a toda
+  sabotagem **hoje**, e o cabeçalho do sensor diz **qual mundo não consegui construir** em cada
+  uma, nunca que o mundo não existe — a distinção que o `CLAUDE.md` já pagou com uma regressão.
+
+**Efeito colateral honesto:** o `check-lang.sh` ganhou uma terceira exceção. A linha `Spec:
+docs/handoffs/<missão>/00-missao.md` do ADR 0008 é **dado** — é a string exata que o `sdd adr check`
+lê de volta, e `docs/handoffs/` está fora do escopo daquele sensor por declaração própria —, mas o
+slug em `OUTPUT_LANG` fazia um ADR inteiro em inglês ser reportado como português. A linha é
+**apagada**, não removida, para o `grep -n` continuar dando o número real, e a exceção tem probe
+diferencial (rc 95) com as duas sabotagens vermelhas.
+
+---
+
 ## 2026-09-12 — A régua D15 aplicada: dez verdades saem do backlog e viram limite declarado
 
 **Problema (Gemba):** o `TODO.md` cresce por acúmulo de **verdades**, não de problemas — 16 itens

@@ -124,11 +124,12 @@ run "entry point cannot fall through into itself" "$ROOT/tests/check-entrypoint.
 # this is what makes the ban a sensor instead of a sentence.
 #
 # The floor moved 12 → 13 when tests/check-entrypoint.sh landed, 13 → 14 for
-# tests/check-checkpoint.sh, and 14 → 15 for tests/check-health.sh. It tracks the real count on
-# purpose: left behind it would still pass, and would go on describing a surface one file smaller
-# than the one it reads — the label-instead-of-artifact shape this whole mission is about.
+# tests/check-checkpoint.sh, 14 → 15 for tests/check-health.sh, 15 → 16 for tests/check-hat.sh
+# and 16 → 17 for tests/check-adr.sh. It tracks the real count on purpose: left behind it would
+# still pass, and would go on describing a surface one file smaller than the one it reads — the
+# label-instead-of-artifact shape this whole mission is about.
 LINT_SEVERITY=warning
-LINT_FLOOR=16
+LINT_FLOOR=17
 
 lint_surface() {
   local files=("$ROOT/bin/sdd") f
@@ -233,6 +234,14 @@ run "sdd health discriminates" "$ROOT/tests/check-health.sh"
 # Cost of letting it in, measured: 0.14 s per run, ~0.6 s of wall clock across the whole pool.
 run "preflight and the install guard" "$ROOT/tests/check-preflight.sh"
 run "every hat declares its boundary" "$ROOT/tests/check-hat.sh"
+
+# Deliberately NOT guarded by SDD_MUTANT, for the reason the two steps above carry: the fifteen
+# `mut_ADR_*`/`mut_PLAN_adr_*`/`mut_EXEC_adr_*`/`mut_RUN_adr_*` entries of the catalogue are caught
+# HERE or nowhere — every assertion in that file drives bin/sdd as a subprocess, which is exactly
+# what a mutant sabotages. Guarded, those entries would score points nothing had measured. It
+# reads only what sandbox() copies: bin/, templates/ and agents/ through `sdd install`, into a
+# fixture of its own under $TMPDIR with its own SDD_STATE_DIR.
+run "adr allocator and link check" "$ROOT/tests/check-adr.sh"
 
 # Sensor of the sensor. TWO conditions, and they answer different questions — collapsing them into
 # one would reopen something the other was holding shut:

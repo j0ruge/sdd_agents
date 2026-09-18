@@ -5,6 +5,7 @@ data: <YYYY-MM-DD>
 versao: <ex.: 0.7.0 — obrigatório quando JIRA_ENABLED=true; confirmado pelo humano no planejamento>
 branch: <nome da branch de trabalho — sdd run/retry faz checkout dela, criando-a da atual se não existir; placeholder entre <> = não troca nada>
 aprovacao: <auto | humano-YYYY-MM-DD>
+adr: <none | TBD | docs/adr/NNNN-slug.md — allocate it with `sdd adr new --slug <s> --spec <este arquivo>`; sob ADR_CHECK=block o gate de PLAN recusa vazio, TBD e este placeholder>
 ddd: <aplicado | n/a>
 ---
 
@@ -43,6 +44,7 @@ sozinho. Qualquer ✗ → `aprovacao` fica vazio e o runner para pedindo aprova�
 | c | Plano passa no teste de autocontenção (sessão nova só com 00/01/checkpoint executa) | <✅/✗> | <como foi testado> |
 | d | Todo incremento do `checkpoint.md` tem Check executável (comando → esperado) | <✅/✗> | <contagem> |
 | e | `versao:` confirmada pelo humano (ou `JIRA_ENABLED=false`) | <✅/✗> | <valor / n/a> |
+| f | `adr:` é uma decisão — um caminho, ou o literal `none` (alocado por `sdd adr new`) | <✅/✗> | <qual ADR, ou por que `none`> |
 
 ## Checklist kaizen (`kaizen-software`)
 

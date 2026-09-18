@@ -59,6 +59,30 @@ surface() {
 # TODO.md and `# TODO`. Measured against a real English markdown file: zero false positives.
 STOPWORDS='falta|sem|para|pelo|pela|quando|onde|nada|este|esta|isso|pois|cada|apenas|ainda|depois|antes|porque|assim|sobre|mesmo|outro|outra|nao|entao'
 
+# The THIRD thing punched out of the scan, and the same argument as the × and the ÷ above: a
+# traceability line is DATA, not prose. `Spec: docs/handoffs/<mission>/00-missao.md` in an ADR is
+# the exact string `sdd adr check` reads back, and `docs/handoffs/` is out of this sensor's scope
+# by the declaration at the top of the allowlist — so the mission slug in it is written in the
+# repo's OUTPUT_LANG on purpose. Measured on 2026-09-17: ADR 0008 of this kit, English throughout,
+# was reported as Portuguese for the word "nao" inside its own Spec: path.
+#
+# The line is BLANKED and not dropped, so grep -n goes on reporting the real line numbers; and the
+# pattern is anchored on the key, so only the contract line loses its content — every other line of
+# the ADR is scanned exactly as before. The tempting wider rule — "ignore anything that looks like a
+# path" — is the fail-open this sensor exists to refuse.
+#
+# TWO halves, and the second is the one that keeps the first honest. Anchoring on the key alone
+# blanked the WHOLE remainder of the line, so `Spec: <any Portuguese sentence>` disappeared before
+# has_portuguese() ever saw it — a strip of every scanned file, one key wide, that the sensor
+# claimed to be reading. It is the fail-open this file exists to refuse, written by the very
+# comment above it. So the exemption fires only when the remainder is ONE path token running to
+# end of line: a slash is required (a bare `TBD` is not a path) and a space is not in the class, so
+# prose never satisfies it. Probed in both directions in selftest() — the path exempted, and a
+# sentence behind the same key still caught.
+ADR_LINK_KEY='^(- )?(\*\*)?(ADR|Spec)(\*\*)?:[[:space:]]*'
+ADR_LINK_PATH='[A-Za-z0-9._-]*(/[A-Za-z0-9._-]+)+[[:space:]]*$'
+ADR_LINK_LINE="${ADR_LINK_KEY}${ADR_LINK_PATH}"
+
 # has_portuguese <file> — prints the offending lines, returns 0 when it found any.
 #
 # Two proxies, because either alone is blind: the accent class misses "falta o handoff", the word
@@ -71,10 +95,11 @@ STOPWORDS='falta|sem|para|pelo|pela|quando|onde|nada|este|esta|isso|pois|cada|ap
 # the tempting move is to reword the doc until the detector goes quiet, which is weakening the
 # content to please a broken instrument.
 has_portuguese() {
-  local f="$1" hits
+  local f="$1" hits body
   [ -f "$f" ] || return 1
-  hits="$( { grep -nP '[\x{00C0}-\x{00D6}\x{00D8}-\x{00F6}\x{00F8}-\x{00FF}]' "$f" || true
-             grep -nwiE "$STOPWORDS" "$f" || true; } | sort -t: -k1,1n -u )"
+  body="$(sed -E "s@${ADR_LINK_LINE}@@" "$f")"
+  hits="$( { grep -nP '[\x{00C0}-\x{00D6}\x{00D8}-\x{00F6}\x{00F8}-\x{00FF}]' <<< "$body" || true
+             grep -nwiE "$STOPWORDS" <<< "$body" || true; } | sort -t: -k1,1n -u )"
   [ -n "$hits" ] || return 1
   printf '%s\n' "$hits"
 }
@@ -96,10 +121,38 @@ selftest() {
   if has_portuguese "$t" >/dev/null; then
     echo "SENSOR-BROKEN: clean English flagged as Portuguese" >&2; exit 92
   fi
+  # The traceability line is data. DIFFERENTIAL, and neither half is the assertion alone: "the
+  # Spec: line is ignored" passes on a sensor that ignores everything, and "prose is still caught"
+  # passes on one that ignores nothing. The two spellings differ by the key in front of the path.
+  printf 'Spec: docs/handoffs/20260917-o-numero-do-adr-nao-e-prosa/00-missao.md\n' > "$t"
+  if has_portuguese "$t" >/dev/null; then
+    echo "SENSOR-BROKEN: a Spec: path read as prose — the mission slug in it is OUTPUT_LANG by design" >&2
+    exit 95
+  fi
+  printf 'See docs/handoffs/20260917-o-numero-do-adr-nao-e-prosa/00-missao.md for the rest.\n' > "$t"
+  if ! has_portuguese "$t" >/dev/null; then
+    echo "SENSOR-BROKEN: the same path in PROSE was not caught — the hole is wider than the key" >&2
+    exit 95
+  fi
+  # The THIRD spelling, and the one that measures the exemption's width rather than its existence.
+  # With the rule anchored on the key alone this sentence was blanked whole and the sensor reported
+  # a clean file: the two probes above both stayed green through it, because neither asks what
+  # happens to a remainder that is NOT a path. Prose behind the key is still prose.
+  printf 'Spec: aqui nao tem caminho nenhum, e apenas uma frase escondida atras da chave\n' > "$t"
+  if ! has_portuguese "$t" >/dev/null; then
+    echo "SENSOR-BROKEN: Portuguese prose behind a Spec: key was blanked — the exemption is not scoped to a path" >&2
+    exit 95
+  fi
+  # And the neighbour that proves the scoping did not simply switch the exemption off: a bare
+  # value with no slash is not a path, so the line is scanned — and a clean one stays clean.
+  printf 'Spec: TBD\n' > "$t"
+  if has_portuguese "$t" >/dev/null; then
+    echo "SENSOR-BROKEN: 'Spec: TBD' read as Portuguese" >&2; exit 92
+  fi
 }
 
 selftest
-echo "  ok    self-test: the sensor detects Portuguese and clears English"
+echo "  ok    self-test: the sensor detects Portuguese, clears English, and reads a traceability line as data"
 
 # Checked before the surface floor below, and not after: the allowlist is itself a surface path,
 # so a missing file trips the floor first and reports "did something move?" — loud, but the wrong
@@ -138,9 +191,11 @@ files="$(surface)"
 # Re-counted against the real surface in I4 of 20260901-o-revisor-so-acha (40 + docs/graphify.md).
 # Re-counted on 2026-09-03 (20260903-a-fronteira-do-chapeu): 41 + tests/check-hat.sh +
 # agents/sdd-ticket.md + its .claude/agents copy = 44; docs/adr/0007 makes it 45 in the same mission.
+# Re-counted on 2026-09-17 (20260917-o-numero-do-adr-nao-e-prosa): tests/check-adr.sh makes it 46,
+# and docs/adr/0008 makes it 47 in the same mission — two hops, two commits, on purpose.
 n_surface="$(grep -c . <<< "$files")"
-if [ "$n_surface" -lt 45 ]; then
-  printf '  FAIL  surface shrank to %d path(s), expected at least 45 — did something move?\n' \
+if [ "$n_surface" -lt 47 ]; then
+  printf '  FAIL  surface shrank to %d path(s), expected at least 47 — did something move?\n' \
     "$n_surface" >&2
   exit 93
 fi

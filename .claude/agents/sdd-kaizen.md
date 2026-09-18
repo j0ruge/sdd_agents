@@ -233,6 +233,14 @@ the runner and the tests grep them:
 
 `JIRA_ENABLED=false` in the kit, so `versao:` empty satisfies PLAN-AUTO criterion (e).
 
+⚠️ **Write `adr: none` in the frontmatter, and satisfy criterion (f) that way.** You have no human
+in the room, and allocating an ADR number is a decision about an architectural trade-off — the one
+thing this loop may never take on somebody's behalf. Under `ADR_CHECK=block` an empty `adr:` or a
+`TBD` would stall the plan you just wrote at the PLAN gate, which no later phase could satisfy:
+the plan would be born unsatisfiable. If the change you are proposing DOES carry a trade-off, say
+so in `01-plano.md` and name the first increment "allocate the ADR with `sdd adr new`" — the human
+who approves the plan is the one who then writes it.
+
 ## 7. Commit everything
 
 The gate requires the artifacts on disk and the tree tells the story: commit the verdict and

@@ -161,6 +161,46 @@ assert_has "the bill counts CLAUDE.md and the rules directory, in files and in b
   "context bill: 2 file(s), $cb_want bytes" "$out_cb"
 rm -rf "$FIX/CLAUDE.md" "$FIX/.claude/rules"
 
+# --- adr traceability: a SENSOR too, and for the same reason ----------------
+# `ok   ` with THREE spaces, not the four a suite sensor prints: this reads the RUNNER's own
+# `ok()`, which is a different function from the `pass()` at the top of this file. Written with
+# four the assertion could never match, and it would have gone on reporting a line that was there.
+#
+# The default is `off` and the fixture never sets the key, so this is the state every repo is in
+# on the day it installs the kit — the one state a preflight must not be red in.
+assert_has "adr traceability is reported under the default off" \
+  "ok   adr check: ADR_CHECK=off, the PLAN and EXEC gates ask nothing" "$out"
+
+# Differential: one config line apart, the SAME repo has to stop saying "asks nothing" and start
+# counting. Asserting only the off line would pass on a preflight that never reads the key; only
+# the warn line, on one that always scans.
+printf 'ADR_CHECK="warn"\n' >> "$FIX/.sdd/config.sh"
+mkdir -p "$FIX/docs/adr" && printf 'loose\n' > "$FIX/docs/adr/not-an-adr.md"
+out_adr="$( "$SDD" preflight 2>&1 )"
+assert_has "under warn it counts the findings instead of refusing the repo" \
+  "adr check: ADR_CHECK=warn, 0 ADR(s) in docs/adr, 1 finding(s)" "$out_adr"
+assert_lacks "and a finding is never a preflight failure — migration debt is not a broken environment" \
+  "fail  adr check" "$out_adr"
+rm -rf "$FIX/docs/adr"
+sed -i '/^ADR_CHECK="warn"$/d' "$FIX/.sdd/config.sh"
+
+# ...and the third state, which is neither: a configuration the GATES refuse. Measured 2026-09-17
+# (Codex review of PR #45): every value other than `off` fell through to the scan, so ADR_CHECK=bogus
+# printed `ok   adr check: ADR_CHECK=bogus, ... no finding` and the command still ended `preflight
+# ok`, while gate_PLAN refused that same value with rc 2. A preflight that certifies a config the
+# pipeline then refuses is not a weaker sensor, it is a wrong one.
+#
+# `fail` and not `warn`, unlike the finding above, and BOTH terms say so: migration debt is a number
+# to count, an unusable config is a door that will not open. Asserting only the `fail` line would
+# pass on a preflight that went red for some unrelated reason.
+printf 'ADR_CHECK="bogus"\n' >> "$FIX/.sdd/config.sh"
+out_bogus="$( "$SDD" preflight 2>&1 )"
+assert_has "an ADR_CHECK the gates refuse fails the preflight instead of being scanned" \
+  "fail  adr check: ADR_CHECK=bogus is not one of off|warn|block" "$out_bogus"
+assert_lacks "...and it never reports a clean scan over a config it cannot use" \
+  "ADR_CHECK=bogus, 0 ADR(s)" "$out_bogus"
+sed -i '/^ADR_CHECK="bogus"$/d' "$FIX/.sdd/config.sh"
+
 # --- the userland is BSD: the probe names all three -------------------------
 echo "== BSD userland (shimmed) =="
 out="$( PATH="$FIX/.bsd:$PATH" "$SDD" preflight 2>&1 )"

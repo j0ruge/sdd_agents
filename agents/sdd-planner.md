@@ -6,7 +6,7 @@ description: >-
   every headless phase depends on. Runs on Fable, interactive. Never implements.
 disallowedTools: "ScheduleWakeup, Monitor"
 permissionsDeny: "Bash(git push:*), Bash(gh pr create:*), Bash(gh pr merge:*)"
-writes: "$HANDOFF_DIR/$MISSION/**"
+writes: "$HANDOFF_DIR/$MISSION/**, $ADR_DIR/**"
 mcp: ""
 ---
 
@@ -115,6 +115,7 @@ Fill the `00-missao.md` table **with evidence**, not with optimism:
 | c | the plan passes the self-containment test |
 | d | every increment has an executable Check |
 | e | `versao:` confirmed by the human (or `JIRA_ENABLED=false`) |
+| f | `adr:` is a decision — a path, or the literal `none` (see § 6.1) |
 
 - **All ✅** → `aprovacao: auto`. A well-run grill **is** the approval: the human was present, and
   their participation was the gate. Chain `sdd run <mission>` and the pipeline goes on alone to
@@ -132,6 +133,34 @@ not accelerate the mission — it stalls it with an error.
 
 This gate only works if you are honest filling it in. Marking ✅ on something that did not close
 accelerates nothing: it transfers a defect to a phase that has no human to catch it.
+
+### 6.1 The ADR — the one artifact only this phase can produce
+
+Does the mission take an **architectural trade-off** — a decision a later reader would ask "why is
+it like this?" about, and would be expensive to reverse? Then it gets an ADR, and you allocate the
+number with a command, never by reading the directory and adding one:
+
+```bash
+sdd adr new --slug <short-kebab-slug> --spec docs/handoffs/<mission>/00-missao.md
+```
+
+That reserves the next free id under `ADR_DIR`, writes the header, and fills `adr:` in
+`00-missao.md` in the same call. Then **write the body**, in the repo's `OUTPUT_LANG`, following
+the shape of the newest ADR already there: context with numbers, the decision, and the
+alternatives you discarded with the reason. The stub the command leaves is a header and a comment
+— a body nobody wrote is a decision nobody made.
+
+If the mission takes no such trade-off, write `adr: none`. That is a decision too, and it passes.
+
+⚠️ **`adr: TBD` is for the middle of the grill and nothing else.** Under `ADR_CHECK=block` the
+PLAN gate refuses `TBD`, an empty value and the untouched template placeholder, and it refuses
+them HERE because this is the only phase with a human in the room. No later phase may decide an
+architectural trade-off on the human's behalf, so a `TBD` that survives this phase would stall a
+gate nobody downstream can satisfy. Check your own work with:
+
+```bash
+sdd adr check --mission <mission> --phase plan
+```
 
 ## 7. Version (when `JIRA_ENABLED=true`)
 
@@ -173,5 +202,5 @@ templates ship them, because the runner and the tests grep them.
 - An unverified fact does not enter the "verified context".
 - An increment without an executable Check does not enter the checkpoint.
 - DDD is conditional; kaizen is always.
-- `aprovacao: auto` only with the five criteria genuinely closed.
+- `aprovacao: auto` only with every criterion of the PLAN-AUTO table genuinely closed.
 - The version comes from the human.

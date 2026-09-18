@@ -3464,6 +3464,142 @@ mut_AUTONOMY_close_key_subsequence() {
   sed -i 's@^       then (\$closerows | map(select(mission_key as \$k | \$printed_missions | any(. == \$k))))$@       then ($closerows | map(select(mission_key as $k | $printed_missions | index($k) != null)))@' "$1"
 }
 
+# --- ADR traceability -------------------------------------------------------------------------
+# The back-link is the half of the pair that tells the RIGHT ADR from any real one: an `adr:`
+# pointing at an existing file is satisfied by EVERY existing file, which is precisely the vault
+# note that started this mission — the number was real and belonged to another decision. Blind,
+# `sdd adr check` certifies a mission wired to somebody else's ADR.
+mut_ADR_backlink_blind() {
+  sed -i '/^adr_check_link() {/,/^}/ s@if \[ "$ADR_LINK_VALUE" != "$rel" \]; then@if false; then@' "$1"
+}
+
+# The id is read from the FILE NAME and never from the title, because the two dialects on disk
+# disagree about the title and agree about the name. With the pattern gone, `adr: docs/adr/notes.md`
+# reads as a legal ADR and the number the whole mechanism exists to allocate stops being required.
+mut_ADR_number_mismatch_blind() {
+  sed -i '/^adr_check_link() {/,/^}/ s@if ! grep -qE "$ADR_FILE_RE" <<< "$base"; then@if false; then@' "$1"
+}
+
+# A bare `ADR NNNN` inside a SpecKit spec is a CLAIM — that tree carries `**ADR**:` lines, so a
+# spec citing a number asserts that number is the decision behind it. Blind, the check certifies a
+# spec built on an ADR that does not exist, which is the vault note of 2026-08-25 with the file
+# missing instead of taken. The same citation in a handoff stays a COUNT, and the probe pair that
+# holds the asymmetry is differential — whichever side drifts turns red.
+mut_ADR_bare_number_blind() {
+  sed -i '/^adr_check_repo() {/,/^}/ s@ADR \[0-9\]{4}@ADR NEVER@g' "$1"
+}
+
+# `set -C` is O_EXCL, and it is the one line in this whole family that MAKES a state instead of
+# reporting on one: create-and-truncate as a single syscall, so two writers racing for the same
+# number get one file and one error rather than two files and a silent overwrite. Without it
+# `sdd adr new` truncates whatever already carries the path it picked — an accepted decision
+# replaced by an empty stub, and no gate anywhere reads the bytes of an ADR.
+mut_ADR_alloc_no_excl() {
+  sed -i '/^adr_reserve() {/,/^}/ s@( set -C; : > "$1" )@( : ; : > "$1" )@' "$1"
+}
+
+# PLAN is the ONE phase that can refuse an undecided `adr:`, because it is the one phase with a
+# human in the room. Blind, `block` is a config key that reads as set and asks nothing — the label
+# without the artifact behind it, which is what principle 1 of CLAUDE.md forbids.
+mut_PLAN_adr_check_ignored() {
+  sed -i '/^gate_PLAN() {/,/^}/ s@^  adr_gate_verdict plan || return 1$@  :@' "$1"
+}
+
+# `TBD` and `none` are NOT the same state: `none` is a decision written down, `TBD` is the absence
+# of one. Collapsed, every mission the planner left mid-grill walks past the gate that exists to
+# catch exactly that — and the untouched template placeholder walks past with it.
+# The anchor is the case ARM of adr_check_mission, which reads in bin/sdd exactly as:
+#     TBD|\<*)
+# — a literal `TBD`, the alternation bar, a backslash-escaped `<` and a `*`, closing paren. Every
+# other mutant in this block anchors on ordinary code; this one cannot, so the fragment is written
+# out here. Reformat that arm and the anchor stops matching — loudly, through the `cmp` guard in
+# run_mutant, never silently, but the reader still needs to know what to preserve.
+mut_PLAN_adr_tbd_accepted() {
+  sed -i '/^adr_check_mission() {/,/^}/ s@^    TBD|\\<\*)$@    never-matches)@' "$1"
+}
+
+# EXEC asks the one thing PLAN cannot: the ADR was on disk when the human approved the plan and is
+# not on disk now. Blind, an ADR deleted or renamed after approval leaves the pipeline running
+# against a decision that no longer exists, and nothing anywhere reads it again.
+mut_EXEC_adr_drift_blind() {
+  sed -i '/^gate_EXEC() {/,/^}/ s@^  adr_gate_verdict exec || return 1$@  :@' "$1"
+}
+
+# `warn` that says nothing is `off` with a config key that reads as set — the label without the
+# artifact, which principle 1 of CLAUDE.md refuses. The row is the only thing that makes a repo's
+# migration countable: without it, "we are on warn and it is quiet" and "we are on warn and nobody
+# is looking" are the same sentence.
+mut_RUN_adr_warn_silent() {
+  sed -i '/^cmd_run() {/,/^}/ s@^        autonomy_degraded_row "adr-check" "EXEC" "$GATE_ADR_WARN_WHY"$@        :@' "$1"
+}
+
+# adr_declare picks the dialect from what is on DISK and adr_spec_link is the reader of the same
+# rule. Blind to the frontmatter half, `sdd adr new --spec` writes `adr:` into a spec.md, says "now
+# declares it", and the scan counts that very file under "carry no ADR line" — the two-way check
+# never runs, and it comes out as an `info` instead of a FAIL. Measured 2026-09-17, which is why
+# the probe that catches this is the FAILING half of the pair and not the count.
+mut_ADR_spec_dialect_blind() {
+  sed -i '/^adr_spec_link() {/,/^}/ s@^  if \[ "$(head -n 1 "$f" 2>/dev/null)" = '"'"'---'"'"' \] && frontmatter_has "$f" adr; then$@  if false; then@' "$1"
+}
+
+# The two counters are the migration instrument: `adr: none` is a decision ADR_CHECK=block ACCEPTS
+# and absent/empty/TBD is what it REFUSES. Lumped back into one number, `sdd adr check` answers a
+# question the gate does not ask — rc 0 and "counted and not failed" over a corpus the PLAN gate
+# sends back to PLAN, which is how this kit flipped its own key and nothing said so.
+mut_ADR_undecided_lumped() {
+  sed -i '/^adr_check_repo() {/,/^}/ s@^        none) n_none=$((n_none + 1)); continue ;;$@        none) n_undecided=$((n_undecided + 1)); continue ;;@' "$1"
+}
+
+# `--phase` is read by adr_check_mission alone. Accepted and discarded, `sdd adr check --phase plan`
+# prints a whole-repo report that reads as an answer about a phase — a flag that does nothing is the
+# one nobody notices, and the rc it returns is shared with a real violation.
+mut_ADR_phase_scope_ignored() {
+  sed -i 's@^      \[ -z "$phase" \] || \[ -n "$mission" \] \\$@      [ -z "$phase" ] || [ -n "$phase" ] \\@' "$1"
+}
+
+# --- ADR: the four the Codex review of PR #45 found -------------------------------------------
+# ADR_DIR builds a hat's `writes:` glob, so it decides where a session may write. Back to a LIST of
+# refused values, `../escaped` is accepted and the allocator writes above REPO_ROOT, past
+# hat_guard_check — the guard that named only `/` while the property was "stays inside the repo".
+mut_ADR_dir_escapes_repo() {
+  sed -i "/^adr_dir_ok() {/,/^}/ s@^      ''|\.|\.\.) return 1 ;;\$@      '') return 1 ;;@" "$1"
+}
+
+# An id is unique inside the namespace that allocates it. Checking only the basename, a link to
+# `elsewhere/0001-x.md` satisfies both directions while the scan counts zero ADRs in ADR_DIR — and
+# the next allocation mints a second 0001. This mission's own Gemba, inside the mechanism.
+mut_ADR_link_outside_namespace() {
+  sed -i '/^adr_check_link() {/,/^}/ s@^  if \[ "$dir" != "${ADR_DIR%/}" \]; then$@  if false; then@' "$1"
+}
+
+# The reservation is the only irreversible step and it runs first, so a failed declaration has to
+# undo it. Without the rollback the ADR stays on disk pointing one way and the retry advances the
+# id — every attempt burning a number adr_next_id will never hand out again.
+mut_ADR_no_rollback_on_declare_fail() {
+  sed -i '/^adr_new() {/,/^}/ s@^    rm -f "$path"$@    :@' "$1"
+}
+
+# The preflight exists to answer "will the phases run here?" before a session is paid for. Reading
+# $ADR_CHECK raw instead of through the shared validator, it certifies `ADR_CHECK=bogus` with
+# `no finding` and ends `preflight ok`, while gate_PLAN refuses the same value with rc 2.
+mut_ADR_preflight_skips_validation() {
+  sed -i '/^cmd_preflight() {/,/^}/ s@^  adr_mode >/dev/null 2>&1 || adr_rc=$?$@  adr_rc=0@' "$1"
+}
+
+# ADR_DIR goes into `$ADR_DIR/**` and hat_path_allowed reads that as a shell GLOB. Without the
+# character allowlist, `ADR_DIR=*` builds `*/**` and widens a hat's write scope to most of the
+# repo — and hat_guard_check, reading the same matcher, never notices. CWE-863.
+mut_ADR_dir_glob_chars() {
+  sed -i '/^adr_dir_ok() {/,/^}/ s@^      \*\[!A-Za-z0-9._-\]\*) return 1 ;;$@      @' "$1"
+}
+
+# The spelling and the filesystem are different questions. Without the physical containment check,
+# a symlinked component of ADR_DIR puts the allocator outside REPO_ROOT while every lexical test
+# passes — `ok docs/adr/0001-….md reserved`, bytes somewhere else entirely.
+mut_ADR_dir_symlink_escape() {
+  sed -i '/^adr_new() {/,/^}/ s@^  adr_dir_contained "$root" "${ADR_DIR%/}" \\$@  true \\@' "$1"
+}
+
 CATALOG=(
   AUTONOMY_meta_ignores_event
   AUTONOMY_mission_drops_close_money
@@ -3774,6 +3910,23 @@ CATALOG=(
   RUN_journal_write_stops_the_line
   RUN_journal_raw_redirection_error
   RUN_ledger_raw_redirection_error
+  ADR_backlink_blind
+  ADR_spec_dialect_blind
+  ADR_undecided_lumped
+  ADR_phase_scope_ignored
+  ADR_dir_escapes_repo
+  ADR_link_outside_namespace
+  ADR_no_rollback_on_declare_fail
+  ADR_preflight_skips_validation
+  ADR_dir_glob_chars
+  ADR_dir_symlink_escape
+  ADR_number_mismatch_blind
+  ADR_bare_number_blind
+  ADR_alloc_no_excl
+  PLAN_adr_check_ignored
+  PLAN_adr_tbd_accepted
+  EXEC_adr_drift_blind
+  RUN_adr_warn_silent
 )
 
 # Mutations that are NOT caught today, each with the increment that closes it. Ratchet in both

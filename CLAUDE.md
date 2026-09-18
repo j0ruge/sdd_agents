@@ -258,12 +258,14 @@ regras estão em `templates/checkpoint.md`, com o porquê medido, e quem as cobr
 `tests/check-checkpoint.sh`.
 
 A suíte é `tests/run-all.sh` — é ela o `TEST_CMD` deste repo, e é ela que os gates rodam. Sensor
-novo entra lá. Os catorze de hoje: `check-templates.sh`, `check-gates.sh`, `check-dry-run.sh`,
+novo entra lá. Os quinze de hoje: `check-templates.sh`, `check-gates.sh`, `check-dry-run.sh`,
 `check-mutation.sh`, `check-lang.sh`, `check-autonomy.sh`, `check-kaizen.sh`, `check-preflight.sh`,
 `check-todo.sh`, `check-pipefail.sh`, `check-entrypoint.sh`, `check-checkpoint.sh`,
-`check-health.sh` e `check-hat.sh`.
+`check-health.sh`, `check-hat.sh` e `check-adr.sh`.
+⚠️ O número sai do comando e nunca desta linha — `ls tests/check-*.sh | wc -l` —, pela mesma
+régua do `44 caught of 44`: a lista envelheceu duas vezes seguidas aqui, uma por sensor.
 
-⚠️ **Treze dos catorze rodam no `TEST_CMD`; o `check-mutation.sh` é opt-in desde `4c86712`.** Ele
+⚠️ **Quatorze dos quinze rodam no `TEST_CMD`; o `check-mutation.sh` é opt-in desde `4c86712`.** Ele
 verifica CADA mutante rodando a suíte inteira numa sandbox, e isso segurava a árvore por mais de
 dez minutos por gate — até tornar uma FASE insatisfazível: três sessões de REVIEW seguidas
 encerraram o turno com as palavras *"waiting for the suite"*, e em `claude -p` encerrar o turno é
@@ -284,6 +286,15 @@ código**. `CLAUDE.md`, `CONTEXT.md`, `docs/` e `TODO.md` não invalidam — mas
 `tests/health-baseline.txt` invalida, e é lá que a catraca do backlog mora, então registrar achado
 (princípio 5) mata o carimbo. A colisão está no `TODO.md`; o sintoma e a saída, em
 [`docs/failure-modes.md`](docs/failure-modes.md).
+⚠️ **"Depois do último commit de código" inclui os consertos que a REVISÃO ainda vai pedir.** Os
+bots de PR (Codex, CodeRabbit, Copilot) só rodam **depois** que o PR existe, então abrir o PR é o
+que os começa, não o que termina o trabalho — e carimbar com revisão em voo é carimbar um rascunho.
+Medido no PR #45 deste kit: **três corridas de ~22 min** onde uma bastava, porque cada rodada de
+achados mexeu em `bin/`. A ordem que economiza a hora é a mesma que mantém conteúdo não medido fora
+da `main`: abrir o PR, esperar **todos** os revisores, consertar numa leva, carimbar **uma vez**,
+mergear. Rodada que só mexe em prosa não custa carimbo — confira com o `md5sum` dos quatro
+diretórios antes de rodar o comando, em vez de re-rodar por desconfiança. Fluxo completo no verbete
+"`sdd health` ran three times for one branch" de [`docs/failure-modes.md`](docs/failure-modes.md).
 
 `sdd preflight`, `bash -n bin/sdd` e os dry-runs completam, mas não substituem. O passo de lint do
 `run-all.sh` cobre `bin/sdd` **e** `tests/*.sh` — deixar a suíte fora do linter foi o que segurou
@@ -318,11 +329,13 @@ conhecida e exigir que ela a diga. O `REVIEW_FLOOR=23` continua lá, agora como 
 álibi. Sensor sem auto-teste que declara o buraco é dívida; sensor sem auto-teste que jura estar
 coberto é o fail-open que esta seção inteira existe para impedir.
 ⚠️ A rubrica é "a mutação não alcança", **não** "tem `selftest()`": `grep -l '^selftest()' tests/*`
-hoje devolve **sete** — os seis acima mais o `check-entrypoint.sh`, que carrega um por escolha
-própria (o catálogo o alcança via `mut_RUN_entrypoint_unguarded`, mas o parser dele é fino demais
-para depender só disso). Sensor a mais com auto-teste nunca é o defeito; sensor **sem** ele, estando
+hoje devolve **oito** — os seis acima mais o `check-entrypoint.sh` e o `check-adr.sh`, que carregam
+um por escolha própria (o catálogo alcança os dois — `mut_RUN_entrypoint_unguarded` num,
+os quinze `mut_*ADR*` no outro —, mas o parser do primeiro é fino demais para depender só disso e o
+segundo quis o **controle negativo**: rodar a primitiva de asserção contra um mundo de resposta
+conhecida). Sensor a mais com auto-teste nunca é o defeito; sensor **sem** ele, estando
 nas duas situações, é.
-⚠️ A âncora `^selftest()` **é** o instrumento; `selftest` solto responde **nove**, somando o
+⚠️ A âncora `^selftest()` **é** o instrumento; `selftest` solto responde **dez**, somando o
 `jobs_selftest()` do escalonador (`tests/check-mutation.sh:63`), que mede o pool de jobs e não
 regra de sensor nenhuma, e o `tests/run-all.sh`, que só os invoca. Número em rubrica sem o
 comando ao lado é a mesma classe do
