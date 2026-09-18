@@ -505,6 +505,43 @@ the repo, which is a decision about the project and not about this mission.
 
 ---
 
+## The session died and the gate took the blame
+
+**Symptom:** `BLOCKED in <PHASE> — the <PHASE> session died: <a sentence from the harness>`, rc 3,
+and a `kind: "session-died"` row in the ledger. One session was bought, not two.
+
+**What it means:** the harness said why the session ended, and it was not the agent's doing — an
+expired credential, a revoked token, a quota, a machine. The runner reads that sentence off the
+same distilled `result` object it takes `cost_usd` and `turns` from, publishes it as
+`session_error` on the session row, and stops **before** buying the retry.
+
+**Why it stops instead of carrying on.** Measured on 2026-09-16 in `sales_quote`, before this
+existed. An expired OAuth token killed a QA session after 35 turns and US$ 4,56. The runner said
+`warn claude exited 1` — one line among dozens — the gate then refused for a reason entirely its
+own (five open bugs in the registry), the runner bought a blind retry that died in one turn for
+US$ 0, and the run ended `two sessions without moving the disk` with `kind: no-progress`. That
+kind is what this pipeline calls pure friction and what D12/D16 read as the kit spinning, so an
+expired credential was charged to the kit in the judge's own instrument. The operator, reading
+the gate's refusal as the last word on the screen, spent the afternoon closing the five bugs.
+
+**What you do:** fix what the sentence names, then `sdd run <mission>` again. Nothing on disk is
+damaged and nothing needs undoing — the phase is derived from the artifacts, so the run resumes
+where it stopped. For an expired login that is `claude` in your own terminal, not in the
+pipeline.
+
+**What it never does is fire on doubt.** Only a session whose summary carries `is_error: true`
+**and** a non-empty `result` string escalates. A session that died with no cause (6 of the 11
+errored sessions measured across the four target repos on 2026-09-18) behaves exactly as it
+always did — `session_error` is `null` and the ordinary retry is still bought. So is the budget
+ceiling (`error_max_budget_usd`, `result: null`), which is the kit's **designed** loop and must
+never stop the line.
+
+**Two doors, and the limit is declared.** The first pass and the inline retry, both in `cmd_run`'s
+loop. `sdd retry` is the human's hand already on the phase and ends on `retry-gate-red` instead;
+`sdd close` does not go through `run_phase`, so nothing arms the marker there.
+
+---
+
 ## The runner published a draft PR by itself
 
 **Symptom:** the mission ends with a **draft** PR and a review that never reached Grade A.
