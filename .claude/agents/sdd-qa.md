@@ -117,21 +117,35 @@ In the `docs/qa/` tree these appear as `Blocked (needs human verify)` or
 
 ### 5.1 Marking the genre — the one line of a bug file that is yours
 
-`- **Closable by:** agent <!-- agent | human -->` is the verdict of §§ 4 and 5 written where the
-gate can read it. Marking it is a duty, not an option.
+`- **Closable by:** agent <!-- agent | human | deferred -->` is the verdict of §§ 4 and 5 written
+where the gate can read it. Marking it is a duty, not an option.
 
 - **`agent`** — a clear technical cause, and the `F<n>` cycle closes on it. Keeps blocking, on
   purpose. It is the default, and what an untriaged file already carries.
 - **`human`** — only when your handoff's "Decisions for a Human" names what the fix waits on,
   cited as `file:line` (or the policy, the person, the external system). "Could not reproduce" and
   "looks intentional" are not provenance. If you cannot name it, the genre is `agent`.
+- **`deferred`** — a bug an agent CAN close that a human has DECIDED another mission will pay
+  for. Only with the decision written in the bug's own body (a `## Decision` / `## Decisao`
+  section carrying the date and who decided) and cited in your handoff. *"We are not doing this
+  now"* without a recorded decision is `agent`, not this. It does not block, and unlike `human` it
+  is **named in the gate's reason on every evaluation** — that visibility is the whole reason the
+  value exists, and it is what keeps deferred debt from ageing out of sight.
 - **absent** — blocks, by design: every bug file written before the field existed lacks it, and a
   permissive default would switch Anchor 3 off for a whole legacy registry in one step.
 
+The line between `human` and `deferred` is *who can*, versus *who pays*. `human` means no agent in
+this pipeline **can** close it — the fix waits on a policy, a person, an external system.
+`deferred` means an agent can, and this mission **will not**. Before the third value existed the
+second was the only one that did not block, so it became the hiding place for the first: measured
+on SQ-129, where four decided bugs were marked `human`, a footer convention was invented to
+remember to change them back, and the change back became a manual increment of the next mission.
+
 Write the value **right after the field name**, before the enum legend —
-`- **Closable by:** human <!-- agent | human -->`. The gate anchors on
-`^- **Closable by:** human` and nothing looser, because the legend carries the word `human` in
-every bug file on disk and a `.*human` spelling would fail open across the whole registry. A value
+`- **Closable by:** human <!-- agent | human | deferred -->`. The gate anchors on
+`^- **Closable by:** human` (and `^- **Closable by:** deferred`) and nothing looser, because the
+legend carries every value's name in every bug file on disk and a `.*human` spelling would fail
+open across the whole registry. A value
 parked after the comment reads as absent, which blocks: safe, but it costs the lap you were
 trying to save. Same trap as the `**Status:**` anchor that cost US$ 15 a round in the SQ-97 pilot.
 
@@ -140,13 +154,15 @@ inside a fenced block — so quoting the line in a repro, a diff or an example d
 bug's genre, on either side of the real field. What it cannot see through is an **unfenced** quote
 sitting above the field: fence your examples, which is what the block above already does.
 
-The value is **lowercase**, and the match is case-sensitive: `Human` and `HUMAN` read as absent
-and block. That is the safe direction, but it is a silent one — the gate says the bug is open, not
+The value is **lowercase**, and the match is case-sensitive: `Human`, `HUMAN` and `Deferred` read
+as absent and block. It is also the **whole word**: `humano` — the pt-BR spelling — and
+`deferredly` read as absent too. That is the safe direction, but it is a silent one — the gate says the bug is open, not
 that its genre is misspelt — and the silence is the whole reason this sentence exists. Write it
 exactly as the enum legend spells it.
 
-⚠️ **This is not licence to touch `Status:`.** `human` says *"no agent in this pipeline can close
-this"* — never that it is closed. The bug stays `open`, stays in the registry, and stays in the PR
+⚠️ **This is not licence to touch `Status:`, and `deferred` is no exception.** `human` says *"no
+agent in this pipeline can close this"* and `deferred` says *"not in this mission"* — never that
+it is closed. The bug stays `open`, stays in the registry, and stays in the PR
 as a decision somebody has to make. The status enum is still the skills', and the rule at the
 bottom of this file is unchanged: this one field is a complement, not a rewrite.
 

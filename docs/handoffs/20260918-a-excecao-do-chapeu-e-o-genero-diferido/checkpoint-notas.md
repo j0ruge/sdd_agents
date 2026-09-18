@@ -73,3 +73,11 @@
   CONTÉM `|` — o sed morria e não mudava nada. Pego pelo arnês que exige `diff` não-vazio antes de
   concluir; os três mutantes estão provados um a um (`diff` 2 linhas, `bash -n` ok, a asserção
   esperada vermelha).
+- I3 — RED observado (`deferred` bloqueava e carregava o marcador de recusa). O `deferred` ganhou
+  um `grep` PRÓPRIO em vez de a linha do `human` virar `(human|deferred)`: (a) só um ramo próprio
+  pode NOMEAR o bug, e (b) mover a linha do `human` apodreceria as âncoras de
+  `QA_bug_genre_{ignored,prefix}`. Verificado depois da mudança — as quatro âncoras antigas ainda
+  casam 1, 1, 2 e 1 vez, e as seis mutações matam a asserção certa.
+  ⚠️ Dívida DECLARADA no comentário do gate: a forma do campo está escrita duas vezes, a três
+  linhas de distância. É a regex que duplica, nunca a decisão — o enum é decidido nesse único laço
+  — e o ramo novo ganhou mutante próprio (`QA_bug_genre_deferred_prefix`) em vez de pegar carona.

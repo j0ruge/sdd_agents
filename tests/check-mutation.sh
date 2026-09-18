@@ -283,6 +283,24 @@ mut_QA_bug_genre_fenced() {
   sed -i 's|{ fenced = !fenced; next }|{ next }|' "$1"
 }
 
+# The THIRD genre, and TWO mutants because its two halves fail open independently of each other
+# and of the human arm's. ADR 0009 amends 0006: `deferred` is a bug a human has decided and that
+# another mission will pay for — it skips the count like `human` and, unlike `human`, gets NAMED
+# in the reason, which is the visibility 0006 asked for when it refused to narrow this anchor.
+#
+# Same anchoring discipline as the four above. The deferred grep is the only line ending in bare
+# `then` (the human one ends `then continue; fi`), so QA_bug_genre_ignored's anchor and this one
+# do not collide — measured, one match each.
+mut_QA_bug_genre_deferred_blocks() {   # the third genre goes: a decided bug blocks the gate again
+  sed -i 's|^    if grep -qE .*Closable by.*deferred.*then$|    if false; then|' "$1"
+}
+# The right-hand boundary of the deferred arm goes, the way QA_bug_genre_prefix takes the human
+# arm's. `@` and not `|` as the delimiter, for that mutant's reason: the text being matched IS an
+# alternation.
+mut_QA_bug_genre_deferred_prefix() {
+  sed -i 's@deferred(\[\[:space:\]\]|\$)@deferred@' "$1"
+}
+
 # Historical bug 3 (SQ-97 pilot, ~US$ 10): the parser exited only at `###`, kept swallowing the
 # report's following tables and failed an all-Grade-A review for finding a `Commit` column.
 # The probe is never called: the gate falls back to the ONE sentence every red e2e used to get,
@@ -3724,6 +3742,8 @@ CATALOG=(
   QA_bug_genre_prefix
   QA_bug_genre_anywhere
   QA_bug_genre_fenced
+  QA_bug_genre_deferred_blocks
+  QA_bug_genre_deferred_prefix
   QA_e2e_red_never_probed
   QA_app_down_on_unknown
   QA_probe_ignores_e2e_rc

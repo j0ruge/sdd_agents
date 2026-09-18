@@ -1099,7 +1099,7 @@ gate_QA() {
   # the lesson check-todo.sh paid for when its parser did not know it was inside an item's code
   # block. `[*][*]` and not `\*\*`: mawk's handling of an escaped literal inside a regex is not
   # worth relying on when a bracket expression says the same thing unambiguously.
-  local openbugs=0 bugfile genre_line
+  local openbugs=0 deferred=0 deferred_names="" bugfile genre_line bugname
   while IFS= read -r bugfile; do
     [ -n "$bugfile" ] || continue
     genre_line="$(awk '
@@ -1107,6 +1107,26 @@ gate_QA() {
       fenced { next }
       /^-[[:space:]]+[*][*]Closable by:[*][*]/ { print; exit }
     ' "$bugfile" || true)"
+    # `deferred` is tested FIRST and by a grep of its own rather than by widening the line below to
+    # `(human|deferred)`, and both halves of that are deliberate. Its own grep, because this branch
+    # has to NAME the bug and an alternation cannot say which arm matched. Tested first, because
+    # the order is what lets the human line below keep the exact text four mutants of
+    # check-mutation.sh are anchored on — a fix that MOVES a line a mutant anchors is how the
+    # catalogue starts reporting a protection nobody measured (measured, r1 of PR #46).
+    #
+    # ⚠️ DECLARED: the field's shape is spelt TWICE, three lines apart, and the two must move
+    # together. It is the regex that is duplicated, never the decision — the enum (`deferred`,
+    # `human`, everything else blocks) is decided in this one loop. The right-hand boundary of the
+    # human arm has a mutant (QA_bug_genre_prefix); the deferred arm got one of its own
+    # (QA_bug_genre_deferred_prefix) rather than riding it, because they fail open independently.
+    if grep -qE '^\-[[:space:]]+\*\*Closable by:\*\*[[:space:]]+deferred([[:space:]]|$)' <<< "$genre_line"; then
+      deferred=$((deferred + 1))
+      bugname="${bugfile##*/}"
+      # Parameter expansion and never `$(basename …)`: this runs once per open bug, and the loop is
+      # read by `sdd status` on every evaluation of the phase.
+      deferred_names="${deferred_names:+$deferred_names, }${bugname%.md}"
+      continue
+    fi
     if grep -qE '^\-[[:space:]]+\*\*Closable by:\*\*[[:space:]]+human([[:space:]]|$)' <<< "$genre_line"; then continue; fi
     openbugs=$((openbugs + 1))
   done <<< "$( { grep -rlE '^\-[[:space:]]+\*\*Status:\*\*[[:space:]]+open' \
@@ -1120,7 +1140,7 @@ gate_QA() {
     # one case this anchor was rewritten for, so the reason says how a bug leaves by the other
     # door. The substring `with Status: open in the registry` is load-bearing: two assertions in
     # check-gates.sh read it (:486 and the genre differential at :535).
-    GATE_WHY="$openbugs bug(s) with Status: open in the registry that an agent could close (an unmarked genre counts) — they become fix increments (QA⇄EXEC loop); one that needs a human decision is marked 'Closable by: human' instead (agents/sdd-qa.md § 5.1)"
+    GATE_WHY="$openbugs bug(s) with Status: open in the registry that an agent could close (an unmarked genre counts) — they become fix increments (QA⇄EXEC loop); one that needs a human decision is marked 'Closable by: human' instead, and one a human has already decided and another mission will pay for is 'Closable by: deferred' (agents/sdd-qa.md § 5.1)"
     return 1
   fi
   if ! run_check_cmd "$TEST_CMD" "gate-qa-test"; then
@@ -1163,7 +1183,14 @@ gate_QA() {
     return 1
   fi
   if [ -n "${report:-}" ]; then
+    # The deferred ones are NAMED on every evaluation, and that is the whole answer to the
+    # objection ADR 0006 raised against narrowing this anchor: debt that stops blocking must not
+    # stop being SEEN. `human` passes silently because nobody in this pipeline can act on it;
+    # `deferred` passes loudly because somebody will, in a mission that has not opened yet.
     GATE_WHY="report $(basename "$report") closed, registry clean, suites green"
+    if [ "$deferred" -gt 0 ]; then
+      GATE_WHY="$GATE_WHY; $deferred deferred (visible, not blocking): $deferred_names"
+    fi
   else
     GATE_WHY="journey walked without a browser interface (evidence in the handoff), suite green"
   fi

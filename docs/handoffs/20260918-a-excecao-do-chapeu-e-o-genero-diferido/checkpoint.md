@@ -33,7 +33,7 @@ atualizado: 2026-09-18 00:00
 |---|---|---|---|---|
 | I0 | A missão existe para o kit: diretório, branch, ADR 0009 alocado por `sdd adr new` | `./bin/sdd adr check --mission 20260918-a-excecao-do-chapeu-e-o-genero-diferido; echo rc=$?` → `rc=0` | done | `79dd4df` |
 | I1 | `HAT_WRITES_EXTRA` no `load_config` + `hat_extra_path_ok` + soma em `hat_writes` + schema/starter | `o=$(bash tests/check-gates.sh 2>&1); grep -c '^  ok    HAT_WRITES_EXTRA with ../ is refused' <<< "$o"` → `1` | done | `350688a` |
-| I2 | Par diferencial da fronteira no `check-autonomy.sh`, remédio na mensagem, 3 mutantes | `o=$(bash tests/check-autonomy.sh 2>&1); grep -c '^  ok    HAT_WRITES_EXTRA lets the declared path through' <<< "$o"` → `1` | pending | — |
+| I2 | Par diferencial da fronteira no `check-autonomy.sh`, remédio na mensagem, 3 mutantes | `o=$(bash tests/check-autonomy.sh 2>&1); grep -c '^  ok    HAT_WRITES_EXTRA lets the declared path through' <<< "$o"` → `1` | done | `a09994a` |
 | I3 | `deferred` na Âncora 3, nomes no `GATE_WHY` de sucesso, 4 regimes, `sdd-qa` § 5.1, 1 mutante | `o=$(bash tests/check-gates.sh 2>&1); grep -c '^  ok    deferred passes and the reason names the bug' <<< "$o"` → `1` | pending | — |
 | I4 | `sdd install` semeia `Closable by:`; `sdd preflight` cobra; 3 regimes, 2 mutantes | `o=$(bash tests/check-preflight.sh 2>&1); grep -c '^  ok    install --force seeds Closable by: below Status:' <<< "$o"` → `1` | pending | — |
 | I5 | ADR 0009, `Amended by: 0009` na 0006, D26, pipeline, failure-modes, rule § 6 | `grep -c 'Amended by: 0009' docs/adr/0006-*.md` → `1` | pending | — |

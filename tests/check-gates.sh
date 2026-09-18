@@ -719,6 +719,65 @@ genre_indented="$( cd "$FIX" && "$SDD" phase "$MISSION" 2>&1 )"
 assert_eq "the field starts at column zero: an indented quote does not become the genre" \
   "REVIEW|QA" "$genre_exact|$genre_indented"
 
+# --- the THIRD genre: `deferred`, visible and not blocking -------------------------------------
+# Two values forced two different questions into one answer. ADR 0006 modelled "who CAN close" —
+# agent or human — and on SQ-129 the question was "who PAYS": a human decided four bugs (383df146,
+# a `## Decisao` section in each body) that an agent CAN close and that mission would not pay for.
+# Neither value fitted. `agent` put all four back in front of the gate of a mission in flight;
+# `human` is the value that never blocks, so it became the hiding place — and the swap back turned
+# into a manual increment of the next mission. ADR 0009 amends 0006 with the third answer.
+#
+# The objection 0006 raised against narrowing this anchor was that debt "ages out of sight". The
+# answer here is VISIBILITY, not silence: `deferred` skips the count exactly as `human` does, and
+# the reason NAMES every deferred bug on every evaluation.
+write_genre_bug '- **Closable by:** deferred <!-- agent | human | deferred -->'
+genre_phase_deferred="$( cd "$FIX" && "$SDD" phase "$MISSION" 2>&1 )"
+genre_why_deferred="$(   cd "$FIX" && "$SDD" why "$MISSION" QA 2>&1 )"
+
+# ⭐ DIFFERENTIAL against `human`, on one word of one line, and the two terms are what make it
+# mean anything. SAME verdict — deferred does not block, which is the whole point — and a
+# DIFFERENT reason, because a value that behaved exactly like `human` would be `human` with extra
+# steps, and the debt would age out of sight just as ADR 0006 warned. The name of the bug is the
+# difference: it appears in the deferred reason and in no other regime.
+assert_eq "deferred passes and the reason names the bug, where human passes silently" \
+  "REVIEW|REVIEW|named:1|human-named:0" \
+  "$genre_phase_human|$genre_phase_deferred|named:$( grep -cF 'BUG-20260102-genre' <<< "$genre_why_deferred" )|human-named:$( grep -cF 'BUG-20260102-genre' <<< "$genre_why_human" )"
+# ...and it is not the BLOCKING reason wearing a new coat: the marker two assertions above read
+# (`with Status: open in the registry`) must be absent, or "deferred passes" would be satisfied by
+# a gate that failed and said so politely.
+assert_eq "the deferred reason is the passing one, not the blocking one reworded" "0" \
+  "$( grep -cF 'with Status: open in the registry' <<< "$genre_why_deferred" )"
+
+# The three blindages are INHERITED, not re-granted — the extractor did not change and the matcher
+# gained one alternative. Inherited is a claim, though, and this file's rule is that a claim about
+# behaviour is written as an assertion. Each of the three fail-opens the anchor already paid for,
+# re-run with the NEW value; `$genre_exact` stays the passing control so a gate that blocked
+# everything takes it red instead of passing these quietly.
+write_genre_bug '- **Closable by:** deferredly <!-- agent | human | deferred -->'
+genre_deferred_prefix="$( cd "$FIX" && "$SDD" phase "$MISSION" 2>&1 )"
+assert_eq "deferred is the whole word too: the near-miss 'deferredly' still blocks" \
+  "REVIEW|QA" "$genre_exact|$genre_deferred_prefix"
+{ printf '# BUG-20260102-genre: filed about the deferred genre, repro fenced\n'
+  printf -- '- **Status:** open <!-- open | fixed | verified | wont-fix | invalid -->\n'
+  printf -- '- **Closable by:** agent <!-- agent | human | deferred -->\n'
+  printf '\nThe line this bug is about reads:\n\n```md\n'
+  printf -- '- **Closable by:** deferred <!-- agent | human | deferred -->\n'
+  printf '```\n'
+} > "$GENRE_BUG"
+genre_deferred_fenced="$( cd "$FIX" && "$SDD" phase "$MISSION" 2>&1 )"
+assert_eq "a fenced 'deferred' quote does not become the genre either" \
+  "REVIEW|QA" "$genre_exact|$genre_deferred_fenced"
+{ printf '# BUG-20260102-genre: the deferred repro is pasted above the metadata\n'
+  printf -- '- **Status:** open <!-- open | fixed | verified | wont-fix | invalid -->\n'
+  printf '\nSteps to reproduce:\n\n```md\n'
+  printf -- '- **Closable by:** deferred <!-- agent | human | deferred -->\n'
+  printf '```\n\n'
+  printf -- '- **Closable by:** agent <!-- agent | human | deferred -->\n'
+} > "$GENRE_BUG"
+genre_deferred_above="$( cd "$FIX" && "$SDD" phase "$MISSION" 2>&1 )"
+assert_eq "a 'deferred' quote ABOVE the field does not become the genre either" \
+  "REVIEW|QA" "$genre_exact|$genre_deferred_above"
+
 rm -f "$GENRE_BUG"
 
 # The QA site of latest_matching(), which the r10 fixture below does NOT cover: that one pins the
