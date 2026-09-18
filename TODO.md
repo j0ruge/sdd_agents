@@ -644,7 +644,7 @@ O plano consolidado pelo Codex Astra, baseado no artigo de @0xCodez e nas refer�
 
 ### Comentário e registro
 
-- [ ] **O chapéu da DOCS não pode escrever comentário de código, e a REVIEW endereça drift de comentário a ela** — `agents/sdd-docs.md:9` — o `writes:` da DOCS lista `docs/**`, `README.md`, `CLAUDE.md` e as rules, mas não `bin/sdd`; comentário de código É documentação viva, e a r2/r3 desta missão mandaram consertar uma frase podre em `cmd_autonomy`. A DOCS consertou (só comentário, zero linha de código) e o `hat_guard_check` parou a linha com `hat-crossed` depois da sessão paga. Reincide toda missão que apodrecer um comentário. Direção: decidir se o drift de comentário é da DOCS (e o `writes:` diz isso) ou da EXEC (e a REVIEW para de endereçá-lo à DOCS).
+- [ ] **O `writes:` do chapéu não comporta obrigação que o repo impõe, e a linha para depois da sessão paga** — `agents/sdd-docs.md:9` — duas instâncias, uma direção. (a) O `writes:` da DOCS não lista `bin/sdd`, e comentário de código É documentação viva: a DOCS consertou uma frase podre que a REVIEW endereçou a ela e o `hat_guard_check` parou a linha com `hat-crossed`. (b) No `sales_quote`, acrescentar um spec e2e **obriga** rever o piso de casos do workflow de CI (`agents/sdd-qa.md:11`), fora da faixa do chapéu. Direção: chave por projeto no `.sdd/config.sh` que some ao `writes:` de um chapéu nomeado, e decidir de quem é o drift de comentário.
   — descoberto por `sdd-docs` na missão `20260911-o-juiz-nao-mente-sobre-a-janela` (2026-09-12)
 
 - [ ] **22 das 33 âncoras do `TODO.md` apontam para a linha errada** —
@@ -825,3 +825,47 @@ O plano consolidado pelo Codex Astra, baseado no artigo de @0xCodez e nas refer�
   com ela. Falha FECHADA (o Check dá 0 e o incremento reprova), mas quem escrever Check sobre esse
   sensor perde a sessão achando que a asserção sumiu. Direção: alinhar a grafia do sensor.
   — descoberto por `sdd-reviewer` na missão `20260911-o-juiz-nao-mente-sobre-a-janela` (2026-09-12)
+
+- [ ] **`gate_QA` cobra bugs `open` de outras missões, e a direção proposta contradiz a ADR 0006** —
+  `bin/sdd` (Âncora 3 do `gate_QA`) — a missão herda a dívida inteira do registry como condição de
+  bloqueio: quanto mais honesta a QA de ontem, mais cara a missão de hoje. Cinco bugs de 2026-09-14,
+  nenhum no raio do diff, travaram a QA da SQ-129. ⚠️ Direção óbvia (contar só a procedência da
+  missão corrente) foi **recusada com argumento** na [ADR 0006](docs/adr/0006-qa-anchor-reads-genre-blocked-handoff-stops-the-line.md)/D17 — quem pegar isto reabre a ADR, não implementa o item.
+  — descoberto por `sessão coordenadora` na missão `20260916-destino-frete-cif` (2026-09-16)
+
+- [ ] **`Closable by:` é binário: falta "decidido, aguardando quem pague"** — `agents/sdd-qa.md:118`
+  — com a decisão humana já tomada e gravada no corpo do bug, trocar o gênero para `agent` faria os
+  quatro voltarem a travar o `gate_QA` da missão em voo; deixar `human` os torna invisíveis ao laço
+  para sempre. O dado certo fica num campo que o gate não lê e a troca vira passo manual (virou o
+  `I6` da SQ-130). Direção: terceiro valor, ou um `decided-by:` que o gate leia junto do gênero.
+  — descoberto por `sessão coordenadora` na missão `20260916-destino-frete-cif` (2026-09-16)
+
+- [ ] **Nenhuma das skills `qa-report`/`qa-execution` conhece o campo `Closable by:`** —
+  `agents/sdd-qa.md:118` — `grep -rn Closable ~/.claude/skills/qa-*` responde **zero**, então o
+  campo só chega ao disco pelo template local do repo ou pelo `sdd-qa` marcando arquivo por arquivo.
+  Em repo-alvo novo a Âncora 3 inteira roda em regime "ausente ⇒ bloqueia". Muda o custo estimado de
+  qualquer missão que ataque os dois itens acima, e precisa estar escrito antes dela ser planejada.
+  — descoberto por `sessão coordenadora` na missão `20260918-a-sessao-morreu-e-o-gate-levou-a-culpa` (2026-09-18)
+
+- [ ] **Fase executada à mão não tem como ser registrada, e o ledger afirma que ela não aconteceu** —
+  `agents/sdd-publisher.md:1` — a fase PR da SQ-129 foi montada à mão depois de três mortes por
+  memória; não há sessão de publisher no ledger e o custo não entra na soma (US$ 161,29 é o total
+  que o journal conhece, e ele para na DOCS). A lacuna virou prosa no `50-pr.md`, que nem o
+  `sdd autonomy` nem o `sdd kaizen` leem. Direção: `sdd note-manual <fase>`, irmão do `intervention:`
+  — ⚠️ pede o **sexto** `event` do ledger, com dois leitores a ensinar no mesmo commit.
+  — descoberto por `sessão coordenadora` na missão `20260916-destino-frete-cif` (2026-09-16)
+
+- [ ] **O teto de orçamento não conhece "missão reaberta"** — `bin/sdd` (`BUDGET_MISSION_USD`) — o
+  conserto pós-review paga o preço do estouro que a entrega causou, então o teto pune justamente o
+  ciclo que deveria ser incentivado. Medido na SQ-129: fechou o PR com US$ 161,29 de 150 sob
+  override, o `@codex review` achou um P1 real, a missão reabriu num `R5` e a EXEC do conserto
+  precisou do mesmo override — com o número já estourado pela entrega. O conserto custou US$ 9,03.
+  Direção: distinguir gasto de entrega de gasto de conserto pós-review, ou estender o teto ao reabrir.
+  — descoberto por `sessão coordenadora` na missão `20260916-destino-frete-cif` (2026-09-16)
+
+- [ ] **`Test Coverage = A` do revisor não implica que os casos negativos existam** —
+  `agents/sdd-reviewer.md:45` — um P1 real passou por **três** rodadas de `sdd-reviewer` (a última
+  com essa nota) e quatro checks de CI verdes; o caso que faltava era o negativo, e nenhum sensor
+  era obrigado a cair. O `@codex review` o achou no PR #167. Direção: o revisor enumera qual
+  sabotagem provou cada nota — hoje narra em prosa, e prosa não é verificável.
+  — descoberto por `sessão coordenadora` na missão `20260916-destino-frete-cif` (2026-09-16)

@@ -1079,6 +1079,60 @@ mut_RUN_app_down_retry_not_escalated() {
   sed -i '/^    if \[ "$gate_rc2" -eq 0 \]; then$/,/^    if \[ "$moved2" = "false" \]; then$/ s|^    if app_down_escalation "$phase"; then return 3; fi$|    if false; then return 3; fi|' "$1"
 }
 
+# The death of a session, and the three properties that make it a Jidoka rather than a louder
+# warning. Anchored on CODE and never on a line number, and each one is a HALF of an assertion
+# whose other half is the budget-ceiling control — so a mutant that survived here would mean the
+# control had stopped discriminating, not that the door is redundant.
+#
+# Door 1 — the first pass. Without it the runner reads the gate's own refusal as the last word,
+# buys the retry that dies the same way, and files the pair as `no-progress`: an expired
+# credential recorded as the pipeline spinning, which is what D12/D16 count as the kit's waste.
+mut_RUN_session_died_not_escalated() {
+  sed -i '/^      "$( \[ "$gate_rc" -eq 0 \] && echo pass || echo fail )" "$GATE_WHY" \\$/,/^    phases_run=$((phases_run + 1))$/ s|^    if session_died_escalation "$phase"; then return 3; fi$|    if false; then return 3; fi|' "$1"
+}
+
+# Door 2 — the inline retry, and it is not symmetry either. A token expires at a moment, and the
+# moment falls between two sessions of one phase as readily as before the first. Without this
+# door that run falls through to `moved2 == false` and writes the same `no-progress`, now bought
+# at two sessions instead of one.
+mut_RUN_session_died_retry_not_escalated() {
+  sed -i '/^    if \[ "$gate_rc2" -eq 0 \]; then$/,/^    if \[ "$moved2" = "false" \]; then$/ s|^    if session_died_escalation "$phase"; then return 3; fi$|    if false; then return 3; fi|' "$1"
+}
+
+# The rule itself, and this is the expensive half to get wrong. Widening it to "any is_error"
+# makes `error_max_budget_usd` stop the line — and that is REVIEW_MAX_ITER seen from down here,
+# the kit's designed loop. With the two `result` clauses gone, `.result` is null on those
+# sessions and `jq -r` prints the string "null", which is non-empty, so the marker arms: the
+# fail-open wearing the shape of the fix. Four assertions die on it, all through the control.
+mut_RUN_session_died_fires_without_cause() {
+  sed -i 's@and (((.result // "") | type) == "string")@and true@; s@and ((.result // "") != "")@and true@' "$1"
+}
+
+# NOT IN THIS CATALOGUE, AND SAID OUT LOUD: the `SESSION_DIED_WHY=""` at the top of run_phase has
+# no mutant, because removing it was MEASURED on a copy and the whole suite stayed green. The
+# setter assigns on every real session and the doors are only reachable after one, so no fixture
+# in this repo leaves a stale value where a door can read it. The line stays — it decides WHICH
+# failure a future door produces — with its missing probe declared at the line itself. Registering
+# a mutant nothing can catch would put a permanent survivor in the score.
+
+# `sdd close` is post-merge and typed by a human, so the prompt says the authorization is already
+# given. Reverted to the bare slash command, the session stops to ask a developer who is not in
+# the room: US$ 0,86 and 43 s for nothing, measured 2026-09-16, and repeating it repeats the
+# question. The assertion reads the stub's argv, so this mutant dies on the runner's own side of
+# the boundary.
+mut_RUN_close_prompt_bare() {
+  sed -i 's@claude -p "$close_prompt"@claude -p "/ticket close $issue"@' "$1"
+}
+
+# `sdd status --no-gates` exists because deriving the phase IS the gate loop — a suite and an e2e
+# for the question "where am I". Parsed as a no-op the flag still answers, and answers well, which
+# is exactly why the assertion behind this mutant counts TEST_CMD invocations off the disk instead
+# of timing the command: on this fixture both halves are fast and only the counter can tell them
+# apart.
+mut_STATUS_no_gates_runs_gates() {
+  sed -i 's@--no-gates) no_gates=1 ;;@--no-gates) no_gates=0 ;;@' "$1"
+}
+
 # The hat's boundary (2026-09-03 spec). Two flags, one mutant each: dropping either one leaves the
 # session with the human's whole harness — 9 MCP servers including Gmail and Jira, 104 tools —
 # which is the measured "before". The projection prints what run_phase passes FROM THE SAME
@@ -3680,6 +3734,11 @@ CATALOG=(
   RUN_ticket_blocked_not_armed
   RUN_app_down_not_escalated
   RUN_app_down_retry_not_escalated
+  RUN_session_died_not_escalated
+  RUN_session_died_retry_not_escalated
+  RUN_session_died_fires_without_cause
+  RUN_close_prompt_bare
+  STATUS_no_gates_runs_gates
   RUN_strict_mcp_dropped
   RUN_disallowed_dropped
   RUN_hat_guard_blind
