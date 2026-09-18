@@ -172,6 +172,36 @@ INIT_CLEAN="$OUTSIDE/stream-init-clean.jsonl"
 INIT_LEAK="$OUTSIDE/stream-init-leak.jsonl"
 { jq -c '.mcp_servers = [{"name":"atlassian","status":"connected"}] | .tools += ["WebSearch"]' "$INIT_SAMPLE"; cat "$STREAM_SAMPLE"; } > "$INIT_LEAK"
 
+# The terminal `result` of a session the ENVIRONMENT killed, and the control that separates it
+# from the loop the kit runs on purpose.
+#
+# PROVENANCE: pasted VERBATIM from the summary run_phase itself distilled onto disk at
+#     ~/repos/sales_quote/.sdd/logs/20260916-destino-frete-cif/QA-20260916-165635-35d43e05.json
+# — the OAuth death of 2026-09-16 that cost 35 turns and US$ 4,56 and was then filed in the
+# ledger as `no-progress`, which is the defect this family exists to delete. Copied rather than
+# typed for one reason above all others: `is_error: true` arrives here carrying
+# `subtype: "success"`, and nobody writing this shape from memory would have put those two
+# fields on the same line. A rule anchored on "an error subtype" would miss exactly this session
+# AND fire on the budget ceiling below.
+DIED_RESULT="$OUTSIDE/died-result.json"
+cat > "$DIED_RESULT" <<'EOF'
+{"duration_api_ms":79859,"stop_reason":"stop_sequence","session_id":"35d43e05-e692-4010-b635-20328f69be56","total_cost_usd":4.563643999999999,"usage":{"input_tokens":68,"cache_creation_input_tokens":168869,"cache_read_input_tokens":5222108,"output_tokens":10140,"output_tokens_details":{"thinking_tokens":4207},"server_tool_use":{"web_search_requests":0,"web_fetch_requests":0},"service_tier":"standard","cache_creation":{"ephemeral_1h_input_tokens":168869,"ephemeral_5m_input_tokens":0},"inference_geo":"not_available","iterations":[{"input_tokens":2,"output_tokens":258,"cache_read_input_tokens":177442,"cache_creation_input_tokens":957,"cache_creation":{"ephemeral_5m_input_tokens":0,"ephemeral_1h_input_tokens":957},"type":"message"}],"speed":"standard"},"modelUsage":{"claude-haiku-4-5-20251001":{"inputTokens":9970,"outputTokens":18,"cacheReadInputTokens":0,"cacheCreationInputTokens":0,"webSearchRequests":0,"costUSD":0.01006,"contextWindow":200000,"maxOutputTokens":32000,"thinkingTokens":0,"canonicalModel":"claude-haiku-4-5","provider":"firstParty","costBasis":"list"},"claude-opus-5":{"inputTokens":68,"outputTokens":10140,"cacheReadInputTokens":5222108,"cacheCreationInputTokens":168869,"webSearchRequests":0,"costUSD":4.553583999999999,"contextWindow":1000000,"maxOutputTokens":64000,"thinkingTokens":4207,"canonicalModel":"claude-opus-5","provider":"firstParty","costBasis":"list"}},"permission_denials":[],"terminal_reason":"api_error","fast_mode_state":"off","fast_mode_disabled_reason":"sdk_opt_in_required","subagent_stats":{"spawned":0,"requested":{"background":0,"foreground":0,"unset":0},"started_in_background":0,"max_depth":0,"spawned_by_subagents":0,"completed":0,"failed":0,"killed":{"parent":0,"user":0,"system":0},"refused":{"depth_limit":0,"concurrency_limit":0,"budget":0},"by_type":{}},"is_error":true,"num_turns":35,"subtype":"success","api_error_status":null,"result":"Failed to authenticate: OAuth session expired and could not be refreshed","type":"result","duration_ms":552423,"uuid":"bac4f374-fa5e-4398-b0bd-7deb6486a612","queued_turn_count":0,"result_index":0}
+EOF
+
+# The control, DERIVED from the line above with jq so that exactly TWO fields differ — the same
+# discipline the dead-app pair keeps with its one line of config. Both values are measured, not
+# invented: on 2026-09-18 the four target repos held 11 sessions with `is_error: true`, and all 3
+# of the `error_max_budget_usd` ones carry `result: null` (here in the kit,
+# .sdd/logs/20260817-eixo-do-juiz/REVIEW-20260817-103556.json is one). The budget ceiling is the
+# kit's NORMAL loop — a rule that stopped the line on it would stop the line on REVIEW_MAX_ITER.
+BUDGET_RESULT="$OUTSIDE/budget-result.json"
+jq -c '.subtype = "error_max_budget_usd" | .result = null' "$DIED_RESULT" > "$BUDGET_RESULT"
+
+STREAM_DIED="$OUTSIDE/stream-died.jsonl"
+{ cat "$INIT_SAMPLE"; cat "$DIED_RESULT"; } > "$STREAM_DIED"
+STREAM_BUDGET="$OUTSIDE/stream-budget.jsonl"
+{ cat "$INIT_SAMPLE"; cat "$BUDGET_RESULT"; } > "$STREAM_BUDGET"
+
 git init -q -b main
 git config user.email "fixture@example.com"
 git config user.name "Fixture"
@@ -2293,6 +2323,79 @@ sed -i 's|^E2E_CMD=.*|E2E_CMD=""|; s|^APP_URL=.*||' .sdd/config.sh
 rm -rf "$FIX/docs/qa"
 printf -- '---\nfase: QA\nstatus: done\n---\n' > "$MDIR/30-handoff-qa.md"
 git add -A && git commit -qm "chore: restore the fixture the app-down pair borrowed"
+
+# --- the session died, and the runner says so ------------------------------
+# THE PAIR of this family, and the same shape as the dead-app pair above: one stub, two regimes,
+# and the only thing that differs between the two runs is which distilled `result` the stub
+# replays. Everything else — the checkpoint, the gate, the number of sessions the runner would
+# buy — is held still, which is what makes the pair isolate the CAUSE OF DEATH and not the
+# redness around it.
+#
+# The defect it exists to delete, measured on 2026-09-16 in sales_quote: the session was killed
+# by an expired OAuth token, `run_phase` said only `warn claude exited 1` among dozens of lines,
+# the gate then refused for a reason of its own, the runner bought a blind retry that died in one
+# turn for US$ 0, and the ledger recorded `kind: no-progress` — which docs/pipeline.md classes as
+# pure friction and D12/D16 read as the pipeline spinning. An expired token entered the judge's
+# instrument as the kit's own waste.
+echo "== the session died and the runner names the cause =="
+DIED_CKPT_BEFORE="$OUTSIDE/checkpoint-before-died.md"
+cp "$MDIR/checkpoint.md" "$DIED_CKPT_BEFORE"
+# A pending increment, so EXEC is the phase the run derives and a session is actually bought.
+cat > "$MDIR/checkpoint.md" <<'EOF'
+| ID | Incremento | Check (comando → esperado) | Status | Commit |
+|---|---|---|---|---|
+| I1 | slice one | `true` → 0 | pending | — |
+EOF
+printf -- '---\nfase: QA\nstatus: done\n---\n' > "$MDIR/30-handoff-qa.md"
+git add -A && git commit -qm "chore: a pending increment for the death pair"
+
+DIED_COUNT="$OUTSIDE/.died-sessions"
+# ONE stub for both regimes — $SDD_DEATH_STREAM picks which distilled summary it replays, so the
+# two halves cannot drift apart in a hand-written second copy. It COUNTS its invocations: "the
+# runner did not buy a second session" is the money half of this family's claim, and a rc alone
+# would not say it.
+cat > "$OUTSIDE/stub/claude" <<STUB
+#!/usr/bin/env bash
+printf 'x\n' >> "$DIED_COUNT"
+cat "\$SDD_DEATH_STREAM"
+exit 1
+STUB
+chmod +x "$OUTSIDE/stub/claude"
+
+: > "$LEDGER"; : > "$DIED_COUNT"
+died_out="$( SDD_DEATH_STREAM="$STREAM_DIED" "$SDD" run "$MISSION" 2>&1 )"
+died_err="$(jq -r -s '[.[] | select(.event == "session")][0].session_error' "$LEDGER")"
+
+: > "$LEDGER"; : > "$DIED_COUNT"
+budget_out="$( SDD_DEATH_STREAM="$STREAM_BUDGET" "$SDD" run "$MISSION" 2>&1 )"
+budget_err="$(jq -r -s '[.[] | select(.event == "session")][0].session_error' "$LEDGER")"
+
+says_died() { grep -qE 'session died: Failed to authenticate' <<< "$1" && echo says || echo silent; }
+
+# I1. The cause reaches the TERMINAL, which is where the operator was looking when they spent an
+# afternoon fixing the five bugs the gate had named instead. DIFFERENTIAL: the budget ceiling
+# replays a summary that differs in two fields and must stay silent — a runner that printed the
+# line for any `is_error` would take this half red.
+assert_eq "the runner names the cause of a death it can name, and says nothing on the budget ceiling" \
+  "says · silent" \
+  "$(says_died "$died_out") · $(says_died "$budget_out")"
+
+# I2. And it reaches the LEDGER, which is where the judge was looking. Same differential: the
+# budget ceiling is the kit's designed loop, so its row carries `null` — and `null` is also what
+# every session that did NOT die carries, which is what keeps the field from becoming a second
+# spelling of `rc != 0`.
+assert_eq "the session row carries the cause of death, and null where there is none to carry" \
+  "Failed to authenticate: OAuth session expired and could not be refreshed · null" \
+  "$died_err · $budget_err"
+
+cp "$DIED_CKPT_BEFORE" "$MDIR/checkpoint.md"
+cat > "$OUTSIDE/stub/claude" <<'STUB'
+#!/usr/bin/env bash
+exit 1
+STUB
+chmod +x "$OUTSIDE/stub/claude"
+printf -- '---\nfase: QA\nstatus: done\n---\n' > "$MDIR/30-handoff-qa.md"
+git add -A && git commit -qm "chore: restore the fixture the death pair borrowed"
 
 # --- the reader ------------------------------------------------------------
 # Fixture ledger written by hand: this is OUR format, so there is no third-party source to copy

@@ -3156,6 +3156,7 @@ autonomy_session_row() {  # <phase> <attempt> <auto_retry> <moved> <gate> <gate_
     --arg turns "$LAST_PHASE_TURNS" --arg cache_read "$LAST_PHASE_CACHE_READ" \
     --arg mcp_seen "$LAST_PHASE_MCP_SEEN" --arg tools_leaked "$LAST_PHASE_TOOLS_LEAKED" \
     --arg denials "$LAST_PHASE_DENIALS" --arg harness "$LAST_PHASE_HARNESS" \
+    --arg died "${LAST_PHASE_DIED:0:200}" \
     --arg pbefore "${7:-}" --arg pafter "${8:-}" --arg itotal "${9:-}" \
     --arg rbefore "${10:-}" --arg rafter "${11:-}" --arg rmax "${12:-}" \
     '{v: 1, ts: $ts, event: "session",
@@ -3175,6 +3176,7 @@ autonomy_session_row() {  # <phase> <attempt> <auto_retry> <moved> <gate> <gate_
       tools_leaked: ($tools_leaked | tonumber? // null),
       denials: ($denials | tonumber? // null),
       harness: (if $harness == "" then null else $harness end),
+      session_error: (if $died == "" then null else $died end),
       moved: ($moved == "true"),
       pending_before: ($pbefore | tonumber? // null),
       pending_after: ($pafter | tonumber? // null),
@@ -3441,6 +3443,35 @@ missing and write the artifacts. The gate will be re-evaluated."
   # moves this number and little else, so a judge asked to verify the cut could not see it. Same
   # `// ""` and same `|| echo` guard as `turns` above, for the same two reasons written there.
   cache_read="$(jq -r '.usage.cache_read_input_tokens // ""' "$logfile" 2>/dev/null || echo "")"
+  # WHAT THE SESSION SUFFERED, out of the same distilled summary the three reads above take what
+  # it SPENT from. Until now the runner measured only the spending: every field here was added
+  # the day a consumer appeared (cost -> D12, turns -> the diet), and the cause of death never
+  # had one — so a session killed by the environment reached the operator as `warn claude exited
+  # 1` among dozens of lines, the gate then refused for a reason of its own, and the ledger filed
+  # the whole episode as the pipeline spinning.
+  #
+  # THE RULE IS WRITTEN POSITIVELY — what comes IN, never `not <what goes out>` — and it is
+  # narrow on purpose. Measured 2026-09-18 over the 11 sessions with `is_error: true` in the four
+  # target repos, which fall into exactly three regimes:
+  #   · 2  the death this exists to name: `subtype: "success"`, `result` a 72-char sentence
+  #        ("Failed to authenticate: OAuth session expired and could not be refreshed");
+  #   · 3  `error_max_budget_usd`, `result: null` — the kit's NORMAL loop, which must not stop;
+  #   · 6  `error_during_execution`, `result: null` — died, cause unknown.
+  # So a rule anchored on "an error subtype" would miss the first regime AND fire on the second.
+  # The only pair that separates all three is `is_error` together with a non-empty string
+  # `result`; the 6 unknown deaths stay exactly as they are today, visible to the judge through
+  # the ledger field but escalating nothing — "unknown escalates nothing" is the same literal
+  # rule app_probe keeps. Written as `not <the budget ceiling>` this would concede the FOURTH
+  # regime by omission the day the harness invents one; written positively, the fourth has to
+  # opt in.
+  #
+  # Same `2>/dev/null || echo ""` guard as its three neighbours, and for the same reason: under
+  # this file's `set -euo pipefail` a jq that fails inside `x="$(…)"` kills the run at the
+  # assignment.
+  local died
+  died="$(jq -r 'if (.is_error == true) and (((.result // "") | type) == "string")
+                    and ((.result // "") != "")
+                 then .result else "" end' "$logfile" 2>/dev/null || echo "")"
   local dur=$((ended - started))
   pipeline_log_line "$(date -Iseconds)  $phase  agent=$agent  model=$model  session=${resume_sid:-$sid}  rc=$rc  dur=${dur}s  cost_usd=$cost  log=$logfile"
 
@@ -3454,8 +3485,17 @@ missing and write the artifacts. The gate will be re-evaluated."
   LAST_PHASE_STEP="$pstep"
   LAST_PHASE_AGENT="$agent"
   LAST_PHASE_MODEL="$model"
+  LAST_PHASE_DIED="$died"
 
   if [ "$rc" -ne 0 ]; then
+    # The cause FIRST and the file pointer second, when there is a cause to give. The order is
+    # the whole fix: the operator of the 2026-09-16 death read `warn claude exited 1`, went on
+    # reading, and met the gate's own refusal — five open bugs in the registry — as the last word
+    # on the screen. They spent the afternoon closing those five. Truncated at 200 like gate_why,
+    # under the same locale caveat (characters in a multibyte locale, bytes under C/POSIX).
+    if [ -n "$died" ]; then
+      bad "the $phase session died: ${died:0:200}"
+    fi
     warn "claude exited $rc in phase $phase (see $logfile and ${logfile%.json}.err)"
   else
     dim "  session ended in ${dur}s, cost $cost USD"
@@ -3477,6 +3517,7 @@ LAST_PHASE_DUR=""
 LAST_PHASE_STEP=""
 LAST_PHASE_AGENT=""
 LAST_PHASE_MODEL=""
+LAST_PHASE_DIED=""
 
 # Fingerprint of the mission state. It answers "did this session do ANYTHING?" when the gate has
 # not passed yet — the normal case for the EXEC phase, which runs one increment at a time.
