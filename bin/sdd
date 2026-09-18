@@ -6079,10 +6079,14 @@ app_down_escalation() {
 # the last word on the screen, spent the afternoon closing the five bugs.
 #
 # So it sits ABOVE handoff_blocked_escalation in both doors: the cause of death beats the
-# gate's reason, because the gate's reason is what sent the operator the wrong way. It also sits
-# above the gate-PASS branch, and that is deliberate rather than incidental — a session the
-# environment killed is worth stopping for even on the rare lap whose gate is satisfied by
-# artefacts an earlier run left behind, and the fail-safe direction is to stop.
+# gate's reason, because the gate's reason is what sent the operator the wrong way. BOTH doors
+# also sit above their own gate-PASS branch — a session the environment killed is worth stopping
+# for even on the rare lap whose gate is satisfied by artefacts an earlier run left behind, and
+# the fail-safe direction is to stop. ⚠️ "Both" is load-bearing and was not free: this sentence
+# originally said "it also sits", was true of door 1, and was asserted of the family while door 2
+# sat BELOW its branch. r1 of PR #46 found it. A comment that claims a property for two sites and
+# holds at one is the shape this file refuses everywhere else; the probe that now pins it is
+# "a dying retry whose gate PASSES…" in tests/check-autonomy.sh, with a mutant per door.
 #
 # TWO DOORS, the same census as its two siblings — the first pass and the inline retry — and the
 # doors are what keep the marker from outliving the LAP as well as the gate. Both are ABOVE the
@@ -6645,6 +6649,20 @@ cmd_run() {
     # crosses its hat and still satisfies the gate must not `continue` into the next phase (the
     # review of 20260903-a-fronteira-do-chapeu found it sitting after the `continue`).
     if hat_crossed_escalation "$phase"; then return 3; fi
+    # DOOR 2 of the death escalation, reading the RETRY's own session: run_phase zeroed the marker
+    # on entry, so what it says is whether the SECOND session died, never whether the first did.
+    # Placed after `moved2` is settled, so it takes nothing away from the sampling window the
+    # comment above defends.
+    #
+    # ABOVE the gate-pass branch, beside the hat door and for the identical reason — this is r1 of
+    # PR #46 and it was a real defect. Below the `continue`, a retry the environment killed whose
+    # gate happened to pass slipped through: measured on the fixture, the run swallowed the death,
+    # derived QA, and bought TWO MORE sessions against the same dead environment before blocking
+    # there as `no-progress` — the wrong kind, on the wrong phase, at twice the price. Door 1 has
+    # always sat above its own gate-pass branch and the function header claims that placement for
+    # the FAMILY, so the comment was true of one door and asserted of two. Same bug, one
+    # escalation later, that the review of 20260903-a-fronteira-do-chapeu found in the hat door.
+    if session_died_escalation "$phase"; then return 3; fi
 
     if [ "$gate_rc2" -eq 0 ]; then
       ok "gate $phase (on the retry): $GATE_WHY"
@@ -6655,11 +6673,6 @@ cmd_run() {
     # DOOR 2, on the same terms, and it is what keeps the marker from outliving the lap. Placed
     # after `moved2` is already settled, so it takes nothing away from the sampling window the
     # comment above defends — it only refuses to let `moved2` answer a question that is not its.
-    # DOOR 2 of the death escalation, first of the three here as well, and reading the RETRY's
-    # own session: run_phase zeroed the marker on entry, so what it says is whether the second
-    # session died, never whether the first did. Placed after `moved2` is settled, so it takes
-    # nothing away from the sampling window the comment above defends.
-    if session_died_escalation "$phase"; then return 3; fi
     if handoff_blocked_escalation "$phase"; then return 3; fi
     # DOOR 2, and it is what keeps THIS marker from outliving the lap either. Placed after
     # `moved2` is settled, so it takes nothing away from the sampling window.

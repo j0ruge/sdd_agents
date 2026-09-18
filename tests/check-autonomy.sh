@@ -2479,6 +2479,62 @@ assert_eq "a retry the environment kills escalates as a death, where the budget 
   "EXEC|session-died|2 · EXEC|no-progress|2" \
   "$died_retry_where|$died_retry_bought · $budget_retry_where|$budget_retry_bought"
 
+# --- ...and a retry that dies with a PASSING gate does not slip through -----
+# r1 of PR #46 (CodeRabbit), and the finding is real even though the reason given for it was not:
+# door 2 sat BELOW the `gate_rc2 == 0` branch, so a retry the environment killed whose gate
+# happened to pass `continue`d into the next lap and the death was never escalated. Door 1 has
+# always sat above its own gate-pass branch, and the escalation's header claims that placement as
+# a property of the FAMILY — so the comment was true of one door and asserted of two, which is the
+# shape this repo refuses everywhere else.
+#
+# It is the same bug, one escalation later, that the review of 20260903-a-fronteira-do-chapeu
+# found in the hat door ("found it sitting after the `continue`") — and the hat door's comment two
+# lines up is what this one now matches.
+#
+# The world is not contrived: a token expires at a moment, and the moment can fall on the last
+# turn of a session that had already written everything its gate asks for. The stub does exactly
+# that — closes the increment with a real commit AND replays the death.
+#
+# DIFFERENTIAL, and the control is what stops it passing vacuously: the SAME stub replaying the
+# budget ceiling must still sail through the gate-pass branch and carry on, which is what proves
+# the fixture really does present a passing gate rather than a failing one.
+DIED_PASS_CKPT="$OUTSIDE/checkpoint-before-died-pass.md"
+cp "$MDIR/checkpoint.md" "$DIED_PASS_CKPT"
+cat > "$OUTSIDE/stub/claude" <<STUB
+#!/usr/bin/env bash
+printf 'x\n' >> "$DIED_COUNT"
+if [ "\$(grep -c . "$DIED_COUNT")" = "1" ]; then cat "$STREAM_SAMPLE"; exit 0; fi
+h=\$(git -C "$FIX" rev-parse --short HEAD)
+sed -i "/^| I1 /s/| pending | — |/| done | \$h |/" "$MDIR/checkpoint.md"
+git -C "$FIX" add -A
+git -C "$FIX" commit -qm "chore: the retry closed the increment on its way out"
+cat "\$SDD_DEATH_STREAM"
+exit 1
+STUB
+chmod +x "$OUTSIDE/stub/claude"
+
+: > "$LEDGER"; : > "$DIED_COUNT"; cp "$DIED_PASS_CKPT" "$MDIR/checkpoint.md"
+git add -A && git commit -qm "chore: a pending increment the dying retry will close" >/dev/null 2>&1
+SDD_DEATH_STREAM="$STREAM_DIED" "$SDD" run "$MISSION" >/dev/null 2>&1; rc=$?
+died_pass="$rc|$(blocked_where)|$(sessions_bought)"
+
+: > "$LEDGER"; : > "$DIED_COUNT"; cp "$DIED_PASS_CKPT" "$MDIR/checkpoint.md"
+git add -A && git commit -qm "chore: control — the same passing retry, under the budget ceiling" >/dev/null 2>&1
+SDD_DEATH_STREAM="$STREAM_BUDGET" "$SDD" run "$MISSION" >/dev/null 2>&1; rc=$?
+budget_pass="$rc|$(blocked_where)|$(sessions_bought)"
+
+# The control's `4` is the load-bearing number, not decoration: it is what proves the retry's
+# gate really PASSED. A fixture whose gate failed would stop at EXEC on both sides and this pair
+# would certify nothing. Measured before the fix, the death side read `3|QA|no-progress|4` — the
+# run swallowed the death, walked into QA, and bought TWO MORE opus sessions against the same
+# dead environment before blocking there under the wrong kind and the wrong phase.
+assert_eq "a dying retry whose gate PASSES stops the line at its own phase, where the budget ceiling walks on into QA" \
+  "3|EXEC|session-died|2 · 3|QA|no-progress|4" \
+  "$died_pass · $budget_pass"
+
+cp "$DIED_PASS_CKPT" "$MDIR/checkpoint.md"
+git add -A && git commit -qm "chore: restore the checkpoint the passing-retry pair borrowed" >/dev/null 2>&1
+
 cp "$DIED_CKPT_BEFORE" "$MDIR/checkpoint.md"
 cat > "$OUTSIDE/stub/claude" <<'STUB'
 #!/usr/bin/env bash

@@ -1095,8 +1095,30 @@ mut_RUN_session_died_not_escalated() {
 # moment falls between two sessions of one phase as readily as before the first. Without this
 # door that run falls through to `moved2 == false` and writes the same `no-progress`, now bought
 # at two sessions instead of one.
+# ⚠️ ANCHORED ON THE WHOLE RETRY REGION, not on the gate-pass branch. The first spelling of this
+# mutant opened its range at `if [ "$gate_rc2" -eq 0 ]; then`, which was below the door at the
+# time. r1 of PR #46 moved the door ABOVE that branch and the range stopped containing it: the
+# sed became a no-op and the mutant would have been scored a SURVIVOR — the same rotted-anchor
+# failure `e29bee2` paid for one mission ago, arriving by the same route (a review fix moving the
+# line the anchor was built around). The range now opens at the retry's own `local` declaration,
+# which is the region's first line and cannot be crossed by a door moving inside it.
 mut_RUN_session_died_retry_not_escalated() {
-  sed -i '/^    if \[ "$gate_rc2" -eq 0 \]; then$/,/^    if \[ "$moved2" = "false" \]; then$/ s|^    if session_died_escalation "$phase"; then return 3; fi$|    if false; then return 3; fi|' "$1"
+  sed -i '/^    local after2 moved2="false" gate_rc2=0$/,/^    if \[ "$moved2" = "false" \]; then$/ s|^    if session_died_escalation "$phase"; then return 3; fi$|    if false; then return 3; fi|' "$1"
+}
+
+# PLACEMENT, which is a different property from presence and cost a real defect to learn. r1 of
+# PR #46 found the retry door sitting BELOW the gate-pass branch: a retry the environment killed
+# whose gate happened to pass `continue`d into the next lap, the death was swallowed, and the run
+# bought two more sessions against the same dead environment before blocking in the WRONG phase
+# under the WRONG kind. Measured on the fixture, `3|EXEC|session-died|2` became
+# `3|QA|no-progress|4`.
+#
+# Expressed as a GUARD rather than as a move of the line, and that is deliberate: "below the
+# gate-pass branch" and "does not fire when the gate passed" are the same defect, and the guard
+# spelling is one `s|…|…|` with no embedded newline — a multi-line `a\` here cannot be sourced by
+# every shell that reads this catalogue, and a mutant that fails to load is scored a survivor.
+mut_RUN_session_died_retry_door_below_gate_pass() {
+  sed -i '/^    local after2 moved2="false" gate_rc2=0$/,/^    if \[ "$moved2" = "false" \]; then$/ s|^    if session_died_escalation "$phase"; then return 3; fi$|    if [ "$gate_rc2" -ne 0 ] \&\& session_died_escalation "$phase"; then return 3; fi|' "$1"
 }
 
 # The rule itself, and this is the expensive half to get wrong. Widening it to "any is_error"
@@ -3736,6 +3758,7 @@ CATALOG=(
   RUN_app_down_retry_not_escalated
   RUN_session_died_not_escalated
   RUN_session_died_retry_not_escalated
+  RUN_session_died_retry_door_below_gate_pass
   RUN_session_died_fires_without_cause
   RUN_close_prompt_bare
   STATUS_no_gates_runs_gates

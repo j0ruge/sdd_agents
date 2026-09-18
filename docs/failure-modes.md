@@ -508,7 +508,9 @@ the repo, which is a decision about the project and not about this mission.
 ## The session died and the gate took the blame
 
 **Symptom:** `BLOCKED in <PHASE> — the <PHASE> session died: <a sentence from the harness>`, rc 3,
-and a `kind: "session-died"` row in the ledger. One session was bought, not two.
+and a `kind: "session-died"` row in the ledger. **One session** was bought when the first pass
+died; **two** when it was the inline retry that died, because the first one came back alive. What
+never happens any more is a third.
 
 **What it means:** the harness said why the session ended, and it was not the agent's doing — an
 expired credential, a revoked token, a quota, a machine. The runner reads that sentence off the
@@ -537,7 +539,11 @@ ceiling (`error_max_budget_usd`, `result: null`), which is the kit's **designed*
 never stop the line.
 
 **Two doors, and the limit is declared.** The first pass and the inline retry, both in `cmd_run`'s
-loop. `sdd retry` is the human's hand already on the phase and ends on `retry-gate-red` instead;
+loop, and both **above their own gate-pass branch**: a session the environment killed stops the
+line even on the rare lap whose gate is satisfied by artifacts an earlier run left behind. That
+placement is the whole of it — with the retry door below the branch, a dying retry whose gate
+passed walked on into the next phase and bought two more sessions against the same dead
+environment before blocking there under the wrong kind. `sdd retry` is the human's hand already on the phase and ends on `retry-gate-red` instead;
 `sdd close` does not go through `run_phase`, so nothing arms the marker there.
 
 ---
