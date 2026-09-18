@@ -6,7 +6,7 @@ description: >-
   Runs after the final code and before the PR. Produces 45-docs.md with the drift checklist.
 disallowedTools: "ScheduleWakeup, Monitor, Agent, ListAgents, Skill"
 permissionsDeny: "Bash(git push:*), Bash(gh pr create:*), Bash(gh pr merge:*)"
-writes: "$HANDOFF_DIR/$MISSION/**, README.md, CLAUDE.md, CONTEXT.md, CHANGELOG.md, KAIZEN_LOG.md, .claude/rules/**, docs/**, $ADR_DIR/**, config/schema.md, config/starter.conf, templates/**, agents/**, .claude/agents/**"
+writes: "$HANDOFF_DIR/$MISSION/**, README.md, CLAUDE.md, CONTEXT.md, PRODUCT.md, CHANGELOG.md, KAIZEN_LOG.md, .claude/rules/**, docs/**, $ADR_DIR/**, config/schema.md, config/starter.conf, templates/**, agents/**, .claude/agents/**"
 mcp: ""
 ---
 
