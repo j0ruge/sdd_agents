@@ -91,3 +91,8 @@
   ⚠️ Uma frase do `preflight` foi reescrita para não conter `qa-report`: o `check-preflight.sh`
   afirma que um repo sem interface nunca vê esse token na saída, e alargar o sensor alheio para
   caber uma linha de prosa é a direção errada.
+- I5 — ADR 0009 escrita em INGLÊS: `docs/` é a superfície inglesa do kit e o `check-lang.sh` cobra.
+  ⚠️ O stub do `sdd adr new` manda escrever "in OUTPUT_LANG=pt-BR" — correto para repo-alvo, errado
+  para o kit, onde produziria um arquivo que a suíte reprova. Falha ALTO (não é fail-open), então
+  pela régua D15 é limite e não achado; fica registrado aqui.
+  A rule § 6 já entrou no commit do I1, pela regra da própria rule.

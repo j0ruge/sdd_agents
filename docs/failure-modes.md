@@ -444,16 +444,68 @@ has decided yet. Left unmarked, this is not a convergence problem at all: it is 
 the field existed. The runner names the escape hatch in its own refusal;
 [ADR 0006](adr/0006-qa-anchor-reads-genre-blocked-handoff-stops-the-line.md) has the reasoning.
 
+**If the bug is one an agent CAN close and this mission simply will not pay for it, the genre is
+`deferred`, not `human`.** Since [ADR 0009](adr/0009-the-genre-gains-deferred-and-hats-gain-project-exceptions.md)
+the field has a third value for exactly that case: a human decided, another mission pays. It does
+not block, and — unlike `human` — the gate's passing reason **names it on every evaluation**
+(`N deferred (visible, not blocking): BUG-a`), so the debt stays in front of whoever runs
+`sdd status`. Marking it requires the decision to be written in the bug's own body; *"not now"* with
+nothing recorded is `agent`. Using `human` for this is what SQ-129 did, and the swap back became a
+manual increment of the next mission.
+
 Three cheap things get read as "unmarked", because the match is deliberately strict and its
-looseness would fail **open**: a value written after the `<!-- agent | human -->` legend instead of
-before it, a translated value (`humano`), and a capitalised one (`Human`). All three block; none of
-them says so out loud. `agents/sdd-qa.md` § 5.1 spells the exact shape.
+looseness would fail **open**: a value written after the `<!-- agent | human | deferred -->` legend
+instead of before it, a translated value (`humano`), and a capitalised one (`Human`). All three
+block; none of them says so out loud. `agents/sdd-qa.md` § 5.1 spells the exact shape.
+
+**If no bug has the field at all, the template is what to fix.** `sdd preflight` says so —
+`qa bug template lacks 'Closable by:'` — and `sdd install --force` seeds the line. Without it every
+bug the QA skills write is born unmarked, which is born blocking.
 
 **Typical cause once the genres are right:** each fix breaks another journey — a sign the defect is
 deeper than the recorded symptoms.
 
 **What you do:** read the `30-handoff-qa.md` of each round. If the bugs move around every round,
 the problem is one of design and belongs back in planning, not with the executor.
+
+---
+
+## The hat stopped correct work
+
+**Symptom:** `BLOCKED in <PHASE> — the <step> session (<hat>) touched N path(s) outside its
+writes:`, and the paths it names are ones your repo's own rules **require** that phase to touch —
+the CI workflow whose case floor must be revised when a spec is added, the napkin your `CLAUDE.md`
+sends gotchas to, a product document your process keeps beside the code.
+
+**What is happening:** `writes:` in `agents/<hat>.md` is the **kit's** constant — what that hat owns
+in every repo the kit is installed in. Your rule is **yours**. The guard is right that the boundary
+was crossed and wrong about what to do next.
+
+**What you do:** declare the path, in `.sdd/config.sh` of your repo:
+
+```sh
+HAT_WRITES_EXTRA="sdd-qa: .github/workflows/e2e-staging.yml; sdd-docs: .claude/napkin.md"
+```
+
+`;` between hats, `:` between a hat and its list, `,` between paths. The sum applies **only** to the
+hat named, so one declaration never widens the rest of the pipeline. Then `sdd run` again. The
+refusal itself now carries a `HAT-REMEDY` line naming this key.
+
+**What you do NOT do:** widen the `writes:` of `agents/<hat>.md` in the kit. That widens the hat for
+**every** project that installs the kit, and it is what happened before the key existed — `796e334`
+put `PRODUCT.md` into every project's `writes:` to unblock one repo's DOCS phase. That list grows
+one name per project and no project owns it.
+
+**If the run is refused before any session opens** — `HAT_WRITES_EXTRA path '…' is not a literal
+path inside the repo` — the value is not a path: the key takes literal, repo-relative paths only, no
+`..`, nothing absolute, and no metacharacter except a trailing `/**` on a directory that is named.
+That is deliberate: the value is matched as a shell **glob**, so a `*` that slipped through would
+widen the hat far past what you meant (CWE-863, PR #45).
+
+**If the declaration seems to do nothing**, check `sdd preflight`: an entry naming a hat whose own
+`writes:` is empty — `sdd-executor` — is accepted and **ignored**, because that hat already writes
+anywhere and narrowing it would be a regression. Reasoning and what was discarded in
+[ADR 0009](adr/0009-the-genre-gains-deferred-and-hats-gain-project-exceptions.md).
 
 ---
 
