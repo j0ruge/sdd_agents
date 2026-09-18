@@ -136,7 +136,8 @@ atrasada em 2026-09-03 — o que o kit precisa lembrar mora no kit.
 fronteira nas fases de alvo. Credencial real entra só na fase cujo gate a exige (QA no navegador,
 PR no `gh`).
 
-**Onde mora hoje.** `ensure_mission_branch`; `kit_guard_arm`/`kit_guard_check` em quatro portas
+**Onde mora hoje.** `ensure_mission_branch`, com igualdade byte a byte de `00-missao.md` e
+`01-plano.md` antes e depois do checkout (progresso fica fora); `kit_guard_arm`/`kit_guard_check` em quatro portas
 (`KIT-TOUCHED`, e desde a fronteira do chapéu uma parada); `hat_guard_check` nos três sítios onde
 o `review_scope_check` só avisava, lendo commits **e** árvore contra `writes:`; o catálogo de
 mutação sabota **uma cópia** em `mktemp -d`; o env do harness é apagado por `run_phase()` antes do

@@ -370,10 +370,12 @@ branch the plan declares:
 A name starting with `-` is refused by the runner itself, before git sees it: `git checkout -f` is
 a legal command that returns 0, switches to nothing and throws away every uncommitted change.
 Everything else git refuses — a space, `..`, a dirty tree the checkout would overwrite — becomes a
-`die` carrying git's own message. And the artifact is re-read **after** the switch: a branch that
-does not carry this mission's `00-missao.md` also stops the line, because the alternative is
-spending sessions against a plan nobody approved there. All of it before a single session is spent;
-what to do about each is in
+`die` carrying git's own message. Before an existing destination is checked out, its
+`00-missao.md` **and** `01-plano.md` must be byte-identical to the source; both are checked again
+after checkout before any intervention or session. Checkpoint, notes and handoffs may differ: they
+are progress, not approved intent. A missing or stale approved artifact stops the line and names
+both branches and every divergent file. All of it before a single session is spent; what to do
+about each is in
 [`docs/failure-modes.md`](failure-modes.md#the-runner-refused-to-switch-to-the-declared-branch).
 
 The failure this closes was measured: in the SQ-97 pilot five phases committed into another PR's

@@ -4143,6 +4143,11 @@ warn_if_on_base_branch() {
 # commit that carries the plan lives where the human is standing when they run, and cutting from
 # the base would leave the whole mission behind.
 #
+# Before an existing branch is checked out, both approved inputs — 00-missao.md and 01-plano.md —
+# must be byte-identical there. The same hashes are checked again after checkout, closing the gap
+# in which the destination can move between the first read and the new working tree. Checkpoint,
+# notes and handoffs stay outside the comparison because they are progress, not approved intent.
+#
 # git refusing the checkout is a `die`, never a warning: a dirty tree or a name git will not take.
 # Going on would run the entire pipeline on a branch the plan did not ask for, which is the exact
 # failure this function exists to close — and guessing on top of a tree git already refused is how
@@ -4150,7 +4155,7 @@ warn_if_on_base_branch() {
 # the message instead of being replaced by a paraphrase.
 ensure_mission_branch() {
   [ "$DRY_RUN" = "1" ] && return 0
-  local want current out rc=0
+  local want current out rc=0 mission_rel mission_hash plan_hash target_hash mismatches artifact
   want="$(frontmatter "$MISSION_DIR/00-missao.md" branch)"
   # Two no-ops: an empty field, and the `<...>` placeholder templates/missao.md ships while the
   # name is still unknown (the TICKET phase fills it in). Neither is a branch name — git rejects
@@ -4174,7 +4179,22 @@ ensure_mission_branch() {
   esac
   current="$( cd "$REPO_ROOT" && git branch --show-current 2>/dev/null || true )"
   [ "$want" = "$current" ] && return 0
+  mission_rel="${MISSION_DIR#"$REPO_ROOT"/}"
+  mission_hash="$(git -C "$REPO_ROOT" hash-object "$MISSION_DIR/00-missao.md" 2>/dev/null || true)"
+  plan_hash="$(git -C "$REPO_ROOT" hash-object "$MISSION_DIR/01-plano.md" 2>/dev/null || true)"
   if ( cd "$REPO_ROOT" && git show-ref --verify --quiet "refs/heads/$want" ); then
+    mismatches=""
+    for artifact in 00-missao.md 01-plano.md; do
+      case "$artifact" in
+        00-missao.md) target_hash="$mission_hash" ;;
+        01-plano.md)  target_hash="$plan_hash" ;;
+      esac
+      [ -n "$target_hash" ] \
+        && [ "$(git -C "$REPO_ROOT" rev-parse --verify "$want:$mission_rel/$artifact" 2>/dev/null || true)" = "$target_hash" ] \
+        || mismatches="${mismatches:+$mismatches, }$artifact"
+    done
+    [ -z "$mismatches" ] \
+      || die "cannot switch from '${current:-<detached>}' to '$want': $mismatches differ or are missing on the destination branch; the working tree was not changed"
     out="$( cd "$REPO_ROOT" && git checkout "$want" 2>&1 )" || rc=$?
   else
     out="$( cd "$REPO_ROOT" && git checkout -b "$want" 2>&1 )" || rc=$?
@@ -4189,14 +4209,16 @@ ensure_mission_branch() {
   # switch as a success and then telling the human the mission was never planned. Worse and
   # quieter: a branch carrying an OLDER copy spends real sessions executing a plan nobody approved.
   #
-  # So the artifact is re-read AFTER the switch, through the same parser, and it has to still be
-  # there and still declare THIS branch. `die`, never a warning, for the reason the refused checkout
-  # gives: going on would run the whole pipeline against a plan the human did not approve, which is
-  # the failure this function exists to close, entered from the other side.
-  if [ ! -f "$MISSION_DIR/00-missao.md" ] \
-     || [ "$(frontmatter "$MISSION_DIR/00-missao.md" branch)" != "$want" ]; then
-    die "the branch '$want' declared in 00-missao.md does not carry this mission — you are now on it, and the plan that asked for it is on '${current:-<detached>}'"
-  fi
+  # So both approved artifacts are hashed again AFTER the switch. `die`, never a warning, for the
+  # reason the refused checkout gives: going on would run the whole pipeline against a plan the
+  # human did not approve, which is the failure this function exists to close from the other side.
+  mismatches=""
+  [ "$(git -C "$REPO_ROOT" hash-object "$MISSION_DIR/00-missao.md" 2>/dev/null || true)" = "$mission_hash" ] \
+    || mismatches="00-missao.md"
+  [ "$(git -C "$REPO_ROOT" hash-object "$MISSION_DIR/01-plano.md" 2>/dev/null || true)" = "$plan_hash" ] \
+    || mismatches="${mismatches:+$mismatches, }01-plano.md"
+  [ -z "$mismatches" ] \
+    || die "after switching from '${current:-<detached>}' to '$want', $mismatches no longer match the approved source; the line stops before any intervention or session"
   ok "branch: ${current:-<detached>} → $want (declared in 00-missao.md)"
   pipeline_log_line "$(date -Iseconds)  BRANCH  ${current:-<detached>} -> $want"
 }

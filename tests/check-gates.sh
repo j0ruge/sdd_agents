@@ -2468,6 +2468,9 @@ BRANCH_LINE='branch: .* → '
 # --- 1. the declared branch exists: check it out — and never in a dry run.
 git branch missao/20260103-existing
 branch_mission "missao/20260103-existing"
+git add "$BMDIR/00-missao.md" "$BMDIR/01-plano.md" "$BMDIR/checkpoint.md"
+git commit -qm "branch fixture: mission carried by both branches"
+git branch -f missao/20260103-existing HEAD
 git checkout -q main
 BR_DRY_OUT="$( cd "$FIX" && "$SDD" run --dry-run "$BM" 2>&1 )"; BR_DRY_RC=$?
 BR_DRY_AT="$(git branch --show-current)"
@@ -2606,8 +2609,15 @@ git checkout -q -b missao/20260103-refused
 echo "content that lives only on the refused branch" > file.txt
 git commit -qam "branch fixture: a conflicting change to a tracked file"
 git checkout -q main
-echo "an uncommitted local change to that very same file" > file.txt
 branch_mission "missao/20260103-refused"
+git add "$BMDIR/00-missao.md" "$BMDIR/01-plano.md"
+git commit -qm "branch fixture: source declares the refused branch"
+git checkout -q missao/20260103-refused
+git checkout -q main -- "$BMDIR/00-missao.md" "$BMDIR/01-plano.md"
+git add "$BMDIR/00-missao.md" "$BMDIR/01-plano.md"
+git commit -qm "branch fixture: destination carries the approved artifacts"
+git checkout -q main
+echo "an uncommitted local change to that very same file" > file.txt
 BR_DIE_OUT="$( cd "$FIX" && "$SDD" run "$BM" 2>&1 )"; BR_DIE_RC=$?
 BR_DIE_AT="$(git branch --show-current)"
 if [ "$BR_DIE_RC" -eq 1 ] \
@@ -2783,17 +2793,141 @@ BR_ORPH_OUT="$( cd "$FIX" && "$SDD" run "$OM" 2>&1 )"; BR_ORPH_RC=$?
 BR_ORPH_AT="$(git branch --show-current)"
 ( cd "$FIX" && git checkout -q main )
 if [ "$BR_ORPH_RC" -eq 1 ] \
+   && [ "$BR_ORPH_AT" = "main" ] \
    && grep -q "missao/20260109-orphan" <<< "$BR_ORPH_OUT" \
-   && grep -q "does not carry" <<< "$BR_ORPH_OUT" \
+   && grep -q "main" <<< "$BR_ORPH_OUT" \
+   && grep -q "00-missao.md" <<< "$BR_ORPH_OUT" \
+   && grep -q "01-plano.md" <<< "$BR_ORPH_OUT" \
    && ! grep -q "sdd-planner" <<< "$BR_ORPH_OUT" \
    && ! grep -q "BLOCKED in EXEC" <<< "$BR_ORPH_OUT"; then
-  pass "a declared branch that does not carry the mission stops the line instead of running blind"
+  pass "a destination missing both plan artifacts is refused before the checkout"
 else
-  fail "a declared branch that does not carry the mission stops the line instead of running blind" \
-       "rc 1 naming the branch and saying it does not carry the mission, with no phase after it" \
+  fail "a destination missing both plan artifacts is refused before the checkout" \
+       "rc 1 on main naming both branches and both missing artifacts, with no phase after it" \
        "rc $BR_ORPH_RC, ended at $BR_ORPH_AT: $(tail -3 <<< "$BR_ORPH_OUT")"
 fi
 git branch -q -D missao/20260109-orphan
+
+# --- 7. both plan artifacts are immutable across an existing-branch switch.
+#
+# The branch field agreeing is necessary but not sufficient: two branches can carry the same
+# mission identity and branch name while 01-plano.md differs. The old runner checked only the
+# field after checkout, so it opened the session against the destination's stale plan. The first
+# control also proves that checkpoint progress is deliberately outside this equality contract.
+PM="20260110-plan-integrity"
+PMDIR="$FIX/docs/handoffs/$PM"
+PTARGET="missao/20260110-plan-integrity"
+mkdir -p "$PMDIR"
+printf -- '---\nmissao: %s\naprovacao: auto\nbranch: %s\n---\n# Mission v1\n' \
+  "$PM" "$PTARGET" > "$PMDIR/00-missao.md"
+printf '# Approved plan v1\n' > "$PMDIR/01-plano.md"
+cat > "$PMDIR/checkpoint.md" <<'EOF'
+| ID | Incremento | Check (comando → esperado) | Status | Commit |
+|---|---|---|---|---|
+| I1 | source progress | `true` → 0 | blocked | — |
+EOF
+git add "$PMDIR"
+git commit -qm "branch fixture: approved plan on source"
+git branch "$PTARGET"
+git checkout -q "$PTARGET"
+sed -i 's/source progress/destination progress/' "$PMDIR/checkpoint.md"
+git commit -qam "branch fixture: independent checkpoint progress"
+git checkout -q main
+
+PI_OK_OUT="$( cd "$FIX" && "$SDD" run "$PM" 2>&1 )"; PI_OK_RC=$?
+PI_OK_AT="$(git branch --show-current)"
+if [ "$PI_OK_RC" -eq 3 ] \
+   && [ "$PI_OK_AT" = "$PTARGET" ] \
+   && grep -qF "branch: main → $PTARGET" <<< "$PI_OK_OUT" \
+   && grep -q "BLOCKED in EXEC" <<< "$PI_OK_OUT" \
+   && ! grep -q "the test invoked the real claude" <<< "$PI_OK_OUT"; then
+  pass "identical mission and plan switch even when checkpoint progress differs"
+else
+  fail "identical mission and plan switch even when checkpoint progress differs" \
+       "rc 3 on $PTARGET after a real switch and the blocked checkpoint, with no session" \
+       "rc $PI_OK_RC at $PI_OK_AT: $(tail -3 <<< "$PI_OK_OUT")"
+fi
+git checkout -q main
+
+# The target now carries the old plan and main receives the approved replacement. `--phase` is
+# intentional: if the integrity guard misses, it writes an intervention before anything else.
+# Refusal therefore has three observable effects: no checkout, no note and no session.
+printf '# Approved plan v2\n' > "$PMDIR/01-plano.md"
+git add "$PMDIR/01-plano.md"
+git commit -qm "branch fixture: newer approved plan on source"
+PI_NOTE_BEFORE="$(grep -Rhc 'intervention:' "$PMDIR" 2>/dev/null | awk '{s += $1} END {print s + 0}')"
+PI_HEAD_BEFORE="$(git rev-parse HEAD)"
+PI_OLD_OUT="$( cd "$FIX" && "$SDD" run "$PM" --phase EXEC 2>&1 )"; PI_OLD_RC=$?
+PI_OLD_AT="$(git branch --show-current)"
+PI_NOTE_AFTER="$(grep -Rhc 'intervention:' "$PMDIR" 2>/dev/null | awk '{s += $1} END {print s + 0}')"
+PI_HEAD_AFTER="$(git rev-parse HEAD)"
+if [ "$PI_OLD_RC" -eq 1 ] \
+   && [ "$PI_OLD_AT" = "main" ] \
+   && [ "$PI_HEAD_AFTER" = "$PI_HEAD_BEFORE" ] \
+   && [ "$PI_NOTE_AFTER" = "$PI_NOTE_BEFORE" ] \
+   && grep -q "main" <<< "$PI_OLD_OUT" \
+   && grep -q "$PTARGET" <<< "$PI_OLD_OUT" \
+   && grep -q "01-plano.md" <<< "$PI_OLD_OUT" \
+   && ! grep -q "BLOCKED in EXEC" <<< "$PI_OLD_OUT" \
+   && ! grep -q "the test invoked the real claude" <<< "$PI_OLD_OUT"; then
+  pass "a stale destination plan is refused before checkout, intervention or session"
+else
+  fail "a stale destination plan is refused before checkout, intervention or session" \
+       "rc 1 on main at the same HEAD, no new intervention, naming both branches and 01-plano.md" \
+       "rc $PI_OLD_RC at $PI_OLD_AT, head $PI_HEAD_BEFORE -> $PI_HEAD_AFTER, notes $PI_NOTE_BEFORE -> $PI_NOTE_AFTER: $(tail -3 <<< "$PI_OLD_OUT")"
+fi
+
+# The other file gets its own witness. Keeping 01-plano.md byte-identical prevents a partial guard
+# that compares only the plan from satisfying the branch family by accident.
+git checkout -q "$PTARGET"
+git checkout -q main -- "$PMDIR/01-plano.md"
+sed -i 's/# Mission v1/# Mission changed on destination/' "$PMDIR/00-missao.md"
+git add "$PMDIR/00-missao.md" "$PMDIR/01-plano.md"
+git commit -qm "branch fixture: destination mission bytes diverge"
+git checkout -q main
+PI_MISSION_OUT="$( cd "$FIX" && "$SDD" run "$PM" 2>&1 )"; PI_MISSION_RC=$?
+PI_MISSION_AT="$(git branch --show-current)"
+if [ "$PI_MISSION_RC" -eq 1 ] \
+   && [ "$PI_MISSION_AT" = "main" ] \
+   && grep -q "00-missao.md" <<< "$PI_MISSION_OUT" \
+   && ! grep -q "01-plano.md" <<< "$PI_MISSION_OUT" \
+   && ! grep -q "BLOCKED in EXEC" <<< "$PI_MISSION_OUT"; then
+  pass "destination mission bytes are compared independently from the plan"
+else
+  fail "destination mission bytes are compared independently from the plan" \
+       "rc 1 on main naming only 00-missao.md, before the blocked phase" \
+       "rc $PI_MISSION_RC at $PI_MISSION_AT: $(tail -3 <<< "$PI_MISSION_OUT")"
+fi
+
+# Rebuild an identical target, then let git's post-checkout hook alter the plan after the precheck.
+# This deterministic race proves the second validation is real; without it the run reaches EXEC.
+git branch -D "$PTARGET" >/dev/null
+git branch "$PTARGET"
+cat > "$FIX/.git/hooks/post-checkout" <<EOF
+#!/usr/bin/env bash
+if [ "\$(git branch --show-current)" = "$PTARGET" ]; then
+  printf '# Plan changed during checkout\\n' > "$PMDIR/01-plano.md"
+fi
+EOF
+chmod +x "$FIX/.git/hooks/post-checkout"
+PI_RACE_OUT="$( cd "$FIX" && "$SDD" run "$PM" 2>&1 )"; PI_RACE_RC=$?
+PI_RACE_AT="$(git branch --show-current)"
+if [ "$PI_RACE_RC" -eq 1 ] \
+   && [ "$PI_RACE_AT" = "$PTARGET" ] \
+   && grep -q "main" <<< "$PI_RACE_OUT" \
+   && grep -q "$PTARGET" <<< "$PI_RACE_OUT" \
+   && grep -q "01-plano.md" <<< "$PI_RACE_OUT" \
+   && ! grep -q "BLOCKED in EXEC" <<< "$PI_RACE_OUT"; then
+  pass "mission and plan are revalidated after checkout before the run continues"
+else
+  fail "mission and plan are revalidated after checkout before the run continues" \
+       "rc 1 on $PTARGET naming both branches and 01-plano.md, before the blocked phase" \
+       "rc $PI_RACE_RC at $PI_RACE_AT: $(tail -3 <<< "$PI_RACE_OUT")"
+fi
+rm -f "$FIX/.git/hooks/post-checkout"
+git checkout -q -- "$PMDIR/01-plano.md"
+git checkout -q main
+git branch -q -D "$PTARGET"
 
 # --- the fourth door: sdd retry warns about the base branch ----------------
 echo "== sdd retry on the base branch =="

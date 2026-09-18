@@ -712,16 +712,17 @@ empty is worth one `wc -c .sdd/config.sh`; on `0`, delete it and install again.
 
 ## The runner refused to switch to the declared branch
 
-**Symptom:** `sdd run` (or `sdd retry`) exits before opening any session, with one of three
-messages naming the `branch:` field of `00-missao.md`.
+**Symptom:** `sdd run` (or `sdd retry`) exits before opening any session, naming the declared
+branch or approved artifacts that differ between branches.
 
 **Cause and what you do**, one per message:
 
 | The runner said | What happened | What you do |
 |---|---|---|
+| `cannot switch from '<source>' to '<destination>': <files> differ or are missing …` | The existing destination does not carry byte-identical `00-missao.md` and `01-plano.md`. The checkout did not happen. | Compare the named files and decide which approved intent is current. Bring both branches into agreement before retrying; do not copy checkpoint, notes or handoffs merely to satisfy this check. |
 | `could not switch to the branch '<name>' … — git said: <git's own message>` | git declined the checkout. Usually the working tree carries changes the switch would overwrite. | Deal with the tree the way you would for any checkout — `git stash`, commit, or discard. The kit will not choose for you: picking one of those three is deciding whose work survives. |
 | `the branch '<name>' … starts with '-' — git would read it as an option` | the declared name would reach `git checkout` as a flag. `git checkout -f` is a legal command that returns 0 and throws the whole dirty tree away, so the shape is refused before git sees it. | Fix `branch:` in `00-missao.md`. |
-| `the branch '<name>' … does not carry this mission — you are now on it, and the plan that asked for it is on '<other>'` | the checkout worked and the mission's artifacts are not on the branch it asked for — an old branch of the same name, or one cut before the mission existed. | Go back (`git checkout <other>`) and decide which branch the mission belongs on. **Do not** re-run from here: the pipeline would spend sessions against a plan nobody approved on this branch. |
+| `after switching from '<source>' to '<destination>', <files> no longer match …` | The approved artifacts changed between the pre-check and the completed checkout. The runner is now on the destination, but stopped before writing an intervention or opening a session. | Return to the named source, inspect who moved the branch or working tree, and reconcile the named files before retrying. |
 
 **How the kit reacts:** it stops, every time — `die`, no session spent, nothing guessed. Carrying
 on from wherever the checkout left the tree is the SQ-97 class the field exists to close

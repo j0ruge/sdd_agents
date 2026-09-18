@@ -2013,17 +2013,29 @@ mut_RUN_branch_switch_dead() {
 # The pattern is what gets sabotaged rather than the `die`, because a mutant that turned the die
 # into a `return 0` would make the whole field a no-op and kill three other assertions with it —
 # this entry has to be credited for the option-shaped name and nothing else.
-# Goes back to treating the checkout as the end of the decision: the plan is read on one branch and
-# the tree is replaced by another, and nothing looks again. The `die` becomes a `:` with the same
-# string, so the condition still runs and a reader still sees a guard — the run simply goes on with
-# MISSION_DIR pointing at a directory the checkout removed, announcing the switch as a success and
-# then telling the human the mission was never planned. The quiet variant is the expensive one: a
-# branch carrying an OLDER copy spends real sessions on a plan nobody approved.
-#
-# This is the regime the whole branch family was blind to until r1 of the review: five assertions
-# on a fixture whose artifacts were never `git add`ed, where `git checkout` cannot remove them.
+# The destination-presence guard is disabled while the post-check remains intact. The run still
+# stops, but only after changing branches: the property is refusal BEFORE checkout, because a
+# failed invocation may not replace the operator's working tree.
 mut_RUN_branch_orphan_blind() {
-  sed -i 's@^    die "the branch@    : "the branch@' "$1"
+  sed -i '/^  if ( cd "$REPO_ROOT" && git show-ref/,/^  else$/ s@^    \[ -z "$mismatches" \] \\$@    true \\@' "$1"
+}
+
+# Compares only 00-missao.md before checkout. A destination with the same branch field and an old
+# 01-plano.md then reaches the checkout — the reproduced defect this stage closes.
+mut_RUN_branch_plan_integrity_blind() {
+  sed -i 's@^    for artifact in 00-missao.md 01-plano.md; do$@    for artifact in 00-missao.md; do@' "$1"
+}
+
+# The symmetric partial guard: 01-plano.md agrees, but other bytes of 00-missao.md changed. Keeping
+# it separate proves neither approved input borrows coverage from the other.
+mut_RUN_branch_mission_integrity_blind() {
+  sed -i 's@^    for artifact in 00-missao.md 01-plano.md; do$@    for artifact in 01-plano.md; do@' "$1"
+}
+
+# Drops the second comparison. The post-checkout hook in check-gates changes the plan after the
+# destination passed the first comparison, so only this validation can stop the run.
+mut_RUN_branch_postcheck_blind() {
+  sed -i 's@^    || die "after switching from @    || : "after switching from @' "$1"
 }
 
 mut_RUN_branch_option_name() {
@@ -3964,6 +3976,9 @@ CATALOG=(
   RUN_branch_switch_dead
   RUN_branch_option_name
   RUN_branch_orphan_blind
+  RUN_branch_plan_integrity_blind
+  RUN_branch_mission_integrity_blind
+  RUN_branch_postcheck_blind
   RETRY_base_branch_warn_dead
   APPROVE_base_branch_warn_dead
   RUN_branch_order_swap
