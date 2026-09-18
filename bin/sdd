@@ -4938,26 +4938,6 @@ health_ratchet() {
   fi
 }
 
-# The increment table, printed by both faces of `sdd status`. ONE definition rather than two: it
-# reads `checkpoint_rows` — itself the single checkpoint reader — and a second copy of this loop
-# is the shape this repo refuses everywhere else (a second reader learns a status token late, and
-# the two faces of one command disagree about the same file).
-status_increments() {
-  local rows; rows="$(checkpoint_rows)"
-  [ -n "$rows" ] || return 0
-  info "  increments:"
-  local id title _c st commit mark
-  while IFS=$'\t' read -r id title _c st commit; do
-    case "$st" in
-      done)    mark="${C_GREEN}✓${C_RESET}" ;;
-      blocked) mark="${C_RED}✗${C_RESET}" ;;
-      doing)   mark="${C_YELLOW}▸${C_RESET}" ;;
-      *)       mark="${C_DIM}·${C_RESET}" ;;
-    esac
-    printf '    %b %-4s %-46s %s%s%s\n' "$mark" "$id" "${title:0:46}" "$C_DIM" "${commit:0:8}" "$C_RESET"
-  done <<< "$rows"
-}
-
 # WHERE AM I, for free. Deriving the phase IS the gate loop — `current_phase()` runs every gate,
 # and a gate runs TEST_CMD and E2E_CMD — so the ordinary `sdd status` costs a whole suite plus a
 # whole e2e every time somebody asks which phase a mission is in. Measured on 2026-09-16 in a
@@ -4989,7 +4969,7 @@ cmd_status() {
 
   if [ "$no_gates" = "1" ]; then
     local f names=""
-    for f in "$MISSION_DIR"/*; do [ -e "$f" ] && names="$names $(basename "$f")"; done
+    for f in "$MISSION_DIR"/*; do [ -e "$f" ] && names="$names ${f##*/}"; done
     info "  artifacts:"
     if [ -n "$names" ]; then
       printf '    %s%s%s\n' "$C_DIM" "${names# }" "$C_RESET"
@@ -5032,6 +5012,31 @@ cmd_status() {
     printf '  next phase: %s%s%s — %s\n' "$C_BOLD" "$next" "$C_RESET" "$GATE_WHY"
     printf '  %srun: sdd run %s%s\n' "$C_DIM" "$MISSION" "$C_RESET"
   fi
+}
+
+# ⚠️ DEFINED BELOW `cmd_status` ON PURPOSE, not for reading order. `tests/check-health.sh`
+# anchors the END of the `sdd health` census region on the text `cmd_status() {`, so a helper
+# placed above it drags its capture into a region it has nothing to do with and moves a ratchet
+# that is supposed to record growth in the health sensor. Bash binds function names at parse
+# time, so the call site above is satisfied either way.
+# The increment table, printed by both faces of `sdd status`. ONE definition rather than two: it
+# reads `checkpoint_rows` — itself the single checkpoint reader — and a second copy of this loop
+# is the shape this repo refuses everywhere else (a second reader learns a status token late, and
+# the two faces of one command disagree about the same file).
+status_increments() {
+  local rows; rows="$(checkpoint_rows)"
+  [ -n "$rows" ] || return 0
+  info "  increments:"
+  local id title _c st commit mark
+  while IFS=$'\t' read -r id title _c st commit; do
+    case "$st" in
+      done)    mark="${C_GREEN}✓${C_RESET}" ;;
+      blocked) mark="${C_RED}✗${C_RESET}" ;;
+      doing)   mark="${C_YELLOW}▸${C_RESET}" ;;
+      *)       mark="${C_DIM}·${C_RESET}" ;;
+    esac
+    printf '    %b %-4s %-46s %s%s%s\n' "$mark" "$id" "${title:0:46}" "$C_DIM" "${commit:0:8}" "$C_RESET"
+  done <<< "$rows"
 }
 
 # Prints only the name of the current phase (or DONE). It exists for scripts and for the kit's
