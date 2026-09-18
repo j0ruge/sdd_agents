@@ -195,6 +195,40 @@ e o kit não foi tocado. A próxima missão que escrever no napkin bloqueia igua
 
 — medido por `sessão coordenadora` na missão `20260916-quatro-silencios-da-tela` (2026-09-17)
 
+**Terceira ocorrência — mesmo chapéu do caso anterior, e desta vez o chapéu FOI alargado**
+(`agents/sdd-docs.md:9`, 2026-09-18, missão `20260917-papeis-consultor-admin` do `sales_quote`):
+
+```text
+  warn  the DOCS session (sdd-docs) touched 1 path(s) outside its writes: PRODUCT.md
+  fail  BLOCKED in DOCS — the DOCS session (sdd-docs) touched 1 path(s) outside its writes:
+        PRODUCT.md
+```
+
+**A mudança que o causou** — 30 linhas em `PRODUCT.md`, e elas estão **certas**: a missão tornou
+falsas quatro afirmações de produto, e a pior delas dizia que aprovar uma cotação é *"a única ação
+exclusiva do sistema"* do administrador, num arquivo cuja primeira metade a própria fase EXEC já
+tinha corrigido no incremento de documentação. A fase DOCS achou o resto.
+
+**Por que está certa**: no repo-alvo, `PRODUCT.md` é irmã de `CONTEXT.md` e de `DESIGN.md` como
+verdade viva — `.claude/rules/frontend-react.md` a declara *"verdade de **produto** (quem usa,
+cenário, restrições duráveis)"*. O chapéu autorizava `CONTEXT.md` e não a irmã ao lado.
+
+**A decisão divergiu da ocorrência anterior, a pedido do humano**: em vez de manter o conteúdo e
+deixar o chapéu como estava, `PRODUCT.md` entrou na lista literal do `writes:`, ao lado de
+`CONTEXT.md`. Duas consequências que valem estar escritas:
+
+- **Alarga para todo projeto que usa o kit**, não só para o `sales_quote` — é o remendo literal, não
+  a chave por projeto que este item propõe. O risco é baixo porque um caminho que não existe no alvo
+  não é escrito; o custo é que a lista literal cresce um nome por projeto, que é exatamente o que a
+  direção deste item existe para evitar.
+- **`DESIGN.md` fica de fora e é da mesma família.** Não entrou porque não foi pedido e nenhuma
+  missão o mediu ainda; a próxima que tocar design bloqueia igual.
+
+O item **continua aberto**: três ocorrências, dois chapéus, e as duas primeiras seguem sem conserto.
+A direção não muda — chave por projeto no `.sdd/config.sh`, declarável **por caminho**.
+
+— medido por `sessão coordenadora` na missão `20260917-papeis-consultor-admin` (2026-09-18)
+
 ---
 
 ### 5. Não existe comando barato para ver o estado
