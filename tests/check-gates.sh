@@ -3637,6 +3637,21 @@ hwx_nocolon_other="$( hwx_probe '"docs/foo.md"' 'the kit has no agents' )"
 assert_eq "an entry with no ':' is refused by the empty-hat clause, not by the hat-not-found one" \
   "died|1|died|0" "$hwx_nocolon|$hwx_nocolon_other"
 
+# An entry that names a hat and then NO path — `sdd-qa:`, or a list of nothing but commas and
+# spaces. The parser drops empty items, so such an entry used to emit no pair at all and the
+# validator had nothing to look at: rc 0, no warning, and an exception that declared nothing. Same
+# silence the hat-not-found clause refuses by name, and the same cost — the operator reads the
+# still-blocked phase as the key not working. Three spellings, because "the list is empty" and
+# "the list is punctuation" reach the parser by different paths.
+assert_eq "an entry that lists no path is refused, and the reason names the hat" "died|1" \
+  "$( hwx_probe '"sdd-qa:"' "entry for hat 'sdd-qa' lists no path" )"
+assert_eq "...and a list of nothing but commas and spaces is the same entry" "died|1" \
+  "$( hwx_probe '"sdd-qa:  ,  , "' "entry for hat 'sdd-qa' lists no path" )"
+# The SECOND hat is the one that is empty here, so a validator that only ever looked at the first
+# entry would pass this and fail nothing else in the block.
+assert_eq "...and it is caught on the second hat too, not only the first" "died|1" \
+  "$( hwx_probe '"sdd-qa: a.md; sdd-docs:"' "entry for hat 'sdd-docs' lists no path" )"
+
 # A NEWLINE. Legal shell, the natural way to spell a long list across two lines in a config file,
 # and the parser cannot see past one: its `read -r -a` consumes a single line. Both callers share
 # that parser, so nothing contradicted anything — the run was ACCEPTED with rc 0 and the second

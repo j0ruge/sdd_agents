@@ -39,7 +39,7 @@ estou"* e o kit responde **errado** ou **caro**.
 | 7 | Teto não conhece missão reaberta | roteado ao `TODO.md` | `1fb120b` |
 | 8 | Background frágil; foreground sobrevive | **RESOLVIDO** — verbete em `docs/failure-modes.md` | `826b6b3` |
 | 9 | CLOSE paga sessão que não pode concluir | **RESOLVIDO** — o prompt carrega a autorização | `a8526ad` |
-| 10 | As skills de QA não conhecem `Closable by:` | **RESOLVIDO** — o `sdd install` semeia o campo no template | `f7bcf10` |
+| 10 | As skills de QA não conhecem `Closable by:` | **RESOLVIDO** — o `sdd install --force` semeia o campo no template | `f7bcf10` |
 | obs | `Test Coverage = A` não implica caso negativo | roteado ao `TODO.md` | `1fb120b` |
 
 **Verificação da missão que fechou os quatro:** `tests/run-all.sh` verde (1163 asserções);
@@ -489,7 +489,8 @@ digitar o comando.
 
 ### 10. Nenhuma das skills de QA conhece o campo `Closable by:`
 
-  RESOLVIDO por `f7bcf10`: o `sdd install` semeia a linha em `$QA_DOCS_PATH/templates/bug.md`,
+  RESOLVIDO por `f7bcf10`: o `sdd install --force` semeia a linha em `$QA_DOCS_PATH/templates/bug.md`
+  (o `sdd install` sem a flag só RELATA o campo faltando, sem tocar no arquivo),
   imediatamente abaixo do `Status:`, idempotente e recusando um template fora da forma da skill; o
   `sdd preflight` fica vermelho com o remédio enquanto faltar. As skills seguem sem conhecer o
   campo — o kit o põe no template de que elas copiam, que é o ponto de extensão que existe.

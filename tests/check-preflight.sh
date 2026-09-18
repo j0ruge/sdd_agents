@@ -875,6 +875,37 @@ assert_eq "a repo with no QA docs tree is neither failed nor seeded" \
   "fail:0 said:1" \
   "fail:$( grep -cE '^ *fail +qa bug template' <<< "$bt_pf_notree" ) said:$( grep -c 'qa bug template not found' <<< "$bt_pf_notree" )"
 
+# 6. The repo that does NOT keep its QA tree at docs/qa. `cmd_install` never calls `load_config`,
+#    so the `${QA_DOCS_PATH:-docs/qa}` it used to build the template path read an UNSET variable
+#    and answered `docs/qa` whatever the repo had declared — while `cmd_preflight`, which does
+#    call `load_config`, checked the configured path. The two commands talked about different
+#    files, and because preflight NAMES `sdd install --force` as its remedy, the pair closed into
+#    a loop: fail, run the remedy, remedy reports ok, nothing changes, fail again.
+#
+#    FOUR terms, and the last two are what make it a measurement rather than a restatement. That
+#    the configured template gained the field is the fix; that `docs/qa` was NOT created is the
+#    defect's own signature (the old code would have looked there and, finding nothing, said so);
+#    and that preflight goes quiet afterwards is the loop actually closing — asserting only the
+#    first term would be satisfied by an installer that seeded both paths.
+rm -rf "$BT/docs" "$BT/quality"
+mkdir -p "$BT/quality/qa/templates"
+sed -i 's|^QA_DOCS_PATH=.*|QA_DOCS_PATH="quality/qa"|' "$BT/.sdd/config.sh"
+grep -q '^QA_DOCS_PATH=' "$BT/.sdd/config.sh" || printf 'QA_DOCS_PATH="quality/qa"\n' >> "$BT/.sdd/config.sh"
+{ printf '# BUG-<YYYYMMDD>-<slug>: <one-line title, user-first>\n\n'
+  printf -- '- **Status:** open <!-- open | fixed | verified | wont-fix | invalid -->\n'
+} > "$BT/quality/qa/templates/bug.md"
+bt_pf_alt_before="$( cd "$BT" && "$SDD" preflight 2>&1 )"
+bt_inst_alt="$(     cd "$BT" && "$SDD" install --force 2>&1 )"
+bt_pf_alt_after="$( cd "$BT" && "$SDD" preflight 2>&1 )"
+assert_eq "install --force seeds the CONFIGURED qa tree, not the default one, and the loop closes" \
+  "before-fail:1 said:1 seeded:1 no-default-tree:1 after-fail:0" \
+  "before-fail:$( grep -cE '^ *fail +qa bug template' <<< "$bt_pf_alt_before" ) said:$( grep -cE '^ *ok +qa bug template.*inserted' <<< "$bt_inst_alt" ) seeded:$( grep -c '^- \*\*Closable by:\*\* agent' "$BT/quality/qa/templates/bug.md" ) no-default-tree:$( [ -e "$BT/docs/qa" ] && echo 0 || echo 1 ) after-fail:$( grep -cE '^ *fail +qa bug template' <<< "$bt_pf_alt_after" )"
+# ...and the remedy preflight NAMES is the one that was just run. The loop above is only a loop
+# because the two sentences point at each other; without this term the pair could drift apart
+# again and each half would still pass.
+assert_eq "and the remedy preflight names is the command that closed it" "1" \
+  "$( grep -c "sdd install --force" <<< "$bt_pf_alt_before" )"
+
 # ---------------------------------------------------------------------------
 echo
 if [ "$fails" -eq 0 ]; then printf '  ok    preflight measures the GNU userland instead of assuming it\n'; exit 0; fi

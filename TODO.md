@@ -858,7 +858,7 @@ O plano consolidado pelo Codex Astra, baseado no artigo de @0xCodez e nas refer�
   `agents/sdd-qa.md:118` — `grep -rn Closable ~/.claude/skills/qa-*` responde **zero**, então o
   campo só chega ao disco pelo template local do repo ou pelo `sdd-qa` marcando arquivo por arquivo.
   Em repo-alvo novo a Âncora 3 inteira roda em regime "ausente ⇒ bloqueia".
-  RESOLVIDO por f7bcf10 — o `sdd install` semeia o campo em `$QA_DOCS_PATH/templates/bug.md`, abaixo
+  RESOLVIDO por f7bcf10 — o `sdd install --force` semeia o campo em `$QA_DOCS_PATH/templates/bug.md`, abaixo
   do `Status:`, idempotente e recusando template fora da forma da skill; o `sdd preflight` cobra. As
   skills seguem sem conhecer o campo: o kit o põe no template de que elas copiam.
   — descoberto por `sessão coordenadora` na missão `20260918-a-sessao-morreu-e-o-gate-levou-a-culpa` (2026-09-18)

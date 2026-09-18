@@ -201,6 +201,15 @@ load_config() {
   while IFS=$'\x1f' read -r _hwx_hat _hwx_path; do
     [ -n "$_hwx_hat" ] \
       || die "HAT_WRITES_EXTRA has an entry with no hat before ':' (offending: '$_hwx_path') — the grammar is 'hat: path[, path]; hat: path'"
+    # An entry whose list yields NO path — `sdd-qa:`, or a list of nothing but commas and spaces.
+    # The parser drops empty items, so such an entry emitted no pair at all and load_config had
+    # nothing to validate: the run was accepted and the exception declared nothing. That is the
+    # same silence the hat-not-found clause above refuses by name — a typo sitting in the config
+    # declaring an exception for nobody, with the operator reading the still-blocked phase as the
+    # key not working. The parser emits one pair with an EMPTY path for it rather than dropping
+    # the entry, so the refusal happens here and the grammar keeps living in one place.
+    [ -n "$_hwx_path" ] \
+      || die "HAT_WRITES_EXTRA entry for hat '$_hwx_hat' lists no path — the grammar is 'hat: path[, path]; hat: path'"
     [ -f "$SDD_HOME/agents/$_hwx_hat.md" ] \
       || die "HAT_WRITES_EXTRA names hat '$_hwx_hat' — the kit has no agents/$_hwx_hat.md"
     hat_extra_path_ok "$_hwx_path" \
@@ -1837,7 +1846,7 @@ hat_expand() {   # hat_expand <globs> — $HANDOFF_DIR $MISSION $TODO_FILE $QA_D
 # carry a probe (tests/check-gates.sh) and a mutant now, because a refusal nobody measures is the
 # one that quietly turns into an acceptance.
 hat_writes_extra_each() {   # hat_writes_extra_each — one `<hat>\x1f<path>` line per declared pair
-  local spec="${HAT_WRITES_EXTRA:-}" entry hat list path
+  local spec="${HAT_WRITES_EXTRA:-}" entry hat list path emitted
   [ -n "$spec" ] || return 0
   local -a entries plist
   IFS=';' read -r -a entries <<< "$spec"
@@ -1847,9 +1856,11 @@ hat_writes_extra_each() {   # hat_writes_extra_each — one `<hat>\x1f<path>` li
     if [ "${entry#*:}" = "$entry" ]; then hat=""; list="$entry"; else hat="${entry%%:*}"; list="${entry#*:}"; fi
     hat="${hat#"${hat%%[![:space:]]*}"}"; hat="${hat%"${hat##*[![:space:]]}"}"
     IFS=',' read -r -a plist <<< "$list"
+    emitted=0
     for path in "${plist[@]}"; do
       path="${path#"${path%%[![:space:]]*}"}"; path="${path%"${path##*[![:space:]]}"}"
       [ -n "$path" ] || continue
+      emitted=1
       # US (0x1f) and never a TAB. `read` discards leading IFS *whitespace* even when IFS is set
       # to one character, and space/tab/newline are that whitespace — so a tab-separated line whose
       # first field is EMPTY arrives with the fields shifted one to the left: the path lands in the
@@ -1859,6 +1870,12 @@ hat_writes_extra_each() {   # hat_writes_extra_each — one `<hat>\x1f<path>` li
       # `agents/docs/foo.md.md`. US is not IFS whitespace, so the empty field survives the read.
       printf '%s\x1f%s\n' "$hat" "$path"
     done
+    # An entry that yielded NO path still emits one pair, with an empty path, so load_config can
+    # refuse it. Dropping it here — which is what the loop above does to every empty item — made
+    # `HAT_WRITES_EXTRA="sdd-qa:"` and a list of nothing but commas and spaces indistinguishable
+    # from having no key at all: accepted, silent, declaring nothing. The grammar is decided in
+    # the validator, so what the parser owes it is the entry, not a verdict on the entry.
+    [ "$emitted" = 1 ] || printf '%s\x1f\n' "$hat"
   done
 }
 
@@ -1909,6 +1926,10 @@ hat_writes_extra_for() {   # hat_writes_extra_for <hat> — the project's paths 
   [ -n "$want" ] || { printf '\n'; return 0; }
   while IFS=$'\x1f' read -r hat path; do
     [ "$hat" = "$want" ] || continue
+    # The empty path the parser emits for a pathless entry is the validator's business, never a
+    # glob: load_config refuses it before any session, and belt-and-braces it never reaches
+    # hat_path_allowed from here either.
+    [ -n "$path" ] || continue
     out="${out:+$out, }$path"
   done < <(hat_writes_extra_each)
   printf '%s\n' "$out"
@@ -3925,23 +3946,35 @@ cmd_install() {
     ok ".sdd/config.sh created (base branch detected: $branch — confirm it)"
   fi
 
-  # The two paths the runner cannot work without, both NAMED in the config just written — which is
+  # The three paths the runner cannot work without, all NAMED in the config just written — which is
   # what makes this the installer's job. Without HANDOFF_DIR, `resolve_mission` dies on the FIRST
   # command a new user types ("docs/handoffs/ does not exist in the target repo"), and TODO_FILE is
   # where principle 5 sends every out-of-scope finding.
+  #
+  # QA_DOCS_PATH is the third, and it was missing: cmd_install does NOT call load_config, so the
+  # `${QA_DOCS_PATH:-docs/qa}` further down read an UNSET variable and silently seeded `docs/qa`
+  # whatever the repo had declared. cmd_preflight does call load_config, so the two commands
+  # disagreed about which file they were talking about — and since preflight NAMES `sdd install
+  # --force` as the remedy for the missing field, a repo with QA_DOCS_PATH="quality/qa" got a
+  # closed loop: preflight fails, the remedy reports `ok  qa bug template not there yet`, the
+  # configured template is never touched, preflight fails again. A gate whose named remedy cannot
+  # satisfy it is the unsatisfiable-gate class of principle 1, reached here through a default.
   #
   # SOURCED in a subshell, the way check 2b of cmd_health reads TEST_CMD: what matters is the value
   # `load_config` will hand the runner after expansion, never the text of the line. `|| true`
   # because the rc of a substitution is its LAST command's, and a config that fails to parse must
   # not take the install down here — it is `sdd preflight`'s job to say so, in its own words.
-  local inst_handoff inst_todo
+  local inst_handoff inst_todo inst_qadocs
   # shellcheck disable=SC1090
   inst_handoff="$( . "$CONFIG_FILE" >/dev/null 2>&1; printf '%s' "${HANDOFF_DIR:-}" )" || true
   # shellcheck disable=SC1090
   inst_todo="$( . "$CONFIG_FILE" >/dev/null 2>&1; printf '%s' "${TODO_FILE:-}" )" || true
+  # shellcheck disable=SC1090
+  inst_qadocs="$( . "$CONFIG_FILE" >/dev/null 2>&1; printf '%s' "${QA_DOCS_PATH:-}" )" || true
   # Same defaults load_config applies, restated here because a broken config arrives EMPTY.
   [ -n "$inst_handoff" ] || inst_handoff="docs/handoffs"
   [ -n "$inst_todo" ]    || inst_todo="TODO.md"
+  [ -n "$inst_qadocs" ]  || inst_qadocs="docs/qa"
 
   if [ -d "$REPO_ROOT/$inst_handoff" ]; then
     ok "$inst_handoff/ already exists"
@@ -4009,7 +4042,9 @@ SEED
   # The QA tree belongs to the qa-report/qa-execution skills, which is why this touches exactly one
   # line of one file and only the line the KIT's gate reads. Diff-first like the agent mirrors:
   # bare `install` shows what is missing, `--force` adopts.
-  local bugtpl="$REPO_ROOT/${QA_DOCS_PATH:-docs/qa}/templates/bug.md"
+  # $inst_qadocs, never $QA_DOCS_PATH: this command does not call load_config, so the variable is
+  # unset here and the `:-` default was answering for a repo that had declared otherwise.
+  local bugtpl="$REPO_ROOT/$inst_qadocs/templates/bug.md"
   local genre_seed='- **Closable by:** agent <!-- agent | human | deferred -->'
   if [ ! -f "$bugtpl" ]; then
     ok "qa bug template not there yet (the qa-report skill seeds the tree on its first run)"

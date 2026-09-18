@@ -1254,6 +1254,14 @@ mut_RUN_hat_close_unchecked() {
 # and the check fail open independently: a seeder that stopped inserting leaves preflight red (the
 # operator at least hears about it), while a check that stopped asking leaves a repo silently
 # shipping blocking bugs.
+# cmd_install goes back to reading $QA_DOCS_PATH — a variable it never loads, because it does not
+# call load_config — instead of the $inst_qadocs it sources itself. A repo whose QA tree is not at
+# docs/qa then gets the default seeded (or nothing), while cmd_preflight checks the configured
+# path and keeps naming `sdd install --force` as the remedy: the two commands point at each other
+# over different files and the pair never converges.
+mut_INSTALL_bug_template_wrong_qa_path() {
+  sed -i 's|^  local bugtpl="$REPO_ROOT/$inst_qadocs/templates/bug.md"$|  local bugtpl="$REPO_ROOT/${QA_DOCS_PATH:-docs/qa}/templates/bug.md"|' "$1"
+}
 mut_INSTALL_bug_template_not_seeded() {
   sed -i 's%^    sed -i "0,/.*bugtpl"$%    :%' "$1"
 }
@@ -1288,6 +1296,15 @@ mut_RUN_hat_extra_empty_hat_shifted() {
 # shell, and the natural way to spell a long list in a config file — took its first line and
 # dropped the rest with rc 0 and no warning; both callers share the parser, so nothing contradicted
 # anything and the operator read the still-blocked phase as the key not working.
+# The pathless entry goes back to being dropped by the parser, so the validator never sees it and
+# `HAT_WRITES_EXTRA="sdd-qa:"` is accepted in silence — an exception declaring nothing, which is
+# what the hat-not-found clause beside it exists to refuse.
+mut_RUN_hat_extra_pathless_admitted() {
+  # `@` and not `|` as the delimiter: the line being matched contains `||`, and the first of those
+  # pipes ended the pattern — the sed died with "unknown option to `s'" and the mutant changed
+  # NOTHING while reporting a clean run. The catalogue would have carried a protection nobody had.
+  sed -i 's@^    \[ "\$emitted" = 1 \].*@    :@' "$1"
+}
 mut_RUN_hat_extra_newline_admitted() {
   sed -i 's|) die "HAT_WRITES_EXTRA contains a newline|) : "HAT_WRITES_EXTRA contains a newline|' "$1"
 }
@@ -3862,12 +3879,14 @@ CATALOG=(
   RUN_hat_retry_door_missing
   RUN_hat_close_door_missing
   INSTALL_bug_template_not_seeded
+  INSTALL_bug_template_wrong_qa_path
   PREFLIGHT_bug_template_blind
   RUN_hat_extra_ignored
   RUN_hat_extra_unguarded
   RUN_hat_extra_glob_chars
   RUN_hat_extra_empty_hat_shifted
   RUN_hat_extra_newline_admitted
+  RUN_hat_extra_pathless_admitted
   RUN_hat_extra_path_unnamed
   RUN_kit_touched_silent
   RUN_init_blind

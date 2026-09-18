@@ -651,8 +651,9 @@ HAT_WRITES_EXTRA="sdd-qa: .github/workflows/e2e-staging.yml; sdd-docs: .claude/n
 
 `hat_writes` sums those paths for the hat that names them and **no other** — one project's
 declaration never widens the rest of the pipeline. `load_config` refuses the whole run, before a
-session is spent, when the value names a hat the kit does not ship or a path that is not literal and
-repo-relative: no `..`, nothing absolute, and no metacharacter except a trailing `/**` on a directory
+session is spent, when the value names a hat the kit does not ship, a hat it then lists no path for
+(`sdd-qa:` alone declares nothing, so it is refused rather than accepted in silence), or a path that
+is not literal and repo-relative: no `..`, nothing absolute, and no metacharacter except a trailing `/**` on a directory
 that is **named** (a lone `**` is refused). The whole value is **one line** — hats are separated by
 `;`, and a newline is refused too, because the parser reads a single line and a two-line value used
 to lose everything after the first with rc 0 and no warning. That strictness is not taste — the value lands in

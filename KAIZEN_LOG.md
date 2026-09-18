@@ -24,7 +24,7 @@ do `adr_dir_ok`, validada no `load_config` — nunca no ponto de uso, que é sub
 onde o `die` cairia no subshell e devolveria a lista vazia, que é a grafia de *"escreve em qualquer
 lugar"*); `Closable by: deferred` (terceiro valor no MESMO campo e mesmo extrator, **nomeado no
 motivo do gate em toda avaliação** — visibilidade, não silêncio, que é a resposta à objeção da ADR
-0006); e o `sdd install` semeando o campo no template com o `sdd preflight` cobrando.
+0006); e o `sdd install --force` semeando o campo no template com o `sdd preflight` cobrando.
 
 **Antes → depois, medido:**
 
