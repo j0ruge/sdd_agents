@@ -3450,6 +3450,82 @@ assert_eq "a misspelt status option is refused, never read as a mission name" "1
   "$( [ "$NG_TYPO_RC" -ne 0 ] && echo 1 || echo 0 )"
 
 # ---------------------------------------------------------------------------
+# HAT_WRITES_EXTRA — the project's exception to the hat's writes:, and its guard.
+#
+# The hat's frontier is a constant of the KIT (`writes:` in agents/<hat>.md); the obligation that
+# crosses it belongs to the PROJECT. Measured on the pilot target 2026-09-17: a QA session of
+# 759 s / US$ 11,32 died in BLOCKED for touching .github/workflows/e2e-staging.yml — which that
+# repo's own rules demand when a spec is added — and a DOCS of 916 s / US$ 6,24 for 18 correct
+# lines in .claude/napkin.md. The third occurrence was patched LITERALLY (796e334 put PRODUCT.md
+# into every project's writes:), which is the list that grows one name per project.
+#
+# The key WIDENS a permission, and its value is dropped into hat_path_allowed's `case "$f" in $g)`
+# — a shell GLOB. So every looseness in the guard fails OPEN, the same way `ADR_DIR=*` built the
+# pattern `*/**` and widened a hat to most of the repo (CWE-863, PR #45). These probes are the
+# guard's, and they are written against the REFUSALS: a key that is ignored outright passes the
+# acceptance probe below and fails every one of these.
+hwx_set() { # hwx_set <value> — the key alone on its own line, replacing any earlier one
+  sed -i '/^HAT_WRITES_EXTRA=/d' .sdd/config.sh
+  [ -n "$1" ] && printf 'HAT_WRITES_EXTRA=%s\n' "$1" >> .sdd/config.sh
+  return 0
+}
+# hwx_probe <value> — "rc|1" when the run died AND the message named <needle>, over one call.
+hwx_probe() {
+  local value="$1" needle="$2" out rc=0
+  hwx_set "$value"
+  out="$( "$SDD" status "$MISSION" --no-gates 2>&1 )" || rc=$?
+  printf '%s|%s\n' "$( [ "$rc" -ne 0 ] && echo died || echo lived )" \
+                   "$( grep -cF -- "$needle" <<< "$out" | head -1 )"
+}
+
+# Traversal. `..` is the spelling that took ADR_DIR outside the repository, and here it would hand
+# a hat a path above the checkout.
+assert_eq "HAT_WRITES_EXTRA with ../ is refused, and the reason names it" "died|1" \
+  "$( hwx_probe '"sdd-qa: ../x"' '..' )"
+# Absolute. hat_path_allowed compares against paths git reports RELATIVE to the root, so an
+# absolute glob matches nothing — but it is refused for being meaningless rather than tolerated
+# for being harmless: the next reader would take silence for support.
+assert_eq "an absolute path is refused" "died|1" \
+  "$( hwx_probe '"sdd-qa: /etc/passwd"' '/etc/passwd' )"
+# The metacharacter, which is the whole reason this guard exists. `docs/*` is not a path, it is a
+# pattern, and the runner would hand it to `case` verbatim.
+assert_eq "a metacharacter outside the /** suffix is refused" "died|1" \
+  "$( hwx_probe '"sdd-qa: docs/*"' 'docs/*' )"
+# ...and `**` is only the LAST component. `docs/**/x` reads as a named directory to a human and as
+# a two-star glob to the shell.
+assert_eq "** in the middle is refused — the suffix is the last component or nothing" "died|1" \
+  "$( hwx_probe '"sdd-qa: docs/**/x"' 'docs/**/x' )"
+# The hat has to EXIST. A typo would otherwise sit in the config declaring an exception for nobody,
+# and the operator would read the still-blocked run as the key not working.
+assert_eq "a hat the kit has no agents/<hat>.md for is refused by name" "died|1" \
+  "$( hwx_probe '"sdd-nope: a.md"' 'sdd-nope' )"
+
+# ⭐ The POSITIVE control, and the half that makes the five refusals mean something: a guard that
+# refuses everything satisfies every one of them. And it reads the BOUNDARY the projection prints
+# rather than only an exit code — "the run lived" is shared with a key that was parsed, validated
+# and then dropped on the floor, so on its own it distinguishes nothing.
+hwx_writes() { # hwx_writes <phase> — the `writes=` the dry-run projects for that phase
+  sed -nE 's/^.*boundary:.* writes=(.*) \| mcp=.*$/\1/p' <<< "$( "$SDD" run "$MISSION" --dry-run --phase "$1" 2>&1 )"
+}
+hwx_set '"sdd-qa: .github/workflows/e2e-staging.yml, .claude/napkin.md; sdd-docs: docs/gotchas/**"'
+hwx_qa="$(hwx_writes QA)"; hwx_docs="$(hwx_writes DOCS)"
+# Three terms, and the third is the one the design turns on: the QA hat gained ITS two paths, the
+# DOCS hat gained ITS one — and the QA hat did NOT gain the DOCS one. The sum is per hat. Without
+# the last term a `hat_writes` that appends the whole key to every hat reads green here, and the
+# key would hand every phase every other phase's exception.
+assert_eq "the measured shape is accepted, and each hat gains only its own paths" \
+  "qa-ci:1 qa-napkin:1 docs-gotchas:1 qa-got-docs:0" \
+  "qa-ci:$( grep -cF '.github/workflows/e2e-staging.yml' <<< "$hwx_qa" ) qa-napkin:$( grep -cF '.claude/napkin.md' <<< "$hwx_qa" ) docs-gotchas:$( grep -cF 'docs/gotchas/**' <<< "$hwx_docs" ) qa-got-docs:$( grep -cF 'docs/gotchas/**' <<< "$hwx_qa" )"
+# A hat whose own writes: is EMPTY means "writes anywhere" (sdd-executor), and the key must never
+# NARROW that: summing an entry there would turn the widest hat in the pipeline into the narrowest
+# — the one regression a key that exists to WIDEN must not cause. Refusing the entry instead would
+# make the key a trap. So it is accepted and ignored, and the projection still says `<anywhere>`.
+hwx_set '"sdd-executor: x.md"'
+assert_eq "an entry for a hat that already writes anywhere neither refuses nor narrows" "<anywhere>" \
+  "$(hwx_writes EXEC)"
+hwx_set ''
+
+# ---------------------------------------------------------------------------
 echo
 if [ "$fails" -eq 0 ]; then
   echo "state machine correct"

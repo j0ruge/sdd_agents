@@ -47,3 +47,16 @@
 >
 > - intervention: <o que o humano teve de fazer> — <fase> — <custo, se houver>
 
+
+- I0 (`79dd4df`) — missão criada, branch de `main` (`a96923d`), ADR 0009 alocada por `sdd adr new`.
+- I1 — probes ANTES do código, RED observado com o motivo certo (`lived|0`: a chave era ignorada
+  inteira). Passada de sabotagem: **9 mutações, 9 pegas, 0 sobreviventes**.
+  ⚠️ A sabotagem achou um defeito meu: `case "$p" in /*) return 1` era **redundante** — um caminho
+  absoluto abre com `/`, então o primeiro componente é vazio e a cláusula `''` já o recusa. O
+  probe ficou VERDE com a cláusula removida. Removi a cláusula (regra do `CLAUDE.md`) e **mantive
+  o probe**, que mede a propriedade e não a linha: a nova sabotagem "a leading slash is stripped
+  like a trailing one" o deixa vermelho, então a propriedade segue medida.
+  ⚠️ Duas tentativas de sabotagem foram descartadas pelo próprio arnês antes de virarem conclusão:
+  âncora `''|.|..) return 1 ;;` casa **2x** (existe igual no `adr_dir_ok`), e um primeiro arnês
+  restaurava o arquivo com `git checkout`, que reverte para o HEAD — anterior ao I1. Nos dois casos
+  o arnês gritou em vez de concluir sobre um arquivo que não mudou.

@@ -176,6 +176,24 @@ load_config() {
   # it. EMPTY means "this repo has no spec tree" and must scan NOTHING — an empty value falling
   # back to the repo root would walk the whole checkout looking for a spec.md.
   : "${SPEC_DIR:=}"
+  # What THIS project obliges a hat to touch beyond its writes:. EMPTY is the default and means
+  # "no exception" — see hat_writes_extra_each for the grammar and hat_extra_path_ok for the guard.
+  #
+  # Validated HERE and not at the point of use. hat_writes is read as `globs="$(hat_writes …)"`, a
+  # command substitution: a `die` down there would exit the SUBSHELL, hand hat_guard_check an empty
+  # glob list, and an empty list is the spelling of "this hat writes anywhere" one line later. The
+  # guard that exists to narrow a value would have widened it. So the refusal happens once, before
+  # a session is spent, on the same floor where PROJECT_NAME and TEST_CMD are refused.
+  : "${HAT_WRITES_EXTRA:=}"
+  local _hwx_hat _hwx_path
+  while IFS=$'\t' read -r _hwx_hat _hwx_path; do
+    [ -n "$_hwx_hat" ] \
+      || die "HAT_WRITES_EXTRA has an entry with no hat before ':' (offending: '$_hwx_path') — the grammar is 'hat: path[, path]; hat: path'"
+    [ -f "$SDD_HOME/agents/$_hwx_hat.md" ] \
+      || die "HAT_WRITES_EXTRA names hat '$_hwx_hat' — the kit has no agents/$_hwx_hat.md"
+    hat_extra_path_ok "$_hwx_path" \
+      || die "HAT_WRITES_EXTRA path '$_hwx_path' (hat $_hwx_hat) is not a literal path inside the repo — relative, no '..', and no metacharacter except a trailing '/**' on a named directory"
+  done < <(hat_writes_extra_each)
 
   [ -n "$PROJECT_NAME" ]   || die "PROJECT_NAME is empty in $CONFIG_FILE"
   [ -n "$DEFAULT_BRANCH" ] || die "DEFAULT_BRANCH is empty in $CONFIG_FILE"
@@ -1746,12 +1764,108 @@ hat_expand() {   # hat_expand <globs> — $HANDOFF_DIR $MISSION $TODO_FILE $QA_D
   printf '%s\n' "$s"
 }
 
+# HAT_WRITES_EXTRA — the PROJECT's exception to the hat's writes:, parsed in ONE place.
+#
+# `writes:` is a constant of the KIT: it says what a hat owns wherever the kit is installed. The
+# obligation that crosses it belongs to the TARGET — the repo whose own rules demand that adding a
+# spec also revises the case floor in .github/workflows/e2e-staging.yml, or that a gotcha be
+# written to .claude/napkin.md. Measured on the pilot target 2026-09-17: a QA session of 759 s /
+# US$ 11,32 and a DOCS of 916 s / US$ 6,24 died in BLOCKED doing exactly what their repo asked.
+# The third occurrence was patched LITERALLY — 796e334 put PRODUCT.md into the writes: of every
+# project that installs the kit — and that is the list which grows one name per project. This key
+# is the variable the model was missing: the hat's frontier is the kit's constant PLUS the
+# project's declaration.
+#
+# Grammar: `hat: path[, path]; hat: path` — `;` separates hats, `:` separates a hat from its list,
+# `,` separates paths. BY PATH and not by directory, because the three measured occurrences say so:
+# `.claude/rules/**` and `.claude/napkin.md` are different decisions.
+#
+# ONE parser, two callers (load_config validates, hat_writes_extra_for reads) — the CLAUDE.md rule
+# for an enum read at more than one point. An entry with no `:` yields an EMPTY hat rather than
+# being dropped: load_config's "the hat must exist" check is then the one rule that refuses it,
+# instead of a second spelling of the grammar living in the validator.
+hat_writes_extra_each() {   # hat_writes_extra_each — one `<hat>\t<path>` line per declared pair
+  local spec="${HAT_WRITES_EXTRA:-}" entry hat list path
+  [ -n "$spec" ] || return 0
+  local -a entries plist
+  IFS=';' read -r -a entries <<< "$spec"
+  for entry in "${entries[@]}"; do
+    entry="${entry#"${entry%%[![:space:]]*}"}"; entry="${entry%"${entry##*[![:space:]]}"}"
+    [ -n "$entry" ] || continue
+    if [ "${entry#*:}" = "$entry" ]; then hat=""; list="$entry"; else hat="${entry%%:*}"; list="${entry#*:}"; fi
+    hat="${hat#"${hat%%[![:space:]]*}"}"; hat="${hat%"${hat##*[![:space:]]}"}"
+    IFS=',' read -r -a plist <<< "$list"
+    for path in "${plist[@]}"; do
+      path="${path#"${path%%[![:space:]]*}"}"; path="${path%"${path##*[![:space:]]}"}"
+      [ -n "$path" ] || continue
+      printf '%s\t%s\n' "$hat" "$path"
+    done
+  done
+}
+
+# hat_extra_path_ok <value> — 0 when the value names a path INSIDE the repo, literally.
+#
+# Modelled on adr_dir_ok, and written POSITIVELY for the same reason: every component has to be a
+# plain name, so `..`, `.`, an absolute path and an empty component are refused by CONSTRUCTION
+# rather than by being remembered. The stakes are higher here than for ADR_DIR, because this key
+# WIDENS a permission and its value is dropped straight into hat_path_allowed's `case "$f" in $g)`
+# — a shell GLOB. `ADR_DIR=*` built the pattern `*/**` and handed a hat most of the repo, with
+# hat_guard_check reading the same widened matcher so it never noticed (CWE-863, PR #45). Every
+# looseness here fails OPEN in exactly that direction.
+#
+# ONE clause more than adr_dir_ok: the LAST component may be exactly `**`, the `/**` suffix the
+# kit's own hats already use for a named directory (`$ADR_DIR/**`). Not the first component, so a
+# lone `**` — every path in the repo — is refused: the suffix belongs to a directory that is named.
+hat_extra_path_ok() {
+  local p="$1" rest comp first=1 last
+  while [ "${p%/}" != "$p" ]; do p="${p%/}"; done
+  [ -n "$p" ] || return 1
+  # NO `case "$p" in /*) return 1` clause, unlike adr_dir_ok — measured, not assumed. An absolute
+  # path opens with a `/`, so its FIRST component is empty and the `''` clause below already
+  # refuses it. The sabotage pass removed the explicit clause and the probe stayed GREEN, which is
+  # this repo's definition of a redundant rule. The PROPERTY keeps its probe ("an absolute path is
+  # refused", tests/check-gates.sh): it is the property that has to hold, and it would stop holding
+  # the day someone taught the loop to strip a leading slash the way it strips trailing ones.
+  rest="$p"
+  while [ -n "$rest" ]; do
+    comp="${rest%%/*}"
+    if [ "$comp" = "$rest" ]; then last=1; rest=""; else last=0; rest="${rest#*/}"; fi
+    case "$comp" in
+      ''|.|..) return 1 ;;
+      # Before the character rule below, which would refuse it: `**` is the ONE pattern this guard
+      # admits, and only as the tail of a named directory.
+      '**') { [ "$last" = 1 ] && [ "$first" = 0 ]; } || return 1 ;;
+      # ...and a LITERAL name otherwise. `*[!set]*` is the positive form — "contains something
+      # outside the set" — so a metacharacter nobody listed is refused by construction. `$` is in
+      # that set's complement too, which is why an extra path is never a hat_expand placeholder.
+      *[!A-Za-z0-9._-]*) return 1 ;;
+    esac
+    first=0
+  done
+  return 0
+}
+
+hat_writes_extra_for() {   # hat_writes_extra_for <hat> — the project's paths for that hat, comma-separated
+  local want="$1" hat path out=""
+  [ -n "$want" ] || { printf '\n'; return 0; }
+  while IFS=$'\t' read -r hat path; do
+    [ "$hat" = "$want" ] || continue
+    out="${out:+$out, }$path"
+  done < <(hat_writes_extra_each)
+  printf '%s\n' "$out"
+}
+
 hat_writes() {   # hat_writes <step> — expanded globs; "" when the hat may write anywhere
-  local hat own=""
+  local hat own="" extra=""
   hat="$(phase_hat "$1")"
   if [ -n "$hat" ]; then own="$(hat_field "$hat" writes)"; fi
+  # An EMPTY own is "writes anywhere" (sdd-executor), and the project's key must never NARROW that:
+  # returning early keeps an entry for such a hat accepted-and-ignored. Summing it here instead
+  # would turn the widest hat in the pipeline into the narrowest, which is the one regression a
+  # key that exists to widen must not cause. `sdd preflight` is where the operator hears about it.
   if [ -z "$own" ]; then printf '\n'; return 0; fi
-  hat_expand "$HAT_WRITES_BASE, $own"
+  extra="$(hat_writes_extra_for "$hat")"
+  hat_expand "$HAT_WRITES_BASE, $own${extra:+, $extra}"
 }
 
 # Literal slash that opens the session, when the phase is driven by a third-party skill.
