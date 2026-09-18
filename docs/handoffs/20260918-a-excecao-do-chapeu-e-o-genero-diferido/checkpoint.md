@@ -36,9 +36,9 @@ atualizado: 2026-09-18 00:00
 | I2 | Par diferencial da fronteira no `check-autonomy.sh`, remédio na mensagem, 3 mutantes | `o=$(bash tests/check-autonomy.sh 2>&1); grep -c '^  ok    HAT_WRITES_EXTRA lets the declared path through' <<< "$o"` → `1` | done | `a09994a` |
 | I3 | `deferred` na Âncora 3, nomes no `GATE_WHY` de sucesso, 4 regimes, `sdd-qa` § 5.1, 1 mutante | `o=$(bash tests/check-gates.sh 2>&1); grep -c '^  ok    deferred passes and the reason names the bug' <<< "$o"` → `1` | done | `81e6f6c` |
 | I4 | `sdd install` semeia `Closable by:`; `sdd preflight` cobra; 3 regimes, 2 mutantes | `o=$(bash tests/check-preflight.sh 2>&1); grep -c '^  ok    install --force seeds Closable by: below Status:' <<< "$o"` → `1` | done | `f7bcf10` |
-| I5 | ADR 0009, `Amended by: 0009` na 0006, D26, pipeline, failure-modes, rule § 6 | `grep -c 'Amended by: 0009' docs/adr/0006-*.md` → `1` | pending | — |
+| I5 | ADR 0009, `Amended by: 0009` na 0006, D26, pipeline, failure-modes, rule § 6 | `grep -c 'Amended by: 0009' docs/adr/0006-*.md` → `1` | done | `27a7717` |
 | I6 | Yokoten no alvo (passo do humano, depois do merge) | `grep -c HAT_WRITES_EXTRA ~/repos/sales_quote/.sdd/config.sh` → `1` | pending | — |
-| I7 | Fecha: `TODO.md` (4 RESOLVIDO), `ACHADOS`, `KAIZEN_LOG.md` | `o=$(bash tests/check-todo.sh 2>&1); grep -c '^  ok    105 finding(s)' <<< "$o"` → `1` | pending | — |
+| I7 | Fecha: `TODO.md` (4 RESOLVIDO), `ACHADOS`, `KAIZEN_LOG.md` | `o=$(bash tests/check-todo.sh 2>&1); grep -c '^  ok    106 finding(s)' <<< "$o"` → `1` | pending | — |
 
 > **As notas de execução não moram aqui.** Elas ficam em `checkpoint-notas.md`, ao lado deste
 > arquivo, append-only, e o prompt de boot inlina as últimas 10 — a sessão nunca abre aquele

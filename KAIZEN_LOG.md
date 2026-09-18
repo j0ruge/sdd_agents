@@ -4,6 +4,57 @@ Registro de melhorias com **antes/depois medido**. Sem número, não entra.
 
 ---
 
+## 2026-09-18 — A exceção do chapéu e o gênero diferido: o kit para de parar trabalho certo
+
+**Problema (Gemba):** duas famílias com a mesma forma — o dado certo existe e o instrumento não
+sabe lê-lo. (1) O `writes:` é constante do **kit** e a obrigação que o cruza é do **alvo**: três
+ocorrências medidas no `sales_quote` em 2026-09-17 — QA de 759 s / **US$ 11,32** por tocar
+`.github/workflows/e2e-staging.yml` (que a regra daquele repo *obriga* a rever ao acrescentar
+spec), DOCS de 916 s / **US$ 6,24** por 18 linhas certas em `.claude/napkin.md`, e uma terceira
+consertada com **remendo literal** (`796e334` pôs `PRODUCT.md` no `writes:` de todo projeto que
+instala o kit — a lista que cresce um nome por projeto). (2) `Closable by:` tinha dois valores e
+modelava *"quem pode fechar"*; na SQ-129 a pergunta era *"quem paga"*, e nenhum dos dois servia:
+`agent` devolvia quatro bugs decididos ao gate da missão em voo, `human` os escondia para sempre.
+Nasceu uma convenção de rodapé, e a troca de volta virou incremento manual da missão seguinte.
+(3) `grep -rn Closable ~/.claude/skills/qa-*` → **0**, e o template local do alvo também não tinha
+o campo: em repo-alvo novo **todo** bug nasce bloqueando a Âncora 3.
+
+**Contramedida:** `HAT_WRITES_EXTRA` (uma chave, por chapéu e por caminho, guarda literal no molde
+do `adr_dir_ok`, validada no `load_config` — nunca no ponto de uso, que é substituição de comando
+onde o `die` cairia no subshell e devolveria a lista vazia, que é a grafia de *"escreve em qualquer
+lugar"*); `Closable by: deferred` (terceiro valor no MESMO campo e mesmo extrator, **nomeado no
+motivo do gate em toda avaliação** — visibilidade, não silêncio, que é a resposta à objeção da ADR
+0006); e o `sdd install` semeando o campo no template com o `sdd preflight` cobrando.
+
+**Antes → depois, medido:**
+
+| Métrica | Antes | Depois |
+|---|---|---|
+| Sessões corretas paradas pelo chapéu (reproduzíveis no fixture) | 3 | **0** |
+| Custo dessas três sessões | US$ 11,32 + US$ 6,24 + 1 não medida | **0** |
+| Valores do gênero `Closable by:` | 2 | **3** |
+| Bug decidido: visível **e** não bloqueante | impossível (um ou outro) | **sim**, nomeado por avaliação |
+| Chaves de config que descrevem obrigação **do projeto** | 0 | **1** |
+| Campo `Closable by:` no template de bug de um repo novo | 0 (à mão, bug a bug) | **1**, semeado pelo `install` |
+| Caminhos no `writes:` de TODO projeto por causa de um só | 1 (`PRODUCT.md`, `796e334`) | **0 novos** — a chave é por projeto |
+| Catálogo de mutação (definidos, `grep -cE '^mut_[A-Za-z0-9_]+\(\) \{'`) | 332 | **339** (7 novos) |
+| ADRs | 8 | **9** (a 0006 ganha `Amended by: 0009`) |
+| Achados abertos (`todo-findings`) | 105 | **106** (4 marcados `RESOLVIDO`, 1 nascido) |
+
+**Jidoka:** a chave **alarga** permissão e o valor vira glob de shell no `case` do
+`hat_path_allowed`, então toda frouxidão da guarda falha **aberta** — a direção que `ADR_DIR=*`
+tomou quando montou `*/**` (CWE-863, PR #45). Por isso a passada de sabotagem é parte do contrato:
+**9 mutações, 9 pegas, 0 sobreviventes**, e ela achou um defeito real — a cláusula de caminho
+absoluto era **redundante** (um caminho absoluto abre com `/`, logo o primeiro componente é vazio e
+a cláusula `''` já o recusa). A regra saiu; o **probe ficou**, porque mede a propriedade e não a
+linha, e uma décima sabotagem o deixa vermelho.
+
+**Yokoten:** o desdobramento no `sales_quote` é passo do humano, depois do merge — duas linhas no
+`.sdd/config.sh` e um `sdd install --force`. `DESIGN.md` **não** entra na chave: ninguém o mediu
+ainda, e a chave existe exatamente para que ele entre no dia em que bloquear.
+
+---
+
 ## 2026-09-18 — A sessão morreu e o gate levou a culpa: o runner mede o que a sessão SOFREU
 
 **Problema (Gemba):** todo campo que o `run_phase` destila do `result` terminal nasceu no dia em

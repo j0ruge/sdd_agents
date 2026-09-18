@@ -5,12 +5,15 @@
 > `3f0fa098`) e `20260916-quatro-silencios-da-tela` (SQ-130, em REVIEW). Nada aqui é sobre o
 > `sales_quote` — o que era daquele repo já foi para o `TODO.md` de lá.
 >
-> ⚠️ **Estado: ROTEADO.** A frase original aqui dizia *"não mexi no `TODO.md` deste repo de
-> propósito"* — era verdade em 2026-09-17 e deixou de ser em 2026-09-18. Os nove itens foram
-> triados pelo humano no grill daquele dia (**G1**: tema T1), quatro estão implementados e os
-> outros cinco estão no `TODO.md` deste repo com a catraca movida no mesmo commit
-> (`todo-findings` 99 → 105 em `tests/health-baseline.txt`). A tabela abaixo é o mapa; cada item
-> carrega o seu desfecho no corpo.
+> ⚠️ **Estado: OITO DOS DEZ FECHADOS.** A frase original aqui dizia *"não mexi no `TODO.md` deste
+> repo de propósito"* — era verdade em 2026-09-17 e deixou de ser em 2026-09-18. Os nove itens (mais
+> o décimo, nascido no gemba) foram triados pelo humano no grill daquele dia e fechados em **duas**
+> missões de kit: **T1** `20260918-a-sessao-morreu-e-o-gate-levou-a-culpa` (PR #46) levou os quatro
+> em que o kit **mentia** sobre o que aconteceu — #1, #5, #8, #9; **T2**
+> `20260918-a-excecao-do-chapeu-e-o-genero-diferido` levou os que o fazem **parar trabalho certo** ou
+> **esconder um dado que existe** — #4, #10, #3, e o #2 **pelo** #3 (ADR 0009, que emenda a 0006).
+> Restam **#6, #7 e a observação**, no `TODO.md` deste repo, para a **T3**. A tabela abaixo é o mapa;
+> cada item carrega o seu desfecho no corpo.
 >
 > **Toda evidência é literal.** As transcrições vieram dos logs da própria execução, e os hashes
 > são alcançáveis (`git log` do `sales_quote`, branches `develop` e `SQ-130_quatro_silencios_da_tela`).
@@ -28,15 +31,15 @@ estou"* e o kit responde **errado** ou **caro**.
 | # | Achado | Desfecho | Evidência |
 |---|---|---|---|
 | 1 | Motivo do gate mascara a causa da morte | **RESOLVIDO** — e vira Jidoka: para a linha antes do retry | `70d7785` `d1002b8` `e3c6671` |
-| 2 | `gate_QA` conta bug de outra missão | roteado ao `TODO.md` — ⚠️ direção contradiz a ADR 0006/D17 | `1fb120b` |
-| 3 | `Closable by:` é binário | roteado ao `TODO.md` — mesma ADR | `1fb120b` |
-| 4 | `writes:` não comporta obrigação do alvo | roteado ao `TODO.md`, **fundido** com o irmão vivo | `1fb120b` |
+| 2 | `gate_QA` conta bug de outra missão | **RESOLVIDO pelo #3** — lacuna no enum, não no escopo da âncora | `81e6f6c` |
+| 3 | `Closable by:` é binário | **RESOLVIDO** — `deferred`, terceiro valor, visível por nome | `81e6f6c` |
+| 4 | `writes:` não comporta obrigação do alvo | **RESOLVIDO** — `HAT_WRITES_EXTRA`, por chapéu e caminho | `350688a` `a09994a` |
 | 5 | Não existe comando barato para ver o estado | **RESOLVIDO** — `sdd status --no-gates`, 0,037 s | `e0c95c8` `ea0923b` |
 | 6 | Fase manual não tem como ser registrada | roteado ao `TODO.md` — pede o 6º `event` do ledger | `1fb120b` |
 | 7 | Teto não conhece missão reaberta | roteado ao `TODO.md` | `1fb120b` |
 | 8 | Background frágil; foreground sobrevive | **RESOLVIDO** — verbete em `docs/failure-modes.md` | `826b6b3` |
 | 9 | CLOSE paga sessão que não pode concluir | **RESOLVIDO** — o prompt carrega a autorização | `a8526ad` |
-| 10 | As skills de QA não conhecem `Closable by:` | **NOVO**, nascido no gemba desta missão; roteado ao `TODO.md` | `1fb120b` |
+| 10 | As skills de QA não conhecem `Closable by:` | **RESOLVIDO** — o `sdd install` semeia o campo no template | `f7bcf10` |
 | obs | `Test Coverage = A` não implica caso negativo | roteado ao `TODO.md` | `1fb120b` |
 
 **Verificação da missão que fechou os quatro:** `tests/run-all.sh` verde (1163 asserções);
@@ -109,6 +112,11 @@ Três detalhes que fazem o caso:
 
 ### 2. `gate_QA` cobra bugs `open` de outras missões
 
+  RESOLVIDO por `81e6f6c`, **pelo #3 e sem reabrir a ADR 0006**: o caso real desta sessão nunca foi
+  "bug de outra missão" — era "bug agent-closable que esta missão decidiu não pagar", que é lacuna
+  no **enum** e não no escopo da âncora. O escopo da Âncora 3 não muda e a alternativa (A) da 0006
+  segue recusada pelo argumento dela.
+
 - [ ] **A missão herda a dívida inteira do registry como condição de bloqueio** — `bin/sdd`
   (Âncora 3 do `gate_QA`) — quanto mais honesta a QA de ontem, mais cara a missão de hoje.
   Direção: contar só bugs cuja procedência é a missão corrente, ou um `since:` explícito.
@@ -144,6 +152,11 @@ já registra que essa classe custou **US$ 73,32 de uma missão de US$ 144,88** a
 
 ### 3. `Closable by: human` é binário — falta "decidido, aguardando quem pague"
 
+  RESOLVIDO por `81e6f6c`: `Closable by: deferred`, terceiro valor no MESMO campo e mesmo extrator.
+  Não bloqueia como `human` e, ao contrário dele, o motivo do gate **nomeia** cada bug diferido em
+  toda avaliação — a visibilidade que responde à objeção da ADR 0006 (*"envelhece fora de vista"*).
+  ADR 0009 emenda a 0006; `agents/sdd-qa.md` § 5.1 exige a decisão gravada no corpo do bug.
+
 - [ ] **Não há estado entre "trava a fase" e "nenhuma missão o pega"** — `agents/sdd-qa.md:118-136`
   — com a decisão humana já tomada e gravada, o bug continua invisível ao laço para sempre.
   Direção: um terceiro valor, ou um `decided-by: <data>` que o gate leia junto do gênero.
@@ -176,6 +189,12 @@ passo manual que alguém tem de lembrar. Na SQ-130 esse passo virou o incremento
 ---
 
 ### 4. O hat guard barra trabalho que as regras do repo-alvo exigem
+
+  RESOLVIDO por `350688a` + `a09994a`: `HAT_WRITES_EXTRA`, uma chave, por chapéu e por caminho,
+  somada em `hat_writes` só para o chapéu que a nomeia, com guarda literal no molde do `adr_dir_ok`
+  validada no `load_config`, e a recusa passa a carregar uma linha `HAT-REMEDY` que nomeia a chave.
+  ADR 0009. ⚠️ O remendo literal do `PRODUCT.md` (`796e334`) **não** foi desfeito aqui — desfazê-lo
+  é decisão de quem opera aquele repo, e a chave é o que torna a decisão possível.
 
 - [ ] **`writes:` do chapéu não comporta obrigação do projeto** — `agents/sdd-qa.md:11` — ao
   acrescentar um spec e2e, a regra do `sales_quote` **obriga** a rever o piso de casos no workflow
@@ -469,6 +488,11 @@ digitar o comando.
 ---
 
 ### 10. Nenhuma das skills de QA conhece o campo `Closable by:`
+
+  RESOLVIDO por `f7bcf10`: o `sdd install` semeia a linha em `$QA_DOCS_PATH/templates/bug.md`,
+  imediatamente abaixo do `Status:`, idempotente e recusando um template fora da forma da skill; o
+  `sdd preflight` fica vermelho com o remédio enquanto faltar. As skills seguem sem conhecer o
+  campo — o kit o põe no template de que elas copiam, que é o ponto de extensão que existe.
 
 > **Achado NOVO**, não estava na lista de 2026-09-17. Nasceu no gemba do planejamento de
 > 2026-09-18, ao medir o custo real de atacar os itens #2 e #3.

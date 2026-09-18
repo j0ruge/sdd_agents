@@ -96,3 +96,13 @@
   para o kit, onde produziria um arquivo que a suíte reprova. Falha ALTO (não é fail-open), então
   pela régua D15 é limite e não achado; fica registrado aqui.
   A rule § 6 já entrou no commit do I1, pela regra da própria rule.
+- I7 — a catraca MOVE nesta missão, ao contrário do que o plano previu: 105 → **106**. Os quatro
+  `RESOLVIDO` só saem do arquivo no chore pós-merge (não movem), mas a instância (a) do item `:647`
+  — drift de comentário em código — **não fecha** e virou item próprio, como o plano admitiu que
+  poderia. `HAT_WRITES_EXTRA` não é a saída dela: declarar `bin/sdd` para o chapéu da DOCS entrega
+  o runner inteiro a quem não edita código.
+  ⚠️ `RESOLVIDO por` entra **antes** da cauda `— descoberto por …` e dentro do teto de 8 linhas: é a
+  convenção que o `check-todo.sh` cobra e que os fechamentos de `5e3c427` já seguiam. A primeira
+  tentativa pôs a linha depois da cauda e deu 9 violações de forma.
+  ⚠️ A célula do catálogo no `KAIZEN_LOG.md` diz **339 definidos** (contados por comando), nunca
+  "0 sobreviventes" — esse veredito é do carimbo, que roda depois da revisão do PR.
