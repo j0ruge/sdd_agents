@@ -3301,6 +3301,22 @@ HARNESS_ENV_UNSET=(-u CLAUDECODE -u CLAUDE_CODE_CHILD_SESSION -u CLAUDE_CODE_MES
 
 run_phase() {
   local phase="$1" resume_sid="${2:-}"
+  # ZEROED ON ENTRY, above every other statement of this function — above the `die`
+  # preconditions and above the DRY_RUN early return. This is the contract every marker in this
+  # file owes and RE-DERIVES rather than inherits from GATE_APP_DOWN: the only setter is the one
+  # that clears it, so the marker can say "the session I just ran died" and nothing else. Above
+  # the projection because `sdd run --dry-run` opens no session to attribute a death to, and
+  # above the preconditions because a `die` there is not a death of the session either.
+  #
+  # ⚠️ NO PROBE, DECLARED, and the house rule says to name the world rather than deny it: with
+  # door 1 sitting ABOVE cmd_run's gate-pass branch, every lap that can read this marker has just
+  # called run_phase, so no fixture built for this file leaves a stale value anywhere a door can
+  # see it. The world I could not build is one where a lap reaches a door WITHOUT having run a
+  # session; whether one exists was not determined. The line stays because it decides WHICH
+  # failure a future door produces — a stale marker would escalate the wrong phase, which is the
+  # F2 the handoff-blocked sibling actually paid for — and a rule that survives by being
+  # unreachable today keeps its missing probe written down instead of being deleted on a claim.
+  SESSION_DIED_WHY=""
   local pstep model agent sid prompt logfile streamfile started ended cost turns cache_read
   # QA is three sessions (plan, walk, close); the step comes from the artifacts, not a counter.
   pstep="$(phase_step "$phase")"
@@ -3472,6 +3488,7 @@ missing and write the artifacts. The gate will be re-evaluated."
   died="$(jq -r 'if (.is_error == true) and (((.result // "") | type) == "string")
                     and ((.result // "") != "")
                  then .result else "" end' "$logfile" 2>/dev/null || echo "")"
+  SESSION_DIED_WHY="${died:0:200}"
   local dur=$((ended - started))
   pipeline_log_line "$(date -Iseconds)  $phase  agent=$agent  model=$model  session=${resume_sid:-$sid}  rc=$rc  dur=${dur}s  cost_usd=$cost  log=$logfile"
 
@@ -3518,6 +3535,7 @@ LAST_PHASE_STEP=""
 LAST_PHASE_AGENT=""
 LAST_PHASE_MODEL=""
 LAST_PHASE_DIED=""
+SESSION_DIED_WHY=""
 
 # Fingerprint of the mission state. It answers "did this session do ANYTHING?" when the gate has
 # not passed yet — the normal case for the EXEC phase, which runs one increment at a time.
@@ -5988,6 +6006,50 @@ app_down_escalation() {
   return 0
 }
 
+# FIFTH Jidoka, and the one that fires EARLIEST: its marker is armed by run_phase itself rather
+# than by a gate, so it knows the session is dead before anything has asked whether the gate is
+# happy. That ordering IS the fix. Measured on 2026-09-16 in sales_quote: an expired OAuth token
+# killed a QA session after 35 turns and US$ 4,56; `run_phase` said `warn claude exited 1` among
+# dozens of lines; the gate then refused for a reason entirely its own (five open bugs in the
+# registry); the runner bought a blind retry that died in one turn for US$ 0; and the run ended
+# `two sessions without moving the disk` with `kind: no-progress` in the ledger — which
+# docs/pipeline.md classes as pure friction and D12/D16 read as the kit spinning. An expired
+# credential was filed as the kit's own waste, and the operator, reading the gate's refusal as
+# the last word on the screen, spent the afternoon closing the five bugs.
+#
+# So it sits ABOVE handoff_blocked_escalation in both doors: the cause of death beats the
+# gate's reason, because the gate's reason is what sent the operator the wrong way. It also sits
+# above the gate-PASS branch, and that is deliberate rather than incidental — a session the
+# environment killed is worth stopping for even on the rare lap whose gate is satisfied by
+# artefacts an earlier run left behind, and the fail-safe direction is to stop.
+#
+# TWO DOORS, the same census as its two siblings — the first pass and the inline retry — and the
+# doors are what keep the marker from outliving the LAP as well as the gate. Both are ABOVE the
+# retry that the whole escalation exists not to buy.
+#
+# DECLARED LIMIT (G4 of the 2026-09-18 grill): `cmd_retry` and `cmd_close` get no door. `sdd
+# retry` is the human's hand already on the phase with their eyes on it, and its single session
+# ends on `retry-gate-red` rather than on a second guess; `cmd_close` does not go through
+# run_phase at all, so the marker is never armed there. Both are reachable, neither is covered,
+# and a third door is a decision with its own probe and its own mutant — not a line added here.
+#
+# Returns 0 when it escalated and 1 when the marker is unset, and it is CALLED, never substituted
+# — a subshell would send the ledger row and the lines a human is meant to act on into the
+# substitution instead of to the ledger and the terminal.
+session_died_escalation() {
+  local phase="$1"
+  [ -n "$SESSION_DIED_WHY" ] || return 1
+  info ""
+  bad "BLOCKED in $phase — the $phase session died: $SESSION_DIED_WHY"
+  dim "  The line stopped on purpose: the harness said why the session ended, and it was not"
+  dim "  the agent's doing. Whatever the gate says below is about something else."
+  dim "  Another session would meet the same environment and die the same way, so none is bought."
+  dim "  Fix what the sentence above names — a credential, a quota, a machine — and 'sdd run'."
+  pipeline_log_line "$(date -Iseconds)  BLOCKED  $phase  session died: $SESSION_DIED_WHY"
+  autonomy_blocked_row "session-died" "$phase" "$SESSION_DIED_WHY"
+  return 0
+}
+
 # Writes one `gate_pass` row for every phase that bought a session in THIS run, failed its gate,
 # and has since closed without buying another. Called from the derived branch of cmd_run's loop and
 # from nowhere else — it reads cmd_run's own `sessions`, `gate_failed` and `gate_pass_logged` maps
@@ -6408,6 +6470,13 @@ cmd_run() {
     # very loop this mission exists to delete, wearing a green rc. Found in the REVIEW round of
     # 20260826-o-laco-da-qa, differentially against the increment-blocked sibling (rc 3 + row)
     # under the same flag. The session row above is already written, so the ledger keeps its order.
+    # DOOR 1 of the death escalation, and it is FIRST of the three on purpose — see
+    # session_died_escalation above. The marker was armed by run_phase, before any gate ran, so
+    # this door answers "did the environment kill the session" before the gate is allowed to
+    # answer "am I happy", and long before `moved` is consulted. ABOVE `--max-phases` for the
+    # same reason as its siblings: a phase no session can satisfy must not answer a paced run
+    # with 0. And ABOVE the retry below, which is the session this whole family exists not to buy.
+    if session_died_escalation "$phase"; then return 3; fi
     if handoff_blocked_escalation "$phase"; then return 3; fi
     # DOOR 1 of the app-down escalation, on the same terms and in the same place: read right after
     # the gate call that could have armed it, BEFORE `moved` is consulted, and ABOVE the
@@ -6525,6 +6594,11 @@ cmd_run() {
     # DOOR 2, on the same terms, and it is what keeps the marker from outliving the lap. Placed
     # after `moved2` is already settled, so it takes nothing away from the sampling window the
     # comment above defends — it only refuses to let `moved2` answer a question that is not its.
+    # DOOR 2 of the death escalation, first of the three here as well, and reading the RETRY's
+    # own session: run_phase zeroed the marker on entry, so what it says is whether the second
+    # session died, never whether the first did. Placed after `moved2` is settled, so it takes
+    # nothing away from the sampling window the comment above defends.
+    if session_died_escalation "$phase"; then return 3; fi
     if handoff_blocked_escalation "$phase"; then return 3; fi
     # DOOR 2, and it is what keeps THIS marker from outliving the lap either. Placed after
     # `moved2` is settled, so it takes nothing away from the sampling window.

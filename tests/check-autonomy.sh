@@ -197,10 +197,21 @@ EOF
 BUDGET_RESULT="$OUTSIDE/budget-result.json"
 jq -c '.subtype = "error_max_budget_usd" | .result = null' "$DIED_RESULT" > "$BUDGET_RESULT"
 
+# NO `init` line on either side, and that is a decision rather than an omission. The pair below
+# measures one thing — what the terminal `result` says about the death — and $INIT_SAMPLE was
+# captured on 2026-09-04 under an EXEC deny list that has since grown `Agent` and `ListAgents`,
+# so today it reads `tools_leaked: 2` for that hat. Concatenated here it would arm `hat-crossed`
+# on BOTH halves, the control included, and the pair would be measuring the hat sensor's fixture
+# drift while claiming to measure the cause of death. A stream with no init line is a shape the
+# runner already has a documented answer for (hat_init_facts publishes "" and the row carries
+# null — unmeasured is not zero), and it is the shape of a session killed before its init line.
+# DECLARED LIMIT: the 2026-09-16 death ran 35 turns and certainly had one, so this pair says
+# nothing about how the two families compose. The hat family keeps its own pair at
+# "== hat boundary ==" below, and the ORDER of the doors is pinned there rather than here.
 STREAM_DIED="$OUTSIDE/stream-died.jsonl"
-{ cat "$INIT_SAMPLE"; cat "$DIED_RESULT"; } > "$STREAM_DIED"
+cat "$DIED_RESULT" > "$STREAM_DIED"
 STREAM_BUDGET="$OUTSIDE/stream-budget.jsonl"
-{ cat "$INIT_SAMPLE"; cat "$BUDGET_RESULT"; } > "$STREAM_BUDGET"
+cat "$BUDGET_RESULT" > "$STREAM_BUDGET"
 
 git init -q -b main
 git config user.email "fixture@example.com"
@@ -2363,12 +2374,17 @@ STUB
 chmod +x "$OUTSIDE/stub/claude"
 
 : > "$LEDGER"; : > "$DIED_COUNT"
-died_out="$( SDD_DEATH_STREAM="$STREAM_DIED" "$SDD" run "$MISSION" 2>&1 )"
+died_out="$( SDD_DEATH_STREAM="$STREAM_DIED" "$SDD" run "$MISSION" 2>&1 )"; died_rc=$?
 died_err="$(jq -r -s '[.[] | select(.event == "session")][0].session_error' "$LEDGER")"
+died_shape="$(blocked_shape "$died_rc")"
+died_bought="$(grep -c . "$DIED_COUNT" 2>/dev/null || echo 0)"
+died_why="$(jq -r -s '[.[] | select(.event == "blocked")][0].gate_why' "$LEDGER")"
 
 : > "$LEDGER"; : > "$DIED_COUNT"
-budget_out="$( SDD_DEATH_STREAM="$STREAM_BUDGET" "$SDD" run "$MISSION" 2>&1 )"
+budget_out="$( SDD_DEATH_STREAM="$STREAM_BUDGET" "$SDD" run "$MISSION" 2>&1 )"; budget_rc=$?
 budget_err="$(jq -r -s '[.[] | select(.event == "session")][0].session_error' "$LEDGER")"
+budget_shape="$(blocked_shape "$budget_rc")"
+budget_bought="$(grep -c . "$DIED_COUNT" 2>/dev/null || echo 0)"
 
 says_died() { grep -qE 'session died: Failed to authenticate' <<< "$1" && echo says || echo silent; }
 
@@ -2387,6 +2403,77 @@ assert_eq "the runner names the cause of a death it can name, and says nothing o
 assert_eq "the session row carries the cause of death, and null where there is none to carry" \
   "Failed to authenticate: OAuth session expired and could not be refreshed · null" \
   "$died_err · $budget_err"
+
+# I3, DOOR 1. The money half of the family, and the reason the escalation sits ABOVE the retry
+# rather than beside it: the 2026-09-16 episode bought a second session that died in one turn for
+# US$ 0 and taught the runner nothing — and it is that second session, not the first, that turns
+# a dead token into `two sessions without moving the disk`. So the assertion counts the sessions
+# the stub was actually asked for, and not only the rc.
+#
+# DIFFERENTIAL against the budget ceiling, which must keep TODAY's behaviour byte for byte: two
+# sessions, `no-progress`, and no `session-died` anywhere. A runner that escalated on `is_error`
+# alone takes this half red — and that half is the one that matters, because `error_max_budget_usd`
+# is what REVIEW_MAX_ITER looks like from down here.
+assert_eq "a named death stops the line on the FIRST session, where the budget ceiling still spends two" \
+  "3|1|blocked|session-died|1 · 3|2|blocked|no-progress|2" \
+  "$died_shape|$died_bought · $budget_shape|$budget_bought"
+
+# The row an operator acts on has to say WHAT killed the session, not merely that something did.
+# `kind` names the class; the sentence is what turns the escalation into an instruction (here:
+# renew the credential and run again), and it is the half a `kind` set by hand would leave empty.
+assert_eq "and the escalation row carries the cause, not just the class" \
+  "names-it" \
+  "$(grep -qE '^Failed to authenticate: OAuth session expired' <<< "$died_why" && echo names-it || echo "$died_why")"
+
+# --- ...and a `--max-phases` ceiling does not turn that into rc 0 -----------
+# Owed by the same argument as the dead-app sibling: door 1 sits ABOVE the ceiling check, so an
+# operator or a CI wrapper pacing the pipeline one phase at a time must not be handed a SUCCESS
+# exit code for a phase whose session the environment killed. DIFFERENTIAL against the budget
+# ceiling, which under the same flag must still end 0 with no escalation row at all — a runner
+# that escalated whenever --max-phases is set takes that half red.
+: > "$LEDGER"; : > "$DIED_COUNT"
+SDD_DEATH_STREAM="$STREAM_DIED" "$SDD" run "$MISSION" --max-phases 1 >/dev/null 2>&1; rc=$?
+died_ceiling="$(blocked_shape "$rc")"
+: > "$LEDGER"; : > "$DIED_COUNT"
+SDD_DEATH_STREAM="$STREAM_BUDGET" "$SDD" run "$MISSION" --max-phases 1 >/dev/null 2>&1; rc=$?
+budget_ceiling="$(blocked_shape "$rc")"
+assert_eq "a --max-phases ceiling does not turn a dead session into rc 0, where the budget ceiling still ends 0" \
+  "3|1|blocked|session-died · 0|1|null|null" \
+  "$died_ceiling · $budget_ceiling"
+
+# --- ...and the INLINE RETRY escalates on the same terms --------------------
+# Everything above sits on the FIRST pass. The retry door is reached when session 1 comes back
+# ALIVE and idle — the gate refuses, nothing moved — and it is session 2 that the environment
+# kills. That is not a contrivance: a token expires at a moment, and the moment can fall between
+# two sessions of one phase as easily as before the first.
+#
+# Without door 2 the run falls straight through to the `moved2 == false` branch and writes
+# `no-progress` — the very row this family exists to stop being written about an environment
+# failure, only now bought at TWO sessions instead of one. The control proves the branch is
+# genuinely reachable in this fixture: with the budget ceiling replayed on the retry instead,
+# the same two sessions must still end exactly there. Only the replayed summary differs.
+cat > "$OUTSIDE/stub/claude" <<STUB
+#!/usr/bin/env bash
+printf 'x\n' >> "$DIED_COUNT"
+if [ "\$(grep -c . "$DIED_COUNT")" = "1" ]; then cat "$STREAM_SAMPLE"; exit 0; fi
+cat "\$SDD_DEATH_STREAM"
+exit 1
+STUB
+chmod +x "$OUTSIDE/stub/claude"
+
+: > "$LEDGER"; : > "$DIED_COUNT"
+SDD_DEATH_STREAM="$STREAM_DIED" "$SDD" run "$MISSION" >/dev/null 2>&1
+died_retry_where="$(blocked_where)"
+died_retry_bought="$(grep -c . "$DIED_COUNT" 2>/dev/null || echo 0)"
+
+: > "$LEDGER"; : > "$DIED_COUNT"
+SDD_DEATH_STREAM="$STREAM_BUDGET" "$SDD" run "$MISSION" >/dev/null 2>&1
+budget_retry_where="$(blocked_where)"
+budget_retry_bought="$(grep -c . "$DIED_COUNT" 2>/dev/null || echo 0)"
+
+assert_eq "a retry the environment kills escalates as a death, where the budget ceiling is still no-progress" \
+  "EXEC|session-died|2 · EXEC|no-progress|2" \
+  "$died_retry_where|$died_retry_bought · $budget_retry_where|$budget_retry_bought"
 
 cp "$DIED_CKPT_BEFORE" "$MDIR/checkpoint.md"
 cat > "$OUTSIDE/stub/claude" <<'STUB'
