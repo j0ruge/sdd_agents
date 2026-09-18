@@ -160,3 +160,27 @@ sozinho. Qualquer ✗ → `aprovacao` fica vazio e o runner para pedindo aprova�
   lá; o item existente já descreve. Sem ação aqui.
 - **`docs/superpowers/{specs,plans}` do kit ficam fora do escopo varrido** — o layout não é
   `<dir>/*/spec.md`. Rota: nota no `KAIZEN_LOG.md` (I8).
+
+### Achados da revisão pré-PR — rota: `TODO.md` no chore PÓS-merge
+
+⚠️ **Escritos aqui e não no `TODO.md` de propósito.** A catraca do backlog mora em
+`tests/health-baseline.txt`, que está **dentro** da chave do carimbo (`bin tests templates
+config`), então registrar os dois achados agora mataria o carimbo desta missão — a colisão que o
+verbete *"`sdd health` ran three times for one branch"* de `docs/failure-modes.md` descreve. O
+transporte para o `TODO.md`, com a linha da catraca se movendo no **mesmo commit**, é o chore
+pós-merge, como nos PRs #31 e #39.
+
+- [ ] **Saber se o carimbo precisa ser refeito custa 20–58 min hoje** — `bin/sdd:1507` — a única
+  forma de responder *"o `sdd health` precisa rodar de novo?"* é rodar o `sdd health`, ou repetir
+  à mão o `find … | md5sum` que o `mutation_stamp_key` já sabe fazer — e quem não sabe disso
+  re-roda por desconfiança. Direção: `sdd health --stamp-status`, que compara
+  `mutation_stamp_key` com o arquivo do carimbo e sai 0/1 sem tocar no catálogo. — descoberto por
+  `codereview` na missão `20260917-o-numero-do-adr-nao-e-prosa` (2026-09-17)
+
+- [ ] **Todo mutante roda a suíte inteira DEPOIS de já ter sido pego** — `tests/run-all.sh:87` —
+  o `run()` acumula `fails` em vez de parar, mas um mutante é *caught* no instante em que UMA
+  asserção falha, e o score é `326 caught of 326`: os 326 pagam a suíte restante por nada. Um
+  fail-fast sob `SDD_MUTANT` preserva o veredito (não-zero = caught) e só muda quando para.
+  Direção: medir primeiro quanto do tempo fica depois do primeiro vermelho — número sai do
+  comando. ⚠️ Não pode mudar QUAIS sensores rodam. — descoberto por `codereview` na missão
+  `20260917-o-numero-do-adr-nao-e-prosa` (2026-09-17)
