@@ -542,6 +542,31 @@ loop. `sdd retry` is the human's hand already on the phase and ends on `retry-ga
 
 ---
 
+## The `sdd run` process itself disappeared
+
+**Symptom:** no `BLOCKED`, no rc, no last line — the run is simply not there any more. `ps -eo
+pid,etime,cmd | grep 'bin/sdd run'` comes back empty and `pipeline.log` stops mid-mission.
+
+**What it is:** memory pressure killing the process from outside, not anything the pipeline did.
+Measured three times on 2026-09-16, all three when the run had been launched as a **background
+task of another agent's shell**; the same missions run in the **foreground**, one phase at a time
+with `sdd run <mission> --max-phases 1`, went nine phases without a single death.
+
+**What you do:** run it in the foreground, or detach it properly with `setsid nohup` and an
+environment cleaned of the parent harness (`env -u CLAUDECODE …`) — never as a background job of
+an agent session, which is what a memory watchdog reaps first. Then `sdd run <mission>` again.
+
+**What is worth knowing before you panic — and it is design, not luck.** None of the three deaths
+corrupted anything. The tree was clean, no artifact was half-written, and the next `sdd run`
+picked up at exactly the right phase. That falls out of two principles this kit does not trade
+away: state lives on disk and never in a session's context (principle 3), and the current phase is
+**derived** from the artifacts rather than stored (principle 4). There is no state file to be left
+lying about a disk that moved on, so *any* death of the runner — a kill, a reboot, a closed
+laptop — is recoverable by rerunning the same command. `sdd status <mission> --no-gates` tells you
+where it stopped without paying for a suite to find out.
+
+---
+
 ## The runner published a draft PR by itself
 
 **Symptom:** the mission ends with a **draft** PR and a review that never reached Grade A.
