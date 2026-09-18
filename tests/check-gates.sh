@@ -3367,6 +3367,62 @@ exit 97
 STUB
 chmod +x "$FIX/.stub/claude"
 
+echo "== sdd status --no-gates =="
+# The cheap answer to "where am I". `sdd status` derives the phase, and deriving the phase IS the
+# gate loop — `current_phase()` runs every gate, and a gate runs TEST_CMD and E2E_CMD. Measured
+# on 2026-09-16 in a real target: two waits of 120 s apiece, spent to be told which phase the
+# mission was in. The flag is ADDITIVE and says so: it does not pretend to measure what it does
+# not measure, and it never prints a next phase.
+#
+# THE PROPERTY IS AN ARTIFACT, NOT A CLOCK. The plan for this increment asked for `< 1 s`, and a
+# wall-clock threshold here would be vacuous in both directions: this fixture runs `TEST_CMD="true"`
+# and an empty E2E_CMD, so BOTH halves answer in well under a second and the assertion would pass
+# with the flag doing nothing at all. A TEST_CMD that leaves a mark behind is the same question
+# asked of the disk — it goes red the moment --no-gates runs one gate, and it cannot be satisfied
+# by a fast machine.
+NO_GATES_MARK="$SDD_STATE_FIX/test-cmd-calls"
+: > "$NO_GATES_MARK"
+# An explicit branch, never `grep -c . f || echo 0`: on an EXISTING but empty file `grep -c`
+# prints "0" AND exits 1 (no match), so the fallback fires too and the helper answers "0\n0" —
+# a two-line value that turns every assertion built on it into a multi-line string whose failure
+# report shows only its first line. Same reason check-autonomy.sh's `nrows` is written this way.
+test_cmd_calls() { [ -s "$NO_GATES_MARK" ] || { echo 0; return; }; grep -c . "$NO_GATES_MARK"; }
+sed -i "s|^TEST_CMD=\"true\"|TEST_CMD=\"echo call >> $NO_GATES_MARK\"|" .sdd/config.sh
+
+: > "$NO_GATES_MARK"
+NG_OUT="$( "$SDD" status "$MISSION" --no-gates 2>&1 )"; NG_RC=$?
+NG_CALLS="$(test_cmd_calls)"
+
+: > "$NO_GATES_MARK"
+FULL_OUT="$( "$SDD" status "$MISSION" 2>&1 )"; FULL_RC=$?
+FULL_CALLS="$(test_cmd_calls)"
+
+sed -i "s|^TEST_CMD=.*|TEST_CMD=\"true\"|" .sdd/config.sh
+
+# ⭐ DIFFERENTIAL, and the two halves are what make it mean anything. The flag half must run the
+# suite ZERO times and name no next phase; the plain half must still do both, or the assertion
+# would also pass on a `sdd status` that silently stopped deriving for everyone.
+assert_eq "--no-gates runs no gate and names no next phase, where plain status still does both" \
+  "rc:0 calls:0 next:0 · rc:0 calls:1 next:1" \
+  "rc:$NG_RC calls:$NG_CALLS next:$(has "$NG_OUT" 'next phase') · rc:$FULL_RC calls:$FULL_CALLS next:$(has "$FULL_OUT" 'next phase')"
+
+# What it does answer has to be worth the call, or the flag is just a faster way of learning
+# nothing: the mission's own name, the increments off the checkpoint (through `checkpoint_rows`,
+# the one reader — a second one would be the second definition this repo refuses), and a line
+# saying in so many words that no phase was derived, so the absence of `next phase` above reads
+# as a declaration rather than as a hole.
+assert_eq "--no-gates still answers the mission, its increments and why there is no verdict" \
+  "mission:1 increment:1 disclaimer:1" \
+  "mission:$(has "$NG_OUT" "$MISSION") increment:$(has "$NG_OUT" 'increments:') disclaimer:$(has "$NG_OUT" 'no gate was evaluated')"
+
+# An unknown option is refused rather than swallowed as a mission name — the shape `cmd_run`
+# already keeps. Without the loop below, `sdd status --no-gate` (a typo) would be resolved as a
+# MISSION and answer about the wrong thing, or about nothing, with rc 0.
+NG_TYPO_RC=0
+"$SDD" status "$MISSION" --no-gate >/dev/null 2>&1 || NG_TYPO_RC=$?
+assert_eq "a misspelt status option is refused, never read as a mission name" "1" \
+  "$( [ "$NG_TYPO_RC" -ne 0 ] && echo 1 || echo 0 )"
+
 # ---------------------------------------------------------------------------
 echo
 if [ "$fails" -eq 0 ]; then

@@ -4938,11 +4938,80 @@ health_ratchet() {
   fi
 }
 
+# The increment table, printed by both faces of `sdd status`. ONE definition rather than two: it
+# reads `checkpoint_rows` — itself the single checkpoint reader — and a second copy of this loop
+# is the shape this repo refuses everywhere else (a second reader learns a status token late, and
+# the two faces of one command disagree about the same file).
+status_increments() {
+  local rows; rows="$(checkpoint_rows)"
+  [ -n "$rows" ] || return 0
+  info "  increments:"
+  local id title _c st commit mark
+  while IFS=$'\t' read -r id title _c st commit; do
+    case "$st" in
+      done)    mark="${C_GREEN}✓${C_RESET}" ;;
+      blocked) mark="${C_RED}✗${C_RESET}" ;;
+      doing)   mark="${C_YELLOW}▸${C_RESET}" ;;
+      *)       mark="${C_DIM}·${C_RESET}" ;;
+    esac
+    printf '    %b %-4s %-46s %s%s%s\n' "$mark" "$id" "${title:0:46}" "$C_DIM" "${commit:0:8}" "$C_RESET"
+  done <<< "$rows"
+}
+
+# WHERE AM I, for free. Deriving the phase IS the gate loop — `current_phase()` runs every gate,
+# and a gate runs TEST_CMD and E2E_CMD — so the ordinary `sdd status` costs a whole suite plus a
+# whole e2e every time somebody asks which phase a mission is in. Measured on 2026-09-16 in a
+# real target: two waits of 120 s apiece, for a question the disk can answer.
+#
+# `--no-gates` is ADDITIVE and deliberately does not pretend: it reports what is ON DISK and says
+# in so many words that no gate was evaluated, and it NEVER prints a next phase. Two shapes were
+# refused in the 2026-09-18 grill. Deriving the phase from the artifacts instead would create a
+# SECOND derivation of the most-read enum in the kit, and the kit's own rule is one definition per
+# program. Inverting the default — cheap unless asked — would leave the cheap answer being read
+# as a verdict, which is the failure this flag exists to avoid rather than to spread.
 cmd_status() {
+  local mission_arg="" no_gates=0
+  # The same parse shape `cmd_run` keeps, and the `-*` arm is the load-bearing half: without it
+  # `sdd status <mission> --no-gate` (a typo) is resolved as a MISSION, and the command answers
+  # confidently about the wrong thing with rc 0.
+  while [ $# -gt 0 ]; do
+    case "$1" in
+      --no-gates) no_gates=1 ;;
+      -*)         die "unknown status option: $1" ;;
+      *)          mission_arg="$1" ;;
+    esac
+    shift
+  done
   load_config
-  resolve_mission "${1:-}"
+  resolve_mission "$mission_arg"
   step "mission $MISSION — $PROJECT_NAME"
   info ""
+
+  if [ "$no_gates" = "1" ]; then
+    local f names=""
+    for f in "$MISSION_DIR"/*; do [ -e "$f" ] && names="$names $(basename "$f")"; done
+    info "  artifacts:"
+    if [ -n "$names" ]; then
+      printf '    %s%s%s\n' "$C_DIM" "${names# }" "$C_RESET"
+    else
+      printf '    %s(none)%s\n' "$C_DIM" "$C_RESET"
+    fi
+    info ""
+    status_increments
+    info ""
+    local jrnl="$REPO_ROOT/.sdd/logs/$MISSION/pipeline.log"
+    if [ -f "$jrnl" ]; then
+      info "  last journal lines:"
+      tail -5 "$jrnl" | sed "s/^/    /"
+      info ""
+    fi
+    # The disclaimer is the whole reason the absence of a next phase above is readable. Without
+    # it the output is indistinguishable from a pipeline that is complete, which is the one
+    # reading a cheap answer must never be allowed to carry.
+    printf '  %sno gate was evaluated — this is the disk, not a verdict%s\n' "$C_YELLOW" "$C_RESET"
+    printf '  %sfor the phase, run: sdd status %s%s\n' "$C_DIM" "$MISSION" "$C_RESET"
+    return 0
+  fi
 
   local ph state why
   for ph in $PHASES; do
@@ -4952,20 +5021,7 @@ cmd_status() {
   done
 
   info ""
-  local rows; rows="$(checkpoint_rows)"
-  if [ -n "$rows" ]; then
-    info "  increments:"
-    local id title _c st commit mark
-    while IFS=$'\t' read -r id title _c st commit; do
-      case "$st" in
-        done)    mark="${C_GREEN}✓${C_RESET}" ;;
-        blocked) mark="${C_RED}✗${C_RESET}" ;;
-        doing)   mark="${C_YELLOW}▸${C_RESET}" ;;
-        *)       mark="${C_DIM}·${C_RESET}" ;;
-      esac
-      printf '    %b %-4s %-46s %s%s%s\n' "$mark" "$id" "${title:0:46}" "$C_DIM" "${commit:0:8}" "$C_RESET"
-    done <<< "$rows"
-  fi
+  status_increments
 
   info ""
   local next; next="$(current_phase)"
@@ -8442,6 +8498,7 @@ USAGE
              [--release]   the six lines of ADR 0007 — apt for another repo of the organisation? —
                            read from artifacts; never runs the suite
   sdd status <mission>       where the mission stands, gate by gate, and what is missing
+    --no-gates               the same page off the DISK alone: no suite, no e2e, no next phase
   sdd approve <mission>      show the plan and, on an explicit y, write the human approval into
                              00-missao.md and commit it (the PLAN gate — never a session)
   sdd run <mission>          run from the first unsatisfied phase through to the PR

@@ -2361,6 +2361,10 @@ printf -- '---\nfase: QA\nstatus: done\n---\n' > "$MDIR/30-handoff-qa.md"
 git add -A && git commit -qm "chore: a pending increment for the death pair"
 
 DIED_COUNT="$OUTSIDE/.died-sessions"
+# An explicit branch, for the reason `nrows` above carries: `grep -c .` on an existing but EMPTY
+# file prints "0" and still exits 1, so a `|| echo 0` fallback fires as well and the helper
+# answers "0\n0".
+sessions_bought() { [ -s "$DIED_COUNT" ] || { echo 0; return; }; grep -c . "$DIED_COUNT"; }
 # ONE stub for both regimes — $SDD_DEATH_STREAM picks which distilled summary it replays, so the
 # two halves cannot drift apart in a hand-written second copy. It COUNTS its invocations: "the
 # runner did not buy a second session" is the money half of this family's claim, and a rc alone
@@ -2377,14 +2381,14 @@ chmod +x "$OUTSIDE/stub/claude"
 died_out="$( SDD_DEATH_STREAM="$STREAM_DIED" "$SDD" run "$MISSION" 2>&1 )"; died_rc=$?
 died_err="$(jq -r -s '[.[] | select(.event == "session")][0].session_error' "$LEDGER")"
 died_shape="$(blocked_shape "$died_rc")"
-died_bought="$(grep -c . "$DIED_COUNT" 2>/dev/null || echo 0)"
+died_bought="$(sessions_bought)"
 died_why="$(jq -r -s '[.[] | select(.event == "blocked")][0].gate_why' "$LEDGER")"
 
 : > "$LEDGER"; : > "$DIED_COUNT"
 budget_out="$( SDD_DEATH_STREAM="$STREAM_BUDGET" "$SDD" run "$MISSION" 2>&1 )"; budget_rc=$?
 budget_err="$(jq -r -s '[.[] | select(.event == "session")][0].session_error' "$LEDGER")"
 budget_shape="$(blocked_shape "$budget_rc")"
-budget_bought="$(grep -c . "$DIED_COUNT" 2>/dev/null || echo 0)"
+budget_bought="$(sessions_bought)"
 
 says_died() { grep -qE 'session died: Failed to authenticate' <<< "$1" && echo says || echo silent; }
 
@@ -2464,12 +2468,12 @@ chmod +x "$OUTSIDE/stub/claude"
 : > "$LEDGER"; : > "$DIED_COUNT"
 SDD_DEATH_STREAM="$STREAM_DIED" "$SDD" run "$MISSION" >/dev/null 2>&1
 died_retry_where="$(blocked_where)"
-died_retry_bought="$(grep -c . "$DIED_COUNT" 2>/dev/null || echo 0)"
+died_retry_bought="$(sessions_bought)"
 
 : > "$LEDGER"; : > "$DIED_COUNT"
 SDD_DEATH_STREAM="$STREAM_BUDGET" "$SDD" run "$MISSION" >/dev/null 2>&1
 budget_retry_where="$(blocked_where)"
-budget_retry_bought="$(grep -c . "$DIED_COUNT" 2>/dev/null || echo 0)"
+budget_retry_bought="$(sessions_bought)"
 
 assert_eq "a retry the environment kills escalates as a death, where the budget ceiling is still no-progress" \
   "EXEC|session-died|2 · EXEC|no-progress|2" \
