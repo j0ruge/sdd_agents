@@ -3157,9 +3157,11 @@ mkdir -p "$FIX/.sdd/logs/$MISSION"
 
 # The close session, reproduced: it spends a session, leaves a marker so "was a session spent?" is
 # ASSERTED and not assumed, exits with whatever the control file says — and never closes anything.
+CLOSE_ARGV="$FIX/.sdd/logs/close-session-argv"
 cat > "$FIX/.stub/claude" <<STUB
 #!/usr/bin/env bash
 : > "$CLOSE_MARK"
+printf '%s\\n' "\$@" > "$CLOSE_ARGV"
 exit "\$(cat "$CLOSE_RCFILE" 2>/dev/null || echo 0)"
 STUB
 chmod +x "$FIX/.stub/claude"
@@ -3345,6 +3347,30 @@ assert_eq "close: an issue already Done is confirmed without spending a session 
   "rc:0 already:1 confirms:1 session-spent:0 acli-calls:1 journal:1" \
   "rc:$CLOSE_RC_OUT already:$(has "$CLOSE_OUT" 'already Done') confirms:$(has "$CLOSE_OUT" 'JIRA confirms') session-spent:$(spent) acli-calls:$(acli_calls) journal:$(has "$(cat "$CLOSE_JOURNAL" 2>/dev/null || true)" 'session=none')"
 
+# 8b. The prompt carries the AUTHORIZATION. `sdd close` is post-merge and is typed by a human:
+#     the permission has already been given by the act of running the command. The `ticket` skill
+#     nevertheless writes, twice in its own SKILL.md, that it must confirm with a developer before
+#     transitioning — so the bare `/ticket close <issue>` opened a session that stopped to ask a
+#     human who is not in the room, burned US$ 0,86 and 43 s, and closed nothing. Measured
+#     2026-09-16. Repeating the session repeats the question, which is why the fix is the prompt
+#     and not a retry.
+#
+#     ⚠️ WHAT THIS PROVES, AND WHERE THE OTHER HALF WAS MEASURED. The argv is the RUNNER's side of
+#     the boundary: it says the sentence left this repo and reached the process. It cannot say the
+#     harness delivers prose that follows a slash command to the model, and that risk was real —
+#     an expansion keeping only the command would drop every word. Measured outside this suite on
+#     2026-09-18, because no stub can answer it: a real `claude -p` carrying `/ticket close ZZZ-0`
+#     on its first line and an instruction four lines down obeyed the instruction (US$ 0,0475,
+#     haiku, one turn). The fallback that measurement made unnecessary is `--append-system-prompt`.
+#     Same helper and same control word as regime 4, which is the cheapest regime that actually
+#     spends a session: the issue is open before it and Done after it.
+rm -f "$CLOSE_ARGV"
+close_run "notdone done" 0
+CLOSE_ARGV_TEXT="$(cat "$CLOSE_ARGV" 2>/dev/null || echo "")"
+assert_eq "close: the prompt tells the session the human already authorised it, and no dev is here to ask" \
+  "slash:1 authorised:1 nobody:1 dont-ask:1" \
+  "slash:$(has "$CLOSE_ARGV_TEXT" '/ticket close') authorised:$(has "$CLOSE_ARGV_TEXT" 'already authorised') nobody:$(has "$CLOSE_ARGV_TEXT" 'no developer') dont-ask:$(has "$CLOSE_ARGV_TEXT" 'without asking')"
+
 # 9. Control. With JIRA off the command asks nothing of anyone — and the two `:0` terms are the
 #    half that matters: a guard that ran acli anyway would still print "nothing to close".
 sed -i 's/^JIRA_ENABLED=true$/JIRA_ENABLED=false/' "$FIX/.sdd/config.sh"
@@ -3359,7 +3385,7 @@ assert_eq "close: with JIRA off nothing is asked of anyone — no session, no ac
 # only defence, and it is not one a sensor can hold: a future author appending below would inherit
 # a `gh` that answers MERGED to everything and a `claude` that returns success without doing
 # anything, and would never see why their new assertion passed. Restoring costs four lines.
-rm -f "$MDIR/10-ticket.md" "$MDIR/50-pr.md" "$FIX/.stub/gh" "$FIX/.stub/acli" "$CLOSE_JOURNAL"
+rm -f "$MDIR/10-ticket.md" "$MDIR/50-pr.md" "$FIX/.stub/gh" "$FIX/.stub/acli" "$CLOSE_JOURNAL" "$CLOSE_ARGV"
 cat > "$FIX/.stub/claude" <<'STUB'
 #!/usr/bin/env bash
 echo "ERROR: the test invoked the real claude — the escalation path did not escape before the session" >&2

@@ -8737,7 +8737,28 @@ To see what it saw:  $acli_bin jira workitem search --jql \"key = $issue AND sta
   # back to `null` — r1 finding #7 undone in silence, with a green assertion over it.
   local streamfile="${logfile%.json}.stream.jsonl" errfile="${logfile%.json}.err" started ended
   started=$(date +%s)
-  ( cd "$REPO_ROOT" && claude -p "/ticket close $issue" \
+  # THE PROMPT CARRIES THE AUTHORIZATION, and that is the whole of this fix. `sdd close` runs
+  # after the merge and is typed by a human — the permission IS the command. The `ticket` skill
+  # writes twice in its own SKILL.md that it must confirm with a developer before transitioning,
+  # and it is right to, in the interactive session it was written for; here there is no developer
+  # in the room to answer. Measured 2026-09-16: the bare `/ticket close <issue>` opened a session
+  # that stopped to ask, spent US$ 0,86 and 43 s, and closed nothing. Running it again asks again
+  # — the question is in the skill, so the answer has to be in the prompt.
+  #
+  # THE HALF THE SENSOR CANNOT REACH WAS MEASURED, not assumed. `tests/check-gates.sh` proves
+  # the sentence leaves this repo and reaches the process; whether the HARNESS delivers prose
+  # that follows a slash command is a question no stub can answer, and the risk was real — an
+  # expansion that kept only the command would have dropped every word of this. Measured
+  # 2026-09-18 on Claude Code with a real `claude -p` carrying `/ticket close ZZZ-0` on its first
+  # line and an instruction four lines down: the session obeyed the instruction (US$ 0,0475,
+  # haiku, one turn). So the prose arrives, and `--append-system-prompt` — the fallback this
+  # comment used to name — is not needed. Re-measure the same way if the harness majors.
+  local close_prompt="/ticket close $issue
+The human running this has already authorised the close: they typed \`sdd close\` after the PR was
+merged, which is the approval step of this pipeline. There is no developer in this session to
+confirm with, so post the summary and transition the issue without asking. If something genuinely
+blocks the transition, say what it is and stop — but do not stop to request permission."
+  ( cd "$REPO_ROOT" && claude -p "$close_prompt" \
       --model "$MODEL_TICKET" --permission-mode "$PERMISSION_MODE" \
       --output-format stream-json --verbose \
       --setting-sources "user,project,local" --allowedTools "$ALLOWED_TOOLS" \
