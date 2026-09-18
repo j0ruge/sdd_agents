@@ -3212,7 +3212,8 @@ autonomy_escalation_row() {   # autonomy_escalation_row <event> <kind> <phase> <
 
 # Called, never substituted, for the same reason the body above says: the kit stamp's one-shot
 # warning flag is a global, and a subshell would reset it once per row.
-# L6 (2026-09-03 audit) — the human's pager. Every escalation that ends the run with rc 3 runs
+# L6 (2026-09-03 audit) — the human's pager. Every escalation that ends the run with rc 3 first
+# writes its durable ledger row, then runs
 # ON_ESCALATION_CMD from .sdd/config.sh, when set, with the reason (the ledger `kind`), the phase,
 # the mission, the project and the gate's sentence in its environment. Measured before it: zero
 # notification sites in this file, and a human watching `tail -F` for hours to learn the line had
@@ -3220,19 +3221,22 @@ autonomy_escalation_row() {   # autonomy_escalation_row <event> <kind> <phase> <
 # sites (count them, never read a number off this comment: `grep -cE '^ +autonomy_blocked_row '`
 # — the r1 of the 2026-09-11 judge mission found the hand-written number two behind the file),
 # because that is the one door every rc 3 goes through — the degraded row is not an rc 3 and gets
-# no pager. The projection never runs it. A hook that fails is a warning, never a second failure:
-# the escalation is already in the journal and the ledger, and a pager that could stop the run
-# from stopping would be the wrong way round. `bash -c` with stdin closed, so a hook that reads
-# its terminal cannot hang the runner on a machine with nobody at the keyboard.
+# no pager. The projection never runs it. A hook that fails or exceeds five seconds is a warning,
+# never a second failure; timeout sends KILL one second after TERM. If timeout(1) is unavailable,
+# the hook is skipped rather than run without a bound. `bash -c` keeps stdin closed too.
 escalation_hook() {   # escalation_hook <kind> <phase> <gate_why> — never fails the run
   [ "$DRY_RUN" = "1" ] && return 0
   [ -n "$ON_ESCALATION_CMD" ] || return 0
+  if ! command -v timeout >/dev/null 2>&1; then
+    warn "timeout(1) is unavailable — ON_ESCALATION_CMD was not run because an unbounded hook could hang the runner"
+    return 0
+  fi
   if ! SDD_REASON="$1" SDD_PHASE="$2" SDD_GATE_WHY="$3" SDD_MISSION="${MISSION:-}" SDD_PROJECT="${PROJECT_NAME:-}" \
-       bash -c "$ON_ESCALATION_CMD" </dev/null >&2; then
-    warn "ON_ESCALATION_CMD exited non-zero — the escalation is recorded either way"
+       timeout --kill-after=1s 5s bash -c "$ON_ESCALATION_CMD" </dev/null >&2; then
+    warn "ON_ESCALATION_CMD exited non-zero or timed out — the escalation still stops the run"
   fi
 }
-autonomy_blocked_row()  { escalation_hook "$1" "$2" "$3"; autonomy_escalation_row "blocked"  "$1" "$2" "$3"; }
+autonomy_blocked_row()  { autonomy_escalation_row "blocked" "$1" "$2" "$3"; escalation_hook "$1" "$2" "$3"; }
 autonomy_degraded_row() { autonomy_escalation_row "degraded" "$1" "$2" "$3"; }
 
 # The FACT that a phase closed without buying a session. Not an escalation — nothing went wrong,

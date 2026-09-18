@@ -56,8 +56,12 @@ environment** — do not confuse them.
 `increment-blocked`, `dirty-tree`, `handoff-blocked`, `app-down`, `budget-exhausted`, `no-progress`,
 `hat-crossed`, `kit-touched` — runs `ON_ESCALATION_CMD` from `.sdd/config.sh`, when set, with `SDD_REASON`, `SDD_PHASE`,
 `SDD_MISSION`, `SDD_PROJECT` and `SDD_GATE_WHY` in its environment (a `notify-send`, an `ntfy`
-curl, whatever reaches you). The projection never runs it, and a hook that fails is a warning, never
-a second failure: the escalation is already in the journal and the ledger. L6 of the 2026-09-03
+curl, whatever reaches you). The ledger write is attempted first, so the hook can read its own
+event when persistence succeeded; a write failure keeps the existing ledger warning and makes no
+false durability claim. The projection never runs the hook. It has five seconds, receives TERM,
+then KILL one second later; failure or timeout warns but leaves the escalation's rc unchanged. If
+`timeout(1)` is unavailable, the runner warns and skips the hook instead of running it without a
+bound. L6 of the 2026-09-03
 audit — before it the kit had zero notification sites, and the human learned the line had stopped
 by watching `tail -F`. The key is documented in `config/schema.md`.
 

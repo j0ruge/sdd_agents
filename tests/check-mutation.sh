@@ -1567,14 +1567,22 @@ mut_RUN_intervention_written_on_dry_run() {
 }
 
 # L6 of the 2026-09-03 audit: ON_ESCALATION_CMD runs on every rc 3 through the one door every
-# blocked row takes (autonomy_blocked_row), and never on a projection. Two mutants: the pager
-# unplugged from the door, and the DRY_RUN guard of the hook removed — the fixture of
-# tests/check-autonomy.sh reads the hook's log as an artefact in both blocks.
+# blocked row takes (autonomy_blocked_row), after the durable write, with a bounded lifetime and
+# never on a projection. Each mutant changes one part of that boundary.
 mut_RUN_escalation_hook_silent() {
-  sed -i 's|^autonomy_blocked_row()  { escalation_hook "$1" "$2" "$3"; autonomy_escalation_row "blocked"  "$1" "$2" "$3"; }$|autonomy_blocked_row()  { autonomy_escalation_row "blocked"  "$1" "$2" "$3"; }|' "$1"
+  sed -i 's|^autonomy_blocked_row()  { autonomy_escalation_row "blocked" "$1" "$2" "$3"; escalation_hook "$1" "$2" "$3"; }$|autonomy_blocked_row()  { autonomy_escalation_row "blocked" "$1" "$2" "$3"; }|' "$1"
 }
 mut_RUN_escalation_hook_on_dry_run() {
   sed -i '/^escalation_hook() {/,/^}/ s|^  \[ "$DRY_RUN" = "1" \] && return 0$|  :|' "$1"
+}
+mut_RUN_escalation_hook_before_ledger() {
+  sed -i 's|^autonomy_blocked_row()  { autonomy_escalation_row "blocked" "$1" "$2" "$3"; escalation_hook "$1" "$2" "$3"; }$|autonomy_blocked_row()  { escalation_hook "$1" "$2" "$3"; autonomy_escalation_row "blocked" "$1" "$2" "$3"; }|' "$1"
+}
+mut_RUN_escalation_hook_timeout_short() {
+  sed -i '/^escalation_hook() {/,/^}/ s|timeout --kill-after=1s 5s bash|timeout --kill-after=1s 1s bash|' "$1"
+}
+mut_RUN_escalation_hook_without_timeout_guard() {
+  sed -i '/^escalation_hook() {/,/^}/ s|^  if ! command -v timeout >/dev/null 2>&1; then$|  if false; then|' "$1"
 }
 
 # L2 of the 2026-09-03 audit: the mission ceiling. The probes read each side separately: both
@@ -3938,6 +3946,9 @@ CATALOG=(
   RUN_intervention_written_on_dry_run
   RUN_escalation_hook_silent
   RUN_escalation_hook_on_dry_run
+  RUN_escalation_hook_before_ledger
+  RUN_escalation_hook_timeout_short
+  RUN_escalation_hook_without_timeout_guard
   RUN_mission_budget_ignored
   RUN_mission_budget_ignored_on_retry
   RUN_mission_budget_zero_is_a_ceiling

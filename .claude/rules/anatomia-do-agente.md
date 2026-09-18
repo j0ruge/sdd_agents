@@ -180,7 +180,8 @@ linha parou não tem hook — tem vigília.
 `no-progress`, `budget-exhausted`; `QA_MAX_ITER`/`REVIEW_MAX_ITER`; `--max-budget-usd` por
 fase (`phase_budget_usd`); merge do PR é humano; `sdd close`. Desde a auditoria: teto por missão
 (`BUDGET_MISSION_USD`, com zero numérico desabilitando e todo valor positivo sendo aplicado),
-`ON_ESCALATION_CMD` em todo rc 3, e a linha `- intervention:` escrita pelo
+`ON_ESCALATION_CMD` em todo rc 3 depois da tentativa de escrita durável, limitado a cinco segundos
+mais um de encerramento forçado, e a linha `- intervention:` escrita pelo
 runner (L2, L6 e L4).
 
 **Dívida declarada.** "Pare depois desta fase" existe: `--phase X --max-phases 1` — a linha
