@@ -134,6 +134,22 @@ assert_has "preflight got as far as the tool checks" "git present" "$out"
 assert_has "GNU userland reported ok" "$OK_LINE" "$out"
 assert_lacks "no GNU complaint on a GNU machine" "the kit assumes the GNU userland" "$out"
 
+# --- HAT_WRITES_EXTRA for a hat that already writes anywhere ----------------
+# An entry naming sdd-executor is accepted and IGNORED: that hat's writes: is empty, which means
+# "writes anywhere", and summing the entry would turn the widest hat in the pipeline into the
+# narrowest. Accepted-and-silent would be a trap of its own, though — the operator would go on
+# believing a declaration is in force while nothing reads it. So preflight says so.
+echo "== HAT_WRITES_EXTRA naming a hat that already writes anywhere =="
+printf 'HAT_WRITES_EXTRA="sdd-executor: x.md"\n' >> .sdd/config.sh
+hwx_out="$( "$SDD" preflight 2>&1 )"
+sed -i '/^HAT_WRITES_EXTRA=/d' .sdd/config.sh
+# DIFFERENTIAL: the same preflight WITHOUT the key must not say it. Asserting only the presence
+# would also pass on a line printed unconditionally, which is a warning that means nothing.
+hwx_quiet="$( "$SDD" preflight 2>&1 )"
+assert_eq "preflight says an entry for a hat that writes anywhere is ignored, and says it only then" \
+  "named:1 quiet:0" \
+  "named:$( grep -c 'sdd-executor' <<< "$hwx_out" ) quiet:$( grep -c 'sdd-executor' <<< "$hwx_quiet" )"
+
 # --- the context bill: a SENSOR, and never a refusal ------------------------
 # The target's CLAUDE.md plus its .claude/rules/ is ~73% of the fixed prefix every turn of every
 # phase carries (measured 2026-09-03, two repos). The kit does not cut anybody's rulebook, so this

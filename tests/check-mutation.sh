@@ -1210,6 +1210,26 @@ mut_RUN_hat_close_unchecked() {
 }
 # The kit guard back to a warning: the marker is never armed, so KIT-TOUCHED is a line and not a
 # stop — the 2d28d13 world. KG1's "rc:3 kind:kit-touched" dies.
+# HAT_WRITES_EXTRA — the project's exception. THREE mutants and not one, because the three fail
+# open INDEPENDENTLY: a key nothing reads, a guard that admits traversal, and a guard that admits
+# a metacharacter are three different holes, and one mutant for "the key" would let two of them rot
+# while staying green. The second and third matter most: this key WIDENS a permission and its value
+# is dropped into hat_path_allowed's `case "$f" in $g)`, a shell GLOB — the direction `ADR_DIR=*`
+# took when it built `*/**` and handed a hat most of the repo (CWE-863, PR #45).
+mut_RUN_hat_extra_ignored() {   # the sum never happens: the key parses, validates, and is dropped
+  sed -i '/^hat_writes() {/,/^}/ s|^  extra="\$(hat_writes_extra_for "\$hat")"$|  extra=""|' "$1"
+}
+# `#` and not `|` as the s/// delimiter: the line this one matches CONTAINS `|` (the `''|.|..`
+# alternation), and a `|` delimiter closes the command three characters in. The sed then failed
+# with "unknown option to `s'" and changed nothing — a mutant the catalogue would have gone on
+# reporting as caught. Found by proving the mutant on a copy before adding it, the rite the r1 of
+# PR #46 paid for.
+mut_RUN_hat_extra_unguarded() {   # traversal admitted — `../x` hands a hat a path above the checkout
+  sed -i "/^hat_extra_path_ok() {/,/^}/ s#^      ''|\.|\.\.) return 1 ;;\$#      '') return 1 ;;#" "$1"
+}
+mut_RUN_hat_extra_glob_chars() {   # a metacharacter outside the `/**` tail admitted — `docs/*` is a pattern, not a path
+  sed -i '/^hat_extra_path_ok() {/,/^}/ s|^      \*\[!A-Za-z0-9\._-\]\*) return 1 ;;$|      :) return 1 ;;|' "$1"
+}
 mut_RUN_kit_touched_silent() {
   sed -i '/^kit_guard_check() {/,/^}/ s|^  KIT_TOUCHED_WHY="the kit at |  : "the kit at |' "$1"
 }
@@ -3769,6 +3789,9 @@ CATALOG=(
   RUN_hat_door2_missing
   RUN_hat_retry_door_missing
   RUN_hat_close_door_missing
+  RUN_hat_extra_ignored
+  RUN_hat_extra_unguarded
+  RUN_hat_extra_glob_chars
   RUN_kit_touched_silent
   RUN_init_blind
   RUN_harness_blind

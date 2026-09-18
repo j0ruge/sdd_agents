@@ -60,3 +60,16 @@
   âncora `''|.|..) return 1 ;;` casa **2x** (existe igual no `adr_dir_ok`), e um primeiro arnês
   restaurava o arquivo com `git checkout`, que reverte para o HEAD — anterior ao I1. Nos dois casos
   o arnês gritou em vez de concluir sobre um arquivo que não mudou.
+- I2 — o par diferencial ficou RED duas vezes por motivo de FIXTURE, não de produto, e as duas
+  valem registro: (1) `hwx_cfg` deixava o `.sdd/config.sh` sujo e o `git add -A` do stub o varria
+  para o commit da sessão — `.sdd/` também está fora do `writes:` do `sdd-docs`, então TODO regime
+  lia `hat-crossed`, por um caminho que o fixture escreveu e não o que estava sob teste; (2) sem
+  `--max-phases 1`, a corrida que a chave DEIXA PASSAR anda para a fase seguinte, onde o stub não
+  faz nada, e termina `no-progress` — rc 3 sobre o fixture, não sobre a fronteira.
+  ⚠️ O remédio saiu de DENTRO do `HAT_CROSSED_WHY`: três asserções antigas leem a lista de
+  caminhos como o ÚLTIMO campo `': '` (`reviewscope_files`), e conselho no `why` também vira ruído
+  no ledger. Ele viaja ao lado, numa linha `HAT-REMEDY` do `pipeline.log` e no bloco `dim`.
+  ⚠️ O `mut_RUN_hat_extra_unguarded` nasceu com `|` de delimitador do `s///` numa linha que
+  CONTÉM `|` — o sed morria e não mudava nada. Pego pelo arnês que exige `diff` não-vazio antes de
+  concluir; os três mutantes estão provados um a um (`diff` 2 linhas, `bash -n` ok, a asserção
+  esperada vermelha).

@@ -2949,6 +2949,14 @@ hat_guard_check() {   # hat_guard_check <phase> <HEAD before the session> — ar
   HAT_CROSSED_WHY="the $step session ($hat) touched $n path(s) outside its writes: $outside"
   warn "$HAT_CROSSED_WHY"
   pipeline_log_line "$(date -Iseconds)  HAT-CROSSED  $phase  $HAT_CROSSED_WHY"
+  # The REMEDY rides BESIDE the accusation, never inside it, and both halves of that are measured.
+  # It is needed at all because the operator of the three occurrences had no way to learn a project
+  # MAY declare an exception, so the repair they reached for was the hat in the kit — which is how
+  # PRODUCT.md ended up in the writes: of every project that installs it (796e334).
+  # It stays OUT of HAT_CROSSED_WHY because that string is DATA: it becomes GATE_WHY and the
+  # ledger's `why`, where advice is noise — and because the path list has to remain the last
+  # `: `-delimited field, which is where three assertions of check-autonomy.sh read it from.
+  pipeline_log_line "$(date -Iseconds)  HAT-REMEDY   $phase  if this repo's own rules oblige one of those paths, declare it in .sdd/config.sh: HAT_WRITES_EXTRA=\"$hat: <path>\" (config/schema.md) — widening the hat in the kit widens it for every project that installs it"
 }
 
 hat_crossed_escalation() {   # hat_crossed_escalation <phase> — rc 0 = STOP (row written), rc 1 = go on
@@ -2960,8 +2968,17 @@ hat_crossed_escalation() {   # hat_crossed_escalation <phase> — rc 0 = STOP (r
   info ""
   bad "BLOCKED in $phase — $why"
   dim "  The hat declares what it may write (agents/<hat>.md, key writes:) and the kit is never a"
-  dim "  target's to edit. Restore or move by hand what belongs elsewhere; to widen a hat, edit it"
-  dim "  in the kit and 'sdd install --force'. Then 'sdd run' again."
+  dim "  target's to edit. Restore or move by hand what belongs elsewhere. Then 'sdd run' again."
+  if [ "$kind" = "hat-crossed" ]; then
+    # Two doors, and naming only the second is what the measured repairs walked through. Widening
+    # the hat in the kit widens it for EVERY project the kit is installed in; the key widens it for
+    # THIS one. The first is right when the path belongs to the pipeline everywhere (a new mission
+    # artifact); the second is right when it belongs to this repo's own rules, which is what the
+    # QA touching a CI workflow and the DOCS touching a napkin both were.
+    dim "  If this repo's own rules oblige that path, declare it — .sdd/config.sh, key"
+    dim "  HAT_WRITES_EXTRA (config/schema.md). Widening the hat itself in the kit widens it for"
+    dim "  every project that installs the kit, which is rarely what one repo's rule means."
+  fi
   pipeline_log_line "$(date -Iseconds)  BLOCKED  $phase  $why"
   autonomy_blocked_row "$kind" "$phase" "$why"
   return 0
@@ -4322,6 +4339,20 @@ cmd_preflight() {
   # Only claims "checked" when no agent failed — saying it right after six failure lines is the
   # output contradicting itself, which is the kind of lie the kit forbids in the gates.
   if [ "$n" -gt 0 ] && [ "$fails" -eq 0 ]; then ok "$n kit agent(s) checked"; fi
+
+  # --- HAT_WRITES_EXTRA entries that nothing will ever read -------------------
+  # A hat whose own `writes:` is empty writes ANYWHERE (sdd-executor), so hat_writes returns early
+  # and never reaches the sum. The entry is accepted rather than refused — refusing would make the
+  # key a trap for an operator declaring an exception that was simply not needed — but accepted AND
+  # SILENT is a trap of its own: the declaration sits in the config and its author goes on
+  # believing it is in force. `warn`, never `_fail`: nothing is broken, and a red preflight over a
+  # harmless line would train its reader to scroll past the ones that matter.
+  local _pf_hat _pf_path
+  while IFS=$'\t' read -r _pf_hat _pf_path; do
+    [ -n "$_pf_hat" ] || continue
+    [ -z "$(hat_field "$_pf_hat" writes)" ] || continue
+    warn "HAT_WRITES_EXTRA names $_pf_hat, whose writes: is empty — that hat already writes anywhere, so the entry ($_pf_path) is accepted and ignored"
+  done < <(hat_writes_extra_each)
 
   # --- git state ---
   local branch; branch="$( cd "$REPO_ROOT" && git branch --show-current )"
