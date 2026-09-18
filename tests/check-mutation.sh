@@ -1577,10 +1577,8 @@ mut_RUN_escalation_hook_on_dry_run() {
   sed -i '/^escalation_hook() {/,/^}/ s|^  \[ "$DRY_RUN" = "1" \] && return 0$|  :|' "$1"
 }
 
-# L2 of the 2026-09-03 audit: the mission ceiling. Five mutants, because the door has five sides
-# the probes of tests/check-autonomy.sh read one by one: the check unplugged from cmd_run, unplugged
-# from cmd_retry, `0` read as a ceiling of zero (every fixture then blocks at 0.00 >= 0), the
-# override going on WITHOUT writing its intervention note, and the projection stopping the run.
+# L2 of the 2026-09-03 audit: the mission ceiling. The probes read each side separately: both
+# command doors, numeric zero, a positive fraction, override intervention and projection.
 mut_RUN_mission_budget_ignored() {
   sed -i 's|^    if mission_budget_blown "$phase"; then return 3; fi$|    if false; then return 3; fi|' "$1"
 }
@@ -1588,7 +1586,10 @@ mut_RUN_mission_budget_ignored_on_retry() {
   sed -i 's|^  if mission_budget_blown "$phase"; then return 3; fi$|  if false; then return 3; fi|' "$1"
 }
 mut_RUN_mission_budget_zero_is_a_ceiling() {
-  sed -i 's|^  case "$ceiling" in 0\|0\.\*) return 1 ;; esac$|  :|' "$1"
+  sed -i '/^mission_budget_blown() {/,/^}/ s|^  if LC_ALL=C awk -v c="$ceiling" '\''BEGIN { exit !((c + 0) == 0) }'\''; then return 1; fi$|  if LC_ALL=C awk -v c="$ceiling" '\''BEGIN { exit !((c + 0) == -1) }'\''; then return 1; fi|' "$1"
+}
+mut_RUN_mission_budget_fractional_disabled() {
+  sed -i '/^mission_budget_blown() {/,/^}/ s|^  if LC_ALL=C awk -v c="$ceiling" .*|  case "$ceiling" in 0\|0.*) return 1 ;; esac|' "$1"
 }
 mut_RUN_mission_budget_override_unnoted() {
   sed -i '/^mission_budget_blown() {/,/^}/ s|^      checkpoint_note_intervention "sdd $AUTONOMY_INVOCATION --budget-override .*$|      :|' "$1"
@@ -3940,6 +3941,7 @@ CATALOG=(
   RUN_mission_budget_ignored
   RUN_mission_budget_ignored_on_retry
   RUN_mission_budget_zero_is_a_ceiling
+  RUN_mission_budget_fractional_disabled
   RUN_mission_budget_override_unnoted
   RUN_mission_budget_stops_projection
   RUN_degraded_row_dropped

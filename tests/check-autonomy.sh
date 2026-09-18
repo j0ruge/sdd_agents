@@ -506,6 +506,54 @@ sed -i 's/^BUDGET_MISSION_USD=150$/BUDGET_MISSION_USD=0/' .sdd/config.sh
 "$SDD" run "$MISSION" --max-phases 1 >/dev/null 2>&1 || true
 assert_eq "BUDGET_MISSION_USD=0 means no ceiling: no budget-exhausted row, a session opens" "0 yes" \
   "$(grep -c . <<< "$(rows 'select(.kind == "budget-exhausted") | .kind')") $(grep -q . <<< "$(rows 'select(.event == "session") | .event')" && echo yes || echo no)"
+
+# Zero is numeric, not a prefix. The former `0|0.*` case disabled every positive fractional
+# ceiling, so the matrix below keeps zero's equivalent spelling beside positive values on both
+# sides of the boundary. Each journal is rewritten to one literal cost: expectations do not reuse
+# mission_cost_usd, and a session from one case cannot move the next case across its threshold.
+budget_log_cost() { # budget_log_cost <literal USD already spent>
+  printf '2026-01-01T10:00:00-03:00  EXEC  agent=sdd-executor  model=opus  session=budget-case  rc=0  dur=1s  cost_usd=%s  log=/dev/null\n' \
+    "$1" > "$PLOG"
+}
+
+sed -i 's/^BUDGET_MISSION_USD=0$/BUDGET_MISSION_USD=0.00/' .sdd/config.sh
+budget_log_cost 1.00
+: > "$LEDGER"
+"$SDD" run "$MISSION" --max-phases 1 >/dev/null 2>&1 || true
+assert_eq "numeric zero written as 0.00 also disables the ceiling" "0 yes" \
+  "$(grep -c . <<< "$(rows 'select(.kind == "budget-exhausted") | .kind')") $(grep -q . <<< "$(rows 'select(.event == "session") | .event')" && echo yes || echo no)"
+
+sed -i 's/^BUDGET_MISSION_USD=0.00$/BUDGET_MISSION_USD=0.50/' .sdd/config.sh
+budget_log_cost 0.49
+: > "$LEDGER"
+"$SDD" run "$MISSION" --max-phases 1 >/dev/null 2>&1 || true
+assert_eq "a fractional ceiling permits spend below it" "0 yes" \
+  "$(grep -c . <<< "$(rows 'select(.kind == "budget-exhausted") | .kind')") $(grep -q . <<< "$(rows 'select(.event == "session") | .event')" && echo yes || echo no)"
+
+budget_log_cost 0.50
+: > "$LEDGER"
+"$SDD" run "$MISSION" >/dev/null 2>&1; rc=$?
+assert_eq "a fractional ceiling stops spend equal to it before a session" "3 1 budget-exhausted" \
+  "$rc $(nrows) $(rows '.kind')"
+
+budget_log_cost 1.00
+: > "$LEDGER"
+"$SDD" run "$MISSION" >/dev/null 2>&1; rc=$?
+assert_eq "a fractional ceiling stops spend above it before a session" "3 1 budget-exhausted" \
+  "$rc $(nrows) $(rows '.kind')"
+
+sed -i 's/^BUDGET_MISSION_USD=0.50$/BUDGET_MISSION_USD=2/' .sdd/config.sh
+budget_log_cost 1.00
+: > "$LEDGER"
+"$SDD" run "$MISSION" --max-phases 1 >/dev/null 2>&1 || true
+assert_eq "an integer ceiling permits spend below it" "0 yes" \
+  "$(grep -c . <<< "$(rows 'select(.kind == "budget-exhausted") | .kind')") $(grep -q . <<< "$(rows 'select(.event == "session") | .event')" && echo yes || echo no)"
+
+budget_log_cost 3.00
+: > "$LEDGER"
+"$SDD" run "$MISSION" >/dev/null 2>&1; rc=$?
+assert_eq "an integer ceiling stops spend above it before a session" "3 1 budget-exhausted" \
+  "$rc $(nrows) $(rows '.kind')"
 sed -i '/^BUDGET_MISSION_USD=/d' .sdd/config.sh
 cp "$OUTSIDE/plog.bak" "$PLOG"
 : > "$LEDGER"

@@ -3859,7 +3859,7 @@ mission_cost_usd() {   # the journal's sum, 2 decimals; a journal that does not 
 }
 mission_budget_blown() {   # mission_budget_blown <phase> — rc 0 = STOP (row written), rc 1 = go on
   local phase="$1" spent ceiling="$BUDGET_MISSION_USD"
-  case "$ceiling" in 0|0.*) return 1 ;; esac
+  if LC_ALL=C awk -v c="$ceiling" 'BEGIN { exit !((c + 0) == 0) }'; then return 1; fi
   spent="$(mission_cost_usd)"
   if [ "$DRY_RUN" = "1" ]; then
     if [ "$MISSION_BUDGET_PROJECTED" = "0" ]; then

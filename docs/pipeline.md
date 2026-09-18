@@ -769,11 +769,12 @@ id, exit code, duration, cost in USD) and two files alongside it, in the same
 
 That journal is also where the **mission ceiling** is read. Before opening any phase the runner
 sums the `cost_usd=` field of every session line (`?` counts as nothing) and compares it with
-`BUDGET_MISSION_USD` (`150` by default, `0` = no ceiling): at or above it the run stops with rc 3
-and a `budget-exhausted` row whose `gate_why` names the mission ceiling, so the money that stops
+`BUDGET_MISSION_USD` (`150` by default, numeric zero = no ceiling): at or above it the run stops
+with rc 3 and a `budget-exhausted` row whose `gate_why` names the mission ceiling, so the money that stops
 the line is money already spent, never a session cut mid-way. `sdd run --budget-override` and
 `sdd retry --budget-override` go on for that one run, and the runner writes the `- intervention:`
-note itself. The projection prints the sum and never stops there. L2 of the 2026-09-03 audit —
+note itself. Zero spellings such as `0.00` are equivalent; a positive fraction such as `0.50` is
+still a real ceiling. The projection prints the sum and never stops there. L2 of the 2026-09-03 audit —
 the mission before it cost US$ 174 against a ceiling of US$ 150 that lived only in the plan's prose.
 
 - `<PHASE>-<ts>.stream.jsonl` — the session's whole event stream, one JSON object per line,
