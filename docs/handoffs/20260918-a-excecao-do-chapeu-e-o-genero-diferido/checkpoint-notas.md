@@ -106,3 +106,28 @@
   tentativa pôs a linha depois da cauda e deu 9 violações de forma.
   ⚠️ A célula do catálogo no `KAIZEN_LOG.md` diz **339 definidos** (contados por comando), nunca
   "0 sobreviventes" — esse veredito é do carimbo, que roda depois da revisão do PR.
+
+## QA — a jornada de CLI, rodada de verdade (2026-09-18)
+
+Missão INTERATIVA: nenhuma fase headless rodou, então não há `20-handoff-exec.md` nem
+`30-handoff-qa.md`. A evidência do gate mora aqui, e são as quatro perguntas binárias do plano:
+
+- **Q1 — a exceção declarada não para a linha.** `tests/check-autonomy.sh`, par diferencial:
+  sem a chave `rc=3 kinds=hat-crossed`; com ela `rc=0 kinds=none`; com ela nomeando OUTRO chapéu
+  `rc=3 kinds=hat-crossed`. E `HAT_WRITES_EXTRA="sdd-qa: ../x"` morre citando `..`
+  (`tests/check-gates.sh`, 7 asserções verdes: `..`, absoluto, metacaractere, `**` no meio, chapéu
+  inexistente, a forma medida aceita por chapéu, e o chapéu que já escreve em qualquer lugar).
+- **Q2 — o bug diferido é visível e não bloqueia.** Quatro regimes: `human` segue calado,
+  `agent` bloqueia, ausente bloqueia, `deferred` segue **e** o motivo nomeia o bug. Mais as três
+  blindagens re-asseveradas com o valor novo (`deferredly`, cercado, citação acima).
+- **Q3 — o campo nasce antes do primeiro bug.** Cinco regimes do `check-preflight.sh`: sem campo
+  o preflight reprova e o `install` sem `--force` só mostra (`md5` igual); `--force` insere na
+  linha 4; segundo `--force` é no-op; template sem `Status:` é nomeado e intocado; repo sem
+  `docs/qa/` nem reprova nem semeia.
+- **Q4 — a decisão está rastreável.** `sdd adr check --mission` rc 0; `docs/adr/0009-*` existe; a
+  0006 diz `Amended by: 0009`.
+
+`tests/run-all.sh` verde e `env -u CLAUDECODE ./bin/sdd preflight` → `preflight ok`.
+⚠️ **O carimbo do `sdd health --with-mutation` ainda NÃO rodou** — pela ordem que economiza a hora:
+ele é o último toque, depois de toda a revisão do PR, porque conserto que mexe em
+`bin/ tests/ templates/ config/` o invalida. Catálogo hoje: **339 mutantes definidos** (332 + 7).

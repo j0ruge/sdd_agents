@@ -38,7 +38,7 @@ atualizado: 2026-09-18 00:00
 | I4 | `sdd install` semeia `Closable by:`; `sdd preflight` cobra; 3 regimes, 2 mutantes | `o=$(bash tests/check-preflight.sh 2>&1); grep -c '^  ok    install --force seeds Closable by: below Status:' <<< "$o"` → `1` | done | `f7bcf10` |
 | I5 | ADR 0009, `Amended by: 0009` na 0006, D26, pipeline, failure-modes, rule § 6 | `grep -c 'Amended by: 0009' docs/adr/0006-*.md` → `1` | done | `27a7717` |
 | I6 | Yokoten no alvo (passo do humano, depois do merge) | `grep -c HAT_WRITES_EXTRA ~/repos/sales_quote/.sdd/config.sh` → `1` | pending | — |
-| I7 | Fecha: `TODO.md` (4 RESOLVIDO), `ACHADOS`, `KAIZEN_LOG.md` | `o=$(bash tests/check-todo.sh 2>&1); grep -c '^  ok    106 finding(s)' <<< "$o"` → `1` | pending | — |
+| I7 | Fecha: `TODO.md` (4 RESOLVIDO), `ACHADOS`, `KAIZEN_LOG.md` | `o=$(bash tests/check-todo.sh 2>&1); grep -c '^  ok    106 finding(s)' <<< "$o"` → `1` | done | `e2b9dcf` |
 
 > **As notas de execução não moram aqui.** Elas ficam em `checkpoint-notas.md`, ao lado deste
 > arquivo, append-only, e o prompt de boot inlina as últimas 10 — a sessão nunca abre aquele
