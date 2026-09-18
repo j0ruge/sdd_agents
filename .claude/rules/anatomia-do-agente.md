@@ -140,9 +140,19 @@ PR no `gh`).
 (`KIT-TOUCHED`, e desde a fronteira do chapéu uma parada); `hat_guard_check` nos três sítios onde
 o `review_scope_check` só avisava, lendo commits **e** árvore contra `writes:`; o catálogo de
 mutação sabota **uma cópia** em `mktemp -d`; o env do harness é apagado por `run_phase()` antes do
-`claude -p` (L5 da auditoria).
+`claude -p` (L5 da auditoria). Desde `20260918-a-excecao-do-chapeu-e-o-genero-diferido` a fronteira
+é constante do chapéu **mais** variável do projeto: `HAT_WRITES_EXTRA` (`hat_writes_extra_each`, a
+única definição da gramática; `hat_extra_path_ok`, a guarda no molde do `adr_dir_ok`;
+`hat_writes_extra_for`, somado por chapéu em `hat_writes`), validada no `load_config` e **nunca**
+no ponto de uso — lá o `die` cairia num subshell e devolveria a lista vazia, que é a grafia de
+"este chapéu escreve em qualquer lugar".
 
-**Dívida declarada.** As fases rodam **no checkout do humano**, com `.env.idp`, Jira e push reais;
+**Dívida declarada.** O `HAT_WRITES_EXTRA` **alarga** permissão e seu valor vira glob de shell no
+`case` do `hat_path_allowed`, então toda frouxidão da guarda falha **aberta** — por isso ela é
+literal-only, e por isso a passada de sabotagem é obrigatória antes do merge. Chapéu cujo `writes:`
+é vazio (`sdd-executor`) já escreve em qualquer lugar: a entrada é aceita e **ignorada**, com aviso
+do `sdd preflight` — estreitar viraria regressão, recusar viraria armadilha.
+As fases rodam **no checkout do humano**, com `.env.idp`, Jira e push reais;
 a guarda de kit **para a linha** desde `20260903-a-fronteira-do-chapeu` (`kind: kit-touched`), e o
 chapéu que escreve fora de `writes:` também (`hat-crossed`) — as duas pela mesma porta,
 `hat_crossed_escalation`, em quatro sítios. Sem worktree nem container: o ledger
