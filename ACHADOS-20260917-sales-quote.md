@@ -5,13 +5,50 @@
 > `3f0fa098`) e `20260916-quatro-silencios-da-tela` (SQ-130, em REVIEW). Nada aqui é sobre o
 > `sales_quote` — o que era daquele repo já foi para o `TODO.md` de lá.
 >
-> **Não mexi no `TODO.md` deste repo de propósito**: ele tem catraca de volume
-> (`todo-findings <N>` em `tests/health-baseline.txt`), que exige mover a baseline no mesmo commit.
-> Os itens abaixo já estão no formato de lá, para colar depois de decidir quais entram.
+> ⚠️ **Estado: ROTEADO.** A frase original aqui dizia *"não mexi no `TODO.md` deste repo de
+> propósito"* — era verdade em 2026-09-17 e deixou de ser em 2026-09-18. Os nove itens foram
+> triados pelo humano no grill daquele dia (**G1**: tema T1), quatro estão implementados e os
+> outros cinco estão no `TODO.md` deste repo com a catraca movida no mesmo commit
+> (`todo-findings` 99 → 105 em `tests/health-baseline.txt`). A tabela abaixo é o mapa; cada item
+> carrega o seu desfecho no corpo.
 >
 > **Toda evidência é literal.** As transcrições vieram dos logs da própria execução, e os hashes
 > são alcançáveis (`git log` do `sales_quote`, branches `develop` e `SQ-130_quatro_silencios_da_tela`).
 > Onde não medi, está dito.
+
+---
+
+## Roteamento — onde cada achado foi parar (2026-09-18)
+
+Missão de kit `20260918-a-sessao-morreu-e-o-gate-levou-a-culpa`, branch
+`feat/a-sessao-morreu-e-o-gate-levou-a-culpa`, base `main` = `1321beb`. Tema **T1 — o runner não
+mente sobre o que aconteceu**: os quatro achados em que o operador pergunta *"o que houve / onde eu
+estou"* e o kit responde **errado** ou **caro**.
+
+| # | Achado | Desfecho | Evidência |
+|---|---|---|---|
+| 1 | Motivo do gate mascara a causa da morte | **RESOLVIDO** — e vira Jidoka: para a linha antes do retry | `70d7785` `d1002b8` `e3c6671` |
+| 2 | `gate_QA` conta bug de outra missão | roteado ao `TODO.md` — ⚠️ direção contradiz a ADR 0006/D17 | `1fb120b` |
+| 3 | `Closable by:` é binário | roteado ao `TODO.md` — mesma ADR | `1fb120b` |
+| 4 | `writes:` não comporta obrigação do alvo | roteado ao `TODO.md`, **fundido** com o irmão vivo | `1fb120b` |
+| 5 | Não existe comando barato para ver o estado | **RESOLVIDO** — `sdd status --no-gates`, 0,037 s | `e0c95c8` `ea0923b` |
+| 6 | Fase manual não tem como ser registrada | roteado ao `TODO.md` — pede o 6º `event` do ledger | `1fb120b` |
+| 7 | Teto não conhece missão reaberta | roteado ao `TODO.md` | `1fb120b` |
+| 8 | Background frágil; foreground sobrevive | **RESOLVIDO** — verbete em `docs/failure-modes.md` | `826b6b3` |
+| 9 | CLOSE paga sessão que não pode concluir | **RESOLVIDO** — o prompt carrega a autorização | `a8526ad` |
+| 10 | As skills de QA não conhecem `Closable by:` | **NOVO**, nascido no gemba desta missão; roteado ao `TODO.md` | `1fb120b` |
+| obs | `Test Coverage = A` não implica caso negativo | roteado ao `TODO.md` | `1fb120b` |
+
+**Verificação da missão que fechou os quatro:** `tests/run-all.sh` verde (1163 asserções);
+`sdd health --with-mutation` = **`331 caught, 0 known gap(s), of 331`** (catálogo 326 → 331, cinco
+mutantes novos, nenhum sobrevivente) com o carimbo escrito; `sdd preflight ok`. Antes/depois medido
+em `KAIZEN_LOG.md`, entrada de 2026-09-18.
+
+⚠️ **Um mutante foi deliberadamente NÃO registrado**, e está dito no catálogo: o
+`SESSION_DIED_WHY=""` na entrada do `run_phase`. Removê-lo foi medido numa cópia e a suíte inteira
+ficou verde — o setter roda em toda sessão real e as portas só são alcançáveis depois de uma. A
+linha fica (ela decide *qual* falha uma porta futura produz) com a ausência de probe declarada na
+própria linha. Registrar um mutante que nada pega seria um sobrevivente permanente no score.
 
 ---
 
@@ -25,6 +62,16 @@
   problema. Direção: quando o `.json` da sessão traz `is_error` com causa, **ela vence** o motivo do
   gate na mensagem — hoje ela só aparece atrás de um caminho de arquivo.
   — descoberto por `sessão coordenadora` na missão `20260916-destino-frete-cif` (2026-09-16)
+  RESOLVIDO por `70d7785` + `d1002b8` + `e3c6671`: `run_phase` lê a causa do mesmo `result`
+  destilado de onde já tirava custo e turnos, publica `LAST_PHASE_DIED`, e a imprime **antes** do
+  ponteiro para os arquivos. A causa não só vence a mensagem — ela **para a linha**:
+  `session_died_escalation` é a quinta Jidoka e a única cujo marcador é armado pelo `run_phase` e
+  não por um gate, então dispara antes de qualquer gate opinar e **acima do retry**, que era o
+  gasto que piorava o diagnóstico. A regra é escrita positivamente (`is_error == true` **e**
+  `result` string não-vazia) porque os três regimes medidos aqui exigem isso: um `subtype` de erro
+  erraria esta morte (`subtype: "success"`) e dispararia no teto de orçamento. Contrato em
+  `docs/pipeline.md` (`kind` + `session_error`), decisão **D25** no `CONTEXT.md`, verbete em
+  `docs/failure-modes.md`. Duas portas, um probe e um mutante cada.
 
 **O que o operador viu** (log da execução, 6 linhas seguidas):
 
@@ -66,6 +113,10 @@ Três detalhes que fazem o caso:
   (Âncora 3 do `gate_QA`) — quanto mais honesta a QA de ontem, mais cara a missão de hoje.
   Direção: contar só bugs cuja procedência é a missão corrente, ou um `since:` explícito.
   — descoberto por `sessão coordenadora` na missão `20260916-destino-frete-cif` (2026-09-16)
+  **ROTEADO para o `TODO.md` deste repo** (não implementado). ⚠️ A direção proposta acima — contar
+  só a procedência da missão corrente — foi **recusada com argumento** na
+  [ADR 0006](docs/adr/0006-qa-anchor-reads-genre-blocked-handoff-stops-the-line.md)/D17. O item
+  registra isso por escrito: quem o pegar **reabre uma ADR**, não implementa um item.
 
 **Exemplo real.** Os cinco que travaram a QA da SQ-129, todos de **2026-09-14**:
 
@@ -97,6 +148,9 @@ já registra que essa classe custou **US$ 73,32 de uma missão de US$ 144,88** a
   — com a decisão humana já tomada e gravada, o bug continua invisível ao laço para sempre.
   Direção: um terceiro valor, ou um `decided-by: <data>` que o gate leia junto do gênero.
   — descoberto por `sessão coordenadora` na missão `20260916-destino-frete-cif` (2026-09-16)
+  **ROTEADO para o `TODO.md` deste repo** (não implementado). Mesma família do #2, mesma ADR.
+  ⚠️ Ver também o achado #10 abaixo, nascido no gemba desta missão: ele muda o custo estimado de
+  qualquer missão que ataque o #2 e o #3 juntos.
 
 **A sequência real, e o beco.** O humano decidiu os quatro bugs na mesma sessão
 (commit `383df146`, seção `## Decisão (2026-09-16, dono do repositório)` no corpo de cada arquivo):
@@ -128,6 +182,10 @@ passo manual que alguém tem de lembrar. Na SQ-130 esse passo virou o incremento
   de CI, que está fora da faixa do chapéu. Direção: chave por projeto no `.sdd/config.sh` que some
   ao `writes:` de um chapéu nomeado.
   — descoberto por `sessão coordenadora` na missão `20260916-destino-frete-cif` (2026-09-16)
+  **ROTEADO para o `TODO.md` deste repo, FUNDIDO com o irmão vivo** sobre `writes:`
+  (`agents/sdd-docs.md:9`, o drift de comentário de código) — junto, não duplicado, porque as duas
+  instâncias pedem a mesma direção: uma chave por projeto no `.sdd/config.sh` que some ao `writes:`
+  de um chapéu nomeado.
 
 **O bloqueio, literal:**
 
@@ -237,6 +295,14 @@ A direção não muda — chave por projeto no `.sdd/config.sh`, declarável **p
   minutos porque executa `TEST_CMD` (e a suíte e2e, no `gate_QA`). Direção: `sdd status --no-gates`,
   ou fazer disso o default com `--verify` para o comportamento atual.
   — descoberto por `sessão coordenadora` na missão `20260916-quatro-silencios-da-tela` (2026-09-17)
+  RESOLVIDO por `e0c95c8` (+ `ea0923b`): `sdd status <missão> --no-gates`, flag **aditiva**.
+  Responde artefatos em disco, incrementos (pelo `checkpoint_rows`, o leitor único) e o fim do
+  journal, diz em letras que **nenhum gate foi avaliado** e nunca imprime `next phase`. Medido
+  neste repo: **0,037 s** contra os 120 s da tabela acima. As duas formas recusadas no grill estão
+  no comentário do comando: derivar a fase pelos artefatos criaria uma **segunda** derivação do
+  enum mais lido do kit, e inverter o default faria a resposta barata ser lida como veredito.
+  ⚠️ A asserção conta **invocações de `TEST_CMD`**, não segundos: no fixture `TEST_CMD="true"` e
+  `E2E_CMD` é vazio, então um limiar de tempo passaria com a flag não fazendo nada.
 
 **Medido nesta sessão:**
 
@@ -259,6 +325,8 @@ Referência do custo embutido, cronometrada no alvo: `npm test` = **30,86 s**, e
   foi feita à mão depois de três mortes por memória; não há sessão de publisher no ledger e o custo
   não entra na soma. Direção: um `sdd note-manual <fase>`, irmão do `intervention:`.
   — descoberto por `sessão coordenadora` na missão `20260916-destino-frete-cif` (2026-09-16)
+  **ROTEADO para o `TODO.md` deste repo** (não implementado). ⚠️ O mais caro dos nove: pede o
+  **sexto** `event` do ledger, um contrato fechado com dois leitores a ensinar no mesmo commit.
 
 **Como chegou nisso**: a 3ª tentativa **pushou a branch** e morreu antes do `gh pr create` — estado
 meio-feito que só se descobre olhando o `git rev-parse --abbrev-ref --symbolic-full-name '@{u}'`.
@@ -285,6 +353,8 @@ gate: "PR #167 aberto contra develop; branch pushada (48 commits, 205 arquivos, 
   depois do PR e voltar para consertar. Direção: distinguir gasto de entrega de gasto de conserto
   pós-review, ou estender o teto ao reabrir.
   — descoberto por `sessão coordenadora` na missão `20260916-destino-frete-cif` (2026-09-16)
+  **ROTEADO para o `TODO.md` deste repo** (não implementado). Tema próprio: pede desenho sobre o
+  que conta como "gasto de conserto" contra "gasto de entrega".
 
 **A sequência real.** A missão fechou o PR com **US$ 161,29 de 150**, já sob override — três linhas
 versionadas, que é o mecanismo funcionando:
@@ -309,6 +379,13 @@ para produção um caminho que grava endereço contraditório na nota fiscal.
   — três `sdd run` mortos nesta estação, nenhum por culpa do kit, mas o tempo perdido superou o que
   as fases custariam. Direção: documentar como modo recomendado em estação apertada.
   — descoberto por `sessão coordenadora` na missão `20260916-quatro-silencios-da-tela` (2026-09-17)
+  RESOLVIDO por `826b6b3`: verbete `## The \`sdd run\` process itself disappeared` em
+  `docs/failure-modes.md`, com o sintoma (`ps -eo pid,etime,cmd | grep 'bin/sdd run'` vazio), o que
+  fazer (primeiro plano, ou `setsid nohup` com o ambiente do harness limpo — nunca tarefa de fundo
+  de uma sessão de agente) e o mérito deste item: as três mortes não corromperam nada **por
+  desenho**, princípios 3 (estado em disco) e 4 (fase derivada). Não há arquivo de estado para
+  ficar mentindo sobre um disco que andou, então qualquer morte do runner é recuperável rodando o
+  mesmo comando.
 
 **As três mortes, e o que cada uma custou:**
 
@@ -336,6 +413,15 @@ casos a árvore ficou limpa e o `sdd run` seguinte retomou do ponto certo — é
   humana **é** o próprio `sdd close` — ou reconhecer esse desfecho e repetir uma vez com o motivo
   do gate, como `run_phase` já faz.
   — medido por `sessão coordenadora` na missão `20260916-quatro-silencios-da-tela` (2026-09-17)
+  RESOLVIDO por `a8526ad`, pelo primeiro caminho da direção (o prompt), que é o que ataca a causa:
+  repetir a sessão repete a pergunta, porque a regra está escrita duas vezes na `SKILL.md`. O
+  prompt do CLOSE passa a dizer que a autorização humana **é** o próprio `sdd close`, que não há
+  dev nesta sessão para confirmar, e que é para postar e transicionar sem perguntar.
+  ⚠️ O risco que isto carregava — prosa **depois** de um slash command podendo ser descartada na
+  expansão — foi **medido**, não declarado: um `claude -p` real com `/ticket close ZZZ-0` na
+  primeira linha e uma instrução quatro linhas abaixo obedeceu a instrução (US$ 0,0475, haiku, um
+  turno). A prosa chega, e o fallback `--append-system-prompt` não é preciso. Mutante
+  `RUN_close_prompt_bare`; a asserção lê o argv do stub, que é o lado do runner na fronteira.
 
 **O que o operador viu:**
 
@@ -379,6 +465,32 @@ da morte): aqui a sessão não morreu, não cruzou fronteira nenhuma, e a mensag
 causa certa. O que falta é a fase headless poder exercer uma autorização que o humano já deu ao
 digitar o comando.
 
+
+---
+
+### 10. Nenhuma das skills de QA conhece o campo `Closable by:`
+
+> **Achado NOVO**, não estava na lista de 2026-09-17. Nasceu no gemba do planejamento de
+> 2026-09-18, ao medir o custo real de atacar os itens #2 e #3.
+
+- [ ] **`Closable by:` não existe nas skills que escrevem o registry** — `agents/sdd-qa.md:118` —
+  `grep -rn Closable ~/.claude/skills/qa-*` responde **zero**, então o campo só chega ao disco pelo
+  template local do repo ou pelo `sdd-qa` marcando arquivo por arquivo. Em repo-alvo novo a Âncora 3
+  inteira roda em regime "ausente ⇒ bloqueia". Direção: ensinar o campo às skills, ou o `sdd-qa`
+  assumir a marcação como passo declarado.
+  — descoberto por `sessão coordenadora` na missão `20260918-a-sessao-morreu-e-o-gate-levou-a-culpa` (2026-09-18)
+  **ROTEADO para o `TODO.md` deste repo** (não implementado).
+
+**Por que importa antes de qualquer decisão sobre #2 e #3.** Os dois itens acima tratam o campo
+`Closable by:` como um dado que existe e cujo **domínio** precisa crescer (#3) ou cuja **leitura**
+precisa encolher (#2). Este achado diz que, fora deste repo, o campo **não é escrito por ninguém
+automaticamente** — o que muda a conta: uma missão que ataque #2/#3 num alvo novo paga primeiro o
+custo de fazer o campo existir. Precisa estar escrito **antes** de essa missão ser planejada, que é
+exatamente por que ele entra aqui e não só no backlog.
+
+⚠️ Medido no dia, com o comando acima, contra `~/.claude/skills/qa-report` e
+`~/.claude/skills/qa-execution` — as duas presentes na estação. Não foi medido contra versões
+futuras das skills: é uma fotografia, e o comando que a tira está na linha do achado.
 
 ---
 
@@ -435,3 +547,8 @@ feita. Mas é evidência de que **`Test Coverage = A` do reviewer não implica q
 existam**. Se virar item, a direção seria o reviewer ter de **enumerar qual sabotagem provou cada
 nota** — hoje ele narra em prosa, e prosa não é verificável. O conserto (`22521387`) acrescentou
 115 linhas de teste, e o caso central é uma única asserção que ninguém tinha escrito.
+
+**ROTEADO para o `TODO.md` deste repo** (`1fb120b`), com a direção que este parágrafo já nomeia: o
+revisor enumera qual sabotagem provou cada nota, porque hoje ele narra em prosa e prosa não é
+verificável. Entrou como achado e não como "observação" por decisão do grill de 2026-09-18 — toca
+`agents/sdd-reviewer.md` e o `gate_REVIEW`, então tem dono e tem tema próprio (T5).
