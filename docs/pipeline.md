@@ -216,7 +216,11 @@ them back, and the change back became a manual increment of the next mission.
 The difference that makes `deferred` safe to have is **visibility**. `human` passes silently;
 `deferred` passes **loudly** — the gate's own passing reason carries
 `N deferred (visible, not blocking): BUG-a, BUG-b` on every evaluation, so `sdd status` says it
-every time anybody asks. That is the answer to the objection ADR 0006 raised when it refused to
+every time anybody asks — on **both** of the gate's passing branches, the one that read a dated
+report and the one that read a journey walked without a browser interface. The registry is durable
+across missions while a repo's `E2E_CMD` is not, so a repo with no interface can hold deferred bugs
+too, and it is the repo with no other channel to hear about them.
+That is the answer to the objection ADR 0006 raised when it refused to
 narrow this anchor: debt that stops blocking must not stop being seen. The return from `deferred`
 to `agent` is still a human's move, and it is no longer a silent one.
 
@@ -649,7 +653,9 @@ HAT_WRITES_EXTRA="sdd-qa: .github/workflows/e2e-staging.yml; sdd-docs: .claude/n
 declaration never widens the rest of the pipeline. `load_config` refuses the whole run, before a
 session is spent, when the value names a hat the kit does not ship or a path that is not literal and
 repo-relative: no `..`, nothing absolute, and no metacharacter except a trailing `/**` on a directory
-that is **named** (a lone `**` is refused). That strictness is not taste — the value lands in
+that is **named** (a lone `**` is refused). The whole value is **one line** — hats are separated by
+`;`, and a newline is refused too, because the parser reads a single line and a two-line value used
+to lose everything after the first with rc 0 and no warning. That strictness is not taste — the value lands in
 `hat_path_allowed`'s `case "$f" in $g)`, a shell **glob**, so a metacharacter that slipped through
 would widen a hat the way `ADR_DIR=*` once did when it built the pattern `*/**` (CWE-863, PR #45).
 

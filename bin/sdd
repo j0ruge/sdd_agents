@@ -185,8 +185,20 @@ load_config() {
   # guard that exists to narrow a value would have widened it. So the refusal happens once, before
   # a session is spent, on the same floor where PROJECT_NAME and TEST_CMD are refused.
   : "${HAT_WRITES_EXTRA:=}"
+  # A NEWLINE is refused HERE, before the parser runs, because the parser cannot see past one:
+  # `IFS=';' read -r -a entries <<< "$spec"` consumes a single LINE. A value written across two
+  # lines is legal shell and the natural way to spell a long list in a config file, and it parsed
+  # its first line and dropped the rest on the floor. Nothing contradicted anything — one parser,
+  # so the validator agreed with the consumer that the second entry did not exist — and the run was
+  # simply accepted (rc 0, no warn) with that hat's exception missing, leaving the operator to read
+  # the still-blocked phase as the key not working. That is the very confusion the "hat must exist"
+  # clause below was written to prevent, so it is refused by the same door. Measured: a two-line
+  # value took line 1 and silently discarded line 2.
+  case "$HAT_WRITES_EXTRA" in
+    *$'\n'*) die "HAT_WRITES_EXTRA contains a newline — hats are separated by ';' and never by lines (the grammar is 'hat: path[, path]; hat: path')" ;;
+  esac
   local _hwx_hat _hwx_path
-  while IFS=$'\t' read -r _hwx_hat _hwx_path; do
+  while IFS=$'\x1f' read -r _hwx_hat _hwx_path; do
     [ -n "$_hwx_hat" ] \
       || die "HAT_WRITES_EXTRA has an entry with no hat before ':' (offending: '$_hwx_path') — the grammar is 'hat: path[, path]; hat: path'"
     [ -f "$SDD_HOME/agents/$_hwx_hat.md" ] \
@@ -1183,16 +1195,24 @@ gate_QA() {
     return 1
   fi
   if [ -n "${report:-}" ]; then
-    # The deferred ones are NAMED on every evaluation, and that is the whole answer to the
-    # objection ADR 0006 raised against narrowing this anchor: debt that stops blocking must not
-    # stop being SEEN. `human` passes silently because nobody in this pipeline can act on it;
-    # `deferred` passes loudly because somebody will, in a mission that has not opened yet.
     GATE_WHY="report $(basename "$report") closed, registry clean, suites green"
-    if [ "$deferred" -gt 0 ]; then
-      GATE_WHY="$GATE_WHY; $deferred deferred (visible, not blocking): $deferred_names"
-    fi
   else
     GATE_WHY="journey walked without a browser interface (evidence in the handoff), suite green"
+  fi
+  # The deferred ones are NAMED on every evaluation, and that is the whole answer to the objection
+  # ADR 0006 raised against narrowing this anchor: debt that stops blocking must not stop being
+  # SEEN. `human` passes silently because nobody in this pipeline can act on it; `deferred` passes
+  # loudly because somebody will, in a mission that has not opened yet.
+  #
+  # AFTER the if/else and never inside one arm. The registry loop above runs on BOTH branches —
+  # it reads $QA_DOCS_PATH/bugs/ without asking whether this repo has an interface — so a repo with
+  # no E2E_CMD and no APP_URL can hold deferred bugs just as well, and the tree is durable across
+  # missions while that config is not. Nested under `report` (which only the interface branch ever
+  # assigns), the one channel that keeps the debt loud went silent in exactly the repo that has no
+  # other channel. Measured differentially: same bug file, same registry, two configs — the
+  # interface run named it, the no-interface run said nothing.
+  if [ "$deferred" -gt 0 ]; then
+    GATE_WHY="$GATE_WHY; $deferred deferred (visible, not blocking): $deferred_names"
   fi
   return 0
 }
@@ -1809,9 +1829,14 @@ hat_expand() {   # hat_expand <globs> — $HANDOFF_DIR $MISSION $TODO_FILE $QA_D
 #
 # ONE parser, two callers (load_config validates, hat_writes_extra_for reads) — the CLAUDE.md rule
 # for an enum read at more than one point. An entry with no `:` yields an EMPTY hat rather than
-# being dropped: load_config's "the hat must exist" check is then the one rule that refuses it,
-# instead of a second spelling of the grammar living in the validator.
-hat_writes_extra_each() {   # hat_writes_extra_each — one `<hat>\t<path>` line per declared pair
+# being dropped, so the VALIDATOR is what refuses it — in a clause of its OWN (`[ -n "$_hwx_hat" ]`),
+# not by falling through to "the hat must exist", whose message would name `agents/.md` and tell
+# the operator nothing. Two clauses, one grammar: the parser decides what an entry IS, load_config
+# decides which entries are ALLOWED, and neither restates the other. This comment used to claim
+# there was a single clause down there; the second one was already three lines away, unprobed. Both
+# carry a probe (tests/check-gates.sh) and a mutant now, because a refusal nobody measures is the
+# one that quietly turns into an acceptance.
+hat_writes_extra_each() {   # hat_writes_extra_each — one `<hat>\x1f<path>` line per declared pair
   local spec="${HAT_WRITES_EXTRA:-}" entry hat list path
   [ -n "$spec" ] || return 0
   local -a entries plist
@@ -1825,7 +1850,14 @@ hat_writes_extra_each() {   # hat_writes_extra_each — one `<hat>\t<path>` line
     for path in "${plist[@]}"; do
       path="${path#"${path%%[![:space:]]*}"}"; path="${path%"${path##*[![:space:]]}"}"
       [ -n "$path" ] || continue
-      printf '%s\t%s\n' "$hat" "$path"
+      # US (0x1f) and never a TAB. `read` discards leading IFS *whitespace* even when IFS is set
+      # to one character, and space/tab/newline are that whitespace — so a tab-separated line whose
+      # first field is EMPTY arrives with the fields shifted one to the left: the path lands in the
+      # hat and the path comes back empty. That is not cosmetic here, because an entry with no `:`
+      # is exactly the line whose hat is empty by construction: load_config's `[ -n "$_hwx_hat" ]`
+      # clause became UNREACHABLE, and the operator who forgot the colon was told the kit has no
+      # `agents/docs/foo.md.md`. US is not IFS whitespace, so the empty field survives the read.
+      printf '%s\x1f%s\n' "$hat" "$path"
     done
   done
 }
@@ -1875,7 +1907,7 @@ hat_extra_path_ok() {
 hat_writes_extra_for() {   # hat_writes_extra_for <hat> — the project's paths for that hat, comma-separated
   local want="$1" hat path out=""
   [ -n "$want" ] || { printf '\n'; return 0; }
-  while IFS=$'\t' read -r hat path; do
+  while IFS=$'\x1f' read -r hat path; do
     [ "$hat" = "$want" ] || continue
     out="${out:+$out, }$path"
   done < <(hat_writes_extra_each)
@@ -4439,7 +4471,7 @@ cmd_preflight() {
   # believing it is in force. `warn`, never `_fail`: nothing is broken, and a red preflight over a
   # harmless line would train its reader to scroll past the ones that matter.
   local _pf_hat _pf_path
-  while IFS=$'\t' read -r _pf_hat _pf_path; do
+  while IFS=$'\x1f' read -r _pf_hat _pf_path; do
     [ -n "$_pf_hat" ] || continue
     [ -z "$(hat_field "$_pf_hat" writes)" ] || continue
     warn "HAT_WRITES_EXTRA names $_pf_hat, whose writes: is empty — that hat already writes anywhere, so the entry ($_pf_path) is accepted and ignored"

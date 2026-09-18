@@ -300,6 +300,20 @@ mut_QA_bug_genre_deferred_blocks() {   # the third genre goes: a decided bug blo
 mut_QA_bug_genre_deferred_prefix() {
   sed -i 's@deferred(\[\[:space:\]\]|\$)@deferred@' "$1"
 }
+# The deferred tail goes back INSIDE the interface arm, which is where it was written and where it
+# was wrong: the registry loop runs on both branches of gate_QA, but only the interface branch ever
+# assigns `report`, so a repo with no E2E_CMD and no APP_URL counted its deferred bugs and then
+# said nothing about them — the one channel ADR 0009 offers against "debt ages out of sight", shut
+# in the repo that has no other. Dies on check-gates' "no interface: deferred still does not block,
+# and the reason still names it", which is the only assertion that runs the genre through that arm.
+mut_QA_bug_genre_deferred_unseen_no_interface() {
+  sed -i 's|^  if \[ "$deferred" -gt 0 \]; then$|  if [ "$deferred" -gt 0 ] \&\& [ -n "${report:-}" ]; then|' "$1"
+}
+# The comma between two deferred names goes. Invisible at N=1, which is every other probe in the
+# genre block — the N>1 regime is the only one that can see it, and it exists for this.
+mut_QA_bug_genre_deferred_join() {
+  sed -i 's|{deferred_names:+$deferred_names, }|{deferred_names:+$deferred_names }|' "$1"
+}
 
 # Historical bug 3 (SQ-97 pilot, ~US$ 10): the parser exited only at `###`, kept swallowing the
 # report's following tables and failed an all-Grade-A review for finding a `Commit` column.
@@ -1259,6 +1273,30 @@ mut_RUN_hat_extra_unguarded() {   # traversal admitted — `../x` hands a hat a 
 }
 mut_RUN_hat_extra_glob_chars() {   # a metacharacter outside the `/**` tail admitted — `docs/*` is a pattern, not a path
   sed -i '/^hat_extra_path_ok() {/,/^}/ s|^      \*\[!A-Za-z0-9\._-\]\*) return 1 ;;$|      :) return 1 ;;|' "$1"
+}
+# The field separator goes back to a TAB at all four sites — emitter and three readers — which is
+# how it was written. `read` discards leading IFS *whitespace* even under a one-character IFS, and
+# tab is that whitespace, so a line whose first field is EMPTY arrives shifted one to the left. An
+# entry with no `:` is precisely the line whose hat is empty by construction, so load_config's
+# `[ -n "$_hwx_hat" ]` clause became unreachable and the operator who forgot the colon was told the
+# kit has no `agents/docs/foo.md.md`. Global on purpose: a separator is a contract between an
+# emitter and its readers, and flipping one side would be a different (louder) defect.
+mut_RUN_hat_extra_empty_hat_shifted() {
+  sed -i 's|x1f|t|g' "$1"
+}
+# The newline clause goes. The parser's `read -r -a` sees one LINE, so a two-line value — legal
+# shell, and the natural way to spell a long list in a config file — took its first line and
+# dropped the rest with rc 0 and no warning; both callers share the parser, so nothing contradicted
+# anything and the operator read the still-blocked phase as the key not working.
+mut_RUN_hat_extra_newline_admitted() {
+  sed -i 's|) die "HAT_WRITES_EXTRA contains a newline|) : "HAT_WRITES_EXTRA contains a newline|' "$1"
+}
+# The path refusal stops naming the value it refused. The gate still dies, so a probe that asserts
+# only "it died" stays green — which is what the traversal assertion did while its needle was the
+# bare `..`, a string the message's own boilerplate ("relative, no '..'") contains for every one of
+# the four path refusals. This mutant is the reason that needle is now the value.
+mut_RUN_hat_extra_path_unnamed() {
+  sed -i "s|HAT_WRITES_EXTRA path '\$_hwx_path' (hat \$_hwx_hat)|HAT_WRITES_EXTRA path (hat \$_hwx_hat)|" "$1"
 }
 mut_RUN_kit_touched_silent() {
   sed -i '/^kit_guard_check() {/,/^}/ s|^  KIT_TOUCHED_WHY="the kit at |  : "the kit at |' "$1"
@@ -3756,6 +3794,8 @@ CATALOG=(
   QA_bug_genre_fenced
   QA_bug_genre_deferred_blocks
   QA_bug_genre_deferred_prefix
+  QA_bug_genre_deferred_unseen_no_interface
+  QA_bug_genre_deferred_join
   QA_e2e_red_never_probed
   QA_app_down_on_unknown
   QA_probe_ignores_e2e_rc
@@ -3826,6 +3866,9 @@ CATALOG=(
   RUN_hat_extra_ignored
   RUN_hat_extra_unguarded
   RUN_hat_extra_glob_chars
+  RUN_hat_extra_empty_hat_shifted
+  RUN_hat_extra_newline_admitted
+  RUN_hat_extra_path_unnamed
   RUN_kit_touched_silent
   RUN_init_blind
   RUN_harness_blind

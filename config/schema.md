@@ -75,7 +75,7 @@ connect that times out instead of answering. Only a connection actively **refuse
 
 | Key | Required | Default | What it is |
 |---|---|---|---|
-| `HAT_WRITES_EXTRA` | no | empty | Paths **this project** obliges a hat to touch beyond the `writes:` of its `agents/<hat>.md`. Grammar: `hat: path[, path]; hat: path` — `;` between hats, `:` between a hat and its list, `,` between paths. The hat must be one the kit ships (`agents/<hat>.md` exists) or `load_config` refuses the whole run by name. Each path must be **literal and repo-relative**: no `..`, no absolute path, and no metacharacter except a trailing `/**` on a directory that is named (a lone `**` is refused). Empty ⇒ no exception, which is the default and the right answer for most repos. |
+| `HAT_WRITES_EXTRA` | no | empty | Paths **this project** obliges a hat to touch beyond the `writes:` of its `agents/<hat>.md`. Grammar: `hat: path[, path]; hat: path` — `;` between hats, `:` between a hat and its list, `,` between paths. The hat must be one the kit ships (`agents/<hat>.md` exists) or `load_config` refuses the whole run by name. Each path must be **literal and repo-relative**: no `..`, no absolute path, and no metacharacter except a trailing `/**` on a directory that is named (a lone `**` is refused). The whole value is **one line**: hats are separated by `;` and a newline is refused, because the parser reads a single line and a two-line value would silently lose everything after the first. Empty ⇒ no exception, which is the default and the right answer for most repos. |
 
 `writes:` is a constant of the **kit**: it says what a hat owns wherever the kit is installed. The
 obligation that crosses it belongs to the **target** — the repo whose own rules say that adding an
@@ -102,6 +102,13 @@ repo, with `hat_guard_check` reading the same widened matcher so it never notice
 The refusal happens in `load_config`, before a session is spent — never at the point of use, which
 is a command substitution where a `die` would exit the subshell and hand the guard an **empty**
 glob list, and an empty list is the spelling of *"this hat writes anywhere"*.
+
+⚠️ The value is **one line**. The parser splits on `;` with a single `read`, which consumes one
+line, so a value spelled across two lines — legal shell, and the natural way to write a long list in
+a config file — used to take its first line and drop the rest with rc 0 and no warning. Both callers
+share that one parser, so nothing contradicted anything: the run was simply accepted with a hat's
+exception missing, and the operator read the still-blocked phase as the key not working. A newline
+is refused in `load_config` now, by the same door as an unknown hat and for the same reason.
 
 ⚠️ Declared limit. A hat whose own `writes:` is empty already writes **anywhere** (`sdd-executor`),
 and an entry for such a hat is accepted and **ignored** rather than narrowing it — `sdd preflight`
