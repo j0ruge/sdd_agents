@@ -674,6 +674,56 @@ Design, and why this is a stamp rather than CI, is
 
 ---
 
+## `sdd health` ran three times for one branch
+
+**Symptom:** nothing fails. The branch is fine, every round is green, and the stamp is valid at the
+end. It just cost an hour and a quarter instead of twenty-five minutes, because the catalogue was
+run once per review round instead of once per branch.
+
+**Measured**, on PR #45 of this kit: three rounds of ~22 min. The first stamped the author's own
+review fixes; Codex then posted four findings, all valid, and the fixes killed the stamp; CodeRabbit
+then posted ten, eight valid, and two of those touched `bin/sdd` and killed it again. One round
+would have covered all three, for the same final content.
+
+**Cause:** the stamp is keyed on the **content** of `bin/ tests/ templates/ config/`, so it is worth
+exactly as much as the promise that the code will not change again. Stamping while review is still
+in flight is stamping a draft. And the reviewers cannot be consulted earlier — the PR bots (Codex,
+CodeRabbit, Copilot) only run **after** the pull request exists, so opening the PR is what starts
+them, not what ends the work.
+
+**What you do** — collect every review source first, fix in one batch, stamp last:
+
+1. open the PR (this is what triggers the bots) and **do not stamp yet**;
+2. run the local `codereview` pass in parallel, while they work;
+3. wait for all of them to post — a bot that is silent has not necessarily finished, and one that
+   reports a quota limit has not reviewed at all, which is a coverage gap rather than an approval;
+4. verify and fix everything in **one** pass;
+5. run `./bin/sdd health` **once**, after the last commit that touches the four stamped directories;
+6. resolve the threads and merge.
+
+Two things that keep the rule from becoming folklore:
+
+- **A review round that only touches documentation does not cost a stamp.** Of the ten CodeRabbit
+  findings above, six were prose; only the two in `bin/sdd` forced the re-run. Ask before you
+  reach for the command, rather than re-running it on suspicion:
+
+  ```bash
+  find bin tests templates config -type f -print0 | LC_ALL=C sort -z \
+    | xargs -0 -r md5sum | md5sum | cut -d' ' -f1      # compare with .sdd/logs/mutation-stamp
+  ```
+
+- **An open PR carrying a stale stamp is only safe while nobody merges it.** `gate_PR` reads the
+  stamp when the gate runs, which for a hand-opened PR is at merge time — so the protection is
+  holding the merge, and the belt-and-braces version is opening the PR as a **draft** and marking it
+  ready only once the final round is green. The same ordering that saves the wall-clock is what
+  keeps unmeasured content off `main`, which is the whole subject of the section above.
+
+⚠️ Recording the out-of-scope findings this ordering produces runs straight into the collision
+named above: `tests/health-baseline.txt` is inside the stamp key, so the `TODO.md` entry has to
+land **before** the single round, never after it.
+
+---
+
 ## `sdd health` fails: the backlog count moved
 
 **Symptom:** `sdd health` exits 1 with **two** lines about the same number — `fail  finding

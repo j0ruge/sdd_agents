@@ -286,6 +286,15 @@ código**. `CLAUDE.md`, `CONTEXT.md`, `docs/` e `TODO.md` não invalidam — mas
 `tests/health-baseline.txt` invalida, e é lá que a catraca do backlog mora, então registrar achado
 (princípio 5) mata o carimbo. A colisão está no `TODO.md`; o sintoma e a saída, em
 [`docs/failure-modes.md`](docs/failure-modes.md).
+⚠️ **"Depois do último commit de código" inclui os consertos que a REVISÃO ainda vai pedir.** Os
+bots de PR (Codex, CodeRabbit, Copilot) só rodam **depois** que o PR existe, então abrir o PR é o
+que os começa, não o que termina o trabalho — e carimbar com revisão em voo é carimbar um rascunho.
+Medido no PR #45 deste kit: **três corridas de ~22 min** onde uma bastava, porque cada rodada de
+achados mexeu em `bin/`. A ordem que economiza a hora é a mesma que mantém conteúdo não medido fora
+da `main`: abrir o PR, esperar **todos** os revisores, consertar numa leva, carimbar **uma vez**,
+mergear. Rodada que só mexe em prosa não custa carimbo — confira com o `md5sum` dos quatro
+diretórios antes de rodar o comando, em vez de re-rodar por desconfiança. Fluxo completo no verbete
+"`sdd health` ran three times for one branch" de [`docs/failure-modes.md`](docs/failure-modes.md).
 
 `sdd preflight`, `bash -n bin/sdd` e os dry-runs completam, mas não substituem. O passo de lint do
 `run-all.sh` cobre `bin/sdd` **e** `tests/*.sh` — deixar a suíte fora do linter foi o que segurou
