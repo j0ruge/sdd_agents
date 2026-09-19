@@ -3852,6 +3852,14 @@ mut_COORD_owner_hidden() {
   sed -i 's@^    coordination_owner$@    :@' "$1"
 }
 
+mut_RUN_branch_filtered_source() {
+  sed -i '/^ensure_mission_branch() {/,/^}/ { /^  \(mission\|plan\)_hash=/ s/hash-object --no-filters/hash-object/; }' "$1"
+}
+
+mut_RUN_branch_filtered_recheck() {
+  sed -i '/^ensure_mission_branch() {/,/^}/ { /^  \[ .*hash-object/ s/hash-object --no-filters/hash-object/; }' "$1"
+}
+
 CATALOG=(
   COORD_admission_missing
   COORD_linker_unlocked
@@ -3865,6 +3873,8 @@ CATALOG=(
   COORD_owner_hidden
   COORD_hook_orphans_escape
   COORD_worker_ignores_sigint
+  RUN_branch_filtered_source
+  RUN_branch_filtered_recheck
   AUTONOMY_meta_ignores_event
   AUTONOMY_mission_drops_close_money
   AUTONOMY_version_drops_close_money

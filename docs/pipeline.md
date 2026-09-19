@@ -426,7 +426,9 @@ A name starting with `-` is refused by the runner itself, before git sees it: `g
 a legal command that returns 0, switches to nothing and throws away every uncommitted change.
 Everything else git refuses — a space, `..`, a dirty tree the checkout would overwrite — becomes a
 `die` carrying git's own message. Before an existing destination is checked out, its
-`00-missao.md` **and** `01-plano.md` must be byte-identical to the source; both are checked again
+`00-missao.md` **and** `01-plano.md` must be byte-identical to the source. Source and post-checkout
+hashes use `--no-filters`: clean filters and EOL conversion cannot hide drift against the stored
+destination blobs. Both artifacts are checked again
 after checkout before any intervention or session. Checkpoint, notes and handoffs may differ: they
 are progress, not approved intent. A missing or stale approved artifact stops the line and names
 both branches and every divergent file. All of it before a single session is spent; what to do

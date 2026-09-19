@@ -2931,6 +2931,79 @@ git checkout -q -- "$PMDIR/01-plano.md"
 git checkout -q main
 git branch -q -D "$PTARGET"
 
+# Clean filters and EOL conversion must not disguise the bytes approved by the caller.
+# Both artifacts receive independent pre-checkout and post-checkout witnesses.
+for PI_ARTIFACT in 00-missao.md 01-plano.md; do
+  # Attributes are repository-relative; absolute patterns never select a path.
+  printf 'docs/handoffs/%s/%s filter=hide-instruction\n' "$PM" "$PI_ARTIFACT" > "$FIX/.gitattributes"
+  git config filter.hide-instruction.clean "sed '/^Instruction:/d'"
+  git add .gitattributes && git commit -qm "branch fixture: filtering hides an instruction"
+  git branch "$PTARGET"
+  printf 'Instruction: approved source intent\n' >> "$PMDIR/$PI_ARTIFACT"
+  PI_RAW="$(git hash-object --no-filters "$PMDIR/$PI_ARTIFACT")"
+  PI_FILTERED="$(git hash-object "$PMDIR/$PI_ARTIFACT")"
+  PI_BLOB="$(git rev-parse "$PTARGET:docs/handoffs/$PM/$PI_ARTIFACT")"
+  assert_eq "filter hides source bytes independently: $PI_ARTIFACT" 'yes/yes' \
+    "$([ "$PI_RAW" != "$PI_BLOB" ] && echo yes)/$([ "$PI_FILTERED" = "$PI_BLOB" ] && echo yes)"
+  PI_FILTER_OUT="$( cd "$FIX" && "$SDD" run "$PM" 2>&1 )"; PI_FILTER_RC=$?
+  if [ "$PI_FILTER_RC" -eq 1 ] && [ "$(git branch --show-current)" = main ] \
+     && grep -q 'the working tree was not changed' <<< "$PI_FILTER_OUT" \
+     && grep -q "$PI_ARTIFACT" <<< "$PI_FILTER_OUT" \
+     && [ "$(git hash-object --no-filters "$PMDIR/$PI_ARTIFACT")" = "$PI_RAW" ]; then
+    pass "raw source mismatch refuses before checkout: $PI_ARTIFACT"
+  else
+    fail "raw source mismatch refuses before checkout: $PI_ARTIFACT" \
+      'rc 1 on main, unchanged raw bytes and pre-checkout refusal' "rc $PI_FILTER_RC: $PI_FILTER_OUT"
+  fi
+  sed -i '/^Instruction:/d' "$PMDIR/$PI_ARTIFACT"
+  git checkout -q main
+  git branch -q -D "$PTARGET"
+  git branch "$PTARGET"
+  PI_RAW="$(git hash-object --no-filters "$PMDIR/$PI_ARTIFACT")"
+  PI_BLOB="$(git rev-parse "$PTARGET:docs/handoffs/$PM/$PI_ARTIFACT")"
+  assert_eq "raw source matches destination before filtered checkout race: $PI_ARTIFACT" "$PI_BLOB" "$PI_RAW"
+  cat > "$FIX/.git/hooks/post-checkout" <<HOOK
+#!/usr/bin/env bash
+printf 'Instruction: changed after checkout\\n' >> "$PMDIR/$PI_ARTIFACT"
+HOOK
+  chmod +x "$FIX/.git/hooks/post-checkout"
+  PI_FILTER_OUT="$( cd "$FIX" && "$SDD" run "$PM" 2>&1 )"; PI_FILTER_RC=$?
+  if [ "$PI_FILTER_RC" -eq 1 ] && [ "$(git branch --show-current)" = "$PTARGET" ] \
+     && grep -q 'no longer match the approved source' <<< "$PI_FILTER_OUT" \
+     && grep -q "$PI_ARTIFACT" <<< "$PI_FILTER_OUT" \
+     && [ "$(git hash-object --no-filters "$PMDIR/$PI_ARTIFACT")" != "$PI_RAW" ] \
+     && [ "$(git hash-object "$PMDIR/$PI_ARTIFACT")" = "$PI_BLOB" ]; then
+    pass "filtered drift stops after checkout: $PI_ARTIFACT"
+  else
+    fail "filtered drift stops after checkout: $PI_ARTIFACT" \
+      'rc 1 on target, raw drift hidden by clean filter, post-checkout refusal' "rc $PI_FILTER_RC: $PI_FILTER_OUT"
+  fi
+  rm -f "$FIX/.git/hooks/post-checkout"
+  sed -i '/^Instruction:/d' "$PMDIR/$PI_ARTIFACT"
+  git checkout -q main
+  git branch -q -D "$PTARGET"
+done
+printf 'docs/handoffs/%s/01-plano.md text\n' "$PM" > "$FIX/.gitattributes"
+git add .gitattributes && git commit -qm "branch fixture: EOL conversion is not byte equality"
+git branch "$PTARGET"
+sed -i 's/$/\r/' "$PMDIR/01-plano.md"
+PI_EOL_RAW="$(git hash-object --no-filters "$PMDIR/01-plano.md")"
+PI_EOL_BLOB="$(git rev-parse "$PTARGET:docs/handoffs/$PM/01-plano.md")"
+assert_eq 'EOL conversion hides CRLF source bytes' 'yes/yes' \
+  "$([ "$PI_EOL_RAW" != "$PI_EOL_BLOB" ] && echo yes)/$([ "$(git hash-object "$PMDIR/01-plano.md")" = "$PI_EOL_BLOB" ] && echo yes)"
+PI_EOL_OUT="$( cd "$FIX" && "$SDD" run "$PM" 2>&1 )"; PI_EOL_RC=$?
+if [ "$PI_EOL_RC" -eq 1 ] && [ "$(git branch --show-current)" = main ] \
+   && grep -q 'the working tree was not changed' <<< "$PI_EOL_OUT"; then
+  pass 'CRLF source differs from LF destination before checkout'
+else
+  fail 'CRLF source differs from LF destination before checkout' 'rc 1, main unchanged' "rc $PI_EOL_RC: $PI_EOL_OUT"
+fi
+sed -i 's/\r$//' "$PMDIR/01-plano.md"
+git checkout -q main
+git branch -q -D "$PTARGET"
+git rm -q .gitattributes && git commit -qm "branch fixture: remove conversion attributes"
+git config --unset filter.hide-instruction.clean
+
 # --- the fourth door: sdd retry warns about the base branch ----------------
 echo "== sdd retry on the base branch =="
 # `sdd retry` opens a session that COMMITS, exactly like the three doors that already warn

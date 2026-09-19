@@ -4185,8 +4185,8 @@ ensure_mission_branch() {
   current="$( cd "$REPO_ROOT" && git branch --show-current 2>/dev/null || true )"
   [ "$want" = "$current" ] && return 0
   mission_rel="${MISSION_DIR#"$REPO_ROOT"/}"
-  mission_hash="$(git -C "$REPO_ROOT" hash-object "$MISSION_DIR/00-missao.md" 2>/dev/null || true)"
-  plan_hash="$(git -C "$REPO_ROOT" hash-object "$MISSION_DIR/01-plano.md" 2>/dev/null || true)"
+  mission_hash="$(git -C "$REPO_ROOT" hash-object --no-filters "$MISSION_DIR/00-missao.md" 2>/dev/null || true)"
+  plan_hash="$(git -C "$REPO_ROOT" hash-object --no-filters "$MISSION_DIR/01-plano.md" 2>/dev/null || true)"
   if ( cd "$REPO_ROOT" && git show-ref --verify --quiet "refs/heads/$want" ); then
     mismatches=""
     for artifact in 00-missao.md 01-plano.md; do
@@ -4218,9 +4218,9 @@ ensure_mission_branch() {
   # reason the refused checkout gives: going on would run the whole pipeline against a plan the
   # human did not approve, which is the failure this function exists to close from the other side.
   mismatches=""
-  [ "$(git -C "$REPO_ROOT" hash-object "$MISSION_DIR/00-missao.md" 2>/dev/null || true)" = "$mission_hash" ] \
+  [ "$(git -C "$REPO_ROOT" hash-object --no-filters "$MISSION_DIR/00-missao.md" 2>/dev/null || true)" = "$mission_hash" ] \
     || mismatches="00-missao.md"
-  [ "$(git -C "$REPO_ROOT" hash-object "$MISSION_DIR/01-plano.md" 2>/dev/null || true)" = "$plan_hash" ] \
+  [ "$(git -C "$REPO_ROOT" hash-object --no-filters "$MISSION_DIR/01-plano.md" 2>/dev/null || true)" = "$plan_hash" ] \
     || mismatches="${mismatches:+$mismatches, }01-plano.md"
   [ -z "$mismatches" ] \
     || die "after switching from '${current:-<detached>}' to '$want', $mismatches no longer match the approved source; the line stops before any intervention or session"
