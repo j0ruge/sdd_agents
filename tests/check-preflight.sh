@@ -411,6 +411,7 @@ mkdir -p "$KIT/bin"
 # resolve SDD_HOME back to the real kit — which HAS the starter, and the fixture would measure
 # nothing. Nothing else is copied on purpose: `config/` absent IS the fixture.
 cp "$SDD" "$KIT/bin/sdd"
+cp "$ROOT/bin/sdd-coordination.py" "$KIT/bin/sdd-coordination.py"
 
 mkdir -p "$FIX/target"
 ( cd "$FIX/target" \

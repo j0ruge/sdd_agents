@@ -1099,6 +1099,7 @@ echo "== reminder: outside the kit it tells the truth about the judge =="
 KIT2="$OUTSIDE/kit2"
 mkdir -p "$KIT2/bin"
 cp "$ROOT/bin/sdd" "$KIT2/bin/sdd"
+cp "$ROOT/bin/sdd-coordination.py" "$KIT2/bin/sdd-coordination.py"
 ( cd "$KIT2" && git init -q -b main \
   && git config user.email "fixture@example.com" && git config user.name "Fixture" \
   && git add -A && git commit -qm "init the second kit checkout" ) >/dev/null 2>&1

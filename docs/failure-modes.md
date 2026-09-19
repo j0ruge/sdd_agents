@@ -7,6 +7,32 @@ The runner can tell you which gate it stopped at and why — do not guess.
 
 ---
 
+## CHECKOUT-BUSY or an owner that died
+
+**Symptom:** a gated or mutating command returns 75 and `CHECKOUT-BUSY`. This is an admission
+refusal, so it does not trigger `ON_ESCALATION_CMD` or record a blocked mission/session.
+
+**What you do:** run `sdd status <mission> --no-gates`. Its `CHECKOUT-OWNER` line identifies the
+checkout, public owner, supervisor, command, requested mission and start time. Full `status`,
+`phase` and `why` run gates and therefore also require ownership. Use an independent worktree
+for independent work, or wait for the current execution and its descendants to finish.
+
+The owner PID may already be dead while its supervisor still waits for a child. This includes
+children that closed inherited descriptors, called `setsid` or double-forked. The lock releases
+automatically after the last descendant exits, even after SIGKILL of the public owner/worker.
+A server left in the background keeps ownership; stop that task through its normal shutdown
+path. Do not delete the lock file or kill the supervisor to force entry: that defeats exclusion.
+Stale JSON without a live lock is harmless and does not require manual cleanup.
+
+**CHECKOUT-UNAVAILABLE:** coordinated execution requires Linux 5.3+ procfs, Python 3.9+ and kernel
+`flock`/subreaper/pidfd support, with pidfd syscalls allowed by seccomp. Admission probes these
+before running config or a paid session.
+Install the required runtime or use a supported Linux environment. Help and version do not
+need the supervisor. This is local coordination, not a filesystem permission boundary against
+external tools or deliberate interference with the supervisor.
+
+---
+
 ## The session cannot execute commands
 
 **Symptom:** the EXEC phase commits nothing; the session log says *"This command requires
@@ -334,9 +360,10 @@ imply that `brew install bash` was enough — it is not. `sdd preflight` now pro
 by behaviour (not by presence: brew installs them as `gmd5sum`/`gdate` unless `gnubin` comes first
 in `PATH`, so the name existing proves nothing).
 
-**What you do:** `brew install bash coreutils gnu-sed grep`, then put the `gnubin` directories
-first in `PATH`. The kit is developed and measured on Linux; macOS is supported only in that
-configuration, and `tests/check-preflight.sh` is what keeps the probe honest.
+**What you do:** use a supported Linux environment with the GNU tools on `PATH`.
+The historical macOS remedy (`brew install bash coreutils gnu-sed grep` plus `gnubin` first)
+only fixes userland differences; it does not provide the Linux subreaper now required for
+coordinated execution. `tests/check-preflight.sh` keeps the GNU behaviour probe honest.
 
 ---
 
@@ -712,16 +739,17 @@ empty is worth one `wc -c .sdd/config.sh`; on `0`, delete it and install again.
 
 ## The runner refused to switch to the declared branch
 
-**Symptom:** `sdd run` (or `sdd retry`) exits before opening any session, with one of three
-messages naming the `branch:` field of `00-missao.md`.
+**Symptom:** `sdd run` (or `sdd retry`) exits before opening any session, naming the declared
+branch or approved artifacts that differ between branches.
 
 **Cause and what you do**, one per message:
 
 | The runner said | What happened | What you do |
 |---|---|---|
+| `cannot switch from '<source>' to '<destination>': <files> differ or are missing …` | The existing destination does not carry byte-identical `00-missao.md` and `01-plano.md`. The checkout did not happen. | Compare the named files and decide which approved intent is current. Bring both branches into agreement before retrying; do not copy checkpoint, notes or handoffs merely to satisfy this check. |
 | `could not switch to the branch '<name>' … — git said: <git's own message>` | git declined the checkout. Usually the working tree carries changes the switch would overwrite. | Deal with the tree the way you would for any checkout — `git stash`, commit, or discard. The kit will not choose for you: picking one of those three is deciding whose work survives. |
 | `the branch '<name>' … starts with '-' — git would read it as an option` | the declared name would reach `git checkout` as a flag. `git checkout -f` is a legal command that returns 0 and throws the whole dirty tree away, so the shape is refused before git sees it. | Fix `branch:` in `00-missao.md`. |
-| `the branch '<name>' … does not carry this mission — you are now on it, and the plan that asked for it is on '<other>'` | the checkout worked and the mission's artifacts are not on the branch it asked for — an old branch of the same name, or one cut before the mission existed. | Go back (`git checkout <other>`) and decide which branch the mission belongs on. **Do not** re-run from here: the pipeline would spend sessions against a plan nobody approved on this branch. |
+| `after switching from '<source>' to '<destination>', <files> no longer match …` | The approved artifacts changed between the pre-check and the completed checkout. The runner is now on the destination, but stopped before writing an intervention or opening a session. | Return to the named source, inspect who moved the branch or working tree, and reconcile the named files before retrying. |
 
 **How the kit reacts:** it stops, every time — `die`, no session spent, nothing guessed. Carrying
 on from wherever the checkout left the tree is the SQ-97 class the field exists to close

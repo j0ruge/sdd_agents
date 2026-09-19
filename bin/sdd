@@ -3212,7 +3212,8 @@ autonomy_escalation_row() {   # autonomy_escalation_row <event> <kind> <phase> <
 
 # Called, never substituted, for the same reason the body above says: the kit stamp's one-shot
 # warning flag is a global, and a subshell would reset it once per row.
-# L6 (2026-09-03 audit) — the human's pager. Every escalation that ends the run with rc 3 runs
+# L6 (2026-09-03 audit) — the human's pager. Every escalation that ends the run with rc 3 first
+# writes its durable ledger row, then runs
 # ON_ESCALATION_CMD from .sdd/config.sh, when set, with the reason (the ledger `kind`), the phase,
 # the mission, the project and the gate's sentence in its environment. Measured before it: zero
 # notification sites in this file, and a human watching `tail -F` for hours to learn the line had
@@ -3220,19 +3221,23 @@ autonomy_escalation_row() {   # autonomy_escalation_row <event> <kind> <phase> <
 # sites (count them, never read a number off this comment: `grep -cE '^ +autonomy_blocked_row '`
 # — the r1 of the 2026-09-11 judge mission found the hand-written number two behind the file),
 # because that is the one door every rc 3 goes through — the degraded row is not an rc 3 and gets
-# no pager. The projection never runs it. A hook that fails is a warning, never a second failure:
-# the escalation is already in the journal and the ledger, and a pager that could stop the run
-# from stopping would be the wrong way round. `bash -c` with stdin closed, so a hook that reads
-# its terminal cannot hang the runner on a machine with nobody at the keyboard.
+# no pager. The projection never runs it. A hook that fails or exceeds five seconds is a warning,
+# never a second failure. The helper bounds the entire hook family, including setsid children;
+# timeout and the subreaper share a five-second deadline and one-second KILL grace. If timeout(1) is unavailable,
+# the hook is skipped rather than run without a bound. `bash -c` keeps stdin closed too.
 escalation_hook() {   # escalation_hook <kind> <phase> <gate_why> — never fails the run
   [ "$DRY_RUN" = "1" ] && return 0
   [ -n "$ON_ESCALATION_CMD" ] || return 0
+  if ! command -v timeout >/dev/null 2>&1; then
+    warn "timeout(1) is unavailable — ON_ESCALATION_CMD was not run because an unbounded hook could hang the runner"
+    return 0
+  fi
   if ! SDD_REASON="$1" SDD_PHASE="$2" SDD_GATE_WHY="$3" SDD_MISSION="${MISSION:-}" SDD_PROJECT="${PROJECT_NAME:-}" \
-       bash -c "$ON_ESCALATION_CMD" </dev/null >&2; then
-    warn "ON_ESCALATION_CMD exited non-zero — the escalation is recorded either way"
+       python3 "$SDD_HOME/bin/sdd-coordination.py" hook 5 1 "$ON_ESCALATION_CMD" </dev/null >&2; then
+    warn "ON_ESCALATION_CMD exited non-zero or timed out — the escalation still stops the run"
   fi
 }
-autonomy_blocked_row()  { escalation_hook "$1" "$2" "$3"; autonomy_escalation_row "blocked"  "$1" "$2" "$3"; }
+autonomy_blocked_row()  { autonomy_escalation_row "blocked" "$1" "$2" "$3"; escalation_hook "$1" "$2" "$3"; }
 autonomy_degraded_row() { autonomy_escalation_row "degraded" "$1" "$2" "$3"; }
 
 # The FACT that a phase closed without buying a session. Not an escalation — nothing went wrong,
@@ -3859,7 +3864,7 @@ mission_cost_usd() {   # the journal's sum, 2 decimals; a journal that does not 
 }
 mission_budget_blown() {   # mission_budget_blown <phase> — rc 0 = STOP (row written), rc 1 = go on
   local phase="$1" spent ceiling="$BUDGET_MISSION_USD"
-  case "$ceiling" in 0|0.*) return 1 ;; esac
+  if LC_ALL=C awk -v c="$ceiling" 'BEGIN { exit !((c + 0) == 0) }'; then return 1; fi
   spent="$(mission_cost_usd)"
   if [ "$DRY_RUN" = "1" ]; then
     if [ "$MISSION_BUDGET_PROJECTED" = "0" ]; then
@@ -4143,6 +4148,11 @@ warn_if_on_base_branch() {
 # commit that carries the plan lives where the human is standing when they run, and cutting from
 # the base would leave the whole mission behind.
 #
+# Before an existing branch is checked out, both approved inputs — 00-missao.md and 01-plano.md —
+# must be byte-identical there. The same hashes are checked again after checkout, closing the gap
+# in which the destination can move between the first read and the new working tree. Checkpoint,
+# notes and handoffs stay outside the comparison because they are progress, not approved intent.
+#
 # git refusing the checkout is a `die`, never a warning: a dirty tree or a name git will not take.
 # Going on would run the entire pipeline on a branch the plan did not ask for, which is the exact
 # failure this function exists to close — and guessing on top of a tree git already refused is how
@@ -4150,7 +4160,7 @@ warn_if_on_base_branch() {
 # the message instead of being replaced by a paraphrase.
 ensure_mission_branch() {
   [ "$DRY_RUN" = "1" ] && return 0
-  local want current out rc=0
+  local want current out rc=0 mission_rel mission_hash plan_hash target_hash mismatches artifact
   want="$(frontmatter "$MISSION_DIR/00-missao.md" branch)"
   # Two no-ops: an empty field, and the `<...>` placeholder templates/missao.md ships while the
   # name is still unknown (the TICKET phase fills it in). Neither is a branch name — git rejects
@@ -4174,7 +4184,22 @@ ensure_mission_branch() {
   esac
   current="$( cd "$REPO_ROOT" && git branch --show-current 2>/dev/null || true )"
   [ "$want" = "$current" ] && return 0
+  mission_rel="${MISSION_DIR#"$REPO_ROOT"/}"
+  mission_hash="$(git -C "$REPO_ROOT" hash-object --no-filters "$MISSION_DIR/00-missao.md" 2>/dev/null || true)"
+  plan_hash="$(git -C "$REPO_ROOT" hash-object --no-filters "$MISSION_DIR/01-plano.md" 2>/dev/null || true)"
   if ( cd "$REPO_ROOT" && git show-ref --verify --quiet "refs/heads/$want" ); then
+    mismatches=""
+    for artifact in 00-missao.md 01-plano.md; do
+      case "$artifact" in
+        00-missao.md) target_hash="$mission_hash" ;;
+        01-plano.md)  target_hash="$plan_hash" ;;
+      esac
+      [ -n "$target_hash" ] \
+        && [ "$(git -C "$REPO_ROOT" rev-parse --verify "$want:$mission_rel/$artifact" 2>/dev/null || true)" = "$target_hash" ] \
+        || mismatches="${mismatches:+$mismatches, }$artifact"
+    done
+    [ -z "$mismatches" ] \
+      || die "cannot switch from '${current:-<detached>}' to '$want': $mismatches differ or are missing on the destination branch; the working tree was not changed"
     out="$( cd "$REPO_ROOT" && git checkout "$want" 2>&1 )" || rc=$?
   else
     out="$( cd "$REPO_ROOT" && git checkout -b "$want" 2>&1 )" || rc=$?
@@ -4189,14 +4214,16 @@ ensure_mission_branch() {
   # switch as a success and then telling the human the mission was never planned. Worse and
   # quieter: a branch carrying an OLDER copy spends real sessions executing a plan nobody approved.
   #
-  # So the artifact is re-read AFTER the switch, through the same parser, and it has to still be
-  # there and still declare THIS branch. `die`, never a warning, for the reason the refused checkout
-  # gives: going on would run the whole pipeline against a plan the human did not approve, which is
-  # the failure this function exists to close, entered from the other side.
-  if [ ! -f "$MISSION_DIR/00-missao.md" ] \
-     || [ "$(frontmatter "$MISSION_DIR/00-missao.md" branch)" != "$want" ]; then
-    die "the branch '$want' declared in 00-missao.md does not carry this mission — you are now on it, and the plan that asked for it is on '${current:-<detached>}'"
-  fi
+  # So both approved artifacts are hashed again AFTER the switch. `die`, never a warning, for the
+  # reason the refused checkout gives: going on would run the whole pipeline against a plan the
+  # human did not approve, which is the failure this function exists to close from the other side.
+  mismatches=""
+  [ "$(git -C "$REPO_ROOT" hash-object --no-filters "$MISSION_DIR/00-missao.md" 2>/dev/null || true)" = "$mission_hash" ] \
+    || mismatches="00-missao.md"
+  [ "$(git -C "$REPO_ROOT" hash-object --no-filters "$MISSION_DIR/01-plano.md" 2>/dev/null || true)" = "$plan_hash" ] \
+    || mismatches="${mismatches:+$mismatches, }01-plano.md"
+  [ -z "$mismatches" ] \
+    || die "after switching from '${current:-<detached>}' to '$want', $mismatches no longer match the approved source; the line stops before any intervention or session"
   ok "branch: ${current:-<detached>} → $want (declared in 00-missao.md)"
   pipeline_log_line "$(date -Iseconds)  BRANCH  ${current:-<detached>} -> $want"
 }
@@ -4642,7 +4669,7 @@ skill_origin() {   # skill_origin <skill> — a URL, or `local`
 # born. Every capture below is guarded: a red line has to be a verdict, never an abort.
 health_release() {   # rc 0 = six green lines
   local kit kit_id ledger reds=0 rows n_repos pr_repos last_ok sk origin bad_origin="" hits="" w key stamp words
-  kit="$(health_kit_root || true)"
+  kit="$(printf '%s' "$COORDINATION_ROOT" || true)"
   # The kit's identity in the ledger is what ledger_repo_root writes — the common dir, never the
   # cwd's toplevel: from a linked worktree the two differ and the kit's own sessions would count as
   # the second target (reproduced by the review of this very branch). ONE definition, reused.
@@ -4749,7 +4776,7 @@ cmd_health() {
   local out rc k n catalogue_green=0 kit
   # The tree, resolved ONCE and used by every check below — including the stamp, which is the whole
   # point: what this command measures and what it stamps can never again be two different trees.
-  kit="$(health_kit_root || true)"
+  kit="$(printf '%s' "$COORDINATION_ROOT" || true)"
 
   # The tree is IN the header, because it is now an answer and no longer a constant: an operator
   # standing in a worktree has to be able to see which of their checkouts was just measured.
@@ -5271,6 +5298,7 @@ cmd_status() {
   info ""
 
   if [ "$no_gates" = "1" ]; then
+    coordination_owner
     local f names=""
     for f in "$MISSION_DIR"/*; do [ -e "$f" ] && names="$names ${f##*/}"; done
     info "  artifacts:"
@@ -5834,6 +5862,24 @@ adr_declare() {
   mv -f "$tmp" "$spec" || { rm -f "$tmp"; ADR_DECLARE_WHY="could not replace $spec"; return 1; }
 }
 
+# Resolve aliases once per validation and keep every spec write inside the admitted checkout.
+adr_spec_relative() {
+  local root="$1" spec="$2" physical
+  root="$(CDPATH='' cd -P "$root" && pwd)" || return 1
+  case "$spec" in
+    /*) physical="$spec" ;;
+    *) physical="$root/$spec" ;;
+  esac
+  physical="$(readlink -f -- "$physical")" \
+    || die "sdd adr new: --spec $spec does not exist"
+  [ -f "$physical" ] || die "sdd adr new: --spec $spec does not exist"
+  case "$physical" in
+    "$root"/*) printf '%s\n' "${physical#"$root"/}" ;;
+    *) die "sdd adr new: --spec $spec resolves outside the admitted checkout; keep the spec inside $root" ;;
+  esac
+}
+
+
 # adr_new <root> <slug> <ticket> <spec> <dry-run> — reserve the id and write the header.
 #
 # The ORDER is the contract: refuse first, reserve second, write both sides third. Reserving before
@@ -5860,8 +5906,7 @@ adr_new() {
 
   local spec_rel=""
   if [ -n "$spec" ]; then
-    spec_rel="${spec#"$root"/}"; spec_rel="${spec_rel#./}"
-    [ -f "$root/$spec_rel" ] || die "sdd adr new: --spec $spec_rel does not exist"
+    spec_rel="$(adr_spec_relative "$root" "$spec")" || return $?
     # Refused BEFORE anything is created: a spec that already names an ADR is either already
     # decided or pointing at the wrong one, and both are decisions a human makes. Silently
     # overwriting the link would be the kit choosing between two ADRs on its own.
@@ -6059,7 +6104,7 @@ adr_dir_contained() {
 
 adr_usage() {
   cat <<'USAGE'
-usage: sdd adr new   --slug <slug> [--ticket <id>] [--spec <path>] [--dry-run]
+usage: sdd adr new   --slug <slug> [--repo <root>] [--ticket <id>] [--spec <path>] [--dry-run]
        sdd adr check [--repo <root>] [--mission <mission>] [--phase plan|exec]
 
   new    reserves the next free id in $ADR_DIR and writes the header stub.
@@ -6067,17 +6112,13 @@ usage: sdd adr new   --slug <slug> [--ticket <id>] [--spec <path>] [--dry-run]
 USAGE
 }
 
-cmd_adr() {
-  local verb="${1:-}"
+# Both admission and dispatch use this parser; outputs are the caller's local variables.
+adr_parse_args() {
+  verb="${1:-}"
   case "$verb" in
     new|check) shift ;;
     *) adr_usage >&2; return 2 ;;
   esac
-
-  # The flag loop stands BEFORE load_config, like cmd_health's: a typo in an option has to be
-  # refused by the command itself, not by whatever the runner happens to do with a config it did
-  # not need to read yet.
-  local slug="" ticket="" spec="" mission="" phase="" repo="" dry=0
   while [ $# -gt 0 ]; do
     case "$1" in
       --slug)    slug="${2:-}";    shift 2 || die "sdd adr: --slug needs a value" ;;
@@ -6091,6 +6132,26 @@ cmd_adr() {
     esac
   done
 
+}
+
+adr_checkout_root() {
+  local verb slug="" ticket="" spec="" mission="" phase="" repo="" dry=0
+  adr_parse_args "$@" || return $?
+  local root
+  root="$(git -C "${repo:-.}" rev-parse --show-toplevel 2>/dev/null)" \
+    || die "sdd adr: --repo must resolve to a Git checkout"
+  # Refuse an external spec before even trusted project config can cause side effects.
+  [ -z "$spec" ] || adr_spec_relative "$root" "$spec" >/dev/null || return $?
+  printf '%s\n' "$root"
+}
+
+cmd_adr() {
+  local verb slug="" ticket="" spec="" mission="" phase="" repo="" dry=0
+  adr_parse_args "$@" || return $?
+  # The admitted destination supplies config and receives all writes, including relative paths.
+  if [ "$verb" = new ]; then
+    cd "$COORDINATION_ROOT" || return 1
+  fi
   load_config
   # Called for its REFUSAL, and the value thrown away: adr_check_repo prints ADR_CHECK itself, and
   # a second copy of the mode carried down from here would be a second answer to one question.
@@ -6102,7 +6163,7 @@ cmd_adr() {
   case "$verb" in
     new)
       [ -n "$slug" ] || die "sdd adr new: --slug is required (see 'sdd help')"
-      adr_new "${repo:-$REPO_ROOT}" "$slug" "$ticket" "$spec" "$dry"
+      adr_new "$COORDINATION_ROOT" "$slug" "$ticket" "$spec" "$dry"
       ;;
     check)
       local root="${repo:-$REPO_ROOT}"
@@ -8814,6 +8875,7 @@ sdd — runner for the autonomous development agent pipeline
 
 USAGE
   sdd install [--force]      install the kit into the target repo (.sdd/config.sh + .claude/agents/)
+  sdd link-agents            link an installed target's agents to this kit (sdd-link-agents)
   sdd preflight              environment sensor: tools, auth, config, plugins, git
   sdd health                 KIT sensor: suite, mutation, doc and config drift
              [--release]   the six lines of ADR 0007 — apt for another repo of the organisation? —
@@ -8895,11 +8957,137 @@ EOF
 }
 
 # ---------------------------------------------------------------------------
+cmd_link_agents() {
+  local linked already untracked src name target IGNORE MARKER
+  REPO_ROOT="$(git rev-parse --show-toplevel 2>/dev/null)" \
+    || die "not inside a git repository."
+
+  # The config is the sensor for "this repo was installed". Linking agents into a repo that never ran
+  # `sdd install` would leave it with hats and no config — a repo that looks adopted and is not.
+  [ -f "$REPO_ROOT/.sdd/config.sh" ] \
+    || die "no .sdd/config.sh in $REPO_ROOT — run 'sdd install' first (see docs/plan-only.md)."
+
+  [ "$REPO_ROOT" != "$SDD_HOME" ] \
+    || die "refusing to link the kit to itself — $REPO_ROOT is the kit."
+
+  mkdir -p "$REPO_ROOT/.claude/agents"
+
+  linked=0; already=0; untracked=0
+  for src in "$SDD_HOME"/agents/sdd-*.md; do
+    name="$(basename "$src")"
+    target="$REPO_ROOT/.claude/agents/$name"
+
+    # Drop it from the index BEFORE replacing it: a tracked path that becomes a symlink shows up as a
+    # content change, and the whole point is that these stop being versioned.
+    if git -C "$REPO_ROOT" ls-files --error-unmatch ".claude/agents/$name" >/dev/null 2>&1; then
+      git -C "$REPO_ROOT" rm --cached --quiet ".claude/agents/$name"
+      untracked=$((untracked + 1))
+    fi
+
+    if [ -L "$target" ] && [ "$(readlink -f "$target")" = "$(readlink -f "$src")" ]; then
+      already=$((already + 1))
+      continue
+    fi
+    ln -sfn "$src" "$target"
+    linked=$((linked + 1))
+  done
+
+  [ "$linked"  -gt 0 ] && ok "$linked agent(s) linked to $SDD_HOME/agents/"
+  [ "$already" -gt 0 ] && dim "  $already already linked"
+  [ "$untracked" -gt 0 ] && ok "$untracked agent(s) removed from the git index (now local-only)"
+
+  # `.gitignore`, appended once. The marker line is what makes the second run a no-op.
+  IGNORE="$REPO_ROOT/.gitignore"
+  MARKER='.claude/agents/sdd-*.md'
+  if ! grep -qxF "$MARKER" "$IGNORE" 2>/dev/null; then
+    {
+      [ -s "$IGNORE" ] && printf '\n'
+      printf '# sdd kit agents: local symlinks created by\n'
+      printf '# `sdd install && sdd-link-agents`. These links stay outside Git because they carry\n'
+      printf '# a machine-specific absolute path and would dangle in another checkout.\n'
+      printf '%s\n' "$MARKER"
+    } >> "$IGNORE"
+    ok ".gitignore updated"
+  else
+    dim "  .gitignore already carries the rule"
+  fi
+
+  info ""
+  dim "Next: $ /sdd-plan   (see $SDD_HOME/docs/plan-only.md)"
+}
+
+# Admission precedes config sourcing: even a gate or dry-run can execute project commands.
+coordination_paths() {
+  local root="$1" gitdir
+  COORDINATION_ROOT="$(CDPATH='' cd -P "$root" && pwd)"
+  gitdir="$(git -C "$COORDINATION_ROOT" rev-parse --absolute-git-dir 2>/dev/null || true)"
+  if [ -n "$gitdir" ]; then
+    COORDINATION_DIR="$(CDPATH='' cd -P "$gitdir" && pwd)"
+  else
+    COORDINATION_DIR="$COORDINATION_ROOT/.sdd/coordination"
+  fi
+}
+
+coordination_enter() {
+  COORDINATION_ADMITTED=0
+  local subcmd="${1:-help}" kind=auxiliary root arg
+  case "$subcmd" in
+    help|--help|-h|version|--version|-v|boot|census|autonomy) { COORDINATION_ADMITTED=1; return 0; } ;;
+    status) for arg in "$@"; do [ "$arg" != --no-gates ] || { COORDINATION_ADMITTED=1; return 0; }; done ;;
+    kaizen) for arg in "$@"; do [ "$arg" != --series ] || { COORDINATION_ADMITTED=1; return 0; }; done; kind=pipeline ;;
+    adr) [ "${2:-}" != check ] || { COORDINATION_ADMITTED=1; return 0; } ;;
+    run|retry|close) kind=pipeline ;;
+    install|preflight|health|approve|phase|why|link-agents) : ;;
+    *) { COORDINATION_ADMITTED=1; return 0; } ;;
+  esac
+  if [ "$subcmd" = health ]; then
+    root="$(health_kit_root)"
+  elif [ "$subcmd" = adr ]; then
+    root="$(adr_checkout_root "${@:2}")" || return $?
+  else
+    root="$(git rev-parse --show-toplevel 2>/dev/null)" || die "not inside a git repository"
+  fi
+  coordination_paths "$root"
+  command -v python3 >/dev/null 2>&1 \
+    || die "CHECKOUT-UNAVAILABLE: coordinated commands require Python 3 and Linux procfs"
+  if [ -n "${SDD_COORDINATION_ID:-}" ] \
+      && python3 "$SDD_HOME/bin/sdd-coordination.py" check "$COORDINATION_ROOT" "$COORDINATION_DIR" "$kind"; then
+    COORDINATION_ADMITTED=1
+    return 0
+  fi
+  local coord_pid rc=0
+  python3 "$SDD_HOME/bin/sdd-coordination.py" enter "$COORDINATION_ROOT" "$COORDINATION_DIR" \
+    "$kind" "$SDD_HOME/bin/sdd" "$@" <&0 &
+  coord_pid=$!
+  trap 'kill -TERM "$coord_pid" 2>/dev/null || true' TERM
+  trap 'kill -INT "$coord_pid" 2>/dev/null || true' INT
+  trap 'kill -HUP "$coord_pid" 2>/dev/null || true' HUP
+  while :; do
+    wait "$coord_pid" && rc=0 || rc=$?
+    kill -0 "$coord_pid" 2>/dev/null || break
+  done
+  trap - TERM INT HUP
+  return "$rc"
+}
+
+coordination_owner() {
+  coordination_paths "$REPO_ROOT"
+  if command -v python3 >/dev/null 2>&1; then
+    python3 "$SDD_HOME/bin/sdd-coordination.py" show "$COORDINATION_ROOT" "$COORDINATION_DIR" query
+  else
+    warn "checkout owner unavailable: Python 3 is missing"
+  fi
+}
+
 main() {
+  local admission=0
+  coordination_enter "$@" || admission=$?
+  [ "$COORDINATION_ADMITTED" = 1 ] || return "$admission"
   local subcmd="${1:-help}"
   shift || true
   case "$subcmd" in
     install)   cmd_install "$@" ;;
+    link-agents) cmd_link_agents "$@" ;;
     preflight) cmd_preflight "$@" ;;
     health)    cmd_health "$@" ;;
     status)    cmd_status "$@" ;;

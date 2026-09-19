@@ -94,8 +94,8 @@ julgam prosa (`Documentation`, `Overall`), nomeados positivamente; achado de pro
 `TODO_FILE`, não compra rodada.
 
 **Onde mora hoje.** O componente mais forte do kit: `gate_<FASE>` por artefato (`TEST_CMD`, grep
-no checkpoint, `git log`, `gh pr view`); Check por incremento; **quinze** sensores em
-`tests/run-all.sh` (o décimo quinto é `check-adr.sh`); catálogo de mutação com carimbo no
+no checkpoint, `git log`, `gh pr view`); Check por incremento; **dezesseis** sensores em
+`tests/run-all.sh` (o décimo sexto é `check-coordination.sh`); catálogo de mutação com carimbo no
 `sdd health`; guarda de kit em quatro portas. Desde `20260917-o-numero-do-adr-nao-e-prosa` o
 `gate_PLAN` também cobra o `adr:` sob `ADR_CHECK=block`, e o comentário do gate **nomeia o dono do
 artefato** — `sdd-planner`, com o humano na sala —, que é a segunda metade da régua do princípio 1.
@@ -136,7 +136,9 @@ atrasada em 2026-09-03 — o que o kit precisa lembrar mora no kit.
 fronteira nas fases de alvo. Credencial real entra só na fase cujo gate a exige (QA no navegador,
 PR no `gh`).
 
-**Onde mora hoje.** `ensure_mission_branch`; `kit_guard_arm`/`kit_guard_check` em quatro portas
+**Onde mora hoje.** `ensure_mission_branch`, com hashes crus `--no-filters` (sem normalização
+de EOL ou clean filters) e igualdade byte a byte de `00-missao.md` e
+`01-plano.md` antes e depois do checkout (progresso fica fora); `kit_guard_arm`/`kit_guard_check` em quatro portas
 (`KIT-TOUCHED`, e desde a fronteira do chapéu uma parada); `hat_guard_check` nos três sítios onde
 o `review_scope_check` só avisava, lendo commits **e** árvore contra `writes:`; o catálogo de
 mutação sabota **uma cópia** em `mktemp -d`; o env do harness é apagado por `run_phase()` antes do
@@ -162,9 +164,32 @@ carimba caminho e um worktree já confundiu a identidade do repo (comentários `
 interativa do Claude Code, aberta em outro repo, rodou `sdd run --phase REVIEW --budget-override`
 sobre a missão já mergeada do próprio kit — trocou a branch da árvore de trabalho **debaixo de um
 `sdd health` em curso** (invalidando o carimbo), abriu uma sessão opus real (morta à mão aos 12
-min) e commitou duas notas `intervention:` numa branch mergeada. Nada no kit impede: a CLI é a
-porta do humano, e qualquer agente com shell entra por ela. A nota passou a dizer só o que o
+min) e commitou duas notas `intervention:` numa branch mergeada. A CLI é a porta do humano, e qualquer agente com shell entra por ela. A exclusão por
+checkout acrescentada em 2026-09-18 agora recusa essa disputa com `CHECKOUT-BUSY`/75. A nota passou a dizer só o que o
 runner sabe ("forçada pela CLI"), nunca "o humano".
+
+**Posse desde 2026-09-18.** `coordination_enter` centraliza admissão antes de config/gates,
+com `flock` por checkout físico; worktrees independentes não dividem lock. `health` protege a
+árvore medida, `adr new --repo` admite o destino e usa sua config (parser único), e
+`sdd-link-agents` entra pela mesma porta. `--spec` é canonicalizado fisicamente e deve ser
+arquivo interno ao destino; `..` ou symlink para fora são recusados antes de config/reserva/escrita.
+Aliases internos relativos e absolutos continuam aceitos; specs externos antes aceitos passam a
+ser recusados, sem lock multi-raiz. O helper Python/Linux
+`bin/sdd-coordination.py` é subreaper separado do PID público: morte do owner/worker, FDs
+fechados, `setsid` e double-fork não liberam posse antes do reap completo. Auxiliar descendente
+reentra por identidade de processo + ancestralidade + FD realmente travado; ambiente sozinho
+não autoriza. Pipeline recursivo é recusado. `check-coordination.sh` mede concorrência,
+ausência de efeitos, consultas, reentrada e recuperação com barreiras e CLIs isoladas.
+Sinais cooperativos alcançam a família ativa, inclusive foreground, outras sessões e filhos
+criados por threads; pidfds fixam a identidade após conferir starttime/ancestralidade. Linux
+5.3+ com syscalls pidfd permitidas e Python 3.9+ são exigidos antes de config/sessão; não há
+fallback para PID numérico reutilizável. A varredura seleciona destinatários, nunca libera
+posse: só `ECHILD` prova reap completo. Handlers que ignoram o sinal por escolha não são garantidos.
+
+**Limite da posse.** Coordena entradas do kit, não edição externa nem daemon preexistente.
+Matar o supervisor, adulterar arquivos/namespace do lock ou intervenção privilegiada derrota
+essa coordenação. Descendente de longa duração conserva o lock até terminar; timeout não
+libera outro escritor. Não é isolamento de filesystem nem mudança do estado derivado da missão.
 
 ## 7. Hooks — pontos de intervenção humana
 
@@ -174,11 +199,19 @@ quando é ele quem recebe o comando pela CLI (`--phase`, `retry`, `--budget-over
 que ele sabe, nunca quem estava na CLI. O humano que precisa vigiar um `tail -F` para saber que a
 linha parou não tem hook — tem vigília.
 
+**Admissão não é escalada.** `CHECKOUT-BUSY`/75 não abre sessão, não altera checkpoint,
+não escreve ledger de missão e não chama hook; `status --no-gates` expõe o proprietário.
+O prazo do hook vale para toda a árvore: um subreaper local cancela também filhos em outra
+sessão, com os mesmos 5 s + 1 s; o lock externo só sai depois do reap. Background do hook
+não pode sobreviver indefinidamente. A semântica geral de órfãos da execução é preservada.
+
 **Onde mora hoje.** `aprovacao:` + `sdd approve` (gate PLAN); rc 3 em
 `handoff_blocked_escalation`, `app_down_escalation`, `increment-blocked`, `dirty-tree`,
 `no-progress`, `budget-exhausted`; `QA_MAX_ITER`/`REVIEW_MAX_ITER`; `--max-budget-usd` por
 fase (`phase_budget_usd`); merge do PR é humano; `sdd close`. Desde a auditoria: teto por missão
-(`BUDGET_MISSION_USD`), `ON_ESCALATION_CMD` em todo rc 3, e a linha `- intervention:` escrita pelo
+(`BUDGET_MISSION_USD`, com zero numérico desabilitando e todo valor positivo sendo aplicado),
+`ON_ESCALATION_CMD` em todo rc 3 depois da tentativa de escrita durável, limitado a cinco segundos
+mais um de encerramento forçado, e a linha `- intervention:` escrita pelo
 runner (L2, L6 e L4).
 
 **Dívida declarada.** "Pare depois desta fase" existe: `--phase X --max-phases 1` — a linha
