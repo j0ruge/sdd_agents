@@ -24,9 +24,13 @@ reentrada exige lock, ancestralidade e identidade viva, enquanto concorrentes re
 | Teto `0.50` com US$ 1,00 já gasto | abria outra sessão | para antes da sessão |
 | Evento visível de dentro do hook | ausente | presente antes da notificação |
 | Prazo do hook e descendentes | sem limite efetivo para filho com `setsid` | **5 s + 1 s** de encerramento forçado |
-| Regressões do sensor de coordenação | 0 | **110/110** no HEAD de implementação |
+| Regressões do sensor de coordenação | 0 | **154/154** na suíte final em `d12ace4` |
+| `adr new --repo B` com B ocupado | escrevia em B sob lock de A | recusa antes de config/efeitos em B |
+| `--spec` externo por `../` ou symlink | alterava outro checkout ocupado | recusa sem efeitos nos dois checkouts; aliases internos aceitos |
+| Drift escondido por clean filter/EOL | hashes concordavam apesar de bytes diferentes | recusa pré-checkout ou parada após troca, conforme o ponto de drift |
+| Handler INT de filho foreground | ausente apesar de rc 130 | executa antes de KILL; posse mantida durante limpeza |
 | Scripts de sensor | **15** | **16** |
-| Catálogo de mutação | **346** | **365** definições e entradas únicas |
+| Catálogo de mutação | **346** | **373** definições e entradas únicas |
 
 **Jidoka:** a primeira rodada RED do novo sensor tinha isolamento incompleto e abriu uma sessão
 real do Claude num fixture temporário. Houve um único `tool_use` (`echo sdd-preflight-ok`) e o
@@ -36,16 +40,24 @@ das CLIs fail-closed e acrescentou controles negativos antes de qualquer chamada
 entrega, portanto, não afirma zero chamadas reais.
 
 **Custos conscientes:** a vida de órfãos com `setsid`/double-fork exigiu Python 3.9+, procfs e
-Linux `PR_SET_CHILD_SUBREAPER` nos comandos coordenados. Hooks que iniciem trabalho em background
-também têm essa árvore encerrada no prazo de 5+1 segundos; descendentes comuns do runner mantêm a
-posse até terminar.
+Linux `PR_SET_CHILD_SUBREAPER` nos comandos coordenados. A entrega de sinais à família ativa
+agora requer Linux 5.3+ com syscalls pidfd permitidas, inclusive sob seccomp, e recusa antes de
+config se a capacidade faltar. Hooks que iniciem trabalho em background também têm essa árvore
+encerrada no prazo de 5+1 segundos; descendentes comuns mantêm posse até terminar. Specs externos
+antes aceitos agora precisam estar no checkout alvo; aliases internos continuam aceitos, sem
+introduzir lock multi-raiz.
 
-**Estado da evidência:** a suíte completa ficou verde em `c4ecb31` com coordenação 104/104. O
-conserto revisado de `SIGINT` em `b7e012e` levou o sensor a 110/110 e ganhou mutante próprio. A
-suíte e a certificação integral dos 365 mutantes no snapshot final ainda são pendências do aceite;
-o handoff durável em
+**Estado da evidência:** a revisão integral encontrou lacunas que os GREENs parciais não mediam.
+F1/F3 deram 12 falhas no novo RED; F2 deu cinco falhas por filtros/EOL. A seleção de filhos de
+outra thread teve RED de quatro falhas antes de fechar. A primeira suíte congelada sobre
+`f11bf27` terminou rc 0, `suite green`, coordenação 148/148. O complemento `--spec` teve seis
+falhas no RED e GREEN focado 154/154; sua nova suíte em `d12ace4` terminou rc 0, `suite green`,
+coordenação 154/154, com runtime imutável durante toda a execução.
+Oito mutantes novos e um existente foram aplicados, tiveram sintaxe válida e foram detectados
+pelos motivos nomeados. A re-revisão final aprovou F1/F2/F3 sem novos achados; a certificação
+comportamental integral dos **373** mutantes e seu carimbo continuam pendentes; o censo não é score. O handoff em
 [`docs/handoffs/20260918-confiabilidade-dos-agentes/entrega.md`](docs/handoffs/20260918-confiabilidade-dos-agentes/entrega.md)
-preserva essa distinção.
+preserva comandos, snapshots, decisões e limites.
 
 ---
 
