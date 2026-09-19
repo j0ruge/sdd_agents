@@ -2657,22 +2657,35 @@ git branch -q -D missao/20260103-refused
 # The probe is the DIRTY FILE, not the rc: a die and a survived `checkout -f` both leave the tree on
 # main, and only one of them still has the human's uncommitted line in it. `BLOCKED in EXEC` rides
 # along as the "the run went on" marker, exactly as in case 4.
-git update-ref "refs/heads/-f" HEAD
-printf 'an uncommitted line the human has not saved anywhere else\n' > file.txt
+# Commit the approved artifacts before pointing the ref at HEAD. If the ref carries their older
+# bytes, the integrity guard stops for a different reason and this fixture never measures `-*`.
 branch_mission "-f"
+git add "$BMDIR/00-missao.md" "$BMDIR/01-plano.md"
+git commit -qm "branch fixture: option-shaped target carries approved artifacts"
+git update-ref "refs/heads/-f" HEAD
+BR_OPT_APPROVED_MATCH=no
+if [ "$(git hash-object --no-filters "$BMDIR/00-missao.md")" = "$(git rev-parse --verify "refs/heads/-f:docs/handoffs/$BM/00-missao.md")" ] \
+   && [ "$(git hash-object --no-filters "$BMDIR/01-plano.md")" = "$(git rev-parse --verify "refs/heads/-f:docs/handoffs/$BM/01-plano.md")" ]; then
+  BR_OPT_APPROVED_MATCH=yes
+fi
+printf 'an uncommitted line the human has not saved anywhere else\n' > file.txt
 BR_OPT_OUT="$( cd "$FIX" && "$SDD" run "$BM" 2>&1 )"; BR_OPT_RC=$?
 BR_OPT_AT="$(git branch --show-current)"
 BR_OPT_FILE="$(cat file.txt)"
 if [ "$BR_OPT_RC" -eq 1 ] \
+   && [ "$BR_OPT_APPROVED_MATCH" = "yes" ] \
    && [ "$BR_OPT_AT" = "main" ] \
    && [ "$BR_OPT_FILE" = "an uncommitted line the human has not saved anywhere else" ] \
+   && grep -q "starts with '-'" <<< "$BR_OPT_OUT" \
+   && grep -q "git would read it as an option" <<< "$BR_OPT_OUT" \
    && ! grep -qE "$BRANCH_LINE" <<< "$BR_OPT_OUT" \
-   && ! grep -q "BLOCKED in EXEC" <<< "$BR_OPT_OUT"; then
+   && ! grep -q "BLOCKED in EXEC" <<< "$BR_OPT_OUT" \
+   && ! grep -q "the test invoked the real claude" <<< "$BR_OPT_OUT"; then
   pass "a declared name git would read as an option is refused, and the dirty tree survives it"
 else
   fail "a declared name git would read as an option is refused, and the dirty tree survives it" \
-       "rc 1, still on main, the uncommitted line intact, no switch announced and no phase after it" \
-       "rc $BR_OPT_RC at $BR_OPT_AT, file.txt now '$BR_OPT_FILE': $(tail -3 <<< "$BR_OPT_OUT")"
+       "raw-identical approved artifacts, rc 1 with the option-shaped-name diagnosis, still on main, the uncommitted line intact, no switch announced and no phase or session after it" \
+       "artifacts $BR_OPT_APPROVED_MATCH, rc $BR_OPT_RC at $BR_OPT_AT, file.txt now '$BR_OPT_FILE': $(tail -3 <<< "$BR_OPT_OUT")"
 fi
 git update-ref -d "refs/heads/-f"
 git checkout -q -- file.txt
