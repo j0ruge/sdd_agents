@@ -12,8 +12,10 @@ A revisão integral de `6c5e6f7` encontrou três Important adicionais (F1–F3),
 `14b09a7`, `b76dfb5` e `f11bf27`. A suíte completa em `f11bf27` terminou rc 0, `suite green`,
 coordenação 148/148, com runtime imutável durante a execução. A revisão F1 confirmou um complemento de fronteira de `--spec`, corrigido em `d12ace4`.
 O suplemento tem GREEN focado 154/154 e suíte completa rc 0, `suite green`, sobre seu snapshot
-congelado `d12ace4`. A re-revisão final aprovou F1/F2/F3, sem novos achados. Somente a
-certificação comportamental integral e seu carimbo permanecem pendentes; esta entrega não está declarada concluída.
+congelado `d12ace4`. A re-revisão final aprovou F1/F2/F3, sem novos achados. Depois de uma primeira
+certificação diagnóstica inválida, o fixture foi corrigido e revisado; a recertificação integral
+no snapshot estável `8875643` terminou rc 0, 373/373 mutantes capturados, zero gap conhecido e
+carimbo correspondente à chave de conteúdo. A entrega está pronta para o Code Review do usuário.
 
 O plano aprovado está preservado, byte a byte, em
 [`plano-aprovado.md`](plano-aprovado.md). O diretório não contém `00-missao.md` nem
@@ -25,7 +27,8 @@ O parecer sobre `6c5e6f7` reproduziu: `adr new --repo` sem admissão do destino;
 filtrados ocultando divergência de bytes; SIGINT que não chegava ao filho foreground do worker.
 Os testes observaram REDs por essas propriedades antes de corrigi-las. Os GREENs focados
 fecharam os regimes medidos, e a revisão dos deltas aprovou os três achados como endereçados.
-A suíte final passou; os aceites ainda aguardam a certificação comportamental integral e o carimbo.
+A suíte final passou, e a recertificação posterior confirmou todo o catálogo e emitiu o carimbo
+para a mesma chave de conteúdo.
 
 Durante a primeira suíte congelada, inspeção de `--spec` revelou uma interação adicional:
 caminhos `../` e diretórios symlink podiam escrever fora do destino, e um alias interno absoluto
@@ -47,6 +50,8 @@ Não foi alterado runtime durante a primeira suíte; a mudança posterior exigiu
 | `b76dfb5` | Compartilha o parser ADR entre admissão e dispatch, protege `--repo` e usa a config do destino. |
 | `f11bf27` | Sinaliza a família ativa por pidfds, incluindo foreground, setsid e filhos criados por outra thread; verifica a capacidade antes de config. |
 | `d12ace4` | Resolve o spec fisicamente dentro do checkout admitido, recusa escape por `../`/symlink e preserva aliases internos. |
+| `d159a9d` | Corrige o fixture do branch iniciado por hífen para que outra recusa não esconda o guard de opções. |
+| `8875643` | Torna visível na ajuda a entrada coordenada `sdd-link-agents`. |
 
 As revisões usaram os intervalos `1c9146d..9089493` (Task 1 aprovada),
 `9089493..c4ecb31` (Task 2 com um achado Important sobre `SIGINT`) e
@@ -54,6 +59,10 @@ As revisões usaram os intervalos `1c9146d..9089493` (Task 1 aprovada),
 `1c9146d..6c5e6f7` encontrou F1/F2/F3; a re-revisão focada de `6c5e6f7..f11bf27` mais o
 suplemento `f11bf27..d12ace4` marcou os três **ADDRESSED**, sem quebra nova Critical,
 Important ou Minor. Não há correção ou outra revisão ampla pendente.
+
+A lacuna de sensor descoberta pela primeira certificação foi revisada isoladamente antes da
+integração. A recertificação sobre `8875643` matou o sobrevivente `RUN_branch_option_name` pela
+asserção específica do guard de opção e confirmou o catálogo inteiro.
 
 O commit que contém este handoff, a cópia do plano e a entrada do `KAIZEN_LOG.md` é somente de
 documentação. Não altera a chave de conteúdo da certificação, formada por `bin/`, `tests/`,
@@ -95,7 +104,10 @@ documentação. Não altera a chave de conteúdo da certificação, formada por 
 | Suíte congelada em `f11bf27` | `bash tests/run-all.sh` rc0, `suite green`, coordenação148/148; runtime imutável durante toda a execução. Log `/tmp/sdd-final-fixes-suite.log`. |
 | Re-revisão final | F1/F2/F3 ADDRESSED em `d12ace4`, sem novos achados. |
 | Precheck do catálogo | 373/373 alterações reais e sintaxe válidas, rc 0, `/tmp/sdd-final-spec-anchor-check.log`; isto não é detecção comportamental. |
-| Certificação final | **Pendente.** Executar os 373 mutantes sobre o conteúdo final, emitir o carimbo e conferir sua chave. |
+| Primeira certificação | **Diagnóstica e inválida:** rc 1, 372/373, sobrevivente `RUN_branch_option_name`, omissão de ajuda de `sdd-link-agents`, sem carimbo. Uma aplicação acidental de patch alterou o checkout compartilhado durante a corrida; o erro foi admitido, informado e a rodada descartada. |
+| Recertificação final | `SDD_MUTATION_JOBS=16 ./bin/sdd health`, rc 0, `373 caught, 0 known gap(s), of 373`, `kit healthy`, 6707.956 s. Controle original e controle extra sob 16 workers verdes. |
+| Snapshot e carimbo | HEAD `8875643a31d67ef1189cc57615fd5886b7cc8d44`, status limpo, zero drift. Chave antes/depois e carimbo: `d15d55d80f67c0b6f77ee8f3a2f32796`. |
+| Auditoria de mutantes | 373 resultados arquivados, todos rc 1; zero log ausente e zero caso sem falha nomeada. Os 27 mutantes novos e o sobrevivente antigo foram conferidos. Quatro grupos com diagnósticos incidentais têm falhas independentes da propriedade, documentadas na auditoria. |
 
 As regressões observam retorno, mensagem e efeitos laterais: branch, intervenção, sessão,
 checkpoint, journal, hook, quantidade de linhas e manutenção da posse. As fixtures de coordenação
@@ -124,7 +136,9 @@ usam barreiras determinísticas, limites de tempo e CLIs simuladas com resoluç�
    fronteira substitui a alternativa de locks multi-raiz; aliases internos relativos e absolutos
    continuam aceitos e geram links a partir do caminho físico interno.
 
-## Incidente de isolamento
+## Incidentes
+
+### Sessão real no fixture
 
 Na primeira rodada RED de `tests/check-coordination.sh`, o fixture de `preflight` não continha
 stubs globais e abriu uma sessão real do Claude no repositório temporário
@@ -145,6 +159,21 @@ qualquer chamada ao runner. O controle negativo remove cada stub e exige recusa 
 `bash tests/check-coordination.sh --check-isolation` ficou verde. Não houve outra chamada real
 conhecida depois dessa correção.
 
+### Patch aplicado no checkout compartilhado durante a primeira certificação
+
+A primeira certificação encontrou o sobrevivente legado `RUN_branch_option_name`. A investigação
+preparou uma correção somente de fixture em cópias de `git archive`, mas uma chamada omitiu o
+`cd` para a cópia temporária antes de `git apply --check` e `git apply`. O diretório efetivo era o
+checkout compartilhado, e `tests/check-gates.sh` foi alterado ali às
+`2026-09-19 00:12:58 -0300` enquanto a certificação ainda rodava.
+
+O autor identificou e admitiu o erro, o controlador informou o usuário, e a corrida foi marcada
+inválida tanto pela quebra do congelamento quanto pelo sobrevivente. Ela terminou rc 1, 372/373,
+sem carimbo. O patch foi então revisado, integrado deliberadamente em `d159a9d`, complementado
+pela ajuda em `8875643` e submetido a uma recertificação nova desde o início. A segunda corrida
+manteve HEAD, status e chave de conteúdo estáveis e fechou 373/373. Não houve CLI paga ou serviço
+externo neste segundo incidente.
+
 ## Limites e pendências
 
 - A coordenação protege entradas do kit; não contém edição direta externa, adulteração da área do
@@ -156,19 +185,32 @@ conhecida depois dessa correção.
   de fechamento. Nenhum item foi removido nesta entrega.
 - Não houve mudança de agente, missão de produção, push, publicação ou merge.
 - A revisão integral e seus deltas estão aprovados, e a suíte final em `d12ace4` passou.
-  A certificação comportamental dos 373 mutantes e seu carimbo permanecem pendentes; não há
-  correção funcional aberta.
+  A certificação comportamental dos 373 mutantes também passou e o carimbo está válido; não há
+  correção funcional ou verificação automática pendente.
+- O próximo passo é o Code Review do usuário. O trabalho local não inclui push ou merge.
 
-## Preenchimento após a certificação
+## Certificação final
 
-Preencher este bloco somente com a saída real produzida pelo controlador, depois da revisão e de
-eventuais consertos:
+- **Revisão integral:** três Important corrigidos; re-revisão aprovou F1/F2/F3 em `d12ace4`, sem
+  novo achado. A correção do fixture sobrevivente também recebeu revisão focalizada aprovada.
+- **Comando:** `SDD_MUTATION_JOBS=16 ./bin/sdd health`.
+- **Resultado:** rc 0; suíte verde; 373 capturados, zero gap conhecido; oito gates com mutação;
+  três fixtures de proveniência válidos; uma dívida conhecida e nenhuma nova; kit saudável.
+- **Duração:** 6707.956 segundos, de `2026-09-19T04:18:53.748704+00:00` a
+  `2026-09-19T06:10:41.715374+00:00`.
+- **Estabilidade:** HEAD antes/depois `8875643a31d67ef1189cc57615fd5886b7cc8d44`, status final
+  vazio, zero evento de drift, chave antes/depois `d15d55d80f67c0b6f77ee8f3a2f32796`.
+- **Carimbo:** `d15d55d80f67c0b6f77ee8f3a2f32796`.
+- **Controles:** suíte original e controle extra sob carga de 16 workers verdes.
+- **Arquivo:** 374 logs de catálogo, 373 arquivos de rc e um controle de carga em
+  `/tmp/sdd-recert-logs-d5kikpbv`.
+- **Precisão do driver:** `completed_mutant_results: 369` é a última amostra periódica; o total
+  final é `archived_mutant_results: 373`, confirmado pelo score e pela auditoria.
 
-- **Revisão integral:** concluída com três Important; re-revisão aprovou F1/F2/F3 em `d12ace4`, sem novos achados.
-- **Comando e rc da certificação:** pendente.
-- **Suíte no snapshot certificado:** pendente.
-- **Score de mutação:** pendente (`373` é o censo, não um resultado de detecção integral).
-- **Carimbo e chave de conteúdo:** pendente.
-- **Evidência bruta:** pendentes `/tmp/sdd-reliability-certification.json`,
-  `/tmp/sdd-reliability-certification.log` e o diretório exclusivo de logs dos mutantes.
-- **Pendências finais ou desvio da matriz:** pendente.
+Os artefatos duráveis deste diretório são
+[`certificacao-final.json`](certificacao-final.json),
+[`matriz-aceite.md`](matriz-aceite.md) e [`revisoes.md`](revisoes.md). O pacote local completo
+[`confiabilidade-20260919-evidencias.tar.gz`](../../../.sdd/logs/confiabilidade-20260919-evidencias.tar.gz)
+tem 10.326.127 bytes e SHA-256
+`6513c6972fc836fd7e0bff6e3a36b58ed9243619f67c2be7abafbbed00f3b03f`; ele é ignorado pelo Git e
+não acompanha clone ou PR.

@@ -54,8 +54,17 @@ outra thread teve RED de quatro falhas antes de fechar. A primeira suíte congel
 falhas no RED e GREEN focado 154/154; sua nova suíte em `d12ace4` terminou rc 0, `suite green`,
 coordenação 154/154, com runtime imutável durante toda a execução.
 Oito mutantes novos e um existente foram aplicados, tiveram sintaxe válida e foram detectados
-pelos motivos nomeados. A re-revisão final aprovou F1/F2/F3 sem novos achados; a certificação
-comportamental integral dos **373** mutantes e seu carimbo continuam pendentes; o censo não é score. O handoff em
+pelos motivos nomeados. A re-revisão final aprovou F1/F2/F3 sem novos achados. A primeira
+certificação foi descartada: terminou 372/373, sem carimbo, e uma aplicação acidental do patch do
+fixture no checkout compartilhado quebrou o congelamento. O erro foi admitido, informado e
+corrigido deliberadamente em `d159a9d`; `8875643` fechou também a omissão na ajuda.
+
+A recertificação inteira, iniciada do zero em `8875643`, terminou rc 0 em **6707.956 s**:
+**373/373 capturados, 0 gaps conhecidos**, suíte e controle sob 16 workers verdes, zero drift e
+`kit healthy`. HEAD e status ficaram estáveis; chave antes/depois e carimbo são
+`d15d55d80f67c0b6f77ee8f3a2f32796`. Os 27 mutantes novos e o sobrevivente antigo foram
+auditados; quatro grupos com traceback/timeout/command-not-found têm as falhas comportamentais
+independentes registradas, sem alegar suítes individuais livres de diagnósticos incidentais. O handoff em
 [`docs/handoffs/20260918-confiabilidade-dos-agentes/entrega.md`](docs/handoffs/20260918-confiabilidade-dos-agentes/entrega.md)
 preserva comandos, snapshots, decisões e limites.
 
