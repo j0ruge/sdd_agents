@@ -3876,7 +3876,17 @@ mut_COORD_pidfd_unchecked() {
   sed -i 's/^    pidfd_capability()$/    pass  # Project code starts without usable pidfd syscalls./' "${1%/*}/sdd-coordination.py"
 }
 
+mut_COORD_adr_external_spec() {
+  sed -i '/^adr_spec_relative() {/,/^}/ s@^    \*) die .*outside the admitted checkout.*@    *) echo "$spec" ;;@' "$1"
+}
+
+mut_COORD_adr_spec_logical_path() {
+  sed -i '/^adr_spec_relative() {/,/^}/ s@physical="$(readlink -f -- "$physical")"@physical="$physical"@' "$1"
+}
+
 CATALOG=(
+  COORD_adr_external_spec
+  COORD_adr_spec_logical_path
   COORD_admission_missing
   COORD_linker_unlocked
   COORD_health_wrong_tree

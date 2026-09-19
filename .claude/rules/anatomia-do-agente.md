@@ -171,7 +171,10 @@ runner sabe ("forçada pela CLI"), nunca "o humano".
 **Posse desde 2026-09-18.** `coordination_enter` centraliza admissão antes de config/gates,
 com `flock` por checkout físico; worktrees independentes não dividem lock. `health` protege a
 árvore medida, `adr new --repo` admite o destino e usa sua config (parser único), e
-`sdd-link-agents` entra pela mesma porta. O helper Python/Linux
+`sdd-link-agents` entra pela mesma porta. `--spec` é canonicalizado fisicamente e deve ser
+arquivo interno ao destino; `..` ou symlink para fora são recusados antes de config/reserva/escrita.
+Aliases internos relativos e absolutos continuam aceitos; specs externos antes aceitos passam a
+ser recusados, sem lock multi-raiz. O helper Python/Linux
 `bin/sdd-coordination.py` é subreaper separado do PID público: morte do owner/worker, FDs
 fechados, `setsid` e double-fork não liberam posse antes do reap completo. Auxiliar descendente
 reentra por identidade de processo + ancestralidade + FD realmente travado; ambiente sozinho

@@ -29,7 +29,11 @@ report, calling `gh`. The text the session returns satisfies no gate.
 `health` owns the tree it actually measures: a kit cwd takes precedence over the installed kit;
 a target cwd uses the installed kit. `adr new --repo <root>` owns the selected physical
 checkout and reads its config; relative ADR/spec paths are resolved there. Admission and
-dispatch share the option parser. The linker enters the same CLI admission policy.
+dispatch share the option parser. `--spec` resolves an existing file physically inside that
+checkout, including relative or absolute internal aliases. Paths outside it (also through a
+symlink) are refused before config, ADR reservation or spec writes. External specs previously
+accepted must be moved into the target checkout; no second checkout lock is acquired.
+The linker enters the same CLI admission policy.
 
 Competing commands return **75** and `CHECKOUT-BUSY` with checkout, public owner PID,
 supervisor PID, command, requested mission and start time. `auto` means the mission was not

@@ -313,6 +313,35 @@ try:
                  "--slug", "consumed-option", "--dry-run")
     check("ADR admission and dispatch share option consumption", result.returncode == 0
           and result.stdout.strip() == "docs/target-adr/0002-consumed-option.md", result.stdout)
+    # A spec must stay inside the admitted checkout even when the other checkout is occupied.
+    spec_external = fixture("adr-external")
+    external_spec = spec_external / "docs/spec.md"
+    external_spec.write_text("# Spec\n\n**ADR**: none\n")
+    (adr_target / "docs/outside").symlink_to(spec_external / "docs", target_is_directory=True)
+    config_effect = work / "external-spec-config-effect"
+    with open(spec_external / ".git/sdd-coordination.lock", "a+") as external_lock:
+        fcntl.flock(external_lock, fcntl.LOCK_EX | fcntl.LOCK_NB)
+        for spelling in ("../adr-external/docs/spec.md", "docs/outside/spec.md"):
+            external_spec.write_text("# Spec\n\n**ADR**: none\n")
+            config_effect.unlink(missing_ok=True)
+            before = [snapshot(path) for path in (repo, adr_target, spec_external)]
+            result = run(repo, "adr", "new", "--repo", str(adr_alias), "--slug", "outside",
+                         "--spec", spelling, extra={"COORD_PROBE": str(config_effect)})
+            check("external ADR spec is refused: " + spelling, result.returncode == 1
+                  and "outside the admitted checkout" in result.stdout, result.stdout)
+            check("external ADR spec refusal has no effects: " + spelling,
+                  before == [snapshot(path) for path in (repo, adr_target, spec_external)]
+                  and not config_effect.exists())
+    (adr_target / "internal").symlink_to(adr_target / "docs", target_is_directory=True)
+    for name, spelling in (("absolute", str(adr_alias / "docs/spec-absolute.md")),
+                           ("relative", "internal/spec-relative.md")):
+        spec_file = adr_target / ("docs/spec-" + name + ".md")
+        spec_file.write_text("# Spec\n\n**ADR**: none\n")
+        result = run(repo, "adr", "new", "--repo", str(adr_alias), "--slug", name, "--spec", spelling)
+        records = list((adr_target / "docs/target-adr").glob("*-" + name + ".md"))
+        check("internal ADR spec alias preserves both link ends: " + name, result.returncode == 0
+              and len(records) == 1 and "**Spec**: docs/spec-" + name + ".md" in records[0].read_text()
+              and "**ADR**: " + str(records[0].relative_to(adr_target)) in spec_file.read_text(), result.stdout)
     # Kernel ownership is authoritative even before metadata has been published.
     lock_file = open(repo / ".git/sdd-coordination.lock", "a+")
     fcntl.flock(lock_file, fcntl.LOCK_EX | fcntl.LOCK_NB)
@@ -541,7 +570,7 @@ finally:
         item[3].close()
     shutil.rmtree(work)
 
-if passed + failed < 148:
+if passed + failed < 154:
     raise SystemExit("SENSOR-BROKEN: coordination probe surface shrank")
 print("coordination: %d passed, %d failed" % (passed, failed))
 sys.exit(1 if failed else 0)

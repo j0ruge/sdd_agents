@@ -5862,6 +5862,24 @@ adr_declare() {
   mv -f "$tmp" "$spec" || { rm -f "$tmp"; ADR_DECLARE_WHY="could not replace $spec"; return 1; }
 }
 
+# Resolve aliases once per validation and keep every spec write inside the admitted checkout.
+adr_spec_relative() {
+  local root="$1" spec="$2" physical
+  root="$(CDPATH='' cd -P "$root" && pwd)" || return 1
+  case "$spec" in
+    /*) physical="$spec" ;;
+    *) physical="$root/$spec" ;;
+  esac
+  physical="$(readlink -f -- "$physical")" \
+    || die "sdd adr new: --spec $spec does not exist"
+  [ -f "$physical" ] || die "sdd adr new: --spec $spec does not exist"
+  case "$physical" in
+    "$root"/*) printf '%s\n' "${physical#"$root"/}" ;;
+    *) die "sdd adr new: --spec $spec resolves outside the admitted checkout; keep the spec inside $root" ;;
+  esac
+}
+
+
 # adr_new <root> <slug> <ticket> <spec> <dry-run> — reserve the id and write the header.
 #
 # The ORDER is the contract: refuse first, reserve second, write both sides third. Reserving before
@@ -5888,8 +5906,7 @@ adr_new() {
 
   local spec_rel=""
   if [ -n "$spec" ]; then
-    spec_rel="${spec#"$root"/}"; spec_rel="${spec_rel#./}"
-    [ -f "$root/$spec_rel" ] || die "sdd adr new: --spec $spec_rel does not exist"
+    spec_rel="$(adr_spec_relative "$root" "$spec")" || return $?
     # Refused BEFORE anything is created: a spec that already names an ADR is either already
     # decided or pointing at the wrong one, and both are decisions a human makes. Silently
     # overwriting the link would be the kit choosing between two ADRs on its own.
@@ -6120,8 +6137,12 @@ adr_parse_args() {
 adr_checkout_root() {
   local verb slug="" ticket="" spec="" mission="" phase="" repo="" dry=0
   adr_parse_args "$@" || return $?
-  git -C "${repo:-.}" rev-parse --show-toplevel 2>/dev/null \
+  local root
+  root="$(git -C "${repo:-.}" rev-parse --show-toplevel 2>/dev/null)" \
     || die "sdd adr: --repo must resolve to a Git checkout"
+  # Refuse an external spec before even trusted project config can cause side effects.
+  [ -z "$spec" ] || adr_spec_relative "$root" "$spec" >/dev/null || return $?
+  printf '%s\n' "$root"
 }
 
 cmd_adr() {
