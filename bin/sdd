@@ -8875,6 +8875,7 @@ sdd — runner for the autonomous development agent pipeline
 
 USAGE
   sdd install [--force]      install the kit into the target repo (.sdd/config.sh + .claude/agents/)
+  sdd link-agents            link an installed target's agents to this kit (sdd-link-agents)
   sdd preflight              environment sensor: tools, auth, config, plugins, git
   sdd health                 KIT sensor: suite, mutation, doc and config drift
              [--release]   the six lines of ADR 0007 — apt for another repo of the organisation? —
