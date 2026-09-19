@@ -256,6 +256,28 @@ try:
     check("missing dependency refuses before execution", missing.returncode != 0
           and "CHECKOUT-UNAVAILABLE" in missing.stdout, missing.stdout)
     check("help needs no supervisor dependency", run(repo, "help", extra=limited_env).returncode == 0)
+    # ADR's explicit target controls both ownership and config, regardless of the caller cwd.
+    adr_target = fixture("adr-target")
+    adr_alias = work / "adr-alias"
+    adr_alias.symlink_to(adr_target, target_is_directory=True)
+    target_config = adr_target / ".sdd/config.sh"
+    target_config.write_text(target_config.read_text() + '\nADR_DIR="docs/target-adr"\n')
+    target_before = snapshot(adr_target)
+    with open(adr_target / ".git/sdd-coordination.lock", "a+") as target_lock:
+        fcntl.flock(target_lock, fcntl.LOCK_EX | fcntl.LOCK_NB)
+        for target in (str(adr_target), "../adr-alias"):
+            busy(repo, "adr", "new", "--slug", "cross", "--repo", target,
+                 name="ADR target owns admission: " + target)
+            check("busy ADR target has no file effects", snapshot(adr_target) == target_before)
+    caller_before = snapshot(repo)
+    result = run(repo, "adr", "new", "--slug", "cross", "--repo", str(adr_alias))
+    check("free ADR target uses its config and physical root", result.returncode == 0
+          and (adr_target / "docs/target-adr/0001-cross.md").exists()
+          and snapshot(repo) == caller_before, result.stdout)
+    result = run(repo, "adr", "new", "--repo", str(adr_target), "--ticket", "--repo",
+                 "--slug", "consumed-option", "--dry-run")
+    check("ADR admission and dispatch share option consumption", result.returncode == 0
+          and result.stdout.strip() == "docs/target-adr/0002-consumed-option.md", result.stdout)
     # Kernel ownership is authoritative even before metadata has been published.
     lock_file = open(repo / ".git/sdd-coordination.lock", "a+")
     fcntl.flock(lock_file, fcntl.LOCK_EX | fcntl.LOCK_NB)
@@ -481,7 +503,7 @@ finally:
         item[3].close()
     shutil.rmtree(work)
 
-if passed + failed < 110:
+if passed + failed < 118:
     raise SystemExit("SENSOR-BROKEN: coordination probe surface shrank")
 print("coordination: %d passed, %d failed" % (passed, failed))
 sys.exit(1 if failed else 0)

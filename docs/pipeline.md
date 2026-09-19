@@ -27,7 +27,9 @@ report, calling `gh`. The text the session returns satisfies no gate.
 `retry`, `close`, executing `kaizen`, `approve`, `install`, `adr new`, `preflight`, full `status`,
 `phase`, `why`, `health` and `sdd-link-agents` all require an exclusive checkout `flock`.
 `health` owns the tree it actually measures: a kit cwd takes precedence over the installed kit;
-a target cwd uses the installed kit. The linker enters the same CLI admission policy.
+a target cwd uses the installed kit. `adr new --repo <root>` owns the selected physical
+checkout and reads its config; relative ADR/spec paths are resolved there. Admission and
+dispatch share the option parser. The linker enters the same CLI admission policy.
 
 Competing commands return **75** and `CHECKOUT-BUSY` with checkout, public owner PID,
 supervisor PID, command, requested mission and start time. `auto` means the mission was not

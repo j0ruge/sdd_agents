@@ -6087,7 +6087,7 @@ adr_dir_contained() {
 
 adr_usage() {
   cat <<'USAGE'
-usage: sdd adr new   --slug <slug> [--ticket <id>] [--spec <path>] [--dry-run]
+usage: sdd adr new   --slug <slug> [--repo <root>] [--ticket <id>] [--spec <path>] [--dry-run]
        sdd adr check [--repo <root>] [--mission <mission>] [--phase plan|exec]
 
   new    reserves the next free id in $ADR_DIR and writes the header stub.
@@ -6095,17 +6095,13 @@ usage: sdd adr new   --slug <slug> [--ticket <id>] [--spec <path>] [--dry-run]
 USAGE
 }
 
-cmd_adr() {
-  local verb="${1:-}"
+# Both admission and dispatch use this parser; outputs are the caller's local variables.
+adr_parse_args() {
+  verb="${1:-}"
   case "$verb" in
     new|check) shift ;;
     *) adr_usage >&2; return 2 ;;
   esac
-
-  # The flag loop stands BEFORE load_config, like cmd_health's: a typo in an option has to be
-  # refused by the command itself, not by whatever the runner happens to do with a config it did
-  # not need to read yet.
-  local slug="" ticket="" spec="" mission="" phase="" repo="" dry=0
   while [ $# -gt 0 ]; do
     case "$1" in
       --slug)    slug="${2:-}";    shift 2 || die "sdd adr: --slug needs a value" ;;
@@ -6119,6 +6115,22 @@ cmd_adr() {
     esac
   done
 
+}
+
+adr_checkout_root() {
+  local verb slug="" ticket="" spec="" mission="" phase="" repo="" dry=0
+  adr_parse_args "$@" || return $?
+  git -C "${repo:-.}" rev-parse --show-toplevel 2>/dev/null \
+    || die "sdd adr: --repo must resolve to a Git checkout"
+}
+
+cmd_adr() {
+  local verb slug="" ticket="" spec="" mission="" phase="" repo="" dry=0
+  adr_parse_args "$@" || return $?
+  # The admitted destination supplies config and receives all writes, including relative paths.
+  if [ "$verb" = new ]; then
+    cd "$COORDINATION_ROOT" || return 1
+  fi
   load_config
   # Called for its REFUSAL, and the value thrown away: adr_check_repo prints ADR_CHECK itself, and
   # a second copy of the mode carried down from here would be a second answer to one question.
@@ -6130,7 +6142,7 @@ cmd_adr() {
   case "$verb" in
     new)
       [ -n "$slug" ] || die "sdd adr new: --slug is required (see 'sdd help')"
-      adr_new "${repo:-$REPO_ROOT}" "$slug" "$ticket" "$spec" "$dry"
+      adr_new "$COORDINATION_ROOT" "$slug" "$ticket" "$spec" "$dry"
       ;;
     check)
       local root="${repo:-$REPO_ROOT}"
@@ -9008,6 +9020,8 @@ coordination_enter() {
   esac
   if [ "$subcmd" = health ]; then
     root="$(health_kit_root)"
+  elif [ "$subcmd" = adr ]; then
+    root="$(adr_checkout_root "${@:2}")" || return $?
   else
     root="$(git rev-parse --show-toplevel 2>/dev/null)" || die "not inside a git repository"
   fi

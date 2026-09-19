@@ -3860,6 +3860,10 @@ mut_RUN_branch_filtered_recheck() {
   sed -i '/^ensure_mission_branch() {/,/^}/ { /^  \[ .*hash-object/ s/hash-object --no-filters/hash-object/; }' "$1"
 }
 
+mut_COORD_adr_cwd_admission() {
+  sed -i '/^coordination_enter() {/,/^}/ s%root="$(adr_checkout_root "${@:2}")"%root="$(git rev-parse --show-toplevel)"%' "$1"
+}
+
 CATALOG=(
   COORD_admission_missing
   COORD_linker_unlocked
@@ -3875,6 +3879,7 @@ CATALOG=(
   COORD_worker_ignores_sigint
   RUN_branch_filtered_source
   RUN_branch_filtered_recheck
+  COORD_adr_cwd_admission
   AUTONOMY_meta_ignores_event
   AUTONOMY_mission_drops_close_money
   AUTONOMY_version_drops_close_money
