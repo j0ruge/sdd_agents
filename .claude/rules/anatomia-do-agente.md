@@ -94,8 +94,8 @@ julgam prosa (`Documentation`, `Overall`), nomeados positivamente; achado de pro
 `TODO_FILE`, não compra rodada.
 
 **Onde mora hoje.** O componente mais forte do kit: `gate_<FASE>` por artefato (`TEST_CMD`, grep
-no checkpoint, `git log`, `gh pr view`); Check por incremento; **quinze** sensores em
-`tests/run-all.sh` (o décimo quinto é `check-adr.sh`); catálogo de mutação com carimbo no
+no checkpoint, `git log`, `gh pr view`); Check por incremento; **dezesseis** sensores em
+`tests/run-all.sh` (o décimo sexto é `check-coordination.sh`); catálogo de mutação com carimbo no
 `sdd health`; guarda de kit em quatro portas. Desde `20260917-o-numero-do-adr-nao-e-prosa` o
 `gate_PLAN` também cobra o `adr:` sob `ADR_CHECK=block`, e o comentário do gate **nomeia o dono do
 artefato** — `sdd-planner`, com o humano na sala —, que é a segunda metade da régua do princípio 1.
@@ -163,9 +163,23 @@ carimba caminho e um worktree já confundiu a identidade do repo (comentários `
 interativa do Claude Code, aberta em outro repo, rodou `sdd run --phase REVIEW --budget-override`
 sobre a missão já mergeada do próprio kit — trocou a branch da árvore de trabalho **debaixo de um
 `sdd health` em curso** (invalidando o carimbo), abriu uma sessão opus real (morta à mão aos 12
-min) e commitou duas notas `intervention:` numa branch mergeada. Nada no kit impede: a CLI é a
-porta do humano, e qualquer agente com shell entra por ela. A nota passou a dizer só o que o
+min) e commitou duas notas `intervention:` numa branch mergeada. A CLI é a porta do humano, e qualquer agente com shell entra por ela. A exclusão por
+checkout acrescentada em 2026-09-18 agora recusa essa disputa com `CHECKOUT-BUSY`/75. A nota passou a dizer só o que o
 runner sabe ("forçada pela CLI"), nunca "o humano".
+
+**Posse desde 2026-09-18.** `coordination_enter` centraliza admissão antes de config/gates,
+com `flock` por checkout físico; worktrees independentes não dividem lock. `health` protege a
+árvore medida e `sdd-link-agents` entra pela mesma porta. O helper Python/Linux
+`bin/sdd-coordination.py` é subreaper separado do PID público: morte do owner/worker, FDs
+fechados, `setsid` e double-fork não liberam posse antes do reap completo. Auxiliar descendente
+reentra por identidade de processo + ancestralidade + FD realmente travado; ambiente sozinho
+não autoriza. Pipeline recursivo é recusado. `check-coordination.sh` mede concorrência,
+ausência de efeitos, consultas, reentrada e recuperação com barreiras e CLIs isoladas.
+
+**Limite da posse.** Coordena entradas do kit, não edição externa nem daemon preexistente.
+Matar o supervisor, adulterar arquivos/namespace do lock ou intervenção privilegiada derrota
+essa coordenação. Descendente de longa duração conserva o lock até terminar; timeout não
+libera outro escritor. Não é isolamento de filesystem nem mudança do estado derivado da missão.
 
 ## 7. Hooks — pontos de intervenção humana
 
@@ -174,6 +188,12 @@ artefato: teto por missão, aviso no bloqueio, e a linha `- intervention:` escri
 quando é ele quem recebe o comando pela CLI (`--phase`, `retry`, `--budget-override`) — dizendo o
 que ele sabe, nunca quem estava na CLI. O humano que precisa vigiar um `tail -F` para saber que a
 linha parou não tem hook — tem vigília.
+
+**Admissão não é escalada.** `CHECKOUT-BUSY`/75 não abre sessão, não altera checkpoint,
+não escreve ledger de missão e não chama hook; `status --no-gates` expõe o proprietário.
+O prazo do hook vale para toda a árvore: um subreaper local cancela também filhos em outra
+sessão, com os mesmos 5 s + 1 s; o lock externo só sai depois do reap. Background do hook
+não pode sobreviver indefinidamente. A semântica geral de órfãos da execução é preservada.
 
 **Onde mora hoje.** `aprovacao:` + `sdd approve` (gate PLAN); rc 3 em
 `handoff_blocked_escalation`, `app_down_escalation`, `increment-blocked`, `dirty-tree`,

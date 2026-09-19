@@ -344,7 +344,7 @@ rm -f "$HOOK_LOG"
 export HOOK_MODE="inspect"
 HOOK_NO_TIMEOUT_PATH="$OUTSIDE/no-timeout-bin"
 mkdir -p "$HOOK_NO_TIMEOUT_PATH"
-for hook_tool in bash git jq uuidgen date awk sed grep dirname mkdir md5sum find sort head tail wc tr readlink basename cut; do
+for hook_tool in bash python3 git jq uuidgen date awk sed grep dirname mkdir md5sum find sort head tail wc tr readlink basename cut; do
   ln -s "$(command -v "$hook_tool")" "$HOOK_NO_TIMEOUT_PATH/$hook_tool"
 done
 HOOK_NO_TIMEOUT_RC=0

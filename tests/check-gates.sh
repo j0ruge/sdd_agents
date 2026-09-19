@@ -1798,6 +1798,7 @@ i4_why   "no stamp at all" "sdd health" "50-pr\.md|does not confirm"
 #    stub suite, which is all cmd_health needs to reach its verdict on the catalogue.
 mkdir -p "$FIX/bin" "$FIX/.sdd/logs"
 cp "$ROOT/bin/sdd" "$FIX/bin/sdd"
+cp "$ROOT/bin/sdd-coordination.py" "$FIX/bin/sdd-coordination.py"
 i4_write_suite
 printf 'tests/scratch.ignored\n' >> "$FIX/.gitignore"
 git add -A && git commit -qm "chore: a kit inside the fixture, so the writer can run" >/dev/null
@@ -1898,6 +1899,7 @@ tree_stamped() { [ -f "$1/$TREE_STAMP" ]; }
 TREE_KIT="$SDD_STATE_FIX/kit-install"
 mkdir -p "$TREE_KIT/bin" "$TREE_KIT/tests" "$TREE_KIT/.sdd/logs"
 cp "$ROOT/bin/sdd" "$TREE_KIT/bin/sdd"
+cp "$ROOT/bin/sdd-coordination.py" "$TREE_KIT/bin/sdd-coordination.py"
 cat > "$TREE_KIT/tests/run-all.sh" <<EOF
 #!/usr/bin/env bash
 # Stub for the installed kit's own catalogue: always green, always this score.

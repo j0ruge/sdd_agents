@@ -1,0 +1,464 @@
+#!/usr/bin/env bash
+# Checkout ownership is measured through real CLI entrypoints and isolated repositories.
+# Removing admission, accepting environment-only reentry, or waiting only for the worker must
+# fail here. Readiness and release FIFOs establish order; deadlines bound every subprocess.
+# The supervisor is not a security boundary against killing it or external daemon writers.
+set -euo pipefail
+ROOT="$(CDPATH='' cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
+python3 - "$ROOT" "$@" <<'PY'
+import contextlib
+import fcntl
+import io
+import json
+import os
+from pathlib import Path
+import shutil
+import signal
+import subprocess
+import sys
+import tempfile
+import time
+
+if sys.argv[2:] not in ([], ["--check-isolation"]):
+    raise SystemExit("unknown coordination sensor option")
+root = Path(sys.argv[1])
+work = Path(tempfile.mkdtemp(prefix="sdd-coordination-"))
+sdd = root / "bin/sdd"
+passed = 0
+failed = 0
+owned = []
+env = {key: value for key, value in os.environ.items()
+       if key not in ("BASH_ENV", "ENV") and not key.startswith("BASH_FUNC_")}
+env.update(SDD_STATE_DIR=str(work / "state"), NO_COLOR="1", ON_ESCALATION_CMD="")
+# An enclosing health run may own another checkout. Its environment is not authority here.
+env.pop("SDD_COORDINATION_ID", None)
+stubs = work / "stubs"
+stubs.mkdir()
+external_commands = ("claude", "gh", "acli", "jira", "curl", "wget", "agent-browser")
+for command in external_commands:
+    stub = stubs / command
+    stub.write_text("#!/usr/bin/env bash\nprintf 'isolated external CLI stub\\n' >&2\nexit 97\n")
+    stub.chmod(0o755)
+env["PATH"] = str(stubs) + ":/usr/bin:/bin"
+env["SDD_ACLI_BIN"] = str(stubs / "acli")
+
+
+def isolated():
+    return all(shutil.which(command, path=env["PATH"]) == str(stubs / command)
+               for command in external_commands)
+
+
+# This guard runs before ANY sdd invocation, including the fixture's initial install.
+# Its negative control removes a stub without executing the resulting real command.
+if not isolated():
+    raise RuntimeError("SENSOR-BROKEN: external CLI resolution escaped the fixture")
+for command in external_commands:
+    stub = stubs / command
+    hidden = stubs / (command + ".hidden")
+    stub.rename(hidden)
+    if isolated():
+        raise RuntimeError("SENSOR-BROKEN: missing external stub was accepted")
+    hidden.rename(stub)
+    result = subprocess.run([command], env=env, text=True, capture_output=True, timeout=2)
+    if result.returncode != 97 or result.stderr != "isolated external CLI stub\n":
+        raise RuntimeError("SENSOR-BROKEN: external stub behavior changed")
+print("  ok    external CLI isolation and missing-stub controls", flush=True)
+if sys.argv[2:] == ["--check-isolation"]:
+    shutil.rmtree(work)
+    sys.exit(0)
+
+
+def check(name, condition, detail=""):
+    global passed, failed
+    if condition:
+        passed += 1
+        print("  ok    " + name, flush=True)
+    else:
+        failed += 1
+        print("  FAIL  " + name + ": " + detail, flush=True)
+
+
+def run(repo, *args, extra=None, binary=sdd):
+    call_env = dict(env, **(extra or {}))
+    return subprocess.run([str(binary), *args], cwd=repo, env=call_env,
+                          text=True, stdout=subprocess.PIPE, stderr=subprocess.STDOUT,
+                          timeout=8)
+
+
+def git(repo, *args):
+    return subprocess.check_output(["git", "-C", str(repo), *args], text=True).strip()
+
+
+def fixture(name):
+    repo = work / name
+    repo.mkdir()
+    git(repo, "init", "-q", "-b", "main")
+    git(repo, "config", "user.name", "Fixture")
+    git(repo, "config", "user.email", "fixture@example.com")
+    (repo / "file").write_text("initial\n")
+    git(repo, "add", ".")
+    git(repo, "commit", "-qm", "initial")
+    installed = run(repo, "install")
+    if installed.returncode:
+        raise RuntimeError("fixture install: " + installed.stdout)
+    (repo / ".sdd/config.sh").write_text('''PROJECT_NAME="fixture"
+DEFAULT_BRANCH="main"
+TEST_CMD="true"
+JIRA_ENABLED=false
+ADR_CHECK=off
+ON_ESCALATION_CMD="${COORD_HOOK:-}"
+if [ -n "${COORD_PROBE:-}" ]; then printf touched >> "$COORD_PROBE"; fi
+if [ -n "${COORD_HOLD:-}" ]; then
+  COORD_WORKER="$$" python3 "$COORD_BARRIER"
+  exit "${COORD_EXIT:-0}"
+fi
+''')
+    for mission in ("20260101-one", "20260101-two"):
+        path = repo / "docs/handoffs" / mission
+        path.mkdir(parents=True)
+        (path / "00-missao.md").write_text("---\naprovacao: fixture\nadr: none\n---\n")
+    return repo
+
+
+barrier = work / "barrier.py"
+barrier.write_text('''import json, os, resource, signal, subprocess
+from pathlib import Path
+mode = os.environ.get("COORD_CHILD", "ordinary")
+if mode == "escaped":
+    if os.fork(): os._exit(0)
+    os.setsid()
+    if os.fork(): os._exit(0)
+os.closerange(3, 1048576)
+if mode == "reentry":
+    child_env = dict(os.environ)
+    child_env.pop("COORD_HOLD", None)
+    commands = [["install", "--force"], ["adr", "new", "--slug", "nested"],
+                ["run", "20260101-one"], ["retry", "20260101-one"], ["close", "20260101-one"], ["kaizen"]]
+    results = []
+    gitdir = subprocess.check_output(["git", "rev-parse", "--absolute-git-dir"], text=True).strip()
+    meta_path = Path(gitdir) / "sdd-coordination.json"
+    before = meta_path.read_bytes()
+    for args in commands:
+        result = subprocess.run([os.environ["COORD_SDD"], *args], env=child_env,
+                                text=True, capture_output=True, timeout=8)
+        results.append([args, result.returncode, result.stdout + result.stderr])
+    results.append([["metadata"], 0 if meta_path.read_bytes() == before else 1, ""])
+    for field in ("owner", "worker", "supervisor"):
+        forged = json.loads(before)
+        forged[field]["start"] = "0"
+        meta_path.write_text(json.dumps(forged))
+        result = subprocess.run([os.environ["COORD_SDD"], "install"], env=child_env,
+                                text=True, capture_output=True, timeout=8)
+        results.append([["stale-" + field], result.returncode, result.stdout + result.stderr])
+        meta_path.write_bytes(before)
+    Path(os.environ["COORD_RESULTS"]).write_text(json.dumps(results))
+ready = Path(os.environ["COORD_READY"])
+stamp = Path('/proc/self/stat').read_text().rsplit(')', 1)[1].split()[19]
+ready.with_suffix('.tmp').write_text(json.dumps({"pid": os.getpid(), "start": stamp, "ppid": os.getppid(), "worker": int(os.environ["COORD_WORKER"])}))
+ready.with_suffix('.tmp').replace(ready)
+with open(os.environ["COORD_RELEASE"], "rb", buffering=0) as stream:
+    stream.read(1)
+Path(os.environ["COORD_FINISHED"]).write_text("child wrote after release")
+''')
+
+
+def start(repo, mode="ordinary", code=0, args=("run", "20260101-one"), binary=sdd):
+    serial = len(owned)
+    ready = work / ("ready-" + str(serial))
+    release = work / ("release-" + str(serial))
+    os.mkfifo(release)
+    log = open(work / ("owner-" + str(serial) + ".log"), "w+")
+    proc = subprocess.Popen([str(binary), *args], cwd=repo,
+                            env=dict(env, COORD_HOLD="1", COORD_BARRIER=str(barrier),
+                                     COORD_READY=str(ready), COORD_RELEASE=str(release),
+                                     COORD_CHILD=mode, COORD_EXIT=str(code), COORD_SDD=str(binary),
+                                     COORD_RESULTS=str(work / "nested-results"),
+                                     COORD_FINISHED=str(ready) + ".finished"),
+                            stdout=log, stderr=subprocess.STDOUT)
+    item = (proc, ready, release, log)
+    owned.append(item)
+    deadline = time.monotonic() + 8
+    while not ready.exists() and time.monotonic() < deadline:
+        if proc.poll() is not None and mode != "escaped":
+            log.seek(0)
+            raise RuntimeError("owner stopped before readiness: " + log.read())
+        time.sleep(.01)
+    if not ready.exists():
+        raise RuntimeError("owner readiness deadline")
+    return item
+
+
+def release(item):
+    proc, ready, fifo, log = item
+    try:
+        fd = os.open(fifo, os.O_WRONLY | os.O_NONBLOCK)
+        os.write(fd, b"x")
+        os.close(fd)
+    except OSError:
+        pass
+    try:
+        return proc.wait(timeout=8)
+    except subprocess.TimeoutExpired:
+        raise RuntimeError("owner did not finish after release")
+
+
+def snapshot(repo):
+    # Operational lock metadata lives in Git's private directory and is intentionally excluded.
+    files = [(str(p.relative_to(repo)), p.read_bytes()) for p in repo.rglob("*")
+             if p.is_file() and ".git" not in p.relative_to(repo).parts]
+    return (git(repo, "symbolic-ref", "HEAD"), git(repo, "ls-files", "--stage"), sorted(files))
+
+
+def busy(repo, *args, binary=sdd, extra=None, name=None):
+    probe = work / "refused-config-effect"
+    probe.unlink(missing_ok=True)
+    hook = work / "refused-hook-effect"
+    hook.unlink(missing_ok=True)
+    before = snapshot(repo)
+    state_before = sorted((str(p), p.read_bytes()) for p in (work / "state").rglob("*") if p.is_file())
+    result = run(repo, *args, binary=binary,
+                 extra=dict(extra or {}, COORD_PROBE=str(probe),
+                            COORD_HOOK="printf touched >> " + str(hook)))
+    check(name or ("busy: " + " ".join(args)),
+          result.returncode == 75 and "CHECKOUT-BUSY" in result.stdout,
+          "rc=" + str(result.returncode) + " " + result.stdout[:400])
+    check("refusal has no effects: " + " ".join(args),
+          not probe.exists() and not hook.exists() and snapshot(repo) == before
+          and state_before == sorted((str(p), p.read_bytes()) for p in (work / "state").rglob("*") if p.is_file()),
+          result.stdout[:200])
+    return result
+
+
+try:
+    # A negative control proves the verdict accumulator itself can report a failure.
+    with contextlib.redirect_stdout(io.StringIO()):
+        check("negative control", False, "intentional")
+    if failed != 1:
+        raise RuntimeError("SENSOR-BROKEN: assertion accounting")
+    failed = 0
+    repo = fixture("repo")
+    # Missing Python cannot reach config or an external CLI; help remains available.
+    limited = work / "limited-path"
+    limited.mkdir()
+    for command in ("bash", "dirname", "git", "cat"):
+        (limited / command).symlink_to(shutil.which(command))
+    limited_env = {"PATH": str(stubs) + ":" + str(limited)}
+    missing = run(repo, "preflight", extra=limited_env)
+    check("missing dependency refuses before execution", missing.returncode != 0
+          and "CHECKOUT-UNAVAILABLE" in missing.stdout, missing.stdout)
+    check("help needs no supervisor dependency", run(repo, "help", extra=limited_env).returncode == 0)
+    # Kernel ownership is authoritative even before metadata has been published.
+    lock_file = open(repo / ".git/sdd-coordination.lock", "a+")
+    fcntl.flock(lock_file, fcntl.LOCK_EX | fcntl.LOCK_NB)
+    busy(repo, "install", name="metadata-free kernel lock refuses admission")
+    lock_file.close()
+    owner = start(repo)
+    for args in [("run", "20260101-one"), ("run", "20260101-two"),
+                 ("run", "20260101-one", "--dry-run"), ("retry", "20260101-one"),
+                 ("close", "20260101-one"), ("kaizen",), ("approve", "20260101-one"),
+                 ("install", "--force"), ("adr", "new", "--slug", "new"),
+                 ("preflight",), ("status", "20260101-one"),
+                 ("phase", "20260101-one"), ("why", "20260101-one", "EXEC")]:
+        busy(repo, *args)
+    busy(repo, binary=root / "bin/sdd-link-agents", name="alternate linker shares admission")
+    alias = work / "alias"
+    alias.symlink_to(repo, target_is_directory=True)
+    busy(alias, "install", name="symlink checkout shares ownership")
+    runner_alias = work / "sdd-alias"
+    runner_alias.symlink_to(sdd)
+    busy(repo, "install", binary=runner_alias, name="symlink runner shares ownership")
+    busy(repo, "install", extra={"SDD_STATE_DIR": str(work / "different-state")},
+         name="state directory cannot split checkout ownership")
+    for args in [("status", "20260101-one", "--no-gates"), ("boot", "20260101-one", "EXEC"),
+                 ("census", "20260101-one"), ("autonomy",), ("kaizen", "--series"),
+                 ("adr", "check"), ("help",), ("version",)]:
+        result = run(repo, *args)
+        check("query stays available: " + " ".join(args),
+              result.returncode != 75 and "CHECKOUT-BUSY" not in result.stdout, result.stdout[:200])
+        if args[0] == "status":
+            check("query reports active owner", "CHECKOUT-OWNER" in result.stdout
+                  and str(owner[0].pid) in result.stdout, result.stdout[:500])
+    independent = work / "worktree"
+    git(repo, "worktree", "add", "-qb", "independent", str(independent))
+    result = run(independent, "install")
+    check("independent worktree can execute", result.returncode == 0, result.stdout)
+    lock_inode = (repo / ".git/sdd-coordination.lock").stat().st_ino
+    check("normal completion preserves result", release(owner) == 0)
+    check("release keeps the same lock inode", (repo / ".git/sdd-coordination.lock").stat().st_ino == lock_inode)
+    check("normal completion recovers", run(repo, "install").returncode == 0)
+    nested = start(repo, mode="reentry")
+    results = json.loads((work / "nested-results").read_text())
+    for args, code, output in results:
+        expected = 0 if args[0] in ("install", "adr", "metadata") else 75
+        check("nested admission: " + " ".join(args), code == expected, str(code) + " " + output)
+    busy(repo, "install", name="nested helpers preserve outside ownership")
+    value = json.loads((repo / ".git/sdd-coordination.json").read_text())
+    metadata_file = repo / ".git/sdd-coordination.json"
+    original_metadata = metadata_file.read_bytes()
+    metadata_file.write_text('{"owner": "corrupted"}')
+    busy(repo, "install", name="malformed diagnostics never override kernel refusal")
+    metadata_file.write_bytes(original_metadata)
+    busy(repo, "install", extra={"SDD_COORDINATION_ID": value["execution_id"]},
+         name="copied owner environment is not authorization")
+    busy(repo, "install", extra={"SDD_COORDINATION_ID": "forged"},
+         name="forged environment is not authorization")
+    release(nested)
+    stale = repo / ".git/sdd-coordination.json"
+    stale.write_text(json.dumps(value))
+    check("stale metadata does not retain ownership", run(repo, "install").returncode == 0)
+    special = start(repo, code=76)
+    check("worker status cannot masquerade as admission", release(special) == 76)
+
+    kit = fixture("kit")
+    shutil.copytree(root / "bin", kit / "bin")
+    (kit / "tests").mkdir()
+    (kit / "tests/check-mutation.sh").write_text("# fixture catalogue\n")
+    health_owner = start(kit)
+    busy(repo, "health", binary=kit / "bin/sdd", name="health locks the kit it measures")
+    # A kit cwd takes precedence over the installed executable's kit.
+    busy(kit, "health", name="health honors measured cwd over executable home")
+    release(health_owner)
+    (kit / "tests/run-all.sh").write_text("#!/usr/bin/env bash\necho fixture-suite-failed\nexit 1\n")
+    (kit / "tests/run-all.sh").chmod(0o755)
+    # An authenticated health auxiliary may enter the currently owned kit.
+    config = kit / ".sdd/config.sh"
+    config.write_text(config.read_text().replace('  COORD_WORKER="$$" python3 "$COORD_BARRIER"',
+        '  if [ -n "${COORD_HEALTH_NESTED:-}" ]; then env -u COORD_HOLD "$COORD_SDD" health > "$COORD_HEALTH_NESTED" 2>&1 || true; fi\n  COORD_WORKER="$$" python3 "$COORD_BARRIER"'))
+    env["COORD_HEALTH_NESTED"] = str(work / "nested-health")
+    nested_health = start(kit, binary=kit / "bin/sdd")
+    health_output = (work / "nested-health").read_text()
+    check("nested health enters owned measured tree", "kit sensor at " + str(kit) in health_output
+          and "CHECKOUT-BUSY" not in health_output and "fixture-suite-failed" in health_output,
+          health_output[:500])
+    release(nested_health)
+    env.pop("COORD_HEALTH_NESTED", None)
+    # Signal delivery must not release a still-running descendant, or leak ownership forever.
+    for number in (signal.SIGTERM, signal.SIGINT):
+        interrupted = start(repo)
+        interrupted[0].send_signal(number)
+        code = interrupted[0].wait(timeout=8)
+        check("signal status: " + str(number), code in (-number, 128 + number), str(code))
+        deadline = time.monotonic() + 8
+        while time.monotonic() < deadline:
+            result = run(repo, "install")
+            if result.returncode != 75:
+                break
+            time.sleep(.01)
+        check("signal recovers: " + str(number), result.returncode == 0, result.stdout)
+    config = repo / ".sdd/config.sh"
+    original_config = config.read_text()
+    config.write_text(original_config + '\nif [ -n "${COORD_STDIN:-}" ]; then read -r answer; printf "%s\\n" "$answer"; exit 0; fi\n')
+    stdin_result = subprocess.run([str(sdd), "phase", "20260101-one"], cwd=repo,
+                                  env=dict(env, COORD_STDIN="1"), input="stdin-witness\n",
+                                  text=True, capture_output=True, timeout=8)
+    check("stdin survives supervision", stdin_result.returncode == 0
+          and stdin_result.stdout == "stdin-witness\n", stdin_result.stdout + stdin_result.stderr)
+    config.write_text(original_config)
+    # A hook must remain bounded even when a child leaves timeout's process group.
+    hook_repo = fixture("hook-escape")
+    mission = hook_repo / "docs/handoffs/20260101-one"
+    (mission / "00-missao.md").write_text("---\naprovacao: auto\nadr: none\n---\n")
+    (mission / "01-plano.md").write_text("")
+    (mission / "checkpoint.md").write_text("| ID | Increment | Check | Status | Commit |\n|---|---|---|---|---|\n| I1 | slice | `true` | blocked | - |\n")
+    git(hook_repo, "add", "-A")
+    git(hook_repo, "commit", "-qm", "hook fixture")
+    hook_fifo = work / "hook-release"
+    os.mkfifo(hook_fifo)
+    hook_ready = work / "hook-ready"
+    hook_child = work / "hook-child.py"
+    hook_child.write_text('import os, signal\nfrom pathlib import Path\nsignal.signal(signal.SIGTERM, signal.SIG_IGN)\nPath(os.environ["HOOK_READY"]).write_text(str(os.getpid()))\nwith open(os.environ["HOOK_RELEASE"], "rb", buffering=0) as stream: stream.read(1)\n')
+    hook = work / "hook.sh"
+    hook.write_text('#!/usr/bin/env bash\nsetsid python3 "$HOOK_CHILD" &\nwait\n')
+    hook.chmod(0o755)
+    with open(work / "hook-owner.log", "w+") as hook_log:
+        hook_owner = subprocess.Popen([str(sdd), "run", "20260101-one"], cwd=hook_repo,
+            env=dict(env, COORD_HOOK=str(hook), HOOK_CHILD=str(hook_child),
+                     HOOK_READY=str(hook_ready), HOOK_RELEASE=str(hook_fifo)),
+            stdout=hook_log, stderr=subprocess.STDOUT)
+        deadline = time.monotonic() + 8
+        while not hook_ready.exists() and time.monotonic() < deadline:
+            time.sleep(.01)
+        check("escaped hook child was exercised", hook_ready.exists())
+        hook_pid = int(hook_ready.read_text())
+        hook_identity = Path("/proc/%d/stat" % hook_pid).read_text().rsplit(")", 1)[1].split()
+        check("escaped hook child is alive in its own session", hook_identity[0] != "Z"
+              and os.getsid(hook_pid) == hook_pid)
+        bounded = True
+        try:
+            hook_status = hook_owner.wait(timeout=9)
+        except subprocess.TimeoutExpired:
+            bounded = False
+            # Release our own barrier to bound a failing mutant without killing its supervisor.
+            descriptor = os.open(hook_fifo, os.O_WRONLY | os.O_NONBLOCK)
+            os.write(descriptor, b"x")
+            os.close(descriptor)
+            hook_status = hook_owner.wait(timeout=8)
+        hook_log.seek(0)
+        hook_output = hook_log.read()
+    check("escaped hook cannot delay the escalation stop", bounded and hook_status == 3
+          and "ON_ESCALATION_CMD" in hook_output, str(hook_status) + " " + hook_output[-300:])
+    ledger_rows = [json.loads(line) for line in (work / "state/autonomy-log.jsonl").read_text().splitlines()]
+    check("escaped hook preserves the escalation row", ledger_rows[-1]["event"] == "blocked"
+          and ledger_rows[-1]["kind"] == "increment-blocked")
+    hook_pid = int(hook_ready.read_text())
+    try:
+        hook_fields = Path("/proc/%d/stat" % hook_pid).read_text().rsplit(")", 1)[1].split()
+        hook_alive = hook_fields[0] != "Z" and hook_fields[19] == hook_identity[19]
+    except FileNotFoundError:
+        hook_alive = False
+    check("escaped hook leaves no live writer", not hook_alive)
+    if hook_alive:
+        descriptor = os.open(hook_fifo, os.O_WRONLY | os.O_NONBLOCK)
+        os.write(descriptor, b"x")
+        os.close(descriptor)
+    check("escaped hook recovery releases ownership", run(hook_repo, "install").returncode == 0)
+    failing = start(repo, code=7)
+    check("error preserves worker status", release(failing) == 7)
+    check("error recovers", run(repo, "install").returncode == 0)
+    for victim, mode in [("owner", "ordinary"), ("worker", "ordinary"), ("owner", "escaped")]:
+        orphan = start(repo, mode=mode)
+        identity = json.loads(orphan[1].read_text())
+        victim_pid = orphan[0].pid if victim == "owner" else identity["worker"]
+        if orphan[0].poll() is None or victim == "worker":
+            os.kill(victim_pid, signal.SIGKILL)
+        if victim == "owner":
+            orphan[0].wait(timeout=8)
+        os.kill(identity["pid"], 0)
+        check("orphan witness is alive: " + victim + "/" + mode,
+              Path("/proc/%d/stat" % identity["pid"]).read_text().rsplit(")", 1)[1].split()[0] != "Z")
+        busy(repo, "install", name="orphan retains ownership: " + victim + "/" + mode)
+        release(orphan)
+        deadline = time.monotonic() + 8
+        while time.monotonic() < deadline:
+            result = run(repo, "install")
+            if result.returncode != 75:
+                break
+            time.sleep(.01)
+        check("orphan completion recovers: " + victim + "/" + mode,
+              result.returncode == 0, result.stdout)
+        check("surviving child finished its write: " + victim + "/" + mode,
+              Path(str(orphan[1]) + ".finished").read_text() == "child wrote after release")
+
+finally:
+    for item in owned:
+        try:
+            release(item)
+        except (RuntimeError, ProcessLookupError):
+            item[0].kill()
+        # Failure cleanup targets only a process whose PID/start time came from this fixture.
+        if item[1].exists():
+            identity = json.loads(item[1].read_text())
+            try:
+                fields = Path("/proc/%d/stat" % identity["pid"]).read_text().rsplit(")", 1)[1].split()
+                if fields[19] == identity["start"] and fields[0] != "Z":
+                    os.kill(identity["pid"], signal.SIGKILL)
+            except (FileNotFoundError, ProcessLookupError):
+                pass
+        item[3].close()
+    shutil.rmtree(work)
+
+if passed + failed < 104:
+    raise SystemExit("SENSOR-BROKEN: coordination probe surface shrank")
+print("coordination: %d passed, %d failed" % (passed, failed))
+sys.exit(1 if failed else 0)
+PY

@@ -7,6 +7,31 @@ The runner can tell you which gate it stopped at and why — do not guess.
 
 ---
 
+## CHECKOUT-BUSY or an owner that died
+
+**Symptom:** a gated or mutating command returns 75 and `CHECKOUT-BUSY`. This is an admission
+refusal, so it does not trigger `ON_ESCALATION_CMD` or record a blocked mission/session.
+
+**What you do:** run `sdd status <mission> --no-gates`. Its `CHECKOUT-OWNER` line identifies the
+checkout, public owner, supervisor, command, requested mission and start time. Full `status`,
+`phase` and `why` run gates and therefore also require ownership. Use an independent worktree
+for independent work, or wait for the current execution and its descendants to finish.
+
+The owner PID may already be dead while its supervisor still waits for a child. This includes
+children that closed inherited descriptors, called `setsid` or double-forked. The lock releases
+automatically after the last descendant exits, even after SIGKILL of the public owner/worker.
+A server left in the background keeps ownership; stop that task through its normal shutdown
+path. Do not delete the lock file or kill the supervisor to force entry: that defeats exclusion.
+Stale JSON without a live lock is harmless and does not require manual cleanup.
+
+**CHECKOUT-UNAVAILABLE:** coordinated execution requires Linux procfs, Python 3.9+ and kernel
+`flock`/subreaper support. Admission probes these before running config or a paid session.
+Install the required runtime or use a supported Linux environment. Help and version do not
+need the supervisor. This is local coordination, not a filesystem permission boundary against
+external tools or deliberate interference with the supervisor.
+
+---
+
 ## The session cannot execute commands
 
 **Symptom:** the EXEC phase commits nothing; the session log says *"This command requires
@@ -334,9 +359,10 @@ imply that `brew install bash` was enough — it is not. `sdd preflight` now pro
 by behaviour (not by presence: brew installs them as `gmd5sum`/`gdate` unless `gnubin` comes first
 in `PATH`, so the name existing proves nothing).
 
-**What you do:** `brew install bash coreutils gnu-sed grep`, then put the `gnubin` directories
-first in `PATH`. The kit is developed and measured on Linux; macOS is supported only in that
-configuration, and `tests/check-preflight.sh` is what keeps the probe honest.
+**What you do:** use a supported Linux environment with the GNU tools on `PATH`.
+The historical macOS remedy (`brew install bash coreutils gnu-sed grep` plus `gnubin` first)
+only fixes userland differences; it does not provide the Linux subreaper now required for
+coordinated execution. `tests/check-preflight.sh` keeps the GNU behaviour probe honest.
 
 ---
 

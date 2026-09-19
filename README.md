@@ -23,6 +23,21 @@ died halfway, `sdd run` again resumes at the exact point.
 **Success is never the model's answer.** Every gate is re-evaluated by the runner (it runs the
 tests, greps the checkpoint, reads the `git log`). A label is not an artifact.
 
+## Runtime requirements and checkout ownership
+
+Coordinated commands require **Linux with readable `/proc`, Python 3.9+ (standard library),
+Bash 4+ and the GNU userland**. The helper checks the kernel's `flock` and child-subreaper
+capabilities before starting the command, including before the paid preflight probe. No Python
+packages, daemon or service are required. macOS is not supported for coordinated execution.
+
+One physical checkout has one execution owner. A competing command exits immediately with
+**75 / `CHECKOUT-BUSY`**, before config, gates, branch changes or sessions. Symlinks share
+ownership; separate Git worktrees can run independently. `sdd status <mission> --no-gates`
+remains available and prints the current owner. A surviving child retains ownership even after
+the CLI is killed; it is released automatically when the last descendant exits. See
+[the execution contract](docs/pipeline.md#checkout-ownership) and
+[recovery guidance](docs/failure-modes.md#checkout-busy-or-an-owner-that-died).
+
 ## Installing into a target repo
 
 ```bash
@@ -202,10 +217,9 @@ no kit agent.
 ## Requirements
 
 authenticated `claude` CLI · authenticated `gh` · `bash` 4+ · `git` · `uuidgen` (util-linux) ·
-`jq` · `agent-browser` (only for the QA phase of projects with a UI).
+`jq` · Python 3.9+ · Linux procfs and flock/subreaper support · `agent-browser` (only for the QA phase of projects with a UI).
 
-**Linux, or a macOS with the GNU userland in front.** The kit calls `md5sum`, `date -Iseconds`
-and `sort -V`, and its own suite calls `sed -i` with no argument and `grep -P` — the BSD tools
-macOS ships reject every one of them. On macOS: `brew install bash coreutils gnu-sed grep`, and
-put the `gnubin` directories first in `PATH` (brew names them `gmd5sum`/`gdate`; the kit calls
-`md5sum`/`date`). `sdd preflight` measures this instead of trusting it.
+**Linux with the GNU userland.** The kit calls `md5sum`, `date -Iseconds` and `sort -V`,
+and its own suite calls `sed -i` with no argument and `grep -P`. `sdd preflight` measures these
+behaviours instead of trusting executable names. Installing GNU tools on macOS addresses those
+userland differences, but does not provide the Linux subreaper required for coordinated commands.

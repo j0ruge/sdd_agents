@@ -1579,7 +1579,7 @@ mut_RUN_escalation_hook_before_ledger() {
   sed -i 's|^autonomy_blocked_row()  { autonomy_escalation_row "blocked" "$1" "$2" "$3"; escalation_hook "$1" "$2" "$3"; }$|autonomy_blocked_row()  { escalation_hook "$1" "$2" "$3"; autonomy_escalation_row "blocked" "$1" "$2" "$3"; }|' "$1"
 }
 mut_RUN_escalation_hook_timeout_short() {
-  sed -i '/^escalation_hook() {/,/^}/ s|timeout --kill-after=1s 5s bash|timeout --kill-after=1s 1s bash|' "$1"
+  sed -i '/^escalation_hook() {/,/^}/ s|sdd-coordination.py" hook 5 1|sdd-coordination.py" hook 1 1|' "$1"
 }
 mut_RUN_escalation_hook_without_timeout_guard() {
   sed -i '/^escalation_hook() {/,/^}/ s|^  if ! command -v timeout >/dev/null 2>&1; then$|  if false; then|' "$1"
@@ -3802,7 +3802,64 @@ mut_ADR_dir_symlink_escape() {
   sed -i '/^adr_new() {/,/^}/ s@^  adr_dir_contained "$root" "${ADR_DIR%/}" \\$@  true \\@' "$1"
 }
 
+# Each coordination mutant changes executable code, and check-coordination.sh asserts the
+# corresponding refusal/lifetime result before releasing its deterministic child barrier.
+mut_COORD_admission_missing() {
+  sed -i 's%^  coordination_enter "$@" || admission=$?$%  COORDINATION_ADMITTED=1%'  "$1"
+}
+
+mut_COORD_linker_unlocked() {
+  sed -i 's@install|preflight|health|approve|phase|why|link-agents)@install|preflight|health|approve|phase|why)@' "$1"
+}
+
+mut_COORD_health_wrong_tree() {
+  sed -i 's@root="$(health_kit_root)"@root="$(git rev-parse --show-toplevel)"@' "$1"
+}
+
+mut_COORD_worktrees_share_lock() {
+  sed -i '/^coordination_paths()/,/^}/ s@--absolute-git-dir@--git-common-dir@' "$1"
+}
+
+mut_COORD_environment_only() {
+  sed -i "/^        if value\['checkout'\] != root/i\        return True" "${1%/*}/sdd-coordination.py"
+}
+
+mut_COORD_recursive_pipeline() {
+  sed -i "s@if kind != 'pipeline' or caller == value\['worker'\]\['pid'\]:@if True:@" "${1%/*}/sdd-coordination.py"
+}
+
+mut_COORD_no_subreaper() {
+  sed -i 's@^    subreaper()$@    pass  # The mutant no longer adopts orphan descendants.@' "${1%/*}/sdd-coordination.py"
+}
+
+mut_COORD_wait_worker_only() {
+  sed -i '/^                    worker_status = 128 - worker_status$/a\            if waited == child: break' "${1%/*}/sdd-coordination.py"
+}
+
+mut_COORD_stale_process_accepted() {
+  sed -i "s@return live is not None and live\['start'\] == saved\['start'\]@return live is not None@" "${1%/*}/sdd-coordination.py"
+}
+
+mut_COORD_hook_orphans_escape() {
+  sed -i '/^def bounded_hook(/,/^def supervise(/ s@^    subreaper()$@    pass  # Escaped hook children are no longer adopted.@' "${1%/*}/sdd-coordination.py"
+}
+
+mut_COORD_owner_hidden() {
+  sed -i 's@^    coordination_owner$@    :@' "$1"
+}
+
 CATALOG=(
+  COORD_admission_missing
+  COORD_linker_unlocked
+  COORD_health_wrong_tree
+  COORD_worktrees_share_lock
+  COORD_environment_only
+  COORD_recursive_pipeline
+  COORD_no_subreaper
+  COORD_wait_worker_only
+  COORD_stale_process_accepted
+  COORD_owner_hidden
+  COORD_hook_orphans_escape
   AUTONOMY_meta_ignores_event
   AUTONOMY_mission_drops_close_money
   AUTONOMY_version_drops_close_money
@@ -4211,12 +4268,17 @@ run_mutant() {
   local box="$WORK/$slug"
   sandbox "$box"
   "mut_$slug" "$box/bin/sdd"
-  if cmp -s "$ROOT/bin/sdd" "$box/bin/sdd"; then
-    echo "the mutation did not apply — did the anchor change in bin/sdd?" > "$box.log"
+  if diff -qr "$ROOT/bin" "$box/bin" >/dev/null; then
+    echo "the mutation did not apply — did its runtime anchor change?" > "$box.log"
     echo 90 > "$box.rc"; return
   fi
   if ! bash -n "$box/bin/sdd" 2>"$box.log"; then
     echo "the mutant is not valid bash" >> "$box.log"
+    echo 91 > "$box.rc"; return
+  fi
+  if ! python3 -c 'import ast, pathlib, sys; ast.parse(pathlib.Path(sys.argv[1]).read_text())' \
+      "$box/bin/sdd-coordination.py" 2>>"$box.log"; then
+    echo "the mutant is not valid Python" >> "$box.log"
     echo 91 > "$box.rc"; return
   fi
   SDD_MUTANT=1 "$box/tests/run-all.sh" > "$box.log" 2>&1

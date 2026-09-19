@@ -21,6 +21,53 @@ And the rule that holds it all up: **success is never the model's answer.** Ever
 re-evaluated by the runner — running the tests, checking the hash in the `git log`, reading the
 report, calling `gh`. The text the session returns satisfies no gate.
 
+## Checkout ownership
+
+`main()` admits commands before sourcing config or running gates. `run` (including dry-run),
+`retry`, `close`, executing `kaizen`, `approve`, `install`, `adr new`, `preflight`, full `status`,
+`phase`, `why`, `health` and `sdd-link-agents` all require an exclusive checkout `flock`.
+`health` owns the tree it actually measures: a kit cwd takes precedence over the installed kit;
+a target cwd uses the installed kit. The linker enters the same CLI admission policy.
+
+Competing commands return **75** and `CHECKOUT-BUSY` with checkout, public owner PID,
+supervisor PID, command, requested mission and start time. `auto` means the mission was not
+explicit at admission. Refusal creates no session, mission escalation, checkpoint note or hook
+invocation. The lock is stable in the checkout's own Git directory, separate for each worktree;
+non-Git kit copies use `.sdd/coordination/`. Symlinks resolve to the physical root. Neither
+`SDD_STATE_DIR` nor the ledger's shared-repository identity selects this lock.
+
+Help, version, `status --no-gates`, `boot`, `census`, `autonomy`, `kaizen --series` and `adr check`
+stay available. `status --no-gates` prints `CHECKOUT-OWNER` while an owner is active. These
+queries evaluate no gates; commands that load config still execute that trusted shell file.
+
+A Python standard-library helper holds the kernel lock in a separate session and enables the
+Linux child-subreaper facility before starting the Bash worker. The original CLI PID remains
+the public owner. Killing that PID or the worker does not release the supervisor's lock.
+Orphans are adopted even when they close descriptors, change process group/session or
+double-fork. The supervisor waits for the kernel's `ECHILD` result, meaning every descendant
+has exited and been reaped. Normal completion and errors keep waiting for surviving children.
+TERM/INT/HUP are forwarded through the launcher; cancellation signals direct/adopted children,
+uses KILL after two seconds, and still waits for actual termination before releasing ownership.
+
+The JSON metadata is diagnostic operational data, never mission state. It records owner,
+worker and supervisor PID/start time, boot identity, execution ID, checkout, command and time.
+Only the kernel lock decides ownership. Old metadata is replaced after acquisition and cannot
+block recovery. The lock file is never removed or replaced to clear a busy checkout.
+
+An owned execution may call helpers such as `install --force`, `adr new` and `health`.
+Reentry checks the live owner/worker/supervisor identities, caller ancestry and the supervisor's
+actual locked descriptor in `/proc`; an inherited or copied environment variable alone grants
+nothing. Helpers neither replace metadata nor release their parent's ownership. Starting
+another `run`, `retry`, `close` or executing `kaizen` in that same checkout is refused, including
+from an authenticated descendant. A helper for another checkout acquires its own lock without
+waiting, so conflicting nested acquisitions fail instead of deadlocking.
+
+This coordinates kit entrypoints, not arbitrary external writes. Killing the supervisor itself,
+changing its files or lock namespace, privileged interference and work delegated to a
+pre-existing external daemon are outside the guarantee. A background server that remains a
+descendant keeps the checkout busy until it stops; an uninterruptible process also keeps the
+lock until the kernel finishes it. No timeout authorizes a second writer.
+
 ## Canonical order
 
 ```
@@ -59,7 +106,11 @@ environment** — do not confuse them.
 curl, whatever reaches you). The ledger write is attempted first, so the hook can read its own
 event when persistence succeeded; a write failure keeps the existing ledger warning and makes no
 false durability claim. The projection never runs the hook. It has five seconds, receives TERM,
-then KILL one second later; failure or timeout warns but leaves the escalation's rc unchanged. If
+then KILL one second later; failure or timeout warns but leaves the escalation's rc unchanged.
+A local subreaper applies that same deadline to the whole hook family, including background
+children that escape with `setsid`; the checkout remains owned until they are reaped. Hooks
+cannot leave a persistent background service behind. A hook whose whole family finishes early
+returns promptly. If
 `timeout(1)` is unavailable, the runner warns and skips the hook instead of running it without a
 bound. L6 of the 2026-09-03
 audit — before it the kit had zero notification sites, and the human learned the line had stopped
