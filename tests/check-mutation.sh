@@ -3844,6 +3844,10 @@ mut_COORD_hook_orphans_escape() {
   sed -i '/^def bounded_hook(/,/^def supervise(/ s@^    subreaper()$@    pass  # Escaped hook children are no longer adopted.@' "${1%/*}/sdd-coordination.py"
 }
 
+mut_COORD_worker_ignores_sigint() {
+  sed -i "/^            os.environ\['SDD_COORDINATION_ID'\] = value\['execution_id'\]$/i\\            signal.signal(signal.SIGINT, signal.SIG_IGN)" "${1%/*}/sdd-coordination.py"
+}
+
 mut_COORD_owner_hidden() {
   sed -i 's@^    coordination_owner$@    :@' "$1"
 }
@@ -3860,6 +3864,7 @@ CATALOG=(
   COORD_stale_process_accepted
   COORD_owner_hidden
   COORD_hook_orphans_escape
+  COORD_worker_ignores_sigint
   AUTONOMY_meta_ignores_event
   AUTONOMY_mission_drops_close_money
   AUTONOMY_version_drops_close_money

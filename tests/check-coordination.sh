@@ -109,6 +109,13 @@ ADR_CHECK=off
 ON_ESCALATION_CMD="${COORD_HOOK:-}"
 if [ -n "${COORD_PROBE:-}" ]; then printf touched >> "$COORD_PROBE"; fi
 if [ -n "${COORD_HOLD:-}" ]; then
+  if [ "${COORD_CHILD:-}" = cooperative ]; then
+    exec 3<> "$COORD_RELEASE"
+    trap 'trap "" INT; printf handled > "$COORD_READY.handled"; read -r -n 1 -u 3; printf cleaned > "$COORD_FINISHED"; exit 42' INT
+    env COORD_WORKER="$$" python3 "$COORD_BARRIER"
+    read -r -n 1 -u 3
+    exit 43
+  fi
   COORD_WORKER="$$" python3 "$COORD_BARRIER"
   exit "${COORD_EXIT:-0}"
 fi
@@ -153,9 +160,11 @@ if mode == "reentry":
         meta_path.write_bytes(before)
     Path(os.environ["COORD_RESULTS"]).write_text(json.dumps(results))
 ready = Path(os.environ["COORD_READY"])
-stamp = Path('/proc/self/stat').read_text().rsplit(')', 1)[1].split()[19]
-ready.with_suffix('.tmp').write_text(json.dumps({"pid": os.getpid(), "start": stamp, "ppid": os.getppid(), "worker": int(os.environ["COORD_WORKER"])}))
+pid = int(os.environ["COORD_WORKER"]) if mode == "cooperative" else os.getpid()
+stamp = Path('/proc/%d/stat' % pid).read_text().rsplit(')', 1)[1].split()[19]
+ready.with_suffix('.tmp').write_text(json.dumps({"pid": pid, "start": stamp, "ppid": os.getppid(), "worker": int(os.environ["COORD_WORKER"])}))
 ready.with_suffix('.tmp').replace(ready)
+if mode == "cooperative": os._exit(0)
 with open(os.environ["COORD_RELEASE"], "rb", buffering=0) as stream:
     stream.read(1)
 Path(os.environ["COORD_FINISHED"]).write_text("child wrote after release")
@@ -345,6 +354,21 @@ try:
                 break
             time.sleep(.01)
         check("signal recovers: " + str(number), result.returncode == 0, result.stdout)
+    # A public SIGINT must run the worker's Bash trap, not merely return status 130.
+    cooperative = start(repo, mode="cooperative", args=("phase", "20260101-one"))
+    handled = Path(str(cooperative[1]) + ".handled")
+    finished = Path(str(cooperative[1]) + ".finished")
+    cooperative[0].send_signal(signal.SIGINT)
+    deadline = time.monotonic() + 8
+    while not handled.exists() and cooperative[0].poll() is None and time.monotonic() < deadline:
+        time.sleep(.01)
+    check("SIGINT executes cooperative worker handler", handled.exists()
+          and handled.read_text() == "handled")
+    busy(repo, "install", name="SIGINT cleanup retains ownership before release")
+    check("SIGINT preserves public status", release(cooperative) == 130)
+    check("SIGINT cleanup finishes before release of ownership", finished.exists()
+          and finished.read_text() == "cleaned")
+    check("SIGINT cooperative cleanup recovers", run(repo, "install").returncode == 0)
     config = repo / ".sdd/config.sh"
     original_config = config.read_text()
     config.write_text(original_config + '\nif [ -n "${COORD_STDIN:-}" ]; then read -r answer; printf "%s\\n" "$answer"; exit 0; fi\n')
@@ -457,7 +481,7 @@ finally:
         item[3].close()
     shutil.rmtree(work)
 
-if passed + failed < 104:
+if passed + failed < 110:
     raise SystemExit("SENSOR-BROKEN: coordination probe surface shrank")
 print("coordination: %d passed, %d failed" % (passed, failed))
 sys.exit(1 if failed else 0)

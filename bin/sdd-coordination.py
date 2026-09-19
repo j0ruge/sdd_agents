@@ -186,6 +186,9 @@ def supervise(root, lock, meta_path, args, caller, boot):
     os.setsid()
     subreaper()
     signal.signal(signal.SIGCHLD, signal.SIG_DFL)
+    # Bash starts this supervisor asynchronously with SIGINT ignored. Install handlers
+    # before fork so exec restores catchable signals in the worker.
+    signals = signal_state()
     value = {'checkout': root, 'checkout_identity': [os.stat(root).st_dev, os.stat(root).st_ino],
              'owner': process(caller), 'supervisor': process(os.getpid()), 'boot_id': boot,
              'lock_fd': lock, 'execution_id': str(uuid.uuid4()),
@@ -210,7 +213,6 @@ def supervise(root, lock, meta_path, args, caller, boot):
         except BaseException:
             os._exit(1)
     os.close(reader)
-    signals = signal_state()
     try:
         value['worker'] = process(child)
         temporary = meta_path.with_name(meta_path.name + '.' + value['execution_id'])
