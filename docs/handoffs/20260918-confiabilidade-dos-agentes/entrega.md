@@ -107,7 +107,7 @@ documentação. Não altera a chave de conteúdo da certificação, formada por 
 | Primeira certificação | **Diagnóstica e inválida:** rc 1, 372/373, sobrevivente `RUN_branch_option_name`, omissão de ajuda de `sdd-link-agents`, sem carimbo. Uma aplicação acidental de patch alterou o checkout compartilhado durante a corrida; o erro foi admitido, informado e a rodada descartada. |
 | Recertificação final | `SDD_MUTATION_JOBS=16 ./bin/sdd health`, rc 0, `373 caught, 0 known gap(s), of 373`, `kit healthy`, 6707.956 s. Controle original e controle extra sob 16 workers verdes. |
 | Snapshot e carimbo | HEAD `8875643a31d67ef1189cc57615fd5886b7cc8d44`, status limpo, zero drift. Chave antes/depois e carimbo: `d15d55d80f67c0b6f77ee8f3a2f32796`. |
-| Auditoria de mutantes | 373 resultados arquivados, todos rc 1; zero log ausente e zero caso sem falha nomeada. Os 27 mutantes novos e o sobrevivente antigo foram conferidos. Quatro grupos com diagnósticos incidentais têm falhas independentes da propriedade, documentadas na auditoria. |
+| Auditoria de mutantes | 373 resultados arquivados, todos rc 1; zero log ausente e zero caso sem falha nomeada. Os 27 mutantes novos e o sobrevivente antigo foram conferidos. Quatro grupos com diagnósticos incidentais têm asserções comportamentais específicas da propriedade, independentes dos diagnósticos incidentais, documentadas na auditoria. |
 
 As regressões observam retorno, mensagem e efeitos laterais: branch, intervenção, sessão,
 checkpoint, journal, hook, quantidade de linhas e manutenção da posse. As fixtures de coordenação

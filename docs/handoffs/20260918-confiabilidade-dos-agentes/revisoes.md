@@ -63,8 +63,9 @@ A auditoria final encontrou 373 resultados, todos rc 1, sem log ausente nem muta
 nomeada. Os 27 mutantes novos e o antigo sobrevivente foram conferidos. Quatro grupos carregam
 diagnósticos incidentais depois ou ao lado da detecção correta:
 
-- `COORD_admission_missing`: comandos/ferramentas ausentes e traceback não são a evidência
-  contada; as falhas nomeadas de lock, recusa e ausência de efeitos aparecem antes.
+- `COORD_admission_missing`: comandos/ferramentas ausentes e traceback aparecem na mesma
+  execução, mas não são a evidência contada; as asserções específicas de lock, recusa e ausência
+  de efeitos falham independentemente desses diagnósticos incidentais.
 - `HEALTH_stamp_tree_blind`: o gate falha pela correspondência carimbo/árvore antes de um timeout
   posterior no probe de health.
 - `RUN_escalation_hook_silent`: as asserções nomeadas de hook/contexto/ledger/prazo falham antes
