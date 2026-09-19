@@ -136,7 +136,8 @@ atrasada em 2026-09-03 — o que o kit precisa lembrar mora no kit.
 fronteira nas fases de alvo. Credencial real entra só na fase cujo gate a exige (QA no navegador,
 PR no `gh`).
 
-**Onde mora hoje.** `ensure_mission_branch`, com igualdade byte a byte de `00-missao.md` e
+**Onde mora hoje.** `ensure_mission_branch`, com hashes crus `--no-filters` (sem normalização
+de EOL ou clean filters) e igualdade byte a byte de `00-missao.md` e
 `01-plano.md` antes e depois do checkout (progresso fica fora); `kit_guard_arm`/`kit_guard_check` em quatro portas
 (`KIT-TOUCHED`, e desde a fronteira do chapéu uma parada); `hat_guard_check` nos três sítios onde
 o `review_scope_check` só avisava, lendo commits **e** árvore contra `writes:`; o catálogo de
@@ -169,12 +170,18 @@ runner sabe ("forçada pela CLI"), nunca "o humano".
 
 **Posse desde 2026-09-18.** `coordination_enter` centraliza admissão antes de config/gates,
 com `flock` por checkout físico; worktrees independentes não dividem lock. `health` protege a
-árvore medida e `sdd-link-agents` entra pela mesma porta. O helper Python/Linux
+árvore medida, `adr new --repo` admite o destino e usa sua config (parser único), e
+`sdd-link-agents` entra pela mesma porta. O helper Python/Linux
 `bin/sdd-coordination.py` é subreaper separado do PID público: morte do owner/worker, FDs
 fechados, `setsid` e double-fork não liberam posse antes do reap completo. Auxiliar descendente
 reentra por identidade de processo + ancestralidade + FD realmente travado; ambiente sozinho
 não autoriza. Pipeline recursivo é recusado. `check-coordination.sh` mede concorrência,
 ausência de efeitos, consultas, reentrada e recuperação com barreiras e CLIs isoladas.
+Sinais cooperativos alcançam a família ativa, inclusive foreground, outras sessões e filhos
+criados por threads; pidfds fixam a identidade após conferir starttime/ancestralidade. Linux
+5.3+ com syscalls pidfd permitidas e Python 3.9+ são exigidos antes de config/sessão; não há
+fallback para PID numérico reutilizável. A varredura seleciona destinatários, nunca libera
+posse: só `ECHILD` prova reap completo. Handlers que ignoram o sinal por escolha não são garantidos.
 
 **Limite da posse.** Coordena entradas do kit, não edição externa nem daemon preexistente.
 Matar o supervisor, adulterar arquivos/namespace do lock ou intervenção privilegiada derrota

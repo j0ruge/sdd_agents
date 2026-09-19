@@ -128,9 +128,19 @@ fi
 
 
 barrier = work / "barrier.py"
-barrier.write_text('''import json, os, resource, signal, subprocess
+barrier.write_text('''import json, os, resource, signal, subprocess, sys, threading
 from pathlib import Path
 mode = os.environ.get("COORD_CHILD", "ordinary")
+if mode == "foreground-threaded":
+    signal.signal(signal.SIGINT, signal.SIG_IGN)
+    def threaded_child():
+        child_env = dict(os.environ, COORD_CHILD="foreground-escaped")
+        os._exit(subprocess.call([sys.executable, __file__], env=child_env))
+    thread = threading.Thread(target=threaded_child)
+    thread.start()
+    thread.join()
+if mode == "foreground-escaped":
+    os.setsid()
 if mode == "escaped":
     if os.fork(): os._exit(0)
     os.setsid()
@@ -159,6 +169,14 @@ if mode == "reentry":
         results.append([["stale-" + field], result.returncode, result.stdout + result.stderr])
         meta_path.write_bytes(before)
     Path(os.environ["COORD_RESULTS"]).write_text(json.dumps(results))
+if mode in ("foreground", "foreground-escaped"):
+    def stop(number, frame):
+        signal.signal(signal.SIGINT, signal.SIG_IGN)
+        Path(os.environ["COORD_READY"] + ".handled").write_text("handled")
+        with open(os.environ["COORD_RELEASE"], "rb", buffering=0) as stream: stream.read(1)
+        Path(os.environ["COORD_FINISHED"]).write_text("cleaned")
+        raise SystemExit(42)
+    signal.signal(signal.SIGINT, stop)
 ready = Path(os.environ["COORD_READY"])
 pid = int(os.environ["COORD_WORKER"]) if mode == "cooperative" else os.getpid()
 stamp = Path('/proc/%d/stat' % pid).read_text().rsplit(')', 1)[1].split()[19]
@@ -256,6 +274,23 @@ try:
     check("missing dependency refuses before execution", missing.returncode != 0
           and "CHECKOUT-UNAVAILABLE" in missing.stdout, missing.stdout)
     check("help needs no supervisor dependency", run(repo, "help", extra=limited_env).returncode == 0)
+    # pidfd support must be usable under this kernel/seccomp policy before project config runs.
+    python_stub = stubs / "python3"
+    capability_effect = work / "pidfd-config-effect"
+    for denied in ("missing", "open", "send"):
+        python_stub.write_text("#!/usr/bin/python3\nimport os, signal, runpy, sys\n"
+            "def denied(*args, **kwargs): raise PermissionError('fixture pidfd denied')\n"
+            + {"missing": "del os.pidfd_open\n", "open": "os.pidfd_open = denied\n",
+               "send": "signal.pidfd_send_signal = denied\n"}[denied]
+            + "target = sys.argv.pop(1)\nrunpy.run_path(target, run_name='__main__')\n")
+        python_stub.chmod(0o755)
+        capability_effect.unlink(missing_ok=True)
+        result = run(repo, "phase", "20260101-one", extra={"COORD_PROBE": str(capability_effect)})
+        check("unavailable pidfd refuses before config: " + denied,
+              result.returncode != 0 and "CHECKOUT-UNAVAILABLE" in result.stdout
+              and not capability_effect.exists(), result.stdout[:300])
+        check("help survives unavailable pidfd: " + denied, run(repo, "help").returncode == 0)
+    python_stub.unlink()
     # ADR's explicit target controls both ownership and config, regardless of the caller cwd.
     adr_target = fixture("adr-target")
     adr_alias = work / "adr-alias"
@@ -376,21 +411,24 @@ try:
                 break
             time.sleep(.01)
         check("signal recovers: " + str(number), result.returncode == 0, result.stdout)
-    # A public SIGINT must run the worker's Bash trap, not merely return status 130.
-    cooperative = start(repo, mode="cooperative", args=("phase", "20260101-one"))
-    handled = Path(str(cooperative[1]) + ".handled")
-    finished = Path(str(cooperative[1]) + ".finished")
-    cooperative[0].send_signal(signal.SIGINT)
-    deadline = time.monotonic() + 8
-    while not handled.exists() and cooperative[0].poll() is None and time.monotonic() < deadline:
-        time.sleep(.01)
-    check("SIGINT executes cooperative worker handler", handled.exists()
-          and handled.read_text() == "handled")
-    busy(repo, "install", name="SIGINT cleanup retains ownership before release")
-    check("SIGINT preserves public status", release(cooperative) == 130)
-    check("SIGINT cleanup finishes before release of ownership", finished.exists()
-          and finished.read_text() == "cleaned")
-    check("SIGINT cooperative cleanup recovers", run(repo, "install").returncode == 0)
+    # The direct-child control proves its explicit handler before forwarding through the owner.
+    for mode, receiver in (("cooperative", "owner"), ("foreground", "child"), ("foreground", "owner"),
+                           ("foreground-escaped", "owner"), ("foreground-threaded", "owner")):
+        label = mode + "/" + receiver
+        cooperative = start(repo, mode=mode, code=42, args=("phase", "20260101-one"))
+        handled = Path(str(cooperative[1]) + ".handled")
+        finished = Path(str(cooperative[1]) + ".finished")
+        recipient = cooperative[0].pid if receiver == "owner" else json.loads(cooperative[1].read_text())["pid"]
+        os.kill(recipient, signal.SIGINT)
+        deadline = time.monotonic() + 8
+        while not handled.exists() and cooperative[0].poll() is None and time.monotonic() < deadline:
+            time.sleep(.01)
+        check("SIGINT executes handler: " + label, handled.exists() and handled.read_text() == "handled")
+        busy(repo, "install", name="SIGINT cleanup retains ownership: " + label)
+        check("SIGINT preserves public status: " + label, release(cooperative) == (130 if receiver == "owner" else 42))
+        check("SIGINT cleanup finishes before releasing ownership: " + label,
+              finished.exists() and finished.read_text() == "cleaned")
+        check("SIGINT cooperative cleanup recovers: " + label, run(repo, "install").returncode == 0)
     config = repo / ".sdd/config.sh"
     original_config = config.read_text()
     config.write_text(original_config + '\nif [ -n "${COORD_STDIN:-}" ]; then read -r answer; printf "%s\\n" "$answer"; exit 0; fi\n')
@@ -503,7 +541,7 @@ finally:
         item[3].close()
     shutil.rmtree(work)
 
-if passed + failed < 118:
+if passed + failed < 148:
     raise SystemExit("SENSOR-BROKEN: coordination probe surface shrank")
 print("coordination: %d passed, %d failed" % (passed, failed))
 sys.exit(1 if failed else 0)

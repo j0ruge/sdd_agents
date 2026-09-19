@@ -85,7 +85,17 @@ def authorized(value, root, lock, caller, boot):
         return False
 
 
+def pidfd_capability():
+    # Check syscall availability and policy before any project config or session can run.
+    descriptor = os.pidfd_open(os.getpid())
+    try:
+        signal.pidfd_send_signal(descriptor, 0)
+    finally:
+        os.close(descriptor)
+
+
 def subreaper():
+    pidfd_capability()
     libc = ctypes.CDLL(None, use_errno=True)
     # Linux prctl is variadic: pass explicit machine-width arguments.
     if libc.prctl(36, ctypes.c_ulong(1), ctypes.c_ulong(0), ctypes.c_ulong(0),
@@ -126,6 +136,57 @@ def signal_state():
     return state
 
 
+def signal_family(number):
+    """Pin descendants before signaling; snapshots select recipients, never release the lock."""
+    pending = [(process(os.getpid()), None)]
+    pinned = []
+    try:
+        while pending:
+            parent, parent_fd = pending.pop()
+            try:
+                if parent_fd is not None:
+                    signal.pidfd_send_signal(parent_fd, 0)
+                children = []
+                for task in Path('/proc/%d/task' % parent['pid']).iterdir():
+                    try:
+                        children.extend((task / 'children').read_text().split())
+                    except FileNotFoundError:
+                        pass  # A thread can finish while its process remains alive.
+                for pid in children:
+                    identity = process(pid)
+                    if identity is None or identity['parent'] != parent['pid']:
+                        continue
+                    descriptor = None
+                    try:
+                        descriptor = os.pidfd_open(identity['pid'])
+                        # Opening a pidfd and reading procfs are separate operations. Recheck
+                        # both identities and the parent edge before authorizing this handle.
+                        if process(identity['pid']) != identity or not same(parent):
+                            continue
+                        if parent_fd is not None:
+                            signal.pidfd_send_signal(parent_fd, 0)
+                        pinned.append(descriptor)
+                        pending.append((identity, descriptor))
+                        descriptor = None
+                    except OSError:
+                        # Concurrent exit/reparenting is normal; a later pass sees adoptees.
+                        continue
+                    finally:
+                        if descriptor is not None:
+                            os.close(descriptor)
+            except OSError:
+                continue
+        # Children receive the cooperative signal before a waiting shell is interrupted.
+        for descriptor in reversed(pinned):
+            try:
+                signal.pidfd_send_signal(descriptor, number)
+            except OSError:
+                pass
+    finally:
+        for descriptor in pinned:
+            os.close(descriptor)
+
+
 def wait_family(child, signals, deadline=None, grace=2):
     worker_status = 1
     while True:
@@ -145,17 +206,7 @@ def wait_family(child, signals, deadline=None, grace=2):
             signals.update(number=signal.SIGTERM, time=deadline, timed_out=True)
         if signals['number']:
             sent = signal.SIGKILL if time.monotonic() - signals['time'] >= grace else signals['number']
-            # Direct children cannot have their PID recycled before this single-threaded reaper
-            # waits for them. Orphans, including setsid/double-fork, become direct children here.
-            try:
-                children = Path('/proc/self/task/%d/children' % os.getpid()).read_text().split()
-            except OSError:
-                children = []
-            for descendant in children:
-                try:
-                    os.kill(int(descendant), sent)
-                except (ProcessLookupError, PermissionError):
-                    pass
+            signal_family(sent)
         time.sleep(.01)
     if signals['timed_out']:
         return 124
@@ -274,6 +325,6 @@ if __name__ == '__main__':
     try:
         sys.exit(main())
     except (OSError, ValueError, AttributeError) as error:
-        print('CHECKOUT-UNAVAILABLE: Linux procfs, Python 3 and flock/subreaper support '
+        print('CHECKOUT-UNAVAILABLE: Linux >=5.3 procfs/pidfd, Python 3.9+ and flock/subreaper support '
               'are required: %s' % error, file=sys.stderr)
         sys.exit(1)

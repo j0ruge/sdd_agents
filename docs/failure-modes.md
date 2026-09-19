@@ -24,8 +24,9 @@ A server left in the background keeps ownership; stop that task through its norm
 path. Do not delete the lock file or kill the supervisor to force entry: that defeats exclusion.
 Stale JSON without a live lock is harmless and does not require manual cleanup.
 
-**CHECKOUT-UNAVAILABLE:** coordinated execution requires Linux procfs, Python 3.9+ and kernel
-`flock`/subreaper support. Admission probes these before running config or a paid session.
+**CHECKOUT-UNAVAILABLE:** coordinated execution requires Linux 5.3+ procfs, Python 3.9+ and kernel
+`flock`/subreaper/pidfd support, with pidfd syscalls allowed by seccomp. Admission probes these
+before running config or a paid session.
 Install the required runtime or use a supported Linux environment. Help and version do not
 need the supervisor. This is local coordination, not a filesystem permission boundary against
 external tools or deliberate interference with the supervisor.

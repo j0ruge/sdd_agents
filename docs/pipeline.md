@@ -48,8 +48,14 @@ the public owner. Killing that PID or the worker does not release the supervisor
 Orphans are adopted even when they close descriptors, change process group/session or
 double-fork. The supervisor waits for the kernel's `ECHILD` result, meaning every descendant
 has exited and been reaped. Normal completion and errors keep waiting for surviving children.
-TERM/INT/HUP are forwarded through the launcher; cancellation signals direct/adopted children,
-uses KILL after two seconds, and still waits for actual termination before releasing ownership.
+TERM/INT/HUP are forwarded through the launcher to the active descendant tree, including
+foreground children and children created by other threads or sessions. Each selected process
+is pinned with a pidfd after rechecking its start time and ancestry; no numeric-PID fallback is
+used. Cancellation uses KILL after two seconds and still waits for actual termination before
+releasing ownership. Processes that deliberately ignore a signal need not run a handler.
+Linux 5.3+ with usable pidfd syscalls (including the sandbox/seccomp policy) and Python 3.9+
+are required and checked before project config or sessions execute. The scan selects signal
+recipients; only `ECHILD` proves the family has finished.
 
 The JSON metadata is diagnostic operational data, never mission state. It records owner,
 worker and supervisor PID/start time, boot identity, execution ID, checkout, command and time.

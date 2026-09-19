@@ -25,10 +25,10 @@ tests, greps the checkpoint, reads the `git log`). A label is not an artifact.
 
 ## Runtime requirements and checkout ownership
 
-Coordinated commands require **Linux with readable `/proc`, Python 3.9+ (standard library),
+Coordinated commands require **Linux 5.3+ with readable `/proc`, Python 3.9+ (standard library),
 Bash 4+ and the GNU userland**. The helper checks the kernel's `flock` and child-subreaper
-capabilities before starting the command, including before the paid preflight probe. No Python
-packages, daemon or service are required. macOS is not supported for coordinated execution.
+capabilities before starting the command, including pidfd syscall availability under seccomp
+and before the paid preflight probe. No Python packages, daemon or service are required. macOS is not supported for coordinated execution.
 
 One physical checkout has one execution owner. A competing command exits immediately with
 **75 / `CHECKOUT-BUSY`**, before config, gates, branch changes or sessions. Symlinks share
@@ -217,7 +217,7 @@ no kit agent.
 ## Requirements
 
 authenticated `claude` CLI · authenticated `gh` · `bash` 4+ · `git` · `uuidgen` (util-linux) ·
-`jq` · Python 3.9+ · Linux procfs and flock/subreaper support · `agent-browser` (only for the QA phase of projects with a UI).
+`jq` · Python 3.9+ · Linux 5.3+ procfs and flock/subreaper/pidfd support · `agent-browser` (only for the QA phase of projects with a UI).
 
 **Linux with the GNU userland.** The kit calls `md5sum`, `date -Iseconds` and `sort -V`,
 and its own suite calls `sed -i` with no argument and `grep -P`. `sdd preflight` measures these

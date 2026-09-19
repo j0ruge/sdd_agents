@@ -3864,6 +3864,18 @@ mut_COORD_adr_cwd_admission() {
   sed -i '/^coordination_enter() {/,/^}/ s%root="$(adr_checkout_root "${@:2}")"%root="$(git rev-parse --show-toplevel)"%' "$1"
 }
 
+mut_COORD_signal_direct_only() {
+  sed -i 's/^                        pending.append((identity, descriptor))$/                        pass  # The active grandchildren never receive the signal./' "${1%/*}/sdd-coordination.py"
+}
+
+mut_COORD_signal_main_thread_only() {
+  sed -i "/^                for task in Path('/a\\                    if task.name != str(parent['pid']): continue" "${1%/*}/sdd-coordination.py"
+}
+
+mut_COORD_pidfd_unchecked() {
+  sed -i 's/^    pidfd_capability()$/    pass  # Project code starts without usable pidfd syscalls./' "${1%/*}/sdd-coordination.py"
+}
+
 CATALOG=(
   COORD_admission_missing
   COORD_linker_unlocked
@@ -3880,6 +3892,9 @@ CATALOG=(
   RUN_branch_filtered_source
   RUN_branch_filtered_recheck
   COORD_adr_cwd_admission
+  COORD_signal_direct_only
+  COORD_signal_main_thread_only
+  COORD_pidfd_unchecked
   AUTONOMY_meta_ignores_event
   AUTONOMY_mission_drops_close_money
   AUTONOMY_version_drops_close_money
