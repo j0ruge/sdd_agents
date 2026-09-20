@@ -283,6 +283,38 @@ mut_QA_bug_genre_fenced() {
   sed -i 's|{ fenced = !fenced; next }|{ next }|' "$1"
 }
 
+# The THIRD genre, and TWO mutants because its two halves fail open independently of each other
+# and of the human arm's. ADR 0009 amends 0006: `deferred` is a bug a human has decided and that
+# another mission will pay for — it skips the count like `human` and, unlike `human`, gets NAMED
+# in the reason, which is the visibility 0006 asked for when it refused to narrow this anchor.
+#
+# Same anchoring discipline as the four above. The deferred grep is the only line ending in bare
+# `then` (the human one ends `then continue; fi`), so QA_bug_genre_ignored's anchor and this one
+# do not collide — measured, one match each.
+mut_QA_bug_genre_deferred_blocks() {   # the third genre goes: a decided bug blocks the gate again
+  sed -i 's|^    if grep -qE .*Closable by.*deferred.*then$|    if false; then|' "$1"
+}
+# The right-hand boundary of the deferred arm goes, the way QA_bug_genre_prefix takes the human
+# arm's. `@` and not `|` as the delimiter, for that mutant's reason: the text being matched IS an
+# alternation.
+mut_QA_bug_genre_deferred_prefix() {
+  sed -i 's@deferred(\[\[:space:\]\]|\$)@deferred@' "$1"
+}
+# The deferred tail goes back INSIDE the interface arm, which is where it was written and where it
+# was wrong: the registry loop runs on both branches of gate_QA, but only the interface branch ever
+# assigns `report`, so a repo with no E2E_CMD and no APP_URL counted its deferred bugs and then
+# said nothing about them — the one channel ADR 0009 offers against "debt ages out of sight", shut
+# in the repo that has no other. Dies on check-gates' "no interface: deferred still does not block,
+# and the reason still names it", which is the only assertion that runs the genre through that arm.
+mut_QA_bug_genre_deferred_unseen_no_interface() {
+  sed -i 's|^  if \[ "$deferred" -gt 0 \]; then$|  if [ "$deferred" -gt 0 ] \&\& [ -n "${report:-}" ]; then|' "$1"
+}
+# The comma between two deferred names goes. Invisible at N=1, which is every other probe in the
+# genre block — the N>1 regime is the only one that can see it, and it exists for this.
+mut_QA_bug_genre_deferred_join() {
+  sed -i 's|{deferred_names:+$deferred_names, }|{deferred_names:+$deferred_names }|' "$1"
+}
+
 # Historical bug 3 (SQ-97 pilot, ~US$ 10): the parser exited only at `###`, kept swallowing the
 # report's following tables and failed an all-Grade-A review for finding a `Commit` column.
 # The probe is never called: the gate falls back to the ONE sentence every red e2e used to get,
@@ -1210,6 +1242,79 @@ mut_RUN_hat_close_unchecked() {
 }
 # The kit guard back to a warning: the marker is never armed, so KIT-TOUCHED is a line and not a
 # stop — the 2d28d13 world. KG1's "rc:3 kind:kit-touched" dies.
+# HAT_WRITES_EXTRA — the project's exception. THREE mutants and not one, because the three fail
+# open INDEPENDENTLY: a key nothing reads, a guard that admits traversal, and a guard that admits
+# a metacharacter are three different holes, and one mutant for "the key" would let two of them rot
+# while staying green. The second and third matter most: this key WIDENS a permission and its value
+# is dropped into hat_path_allowed's `case "$f" in $g)`, a shell GLOB — the direction `ADR_DIR=*`
+# took when it built `*/**` and handed a hat most of the repo (CWE-863, PR #45).
+# The qa bug template's genre field. Anchor 3 blocks on an ABSENT `Closable by:` and nothing but
+# the installer ever writes that field into the template the qa-report skill copies from — so a
+# fresh target discovers the contract by paying a QA lap for it. Two mutants, because the seeder
+# and the check fail open independently: a seeder that stopped inserting leaves preflight red (the
+# operator at least hears about it), while a check that stopped asking leaves a repo silently
+# shipping blocking bugs.
+# cmd_install goes back to reading $QA_DOCS_PATH — a variable it never loads, because it does not
+# call load_config — instead of the $inst_qadocs it sources itself. A repo whose QA tree is not at
+# docs/qa then gets the default seeded (or nothing), while cmd_preflight checks the configured
+# path and keeps naming `sdd install --force` as the remedy: the two commands point at each other
+# over different files and the pair never converges.
+mut_INSTALL_bug_template_wrong_qa_path() {
+  sed -i 's|^  local bugtpl="$REPO_ROOT/$inst_qadocs/templates/bug.md"$|  local bugtpl="$REPO_ROOT/${QA_DOCS_PATH:-docs/qa}/templates/bug.md"|' "$1"
+}
+mut_INSTALL_bug_template_not_seeded() {
+  sed -i 's%^    sed -i "0,/.*bugtpl"$%    :%' "$1"
+}
+mut_PREFLIGHT_bug_template_blind() {
+  sed -i 's%^    _fail "qa bug template lacks.*%    :%' "$1"
+}
+mut_RUN_hat_extra_ignored() {   # the sum never happens: the key parses, validates, and is dropped
+  sed -i '/^hat_writes() {/,/^}/ s|^  extra="\$(hat_writes_extra_for "\$hat")"$|  extra=""|' "$1"
+}
+# `#` and not `|` as the s/// delimiter: the line this one matches CONTAINS `|` (the `''|.|..`
+# alternation), and a `|` delimiter closes the command three characters in. The sed then failed
+# with "unknown option to `s'" and changed nothing — a mutant the catalogue would have gone on
+# reporting as caught. Found by proving the mutant on a copy before adding it, the rite the r1 of
+# PR #46 paid for.
+mut_RUN_hat_extra_unguarded() {   # traversal admitted — `../x` hands a hat a path above the checkout
+  sed -i "/^hat_extra_path_ok() {/,/^}/ s#^      ''|\.|\.\.) return 1 ;;\$#      '') return 1 ;;#" "$1"
+}
+mut_RUN_hat_extra_glob_chars() {   # a metacharacter outside the `/**` tail admitted — `docs/*` is a pattern, not a path
+  sed -i '/^hat_extra_path_ok() {/,/^}/ s|^      \*\[!A-Za-z0-9\._-\]\*) return 1 ;;$|      :) return 1 ;;|' "$1"
+}
+# The field separator goes back to a TAB at all four sites — emitter and three readers — which is
+# how it was written. `read` discards leading IFS *whitespace* even under a one-character IFS, and
+# tab is that whitespace, so a line whose first field is EMPTY arrives shifted one to the left. An
+# entry with no `:` is precisely the line whose hat is empty by construction, so load_config's
+# `[ -n "$_hwx_hat" ]` clause became unreachable and the operator who forgot the colon was told the
+# kit has no `agents/docs/foo.md.md`. Global on purpose: a separator is a contract between an
+# emitter and its readers, and flipping one side would be a different (louder) defect.
+mut_RUN_hat_extra_empty_hat_shifted() {
+  sed -i 's|x1f|t|g' "$1"
+}
+# The newline clause goes. The parser's `read -r -a` sees one LINE, so a two-line value — legal
+# shell, and the natural way to spell a long list in a config file — took its first line and
+# dropped the rest with rc 0 and no warning; both callers share the parser, so nothing contradicted
+# anything and the operator read the still-blocked phase as the key not working.
+# The pathless entry goes back to being dropped by the parser, so the validator never sees it and
+# `HAT_WRITES_EXTRA="sdd-qa:"` is accepted in silence — an exception declaring nothing, which is
+# what the hat-not-found clause beside it exists to refuse.
+mut_RUN_hat_extra_pathless_admitted() {
+  # `@` and not `|` as the delimiter: the line being matched contains `||`, and the first of those
+  # pipes ended the pattern — the sed died with "unknown option to `s'" and the mutant changed
+  # NOTHING while reporting a clean run. The catalogue would have carried a protection nobody had.
+  sed -i 's@^    \[ "\$emitted" = 1 \].*@    :@' "$1"
+}
+mut_RUN_hat_extra_newline_admitted() {
+  sed -i 's|) die "HAT_WRITES_EXTRA contains a newline|) : "HAT_WRITES_EXTRA contains a newline|' "$1"
+}
+# The path refusal stops naming the value it refused. The gate still dies, so a probe that asserts
+# only "it died" stays green — which is what the traversal assertion did while its needle was the
+# bare `..`, a string the message's own boilerplate ("relative, no '..'") contains for every one of
+# the four path refusals. This mutant is the reason that needle is now the value.
+mut_RUN_hat_extra_path_unnamed() {
+  sed -i "s|HAT_WRITES_EXTRA path '\$_hwx_path' (hat \$_hwx_hat)|HAT_WRITES_EXTRA path (hat \$_hwx_hat)|" "$1"
+}
 mut_RUN_kit_touched_silent() {
   sed -i '/^kit_guard_check() {/,/^}/ s|^  KIT_TOUCHED_WHY="the kit at |  : "the kit at |' "$1"
 }
@@ -3704,6 +3809,10 @@ CATALOG=(
   QA_bug_genre_prefix
   QA_bug_genre_anywhere
   QA_bug_genre_fenced
+  QA_bug_genre_deferred_blocks
+  QA_bug_genre_deferred_prefix
+  QA_bug_genre_deferred_unseen_no_interface
+  QA_bug_genre_deferred_join
   QA_e2e_red_never_probed
   QA_app_down_on_unknown
   QA_probe_ignores_e2e_rc
@@ -3769,6 +3878,16 @@ CATALOG=(
   RUN_hat_door2_missing
   RUN_hat_retry_door_missing
   RUN_hat_close_door_missing
+  INSTALL_bug_template_not_seeded
+  INSTALL_bug_template_wrong_qa_path
+  PREFLIGHT_bug_template_blind
+  RUN_hat_extra_ignored
+  RUN_hat_extra_unguarded
+  RUN_hat_extra_glob_chars
+  RUN_hat_extra_empty_hat_shifted
+  RUN_hat_extra_newline_admitted
+  RUN_hat_extra_pathless_admitted
+  RUN_hat_extra_path_unnamed
   RUN_kit_touched_silent
   RUN_init_blind
   RUN_harness_blind

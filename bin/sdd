@@ -176,6 +176,45 @@ load_config() {
   # it. EMPTY means "this repo has no spec tree" and must scan NOTHING — an empty value falling
   # back to the repo root would walk the whole checkout looking for a spec.md.
   : "${SPEC_DIR:=}"
+  # What THIS project obliges a hat to touch beyond its writes:. EMPTY is the default and means
+  # "no exception" — see hat_writes_extra_each for the grammar and hat_extra_path_ok for the guard.
+  #
+  # Validated HERE and not at the point of use. hat_writes is read as `globs="$(hat_writes …)"`, a
+  # command substitution: a `die` down there would exit the SUBSHELL, hand hat_guard_check an empty
+  # glob list, and an empty list is the spelling of "this hat writes anywhere" one line later. The
+  # guard that exists to narrow a value would have widened it. So the refusal happens once, before
+  # a session is spent, on the same floor where PROJECT_NAME and TEST_CMD are refused.
+  : "${HAT_WRITES_EXTRA:=}"
+  # A NEWLINE is refused HERE, before the parser runs, because the parser cannot see past one:
+  # `IFS=';' read -r -a entries <<< "$spec"` consumes a single LINE. A value written across two
+  # lines is legal shell and the natural way to spell a long list in a config file, and it parsed
+  # its first line and dropped the rest on the floor. Nothing contradicted anything — one parser,
+  # so the validator agreed with the consumer that the second entry did not exist — and the run was
+  # simply accepted (rc 0, no warn) with that hat's exception missing, leaving the operator to read
+  # the still-blocked phase as the key not working. That is the very confusion the "hat must exist"
+  # clause below was written to prevent, so it is refused by the same door. Measured: a two-line
+  # value took line 1 and silently discarded line 2.
+  case "$HAT_WRITES_EXTRA" in
+    *$'\n'*) die "HAT_WRITES_EXTRA contains a newline — hats are separated by ';' and never by lines (the grammar is 'hat: path[, path]; hat: path')" ;;
+  esac
+  local _hwx_hat _hwx_path
+  while IFS=$'\x1f' read -r _hwx_hat _hwx_path; do
+    [ -n "$_hwx_hat" ] \
+      || die "HAT_WRITES_EXTRA has an entry with no hat before ':' (offending: '$_hwx_path') — the grammar is 'hat: path[, path]; hat: path'"
+    # An entry whose list yields NO path — `sdd-qa:`, or a list of nothing but commas and spaces.
+    # The parser drops empty items, so such an entry emitted no pair at all and load_config had
+    # nothing to validate: the run was accepted and the exception declared nothing. That is the
+    # same silence the hat-not-found clause above refuses by name — a typo sitting in the config
+    # declaring an exception for nobody, with the operator reading the still-blocked phase as the
+    # key not working. The parser emits one pair with an EMPTY path for it rather than dropping
+    # the entry, so the refusal happens here and the grammar keeps living in one place.
+    [ -n "$_hwx_path" ] \
+      || die "HAT_WRITES_EXTRA entry for hat '$_hwx_hat' lists no path — the grammar is 'hat: path[, path]; hat: path'"
+    [ -f "$SDD_HOME/agents/$_hwx_hat.md" ] \
+      || die "HAT_WRITES_EXTRA names hat '$_hwx_hat' — the kit has no agents/$_hwx_hat.md"
+    hat_extra_path_ok "$_hwx_path" \
+      || die "HAT_WRITES_EXTRA path '$_hwx_path' (hat $_hwx_hat) is not a literal path inside the repo — relative, no '..', and no metacharacter except a trailing '/**' on a named directory"
+  done < <(hat_writes_extra_each)
 
   [ -n "$PROJECT_NAME" ]   || die "PROJECT_NAME is empty in $CONFIG_FILE"
   [ -n "$DEFAULT_BRANCH" ] || die "DEFAULT_BRANCH is empty in $CONFIG_FILE"
@@ -1081,7 +1120,7 @@ gate_QA() {
   # the lesson check-todo.sh paid for when its parser did not know it was inside an item's code
   # block. `[*][*]` and not `\*\*`: mawk's handling of an escaped literal inside a regex is not
   # worth relying on when a bracket expression says the same thing unambiguously.
-  local openbugs=0 bugfile genre_line
+  local openbugs=0 deferred=0 deferred_names="" bugfile genre_line bugname
   while IFS= read -r bugfile; do
     [ -n "$bugfile" ] || continue
     genre_line="$(awk '
@@ -1089,6 +1128,26 @@ gate_QA() {
       fenced { next }
       /^-[[:space:]]+[*][*]Closable by:[*][*]/ { print; exit }
     ' "$bugfile" || true)"
+    # `deferred` is tested FIRST and by a grep of its own rather than by widening the line below to
+    # `(human|deferred)`, and both halves of that are deliberate. Its own grep, because this branch
+    # has to NAME the bug and an alternation cannot say which arm matched. Tested first, because
+    # the order is what lets the human line below keep the exact text four mutants of
+    # check-mutation.sh are anchored on — a fix that MOVES a line a mutant anchors is how the
+    # catalogue starts reporting a protection nobody measured (measured, r1 of PR #46).
+    #
+    # ⚠️ DECLARED: the field's shape is spelt TWICE, three lines apart, and the two must move
+    # together. It is the regex that is duplicated, never the decision — the enum (`deferred`,
+    # `human`, everything else blocks) is decided in this one loop. The right-hand boundary of the
+    # human arm has a mutant (QA_bug_genre_prefix); the deferred arm got one of its own
+    # (QA_bug_genre_deferred_prefix) rather than riding it, because they fail open independently.
+    if grep -qE '^\-[[:space:]]+\*\*Closable by:\*\*[[:space:]]+deferred([[:space:]]|$)' <<< "$genre_line"; then
+      deferred=$((deferred + 1))
+      bugname="${bugfile##*/}"
+      # Parameter expansion and never `$(basename …)`: this runs once per open bug, and the loop is
+      # read by `sdd status` on every evaluation of the phase.
+      deferred_names="${deferred_names:+$deferred_names, }${bugname%.md}"
+      continue
+    fi
     if grep -qE '^\-[[:space:]]+\*\*Closable by:\*\*[[:space:]]+human([[:space:]]|$)' <<< "$genre_line"; then continue; fi
     openbugs=$((openbugs + 1))
   done <<< "$( { grep -rlE '^\-[[:space:]]+\*\*Status:\*\*[[:space:]]+open' \
@@ -1102,7 +1161,7 @@ gate_QA() {
     # one case this anchor was rewritten for, so the reason says how a bug leaves by the other
     # door. The substring `with Status: open in the registry` is load-bearing: two assertions in
     # check-gates.sh read it (:486 and the genre differential at :535).
-    GATE_WHY="$openbugs bug(s) with Status: open in the registry that an agent could close (an unmarked genre counts) — they become fix increments (QA⇄EXEC loop); one that needs a human decision is marked 'Closable by: human' instead (agents/sdd-qa.md § 5.1)"
+    GATE_WHY="$openbugs bug(s) with Status: open in the registry that an agent could close (an unmarked genre counts) — they become fix increments (QA⇄EXEC loop); one that needs a human decision is marked 'Closable by: human' instead, and one a human has already decided and another mission will pay for is 'Closable by: deferred' (agents/sdd-qa.md § 5.1)"
     return 1
   fi
   if ! run_check_cmd "$TEST_CMD" "gate-qa-test"; then
@@ -1148,6 +1207,21 @@ gate_QA() {
     GATE_WHY="report $(basename "$report") closed, registry clean, suites green"
   else
     GATE_WHY="journey walked without a browser interface (evidence in the handoff), suite green"
+  fi
+  # The deferred ones are NAMED on every evaluation, and that is the whole answer to the objection
+  # ADR 0006 raised against narrowing this anchor: debt that stops blocking must not stop being
+  # SEEN. `human` passes silently because nobody in this pipeline can act on it; `deferred` passes
+  # loudly because somebody will, in a mission that has not opened yet.
+  #
+  # AFTER the if/else and never inside one arm. The registry loop above runs on BOTH branches —
+  # it reads $QA_DOCS_PATH/bugs/ without asking whether this repo has an interface — so a repo with
+  # no E2E_CMD and no APP_URL can hold deferred bugs just as well, and the tree is durable across
+  # missions while that config is not. Nested under `report` (which only the interface branch ever
+  # assigns), the one channel that keeps the debt loud went silent in exactly the repo that has no
+  # other channel. Measured differentially: same bug file, same registry, two configs — the
+  # interface run named it, the no-interface run said nothing.
+  if [ "$deferred" -gt 0 ]; then
+    GATE_WHY="$GATE_WHY; $deferred deferred (visible, not blocking): $deferred_names"
   fi
   return 0
 }
@@ -1746,12 +1820,132 @@ hat_expand() {   # hat_expand <globs> — $HANDOFF_DIR $MISSION $TODO_FILE $QA_D
   printf '%s\n' "$s"
 }
 
+# HAT_WRITES_EXTRA — the PROJECT's exception to the hat's writes:, parsed in ONE place.
+#
+# `writes:` is a constant of the KIT: it says what a hat owns wherever the kit is installed. The
+# obligation that crosses it belongs to the TARGET — the repo whose own rules demand that adding a
+# spec also revises the case floor in .github/workflows/e2e-staging.yml, or that a gotcha be
+# written to .claude/napkin.md. Measured on the pilot target 2026-09-17: a QA session of 759 s /
+# US$ 11,32 and a DOCS of 916 s / US$ 6,24 died in BLOCKED doing exactly what their repo asked.
+# The third occurrence was patched LITERALLY — 796e334 put PRODUCT.md into the writes: of every
+# project that installs the kit — and that is the list which grows one name per project. This key
+# is the variable the model was missing: the hat's frontier is the kit's constant PLUS the
+# project's declaration.
+#
+# Grammar: `hat: path[, path]; hat: path` — `;` separates hats, `:` separates a hat from its list,
+# `,` separates paths. BY PATH and not by directory, because the three measured occurrences say so:
+# `.claude/rules/**` and `.claude/napkin.md` are different decisions.
+#
+# ONE parser, two callers (load_config validates, hat_writes_extra_for reads) — the CLAUDE.md rule
+# for an enum read at more than one point. An entry with no `:` yields an EMPTY hat rather than
+# being dropped, so the VALIDATOR is what refuses it — in a clause of its OWN (`[ -n "$_hwx_hat" ]`),
+# not by falling through to "the hat must exist", whose message would name `agents/.md` and tell
+# the operator nothing. Two clauses, one grammar: the parser decides what an entry IS, load_config
+# decides which entries are ALLOWED, and neither restates the other. This comment used to claim
+# there was a single clause down there; the second one was already three lines away, unprobed. Both
+# carry a probe (tests/check-gates.sh) and a mutant now, because a refusal nobody measures is the
+# one that quietly turns into an acceptance.
+hat_writes_extra_each() {   # hat_writes_extra_each — one `<hat>\x1f<path>` line per declared pair
+  local spec="${HAT_WRITES_EXTRA:-}" entry hat list path emitted
+  [ -n "$spec" ] || return 0
+  local -a entries plist
+  IFS=';' read -r -a entries <<< "$spec"
+  for entry in "${entries[@]}"; do
+    entry="${entry#"${entry%%[![:space:]]*}"}"; entry="${entry%"${entry##*[![:space:]]}"}"
+    [ -n "$entry" ] || continue
+    if [ "${entry#*:}" = "$entry" ]; then hat=""; list="$entry"; else hat="${entry%%:*}"; list="${entry#*:}"; fi
+    hat="${hat#"${hat%%[![:space:]]*}"}"; hat="${hat%"${hat##*[![:space:]]}"}"
+    IFS=',' read -r -a plist <<< "$list"
+    emitted=0
+    for path in "${plist[@]}"; do
+      path="${path#"${path%%[![:space:]]*}"}"; path="${path%"${path##*[![:space:]]}"}"
+      [ -n "$path" ] || continue
+      emitted=1
+      # US (0x1f) and never a TAB. `read` discards leading IFS *whitespace* even when IFS is set
+      # to one character, and space/tab/newline are that whitespace — so a tab-separated line whose
+      # first field is EMPTY arrives with the fields shifted one to the left: the path lands in the
+      # hat and the path comes back empty. That is not cosmetic here, because an entry with no `:`
+      # is exactly the line whose hat is empty by construction: load_config's `[ -n "$_hwx_hat" ]`
+      # clause became UNREACHABLE, and the operator who forgot the colon was told the kit has no
+      # `agents/docs/foo.md.md`. US is not IFS whitespace, so the empty field survives the read.
+      printf '%s\x1f%s\n' "$hat" "$path"
+    done
+    # An entry that yielded NO path still emits one pair, with an empty path, so load_config can
+    # refuse it. Dropping it here — which is what the loop above does to every empty item — made
+    # `HAT_WRITES_EXTRA="sdd-qa:"` and a list of nothing but commas and spaces indistinguishable
+    # from having no key at all: accepted, silent, declaring nothing. The grammar is decided in
+    # the validator, so what the parser owes it is the entry, not a verdict on the entry.
+    [ "$emitted" = 1 ] || printf '%s\x1f\n' "$hat"
+  done
+}
+
+# hat_extra_path_ok <value> — 0 when the value names a path INSIDE the repo, literally.
+#
+# Modelled on adr_dir_ok, and written POSITIVELY for the same reason: every component has to be a
+# plain name, so `..`, `.`, an absolute path and an empty component are refused by CONSTRUCTION
+# rather than by being remembered. The stakes are higher here than for ADR_DIR, because this key
+# WIDENS a permission and its value is dropped straight into hat_path_allowed's `case "$f" in $g)`
+# — a shell GLOB. `ADR_DIR=*` built the pattern `*/**` and handed a hat most of the repo, with
+# hat_guard_check reading the same widened matcher so it never noticed (CWE-863, PR #45). Every
+# looseness here fails OPEN in exactly that direction.
+#
+# ONE clause more than adr_dir_ok: the LAST component may be exactly `**`, the `/**` suffix the
+# kit's own hats already use for a named directory (`$ADR_DIR/**`). Not the first component, so a
+# lone `**` — every path in the repo — is refused: the suffix belongs to a directory that is named.
+hat_extra_path_ok() {
+  local p="$1" rest comp first=1 last
+  while [ "${p%/}" != "$p" ]; do p="${p%/}"; done
+  [ -n "$p" ] || return 1
+  # NO `case "$p" in /*) return 1` clause, unlike adr_dir_ok — measured, not assumed. An absolute
+  # path opens with a `/`, so its FIRST component is empty and the `''` clause below already
+  # refuses it. The sabotage pass removed the explicit clause and the probe stayed GREEN, which is
+  # this repo's definition of a redundant rule. The PROPERTY keeps its probe ("an absolute path is
+  # refused", tests/check-gates.sh): it is the property that has to hold, and it would stop holding
+  # the day someone taught the loop to strip a leading slash the way it strips trailing ones.
+  rest="$p"
+  while [ -n "$rest" ]; do
+    comp="${rest%%/*}"
+    if [ "$comp" = "$rest" ]; then last=1; rest=""; else last=0; rest="${rest#*/}"; fi
+    case "$comp" in
+      ''|.|..) return 1 ;;
+      # Before the character rule below, which would refuse it: `**` is the ONE pattern this guard
+      # admits, and only as the tail of a named directory.
+      '**') { [ "$last" = 1 ] && [ "$first" = 0 ]; } || return 1 ;;
+      # ...and a LITERAL name otherwise. `*[!set]*` is the positive form — "contains something
+      # outside the set" — so a metacharacter nobody listed is refused by construction. `$` is in
+      # that set's complement too, which is why an extra path is never a hat_expand placeholder.
+      *[!A-Za-z0-9._-]*) return 1 ;;
+    esac
+    first=0
+  done
+  return 0
+}
+
+hat_writes_extra_for() {   # hat_writes_extra_for <hat> — the project's paths for that hat, comma-separated
+  local want="$1" hat path out=""
+  [ -n "$want" ] || { printf '\n'; return 0; }
+  while IFS=$'\x1f' read -r hat path; do
+    [ "$hat" = "$want" ] || continue
+    # The empty path the parser emits for a pathless entry is the validator's business, never a
+    # glob: load_config refuses it before any session, and belt-and-braces it never reaches
+    # hat_path_allowed from here either.
+    [ -n "$path" ] || continue
+    out="${out:+$out, }$path"
+  done < <(hat_writes_extra_each)
+  printf '%s\n' "$out"
+}
+
 hat_writes() {   # hat_writes <step> — expanded globs; "" when the hat may write anywhere
-  local hat own=""
+  local hat own="" extra=""
   hat="$(phase_hat "$1")"
   if [ -n "$hat" ]; then own="$(hat_field "$hat" writes)"; fi
+  # An EMPTY own is "writes anywhere" (sdd-executor), and the project's key must never NARROW that:
+  # returning early keeps an entry for such a hat accepted-and-ignored. Summing it here instead
+  # would turn the widest hat in the pipeline into the narrowest, which is the one regression a
+  # key that exists to widen must not cause. `sdd preflight` is where the operator hears about it.
   if [ -z "$own" ]; then printf '\n'; return 0; fi
-  hat_expand "$HAT_WRITES_BASE, $own"
+  extra="$(hat_writes_extra_for "$hat")"
+  hat_expand "$HAT_WRITES_BASE, $own${extra:+, $extra}"
 }
 
 # Literal slash that opens the session, when the phase is driven by a third-party skill.
@@ -2835,6 +3029,14 @@ hat_guard_check() {   # hat_guard_check <phase> <HEAD before the session> — ar
   HAT_CROSSED_WHY="the $step session ($hat) touched $n path(s) outside its writes: $outside"
   warn "$HAT_CROSSED_WHY"
   pipeline_log_line "$(date -Iseconds)  HAT-CROSSED  $phase  $HAT_CROSSED_WHY"
+  # The REMEDY rides BESIDE the accusation, never inside it, and both halves of that are measured.
+  # It is needed at all because the operator of the three occurrences had no way to learn a project
+  # MAY declare an exception, so the repair they reached for was the hat in the kit — which is how
+  # PRODUCT.md ended up in the writes: of every project that installs it (796e334).
+  # It stays OUT of HAT_CROSSED_WHY because that string is DATA: it becomes GATE_WHY and the
+  # ledger's `why`, where advice is noise — and because the path list has to remain the last
+  # `: `-delimited field, which is where three assertions of check-autonomy.sh read it from.
+  pipeline_log_line "$(date -Iseconds)  HAT-REMEDY   $phase  if this repo's own rules oblige one of those paths, declare it in .sdd/config.sh: HAT_WRITES_EXTRA=\"$hat: <path>\" (config/schema.md) — widening the hat in the kit widens it for every project that installs it"
 }
 
 hat_crossed_escalation() {   # hat_crossed_escalation <phase> — rc 0 = STOP (row written), rc 1 = go on
@@ -2846,8 +3048,17 @@ hat_crossed_escalation() {   # hat_crossed_escalation <phase> — rc 0 = STOP (r
   info ""
   bad "BLOCKED in $phase — $why"
   dim "  The hat declares what it may write (agents/<hat>.md, key writes:) and the kit is never a"
-  dim "  target's to edit. Restore or move by hand what belongs elsewhere; to widen a hat, edit it"
-  dim "  in the kit and 'sdd install --force'. Then 'sdd run' again."
+  dim "  target's to edit. Restore or move by hand what belongs elsewhere. Then 'sdd run' again."
+  if [ "$kind" = "hat-crossed" ]; then
+    # Two doors, and naming only the second is what the measured repairs walked through. Widening
+    # the hat in the kit widens it for EVERY project the kit is installed in; the key widens it for
+    # THIS one. The first is right when the path belongs to the pipeline everywhere (a new mission
+    # artifact); the second is right when it belongs to this repo's own rules, which is what the
+    # QA touching a CI workflow and the DOCS touching a napkin both were.
+    dim "  If this repo's own rules oblige that path, declare it — .sdd/config.sh, key"
+    dim "  HAT_WRITES_EXTRA (config/schema.md). Widening the hat itself in the kit widens it for"
+    dim "  every project that installs the kit, which is rarely what one repo's rule means."
+  fi
   pipeline_log_line "$(date -Iseconds)  BLOCKED  $phase  $why"
   autonomy_blocked_row "$kind" "$phase" "$why"
   return 0
@@ -3735,23 +3946,35 @@ cmd_install() {
     ok ".sdd/config.sh created (base branch detected: $branch — confirm it)"
   fi
 
-  # The two paths the runner cannot work without, both NAMED in the config just written — which is
+  # The three paths the runner cannot work without, all NAMED in the config just written — which is
   # what makes this the installer's job. Without HANDOFF_DIR, `resolve_mission` dies on the FIRST
   # command a new user types ("docs/handoffs/ does not exist in the target repo"), and TODO_FILE is
   # where principle 5 sends every out-of-scope finding.
+  #
+  # QA_DOCS_PATH is the third, and it was missing: cmd_install does NOT call load_config, so the
+  # `${QA_DOCS_PATH:-docs/qa}` further down read an UNSET variable and silently seeded `docs/qa`
+  # whatever the repo had declared. cmd_preflight does call load_config, so the two commands
+  # disagreed about which file they were talking about — and since preflight NAMES `sdd install
+  # --force` as the remedy for the missing field, a repo with QA_DOCS_PATH="quality/qa" got a
+  # closed loop: preflight fails, the remedy reports `ok  qa bug template not there yet`, the
+  # configured template is never touched, preflight fails again. A gate whose named remedy cannot
+  # satisfy it is the unsatisfiable-gate class of principle 1, reached here through a default.
   #
   # SOURCED in a subshell, the way check 2b of cmd_health reads TEST_CMD: what matters is the value
   # `load_config` will hand the runner after expansion, never the text of the line. `|| true`
   # because the rc of a substitution is its LAST command's, and a config that fails to parse must
   # not take the install down here — it is `sdd preflight`'s job to say so, in its own words.
-  local inst_handoff inst_todo
+  local inst_handoff inst_todo inst_qadocs
   # shellcheck disable=SC1090
   inst_handoff="$( . "$CONFIG_FILE" >/dev/null 2>&1; printf '%s' "${HANDOFF_DIR:-}" )" || true
   # shellcheck disable=SC1090
   inst_todo="$( . "$CONFIG_FILE" >/dev/null 2>&1; printf '%s' "${TODO_FILE:-}" )" || true
+  # shellcheck disable=SC1090
+  inst_qadocs="$( . "$CONFIG_FILE" >/dev/null 2>&1; printf '%s' "${QA_DOCS_PATH:-}" )" || true
   # Same defaults load_config applies, restated here because a broken config arrives EMPTY.
   [ -n "$inst_handoff" ] || inst_handoff="docs/handoffs"
   [ -n "$inst_todo" ]    || inst_todo="TODO.md"
+  [ -n "$inst_qadocs" ]  || inst_qadocs="docs/qa"
 
   if [ -d "$REPO_ROOT/$inst_handoff" ]; then
     ok "$inst_handoff/ already exists"
@@ -3808,6 +4031,54 @@ SEED
       diff -u "$target" "$a" | sed 's/^/      /' >&2 || true
     fi
   done
+  # --- the qa bug template gains the genre field ------------------------------
+  # Anchor 3 of gate_QA reads `Closable by:` and an ABSENT genre BLOCKS, which is fail-safe and
+  # right: every bug written before the field existed lacks it. But NOTHING on disk ever puts the
+  # field there — `grep -rn Closable ~/.claude/skills/qa-*` answers 0, and the pilot target's own
+  # docs/qa/templates/bug.md has no such line either. So in a fresh target every bug the skills
+  # write is born blocking, and a QA lap is paid before anyone works out why. The field has to
+  # exist BEFORE the first bug, and the installer is the one thing that runs before the first bug.
+  #
+  # The QA tree belongs to the qa-report/qa-execution skills, which is why this touches exactly one
+  # line of one file and only the line the KIT's gate reads. Diff-first like the agent mirrors:
+  # bare `install` shows what is missing, `--force` adopts.
+  # $inst_qadocs, never $QA_DOCS_PATH: this command does not call load_config, so the variable is
+  # unset here and the `:-` default was answering for a repo that had declared otherwise.
+  local bugtpl="$REPO_ROOT/$inst_qadocs/templates/bug.md"
+  local genre_seed='- **Closable by:** agent <!-- agent | human | deferred -->'
+  if [ ! -f "$bugtpl" ]; then
+    ok "qa bug template not there yet (the qa-report skill seeds the tree on its first run)"
+  elif grep -qE '^- \*\*Closable by:\*\*' "$bugtpl"; then
+    # ⚠️ DECLARED LIMIT: the field is looked for, never the LEGEND behind it. A repo installed
+    # before ADR 0009 carries `<!-- agent | human -->`, and this line leaves it alone — gate_QA
+    # reads the VALUE and never the comment, and rewriting a legend inside somebody else's
+    # template is a larger licence than seeding a line the gate demands. The three values are in
+    # agents/sdd-qa.md § 5.1, which is where the agent reads them.
+    ok "qa bug template already carries 'Closable by:'"
+  elif ! grep -qE '^- \*\*Status:\*\*' "$bugtpl"; then
+    # No anchor, no write. A template that is not the skill's shape is somebody else's file, and
+    # guessing where the field goes in it is how an installer corrupts a document it does not
+    # understand. Say it and leave the bytes alone.
+    warn "qa bug template has no '- **Status:**' line — it is not the shape the qa-report skill writes, so the 'Closable by:' field was NOT inserted. Add it by hand below the status line: $genre_seed"
+  elif [ "$force" = "1" ]; then
+    # BELOW the first Status: line, and the position is not cosmetic — gate_QA reads the FIRST
+    # field-shaped line outside a fence, so a seed appended at the end would work today and stop
+    # working the day the template grows a fenced example above it. `0,/re/` so a template that
+    # repeats the status line in an example gets exactly one insertion.
+    # `@` and NEVER `|` as the s/// delimiter: $genre_seed carries the enum legend
+    # `<!-- agent | human | deferred -->`, so a `|`-delimited script ends inside the replacement
+    # and sed refuses it — the same one-character trap that made a mutant of this mission apply to
+    # nothing while the catalogue went on calling it caught.
+    sed -i "0,/^- \*\*Status:\*\*/s@^- \*\*Status:\*\*.*@&\n$genre_seed@" "$bugtpl"
+    ok "qa bug template: 'Closable by:' inserted below 'Status:' (--force)"
+  else
+    warn "qa bug template lacks 'Closable by:' — every bug it births blocks Anchor 3 of the QA gate until somebody marks it by hand. The line, below 'Status:':"
+    dim "      $genre_seed"
+    changed=$((changed + 1))
+  fi
+
+  # "the kit version" covers the agent mirrors AND the bug template's one line: both are the kit's
+  # side of a file the target owns, and both are adopted by the same flag.
   if [ "$changed" -gt 0 ]; then warn "run 'sdd install --force' to adopt the kit version"; fi
 
   local gitignore="$REPO_ROOT/.gitignore"
@@ -4208,6 +4479,38 @@ cmd_preflight() {
   # Only claims "checked" when no agent failed — saying it right after six failure lines is the
   # output contradicting itself, which is the kind of lie the kit forbids in the gates.
   if [ "$n" -gt 0 ] && [ "$fails" -eq 0 ]; then ok "$n kit agent(s) checked"; fi
+
+  # --- the qa bug template carries the genre field ----------------------------
+  # Anchor 3 of gate_QA blocks on an ABSENT `Closable by:`, and nothing but `sdd install` ever
+  # writes that field into the template the qa-report skill copies from. Without this line a fresh
+  # target discovers the contract by paying a QA lap for it. `_fail` and not `warn`: the phase
+  # WILL stall, so this is a prediction the preflight can make for free.
+  local _pf_bugtpl="$REPO_ROOT/${QA_DOCS_PATH:-docs/qa}/templates/bug.md"
+  if [ ! -f "$_pf_bugtpl" ]; then
+    # The skill is not NAMED on this line on purpose. check-preflight.sh asserts that a repo with
+    # no interface never sees `qa-report` in this output — the kit must not ask for a skill it does
+    # not need — and that assertion reads the bare token. Widening someone else's sensor to fit a
+    # line of prose is the wrong direction; the sentence says the same thing without it.
+    dim "  ---  qa bug template not found (no QA docs tree yet — the QA skills create it on their first run)"
+  elif grep -qE '^- \*\*Closable by:\*\*' "$_pf_bugtpl"; then
+    ok "qa bug template carries 'Closable by:'"
+  else
+    _fail "qa bug template lacks 'Closable by:' — every bug it births blocks Anchor 3 of the QA gate until somebody marks it by hand; run 'sdd install --force'"
+  fi
+
+  # --- HAT_WRITES_EXTRA entries that nothing will ever read -------------------
+  # A hat whose own `writes:` is empty writes ANYWHERE (sdd-executor), so hat_writes returns early
+  # and never reaches the sum. The entry is accepted rather than refused — refusing would make the
+  # key a trap for an operator declaring an exception that was simply not needed — but accepted AND
+  # SILENT is a trap of its own: the declaration sits in the config and its author goes on
+  # believing it is in force. `warn`, never `_fail`: nothing is broken, and a red preflight over a
+  # harmless line would train its reader to scroll past the ones that matter.
+  local _pf_hat _pf_path
+  while IFS=$'\x1f' read -r _pf_hat _pf_path; do
+    [ -n "$_pf_hat" ] || continue
+    [ -z "$(hat_field "$_pf_hat" writes)" ] || continue
+    warn "HAT_WRITES_EXTRA names $_pf_hat, whose writes: is empty — that hat already writes anywhere, so the entry ($_pf_path) is accepted and ignored"
+  done < <(hat_writes_extra_each)
 
   # --- git state ---
   local branch; branch="$( cd "$REPO_ROOT" && git branch --show-current )"

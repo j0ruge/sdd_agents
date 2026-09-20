@@ -4930,6 +4930,76 @@ assert_eq "hat: door 2 — a retry that crosses AND passes the gate still stops"
   "$rc $(cat "$OUTSIDE/hat-count" 2>/dev/null || echo 0) $(jq -r -s '[.[].event] | join(",")' "$LEDGER") $(hat_rows)"
 git -C "$FIX" reset -q --hard HEAD~1; git -C "$FIX" clean -qfd
 
+# --- HAT_WRITES_EXTRA: the project's exception, proved by the line it does NOT stop -----------
+# `writes:` is a constant of the KIT; the obligation that crosses it belongs to the TARGET. Measured
+# on the pilot repo 2026-09-17: a QA session of 759 s / US$ 11,32 and a DOCS of 916 s / US$ 6,24
+# died in BLOCKED doing exactly what their own repo's rules demanded — revise the case floor in the
+# CI workflow when a spec is added, put the gotcha in .claude/napkin.md. The third occurrence was
+# repaired by widening the hat for EVERY project, which is the list this key exists to stop.
+echo "== hat boundary: the project's declared exception =="
+hwx_cfg() {   # hwx_cfg <value|''> — the key alone on its own line, replacing any earlier one
+  sed -i '/^HAT_WRITES_EXTRA=/d' "$FIX/.sdd/config.sh"
+  [ -n "$1" ] && printf 'HAT_WRITES_EXTRA=%s\n' "$1" >> "$FIX/.sdd/config.sh"
+  # COMMITTED before the run, and this is not tidiness. The stub below ends in `git add -A`, so a
+  # config left dirty is swept into the session's own commit — and .sdd/config.sh is outside
+  # sdd-docs's writes: too. The differential would then read `hat-crossed` in every regime, for a
+  # path the fixture wrote rather than the one under test, and the key would look broken.
+  git -C "$FIX" add -A >/dev/null 2>&1 || true
+  git -C "$FIX" diff --cached --quiet || git -C "$FIX" commit -qm "chore(fixture): HAT_WRITES_EXTRA=${1:-<unset>}"
+  return 0
+}
+# ONE stub for all three runs: a DOCS session that satisfies its own gate AND writes the CI
+# workflow. Only the CONFIG LINE differs between the runs, which is what makes the three a
+# differential instead of three unrelated observations — the house rule for "X behaves like Y".
+hwx_stub() {
+  cat > "$OUTSIDE/stub/claude" <<STUB
+printf -- '---\nfase: DOCS\nstatus: done\n---\n# drift checklist\n| Area | Doc | Status | Evidence |\n|---|---|---|---|\n| code | README | \xe2\x9c\x85 | abc |\n' > "docs/handoffs/$MISSION/45-docs.md"
+mkdir -p .github/workflows
+printf 'on: push\n' > .github/workflows/e2e-staging.yml
+git add -A; git commit -qm "chore: the docs session revised the workflow its repo demands"
+cat "$STREAM_SAMPLE"
+exit 0
+STUB
+  chmod +x "$OUTSIDE/stub/claude"
+}
+hwx_run() {   # hwx_run — "rc=<rc> kinds=<kinds|none>" for one DOCS run; the tree is put back after
+  local rc=0 kinds
+  hat_reset; hwx_stub
+  # `--max-phases 1`, or the run that the key LETS THROUGH walks on to the next phase, where this
+  # stub does nothing and the lap ends `no-progress` — an rc 3 about the fixture, not about the
+  # frontier. Measured while writing this pair: the crossing was already gone and the assertion
+  # still read red.
+  "$SDD" run "$MISSION" --phase DOCS --max-phases 1 >/dev/null 2>&1 || rc=$?
+  kinds="$(hat_rows)"
+  printf 'rc=%s kinds=%s\n' "$rc" "${kinds:-none}"
+  git -C "$FIX" reset -q --hard HEAD~1 >/dev/null 2>&1 || true
+  git -C "$FIX" clean -qfd >/dev/null 2>&1 || true
+}
+hwx_cfg ''
+hwx_without="$(hwx_run)"
+hwx_plog_without="$(grep -c 'HAT_WRITES_EXTRA' "$HAT_PLOG" 2>/dev/null || true)"
+hwx_cfg '"sdd-docs: .github/workflows/e2e-staging.yml"'
+hwx_with="$(hwx_run)"
+hwx_cfg '"sdd-qa: .github/workflows/e2e-staging.yml"'
+hwx_other="$(hwx_run)"
+hwx_cfg ''
+
+# ⭐ THE DIFFERENTIAL. One session, one path, one config line apart: without the key the line stops
+# with rc 3 and a hat-crossed row; with it the same session finishes clean. Two separate "it
+# stopped" / "it passed" assertions would each be satisfied by a runner that always did one of them.
+assert_eq "HAT_WRITES_EXTRA lets the declared path through, where the same session without it stops" \
+  "rc=3 kinds=hat-crossed · rc=0 kinds=none" "$hwx_without · $hwx_with"
+# ...and the sum is PER HAT. A key that named some OTHER hat's exception must not save this one:
+# without this half, a hat_writes that appends the whole key to every hat reads green above, and
+# one project's declaration would widen every phase of the pipeline.
+assert_eq "a path declared for another hat does not save this one — the sum is per hat" \
+  "rc=3 kinds=hat-crossed" "$hwx_other"
+# The operator of the three measured occurrences had no way to learn the exception exists: the
+# refusal named the paths and then sent them to widen the hat IN THE KIT, which is the repair that
+# put PRODUCT.md into every project. The reason now carries the key.
+assert_eq "the refusal names the remedy, so the operator does not widen the hat for everyone" "1" \
+  "$hwx_plog_without"
+
 # The status half reads names LITERAL: a mission-directory file with a space in its name, left
 # uncommitted, must not read as outside (the line-mode porcelain C-quotes it; -z does not).
 hat_reset

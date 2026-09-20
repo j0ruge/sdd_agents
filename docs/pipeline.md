@@ -186,22 +186,49 @@ journeys in a project with no browser is the paperwork `skipped` exists to avoid
     already applies to both paths;
 - no file in `<QA_DOCS_PATH>/bugs/` has a `**Status:** open` **that an agent could close** (true in
   both cases). Since `20260826-o-laco-da-qa` the anchor reads a second field of the same file,
-  `- **Closable by:**`: `agent` blocks, `human` does not, and **absent blocks**. Absent is the
-  fail-safe and not an oversight — every bug file written before the field existed lacks it, so a
-  permissive default would switch this anchor off for a whole legacy registry in one step. The
+  `- **Closable by:**`: `agent` blocks, `human` and `deferred` do not, and **absent blocks**. Absent
+  is the fail-safe and not an oversight — every bug file written before the field existed lacks it,
+  so a permissive default would switch this anchor off for a whole legacy registry in one step. The
   genre is read from the FIELD, not from wherever the words happen to appear in the body, and
-  matched as a whole lowercase word: `humano`, `humans` and `Human` all read as absent, and block;
+  matched as a whole lowercase word: `humano`, `humans`, `Human` and `deferredly` all read as
+  absent, and block;
 - `TEST_CMD` exits 0 and `E2E_CMD` exits 0 (when set).
 
 `wont-fix` and `invalid` do **not** block: they are a recorded human decision, not a pending
-defect. Neither does an `open` bug marked `Closable by: human`, and that is the only way an `open`
-bug passes. The reason is one level up: no agent in this pipeline may write the `Status:` line —
+defect. Neither does an `open` bug marked `Closable by: human` or `Closable by: deferred`, and
+those are the only two ways an `open` bug passes. The reason is one level up: no agent in this pipeline may write the `Status:` line —
 the `docs/qa/` tree belongs to the `qa-report`/`qa-execution` skills — so a bug waiting on a
 product decision had no path out of `open` at all while this anchor blocked the phase for it
 anyway, and every honest finding bought another lap. Measured in `20260825-frete-cif-fob`: 7 of the
 12 QA sessions in that loop, US$ 73,32 of the mission's US$ 144,88. Marking the genre is the
 `sdd-qa` agent's duty and the one line of a bug file that is its (`agents/sdd-qa.md` § 5.1);
 `Status:` stays the skills'.
+
+`deferred` is the third value, added by [ADR 0009](adr/0009-the-genre-gains-deferred-and-hats-gain-project-exceptions.md)
+as an **amendment** to 0006 rather than a widening of this anchor's scope. `human` and `deferred`
+answer two different questions: `human` is *who **can** close this* — nobody in this pipeline, the
+fix waits on a policy, a person or an external system. `deferred` is *who **pays*** — an agent can,
+and this mission will not, because a human decided so. Before it existed, `human` was the only
+value that did not block, so it became the hiding place for the other question: measured on SQ-129,
+where four decided bugs were marked `human`, a footer convention was invented to remember to change
+them back, and the change back became a manual increment of the next mission.
+
+The difference that makes `deferred` safe to have is **visibility**. `human` passes silently;
+`deferred` passes **loudly** — the gate's own passing reason carries
+`N deferred (visible, not blocking): BUG-a, BUG-b` on every evaluation, so `sdd status` says it
+every time anybody asks — on **both** of the gate's passing branches, the one that read a dated
+report and the one that read a journey walked without a browser interface. The registry is durable
+across missions while a repo's `E2E_CMD` is not, so a repo with no interface can hold deferred bugs
+too, and it is the repo with no other channel to hear about them.
+That is the answer to the objection ADR 0006 raised when it refused to
+narrow this anchor: debt that stops blocking must not stop being seen. The return from `deferred`
+to `agent` is still a human's move, and it is no longer a silent one.
+
+`sdd install` seeds `- **Closable by:** agent <!-- agent | human | deferred -->` into
+`<QA_DOCS_PATH>/templates/bug.md`, below its `Status:` line, and `sdd preflight` fails when the
+template lacks it. Without that, the field reaches disk only when `sdd-qa` marks a file by hand —
+and in a fresh target every bug the skills write is born blocking, with a QA lap paid before anyone
+works out why.
 
 `qa: skipped` is a legitimate and expected answer: a diff with no user-visible change (refactor,
 types, build, docs) has no journey to walk. Inventing a journey just to "have QA" is waste.
@@ -605,6 +632,42 @@ quoted by git and would still be counted as outside the mission directory. The
 **unconditional**: it exists for the kit's own repo, and a target repo that happens to carry that
 path has a reviewer's edit to it waved through. That is the allowlist's one fail-open, and it is
 written down here and in the function's header rather than left to be discovered.
+
+### The project's own exception: `HAT_WRITES_EXTRA`
+
+`writes:` is the **kit's** constant — what a hat owns wherever the kit is installed. The obligation
+that crosses it is often the **target's**: the repo whose own rules say that adding an e2e spec also
+revises the case floor in its CI workflow, or that a gotcha belongs in `.claude/napkin.md`. Before
+the key existed there were two moves and both were wrong — let the run die, or widen the hat in the
+kit for **every** project that installs it. The second is what happened: `796e334` put `PRODUCT.md`
+into every project's `writes:`, which is a list that grows one name per project. Measured on the
+pilot target in 2026-09-17: a QA session of 759 s / US$ 11,32 and a DOCS of 916 s / US$ 6,24 stopped
+in `BLOCKED` doing exactly what their own repo asked.
+
+```sh
+# .sdd/config.sh — `;` between hats, `:` between a hat and its list, `,` between paths
+HAT_WRITES_EXTRA="sdd-qa: .github/workflows/e2e-staging.yml; sdd-docs: .claude/napkin.md"
+```
+
+`hat_writes` sums those paths for the hat that names them and **no other** — one project's
+declaration never widens the rest of the pipeline. `load_config` refuses the whole run, before a
+session is spent, when the value names a hat the kit does not ship, a hat it then lists no path for
+(`sdd-qa:` alone declares nothing, so it is refused rather than accepted in silence), or a path that
+is not literal and repo-relative: no `..`, nothing absolute, and no metacharacter except a trailing `/**` on a directory
+that is **named** (a lone `**` is refused). The whole value is **one line** — hats are separated by
+`;`, and a newline is refused too, because the parser reads a single line and a two-line value used
+to lose everything after the first with rc 0 and no warning. That strictness is not taste — the value lands in
+`hat_path_allowed`'s `case "$f" in $g)`, a shell **glob**, so a metacharacter that slipped through
+would widen a hat the way `ADR_DIR=*` once did when it built the pattern `*/**` (CWE-863, PR #45).
+
+By **path** and not by directory, because the measured occurrences say so: `.claude/rules/**` and
+`.claude/napkin.md` are different decisions. A hat whose own `writes:` is empty already writes
+anywhere (`sdd-executor`); an entry naming it is accepted and **ignored**, and `sdd preflight` says
+so rather than leaving its author believing a declaration is in force. When the guard does stop the
+line, a `HAT-REMEDY` line beside the `HAT-CROSSED` one names this key — the operator of those three
+occurrences had no way to learn the exception exists, which is why the repair they reached for was
+the hat in the kit. Full grammar and guard in [`../config/schema.md`](../config/schema.md); the
+decision and what it discarded in [ADR 0009](adr/0009-the-genre-gains-deferred-and-hats-gain-project-exceptions.md).
 
 It **warns and records; it does not stop the line** — a reviewer that edited a file has already
 spent the money, and refusing the session would throw away the round report with it. It reads

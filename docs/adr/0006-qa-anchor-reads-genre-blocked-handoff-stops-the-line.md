@@ -1,6 +1,6 @@
 # 0006 — The QA anchor reads the bug's genre, and a blocked handoff stops the line at once
 
-Date: 2026-08-26 · Status: accepted
+Date: 2026-08-26 · Status: accepted · Amended by: 0009
 
 ## Context
 

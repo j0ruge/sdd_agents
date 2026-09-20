@@ -134,6 +134,22 @@ assert_has "preflight got as far as the tool checks" "git present" "$out"
 assert_has "GNU userland reported ok" "$OK_LINE" "$out"
 assert_lacks "no GNU complaint on a GNU machine" "the kit assumes the GNU userland" "$out"
 
+# --- HAT_WRITES_EXTRA for a hat that already writes anywhere ----------------
+# An entry naming sdd-executor is accepted and IGNORED: that hat's writes: is empty, which means
+# "writes anywhere", and summing the entry would turn the widest hat in the pipeline into the
+# narrowest. Accepted-and-silent would be a trap of its own, though — the operator would go on
+# believing a declaration is in force while nothing reads it. So preflight says so.
+echo "== HAT_WRITES_EXTRA naming a hat that already writes anywhere =="
+printf 'HAT_WRITES_EXTRA="sdd-executor: x.md"\n' >> .sdd/config.sh
+hwx_out="$( "$SDD" preflight 2>&1 )"
+sed -i '/^HAT_WRITES_EXTRA=/d' .sdd/config.sh
+# DIFFERENTIAL: the same preflight WITHOUT the key must not say it. Asserting only the presence
+# would also pass on a line printed unconditionally, which is a warning that means nothing.
+hwx_quiet="$( "$SDD" preflight 2>&1 )"
+assert_eq "preflight says an entry for a hat that writes anywhere is ignored, and says it only then" \
+  "named:1 quiet:0" \
+  "named:$( grep -c 'sdd-executor' <<< "$hwx_out" ) quiet:$( grep -c 'sdd-executor' <<< "$hwx_quiet" )"
+
 # --- the context bill: a SENSOR, and never a refusal ------------------------
 # The target's CLAUDE.md plus its .claude/rules/ is ~73% of the fixed prefix every turn of every
 # phase carries (measured 2026-09-03, two repos). The kit does not cut anybody's rulebook, so this
@@ -781,6 +797,114 @@ else
   fail "with two manifests the first match wins (package.json → npm test)" \
        "npm test" "$multi_test_cmd"
 fi
+
+# --- the bug template is seeded with `Closable by:` -------------------------
+# Anchor 3 of gate_QA reads that field and an ABSENT genre BLOCKS — fail-safe, because every bug
+# written before the field existed lacks it. But nothing on disk ever puts the field there:
+# `grep -rn Closable ~/.claude/skills/qa-*` answers 0, and the pilot target's own
+# docs/qa/templates/bug.md has no such line either. So in a fresh target every bug the skills write
+# is born blocking, and somebody pays a QA lap before anyone works out why. The field has to exist
+# BEFORE the first bug, which makes it the installer's job.
+echo "== the qa bug template gains Closable by: =="
+BT="$FIX/bugtpl"
+mkdir -p "$BT/docs/qa/templates"
+( cd "$BT" && git init -q -b main && git config user.email "fixture@example.com"   && git config user.name "Fixture" && printf '{}\n' > package.json ) >/dev/null 2>&1
+# PROVENANCE: ~/.claude/skills/qa-report/assets/bug-template.md:1-4, verbatim. Copied and not
+# written from memory — three gate bugs of this kit were born of an imagined fixture, where the
+# gate and the fixture shared an author and a wrong assumption, so green CONFIRMED the assumption
+# instead of measuring it.
+bt_template() {
+  cat > "$BT/docs/qa/templates/bug.md" <<'BTEOF'
+# BUG-<YYYYMMDD>-<slug>: <one-line title, user-first>
+
+- **Status:** open <!-- open | fixed | verified | wont-fix | invalid -->
+- **Impact (user-side):** <Blocks-Completion | Data-Loss | Trust-Damage | Friction | Cosmetic>
+BTEOF
+}
+bt_template
+( cd "$BT" && git add -A && git commit -qm "init" ) >/dev/null 2>&1
+( cd "$BT" && "$SDD" install >/dev/null 2>&1 )
+bt_template   # the install above wrote .sdd/; the template is put back to the skill's own shape
+
+# 1. WITHOUT the field: preflight refuses, and `install` alone only SHOWS it — diff-first, the way
+#    the agent mirrors already behave. `md5:same` is the half that matters: an installer that
+#    edited the file without being asked would satisfy "it warned" and still have edited.
+bt_md5_before="$(md5sum < "$BT/docs/qa/templates/bug.md")"
+bt_pf_missing="$( cd "$BT" && "$SDD" preflight 2>&1 )"
+bt_inst_soft="$( cd "$BT" && "$SDD" install 2>&1 )"
+assert_eq "a template without Closable by: fails preflight, and a bare install only shows it" \
+  "pf-fail:1 pf-remedy:1 shown:1 md5:same" \
+  "pf-fail:$( grep -cE '^ *fail +qa bug template' <<< "$bt_pf_missing" ) pf-remedy:$( grep -c "sdd install --force" <<< "$bt_pf_missing" ) shown:$( grep -cF -- '- **Closable by:** agent <!-- agent | human | deferred -->' <<< "$bt_inst_soft" ) md5:$( [ "$bt_md5_before" = "$(md5sum < "$BT/docs/qa/templates/bug.md")" ] && echo same || echo edited )"
+
+# 2. WITH --force: the line lands immediately BELOW `Status:` — line 4, because the skill's own
+#    file opens with the title, a blank line and Status. Position is not cosmetic: gate_QA reads
+#    the FIRST field-shaped line outside a fence, so a seed dropped at the end of the file would
+#    still work today and stop working the day the template grows a fenced example above it.
+( cd "$BT" && "$SDD" install --force >/dev/null 2>&1 )
+bt_line4="$(sed -n '4p' "$BT/docs/qa/templates/bug.md")"
+bt_pf_seeded="$( cd "$BT" && "$SDD" preflight 2>&1 )"
+assert_eq "install --force seeds Closable by: below Status:, and preflight goes quiet" \
+  "line4:1 legend:1 pf-fail:0" \
+  "line4:$( grep -c '^- \*\*Closable by:\*\* agent' <<< "$bt_line4" ) legend:$( grep -c 'agent | human | deferred' <<< "$bt_line4" ) pf-fail:$( grep -cE '^ *fail +qa bug template' <<< "$bt_pf_seeded" )"
+
+# 3. IDEMPOTENT. A second --force must not stack a second line: `sdd install --force` is run after
+#    every change to an agent file, so a seeder that appended each time would grow the template one
+#    line per kit update and the SECOND field-shaped line would be nobody's genre.
+bt_md5_seeded="$(md5sum < "$BT/docs/qa/templates/bug.md")"
+( cd "$BT" && "$SDD" install --force >/dev/null 2>&1 )
+assert_eq "a second install --force is a no-op on the template" \
+  "md5:same count:1" \
+  "md5:$( [ "$bt_md5_seeded" = "$(md5sum < "$BT/docs/qa/templates/bug.md")" ] && echo same || echo changed ) count:$( grep -c '^- \*\*Closable by:\*\*' "$BT/docs/qa/templates/bug.md" )"
+
+# 4. NO ANCHOR, NO WRITE. A template that is not the skill's shape is somebody else's file, and
+#    guessing where the field goes in it is how an installer corrupts a document it does not
+#    understand. It says so and leaves the bytes alone — the `md5:same` here is the assertion.
+printf 'a template of our own, with no Status line\n' > "$BT/docs/qa/templates/bug.md"
+bt_md5_odd="$(md5sum < "$BT/docs/qa/templates/bug.md")"
+bt_inst_odd="$( cd "$BT" && "$SDD" install --force 2>&1 )"
+assert_eq "a template with no Status: anchor is named and left untouched" \
+  "warned:1 md5:same" \
+  "warned:$( grep -c 'Status:' <<< "$bt_inst_odd" ) md5:$( [ "$bt_md5_odd" = "$(md5sum < "$BT/docs/qa/templates/bug.md")" ] && echo same || echo edited )"
+
+# 5. NO TREE, NO COMPLAINT. A repo with no docs/qa/ yet has nothing to seed and nothing to fail
+#    on — the skills create that tree on their first run. Without this the kit's OWN preflight
+#    would go red, which is the check reporting the absence of a feature as a defect.
+rm -rf "$BT/docs/qa"
+bt_pf_notree="$( cd "$BT" && "$SDD" preflight 2>&1 )"
+assert_eq "a repo with no QA docs tree is neither failed nor seeded" \
+  "fail:0 said:1" \
+  "fail:$( grep -cE '^ *fail +qa bug template' <<< "$bt_pf_notree" ) said:$( grep -c 'qa bug template not found' <<< "$bt_pf_notree" )"
+
+# 6. The repo that does NOT keep its QA tree at docs/qa. `cmd_install` never calls `load_config`,
+#    so the `${QA_DOCS_PATH:-docs/qa}` it used to build the template path read an UNSET variable
+#    and answered `docs/qa` whatever the repo had declared — while `cmd_preflight`, which does
+#    call `load_config`, checked the configured path. The two commands talked about different
+#    files, and because preflight NAMES `sdd install --force` as its remedy, the pair closed into
+#    a loop: fail, run the remedy, remedy reports ok, nothing changes, fail again.
+#
+#    FOUR terms, and the last two are what make it a measurement rather than a restatement. That
+#    the configured template gained the field is the fix; that `docs/qa` was NOT created is the
+#    defect's own signature (the old code would have looked there and, finding nothing, said so);
+#    and that preflight goes quiet afterwards is the loop actually closing — asserting only the
+#    first term would be satisfied by an installer that seeded both paths.
+rm -rf "$BT/docs" "$BT/quality"
+mkdir -p "$BT/quality/qa/templates"
+sed -i 's|^QA_DOCS_PATH=.*|QA_DOCS_PATH="quality/qa"|' "$BT/.sdd/config.sh"
+grep -q '^QA_DOCS_PATH=' "$BT/.sdd/config.sh" || printf 'QA_DOCS_PATH="quality/qa"\n' >> "$BT/.sdd/config.sh"
+{ printf '# BUG-<YYYYMMDD>-<slug>: <one-line title, user-first>\n\n'
+  printf -- '- **Status:** open <!-- open | fixed | verified | wont-fix | invalid -->\n'
+} > "$BT/quality/qa/templates/bug.md"
+bt_pf_alt_before="$( cd "$BT" && "$SDD" preflight 2>&1 )"
+bt_inst_alt="$(     cd "$BT" && "$SDD" install --force 2>&1 )"
+bt_pf_alt_after="$( cd "$BT" && "$SDD" preflight 2>&1 )"
+assert_eq "install --force seeds the CONFIGURED qa tree, not the default one, and the loop closes" \
+  "before-fail:1 said:1 seeded:1 no-default-tree:1 after-fail:0" \
+  "before-fail:$( grep -cE '^ *fail +qa bug template' <<< "$bt_pf_alt_before" ) said:$( grep -cE '^ *ok +qa bug template.*inserted' <<< "$bt_inst_alt" ) seeded:$( grep -c '^- \*\*Closable by:\*\* agent' "$BT/quality/qa/templates/bug.md" ) no-default-tree:$( [ -e "$BT/docs/qa" ] && echo 0 || echo 1 ) after-fail:$( grep -cE '^ *fail +qa bug template' <<< "$bt_pf_alt_after" )"
+# ...and the remedy preflight NAMES is the one that was just run. The loop above is only a loop
+# because the two sentences point at each other; without this term the pair could drift apart
+# again and each half would still pass.
+assert_eq "and the remedy preflight names is the command that closed it" "1" \
+  "$( grep -c "sdd install --force" <<< "$bt_pf_alt_before" )"
 
 # ---------------------------------------------------------------------------
 echo

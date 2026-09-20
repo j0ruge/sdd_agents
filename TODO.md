@@ -644,7 +644,17 @@ O plano consolidado pelo Codex Astra, baseado no artigo de @0xCodez e nas refer�
 
 ### Comentário e registro
 
-- [ ] **O `writes:` do chapéu não comporta obrigação que o repo impõe, e a linha para depois da sessão paga** — `agents/sdd-docs.md:9` — duas instâncias, uma direção. (a) O `writes:` da DOCS não lista `bin/sdd`, e comentário de código É documentação viva: a DOCS consertou uma frase podre que a REVIEW endereçou a ela e o `hat_guard_check` parou a linha com `hat-crossed`. (b) No `sales_quote`, acrescentar um spec e2e **obriga** rever o piso de casos do workflow de CI (`agents/sdd-qa.md:11`), fora da faixa do chapéu. Direção: chave por projeto no `.sdd/config.sh` que some ao `writes:` de um chapéu nomeado, e decidir de quem é o drift de comentário.
+- [ ] **O `writes:` do chapéu não comporta obrigação que o repo impõe, e a linha para depois da sessão paga** — `agents/sdd-docs.md:9` — duas instâncias. (a) O `writes:` da DOCS não lista `bin/sdd`, e comentário de código É documentação viva. (b) No `sales_quote`, acrescentar um spec e2e **obriga** rever o piso de casos do workflow de CI (`agents/sdd-qa.md:11`), fora da faixa do chapéu.
+  RESOLVIDO por 350688a **na instância (b)** — `HAT_WRITES_EXTRA` declara o caminho por chapéu,
+  com guarda literal, e a recusa nomeia a chave (ADR 0009). A (a) não fecha: dar `bin/sdd` ao chapéu
+  da DOCS entrega o runner a quem não edita código. Virou o item logo abaixo.
+  — descoberto por `sdd-docs` na missão `20260911-o-juiz-nao-mente-sobre-a-janela` (2026-09-12)
+
+- [ ] **Drift de comentário em código não tem dono: nem a DOCS nem a EXEC** — `agents/sdd-docs.md:9`
+  — comentário de código É documentação viva, mas o `writes:` da DOCS não lista `bin/sdd` e o
+  `hat_guard_check` para a linha quando ela o conserta. `HAT_WRITES_EXTRA` não é a saída: declarar
+  `bin/sdd` para a DOCS entrega o runner inteiro a quem não edita código, e a fronteira existe para
+  isso. Direção: a REVIEW endereça o achado à EXEC, ou a DOCS ganha um caminho estreito.
   — descoberto por `sdd-docs` na missão `20260911-o-juiz-nao-mente-sobre-a-janela` (2026-09-12)
 
 - [ ] **22 das 33 âncoras do `TODO.md` apontam para a linha errada** —
@@ -829,22 +839,28 @@ O plano consolidado pelo Codex Astra, baseado no artigo de @0xCodez e nas refer�
 - [ ] **`gate_QA` cobra bugs `open` de outras missões, e a direção proposta contradiz a ADR 0006** —
   `bin/sdd` (Âncora 3 do `gate_QA`) — a missão herda a dívida inteira do registry como condição de
   bloqueio: quanto mais honesta a QA de ontem, mais cara a missão de hoje. Cinco bugs de 2026-09-14,
-  nenhum no raio do diff, travaram a QA da SQ-129. ⚠️ Direção óbvia (contar só a procedência da
-  missão corrente) foi **recusada com argumento** na [ADR 0006](docs/adr/0006-qa-anchor-reads-genre-blocked-handoff-stops-the-line.md)/D17 — quem pegar isto reabre a ADR, não implementa o item.
+  nenhum no raio do diff, travaram a QA da SQ-129.
+  RESOLVIDO por 81e6f6c **pelo item abaixo** — o caso real não era "bug de outra missão" e sim
+  "agent-closable que esta missão não paga": lacuna no ENUM, não no escopo. A [ADR 0006](docs/adr/0006-qa-anchor-reads-genre-blocked-handoff-stops-the-line.md)/D17
+  é **emendada** (`Amended by: 0009`), a alternativa (A) dela segue recusada e a âncora não muda.
   — descoberto por `sessão coordenadora` na missão `20260916-destino-frete-cif` (2026-09-16)
 
 - [ ] **`Closable by:` é binário: falta "decidido, aguardando quem pague"** — `agents/sdd-qa.md:118`
   — com a decisão humana já tomada e gravada no corpo do bug, trocar o gênero para `agent` faria os
   quatro voltarem a travar o `gate_QA` da missão em voo; deixar `human` os torna invisíveis ao laço
-  para sempre. O dado certo fica num campo que o gate não lê e a troca vira passo manual (virou o
-  `I6` da SQ-130). Direção: terceiro valor, ou um `decided-by:` que o gate leia junto do gênero.
+  para sempre, e a troca vira passo manual (virou o `I6` da SQ-130).
+  RESOLVIDO por 81e6f6c — `Closable by: deferred`, terceiro valor no MESMO campo e mesmo extrator:
+  não bloqueia como `human` e, ao contrário dele, é nomeado no motivo do gate em toda avaliação
+  (ADR 0009; `agents/sdd-qa.md` § 5.1 exige a decisão gravada no corpo do bug).
   — descoberto por `sessão coordenadora` na missão `20260916-destino-frete-cif` (2026-09-16)
 
 - [ ] **Nenhuma das skills `qa-report`/`qa-execution` conhece o campo `Closable by:`** —
   `agents/sdd-qa.md:118` — `grep -rn Closable ~/.claude/skills/qa-*` responde **zero**, então o
   campo só chega ao disco pelo template local do repo ou pelo `sdd-qa` marcando arquivo por arquivo.
-  Em repo-alvo novo a Âncora 3 inteira roda em regime "ausente ⇒ bloqueia". Muda o custo estimado de
-  qualquer missão que ataque os dois itens acima, e precisa estar escrito antes dela ser planejada.
+  Em repo-alvo novo a Âncora 3 inteira roda em regime "ausente ⇒ bloqueia". `f7bcf10` ESTREITOU o
+  raio — semeia o campo no template de que elas copiam e o `sdd preflight` cobra —, mas NÃO fechou
+  este item: as skills seguem sem o conhecer. Direção: ensinar o campo às skills, ou o `sdd-qa`
+  assumir a marcação como passo declarado.
   — descoberto por `sessão coordenadora` na missão `20260918-a-sessao-morreu-e-o-gate-levou-a-culpa` (2026-09-18)
 
 - [ ] **Fase executada à mão não tem como ser registrada, e o ledger afirma que ela não aconteceu** —

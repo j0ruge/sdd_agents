@@ -719,6 +719,87 @@ genre_indented="$( cd "$FIX" && "$SDD" phase "$MISSION" 2>&1 )"
 assert_eq "the field starts at column zero: an indented quote does not become the genre" \
   "REVIEW|QA" "$genre_exact|$genre_indented"
 
+# --- the THIRD genre: `deferred`, visible and not blocking -------------------------------------
+# Two values forced two different questions into one answer. ADR 0006 modelled "who CAN close" —
+# agent or human — and on SQ-129 the question was "who PAYS": a human decided four bugs (383df146,
+# a `## Decisao` section in each body) that an agent CAN close and that mission would not pay for.
+# Neither value fitted. `agent` put all four back in front of the gate of a mission in flight;
+# `human` is the value that never blocks, so it became the hiding place — and the swap back turned
+# into a manual increment of the next mission. ADR 0009 amends 0006 with the third answer.
+#
+# The objection 0006 raised against narrowing this anchor was that debt "ages out of sight". The
+# answer here is VISIBILITY, not silence: `deferred` skips the count exactly as `human` does, and
+# the reason NAMES every deferred bug on every evaluation.
+write_genre_bug '- **Closable by:** deferred <!-- agent | human | deferred -->'
+genre_phase_deferred="$( cd "$FIX" && "$SDD" phase "$MISSION" 2>&1 )"
+genre_why_deferred="$(   cd "$FIX" && "$SDD" why "$MISSION" QA 2>&1 )"
+
+# ⭐ DIFFERENTIAL against `human`, on one word of one line, and the two terms are what make it
+# mean anything. SAME verdict — deferred does not block, which is the whole point — and a
+# DIFFERENT reason, because a value that behaved exactly like `human` would be `human` with extra
+# steps, and the debt would age out of sight just as ADR 0006 warned. The name of the bug is the
+# difference: it appears in the deferred reason and in no other regime.
+assert_eq "deferred passes and the reason names the bug, where human passes silently" \
+  "REVIEW|REVIEW|named:1|human-named:0" \
+  "$genre_phase_human|$genre_phase_deferred|named:$( grep -cF 'BUG-20260102-genre' <<< "$genre_why_deferred" )|human-named:$( grep -cF 'BUG-20260102-genre' <<< "$genre_why_human" )"
+# ...and it is not the BLOCKING reason wearing a new coat: the marker two assertions above read
+# (`with Status: open in the registry`) must be absent, or "deferred passes" would be satisfied by
+# a gate that failed and said so politely.
+assert_eq "the deferred reason is the passing one, not the blocking one reworded" "0" \
+  "$( grep -cF 'with Status: open in the registry' <<< "$genre_why_deferred" )"
+
+# The three blindages are INHERITED, not re-granted — the extractor did not change and the matcher
+# gained one alternative. Inherited is a claim, though, and this file's rule is that a claim about
+# behaviour is written as an assertion. Each of the three fail-opens the anchor already paid for,
+# re-run with the NEW value; `$genre_exact` stays the passing control so a gate that blocked
+# everything takes it red instead of passing these quietly.
+write_genre_bug '- **Closable by:** deferredly <!-- agent | human | deferred -->'
+genre_deferred_prefix="$( cd "$FIX" && "$SDD" phase "$MISSION" 2>&1 )"
+assert_eq "deferred is the whole word too: the near-miss 'deferredly' still blocks" \
+  "REVIEW|QA" "$genre_exact|$genre_deferred_prefix"
+{ printf '# BUG-20260102-genre: filed about the deferred genre, repro fenced\n'
+  printf -- '- **Status:** open <!-- open | fixed | verified | wont-fix | invalid -->\n'
+  printf -- '- **Closable by:** agent <!-- agent | human | deferred -->\n'
+  printf '\nThe line this bug is about reads:\n\n```md\n'
+  printf -- '- **Closable by:** deferred <!-- agent | human | deferred -->\n'
+  printf '```\n'
+} > "$GENRE_BUG"
+genre_deferred_fenced="$( cd "$FIX" && "$SDD" phase "$MISSION" 2>&1 )"
+assert_eq "a fenced 'deferred' quote does not become the genre either" \
+  "REVIEW|QA" "$genre_exact|$genre_deferred_fenced"
+{ printf '# BUG-20260102-genre: the deferred repro is pasted above the metadata\n'
+  printf -- '- **Status:** open <!-- open | fixed | verified | wont-fix | invalid -->\n'
+  printf '\nSteps to reproduce:\n\n```md\n'
+  printf -- '- **Closable by:** deferred <!-- agent | human | deferred -->\n'
+  printf '```\n\n'
+  printf -- '- **Closable by:** agent <!-- agent | human | deferred -->\n'
+} > "$GENRE_BUG"
+genre_deferred_above="$( cd "$FIX" && "$SDD" phase "$MISSION" 2>&1 )"
+assert_eq "a 'deferred' quote ABOVE the field does not become the genre either" \
+  "REVIEW|QA" "$genre_exact|$genre_deferred_above"
+
+# TWO deferred bugs at once, which is the only regime that exercises the JOIN. Every probe above
+# holds exactly one, and `deferred_names="${deferred_names:+$deferred_names, }${bugname%.md}"` is
+# the one line that has to put a `, ` between two names and no comma before the first — a defect
+# there (doubled separator, leading comma, one name winning) is invisible at N=1.
+#
+# The join is asserted as ONE alternation over both orderings rather than as two `grep -c` terms,
+# because the registry is walked in `grep -rl` order, which is the filesystem's and not ours:
+# demanding a fixed order would make this assertion a statement about readdir. Both orderings
+# name the property — two names, one separator, nothing between them — and neither is satisfied
+# by a reason that merely contains both names somewhere.
+GENRE_BUG2="$FIX/docs/qa/bugs/BUG-20260103-genre-two.md"
+write_genre_bug '- **Closable by:** deferred <!-- agent | human | deferred -->'
+{ printf '# BUG-20260103-genre-two: a second bug the same human decided\n'
+  printf -- '- **Status:** open <!-- open | fixed | verified | wont-fix | invalid -->\n'
+  printf -- '- **Closable by:** deferred <!-- agent | human | deferred -->\n'
+} > "$GENRE_BUG2"
+genre_why_two="$( cd "$FIX" && "$SDD" why "$MISSION" QA 2>&1 )"
+assert_eq "two deferred bugs are counted as two and joined by ', ' — the N>1 regime" \
+  "count:1 joined:1" \
+  "count:$( grep -cF '2 deferred (visible, not blocking)' <<< "$genre_why_two" ) joined:$( grep -cE 'BUG-20260102-genre, BUG-20260103-genre-two|BUG-20260103-genre-two, BUG-20260102-genre' <<< "$genre_why_two" )"
+rm -f "$GENRE_BUG2"
+
 rm -f "$GENRE_BUG"
 
 # The QA site of latest_matching(), which the r10 fixture below does NOT cover: that one pins the
@@ -879,6 +960,31 @@ assert_why   "QA asks for the journey evidence" "QA" "evidence of the journey|no
 printf -- '---\nfase: QA\nstatus: done\ngate: "1 journey walked in the CLI; 1 finding became F1"\n---\n' \
   > "$MDIR/30-handoff-qa.md"
 assert_phase "no interface, 'done' WITH evidence passes" "REVIEW"
+
+# ...and the deferred debt is named HERE too. The registry loop in gate_QA runs on both branches —
+# it reads $QA_DOCS_PATH/bugs/ without asking whether the repo has an interface — but the sentence
+# that names the deferred bugs used to live inside `if [ -n "$report" ]`, and only the interface
+# branch ever assigns `report`. So the one channel ADR 0009 offers against ADR 0006's "debt ages
+# out of sight" went silent in exactly the repo that has no other channel, and no probe covered it:
+# every genre assertion above runs with E2E_CMD and APP_URL set. The bug registry is durable across
+# missions while this config is not, so "a repo with no interface has no docs/qa/ tree" is an
+# assumption, never a guarantee.
+#
+# DIFFERENTIAL on the branch, not just on the name: the second term demands the no-interface
+# sentence be the one that carried it. Asserting only `named:1` would be satisfied by a runner that
+# fell through to the interface branch, which is the other way this could go wrong.
+NOIF_BUG="$FIX/docs/qa/bugs/BUG-20260104-noif.md"
+{ printf '# BUG-20260104-noif: decided by a human, another mission pays\n'
+  printf -- '- **Status:** open <!-- open | fixed | verified | wont-fix | invalid -->\n'
+  printf -- '- **Closable by:** deferred <!-- agent | human | deferred -->\n'
+} > "$NOIF_BUG"
+noif_phase="$( cd "$FIX" && "$SDD" phase "$MISSION" 2>&1 )"
+noif_why="$(   cd "$FIX" && "$SDD" why "$MISSION" QA 2>&1 )"
+assert_eq "no interface: deferred still does not block, and the reason still names it" \
+  "REVIEW named:1 branch:1" \
+  "$noif_phase named:$( grep -cF '1 deferred (visible, not blocking): BUG-20260104-noif' <<< "$noif_why" ) branch:$( grep -cF 'without a browser interface' <<< "$noif_why" )"
+rm -f "$NOIF_BUG"
+assert_phase "no interface, the registry is clean again" "REVIEW"
 
 # skipped short-circuits everything
 cp "$MDIR/30-handoff-qa.md" "$MDIR/30.bak"
@@ -3448,6 +3554,137 @@ NG_TYPO_RC=0
 "$SDD" status "$MISSION" --no-gate >/dev/null 2>&1 || NG_TYPO_RC=$?
 assert_eq "a misspelt status option is refused, never read as a mission name" "1" \
   "$( [ "$NG_TYPO_RC" -ne 0 ] && echo 1 || echo 0 )"
+
+# ---------------------------------------------------------------------------
+# HAT_WRITES_EXTRA — the project's exception to the hat's writes:, and its guard.
+#
+# The hat's frontier is a constant of the KIT (`writes:` in agents/<hat>.md); the obligation that
+# crosses it belongs to the PROJECT. Measured on the pilot target 2026-09-17: a QA session of
+# 759 s / US$ 11,32 died in BLOCKED for touching .github/workflows/e2e-staging.yml — which that
+# repo's own rules demand when a spec is added — and a DOCS of 916 s / US$ 6,24 for 18 correct
+# lines in .claude/napkin.md. The third occurrence was patched LITERALLY (796e334 put PRODUCT.md
+# into every project's writes:), which is the list that grows one name per project.
+#
+# The key WIDENS a permission, and its value is dropped into hat_path_allowed's `case "$f" in $g)`
+# — a shell GLOB. So every looseness in the guard fails OPEN, the same way `ADR_DIR=*` built the
+# pattern `*/**` and widened a hat to most of the repo (CWE-863, PR #45). These probes are the
+# guard's, and they are written against the REFUSALS: a key that is ignored outright passes the
+# acceptance probe below and fails every one of these.
+# The base config is SNAPSHOT and restored, never sed-edited in place. `sed -i '/^HAT_WRITES_EXTRA=/d'`
+# deletes one LINE, and one of the values below is deliberately two lines long — it left the
+# orphan `sdd-docs: docs/gotchas/**"` behind in config.sh, and the acceptance probes further down
+# then measured a fixture nobody had written. A probe whose cleanup is narrower than its write
+# contaminates every assertion after it, and the contamination reads as a failure of THOSE.
+# The snapshot lives outside the fixture's git tree: $FIX is a working tree, and a stray file in
+# .sdd/ is untracked noise in a fixture whose whole point is to model a clean repo.
+HWX_CFG_BASE="$SDD_STATE_FIX/hwx-config-base.sh"
+cp .sdd/config.sh "$HWX_CFG_BASE"
+hwx_set() { # hwx_set <value> — the key alone on its own line, over a pristine config
+  cp "$HWX_CFG_BASE" .sdd/config.sh
+  [ -n "$1" ] && printf 'HAT_WRITES_EXTRA=%s\n' "$1" >> .sdd/config.sh
+  return 0
+}
+# hwx_probe <value> — "rc|1" when the run died AND the message named <needle>, over one call.
+hwx_probe() {
+  local value="$1" needle="$2" out rc=0
+  hwx_set "$value"
+  out="$( "$SDD" status "$MISSION" --no-gates 2>&1 )" || rc=$?
+  printf '%s|%s\n' "$( [ "$rc" -ne 0 ] && echo died || echo lived )" \
+                   "$( grep -cF -- "$needle" <<< "$out" | head -1 )"
+}
+
+# Traversal. `..` is the spelling that took ADR_DIR outside the repository, and here it would hand
+# a hat a path above the checkout.
+#
+# The needle is the VALUE (`../x`) and never the bare `..`, which is what it used to be. The die
+# message all four path refusals share ends "...relative, no '..', and no metacharacter except a
+# trailing '/**'" — so `grep -cF -- '..'` counted the BOILERPLATE and answered 1 for every one of
+# them. Measured, three values through the same probe: `../x`, `/etc/passwd` and `docs/*` all
+# returned `died|1`, so the half of this assertion that claims "the reason names it" was satisfied
+# by text that names nothing. Had the message stopped echoing `$_hwx_path`, it would still have
+# passed. The other three assertions below were always right for this reason; this one now matches
+# them.
+assert_eq "HAT_WRITES_EXTRA with ../ is refused, and the reason names it" "died|1" \
+  "$( hwx_probe '"sdd-qa: ../x"' '../x' )"
+# Absolute. hat_path_allowed compares against paths git reports RELATIVE to the root, so an
+# absolute glob matches nothing — but it is refused for being meaningless rather than tolerated
+# for being harmless: the next reader would take silence for support.
+assert_eq "an absolute path is refused" "died|1" \
+  "$( hwx_probe '"sdd-qa: /etc/passwd"' '/etc/passwd' )"
+# The metacharacter, which is the whole reason this guard exists. `docs/*` is not a path, it is a
+# pattern, and the runner would hand it to `case` verbatim.
+assert_eq "a metacharacter outside the /** suffix is refused" "died|1" \
+  "$( hwx_probe '"sdd-qa: docs/*"' 'docs/*' )"
+# ...and `**` is only the LAST component. `docs/**/x` reads as a named directory to a human and as
+# a two-star glob to the shell.
+assert_eq "** in the middle is refused — the suffix is the last component or nothing" "died|1" \
+  "$( hwx_probe '"sdd-qa: docs/**/x"' 'docs/**/x' )"
+# The hat has to EXIST. A typo would otherwise sit in the config declaring an exception for nobody,
+# and the operator would read the still-blocked run as the key not working.
+assert_eq "a hat the kit has no agents/<hat>.md for is refused by name" "died|1" \
+  "$( hwx_probe '"sdd-nope: a.md"' 'sdd-nope' )"
+
+# An entry with NO `:` at all. The parser yields an empty hat for it by construction and
+# load_config refuses it in a clause of its own — and this is a DIFFERENTIAL, not a "died" probe,
+# because the two clauses sit three lines apart and the wrong one answering looks identical from
+# the outside. It caught exactly that: the parser emitted `<hat>\t<path>`, and `read` discards
+# leading IFS *whitespace* even under a one-character IFS, so a line whose first field was empty
+# arrived shifted — the path landed in the hat, the empty-hat clause became UNREACHABLE, and the
+# operator who forgot the colon was told the kit has no `agents/docs/foo.md.md`. The separator is
+# US (0x1f) now; this pair is what stops it going back to a tab.
+hwx_nocolon="$( hwx_probe '"docs/foo.md"' 'no hat before' )"
+hwx_nocolon_other="$( hwx_probe '"docs/foo.md"' 'the kit has no agents' )"
+assert_eq "an entry with no ':' is refused by the empty-hat clause, not by the hat-not-found one" \
+  "died|1|died|0" "$hwx_nocolon|$hwx_nocolon_other"
+
+# An entry that names a hat and then NO path — `sdd-qa:`, or a list of nothing but commas and
+# spaces. The parser drops empty items, so such an entry used to emit no pair at all and the
+# validator had nothing to look at: rc 0, no warning, and an exception that declared nothing. Same
+# silence the hat-not-found clause refuses by name, and the same cost — the operator reads the
+# still-blocked phase as the key not working. Three spellings, because "the list is empty" and
+# "the list is punctuation" reach the parser by different paths.
+assert_eq "an entry that lists no path is refused, and the reason names the hat" "died|1" \
+  "$( hwx_probe '"sdd-qa:"' "entry for hat 'sdd-qa' lists no path" )"
+assert_eq "...and a list of nothing but commas and spaces is the same entry" "died|1" \
+  "$( hwx_probe '"sdd-qa:  ,  , "' "entry for hat 'sdd-qa' lists no path" )"
+# The SECOND hat is the one that is empty here, so a validator that only ever looked at the first
+# entry would pass this and fail nothing else in the block.
+assert_eq "...and it is caught on the second hat too, not only the first" "died|1" \
+  "$( hwx_probe '"sdd-qa: a.md; sdd-docs:"' "entry for hat 'sdd-docs' lists no path" )"
+
+# A NEWLINE. Legal shell, the natural way to spell a long list across two lines in a config file,
+# and the parser cannot see past one: its `read -r -a` consumes a single line. Both callers share
+# that parser, so nothing contradicted anything — the run was ACCEPTED with rc 0 and the second
+# hat's exception silently absent, which is the confusion the hat-must-exist clause above exists to
+# prevent. Refused on the same floor. Measured before the fix: rc 0, line 1 applied, line 2 gone.
+assert_eq "a newline in the key is refused — hats are separated by ';', not by lines" "died|1" \
+  "$( hwx_probe '"sdd-qa: .claude/napkin.md
+sdd-docs: docs/gotchas/**"' 'contains a newline' )"
+
+# ⭐ The POSITIVE control, and the half that makes the five refusals mean something: a guard that
+# refuses everything satisfies every one of them. And it reads the BOUNDARY the projection prints
+# rather than only an exit code — "the run lived" is shared with a key that was parsed, validated
+# and then dropped on the floor, so on its own it distinguishes nothing.
+hwx_writes() { # hwx_writes <phase> — the `writes=` the dry-run projects for that phase
+  sed -nE 's/^.*boundary:.* writes=(.*) \| mcp=.*$/\1/p' <<< "$( "$SDD" run "$MISSION" --dry-run --phase "$1" 2>&1 )"
+}
+hwx_set '"sdd-qa: .github/workflows/e2e-staging.yml, .claude/napkin.md; sdd-docs: docs/gotchas/**"'
+hwx_qa="$(hwx_writes QA)"; hwx_docs="$(hwx_writes DOCS)"
+# Three terms, and the third is the one the design turns on: the QA hat gained ITS two paths, the
+# DOCS hat gained ITS one — and the QA hat did NOT gain the DOCS one. The sum is per hat. Without
+# the last term a `hat_writes` that appends the whole key to every hat reads green here, and the
+# key would hand every phase every other phase's exception.
+assert_eq "the measured shape is accepted, and each hat gains only its own paths" \
+  "qa-ci:1 qa-napkin:1 docs-gotchas:1 qa-got-docs:0" \
+  "qa-ci:$( grep -cF '.github/workflows/e2e-staging.yml' <<< "$hwx_qa" ) qa-napkin:$( grep -cF '.claude/napkin.md' <<< "$hwx_qa" ) docs-gotchas:$( grep -cF 'docs/gotchas/**' <<< "$hwx_docs" ) qa-got-docs:$( grep -cF 'docs/gotchas/**' <<< "$hwx_qa" )"
+# A hat whose own writes: is EMPTY means "writes anywhere" (sdd-executor), and the key must never
+# NARROW that: summing an entry there would turn the widest hat in the pipeline into the narrowest
+# — the one regression a key that exists to WIDEN must not cause. Refusing the entry instead would
+# make the key a trap. So it is accepted and ignored, and the projection still says `<anywhere>`.
+hwx_set '"sdd-executor: x.md"'
+assert_eq "an entry for a hat that already writes anywhere neither refuses nor narrows" "<anywhere>" \
+  "$(hwx_writes EXEC)"
+hwx_set ''
 
 # ---------------------------------------------------------------------------
 echo

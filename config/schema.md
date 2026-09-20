@@ -71,6 +71,50 @@ connect that times out instead of answering. Only a connection actively **refuse
 | `QA_DOCS_PATH` | no | `docs/qa` | Where the `qa-report`/`qa-execution` skills write. The runner does not write here — the skills own it. |
 | `TODO_FILE` | no | `TODO.md` | Destination for out-of-scope findings. |
 
+## The hat's frontier, and this project's exception
+
+| Key | Required | Default | What it is |
+|---|---|---|---|
+| `HAT_WRITES_EXTRA` | no | empty | Paths **this project** obliges a hat to touch beyond the `writes:` of its `agents/<hat>.md`. Grammar: `hat: path[, path]; hat: path` — `;` between hats, `:` between a hat and its list, `,` between paths. The hat must be one the kit ships (`agents/<hat>.md` exists) or `load_config` refuses the whole run by name, and it must be followed by at least one path — `sdd-qa:` with nothing after it, or a list of nothing but commas and spaces, is refused rather than accepted as an exception that declares nothing. Each path must be **literal and repo-relative**: no `..`, no absolute path, and no metacharacter except a trailing `/**` on a directory that is named (a lone `**` is refused). The whole value is **one line**: hats are separated by `;` and a newline is refused, because the parser reads a single line and a two-line value would silently lose everything after the first. Empty ⇒ no exception, which is the default and the right answer for most repos. |
+
+`writes:` is a constant of the **kit**: it says what a hat owns wherever the kit is installed. The
+obligation that crosses it belongs to the **target** — the repo whose own rules say that adding an
+e2e spec also revises the case floor in its CI workflow, or that a gotcha belongs in
+`.claude/napkin.md`. Before this key existed there was nowhere to say that, and the two ways out
+were both bad: let the run die, or widen the hat in the kit for **everyone**. Measured on the pilot
+target 2026-09-17 — a QA session of 759 s / US$ 11,32 and a DOCS of 916 s / US$ 6,24 stopped in
+`BLOCKED` doing exactly what their repo asked, and a third occurrence was repaired by putting
+`PRODUCT.md` into the `writes:` of every project that installs the kit. That is the list which
+grows one name per project, and this key is what replaces it.
+
+By **path** and not by directory, because the three measured occurrences say so: `.claude/rules/**`
+and `.claude/napkin.md` are different decisions and a project may want one without the other.
+
+```sh
+# the two exceptions the pilot target actually needs
+HAT_WRITES_EXTRA="sdd-qa: .github/workflows/e2e-staging.yml; sdd-docs: .claude/napkin.md"
+```
+
+⚠️ This key **widens a permission**, and its value is dropped into `hat_path_allowed`'s
+`case "$f" in $g)` — a shell **glob**. So every looseness in the guard fails **open**, which is why
+the value is literal-only: `ADR_DIR=*` once built the pattern `*/**` and handed a hat most of the
+repo, with `hat_guard_check` reading the same widened matcher so it never noticed (CWE-863, PR #45).
+The refusal happens in `load_config`, before a session is spent — never at the point of use, which
+is a command substitution where a `die` would exit the subshell and hand the guard an **empty**
+glob list, and an empty list is the spelling of *"this hat writes anywhere"*.
+
+⚠️ The value is **one line**. The parser splits on `;` with a single `read`, which consumes one
+line, so a value spelled across two lines — legal shell, and the natural way to write a long list in
+a config file — used to take its first line and drop the rest with rc 0 and no warning. Both callers
+share that one parser, so nothing contradicted anything: the run was simply accepted with a hat's
+exception missing, and the operator read the still-blocked phase as the key not working. A newline
+is refused in `load_config` now, by the same door as an unknown hat and for the same reason.
+
+⚠️ Declared limit. A hat whose own `writes:` is empty already writes **anywhere** (`sdd-executor`),
+and an entry for such a hat is accepted and **ignored** rather than narrowing it — `sdd preflight`
+says so. Narrowing would turn the widest hat in the pipeline into the narrowest; refusing would
+make the key a trap for an operator declaring an exception that was never needed.
+
 ## ADR traceability
 
 | Key | Required | Default | What it is |
