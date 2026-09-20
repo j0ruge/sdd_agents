@@ -649,6 +649,15 @@ O plano consolidado pelo Codex Astra, baseado no artigo de @0xCodez e nas refer�
   reescrevendo o handoff de uma fase encerrada, e sim registrando aqui.
   — descoberto por `sdd-reviewer` na missão `20260901-o-revisor-so-acha` (2026-09-02)
 
+- [ ] **A linha `kit-touched` do ledger afirma uma atribuição que o runner nunca mediu** —
+  `bin/sdd:2891` — o `warn` da tela ressalva (*"if that was you working on the kit in another
+  terminal, this is that"*, `:2889`); o `KIT_TOUCHED_WHY`, que vai para o ledger e para a escalada,
+  afirma *"a session committing outside its mission's repo"*. Medido no `796e334`: a única escalada
+  da fatia foi o HUMANO commitando o kit durante a fase PR do `sales_quote`, e o juiz a lê como
+  fricção daquela versão — a mesma classe que a T1 fechou para `session-died`. Direção: a linha diz
+  o que o runner sabe (o sha do kit mudou durante a fase), ou ele mede a atribuição.
+  — descoberto por `claude` na leitura do juiz de 2026-09-20 (2026-09-20)
+
 ### Idioma
 
 - [ ] **Dois arquivos ficam fora do sensor de idioma** — `tests/check-lang.sh` (função
