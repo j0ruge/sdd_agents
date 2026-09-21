@@ -59,14 +59,6 @@ O plano consolidado pelo Codex Astra, baseado no artigo de @0xCodez e nas refer�
   relatório com o slug da missão ou com a janela de datas dela.
   — descoberto por `sdd-qa` na missão `20260827-condicoes-pagamento-mesmo-cliente` (2026-08-27)
 
-- [ ] **`sdd retry` devolve 3 sem escrever linha de escalada no ledger** — `bin/sdd:3653` — o
-  `cmd_retry` chama o gate e sai 3 em qualquer reprovação, mas nunca chama `autonomy_blocked_row`
-  nem escreve `BLOCKED` no `pipeline.log`. O juiz lê um ledger sem eventos que aconteceram.
-  RESOLVIDO por `aa3c0a2`: `kind: retry-gate-red`, próprio e não `no-progress` — aquele afirma
-  duas sessões sem mover o disco, e um retry gasta UMA e pode ter movido. Mutante
-  `RETRY_gate_red_silent`.
-  — descoberto por `sdd-reviewer` na missão `20260826-o-laco-da-qa` (2026-08-26)
-
 - [ ] **Citação NÃO-cercada acima do cabeçalho ainda vira o gênero do bug** — `bin/sdd:686` — o
   extrator da Âncora 3 pula blocos cercados e pega a primeira linha com forma de campo fora de um,
   então prosa nua abrindo com `- **Closable by:** human` acima do campo real ainda é lida como o
@@ -470,15 +462,6 @@ O plano consolidado pelo Codex Astra, baseado no artigo de @0xCodez e nas refer�
   nunca lê — e diz que conferiu. Fail-open (D15). Direção: ler o `installPath` do registro, `find` só
   como fallback, mutante no catálogo. — descoberto por `claude` na faxina `20260904-faxina-do-backlog` (2026-09-04)
 
-- [ ] **A janela de medição não tem instrumento que perceba a própria ruptura** — `bin/sdd:6070` —
-  `degenerate_axis` respondeu `false` para a janela 3 partida: `2e48a87` com **1** missão e **24**
-  commits do kit depois dela (entrada de 2026-09-04 do `KAIZEN_LOG.md`). As cláusulas do guard falam
-  do recorte, nunca da janela; quem viu foi um humano lendo `git log`.
-  RESOLVIDO por 5e3c427 — `window_broken`/`window_missions_stranded` contam as missões gastas desde
-  a última linha `KAIZEN` que caíram noutra versão do kit; no recorte real da janela 4, `true` com 3
-  encalhadas. Não veta, e `guard.why` nomeia o motivo.
-  — descoberto por `claude` na faxina `20260904-faxina-do-backlog` (2026-09-04)
-
 ### Contrato e configuração
 
 - [ ] **Fase interrompida depois do REVIEW faz o pipeline REGREDIR para o REVIEW** —
@@ -596,13 +579,6 @@ O plano consolidado pelo Codex Astra, baseado no artigo de @0xCodez e nas refer�
   `sdd run` avisar quando o `bin/sdd` mudou sob ele; a métrica citar `.sdd/logs/` na estreia.
   — descoberto por `sdd-qa` na missão `20260901-o-revisor-so-acha` (2026-09-01)
 
-- [ ] **A fronteira do laço de revisão é calculada sobre o subconjunto `comparable`** —
-  `bin/sdd:5249` — uma rodada não-comparável esconde as sessões EXEC que ela mesma gerou, e no
-  limite a célula some numa missão que laçou. RESOLVIDO por `392f526`: fronteira, numerador e
-  denominador passam para `$every`, a população de `launches`/`reopened`. Medido no ledger real:
-  `lote-facil` 28% -> 62%, `portas-do-humano` 24% -> 42%. Dois mutantes novos.
-  — descoberto por `sdd-qa` na missão `20260901-o-revisor-so-acha` (2026-09-01)
-
 ### Saída humana e cosmética
 
 - [ ] **43% do `docs/pipeline.md` é um subsistema só, e ele cresce toda missão do ledger** —
@@ -644,12 +620,6 @@ O plano consolidado pelo Codex Astra, baseado no artigo de @0xCodez e nas refer�
 
 ### Comentário e registro
 
-- [ ] **O `writes:` do chapéu não comporta obrigação que o repo impõe, e a linha para depois da sessão paga** — `agents/sdd-docs.md:9` — duas instâncias. (a) O `writes:` da DOCS não lista `bin/sdd`, e comentário de código É documentação viva. (b) No `sales_quote`, acrescentar um spec e2e **obriga** rever o piso de casos do workflow de CI (`agents/sdd-qa.md:11`), fora da faixa do chapéu.
-  RESOLVIDO por 350688a **na instância (b)** — `HAT_WRITES_EXTRA` declara o caminho por chapéu,
-  com guarda literal, e a recusa nomeia a chave (ADR 0009). A (a) não fecha: dar `bin/sdd` ao chapéu
-  da DOCS entrega o runner a quem não edita código. Virou o item logo abaixo.
-  — descoberto por `sdd-docs` na missão `20260911-o-juiz-nao-mente-sobre-a-janela` (2026-09-12)
-
 - [ ] **Drift de comentário em código não tem dono: nem a DOCS nem a EXEC** — `agents/sdd-docs.md:9`
   — comentário de código É documentação viva, mas o `writes:` da DOCS não lista `bin/sdd` e o
   `hat_guard_check` para a linha quando ela o conserta. `HAT_WRITES_EXTRA` não é a saída: declarar
@@ -678,6 +648,15 @@ O plano consolidado pelo Codex Astra, baseado no artigo de @0xCodez e nas refer�
   evidência citada é que não existe. Imprecisão em artefato de trilha de auditoria: não se conserta
   reescrevendo o handoff de uma fase encerrada, e sim registrando aqui.
   — descoberto por `sdd-reviewer` na missão `20260901-o-revisor-so-acha` (2026-09-02)
+
+- [ ] **A linha `kit-touched` do ledger afirma uma atribuição que o runner nunca mediu** —
+  `bin/sdd:2891` — o `warn` da tela ressalva (*"if that was you working on the kit in another
+  terminal, this is that"*, `:2889`); o `KIT_TOUCHED_WHY`, que vai para o ledger e para a escalada,
+  afirma *"a session committing outside its mission's repo"*. Medido no `796e334`: a única escalada
+  da fatia foi o HUMANO commitando o kit durante a fase PR do `sales_quote`, e o juiz a lê como
+  fricção daquela versão — a mesma classe que a T1 fechou para `session-died`. Direção: a linha diz
+  o que o runner sabe (o sha do kit mudou durante a fase), ou ele mede a atribuição.
+  — descoberto por `claude` na leitura do juiz de 2026-09-20 (2026-09-20)
 
 ### Idioma
 
@@ -741,13 +720,6 @@ O plano consolidado pelo Codex Astra, baseado no artigo de @0xCodez e nas refer�
 > itens abaixo são achados de verdade que foram apendados ao fim do arquivo e nunca classificados;
 > quem mexer num deles o move para a seção a que ele pertence.
 
-- [ ] **`sdd close` abre sessão e não escreve linha no ledger** — `bin/sdd:5422` — o
-  `docs/pipeline.md` promete "uma linha JSON por sessão gasta ou escalada" e esta sessão não tem
-  linha. Fail-open pela régua D15, com consumidor fora da suíte (o juiz e a D12).
-  RESOLVIDO por `aa3c0a2`: quarto evento `event: "close"`, escrito só onde a sessão foi gasta, e
-  os dois leitores o admitem por `is_close` no mesmo commit. Mutante `RUN_close_writes_no_row`.
-  — descoberto por `humano` na missão `20260828-instrumento-honesto` (2026-08-28)
-
 - [ ] **`gate_EXEC` valida por uma leitura e conta por outra, e uma célula vazia as separa** —
   `bin/sdd:786` — o laço lê com `IFS=$'\t' read`, que COLAPSA tabs por serem whitespace de IFS; o
   `checkpoint_tally` lê com `awk -F'\t' $4`, que não colapsa. Uma célula vazia e os dois caem em
@@ -765,38 +737,6 @@ O plano consolidado pelo Codex Astra, baseado no artigo de @0xCodez e nas refer�
   guarda o total FEITO, `pending_before := M - done_before` — um invariante que muda **0 de 158**
   linhas do ledger real. Não aplicado: reescreve a decisão 3 do grill — julgamento humano.
   — descoberto por `sdd-reviewer` na missão `20260829-o-incremento-que-andou` (2026-08-30)
-
-- [ ] **O ledger global real está contaminado por missões de fixture dos próprios testes** —
-  `~/.sdd/autonomy-log.jsonl` — missões de fixture moravam no ledger que o `sdd autonomy` e o
-  `sdd kaizen` leem para julgar o kit, e por isso a mesma pergunta devolvia respostas diferentes.
-  RESOLVIDO por `5956e80`: a escrita nova já era recusada pela ADR 0005 parte 3 (`28af7ea`, quatro
-  asserções `writer:` + `mut_LEDGER_tmp_repo_allowed`); faltava o resíduo, e as 11 linhas sob
-  `/tmp` saíram (292 → 281), com backup em `autonomy-log.jsonl.bak-2026-09-11`.
-  — descoberto por `sdd-reviewer` na missão `20260829-o-incremento-que-andou` (2026-08-30)
-
-- [ ] **`reopened` é cego à closure, e a resposta depende de a fase ter CUSTADO dinheiro** —
-  `bin/sdd:4860` — o `def reopened` lia `.gate == "pass"` sobre `$every_session`, e a closure é
-  justamente o fato que `.gate == "pass"` representa. RESOLVIDO por `392f526`: população própria
-  (`$every_row` = sessões + closures), passe escrito positivamente, `$every_session` intacto para
-  `launches`/`history_extra`. Par diferencial livre x paga (`free:0 paid:2` -> `2 2`) e um mutante
-  novo. — descoberto por `sdd-reviewer` na missão `20260831-a-rodada-que-andou` (2026-08-31)
-
-- [ ] **O `$order` do `cmd_autonomy` e o `comparable_row` do `kaizen_series` divergem sobre a linha
-  `gate_pass`, e o comentário entre eles jura paridade** — `bin/sdd:4929` — o `$order` admite
-  `(is_session and comparable) or (is_escalation and on_axis)` e NÃO vê o evento novo; o
-  `comparable_row` é `on_axis and ((.event != "session") or has("moved"))` e vê. Com a closure como
-  primeira linha de um sha, os dois respondem `latest`/`previous` INVERTIDOS — medido.
-  RESOLVIDO por `7e6b3f5` — a rota da closure já estava fechada pelo `shas_in_file_order` positivo;
-  a divergência viva era a linha KAIZEN liderando uma versão (tabela `bbbbbbb` × série `ccccccc`).
-  — descoberto por `sdd-reviewer` na missão `20260831-a-rodada-que-andou` (2026-08-31)
-
-- [ ] **Missão que só tem `gate_pass` numa fatia entra em `missions` sem produzir célula** —
-  `bin/sdd:5374` — `missions:` conta sobre `$rows` cru, que agora inclui a closure, enquanto o
-  `$detail` (`:5368`, desde `dfe4d63`) exige sessão ou escalada. É a única forma de linha que conta no
-  `guard.missions_after_change` e no `composition` da ADR 0005 sem deixar rastro gradeável.
-  RESOLVIDO por `7e6b3f5` — `graded_row` (`session or escalation`), uma definição para os três
-  leitores; `missions: 2` sobre `detail: 1` reproduzido antes e fechado depois.
-  — descoberto por `sdd-reviewer` na missão `20260831-a-rodada-que-andou` (2026-08-31)
 
 - [ ] **A regra `doing` conta como pendente não tem probe, e sem ela o `gate_EXEC` fecha a fase por
   cima de um incremento em voo** — `bin/sdd:328` — degradar `$4 == "pending" || $4 == "doing"` para
@@ -822,37 +762,12 @@ O plano consolidado pelo Codex Astra, baseado no artigo de @0xCodez e nas refer�
   33% waste` íntegro e `3 advanced · 0 churned · 0% waste` sabotado. Direção: uma linha QA `pass`
   entre duas linhas EXEC de prosa no fixture `histfix` que já existe.
   — descoberto por `sdd-reviewer` na missão `20260829-o-incremento-que-andou` (2026-08-30)
-- [ ] **O juiz vê duas versões de harness numa fatia e não recusa** — `bin/sdd:6680` — a linha
-  `session` carrega `harness:` desde 2026-09-06 e a série o lista por fatia, mas `guard.sufficient`
-  segue `true` sobre uma fatia que rodou em 2.1.259 e 2.1.263: o veredito compara kit_sha como se
-  a máquina parasse, e o bump que tirou o Bash de toda fase entraria no "piorou" do kit. Direção:
-  RESOLVIDO por 5e3c427 — responde `sufficient: false` com `why: ["harness_mixed"]`, composição
-  aceita enumerada positivamente, par diferencial e mutante próprios.
-  — descoberto por `sdd-executor` na missão `fix/o-chapeu-sem-bash` (2026-09-06)
 - [ ] **`check-templates.sh` imprime `ok` com três espaços, contra os quatro que todo Check ancora**
   — `tests/check-templates.sh` — o `CLAUDE.md` e o `templates/checkpoint.md` declaram `  ok    ` (4)
   como a âncora obrigatória de todo Check que lê sensor, e 85 das 1058 asserções da suíte não casam
   com ela. Falha FECHADA (o Check dá 0 e o incremento reprova), mas quem escrever Check sobre esse
   sensor perde a sessão achando que a asserção sumiu. Direção: alinhar a grafia do sensor.
   — descoberto por `sdd-reviewer` na missão `20260911-o-juiz-nao-mente-sobre-a-janela` (2026-09-12)
-
-- [ ] **`gate_QA` cobra bugs `open` de outras missões, e a direção proposta contradiz a ADR 0006** —
-  `bin/sdd` (Âncora 3 do `gate_QA`) — a missão herda a dívida inteira do registry como condição de
-  bloqueio: quanto mais honesta a QA de ontem, mais cara a missão de hoje. Cinco bugs de 2026-09-14,
-  nenhum no raio do diff, travaram a QA da SQ-129.
-  RESOLVIDO por 81e6f6c **pelo item abaixo** — o caso real não era "bug de outra missão" e sim
-  "agent-closable que esta missão não paga": lacuna no ENUM, não no escopo. A [ADR 0006](docs/adr/0006-qa-anchor-reads-genre-blocked-handoff-stops-the-line.md)/D17
-  é **emendada** (`Amended by: 0009`), a alternativa (A) dela segue recusada e a âncora não muda.
-  — descoberto por `sessão coordenadora` na missão `20260916-destino-frete-cif` (2026-09-16)
-
-- [ ] **`Closable by:` é binário: falta "decidido, aguardando quem pague"** — `agents/sdd-qa.md:118`
-  — com a decisão humana já tomada e gravada no corpo do bug, trocar o gênero para `agent` faria os
-  quatro voltarem a travar o `gate_QA` da missão em voo; deixar `human` os torna invisíveis ao laço
-  para sempre, e a troca vira passo manual (virou o `I6` da SQ-130).
-  RESOLVIDO por 81e6f6c — `Closable by: deferred`, terceiro valor no MESMO campo e mesmo extrator:
-  não bloqueia como `human` e, ao contrário dele, é nomeado no motivo do gate em toda avaliação
-  (ADR 0009; `agents/sdd-qa.md` § 5.1 exige a decisão gravada no corpo do bug).
-  — descoberto por `sessão coordenadora` na missão `20260916-destino-frete-cif` (2026-09-16)
 
 - [ ] **Nenhuma das skills `qa-report`/`qa-execution` conhece o campo `Closable by:`** —
   `agents/sdd-qa.md:118` — `grep -rn Closable ~/.claude/skills/qa-*` responde **zero**, então o
