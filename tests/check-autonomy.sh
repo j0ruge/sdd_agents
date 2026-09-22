@@ -810,16 +810,32 @@ rm -f "$TALLY_MARKER"
 # the first call it makes a real change (a new file) and commits it, which moves `git rev-parse
 # HEAD` and therefore `state_fingerprint()`; on every later call it does nothing. No token, no
 # network: the stub never shells out to the real `claude`.
+#
+# The real change CLOSES an increment, and it used to be a marker file alone. A commit that changes
+# nothing the gate reads is the no-op commit of 20260922-o-motivo-da-fase: since then the second lap
+# with the same reason stops as `no-work` before the second session this block measures. Closing
+# I1 of two moves the gate's reason ("2 of 2" → "1 of 2"), so the second lap is still bought.
 echo "== moved: true on a real change, false once nothing changes =="
 : > "$LEDGER"
 MOVE_MARKER="$FIX/.moved-once"
 rm -f "$MOVE_MARKER"
+cat > "$MDIR/checkpoint.md" <<'EOF'
+| ID | Incremento | Check (comando → esperado) | Status | Commit |
+|---|---|---|---|---|
+| I1 | slice one | `true` → 0 | pending | — |
+| I2 | slice two | `true` → 0 | pending | — |
+EOF
+git add -A && git commit -qm "chore: two pending increments for the moved block"
 cat > "$OUTSIDE/stub/claude" <<STUB
 #!/usr/bin/env bash
 if [ ! -e "$MOVE_MARKER" ]; then
   : > "$MOVE_MARKER"
   git -C "$FIX" add -A
   git -C "$FIX" commit -qm "chore: session made a real change"
+  h=\$(git -C "$FIX" rev-parse --short HEAD)
+  sed -i "0,/| pending | — |/s//| done | \$h |/" "$MDIR/checkpoint.md"
+  git -C "$FIX" add -A
+  git -C "$FIX" commit -qm "chore: and closed the increment it was for"
 fi
 cat "$STREAM_SAMPLE"
 exit 0
@@ -4471,6 +4487,12 @@ assert_eq "writer: ...and refused as soon as TMPDIR names that root" \
 # to forbid. The alternating stub is what puts the fixture in the regime that separates them —
 # odd sessions change nothing (so the runner retries inside the lap), even sessions commit (so the
 # lap ends "carrying on" instead of escalating no-progress).
+#
+# The even sessions CLOSE an increment, and they used to commit a note. A commit that changes nothing
+# the gate reads is the no-op commit of 20260922-o-motivo-da-fase: since then the second lap with
+# the same reason stops as `no-work` before this ceiling is ever reached. Closing a row changes the
+# reason ("3 of 3" → "2 of 3" → …), which keeps the regime this block needs — laps that move and
+# buy a retry — honest under that guard.
 echo "== the phase ceiling counts sessions, not laps =="
 
 CEIL="$OUTSIDE/ceiling"
@@ -4481,8 +4503,10 @@ tmpguard_fixture "$CEIL/repo" \
   || fail "PROBE-BROKEN: the ceiling fixture did not build" "built" "failed"
 # `pending`, not `blocked`: the Jidoka of a blocked increment escalates before any session and this
 # section is about the sessions. EXEC_MAX_RETRY is pinned so the budget below is derivable by hand
-# instead of by whatever the default happens to be: rows + EXEC_MAX_RETRY + 2 = 1 + 1 + 2 = 4.
+# instead of by whatever the default happens to be: rows + EXEC_MAX_RETRY + 2 = 3 + 1 + 2 = 6.
 sed -i 's/| blocked | — |/| pending | — |/' "$CEIL/repo/docs/handoffs/$MISSION/checkpoint.md"
+printf '| I2 | slice two | `true` → 0 | pending | — |\n| I3 | slice three | `true` → 0 | pending | — |\n' \
+  >> "$CEIL/repo/docs/handoffs/$MISSION/checkpoint.md"
 printf 'EXEC_MAX_RETRY=1\n' >> "$CEIL/repo/.sdd/config.sh"
 ( cd "$CEIL/repo" && git add -A && git commit -qm "chore: a pending increment" ) >/dev/null 2>&1
 
@@ -4492,9 +4516,10 @@ cat > "$CEIL/stub/claude" <<STUB
 n=\$(( \$(cat "$CEIL/n" 2>/dev/null || echo 0) + 1 ))
 echo "\$n" > "$CEIL/n"
 if [ \$(( n % 2 )) -eq 1 ]; then exit 9; fi
-: > "$CEIL/repo/docs/handoffs/$MISSION/note-\$n.md"
+h=\$(git -C "$CEIL/repo" rev-parse --short HEAD)
+sed -i "0,/| pending | — |/s//| done | \$h |/" "$CEIL/repo/docs/handoffs/$MISSION/checkpoint.md"
 git -C "$CEIL/repo" add -A >/dev/null 2>&1
-git -C "$CEIL/repo" commit -qm "chore: session \$n moved the disk" >/dev/null 2>&1
+git -C "$CEIL/repo" commit -qm "chore: session \$n closed an increment" >/dev/null 2>&1
 cat "$STREAM_SAMPLE"
 exit 0
 STUB
@@ -4508,19 +4533,19 @@ ceil_laps="$(jq -rs '[.[] | select(.event == "session") | .attempt] | max // 0' 
 
 assert_eq "witness: the fixture really does buy a retry inside a lap" "yes" \
   "$( [ "${ceil_retries:-0}" -ge 1 ] && echo yes || echo "no:${ceil_retries:-<none>}" )"
-# EXEC's budget here is 4 SESSIONS. Two laps of two sessions each spend them, and the third lap is
-# refused before it opens anything: 4 rows, then `budget-exhausted`. Counting LAPS the same fixture
-# runs five laps and buys EIGHT sessions before the same escalation — double the bill for the same
-# refusal, which is exactly what happened in QA.
-# The escalation KIND is part of the same string on purpose: 4 sessions followed by `no-progress`
+# EXEC's budget here is 6 SESSIONS. Three laps of two sessions each spend them, and the fourth lap
+# is refused before it opens anything: 6 rows, then `budget-exhausted`. Counting LAPS the same
+# fixture would buy a session per lap more before the same escalation — the bill that happened in
+# QA.
+# The escalation KIND is part of the same string on purpose: 6 sessions followed by `no-progress`
 # would be a different run altogether (the alternating stub having stopped alternating), and a
 # count asserted alone would call it green.
 assert_eq "the ceiling stops the phase by sessions spent, not by laps of the loop" \
-  "4 budget-exhausted" \
+  "6 budget-exhausted" \
   "$(printf '%s %s' "${ceil_sessions:-0}" \
        "$(jq -rs '[.[] | select(.event == "blocked")] | last | .kind // "none"' "$CEILLEDGER" 2>/dev/null)")"
 # The differential that makes the number mean something: on THIS fixture laps really are fewer than
-# sessions, so "4" was not reached by the two being the same quantity under another name.
+# sessions, so "6" was not reached by the two being the same quantity under another name.
 assert_eq "...and on this fixture the two units really do disagree" "fewer" \
   "$( if [ "${ceil_laps:-0}" -lt "${ceil_sessions:-0}" ]; then echo fewer
       else echo "same:${ceil_laps:-0}/${ceil_sessions:-0}"; fi )"
@@ -5876,6 +5901,7 @@ chmod +x "$OUTSIDE/stub/claude"
 # NW_TEST is the verdict TEST_CMD returns after counting (`true` unless a regime says otherwise).
 NW_COUNT="$OUTSIDE/nowork-count"
 NW_TEST="true"
+NW_E2E=""
 nowork_world() {
   local dir="$1" status="$2" cell="${3:-—}" handoff="${4:-0}"
   rm -rf "$dir"; mkdir -p "$dir"
@@ -5889,7 +5915,7 @@ nowork_world() {
 PROJECT_NAME="nowork"
 DEFAULT_BRANCH="main"
 TEST_CMD="echo x >> '$dir.testruns'; $NW_TEST"
-E2E_CMD=""
+E2E_CMD="$NW_E2E"
 HANDOFF_DIR="docs/handoffs"
 QA_DOCS_PATH="docs/qa"
 JIRA_ENABLED=false
@@ -6006,6 +6032,74 @@ NW6_HEAD="$(git -C "$NW6" rev-parse HEAD)"
 assert_eq "door 3: sdd retry refuses an unreadable cell before any session" \
   "rc:3 kind:no-work stub:0 rows:0 notes:0 head:same" \
   "rc:$NW6_RC kind:$(nw_last_kind) stub:$(nw_sessions) rows:$(nw_session_rows) notes:$(cat "$NW6/docs/handoffs/$MISSION"/*.md | grep -c '^- intervention:') head:$([ "$(git -C "$NW6" rev-parse HEAD)" = "$NW6_HEAD" ] && echo same || echo moved)"
+
+# Form (a): the same phase derived twice in a row with the SAME reason. The stub is the incident's
+# session over a pending row it never executes — its no-op commit moves HEAD, so without the guard
+# the lap is bought again and again until the phase ceiling.
+NW7="$OUTSIDE/nowork-same"
+nowork_world "$NW7" pending
+nowork_stub "$NW7" empty-commit
+: > "$LEDGER"
+( cd "$NW7" && "$SDD" run "$MISSION" ) >/dev/null 2>&1; NW7_RC=$?
+assert_eq "door 1: the same reason twice stops the line as no-work" \
+  "rc:3 kind:no-work stub:1 rows:1" \
+  "rc:$NW7_RC kind:$(nw_last_kind) stub:$(nw_sessions) rows:$(nw_session_rows)"
+
+# The other side of form (a): a red suite is a reason a session may be halfway through fixing, and
+# it must never stop the line as no-work. `laps:1` is the witness that the regime REPEATS — at least
+# two sessions over the same phase — so the absence of no-work is a fact about a world where form
+# (a) had its chance, not about a run that ended first. What ends it is not asserted: that belongs
+# to the ceilings.
+NW_TEST="false"
+NW8="$OUTSIDE/nowork-log"
+nowork_world "$NW8" "done" '{sha}' 1
+NW_TEST="true"
+nowork_stub "$NW8" empty-commit
+: > "$LEDGER"
+( cd "$NW8" && "$SDD" run "$MISSION" ) >/dev/null 2>&1
+assert_eq "a reason that cites a log never stops the line as no-work" \
+  "laps:1 no-work:0" \
+  "laps:$([ "$(nw_sessions)" -ge 2 ] && echo 1 || echo 0) no-work:$(jq -s '[.[] | select(.kind == "no-work")] | length' "$LEDGER")"
+
+# Form (a) is keyed on the STEP, and QA is why. With an interface, QA is three sessions derived
+# from the artifacts — plan (charters), walk (a report), close (the handoff) — and gate_QA says
+# "missing 30-handoff-qa.md" after the first two alike. Keyed on the phase, the walk was never
+# opened. The stub writes a charter on its first call and an unclosed report on its second, then
+# nothing: `stub:2` is the walk being opened, and `kind:no-work` is the repeated QA:exec — the same
+# step, the same reason — still stopping the line.
+NW_E2E="true"
+NW10="$OUTSIDE/nowork-qa"
+nowork_world "$NW10" "done" '{sha}' 1
+NW_E2E=""
+cat > "$OUTSIDE/stub/claude" <<STUB
+#!/usr/bin/env bash
+n=\$(( \$(cat "$NW_COUNT" 2>/dev/null || echo 0) + 1 ))
+printf '%s\n' "\$n" > "$NW_COUNT"
+mkdir -p "$NW10/docs/qa/charters" "$NW10/docs/qa/reports"
+if [ "\$n" -eq 1 ]; then printf 'charter\n' > "$NW10/docs/qa/charters/c1.md"; fi
+if [ "\$n" -eq 2 ]; then printf -- '---\nstatus: in-progress\n---\n' > "$NW10/docs/qa/reports/2026-01-01-r.md"; fi
+git -C "$NW10" add -A && git -C "$NW10" commit -qm "qa: step \$n" || true
+cat "$STREAM_SAMPLE"
+exit 0
+STUB
+chmod +x "$OUTSIDE/stub/claude"
+: > "$LEDGER"
+( cd "$NW10" && "$SDD" run "$MISSION" ) >/dev/null 2>&1; NW10_RC=$?
+assert_eq "a QA that advances its step behind the same reason is not no-work, and a repeated step still is" \
+  "rc:3 kind:no-work stub:2 phases:QA,QA" \
+  "rc:$NW10_RC kind:$(nw_last_kind) stub:$(nw_sessions) phases:$(jq -r -s '[.[] | select(.event == "session") | .phase] | join(",")' "$LEDGER")"
+
+# Door 2 is cmd_run's inline retry, reachable only when the first session moved nothing — so the
+# stub does nothing — and only under `--phase`, because door 1 refuses the derived lap first. Without
+# the door the retry is bought and the pair ends as no-progress, two sessions later.
+NW9="$OUTSIDE/nowork-door2"
+nowork_world "$NW9" "done" deadbee 1
+nowork_stub "$NW9" nothing
+: > "$LEDGER"
+( cd "$NW9" && "$SDD" run "$MISSION" --phase EXEC ) >/dev/null 2>&1; NW9_RC=$?
+assert_eq "door 2: the inline retry is refused on an unreadable cell" \
+  "rc:3 kind:no-work stub:1 rows:1" \
+  "rc:$NW9_RC kind:$(nw_last_kind) stub:$(nw_sessions) rows:$(nw_session_rows)"
 
 # The kind is new, and it travels in `event: "blocked"`, so both readers' single is_escalation
 # admits it without an edit. The DIFFERENTIAL is what proves they count it alike: the judge's series

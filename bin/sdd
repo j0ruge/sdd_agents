@@ -6609,13 +6609,22 @@ cmd_run() {
   local adr_degraded_logged=0
   local dry_next=""   # dry-run projection cursor (distinct from --phase, which prints just one)
   local derived=0     # 1 on a lap whose phase came from derive_phase — the only one no-work reads
+  # The previous DERIVED lap's step and reason, for no-work's form (a). Written on derived laps,
+  # cleared on forced ones (see the top of the loop).
+  local prev_step="" prev_why=""
 
   while :; do
     # The two branches that do not derive also clear the derivation: a reason left over from an
     # earlier lap must not reach the boot of a phase the runner is now FORCING.
     derived=0
-    if [ -n "$dry_next" ]; then phase="$dry_next"; CURRENT_PHASE=""; CURRENT_PHASE_WHY=""
-    elif [ -n "$force_phase" ]; then phase="$force_phase"; CURRENT_PHASE=""; CURRENT_PHASE_WHY=""
+    # A forced lap also breaks "twice IN A ROW" for no-work's form (a): it ran a session of another
+    # phase in between, so the next derived lap has no previous reason to be compared with.
+    # ⚠️ NO PROBE, DECLARED: the one forced lap followed by a derived lap in today's flow is the
+    # draft jump, and the REVIEW lap after it meets the ceiling before it reaches door 1 — so
+    # dropping this reset turns nothing red. The world I could not build is a forced lap whose next
+    # derived lap reaches the door with the same step as the lap before the forced one.
+    if [ -n "$dry_next" ]; then phase="$dry_next"; CURRENT_PHASE=""; CURRENT_PHASE_WHY=""; prev_step=""; prev_why=""
+    elif [ -n "$force_phase" ]; then phase="$force_phase"; CURRENT_PHASE=""; CURRENT_PHASE_WHY=""; prev_step=""; prev_why=""
     # The DERIVED branch alone, and that is the whole licence gate_pass_rows has to speak: this
     # `current_phase()` call is what proves every earlier phase's gate passed. `--phase X` and the
     # dry-run cursor never consult the derivation, so under either of them the runner knows nothing
@@ -6655,13 +6664,6 @@ cmd_run() {
       return 2
     fi
 
-    # DOOR 1 of no-work, on the DERIVED branch only — under `--phase` and the dry-run cursor there
-    # is no derived reason to read. Before every other refusal of the lap and before the session:
-    # this is the door that refuses to BUY one.
-    if [ "$derived" = "1" ]; then
-      no_work_check "$phase" ""
-      if no_work_escalation "$phase"; then return 3; fi
-    fi
 
     # Real Jidoka: a `blocked` increment escalates ON THE SPOT. Without this the runner read the
     # checkpoint change as "progress" and rebooted EXEC until the phase budget blew — three
@@ -6832,6 +6834,27 @@ cmd_run() {
       return 3
     fi
 
+    # DOOR 1 of no-work, on the DERIVED branch only — under `--phase` and the dry-run cursor there
+    # is no derived reason to read. It is the last refusal before the session is bought, and BELOW
+    # the Jidoka pre-checks and the ceilings on purpose: those are designed stops (and one designed
+    # degradation, the draft PR), each with its own kind and remedy, and no-work is the catch for
+    # the loop that runs under all of them. Placed above them, form (a) pre-empted `review-to-draft`
+    # on the first probe that reached it.
+    if [ "$derived" = "1" ]; then
+      # Form (a) compares the STEP, not the phase — decided by the human on 2026-09-22 when the
+      # first probe found QA: with an interface it is three sessions (plan, walk, close) derived from
+      # the artifacts, and gate_QA says "missing 30-handoff-qa.md" after the first two alike. Keyed
+      # on the phase, every healthy QA stopped as no-work after QA:plan. Everywhere else the step IS
+      # the phase.
+      local step same_prev=""
+      step="$(phase_step "$phase")"
+      [ "$prev_step" = "$step" ] && same_prev="$prev_why"
+      no_work_check "$phase" "$same_prev"
+      if no_work_escalation "$phase"; then return 3; fi
+      prev_step="$step"
+      prev_why="$CURRENT_PHASE_WHY"
+    fi
+
     before="$(state_fingerprint)"
     # The photograph, and it has to be taken HERE: once run_phase returns, the checkpoint the
     # session just edited is the only one left on disk and "how many were pending before" is
@@ -6954,6 +6977,12 @@ cmd_run() {
       force_phase=""
       continue
     fi
+
+    # DOOR 2 of no-work, form (b) only, over the gate that just ran in this shell and BEFORE the
+    # retry is bought: a first session that moved nothing over an unreadable cell has no second
+    # session in it either. Reachable under `--phase EXEC`, where door 1 does not look.
+    no_work_check "$phase" ""
+    if no_work_escalation "$phase"; then return 3; fi
 
     warn "gate $phase failed and the session changed nothing: $GATE_WHY"
     warn "  retrying once with the gate reason in the prompt"
@@ -7101,17 +7130,44 @@ cmd_run() {
 # Form (b), the unreadable cell: the phase is EXEC and the gate that just refused armed
 # GATE_EXEC_CELL. Classified by the MARKER, never by the text of GATE_WHY.
 #
+# Form (a), narrow: the same STEP (phase_step — QA's sub-step, the phase everywhere else) derived
+# twice in a row with the SAME reason, word for word — the session in between changed nothing the
+# gate reads. Only door 1 passes a previous reason; doors 2
+# and 3 read (b) alone. A reason that cites a log is excluded (gate_why_cites_log): a session
+# halfway through fixing a red suite may leave the gate's sentence as it was.
+#
 # DECLARED LIMIT: `sdd kaizen` keeps its own `no-progress` loop and does not get this guard — it has
 # no checkpoint whose cells could be unreadable, and its phase is not derived by derive_phase.
 NO_WORK_WHY=""
 no_work_check() {   # no_work_check <phase> <reason of the previous derived lap, "" for form (b) only>
   NO_WORK_WHY=""
   [ "$DRY_RUN" = "1" ] && return 0
-  local phase="$1"
+  local phase="$1" prev="$2"
   if [ "$phase" = "EXEC" ] && [ "$GATE_EXEC_CELL" = "1" ]; then
     NO_WORK_WHY="$GATE_WHY"
+    return 0
+  fi
+  if [ -n "$prev" ] && [ "$prev" = "$GATE_WHY" ] && ! gate_why_cites_log "$GATE_WHY"; then
+    NO_WORK_WHY="the same reason as the lap before, and the session in between changed nothing the gate reads — $GATE_WHY"
   fi
   return 0
+}
+
+# gate_why_cites_log <reason> — 0 when the gate's sentence sends the reader to a log file: `see` or
+# `See` followed by a path ending in `.log`, the spelling of every TEST_CMD/E2E_CMD refusal in the
+# gates. POSITIVE admission, one definition: a reason that cites a log some other way is NOT
+# admitted, so it falls on the side that stops the line — the fail-safe direction for a guard whose
+# other failure is buying sessions.
+#
+# ⚠️ NO PROBE, DECLARED, and the world I could not build is named rather than denied: every log
+# those sentences cite comes from run_check_cmd's `mktemp`, unique per EXECUTION, and each derived
+# lap reads a different execution — so two log-citing reasons are never the same text today, and
+# form (a) never reaches this test with one. Sabotaged to always-false, the suite stays green. It
+# stays because it decides WHICH failure the day a log path becomes stable (a memo that outlives
+# invalidate_checks, a fixed report name): without it, a red suite a session is halfway through
+# fixing would stop the line as no-work. Grill decision 3 of 20260922-o-motivo-da-fase.
+gate_why_cites_log() {
+  [[ "$1" =~ [Ss]ee\ [^[:space:]]+\.log ]]
 }
 
 # CALLED, never substituted — the ledger row and the lines a human acts on would go into the

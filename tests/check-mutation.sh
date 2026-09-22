@@ -245,6 +245,25 @@ mut_EXEC_cell_marker_never_armed() {
   sed -i '/^gate_EXEC() {/,/^}/ s@GATE_EXEC_CELL=1@GATE_EXEC_CELL=0@g' "$1"
 }
 
+# Form (a) of no-work never matches: a no-op commit moves HEAD, the lap is bought again with the
+# same reason, and the loop runs until the phase ceiling — the incident's pending-row variant.
+mut_RUN_no_work_same_reason_blind() {
+  sed -i '/^no_work_check() {/,/^}/ s@\[ "\$prev" = "\$GATE_WHY" \]@[ "$prev" = "#never" ]@' "$1"
+}
+
+# Door 2 of no-work goes: `sdd run --phase EXEC` over an unreadable cell buys the inline retry after
+# a first session that moved nothing, and the pair ends as no-progress two sessions later.
+mut_RUN_no_work_door2_blind() {
+  sed -i '/^cmd_run() {/,/^}/ s@^    if no_work_escalation "\$phase"; then return 3; fi$@    :@' "$1"
+}
+
+# Form (a) keyed on the phase instead of the step — the key the human rejected on 2026-09-22: QA
+# with an interface says "missing 30-handoff-qa.md" after QA:plan and QA:exec alike, so every
+# healthy QA stops as no-work before its walk.
+mut_RUN_no_work_keyed_on_phase() {
+  sed -i '/^cmd_run() {/,/^}/ s@^      step="\$(phase_step "\$phase")"$@      step="$phase"@' "$1"
+}
+
 mut_EXEC_ignores_TEST_CMD() { # discards the suite's rc — the gate stops measuring TEST_CMD
   sed -i 's|.*run_check_cmd "\$TEST_CMD" "gate-exec-test".*|  if false; then|' "$1"
 }
@@ -3856,6 +3875,9 @@ CATALOG=(
   RUN_no_work_door1_blind
   RETRY_no_work_blind
   EXEC_cell_marker_never_armed
+  RUN_no_work_same_reason_blind
+  RUN_no_work_door2_blind
+  RUN_no_work_keyed_on_phase
   REVIEW_alignment_colon_blind
   DOCS_alignment_colon_blind
   QA_status_line_start
