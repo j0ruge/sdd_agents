@@ -227,6 +227,24 @@ mut_BOOT_reason_dropped() {
   sed -i '/^boot_prompt() {/,/^}/ { /^\$why_line$/d }' "$1"
 }
 
+# Door 1 of no-work goes: cmd_run derives EXEC over an unreadable cell and buys the session, whose
+# no-op commit moves HEAD and buys the next — the incident of issues #54/#55, to the budget ceiling.
+mut_RUN_no_work_door1_blind() {
+  sed -i '/^cmd_run() {/,/^}/ s@^      if no_work_escalation "\$phase"; then return 3; fi$@      :@' "$1"
+}
+
+# Door 3 of no-work goes: `sdd retry` writes its intervention note and opens a fresh session over a
+# checkpoint cell no session can read.
+mut_RETRY_no_work_blind() {
+  sed -i '/^cmd_retry() {/,/^}/ s@^  if no_work_escalation "\$phase"; then return 3; fi$@  :@' "$1"
+}
+
+# gate_EXEC stops arming the cell marker: every refusal still happens with its own reason, but the
+# no-work guard, which reads the MARKER and never the text, is blind at every door.
+mut_EXEC_cell_marker_never_armed() {
+  sed -i '/^gate_EXEC() {/,/^}/ s@GATE_EXEC_CELL=1@GATE_EXEC_CELL=0@g' "$1"
+}
+
 mut_EXEC_ignores_TEST_CMD() { # discards the suite's rc — the gate stops measuring TEST_CMD
   sed -i 's|.*run_check_cmd "\$TEST_CMD" "gate-exec-test".*|  if false; then|' "$1"
 }
@@ -3835,6 +3853,9 @@ CATALOG=(
   RUN_phase_reason_unlogged
   RUN_derive_in_subshell
   BOOT_reason_dropped
+  RUN_no_work_door1_blind
+  RETRY_no_work_blind
+  EXEC_cell_marker_never_armed
   REVIEW_alignment_colon_blind
   DOCS_alignment_colon_blind
   QA_status_line_start

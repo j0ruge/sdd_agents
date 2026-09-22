@@ -934,7 +934,6 @@ GATE_EXEC_TOTAL=""
 # direct gate calls of cmd_run/cmd_retry) — through `$(current_phase)` it dies with the subshell.
 GATE_EXEC_CELL=0
 
-# shellcheck disable=SC2034 # GATE_EXEC_CELL: its consumer (no_work_check) lands in I5 of 20260922-o-motivo-da-fase
 gate_EXEC() {
   GATE_EXEC_DIRTY=0
   GATE_EXEC_CELL=0
@@ -6609,10 +6608,12 @@ cmd_run() {
   # ledger would carry one row for two events.
   local adr_degraded_logged=0
   local dry_next=""   # dry-run projection cursor (distinct from --phase, which prints just one)
+  local derived=0     # 1 on a lap whose phase came from derive_phase — the only one no-work reads
 
   while :; do
     # The two branches that do not derive also clear the derivation: a reason left over from an
     # earlier lap must not reach the boot of a phase the runner is now FORCING.
+    derived=0
     if [ -n "$dry_next" ]; then phase="$dry_next"; CURRENT_PHASE=""; CURRENT_PHASE_WHY=""
     elif [ -n "$force_phase" ]; then phase="$force_phase"; CURRENT_PHASE=""; CURRENT_PHASE_WHY=""
     # The DERIVED branch alone, and that is the whole licence gate_pass_rows has to speak: this
@@ -6621,6 +6622,7 @@ cmd_run() {
     # about the other phases and says nothing about them. Called, never `$( )` — see derive_phase.
     else
       derive_phase
+      derived=1
       phase="$CURRENT_PHASE"
       gate_pass_rows "$phase"
       # The reason, where the human watching `tail -F` reads it, BEFORE a session is paid for. The
@@ -6651,6 +6653,14 @@ cmd_run() {
       dim "  sdd-planner agent (Fable model) and produce 00-missao.md, 01-plano.md, checkpoint.md."
       dim "  Once the PLAN-AUTO gate closes clean, 'sdd run $MISSION' goes on alone to the PR."
       return 2
+    fi
+
+    # DOOR 1 of no-work, on the DERIVED branch only — under `--phase` and the dry-run cursor there
+    # is no derived reason to read. Before every other refusal of the lap and before the session:
+    # this is the door that refuses to BUY one.
+    if [ "$derived" = "1" ]; then
+      no_work_check "$phase" ""
+      if no_work_escalation "$phase"; then return 3; fi
     fi
 
     # Real Jidoka: a `blocked` increment escalates ON THE SPOT. Without this the runner read the
@@ -7068,6 +7078,58 @@ cmd_run() {
   done
 }
 
+# ---------------------------------------------------------------------------
+# no-work — the session would have nothing to do (20260922-o-motivo-da-fase, ADR 0010)
+# ---------------------------------------------------------------------------
+# The fifth escalation family, and the only one that stops the line BEFORE a session rather than
+# after one. In 20260921-amep-backend-0-1-0 the runner opened EXEC sessions over a checkpoint whose
+# every row was `done` but one Commit cell was unreadable: each session found no pending row, made a
+# no-op commit, the commit moved HEAD, `state_fingerprint` read that as progress, and the lap was
+# bought again — US$ 1,94 in two sessions before a human killed the third, with no end short of
+# BUDGET_MISSION_USD (issues #54/#55). "The disk moved" is not "the gate can be satisfied": that is
+# the unsatisfiable-gate class of principle 1, and this family is where the runner learns the
+# difference.
+#
+# CONTRACT, re-derived for this marker and not inherited:
+#   · NO_WORK_WHY has ONE setter, no_work_check, which zeroes it on entry;
+#   · it is read by no_work_escalation alone, and every door calls the pair back to back — check,
+#     then `if no_work_escalation "$phase"; then return 3; fi` — so the marker cannot outlive the lap;
+#   · the projection (`--dry-run`) arms nothing: it opens no session to refuse;
+#   · the census is the command, never this sentence:
+#         grep -cE '^ +if no_work_escalation "\$phase"; then' bin/sdd
+#
+# Form (b), the unreadable cell: the phase is EXEC and the gate that just refused armed
+# GATE_EXEC_CELL. Classified by the MARKER, never by the text of GATE_WHY.
+#
+# DECLARED LIMIT: `sdd kaizen` keeps its own `no-progress` loop and does not get this guard — it has
+# no checkpoint whose cells could be unreadable, and its phase is not derived by derive_phase.
+NO_WORK_WHY=""
+no_work_check() {   # no_work_check <phase> <reason of the previous derived lap, "" for form (b) only>
+  NO_WORK_WHY=""
+  [ "$DRY_RUN" = "1" ] && return 0
+  local phase="$1"
+  if [ "$phase" = "EXEC" ] && [ "$GATE_EXEC_CELL" = "1" ]; then
+    NO_WORK_WHY="$GATE_WHY"
+  fi
+  return 0
+}
+
+# CALLED, never substituted — the ledger row and the lines a human acts on would go into the
+# substitution instead (the family CLAUDE.md records against run_phase).
+no_work_escalation() {
+  local phase="$1"
+  [ -n "$NO_WORK_WHY" ] || return 1
+  info ""
+  bad "BLOCKED in $phase — no work a session could do: $NO_WORK_WHY"
+  dim "  The line stopped BEFORE a session: another one would find nothing to execute, and a no-op"
+  dim "  commit would move the disk and buy the lap after it."
+  dim "  Fix what the reason names — a checkpoint cell is written by hand, never by a session —"
+  dim "  then 'sdd run'."
+  pipeline_log_line "$(date -Iseconds)  BLOCKED  $phase  no-work: $NO_WORK_WHY"
+  autonomy_blocked_row "no-work" "$phase" "$NO_WORK_WHY"
+  return 0
+}
+
 cmd_retry() {
   local mission_arg=""
   while [ $# -gt 0 ]; do
@@ -7102,6 +7164,11 @@ cmd_retry() {
   phase="$CURRENT_PHASE"
   [ -n "$phase" ] || { info "pipeline complete — nothing to retry"; return 0; }
   [ "$phase" = "PLAN" ] && die "PLAN is interactive — there is nothing to retry headless"
+  # DOOR 3 of no-work, form (b) only: a retry spends one fresh session, and a session opened over
+  # an unreadable cell has nothing to do. BEFORE the intervention note — no session is opened, so
+  # there is nothing to attribute the note to, and nothing is committed on the human's behalf.
+  no_work_check "$phase" ""
+  if no_work_escalation "$phase"; then return 3; fi
   # L4 (2026-09-03 audit): a retry IS the human's hand — the template's own first example of one.
   checkpoint_note_intervention "sdd retry (the phase was relaunched from the CLI with a fresh session)" "$phase"
   # L2: the second door of the mission ceiling — a retry is a session too.
@@ -7126,16 +7193,13 @@ cmd_retry() {
   hat_guard_check "$phase" "${before%%|*}"
   [ "$before" != "$after" ] && moved="true"
   gate_"$phase" || gate_rc=$?
-  # DECLARED, NO PROBE — and MEASURED, not assumed. These two guards are inert today: this function
-  # calls `gate_"$phase"` only for the phase it is retrying, and `current_phase()` runs its gates
-  # inside `$( )`, whose assignments die with the subshell. So both globals still hold the empty
-  # string their declarations gave them (:736, :1015), and deleting either guard changes no byte of
-  # the row — sabotaged one at a time, the suite stays green, where the two PHOTOGRAPH guards above
-  # turn it red (both pinned by "sdd retry photographs only the phase it is retrying" in
-  # tests/check-autonomy.sh). They stay because they decide WHICH failure the next writer gets the
-  # day a second gate call in the parent shell is added here — the world this fixture could not
-  # build, NOT a claim that none exists. That distinction is what d4deb35 got wrong and 7cbc8e2
-  # had to undo.
+  # These two guards were DECLARED inert, with no probe, while the derivation ran inside `$( )` and
+  # its gate assignments died with the subshell. Since 20260922-o-motivo-da-fase derive_phase runs
+  # in THIS shell — the "second gate call in the parent shell" this comment used to name as the
+  # world it could not build — so a retry of REVIEW now arrives with GATE_EXEC_PENDING set by the
+  # derivation's passing gate_EXEC, and the guard is what keeps it off the row. Measured: removing
+  # the EXEC guard now turns "and its row carries all six count fields as null" red in
+  # tests/check-autonomy.sh. d4deb35 / 7cbc8e2 are why the guard was kept while it looked inert.
   if [ "$phase" = "EXEC" ]; then exec_after="$GATE_EXEC_PENDING"; exec_total="$GATE_EXEC_TOTAL"; fi
   if [ "$phase" = "REVIEW" ]; then review_after="$GATE_REVIEW_ROUNDS"; review_max="$GATE_REVIEW_MAX"; fi
   autonomy_session_row "$phase" "1" "false" "$moved" \

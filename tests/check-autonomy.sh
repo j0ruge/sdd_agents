@@ -676,34 +676,44 @@ assert_eq "and the refusal that produced it is the Jidoka one" "true" \
 # first pass changed nothing, and `state_fingerprint` includes the checkpoint's md5 — so the file
 # the retry starts on is byte-identical to the one the photograph read.
 echo "== the inline retry records the count it started from =="
+# THE REFUSAL THAT PUBLISHES NOTHING IS AN ADR DRIFT, and it used to be a `done` with no commit.
+# Since 20260922-o-motivo-da-fase that one is an unreadable CELL: door 1 refuses it before any
+# session and door 2 refuses the retry over it, so the runner no longer buys the world this block
+# needs through a cell — which is the point of that mission, not an accident of this fixture. What
+# still refuses before publishing WITHOUT arming GATE_EXEC_CELL is the ADR verdict at the top of
+# gate_EXEC: ADR_CHECK=block over a mission with no `adr:`. `--phase EXEC` because under block the
+# derivation would stop at PLAN, which asks for the same decision.
 : > "$LEDGER"
-cat > "$MDIR/checkpoint.md" <<'EOF'
+printf 'ADR_CHECK=block\n' >> .sdd/config.sh
+cat > "$MDIR/checkpoint.md" <<EOF
 | ID | Incremento | Check (comando → esperado) | Status | Commit |
 |---|---|---|---|---|
-| I1 | slice one | `true` → 0 | done | — |
-| I2 | slice two | `true` → 0 | pending | — |
+| I1 | slice one | \`true\` → 0 | done | $(git rev-parse --short HEAD) |
+| I2 | slice two | \`true\` → 0 | pending | — |
 EOF
-git add -A && git commit -qm "chore: a label with no artifact, and one increment still pending"
+git add -A && git commit -qm "chore: an undecided adr under block, and one increment still pending"
 rm -f "$TALLY_MARKER"
 # The FIRST session changes nothing — that is the only way to reach the inline retry, which is
-# guarded on `moved == false`. The SECOND gives I1 the commit it was missing, so the retry's gate
-# gets past validation and PUBLISHES a count while the pass before it did not.
+# guarded on `moved == false`. The SECOND decides the ADR, so the retry's gate gets past the
+# verdict and PUBLISHES a count while the pass before it did not.
 cat > "$OUTSIDE/stub/claude" <<STUB
 #!/usr/bin/env bash
 if [ ! -e "$TALLY_MARKER" ]; then
   : > "$TALLY_MARKER"
-else
-  h=\$(git -C "$FIX" rev-parse --short HEAD)
-  sed -i "/^| I1 /s/| done | — |/| done | \$h |/" "$MDIR/checkpoint.md"
+elif ! grep -q '^adr: none$' "$MDIR/00-missao.md"; then
+  sed -i 's/^aprovacao: auto$/aprovacao: auto\nadr: none/' "$MDIR/00-missao.md"
   git -C "$FIX" add -A
-  git -C "$FIX" commit -qm "chore: the retry gives the increment its artifact"
+  git -C "$FIX" commit -qm "chore: the retry decides the adr"
 fi
 cat "$STREAM_SAMPLE"
 exit 0
 STUB
 chmod +x "$OUTSIDE/stub/claude"
 
-"$SDD" run "$MISSION" >/dev/null 2>&1
+"$SDD" run "$MISSION" --phase EXEC >/dev/null 2>&1
+sed -i '/^ADR_CHECK=block$/d' .sdd/config.sh
+sed -i '/^adr: none$/d' "$MDIR/00-missao.md"
+git add -A && git commit -qm "chore: back to no ADR check" >/dev/null 2>&1
 # The floor, and it is what keeps the assertion below from passing over a run that never retried:
 # it names the FIRST pass, proves it is the non-retry one, and proves its gate published nothing.
 assert_eq "the pass before the retry is the one that published nothing" "false 1 null null" \
@@ -5966,6 +5976,54 @@ assert_eq "the boot prompt carries the phase reason" "1" \
   "$(grep -cF 'Why this phase: 1 of 1 increment(s) still to execute' <<< "$NW4_EXEC")"
 assert_eq "a phase the runner did not derive says so in the boot" "forced:1 borrowed:0" \
   "forced:$(grep -cF 'Why this phase: forced from the CLI' <<< "$NW4_DOCS") borrowed:$(grep -cF 'still to execute' <<< "$NW4_DOCS")"
+
+echo "== no-work: an unreadable checkpoint cell stops the line before any session =="
+# The incident, in its unrecoverable variant: a `done` row whose Commit cell names a commit that
+# does not exist. The phase is EXEC, and no EXEC session can have anything to execute — the stub
+# is the incident's session (a no-op commit that moves HEAD and used to read as progress). Every
+# door is asserted with the witness that NO session opened: the stub's own counter and the ledger's
+# session rows, both zero.
+nw_session_rows() { jq -s '[.[] | select(.event == "session")] | length' "$LEDGER" 2>/dev/null || printf 0; }
+nw_last_kind() { jq -r -s 'map(select(.event == "blocked")) | last | .kind // "none"' "$LEDGER" 2>/dev/null || printf none; }
+NW5="$OUTSIDE/nowork-door1"
+nowork_world "$NW5" "done" deadbee 1
+nowork_stub "$NW5" empty-commit
+: > "$LEDGER"
+( cd "$NW5" && "$SDD" run "$MISSION" ) >/dev/null 2>&1; NW5_RC=$?
+assert_eq "door 1: an unreadable cell stops the line before any session" \
+  "rc:3 kind:no-work stub:0 rows:0" \
+  "rc:$NW5_RC kind:$(nw_last_kind) stub:$(nw_sessions) rows:$(nw_session_rows)"
+
+# Door 3 is `sdd retry`, which never goes through cmd_run's loop. It refuses before writing its
+# `intervention:` note, because no session was opened to attribute it to — HEAD unmoved is the
+# witness that nothing was committed on the human's behalf either.
+NW6="$OUTSIDE/nowork-door3"
+nowork_world "$NW6" "done" deadbee 1
+nowork_stub "$NW6" empty-commit
+NW6_HEAD="$(git -C "$NW6" rev-parse HEAD)"
+: > "$LEDGER"
+( cd "$NW6" && "$SDD" retry "$MISSION" ) >/dev/null 2>&1; NW6_RC=$?
+assert_eq "door 3: sdd retry refuses an unreadable cell before any session" \
+  "rc:3 kind:no-work stub:0 rows:0 notes:0 head:same" \
+  "rc:$NW6_RC kind:$(nw_last_kind) stub:$(nw_sessions) rows:$(nw_session_rows) notes:$(cat "$NW6/docs/handoffs/$MISSION"/*.md | grep -c '^- intervention:') head:$([ "$(git -C "$NW6" rev-parse HEAD)" = "$NW6_HEAD" ] && echo same || echo moved)"
+
+# The kind is new, and it travels in `event: "blocked"`, so both readers' single is_escalation
+# admits it without an edit. The DIFFERENTIAL is what proves they count it alike: the judge's series
+# on one side, the human's table on the other, over one hand-written ledger — never a constant.
+# `floor:no-work: 1` is the witness that the series really saw the row; without it two readers
+# that both dropped it would agree on nothing.
+mkdir -p "$OUTSIDE/noworkaxis"
+localize > "$OUTSIDE/noworkaxis/autonomy-log.jsonl" <<'EOF'
+{"v":1,"ts":"2026-09-22T10:00:00-03:00","event":"blocked","kind":"no-work","run_id":"r1","invocation":"run","kit_sha":"ccccccc","kit_dirty":false,"project":"p1","repo":"/p1","mission":"m1","phase":"EXEC","gate_why":"x"}
+{"v":1,"ts":"2026-09-22T10:01:00-03:00","event":"blocked","kind":"no-progress","run_id":"r2","invocation":"run","kit_sha":"ccccccc","kit_dirty":false,"project":"p1","repo":"/p1","mission":"m2","phase":"EXEC","gate_why":"x"}
+EOF
+NWA_OUT="$( cd "$FIX" && SDD_STATE_DIR="$OUTSIDE/noworkaxis" "$SDD" autonomy 2>&1 )"
+NWA_SERIES="$( cd "$FIX" && SDD_STATE_DIR="$OUTSIDE/noworkaxis" "$SDD" kaizen --series 2>/dev/null )"
+NWA_SERIES_ESC="$(jq -r '.latest.escalations | to_entries | sort_by(.key) | map("\(.key): \(.value)") | join("\n")' <<< "$NWA_SERIES")"
+NWA_READER_ESC="$(awk '$1 == "ccccccc" && $3 ~ /^[0-9]+$/ { print $2, $3 }' <<< "$NWA_OUT" | sort)"
+assert_eq "no-work rows are counted alike by both readers" \
+  "floor:1 $NWA_SERIES_ESC" \
+  "floor:$(grep -cx 'no-work: 1' <<< "$NWA_SERIES_ESC") $NWA_READER_ESC"
 
 cat > "$OUTSIDE/stub/claude" <<'STUB'
 #!/usr/bin/env bash
