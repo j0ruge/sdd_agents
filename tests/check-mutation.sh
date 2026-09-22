@@ -195,6 +195,13 @@ mut_EXEC_dirty_tree_as_red() {
   sed -i '/^gate_EXEC()/,/^}/ s@^      GATE_EXEC_DIRTY=1$@      :@' "$1"
 }
 
+# checkpoint_rows stops stripping backticks from the Commit cell. `` `abc1234` `` renders exactly like
+# the bare hash, and the gate hands it to `git cat-file`, which answers "does not exist": the phase
+# stays EXEC with nothing left to execute, and the runner buys sessions for it (issue #55).
+mut_GATE_EXEC_backtick_kept() {
+  sed -i '/^checkpoint_rows() {/,/^}/ { /^      gsub(\/`\/, "", f\[6\])$/d }' "$1"
+}
+
 mut_EXEC_ignores_TEST_CMD() { # discards the suite's rc — the gate stops measuring TEST_CMD
   sed -i 's|.*run_check_cmd "\$TEST_CMD" "gate-exec-test".*|  if false; then|' "$1"
 }
@@ -3798,6 +3805,7 @@ CATALOG=(
   EXEC_escaped_pipe_blind
   EXEC_alignment_colon_blind
   EXEC_dirty_tree_as_red
+  GATE_EXEC_backtick_kept
   REVIEW_alignment_colon_blind
   DOCS_alignment_colon_blind
   QA_status_line_start

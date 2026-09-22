@@ -458,6 +458,20 @@ fi
 assert_phase "an alignment-colon separator is not an increment" "QA"
 mv "$MDIR/checkpoint.colon.bak" "$MDIR/checkpoint.md"
 
+# A Commit cell fenced in backticks — `` `abc1234` `` — renders exactly like the bare hash, and an
+# executor wrote one in 20260921-amep-backend-0-1-0 (issue #55). checkpoint_rows trimmed spaces
+# but not backticks, so gate_EXEC handed `` `abc1234` `` to `git cat-file` and answered "does not
+# exist": the phase stayed EXEC with nothing left to execute and the runner bought sessions for it.
+cp "$MDIR/checkpoint.md" "$MDIR/checkpoint.tick.bak"
+sed -i "s/| done | $REAL_HASH |/| done | \`$REAL_HASH\` |/" "$MDIR/checkpoint.md"
+if grep -qF "| done | \`$REAL_HASH\` |" "$MDIR/checkpoint.md"; then
+  pass "fixture: the commit cell really carries backticks"
+else
+  fail "backticked commit fixture" "a done row with a backticked hash" "$(grep -m1 '| done |' "$MDIR/checkpoint.md")"
+fi
+assert_phase "a backticked commit cell is read as the SHA it carries" "QA"
+mv "$MDIR/checkpoint.tick.bak" "$MDIR/checkpoint.md"
+
 # --- QA --------------------------------------------------------------------
 # The QA gate has TWO contracts, because there are two kinds of project.
 #

@@ -455,6 +455,11 @@ checkpoint_rows() {
       }
       if (n < 6) next
       for (i = 2; i <= 6; i++) { gsub(/^[ \t]+|[ \t]+$/, "", f[i]) }
+      # The Commit cell only: a hash fenced in backticks renders exactly like the bare one, so the
+      # human reading the table sees a SHA and the gate saw "`abc1234`", which does not exist —
+      # the phase stayed EXEC with nothing to execute (issue #55). The Check cell keeps its
+      # backticks: they are legitimate there, and check-checkpoint.sh reads them.
+      gsub(/`/, "", f[6])
       # `:?-+:?` and not `-+`: GFM spells column alignment with colons on the separator row, and
       # prettier and markdownlint WRITE them (`|:---|:---:|`). Matched against the bare dashes only,
       # the separator stopped being skipped and became a row whose Status is `:---:` — outside the
