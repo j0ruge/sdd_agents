@@ -18,6 +18,12 @@ atualizado: <YYYY-MM-DD HH:MM>
 > `` o=$(cmd 2>&1); grep -c 'x' <<< "$o" ``, e o `tests/check-checkpoint.sh` recusa as duas formas
 > nos checkpoints deste repo.
 >
+> ⚠️ **A célula Commit leva o hash curto NU, sem crase.** `` `abc1234` `` renderiza igual ao hash
+> nu, mas é a célula que o runner lê: o `checkpoint_rows` hoje tira a crase dessa coluna, e uma
+> célula que não tem forma de SHA reprova o `gate_EXEC` com motivo próprio e para a linha como
+> `no-work` antes de abrir sessão. Custou duas sessões EXEC sem trabalho em
+> `20260921-amep-backend-0-1-0`.
+>
 > ⚠️ **Check que lê a saída de um sensor ancora em `^  ok    ` — quatro espaços, com o `^`.**
 > Todo sensor da suíte imprime `  ok    <asserção>` na **stdout** e `  FAIL  <asserção>` na
 > **stderr**, com o *mesmo* `<asserção>`. Um Check que faz `2>&1` e grepa o texto solto devolve o
