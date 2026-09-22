@@ -6101,6 +6101,40 @@ assert_eq "door 2: the inline retry is refused on an unreadable cell" \
   "rc:3 kind:no-work stub:1 rows:1" \
   "rc:$NW9_RC kind:$(nw_last_kind) stub:$(nw_sessions) rows:$(nw_session_rows)"
 
+echo "== incident replay: 20260921-amep-backend-0-1-0 =="
+# The incident end to end, in its two variants. Every increment is done, the suite is green and the
+# EXEC handoff is written; one Commit cell is fenced in backticks among bare ones — the shape the
+# executor wrote there. The stub is that incident's session: no pending row to take, a no-op commit.
+#
+# Variant 1 — the backticked cell names a REAL commit. It is read as the SHA it carries, gate_EXEC
+# passes, and the first derived phase is the one after it: no EXEC session is bought at all, and
+# the journal says which phase was derived. `phase:QA` is the term that reverting I1 turns red —
+# the cell would then be unreadable and the line would stop in EXEC instead.
+NW11="$OUTSIDE/nowork-replay-tick"
+nowork_world "$NW11" "done" '{sha}' 1
+( cd "$NW11" && printf '| I2 | slice two | `true` → 0 | done | `%s` |\n' "$(git rev-parse --short HEAD)" \
+    >> "docs/handoffs/$MISSION/checkpoint.md" && git add -A && git commit -qm "chore: a fenced hash among bare ones" ) >/dev/null 2>&1
+nowork_stub "$NW11" empty-commit
+: > "$LEDGER"
+( cd "$NW11" && "$SDD" run "$MISSION" --max-phases 1 ) >/dev/null 2>&1
+assert_eq "incident replay: a backticked cell buys no EXEC session" \
+  "fenced:1 exec:0 phase:QA no-work:0" \
+  "fenced:$(grep -c '| done | `[0-9a-f]*` |$' "$NW11/docs/handoffs/$MISSION/checkpoint.md") exec:$(jq -s '[.[] | select(.event == "session" and .phase == "EXEC")] | length' "$LEDGER") phase:$(grep -oE 'PHASE  [A-Z]+' <<< "$(nw_log "$NW11")" | head -1 | awk '{print $2}') no-work:$(jq -s '[.[] | select(.kind == "no-work")] | length' "$LEDGER")"
+
+# Variant 2 — the cell names a commit that does not exist. No session can repair that: rc 3,
+# `no-work`, and zero sessions of any phase — where the incident paid two and was heading for the
+# mission ceiling.
+NW12="$OUTSIDE/nowork-replay-missing"
+nowork_world "$NW12" "done" '{sha}' 1
+( cd "$NW12" && printf '| I2 | slice two | `true` → 0 | done | deadbee |\n' \
+    >> "docs/handoffs/$MISSION/checkpoint.md" && git add -A && git commit -qm "chore: a hash that does not exist" ) >/dev/null 2>&1
+nowork_stub "$NW12" empty-commit
+: > "$LEDGER"
+( cd "$NW12" && "$SDD" run "$MISSION" ) >/dev/null 2>&1; NW12_RC=$?
+assert_eq "incident replay: a missing commit ends rc 3 no-work with zero sessions" \
+  "rc:3 kind:no-work stub:0 rows:0" \
+  "rc:$NW12_RC kind:$(nw_last_kind) stub:$(nw_sessions) rows:$(nw_session_rows)"
+
 # The kind is new, and it travels in `event: "blocked"`, so both readers' single is_escalation
 # admits it without an edit. The DIFFERENTIAL is what proves they count it alike: the judge's series
 # on one side, the human's table on the other, over one hand-written ledger — never a constant.

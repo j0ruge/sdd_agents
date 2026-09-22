@@ -36,11 +36,16 @@ moved" as progress, and a session with no work to do can always move the disk.
      history, an invalid status, a cell that is not a SHA). No session can fix these by doing
      increment work. The class is marked positively by `gate_EXEC` at those sites and is never
      inferred from the text.
-   - **(a)** when the same phase comes back with the **same** reason on consecutive laps, unless
-     that reason cites a log. A red suite produces the same sentence even when a session fixed half
-     of it, and stopping it would stop real work.
-   It lives in three doors: `cmd_run`'s first pass, its inline retry, and `cmd_retry`. There is
-   one probe and one mutant per door.
+   - **(a)** when the same **step** (`phase_step`: QA's sub-step, the phase everywhere else) comes
+     back derived with the **same** reason on consecutive laps, unless that reason cites a log. A
+     red suite produces the same sentence even when a session fixed half of it, and stopping it
+     would stop real work. Keyed on the step by a human decision taken during execution: keyed on
+     the phase, every QA with an interface stopped after `QA:plan`, because `gate_QA` says
+     `missing 30-handoff-qa.md` after the plan and the walk alike.
+   It lives in three doors: `cmd_run`'s first pass (derived laps only, the last refusal before the
+   session, below the Jidoka pre-checks and the ceilings, which keep their own kinds and the draft
+   degradation), its inline retry, and `cmd_retry`. Only the first door reads (a). There is one
+   probe and one mutant per door.
 3. **The cell is read the way a human reads it.** `checkpoint_rows` strips backticks from the commit
    cell. That function is the single reader, so every consumer is fixed at once. A cell that is
    still not hex after that gets its own gate message.
@@ -57,7 +62,13 @@ moved" as progress, and a session with no work to do can always move the disk.
   reason's class, not on the count.
 - **"Same reason twice ⇒ stop", unqualified.** A session that fixes part of a red suite leaves
   `TEST_CMD failed — see <log>` unchanged and would be stopped while working. Hence the log
-  exclusion.
+  exclusion. (Measured during execution: today every cited log is a per-execution `mktemp`, so two
+  log-citing reasons are never the same text and the exclusion has no probe. It stays for the day a
+  log path becomes stable, and the missing probe is declared where the predicate is defined.)
+- **Key (a) on the phase.** It was the plan's key. The first probe found that it stops every QA
+  with an interface after its first sub-step, which is real progress behind a stable reason.
+- **Door 1 above the Jidoka pre-checks and the ceilings.** Placed there, (a) pre-empted
+  `review-to-draft` and `budget-exhausted`, which are designed stops with their own remedies.
 - **Re-call `gate_"$phase"` directly after `$(current_phase)`, as `cmd_status` does.** Inside
   `cmd_run` this re-runs `TEST_CMD` on every lap, because the `run_check_cmd` cache dies in the
   subshell (`TODO.md:705`). Publishing from a directly called function fixes both. A counter sensor
