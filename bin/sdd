@@ -2234,6 +2234,18 @@ session ending the turn ends the session, and \"I will resume when it finishes\"
 Wait for it, read its result, then write the artifacts and commit."
   slash="$(phase_slash "$step")"
   agent="$(phase_agent "$step")"
+  # Why the session was opened — decision 1 of 20260922-o-motivo-da-fase, ONE line for every phase.
+  # The executor of 20260921-amep-backend-0-1-0 was opened with no pending row and no reason, looked
+  # for "the first pending", found none, and made a no-op commit that bought the next lap. The
+  # reason is the one derive_phase published; `${step%%:*}` because QA boots per sub-step. A phase
+  # the runner did not derive (`--phase`, `sdd boot` of another phase, the draft jump to PR) says
+  # so instead of borrowing the reason of a phase it is not.
+  local why_line
+  if [ -n "$CURRENT_PHASE" ] && [ "$CURRENT_PHASE" = "${step%%:*}" ] && [ -n "$CURRENT_PHASE_WHY" ]; then
+    why_line="Why this phase: $CURRENT_PHASE_WHY"
+  else
+    why_line="Why this phase: forced from the CLI — the runner did not derive it"
+  fi
   # The kit is English; the ARTIFACT speaks whatever language the target repo declared. Empty ⇒
   # nothing is said, and the prompt stays byte for byte what it was before this key existed.
   if [ -n "$OUTPUT_LANG" ]; then
@@ -2308,6 +2320,7 @@ before. Read, in this order, before anything else:
   6. $item6
 $handoff_block$notes_block$lang_line
 Your task in this session: $(phase_task "$step").
+$why_line
 $(phase_extra "$step")
 $turn_rule
 
@@ -6598,8 +6611,10 @@ cmd_run() {
   local dry_next=""   # dry-run projection cursor (distinct from --phase, which prints just one)
 
   while :; do
-    if [ -n "$dry_next" ]; then phase="$dry_next"
-    elif [ -n "$force_phase" ]; then phase="$force_phase"
+    # The two branches that do not derive also clear the derivation: a reason left over from an
+    # earlier lap must not reach the boot of a phase the runner is now FORCING.
+    if [ -n "$dry_next" ]; then phase="$dry_next"; CURRENT_PHASE=""; CURRENT_PHASE_WHY=""
+    elif [ -n "$force_phase" ]; then phase="$force_phase"; CURRENT_PHASE=""; CURRENT_PHASE_WHY=""
     # The DERIVED branch alone, and that is the whole licence gate_pass_rows has to speak: this
     # `current_phase()` call is what proves every earlier phase's gate passed. `--phase X` and the
     # dry-run cursor never consult the derivation, so under either of them the runner knows nothing
@@ -7307,6 +7322,8 @@ cmd_boot() {
   [ -n "$phase" ] || die "usage: sdd boot <mission> <PHASE>"
   phase="$(printf '%s' "$phase" | tr '[:lower:]' '[:upper:]')"
   case " $PHASES " in *" $phase "*) ;; *) die "unknown phase '$phase' (one of: $PHASES)" ;; esac
+  # The same derivation the session would be opened on, so the instrument shows what it would see.
+  derive_phase
   boot_prompt "$phase" "$(phase_hat "$phase")"
 }
 

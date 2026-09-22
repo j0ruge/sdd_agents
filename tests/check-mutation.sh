@@ -221,6 +221,12 @@ mut_RUN_derive_in_subshell() {
   sed -i '/^cmd_run() {/,/^}/ { /^      derive_phase$/d; s@^      phase="\$CURRENT_PHASE"$@      phase="$(current_phase)"@ }' "$1"
 }
 
+# The boot prompt stops saying why the phase was opened. The session is back to looking for "the
+# first pending" with no reason in hand, which is how the no-op commit of issue #54 was born.
+mut_BOOT_reason_dropped() {
+  sed -i '/^boot_prompt() {/,/^}/ { /^\$why_line$/d }' "$1"
+}
+
 mut_EXEC_ignores_TEST_CMD() { # discards the suite's rc — the gate stops measuring TEST_CMD
   sed -i 's|.*run_check_cmd "\$TEST_CMD" "gate-exec-test".*|  if false; then|' "$1"
 }
@@ -3828,6 +3834,7 @@ CATALOG=(
   GATE_EXEC_not_a_sha_silent
   RUN_phase_reason_unlogged
   RUN_derive_in_subshell
+  BOOT_reason_dropped
   REVIEW_alignment_colon_blind
   DOCS_alignment_colon_blind
   QA_status_line_start

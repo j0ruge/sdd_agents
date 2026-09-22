@@ -5953,6 +5953,20 @@ assert_eq "deriving the phase runs TEST_CMD no more often than forcing it" \
   "floor:1 runs:$NW3_RUNS" \
   "floor:$([ "$NW3_RUNS" -ge 1 ] && echo 1 || echo 0) runs:$NW2_RUNS"
 
+echo "== the boot prompt says why the phase was opened =="
+# `sdd boot` prints the prompt run_phase would hand the session, without opening one. With one
+# increment pending the derived phase is EXEC and its reason is the gate's; asking for DOCS on the
+# same mission is a phase the runner did not derive, and the prompt has to say so rather than
+# borrow EXEC's reason. The pair is the differential: one world, two phases, two answers.
+NW4="$OUTSIDE/nowork-boot"
+nowork_world "$NW4" pending
+NW4_EXEC="$( cd "$NW4" && "$SDD" boot "$MISSION" EXEC 2>&1 )"
+NW4_DOCS="$( cd "$NW4" && "$SDD" boot "$MISSION" DOCS 2>&1 )"
+assert_eq "the boot prompt carries the phase reason" "1" \
+  "$(grep -cF 'Why this phase: 1 of 1 increment(s) still to execute' <<< "$NW4_EXEC")"
+assert_eq "a phase the runner did not derive says so in the boot" "forced:1 borrowed:0" \
+  "forced:$(grep -cF 'Why this phase: forced from the CLI' <<< "$NW4_DOCS") borrowed:$(grep -cF 'still to execute' <<< "$NW4_DOCS")"
+
 cat > "$OUTSIDE/stub/claude" <<'STUB'
 #!/usr/bin/env bash
 echo "ERROR: the test invoked the real claude" >&2
