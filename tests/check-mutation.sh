@@ -202,6 +202,12 @@ mut_GATE_EXEC_backtick_kept() {
   sed -i '/^checkpoint_rows() {/,/^}/ { /^      gsub(\/`\/, "", f\[6\])$/d }' "$1"
 }
 
+# The not-a-SHA branch of gate_EXEC goes: `commit abc1234` falls through to `git cat-file` and is
+# told it "does not exist", which sends the reader after a lost commit instead of at the cell.
+mut_GATE_EXEC_not_a_sha_silent() {
+  sed -i '/^gate_EXEC() {/,/^}/ s@^        if ! \[\[ "\$commit" =~ .*\]\]; then$@        if false; then@' "$1"
+}
+
 mut_EXEC_ignores_TEST_CMD() { # discards the suite's rc — the gate stops measuring TEST_CMD
   sed -i 's|.*run_check_cmd "\$TEST_CMD" "gate-exec-test".*|  if false; then|' "$1"
 }
@@ -3806,6 +3812,7 @@ CATALOG=(
   EXEC_alignment_colon_blind
   EXEC_dirty_tree_as_red
   GATE_EXEC_backtick_kept
+  GATE_EXEC_not_a_sha_silent
   REVIEW_alignment_colon_blind
   DOCS_alignment_colon_blind
   QA_status_line_start

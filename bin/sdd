@@ -919,8 +919,22 @@ GATE_APP_DOWN=0
 GATE_EXEC_PENDING=""
 GATE_EXEC_TOTAL=""
 
+# 1 when gate_EXEC refused because a checkpoint CELL is unreadable — a `done` with no commit, a
+# Commit cell that is not a SHA, a SHA that does not exist or is outside HEAD's history, a status
+# outside the enum. It is the data no_work_check reads for its form (b): a session opened over one
+# of these has nothing to execute, and in 20260921-amep-backend-0-1-0 each one made a no-op commit
+# that moved the disk and bought the next lap (issues #54/#55). Classified by the MARKER, never by
+# the text of GATE_WHY — a reworded message must not move a reason from one class to the other.
+#
+# CONTRACT: reset at the ENTRY of gate_EXEC, its only setter, like GATE_EXEC_DIRTY; armed at each
+# cell site immediately before its `return 1`. Read in the parent shell only (derive_phase and the
+# direct gate calls of cmd_run/cmd_retry) — through `$(current_phase)` it dies with the subshell.
+GATE_EXEC_CELL=0
+
+# shellcheck disable=SC2034 # GATE_EXEC_CELL: its consumer (no_work_check) lands in I5 of 20260922-o-motivo-da-fase
 gate_EXEC() {
   GATE_EXEC_DIRTY=0
+  GATE_EXEC_CELL=0
   # Emptied on ENTRY, the same reset GATE_EXEC_DIRTY and GATE_APP_DOWN get one screen up and for
   # the same reason: a gate that refuses below must not hand its caller the numbers of the gate
   # before it.
@@ -941,9 +955,18 @@ gate_EXEC() {
     case "$status" in
       done)
         if [ -z "$commit" ] || [ "$commit" = "—" ] || [ "$commit" = "-" ]; then
+          GATE_EXEC_CELL=1
           GATE_WHY="increment $id is 'done' with no commit — a label is not an artifact"; return 1
         fi
+        # Shape before existence: `commit abc1234` told "does not exist" sends the reader after a
+        # lost commit when the defect is the cell. Backticks never reach here (checkpoint_rows
+        # strips them from this column); anything else that is not 7–40 hex digits is the writer's.
+        if ! [[ "$commit" =~ ^[0-9a-fA-F]{7,40}$ ]]; then
+          GATE_EXEC_CELL=1
+          GATE_WHY="increment $id: the Commit cell '$commit' is not a SHA — write the bare short hash, no backticks or words"; return 1
+        fi
         if ! ( cd "$REPO_ROOT" && git cat-file -e "${commit}^{commit}" 2>/dev/null ); then
+          GATE_EXEC_CELL=1
           GATE_WHY="increment $id points at commit '$commit', which does not exist in the repository"; return 1
         fi
         # `cat-file -e` only says the OBJECT exists in the database — not that it is in the
@@ -953,6 +976,7 @@ gate_EXEC() {
         # prevent, inside the gate itself. Measured by sdd-qa in mission
         # 20260814-dry-run-completo, with a real amend.
         if ! ( cd "$REPO_ROOT" && git merge-base --is-ancestor "$commit" HEAD 2>/dev/null ); then
+          GATE_EXEC_CELL=1
           GATE_WHY="increment $id points at commit '$commit', which exists but is NOT in the history of HEAD (amend/rebase/reset?) — the gate demands a reachable artifact, not a loose object"
           return 1
         fi
@@ -960,7 +984,8 @@ gate_EXEC() {
       # Valid and nothing to check — the arm exists so the enum stays exhaustive and the `*)` below
       # keeps meaning "not one of the four". Counting them is checkpoint_tally's job, below.
       pending|doing|blocked) ;;
-      *) GATE_WHY="increment $id has invalid status '$status' (use pending|doing|done|blocked)"; return 1 ;;
+      *) GATE_EXEC_CELL=1
+         GATE_WHY="increment $id has invalid status '$status' (use pending|doing|done|blocked)"; return 1 ;;
     esac
   done <<< "$rows"
 

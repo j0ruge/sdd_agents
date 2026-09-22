@@ -472,6 +472,20 @@ fi
 assert_phase "a backticked commit cell is read as the SHA it carries" "QA"
 mv "$MDIR/checkpoint.tick.bak" "$MDIR/checkpoint.md"
 
+# A Commit cell that has no SHA shape at all — words around the hash — used to be told it "does
+# not exist", which sends whoever reads it looking for a lost commit instead of at the cell.
+cp "$MDIR/checkpoint.md" "$MDIR/checkpoint.notsha.bak"
+sed -i "s/| done | $REAL_HASH |/| done | commit $REAL_HASH |/" "$MDIR/checkpoint.md"
+if grep -qF "| done | commit $REAL_HASH |" "$MDIR/checkpoint.md"; then
+  pass "fixture: the commit cell really carries words around the hash"
+else
+  fail "not-a-SHA fixture" "a done row with 'commit <hash>'" "$(grep -m1 '| done |' "$MDIR/checkpoint.md")"
+fi
+assert_phase "a commit cell that is not a SHA fails the EXEC gate" "EXEC"
+assert_why   "a commit cell that is not a SHA gets its own reason" "EXEC" "is not a SHA"
+assert_why_absent "the not-a-SHA reason is not the does-not-exist reason" "EXEC" "does not exist"
+mv "$MDIR/checkpoint.notsha.bak" "$MDIR/checkpoint.md"
+
 # --- QA --------------------------------------------------------------------
 # The QA gate has TWO contracts, because there are two kinds of project.
 #
