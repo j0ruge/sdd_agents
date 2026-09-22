@@ -800,3 +800,10 @@ O plano consolidado pelo Codex Astra, baseado no artigo de @0xCodez e nas refer�
   era obrigado a cair. O `@codex review` o achou no PR #167. Direção: o revisor enumera qual
   sabotagem provou cada nota — hoje narra em prosa, e prosa não é verificável.
   — descoberto por `sessão coordenadora` na missão `20260916-destino-frete-cif` (2026-09-16)
+
+- [ ] **`sdd approve` commita na branch corrente, mesmo a padrão, e só o `00-missao.md`** —
+  `bin/sdd:6260` — medido aqui: o commit da aprovação caiu na `main` local, com o `01-plano.md`, o
+  `checkpoint.md` e o ADR citado fora do git, ou seja, uma missão aprovada sem plano no histórico.
+  Em repo-alvo, alguém que dê `push` na `main` publica isso. Direção: recusar ou avisar quando a
+  branch é o `DEFAULT_BRANCH`, e commitar o diretório da missão inteiro.
+  — descoberto por `sessão coordenadora` na missão `20260922-o-motivo-da-fase` (2026-09-22)
