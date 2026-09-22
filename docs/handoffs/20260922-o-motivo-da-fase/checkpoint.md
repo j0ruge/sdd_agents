@@ -31,7 +31,7 @@ atualizado: 2026-09-22 18:06
 
 | ID | Incremento | Check (comando → esperado) | Status | Commit |
 |---|---|---|---|---|
-| I1 | crase na célula de commit é lida como o SHA (#55) | `o=$(bash tests/check-gates.sh 2>&1); grep -c '^  ok    a backticked commit cell is read as the SHA it carries' <<< "$o"` → `1` | pending | — |
+| I1 | crase na célula de commit é lida como o SHA (#55) | `o=$(bash tests/check-gates.sh 2>&1); grep -c '^  ok    a backticked commit cell is read as the SHA it carries' <<< "$o"` → `1` | done | 74e294c |
 | I2 | célula que não é SHA ganha motivo próprio + marcador GATE_EXEC_CELL | `o=$(bash tests/check-gates.sh 2>&1); grep -c '^  ok    a commit cell that is not a SHA gets its own reason' <<< "$o"` → `1` | pending | — |
 | I3 | derive_phase publica fase e motivo; linha PHASE no journal; contador do TEST_CMD (#56) | `o=$(bash tests/check-autonomy.sh 2>&1); grep -c '^  ok    every derived phase writes its reason to the journal' <<< "$o"` → `1` | pending | — |
 | I4 | boot_prompt diz por que a fase foi aberta (toda fase) | `o=$(bash tests/check-autonomy.sh 2>&1); grep -c '^  ok    the boot prompt carries the phase reason' <<< "$o"` → `1` | pending | — |
