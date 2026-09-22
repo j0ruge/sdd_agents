@@ -49,3 +49,4 @@
 
 - 2026-09-22 18:26 · `EXEC` · I1 done (74e294c): gsub da crase só em f[6]; mutante GATE_EXEC_backtick_kept vermelho pela receita M (check-gates rc=1)
 - 2026-09-22 18:38 · `EXEC` · I2 done (f35189f): regex aceita A-F além de a-f (git aceita hex maiúsculo; recusar seria regressão); SC2034 desligado em gate_EXEC até o I5 dar consumidor ao GATE_EXEC_CELL
+- 2026-09-22 18:52 · `EXEC` · I3 done (3245bfd): medido antes do conserto — derivado 3 execuções de TEST_CMD × forçado 2 (subshell do derive + pré-checagem do gate_EXEC no pai); depois 2 × 2. A forma do plano ("não cresce com o nº de fases pendentes") não tinha Red — o memo é por $cmd — e virou o diferencial derivado × --phase
