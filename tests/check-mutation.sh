@@ -208,6 +208,19 @@ mut_GATE_EXEC_not_a_sha_silent() {
   sed -i '/^gate_EXEC() {/,/^}/ s@^        if ! \[\[ "\$commit" =~ .*\]\]; then$@        if false; then@' "$1"
 }
 
+# cmd_run stops writing the PHASE line: the journal goes back to saying only `rc=0` once the
+# session ends, which reads as success over a session that had nothing to do (issue #56).
+mut_RUN_phase_reason_unlogged() {
+  sed -i '/^cmd_run() {/,/^}/ s@^        pipeline_log_line .*  PHASE  \$phase  reason=.*$@        :@' "$1"
+}
+
+# cmd_run goes back to deriving through a command substitution. The reason dies with the subshell
+# (the PHASE line carries `reason=""`) and so does the run_check_cmd memo, so the parent's own
+# gate_EXEC runs TEST_CMD again over the same epoch.
+mut_RUN_derive_in_subshell() {
+  sed -i '/^cmd_run() {/,/^}/ { /^      derive_phase$/d; s@^      phase="\$CURRENT_PHASE"$@      phase="$(current_phase)"@ }' "$1"
+}
+
 mut_EXEC_ignores_TEST_CMD() { # discards the suite's rc — the gate stops measuring TEST_CMD
   sed -i 's|.*run_check_cmd "\$TEST_CMD" "gate-exec-test".*|  if false; then|' "$1"
 }
@@ -3813,6 +3826,8 @@ CATALOG=(
   EXEC_dirty_tree_as_red
   GATE_EXEC_backtick_kept
   GATE_EXEC_not_a_sha_silent
+  RUN_phase_reason_unlogged
+  RUN_derive_in_subshell
   REVIEW_alignment_colon_blind
   DOCS_alignment_colon_blind
   QA_status_line_start

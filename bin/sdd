@@ -916,6 +916,9 @@ GATE_APP_DOWN=0
 # is built with these still set. The readers guard on the phase; see the call sites. (Measured
 # 2026-08-30: through `$(current_phase)` both come back empty, called directly they come back set.
 # The guard is required either way; only the mechanism named here was wrong.)
+# Since 20260922-o-motivo-da-fase cmd_run and cmd_retry derive with derive_phase, in the parent
+# shell, so the derivation itself is now a third live vector — the phase guard at the readers is
+# what keeps it harmless, exactly as for the other two.
 GATE_EXEC_PENDING=""
 GATE_EXEC_TOTAL=""
 
@@ -1665,13 +1668,31 @@ gate_PR() {
 
 readonly PHASES="PLAN TICKET EXEC QA REVIEW DOCS PR"
 
-# First phase whose gate is not satisfied. Empty ⇒ mission complete.
-current_phase() {
+# First phase whose gate is not satisfied, PUBLISHED: CURRENT_PHASE (empty ⇒ mission complete) and
+# CURRENT_PHASE_WHY, the GATE_WHY of the gate that refused — the reason the runner is about to open
+# that phase. CALLED, never `$( )`: read through a substitution, the reason died with the subshell,
+# the journal said only `rc=0`, and the session was opened without knowing why (issue #56). The
+# gates run in THIS shell, so the run_check_cmd memo and every gate marker (GATE_EXEC_CELL among
+# them) outlive the call — through `$(current_phase)` the memo scored zero hits in a whole `sdd run`
+# and the parent's own gate_EXEC ran TEST_CMD again over the same epoch. The sensor is "deriving
+# the phase runs TEST_CMD no more often than forcing it" in tests/check-autonomy.sh.
+CURRENT_PHASE=""
+CURRENT_PHASE_WHY=""
+derive_phase() {
   local ph
+  CURRENT_PHASE=""
+  CURRENT_PHASE_WHY=""
   for ph in $PHASES; do
-    if ! "gate_$ph"; then printf '%s\n' "$ph"; return 0; fi
+    if ! "gate_$ph"; then CURRENT_PHASE="$ph"; CURRENT_PHASE_WHY="$GATE_WHY"; return 0; fi
   done
-  printf '%s\n' ""
+  return 0
+}
+
+# The same derivation, printed — for the readers that only want the name (cmd_status, cmd_phase,
+# cmd_why). One definition: this is derive_phase, not a second walk over $PHASES.
+current_phase() {
+  derive_phase
+  printf '%s\n' "$CURRENT_PHASE"
 }
 
 # First phase AFTER <phase> whose gate is not satisfied. Empty ⇒ the list ended.
@@ -6582,8 +6603,18 @@ cmd_run() {
     # The DERIVED branch alone, and that is the whole licence gate_pass_rows has to speak: this
     # `current_phase()` call is what proves every earlier phase's gate passed. `--phase X` and the
     # dry-run cursor never consult the derivation, so under either of them the runner knows nothing
-    # about the other phases and says nothing about them. Called, never `$( )` — see the function.
-    else phase="$(current_phase)"; gate_pass_rows "$phase"; fi
+    # about the other phases and says nothing about them. Called, never `$( )` — see derive_phase.
+    else
+      derive_phase
+      phase="$CURRENT_PHASE"
+      gate_pass_rows "$phase"
+      # The reason, where the human watching `tail -F` reads it, BEFORE a session is paid for. The
+      # journal used to say only `rc=0` once the session ended, which reads as success over a
+      # session that had nothing to do (issue #56).
+      if [ -n "$phase" ]; then
+        pipeline_log_line "$(date -Iseconds)  PHASE  $phase  reason=\"$CURRENT_PHASE_WHY\""
+      fi
+    fi
 
     if [ -z "$phase" ]; then
       info ""
@@ -7051,7 +7082,9 @@ cmd_retry() {
   # decides where this retry will commit, so warning first would cry wolf at a human the runner is
   # about to move off the base branch anyway.
   warn_if_on_base_branch
-  local phase; phase="$(current_phase)"
+  local phase
+  derive_phase
+  phase="$CURRENT_PHASE"
   [ -n "$phase" ] || { info "pipeline complete — nothing to retry"; return 0; }
   [ "$phase" = "PLAN" ] && die "PLAN is interactive — there is nothing to retry headless"
   # L4 (2026-09-03 audit): a retry IS the human's hand — the template's own first example of one.

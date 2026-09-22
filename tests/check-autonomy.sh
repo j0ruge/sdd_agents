@@ -5857,6 +5857,109 @@ exit 97
 STUB
 chmod +x "$OUTSIDE/stub/claude"
 
+# --- the phase reason and the no-work guard (20260922-o-motivo-da-fase) --------
+# One world per regime, built from scratch, on the reviewscope pattern above: the mission sits at
+# a chosen checkpoint row, TEST_CMD counts its own executions into a file OUTSIDE the world (inside
+# it, the count would dirty the tree the gates read), and the stub counts sessions the same way.
+#
+# nowork_world <dir> <pending|done> [commit cell, `{sha}` = the real short hash] [handoff: 1|0]
+# NW_TEST is the verdict TEST_CMD returns after counting (`true` unless a regime says otherwise).
+NW_COUNT="$OUTSIDE/nowork-count"
+NW_TEST="true"
+nowork_world() {
+  local dir="$1" status="$2" cell="${3:-—}" handoff="${4:-0}"
+  rm -rf "$dir"; mkdir -p "$dir"
+  ( cd "$dir" || exit 1
+    git init -q -b main
+    git config user.email "fixture@example.com"
+    git config user.name "Fixture"
+    printf 'content\n' > file.txt
+    "$SDD" install >/dev/null
+    cat > .sdd/config.sh <<CFG
+PROJECT_NAME="nowork"
+DEFAULT_BRANCH="main"
+TEST_CMD="echo x >> '$dir.testruns'; $NW_TEST"
+E2E_CMD=""
+HANDOFF_DIR="docs/handoffs"
+QA_DOCS_PATH="docs/qa"
+JIRA_ENABLED=false
+CFG
+    mkdir -p "docs/handoffs/$MISSION"
+    cat > "docs/handoffs/$MISSION/00-missao.md" <<'MIS'
+---
+missao: 20260101-fixture
+aprovacao: auto
+---
+# Mission
+MIS
+    : > "docs/handoffs/$MISSION/01-plano.md"
+    if [ "$handoff" = "1" ]; then
+      printf -- '---\nfase: EXEC\nstatus: done\n---\n' > "docs/handoffs/$MISSION/20-handoff-exec.md"
+    fi
+    git add -A && git commit -qm "chore: fixture mission"
+    cell="${cell//\{sha\}/$(git rev-parse --short HEAD)}"
+    cat > "docs/handoffs/$MISSION/checkpoint.md" <<EOF
+| ID | Incremento | Check (comando → esperado) | Status | Commit |
+|---|---|---|---|---|
+| I1 | slice one | \`true\` → 0 | $status | $cell |
+EOF
+    git add -A && git commit -qm "chore: the checkpoint row" ) >/dev/null 2>&1
+  rm -f "$dir.testruns" "$NW_COUNT"
+}
+# nowork_stub <dir> <empty-commit|nothing> — the session. `empty-commit` is the incident's session:
+# no pending row to take, so it commits a no-op, which moves HEAD and reads as progress.
+nowork_stub() {
+  cat > "$OUTSIDE/stub/claude" <<STUB
+#!/usr/bin/env bash
+n=\$(( \$(cat "$NW_COUNT" 2>/dev/null || echo 0) + 1 ))
+printf '%s\n' "\$n" > "$NW_COUNT"
+if [ "$2" = "empty-commit" ]; then git -C "$1" commit --allow-empty -qm 'docs(checkpoint): no-op'; fi
+cat "$STREAM_SAMPLE"
+exit 0
+STUB
+  chmod +x "$OUTSIDE/stub/claude"
+}
+nw_sessions() { cat "$NW_COUNT" 2>/dev/null || printf 0; }
+nw_testruns() { grep -c . "$1.testruns" 2>/dev/null || printf 0; }
+nw_log() { cat "$1/.sdd/logs/$MISSION/pipeline.log" 2>/dev/null || true; }
+
+echo "== the derived phase writes its reason to the journal =="
+NW1="$OUTSIDE/nowork-reason"
+nowork_world "$NW1" pending
+nowork_stub "$NW1" empty-commit
+( cd "$NW1" && "$SDD" run "$MISSION" --max-phases 1 ) >/dev/null 2>&1
+assert_eq "every derived phase writes its reason to the journal" \
+  "sessions:1 lines:1" \
+  "sessions:$(nw_sessions) lines:$(grep -cF 'PHASE  EXEC  reason="1 of 1 increment(s) still to execute"' <<< "$(nw_log "$NW1")")"
+
+# TODO.md: "the economy of current_phase depends on the memo and nobody counts" and "the memo
+# scores zero hits in a whole sdd run". Deriving through `$(current_phase)` ran the gates in a
+# subshell, so the memo died with it and the parent's own gate_EXEC ran TEST_CMD again over the
+# same epoch. DIFFERENTIAL: the same world, derived versus forced with --phase (which derives
+# nothing) — deriving must cost no TEST_CMD run that forcing does not. `floor:1` is the witness that
+# the world reaches TEST_CMD at all: every increment done, the handoff missing, so gate_EXEC runs
+# the suite and still refuses.
+NW2="$OUTSIDE/nowork-derived"
+nowork_world "$NW2" "done" '{sha}' 0
+nowork_stub "$NW2" nothing
+( cd "$NW2" && "$SDD" run "$MISSION" --max-phases 1 ) >/dev/null 2>&1
+NW2_RUNS="$(nw_testruns "$NW2")"
+NW3="$OUTSIDE/nowork-forced"
+nowork_world "$NW3" "done" '{sha}' 0
+nowork_stub "$NW3" nothing
+( cd "$NW3" && "$SDD" run "$MISSION" --phase EXEC --max-phases 1 ) >/dev/null 2>&1
+NW3_RUNS="$(nw_testruns "$NW3")"
+assert_eq "deriving the phase runs TEST_CMD no more often than forcing it" \
+  "floor:1 runs:$NW3_RUNS" \
+  "floor:$([ "$NW3_RUNS" -ge 1 ] && echo 1 || echo 0) runs:$NW2_RUNS"
+
+cat > "$OUTSIDE/stub/claude" <<'STUB'
+#!/usr/bin/env bash
+echo "ERROR: the test invoked the real claude" >&2
+exit 97
+STUB
+chmod +x "$OUTSIDE/stub/claude"
+
 # --- the instrument never lands inside the thing it measures ----------------
 # Pins the $OUTSIDE decision at the top of this file. If the ledger, a reader fixture or the kit
 # copy ever moves back under $FIX, the moving stub's `git add -A` commits it into the repo under
