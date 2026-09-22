@@ -3477,6 +3477,60 @@ assert_eq "close: the prompt tells the session the human already authorised it, 
   "slash:1 authorised:1 nobody:1 dont-ask:1" \
   "slash:$(has "$CLOSE_ARGV_TEXT" '/ticket close') authorised:$(has "$CLOSE_ARGV_TEXT" 'already authorised') nobody:$(has "$CLOSE_ARGV_TEXT" 'no developer') dont-ask:$(has "$CLOSE_ARGV_TEXT" 'without asking')"
 
+# CLOSE_HOME is READ from the fixture's own config, never written twice: a literal here and a
+# literal in the heredoc at the top of this file would be two spellings of one fact, and the day
+# someone changes the fixture's DEFAULT_BRANCH the assertion below would go on checking the old
+# name and pass by agreeing with itself.
+CLOSE_HOME="$(sed -n 's/^DEFAULT_BRANCH="\(.*\)"$/\1/p' "$FIX/.sdd/config.sh")"
+[ -n "$CLOSE_HOME" ] || { echo "check-gates: could not read DEFAULT_BRANCH from the fixture config" >&2; exit 1; }
+
+# 8c. THE MISSION BRANCH IS NOT WHERE THE NEXT MISSION STARTS. `sdd close` is post-merge: the work
+#     is in the default branch and the mission branch is spent. Leaving the session standing on it
+#     is how the next thing typed lands on a ref nobody will merge again — measured on the
+#     lighthouse_project close of 2026-09-22, which ended on `LH-1_amep-backend-0-1-0` with the
+#     merge already in `develop`.
+#
+#     Asserted on the CHEAPEST verified arm (`done`, regime 8), because the return belongs to the
+#     verdict and not to the session: an issue already Done spends nothing and still has to land
+#     the human back home. Regime 8d covers the arm that does spend one, so the two exits cannot
+#     drift apart — a fix applied to only one of them is exactly what this pair refuses.
+#     The fixture tree is committed first, because THE REAL ONE IS CLEAN HERE: `sdd install`
+#     guarantees `.sdd/logs/` is gitignored in every repo, so the logs this command writes are
+#     invisible to git and a post-merge tree has nothing pending. A fixture left dirty would send
+#     every one of these regimes down the dirty arm and prove only that arm, twice.
+git -C "$FIX" add -A >/dev/null 2>&1
+git -C "$FIX" -c user.email=fix@example.com -c user.name=fixture commit -q -m "fixture: clean tree before the close" >/dev/null 2>&1 || true
+git -C "$FIX" checkout -q -b LH-9_fixture-branch
+close_run "done" 0
+assert_eq "close: a verified close leaves the tree back on the default branch, and says so" \
+  "rc:0 branch:$CLOSE_HOME said:1" \
+  "rc:$CLOSE_RC_OUT branch:$(git -C "$FIX" rev-parse --abbrev-ref HEAD) said:$(has "$CLOSE_OUT" "$CLOSE_HOME")"
+
+# 8d. The same, on the arm that spends a session. Two exits, one behaviour.
+git -C "$FIX" add -A >/dev/null 2>&1
+git -C "$FIX" -c user.email=fix@example.com -c user.name=fixture commit -q -m "fixture: clean again" >/dev/null 2>&1 || true
+git -C "$FIX" checkout -q -b LH-10_fixture-branch
+close_run "notdone done" 0
+assert_eq "close: the arm that spends a session comes home too" \
+  "rc:0 branch:$CLOSE_HOME" \
+  "rc:$CLOSE_RC_OUT branch:$(git -C "$FIX" rev-parse --abbrev-ref HEAD)"
+
+# 8e. A DIRTY TREE IS NOT A REASON TO MOVE HEAD. The close already succeeded; throwing away
+#     uncommitted work for branch hygiene is the worse trade, and `ensure_mission_branch` argues
+#     the same thing one screen up in bin/sdd ("guessing on top of a tree git already refused is
+#     how a working tree gets destroyed"). So: stay, warn, and NAME the branch you stayed on —
+#     a silent non-move reads exactly like a move that worked.
+git -C "$FIX" add -A >/dev/null 2>&1
+git -C "$FIX" -c user.email=fix@example.com -c user.name=fixture commit -q -m "fixture: clean before the dirty case" >/dev/null 2>&1 || true
+git -C "$FIX" checkout -q -b LH-11_dirty-branch
+printf 'uncommitted work\n' > "$FIX/human-draft.txt"
+close_run "done" 0
+assert_eq "close: with a dirty tree it stays put, warns, and does not destroy the work" \
+  "rc:0 branch:LH-11_dirty-branch kept:1 warned:1" \
+  "rc:$CLOSE_RC_OUT branch:$(git -C "$FIX" rev-parse --abbrev-ref HEAD) kept:$([ -e "$FIX/human-draft.txt" ] && printf 1 || printf 0) warned:$(has "$CLOSE_OUT" 'uncommitted')"
+rm -f "$FIX/human-draft.txt"
+git -C "$FIX" checkout -q "$CLOSE_HOME"
+
 # 9. Control. With JIRA off the command asks nothing of anyone — and the two `:0` terms are the
 #    half that matters: a guard that ran acli anyway would still print "nothing to close".
 sed -i 's/^JIRA_ENABLED=true$/JIRA_ENABLED=false/' "$FIX/.sdd/config.sh"

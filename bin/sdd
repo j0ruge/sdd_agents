@@ -8971,6 +8971,37 @@ close_query() {
 
 # Post-merge: closes the JIRA issue. Fired by the human after the merge — it is the only thing
 # that happens AFTER the human gate, which is why it is not part of `sdd run`.
+# COMING HOME. `sdd close` is post-merge: the work is in the default branch and the mission branch
+# is spent. Leaving the session standing on it is how the next thing typed lands on a ref nobody
+# will merge again — measured on the lighthouse_project close of 2026-09-22, which ended on
+# `LH-1_amep-backend-0-1-0` with the merge already sitting in `develop`.
+#
+# A WARN AND NEVER A die, and that asymmetry is the whole design. `ensure_mission_branch` dies
+# because going on would run a whole pipeline on the wrong ref; here the close has ALREADY
+# succeeded and there is nothing left to protect — the only thing a die could still do is take
+# somebody's uncommitted work with it. Same reason that function gives one screen up: guessing on
+# top of a tree git already refused is how a working tree gets destroyed.
+#
+# The dirty case is announced rather than passed over: a silent non-move reads exactly like a move
+# that worked, and the human finds out two commits later.
+close_return_home() {
+  local current out rc=0
+  [ -n "${DEFAULT_BRANCH:-}" ] || return 0
+  current="$( git -C "$REPO_ROOT" rev-parse --abbrev-ref HEAD 2>/dev/null || echo "" )"
+  [ -n "$current" ] || return 0
+  [ "$current" != "$DEFAULT_BRANCH" ] || return 0
+  if [ -n "$( git -C "$REPO_ROOT" status --porcelain 2>/dev/null )" ]; then
+    warn "staying on '$current': the tree has uncommitted changes, and '$DEFAULT_BRANCH' is one 'git checkout' away once you have dealt with them"
+    return 0
+  fi
+  out="$( git -C "$REPO_ROOT" checkout "$DEFAULT_BRANCH" 2>&1 )" || rc=$?
+  if [ "$rc" -ne 0 ]; then
+    warn "could not return to '$DEFAULT_BRANCH' — still on '$current'. git said: $out"
+    return 0
+  fi
+  ok "back on '$DEFAULT_BRANCH' — the mission branch is merged and spent"
+}
+
 cmd_close() {
   load_config
   resolve_mission "${1:-}"
@@ -9013,6 +9044,7 @@ To see what it saw:  $acli_bin jira workitem search --jql \"key = $issue AND sta
     # nobody spent would be the same class of lie as the rc this whole function stopped believing.
     pipeline_log_line "$(date -Iseconds)  CLOSE  issue=$issue  session=none  rc=0  verified=true  log=none"
     ok "$issue is already Done — JIRA confirms it, and no session was spent"
+    close_return_home
     return 0
   fi
 
@@ -9124,6 +9156,7 @@ blocks the transition, say what it is and stop — but do not stop to request pe
     # second label ANDed onto the first. A session that fell over after closing the issue closed it.
     if [ "$rc" -ne 0 ]; then dim "  (the close session exited $rc — see $close_logs — but the issue is Done, so the artifact decides)"; fi
     ok "$issue closed — JIRA confirms it is Done"
+    close_return_home
     return 0
   fi
   # THREE outcomes, not two, and the third is why this branch exists: "I asked and JIRA said no" and
