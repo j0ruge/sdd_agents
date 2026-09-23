@@ -377,12 +377,19 @@ try:
     relay_bin.mkdir(exist_ok=True)
     relay_file = work / "relay-terms"
     relay_file.unlink(missing_ok=True)
+    # Like the real timeout(1) it is the BACKSTOP: it honours the duration it is handed and kills
+    # the command's whole group when that passes, so a supervisor that fails to stop the hook — the
+    # mutants that break hook supervision — cannot leave the endless loop behind (CodeRabbit, #59).
     (relay_bin / "timeout").write_text(
         "#!/usr/bin/env python3\n"
         "import os, signal, subprocess, sys\n"
         "signal.signal(signal.SIGTERM, lambda n, f: open(os.environ['RELAY_FILE'], 'a').write('T'))\n"
         "args = [a for a in sys.argv[1:] if not a.startswith('--kill-after')]\n"
-        "sys.exit(subprocess.call(args[1:]))\n")
+        "child = subprocess.Popen(args[1:], start_new_session=True)\n"
+        "try:\n"
+        "    sys.exit(child.wait(timeout=float(args[0].rstrip('s'))))\n"
+        "except subprocess.TimeoutExpired:\n"
+        "    os.killpg(child.pid, signal.SIGKILL); child.wait(); sys.exit(124)\n")
     (relay_bin / "timeout").chmod(0o755)
     relayed = subprocess.run([sys.executable, "-B", str(root / "bin/sdd-coordination.py"), "hook", "1", "1",
                               'trap ":" TERM; while :; do sleep 5 & wait; done'],
