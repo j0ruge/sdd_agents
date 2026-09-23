@@ -1089,8 +1089,20 @@ surface_rules_hold() {
   #
   # Both sides are derived — the files on disk, the invocations in the file under test — so there
   # is no fourth hand-written number to fall behind.
-  local f n_inv
+  #
+  # ONE sensor is invoked twice, and the rule names the difference instead of losing it:
+  # check-mutation.sh runs as the catalogue (the ten-minute question, exactly once, under
+  # --with-mutation) and as `--anchors` (seconds, in every run). Counted by OCCURRENCE, not by line,
+  # so a second catalogue call on the anchors line is still one too many; and the anchors call is
+  # required too — unhooking it is a sensor quietly leaving the suite, the "too FEW" case above.
+  local f n_inv n_anchors
   for f in "$ROOT"/tests/check-*.sh; do
+    if [ "$(basename -- "$f")" = check-mutation.sh ]; then
+      n_inv="$(grep -oF '$ROOT/tests/check-mutation.sh' "$SURFACE_FILE" | wc -l || true)"
+      n_anchors="$(grep -oF '$ROOT/tests/check-mutation.sh" --anchors' "$SURFACE_FILE" | wc -l || true)"
+      [ "$n_anchors" -eq 1 ] && [ "$((n_inv - n_anchors))" -eq 1 ] || return 1
+      continue
+    fi
     n_inv="$(grep -c "\$ROOT/tests/$(basename -- "$f")" "$SURFACE_FILE" || true)"
     [ "$n_inv" -eq 1 ] || return 1
   done
@@ -1176,6 +1188,16 @@ surface_rules_hold \
 surface_degrade 's@^printf ..n.$@if [ -z "${SDD_MUTANT:-}" ]; then "$ROOT/tests/check-mutation.sh" >/dev/null 2>\&1 || true; fi\n&@' 'a catalogue call outside run()'
 surface_rules_hold \
   && broken "the surface rules passed a suite invoking the catalogue outside run() — --list cannot see it and rule 4 is decoration"
+
+# Rule 4's two-call exception, from both sides. The cheap anchors step unhooked is a sensor
+# leaving the suite; the catalogue riding along on the anchors LINE is one catalogue call too many,
+# which a count by line would have read as the one allowed anchors call.
+surface_degrade '/^  || run "catalogue anchors: /d' 'the anchors step unhooked'
+surface_rules_hold \
+  && broken "the surface rules passed a suite without the anchors step — rule 4's exception answers no world of its own"
+surface_degrade 's@"\$ROOT/tests/check-mutation.sh" --anchors$@"$ROOT/tests/check-mutation.sh" --anchors; "$ROOT/tests/check-mutation.sh"@' 'the catalogue riding on the anchors line'
+surface_rules_hold \
+  && broken "the surface rules passed a catalogue call on the anchors line — rule 4 counts lines, not calls"
 
 # Rule 5: one sensor quietly unhooked from the suite. Nothing else in this repo notices — measured
 # on check-lang.sh, check-pipefail.sh and this file, all green over the 13-step suite.

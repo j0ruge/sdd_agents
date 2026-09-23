@@ -246,6 +246,14 @@ run "every hat declares its boundary" "$ROOT/tests/check-hat.sh"
 run "adr allocator and link check" "$ROOT/tests/check-adr.sh"
 run "one checkout has one execution owner" "$ROOT/tests/check-coordination.sh"
 
+# The catalogue's cheap half, in seconds and on every run: every mutant still APPLIES and leaves
+# valid bash and Python. A fix that moves a line a mutant anchors used to surface only at the end of
+# a half-hour `sdd health`, scored as a survivor and unnamed (2026-09-23: 387 of 389, both broken
+# anchors). Guarded by SDD_MUTANT for the recursion reason below — check-mutation.sh dies when born
+# inside a mutant, and a red step there would make every mutant read as caught.
+[ -n "${SDD_MUTANT:-}" ] \
+  || run "catalogue anchors: every mutant still applies" "$ROOT/tests/check-mutation.sh" --anchors
+
 # Sensor of the sensor. TWO conditions, and they answer different questions — collapsing them into
 # one would reopen something the other was holding shut:
 #

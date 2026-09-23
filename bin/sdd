@@ -4906,6 +4906,10 @@ cmd_health() {
     # over a red the catalogue found, and concludes health is lying — the one thing this command
     # may never be. The sentence has to name the command that reproduces what was just measured.
     health_bad "suite red (rc $rc) — run tests/run-all.sh --with-mutation to see it"
+    # Every FAIL line first, then the tail. The tail alone dropped the names: on 2026-09-23 the
+    # catalogue answered 387 of 389 after half an hour, the two culprits' lines sat above the last
+    # fifteen, and nothing short of a second half-hour run would say which mutants they were.
+    grep -E '^  FAIL  ' <<< "$out" >&2 || true
     printf '%s\n' "$out" | tail -15 >&2
   fi
 
