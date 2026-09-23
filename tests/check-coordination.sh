@@ -367,6 +367,32 @@ try:
     check("a timed-out hook gets one TERM and then its grace",
           hook.returncode == 124 and terms == 1 and elapsed >= 1.7,
           "rc=%s terms=%d elapsed=%.2f" % (hook.returncode, terms, elapsed))
+    # The same property read DIRECTLY: the relay itself receives no cooperative TERM. The count
+    # above cannot say it under load — two TERMs reaching a bash that is not scheduled in between
+    # merge into one pending signal, and mut_COORD_hook_relay_signaled survived a loaded catalogue
+    # that way (2 of 5 runs under 28 busy loops; `sdd health` on PR #59). Here `timeout` is a
+    # recording stand-in on PATH: it runs the command and writes one byte per TERM it receives.
+    # It can receive at most the one TERM the supervisor would wrongly send, so nothing can merge.
+    relay_bin = work / "relay-bin"
+    relay_bin.mkdir(exist_ok=True)
+    relay_file = work / "relay-terms"
+    relay_file.unlink(missing_ok=True)
+    (relay_bin / "timeout").write_text(
+        "#!/usr/bin/env python3\n"
+        "import os, signal, subprocess, sys\n"
+        "signal.signal(signal.SIGTERM, lambda n, f: open(os.environ['RELAY_FILE'], 'a').write('T'))\n"
+        "args = [a for a in sys.argv[1:] if not a.startswith('--kill-after')]\n"
+        "sys.exit(subprocess.call(args[1:]))\n")
+    (relay_bin / "timeout").chmod(0o755)
+    relayed = subprocess.run([sys.executable, "-B", str(root / "bin/sdd-coordination.py"), "hook", "1", "1",
+                              'trap ":" TERM; while :; do sleep 5 & wait; done'],
+                             env=dict(env, RELAY_FILE=str(relay_file),
+                                      PATH=str(relay_bin) + ":" + env["PATH"]),
+                             capture_output=True, text=True, timeout=8)
+    relay_terms = len(relay_file.read_text()) if relay_file.exists() else 0
+    check("the hook's relay receives no cooperative TERM",
+          relayed.returncode == 124 and relay_terms == 0,
+          "rc=%s relay_terms=%d" % (relayed.returncode, relay_terms))
     # `show` and `check` only ask: they answer from /proc and never take the flock, or a question
     # asked at the wrong instant made a concurrent `enter` fail CHECKOUT-BUSY (CodeRabbit, PR #48).
     flock_log = work / "flock-calls"

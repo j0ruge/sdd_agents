@@ -3996,7 +3996,9 @@ mut_RUN_branch_double_slash() {
 }
 
 # The hook's timeout(1) forwards what it receives, and GNU timeout turns a signal after its own TERM
-# into an immediate KILL: signaling it cut the hook's grace (Codex on PR #48).
+# into an immediate KILL: signaling it cut the hook's grace (Codex on PR #48). Caught
+# deterministically by "the hook's relay receives no cooperative TERM"; the older TERM count
+# missed it under load — two TERMs merge into one pending signal — and it survived a catalogue.
 mut_COORD_hook_relay_signaled() {
   sed -i "s@^            if identity\['pid'\] == relay and number != signal.SIGKILL:\$@            if False:@" "${1%/*}/sdd-coordination.py"
 }
