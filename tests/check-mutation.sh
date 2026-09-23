@@ -9,7 +9,9 @@
 # WARNING: exporting SDD_MUTANT in your shell skips the linter AND the mutation for the whole
 # suite — the variable is the anti-recursion mechanism, not a user option.
 #
-# Usage: tests/check-mutation.sh   (exit 0 = catalogue intact and every unlisted mutation caught)
+# Usage: tests/check-mutation.sh             (exit 0 = catalogue intact and every unlisted mutation caught)
+#        tests/check-mutation.sh --anchors   (seconds, no suite run: every mutant still APPLIES and
+#                                             leaves valid bash and Python — the fast suite runs this)
 
 set -uo pipefail
 
@@ -22,6 +24,19 @@ if [ -n "${SDD_MUTANT:-}" ]; then
 fi
 
 ROOT="$(CDPATH='' cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
+
+# `--anchors` is the catalogue's cheap half. A mutant whose anchor a fix moved no longer mutates
+# anything (rc 90) or mutates into invalid code (rc 91), and the full catalogue scores it the same
+# as a survivor — measured on 2026-09-23: `sdd health` over main answered 387 of 389 after half an
+# hour, `sdd health` names no culprit, and both were anchors today's merges had broken. Applying
+# the 389 without running the suite found them in 20 seconds. So the fast suite asks this question
+# on every gate, and the expensive one stays where 4c86712 put it.
+ANCHORS_ONLY=0
+case "${1:-}" in
+  "") ;;
+  --anchors) ANCHORS_ONLY=1 ;;
+  *) echo "check-mutation.sh: unknown option '$1' (want nothing, or --anchors)" >&2; exit 2 ;;
+esac
 
 # ---------------------------------------------------------------------------
 # JOBS resolution
@@ -4424,31 +4439,101 @@ sandbox() { # sandbox <target-dir> — the whole kit the suite needs, and nothin
 }
 
 # run_mutant <slug> — writes $WORK/<slug>.rc and $WORK/<slug>.log
+# apply_mutant <function> <box> — rc 0 when the mutation LANDED on <box>/bin and left valid bash
+# and Python; 90 when it changed nothing (its anchor moved), 91 when it broke the syntax. ONE
+# definition for the two callers — run_mutant below and the --anchors mode — so the fast answer and
+# the catalogue's can never disagree about what "the mutant applies" means. It takes the FUNCTION,
+# not the slug, so the --anchors controls need no `mut_` name: `sdd health` counts every
+# `^mut_…() {` as a mutant the catalogue must have run.
+apply_mutant() {
+  local fn="$1" box="$2"
+  "$fn" "$box/bin/sdd"
+  if diff -qr "$ROOT/bin" "$box/bin" >/dev/null; then
+    echo "the mutation did not apply — did its runtime anchor change?" > "$box.log"
+    return 90
+  fi
+  if ! bash -n "$box/bin/sdd" 2>"$box.log"; then
+    echo "the mutant is not valid bash" >> "$box.log"
+    return 91
+  fi
+  if ! python3 -c 'import ast, pathlib, sys; ast.parse(pathlib.Path(sys.argv[1]).read_text())' \
+      "$box/bin/sdd-coordination.py" 2>>"$box.log"; then
+    echo "the mutant is not valid Python" >> "$box.log"
+    return 91
+  fi
+  return 0
+}
+
 run_mutant() {
   # Two `local`s on purpose (SC2318): collapsed into one, the `$slug` on the right expands BEFORE
   # this line's own assignment lands, so it reads the caller's global — correct today only by the
   # coincidence that the loop variable happens to share the name. Rename the loop variable and
   # every mutant silently shares `$WORK/`, one box for all of them.
   local slug="$1"
-  local box="$WORK/$slug"
+  local box="$WORK/$slug" arc=0
   sandbox "$box"
-  "mut_$slug" "$box/bin/sdd"
-  if diff -qr "$ROOT/bin" "$box/bin" >/dev/null; then
-    echo "the mutation did not apply — did its runtime anchor change?" > "$box.log"
-    echo 90 > "$box.rc"; return
-  fi
-  if ! bash -n "$box/bin/sdd" 2>"$box.log"; then
-    echo "the mutant is not valid bash" >> "$box.log"
-    echo 91 > "$box.rc"; return
-  fi
-  if ! python3 -c 'import ast, pathlib, sys; ast.parse(pathlib.Path(sys.argv[1]).read_text())' \
-      "$box/bin/sdd-coordination.py" 2>>"$box.log"; then
-    echo "the mutant is not valid Python" >> "$box.log"
-    echo 91 > "$box.rc"; return
-  fi
+  apply_mutant "mut_$slug" "$box" || arc=$?
+  if [ "$arc" -ne 0 ]; then echo "$arc" > "$box.rc"; return; fi
   SDD_MUTANT=1 "$box/tests/run-all.sh" > "$box.log" 2>&1
   echo $? > "$box.rc"
 }
+
+# ---------------------------------------------------------------------------
+# --anchors: apply every mutant to a copy of bin/ and stop there — no suite, no control run.
+#
+# Only bin/ is copied, because a mutant only ever edits bin/ (apply_mutant's own diff reads bin/
+# alone). Before the loop, the two failure answers are proved on a world whose answer is known —
+# a mutation that changes nothing must read 90, one that breaks the syntax must read 91 — or a
+# broken apply_mutant would certify every anchor. The floor refuses a catalogue that emptied or
+# stopped being parsed: an empty loop reports "0 broken" forever.
+# ---------------------------------------------------------------------------
+if [ "$ANCHORS_ONLY" = 1 ]; then
+  ANCHOR_FLOOR=389
+  anchor_box() { mkdir -p "$1"; cp -r "$ROOT/bin" "$1/"; }
+  anchor_control_noop()    { :; }
+  anchor_control_invalid() { printf 'if\n' >> "$1"; }
+  anchor_one() { # anchor_one <slug> — writes <box>.rc like run_mutant, for the same scoring
+    local box="$WORK/$1" arc=0
+    anchor_box "$box"
+    apply_mutant "mut_$1" "$box" || arc=$?
+    echo "$arc" > "$box.rc"
+  }
+  for ctl in noop:90 invalid:91; do
+    anchor_box "$WORK/_control_${ctl%%:*}"
+    crc=0; apply_mutant "anchor_control_${ctl%%:*}" "$WORK/_control_${ctl%%:*}" || crc=$?
+    if [ "$crc" != "${ctl##*:}" ]; then
+      fail "SENSOR-BROKEN: apply_mutant answered $crc for a ${ctl%%:*} mutation" \
+           "expected ${ctl##*:} — every anchor verdict below would be unfounded"
+      exit 1
+    fi
+  done
+  pass "apply_mutant tells a mutation that changes nothing (90) and one that breaks syntax (91)"
+  if [ "${#CATALOG[@]}" -lt "$ANCHOR_FLOOR" ]; then
+    fail "SENSOR-BROKEN: the catalogue lists ${#CATALOG[@]} mutant(s), below the floor of $ANCHOR_FLOOR" \
+         "an emptied or unparsed catalogue would report every anchor intact"
+    exit 1
+  fi
+  running=0
+  for slug in "${CATALOG[@]}"; do
+    anchor_one "$slug" &
+    running=$((running + 1))
+    if [ "$running" -ge "$JOBS" ]; then wait -n 2>/dev/null || wait; running=$((running - 1)); fi
+  done
+  wait
+  broken=0
+  for slug in "${CATALOG[@]}"; do
+    rc="$(cat "$WORK/$slug.rc" 2>/dev/null || echo 99)"
+    [ "$rc" = 0 ] && continue
+    fail "CATALOGUE-BROKEN: $slug (rc $rc)" "$(cat "$WORK/$slug.log" 2>/dev/null || echo 'no result')"
+    broken=$((broken + 1))
+  done
+  if [ "$broken" -eq 0 ]; then
+    pass "anchors: all ${#CATALOG[@]} mutants still apply and leave valid code"
+    exit 0
+  fi
+  printf '%d mutant(s) no longer apply — fix their anchors before the catalogue scores them as survivors\n' "$broken" >&2
+  exit 1
+fi
 
 # ---------------------------------------------------------------------------
 # CONTROL run — the copy has to be green with NO sabotage at all.

@@ -278,6 +278,12 @@ encerraram o turno com as palavras *"waiting for the suite"*, e em `claude -p` e
 encerrar a sessão. Hoje o catálogo mora no `sdd health`, pelo mesmo argumento que já vale para a
 catraca do backlog. **Nada foi afrouxado** — muda quem cobra e quando: os gates fazem a pergunta
 rápida, `sdd health --with-mutation` faz a cara.
+⚠️ **A metade barata do catálogo roda na suíte rápida desde 2026-09-23:** `check-mutation.sh
+--anchors` aplica cada mutante numa cópia do `bin/` sem rodar a suíte (segundos) e reprova o que
+não se aplica mais ou vira código inválido. Medido: um `sdd health` de meia hora respondeu
+`387 of 389` e não nomeou ninguém; os dois eram âncoras quebradas por merges do mesmo dia, achadas
+em 20 s. É a única exceção à regra 4 da superfície (`tests/check-health.sh`): o sensor é invocado
+duas vezes, uma como catálogo e outra como `--anchors`, e a regra conta as duas por ocorrência.
 
 ⚠️ **A lacuna que o opt-in abriu está fechada desde `c962e2e`, e não por CI — por artefato.** Ela
 era real e cobrou: entre os PRs #12 e #13 um conserto apodreceu a âncora de um mutante, os gates de
