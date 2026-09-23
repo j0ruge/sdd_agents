@@ -3960,9 +3960,28 @@ mut_COORD_adr_spec_logical_path() {
   sed -i '/^adr_spec_relative() {/,/^}/ s@physical="$(readlink -f -- "$physical")"@physical="$physical"@' "$1"
 }
 
+# Each process gets each signal once; without the memory the rescan re-sends INT every 10 ms and a
+# cleanup handler is interrupted by the next one (CodeRabbit on PR #48).
+mut_COORD_signal_repeated() {
+  sed -i 's@^            if delivered is not None and key in delivered:$@            if False:@' "${1%/*}/sdd-coordination.py"
+}
+
+# HANDOFF_DIR with a trailing slash puts `//` in the tree path git refuses (CodeRabbit on PR #48).
+mut_RUN_branch_double_slash() {
+  sed -i '/^ensure_mission_branch() {/,/^}/ { /^  while \[\[ "\$mission_rel" == \*\/\/\* \]\]; do/d }' "$1"
+}
+
+# `boot` derives the phase and runs the gates, so it belongs under the lock (CodeRabbit on PR #48).
+mut_COORD_boot_unlocked() {
+  sed -i '/^coordination_enter() {/,/^}/ s@help|--help|-h|version|--version|-v|census|autonomy)@help|--help|-h|version|--version|-v|boot|census|autonomy)@' "$1"
+}
+
 CATALOG=(
   COORD_adr_external_spec
   COORD_adr_spec_logical_path
+  COORD_signal_repeated
+  COORD_boot_unlocked
+  RUN_branch_double_slash
   COORD_admission_missing
   COORD_linker_unlocked
   COORD_health_wrong_tree

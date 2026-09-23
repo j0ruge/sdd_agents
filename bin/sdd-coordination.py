@@ -51,6 +51,26 @@ def describe(label, root, value):
              value.get('started_at', 'unknown')))
 
 
+def holds_lock(value, lock):
+    """The recorded supervisor is alive and its kernel FD holds a WRITE flock on this lock file.
+
+    Read from /proc, never by taking the lock: `show` and `check` only ask, and a question that
+    grabbed the exclusive flock, even for an instant, made a concurrent `enter` fail CHECKOUT-BUSY
+    against metadata of an owner that had already finished (CodeRabbit on PR #48)."""
+    try:
+        if not same(value['supervisor']):
+            return False
+        supervisor = value['supervisor']['pid']
+        fd_path = '/proc/%d/fd/%d' % (supervisor, value['lock_fd'])
+        held, expected = os.stat(fd_path), os.fstat(lock)
+        if (held.st_dev, held.st_ino) != (expected.st_dev, expected.st_ino):
+            return False
+        fdinfo = Path('/proc/%d/fdinfo/%d' % (supervisor, value['lock_fd'])).read_text()
+        return any('FLOCK' in line and 'WRITE' in line for line in fdinfo.splitlines())
+    except (KeyError, TypeError, ValueError, OSError):
+        return False
+
+
 def authorized(value, root, lock, caller, boot):
     """Environment selects a candidate; live ancestry and the holder's kernel FD prove it."""
     try:
@@ -60,14 +80,9 @@ def authorized(value, root, lock, caller, boot):
             return False
         if not all(same(value[key]) for key in ('owner', 'supervisor', 'worker')):
             return False
+        if not holds_lock(value, lock):
+            return False
         supervisor = value['supervisor']['pid']
-        fd_path = '/proc/%d/fd/%d' % (supervisor, value['lock_fd'])
-        held, expected = os.stat(fd_path), os.fstat(lock)
-        if (held.st_dev, held.st_ino) != (expected.st_dev, expected.st_ino):
-            return False
-        fdinfo = Path('/proc/%d/fdinfo/%d' % (supervisor, value['lock_fd'])).read_text()
-        if not any('FLOCK' in line and 'WRITE' in line for line in fdinfo.splitlines()):
-            return False
         worker = value['worker']['pid']
         current = caller
         seen = set()
@@ -151,8 +166,13 @@ def signal_state():
     return state
 
 
-def signal_family(number):
-    """Pin descendants before signaling; snapshots select recipients, never release the lock."""
+def signal_family(number, delivered=None):
+    """Pin descendants before signaling; snapshots select recipients, never release the lock.
+
+    `delivered` remembers (pid, start, signal) across the caller's rescans. The rescan must go on —
+    an adoptee appears only on a later pass — but each process gets each signal ONCE: sent every
+    10 ms, a second Ctrl-C interrupted the cleanup handler it was meant to let run (a Python
+    `finally`, a bash trap, a CLI that reads the second INT as "force exit"; CodeRabbit on PR #48)."""
     pending = [(process(os.getpid()), None)]
     pinned = []
     try:
@@ -180,7 +200,7 @@ def signal_family(number):
                             continue
                         if parent_fd is not None:
                             signal.pidfd_send_signal(parent_fd, 0)
-                        pinned.append(descriptor)
+                        pinned.append((identity, descriptor))
                         pending.append((identity, descriptor))
                         descriptor = None
                     except OSError:
@@ -192,13 +212,18 @@ def signal_family(number):
             except OSError:
                 continue
         # Children receive the cooperative signal before a waiting shell is interrupted.
-        for descriptor in reversed(pinned):
+        for identity, descriptor in reversed(pinned):
+            key = (identity['pid'], identity['start'], number)
+            if delivered is not None and key in delivered:
+                continue
             try:
                 signal.pidfd_send_signal(descriptor, number)
+                if delivered is not None:
+                    delivered.add(key)
             except OSError:
                 pass
     finally:
-        for descriptor in pinned:
+        for _identity, descriptor in pinned:
             os.close(descriptor)
 
 
@@ -209,6 +234,7 @@ def wait_family(child, signals, deadline=None, grace=2):
     # late Ctrl-C used to turn a successful `sdd run` into 128+n. A timeout is not a signal the
     # worker survived — the hook family must finish inside its deadline — so 124 still wins.
     worker_done_first = False
+    delivered = set()
     while True:
         try:
             waited, status = os.waitpid(-1, os.WNOHANG)
@@ -227,7 +253,7 @@ def wait_family(child, signals, deadline=None, grace=2):
             signals.update(number=signal.SIGTERM, time=deadline, timed_out=True)
         if signals['number']:
             sent = signal.SIGKILL if time.monotonic() - signals['time'] >= grace else signals['number']
-            signal_family(sent)
+            signal_family(sent, delivered)
         time.sleep(.01)
     if signals['timed_out']:
         return 124
@@ -334,29 +360,30 @@ def main():
     directory.mkdir(mode=0o700, parents=True, exist_ok=True)
     lock_path = directory / 'sdd-coordination.lock'
     meta_path = directory / 'sdd-coordination.json'
-    if mode == 'show' and not lock_path.exists():
-        return 0
+    if mode in ('show', 'check') and not lock_path.exists():
+        return 0 if mode == 'show' else 1
     lock = os.open(lock_path, os.O_RDWR | os.O_CREAT | os.O_NOFOLLOW, 0o600)
     if not stat.S_ISREG(os.fstat(lock).st_mode):
         raise OSError('checkout lock is not a regular file')
+    # The two questions answer from /proc (holds_lock) and never take the flock themselves.
+    if mode == 'show':
+        value = metadata(meta_path)
+        if holds_lock(value, lock):
+            print(describe('CHECKOUT-OWNER', root, value))
+        return 0
+    if mode == 'check':
+        value = metadata(meta_path)
+        boot = Path('/proc/sys/kernel/random/boot_id').read_text().strip()
+        caller = os.getppid()
+        if authorized(value, root, lock, caller, boot):
+            if kind != 'pipeline' or caller == value['worker']['pid']:
+                return 0
+        return 1
     try:
         fcntl.flock(lock, fcntl.LOCK_EX | fcntl.LOCK_NB)
     except BlockingIOError:
-        value = metadata(meta_path)
-        if mode == 'show':
-            print(describe('CHECKOUT-OWNER', root, value))
-            return 0
-        boot = Path('/proc/sys/kernel/random/boot_id').read_text().strip()
-        caller = os.getppid()
-        if mode == 'check':
-            if authorized(value, root, lock, caller, boot):
-                if kind != 'pipeline' or caller == value['worker']['pid']:
-                    return 0
-            return 1
-        print(describe('CHECKOUT-BUSY', root, value), file=sys.stderr)
+        print(describe('CHECKOUT-BUSY', root, metadata(meta_path)), file=sys.stderr)
         return BUSY
-    if mode in ('show', 'check'):
-        return 0 if mode == 'show' else 1
     boot = Path('/proc/sys/kernel/random/boot_id').read_text().strip()
     return supervise(root, lock, meta_path, args, os.getppid(), boot)
 

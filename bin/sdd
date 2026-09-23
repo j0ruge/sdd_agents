@@ -4274,6 +4274,9 @@ ensure_mission_branch() {
   current="$( cd "$REPO_ROOT" && git branch --show-current 2>/dev/null || true )"
   [ "$want" = "$current" ] && return 0
   mission_rel="${MISSION_DIR#"$REPO_ROOT"/}"
+  # A HANDOFF_DIR with a trailing slash leaves `//` in MISSION_DIR, and `git rev-parse <rev>:<path>`
+  # refuses a doubled separator — the approved files would read as missing on the destination.
+  while [[ "$mission_rel" == *//* ]]; do mission_rel="${mission_rel//\/\//\/}"; done
   mission_hash="$(git -C "$REPO_ROOT" hash-object --no-filters "$MISSION_DIR/00-missao.md" 2>/dev/null || true)"
   plan_hash="$(git -C "$REPO_ROOT" hash-object --no-filters "$MISSION_DIR/01-plano.md" 2>/dev/null || true)"
   if ( cd "$REPO_ROOT" && git show-ref --verify --quiet "refs/heads/$want" ); then
@@ -9269,12 +9272,14 @@ coordination_enter() {
   COORDINATION_ADMITTED=0
   local subcmd="${1:-help}" kind=auxiliary root arg
   case "$subcmd" in
-    help|--help|-h|version|--version|-v|boot|census|autonomy) { COORDINATION_ADMITTED=1; return 0; } ;;
+    help|--help|-h|version|--version|-v|census|autonomy) { COORDINATION_ADMITTED=1; return 0; } ;;
     status) for arg in "$@"; do [ "$arg" != --no-gates ] || { COORDINATION_ADMITTED=1; return 0; }; done ;;
     kaizen) for arg in "$@"; do [ "$arg" != --series ] || { COORDINATION_ADMITTED=1; return 0; }; done; kind=pipeline ;;
     adr) [ "${2:-}" != check ] || { COORDINATION_ADMITTED=1; return 0; } ;;
     run|retry|close) kind=pipeline ;;
-    install|preflight|health|approve|phase|why|link-agents) : ;;
+    # `boot` derives the phase since 20260922-o-motivo-da-fase, so it runs the gates — TEST_CMD and,
+    # past EXEC, E2E_CMD — and a projection that runs the suite needs the lock like any other.
+    boot|install|preflight|health|approve|phase|why|link-agents) : ;;
     *) { COORDINATION_ADMITTED=1; return 0; } ;;
   esac
   if [ "$subcmd" = health ]; then

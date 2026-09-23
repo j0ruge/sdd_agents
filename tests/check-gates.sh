@@ -2935,6 +2935,27 @@ else
 fi
 git checkout -q main
 
+# The same switch with HANDOFF_DIR written with a trailing slash. MISSION_DIR then carries `//`,
+# and `git rev-parse <branch>:<path>` refuses a doubled separator — the approved plan used to read
+# as missing on the destination and the switch was refused (CodeRabbit on PR #48).
+sed -i 's|^HANDOFF_DIR="docs/handoffs"$|HANDOFF_DIR="docs/handoffs/"|' "$FIX/.sdd/config.sh"
+if grep -qx 'HANDOFF_DIR="docs/handoffs/"' "$FIX/.sdd/config.sh"; then
+  pass "fixture: HANDOFF_DIR really carries a trailing slash"
+else
+  fail "trailing-slash fixture" 'HANDOFF_DIR="docs/handoffs/"' "$(grep HANDOFF_DIR "$FIX/.sdd/config.sh")"
+fi
+PI_SL_OUT="$( cd "$FIX" && "$SDD" run "$PM" 2>&1 )"; PI_SL_RC=$?
+PI_SL_AT="$(git branch --show-current)"
+sed -i 's|^HANDOFF_DIR="docs/handoffs/"$|HANDOFF_DIR="docs/handoffs"|' "$FIX/.sdd/config.sh"
+if [ "$PI_SL_RC" -eq 3 ] && [ "$PI_SL_AT" = "$PTARGET" ] \
+   && grep -qF "branch: main → $PTARGET" <<< "$PI_SL_OUT"; then
+  pass "a trailing slash in HANDOFF_DIR does not make the approved plan look missing"
+else
+  fail "a trailing slash in HANDOFF_DIR does not make the approved plan look missing" \
+       "rc 3 on $PTARGET after the switch" "rc $PI_SL_RC at $PI_SL_AT: $(tail -3 <<< "$PI_SL_OUT")"
+fi
+git checkout -q main
+
 # The target now carries the old plan and main receives the approved replacement. `--phase` is
 # intentional: if the integrity guard misses, it writes an intervention before anything else.
 # Refusal therefore has three observable effects: no checkout, no note and no session.

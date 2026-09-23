@@ -324,6 +324,48 @@ try:
         late[when] = probe.stdout.strip()
     check("a signal after the worker's own exit keeps its status", late["after"] == "0", late)
     check("...and the same signal before it still reports the interrupt", late["before"] == "130", late)
+    # Each process gets each signal ONCE. The rescan runs every 10 ms and used to re-send INT on
+    # every pass, so a cleanup handler was interrupted by the next INT (CodeRabbit, PR #48). The
+    # child counts deliveries and does not reset its handler — the defensive fixtures above do.
+    count_file = work / "int-count"
+    once_probe = work / "signal-once.py"
+    once_probe.write_text(
+        "import importlib.util, os, signal, sys, threading, time\n"
+        "spec = importlib.util.spec_from_file_location('coord', sys.argv[1])\n"
+        "m = importlib.util.module_from_spec(spec); spec.loader.exec_module(m)\n"
+        "signals = m.signal_state()\n"
+        "worker = os.fork()\n"
+        "if worker == 0:\n"
+        "    signal.signal(signal.SIGINT, lambda n, f: open(sys.argv[2], 'a').write('x'))\n"
+        "    time.sleep(6); os._exit(0)\n"
+        "def late():\n"
+        "    time.sleep(.5); os.kill(os.getpid(), signal.SIGINT)\n"
+        "threading.Thread(target=late, daemon=True).start()\n"
+        "print(m.wait_family(worker, signals))\n")
+    count_file.unlink(missing_ok=True)
+    once = subprocess.run([sys.executable, "-B", str(once_probe), str(root / "bin/sdd-coordination.py"),
+                           str(count_file)], capture_output=True, text=True, timeout=8)
+    deliveries = len(count_file.read_text()) if count_file.exists() else 0
+    check("a cooperative signal reaches each process once", deliveries == 1,
+          "deliveries=%d rc=%s" % (deliveries, once.stdout.strip()))
+    # `show` and `check` only ask: they answer from /proc and never take the flock, or a question
+    # asked at the wrong instant made a concurrent `enter` fail CHECKOUT-BUSY (CodeRabbit, PR #48).
+    flock_log = work / "flock-calls"
+    for mode in ("show", "check"):
+        flock_log.unlink(missing_ok=True)
+        subprocess.run([sys.executable, "-B", "-c",
+                        "import fcntl, os, runpy, sys\n"
+                        "real = fcntl.flock\n"
+                        "def spy(*a):\n"
+                        "    open(os.environ['FLOCK_LOG'], 'a').write('x'); return real(*a)\n"
+                        "fcntl.flock = spy\n"
+                        "sys.argv = sys.argv[1:]\n"
+                        "runpy.run_path(sys.argv[0], run_name='__main__')\n",
+                        str(root / "bin/sdd-coordination.py"), mode, str(repo), str(repo / ".git"),
+                        "query"], env=dict(env, FLOCK_LOG=str(flock_log)),
+                       capture_output=True, text=True, timeout=8)
+        check("%s answers without taking the checkout flock" % mode, not flock_log.exists(),
+              flock_log.read_text() if flock_log.exists() else "")
     # ADR's explicit target controls both ownership and config, regardless of the caller cwd.
     adr_target = fixture("adr-target")
     adr_alias = work / "adr-alias"
@@ -386,7 +428,8 @@ try:
                  ("close", "20260101-one"), ("kaizen",), ("approve", "20260101-one"),
                  ("install", "--force"), ("adr", "new", "--slug", "new"),
                  ("preflight",), ("status", "20260101-one"),
-                 ("phase", "20260101-one"), ("why", "20260101-one", "EXEC")]:
+                 ("phase", "20260101-one"), ("why", "20260101-one", "EXEC"),
+                 ("boot", "20260101-one", "EXEC")]:
         busy(repo, *args)
     busy(repo, binary=root / "bin/sdd-link-agents", name="alternate linker shares admission")
     alias = work / "alias"
@@ -397,7 +440,7 @@ try:
     busy(repo, "install", binary=runner_alias, name="symlink runner shares ownership")
     busy(repo, "install", extra={"SDD_STATE_DIR": str(work / "different-state")},
          name="state directory cannot split checkout ownership")
-    for args in [("status", "20260101-one", "--no-gates"), ("boot", "20260101-one", "EXEC"),
+    for args in [("status", "20260101-one", "--no-gates"),
                  ("census", "20260101-one"), ("autonomy",), ("kaizen", "--series"),
                  ("adr", "check"), ("help",), ("version",)]:
         result = run(repo, *args)

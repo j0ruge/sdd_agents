@@ -42,9 +42,12 @@ invocation. The lock is stable in the checkout's own Git directory, separate for
 non-Git kit copies use `.sdd/coordination/`. Symlinks resolve to the physical root. Neither
 `SDD_STATE_DIR` nor the ledger's shared-repository identity selects this lock.
 
-Help, version, `status --no-gates`, `boot`, `census`, `autonomy`, `kaizen --series` and `adr check`
+Help, version, `status --no-gates`, `census`, `autonomy`, `kaizen --series` and `adr check`
 stay available. `status --no-gates` prints `CHECKOUT-OWNER` while an owner is active. These
 queries evaluate no gates; commands that load config still execute that trusted shell file.
+`boot` is NOT among them: it derives the phase, so it runs the gates (and `TEST_CMD`) and takes the
+lock like any other command that can run the suite. `status --no-gates` reads the owner from `/proc`
+and never takes the lock itself, so a monitor polling it cannot make a real `run` fail `CHECKOUT-BUSY`.
 
 A Python standard-library helper holds the kernel lock in a separate session and enables the
 Linux child-subreaper facility before starting the Bash worker. The original CLI PID remains
