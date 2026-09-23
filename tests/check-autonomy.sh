@@ -5973,7 +5973,7 @@ assert_eq "every derived phase writes its reason to the journal" \
 # scores zero hits in a whole sdd run". Deriving through `$(current_phase)` ran the gates in a
 # subshell, so the memo died with it and the parent's own gate_EXEC ran TEST_CMD again over the
 # same epoch. DIFFERENTIAL: the same world, derived versus forced with --phase (which derives
-# nothing) — deriving must cost no TEST_CMD run that forcing does not. `floor:1` is the witness that
+# nothing) — deriving must run TEST_CMD exactly as often as forcing does. `floor:1` is the witness that
 # the world reaches TEST_CMD at all: every increment done, the handoff missing, so gate_EXEC runs
 # the suite and still refuses.
 NW2="$OUTSIDE/nowork-derived"
@@ -5986,7 +5986,7 @@ nowork_world "$NW3" "done" '{sha}' 0
 nowork_stub "$NW3" nothing
 ( cd "$NW3" && "$SDD" run "$MISSION" --phase EXEC --max-phases 1 ) >/dev/null 2>&1
 NW3_RUNS="$(nw_testruns "$NW3")"
-assert_eq "deriving the phase runs TEST_CMD no more often than forcing it" \
+assert_eq "deriving the phase runs TEST_CMD exactly as often as forcing it" \
   "floor:1 runs:$NW3_RUNS" \
   "floor:$([ "$NW3_RUNS" -ge 1 ] && echo 1 || echo 0) runs:$NW2_RUNS"
 

@@ -1674,7 +1674,7 @@ readonly PHASES="PLAN TICKET EXEC QA REVIEW DOCS PR"
 # gates run in THIS shell, so the run_check_cmd memo and every gate marker (GATE_EXEC_CELL among
 # them) outlive the call — through `$(current_phase)` the memo scored zero hits in a whole `sdd run`
 # and the parent's own gate_EXEC ran TEST_CMD again over the same epoch. The sensor is "deriving
-# the phase runs TEST_CMD no more often than forcing it" in tests/check-autonomy.sh.
+# the phase runs TEST_CMD exactly as often as forcing it" in tests/check-autonomy.sh.
 CURRENT_PHASE=""
 CURRENT_PHASE_WHY=""
 derive_phase() {
@@ -6674,7 +6674,6 @@ cmd_run() {
       return 2
     fi
 
-
     # Real Jidoka: a `blocked` increment escalates ON THE SPOT. Without this the runner read the
     # checkpoint change as "progress" and rebooted EXEC until the phase budget blew — three
     # sessions against the same wall. Found by the fixture mission 20260814-dry-run-completo.
@@ -6861,6 +6860,11 @@ cmd_run() {
       # Not after a harness cut: SESSION_BUDGET_CUT is the last session this run opened — the one
       # that ended the previous lap — and a session cut by its budget may be mid-increment.
       if [ "$prev_step" = "$step" ] && [ "$SESSION_BUDGET_CUT" != "1" ]; then same_prev="$prev_why"; fi
+      # no_work_check compares against GATE_WHY, and prev_why was stored from CURRENT_PHASE_WHY.
+      # The Jidoka pre-checks and the ceilings above may re-run a gate between derive_phase and
+      # here, so the reason this lap was derived on is restored explicitly — the comparison must
+      # not depend on which gate happened to run last.
+      GATE_WHY="$CURRENT_PHASE_WHY"
       no_work_check "$phase" "$same_prev"
       if no_work_escalation "$phase"; then return 3; fi
       prev_step="$step"
