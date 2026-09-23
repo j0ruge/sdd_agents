@@ -169,6 +169,7 @@ build_fixture() {
 
   # LIVE copy — see the header. This is the file mut_HEALTH_* sabotages.
   cp "$ROOT/bin/sdd" "$FIX/bin/sdd"
+  cp "$ROOT/bin/sdd-coordination.py" "$FIX/bin/sdd-coordination.py"
 
   # What cmd_health reads out of its own $SDD_HOME, and nothing else:
   #   config/schema.md        checks 4 and 6 (documented key <-> load_config default)

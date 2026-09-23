@@ -88,6 +88,7 @@ run() { # run <name> <command...>
 }
 
 run "runner syntax (bash -n)" bash -n "$ROOT/bin/sdd"
+run "coordination helper syntax" python3 -c 'import ast, pathlib, sys; ast.parse(pathlib.Path(sys.argv[1]).read_text())' "$ROOT/bin/sdd-coordination.py"
 
 # Beside the syntax check because it measures the same thing — bin/sdd as a FILE — and needs no
 # fixture. Deliberately NOT guarded by SDD_MUTANT: it is the only thing that catches
@@ -128,11 +129,12 @@ run "entry point cannot fall through into itself" "$ROOT/tests/check-entrypoint.
 # and 16 → 17 for tests/check-adr.sh. It tracks the real count on purpose: left behind it would
 # still pass, and would go on describing a surface one file smaller than the one it reads — the
 # label-instead-of-artifact shape this whole mission is about.
+# Checkout coordination adds its sensor and the alternate linker: 17 -> 19 Bash paths.
 LINT_SEVERITY=warning
-LINT_FLOOR=17
+LINT_FLOOR=19
 
 lint_surface() {
-  local files=("$ROOT/bin/sdd") f
+  local files=("$ROOT/bin/sdd" "$ROOT/bin/sdd-link-agents") f
   for f in "$ROOT"/tests/*.sh; do [ -f "$f" ] && files+=("$f"); done
 
   # Anti-vacuity, half 1 — the LIST. Catches the glob that stops matching and the list narrowed
@@ -242,6 +244,7 @@ run "every hat declares its boundary" "$ROOT/tests/check-hat.sh"
 # reads only what sandbox() copies: bin/, templates/ and agents/ through `sdd install`, into a
 # fixture of its own under $TMPDIR with its own SDD_STATE_DIR.
 run "adr allocator and link check" "$ROOT/tests/check-adr.sh"
+run "one checkout has one execution owner" "$ROOT/tests/check-coordination.sh"
 
 # Sensor of the sensor. TWO conditions, and they answer different questions — collapsing them into
 # one would reopen something the other was holding shut:

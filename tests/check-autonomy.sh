@@ -240,10 +240,30 @@ EOF
 # L6 of the 2026-09-03 audit: ON_ESCALATION_CMD is the human's pager — every rc 3 runs it with
 # SDD_REASON, SDD_PHASE, SDD_MISSION and SDD_GATE_WHY in its env. Measured before it: zero
 # notification sites in bin/sdd, and a human watching `tail -F` to learn the line had stopped.
-# The fixture's hook appends one line per escalation; the blocks below read it as an artefact.
-HOOK_LOG="$OUTSIDE/hook.log"
+# The fixture's hook reads the real ledger before reporting. It can also fail or ignore TERM so
+# the blocks below exercise the notification boundary without replacing the durable writer.
+export HOOK_LOG="$OUTSIDE/hook.log"
+export HOOK_LEDGER="$LEDGER"
+export HOOK_MODE="inspect"
+HOOK_CMD="$OUTSIDE/escalation-hook"
+cat > "$HOOK_CMD" <<'HOOK'
+#!/usr/bin/env bash
+if jq -e --arg kind "$SDD_REASON" --arg phase "$SDD_PHASE" \
+     'select(.event == "blocked" and .kind == $kind and .phase == $phase)' \
+     "$HOOK_LEDGER" >/dev/null 2>&1; then
+  ledger=seen
+else
+  ledger=missing
+fi
+printf '%s|%s|%s|%s|%s\n' "$SDD_REASON" "$SDD_PHASE" "$SDD_MISSION" "$SDD_GATE_WHY" "$ledger" >> "$HOOK_LOG"
+case "$HOOK_MODE" in
+  fail) exit 42 ;;
+  hang) trap '' TERM; while :; do sleep 1; done ;;
+esac
+HOOK
+chmod +x "$HOOK_CMD"
 cat >> .sdd/config.sh <<EOF
-ON_ESCALATION_CMD='printf "%s|%s|%s|%s\n" "\$SDD_REASON" "\$SDD_PHASE" "\$SDD_MISSION" "\$SDD_GATE_WHY" >> $HOOK_LOG'
+ON_ESCALATION_CMD='$HOOK_CMD'
 EOF
 
 MDIR="$FIX/docs/handoffs/$MISSION"
@@ -277,8 +297,8 @@ echo "== blocked escalation =="
 "$SDD" run "$MISSION" >/dev/null 2>&1; rc=$?
 assert_eq "the blocked increment escalates with rc 3" "3" "$rc"
 assert_eq "the escalation ran ON_ESCALATION_CMD once, with reason, phase, mission and gate_why in its env" \
-  "1 increment-blocked|EXEC|$MISSION yes" \
-  "$(grep -c . "$HOOK_LOG" 2>/dev/null || echo 0) $(cut -d'|' -f1-3 "$HOOK_LOG" 2>/dev/null) $(grep -q Jidoka "$HOOK_LOG" 2>/dev/null && echo yes || echo no)"
+  "1 increment-blocked|EXEC|$MISSION yes seen" \
+  "$(grep -c . "$HOOK_LOG" 2>/dev/null || echo 0) $(cut -d'|' -f1-3 "$HOOK_LOG" 2>/dev/null) $(grep -q Jidoka "$HOOK_LOG" 2>/dev/null && echo yes || echo no) $(cut -d'|' -f5 "$HOOK_LOG" 2>/dev/null)"
 rm -f "$HOOK_LOG"
 assert_eq "exactly one row was written" "1" "$(nrows)"
 assert_eq "every row is valid JSON" "1" "$(jq -e . "$LEDGER" >/dev/null 2>&1 && echo 1 || echo 0)"
@@ -298,6 +318,40 @@ assert_eq "no session fields on an escalation" "true" \
 # The gate reason carries quotes and an em-dash. Hand-rolled JSON would break here, and the only
 # reader that would notice is the judge, months later, comparing garbage.
 assert_eq "gate_why survived quoting" "true" "$(rows '(.gate_why | test("Jidoka"))')"
+
+# A pager is downstream of the durable event. Failure and timeout warn, but neither can replace
+# the escalation's rc or row. The hanging hook ignores TERM, exercising timeout's one-second KILL
+# grace rather than escaping on the first signal.
+: > "$LEDGER"
+export HOOK_MODE="fail"
+HOOK_FAIL_OUT="$( "$SDD" run "$MISSION" 2>&1 )"; HOOK_FAIL_RC=$?
+assert_eq "a failing hook sees the row first and cannot replace the escalation" "3 1 seen 1" \
+  "$HOOK_FAIL_RC $(nrows) $(cut -d'|' -f5 "$HOOK_LOG") $(grep -c 'ON_ESCALATION_CMD' <<< "$HOOK_FAIL_OUT")"
+rm -f "$HOOK_LOG"
+
+: > "$LEDGER"
+export HOOK_MODE="hang"
+HOOK_HANG_START="$(date +%s)"
+HOOK_HANG_OUT="$( "$SDD" run "$MISSION" 2>&1 )"; HOOK_HANG_RC=$?
+HOOK_HANG_ELAPSED=$(( $(date +%s) - HOOK_HANG_START ))
+assert_eq "a stuck hook is killed after the five-second limit and one-second grace" "3 1 seen yes yes" \
+  "$HOOK_HANG_RC $(nrows) $(cut -d'|' -f5 "$HOOK_LOG") $( [ "$HOOK_HANG_ELAPSED" -ge 5 ] && [ "$HOOK_HANG_ELAPSED" -le 9 ] && echo yes || echo no ) $(grep -q 'ON_ESCALATION_CMD' <<< "$HOOK_HANG_OUT" && echo yes || echo no)"
+rm -f "$HOOK_LOG"
+
+# Give the runner a PATH containing the tools this blocked path uses, except timeout. The hook log
+# is the proof it did not launch an unbounded fallback.
+: > "$LEDGER"
+export HOOK_MODE="inspect"
+HOOK_NO_TIMEOUT_PATH="$OUTSIDE/no-timeout-bin"
+mkdir -p "$HOOK_NO_TIMEOUT_PATH"
+for hook_tool in bash python3 git jq uuidgen date awk sed grep dirname mkdir md5sum find sort head tail wc tr readlink basename cut; do
+  ln -s "$(command -v "$hook_tool")" "$HOOK_NO_TIMEOUT_PATH/$hook_tool"
+done
+HOOK_NO_TIMEOUT_RC=0
+HOOK_NO_TIMEOUT_OUT="$( PATH="$HOOK_NO_TIMEOUT_PATH" "$SDD" run "$MISSION" 2>&1 )" || HOOK_NO_TIMEOUT_RC=$?
+assert_eq "without timeout(1), the runner warns and does not execute an unbounded hook" "3 1 absent 1" \
+  "$HOOK_NO_TIMEOUT_RC $(nrows) $( [ -e "$HOOK_LOG" ] && echo present || echo absent ) $(grep -c 'timeout(1)' <<< "$HOOK_NO_TIMEOUT_OUT")"
+export HOOK_MODE="inspect"
 
 # --- the interactive PLAN spends no session, so it records none --------------
 # PLAN returns 2 before opening anything: there is no friction to measure in a phase that is
@@ -506,6 +560,54 @@ sed -i 's/^BUDGET_MISSION_USD=150$/BUDGET_MISSION_USD=0/' .sdd/config.sh
 "$SDD" run "$MISSION" --max-phases 1 >/dev/null 2>&1 || true
 assert_eq "BUDGET_MISSION_USD=0 means no ceiling: no budget-exhausted row, a session opens" "0 yes" \
   "$(grep -c . <<< "$(rows 'select(.kind == "budget-exhausted") | .kind')") $(grep -q . <<< "$(rows 'select(.event == "session") | .event')" && echo yes || echo no)"
+
+# Zero is numeric, not a prefix. The former `0|0.*` case disabled every positive fractional
+# ceiling, so the matrix below keeps zero's equivalent spelling beside positive values on both
+# sides of the boundary. Each journal is rewritten to one literal cost: expectations do not reuse
+# mission_cost_usd, and a session from one case cannot move the next case across its threshold.
+budget_log_cost() { # budget_log_cost <literal USD already spent>
+  printf '2026-01-01T10:00:00-03:00  EXEC  agent=sdd-executor  model=opus  session=budget-case  rc=0  dur=1s  cost_usd=%s  log=/dev/null\n' \
+    "$1" > "$PLOG"
+}
+
+sed -i 's/^BUDGET_MISSION_USD=0$/BUDGET_MISSION_USD=0.00/' .sdd/config.sh
+budget_log_cost 1.00
+: > "$LEDGER"
+"$SDD" run "$MISSION" --max-phases 1 >/dev/null 2>&1 || true
+assert_eq "numeric zero written as 0.00 also disables the ceiling" "0 yes" \
+  "$(grep -c . <<< "$(rows 'select(.kind == "budget-exhausted") | .kind')") $(grep -q . <<< "$(rows 'select(.event == "session") | .event')" && echo yes || echo no)"
+
+sed -i 's/^BUDGET_MISSION_USD=0.00$/BUDGET_MISSION_USD=0.50/' .sdd/config.sh
+budget_log_cost 0.49
+: > "$LEDGER"
+"$SDD" run "$MISSION" --max-phases 1 >/dev/null 2>&1 || true
+assert_eq "a fractional ceiling permits spend below it" "0 yes" \
+  "$(grep -c . <<< "$(rows 'select(.kind == "budget-exhausted") | .kind')") $(grep -q . <<< "$(rows 'select(.event == "session") | .event')" && echo yes || echo no)"
+
+budget_log_cost 0.50
+: > "$LEDGER"
+"$SDD" run "$MISSION" >/dev/null 2>&1; rc=$?
+assert_eq "a fractional ceiling stops spend equal to it before a session" "3 1 budget-exhausted" \
+  "$rc $(nrows) $(rows '.kind')"
+
+budget_log_cost 1.00
+: > "$LEDGER"
+"$SDD" run "$MISSION" >/dev/null 2>&1; rc=$?
+assert_eq "a fractional ceiling stops spend above it before a session" "3 1 budget-exhausted" \
+  "$rc $(nrows) $(rows '.kind')"
+
+sed -i 's/^BUDGET_MISSION_USD=0.50$/BUDGET_MISSION_USD=2/' .sdd/config.sh
+budget_log_cost 1.00
+: > "$LEDGER"
+"$SDD" run "$MISSION" --max-phases 1 >/dev/null 2>&1 || true
+assert_eq "an integer ceiling permits spend below it" "0 yes" \
+  "$(grep -c . <<< "$(rows 'select(.kind == "budget-exhausted") | .kind')") $(grep -q . <<< "$(rows 'select(.event == "session") | .event')" && echo yes || echo no)"
+
+budget_log_cost 3.00
+: > "$LEDGER"
+"$SDD" run "$MISSION" >/dev/null 2>&1; rc=$?
+assert_eq "an integer ceiling stops spend above it before a session" "3 1 budget-exhausted" \
+  "$rc $(nrows) $(rows '.kind')"
 sed -i '/^BUDGET_MISSION_USD=/d' .sdd/config.sh
 cp "$OUTSIDE/plog.bak" "$PLOG"
 : > "$LEDGER"

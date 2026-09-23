@@ -1,0 +1,39 @@
+{
+  "checkout": "/home/joruge/repos/sdd_agents_reliability",
+  "branch": "fix/confiabilidade-dos-agentes",
+  "head_before": "8875643a31d67ef1189cc57615fd5886b7cc8d44",
+  "content_key_before": "d15d55d80f67c0b6f77ee8f3a2f32796",
+  "command": "SDD_MUTATION_JOBS=16 ./bin/sdd health",
+  "mutation_jobs": 16,
+  "started_utc": "2026-09-19T04:18:53.748704+00:00",
+  "log": "/tmp/sdd-reliability-recertification.log",
+  "mutation_log_archive": "/tmp/sdd-recert-logs-d5kikpbv",
+  "mutation_directories_before": [],
+  "content_drift_events": [],
+  "metadata_monitor_interval_seconds": 2,
+  "mutation_stamp_before": null,
+  "health_pid": 2651360,
+  "completed_mutant_results": 369,
+  "elapsed_seconds": 6707.956,
+  "mutation_directories_observed": [
+    "/tmp/sdd-mut-q0yeiY"
+  ],
+  "load_control": {
+    "checkout": "/tmp/sdd-recert-load-control-2cmq__bh/kit",
+    "log": "/tmp/sdd-recert-logs-d5kikpbv/load-control.log",
+    "started_elapsed_seconds": 527.364,
+    "mutant_logs_at_start": 16,
+    "rc": 0,
+    "finished_elapsed_seconds": 764.042
+  },
+  "health_rc": 0,
+  "rc": 0,
+  "finished_utc": "2026-09-19T06:10:41.715374+00:00",
+  "head_after": "8875643a31d67ef1189cc57615fd5886b7cc8d44",
+  "status_after": "",
+  "content_key_after": "d15d55d80f67c0b6f77ee8f3a2f32796",
+  "snapshot_stable": true,
+  "mutation_stamp": "d15d55d80f67c0b6f77ee8f3a2f32796",
+  "archived_catalogue_logs": 374,
+  "archived_mutant_results": 373
+}

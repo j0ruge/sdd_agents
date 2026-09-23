@@ -40,6 +40,72 @@ execução) — declarada sem probe, não apagada.
 
 ---
 
+## 2026-09-18 — Um checkout, um dono: a recusa acontece antes do efeito
+
+**Problema (Gemba):** duas invocações simultâneas de `sdd run` no mesmo checkout chegavam à
+abertura de sessão. Na mesma auditoria, uma branch existente aceitava plano antigo, um teto
+positivo de US$ 0,50 era tratado como desabilitado e o hook de escalada via o ledger ainda sem o
+evento; se o hook travasse, a persistência também travava.
+
+**Contramedida:** igualdade byte a byte dos dois artefatos aprovados antes e depois do checkout;
+zero de orçamento decidido numericamente; ledger antes do hook com prazo para toda a árvore; e
+um `flock` por checkout físico mantido por supervisor local até o reap do último descendente. A
+reentrada exige lock, ancestralidade e identidade viva, enquanto concorrentes recebem rc 75 e
+`CHECKOUT-BUSY` antes de config, branch, artefato, gate ou sessão.
+
+| Métrica | Antes | Depois medido |
+|---|---|---|
+| Donos simultâneos que alcançam sessão no mesmo checkout | **2** | **1**; concorrente recusado sem efeitos |
+| Plano divergente em branch existente | aceito e executado | recusado antes do checkout e revalidado depois |
+| Teto `0.50` com US$ 1,00 já gasto | abria outra sessão | para antes da sessão |
+| Evento visível de dentro do hook | ausente | presente antes da notificação |
+| Prazo do hook e descendentes | sem limite efetivo para filho com `setsid` | **5 s + 1 s** de encerramento forçado |
+| Regressões do sensor de coordenação | 0 | **154/154** na suíte final em `d12ace4` |
+| `adr new --repo B` com B ocupado | escrevia em B sob lock de A | recusa antes de config/efeitos em B |
+| `--spec` externo por `../` ou symlink | alterava outro checkout ocupado | recusa sem efeitos nos dois checkouts; aliases internos aceitos |
+| Drift escondido por clean filter/EOL | hashes concordavam apesar de bytes diferentes | recusa pré-checkout ou parada após troca, conforme o ponto de drift |
+| Handler INT de filho foreground | ausente apesar de rc 130 | executa antes de KILL; posse mantida durante limpeza |
+| Scripts de sensor | **15** | **16** |
+| Catálogo de mutação | **346** | **373** definições e entradas únicas |
+
+**Jidoka:** a primeira rodada RED do novo sensor tinha isolamento incompleto e abriu uma sessão
+real do Claude num fixture temporário. Houve um único `tool_use` (`echo sdd-preflight-ok`) e o
+preflight também alcançou o probe de leitura `gh auth status`; não há evidência de escrita externa
+nem de missão real. O custo não foi preservado e é **desconhecido**. A correção tornou a resolução
+das CLIs fail-closed e acrescentou controles negativos antes de qualquer chamada ao runner. A
+entrega, portanto, não afirma zero chamadas reais.
+
+**Custos conscientes:** a vida de órfãos com `setsid`/double-fork exigiu Python 3.9+, procfs e
+Linux `PR_SET_CHILD_SUBREAPER` nos comandos coordenados. A entrega de sinais à família ativa
+agora requer Linux 5.3+ com syscalls pidfd permitidas, inclusive sob seccomp, e recusa antes de
+config se a capacidade faltar. Hooks que iniciem trabalho em background também têm essa árvore
+encerrada no prazo de 5+1 segundos; descendentes comuns mantêm posse até terminar. Specs externos
+antes aceitos agora precisam estar no checkout alvo; aliases internos continuam aceitos, sem
+introduzir lock multi-raiz.
+
+**Estado da evidência:** a revisão integral encontrou lacunas que os GREENs parciais não mediam.
+F1/F3 deram 12 falhas no novo RED; F2 deu cinco falhas por filtros/EOL. A seleção de filhos de
+outra thread teve RED de quatro falhas antes de fechar. A primeira suíte congelada sobre
+`f11bf27` terminou rc 0, `suite green`, coordenação 148/148. O complemento `--spec` teve seis
+falhas no RED e GREEN focado 154/154; sua nova suíte em `d12ace4` terminou rc 0, `suite green`,
+coordenação 154/154, com runtime imutável durante toda a execução.
+Oito mutantes novos e um existente foram aplicados, tiveram sintaxe válida e foram detectados
+pelos motivos nomeados. A re-revisão final aprovou F1/F2/F3 sem novos achados. A primeira
+certificação foi descartada: terminou 372/373, sem carimbo, e uma aplicação acidental do patch do
+fixture no checkout compartilhado quebrou o congelamento. O erro foi admitido, informado e
+corrigido deliberadamente em `d159a9d`; `8875643` fechou também a omissão na ajuda.
+
+A recertificação inteira, iniciada do zero em `8875643`, terminou rc 0 em **6707.956 s**:
+**373/373 capturados, 0 gaps conhecidos**, suíte e controle sob 16 workers verdes, zero drift e
+`kit healthy`. HEAD e status ficaram estáveis; chave antes/depois e carimbo são
+`d15d55d80f67c0b6f77ee8f3a2f32796`. Os 27 mutantes novos e o sobrevivente antigo foram
+auditados; quatro grupos com traceback/timeout/command-not-found têm as falhas comportamentais
+independentes registradas, sem alegar suítes individuais livres de diagnósticos incidentais. O handoff em
+[`docs/handoffs/20260918-confiabilidade-dos-agentes/entrega.md`](docs/handoffs/20260918-confiabilidade-dos-agentes/entrega.md)
+preserva comandos, snapshots, decisões e limites.
+
+---
+
 ## 2026-09-18 — A exceção do chapéu e o gênero diferido: o kit para de parar trabalho certo
 
 **Problema (Gemba):** duas famílias com a mesma forma — o dado certo existe e o instrumento não

@@ -48,7 +48,7 @@ trap 'rm -rf "$WORK"' EXIT
 # fix that would restore coverage is to move the template contract out into a data file, leaving
 # the script pure English logic — recorded in TODO.md, not done here.
 surface() {
-  ( cd "$ROOT" && ls -1 bin/sdd agents/sdd-*.md .claude/agents/sdd-*.md \
+  ( cd "$ROOT" && ls -1 bin/sdd bin/sdd-link-agents bin/sdd-coordination.py agents/sdd-*.md .claude/agents/sdd-*.md \
       docs/pipeline.md docs/failure-modes.md docs/graphify.md docs/adr/*.md README.md \
       config/schema.md config/starter.conf \
       tests/*.sh tests/health-baseline.txt tests/lang-allowlist.txt 2>/dev/null ) \
@@ -193,9 +193,10 @@ files="$(surface)"
 # agents/sdd-ticket.md + its .claude/agents copy = 44; docs/adr/0007 makes it 45 in the same mission.
 # Re-counted on 2026-09-17 (20260917-o-numero-do-adr-nao-e-prosa): tests/check-adr.sh makes it 46,
 # and docs/adr/0008 makes it 47 in the same mission — two hops, two commits, on purpose.
+# Checkout coordination adds its sensor, linker and Python helper to the previous 48 paths.
 n_surface="$(grep -c . <<< "$files")"
-if [ "$n_surface" -lt 47 ]; then
-  printf '  FAIL  surface shrank to %d path(s), expected at least 47 — did something move?\n' \
+if [ "$n_surface" -lt 51 ]; then
+  printf '  FAIL  surface shrank to %d path(s), expected at least 51 — did something move?\n' \
     "$n_surface" >&2
   exit 93
 fi

@@ -445,7 +445,7 @@ check_file() {
 # scan_surface path over a fixture tree — the floor below is a rule like any other and a rule
 # without a probe is a wish.
 surface() {
-  ( cd "$1" && ls -1 bin/sdd tests/*.sh 2>/dev/null ) | grep -vxF -e "$SELF_REL"
+  ( cd "$1" && ls -1 bin/sdd bin/sdd-link-agents tests/*.sh 2>/dev/null ) | grep -vxF -e "$SELF_REL"
 }
 
 # --- selftest ----------------------------------------------------------------------------------
@@ -860,12 +860,12 @@ EOF
   for i in 1 2 3; do : > "$tree/tests/check-$i.sh"; done
   probe 'a shrunken surface fails instead of reporting clean' 93 'surface shrank' "$tree" --scan
 
-  # One test file per unit of the floor, minus the bin/sdd that comes free: the tree has to CLEAR
+  # One test file per unit of the floor, minus the two bin/ scripts that come free: the tree has to CLEAR
   # the floor, so this loop moves with it. Left one short, every probe below turns into "surface
   # shrank" and stops measuring the thing it names — which is how the floor bump of this mission
   # was caught, by three probes failing at once with the wrong message.
-  tree="$box/full"; mkdir -p "$tree/bin" "$tree/tests"; : > "$tree/bin/sdd"
-  for i in 1 2 3 4 5 6 7 8 9 10 11 12 13 14 15; do : > "$tree/tests/check-$i.sh"; done
+  tree="$box/full"; mkdir -p "$tree/bin" "$tree/tests"; : > "$tree/bin/sdd"; : > "$tree/bin/sdd-link-agents"
+  for i in 1 2 3 4 5 6 7 8 9 10 11 12 13 14 15 16; do : > "$tree/tests/check-$i.sh"; done
   probe 'a full clean surface passes' 0 '(0 waived)' "$tree" --scan
 
   # The waived COUNT is the only thing that makes the waiver hole visible in a diff, so it is a
@@ -929,8 +929,9 @@ scan_surface() {
   # tests/check-health.sh did, and 15 until tests/check-adr.sh did, and it tracks the real count
 # rather than staying at a number that
   # would still pass while describing a smaller surface than the one actually scanned.
-  if [ "$n_files" -lt 16 ]; then
-    printf '  FAIL  surface shrank to %d path(s), expected at least 16 — did something move?\n' \
+  # Coordination adds its sensor and the alternate linker: 16 -> 18 Bash paths.
+  if [ "$n_files" -lt 18 ]; then
+    printf '  FAIL  surface shrank to %d path(s), expected at least 18 — did something move?\n' \
       "$n_files" >&2
     return 93
   fi

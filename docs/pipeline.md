@@ -21,6 +21,69 @@ And the rule that holds it all up: **success is never the model's answer.** Ever
 re-evaluated by the runner — running the tests, checking the hash in the `git log`, reading the
 report, calling `gh`. The text the session returns satisfies no gate.
 
+## Checkout ownership
+
+`main()` admits commands before sourcing config or running gates. `run` (including dry-run),
+`retry`, `close`, executing `kaizen`, `approve`, `install`, `adr new`, `preflight`, full `status`,
+`phase`, `why`, `health` and `sdd-link-agents` all require an exclusive checkout `flock`.
+`health` owns the tree it actually measures: a kit cwd takes precedence over the installed kit;
+a target cwd uses the installed kit. `adr new --repo <root>` owns the selected physical
+checkout and reads its config; relative ADR/spec paths are resolved there. Admission and
+dispatch share the option parser. `--spec` resolves an existing file physically inside that
+checkout, including relative or absolute internal aliases. Paths outside it (also through a
+symlink) are refused before config, ADR reservation or spec writes. External specs previously
+accepted must be moved into the target checkout; no second checkout lock is acquired.
+The linker enters the same CLI admission policy.
+
+Competing commands return **75** and `CHECKOUT-BUSY` with checkout, public owner PID,
+supervisor PID, command, requested mission and start time. `auto` means the mission was not
+explicit at admission. Refusal creates no session, mission escalation, checkpoint note or hook
+invocation. The lock is stable in the checkout's own Git directory, separate for each worktree;
+non-Git kit copies use `.sdd/coordination/`. Symlinks resolve to the physical root. Neither
+`SDD_STATE_DIR` nor the ledger's shared-repository identity selects this lock.
+
+Help, version, `status --no-gates`, `census`, `autonomy`, `kaizen --series` and `adr check`
+stay available. `status --no-gates` prints `CHECKOUT-OWNER` while an owner is active. These
+queries evaluate no gates; commands that load config still execute that trusted shell file.
+`boot` is NOT among them: it derives the phase, so it runs the gates (and `TEST_CMD`) and takes the
+lock like any other command that can run the suite. `status --no-gates` reads the owner from `/proc`
+and never takes the lock itself, so a monitor polling it cannot make a real `run` fail `CHECKOUT-BUSY`.
+
+A Python standard-library helper holds the kernel lock in a separate session and enables the
+Linux child-subreaper facility before starting the Bash worker. The original CLI PID remains
+the public owner. Killing that PID or the worker does not release the supervisor's lock.
+Orphans are adopted even when they close descriptors, change process group/session or
+double-fork. The supervisor waits for the kernel's `ECHILD` result, meaning every descendant
+has exited and been reaped. Normal completion and errors keep waiting for surviving children.
+TERM/INT/HUP are forwarded through the launcher to the active descendant tree, including
+foreground children and children created by other threads or sessions. Each selected process
+is pinned with a pidfd after rechecking its start time and ancestry; no numeric-PID fallback is
+used. Cancellation uses KILL after two seconds and still waits for actual termination before
+releasing ownership. Processes that deliberately ignore a signal need not run a handler.
+Linux 5.3+ with usable pidfd syscalls (including the sandbox/seccomp policy), a procfs that
+enumerates task children (`CONFIG_PROC_CHILDREN` — without it an interrupt would reach nobody) and Python 3.9+
+are required and checked before project config or sessions execute. The scan selects signal
+recipients; only `ECHILD` proves the family has finished.
+
+The JSON metadata is diagnostic operational data, never mission state. It records owner,
+worker and supervisor PID/start time, boot identity, execution ID, checkout, command and time.
+Only the kernel lock decides ownership. Old metadata is replaced after acquisition and cannot
+block recovery. The lock file is never removed or replaced to clear a busy checkout.
+
+An owned execution may call helpers such as `install --force`, `adr new` and `health`.
+Reentry checks the live owner/worker/supervisor identities, caller ancestry and the supervisor's
+actual locked descriptor in `/proc`; an inherited or copied environment variable alone grants
+nothing. Helpers neither replace metadata nor release their parent's ownership. Starting
+another `run`, `retry`, `close` or executing `kaizen` in that same checkout is refused, including
+from an authenticated descendant. A helper for another checkout acquires its own lock without
+waiting, so conflicting nested acquisitions fail instead of deadlocking.
+
+This coordinates kit entrypoints, not arbitrary external writes. Killing the supervisor itself,
+changing its files or lock namespace, privileged interference and work delegated to a
+pre-existing external daemon are outside the guarantee. A background server that remains a
+descendant keeps the checkout busy until it stops; an uninterruptible process also keeps the
+lock until the kernel finishes it. No timeout authorizes a second writer.
+
 ## Canonical order
 
 ```
@@ -56,8 +119,16 @@ environment** — do not confuse them.
 `increment-blocked`, `dirty-tree`, `handoff-blocked`, `app-down`, `session-died`, `budget-exhausted`,
 `no-progress`, `no-work`, `retry-gate-red`, `hat-crossed`, `kit-touched` — runs `ON_ESCALATION_CMD` from `.sdd/config.sh`, when set, with `SDD_REASON`, `SDD_PHASE`,
 `SDD_MISSION`, `SDD_PROJECT` and `SDD_GATE_WHY` in its environment (a `notify-send`, an `ntfy`
-curl, whatever reaches you). The projection never runs it, and a hook that fails is a warning, never
-a second failure: the escalation is already in the journal and the ledger. L6 of the 2026-09-03
+curl, whatever reaches you). The ledger write is attempted first, so the hook can read its own
+event when persistence succeeded; a write failure keeps the existing ledger warning and makes no
+false durability claim. The projection never runs the hook. It has five seconds, receives TERM,
+then KILL one second later; failure or timeout warns but leaves the escalation's rc unchanged.
+A local subreaper applies that same deadline to the whole hook family, including background
+children that escape with `setsid`; the checkout remains owned until they are reaped. Hooks
+cannot leave a persistent background service behind. A hook whose whole family finishes early
+returns promptly. If
+`timeout(1)` is unavailable, the runner warns and skips the hook instead of running it without a
+bound. L6 of the 2026-09-03
 audit — before it the kit had zero notification sites, and the human learned the line had stopped
 by watching `tail -F`. The key is documented in `config/schema.md`.
 
@@ -370,10 +441,14 @@ branch the plan declares:
 A name starting with `-` is refused by the runner itself, before git sees it: `git checkout -f` is
 a legal command that returns 0, switches to nothing and throws away every uncommitted change.
 Everything else git refuses — a space, `..`, a dirty tree the checkout would overwrite — becomes a
-`die` carrying git's own message. And the artifact is re-read **after** the switch: a branch that
-does not carry this mission's `00-missao.md` also stops the line, because the alternative is
-spending sessions against a plan nobody approved there. All of it before a single session is spent;
-what to do about each is in
+`die` carrying git's own message. Before an existing destination is checked out, its
+`00-missao.md` **and** `01-plano.md` must be byte-identical to the source. Source and post-checkout
+hashes use `--no-filters`: clean filters and EOL conversion cannot hide drift against the stored
+destination blobs. Both artifacts are checked again
+after checkout before any intervention or session. Checkpoint, notes and handoffs may differ: they
+are progress, not approved intent. A missing or stale approved artifact stops the line and names
+both branches and every divergent file. All of it before a single session is spent; what to do
+about each is in
 [`docs/failure-modes.md`](failure-modes.md#the-runner-refused-to-switch-to-the-declared-branch).
 
 The failure this closes was measured: in the SQ-97 pilot five phases committed into another PR's
@@ -771,11 +846,12 @@ nothing was derived. The two files:
 
 That journal is also where the **mission ceiling** is read. Before opening any phase the runner
 sums the `cost_usd=` field of every session line (`?` counts as nothing) and compares it with
-`BUDGET_MISSION_USD` (`150` by default, `0` = no ceiling): at or above it the run stops with rc 3
-and a `budget-exhausted` row whose `gate_why` names the mission ceiling, so the money that stops
+`BUDGET_MISSION_USD` (`150` by default, numeric zero = no ceiling): at or above it the run stops
+with rc 3 and a `budget-exhausted` row whose `gate_why` names the mission ceiling, so the money that stops
 the line is money already spent, never a session cut mid-way. `sdd run --budget-override` and
 `sdd retry --budget-override` go on for that one run, and the runner writes the `- intervention:`
-note itself. The projection prints the sum and never stops there. L2 of the 2026-09-03 audit —
+note itself. Zero spellings such as `0.00` are equivalent; a positive fraction such as `0.50` is
+still a real ceiling. The projection prints the sum and never stops there. L2 of the 2026-09-03 audit —
 the mission before it cost US$ 174 against a ceiling of US$ 150 that lived only in the plan's prose.
 
 - `<PHASE>-<ts>.stream.jsonl` — the session's whole event stream, one JSON object per line,

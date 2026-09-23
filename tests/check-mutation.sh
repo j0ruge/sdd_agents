@@ -1643,20 +1643,26 @@ mut_RUN_intervention_written_on_dry_run() {
 }
 
 # L6 of the 2026-09-03 audit: ON_ESCALATION_CMD runs on every rc 3 through the one door every
-# blocked row takes (autonomy_blocked_row), and never on a projection. Two mutants: the pager
-# unplugged from the door, and the DRY_RUN guard of the hook removed — the fixture of
-# tests/check-autonomy.sh reads the hook's log as an artefact in both blocks.
+# blocked row takes (autonomy_blocked_row), after the durable write, with a bounded lifetime and
+# never on a projection. Each mutant changes one part of that boundary.
 mut_RUN_escalation_hook_silent() {
-  sed -i 's|^autonomy_blocked_row()  { escalation_hook "$1" "$2" "$3"; autonomy_escalation_row "blocked"  "$1" "$2" "$3"; }$|autonomy_blocked_row()  { autonomy_escalation_row "blocked"  "$1" "$2" "$3"; }|' "$1"
+  sed -i 's|^autonomy_blocked_row()  { autonomy_escalation_row "blocked" "$1" "$2" "$3"; escalation_hook "$1" "$2" "$3"; }$|autonomy_blocked_row()  { autonomy_escalation_row "blocked" "$1" "$2" "$3"; }|' "$1"
 }
 mut_RUN_escalation_hook_on_dry_run() {
   sed -i '/^escalation_hook() {/,/^}/ s|^  \[ "$DRY_RUN" = "1" \] && return 0$|  :|' "$1"
 }
+mut_RUN_escalation_hook_before_ledger() {
+  sed -i 's|^autonomy_blocked_row()  { autonomy_escalation_row "blocked" "$1" "$2" "$3"; escalation_hook "$1" "$2" "$3"; }$|autonomy_blocked_row()  { escalation_hook "$1" "$2" "$3"; autonomy_escalation_row "blocked" "$1" "$2" "$3"; }|' "$1"
+}
+mut_RUN_escalation_hook_timeout_short() {
+  sed -i '/^escalation_hook() {/,/^}/ s|sdd-coordination.py" hook 5 1|sdd-coordination.py" hook 1 1|' "$1"
+}
+mut_RUN_escalation_hook_without_timeout_guard() {
+  sed -i '/^escalation_hook() {/,/^}/ s|^  if ! command -v timeout >/dev/null 2>&1; then$|  if false; then|' "$1"
+}
 
-# L2 of the 2026-09-03 audit: the mission ceiling. Five mutants, because the door has five sides
-# the probes of tests/check-autonomy.sh read one by one: the check unplugged from cmd_run, unplugged
-# from cmd_retry, `0` read as a ceiling of zero (every fixture then blocks at 0.00 >= 0), the
-# override going on WITHOUT writing its intervention note, and the projection stopping the run.
+# L2 of the 2026-09-03 audit: the mission ceiling. The probes read each side separately: both
+# command doors, numeric zero, a positive fraction, override intervention and projection.
 mut_RUN_mission_budget_ignored() {
   sed -i 's|^    if mission_budget_blown "$phase"; then return 3; fi$|    if false; then return 3; fi|' "$1"
 }
@@ -1664,7 +1670,10 @@ mut_RUN_mission_budget_ignored_on_retry() {
   sed -i 's|^  if mission_budget_blown "$phase"; then return 3; fi$|  if false; then return 3; fi|' "$1"
 }
 mut_RUN_mission_budget_zero_is_a_ceiling() {
-  sed -i 's|^  case "$ceiling" in 0\|0\.\*) return 1 ;; esac$|  :|' "$1"
+  sed -i '/^mission_budget_blown() {/,/^}/ s|^  if LC_ALL=C awk -v c="$ceiling" '\''BEGIN { exit !((c + 0) == 0) }'\''; then return 1; fi$|  if LC_ALL=C awk -v c="$ceiling" '\''BEGIN { exit !((c + 0) == -1) }'\''; then return 1; fi|' "$1"
+}
+mut_RUN_mission_budget_fractional_disabled() {
+  sed -i '/^mission_budget_blown() {/,/^}/ s|^  if LC_ALL=C awk -v c="$ceiling" .*|  case "$ceiling" in 0\|0.*) return 1 ;; esac|' "$1"
 }
 mut_RUN_mission_budget_override_unnoted() {
   sed -i '/^mission_budget_blown() {/,/^}/ s|^      checkpoint_note_intervention "sdd $AUTONOMY_INVOCATION --budget-override .*$|      :|' "$1"
@@ -2089,17 +2098,29 @@ mut_RUN_branch_switch_dead() {
 # The pattern is what gets sabotaged rather than the `die`, because a mutant that turned the die
 # into a `return 0` would make the whole field a no-op and kill three other assertions with it —
 # this entry has to be credited for the option-shaped name and nothing else.
-# Goes back to treating the checkout as the end of the decision: the plan is read on one branch and
-# the tree is replaced by another, and nothing looks again. The `die` becomes a `:` with the same
-# string, so the condition still runs and a reader still sees a guard — the run simply goes on with
-# MISSION_DIR pointing at a directory the checkout removed, announcing the switch as a success and
-# then telling the human the mission was never planned. The quiet variant is the expensive one: a
-# branch carrying an OLDER copy spends real sessions on a plan nobody approved.
-#
-# This is the regime the whole branch family was blind to until r1 of the review: five assertions
-# on a fixture whose artifacts were never `git add`ed, where `git checkout` cannot remove them.
+# The destination-presence guard is disabled while the post-check remains intact. The run still
+# stops, but only after changing branches: the property is refusal BEFORE checkout, because a
+# failed invocation may not replace the operator's working tree.
 mut_RUN_branch_orphan_blind() {
-  sed -i 's@^    die "the branch@    : "the branch@' "$1"
+  sed -i '/^  if ( cd "$REPO_ROOT" && git show-ref/,/^  else$/ s@^    \[ -z "$mismatches" \] \\$@    true \\@' "$1"
+}
+
+# Compares only 00-missao.md before checkout. A destination with the same branch field and an old
+# 01-plano.md then reaches the checkout — the reproduced defect this stage closes.
+mut_RUN_branch_plan_integrity_blind() {
+  sed -i 's@^    for artifact in 00-missao.md 01-plano.md; do$@    for artifact in 00-missao.md; do@' "$1"
+}
+
+# The symmetric partial guard: 01-plano.md agrees, but other bytes of 00-missao.md changed. Keeping
+# it separate proves neither approved input borrows coverage from the other.
+mut_RUN_branch_mission_integrity_blind() {
+  sed -i 's@^    for artifact in 00-missao.md 01-plano.md; do$@    for artifact in 01-plano.md; do@' "$1"
+}
+
+# Drops the second comparison. The post-checkout hook in check-gates changes the plan after the
+# destination passed the first comparison, so only this validation can stop the run.
+mut_RUN_branch_postcheck_blind() {
+  sed -i 's@^    || die "after switching from @    || : "after switching from @' "$1"
 }
 
 mut_RUN_branch_option_name() {
@@ -3857,7 +3878,135 @@ mut_ADR_dir_symlink_escape() {
   sed -i '/^adr_new() {/,/^}/ s@^  adr_dir_contained "$root" "${ADR_DIR%/}" \\$@  true \\@' "$1"
 }
 
+# Each coordination mutant changes executable code, and check-coordination.sh asserts the
+# corresponding refusal/lifetime result before releasing its deterministic child barrier.
+mut_COORD_admission_missing() {
+  sed -i 's%^  coordination_enter "$@" || admission=$?$%  COORDINATION_ADMITTED=1%'  "$1"
+}
+
+mut_COORD_linker_unlocked() {
+  sed -i 's@install|preflight|health|approve|phase|why|link-agents)@install|preflight|health|approve|phase|why)@' "$1"
+}
+
+mut_COORD_health_wrong_tree() {
+  sed -i 's@root="$(health_kit_root)"@root="$(git rev-parse --show-toplevel)"@' "$1"
+}
+
+mut_COORD_worktrees_share_lock() {
+  sed -i '/^coordination_paths()/,/^}/ s@--absolute-git-dir@--git-common-dir@' "$1"
+}
+
+mut_COORD_environment_only() {
+  sed -i "/^        if value\['checkout'\] != root/i\        return True" "${1%/*}/sdd-coordination.py"
+}
+
+mut_COORD_recursive_pipeline() {
+  sed -i "s@if kind != 'pipeline' or caller == value\['worker'\]\['pid'\]:@if True:@" "${1%/*}/sdd-coordination.py"
+}
+
+mut_COORD_no_subreaper() {
+  sed -i '/^def supervise(/,/^def main(/ s@^    subreaper()$@    pass  # The pipeline no longer adopts orphan descendants.@' "${1%/*}/sdd-coordination.py"
+}
+
+mut_COORD_wait_worker_only() {
+  sed -i '/^                    worker_status = 128 - worker_status$/a\            if waited == child: break' "${1%/*}/sdd-coordination.py"
+}
+
+mut_COORD_stale_process_accepted() {
+  sed -i "s@return live is not None and live\['start'\] == saved\['start'\]@return live is not None@" "${1%/*}/sdd-coordination.py"
+}
+
+mut_COORD_hook_orphans_escape() {
+  sed -i '/^def bounded_hook(/,/^def supervise(/ s@^    subreaper()$@    pass  # Escaped hook children are no longer adopted.@' "${1%/*}/sdd-coordination.py"
+}
+
+mut_COORD_worker_ignores_sigint() {
+  sed -i "/^            os.environ\['SDD_COORDINATION_ID'\] = value\['execution_id'\]$/i\\            signal.signal(signal.SIGINT, signal.SIG_IGN)" "${1%/*}/sdd-coordination.py"
+}
+
+mut_COORD_owner_hidden() {
+  sed -i 's@^    coordination_owner$@    :@' "$1"
+}
+
+mut_RUN_branch_filtered_source() {
+  sed -i '/^ensure_mission_branch() {/,/^}/ { /^  \(mission\|plan\)_hash=/ s/hash-object --no-filters/hash-object/; }' "$1"
+}
+
+mut_RUN_branch_filtered_recheck() {
+  sed -i '/^ensure_mission_branch() {/,/^}/ { /^  \[ .*hash-object/ s/hash-object --no-filters/hash-object/; }' "$1"
+}
+
+mut_COORD_adr_cwd_admission() {
+  sed -i '/^coordination_enter() {/,/^}/ s%root="$(adr_checkout_root "${@:2}")"%root="$(git rev-parse --show-toplevel)"%' "$1"
+}
+
+mut_COORD_signal_direct_only() {
+  sed -i 's/^                        pending.append((identity, descriptor))$/                        pass  # The active grandchildren never receive the signal./' "${1%/*}/sdd-coordination.py"
+}
+
+mut_COORD_signal_main_thread_only() {
+  sed -i "/^                for task in Path('/a\\                    if task.name != str(parent['pid']): continue" "${1%/*}/sdd-coordination.py"
+}
+
+mut_COORD_pidfd_unchecked() {
+  sed -i 's/^    pidfd_capability()$/    pass  # Project code starts without usable pidfd syscalls./' "${1%/*}/sdd-coordination.py"
+}
+
+mut_COORD_adr_external_spec() {
+  sed -i '/^adr_spec_relative() {/,/^}/ s@^    \*) die .*outside the admitted checkout.*@    *) echo "$spec" ;;@' "$1"
+}
+
+mut_COORD_adr_spec_logical_path() {
+  sed -i '/^adr_spec_relative() {/,/^}/ s@physical="$(readlink -f -- "$physical")"@physical="$physical"@' "$1"
+}
+
+# Each process gets each signal once; without the memory the rescan re-sends INT every 10 ms and a
+# cleanup handler is interrupted by the next one (CodeRabbit on PR #48).
+mut_COORD_signal_repeated() {
+  sed -i 's@^            if delivered is not None and key in delivered:$@            if False:@' "${1%/*}/sdd-coordination.py"
+}
+
+# HANDOFF_DIR with a trailing slash puts `//` in the tree path git refuses (CodeRabbit on PR #48).
+mut_RUN_branch_double_slash() {
+  sed -i '/^ensure_mission_branch() {/,/^}/ { /^  while \[\[ "\$mission_rel" == \*\/\/\* \]\]; do/d }' "$1"
+}
+
+# The hook's timeout(1) forwards what it receives, and GNU timeout turns a signal after its own TERM
+# into an immediate KILL: signaling it cut the hook's grace (Codex on PR #48).
+mut_COORD_hook_relay_signaled() {
+  sed -i "s@^            if identity\['pid'\] == relay and number != signal.SIGKILL:\$@            if False:@" "${1%/*}/sdd-coordination.py"
+}
+
+# `boot` derives the phase and runs the gates, so it belongs under the lock (CodeRabbit on PR #48).
+mut_COORD_boot_unlocked() {
+  sed -i '/^coordination_enter() {/,/^}/ s@help|--help|-h|version|--version|-v|census|autonomy)@help|--help|-h|version|--version|-v|boot|census|autonomy)@' "$1"
+}
+
 CATALOG=(
+  COORD_adr_external_spec
+  COORD_adr_spec_logical_path
+  COORD_signal_repeated
+  COORD_boot_unlocked
+  COORD_hook_relay_signaled
+  RUN_branch_double_slash
+  COORD_admission_missing
+  COORD_linker_unlocked
+  COORD_health_wrong_tree
+  COORD_worktrees_share_lock
+  COORD_environment_only
+  COORD_recursive_pipeline
+  COORD_no_subreaper
+  COORD_wait_worker_only
+  COORD_stale_process_accepted
+  COORD_owner_hidden
+  COORD_hook_orphans_escape
+  COORD_worker_ignores_sigint
+  RUN_branch_filtered_source
+  RUN_branch_filtered_recheck
+  COORD_adr_cwd_admission
+  COORD_signal_direct_only
+  COORD_signal_main_thread_only
+  COORD_pidfd_unchecked
   AUTONOMY_meta_ignores_event
   AUTONOMY_mission_drops_close_money
   AUTONOMY_version_drops_close_money
@@ -4013,9 +4162,13 @@ CATALOG=(
   RUN_intervention_written_on_dry_run
   RUN_escalation_hook_silent
   RUN_escalation_hook_on_dry_run
+  RUN_escalation_hook_before_ledger
+  RUN_escalation_hook_timeout_short
+  RUN_escalation_hook_without_timeout_guard
   RUN_mission_budget_ignored
   RUN_mission_budget_ignored_on_retry
   RUN_mission_budget_zero_is_a_ceiling
+  RUN_mission_budget_fractional_disabled
   RUN_mission_budget_override_unnoted
   RUN_mission_budget_stops_projection
   RUN_degraded_row_dropped
@@ -4052,6 +4205,9 @@ CATALOG=(
   RUN_branch_switch_dead
   RUN_branch_option_name
   RUN_branch_orphan_blind
+  RUN_branch_plan_integrity_blind
+  RUN_branch_mission_integrity_blind
+  RUN_branch_postcheck_blind
   RETRY_base_branch_warn_dead
   APPROVE_base_branch_warn_dead
   RUN_branch_order_swap
@@ -4271,12 +4427,17 @@ run_mutant() {
   local box="$WORK/$slug"
   sandbox "$box"
   "mut_$slug" "$box/bin/sdd"
-  if cmp -s "$ROOT/bin/sdd" "$box/bin/sdd"; then
-    echo "the mutation did not apply — did the anchor change in bin/sdd?" > "$box.log"
+  if diff -qr "$ROOT/bin" "$box/bin" >/dev/null; then
+    echo "the mutation did not apply — did its runtime anchor change?" > "$box.log"
     echo 90 > "$box.rc"; return
   fi
   if ! bash -n "$box/bin/sdd" 2>"$box.log"; then
     echo "the mutant is not valid bash" >> "$box.log"
+    echo 91 > "$box.rc"; return
+  fi
+  if ! python3 -c 'import ast, pathlib, sys; ast.parse(pathlib.Path(sys.argv[1]).read_text())' \
+      "$box/bin/sdd-coordination.py" 2>>"$box.log"; then
+    echo "the mutant is not valid Python" >> "$box.log"
     echo 91 > "$box.rc"; return
   fi
   SDD_MUTANT=1 "$box/tests/run-all.sh" > "$box.log" 2>&1
