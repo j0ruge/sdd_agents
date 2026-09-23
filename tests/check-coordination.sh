@@ -348,6 +348,21 @@ try:
     deliveries = len(count_file.read_text()) if count_file.exists() else 0
     check("a cooperative signal reaches each process once", deliveries == 1,
           "deliveries=%d rc=%s" % (deliveries, once.stdout.strip()))
+    # A timed-out hook gets ONE TERM and then its grace. The nested timeout(1) used to receive the
+    # supervisor's TERM too, and GNU timeout turns any signal after its own TERM into an immediate
+    # KILL — the hook's trap was cut at ~1.1 s instead of 2 s (traced; Codex on PR #48).
+    term_file = work / "hook-terms"
+    term_file.unlink(missing_ok=True)
+    started = time.monotonic()
+    hook = subprocess.run([sys.executable, "-B", str(root / "bin/sdd-coordination.py"), "hook", "1", "1",
+                           'trap "printf x >> \\"$TERM_FILE\\"" TERM; while :; do sleep 5 & wait; done'],
+                          env=dict(env, TERM_FILE=str(term_file)), capture_output=True, text=True,
+                          timeout=8)
+    elapsed = time.monotonic() - started
+    terms = len(term_file.read_text()) if term_file.exists() else 0
+    check("a timed-out hook gets one TERM and then its grace",
+          hook.returncode == 124 and terms == 1 and elapsed >= 1.7,
+          "rc=%s terms=%d elapsed=%.2f" % (hook.returncode, terms, elapsed))
     # `show` and `check` only ask: they answer from /proc and never take the flock, or a question
     # asked at the wrong instant made a concurrent `enter` fail CHECKOUT-BUSY (CodeRabbit, PR #48).
     flock_log = work / "flock-calls"

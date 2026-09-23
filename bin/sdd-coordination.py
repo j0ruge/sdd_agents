@@ -166,13 +166,18 @@ def signal_state():
     return state
 
 
-def signal_family(number, delivered=None):
+def signal_family(number, delivered=None, relay=None):
     """Pin descendants before signaling; snapshots select recipients, never release the lock.
 
     `delivered` remembers (pid, start, signal) across the caller's rescans. The rescan must go on —
     an adoptee appears only on a later pass — but each process gets each signal ONCE: sent every
     10 ms, a second Ctrl-C interrupted the cleanup handler it was meant to let run (a Python
-    `finally`, a bash trap, a CLI that reads the second INT as "force exit"; CodeRabbit on PR #48)."""
+    `finally`, a bash trap, a CLI that reads the second INT as "force exit"; CodeRabbit on PR #48).
+
+    `relay` is a descendant that FORWARDS what it receives — the hook's timeout(1), which passes a
+    TERM on to its whole group. It gets no cooperative signal (its command already gets one
+    directly, and would get a second through it; Codex on PR #48); SIGKILL cannot be forwarded and
+    still reaches it."""
     pending = [(process(os.getpid()), None)]
     pinned = []
     try:
@@ -213,6 +218,8 @@ def signal_family(number, delivered=None):
                 continue
         # Children receive the cooperative signal before a waiting shell is interrupted.
         for identity, descriptor in reversed(pinned):
+            if identity['pid'] == relay and number != signal.SIGKILL:
+                continue
             key = (identity['pid'], identity['start'], number)
             if delivered is not None and key in delivered:
                 continue
@@ -227,7 +234,7 @@ def signal_family(number, delivered=None):
             os.close(descriptor)
 
 
-def wait_family(child, signals, deadline=None, grace=2):
+def wait_family(child, signals, deadline=None, grace=2, relay=None):
     worker_status = 1
     # Whether the worker had already exited, on its own, before any signal was recorded. Then a
     # signal that arrives while only stragglers are being reaped does not rewrite its status: a
@@ -253,7 +260,7 @@ def wait_family(child, signals, deadline=None, grace=2):
             signals.update(number=signal.SIGTERM, time=deadline, timed_out=True)
         if signals['number']:
             sent = signal.SIGKILL if time.monotonic() - signals['time'] >= grace else signals['number']
-            signal_family(sent, delivered)
+            signal_family(sent, delivered, relay)
         time.sleep(.01)
     if signals['timed_out']:
         return 124
@@ -274,11 +281,13 @@ def bounded_hook(duration, grace, command):
     if child == 0:
         try:
             os.setsid()
-            os.execvp('timeout', ['timeout', '--kill-after=%ss' % grace, '%ss' % duration,
-                                  'bash', '-c', command])
+            # timeout(1) is the BACKSTOP for a supervisor that died, so its deadline comes after
+            # ours: on the normal path wait_family alone delivers TERM, then KILL, once each.
+            os.execvp('timeout', ['timeout', '--kill-after=%ss' % grace,
+                                  '%ss' % (duration + grace + 1), 'bash', '-c', command])
         except BaseException:
             os._exit(1)
-    return wait_family(child, signals, deadline, grace)
+    return wait_family(child, signals, deadline, grace, relay=child)
 
 
 def supervise(root, lock, meta_path, args, caller, boot):

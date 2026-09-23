@@ -3971,6 +3971,12 @@ mut_RUN_branch_double_slash() {
   sed -i '/^ensure_mission_branch() {/,/^}/ { /^  while \[\[ "\$mission_rel" == \*\/\/\* \]\]; do/d }' "$1"
 }
 
+# The hook's timeout(1) forwards what it receives, and GNU timeout turns a signal after its own TERM
+# into an immediate KILL: signaling it cut the hook's grace (Codex on PR #48).
+mut_COORD_hook_relay_signaled() {
+  sed -i "s@^            if identity\['pid'\] == relay and number != signal.SIGKILL:\$@            if False:@" "${1%/*}/sdd-coordination.py"
+}
+
 # `boot` derives the phase and runs the gates, so it belongs under the lock (CodeRabbit on PR #48).
 mut_COORD_boot_unlocked() {
   sed -i '/^coordination_enter() {/,/^}/ s@help|--help|-h|version|--version|-v|census|autonomy)@help|--help|-h|version|--version|-v|boot|census|autonomy)@' "$1"
@@ -3981,6 +3987,7 @@ CATALOG=(
   COORD_adr_spec_logical_path
   COORD_signal_repeated
   COORD_boot_unlocked
+  COORD_hook_relay_signaled
   RUN_branch_double_slash
   COORD_admission_missing
   COORD_linker_unlocked
