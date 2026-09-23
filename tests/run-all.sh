@@ -85,6 +85,16 @@ run() { # run <name> <command...>
   if [ "$LIST_ONLY" = 1 ]; then printf '%s\n' "$1"; return 0; fi
   printf '\n\033[1m▸ %s\033[0m\n' "$1"; shift
   if "$@"; then :; else printf '\033[31m  ✗ failed\033[0m\n' >&2; fails=$((fails + 1)); fi
+  # Inside a mutant the first red step IS the verdict: the catalogue reads this suite's rc and
+  # nothing else, so every step after it was paid for and read by no one — 389 mutants × ~250 s ÷ 8
+  # jobs was 3h23 of `sdd health` (2026-09-23). A survivor has no red step and still runs them all,
+  # so no verdict moves. Outside a mutant the run goes on: a human needs every red step, not the
+  # first. Both halves are asserted over this very file by check-health.sh (`surface: inside a
+  # mutant the suite stops…`).
+  if [ "$fails" -gt 0 ] && [ -n "${SDD_MUTANT:-}" ]; then
+    printf '\033[31m\033[1mstopped at the first red step (SDD_MUTANT)\033[0m\n' >&2
+    exit 1
+  fi
 }
 
 run "runner syntax (bash -n)" bash -n "$ROOT/bin/sdd"
@@ -248,7 +258,7 @@ run "one checkout has one execution owner" "$ROOT/tests/check-coordination.sh"
 
 # The catalogue's cheap half, in seconds and on every run: every mutant still APPLIES and leaves
 # valid bash and Python. A fix that moves a line a mutant anchors used to surface only at the end of
-# a half-hour `sdd health`, scored as a survivor and unnamed (2026-09-23: 387 of 389, both broken
+# a `sdd health` of three hours, scored as a survivor and unnamed (2026-09-23: 387 of 389, both broken
 # anchors). Guarded by SDD_MUTANT for the recursion reason below — check-mutation.sh dies when born
 # inside a mutant, and a red step there would make every mutant read as caught.
 [ -n "${SDD_MUTANT:-}" ] \

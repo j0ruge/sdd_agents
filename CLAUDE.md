@@ -280,9 +280,12 @@ catraca do backlog. **Nada foi afrouxado** — muda quem cobra e quando: os gate
 rápida, `sdd health --with-mutation` faz a cara.
 ⚠️ **A metade barata do catálogo roda na suíte rápida desde 2026-09-23:** `check-mutation.sh
 --anchors` aplica cada mutante numa cópia do `bin/` sem rodar a suíte (segundos) e reprova o que
-não se aplica mais ou vira código inválido. Medido: um `sdd health` de meia hora respondeu
-`387 of 389` e não nomeou ninguém; os dois eram âncoras quebradas por merges do mesmo dia, achadas
-em 20 s. É a única exceção à regra 4 da superfície (`tests/check-health.sh`): o sensor é invocado
+não se aplica mais ou vira código inválido. Medido: um `sdd health` de **3h05** (23:57 → 03:02,
+pelo log — o "meia hora" que esteve escrito aqui nunca foi medido) respondeu `387 of 389` e não
+nomeou ninguém; os dois eram âncoras quebradas por merges do mesmo dia, achadas em 20 s.
+⚠️ **Sob `SDD_MUTANT` a suíte para no primeiro sensor vermelho** (`run()` do `tests/run-all.sh`),
+porque o catálogo só lê o rc: amostra de 40 mutantes, mediana 226 s → 133 s, 40 de 40 pegos antes
+e depois. Fora de mutante nada para cedo. O resto do custo é a coordenação por chamada (`TODO.md`). É a única exceção à regra 4 da superfície (`tests/check-health.sh`): o sensor é invocado
 duas vezes, uma como catálogo e outra como `--anchors`, e a regra conta as duas por ocorrência.
 
 ⚠️ **A lacuna que o opt-in abriu está fechada desde `c962e2e`, e não por CI — por artefato.** Ela

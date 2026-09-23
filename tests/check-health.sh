@@ -1242,6 +1242,80 @@ else
 fi
 
 # ---------------------------------------------------------------------------
+# surface: inside a mutant the suite stops at the FIRST red step; outside one it runs every step
+#
+# The catalogue reads the suite's rc and nothing else (run_mutant in check-mutation.sh): one red
+# step is the whole verdict, and every step after it was paid for and read by no one. Measured on
+# 2026-09-23: 389 mutants × the whole behavioural suite (~250 s) ÷ 8 jobs was 3h23 of `sdd health`.
+# So under SDD_MUTANT the first red step ends the run. No verdict can change: a caught mutant is
+# still caught, and a survivor has no red step, so it still runs everything. Outside a mutant
+# nothing stops early — a human reading a red suite needs EVERY red step, not the first one.
+#
+# Measured over the REAL run-all.sh, copied into a world whose sensors are stubs: each stub appends
+# its own name to a log, and the one named by FAILFAST_RED fails. DIFFERENTIAL — the same world in
+# both modes, compared against each other — plus a green control, so a suite that stopped EVERY run
+# early, or never stopped, cannot satisfy it by accident. The stubs are built from the sensors on
+# disk, so a renamed red sensor leaves the mutant run green and the first assertion dies loudly.
+# ---------------------------------------------------------------------------
+FAILFAST="$WORK/failfast"
+FAILFAST_RED=check-templates.sh
+mkdir -p "$FAILFAST/bin" "$FAILFAST/tests"
+printf '#!/usr/bin/env bash\n:\n' > "$FAILFAST/bin/sdd"
+printf 'pass\n' > "$FAILFAST/bin/sdd-coordination.py"
+cp "$ROOT/tests/run-all.sh" "$FAILFAST/tests/run-all.sh"
+for f in "$ROOT"/tests/check-*.sh; do
+  printf '#!/usr/bin/env bash\necho "${0##*/}" >> "$FAILFAST_LOG"\n[ "${0##*/}" != "${FAILFAST_RED:-}" ]\n' \
+    > "$FAILFAST/tests/$(basename -- "$f")"
+done
+chmod +x "$FAILFAST/bin/sdd" "$FAILFAST"/tests/*.sh
+[ -x "$FAILFAST/tests/$FAILFAST_RED" ] \
+  || broken "failfast probe: tests/$FAILFAST_RED is gone — the world has no red step to stop at"
+
+failfast_run() { # failfast_run <mutant|plain> <red sensor or empty> — PUBLISHES FAILFAST_RC / FAILFAST_STEPS
+  local log="$WORK/failfast-$1-${2:-green}.log"
+  : > "$log"
+  FAILFAST_RC=0
+  if [ "$1" = mutant ]; then
+    env -u SDD_TPL_SELFTEST_CHILD SDD_MUTANT=1 FAILFAST_LOG="$log" FAILFAST_RED="$2" \
+      "$FAILFAST/tests/run-all.sh" >/dev/null 2>&1 || FAILFAST_RC=$?
+  else
+    env -u SDD_TPL_SELFTEST_CHILD -u SDD_MUTANT FAILFAST_LOG="$log" FAILFAST_RED="$2" \
+      "$FAILFAST/tests/run-all.sh" >/dev/null 2>&1 || FAILFAST_RC=$?
+  fi
+  FAILFAST_STEPS="$(cat "$log")"
+}
+
+failfast_run mutant "$FAILFAST_RED"
+if [ "$FAILFAST_RC" = 1 ] && [ "$(tail -n 1 <<< "$FAILFAST_STEPS")" = "$FAILFAST_RED" ] \
+   && [ "$(grep -c . <<< "$FAILFAST_STEPS" || true)" -ge 2 ]; then
+  pass 'surface: inside a mutant the suite stops at the first red step'
+else
+  fail 'surface: inside a mutant the suite stops at the first red step' \
+       "rc 1, at least one step before $FAILFAST_RED, and $FAILFAST_RED the LAST step run" \
+       "rc $FAILFAST_RC, steps: $(tr '\n' ' ' <<< "$FAILFAST_STEPS")"
+fi
+
+failfast_run plain "$FAILFAST_RED"
+if [ "$FAILFAST_RC" = 1 ] && grep -qxF "$FAILFAST_RED" <<< "$FAILFAST_STEPS" \
+   && [ "$(tail -n 1 <<< "$FAILFAST_STEPS")" != "$FAILFAST_RED" ]; then
+  pass 'surface: outside a mutant a red step does not stop the suite'
+else
+  fail 'surface: outside a mutant a red step does not stop the suite' \
+       "rc 1, $FAILFAST_RED run, and steps run AFTER it" \
+       "rc $FAILFAST_RC, steps: $(tr '\n' ' ' <<< "$FAILFAST_STEPS")"
+fi
+
+failfast_run mutant ""
+if [ "$FAILFAST_RC" = 0 ] && grep -qxF "$FAILFAST_RED" <<< "$FAILFAST_STEPS" \
+   && [ "$(tail -n 1 <<< "$FAILFAST_STEPS")" != "$FAILFAST_RED" ]; then
+  pass 'surface: inside a mutant with no red step the suite runs to the end'
+else
+  fail 'surface: inside a mutant with no red step the suite runs to the end' \
+       "rc 0, and steps run after $FAILFAST_RED" \
+       "rc $FAILFAST_RC, steps: $(tr '\n' ' ' <<< "$FAILFAST_STEPS")"
+fi
+
+# ---------------------------------------------------------------------------
 # surface: `--list` prints STEPS ONLY, and a TEST_CMD carrying it is refused
 #
 # Two ends of ONE hole, which is why they share a sentence: `--list` exits 0 having executed
