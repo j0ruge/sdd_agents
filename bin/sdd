@@ -5954,7 +5954,8 @@ adr_declare() {
 # Resolve aliases once per validation and keep every spec write inside the admitted checkout.
 adr_spec_relative() {
   local root="$1" spec="$2" physical
-  root="$(CDPATH='' cd -P "$root" && pwd)" || return 1
+  root="$(CDPATH='' cd -P "$root" && pwd)" \
+    || die "sdd adr new: the admitted checkout $root can no longer be entered"
   case "$spec" in
     /*) physical="$spec" ;;
     *) physical="$root/$spec" ;;
@@ -6239,7 +6240,8 @@ cmd_adr() {
   adr_parse_args "$@" || return $?
   # The admitted destination supplies config and receives all writes, including relative paths.
   if [ "$verb" = new ]; then
-    cd "$COORDINATION_ROOT" || return 1
+    cd "$COORDINATION_ROOT" \
+      || die "sdd adr new: the admitted checkout $COORDINATION_ROOT can no longer be entered"
   fi
   load_config
   # Called for its REFUSAL, and the value thrown away: adr_check_repo prints ADR_CHECK itself, and

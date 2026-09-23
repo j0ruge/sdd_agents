@@ -3905,7 +3905,7 @@ mut_COORD_recursive_pipeline() {
 }
 
 mut_COORD_no_subreaper() {
-  sed -i 's@^    subreaper()$@    pass  # The mutant no longer adopts orphan descendants.@' "${1%/*}/sdd-coordination.py"
+  sed -i '/^def supervise(/,/^def main(/ s@^    subreaper()$@    pass  # The pipeline no longer adopts orphan descendants.@' "${1%/*}/sdd-coordination.py"
 }
 
 mut_COORD_wait_worker_only() {

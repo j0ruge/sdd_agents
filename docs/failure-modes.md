@@ -25,7 +25,8 @@ path. Do not delete the lock file or kill the supervisor to force entry: that de
 Stale JSON without a live lock is harmless and does not require manual cleanup.
 
 **CHECKOUT-UNAVAILABLE:** coordinated execution requires Linux 5.3+ procfs, Python 3.9+ and kernel
-`flock`/subreaper/pidfd support, with pidfd syscalls allowed by seccomp. Admission probes these
+`flock`/subreaper/pidfd support, with pidfd syscalls allowed by seccomp, and a procfs that
+enumerates task children (`/proc/<pid>/task/<tid>/children`, `CONFIG_PROC_CHILDREN`). Admission probes these
 before running config or a paid session.
 Install the required runtime or use a supported Linux environment. Help and version do not
 need the supervisor. This is local coordination, not a filesystem permission boundary against

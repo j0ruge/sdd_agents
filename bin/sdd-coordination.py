@@ -92,20 +92,35 @@ def pidfd_capability():
         signal.pidfd_send_signal(descriptor, 0)
     finally:
         os.close(descriptor)
+    # signal_family discovers descendants ONLY through /proc/<pid>/task/<tid>/children, which a
+    # kernel without CONFIG_PROC_CHILDREN does not have. There every task reads as childless, a
+    # signal reaches nobody, and an interrupted run keeps the lock (Codex on PR #48) — so the
+    # absence is refused here, before execution, like a missing pidfd.
+    if not os.path.exists('/proc/%d/task/%d/children' % (os.getpid(), os.getpid())):
+        raise OSError('procfs has no task children enumeration (CONFIG_PROC_CHILDREN)')
+
+
+PR_SET_CHILD_SUBREAPER = 36
+PR_GET_CHILD_SUBREAPER = 37
 
 
 def subreaper():
     pidfd_capability()
     libc = ctypes.CDLL(None, use_errno=True)
     # Linux prctl is variadic: pass explicit machine-width arguments.
-    if libc.prctl(36, ctypes.c_ulong(1), ctypes.c_ulong(0), ctypes.c_ulong(0),
-                  ctypes.c_ulong(0)) != 0:
+    if libc.prctl(PR_SET_CHILD_SUBREAPER, ctypes.c_ulong(1), ctypes.c_ulong(0),
+                  ctypes.c_ulong(0), ctypes.c_ulong(0)) != 0:
         raise OSError(ctypes.get_errno(), 'PR_SET_CHILD_SUBREAPER failed')
     enabled = ctypes.c_int()
-    if libc.prctl(37, ctypes.byref(enabled), 0, 0, 0) != 0 or enabled.value != 1:
+    if libc.prctl(PR_GET_CHILD_SUBREAPER, ctypes.byref(enabled), 0, 0, 0) != 0 \
+            or enabled.value != 1:
         raise OSError('PR_GET_CHILD_SUBREAPER did not confirm supervision')
 
 
+# A second reader of bin/sdd's argument grammar, for the metadata's `mission=` only (display, never
+# a decision). It knows the value-taking flags of run/retry/close today — `--phase` and
+# `--max-phases`; `--dry-run` and `--budget-override` take none. A flag that gains a value in
+# bin/sdd must be added here in the same commit, or `show` names the value as the mission.
 def requested_mission(args):
     if '--mission' in args:
         index = args.index('--mission') + 1
@@ -189,6 +204,11 @@ def signal_family(number):
 
 def wait_family(child, signals, deadline=None, grace=2):
     worker_status = 1
+    # Whether the worker had already exited, on its own, before any signal was recorded. Then a
+    # signal that arrives while only stragglers are being reaped does not rewrite its status: a
+    # late Ctrl-C used to turn a successful `sdd run` into 128+n. A timeout is not a signal the
+    # worker survived — the hook family must finish inside its deadline — so 124 still wins.
+    worker_done_first = False
     while True:
         try:
             waited, status = os.waitpid(-1, os.WNOHANG)
@@ -198,6 +218,7 @@ def wait_family(child, signals, deadline=None, grace=2):
             continue
         if waited:
             if waited == child:
+                worker_done_first = not signals['number']
                 worker_status = os.waitstatus_to_exitcode(status)
                 if worker_status < 0:
                     worker_status = 128 - worker_status
@@ -210,6 +231,8 @@ def wait_family(child, signals, deadline=None, grace=2):
         time.sleep(.01)
     if signals['timed_out']:
         return 124
+    if worker_done_first:
+        return worker_status
     return 128 + signals['number'] if signals['number'] else worker_status
 
 
@@ -240,7 +263,7 @@ def supervise(root, lock, meta_path, args, caller, boot):
     # Bash starts this supervisor asynchronously with SIGINT ignored. Install handlers
     # before fork so exec restores catchable signals in the worker.
     signals = signal_state()
-    value = {'checkout': root, 'checkout_identity': [os.stat(root).st_dev, os.stat(root).st_ino],
+    value = {'checkout': root,
              'owner': process(caller), 'supervisor': process(os.getpid()), 'boot_id': boot,
              'lock_fd': lock, 'execution_id': str(uuid.uuid4()),
              'started_at': datetime.datetime.now(datetime.timezone.utc).isoformat(),
@@ -274,6 +297,10 @@ def supervise(root, lock, meta_path, args, caller, boot):
         # Startup failure never releases a live child or lets it enter the command.
         signals['number'] = signal.SIGTERM
         signals['time'] = time.monotonic()
+        try:
+            temporary.unlink(missing_ok=True)   # a write that landed but was never renamed
+        except (NameError, OSError):
+            pass
     finally:
         os.close(writer)
     result = wait_family(child, signals)
@@ -284,13 +311,26 @@ def supervise(root, lock, meta_path, args, caller, boot):
 
 
 def main():
+    """The CLI bin/sdd calls — its only caller:
+
+      hook  <seconds> <grace> <command>          run ON_ESCALATION_CMD, the whole family bounded
+      enter <root> <dir> <kind> <sdd> <args...>  take the checkout lock and supervise <sdd>
+      check <root> <dir> <kind>                  0 when the caller descends from the lock holder;
+                                                 kind `pipeline` further requires the worker itself
+      show  <root> <dir> <kind>                  print the current owner, if any; never locks
+    """
     if sys.argv[1:2] == ['hook']:
         return bounded_hook(*sys.argv[2:])
+    if len(sys.argv) < 5:
+        print('usage: sdd-coordination.py hook|enter|check|show <root> <dir> <kind> [args...]',
+              file=sys.stderr)
+        return 2
     mode, root, directory, kind, *args = sys.argv[1:]
     root = os.path.realpath(root)
     directory = Path(directory)
-    if mode == 'show' and not directory.exists():
-        return 0
+    # Two questions that must not write: nothing to show, and nothing a caller could descend from.
+    if mode in ('show', 'check') and not directory.exists():
+        return 0 if mode == 'show' else 1
     directory.mkdir(mode=0o700, parents=True, exist_ok=True)
     lock_path = directory / 'sdd-coordination.lock'
     meta_path = directory / 'sdd-coordination.json'
@@ -325,6 +365,7 @@ if __name__ == '__main__':
     try:
         sys.exit(main())
     except (OSError, ValueError, AttributeError) as error:
-        print('CHECKOUT-UNAVAILABLE: Linux >=5.3 procfs/pidfd, Python 3.9+ and flock/subreaper support '
+        print('CHECKOUT-UNAVAILABLE: Linux >=5.3 procfs/pidfd with task children enumeration, '
+              'Python 3.9+ and flock/subreaper support '
               'are required: %s' % error, file=sys.stderr)
         sys.exit(1)

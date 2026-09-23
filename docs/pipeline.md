@@ -57,7 +57,8 @@ foreground children and children created by other threads or sessions. Each sele
 is pinned with a pidfd after rechecking its start time and ancestry; no numeric-PID fallback is
 used. Cancellation uses KILL after two seconds and still waits for actual termination before
 releasing ownership. Processes that deliberately ignore a signal need not run a handler.
-Linux 5.3+ with usable pidfd syscalls (including the sandbox/seccomp policy) and Python 3.9+
+Linux 5.3+ with usable pidfd syscalls (including the sandbox/seccomp policy), a procfs that
+enumerates task children (`CONFIG_PROC_CHILDREN` — without it an interrupt would reach nobody) and Python 3.9+
 are required and checked before project config or sessions execute. The scan selects signal
 recipients; only `ECHILD` proves the family has finished.
 

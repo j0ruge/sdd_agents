@@ -264,14 +264,14 @@ regras estão em `templates/checkpoint.md`, com o porquê medido, e quem as cobr
 `tests/check-checkpoint.sh`.
 
 A suíte é `tests/run-all.sh` — é ela o `TEST_CMD` deste repo, e é ela que os gates rodam. Sensor
-novo entra lá. Os quinze de hoje: `check-templates.sh`, `check-gates.sh`, `check-dry-run.sh`,
+novo entra lá. Os dezesseis de hoje: `check-templates.sh`, `check-gates.sh`, `check-dry-run.sh`,
 `check-mutation.sh`, `check-lang.sh`, `check-autonomy.sh`, `check-kaizen.sh`, `check-preflight.sh`,
 `check-todo.sh`, `check-pipefail.sh`, `check-entrypoint.sh`, `check-checkpoint.sh`,
-`check-health.sh`, `check-hat.sh` e `check-adr.sh`.
+`check-health.sh`, `check-hat.sh`, `check-adr.sh` e `check-coordination.sh`.
 ⚠️ O número sai do comando e nunca desta linha — `ls tests/check-*.sh | wc -l` —, pela mesma
-régua do `44 caught of 44`: a lista envelheceu duas vezes seguidas aqui, uma por sensor.
+régua do `44 caught of 44`: a lista envelheceu três vezes seguidas aqui, uma por sensor.
 
-⚠️ **Quatorze dos quinze rodam no `TEST_CMD`; o `check-mutation.sh` é opt-in desde `4c86712`.** Ele
+⚠️ **Quinze dos dezesseis rodam no `TEST_CMD`; o `check-mutation.sh` é opt-in desde `4c86712`.** Ele
 verifica CADA mutante rodando a suíte inteira numa sandbox, e isso segurava a árvore por mais de
 dez minutos por gate — até tornar uma FASE insatisfazível: três sessões de REVIEW seguidas
 encerraram o turno com as palavras *"waiting for the suite"*, e em `claude -p` encerrar o turno é

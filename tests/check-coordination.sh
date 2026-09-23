@@ -128,7 +128,7 @@ fi
 
 
 barrier = work / "barrier.py"
-barrier.write_text('''import json, os, resource, signal, subprocess, sys, threading
+barrier.write_text('''import json, os, signal, subprocess, sys, threading
 from pathlib import Path
 mode = os.environ.get("COORD_CHILD", "ordinary")
 if mode == "foreground-threaded":
@@ -277,11 +277,16 @@ try:
     # pidfd support must be usable under this kernel/seccomp policy before project config runs.
     python_stub = stubs / "python3"
     capability_effect = work / "pidfd-config-effect"
-    for denied in ("missing", "open", "send"):
+    # `children`: a procfs without task children enumeration (no CONFIG_PROC_CHILDREN) makes every
+    # task read as childless, so an interrupt would reach nobody and keep the lock (Codex, PR #48).
+    for denied in ("missing", "open", "send", "children"):
         python_stub.write_text("#!/usr/bin/python3\nimport os, signal, runpy, sys\n"
             "def denied(*args, **kwargs): raise PermissionError('fixture pidfd denied')\n"
             + {"missing": "del os.pidfd_open\n", "open": "os.pidfd_open = denied\n",
-               "send": "signal.pidfd_send_signal = denied\n"}[denied]
+               "send": "signal.pidfd_send_signal = denied\n",
+               "children": "_exists = os.path.exists\n"
+                           "os.path.exists = lambda p: False if str(p).endswith('/children')"
+                           " else _exists(p)\n"}[denied]
             + "target = sys.argv.pop(1)\nrunpy.run_path(target, run_name='__main__')\n")
         python_stub.chmod(0o755)
         capability_effect.unlink(missing_ok=True)
@@ -291,6 +296,32 @@ try:
               and not capability_effect.exists(), result.stdout[:300])
         check("help survives unavailable pidfd: " + denied, run(repo, "help").returncode == 0)
     python_stub.unlink()
+    # A signal that lands after the worker already exited, while only a straggler is being reaped,
+    # must not rewrite the worker's status: a late Ctrl-C turned a successful run into 130.
+    # DIFFERENTIAL: the same family and the same signal, once after the worker exit and once before.
+    late_probe = work / "late-signal.py"
+    late_probe.write_text(
+        "import importlib.util, os, signal, sys, threading, time\n"
+        "spec = importlib.util.spec_from_file_location('coord', sys.argv[1])\n"
+        "m = importlib.util.module_from_spec(spec); spec.loader.exec_module(m)\n"
+        "signals = m.signal_state()\n"
+        "worker = os.fork()\n"
+        "if worker == 0:\n"
+        "    time.sleep(0 if sys.argv[2] == 'after' else 3); os._exit(0)\n"
+        "straggler = os.fork()\n"
+        "if straggler == 0:\n"
+        "    time.sleep(5); os._exit(0)\n"
+        "def late():\n"
+        "    time.sleep(.5); os.kill(os.getpid(), signal.SIGINT)\n"
+        "threading.Thread(target=late, daemon=True).start()\n"
+        "print(m.wait_family(worker, signals))\n")
+    late = {}
+    for when in ("after", "before"):
+        probe = subprocess.run([sys.executable, str(late_probe), str(root / "bin/sdd-coordination.py"),
+                                when], capture_output=True, text=True, timeout=8)
+        late[when] = probe.stdout.strip()
+    check("a signal after the worker's own exit keeps its status", late["after"] == "0", late)
+    check("...and the same signal before it still reports the interrupt", late["before"] == "130", late)
     # ADR's explicit target controls both ownership and config, regardless of the caller cwd.
     adr_target = fixture("adr-target")
     adr_alias = work / "adr-alias"

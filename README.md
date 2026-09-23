@@ -28,6 +28,7 @@ tests, greps the checkpoint, reads the `git log`). A label is not an artifact.
 Coordinated commands require **Linux 5.3+ with readable `/proc`, Python 3.9+ (standard library),
 Bash 4+ and the GNU userland**. The helper checks the kernel's `flock` and child-subreaper
 capabilities before starting the command, including pidfd syscall availability under seccomp
+and procfs task children enumeration (`CONFIG_PROC_CHILDREN`),
 and before the paid preflight probe. No Python packages, daemon or service are required. macOS is not supported for coordinated execution.
 
 One physical checkout has one execution owner. A competing command exits immediately with
