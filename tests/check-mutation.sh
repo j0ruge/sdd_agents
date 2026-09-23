@@ -4020,8 +4020,10 @@ mut_COORD_reaped_pidfd_kept() {
 }
 
 # Back to select() on the worker's pidfd: a caller holding descriptors past 1023 makes it raise
-# ValueError and the supervisor dies under a live worker. Caught by "a caller holding 1100
-# descriptors keeps the supervisor alive" (check-coordination.sh).
+# ValueError and the supervisor dies under a live worker. Caught by "a caller holding
+# descriptors past 1023 keeps the supervisor alive" (check-coordination.sh). Declared limit: on a
+# host whose hard RLIMIT_NOFILE is below 1040 that probe cannot build its world and says `skip`, so
+# this mutant survives there and that host cannot produce the green stamp until the limit rises.
 mut_COORD_select_pidfd() {
   sed -i 's@^                worker_poll.poll(10)$@                select.select([worker_fd], [], [], .01)@' "${1%/*}/sdd-coordination.py"
 }

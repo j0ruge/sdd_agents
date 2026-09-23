@@ -504,22 +504,29 @@ try:
     # world ends in a timeout, not in an rc: caught here and read as the failure it is.
     fdcount = work / "fdcount"
     try:
+        # The soft limit is DERIVED from the hard one (Codex on PR #59): a fixed `ulimit -n 4096`
+        # skipped every host whose hard limit sits between ~1040 and 4095, where a descriptor CAN
+        # pass 1023 — and there mut_COORD_select_pidfd survived. Eight descriptors are left free
+        # for bash and the helper's own opens, so the supervisor's pidfd lands at soft-8 or above.
         crowded = subprocess.run(["bash", "-c",
-            'ulimit -n 4096 2>/dev/null || exit 3\n'
+            'hard=$(ulimit -Hn); [ "$hard" = unlimited ] && hard=1100\n'
+            '[ "$hard" -ge 1040 ] || exit 3\n'
+            'soft=$(( hard < 1100 ? hard : 1100 )); ulimit -n "$soft" || exit 3\n'
             'for n in 3 4 5 6 7 8 9; do eval "exec $n</dev/null"; done\n'
-            'for _ in $(seq 1100); do exec {fd}</dev/null; done\n'
+            'while exec {fd}</dev/null && [ "$fd" -lt $((soft - 8)) ]; do :; done\n'
             'exec "$0" phase 20260101-one', str(sdd)],
             cwd=repo, env=dict(env, COORD_FDCOUNT=str(fdcount)), text=True,
             stdout=subprocess.PIPE, stderr=subprocess.STDOUT, timeout=8)
     except subprocess.TimeoutExpired as error:
         crowded = subprocess.CompletedProcess(error.cmd, 124, (error.output or b"").decode(errors="replace"))
     if crowded.returncode == 3:
-        # The world cannot be built where the hard limit is below 4096 — and there no descriptor
-        # can pass 1023 either, so the defect this probe hunts cannot happen. Said, not hidden.
-        print("  skip  a crowded caller: the hard RLIMIT_NOFILE is below 4096 on this machine", flush=True)
+        # The world NOT built here: a hard limit below 1040. At 1024 or less no descriptor can pass
+        # 1023, so the defect cannot happen; between 1025 and 1039 it can, but only for a caller
+        # holding all but a handful of its descriptors, and this probe does not build that world.
+        print("  skip  a crowded caller: the hard RLIMIT_NOFILE is below 1040 on this machine", flush=True)
     else:
         seen = int(fdcount.read_text()) if fdcount.exists() else 0
-        check("a caller holding 1100 descriptors keeps the supervisor alive",
+        check("a caller holding descriptors past 1023 keeps the supervisor alive",
               crowded.returncode == 0 and "CHECKOUT-UNAVAILABLE" not in crowded.stdout and seen >= 1024,
               "rc %d, worker saw %d descriptors: %s" % (crowded.returncode, seen, crowded.stdout[-300:]))
     nested = start(repo, mode="reentry")

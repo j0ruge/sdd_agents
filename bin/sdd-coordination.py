@@ -253,7 +253,7 @@ def wait_family(child, signals, deadline=None, grace=2, relay=None):
     # machine without pidfds before any worker exists, so the world where it runs is not built.
     # poll(), never select(): a caller holding descriptors past 1023 hands the supervisor a pidfd
     # select() refuses with ValueError, and the supervisor died under a live worker (CodeRabbit on
-    # PR #59; probe "a caller holding 1100 descriptors" in check-coordination.sh).
+    # PR #59; probe "a caller holding descriptors past 1023" in check-coordination.sh).
     worker_poll = select.poll()
     try:
         worker_fd = os.pidfd_open(child)
