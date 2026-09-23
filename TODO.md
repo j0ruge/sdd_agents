@@ -816,10 +816,10 @@ O plano consolidado pelo Codex Astra, baseado no artigo de @0xCodez e nas refer�
   Direção: SIG_DFL no filho do probe, ou declarar a pré-condição no cabeçalho.
   — descoberto por `sessão coordenadora` no PR #58 `fix/ancoras-do-catalogo` (2026-09-23)
 
-- [ ] **A coordenação do PR #48 dobrou a suíte e o catálogo** — `bin/sdd:9305` — cada chamada
-  coordenada passou de 35 para 126 ms (`sdd install` ×20): o Python `enter`, o worker que relê o
-  `bin/sdd` e um 2º Python (`check`) só para provar a reentrada, cada um com ~14 ms de imports. A
-  suíte comportamental foi de 117 para 251 s, o `TEST_CMD` de todo gate paga isso, e o catálogo
-  levou 3h23 (~2h com o fail-fast). Direção: `python3 -S`, imports preguiçosos, e dispensar o 2º
-  Python sem afrouxar "ambiente sozinho não autoriza".
+- [ ] **O 2º Python do worker custa ~30 ms em toda chamada coordenada** — `bin/sdd:9309` — o
+  worker relê o `bin/sdd` e sobe um 2º Python (`check`) só para provar a reentrada. Medido: sem ele
+  o `sdd install` cai de ~160 para ~130 ms, e o #48 levou a suíte comportamental de 117 para 251 s.
+  A parte barata já saiu no branch `perf/catalogo-para-no-primeiro-vermelho` (`-I -S` e acordar pelo
+  pidfd, 158 → 147 ms). Direção: provar o worker direto por um FD do flock herdado, fechado antes do
+  1º fork, sem afrouxar "ambiente sozinho não autoriza" — pede ADR.
   — descoberto por `sessão coordenadora` no branch `perf/catalogo-para-no-primeiro-vermelho` (2026-09-23)

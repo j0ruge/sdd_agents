@@ -6,6 +6,7 @@ import fcntl
 import json
 import os
 from pathlib import Path
+import select
 import signal
 import stat
 import sys
@@ -242,26 +243,47 @@ def wait_family(child, signals, deadline=None, grace=2, relay=None):
     # worker survived — the hook family must finish inside its deadline — so 124 still wins.
     worker_done_first = False
     delivered = set()
-    while True:
-        try:
-            waited, status = os.waitpid(-1, os.WNOHANG)
-        except ChildProcessError:
-            break
-        except InterruptedError:
-            continue
-        if waited:
-            if waited == child:
-                worker_done_first = not signals['number']
-                worker_status = os.waitstatus_to_exitcode(status)
-                if worker_status < 0:
-                    worker_status = 128 - worker_status
-            continue
-        if deadline is not None and time.monotonic() >= deadline and signals['time'] is None:
-            signals.update(number=signal.SIGTERM, time=deadline, timed_out=True)
-        if signals['number']:
-            sent = signal.SIGKILL if time.monotonic() - signals['time'] >= grace else signals['number']
-            signal_family(sent, delivered, relay)
-        time.sleep(.01)
+    # Woken by the worker's exit, not by the next 10 ms tick: most coordinated calls are short and
+    # the tick was latency added to every one of them. Signals still land in the handlers, which
+    # interrupt the wait exactly as they interrupted the sleep. Once the worker is reaped its pidfd
+    # stays readable, so it is closed there and the stragglers go back to the plain tick.
+    # A pidfd that cannot be opened falls back to the tick too: raising here would end the
+    # supervisor with the worker still alive, releasing the lock under it. No probe reaches this
+    # branch, and it is declared rather than claimed: pidfd_capability() has already refused a
+    # machine without pidfds before any worker exists, so the world where it runs is not built.
+    try:
+        worker_fd = os.pidfd_open(child)
+    except OSError:
+        worker_fd = None
+    try:
+        while True:
+            try:
+                waited, status = os.waitpid(-1, os.WNOHANG)
+            except ChildProcessError:
+                break
+            except InterruptedError:
+                continue
+            if waited:
+                if waited == child:
+                    worker_done_first = not signals['number']
+                    worker_status = os.waitstatus_to_exitcode(status)
+                    if worker_status < 0:
+                        worker_status = 128 - worker_status
+                    os.close(worker_fd)
+                    worker_fd = None
+                continue
+            if deadline is not None and time.monotonic() >= deadline and signals['time'] is None:
+                signals.update(number=signal.SIGTERM, time=deadline, timed_out=True)
+            if signals['number']:
+                sent = signal.SIGKILL if time.monotonic() - signals['time'] >= grace else signals['number']
+                signal_family(sent, delivered, relay)
+            if worker_fd is not None:
+                select.select([worker_fd], [], [], .01)
+            else:
+                time.sleep(.01)
+    finally:
+        if worker_fd is not None:
+            os.close(worker_fd)
     if signals['timed_out']:
         return 124
     if worker_done_first:

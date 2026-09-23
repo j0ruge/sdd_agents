@@ -188,6 +188,10 @@ criados por threads; pidfds fixam a identidade após conferir starttime/ancestra
 5.3+ com syscalls pidfd permitidas e Python 3.9+ são exigidos antes de config/sessão; não há
 fallback para PID numérico reutilizável. A varredura seleciona destinatários, nunca libera
 posse: só `ECHILD` prova reap completo. Handlers que ignoram o sinal por escolha não são garantidos.
+O helper sobe com `python3 -I -S` (`COORDINATION_PYTHON`, uma definição para os quatro sítios):
+o `PYTHONPATH` de quem chama não troca os módulos do processo que decide a posse. O supervisor
+acorda pelo pidfd do worker, não pelo tique de 10 ms. O custo que sobra, ~30 ms do 2º Python do
+worker em toda chamada coordenada, está no `TODO.md`.
 
 **Limite da posse.** Coordena entradas do kit, não edição externa nem daemon preexistente.
 Matar o supervisor, adulterar arquivos/namespace do lock ou intervenção privilegiada derrota

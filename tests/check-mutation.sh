@@ -3933,7 +3933,7 @@ mut_COORD_no_subreaper() {
 }
 
 mut_COORD_wait_worker_only() {
-  sed -i '/^                    worker_status = 128 - worker_status$/a\            if waited == child: break' "${1%/*}/sdd-coordination.py"
+  sed -i '/^                    worker_fd = None$/a\                if waited == child: break' "${1%/*}/sdd-coordination.py"
 }
 
 mut_COORD_stale_process_accepted() {
@@ -4006,12 +4006,27 @@ mut_COORD_boot_unlocked() {
   sed -i '/^coordination_enter() {/,/^}/ s@help|--help|-h|version|--version|-v|census|autonomy)@help|--help|-h|version|--version|-v|boot|census|autonomy)@' "$1"
 }
 
+# The lock helper started WITHOUT isolation: a caller's PYTHONPATH shadows its stdlib imports and
+# runs inside the process that decides checkout ownership. Caught by "the lock helper ignores the
+# caller's PYTHONPATH" (check-coordination.sh), and by nothing else.
+mut_COORD_helper_not_isolated() {
+  sed -i 's@^readonly COORDINATION_PYTHON=(python3 -I -S)$@readonly COORDINATION_PYTHON=(python3)@' "$1"
+}
+
+# The worker's pidfd kept after the worker is reaped: the next wait selects on a closed descriptor,
+# the supervisor dies of EBADF and the lock goes with it. Caught by every coordinated call.
+mut_COORD_reaped_pidfd_kept() {
+  sed -i '/^def wait_family(/,/^def / { /^                    worker_fd = None$/d }' "${1%/*}/sdd-coordination.py"
+}
+
 CATALOG=(
   COORD_adr_external_spec
   COORD_adr_spec_logical_path
   COORD_signal_repeated
   COORD_boot_unlocked
   COORD_hook_relay_signaled
+  COORD_helper_not_isolated
+  COORD_reaped_pidfd_kept
   RUN_branch_double_slash
   COORD_admission_missing
   COORD_linker_unlocked
@@ -4496,7 +4511,7 @@ run_mutant() {
 # stopped being parsed: an empty loop reports "0 broken" forever.
 # ---------------------------------------------------------------------------
 if [ "$ANCHORS_ONLY" = 1 ]; then
-  ANCHOR_FLOOR=389
+  ANCHOR_FLOOR=391
   anchor_box() { mkdir -p "$1"; cp -r "$ROOT/bin" "$1/"; }
   anchor_control_noop()       { :; }
   anchor_control_intact()     { printf '# a mutation that lands and stays valid\n' >> "$1"; }

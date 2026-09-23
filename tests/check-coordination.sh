@@ -287,6 +287,9 @@ try:
                "children": "_exists = os.path.exists\n"
                            "os.path.exists = lambda p: False if str(p).endswith('/children')"
                            " else _exists(p)\n"}[denied]
+            # The runner starts the helper with interpreter flags (COORDINATION_PYTHON); the stub
+            # imitates the CLI, so it consumes them before the script path.
+            + "while sys.argv[1].startswith('-'): sys.argv.pop(1)\n"
             + "target = sys.argv.pop(1)\nrunpy.run_path(target, run_name='__main__')\n")
         python_stub.chmod(0o755)
         capability_effect.unlink(missing_ok=True)
@@ -472,6 +475,24 @@ try:
     check("normal completion preserves result", release(owner) == 0)
     check("release keeps the same lock inode", (repo / ".git/sdd-coordination.lock").stat().st_ino == lock_inode)
     check("normal completion recovers", run(repo, "install").returncode == 0)
+    # The lock helper runs isolated from the caller's Python environment (`python3 -I`). Without
+    # it a PYTHONPATH entry shadows the helper's stdlib imports — json here — and code nobody
+    # reviewed runs inside the process that decides checkout ownership, on every coordinated call.
+    # The shadow hands the real module back, so the failure is "it ran", never a crash.
+    shadow = work / "shadow"
+    shadow.mkdir()
+    shadowed = work / "shadowed"
+    (shadow / "json.py").write_text(
+        "import importlib, os, sys\n"
+        "open(os.environ['COORD_SHADOWED'], 'a').write('json\\n')\n"
+        "here = os.path.dirname(os.path.abspath(__file__))\n"
+        "sys.path[:] = [p for p in sys.path if os.path.abspath(p or '.') != here]\n"
+        "del sys.modules['json']\n"
+        "sys.modules['json'] = importlib.import_module('json')\n")
+    result = run(repo, "install", extra={"PYTHONPATH": str(shadow), "COORD_SHADOWED": str(shadowed)})
+    check("the lock helper ignores the caller's PYTHONPATH",
+          result.returncode == 0 and not shadowed.exists(),
+          "rc %d, shadow module ran: %s" % (result.returncode, shadowed.exists()))
     nested = start(repo, mode="reentry")
     results = json.loads((work / "nested-results").read_text())
     for args, code, output in results:

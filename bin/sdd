@@ -3312,7 +3312,7 @@ escalation_hook() {   # escalation_hook <kind> <phase> <gate_why> — never fail
     return 0
   fi
   if ! SDD_REASON="$1" SDD_PHASE="$2" SDD_GATE_WHY="$3" SDD_MISSION="${MISSION:-}" SDD_PROJECT="${PROJECT_NAME:-}" \
-       python3 "$SDD_HOME/bin/sdd-coordination.py" hook 5 1 "$ON_ESCALATION_CMD" </dev/null >&2; then
+       "${COORDINATION_PYTHON[@]}" "$SDD_HOME/bin/sdd-coordination.py" hook 5 1 "$ON_ESCALATION_CMD" </dev/null >&2; then
     warn "ON_ESCALATION_CMD exited non-zero or timed out — the escalation still stops the run"
   fi
 }
@@ -9261,6 +9261,15 @@ cmd_link_agents() {
 }
 
 # Admission precedes config sourcing: even a gate or dry-run can execute project commands.
+# How the lock helper is started — ONE definition for the four call sites (enter, check, show and
+# the escalation hook). `-I` isolates it from the caller's Python environment: without it a
+# PYTHONPATH entry shadows the helper's stdlib imports and runs unreviewed code inside the process
+# that decides checkout ownership (probe in tests/check-coordination.sh). `-S` skips site, which the
+# helper never needs. An array and not a function: `enter` runs in the background and its PID is the
+# owner the helper records, so it has to stay a simple command — a function would put a subshell
+# between the two.
+readonly COORDINATION_PYTHON=(python3 -I -S)
+
 coordination_paths() {
   local root="$1" gitdir
   COORDINATION_ROOT="$(CDPATH='' cd -P "$root" && pwd)"
@@ -9297,12 +9306,12 @@ coordination_enter() {
   command -v python3 >/dev/null 2>&1 \
     || die "CHECKOUT-UNAVAILABLE: coordinated commands require Python 3 and Linux procfs"
   if [ -n "${SDD_COORDINATION_ID:-}" ] \
-      && python3 "$SDD_HOME/bin/sdd-coordination.py" check "$COORDINATION_ROOT" "$COORDINATION_DIR" "$kind"; then
+      && "${COORDINATION_PYTHON[@]}" "$SDD_HOME/bin/sdd-coordination.py" check "$COORDINATION_ROOT" "$COORDINATION_DIR" "$kind"; then
     COORDINATION_ADMITTED=1
     return 0
   fi
   local coord_pid rc=0
-  python3 "$SDD_HOME/bin/sdd-coordination.py" enter "$COORDINATION_ROOT" "$COORDINATION_DIR" \
+  "${COORDINATION_PYTHON[@]}" "$SDD_HOME/bin/sdd-coordination.py" enter "$COORDINATION_ROOT" "$COORDINATION_DIR" \
     "$kind" "$SDD_HOME/bin/sdd" "$@" <&0 &
   coord_pid=$!
   trap 'kill -TERM "$coord_pid" 2>/dev/null || true' TERM
@@ -9319,7 +9328,7 @@ coordination_enter() {
 coordination_owner() {
   coordination_paths "$REPO_ROOT"
   if command -v python3 >/dev/null 2>&1; then
-    python3 "$SDD_HOME/bin/sdd-coordination.py" show "$COORDINATION_ROOT" "$COORDINATION_DIR" query
+    "${COORDINATION_PYTHON[@]}" "$SDD_HOME/bin/sdd-coordination.py" show "$COORDINATION_ROOT" "$COORDINATION_DIR" query
   else
     warn "checkout owner unavailable: Python 3 is missing"
   fi
