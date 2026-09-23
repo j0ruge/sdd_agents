@@ -264,6 +264,13 @@ mut_RUN_no_work_keyed_on_phase() {
   sed -i '/^cmd_run() {/,/^}/ s@^      step="\$(phase_step "\$phase")"$@      step="$phase"@' "$1"
 }
 
+# Form (a) reads the lap after a session cut by its budget: a session that committed half an
+# increment and hit `error_max_budget_usd` makes the next lap "the same reason twice", and the line
+# stops as no-work over a run that was progressing.
+mut_RUN_no_work_after_budget_cut() {
+  sed -i '/^cmd_run() {/,/^}/ s@ \&\& \[ "\$SESSION_BUDGET_CUT" != "1" \]@@' "$1"
+}
+
 mut_EXEC_ignores_TEST_CMD() { # discards the suite's rc — the gate stops measuring TEST_CMD
   sed -i 's|.*run_check_cmd "\$TEST_CMD" "gate-exec-test".*|  if false; then|' "$1"
 }
@@ -3878,6 +3885,7 @@ CATALOG=(
   RUN_no_work_same_reason_blind
   RUN_no_work_door2_blind
   RUN_no_work_keyed_on_phase
+  RUN_no_work_after_budget_cut
   REVIEW_alignment_colon_blind
   DOCS_alignment_colon_blind
   QA_status_line_start

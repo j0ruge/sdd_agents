@@ -41,7 +41,10 @@ moved" as progress, and a session with no work to do can always move the disk.
      red suite produces the same sentence even when a session fixed half of it, and stopping it
      would stop real work. Keyed on the step by a human decision taken during execution: keyed on
      the phase, every QA with an interface stopped after `QA:plan`, because `gate_QA` says
-     `missing 30-handoff-qa.md` after the plan and the walk alike.
+     `missing 30-handoff-qa.md` after the plan and the walk alike. Nor does (a) read the lap after
+     a session cut by its per-session budget (`error_max_budget_usd`): that session may have
+     committed half an increment, and the next one finishes it — found by the final review and
+     decided by the human.
    It lives in three doors: `cmd_run`'s first pass (derived laps only, the last refusal before the
    session, below the Jidoka pre-checks and the ceilings, which keep their own kinds and the draft
    degradation), its inline retry, and `cmd_retry`. Only the first door reads (a). There is one

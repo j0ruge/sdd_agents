@@ -5942,15 +5942,16 @@ EOF
     git add -A && git commit -qm "chore: the checkpoint row" ) >/dev/null 2>&1
   rm -f "$dir.testruns" "$NW_COUNT"
 }
-# nowork_stub <dir> <empty-commit|nothing> — the session. `empty-commit` is the incident's session:
-# no pending row to take, so it commits a no-op, which moves HEAD and reads as progress.
+# nowork_stub <dir> <empty-commit|nothing> [stream] — the session. `empty-commit` is the incident's
+# session: no pending row to take, so it commits a no-op, which moves HEAD and reads as progress.
+# The optional stream is what the session answers with ($STREAM_SAMPLE unless a regime says).
 nowork_stub() {
   cat > "$OUTSIDE/stub/claude" <<STUB
 #!/usr/bin/env bash
 n=\$(( \$(cat "$NW_COUNT" 2>/dev/null || echo 0) + 1 ))
 printf '%s\n' "\$n" > "$NW_COUNT"
 if [ "$2" = "empty-commit" ]; then git -C "$1" commit --allow-empty -qm 'docs(checkpoint): no-op'; fi
-cat "$STREAM_SAMPLE"
+cat "${3:-$STREAM_SAMPLE}"
 exit 0
 STUB
   chmod +x "$OUTSIDE/stub/claude"
@@ -6044,6 +6045,22 @@ nowork_stub "$NW7" empty-commit
 assert_eq "door 1: the same reason twice stops the line as no-work" \
   "rc:3 kind:no-work stub:1 rows:1" \
   "rc:$NW7_RC kind:$(nw_last_kind) stub:$(nw_sessions) rows:$(nw_session_rows)"
+
+# Form (a) does not read a lap that follows a HARNESS CUT. A session that hits its per-session
+# budget (`error_max_budget_usd`, the kit's designed loop — see the D25 pair above) may have
+# committed half an increment and never reached the row: same step, same reason, and the next
+# session is the one that finishes it. Found by the final review of 20260922-o-motivo-da-fase and
+# decided by the human the same day. The world is NW7's with one difference — every session ends
+# on the budget ceiling ($STREAM_BUDGET, derived from a real capture) — so `stub:1` there against
+# `laps:1` here is the differential; `died:0` is the witness that session-died did not take the run.
+NW13="$OUTSIDE/nowork-cut"
+nowork_world "$NW13" pending
+nowork_stub "$NW13" empty-commit "$STREAM_BUDGET"
+: > "$LEDGER"
+( cd "$NW13" && "$SDD" run "$MISSION" ) >/dev/null 2>&1
+assert_eq "a lap after a session cut by its budget is not no-work" \
+  "laps:1 no-work:0 died:0" \
+  "laps:$([ "$(nw_sessions)" -ge 2 ] && echo 1 || echo 0) no-work:$(jq -s '[.[] | select(.kind == "no-work")] | length' "$LEDGER") died:$(jq -s '[.[] | select(.kind == "session-died")] | length' "$LEDGER")"
 
 # The other side of form (a): a red suite is a reason a session may be halfway through fixing, and
 # it must never stop the line as no-work. `laps:1` is the witness that the regime REPEATS — at least

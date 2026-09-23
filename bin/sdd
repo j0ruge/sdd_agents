@@ -3591,6 +3591,9 @@ run_phase() {
   # F2 the handoff-blocked sibling actually paid for — and a rule that survives by being
   # unreachable today keeps its missing probe written down instead of being deleted on a claim.
   SESSION_DIED_WHY=""
+  # Same contract, same place, for the sibling marker below: zeroed on entry, set only by this
+  # function, so it says whether the session JUST run was cut and nothing older.
+  SESSION_BUDGET_CUT=""
   local pstep model agent sid prompt logfile streamfile started ended cost turns cache_read
   # QA is three sessions (plan, walk, close); the step comes from the artifacts, not a counter.
   pstep="$(phase_step "$phase")"
@@ -3763,6 +3766,12 @@ missing and write the artifacts. The gate will be re-evaluated."
                     and ((.result // "") != "")
                  then .result else "" end' "$logfile" 2>/dev/null || echo "")"
   SESSION_DIED_WHY="${died:0:200}"
+  # The other named regime of the three above: the session hit its per-session budget. It is the
+  # kit's DESIGNED loop and stops nothing — but a session cut there may have committed half an
+  # increment without reaching the row, so no-work's form (a) must not read the lap after it as
+  # "nothing to do" (final review of 20260922-o-motivo-da-fase; decided by the human). POSITIVE
+  # rule, one subtype named, for the reason the paragraph above gives.
+  SESSION_BUDGET_CUT="$(jq -r 'if .subtype == "error_max_budget_usd" then "1" else "" end' "$logfile" 2>/dev/null || echo "")"
   local dur=$((ended - started))
   pipeline_log_line "$(date -Iseconds)  $phase  agent=$agent  model=$model  session=${resume_sid:-$sid}  rc=$rc  dur=${dur}s  cost_usd=$cost  log=$logfile"
 
@@ -3810,6 +3819,7 @@ LAST_PHASE_AGENT=""
 LAST_PHASE_MODEL=""
 LAST_PHASE_DIED=""
 SESSION_DIED_WHY=""
+SESSION_BUDGET_CUT=""
 
 # Fingerprint of the mission state. It answers "did this session do ANYTHING?" when the gate has
 # not passed yet — the normal case for the EXEC phase, which runs one increment at a time.
@@ -6848,7 +6858,9 @@ cmd_run() {
       # the phase.
       local step same_prev=""
       step="$(phase_step "$phase")"
-      [ "$prev_step" = "$step" ] && same_prev="$prev_why"
+      # Not after a harness cut: SESSION_BUDGET_CUT is the last session this run opened — the one
+      # that ended the previous lap — and a session cut by its budget may be mid-increment.
+      if [ "$prev_step" = "$step" ] && [ "$SESSION_BUDGET_CUT" != "1" ]; then same_prev="$prev_why"; fi
       no_work_check "$phase" "$same_prev"
       if no_work_escalation "$phase"; then return 3; fi
       prev_step="$step"
@@ -7423,8 +7435,10 @@ census_files() {   # census_files <handoff-dir-with-slash> <stream>...
       | .[] | "          file  \(.f) reads \(.reads) bytes \(.bytes)"' "$@" 2>/dev/null || true
 }
 
-# sdd boot <mission> <PHASE> — print the boot prompt that PHASE would be given, and exit. Reads
-# only; opens no session, writes nothing, spends nothing.
+# sdd boot <mission> <PHASE> — print the boot prompt that PHASE would be given, and exit. Opens no
+# session and spends nothing — but since 20260922-o-motivo-da-fase it DERIVES the phase first, so
+# the prompt carries the same `Why this phase:` line the session would: that runs the gates, which
+# run TEST_CMD (and E2E_CMD once the derivation reaches QA) and write their logs under .sdd/logs/.
 #
 # It exists because of a hole this repo already pays for elsewhere: until now `boot_prompt()` had
 # exactly ONE caller (`run_phase`), so the only way to see what a phase is actually told was to
@@ -9041,8 +9055,9 @@ USAGE
                              name, MCP seen, denials, bytes re-read under HANDOFF_DIR, per file,
                              plus the boot bill — what the boot points at, before and at the worst
                              point of the mission
-  sdd boot <mission> <PHASE> print the boot prompt that phase would be given, and exit. Reads
-                             only: no session, no writes, no cost
+  sdd boot <mission> <PHASE> print the boot prompt that phase would be given, and exit. No
+                             session, no cost — but it derives the phase, so the gates run
+                             TEST_CMD (and E2E_CMD past EXEC); avoid it during a live 'sdd run'
   sdd kaizen [--dry-run]     judge the previous kit change and give birth to the next kit
                              mission plan (kit repo only; exit 3 = the change made it worse)
   sdd kaizen --series        the deterministic series (JSON) the judge cites — EVERY repo in the
