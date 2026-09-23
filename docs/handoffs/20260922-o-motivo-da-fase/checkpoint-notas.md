@@ -57,3 +57,4 @@
 - intervention: decisão humana sobre a chave da forma (a) — (fase, motivo) parava todo QA com interface após QA:plan; escolhido (phase_step, motivo) — EXEC — sem custo de sessão
 - 2026-09-22 19:53 · `EXEC` · I7 done (e25a20c): executor § 2 (zero pending) e § 5 (hash nu) em inglês; template com a frase em pt-BR; espelho via install --force; preflight verde depois do commit
 - 2026-09-22 20:03 · `EXEC` · I8 done (7ad9e2d): replay 1 vermelho com o I1 revertido (receita M, GATE_EXEC_backtick_kept); D27, KAIZEN_LOG, anatomia §3/§7; ADR 0010 atualizado com a chave (passo, motivo) e segue proposed até o merge
+- 2026-09-22 21:02 · `REVIEW` · revisão final: 0 critical, 2 important consertados em 366982a (forma (a) não lê a volta depois de corte por orçamento — decisão humana; help/docs do sdd boot e linha PHASE documentada); minors adiados
