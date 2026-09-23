@@ -458,6 +458,58 @@ fi
 assert_phase "an alignment-colon separator is not an increment" "QA"
 mv "$MDIR/checkpoint.colon.bak" "$MDIR/checkpoint.md"
 
+# A Commit cell fenced in backticks — `` `abc1234` `` — renders exactly like the bare hash, and an
+# executor wrote one in 20260921-amep-backend-0-1-0 (issue #55). checkpoint_rows trimmed spaces
+# but not backticks, so gate_EXEC handed `` `abc1234` `` to `git cat-file` and answered "does not
+# exist": the phase stayed EXEC with nothing left to execute and the runner bought sessions for it.
+cp "$MDIR/checkpoint.md" "$MDIR/checkpoint.tick.bak"
+sed -i "s/| done | $REAL_HASH |/| done | \`$REAL_HASH\` |/" "$MDIR/checkpoint.md"
+if grep -qF "| done | \`$REAL_HASH\` |" "$MDIR/checkpoint.md"; then
+  pass "fixture: the commit cell really carries backticks"
+else
+  fail "backticked commit fixture" "a done row with a backticked hash" "$(grep -m1 '| done |' "$MDIR/checkpoint.md")"
+fi
+assert_phase "a backticked commit cell is read as the SHA it carries" "QA"
+# Padding INSIDE the backticks renders the same (CommonMark drops it), and the trim used to run
+# before the backticks came off — the cell reached the shape check as ' abc1234 ' (CodeRabbit on
+# PR #57).
+sed -i "s/| done | \`$REAL_HASH\` |/| done | \` $REAL_HASH \` |/" "$MDIR/checkpoint.md"
+if grep -qF "| done | \` $REAL_HASH \` |" "$MDIR/checkpoint.md"; then
+  pass "fixture: the commit cell really carries spaces inside the backticks"
+else
+  fail "padded backtick fixture" "a done row with a padded backticked hash" "$(grep -m1 '| done |' "$MDIR/checkpoint.md")"
+fi
+assert_phase "a backticked commit cell with padding inside is read as the SHA it carries" "QA"
+mv "$MDIR/checkpoint.tick.bak" "$MDIR/checkpoint.md"
+
+# A 64-digit id is a SHA SHAPE (sha256 repositories write them): it must reach the existence check
+# and be told "does not exist", never "is not a SHA" (Codex on PR #57).
+cp "$MDIR/checkpoint.md" "$MDIR/checkpoint.sha256.bak"
+SHA256_LIKE="$(printf 'ab%.0s' $(seq 32))"
+sed -i "s/| done | $REAL_HASH |/| done | $SHA256_LIKE |/" "$MDIR/checkpoint.md"
+if grep -qF "| done | $SHA256_LIKE |" "$MDIR/checkpoint.md" && [ "${#SHA256_LIKE}" -eq 64 ]; then
+  pass "fixture: the commit cell really carries a 64-digit id"
+else
+  fail "sha256-shape fixture" "a done row with a 64-hex id" "$(grep -m1 '| done |' "$MDIR/checkpoint.md")"
+fi
+assert_why        "a 64-digit id has a SHA shape and reaches the existence check" "EXEC" "does not exist"
+assert_why_absent "...and is not refused as a non-SHA" "EXEC" "is not a SHA"
+mv "$MDIR/checkpoint.sha256.bak" "$MDIR/checkpoint.md"
+
+# A Commit cell that has no SHA shape at all — words around the hash — used to be told it "does
+# not exist", which sends whoever reads it looking for a lost commit instead of at the cell.
+cp "$MDIR/checkpoint.md" "$MDIR/checkpoint.notsha.bak"
+sed -i "s/| done | $REAL_HASH |/| done | commit $REAL_HASH |/" "$MDIR/checkpoint.md"
+if grep -qF "| done | commit $REAL_HASH |" "$MDIR/checkpoint.md"; then
+  pass "fixture: the commit cell really carries words around the hash"
+else
+  fail "not-a-SHA fixture" "a done row with 'commit <hash>'" "$(grep -m1 '| done |' "$MDIR/checkpoint.md")"
+fi
+assert_phase "a commit cell that is not a SHA fails the EXEC gate" "EXEC"
+assert_why   "a commit cell that is not a SHA gets its own reason" "EXEC" "is not a SHA"
+assert_why_absent "the not-a-SHA reason is not the does-not-exist reason" "EXEC" "does not exist"
+mv "$MDIR/checkpoint.notsha.bak" "$MDIR/checkpoint.md"
+
 # --- QA --------------------------------------------------------------------
 # The QA gate has TWO contracts, because there are two kinds of project.
 #
@@ -497,6 +549,17 @@ assert_why   "QA reports the unclosed report" "QA" "closed"
 sed -i 's/\*\*Status:\*\* in-progress/**Status:** closed/' "$FIX/docs/qa/reports/2026-01-01-fixture.md"
 assert_phase "report closed but with a Pending row in the matrix" "QA"
 assert_why   "QA reports the Pending matrix" "QA" "Pending"
+# COUNTED, because no-work's form (a) compares reasons word for word: a walk that settles one of
+# two Pending rows must change the sentence, or the next lap reads as "nothing changed".
+assert_why   "QA counts the Pending rows (one)" "QA" "still has 1 'Pending' row\\(s\\)"
+sed -i 's/^| 1 | CH-one | Pending |$/&\n| 2 | CH-two | Pending |/' "$FIX/docs/qa/reports/2026-01-01-fixture.md"
+if grep -qxF '| 2 | CH-two | Pending |' "$FIX/docs/qa/reports/2026-01-01-fixture.md"; then
+  pass "fixture: the matrix really carries a second Pending row"
+else
+  fail "second Pending row fixture" "| 2 | CH-two | Pending |" "$(grep -c Pending "$FIX/docs/qa/reports/2026-01-01-fixture.md") Pending line(s)"
+fi
+assert_why   "QA counts the Pending rows (two)" "QA" "still has 2 'Pending' row\\(s\\)"
+sed -i '/^| 2 | CH-two | Pending |$/d' "$FIX/docs/qa/reports/2026-01-01-fixture.md"
 
 sed -i 's/| 1 | CH-one | Pending |/| 1 | CH-one | Pass |/' "$FIX/docs/qa/reports/2026-01-01-fixture.md"
 # PROVENANCE: ~/.claude/skills/qa-report/assets/bug-template.md:1-3, verbatim. The legend
@@ -1618,6 +1681,14 @@ printf '# Docs\n\ndrift checklist\n\n| Area | Doc | Status | Evidence |\n|---|--
 git add -A && git commit -qm "chore: partial docs"
 assert_phase "drift checklist with a ✗ item" "DOCS"
 assert_why   "DOCS reports the area with a pending Status, quoting the value" "DOCS" "Status '✗'"
+assert_why   "DOCS counts the pending areas (one)" "DOCS" "has 1 area\\(s\\) pending"
+# Two ✗ rows: the count must move, or a session that fixed one of them would leave the reason
+# word for word as it was and no-work's form (a) would stop the next DOCS lap (Codex on PR #57).
+printf '# Docs\n\ndrift checklist\n\n| Area | Doc | Status | Evidence |\n|---|---|---|---|\n| runner | README | ✗ | pending |\n| libs | CONTEXT | ⏳ | pending |\n\nFindings recorded in TODO.md for this mission.\n' \
+  > "$MDIR/45-docs.md"
+git add -A && git commit -qm "chore: two pending docs areas"
+assert_why   "DOCS counts the pending areas (two)" "DOCS" "has 2 area\\(s\\) pending"
+assert_why   "...and still quotes the FIRST pending Status" "DOCS" "the first with Status '✗'"
 
 printf '# Docs\n\ndrift checklist\n\n| Area | Doc | Status | Evidence |\n|---|---|---|---|\n| runner | README | ✅ | commit abc1234 |\n| libs | — | n/a | internal refactor |\n\nFindings recorded in TODO.md for this mission.\n' \
   > "$MDIR/45-docs.md"
@@ -3698,6 +3769,60 @@ CLOSE_ARGV_TEXT="$(cat "$CLOSE_ARGV" 2>/dev/null || echo "")"
 assert_eq "close: the prompt tells the session the human already authorised it, and no dev is here to ask" \
   "slash:1 authorised:1 nobody:1 dont-ask:1" \
   "slash:$(has "$CLOSE_ARGV_TEXT" '/ticket close') authorised:$(has "$CLOSE_ARGV_TEXT" 'already authorised') nobody:$(has "$CLOSE_ARGV_TEXT" 'no developer') dont-ask:$(has "$CLOSE_ARGV_TEXT" 'without asking')"
+
+# CLOSE_HOME is READ from the fixture's own config, never written twice: a literal here and a
+# literal in the heredoc at the top of this file would be two spellings of one fact, and the day
+# someone changes the fixture's DEFAULT_BRANCH the assertion below would go on checking the old
+# name and pass by agreeing with itself.
+CLOSE_HOME="$(sed -n 's/^DEFAULT_BRANCH="\(.*\)"$/\1/p' "$FIX/.sdd/config.sh")"
+[ -n "$CLOSE_HOME" ] || { echo "check-gates: could not read DEFAULT_BRANCH from the fixture config" >&2; exit 1; }
+
+# 8c. THE MISSION BRANCH IS NOT WHERE THE NEXT MISSION STARTS. `sdd close` is post-merge: the work
+#     is in the default branch and the mission branch is spent. Leaving the session standing on it
+#     is how the next thing typed lands on a ref nobody will merge again — measured on the
+#     lighthouse_project close of 2026-09-22, which ended on `LH-1_amep-backend-0-1-0` with the
+#     merge already in `develop`.
+#
+#     Asserted on the CHEAPEST verified arm (`done`, regime 8), because the return belongs to the
+#     verdict and not to the session: an issue already Done spends nothing and still has to land
+#     the human back home. Regime 8d covers the arm that does spend one, so the two exits cannot
+#     drift apart — a fix applied to only one of them is exactly what this pair refuses.
+#     The fixture tree is committed first, because THE REAL ONE IS CLEAN HERE: `sdd install`
+#     guarantees `.sdd/logs/` is gitignored in every repo, so the logs this command writes are
+#     invisible to git and a post-merge tree has nothing pending. A fixture left dirty would send
+#     every one of these regimes down the dirty arm and prove only that arm, twice.
+git -C "$FIX" add -A >/dev/null 2>&1
+git -C "$FIX" -c user.email=fix@example.com -c user.name=fixture commit -q -m "fixture: clean tree before the close" >/dev/null 2>&1 || true
+git -C "$FIX" checkout -q -b LH-9_fixture-branch
+close_run "done" 0
+assert_eq "close: a verified close leaves the tree back on the default branch, and says so" \
+  "rc:0 branch:$CLOSE_HOME said:1" \
+  "rc:$CLOSE_RC_OUT branch:$(git -C "$FIX" rev-parse --abbrev-ref HEAD) said:$(has "$CLOSE_OUT" "$CLOSE_HOME")"
+
+# 8d. The same, on the arm that spends a session. Two exits, one behaviour.
+git -C "$FIX" add -A >/dev/null 2>&1
+git -C "$FIX" -c user.email=fix@example.com -c user.name=fixture commit -q -m "fixture: clean again" >/dev/null 2>&1 || true
+git -C "$FIX" checkout -q -b LH-10_fixture-branch
+close_run "notdone done" 0
+assert_eq "close: the arm that spends a session comes home too" \
+  "rc:0 branch:$CLOSE_HOME" \
+  "rc:$CLOSE_RC_OUT branch:$(git -C "$FIX" rev-parse --abbrev-ref HEAD)"
+
+# 8e. A DIRTY TREE IS NOT A REASON TO MOVE HEAD. The close already succeeded; throwing away
+#     uncommitted work for branch hygiene is the worse trade, and `ensure_mission_branch` argues
+#     the same thing one screen up in bin/sdd ("guessing on top of a tree git already refused is
+#     how a working tree gets destroyed"). So: stay, warn, and NAME the branch you stayed on —
+#     a silent non-move reads exactly like a move that worked.
+git -C "$FIX" add -A >/dev/null 2>&1
+git -C "$FIX" -c user.email=fix@example.com -c user.name=fixture commit -q -m "fixture: clean before the dirty case" >/dev/null 2>&1 || true
+git -C "$FIX" checkout -q -b LH-11_dirty-branch
+printf 'uncommitted work\n' > "$FIX/human-draft.txt"
+close_run "done" 0
+assert_eq "close: with a dirty tree it stays put, warns, and does not destroy the work" \
+  "rc:0 branch:LH-11_dirty-branch kept:1 warned:1" \
+  "rc:$CLOSE_RC_OUT branch:$(git -C "$FIX" rev-parse --abbrev-ref HEAD) kept:$([ -e "$FIX/human-draft.txt" ] && printf 1 || printf 0) warned:$(has "$CLOSE_OUT" 'uncommitted')"
+rm -f "$FIX/human-draft.txt"
+git -C "$FIX" checkout -q "$CLOSE_HOME"
 
 # 9. Control. With JIRA off the command asks nothing of anyone — and the two `:0` terms are the
 #    half that matters: a guard that ran acli anyway would still print "nothing to close".

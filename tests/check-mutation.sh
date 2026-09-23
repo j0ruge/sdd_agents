@@ -195,6 +195,82 @@ mut_EXEC_dirty_tree_as_red() {
   sed -i '/^gate_EXEC()/,/^}/ s@^      GATE_EXEC_DIRTY=1$@      :@' "$1"
 }
 
+# checkpoint_rows stops stripping backticks from the Commit cell. `` `abc1234` `` renders exactly like
+# the bare hash, and the gate hands it to `git cat-file`, which answers "does not exist": the phase
+# stays EXEC with nothing left to execute, and the runner buys sessions for it (issue #55).
+mut_GATE_EXEC_backtick_kept() {
+  sed -i '/^checkpoint_rows() {/,/^}/ { /^      gsub(\/`\/, "", f\[6\])$/d }' "$1"
+}
+
+# The not-a-SHA branch of gate_EXEC goes: `commit abc1234` falls through to `git cat-file` and is
+# told it "does not exist", which sends the reader after a lost commit instead of at the cell.
+mut_GATE_EXEC_not_a_sha_silent() {
+  sed -i '/^gate_EXEC() {/,/^}/ s@^        if ! \[\[ "\$commit" =~ .*\]\]; then$@        if false; then@' "$1"
+}
+
+# cmd_run stops writing the PHASE line: the journal goes back to saying only `rc=0` once the
+# session ends, which reads as success over a session that had nothing to do (issue #56).
+mut_RUN_phase_reason_unlogged() {
+  sed -i '/^cmd_run() {/,/^}/ s@^        pipeline_log_line .*  PHASE  \$phase  reason=.*$@        :@' "$1"
+}
+
+# cmd_run goes back to deriving through a command substitution. The reason dies with the subshell
+# (the PHASE line carries `reason=""`) and so does the run_check_cmd memo, so the parent's own
+# gate_EXEC runs TEST_CMD again over the same epoch.
+mut_RUN_derive_in_subshell() {
+  sed -i '/^cmd_run() {/,/^}/ { /^      derive_phase$/d; s@^      phase="\$CURRENT_PHASE"$@      phase="$(current_phase)"@ }' "$1"
+}
+
+# The boot prompt stops saying why the phase was opened. The session is back to looking for "the
+# first pending" with no reason in hand, which is how the no-op commit of issue #54 was born.
+mut_BOOT_reason_dropped() {
+  sed -i '/^boot_prompt() {/,/^}/ { /^\$why_line$/d }' "$1"
+}
+
+# Door 1 of no-work goes: cmd_run derives EXEC over an unreadable cell and buys the session, whose
+# no-op commit moves HEAD and buys the next — the incident of issues #54/#55, to the budget ceiling.
+mut_RUN_no_work_door1_blind() {
+  sed -i '/^cmd_run() {/,/^}/ s@^      if no_work_escalation "\$phase"; then return 3; fi$@      :@' "$1"
+}
+
+# Door 3 of no-work goes: `sdd retry` writes its intervention note and opens a fresh session over a
+# checkpoint cell no session can read.
+mut_RETRY_no_work_blind() {
+  sed -i '/^cmd_retry() {/,/^}/ s@^  if no_work_escalation "\$phase"; then return 3; fi$@  :@' "$1"
+}
+
+# gate_EXEC stops arming the cell marker: every refusal still happens with its own reason, but the
+# no-work guard, which reads the MARKER and never the text, is blind at every door.
+mut_EXEC_cell_marker_never_armed() {
+  sed -i '/^gate_EXEC() {/,/^}/ s@GATE_EXEC_CELL=1@GATE_EXEC_CELL=0@g' "$1"
+}
+
+# Form (a) of no-work never matches: a no-op commit moves HEAD, the lap is bought again with the
+# same reason, and the loop runs until the phase ceiling — the incident's pending-row variant.
+mut_RUN_no_work_same_reason_blind() {
+  sed -i '/^no_work_check() {/,/^}/ s@\[ "\$prev" = "\$GATE_WHY" \]@[ "$prev" = "#never" ]@' "$1"
+}
+
+# Door 2 of no-work goes: `sdd run --phase EXEC` over an unreadable cell buys the inline retry after
+# a first session that moved nothing, and the pair ends as no-progress two sessions later.
+mut_RUN_no_work_door2_blind() {
+  sed -i '/^cmd_run() {/,/^}/ s@^    if no_work_escalation "\$phase"; then return 3; fi$@    :@' "$1"
+}
+
+# Form (a) keyed on the phase instead of the step — the key the human rejected on 2026-09-22: QA
+# with an interface says "missing 30-handoff-qa.md" after QA:plan and QA:exec alike, so every
+# healthy QA stops as no-work before its walk.
+mut_RUN_no_work_keyed_on_phase() {
+  sed -i '/^cmd_run() {/,/^}/ s@^      step="\$(phase_step "\$phase")"$@      step="$phase"@' "$1"
+}
+
+# Form (a) reads the lap after a session cut by its budget: a session that committed half an
+# increment and hit `error_max_budget_usd` makes the next lap "the same reason twice", and the line
+# stops as no-work over a run that was progressing.
+mut_RUN_no_work_after_budget_cut() {
+  sed -i '/^cmd_run() {/,/^}/ s@ \&\& \[ "\$SESSION_BUDGET_CUT" != "1" \]@@' "$1"
+}
+
 mut_EXEC_ignores_TEST_CMD() { # discards the suite's rc — the gate stops measuring TEST_CMD
   sed -i 's|.*run_check_cmd "\$TEST_CMD" "gate-exec-test".*|  if false; then|' "$1"
 }
@@ -3921,6 +3997,18 @@ CATALOG=(
   EXEC_escaped_pipe_blind
   EXEC_alignment_colon_blind
   EXEC_dirty_tree_as_red
+  GATE_EXEC_backtick_kept
+  GATE_EXEC_not_a_sha_silent
+  RUN_phase_reason_unlogged
+  RUN_derive_in_subshell
+  BOOT_reason_dropped
+  RUN_no_work_door1_blind
+  RETRY_no_work_blind
+  EXEC_cell_marker_never_armed
+  RUN_no_work_same_reason_blind
+  RUN_no_work_door2_blind
+  RUN_no_work_keyed_on_phase
+  RUN_no_work_after_budget_cut
   REVIEW_alignment_colon_blind
   DOCS_alignment_colon_blind
   QA_status_line_start

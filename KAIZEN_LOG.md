@@ -4,6 +4,42 @@ Registro de melhorias com **antes/depois medido**. Sem número, não entra.
 
 ---
 
+## 2026-09-22 — O motivo da fase: o runner diz por que abriu a sessão, e para quando ela não tem trabalho
+
+**Problema (Gemba):** na `20260921-amep-backend-0-1-0` (`lighthouse_project`, kit em `ea39868`)
+uma célula de commit veio com crase (`` `19c2c89` ``) entre 27 nuas. O `checkpoint_rows` aparava
+espaço e não crase, o `gate_EXEC` respondia "does not exist", a fase derivada ficava em EXEC, o
+motivo morria no `$(current_phase)`, e o executor abria sem nenhuma linha `pending` e sem saber
+por quê — fazia commit no-op, o HEAD andava, `moved=true` comprava a volta seguinte. Duas sessões
+(US$ 0,978 + US$ 0,964 = **US$ 1,94**) até um humano matar a terceira; sem ele, só o
+`BUDGET_MISSION_USD` parava. Issues #54, #55 e #56.
+
+**Contramedida:** poka-yoke primeiro — a crase sai da célula Commit no único leitor; célula sem
+forma de SHA ganha motivo próprio e o marcador `GATE_EXEC_CELL`; `derive_phase` chamada publica
+fase e motivo (journal `PHASE <X> reason="…"`, boot `Why this phase:`); `kind: "no-work"` para a
+linha **antes** da sessão em três portas. Depois o texto: executor (zero `pending` e hash nu),
+template, `docs/pipeline.md`, ADR 0010.
+
+**Antes → depois, medido:**
+
+| Métrica | Antes | Depois |
+|---|---|---|
+| Sessões EXEC compradas por uma célula com crase (replay no fixture) | ≥ 2 pagas, sem teto até `BUDGET_MISSION_USD` (fixture: **4** + `budget-exhausted`) | **0** — a crase é lida como o SHA e a fase derivada avança |
+| Sessões abertas sobre célula com SHA inexistente | laço até o teto de fase (fixture: **4**) | **0**, rc 3 `no-work` |
+| Linhas `PHASE <X> reason=` no journal por fase derivada | 0 | **1** |
+| Boot que diz por que a fase foi aberta | nenhuma fase | **toda fase de missão** (uma linha no `boot_prompt`; o KAIZEN retorna antes dela — não tem fase derivada) |
+| Execuções de `TEST_CMD` numa volta derivada × forçada (mesmo mundo) | 3 × 2 | **2 × 2** |
+| Portas `no-work` (`grep -cE '^ +if no_work_escalation "\$phase"; then' bin/sdd`) | 0 | **3** |
+| Catálogo de mutação (definidos, `grep -cE '^mut_[A-Za-z0-9_]+\(\) \{'`) | 346 | **357** (11 novos) |
+
+**Achado no caminho:** a chave (fase, motivo) do plano para a forma (a) parava **todo QA com
+interface** depois de `QA:plan` — o `gate_QA` diz `missing 30-handoff-qa.md` depois do plano e da
+caminhada. Achado pelo primeiro probe, levado ao humano (Jidoka do plano), chave trocada para
+(passo, motivo). E a exclusão "motivo que cita log" hoje é inalcançável (todo log é `mktemp` por
+execução) — declarada sem probe, não apagada.
+
+---
+
 ## 2026-09-18 — Um checkout, um dono: a recusa acontece antes do efeito
 
 **Problema (Gemba):** duas invocações simultâneas de `sdd run` no mesmo checkout chegavam à

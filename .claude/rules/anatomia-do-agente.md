@@ -66,7 +66,10 @@ o `checkpoint.md` é só a tabela, e as notas moram em `checkpoint-notas.md` (ap
 o boot **inlina** as últimas `BOOT_NOTES_TAIL=10` (`boot_notes_tail`) e manda não abrir o arquivo;
 **nomeia** o handoff mais recente (`mission_latest_handoff`, sobre a mesma `latest_matching` do gate
 de REVIEW) e inlina só `## TL;DR` + a seção de boot (`handoff_boot_sections`); nomeia os templates
-da fase (`phase_templates`). O TL;DR tem teto de 20 linhas (`handoff_tldr_ok`), cobrado pelos gates
+da fase (`phase_templates`). Desde `20260922-o-motivo-da-fase` o boot também diz **por que** a fase
+foi aberta: a linha `Why this phase:` carrega o `GATE_WHY` que o `derive_phase` publicou (chamado,
+nunca `$( )`), ou diz `forced from the CLI` quando o runner não derivou a fase — o executor da
+`20260921-amep-backend-0-1-0` abriu sem linha `pending` e sem motivo, e fez commit no-op. O TL;DR tem teto de 20 linhas (`handoff_tldr_ok`), cobrado pelos gates
 de EXEC, QA e REVIEW — as três fases cujo chapéu **escreve** o arquivo, senão o gate giraria a
 linha. Quem mede: `sdd census` (por arquivo; `boot bill` no último handoff **e no pior ponto**),
 `sdd boot <missão> <FASE>` (o prompt, sem sessão), `cache_read` na linha do ledger e a linha
@@ -207,7 +210,10 @@ não pode sobreviver indefinidamente. A semântica geral de órfãos da execuç�
 
 **Onde mora hoje.** `aprovacao:` + `sdd approve` (gate PLAN); rc 3 em
 `handoff_blocked_escalation`, `app_down_escalation`, `increment-blocked`, `dirty-tree`,
-`no-progress`, `budget-exhausted`; `QA_MAX_ITER`/`REVIEW_MAX_ITER`; `--max-budget-usd` por
+`no-progress`, `budget-exhausted`, e desde `20260922-o-motivo-da-fase` `no_work_escalation`
+(`kind: "no-work"`) — a única que para a linha **antes** da sessão, quando a célula do checkpoint
+é ilegível ou o mesmo passo volta com o mesmo motivo; o journal ganhou a linha
+`PHASE <X> reason="…"` por fase derivada, que é o que o humano no `tail -F` lê; `QA_MAX_ITER`/`REVIEW_MAX_ITER`; `--max-budget-usd` por
 fase (`phase_budget_usd`); merge do PR é humano; `sdd close`. Desde a auditoria: teto por missão
 (`BUDGET_MISSION_USD`, com zero numérico desabilitando e todo valor positivo sendo aplicado),
 `ON_ESCALATION_CMD` em todo rc 3 depois da tentativa de escrita durável, limitado a cinco segundos

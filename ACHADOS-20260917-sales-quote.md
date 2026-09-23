@@ -39,7 +39,7 @@ estou"* e o kit responde **errado** ou **caro**.
 | 7 | Teto não conhece missão reaberta | roteado ao `TODO.md` | `1fb120b` |
 | 8 | Background frágil; foreground sobrevive | **RESOLVIDO** — verbete em `docs/failure-modes.md` | `826b6b3` |
 | 9 | CLOSE paga sessão que não pode concluir | **RESOLVIDO** — o prompt carrega a autorização | `a8526ad` |
-| 10 | As skills de QA não conhecem `Closable by:` | **RESOLVIDO** — o `sdd install --force` semeia o campo no template | `f7bcf10` |
+| 10 | As skills de QA não conhecem `Closable by:` | **PARCIAL** — o `sdd install --force` semeia o campo no template; as skills seguem sem o conhecer, roteado ao `TODO.md` | `f7bcf10` |
 | obs | `Test Coverage = A` não implica caso negativo | roteado ao `TODO.md` | `1fb120b` |
 
 **Verificação da missão que fechou os quatro:** `tests/run-all.sh` verde (1163 asserções);
@@ -489,11 +489,17 @@ digitar o comando.
 
 ### 10. Nenhuma das skills de QA conhece o campo `Closable by:`
 
-  RESOLVIDO por `f7bcf10`: o `sdd install --force` semeia a linha em `$QA_DOCS_PATH/templates/bug.md`
-  (o `sdd install` sem a flag só RELATA o campo faltando, sem tocar no arquivo),
-  imediatamente abaixo do `Status:`, idempotente e recusando um template fora da forma da skill; o
-  `sdd preflight` fica vermelho com o remédio enquanto faltar. As skills seguem sem conhecer o
-  campo — o kit o põe no template de que elas copiam, que é o ponto de extensão que existe.
+  PARCIAL — `f7bcf10` fechou a metade que é do KIT: o `sdd install --force` semeia a linha em
+  `$QA_DOCS_PATH/templates/bug.md` (o `sdd install` sem a flag só RELATA o campo faltando, sem
+  tocar no arquivo), imediatamente abaixo do `Status:`, idempotente e recusando um template fora
+  da forma da skill; o `sdd preflight` fica vermelho com o remédio enquanto faltar.
+
+  ⚠️ **O achado, porém, é sobre as SKILLS, e essa metade continua aberta:** elas seguem sem
+  conhecer o campo. O kit o põe no template de que elas copiam, que é o ponto de extensão que
+  existe — um estreitamento do raio, não o fechamento do item. Marcá-lo `RESOLVIDO` era rótulo
+  contra artefato (princípio 1), e teria custado o item: por `CLAUDE.md`, `RESOLVIDO por <hash>`
+  é apagado do `TODO.md` quando a PR que cita a evidência é mergeada, então a lacuna das skills
+  sairia do backlog sem nunca ter sido fechada.
 
 > **Achado NOVO**, não estava na lista de 2026-09-17. Nasceu no gemba do planejamento de
 > 2026-09-18, ao medir o custo real de atacar os itens #2 e #3.

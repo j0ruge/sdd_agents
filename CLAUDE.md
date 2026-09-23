@@ -88,18 +88,18 @@ precisa correr **depois** de `moved2` ser amostrado, e uma guarda dentro do `run
 dentro da janela. O preço é que a quinta porta nasce desguardada; ele é pago com um probe por
 porta (`tests/check-autonomy.sh`, regimes 1, 4, 5 e 7), então porta acrescentada sem probe é porta
 cuja remoção nenhuma asserção percebe.
-⚠️ **A forma tem hoje QUATRO instâncias deliberadas, e a frase acima ("este arquivo a recusa em toda
+⚠️ **A forma tem hoje SEIS instâncias deliberadas, e a frase acima ("este arquivo a recusa em toda
 outra família") vale para as outras, não para estas.** O censo sai do comando, nunca desta linha —
 é a mesma régua do `44 caught of 44`, conte a propriedade e não a palavra:
 
 ```bash
-grep -cE '^[a-z_]+_escalation\(\) \{'                 bin/sdd   # definições de escalada → 3
-grep -cE '^ +if [a-z_]+_escalation "\$phase"; then'   bin/sdd   # portas delas           → 8
+grep -cE '^[a-z_]+_escalation\(\) \{'                 bin/sdd   # definições de escalada → 5
+grep -cE '^ +if [a-z_]+_escalation "\$phase"; then'   bin/sdd   # portas delas           → 13
 grep -cE '^ *kit_guard_check "'                       bin/sdd   # portas da guarda de kit → 4
 ```
 
-⚠️ O `-E` com âncora não é capricho: `grep -F 'escalation "$phase"'` responde **5**, porque conta a
-linha de comentário que exibe a grafia. A conta é sempre a mesma, **um probe por porta**, e porta
+⚠️ O `-E` com âncora não é capricho: `grep -F 'escalation "$phase"'` responde **15**, porque conta as
+linhas de comentário que exibem a grafia. A conta é sempre a mesma, **um probe por porta**, e porta
 acrescentada sem probe é porta cuja remoção nenhuma asserção percebe.
 
 - `handoff_blocked_escalation`, desde `20260826-o-laco-da-qa`: UMA definição com DUAS portas no
@@ -120,6 +120,12 @@ acrescentada sem probe é porta cuja remoção nenhuma asserção percebe.
   todas lidas **depois** da linha de sessão do ledger. Cada marcador tem um setter só, que o zera
   na entrada; um probe por porta em `check-autonomy.sh` e um mutante por porta no catálogo. É o
   quarto marcador, e ele **re-derivou** o contrato em vez de herdá-lo.
+- `session_died_escalation`, desde `20260918-a-sessao-morreu-e-o-gate-levou-a-culpa`: marcador
+  (`SESSION_DIED_WHY`) armado pelo **próprio `run_phase`**, não por um gate; as duas portas do laço
+  do `cmd_run`, primeiras de cada uma.
+- `no_work_escalation`, desde `20260922-o-motivo-da-fase` (ADR 0010): a única que para a linha
+  **antes** da sessão; marcador `NO_WORK_WHY`, setter único `no_work_check`; TRÊS portas — a
+  primeira passada do `cmd_run` (só volta derivada), o retry inline e `cmd_retry`.
 
 A projeção (`--dry-run`) **não arma nada** em nenhuma das duas: `sdd run --dry-run` não abre sessão
 a que atribuir mudança, e armar mesmo assim fazia a projeção herdar o aviso de ledger do
