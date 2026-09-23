@@ -1,9 +1,9 @@
 ---
-missao: <YYYYMMDD>-<slug>
-atualizado: <YYYY-MM-DD HH:MM>
+missao: 20260922-o-motivo-da-fase
+atualizado: 2026-09-22 18:06
 ---
 
-# Checkpoint — <título da missão>
+# Checkpoint — o motivo da fase
 
 > **Este arquivo é lido por máquina.** O runner faz parse da tabela abaixo para decidir a
 > próxima fase. Não mude as colunas, não mude os tokens de status, não quebre linhas dentro de
@@ -18,12 +18,6 @@ atualizado: <YYYY-MM-DD HH:MM>
 > `` o=$(cmd 2>&1); grep -c 'x' <<< "$o" ``, e o `tests/check-checkpoint.sh` recusa as duas formas
 > nos checkpoints deste repo.
 >
-> ⚠️ **A célula Commit leva o hash curto NU, sem crase.** `` `abc1234` `` renderiza igual ao hash
-> nu, mas é a célula que o runner lê: o `checkpoint_rows` hoje tira a crase dessa coluna, e uma
-> célula que não tem forma de SHA reprova o `gate_EXEC` com motivo próprio e para a linha como
-> `no-work` antes de abrir sessão. Custou duas sessões EXEC sem trabalho em
-> `20260921-amep-backend-0-1-0`.
->
 > ⚠️ **Check que lê a saída de um sensor ancora em `^  ok    ` — quatro espaços, com o `^`.**
 > Todo sensor da suíte imprime `  ok    <asserção>` na **stdout** e `  FAIL  <asserção>` na
 > **stderr**, com o *mesmo* `<asserção>`. Um Check que faz `2>&1` e grepa o texto solto devolve o
@@ -37,8 +31,14 @@ atualizado: <YYYY-MM-DD HH:MM>
 
 | ID | Incremento | Check (comando → esperado) | Status | Commit |
 |---|---|---|---|---|
-| I1 | <título curto> | `<comando>` → `<esperado>` | pending | — |
-| I2 | <título curto> | `<comando>` → `<esperado>` | pending | — |
+| I1 | crase na célula de commit é lida como o SHA (#55) | `o=$(bash tests/check-gates.sh 2>&1); grep -c '^  ok    a backticked commit cell is read as the SHA it carries' <<< "$o"` → `1` | done | 74e294c |
+| I2 | célula que não é SHA ganha motivo próprio + marcador GATE_EXEC_CELL | `o=$(bash tests/check-gates.sh 2>&1); grep -c '^  ok    a commit cell that is not a SHA gets its own reason' <<< "$o"` → `1` | done | f35189f |
+| I3 | derive_phase publica fase e motivo; linha PHASE no journal; contador do TEST_CMD (#56) | `o=$(bash tests/check-autonomy.sh 2>&1); grep -c '^  ok    every derived phase writes its reason to the journal' <<< "$o"` → `1` | done | 3245bfd |
+| I4 | boot_prompt diz por que a fase foi aberta (toda fase) | `o=$(bash tests/check-autonomy.sh 2>&1); grep -c '^  ok    the boot prompt carries the phase reason' <<< "$o"` → `1` | done | bb2a9f7 |
+| I5 | kind no-work: célula ilegível para a linha antes da sessão (portas 1 e 3) + contrato do kind | `o=$(bash tests/check-autonomy.sh 2>&1); grep -c '^  ok    door 1: an unreadable cell stops the line before any session' <<< "$o"` → `1` | done | d767689 |
+| I6 | mesmo motivo duas vezes para a linha (forma a) + porta 2 no retry inline | `o=$(bash tests/check-autonomy.sh 2>&1); grep -c '^  ok    door 1: the same reason twice stops the line as no-work' <<< "$o"` → `1` | done | 7295ef4 |
+| I7 | executor e template: célula nua e caso zero pending; install --force | `grep -c 'no-op commit' agents/sdd-executor.md; cmp -s agents/sdd-executor.md .claude/agents/sdd-executor.md && echo espelho-ok` → `1` (ou mais) e `espelho-ok` | done | e25a20c |
+| I8 | replay do incidente + anatomia, CONTEXT D27, KAIZEN_LOG | `o=$(bash tests/check-autonomy.sh 2>&1); grep -c '^  ok    incident replay: a missing commit ends rc 3 no-work with zero sessions' <<< "$o"` → `1` | done | 7ad9e2d |
 
 > **As notas de execução não moram aqui.** Elas ficam em `checkpoint-notas.md`, ao lado deste
 > arquivo, append-only, e o prompt de boot inlina as últimas 10 — a sessão nunca abre aquele

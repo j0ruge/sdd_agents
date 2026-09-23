@@ -33,6 +33,20 @@ Re-exploring what has already been verified is the waste this pipeline exists to
 
 The **first** one with `Status: pending` in the `checkpoint.md` table, top to bottom. Exactly one.
 
+**No row is `pending`?** Then the runner opened this session for another reason, and the boot
+prompt says which in its `Why this phase:` line — the gate's own sentence. Act on it:
+
+- it names the **suite** (`TEST_CMD failed … see <log>`) or the **missing handoff** — fix that; it
+  is the work of this session;
+- it names a **checkpoint cell** (a Commit that is not a SHA, does not exist or is outside the
+  history, a status outside the enum) — fix it only if the fix is **reformatting** (backticks or
+  spaces around the hash). Anything else is an increment marked `blocked`, with the reason in the
+  execution notes: a commit that went missing is a human's call, never a session's guess;
+- **never a no-op commit.** A commit that changes nothing the gate reads moves the disk, and the
+  runner used to read that as progress and buy the next session — the incident of
+  `20260921-amep-backend-0-1-0`. Today it stops the line as `no-work`; either way the commit is
+  waste.
+
 **The ID prefix tells you where the detail lives**, and only that — the work is the same:
 
 - `I<n>` — a slice of the plan; the *why* is in `01-plano.md § Incrementos`;
@@ -106,7 +120,8 @@ Drifting off scope is the expensive mistake here. Recording costs one line.
 After the commit, never before. On the increment's row:
 
 - `Status` → `done`
-- `Commit` → the short hash of the commit
+- `Commit` → the bare short hash of the commit, no backticks: the runner reads the cell, and
+  fencing it renders identically for a human while making the SHA unreadable to the gate
 
 Plus a line in the execution notes if something deserved recording (a decision taken, a justified
 departure from the plan, a surprise). They live in `docs/handoffs/<mission>/checkpoint-notas.md` (APPEND one line with `>>` — never rewrite the file, never read it whole) — the boot prompt inlined the last ten of

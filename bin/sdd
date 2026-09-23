@@ -455,6 +455,14 @@ checkpoint_rows() {
       }
       if (n < 6) next
       for (i = 2; i <= 6; i++) { gsub(/^[ \t]+|[ \t]+$/, "", f[i]) }
+      # The Commit cell only: a hash fenced in backticks renders exactly like the bare one, so the
+      # human reading the table sees a SHA and the gate saw "`abc1234`", which does not exist —
+      # the phase stayed EXEC with nothing to execute (issue #55). The Check cell keeps its
+      # backticks: they are legitimate there, and check-checkpoint.sh reads them.
+      gsub(/`/, "", f[6])
+      # Trimmed again: `` ` abc1234 ` `` renders like the bare hash too (CommonMark drops the
+      # padding inside a code span), and the trim above ran before the backticks came off.
+      gsub(/^[ \t]+|[ \t]+$/, "", f[6])
       # `:?-+:?` and not `-+`: GFM spells column alignment with colons on the separator row, and
       # prettier and markdownlint WRITE them (`|:---|:---:|`). Matched against the bare dashes only,
       # the separator stopped being skipped and became a row whose Status is `:---:` — outside the
@@ -911,11 +919,27 @@ GATE_APP_DOWN=0
 # is built with these still set. The readers guard on the phase; see the call sites. (Measured
 # 2026-08-30: through `$(current_phase)` both come back empty, called directly they come back set.
 # The guard is required either way; only the mechanism named here was wrong.)
+# Since 20260922-o-motivo-da-fase cmd_run and cmd_retry derive with derive_phase, in the parent
+# shell, so the derivation itself is now a third live vector — the phase guard at the readers is
+# what keeps it harmless, exactly as for the other two.
 GATE_EXEC_PENDING=""
 GATE_EXEC_TOTAL=""
 
+# 1 when gate_EXEC refused because a checkpoint CELL is unreadable — a `done` with no commit, a
+# Commit cell that is not a SHA, a SHA that does not exist or is outside HEAD's history, a status
+# outside the enum. It is the data no_work_check reads for its form (b): a session opened over one
+# of these has nothing to execute, and in 20260921-amep-backend-0-1-0 each one made a no-op commit
+# that moved the disk and bought the next lap (issues #54/#55). Classified by the MARKER, never by
+# the text of GATE_WHY — a reworded message must not move a reason from one class to the other.
+#
+# CONTRACT: reset at the ENTRY of gate_EXEC, its only setter, like GATE_EXEC_DIRTY; armed at each
+# cell site immediately before its `return 1`. Read in the parent shell only (derive_phase and the
+# direct gate calls of cmd_run/cmd_retry) — through `$(current_phase)` it dies with the subshell.
+GATE_EXEC_CELL=0
+
 gate_EXEC() {
   GATE_EXEC_DIRTY=0
+  GATE_EXEC_CELL=0
   # Emptied on ENTRY, the same reset GATE_EXEC_DIRTY and GATE_APP_DOWN get one screen up and for
   # the same reason: a gate that refuses below must not hand its caller the numbers of the gate
   # before it.
@@ -936,9 +960,20 @@ gate_EXEC() {
     case "$status" in
       done)
         if [ -z "$commit" ] || [ "$commit" = "—" ] || [ "$commit" = "-" ]; then
+          GATE_EXEC_CELL=1
           GATE_WHY="increment $id is 'done' with no commit — a label is not an artifact"; return 1
         fi
+        # Shape before existence: `commit abc1234` told "does not exist" sends the reader after a
+        # lost commit when the defect is the cell. Backticks never reach here (checkpoint_rows
+        # strips them from this column); anything else that is not 7–64 hex digits is the writer's.
+        # 64, not 40: a repository created with `--object-format=sha256` writes 64-digit commit
+        # ids, which cat-file and merge-base below accept.
+        if ! [[ "$commit" =~ ^[0-9a-fA-F]{7,64}$ ]]; then
+          GATE_EXEC_CELL=1
+          GATE_WHY="increment $id: the Commit cell '$commit' is not a SHA — write the bare short hash, no backticks or words"; return 1
+        fi
         if ! ( cd "$REPO_ROOT" && git cat-file -e "${commit}^{commit}" 2>/dev/null ); then
+          GATE_EXEC_CELL=1
           GATE_WHY="increment $id points at commit '$commit', which does not exist in the repository"; return 1
         fi
         # `cat-file -e` only says the OBJECT exists in the database — not that it is in the
@@ -948,6 +983,7 @@ gate_EXEC() {
         # prevent, inside the gate itself. Measured by sdd-qa in mission
         # 20260814-dry-run-completo, with a real amend.
         if ! ( cd "$REPO_ROOT" && git merge-base --is-ancestor "$commit" HEAD 2>/dev/null ); then
+          GATE_EXEC_CELL=1
           GATE_WHY="increment $id points at commit '$commit', which exists but is NOT in the history of HEAD (amend/rebase/reset?) — the gate demands a reachable artifact, not a loose object"
           return 1
         fi
@@ -955,7 +991,8 @@ gate_EXEC() {
       # Valid and nothing to check — the arm exists so the enum stays exhaustive and the `*)` below
       # keeps meaning "not one of the four". Counting them is checkpoint_tally's job, below.
       pending|doing|blocked) ;;
-      *) GATE_WHY="increment $id has invalid status '$status' (use pending|doing|done|blocked)"; return 1 ;;
+      *) GATE_EXEC_CELL=1
+         GATE_WHY="increment $id has invalid status '$status' (use pending|doing|done|blocked)"; return 1 ;;
     esac
   done <<< "$rows"
 
@@ -1063,7 +1100,11 @@ gate_QA() {
     fi
     # Anchor 2: no row of the matrix may still read Pending.
     if grep -qE '\|[[:space:]]*Pending[[:space:]]*\|' "$report"; then
-      GATE_WHY="report $(basename "$report") still has 'Pending' row(s) in the matrix"; return 1
+      # Counted for the reason gate_DOCS counts: a walk that settles some rows must change the
+      # sentence, or no-work's form (a) reads the next lap as "nothing changed".
+      local pending_rows
+      pending_rows="$(grep -cE '\|[[:space:]]*Pending[[:space:]]*\|' "$report" || true)"
+      GATE_WHY="report $(basename "$report") still has $pending_rows 'Pending' row(s) in the matrix"; return 1
     fi
   fi
   # Anchor 3: registry with no open bug an AGENT could close. 'wont-fix'/'invalid' are human calls
@@ -1473,12 +1514,19 @@ gate_DOCS() {
         # nothing pending in it. Same regex in checkpoint_rows and gate_REVIEW.
         if (cell ~ /^:?-+:?$/ || cell == "") next
         if (cell == "✅" || cell == "n/a" || cell == "N/A") next
-        print cell; exit
+        print cell
       }
       col && !/^[ \t]*\|/ { exit }   # the table ended
     ' "$d")"
   if [ -n "$pending_cell" ]; then
-    GATE_WHY="45-docs.md has an area with Status '$pending_cell' in the drift checklist — every row needs ✅ (with a hash) or a justified n/a"
+    # Every pending row is printed and COUNTED, and the count goes into the reason: no-work's form
+    # (a) compares reasons word for word, and a session that fixed one of two ✗ rows used to leave
+    # the sentence as it was — the next DOCS lap stopped as no-work with the work moving (Codex on
+    # PR #57). A reason over a countable set carries the count.
+    local pending_n
+    pending_n="$(wc -l <<< "$pending_cell")"
+    pending_cell="${pending_cell%%$'\n'*}"
+    GATE_WHY="45-docs.md has $pending_n area(s) pending in the drift checklist (the first with Status '$pending_cell') — every row needs ✅ (with a hash) or a justified n/a"
     return 1
   fi
   GATE_WHY="drift checklist complete"
@@ -1635,13 +1683,31 @@ gate_PR() {
 
 readonly PHASES="PLAN TICKET EXEC QA REVIEW DOCS PR"
 
-# First phase whose gate is not satisfied. Empty ⇒ mission complete.
-current_phase() {
+# First phase whose gate is not satisfied, PUBLISHED: CURRENT_PHASE (empty ⇒ mission complete) and
+# CURRENT_PHASE_WHY, the GATE_WHY of the gate that refused — the reason the runner is about to open
+# that phase. CALLED, never `$( )`: read through a substitution, the reason died with the subshell,
+# the journal said only `rc=0`, and the session was opened without knowing why (issue #56). The
+# gates run in THIS shell, so the run_check_cmd memo and every gate marker (GATE_EXEC_CELL among
+# them) outlive the call — through `$(current_phase)` the memo scored zero hits in a whole `sdd run`
+# and the parent's own gate_EXEC ran TEST_CMD again over the same epoch. The sensor is "deriving
+# the phase runs TEST_CMD exactly as often as forcing it" in tests/check-autonomy.sh.
+CURRENT_PHASE=""
+CURRENT_PHASE_WHY=""
+derive_phase() {
   local ph
+  CURRENT_PHASE=""
+  CURRENT_PHASE_WHY=""
   for ph in $PHASES; do
-    if ! "gate_$ph"; then printf '%s\n' "$ph"; return 0; fi
+    if ! "gate_$ph"; then CURRENT_PHASE="$ph"; CURRENT_PHASE_WHY="$GATE_WHY"; return 0; fi
   done
-  printf '%s\n' ""
+  return 0
+}
+
+# The same derivation, printed — for the readers that only want the name (cmd_status, cmd_phase,
+# cmd_why). One definition: this is derive_phase, not a second walk over $PHASES.
+current_phase() {
+  derive_phase
+  printf '%s\n' "$CURRENT_PHASE"
 }
 
 # First phase AFTER <phase> whose gate is not satisfied. Empty ⇒ the list ended.
@@ -2183,6 +2249,18 @@ session ending the turn ends the session, and \"I will resume when it finishes\"
 Wait for it, read its result, then write the artifacts and commit."
   slash="$(phase_slash "$step")"
   agent="$(phase_agent "$step")"
+  # Why the session was opened — decision 1 of 20260922-o-motivo-da-fase, ONE line for every phase.
+  # The executor of 20260921-amep-backend-0-1-0 was opened with no pending row and no reason, looked
+  # for "the first pending", found none, and made a no-op commit that bought the next lap. The
+  # reason is the one derive_phase published; `${step%%:*}` because QA boots per sub-step. A phase
+  # the runner did not derive (`--phase`, `sdd boot` of another phase, the draft jump to PR) says
+  # so instead of borrowing the reason of a phase it is not.
+  local why_line
+  if [ -n "$CURRENT_PHASE" ] && [ "$CURRENT_PHASE" = "${step%%:*}" ] && [ -n "$CURRENT_PHASE_WHY" ]; then
+    why_line="Why this phase: $CURRENT_PHASE_WHY"
+  else
+    why_line="Why this phase: forced from the CLI — the runner did not derive it"
+  fi
   # The kit is English; the ARTIFACT speaks whatever language the target repo declared. Empty ⇒
   # nothing is said, and the prompt stays byte for byte what it was before this key existed.
   if [ -n "$OUTPUT_LANG" ]; then
@@ -2257,6 +2335,7 @@ before. Read, in this order, before anything else:
   6. $item6
 $handoff_block$notes_block$lang_line
 Your task in this session: $(phase_task "$step").
+$why_line
 $(phase_extra "$step")
 $turn_rule
 
@@ -3528,6 +3607,9 @@ run_phase() {
   # F2 the handoff-blocked sibling actually paid for — and a rule that survives by being
   # unreachable today keeps its missing probe written down instead of being deleted on a claim.
   SESSION_DIED_WHY=""
+  # Same contract, same place, for the sibling marker below: zeroed on entry, set only by this
+  # function, so it says whether the session JUST run was cut and nothing older.
+  SESSION_BUDGET_CUT=""
   local pstep model agent sid prompt logfile streamfile started ended cost turns cache_read
   # QA is three sessions (plan, walk, close); the step comes from the artifacts, not a counter.
   pstep="$(phase_step "$phase")"
@@ -3700,6 +3782,12 @@ missing and write the artifacts. The gate will be re-evaluated."
                     and ((.result // "") != "")
                  then .result else "" end' "$logfile" 2>/dev/null || echo "")"
   SESSION_DIED_WHY="${died:0:200}"
+  # The other named regime of the three above: the session hit its per-session budget. It is the
+  # kit's DESIGNED loop and stops nothing — but a session cut there may have committed half an
+  # increment without reaching the row, so no-work's form (a) must not read the lap after it as
+  # "nothing to do" (final review of 20260922-o-motivo-da-fase; decided by the human). POSITIVE
+  # rule, one subtype named, for the reason the paragraph above gives.
+  SESSION_BUDGET_CUT="$(jq -r 'if .subtype == "error_max_budget_usd" then "1" else "" end' "$logfile" 2>/dev/null || echo "")"
   local dur=$((ended - started))
   pipeline_log_line "$(date -Iseconds)  $phase  agent=$agent  model=$model  session=${resume_sid:-$sid}  rc=$rc  dur=${dur}s  cost_usd=$cost  log=$logfile"
 
@@ -3747,6 +3835,7 @@ LAST_PHASE_AGENT=""
 LAST_PHASE_MODEL=""
 LAST_PHASE_DIED=""
 SESSION_DIED_WHY=""
+SESSION_BUDGET_CUT=""
 
 # Fingerprint of the mission state. It answers "did this session do ANYTHING?" when the gate has
 # not passed yet — the normal case for the EXEC phase, which runs one increment at a time.
@@ -6545,15 +6634,39 @@ cmd_run() {
   # ledger would carry one row for two events.
   local adr_degraded_logged=0
   local dry_next=""   # dry-run projection cursor (distinct from --phase, which prints just one)
+  local derived=0     # 1 on a lap whose phase came from derive_phase — the only one no-work reads
+  # The previous DERIVED lap's step and reason, for no-work's form (a). Written on derived laps,
+  # cleared on forced ones (see the top of the loop).
+  local prev_step="" prev_why=""
 
   while :; do
-    if [ -n "$dry_next" ]; then phase="$dry_next"
-    elif [ -n "$force_phase" ]; then phase="$force_phase"
+    # The two branches that do not derive also clear the derivation: a reason left over from an
+    # earlier lap must not reach the boot of a phase the runner is now FORCING.
+    derived=0
+    # A forced lap also breaks "twice IN A ROW" for no-work's form (a): it ran a session of another
+    # phase in between, so the next derived lap has no previous reason to be compared with.
+    # ⚠️ NO PROBE, DECLARED: the one forced lap followed by a derived lap in today's flow is the
+    # draft jump, and the REVIEW lap after it meets the ceiling before it reaches door 1 — so
+    # dropping this reset turns nothing red. The world I could not build is a forced lap whose next
+    # derived lap reaches the door with the same step as the lap before the forced one.
+    if [ -n "$dry_next" ]; then phase="$dry_next"; CURRENT_PHASE=""; CURRENT_PHASE_WHY=""; prev_step=""; prev_why=""
+    elif [ -n "$force_phase" ]; then phase="$force_phase"; CURRENT_PHASE=""; CURRENT_PHASE_WHY=""; prev_step=""; prev_why=""
     # The DERIVED branch alone, and that is the whole licence gate_pass_rows has to speak: this
     # `current_phase()` call is what proves every earlier phase's gate passed. `--phase X` and the
     # dry-run cursor never consult the derivation, so under either of them the runner knows nothing
-    # about the other phases and says nothing about them. Called, never `$( )` — see the function.
-    else phase="$(current_phase)"; gate_pass_rows "$phase"; fi
+    # about the other phases and says nothing about them. Called, never `$( )` — see derive_phase.
+    else
+      derive_phase
+      derived=1
+      phase="$CURRENT_PHASE"
+      gate_pass_rows "$phase"
+      # The reason, where the human watching `tail -F` reads it, BEFORE a session is paid for. The
+      # journal used to say only `rc=0` once the session ended, which reads as success over a
+      # session that had nothing to do (issue #56).
+      if [ -n "$phase" ]; then
+        pipeline_log_line "$(date -Iseconds)  PHASE  $phase  reason=\"$CURRENT_PHASE_WHY\""
+      fi
+    fi
 
     if [ -z "$phase" ]; then
       info ""
@@ -6746,6 +6859,34 @@ cmd_run() {
       return 3
     fi
 
+    # DOOR 1 of no-work, on the DERIVED branch only — under `--phase` and the dry-run cursor there
+    # is no derived reason to read. It is the last refusal before the session is bought, and BELOW
+    # the Jidoka pre-checks and the ceilings on purpose: those are designed stops (and one designed
+    # degradation, the draft PR), each with its own kind and remedy, and no-work is the catch for
+    # the loop that runs under all of them. Placed above them, form (a) pre-empted `review-to-draft`
+    # on the first probe that reached it.
+    if [ "$derived" = "1" ]; then
+      # Form (a) compares the STEP, not the phase — decided by the human on 2026-09-22 when the
+      # first probe found QA: with an interface it is three sessions (plan, walk, close) derived from
+      # the artifacts, and gate_QA says "missing 30-handoff-qa.md" after the first two alike. Keyed
+      # on the phase, every healthy QA stopped as no-work after QA:plan. Everywhere else the step IS
+      # the phase.
+      local step same_prev=""
+      step="$(phase_step "$phase")"
+      # Not after a harness cut: SESSION_BUDGET_CUT is the last session this run opened — the one
+      # that ended the previous lap — and a session cut by its budget may be mid-increment.
+      if [ "$prev_step" = "$step" ] && [ "$SESSION_BUDGET_CUT" != "1" ]; then same_prev="$prev_why"; fi
+      # no_work_check compares against GATE_WHY, and prev_why was stored from CURRENT_PHASE_WHY.
+      # The Jidoka pre-checks and the ceilings above may re-run a gate between derive_phase and
+      # here, so the reason this lap was derived on is restored explicitly — the comparison must
+      # not depend on which gate happened to run last.
+      GATE_WHY="$CURRENT_PHASE_WHY"
+      no_work_check "$phase" "$same_prev"
+      if no_work_escalation "$phase"; then return 3; fi
+      prev_step="$step"
+      prev_why="$CURRENT_PHASE_WHY"
+    fi
+
     before="$(state_fingerprint)"
     # The photograph, and it has to be taken HERE: once run_phase returns, the checkpoint the
     # session just edited is the only one left on disk and "how many were pending before" is
@@ -6868,6 +7009,12 @@ cmd_run() {
       force_phase=""
       continue
     fi
+
+    # DOOR 2 of no-work, form (b) only, over the gate that just ran in this shell and BEFORE the
+    # retry is bought: a first session that moved nothing over an unreadable cell has no second
+    # session in it either. Reachable under `--phase EXEC`, where door 1 does not look.
+    no_work_check "$phase" ""
+    if no_work_escalation "$phase"; then return 3; fi
 
     warn "gate $phase failed and the session changed nothing: $GATE_WHY"
     warn "  retrying once with the gate reason in the prompt"
@@ -6992,6 +7139,85 @@ cmd_run() {
   done
 }
 
+# ---------------------------------------------------------------------------
+# no-work — the session would have nothing to do (20260922-o-motivo-da-fase, ADR 0010)
+# ---------------------------------------------------------------------------
+# The fifth escalation family, and the only one that stops the line BEFORE a session rather than
+# after one. In 20260921-amep-backend-0-1-0 the runner opened EXEC sessions over a checkpoint whose
+# every row was `done` but one Commit cell was unreadable: each session found no pending row, made a
+# no-op commit, the commit moved HEAD, `state_fingerprint` read that as progress, and the lap was
+# bought again — US$ 1,94 in two sessions before a human killed the third, with no end short of
+# BUDGET_MISSION_USD (issues #54/#55). "The disk moved" is not "the gate can be satisfied": that is
+# the unsatisfiable-gate class of principle 1, and this family is where the runner learns the
+# difference.
+#
+# CONTRACT, re-derived for this marker and not inherited:
+#   · NO_WORK_WHY has ONE setter, no_work_check, which zeroes it on entry;
+#   · it is read by no_work_escalation alone, and every door calls the pair back to back — check,
+#     then `if no_work_escalation "$phase"; then return 3; fi` — so the marker cannot outlive the lap;
+#   · the projection (`--dry-run`) arms nothing: it opens no session to refuse;
+#   · the census is the command, never this sentence:
+#         grep -cE '^ +if no_work_escalation "\$phase"; then' bin/sdd
+#
+# Form (b), the unreadable cell: the phase is EXEC and the gate that just refused armed
+# GATE_EXEC_CELL. Classified by the MARKER, never by the text of GATE_WHY.
+#
+# Form (a), narrow: the same STEP (phase_step — QA's sub-step, the phase everywhere else) derived
+# twice in a row with the SAME reason, word for word — the session in between changed nothing the
+# gate reads. Only door 1 passes a previous reason; doors 2
+# and 3 read (b) alone. A reason that cites a log is excluded (gate_why_cites_log): a session
+# halfway through fixing a red suite may leave the gate's sentence as it was.
+#
+# DECLARED LIMIT: `sdd kaizen` keeps its own `no-progress` loop and does not get this guard — it has
+# no checkpoint whose cells could be unreadable, and its phase is not derived by derive_phase.
+NO_WORK_WHY=""
+no_work_check() {   # no_work_check <phase> <reason of the previous derived lap, "" for form (b) only>
+  NO_WORK_WHY=""
+  [ "$DRY_RUN" = "1" ] && return 0
+  local phase="$1" prev="$2"
+  if [ "$phase" = "EXEC" ] && [ "$GATE_EXEC_CELL" = "1" ]; then
+    NO_WORK_WHY="$GATE_WHY"
+    return 0
+  fi
+  if [ -n "$prev" ] && [ "$prev" = "$GATE_WHY" ] && ! gate_why_cites_log "$GATE_WHY"; then
+    NO_WORK_WHY="the same reason as the lap before, and the session in between changed nothing the gate reads — $GATE_WHY"
+  fi
+  return 0
+}
+
+# gate_why_cites_log <reason> — 0 when the gate's sentence sends the reader to a log file: `see` or
+# `See` followed by a path ending in `.log`, the spelling of every TEST_CMD/E2E_CMD refusal in the
+# gates. POSITIVE admission, one definition: a reason that cites a log some other way is NOT
+# admitted, so it falls on the side that stops the line — the fail-safe direction for a guard whose
+# other failure is buying sessions.
+#
+# ⚠️ NO PROBE, DECLARED, and the world I could not build is named rather than denied: every log
+# those sentences cite comes from run_check_cmd's `mktemp`, unique per EXECUTION, and each derived
+# lap reads a different execution — so two log-citing reasons are never the same text today, and
+# form (a) never reaches this test with one. Sabotaged to always-false, the suite stays green. It
+# stays because it decides WHICH failure the day a log path becomes stable (a memo that outlives
+# invalidate_checks, a fixed report name): without it, a red suite a session is halfway through
+# fixing would stop the line as no-work. Grill decision 3 of 20260922-o-motivo-da-fase.
+gate_why_cites_log() {
+  [[ "$1" =~ [Ss]ee\ [^[:space:]]+\.log ]]
+}
+
+# CALLED, never substituted — the ledger row and the lines a human acts on would go into the
+# substitution instead (the family CLAUDE.md records against run_phase).
+no_work_escalation() {
+  local phase="$1"
+  [ -n "$NO_WORK_WHY" ] || return 1
+  info ""
+  bad "BLOCKED in $phase — no work a session could do: $NO_WORK_WHY"
+  dim "  The line stopped BEFORE a session: another one would find nothing to execute, and a no-op"
+  dim "  commit would move the disk and buy the lap after it."
+  dim "  Fix what the reason names — a checkpoint cell is written by hand, never by a session —"
+  dim "  then 'sdd run'."
+  pipeline_log_line "$(date -Iseconds)  BLOCKED  $phase  no-work: $NO_WORK_WHY"
+  autonomy_blocked_row "no-work" "$phase" "$NO_WORK_WHY"
+  return 0
+}
+
 cmd_retry() {
   local mission_arg=""
   while [ $# -gt 0 ]; do
@@ -7021,9 +7247,16 @@ cmd_retry() {
   # decides where this retry will commit, so warning first would cry wolf at a human the runner is
   # about to move off the base branch anyway.
   warn_if_on_base_branch
-  local phase; phase="$(current_phase)"
+  local phase
+  derive_phase
+  phase="$CURRENT_PHASE"
   [ -n "$phase" ] || { info "pipeline complete — nothing to retry"; return 0; }
   [ "$phase" = "PLAN" ] && die "PLAN is interactive — there is nothing to retry headless"
+  # DOOR 3 of no-work, form (b) only: a retry spends one fresh session, and a session opened over
+  # an unreadable cell has nothing to do. BEFORE the intervention note — no session is opened, so
+  # there is nothing to attribute the note to, and nothing is committed on the human's behalf.
+  no_work_check "$phase" ""
+  if no_work_escalation "$phase"; then return 3; fi
   # L4 (2026-09-03 audit): a retry IS the human's hand — the template's own first example of one.
   checkpoint_note_intervention "sdd retry (the phase was relaunched from the CLI with a fresh session)" "$phase"
   # L2: the second door of the mission ceiling — a retry is a session too.
@@ -7048,16 +7281,13 @@ cmd_retry() {
   hat_guard_check "$phase" "${before%%|*}"
   [ "$before" != "$after" ] && moved="true"
   gate_"$phase" || gate_rc=$?
-  # DECLARED, NO PROBE — and MEASURED, not assumed. These two guards are inert today: this function
-  # calls `gate_"$phase"` only for the phase it is retrying, and `current_phase()` runs its gates
-  # inside `$( )`, whose assignments die with the subshell. So both globals still hold the empty
-  # string their declarations gave them (:736, :1015), and deleting either guard changes no byte of
-  # the row — sabotaged one at a time, the suite stays green, where the two PHOTOGRAPH guards above
-  # turn it red (both pinned by "sdd retry photographs only the phase it is retrying" in
-  # tests/check-autonomy.sh). They stay because they decide WHICH failure the next writer gets the
-  # day a second gate call in the parent shell is added here — the world this fixture could not
-  # build, NOT a claim that none exists. That distinction is what d4deb35 got wrong and 7cbc8e2
-  # had to undo.
+  # These two guards were DECLARED inert, with no probe, while the derivation ran inside `$( )` and
+  # its gate assignments died with the subshell. Since 20260922-o-motivo-da-fase derive_phase runs
+  # in THIS shell — the "second gate call in the parent shell" this comment used to name as the
+  # world it could not build — so a retry of REVIEW now arrives with GATE_EXEC_PENDING set by the
+  # derivation's passing gate_EXEC, and the guard is what keeps it off the row. Measured: removing
+  # the EXEC guard now turns "and its row carries all six count fields as null" red in
+  # tests/check-autonomy.sh. d4deb35 / 7cbc8e2 are why the guard was kept while it looked inert.
   if [ "$phase" = "EXEC" ]; then exec_after="$GATE_EXEC_PENDING"; exec_total="$GATE_EXEC_TOTAL"; fi
   if [ "$phase" = "REVIEW" ]; then review_after="$GATE_REVIEW_ROUNDS"; review_max="$GATE_REVIEW_MAX"; fi
   autonomy_session_row "$phase" "1" "false" "$moved" \
@@ -7225,8 +7455,10 @@ census_files() {   # census_files <handoff-dir-with-slash> <stream>...
       | .[] | "          file  \(.f) reads \(.reads) bytes \(.bytes)"' "$@" 2>/dev/null || true
 }
 
-# sdd boot <mission> <PHASE> — print the boot prompt that PHASE would be given, and exit. Reads
-# only; opens no session, writes nothing, spends nothing.
+# sdd boot <mission> <PHASE> — print the boot prompt that PHASE would be given, and exit. Opens no
+# session and spends nothing — but since 20260922-o-motivo-da-fase it DERIVES the phase first, so
+# the prompt carries the same `Why this phase:` line the session would: that runs the gates, which
+# run TEST_CMD (and E2E_CMD once the derivation reaches QA) and write their logs under .sdd/logs/.
 #
 # It exists because of a hole this repo already pays for elsewhere: until now `boot_prompt()` had
 # exactly ONE caller (`run_phase`), so the only way to see what a phase is actually told was to
@@ -7244,6 +7476,8 @@ cmd_boot() {
   [ -n "$phase" ] || die "usage: sdd boot <mission> <PHASE>"
   phase="$(printf '%s' "$phase" | tr '[:lower:]' '[:upper:]')"
   case " $PHASES " in *" $phase "*) ;; *) die "unknown phase '$phase' (one of: $PHASES)" ;; esac
+  # The same derivation the session would be opened on, so the instrument shows what it would see.
+  derive_phase
   boot_prompt "$phase" "$(phase_hat "$phase")"
 }
 
@@ -8841,8 +9075,9 @@ USAGE
                              name, MCP seen, denials, bytes re-read under HANDOFF_DIR, per file,
                              plus the boot bill — what the boot points at, before and at the worst
                              point of the mission
-  sdd boot <mission> <PHASE> print the boot prompt that phase would be given, and exit. Reads
-                             only: no session, no writes, no cost
+  sdd boot <mission> <PHASE> print the boot prompt that phase would be given, and exit. No
+                             session, no cost — but it derives the phase, so the gates run
+                             TEST_CMD (and E2E_CMD past EXEC); avoid it during a live 'sdd run'
   sdd kaizen [--dry-run]     judge the previous kit change and give birth to the next kit
                              mission plan (kit repo only; exit 3 = the change made it worse)
   sdd kaizen --series        the deterministic series (JSON) the judge cites — EVERY repo in the

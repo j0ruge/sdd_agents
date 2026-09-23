@@ -676,34 +676,44 @@ assert_eq "and the refusal that produced it is the Jidoka one" "true" \
 # first pass changed nothing, and `state_fingerprint` includes the checkpoint's md5 — so the file
 # the retry starts on is byte-identical to the one the photograph read.
 echo "== the inline retry records the count it started from =="
+# THE REFUSAL THAT PUBLISHES NOTHING IS AN ADR DRIFT, and it used to be a `done` with no commit.
+# Since 20260922-o-motivo-da-fase that one is an unreadable CELL: door 1 refuses it before any
+# session and door 2 refuses the retry over it, so the runner no longer buys the world this block
+# needs through a cell — which is the point of that mission, not an accident of this fixture. What
+# still refuses before publishing WITHOUT arming GATE_EXEC_CELL is the ADR verdict at the top of
+# gate_EXEC: ADR_CHECK=block over a mission with no `adr:`. `--phase EXEC` because under block the
+# derivation would stop at PLAN, which asks for the same decision.
 : > "$LEDGER"
-cat > "$MDIR/checkpoint.md" <<'EOF'
+printf 'ADR_CHECK=block\n' >> .sdd/config.sh
+cat > "$MDIR/checkpoint.md" <<EOF
 | ID | Incremento | Check (comando → esperado) | Status | Commit |
 |---|---|---|---|---|
-| I1 | slice one | `true` → 0 | done | — |
-| I2 | slice two | `true` → 0 | pending | — |
+| I1 | slice one | \`true\` → 0 | done | $(git rev-parse --short HEAD) |
+| I2 | slice two | \`true\` → 0 | pending | — |
 EOF
-git add -A && git commit -qm "chore: a label with no artifact, and one increment still pending"
+git add -A && git commit -qm "chore: an undecided adr under block, and one increment still pending"
 rm -f "$TALLY_MARKER"
 # The FIRST session changes nothing — that is the only way to reach the inline retry, which is
-# guarded on `moved == false`. The SECOND gives I1 the commit it was missing, so the retry's gate
-# gets past validation and PUBLISHES a count while the pass before it did not.
+# guarded on `moved == false`. The SECOND decides the ADR, so the retry's gate gets past the
+# verdict and PUBLISHES a count while the pass before it did not.
 cat > "$OUTSIDE/stub/claude" <<STUB
 #!/usr/bin/env bash
 if [ ! -e "$TALLY_MARKER" ]; then
   : > "$TALLY_MARKER"
-else
-  h=\$(git -C "$FIX" rev-parse --short HEAD)
-  sed -i "/^| I1 /s/| done | — |/| done | \$h |/" "$MDIR/checkpoint.md"
+elif ! grep -q '^adr: none$' "$MDIR/00-missao.md"; then
+  sed -i 's/^aprovacao: auto$/aprovacao: auto\nadr: none/' "$MDIR/00-missao.md"
   git -C "$FIX" add -A
-  git -C "$FIX" commit -qm "chore: the retry gives the increment its artifact"
+  git -C "$FIX" commit -qm "chore: the retry decides the adr"
 fi
 cat "$STREAM_SAMPLE"
 exit 0
 STUB
 chmod +x "$OUTSIDE/stub/claude"
 
-"$SDD" run "$MISSION" >/dev/null 2>&1
+"$SDD" run "$MISSION" --phase EXEC >/dev/null 2>&1
+sed -i '/^ADR_CHECK=block$/d' .sdd/config.sh
+sed -i '/^adr: none$/d' "$MDIR/00-missao.md"
+git add -A && git commit -qm "chore: back to no ADR check" >/dev/null 2>&1
 # The floor, and it is what keeps the assertion below from passing over a run that never retried:
 # it names the FIRST pass, proves it is the non-retry one, and proves its gate published nothing.
 assert_eq "the pass before the retry is the one that published nothing" "false 1 null null" \
@@ -800,16 +810,32 @@ rm -f "$TALLY_MARKER"
 # the first call it makes a real change (a new file) and commits it, which moves `git rev-parse
 # HEAD` and therefore `state_fingerprint()`; on every later call it does nothing. No token, no
 # network: the stub never shells out to the real `claude`.
+#
+# The real change CLOSES an increment, and it used to be a marker file alone. A commit that changes
+# nothing the gate reads is the no-op commit of 20260922-o-motivo-da-fase: since then the second lap
+# with the same reason stops as `no-work` before the second session this block measures. Closing
+# I1 of two moves the gate's reason ("2 of 2" → "1 of 2"), so the second lap is still bought.
 echo "== moved: true on a real change, false once nothing changes =="
 : > "$LEDGER"
 MOVE_MARKER="$FIX/.moved-once"
 rm -f "$MOVE_MARKER"
+cat > "$MDIR/checkpoint.md" <<'EOF'
+| ID | Incremento | Check (comando → esperado) | Status | Commit |
+|---|---|---|---|---|
+| I1 | slice one | `true` → 0 | pending | — |
+| I2 | slice two | `true` → 0 | pending | — |
+EOF
+git add -A && git commit -qm "chore: two pending increments for the moved block"
 cat > "$OUTSIDE/stub/claude" <<STUB
 #!/usr/bin/env bash
 if [ ! -e "$MOVE_MARKER" ]; then
   : > "$MOVE_MARKER"
   git -C "$FIX" add -A
   git -C "$FIX" commit -qm "chore: session made a real change"
+  h=\$(git -C "$FIX" rev-parse --short HEAD)
+  sed -i "0,/| pending | — |/s//| done | \$h |/" "$MDIR/checkpoint.md"
+  git -C "$FIX" add -A
+  git -C "$FIX" commit -qm "chore: and closed the increment it was for"
 fi
 cat "$STREAM_SAMPLE"
 exit 0
@@ -4461,6 +4487,12 @@ assert_eq "writer: ...and refused as soon as TMPDIR names that root" \
 # to forbid. The alternating stub is what puts the fixture in the regime that separates them —
 # odd sessions change nothing (so the runner retries inside the lap), even sessions commit (so the
 # lap ends "carrying on" instead of escalating no-progress).
+#
+# The even sessions CLOSE an increment, and they used to commit a note. A commit that changes nothing
+# the gate reads is the no-op commit of 20260922-o-motivo-da-fase: since then the second lap with
+# the same reason stops as `no-work` before this ceiling is ever reached. Closing a row changes the
+# reason ("3 of 3" → "2 of 3" → …), which keeps the regime this block needs — laps that move and
+# buy a retry — honest under that guard.
 echo "== the phase ceiling counts sessions, not laps =="
 
 CEIL="$OUTSIDE/ceiling"
@@ -4471,8 +4503,10 @@ tmpguard_fixture "$CEIL/repo" \
   || fail "PROBE-BROKEN: the ceiling fixture did not build" "built" "failed"
 # `pending`, not `blocked`: the Jidoka of a blocked increment escalates before any session and this
 # section is about the sessions. EXEC_MAX_RETRY is pinned so the budget below is derivable by hand
-# instead of by whatever the default happens to be: rows + EXEC_MAX_RETRY + 2 = 1 + 1 + 2 = 4.
+# instead of by whatever the default happens to be: rows + EXEC_MAX_RETRY + 2 = 3 + 1 + 2 = 6.
 sed -i 's/| blocked | — |/| pending | — |/' "$CEIL/repo/docs/handoffs/$MISSION/checkpoint.md"
+printf '| I2 | slice two | `true` → 0 | pending | — |\n| I3 | slice three | `true` → 0 | pending | — |\n' \
+  >> "$CEIL/repo/docs/handoffs/$MISSION/checkpoint.md"
 printf 'EXEC_MAX_RETRY=1\n' >> "$CEIL/repo/.sdd/config.sh"
 ( cd "$CEIL/repo" && git add -A && git commit -qm "chore: a pending increment" ) >/dev/null 2>&1
 
@@ -4482,9 +4516,10 @@ cat > "$CEIL/stub/claude" <<STUB
 n=\$(( \$(cat "$CEIL/n" 2>/dev/null || echo 0) + 1 ))
 echo "\$n" > "$CEIL/n"
 if [ \$(( n % 2 )) -eq 1 ]; then exit 9; fi
-: > "$CEIL/repo/docs/handoffs/$MISSION/note-\$n.md"
+h=\$(git -C "$CEIL/repo" rev-parse --short HEAD)
+sed -i "0,/| pending | — |/s//| done | \$h |/" "$CEIL/repo/docs/handoffs/$MISSION/checkpoint.md"
 git -C "$CEIL/repo" add -A >/dev/null 2>&1
-git -C "$CEIL/repo" commit -qm "chore: session \$n moved the disk" >/dev/null 2>&1
+git -C "$CEIL/repo" commit -qm "chore: session \$n closed an increment" >/dev/null 2>&1
 cat "$STREAM_SAMPLE"
 exit 0
 STUB
@@ -4498,19 +4533,19 @@ ceil_laps="$(jq -rs '[.[] | select(.event == "session") | .attempt] | max // 0' 
 
 assert_eq "witness: the fixture really does buy a retry inside a lap" "yes" \
   "$( [ "${ceil_retries:-0}" -ge 1 ] && echo yes || echo "no:${ceil_retries:-<none>}" )"
-# EXEC's budget here is 4 SESSIONS. Two laps of two sessions each spend them, and the third lap is
-# refused before it opens anything: 4 rows, then `budget-exhausted`. Counting LAPS the same fixture
-# runs five laps and buys EIGHT sessions before the same escalation — double the bill for the same
-# refusal, which is exactly what happened in QA.
-# The escalation KIND is part of the same string on purpose: 4 sessions followed by `no-progress`
+# EXEC's budget here is 6 SESSIONS. Three laps of two sessions each spend them, and the fourth lap
+# is refused before it opens anything: 6 rows, then `budget-exhausted`. Counting LAPS the same
+# fixture would buy a session per lap more before the same escalation — the bill that happened in
+# QA.
+# The escalation KIND is part of the same string on purpose: 6 sessions followed by `no-progress`
 # would be a different run altogether (the alternating stub having stopped alternating), and a
 # count asserted alone would call it green.
 assert_eq "the ceiling stops the phase by sessions spent, not by laps of the loop" \
-  "4 budget-exhausted" \
+  "6 budget-exhausted" \
   "$(printf '%s %s' "${ceil_sessions:-0}" \
        "$(jq -rs '[.[] | select(.event == "blocked")] | last | .kind // "none"' "$CEILLEDGER" 2>/dev/null)")"
 # The differential that makes the number mean something: on THIS fixture laps really are fewer than
-# sessions, so "4" was not reached by the two being the same quantity under another name.
+# sessions, so "6" was not reached by the two being the same quantity under another name.
 assert_eq "...and on this fixture the two units really do disagree" "fewer" \
   "$( if [ "${ceil_laps:-0}" -lt "${ceil_sessions:-0}" ]; then echo fewer
       else echo "same:${ceil_laps:-0}/${ceil_sessions:-0}"; fi )"
@@ -5850,6 +5885,291 @@ assert_eq "neither journal writer leaks a raw redirection error when its file ca
   "jarmed:$RS8_JARMED larmed:$RS8_LARMED sessions:$(reviewscope_sessions) journal:$(grep -c 'the pipeline journal at' <<< "$RS8_ERR") ledger:$(grep -c 'could not write the autonomy ledger at' <<< "$RS8_ERR") raw:$(( RS8_NAMED - RS8_CURATED )) rc:$RS8_RC"
 
 # The stub goes back the way it was found, for the reason spelled out one screen up.
+cat > "$OUTSIDE/stub/claude" <<'STUB'
+#!/usr/bin/env bash
+echo "ERROR: the test invoked the real claude" >&2
+exit 97
+STUB
+chmod +x "$OUTSIDE/stub/claude"
+
+# --- the phase reason and the no-work guard (20260922-o-motivo-da-fase) --------
+# One world per regime, built from scratch, on the reviewscope pattern above: the mission sits at
+# a chosen checkpoint row, TEST_CMD counts its own executions into a file OUTSIDE the world (inside
+# it, the count would dirty the tree the gates read), and the stub counts sessions the same way.
+#
+# nowork_world <dir> <pending|done> [commit cell, `{sha}` = the real short hash] [handoff: 1|0]
+# NW_TEST is the verdict TEST_CMD returns after counting (`true` unless a regime says otherwise).
+NW_COUNT="$OUTSIDE/nowork-count"
+NW_TEST="true"
+NW_E2E=""
+nowork_world() {
+  local dir="$1" status="$2" cell="${3:-—}" handoff="${4:-0}"
+  rm -rf "$dir"; mkdir -p "$dir"
+  ( cd "$dir" || exit 1
+    git init -q -b main
+    git config user.email "fixture@example.com"
+    git config user.name "Fixture"
+    printf 'content\n' > file.txt
+    "$SDD" install >/dev/null
+    cat > .sdd/config.sh <<CFG
+PROJECT_NAME="nowork"
+DEFAULT_BRANCH="main"
+TEST_CMD="echo x >> '$dir.testruns'; $NW_TEST"
+E2E_CMD="$NW_E2E"
+HANDOFF_DIR="docs/handoffs"
+QA_DOCS_PATH="docs/qa"
+JIRA_ENABLED=false
+CFG
+    mkdir -p "docs/handoffs/$MISSION"
+    cat > "docs/handoffs/$MISSION/00-missao.md" <<'MIS'
+---
+missao: 20260101-fixture
+aprovacao: auto
+---
+# Mission
+MIS
+    : > "docs/handoffs/$MISSION/01-plano.md"
+    if [ "$handoff" = "1" ]; then
+      printf -- '---\nfase: EXEC\nstatus: done\n---\n' > "docs/handoffs/$MISSION/20-handoff-exec.md"
+    fi
+    git add -A && git commit -qm "chore: fixture mission"
+    cell="${cell//\{sha\}/$(git rev-parse --short HEAD)}"
+    cat > "docs/handoffs/$MISSION/checkpoint.md" <<EOF
+| ID | Incremento | Check (comando → esperado) | Status | Commit |
+|---|---|---|---|---|
+| I1 | slice one | \`true\` → 0 | $status | $cell |
+EOF
+    git add -A && git commit -qm "chore: the checkpoint row" ) >/dev/null 2>&1
+  rm -f "$dir.testruns" "$NW_COUNT"
+}
+# nowork_stub <dir> <empty-commit|nothing> [stream] — the session. `empty-commit` is the incident's
+# session: no pending row to take, so it commits a no-op, which moves HEAD and reads as progress.
+# The optional stream is what the session answers with ($STREAM_SAMPLE unless a regime says).
+nowork_stub() {
+  cat > "$OUTSIDE/stub/claude" <<STUB
+#!/usr/bin/env bash
+n=\$(( \$(cat "$NW_COUNT" 2>/dev/null || echo 0) + 1 ))
+printf '%s\n' "\$n" > "$NW_COUNT"
+if [ "$2" = "empty-commit" ]; then git -C "$1" commit --allow-empty -qm 'docs(checkpoint): no-op'; fi
+cat "${3:-$STREAM_SAMPLE}"
+exit 0
+STUB
+  chmod +x "$OUTSIDE/stub/claude"
+}
+nw_sessions() { cat "$NW_COUNT" 2>/dev/null || printf 0; }
+nw_testruns() { grep -c . "$1.testruns" 2>/dev/null || printf 0; }
+nw_log() { cat "$1/.sdd/logs/$MISSION/pipeline.log" 2>/dev/null || true; }
+
+echo "== the derived phase writes its reason to the journal =="
+NW1="$OUTSIDE/nowork-reason"
+nowork_world "$NW1" pending
+nowork_stub "$NW1" empty-commit
+( cd "$NW1" && "$SDD" run "$MISSION" --max-phases 1 ) >/dev/null 2>&1
+assert_eq "every derived phase writes its reason to the journal" \
+  "sessions:1 lines:1" \
+  "sessions:$(nw_sessions) lines:$(grep -cF 'PHASE  EXEC  reason="1 of 1 increment(s) still to execute"' <<< "$(nw_log "$NW1")")"
+
+# TODO.md: "the economy of current_phase depends on the memo and nobody counts" and "the memo
+# scores zero hits in a whole sdd run". Deriving through `$(current_phase)` ran the gates in a
+# subshell, so the memo died with it and the parent's own gate_EXEC ran TEST_CMD again over the
+# same epoch. DIFFERENTIAL: the same world, derived versus forced with --phase (which derives
+# nothing) — deriving must run TEST_CMD exactly as often as forcing does. `floor:1` is the witness that
+# the world reaches TEST_CMD at all: every increment done, the handoff missing, so gate_EXEC runs
+# the suite and still refuses.
+NW2="$OUTSIDE/nowork-derived"
+nowork_world "$NW2" "done" '{sha}' 0
+nowork_stub "$NW2" nothing
+( cd "$NW2" && "$SDD" run "$MISSION" --max-phases 1 ) >/dev/null 2>&1
+NW2_RUNS="$(nw_testruns "$NW2")"
+NW3="$OUTSIDE/nowork-forced"
+nowork_world "$NW3" "done" '{sha}' 0
+nowork_stub "$NW3" nothing
+( cd "$NW3" && "$SDD" run "$MISSION" --phase EXEC --max-phases 1 ) >/dev/null 2>&1
+NW3_RUNS="$(nw_testruns "$NW3")"
+assert_eq "deriving the phase runs TEST_CMD exactly as often as forcing it" \
+  "floor:1 runs:$NW3_RUNS" \
+  "floor:$([ "$NW3_RUNS" -ge 1 ] && echo 1 || echo 0) runs:$NW2_RUNS"
+
+echo "== the boot prompt says why the phase was opened =="
+# `sdd boot` prints the prompt run_phase would hand the session, without opening one. With one
+# increment pending the derived phase is EXEC and its reason is the gate's; asking for DOCS on the
+# same mission is a phase the runner did not derive, and the prompt has to say so rather than
+# borrow EXEC's reason. The pair is the differential: one world, two phases, two answers.
+NW4="$OUTSIDE/nowork-boot"
+nowork_world "$NW4" pending
+NW4_EXEC="$( cd "$NW4" && "$SDD" boot "$MISSION" EXEC 2>&1 )"
+NW4_DOCS="$( cd "$NW4" && "$SDD" boot "$MISSION" DOCS 2>&1 )"
+assert_eq "the boot prompt carries the phase reason" "1" \
+  "$(grep -cF 'Why this phase: 1 of 1 increment(s) still to execute' <<< "$NW4_EXEC")"
+assert_eq "a phase the runner did not derive says so in the boot" "forced:1 borrowed:0" \
+  "forced:$(grep -cF 'Why this phase: forced from the CLI' <<< "$NW4_DOCS") borrowed:$(grep -cF 'still to execute' <<< "$NW4_DOCS")"
+
+echo "== no-work: an unreadable checkpoint cell stops the line before any session =="
+# The incident, in its unrecoverable variant: a `done` row whose Commit cell names a commit that
+# does not exist. The phase is EXEC, and no EXEC session can have anything to execute — the stub
+# is the incident's session (a no-op commit that moves HEAD and used to read as progress). Every
+# door is asserted with the witness that NO session opened: the stub's own counter and the ledger's
+# session rows, both zero.
+nw_session_rows() { jq -s '[.[] | select(.event == "session")] | length' "$LEDGER" 2>/dev/null || printf 0; }
+nw_last_kind() { jq -r -s 'map(select(.event == "blocked")) | last | .kind // "none"' "$LEDGER" 2>/dev/null || printf none; }
+NW5="$OUTSIDE/nowork-door1"
+nowork_world "$NW5" "done" deadbee 1
+nowork_stub "$NW5" empty-commit
+: > "$LEDGER"
+( cd "$NW5" && "$SDD" run "$MISSION" ) >/dev/null 2>&1; NW5_RC=$?
+assert_eq "door 1: an unreadable cell stops the line before any session" \
+  "rc:3 kind:no-work stub:0 rows:0" \
+  "rc:$NW5_RC kind:$(nw_last_kind) stub:$(nw_sessions) rows:$(nw_session_rows)"
+
+# Door 3 is `sdd retry`, which never goes through cmd_run's loop. It refuses before writing its
+# `intervention:` note, because no session was opened to attribute it to — HEAD unmoved is the
+# witness that nothing was committed on the human's behalf either.
+NW6="$OUTSIDE/nowork-door3"
+nowork_world "$NW6" "done" deadbee 1
+nowork_stub "$NW6" empty-commit
+NW6_HEAD="$(git -C "$NW6" rev-parse HEAD)"
+: > "$LEDGER"
+( cd "$NW6" && "$SDD" retry "$MISSION" ) >/dev/null 2>&1; NW6_RC=$?
+assert_eq "door 3: sdd retry refuses an unreadable cell before any session" \
+  "rc:3 kind:no-work stub:0 rows:0 notes:0 head:same" \
+  "rc:$NW6_RC kind:$(nw_last_kind) stub:$(nw_sessions) rows:$(nw_session_rows) notes:$(cat "$NW6/docs/handoffs/$MISSION"/*.md | grep -c '^- intervention:') head:$([ "$(git -C "$NW6" rev-parse HEAD)" = "$NW6_HEAD" ] && echo same || echo moved)"
+
+# Form (a): the same phase derived twice in a row with the SAME reason. The stub is the incident's
+# session over a pending row it never executes — its no-op commit moves HEAD, so without the guard
+# the lap is bought again and again until the phase ceiling.
+NW7="$OUTSIDE/nowork-same"
+nowork_world "$NW7" pending
+nowork_stub "$NW7" empty-commit
+: > "$LEDGER"
+( cd "$NW7" && "$SDD" run "$MISSION" ) >/dev/null 2>&1; NW7_RC=$?
+assert_eq "door 1: the same reason twice stops the line as no-work" \
+  "rc:3 kind:no-work stub:1 rows:1" \
+  "rc:$NW7_RC kind:$(nw_last_kind) stub:$(nw_sessions) rows:$(nw_session_rows)"
+
+# Form (a) does not read a lap that follows a HARNESS CUT. A session that hits its per-session
+# budget (`error_max_budget_usd`, the kit's designed loop — see the D25 pair above) may have
+# committed half an increment and never reached the row: same step, same reason, and the next
+# session is the one that finishes it. Found by the final review of 20260922-o-motivo-da-fase and
+# decided by the human the same day. The world is NW7's with one difference — every session ends
+# on the budget ceiling ($STREAM_BUDGET, derived from a real capture) — so `stub:1` there against
+# `laps:1` here is the differential; `died:0` is the witness that session-died did not take the run.
+NW13="$OUTSIDE/nowork-cut"
+nowork_world "$NW13" pending
+nowork_stub "$NW13" empty-commit "$STREAM_BUDGET"
+: > "$LEDGER"
+( cd "$NW13" && "$SDD" run "$MISSION" ) >/dev/null 2>&1
+assert_eq "a lap after a session cut by its budget is not no-work" \
+  "laps:1 no-work:0 died:0" \
+  "laps:$([ "$(nw_sessions)" -ge 2 ] && echo 1 || echo 0) no-work:$(jq -s '[.[] | select(.kind == "no-work")] | length' "$LEDGER") died:$(jq -s '[.[] | select(.kind == "session-died")] | length' "$LEDGER")"
+
+# The other side of form (a): a red suite is a reason a session may be halfway through fixing, and
+# it must never stop the line as no-work. `laps:1` is the witness that the regime REPEATS — at least
+# two sessions over the same phase — so the absence of no-work is a fact about a world where form
+# (a) had its chance, not about a run that ended first. What ends it is not asserted: that belongs
+# to the ceilings.
+NW_TEST="false"
+NW8="$OUTSIDE/nowork-log"
+nowork_world "$NW8" "done" '{sha}' 1
+NW_TEST="true"
+nowork_stub "$NW8" empty-commit
+: > "$LEDGER"
+( cd "$NW8" && "$SDD" run "$MISSION" ) >/dev/null 2>&1
+assert_eq "a reason that cites a log never stops the line as no-work" \
+  "laps:1 no-work:0" \
+  "laps:$([ "$(nw_sessions)" -ge 2 ] && echo 1 || echo 0) no-work:$(jq -s '[.[] | select(.kind == "no-work")] | length' "$LEDGER")"
+
+# Form (a) is keyed on the STEP, and QA is why. With an interface, QA is three sessions derived
+# from the artifacts — plan (charters), walk (a report), close (the handoff) — and gate_QA says
+# "missing 30-handoff-qa.md" after the first two alike. Keyed on the phase, the walk was never
+# opened. The stub writes a charter on its first call and an unclosed report on its second, then
+# nothing: `stub:2` is the walk being opened, and `kind:no-work` is the repeated QA:exec — the same
+# step, the same reason — still stopping the line.
+NW_E2E="true"
+NW10="$OUTSIDE/nowork-qa"
+nowork_world "$NW10" "done" '{sha}' 1
+NW_E2E=""
+cat > "$OUTSIDE/stub/claude" <<STUB
+#!/usr/bin/env bash
+n=\$(( \$(cat "$NW_COUNT" 2>/dev/null || echo 0) + 1 ))
+printf '%s\n' "\$n" > "$NW_COUNT"
+mkdir -p "$NW10/docs/qa/charters" "$NW10/docs/qa/reports"
+if [ "\$n" -eq 1 ]; then printf 'charter\n' > "$NW10/docs/qa/charters/c1.md"; fi
+if [ "\$n" -eq 2 ]; then printf -- '---\nstatus: in-progress\n---\n' > "$NW10/docs/qa/reports/2026-01-01-r.md"; fi
+git -C "$NW10" add -A && git -C "$NW10" commit -qm "qa: step \$n" || true
+cat "$STREAM_SAMPLE"
+exit 0
+STUB
+chmod +x "$OUTSIDE/stub/claude"
+: > "$LEDGER"
+( cd "$NW10" && "$SDD" run "$MISSION" ) >/dev/null 2>&1; NW10_RC=$?
+assert_eq "a QA that advances its step behind the same reason is not no-work, and a repeated step still is" \
+  "rc:3 kind:no-work stub:2 phases:QA,QA" \
+  "rc:$NW10_RC kind:$(nw_last_kind) stub:$(nw_sessions) phases:$(jq -r -s '[.[] | select(.event == "session") | .phase] | join(",")' "$LEDGER")"
+
+# Door 2 is cmd_run's inline retry, reachable only when the first session moved nothing — so the
+# stub does nothing — and only under `--phase`, because door 1 refuses the derived lap first. Without
+# the door the retry is bought and the pair ends as no-progress, two sessions later.
+NW9="$OUTSIDE/nowork-door2"
+nowork_world "$NW9" "done" deadbee 1
+nowork_stub "$NW9" nothing
+: > "$LEDGER"
+( cd "$NW9" && "$SDD" run "$MISSION" --phase EXEC ) >/dev/null 2>&1; NW9_RC=$?
+assert_eq "door 2: the inline retry is refused on an unreadable cell" \
+  "rc:3 kind:no-work stub:1 rows:1" \
+  "rc:$NW9_RC kind:$(nw_last_kind) stub:$(nw_sessions) rows:$(nw_session_rows)"
+
+echo "== incident replay: 20260921-amep-backend-0-1-0 =="
+# The incident end to end, in its two variants. Every increment is done, the suite is green and the
+# EXEC handoff is written; one Commit cell is fenced in backticks among bare ones — the shape the
+# executor wrote there. The stub is that incident's session: no pending row to take, a no-op commit.
+#
+# Variant 1 — the backticked cell names a REAL commit. It is read as the SHA it carries, gate_EXEC
+# passes, and the first derived phase is the one after it: no EXEC session is bought at all, and
+# the journal says which phase was derived. `phase:QA` is the term that reverting I1 turns red —
+# the cell would then be unreadable and the line would stop in EXEC instead.
+NW11="$OUTSIDE/nowork-replay-tick"
+nowork_world "$NW11" "done" '{sha}' 1
+( cd "$NW11" && printf '| I2 | slice two | `true` → 0 | done | `%s` |\n' "$(git rev-parse --short HEAD)" \
+    >> "docs/handoffs/$MISSION/checkpoint.md" && git add -A && git commit -qm "chore: a fenced hash among bare ones" ) >/dev/null 2>&1
+nowork_stub "$NW11" empty-commit
+: > "$LEDGER"
+( cd "$NW11" && "$SDD" run "$MISSION" --max-phases 1 ) >/dev/null 2>&1
+assert_eq "incident replay: a backticked cell buys no EXEC session" \
+  "fenced:1 exec:0 phase:QA no-work:0" \
+  "fenced:$(grep -c '| done | `[0-9a-f]*` |$' "$NW11/docs/handoffs/$MISSION/checkpoint.md") exec:$(jq -s '[.[] | select(.event == "session" and .phase == "EXEC")] | length' "$LEDGER") phase:$(grep -oE 'PHASE  [A-Z]+' <<< "$(nw_log "$NW11")" | head -1 | awk '{print $2}') no-work:$(jq -s '[.[] | select(.kind == "no-work")] | length' "$LEDGER")"
+
+# Variant 2 — the cell names a commit that does not exist. No session can repair that: rc 3,
+# `no-work`, and zero sessions of any phase — where the incident paid two and was heading for the
+# mission ceiling.
+NW12="$OUTSIDE/nowork-replay-missing"
+nowork_world "$NW12" "done" '{sha}' 1
+( cd "$NW12" && printf '| I2 | slice two | `true` → 0 | done | deadbee |\n' \
+    >> "docs/handoffs/$MISSION/checkpoint.md" && git add -A && git commit -qm "chore: a hash that does not exist" ) >/dev/null 2>&1
+nowork_stub "$NW12" empty-commit
+: > "$LEDGER"
+( cd "$NW12" && "$SDD" run "$MISSION" ) >/dev/null 2>&1; NW12_RC=$?
+assert_eq "incident replay: a missing commit ends rc 3 no-work with zero sessions" \
+  "rc:3 kind:no-work stub:0 rows:0" \
+  "rc:$NW12_RC kind:$(nw_last_kind) stub:$(nw_sessions) rows:$(nw_session_rows)"
+
+# The kind is new, and it travels in `event: "blocked"`, so both readers' single is_escalation
+# admits it without an edit. The DIFFERENTIAL is what proves they count it alike: the judge's series
+# on one side, the human's table on the other, over one hand-written ledger — never a constant.
+# `floor:no-work: 1` is the witness that the series really saw the row; without it two readers
+# that both dropped it would agree on nothing.
+mkdir -p "$OUTSIDE/noworkaxis"
+localize > "$OUTSIDE/noworkaxis/autonomy-log.jsonl" <<'EOF'
+{"v":1,"ts":"2026-09-22T10:00:00-03:00","event":"blocked","kind":"no-work","run_id":"r1","invocation":"run","kit_sha":"ccccccc","kit_dirty":false,"project":"p1","repo":"/p1","mission":"m1","phase":"EXEC","gate_why":"x"}
+{"v":1,"ts":"2026-09-22T10:01:00-03:00","event":"blocked","kind":"no-progress","run_id":"r2","invocation":"run","kit_sha":"ccccccc","kit_dirty":false,"project":"p1","repo":"/p1","mission":"m2","phase":"EXEC","gate_why":"x"}
+EOF
+NWA_OUT="$( cd "$FIX" && SDD_STATE_DIR="$OUTSIDE/noworkaxis" "$SDD" autonomy 2>&1 )"
+NWA_SERIES="$( cd "$FIX" && SDD_STATE_DIR="$OUTSIDE/noworkaxis" "$SDD" kaizen --series 2>/dev/null )"
+NWA_SERIES_ESC="$(jq -r '.latest.escalations | to_entries | sort_by(.key) | map("\(.key): \(.value)") | join("\n")' <<< "$NWA_SERIES")"
+NWA_READER_ESC="$(awk '$1 == "ccccccc" && $3 ~ /^[0-9]+$/ { print $2, $3 }' <<< "$NWA_OUT" | sort)"
+assert_eq "no-work rows are counted alike by both readers" \
+  "floor:1 $NWA_SERIES_ESC" \
+  "floor:$(grep -cx 'no-work: 1' <<< "$NWA_SERIES_ESC") $NWA_READER_ESC"
+
 cat > "$OUTSIDE/stub/claude" <<'STUB'
 #!/usr/bin/env bash
 echo "ERROR: the test invoked the real claude" >&2

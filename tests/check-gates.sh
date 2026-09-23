@@ -458,6 +458,58 @@ fi
 assert_phase "an alignment-colon separator is not an increment" "QA"
 mv "$MDIR/checkpoint.colon.bak" "$MDIR/checkpoint.md"
 
+# A Commit cell fenced in backticks — `` `abc1234` `` — renders exactly like the bare hash, and an
+# executor wrote one in 20260921-amep-backend-0-1-0 (issue #55). checkpoint_rows trimmed spaces
+# but not backticks, so gate_EXEC handed `` `abc1234` `` to `git cat-file` and answered "does not
+# exist": the phase stayed EXEC with nothing left to execute and the runner bought sessions for it.
+cp "$MDIR/checkpoint.md" "$MDIR/checkpoint.tick.bak"
+sed -i "s/| done | $REAL_HASH |/| done | \`$REAL_HASH\` |/" "$MDIR/checkpoint.md"
+if grep -qF "| done | \`$REAL_HASH\` |" "$MDIR/checkpoint.md"; then
+  pass "fixture: the commit cell really carries backticks"
+else
+  fail "backticked commit fixture" "a done row with a backticked hash" "$(grep -m1 '| done |' "$MDIR/checkpoint.md")"
+fi
+assert_phase "a backticked commit cell is read as the SHA it carries" "QA"
+# Padding INSIDE the backticks renders the same (CommonMark drops it), and the trim used to run
+# before the backticks came off — the cell reached the shape check as ' abc1234 ' (CodeRabbit on
+# PR #57).
+sed -i "s/| done | \`$REAL_HASH\` |/| done | \` $REAL_HASH \` |/" "$MDIR/checkpoint.md"
+if grep -qF "| done | \` $REAL_HASH \` |" "$MDIR/checkpoint.md"; then
+  pass "fixture: the commit cell really carries spaces inside the backticks"
+else
+  fail "padded backtick fixture" "a done row with a padded backticked hash" "$(grep -m1 '| done |' "$MDIR/checkpoint.md")"
+fi
+assert_phase "a backticked commit cell with padding inside is read as the SHA it carries" "QA"
+mv "$MDIR/checkpoint.tick.bak" "$MDIR/checkpoint.md"
+
+# A 64-digit id is a SHA SHAPE (sha256 repositories write them): it must reach the existence check
+# and be told "does not exist", never "is not a SHA" (Codex on PR #57).
+cp "$MDIR/checkpoint.md" "$MDIR/checkpoint.sha256.bak"
+SHA256_LIKE="$(printf 'ab%.0s' $(seq 32))"
+sed -i "s/| done | $REAL_HASH |/| done | $SHA256_LIKE |/" "$MDIR/checkpoint.md"
+if grep -qF "| done | $SHA256_LIKE |" "$MDIR/checkpoint.md" && [ "${#SHA256_LIKE}" -eq 64 ]; then
+  pass "fixture: the commit cell really carries a 64-digit id"
+else
+  fail "sha256-shape fixture" "a done row with a 64-hex id" "$(grep -m1 '| done |' "$MDIR/checkpoint.md")"
+fi
+assert_why        "a 64-digit id has a SHA shape and reaches the existence check" "EXEC" "does not exist"
+assert_why_absent "...and is not refused as a non-SHA" "EXEC" "is not a SHA"
+mv "$MDIR/checkpoint.sha256.bak" "$MDIR/checkpoint.md"
+
+# A Commit cell that has no SHA shape at all — words around the hash — used to be told it "does
+# not exist", which sends whoever reads it looking for a lost commit instead of at the cell.
+cp "$MDIR/checkpoint.md" "$MDIR/checkpoint.notsha.bak"
+sed -i "s/| done | $REAL_HASH |/| done | commit $REAL_HASH |/" "$MDIR/checkpoint.md"
+if grep -qF "| done | commit $REAL_HASH |" "$MDIR/checkpoint.md"; then
+  pass "fixture: the commit cell really carries words around the hash"
+else
+  fail "not-a-SHA fixture" "a done row with 'commit <hash>'" "$(grep -m1 '| done |' "$MDIR/checkpoint.md")"
+fi
+assert_phase "a commit cell that is not a SHA fails the EXEC gate" "EXEC"
+assert_why   "a commit cell that is not a SHA gets its own reason" "EXEC" "is not a SHA"
+assert_why_absent "the not-a-SHA reason is not the does-not-exist reason" "EXEC" "does not exist"
+mv "$MDIR/checkpoint.notsha.bak" "$MDIR/checkpoint.md"
+
 # --- QA --------------------------------------------------------------------
 # The QA gate has TWO contracts, because there are two kinds of project.
 #
@@ -497,6 +549,17 @@ assert_why   "QA reports the unclosed report" "QA" "closed"
 sed -i 's/\*\*Status:\*\* in-progress/**Status:** closed/' "$FIX/docs/qa/reports/2026-01-01-fixture.md"
 assert_phase "report closed but with a Pending row in the matrix" "QA"
 assert_why   "QA reports the Pending matrix" "QA" "Pending"
+# COUNTED, because no-work's form (a) compares reasons word for word: a walk that settles one of
+# two Pending rows must change the sentence, or the next lap reads as "nothing changed".
+assert_why   "QA counts the Pending rows (one)" "QA" "still has 1 'Pending' row\\(s\\)"
+sed -i 's/^| 1 | CH-one | Pending |$/&\n| 2 | CH-two | Pending |/' "$FIX/docs/qa/reports/2026-01-01-fixture.md"
+if grep -qxF '| 2 | CH-two | Pending |' "$FIX/docs/qa/reports/2026-01-01-fixture.md"; then
+  pass "fixture: the matrix really carries a second Pending row"
+else
+  fail "second Pending row fixture" "| 2 | CH-two | Pending |" "$(grep -c Pending "$FIX/docs/qa/reports/2026-01-01-fixture.md") Pending line(s)"
+fi
+assert_why   "QA counts the Pending rows (two)" "QA" "still has 2 'Pending' row\\(s\\)"
+sed -i '/^| 2 | CH-two | Pending |$/d' "$FIX/docs/qa/reports/2026-01-01-fixture.md"
 
 sed -i 's/| 1 | CH-one | Pending |/| 1 | CH-one | Pass |/' "$FIX/docs/qa/reports/2026-01-01-fixture.md"
 # PROVENANCE: ~/.claude/skills/qa-report/assets/bug-template.md:1-3, verbatim. The legend
@@ -1618,6 +1681,14 @@ printf '# Docs\n\ndrift checklist\n\n| Area | Doc | Status | Evidence |\n|---|--
 git add -A && git commit -qm "chore: partial docs"
 assert_phase "drift checklist with a ✗ item" "DOCS"
 assert_why   "DOCS reports the area with a pending Status, quoting the value" "DOCS" "Status '✗'"
+assert_why   "DOCS counts the pending areas (one)" "DOCS" "has 1 area\\(s\\) pending"
+# Two ✗ rows: the count must move, or a session that fixed one of them would leave the reason
+# word for word as it was and no-work's form (a) would stop the next DOCS lap (Codex on PR #57).
+printf '# Docs\n\ndrift checklist\n\n| Area | Doc | Status | Evidence |\n|---|---|---|---|\n| runner | README | ✗ | pending |\n| libs | CONTEXT | ⏳ | pending |\n\nFindings recorded in TODO.md for this mission.\n' \
+  > "$MDIR/45-docs.md"
+git add -A && git commit -qm "chore: two pending docs areas"
+assert_why   "DOCS counts the pending areas (two)" "DOCS" "has 2 area\\(s\\) pending"
+assert_why   "...and still quotes the FIRST pending Status" "DOCS" "the first with Status '✗'"
 
 printf '# Docs\n\ndrift checklist\n\n| Area | Doc | Status | Evidence |\n|---|---|---|---|\n| runner | README | ✅ | commit abc1234 |\n| libs | — | n/a | internal refactor |\n\nFindings recorded in TODO.md for this mission.\n' \
   > "$MDIR/45-docs.md"
