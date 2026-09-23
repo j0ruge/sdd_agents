@@ -807,3 +807,11 @@ O plano consolidado pelo Codex Astra, baseado no artigo de @0xCodez e nas refer�
   Em repo-alvo, alguém que dê `push` na `main` publica isso. Direção: recusar ou avisar quando a
   branch é o `DEFAULT_BRANCH`, e commitar o diretório da missão inteiro.
   — descoberto por `sessão coordenadora` na missão `20260922-o-motivo-da-fase` (2026-09-22)
+
+- [ ] **`check-coordination.sh` reprova quando herda SIGINT ignorado** — `tests/check-coordination.sh:524`
+  — o probe `signal status: 2` manda SIGINT ao `sdd run` e espera a morte; lançada com `&` de shell
+  não interativo (o `setsid nohup … &` que se usa para `sdd run`), a suíte nasce com `SigIgn 0x7`, o
+  bash não desfaz sinal ignorado na entrada, e o probe estoura 8 s: vermelho 3 de 3, verde 3 de 3 em
+  primeiro plano. O `TEST_CMD` de um gate num `sdd run` destacado herdaria a máscara (não medido).
+  Direção: SIG_DFL no filho do probe, ou declarar a pré-condição no cabeçalho.
+  — descoberto por `sessão coordenadora` no PR #58 `fix/ancoras-do-catalogo` (2026-09-23)
