@@ -460,6 +460,9 @@ checkpoint_rows() {
       # the phase stayed EXEC with nothing to execute (issue #55). The Check cell keeps its
       # backticks: they are legitimate there, and check-checkpoint.sh reads them.
       gsub(/`/, "", f[6])
+      # Trimmed again: `` ` abc1234 ` `` renders like the bare hash too (CommonMark drops the
+      # padding inside a code span), and the trim above ran before the backticks came off.
+      gsub(/^[ \t]+|[ \t]+$/, "", f[6])
       # `:?-+:?` and not `-+`: GFM spells column alignment with colons on the separator row, and
       # prettier and markdownlint WRITE them (`|:---|:---:|`). Matched against the bare dashes only,
       # the separator stopped being skipped and became a row whose Status is `:---:` — outside the
@@ -962,8 +965,10 @@ gate_EXEC() {
         fi
         # Shape before existence: `commit abc1234` told "does not exist" sends the reader after a
         # lost commit when the defect is the cell. Backticks never reach here (checkpoint_rows
-        # strips them from this column); anything else that is not 7–40 hex digits is the writer's.
-        if ! [[ "$commit" =~ ^[0-9a-fA-F]{7,40}$ ]]; then
+        # strips them from this column); anything else that is not 7–64 hex digits is the writer's.
+        # 64, not 40: a repository created with `--object-format=sha256` writes 64-digit commit
+        # ids, which cat-file and merge-base below accept.
+        if ! [[ "$commit" =~ ^[0-9a-fA-F]{7,64}$ ]]; then
           GATE_EXEC_CELL=1
           GATE_WHY="increment $id: the Commit cell '$commit' is not a SHA — write the bare short hash, no backticks or words"; return 1
         fi
@@ -1095,7 +1100,11 @@ gate_QA() {
     fi
     # Anchor 2: no row of the matrix may still read Pending.
     if grep -qE '\|[[:space:]]*Pending[[:space:]]*\|' "$report"; then
-      GATE_WHY="report $(basename "$report") still has 'Pending' row(s) in the matrix"; return 1
+      # Counted for the reason gate_DOCS counts: a walk that settles some rows must change the
+      # sentence, or no-work's form (a) reads the next lap as "nothing changed".
+      local pending_rows
+      pending_rows="$(grep -cE '\|[[:space:]]*Pending[[:space:]]*\|' "$report" || true)"
+      GATE_WHY="report $(basename "$report") still has $pending_rows 'Pending' row(s) in the matrix"; return 1
     fi
   fi
   # Anchor 3: registry with no open bug an AGENT could close. 'wont-fix'/'invalid' are human calls
@@ -1505,12 +1514,19 @@ gate_DOCS() {
         # nothing pending in it. Same regex in checkpoint_rows and gate_REVIEW.
         if (cell ~ /^:?-+:?$/ || cell == "") next
         if (cell == "✅" || cell == "n/a" || cell == "N/A") next
-        print cell; exit
+        print cell
       }
       col && !/^[ \t]*\|/ { exit }   # the table ended
     ' "$d")"
   if [ -n "$pending_cell" ]; then
-    GATE_WHY="45-docs.md has an area with Status '$pending_cell' in the drift checklist — every row needs ✅ (with a hash) or a justified n/a"
+    # Every pending row is printed and COUNTED, and the count goes into the reason: no-work's form
+    # (a) compares reasons word for word, and a session that fixed one of two ✗ rows used to leave
+    # the sentence as it was — the next DOCS lap stopped as no-work with the work moving (Codex on
+    # PR #57). A reason over a countable set carries the count.
+    local pending_n
+    pending_n="$(wc -l <<< "$pending_cell")"
+    pending_cell="${pending_cell%%$'\n'*}"
+    GATE_WHY="45-docs.md has $pending_n area(s) pending in the drift checklist (the first with Status '$pending_cell') — every row needs ✅ (with a hash) or a justified n/a"
     return 1
   fi
   GATE_WHY="drift checklist complete"

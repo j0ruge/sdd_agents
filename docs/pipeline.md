@@ -53,8 +53,8 @@ measures?". It belongs to the **kit**; `sdd preflight` belongs to the **target r
 environment** — do not confuse them.
 
 **When the line stops, the runner can page you.** Every escalation that ends the run with rc 3 —
-`increment-blocked`, `dirty-tree`, `handoff-blocked`, `app-down`, `budget-exhausted`, `no-progress`,
-`no-work`, `hat-crossed`, `kit-touched` — runs `ON_ESCALATION_CMD` from `.sdd/config.sh`, when set, with `SDD_REASON`, `SDD_PHASE`,
+`increment-blocked`, `dirty-tree`, `handoff-blocked`, `app-down`, `session-died`, `budget-exhausted`,
+`no-progress`, `no-work`, `retry-gate-red`, `hat-crossed`, `kit-touched` — runs `ON_ESCALATION_CMD` from `.sdd/config.sh`, when set, with `SDD_REASON`, `SDD_PHASE`,
 `SDD_MISSION`, `SDD_PROJECT` and `SDD_GATE_WHY` in its environment (a `notify-send`, an `ntfy`
 curl, whatever reaches you). The projection never runs it, and a hook that fails is a warning, never
 a second failure: the escalation is already in the journal and the ledger. L6 of the 2026-09-03

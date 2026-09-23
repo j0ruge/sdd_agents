@@ -93,9 +93,10 @@ faz commit no-op.
 Preenchido pelo `sdd-planner` **com evidência**. Todos ✅ → `aprovacao: auto` e o pipeline segue
 sozinho. Qualquer ✗ → `aprovacao` fica vazio e o runner para pedindo aprovação humana explícita.
 
-⚠️ `aprovacao:` fica **vazio** por instrução explícita da sessão coordenadora. O humano fecha com
-`sdd approve 20260922-o-motivo-da-fase`. Este plano nunca é executado por `sdd run`, só
-interativamente.
+⚠️ **Estado anterior à aprovação:** `aprovacao:` foi deixado **vazio** por instrução explícita da
+sessão coordenadora, e o humano o fechou com `sdd approve 20260922-o-motivo-da-fase`
+(`aprovacao: humano-2026-09-22` no frontmatter, commit `6a1bcec`). Este plano nunca é executado
+por `sdd run`, só interativamente.
 
 | # | Critério | Status | Evidência |
 |---|---|---|---|
@@ -141,8 +142,10 @@ Todas tomadas **pelo humano** em 2026-09-22.
    - **(b)** recusa a sessão **antes de abri-la** quando o motivo do gate pertence à classe
      **célula ilegível**: `bin/sdd:939` (`done` sem commit), `:942` (commit inexistente), `:951`
      (fora da história de HEAD), `:958` (status inválido) e a mensagem nova "não é SHA" da decisão 5.
-   - **(a) estreita** para a linha quando a mesma fase volta com o **mesmo** motivo duas vezes
-     seguidas, **excluindo** motivos que citam log (suíte vermelha). Uma sessão que conserta metade
+   - **(a) estreita** para a linha quando o mesmo **passo** (`phase_step` — o sub-passo da QA, a
+     fase em todo o resto) volta com o **mesmo** motivo duas vezes seguidas, **excluindo** motivos
+     que citam log (suíte vermelha). O texto original dizia "a mesma fase"; a chave virou o passo
+     por decisão humana durante a execução (ver `checkpoint-notas.md` e o D27 do `CONTEXT.md`). Uma sessão que conserta metade
      de uma suíte vermelha produz o mesmo texto e não pode ser parada.
 4. **Kind novo no ledger: `no-work`**, e não `no-progress`, que afirma "duas sessões sem mexer no
    disco". O kind entra pela definição única de cada programa e ganha uma asserção **diferencial**
