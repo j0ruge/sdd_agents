@@ -4456,8 +4456,13 @@ apply_mutant() {
     echo "the mutant is not valid bash" >> "$box.log"
     return 91
   fi
-  if ! python3 -c 'import ast, pathlib, sys; ast.parse(pathlib.Path(sys.argv[1]).read_text())' \
-      "$box/bin/sdd-coordination.py" 2>>"$box.log"; then
+  # Parsed only when this mutant changed it: one python3 per mutant was 389 interpreter starts, and
+  # behind a pyenv shim (~2.5 s each) that turned the seconds-long --anchors into 4m47s on every gate
+  # (Codex on PR #58). The --anchors controls include an invalid-Python mutant, so skipping the parse
+  # where it IS needed turns them red.
+  if ! cmp -s "$ROOT/bin/sdd-coordination.py" "$box/bin/sdd-coordination.py" \
+     && ! python3 -c 'import ast, pathlib, sys; ast.parse(pathlib.Path(sys.argv[1]).read_text())' \
+          "$box/bin/sdd-coordination.py" 2>>"$box.log"; then
     echo "the mutant is not valid Python" >> "$box.log"
     return 91
   fi
@@ -4490,15 +4495,36 @@ run_mutant() {
 if [ "$ANCHORS_ONLY" = 1 ]; then
   ANCHOR_FLOOR=389
   anchor_box() { mkdir -p "$1"; cp -r "$ROOT/bin" "$1/"; }
-  anchor_control_noop()    { :; }
-  anchor_control_invalid() { printf 'if\n' >> "$1"; }
-  anchor_one() { # anchor_one <slug> — writes <box>.rc like run_mutant, for the same scoring
+  anchor_control_noop()       { :; }
+  anchor_control_intact()     { printf '# a mutation that lands and stays valid\n' >> "$1"; }
+  anchor_control_invalid()    { printf 'if\n' >> "$1"; }
+  anchor_control_invalid_py() { printf 'def\n' >> "${1%/*}/sdd-coordination.py"; }
+  anchor_one() { # anchor_one <name> <function> — writes <box>.rc like run_mutant, for the same scoring
     local box="$WORK/$1" arc=0
     anchor_box "$box"
-    apply_mutant "mut_$1" "$box" || arc=$?
+    apply_mutant "$2" "$box" || arc=$?
     echo "$arc" > "$box.rc"
   }
-  for ctl in noop:90 invalid:91; do
+  # anchor_verdict <name=function>... — rc 1 when any entry no longer applies, naming each one. The
+  # SAME function scores the control catalogue below and the real one, so the failing path — pool,
+  # scoring, verdict — is exercised end to end, not only apply_mutant (Codex on PR #58).
+  anchor_verdict() {
+    local entry rc running=0 broken=0
+    for entry in "$@"; do
+      anchor_one "${entry%%=*}" "${entry#*=}" &
+      running=$((running + 1))
+      if [ "$running" -ge "$JOBS" ]; then wait -n 2>/dev/null || wait; running=$((running - 1)); fi
+    done
+    wait
+    for entry in "$@"; do
+      rc="$(cat "$WORK/${entry%%=*}.rc" 2>/dev/null || echo 99)"
+      [ "$rc" = 0 ] && continue
+      fail "CATALOGUE-BROKEN: ${entry%%=*} (rc $rc)" "$(cat "$WORK/${entry%%=*}.log" 2>/dev/null || echo 'no result')"
+      broken=$((broken + 1))
+    done
+    [ "$broken" -eq 0 ]
+  }
+  for ctl in noop:90 invalid:91 invalid_py:91; do
     anchor_box "$WORK/_control_${ctl%%:*}"
     crc=0; apply_mutant "anchor_control_${ctl%%:*}" "$WORK/_control_${ctl%%:*}" || crc=$?
     if [ "$crc" != "${ctl##*:}" ]; then
@@ -4507,31 +4533,33 @@ if [ "$ANCHORS_ONLY" = 1 ]; then
       exit 1
     fi
   done
-  pass "apply_mutant tells a mutation that changes nothing (90) and one that breaks syntax (91)"
+  pass "apply_mutant tells a mutation that changes nothing (90) and one that breaks bash or Python (91)"
+  # End to end: a catalogue of one intact mutant and one that changes nothing must be REFUSED.
+  if ! anchor_verdict "_verdict_alone=anchor_control_intact" >/dev/null 2>&1; then
+    fail "SENSOR-BROKEN: the anchors verdict refused a catalogue whose one mutant applies cleanly" \
+         "every run would be red whatever the anchors say"
+    exit 1
+  fi
+  if anchor_verdict "_verdict_ok=anchor_control_intact" "_verdict_broken=anchor_control_noop" >/dev/null 2>&1; then
+    fail "SENSOR-BROKEN: the anchors verdict passed a catalogue carrying a mutant that changes nothing" \
+         "the scoring path would certify every broken anchor"
+    exit 1
+  fi
+  pass "the verdict refuses a catalogue with one broken anchor (pool, scoring and verdict exercised)"
   if [ "${#CATALOG[@]}" -lt "$ANCHOR_FLOOR" ]; then
     fail "SENSOR-BROKEN: the catalogue lists ${#CATALOG[@]} mutant(s), below the floor of $ANCHOR_FLOOR" \
          "an emptied or unparsed catalogue would report every anchor intact"
     exit 1
   fi
-  running=0
-  for slug in "${CATALOG[@]}"; do
-    anchor_one "$slug" &
-    running=$((running + 1))
-    if [ "$running" -ge "$JOBS" ]; then wait -n 2>/dev/null || wait; running=$((running - 1)); fi
-  done
-  wait
-  broken=0
-  for slug in "${CATALOG[@]}"; do
-    rc="$(cat "$WORK/$slug.rc" 2>/dev/null || echo 99)"
-    [ "$rc" = 0 ] && continue
-    fail "CATALOGUE-BROKEN: $slug (rc $rc)" "$(cat "$WORK/$slug.log" 2>/dev/null || echo 'no result')"
-    broken=$((broken + 1))
-  done
-  if [ "$broken" -eq 0 ]; then
+  entries=()
+  for slug in "${CATALOG[@]}"; do entries+=("$slug=mut_$slug"); done
+  # ⚠️ The one line the controls above cannot assert on: `if anchor_verdict` sabotaged into `if true`
+  # is this sensor's last line, and the catalogue does not mutate tests/ — declared, not claimed.
+  if anchor_verdict "${entries[@]}"; then
     pass "anchors: all ${#CATALOG[@]} mutants still apply and leave valid code"
     exit 0
   fi
-  printf '%d mutant(s) no longer apply — fix their anchors before the catalogue scores them as survivors\n' "$broken" >&2
+  printf 'mutant(s) no longer apply — fix their anchors before the catalogue scores them as survivors\n' >&2
   exit 1
 fi
 
