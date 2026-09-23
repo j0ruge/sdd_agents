@@ -317,8 +317,10 @@ try:
         "print(m.wait_family(worker, signals))\n")
     late = {}
     for when in ("after", "before"):
-        probe = subprocess.run([sys.executable, str(late_probe), str(root / "bin/sdd-coordination.py"),
-                                when], capture_output=True, text=True, timeout=8)
+        # -B: importing the helper must not leave bin/__pycache__/ in the kit's tree.
+        probe = subprocess.run([sys.executable, "-B", str(late_probe),
+                                str(root / "bin/sdd-coordination.py"), when],
+                               capture_output=True, text=True, timeout=8)
         late[when] = probe.stdout.strip()
     check("a signal after the worker's own exit keeps its status", late["after"] == "0", late)
     check("...and the same signal before it still reports the interrupt", late["before"] == "130", late)
