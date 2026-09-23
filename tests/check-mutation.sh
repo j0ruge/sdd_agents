@@ -296,7 +296,10 @@ mut_QA_bug_enum_loose() {
 }
 
 mut_QA_matrix_pending() {     # ignores a 'Pending' matrix row — an unwalked journey passes
-  sed -i 's|.*Pending\[\[:space:\]\]\*.*|    if false; then|' "$1"
+  # Anchored on the `if grep -qE` line alone: since the Pending rows are COUNTED for the reason
+  # (PR #57 review), a second line carries the same regex, and the unanchored spelling turned both
+  # into `if false; then` — invalid bash, which the catalogue scored as a survivor.
+  sed -i '/^gate_QA() {/,/^}/ s|^    if grep -qE .*Pending\[\[:space:\]\]\*.*|    if false; then|' "$1"
 }
 
 mut_QA_bug_open() {           # ignores a bug with Status: open in the registry
@@ -3351,7 +3354,10 @@ mut_RUN_gate_pass_ignores_own_session() {
 # hold what the runner measured. Caught by `the phase the runner gave up on records no gate closure`
 # in check-autonomy.sh, and by nothing else.
 mut_RUN_gate_pass_off_the_derived_branch() {
-  sed -i 's@^    else phase="\$(current_phase)"; gate_pass_rows "\$phase"; fi$@    else phase="$(current_phase)"; fi\n    gate_pass_rows "$phase"@' "$1"
+  # Re-anchored after 20260922-o-motivo-da-fase split the derived branch over several lines: the
+  # writer now ALSO runs on the two branches that do not derive (the dry-run cursor and --phase /
+  # the draft jump), which is what moving it out of the derived branch meant on the one-line form.
+  sed -i '/^cmd_run() {/,/^}/ s@^\(    \(el\)\{0,1\}if \[ -n "\$\(dry_next\|force_phase\)" \]; then phase=.*prev_why=""\)$@\1; gate_pass_rows "$phase"@' "$1"
 }
 
 # The human reader files a row the runner itself wrote under "unrecognized" — the same defect the
