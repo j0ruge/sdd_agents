@@ -42,9 +42,12 @@ esac
 # JOBS resolution
 #
 # The default derives from the machine instead of being the constant 4 it used to be: a 20-core
-# box was pinned to 4 while a 2-core one was oversubscribed by the same constant. Capped at 8 —
-# each mutant runs a whole copy of the suite, and past that point the copies fight for disk and
-# memory instead of finishing sooner. An explicit SDD_MUTATION_JOBS always wins; garbage in it is
+# box was pinned to 4 while a 2-core one was oversubscribed by the same constant. Capped at 16 —
+# each mutant runs a whole copy of the suite, and past some point the copies fight for disk and
+# memory instead of finishing sooner. The cap used to be 8 on that argument alone, never measured;
+# measured on 2026-09-23 over one fixed sample of 40 mutants on a 20-core box, 8 -> 16 jobs made
+# each mutant 20% slower (median 133 -> 160 s) and the pool nearly twice as fast (projected
+# catalogue ~1h58 -> ~1h06). An explicit SDD_MUTATION_JOBS always wins; garbage in it is
 # refused by name, never silently degraded (0 used to reach `i % JOBS` as a division by zero).
 # ---------------------------------------------------------------------------
 detect_cores() { # behaviour, not presence — the bin/sdd preflight pattern for the GNU userland
@@ -68,7 +71,7 @@ resolve_jobs() { # resolve_jobs <env-value> <cores> — pure; prints JOBS or ref
   fi
   case "$cores" in *[!0-9]*|'') cores=4 ;; esac
   [ "$cores" -ge 1 ] || cores=1
-  [ "$cores" -gt 8 ] && cores=8
+  [ "$cores" -gt 16 ] && cores=16
   echo "$cores"
 }
 
@@ -77,7 +80,7 @@ resolve_jobs() { # resolve_jobs <env-value> <cores> — pure; prints JOBS or ref
 # pairs only; detect_cores is machine-dependent and stays unprobed (the chain is trivial to read).
 jobs_selftest() {
   local got
-  got="$(resolve_jobs "" 20)"      && [ "$got" = 8 ]  || { echo "  SELFTEST FAIL  cap: 20 cores resolved to '$got', expected 8" >&2; return 1; }
+  got="$(resolve_jobs "" 20)"      && [ "$got" = 16 ] || { echo "  SELFTEST FAIL  cap: 20 cores resolved to '$got', expected 16" >&2; return 1; }
   got="$(resolve_jobs "" 2)"       && [ "$got" = 2 ]  || { echo "  SELFTEST FAIL  small box: 2 cores resolved to '$got', expected 2" >&2; return 1; }
   got="$(resolve_jobs "" 0)"       && [ "$got" = 1 ]  || { echo "  SELFTEST FAIL  floor: 0 cores resolved to '$got', expected 1" >&2; return 1; }
   got="$(resolve_jobs "" bogus)"   && [ "$got" = 4 ]  || { echo "  SELFTEST FAIL  garbage cores resolved to '$got', expected the 4 fallback" >&2; return 1; }
