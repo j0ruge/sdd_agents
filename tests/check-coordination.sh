@@ -108,6 +108,7 @@ JIRA_ENABLED=false
 ADR_CHECK=off
 ON_ESCALATION_CMD="${COORD_HOOK:-}"
 if [ -n "${COORD_PROBE:-}" ]; then printf touched >> "$COORD_PROBE"; fi
+if [ -n "${COORD_FDCOUNT:-}" ]; then ls /proc/$$/fd | wc -l > "$COORD_FDCOUNT"; fi
 if [ -n "${COORD_HOLD:-}" ]; then
   if [ "${COORD_CHILD:-}" = cooperative ]; then
     exec 3<> "$COORD_RELEASE"
@@ -493,6 +494,34 @@ try:
     check("the lock helper ignores the caller's PYTHONPATH",
           result.returncode == 0 and not shadowed.exists(),
           "rc %d, shadow module ran: %s" % (result.returncode, shadowed.exists()))
+    # A caller holding descriptors 3..~1110 pushes every descriptor the supervisor opens past 1023,
+    # where select() raises ValueError: the supervisor died mid-run and its flock went with it,
+    # under a live worker (CodeRabbit on PR #59). Reachable in practice: Node raises the soft
+    # RLIMIT_NOFILE to the hard one, and every child of a harness session inherits it. The worker
+    # counts its own descriptors, which proves the world was built — a caller that closed them
+    # would make this probe pass over a supervisor that never saw a high descriptor.
+    # A supervisor that dies leaves its worker orphaned and holding the output pipe, so the broken
+    # world ends in a timeout, not in an rc: caught here and read as the failure it is.
+    fdcount = work / "fdcount"
+    try:
+        crowded = subprocess.run(["bash", "-c",
+            'ulimit -n 4096 2>/dev/null || exit 3\n'
+            'for n in 3 4 5 6 7 8 9; do eval "exec $n</dev/null"; done\n'
+            'for _ in $(seq 1100); do exec {fd}</dev/null; done\n'
+            'exec "$0" phase 20260101-one', str(sdd)],
+            cwd=repo, env=dict(env, COORD_FDCOUNT=str(fdcount)), text=True,
+            stdout=subprocess.PIPE, stderr=subprocess.STDOUT, timeout=8)
+    except subprocess.TimeoutExpired as error:
+        crowded = subprocess.CompletedProcess(error.cmd, 124, (error.output or b"").decode(errors="replace"))
+    if crowded.returncode == 3:
+        # The world cannot be built where the hard limit is below 4096 — and there no descriptor
+        # can pass 1023 either, so the defect this probe hunts cannot happen. Said, not hidden.
+        print("  skip  a crowded caller: the hard RLIMIT_NOFILE is below 4096 on this machine", flush=True)
+    else:
+        seen = int(fdcount.read_text()) if fdcount.exists() else 0
+        check("a caller holding 1100 descriptors keeps the supervisor alive",
+              crowded.returncode == 0 and "CHECKOUT-UNAVAILABLE" not in crowded.stdout and seen >= 1024,
+              "rc %d, worker saw %d descriptors: %s" % (crowded.returncode, seen, crowded.stdout[-300:]))
     nested = start(repo, mode="reentry")
     results = json.loads((work / "nested-results").read_text())
     for args, code, output in results:

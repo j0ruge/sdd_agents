@@ -251,8 +251,13 @@ def wait_family(child, signals, deadline=None, grace=2, relay=None):
     # supervisor with the worker still alive, releasing the lock under it. No probe reaches this
     # branch, and it is declared rather than claimed: pidfd_capability() has already refused a
     # machine without pidfds before any worker exists, so the world where it runs is not built.
+    # poll(), never select(): a caller holding descriptors past 1023 hands the supervisor a pidfd
+    # select() refuses with ValueError, and the supervisor died under a live worker (CodeRabbit on
+    # PR #59; probe "a caller holding 1100 descriptors" in check-coordination.sh).
+    worker_poll = select.poll()
     try:
         worker_fd = os.pidfd_open(child)
+        worker_poll.register(worker_fd, select.POLLIN)
     except OSError:
         worker_fd = None
     try:
@@ -269,7 +274,9 @@ def wait_family(child, signals, deadline=None, grace=2, relay=None):
                     worker_status = os.waitstatus_to_exitcode(status)
                     if worker_status < 0:
                         worker_status = 128 - worker_status
-                    os.close(worker_fd)
+                    if worker_fd is not None:
+                        worker_poll.unregister(worker_fd)
+                        os.close(worker_fd)
                     worker_fd = None
                 continue
             if deadline is not None and time.monotonic() >= deadline and signals['time'] is None:
@@ -278,7 +285,7 @@ def wait_family(child, signals, deadline=None, grace=2, relay=None):
                 sent = signal.SIGKILL if time.monotonic() - signals['time'] >= grace else signals['number']
                 signal_family(sent, delivered, relay)
             if worker_fd is not None:
-                select.select([worker_fd], [], [], .01)
+                worker_poll.poll(10)
             else:
                 time.sleep(.01)
     finally:

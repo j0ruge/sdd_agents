@@ -4013,10 +4013,17 @@ mut_COORD_helper_not_isolated() {
   sed -i 's@^readonly COORDINATION_PYTHON=(python3 -I -S)$@readonly COORDINATION_PYTHON=(python3)@' "$1"
 }
 
-# The worker's pidfd kept after the worker is reaped: the next wait selects on a closed descriptor,
-# the supervisor dies of EBADF and the lock goes with it. Caught by every coordinated call.
+# The worker's pidfd kept after the worker is reaped: the `finally` closes it a second time — EBADF,
+# or worse, a descriptor reused since — and the supervisor dies. Caught by every coordinated call.
 mut_COORD_reaped_pidfd_kept() {
   sed -i '/^def wait_family(/,/^def / { /^                    worker_fd = None$/d }' "${1%/*}/sdd-coordination.py"
+}
+
+# Back to select() on the worker's pidfd: a caller holding descriptors past 1023 makes it raise
+# ValueError and the supervisor dies under a live worker. Caught by "a caller holding 1100
+# descriptors keeps the supervisor alive" (check-coordination.sh).
+mut_COORD_select_pidfd() {
+  sed -i 's@^                worker_poll.poll(10)$@                select.select([worker_fd], [], [], .01)@' "${1%/*}/sdd-coordination.py"
 }
 
 CATALOG=(
@@ -4027,6 +4034,7 @@ CATALOG=(
   COORD_hook_relay_signaled
   COORD_helper_not_isolated
   COORD_reaped_pidfd_kept
+  COORD_select_pidfd
   RUN_branch_double_slash
   COORD_admission_missing
   COORD_linker_unlocked
@@ -4511,7 +4519,7 @@ run_mutant() {
 # stopped being parsed: an empty loop reports "0 broken" forever.
 # ---------------------------------------------------------------------------
 if [ "$ANCHORS_ONLY" = 1 ]; then
-  ANCHOR_FLOOR=391
+  ANCHOR_FLOOR=392
   anchor_box() { mkdir -p "$1"; cp -r "$ROOT/bin" "$1/"; }
   anchor_control_noop()       { :; }
   anchor_control_intact()     { printf '# a mutation that lands and stays valid\n' >> "$1"; }
