@@ -348,7 +348,7 @@ segundo quis o **controle negativo**: rodar a primitiva de asserção contra um 
 conhecida). Sensor a mais com auto-teste nunca é o defeito; sensor **sem** ele, estando
 nas duas situações, é.
 ⚠️ A âncora `^selftest()` **é** o instrumento; `selftest` solto responde **dez**, somando o
-`jobs_selftest()` do escalonador (`tests/check-mutation.sh:63`), que mede o pool de jobs e não
+`jobs_selftest()` do escalonador (`grep -n '^jobs_selftest()' tests/check-mutation.sh`), que mede o pool de jobs e não
 regra de sensor nenhuma, e o `tests/run-all.sh`, que só os invoca. Número em rubrica sem o
 comando ao lado é a mesma classe do
 `44 caught of 44` que já venceu neste arquivo — conte a propriedade, não a palavra.
