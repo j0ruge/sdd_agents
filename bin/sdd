@@ -2317,7 +2317,8 @@ $turn_rule
 
 Write the artifacts to disk and commit. The runner re-evaluates the gate from outside — it reads
 the files and the frontmatter. Your answer in text proves nothing and satisfies no gate. A
-finding that does not fit this mission goes to $TODO_FILE, never to the diff.
+finding that does not fit this mission goes under the <!-- sdd:open --> marker of $TODO_FILE
+(grammar: $SDD_HOME/templates/todo.md), never to the diff.
 EOF
     return 0
   fi
@@ -2341,8 +2342,8 @@ $turn_rule
 
 Write the artifacts to disk and commit. The runner re-evaluates the gate from outside — it runs
 the tests, checks the hashes in the git log, reads the files. Your answer in text proves nothing
-and satisfies no gate. A finding that does not fit this mission goes to $TODO_FILE, never to the
-diff.
+and satisfies no gate. A finding that does not fit this mission goes under the <!-- sdd:open -->
+marker of $TODO_FILE (grammar: $SDD_HOME/templates/todo.md), never to the diff.
 EOF
 }
 
@@ -4058,13 +4059,15 @@ cmd_install() {
   # `load_config` will hand the runner after expansion, never the text of the line. `|| true`
   # because the rc of a substitution is its LAST command's, and a config that fails to parse must
   # not take the install down here — it is `sdd preflight`'s job to say so, in its own words.
-  local inst_handoff inst_todo inst_qadocs
+  local inst_handoff inst_todo inst_qadocs inst_lang
   # shellcheck disable=SC1090
   inst_handoff="$( . "$CONFIG_FILE" >/dev/null 2>&1; printf '%s' "${HANDOFF_DIR:-}" )" || true
   # shellcheck disable=SC1090
   inst_todo="$( . "$CONFIG_FILE" >/dev/null 2>&1; printf '%s' "${TODO_FILE:-}" )" || true
   # shellcheck disable=SC1090
   inst_qadocs="$( . "$CONFIG_FILE" >/dev/null 2>&1; printf '%s' "${QA_DOCS_PATH:-}" )" || true
+  # shellcheck disable=SC1090
+  inst_lang="$( . "$CONFIG_FILE" >/dev/null 2>&1; printf '%s' "${OUTPUT_LANG:-}" )" || true
   # Same defaults load_config applies, restated here because a broken config arrives EMPTY.
   [ -n "$inst_handoff" ] || inst_handoff="docs/handoffs"
   [ -n "$inst_todo" ]    || inst_todo="TODO.md"
@@ -4077,35 +4080,33 @@ cmd_install() {
     ok "$inst_handoff/ created (the mission's durable state lives here, committed)"
   fi
 
-  if [ -f "$REPO_ROOT/$inst_todo" ]; then
-    ok "$inst_todo already exists (preserved)"
-  else
+  # The seed is the kit's template in the repo's OUTPUT_LANG — templates/todo.<lang>.md — and the
+  # English templates/todo.md when no variant exists for that language. Every variant carries the
+  # same two markers (tests/check-templates.sh holds them to one structure), so the sensor and the
+  # agents read any of them the same way; only the prose a human reads changes.
+  local seed="$SDD_HOME/templates/todo.md"
+  if [ -n "$inst_lang" ] && [ -f "$SDD_HOME/templates/todo.$inst_lang.md" ]; then
+    seed="$SDD_HOME/templates/todo.$inst_lang.md"
+  fi
+  [ -f "$seed" ] || die "the TODO.md seed is missing from the kit: $seed"
+  # The blob of the seed this command wrote before the two-section skeleton, byte for byte. A file
+  # still equal to it holds no finding, so replacing it loses nothing; one byte different and it is
+  # somebody's work, preserved. Measured on three targets that were seeded and never written to.
+  local legacy_seed_blob="1bcb41467fec35ec67cf74948a3e2acfdafcc194"
+
+  if [ ! -f "$REPO_ROOT/$inst_todo" ]; then
     # Seeded with the FORMAT, because an empty file teaches nothing and the format is what makes
     # the entries countable. Never overwritten: a second install over a file holding real findings
     # would take them with it.
-    cat > "$REPO_ROOT/$inst_todo" <<'SEED'
-# Findings
-
-> Out-of-scope findings from `sdd` missions. Never divert the mission to fix one; never lose it.
-> One entry, about six lines: what, the anchor, why it matters, the direction, who found it.
-> The long analysis belongs in the handoff of the mission cited.
->
-> Format:
->
-> ```md
-> - [ ] <what> — `file:line` — <why it matters> — found by `<agent>` in mission `<slug>` (YYYY-MM-DD)
-> ```
->
-> Closed is DELETED, never archived: an entry marked `RESOLVED by <hash>` stays here only until
-> the PR citing that evidence is merged, then leaves the file. Durable memory already exists in
-> `git log -S`, in the handoffs, and in the hash the entry itself quotes. Delete on the artifact
-> — `git merge-base --is-ancestor <hash> <base>` — never on a PR label.
-
-## Open
-
-## Resolved
-SEED
-    ok "$inst_todo created (out-of-scope findings go here — principle 5)"
+    cp "$seed" "$REPO_ROOT/$inst_todo"
+    ok "$inst_todo created from templates/$(basename "$seed") (out-of-scope findings go here — principle 5)"
+  elif [ "$(git hash-object "$REPO_ROOT/$inst_todo" 2>/dev/null)" = "$legacy_seed_blob" ]; then
+    cp "$seed" "$REPO_ROOT/$inst_todo"
+    ok "$inst_todo was the untouched legacy seed — replaced by templates/$(basename "$seed") (it held no finding)"
+  elif ! grep -qE '^<!-- sdd:open -->[[:space:]]*$' "$REPO_ROOT/$inst_todo"; then
+    warn "$inst_todo predates the two-section skeleton (no <!-- sdd:open --> marker) — preserved; migrate it by hand from templates/$(basename "$seed")"
+  else
+    ok "$inst_todo already exists (preserved)"
   fi
 
   local a name target changed=0

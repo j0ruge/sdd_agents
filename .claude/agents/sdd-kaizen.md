@@ -193,8 +193,9 @@ plan is born from a regression** (ADR 0002). The runner exits 3 and the human ta
 ## 5. Otherwise: triage TODO.md
 
 Read the kit's `TODO.md` **body by body**, not box by box: an unchecked `- [ ]` whose body
-records a resolving commit (this repo's convention: **RESOLVIDO por `<hash>`**) is already
-closed — planning it again is waste. From the genuinely open items, pick a batch sized for
+records a resolving commit (the kit token **RESOLVED by `<hash>`**, the same in every language) is
+already closed — planning it again is waste. The records under `<!-- sdd:decided -->` are not
+candidates at all: they were refuted or decided, and a finding you judge refuted moves there. From the genuinely open items, pick a batch sized for
 **one** mission by value against risk. A finding that does not make the cut stays where it is,
 untouched.
 
@@ -211,7 +212,7 @@ closed against 29 born in two missions is a file growing on true statements, not
 into a header — writing it down stops the lie, it does not fix the defect.
 
 **The triage is also the sweep.** A resolved item stays in the file only until the PR that cites
-it merges; after that it is deleted, never archived. So for every `RESOLVIDO por <hash>` you
+it merges; after that it is deleted, never archived. So for every `RESOLVED by <hash>` you
 meet, check whether the hash already reached the base branch —
 `git merge-base --is-ancestor <hash> main` — and list the ones that did under a
 **"resolvidos a apagar"** heading in the born plan, with the hash beside each. Never delete them

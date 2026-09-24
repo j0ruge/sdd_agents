@@ -891,9 +891,9 @@ one that just recorded the finding.
 **What you do:** write the new number into `tests/health-baseline.txt` **in the same commit** as
 the finding that moved it. That is the whole point — growing stays allowed, growing undeclared does
 not, and the count moves in a diff with an author. Take `<N>` from the failure message or from
-`tests/check-todo.sh` (`  ok    N finding(s) …`), never from a `grep -c` of your own: that answers
-one too many, counting the format example inside the header's fenced block. Findings closed with
-`RESOLVIDO por <hash>` keep counting until they are deleted, which happens after the PR merges
+`tests/check-todo.sh` (`  ok    N finding(s) …`), never from a `grep -c` of your own: a grep does
+not know where the open section ends. Findings closed with
+`RESOLVED by <hash>` keep counting until they are deleted, which happens after the PR merges
 (`git merge-base --is-ancestor <hash> main`) — so the count usually drops on the post-merge sweep,
 not inside the mission that fixed them.
 

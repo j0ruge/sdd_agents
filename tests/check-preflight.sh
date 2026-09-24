@@ -767,6 +767,56 @@ if [ -s "$SEED/TODO.md" ]; then pass "the findings file is seeded, and not empty
 else fail "the findings file is seeded, and not empty" "a non-empty TODO.md" \
        "$(wc -c < "$SEED/TODO.md" 2>/dev/null || echo 'no file') byte(s)"; fi
 
+# The seed is the kit's template in the repo's OUTPUT_LANG, and it passes the shape sensor the
+# repo will be measured by. The starter config declares no language, so this fixture gets English.
+if cmp -s "$SEED/TODO.md" "$ROOT/templates/todo.md"; then
+  pass "with OUTPUT_LANG empty the seed is templates/todo.md, byte for byte"
+else fail "with OUTPUT_LANG empty the seed is templates/todo.md, byte for byte" \
+       "a copy of templates/todo.md" "$(head -c 120 "$SEED/TODO.md" 2>/dev/null)"; fi
+seed_check="$(bash "$ROOT/tests/check-todo.sh" --check "$SEED/TODO.md" --allow-empty 2>&1)"; rc=$?
+if [ "$rc" -eq 0 ] && grep -q '^  ok    0 finding(s)' <<< "$seed_check"; then
+  pass "the seed passes the shape sensor with zero findings"
+else fail "the seed passes the shape sensor with zero findings" "rc 0 and 'ok    0 finding(s)'" \
+       "rc $rc: $seed_check"; fi
+
+# Which variant: templates/todo.<OUTPUT_LANG>.md when the kit has one, the English one otherwise.
+# Each case removes the file first, because an existing TODO.md is never overwritten.
+seed_lang() { # seed_lang <lang> — reinstall with OUTPUT_LANG=<lang> over no TODO.md
+  sed -i "s/^OUTPUT_LANG=.*/OUTPUT_LANG=\"$1\"/" "$SEED/.sdd/config.sh"
+  rm -f "$SEED/TODO.md"
+  ( cd "$SEED" && "$SDD" install >/dev/null 2>&1 )
+}
+seed_lang pt-BR
+if cmp -s "$SEED/TODO.md" "$ROOT/templates/todo.pt-BR.md"; then
+  pass "with OUTPUT_LANG=pt-BR the seed is templates/todo.pt-BR.md"
+else fail "with OUTPUT_LANG=pt-BR the seed is templates/todo.pt-BR.md" "the pt-BR variant" \
+       "$(sed -n 3p "$SEED/TODO.md" 2>/dev/null)"; fi
+seed_lang xx
+if cmp -s "$SEED/TODO.md" "$ROOT/templates/todo.md"; then
+  pass "a language the kit has no variant for falls back to templates/todo.md"
+else fail "a language the kit has no variant for falls back to templates/todo.md" "the English seed" \
+       "$(sed -n 3p "$SEED/TODO.md" 2>/dev/null)"; fi
+
+# The legacy seed — written by this command before the two-section skeleton — held no finding, so
+# an install over an untouched copy replaces it; one byte of difference makes it somebody's work,
+# preserved, with a warning that names the migration.
+cp "$ROOT/tests/fixtures/todo-seed-legacy-en.md" "$SEED/TODO.md"
+legacy_out="$( cd "$SEED" && "$SDD" install 2>&1 )"
+if cmp -s "$SEED/TODO.md" "$ROOT/templates/todo.md"; then
+  pass "an untouched legacy seed is replaced by the current one"
+else fail "an untouched legacy seed is replaced by the current one" "templates/todo.md" \
+       "$(sed -n 1p "$SEED/TODO.md" 2>/dev/null)"; fi
+assert_has "the replacement of the legacy seed is announced" "untouched legacy seed" "$legacy_out"
+{ cat "$ROOT/tests/fixtures/todo-seed-legacy-en.md"; printf -- '- [ ] one real finding\n'; } > "$SEED/TODO.md"
+before_legacy="$(md5sum < "$SEED/TODO.md")"
+legacy_out="$( cd "$SEED" && "$SDD" install 2>&1 )"
+if [ "$before_legacy" = "$(md5sum < "$SEED/TODO.md")" ]; then
+  pass "a legacy seed holding a finding is preserved"
+else fail "a legacy seed holding a finding is preserved" "the same TODO.md" "rewritten"; fi
+assert_has "a pre-skeleton TODO.md is named for migration" "predates the two-section skeleton" "$legacy_out"
+sed -i 's/^OUTPUT_LANG=.*/OUTPUT_LANG=""/' "$SEED/.sdd/config.sh"
+cp "$ROOT/templates/todo.md" "$SEED/TODO.md"
+
 # A second install must not overwrite what the repo already has — the installer is idempotent
 # everywhere else, and a TODO.md flattened on the second run would take real findings with it.
 printf -- '- [ ] a real finding — `x:1` — it matters — found by `x` in mission `m` (2026-01-01)\n' \

@@ -93,8 +93,8 @@ handed to the executor as an `R<n>` buys a session to chase nothing.
 |---|---|
 | CRITICAL or HIGH | one `R<n>` row each — own Red, own commit, revertible on its own |
 | MEDIUM/LOW, cheap | **one** batch `R<n>` row for the whole round (`"achados #4–#7 da r1"`), a Check per finding inside the cell |
-| MEDIUM/LOW, expensive | a line in the repo's `TODO_FILE`, carrying the finding's text |
-| prose alone (Documentation below A) | a line in the repo's `TODO_FILE` — **never** an `R<n>`. The gate tolerates B there, and a prose fix writes new prose for the next round to grade: `20260902-o-rascunho-legado-fala-cru` spent four rounds and ~US$ 133 on exactly that, with zero functional findings |
+| MEDIUM/LOW, expensive | an item in the `<!-- sdd:open -->` section of the repo's `TODO_FILE`, carrying the finding's text |
+| prose alone (Documentation below A) | an item in the `<!-- sdd:open -->` section of the repo's `TODO_FILE` — **never** an `R<n>`. The gate tolerates B there, and a prose fix writes new prose for the next round to grade: `20260902-o-rascunho-legado-fala-cru` spent four rounds and ~US$ 133 on exactly that, with zero functional findings |
 | needs human judgement | the report's "Decisions for a Human" section — **never** an `R<n>` |
 
 The batch row is not laziness: booting an EXEC session costs about US$ 1–2, so six sessions for six

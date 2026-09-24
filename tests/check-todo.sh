@@ -1,5 +1,12 @@
 #!/usr/bin/env bash
-# Shape sensor for the kit's findings file (TODO.md).
+# Shape sensor for a findings file (TODO.md) — the kit's own, and any target's that adopted the
+# skeleton of templates/todo.md.
+#
+# The skeleton: exactly two `##` sections, each followed on the very next line by its marker —
+# `<!-- sdd:open -->` (the findings) and then `<!-- sdd:decided -->` (one-line records of what was
+# refuted, decided or accepted, which have no commit to close them). The heading text above each
+# marker is free and written in OUTPUT_LANG; the markers are the contract, identical everywhere.
+# The findings section runs from its marker to the next `##`, never to the end of the file.
 #
 # The file grew to 861 lines because two rules existed only as prose and nobody enforced them:
 # a finding fits on a few lines, and a closed finding leaves. Prose alone lost that argument —
@@ -15,6 +22,9 @@
 #      audits every mission. Anchoring on the last line rather than anywhere in the body is
 #      deliberate: a date buried mid-item is a measurement, not attribution.
 #   5. at most CAP content lines; the long analysis lives in the handoff the item cites
+#
+# And per decided record: `- **<title>** — …`, one physical line, a code span after the title (the
+# pointer to the evidence) and a `(YYYY-MM-DD)` at the end. Records are not counted as findings.
 #
 # What it deliberately does NOT measure: whether the prose is any good, or whether the anchor
 # still points at real code. Both are human judgement on the diff. This one stops the regression,
@@ -35,11 +45,21 @@
 # and no exclusion from check-lang's surface(): TODO.md is content in OUTPUT_LANG, so a sensor
 # keyed on the Portuguese words of the found-by field would both break in an English target repo
 # and widen the exact coverage hole that TODO.md already records against check-lang's surface().
+# The two section markers are the only WORDS this file reads, and they are English on purpose —
+# the same rule that keeps status tokens English inside a pt-BR checkpoint. The previous version
+# found the section by `^## Aberto`, a Portuguese heading, and was the one exception to this
+# paragraph: in a target whose findings sat under another heading it read the whole file.
 #
 # Usage: tests/check-todo.sh                (selftest, then check TODO.md — what run-all.sh calls)
 #        tests/check-todo.sh --selftest     (probes only)
-#        tests/check-todo.sh --check <file> (check one file, no selftest — used BY the selftest to
-#                                            exercise the real reporting path without recursing)
+#        tests/check-todo.sh --check <file> [--allow-empty]
+#                                           (check one file, no selftest — used BY the selftest to
+#                                            exercise the real reporting path without recursing, and
+#                                            by anyone checking a target's TODO.md; --allow-empty
+#                                            accepts zero findings, which the kit's own file never is)
+#        tests/check-todo.sh --count <file> (print the parser's item count, even when the lint
+#                                            fails — for tools that mirror the findings elsewhere
+#                                            and must prove their own parser agrees)
 #
 # Env: SDD_TODO_FILE overrides which file the no-arg form checks; SDD_TODO_CAP overrides the
 #      per-item line budget (a positive integer; anything else exits 95).
@@ -128,6 +148,9 @@
 #   89  no temp dir (the probes never ran)   90/91/92  a selftest probe failed
 #   93  findings file missing or unreadable  94  fewer items than the floor
 #   95  SDD_TODO_CAP is not a positive integer   96  unknown option
+#   97  the selftest was poisoned on purpose (a probe of the dispatch, never a real run)
+#   98  the bare path reached check_file without the selftest
+#   99  no `<!-- sdd:open -->` marker — the findings section is never guessed
 
 set -uo pipefail
 
@@ -135,6 +158,18 @@ SELF="$(CDPATH='' cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)/$(basename "${BASH
 ROOT="$(CDPATH='' cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 TODO="${SDD_TODO_FILE:-$ROOT/TODO.md}"
 CAP="${SDD_TODO_CAP:-8}"
+# The two section markers are the ONLY words this sensor reads, and they are English on purpose:
+# the heading above each one is content in OUTPUT_LANG (`## Aberto`, `## Open`, anything), so a
+# sensor keyed on the heading text would work in one language and go quietly blind in every other
+# one. That is what happened: the previous version located the section by `^## Aberto`, and in a
+# target whose findings live under another heading it fell back to "the whole file is findings"
+# and reported thousands of violations about prose it was never meant to read.
+OPEN_MARKER='<!-- sdd:open -->'
+DECIDED_MARKER='<!-- sdd:decided -->'
+OPEN_MARKER_ERE='^<!-- sdd:open -->[[:space:]]*$'
+# The item floor. 1 for the kit's own file (an empty count there means the parser broke); a target
+# with no findings yet is legitimate, and `--check <file> --allow-empty` lowers it to 0.
+FLOOR=1
 
 # valid_cap <value> — a cap that is not a positive integer would be compared as a STRING by awk
 # ("9" > "abc" is false), silently switching the line budget off. Zero is rejected too: it is a
@@ -160,24 +195,38 @@ valid_cap() {
 # awk, and markdown is genuinely hard.
 #
 # So it stopped. The findings section of TODO.md contains NO fenced block — the only one is the
-# format example in the header — so the parser skips the header wholesale and forbids fences
-# after it. Nothing to desync, and every shape that used to hide behind a fence is now judged by
+# format example in the header — so the parser skips the header (everything above the open
+# marker) wholesale and forbids fences after it. Nothing to desync, and every shape that used to hide behind a fence is now judged by
 # a rule that never looks at fences at all.
+# unassignable <path> — the path as grep and awk must be handed it.
+# A bare path shaped like `name=value` is eaten by awk as a variable ASSIGNMENT, and awk then
+# reads stdin instead of the file — the sensor would happily lint whatever it was handed and
+# report "ok". mawk has no `--` for operands, so the fix is to make the path un-assignable.
+# `name=value` is a variable ASSIGNMENT to awk and `-` is stdin to both grep and awk; either way
+# the file is never opened and the sensor reports about something else entirely. Shared by every
+# reader of the file, because the marker lookup below is a second reader and would reopen the hole.
+unassignable() {
+  case "$1" in [A-Za-z_]*=* | -) printf './%s' "$1" ;; *) printf '%s' "$1" ;; esac
+}
+
+# has_open_marker <file> — does the file carry the open-section marker, alone on its line?
+# Anchored at both ends: a marker QUOTED in prose (the seed explains it in its own preamble) is
+# documentation, and an unanchored match would call that file sectioned.
+has_open_marker() { grep -qE "$OPEN_MARKER_ERE" "$(unassignable "$1")" 2>/dev/null; }
+
 todo_awk() {
-  local from f="$1"
-  # A bare path shaped like `name=value` is eaten by awk as a variable ASSIGNMENT, and awk then
-  # reads stdin instead of the file — the sensor would happily lint whatever it was handed and
-  # report "ok". mawk has no `--` for operands, so the fix is to make the path un-assignable.
-  # `name=value` is a variable ASSIGNMENT to awk and `-` is stdin to both grep and awk; either way
-  # the file is never opened and the sensor reports about something else entirely.
-  case "$f" in [A-Za-z_]*=* | -) f="./$f" ;; esac
-  # The heading is located here rather than in awk because awk cannot look ahead, and starting
-  # from "the findings begin" is what lets the header keep its example fence without the parser
-  # having to understand fences. Absent (a probe fixture), the whole file is the findings section.
-  from="$(grep -n '^## Aberto' "$f" 2>/dev/null | head -1 | cut -d: -f1)"
-  awk -v cap="$2" -v mode="$3" -v from="${from:-0}" '
+  local marked f
+  f="$(unassignable "$1")"
+  # Whether the file is sectioned at all is decided here; WHERE each section begins is decided in
+  # awk, by the marker under each `##`. Unmarked (a probe fixture) means the whole file is the
+  # findings section — a path only the probes reach, because check_file refuses an unmarked file
+  # (rc 99) before it ever asks the parser.
+  marked=0
+  has_open_marker "$f" && marked=1
+  awk -v cap="$2" -v mode="$3" -v marked="$marked" -v omark="$OPEN_MARKER" -v dmark="$DECIDED_MARKER" '
     # How many backticks occur in text. Byte-based like everything else here, and that is safe:
     # a backtick is ASCII, so no multibyte character can contain one as a byte.
+    BEGIN { sect = marked ? 0 : 1 }   # 0 preamble, 1 open, 2 decided, 3 under a stray H2
     function backticks(text,   n, i, p) {
       n = 0; i = 1
       while ((p = index(substr(text, i), "`")) > 0) { n++; i = i + p }
@@ -304,6 +353,35 @@ todo_awk() {
       if (mode == "lint") print "  line " NR ": a bare [ ]/[x] box — the marker it belongs to is on another line"
       flush(); next
     }
+    # ── The skeleton: every `##` is followed, on the very next line, by its section marker ─────
+    # Two sections and nothing else: the open findings, then the decided records. The heading
+    # TEXT is never read — it is content in OUTPUT_LANG — and the marker is. An H2 without one is
+    # refused wherever it sits; before the open marker it leaves the reader in the preamble, after
+    # it the reader parks in a section whose contents nobody consumes.
+    /^## / { flush(); h2 = NR; next }
+    h2 && NR == h2 + 1 {
+      h2 = 0; t = $0; sub(/[ \t]+$/, "", t)
+      if (t == omark) {
+        if (oseen) { if (mode == "lint") print "  line " NR ": a second open marker — the skeleton has one open section" }
+        else if (dseen && mode == "lint") print "  line " NR ": the open section comes after the decided one — open first, decided last"
+        oseen = 1; sect = 1; next
+      }
+      if (t == dmark) {
+        if (dseen) { if (mode == "lint") print "  line " NR ": a second decided marker — the skeleton has one decided section" }
+        else if (!oseen && mode == "lint") print "  line " NR ": the decided section comes before the open one — open first, decided last"
+        dseen = 1; sect = 2; next
+      }
+      if (mode == "lint")
+        print "  line " (NR - 1) ": an H2 with no section marker on the next line — the skeleton has two, each followed by " omark " or " dmark
+      if (oseen || dseen) sect = 3
+    }
+    # A marker that does not sit right under a `##` names no heading. Refused rather than guessed:
+    # a blank line between the two is the likeliest cause, and the message says where to look.
+    { t = $0; sub(/[ \t]+$/, "", t) }
+    t == omark || t == dmark {
+      if (mode == "lint") print "  line " NR ": a section marker with no `##` on the line above — it names the heading it sits under"
+      flush(); next
+    }
     # ── Header: NOTHING here models a fence, and that is the fourth and final answer ───────────
     # Four mechanisms tried to know where the header example begins and ends — a global toggle, a
     # bounded toggle, a parity count, and the closer-matching in between. All four failed, and the
@@ -321,12 +399,48 @@ todo_awk() {
     # rendered as a task item and went invisible, all 288 carrying a `<`, none without one. The
     # widening was meant to accept a header example written as `- [ ] **<what>** — …`; anchoring
     # to the title position accepts that and nothing else.
-    NR <= from && /^[ \t>]*([-*+]|[0-9]+[.)])[ \t]+\[ \]/ {
+    sect == 0 && /^[ \t>]*([-*+]|[0-9]+[.)])[ \t]+\[ \]/ {
       if ($0 !~ /^[ \t>]*([-*+]|[0-9]+[.)])[ \t]+\[ \][ \t]*(\*\*)?</ && mode == "lint")
         print "  line " NR ": a finding above the findings section"
       next
     }
-    NR <= from                { next }
+    sect == 0                 { next }
+    # ── The decided section: one line per record, a pointer, a date ────────────────────────────
+    # A refuted, decided or accepted finding has no commit that closes it, so `git log -S` never
+    # finds it again and the next QA round files it anew. The record stays, and it stays SHORT:
+    # the analysis lives wherever its pointer points, which is why a continuation is refused.
+    sect == 2 {
+      if (!NF || /^#/ || /^>/) next
+      if (/^[ \t>]*([-*+]|[0-9]+[.)])[ \t]+\[ \]/) {
+        if (mode == "lint") print "  line " NR ": a decided record carries no box — a decided finding is not open"
+        next
+      }
+      if (/^[ \t]/) {
+        if (mode == "lint") print "  line " NR ": a decided record is one line — the analysis lives where its pointer points"
+        next
+      }
+      if (/^([-*+]|[0-9]+[.)])[ \t]/) {
+        if ($0 !~ /^- \*\*[^*]+\*\* — /) {
+          if (mode == "lint") print "  line " NR ": a decided record opens with `- **<title>** — `"
+          next
+        }
+        rest = $0; sub(/^- \*\*[^*]+\*\* — /, "", rest)
+        if (rest !~ /`[^`]+`/ && mode == "lint")
+          print "  line " NR ": a decided record points at its evidence — no code span after the title"
+        if ($0 !~ /\([0-9][0-9][0-9][0-9]-[0-9][0-9]-[0-9][0-9]\)[ \t]*$/ && mode == "lint")
+          print "  line " NR ": a decided record ends with (YYYY-MM-DD)"
+        next
+      }
+      if (mode == "lint") print "  line " NR ": prose at column 0 in the decided section"
+      next
+    }
+    # Under an H2 the skeleton does not have, the H2 itself was already reported; a finding parked
+    # there is named too, because it is invisible to the count and to every consumer.
+    sect == 3 {
+      if (/^[ \t>]*([-*+]|[0-9]+[.)])[ \t]+\[ \]/ && mode == "lint")
+        print "  line " NR ": a finding under an H2 the skeleton does not have"
+      next
+    }
     # ── Findings section: a WHITELIST. Item, indented continuation, heading, block quote, blank ─
     # Everything else at column 0 is refused. Seven rounds of fail-open came from trying to decide
     # what an unfamiliar construct MEANT; this decides only whether it belongs, which is a question
@@ -423,7 +537,7 @@ RULE_MARK_FAILS=0
 # floor guards the probes and nothing guards the report: the sensor would stay green while saying
 # one rule fewer than it ran, which is the shape of every quiet regression in this suite.
 RULES_REPORTED=0
-RULES_FLOOR=2
+RULES_FLOOR=6
 rule_begin() { RULE_MARK_PROBES="$PROBES"; RULE_MARK_FAILS="$FAILS"; }
 rule_end() { # rule_end <floor> <text>
   local n=$((PROBES - RULE_MARK_PROBES))
@@ -470,11 +584,13 @@ helper_selfcheck() {
   fi
   cat > "$box/bad.md" <<'EOF'
 ## Aberto
+<!-- sdd:open -->
 
 - [ ] a finding with no bold title, no anchor and no date
 EOF
   cat > "$box/good.md" <<'EOF'
 ## Aberto
+<!-- sdd:open -->
 
 - [ ] **A finding with every field in place** — `bin/sdd:42` — why it matters, in one clause.
   Direction: what to do about it. — found by `sdd-qa` in mission `20260816-probe` (2026-08-16)
@@ -541,6 +657,7 @@ selftest() {
   # --- shapes that must pass ---
   cat > "$box/good.md" <<'EOF'
 ## Aberto
+<!-- sdd:open -->
 
 - [ ] **A finding with every field in place** — `bin/sdd:42` — why it matters, in one clause.
   Direction: what to do about it. — found by `sdd-qa` in mission `20260816-probe` (2026-08-16)
@@ -555,6 +672,7 @@ Format:
 ```
 
 ## Aberto
+<!-- sdd:open -->
 
 - [ ] **Real item** — `bin/sdd:1` — matters. — found by `humano` (2026-08-16)
 EOF
@@ -575,14 +693,14 @@ EOF
   #
   # ── Fences in the findings section: ONE rule, and the probes that killed a dozen ─────────────
   # Six rounds of fail-open lived in fence tracking. There is none now: the header (everything up
-  # to `## Aberto`) is skipped wholesale, and after it any fence at all is a violation. These
+  # to the open marker) is skipped wholesale, and after it any fence at all is a violation. These
   # probes are the shapes that each used to be its own bypass — a four-backtick block quoting a
   # three-backtick one, a backtick fence "closed" by a tilde, an inline span mistaken for an
   # opener, a fence indented past CommonMark's limit, a closer carrying an info string, and a
   # fence that never closes. Every one of them is now the same single answer.
   local shape
   for shape in '```sh' '````md' '~~~md' '   ```' '```code``` inline' '```x'; do
-    { printf '## Aberto\n\n'
+    { printf '## Aberto\n<!-- sdd:open -->\n\n'
       printf -- '- [ ] **Good** — `bin/sdd:1` — why. — found by `x` (2026-08-16)\n\n'
       printf '%s\n' "$shape"
       printf -- '- [x] **a closed finding that used to hide below this**\n'; } > "$box/fence.md"
@@ -592,7 +710,7 @@ EOF
 
   # An item may not carry one either, and the box below it stays visible — the shape that exited 0
   # through four different generations of fence tracking.
-  { printf '## Aberto\n\n'
+  { printf '## Aberto\n<!-- sdd:open -->\n\n'
     printf -- '- [ ] **T** — `f:1` — why. — found by `x` (2026-08-16)\n'
     printf '  ```\n'
     printf -- '- [x] **A CLOSED FINDING that GitHub renders ticked**\n'
@@ -639,7 +757,7 @@ EOF
   # archived findings parked above it switched rule 2 off entirely, with the run green.
   { printf '## Resolvido\n'
     printf -- '- [x] **closed A** — `f:1` — w. — by `x` (2026-08-16)\n'
-    printf -- '- [x] **closed B**\n\n## Aberto\n\n'
+    printf -- '- [x] **closed B**\n\n## Aberto\n<!-- sdd:open -->\n\n'
     printf -- '- [ ] **Open** — `bin/sdd:42` — w. — by `x` (2026-08-16)\n'; } > "$box/archived.md"
   assert_says "$box/archived.md" 8 'ticked box' "a ticked box in a section above ## Aberto"
 
@@ -648,7 +766,7 @@ EOF
   # same anchorless, dateless, 41-line finding was four violations below the heading and silence
   # above it, with the reported count short by one.
   { printf '## Triagem\n'
-    printf -- '- [ ] a wish with no title, no anchor and no date\n\n## Aberto\n\n'
+    printf -- '- [ ] a wish with no title, no anchor and no date\n\n## Aberto\n<!-- sdd:open -->\n\n'
     printf -- '- [ ] **Good** — `f:1` — w. — by `x` (2026-08-16)\n'; } > "$box/aboveitem.md"
   assert_says "$box/aboveitem.md" 8 'above the findings section' "an item parked above ## Aberto"
 
@@ -657,13 +775,13 @@ EOF
   # fence needed a toggle, and every fence toggle this file ever had desynced.
   { printf 'Format:\n\n```md\n'
     printf -- '- [ ] <what> — `file:line` — <why> — by `<agent>` (YYYY-MM-DD)\n'
-    printf '```\n\n## Aberto\n\n'
+    printf '```\n\n## Aberto\n<!-- sdd:open -->\n\n'
     printf -- '- [ ] **Good** — `f:1` — w. — by `x` (2026-08-16)\n'; } > "$box/template.md"
   assert_clean "$box/template.md" 8 "the format example in the header"
 
   # A bare CR is a line ending to GitHub and not to awk: a closed finding could ride behind one on
   # the same physical line, invisible, with the run green. Refused by name.
-  printf -- '## Aberto\n\n- [ ] **Item** — `f:1` — w. — by `x` (2026-08-16)\r- [x] **hidden**\n' \
+  printf -- '## Aberto\n<!-- sdd:open -->\n\n- [ ] **Item** — `f:1` — w. — by `x` (2026-08-16)\r- [x] **hidden**\n' \
     > "$box/barecr.md"
   assert_says "$box/barecr.md" 8 'a bare CR' "a closed finding hidden behind a bare CR"
 
@@ -675,7 +793,7 @@ EOF
   # three cases and the code covered two.
   { printf 'Format:\n\n```md\n'
     printf -- '- [ ] **<what>** — `file:line` — <why> — by `<agent>` (YYYY-MM-DD)\n'
-    printf '```\n\n## Aberto\n\n'
+    printf '```\n\n## Aberto\n<!-- sdd:open -->\n\n'
     printf -- '- [ ] **Good** — `f:1` — w. — by `x` (2026-08-16)\n'; } > "$box/template2.md"
   assert_clean "$box/template2.md" 8 "a header example written in the enforced shape"
 
@@ -683,7 +801,7 @@ EOF
   # the template test to "carries a `<` anywhere" hid 288 of the 18720 header shapes that render
   # as a task item — every one of them carrying a `<`, none without.
   { printf -- '- [ ] **`gate_DOCS` fails when the text quotes `<preencher>`** — `bin/sdd:394` —\n'
-    printf '  the sentinel matches an innocent mention. — by `humano` (2026-08-16)\n\n## Aberto\n\n'
+    printf '  the sentinel matches an innocent mention. — by `humano` (2026-08-16)\n\n## Aberto\n<!-- sdd:open -->\n\n'
     printf -- '- [ ] **Good** — `f:1` — w. — by `x` (2026-08-16)\n'; } > "$box/quotesplaceholder.md"
   assert_says "$box/quotesplaceholder.md" 8 'above the findings section' \
     "a header finding that quotes a placeholder"
@@ -692,7 +810,7 @@ EOF
   # put the quote BEFORE any item, where flushing is a no-op. With an item open, a quote ends it —
   # CommonMark puts the paragraph after it outside the list — and without the flush the item
   # swallows that paragraph and its defects go unreported, rc 0.
-  { printf '## Aberto\n\n'
+  { printf '## Aberto\n<!-- sdd:open -->\n\n'
     printf -- '- [ ] **A finding with no anchor and no date**\n\n'
     printf '> a note in the section\n\n  — by `x` (2026-08-16)\n'; } > "$box/quoteflush.md"
   # Asserting the DATE message, not the anchor one: without the flush the indented line below the
@@ -702,27 +820,27 @@ EOF
 
   # The tail rule's "non-empty" half had no probe — the head's did. An empty pair must not count
   # as naming an agent.
-  printf -- '## Aberto\n\n- [ ] **T** — `f:1` — why. — found by `` (2026-08-16)\n' \
+  printf -- '## Aberto\n<!-- sdd:open -->\n\n- [ ] **T** — `f:1` — why. — found by `` (2026-08-16)\n' \
     > "$box/emptytail.md"
   assert_says "$box/emptytail.md" 8 'last field names no' "an empty backtick pair in the tail"
 
   # A blank line must NOT close an item: findings are written in multiple paragraphs, and closing
   # on blank would turn every one of them red.
-  { printf '## Aberto\n\n'
+  { printf '## Aberto\n<!-- sdd:open -->\n\n'
     printf -- '- [ ] **A multi-paragraph finding** — `f:1` — first paragraph.\n\n'
     printf '  Second paragraph. — found by `x` (2026-08-16)\n'; } > "$box/multipara.md"
   assert_clean "$box/multipara.md" 8 "a finding written in two paragraphs"
 
   # And the `NF` guard on the continuation rule: a whitespace-only line must not become the item's
   # last line, or the date rule blames a finding that carries its date correctly.
-  { printf '## Aberto\n\n'
+  { printf '## Aberto\n<!-- sdd:open -->\n\n'
     printf -- '- [ ] **A finding** — `f:1` — why. — found by `x` (2026-08-16)\n'
     printf '   \n'; } > "$box/wsline.md"
   assert_clean "$box/wsline.md" 8 "a whitespace-only line after the last item"
 
   # The violation COUNT in the failure report is asserted, not just the messages: setting it to a
   # constant used to survive the whole selftest.
-  { printf '## Aberto\n\n'
+  { printf '## Aberto\n<!-- sdd:open -->\n\n'
     printf -- '- [ ] **Good** — `f:1` — w. — by `x` (2026-08-16)\n'
     printf -- '1. [ ] one\n-  [ ] two\n> - [ ] three\n'; } > "$box/countable.md"
   # Herestring, never `| grep -q`: under `pipefail` a matching `grep -q` closes the pipe, the
@@ -736,26 +854,26 @@ EOF
     FAILS=$((FAILS + 1)); fail_rc 92
   fi
 
-  # `from` is the FIRST `^## Aberto`, anchored at column 0. Taking the last one would put a whole
-  # section of findings back inside the header; matching the word unanchored would let a mention
-  # of the heading in prose move the boundary earlier.
+  # The section opens at the FIRST open marker; a second one is reported and does not move the
+  # boundary back. Taking the last one would put a whole section of findings back inside the
+  # header, and a mention of the marker in prose is documentation, never a boundary.
   # A ticked box would not discriminate here — that rule reads the whole file. A malformed ITEM
   # does: judged in the section it gets the anchor and date rules, judged as header it gets one
   # "above the findings section" and its real defects go unreported.
-  { printf '## Aberto\n\n'
-    printf -- '- [ ] **A finding with no anchor and no date**\n\n## Aberto\n\n'
+  { printf '## Aberto\n<!-- sdd:open -->\n\n'
+    printf -- '- [ ] **A finding with no anchor and no date**\n\n## Aberto\n<!-- sdd:open -->\n\n'
     printf -- '- [ ] **Good** — `f:1` — w. — by `x` (2026-08-16)\n'; } > "$box/twoheadings.md"
   assert_says "$box/twoheadings.md" 8 'no non-empty' "a malformed item between two ## Aberto headings"
   { printf 'Header prose mentioning the Aberto section before it exists.\n\n'
-    printf -- '- [ ] not a finding, just header prose\n\n## Aberto\n\n'
+    printf -- '- [ ] not a finding, just header prose\n\n## Aberto\n<!-- sdd:open -->\n\n'
     printf -- '- [ ] **Good** — `f:1` — w. — by `x` (2026-08-16)\n'; } > "$box/looseheading.md"
   assert_says "$box/looseheading.md" 8 'above the findings section' "a heading word mentioned in header prose"
 
 
   # An indented line with no finding open is refused like everything off the whitelist, but it is
   # named for what it is: calling it "prose at column 0" sends the reader to the wrong place.
-  { printf '## Aberto\n\n'
-    printf -- '- [ ] **Good** — `f:1` — w. — by `x` (2026-08-16)\n\n## Section\n  an orphan indented line\n'; } \
+  { printf '## Aberto\n<!-- sdd:open -->\n\n'
+    printf -- '- [ ] **Good** — `f:1` — w. — by `x` (2026-08-16)\n\n### Section\n  an orphan indented line\n'; } \
     > "$box/orphanindent.md"
   assert_says "$box/orphanindent.md" 8 'belongs to no finding' "an indented line outside any item"
 
@@ -763,7 +881,7 @@ EOF
   # Markdown says those paragraphs are not item content, so the cap never saw them: three findings
   # trailed by 30 de-indented lines each reported "all within 8 lines" — 101 lines passing green,
   # the exact regression this sensor exists to stop.
-  { printf '## Aberto\n\n'
+  { printf '## Aberto\n<!-- sdd:open -->\n\n'
     printf -- '- [ ] **I** — `f:1` — w. — by `x` (2026-08-16)\n\n'
     printf 'a de-indented paragraph that markdown does not fold into the item\n'; } \
     > "$box/deindented.md"
@@ -772,34 +890,34 @@ EOF
   # CommonMark ends a paragraph at a heading, a thematic break, a block quote, an HTML block and a
   # list start. An earlier rule called all five "a lazy continuation" and named the wrong line, so
   # deleting one blank line before a `###` section heading turned the suite red on a good file.
-  { printf '## Aberto\n\n'
+  { printf '## Aberto\n<!-- sdd:open -->\n\n'
     printf -- '- [ ] **Good** — `f:1` — w. — by `x` (2026-08-16)\n'
-    printf '## A heading right after it\n'; } > "$box/interrupt.md"
+    printf '### A heading right after it\n'; } > "$box/interrupt.md"
   assert_clean "$box/interrupt.md" 8 "a heading interrupting an item with no blank line"
 
   # The section header of the real file is a 14-line block quote, so `>` has to be on the
   # whitelist — without it the whole preamble reads as prose at column 0 and every run fails.
-  { printf '## Aberto\n\n> The lifecycle rule, stated where the findings live.\n'
+  { printf '## Aberto\n<!-- sdd:open -->\n\n> The lifecycle rule, stated where the findings live.\n'
     printf '> Second line of it.\n\n'
     printf -- '- [ ] **Good** — `f:1` — w. — by `x` (2026-08-16)\n'; } > "$box/quoted.md"
   assert_clean "$box/quoted.md" 8 "a block quote in the findings section"
 
   # The bare-marker rule tolerates the trailing space editors actually leave behind.
-  { printf '## Aberto\n\n'
+  { printf '## Aberto\n<!-- sdd:open -->\n\n'
     printf -- '- [ ] **Good** — `f:1` — w. — by `x` (2026-08-16)\n\n- \n  [x] **closed**\n'; } \
     > "$box/markerspace.md"
   assert_says "$box/markerspace.md" 8 'bare list marker' "a bare marker with a trailing space"
 
   # A list marker alone on its line with the box below it is one rendered, ticked item that no
   # per-line rule can see. Refused rather than parsed.
-  { printf '## Aberto\n\n'
+  { printf '## Aberto\n<!-- sdd:open -->\n\n'
     printf -- '- [ ] **Good** — `f:1` — w. — by `x` (2026-08-16)\n\n-\n  [x] **closed, split marker**\n'; } \
     > "$box/splitmarker.md"
   assert_says "$box/splitmarker.md" 8 'bare list marker' "a list marker with its box on the next line"
 
   # The open shapes. The ticked rule was wide and the item-start rule was narrow, so the same line
   # was "a closed finding" when ticked and nothing at all when open.
-  { printf '## Aberto\n\n'
+  { printf '## Aberto\n<!-- sdd:open -->\n\n'
     printf -- '- [ ] **Good** — `f:1` — w. — by `x` (2026-08-16)\n'
     printf -- '1. [ ] a vague wish\n-  [ ] another, two spaces\n> - [ ] one in a quote\n'; } \
     > "$box/openshapes.md"
@@ -812,13 +930,13 @@ EOF
 
   # A lazy continuation folds into the item in markdown and used to count as zero lines, so a
   # 41-line finding written that way reported "within 8 lines".
-  { printf '## Aberto\n\n'
+  { printf '## Aberto\n<!-- sdd:open -->\n\n'
     printf -- '- [ ] **Good** — `f:1` — w. — by `x` (2026-08-16)\n'
     printf 'a lazy continuation at column 0\n'; } > "$box/lazy.md"
   assert_says "$box/lazy.md" 8 'prose at column 0' "a column-0 continuation with no blank line"
 
   # And the legitimate shape it must not be confused with: a footnote AFTER a blank line.
-  { printf '## Aberto\n\n'
+  { printf '## Aberto\n<!-- sdd:open -->\n\n'
     printf -- '- [ ] **Good** — `f:1` — w. — by `x` (2026-08-16)\n\n'
     printf 'A closing note.\n  and its indented continuation.\n'; } > "$box/footnote2.md"
   assert_says "$box/footnote2.md" 8 'prose at column 0' "a column-0 footnote after a blank line"
@@ -869,7 +987,7 @@ EOF
   # A file literally named `-` is stdin to both grep and awk: the file is never opened and the
   # sensor reports about whatever it was handed.
   PROBES=$((PROBES + 1))
-  printf -- '- [x] **closed**\n' > "$box/-"
+  printf -- '## Aberto\n<!-- sdd:open -->\n\n- [x] **closed**\n' > "$box/-"
   printf -- '- [ ] **A** — `f:1` — w. — by `x` (2026-08-16)\n' > "$box/innocent.md"
   ( cd "$box" && bash "$SELF" --check - < innocent.md >/dev/null 2>&1 )
   if [ "$?" -ne 1 ]; then
@@ -886,7 +1004,7 @@ EOF
   # A path shaped like `name=value` is a variable ASSIGNMENT to awk, which then reads stdin — the
   # sensor would lint whatever it was handed and report "ok" about a file it never opened.
   PROBES=$((PROBES + 1))
-  printf -- '- [x] **closed**\n' > "$box/weird=path.md"
+  printf -- '## Aberto\n<!-- sdd:open -->\n\n- [x] **closed**\n' > "$box/weird=path.md"
   printf -- '- [ ] **A** — `f:1` — w. — by `x` (2026-08-16)\n' > "$box/innocent.md"
   ( cd "$box" && bash "$SELF" --check 'weird=path.md' < innocent.md >/dev/null 2>&1 )
   if [ "$?" -ne 1 ]; then
@@ -992,7 +1110,7 @@ EOF
 
   # A heading after an item must end it. No probe covered this, so deleting the heading rule
   # passed the selftest; the real file only caught it by accident, having headings mid-file.
-  { cat "$box/good.md"; printf '\n## Another section\n'; } > "$box/heading.md"
+  { cat "$box/good.md"; printf '\n### Another section\n'; } > "$box/heading.md"
   assert_clean "$box/heading.md" 8 "a heading after an item"
 
   # --- the knobs ---
@@ -1017,7 +1135,7 @@ EOF
   # reaching for a `grep -c` beside the parser, which no probe on the function could ever notice.
   # Invoked through `bash "$SELF"` so a checkout without the exec bit (tarball, zip,
   # core.fileMode=false) does not turn into a bogus "the count is wrong" diagnosis.
-  { printf 'Format:\n\n```md\n- [ ] <what> — `f:1` — <why> — by `<a>` (YYYY-MM-DD)\n```\n\n## Aberto\n\n'
+  { printf 'Format:\n\n```md\n- [ ] <what> — `f:1` — <why> — by `<a>` (YYYY-MM-DD)\n```\n\n## Aberto\n<!-- sdd:open -->\n\n'
     for i in $(seq 1 21); do
       printf -- '- [ ] **Item %s** — `bin/sdd:%s` — why it matters. — found by `x` (2026-08-16)\n' "$i" "$i"
     done; } > "$box/counted.md"
@@ -1063,6 +1181,7 @@ EOF
   rule_begin
   cat > "$box/tailspan.md" <<'EOF'
 ## Aberto
+<!-- sdd:open -->
 
 - [ ] **A finding whose attribution carries an em-dash in backticks** — `bin/sdd:42` — why it
   matters, in one clause. — found by `sdd-qa` in mission `a — b` (2026-08-16)
@@ -1080,6 +1199,7 @@ EOF
   # so it was measuring the anchor rule and calling it the tail rule.
   cat > "$box/twospans.md" <<'EOF'
 ## Aberto
+<!-- sdd:open -->
 
 - [ ] **A finding with two em-dash spans in its tail** — `bin/sdd:42` — why it matters, in one
   clause. — found by `a — b` in mission `c — d` (2026-08-16)
@@ -1090,6 +1210,7 @@ EOF
   # span at all is still an item that never names its agent.
   cat > "$box/tailspan-bad.md" <<'EOF'
 ## Aberto
+<!-- sdd:open -->
 
 - [ ] **A finding with an em-dash in a span and no agent** — `bin/sdd:42` — because `a — b`
   matters — found by nobody at all (2026-08-16)
@@ -1101,6 +1222,7 @@ EOF
   # same answer as an item with no separator — malformed, said out loud.
   cat > "$box/allspan.md" <<'EOF'
 ## Aberto
+<!-- sdd:open -->
 
 - [ ] **A finding whose only separators hide in one span** — `a — b — c` (2026-08-16)
 EOF
@@ -1116,6 +1238,7 @@ EOF
   # regression is invisible and an unattributed finding hides behind any trailing quoted phrase.
   cat > "$box/decoyspan.md" <<'EOF'
 ## Aberto
+<!-- sdd:open -->
 
 - [ ] **A finding with a decoy span and no attribution** — `bin/sdd:42` — `emdash — inside decoy span` (2026-08-16)
 EOF
@@ -1126,6 +1249,7 @@ EOF
   # on the next, so a rule reading single lines instead of the joined body would miss it.
   cat > "$box/decoyspan-multi.md" <<'EOF'
 ## Aberto
+<!-- sdd:open -->
 
 - [ ] **A finding with a decoy span across two lines** — `bin/sdd:42` — why it matters, in one
   clause. — `emdash — inside decoy span` (2026-08-16)
@@ -1140,6 +1264,7 @@ EOF
   # authoring and not a contrivance, walked through unattributed.
   cat > "$box/decoyspan-indent.md" <<'EOF'
 ## Aberto
+<!-- sdd:open -->
 
 - [ ] **A finding whose decoy span opens the continuation line** — `bin/sdd:42` — why it matters —
   `emdash — inside decoy span` (2026-08-16)
@@ -1166,6 +1291,7 @@ EOF
   [x] **a closed finding hiding behind an empty marker**
 
 ## Aberto
+<!-- sdd:open -->
 
 - [ ] **A well-formed item** — `bin/sdd:42` — why — found by `x` in mission `y` (2026-08-16)
 EOF
@@ -1179,6 +1305,7 @@ EOF
   [x] **a closed finding hiding behind a link reference**
 
 ## Aberto
+<!-- sdd:open -->
 
 - [ ] **A well-formed item** — `bin/sdd:42` — why — found by `x` in mission `y` (2026-08-16)
 EOF
@@ -1200,6 +1327,7 @@ EOF
   [ ] **an open finding the counter never saw**
 
 ## Aberto
+<!-- sdd:open -->
 
 - [ ] **A well-formed item** — `bin/sdd:42` — why — found by `x` in mission `y` (2026-08-16)
 EOF
@@ -1219,6 +1347,7 @@ EOF
   [X] **a closed finding hiding behind an uppercase tick on the split line**
 
 ## Aberto
+<!-- sdd:open -->
 
 - [ ] **A well-formed item** — `bin/sdd:42` — why — found by `x` in mission `y` (2026-08-16)
 EOF
@@ -1230,6 +1359,7 @@ EOF
   # findings-section half from being deleted as a duplicate of the new one.
   cat > "$box/splitinside.md" <<'EOF'
 ## Aberto
+<!-- sdd:open -->
 
 -
   [x] **a closed finding inside the findings section**
@@ -1243,6 +1373,7 @@ EOF
   # well-formed item — whose own line carries `- [ ] ` — is not a bare box either.
   cat > "$box/notabox.md" <<'EOF'
 ## Aberto
+<!-- sdd:open -->
 
 - [ ] **A well-formed item** — `bin/sdd:42` — why it matters. See
   [the handoff](docs/handoffs/x.md) for the analysis. — found by `x` in mission `y` (2026-08-16)
@@ -1252,12 +1383,133 @@ EOF
 
   # Every exit path carries a probe, or the code that names it is decoration: mutating any of
   # these `exit`/`return` values used to survive the whole selftest.
+  # ── The skeleton: sections are found by their MARKER, never by the heading text ─────────────
+  # The heading above each marker is content in OUTPUT_LANG. These probes write it in two
+  # languages and expect the same verdict, and every refusal is asserted by its own message.
+  rule_begin
+  cat > "$box/skel-en.md" <<'EOF'
+# TODO
+
+## Open
+<!-- sdd:open -->
+
+### Missing sensors
+
+- [ ] **A well-formed finding** — `bin/sdd:42` — why it matters, in one clause.
+  — found by `sdd-qa` in mission `20260924-probe` (2026-09-24)
+
+## Decided — do not reopen
+<!-- sdd:decided -->
+
+- **A refuted finding** — measured, and the behaviour is intended — `docs/adr/0001.md` (2026-09-24)
+EOF
+  assert_clean "$box/skel-en.md" 8 "the skeleton with English headings"
+  sed -e 's/^## Open$/## Aberto/' -e 's/^## Decided .*$/## Decidido/' "$box/skel-en.md" > "$box/skel-pt.md"
+  assert_clean "$box/skel-pt.md" 8 "the same skeleton with Portuguese headings"
+  # The count sees the finding and never the decided record: a record is not open work.
+  PROBES=$((PROBES + 1))
+  if [ "$(count_items "$box/skel-pt.md")" != "1" ]; then
+    printf '  SELFTEST FAIL  the count saw %s item(s) in a skeleton with one finding and one record\n' \
+      "$(count_items "$box/skel-pt.md")" >&2
+    FAILS=$((FAILS + 1)); fail_rc 90
+  fi
+  # A marker QUOTED in the preamble is documentation — the seed explains its own markers — and
+  # must neither open a section nor be reported as an orphan.
+  { printf '# TODO\n\n> Each section carries `<!-- sdd:open -->` or `<!-- sdd:decided -->` below it.\n\n'
+    tail -n +3 "$box/skel-en.md"; } > "$box/skel-quoted.md"
+  assert_clean "$box/skel-quoted.md" 8 "a marker quoted inside preamble prose"
+  { cat "$box/skel-en.md"; printf '\n## Notes\n\nfree text\n'; } > "$box/skel-strayafter.md"
+  assert_says "$box/skel-strayafter.md" 8 'an H2 with no section marker' "an H2 without a marker after the sections"
+  { printf '# TODO\n\n## Plan\n\nsome roadmap prose\n\n'; tail -n +3 "$box/skel-en.md"; } > "$box/skel-strayabove.md"
+  assert_says "$box/skel-strayabove.md" 8 'an H2 with no section marker' "an H2 without a marker in the preamble"
+  { cat "$box/skel-en.md"
+    printf '\n## Backlog\n\n- [ ] **Parked** — `f:1` — why. — found by `x` (2026-09-24)\n'; } > "$box/skel-parked.md"
+  assert_says "$box/skel-parked.md" 8 'under an H2 the skeleton does not have' "a finding parked under a stray H2"
+  # The section ENDS at the next `##`: the same finding-shaped line is a finding above it and a
+  # refused record below it. Without the boundary the open section would run to the end of the file.
+  { cat "$box/skel-en.md"; printf -- '- [ ] **Late** — `f:1` — why. — found by `x` (2026-09-24)\n'; } \
+    > "$box/skel-boundary.md"
+  assert_says "$box/skel-boundary.md" 8 'a decided record carries no box' "the open section ends at the next H2"
+  { printf '## Decided\n<!-- sdd:decided -->\n\n## Open\n<!-- sdd:open -->\n\n'
+    printf -- '- [ ] **A** — `f:1` — why. — found by `x` (2026-09-24)\n'; } > "$box/skel-order.md"
+  assert_says "$box/skel-order.md" 8 'comes before the open one' "the decided section above the open one"
+  { cat "$box/skel-en.md"; printf '\n## Open again\n<!-- sdd:open -->\n'; } > "$box/skel-dupopen.md"
+  assert_says "$box/skel-dupopen.md" 8 'a second open marker' "two open markers"
+  { printf '## Open\n\n<!-- sdd:open -->\n\n'
+    printf -- '- [ ] **A** — `f:1` — why. — found by `x` (2026-09-24)\n'; } > "$box/skel-orphan.md"
+  assert_says "$box/skel-orphan.md" 8 'with no `##` on the line above' "a blank line between the H2 and its marker"
+  rule_end 11 'the sections are found by their marker, never by the heading text'
+
+  # ── An unmarked file is refused by the CLI, never guessed ─────────────────────────────────────
+  rule_begin
+  { printf '## Aberto\n\n'
+    printf -- '- [ ] **A** — `f:1` — why. — found by `x` (2026-09-24)\n'; } > "$box/unmarked.md"
+  assert_rc 99 "--check on a file with a heading and no marker must exit 99" \
+    bash "$SELF" --check "$box/unmarked.md"
+  assert_rc 99 "--count on a file with no marker must exit 99" \
+    bash "$SELF" --count "$box/unmarked.md"
+  { printf 'See the `<!-- sdd:open -->` marker in the seed.\n\n'
+    printf -- '- [ ] **A** — `f:1` — why. — found by `x` (2026-09-24)\n'; } > "$box/quotedonly.md"
+  assert_rc 99 "a marker quoted in prose does not section the file" \
+    bash "$SELF" --check "$box/quotedonly.md"
+  printf '## Open\r\n<!-- sdd:open --> \r\n\r\n- [ ] **A** — `f:1` — why. — found by `x` (2026-09-24)\r\n' \
+    > "$box/crlfmarker.md"
+  assert_rc 0 "a CRLF file with trailing space after the marker is sectioned" \
+    bash "$SELF" --check "$box/crlfmarker.md"
+  rule_end 4 'a file without the open marker is refused by the CLI, never guessed'
+
+  # ── The decided records: one line, a pointer, a date ─────────────────────────────────────────
+  rule_begin
+  { printf '## Open\n<!-- sdd:open -->\n\n## Decided\n<!-- sdd:decided -->\n\n> Records only.\n\n### Refuted\n\n'
+    printf -- '- **`gate_QA` reads another mission** — refuted: the glob is scoped — `bin/sdd:614` (2026-09-24)\n'
+    printf -- '- **Accepted risk** — a trade-off, written down — `docs/adr/0009.md` (2026-09-24)\n'; } \
+    > "$box/decided-ok.md"
+  assert_clean "$box/decided-ok.md" 8 "well-formed decided records with a quote and an H3"
+  sed 's/^- \*\*Accepted risk\*\*/- [ ] **Accepted risk**/' "$box/decided-ok.md" > "$box/decided-box.md"
+  assert_says "$box/decided-box.md" 8 'a decided record carries no box' "a box in the decided section"
+  { cat "$box/decided-ok.md"; printf '  and a second line of analysis\n'; } > "$box/decided-wrap.md"
+  assert_says "$box/decided-wrap.md" 8 'a decided record is one line' "a decided record that wraps"
+  { cat "$box/decided-ok.md"; printf -- '- plain record — `x` (2026-09-24)\n'; } > "$box/decided-nobold.md"
+  assert_says "$box/decided-nobold.md" 8 'a decided record opens with' "a decided record without a bold title"
+  # The pointer must come AFTER the title: a title carrying its own code span is not evidence.
+  { cat "$box/decided-ok.md"; printf -- '- **`gate` is fine** — decided, and nothing says where (2026-09-24)\n'; } \
+    > "$box/decided-nopointer.md"
+  assert_says "$box/decided-nopointer.md" 8 'points at its evidence' "a code span only in the title"
+  { cat "$box/decided-ok.md"; printf -- '- **Undated** — decided — `docs/x.md`\n'; } > "$box/decided-nodate.md"
+  assert_says "$box/decided-nodate.md" 8 'ends with (YYYY-MM-DD)' "a decided record with no date"
+  { cat "$box/decided-ok.md"; printf 'a loose paragraph\n'; } > "$box/decided-prose.md"
+  assert_says "$box/decided-prose.md" 8 'prose at column 0 in the decided section' "prose in the decided section"
+  rule_end 7 'a decided record is one line carrying a pointer and a date'
+
+  # ── The CLI: --allow-empty for a target with no findings yet, --count for mirrors ─────────────
+  rule_begin
+  printf '# TODO\n\n## Open\n<!-- sdd:open -->\n\n## Decided\n<!-- sdd:decided -->\n' > "$box/seedlike.md"
+  assert_rc 0 "--allow-empty accepts a sectioned file with no findings" \
+    bash "$SELF" --check "$box/seedlike.md" --allow-empty
+  PROBES=$((PROBES + 1))
+  if ! grep -q '^  ok    0 finding(s)' <<< "$(bash "$SELF" --check "$box/seedlike.md" --allow-empty 2>&1)"; then
+    printf '  SELFTEST FAIL  --allow-empty did not report "ok    0 finding(s)" — sdd health reads that line\n' >&2
+    FAILS=$((FAILS + 1)); fail_rc 92
+  fi
+  assert_rc 96 "an unknown flag after --check <file> must exit 96" \
+    bash "$SELF" --check "$box/seedlike.md" --bogus
+  # The count answers over a file that FAILS its lint: countable.md carries one finding and three
+  # refused shapes. A count that waited for a clean file would hide the drift it exists to show.
+  PROBES=$((PROBES + 1))
+  if [ "$(bash "$SELF" --count "$box/countable.md" 2>/dev/null)" != "1" ]; then
+    printf '  SELFTEST FAIL  --count did not print 1 over a file that fails its lint: %s\n' \
+      "$(bash "$SELF" --count "$box/countable.md" 2>&1)" >&2
+    FAILS=$((FAILS + 1)); fail_rc 92
+  fi
+  assert_rc 93 "--count on a missing file must exit 93" bash "$SELF" --count "$box/does-not-exist.md"
+  rule_end 5 'the CLI answers --count, and --allow-empty lowers the floor to zero'
+
   assert_rc 95 "a non-integer cap must exit 95" env SDD_TODO_CAP=abc bash "$SELF" --check "$box/good.md"
   assert_rc 95 "a zero cap must exit 95"        env SDD_TODO_CAP=0   bash "$SELF" --check "$box/good.md"
   assert_rc 96 "an unknown option must exit 96" bash "$SELF" --bogus
   assert_rc 93 "a missing file must exit 93"    bash "$SELF" --check "$box/does-not-exist.md"
   # A file with prose but no items at all trips the floor, not the linter.
-  printf '# Heading\n\n## Another\n' > "$box/noitems.md"
+  printf '# Heading\n\n## Aberto\n<!-- sdd:open -->\n' > "$box/noitems.md"
   assert_rc 94 "a file with no items must exit 94" bash "$SELF" --check "$box/noitems.md"
   # And an unclosed fence above every item must still say WHY, instead of the floor's generic
   # "did the format change?" — the linter runs first for exactly this case.
@@ -1265,8 +1517,8 @@ EOF
   # Floor on the probe COUNT, for the same reason every other floor here exists: neutering all the
   # assert_* call sites made the summary print "0 probe(s)" and exit 0 — a selftest that ran
   # nothing reads exactly like a selftest that passed. The number moves only on purpose.
-  if [ "$((PROBES + PROBES_SKIPPED))" -lt 88 ]; then
-    printf '  SELFTEST FAIL  only %d probe(s) accounted for (%d ran, %d skipped), expected 88\n' \
+  if [ "$((PROBES + PROBES_SKIPPED))" -lt 117 ]; then
+    printf '  SELFTEST FAIL  only %d probe(s) accounted for (%d ran, %d skipped), expected 117\n' \
       "$((PROBES + PROBES_SKIPPED))" "$PROBES" "$PROBES_SKIPPED" >&2
     FAILS=$((FAILS + 1)); fail_rc 92
   fi
@@ -1321,6 +1573,15 @@ check_file() {
     return 93
   fi
 
+  # Never guessed. The fallback that used to answer here — "no heading, so the whole file is
+  # findings" — linted a target's entire narrative backlog and buried the real violations under
+  # thousands of false ones. A file without the marker predates the skeleton; say so and stop.
+  if ! has_open_marker "$file"; then
+    printf '  FAIL  no %s marker in %s — the findings section is never guessed\n' "$OPEN_MARKER" "$file" >&2
+    printf '        (skeleton: templates/todo.md of the sdd kit, one variant per OUTPUT_LANG)\n' >&2
+    return 99
+  fi
+
   n_items="$(count_items "$file")"
   case "$n_items" in
     '' | *[!0-9]*)
@@ -1343,13 +1604,36 @@ check_file() {
   # this sensor exists to make the file SHRINK, so a floor near today's size would fail the run
   # the day the cleanup finally works. The real defence against a parser that stopped matching is
   # the selftest, whose probes go red on every rule.
-  if [ "$n_items" -lt 1 ]; then
+  if [ "$n_items" -lt "$FLOOR" ]; then
     printf '  FAIL  no items parsed from %s — did the format change?\n' "$file" >&2
     return 94
   fi
 
   printf '  ok    %d finding(s), all within %d lines and carrying anchor + date\n' "$n_items" "$cap"
   return 0
+}
+
+# count_file <file> — prints the parser's item count and nothing else, even over a file that fails
+# its lint. A caller that mirrors the findings elsewhere (an issue tracker, a dashboard) compares
+# its own parser against this number; asking it to first make the file clean would hide exactly
+# the drift the comparison exists to catch. The readability and marker refusals still apply: a
+# number about a file that was never opened, or never sectioned, would be a guess.
+count_file() {
+  local file="$1" n
+  if [ -z "$file" ] || [ ! -f "$file" ] || [ ! -r "$file" ]; then
+    printf '  FAIL  findings file missing or unreadable: %s\n' "$file" >&2
+    return 93
+  fi
+  if ! has_open_marker "$file"; then
+    printf '  FAIL  no %s marker in %s — the findings section is never guessed\n' "$OPEN_MARKER" "$file" >&2
+    return 99
+  fi
+  n="$(count_items "$file")"
+  case "$n" in '' | *[!0-9]*)
+    printf '  FAIL  could not parse %s — the counter returned "%s"\n' "$file" "$n" >&2
+    return 93 ;;
+  esac
+  printf '%s\n' "$n"
 }
 
 if ! valid_cap "$CAP"; then
@@ -1365,7 +1649,18 @@ case "${1:-}" in
   --selftest) selftest; exit $? ;;
   # `${2-$TODO}` and not `${2:-$TODO}`: an EMPTY argument is a caller passing an unset variable,
   # and defaulting it to TODO.md answered "ok" about a file the caller never named.
-  --check)    EXPLICIT_MODE=1; check_file "${2-$TODO}" "$CAP"; exit $? ;;
+  --check)
+    EXPLICIT_MODE=1
+    # One optional flag after the file, and only that one: a typo here must not silently check
+    # with the kit's floor, nor silently skip it.
+    case "${3-}" in
+      '') ;;
+      --allow-empty) FLOOR=0 ;;
+      *) printf '  FAIL  unknown option after --check <file>: %s\n' "$3" >&2; exit 96 ;;
+    esac
+    [ "$#" -le 3 ] || { printf '  FAIL  too many arguments to --check\n' >&2; exit 96; }
+    check_file "${2-$TODO}" "$CAP"; exit $? ;;
+  --count)    count_file "${2-}"; exit $? ;;
   '')         selftest || exit $?; check_file "$TODO" "$CAP"; exit $? ;;
   *)          printf '  FAIL  unknown option: %s (see the usage header)\n' "$1" >&2; exit 96 ;;
 esac

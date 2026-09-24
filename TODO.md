@@ -2,44 +2,24 @@
 
 Achados que **não cabem na missão atual**, registrados por qualquer agente ou humano
 (kaizen princípio 10: oportunidade registrada, nunca desvio de escopo, nunca achado perdido).
-
-Formato:
-
-```md
-- [ ] <o quê> — `arquivo:linha` — <por que importa> — descoberto por `<agente>` na missão `<slug>` (YYYY-MM-DD)
-```
+Formato, esqueleto e ciclo de vida: [`templates/todo.pt-BR.md`](templates/todo.pt-BR.md) — a
+semente que o `sdd install` grava nos repos-alvo, uma variante por `OUTPUT_LANG`, com a forma
+medida por `tests/check-todo.sh`. Os planos estacionados do kit moram na gaveta,
+[`docs/superpowers/specs/2026-09-23-a-gaveta-do-kit.md`](docs/superpowers/specs/2026-09-23-a-gaveta-do-kit.md).
 
 Achados sobre **repos-alvo** vão para o `TODO.md` daquele repo. Este arquivo é só sobre o kit.
 
-## Plano de evolução da equipe de agentes
-
-O plano consolidado pelo Codex Astra, baseado no artigo de @0xCodez e nas referências de harness do Second Brain, está em [`sdd-agents-team-harness-raft.md`](file:///home/joruge/repos/obsidian/03%20Resources/IA%20e%20Agentes/sdd-agents-team-harness-raft.md). A primeira missão é **um checkout, um dono de execução**: exclusão mútua, proprietário identificável e recuperação após queda, antes de claims, agenda ou coordenação distribuída.
-
-## Aberto
-
-> **Ciclo de vida.** Um item cujo corpo traz **RESOLVIDO por `<hash>`** já está fechado: fica
-> aqui, com a caixa ainda desmarcada, só até o PR da missão que o fechou ser mergeado — é dali
-> que o PR cita a evidência. **Depois do merge ele é apagado**, não arquivado: a memória durável
-> é o `git log -S`, o `KAIZEN_LOG.md` e os handoffs, e cada item já cita o hash que o fecha.
-> Ler a caixa sem ler o corpo dá falso positivo; o corpo é a fonte da verdade.
->
-> **Uma convenção só.** `- [x]` e `[FEITO em <hash>]` no título **não** existem mais neste
-> arquivo — fechado é apagado, e caixa marcada era invisível para a triagem do kaizen, que
-> procura `RESOLVIDO por`. Apagar prova por artefato: `git merge-base --is-ancestor <hash> main`
-> antes de remover, nunca o rótulo do PR.
->
-> **Teto de tamanho.** Um item cabe em ~6 linhas: o quê + `arquivo:linha` + por que importa +
-> direção + quem descobriu. A análise longa mora no handoff da missão citada. `tests/check-todo.sh`
-> mede a forma e o teto.
->
 > **Catraca do volume — crescer é permitido, crescer calado não.** Quantos itens este arquivo
 > carrega é o achado `todo-findings <N>` do `sdd health`, congelado em `tests/health-baseline.txt`.
 > Reprova nos **dois** sentidos: número que subiu sem registro, e baseline que ficou para trás
 > depois de uma faxina. Quem acrescenta item aqui **e** move a linha da baseline no mesmo commit
 > está certo — o número tem dono e aparece no diff. Quem só acrescenta descobre no `sdd health`.
 > Ela mora lá e não no `TEST_CMD` porque um teto dentro da suíte reprovaria toda missão em voo.
-> ⚠️ A contagem sai de `tests/check-todo.sh`, nunca de um `grep -c '^- \[ \]'` — este responde um
-> a mais, contando a linha de exemplo do bloco cercado acima.
+> ⚠️ A contagem sai de `tests/check-todo.sh`, nunca de um `grep -c '^- \[ \]'`, que não sabe
+> onde a seção aberta termina.
+
+## Aberto
+<!-- sdd:open -->
 
 ### Sensores que faltam
 
@@ -309,13 +289,12 @@ O plano consolidado pelo Codex Astra, baseado no artigo de @0xCodez e nas refer�
   — descoberto por `sdd-qa` na missão `20260814-dry-run-completo` (2026-08-14)
 
 - [ ] **O formato de achado vale para os repos-alvo, mas o sensor só guarda o arquivo do kit** —
-  `tests/check-todo.sh` vs `CLAUDE.md` (princípio 5) — a regra de formato e o ciclo "fechado é
-  apagado" são prescritos para o `TODO.md` de **qualquer** repo, e os agentes escrevem nos dois;
-  o sensor mora na suíte do kit e nunca é instalado. Um alvo acumula o mesmo inchaço sem nada
-  medindo. Direção: `sdd install` copiar o sensor (ou uma versão dele) e o `starter.conf` sugerir
-  incluí-lo no `TEST_CMD`. ⚠️ As regras já são estruturais e language-neutral de propósito, então
-  ele roda num alvo `OUTPUT_LANG="en"` sem mudança. — descoberto por `humano` revisando o sensor
-  novo (2026-08-16)
+  `tests/check-todo.sh` vs `CLAUDE.md` (princípio 5) — o esqueleto de duas seções e o ciclo
+  "fechado é apagado" valem para o `TODO.md` de **qualquer** repo. Desde o marcador, o sensor roda
+  num alvo (`--check <arquivo> --allow-empty`, e a skill `todo-to-github-issues` o chama antes de
+  espelhar), mas nada o põe na suíte do alvo: o inchaço volta sem ninguém medir a cada missão.
+  Direção: o `starter.conf` sugerir o `--check` do kit no `TEST_CMD` do alvo.
+  — descoberto por `humano` revisando o sensor novo (2026-08-16)
 
 - [ ] **A economia de `current_phase()`/`next_pending_phase()` depende da memoização e ninguém
   conta** — `bin/sdd:475-492` vs `:193-210` — as duas reavaliam o gate de toda fase a cada
@@ -675,6 +654,14 @@ O plano consolidado pelo Codex Astra, baseado no artigo de @0xCodez e nas refer�
   porque glob e piso enumerado são a mesma discussão do item do piso acima.
   — descoberto por `sdd-planner` na missão `20260901-o-revisor-so-acha` (2026-09-01)
 
+- [ ] **Os demais `templates/*.md` só existem em pt-BR, e um alvo `OUTPUT_LANG=en` recebe
+  handoff em português** — `templates/handoff.md:1` — as chaves de frontmatter que o runner lê e os
+  títulos que o `check-templates.sh` cobra estão em pt-BR, e o `sdd install` não tem variante a
+  escolher. O `todo.md` é o primeiro template com uma variante por idioma (`todo.<lang>.md`, com
+  paridade estrutural cobrada), e o mecanismo serve de precedente. Direção: o mesmo par para os
+  demais, com as chaves de contrato em inglês — é o mesmo nó de `aprovacao`/`versao`/`titulo`.
+  — descoberto por `claude` na padronização do `TODO.md` entre repos (2026-09-24)
+
 ### Custo e escala
 
 - [ ] **O `sdd-publisher` não consegue esperar o `sdd health` dentro de uma sessão headless** —
@@ -823,3 +810,6 @@ O plano consolidado pelo Codex Astra, baseado no artigo de @0xCodez e nas refer�
   pidfd, 158 → 147 ms). Direção: provar o worker direto por um FD do flock herdado, fechado antes do
   1º fork, sem afrouxar "ambiente sozinho não autoriza" — pede ADR.
   — descoberto por `sessão coordenadora` no branch `perf/catalogo-para-no-primeiro-vermelho` (2026-09-23)
+
+## Decidido — não reabrir
+<!-- sdd:decided -->

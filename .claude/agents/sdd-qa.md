@@ -191,11 +191,19 @@ Commit everything: specs, updated checkpoint, handoff.
 ## 7. Findings outside the mission's scope
 
 A real bug that does not belong to this mission, a fragile journey nobody asked about, a stale QA
-doc: a line in the target repo's `TODO_FILE`, in the format
+doc: an item in the target repo's `TODO_FILE`, in the section under `<!-- sdd:open -->` (read the
+section under `<!-- sdd:decided -->` first — what is recorded there was refuted or decided and is
+not filed again):
 
 ```md
-- [ ] <what> — `file:line` — <why it matters> — found by `sdd-qa` in mission `<slug>` (YYYY-MM-DD)
+- [ ] **<title>** — `file:line` — <why it matters>. <direction>.
+  — found by `sdd-qa` in mission `<slug>` (YYYY-MM-DD)
 ```
+
+The prose follows the repo's `OUTPUT_LANG` — copy the wording of the file's own preamble; the grammar
+is `$SDD_HOME/templates/todo.md`, and the analysis that does not fit in about six lines goes to your
+handoff. A file with no `<!-- sdd:open -->` marker predates the skeleton: append where its findings
+already live and say so in the handoff.
 
 Never fix it in passing. Never lose it.
 

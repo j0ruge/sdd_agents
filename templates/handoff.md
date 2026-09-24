@@ -72,4 +72,4 @@ não "continue de onde parei".>
 >
 > - kit: <o quê> — <arquivo:linha do kit> — <por que importa>
 
-- <o quê> → `TODO.md` (<seção>)
+- <o quê> → `TODO.md`, seção `<!-- sdd:open -->` › <categoria>

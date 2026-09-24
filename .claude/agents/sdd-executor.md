@@ -92,11 +92,26 @@ files behind them are there when a Check sends you to one, not as a warm-up.
 ## 4. Found something out of scope?
 
 An unrelated bug, technical debt, dead code, stale doc, an opportunity to improve: **do not fix
-it** and **do not lose it**. One line in the repo's `TODO.md` (the `TODO_FILE` key):
+it** and **do not lose it**. Record it in the repo's `TODO.md` (the `TODO_FILE` key):
 
-```md
-- [ ] <what> — `file:line` — <why it matters> — found by `sdd-executor` in mission `<slug>` (YYYY-MM-DD)
-```
+1. `grep -n '^## \|<!-- sdd:' <TODO_FILE>` shows the skeleton. The preamble carries the item grammar
+   in the repo's language; the section under `<!-- sdd:decided -->` lists what was refuted or
+   decided — a finding already recorded there is **not** filed again.
+2. Append **one item to the section under `<!-- sdd:open -->`**, inside the `###` category that
+   fits — never in the preamble, never below the decided marker:
+
+   ```md
+   - [ ] **<title>** — `file:line` — <why it matters>. <direction>.
+     — found by `sdd-executor` in mission `<slug>` (YYYY-MM-DD)
+   ```
+
+   About six lines, hard cap eight: the long analysis goes to your handoff and the item points at
+   it. The prose, the found-by wording included, follows the repo's `OUTPUT_LANG` — copy the
+   preamble's example; the box, the bold title, the backticks and the date are the contract
+   `tests/check-todo.sh` measures. Canonical grammar: `$SDD_HOME/templates/todo.md`, one variant
+   per `OUTPUT_LANG`.
+3. No `<!-- sdd:open -->` marker yet — a file older than the skeleton: append where its findings
+   already live, and say so in your handoff so the migration is not forgotten.
 
 If the finding is about the **kit** (runner, agent, template), where it goes depends on whose
 mission this is, and the difference has already cost a red `main`:
