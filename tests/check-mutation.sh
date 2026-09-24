@@ -42,9 +42,12 @@ esac
 # JOBS resolution
 #
 # The default derives from the machine instead of being the constant 4 it used to be: a 20-core
-# box was pinned to 4 while a 2-core one was oversubscribed by the same constant. Capped at 8 —
-# each mutant runs a whole copy of the suite, and past that point the copies fight for disk and
-# memory instead of finishing sooner. An explicit SDD_MUTATION_JOBS always wins; garbage in it is
+# box was pinned to 4 while a 2-core one was oversubscribed by the same constant. Capped at 16 —
+# each mutant runs a whole copy of the suite, and past some point the copies fight for disk and
+# memory instead of finishing sooner. The cap used to be 8 on that argument alone, never measured;
+# measured on 2026-09-23 over one fixed sample of 40 mutants on a 20-core box, 8 -> 16 jobs made
+# each mutant 20% slower (median 133 -> 160 s) and the pool nearly twice as fast (projected
+# catalogue ~1h58 -> ~1h06). An explicit SDD_MUTATION_JOBS always wins; garbage in it is
 # refused by name, never silently degraded (0 used to reach `i % JOBS` as a division by zero).
 # ---------------------------------------------------------------------------
 detect_cores() { # behaviour, not presence — the bin/sdd preflight pattern for the GNU userland
@@ -68,7 +71,7 @@ resolve_jobs() { # resolve_jobs <env-value> <cores> — pure; prints JOBS or ref
   fi
   case "$cores" in *[!0-9]*|'') cores=4 ;; esac
   [ "$cores" -ge 1 ] || cores=1
-  [ "$cores" -gt 8 ] && cores=8
+  [ "$cores" -gt 16 ] && cores=16
   echo "$cores"
 }
 
@@ -77,7 +80,7 @@ resolve_jobs() { # resolve_jobs <env-value> <cores> — pure; prints JOBS or ref
 # pairs only; detect_cores is machine-dependent and stays unprobed (the chain is trivial to read).
 jobs_selftest() {
   local got
-  got="$(resolve_jobs "" 20)"      && [ "$got" = 8 ]  || { echo "  SELFTEST FAIL  cap: 20 cores resolved to '$got', expected 8" >&2; return 1; }
+  got="$(resolve_jobs "" 20)"      && [ "$got" = 16 ] || { echo "  SELFTEST FAIL  cap: 20 cores resolved to '$got', expected 16" >&2; return 1; }
   got="$(resolve_jobs "" 2)"       && [ "$got" = 2 ]  || { echo "  SELFTEST FAIL  small box: 2 cores resolved to '$got', expected 2" >&2; return 1; }
   got="$(resolve_jobs "" 0)"       && [ "$got" = 1 ]  || { echo "  SELFTEST FAIL  floor: 0 cores resolved to '$got', expected 1" >&2; return 1; }
   got="$(resolve_jobs "" bogus)"   && [ "$got" = 4 ]  || { echo "  SELFTEST FAIL  garbage cores resolved to '$got', expected the 4 fallback" >&2; return 1; }
@@ -3930,7 +3933,7 @@ mut_COORD_no_subreaper() {
 }
 
 mut_COORD_wait_worker_only() {
-  sed -i '/^                    worker_status = 128 - worker_status$/a\            if waited == child: break' "${1%/*}/sdd-coordination.py"
+  sed -i '/^                    worker_fd = None$/a\                if waited == child: break' "${1%/*}/sdd-coordination.py"
 }
 
 mut_COORD_stale_process_accepted() {
@@ -3993,7 +3996,9 @@ mut_RUN_branch_double_slash() {
 }
 
 # The hook's timeout(1) forwards what it receives, and GNU timeout turns a signal after its own TERM
-# into an immediate KILL: signaling it cut the hook's grace (Codex on PR #48).
+# into an immediate KILL: signaling it cut the hook's grace (Codex on PR #48). Caught
+# deterministically by "the hook's relay receives no cooperative TERM"; the older TERM count
+# missed it under load — two TERMs merge into one pending signal — and it survived a catalogue.
 mut_COORD_hook_relay_signaled() {
   sed -i "s@^            if identity\['pid'\] == relay and number != signal.SIGKILL:\$@            if False:@" "${1%/*}/sdd-coordination.py"
 }
@@ -4003,12 +4008,37 @@ mut_COORD_boot_unlocked() {
   sed -i '/^coordination_enter() {/,/^}/ s@help|--help|-h|version|--version|-v|census|autonomy)@help|--help|-h|version|--version|-v|boot|census|autonomy)@' "$1"
 }
 
+# The lock helper started WITHOUT isolation: a caller's PYTHONPATH shadows its stdlib imports and
+# runs inside the process that decides checkout ownership. Caught by "the lock helper ignores the
+# caller's PYTHONPATH" (check-coordination.sh), and by nothing else.
+mut_COORD_helper_not_isolated() {
+  sed -i 's@^readonly COORDINATION_PYTHON=(python3 -I -S)$@readonly COORDINATION_PYTHON=(python3)@' "$1"
+}
+
+# The worker's pidfd kept after the worker is reaped: the `finally` closes it a second time — EBADF,
+# or worse, a descriptor reused since — and the supervisor dies. Caught by every coordinated call.
+mut_COORD_reaped_pidfd_kept() {
+  sed -i '/^def wait_family(/,/^def / { /^                    worker_fd = None$/d }' "${1%/*}/sdd-coordination.py"
+}
+
+# Back to select() on the worker's pidfd: a caller holding descriptors past 1023 makes it raise
+# ValueError and the supervisor dies under a live worker. Caught by "a caller holding
+# descriptors past 1023 keeps the supervisor alive" (check-coordination.sh). Declared limit: on a
+# host whose hard RLIMIT_NOFILE is below 1040 that probe cannot build its world and says `skip`, so
+# this mutant survives there and that host cannot produce the green stamp until the limit rises.
+mut_COORD_select_pidfd() {
+  sed -i 's@^                worker_poll.poll(10)$@                select.select([worker_fd], [], [], .01)@' "${1%/*}/sdd-coordination.py"
+}
+
 CATALOG=(
   COORD_adr_external_spec
   COORD_adr_spec_logical_path
   COORD_signal_repeated
   COORD_boot_unlocked
   COORD_hook_relay_signaled
+  COORD_helper_not_isolated
+  COORD_reaped_pidfd_kept
+  COORD_select_pidfd
   RUN_branch_double_slash
   COORD_admission_missing
   COORD_linker_unlocked
@@ -4493,7 +4523,7 @@ run_mutant() {
 # stopped being parsed: an empty loop reports "0 broken" forever.
 # ---------------------------------------------------------------------------
 if [ "$ANCHORS_ONLY" = 1 ]; then
-  ANCHOR_FLOOR=389
+  ANCHOR_FLOOR=392
   anchor_box() { mkdir -p "$1"; cp -r "$ROOT/bin" "$1/"; }
   anchor_control_noop()       { :; }
   anchor_control_intact()     { printf '# a mutation that lands and stays valid\n' >> "$1"; }

@@ -108,6 +108,7 @@ JIRA_ENABLED=false
 ADR_CHECK=off
 ON_ESCALATION_CMD="${COORD_HOOK:-}"
 if [ -n "${COORD_PROBE:-}" ]; then printf touched >> "$COORD_PROBE"; fi
+if [ -n "${COORD_FDCOUNT:-}" ]; then ls /proc/$$/fd | wc -l > "$COORD_FDCOUNT"; fi
 if [ -n "${COORD_HOLD:-}" ]; then
   if [ "${COORD_CHILD:-}" = cooperative ]; then
     exec 3<> "$COORD_RELEASE"
@@ -287,6 +288,9 @@ try:
                "children": "_exists = os.path.exists\n"
                            "os.path.exists = lambda p: False if str(p).endswith('/children')"
                            " else _exists(p)\n"}[denied]
+            # The runner starts the helper with interpreter flags (COORDINATION_PYTHON); the stub
+            # imitates the CLI, so it consumes them before the script path.
+            + "while sys.argv[1].startswith('-'): sys.argv.pop(1)\n"
             + "target = sys.argv.pop(1)\nrunpy.run_path(target, run_name='__main__')\n")
         python_stub.chmod(0o755)
         capability_effect.unlink(missing_ok=True)
@@ -363,6 +367,39 @@ try:
     check("a timed-out hook gets one TERM and then its grace",
           hook.returncode == 124 and terms == 1 and elapsed >= 1.7,
           "rc=%s terms=%d elapsed=%.2f" % (hook.returncode, terms, elapsed))
+    # The same property read DIRECTLY: the relay itself receives no cooperative TERM. The count
+    # above cannot say it under load — two TERMs reaching a bash that is not scheduled in between
+    # merge into one pending signal, and mut_COORD_hook_relay_signaled survived a loaded catalogue
+    # that way (2 of 5 runs under 28 busy loops; `sdd health` on PR #59). Here `timeout` is a
+    # recording stand-in on PATH: it runs the command and writes one byte per TERM it receives.
+    # It can receive at most the one TERM the supervisor would wrongly send, so nothing can merge.
+    relay_bin = work / "relay-bin"
+    relay_bin.mkdir(exist_ok=True)
+    relay_file = work / "relay-terms"
+    relay_file.unlink(missing_ok=True)
+    # Like the real timeout(1) it is the BACKSTOP: it honours the duration it is handed and kills
+    # the command's whole group when that passes, so a supervisor that fails to stop the hook — the
+    # mutants that break hook supervision — cannot leave the endless loop behind (CodeRabbit, #59).
+    (relay_bin / "timeout").write_text(
+        "#!/usr/bin/env python3\n"
+        "import os, signal, subprocess, sys\n"
+        "signal.signal(signal.SIGTERM, lambda n, f: open(os.environ['RELAY_FILE'], 'a').write('T'))\n"
+        "args = [a for a in sys.argv[1:] if not a.startswith('--kill-after')]\n"
+        "child = subprocess.Popen(args[1:], start_new_session=True)\n"
+        "try:\n"
+        "    sys.exit(child.wait(timeout=float(args[0].rstrip('s'))))\n"
+        "except subprocess.TimeoutExpired:\n"
+        "    os.killpg(child.pid, signal.SIGKILL); child.wait(); sys.exit(124)\n")
+    (relay_bin / "timeout").chmod(0o755)
+    relayed = subprocess.run([sys.executable, "-B", str(root / "bin/sdd-coordination.py"), "hook", "1", "1",
+                              'trap ":" TERM; while :; do sleep 5 & wait; done'],
+                             env=dict(env, RELAY_FILE=str(relay_file),
+                                      PATH=str(relay_bin) + ":" + env["PATH"]),
+                             capture_output=True, text=True, timeout=8)
+    relay_terms = len(relay_file.read_text()) if relay_file.exists() else 0
+    check("the hook's relay receives no cooperative TERM",
+          relayed.returncode == 124 and relay_terms == 0,
+          "rc=%s relay_terms=%d" % (relayed.returncode, relay_terms))
     # `show` and `check` only ask: they answer from /proc and never take the flock, or a question
     # asked at the wrong instant made a concurrent `enter` fail CHECKOUT-BUSY (CodeRabbit, PR #48).
     flock_log = work / "flock-calls"
@@ -472,6 +509,59 @@ try:
     check("normal completion preserves result", release(owner) == 0)
     check("release keeps the same lock inode", (repo / ".git/sdd-coordination.lock").stat().st_ino == lock_inode)
     check("normal completion recovers", run(repo, "install").returncode == 0)
+    # The lock helper runs isolated from the caller's Python environment (`python3 -I`). Without
+    # it a PYTHONPATH entry shadows the helper's stdlib imports — json here — and code nobody
+    # reviewed runs inside the process that decides checkout ownership, on every coordinated call.
+    # The shadow hands the real module back, so the failure is "it ran", never a crash.
+    shadow = work / "shadow"
+    shadow.mkdir()
+    shadowed = work / "shadowed"
+    (shadow / "json.py").write_text(
+        "import importlib, os, sys\n"
+        "open(os.environ['COORD_SHADOWED'], 'a').write('json\\n')\n"
+        "here = os.path.dirname(os.path.abspath(__file__))\n"
+        "sys.path[:] = [p for p in sys.path if os.path.abspath(p or '.') != here]\n"
+        "del sys.modules['json']\n"
+        "sys.modules['json'] = importlib.import_module('json')\n")
+    result = run(repo, "install", extra={"PYTHONPATH": str(shadow), "COORD_SHADOWED": str(shadowed)})
+    check("the lock helper ignores the caller's PYTHONPATH",
+          result.returncode == 0 and not shadowed.exists(),
+          "rc %d, shadow module ran: %s" % (result.returncode, shadowed.exists()))
+    # A caller holding descriptors 3..~1110 pushes every descriptor the supervisor opens past 1023,
+    # where select() raises ValueError: the supervisor died mid-run and its flock went with it,
+    # under a live worker (CodeRabbit on PR #59). Reachable in practice: Node raises the soft
+    # RLIMIT_NOFILE to the hard one, and every child of a harness session inherits it. The worker
+    # counts its own descriptors, which proves the world was built — a caller that closed them
+    # would make this probe pass over a supervisor that never saw a high descriptor.
+    # A supervisor that dies leaves its worker orphaned and holding the output pipe, so the broken
+    # world ends in a timeout, not in an rc: caught here and read as the failure it is.
+    fdcount = work / "fdcount"
+    try:
+        # The soft limit is DERIVED from the hard one (Codex on PR #59): a fixed `ulimit -n 4096`
+        # skipped every host whose hard limit sits between ~1040 and 4095, where a descriptor CAN
+        # pass 1023 — and there mut_COORD_select_pidfd survived. Eight descriptors are left free
+        # for bash and the helper's own opens, so the supervisor's pidfd lands at soft-8 or above.
+        crowded = subprocess.run(["bash", "-c",
+            'hard=$(ulimit -Hn); [ "$hard" = unlimited ] && hard=1100\n'
+            '[ "$hard" -ge 1040 ] || exit 3\n'
+            'soft=$(( hard < 1100 ? hard : 1100 )); ulimit -n "$soft" || exit 3\n'
+            'for n in 3 4 5 6 7 8 9; do eval "exec $n</dev/null"; done\n'
+            'while exec {fd}</dev/null && [ "$fd" -lt $((soft - 8)) ]; do :; done\n'
+            'exec "$0" phase 20260101-one', str(sdd)],
+            cwd=repo, env=dict(env, COORD_FDCOUNT=str(fdcount)), text=True,
+            stdout=subprocess.PIPE, stderr=subprocess.STDOUT, timeout=8)
+    except subprocess.TimeoutExpired as error:
+        crowded = subprocess.CompletedProcess(error.cmd, 124, (error.output or b"").decode(errors="replace"))
+    if crowded.returncode == 3:
+        # The world NOT built here: a hard limit below 1040. At 1024 or less no descriptor can pass
+        # 1023, so the defect cannot happen; between 1025 and 1039 it can, but only for a caller
+        # holding all but a handful of its descriptors, and this probe does not build that world.
+        print("  skip  a crowded caller: the hard RLIMIT_NOFILE is below 1040 on this machine", flush=True)
+    else:
+        seen = int(fdcount.read_text()) if fdcount.exists() else 0
+        check("a caller holding descriptors past 1023 keeps the supervisor alive",
+              crowded.returncode == 0 and "CHECKOUT-UNAVAILABLE" not in crowded.stdout and seen >= 1024,
+              "rc %d, worker saw %d descriptors: %s" % (crowded.returncode, seen, crowded.stdout[-300:]))
     nested = start(repo, mode="reentry")
     results = json.loads((work / "nested-results").read_text())
     for args, code, output in results:

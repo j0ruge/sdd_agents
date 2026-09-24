@@ -815,3 +815,11 @@ O plano consolidado pelo Codex Astra, baseado no artigo de @0xCodez e nas refer�
   primeiro plano. O `TEST_CMD` de um gate num `sdd run` destacado herdaria a máscara (não medido).
   Direção: SIG_DFL no filho do probe, ou declarar a pré-condição no cabeçalho.
   — descoberto por `sessão coordenadora` no PR #58 `fix/ancoras-do-catalogo` (2026-09-23)
+
+- [ ] **O 2º Python do worker custa ~30 ms em toda chamada coordenada** — `bin/sdd:9309` — o
+  worker relê o `bin/sdd` e sobe um 2º Python (`check`) só para provar a reentrada. Medido: sem ele
+  o `sdd install` cai de ~160 para ~130 ms, e o #48 levou a suíte comportamental de 117 para 251 s.
+  A parte barata já saiu no branch `perf/catalogo-para-no-primeiro-vermelho` (`-I -S` e acordar pelo
+  pidfd, 158 → 147 ms). Direção: provar o worker direto por um FD do flock herdado, fechado antes do
+  1º fork, sem afrouxar "ambiente sozinho não autoriza" — pede ADR.
+  — descoberto por `sessão coordenadora` no branch `perf/catalogo-para-no-primeiro-vermelho` (2026-09-23)
