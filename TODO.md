@@ -23,6 +23,14 @@ Achados sobre **repos-alvo** vão para o `TODO.md` daquele repo. Este arquivo é
 
 ### Sensores que faltam
 
+- [ ] **O teto de 8 linhas conta linhas físicas, e um item numa linha só passa com 1800
+  caracteres** — `tests/check-todo.sh:24` — a regra 5 promete que a análise longa mora no
+  handoff, mas mede `nlines`: num alvo, itens de 300 a 1832 caracteres numa linha física passavam
+  como uma linha de conteúdo, e quebrá-los em 100 colunas (o `--fix` da skill
+  `todo-to-github-issues`) revelou 10 acima do teto. Fail-open da regra que o sensor existe para
+  cobrar. Direção: contar linhas visuais de 100 colunas, ou recusar linha longa na seção aberta.
+  — descoberto por `claude` no `--audit` de um repo-alvo (2026-09-24)
+
 - [ ] **Âncora morta de mutante só aparece no catálogo inteiro (15–20 min), mas detectá-la custa
   segundos** — `tests/check-mutation.sh:2647` — a guarda `cmp -s` (rc 90) só roda dentro do
   `sdd health`; aplicar os 195 `sed` numa cópia de `bin/sdd` e comparar não roda suíte nenhuma.
