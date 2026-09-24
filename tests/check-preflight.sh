@@ -957,6 +957,52 @@ assert_eq "install --force seeds the CONFIGURED qa tree, not the default one, an
 assert_eq "and the remedy preflight names is the command that closed it" "1" \
   "$( grep -c "sdd install --force" <<< "$bt_pf_alt_before" )"
 
+# --- a Node TEST_CMD carries lint, typecheck and build ----------------------
+# The starter says it in the line beside the key: lint and build go INSIDE TEST_CMD, because the
+# runner reads no other sensor. `sdd install` then wrote `npm test` for every package.json, whatever
+# scripts the repo declared — the installer breaking the rule it prints. Measured on 2026-09-24
+# across the Node repos carrying the kit: four of six had `lint`, `build` or `typecheck` outside the
+# gate, so a mission there passes EXEC and REVIEW with the lint or the build red (a Codex review of
+# warehouse_explorer_api PR #7 is what surfaced it). Two halves: install composes the command from
+# the scripts that exist, and preflight warns about a config written before that, or by hand.
+echo "== a Node TEST_CMD carries lint, typecheck and build =="
+node_target() { # node_target <dir> <scripts-json> — a fresh repo with that package.json
+  mkdir -p "$1"
+  ( cd "$1" && git init -q -b main && git config user.email "fixture@example.com" \
+    && git config user.name "Fixture" && printf '{"name":"f","scripts":%s}\n' "$2" > package.json \
+    && git add -A && git commit -qm init ) >/dev/null 2>&1
+}
+node_target "$FIX/node-full" '{"lint":"true","typecheck":"true","build":"true","test":"true"}'
+( cd "$FIX/node-full" && "$SDD" install >/dev/null 2>&1 )
+assert_eq "install chains every gate script into TEST_CMD, cheapest first" \
+  'TEST_CMD="npm run lint && npm run typecheck && npm run build && npm test"' \
+  "$(grep -oE '^TEST_CMD="[^"]*"' "$FIX/node-full/.sdd/config.sh" 2>/dev/null || echo 'no TEST_CMD line')"
+# The positive control: a repo that declares only `test` keeps the old value. Without it an
+# installer that chained scripts the repo does not have would pass the case above.
+node_target "$FIX/node-bare" '{"test":"true"}'
+( cd "$FIX/node-bare" && "$SDD" install >/dev/null 2>&1 )
+assert_eq "install keeps a bare npm test when the repo declares no gate script" \
+  'TEST_CMD="npm test"' \
+  "$(grep -oE '^TEST_CMD="[^"]*"' "$FIX/node-bare/.sdd/config.sh" 2>/dev/null || echo 'no TEST_CMD line')"
+
+nw_case() { # nw_case <TEST_CMD> <expected: warn|quiet> <description>
+  # Escaped for sed: `&` in a replacement is the matched text, and every value here carries `&&`.
+  local v; v="$(printf '%s' "$1" | sed -e 's/[\\&|]/\\&/g')"
+  sed -i "s|^TEST_CMD=.*|TEST_CMD=\"$v\"|" "$FIX/node-full/.sdd/config.sh"
+  local o got; o="$( cd "$FIX/node-full" && "$SDD" preflight 2>&1 )"
+  if grep -qF "leaves out package.json script" <<< "$o"; then got="warn: $(grep -oE 'script\(s\): [a-z ]+' <<< "$o" | head -1)"
+  else got="quiet"; fi
+  assert_eq "$3" "$2" "$got"
+}
+nw_case 'npm test' 'warn: script(s): lint typecheck build ' \
+  "preflight names every gate script a hand-written TEST_CMD leaves out"
+nw_case 'npm run lint && npm test' 'warn: script(s): typecheck build ' \
+  "preflight names only the scripts that are missing"
+nw_case 'npm run lint && npm run typecheck && npm run build && npm test' 'quiet' \
+  "preflight stays quiet when every gate script is inside TEST_CMD"
+nw_case 'npm run build:prod && npm run lint && npm run typecheck && npm test' 'warn: script(s): build ' \
+  "a longer script name that merely starts with build does not count as build"
+
 # ---------------------------------------------------------------------------
 echo
 if [ "$fails" -eq 0 ]; then printf '  ok    preflight measures the GNU userland instead of assuming it\n'; exit 0; fi

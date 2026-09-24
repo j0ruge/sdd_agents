@@ -3879,6 +3879,45 @@ skill_findable() {
   [ -n "$( find "$root/plugins/cache" -maxdepth 6 -type d -name "$name" -print -quit 2>/dev/null || true )" ]
 }
 
+# node_gate_scripts → the package.json scripts that belong INSIDE TEST_CMD, one per line, in the
+# order a gate should run them (cheapest first, so a lint error does not wait on a build).
+#
+# The runner reads exactly one sensor, TEST_CMD, and the starter says so beside the key: lint and
+# build go inside it. `sdd install` still wrote a bare `npm test` for every package.json, whatever
+# scripts the repo declared — measured on 2026-09-24, four of six Node repos carrying the kit had
+# `lint`, `build` or `typecheck` outside the gate, and a mission there passes EXEC and REVIEW with
+# them red. Only these three names: they are the convention, and a script the kit does not know
+# (`e2e`, `format`) is not something to chain in on a guess.
+NODE_GATE_SCRIPTS=(lint typecheck build)
+node_gate_scripts() {
+  local pkg="$REPO_ROOT/package.json" s
+  [ -f "$pkg" ] || return 0
+  for s in "${NODE_GATE_SCRIPTS[@]}"; do
+    if jq -e --arg s "$s" '.scripts[$s] // empty' "$pkg" >/dev/null 2>&1; then printf '%s\n' "$s"; fi
+  done
+  return 0
+}
+
+# node_test_cmd → the TEST_CMD `sdd install` writes for a Node repo: every gate script, then the suite.
+node_test_cmd() {
+  local s chain=""
+  while IFS= read -r s; do
+    [ -n "$s" ] && chain="${chain}npm run $s && "
+  done < <(node_gate_scripts)
+  printf '%snpm test\n' "$chain"
+}
+
+# node_scripts_outside_test_cmd <cmd> → the gate scripts <cmd> never names, space-separated.
+# Matched as a WHOLE word: `build:prod` is another script and does not stand in for `build`.
+node_scripts_outside_test_cmd() {
+  local s
+  while IFS= read -r s; do
+    [ -n "$s" ] || continue
+    grep -qE "(^|[^[:alnum:]_:-])${s}([^[:alnum:]_:-]|\$)" <<< "$1" || printf '%s ' "$s"
+  done < <(node_gate_scripts)
+  return 0
+}
+
 # test_cmd_looks_noop <cmd> → 0 when the command would exit 0 having run no test at all.
 #
 # `TEST_CMD` is the EXEC gate and half the REVIEW gate. A value that runs nothing is worse than an
@@ -4019,7 +4058,7 @@ cmd_install() {
     # chosen in silence, in the one key the whole pipeline trusts. package.json first because a
     # repo with two manifests is usually a JS project with a helper in another language.
     test_cmd="TODO"
-    if   [ -f "$REPO_ROOT/package.json" ];   then test_cmd="npm test"
+    if   [ -f "$REPO_ROOT/package.json" ];   then test_cmd="$(node_test_cmd)"
     elif [ -f "$REPO_ROOT/pyproject.toml" ]; then test_cmd="pytest -q"
     elif [ -f "$REPO_ROOT/Cargo.toml" ];     then test_cmd="cargo test"
     elif [ -f "$REPO_ROOT/go.mod" ];         then test_cmd="go test ./..."
@@ -4033,9 +4072,14 @@ cmd_install() {
     # about the consequence.
     [ -f "$SDD_HOME/config/starter.conf" ] \
       || die "the kit at $SDD_HOME has no config/starter.conf — .sdd/config.sh would be created empty, and the next 'sdd install' would report it as already existing. Re-copy or re-clone the kit."
+    # `&` in a sed REPLACEMENT means "the matched text", so a composed `npm run lint && npm test`
+    # came out as `npm run lint <TEST_CMD><TEST_CMD> npm test` — measured, in the probe that asserts
+    # the composed value. `\` and the `|` delimiter are escaped for the same reason.
+    local test_cmd_sed
+    test_cmd_sed="$(printf '%s' "$test_cmd" | sed -e 's/[\\&|]/\\&/g')"
     sed -e "s|<PROJECT_NAME>|$project|g" \
         -e "s|<DEFAULT_BRANCH>|$branch|g" \
-        -e "s|<TEST_CMD>|$test_cmd|g" \
+        -e "s|<TEST_CMD>|$test_cmd_sed|g" \
         -e "s|<SDD_HOME>|$SDD_HOME|g" \
         "$SDD_HOME/config/starter.conf" > "$CONFIG_FILE"
     ok ".sdd/config.sh created (base branch detected: $branch — confirm it)"
@@ -4508,6 +4552,16 @@ cmd_preflight() {
         phase unsatisfiable — one session per lap, for ever. Output: $LAST_CHECK_LOG"
         fi
       fi ;;
+  esac
+  # A warn and never a fail: leaving a slow build out of the per-increment gate can be deliberate,
+  # and the operator is the one who knows. What must not happen is leaving it out WITHOUT knowing.
+  case "$TEST_CMD" in
+    TODO|"") ;;
+    *)
+      local outside; outside="$(node_scripts_outside_test_cmd "$TEST_CMD")"
+      [ -z "$outside" ] || warn "TEST_CMD leaves out package.json script(s): ${outside}— the runner reads
+        no other sensor, so a mission passes every gate with them red. Chain them in (npm run <script>
+        && … && npm test), unless leaving them out is deliberate." ;;
   esac
 
   # DEFAULT_BRANCH is the base of `gh pr create` in the PR phase — the LAST phase, after EXEC, QA,

@@ -2024,6 +2024,28 @@ mut_PRE_testcmd_noop_runs_anyway() {
   sed -i '/^cmd_preflight()/,/^}/ s@if test_cmd_looks_noop "\$TEST_CMD"; then@if test_cmd_looks_noop "$TEST_CMD"; then run_check_cmd "$TEST_CMD" "preflight-test" || true;@' "$1"
 }
 
+# The Node TEST_CMD rule has four owners, one mutant each. install goes back to a bare `npm test`
+# whatever the package.json declares — the defect a Codex review of warehouse_explorer_api PR #7
+# surfaced, measured in four of six Node repos.
+mut_PRE_node_install_bare() {
+  sed -i 's@then test_cmd="\$(node_test_cmd)"@then test_cmd="npm test"@' "$1"
+}
+
+# The preflight half goes blind: the helper still runs, it just never names a missing script.
+mut_PRE_node_outside_blind() {
+  sed -i '/^node_scripts_outside_test_cmd()/,/^}/ s@|| printf .%s . "\$s"@|| true@' "$1"
+}
+
+# The composed value goes to sed unescaped, and `&&` turns into the matched text twice.
+mut_PRE_node_sed_unescaped() {
+  sed -i 's@-e "s|<TEST_CMD>|\$test_cmd_sed|g"@-e "s|<TEST_CMD>|$test_cmd|g"@' "$1"
+}
+
+# The whole-word match degrades to a substring, and `build:prod` starts standing in for `build`.
+mut_PRE_node_outside_substring() {
+  sed -i '/^node_scripts_outside_test_cmd()/,/^}/ s@grep -qE "(^|\[^\[:alnum:\]_:-\])\${s}(\[^\[:alnum:\]_:-\]|\\\$)"@grep -qF "$s"@' "$1"
+}
+
 # Not a gate: the base branch warning goes back to being decoration. The body is emptied while the
 # function keeps existing and keeps returning 0, so every call site stays syntactically valid and
 # nothing else about the runs changes — which is exactly the shape of the defect this closes, a
