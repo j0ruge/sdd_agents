@@ -7,6 +7,12 @@ repos-alvo, veja [`docs/pipeline.md`](docs/pipeline.md).
 
 O plano consolidado pelo Codex Astra, baseado no artigo de @0xCodez e nas referências de harness do Second Brain, está em [`sdd-agents-team-harness-raft.md`](file:///home/joruge/repos/obsidian/03%20Resources/IA%20e%20Agentes/sdd-agents-team-harness-raft.md). A primeira missão é **um checkout, um dono de execução**: exclusão mútua, proprietário identificável e recuperação após queda, antes de claims, agenda ou coordenação distribuída. Hooks são posteriores e complementares; não substituem gates, locks ou permissões.
 
+O que está planejado e **parado** no kit — frentes, estado medido e ordem — tem um índice só:
+[`docs/superpowers/specs/2026-09-23-a-gaveta-do-kit.md`](docs/superpowers/specs/2026-09-23-a-gaveta-do-kit.md).
+Plano de kit mora no repo, nunca só em `~/.claude/plans/` ou num branch local: o spec do worker
+passou semanas num branch nunca empurrado. Frente que anda, fecha ou nasce atualiza o índice no
+mesmo commit.
+
 ## Idioma
 
 Duas audiências, duas regras. A regra antiga ("PT-BR em tudo que é lido por humano") misturava as
