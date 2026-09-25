@@ -37,7 +37,7 @@ atualizado: 2026-09-25 01:10
 
 | ID | Incremento | Check (comando → esperado) | Status | Commit |
 |---|---|---|---|---|
-| I1 | regra 5 recusa linha física acima de 120 caracteres (não bytes) | `o=$(bash tests/check-todo.sh 2>&1); grep -c '^  ok    rule: a physical line of the open section holds at most 120 characters' <<< "$o"` → `1` | pending | — |
+| I1 | regra 5 recusa linha física acima de 120 caracteres (não bytes) | `o=$(bash tests/check-todo.sh 2>&1); grep -c '^  ok    rule: a physical line of the open section holds at most 120 characters' <<< "$o"` → `1` | done | 7bf0773 |
 | I2 | selftest vermelho em toda sabotagem do #70 (a, c, d, b1, b2; b4/b5 declarados) | `o=$(bash tests/check-todo.sh 2>&1); grep -c '^  ok    rule: the selftest goes red under every sabotage issue 70 listed' <<< "$o"` → `1` | pending | — |
 | I3 | config_read_key nos sete sítios: config que não parseia é dito (#116) | `o=$(bash tests/check-health.sh 2>&1); grep -c '^  ok    a kit config that does not parse is reported as not parsing, never as a missing TEST_CMD' <<< "$o"` → `1` | pending | — |
 | I4 | predicado único recusa --list com TAB ou entre aspas (#118) | `o=$(bash tests/check-preflight.sh 2>&1); grep -c '^  ok    a TAB or a quoted --list is refused like a spaced one' <<< "$o"` → `1` | pending | — |

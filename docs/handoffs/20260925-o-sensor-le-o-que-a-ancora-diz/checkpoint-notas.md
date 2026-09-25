@@ -46,3 +46,4 @@
 > fora da citação ao registrar uma intervenção de verdade.
 >
 > - intervention: <o que o humano teve de fazer> — <fase> — <custo, se houver>
+- 2026-09-25 01:03 · `EXEC` · I1 `7bf0773`: regra de largura (120 caracteres) no awk do lint; sabotagens medidas no scratch, todas vermelhas no selftest: contar bytes (`length($0)`) → rc 91; `WIDTH_CAP=1200` → rc 91; só a primeira linha do item → rc 91. O caractere acentuado do probe sai por escape de bytes (`$'\xc3\xbc'`), porque o `check-lang.sh` lê letra acentuada no fonte como português.
