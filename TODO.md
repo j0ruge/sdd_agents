@@ -23,15 +23,6 @@ Achados sobre **repos-alvo** vão para o `TODO.md` daquele repo. Este arquivo é
 
 ### Sensores que faltam
 
-- [ ] **O teto de 8 linhas conta linhas físicas, e um item numa linha só passa com 1800
-  caracteres** — `tests/check-todo.sh:374` — a regra 5 promete que a análise longa mora no
-  handoff, mas mede `nlines`: num alvo, itens de 300 a 1832 caracteres numa linha física passavam
-  como uma linha de conteúdo, e quebrá-los em 100 colunas (o `--fix` da skill
-  `todo-to-github-issues`) revelou 10 acima do teto. Fail-open da regra que o sensor existe para
-  cobrar. Direção: contar linhas visuais de 100 colunas, ou recusar linha longa na seção aberta.
-  RESOLVED by 7bf0773 (missão `20260925-o-sensor-le-o-que-a-ancora-diz`).
-  — descoberto por `claude` no `--audit` de um repo-alvo (2026-09-24)
-
 - [ ] **`gate_QA` aceita relatório de QA de OUTRA missão** — `bin/sdd:1123` — a Âncora 1 pega o
   relatório mais recente do glob por `latest_matching` e só exige `closed` sem linhas `Pending`;
   nada o amarra à missão corrente. Em `20260827-condicoes-pagamento-mesmo-cliente` o gate passou
@@ -82,26 +73,17 @@ Achados sobre **repos-alvo** vão para o `TODO.md` daquele repo. Este arquivo é
   `20260819-fecho-...` (2026-08-19)
 
 - [ ] **A alternativa `|| :` da guarda do `guard:` não tem probe** —
-  `tests/check-health.sh:1534` — a guarda aceita `(true|:)`, e só `|| true` tem mundo no `cap_world`.
+  `tests/check-health.sh:1621` — a guarda aceita `(true|:)`, e só `|| true` tem mundo no `cap_world`.
   Medido em 2026-09-25: tirar o `:` da alternância deixa o `check-health.sh` inteiro verde. Das quatro
   sobreviventes da r2, três fecharam em `a948f68` (piso exato de capturas, probe aritmético, lista
   `RULE_REPORTS`). Direção: um `cap_world` com `|| :` e o censo afirmado, como os vizinhos.
   — descoberto por `sdd-reviewer` na missão `20260818-lote-facil` (2026-08-19)
 
 - [ ] **O `guard:` é cego a helper `health_*()` definido fora da região** —
-  `tests/check-health.sh:1553` — a região vai de `# Sensor of the KIT` até `cmd_status()`, então um
+  `tests/check-health.sh:1640` — a região vai de `# Sensor of the KIT` até `cmd_status()`, então um
   `health_*()` definido depois dela não é censurado. A outra metade do achado (`if x=`, `local x=` e
   here-doc lidos como offender) fechou: as três formas são isentas e declaradas no cabeçalho da regra.
   Direção: censurar todo `health_*()` onde ele estiver.
-  — descoberto por `sdd-reviewer` na missão `20260818-lote-facil` (2026-08-19)
-
-- [ ] **Quatro regras do `check-todo.sh` que o selftest diz medir e não mede** —
-  `tests/check-todo.sh:1693` — a contagem de violações trocada pela constante `3` passa (o fixture
-  tem exatamente 3); o `^` do `grep '^## Aberto'` é load-bearing e o probe não o exercita; o
-  `flush()` do ramo da caixa marcada não tem probe (esconde 3 de 4 violações); e o probe
-  `--check ''` é vácuo quando `$ROOT/TODO.md` não existe. Direção: segundo fixture com contagem
-  DIFERENTE, e prosa contendo `## Aberto` fora da coluna 0.
-  RESOLVED by b517d10 (missão `20260925-o-sensor-le-o-que-a-ancora-diz`).
   — descoberto por `sdd-reviewer` na missão `20260818-lote-facil` (2026-08-19)
 
 - [ ] **Os dois literais "ESTRUTURAIS" da regra 3 do `check-checkpoint.sh` afrouxam em verde** —
@@ -196,15 +178,6 @@ Achados sobre **repos-alvo** vão para o `TODO.md` daquele repo. Este arquivo é
   de contagem falsa, como o `SDD_EP_FORCE_FAIL` da composição, com um probe por ramo.
   — descoberto por `sdd-reviewer` na missão `20260816-kit-como-alvo` (2026-08-16)
 
-- [ ] **O `check-todo.sh` mede a FORMA da âncora, nunca se ela ainda aponta o que o item diz** —
-  `tests/check-todo.sh:1` — a regra exige `arquivo:linha` e o sensor só confere que há uma crase
-  antes do rabo; nada re-deriva o alvo. Medido na fase DOCS desta missão: **15 âncoras em 11 itens**
-  apontavam linha errada — a maioria apodreceu (o `bin/sdd` foi de 2287 para 2324 linhas na própria
-  missão que as escreveu), três nasceram erradas. É "rótulo, não artefato" dentro do arquivo que
-  cataloga essa família. Direção: resolver cada âncora e cobrar que a linha contenha um termo do
-  RESOLVED by a8a65db (missão `20260925-o-sensor-le-o-que-a-ancora-diz`).
-  título. — descoberto por `sdd-docs` na missão `20260816-runner-sem-dividas` (2026-08-16)
-
 - [ ] **O fixture de `stream-json` não tem checagem de proveniência** — `tests/check-autonomy.sh:127`
   — as três linhas replayadas pelos stubs foram copiadas de sessão real (CLI 2.1.233) e o comentário
   registra o comando, mas `health_provenance` (`bin/sdd:1405`) só confere as 3 fixtures de skill
@@ -220,7 +193,7 @@ Achados sobre **repos-alvo** vão para o `TODO.md` daquele repo. Este arquivo é
   gitignored e local. Direção: reter as N sessões mais recentes por missão, ou comprimir o stream
   ao fim da fase. — descoberto por `sdd-executor` na missão `20260816-runner-sem-dividas` (2026-08-16)
 
-- [ ] **Sensor pulado por `SDD_MUTANT` vira ponto cego sem aviso** — `tests/run-all.sh:198` —
+- [ ] **Sensor pulado por `SDD_MUTANT` vira ponto cego sem aviso** — `tests/run-all.sh:224` —
   sensores são pulados dentro do mutante (hoje o lint e os quatro de `:198-221`). É aposta que vence
   sozinha: no I3 o `check-preflight.sh`
   ganhou asserção de comportamento do runner, e a linha que o pulava virou a escondedora da única
@@ -329,7 +302,7 @@ Achados sobre **repos-alvo** vão para o `TODO.md` daquele repo. Este arquivo é
   — descoberto por `sdd-qa` na missão `20260819-fecho-que-nao-mente` (2026-08-19)
 
 - [ ] **O piso do catálogo mora só no consumidor; quem imprime o `score:` segue sem nenhum** —
-  `tests/check-mutation.sh:4755` — com `CATALOG=()` o laço roda zero vezes, `errors` fica 0 e o
+  `tests/check-mutation.sh:4783` — com `CATALOG=()` o laço roda zero vezes, `errors` fica 0 e o
   arquivo imprime `score: 0 caught, 0 known gap(s), of 0` saindo 0. O F1 pôs o piso no `cmd_health`,
   hoje o único chamador — mas duas frases do próprio runner (`bin/sdd:5055` e `:5108`) mandam o
   operador rodar `tests/run-all.sh --with-mutation` à mão, e aí o verde volta a mentir.
@@ -382,7 +355,7 @@ Achados sobre **repos-alvo** vão para o `TODO.md` daquele repo. Este arquivo é
   comentário baixa a alegação, ou a asserção ganha o mundo que a distingue.
   — descoberto por `sdd-reviewer` na missão `20260901-o-revisor-so-acha` (2026-09-02)
 
-- [ ] **A suíte não tem `timeout` em lugar nenhum** — `tests/run-all.sh:82` (`run()`) — regra quebrada que
+- [ ] **A suíte não tem `timeout` em lugar nenhum** — `tests/run-all.sh:101` (`run()`) — regra quebrada que
   recursa sai como **travamento sem mensagem**, e não como vermelho; medido em `rc=124` sob
   `timeout 20` na r2 desta missão. É a classe que já custou três sessões de REVIEW deste repo
   (`4c86712`), e o probe de ponta a ponta do `check-templates.sh` está a uma edição dela.
@@ -415,30 +388,12 @@ Achados sobre **repos-alvo** vão para o `TODO.md` daquele repo. Este arquivo é
   o princípio 4 promete resolver de graça. Direção: escopar a checagem ao que o REVIEW pode sujar.
   — descoberto por `operador` na missão `20260827-condicoes-pagamento-mesmo-cliente` (2026-08-27)
 
-- [ ] **`.sdd/config.sh` que não parseia é reportado como "declares no TEST_CMD"** —
-  `bin/sdd:5179` — a checagem 2b lê o `TEST_CMD` sourceando o config num subshell com
-  `>/dev/null 2>&1`, então o erro de sintaxe é engolido e o valor chega vazio: o operador ouve que
-  a chave não existe quando o arquivo inteiro está quebrado. Medido nesta rodada que o `set -e`
-  NÃO derruba a substituição (sem `inherit_errexit`), então o ramo existe e é alcançável.
-  Direção: capturar a stderr do source e, se ela não estiver vazia, dizer "não parseia" e mostrá-la.
-  RESOLVED by 932a1ba (missão `20260925-o-sensor-le-o-que-a-ancora-diz`).
-  — descoberto por `sdd-reviewer` na missão `20260819-fecho-que-nao-mente` (2026-08-19)
-
 - [ ] **A catraca do backlog e o carimbo de mutação colidem em toda missão** —
   `tests/health-baseline.txt` (`todo-findings`) — o arquivo mora DENTRO dos quatro diretórios da chave do carimbo,
   então cumprir o princípio 5 (achado fora de escopo vira item) obriga a bumpar a catraca, o que
   invalida o carimbo e cobra outra rodada de 20 a 50 min antes do `gate_PR`. Medido nesta sessão:
   o carimbo `0575d68…` foi ganho e perdido pelo commit que registra estes achados. Direção: tirar
   o baseline da chave, ou aceitar o custo declarando-o no boot da fase PR.
-  — descoberto por `sdd-qa` na missão `20260819-fecho-que-nao-mente` (2026-08-19)
-
-- [ ] **A regra do `--list` é só de espaço, e o `eval` que roda o `TEST_CMD` não é** —
-  `bin/sdd:4002` — o `case " $kit_test_cmd " in *" --list "*` não vê `TEST_CMD` com TAB antes da
-  flag, nem `"--list"` entre aspas; o `eval` do `run_check_cmd` (`bin/sdd:708`) entrega `--list`
-  à suíte nos três casos. O `sdd health` responde `ok TEST_CMD runs the suite` e todo gate passa
-  contra uma suíte que não rodou — o buraco que o I2 existe para fechar, outra grafia.
-  Direção: normalizar o espaço em branco antes do `case`.
-  RESOLVED by 2b5f492 (missão `20260925-o-sensor-le-o-que-a-ancora-diz`).
   — descoberto por `sdd-qa` na missão `20260819-fecho-que-nao-mente` (2026-08-19)
 
 - [ ] **Lixo ignorado pelo git dentro dos quatro diretórios move a chave do carimbo** —
@@ -551,14 +506,6 @@ Achados sobre **repos-alvo** vão para o `TODO.md` daquele repo. Este arquivo é
   isso. Direção: a REVIEW endereça o achado à EXEC, ou a DOCS ganha um caminho estreito.
   — descoberto por `sdd-docs` na missão `20260911-o-juiz-nao-mente-sobre-a-janela` (2026-09-12)
 
-- [ ] **22 das 33 âncoras do `TODO.md` apontam para a linha errada** —
-  `tests/check-todo.sh:1` — auditadas uma a uma contra o HEAD: várias erram por centenas de
-  linhas e uma cai fora do arquivo (`tests/run-all.sh:180`, num arquivo de 173). O sensor mede
-  **forma**, nunca se a âncora ainda acerta o alvo, então o número não se move sozinho — e esta
-  missão empurrou parte delas ao crescer o `bin/sdd` em 162 linhas. Direção: re-derivar em lote.
-  RESOLVED by a8a65db (missão `20260925-o-sensor-le-o-que-a-ancora-diz`).
-  — descoberto por `sdd-reviewer` na missão `20260818-lote-facil` (2026-08-18)
-
 - [ ] **O `rows=13` do `gate:` da QA não sai do extrator do `gate_REVIEW`** —
   `docs/handoffs/20260818-lote-facil/30-handoff-qa.md:7` — o awk literal do gate responde `rows=8`
   sobre `templates/review.md`; 13 é a contagem sem o filtro de cabeçalho e separador. A conclusão
@@ -611,7 +558,7 @@ Achados sobre **repos-alvo** vão para o `TODO.md` daquele repo. Este arquivo é
   julgamento. — descoberto por `humano` na missão `20260829-o-incremento-que-andou` (2026-08-30)
 
 - [ ] **A suíte segue acima do alvo "<30 s" da D7, mesmo depois do paralelismo** —
-  `tests/run-all.sh:82` (`run()`) — a saída "subir o default" foi tomada e executada (pool + `min(núcleos, 8)`,
+  `tests/run-all.sh:101` (`run()`) — a saída "subir o default" foi tomada e executada (pool + `min(núcleos, 8)`,
   ver KAIZEN_LOG de 2026-08-16): mediana 54,13 s → **32,87 s** na mesma sessão, score 30/30
   intacto. Restam as duas saídas de régua, ambas do humano: subir o alvo da D7 (o "≤15 s" do
   I13.1 já é história) ou aceitar o estouro — hoje ~300 s (2026-09-25). — medido por
@@ -619,12 +566,11 @@ Achados sobre **repos-alvo** vão para o `TODO.md` daquele repo. Este arquivo é
   paralelismo (2026-08-16)
 
 - [ ] **Sensor novo na suíte é multiplicador, não parcela: custa uma vez por mutante** —
-  `tests/run-all.sh:180` — `check-health.sh` roda em ~1,5 s sozinho e roda **dentro de cada
+  `tests/run-all.sh:262` — `check-health.sh` roda em ~1,5 s sozinho e roda **dentro de cada
   mutante**, hoje 81. Medido em passadas sequenciais e máquina quieta, `main` (`6d68dfc`) contra o
-  HEAD desta missão: **155,97 s → 210,81 s**, +55 s com 11 mutações a mais no mesmo diff.
-  ⚠️ O EXEC registrou **+281 s** para a mesma família e isso não reproduz — era contenção, não o
-  mecanismo. O item acima fala em crescer com o catálogo; este é outro mecanismo.
-  Direção: rodar por mutante só o sensor que o alcança — decisão do humano, junto com o alvo da D7.
+  HEAD desta missão: **155,97 s → 210,81 s**, +55 s com 11 mutações a mais no mesmo diff (o +281 s
+  do EXEC não reproduz: era contenção). Direção: rodar por mutante só o sensor que o alcança.
+  RESOLVED by b874141 (o passo que matou o mutante roda primeiro; amostra de 40: 389 → 171 s).
   — descoberto por `sdd-executor` na missão `20260817-catraca-do-backlog` (2026-08-17)
 
 ### Sem seção — chegaram depois da última classificação
@@ -678,14 +624,6 @@ Achados sobre **repos-alvo** vão para o `TODO.md` daquele repo. Este arquivo é
   33% waste` íntegro e `3 advanced · 0 churned · 0% waste` sabotado. Direção: uma linha QA `pass`
   entre duas linhas EXEC de prosa no fixture `histfix` que já existe.
   — descoberto por `sdd-reviewer` na missão `20260829-o-incremento-que-andou` (2026-08-30)
-- [ ] **`check-templates.sh` imprime `ok` com três espaços, contra os quatro que todo Check ancora**
-  — `tests/check-templates.sh` — o `CLAUDE.md` e o `templates/checkpoint.md` declaram `  ok    ` (4)
-  como a âncora obrigatória de todo Check que lê sensor, e 85 das 1058 asserções da suíte não casam
-  com ela. Falha FECHADA (o Check dá 0 e o incremento reprova), mas quem escrever Check sobre esse
-  sensor perde a sessão achando que a asserção sumiu. Direção: alinhar a grafia do sensor.
-  RESOLVED by eb0ee9e (missão `20260925-o-sensor-le-o-que-a-ancora-diz`).
-  — descoberto por `sdd-reviewer` na missão `20260911-o-juiz-nao-mente-sobre-a-janela` (2026-09-12)
-
 - [ ] **Nenhuma das skills `qa-report`/`qa-execution` conhece o campo `Closable by:`** —
   `agents/sdd-qa.md:118` — `grep -rn Closable ~/.claude/skills/qa-*` responde **zero**, então o
   campo só chega ao disco pelo template local do repo ou pelo `sdd-qa` marcando arquivo por arquivo.
@@ -740,6 +678,14 @@ Achados sobre **repos-alvo** vão para o `TODO.md` daquele repo. Este arquivo é
   pidfd, 158 → 147 ms). Direção: provar o worker direto por um FD do flock herdado, fechado antes do
   1º fork, sem afrouxar "ambiente sozinho não autoriza" — pede ADR.
   — descoberto por `sessão coordenadora` no branch `perf/catalogo-para-no-primeiro-vermelho` (2026-09-23)
+
+- [ ] **O mapa de assassinos reordena a suíte e confia que nenhum sensor muda de resposta por rodar primeiro** —
+  `tests/run-all.sh:308` — sob `SDD_MUTANT_FIRST` o CONJUNTO de passos de um mutante é o mesmo (as probes
+  `surface:` do `check-health.sh` o provam), mas a ORDEM muda, e um passo que ficasse vermelho só por rodar
+  primeiro faria um sobrevivente ler como pego: fail-open. Medido 13 de 13 verde em 2026-09-25 (kit sem
+  sabotagem, cada passo nomeado primeiro), sem sensor que o repita. Direção: o controle do catálogo roda
+  também uma vez por assassino distinto do mapa, com ele na frente, e exige verde.
+  — descoberto por `revisão final` no PR #168 `perf/catalogo-assassino-primeiro` (2026-09-25)
 
 ## Decidido — não reabrir
 <!-- sdd:decided -->

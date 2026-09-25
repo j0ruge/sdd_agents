@@ -4,6 +4,48 @@ Registro de melhorias com **antes/depois medido**. Sem número, não entra.
 
 ---
 
+## 2026-09-25 — O catálogo roda primeiro o passo que matou o mutante
+
+**Problema (Gemba):** desde o PR #59 cada mutante para no primeiro passo vermelho da suíte, mas os
+passos rodam sempre na mesma ordem. Um mutante que só o preflight mata pagava antes templates,
+gates, dry-run, autonomy, kaizen e health. O carimbo levava 1h21 com 392 mutantes e cresce a cada
+missão (406 hoje).
+
+**Medição:** amostra fixa de 40 mutantes sorteados de `583b3c3` (`shuf` com semente), cada um
+numa sandbox igual à do `run_mutant`, com carimbo de tempo por linha e 16 jobs. Assassinos: gates
+16, autonomy 12, kaizen 7, health 2, preflight, coordination e dry-run 1 cada; nenhum sobrevivente.
+
+| | Antes | Depois |
+|---|---|---|
+| Relógio da amostra, 16 jobs | 389 s (duas medições: 389 e 389) | **171 s** |
+| Soma da suíte nos 40 mutantes | 4 796 s / 4 828 s | **1 959 s** |
+| Mediana por mutante | 146 s / 149 s | **49 s** |
+| Vereditos diferentes (rc mutante a mutante) | — | **0 de 40**, e o mesmo passo assassino em todos |
+
+**Catálogo inteiro** (`sdd health`, 406 mutantes, 16 jobs, todas as rodadas 406 de 406 e kit
+healthy): a 1ª rodada, que aprende o mapa, levou **1h27** (12:45 → 14:12); as duas seguintes,
+já com ele, **40 min 07 s** sobre `0a56d5f` e **37 min 42 s** sobre `cc03abd` (o conserto da
+revisão final). **2,2 a 2,3× mais rápido**, na linha da amostra (389 → 171 s). A de 40 min dividiu
+a máquina com ~10 rodadas do `check-health.sh` num clone (~5 min de um núcleo, de 20).
+
+**Contramedida:** `run-all.sh` percorre a lista de passos duas vezes quando recebe
+`SDD_MUTANT_FIRST` dentro de um mutante: primeiro só o passo nomeado, depois os outros. O
+`check-mutation.sh` lê o assassino do log de cada mutante e regrava o mapa no fim do catálogo.
+Quatro probes `surface:` no `check-health.sh`, e cada uma das três sabotagens manuais (rodar o
+passo duas vezes, rodar tudo na 1ª passada, honrar a variável fora de mutante) deixa um vermelho.
+A guarda `FIRST_RAN` foi escrita e removida sem probe que a deixasse vermelha: não se construiu um
+mundo em que o nome case numa passada e não na outra, o que não prova que ele não exista — o
+comentário do `run-all.sh` diz qual seria (uma condição do `steps()` lendo estado que um passo escreve).
+
+**Limite declarado:** o ganho aparece a partir da 2ª rodada, porque a 1ª aprende o mapa. As probes
+provam que o CONJUNTO de passos de um mutante não muda; que a ORDEM não mude veredito foi medido
+(o kit sem sabotagem, sob `SDD_MUTANT`, cada um dos 13 passos nomeado primeiro: 13 de 13 verde) e
+não tem sensor — um passo vermelho só por rodar primeiro leria sobrevivente como pego, e o item está
+no `TODO.md`. O próximo degrau é o P2(b) da gaveta (parar no primeiro assert dentro do sensor):
+gates e autonomy sozinhos ainda custam 55 a 92 s por mutante.
+
+---
+
 ## 2026-09-25 — O sensor lê o que a âncora diz: a âncora do achado passa a ser medida, e o teto de linhas perde o atalho
 
 **Problema (Gemba):** medido em `5cb0101`, das 85 âncoras `arquivo:N` do `TODO.md` do kit, **63**

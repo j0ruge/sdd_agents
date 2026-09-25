@@ -13,7 +13,7 @@
 
 | # | Frente | Estado | Próximo passo | Espera por |
 |---|---|---|---|---|
-| F1 | Custo do catálogo de mutação | PR #59 mergeado (`d0ac22d`); P1–P4 abertos | P3 (varrer probes sensíveis a tempo sob carga) | — |
+| F1 | Custo do catálogo de mutação | PR #59 mergeado (`d0ac22d`); P2(a) feito em 2026-09-25 (assassino primeiro, amostra 389 → 171 s, `sdd health` 1h27 → ~38–40 min); P1, P2(b), P3, P4 abertos | P3 (varrer probes sensíveis a tempo sob carga); P2(b) se o carimbo seguir caro | — |
 | F2 | Faxina pós-#57 | parada | ADR 0010 para `accepted`; apagar 2 itens do `TODO.md` | carona num PR que já carimbe |
 | F3 | T3 e a janela do juiz | parada | decidir as 3 perguntas de desenho | **decisão humana** (inclusive: congelar ou não) |
 | F4 | Portabilidade para outros repos | parcial | registrar as lacunas no `TODO.md`; consertar a 2 | carona num PR que já carimbe |
@@ -68,7 +68,12 @@ trabalho de fato.
   authorization` continuam recusando o impostor, e um probe novo recusa o descendente sem o FD no
   caso `pipeline`. Já está no `TODO.md` ("O 2º Python do worker custa ~30 ms").
 - **P2. Catálogo mais barato por estrutura**, a maior alavanca que resta sem trocar linguagem.
-  - **(a) Mutante → sensor alvo.** Cada mutante roda primeiro o sensor que o comentário dele
+  - **(a) Mutante → sensor alvo. FEITO em 2026-09-25**, derivado dos logs e não dos comentários
+    (274 dos 406 mutantes não nomeiam sensor): o catálogo grava em `.sdd/cache/mutation-killers.tsv`
+    o passo que matou cada mutante, e na rodada seguinte `SDD_MUTANT_FIRST` o roda primeiro. Numa
+    amostra fixa de 40 mutantes de `583b3c3`, com 16 jobs: relógio **389 → 171 s**, soma
+    **4 828 → 1 959 s**, 0 de 40 vereditos diferentes. A 1ª rodada aprende o mapa e custa como antes (1h27); no
+    catálogo inteiro, as duas seguintes levaram 40 min 07 s e 37 min 42 s, 406 de 406. O texto original do plano: cada mutante roda primeiro o sensor que o comentário dele
     nomeia. Se ele morre, a suíte morreria também, então um subconjunto vermelho prova o veredito.
     Se fica verde, cai para a suíte inteira antes de declarar sobrevivente. Nenhum veredito muda.
     O custo é anotar os 392 mutantes; dá para derivar dos logs de uma corrida completa, que mostram

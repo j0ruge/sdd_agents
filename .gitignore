@@ -1,5 +1,8 @@
 # Logs e artefatos efêmeros do runner (o estado durável vive em docs/handoffs/, commitado)
 .sdd/logs/
+# Mapa de assassinos do catálogo de mutação (tests/check-mutation.sh): dica de ORDEM, aprendida a
+# cada `sdd health` e fora da chave do carimbo. Apagá-lo só custa velocidade, nunca veredito.
+.sdd/cache/
 *.log
 
 # Configuração local de máquina
