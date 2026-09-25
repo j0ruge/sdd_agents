@@ -1538,7 +1538,13 @@ EOF
   assert_says "$box/skel-lastline.md" 8 'an H2 with no section marker' "an H2 on the last line"
   { printf '## Plan\n[ ]\n\n'; cat "$box/skel-en.md"; } > "$box/skel-overbox.md"
   assert_says "$box/skel-overbox.md" 8 'line 1: an H2 with no section marker' "an H2 over a line another rule ends"
-  rule_end 11 'the sections are found by their marker, never by the heading text'
+  { printf '## Plan\n- [x] done\n\n'; cat "$box/skel-en.md"; } > "$box/skel-overticked.md"
+  assert_says "$box/skel-overticked.md" 8 'line 1: an H2 with no section marker' "an H2 over a ticked box"
+  { printf '## Plan\n-\n\n'; cat "$box/skel-en.md"; } > "$box/skel-overmarker.md"
+  assert_says "$box/skel-overmarker.md" 8 'line 1: an H2 with no section marker' "an H2 over a bare list marker"
+  { printf '## Plan\nfoo\rbar\n\n'; cat "$box/skel-en.md"; } > "$box/skel-overcr.md"
+  assert_says "$box/skel-overcr.md" 8 'line 1: an H2 with no section marker' "an H2 over a bare CR"
+  rule_end 17 'the sections are found by their marker, never by the heading text'
 
   # ── An unmarked file is refused by the CLI, never guessed ─────────────────────────────────────
   rule_begin
