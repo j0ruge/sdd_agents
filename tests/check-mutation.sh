@@ -2079,6 +2079,11 @@ mut_PRE_node_manifest_unread_blind() {
   sed -i '/^node_manifest_unread()/,/^}/ s@  jq empty "\$pkg" >/dev/null 2>&1 || printf .package.json does not parse as JSON.@  :@' "$1"
 }
 
+# The jq-absent branch goes: an unread manifest is still said, but blamed on the JSON.
+mut_PRE_node_manifest_jq_missing_blind() {
+  sed -i '/^node_manifest_unread()/,/^}/ s@  if ! command -v jq >/dev/null 2>&1; then printf .jq is not installed.; return 0; fi@  :@' "$1"
+}
+
 # Only TEST_CMD stays escaped: a branch carrying `&` comes out of the starter as the matched text.
 mut_RUN_install_branch_unescaped() {
   sed -i 's@    branch_sed="\$(sed_replacement "\$branch")"@    branch_sed="$branch"@' "$1"
@@ -4329,6 +4334,7 @@ CATALOG=(
   PRE_node_sed_unescaped
   PRE_node_outside_substring
   PRE_node_manifest_unread_blind
+  PRE_node_manifest_jq_missing_blind
   RUN_install_branch_unescaped
   RUN_base_branch_warn_dead
   RUN_approve_writes_auto
@@ -4605,7 +4611,7 @@ run_mutant() {
 # stopped being parsed: an empty loop reports "0 broken" forever.
 # ---------------------------------------------------------------------------
 if [ "$ANCHORS_ONLY" = 1 ]; then
-  ANCHOR_FLOOR=403
+  ANCHOR_FLOOR=404
   anchor_box() { mkdir -p "$1"; cp -r "$ROOT/bin" "$1/"; }
   anchor_control_noop()       { :; }
   anchor_control_intact()     { printf '# a mutation that lands and stays valid\n' >> "$1"; }

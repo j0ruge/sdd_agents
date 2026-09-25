@@ -1102,6 +1102,27 @@ assert_eq "install and preflight say they could not read package.json's scripts"
   "install: said / preflight: said / parsed manifest: quiet" \
   "install: $(grep -qF "$unread_says" <<< "$inst3" && printf said || printf silent) / preflight: $(grep -qF "$unread_says" <<< "$out3" && printf said || printf silent) / parsed manifest: $(grep -qF 'could not read package.json' <<< "$out4" && printf said || printf quiet)"
 
+# The other half of node_manifest_unread: jq itself absent. A PATH prefix cannot HIDE a binary,
+# so the probe builds a shadow PATH — a link to every executable the real one reaches, minus jq —
+# and runs install there. A package.json that parses must still be reported as unread, and for
+# the right reason: with the jq check gone, `jq empty` fails as "command not found" and the
+# message would blame the JSON instead.
+nojq="$FIX/.nojq-bin"; mkdir -p "$nojq"
+IFS=: read -r -a path_dirs <<< "$PATH"
+for d in "${path_dirs[@]}"; do
+  [ -d "$d" ] || continue
+  for f in "$d"/*; do
+    n="${f##*/}"
+    [ "$n" = jq ] && continue
+    [ -x "$f" ] && [ ! -e "$nojq/$n" ] && ln -s "$f" "$nojq/$n"
+  done
+done
+node_target "$FIX/no-jq" '{"lint":"true","test":"true"}'
+inst5="$( cd "$FIX/no-jq" && PATH="$nojq" "$SDD" install 2>&1 )"
+assert_eq "install without jq says so, and does not blame the JSON" \
+  "jq: said / json: not blamed / TEST_CMD: bare" \
+  "jq: $(grep -qF "could not read package.json's scripts (jq is not installed)" <<< "$inst5" && printf said || printf silent) / json: $(grep -qF 'does not parse as JSON' <<< "$inst5" && printf blamed || printf 'not blamed') / TEST_CMD: $([ "$(grep -oE '^TEST_CMD="[^"]*"' "$FIX/no-jq/.sdd/config.sh" 2>/dev/null)" = 'TEST_CMD="npm test"' ] && printf bare || printf other)"
+
 # --- every value install substitutes is escaped for sed, not only TEST_CMD -------------------
 # `&` in a sed replacement is "the matched text": a branch named `feat/a&b` came out of the starter
 # as `feat/a<DEFAULT_BRANCH>b`. The same corruption the composed TEST_CMD had, through another key.
