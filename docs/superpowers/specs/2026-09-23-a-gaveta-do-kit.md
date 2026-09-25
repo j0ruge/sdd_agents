@@ -13,7 +13,7 @@
 
 | # | Frente | Estado | Próximo passo | Espera por |
 |---|---|---|---|---|
-| F1 | Custo do catálogo de mutação | PR #59 mergeado (`d0ac22d`); P2(a) feito em 2026-09-25 (assassino primeiro, amostra 389 → 171 s, `sdd health` 1h27 → ~38–40 min); P1, P2(b), P3, P4 abertos | P3 (varrer probes sensíveis a tempo sob carga); P2(b) se o carimbo seguir caro | — |
+| F1 | Custo do catálogo de mutação | PR #59 mergeado (`d0ac22d`); P2(a) feito em 2026-09-25 (assassino primeiro, amostra 389 → 171 s, `sdd health` 1h27 → ~38–40 min); P2(b) em desenho ([spec](2026-09-25-o-sensor-para-no-primeiro-fail-design.md), meta ≤ 20 min); P1, P3, P4 abertos | P2(b) (desenho aprovado em conversa em 2026-09-25; spec em revisão); depois P3 | — |
 | F2 | Faxina pós-#57 | parada | ADR 0010 para `accepted`; apagar 2 itens do `TODO.md` | carona num PR que já carimbe |
 | F3 | T3 e a janela do juiz | parada | decidir as 3 perguntas de desenho | **decisão humana** (inclusive: congelar ou não) |
 | F4 | Portabilidade para outros repos | parcial | registrar as lacunas no `TODO.md`; consertar a 2 | carona num PR que já carimbe |
@@ -78,8 +78,10 @@ trabalho de fato.
     Se fica verde, cai para a suíte inteira antes de declarar sobrevivente. Nenhum veredito muda.
     O custo é anotar os 392 mutantes; dá para derivar dos logs de uma corrida completa, que mostram
     o primeiro sensor vermelho de cada um.
-  - **(b) Parar no primeiro assert vermelho dentro do sensor** sob `SDD_MUTANT`. Toca os 11
-    sensores comportamentais e os seus selftests.
+  - **(b) Parar no primeiro assert vermelho dentro do sensor** sob `SDD_MUTANT`. EM DESENHO:
+    [`2026-09-25-o-sensor-para-no-primeiro-fail-design.md`](2026-09-25-o-sensor-para-no-primeiro-fail-design.md).
+    Amostra de 24 mutantes: o 1º FAIL sai na metade do sensor (1328,7 → 624,4 s, −53%). Vem
+    junto: o controle em paralelo com o pool e o mais longo primeiro. Meta: health ≤ 20 min.
 - **P3. Probes sensíveis a tempo sob carga.** Os 16 jobs expuseram um probe que distinguia o
   mutante contando sinais. Sinais comuns se fundem quando o processo não é escalonado a tempo, e
   o `mut_COORD_hook_relay_signaled` sobreviveu ao primeiro carimbo do #59. Falta varrer os sensores
