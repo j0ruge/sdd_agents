@@ -1045,6 +1045,37 @@ assert_eq "a red suite with its manifest present still fails" \
   "FAILED, no warn" \
   "$(grep -qF 'TEST_CMD FAILED' <<< "$out" && printf 'FAILED' || printf 'no FAILED'), $(grep -qF 'expected if I1 creates the scaffold' <<< "$out" && printf 'warn' || printf 'no warn')"
 
+# The excuse is only for the runner that SAYS its manifest is missing. Two worlds the table alone
+# used to excuse: pytest needs no manifest at all, so a red suite in a setup.py repo read as
+# "scaffold not there yet"; and `npm --prefix sub test` keeps its manifest in a subdirectory, so
+# the root check was blind to it. Both must stay a fail.
+mkdir -p "$FIX/.pyfail"
+printf '#!/bin/sh\necho "FAILED tests/test_x.py::test_x - assert False"\nexit 1\n' > "$FIX/.pyfail/pytest"
+chmod +x "$FIX/.pyfail/pytest"
+node_target "$FIX/py-red" '{}'
+rm -f "$FIX/py-red/package.json"
+( cd "$FIX/py-red" && "$SDD" install >/dev/null 2>&1 )
+sed -i 's|^TEST_CMD=.*|TEST_CMD="pytest"|' "$FIX/py-red/.sdd/config.sh"
+out="$( cd "$FIX/py-red" && PATH="$FIX/.pyfail:$PATH" "$SDD" preflight 2>&1 )"
+node_target "$FIX/prefix-red" '{}'
+rm -f "$FIX/prefix-red/package.json"
+mkdir -p "$FIX/prefix-red/sub" && printf '{"name":"s","scripts":{"test":"exit 3"}}\n' > "$FIX/prefix-red/sub/package.json"
+( cd "$FIX/prefix-red" && "$SDD" install >/dev/null 2>&1 )
+sed -i 's|^TEST_CMD=.*|TEST_CMD="npm --prefix sub test"|' "$FIX/prefix-red/.sdd/config.sh"
+out2="$( cd "$FIX/prefix-red" && "$SDD" preflight 2>&1 )"
+# And the root check earns its place with a manifest the runner names while it IS there: a malformed
+# package.json makes npm cite it (EJSONPARSE), and without the root check that read as "missing".
+node_target "$FIX/bad-json" '{}'
+printf '{"name": \n' > "$FIX/bad-json/package.json"
+( cd "$FIX/bad-json" && "$SDD" install >/dev/null 2>&1 )
+sed -i 's|^TEST_CMD=.*|TEST_CMD="npm test"|' "$FIX/bad-json/.sdd/config.sh"
+out3="$( cd "$FIX/bad-json" && "$SDD" preflight 2>&1 )"
+assert_eq "a manifest the runner cites while it exists (malformed) is still a fail" "FAILED" \
+  "$(grep -qF 'TEST_CMD FAILED' <<< "$out3" && printf 'FAILED' || printf 'excused')"
+assert_eq "a red suite whose runner never said its manifest is missing still fails" \
+  "pytest: FAILED / prefix: FAILED" \
+  "pytest: $(grep -qF 'TEST_CMD FAILED' <<< "$out" && printf 'FAILED' || printf 'excused') / prefix: $(grep -qF 'TEST_CMD FAILED' <<< "$out2" && printf 'FAILED' || printf 'excused')"
+
 # --- sdd install over a config that does not parse (issue 116) -------------
 # install reads four keys of an existing .sdd/config.sh, and used to source it with
 # `>/dev/null 2>&1` — so an unclosed quote quietly bought the defaults, and the handoff dir the
