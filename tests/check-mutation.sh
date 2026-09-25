@@ -4313,6 +4313,10 @@ CATALOG=(
   PRE_testcmd_list_unquoted
   PRE_greenfield_warn_always
   PRE_greenfield_warn_without_evidence
+  PRE_node_install_bare
+  PRE_node_outside_blind
+  PRE_node_sed_unescaped
+  PRE_node_outside_substring
   RUN_base_branch_warn_dead
   RUN_approve_writes_auto
   RUN_approve_bails_on_kaizen_born
@@ -4588,7 +4592,7 @@ run_mutant() {
 # stopped being parsed: an empty loop reports "0 broken" forever.
 # ---------------------------------------------------------------------------
 if [ "$ANCHORS_ONLY" = 1 ]; then
-  ANCHOR_FLOOR=397
+  ANCHOR_FLOOR=401
   anchor_box() { mkdir -p "$1"; cp -r "$ROOT/bin" "$1/"; }
   anchor_control_noop()       { :; }
   anchor_control_intact()     { printf '# a mutation that lands and stays valid\n' >> "$1"; }
@@ -4646,6 +4650,27 @@ if [ "$ANCHORS_ONLY" = 1 ]; then
          "an emptied or unparsed catalogue would report every anchor intact"
     exit 1
   fi
+  # A mutant DEFINED but never LISTED is dead code that no loop here runs, and the fast suite used
+  # to stay green over it: four `mut_PRE_node_*` sat outside CATALOG for a whole branch, and only
+  # `sdd health` — an hour in — would have said "ran 397 of the 401 defined". The definitions are
+  # read with health's own spelling, so both programs count the same population.
+  catalogue_orphans() { # catalogue_orphans <defined, one per line> <listed, one per line>
+    comm -23 <(sort -u <<< "$1") <(sort -u <<< "$2")
+  }
+  if [ "$(catalogue_orphans $'a\nb' 'a')" != b ] || [ -n "$(catalogue_orphans 'a' $'a\nb')" ]; then
+    fail "SENSOR-BROKEN: catalogue_orphans misread a world whose answer is known" \
+         "expected exactly 'b' orphaned from {a, b} vs {a}, and nothing the other way round"
+    exit 1
+  fi
+  orphans="$(catalogue_orphans \
+    "$(sed -nE 's/^mut_([A-Za-z0-9_]+)\(\) \{.*/\1/p' "$ROOT/tests/check-mutation.sh")" \
+    "$(printf '%s\n' "${CATALOG[@]}")")"
+  if [ -n "$orphans" ]; then
+    fail "CATALOGUE-BROKEN: mutant(s) defined but absent from CATALOG — nothing runs them" \
+         "$(tr '\n' ' ' <<< "$orphans")"
+    exit 1
+  fi
+  pass "every mut_* defined in this file is listed in CATALOG"
   entries=()
   for slug in "${CATALOG[@]}"; do entries+=("$slug=mut_$slug"); done
   # ⚠️ The one line the controls above cannot assert on: `if anchor_verdict` sabotaged into `if true`
