@@ -2024,6 +2024,85 @@ mut_PRE_testcmd_noop_runs_anyway() {
   sed -i '/^cmd_preflight()/,/^}/ s@if test_cmd_looks_noop "\$TEST_CMD"; then@if test_cmd_looks_noop "$TEST_CMD"; then run_check_cmd "$TEST_CMD" "preflight-test" || true;@' "$1"
 }
 
+# The listing predicate stops normalising — issue 118, one mutant per half. Without the whitespace
+# half a TAB before `--list` is certified; without the quote half `"--list"` is. Both reach the
+# suite as a bare `--list` through run_check_cmd's eval. Caught by `a TAB or a quoted --list is
+# refused like a spaced one` in check-preflight.sh (each half answers for its own world) and by
+# `health refuses a TAB or a quoted --list in the kit's TEST_CMD` in check-health.sh.
+mut_PRE_testcmd_list_unnormalised() {
+  sed -i '/^test_cmd_lists_only() {/,/^}/ s@^  tc="\${tc//\[\[:space:\]\]/ }"$@  :@' "$1"
+}
+mut_PRE_testcmd_list_unquoted() {
+  sed -i '/^test_cmd_lists_only() {/,/^}/ s@^  tc="\${tc//\[\\"\\'"'"'\]/}"$@  :@' "$1"
+}
+# The third half, from the PR #167 review: without it `--list; true` is certified, because the
+# operator glues itself to the flag and the padded match never sees ` --list `. Caught by `a
+# --list ended by a shell operator is refused like a spaced one` in check-preflight.sh.
+mut_PRE_testcmd_list_unseparated() {
+  sed -i '/^test_cmd_lists_only() {/,/^}/ s@^  tc="\${tc//\[;&|()<>\]/ }"$@  :@' "$1"
+}
+
+# config_read_key stops telling a config that does not EVALUATE from an absent one — the source's
+# failure falls through, the unset variable reads as rc 1 and install buys the defaults in silence
+# (PR #167 review). Caught by `install says a config that does not evaluate does not load, instead
+# of using defaults in silence` in check-preflight.sh.
+mut_PRE_config_eval_blind() {
+  sed -i '/^config_read_key() {/,/^}/ s@^  if \[ "\$rc" -ne 0 \]; then$@  if false; then@' "$1"
+}
+
+# The greenfield warn stops being narrow — issue 53. With the root check skipped, a failing TEST_CMD
+# whose runner merely CITES its manifest is excused although the manifest is right there — a
+# malformed package.json makes npm name it. Caught by `a manifest the runner cites while it exists
+# (malformed) is still a fail` in check-preflight.sh.
+mut_PRE_greenfield_warn_always() {
+  sed -i '/^test_cmd_missing_manifest() {/,/^}/ s@\[ ! -e "\$REPO_ROOT/\$manifest" \] || return 1@:@' "$1"
+}
+# The other guard of the same excuse: the runner no longer has to SAY its manifest is missing. Then
+# `npm --prefix sub test` with a red suite under sub/, and any red suite of a known runner in a repo
+# whose manifest lives elsewhere, is excused. Caught by `a red suite whose runner never said its
+# manifest is missing still fails` in check-preflight.sh.
+mut_PRE_greenfield_warn_without_evidence() {
+  sed -i '/^test_cmd_missing_manifest() {/,/^}/ s@\[ -n "\$log" \] && grep -qE "\$evidence" "\$log" 2>/dev/null || return 1@:@' "$1"
+}
+
+# The Node TEST_CMD rule has four owners, one mutant each. install goes back to a bare `npm test`
+# whatever the package.json declares — the defect a Codex review of warehouse_explorer_api PR #7
+# surfaced, measured in four of six Node repos.
+mut_PRE_node_install_bare() {
+  sed -i 's@then test_cmd="\$(node_test_cmd)"@then test_cmd="npm test"@' "$1"
+}
+
+# The preflight half goes blind: the helper still runs, it just never names a missing script.
+mut_PRE_node_outside_blind() {
+  sed -i '/^node_scripts_outside_test_cmd()/,/^}/ s@|| printf .%s . "\$s"@|| true@' "$1"
+}
+
+# The composed value goes to sed unescaped, and `&&` turns into the matched text twice.
+mut_PRE_node_sed_unescaped() {
+  sed -i 's@-e "s|<TEST_CMD>|\$test_cmd_sed|g"@-e "s|<TEST_CMD>|$test_cmd|g"@' "$1"
+}
+
+# The whole-word match degrades to a substring, and `build:prod` starts standing in for `build`.
+mut_PRE_node_outside_substring() {
+  sed -i '/^node_scripts_outside_test_cmd()/,/^}/ s@grep -qE "(^|\[^\[:alnum:\]_:-\])\${s}(\[^\[:alnum:\]_:-\]|\\\$)"@grep -qF "$s"@' "$1"
+}
+
+# A package.json the kit could not read goes back to reading as "declares no gate script": install
+# writes a bare `npm test` and preflight stays quiet, in silence, both.
+mut_PRE_node_manifest_unread_blind() {
+  sed -i '/^node_manifest_unread()/,/^}/ s@  jq empty "\$pkg" >/dev/null 2>&1 || printf .package.json does not parse as JSON.@  :@' "$1"
+}
+
+# The jq-absent branch goes: an unread manifest is still said, but blamed on the JSON.
+mut_PRE_node_manifest_jq_missing_blind() {
+  sed -i '/^node_manifest_unread()/,/^}/ s@  if ! command -v jq >/dev/null 2>&1; then printf .jq is not installed.; return 0; fi@  :@' "$1"
+}
+
+# Only TEST_CMD stays escaped: a branch carrying `&` comes out of the starter as the matched text.
+mut_RUN_install_branch_unescaped() {
+  sed -i 's@    branch_sed="\$(sed_replacement "\$branch")"@    branch_sed="$branch"@' "$1"
+}
+
 # Not a gate: the base branch warning goes back to being decoration. The body is emptied while the
 # function keeps existing and keeps returning 0, so every call site stays syntactically valid and
 # nothing else about the runs changes — which is exactly the shape of the defect this closes, a
@@ -2457,15 +2536,26 @@ mut_HEALTH_suite_without_mutation() {
 # the log left behind is a dozen plausible step names. Health is where that gets said, because
 # nothing else in the kit reads TEST_CMD as anything but a command to obey.
 #
-# The pattern is degraded rather than deleted, and the `case` is left with the same arms: a mutant
-# that removed the branch outright would also remove the `ok` line, and half the assertions in
-# check-health.sh would go red for a missing sentence instead of for the blindness.
+# The call to the shared predicate is blinded rather than deleted, and the if/elif keeps its arms:
+# a mutant that removed the branch outright would also remove the `ok` line, and half the
+# assertions in check-health.sh would go red for a missing sentence instead of for the blindness.
+# (Re-anchored in 20260925-o-sensor-le-o-que-a-ancora-diz: the `case` this used to degrade became
+# a call to test_cmd_lists_only, the one definition the preflight shares.)
 #
 # Range-addressed to the body of cmd_health, per the header of the entries above. Caught by
 # `surface: --list prints steps only, and a TEST_CMD carrying it is refused` in check-health.sh —
 # by its (b) half, whose two worlds differ in exactly this flag.
 mut_HEALTH_testcmd_list_blind() {
-  sed -i '/^cmd_health() {/,/^}/ s@\*" --list "\*)@*" --a-flag-no-config-carries "*)@' "$1"
+  sed -i '/^cmd_health() {/,/^}/ s@if test_cmd_lists_only "\$kit_test_cmd"; then@if false; then@' "$1"
+}
+
+# Check 2b goes back to reading a config that does not parse as a missing key — issue 116. The
+# parse verdict is skipped rather than deleted, so the value read below still runs and lands EMPTY,
+# which is exactly the old "declares no TEST_CMD" about a file that declares it. Range-addressed to
+# cmd_health. Caught by `a kit config that does not parse is reported as not parsing, never as a
+# missing TEST_CMD` in check-health.sh.
+mut_HEALTH_config_parse_blind() {
+  sed -i '/^cmd_health() {/,/^}/ s@if \[ "\$kit_cfg_rc" -eq 2 \]; then@if false; then@' "$1"
 }
 
 mut_HEALTH_provenance_find_aborts() {
@@ -4249,6 +4339,19 @@ CATALOG=(
   PRE_agent_presence_only
   PRE_testcmd_noop_blind
   PRE_testcmd_noop_runs_anyway
+  PRE_testcmd_list_unnormalised
+  PRE_testcmd_list_unquoted
+  PRE_testcmd_list_unseparated
+  PRE_config_eval_blind
+  PRE_greenfield_warn_always
+  PRE_greenfield_warn_without_evidence
+  PRE_node_install_bare
+  PRE_node_outside_blind
+  PRE_node_sed_unescaped
+  PRE_node_outside_substring
+  PRE_node_manifest_unread_blind
+  PRE_node_manifest_jq_missing_blind
+  RUN_install_branch_unescaped
   RUN_base_branch_warn_dead
   RUN_approve_writes_auto
   RUN_approve_bails_on_kaizen_born
@@ -4296,6 +4399,7 @@ CATALOG=(
   HEALTH_mutation_survivor_blind
   HEALTH_catalogue_floor_blind
   HEALTH_testcmd_list_blind
+  HEALTH_config_parse_blind
   HEALTH_suite_without_mutation
   HEALTH_provenance_find_aborts
   HEALTH_baseline_read_aborts
@@ -4523,7 +4627,7 @@ run_mutant() {
 # stopped being parsed: an empty loop reports "0 broken" forever.
 # ---------------------------------------------------------------------------
 if [ "$ANCHORS_ONLY" = 1 ]; then
-  ANCHOR_FLOOR=392
+  ANCHOR_FLOOR=404
   anchor_box() { mkdir -p "$1"; cp -r "$ROOT/bin" "$1/"; }
   anchor_control_noop()       { :; }
   anchor_control_intact()     { printf '# a mutation that lands and stays valid\n' >> "$1"; }
@@ -4581,6 +4685,27 @@ if [ "$ANCHORS_ONLY" = 1 ]; then
          "an emptied or unparsed catalogue would report every anchor intact"
     exit 1
   fi
+  # A mutant DEFINED but never LISTED is dead code that no loop here runs, and the fast suite used
+  # to stay green over it: four `mut_PRE_node_*` sat outside CATALOG for a whole branch, and only
+  # `sdd health` — an hour in — would have said "ran 397 of the 401 defined". The definitions are
+  # read with health's own spelling, so both programs count the same population.
+  catalogue_orphans() { # catalogue_orphans <defined, one per line> <listed, one per line>
+    comm -23 <(sort -u <<< "$1") <(sort -u <<< "$2")
+  }
+  if [ "$(catalogue_orphans $'a\nb' 'a')" != b ] || [ -n "$(catalogue_orphans 'a' $'a\nb')" ]; then
+    fail "SENSOR-BROKEN: catalogue_orphans misread a world whose answer is known" \
+         "expected exactly 'b' orphaned from {a, b} vs {a}, and nothing the other way round"
+    exit 1
+  fi
+  orphans="$(catalogue_orphans \
+    "$(sed -nE 's/^mut_([A-Za-z0-9_]+)\(\) \{.*/\1/p' "$ROOT/tests/check-mutation.sh")" \
+    "$(printf '%s\n' "${CATALOG[@]}")")"
+  if [ -n "$orphans" ]; then
+    fail "CATALOGUE-BROKEN: mutant(s) defined but absent from CATALOG — nothing runs them" \
+         "$(tr '\n' ' ' <<< "$orphans")"
+    exit 1
+  fi
+  pass "every mut_* defined in this file is listed in CATALOG"
   entries=()
   for slug in "${CATALOG[@]}"; do entries+=("$slug=mut_$slug"); done
   # ⚠️ The one line the controls above cannot assert on: `if anchor_verdict` sabotaged into `if true`

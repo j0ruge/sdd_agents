@@ -205,7 +205,7 @@ build_fixture() {
 write_stub_suite() { # write_stub_suite <with-count|no-count> [with-score|no-score] [exit code] [score line]
   local count_line="" score_line="" rc="${3:-0}" score="${4:-$STUB_SCORE}"
   [ "$1" = "with-count" ] \
-    && count_line="printf '  ok    %d finding(s), all within 8 lines and carrying anchor + date\\n' $STUB_TODO_COUNT"
+    && count_line="printf '  ok    %d finding(s), all within 8 lines, carrying anchor + date, every anchor on target\\n' $STUB_TODO_COUNT"
   [ "${2:-with-score}" = "with-score" ] \
     && score_line="printf '%s\\n' '$score'"
 
@@ -1388,6 +1388,61 @@ else
        "non-step line(s) in the no-linter list: ${SURFACE_NOT_STEP:-none} // clean: rc $RC_TC_OK $(digest "$OUT_TC_OK") // --list: rc $RC_TC_LIST $(digest "$OUT_TC_LIST")"
 fi
 
+# The spellings the space-only `case` let through (issue 118): a TAB before `--list`, and a quoted
+# `"--list"`. run_check_cmd EVALS the value, so both reach the suite as a bare `--list`. Each world
+# differs from the green one in the TEST_CMD alone, and each must fail naming the flag.
+LIST_SPELL_DESC="health refuses a TAB or a quoted --list in the kit's TEST_CMD"
+green_world
+set_test_cmd "$STUB_TEST_CMD"$'\t'"--list"
+health_run
+OUT_TC_TAB="$HEALTH_OUT"; RC_TC_TAB="$HEALTH_RC"
+green_world
+set_test_cmd "$STUB_TEST_CMD \\\"--list\\\""
+health_run
+OUT_TC_QUOTE="$HEALTH_OUT"; RC_TC_QUOTE="$HEALTH_RC"
+# The negative control, differential with the TAB world above: the same TAB, before a flag that
+# merely STARTS with --list. Without it, a fix that refused any TAB-separated TEST_CMD would pass
+# both assertions. Check 2b must reach its ok line and say nothing of --list.
+green_world
+set_test_cmd "$STUB_TEST_CMD"$'\t'"--listen-port"
+health_run
+OUT_TC_NEAR="$HEALTH_OUT"
+green_world
+if [ "$RC_TC_TAB" -ne 0 ] && grep -qF 'TEST_CMD carries --list' <<< "$OUT_TC_TAB" \
+   && [ "$RC_TC_QUOTE" -ne 0 ] && grep -qF 'TEST_CMD carries --list' <<< "$OUT_TC_QUOTE" \
+   && grep -qF 'TEST_CMD runs the suite (' <<< "$OUT_TC_NEAR" \
+   && ! grep -qF 'TEST_CMD carries --list' <<< "$OUT_TC_NEAR"; then
+  pass "$LIST_SPELL_DESC"
+else
+  fail "$LIST_SPELL_DESC" "both worlds fail naming 'TEST_CMD carries --list', and a TAB before --listen-port reaches 2b's ok" \
+       "TAB: rc $RC_TC_TAB $(digest "$OUT_TC_TAB") // quoted: rc $RC_TC_QUOTE $(digest "$OUT_TC_QUOTE") // --listen-port: $(digest "$OUT_TC_NEAR")"
+fi
+
+# ---------------------------------------------------------------------------
+# A kit config that does not parse is SAID, never read as a missing key (issue 116)
+#
+# Check 2b used to source the config with `>/dev/null 2>&1`, so an unclosed quote arrived EMPTY
+# and the operator was told "declares no TEST_CMD" about a file that declares it on line 1 — the
+# one diagnosis that sends them looking for the wrong defect. The world differs from the green one
+# in a single missing quote, and the assertion demands the parse message AND the absence of the
+# missing-key one: a check that printed both would still be lying in half its output.
+# ---------------------------------------------------------------------------
+PARSE_DESC='a kit config that does not parse is reported as not parsing, never as a missing TEST_CMD'
+green_world
+printf 'TEST_CMD="%s\n' "$STUB_TEST_CMD" > "$FIX/.sdd/config.sh"
+health_run
+OUT_PARSE="$HEALTH_OUT"; RC_PARSE="$HEALTH_RC"
+green_world
+if [ "$RC_PARSE" -ne 0 ] \
+   && grep -qF 'does not parse' <<< "$OUT_PARSE" \
+   && ! grep -qF 'declares no TEST_CMD' <<< "$OUT_PARSE"; then
+  pass "$PARSE_DESC"
+else
+  fail "$PARSE_DESC" \
+       "rc != 0, 'does not parse' in the output and no 'declares no TEST_CMD'" \
+       "rc $RC_PARSE $(digest "$OUT_PARSE")"
+fi
+
 # ---------------------------------------------------------------------------
 # guard: no capture in the `sdd health` region may abort the run
 #
@@ -1579,7 +1634,13 @@ health_captures() {
 # capture. Guarded INSIDE with `|| true`, though the function it calls cannot fail: the ratchet
 # counts every capture in the region, and a capture whose guard depends on the callee staying
 # infallible is a guard that rots the day somebody adds a branch to it.
-CAPTURE_FLOOR=36
+# 22 → 36: fourteen captures arrived without their line. The ratchet held the NUMBER at every step
+# and nobody held the record, which is the half this ledger exists for — stated rather than
+# reconstructed from memory; `git log -G'^CAPTURE_FLOOR=[0-9]' -- tests/check-health.sh` has each step.
+# 36 → 37: check 2b decides whether the kit's .sdd/config.sh parses BEFORE reading TEST_CMD
+# (issue 116, 932a1ba), so the region gained the `kit_cfg_diag` capture — guarded in the tail,
+# `|| kit_cfg_rc=$?`, because rc 2 is the branch that says "does not parse", not a crash.
+CAPTURE_FLOOR=37
 
 capture_report() {
   local out total safe offenders

@@ -550,6 +550,33 @@ noop_ran="$(grep -c . "$PROBE/witness" 2>/dev/null || true)"
 assert_eq "a TEST_CMD the heuristic already refused is not executed at all" \
   "runs nothing, ran=0" \
   "$(grep -qF 'runs nothing' <<< "$noop_out" && printf 'runs nothing' || printf 'not refused'), ran=$noop_ran"
+
+# The same refusal for the spellings the old space-only `case` let through (issue 118): a TAB
+# before `--list`, and `"--list"` quoted. run_check_cmd EVALS the value, so both reach the suite
+# as a bare `--list` — measured with a witness recording the argv. Same two-halves witness as the
+# block above: refused in words AND never executed.
+list_spelling() { # list_spelling <the TEST_CMD value, raw> → "<refused?>, ran=<n>"
+  : > "$PROBE/witness"
+  { grep -v '^TEST_CMD=' .sdd/config.sh; printf 'TEST_CMD=%s\n' "$1"; } > .sdd/config.sh.tmp
+  mv .sdd/config.sh.tmp .sdd/config.sh
+  local o; o="$( "$SDD" preflight 2>&1 )"
+  printf '%s, ran=%s' "$(grep -qF 'runs nothing' <<< "$o" && printf 'runs nothing' || printf 'not refused')" \
+    "$(grep -c . "$PROBE/witness" 2>/dev/null || true)"
+}
+assert_eq "a TAB or a quoted --list is refused like a spaced one" \
+  "runs nothing, ran=0 / runs nothing, ran=0" \
+  "$(list_spelling "\"$PROBE/suite-green.sh"$'\t'"--list\"") / $(list_spelling "'$PROBE/suite-green.sh \"--list\"'")"
+assert_eq "a TAB before --listen-port is still not accused" \
+  "not refused, ran=1" \
+  "$(list_spelling "\"$PROBE/suite-green.sh"$'\t'"--listen-port\"")"
+# A shell operator ends the word as surely as a space does: `--list; true` lists and exits 0 (PR
+# #167 review). The negative control is the same operator after a flag that only STARTS with --list.
+assert_eq "a --list ended by a shell operator is refused like a spaced one" \
+  "runs nothing, ran=0 / runs nothing, ran=0" \
+  "$(list_spelling "\"$PROBE/suite-green.sh --list; true\"") / $(list_spelling "\"$PROBE/suite-green.sh --list&&true\"")"
+assert_eq "an operator after --listen-port is still not accused" \
+  "not refused, ran=1" \
+  "$(list_spelling "\"$PROBE/suite-green.sh --listen-port; true\"")"
 mv .sdd/config.sh.bak .sdd/config.sh
 
 # --- DEFAULT_BRANCH names a branch that EXISTS ------------------------------
@@ -767,6 +794,56 @@ if [ -s "$SEED/TODO.md" ]; then pass "the findings file is seeded, and not empty
 else fail "the findings file is seeded, and not empty" "a non-empty TODO.md" \
        "$(wc -c < "$SEED/TODO.md" 2>/dev/null || echo 'no file') byte(s)"; fi
 
+# The seed is the kit's template in the repo's OUTPUT_LANG, and it passes the shape sensor the
+# repo will be measured by. The starter config declares no language, so this fixture gets English.
+if cmp -s "$SEED/TODO.md" "$ROOT/templates/todo.md"; then
+  pass "with OUTPUT_LANG empty the seed is templates/todo.md, byte for byte"
+else fail "with OUTPUT_LANG empty the seed is templates/todo.md, byte for byte" \
+       "a copy of templates/todo.md" "$(head -c 120 "$SEED/TODO.md" 2>/dev/null)"; fi
+seed_check="$(bash "$ROOT/tests/check-todo.sh" --check "$SEED/TODO.md" --allow-empty 2>&1)"; rc=$?
+if [ "$rc" -eq 0 ] && grep -q '^  ok    0 finding(s)' <<< "$seed_check"; then
+  pass "the seed passes the shape sensor with zero findings"
+else fail "the seed passes the shape sensor with zero findings" "rc 0 and 'ok    0 finding(s)'" \
+       "rc $rc: $seed_check"; fi
+
+# Which variant: templates/todo.<OUTPUT_LANG>.md when the kit has one, the English one otherwise.
+# Each case removes the file first, because an existing TODO.md is never overwritten.
+seed_lang() { # seed_lang <lang> — reinstall with OUTPUT_LANG=<lang> over no TODO.md
+  sed -i "s/^OUTPUT_LANG=.*/OUTPUT_LANG=\"$1\"/" "$SEED/.sdd/config.sh"
+  rm -f "$SEED/TODO.md"
+  ( cd "$SEED" && "$SDD" install >/dev/null 2>&1 )
+}
+seed_lang pt-BR
+if cmp -s "$SEED/TODO.md" "$ROOT/templates/todo.pt-BR.md"; then
+  pass "with OUTPUT_LANG=pt-BR the seed is templates/todo.pt-BR.md"
+else fail "with OUTPUT_LANG=pt-BR the seed is templates/todo.pt-BR.md" "the pt-BR variant" \
+       "$(sed -n 3p "$SEED/TODO.md" 2>/dev/null)"; fi
+seed_lang xx
+if cmp -s "$SEED/TODO.md" "$ROOT/templates/todo.md"; then
+  pass "a language the kit has no variant for falls back to templates/todo.md"
+else fail "a language the kit has no variant for falls back to templates/todo.md" "the English seed" \
+       "$(sed -n 3p "$SEED/TODO.md" 2>/dev/null)"; fi
+
+# The legacy seed — written by this command before the two-section skeleton — held no finding, so
+# an install over an untouched copy replaces it; one byte of difference makes it somebody's work,
+# preserved, with a warning that names the migration.
+cp "$ROOT/tests/fixtures/todo-seed-legacy-en.md" "$SEED/TODO.md"
+legacy_out="$( cd "$SEED" && "$SDD" install 2>&1 )"
+if cmp -s "$SEED/TODO.md" "$ROOT/templates/todo.md"; then
+  pass "an untouched legacy seed is replaced by the current one"
+else fail "an untouched legacy seed is replaced by the current one" "templates/todo.md" \
+       "$(sed -n 1p "$SEED/TODO.md" 2>/dev/null)"; fi
+assert_has "the replacement of the legacy seed is announced" "untouched legacy seed" "$legacy_out"
+{ cat "$ROOT/tests/fixtures/todo-seed-legacy-en.md"; printf -- '- [ ] one real finding\n'; } > "$SEED/TODO.md"
+before_legacy="$(md5sum < "$SEED/TODO.md")"
+legacy_out="$( cd "$SEED" && "$SDD" install 2>&1 )"
+if [ "$before_legacy" = "$(md5sum < "$SEED/TODO.md")" ]; then
+  pass "a legacy seed holding a finding is preserved"
+else fail "a legacy seed holding a finding is preserved" "the same TODO.md" "rewritten"; fi
+assert_has "a pre-skeleton TODO.md is named for migration" "predates the two-section skeleton" "$legacy_out"
+sed -i 's/^OUTPUT_LANG=.*/OUTPUT_LANG=""/' "$SEED/.sdd/config.sh"
+cp "$ROOT/templates/todo.md" "$SEED/TODO.md"
+
 # A second install must not overwrite what the repo already has — the installer is idempotent
 # everywhere else, and a TODO.md flattened on the second run would take real findings with it.
 printf -- '- [ ] a real finding — `x:1` — it matters — found by `x` in mission `m` (2026-01-01)\n' \
@@ -906,6 +983,192 @@ assert_eq "install --force seeds the CONFIGURED qa tree, not the default one, an
 # again and each half would still pass.
 assert_eq "and the remedy preflight names is the command that closed it" "1" \
   "$( grep -c "sdd install --force" <<< "$bt_pf_alt_before" )"
+
+# --- a Node TEST_CMD carries lint, typecheck and build ----------------------
+# The starter says it in the line beside the key: lint and build go INSIDE TEST_CMD, because the
+# runner reads no other sensor. `sdd install` then wrote `npm test` for every package.json, whatever
+# scripts the repo declared — the installer breaking the rule it prints. Measured on 2026-09-24
+# across the Node repos carrying the kit: four of six had `lint`, `build` or `typecheck` outside the
+# gate, so a mission there passes EXEC and REVIEW with the lint or the build red (a Codex review of
+# warehouse_explorer_api PR #7 is what surfaced it). Two halves: install composes the command from
+# the scripts that exist, and preflight warns about a config written before that, or by hand.
+echo "== a Node TEST_CMD carries lint, typecheck and build =="
+node_target() { # node_target <dir> <scripts-json> — a fresh repo with that package.json
+  mkdir -p "$1"
+  ( cd "$1" && git init -q -b main && git config user.email "fixture@example.com" \
+    && git config user.name "Fixture" && printf '{"name":"f","scripts":%s}\n' "$2" > package.json \
+    && git add -A && git commit -qm init ) >/dev/null 2>&1
+}
+node_target "$FIX/node-full" '{"lint":"true","typecheck":"true","build":"true","test":"true"}'
+( cd "$FIX/node-full" && "$SDD" install >/dev/null 2>&1 )
+assert_eq "install chains every gate script into TEST_CMD, cheapest first" \
+  'TEST_CMD="npm run lint && npm run typecheck && npm run build && npm test"' \
+  "$(grep -oE '^TEST_CMD="[^"]*"' "$FIX/node-full/.sdd/config.sh" 2>/dev/null || echo 'no TEST_CMD line')"
+# The positive control: a repo that declares only `test` keeps the old value. Without it an
+# installer that chained scripts the repo does not have would pass the case above.
+node_target "$FIX/node-bare" '{"test":"true"}'
+( cd "$FIX/node-bare" && "$SDD" install >/dev/null 2>&1 )
+assert_eq "install keeps a bare npm test when the repo declares no gate script" \
+  'TEST_CMD="npm test"' \
+  "$(grep -oE '^TEST_CMD="[^"]*"' "$FIX/node-bare/.sdd/config.sh" 2>/dev/null || echo 'no TEST_CMD line')"
+
+nw_case() { # nw_case <TEST_CMD> <expected: warn|quiet> <description>
+  # Escaped for sed: `&` in a replacement is the matched text, and every value here carries `&&`.
+  local v; v="$(printf '%s' "$1" | sed -e 's/[\\&|]/\\&/g')"
+  sed -i "s|^TEST_CMD=.*|TEST_CMD=\"$v\"|" "$FIX/node-full/.sdd/config.sh"
+  local o got; o="$( cd "$FIX/node-full" && "$SDD" preflight 2>&1 )"
+  if grep -qF "leaves out package.json script" <<< "$o"; then got="warn: $(grep -oE 'script\(s\): [a-z ]+' <<< "$o" | head -1)"
+  else got="quiet"; fi
+  assert_eq "$3" "$2" "$got"
+}
+nw_case 'npm test' 'warn: script(s): lint typecheck build ' \
+  "preflight names every gate script a hand-written TEST_CMD leaves out"
+nw_case 'npm run lint && npm test' 'warn: script(s): typecheck build ' \
+  "preflight names only the scripts that are missing"
+nw_case 'npm run lint && npm run typecheck && npm run build && npm test' 'quiet' \
+  "preflight stays quiet when every gate script is inside TEST_CMD"
+nw_case 'npm run build:prod && npm run lint && npm run typecheck && npm test' 'warn: script(s): build ' \
+  "a longer script name that merely starts with build does not count as build"
+
+# --- a greenfield mission: the runner is there, its manifest is not yet (issue 53) ----------
+# A mission whose I1 creates the package.json runs preflight BEFORE the manifest exists, and
+# `npm test` dies with ENOENT (rc 254). The old verdict — "a red suite makes the EXEC phase
+# unsatisfiable" — was false about that repo: the scaffold is exactly what EXEC is about to write.
+# The warn is NARROW, and the three probes are its edges: no manifest -> warn; manifest present and
+# suite red -> still the fail; a runner the table does not know -> still the fail (run_case above).
+echo "== greenfield: TEST_CMD's runner without its manifest =="
+# The excuse needs the runner to SAY the manifest is missing, so this probe needs npm's own words —
+# and a real npm is not something the suite may assume: without one the shell answers "command not
+# found", the evidence never matches, and the probe went red on a machine with no Node for a reason
+# that has nothing to do with issue 53. The stub prints what npm prints. Provenance: `npm test` in an
+# empty directory, npm 12.0.2, 2026-09-25 — copied, not written from memory (the CLAUDE.md rule).
+mkdir -p "$FIX/.npmstub"
+cat > "$FIX/.npmstub/npm" <<'STUB'
+#!/usr/bin/env bash
+cat >&2 <<EOF
+npm error code ENOENT
+npm error syscall open
+npm error path $PWD/package.json
+npm error errno -2
+npm error enoent Could not read package.json: Error: ENOENT: no such file or directory, open '$PWD/package.json'
+npm error enoent This is related to npm not being able to find a file.
+npm error enoent
+EOF
+exit 254
+STUB
+chmod +x "$FIX/.npmstub/npm"
+node_target "$FIX/greenfield" '{}'
+rm -f "$FIX/greenfield/package.json"
+( cd "$FIX/greenfield" && "$SDD" install >/dev/null 2>&1 )
+sed -i 's|^TEST_CMD=.*|TEST_CMD="npm test"|' "$FIX/greenfield/.sdd/config.sh"
+out="$( cd "$FIX/greenfield" && PATH="$FIX/.npmstub:$PATH" "$SDD" preflight 2>&1 )"
+assert_eq "a runner without its manifest at the root is a warn, not a fail" \
+  "warn, no FAILED" \
+  "$(grep -qF 'expected if I1 creates the scaffold' <<< "$out" && printf 'warn' || printf 'no warn'), $(grep -qF 'TEST_CMD FAILED' <<< "$out" && printf 'FAILED' || printf 'no FAILED')"
+node_target "$FIX/node-red" '{"test":"exit 3"}'
+( cd "$FIX/node-red" && "$SDD" install >/dev/null 2>&1 )
+sed -i 's|^TEST_CMD=.*|TEST_CMD="npm test"|' "$FIX/node-red/.sdd/config.sh"
+out="$( cd "$FIX/node-red" && "$SDD" preflight 2>&1 )"
+assert_eq "a red suite with its manifest present still fails" \
+  "FAILED, no warn" \
+  "$(grep -qF 'TEST_CMD FAILED' <<< "$out" && printf 'FAILED' || printf 'no FAILED'), $(grep -qF 'expected if I1 creates the scaffold' <<< "$out" && printf 'warn' || printf 'no warn')"
+
+# The excuse is only for the runner that SAYS its manifest is missing. Two worlds the table alone
+# used to excuse: pytest needs no manifest at all, so a red suite in a setup.py repo read as
+# "scaffold not there yet"; and `npm --prefix sub test` keeps its manifest in a subdirectory, so
+# the root check was blind to it. Both must stay a fail.
+mkdir -p "$FIX/.pyfail"
+printf '#!/bin/sh\necho "FAILED tests/test_x.py::test_x - assert False"\nexit 1\n' > "$FIX/.pyfail/pytest"
+chmod +x "$FIX/.pyfail/pytest"
+node_target "$FIX/py-red" '{}'
+rm -f "$FIX/py-red/package.json"
+( cd "$FIX/py-red" && "$SDD" install >/dev/null 2>&1 )
+sed -i 's|^TEST_CMD=.*|TEST_CMD="pytest"|' "$FIX/py-red/.sdd/config.sh"
+out="$( cd "$FIX/py-red" && PATH="$FIX/.pyfail:$PATH" "$SDD" preflight 2>&1 )"
+node_target "$FIX/prefix-red" '{}'
+rm -f "$FIX/prefix-red/package.json"
+mkdir -p "$FIX/prefix-red/sub" && printf '{"name":"s","scripts":{"test":"exit 3"}}\n' > "$FIX/prefix-red/sub/package.json"
+( cd "$FIX/prefix-red" && "$SDD" install >/dev/null 2>&1 )
+sed -i 's|^TEST_CMD=.*|TEST_CMD="npm --prefix sub test"|' "$FIX/prefix-red/.sdd/config.sh"
+out2="$( cd "$FIX/prefix-red" && "$SDD" preflight 2>&1 )"
+# And the root check earns its place with a manifest the runner names while it IS there: a malformed
+# package.json makes npm cite it (EJSONPARSE), and without the root check that read as "missing".
+node_target "$FIX/bad-json" '{}'
+printf '{"name": \n' > "$FIX/bad-json/package.json"
+inst3="$( cd "$FIX/bad-json" && "$SDD" install 2>&1 )"
+sed -i 's|^TEST_CMD=.*|TEST_CMD="npm test"|' "$FIX/bad-json/.sdd/config.sh"
+out3="$( cd "$FIX/bad-json" && "$SDD" preflight 2>&1 )"
+assert_eq "a manifest the runner cites while it exists (malformed) is still a fail" "FAILED" \
+  "$(grep -qF 'TEST_CMD FAILED' <<< "$out3" && printf 'FAILED' || printf 'excused')"
+# The same malformed manifest, read by the kit: node_gate_scripts answers "no gate script" both for
+# a repo that declares none and for one it could not read, and the second used to be silence —
+# install wrote a bare `npm test`, preflight never warned. Both now SAY they could not read it, and
+# the control (node-bare, a manifest that parses) says nothing of the kind.
+unread_says="could not read package.json's scripts (package.json does not parse as JSON)"
+out4="$( cd "$FIX/node-bare" && "$SDD" preflight 2>&1 )"
+assert_eq "install and preflight say they could not read package.json's scripts" \
+  "install: said / preflight: said / parsed manifest: quiet" \
+  "install: $(grep -qF "$unread_says" <<< "$inst3" && printf said || printf silent) / preflight: $(grep -qF "$unread_says" <<< "$out3" && printf said || printf silent) / parsed manifest: $(grep -qF 'could not read package.json' <<< "$out4" && printf said || printf quiet)"
+
+# The other half of node_manifest_unread: jq itself absent. A PATH prefix cannot HIDE a binary,
+# so the probe builds a shadow PATH — a link to every executable the real one reaches, minus jq —
+# and runs install there. A package.json that parses must still be reported as unread, and for
+# the right reason: with the jq check gone, `jq empty` fails as "command not found" and the
+# message would blame the JSON instead.
+nojq="$FIX/.nojq-bin"; mkdir -p "$nojq"
+IFS=: read -r -a path_dirs <<< "$PATH"
+for d in "${path_dirs[@]}"; do
+  [ -d "$d" ] || continue
+  for f in "$d"/*; do
+    n="${f##*/}"
+    [ "$n" = jq ] && continue
+    [ -x "$f" ] && [ ! -e "$nojq/$n" ] && ln -s "$f" "$nojq/$n"
+  done
+done
+node_target "$FIX/no-jq" '{"lint":"true","test":"true"}'
+inst5="$( cd "$FIX/no-jq" && PATH="$nojq" "$SDD" install 2>&1 )"
+assert_eq "install without jq says so, and does not blame the JSON" \
+  "jq: said / json: not blamed / TEST_CMD: bare" \
+  "jq: $(grep -qF "could not read package.json's scripts (jq is not installed)" <<< "$inst5" && printf said || printf silent) / json: $(grep -qF 'does not parse as JSON' <<< "$inst5" && printf blamed || printf 'not blamed') / TEST_CMD: $([ "$(grep -oE '^TEST_CMD="[^"]*"' "$FIX/no-jq/.sdd/config.sh" 2>/dev/null)" = 'TEST_CMD="npm test"' ] && printf bare || printf other)"
+
+# --- every value install substitutes is escaped for sed, not only TEST_CMD -------------------
+# `&` in a sed replacement is "the matched text": a branch named `feat/a&b` came out of the starter
+# as `feat/a<DEFAULT_BRANCH>b`. The same corruption the composed TEST_CMD had, through another key.
+echo "== install escapes the branch name for sed =="
+mkdir -p "$FIX/amp-branch"
+( cd "$FIX/amp-branch" && git init -q -b 'feat/a&b' && git config user.email "fixture@example.com" \
+  && git config user.name "Fixture" && git commit -q --allow-empty -m init ) >/dev/null 2>&1
+( cd "$FIX/amp-branch" && "$SDD" install >/dev/null 2>&1 )
+assert_eq "a branch name carrying & reaches DEFAULT_BRANCH verbatim" \
+  'DEFAULT_BRANCH="feat/a&b"' \
+  "$(grep -oE '^DEFAULT_BRANCH="[^"]*"' "$FIX/amp-branch/.sdd/config.sh" 2>/dev/null || echo 'no DEFAULT_BRANCH line')"
+assert_eq "a red suite whose runner never said its manifest is missing still fails" \
+  "pytest: FAILED / prefix: FAILED" \
+  "pytest: $(grep -qF 'TEST_CMD FAILED' <<< "$out" && printf 'FAILED' || printf 'excused') / prefix: $(grep -qF 'TEST_CMD FAILED' <<< "$out2" && printf 'FAILED' || printf 'excused')"
+
+# --- sdd install over a config that does not parse (issue 116) -------------
+# install reads four keys of an existing .sdd/config.sh, and used to source it with
+# `>/dev/null 2>&1` — so an unclosed quote quietly bought the defaults, and the handoff dir the
+# repo declared was never created. The defaults are still the right fallback; the silence is not.
+echo "== sdd install over a config that does not parse =="
+mkdir -p "$FIX/unparse/.sdd"
+( cd "$FIX/unparse" && git init -q -b main ) || exit 1
+printf 'HANDOFF_DIR="notes/handoffs\n' > "$FIX/unparse/.sdd/config.sh"
+out="$( cd "$FIX/unparse" && "$SDD" install 2>&1 )"
+assert_has "install says the config does not parse instead of using defaults in silence" \
+  "does not parse" "$out"
+
+# The same silence one step later. `bash -n` accepts `"$UNSET/x"`, and load_config's `set -u` dies
+# on it; config_read_key let the final printf eat the source's failure, the unset variable came
+# back as rc 1 — "no such file" — and install bought the defaults saying nothing (PR #167 review).
+echo "== sdd install over a config that parses but does not evaluate =="
+mkdir -p "$FIX/uneval/.sdd"
+( cd "$FIX/uneval" && git init -q -b main ) || exit 1
+# shellcheck disable=SC2016  # the $ is for the config file, never for this shell
+printf 'HANDOFF_DIR="$SDD_PROBE_NEVER_SET/handoffs"\n' > "$FIX/uneval/.sdd/config.sh"
+out="$( cd "$FIX/uneval" && env -u SDD_PROBE_NEVER_SET "$SDD" install 2>&1 )"
+assert_has "install says a config that does not evaluate does not load, instead of using defaults in silence" \
+  "parses but does not evaluate" "$out"
 
 # ---------------------------------------------------------------------------
 echo

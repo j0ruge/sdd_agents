@@ -104,6 +104,13 @@ no checkpoint, `git log`, `gh pr view`); Check por incremento; **dezesseis** sen
 artefato** — `sdd-planner`, com o humano na sala —, que é a segunda metade da régua do princípio 1.
 É por isso que a recusa mora no PLAN e não no EXEC: nenhum agente do kit decide trade-off
 arquitetural, então cobrar a decisão de uma fase sem humano seria o gate insatisfazível.
+Desde `20260925-o-sensor-le-o-que-a-ancora-diz` o `TEST_CMD` deixa de ser certificado por grafia:
+`config_read_key` é a única leitura de chave fora do `load_config` e diz por que o arquivo não
+carrega ("does not parse" ou "does not evaluate", o mesmo rc 2);
+`test_cmd_lists_only` é o predicado único do `--list` (health 2b e preflight); e o ramo vermelho
+do `TEST_CMD` no preflight chama `_fail`, e só emite `warn` no lugar dele quando o runner **diz**
+que falta o manifesto na raiz (`test_cmd_missing_manifest`). A âncora do `TODO.md` também virou
+sensor (ADR 0011).
 
 **Dívida declarada.** A nota de revisão continua sendo rótulo; o que L1 fechou foi que rótulo
 sem sensor comprava rodada — hoje `gate_REVIEW` tolera `REVIEW_PROSE_MIN_GRADE` só nas linhas

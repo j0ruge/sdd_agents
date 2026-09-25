@@ -98,6 +98,45 @@ resolve_repo_root() {
   CONFIG_FILE="$REPO_ROOT/.sdd/config.sh"
 }
 
+# config_read_key <file> <KEY> — the ONE definition of "read one key out of a config file" for the
+# commands that must not die on a missing or broken config (install, health, autonomy). Prints the
+# value AFTER expansion — sourcing is what load_config does, so the value is the one the gates get.
+#   rc 0  parsed; the value on stdout (empty when the key is unset)
+#   rc 1  no such file — the caller's default applies, and nothing is said
+#   rc 2  the file does not LOAD, which is what load_config would die on, said on stderr in one of
+#         two ways: `<file> does not parse: <bash -n diagnosis>`, or `<file> parses but does not
+#         evaluate` when sourcing it fails — an unset variable under `set -u`, a last command that
+#         returns non-zero. The second used to fall through the final printf: the unset variable
+#         came back as rc 1, "no such file", and install bought the defaults saying nothing. ONE
+#         status for both, because every caller asks one question; a third status is the one the
+#         next caller forgets to test. A command that fails MID-file is not seen: every caller
+#         reads under `||`, where errexit is off, and load_config's `set -e` is not.
+# Seven call sites used to source the file with `>/dev/null 2>&1` each, so a config with an
+# unclosed quote arrived EMPTY and was reported as "declares no TEST_CMD" (issue 116), or quietly
+# bought the defaults. Called as `v="$(config_read_key …)"`: it publishes no global, because a
+# global set inside a command substitution dies with it.
+# ⚠️ A key the file does NOT set comes back from the caller's environment, on purpose: that is
+# what load_config's `source` + `: "${KEY:=default}"` hands the runner, and install and autonomy
+# promise that same value. Emptying the key here alone would split them — install seeding TODO.md
+# while the runner reads the exported TODO_FILE. The one caller that wants the kit's file and
+# nothing else (health --release, RELEASE_FORBIDDEN_WORDS) empties the key in its own env prefix.
+config_read_key() {
+  local file="$1" key="$2" diag value rc=0
+  case "$key" in '' | [!A-Za-z_]* | *[!A-Za-z0-9_]*) printf 'config_read_key: bad key %s\n' "$key" >&2; return 2 ;; esac
+  [ -f "$file" ] || return 1
+  if ! diag="$(bash -n "$file" 2>&1)"; then
+    printf '%s does not parse: %s\n' "$file" "${diag//$'\n'/ }" >&2
+    return 2
+  fi
+  # shellcheck disable=SC1090
+  value="$( . "$file" >/dev/null 2>&1 || exit; printf '%s' "${!key:-}" )" || rc=$?
+  if [ "$rc" -ne 0 ]; then
+    printf '%s parses but does not evaluate (status %s) — load_config would die sourcing it; source it under set -eu to see why\n' "$file" "$rc" >&2
+    return 2
+  fi
+  printf '%s' "$value"
+}
+
 # Defaults + validation. An empty required key fails HERE, before spending a session.
 load_config() {
   resolve_repo_root
@@ -2317,7 +2356,8 @@ $turn_rule
 
 Write the artifacts to disk and commit. The runner re-evaluates the gate from outside — it reads
 the files and the frontmatter. Your answer in text proves nothing and satisfies no gate. A
-finding that does not fit this mission goes to $TODO_FILE, never to the diff.
+finding that does not fit this mission goes under the <!-- sdd:open --> marker of $TODO_FILE
+(grammar: $SDD_HOME/templates/todo.md), never to the diff.
 EOF
     return 0
   fi
@@ -2341,8 +2381,8 @@ $turn_rule
 
 Write the artifacts to disk and commit. The runner re-evaluates the gate from outside — it runs
 the tests, checks the hashes in the git log, reads the files. Your answer in text proves nothing
-and satisfies no gate. A finding that does not fit this mission goes to $TODO_FILE, never to the
-diff.
+and satisfies no gate. A finding that does not fit this mission goes under the <!-- sdd:open -->
+marker of $TODO_FILE (grammar: $SDD_HOME/templates/todo.md), never to the diff.
 EOF
 }
 
@@ -3878,6 +3918,70 @@ skill_findable() {
   [ -n "$( find "$root/plugins/cache" -maxdepth 6 -type d -name "$name" -print -quit 2>/dev/null || true )" ]
 }
 
+# node_gate_scripts → the package.json scripts that belong INSIDE TEST_CMD, one per line, in the
+# order a gate should run them (cheapest first, so a lint error does not wait on a build).
+#
+# The runner reads exactly one sensor, TEST_CMD, and the starter says so beside the key: lint and
+# build go inside it. `sdd install` still wrote a bare `npm test` for every package.json, whatever
+# scripts the repo declared — measured on 2026-09-24, four of six Node repos carrying the kit had
+# `lint`, `build` or `typecheck` outside the gate, and a mission there passes EXEC and REVIEW with
+# them red. Only these three names: they are the convention, and a script the kit does not know
+# (`e2e`, `format`) is not something to chain in on a guess.
+NODE_GATE_SCRIPTS=(lint typecheck build)
+node_gate_scripts() {
+  local pkg="$REPO_ROOT/package.json" s
+  [ -f "$pkg" ] || return 0
+  for s in "${NODE_GATE_SCRIPTS[@]}"; do
+    if jq -e --arg s "$s" '.scripts[$s] // empty' "$pkg" >/dev/null 2>&1; then printf '%s\n' "$s"; fi
+  done
+  return 0
+}
+
+# sed_replacement <value> → <value> safe as the REPLACEMENT of an `s|…|…|` command: `\`, `&` and
+# the `|` delimiter escaped. One definition for every value cmd_install substitutes.
+sed_replacement() { printf '%s' "$1" | sed -e 's/[\\&|]/\\&/g'; }
+
+# node_manifest_unread → why node_gate_scripts cannot read the gate scripts, or nothing.
+#
+# node_gate_scripts answers "none" in two worlds: a package.json that declares no lint, typecheck
+# or build, and one it could not READ — jq absent (`sdd install` does not require it) or a manifest
+# that is not JSON. Both came out as silence: install wrote a bare `npm test` and preflight's
+# outside-the-gate warning never fired, which is the defect the helper exists to close, reached by
+# a missing binary. It is a separate predicate, and not a global set inside node_gate_scripts,
+# because every caller reads that one through `< <( )`, a subshell where a global dies.
+node_manifest_unread() {
+  local pkg="$REPO_ROOT/package.json"
+  [ -f "$pkg" ] || return 0
+  if ! command -v jq >/dev/null 2>&1; then printf 'jq is not installed'; return 0; fi
+  jq empty "$pkg" >/dev/null 2>&1 || printf 'package.json does not parse as JSON'
+  return 0
+}
+
+# node_test_cmd → the TEST_CMD `sdd install` writes for a Node repo: every gate script, then the suite.
+node_test_cmd() {
+  local s chain=""
+  while IFS= read -r s; do
+    [ -n "$s" ] && chain="${chain}npm run $s && "
+  done < <(node_gate_scripts)
+  printf '%snpm test\n' "$chain"
+}
+
+# node_scripts_outside_test_cmd <cmd> → the gate scripts <cmd> never names, space-separated.
+# Matched as a WHOLE word: `build:prod` is another script and does not stand in for `build`.
+# ⚠️ Declared limit: a MENTION counts as naming it, so `echo "build skipped" && npm test` silences
+# the warning for `build`. Matching invocations instead would accuse `run-s lint build`, `turbo run
+# build` and every runner this file has never heard of, and this only WARNS — a rule that fires on
+# correct config is a rule the next author deletes. A TEST_CMD that prints a script's name without
+# running it was written by someone who meant it.
+node_scripts_outside_test_cmd() {
+  local s
+  while IFS= read -r s; do
+    [ -n "$s" ] || continue
+    grep -qE "(^|[^[:alnum:]_:-])${s}([^[:alnum:]_:-]|\$)" <<< "$1" || printf '%s ' "$s"
+  done < <(node_gate_scripts)
+  return 0
+}
+
 # test_cmd_looks_noop <cmd> → 0 when the command would exit 0 having run no test at all.
 #
 # `TEST_CMD` is the EXEC gate and half the REVIEW gate. A value that runs nothing is worse than an
@@ -3892,10 +3996,10 @@ skill_findable() {
 #     tests instead of running them. Unpadded, `*--list*` would also accuse `--listen-port`, and a
 #     rule that fires on correct config is a rule the next author deletes.
 #
-# ONE definition, called from cmd_preflight. Check 2b in cmd_health deliberately keeps its OWN
-# narrower `--list` case rather than calling this: its subject is the kit's own suite mode, its
-# message says so, and `mut_HEALTH_testcmd_list_blind` anchors on that case pattern. The
-# duplication is declared here rather than hidden — a new spelling belongs in BOTH.
+# ONE definition, called from cmd_preflight. The listing half lives in test_cmd_lists_only, which
+# check 2b of cmd_health calls too. It used to be two `case` patterns, one per command, with the
+# duplication declared "deliberate" — and a spelling neither knew (a TAB, a quoted `"--list"`)
+# passed BOTH, because both matched only the literal space: issue 118.
 # `tc` and not `cmd`: `cmd` is a `local -a` in run_phase, and shellcheck reasons about the name
 # across the whole file — a scalar `cmd` here makes it read every use as the first element of an
 # array (SC2178/SC2128) and the lint step of the suite goes red.
@@ -3905,10 +4009,55 @@ test_cmd_looks_noop() {
   case "${tc%% *}" in
     true|:|echo|printf|exit) return 0 ;;
   esac
+  test_cmd_lists_only "$tc"
+}
+
+# test_cmd_lists_only <cmd> → 0 when an argument, matched WHOLE, asks the runner to enumerate the
+# tests instead of running them. Normalised first, because run_check_cmd EVALS the value and the
+# shell reads more than one spelling as the same argument: every whitespace character becomes a
+# space (a TAB before `--list` is still a separate word), every shell operator character becomes a
+# space too (`--list; true` and `--list&&true` end the word at the operator, and eval runs the
+# listing and then exits 0), and quote characters are dropped (`"--list"`
+# and `'--list'` arrive as `--list`). Dropping every quote can only widen the match — a quoted
+# phrase containing ` --list ` is refused although eval would keep it one word — and that is the
+# direction a refusal may err in. Padded on both sides so `--listen-port` stays accepted.
+test_cmd_lists_only() {
+  local tc="${1:-}"
+  tc="${tc//[[:space:]]/ }"
+  tc="${tc//[;&|()<>]/ }"
+  tc="${tc//[\"\']/}"
   case " $tc " in
     *" --list "*|*" --listTests "*|*" --collect-only "*) return 0 ;;
   esac
   return 1
+}
+
+# test_cmd_missing_manifest <cmd> <log> → prints the manifest the runner of <cmd> needs and returns
+# 0 when all three hold: the first word of <cmd> is a runner this table knows, none of its
+# manifests exists at $REPO_ROOT, and the runner's own output in <log> SAYS the manifest is missing.
+# Returns 1 otherwise. ONE table, runner -> manifest -> the words the runner prints without it
+# (measured: npm `…/package.json` ENOENT, yarn "Couldn't find a package.json", pnpm "No
+# package.json found", cargo "could not find `Cargo.toml`", go "go.mod file not found" or, for
+# `./...`, "does not contain main module"). The preflight of a greenfield mission, whose I1
+# creates the scaffold, used to report `npm test` dying on ENOENT as a red suite that makes EXEC
+# unsatisfiable (issue 53) — false about a repo whose manifest is what EXEC is about to write.
+# Narrow on purpose, and the third condition is what keeps it narrow: the root check alone
+# excused `npm --prefix sub test` with a red suite under sub/, and a table entry for pytest —
+# which needs no manifest at all — excused every red pytest suite in a setup.py repo.
+test_cmd_missing_manifest() {
+  local tc="${1:-}" log="${2:-}" first manifest evidence
+  tc="${tc//[[:space:]]/ }"
+  while [ "${tc# }" != "$tc" ]; do tc="${tc# }"; done
+  first="${tc%% *}"
+  case "$first" in
+    npm|yarn|pnpm) manifest=package.json; evidence='package\.json' ;;
+    cargo)         manifest=Cargo.toml;   evidence='Cargo\.toml' ;;
+    go)            manifest=go.mod;       evidence='go\.mod file not found|does not contain main module' ;;
+    *)             return 1 ;;
+  esac
+  [ ! -e "$REPO_ROOT/$manifest" ] || return 1
+  [ -n "$log" ] && grep -qE "$evidence" "$log" 2>/dev/null || return 1
+  printf '%s' "$manifest"
 }
 
 # How many REVIEW rounds this mission has already spent, read off the disk.
@@ -4018,7 +4167,8 @@ cmd_install() {
     # chosen in silence, in the one key the whole pipeline trusts. package.json first because a
     # repo with two manifests is usually a JS project with a helper in another language.
     test_cmd="TODO"
-    if   [ -f "$REPO_ROOT/package.json" ];   then test_cmd="npm test"
+    local node_unread=""
+    if   [ -f "$REPO_ROOT/package.json" ];   then test_cmd="$(node_test_cmd)"; node_unread="$(node_manifest_unread)"
     elif [ -f "$REPO_ROOT/pyproject.toml" ]; then test_cmd="pytest -q"
     elif [ -f "$REPO_ROOT/Cargo.toml" ];     then test_cmd="cargo test"
     elif [ -f "$REPO_ROOT/go.mod" ];         then test_cmd="go test ./..."
@@ -4032,12 +4182,24 @@ cmd_install() {
     # about the consequence.
     [ -f "$SDD_HOME/config/starter.conf" ] \
       || die "the kit at $SDD_HOME has no config/starter.conf — .sdd/config.sh would be created empty, and the next 'sdd install' would report it as already existing. Re-copy or re-clone the kit."
-    sed -e "s|<PROJECT_NAME>|$project|g" \
-        -e "s|<DEFAULT_BRANCH>|$branch|g" \
-        -e "s|<TEST_CMD>|$test_cmd|g" \
-        -e "s|<SDD_HOME>|$SDD_HOME|g" \
+    # `&` in a sed REPLACEMENT means "the matched text", so a composed `npm run lint && npm test`
+    # came out as `npm run lint <TEST_CMD><TEST_CMD> npm test` — measured, in the probe that asserts
+    # the composed value. `\` and the `|` delimiter are escaped for the same reason, and for EVERY
+    # value substituted here: a branch named `feat/a&b` or a checkout under `/srv/a|b` is the same
+    # corruption through another key.
+    local test_cmd_sed project_sed branch_sed home_sed
+    test_cmd_sed="$(sed_replacement "$test_cmd")"
+    project_sed="$(sed_replacement "$project")"
+    branch_sed="$(sed_replacement "$branch")"
+    home_sed="$(sed_replacement "$SDD_HOME")"
+    sed -e "s|<PROJECT_NAME>|$project_sed|g" \
+        -e "s|<DEFAULT_BRANCH>|$branch_sed|g" \
+        -e "s|<TEST_CMD>|$test_cmd_sed|g" \
+        -e "s|<SDD_HOME>|$home_sed|g" \
         "$SDD_HOME/config/starter.conf" > "$CONFIG_FILE"
     ok ".sdd/config.sh created (base branch detected: $branch — confirm it)"
+    [ -z "$node_unread" ] || warn "could not read package.json's scripts ($node_unread) — TEST_CMD
+        is a bare 'npm test'. If the repo declares lint, typecheck or build, chain them in by hand."
   fi
 
   # The three paths the runner cannot work without, all NAMED in the config just written — which is
@@ -4054,17 +4216,20 @@ cmd_install() {
   # configured template is never touched, preflight fails again. A gate whose named remedy cannot
   # satisfy it is the unsatisfiable-gate class of principle 1, reached here through a default.
   #
-  # SOURCED in a subshell, the way check 2b of cmd_health reads TEST_CMD: what matters is the value
-  # `load_config` will hand the runner after expansion, never the text of the line. `|| true`
-  # because the rc of a substitution is its LAST command's, and a config that fails to parse must
-  # not take the install down here — it is `sdd preflight`'s job to say so, in its own words.
-  local inst_handoff inst_todo inst_qadocs
-  # shellcheck disable=SC1090
-  inst_handoff="$( . "$CONFIG_FILE" >/dev/null 2>&1; printf '%s' "${HANDOFF_DIR:-}" )" || true
-  # shellcheck disable=SC1090
-  inst_todo="$( . "$CONFIG_FILE" >/dev/null 2>&1; printf '%s' "${TODO_FILE:-}" )" || true
-  # shellcheck disable=SC1090
-  inst_qadocs="$( . "$CONFIG_FILE" >/dev/null 2>&1; printf '%s' "${QA_DOCS_PATH:-}" )" || true
+  # Read through config_read_key: the value `load_config` will hand the runner after expansion,
+  # never the text of the line. A config that does not load must not take the install down — the
+  # defaults below still apply — but it is SAID, once, with the bash -n diagnosis (issue 116: the
+  # old `>/dev/null 2>&1` bought the defaults in silence, and the declared handoff dir was never
+  # created). The first read decides; the other three are skipped when the file does not load.
+  local inst_handoff="" inst_todo="" inst_qadocs="" inst_lang="" inst_rc=0
+  inst_handoff="$(config_read_key "$CONFIG_FILE" HANDOFF_DIR)" || inst_rc=$?
+  if [ "$inst_rc" -eq 0 ]; then
+    inst_todo="$(config_read_key "$CONFIG_FILE" TODO_FILE)" || true
+    inst_qadocs="$(config_read_key "$CONFIG_FILE" QA_DOCS_PATH)" || true
+    inst_lang="$(config_read_key "$CONFIG_FILE" OUTPUT_LANG)" || true
+  elif [ "$inst_rc" -eq 2 ]; then
+    warn "$CONFIG_FILE does not load (diagnosis above) — install uses the defaults for HANDOFF_DIR, TODO_FILE, QA_DOCS_PATH and OUTPUT_LANG"
+  fi
   # Same defaults load_config applies, restated here because a broken config arrives EMPTY.
   [ -n "$inst_handoff" ] || inst_handoff="docs/handoffs"
   [ -n "$inst_todo" ]    || inst_todo="TODO.md"
@@ -4077,35 +4242,35 @@ cmd_install() {
     ok "$inst_handoff/ created (the mission's durable state lives here, committed)"
   fi
 
-  if [ -f "$REPO_ROOT/$inst_todo" ]; then
-    ok "$inst_todo already exists (preserved)"
-  else
+  # The seed is the kit's template in the repo's OUTPUT_LANG — templates/todo.<lang>.md — and the
+  # English templates/todo.md when no variant exists for that language. Every variant carries the
+  # same two markers (tests/check-templates.sh holds them to one structure), so the sensor and the
+  # agents read any of them the same way; only the prose a human reads changes.
+  local seed="$SDD_HOME/templates/todo.md"
+  if [ -n "$inst_lang" ] && [ -f "$SDD_HOME/templates/todo.$inst_lang.md" ]; then
+    seed="$SDD_HOME/templates/todo.$inst_lang.md"
+  fi
+  [ -f "$seed" ] || die "the TODO.md seed is missing from the kit: $seed"
+  # The blob of the seed this command wrote before the two-section skeleton, byte for byte. A file
+  # still equal to it holds no finding, so replacing it loses nothing; one byte different and it is
+  # somebody's work, preserved. Measured on three targets that were seeded and never written to.
+  # `--no-filters`, as in ensure_mission_branch: "byte for byte" means the bytes on disk, never what
+  # the target's clean filters or core.autocrlf would have made of them.
+  local legacy_seed_blob="1bcb41467fec35ec67cf74948a3e2acfdafcc194"
+
+  if [ ! -f "$REPO_ROOT/$inst_todo" ]; then
     # Seeded with the FORMAT, because an empty file teaches nothing and the format is what makes
     # the entries countable. Never overwritten: a second install over a file holding real findings
     # would take them with it.
-    cat > "$REPO_ROOT/$inst_todo" <<'SEED'
-# Findings
-
-> Out-of-scope findings from `sdd` missions. Never divert the mission to fix one; never lose it.
-> One entry, about six lines: what, the anchor, why it matters, the direction, who found it.
-> The long analysis belongs in the handoff of the mission cited.
->
-> Format:
->
-> ```md
-> - [ ] <what> — `file:line` — <why it matters> — found by `<agent>` in mission `<slug>` (YYYY-MM-DD)
-> ```
->
-> Closed is DELETED, never archived: an entry marked `RESOLVED by <hash>` stays here only until
-> the PR citing that evidence is merged, then leaves the file. Durable memory already exists in
-> `git log -S`, in the handoffs, and in the hash the entry itself quotes. Delete on the artifact
-> — `git merge-base --is-ancestor <hash> <base>` — never on a PR label.
-
-## Open
-
-## Resolved
-SEED
-    ok "$inst_todo created (out-of-scope findings go here — principle 5)"
+    cp "$seed" "$REPO_ROOT/$inst_todo"
+    ok "$inst_todo created from templates/$(basename "$seed") (out-of-scope findings go here — principle 5)"
+  elif [ "$(git hash-object --no-filters "$REPO_ROOT/$inst_todo" 2>/dev/null)" = "$legacy_seed_blob" ]; then
+    cp "$seed" "$REPO_ROOT/$inst_todo"
+    ok "$inst_todo was the untouched legacy seed — replaced by templates/$(basename "$seed") (it held no finding)"
+  elif ! grep -qE '^<!-- sdd:open -->[[:space:]]*$' "$REPO_ROOT/$inst_todo"; then
+    warn "$inst_todo predates the two-section skeleton (no <!-- sdd:open --> marker) — preserved; migrate it by hand from templates/$(basename "$seed")"
+  else
+    ok "$inst_todo already exists (preserved)"
   fi
 
   local a name target changed=0
@@ -4497,16 +4662,32 @@ cmd_preflight() {
         # the preflight would be running whatever someone typed into a key it had just rejected.
         # Through run_check_cmd, which already memoises and already puts the output in the mission
         # log rather than on the runner's stdout.
-        local test_rc=0
+        local test_rc=0 missing_manifest=""
         run_check_cmd "$TEST_CMD" "preflight-test" || test_rc=$?
         if [ "$test_rc" -eq 0 ]; then
           ok "TEST_CMD ran green ($TEST_CMD)"
+        elif missing_manifest="$(test_cmd_missing_manifest "$TEST_CMD" "$LAST_CHECK_LOG")"; then
+          warn "TEST_CMD failed and $missing_manifest does not exist yet ($TEST_CMD) — expected if I1 creates the scaffold;
+        from EXEC on, this is a hard gate. Output: $LAST_CHECK_LOG"
         else
           _fail "TEST_CMD FAILED (rc $test_rc): $TEST_CMD
         gate_EXEC, gate_QA and gate_REVIEW run this same command, so a red suite makes the EXEC
         phase unsatisfiable — one session per lap, for ever. Output: $LAST_CHECK_LOG"
         fi
       fi ;;
+  esac
+  # A warn and never a fail: leaving a slow build out of the per-increment gate can be deliberate,
+  # and the operator is the one who knows. What must not happen is leaving it out WITHOUT knowing.
+  case "$TEST_CMD" in
+    TODO|"") ;;
+    *)
+      local outside unread; unread="$(node_manifest_unread)"
+      [ -z "$unread" ] || warn "could not read package.json's scripts ($unread) — whether TEST_CMD
+        leaves out lint, typecheck or build was NOT checked, so this silence is not an ok."
+      outside="$(node_scripts_outside_test_cmd "$TEST_CMD")"
+      [ -z "$outside" ] || warn "TEST_CMD leaves out package.json script(s): ${outside}— the runner reads
+        no other sensor, so a mission passes every gate with them red. Chain them in (npm run <script>
+        && … && npm test), unless leaving them out is deliberate." ;;
   esac
 
   # DEFAULT_BRANCH is the base of `gh pr create` in the PR phase — the LAST phase, after EXEC, QA,
@@ -4760,7 +4941,7 @@ skill_origin() {   # skill_origin <skill> — a URL, or `local`
 # suite (the stamp IS the suite's artifact). Red is a finding, and four were red on the day it was
 # born. Every capture below is guarded: a red line has to be a verdict, never an abort.
 health_release() {   # rc 0 = six green lines
-  local kit kit_id ledger reds=0 rows n_repos pr_repos last_ok sk origin bad_origin="" hits="" w key stamp words
+  local kit kit_id ledger reds=0 rows n_repos pr_repos last_ok sk origin bad_origin="" hits="" w key stamp words words_rc
   kit="$(printf '%s' "$COORDINATION_ROOT" || true)"
   # The kit's identity in the ledger is what ledger_repo_root writes — the common dir, never the
   # cwd's toplevel: from a linked worktree the two differ and the kit's own sessions would count as
@@ -4770,7 +4951,10 @@ health_release() {   # rc 0 = six green lines
   ledger="$(autonomy_log_path)" || ledger=""
   # The forbidden words are the KIT's, read from its own .sdd/config.sh wherever the operator
   # stands — load_config would read the cwd's and die outside an installed repo.
-  words="$( ( RELEASE_FORBIDDEN_WORDS=""; [ -f "$kit/.sdd/config.sh" ] && . "$kit/.sdd/config.sh"; printf '%s' "${RELEASE_FORBIDDEN_WORDS:-}" ) 2>/dev/null )" || words=""
+  # The env prefix empties the key for the read, so a caller's environment never lends the kit a
+  # word list. A config that does not parse is not "no words": line 5 goes red and says why.
+  words_rc=0
+  words="$(RELEASE_FORBIDDEN_WORDS='' config_read_key "$kit/.sdd/config.sh" RELEASE_FORBIDDEN_WORDS 2>/dev/null)" || words_rc=$?
   step "sdd health --release — apt for another repo? (ADR 0007)"
   line() {   # line <n> <ok|bad> <text>
     if [ "$2" = ok ]; then ok "line $1 · $3"; else bad "line $1 · $3"; reds=$((reds + 1)); fi
@@ -4832,7 +5016,8 @@ health_release() {   # rc 0 = six green lines
       hits="$hits $w"
     fi
   done
-  if [ -f "$kit/LICENSE" ] && [ -z "$hits" ]; then line 5 ok "LICENSE present, surface free of client identifiers"
+  if [ "$words_rc" -eq 2 ]; then line 5 bad "the kit's .sdd/config.sh does not load — the forbidden words were never read (bash -n it, then source it under set -eu)"
+  elif [ -f "$kit/LICENSE" ] && [ -z "$hits" ]; then line 5 ok "LICENSE present, surface free of client identifiers"
   elif [ ! -f "$kit/LICENSE" ]; then line 5 bad "no LICENSE at the kit root${hits:+; and client identifiers on the surface:$hits}"
   else line 5 bad "client identifiers on the surface:$hits"; fi
   # 6 — the mutation stamp matches this content (the suite's artifact; never re-run here)
@@ -5015,34 +5200,28 @@ cmd_health() {
   if [ ! -f "$kit_cfg" ]; then
     health_bad "the kit at $kit has no .sdd/config.sh — health cannot say whether TEST_CMD runs anything"
   else
-    # `|| true` in the tail, the same family the whole command was audited for — but the reason is
-    # the LAST command of the substitution and not the sourcing. Measured, because the first version
-    # of this comment claimed the sourcing was what could kill the run and that is false: without
-    # `shopt -s inherit_errexit` a `$( … )` does not carry errexit in, so a config that fails to
-    # parse still reaches the `printf` and the substitution exits 0.
-    # Reproduced with a bad.sh holding `if then fi`, run through this exact assignment under
-    # `set -euo pipefail`: the shell reaches the line after it and reports rc 0.
-    # (The command is described and not pasted: the `guard:` census of check-health.sh scans this
-    # region line by line and would have counted the example as a twenty-third capture — it did,
-    # once, and the ratchet went red. Fail-closed, and noted in TODO.md.)
-    # What the guard is really for is the day this line grows a different tail — and for the record
-    # a broken config lands as EMPTY here, so the operator is told "declares no TEST_CMD" while the
-    # parse error itself is swallowed by the redirect. That gap is in TODO.md, not hidden here.
-    # shellcheck disable=SC1090
-    kit_test_cmd="$( . "$kit_cfg" >/dev/null 2>&1; printf '%s' "${TEST_CMD:-}" )" || true
-    # Padded on both sides so `--list` is matched as a WHOLE ARGUMENT: an unpadded `*--list*` would
-    # also accuse a suite named `run-all.sh --listen-mode`, and a rule that fails on correct config
-    # is a rule the next author deletes.
-    case " $kit_test_cmd " in
-      *" --list "*)
-        health_bad "TEST_CMD carries --list ($kit_test_cmd) — that mode exits 0 having run NOTHING, so every gate would pass against a suite that never ran" ;;
-      *)
-        if [ -z "$kit_test_cmd" ]; then
-          health_bad "the kit's .sdd/config.sh declares no TEST_CMD — the gates have no suite to run"
-        else
-          ok "TEST_CMD runs the suite ($kit_test_cmd)"
-        fi ;;
-    esac
+    # Through config_read_key, and the parse is decided FIRST: a config that does not parse used
+    # to land here EMPTY behind a `>/dev/null 2>&1`, and the operator was told "declares no
+    # TEST_CMD" about a file that declares it — issue 116. Now rc 2 is its own verdict, carrying
+    # the bash -n diagnosis, and "declares no TEST_CMD" is left for the key that is really absent.
+    # Both captures are guarded (`|| kit_cfg_rc=$?`): the `guard:` census of check-health.sh
+    # scans this region, and an unguarded capture would abort the run instead of reporting.
+    local kit_cfg_rc=0 kit_cfg_diag=""
+    kit_cfg_diag="$(config_read_key "$kit_cfg" TEST_CMD 2>&1 >/dev/null)" || kit_cfg_rc=$?
+    if [ "$kit_cfg_rc" -eq 2 ]; then
+      health_bad "the kit's config: ${kit_cfg_diag} — every gate would die in load_config"
+    else
+      kit_test_cmd="$(config_read_key "$kit_cfg" TEST_CMD)" || kit_test_cmd=""
+      # The same predicate the preflight uses — one definition, so a spelling that one of them
+      # learns the other cannot miss (issue 118: a TAB or a quoted `"--list"` passed both).
+      if test_cmd_lists_only "$kit_test_cmd"; then
+        health_bad "TEST_CMD carries --list or a sibling listing flag ($kit_test_cmd) — that mode exits 0 having run NOTHING, so every gate would pass against a suite that never ran"
+      elif [ -z "$kit_test_cmd" ]; then
+        health_bad "the kit's .sdd/config.sh declares no TEST_CMD — the gates have no suite to run"
+      else
+        ok "TEST_CMD runs the suite ($kit_test_cmd)"
+      fi
+    fi
   fi
 
   # --- 2c. the stamp: the catalogue stops depending on somebody REMEMBERING --
@@ -7707,14 +7886,16 @@ cmd_autonomy() {
   local interventions="{}"
   if [ "$by_mission" = "1" ] && [ -n "$repo" ]; then
     local mlist m ck n hdir nf nsrc
-    # SOURCED in a subshell, the way check 2b of cmd_health reads TEST_CMD, and NOT through
+    # Through config_read_key, the way check 2b of cmd_health reads TEST_CMD, and NOT through
     # load_config: `sdd autonomy` has never required a .sdd/config.sh — it has a branch for "this is
     # not a git repository" — and making it demand one to answer a question about the ledger would
     # be a new requirement bought with nothing. An absent or broken config costs the default, not
-    # the command. Same default load_config applies, restated here because a broken config arrives
+    # the command — but a broken one is SAID (issue 116), with the bash -n diagnosis above the
+    # warning. Same default load_config applies, restated here because a broken config arrives
     # EMPTY.
-    # shellcheck disable=SC1090
-    hdir="$( . "$repo/.sdd/config.sh" >/dev/null 2>&1; printf '%s' "${HANDOFF_DIR:-}" )" || true
+    local hdir_rc=0
+    hdir="$(config_read_key "$repo/.sdd/config.sh" HANDOFF_DIR)" || hdir_rc=$?
+    [ "$hdir_rc" -ne 2 ] || warn "$repo/.sdd/config.sh does not load — the intervention notes are read from the default docs/handoffs"
     [ -n "$hdir" ] || hdir="docs/handoffs"
     # Guarded, like every capture in this file: jq answering nothing must leave an empty list and a
     # census of zero missions, never abort the command it is a detail of.

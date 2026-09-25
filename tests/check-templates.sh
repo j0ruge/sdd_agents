@@ -56,12 +56,17 @@ fails=0
 # `templates/review.md` of ZERO BYTES — the only carrier of the seven criteria gate_REVIEW cannot
 # check itself. A floor over call sites counts intentions; a floor over this counts greps.
 CHECKS_RUN=0
+# The one writer of an ok line, with the prefix every other sensor of the suite prints: two spaces,
+# `ok`, FOUR spaces. This file printed three for two missions — the only sensor that did — and
+# the calibrate() of check-checkpoint.sh never saw it, because it reads `pass()` lines and this
+# file had none (issue 151). Kept on ONE line in exactly that shape, so calibrate() counts it.
+pass() { printf '  ok    %s\n' "$*"; }
 check() { # check <file> <regex> <description>
   local rc=0
   grep -qE "$2" "$T/$1" || rc=1
   CHECKS_RUN=$((CHECKS_RUN + 1))
   if [ "$rc" -eq 0 ]; then
-    printf '  ok   %s: %s\n' "$1" "$3"
+    pass "$1: $3"
   else
     printf '  FAIL %s: missing %s (regex: %s)\n' "$1" "$3" "$2" >&2
     fails=$((fails + 1))
@@ -98,7 +103,7 @@ refute() { # refute <file> <regex> <description> — passes when the regex does 
   grep -qiE "$2" "$T/$1" 2>/dev/null || rc=$?
   CHECKS_RUN=$((CHECKS_RUN + 1))
   case "$rc" in
-    1) printf '  ok   %s: does not carry %s\n' "$1" "$3" ;;
+    1) pass "$1: does not carry $3" ;;
     0) printf '  FAIL %s: still carries %s (regex: %s)\n' "$1" "$3" "$2" >&2
        fails=$((fails + 1)) ;;
     *) printf '  FAIL %s: could not be read to refute %s (grep rc=%s)\n' "$1" "$3" "$rc" >&2
@@ -422,6 +427,44 @@ check pr-body.md '^## Riscos e não-feitos'    "section 'Riscos e não-feitos'"
 # printing an `ok rule:` line about a template that had just failed fourteen checks. The second
 # draft counted CALL SITES, in the wrapper, and failed open on a zero-byte template (see check()).
 # It is a delta over CHECKS_RUN so that the number belongs to this block and not to the file.
+# The TODO.md seed ships one variant per OUTPUT_LANG (templates/todo.<lang>.md, English as
+# templates/todo.md). The prose differs by language and must; the skeleton must not, because the
+# shape sensor and the agents read every variant the same way. So each variant carries the two
+# markers and the English token RESOLVED by, has the same structural lines in the same order as
+# the English one, and passes the shape sensor itself — the seed is the first file a target owns,
+# and a seed that fails its own sensor would teach the wrong shape on day one.
+todo_shape() { # the lines a parser or the eye navigates by, one token each; prose is free
+  sed -nE -e 's/^(#+) .*/\1/p' \
+          -e '/^<!-- sdd:[a-z]+ -->$/p' \
+          -e 's/^> (```).*/fence/p' \
+          -e 's/^> - \[ \] \*\*<.*/open-example/p' \
+          -e 's/^> - \*\*<.*/decided-example/p' "$1"
+}
+echo "== templates/todo*.md =="
+for v in "$T"/todo.md "$T"/todo.*.md; do
+  [ -e "$v" ] || continue
+  vn="$(basename "$v")"
+  check "$vn" '^<!-- sdd:open -->$'    "the open-section marker, alone on its line"
+  check "$vn" '^<!-- sdd:decided -->$' "the decided-section marker, alone on its line"
+  check "$vn" 'RESOLVED by'           "the kit token for a finding fixed by a commit"
+  CHECKS_RUN=$((CHECKS_RUN + 1))
+  if [ "$(todo_shape "$v")" = "$(todo_shape "$T/todo.md")" ] && [ -n "$(todo_shape "$v")" ]; then
+    pass "$vn: the same skeleton as todo.md, line for line"
+  else
+    printf '  FAIL %s: its skeleton differs from todo.md —\n%s\n' "$vn" \
+      "$(diff <(todo_shape "$T/todo.md") <(todo_shape "$v"))" >&2
+    fails=$((fails + 1))
+  fi
+  CHECKS_RUN=$((CHECKS_RUN + 1))
+  if bash "$ROOT/tests/check-todo.sh" --check "$v" --allow-empty >/dev/null 2>&1; then
+    pass "$vn: passes the shape sensor with zero findings"
+  else
+    printf '  FAIL %s: fails tests/check-todo.sh --check --allow-empty\n' "$vn" >&2
+    fails=$((fails + 1))
+  fi
+done
+check todo.pt-BR.md '^## ' "the pt-BR variant this repo's OUTPUT_LANG seeds from"
+
 REVIEW_MARK="$CHECKS_RUN"
 REVIEW_ASSERTIONS=0
 REVIEW_FAILS_BEFORE="$fails"

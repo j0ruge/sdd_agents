@@ -109,8 +109,8 @@ inclusive o campo escrito e deixado em branco.
 
 ## Achados fora de escopo
 
-> O que não cabe nesta missão vai para o `TODO_FILE`, nunca para o diff. Uma linha por item, no
-> formato do repo, e a referência aqui.
+> O que não cabe nesta missão vai para o `TODO_FILE`, nunca para o diff: um item por achado, na
+> seção `<!-- sdd:open -->`, no formato de `templates/todo.md`, e a referência aqui.
 
 - <achado> — registrado no `TODO.md` (<data>)
 
