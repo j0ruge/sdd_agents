@@ -15,7 +15,7 @@ de TAB ou entre aspas passava pelas duas regras, e o greenfield sem `package.jso
 
 | | Antes | Depois |
 |---|---|---|
-| Âncoras fora do alvo (`--anchors TODO.md`) | 69 de 100 (a auditoria manual: 63 de 85) | **0 de 89**, cobrado no lint |
+| Âncoras fora do alvo (`--anchors TODO.md`) | 69 de 100 (a auditoria manual: 63 de 85) | **0 de 89**, cobrado no lint; mais 8 que a regra aceitava por uma crase genérica, re-ancorados à mão na revisão final |
 | Item de 1794 caracteres numa linha física | aceito, rc 0 | recusado (`cap is 120`, contando caracteres) |
 | Sabotagens do #70 sobrevivendo ao selftest | 5 (a, c, d, b1, b2) | 0 — b4/b5 declaradas (só mudam a mensagem) |
 | Sensores com o `ok` calibrado pelo `calibrate()` | 8 | 9 (`CALIBRATE_FLOOR` 4 → 9) |
@@ -31,6 +31,11 @@ buscada depois do título (`9a123fa`), e os seis apareceram fora do alvo.
 **Re-verificar o conteúdo pagou mais que re-ancorar:** oito itens descreviam defeito já consertado
 por commits que estavam na `main` havia semanas (apagados), dois viraram registro decidido e um foi
 fundido; a catraca foi de 100 para 89 com os sete `RESOLVED by` desta missão ainda na seção aberta.
+
+**Limite medido na revisão final:** 48 dos 89 itens passam por um símbolo só, e uma crase genérica
+(`` `warn` ``, `` `true` ``, `` `repo` ``) satisfaz a distância perto de quase qualquer linha — foi assim
+que oito âncoras erradas passaram. A regra prova proximidade, não pertinência; a leitura humana do
+alvo continua sendo a outra metade.
 
 **Contramedida:** a regra vive no lint (`check_file`), então uma missão que move código sob uma
 âncora fica vermelha na mesma corrida que fecha o gate da fase — medido no próprio I10, que empurrou a âncora
