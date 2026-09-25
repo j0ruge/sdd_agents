@@ -314,7 +314,7 @@ scan() { # scan <root> — the full surface, floors and doc assertions included
 # of every behavioural sensor — so a widened anchor no longer matches the thing it is an anchor
 # FOR. It also catches the mirror failure, which is the one that will actually happen some day:
 # the house changes the ok prefix and this file goes on enforcing the old one.
-CALIBRATE_FLOOR=4
+CALIBRATE_FLOOR=9
 calibrate() {
   local root="$1" f line p seen='' n=0
   for f in "$root"/tests/*.sh; do
@@ -618,7 +618,9 @@ selftest() {
   # kill.
   local cal="$box/cal" caldis="$box/caldis" calthin="$box/calthin" i
   mkdir -p "$cal/tests" "$caldis/tests" "$calthin/tests"
-  for i in 1 2 3 4; do
+  # As many fake sensors as the floor asks for: a tree thinner than the floor answers "almost
+  # nothing" before it can answer the question each probe asks.
+  for i in $(seq 1 "$CALIBRATE_FLOOR"); do
     printf 'pass() { printf %s  ok    %%s\\n%s "$1"; }\n' "'" "'" > "$cal/tests/check-$i.sh"
     printf 'pass() { printf %s  ok    %%s\\n%s "$1"; }\n' "'" "'" > "$caldis/tests/check-$i.sh"
   done
@@ -639,7 +641,7 @@ selftest() {
   # that can tell "compared" from "did not compare".
   local calelse="$box/calelse"
   mkdir -p "$calelse/tests"
-  for i in 1 2 3 4; do
+  for i in $(seq 1 "$CALIBRATE_FLOOR"); do
     printf 'pass() { printf %s  ok  %%s\\n%s "$1"; }\n' "'" "'" > "$calelse/tests/check-$i.sh"
   done
   probe 'a house prefix the anchor does not match is caught' 1 \
