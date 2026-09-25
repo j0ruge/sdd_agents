@@ -79,10 +79,27 @@ for arg in "$@"; do
   esac
 done
 
+# SDD_MUTANT_FIRST=<step name> — inside a mutant, the step that killed this mutant last time runs
+# FIRST. The catalogue learns the name from each mutant's log (check-mutation.sh, KILLERS_FILE) and
+# hands it back on the next run. Measured on 40 mutants of 583b3c3 (2026-09-25): the first red step
+# ends the run, so a mutant only the preflight kills still paid templates, gates, dry-run, autonomy,
+# kaizen and health before it — 4796 s of suite where its killing steps alone cost 2201 s.
+# steps() is called twice: pass `first` runs the named step only, pass `rest` runs every other one.
+# No verdict can move: both passes walk the SAME list, so the one step `rest` skips is the one
+# `first` just ran — a name that matches nothing runs the whole suite in its usual order, a stale
+# map costs time and never a verdict, and a survivor still runs every step. Outside a mutant the
+# variable is ignored. (A FIRST_RAN flag guarding the skip was tried and removed: no world makes the
+# name match in one pass and not the other, so no probe could turn it red.)
+PASS=all
+
 run() { # run <name> <command...>
   # The list mode lives HERE, in the one function every step goes through, and not in a table
   # beside them: a step added tomorrow is listed without anyone remembering to list it.
   if [ "$LIST_ONLY" = 1 ]; then printf '%s\n' "$1"; return 0; fi
+  case "$PASS" in
+    first) [ "$1" = "$SDD_MUTANT_FIRST" ] || return 0 ;;
+    rest)  [ "$1" != "$SDD_MUTANT_FIRST" ] || return 0 ;;
+  esac
   printf '\n\033[1m▸ %s\033[0m\n' "$1"; shift
   if "$@"; then :; else printf '\033[31m  ✗ failed\033[0m\n' >&2; fails=$((fails + 1)); fi
   # Inside a mutant the first red step IS the verdict: the catalogue reads this suite's rc and
@@ -97,6 +114,9 @@ run() { # run <name> <command...>
   fi
 }
 
+# Every step of the suite, in order. A function only so it can be walked twice (see PASS above);
+# the body stays at column 0 so the steps read, and are anchored by the probes, as they always were.
+steps() {
 run "runner syntax (bash -n)" bash -n "$ROOT/bin/sdd"
 run "coordination helper syntax" python3 -c 'import ast, pathlib, sys; ast.parse(pathlib.Path(sys.argv[1]).read_text())' "$ROOT/bin/sdd-coordination.py"
 
@@ -276,6 +296,15 @@ run "one checkout has one execution owner" "$ROOT/tests/check-coordination.sh"
 # `sdd health` asks for --with-mutation, and inside its sandbox that would recurse.
 [ -n "${SDD_MUTANT:-}" ] || [ "$WITH_MUTATION" = 0 ] \
   || run "mutation: the suite dies when the runner is sabotaged" "$ROOT/tests/check-mutation.sh"
+return 0
+}
+
+if [ -n "${SDD_MUTANT:-}" ] && [ -n "${SDD_MUTANT_FIRST:-}" ] && [ "$LIST_ONLY" = 0 ]; then
+  PASS=first; steps
+  PASS=rest; steps
+else
+  steps
+fi
 
 # Before the verdict, not after: a list that ended in `suite green` would be claiming a run that
 # never happened — the label-instead-of-artifact shape this kit exists to refuse.

@@ -4,6 +4,37 @@ Registro de melhorias com **antes/depois medido**. Sem número, não entra.
 
 ---
 
+## 2026-09-25 — O catálogo roda primeiro o passo que matou o mutante
+
+**Problema (Gemba):** desde o PR #59 cada mutante para no primeiro passo vermelho da suíte, mas os
+passos rodam sempre na mesma ordem. Um mutante que só o preflight mata pagava antes templates,
+gates, dry-run, autonomy, kaizen e health. O carimbo levava 1h21 com 392 mutantes e cresce a cada
+missão (406 hoje).
+
+**Medição:** amostra fixa de 40 mutantes sorteados de `583b3c3` (`shuf` com semente), cada um
+numa sandbox igual à do `run_mutant`, com carimbo de tempo por linha e 16 jobs. Assassinos: gates
+16, autonomy 12, kaizen 7, health 2, preflight, coordination e dry-run 1 cada; nenhum sobrevivente.
+
+| | Antes | Depois |
+|---|---|---|
+| Relógio da amostra, 16 jobs | 389 s (duas medições: 389 e 389) | **171 s** |
+| Soma da suíte nos 40 mutantes | 4 796 s / 4 828 s | **1 959 s** |
+| Mediana por mutante | 146 s / 149 s | **49 s** |
+| Vereditos diferentes (rc mutante a mutante) | — | **0 de 40**, e o mesmo passo assassino em todos |
+
+**Contramedida:** `run-all.sh` percorre a lista de passos duas vezes quando recebe
+`SDD_MUTANT_FIRST` dentro de um mutante: primeiro só o passo nomeado, depois os outros. O
+`check-mutation.sh` lê o assassino do log de cada mutante e regrava o mapa no fim do catálogo.
+Quatro probes `surface:` no `check-health.sh`, e cada uma das três sabotagens manuais (rodar o
+passo duas vezes, rodar tudo na 1ª passada, honrar a variável fora de mutante) deixa um vermelho.
+A guarda `FIRST_RAN` foi escrita e removida: nenhum mundo a torna necessária.
+
+**Limite declarado:** o ganho aparece a partir da 2ª rodada, porque a 1ª aprende o mapa. O
+próximo degrau é o P2(b) da gaveta (parar no primeiro assert dentro do sensor): gates e autonomy
+sozinhos ainda custam 55 a 92 s por mutante.
+
+---
+
 ## 2026-09-25 — O sensor lê o que a âncora diz: a âncora do achado passa a ser medida, e o teto de linhas perde o atalho
 
 **Problema (Gemba):** medido em `5cb0101`, das 85 âncoras `arquivo:N` do `TODO.md` do kit, **63**

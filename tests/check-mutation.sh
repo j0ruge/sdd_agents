@@ -4613,9 +4613,28 @@ run_mutant() {
   sandbox "$box"
   apply_mutant "mut_$slug" "$box" || arc=$?
   if [ "$arc" -ne 0 ]; then echo "$arc" > "$box.rc"; return; fi
-  SDD_MUTANT=1 "$box/tests/run-all.sh" > "$box.log" 2>&1
-  echo $? > "$box.rc"
+  local rc=0
+  SDD_MUTANT=1 SDD_MUTANT_FIRST="${KILLER[$slug]:-}" "$box/tests/run-all.sh" > "$box.log" 2>&1 || rc=$?
+  echo "$rc" > "$box.rc"
+  [ "$rc" -eq 0 ] || killer_of "$box.log" > "$box.killer"
 }
+
+# killer_of <suite log> → the name of the step that killed the mutant: the LAST step header the
+# suite printed (`run()` prints `\033[1m▸ <name>\033[0m` before each step, and under SDD_MUTANT the
+# first red step ends the run). Anchored at the start of the line, ESC included, so a `▸` quoted
+# inside a sensor's own output is never read as a step. Empty when there is none.
+killer_of() {
+  sed -n "s/^"$'\033'"\[1m▸ \(.*\)"$'\033'"\[0m\$/\1/p" "$1" | tail -n 1
+}
+
+# The killer map: <slug> TAB <step name>, learned from the last catalogue and handed back to each
+# mutant as SDD_MUTANT_FIRST, so the step that killed it runs first (see the note above PASS in
+# run-all.sh: 4796 s → 2201 s of suite over 40 mutants of 583b3c3). It is an ORDER hint and nothing
+# else — a stale or garbled line costs time, never a verdict, because run-all.sh still runs every
+# step of a mutant the named one did not kill. It lives in .sdd/cache/, gitignored and OUTSIDE the
+# four directories of mutation_stamp_key, so learning it never invalidates a stamp.
+KILLERS_FILE="$ROOT/.sdd/cache/mutation-killers.tsv"
+declare -A KILLER=()
 
 # ---------------------------------------------------------------------------
 # --anchors: apply every mutant to a copy of bin/ and stop there — no suite, no control run.
@@ -4743,6 +4762,13 @@ fi
 # $WORK/<slug>.rc/.log and the scoring loop below reads the catalogue in order afterwards.
 # `wait -n` is bash 4.3+; without it, fall back to the barrier and SAY so — a declared
 # degradation, never a silent one.
+if [ -r "$KILLERS_FILE" ]; then
+  while IFS=$'\t' read -r k v; do
+    [ -n "$k" ] && [ -n "$v" ] && KILLER["$k"]="$v"
+  done < "$KILLERS_FILE"
+fi
+echo "== killer map: ${#KILLER[@]} mutant(s) run their last killer first =="
+
 if (: & wait -n) 2>/dev/null; then
   echo "== mutants (pool of $JOBS) =="
   running=0
@@ -4791,6 +4817,19 @@ for slug in "${CATALOG[@]}"; do
       fi ;;
   esac
 done
+
+# Rewritten from THIS run only, atomically: a mutant that stopped being caught leaves the map. A
+# map that cannot be written is said and costs the next run its speed, never this run's verdict.
+if mkdir -p "${KILLERS_FILE%/*}" 2>/dev/null \
+   && for slug in "${CATALOG[@]}"; do
+        if [ -s "$WORK/$slug.killer" ]; then printf '%s\t%s\n' "$slug" "$(cat "$WORK/$slug.killer")"; fi
+      done > "$KILLERS_FILE.tmp.$$" \
+   && mv -f "$KILLERS_FILE.tmp.$$" "$KILLERS_FILE"; then
+  echo "== killer map: $(grep -c . "$KILLERS_FILE" || true) mutant(s) recorded in ${KILLERS_FILE#"$ROOT"/} =="
+else
+  rm -f "$KILLERS_FILE.tmp.$$"
+  printf '  warn  the killer map could not be written to %s — the next catalogue runs in the usual order\n' "$KILLERS_FILE" >&2
+fi
 
 echo
 # `cmd_health` in bin/sdd greps this exact line. The two sides are one contract across two files:

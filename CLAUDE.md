@@ -287,7 +287,10 @@ pelo log — o "meia hora" que esteve escrito aqui nunca foi medido) respondeu `
 nomeou ninguém; os dois eram âncoras quebradas por merges do mesmo dia, achadas em 20 s.
 ⚠️ **Sob `SDD_MUTANT` a suíte para no primeiro sensor vermelho** (`run()` do `tests/run-all.sh`),
 porque o catálogo só lê o rc: amostra de 40 mutantes, mediana 226 s → 133 s, 40 de 40 pegos antes
-e depois. Fora de mutante nada para cedo. O resto do custo é a coordenação por chamada (`TODO.md`). É a única exceção à regra 4 da superfície (`tests/check-health.sh`): o sensor é invocado
+e depois. Fora de mutante nada para cedo. **E o passo que matou o mutante na rodada anterior roda
+primeiro** (`SDD_MUTANT_FIRST`, mapa em `.sdd/cache/mutation-killers.tsv`, fora da chave do
+carimbo): mesma amostra, relógio 389 s → 171 s, 0 de 40 vereditos diferentes. O mapa é dica de
+ordem, nunca de veredito, e a 1ª rodada sem ele custa como antes. O resto do custo é a coordenação por chamada (`TODO.md`). É a única exceção à regra 4 da superfície (`tests/check-health.sh`): o sensor é invocado
 duas vezes, uma como catálogo e outra como `--anchors`, e a regra conta as duas por ocorrência.
 
 ⚠️ **A lacuna que o opt-in abriu está fechada desde `c962e2e`, e não por CI — por artefato.** Ela

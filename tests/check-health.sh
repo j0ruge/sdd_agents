@@ -1271,15 +1271,15 @@ chmod +x "$FAILFAST/bin/sdd" "$FAILFAST"/tests/*.sh
 [ -x "$FAILFAST/tests/$FAILFAST_RED" ] \
   || broken "failfast probe: tests/$FAILFAST_RED is gone — the world has no red step to stop at"
 
-failfast_run() { # failfast_run <mutant|plain> <red sensor or empty> — PUBLISHES FAILFAST_RC / FAILFAST_STEPS
-  local log="$WORK/failfast-$1-${2:-green}.log"
+failfast_run() { # failfast_run <mutant|plain> <red sensor or empty> [first step] — PUBLISHES FAILFAST_RC / FAILFAST_STEPS
+  local log="$WORK/failfast-$1-${2:-green}-${3:+first}.log"
   : > "$log"
   FAILFAST_RC=0
   if [ "$1" = mutant ]; then
-    env -u SDD_TPL_SELFTEST_CHILD SDD_MUTANT=1 FAILFAST_LOG="$log" FAILFAST_RED="$2" \
+    env -u SDD_TPL_SELFTEST_CHILD SDD_MUTANT=1 SDD_MUTANT_FIRST="${3:-}" FAILFAST_LOG="$log" FAILFAST_RED="$2" \
       "$FAILFAST/tests/run-all.sh" >/dev/null 2>&1 || FAILFAST_RC=$?
   else
-    env -u SDD_TPL_SELFTEST_CHILD -u SDD_MUTANT FAILFAST_LOG="$log" FAILFAST_RED="$2" \
+    env -u SDD_TPL_SELFTEST_CHILD -u SDD_MUTANT SDD_MUTANT_FIRST="${3:-}" FAILFAST_LOG="$log" FAILFAST_RED="$2" \
       "$FAILFAST/tests/run-all.sh" >/dev/null 2>&1 || FAILFAST_RC=$?
   fi
   FAILFAST_STEPS="$(cat "$log")"
@@ -1312,6 +1312,58 @@ if [ "$FAILFAST_RC" = 0 ] && grep -qxF "$FAILFAST_RED" <<< "$FAILFAST_STEPS" \
 else
   fail 'surface: inside a mutant with no red step the suite runs to the end' \
        "rc 0, and steps run after $FAILFAST_RED" \
+       "rc $FAILFAST_RC, steps: $(tr '\n' ' ' <<< "$FAILFAST_STEPS")"
+fi
+
+# SDD_MUTANT_FIRST: the step that killed a mutant last time runs first (check-mutation.sh learns
+# the name). Four worlds, each DIFFERENTIAL against the green mutant run above, which is the order
+# every other world is measured against. The step named is a LATE one, so "first" cannot be the
+# order's own accident. The unsound edits this must refuse: skipping a step that never ran (a name
+# matching nothing would then drop nothing, but a stale name would), running the named step twice,
+# and honouring the variable outside a mutant.
+FIRST_STEP_NAME='every hat declares its boundary'
+FIRST_STEP_FILE=check-hat.sh
+FIRST_ORDER="$FAILFAST_STEPS"
+[ "$(grep -c . <<< "$FIRST_ORDER" || true)" -ge 3 ] \
+  || broken "first-step probe: the green mutant run listed fewer than 3 steps — there is no order to reorder"
+grep -qxF "$FIRST_STEP_FILE" <<< "$FIRST_ORDER" \
+  || broken "first-step probe: $FIRST_STEP_FILE is not a step of the suite — the world names nothing"
+failfast_run mutant "$FIRST_STEP_FILE" "$FIRST_STEP_NAME"
+if [ "$FAILFAST_RC" = 1 ] && [ "$FAILFAST_STEPS" = "$FIRST_STEP_FILE" ]; then
+  pass 'surface: inside a mutant the step named by SDD_MUTANT_FIRST runs first, and alone when it is red'
+else
+  fail 'surface: inside a mutant the step named by SDD_MUTANT_FIRST runs first, and alone when it is red' \
+       "rc 1 and $FIRST_STEP_FILE the only step run" \
+       "rc $FAILFAST_RC, steps: $(tr '\n' ' ' <<< "$FAILFAST_STEPS")"
+fi
+failfast_run mutant "" "$FIRST_STEP_NAME"
+if [ "$FAILFAST_RC" = 0 ] && [ "$(head -n 1 <<< "$FAILFAST_STEPS")" = "$FIRST_STEP_FILE" ] \
+   && [ "$(grep -cxF "$FIRST_STEP_FILE" <<< "$FAILFAST_STEPS" || true)" = 1 ] \
+   && [ "$(sort <<< "$FAILFAST_STEPS")" = "$(sort <<< "$FIRST_ORDER")" ]; then
+  pass 'surface: a survivor with SDD_MUTANT_FIRST still runs every step, the named one once'
+else
+  fail 'surface: a survivor with SDD_MUTANT_FIRST still runs every step, the named one once' \
+       "rc 0, $FIRST_STEP_FILE first and once, and the same set of steps as the run without it" \
+       "rc $FAILFAST_RC, steps: $(tr '\n' ' ' <<< "$FAILFAST_STEPS")"
+fi
+failfast_run mutant "" 'a step this suite does not have'
+if [ "$FAILFAST_RC" = 0 ] && [ "$FAILFAST_STEPS" = "$FIRST_ORDER" ]; then
+  pass 'surface: an SDD_MUTANT_FIRST naming no step leaves the order and the steps untouched'
+else
+  fail 'surface: an SDD_MUTANT_FIRST naming no step leaves the order and the steps untouched' \
+       "rc 0 and exactly the order of the run without it" \
+       "rc $FAILFAST_RC, steps: $(tr '\n' ' ' <<< "$FAILFAST_STEPS")"
+fi
+failfast_run plain "" ""
+FIRST_PLAIN_ORDER="$FAILFAST_STEPS"; FIRST_PLAIN_RC="$FAILFAST_RC"
+failfast_run plain "" "$FIRST_STEP_NAME"
+# The rc is compared with the plain run's own, never with 0: outside a mutant the lint step runs over
+# the stubs of this world, so the plain run is not green here — and it does not need to be.
+if [ "$FAILFAST_RC" = "$FIRST_PLAIN_RC" ] && [ "$FAILFAST_STEPS" = "$FIRST_PLAIN_ORDER" ]; then
+  pass 'surface: outside a mutant SDD_MUTANT_FIRST changes nothing'
+else
+  fail 'surface: outside a mutant SDD_MUTANT_FIRST changes nothing' \
+       "rc $FIRST_PLAIN_RC and exactly the order of the plain run without it" \
        "rc $FAILFAST_RC, steps: $(tr '\n' ' ' <<< "$FAILFAST_STEPS")"
 fi
 

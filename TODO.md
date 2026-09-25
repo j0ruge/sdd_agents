@@ -82,14 +82,14 @@ Achados sobre **repos-alvo** vão para o `TODO.md` daquele repo. Este arquivo é
   `20260819-fecho-...` (2026-08-19)
 
 - [ ] **A alternativa `|| :` da guarda do `guard:` não tem probe** —
-  `tests/check-health.sh:1534` — a guarda aceita `(true|:)`, e só `|| true` tem mundo no `cap_world`.
+  `tests/check-health.sh:1586` — a guarda aceita `(true|:)`, e só `|| true` tem mundo no `cap_world`.
   Medido em 2026-09-25: tirar o `:` da alternância deixa o `check-health.sh` inteiro verde. Das quatro
   sobreviventes da r2, três fecharam em `a948f68` (piso exato de capturas, probe aritmético, lista
   `RULE_REPORTS`). Direção: um `cap_world` com `|| :` e o censo afirmado, como os vizinhos.
   — descoberto por `sdd-reviewer` na missão `20260818-lote-facil` (2026-08-19)
 
 - [ ] **O `guard:` é cego a helper `health_*()` definido fora da região** —
-  `tests/check-health.sh:1553` — a região vai de `# Sensor of the KIT` até `cmd_status()`, então um
+  `tests/check-health.sh:1605` — a região vai de `# Sensor of the KIT` até `cmd_status()`, então um
   `health_*()` definido depois dela não é censurado. A outra metade do achado (`if x=`, `local x=` e
   here-doc lidos como offender) fechou: as três formas são isentas e declaradas no cabeçalho da regra.
   Direção: censurar todo `health_*()` onde ele estiver.
@@ -220,7 +220,7 @@ Achados sobre **repos-alvo** vão para o `TODO.md` daquele repo. Este arquivo é
   gitignored e local. Direção: reter as N sessões mais recentes por missão, ou comprimir o stream
   ao fim da fase. — descoberto por `sdd-executor` na missão `20260816-runner-sem-dividas` (2026-08-16)
 
-- [ ] **Sensor pulado por `SDD_MUTANT` vira ponto cego sem aviso** — `tests/run-all.sh:198` —
+- [ ] **Sensor pulado por `SDD_MUTANT` vira ponto cego sem aviso** — `tests/run-all.sh:218` —
   sensores são pulados dentro do mutante (hoje o lint e os quatro de `:198-221`). É aposta que vence
   sozinha: no I3 o `check-preflight.sh`
   ganhou asserção de comportamento do runner, e a linha que o pulava virou a escondedora da única
@@ -329,7 +329,7 @@ Achados sobre **repos-alvo** vão para o `TODO.md` daquele repo. Este arquivo é
   — descoberto por `sdd-qa` na missão `20260819-fecho-que-nao-mente` (2026-08-19)
 
 - [ ] **O piso do catálogo mora só no consumidor; quem imprime o `score:` segue sem nenhum** —
-  `tests/check-mutation.sh:4755` — com `CATALOG=()` o laço roda zero vezes, `errors` fica 0 e o
+  `tests/check-mutation.sh:4781` — com `CATALOG=()` o laço roda zero vezes, `errors` fica 0 e o
   arquivo imprime `score: 0 caught, 0 known gap(s), of 0` saindo 0. O F1 pôs o piso no `cmd_health`,
   hoje o único chamador — mas duas frases do próprio runner (`bin/sdd:5055` e `:5108`) mandam o
   operador rodar `tests/run-all.sh --with-mutation` à mão, e aí o verde volta a mentir.
@@ -382,7 +382,7 @@ Achados sobre **repos-alvo** vão para o `TODO.md` daquele repo. Este arquivo é
   comentário baixa a alegação, ou a asserção ganha o mundo que a distingue.
   — descoberto por `sdd-reviewer` na missão `20260901-o-revisor-so-acha` (2026-09-02)
 
-- [ ] **A suíte não tem `timeout` em lugar nenhum** — `tests/run-all.sh:82` (`run()`) — regra quebrada que
+- [ ] **A suíte não tem `timeout` em lugar nenhum** — `tests/run-all.sh:95` (`run()`) — regra quebrada que
   recursa sai como **travamento sem mensagem**, e não como vermelho; medido em `rc=124` sob
   `timeout 20` na r2 desta missão. É a classe que já custou três sessões de REVIEW deste repo
   (`4c86712`), e o probe de ponta a ponta do `check-templates.sh` está a uma edição dela.
@@ -553,7 +553,7 @@ Achados sobre **repos-alvo** vão para o `TODO.md` daquele repo. Este arquivo é
 
 - [ ] **22 das 33 âncoras do `TODO.md` apontam para a linha errada** —
   `tests/check-todo.sh:1` — auditadas uma a uma contra o HEAD: várias erram por centenas de
-  linhas e uma cai fora do arquivo (`tests/run-all.sh:180`, num arquivo de 173). O sensor mede
+  linhas e uma cai fora do arquivo (`tests/run-all.sh:200`, num arquivo de 173). O sensor mede
   **forma**, nunca se a âncora ainda acerta o alvo, então o número não se move sozinho — e esta
   missão empurrou parte delas ao crescer o `bin/sdd` em 162 linhas. Direção: re-derivar em lote.
   RESOLVED by a8a65db (missão `20260925-o-sensor-le-o-que-a-ancora-diz`).
@@ -611,7 +611,7 @@ Achados sobre **repos-alvo** vão para o `TODO.md` daquele repo. Este arquivo é
   julgamento. — descoberto por `humano` na missão `20260829-o-incremento-que-andou` (2026-08-30)
 
 - [ ] **A suíte segue acima do alvo "<30 s" da D7, mesmo depois do paralelismo** —
-  `tests/run-all.sh:82` (`run()`) — a saída "subir o default" foi tomada e executada (pool + `min(núcleos, 8)`,
+  `tests/run-all.sh:95` (`run()`) — a saída "subir o default" foi tomada e executada (pool + `min(núcleos, 8)`,
   ver KAIZEN_LOG de 2026-08-16): mediana 54,13 s → **32,87 s** na mesma sessão, score 30/30
   intacto. Restam as duas saídas de régua, ambas do humano: subir o alvo da D7 (o "≤15 s" do
   I13.1 já é história) ou aceitar o estouro — hoje ~300 s (2026-09-25). — medido por
@@ -619,7 +619,7 @@ Achados sobre **repos-alvo** vão para o `TODO.md` daquele repo. Este arquivo é
   paralelismo (2026-08-16)
 
 - [ ] **Sensor novo na suíte é multiplicador, não parcela: custa uma vez por mutante** —
-  `tests/run-all.sh:180` — `check-health.sh` roda em ~1,5 s sozinho e roda **dentro de cada
+  `tests/run-all.sh:200` — `check-health.sh` roda em ~1,5 s sozinho e roda **dentro de cada
   mutante**, hoje 81. Medido em passadas sequenciais e máquina quieta, `main` (`6d68dfc`) contra o
   HEAD desta missão: **155,97 s → 210,81 s**, +55 s com 11 mutações a mais no mesmo diff.
   ⚠️ O EXEC registrou **+281 s** para a mesma família e isso não reproduz — era contenção, não o
