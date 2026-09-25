@@ -566,7 +566,7 @@ Achados sobre **repos-alvo** vão para o `TODO.md` daquele repo. Este arquivo é
   paralelismo (2026-08-16)
 
 - [ ] **Sensor novo na suíte é multiplicador, não parcela: custa uma vez por mutante** —
-  `tests/run-all.sh:200` — `check-health.sh` roda em ~1,5 s sozinho e roda **dentro de cada
+  `tests/run-all.sh:256` — `check-health.sh` roda em ~1,5 s sozinho e roda **dentro de cada
   mutante**, hoje 81. Medido em passadas sequenciais e máquina quieta, `main` (`6d68dfc`) contra o
   HEAD desta missão: **155,97 s → 210,81 s**, +55 s com 11 mutações a mais no mesmo diff (o +281 s
   do EXEC não reproduz: era contenção). Direção: rodar por mutante só o sensor que o alcança.
