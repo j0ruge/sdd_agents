@@ -29,9 +29,13 @@
 # And per decided record: `- **<title>** — …`, one physical line, a code span after the title (the
 # pointer to the evidence) and a `(YYYY-MM-DD)` at the end. Records are not counted as findings.
 #
-# What it deliberately does NOT measure: whether the prose is any good, or whether the anchor
-# still points at real code. Both are human judgement on the diff. This one stops the regression,
-# which is the half that rots on its own.
+# What it deliberately does NOT measure: whether the prose is any good — human judgement on the
+# diff. Whether the anchor still points at real code USED to sit in this sentence too, and 63 of 85
+# anchors of this kit's own TODO.md rotted under it. It is measured now (ADR 0011): the first
+# path-shaped span of the head must name a regular file of the CHECKED file's repository, and
+# another span of the head (4+ characters) must occur in that file within 10 lines of the anchored
+# line — anywhere in it for a whole-file anchor (no line, or `:1`). Until the rule is wired into the
+# lint it lives in `--anchors <file> [<prefix>]`, the report mode the re-anchoring reads.
 #
 # And what it deliberately REFUSES in the findings section: fenced blocks, bare list markers,
 # lazy column-0 continuations, and every task-item shape that is not `- [ ] **<title>**` at
@@ -63,6 +67,10 @@
 #        tests/check-todo.sh --count <file> (print the parser's item count, even when the lint
 #                                            fails — for tools that mirror the findings elsewhere
 #                                            and must prove their own parser agrees)
+#        tests/check-todo.sh --anchors <file> [<prefix>]
+#                                           (measure the anchors only — ADR 0011 — of every open item,
+#                                            or of those whose anchor starts with <prefix>; one
+#                                            `FAIL  line …` per violation, then one summary line)
 #
 # Env: SDD_TODO_FILE overrides which file the no-arg form checks; SDD_TODO_CAP overrides the
 #      per-item line budget (a positive integer; anything else exits 95).
@@ -96,8 +104,14 @@
 #   - neutering a helper AND discarding the `cfail` verdict of its control
 #   - deleting `selftest ||` from the dispatch AND the coupling in check_file that refuses it
 #
-# Not measured, on purpose: whether an anchor still points at real code, whether the prose is any
-# good, and whether a finding is worth keeping. All three are human judgement on the diff.
+# Not measured, on purpose: whether the prose is any good, and whether a finding is worth keeping.
+# Both are human judgement on the diff. The anchor is measured (ADR 0011, `--anchors`), and its
+# limits are declared rather than hidden: only the FIRST anchor of an item is read, so a secondary
+# `(+ other/path:N)` stays unmeasured; a whole-file anchor (`:1`) is weaker than a line anchor by
+# design; and a symbol that occurs everywhere (`local`, `printf`) satisfies the distance near
+# almost any line — the 4-character minimum narrows that, it does not close it. A glob can never
+# anchor: the refusal is spelled out although the quoted `-f` would refuse it anyway, because a
+# sabotage that EXPANDS the glob is the one that would let it pass.
 #
 # ── Declared debt, admitted here instead of into the backlog (the D15 rule of CLAUDE.md) ────────
 # A finding earns a TODO.md entry when the sensor CLAIMS to measure what it does not (fail-open)
@@ -274,9 +288,24 @@ todo_awk() {
     # catches the item whose last field is not the attribution at all.
     function head_of(text,   last) { last = last_sep(text); return last == 0 ? "" : substr(text, 1, last - 1) }
     function tail_of(text,   last) { last = last_sep(text); return last == 0 ? "" : substr(text, last + length(" — ")) }
+    # Every backticked span of text, each prefixed by a TAB. index()/substr() and never a negated
+    # class, the mawk rule above. An unclosed backtick ends the walk: what follows is not a span.
+    function spans(text,   out, rest, p, q) {
+      out = ""; rest = text
+      while ((p = index(rest, "`")) > 0) {
+        rest = substr(rest, p + 1)
+        if ((q = index(rest, "`")) == 0) break
+        out = out "\t" substr(rest, 1, q - 1)
+        rest = substr(rest, q + 1)
+      }
+      return out
+    }
     function flush() {
       if (!initem) return
       items++
+      # The anchors view: one line per open item, its start line and the spans of its HEAD. The
+      # tail is the attribution and names an agent, never code, so it is never a symbol.
+      if (mode == "anchors") print start spans(head_of(body))
       if (mode == "lint") {
         if (first !~ /^- \[ \] \*\*/)
           print "  line " start ": item does not open with `- [ ] **<title>**`"
@@ -558,7 +587,7 @@ RULE_MARK_FAILS=0
 # floor guards the probes and nothing guards the report: the sensor would stay green while saying
 # one rule fewer than it ran, which is the shape of every quiet regression in this suite.
 RULES_REPORTED=0
-RULES_FLOOR=8
+RULES_FLOOR=9
 rule_begin() { RULE_MARK_PROBES="$PROBES"; RULE_MARK_FAILS="$FAILS"; }
 rule_end() { # rule_end <floor> <text>
   local n=$((PROBES - RULE_MARK_PROBES))
@@ -1601,6 +1630,57 @@ EOF
   done
   rule_end 11 'the selftest goes red under every sabotage issue 70 listed'
 
+  # ── The anchor names a file of the CHECKED repo, and a cited symbol sits near its line ────────
+  # ADR 0011. The fixture is a git repo of its own, and every probe runs from `/`: the base of
+  # resolution is the checked file's repository, never the cwd and never this kit's $ROOT — probe 7
+  # plants a path that exists ONLY in the kit, which is the one world that tells the two apart.
+  rule_begin
+  local ar="$box/anchorrepo"
+  mkdir -p "$ar/src" && git -C "$ar" init -q 2>/dev/null
+  { for i in $(seq 1 40); do
+      if [ "$i" -eq 20 ]; then printf 'frobnicate_widget() { :; }\n'; else printf '# filler line %d\n' "$i"; fi
+    done; } > "$ar/src/code.sh"
+  anchor_item() { # anchor_item <file name> <head after the title> — one item in a TODO.md of $ar
+    printf '## Open\n<!-- sdd:open -->\n\n- [ ] **Anchor probe** — %s — why. — found by `x` (2026-08-16)\n' "$2" > "$ar/$1"
+  }
+  anchors_says() { # anchors_says <rc> <substring> <label> <args...> — the real --anchors path, from /
+    PROBES=$((PROBES + 1))
+    local want="$1" sub="$2" label="$3" out got; shift 3
+    out="$(cd / && bash "$SELF" --anchors "$@" 2>&1)"; got=$?
+    [ "$got" -eq "$want" ] && case "$out" in *"$sub"*) return 0 ;; esac
+    printf '  SELFTEST FAIL  %s — expected rc %s and "%s", got rc %s: %s\n' "$label" "$want" "$sub" "$got" "$out" >&2
+    FAILS=$((FAILS + 1)); fail_rc 91
+  }
+  anchor_item ok.md '`src/code.sh:20` — calls `frobnicate_widget`, cites `docs/none.md` too'
+  anchors_says 0 '  ok    anchors: 1 measured, 0 off target' "an anchor on target passes" "$ar/ok.md"
+  anchors_says 0 '  ok    anchors: 0 measured, 0 off target' "a prefix that matches nothing measures nothing" "$ar/ok.md" other/
+  anchor_item off.md '`src/code.sh:31` — calls `frobnicate_widget`'
+  anchors_says 1 'anchor `src/code.sh:31` is off target — nearest `frobnicate_widget` is at line 20' \
+    "eleven lines off is off target" "$ar/off.md"
+  anchors_says 1 '  FAIL  anchors: 1 measured, 1 off target' "an off-target anchor is counted" "$ar/off.md"
+  anchor_item nofile.md '`src/missing.sh:5` — calls `frobnicate_widget`'
+  anchors_says 1 'anchor `src/missing.sh` names no file of this repository' "a missing file is refused" "$ar/nofile.md"
+  anchor_item nosym.md '`src/code.sh:20` — calls `unheard_of_symbol`'
+  anchors_says 1 'anchor `src/code.sh:20` — no backticked symbol of the item occurs in src/code.sh' \
+    "a symbol the file does not carry is refused" "$ar/nosym.md"
+  anchor_item whole.md '`src/code.sh:1` — calls `frobnicate_widget`'
+  anchors_says 0 '0 off target' "a whole-file anchor passes with the symbol anywhere" "$ar/whole.md"
+  anchor_item glob.md '`src/*.sh:20` — calls `frobnicate_widget`'
+  anchors_says 1 'anchor `src/*.sh` names no file of this repository' "a glob is not an anchor" "$ar/glob.md"
+  # The kit's own file, cited from a repo that does not have it. Witness first: a path that did not
+  # exist under $ROOT either would make this probe vacuous.
+  PROBES=$((PROBES + 1))
+  [ -f "$ROOT/tests/check-todo.sh" ] || { FAILS=$((FAILS + 1)); fail_rc 92
+    printf '  SELFTEST FAIL  the kit-only witness tests/check-todo.sh is not under $ROOT\n' >&2; }
+  anchor_item kitonly.md '`tests/check-todo.sh:1` — calls `selftest`'
+  anchors_says 1 'anchor `tests/check-todo.sh` names no file of this repository' \
+    "a file that exists only in the kit is not a file of the checked repo" "$ar/kitonly.md"
+  anchor_item short.md '`src/code.sh:20` — calls `fro`'
+  anchors_says 1 'no backticked symbol of the item occurs in src/code.sh' "a 3-character symbol does not count" "$ar/short.md"
+  printf '## Open\n\n- [ ] **No marker** — `src/code.sh:20` — `frobnicate_widget`. — by `x` (2026-08-16)\n' > "$ar/nomark.md"
+  anchors_says 99 'marker' "--anchors refuses a file without the open marker" "$ar/nomark.md"
+  rule_end 12 'an anchor names a file of the checked repo and sits within 10 lines of a symbol the item cites'
+
   assert_rc 95 "a non-integer cap must exit 95" env SDD_TODO_CAP=abc bash "$SELF" --check "$box/good.md"
   assert_rc 95 "a zero cap must exit 95"        env SDD_TODO_CAP=0   bash "$SELF" --check "$box/good.md"
   assert_rc 96 "an unknown option must exit 96" bash "$SELF" --bogus
@@ -1614,8 +1694,8 @@ EOF
   # Floor on the probe COUNT, for the same reason every other floor here exists: neutering all the
   # assert_* call sites made the summary print "0 probe(s)" and exit 0 — a selftest that ran
   # nothing reads exactly like a selftest that passed. The number moves only on purpose.
-  if [ "$((PROBES + PROBES_SKIPPED))" -lt 134 ]; then
-    printf '  SELFTEST FAIL  only %d probe(s) accounted for (%d ran, %d skipped), expected 134\n' \
+  if [ "$((PROBES + PROBES_SKIPPED))" -lt 146 ]; then
+    printf '  SELFTEST FAIL  only %d probe(s) accounted for (%d ran, %d skipped), expected 146\n' \
       "$((PROBES + PROBES_SKIPPED))" "$PROBES" "$PROBES_SKIPPED" >&2
     FAILS=$((FAILS + 1)); fail_rc 92
   fi
@@ -1733,6 +1813,108 @@ count_file() {
   printf '%s\n' "$n"
 }
 
+# ── The anchor rule (ADR 0011) ────────────────────────────────────────────────────────────────
+# ANCHOR_REACH is the distance, in lines, a cited symbol may sit from the anchored line;
+# ANCHOR_SYMBOL_MIN the shortest span that counts as a symbol — a two-letter span occurs near
+# almost any line and would satisfy the rule by accident.
+ANCHOR_REACH=10
+ANCHOR_SYMBOL_MIN=4
+
+# anchor_base <file> — the repository the anchors of <file> are resolved against: the toplevel of
+# the git checkout holding it, else its own directory. NEVER $ROOT: in a target repo the kit's tree
+# would answer about the wrong files, and a file that exists only in the kit would pass. `git -C`
+# and no `cd`, so no CDPATH can print into the substitution.
+anchor_base() {
+  local dir; dir="$(dirname -- "$1")"
+  git -C "$dir" rev-parse --show-toplevel 2>/dev/null || (CDPATH='' cd -- "$dir" && pwd)
+}
+
+# anchor_scan <file> [<prefix>] — measures the FIRST anchor of every open item of <file> whose
+# anchor starts with <prefix> (all items without one). Publishes, never prints — it is CALLED,
+# never read through `$( )`, because globals set in a command substitution die with it:
+#   ANCHOR_MEASURED    items measured
+#   ANCHOR_VIOLATIONS  one `  line <L>: anchor `…` …` per violation, the lint's own shape
+# The caller has already refused an unreadable or unmarked file.
+anchor_scan() {
+  local file="$1" prefix="${2-}" base line start anchor path n sp sym hits hit best bestsym dist
+  local -a sp_list syms
+  ANCHOR_MEASURED=0; ANCHOR_VIOLATIONS=''
+  base="$(anchor_base "$file")"
+  while IFS= read -r line; do
+    start="${line%%$'\t'*}"
+    IFS=$'\t' read -r -a sp_list <<< "${line#"$start"}"
+    # The anchor: the first span shaped like a path — a `/` or a `.`, no space. A span that is not
+    # (`frontmatter`, `sdd health`) is prose, skipped and never an anchor.
+    anchor=''
+    for sp in "${sp_list[@]}"; do
+      [ -n "$sp" ] || continue
+      case "$sp" in *' '*) continue ;; */* | *.*) anchor="$sp"; break ;; esac
+    done
+    case "$anchor" in "$prefix"*) ;; *) [ -z "$prefix" ] || continue ;; esac
+    ANCHOR_MEASURED=$((ANCHOR_MEASURED + 1))
+    if [ -z "$anchor" ]; then
+      ANCHOR_VIOLATIONS+="  line $start: anchor \`<none>\` names no file of this repository — no span of the head is a path"$'\n'
+      continue
+    fi
+    # `path:N`, `path:N-M`, `path:N,M,…`: the first number is the line. No number, or 1, is a
+    # whole-file anchor.
+    path="$anchor"; n=0
+    if [[ "$anchor" =~ ^(.+):([0-9]+)([-,][0-9,-]*)?$ ]]; then path="${BASH_REMATCH[1]}"; n="${BASH_REMATCH[2]}"; fi
+    # A glob or an absolute path names no file OF THIS REPOSITORY, whatever a shell would expand it
+    # to. `-f` below is quoted and would refuse the glob anyway; the case is the rule said aloud.
+    case "$path" in /* | *'*'* | *'?'* | *'['*)
+      ANCHOR_VIOLATIONS+="  line $start: anchor \`$path\` names no file of this repository"$'\n'; continue ;;
+    esac
+    if [ ! -f "$base/$path" ]; then
+      ANCHOR_VIOLATIONS+="  line $start: anchor \`$path\` names no file of this repository"$'\n'
+      continue
+    fi
+    syms=()
+    for sp in "${sp_list[@]}"; do
+      [ "${#sp}" -ge "$ANCHOR_SYMBOL_MIN" ] || continue
+      [ "$sp" != "$anchor" ] && [ "$sp" != "$path" ] || continue
+      syms+=("$sp")
+    done
+    best=''; bestsym=''
+    for sym in "${syms[@]}"; do
+      hits="$(grep -nF -- "$sym" "$base/$path" 2>/dev/null | cut -d: -f1)" || hits=''
+      for hit in $hits; do
+        if [ "$n" -le 1 ]; then best=0; bestsym="$sym"; break 2; fi
+        dist=$((hit > n ? hit - n : n - hit))
+        if [ -z "$best" ] || [ "$dist" -lt "$(( best > n ? best - n : n - best ))" ]; then best="$hit"; bestsym="$sym"; fi
+      done
+    done
+    if [ -z "$bestsym" ]; then
+      ANCHOR_VIOLATIONS+="  line $start: anchor \`$anchor\` — no backticked symbol of the item occurs in $path"$'\n'
+    elif [ "$n" -gt 1 ] && [ $(( best > n ? best - n : n - best )) -gt "$ANCHOR_REACH" ]; then
+      ANCHOR_VIOLATIONS+="  line $start: anchor \`$anchor\` is off target — nearest \`$bestsym\` is at line $best"$'\n'
+    fi
+  done < <(todo_awk "$file" 1 anchors)
+  ANCHOR_VIOLATIONS="${ANCHOR_VIOLATIONS%$'\n'}"
+}
+
+# anchors_file <file> [<prefix>] — the report mode. The same refusals as count_file, then the
+# measurement, then ONE summary assertion in the house shape: `ok` on stdout, `FAIL` on stderr.
+anchors_file() {
+  local file="${1-}" m=0
+  if [ -z "$file" ] || [ ! -f "$file" ] || [ ! -r "$file" ]; then
+    printf '  FAIL  findings file missing or unreadable: %s\n' "$file" >&2
+    return 93
+  fi
+  if ! has_open_marker "$file"; then
+    printf '  FAIL  no %s marker in %s — the findings section is never guessed\n' "$OPEN_MARKER" "$file" >&2
+    return 99
+  fi
+  anchor_scan "$file" "${2-}"
+  if [ -n "$ANCHOR_VIOLATIONS" ]; then
+    m="$(grep -c . <<< "$ANCHOR_VIOLATIONS")"
+    sed 's/^  /  FAIL  /' <<< "$ANCHOR_VIOLATIONS" >&2
+    printf '  FAIL  anchors: %d measured, %d off target\n' "$ANCHOR_MEASURED" "$m" >&2
+    return 1
+  fi
+  printf '  ok    anchors: %d measured, 0 off target\n' "$ANCHOR_MEASURED"
+}
+
 if ! valid_cap "$CAP"; then
   printf '  FAIL  SDD_TODO_CAP must be a positive integer, got: %s\n' "$CAP" >&2
   exit 95
@@ -1758,6 +1940,9 @@ case "${1:-}" in
     [ "$#" -le 3 ] || { printf '  FAIL  too many arguments to --check\n' >&2; exit 96; }
     check_file "${2-$TODO}" "$CAP"; exit $? ;;
   --count)    count_file "${2-}"; exit $? ;;
+  --anchors)
+    [ "$#" -le 3 ] || { printf '  FAIL  too many arguments to --anchors\n' >&2; exit 96; }
+    anchors_file "${2-}" "${3-}"; exit $? ;;
   '')         selftest || exit $?; check_file "$TODO" "$CAP"; exit $? ;;
   *)          printf '  FAIL  unknown option: %s (see the usage header)\n' "$1" >&2; exit 96 ;;
 esac
