@@ -13,7 +13,7 @@
 
 | # | Frente | Estado | Próximo passo | Espera por |
 |---|---|---|---|---|
-| F1 | Custo do catálogo de mutação | PR #59 mergeado (`d0ac22d`); P2(a) feito em 2026-09-25 (assassino primeiro, amostra 389 → 171 s, `sdd health` 1h27 → ~38–40 min); P2(b) em desenho ([spec](2026-09-25-o-sensor-para-no-primeiro-fail-design.md), meta ≤ 20 min); P1, P3, P4 abertos | P2(b) (desenho aprovado em conversa em 2026-09-25; spec em revisão); depois P3 | — |
+| F1 | Custo do catálogo de mutação | PR #59 mergeado (`d0ac22d`); P2(a) feito em 2026-09-25 (assassino primeiro, amostra 389 → 171 s, `sdd health` 1h27 → ~38–40 min); P2(b) implementado no branch `perf/sensor-para-no-primeiro-fail` (`fa6b469`, [spec](2026-09-25-o-sensor-para-no-primeiro-fail-design.md), amostra 1328,7 → 571 s), sem PR nem carimbo; P1, P3, P4 abertos | Entrega do P2(b) pelo [handoff](../plans/2026-09-25-o-sensor-para-no-primeiro-fail-handoff.md) (PR, bots, health ×2, KAIZEN, `/codereview` no fim); depois P3 | o merge do P2(b) |
 | F2 | Faxina pós-#57 | parada | ADR 0010 para `accepted`; apagar 2 itens do `TODO.md` | carona num PR que já carimbe |
 | F3 | T3 e a janela do juiz | parada | decidir as 3 perguntas de desenho | **decisão humana** (inclusive: congelar ou não) |
 | F4 | Portabilidade para outros repos | parcial | registrar as lacunas no `TODO.md`; consertar a 2 | carona num PR que já carimbe |
@@ -78,8 +78,11 @@ trabalho de fato.
     Se fica verde, cai para a suíte inteira antes de declarar sobrevivente. Nenhum veredito muda.
     O custo é anotar os 392 mutantes; dá para derivar dos logs de uma corrida completa, que mostram
     o primeiro sensor vermelho de cada um.
-  - **(b) Parar no primeiro assert vermelho dentro do sensor** sob `SDD_MUTANT`. EM DESENHO:
-    [`2026-09-25-o-sensor-para-no-primeiro-fail-design.md`](2026-09-25-o-sensor-para-no-primeiro-fail-design.md).
+  - **(b) Parar no primeiro assert vermelho dentro do sensor** sob `SDD_MUTANT`. IMPLEMENTADO em
+    2026-09-25 no branch `perf/sensor-para-no-primeiro-fail` (`fa6b469`), Entrega pendente:
+    [`spec`](2026-09-25-o-sensor-para-no-primeiro-fail-design.md) ·
+    [`handoff`](../plans/2026-09-25-o-sensor-para-no-primeiro-fail-handoff.md). Medido na mesma
+    amostra: soma do passo assassino 1328,7 → 570,9 / 570,5 / 574,0 s (−57%).
     Amostra de 24 mutantes: o 1º FAIL sai na metade do sensor (1328,7 → 624,4 s, −53%). Vem
     junto: o controle em paralelo com o pool e o mais longo primeiro. Meta: health ≤ 20 min.
 - **P3. Probes sensíveis a tempo sob carga.** Os 16 jobs expuseram um probe que distinguia o
