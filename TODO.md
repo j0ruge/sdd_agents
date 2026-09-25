@@ -572,12 +572,22 @@ O plano consolidado pelo Codex Astra, baseado no artigo de @0xCodez e nas refer�
   — descoberto por `sdd-executor` na missão `20260901-o-revisor-so-acha` (2026-09-02)
 
 - [ ] **Uma sessão escreve o ledger com o `bin/sdd` que tinha em MEMÓRIA ao ser lançada** —
-  `bin/sdd:2650` — logo a missão que ACRESCENTA um campo é, por construção, a única que não o
-  registra: 3 das 4 rodadas desta missão saíram com `turns: null`. Duas superfícies, consequências
-  diferentes: no ledger o campo falta; em `review_scope_check` um `grep -c REVIEW-EDITED-CODE`
-  responde `0` sem distinguir "medido limpo" de "não medido" — fail-open de leitura. Direção: o
-  `sdd run` avisar quando o `bin/sdd` mudou sob ele; a métrica citar `.sdd/logs/` na estreia.
-  — descoberto por `sdd-qa` na missão `20260901-o-revisor-so-acha` (2026-09-01)
+  `bin/sdd:3752` — a missão que ACRESCENTA um campo é a única que não o registra (3 de 4 rodadas
+  com `turns: null`), e `review_scope_check` lê `0` sem distinguir "limpo" de "não medido". O
+  `.sdd/config.sh` tem o mesmo defeito (`bin/sdd:108`, `source` único): o `TEST_CMD` consertado a
+  meio do run não vale, e o EXEC da SQ-141 queimou 4 retries (~US$ 5,90) num gate insatisfazível.
+  Direção: o `sdd run` avisar quando `bin/sdd` ou config mudou sob ele (ou reler o config por gate).
+  — descoberto por `sdd-qa` na missão `20260901-o-revisor-so-acha` (2026-09-01); config por
+  `claude` na missão `20260924-transacao-honra-o-timeout` (2026-09-24)
+
+- [ ] **O effort das fases não é do kit: `claude -p` herda o que a máquina tiver, e nenhum log o
+  registra** — `bin/sdd:3657` — o runner passa `--model` por fase e nunca `--effort`, que o CLI
+  aceita. O nível sai do `effortLevel` do usuário, de um `modelSettings` por modelo (há
+  `"claude-opus-5": low` ao lado do `xhigh` global, sem saber se casa `claude-opus-5-5`) ou do
+  `CLAUDE_EFFORT` herdado de uma sessão-mãe, que o `HARNESS_ENV_UNSET` não limpa. O stream traz só
+  `per_turn_effort_active:true`. Direção: `EFFORT_<FASE>` no config ao lado de `MODEL_<FASE>`,
+  `--effort` explícito e o valor gravado no log da fase.
+  — descoberto por `claude` no PLAN da missão D do `sales_quote` (2026-09-24)
 
 ### Saída humana e cosmética
 
