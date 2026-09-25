@@ -261,6 +261,8 @@ def busy(repo, *args, binary=sdd, extra=None, name=None):
     return result
 
 
+# Set once the escaped hook child exists; the finally below releases it whatever happened.
+hook_fifo = None
 try:
     # A negative control proves the verdict accumulator itself can report a failure. It runs
     # outside the mutant on purpose: it needs this red check() to return, and inside a mutant the
@@ -745,6 +747,14 @@ try:
               Path(str(orphan[1]) + ".finished").read_text() == "child wrote after release")
 
 finally:
+    # The escaped hook child ignores SIGTERM and blocks on this FIFO. Inside a mutant a red check
+    # between its start and its release ends the sensor, so the release lives here too: a no-op
+    # once the child has read (no reader left, ENXIO), and the child's way out otherwise.
+    if hook_fifo is not None:
+        with contextlib.suppress(OSError):
+            descriptor = os.open(hook_fifo, os.O_WRONLY | os.O_NONBLOCK)
+            os.write(descriptor, b"x")
+            os.close(descriptor)
     for item in owned:
         try:
             release(item)

@@ -1422,19 +1422,38 @@ fi
 # variable unset, and set to the empty string, it must return with its counter up by one. A new
 # sensor that runs inside mutants and forgets the clause turns this red, because the census walks
 # the suite instead of a table somebody has to remember to extend.
-# Outside the census, declared: check-entrypoint.sh and check-templates.sh run inside mutants with
-# no single failure primitive (1 and 0 kills in the map of 2026-09-25, ~0.5 s each). Not measured
-# here, and said: a fail() called inside a subshell would stop only the subshell — no such call
+# Outside the census, declared in CENSUS_EXEMPT below: check-entrypoint.sh and check-templates.sh run
+# inside mutants with no single failure primitive (1 and 0 kills in the map of 2026-09-25, ~0.5 s
+# each). Not measured here, and said: a fail() called inside a subshell would stop only the subshell — no such call
 # exists today, and one would already lose its `fails` count; the census cannot see call sites.
 # CENSUS_FLOOR is the nine of 2026-09-25 (autonomy, gates, kaizen, preflight, health, adr, hat,
 # dry-run, coordination): the list or the join to tests/ that stops reading the suite fails loudly.
 # ---------------------------------------------------------------------------
 CENSUS_FLOOR=9
-census_file_of() { # census_file_of <step title> — the tests/check-*.sh that step runs, or nothing
+# The two declarations the walk needs, in code and not only in prose: the mutant steps that run no
+# tests/check-*.sh, and the sensors that run inside mutants with no single failure primitive. A
+# step or a sensor in neither list and with no primitive the census knows is SENSOR-BROKEN, never
+# skipped — the promise above is kept by refusing what the walk cannot classify.
+CENSUS_NOT_SENSORS=$'runner syntax (bash -n)\ncoordination helper syntax'
+CENSUS_EXEMPT=$'check-entrypoint.sh\ncheck-templates.sh'
+census_join() { # census_join <run-all.sh> — the file with every `\`-continued line joined onto one
+  sed -e ':a' -e '/\\$/N; s/[[:space:]]*\\\n[[:space:]]*/ /; ta' "$1"
+}
+census_file_of() { # census_file_of <step title> <joined run-all> — the tests/check-*.sh it runs
   local hits
-  hits="$(grep -F -- "run \"$1\" \"\$ROOT/tests/check-" "$ROOT/tests/run-all.sh" \
+  hits="$(grep -F -- "run \"$1\" \"\$ROOT/tests/check-" <<< "$2" \
           | sed -n 's|.*"\$ROOT/tests/\(check-[a-z-]*\.sh\)".*|\1|p')" || true
   printf '%s' "${hits%%$'\n'*}"
+}
+census_kind_of() { # census_kind_of <step> <joined run-all> <tests dir> — skip | exempt <f> | bash <f> | py <f> | unknown <why>
+  local f
+  if grep -qxF -- "$1" <<< "$CENSUS_NOT_SENSORS"; then echo skip; return; fi
+  f="$(census_file_of "$1" "$2")"
+  if [ -z "$f" ]; then echo "unknown step '$1' joins to no tests/check-*.sh and is not declared a non-sensor"
+  elif grep -q '^fail() {' "$3/$f"; then echo "bash $f"
+  elif grep -q '^def check(' "$3/$f"; then echo "py $f"
+  elif grep -qxF -- "$f" <<< "$CENSUS_EXEMPT"; then echo "exempt $f"
+  else echo "unknown $f defines neither 'fail() {' nor 'def check(' and is not declared exempt"; fi
 }
 census_src() { # census_src <file> <bash|py> — the definition, printed only when short and closed
   local src n
@@ -1442,6 +1461,9 @@ census_src() { # census_src <file> <bash|py> — the definition, printed only wh
     src="$(awk '/^fail\(\) \{/ { p = 1 } p { print; if ($0 ~ /\}[[:space:]]*$/) exit }' "$1")"
     n="$(grep -c . <<< "$src")"
     [ -n "$src" ] && [ "$n" -le 8 ] && [ "${src: -1}" = '}' ] || return 1
+    # "Closed" is the parser's word, not the last character's: a line like `local m=${1}` ends
+    # in `}` too, and the awk above would stop there.
+    bash -n <<< "$src" 2>/dev/null || return 1
   else
     src="$(awk '/^def check\(/ { p = 1 } p { if ($0 ~ /^[[:space:]]*$/) exit; print }' "$1")"
     n="$(grep -c . <<< "$src")"
@@ -1452,10 +1474,13 @@ census_src() { # census_src <file> <bash|py> — the definition, printed only wh
 census_call() { # census_call <bash|py> <definition> <SDD_MUTANT value | UNSET> — "rc=<n> said=<n> back=<n>"
   local out rc=0 prog
   if [ "$1" = bash ]; then
-    # PROBES is read by check-adr.sh's fail(), which the eval below defines.
+    # PROBES is read by check-adr.sh's fail(), which the eval below defines. THIS file's fail() is
+    # unset first and a failed eval is loud: otherwise the probe calls the outer fail(), which
+    # carries the clause, and certifies a sensor that has none.
     # shellcheck disable=SC2034
     out="$( { fails=0; PROBES=0
-               eval "$2"
+               unset -f fail
+               eval "$2" || { printf 'EVAL-BROKEN\n'; exit 97; }
                if [ "$3" = UNSET ]; then unset SDD_MUTANT; else export SDD_MUTANT="$3"; fi
                fail 'census probe' x y
                printf 'back=%s\n' "$fails"; } 2>&1 )" || rc=$?
@@ -1467,16 +1492,56 @@ census_call() { # census_call <bash|py> <definition> <SDD_MUTANT value | UNSET> 
   printf 'rc=%s said=%s back=%s\n' "$rc" "$(grep -c 'FAIL  census probe' <<< "$out" || true)" \
          "$(grep -c '^back=1$' <<< "$out" || true)"
 }
+# The census measures itself first, on worlds whose answer is known (the negative control of
+# CLAUDE.md). Each probe names the fail-open it closes: found by the final review of this branch,
+# reproduced, and red here before the fix.
+census_box="$WORK/census"
+mkdir -p "$census_box"
+# 1. A clause-less fail() reads as clause-less: census_call measures the definition it was handed.
+census_noclause=$'fail() { printf \'  FAIL  %s\\n\' "$1" >&2\n         fails=$((fails + 1)); }'
+[ "$(census_call bash "$census_noclause" 1)" = 'rc=0 said=1 back=1' ] \
+  || broken "census: a fail() with no clause did not read as one — census_call measures something else"
+# 2. A definition that does not parse never borrows THIS file's fail(), which carries the clause:
+#    the eval failed, the group went on, and the outer fail() certified a sensor with no clause.
+[ "$(census_call bash 'fail() { local m=${1}' 1)" != 'rc=1 said=1 back=0' ] \
+  || broken "census: a definition that does not parse was certified — census_call fell back to this file's own fail()"
+# 3. census_src refuses a fail() cut at an inner `}` (the line `local m=${1}` ends in one) instead
+#    of handing out the first line as if it were the whole, closed definition.
+printf 'fail() { local m=${1}\n  printf "  FAIL  %%s\\n" "$m" >&2\n  fails=$((fails + 1)); }\n' > "$census_box/check-cut.sh"
+if census_src "$census_box/check-cut.sh" bash >/dev/null; then
+  broken "census: census_src handed out a fail() cut at an inner } — it must refuse what does not parse"
+fi
+# 4. A `run` line wrapped with \ is joined to its file: the house style for a long title, and a
+#    tenth sensor written that way was listed by --list and silently dropped by a one-line grep.
+printf 'run "a wrapped step" \\\n  "$ROOT/tests/check-wrapped.sh"\nrun "one line" "$ROOT/tests/check-oneline.sh"\n' \
+  > "$census_box/run-all.sh"
+printf 'fail() { :; }\n' > "$census_box/check-wrapped.sh"
+: > "$census_box/check-oneline.sh"
+census_fixture="$(census_join "$census_box/run-all.sh")"
+[ "$(census_file_of 'a wrapped step' "$census_fixture")" = check-wrapped.sh ] \
+  || broken "census: a run line wrapped with \\ was not joined to its file"
+# 5. The walk is exhaustive: a step it cannot join, and a joined file with no primitive that is
+#    not declared exempt, are unknown — never skipped in silence. A declared non-sensor is skipped.
+case "$(census_kind_of 'a step nobody declared' "$census_fixture" "$census_box")" in
+  unknown\ *) : ;; *) broken "census: a listed step joined to no file was skipped instead of refused" ;; esac
+case "$(census_kind_of 'one line' "$census_fixture" "$census_box")" in
+  unknown\ *) : ;; *) broken "census: a sensor with no failure primitive, not declared exempt, was skipped" ;; esac
+[ "$(census_kind_of 'a wrapped step' "$census_fixture" "$census_box")" = 'bash check-wrapped.sh' ] \
+  || broken "census: a wrapped step with a fail() was not classified as bash"
+[ "$(census_kind_of 'runner syntax (bash -n)' "$census_fixture" "$census_box")" = skip ] \
+  || broken "census: a declared non-sensor step was not skipped"
+
+CENSUS_RUNALL="$(census_join "$ROOT/tests/run-all.sh")"
 CENSUS_STEPS="$(SDD_MUTANT=1 "$ROOT/tests/run-all.sh" --list 2>/dev/null || true)"
 census_n=0
 while IFS= read -r census_step; do
   [ -n "$census_step" ] || continue
-  census_f="$(census_file_of "$census_step")"
-  [ -n "$census_f" ] || continue
-  census_kind=''
-  grep -q '^fail() {' "$ROOT/tests/$census_f" && census_kind=bash
-  grep -q '^def check(' "$ROOT/tests/$census_f" && census_kind=py
-  [ -n "$census_kind" ] || continue
+  census_class="$(census_kind_of "$census_step" "$CENSUS_RUNALL" "$ROOT/tests")"
+  case "$census_class" in
+    skip|exempt\ *) continue ;;
+    unknown\ *) broken "census: ${census_class#unknown }" ;;
+  esac
+  census_kind="${census_class%% *}"; census_f="${census_class#* }"
   census_def="$(census_src "$ROOT/tests/$census_f" "$census_kind")" \
     || broken "census: $census_f defines its failure primitive, but not as one short closed block — refusing to source it"
   census_n=$((census_n + 1))
