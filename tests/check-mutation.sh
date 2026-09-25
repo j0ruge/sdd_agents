@@ -105,6 +105,115 @@ WORK="$(mktemp -d "${TMPDIR:-/tmp}/sdd-mut-XXXXXX")"
 trap 'rm -rf "$WORK"' EXIT
 
 # ---------------------------------------------------------------------------
+# The killer map, the launch order and the pool are functions so each can carry probes of its own:
+# the catalogue cannot reach the harness, the same rule as jobs_selftest above. Both selftests run
+# on every invocation, --anchors included, so the fast suite measures them.
+# ---------------------------------------------------------------------------
+declare -A KILLER=() SECS=()
+
+# load_killer_map <tsv> — fills KILLER[slug]=<step> and SECS[slug]=<seconds>. A line of two columns
+# (the map before 2026-09-25) is read with no time; a time that is not digits is dropped, never
+# guessed. A missing file is an empty map, and the catalogue runs in its usual order.
+load_killer_map() {
+  local k v s
+  [ -r "$1" ] || return 0
+  while IFS=$'\t' read -r k v s; do
+    [ -n "$k" ] && [ -n "$v" ] || continue
+    KILLER["$k"]="$v"
+    case "$s" in ''|*[!0-9]*) ;; *) SECS["$k"]="$s" ;; esac
+  done < "$1"
+}
+
+# launch_order — stdin: <slug> TAB <seconds or empty>, in catalogue order; stdout: the slugs in
+# launch order. The ones with no recorded time come first (new mutants and survivors run the whole
+# suite), in catalogue order; then the longest first, ties in catalogue order. A pool that starts
+# its longest jobs last ends with one slot busy and the rest idle.
+launch_order() {
+  awk -F'\t' '{ s = ($2 ~ /^[0-9]+$/) ? $2 : 999999; printf "%s\t%d\t%s\n", s, NR, $1 }' \
+    | LC_ALL=C sort -t "$(printf '\t')" -k1,1nr -k2,2n | cut -f3
+}
+
+# control_red <dir> — true once the control run has written a rc that is not 0.
+control_red() {
+  local rc
+  rc="$(cat "$1/control.rc" 2>/dev/null || true)"
+  [ -n "$rc" ] && [ "$rc" != 0 ]
+}
+
+# control_verdict <dir> — 0 when the control came back green; otherwise prints why and returns 1.
+# A control that wrote no rc at all (it died before) is not green either.
+control_verdict() {
+  local rc
+  rc="$(cat "$1/control.rc" 2>/dev/null || true)"
+  [ "$rc" = 0 ] && return 0
+  printf 'HARNESS-BROKEN: the copy is not green even without sabotage (control rc %s)\n' "${rc:-none}"
+  return 1
+}
+
+# run_pool <dir> <control-fn> <mutant-fn> <slug...> — the control run is the pool's FIRST job and
+# the mutants start beside it. Once the control is back red no further mutant is launched, and the
+# ones already running are waited for, never killed: their sdd and coordination children have no
+# process group of their own, and killing the subshell would orphan them. Publishes POOL_LAUNCHED.
+# `wait -n` is bash 4.3+; the caller checks for it.
+run_pool() {
+  local dir="$1" control="$2" mutant="$3" slug running=1
+  shift 3
+  POOL_LAUNCHED=0
+  "$control" &
+  for slug in "$@"; do
+    control_red "$dir" && break
+    "$mutant" "$slug" &
+    POOL_LAUNCHED=$((POOL_LAUNCHED + 1))
+    running=$((running + 1))
+    if [ "$running" -ge "$JOBS" ]; then wait -n; running=$((running - 1)); fi
+  done
+  wait
+}
+
+order_selftest() {
+  local got f="$WORK/order-selftest.tsv"
+  load_killer_map "$WORK/no-such-map.tsv"
+  [ "${#KILLER[@]}" = 0 ] || { echo "  SELFTEST FAIL  a missing map was not an empty one" >&2; return 1; }
+  printf 'b\tstep one\t10\nc\tstep two\t50\ne\tstep one\t10\nf\tstep two\tx\ng\tstep three\n' > "$f"
+  load_killer_map "$f"
+  [ "${KILLER[g]:-}" = 'step three' ] || { echo "  SELFTEST FAIL  a two-column line was not read: KILLER[g]='${KILLER[g]:-}'" >&2; return 1; }
+  [ "${SECS[c]:-}" = 50 ] || { echo "  SELFTEST FAIL  a recorded time was not read: SECS[c]='${SECS[c]:-}'" >&2; return 1; }
+  [ -z "${SECS[f]:-}" ] || { echo "  SELFTEST FAIL  a time that is not digits was kept: SECS[f]='${SECS[f]}'" >&2; return 1; }
+  got="$(for s in a b c d e f g; do printf '%s\t%s\n' "$s" "${SECS[$s]:-}"; done | launch_order | tr '\n' ' ')"
+  [ "$got" = 'a d f g c b e ' ] || { echo "  SELFTEST FAIL  launch order '$got', expected 'a d f g c b e '" >&2; return 1; }
+  KILLER=(); SECS=()
+  return 0
+}
+
+pool_selftest() {
+  local JOBS=2 d="$WORK/pool-selftest" why
+  mkdir -p "$d"
+  st_control_red()   { echo 1 > "$d/control.rc"; }
+  st_control_green() { echo 0 > "$d/control.rc"; }
+  st_mutant()        { sleep 0.3; }
+  rm -f "$d/control.rc"
+  run_pool "$d" st_control_red st_mutant m1 m2 m3 m4 m5 m6 m7 m8
+  [ "$POOL_LAUNCHED" -le "$JOBS" ] || { echo "  SELFTEST FAIL  red control: $POOL_LAUNCHED of 8 mutants launched, expected at most $JOBS" >&2; return 1; }
+  why="$(control_verdict "$d")" && { echo "  SELFTEST FAIL  a red control was read as green" >&2; return 1; }
+  case "$why" in *HARNESS-BROKEN*) : ;; *) echo "  SELFTEST FAIL  a red control was refused without saying HARNESS-BROKEN: $why" >&2; return 1 ;; esac
+  rm -f "$d/control.rc"
+  control_verdict "$d" >/dev/null && { echo "  SELFTEST FAIL  a control with no rc was read as green" >&2; return 1; }
+  run_pool "$d" st_control_green st_mutant m1 m2 m3
+  [ "$POOL_LAUNCHED" = 3 ] || { echo "  SELFTEST FAIL  green control: $POOL_LAUNCHED of 3 mutants launched" >&2; return 1; }
+  control_verdict "$d" >/dev/null || { echo "  SELFTEST FAIL  a green control was refused" >&2; return 1; }
+  return 0
+}
+
+if ! order_selftest; then
+  echo "the killer map or the launch order does not measure what it claims — refusing to schedule mutants with it" >&2
+  exit 1
+fi
+if (: & wait -n) 2>/dev/null && ! pool_selftest; then
+  echo "the pool does not stop on a red control — refusing to schedule mutants with it" >&2
+  exit 1
+fi
+
+# ---------------------------------------------------------------------------
 # Catalogue
 #
 # Mutation idiom: find the line by a UNIQUE anchor and touch only that line. If the anchor
@@ -4613,8 +4722,9 @@ run_mutant() {
   sandbox "$box"
   apply_mutant "mut_$slug" "$box" || arc=$?
   if [ "$arc" -ne 0 ]; then echo "$arc" > "$box.rc"; return; fi
-  local rc=0
+  local rc=0 t0=$SECONDS
   SDD_MUTANT=1 SDD_MUTANT_FIRST="${KILLER[$slug]:-}" "$box/tests/run-all.sh" > "$box.log" 2>&1 || rc=$?
+  echo "$((SECONDS - t0))" > "$box.secs"
   echo "$rc" > "$box.rc"
   [ "$rc" -eq 0 ] || killer_of "$box.log" > "$box.killer"
 }
@@ -4627,16 +4737,16 @@ killer_of() {
   sed -n "s/^"$'\033'"\[1m▸ \(.*\)"$'\033'"\[0m\$/\1/p" "$1" | tail -n 1
 }
 
-# The killer map: <slug> TAB <step name>, learned from the last catalogue and handed back to each
-# mutant as SDD_MUTANT_FIRST, so the step that killed it runs first (see the note above PASS in
-# run-all.sh: over 40 mutants of 583b3c3 the suite summed 4796/4828 s before, 1959 s after). It
-# is an ORDER hint and nothing else — a stale or garbled line costs time and changes no step a
-# mutant runs, because run-all.sh still runs every step of a mutant the named one did not kill.
+# The killer map: <slug> TAB <step name> TAB <seconds>, learned from the last catalogue and handed
+# back to each mutant as SDD_MUTANT_FIRST, so the step that killed it runs first (see the note
+# above PASS in run-all.sh: over 40 mutants of 583b3c3 the suite summed 4796/4828 s before, 1959 s
+# after). It is an ORDER hint and nothing else — a stale or garbled line costs time and changes no
+# step a mutant runs, because run-all.sh still runs every step of a mutant the named one did not kill.
 # That the ORDER moves no verdict either is measured, not asserted (the same note). It lives in
 # .sdd/cache/, gitignored and OUTSIDE the four directories of mutation_stamp_key, so learning it
 # never invalidates a stamp.
+# The seconds are the mutant's own suite time; the pool reads them to launch the longest first.
 KILLERS_FILE="$ROOT/.sdd/cache/mutation-killers.tsv"
-declare -A KILLER=()
 
 # ---------------------------------------------------------------------------
 # --anchors: apply every mutant to a copy of bin/ and stop there — no suite, no control run.
@@ -4745,50 +4855,55 @@ fi
 # Without it, a broken copy (a future test reading agents/ or docs/, for instance) would leave
 # EVERY mutant red and the score would read 100% while measuring exactly nothing — the same
 # vacuity the mutation exists to catch, now inside the measuring device itself.
+#
+# It is the pool's FIRST job, and the mutants start beside it: run alone first, it cost ~3.9 min
+# of an otherwise idle pool (2026-09-25). No score is written before its rc is read below, so no
+# verdict can come from a red control; a red control stops further launches (run_pool). `wait -n`
+# is bash 4.3+; without it the control runs first and the mutants go in barriers of JOBS — a
+# declared degradation, never a silent one.
 # ---------------------------------------------------------------------------
-echo "== control =="
+echo "== control (the first job of the pool) =="
 sandbox "$WORK/control"
-if SDD_MUTANT=1 "$WORK/control/tests/run-all.sh" > "$WORK/control.log" 2>&1; then
-  pass "the kit copy is green with no sabotage"
-else
-  fail "HARNESS-BROKEN: the copy is not green even without sabotage" \
-       "the score would read 100% by vacuity — see $WORK/control.log"
-  tail -20 "$WORK/control.log" >&2
-  exit 1
-fi
+run_control() {
+  local rc=0
+  SDD_MUTANT=1 "$WORK/control/tests/run-all.sh" > "$WORK/control.log" 2>&1 || rc=$?
+  echo "$rc" > "$WORK/control.rc"
+}
+
+load_killer_map "$KILLERS_FILE"
+echo "== killer map: ${#KILLER[@]} mutant(s) run their last killer first, ${#SECS[@]} with a recorded time =="
+mapfile -t ORDER < <(for slug in "${CATALOG[@]}"; do printf '%s\t%s\n' "$slug" "${SECS[$slug]:-}"; done | launch_order)
 
 # ---------------------------------------------------------------------------
 # A pool, not batches: the old `[ i % JOBS -eq 0 ] && wait` was a barrier every JOBS mutants, so
 # each batch cost its slowest member while the finished slots sat idle. `wait -n` frees a slot as
 # soon as ANY mutant exits. Safe because run_mutant shares nothing — each writes its own
-# $WORK/<slug>.rc/.log and the scoring loop below reads the catalogue in order afterwards.
-# `wait -n` is bash 4.3+; without it, fall back to the barrier and SAY so — a declared
-# degradation, never a silent one.
-if [ -r "$KILLERS_FILE" ]; then
-  while IFS=$'\t' read -r k v; do
-    [ -n "$k" ] && [ -n "$v" ] && KILLER["$k"]="$v"
-  done < "$KILLERS_FILE"
-fi
-echo "== killer map: ${#KILLER[@]} mutant(s) run their last killer first =="
-
+# $WORK/<slug>.rc/.log/.secs and the scoring loop below reads the catalogue in order afterwards.
+# The launch order is launch_order's: no recorded time first, then the longest first.
 if (: & wait -n) 2>/dev/null; then
-  echo "== mutants (pool of $JOBS) =="
-  running=0
-  for slug in "${CATALOG[@]}"; do
-    run_mutant "$slug" &
-    running=$((running + 1))
-    if [ "$running" -ge "$JOBS" ]; then wait -n; running=$((running - 1)); fi
-  done
+  echo "== mutants (pool of $JOBS, longest first) =="
+  run_pool "$WORK" run_control run_mutant "${ORDER[@]}"
 else
-  echo "== mutants (batches of $JOBS — this bash has no 'wait -n', falling back to barriers) =="
-  i=0
-  for slug in "${CATALOG[@]}"; do
-    run_mutant "$slug" &
-    i=$((i + 1))
-    [ $((i % JOBS)) -eq 0 ] && wait
-  done
+  echo "== mutants (batches of $JOBS — this bash has no 'wait -n': the control runs first) =="
+  run_control
+  if ! control_red "$WORK"; then
+    i=0
+    for slug in "${ORDER[@]}"; do
+      run_mutant "$slug" &
+      i=$((i + 1))
+      [ $((i % JOBS)) -eq 0 ] && wait
+    done
+    wait
+  fi
 fi
-wait
+
+if why="$(control_verdict "$WORK")"; then
+  pass "the kit copy is green with no sabotage"
+else
+  fail "$why" "the score would read 100% by vacuity — see $WORK/control.log"
+  tail -20 "$WORK/control.log" >&2
+  exit 1
+fi
 
 caught=0; gaps=0; errors=0
 for slug in "${CATALOG[@]}"; do
@@ -4824,7 +4939,9 @@ done
 # map that cannot be written is said and costs the next run its speed, never this run's verdict.
 if mkdir -p "${KILLERS_FILE%/*}" 2>/dev/null \
    && for slug in "${CATALOG[@]}"; do
-        if [ -s "$WORK/$slug.killer" ]; then printf '%s\t%s\n' "$slug" "$(cat "$WORK/$slug.killer")"; fi
+        if [ -s "$WORK/$slug.killer" ]; then
+          printf '%s\t%s\t%s\n' "$slug" "$(cat "$WORK/$slug.killer")" "$(cat "$WORK/$slug.secs" 2>/dev/null || true)"
+        fi
       done > "$KILLERS_FILE.tmp.$$" \
    && mv -f "$KILLERS_FILE.tmp.$$" "$KILLERS_FILE"; then
   echo "== killer map: $(grep -c . "$KILLERS_FILE" || true) mutant(s) recorded in ${KILLERS_FILE#"$ROOT"/} =="
