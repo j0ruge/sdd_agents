@@ -2490,6 +2490,15 @@ mut_HEALTH_testcmd_list_blind() {
   sed -i '/^cmd_health() {/,/^}/ s@\*" --list "\*)@*" --a-flag-no-config-carries "*)@' "$1"
 }
 
+# Check 2b goes back to reading a config that does not parse as a missing key — issue 116. The
+# parse verdict is skipped rather than deleted, so the value read below still runs and lands EMPTY,
+# which is exactly the old "declares no TEST_CMD" about a file that declares it. Range-addressed to
+# cmd_health. Caught by `a kit config that does not parse is reported as not parsing, never as a
+# missing TEST_CMD` in check-health.sh.
+mut_HEALTH_config_parse_blind() {
+  sed -i '/^cmd_health() {/,/^}/ s@if \[ "\$kit_cfg_rc" -eq 2 \]; then@if false; then@' "$1"
+}
+
 mut_HEALTH_provenance_find_aborts() {
   sed -i 's@ | sort -V | tail -1 || true)"@ | sort -V | tail -1)"@' "$1"
 }
@@ -4318,6 +4327,7 @@ CATALOG=(
   HEALTH_mutation_survivor_blind
   HEALTH_catalogue_floor_blind
   HEALTH_testcmd_list_blind
+  HEALTH_config_parse_blind
   HEALTH_suite_without_mutation
   HEALTH_provenance_find_aborts
   HEALTH_baseline_read_aborts
@@ -4545,7 +4555,7 @@ run_mutant() {
 # stopped being parsed: an empty loop reports "0 broken" forever.
 # ---------------------------------------------------------------------------
 if [ "$ANCHORS_ONLY" = 1 ]; then
-  ANCHOR_FLOOR=392
+  ANCHOR_FLOOR=393
   anchor_box() { mkdir -p "$1"; cp -r "$ROOT/bin" "$1/"; }
   anchor_control_noop()       { :; }
   anchor_control_intact()     { printf '# a mutation that lands and stays valid\n' >> "$1"; }

@@ -1389,6 +1389,31 @@ else
 fi
 
 # ---------------------------------------------------------------------------
+# A kit config that does not parse is SAID, never read as a missing key (issue 116)
+#
+# Check 2b used to source the config with `>/dev/null 2>&1`, so an unclosed quote arrived EMPTY
+# and the operator was told "declares no TEST_CMD" about a file that declares it on line 1 — the
+# one diagnosis that sends them looking for the wrong defect. The world differs from the green one
+# in a single missing quote, and the assertion demands the parse message AND the absence of the
+# missing-key one: a check that printed both would still be lying in half its output.
+# ---------------------------------------------------------------------------
+PARSE_DESC='a kit config that does not parse is reported as not parsing, never as a missing TEST_CMD'
+green_world
+printf 'TEST_CMD="%s\n' "$STUB_TEST_CMD" > "$FIX/.sdd/config.sh"
+health_run
+OUT_PARSE="$HEALTH_OUT"; RC_PARSE="$HEALTH_RC"
+green_world
+if [ "$RC_PARSE" -ne 0 ] \
+   && grep -qF 'does not parse' <<< "$OUT_PARSE" \
+   && ! grep -qF 'declares no TEST_CMD' <<< "$OUT_PARSE"; then
+  pass "$PARSE_DESC"
+else
+  fail "$PARSE_DESC" \
+       "rc != 0, 'does not parse' in the output and no 'declares no TEST_CMD'" \
+       "rc $RC_PARSE $(digest "$OUT_PARSE")"
+fi
+
+# ---------------------------------------------------------------------------
 # guard: no capture in the `sdd health` region may abort the run
 #
 # The rule the four `abort:` assertions above cannot carry, and the reason it is written as a
@@ -1579,7 +1604,7 @@ health_captures() {
 # capture. Guarded INSIDE with `|| true`, though the function it calls cannot fail: the ratchet
 # counts every capture in the region, and a capture whose guard depends on the callee staying
 # infallible is a guard that rots the day somebody adds a branch to it.
-CAPTURE_FLOOR=36
+CAPTURE_FLOOR=37
 
 capture_report() {
   local out total safe offenders

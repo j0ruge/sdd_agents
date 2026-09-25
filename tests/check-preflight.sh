@@ -1003,6 +1003,18 @@ nw_case 'npm run lint && npm run typecheck && npm run build && npm test' 'quiet'
 nw_case 'npm run build:prod && npm run lint && npm run typecheck && npm test' 'warn: script(s): build ' \
   "a longer script name that merely starts with build does not count as build"
 
+# --- sdd install over a config that does not parse (issue 116) -------------
+# install reads four keys of an existing .sdd/config.sh, and used to source it with
+# `>/dev/null 2>&1` — so an unclosed quote quietly bought the defaults, and the handoff dir the
+# repo declared was never created. The defaults are still the right fallback; the silence is not.
+echo "== sdd install over a config that does not parse =="
+mkdir -p "$FIX/unparse/.sdd"
+( cd "$FIX/unparse" && git init -q -b main ) || exit 1
+printf 'HANDOFF_DIR="notes/handoffs\n' > "$FIX/unparse/.sdd/config.sh"
+out="$( cd "$FIX/unparse" && "$SDD" install 2>&1 )"
+assert_has "install says the config does not parse instead of using defaults in silence" \
+  "does not parse" "$out"
+
 # ---------------------------------------------------------------------------
 echo
 if [ "$fails" -eq 0 ]; then printf '  ok    preflight measures the GNU userland instead of assuming it\n'; exit 0; fi
