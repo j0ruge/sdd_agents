@@ -35,7 +35,10 @@
 # the first path-shaped span AFTER the bold title must name a regular file of the CHECKED file's
 # repository, and another span of the head (4+ characters, the title's included) must occur in that
 # file within 10 lines of the anchored line — anywhere in it for a whole-file anchor (no line, or
-# `:1`). `--anchors <file> [<prefix>]` reports the same rule alone, for re-anchoring in bulk.
+# `:1`). "Of the repository" is judged on the RESOLVED file (`realpath -e` under the resolved
+# base), so a `..` that climbs out and a symlink pointing out are refused like a missing file; a
+# title with no closing `**` has no end, so its item has no anchor at all.
+# `--anchors <file> [<prefix>]` reports the same rule alone, for re-anchoring in bulk.
 #
 # And what it deliberately REFUSES in the findings section: fenced blocks, bare list markers,
 # lazy column-0 continuations, and every task-item shape that is not `- [ ] **<title>**` at
@@ -309,8 +312,11 @@ todo_awk() {
       # title stood in for the anchor and left the real one unmeasured.
       if (mode == "anchors") {
         h = head_of(body); ttl = ""; rest = h
-        if (substr(h, 1, 8) == "- [ ] **" && (q = index(substr(h, 9), "**")) > 0) {
-          ttl = substr(h, 9, q - 1); rest = substr(h, 9 + q + 1)
+        # A title that never closes has no end: all of the head is title, and the item has no
+        # anchor. Falling back to the whole head put a title path back in the anchor seat.
+        if (substr(h, 1, 8) == "- [ ] **") {
+          if ((q = index(substr(h, 9), "**")) > 0) { ttl = substr(h, 9, q - 1); rest = substr(h, 9 + q + 1) }
+          else { ttl = substr(h, 9); rest = "" }
         }
         tt = spans(ttl); gsub(/\t/, "\t\036", tt)
         print start tt spans(rest)
@@ -1717,9 +1723,23 @@ EOF
     printf '  SELFTEST FAIL  --check refuses an anchor that is on target\n' >&2
     FAILS=$((FAILS + 1)); fail_rc 92
   fi
+  # "Of this repository" is a promise about the FILE, not about the spelling: a `..` that climbs out
+  # of the checked repo, and a symlink whose target lives outside it, both name a regular file that
+  # `-f` accepts. Planted beside the fixture repo, carrying the symbol, so only the escape is wrong.
+  mkdir -p "$box/outside" && printf 'escaped_symbol\n' > "$box/outside/x.sh"
+  ln -sf "$box/outside/x.sh" "$ar/src/link.sh"
+  anchor_item climb.md '`../outside/x.sh:1` — cites `escaped_symbol`'
+  anchors_says 1 'anchor `../outside/x.sh` names no file of this repository' "a .. that leaves the repo is refused" "$ar/climb.md"
+  anchor_item symlink.md '`src/link.sh:1` — cites `escaped_symbol`'
+  anchors_says 1 'anchor `src/link.sh` names no file of this repository' "a symlink out of the repo is refused" "$ar/symlink.md"
+  # A title that never closes has no end, so nothing after it can be told apart from it: every span
+  # is the title's, and the item has no anchor. The fallback to "the whole head" put a title path
+  # back in the anchor's seat — the hole the title tag exists to close.
+  printf '## Open\n<!-- sdd:open -->\n\n- [ ] **Open `src/code.sh` — `src/missing.sh:3` — `frobnicate_widget` — by `x` (2026-08-16)\n' > "$ar/unclosed.md"
+  anchors_says 1 'anchor `<none>` names no file of this repository' "a title with no closing ** has no anchor" "$ar/unclosed.md"
   printf '## Open\n\n- [ ] **No marker** — `src/code.sh:20` — `frobnicate_widget`. — by `x` (2026-08-16)\n' > "$ar/nomark.md"
   anchors_says 99 'marker' "--anchors refuses a file without the open marker" "$ar/nomark.md"
-  rule_end 16 'an anchor names a file of the checked repo and sits within 10 lines of a symbol the item cites'
+  rule_end 19 'an anchor names a file of the checked repo and sits within 10 lines of a symbol the item cites'
 
   assert_rc 95 "a non-integer cap must exit 95" env SDD_TODO_CAP=abc bash "$SELF" --check "$box/good.md"
   assert_rc 95 "a zero cap must exit 95"        env SDD_TODO_CAP=0   bash "$SELF" --check "$box/good.md"
@@ -1734,8 +1754,8 @@ EOF
   # Floor on the probe COUNT, for the same reason every other floor here exists: neutering all the
   # assert_* call sites made the summary print "0 probe(s)" and exit 0 — a selftest that ran
   # nothing reads exactly like a selftest that passed. The number moves only on purpose.
-  if [ "$((PROBES + PROBES_SKIPPED))" -lt 150 ]; then
-    printf '  SELFTEST FAIL  only %d probe(s) accounted for (%d ran, %d skipped), expected 150\n' \
+  if [ "$((PROBES + PROBES_SKIPPED))" -lt 153 ]; then
+    printf '  SELFTEST FAIL  only %d probe(s) accounted for (%d ran, %d skipped), expected 153\n' \
       "$((PROBES + PROBES_SKIPPED))" "$PROBES" "$PROBES_SKIPPED" >&2
     FAILS=$((FAILS + 1)); fail_rc 92
   fi
@@ -1885,10 +1905,11 @@ anchor_base() {
 #   ANCHOR_VIOLATIONS  one `  line <L>: anchor `…` …` per violation, the lint's own shape
 # The caller has already refused an unreadable or unmarked file.
 anchor_scan() {
-  local file="$1" prefix="${2-}" lint="${3-}" base line start anchor path n sp sym hits hit best bestsym dist
+  local file="$1" prefix="${2-}" lint="${3-}" base breal real line start anchor path n sp sym hits hit best bestsym dist
   local -a sp_list syms
   ANCHOR_MEASURED=0; ANCHOR_VIOLATIONS=''
   base="$(anchor_base "$file")"
+  breal="$(realpath -e -- "$base" 2>/dev/null)" || breal="$base"
   while IFS= read -r line; do
     start="${line%%$'\t'*}"
     IFS=$'\t' read -r -a sp_list <<< "${line#"$start"}"
@@ -1918,7 +1939,11 @@ anchor_scan() {
     case "$path" in /* | *'*'* | *'?'* | *'['*)
       ANCHOR_VIOLATIONS+="  line $start: anchor \`$path\` names no file of this repository"$'\n'; continue ;;
     esac
-    if [ ! -f "$base/$path" ]; then
+    # "Of this repository" is about the FILE: resolved, it must sit under the resolved base. `-f`
+    # alone follows a `..` out of the repo and a symlink whose target lives elsewhere.
+    real="$(realpath -e -- "$base/$path" 2>/dev/null)" || real=''
+    case "$real" in "$breal"/*) ;; *) real='' ;; esac
+    if [ -z "$real" ] || [ ! -f "$real" ]; then
       ANCHOR_VIOLATIONS+="  line $start: anchor \`$path\` names no file of this repository"$'\n'
       continue
     fi
