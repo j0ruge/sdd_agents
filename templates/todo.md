@@ -13,9 +13,14 @@ is measured by the kit's `tests/check-todo.sh --check TODO.md --allow-empty`.
 > **Open finding** — about 6 lines (cap 8), the box always empty, the attribution on the last line:
 >
 > ```md
-> - [ ] **<title>** — `<file:line>` — <why it matters>. Direction: <what to do>. Source: `<docs/…>`
->   — found by `<agent>` in mission `<slug>` (YYYY-MM-DD)
+> - [ ] **<title>** — `<file:line>` (`<symbol>`) — <why it matters>. Direction: <what to do>.
+>   Source: `<docs/…>` — found by `<agent>` in mission `<slug>` (YYYY-MM-DD)
 > ```
+>
+> **The anchor is measured.** The first path after the title names a file of this repository, and
+> a code span of the head (4+ characters, the `<symbol>`) occurs in that file within 10 lines of the
+> line — anywhere in it for `:1` or no line. No physical line of the open section passes 120
+> characters. ([ADR 0011 of the sdd kit](https://github.com/j0ruge/sdd_agents/blob/main/docs/adr/0011-ancora-do-todo-carrega-simbolo.md))
 >
 > **Decided record** — one physical line, no box, pointing at the evidence:
 >

@@ -205,7 +205,7 @@ build_fixture() {
 write_stub_suite() { # write_stub_suite <with-count|no-count> [with-score|no-score] [exit code] [score line]
   local count_line="" score_line="" rc="${3:-0}" score="${4:-$STUB_SCORE}"
   [ "$1" = "with-count" ] \
-    && count_line="printf '  ok    %d finding(s), all within 8 lines and carrying anchor + date\\n' $STUB_TODO_COUNT"
+    && count_line="printf '  ok    %d finding(s), all within 8 lines, carrying anchor + date, every anchor on target\\n' $STUB_TODO_COUNT"
   [ "${2:-with-score}" = "with-score" ] \
     && score_line="printf '%s\\n' '$score'"
 

@@ -13,9 +13,14 @@ forma é medida por `tests/check-todo.sh --check TODO.md --allow-empty`, do kit.
 > **Achado aberto** — cerca de 6 linhas (teto 8), caixa sempre vazia, atribuição na última linha:
 >
 > ```md
-> - [ ] **<título>** — `<arquivo:linha>` — <por que importa>. Direção: <o que fazer>. Fonte: `<docs/…>`
->   — descoberto por `<agente>` na missão `<slug>` (YYYY-MM-DD)
+> - [ ] **<título>** — `<arquivo:linha>` (`<símbolo>`) — <por que importa>. Direção: <o que fazer>.
+>   Fonte: `<docs/…>` — descoberto por `<agente>` na missão `<slug>` (YYYY-MM-DD)
 > ```
+>
+> **A âncora é medida.** O primeiro caminho depois do título nomeia um arquivo deste repositório, e
+> uma crase da cabeça (4+ caracteres, o `<símbolo>`) ocorre nesse arquivo a até 10 linhas da linha —
+> em qualquer ponto dele para `:1` ou sem linha. Nenhuma linha física da seção aberta passa de 120
+> caracteres. ([ADR 0011 do kit sdd](https://github.com/j0ruge/sdd_agents/blob/main/docs/adr/0011-ancora-do-todo-carrega-simbolo.md))
 >
 > **Registro decidido** — uma linha física, sem caixa, apontando a evidência:
 >

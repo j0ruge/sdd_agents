@@ -95,7 +95,7 @@ Achados sobre **repos-alvo** vão para o `TODO.md` daquele repo. Este arquivo é
   — descoberto por `sdd-reviewer` na missão `20260818-lote-facil` (2026-08-19)
 
 - [ ] **Quatro regras do `check-todo.sh` que o selftest diz medir e não mede** —
-  `tests/check-todo.sh:1190` — a contagem de violações trocada pela constante `3` passa (o fixture
+  `tests/check-todo.sh:1611` — a contagem de violações trocada pela constante `3` passa (o fixture
   tem exatamente 3); o `^` do `grep '^## Aberto'` é load-bearing e o probe não o exercita; o
   `flush()` do ramo da caixa marcada não tem probe (esconde 3 de 4 violações); e o probe
   `--check ''` é vácuo quando `$ROOT/TODO.md` não existe. Direção: segundo fixture com contagem
