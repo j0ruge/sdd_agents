@@ -103,7 +103,14 @@ resolve_repo_root() {
 # value AFTER expansion — sourcing is what load_config does, so the value is the one the gates get.
 #   rc 0  parsed; the value on stdout (empty when the key is unset)
 #   rc 1  no such file — the caller's default applies, and nothing is said
-#   rc 2  the file does not parse — `<file> does not parse: <bash -n diagnosis>` on stderr
+#   rc 2  the file does not LOAD, which is what load_config would die on, said on stderr in one of
+#         two ways: `<file> does not parse: <bash -n diagnosis>`, or `<file> parses but does not
+#         evaluate` when sourcing it fails — an unset variable under `set -u`, a last command that
+#         returns non-zero. The second used to fall through the final printf: the unset variable
+#         came back as rc 1, "no such file", and install bought the defaults saying nothing. ONE
+#         status for both, because every caller asks one question; a third status is the one the
+#         next caller forgets to test. A command that fails MID-file is not seen: every caller
+#         reads under `||`, where errexit is off, and load_config's `set -e` is not.
 # Seven call sites used to source the file with `>/dev/null 2>&1` each, so a config with an
 # unclosed quote arrived EMPTY and was reported as "declares no TEST_CMD" (issue 116), or quietly
 # bought the defaults. Called as `v="$(config_read_key …)"`: it publishes no global, because a
@@ -114,7 +121,7 @@ resolve_repo_root() {
 # while the runner reads the exported TODO_FILE. The one caller that wants the kit's file and
 # nothing else (health --release, RELEASE_FORBIDDEN_WORDS) empties the key in its own env prefix.
 config_read_key() {
-  local file="$1" key="$2" diag
+  local file="$1" key="$2" diag value rc=0
   case "$key" in '' | [!A-Za-z_]* | *[!A-Za-z0-9_]*) printf 'config_read_key: bad key %s\n' "$key" >&2; return 2 ;; esac
   [ -f "$file" ] || return 1
   if ! diag="$(bash -n "$file" 2>&1)"; then
@@ -122,7 +129,12 @@ config_read_key() {
     return 2
   fi
   # shellcheck disable=SC1090
-  ( . "$file" >/dev/null 2>&1; printf '%s' "${!key:-}" )
+  value="$( . "$file" >/dev/null 2>&1 || exit; printf '%s' "${!key:-}" )" || rc=$?
+  if [ "$rc" -ne 0 ]; then
+    printf '%s parses but does not evaluate (status %s) — load_config would die sourcing it; source it under set -eu to see why\n' "$file" "$rc" >&2
+    return 2
+  fi
+  printf '%s' "$value"
 }
 
 # Defaults + validation. An empty required key fails HERE, before spending a session.
@@ -3956,6 +3968,11 @@ node_test_cmd() {
 
 # node_scripts_outside_test_cmd <cmd> → the gate scripts <cmd> never names, space-separated.
 # Matched as a WHOLE word: `build:prod` is another script and does not stand in for `build`.
+# ⚠️ Declared limit: a MENTION counts as naming it, so `echo "build skipped" && npm test` silences
+# the warning for `build`. Matching invocations instead would accuse `run-s lint build`, `turbo run
+# build` and every runner this file has never heard of, and this only WARNS — a rule that fires on
+# correct config is a rule the next author deletes. A TEST_CMD that prints a script's name without
+# running it was written by someone who meant it.
 node_scripts_outside_test_cmd() {
   local s
   while IFS= read -r s; do
@@ -3998,13 +4015,16 @@ test_cmd_looks_noop() {
 # test_cmd_lists_only <cmd> → 0 when an argument, matched WHOLE, asks the runner to enumerate the
 # tests instead of running them. Normalised first, because run_check_cmd EVALS the value and the
 # shell reads more than one spelling as the same argument: every whitespace character becomes a
-# space (a TAB before `--list` is still a separate word), and quote characters are dropped (`"--list"`
+# space (a TAB before `--list` is still a separate word), every shell operator character becomes a
+# space too (`--list; true` and `--list&&true` end the word at the operator, and eval runs the
+# listing and then exits 0), and quote characters are dropped (`"--list"`
 # and `'--list'` arrive as `--list`). Dropping every quote can only widen the match — a quoted
 # phrase containing ` --list ` is refused although eval would keep it one word — and that is the
 # direction a refusal may err in. Padded on both sides so `--listen-port` stays accepted.
 test_cmd_lists_only() {
   local tc="${1:-}"
   tc="${tc//[[:space:]]/ }"
+  tc="${tc//[;&|()<>]/ }"
   tc="${tc//[\"\']/}"
   case " $tc " in
     *" --list "*|*" --listTests "*|*" --collect-only "*) return 0 ;;
@@ -4197,10 +4217,10 @@ cmd_install() {
   # satisfy it is the unsatisfiable-gate class of principle 1, reached here through a default.
   #
   # Read through config_read_key: the value `load_config` will hand the runner after expansion,
-  # never the text of the line. A config that does not parse must not take the install down — the
+  # never the text of the line. A config that does not load must not take the install down — the
   # defaults below still apply — but it is SAID, once, with the bash -n diagnosis (issue 116: the
   # old `>/dev/null 2>&1` bought the defaults in silence, and the declared handoff dir was never
-  # created). The first read decides; the other three are skipped when the file does not parse.
+  # created). The first read decides; the other three are skipped when the file does not load.
   local inst_handoff="" inst_todo="" inst_qadocs="" inst_lang="" inst_rc=0
   inst_handoff="$(config_read_key "$CONFIG_FILE" HANDOFF_DIR)" || inst_rc=$?
   if [ "$inst_rc" -eq 0 ]; then
@@ -4208,7 +4228,7 @@ cmd_install() {
     inst_qadocs="$(config_read_key "$CONFIG_FILE" QA_DOCS_PATH)" || true
     inst_lang="$(config_read_key "$CONFIG_FILE" OUTPUT_LANG)" || true
   elif [ "$inst_rc" -eq 2 ]; then
-    warn "$CONFIG_FILE does not parse (diagnosis above) — install uses the defaults for HANDOFF_DIR, TODO_FILE, QA_DOCS_PATH and OUTPUT_LANG"
+    warn "$CONFIG_FILE does not load (diagnosis above) — install uses the defaults for HANDOFF_DIR, TODO_FILE, QA_DOCS_PATH and OUTPUT_LANG"
   fi
   # Same defaults load_config applies, restated here because a broken config arrives EMPTY.
   [ -n "$inst_handoff" ] || inst_handoff="docs/handoffs"
@@ -4996,7 +5016,7 @@ health_release() {   # rc 0 = six green lines
       hits="$hits $w"
     fi
   done
-  if [ "$words_rc" -eq 2 ]; then line 5 bad "the kit's .sdd/config.sh does not parse — the forbidden words were never read (run bash -n on it)"
+  if [ "$words_rc" -eq 2 ]; then line 5 bad "the kit's .sdd/config.sh does not load — the forbidden words were never read (bash -n it, then source it under set -eu)"
   elif [ -f "$kit/LICENSE" ] && [ -z "$hits" ]; then line 5 ok "LICENSE present, surface free of client identifiers"
   elif [ ! -f "$kit/LICENSE" ]; then line 5 bad "no LICENSE at the kit root${hits:+; and client identifiers on the surface:$hits}"
   else line 5 bad "client identifiers on the surface:$hits"; fi
@@ -7875,7 +7895,7 @@ cmd_autonomy() {
     # EMPTY.
     local hdir_rc=0
     hdir="$(config_read_key "$repo/.sdd/config.sh" HANDOFF_DIR)" || hdir_rc=$?
-    [ "$hdir_rc" -ne 2 ] || warn "$repo/.sdd/config.sh does not parse — the intervention notes are read from the default docs/handoffs"
+    [ "$hdir_rc" -ne 2 ] || warn "$repo/.sdd/config.sh does not load — the intervention notes are read from the default docs/handoffs"
     [ -n "$hdir" ] || hdir="docs/handoffs"
     # Guarded, like every capture in this file: jq answering nothing must leave an empty list and a
     # census of zero missions, never abort the command it is a detail of.

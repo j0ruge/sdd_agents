@@ -257,7 +257,10 @@ todo_awk() {
   # (rc 99) before it ever asks the parser.
   marked=0
   has_open_marker "$f" && marked=1
-  awk -v cap="$2" -v wcap="$WIDTH_CAP" -v mode="$3" -v marked="$marked" -v omark="$OPEN_MARKER" -v dmark="$DECIDED_MARKER" '
+  # LC_ALL=C: every awk reads this program the way mawk does, byte by byte. gawk in a UTF-8 locale
+  # refuses the byte class of rule 5 at PARSE time ("Invalid collation character: /[\200/"), and
+  # every run of this sensor died — measured with gawk 5.2.1 under C.UTF-8 (PR #167 review).
+  LC_ALL=C awk -v cap="$2" -v wcap="$WIDTH_CAP" -v mode="$3" -v marked="$marked" -v omark="$OPEN_MARKER" -v dmark="$DECIDED_MARKER" '
     # How many backticks occur in text. Byte-based like everything else here, and that is safe:
     # a backtick is ASCII, so no multibyte character can contain one as a byte.
     BEGIN { sect = marked ? 0 : 1 }   # 0 preamble, 1 open, 2 decided, 3 under a stray H2
@@ -515,9 +518,9 @@ todo_awk() {
       next
     }
     # Rule 5 counts PHYSICAL lines, so it needs a width or one long line is a free pass. Counted in
-    # CHARACTERS: mawk length() counts bytes, so the UTF-8 continuation bytes (0x80-0xBF) are
-    # dropped from a copy first, and every character then weighs one. No `next`: the line still
-    # goes on to the whitelist below.
+    # CHARACTERS: under LC_ALL=C (see the call) length() counts bytes in every awk, so the UTF-8
+    # continuation bytes (0x80-0xBF) are dropped from a copy first, and every character then weighs
+    # one. No `next`: the line still goes on to the whitelist below.
     sect == 1 && mode == "lint" {
       w = $0; gsub(/[\200-\277]/, "", w)
       if (length(w) > wcap)
@@ -558,7 +561,16 @@ todo_awk() {
       if (mode == "lint") print "  line " NR ": prose at column 0 in the findings section"
       flush(); next
     }
-    END { flush(); if (h2) nomarker(h2); if (mode == "count") print items + 0 }
+    # The second section is not optional: without it a refuted finding has nowhere to go and the
+    # next session files it again. `dseen` was recorded and never read, so a file holding only the
+    # open section passed --check (PR #167 review). Only a marked file is held to it — unmarked is
+    # the whole-file mode of the probes, and the CLI refuses it (rc 99) before the parser runs.
+    END {
+      flush(); if (h2) nomarker(h2)
+      if (marked && !dseen && mode == "lint")
+        print "  line " NR ": no decided section — the skeleton ends with a `##` whose next line is " dmark
+      if (mode == "count") print items + 0
+    }
   ' "$f"
 }
 
@@ -646,6 +658,19 @@ assert_rc() {
   FAILS=$((FAILS + 1)); fail_rc 92
 }
 
+# with_decided <file> → the path of a copy of <file> that closes with the decided section, written
+# beside it (an anchor resolves against the file's own repository). Most fixtures below write only
+# the open section, because the ITEM rules are what they measure; the skeleton wants both, and a
+# file without the decided one is refused (PR #167 review). A probe that expects a CLEAN verdict,
+# an exact count or rc 0/94 over such a fixture hands the parser this copy. The fixture itself stays
+# as written: several are extended afterwards, and a decided section in the middle would move what
+# follows it into the wrong section.
+with_decided() {
+  local out="${1%.md}.decided.md"
+  { cat -- "$1"; printf '\n## Decidido\n<!-- sdd:decided -->\n'; } > "$out"
+  printf '%s' "$out"
+}
+
 # --- negative controls over the assertion helpers themselves ------------------------------------
 # The three helpers above are the ONLY thing standing between a broken parser and a green run, and
 # the r2 review of 20260818-lote-facil measured that nothing stood behind them: replacing the body
@@ -676,6 +701,9 @@ EOF
 
 - [ ] **A finding with every field in place** — `bin/sdd:42` — `bsym` matters, in one clause.
   Direction: what to do about it. — found by `sdd-qa` in mission `20260816-probe` (2026-08-16)
+
+## Decidido
+<!-- sdd:decided -->
 EOF
   # Ground truth from the parser itself, never assumed: a control over a fixture that turned out
   # clean would be vacuous in exactly the direction being tested.
@@ -753,7 +781,7 @@ selftest() {
 - [ ] **A finding with every field in place** — `bin/sdd:42` — `bsym` matters, in one clause.
   Direction: what to do about it. — found by `sdd-qa` in mission `20260816-probe` (2026-08-16)
 EOF
-  assert_clean "$box/good.md" 8 "a well-formed item"
+  assert_clean "$(with_decided "$box/good.md")" 8 "a well-formed item"
 
   cat > "$box/fenced.md" <<'EOF'
 Format:
@@ -767,7 +795,7 @@ Format:
 
 - [ ] **Real item** — `bin/sdd:1` — matters. — found by `humano` (2026-08-16)
 EOF
-  assert_clean "$box/fenced.md" 8 "the format example inside a fenced block"
+  assert_clean "$(with_decided "$box/fenced.md")" 8 "the format example inside a fenced block"
 
   # The footnote's INDENTED second line is what makes this probe discriminate: without the
   # column-0 terminator the item stays open across the blank line, absorbs that line, and the date
@@ -868,7 +896,7 @@ EOF
     printf -- '- [ ] <what> — `file:line` — <why> — by `<agent>` (YYYY-MM-DD)\n'
     printf '```\n\n## Aberto\n<!-- sdd:open -->\n\n'
     printf -- '- [ ] **Good** — `f:1` — w. — by `x` (2026-08-16)\n'; } > "$box/template.md"
-  assert_clean "$box/template.md" 8 "the format example in the header"
+  assert_clean "$(with_decided "$box/template.md")" 8 "the format example in the header"
 
   # A bare CR is a line ending to GitHub and not to awk: a closed finding could ride behind one on
   # the same physical line, invisible, with the run green. Refused by name.
@@ -886,7 +914,7 @@ EOF
     printf -- '- [ ] **<what>** — `file:line` — <why> — by `<agent>` (YYYY-MM-DD)\n'
     printf '```\n\n## Aberto\n<!-- sdd:open -->\n\n'
     printf -- '- [ ] **Good** — `f:1` — w. — by `x` (2026-08-16)\n'; } > "$box/template2.md"
-  assert_clean "$box/template2.md" 8 "a header example written in the enforced shape"
+  assert_clean "$(with_decided "$box/template2.md")" 8 "a header example written in the enforced shape"
 
   # A finding parked in the header that merely QUOTES a placeholder is still a finding. Loosening
   # the template test to "carries a `<` anywhere" hid 288 of the 18720 header shapes that render
@@ -920,14 +948,14 @@ EOF
   { printf '## Aberto\n<!-- sdd:open -->\n\n'
     printf -- '- [ ] **A multi-paragraph finding** — `f:1` — first paragraph.\n\n'
     printf '  Second paragraph. — found by `x` (2026-08-16)\n'; } > "$box/multipara.md"
-  assert_clean "$box/multipara.md" 8 "a finding written in two paragraphs"
+  assert_clean "$(with_decided "$box/multipara.md")" 8 "a finding written in two paragraphs"
 
   # And the `NF` guard on the continuation rule: a whitespace-only line must not become the item's
   # last line, or the date rule blames a finding that carries its date correctly.
   { printf '## Aberto\n<!-- sdd:open -->\n\n'
     printf -- '- [ ] **A finding** — `f:1` — why. — found by `x` (2026-08-16)\n'
     printf '   \n'; } > "$box/wsline.md"
-  assert_clean "$box/wsline.md" 8 "a whitespace-only line after the last item"
+  assert_clean "$(with_decided "$box/wsline.md")" 8 "a whitespace-only line after the last item"
 
   # The violation COUNT in the failure report is asserted, not just the messages: setting it to a
   # constant used to survive the whole selftest.
@@ -939,7 +967,7 @@ EOF
   # failure exactly when the assertion HOLDS. The trap this repo documents, walked into while
   # writing the probe that asserts the count.
   PROBES=$((PROBES + 1))
-  local countout; countout="$(bash "$SELF" --check "$box/countable.md" 2>&1)"
+  local countout; countout="$(bash "$SELF" --check "$(with_decided "$box/countable.md")" 2>&1)"
   if ! grep -q '^3 shape violation(s)' <<< "$countout"; then
     printf '  SELFTEST FAIL  the reported violation count is not 3\n' >&2
     FAILS=$((FAILS + 1)); fail_rc 92
@@ -984,14 +1012,14 @@ EOF
   { printf '## Aberto\n<!-- sdd:open -->\n\n'
     printf -- '- [ ] **Good** — `f:1` — w. — by `x` (2026-08-16)\n'
     printf '### A heading right after it\n'; } > "$box/interrupt.md"
-  assert_clean "$box/interrupt.md" 8 "a heading interrupting an item with no blank line"
+  assert_clean "$(with_decided "$box/interrupt.md")" 8 "a heading interrupting an item with no blank line"
 
   # The section header of the real file is a 14-line block quote, so `>` has to be on the
   # whitelist — without it the whole preamble reads as prose at column 0 and every run fails.
   { printf '## Aberto\n<!-- sdd:open -->\n\n> The lifecycle rule, stated where the findings live.\n'
     printf '> Second line of it.\n\n'
     printf -- '- [ ] **Good** — `f:1` — w. — by `x` (2026-08-16)\n'; } > "$box/quoted.md"
-  assert_clean "$box/quoted.md" 8 "a block quote in the findings section"
+  assert_clean "$(with_decided "$box/quoted.md")" 8 "a block quote in the findings section"
 
   # The bare-marker rule tolerates the trailing space editors actually leave behind.
   { printf '## Aberto\n<!-- sdd:open -->\n\n'
@@ -1069,7 +1097,7 @@ EOF
     FAILS=$((FAILS + 1)); fail_rc 92
   fi
   PROBES=$((PROBES + 1))
-  if [ "$(SDD_TODO_CAP=08 bash "$SELF" --check "$box/good.md" 2>&1 | grep -oE 'within [0-9]+ lines')" \
+  if [ "$(SDD_TODO_CAP=08 bash "$SELF" --check "$(with_decided "$box/good.md")" 2>&1 | grep -oE 'within [0-9]+ lines')" \
        != "within 8 lines" ]; then
     printf '  SELFTEST FAIL  a leading-zero cap is not normalised to base 10\n' >&2
     FAILS=$((FAILS + 1)); fail_rc 92
@@ -1202,7 +1230,7 @@ EOF
   # A heading after an item must end it. No probe covered this, so deleting the heading rule
   # passed the selftest; the real file only caught it by accident, having headings mid-file.
   { cat "$box/good.md"; printf '\n### Another section\n'; } > "$box/heading.md"
-  assert_clean "$box/heading.md" 8 "a heading after an item"
+  assert_clean "$(with_decided "$box/heading.md")" 8 "a heading after an item"
 
   # --- the knobs ---
   PROBES=$((PROBES + 1))
@@ -1232,7 +1260,7 @@ EOF
     done; } > "$box/counted.md"
   PROBES=$((PROBES + 1))
   local reported
-  reported="$(SDD_TODO_CAP=8 bash "$SELF" --check "$box/counted.md" 2>&1 |
+  reported="$(SDD_TODO_CAP=8 bash "$SELF" --check "$(with_decided "$box/counted.md")" 2>&1 |
     grep -oE '[0-9]+ finding' | grep -oE '[0-9]+')"
   if [ "$reported" != "21" ]; then
     printf '  SELFTEST FAIL  the sensor reports %s finding(s) where the parser sees 21 — the count\n' \
@@ -1277,7 +1305,7 @@ EOF
 - [ ] **A finding whose attribution carries an em-dash in backticks** — `bin/sdd:42` — why it
   matters, in one clause. — found by `sdd-qa` in mission `a — b` (2026-08-16)
 EOF
-  assert_clean "$box/tailspan.md" 8 "an em-dash inside the attribution's code span"
+  assert_clean "$(with_decided "$box/tailspan.md")" 8 "an em-dash inside the attribution's code span"
 
   # TWO spans carrying a separator, and the scan has to walk past both. A loop that stopped at the
   # first one it had to skip would answer with a cut further left and call the item malformed for
@@ -1295,7 +1323,7 @@ EOF
 - [ ] **A finding with two em-dash spans in its tail** — `bin/sdd:42` — why it matters, in one
   clause. — found by `a — b` in mission `c — d` (2026-08-16)
 EOF
-  assert_clean "$box/twospans.md" 8 "two code spans carrying separators in the tail"
+  assert_clean "$(with_decided "$box/twospans.md")" 8 "two code spans carrying separators in the tail"
 
   # The rule must still BITE, or "ignore code spans" is just "stop checking". A tail with no code
   # span at all is still an item that never names its agent.
@@ -1469,7 +1497,7 @@ EOF
 - [ ] **A well-formed item** — `bin/sdd:42` — why it matters. See
   [the handoff](docs/handoffs/x.md) for the analysis. — found by `x` in mission `y` (2026-08-16)
 EOF
-  assert_clean "$box/notabox.md" 8 "a markdown link opening a continuation line is not a box"
+  assert_clean "$(with_decided "$box/notabox.md")" 8 "a markdown link opening a continuation line is not a box"
   rule_end 5 'a box landing on the line after its marker is refused, not rendered'
 
   # Every exit path carries a probe, or the code that names it is decoration: mutating any of
@@ -1524,6 +1552,12 @@ EOF
   { printf '## Decided\n<!-- sdd:decided -->\n\n## Open\n<!-- sdd:open -->\n\n'
     printf -- '- [ ] **A** — `f:1` — why. — found by `x` (2026-09-24)\n'; } > "$box/skel-order.md"
   assert_says "$box/skel-order.md" 8 'comes before the open one' "the decided section above the open one"
+  # The second section is not optional (PR #167 review): `dseen` was recorded and never read, and a
+  # file holding only the open section passed --check. Refused by the parser AND by the CLI, the
+  # path the review reproduced.
+  sed '/^## Decided/,$d' "$box/skel-en.md" > "$box/skel-nodecided.md"
+  assert_says "$box/skel-nodecided.md" 8 'no decided section' "a file with the open section alone"
+  assert_rc 1 "a file with the open section alone fails --check" bash "$SELF" --check "$box/skel-nodecided.md"
   { cat "$box/skel-en.md"; printf '\n## Open again\n<!-- sdd:open -->\n'; } > "$box/skel-dupopen.md"
   assert_says "$box/skel-dupopen.md" 8 'a second open marker' "two open markers"
   { printf '## Open\n\n<!-- sdd:open -->\n\n'
@@ -1544,7 +1578,7 @@ EOF
   assert_says "$box/skel-overmarker.md" 8 'line 1: an H2 with no section marker' "an H2 over a bare list marker"
   { printf '## Plan\nfoo\rbar\n\n'; cat "$box/skel-en.md"; } > "$box/skel-overcr.md"
   assert_says "$box/skel-overcr.md" 8 'line 1: an H2 with no section marker' "an H2 over a bare CR"
-  rule_end 17 'the sections are found by their marker, never by the heading text'
+  rule_end 19 'the sections are found by their marker, never by the heading text'
 
   # ── An unmarked file is refused by the CLI, never guessed ─────────────────────────────────────
   rule_begin
@@ -1561,7 +1595,7 @@ EOF
   printf '## Open\r\n<!-- sdd:open --> \r\n\r\n- [ ] **A** — `f.sh:1` — `fsym`. — found by `x` (2026-09-24)\r\n' \
     > "$box/crlfmarker.md"
   assert_rc 0 "a CRLF file with trailing space after the marker is sectioned" \
-    bash "$SELF" --check "$box/crlfmarker.md"
+    bash "$SELF" --check "$(with_decided "$box/crlfmarker.md")"
   rule_end 4 'a file without the open marker is refused by the CLI, never guessed'
 
   # ── The decided records: one line, a pointer, a date ─────────────────────────────────────────
@@ -1633,13 +1667,24 @@ EOF
     printf '  SELFTEST FAIL  the accented fixture is not 120 characters over more than 120 bytes\n' >&2
     FAILS=$((FAILS + 1)); fail_rc 92
   fi
-  assert_rc 0 "120 accented characters (over 120 bytes) pass --check" bash "$SELF" --check "$box/line120acc.md"
+  assert_rc 0 "120 accented characters (over 120 bytes) pass --check" bash "$SELF" --check "$(with_decided "$box/line120acc.md")"
   long_item 'e' 1728 > "$box/line1800.md"
   assert_says "$box/line1800.md" 8 '1800 characters on one physical line, cap is 120' "the 1800-character item is refused"
   { printf '## Open\n<!-- sdd:open -->\n\n- [ ] **Short head** — `x.sh:1` — fine.\n'
     printf '  %s — found by `sdd-qa` (2026-08-16)\n' "$(rep 'e' 130)"; } > "$box/longcont.md"
   assert_says "$box/longcont.md" 8 'line 5: 165 characters on one physical line' "a long continuation line is refused"
-  rule_end 5 'a physical line of the open section holds at most 120 characters'
+  # The byte class this rule strips with is legal only in the C locale: gawk under C.UTF-8 refuses
+  # it at PARSE time and every run of the sensor died (PR #167 review, reproduced with gawk 5.2.1).
+  # The machine that runs this suite has mawk, which never complains, so the probe does not wait for
+  # gawk: an `awk` first on PATH that refuses to run outside LC_ALL=C witnesses the locale the parser
+  # is handed, whatever the caller exported.
+  mkdir -p "$box/awkshim"
+  printf '#!/usr/bin/env bash\n[ "${LC_ALL-}" = C ] || { echo "awk under LC_ALL=${LC_ALL-unset}" >&2; exit 2; }\nexec %q "$@"\n' \
+    "$(command -v awk)" > "$box/awkshim/awk"
+  chmod +x "$box/awkshim/awk"
+  assert_rc 0 "the parser runs under LC_ALL=C whatever the caller's locale" \
+    env LC_ALL=C.UTF-8 PATH="$box/awkshim:$PATH" bash "$SELF" --check "$(with_decided "$box/line120acc.md")"
+  rule_end 7 'a physical line of the open section holds at most 120 characters'
 
   # ── Issue 70: every sabotage it listed turns this selftest red ─────────────────────────────────
   # Each probe below was written against the mutant it names, applied to a scratch copy, and seen
@@ -1655,14 +1700,14 @@ EOF
     printf -- '- [ ] **Good** — `f.sh:1` — `fsym`. — by `x` (2026-08-16)\n'
     printf -- '1. [ ] one\n-  [ ] two\n'; } > "$box/countable2.md"
   PROBES=$((PROBES + 1))
-  if ! grep -q '^2 shape violation(s)' <<< "$(bash "$SELF" --check "$box/countable2.md" 2>&1)"; then
+  if ! grep -q '^2 shape violation(s)' <<< "$(bash "$SELF" --check "$(with_decided "$box/countable2.md")" 2>&1)"; then
     printf '  SELFTEST FAIL  the reported violation count is not 2 over a file with two violations\n' >&2
     FAILS=$((FAILS + 1)); fail_rc 92
   fi
   { printf '## Open\n<!-- sdd:open -->\n\n'
     printf -- '- [ ] no title here\n- [x] **closed**\n  and a tail — found by `x` (2026-08-16)\n'; } > "$box/tickflush.md"
   PROBES=$((PROBES + 1))
-  if ! grep -q '^5 shape violation(s)' <<< "$(bash "$SELF" --check "$box/tickflush.md" 2>&1)"; then
+  if ! grep -q '^5 shape violation(s)' <<< "$(bash "$SELF" --check "$(with_decided "$box/tickflush.md")" 2>&1)"; then
     printf '  SELFTEST FAIL  a ticked box between an item and its tail no longer closes the item (not 5 violations)\n' >&2
     FAILS=$((FAILS + 1)); fail_rc 92
   fi
@@ -1751,7 +1796,7 @@ EOF
     FAILS=$((FAILS + 1)); fail_rc 92
   fi
   PROBES=$((PROBES + 1))
-  if ! (cd / && bash "$SELF" --check "$ar/ok.md" >/dev/null 2>&1); then
+  if ! (cd / && bash "$SELF" --check "$(with_decided "$ar/ok.md")" >/dev/null 2>&1); then
     printf '  SELFTEST FAIL  --check refuses an anchor that is on target\n' >&2
     FAILS=$((FAILS + 1)); fail_rc 92
   fi
@@ -1779,15 +1824,15 @@ EOF
   assert_rc 93 "a missing file must exit 93"    bash "$SELF" --check "$box/does-not-exist.md"
   # A file with prose but no items at all trips the floor, not the linter.
   printf '# Heading\n\n## Aberto\n<!-- sdd:open -->\n' > "$box/noitems.md"
-  assert_rc 94 "a file with no items must exit 94" bash "$SELF" --check "$box/noitems.md"
+  assert_rc 94 "a file with no items must exit 94" bash "$SELF" --check "$(with_decided "$box/noitems.md")"
   # And an unclosed fence above every item must still say WHY, instead of the floor's generic
   # "did the format change?" — the linter runs first for exactly this case.
 
   # Floor on the probe COUNT, for the same reason every other floor here exists: neutering all the
   # assert_* call sites made the summary print "0 probe(s)" and exit 0 — a selftest that ran
   # nothing reads exactly like a selftest that passed. The number moves only on purpose.
-  if [ "$((PROBES + PROBES_SKIPPED))" -lt 153 ]; then
-    printf '  SELFTEST FAIL  only %d probe(s) accounted for (%d ran, %d skipped), expected 153\n' \
+  if [ "$((PROBES + PROBES_SKIPPED))" -lt 156 ]; then
+    printf '  SELFTEST FAIL  only %d probe(s) accounted for (%d ran, %d skipped), expected 156\n' \
       "$((PROBES + PROBES_SKIPPED))" "$PROBES" "$PROBES_SKIPPED" >&2
     FAILS=$((FAILS + 1)); fail_rc 92
   fi
@@ -1939,6 +1984,9 @@ anchor_base() {
 # The caller has already refused an unreadable or unmarked file.
 anchor_scan() {
   local file="$1" prefix="${2-}" lint="${3-}" base breal real line start anchor path n sp sym hits hit best bestsym dist
+  # Every loop over these reads `${a[@]+"${a[@]}"}`: under `set -u`, bash 4.0-4.3 calls an EMPTY
+  # array unbound and aborts, and the kit promises bash 4+ (bin/sdd reads its probe_agent the same
+  # way). An item with an anchor and no other span is exactly an empty `syms` (PR #167 review).
   local -a sp_list syms
   ANCHOR_MEASURED=0; ANCHOR_VIOLATIONS=''
   base="$(anchor_base "$file")"
@@ -1947,13 +1995,13 @@ anchor_scan() {
     start="${line%%$'\t'*}"
     IFS=$'\t' read -r -a sp_list <<< "${line#"$start"}"
     if [ "$lint" = lint ]; then
-      anchor=''; for sp in "${sp_list[@]}"; do [ -z "${sp#$'\036'}" ] || { anchor=1; break; }; done
+      anchor=''; for sp in ${sp_list[@]+"${sp_list[@]}"}; do [ -z "${sp#$'\036'}" ] || { anchor=1; break; }; done
       [ -n "$anchor" ] || continue
     fi
     # The anchor: the first span shaped like a path — a `/` or a `.`, no space. A span that is not
     # (`frontmatter`, `sdd health`) is prose, skipped and never an anchor.
     anchor=''
-    for sp in "${sp_list[@]}"; do
+    for sp in ${sp_list[@]+"${sp_list[@]}"}; do
       [ -n "$sp" ] || continue
       case "$sp" in $'\036'* | *' '*) continue ;; */* | *.*) anchor="$sp"; break ;; esac
     done
@@ -1981,14 +2029,14 @@ anchor_scan() {
       continue
     fi
     syms=()
-    for sp in "${sp_list[@]}"; do
+    for sp in ${sp_list[@]+"${sp_list[@]}"}; do
       sp="${sp#$'\036'}"
       [ "${#sp}" -ge "$ANCHOR_SYMBOL_MIN" ] || continue
       [ "$sp" != "$anchor" ] && [ "$sp" != "$path" ] || continue
       syms+=("$sp")
     done
     best=''; bestsym=''
-    for sym in "${syms[@]}"; do
+    for sym in ${syms[@]+"${syms[@]}"}; do
       hits="$(grep -nF -- "$sym" "$base/$path" 2>/dev/null | cut -d: -f1)" || hits=''
       for hit in $hits; do
         if [ "$n" -le 1 ]; then best=0; bestsym="$sym"; break 2; fi

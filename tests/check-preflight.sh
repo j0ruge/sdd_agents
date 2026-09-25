@@ -569,6 +569,14 @@ assert_eq "a TAB or a quoted --list is refused like a spaced one" \
 assert_eq "a TAB before --listen-port is still not accused" \
   "not refused, ran=1" \
   "$(list_spelling "\"$PROBE/suite-green.sh"$'\t'"--listen-port\"")"
+# A shell operator ends the word as surely as a space does: `--list; true` lists and exits 0 (PR
+# #167 review). The negative control is the same operator after a flag that only STARTS with --list.
+assert_eq "a --list ended by a shell operator is refused like a spaced one" \
+  "runs nothing, ran=0 / runs nothing, ran=0" \
+  "$(list_spelling "\"$PROBE/suite-green.sh --list; true\"") / $(list_spelling "\"$PROBE/suite-green.sh --list&&true\"")"
+assert_eq "an operator after --listen-port is still not accused" \
+  "not refused, ran=1" \
+  "$(list_spelling "\"$PROBE/suite-green.sh --listen-port; true\"")"
 mv .sdd/config.sh.bak .sdd/config.sh
 
 # --- DEFAULT_BRANCH names a branch that EXISTS ------------------------------
@@ -1149,6 +1157,18 @@ printf 'HANDOFF_DIR="notes/handoffs\n' > "$FIX/unparse/.sdd/config.sh"
 out="$( cd "$FIX/unparse" && "$SDD" install 2>&1 )"
 assert_has "install says the config does not parse instead of using defaults in silence" \
   "does not parse" "$out"
+
+# The same silence one step later. `bash -n` accepts `"$UNSET/x"`, and load_config's `set -u` dies
+# on it; config_read_key let the final printf eat the source's failure, the unset variable came
+# back as rc 1 — "no such file" — and install bought the defaults saying nothing (PR #167 review).
+echo "== sdd install over a config that parses but does not evaluate =="
+mkdir -p "$FIX/uneval/.sdd"
+( cd "$FIX/uneval" && git init -q -b main ) || exit 1
+# shellcheck disable=SC2016  # the $ is for the config file, never for this shell
+printf 'HANDOFF_DIR="$SDD_PROBE_NEVER_SET/handoffs"\n' > "$FIX/uneval/.sdd/config.sh"
+out="$( cd "$FIX/uneval" && env -u SDD_PROBE_NEVER_SET "$SDD" install 2>&1 )"
+assert_has "install says a config that does not evaluate does not load, instead of using defaults in silence" \
+  "parses but does not evaluate" "$out"
 
 # ---------------------------------------------------------------------------
 echo

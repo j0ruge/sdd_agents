@@ -2035,6 +2035,20 @@ mut_PRE_testcmd_list_unnormalised() {
 mut_PRE_testcmd_list_unquoted() {
   sed -i '/^test_cmd_lists_only() {/,/^}/ s@^  tc="\${tc//\[\\"\\'"'"'\]/}"$@  :@' "$1"
 }
+# The third half, from the PR #167 review: without it `--list; true` is certified, because the
+# operator glues itself to the flag and the padded match never sees ` --list `. Caught by `a
+# --list ended by a shell operator is refused like a spaced one` in check-preflight.sh.
+mut_PRE_testcmd_list_unseparated() {
+  sed -i '/^test_cmd_lists_only() {/,/^}/ s@^  tc="\${tc//\[;&|()<>\]/ }"$@  :@' "$1"
+}
+
+# config_read_key stops telling a config that does not EVALUATE from an absent one — the source's
+# failure falls through, the unset variable reads as rc 1 and install buys the defaults in silence
+# (PR #167 review). Caught by `install says a config that does not evaluate does not load, instead
+# of using defaults in silence` in check-preflight.sh.
+mut_PRE_config_eval_blind() {
+  sed -i '/^config_read_key() {/,/^}/ s@^  if \[ "\$rc" -ne 0 \]; then$@  if false; then@' "$1"
+}
 
 # The greenfield warn stops being narrow — issue 53. With the root check skipped, a failing TEST_CMD
 # whose runner merely CITES its manifest is excused although the manifest is right there — a
@@ -4327,6 +4341,8 @@ CATALOG=(
   PRE_testcmd_noop_runs_anyway
   PRE_testcmd_list_unnormalised
   PRE_testcmd_list_unquoted
+  PRE_testcmd_list_unseparated
+  PRE_config_eval_blind
   PRE_greenfield_warn_always
   PRE_greenfield_warn_without_evidence
   PRE_node_install_bare
