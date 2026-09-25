@@ -1335,6 +1335,30 @@ assert_eq "covered: an unknown cost is journalled as '?', both when the answer c
   "1 0 cost_usd=? null 0 cost_usd=? null" \
   "$costless_floor $cost_a_journal $cost_a_ledger $summary_b_lines $cost_b_journal $cost_b_ledger"
 
+# --- the journal says which effort the session was launched with ------------
+# The stream carries no effort level (`per_turn_effort_active:true` is all it says), so the journal
+# line is the only place a human can read it back. Both halves: with no EFFORT_* configured the
+# field says the human's settings decided; with the phase's key set it says the value. The phase
+# is read off the same line, so the pair cannot be satisfied by a line about another phase.
+journal_effort() {
+  awk '/  agent=/ { l = $0 } END {
+    n = split(l, f, "  "); for (i = 1; i <= n; i++) if (f[i] ~ /^effort=/) e = f[i]
+    print f[2] " " e
+  }' "$FIX/.sdd/logs/$MISSION/pipeline.log"
+}
+effort_default="$(journal_effort)"
+effort_phase="${effort_default%% *}"
+case "$effort_phase" in PR) effort_key=EFFORT_PUBLISH ;; *) effort_key="EFFORT_$effort_phase" ;; esac
+printf '%s="xhigh"\n' "$effort_key" >> "$FIX/.sdd/config.sh"
+: > "$LEDGER"
+rm -f "$LOGDIR"/*.json "$LOGDIR"/*.jsonl "$LOGDIR"/*.err
+"$SDD" run "$MISSION" >/dev/null 2>&1
+effort_set="$(journal_effort)"
+sed -i '/^EFFORT_/d' "$FIX/.sdd/config.sh"
+assert_eq "covered: the journal records effort=settings with no EFFORT_* and the configured value with one" \
+  "$effort_phase effort=settings | $effort_phase effort=xhigh" \
+  "$effort_default | $effort_set"
+
 # --- --max-phases stops the run where the human asked -----------------------
 # The option is parsed, counted and reported, and nothing ever ran it. It is the flag a human
 # reaches for to spend ONE session and look at the result — the cheapest way to drive a headless

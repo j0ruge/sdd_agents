@@ -580,15 +580,6 @@ O plano consolidado pelo Codex Astra, baseado no artigo de @0xCodez e nas refer�
   — descoberto por `sdd-qa` na missão `20260901-o-revisor-so-acha` (2026-09-01); config por
   `claude` na missão `20260924-transacao-honra-o-timeout` (2026-09-24)
 
-- [ ] **O effort das fases não é do kit: `claude -p` herda o que a máquina tiver, e nenhum log o
-  registra** — `bin/sdd:3657` — o runner passa `--model` por fase e nunca `--effort`, que o CLI
-  aceita. O nível sai do `effortLevel` do usuário, de um `modelSettings` por modelo (há
-  `"claude-opus-5": low` ao lado do `xhigh` global, sem saber se casa `claude-opus-5-5`) ou do
-  `CLAUDE_EFFORT` herdado de uma sessão-mãe, que o `HARNESS_ENV_UNSET` não limpa. O stream traz só
-  `per_turn_effort_active:true`. Direção: `EFFORT_<FASE>` no config ao lado de `MODEL_<FASE>`,
-  `--effort` explícito e o valor gravado no log da fase.
-  — descoberto por `claude` no PLAN da missão D do `sales_quote` (2026-09-24)
-
 ### Saída humana e cosmética
 
 - [ ] **43% do `docs/pipeline.md` é um subsistema só, e ele cresce toda missão do ledger** —
