@@ -141,6 +141,12 @@
 #     already refused by has_open_marker (rc 99) or by another violation, so the run stays red. A
 #     limit by the D15 rule, decided in the grill of 20260925-o-sensor-le-o-que-a-ancora-diz, and
 #     the reason issue 70 calls them b4/b5 and closes the other five with probes.
+#   - The 120-character WIDTH cap (rule 5) reads the open section only. A decided record has no
+#     width cap, and that is a choice, not an oversight: the record must be ONE physical line (a
+#     continuation is refused), so a cap there would force cutting the pointer or the date rather
+#     than moving prose to a continuation. What bounds it is the format — title, one pointer, a
+#     date — and three records of this repo's TODO.md run 178 to 249 characters under it. Found
+#     by /codereview on feat/todo-esqueleto-neutro (2026-09-25).
 #
 # TWO measured weaknesses, stated rather than hidden. The first is the header: nothing here
 # models a fence, so a stray or unbalanced fence in the header — which makes GitHub render the
@@ -302,6 +308,11 @@ todo_awk() {
       }
       return out
     }
+    function nomarker(at) {
+      if (mode == "lint")
+        print "  line " at ": an H2 with no section marker on the next line — the skeleton has two, each followed by " omark " or " dmark
+      if (oseen || dseen) sect = 3
+    }
     function flush() {
       if (!initem) return
       items++
@@ -363,6 +374,26 @@ todo_awk() {
       initem = 0
     }
     { sub(/\r$/, "") }        # CRLF: a trailing \r used to defeat the end-of-line alternations
+    # ── The line right under a `##` is judged FIRST, before any rule that says `next` ──────────
+    # It used to sit after the rules for a bare CR, a ticked box, an empty list marker and a bare
+    # box, and after `/^## /` itself, each of which ends the line with `next`. Two headings back to
+    # back were the fail-open: the second one reassigned h2, the first was never judged, and the
+    # file passed green (measured, rc 0). An H2 on the LAST line has no next line at all, so END
+    # asks the same question of it (rc 0 too, before this).
+    h2 && NR == h2 + 1 {
+      h2 = 0; t = $0; sub(/[ \t]+$/, "", t)
+      if (t == omark) {
+        if (oseen) { if (mode == "lint") print "  line " NR ": a second open marker — the skeleton has one open section" }
+        else if (dseen && mode == "lint") print "  line " NR ": the open section comes after the decided one — open first, decided last"
+        oseen = 1; sect = 1; next
+      }
+      if (t == dmark) {
+        if (dseen) { if (mode == "lint") print "  line " NR ": a second decided marker — the skeleton has one decided section" }
+        else if (!oseen && mode == "lint") print "  line " NR ": the decided section comes before the open one — open first, decided last"
+        dseen = 1; sect = 2; next
+      }
+      nomarker(NR - 1)
+    }
     # A BARE CR — one not followed by LF — is a line ending to CommonMark and to GitHub, and not
     # to awk or grep. Everything after it on the same physical line renders as its own line, so a
     # closed finding could ride behind one, invisible, with the run green. Refused by name rather
@@ -415,22 +446,8 @@ todo_awk() {
     # refused wherever it sits; before the open marker it leaves the reader in the preamble, after
     # it the reader parks in a section whose contents nobody consumes.
     /^## / { flush(); h2 = NR; next }
-    h2 && NR == h2 + 1 {
-      h2 = 0; t = $0; sub(/[ \t]+$/, "", t)
-      if (t == omark) {
-        if (oseen) { if (mode == "lint") print "  line " NR ": a second open marker — the skeleton has one open section" }
-        else if (dseen && mode == "lint") print "  line " NR ": the open section comes after the decided one — open first, decided last"
-        oseen = 1; sect = 1; next
-      }
-      if (t == dmark) {
-        if (dseen) { if (mode == "lint") print "  line " NR ": a second decided marker — the skeleton has one decided section" }
-        else if (!oseen && mode == "lint") print "  line " NR ": the decided section comes before the open one — open first, decided last"
-        dseen = 1; sect = 2; next
-      }
-      if (mode == "lint")
-        print "  line " (NR - 1) ": an H2 with no section marker on the next line — the skeleton has two, each followed by " omark " or " dmark
-      if (oseen || dseen) sect = 3
-    }
+    # (The line right under it is judged at the top of the program, before any rule that says
+    # `next`: see the pending-H2 rule there, and nomarker() in END for an H2 on the last line.)
     # A marker that does not sit right under a `##` names no heading. Refused rather than guessed:
     # a blank line between the two is the likeliest cause, and the message says where to look.
     { t = $0; sub(/[ \t]+$/, "", t) }
@@ -541,7 +558,7 @@ todo_awk() {
       if (mode == "lint") print "  line " NR ": prose at column 0 in the findings section"
       flush(); next
     }
-    END { flush(); if (mode == "count") print items + 0 }
+    END { flush(); if (h2) nomarker(h2); if (mode == "count") print items + 0 }
   ' "$f"
 }
 
@@ -1512,6 +1529,15 @@ EOF
   { printf '## Open\n\n<!-- sdd:open -->\n\n'
     printf -- '- [ ] **A** — `f:1` — why. — found by `x` (2026-09-24)\n'; } > "$box/skel-orphan.md"
   assert_says "$box/skel-orphan.md" 8 'with no `##` on the line above' "a blank line between the H2 and its marker"
+  # The line under a `##` is judged before any rule that ends a line with `next`. Two headings back
+  # to back, a heading on the last line and a heading over a bare box were all green, or all silent
+  # about the heading, while the judgement sat below those rules (measured, rc 0 for the first two).
+  { printf '## Plan\n'; tail -n +3 "$box/skel-en.md"; } > "$box/skel-backtoback.md"
+  assert_says "$box/skel-backtoback.md" 8 'line 1: an H2 with no section marker' "two H2 back to back"
+  { cat "$box/skel-en.md"; printf '\n## Tail\n'; } > "$box/skel-lastline.md"
+  assert_says "$box/skel-lastline.md" 8 'an H2 with no section marker' "an H2 on the last line"
+  { printf '## Plan\n[ ]\n\n'; cat "$box/skel-en.md"; } > "$box/skel-overbox.md"
+  assert_says "$box/skel-overbox.md" 8 'line 1: an H2 with no section marker' "an H2 over a line another rule ends"
   rule_end 11 'the sections are found by their marker, never by the heading text'
 
   # ── An unmarked file is refused by the CLI, never guessed ─────────────────────────────────────
@@ -1778,6 +1804,26 @@ EOF
 
 # check_file <file> <cap> — the real check. Kept out of the top-level flow so the selftest can
 # invoke it through `--check` without recursing into itself.
+# require_marked_file <file> — the ONE guard the three entry points share (check_file, count_file,
+# anchors_file): rc 93 when the file is missing or unreadable, rc 99 when it carries no open marker.
+# It was written three times and the copies had already drifted — only one printed the skeleton
+# hint, only two refused an empty name.
+require_marked_file() {
+  local file="${1-}"
+  if [ -z "$file" ] || [ ! -f "$file" ] || [ ! -r "$file" ]; then
+    printf '  FAIL  findings file missing or unreadable: %s\n' "$file" >&2
+    return 93
+  fi
+  # Never guessed. The fallback that used to answer here — "no heading, so the whole file is
+  # findings" — linted a target's entire narrative backlog and buried the real violations under
+  # thousands of false ones. A file without the marker predates the skeleton; say so and stop.
+  if ! has_open_marker "$file"; then
+    printf '  FAIL  no %s marker in %s — the findings section is never guessed\n' "$OPEN_MARKER" "$file" >&2
+    printf '        (skeleton: templates/todo.md of the sdd kit, one variant per OUTPUT_LANG)\n' >&2
+    return 99
+  fi
+}
+
 check_file() {
   local file="$1" cap="$2" n_items violations
 
@@ -1805,19 +1851,7 @@ check_file() {
   # `-r` names the permission problem before awk runs; the numeric check catches any other way the
   # counter can come back non-numeric (awk killed, out of memory, a future parser bug). The probe
   # asserts the OUTCOME — unreadable file exits 93 — precisely so it does not care which one fires.
-  if [ ! -f "$file" ] || [ ! -r "$file" ]; then
-    printf '  FAIL  findings file missing or unreadable: %s\n' "$file" >&2
-    return 93
-  fi
-
-  # Never guessed. The fallback that used to answer here — "no heading, so the whole file is
-  # findings" — linted a target's entire narrative backlog and buried the real violations under
-  # thousands of false ones. A file without the marker predates the skeleton; say so and stop.
-  if ! has_open_marker "$file"; then
-    printf '  FAIL  no %s marker in %s — the findings section is never guessed\n' "$OPEN_MARKER" "$file" >&2
-    printf '        (skeleton: templates/todo.md of the sdd kit, one variant per OUTPUT_LANG)\n' >&2
-    return 99
-  fi
+  require_marked_file "$file" || return $?
 
   n_items="$(count_items "$file")"
   case "$n_items" in
@@ -1864,14 +1898,7 @@ check_file() {
 # number about a file that was never opened, or never sectioned, would be a guess.
 count_file() {
   local file="$1" n
-  if [ -z "$file" ] || [ ! -f "$file" ] || [ ! -r "$file" ]; then
-    printf '  FAIL  findings file missing or unreadable: %s\n' "$file" >&2
-    return 93
-  fi
-  if ! has_open_marker "$file"; then
-    printf '  FAIL  no %s marker in %s — the findings section is never guessed\n' "$OPEN_MARKER" "$file" >&2
-    return 99
-  fi
+  require_marked_file "$file" || return $?
   n="$(count_items "$file")"
   case "$n" in '' | *[!0-9]*)
     printf '  FAIL  could not parse %s — the counter returned "%s"\n' "$file" "$n" >&2
@@ -1976,14 +2003,7 @@ anchor_scan() {
 # measurement, then ONE summary assertion in the house shape: `ok` on stdout, `FAIL` on stderr.
 anchors_file() {
   local file="${1-}" m=0
-  if [ -z "$file" ] || [ ! -f "$file" ] || [ ! -r "$file" ]; then
-    printf '  FAIL  findings file missing or unreadable: %s\n' "$file" >&2
-    return 93
-  fi
-  if ! has_open_marker "$file"; then
-    printf '  FAIL  no %s marker in %s — the findings section is never guessed\n' "$OPEN_MARKER" "$file" >&2
-    return 99
-  fi
+  require_marked_file "$file" || return $?
   anchor_scan "$file" "${2-}"
   if [ -n "$ANCHOR_VIOLATIONS" ]; then
     m="$(grep -c . <<< "$ANCHOR_VIOLATIONS")"
