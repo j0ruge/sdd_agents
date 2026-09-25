@@ -118,6 +118,12 @@
 #     item by another road. The redundancy is accidental rather than designed, and what it costs is
 #     the specific message ("bare list marker") going quiet — never a violation going unreported.
 #     Measured by sdd-reviewer in 20260818-lote-facil (2026-08-18).
+#   - The in-awk marker comparison (`t == omark` under each `##`) accepts two loosenings that no
+#     probe tells apart: `index(t, omark)` in place of the equality, and a leading `[ \t>]` allowed
+#     before the marker. Both survive the selftest, and both only change the MESSAGE: the file is
+#     already refused by has_open_marker (rc 99) or by another violation, so the run stays red. A
+#     limit by the D15 rule, decided in the grill of 20260925-o-sensor-le-o-que-a-ancora-diz, and
+#     the reason issue 70 calls them b4/b5 and closes the other five with probes.
 #
 # TWO measured weaknesses, stated rather than hidden. The first is the header: nothing here
 # models a fence, so a stray or unbalanced fence in the header — which makes GitHub render the
@@ -552,7 +558,7 @@ RULE_MARK_FAILS=0
 # floor guards the probes and nothing guards the report: the sensor would stay green while saying
 # one rule fewer than it ran, which is the shape of every quiet regression in this suite.
 RULES_REPORTED=0
-RULES_FLOOR=7
+RULES_FLOOR=8
 rule_begin() { RULE_MARK_PROBES="$PROBES"; RULE_MARK_FAILS="$FAILS"; }
 rule_end() { # rule_end <floor> <text>
   local n=$((PROBES - RULE_MARK_PROBES))
@@ -1550,6 +1556,51 @@ EOF
   assert_says "$box/longcont.md" 8 'line 5: 165 characters on one physical line' "a long continuation line is refused"
   rule_end 5 'a physical line of the open section holds at most 120 characters'
 
+  # ── Issue 70: every sabotage it listed turns this selftest red ─────────────────────────────────
+  # Each probe below was written against the mutant it names, applied to a scratch copy, and seen
+  # red there before it was seen green here. The survivors it closes, one per probe:
+  #   (a) the violation count replaced by the constant 3 — the only count probe HAD exactly 3;
+  #   (c) the flush() of the ticked-box branch dropped — 5 violations quietly became 3;
+  #   (d) `${2-$TODO}` loosened to `${2:-$TODO}` — the empty-argument probe only bit where a
+  #       TODO.md happened to exist beside the sensor;
+  #   b1/b2 the open-marker regex losing its `^` or its `[[:space:]]*$` — an indented, quoted or
+  #       trailed marker then counted as the section, rc 0 where rc 99 is the honest answer.
+  rule_begin
+  { printf '## Open\n<!-- sdd:open -->\n\n'
+    printf -- '- [ ] **Good** — `f:1` — w. — by `x` (2026-08-16)\n'
+    printf -- '1. [ ] one\n-  [ ] two\n'; } > "$box/countable2.md"
+  PROBES=$((PROBES + 1))
+  if ! grep -q '^2 shape violation(s)' <<< "$(bash "$SELF" --check "$box/countable2.md" 2>&1)"; then
+    printf '  SELFTEST FAIL  the reported violation count is not 2 over a file with two violations\n' >&2
+    FAILS=$((FAILS + 1)); fail_rc 92
+  fi
+  { printf '## Open\n<!-- sdd:open -->\n\n'
+    printf -- '- [ ] no title here\n- [x] **closed**\n  and a tail — found by `x` (2026-08-16)\n'; } > "$box/tickflush.md"
+  PROBES=$((PROBES + 1))
+  if ! grep -q '^5 shape violation(s)' <<< "$(bash "$SELF" --check "$box/tickflush.md" 2>&1)"; then
+    printf '  SELFTEST FAIL  a ticked box between an item and its tail no longer closes the item (not 5 violations)\n' >&2
+    FAILS=$((FAILS + 1)); fail_rc 92
+  fi
+  assert_says "$box/tickflush.md" 8 'line 4: last line carries no (YYYY-MM-DD)' "the ticked box closes the item above it"
+  assert_says "$box/tickflush.md" 8 'line 6: an indented line that belongs to no finding' "the tail after a ticked box belongs to no item"
+  # An EXISTING, healthy file behind SDD_TODO_FILE: the loosened default would check it and answer
+  # 0, while the empty argument must still be refused. Pointing at a missing file would not
+  # discriminate — both spellings then answer 93.
+  assert_rc 93 "--check '' is refused even when the default file exists and is healthy" \
+    env SDD_TODO_FILE="$box/good.md" bash "$SELF" --check ''
+  { printf '## Open\n  <!-- sdd:open -->\n\n'
+    printf -- '- [ ] **Good** — `f:1` — w. — by `x` (2026-08-16)\n'; } > "$box/mark-indented.md"
+  { printf '## Open\n> <!-- sdd:open -->\n\n'
+    printf -- '- [ ] **Good** — `f:1` — w. — by `x` (2026-08-16)\n'; } > "$box/mark-quoted.md"
+  { printf '## Open\n<!-- sdd:open --> x\n\n'
+    printf -- '- [ ] **Good** — `f:1` — w. — by `x` (2026-08-16)\n'; } > "$box/mark-trailed.md"
+  local m
+  for m in mark-indented mark-quoted mark-trailed; do
+    assert_rc 99 "--count refuses a file whose only open marker is $m" bash "$SELF" --count "$box/$m.md"
+    assert_rc 99 "--check refuses a file whose only open marker is $m" bash "$SELF" --check "$box/$m.md"
+  done
+  rule_end 11 'the selftest goes red under every sabotage issue 70 listed'
+
   assert_rc 95 "a non-integer cap must exit 95" env SDD_TODO_CAP=abc bash "$SELF" --check "$box/good.md"
   assert_rc 95 "a zero cap must exit 95"        env SDD_TODO_CAP=0   bash "$SELF" --check "$box/good.md"
   assert_rc 96 "an unknown option must exit 96" bash "$SELF" --bogus
@@ -1563,8 +1614,8 @@ EOF
   # Floor on the probe COUNT, for the same reason every other floor here exists: neutering all the
   # assert_* call sites made the summary print "0 probe(s)" and exit 0 — a selftest that ran
   # nothing reads exactly like a selftest that passed. The number moves only on purpose.
-  if [ "$((PROBES + PROBES_SKIPPED))" -lt 123 ]; then
-    printf '  SELFTEST FAIL  only %d probe(s) accounted for (%d ran, %d skipped), expected 123\n' \
+  if [ "$((PROBES + PROBES_SKIPPED))" -lt 134 ]; then
+    printf '  SELFTEST FAIL  only %d probe(s) accounted for (%d ran, %d skipped), expected 134\n' \
       "$((PROBES + PROBES_SKIPPED))" "$PROBES" "$PROBES_SKIPPED" >&2
     FAILS=$((FAILS + 1)); fail_rc 92
   fi
