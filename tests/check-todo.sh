@@ -304,8 +304,18 @@ todo_awk() {
       if (!initem) return
       items++
       # The anchors view: one line per open item, its start line and the spans of its HEAD. The
-      # tail is the attribution and names an agent, never code, so it is never a symbol.
-      if (mode == "anchors") print start spans(head_of(body))
+      # tail is the attribution and names an agent, never code, so it is never a symbol. The spans
+      # of the bold TITLE come first, each tagged with an \036 byte: they are symbols, never the
+      # anchor, which the format puts right after the title. Untagged, a path-shaped span in a
+      # title stood in for the anchor and left the real one unmeasured.
+      if (mode == "anchors") {
+        h = head_of(body); ttl = ""; rest = h
+        if (substr(h, 1, 8) == "- [ ] **" && (q = index(substr(h, 9), "**")) > 0) {
+          ttl = substr(h, 9, q - 1); rest = substr(h, 9 + q + 1)
+        }
+        tt = spans(ttl); gsub(/\t/, "\t\036", tt)
+        print start tt spans(rest)
+      }
       if (mode == "lint") {
         if (first !~ /^- \[ \] \*\*/)
           print "  line " start ": item does not open with `- [ ] **<title>**`"
@@ -1677,9 +1687,16 @@ EOF
     "a file that exists only in the kit is not a file of the checked repo" "$ar/kitonly.md"
   anchor_item short.md '`src/code.sh:20` — calls `fro`'
   anchors_says 1 'no backticked symbol of the item occurs in src/code.sh' "a 3-character symbol does not count" "$ar/short.md"
+  # The title is not where the anchor lives: a path-shaped span in it (`src/code.sh` here, a real file)
+  # used to become the whole-file anchor and let the off-target one right after it go unmeasured. It
+  # still counts as a SYMBOL — only the anchor search starts after the title.
+  printf '## Open\n<!-- sdd:open -->\n\n- [ ] **Title citing `src/code.sh` and `frobnicate_widget`** — `src/code.sh:35` — why. — by `x` (2026-08-16)\n' > "$ar/titlepath.md"
+  anchors_says 1 'anchor `src/code.sh:35` is off target' "a path in the title does not stand in for the anchor" "$ar/titlepath.md"
+  printf '## Open\n<!-- sdd:open -->\n\n- [ ] **Title citing `frobnicate_widget`** — `src/code.sh:25` — why. — by `x` (2026-08-16)\n' > "$ar/titlesym.md"
+  anchors_says 0 '1 measured, 0 off target' "a symbol cited in the title still counts" "$ar/titlesym.md"
   printf '## Open\n\n- [ ] **No marker** — `src/code.sh:20` — `frobnicate_widget`. — by `x` (2026-08-16)\n' > "$ar/nomark.md"
   anchors_says 99 'marker' "--anchors refuses a file without the open marker" "$ar/nomark.md"
-  rule_end 12 'an anchor names a file of the checked repo and sits within 10 lines of a symbol the item cites'
+  rule_end 14 'an anchor names a file of the checked repo and sits within 10 lines of a symbol the item cites'
 
   assert_rc 95 "a non-integer cap must exit 95" env SDD_TODO_CAP=abc bash "$SELF" --check "$box/good.md"
   assert_rc 95 "a zero cap must exit 95"        env SDD_TODO_CAP=0   bash "$SELF" --check "$box/good.md"
@@ -1694,8 +1711,8 @@ EOF
   # Floor on the probe COUNT, for the same reason every other floor here exists: neutering all the
   # assert_* call sites made the summary print "0 probe(s)" and exit 0 — a selftest that ran
   # nothing reads exactly like a selftest that passed. The number moves only on purpose.
-  if [ "$((PROBES + PROBES_SKIPPED))" -lt 146 ]; then
-    printf '  SELFTEST FAIL  only %d probe(s) accounted for (%d ran, %d skipped), expected 146\n' \
+  if [ "$((PROBES + PROBES_SKIPPED))" -lt 148 ]; then
+    printf '  SELFTEST FAIL  only %d probe(s) accounted for (%d ran, %d skipped), expected 148\n' \
       "$((PROBES + PROBES_SKIPPED))" "$PROBES" "$PROBES_SKIPPED" >&2
     FAILS=$((FAILS + 1)); fail_rc 92
   fi
@@ -1848,7 +1865,7 @@ anchor_scan() {
     anchor=''
     for sp in "${sp_list[@]}"; do
       [ -n "$sp" ] || continue
-      case "$sp" in *' '*) continue ;; */* | *.*) anchor="$sp"; break ;; esac
+      case "$sp" in $'\036'* | *' '*) continue ;; */* | *.*) anchor="$sp"; break ;; esac
     done
     case "$anchor" in "$prefix"*) ;; *) [ -z "$prefix" ] || continue ;; esac
     ANCHOR_MEASURED=$((ANCHOR_MEASURED + 1))
@@ -1871,6 +1888,7 @@ anchor_scan() {
     fi
     syms=()
     for sp in "${sp_list[@]}"; do
+      sp="${sp#$'\036'}"
       [ "${#sp}" -ge "$ANCHOR_SYMBOL_MIN" ] || continue
       [ "$sp" != "$anchor" ] && [ "$sp" != "$path" ] || continue
       syms+=("$sp")
