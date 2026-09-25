@@ -550,6 +550,25 @@ noop_ran="$(grep -c . "$PROBE/witness" 2>/dev/null || true)"
 assert_eq "a TEST_CMD the heuristic already refused is not executed at all" \
   "runs nothing, ran=0" \
   "$(grep -qF 'runs nothing' <<< "$noop_out" && printf 'runs nothing' || printf 'not refused'), ran=$noop_ran"
+
+# The same refusal for the spellings the old space-only `case` let through (issue 118): a TAB
+# before `--list`, and `"--list"` quoted. run_check_cmd EVALS the value, so both reach the suite
+# as a bare `--list` — measured with a witness recording the argv. Same two-halves witness as the
+# block above: refused in words AND never executed.
+list_spelling() { # list_spelling <the TEST_CMD value, raw> → "<refused?>, ran=<n>"
+  : > "$PROBE/witness"
+  { grep -v '^TEST_CMD=' .sdd/config.sh; printf 'TEST_CMD=%s\n' "$1"; } > .sdd/config.sh.tmp
+  mv .sdd/config.sh.tmp .sdd/config.sh
+  local o; o="$( "$SDD" preflight 2>&1 )"
+  printf '%s, ran=%s' "$(grep -qF 'runs nothing' <<< "$o" && printf 'runs nothing' || printf 'not refused')" \
+    "$(grep -c . "$PROBE/witness" 2>/dev/null || true)"
+}
+assert_eq "a TAB or a quoted --list is refused like a spaced one" \
+  "runs nothing, ran=0 / runs nothing, ran=0" \
+  "$(list_spelling "\"$PROBE/suite-green.sh"$'\t'"--list\"") / $(list_spelling "'$PROBE/suite-green.sh \"--list\"'")"
+assert_eq "a TAB before --listen-port is still not accused" \
+  "not refused, ran=1" \
+  "$(list_spelling "\"$PROBE/suite-green.sh"$'\t'"--listen-port\"")"
 mv .sdd/config.sh.bak .sdd/config.sh
 
 # --- DEFAULT_BRANCH names a branch that EXISTS ------------------------------

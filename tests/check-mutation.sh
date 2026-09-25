@@ -2024,6 +2024,18 @@ mut_PRE_testcmd_noop_runs_anyway() {
   sed -i '/^cmd_preflight()/,/^}/ s@if test_cmd_looks_noop "\$TEST_CMD"; then@if test_cmd_looks_noop "$TEST_CMD"; then run_check_cmd "$TEST_CMD" "preflight-test" || true;@' "$1"
 }
 
+# The listing predicate stops normalising — issue 118, one mutant per half. Without the whitespace
+# half a TAB before `--list` is certified; without the quote half `"--list"` is. Both reach the
+# suite as a bare `--list` through run_check_cmd's eval. Caught by `a TAB or a quoted --list is
+# refused like a spaced one` in check-preflight.sh (each half answers for its own world) and by
+# `health refuses a TAB or a quoted --list in the kit's TEST_CMD` in check-health.sh.
+mut_PRE_testcmd_list_unnormalised() {
+  sed -i '/^test_cmd_lists_only() {/,/^}/ s@^  tc="\${tc//\[\[:space:\]\]/ }"$@  :@' "$1"
+}
+mut_PRE_testcmd_list_unquoted() {
+  sed -i '/^test_cmd_lists_only() {/,/^}/ s@^  tc="\${tc//\[\\"\\'"'"'\]/}"$@  :@' "$1"
+}
+
 # The Node TEST_CMD rule has four owners, one mutant each. install goes back to a bare `npm test`
 # whatever the package.json declares — the defect a Codex review of warehouse_explorer_api PR #7
 # surfaced, measured in four of six Node repos.
@@ -2479,15 +2491,17 @@ mut_HEALTH_suite_without_mutation() {
 # the log left behind is a dozen plausible step names. Health is where that gets said, because
 # nothing else in the kit reads TEST_CMD as anything but a command to obey.
 #
-# The pattern is degraded rather than deleted, and the `case` is left with the same arms: a mutant
-# that removed the branch outright would also remove the `ok` line, and half the assertions in
-# check-health.sh would go red for a missing sentence instead of for the blindness.
+# The call to the shared predicate is blinded rather than deleted, and the if/elif keeps its arms:
+# a mutant that removed the branch outright would also remove the `ok` line, and half the
+# assertions in check-health.sh would go red for a missing sentence instead of for the blindness.
+# (Re-anchored in 20260925-o-sensor-le-o-que-a-ancora-diz: the `case` this used to degrade became
+# a call to test_cmd_lists_only, the one definition the preflight shares.)
 #
 # Range-addressed to the body of cmd_health, per the header of the entries above. Caught by
 # `surface: --list prints steps only, and a TEST_CMD carrying it is refused` in check-health.sh —
 # by its (b) half, whose two worlds differ in exactly this flag.
 mut_HEALTH_testcmd_list_blind() {
-  sed -i '/^cmd_health() {/,/^}/ s@\*" --list "\*)@*" --a-flag-no-config-carries "*)@' "$1"
+  sed -i '/^cmd_health() {/,/^}/ s@if test_cmd_lists_only "\$kit_test_cmd"; then@if false; then@' "$1"
 }
 
 # Check 2b goes back to reading a config that does not parse as a missing key — issue 116. The
@@ -4280,6 +4294,8 @@ CATALOG=(
   PRE_agent_presence_only
   PRE_testcmd_noop_blind
   PRE_testcmd_noop_runs_anyway
+  PRE_testcmd_list_unnormalised
+  PRE_testcmd_list_unquoted
   RUN_base_branch_warn_dead
   RUN_approve_writes_auto
   RUN_approve_bails_on_kaizen_born
@@ -4555,7 +4571,7 @@ run_mutant() {
 # stopped being parsed: an empty loop reports "0 broken" forever.
 # ---------------------------------------------------------------------------
 if [ "$ANCHORS_ONLY" = 1 ]; then
-  ANCHOR_FLOOR=393
+  ANCHOR_FLOOR=395
   anchor_box() { mkdir -p "$1"; cp -r "$ROOT/bin" "$1/"; }
   anchor_control_noop()       { :; }
   anchor_control_intact()     { printf '# a mutation that lands and stays valid\n' >> "$1"; }

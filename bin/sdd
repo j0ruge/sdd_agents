@@ -3954,10 +3954,10 @@ node_scripts_outside_test_cmd() {
 #     tests instead of running them. Unpadded, `*--list*` would also accuse `--listen-port`, and a
 #     rule that fires on correct config is a rule the next author deletes.
 #
-# ONE definition, called from cmd_preflight. Check 2b in cmd_health deliberately keeps its OWN
-# narrower `--list` case rather than calling this: its subject is the kit's own suite mode, its
-# message says so, and `mut_HEALTH_testcmd_list_blind` anchors on that case pattern. The
-# duplication is declared here rather than hidden — a new spelling belongs in BOTH.
+# ONE definition, called from cmd_preflight. The listing half lives in test_cmd_lists_only, which
+# check 2b of cmd_health calls too. It used to be two `case` patterns, one per command, with the
+# duplication declared "deliberate" — and a spelling neither knew (a TAB, a quoted `"--list"`)
+# passed BOTH, because both matched only the literal space: issue 118.
 # `tc` and not `cmd`: `cmd` is a `local -a` in run_phase, and shellcheck reasons about the name
 # across the whole file — a scalar `cmd` here makes it read every use as the first element of an
 # array (SC2178/SC2128) and the lint step of the suite goes red.
@@ -3967,6 +3967,20 @@ test_cmd_looks_noop() {
   case "${tc%% *}" in
     true|:|echo|printf|exit) return 0 ;;
   esac
+  test_cmd_lists_only "$tc"
+}
+
+# test_cmd_lists_only <cmd> → 0 when an argument, matched WHOLE, asks the runner to enumerate the
+# tests instead of running them. Normalised first, because run_check_cmd EVALS the value and the
+# shell reads more than one spelling as the same argument: every whitespace character becomes a
+# space (a TAB before `--list` is still a separate word), and quote characters are dropped (`"--list"`
+# and `'--list'` arrive as `--list`). Dropping every quote can only widen the match — a quoted
+# phrase containing ` --list ` is refused although eval would keep it one word — and that is the
+# direction a refusal may err in. Padded on both sides so `--listen-port` stays accepted.
+test_cmd_lists_only() {
+  local tc="${1:-}"
+  tc="${tc//[[:space:]]/ }"
+  tc="${tc//[\"\']/}"
   case " $tc " in
     *" --list "*|*" --listTests "*|*" --collect-only "*) return 0 ;;
   esac
@@ -5109,19 +5123,15 @@ cmd_health() {
       health_bad "the kit's config: ${kit_cfg_diag} — every gate would die in load_config"
     else
       kit_test_cmd="$(config_read_key "$kit_cfg" TEST_CMD)" || kit_test_cmd=""
-      # Padded on both sides so `--list` is matched as a WHOLE ARGUMENT: an unpadded `*--list*` would
-      # also accuse a suite named `run-all.sh --listen-mode`, and a rule that fails on correct config
-      # is a rule the next author deletes.
-      case " $kit_test_cmd " in
-        *" --list "*)
-          health_bad "TEST_CMD carries --list ($kit_test_cmd) — that mode exits 0 having run NOTHING, so every gate would pass against a suite that never ran" ;;
-        *)
-          if [ -z "$kit_test_cmd" ]; then
-            health_bad "the kit's .sdd/config.sh declares no TEST_CMD — the gates have no suite to run"
-          else
-            ok "TEST_CMD runs the suite ($kit_test_cmd)"
-          fi ;;
-      esac
+      # The same predicate the preflight uses — one definition, so a spelling that one of them
+      # learns the other cannot miss (issue 118: a TAB or a quoted `"--list"` passed both).
+      if test_cmd_lists_only "$kit_test_cmd"; then
+        health_bad "TEST_CMD carries --list or a sibling listing flag ($kit_test_cmd) — that mode exits 0 having run NOTHING, so every gate would pass against a suite that never ran"
+      elif [ -z "$kit_test_cmd" ]; then
+        health_bad "the kit's .sdd/config.sh declares no TEST_CMD — the gates have no suite to run"
+      else
+        ok "TEST_CMD runs the suite ($kit_test_cmd)"
+      fi
     fi
   fi
 

@@ -1388,6 +1388,27 @@ else
        "non-step line(s) in the no-linter list: ${SURFACE_NOT_STEP:-none} // clean: rc $RC_TC_OK $(digest "$OUT_TC_OK") // --list: rc $RC_TC_LIST $(digest "$OUT_TC_LIST")"
 fi
 
+# The spellings the space-only `case` let through (issue 118): a TAB before `--list`, and a quoted
+# `"--list"`. run_check_cmd EVALS the value, so both reach the suite as a bare `--list`. Each world
+# differs from the green one in the TEST_CMD alone, and each must fail naming the flag.
+LIST_SPELL_DESC="health refuses a TAB or a quoted --list in the kit's TEST_CMD"
+green_world
+set_test_cmd "$STUB_TEST_CMD"$'\t'"--list"
+health_run
+OUT_TC_TAB="$HEALTH_OUT"; RC_TC_TAB="$HEALTH_RC"
+green_world
+set_test_cmd "$STUB_TEST_CMD \\\"--list\\\""
+health_run
+OUT_TC_QUOTE="$HEALTH_OUT"; RC_TC_QUOTE="$HEALTH_RC"
+green_world
+if [ "$RC_TC_TAB" -ne 0 ] && grep -qF 'TEST_CMD carries --list' <<< "$OUT_TC_TAB" \
+   && [ "$RC_TC_QUOTE" -ne 0 ] && grep -qF 'TEST_CMD carries --list' <<< "$OUT_TC_QUOTE"; then
+  pass "$LIST_SPELL_DESC"
+else
+  fail "$LIST_SPELL_DESC" "both worlds fail naming 'TEST_CMD carries --list'" \
+       "TAB: rc $RC_TC_TAB $(digest "$OUT_TC_TAB") // quoted: rc $RC_TC_QUOTE $(digest "$OUT_TC_QUOTE")"
+fi
+
 # ---------------------------------------------------------------------------
 # A kit config that does not parse is SAID, never read as a missing key (issue 116)
 #
