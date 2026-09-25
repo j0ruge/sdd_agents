@@ -196,14 +196,15 @@ section under `<!-- sdd:decided -->` first — what is recorded there was refute
 not filed again):
 
 ```md
-- [ ] **<title>** — `file:line` — <why it matters>. <direction>.
-  — found by `sdd-qa` in mission `<slug>` (YYYY-MM-DD)
+- [ ] **<title>** — `<file:line>` (`<symbol>`) — <why it matters>. Direction: <what to do>.
+  Source: `<your handoff>` — found by `sdd-qa` in mission `<slug>` (YYYY-MM-DD)
 ```
 
 The prose follows the repo's `OUTPUT_LANG` — copy the wording of the file's own preamble; the grammar
 is `$SDD_HOME/templates/todo.md`, and the analysis that does not fit in about six lines goes to your
-handoff. A file with no `<!-- sdd:open -->` marker predates the skeleton: append where its findings
-already live and say so in the handoff.
+handoff, which `Source:` names. The anchor is measured: `<symbol>` is a code span of 4+ characters
+that occurs in that file within 10 lines of the line. A file with no `<!-- sdd:open -->` marker
+predates the skeleton: append where its findings already live and say so in the handoff.
 
 Never fix it in passing. Never lose it.
 

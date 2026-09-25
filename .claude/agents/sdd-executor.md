@@ -101,15 +101,17 @@ it** and **do not lose it**. Record it in the repo's `TODO.md` (the `TODO_FILE` 
    fits — never in the preamble, never below the decided marker:
 
    ```md
-   - [ ] **<title>** — `file:line` — <why it matters>. <direction>.
-     — found by `sdd-executor` in mission `<slug>` (YYYY-MM-DD)
+   - [ ] **<title>** — `<file:line>` (`<symbol>`) — <why it matters>. Direction: <what to do>.
+     Source: `<your handoff>` — found by `sdd-executor` in mission `<slug>` (YYYY-MM-DD)
    ```
 
-   About six lines, hard cap eight: the long analysis goes to your handoff and the item points at
-   it. The prose, the found-by wording included, follows the repo's `OUTPUT_LANG` — copy the
-   preamble's example; the box, the bold title, the backticks and the date are the contract
-   `tests/check-todo.sh` measures. Canonical grammar: `$SDD_HOME/templates/todo.md`, one variant
-   per `OUTPUT_LANG`.
+   About six lines, hard cap eight, none wider than 120 characters: the long analysis goes to your
+   handoff and `Source:` points at it. The prose, the found-by wording included, follows the repo's
+   `OUTPUT_LANG` — copy the preamble's example; the box, the bold title, the backticks, the date
+   and the anchor are the contract `tests/check-todo.sh` measures. The anchor is measured, not
+   read: `<symbol>` is a code span of 4+ characters that occurs in that file within 10 lines of
+   the line (anywhere in it for `:1`). Canonical grammar: `$SDD_HOME/templates/todo.md`, one
+   variant per `OUTPUT_LANG`.
 3. No `<!-- sdd:open -->` marker yet — a file older than the skeleton: append where its findings
    already live, and say so in your handoff so the migration is not forgotten.
 
