@@ -21,7 +21,10 @@
 #   4. a `(YYYY-MM-DD)` on the item's LAST content line — the found-by field the DOCS phase
 #      audits every mission. Anchoring on the last line rather than anywhere in the body is
 #      deliberate: a date buried mid-item is a measurement, not attribution.
-#   5. at most CAP content lines; the long analysis lives in the handoff the item cites
+#   5. at most CAP content lines; the long analysis lives in the handoff the item cites. The cap
+#      counts PHYSICAL lines, so it carries a width: no physical line of the findings section holds
+#      more than WIDTH_CAP (120) CHARACTERS. Without it, 1794 characters on one line passed as one.
+#      Characters and not bytes — mawk counts bytes, and a probe of accented text proves the rest.
 #
 # And per decided record: `- **<title>** — …`, one physical line, a code span after the title (the
 # pointer to the evidence) and a `(YYYY-MM-DD)` at the end. Records are not counted as findings.
@@ -33,11 +36,11 @@
 # And what it deliberately REFUSES in the findings section: fenced blocks, bare list markers,
 # lazy column-0 continuations, and every task-item shape that is not `- [ ] **<title>**` at
 # column 0. (Indented code blocks are NOT detected — an earlier version of this line claimed they
-# were. Inside an item they are absorbed as content; the ~6-line cap is what bounds them.)
+# were. Inside an item they are absorbed as content; the line cap is what bounds them.)
 # That is stricter than CommonMark on purpose. Six adversarial rounds proved that a sensor which
 # tries to decide what is code and what is a finding will get it wrong in a new way every time —
 # every fail-open this file ever had lived in that decision. Forbidding the construct is one rule
-# that cannot desync, and it costs nothing real: no finding carries a code block, and the ~6-line
+# that cannot desync, and it costs nothing real: no finding carries a code block, and the 8-line
 # budget leaves no room for one. A sensor should refuse what it cannot safely parse, not guess.
 #
 # Every rule above is STRUCTURAL — punctuation, backticks, a date — never a Portuguese word.
@@ -158,6 +161,9 @@ SELF="$(CDPATH='' cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)/$(basename "${BASH
 ROOT="$(CDPATH='' cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 TODO="${SDD_TODO_FILE:-$ROOT/TODO.md}"
 CAP="${SDD_TODO_CAP:-8}"
+# The width half of rule 5: a physical line of the findings section holds at most this many
+# CHARACTERS. Not an env knob on purpose — the line cap is tunable per target, the shortcut is not.
+WIDTH_CAP=120
 # The two section markers are the ONLY words this sensor reads, and they are English on purpose:
 # the heading above each one is content in OUTPUT_LANG (`## Aberto`, `## Open`, anything), so a
 # sensor keyed on the heading text would work in one language and go quietly blind in every other
@@ -223,7 +229,7 @@ todo_awk() {
   # (rc 99) before it ever asks the parser.
   marked=0
   has_open_marker "$f" && marked=1
-  awk -v cap="$2" -v mode="$3" -v marked="$marked" -v omark="$OPEN_MARKER" -v dmark="$DECIDED_MARKER" '
+  awk -v cap="$2" -v wcap="$WIDTH_CAP" -v mode="$3" -v marked="$marked" -v omark="$OPEN_MARKER" -v dmark="$DECIDED_MARKER" '
     # How many backticks occur in text. Byte-based like everything else here, and that is safe:
     # a backtick is ASCII, so no multibyte character can contain one as a byte.
     BEGIN { sect = marked ? 0 : 1 }   # 0 preamble, 1 open, 2 decided, 3 under a stray H2
@@ -441,6 +447,15 @@ todo_awk() {
         print "  line " NR ": a finding under an H2 the skeleton does not have"
       next
     }
+    # Rule 5 counts PHYSICAL lines, so it needs a width or one long line is a free pass. Counted in
+    # CHARACTERS: mawk length() counts bytes, so the UTF-8 continuation bytes (0x80-0xBF) are
+    # dropped from a copy first, and every character then weighs one. No `next`: the line still
+    # goes on to the whitelist below.
+    sect == 1 && mode == "lint" {
+      w = $0; gsub(/[\200-\277]/, "", w)
+      if (length(w) > wcap)
+        print "  line " NR ": " length(w) " characters on one physical line, cap is " wcap " — the long analysis lives in the handoff"
+    }
     # ── Findings section: a WHITELIST. Item, indented continuation, heading, block quote, blank ─
     # Everything else at column 0 is refused. Seven rounds of fail-open came from trying to decide
     # what an unfamiliar construct MEANT; this decides only whether it belongs, which is a question
@@ -537,7 +552,7 @@ RULE_MARK_FAILS=0
 # floor guards the probes and nothing guards the report: the sensor would stay green while saying
 # one rule fewer than it ran, which is the shape of every quiet regression in this suite.
 RULES_REPORTED=0
-RULES_FLOOR=6
+RULES_FLOOR=7
 rule_begin() { RULE_MARK_PROBES="$PROBES"; RULE_MARK_FAILS="$FAILS"; }
 rule_end() { # rule_end <floor> <text>
   local n=$((PROBES - RULE_MARK_PROBES))
@@ -1504,6 +1519,37 @@ EOF
   assert_rc 93 "--count on a missing file must exit 93" bash "$SELF" --count "$box/does-not-exist.md"
   rule_end 5 'the CLI answers --count, and --allow-empty lowers the floor to zero'
 
+  # ── Rule 5 has no shortcut: a physical line of the findings section holds at most 120 chars ──
+  # The line cap counts PHYSICAL lines, so before this rule a whole analysis joined onto one line
+  # passed as "1 line" — measured, 1794 characters answered `ok 1 finding(s), all within 8 lines`.
+  # Characters, never bytes: mawk's length() counts bytes, and the accented probe below is the one
+  # that proves the difference (120 characters, well over 120 bytes, must pass).
+  rule_begin
+  rep() { local s='' i; for ((i = 0; i < $2; i++)); do s+="$1"; done; printf '%s' "$s"; }
+  long_item() { # <fill> <count> — one well-formed item on one physical line, 70 + <count> chars
+    printf '## Open\n<!-- sdd:open -->\n\n- [ ] **Accented line** — `x.sh:1` — %s — found by `sdd-qa` (2026-08-16)\n' \
+      "$(rep "$1" "$2")"
+  }
+  long_item 'e' 51 > "$box/line121.md"
+  assert_says "$box/line121.md" 8 '121 characters on one physical line, cap is 120' "a 121-character line is refused"
+  assert_rc 1 "a 121-character line fails --check" bash "$SELF" --check "$box/line121.md"
+  long_item $'\xc3\xbc' 50 > "$box/line120acc.md"
+  # Witness that the fixture is what it claims: 120 characters, more than 120 bytes. A fixture that
+  # drifted to plain ASCII would pass under a byte count and prove nothing.
+  PROBES=$((PROBES + 1))
+  if [ "$(sed -n 4p "$box/line120acc.md" | LC_ALL=C.UTF-8 wc -m)" -ne 121 ] \
+    || [ "$(sed -n 4p "$box/line120acc.md" | LC_ALL=C wc -c)" -le 121 ]; then
+    printf '  SELFTEST FAIL  the accented fixture is not 120 characters over more than 120 bytes\n' >&2
+    FAILS=$((FAILS + 1)); fail_rc 92
+  fi
+  assert_rc 0 "120 accented characters (over 120 bytes) pass --check" bash "$SELF" --check "$box/line120acc.md"
+  long_item 'e' 1730 > "$box/line1800.md"
+  assert_says "$box/line1800.md" 8 '1800 characters on one physical line, cap is 120' "the 1800-character item is refused"
+  { printf '## Open\n<!-- sdd:open -->\n\n- [ ] **Short head** — `x.sh:1` — fine.\n'
+    printf '  %s — found by `sdd-qa` (2026-08-16)\n' "$(rep 'e' 130)"; } > "$box/longcont.md"
+  assert_says "$box/longcont.md" 8 'line 5: 165 characters on one physical line' "a long continuation line is refused"
+  rule_end 5 'a physical line of the open section holds at most 120 characters'
+
   assert_rc 95 "a non-integer cap must exit 95" env SDD_TODO_CAP=abc bash "$SELF" --check "$box/good.md"
   assert_rc 95 "a zero cap must exit 95"        env SDD_TODO_CAP=0   bash "$SELF" --check "$box/good.md"
   assert_rc 96 "an unknown option must exit 96" bash "$SELF" --bogus
@@ -1517,8 +1563,8 @@ EOF
   # Floor on the probe COUNT, for the same reason every other floor here exists: neutering all the
   # assert_* call sites made the summary print "0 probe(s)" and exit 0 — a selftest that ran
   # nothing reads exactly like a selftest that passed. The number moves only on purpose.
-  if [ "$((PROBES + PROBES_SKIPPED))" -lt 117 ]; then
-    printf '  SELFTEST FAIL  only %d probe(s) accounted for (%d ran, %d skipped), expected 117\n' \
+  if [ "$((PROBES + PROBES_SKIPPED))" -lt 123 ]; then
+    printf '  SELFTEST FAIL  only %d probe(s) accounted for (%d ran, %d skipped), expected 123\n' \
       "$((PROBES + PROBES_SKIPPED))" "$PROBES" "$PROBES_SKIPPED" >&2
     FAILS=$((FAILS + 1)); fail_rc 92
   fi
