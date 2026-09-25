@@ -4,7 +4,7 @@ titulo: o sensor do TODO passa a ler o que a âncora diz, o teto de linhas deixa
 data: 2026-09-25
 versao: n/a — JIRA_ENABLED=false
 branch: feat/todo-esqueleto-neutro
-aprovacao:
+aprovacao: humano-2026-09-25
 adr: docs/adr/0011-ancora-do-todo-carrega-simbolo.md
 ddd: n/a
 ---
