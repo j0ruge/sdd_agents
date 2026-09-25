@@ -185,7 +185,8 @@ São quatro, todas abertas em 2026-09-22 a partir da missão do `lighthouse_proj
 - **#52** — o `sdd approve` sai 0 com "not approved" quando não há TTY. Liga-se ao W3 (F6) e ao
   item do `TODO.md` sobre o `sdd approve`.
 - **#53** — o preflight reprova `TEST_CMD` em missão greenfield cujo I1 cria o manifesto. Liga-se
-  a F4.
+  a F4. **Fechada** pela missão `20260925-o-sensor-le-o-que-a-ancora-diz` (`bc624f9`, `warn` estreito
+  quando o manifesto do runner não existe na raiz); a issue fecha com o merge do PR.
 
 ## F6 — O worker (W1–W7)
 

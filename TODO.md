@@ -29,6 +29,7 @@ Achados sobre **repos-alvo** vão para o `TODO.md` daquele repo. Este arquivo é
   como uma linha de conteúdo, e quebrá-los em 100 colunas (o `--fix` da skill
   `todo-to-github-issues`) revelou 10 acima do teto. Fail-open da regra que o sensor existe para
   cobrar. Direção: contar linhas visuais de 100 colunas, ou recusar linha longa na seção aberta.
+  RESOLVED by 7bf0773 (missão `20260925-o-sensor-le-o-que-a-ancora-diz`).
   — descoberto por `claude` no `--audit` de um repo-alvo (2026-09-24)
 
 - [ ] **`gate_QA` aceita relatório de QA de OUTRA missão** — `bin/sdd:1111` — a Âncora 1 pega o
@@ -100,6 +101,7 @@ Achados sobre **repos-alvo** vão para o `TODO.md` daquele repo. Este arquivo é
   `flush()` do ramo da caixa marcada não tem probe (esconde 3 de 4 violações); e o probe
   `--check ''` é vácuo quando `$ROOT/TODO.md` não existe. Direção: segundo fixture com contagem
   DIFERENTE, e prosa contendo `## Aberto` fora da coluna 0.
+  RESOLVED by b517d10 (missão `20260925-o-sensor-le-o-que-a-ancora-diz`).
   — descoberto por `sdd-reviewer` na missão `20260818-lote-facil` (2026-08-19)
 
 - [ ] **Os dois literais "ESTRUTURAIS" da regra 3 do `check-checkpoint.sh` afrouxam em verde** —
@@ -200,6 +202,7 @@ Achados sobre **repos-alvo** vão para o `TODO.md` daquele repo. Este arquivo é
   apontavam linha errada — a maioria apodreceu (o `bin/sdd` foi de 2287 para 2324 linhas na própria
   missão que as escreveu), três nasceram erradas. É "rótulo, não artefato" dentro do arquivo que
   cataloga essa família. Direção: resolver cada âncora e cobrar que a linha contenha um termo do
+  RESOLVED by a8a65db (missão `20260925-o-sensor-le-o-que-a-ancora-diz`).
   título. — descoberto por `sdd-docs` na missão `20260816-runner-sem-dividas` (2026-08-16)
 
 - [ ] **O fixture de `stream-json` não tem checagem de proveniência** — `tests/check-autonomy.sh:127`
@@ -418,6 +421,7 @@ Achados sobre **repos-alvo** vão para o `TODO.md` daquele repo. Este arquivo é
   a chave não existe quando o arquivo inteiro está quebrado. Medido nesta rodada que o `set -e`
   NÃO derruba a substituição (sem `inherit_errexit`), então o ramo existe e é alcançável.
   Direção: capturar a stderr do source e, se ela não estiver vazia, dizer "não parseia" e mostrá-la.
+  RESOLVED by 932a1ba (missão `20260925-o-sensor-le-o-que-a-ancora-diz`).
   — descoberto por `sdd-reviewer` na missão `20260819-fecho-que-nao-mente` (2026-08-19)
 
 - [ ] **A catraca do backlog e o carimbo de mutação colidem em toda missão** —
@@ -434,6 +438,7 @@ Achados sobre **repos-alvo** vão para o `TODO.md` daquele repo. Este arquivo é
   à suíte nos três casos. O `sdd health` responde `ok TEST_CMD runs the suite` e todo gate passa
   contra uma suíte que não rodou — o buraco que o I2 existe para fechar, outra grafia.
   Direção: normalizar o espaço em branco antes do `case`.
+  RESOLVED by 2b5f492 (missão `20260925-o-sensor-le-o-que-a-ancora-diz`).
   — descoberto por `sdd-qa` na missão `20260819-fecho-que-nao-mente` (2026-08-19)
 
 - [ ] **Lixo ignorado pelo git dentro dos quatro diretórios move a chave do carimbo** —
@@ -472,7 +477,8 @@ Achados sobre **repos-alvo** vão para o `TODO.md` daquele repo. Este arquivo é
   `$SDD_HOME`). Um alvo com `OUTPUT_LANG="en"` recebe prompt certo e template em português. Não
   morde hoje porque todo alvo é PT-BR. Direção: `templates/<lang>/` com fallback, ou estrutura
   inglesa com prosa-guia que o agente reescreve — a segunda mexe no contrato que
-  `check-templates.sh` mede, então vem depois da entrada acima. — descoberto por `humano` na
+  `check-templates.sh` mede. Precedente: o `todo.md` já tem uma variante por idioma (`todo.<lang>.md`,
+  paridade cobrada). — descoberto por `humano` na
   missão `20260815-i13.5-kit-em-ingles` (2026-08-15)
 
 - [ ] **A regra `cdpath:` certifica como limpo o `cd` de operando VARIÁVEL** —
@@ -550,6 +556,7 @@ Achados sobre **repos-alvo** vão para o `TODO.md` daquele repo. Este arquivo é
   linhas e uma cai fora do arquivo (`tests/run-all.sh:180`, num arquivo de 173). O sensor mede
   **forma**, nunca se a âncora ainda acerta o alvo, então o número não se move sozinho — e esta
   missão empurrou parte delas ao crescer o `bin/sdd` em 162 linhas. Direção: re-derivar em lote.
+  RESOLVED by a8a65db (missão `20260925-o-sensor-le-o-que-a-ancora-diz`).
   — descoberto por `sdd-reviewer` na missão `20260818-lote-facil` (2026-08-18)
 
 - [ ] **O `rows=13` do `gate:` da QA não sai do extrator do `gate_REVIEW`** —
@@ -592,14 +599,6 @@ Achados sobre **repos-alvo** vão para o `TODO.md` daquele repo. Este arquivo é
   vez**, que é o remendo e não o conserto. Direção: glob, com o piso derivado junto — é decisão,
   porque glob e piso enumerado são a mesma discussão do item do piso acima.
   — descoberto por `sdd-planner` na missão `20260901-o-revisor-so-acha` (2026-09-01)
-
-- [ ] **Os demais `templates/*.md` só existem em pt-BR, e um alvo `OUTPUT_LANG=en` recebe
-  handoff em português** — `templates/handoff.md:2` (`missao:`) — as chaves de frontmatter que o runner lê e os
-  títulos que o `check-templates.sh` cobra estão em pt-BR, e o `sdd install` não tem variante a
-  escolher. O `todo.md` é o primeiro template com uma variante por idioma (`todo.<lang>.md`, com
-  paridade estrutural cobrada), e o mecanismo serve de precedente. Direção: o mesmo par para os
-  demais, com as chaves de contrato em inglês — é o mesmo nó de `aprovacao`/`versao`/`titulo`.
-  — descoberto por `claude` na padronização do `TODO.md` entre repos (2026-09-24)
 
 ### Custo e escala
 
@@ -684,6 +683,7 @@ Achados sobre **repos-alvo** vão para o `TODO.md` daquele repo. Este arquivo é
   como a âncora obrigatória de todo Check que lê sensor, e 85 das 1058 asserções da suíte não casam
   com ela. Falha FECHADA (o Check dá 0 e o incremento reprova), mas quem escrever Check sobre esse
   sensor perde a sessão achando que a asserção sumiu. Direção: alinhar a grafia do sensor.
+  RESOLVED by eb0ee9e (missão `20260925-o-sensor-le-o-que-a-ancora-diz`).
   — descoberto por `sdd-reviewer` na missão `20260911-o-juiz-nao-mente-sobre-a-janela` (2026-09-12)
 
 - [ ] **Nenhuma das skills `qa-report`/`qa-execution` conhece o campo `Closable by:`** —
@@ -745,3 +745,4 @@ Achados sobre **repos-alvo** vão para o `TODO.md` daquele repo. Este arquivo é
 <!-- sdd:decided -->
 - **O `sdd preflight` não provaria que a sessão headless executa comando** — refutado: `bin/sdd:4504` manda rodar `bash -c 'echo sdd-preflight-ok'` sob as flags do `run_phase` desde `2083680`, e sob o chapéu do executor desde 2026-09-06 (2026-09-25)
 - **O `RESOLVED by` não deixa a catraca descer na missão que conserta** — decidido: o item fica até o merge e sai no chore pós-merge, `templates/todo.pt-BR.md` § Ciclo de vida (2026-09-25)
+- **O stub do `sdd adr new` manda escrever em `OUTPUT_LANG`, e o `check-lang.sh` lê `docs/adr/` como inglês** — limite declarado pela D15, não achado: `bin/sdd:6108` (2026-09-25)

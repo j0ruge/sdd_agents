@@ -4,6 +4,40 @@ Registro de melhorias com **antes/depois medido**. Sem número, não entra.
 
 ---
 
+## 2026-09-25 — O sensor lê o que a âncora diz: a âncora do achado passa a ser medida, e o teto de linhas perde o atalho
+
+**Problema (Gemba):** medido em `5cb0101`, das 85 âncoras `arquivo:N` do `TODO.md` do kit, **63**
+apontavam código errado — e a regra "existe e está no intervalo" reprovaria **0**, porque o
+`check-todo.sh` nunca abria o arquivo. O teto de 8 linhas contava linhas físicas: um item de 1794
+caracteres numa linha só passava. O selftest sobrevivia a cinco sabotagens do #70. E o `TEST_CMD`
+era certificado por grafia: config que não parseia virava "declares no TEST_CMD", `--list` depois
+de TAB ou entre aspas passava pelas duas regras, e o greenfield sem `package.json` levava `fail`.
+
+| | Antes | Depois |
+|---|---|---|
+| Âncoras fora do alvo (`--anchors TODO.md`) | 69 de 100 (a auditoria manual: 63 de 85) | **0 de 89**, cobrado no lint |
+| Item de 1794 caracteres numa linha física | aceito, rc 0 | recusado (`cap is 120`, contando caracteres) |
+| Sabotagens do #70 sobrevivendo ao selftest | 5 (a, c, d, b1, b2) | 0 — b4/b5 declaradas (só mudam a mensagem) |
+| Sensores com o `ok` calibrado pelo `calibrate()` | 8 | 9 (`CALIBRATE_FLOOR` 4 → 9) |
+| `TEST_CMD` com TAB ou aspas antes de `--list` | certificado pelas duas regras | recusado por um predicado só |
+| Config que não parseia, nos 7 sítios de leitura por chave | engolido (`>/dev/null 2>&1`) | dito, com o diagnóstico do `bash -n` |
+| Catálogo de mutação (âncoras) | 392 | 396 |
+
+**Achado durante a execução:** a primeira versão da regra tomava a primeira crase com forma de
+caminho da cabeça **com o título**, e um título citando `` `.sdd/config.sh` `` ou `` `bin/sdd` ``
+virava âncora de arquivo inteiro — seis itens escondiam a âncora real assim. A âncora passou a ser
+buscada depois do título (`9a123fa`), e os seis apareceram fora do alvo.
+
+**Re-verificar o conteúdo pagou mais que re-ancorar:** oito itens descreviam defeito já consertado
+por commits que estavam na `main` havia semanas (apagados), dois viraram registro decidido e um foi
+fundido; a catraca foi de 100 para 89 com os sete `RESOLVED by` desta missão ainda na seção aberta.
+
+**Contramedida:** a regra vive no lint (`check_file`), então uma missão que move código sob uma
+âncora fica vermelha na mesma corrida que fecha o gate da fase — medido no próprio I10, que empurrou a âncora
+do item do #70 e a viu apontada. ADR 0011.
+
+---
+
 ## 2026-09-22 — O motivo da fase: o runner diz por que abriu a sessão, e para quando ela não tem trabalho
 
 **Problema (Gemba):** na `20260921-amep-backend-0-1-0` (`lighthouse_project`, kit em `ea39868`)
