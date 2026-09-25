@@ -42,7 +42,9 @@ HAT_FLOOR=8
 PLACEHOLDERS='HANDOFF_DIR|MISSION|TODO_FILE|QA_DOCS_PATH|E2E_DIR|ADR_DIR'
 fails=0
 pass() { printf '  ok    %s\n' "$1"; }
-fail() { printf '  FAIL  %s\n' "$1" >&2; fails=$((fails + 1)); }
+# Inside a mutant the first red assertion is the verdict: fail() ends the sensor there, AFTER
+# printing, so the mutant's log still names it. The census in check-health.sh holds all nine.
+fail() { printf '  FAIL  %s\n' "$1" >&2; fails=$((fails + 1)); [ -z "${SDD_MUTANT:-}" ] || exit 1; }
 
 # fm_value <file> <key> — the frontmatter value, quotes stripped; prints the sentinel when absent
 ABSENT='@absent@'
@@ -114,7 +116,8 @@ selftest() {
   probe() {
     local desc="$1" want="$2" body="$3" needle="${4-}" got out
     printf '%s\n' "$body" > "$box/sdd-probe.md"
-    out="$("$ROOT/tests/check-hat.sh" --check "$box/sdd-probe.md" 2>&1)"; got=$?
+    # Outside a mutant on purpose: this child measures the report a human reads, every rule named.
+    out="$(env -u SDD_MUTANT "$ROOT/tests/check-hat.sh" --check "$box/sdd-probe.md" 2>&1)"; got=$?
     PROBES=$((PROBES + 1))
     local named=1
     if [ -n "$needle" ] && ! grep -qF -- "$needle" <<< "$out"; then named=0; fi

@@ -38,8 +38,10 @@ fails=0
 trap 'rm -rf "$FIX"' EXIT
 
 pass() { printf '  ok    %s\n' "$1"; }
+# Inside a mutant the first red assertion is the verdict: fail() ends the sensor there, AFTER
+# printing, so the mutant's log still names it. The census in check-health.sh holds all nine.
 fail() { printf '  FAIL  %s\n         expected: %s\n         got:      %s\n' "$1" "$2" "$3" >&2
-         fails=$((fails + 1)); }
+         fails=$((fails + 1)); [ -z "${SDD_MUTANT:-}" ] || exit 1; }
 
 # assert_has <description> <needle> <haystack>
 assert_has() {

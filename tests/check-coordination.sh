@@ -76,6 +76,10 @@ def check(name, condition, detail=""):
     else:
         failed += 1
         print("  FAIL  " + name + ": " + detail, flush=True)
+        # Inside a mutant the first red check is the verdict: stop here, after printing. The
+        # finally at the bottom still releases every process family and lock this file started.
+        if os.environ.get("SDD_MUTANT"):
+            raise SystemExit(1)
 
 
 def run(repo, *args, extra=None, binary=sdd):
@@ -258,9 +262,16 @@ def busy(repo, *args, binary=sdd, extra=None, name=None):
 
 
 try:
-    # A negative control proves the verdict accumulator itself can report a failure.
-    with contextlib.redirect_stdout(io.StringIO()):
-        check("negative control", False, "intentional")
+    # A negative control proves the verdict accumulator itself can report a failure. It runs
+    # outside the mutant on purpose: it needs this red check() to return, and inside a mutant the
+    # first red check ends the sensor. `env`, copied above, still carries SDD_MUTANT to every CLI.
+    mutant = os.environ.pop("SDD_MUTANT", None)
+    try:
+        with contextlib.redirect_stdout(io.StringIO()):
+            check("negative control", False, "intentional")
+    finally:
+        if mutant is not None:
+            os.environ["SDD_MUTANT"] = mutant
     if failed != 1:
         raise RuntimeError("SENSOR-BROKEN: assertion accounting")
     failed = 0

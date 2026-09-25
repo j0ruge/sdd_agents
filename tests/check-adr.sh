@@ -204,9 +204,11 @@ fails=0
 PROBE_FLOOR=69
 
 pass() { PROBES=$((PROBES + 1)); printf '  ok    %s\n' "$1"; }
+# Inside a mutant the first red assertion is the verdict: fail() ends the sensor there, AFTER
+# printing, so the mutant's log still names it. The census in check-health.sh holds all nine.
 fail() { PROBES=$((PROBES + 1))
          printf '  FAIL  %s\n         expected: %s\n         got:      %s\n' "$1" "$2" "$3" >&2
-         fails=$((fails + 1)); }
+         fails=$((fails + 1)); [ -z "${SDD_MUTANT:-}" ] || exit 1; }
 
 # A fixture repo per probe, thrown away at exit. Its own SDD_STATE_DIR for the same reason
 # check-gates.sh carries one: a standalone run does not inherit run-all.sh's export, and a fixture

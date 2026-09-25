@@ -100,8 +100,10 @@ trap 'rm -rf "$WORK"' EXIT
 
 fails=0
 pass() { printf '  ok    %s\n' "$1"; }
+# Inside a mutant the first red assertion is the verdict: fail() ends the sensor there, AFTER
+# printing, so the mutant's log still names it. The census in check-health.sh holds all nine.
 fail() { printf '  FAIL  %s\n         expected: %s\n         got:      %s\n' "$1" "$2" "$3" >&2
-         fails=$((fails + 1)); }
+         fails=$((fails + 1)); [ -z "${SDD_MUTANT:-}" ] || exit 1; }
 
 # SENSOR-BROKEN is not an assertion failure. It means the fixture stopped modelling the world, so
 # every verdict below would be a verdict about nothing — counting it as one red assertion among
@@ -1400,6 +1402,118 @@ else
   fail 'surface: outside a mutant SDD_MUTANT_FIRST changes nothing' \
        "rc $FIRST_PLAIN_RC and exactly the order of the plain run without it" \
        "rc $FAILFAST_RC, steps: $(tr '\n' ' ' <<< "$FAILFAST_STEPS")"
+fi
+
+# ---------------------------------------------------------------------------
+# surface: inside a mutant every sensor stops at its FIRST red assertion
+#
+# The catalogue reads the suite's rc and nothing else, and a sensor that called fail() once has
+# already decided that rc: everything it runs after is paid and read by no one. Measured on 24
+# mutants of 8f2f2a9 (2026-09-25): the first FAIL lands, on the median, halfway through the killing
+# sensor — 1328.7 s of sensor against 624.4 s up to the first FAIL. So each sensor that runs inside
+# a mutant ends at its first fail() when SDD_MUTANT is set, AFTER printing it: the mutant's log still
+# names what killed it, and killer_of reads the step off that log.
+#
+# A CENSUS, not a sample. The population is read off the suite itself — every step
+# `SDD_MUTANT=1 run-all.sh --list` prints, joined to the tests/check-*.sh its `run` line executes —
+# and every one of those files that defines a bash `fail() {` or a Python `def check(` is measured.
+# Each definition is sourced (the killer_of guard: one short, closed block, or SENSOR-BROKEN) and
+# called three times: under SDD_MUTANT=1 it must exit 1 with the FAIL already printed; with the
+# variable unset, and set to the empty string, it must return with its counter up by one. A new
+# sensor that runs inside mutants and forgets the clause turns this red, because the census walks
+# the suite instead of a table somebody has to remember to extend.
+# Outside the census, declared: check-entrypoint.sh and check-templates.sh run inside mutants with
+# no single failure primitive (1 and 0 kills in the map of 2026-09-25, ~0.5 s each). Not measured
+# here, and said: a fail() called inside a subshell would stop only the subshell — no such call
+# exists today, and one would already lose its `fails` count; the census cannot see call sites.
+# CENSUS_FLOOR is the nine of 2026-09-25 (autonomy, gates, kaizen, preflight, health, adr, hat,
+# dry-run, coordination): the list or the join to tests/ that stops reading the suite fails loudly.
+# ---------------------------------------------------------------------------
+CENSUS_FLOOR=9
+census_file_of() { # census_file_of <step title> — the tests/check-*.sh that step runs, or nothing
+  local hits
+  hits="$(grep -F -- "run \"$1\" \"\$ROOT/tests/check-" "$ROOT/tests/run-all.sh" \
+          | sed -n 's|.*"\$ROOT/tests/\(check-[a-z-]*\.sh\)".*|\1|p')" || true
+  printf '%s' "${hits%%$'\n'*}"
+}
+census_src() { # census_src <file> <bash|py> — the definition, printed only when short and closed
+  local src n
+  if [ "$2" = bash ]; then
+    src="$(awk '/^fail\(\) \{/ { p = 1 } p { print; if ($0 ~ /\}[[:space:]]*$/) exit }' "$1")"
+    n="$(grep -c . <<< "$src")"
+    [ -n "$src" ] && [ "$n" -le 8 ] && [ "${src: -1}" = '}' ] || return 1
+  else
+    src="$(awk '/^def check\(/ { p = 1 } p { if ($0 ~ /^[[:space:]]*$/) exit; print }' "$1")"
+    n="$(grep -c . <<< "$src")"
+    [ -n "$src" ] && [ "$n" -le 16 ] || return 1
+  fi
+  printf '%s\n' "$src"
+}
+census_call() { # census_call <bash|py> <definition> <SDD_MUTANT value | UNSET> — "rc=<n> said=<n> back=<n>"
+  local out rc=0 prog
+  if [ "$1" = bash ]; then
+    # PROBES is read by check-adr.sh's fail(), which the eval below defines.
+    # shellcheck disable=SC2034
+    out="$( { fails=0; PROBES=0
+               eval "$2"
+               if [ "$3" = UNSET ]; then unset SDD_MUTANT; else export SDD_MUTANT="$3"; fi
+               fail 'census probe' x y
+               printf 'back=%s\n' "$fails"; } 2>&1 )" || rc=$?
+  else
+    prog="$(printf 'import os, sys\npassed = failed = 0\n%s\ncheck("census probe", False, "x")\nprint("back=%%d" %% failed)\n' "$2")"
+    if [ "$3" = UNSET ]; then out="$(env -u SDD_MUTANT python3 -c "$prog" 2>&1)" || rc=$?
+    else out="$(SDD_MUTANT="$3" python3 -c "$prog" 2>&1)" || rc=$?; fi
+  fi
+  printf 'rc=%s said=%s back=%s\n' "$rc" "$(grep -c 'FAIL  census probe' <<< "$out" || true)" \
+         "$(grep -c '^back=1$' <<< "$out" || true)"
+}
+CENSUS_STEPS="$(SDD_MUTANT=1 "$ROOT/tests/run-all.sh" --list 2>/dev/null || true)"
+census_n=0
+while IFS= read -r census_step; do
+  [ -n "$census_step" ] || continue
+  census_f="$(census_file_of "$census_step")"
+  [ -n "$census_f" ] || continue
+  census_kind=''
+  grep -q '^fail() {' "$ROOT/tests/$census_f" && census_kind=bash
+  grep -q '^def check(' "$ROOT/tests/$census_f" && census_kind=py
+  [ -n "$census_kind" ] || continue
+  census_def="$(census_src "$ROOT/tests/$census_f" "$census_kind")" \
+    || broken "census: $census_f defines its failure primitive, but not as one short closed block — refusing to source it"
+  census_n=$((census_n + 1))
+  census_in="$(census_call "$census_kind" "$census_def" 1)"
+  census_out="$(census_call "$census_kind" "$census_def" UNSET)"
+  census_empty="$(census_call "$census_kind" "$census_def" '')"
+  if [ "$census_in" = 'rc=1 said=1 back=0' ] && [ "$census_out" = 'rc=0 said=1 back=1' ] \
+     && [ "$census_empty" = 'rc=0 said=1 back=1' ]; then
+    pass "surface: $census_f stops at its first FAIL inside a mutant, and only there"
+  else
+    fail "surface: $census_f stops at its first FAIL inside a mutant, and only there" \
+         "SDD_MUTANT=1: rc=1 said=1 back=0 · unset and empty: rc=0 said=1 back=1" \
+         "SDD_MUTANT=1: $census_in · unset: $census_out · empty: $census_empty"
+  fi
+done <<< "$CENSUS_STEPS"
+[ "$census_n" -ge "$CENSUS_FLOOR" ] \
+  || broken "census: $census_n sensor(s) with a failure primitive among the mutant steps, the floor is $CENSUS_FLOOR — the list or the join to tests/ stopped reading the suite"
+# A sensor that calls its own failure primitive on purpose runs that call outside the mutant.
+# The hat selftest runs its own --check as a child and demands the output NAME the broken rule: that
+# child measures the report a human reads, so it runs outside the mutant, where fail() never stops.
+if grep -qF 'out="$(env -u SDD_MUTANT "$ROOT/tests/check-hat.sh" --check' "$ROOT/tests/check-hat.sh"; then
+  pass 'surface: the hat selftest measures its report outside a mutant'
+else
+  fail 'surface: the hat selftest measures its report outside a mutant' \
+       'the selftest child of tests/check-hat.sh runs under env -u SDD_MUTANT' \
+       'the child inherits SDD_MUTANT, and a probe whose rule is named second would read red'
+fi
+# The same rule, second instance: check-coordination.sh opens with a negative control that calls a
+# red check() on purpose and needs it to RETURN, so it can read the accounting. Inside a mutant that
+# call ends the sensor with its stdout redirected — rc 1 and not one FAIL line. Measured on this
+# branch before the fix: `SDD_MUTANT=1 run-all.sh` red at "one checkout has one execution owner".
+if grep -qF 'mutant = os.environ.pop("SDD_MUTANT", None)' "$ROOT/tests/check-coordination.sh"; then
+  pass 'surface: the coordination negative control runs outside a mutant'
+else
+  fail 'surface: the coordination negative control runs outside a mutant' \
+       'the negative control of tests/check-coordination.sh pops SDD_MUTANT around its red check()' \
+       'the control inherits SDD_MUTANT, and the sensor exits 1 on the intact kit with nothing printed'
 fi
 
 # ---------------------------------------------------------------------------
