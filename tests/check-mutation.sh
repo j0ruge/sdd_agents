@@ -2073,6 +2073,17 @@ mut_PRE_node_outside_substring() {
   sed -i '/^node_scripts_outside_test_cmd()/,/^}/ s@grep -qE "(^|\[^\[:alnum:\]_:-\])\${s}(\[^\[:alnum:\]_:-\]|\\\$)"@grep -qF "$s"@' "$1"
 }
 
+# A package.json the kit could not read goes back to reading as "declares no gate script": install
+# writes a bare `npm test` and preflight stays quiet, in silence, both.
+mut_PRE_node_manifest_unread_blind() {
+  sed -i '/^node_manifest_unread()/,/^}/ s@  jq empty "\$pkg" >/dev/null 2>&1 || printf .package.json does not parse as JSON.@  :@' "$1"
+}
+
+# Only TEST_CMD stays escaped: a branch carrying `&` comes out of the starter as the matched text.
+mut_RUN_install_branch_unescaped() {
+  sed -i 's@    branch_sed="\$(sed_replacement "\$branch")"@    branch_sed="$branch"@' "$1"
+}
+
 # Not a gate: the base branch warning goes back to being decoration. The body is emptied while the
 # function keeps existing and keeps returning 0, so every call site stays syntactically valid and
 # nothing else about the runs changes — which is exactly the shape of the defect this closes, a
@@ -4317,6 +4328,8 @@ CATALOG=(
   PRE_node_outside_blind
   PRE_node_sed_unescaped
   PRE_node_outside_substring
+  PRE_node_manifest_unread_blind
+  RUN_install_branch_unescaped
   RUN_base_branch_warn_dead
   RUN_approve_writes_auto
   RUN_approve_bails_on_kaizen_born
@@ -4592,7 +4605,7 @@ run_mutant() {
 # stopped being parsed: an empty loop reports "0 broken" forever.
 # ---------------------------------------------------------------------------
 if [ "$ANCHORS_ONLY" = 1 ]; then
-  ANCHOR_FLOOR=401
+  ANCHOR_FLOOR=403
   anchor_box() { mkdir -p "$1"; cp -r "$ROOT/bin" "$1/"; }
   anchor_control_noop()       { :; }
   anchor_control_intact()     { printf '# a mutation that lands and stays valid\n' >> "$1"; }

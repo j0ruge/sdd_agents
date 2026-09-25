@@ -38,6 +38,14 @@ a key the runner never reads is a promise the user cannot collect on, and this s
 such keys — for a lint, a build and bringing the environment up — until they were removed. Adding
 one back means wiring the read in `bin/sdd` in the **same** commit.
 
+For a Node repo, `sdd install` writes that chain for you: every one of `lint`, `typecheck` and
+`build` that `package.json` declares, in that order (cheapest first), then `npm test` — so
+`npm run lint && npm run build && npm test` for a repo with no `typecheck`. No other script name is
+chained in on a guess. `sdd preflight` warns when a `TEST_CMD` written by hand leaves one of those
+three out (a warn, since leaving a slow build out can be deliberate), and warns separately when it
+could not read the scripts at all — `jq` missing or a `package.json` that is not JSON — so a silence
+there is never mistaken for an ok.
+
 ## Running application (QA phase)
 
 | Key | Required | Default | What it is |

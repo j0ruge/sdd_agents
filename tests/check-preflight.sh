@@ -1029,11 +1029,31 @@ nw_case 'npm run build:prod && npm run lint && npm run typecheck && npm test' 'w
 # The warn is NARROW, and the three probes are its edges: no manifest -> warn; manifest present and
 # suite red -> still the fail; a runner the table does not know -> still the fail (run_case above).
 echo "== greenfield: TEST_CMD's runner without its manifest =="
+# The excuse needs the runner to SAY the manifest is missing, so this probe needs npm's own words —
+# and a real npm is not something the suite may assume: without one the shell answers "command not
+# found", the evidence never matches, and the probe went red on a machine with no Node for a reason
+# that has nothing to do with issue 53. The stub prints what npm prints. Provenance: `npm test` in an
+# empty directory, npm 12.0.2, 2026-09-25 — copied, not written from memory (the CLAUDE.md rule).
+mkdir -p "$FIX/.npmstub"
+cat > "$FIX/.npmstub/npm" <<'STUB'
+#!/usr/bin/env bash
+cat >&2 <<EOF
+npm error code ENOENT
+npm error syscall open
+npm error path $PWD/package.json
+npm error errno -2
+npm error enoent Could not read package.json: Error: ENOENT: no such file or directory, open '$PWD/package.json'
+npm error enoent This is related to npm not being able to find a file.
+npm error enoent
+EOF
+exit 254
+STUB
+chmod +x "$FIX/.npmstub/npm"
 node_target "$FIX/greenfield" '{}'
 rm -f "$FIX/greenfield/package.json"
 ( cd "$FIX/greenfield" && "$SDD" install >/dev/null 2>&1 )
 sed -i 's|^TEST_CMD=.*|TEST_CMD="npm test"|' "$FIX/greenfield/.sdd/config.sh"
-out="$( cd "$FIX/greenfield" && "$SDD" preflight 2>&1 )"
+out="$( cd "$FIX/greenfield" && PATH="$FIX/.npmstub:$PATH" "$SDD" preflight 2>&1 )"
 assert_eq "a runner without its manifest at the root is a warn, not a fail" \
   "warn, no FAILED" \
   "$(grep -qF 'expected if I1 creates the scaffold' <<< "$out" && printf 'warn' || printf 'no warn'), $(grep -qF 'TEST_CMD FAILED' <<< "$out" && printf 'FAILED' || printf 'no FAILED')"
@@ -1067,11 +1087,32 @@ out2="$( cd "$FIX/prefix-red" && "$SDD" preflight 2>&1 )"
 # package.json makes npm cite it (EJSONPARSE), and without the root check that read as "missing".
 node_target "$FIX/bad-json" '{}'
 printf '{"name": \n' > "$FIX/bad-json/package.json"
-( cd "$FIX/bad-json" && "$SDD" install >/dev/null 2>&1 )
+inst3="$( cd "$FIX/bad-json" && "$SDD" install 2>&1 )"
 sed -i 's|^TEST_CMD=.*|TEST_CMD="npm test"|' "$FIX/bad-json/.sdd/config.sh"
 out3="$( cd "$FIX/bad-json" && "$SDD" preflight 2>&1 )"
 assert_eq "a manifest the runner cites while it exists (malformed) is still a fail" "FAILED" \
   "$(grep -qF 'TEST_CMD FAILED' <<< "$out3" && printf 'FAILED' || printf 'excused')"
+# The same malformed manifest, read by the kit: node_gate_scripts answers "no gate script" both for
+# a repo that declares none and for one it could not read, and the second used to be silence —
+# install wrote a bare `npm test`, preflight never warned. Both now SAY they could not read it, and
+# the control (node-bare, a manifest that parses) says nothing of the kind.
+unread_says="could not read package.json's scripts (package.json does not parse as JSON)"
+out4="$( cd "$FIX/node-bare" && "$SDD" preflight 2>&1 )"
+assert_eq "install and preflight say they could not read package.json's scripts" \
+  "install: said / preflight: said / parsed manifest: quiet" \
+  "install: $(grep -qF "$unread_says" <<< "$inst3" && printf said || printf silent) / preflight: $(grep -qF "$unread_says" <<< "$out3" && printf said || printf silent) / parsed manifest: $(grep -qF 'could not read package.json' <<< "$out4" && printf said || printf quiet)"
+
+# --- every value install substitutes is escaped for sed, not only TEST_CMD -------------------
+# `&` in a sed replacement is "the matched text": a branch named `feat/a&b` came out of the starter
+# as `feat/a<DEFAULT_BRANCH>b`. The same corruption the composed TEST_CMD had, through another key.
+echo "== install escapes the branch name for sed =="
+mkdir -p "$FIX/amp-branch"
+( cd "$FIX/amp-branch" && git init -q -b 'feat/a&b' && git config user.email "fixture@example.com" \
+  && git config user.name "Fixture" && git commit -q --allow-empty -m init ) >/dev/null 2>&1
+( cd "$FIX/amp-branch" && "$SDD" install >/dev/null 2>&1 )
+assert_eq "a branch name carrying & reaches DEFAULT_BRANCH verbatim" \
+  'DEFAULT_BRANCH="feat/a&b"' \
+  "$(grep -oE '^DEFAULT_BRANCH="[^"]*"' "$FIX/amp-branch/.sdd/config.sh" 2>/dev/null || echo 'no DEFAULT_BRANCH line')"
 assert_eq "a red suite whose runner never said its manifest is missing still fails" \
   "pytest: FAILED / prefix: FAILED" \
   "pytest: $(grep -qF 'TEST_CMD FAILED' <<< "$out" && printf 'FAILED' || printf 'excused') / prefix: $(grep -qF 'TEST_CMD FAILED' <<< "$out2" && printf 'FAILED' || printf 'excused')"

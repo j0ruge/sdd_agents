@@ -108,6 +108,11 @@ resolve_repo_root() {
 # unclosed quote arrived EMPTY and was reported as "declares no TEST_CMD" (issue 116), or quietly
 # bought the defaults. Called as `v="$(config_read_key …)"`: it publishes no global, because a
 # global set inside a command substitution dies with it.
+# ⚠️ A key the file does NOT set comes back from the caller's environment, on purpose: that is
+# what load_config's `source` + `: "${KEY:=default}"` hands the runner, and install and autonomy
+# promise that same value. Emptying the key here alone would split them — install seeding TODO.md
+# while the runner reads the exported TODO_FILE. The one caller that wants the kit's file and
+# nothing else (health --release, RELEASE_FORBIDDEN_WORDS) empties the key in its own env prefix.
 config_read_key() {
   local file="$1" key="$2" diag
   case "$key" in '' | [!A-Za-z_]* | *[!A-Za-z0-9_]*) printf 'config_read_key: bad key %s\n' "$key" >&2; return 2 ;; esac
@@ -3920,6 +3925,26 @@ node_gate_scripts() {
   return 0
 }
 
+# sed_replacement <value> → <value> safe as the REPLACEMENT of an `s|…|…|` command: `\`, `&` and
+# the `|` delimiter escaped. One definition for every value cmd_install substitutes.
+sed_replacement() { printf '%s' "$1" | sed -e 's/[\\&|]/\\&/g'; }
+
+# node_manifest_unread → why node_gate_scripts cannot read the gate scripts, or nothing.
+#
+# node_gate_scripts answers "none" in two worlds: a package.json that declares no lint, typecheck
+# or build, and one it could not READ — jq absent (`sdd install` does not require it) or a manifest
+# that is not JSON. Both came out as silence: install wrote a bare `npm test` and preflight's
+# outside-the-gate warning never fired, which is the defect the helper exists to close, reached by
+# a missing binary. It is a separate predicate, and not a global set inside node_gate_scripts,
+# because every caller reads that one through `< <( )`, a subshell where a global dies.
+node_manifest_unread() {
+  local pkg="$REPO_ROOT/package.json"
+  [ -f "$pkg" ] || return 0
+  if ! command -v jq >/dev/null 2>&1; then printf 'jq is not installed'; return 0; fi
+  jq empty "$pkg" >/dev/null 2>&1 || printf 'package.json does not parse as JSON'
+  return 0
+}
+
 # node_test_cmd → the TEST_CMD `sdd install` writes for a Node repo: every gate script, then the suite.
 node_test_cmd() {
   local s chain=""
@@ -4122,7 +4147,8 @@ cmd_install() {
     # chosen in silence, in the one key the whole pipeline trusts. package.json first because a
     # repo with two manifests is usually a JS project with a helper in another language.
     test_cmd="TODO"
-    if   [ -f "$REPO_ROOT/package.json" ];   then test_cmd="$(node_test_cmd)"
+    local node_unread=""
+    if   [ -f "$REPO_ROOT/package.json" ];   then test_cmd="$(node_test_cmd)"; node_unread="$(node_manifest_unread)"
     elif [ -f "$REPO_ROOT/pyproject.toml" ]; then test_cmd="pytest -q"
     elif [ -f "$REPO_ROOT/Cargo.toml" ];     then test_cmd="cargo test"
     elif [ -f "$REPO_ROOT/go.mod" ];         then test_cmd="go test ./..."
@@ -4138,15 +4164,22 @@ cmd_install() {
       || die "the kit at $SDD_HOME has no config/starter.conf — .sdd/config.sh would be created empty, and the next 'sdd install' would report it as already existing. Re-copy or re-clone the kit."
     # `&` in a sed REPLACEMENT means "the matched text", so a composed `npm run lint && npm test`
     # came out as `npm run lint <TEST_CMD><TEST_CMD> npm test` — measured, in the probe that asserts
-    # the composed value. `\` and the `|` delimiter are escaped for the same reason.
-    local test_cmd_sed
-    test_cmd_sed="$(printf '%s' "$test_cmd" | sed -e 's/[\\&|]/\\&/g')"
-    sed -e "s|<PROJECT_NAME>|$project|g" \
-        -e "s|<DEFAULT_BRANCH>|$branch|g" \
+    # the composed value. `\` and the `|` delimiter are escaped for the same reason, and for EVERY
+    # value substituted here: a branch named `feat/a&b` or a checkout under `/srv/a|b` is the same
+    # corruption through another key.
+    local test_cmd_sed project_sed branch_sed home_sed
+    test_cmd_sed="$(sed_replacement "$test_cmd")"
+    project_sed="$(sed_replacement "$project")"
+    branch_sed="$(sed_replacement "$branch")"
+    home_sed="$(sed_replacement "$SDD_HOME")"
+    sed -e "s|<PROJECT_NAME>|$project_sed|g" \
+        -e "s|<DEFAULT_BRANCH>|$branch_sed|g" \
         -e "s|<TEST_CMD>|$test_cmd_sed|g" \
-        -e "s|<SDD_HOME>|$SDD_HOME|g" \
+        -e "s|<SDD_HOME>|$home_sed|g" \
         "$SDD_HOME/config/starter.conf" > "$CONFIG_FILE"
     ok ".sdd/config.sh created (base branch detected: $branch — confirm it)"
+    [ -z "$node_unread" ] || warn "could not read package.json's scripts ($node_unread) — TEST_CMD
+        is a bare 'npm test'. If the repo declares lint, typecheck or build, chain them in by hand."
   fi
 
   # The three paths the runner cannot work without, all NAMED in the config just written — which is
@@ -4201,6 +4234,8 @@ cmd_install() {
   # The blob of the seed this command wrote before the two-section skeleton, byte for byte. A file
   # still equal to it holds no finding, so replacing it loses nothing; one byte different and it is
   # somebody's work, preserved. Measured on three targets that were seeded and never written to.
+  # `--no-filters`, as in ensure_mission_branch: "byte for byte" means the bytes on disk, never what
+  # the target's clean filters or core.autocrlf would have made of them.
   local legacy_seed_blob="1bcb41467fec35ec67cf74948a3e2acfdafcc194"
 
   if [ ! -f "$REPO_ROOT/$inst_todo" ]; then
@@ -4209,7 +4244,7 @@ cmd_install() {
     # would take them with it.
     cp "$seed" "$REPO_ROOT/$inst_todo"
     ok "$inst_todo created from templates/$(basename "$seed") (out-of-scope findings go here — principle 5)"
-  elif [ "$(git hash-object "$REPO_ROOT/$inst_todo" 2>/dev/null)" = "$legacy_seed_blob" ]; then
+  elif [ "$(git hash-object --no-filters "$REPO_ROOT/$inst_todo" 2>/dev/null)" = "$legacy_seed_blob" ]; then
     cp "$seed" "$REPO_ROOT/$inst_todo"
     ok "$inst_todo was the untouched legacy seed — replaced by templates/$(basename "$seed") (it held no finding)"
   elif ! grep -qE '^<!-- sdd:open -->[[:space:]]*$' "$REPO_ROOT/$inst_todo"; then
@@ -4626,7 +4661,10 @@ cmd_preflight() {
   case "$TEST_CMD" in
     TODO|"") ;;
     *)
-      local outside; outside="$(node_scripts_outside_test_cmd "$TEST_CMD")"
+      local outside unread; unread="$(node_manifest_unread)"
+      [ -z "$unread" ] || warn "could not read package.json's scripts ($unread) — whether TEST_CMD
+        leaves out lint, typecheck or build was NOT checked, so this silence is not an ok."
+      outside="$(node_scripts_outside_test_cmd "$TEST_CMD")"
       [ -z "$outside" ] || warn "TEST_CMD leaves out package.json script(s): ${outside}— the runner reads
         no other sensor, so a mission passes every gate with them red. Chain them in (npm run <script>
         && … && npm test), unless leaving them out is deliberate." ;;
