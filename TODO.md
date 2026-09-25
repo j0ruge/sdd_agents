@@ -227,7 +227,7 @@ Achados sobre **repos-alvo** vão para o `TODO.md` daquele repo. Este arquivo é
   Direção: probe que rode o CLI de verdade, ou capturar o schema num arquivo versionado.
   — descoberto por `sdd-executor` na missão `20260816-runner-sem-dividas` (2026-08-16)
 
-- [ ] **`.sdd/logs/` não tem poda e agora guarda o stream inteiro** — `bin/sdd:213` — desde o I10
+- [ ] **`.sdd/logs/` não tem poda e agora guarda o stream inteiro** — `bin/sdd:707` — desde o I10
   cada sessão deixa três arquivos, e o `.stream.jsonl` é a sessão toda (a de teste, trivial, deu
   ~40 KB; uma fase real de 10 min é ordens de grandeza maior). Nada apaga nada: o diretório cresce
   por missão para sempre, e é justamente o que o humano vai querer abrir. Não é urgente — é
@@ -242,10 +242,10 @@ Achados sobre **repos-alvo** vão para o `TODO.md` daquele repo. Este arquivo é
   tentador é `KNOWN_GAPS`. Direção: reprovar guarda de `SDD_MUTANT` em arquivo que invoca `bin/sdd`.
   — descoberto por `sdd-executor` na missão `20260816-runner-sem-dividas` (2026-08-16)
 
-- [ ] **`check-autonomy.sh` é vermelho intermitente, causa desconhecida** — `bin/sdd:989` —
+- [ ] **`check-autonomy.sh` é vermelho intermitente, causa desconhecida** — `bin/sdd:4286` —
   ⚠️ **A causa registrada foi REFUTADA; o sintoma segue aberto.** Era "colisão de nome de log em
   repo que versiona `.sdd/logs/`", e não se sustenta: `check-autonomy.sh:140` chama
-  `sdd install` ANTES de existir log, e `bin/sdd:1125` já põe `.sdd/logs/` no `.gitignore` —
+  `sdd install` ANTES de existir log, e o `sdd install` já põe `.sdd/logs/` no `.gitignore` —
   `git ls-files` no fixture lista só `.sdd/config.sh`. Colisão é a norma (8 sessões EXEC no mesmo
   segundo num run) e a árvore fecha limpa. Não reproduziu em **152 runs**. Direção: `%N` é no-op;
   medir de novo antes de consertar. — refutado por `sdd-reviewer` (r2), descoberto por
@@ -430,7 +430,7 @@ Achados sobre **repos-alvo** vão para o `TODO.md` daquele repo. Este arquivo é
   — descoberto por `operador` na missão `20260827-condicoes-pagamento-mesmo-cliente` (2026-08-27)
 
 - [ ] **`.sdd/config.sh` que não parseia é reportado como "declares no TEST_CMD"** —
-  `bin/sdd:2183` — a checagem 2b lê o `TEST_CMD` sourceando o config num subshell com
+  `bin/sdd:5159` — a checagem 2b lê o `TEST_CMD` sourceando o config num subshell com
   `>/dev/null 2>&1`, então o erro de sintaxe é engolido e o valor chega vazio: o operador ouve que
   a chave não existe quando o arquivo inteiro está quebrado. Medido nesta rodada que o `set -e`
   NÃO derruba a substituição (sem `inherit_errexit`), então o ramo existe e é alcançável.
@@ -508,7 +508,7 @@ Achados sobre **repos-alvo** vão para o `TODO.md` daquele repo. Este arquivo é
   — descoberto por `sdd-executor` na missão `20260818-lote-facil` (2026-08-18)
 
 - [ ] **Nenhuma chave de caminho do `.sdd/config.sh` é normalizada antes de virar padrão de `case`**
-  — `bin/sdd:2393` — `review_scope_check` compara `$TODO_FILE` **literalmente** contra a saída de
+  — `bin/sdd:1902` — `hat_expand` troca `$TODO_FILE` **literalmente** no `writes:` do chapéu, lido contra
   `git diff --name-only`; um repo-alvo com `TODO_FILE="./TODO.md"` — ou `HANDOFF_DIR="./docs/handoffs"`,
   que a normalização do `F4` também não pega — reproduz o defeito que o `F4` acabou de consertar,
   com raio menor. Direção: normalização **única** na leitura do config, com um probe por chave.
@@ -522,10 +522,10 @@ Achados sobre **repos-alvo** vão para o `TODO.md` daquele repo. Este arquivo é
   — descoberto por `sdd-executor` na missão `20260901-o-revisor-so-acha` (2026-09-02)
 
 - [ ] **Uma sessão escreve o ledger com o `bin/sdd` que tinha em MEMÓRIA ao ser lançada** —
-  `bin/sdd:2650` — logo a missão que ACRESCENTA um campo é, por construção, a única que não o
-  registra: 3 das 4 rodadas desta missão saíram com `turns: null`. Duas superfícies, consequências
-  diferentes: no ledger o campo falta; em `review_scope_check` um `grep -c REVIEW-EDITED-CODE`
-  responde `0` sem distinguir "medido limpo" de "não medido" — fail-open de leitura. Direção: o
+  `bin/sdd:3491` — logo a missão que ACRESCENTA um campo é, por construção, a única que não o
+  registra: 3 das 4 rodadas desta missão saíram com o `turns` nulo, e o ledger não distingue
+  "medido nulo" de "não medido" — fail-open de leitura (o `review_scope_check` que era a 2ª
+  superfície virou `hat_guard_check`, que lê commits e árvore). Direção: o
   `sdd run` avisar quando o `bin/sdd` mudou sob ele; a métrica citar `.sdd/logs/` na estreia.
   — descoberto por `sdd-qa` na missão `20260901-o-revisor-so-acha` (2026-09-01)
 
@@ -743,7 +743,7 @@ Achados sobre **repos-alvo** vão para o `TODO.md` daquele repo. Este arquivo é
   — descoberto por `sessão coordenadora` na missão `20260916-destino-frete-cif` (2026-09-16)
 
 - [ ] **`sdd approve` commita na branch corrente, mesmo a padrão, e só o `00-missao.md`** —
-  `bin/sdd:6260` — medido aqui: o commit da aprovação caiu na `main` local, com o `01-plano.md`, o
+  `bin/sdd:6542` — medido aqui: o commit da aprovação caiu na `main` local, com o `01-plano.md`, o
   `checkpoint.md` e o ADR citado fora do git, ou seja, uma missão aprovada sem plano no histórico.
   Em repo-alvo, alguém que dê `push` na `main` publica isso. Direção: recusar ou avisar quando a
   branch é o `DEFAULT_BRANCH`, e commitar o diretório da missão inteiro.
