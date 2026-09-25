@@ -84,9 +84,17 @@ fixture, gravados como texto.
 `check-hat.sh --check` como processo filho e exige que a saída **nomeie** a regra violada. Esse
 filho mede o caminho de relatório que o humano vê, então ele roda com `env -u SDD_MUTANT`. A
 regra geral, escrita no comentário do censo: sensor que roda a si mesmo para medir o relatório
-roda esse filho fora do mutante. Hoje esse é o único caso. O `check-preflight.sh:803` chama o
-`check-todo.sh`, que não tem `fail()`, e o `check-health.sh` só copia os outros sensores e faz
-`grep` neles.
+roda esse filho fora do mutante. O `check-preflight.sh:803` chama o `check-todo.sh`, que não tem
+`fail()`, e o `check-health.sh` só copia os outros sensores e faz `grep` neles.
+
+⚠️ **Esta leitura errou por um: havia um segundo caso.** O `check-coordination.sh` abre com um
+controle negativo que chama `check("negative control", False, …)` de propósito, com a stdout
+redirecionada, e precisa que ele **volte** para ler a contabilidade. Medido na execução: com a
+cláusula e sem conserto, `SDD_MUTANT=1 run-all.sh` no kit intacto ficou vermelho em "one checkout
+has one execution owner", rc 1 e nenhuma linha FAIL. O controle agora tira `SDD_MUTANT` do
+`os.environ` em volta dessa chamada (a cópia `env` continua levando a variável a toda CLI), e o
+censo ganhou a asserção irmã da do `hat`. A regra geral passa a ser: sensor que chama a própria
+primitiva de falha **de propósito** faz essa chamada fora do mutante.
 
 **Por que nenhum veredito muda.** O catálogo só lê o rc da suíte. Um sensor que chamou `fail()`
 já termina com 1: os oito em bash fecham com `exit 1` quando `fails` não é zero, e o coordination
@@ -117,8 +125,9 @@ No `check-health.sh`, junto das probes do mapa de assassinos (`surface:`).
   - A quarta asserção lê o `check-hat.sh`: o filho do selftest roda sob `env -u SDD_MUTANT`.
 - **Piso contra vacuidade.** Se o censo encontrar menos sensores que o piso (hoje, 9), o
   resultado é SENSOR-BROKEN, nunca "0 violações".
-- **Exceção declarada, com o motivo no comentário:** `check-entrypoint.sh` (1 morte, 0,5 s, sem
-  `fail()`).
+- **Exceções declaradas, com o motivo no comentário:** `check-entrypoint.sh` (1 morte, 0,5 s)
+  e `check-templates.sh` (0 mortes, 0,5 s); os dois rodam dentro de mutante sem um ponto único de
+  falha.
 - **Sensor novo sem a cláusula deixa o censo vermelho.** O CLAUDE.md pede isso de toda porta:
   porta acrescentada sem probe é porta cuja remoção ninguém percebe.
 
@@ -169,7 +178,8 @@ stub, no molde do `jobs_selftest`.
 
 ## 4. Fora do escopo — limites declarados
 
-- **`check-entrypoint.sh`** fica sem a cláusula (1 morte, 0,5 s).
+- **`check-entrypoint.sh` e `check-templates.sh`** ficam sem a cláusula (1 e 0 mortes, 0,5 s
+  cada).
 - **bash < 4.3** mantém o controle antes do pool.
 - **A ordem das asserções dentro do sensor** fica como está. Em `autonomy` o 1º FAIL sai, na
   mediana, aos 48% do sensor, e há mutantes em que ele só sai aos 92%. Reordenar asserções é a

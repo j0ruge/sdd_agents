@@ -194,7 +194,7 @@ Achados sobre **repos-alvo** vão para o `TODO.md` daquele repo. Este arquivo é
   ao fim da fase. — descoberto por `sdd-executor` na missão `20260816-runner-sem-dividas` (2026-08-16)
 
 - [ ] **Sensor pulado por `SDD_MUTANT` vira ponto cego sem aviso** — `tests/run-all.sh:224` —
-  sensores são pulados dentro do mutante (hoje o lint e os quatro de `:198-221`). É aposta que vence
+  sensores são pulados dentro do mutante (hoje o lint e os quatro de `:224-248`). É aposta que vence
   sozinha: no I3 o `check-preflight.sh`
   ganhou asserção de comportamento do runner, e a linha que o pulava virou a escondedora da única
   sensora de `RUN_install_no_guard`. O sintoma chega como "mutação não capturada", e o conserto
@@ -564,14 +564,6 @@ Achados sobre **repos-alvo** vão para o `TODO.md` daquele repo. Este arquivo é
   I13.1 já é história) ou aceitar o estouro — hoje ~300 s (2026-09-25). — medido por
   `sdd-executor` e `humano` nas missões `20260815-ledger-sem-ponto-cego` e no kaizen do
   paralelismo (2026-08-16)
-
-- [ ] **Sensor novo na suíte é multiplicador, não parcela: custa uma vez por mutante** —
-  `tests/run-all.sh:262` — `check-health.sh` roda em ~1,5 s sozinho e roda **dentro de cada
-  mutante**, hoje 81. Medido em passadas sequenciais e máquina quieta, `main` (`6d68dfc`) contra o
-  HEAD desta missão: **155,97 s → 210,81 s**, +55 s com 11 mutações a mais no mesmo diff (o +281 s
-  do EXEC não reproduz: era contenção). Direção: rodar por mutante só o sensor que o alcança.
-  RESOLVED by b874141 (o passo que matou o mutante roda primeiro; amostra de 40: 389 → 171 s).
-  — descoberto por `sdd-executor` na missão `20260817-catraca-do-backlog` (2026-08-17)
 
 ### Sem seção — chegaram depois da última classificação
 
