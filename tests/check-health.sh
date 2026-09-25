@@ -1400,13 +1400,22 @@ green_world
 set_test_cmd "$STUB_TEST_CMD \\\"--list\\\""
 health_run
 OUT_TC_QUOTE="$HEALTH_OUT"; RC_TC_QUOTE="$HEALTH_RC"
+# The negative control, differential with the TAB world above: the same TAB, before a flag that
+# merely STARTS with --list. Without it, a fix that refused any TAB-separated TEST_CMD would pass
+# both assertions. Check 2b must reach its ok line and say nothing of --list.
+green_world
+set_test_cmd "$STUB_TEST_CMD"$'\t'"--listen-port"
+health_run
+OUT_TC_NEAR="$HEALTH_OUT"
 green_world
 if [ "$RC_TC_TAB" -ne 0 ] && grep -qF 'TEST_CMD carries --list' <<< "$OUT_TC_TAB" \
-   && [ "$RC_TC_QUOTE" -ne 0 ] && grep -qF 'TEST_CMD carries --list' <<< "$OUT_TC_QUOTE"; then
+   && [ "$RC_TC_QUOTE" -ne 0 ] && grep -qF 'TEST_CMD carries --list' <<< "$OUT_TC_QUOTE" \
+   && grep -qF 'TEST_CMD runs the suite (' <<< "$OUT_TC_NEAR" \
+   && ! grep -qF 'TEST_CMD carries --list' <<< "$OUT_TC_NEAR"; then
   pass "$LIST_SPELL_DESC"
 else
-  fail "$LIST_SPELL_DESC" "both worlds fail naming 'TEST_CMD carries --list'" \
-       "TAB: rc $RC_TC_TAB $(digest "$OUT_TC_TAB") // quoted: rc $RC_TC_QUOTE $(digest "$OUT_TC_QUOTE")"
+  fail "$LIST_SPELL_DESC" "both worlds fail naming 'TEST_CMD carries --list', and a TAB before --listen-port reaches 2b's ok" \
+       "TAB: rc $RC_TC_TAB $(digest "$OUT_TC_TAB") // quoted: rc $RC_TC_QUOTE $(digest "$OUT_TC_QUOTE") // --listen-port: $(digest "$OUT_TC_NEAR")"
 fi
 
 # ---------------------------------------------------------------------------
@@ -1625,6 +1634,12 @@ health_captures() {
 # capture. Guarded INSIDE with `|| true`, though the function it calls cannot fail: the ratchet
 # counts every capture in the region, and a capture whose guard depends on the callee staying
 # infallible is a guard that rots the day somebody adds a branch to it.
+# 22 → 36: fourteen captures arrived without their line. The ratchet held the NUMBER at every step
+# and nobody held the record, which is the half this ledger exists for — stated rather than
+# reconstructed from memory; `git log -G'^CAPTURE_FLOOR=[0-9]' -- tests/check-health.sh` has each step.
+# 36 → 37: check 2b decides whether the kit's .sdd/config.sh parses BEFORE reading TEST_CMD
+# (issue 116, 932a1ba), so the region gained the `kit_cfg_diag` capture — guarded in the tail,
+# `|| kit_cfg_rc=$?`, because rc 2 is the branch that says "does not parse", not a crash.
 CAPTURE_FLOOR=37
 
 capture_report() {
