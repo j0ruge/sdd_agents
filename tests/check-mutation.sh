@@ -4629,10 +4629,12 @@ killer_of() {
 
 # The killer map: <slug> TAB <step name>, learned from the last catalogue and handed back to each
 # mutant as SDD_MUTANT_FIRST, so the step that killed it runs first (see the note above PASS in
-# run-all.sh: 4796 s → 2201 s of suite over 40 mutants of 583b3c3). It is an ORDER hint and nothing
-# else — a stale or garbled line costs time, never a verdict, because run-all.sh still runs every
-# step of a mutant the named one did not kill. It lives in .sdd/cache/, gitignored and OUTSIDE the
-# four directories of mutation_stamp_key, so learning it never invalidates a stamp.
+# run-all.sh: over 40 mutants of 583b3c3 the suite summed 4796/4828 s before, 1959 s after). It
+# is an ORDER hint and nothing else — a stale or garbled line costs time and changes no step a
+# mutant runs, because run-all.sh still runs every step of a mutant the named one did not kill.
+# That the ORDER moves no verdict either is measured, not asserted (the same note). It lives in
+# .sdd/cache/, gitignored and OUTSIDE the four directories of mutation_stamp_key, so learning it
+# never invalidates a stamp.
 KILLERS_FILE="$ROOT/.sdd/cache/mutation-killers.tsv"
 declare -A KILLER=()
 

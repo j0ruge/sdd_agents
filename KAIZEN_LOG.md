@@ -27,11 +27,16 @@ numa sandbox igual à do `run_mutant`, com carimbo de tempo por linha e 16 jobs.
 `check-mutation.sh` lê o assassino do log de cada mutante e regrava o mapa no fim do catálogo.
 Quatro probes `surface:` no `check-health.sh`, e cada uma das três sabotagens manuais (rodar o
 passo duas vezes, rodar tudo na 1ª passada, honrar a variável fora de mutante) deixa um vermelho.
-A guarda `FIRST_RAN` foi escrita e removida: nenhum mundo a torna necessária.
+A guarda `FIRST_RAN` foi escrita e removida sem probe que a deixasse vermelha: não se construiu um
+mundo em que o nome case numa passada e não na outra, o que não prova que ele não exista — o
+comentário do `run-all.sh` diz qual seria (uma condição do `steps()` lendo estado que um passo escreve).
 
-**Limite declarado:** o ganho aparece a partir da 2ª rodada, porque a 1ª aprende o mapa. O
-próximo degrau é o P2(b) da gaveta (parar no primeiro assert dentro do sensor): gates e autonomy
-sozinhos ainda custam 55 a 92 s por mutante.
+**Limite declarado:** o ganho aparece a partir da 2ª rodada, porque a 1ª aprende o mapa. As probes
+provam que o CONJUNTO de passos de um mutante não muda; que a ORDEM não mude veredito foi medido
+(o kit sem sabotagem, sob `SDD_MUTANT`, cada um dos 13 passos nomeado primeiro: 13 de 13 verde) e
+não tem sensor — um passo vermelho só por rodar primeiro leria sobrevivente como pego, e o item está
+no `TODO.md`. O próximo degrau é o P2(b) da gaveta (parar no primeiro assert dentro do sensor):
+gates e autonomy sozinhos ainda custam 55 a 92 s por mutante.
 
 ---
 

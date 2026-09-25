@@ -1271,16 +1271,19 @@ chmod +x "$FAILFAST/bin/sdd" "$FAILFAST"/tests/*.sh
 [ -x "$FAILFAST/tests/$FAILFAST_RED" ] \
   || broken "failfast probe: tests/$FAILFAST_RED is gone — the world has no red step to stop at"
 
-failfast_run() { # failfast_run <mutant|plain> <red sensor or empty> [first step] — PUBLISHES FAILFAST_RC / FAILFAST_STEPS
+failfast_run() { # failfast_run <mutant|plain> <red sensor or empty> [first step] — PUBLISHES FAILFAST_RC / FAILFAST_STEPS / FAILFAST_OUT
   local log="$WORK/failfast-$1-${2:-green}-${3:+first}.log"
   : > "$log"
   FAILFAST_RC=0
+  # The suite's own stdout+stderr, kept the way run_mutant keeps a mutant's (`> "$box.log" 2>&1`):
+  # it is the log the catalogue reads the killing step from.
+  FAILFAST_OUT="$log.out"
   if [ "$1" = mutant ]; then
     env -u SDD_TPL_SELFTEST_CHILD SDD_MUTANT=1 SDD_MUTANT_FIRST="${3:-}" FAILFAST_LOG="$log" FAILFAST_RED="$2" \
-      "$FAILFAST/tests/run-all.sh" >/dev/null 2>&1 || FAILFAST_RC=$?
+      "$FAILFAST/tests/run-all.sh" > "$FAILFAST_OUT" 2>&1 || FAILFAST_RC=$?
   else
     env -u SDD_TPL_SELFTEST_CHILD -u SDD_MUTANT SDD_MUTANT_FIRST="${3:-}" FAILFAST_LOG="$log" FAILFAST_RED="$2" \
-      "$FAILFAST/tests/run-all.sh" >/dev/null 2>&1 || FAILFAST_RC=$?
+      "$FAILFAST/tests/run-all.sh" > "$FAILFAST_OUT" 2>&1 || FAILFAST_RC=$?
   fi
   FAILFAST_STEPS="$(cat "$log")"
 }
@@ -1293,6 +1296,32 @@ else
   fail 'surface: inside a mutant the suite stops at the first red step' \
        "rc 1, at least one step before $FAILFAST_RED, and $FAILFAST_RED the LAST step run" \
        "rc $FAILFAST_RC, steps: $(tr '\n' ' ' <<< "$FAILFAST_STEPS")"
+fi
+
+# The killer map of check-mutation.sh is read off this same log: killer_of takes the LAST step
+# header run() printed. The header is WRITTEN in run-all.sh and PARSED in check-mutation.sh — one
+# contract across two files, and nothing else reads it. Drift either side alone (a trailing space
+# before the reset code is enough) and every killer reads empty: the map is rewritten with 0 lines,
+# the catalogue stays green, and every later `sdd health` runs in the old order — 1h27 instead of
+# the measured gain, said only by a `0 mutant(s) recorded` line inside an hour of log. So killer_of
+# is SOURCED from the catalogue, never copied, and must name the red step of the run above, which
+# printed several headers: "the last one" is measured too, not only "a header parses". The source
+# is refused unless it is one short function, since an unterminated range would source the rest
+# of the catalogue.
+FAILFAST_RED_NAME='template contract'
+grep -qxF "run \"$FAILFAST_RED_NAME\" \"\$ROOT/tests/$FAILFAST_RED\"" "$ROOT/tests/run-all.sh" \
+  || broken "killer probe: run-all.sh has no step '$FAILFAST_RED_NAME' running tests/$FAILFAST_RED — the probe names nothing"
+KILLER_OF_SRC="$(sed -n '/^killer_of() {$/,/^}$/p' "$ROOT/tests/check-mutation.sh")"
+{ [ "$(tail -n 1 <<< "$KILLER_OF_SRC")" = '}' ] && [ "$(grep -c . <<< "$KILLER_OF_SRC")" -le 8 ]; } \
+  || broken "killer probe: tests/check-mutation.sh has no short killer_of() { … } to read the log with"
+eval "$KILLER_OF_SRC"
+FAILFAST_KILLER="$(killer_of "$FAILFAST_OUT")"
+if [ "$FAILFAST_RC" = 1 ] && [ "$FAILFAST_KILLER" = "$FAILFAST_RED_NAME" ]; then
+  pass "surface: the catalogue's killer_of reads the red step off the suite's log, header by header"
+else
+  fail "surface: the catalogue's killer_of reads the red step off the suite's log, header by header" \
+       "rc 1 and killer_of naming '$FAILFAST_RED_NAME', the last header run() printed" \
+       "rc $FAILFAST_RC, killer_of read '${FAILFAST_KILLER:-nothing}' — run()'s header (run-all.sh) and killer_of's pattern (check-mutation.sh) drifted apart"
 fi
 
 failfast_run plain "$FAILFAST_RED"
@@ -1317,10 +1346,12 @@ fi
 
 # SDD_MUTANT_FIRST: the step that killed a mutant last time runs first (check-mutation.sh learns
 # the name). Four worlds, each DIFFERENTIAL against the green mutant run above, which is the order
-# every other world is measured against. The step named is a LATE one, so "first" cannot be the
-# order's own accident. The unsound edits this must refuse: skipping a step that never ran (a name
-# matching nothing would then drop nothing, but a stale name would), running the named step twice,
-# and honouring the variable outside a mutant.
+# every other world is measured against. The unsound edits this must refuse: skipping a step that
+# never ran (a name matching nothing would then drop nothing, but a stale name would), running the
+# named step twice, and honouring the variable outside a mutant.
+# The step named must NOT already be the first to run, and that is asserted, not assumed: with
+# check-hat.sh first in the natural order, a run-all.sh that ignored SDD_MUTANT_FIRST altogether
+# turned all four worlds green (measured, 2026-09-25) — "first" was the order's own accident.
 FIRST_STEP_NAME='every hat declares its boundary'
 FIRST_STEP_FILE=check-hat.sh
 FIRST_ORDER="$FAILFAST_STEPS"
@@ -1328,6 +1359,10 @@ FIRST_ORDER="$FAILFAST_STEPS"
   || broken "first-step probe: the green mutant run listed fewer than 3 steps — there is no order to reorder"
 grep -qxF "$FIRST_STEP_FILE" <<< "$FIRST_ORDER" \
   || broken "first-step probe: $FIRST_STEP_FILE is not a step of the suite — the world names nothing"
+[ "$(head -n 1 <<< "$FIRST_ORDER")" != "$FIRST_STEP_FILE" ] \
+  || broken "first-step probe: $FIRST_STEP_FILE already runs first — 'first' would be the order's own accident"
+grep -qxF "run \"$FIRST_STEP_NAME\" \"\$ROOT/tests/$FIRST_STEP_FILE\"" "$ROOT/tests/run-all.sh" \
+  || broken "first-step probe: run-all.sh has no step '$FIRST_STEP_NAME' running tests/$FIRST_STEP_FILE — the world names nothing"
 failfast_run mutant "$FIRST_STEP_FILE" "$FIRST_STEP_NAME"
 if [ "$FAILFAST_RC" = 1 ] && [ "$FAILFAST_STEPS" = "$FIRST_STEP_FILE" ]; then
   pass 'surface: inside a mutant the step named by SDD_MUTANT_FIRST runs first, and alone when it is red'

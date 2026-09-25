@@ -85,11 +85,17 @@ done
 # ends the run, so a mutant only the preflight kills still paid templates, gates, dry-run, autonomy,
 # kaizen and health before it — 4796 s of suite where its killing steps alone cost 2201 s.
 # steps() is called twice: pass `first` runs the named step only, pass `rest` runs every other one.
-# No verdict can move: both passes walk the SAME list, so the one step `rest` skips is the one
-# `first` just ran — a name that matches nothing runs the whole suite in its usual order, a stale
-# map costs time and never a verdict, and a survivor still runs every step. Outside a mutant the
-# variable is ignored. (A FIRST_RAN flag guarding the skip was tried and removed: no world makes the
-# name match in one pass and not the other, so no probe could turn it red.)
+# Both passes walk the SAME list, so the one step `rest` skips is the one `first` just ran: the SET
+# of steps a mutant runs never changes — a name that matches nothing runs the whole suite in its
+# usual order, a stale map costs time, and a survivor still runs every step (the `surface:` probes
+# of check-health.sh assert all three). What the set does not settle is the ORDER: a sensor that
+# went red only for running first would read a survivor as caught. That no step does was MEASURED
+# — the kit with no sabotage, under SDD_MUTANT, each of its 13 steps named first: 13 of 13 green
+# (2026-09-25) — and no sensor asserts it (TODO.md). Outside a mutant the variable is ignored.
+# (A FIRST_RAN flag guarding the skip was tried and removed with no probe to turn it red: no world
+# was BUILT where the name matches in one pass and not the other, because every condition in
+# steps() reads state set before both passes. A condition reading state that a step WRITES would be
+# that world, and would need the flag back.)
 PASS=all
 
 run() { # run <name> <command...>
