@@ -22,6 +22,12 @@ numa sandbox igual à do `run_mutant`, com carimbo de tempo por linha e 16 jobs.
 | Mediana por mutante | 146 s / 149 s | **49 s** |
 | Vereditos diferentes (rc mutante a mutante) | — | **0 de 40**, e o mesmo passo assassino em todos |
 
+**Catálogo inteiro** (`sdd health`, 406 mutantes, 16 jobs, todas as rodadas 406 de 406 e kit
+healthy): a 1ª rodada, que aprende o mapa, levou **1h27** (12:45 → 14:12); as duas seguintes,
+já com ele, **40 min 07 s** sobre `0a56d5f` e **37 min 42 s** sobre `cc03abd` (o conserto da
+revisão final). **2,2 a 2,3× mais rápido**, na linha da amostra (389 → 171 s). A de 40 min dividiu
+a máquina com ~10 rodadas do `check-health.sh` num clone (~5 min de um núcleo, de 20).
+
 **Contramedida:** `run-all.sh` percorre a lista de passos duas vezes quando recebe
 `SDD_MUTANT_FIRST` dentro de um mutante: primeiro só o passo nomeado, depois os outros. O
 `check-mutation.sh` lê o assassino do log de cada mutante e regrava o mapa no fim do catálogo.
