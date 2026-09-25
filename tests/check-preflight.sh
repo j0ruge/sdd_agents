@@ -1022,6 +1022,29 @@ nw_case 'npm run lint && npm run typecheck && npm run build && npm test' 'quiet'
 nw_case 'npm run build:prod && npm run lint && npm run typecheck && npm test' 'warn: script(s): build ' \
   "a longer script name that merely starts with build does not count as build"
 
+# --- a greenfield mission: the runner is there, its manifest is not yet (issue 53) ----------
+# A mission whose I1 creates the package.json runs preflight BEFORE the manifest exists, and
+# `npm test` dies with ENOENT (rc 254). The old verdict — "a red suite makes the EXEC phase
+# unsatisfiable" — was false about that repo: the scaffold is exactly what EXEC is about to write.
+# The warn is NARROW, and the three probes are its edges: no manifest -> warn; manifest present and
+# suite red -> still the fail; a runner the table does not know -> still the fail (run_case above).
+echo "== greenfield: TEST_CMD's runner without its manifest =="
+node_target "$FIX/greenfield" '{}'
+rm -f "$FIX/greenfield/package.json"
+( cd "$FIX/greenfield" && "$SDD" install >/dev/null 2>&1 )
+sed -i 's|^TEST_CMD=.*|TEST_CMD="npm test"|' "$FIX/greenfield/.sdd/config.sh"
+out="$( cd "$FIX/greenfield" && "$SDD" preflight 2>&1 )"
+assert_eq "a runner without its manifest at the root is a warn, not a fail" \
+  "warn, no FAILED" \
+  "$(grep -qF 'expected if I1 creates the scaffold' <<< "$out" && printf 'warn' || printf 'no warn'), $(grep -qF 'TEST_CMD FAILED' <<< "$out" && printf 'FAILED' || printf 'no FAILED')"
+node_target "$FIX/node-red" '{"test":"exit 3"}'
+( cd "$FIX/node-red" && "$SDD" install >/dev/null 2>&1 )
+sed -i 's|^TEST_CMD=.*|TEST_CMD="npm test"|' "$FIX/node-red/.sdd/config.sh"
+out="$( cd "$FIX/node-red" && "$SDD" preflight 2>&1 )"
+assert_eq "a red suite with its manifest present still fails" \
+  "FAILED, no warn" \
+  "$(grep -qF 'TEST_CMD FAILED' <<< "$out" && printf 'FAILED' || printf 'no FAILED'), $(grep -qF 'expected if I1 creates the scaffold' <<< "$out" && printf 'warn' || printf 'no warn')"
+
 # --- sdd install over a config that does not parse (issue 116) -------------
 # install reads four keys of an existing .sdd/config.sh, and used to source it with
 # `>/dev/null 2>&1` — so an unclosed quote quietly bought the defaults, and the handoff dir the

@@ -3987,6 +3987,31 @@ test_cmd_lists_only() {
   return 1
 }
 
+# test_cmd_missing_manifest <cmd> → prints the manifest the runner of <cmd> needs and returns 0
+# when the first word of <cmd> is a runner this table knows AND none of its manifests exists at
+# $REPO_ROOT; returns 1 otherwise (unknown runner, or a manifest present). ONE table, runner ->
+# manifest(s): the preflight of a greenfield mission, whose I1 creates the scaffold, used to report
+# `npm test` dying on ENOENT as a red suite that makes EXEC unsatisfiable (issue 53) — false about
+# a repo whose manifest is exactly what EXEC is about to write. Narrow on purpose: with the
+# manifest present a red suite is red, and a runner outside the table is never excused.
+test_cmd_missing_manifest() {
+  local tc="${1:-}" first m
+  tc="${tc//[[:space:]]/ }"; tc="${tc# }"
+  first="${tc%% *}"
+  local -a manifests=()
+  case "$first" in
+    npm|yarn|pnpm) manifests=(package.json) ;;
+    cargo)         manifests=(Cargo.toml) ;;
+    go)            manifests=(go.mod) ;;
+    pytest)        manifests=(pyproject.toml pytest.ini setup.cfg tox.ini) ;;
+    *)             return 1 ;;
+  esac
+  for m in "${manifests[@]}"; do
+    [ ! -e "$REPO_ROOT/$m" ] || return 1
+  done
+  printf '%s' "${manifests[0]}"
+}
+
 # How many REVIEW rounds this mission has already spent, read off the disk.
 #
 # `attempts` in cmd_run is a `local -A` born with the PROCESS, so `REVIEW_MAX_ITER` only ever
@@ -4579,10 +4604,13 @@ cmd_preflight() {
         # the preflight would be running whatever someone typed into a key it had just rejected.
         # Through run_check_cmd, which already memoises and already puts the output in the mission
         # log rather than on the runner's stdout.
-        local test_rc=0
+        local test_rc=0 missing_manifest=""
         run_check_cmd "$TEST_CMD" "preflight-test" || test_rc=$?
         if [ "$test_rc" -eq 0 ]; then
           ok "TEST_CMD ran green ($TEST_CMD)"
+        elif missing_manifest="$(test_cmd_missing_manifest "$TEST_CMD")"; then
+          warn "TEST_CMD failed and $missing_manifest does not exist yet ($TEST_CMD) — expected if I1 creates the scaffold;
+        from EXEC on, this is a hard gate. Output: $LAST_CHECK_LOG"
         else
           _fail "TEST_CMD FAILED (rc $test_rc): $TEST_CMD
         gate_EXEC, gate_QA and gate_REVIEW run this same command, so a red suite makes the EXEC

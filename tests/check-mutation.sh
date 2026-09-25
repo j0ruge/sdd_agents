@@ -2036,6 +2036,14 @@ mut_PRE_testcmd_list_unquoted() {
   sed -i '/^test_cmd_lists_only() {/,/^}/ s@^  tc="\${tc//\[\\"\\'"'"'\]/}"$@  :@' "$1"
 }
 
+# The greenfield warn stops being narrow — issue 53. With the manifest check skipped, EVERY failing
+# TEST_CMD whose runner is in the table is excused as "the scaffold is not there yet", including a
+# red suite in a repo whose package.json is right there. Caught by `a red suite with its manifest
+# present still fails` in check-preflight.sh.
+mut_PRE_greenfield_warn_always() {
+  sed -i '/^test_cmd_missing_manifest() {/,/^}/ s@\[ ! -e "\$REPO_ROOT/\$m" \] || return 1@:@' "$1"
+}
+
 # The Node TEST_CMD rule has four owners, one mutant each. install goes back to a bare `npm test`
 # whatever the package.json declares — the defect a Codex review of warehouse_explorer_api PR #7
 # surfaced, measured in four of six Node repos.
@@ -4296,6 +4304,7 @@ CATALOG=(
   PRE_testcmd_noop_runs_anyway
   PRE_testcmd_list_unnormalised
   PRE_testcmd_list_unquoted
+  PRE_greenfield_warn_always
   RUN_base_branch_warn_dead
   RUN_approve_writes_auto
   RUN_approve_bails_on_kaizen_born
@@ -4571,7 +4580,7 @@ run_mutant() {
 # stopped being parsed: an empty loop reports "0 broken" forever.
 # ---------------------------------------------------------------------------
 if [ "$ANCHORS_ONLY" = 1 ]; then
-  ANCHOR_FLOOR=395
+  ANCHOR_FLOOR=396
   anchor_box() { mkdir -p "$1"; cp -r "$ROOT/bin" "$1/"; }
   anchor_control_noop()       { :; }
   anchor_control_intact()     { printf '# a mutation that lands and stays valid\n' >> "$1"; }
