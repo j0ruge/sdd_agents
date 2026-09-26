@@ -6,6 +6,29 @@
 > As Tasks 1–4 e a revisão final do executing-plans estão **feitas**; falta a **Entrega**. Leia
 > este arquivo e a seção "Entrega" do plano; o resto do plano é histórico.
 
+## Atualização, 2026-09-25 21:10 — E1 feito, E2 consertado, health nº 1 adiantado
+
+- **E1 feito:** branch empurrado, **PR #170** aberto contra `main`
+  (<https://github.com/j0ruge/sdd_agents/pull/170>). Não abra outro.
+- **E2 feito:** Copilot sem cota; Codex (pedido com `@codex review`, como no #168) e CodeRabbit
+  revisaram. Três achados, todos válidos, consertados numa leva no `tests/check-mutation.sh`, cada
+  um com probe vista vermelha antes e sabotagem que a deixa vermelha de novo:
+  1. `SDD_MUTATION_JOBS=1` rodava o 1º mutante ao lado do controle (Codex e CodeRabbit; era o Minor
+     adiado abaixo): a vaga agora é esperada **antes** de cada lançamento;
+  2. um controle morto antes de escrever `control.rc` (OOM, sinal) deixava o `control_red` falso e o
+     pool lançava o catálogo inteiro: `control_run` escreve `none (exit N)` quando o controle volta
+     sem rc, nos dois caminhos (pool e lotes sem `wait -n`);
+  3. handoff e gaveta ainda diziam "sem PR" (este texto e a linha F1 da gaveta).
+  Achado ao consertar o 1: um job que termina antes de um `wait` sem argumento deixa o status na
+  tabela, e o `wait -n` seguinte o devolve na hora (1 ms contra 300, bash 5.2). Com a vaga esperada
+  antes do lançamento, o controle vermelho da `pool_selftest` sobrava assim e contaria como vaga
+  livre no pool real, que roda no mesmo shell logo depois. `run_pool` começa por `jobs >/dev/null`.
+  No HEAD anterior (`7bb0762`) a selftest deixava 0, medido: o health nº 1 não foi afetado.
+- **E3 feito, adiantado:** o health nº 1 rodou **durante** a espera pelos bots, sobre `7bb0762`:
+  20:47:27 → 21:06:23, **18 min 56 s**, 406 de 406, `kit healthy`, mapa com 406 linhas de 3 colunas.
+  Ele só grava os tempos no mapa (por mutante, fora da chave do carimbo), então vale para o código
+  consertado. Quem carimba é o nº 2, depois do conserto. O próximo passo é o **E4**.
+
 ## Estado em 2026-09-25, 20:40
 
 - Branch `perf/sensor-para-no-primeiro-fail`, a partir de `main` = `8f2f2a9`. **Não empurrado, sem
@@ -52,14 +75,14 @@ fora da catraca) não custa carimbo. Confira com o `stamp-check` antes de re-rod
 
 ## A Entrega
 
-- **E1.** `git push -u origin perf/sensor-para-no-primeiro-fail`; `gh pr create --base main`, título
+- **E1. FEITO — PR #170.** (Era: `git push -u origin perf/sensor-para-no-primeiro-fail`; `gh pr create --base main`, título
   `perf: the sensor stops at its first FAIL — health under 20 min (P2(b))`. Corpo: resumo; a tabela
   acima; o que o censo prova (enumera os passos de `SDD_MUTANT=1 run-all.sh --list`, junta as
   linhas continuadas, chama cada primitiva sob `SDD_MUTANT=1`/ausente/vazio, piso 9, 5 controles
   negativos antes do laço, desconhecido = SENSOR-BROKEN); as sabotagens (13 no censo, 4 nos
   selftests do pool); os achados da execução e da revisão (abaixo); `Refs` para a gaveta; test plan
-  com `- [ ] sdd health twice (1st records the times, 2nd measures and stamps)`; rodapé de atribuição.
-- **E2.** Espere **todos** os revisores (CodeRabbit; Codex — comente `@codex review` se não vier;
+  com `- [ ] sdd health twice (1st records the times, 2nd measures and stamps)`; rodapé de atribuição.)
+- **E2. FEITO** (ver a atualização no topo). Era: espere **todos** os revisores (CodeRabbit; Codex — comente `@codex review` se não vier;
   Copilot pode estar sem cota). Conserte numa leva só com `/codereview:coderabbit_pr`; conserto em
   `tests/` roda de novo a suíte rápida (pelo lançador) e o `tests/check-health.sh` (censo).
 - **E3. Health nº 1** — `python3 "$SP/health-launch.py" "$SP/health1.log" /home/joruge/repos/sdd_agents ./bin/sdd health`.
@@ -103,7 +126,7 @@ precisa que ele volte; com a cláusula, `SDD_MUTANT=1 run-all.sh` ficou vermelho
 do `source` no harness da Task 4 (nenhum). Os 10 itens que o revisor declinou são limites já
 declarados no spec §4 ou medidos na Entrega.
 
-**Minors adiados (candidatos a `TODO.md` só se passarem na régua D15):** `SDD_MUTATION_JOBS=1` roda
-dois jobs até o controle voltar; arquivo com `fail()` e `def check(` é classificado pelo primeiro
+**Minors adiados (candidatos a `TODO.md` só se passarem na régua D15):** ~~`SDD_MUTATION_JOBS=1` roda
+dois jobs até o controle voltar~~ (consertado no E2); arquivo com `fail()` e `def check(` é classificado pelo primeiro
 casamento; o `-le "$JOBS"` do `pool_selftest` tolera a corrida sem dizer; `"${ORDER[@]}"` vazio sob
 `set -u` no bash 4.3; a palavra "fechada" no §3.2 do spec.

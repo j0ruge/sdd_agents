@@ -13,7 +13,7 @@
 
 | # | Frente | Estado | Próximo passo | Espera por |
 |---|---|---|---|---|
-| F1 | Custo do catálogo de mutação | PR #59 mergeado (`d0ac22d`); P2(a) feito em 2026-09-25 (assassino primeiro, amostra 389 → 171 s, `sdd health` 1h27 → ~38–40 min); P2(b) implementado no branch `perf/sensor-para-no-primeiro-fail` (`fa6b469`, [spec](2026-09-25-o-sensor-para-no-primeiro-fail-design.md), amostra 1328,7 → 571 s), sem PR nem carimbo; P1, P3, P4 abertos | Entrega do P2(b) pelo [handoff](../plans/2026-09-25-o-sensor-para-no-primeiro-fail-handoff.md) (PR, bots, health ×2, KAIZEN, `/codereview` no fim); depois P3 | o merge do P2(b) |
+| F1 | Custo do catálogo de mutação | PR #59 mergeado (`d0ac22d`); P2(a) feito em 2026-09-25 (assassino primeiro, amostra 389 → 171 s, `sdd health` 1h27 → ~38–40 min); P2(b) no **PR #170** (branch `perf/sensor-para-no-primeiro-fail`, [spec](2026-09-25-o-sensor-para-no-primeiro-fail-design.md), amostra 1328,7 → 571 s), bots revisados e consertados, health nº 2 e carimbo pendentes; P1, P3, P4 abertos | resto da Entrega do P2(b) pelo [handoff](../plans/2026-09-25-o-sensor-para-no-primeiro-fail-handoff.md) (health nº 2 e carimbo, KAIZEN, `/codereview` no fim, merge); depois P3 | o merge do #170 |
 | F2 | Faxina pós-#57 | parada | ADR 0010 para `accepted`; apagar 2 itens do `TODO.md` | carona num PR que já carimbe |
 | F3 | T3 e a janela do juiz | parada | decidir as 3 perguntas de desenho | **decisão humana** (inclusive: congelar ou não) |
 | F4 | Portabilidade para outros repos | parcial | registrar as lacunas no `TODO.md`; consertar a 2 | carona num PR que já carimbe |
@@ -79,7 +79,7 @@ trabalho de fato.
     O custo é anotar os 392 mutantes; dá para derivar dos logs de uma corrida completa, que mostram
     o primeiro sensor vermelho de cada um.
   - **(b) Parar no primeiro assert vermelho dentro do sensor** sob `SDD_MUTANT`. IMPLEMENTADO em
-    2026-09-25 no branch `perf/sensor-para-no-primeiro-fail` (`fa6b469`), Entrega pendente:
+    2026-09-25 no **PR #170** (branch `perf/sensor-para-no-primeiro-fail`), carimbo pendente:
     [`spec`](2026-09-25-o-sensor-para-no-primeiro-fail-design.md) ·
     [`handoff`](../plans/2026-09-25-o-sensor-para-no-primeiro-fail-handoff.md). Medido na mesma
     amostra: soma do passo assassino 1328,7 → 570,9 / 570,5 / 574,0 s (−57%).

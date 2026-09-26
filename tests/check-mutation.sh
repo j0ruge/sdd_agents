@@ -150,22 +150,41 @@ control_verdict() {
   return 1
 }
 
+# control_run <dir> <control-fn> — runs the control in a subshell of its own and, if it came back
+# without writing <dir>/control.rc (killed by the OOM killer or a signal, or an exit before the
+# write), writes one that is not 0. Without it a dead control left control_red false for good, and
+# the pool launched the whole catalogue before control_verdict said HARNESS-BROKEN (review of PR
+# #170). Both paths below start the control through here.
+control_run() {
+  local crc=0
+  ( "$2" ) || crc=$?
+  [ -e "$1/control.rc" ] || echo "none (exit $crc)" > "$1/control.rc"
+}
+
 # run_pool <dir> <control-fn> <mutant-fn> <slug...> — the control run is the pool's FIRST job and
-# the mutants start beside it. Once the control is back red no further mutant is launched, and the
+# the mutants start beside it. It holds a slot like any mutant: the slot is waited for BEFORE each
+# launch, so JOBS=1 runs the control alone and then one mutant at a time (review of PR #170).
+# Once the control is back red no further mutant is launched, and the
 # ones already running are waited for, never killed: their sdd and coordination children have no
 # process group of their own, and killing the subshell would orphan them. Publishes POOL_LAUNCHED.
-# `wait -n` is bash 4.3+; the caller checks for it.
+# `wait -n` is bash 4.3+; the caller checks for it. The `jobs` at the top drops the status of any
+# job that ended before the pool: a background job that exits before a bare `wait` keeps its status
+# in the table, the next `wait -n` returns it at once (1 ms against 300, bash 5.2), and every such
+# status is a slot counted free that never was. With the slot waited before each launch,
+# pool_selftest's red control ends unconsumed (measured: the JOBS=1 probe red without this line),
+# and that selftest runs in this same shell just before the catalogue.
 run_pool() {
   local dir="$1" control="$2" mutant="$3" slug running=1
   shift 3
+  jobs >/dev/null
   POOL_LAUNCHED=0
-  "$control" &
+  control_run "$dir" "$control" &
   for slug in "$@"; do
+    if [ "$running" -ge "$JOBS" ]; then wait -n; running=$((running - 1)); fi
     control_red "$dir" && break
     "$mutant" "$slug" &
     POOL_LAUNCHED=$((POOL_LAUNCHED + 1))
     running=$((running + 1))
-    if [ "$running" -ge "$JOBS" ]; then wait -n; running=$((running - 1)); fi
   done
   wait
 }
@@ -201,6 +220,26 @@ pool_selftest() {
   run_pool "$d" st_control_green st_mutant m1 m2 m3
   [ "$POOL_LAUNCHED" = 3 ] || { echo "  SELFTEST FAIL  green control: $POOL_LAUNCHED of 3 mutants launched" >&2; return 1; }
   control_verdict "$d" >/dev/null || { echo "  SELFTEST FAIL  a green control was refused" >&2; return 1; }
+  # A control that dies before writing its rc (OOM, a signal) stops the launches like a red one:
+  # found by review of PR #170, where it left control_red false and the pool ran the whole catalogue.
+  st_control_dies() { exit 3; }
+  rm -f "$d/control.rc"
+  run_pool "$d" st_control_dies st_mutant m1 m2 m3 m4 m5 m6 m7 m8
+  [ "$POOL_LAUNCHED" -le "$JOBS" ] || { echo "  SELFTEST FAIL  a control that died with no rc: $POOL_LAUNCHED of 8 mutants launched, expected at most $JOBS" >&2; return 1; }
+  control_verdict "$d" >/dev/null && { echo "  SELFTEST FAIL  a control that died with no rc was read as green" >&2; return 1; }
+  # JOBS=1 is one suite at a time, the control included: found by review of PR #170, where the
+  # first mutant was launched beside the control before the slot was counted. The job planted
+  # first ends before the call, and a pool that counted its status as a free slot overlaps too.
+  st_control_slow() { sleep 0.3; echo 0 > "$d/control.rc"; }
+  st_mutant_alone() {
+    { [ -e "$d/control.rc" ] && ! compgen -G "$d/busy.*" >/dev/null; } || : > "$d/overlap"
+    : > "$d/busy.$1"; sleep 0.1; rm -f "$d/busy.$1"
+  }
+  rm -f "$d/control.rc" "$d/overlap" "$d"/busy.*
+  : & sleep 0.1
+  JOBS=1 run_pool "$d" st_control_slow st_mutant_alone m1 m2 m3
+  [ ! -e "$d/overlap" ] || { echo "  SELFTEST FAIL  JOBS=1 ran two suites at once" >&2; return 1; }
+  [ "$POOL_LAUNCHED" = 3 ] || { echo "  SELFTEST FAIL  JOBS=1: $POOL_LAUNCHED of 3 mutants launched" >&2; return 1; }
   return 0
 }
 
@@ -209,7 +248,7 @@ if ! order_selftest; then
   exit 1
 fi
 if (: & wait -n) 2>/dev/null && ! pool_selftest; then
-  echo "the pool does not stop on a red control — refusing to schedule mutants with it" >&2
+  echo "the pool does not stop on a failed control or keep to its slots — refusing to schedule mutants with it" >&2
   exit 1
 fi
 
@@ -4858,9 +4897,9 @@ fi
 #
 # It is the pool's FIRST job, and the mutants start beside it: run alone first, it cost ~3.9 min
 # of an otherwise idle pool (2026-09-25). No score is written before its rc is read below, so no
-# verdict can come from a red control; a red control stops further launches (run_pool). `wait -n`
-# is bash 4.3+; without it the control runs first and the mutants go in barriers of JOBS — a
-# declared degradation, never a silent one.
+# verdict can come from a red control; a red or dead control stops further launches (run_pool,
+# control_run). `wait -n` is bash 4.3+; without it the control runs first and the mutants go in
+# barriers of JOBS — a declared degradation, never a silent one.
 # ---------------------------------------------------------------------------
 echo "== control (the first job of the pool) =="
 sandbox "$WORK/control"
@@ -4885,7 +4924,7 @@ if (: & wait -n) 2>/dev/null; then
   run_pool "$WORK" run_control run_mutant "${ORDER[@]}"
 else
   echo "== mutants (batches of $JOBS — this bash has no 'wait -n': the control runs first) =="
-  run_control
+  control_run "$WORK" run_control
   if ! control_red "$WORK"; then
     i=0
     for slug in "${ORDER[@]}"; do
