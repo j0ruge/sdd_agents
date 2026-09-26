@@ -152,7 +152,10 @@ de EOL ou clean filters) e igualdade byte a byte de `00-missao.md` e
 (`KIT-TOUCHED`, e desde a fronteira do chapéu uma parada); `hat_guard_check` nos três sítios onde
 o `review_scope_check` só avisava, lendo commits **e** árvore contra `writes:`; o catálogo de
 mutação sabota **uma cópia** em `mktemp -d`; o env do harness é apagado por `run_phase()` antes do
-`claude -p` (L5 da auditoria). Desde `20260918-a-excecao-do-chapeu-e-o-genero-diferido` a fronteira
+`claude -p` (L5 da auditoria). Desde o PR #166 isso inclui o effort herdado: `CLAUDE_CODE_EFFORT_LEVEL`
+e `CLAUDE_EFFORT` estão no `HARNESS_ENV_UNSET` e no `env -u` do `sdd close`, porque a primeira passa
+por cima das settings; o nível da fase é do kit (`EFFORT_<FASE>` → `--effort`, vazio = settings) e
+fica no `effort=` do `pipeline.log`, na linha da fase e na do `CLOSE`, já que o stream não o traz. Desde `20260918-a-excecao-do-chapeu-e-o-genero-diferido` a fronteira
 é constante do chapéu **mais** variável do projeto: `HAT_WRITES_EXTRA` (`hat_writes_extra_each`, a
 única definição da gramática; `hat_extra_path_ok`, a guarda no molde do `adr_dir_ok`;
 `hat_writes_extra_for`, somado por chapéu em `hat_writes`), validada no `load_config` e **nunca**
