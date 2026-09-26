@@ -1,5 +1,8 @@
 # Handoff — o sensor para no primeiro FAIL: da implementação ao merge (2026-09-25)
 
+> **ENCERRADO:** PR #170 mergeado em `31dfd43` (2026-09-25 22:22). O que falta (E6) e a próxima
+> escolha moram em [`2026-09-25-depois-do-170-handoff.md`](2026-09-25-depois-do-170-handoff.md).
+
 > Continuação autocontida do plano
 > [`2026-09-25-o-sensor-para-no-primeiro-fail.md`](2026-09-25-o-sensor-para-no-primeiro-fail.md)
 > (spec: [`../specs/2026-09-25-o-sensor-para-no-primeiro-fail-design.md`](../specs/2026-09-25-o-sensor-para-no-primeiro-fail-design.md)).
