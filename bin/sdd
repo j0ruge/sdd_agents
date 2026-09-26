@@ -725,7 +725,11 @@ run_check_cmd() {
   # the only property that survives being called from inside a substitution.
   mkdir -p "$(log_dir)"
   logfile="$(mktemp "$(log_dir)/${label}-$(date +%Y%m%d-%H%M%S)-XXXXXX.log")"
-  ( cd "$REPO_ROOT" && eval "$cmd" ) >"$logfile" 2>&1 || rc=$?
+  # stdin is /dev/null, whatever the caller holds (gap 3 of portability): a test runner that reads
+  # a terminal as "interactive" — vitest 3 turns watch mode on when stdin is a TTY — would hang the
+  # gate for good, with no rc, from any `sdd run` typed at a terminal. The gates, the E2E_CMD and
+  # the preflight all run through here, so this one redirection covers the three.
+  ( cd "$REPO_ROOT" && eval "$cmd" ) </dev/null >"$logfile" 2>&1 || rc=$?
   _CHECK_RC[$cmd]="$rc"
   _CHECK_LOG[$cmd]="$logfile"
   LAST_CHECK_LOG="$logfile"

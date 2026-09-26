@@ -530,6 +530,23 @@ run_case suite-green.sh "TEST_CMD ran green" "TEST_CMD FAILED" \
 run_case suite-red.sh   "TEST_CMD FAILED"    "TEST_CMD ran green" \
   "a TEST_CMD that exits non-zero is refused by its exit status, not by its spelling"
 
+# Gap 3 of portability: the TEST_CMD used to inherit the runner's stdin. vitest 3 turns watch mode
+# on when stdin is a terminal (`watch: !isCI && process.stdin.isTTY`), and a target whose `test` is
+# a bare `vitest` would hang the gate for good, with no rc, from any `sdd run` typed at a terminal.
+# The preflight runs TEST_CMD through the same run_check_cmd the gates do, so one probe here covers
+# the one redirection. The caller FEEDS a line on purpose: under a harness stdin is already
+# /dev/null, and a probe that only inherited it would pass with and without the fix.
+printf '#!/usr/bin/env bash\nprintf "ran\\n" >> "%s/witness"\nif IFS= read -r line; then printf "stdin:%%s\\n" "$line" >> "%s/witness"; exit 4; fi\nexit 0\n' \
+  "$PROBE" "$PROBE" > "$PROBE/suite-stdin.sh"
+chmod +x "$PROBE/suite-stdin.sh"
+printf 'a line the TEST_CMD must never see\n' > "$PROBE/a-line"
+: > "$PROBE/witness"
+sed -i "s|^TEST_CMD=.*|TEST_CMD=\"$PROBE/suite-stdin.sh\"|" .sdd/config.sh
+stdin_out="$( "$SDD" preflight < "$PROBE/a-line" 2>&1 )"
+assert_eq "TEST_CMD runs with stdin closed, whatever stdin the caller holds" \
+  "ran=1 stdin=0 green=1 failed=0" \
+  "ran=$(grep -cx 'ran' "$PROBE/witness") stdin=$(grep -c '^stdin:' "$PROBE/witness") green=$(grep -cF 'TEST_CMD ran green' <<< "$stdin_out") failed=$(grep -cF 'TEST_CMD FAILED' <<< "$stdin_out")"
+
 # The no-op arm: a command the heuristic already refused must NOT be executed. Running whatever
 # someone typed into a key the preflight had already decided was wrong is a preflight doing damage
 # on config it just rejected.

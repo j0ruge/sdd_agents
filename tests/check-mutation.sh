@@ -4225,6 +4225,13 @@ mut_ADR_link_not_path_generic() {
   sed -i '/^adr_check_link() {/,/^}/ s@^    \*/\*) ;;$@    *) ;;@' "$1"
 }
 
+# Gap 3 of portability: the TEST_CMD inherits the runner's stdin again. A bare `vitest` reads a
+# terminal as "interactive" and turns watch mode on, and the gate hangs with no rc from any `sdd run`
+# typed at a terminal. Caught by the preflight probe that FEEDS a line and demands it never arrive.
+mut_RUN_check_cmd_stdin_inherited() {
+  sed -i '/^run_check_cmd() {/,/^}/ s@ ) </dev/null >"$logfile" 2>&1 || rc=$?$@ ) >"$logfile" 2>\&1 || rc=$?@' "$1"
+}
+
 # Each coordination mutant changes executable code, and check-coordination.sh asserts the
 # corresponding refusal/lifetime result before releasing its deterministic child barrier.
 mut_COORD_admission_missing() {
@@ -4768,6 +4775,7 @@ CATALOG=(
   ADR_link_bold_colon_blind
   ADR_link_backtick_kept
   ADR_link_not_path_generic
+  RUN_check_cmd_stdin_inherited
   PLAN_adr_check_ignored
   PLAN_adr_tbd_accepted
   EXEC_adr_drift_blind
@@ -4894,7 +4902,7 @@ KILLERS_FILE="$ROOT/.sdd/cache/mutation-killers.tsv"
 # stopped being parsed: an empty loop reports "0 broken" forever.
 # ---------------------------------------------------------------------------
 if [ "$ANCHORS_ONLY" = 1 ]; then
-  ANCHOR_FLOOR=416
+  ANCHOR_FLOOR=417
   anchor_box() { mkdir -p "$1"; cp -r "$ROOT/bin" "$1/"; }
   anchor_control_noop()       { :; }
   anchor_control_intact()     { printf '# a mutation that lands and stays valid\n' >> "$1"; }

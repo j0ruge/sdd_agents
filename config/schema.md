@@ -25,7 +25,11 @@ phase that has already been paid for:
 
 ## Verification commands (the runner's sensors)
 
-They all run with cwd at the root of the target repo. The runner only looks at the **exit code**.
+They all run with cwd at the root of the target repo and **stdin at `/dev/null`**, whatever stdin
+the runner itself holds. The runner only looks at the **exit code**. The closed stdin is deliberate:
+a test runner that reads a terminal as "interactive" — vitest 3 turns watch mode on when stdin is a
+TTY, and a bare `"test": "vitest"` is common — would otherwise hang the gate for good, with no rc,
+from any `sdd run` typed at a terminal.
 
 | Key | Required | Default | What it is |
 |---|---|---|---|
