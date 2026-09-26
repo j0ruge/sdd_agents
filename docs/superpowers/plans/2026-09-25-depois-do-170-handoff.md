@@ -13,22 +13,25 @@
 - **`sdd health` custa ~18 min** (três rodadas: 18:56, 18:14, 18:24), contra 37 min 42 s antes. Daqui
   em diante o ganho vem de baratear o mutante (F1-P1/P4), não de reordenar: os 406 mutantes somam
   12 031 s (~12,5 min em 16 vagas), e o resto são ~3,5 min de suíte rápida.
-- **`TODO.md`:** 82 achados, contra **83** issues abertas com a label `todo`. A diferença é a **#144**,
-  que saiu do arquivo neste PR (`RESOLVED by b874141`, mergeado com o #168).
-- **Este branch** (`docs/depois-do-170`) leva só este handoff e a linha da F1 na gaveta. Está
-  empurrado e **sem PR**. Nada nele toca a chave do carimbo.
+- **`TODO.md`:** 82 achados ↔ **82** issues abertas com a label `todo` desde o re-sync de 2026-09-26
+  (E6, abaixo). A **#144**, que saiu do arquivo no #170, está fechada.
+- **Este branch** (`docs/depois-do-170`) leva só este handoff e a linha da F1 na gaveta, pelo
+  **PR #171**, que se mergeia só com o ok do humano. Nada nele toca a chave do carimbo.
 
-## E6 — o que falta do #170 (pedido ao humano, que mandou deixar para depois do `/clear`)
+## E6 — o que faltava do #170: **FEITO em 2026-09-26**
 
-1. **Re-sync do espelho de issues** com a skill `todo-to-github-issues`. A #144 fica órfã: feche como
-   `completed`, citando `b874141` (o commit que a resolveu) e o #170 (o PR que a tirou do arquivo). O
-   plano de sync tem de voltar `create=0 update=0`. Qualquer outra divergência é achado, não ruído.
-2. **Apague o branch** `perf/sensor-para-no-primeiro-fail`, no remoto
-   (`git push origin --delete perf/sensor-para-no-primeiro-fail`) e o local. Os anteriores foram
-   apagados depois do merge.
-3. **Abra o PR deste branch** (docs só: handoff e gaveta). Não pede health, porque a chave do carimbo
-   não muda. Confira com o `stamp-check` antes de abrir. Espere os bots e mergeie só com o ok do
-   humano.
+Não refaça nenhum dos três passos; o que sobra é a escolha da seção seguinte.
+
+1. **Espelho de issues re-sincronizado** com a skill `todo-to-github-issues`. O plano deu `update=14`
+   além da órfã: os 14 eram só número de linha de âncora que o #170 re-apontou no `TODO.md`
+   (conferido com `--dump` contra o corpo vivo, dígitos normalizados, 14 de 14). A **#144** fechou como
+   `completed`, citando `b874141` (o conserto) e `82572b2` (a saída do arquivo, pelo #170). O plano
+   voltou `create=0 update=0 orphans=0`.
+2. **Branch `perf/sensor-para-no-primeiro-fail` apagado**, no remoto e o local (a ponta `b2741d3` está
+   na `main`).
+3. **PR #171 aberto** deste branch, com o `stamp-check` em `STAMP VALID` antes (sem health: a chave do
+   carimbo não muda). Revisores: CodeRabbit e Codex acharam o mesmo ponto (este bloco dizia que o E6
+   estava por fazer), consertado no próprio PR; o Copilot não revisou, sem cota.
 
 ## Depois do E6 — a escolha é do humano
 
@@ -65,11 +68,8 @@ valendo, e o item 1 dela está feito:
 ## Prompt para depois do `/clear`
 
 ```text
-Siga o handoff docs/superpowers/plans/2026-09-25-depois-do-170-handoff.md (branch
-docs/depois-do-170). Faça o E6: re-sync das issues do TODO.md com a skill todo-to-github-issues
-(a #144 fecha como completed citando b874141 e o #170; o plano tem de voltar create=0 update=0),
-apague o branch perf/sensor-para-no-primeiro-fail (remoto e local) e abra o PR do branch
-docs/depois-do-170 (confira o stamp-check antes; esse PR não pede health). Espere os bots e me
-peça o merge. Depois me pergunte se o kit congela para a janela do juiz (item 2 da recomendação
-da gaveta) antes de propor qualquer trabalho de kit.
+Siga o handoff docs/superpowers/plans/2026-09-25-depois-do-170-handoff.md. O E6 está feito
+(espelho 82 ↔ 82, #144 fechada, branch apagado, PR #171); não refaça nada dele. Se o #171 ainda
+estiver aberto, me peça o merge. Depois me pergunte se o kit congela para a janela do juiz
+(item 2 da recomendação da gaveta) antes de propor qualquer trabalho de kit.
 ```
