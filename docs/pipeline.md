@@ -163,7 +163,9 @@ leaves `aprovacao` empty, and the runner stops asking for explicit approval.
 being approved — the title, the PLAN-AUTO evidence, the increments, the open questions — asks
 `[y/N]`, and only on an explicit yes writes `aprovacao: humano-<date>` and commits **that one file**.
 It never opens a session: approving is the one decision in the pipeline that has to come from
-outside it. Whenever the gate stalls on the field it names the command in its own reason, because a
+outside it. `N` and a bare Enter are answers and exit 0; when not a single character reaches the
+prompt (stdin closed, an empty pipe, a harness with no terminal) it exits **66** (`EX_NOINPUT`) and
+writes nothing, because rc 0 there read exactly like a human who typed N. Whenever the gate stalls on the field it names the command in its own reason, because a
 refusal that does not carry its remedy sends the human back to typing `humano-YYYY-MM-DD` into the
 frontmatter by hand — which is the failure the command exists to end.
 

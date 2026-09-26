@@ -17,7 +17,7 @@
 | F2 | Faxina pós-#57 | parada | ADR 0010 para `accepted`; apagar 2 itens do `TODO.md` | carona num PR que já carimbe |
 | F3 | T3 e a janela do juiz | parada | decidir as 3 perguntas de desenho | **decisão humana** (inclusive: congelar ou não) |
 | F4 | Portabilidade para outros repos | parcial | registrar as lacunas no `TODO.md`; consertar a 2 | carona num PR que já carimbe |
-| F5 | Issues avulsas #50–#53 | #53 fechada; #50 consertada na missão `20260926-a-carona-antes-do-congelamento` (I1); #51 e #52 em curso nela | fechar #51 e #52 na mesma missão; as três fecham com o PR | — |
+| F5 | Issues avulsas #50–#53 | #53 fechada; #50 e #52 consertadas na missão `20260926-a-carona-antes-do-congelamento` (I1, I2); #51 em curso nela | fechar #51 na mesma missão; as três fecham com o PR | — |
 | F6 | O worker (W1–W7) | estacionada por decisão | nada, até os fluxos atuais rodarem limpos | **decisão humana** |
 | F7 | Plano Astra, fases 2–7 | não iniciada | nada; vem depois do worker | F6 |
 
@@ -197,7 +197,8 @@ São quatro, todas abertas em 2026-09-22 a partir da missão do `lighthouse_proj
   da sessão. É da mesma classe do item "a linha `kit-touched` afirma atribuição que ninguém mediu";
   o #48 declara que "coordena entradas do kit, não edição externa".
 - **#52** — o `sdd approve` sai 0 com "not approved" quando não há TTY. Liga-se ao W3 (F6) e ao
-  item do `TODO.md` sobre o `sdd approve`.
+  item do `TODO.md` sobre o `sdd approve`. **Consertada** no I2 da mesma missão: sem nenhum
+  caractere no stdin o comando sai 66 e não escreve nada; `n` e Enter seguem rc 0.
 - **#53** — o preflight reprova `TEST_CMD` em missão greenfield cujo I1 cria o manifesto. Liga-se
   a F4. **Fechada** pela missão `20260925-o-sensor-le-o-que-a-ancora-diz` (`bc624f9`, `warn` estreito
   quando o manifesto do runner não existe na raiz); a issue fecha com o merge do PR.

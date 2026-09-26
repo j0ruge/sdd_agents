@@ -106,7 +106,9 @@ sdd adr check [--mission <m>]         # read the links back; rc 0 clean, 1 viola
 are about to approve — the title, the PLAN-AUTO evidence, the increments, the open questions —
 asks `[y/N]`, and only on an explicit yes writes `aprovacao: humano-<date>` and commits that one
 file. It never opens a session: approving is the one decision in the pipeline that has to come from
-outside it. On a plan born of `sdd kaizen` it is the **only** way through the gate — `auto` is
+outside it. `N` or a bare Enter is an answer and exits 0; no answer at all — stdin closed, an empty
+pipe, a harness with no terminal — exits **66** and writes nothing, so a caller can tell "the human
+said no" from "nobody was asked". On a plan born of `sdd kaizen` it is the **only** way through the gate — `auto` is
 refused there, because nobody was in the room
 ([why](docs/pipeline.md#plan--the-only-one-the-runner-does-not-execute)).
 

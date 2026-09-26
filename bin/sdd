@@ -6635,13 +6635,25 @@ cmd_approve() {
   # wolf that teaches people to skip reading them.
   warn_if_on_base_branch
   printf '  approve this plan? [y/N] '
-  # `|| ans=""`: with stdin closed, `read` returns non-zero and `set -e` would abort mid-prompt.
+  # `|| got=$?`: with stdin closed, `read` returns non-zero and `set -e` would abort mid-prompt.
   # Anything that is not an explicit yes is a no — the default of a [y/N] prompt is the safe side.
-  local ans=""
-  read -r ans || ans=""
+  local ans="" got=0
+  read -r ans || got=$?
   # The prompt ends without a newline, and a terminal supplies one when the human hits Enter. A
   # pipe or a closed stdin does not, and the answer would sit glued to the prompt.
   info ""
+  # ...but NO character at all is not a no: nobody was asked (issue #52). rc 0 with "not approved"
+  # is what a human who typed N gets, so a caller could not tell the two apart. 66 is EX_NOINPUT,
+  # the sysexits family of the 75 this kit already answers for CHECKOUT-BUSY. A partial line with
+  # no newline is an answer that arrived, and stays discarded below exactly as before.
+  if [ "$got" -ne 0 ] && [ -z "$ans" ]; then
+    local why="no answer reached the prompt — stdin closed before a single character was read"
+    [ -t 0 ] || why="$why (stdin is not a terminal)"
+    bad "$why"
+    dim "  nothing was written. Run 'sdd approve $MISSION' from an interactive shell."
+    return 66
+  fi
+  [ "$got" -eq 0 ] || ans=""
   case "$ans" in
     y|Y|yes|Yes|YES) : ;;
     *) info "  not approved — nothing was written"; return 0 ;;

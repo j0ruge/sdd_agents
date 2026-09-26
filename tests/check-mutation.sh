@@ -2329,6 +2329,13 @@ mut_RUN_approve_no_plan_blind() {
   sed -i '/^cmd_approve() {/,/^}/ s@; then die "$GATE_WHY"; fi@; then :; fi@' "$1"
 }
 
+# `sdd approve` reads "no character arrived" as a no again (issue #52): rc 0 and "not approved", the
+# answer a human who typed N gets, so a harness with no terminal and a human refusal look the same
+# to every caller. Addressed to cmd_approve; `return 66` is its only one.
+mut_RUN_approve_eof_silent() {
+  sed -i '/^cmd_approve() {/,/^}/ s@^    return 66$@    info "  not approved — nothing was written"; return 0@' "$1"
+}
+
 # The runner stops reading the `branch:` field — the state the kit lived in until this mission, and
 # the one that let five phases of the SQ-97 pilot commit into another PR's branch. It is a no-op
 # that costs nothing and breaks nothing on screen: the run goes on, the gates pass, and every
@@ -4537,6 +4544,7 @@ CATALOG=(
   RUN_approve_writes_auto
   RUN_approve_bails_on_kaizen_born
   RUN_approve_no_plan_blind
+  RUN_approve_eof_silent
   RUN_branch_switch_dead
   RUN_branch_option_name
   RUN_branch_orphan_blind
@@ -4833,7 +4841,7 @@ KILLERS_FILE="$ROOT/.sdd/cache/mutation-killers.tsv"
 # stopped being parsed: an empty loop reports "0 broken" forever.
 # ---------------------------------------------------------------------------
 if [ "$ANCHORS_ONLY" = 1 ]; then
-  ANCHOR_FLOOR=409
+  ANCHOR_FLOOR=410
   anchor_box() { mkdir -p "$1"; cp -r "$ROOT/bin" "$1/"; }
   anchor_control_noop()       { :; }
   anchor_control_intact()     { printf '# a mutation that lands and stays valid\n' >> "$1"; }

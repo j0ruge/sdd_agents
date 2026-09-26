@@ -64,7 +64,7 @@ Achados sobre **repos-alvo** vão para o `TODO.md` daquele repo. Este arquivo é
   missão `20260819-fecho-...` (2026-08-19)
 
 - [ ] **O carimbo de mutação cobre 4 dos 8 caminhos que a sandbox do catálogo copia** —
-  `bin/sdd:1616` contra `tests/check-mutation.sh:4699` — a chave lê `bin tests templates config`,
+  `bin/sdd:1616` contra `tests/check-mutation.sh:4707` — a chave lê `bin tests templates config`,
   mas `sandbox()` também copia `agents/`, `CLAUDE.md`, `TODO.md` e `docs/adr`. Mudança confinada a
   esses quatro mantém o carimbo válido sobre conteúdo que o catálogo de fato mede — a
   regra 12 do `check-health.sh` lê o `CLAUDE.md`. Estreitamento deliberado (a fase DOCS edita
@@ -141,7 +141,7 @@ Achados sobre **repos-alvo** vão para o `TODO.md` daquele repo. Este arquivo é
   — descoberto por `sdd-reviewer` na missão `20260818-lote-facil` (2026-08-18)
 
 - [ ] **O `moved2` do `cmd_kaizen` não tem asserção que morra ao apagá-lo** —
-  `bin/sdd:7310` — a asserção `covered:` do `moved` cobre a primeira atribuição; neutralizar a
+  `bin/sdd:7322` — a asserção `covered:` do `moved` cobre a primeira atribuição; neutralizar a
   do retry deixa `check-kaizen.sh`, `check-autonomy.sh` e o catálogo verdes, porque o default
   local `false` coincide com o que o regime do fixture espera. Só o hardcode para `true` morre.
   Direção: um mundo em que o retry mexe no disco de verdade, ou estreitar o que a asserção diz.
@@ -255,7 +255,7 @@ Achados sobre **repos-alvo** vão para o `TODO.md` daquele repo. Este arquivo é
   pelo caminho real. Ainda pega campo ausente ou `moved` sempre-`true`; só o nome discrimina mais
   do que ela. — descoberto por `/codereview` na missão `20260815-i13.1-autonomy-log` (2026-08-15)
 
-- [ ] **O schema da série não tem sensor de drift contra a prosa que o descreve** — `bin/sdd:8448`
+- [ ] **O schema da série não tem sensor de drift contra a prosa que o descreve** — `bin/sdd:8460`
   (`kaizen_series`) vs `docs/pipeline.md:501`, `docs/adr/0003:57`, `agents/sdd-kaizen.md:40` e
   `docs/failure-modes.md:99` — produzido em dois lugares (o `jq` e o literal vazio, `:8394`) e
   descrito em **dez**, QUATRO deles dentro do `bin/sdd`. Cobrado 6×: na DOCS de
@@ -302,7 +302,7 @@ Achados sobre **repos-alvo** vão para o `TODO.md` daquele repo. Este arquivo é
   — descoberto por `sdd-qa` na missão `20260819-fecho-que-nao-mente` (2026-08-19)
 
 - [ ] **O piso do catálogo mora só no consumidor; quem imprime o `score:` segue sem nenhum** —
-  `tests/check-mutation.sh:4983` — com `CATALOG=()` o laço roda zero vezes, `errors` fica 0 e o
+  `tests/check-mutation.sh:4991` — com `CATALOG=()` o laço roda zero vezes, `errors` fica 0 e o
   arquivo imprime `score: 0 caught, 0 known gap(s), of 0` saindo 0. O F1 pôs o piso no `cmd_health`,
   hoje o único chamador — mas duas frases do próprio runner (`bin/sdd:5101` e `:5108`) mandam o
   operador rodar `tests/run-all.sh --with-mutation` à mão, e aí o verde volta a mentir.
@@ -341,7 +341,7 @@ Achados sobre **repos-alvo** vão para o `TODO.md` daquele repo. Este arquivo é
   Direção: um `refute()` sobre a superfície de docs, ou ligar a tabela de agentes ao frontmatter.
   — descoberto por `sdd-executor` na missão `20260901-o-revisor-so-acha` (2026-09-01)
 
-- [ ] **O braço `else ""` da célula do laço de revisão não tem fixture** — `bin/sdd:8313` — a
+- [ ] **O braço `else ""` da célula do laço de revisão não tem fixture** — `bin/sdd:8325` — a
   guarda contra a divisão por zero do `jq` (`$whole > 0`) está correta e **não é medida**: uma
   frouxidão futura (`$whole >= 0`) abortaria o `--by-mission` inteiro sobre um ledger real com
   missão de custo nulo, e nada nesta suíte avisaria. Direção: fixture diferencial de missão de
@@ -404,7 +404,7 @@ Achados sobre **repos-alvo** vão para o `TODO.md` daquele repo. Este arquivo é
   Direção: basear a chave nos arquivos rastreados, ou podar dotfiles.
   — descoberto por `sdd-qa` na missão `20260819-fecho-que-nao-mente` (2026-08-19)
 
-- [ ] **`sdd kaizen` recusa rodar de um worktree do próprio kit** — `bin/sdd:9208` — a porta
+- [ ] **`sdd kaizen` recusa rodar de um worktree do próprio kit** — `bin/sdd:9220` — a porta
   "estou no repo do kit?" compara `kit_root` (`--show-toplevel` de `$SDD_HOME`) com `$REPO_ROOT`,
   e o toplevel é por worktree: com o `sdd` do checkout principal e o cwd num worktree os dois
   divergem e o `die` da `:9126` mata. ⚠️ **`--series` NÃO passa por ela** — sai na `:9113`, medido
@@ -664,7 +664,7 @@ Achados sobre **repos-alvo** vão para o `TODO.md` daquele repo. Este arquivo é
   Direção: SIG_DFL no filho do probe, ou declarar a pré-condição no cabeçalho.
   — descoberto por `sessão coordenadora` no PR #58 `fix/ancoras-do-catalogo` (2026-09-23)
 
-- [ ] **O 2º Python do worker custa ~30 ms em toda chamada coordenada** — `bin/sdd:9512` — o
+- [ ] **O 2º Python do worker custa ~30 ms em toda chamada coordenada** — `bin/sdd:9524` — o
   worker relê o `bin/sdd` e sobe um 2º Python (`check`) só para provar a reentrada. Medido: sem ele
   o `sdd install` cai de ~160 para ~130 ms, e o #48 levou a suíte comportamental de 117 para 251 s.
   A parte barata já saiu no branch `perf/catalogo-para-no-primeiro-vermelho` (`-I -S` e acordar pelo

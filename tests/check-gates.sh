@@ -2263,6 +2263,33 @@ else
        "rc $APPROVE_N_RC, phase $APPROVE_N_PHASE, approval line '$(grep -m1 '^aprovacao:' "$AMDIR/00-missao.md")': $(tail -3 <<< "$APPROVE_N_OUT")"
 fi
 
+# --- 1b. no answer at all is not a "no" (issue #52).
+#
+# With stdin closed — a harness with no terminal, an empty pipe — `read` fails before a single
+# character arrives, and the command used to print "not approved" with rc 0, exactly what a human
+# who typed N gets. A caller could not tell "the human said no" from "nobody was asked". rc 66 is
+# EX_NOINPUT, the sysexits family of the 75 the kit already answers for CHECKOUT-BUSY.
+#
+# Differential in the same outcome: the bare Enter (an answer, and a no) keeps rc 0 with "not
+# approved", so the 66 is proven to belong to "no line at all" and not to "an empty answer".
+APPROVE_EOF_OUT="$( cd "$FIX" && "$SDD" approve "$AM" 2>&1 </dev/null )"; APPROVE_EOF_RC=$?
+APPROVE_EOF_PHASE="$( cd "$FIX" && "$SDD" phase "$AM" 2>&1 )"
+APPROVE_ENTER_OUT="$( cd "$FIX" && "$SDD" approve "$AM" 2>&1 <<< "" )"; APPROVE_ENTER_RC=$?
+if [ "$APPROVE_EOF_RC" -eq 66 ] \
+   && grep -q 'no answer reached the prompt' <<< "$APPROVE_EOF_OUT" \
+   && ! grep -q 'not approved' <<< "$APPROVE_EOF_OUT" \
+   && grep -qx 'aprovacao:' "$AMDIR/00-missao.md" \
+   && [ "$(git rev-parse HEAD)" = "$APPROVE_HEAD_0" ] \
+   && [ "$APPROVE_EOF_PHASE" = "PLAN" ] \
+   && [ "$APPROVE_ENTER_RC" -eq 0 ] \
+   && grep -q 'not approved' <<< "$APPROVE_ENTER_OUT"; then
+  pass "sdd approve with no answer at all exits 66 and writes nothing"
+else
+  fail "sdd approve with no answer at all exits 66 and writes nothing" \
+       "rc 66, 'no answer reached the prompt', no 'not approved', nothing written, still PLAN; Enter still rc 0 'not approved'" \
+       "rc $APPROVE_EOF_RC, phase $APPROVE_EOF_PHASE, Enter rc $APPROVE_ENTER_RC: $(tail -3 <<< "$APPROVE_EOF_OUT")"
+fi
+
 # --- 2. `y` writes humano-<today>, never `auto`, and the gate opens.
 #
 # `auto` is asserted ABSENT and not merely "humano- present": the two values share the gate's happy
