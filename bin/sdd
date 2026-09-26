@@ -3057,11 +3057,24 @@ kit_guard_check() {
 # may have left a mark, committed OR dirty, and a path outside it arms HAT_CROSSED_WHY. The marker
 # follows the contract every marker in this file follows — reset at the entry of its ONLY setter,
 # read by the doors AFTER the session's ledger row, never surviving the lap — and
-# hat_crossed_escalation is the ONE door for it and for KIT_TOUCHED_WHY alike: two markers, two
-# ledger kinds (`hat-crossed`, `kit-touched`), one definition of "the line stops because a session
-# went where its hat does not reach". Four doors: cmd_run's first pass and its inline retry (after
-# the row, next to the other two escalations), cmd_retry (after its row) and cmd_close (no row
-# there, so right after the kit guard). One probe per door and one mutant per door.
+# hat_crossed_escalation is the ONE door for it, for FOREIGN_COMMIT_WHY and for KIT_TOUCHED_WHY
+# alike: three markers, three ledger kinds (`hat-crossed`, `foreign-commit`, `kit-touched`), one
+# definition of "the line stops because something went where a hat does not reach". Four doors:
+# cmd_run's first pass and its inline retry (after the row, next to the other two escalations),
+# cmd_retry (after its row) and cmd_close (no row there, so right after the kit guard). One probe
+# per door and one mutant per door.
+#
+# WHOSE COMMIT IT IS (issue #51, ADR 0012). Every session runs under GIT_REFLOG_ACTION=<its label>
+# (session_git_label), so its commits, amends, checkouts and resets land in the reflog of HEAD
+# carrying who made them. hat_guard_arm records the newest reflog entry; hat_guard_check reads the
+# entries written after it — the WINDOW of the session — and splits them: an entry with the
+# session's EXACT label is the session's and is checked against writes: as always; an entry
+# without it is FOREIGN, and a foreign commit that changed a path outside writes: arms
+# FOREIGN_COMMIT_WHY. It stops the line all the same: the attribution picks the kind and the
+# remedy, never whether the line stops, so a session that strips its own label changes the kind
+# and not the stop. When the reflog cannot account for the move — no reflog, the recorded entry no
+# longer right below the new ones, HEAD moved with no new entry, no label — the guard falls back to
+# the range diff of before, and every path is the session's.
 #
 # ⚠️ DECLARED LIMITS:
 #  · A `grep -c HAT-CROSSED <pipeline.log>` ANSWERING 0 IS NOT EVIDENCE THAT THE SESSION BEHAVED.
@@ -3104,19 +3117,103 @@ kit_guard_check() {
 #  · ONLY TRAILING SLASHES are normalised out of `$HANDOFF_DIR` (hat_expand); a leading `./`, a
 #    `//` in the middle or an absolute `$HANDOFF_DIR` would each miss the same way and none has a
 #    probe.
+#  · THE LABEL IS ATTRIBUTION, NOT PROOF. A git command that sets GIT_REFLOG_ACTION itself (a
+#    `rebase`, a `pull`) writes an entry without the session's label, and the session's own move
+#    reads as foreign: the line still stops, only the kind is wrong. A writer that copies the label
+#    would be read as the session — the stop is the same, `hat-crossed`.
+#  · ONLY COMMITS ARE ATTRIBUTED. The status half still reads uncommitted edits as the session's,
+#    so a concurrent writer's dirty file is still the hat's crossing.
+#  · cmd_kaizen exports the label through run_phase and is still outside these doors (above).
 HAT_CROSSED_WHY=""
+FOREIGN_COMMIT_WHY=""
 KIT_TOUCHED_WHY=""
 HAT_STATUS_BEFORE=""
+HAT_REFLOG_TOP=""
+HAT_REFLOG_COUNT=0
 
 # The human's own dirt is not the hat's crossing. Armed next to kit_guard_arm, before the session
 # opens: a file left untracked or modified BEFORE the phase is filtered out of the status half
 # below, so only what the session left behind is read. A file the session COMMITS still lands in
 # the diff half — sweeping the human's file into a round's commit is the hat's doing. Empty under
 # DRY_RUN, like the kit guard's baseline.
+#
+# ...and the newest entry of the reflog of HEAD, with how many there are: the window of the session
+# is what gets written above that entry. Empty when there is no reflog, which is what sends
+# hat_guard_check back to the range diff.
 hat_guard_arm() {
-  HAT_STATUS_BEFORE=""
+  HAT_STATUS_BEFORE=""; HAT_REFLOG_TOP=""; HAT_REFLOG_COUNT=0
   [ "$DRY_RUN" = "1" ] && return 0
   HAT_STATUS_BEFORE="$(hat_status_lines)"
+  local lines; lines="$(hat_reflog_lines)"
+  if [ -n "$lines" ]; then
+    HAT_REFLOG_TOP="${lines%%$'\n'*}"
+    HAT_REFLOG_COUNT="$(grep -c '' <<< "$lines")"
+  fi
+}
+
+# The reflog of HEAD, newest first, one `<selector>\t<sha>\t<subject>` per entry. Two entries of the
+# same second share the selector, so an entry is identified by the WHOLE line. `|| true`: no reflog
+# at all is an answer (empty), not a failure.
+hat_reflog_lines() {
+  git -C "$REPO_ROOT" reflog show --date=unix --format='%gd%x09%H%x09%gs' HEAD 2>/dev/null || true
+}
+
+# The paths between two commits, as the guard reads them — ONE definition for the reflog window and
+# for the range-diff fallback, so the flag below cannot be right in one half and gone in the other.
+# `core.quotePath=false`: see the DECLARED LIMITS above.
+hat_diff_names() {   # hat_diff_names <old sha> <new sha>
+  git -C "$REPO_ROOT" -c core.quotePath=false diff --name-only "$1" "$2" 2>/dev/null || true
+}
+
+# hat_reflog_window <HEAD now> <expanded globs> — rc 0 when the reflog accounts for the move, rc 1
+# to fall back to the range diff. PUBLISHES HAT_WINDOW_OWN (the paths of the entries carrying the
+# session's exact label, one per line) and HAT_WINDOW_FOREIGN / HAT_WINDOW_FOREIGN_N (the entries
+# without it that changed a path outside the globs, as `<sha7> <subject>`, `; `-joined, and their
+# count). CALLED, never `$( )`: it publishes three globals.
+#
+# Each entry is diffed against the entry below it — the recorded top for the oldest — so a session
+# commit made on top of a foreign one is diffed against the foreign one, and neither owns the other's
+# paths. The label is matched EXACTLY (alone, or followed by `:` and the subject git appends), never
+# by the `sdd:` prefix: a label of an earlier lap is somebody else's as far as this window goes.
+HAT_WINDOW_OWN=""
+HAT_WINDOW_FOREIGN=""
+HAT_WINDOW_FOREIGN_N=0
+hat_reflog_window() {
+  local head_now="$1" globs="$2" label="$LAST_PHASE_GIT_LABEL" lines count k i entry sha old subj paths p outside
+  HAT_WINDOW_OWN=""; HAT_WINDOW_FOREIGN=""; HAT_WINDOW_FOREIGN_N=0
+  [ -n "$label" ] && [ -n "$HAT_REFLOG_TOP" ] || return 1
+  lines="$(hat_reflog_lines)"
+  local -a entries
+  mapfile -t entries <<< "$lines"
+  count=${#entries[@]}
+  k=$(( count - HAT_REFLOG_COUNT ))
+  # New entries, the recorded top right below them, and the newest one where HEAD is now — or the
+  # reflog does not account for the move, and nothing is attributed by it.
+  [ "$k" -ge 1 ] || return 1
+  [ "${entries[$k]}" = "$HAT_REFLOG_TOP" ] || return 1
+  sha="${entries[0]#*$'\t'}"; sha="${sha%%$'\t'*}"
+  [ "$sha" = "$head_now" ] || return 1
+  old="${HAT_REFLOG_TOP#*$'\t'}"; old="${old%%$'\t'*}"
+  for (( i = k - 1; i >= 0; i-- )); do
+    entry="${entries[$i]#*$'\t'}"
+    sha="${entry%%$'\t'*}"; subj="${entry#*$'\t'}"
+    paths="$(hat_diff_names "$old" "$sha")"
+    if [ "$subj" = "$label" ] || [[ "$subj" == "$label:"* ]]; then
+      HAT_WINDOW_OWN="${HAT_WINDOW_OWN:+$HAT_WINDOW_OWN$'\n'}$paths"
+    else
+      outside=0
+      while IFS= read -r p; do
+        [ -n "$p" ] || continue
+        hat_path_allowed "$p" "$globs" || { outside=1; break; }
+      done <<< "$paths"
+      if [ "$outside" = 1 ]; then
+        HAT_WINDOW_FOREIGN_N=$((HAT_WINDOW_FOREIGN_N + 1))
+        HAT_WINDOW_FOREIGN="${HAT_WINDOW_FOREIGN:+$HAT_WINDOW_FOREIGN; }${sha:0:7} $subj"
+      fi
+    fi
+    old="$sha"
+  done
+  return 0
 }
 
 # `git status --porcelain -z`, one `XY path` line per entry with the NAME LITERAL — the line-mode
@@ -3149,7 +3246,8 @@ hat_path_allowed() {   # hat_path_allowed <path> <expanded globs, comma-separate
 
 hat_guard_check() {   # hat_guard_check <phase> <HEAD before the session> — arms, never stops
   local phase="${1:-}" before="${2:-}" step hat globs head_now changed status f outside="" n=0
-  HAT_CROSSED_WHY=""
+  HAT_CROSSED_WHY=""; FOREIGN_COMMIT_WHY=""
+  HAT_WINDOW_OWN=""; HAT_WINDOW_FOREIGN=""; HAT_WINDOW_FOREIGN_N=0
   [ "$DRY_RUN" = "1" ] && return 0
   step="$LAST_PHASE_STEP"; [ -n "$step" ] || step="$phase"
   hat="$(phase_hat "$step")"; [ -n "$hat" ] || return 0
@@ -3167,7 +3265,13 @@ hat_guard_check() {   # hat_guard_check <phase> <HEAD before the session> — ar
   changed=""
   head_now="$( git -C "$REPO_ROOT" rev-parse HEAD 2>/dev/null || echo "-" )"
   if [ -n "$before" ] && [ "$before" != "-" ] && [ "$head_now" != "-" ] && [ "$head_now" != "$before" ]; then
-    changed="$( git -C "$REPO_ROOT" -c core.quotePath=false diff --name-only "$before" "$head_now" 2>/dev/null || true )"
+    # The session's own commits by the reflog when it can say whose they are; the whole range,
+    # attributed to the session as before, when it cannot.
+    if hat_reflog_window "$head_now" "$globs"; then
+      changed="$HAT_WINDOW_OWN"
+    else
+      changed="$(hat_diff_names "$before" "$head_now")"
+    fi
   fi
   status="$(hat_status_lines)"
   if [ -n "$HAT_STATUS_BEFORE" ]; then
@@ -3180,7 +3284,16 @@ hat_guard_check() {   # hat_guard_check <phase> <HEAD before the session> — ar
     hat_path_allowed "$f" "$globs" && continue
     n=$((n + 1)); outside="${outside:+$outside }$f"
   done <<< "$changed"$'\n'"$status"
-  [ "$n" -gt 0 ] || return 0
+  if [ "$n" -eq 0 ]; then
+    # Not the hat's crossing — but somebody committed into this checkout while the phase ran, and
+    # the line stops for that too, with its own kind and the remedy that fits it (ADR 0012).
+    [ "$HAT_WINDOW_FOREIGN_N" -gt 0 ] || return 0
+    FOREIGN_COMMIT_WHY="while the $step session ($hat) ran, $HAT_WINDOW_FOREIGN_N commit(s) without its label changed path(s) outside its writes: $HAT_WINDOW_FOREIGN"
+    warn "$FOREIGN_COMMIT_WHY"
+    pipeline_log_line "$(date -Iseconds)  FOREIGN-COMMIT  $phase  $FOREIGN_COMMIT_WHY"
+    pipeline_log_line "$(date -Iseconds)  FOREIGN-REMEDY  $phase  nothing may commit into this checkout while a phase runs — let the phase end, then 'sdd run' again; widening writes: or HAT_WRITES_EXTRA would not fix this"
+    return 0
+  fi
   HAT_CROSSED_WHY="the $step session ($hat) touched $n path(s) outside its writes: $outside"
   warn "$HAT_CROSSED_WHY"
   pipeline_log_line "$(date -Iseconds)  HAT-CROSSED  $phase  $HAT_CROSSED_WHY"
@@ -3196,14 +3309,25 @@ hat_guard_check() {   # hat_guard_check <phase> <HEAD before the session> — ar
 
 hat_crossed_escalation() {   # hat_crossed_escalation <phase> — rc 0 = STOP (row written), rc 1 = go on
   local phase="$1" kind why
+  # The session's own crossings first — its hat, then the kit — and the commit that was not the
+  # session's last: when both arm, the one the session is answerable for is the one to name.
   if [ -n "$HAT_CROSSED_WHY" ]; then kind="hat-crossed"; why="$HAT_CROSSED_WHY"
   elif [ -n "$KIT_TOUCHED_WHY" ]; then kind="kit-touched"; why="$KIT_TOUCHED_WHY"
+  elif [ -n "$FOREIGN_COMMIT_WHY" ]; then kind="foreign-commit"; why="$FOREIGN_COMMIT_WHY"
   else return 1; fi
   GATE_WHY="$why"
   info ""
   bad "BLOCKED in $phase — $why"
-  dim "  The hat declares what it may write (agents/<hat>.md, key writes:) and the kit is never a"
-  dim "  target's to edit. Restore or move by hand what belongs elsewhere. Then 'sdd run' again."
+  if [ "$kind" = "foreign-commit" ]; then
+    # The one remedy that fits, and the two that do not, named: the three occurrences of #51 were
+    # repaired by restoring the path by hand and by widening HAT_WRITES_EXTRA, and the second
+    # weakens a real guard for good to silence a race.
+    dim "  Nothing may commit into this checkout while a phase runs — let the phase end, then"
+    dim "  'sdd run' again. Widening writes: or HAT_WRITES_EXTRA would not fix this."
+  else
+    dim "  The hat declares what it may write (agents/<hat>.md, key writes:) and the kit is never a"
+    dim "  target's to edit. Restore or move by hand what belongs elsewhere. Then 'sdd run' again."
+  fi
   if [ "$kind" = "hat-crossed" ]; then
     # Two doors, and naming only the second is what the measured repairs walked through. Widening
     # the hat in the kit widens it for EVERY project the kit is installed in; the key widens it for

@@ -170,7 +170,14 @@ do `sdd preflight` — estreitar viraria regressão, recusar viraria armadilha.
 As fases rodam **no checkout do humano**, com `.env.idp`, Jira e push reais;
 a guarda de kit **para a linha** desde `20260903-a-fronteira-do-chapeu` (`kind: kit-touched`), e o
 chapéu que escreve fora de `writes:` também (`hat-crossed`) — as duas pela mesma porta,
-`hat_crossed_escalation`, em quatro sítios. Sem worktree nem container: o ledger
+`hat_crossed_escalation`, em quatro sítios. Desde `20260926-a-carona-antes-do-congelamento`
+(issue #51, ADR 0012) a guarda do chapéu **atribui** o commit antes de culpar: toda sessão roda com
+`GIT_REFLOG_ACTION=sdd:<passo>:<sid8>` (`session_git_label`, no `run_phase` e no `cmd_close`), e o
+`hat_guard_check` lê a janela pelo reflog de `HEAD` — entrada com o rótulo exato é da sessão, sem ele
+é alheia e para a linha como `foreign-commit`, com o commit nomeado e o remédio certo; sem reflog
+que explique o movimento, o diff do intervalo de antes. Limites: um git que sobrescreve o
+`GIT_REFLOG_ACTION` troca o `kind`, nunca a parada; sujeira **não commitada** de um escritor
+concorrente continua atribuída ao chapéu; a guarda de kit não lê o rótulo. Sem worktree nem container: o ledger
 carimba caminho e um worktree já confundiu a identidade do repo (comentários `WORKTREE` do
 `bin/sdd`). Fechar pede desenho próprio, não um `git worktree add` no laço.
 ⚠️ **Medido em 2026-09-03 18:45, vinte minutos depois de o L4 pousar:** uma segunda sessão

@@ -6052,6 +6052,87 @@ assert_eq "every session runs under its own git label, the close session too" \
   "run:1 log:1 close:1" \
   "run:$(grep -cE '^sdd:REVIEW:[0-9a-f]{8}$' <<< "$RS9_RUN") log:$(if [ -n "$RS9_LOGHEX" ] && [ "$RS9_RUN" = "sdd:REVIEW:$RS9_LOGHEX" ]; then echo 1; else echo 0; fi) close:$(grep -cE '^sdd:CLOSE:[0-9a-f]{8}$' <<< "$RS9_CLOSE")"
 
+# 10-12. THE COMMIT HAS AN OWNER (issue #51, part 2; ADR 0012). The REVIEW session lands its round
+#    WITH its label, and then one more commit touches bin/tool.sh — outside the reviewer's writes: —
+#    in one of three ways: WITHOUT the label (`env -u GIT_REFLOG_ACTION`, which is what a human
+#    committing from another shell into the same checkout looks like in the reflog), WITH it (the
+#    session's own), or without it but INSIDE the writes:. The first used to stop as `hat-crossed`,
+#    blaming the hat and naming two wrong remedies; it stops now as `foreign-commit`, naming the
+#    commit. Both STOP: the attribution picks the kind and the remedy, never whether the line stops —
+#    a session that stripped its own label would otherwise cross its hat for free.
+foreign_stub() {   # foreign_stub <dir> <foreign|labelled|inside>
+  cat > "$OUTSIDE/stub/claude" <<STUB
+#!/usr/bin/env bash
+cat > "$1/docs/handoffs/$MISSION/40-review-r1.md" <<'MD'
+---
+fase: REVIEW
+gate: r1 landed with one real finding
+---
+### Overall Grade
+
+| Criterion | Grade | Rationale |
+|---|---|---|
+| Correctness | B | One real finding, handed to EXEC as R1. |
+MD
+git -C "$1" add "docs/handoffs/$MISSION/40-review-r1.md"
+git -C "$1" commit -qm "chore: round one landed"
+case "$2" in
+  foreign)  printf 'echo from elsewhere\n' > "$1/bin/tool.sh"; git -C "$1" add bin/tool.sh
+            env -u GIT_REFLOG_ACTION git -C "$1" commit -qm "chore: a concurrent writer" ;;
+  labelled) printf 'echo from elsewhere\n' > "$1/bin/tool.sh"; git -C "$1" add bin/tool.sh
+            git -C "$1" commit -qm "chore: a concurrent writer" ;;
+  inside)   printf 'a note\n' > "$1/docs/handoffs/$MISSION/notes.md"; git -C "$1" add "docs/handoffs/$MISSION/notes.md"
+            env -u GIT_REFLOG_ACTION git -C "$1" commit -qm "chore: a concurrent writer" ;;
+esac
+cat "$STREAM_SAMPLE"
+exit 0
+STUB
+  chmod +x "$OUTSIDE/stub/claude"
+}
+# foreign_run <dir> — PUBLISHES FR_RC, FR_LOG and FR_KIND. CALLED, never `$( )`.
+foreign_run() {
+  : > "$LEDGER"
+  FR_RC=0
+  ( cd "$1" && "$SDD" run "$MISSION" --phase REVIEW --max-phases 1 ) >/dev/null 2>&1 || FR_RC=$?
+  FR_LOG="$(cat "$1/.sdd/logs/$MISSION/pipeline.log" 2>/dev/null || true)"
+  FR_KIND="$(hat_rows)"
+}
+RSF="$OUTSIDE/reviewscope-foreign"
+reviewscope_world "$RSF"
+foreign_stub "$RSF" foreign
+foreign_run "$RSF"
+RSF_RC="$FR_RC"; RSF_LOG="$FR_LOG"; RSF_KIND="$FR_KIND"
+RSF_SHA="$(git -C "$RSF" rev-parse HEAD)"; RSF_SHA="${RSF_SHA:0:7}"
+RSF_NAMED="$(grep 'FOREIGN-COMMIT' <<< "$RSF_LOG" | grep -F "$RSF_SHA" | grep -c 'a concurrent writer')"
+RSL="$OUTSIDE/reviewscope-labelled"
+reviewscope_world "$RSL"
+foreign_stub "$RSL" labelled
+foreign_run "$RSL"
+assert_eq "a commit without the session label stops the line as foreign-commit, the same commit with it as hat-crossed" \
+  "rc=3 kind=foreign-commit journal=1 named=1 hat=0 · rc=3 kind=hat-crossed" \
+  "rc=$RSF_RC kind=$RSF_KIND journal=$(grep -c 'FOREIGN-COMMIT' <<< "$RSF_LOG") named=$RSF_NAMED hat=$(grep -c 'HAT-CROSSED' <<< "$RSF_LOG") · rc=$FR_RC kind=$FR_KIND"
+# Inside the writes: a foreign commit is nobody's crossing, exactly as today. `fired:1` is the floor:
+# a stub that stopped committing would satisfy every zero on the right.
+RSI="$OUTSIDE/reviewscope-inside"
+reviewscope_world "$RSI"
+foreign_stub "$RSI" inside
+foreign_run "$RSI"
+assert_eq "a foreign commit inside the hat writes is not a stop" \
+  "fired:1 kind: journal:0 hat:0" \
+  "fired:$(git -C "$RSI" log --oneline | grep -c 'a concurrent writer') kind:$FR_KIND journal:$(grep -c 'FOREIGN-COMMIT' <<< "$FR_LOG") hat:$(grep -c 'HAT-CROSSED' <<< "$FR_LOG")"
+# With no reflog there is nothing to attribute by, and the guard falls back to the range diff of
+# today: every path is the session's. `logs:0` is the floor that the venom is ARMED — a reflog that
+# quietly came back would make this the foreign regime with a different name.
+RSN="$OUTSIDE/reviewscope-noreflog"
+reviewscope_world "$RSN"
+git -C "$RSN" config core.logAllRefUpdates false
+rm -rf "$RSN/.git/logs"
+foreign_stub "$RSN" foreign
+foreign_run "$RSN"
+assert_eq "without a reflog the guard blames the session as before" \
+  "logs:0 rc=3 kind=hat-crossed" \
+  "logs:$(git -C "$RSN" reflog show HEAD 2>/dev/null | grep -c .) rc=$FR_RC kind=$FR_KIND"
+
 # The stub goes back the way it was found, for the reason spelled out one screen up.
 cat > "$OUTSIDE/stub/claude" <<'STUB'
 #!/usr/bin/env bash

@@ -119,9 +119,11 @@ acrescentada sem probe é porta cuja remoção nenhuma asserção percebe.
   ⚠️ Marcador novo **re-deriva** o contrato (reset na entrada do seu único setter, não sobrevive à
   volta) em vez de herdá-lo: é o que o comentário sobre `GATE_APP_DOWN` faz, e é o que se cobra do
   quarto.
-- `hat_crossed_escalation`, desde `20260903-a-fronteira-do-chapeu`: UMA definição, DOIS marcadores
+- `hat_crossed_escalation`, desde `20260903-a-fronteira-do-chapeu`: UMA definição, TRÊS marcadores
   (`HAT_CROSSED_WHY`, armado por `hat_guard_check` quando a sessão tocou caminho fora do `writes:`
-  do chapéu ou viu MCP/ferramenta que não declarou; `KIT_TOUCHED_WHY`, armado por
+  do chapéu ou viu MCP/ferramenta que não declarou; `FOREIGN_COMMIT_WHY`, armado pelo mesmo setter
+  quando um commit **sem o rótulo da sessão** no reflog saiu do `writes:` — desde
+  `20260926-a-carona-antes-do-congelamento`, ADR 0012; `KIT_TOUCHED_WHY`, armado por
   `kit_guard_check`) e QUATRO portas — as duas do laço do `cmd_run`, `cmd_retry` e `cmd_close` —,
   todas lidas **depois** da linha de sessão do ledger. Cada marcador tem um setter só, que o zera
   na entrada; um probe por porta em `check-autonomy.sh` e um mutante por porta no catálogo. É o

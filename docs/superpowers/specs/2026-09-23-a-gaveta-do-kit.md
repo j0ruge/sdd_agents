@@ -17,7 +17,7 @@
 | F2 | Faxina pós-#57 | parada | ADR 0010 para `accepted`; apagar 2 itens do `TODO.md` | carona num PR que já carimbe |
 | F3 | T3 e a janela do juiz | parada | decidir as 3 perguntas de desenho | **decisão humana** (inclusive: congelar ou não) |
 | F4 | Portabilidade para outros repos | parcial | registrar as lacunas no `TODO.md`; consertar a 2 | carona num PR que já carimbe |
-| F5 | Issues avulsas #50–#53 | #53 fechada; #50 e #52 consertadas na missão `20260926-a-carona-antes-do-congelamento` (I1, I2); #51 em curso nela | fechar #51 na mesma missão; as três fecham com o PR | — |
+| F5 | Issues avulsas #50–#53 | #53 fechada; #50, #51 e #52 consertadas na missão `20260926-a-carona-antes-do-congelamento` (I1–I4) | as três fecham com o merge do PR | — |
 | F6 | O worker (W1–W7) | estacionada por decisão | nada, até os fluxos atuais rodarem limpos | **decisão humana** |
 | F7 | Plano Astra, fases 2–7 | não iniciada | nada; vem depois do worker | F6 |
 
@@ -195,7 +195,10 @@ São quatro, todas abertas em 2026-09-22 a partir da missão do `lighthouse_proj
   leva a mesma leitura à nota do `gate_REVIEW` e ao Status do `gate_DOCS`; fecha com o merge do PR.
 - **#51** — o sensor de fronteira de escrita culpa o chapéu por um commit concorrente feito de fora
   da sessão. É da mesma classe do item "a linha `kit-touched` afirma atribuição que ninguém mediu";
-  o #48 declara que "coordena entradas do kit, não edição externa".
+  o #48 declara que "coordena entradas do kit, não edição externa". **Consertada** no I3 e no I4 da
+  mesma missão (ADR 0012): toda sessão roda com o rótulo `GIT_REFLOG_ACTION=sdd:<passo>:<sid8>`, e um
+  commit sem ele fora do `writes:` para a linha como `foreign-commit`, com o commit nomeado. O item
+  do `kit-touched` continua aberto no `TODO.md`.
 - **#52** — o `sdd approve` sai 0 com "not approved" quando não há TTY. Liga-se ao W3 (F6) e ao
   item do `TODO.md` sobre o `sdd approve`. **Consertada** no I2 da mesma missão: sem nenhum
   caractere no stdin o comando sai 66 e não escreve nada; `n` e Enter seguem rc 0.

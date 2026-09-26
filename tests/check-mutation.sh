@@ -1496,6 +1496,29 @@ mut_RUN_hat_missing_mirror_ignored() {
 mut_RUN_hat_close_unchecked() {
   sed -i '/^cmd_close() {/,/^}/ s|^  hat_guard_check "\$phase" "\$close_before"$|  :|' "$1"
 }
+
+# Issue #51, part 2 (ADR 0012): whose commit it is. Every entry of the window read as the session's,
+# the human's commit from another shell is the hat's crossing again — `hat-crossed`, and the two
+# wrong remedies the #51 operator reached for. The differential of regimes 10-12 in
+# check-autonomy.sh reads `foreign-commit` on one world and `hat-crossed` on the other.
+mut_RUN_foreign_blamed_on_hat() {
+  sed -i '/^hat_reflog_window() {/,/^}/ s@^    if \[ "$subj" = "$label" \] || \[\[ "$subj" == "$label:"\* \]\]; then$@    if true; then@' "$1"
+}
+
+# ...and the foreign commit that is armed but never stops: the door reads the other two markers
+# only, the run goes on over a commit nobody in the pipeline made, and the fail-safe that keeps a
+# session from stripping its own label to cross its hat for free is gone.
+mut_RUN_foreign_not_stopped() {
+  sed -i '/^hat_crossed_escalation() {/,/^}/ s@^  elif \[ -n "$FOREIGN_COMMIT_WHY" \]; then@  elif false; then@' "$1"
+}
+
+# With nothing recorded (no reflog), the window reads "zero entries of the session" instead of
+# falling back to the range diff: every commit in the phase — the session's included — goes
+# unexamined, and a repo without a reflog silently loses the hat guard. Caught by `without a reflog
+# the guard blames the session as before`.
+mut_RUN_reflog_fallback_blind() {
+  sed -i '/^hat_reflog_window() {/,/^}/ s@^  \[ -n "$label" \] && \[ -n "$HAT_REFLOG_TOP" \] || return 1$@  [ -n "$label" ] \&\& [ -n "$HAT_REFLOG_TOP" ] || return 0@' "$1"
+}
 # The kit guard back to a warning: the marker is never armed, so KIT-TOUCHED is a line and not a
 # stop — the 2d28d13 world. KG1's "rc:3 kind:kit-touched" dies.
 # HAT_WRITES_EXTRA — the project's exception. THREE mutants and not one, because the three fail
@@ -3946,9 +3969,11 @@ mut_RUN_review_scope_handoff_dir_verbatim() {   # since the hat's boundary: hat_
 #
 # Anchored on the FUNCTION range for its sibling's reason: `git -C "$REPO_ROOT" diff` is a shape
 # this runner writes in several places, and a pattern that drifted would sabotage one of those
-# while still looking applied.
+# while still looking applied. Since issue #51 the range is hat_diff_names, the ONE definition both
+# halves of the guard read — the reflog window (which regime 6 now walks) and the range-diff
+# fallback — so sabotaging it sabotages both, and neither can keep the flag while the other loses it.
 mut_RUN_review_scope_quotepath_default() {   # since the hat's boundary: the diff half of hat_guard_check
-  sed -i '/^hat_guard_check() {/,/^}/ s@ -c core\.quotePath=false diff --name-only @ diff --name-only @' "$1"
+  sed -i '/^hat_diff_names() {/,/^}/ s@ -c core\.quotePath=false diff --name-only @ diff --name-only @' "$1"
 }
 
 # The guard above, firing correctly — and taking the runner down with it. `pipeline_log_line` ends
@@ -4499,6 +4524,9 @@ CATALOG=(
   RUN_hat_expand_unquoted
   RUN_hat_missing_mirror_ignored
   RUN_hat_close_unchecked
+  RUN_foreign_blamed_on_hat
+  RUN_foreign_not_stopped
+  RUN_reflog_fallback_blind
   RUN_turn_rule_dropped
   RUN_harness_env_inherited
   RUN_git_label_unexported
@@ -4858,7 +4886,7 @@ KILLERS_FILE="$ROOT/.sdd/cache/mutation-killers.tsv"
 # stopped being parsed: an empty loop reports "0 broken" forever.
 # ---------------------------------------------------------------------------
 if [ "$ANCHORS_ONLY" = 1 ]; then
-  ANCHOR_FLOOR=412
+  ANCHOR_FLOOR=415
   anchor_box() { mkdir -p "$1"; cp -r "$ROOT/bin" "$1/"; }
   anchor_control_noop()       { :; }
   anchor_control_intact()     { printf '# a mutation that lands and stays valid\n' >> "$1"; }

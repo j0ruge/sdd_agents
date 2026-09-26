@@ -53,12 +53,11 @@ Two facts decided the mechanism, both measured on 2026-09-26:
 
 ## Implementation
 
-The label half is confirmed by I3; the reading half is the planned shape until I4 confirms it or
-corrects it in the same commit.
+Confirmed by I3 (the label) and I4 (the reading) of the mission.
 
-- **The label (I3, confirmed).** `session_git_label <step> <sid>` prints `sdd:<step>:<sid8>` and is
-  the one spelling; a QA step reads `sdd:QA:plan:<sid8>`. `run_phase` zeroes `LAST_PHASE_GIT_LABEL`
-  on entry, next to `SESSION_DIED_WHY` and `SESSION_BUDGET_CUT`, and sets it right after minting
+- **The label (I3).** `session_git_label <step> <sid>` prints `sdd:<step>:<sid8>` and is the one
+  spelling; a QA step reads `sdd:QA:plan:<sid8>`. `run_phase` zeroes `LAST_PHASE_GIT_LABEL` on
+  entry, next to `SESSION_DIED_WHY` and `SESSION_BUDGET_CUT`, and sets it right after minting
   `$sid`, so the 8 hex are the ones the session's log file is named after, on a retry too (the
   retry mints a fresh `$sid` and hands claude `--resume <old> --fork-session`). The label enters
   the command as `env -u … GIT_REFLOG_ACTION=<label> claude -p`, between the last `-u` and
@@ -66,15 +65,26 @@ corrects it in the same commit.
   label with the same function and passes it the same way; it is the one `claude -p` of the
   pipeline that does not go through `run_phase`. The projection (`--dry-run`) prints the label in
   every block, and `tests/check-dry-run.sh` checks it against the block's session id.
-- `hat_guard_arm` records the newest entry of `git reflog show --date=unix
-  --format='%gd%x09%H%x09%gs' HEAD` and the number of entries. `hat_guard_check` requires that
-  exactly that line sits right below the new entries; otherwise it falls back.
-- The old sha of each new entry is the new sha of the entry below it; for the oldest new entry it is
-  the recorded one. Paths come from `git diff --name-only <old> <new>` per entry, so a session commit
-  made on top of a foreign one is diffed against the foreign one.
-- `FOREIGN_COMMIT_WHY` is the new marker. It is reset at the entry of its only setter,
-  `hat_guard_check`, and read by `hat_crossed_escalation`, the door the other two markers already
-  use, in its four call sites. `HAT_CROSSED_WHY` wins when both are armed.
+- **The window (I4).** `hat_guard_arm` records `HAT_REFLOG_TOP`, the newest line of
+  `git reflog show --date=unix --format='%gd%x09%H%x09%gs' HEAD` (`hat_reflog_lines`), and
+  `HAT_REFLOG_COUNT`. Two entries of the same second share the selector, so an entry is the whole
+  line. `hat_reflog_window` takes the `count now − HAT_REFLOG_COUNT` newest entries and accounts for
+  the move only when there is at least one, the line right below them is `HAT_REFLOG_TOP` and the
+  newest one's sha is `HEAD`; otherwise, or with no label or no recorded top, it returns 1 and
+  `hat_guard_check` falls back to the range diff. It is read only when `HEAD` moved, as the diff
+  half always was.
+- **The attribution (I4).** Each new entry is diffed against the one below it (the recorded top for
+  the oldest) through `hat_diff_names`, the one definition of `-c core.quotePath=false diff
+  --name-only` that the window and the fallback share. An entry whose subject is the session's
+  exact label, alone or followed by `:`, is the session's: its paths join the status half and are
+  checked against `writes:` as before. Any other entry is foreign; when one of its paths is outside
+  `writes:`, the commit is listed as `<sha7> <subject>`.
+- **The marker (I4).** `FOREIGN_COMMIT_WHY` is armed by `hat_guard_check` only when the session's
+  own paths armed nothing, with a `FOREIGN-COMMIT` and a `FOREIGN-REMEDY` line in the journal. It
+  is reset at the entry of its only setter, beside `HAT_CROSSED_WHY`. `hat_crossed_escalation`
+  reads it third, after `HAT_CROSSED_WHY` and `KIT_TOUCHED_WHY` — the session's own crossings are
+  the ones to name when both arm — with `kind: foreign-commit` and its own remedy in place of the
+  hat's. The four doors did not change.
 
 ## Alternatives discarded
 
