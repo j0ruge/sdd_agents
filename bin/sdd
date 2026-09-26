@@ -9809,7 +9809,9 @@ blocks the transition, say what it is and stop — but do not stop to request pe
   # earlier answer would be reading a label again — just an older one.
   close_query "$acli_bin" "$issue"
   local verified="$CLOSE_VERIFIED"
-  pipeline_log_line "$(date -Iseconds)  CLOSE  issue=$issue  session=$sid  rc=$rc  verified=$verified  reachable=$CLOSE_REACHABLE  log=$logfile"
+  # `effort=` as on the phase line (`settings` when EFFORT_TICKET is empty): the stream does not carry
+  # the effort, so this row is the only record of what the close session ran at.
+  pipeline_log_line "$(date -Iseconds)  CLOSE  issue=$issue  effort=${EFFORT_TICKET:-settings}  session=$sid  rc=$rc  verified=$verified  reachable=$CLOSE_REACHABLE  log=$logfile"
   # Beside the journal line and never instead of it: the journal is per-mission and per-machine, and
   # the ledger is the file every reader of autonomy opens. Placed HERE, past the session and past
   # the second `close_query`, so the row carries the verdict the artifact gave rather than the one
