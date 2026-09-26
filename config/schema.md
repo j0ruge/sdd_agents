@@ -164,6 +164,31 @@ exception, never a silent one** (kaizen K3). Values: any alias `claude --model` 
 | `MODEL_TICKET` | `sonnet` | Calling `acli` with fields already decided is mechanical. |
 | `MODEL_KAIZEN` | `opus` | Used only by the kit's own kaizen loop (`sdd kaizen`, kit repo): judging the previous kit change and planning the next takes judgement. |
 
+## Effort per phase
+
+The same seven phases, the same shape. **Empty is the default and means the human's settings
+decide**: the runner passes no `--effort`, exactly as before these keys existed. A value is handed
+to that phase alone as `claude --effort <value>`. Accepted: `low`, `medium`, `high`, `xhigh`, `max`
+or `auto` (the model's default); anything else stops `load_config` before a session is paid for —
+including `ultracode`, which `--effort` takes but which is a workflow-orchestrating session
+setting, not an effort level.
+
+Whatever the keys say, a phase never inherits the effort of the shell that launched `sdd run`:
+`CLAUDE_CODE_EFFORT_LEVEL` and `CLAUDE_EFFORT` are in the runner's `env -u` list, beside the other
+parent-session variables. The value used is written to the journal (`effort=` in `pipeline.log`,
+`settings` when the key was empty) and printed by `--dry-run`, because the session stream does not
+carry it.
+
+| Key | Default | Why |
+|---|---|---|
+| `EFFORT_EXEC` | *(empty)* | Settings decide unless the target pins it. |
+| `EFFORT_QA` | *(empty)* | Settings decide unless the target pins it. |
+| `EFFORT_REVIEW` | *(empty)* | Settings decide unless the target pins it. |
+| `EFFORT_DOCS` | *(empty)* | Settings decide unless the target pins it. |
+| `EFFORT_PUBLISH` | *(empty)* | Read by the PR phase, like `MODEL_PUBLISH`. |
+| `EFFORT_TICKET` | *(empty)* | Read by the TICKET phase and by `sdd close`, the one session outside `run_phase`. |
+| `EFFORT_KAIZEN` | *(empty)* | Kit repo only, like `MODEL_KAIZEN`. |
+
 ## Limits and policy
 
 | Key | Default | What it is |

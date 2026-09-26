@@ -152,6 +152,21 @@ load_config() {
   : "${MODEL_EXEC:=opus}"; : "${MODEL_QA:=opus}"; : "${MODEL_REVIEW:=opus}"
   : "${MODEL_DOCS:=opus}"; : "${MODEL_PUBLISH:=sonnet}"; : "${MODEL_TICKET:=sonnet}"
   : "${MODEL_KAIZEN:=opus}"
+  # Effort per phase, mirroring the models above. EMPTY is the default and means "the human's
+  # settings decide" — the runner passes no --effort, which is what it did before the keys existed.
+  # A value is validated HERE, before a session is paid for: `claude --effort` also takes
+  # `ultracode`, which is a session setting that orchestrates workflows, not an effort level, and a
+  # headless phase must never start one. The accepted set is the CLI's effort levels, 2.1.282.
+  : "${EFFORT_EXEC:=}"; : "${EFFORT_QA:=}"; : "${EFFORT_REVIEW:=}"
+  : "${EFFORT_DOCS:=}"; : "${EFFORT_PUBLISH:=}"; : "${EFFORT_TICKET:=}"
+  : "${EFFORT_KAIZEN:=}"
+  local effort_key
+  for effort_key in EFFORT_EXEC EFFORT_QA EFFORT_REVIEW EFFORT_DOCS EFFORT_PUBLISH EFFORT_TICKET EFFORT_KAIZEN; do
+    case "${!effort_key}" in
+      ''|low|medium|high|xhigh|max|auto) ;;
+      *) die "$effort_key must be empty (the human's settings decide) or one of low|medium|high|xhigh|max|auto, got: '${!effort_key}'" ;;
+    esac
+  done
   : "${QA_MAX_ITER:=3}"; : "${REVIEW_MAX_ITER:=3}"; : "${EXEC_MAX_RETRY:=1}"
   # L1 of the 2026-09-03 audit: Grade A is required where the codereview skill has a SENSOR (code,
   # types, errors, security, performance, tests) and a floor is tolerated where it grades PROSE.
@@ -1776,6 +1791,21 @@ phase_model() {
     TICKET) printf '%s\n' "$MODEL_TICKET" ;;
     KAIZEN) printf '%s\n' "$MODEL_KAIZEN" ;;
     *)      printf '%s\n' "$MODEL_EXEC" ;;
+  esac
+}
+
+# Effort configured for the phase — empty when the human's settings decide. Same shape and same
+# fallthrough as phase_model, on purpose: the PR phase answers to the PUBLISH key in both.
+phase_effort() {
+  case "$1" in
+    EXEC)   printf '%s\n' "$EFFORT_EXEC" ;;
+    QA)     printf '%s\n' "$EFFORT_QA" ;;
+    REVIEW) printf '%s\n' "$EFFORT_REVIEW" ;;
+    DOCS)   printf '%s\n' "$EFFORT_DOCS" ;;
+    PR)     printf '%s\n' "$EFFORT_PUBLISH" ;;
+    TICKET) printf '%s\n' "$EFFORT_TICKET" ;;
+    KAIZEN) printf '%s\n' "$EFFORT_KAIZEN" ;;
+    *)      printf '%s\n' "$EFFORT_EXEC" ;;
   esac
 }
 
@@ -3631,8 +3661,15 @@ stream_watch() { # stream_watch <stream.jsonl> — background; killed by run_pha
 # the incantation lived at the human's terminal (`env -u … setsid nohup …`); a rule the runner needs
 # every time is written in the runner. `env -u` of an unset name is a no-op, so a terminal launch
 # pays nothing. The dry-run prints the prefix, and tests/check-dry-run.sh counts it per phase.
+#
+# The last two are the effort a parent session hands down, and they belong to the same family: state
+# of the LAUNCHING shell leaking into a phase. Measured 2026-09-24 from a Bash inside an interactive
+# session: CLAUDE_EFFORT read `medium`, then `xhigh` right after the human changed the session's
+# effort. CLAUDE_CODE_EFFORT_LEVEL is the documented one and outranks the settings. With both gone a
+# phase runs at EFFORT_<PHASE> when it is set, and at the human's settings otherwise.
 HARNESS_ENV_UNSET=(-u CLAUDECODE -u CLAUDE_CODE_CHILD_SESSION -u CLAUDE_CODE_MESSAGING_SOCKET
-  -u CLAUDE_CODE_MESSAGING_TOKEN -u CLAUDE_PID -u CLAUDE_CODE_SESSION_ID -u CLAUDE_CODE_BRIDGE_SESSION_ID)
+  -u CLAUDE_CODE_MESSAGING_TOKEN -u CLAUDE_PID -u CLAUDE_CODE_SESSION_ID -u CLAUDE_CODE_BRIDGE_SESSION_ID
+  -u CLAUDE_CODE_EFFORT_LEVEL -u CLAUDE_EFFORT)
 
 run_phase() {
   local phase="$1" resume_sid="${2:-}"
@@ -3655,10 +3692,11 @@ run_phase() {
   # Same contract, same place, for the sibling marker below: zeroed on entry, set only by this
   # function, so it says whether the session JUST run was cut and nothing older.
   SESSION_BUDGET_CUT=""
-  local pstep model agent sid prompt logfile streamfile started ended cost turns cache_read
+  local pstep model effort agent sid prompt logfile streamfile started ended cost turns cache_read
   # QA is three sessions (plan, walk, close); the step comes from the artifacts, not a counter.
   pstep="$(phase_step "$phase")"
   model="$(phase_model "$phase")"
+  effort="$(phase_effort "$phase")"
   agent="$(phase_agent "$pstep")"
   sid="$(uuidgen)"
   prompt="$(boot_prompt "$pstep")"
@@ -3702,6 +3740,7 @@ missing and write the artifacts. The gate will be re-evaluated."
     --disallowedTools "$disallowed"
     --max-budget-usd "$(phase_budget_usd "$phase")")
   if [ -n "$agent" ]; then cmd+=(--agent "$agent"); fi
+  if [ -n "$effort" ]; then cmd+=(--effort "$effort"); fi
   # Empty mcp: ⇒ the session sees no MCP server at all — and empty is the only value run_phase
   # accepts today (see the precondition above); hat_init_facts still compares against the list so
   # the day a --mcp-config is carved the sensor is already there.
@@ -3714,8 +3753,9 @@ missing and write the artifacts. The gate will be re-evaluated."
     info ""
     printf '%s--- DRY RUN: phase %s ---%s\n' "$C_BOLD" "$pstep" "$C_RESET"
     printf '%scwd:%s   %s\n' "$C_DIM" "$C_RESET" "$REPO_ROOT"
-    printf '%smodel:%s %s   %sagent:%s %s   %ssession:%s %s\n' \
-      "$C_DIM" "$C_RESET" "$model" "$C_DIM" "$C_RESET" "${agent:-<none>}" \
+    printf '%smodel:%s %s   %seffort:%s %s   %sagent:%s %s   %ssession:%s %s\n' \
+      "$C_DIM" "$C_RESET" "$model" "$C_DIM" "$C_RESET" "${effort:-<settings>}" \
+      "$C_DIM" "$C_RESET" "${agent:-<none>}" \
       "$C_DIM" "$C_RESET" "${resume_sid:-$sid}"
     printf '%sboundary:%s deny=%s | writes=%s | mcp=%s\n' "$C_DIM" "$C_RESET" \
       "$disallowed" "${writes:-<anywhere>}" "$mcp_mode"
@@ -3742,7 +3782,7 @@ missing and write the artifacts. The gate will be re-evaluated."
   streamfile="${logfile%.json}.stream.jsonl"
   mkdir -p "$(dirname "$logfile")"
   started="$(date +%s)"
-  step "phase $pstep — ${agent:-skill} ($model) — session ${resume_sid:-$sid}"
+  step "phase $pstep — ${agent:-skill} ($model, effort ${effort:-<settings>}) — session ${resume_sid:-$sid}"
 
   local rc=0
   # The session writes STRAIGHT to the stream file, one JSON event per line, as it happens. Under
@@ -3834,7 +3874,7 @@ missing and write the artifacts. The gate will be re-evaluated."
   # rule, one subtype named, for the reason the paragraph above gives.
   SESSION_BUDGET_CUT="$(jq -r 'if .subtype == "error_max_budget_usd" then "1" else "" end' "$logfile" 2>/dev/null || echo "")"
   local dur=$((ended - started))
-  pipeline_log_line "$(date -Iseconds)  $phase  agent=$agent  model=$model  session=${resume_sid:-$sid}  rc=$rc  dur=${dur}s  cost_usd=$cost  log=$logfile"
+  pipeline_log_line "$(date -Iseconds)  $phase  agent=$agent  model=$model  effort=${effort:-settings}  session=${resume_sid:-$sid}  rc=$rc  dur=${dur}s  cost_usd=$cost  log=$logfile"
 
   # Published for the autonomy ledger, which is written by cmd_run — only there is the gate
   # result known, and the row carries it.
@@ -9730,8 +9770,14 @@ The human running this has already authorised the close: they typed \`sdd close\
 merged, which is the approval step of this pipeline. There is no developer in this session to
 confirm with, so post the summary and transition the issue without asking. If something genuinely
 blocks the transition, say what it is and stop — but do not stop to request permission."
-  ( cd "$REPO_ROOT" && claude -p "$close_prompt" \
-      --model "$MODEL_TICKET" --permission-mode "$PERMISSION_MODE" \
+  # EFFORT_TICKET threaded by hand: this is the one `claude -p` of the pipeline that does not go
+  # through run_phase, so it gets neither the flag nor the env -u of the two inherited effort
+  # variables for free. Only that pair is unset here — the rest of HARNESS_ENV_UNSET is about the
+  # nested-session teardown of a long phase, and widening it for this call is a separate decision.
+  local -a close_effort=()
+  if [ -n "$EFFORT_TICKET" ]; then close_effort=(--effort "$EFFORT_TICKET"); fi
+  ( cd "$REPO_ROOT" && env -u CLAUDE_CODE_EFFORT_LEVEL -u CLAUDE_EFFORT claude -p "$close_prompt" \
+      --model "$MODEL_TICKET" ${close_effort[@]+"${close_effort[@]}"} --permission-mode "$PERMISSION_MODE" \
       --output-format stream-json --verbose \
       --setting-sources "user,project,local" --allowedTools "$ALLOWED_TOOLS" \
       --disallowedTools "$(hat_disallowed "$phase")" --strict-mcp-config \
@@ -9763,7 +9809,9 @@ blocks the transition, say what it is and stop — but do not stop to request pe
   # earlier answer would be reading a label again — just an older one.
   close_query "$acli_bin" "$issue"
   local verified="$CLOSE_VERIFIED"
-  pipeline_log_line "$(date -Iseconds)  CLOSE  issue=$issue  session=$sid  rc=$rc  verified=$verified  reachable=$CLOSE_REACHABLE  log=$logfile"
+  # `effort=` as on the phase line (`settings` when EFFORT_TICKET is empty): the stream does not carry
+  # the effort, so this row is the only record of what the close session ran at.
+  pipeline_log_line "$(date -Iseconds)  CLOSE  issue=$issue  effort=${EFFORT_TICKET:-settings}  session=$sid  rc=$rc  verified=$verified  reachable=$CLOSE_REACHABLE  log=$logfile"
   # Beside the journal line and never instead of it: the journal is per-mission and per-machine, and
   # the ledger is the file every reader of autonomy opens. Placed HERE, past the session and past
   # the second `close_query`, so the row carries the verdict the artifact gave rather than the one

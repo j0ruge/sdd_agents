@@ -792,6 +792,12 @@ Opus where there is judgement (EXEC, QA, REVIEW, DOCS), Sonnet where the task is
 TICKET), Fable in interactive planning. The cost exception is **explicit in the config**, never
 silent — `MODEL_PUBLISH="sonnet"` is there to be read and challenged.
 
+Effort follows the same map, one `EFFORT_<PHASE>` key per `MODEL_<PHASE>`. Empty (the default)
+leaves it to the human's settings; a value becomes `--effort` for that phase. Either way the phase
+no longer inherits an effort variable from the shell that launched it, and the value lands in the
+journal as `effort=` — the stream does not carry it. Keys and accepted values in
+[`config/schema.md`](../config/schema.md#effort-per-phase).
+
 ## Language
 
 The kit is English. The **artifacts** of a mission follow `OUTPUT_LANG` from the target repo's

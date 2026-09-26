@@ -3584,6 +3584,7 @@ cat > "$FIX/.stub/claude" <<STUB
 #!/usr/bin/env bash
 : > "$CLOSE_MARK"
 printf '%s\\n' "\$@" > "$CLOSE_ARGV"
+printf '%s\\n' "\${CLAUDE_CODE_EFFORT_LEVEL-unset}" > "$CLOSE_ARGV.env"
 exit "\$(cat "$CLOSE_RCFILE" 2>/dev/null || echo 0)"
 STUB
 chmod +x "$FIX/.stub/claude"
@@ -3789,9 +3790,37 @@ assert_eq "close: an issue already Done is confirmed without spending a session 
 rm -f "$CLOSE_ARGV"
 close_run "notdone done" 0
 CLOSE_ARGV_TEXT="$(cat "$CLOSE_ARGV" 2>/dev/null || echo "")"
+CLOSE_JOURNAL_UNSET="$(grep -F '  CLOSE  ' "$CLOSE_JOURNAL" 2>/dev/null || echo "")"
 assert_eq "close: the prompt tells the session the human already authorised it, and no dev is here to ask" \
   "slash:1 authorised:1 nobody:1 dont-ask:1" \
   "slash:$(has "$CLOSE_ARGV_TEXT" '/ticket close') authorised:$(has "$CLOSE_ARGV_TEXT" 'already authorised') nobody:$(has "$CLOSE_ARGV_TEXT" 'no developer') dont-ask:$(has "$CLOSE_ARGV_TEXT" 'without asking')"
+
+# The close session is the one `claude -p` of the pipeline that does not go through run_phase, so
+# EFFORT_TICKET has to be threaded into it by hand — the same key the TICKET phase reads. Both halves
+# in one assertion: the run above had no EFFORT_* configured and carried no flag; this one has the
+# key set and must carry it. One argv line per argument, so `--effort` is followed by its value.
+# And the variable a parent session hands down must not reach it: CLAUDE_CODE_EFFORT_LEVEL outranks
+# the settings, so an inherited one would silently override what the target configured. Exported
+# on purpose, the way a terminal inside an interactive session has it.
+printf 'EFFORT_TICKET="low"\n' >> "$FIX/.sdd/config.sh"
+rm -f "$CLOSE_ARGV" "$CLOSE_ARGV.env"
+export CLAUDE_CODE_EFFORT_LEVEL=max
+close_run "notdone done" 0
+unset CLAUDE_CODE_EFFORT_LEVEL
+sed -i '/^EFFORT_TICKET=/d' "$FIX/.sdd/config.sh"
+CLOSE_JOURNAL_SET="$(grep -F '  CLOSE  ' "$CLOSE_JOURNAL" 2>/dev/null || echo "")"
+assert_eq "close: an inherited CLAUDE_CODE_EFFORT_LEVEL does not reach the close session" \
+  "unset" "$(cat "$CLOSE_ARGV.env" 2>/dev/null || echo missing)"
+assert_eq "close: EFFORT_TICKET reaches the close session as --effort, and nothing is passed without it" \
+  "unset:- set:low" \
+  "unset:$(grep -A1 -xF -- '--effort' <<< "$CLOSE_ARGV_TEXT" | sed -n 2p | grep . || echo -) set:$(grep -A1 -xF -- '--effort' "$CLOSE_ARGV" 2>/dev/null | sed -n 2p)"
+# The stream does not carry the effort, so the journal is the only record of what the close session
+# ran at (config/schema.md, "Effort per phase"). Same two runs, same field as the phase line:
+# `settings` when the key is empty, the value when it is set. The CLOSE row is read from each run's
+# own journal (close_run removes it first), so neither half can pass on the other's line.
+assert_eq "close: the CLOSE journal row records the effort the session ran at" \
+  "unset:settings set:low" \
+  "unset:$(grep -oE ' effort=[^ ]*' <<< "$CLOSE_JOURNAL_UNSET" | cut -d= -f2 | grep . || echo -) set:$(grep -oE ' effort=[^ ]*' <<< "$CLOSE_JOURNAL_SET" | cut -d= -f2 | grep . || echo -)"
 
 # CLOSE_HOME is READ from the fixture's own config, never written twice: a literal here and a
 # literal in the heredoc at the top of this file would be two spellings of one fact, and the day
@@ -3861,7 +3890,7 @@ assert_eq "close: with JIRA off nothing is asked of anyone — no session, no ac
 # only defence, and it is not one a sensor can hold: a future author appending below would inherit
 # a `gh` that answers MERGED to everything and a `claude` that returns success without doing
 # anything, and would never see why their new assertion passed. Restoring costs four lines.
-rm -f "$MDIR/10-ticket.md" "$MDIR/50-pr.md" "$FIX/.stub/gh" "$FIX/.stub/acli" "$CLOSE_JOURNAL" "$CLOSE_ARGV"
+rm -f "$MDIR/10-ticket.md" "$MDIR/50-pr.md" "$FIX/.stub/gh" "$FIX/.stub/acli" "$CLOSE_JOURNAL" "$CLOSE_ARGV" "$CLOSE_ARGV.env"
 cat > "$FIX/.stub/claude" <<'STUB'
 #!/usr/bin/env bash
 echo "ERROR: the test invoked the real claude — the escalation path did not escape before the session" >&2

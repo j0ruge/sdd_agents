@@ -229,8 +229,14 @@ assert_eq "every projected phase asks for stream-json WITH --verbose" "$blocks" 
 # inherited CLAUDE_CODE_CHILD_SESSION and the messaging socket and became a child of the
 # interactive session, which the harness tears down as a tree. The incantation lived at the human's
 # terminal; it now lives in run_phase(), once, and every projected command carries it.
+# The last two names are the effort a parent session would hand down. Measured 2026-09-24 from a
+# Bash inside an interactive session: CLAUDE_EFFORT read `medium`, then `xhigh` right after the
+# human changed the session's effort — so a phase launched from there ran at whatever the parent
+# happened to be on. CLAUDE_CODE_EFFORT_LEVEL is the documented one, and it outranks both the
+# settings and `/effort`. Unsetting them is what makes a phase's effort the kit's (EFFORT_<PHASE>)
+# or the human's settings, and never the launching shell's — asserted in its own block below.
 assert_eq "every projected phase opens claude with the harness env unset (env -u, one definition)" "$blocks" \
-  "$(grep -c -- 'env -u CLAUDECODE -u CLAUDE_CODE_CHILD_SESSION -u CLAUDE_CODE_MESSAGING_SOCKET -u CLAUDE_CODE_MESSAGING_TOKEN -u CLAUDE_PID -u CLAUDE_CODE_SESSION_ID -u CLAUDE_CODE_BRIDGE_SESSION_ID claude -p' <<< "$argv")"
+  "$(grep -c -- 'env -u CLAUDECODE -u CLAUDE_CODE_CHILD_SESSION -u CLAUDE_CODE_MESSAGING_SOCKET -u CLAUDE_CODE_MESSAGING_TOKEN -u CLAUDE_PID -u CLAUDE_CODE_SESSION_ID -u CLAUDE_CODE_BRIDGE_SESSION_ID -u CLAUDE_CODE_EFFORT_LEVEL -u CLAUDE_EFFORT claude -p' <<< "$argv")"
 
 # --- the artifact templates reach every phase, not only KAIZEN --------------
 # The agents are told to start from `templates/review.md`, `templates/handoff.md` and the rest —
@@ -300,6 +306,50 @@ assert_eq "REVIEW carries --max-budget-usd 40 while PR carries 15" \
 # by something. DOCS falls through to the global on purpose: it is one write of documentation.
 assert_eq "EXEC and QA carry their own ceiling, DOCS falls back to the global" \
   "25 25 15" "$(budget_of EXEC) $(budget_of QA:close) $(budget_of DOCS)"
+
+# --- the effort is the kit's, per phase ------------------------------------
+# The runner pinned `--model` per phase and never `--effort`, so a phase ran at whatever effort the
+# machine resolved: the human's `effortLevel`, a per-model `modelSettings` entry, or an effort
+# variable inherited from the shell that launched `sdd run` — and the stream never says which
+# (`per_turn_effort_active:true` is all it carries). EFFORT_<PHASE> mirrors MODEL_<PHASE>: empty
+# means "the human's settings decide", a value is passed as `--effort` to that phase alone.
+#
+# Read off the REAL argv, like the budget above: a stub answers whatever it is handed.
+effort_of() { # effort_of <argv> <phase> — the value after --effort in that block, or "-" when absent
+  awk -v want="$2" '
+    /^--- DRY RUN: phase .* ---$/ { blk = $5; next }
+    blk == want && / claude -p / {
+      for (i = 1; i <= NF; i++) if ($i == "--effort") { print $(i + 1); found = 1; exit }
+    }
+    END { if (!found) print "-" }
+  ' <<< "$1"
+}
+
+echo "== the effort is the kit's, per phase =="
+# The default half: no EFFORT_* in the config ⇒ no phase is handed a flag. Five blocks read, so a
+# resolver that stamps one value everywhere cannot pass by accident.
+assert_eq "with no EFFORT_* configured, no phase carries --effort" \
+  "- - - - -" \
+  "$(effort_of "$argv" EXEC) $(effort_of "$argv" QA:close) $(effort_of "$argv" REVIEW) $(effort_of "$argv" DOCS) $(effort_of "$argv" PR)"
+
+# The configured half, in ONE assertion: a set key reaches its own phase, the PR phase answers to
+# EFFORT_PUBLISH (the same name MODEL_PUBLISH uses), and an unset key leaves its phase alone.
+printf 'EFFORT_EXEC="xhigh"\nEFFORT_PUBLISH="low"\n' >> .sdd/config.sh
+effort_argv="$(tr -s ' ' <<< "$( "$SDD" run "$MISSION" --dry-run 2>&1 )")"
+assert_eq "EFFORT_EXEC reaches EXEC, EFFORT_PUBLISH reaches PR, and an unset key adds nothing" \
+  "xhigh - low" \
+  "$(effort_of "$effort_argv" EXEC) $(effort_of "$effort_argv" REVIEW) $(effort_of "$effort_argv" PR)"
+
+# A value the CLI would reject — or accept and misuse — fails in load_config, before any session
+# is paid for. `ultracode` is the tempting one: `claude --effort` takes it, but it is a session
+# setting that orchestrates workflows, not an effort level, and a headless phase must not start one.
+sed -i '/^EFFORT_/d' .sdd/config.sh
+printf 'EFFORT_REVIEW="ultracode"\n' >> .sdd/config.sh
+bad_out="$( "$SDD" run "$MISSION" --dry-run 2>&1 )"; bad_rc=$?
+sed -i '/^EFFORT_/d' .sdd/config.sh
+assert_eq "an effort outside low|medium|high|xhigh|max|auto stops the run and names the key and the value" \
+  "rc:nonzero key:1 value:1" \
+  "rc:$([ "$bad_rc" -ne 0 ] && echo nonzero || echo zero) key:$(grep -c 'EFFORT_REVIEW' <<< "$bad_out") value:$(grep -c "'ultracode'" <<< "$bad_out")"
 
 # --- the REVIEW session is told which hat it wears -------------------------
 # Since `20260901-o-revisor-so-acha` the reviewer FINDS and the executor FIXES. The whole contract
