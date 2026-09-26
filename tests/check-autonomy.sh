@@ -6012,6 +6012,46 @@ assert_eq "neither journal writer leaks a raw redirection error when its file ca
   "jarmed:1 larmed:1 sessions:1 journal:1 ledger:2 raw:0 rc:3" \
   "jarmed:$RS8_JARMED larmed:$RS8_LARMED sessions:$(reviewscope_sessions) journal:$(grep -c 'the pipeline journal at' <<< "$RS8_ERR") ledger:$(grep -c 'could not write the autonomy ledger at' <<< "$RS8_ERR") raw:$(( RS8_NAMED - RS8_CURATED )) rc:$RS8_RC"
 
+# 9. THE SESSION'S GIT LABEL (issue #51, part 1). Every session runs under
+#    GIT_REFLOG_ACTION=sdd:<step>:<sid8>, so every commit, amend, checkout or reset it makes lands in
+#    the reflog carrying WHO made it — the artifact hat_guard_check reads to tell the session's
+#    commits from a concurrent writer's. The close session opens its own `claude` outside
+#    run_phase, so it is a door of its own and is asserted in the same outcome.
+#    The 8 hex are compared against the NAME of the session's log file: that is the cross-proof
+#    that the label names this invocation, and not some id that merely has the right shape.
+RS9="$OUTSIDE/reviewscope-label"
+RS9_LABELS="$OUTSIDE/git-labels"
+reviewscope_world "$RS9"
+cat > "$OUTSIDE/stub/claude" <<STUB
+#!/usr/bin/env bash
+printf '%s\n' "\$GIT_REFLOG_ACTION" >> "$RS9_LABELS"
+cat "$STREAM_SAMPLE"
+exit 0
+STUB
+chmod +x "$OUTSIDE/stub/claude"
+rm -f "$RS9_LABELS"
+( cd "$RS9" && "$SDD" run "$MISSION" --phase REVIEW --max-phases 1 ) >/dev/null 2>&1
+RS9_RUN="$(head -n 1 "$RS9_LABELS" 2>/dev/null || true)"
+RS9_LOGHEX=""
+for f in "$RS9/.sdd/logs/$MISSION"/REVIEW-*.json; do
+  [ -e "$f" ] || continue
+  RS9_LOGHEX="${f##*-}"; RS9_LOGHEX="${RS9_LOGHEX%.json}"; break
+done
+RS9_CL="$OUTSIDE/label-close"
+kitguard_world "$RS9_CL"
+sed -i 's/^JIRA_ENABLED=false$/JIRA_ENABLED=true/' "$RS9_CL/.sdd/config.sh"
+printf -- '---\nfase: TICKET\nissue: SQ-1\n---\n# TICKET\n' > "$RS9_CL/docs/handoffs/$MISSION/10-ticket.md"
+( cd "$RS9_CL" && git add -A && git commit -qm "chore: ticket" ) >/dev/null
+printf '#!/usr/bin/env bash\nprintf "[]\\n"\n' > "$OUTSIDE/stub/acli"
+chmod +x "$OUTSIDE/stub/acli"
+rm -f "$RS9_LABELS"
+( cd "$RS9_CL" && "$FAKEKIT/bin/sdd" close "$MISSION" ) >/dev/null 2>&1
+RS9_CLOSE="$(head -n 1 "$RS9_LABELS" 2>/dev/null || true)"
+rm -f "$OUTSIDE/stub/acli"
+assert_eq "every session runs under its own git label, the close session too" \
+  "run:1 log:1 close:1" \
+  "run:$(grep -cE '^sdd:REVIEW:[0-9a-f]{8}$' <<< "$RS9_RUN") log:$(if [ -n "$RS9_LOGHEX" ] && [ "$RS9_RUN" = "sdd:REVIEW:$RS9_LOGHEX" ]; then echo 1; else echo 0; fi) close:$(grep -cE '^sdd:CLOSE:[0-9a-f]{8}$' <<< "$RS9_CLOSE")"
+
 # The stub goes back the way it was found, for the reason spelled out one screen up.
 cat > "$OUTSIDE/stub/claude" <<'STUB'
 #!/usr/bin/env bash

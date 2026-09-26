@@ -1803,7 +1803,22 @@ mut_RUN_turn_rule_dropped() {
 # 2026-08-30, whose sessions the harness killed as children of the interactive one. The dry-run
 # prints the command per phase and tests/check-dry-run.sh counts the prefix: 5 expected, 0 found.
 mut_RUN_harness_env_inherited() {
-  sed -i 's|^  local -a cmd=(env "${HARNESS_ENV_UNSET\[@\]}" claude -p "$prompt"$|  local -a cmd=(claude -p "$prompt"|' "$1"
+  sed -i 's|^  local -a cmd=(env "${HARNESS_ENV_UNSET\[@\]}" "GIT_REFLOG_ACTION=$LAST_PHASE_GIT_LABEL" claude -p "$prompt"$|  local -a cmd=(claude -p "$prompt"|' "$1"
+}
+
+# Issue #51, part 1: the phase session no longer carries its git label. Its commits land in the
+# reflog as `commit: …`, which is exactly what a concurrent writer's look like — so the guard that
+# reads the label (hat_guard_check) would read the session's own work as someone else's. The
+# projection prints no label (check-dry-run.sh) and the stub records an empty one (check-autonomy.sh).
+mut_RUN_git_label_unexported() {
+  sed -i 's|^  local -a cmd=(env "${HARNESS_ENV_UNSET\[@\]}" "GIT_REFLOG_ACTION=$LAST_PHASE_GIT_LABEL" claude -p "$prompt"$|  local -a cmd=(env "${HARNESS_ENV_UNSET[@]}" claude -p "$prompt"|' "$1"
+}
+
+# ...and the close session, which opens its own `claude` outside run_phase and so is a door of its
+# own: without the label there, the close's commits read as foreign in the one session per mission
+# that runs after the merge.
+mut_RUN_close_git_label_unexported() {
+  sed -i '/^cmd_close() {/,/^}/ s@ "GIT_REFLOG_ACTION=$LAST_PHASE_GIT_LABEL" claude -p "$close_prompt"@ claude -p "$close_prompt"@' "$1"
 }
 
 # L4 of the 2026-09-03 audit: the `- intervention:` note is written by the runner at two doors —
@@ -4486,6 +4501,8 @@ CATALOG=(
   RUN_hat_close_unchecked
   RUN_turn_rule_dropped
   RUN_harness_env_inherited
+  RUN_git_label_unexported
+  RUN_close_git_label_unexported
   RUN_intervention_unwritten_on_phase
   RUN_intervention_unwritten_on_retry
   RUN_intervention_written_on_dry_run
@@ -4841,7 +4858,7 @@ KILLERS_FILE="$ROOT/.sdd/cache/mutation-killers.tsv"
 # stopped being parsed: an empty loop reports "0 broken" forever.
 # ---------------------------------------------------------------------------
 if [ "$ANCHORS_ONLY" = 1 ]; then
-  ANCHOR_FLOOR=410
+  ANCHOR_FLOOR=412
   anchor_box() { mkdir -p "$1"; cp -r "$ROOT/bin" "$1/"; }
   anchor_control_noop()       { :; }
   anchor_control_intact()     { printf '# a mutation that lands and stays valid\n' >> "$1"; }

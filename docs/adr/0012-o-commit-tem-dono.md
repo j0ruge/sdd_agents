@@ -53,8 +53,19 @@ Two facts decided the mechanism, both measured on 2026-09-26:
 
 ## Implementation
 
-Planned shape; I3 and I4 of the mission confirm it or correct this section in the same commit.
+The label half is confirmed by I3; the reading half is the planned shape until I4 confirms it or
+corrects it in the same commit.
 
+- **The label (I3, confirmed).** `session_git_label <step> <sid>` prints `sdd:<step>:<sid8>` and is
+  the one spelling; a QA step reads `sdd:QA:plan:<sid8>`. `run_phase` zeroes `LAST_PHASE_GIT_LABEL`
+  on entry, next to `SESSION_DIED_WHY` and `SESSION_BUDGET_CUT`, and sets it right after minting
+  `$sid`, so the 8 hex are the ones the session's log file is named after, on a retry too (the
+  retry mints a fresh `$sid` and hands claude `--resume <old> --fork-session`). The label enters
+  the command as `env -u … GIT_REFLOG_ACTION=<label> claude -p`, between the last `-u` and
+  `claude`, because `env` takes assignments only after its options. `cmd_close` mints its own
+  label with the same function and passes it the same way; it is the one `claude -p` of the
+  pipeline that does not go through `run_phase`. The projection (`--dry-run`) prints the label in
+  every block, and `tests/check-dry-run.sh` checks it against the block's session id.
 - `hat_guard_arm` records the newest entry of `git reflog show --date=unix
   --format='%gd%x09%H%x09%gs' HEAD` and the number of entries. `hat_guard_check` requires that
   exactly that line sits right below the new entries; otherwise it falls back.

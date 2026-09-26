@@ -3677,6 +3677,14 @@ HARNESS_ENV_UNSET=(-u CLAUDECODE -u CLAUDE_CODE_CHILD_SESSION -u CLAUDE_CODE_MES
   -u CLAUDE_CODE_MESSAGING_TOKEN -u CLAUDE_PID -u CLAUDE_CODE_SESSION_ID -u CLAUDE_CODE_BRIDGE_SESSION_ID
   -u CLAUDE_CODE_EFFORT_LEVEL -u CLAUDE_EFFORT)
 
+# session_git_label <step> <sid> — THE one spelling of a session's git label, `sdd:<step>:<sid8>`
+# (issue #51, ADR 0012). run_phase and cmd_close hand it to claude as GIT_REFLOG_ACTION, so every
+# commit, amend, checkout or reset the session makes lands in the reflog carrying who made it —
+# measured on git 2.43: `sdd:EXEC:ab12cd34: <subject>` against `commit: <subject>` for a commit made
+# from outside. hat_guard_check reads that to tell the session's commits from a concurrent writer's.
+# The 8 hex are the invocation's own id, the one the session's log file is named after.
+session_git_label() { printf 'sdd:%s:%s\n' "$1" "${2:0:8}"; }
+
 run_phase() {
   local phase="$1" resume_sid="${2:-}"
   # ZEROED ON ENTRY, above every other statement of this function — above the `die`
@@ -3698,6 +3706,9 @@ run_phase() {
   # Same contract, same place, for the sibling marker below: zeroed on entry, set only by this
   # function, so it says whether the session JUST run was cut and nothing older.
   SESSION_BUDGET_CUT=""
+  # Same contract again: the label of the session THIS call opens, or empty when none was opened —
+  # hat_guard_check reads an empty label as "nothing to attribute by" and falls back to the diff.
+  LAST_PHASE_GIT_LABEL=""
   local pstep model effort agent sid prompt logfile streamfile started ended cost turns cache_read
   # QA is three sessions (plan, walk, close); the step comes from the artifacts, not a counter.
   pstep="$(phase_step "$phase")"
@@ -3705,6 +3716,7 @@ run_phase() {
   effort="$(phase_effort "$phase")"
   agent="$(phase_agent "$pstep")"
   sid="$(uuidgen)"
+  LAST_PHASE_GIT_LABEL="$(session_git_label "$pstep" "$sid")"
   prompt="$(boot_prompt "$pstep")"
   # Three preconditions that fail LOUD, outside any capture (a die inside `$( )` ends the subshell
   # and the parent goes on): the hat's source file exists (absent, hat_writes reads "anywhere"),
@@ -3737,7 +3749,9 @@ Fix exactly that. Do not restart the phase: read what is already on disk, comple
 missing and write the artifacts. The gate will be re-evaluated."
   fi
 
-  local -a cmd=(env "${HARNESS_ENV_UNSET[@]}" claude -p "$prompt"
+  # The label rides between the last `-u` and claude: `env` takes assignments only AFTER its
+  # options, and `env NAME=v -u X cmd` would run `-u` as the command.
+  local -a cmd=(env "${HARNESS_ENV_UNSET[@]}" "GIT_REFLOG_ACTION=$LAST_PHASE_GIT_LABEL" claude -p "$prompt"
     --model "$model"
     --permission-mode "$PERMISSION_MODE"
     --output-format stream-json --verbose
@@ -3925,6 +3939,7 @@ LAST_PHASE_STEP=""
 LAST_PHASE_AGENT=""
 LAST_PHASE_MODEL=""
 LAST_PHASE_DIED=""
+LAST_PHASE_GIT_LABEL=""
 SESSION_DIED_WHY=""
 SESSION_BUDGET_CUT=""
 
@@ -9750,6 +9765,10 @@ To see what it saw:  $acli_bin jira workitem search --jql \"key = $issue AND sta
   step "closing $issue"
   local sid logfile rc=0
   sid="$(uuidgen)"
+  # The close session commits through its own `claude`, outside run_phase, so it carries the label
+  # by hand — the same spelling, its own id — or hat_guard_check below would read its commits as a
+  # concurrent writer's.
+  LAST_PHASE_GIT_LABEL="$(session_git_label CLOSE "$sid")"
   # Same grafia, same fix as run_phase above — and here $sid is the id claude is actually handed
   # via --session-id, so the name and the journal's `session=` field agree exactly. Reached once per
   # mission, so no fixture drives it; it is fixed by FORM, and that is said out loud rather than
@@ -9811,7 +9830,7 @@ blocks the transition, say what it is and stop — but do not stop to request pe
   # nested-session teardown of a long phase, and widening it for this call is a separate decision.
   local -a close_effort=()
   if [ -n "$EFFORT_TICKET" ]; then close_effort=(--effort "$EFFORT_TICKET"); fi
-  ( cd "$REPO_ROOT" && env -u CLAUDE_CODE_EFFORT_LEVEL -u CLAUDE_EFFORT claude -p "$close_prompt" \
+  ( cd "$REPO_ROOT" && env -u CLAUDE_CODE_EFFORT_LEVEL -u CLAUDE_EFFORT "GIT_REFLOG_ACTION=$LAST_PHASE_GIT_LABEL" claude -p "$close_prompt" \
       --model "$MODEL_TICKET" ${close_effort[@]+"${close_effort[@]}"} --permission-mode "$PERMISSION_MODE" \
       --output-format stream-json --verbose \
       --setting-sources "user,project,local" --allowedTools "$ALLOWED_TOOLS" \

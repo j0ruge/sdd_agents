@@ -236,7 +236,23 @@ assert_eq "every projected phase asks for stream-json WITH --verbose" "$blocks" 
 # settings and `/effort`. Unsetting them is what makes a phase's effort the kit's (EFFORT_<PHASE>)
 # or the human's settings, and never the launching shell's — asserted in its own block below.
 assert_eq "every projected phase opens claude with the harness env unset (env -u, one definition)" "$blocks" \
-  "$(grep -c -- 'env -u CLAUDECODE -u CLAUDE_CODE_CHILD_SESSION -u CLAUDE_CODE_MESSAGING_SOCKET -u CLAUDE_CODE_MESSAGING_TOKEN -u CLAUDE_PID -u CLAUDE_CODE_SESSION_ID -u CLAUDE_CODE_BRIDGE_SESSION_ID -u CLAUDE_CODE_EFFORT_LEVEL -u CLAUDE_EFFORT claude -p' <<< "$argv")"
+  "$(grep -c -- 'env -u CLAUDECODE -u CLAUDE_CODE_CHILD_SESSION -u CLAUDE_CODE_MESSAGING_SOCKET -u CLAUDE_CODE_MESSAGING_TOKEN -u CLAUDE_PID -u CLAUDE_CODE_SESSION_ID -u CLAUDE_CODE_BRIDGE_SESSION_ID -u CLAUDE_CODE_EFFORT_LEVEL -u CLAUDE_EFFORT GIT_REFLOG_ACTION=sdd:[A-Za-z:]*:[0-9a-f]\{8\} claude -p' <<< "$argv")"
+# Issue #51: the session's git moves carry its label in the reflog (GIT_REFLOG_ACTION), which is
+# how hat_guard_check tells the session's commits from a concurrent writer's. The label names the
+# INVOCATION: its 8 hex are the session id the same block prints, never a shape that merely fits.
+# `env` takes assignments only AFTER its options, so the label sits between the last -u and claude.
+labelled="$(awk '
+  /^--- DRY RUN: phase / { sid = "" }
+  # Anchored on the shape of the header line: the boot prompt rides inside the command line, and its
+  # prose says "in this session: …" — an unanchored ` session: ` read the prompt as the id.
+  / agent: .* session: [0-9a-f-]+$/ { s = $0; sub(/.* session: /, "", s); sid = substr(s, 1, 8) }
+  sid != "" && index($0, "GIT_REFLOG_ACTION=sdd:") {
+    l = $0; sub(/.*GIT_REFLOG_ACTION=sdd:/, "", l); sub(/ .*/, "", l)
+    if (substr(l, length(l) - 8) == ":" sid) n++
+    sid = ""
+  }
+  END { print n + 0 }' <<< "$argv")"
+assert_eq "every projected phase labels its git moves with the session" "$blocks" "$labelled"
 
 # --- the artifact templates reach every phase, not only KAIZEN --------------
 # The agents are told to start from `templates/review.md`, `templates/handoff.md` and the rest —

@@ -2106,7 +2106,9 @@ echo "== base branch warning =="
 # `session: <uuid>` per projected phase, so two runs of the same fixture never match literally. The
 # substitution is anchored on the UUID SHAPE and nothing else — widening it to `session:.*` would
 # also erase a phase changing its agent or its model, which is half of what this comparison is for.
-no_uuid() { sed -E 's/[0-9a-f]{8}(-[0-9a-f]{4}){3}-[0-9a-f]{12}/<uuid>/g'; }
+# The session's git label (`GIT_REFLOG_ACTION=sdd:<step>:<sid8>`, issue #51) carries the same fresh
+# id cut to 8 hex, so it is normalised by ITS shape too — the step stays, only the hex goes.
+no_uuid() { sed -E 's/[0-9a-f]{8}(-[0-9a-f]{4}){3}-[0-9a-f]{12}/<uuid>/g; s/(GIT_REFLOG_ACTION=sdd:[A-Za-z:]+:)[0-9a-f]{8}/\1<sid8>/g'; }
 
 # The two streams are captured APART and only then joined, in a fixed order. Not tidiness: it is
 # what lets the assertion below read stderr alone. A `2>&1` capture cannot tell `warn` (stderr,
