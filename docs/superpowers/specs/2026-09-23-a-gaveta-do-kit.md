@@ -13,7 +13,7 @@
 
 | # | Frente | Estado | Próximo passo | Espera por |
 |---|---|---|---|---|
-| F1 | Custo do catálogo de mutação | PR #59 mergeado (`d0ac22d`); P2(a) feito em 2026-09-25 (assassino primeiro, amostra 389 → 171 s, `sdd health` 1h27 → ~38–40 min); P2(b) **FEITO** no **PR #170** (o sensor para no primeiro FAIL, [spec](2026-09-25-o-sensor-para-no-primeiro-fail-design.md), amostra 1328,7 → 571 s, `sdd health` 37 min 42 s → **18 min 14 s**, carimbo 406/406 em `f5f6aba`), esperando `/codereview` e merge; P1, P3, P4 abertos | `/codereview` e merge do #170 pelo [handoff](../plans/2026-09-25-o-sensor-para-no-primeiro-fail-handoff.md); depois P3 | o merge do #170 |
+| F1 | Custo do catálogo de mutação | PR #59 mergeado (`d0ac22d`); P2(a) feito em 2026-09-25 (assassino primeiro, amostra 389 → 171 s, `sdd health` 1h27 → ~38–40 min); P2(b) **FEITO**, PR #170 mergeado (`31dfd43`; o sensor para no primeiro FAIL, [spec](2026-09-25-o-sensor-para-no-primeiro-fail-design.md), amostra 1328,7 → 571 s, `sdd health` 37 min 42 s → **~18 min**, carimbo 406/406 válido na `main`); P1, P3, P4 abertos | E6 do #170 pelo [handoff](../plans/2026-09-25-depois-do-170-handoff.md); depois P3, na carona do item 3 da recomendação | a decisão de congelar (item 2) |
 | F2 | Faxina pós-#57 | parada | ADR 0010 para `accepted`; apagar 2 itens do `TODO.md` | carona num PR que já carimbe |
 | F3 | T3 e a janela do juiz | parada | decidir as 3 perguntas de desenho | **decisão humana** (inclusive: congelar ou não) |
 | F4 | Portabilidade para outros repos | parcial | registrar as lacunas no `TODO.md`; consertar a 2 | carona num PR que já carimbe |
@@ -79,7 +79,7 @@ trabalho de fato.
     O custo é anotar os 392 mutantes; dá para derivar dos logs de uma corrida completa, que mostram
     o primeiro sensor vermelho de cada um.
   - **(b) Parar no primeiro assert vermelho dentro do sensor** sob `SDD_MUTANT`. **FEITO em
-    2026-09-25** no **PR #170**: `sdd health` 37 min 42 s → **18 min 14 s** (nº 2, o mais longo
+    2026-09-25** no **PR #170**, mergeado em `31dfd43`: `sdd health` 37 min 42 s → **18 min 14 s** (nº 2, o mais longo
     primeiro, carimbou 406/406 em `f5f6aba`; o nº 1, ainda na ordem do catálogo, 18 min 56 s).
     [`spec`](2026-09-25-o-sensor-para-no-primeiro-fail-design.md) ·
     [`handoff`](../plans/2026-09-25-o-sensor-para-no-primeiro-fail-handoff.md). Medido na mesma
