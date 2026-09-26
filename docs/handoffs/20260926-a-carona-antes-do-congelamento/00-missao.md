@@ -4,7 +4,7 @@ titulo: o último PR antes do congelamento fecha as issues #50, #51 e #52, as la
 data: 2026-09-26
 versao: n/a — JIRA_ENABLED=false
 branch: fix/a-carona-antes-do-congelamento
-aprovacao:
+aprovacao: humano-2026-09-26
 adr: docs/adr/0012-o-commit-tem-dono.md
 ddd: aplicado
 ---
