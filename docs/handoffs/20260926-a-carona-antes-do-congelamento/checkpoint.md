@@ -1,6 +1,6 @@
 ---
 missao: 20260926-a-carona-antes-do-congelamento
-atualizado: 2026-09-26 19:50
+atualizado: 2026-09-26 19:59
 ---
 
 # Checkpoint — a carona antes do congelamento
@@ -43,7 +43,7 @@ atualizado: 2026-09-26 19:50
 | I4 | #51 parte 2: hat_guard_check lê a janela pelo reflog; commit sem rótulo fora do writes para a linha como foreign-commit; sem reflog, como hoje; contrato do kind novo | `o=$(bash tests/check-autonomy.sh 2>&1); grep -c '^  ok    a commit without the session label stops the line as foreign-commit, the same commit with it as hat-crossed' <<< "$o"; grep -c '^  ok    without a reflog the guard blames the session as before' <<< "$o"` → `1` e `1` | done | a707b3f |
 | I5 | lacuna 2: sem Jira o gate_PLAN recusa branch vazio ou placeholder; fixtures declaram a branch; planner, kaizen, template, schema e pipeline | `o=$(bash tests/check-gates.sh 2>&1); grep -c '^  ok    JIRA off with no branch stalls PLAN and names the fix' <<< "$o"; grep -c '^  ok    JIRA on leaves an empty branch to the TICKET phase' <<< "$o"` → `1` e `1` | done | 81d50aa |
 | I6 | lacuna 3: run_check_cmd roda o comando com stdin em /dev/null (gates, preflight, E2E) | `o=$(bash tests/check-preflight.sh 2>&1); grep -c '^  ok    TEST_CMD runs with stdin closed, whatever stdin the caller holds' <<< "$o"` → `1` | done | 1f66743 |
-| I7 | faxina: ADRs 0010, 0011 e 0012 accepted; sai o TODO.md:244; entram as lacunas 4 e 5; catraca 83; KAIZEN_LOG; gaveta | `c=$(bash tests/check-todo.sh --count TODO.md); b=$(cat tests/health-baseline.txt); grep -c "^todo-findings $c\$" <<< "$b"; grep -c '^todo-findings 83$' <<< "$b"; a=$(cat docs/adr/0010-o-motivo-da-fase.md docs/adr/0011-ancora-do-todo-carrega-simbolo.md docs/adr/0012-o-commit-tem-dono.md); grep -c '^- \*\*Status\*\*: accepted' <<< "$a"` → `1`, `1` e `3` | pending | — |
+| I7 | faxina: ADRs 0010, 0011 e 0012 accepted; sai o TODO.md:244; entram as lacunas 4 e 5; catraca 83; KAIZEN_LOG; gaveta | `c=$(bash tests/check-todo.sh --count TODO.md); b=$(cat tests/health-baseline.txt); grep -c "^todo-findings $c\$" <<< "$b"; grep -c '^todo-findings 83$' <<< "$b"; a=$(cat docs/adr/0010-o-motivo-da-fase.md docs/adr/0011-ancora-do-todo-carrega-simbolo.md docs/adr/0012-o-commit-tem-dono.md); grep -c '^- \*\*Status\*\*: accepted' <<< "$a"` → `1`, `1` e `3` | done | af8d4aa |
 
 > **As notas de execução não moram aqui.** Elas ficam em `checkpoint-notas.md`, ao lado deste
 > arquivo, append-only, e o prompt de boot inlina as últimas 10 — a sessão nunca abre aquele
