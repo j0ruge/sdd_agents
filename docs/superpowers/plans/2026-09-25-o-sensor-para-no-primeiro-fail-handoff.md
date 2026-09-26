@@ -6,7 +6,7 @@
 > As Tasks 1–4 e a revisão final do executing-plans estão **feitas**; falta a **Entrega**. Leia
 > este arquivo e a seção "Entrega" do plano; o resto do plano é histórico.
 
-## Atualização, 2026-09-25 22:00 — `/codereview` feito; falta o health nº 3 e o E6
+## Atualização, 2026-09-25 22:20 — tudo feito até o carimbo; falta só o E6 (merge humano)
 
 - **`/codereview:codereview`** sobre `main..HEAD` (5 agentes por arquivo + varredura de código morto,
   sonnet): segredos PASS, código morto limpo. Consertado numa leva (commit `fix(sensors): …` seguinte):
@@ -27,13 +27,18 @@
   controle "só com `wait -n`" (as funções não dependem de `wait -n`); `run_control` "ignora `dir`"
   (premissa errada: o controle não recebe argumento, os stubs também usam variável livre); sentinela
   `999999`; tempo de sobrevivente não gravado.
-- **Observado, causa não provada (pendência, dono: próxima sessão no kit):** o health nº 2 deixou um
-  `/tmp/sdd-coordination-ms3690m1/repo/.git` com o registro de dono de um `sdd run` do fixture `repo`
-  (um item de `owned`, não o `hook_owner`), processos já mortos: o `rmtree(work)` do `finally` correu
-  contra algo que ainda escrevia. Um em 21 mutantes do coordination; não se sabe se é da cláusula.
-  Os `sdd-ck-*` (~150 por health) são anteriores ao branch (`bin/sdd:440`, 158 no health do #168).
-- **Próximo:** suíte rápida e `SDD_MUTANT=1` pelo lançador → commit → **health nº 3** → `stamp-check`
-  → push → E6.
+- **Medido, anterior ao branch (pendência sem rota de `TODO.md` pela régua D15 — não falha aberto,
+  sem consumidor fora da suíte):** cada health deixa um `/tmp/sdd-coordination-*/repo/.git` com o
+  registro de dono de um `sdd run` do fixture `repo`, processos já mortos — o `rmtree(work)` do
+  `finally` corre contra o supervisor que ainda escreve. É o mutante **`COORD_pidfd_unchecked`**, que
+  mata o sensor por **exceção** (`fails=0`), caminho que não passa pela cláusula: 6 rodadas de cada,
+  `main` (`8f2f2a9`) vazou **2**, o branch **1**. Os `sdd-ck-*` (~150 por health) também são
+  anteriores (`bin/sdd:440`, 158 no health do #168).
+- **Feito:** suíte rápida verde (1491 ok) e `SDD_MUTANT=1` verde, commit `e8283e6`, **health nº 3**
+  21:55:51 → 22:14:15, **18 min 24 s**, 406 de 406, carimbo `1240f67f…` → `STAMP VALID`; caixas do hat
+  em `/tmp` depois dele: **0** (eram 14 no nº 2).
+- **Próximo: E6.** Pedir o merge do #170 ao humano; depois, com o ok, re-sync do espelho de issues
+  (#144 órfã, `completed` citando `b874141`) e apagar o branch.
 
 ## Atualização, 2026-09-25 21:35 — E1 a E5 feitos; falta o `/codereview` e o E6
 
