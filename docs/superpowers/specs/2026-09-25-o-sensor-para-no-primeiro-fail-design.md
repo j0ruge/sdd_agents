@@ -1,5 +1,8 @@
 # O sensor para no primeiro FAIL — o `sdd health` abaixo de 20 minutos (2026-09-25)
 
+> **FEITO** em 2026-09-25: health **18 min 14 s** (406/406, carimbo em `f5f6aba`, PR #170), contra
+> 37 min 42 s antes. Números e leitura no `KAIZEN_LOG.md`.
+
 > Spec do **P2(b) da frente F1** da [gaveta do kit](2026-09-23-a-gaveta-do-kit.md), escrita com o
 > humano presente, logo depois do merge do PR #168 (o passo assassino primeiro, `8f2f2a9`). A meta
 > que o humano fixou nesta sessão: **performance, o tempo o mais baixo possível**. Por isso o spec

@@ -6,7 +6,7 @@
 > As Tasks 1–4 e a revisão final do executing-plans estão **feitas**; falta a **Entrega**. Leia
 > este arquivo e a seção "Entrega" do plano; o resto do plano é histórico.
 
-## Atualização, 2026-09-25 21:10 — E1 feito, E2 consertado, health nº 1 adiantado
+## Atualização, 2026-09-25 21:35 — E1 a E5 feitos; falta o `/codereview` e o E6
 
 - **E1 feito:** branch empurrado, **PR #170** aberto contra `main`
   (<https://github.com/j0ruge/sdd_agents/pull/170>). Não abra outro.
@@ -27,7 +27,13 @@
 - **E3 feito, adiantado:** o health nº 1 rodou **durante** a espera pelos bots, sobre `7bb0762`:
   20:47:27 → 21:06:23, **18 min 56 s**, 406 de 406, `kit healthy`, mapa com 406 linhas de 3 colunas.
   Ele só grava os tempos no mapa (por mutante, fora da chave do carimbo), então vale para o código
-  consertado. Quem carimba é o nº 2, depois do conserto. O próximo passo é o **E4**.
+  consertado. Quem carimba é o nº 2, depois do conserto.
+- **E4 feito:** health nº 2 sobre `f5f6aba` (o conserto dos bots): 21:11:04 → 21:29:18,
+  **18 min 14 s**, 406 de 406, `kit healthy`, carimbo `e7867ba8…` escrito, `stamp-check` → `STAMP VALID`.
+  O mais longo primeiro rendeu só 42 s: os 406 mutantes somam 12 031 s e o mais longo leva 86 s.
+- **E5 feito:** `KAIZEN_LOG.md`, gaveta (F1 e item (b) em `FEITO`) e o topo do spec, fora da chave do
+  carimbo. **Próximo passo: `/codereview:codereview` sobre `main..HEAD`**, depois o E6. Conserto em
+  `bin/ tests/ templates/ config/` pede mais um health (~18 min) e `stamp-check`.
 
 ## Estado em 2026-09-25, 20:40
 
