@@ -17,6 +17,14 @@
   (E6, abaixo). A **#144**, que saiu do arquivo no #170, está fechada.
 - **Este branch** (`docs/depois-do-170`) leva só este handoff e a linha da F1 na gaveta, pelo
   **PR #171**, que se mergeia só com o ok do humano. Nada nele toca a chave do carimbo.
+- **Depois do E6, em 2026-09-26, o humano mandou mergear o PR #166** (effort por fase:
+  `EFFORT_<FASE>`, `--effort`, effort herdado fora do env). `main` = **`c81dd46`**, carimbo
+  **`b4ab72e1…`**, 406 de 406 (health 18 min 47 s). O branch estava 60 commits atrás: `main`
+  mergeada nele, 40 âncoras do `TODO.md` remapeadas, e a revisão do Codex consertada (`effort=` na
+  linha `CLOSE`, §6 da rule da anatomia). Espelho: 39 `UPDATE`, de novo 82 ↔ 82. A "harmonia com a
+  skill" pedida esbarrou na skill, não no arquivo: `todo-to-github-issues` **v2.0.2** lê o
+  `WIDTH_CAP` do kit em vez de um `WRAP = 100` próprio. **A `main` mudou depois deste retrato**, e
+  é sobre `c81dd46` que a pergunta do congelamento vale agora.
 
 ## E6 — o que faltava do #170: **FEITO em 2026-09-26**
 

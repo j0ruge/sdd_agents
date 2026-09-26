@@ -25,7 +25,8 @@ Fechados, para ninguém reabrir: o laço do fingerprint (#54–#56 → missão
 `20260922-o-motivo-da-fase`, PR #57, merge `2258e53`); o fluxo `develop → staging → main` com o
 `sdd close` voltando para `develop` (`147add7` no kit; ADR 0003 no `lighthouse_project`); T1 (PR #46);
 T2 (PR #47, com o I6 no PR #174 do `sales_quote`); o número do ADR (PR #45); a fase 1 do Astra, "um
-checkout, um dono de execução" (PR #48, merge `589a7bc`), que também é o W1 do worker.
+checkout, um dono de execução" (PR #48, merge `589a7bc`), que também é o W1 do worker; o effort por
+fase, `EFFORT_<FASE>` e `--effort` (PR #166, merge `c81dd46`), que nunca esteve aqui como frente.
 
 ---
 
