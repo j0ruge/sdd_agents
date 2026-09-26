@@ -115,6 +115,7 @@ mkdir -p "$MDIR"
 cat > "$MDIR/00-missao.md" <<'EOF'
 ---
 missao: 20260101-fixture
+branch: main
 aprovacao: auto
 ---
 # Mission

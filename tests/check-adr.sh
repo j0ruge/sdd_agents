@@ -269,6 +269,9 @@ mission() {
     printf -- '---\n'
     printf 'missao: %s\n' "$m"
     printf 'aprovacao: humano-2026-01-01\n'
+    # The branch every fixture stands on (`git init -b main`): with JIRA off gate_PLAN refuses a
+    # mission that names none, and `main` is the one value on which ensure_mission_branch does nothing.
+    printf 'branch: main\n'
     [ "$v" = '@none@' ] || printf 'adr: %s\n' "$v"
     printf -- '---\n\n# %s\n' "$m"
   } > "$d/docs/handoffs/$m/00-missao.md"
@@ -777,7 +780,7 @@ fi
 G="$(fixture gates ADR_CHECK=\"block\")" || { echo "fixture failed" >&2; exit 1; }
 GM=20260101-gate
 mkdir -p "$G/docs/handoffs/$GM"
-{ printf -- '---\nmissao: %s\naprovacao: auto\n---\n\n# Mission\n' "$GM"; } > "$G/docs/handoffs/$GM/00-missao.md"
+{ printf -- '---\nmissao: %s\naprovacao: auto\nbranch: main\n---\n\n# Mission\n' "$GM"; } > "$G/docs/handoffs/$GM/00-missao.md"
 : > "$G/docs/handoffs/$GM/01-plano.md"
 { printf '| ID | Incremento | Check (comando → esperado) | Status | Commit |\n'
   printf -- '|---|---|---|---|---|\n'
@@ -851,7 +854,7 @@ W="$(fixture warnrun ADR_CHECK=\"warn\")" || { echo "fixture failed" >&2; exit 1
 WM=20260101-warn
 WLEDGER="$BOX/warn-state"
 mkdir -p "$WLEDGER" "$W/docs/handoffs/$WM"
-{ printf -- '---\nmissao: %s\naprovacao: auto\nadr: TBD\n---\n\n# Mission\n' "$WM"; } > "$W/docs/handoffs/$WM/00-missao.md"
+{ printf -- '---\nmissao: %s\naprovacao: auto\nbranch: main\nadr: TBD\n---\n\n# Mission\n' "$WM"; } > "$W/docs/handoffs/$WM/00-missao.md"
 : > "$W/docs/handoffs/$WM/01-plano.md"
 ( cd "$W" && git add -A && git commit -qm "mission" ) >/dev/null 2>&1
 WSHA="$( cd "$W" && git rev-parse --short HEAD )"

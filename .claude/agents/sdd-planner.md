@@ -177,11 +177,13 @@ whatever branch the human is standing on** when it does not exist yet. Three val
 behaviours:
 
 - **the `<...>` placeholder the template ships** (or an empty value) → no-op, the runner stays
-  where it is. This is the right answer whenever the branch name is not yours to decide — with
-  `JIRA_ENABLED=true` it is the TICKET phase that creates the branch.
+  where it is. This is the right answer **only with `JIRA_ENABLED=true`**, where the TICKET phase
+  creates the branch and writes it back.
 - **a real branch name** → checked out if it exists, cut from the current branch if it does not.
-  Write one only when you mean "this mission's commits belong there", which is the ordinary case
-  for a mission planned outside JIRA.
+  With `JIRA_ENABLED` anything but `true` it is **mandatory**: nothing else will ever create the
+  branch, so `gate_PLAN` refuses an empty value or the placeholder and the mission stays in PLAN.
+  Decide the name with the human, in the room — it is part of the plan they approve. Naming the
+  base branch itself (`main`) is a decision too, and passes; leaving the field empty is not.
 - **anything git refuses** (a name starting with `-`, spaces, `..`) → the runner `die`s and the
   pipeline stops before spending a session.
 

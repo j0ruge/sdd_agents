@@ -226,6 +226,12 @@ rendered as one run-on sentence until this was caught in review.
 When `JIRA_ENABLED=true`, `00-missao.md` **must** have `versao:` filled in — the version label is a
 human decision, never headless. The PLAN-AUTO gate (criterion `e`) checks this.
 
+The mirror, for the other value: when `JIRA_ENABLED` is not `true`, `00-missao.md` **must** name
+its `branch:` — a real name, not empty and not the template's `<…>` placeholder. The TICKET phase
+that would have written it is skipped, so nothing else creates the branch, and without it every
+phase commits wherever the human stands. `gate_PLAN` refuses the mission and names the remedy; any
+real name passes, `DEFAULT_BRANCH` included.
+
 ### Not a config key: context compaction
 
 There is no key for `--autocompact`, because the runner never passes it. One session per phase

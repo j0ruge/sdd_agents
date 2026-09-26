@@ -273,6 +273,7 @@ mkdir -p "$MDIR"
 cat > "$MDIR/00-missao.md" <<'EOF'
 ---
 missao: 20260101-fixture
+branch: main
 aprovacao: auto
 ---
 # Mission
@@ -4036,6 +4037,7 @@ CFG
   cat > "docs/handoffs/$MISSION/00-missao.md" <<'MIS'
 ---
 missao: 20260101-fixture
+branch: main
 aprovacao: auto
 ---
 # Mission
@@ -4048,6 +4050,12 @@ MIS
 CPT
   git add -A && git commit -qm "init"
   git worktree add "$WTLINK" -b wtprobe
+  # Each checkout's mission names the branch that checkout stands on — the one value on which
+  # ensure_mission_branch does nothing. `branch: main` in the worktree would ask git to check out a
+  # branch the main checkout already holds.
+  cd "$WTLINK" || exit 1
+  sed -i 's/^branch: main$/branch: wtprobe/' "docs/handoffs/$MISSION/00-missao.md"
+  git commit -qam "the worktree's mission names its own branch"
 ) >/dev/null 2>&1
 
 ( cd "$WTMAIN" && SDD_STATE_DIR="$WTSTATE" "$SDD" run "$MISSION" ) >/dev/null 2>&1
@@ -4540,6 +4548,7 @@ CFG
   cat > "$d/docs/handoffs/$MISSION/00-missao.md" <<'MSN'
 ---
 missao: 20260101-fixture
+branch: main
 aprovacao: auto
 ---
 # Mission
@@ -5233,6 +5242,7 @@ CFG
     cat > "docs/handoffs/$MISSION/00-missao.md" <<'MIS'
 ---
 missao: 20260101-fixture
+branch: main
 aprovacao: auto
 ---
 # Mission
@@ -5701,6 +5711,7 @@ CFG
     cat > "docs/handoffs/$MISSION/00-missao.md" <<'MIS'
 ---
 missao: 20260101-fixture
+branch: main
 aprovacao: auto
 ---
 # Mission
@@ -6173,6 +6184,7 @@ CFG
     cat > "docs/handoffs/$MISSION/00-missao.md" <<'MIS'
 ---
 missao: 20260101-fixture
+branch: main
 aprovacao: auto
 ---
 # Mission

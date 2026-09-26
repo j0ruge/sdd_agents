@@ -300,6 +300,13 @@ mut_PLAN_remedy_unnamed() {
   sed -i '/00-missao.md has/ s@: run .sdd approve \$MISSION.@@' "$1"
 }
 
+# Gap 2 of portability: with JIRA off, the plan stops being asked for its branch. The TICKET phase
+# that wrote `branch:` is skipped, ensure_mission_branch reads empty or `<…>` as a no-op, and every
+# phase of a new repo commits into its `main` by omission — which is what this rule exists to end.
+mut_PLAN_branch_unasked() {
+  sed -i '/^gate_PLAN() {/,/^}/ s@^  if \[ "$JIRA_ENABLED" != "true" \]; then$@  if false; then@' "$1"
+}
+
 # The gate stops checking that the branch born in this phase reached the artifact the runner reads.
 # `ensure_mission_branch` looks at `branch:` in 00-missao.md and nowhere else, so a name recorded
 # only in 10-ticket.md leaves every later phase running on whatever branch the human was standing
@@ -4382,6 +4389,7 @@ CATALOG=(
   PLAN_empty_approval
   PLAN_kaizen_born_blind
   PLAN_remedy_unnamed
+  PLAN_branch_unasked
   TICKET_no_sprint
   TICKET_branch_writeback_blind
   EXEC_done_without_commit
@@ -4886,7 +4894,7 @@ KILLERS_FILE="$ROOT/.sdd/cache/mutation-killers.tsv"
 # stopped being parsed: an empty loop reports "0 broken" forever.
 # ---------------------------------------------------------------------------
 if [ "$ANCHORS_ONLY" = 1 ]; then
-  ANCHOR_FLOOR=415
+  ANCHOR_FLOOR=416
   anchor_box() { mkdir -p "$1"; cp -r "$ROOT/bin" "$1/"; }
   anchor_control_noop()       { :; }
   anchor_control_intact()     { printf '# a mutation that lands and stays valid\n' >> "$1"; }

@@ -756,9 +756,10 @@ branch or approved artifacts that differ between branches.
 on from wherever the checkout left the tree is the SQ-97 class the field exists to close
 ([the mission's branch](pipeline.md#the-missions-branch)).
 
-A mission that should not move branches at all leaves `branch:` at the `<…>` placeholder the
-template ships, which is a no-op — that is the right value whenever the name is not yours to
-decide.
+A mission that should not move branches at all names the branch it already runs on — the one
+value on which the runner does nothing. The `<…>` placeholder the template ships is a no-op too,
+but only with `JIRA_ENABLED=true`, where the TICKET phase fills it; with JIRA off `gate_PLAN`
+refuses it, because nothing would ever create the branch.
 
 ---
 

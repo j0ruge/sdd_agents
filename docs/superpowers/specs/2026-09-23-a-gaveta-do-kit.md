@@ -16,7 +16,7 @@
 | F1 | Custo do catálogo de mutação | PR #59 mergeado (`d0ac22d`); P2(a) feito em 2026-09-25 (assassino primeiro, amostra 389 → 171 s, `sdd health` 1h27 → ~38–40 min); P2(b) **FEITO**, PR #170 mergeado (`31dfd43`; o sensor para no primeiro FAIL, [spec](2026-09-25-o-sensor-para-no-primeiro-fail-design.md), amostra 1328,7 → 571 s, `sdd health` 37 min 42 s → **~18 min**, carimbo 406/406 válido na `main`); P1, P3, P4 abertos | E6 do #170 **feito** em 2026-09-26 (espelho 82 ↔ 82, #144 fechada, PR #171; [handoff](../plans/2026-09-25-depois-do-170-handoff.md)); depois P3, na carona do item 3 da recomendação | a decisão de congelar (item 2) |
 | F2 | Faxina pós-#57 | parada | ADR 0010 para `accepted`; apagar 2 itens do `TODO.md` | carona num PR que já carimbe |
 | F3 | T3 e a janela do juiz | parada | decidir as 3 perguntas de desenho | **decisão humana** (inclusive: congelar ou não) |
-| F4 | Portabilidade para outros repos | parcial | registrar as lacunas no `TODO.md`; consertar a 2 | carona num PR que já carimbe |
+| F4 | Portabilidade para outros repos | parcial; lacuna 2 **consertada** na missão `20260926-a-carona-antes-do-congelamento` (I5) | consertar a 3 e registrar a 4 e a 5 no `TODO.md`, na mesma missão | carona num PR que já carimbe |
 | F5 | Issues avulsas #50–#53 | #53 fechada; #50, #51 e #52 consertadas na missão `20260926-a-carona-antes-do-congelamento` (I1–I4) | as três fecham com o merge do PR | — |
 | F6 | O worker (W1–W7) | estacionada por decisão | nada, até os fluxos atuais rodarem limpos | **decisão humana** |
 | F7 | Plano Astra, fases 2–7 | não iniciada | nada; vem depois do worker | F6 |
@@ -168,8 +168,9 @@ a missão `20260921-amep-backend-0-1-0` sobre o kit `ea39868`: 46 sessões, US$ 
    `ensure_mission_branch` lê `branch:` do `00-missao.md`; vazio ou placeholder ⇒ não cria branch,
    só o `warn` do `warn_if_on_base_branch`. Com `JIRA_ENABLED=false`, que é o default de repo
    novo, a fase TICKET (que escrevia o campo) é pulada. É o único gap que corrompe a `main` de um
-   repo novo por omissão. Direção: o `gate_PLAN` exige `branch:` quando o Jira está desligado, ou
-   o runner deriva o nome do slug.
+   repo novo por omissão. **Consertada** no I5 da missão `20260926-a-carona-antes-do-congelamento`:
+   com o Jira desligado o `gate_PLAN` recusa `branch:` vazio ou placeholder e nomeia o remédio; o
+   planner decide o nome com o humano.
 3. **O `sdd install` adivinha o `TEST_CMD` pelo primeiro manifesto.** `package.json` ⇒ `npm test`,
    que no `erp_api` é Vitest em watch mode e travaria o `gate_EXEC`. Direção: detectar
    `"test": "vitest"` sem `run` e recusar, ou nomear `test:run`.

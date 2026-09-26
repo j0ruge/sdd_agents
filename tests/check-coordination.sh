@@ -667,7 +667,7 @@ try:
     # A hook must remain bounded even when a child leaves timeout's process group.
     hook_repo = fixture("hook-escape")
     mission = hook_repo / "docs/handoffs/20260101-one"
-    (mission / "00-missao.md").write_text("---\naprovacao: auto\nadr: none\n---\n")
+    (mission / "00-missao.md").write_text("---\naprovacao: auto\nbranch: main\nadr: none\n---\n")
     (mission / "01-plano.md").write_text("")
     (mission / "checkpoint.md").write_text("| ID | Increment | Check | Status | Commit |\n|---|---|---|---|---|\n| I1 | slice | `true` | blocked | - |\n")
     git(hook_repo, "add", "-A")

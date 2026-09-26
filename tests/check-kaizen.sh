@@ -1053,6 +1053,7 @@ mkdir -p "$DMDIR"
 cat > "$DMDIR/00-missao.md" <<'EOF'
 ---
 missao: 20260102-donemission
+branch: main
 aprovacao: auto
 ---
 # Mission

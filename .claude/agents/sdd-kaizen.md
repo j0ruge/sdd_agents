@@ -232,7 +232,9 @@ the runner and the tests grep them:
   command output). A claim you did not verify goes marked as a risk, not as context.
 - `checkpoint.md` — every increment with an executable Check (command → expected result).
 
-`JIRA_ENABLED=false` in the kit, so `versao:` empty satisfies PLAN-AUTO criterion (e).
+`JIRA_ENABLED=false` in the kit, so `versao:` empty satisfies PLAN-AUTO criterion (e) — and, for
+the same reason, `branch:` must carry a **real** branch name (`kaizen/<slug>` by house convention):
+with JIRA off nothing else creates it, and `gate_PLAN` refuses an empty value or the placeholder.
 
 ⚠️ **Write `adr: none` in the frontmatter, and satisfy criterion (f) that way.** You have no human
 in the room, and allocating an ADR number is a decision about an architectural trade-off — the one

@@ -437,7 +437,7 @@ branch the plan declares:
 
 | `branch:` | What the runner does |
 |---|---|
-| the `<…>` placeholder the template ships, or empty | nothing — the mission runs where you are |
+| the `<…>` placeholder the template ships, or empty | with `JIRA_ENABLED=true`, nothing — the TICKET phase creates the branch and writes it back; **with JIRA off, `gate_PLAN` refuses the mission** (nothing would ever create the branch, and every phase would commit wherever you stand) |
 | the branch you are already on | nothing |
 | a branch that exists | `git checkout <name>` |
 | a branch that does not exist | `git checkout -b <name>` **from the branch you are standing on** — the one the plan's own commit lives on |

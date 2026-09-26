@@ -842,6 +842,19 @@ gate_PLAN() {
       return 1
     fi
   fi
+  # The mirror of the `versao:` rule, for the other half of the config. With JIRA off the TICKET
+  # phase that wrote `branch:` is skipped, ensure_mission_branch reads empty or `<…>` as a no-op,
+  # and every phase commits wherever the human happens to stand — the `main` of a new repo, by
+  # omission (gap 2 of portability). The field's owner is `sdd-planner`, with the human in the
+  # room, which is why the refusal lives HERE: no headless phase could satisfy it. Any real name
+  # passes, DEFAULT_BRANCH included — that is a decision written down, not an omission.
+  if [ "$JIRA_ENABLED" != "true" ]; then
+    local b; b="$(frontmatter "$m" branch)"
+    if [ -z "$b" ] || [[ $b == \<* ]]; then
+      GATE_WHY="JIRA_ENABLED is not true and 00-missao.md has no mission branch ('branch: ${b:-<empty>}') — nothing will create one, so every phase would commit wherever you stand: write the branch name into 00-missao.md (the planner decides it with the human)"
+      return 1
+    fi
+  fi
   # Under ADR_CHECK=block this is where an undecided `adr:` stops the line, and PLAN is the only
   # phase where it can: the artifact's owner is `sdd-planner`, running with the human in the room.
   adr_gate_verdict plan || return 1
