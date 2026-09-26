@@ -47,3 +47,4 @@
 >
 > - intervention: <o que o humano teve de fazer> — <fase> — <custo, se houver>
 
+- 2026-09-26 18:06 · `EXEC` · I1 `done` em `b6cc2bd` (sessão interativa, Opus): #50 + yokoten da crase; 7 asserções, 5 mutantes pela receita M; suíte verde. Desvios: regras R35–R37 no check-adr (R33/R34 já existiam em comentários de probe) e um 4º probe para o valor vazio.
