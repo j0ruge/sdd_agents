@@ -31,8 +31,10 @@ export SDD_STATE_DIR="$SDD_STATE_FIX"
 trap 'rm -rf "$FIX" "$SDD_STATE_FIX"' EXIT
 
 pass() { printf '  ok    %s\n' "$1"; }
+# Inside a mutant the first red assertion is the verdict: fail() ends the sensor there, AFTER
+# printing, so the mutant's log still names it. The census in check-health.sh holds all nine.
 fail() { printf '  FAIL  %s\n         expected: %s\n         got:      %s\n' "$1" "$2" "$3" >&2
-         fails=$((fails + 1)); }
+         fails=$((fails + 1)); [ -z "${SDD_MUTANT:-}" ] || exit 1; }
 
 # assert_eq <description> <expected> <got>. For the blocks that compose several terms into one
 # string — "this arm fired AND the other did not AND the artifact was written" — so a red names the

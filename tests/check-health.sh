@@ -54,6 +54,13 @@
 #      stamp. `of 0` satisfies assertion 14's `caught == of` perfectly — an empty loop printing the
 #      greenest line the command has — and it used to reach `kit healthy` and write the stamp that
 #      opens gate_PR.
+#   17. inside a mutant the SUITE stops at its first red step, and the step that killed the mutant
+#      last time runs first (SDD_MUTANT_FIRST); outside one every step runs, in order. Prefixed
+#      `surface:` — the catalogue reads only the suite's rc, so these are about what that rc costs.
+#   18. inside a mutant every SENSOR stops at its first red assertion: a CENSUS over the steps
+#      `SDD_MUTANT=1 run-all.sh --list` prints, calling each failure primitive with SDD_MUTANT set,
+#      unset and empty (floor 9, five known worlds measured first), plus the two sensors that call
+#      their own primitive on purpose asserted to do it outside the mutant. Prefixed `surface:`.
 #
 # Usage: tests/check-health.sh   (exit 0 = cmd_health discriminates)
 #
@@ -100,8 +107,10 @@ trap 'rm -rf "$WORK"' EXIT
 
 fails=0
 pass() { printf '  ok    %s\n' "$1"; }
+# Inside a mutant the first red assertion is the verdict: fail() ends the sensor there, AFTER
+# printing, so the mutant's log still names it. The census in check-health.sh holds all nine.
 fail() { printf '  FAIL  %s\n         expected: %s\n         got:      %s\n' "$1" "$2" "$3" >&2
-         fails=$((fails + 1)); }
+         fails=$((fails + 1)); [ -z "${SDD_MUTANT:-}" ] || exit 1; }
 
 # SENSOR-BROKEN is not an assertion failure. It means the fixture stopped modelling the world, so
 # every verdict below would be a verdict about nothing — counting it as one red assertion among
@@ -205,7 +214,7 @@ build_fixture() {
 write_stub_suite() { # write_stub_suite <with-count|no-count> [with-score|no-score] [exit code] [score line]
   local count_line="" score_line="" rc="${3:-0}" score="${4:-$STUB_SCORE}"
   [ "$1" = "with-count" ] \
-    && count_line="printf '  ok    %d finding(s), all within 8 lines and carrying anchor + date\\n' $STUB_TODO_COUNT"
+    && count_line="printf '  ok    %d finding(s), all within 8 lines, carrying anchor + date, every anchor on target\\n' $STUB_TODO_COUNT"
   [ "${2:-with-score}" = "with-score" ] \
     && score_line="printf '%s\\n' '$score'"
 
@@ -1271,16 +1280,19 @@ chmod +x "$FAILFAST/bin/sdd" "$FAILFAST"/tests/*.sh
 [ -x "$FAILFAST/tests/$FAILFAST_RED" ] \
   || broken "failfast probe: tests/$FAILFAST_RED is gone — the world has no red step to stop at"
 
-failfast_run() { # failfast_run <mutant|plain> <red sensor or empty> — PUBLISHES FAILFAST_RC / FAILFAST_STEPS
-  local log="$WORK/failfast-$1-${2:-green}.log"
+failfast_run() { # failfast_run <mutant|plain> <red sensor or empty> [first step] — PUBLISHES FAILFAST_RC / FAILFAST_STEPS / FAILFAST_OUT
+  local log="$WORK/failfast-$1-${2:-green}-${3:+first}.log"
   : > "$log"
   FAILFAST_RC=0
+  # The suite's own stdout+stderr, kept the way run_mutant keeps a mutant's (`> "$box.log" 2>&1`):
+  # it is the log the catalogue reads the killing step from.
+  FAILFAST_OUT="$log.out"
   if [ "$1" = mutant ]; then
-    env -u SDD_TPL_SELFTEST_CHILD SDD_MUTANT=1 FAILFAST_LOG="$log" FAILFAST_RED="$2" \
-      "$FAILFAST/tests/run-all.sh" >/dev/null 2>&1 || FAILFAST_RC=$?
+    env -u SDD_TPL_SELFTEST_CHILD SDD_MUTANT=1 SDD_MUTANT_FIRST="${3:-}" FAILFAST_LOG="$log" FAILFAST_RED="$2" \
+      "$FAILFAST/tests/run-all.sh" > "$FAILFAST_OUT" 2>&1 || FAILFAST_RC=$?
   else
-    env -u SDD_TPL_SELFTEST_CHILD -u SDD_MUTANT FAILFAST_LOG="$log" FAILFAST_RED="$2" \
-      "$FAILFAST/tests/run-all.sh" >/dev/null 2>&1 || FAILFAST_RC=$?
+    env -u SDD_TPL_SELFTEST_CHILD -u SDD_MUTANT SDD_MUTANT_FIRST="${3:-}" FAILFAST_LOG="$log" FAILFAST_RED="$2" \
+      "$FAILFAST/tests/run-all.sh" > "$FAILFAST_OUT" 2>&1 || FAILFAST_RC=$?
   fi
   FAILFAST_STEPS="$(cat "$log")"
 }
@@ -1293,6 +1305,32 @@ else
   fail 'surface: inside a mutant the suite stops at the first red step' \
        "rc 1, at least one step before $FAILFAST_RED, and $FAILFAST_RED the LAST step run" \
        "rc $FAILFAST_RC, steps: $(tr '\n' ' ' <<< "$FAILFAST_STEPS")"
+fi
+
+# The killer map of check-mutation.sh is read off this same log: killer_of takes the LAST step
+# header run() printed. The header is WRITTEN in run-all.sh and PARSED in check-mutation.sh — one
+# contract across two files, and nothing else reads it. Drift either side alone (a trailing space
+# before the reset code is enough) and every killer reads empty: the map is rewritten with 0 lines,
+# the catalogue stays green, and every later `sdd health` runs in the old order — 1h27 instead of
+# the measured gain, said only by a `0 mutant(s) recorded` line inside an hour of log. So killer_of
+# is SOURCED from the catalogue, never copied, and must name the red step of the run above, which
+# printed several headers: "the last one" is measured too, not only "a header parses". The source
+# is refused unless it is one short function, since an unterminated range would source the rest
+# of the catalogue.
+FAILFAST_RED_NAME='template contract'
+grep -qxF "run \"$FAILFAST_RED_NAME\" \"\$ROOT/tests/$FAILFAST_RED\"" "$ROOT/tests/run-all.sh" \
+  || broken "killer probe: run-all.sh has no step '$FAILFAST_RED_NAME' running tests/$FAILFAST_RED — the probe names nothing"
+KILLER_OF_SRC="$(sed -n '/^killer_of() {$/,/^}$/p' "$ROOT/tests/check-mutation.sh")"
+{ [ "$(tail -n 1 <<< "$KILLER_OF_SRC")" = '}' ] && [ "$(grep -c . <<< "$KILLER_OF_SRC")" -le 8 ]; } \
+  || broken "killer probe: tests/check-mutation.sh has no short killer_of() { … } to read the log with"
+eval "$KILLER_OF_SRC"
+FAILFAST_KILLER="$(killer_of "$FAILFAST_OUT")"
+if [ "$FAILFAST_RC" = 1 ] && [ "$FAILFAST_KILLER" = "$FAILFAST_RED_NAME" ]; then
+  pass "surface: the catalogue's killer_of reads the red step off the suite's log, header by header"
+else
+  fail "surface: the catalogue's killer_of reads the red step off the suite's log, header by header" \
+       "rc 1 and killer_of naming '$FAILFAST_RED_NAME', the last header run() printed" \
+       "rc $FAILFAST_RC, killer_of read '${FAILFAST_KILLER:-nothing}' — run()'s header (run-all.sh) and killer_of's pattern (check-mutation.sh) drifted apart"
 fi
 
 failfast_run plain "$FAILFAST_RED"
@@ -1313,6 +1351,241 @@ else
   fail 'surface: inside a mutant with no red step the suite runs to the end' \
        "rc 0, and steps run after $FAILFAST_RED" \
        "rc $FAILFAST_RC, steps: $(tr '\n' ' ' <<< "$FAILFAST_STEPS")"
+fi
+
+# SDD_MUTANT_FIRST: the step that killed a mutant last time runs first (check-mutation.sh learns
+# the name). Four worlds, each DIFFERENTIAL against the green mutant run above, which is the order
+# every other world is measured against. The unsound edits this must refuse: skipping a step that
+# never ran (a name matching nothing would then drop nothing, but a stale name would), running the
+# named step twice, and honouring the variable outside a mutant.
+# The step named must NOT already be the first to run, and that is asserted, not assumed: with
+# check-hat.sh first in the natural order, a run-all.sh that ignored SDD_MUTANT_FIRST altogether
+# turned all four worlds green (measured, 2026-09-25) — "first" was the order's own accident.
+FIRST_STEP_NAME='every hat declares its boundary'
+FIRST_STEP_FILE=check-hat.sh
+FIRST_ORDER="$FAILFAST_STEPS"
+[ "$(grep -c . <<< "$FIRST_ORDER" || true)" -ge 3 ] \
+  || broken "first-step probe: the green mutant run listed fewer than 3 steps — there is no order to reorder"
+grep -qxF "$FIRST_STEP_FILE" <<< "$FIRST_ORDER" \
+  || broken "first-step probe: $FIRST_STEP_FILE is not a step of the suite — the world names nothing"
+[ "$(head -n 1 <<< "$FIRST_ORDER")" != "$FIRST_STEP_FILE" ] \
+  || broken "first-step probe: $FIRST_STEP_FILE already runs first — 'first' would be the order's own accident"
+grep -qxF "run \"$FIRST_STEP_NAME\" \"\$ROOT/tests/$FIRST_STEP_FILE\"" "$ROOT/tests/run-all.sh" \
+  || broken "first-step probe: run-all.sh has no step '$FIRST_STEP_NAME' running tests/$FIRST_STEP_FILE — the world names nothing"
+failfast_run mutant "$FIRST_STEP_FILE" "$FIRST_STEP_NAME"
+if [ "$FAILFAST_RC" = 1 ] && [ "$FAILFAST_STEPS" = "$FIRST_STEP_FILE" ]; then
+  pass 'surface: inside a mutant the step named by SDD_MUTANT_FIRST runs first, and alone when it is red'
+else
+  fail 'surface: inside a mutant the step named by SDD_MUTANT_FIRST runs first, and alone when it is red' \
+       "rc 1 and $FIRST_STEP_FILE the only step run" \
+       "rc $FAILFAST_RC, steps: $(tr '\n' ' ' <<< "$FAILFAST_STEPS")"
+fi
+failfast_run mutant "" "$FIRST_STEP_NAME"
+if [ "$FAILFAST_RC" = 0 ] && [ "$(head -n 1 <<< "$FAILFAST_STEPS")" = "$FIRST_STEP_FILE" ] \
+   && [ "$(grep -cxF "$FIRST_STEP_FILE" <<< "$FAILFAST_STEPS" || true)" = 1 ] \
+   && [ "$(sort <<< "$FAILFAST_STEPS")" = "$(sort <<< "$FIRST_ORDER")" ]; then
+  pass 'surface: a survivor with SDD_MUTANT_FIRST still runs every step, the named one once'
+else
+  fail 'surface: a survivor with SDD_MUTANT_FIRST still runs every step, the named one once' \
+       "rc 0, $FIRST_STEP_FILE first and once, and the same set of steps as the run without it" \
+       "rc $FAILFAST_RC, steps: $(tr '\n' ' ' <<< "$FAILFAST_STEPS")"
+fi
+failfast_run mutant "" 'a step this suite does not have'
+if [ "$FAILFAST_RC" = 0 ] && [ "$FAILFAST_STEPS" = "$FIRST_ORDER" ]; then
+  pass 'surface: an SDD_MUTANT_FIRST naming no step leaves the order and the steps untouched'
+else
+  fail 'surface: an SDD_MUTANT_FIRST naming no step leaves the order and the steps untouched' \
+       "rc 0 and exactly the order of the run without it" \
+       "rc $FAILFAST_RC, steps: $(tr '\n' ' ' <<< "$FAILFAST_STEPS")"
+fi
+failfast_run plain "" ""
+FIRST_PLAIN_ORDER="$FAILFAST_STEPS"; FIRST_PLAIN_RC="$FAILFAST_RC"
+failfast_run plain "" "$FIRST_STEP_NAME"
+# The rc is compared with the plain run's own, never with 0: outside a mutant the lint step runs over
+# the stubs of this world, so the plain run is not green here — and it does not need to be.
+if [ "$FAILFAST_RC" = "$FIRST_PLAIN_RC" ] && [ "$FAILFAST_STEPS" = "$FIRST_PLAIN_ORDER" ]; then
+  pass 'surface: outside a mutant SDD_MUTANT_FIRST changes nothing'
+else
+  fail 'surface: outside a mutant SDD_MUTANT_FIRST changes nothing' \
+       "rc $FIRST_PLAIN_RC and exactly the order of the plain run without it" \
+       "rc $FAILFAST_RC, steps: $(tr '\n' ' ' <<< "$FAILFAST_STEPS")"
+fi
+
+# ---------------------------------------------------------------------------
+# surface: inside a mutant every sensor stops at its FIRST red assertion
+#
+# The catalogue reads the suite's rc and nothing else, and a sensor that called fail() once has
+# already decided that rc: everything it runs after is paid and read by no one. Measured on 24
+# mutants of 8f2f2a9 (2026-09-25): the first FAIL lands, on the median, halfway through the killing
+# sensor — 1328.7 s of sensor against 624.4 s up to the first FAIL. So each sensor that runs inside
+# a mutant ends at its first fail() when SDD_MUTANT is set, AFTER printing it: the mutant's log still
+# names what killed it, and killer_of reads the step off that log.
+#
+# A CENSUS, not a sample. The population is read off the suite itself — every step
+# `SDD_MUTANT=1 run-all.sh --list` prints, joined to the tests/check-*.sh its `run` line executes —
+# and every one of those files that defines a bash `fail() {` or a Python `def check(` is measured.
+# Each definition is sourced (the killer_of guard: one short, closed block, or SENSOR-BROKEN) and
+# called three times: under SDD_MUTANT=1 it must exit 1 with the FAIL already printed; with the
+# variable unset, and set to the empty string, it must return with its counter up by one. A new
+# sensor that runs inside mutants and forgets the clause turns this red, because the census walks
+# the suite instead of a table somebody has to remember to extend.
+# Outside the census, declared in CENSUS_EXEMPT below: check-entrypoint.sh and check-templates.sh run
+# inside mutants with no single failure primitive (1 and 0 kills in the map of 2026-09-25, ~0.5 s
+# each). Not measured here, and said: a fail() called inside a subshell would stop only the subshell — no such call
+# exists today, and one would already lose its `fails` count; the census cannot see call sites.
+# CENSUS_FLOOR is the nine of 2026-09-25 (autonomy, gates, kaizen, preflight, health, adr, hat,
+# dry-run, coordination): the list or the join to tests/ that stops reading the suite fails loudly.
+# ---------------------------------------------------------------------------
+CENSUS_FLOOR=9
+# The two declarations the walk needs, in code and not only in prose: the mutant steps that run no
+# tests/check-*.sh, and the sensors that run inside mutants with no single failure primitive. A
+# step or a sensor in neither list and with no primitive the census knows is SENSOR-BROKEN, never
+# skipped — the promise above is kept by refusing what the walk cannot classify.
+CENSUS_NOT_SENSORS=$'runner syntax (bash -n)\ncoordination helper syntax'
+CENSUS_EXEMPT=$'check-entrypoint.sh\ncheck-templates.sh'
+census_join() { # census_join <run-all.sh> — the file with every `\`-continued line joined onto one
+  sed -e ':a' -e '/\\$/N; s/[[:space:]]*\\\n[[:space:]]*/ /; ta' "$1"
+}
+census_file_of() { # census_file_of <step title> <joined run-all> — the tests/check-*.sh it runs
+  local hits
+  hits="$(grep -F -- "run \"$1\" \"\$ROOT/tests/check-" <<< "$2" \
+          | sed -n 's|.*"\$ROOT/tests/\(check-[a-z-]*\.sh\)".*|\1|p')" || true
+  printf '%s' "${hits%%$'\n'*}"
+}
+census_kind_of() { # census_kind_of <step> <joined run-all> <tests dir> — skip | exempt <f> | bash <f> | py <f> | unknown <why>
+  local f
+  if grep -qxF -- "$1" <<< "$CENSUS_NOT_SENSORS"; then echo skip; return; fi
+  f="$(census_file_of "$1" "$2")"
+  if [ -z "$f" ]; then echo "unknown step '$1' joins to no tests/check-*.sh and is not declared a non-sensor"
+  elif grep -q '^fail() {' "$3/$f"; then echo "bash $f"
+  elif grep -q '^def check(' "$3/$f"; then echo "py $f"
+  elif grep -qxF -- "$f" <<< "$CENSUS_EXEMPT"; then echo "exempt $f"
+  else echo "unknown $f defines neither 'fail() {' nor 'def check(' and is not declared exempt"; fi
+}
+census_src() { # census_src <file> <bash|py> — the definition, printed only when short and closed
+  local src n
+  if [ "$2" = bash ]; then
+    src="$(awk '/^fail\(\) \{/ { p = 1 } p { print; if ($0 ~ /\}[[:space:]]*$/) exit }' "$1")"
+    n="$(grep -c . <<< "$src")"
+    [ -n "$src" ] && [ "$n" -le 8 ] && [ "${src: -1}" = '}' ] || return 1
+    # "Closed" is the parser's word, not the last character's: a line like `local m=${1}` ends
+    # in `}` too, and the awk above would stop there.
+    bash -n <<< "$src" 2>/dev/null || return 1
+  else
+    src="$(awk '/^def check\(/ { p = 1 } p { if ($0 ~ /^[[:space:]]*$/) exit; print }' "$1")"
+    n="$(grep -c . <<< "$src")"
+    [ -n "$src" ] && [ "$n" -le 16 ] || return 1
+  fi
+  printf '%s\n' "$src"
+}
+census_call() { # census_call <bash|py> <definition> <SDD_MUTANT value | UNSET> — "rc=<n> said=<n> back=<n>"
+  local out rc=0 prog
+  if [ "$1" = bash ]; then
+    # PROBES is read by check-adr.sh's fail(), which the eval below defines. THIS file's fail() is
+    # unset first and a failed eval is loud: otherwise the probe calls the outer fail(), which
+    # carries the clause, and certifies a sensor that has none.
+    # shellcheck disable=SC2034
+    out="$( { fails=0; PROBES=0
+               unset -f fail
+               eval "$2" || { printf 'EVAL-BROKEN\n'; exit 97; }
+               if [ "$3" = UNSET ]; then unset SDD_MUTANT; else export SDD_MUTANT="$3"; fi
+               fail 'census probe' x y
+               printf 'back=%s\n' "$fails"; } 2>&1 )" || rc=$?
+  else
+    prog="$(printf 'import os, sys\npassed = failed = 0\n%s\ncheck("census probe", False, "x")\nprint("back=%%d" %% failed)\n' "$2")"
+    if [ "$3" = UNSET ]; then out="$(env -u SDD_MUTANT python3 -c "$prog" 2>&1)" || rc=$?
+    else out="$(SDD_MUTANT="$3" python3 -c "$prog" 2>&1)" || rc=$?; fi
+  fi
+  printf 'rc=%s said=%s back=%s\n' "$rc" "$(grep -c 'FAIL  census probe' <<< "$out" || true)" \
+         "$(grep -c '^back=1$' <<< "$out" || true)"
+}
+# The census measures itself first, on worlds whose answer is known (the negative control of
+# CLAUDE.md). Each probe names the fail-open it closes: found by the final review of this branch,
+# reproduced, and red here before the fix.
+census_box="$WORK/census"
+mkdir -p "$census_box"
+# 1. A clause-less fail() reads as clause-less: census_call measures the definition it was handed.
+census_noclause=$'fail() { printf \'  FAIL  %s\\n\' "$1" >&2\n         fails=$((fails + 1)); }'
+[ "$(census_call bash "$census_noclause" 1)" = 'rc=0 said=1 back=1' ] \
+  || broken "census: a fail() with no clause did not read as one — census_call measures something else"
+# 2. A definition that does not parse never borrows THIS file's fail(), which carries the clause:
+#    the eval failed, the group went on, and the outer fail() certified a sensor with no clause.
+[ "$(census_call bash 'fail() { local m=${1}' 1)" != 'rc=1 said=1 back=0' ] \
+  || broken "census: a definition that does not parse was certified — census_call fell back to this file's own fail()"
+# 3. census_src refuses a fail() cut at an inner `}` (the line `local m=${1}` ends in one) instead
+#    of handing out the first line as if it were the whole, closed definition.
+printf 'fail() { local m=${1}\n  printf "  FAIL  %%s\\n" "$m" >&2\n  fails=$((fails + 1)); }\n' > "$census_box/check-cut.sh"
+if census_src "$census_box/check-cut.sh" bash >/dev/null; then
+  broken "census: census_src handed out a fail() cut at an inner } — it must refuse what does not parse"
+fi
+# 4. A `run` line wrapped with \ is joined to its file: the house style for a long title, and a
+#    tenth sensor written that way was listed by --list and silently dropped by a one-line grep.
+printf 'run "a wrapped step" \\\n  "$ROOT/tests/check-wrapped.sh"\nrun "one line" "$ROOT/tests/check-oneline.sh"\n' \
+  > "$census_box/run-all.sh"
+printf 'fail() { :; }\n' > "$census_box/check-wrapped.sh"
+: > "$census_box/check-oneline.sh"
+census_fixture="$(census_join "$census_box/run-all.sh")"
+[ "$(census_file_of 'a wrapped step' "$census_fixture")" = check-wrapped.sh ] \
+  || broken "census: a run line wrapped with \\ was not joined to its file"
+# 5. The walk is exhaustive: a step it cannot join, and a joined file with no primitive that is
+#    not declared exempt, are unknown — never skipped in silence. A declared non-sensor is skipped.
+case "$(census_kind_of 'a step nobody declared' "$census_fixture" "$census_box")" in
+  unknown\ *) : ;; *) broken "census: a listed step joined to no file was skipped instead of refused" ;; esac
+case "$(census_kind_of 'one line' "$census_fixture" "$census_box")" in
+  unknown\ *) : ;; *) broken "census: a sensor with no failure primitive, not declared exempt, was skipped" ;; esac
+[ "$(census_kind_of 'a wrapped step' "$census_fixture" "$census_box")" = 'bash check-wrapped.sh' ] \
+  || broken "census: a wrapped step with a fail() was not classified as bash"
+[ "$(census_kind_of 'runner syntax (bash -n)' "$census_fixture" "$census_box")" = skip ] \
+  || broken "census: a declared non-sensor step was not skipped"
+
+CENSUS_RUNALL="$(census_join "$ROOT/tests/run-all.sh")"
+CENSUS_STEPS="$(SDD_MUTANT=1 "$ROOT/tests/run-all.sh" --list 2>/dev/null || true)"
+census_n=0
+while IFS= read -r census_step; do
+  [ -n "$census_step" ] || continue
+  census_class="$(census_kind_of "$census_step" "$CENSUS_RUNALL" "$ROOT/tests")"
+  case "$census_class" in
+    skip|exempt\ *) continue ;;
+    unknown\ *) broken "census: ${census_class#unknown }" ;;
+  esac
+  census_kind="${census_class%% *}"; census_f="${census_class#* }"
+  census_def="$(census_src "$ROOT/tests/$census_f" "$census_kind")" \
+    || broken "census: $census_f defines its failure primitive, but not as one short closed block — refusing to source it"
+  census_n=$((census_n + 1))
+  census_in="$(census_call "$census_kind" "$census_def" 1)"
+  census_out="$(census_call "$census_kind" "$census_def" UNSET)"
+  census_empty="$(census_call "$census_kind" "$census_def" '')"
+  if [ "$census_in" = 'rc=1 said=1 back=0' ] && [ "$census_out" = 'rc=0 said=1 back=1' ] \
+     && [ "$census_empty" = 'rc=0 said=1 back=1' ]; then
+    pass "surface: $census_f stops at its first FAIL inside a mutant, and only there"
+  else
+    fail "surface: $census_f stops at its first FAIL inside a mutant, and only there" \
+         "SDD_MUTANT=1: rc=1 said=1 back=0 · unset and empty: rc=0 said=1 back=1" \
+         "SDD_MUTANT=1: $census_in · unset: $census_out · empty: $census_empty"
+  fi
+done <<< "$CENSUS_STEPS"
+[ "$census_n" -ge "$CENSUS_FLOOR" ] \
+  || broken "census: $census_n sensor(s) with a failure primitive among the mutant steps, the floor is $CENSUS_FLOOR — the list or the join to tests/ stopped reading the suite"
+# A sensor that calls its own failure primitive on purpose runs that call outside the mutant.
+# The hat selftest runs its own --check as a child and demands the output NAME the broken rule: that
+# child measures the report a human reads, so it runs outside the mutant, where fail() never stops.
+if grep -qF 'out="$(env -u SDD_MUTANT "$ROOT/tests/check-hat.sh" --check' "$ROOT/tests/check-hat.sh"; then
+  pass 'surface: the hat selftest measures its report outside a mutant'
+else
+  fail 'surface: the hat selftest measures its report outside a mutant' \
+       'the selftest child of tests/check-hat.sh runs under env -u SDD_MUTANT' \
+       'the child inherits SDD_MUTANT, and a probe whose rule is named second would read red'
+fi
+# The same rule, second instance: check-coordination.sh opens with a negative control that calls a
+# red check() on purpose and needs it to RETURN, so it can read the accounting. Inside a mutant that
+# call ends the sensor with its stdout redirected — rc 1 and not one FAIL line. Measured on this
+# branch before the fix: `SDD_MUTANT=1 run-all.sh` red at "one checkout has one execution owner".
+if grep -qF 'mutant = os.environ.pop("SDD_MUTANT", None)' "$ROOT/tests/check-coordination.sh"; then
+  pass 'surface: the coordination negative control runs outside a mutant'
+else
+  fail 'surface: the coordination negative control runs outside a mutant' \
+       'the negative control of tests/check-coordination.sh pops SDD_MUTANT around its red check()' \
+       'the control inherits SDD_MUTANT, and the sensor exits 1 on the intact kit with nothing printed'
 fi
 
 # ---------------------------------------------------------------------------
@@ -1386,6 +1659,61 @@ else
   fail "$SURFACE_LIST_DESC" \
        "the no-linter --list lists only steps; TEST_CMD='$STUB_TEST_CMD' reaches 'kit healthy' saying nothing of --list, and TEST_CMD='$STUB_TEST_CMD --list' fails naming it, with '$VERDICT' still printed" \
        "non-step line(s) in the no-linter list: ${SURFACE_NOT_STEP:-none} // clean: rc $RC_TC_OK $(digest "$OUT_TC_OK") // --list: rc $RC_TC_LIST $(digest "$OUT_TC_LIST")"
+fi
+
+# The spellings the space-only `case` let through (issue 118): a TAB before `--list`, and a quoted
+# `"--list"`. run_check_cmd EVALS the value, so both reach the suite as a bare `--list`. Each world
+# differs from the green one in the TEST_CMD alone, and each must fail naming the flag.
+LIST_SPELL_DESC="health refuses a TAB or a quoted --list in the kit's TEST_CMD"
+green_world
+set_test_cmd "$STUB_TEST_CMD"$'\t'"--list"
+health_run
+OUT_TC_TAB="$HEALTH_OUT"; RC_TC_TAB="$HEALTH_RC"
+green_world
+set_test_cmd "$STUB_TEST_CMD \\\"--list\\\""
+health_run
+OUT_TC_QUOTE="$HEALTH_OUT"; RC_TC_QUOTE="$HEALTH_RC"
+# The negative control, differential with the TAB world above: the same TAB, before a flag that
+# merely STARTS with --list. Without it, a fix that refused any TAB-separated TEST_CMD would pass
+# both assertions. Check 2b must reach its ok line and say nothing of --list.
+green_world
+set_test_cmd "$STUB_TEST_CMD"$'\t'"--listen-port"
+health_run
+OUT_TC_NEAR="$HEALTH_OUT"
+green_world
+if [ "$RC_TC_TAB" -ne 0 ] && grep -qF 'TEST_CMD carries --list' <<< "$OUT_TC_TAB" \
+   && [ "$RC_TC_QUOTE" -ne 0 ] && grep -qF 'TEST_CMD carries --list' <<< "$OUT_TC_QUOTE" \
+   && grep -qF 'TEST_CMD runs the suite (' <<< "$OUT_TC_NEAR" \
+   && ! grep -qF 'TEST_CMD carries --list' <<< "$OUT_TC_NEAR"; then
+  pass "$LIST_SPELL_DESC"
+else
+  fail "$LIST_SPELL_DESC" "both worlds fail naming 'TEST_CMD carries --list', and a TAB before --listen-port reaches 2b's ok" \
+       "TAB: rc $RC_TC_TAB $(digest "$OUT_TC_TAB") // quoted: rc $RC_TC_QUOTE $(digest "$OUT_TC_QUOTE") // --listen-port: $(digest "$OUT_TC_NEAR")"
+fi
+
+# ---------------------------------------------------------------------------
+# A kit config that does not parse is SAID, never read as a missing key (issue 116)
+#
+# Check 2b used to source the config with `>/dev/null 2>&1`, so an unclosed quote arrived EMPTY
+# and the operator was told "declares no TEST_CMD" about a file that declares it on line 1 — the
+# one diagnosis that sends them looking for the wrong defect. The world differs from the green one
+# in a single missing quote, and the assertion demands the parse message AND the absence of the
+# missing-key one: a check that printed both would still be lying in half its output.
+# ---------------------------------------------------------------------------
+PARSE_DESC='a kit config that does not parse is reported as not parsing, never as a missing TEST_CMD'
+green_world
+printf 'TEST_CMD="%s\n' "$STUB_TEST_CMD" > "$FIX/.sdd/config.sh"
+health_run
+OUT_PARSE="$HEALTH_OUT"; RC_PARSE="$HEALTH_RC"
+green_world
+if [ "$RC_PARSE" -ne 0 ] \
+   && grep -qF 'does not parse' <<< "$OUT_PARSE" \
+   && ! grep -qF 'declares no TEST_CMD' <<< "$OUT_PARSE"; then
+  pass "$PARSE_DESC"
+else
+  fail "$PARSE_DESC" \
+       "rc != 0, 'does not parse' in the output and no 'declares no TEST_CMD'" \
+       "rc $RC_PARSE $(digest "$OUT_PARSE")"
 fi
 
 # ---------------------------------------------------------------------------
@@ -1579,7 +1907,13 @@ health_captures() {
 # capture. Guarded INSIDE with `|| true`, though the function it calls cannot fail: the ratchet
 # counts every capture in the region, and a capture whose guard depends on the callee staying
 # infallible is a guard that rots the day somebody adds a branch to it.
-CAPTURE_FLOOR=36
+# 22 → 36: fourteen captures arrived without their line. The ratchet held the NUMBER at every step
+# and nobody held the record, which is the half this ledger exists for — stated rather than
+# reconstructed from memory; `git log -G'^CAPTURE_FLOOR=[0-9]' -- tests/check-health.sh` has each step.
+# 36 → 37: check 2b decides whether the kit's .sdd/config.sh parses BEFORE reading TEST_CMD
+# (issue 116, 932a1ba), so the region gained the `kit_cfg_diag` capture — guarded in the tail,
+# `|| kit_cfg_rc=$?`, because rc 2 is the branch that says "does not parse", not a crash.
+CAPTURE_FLOOR=37
 
 capture_report() {
   local out total safe offenders

@@ -55,8 +55,13 @@ by an agent is debt the next agent will obey without questioning.
 ## 4. Check the mission's TODO findings
 
 Part of your job: are the entries the other agents created in `TODO_FILE` during this mission
-**well formed**? Each one needs: what + where (`file:line`) + why it matters + found by
-(agent/mission/date). Complete the half-written ones.
+**well formed**? Each one needs: a bold title + where (`file:line`, then a `<symbol>` in parentheses that
+occurs in that file within 10 lines of the line) + why it matters + `Direction:` + `Source:`
+pointing at the handoff that holds the analysis + found by (agent/mission/date), and it sits in
+the section under `<!-- sdd:open -->`. Complete the
+half-written ones. A finding this mission refuted or decided leaves the open section and becomes
+a one-line record under `<!-- sdd:decided -->`, with the pointer to its evidence — never a ticked
+box. Grammar: `$SDD_HOME/templates/todo.md`; shape: `tests/check-todo.sh --check <TODO_FILE>`.
 
 ## 5. Write the drift checklist
 

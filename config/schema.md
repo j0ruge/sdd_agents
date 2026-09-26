@@ -21,7 +21,7 @@ phase that has already been paid for:
 |---|---|---|---|
 | `PROJECT_NAME` | yes | — | Short name of the target repo. Appears in the logs and in the PR body. |
 | `DEFAULT_BRANCH` | yes | — | **Base branch for PRs**. ⚠️ Not always `main`: in `sales_quote` the flow is `develop → staging → main`, so it is `develop`. Check `git symbolic-ref refs/remotes/origin/HEAD` instead of assuming. |
-| `OUTPUT_LANG` | no | empty | Language of the mission **artifacts** — handoffs, checkpoint, commit messages, PR body — passed into the boot prompt of every phase. Empty ⇒ the runner says nothing about language and each session follows whatever the existing artifacts use. It does not affect the kit, which is English, nor the contract (config keys and status tokens are always English). E.g. `pt-BR`, `en`, `es`. |
+| `OUTPUT_LANG` | no | empty | Language of the mission **artifacts** — handoffs, checkpoint, commit messages, PR body — passed into the boot prompt of every phase. Empty ⇒ the runner says nothing about language and each session follows whatever the existing artifacts use. It does not affect the kit, which is English, nor the contract (config keys and status tokens are always English). It also picks the `TODO.md` seed of `sdd install`: `templates/todo.<OUTPUT_LANG>.md`, or the English `templates/todo.md` when the kit has no variant. E.g. `pt-BR`, `en`, `es`. |
 
 ## Verification commands (the runner's sensors)
 
@@ -37,6 +37,14 @@ The runner has exactly these three. A separate lint or build command belongs **i
 a key the runner never reads is a promise the user cannot collect on, and this schema carried five
 such keys — for a lint, a build and bringing the environment up — until they were removed. Adding
 one back means wiring the read in `bin/sdd` in the **same** commit.
+
+For a Node repo, `sdd install` writes that chain for you: every one of `lint`, `typecheck` and
+`build` that `package.json` declares, in that order (cheapest first), then `npm test` — so
+`npm run lint && npm run build && npm test` for a repo with no `typecheck`. No other script name is
+chained in on a guess. `sdd preflight` warns when a `TEST_CMD` written by hand leaves one of those
+three out (a warn, since leaving a slow build out can be deliberate), and warns separately when it
+could not read the scripts at all — `jq` missing or a `package.json` that is not JSON — so a silence
+there is never mistaken for an ok.
 
 ## Running application (QA phase)
 
@@ -69,7 +77,7 @@ connect that times out instead of answering. Only a connection actively **refuse
 |---|---|---|---|
 | `HANDOFF_DIR` | no | `docs/handoffs` | Root of the durable state. Each mission becomes `<HANDOFF_DIR>/<YYYYMMDD>-<slug>/`. **Committed.** |
 | `QA_DOCS_PATH` | no | `docs/qa` | Where the `qa-report`/`qa-execution` skills write. The runner does not write here — the skills own it. |
-| `TODO_FILE` | no | `TODO.md` | Destination for out-of-scope findings. |
+| `TODO_FILE` | no | `TODO.md` | Destination for out-of-scope findings. Shape: `templates/todo.md` — two sections found by their markers (`<!-- sdd:open -->`, `<!-- sdd:decided -->`), measured by `tests/check-todo.sh --check <file> --allow-empty`. |
 
 ## The hat's frontier, and this project's exception
 

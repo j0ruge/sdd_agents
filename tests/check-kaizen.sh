@@ -31,8 +31,10 @@ OUTSIDE="$(mktemp -d "${TMPDIR:-/tmp}/sdd-kaizen-outside-XXXXXX")"
 trap 'rm -rf "$OUTSIDE"' EXIT
 
 pass() { printf '  ok    %s\n' "$1"; }
+# Inside a mutant the first red assertion is the verdict: fail() ends the sensor there, AFTER
+# printing, so the mutant's log still names it. The census in check-health.sh holds all nine.
 fail() { printf '  FAIL  %s\n         expected: %s\n         got:      %s\n' "$1" "$2" "$3" >&2
-         fails=$((fails + 1)); }
+         fails=$((fails + 1)); [ -z "${SDD_MUTANT:-}" ] || exit 1; }
 assert_eq() { if [ "$2" = "$3" ]; then pass "$1"; else fail "$1" "$2" "$3"; fi }
 
 export SDD_STATE_DIR="$OUTSIDE/state"

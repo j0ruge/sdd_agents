@@ -105,6 +105,154 @@ WORK="$(mktemp -d "${TMPDIR:-/tmp}/sdd-mut-XXXXXX")"
 trap 'rm -rf "$WORK"' EXIT
 
 # ---------------------------------------------------------------------------
+# The killer map, the launch order and the pool are functions so each can carry probes of its own:
+# the catalogue cannot reach the harness, the same rule as jobs_selftest above. Both selftests run
+# on every invocation, --anchors included, so the fast suite measures them.
+# ---------------------------------------------------------------------------
+declare -A KILLER=() SECS=()
+
+# load_killer_map <tsv> — fills KILLER[slug]=<step> and SECS[slug]=<seconds>. A line of two columns
+# (the map before 2026-09-25) is read with no time; a time that is not digits is dropped, never
+# guessed. A missing file is an empty map, and the catalogue runs in its usual order.
+load_killer_map() {
+  local k v s
+  [ -r "$1" ] || return 0
+  while IFS=$'\t' read -r k v s; do
+    [ -n "$k" ] && [ -n "$v" ] || continue
+    KILLER["$k"]="$v"
+    case "$s" in ''|*[!0-9]*) ;; *) SECS["$k"]="$s" ;; esac
+  done < "$1"
+}
+
+# launch_order — stdin: <slug> TAB <seconds or empty>, in catalogue order; stdout: the slugs in
+# launch order. The ones with no recorded time come first (new mutants and survivors run the whole
+# suite), in catalogue order; then the longest first, ties in catalogue order. A pool that starts
+# its longest jobs last ends with one slot busy and the rest idle.
+launch_order() {
+  awk -F'\t' '{ s = ($2 ~ /^[0-9]+$/) ? $2 : 999999; printf "%s\t%d\t%s\n", s, NR, $1 }' \
+    | LC_ALL=C sort -t "$(printf '\t')" -k1,1nr -k2,2n | cut -f3
+}
+
+# control_red <dir> — true once the control run has written a rc that is not 0.
+control_red() {
+  local rc
+  rc="$(cat "$1/control.rc" 2>/dev/null || true)"
+  [ -n "$rc" ] && [ "$rc" != 0 ]
+}
+
+# control_verdict <dir> — 0 when the control came back green; otherwise prints why and returns 1.
+# A control that wrote no rc at all (it died before) is not green either.
+control_verdict() {
+  local rc
+  rc="$(cat "$1/control.rc" 2>/dev/null || true)"
+  [ "$rc" = 0 ] && return 0
+  printf 'HARNESS-BROKEN: the copy is not green even without sabotage (control rc %s)\n' "${rc:-none}"
+  return 1
+}
+
+# control_run <dir> <control-fn> — runs the control in a subshell of its own and, if it came back
+# without writing <dir>/control.rc (killed by the OOM killer or a signal, or an exit before the
+# write), writes one that is not 0. Without it a dead control left control_red false for good, and
+# the pool launched the whole catalogue before control_verdict said HARNESS-BROKEN (review of PR
+# #170). Both paths below start the control through here.
+control_run() {
+  local crc=0
+  ( "$2" ) || crc=$?
+  [ -e "$1/control.rc" ] || echo "none (exit $crc)" > "$1/control.rc"
+}
+
+# run_pool <dir> <control-fn> <mutant-fn> <slug...> — the control run is the pool's FIRST job and
+# the mutants start beside it. It holds a slot like any mutant: the slot is waited for BEFORE each
+# launch, so JOBS=1 runs the control alone and then one mutant at a time (review of PR #170).
+# Once the control is back red no further mutant is launched, and the
+# ones already running are waited for, never killed: their sdd and coordination children have no
+# process group of their own, and killing the subshell would orphan them. Publishes POOL_LAUNCHED.
+# `wait -n` is bash 4.3+; the caller checks for it. The `jobs` at the top drops the status of any
+# job that ended before the pool: a background job that exits before a bare `wait` keeps its status
+# in the table, the next `wait -n` returns it at once (1 ms against 300, bash 5.2), and every such
+# status is a slot counted free that never was. With the slot waited before each launch,
+# pool_selftest's red control ends unconsumed (measured: the JOBS=1 probe red without this line),
+# and that selftest runs in this same shell just before the catalogue.
+run_pool() {
+  local dir="$1" control="$2" mutant="$3" slug running=1
+  shift 3
+  jobs >/dev/null
+  POOL_LAUNCHED=0
+  control_run "$dir" "$control" &
+  for slug in "$@"; do
+    if [ "$running" -ge "$JOBS" ]; then wait -n; running=$((running - 1)); fi
+    control_red "$dir" && break
+    "$mutant" "$slug" &
+    POOL_LAUNCHED=$((POOL_LAUNCHED + 1))
+    running=$((running + 1))
+  done
+  wait
+}
+
+order_selftest() {
+  local got f="$WORK/order-selftest.tsv"
+  load_killer_map "$WORK/no-such-map.tsv"
+  [ "${#KILLER[@]}" = 0 ] || { echo "  SELFTEST FAIL  a missing map was not an empty one" >&2; return 1; }
+  printf 'b\tstep one\t10\nc\tstep two\t50\ne\tstep one\t10\nf\tstep two\tx\ng\tstep three\n' > "$f"
+  load_killer_map "$f"
+  [ "${KILLER[g]:-}" = 'step three' ] || { echo "  SELFTEST FAIL  a two-column line was not read: KILLER[g]='${KILLER[g]:-}'" >&2; return 1; }
+  [ "${SECS[c]:-}" = 50 ] || { echo "  SELFTEST FAIL  a recorded time was not read: SECS[c]='${SECS[c]:-}'" >&2; return 1; }
+  [ -z "${SECS[f]:-}" ] || { echo "  SELFTEST FAIL  a time that is not digits was kept: SECS[f]='${SECS[f]}'" >&2; return 1; }
+  got="$(for s in a b c d e f g; do printf '%s\t%s\n' "$s" "${SECS[$s]:-}"; done | launch_order | tr '\n' ' ')"
+  [ "$got" = 'a d f g c b e ' ] || { echo "  SELFTEST FAIL  launch order '$got', expected 'a d f g c b e '" >&2; return 1; }
+  KILLER=(); SECS=()
+  return 0
+}
+
+pool_selftest() {
+  local JOBS=2 d="$WORK/pool-selftest" why
+  mkdir -p "$d"
+  st_control_red()   { echo 1 > "$d/control.rc"; }
+  st_control_green() { echo 0 > "$d/control.rc"; }
+  st_mutant()        { sleep 0.3; }
+  rm -f "$d/control.rc"
+  run_pool "$d" st_control_red st_mutant m1 m2 m3 m4 m5 m6 m7 m8
+  [ "$POOL_LAUNCHED" -le "$JOBS" ] || { echo "  SELFTEST FAIL  red control: $POOL_LAUNCHED of 8 mutants launched, expected at most $JOBS" >&2; return 1; }
+  why="$(control_verdict "$d")" && { echo "  SELFTEST FAIL  a red control was read as green" >&2; return 1; }
+  case "$why" in *HARNESS-BROKEN*) : ;; *) echo "  SELFTEST FAIL  a red control was refused without saying HARNESS-BROKEN: $why" >&2; return 1 ;; esac
+  rm -f "$d/control.rc"
+  control_verdict "$d" >/dev/null && { echo "  SELFTEST FAIL  a control with no rc was read as green" >&2; return 1; }
+  run_pool "$d" st_control_green st_mutant m1 m2 m3
+  [ "$POOL_LAUNCHED" = 3 ] || { echo "  SELFTEST FAIL  green control: $POOL_LAUNCHED of 3 mutants launched" >&2; return 1; }
+  control_verdict "$d" >/dev/null || { echo "  SELFTEST FAIL  a green control was refused" >&2; return 1; }
+  # A control that dies before writing its rc (OOM, a signal) stops the launches like a red one:
+  # found by review of PR #170, where it left control_red false and the pool ran the whole catalogue.
+  st_control_dies() { exit 3; }
+  rm -f "$d/control.rc"
+  run_pool "$d" st_control_dies st_mutant m1 m2 m3 m4 m5 m6 m7 m8
+  [ "$POOL_LAUNCHED" -le "$JOBS" ] || { echo "  SELFTEST FAIL  a control that died with no rc: $POOL_LAUNCHED of 8 mutants launched, expected at most $JOBS" >&2; return 1; }
+  control_verdict "$d" >/dev/null && { echo "  SELFTEST FAIL  a control that died with no rc was read as green" >&2; return 1; }
+  # JOBS=1 is one suite at a time, the control included: found by review of PR #170, where the
+  # first mutant was launched beside the control before the slot was counted. The job planted
+  # first ends before the call, and a pool that counted its status as a free slot overlaps too.
+  st_control_slow() { sleep 0.3; echo 0 > "$d/control.rc"; }
+  st_mutant_alone() {
+    { [ -e "$d/control.rc" ] && ! compgen -G "$d/busy.*" >/dev/null; } || : > "$d/overlap"
+    : > "$d/busy.$1"; sleep 0.1; rm -f "$d/busy.$1"
+  }
+  rm -f "$d/control.rc" "$d/overlap" "$d"/busy.*
+  : & sleep 0.1
+  JOBS=1 run_pool "$d" st_control_slow st_mutant_alone m1 m2 m3
+  [ ! -e "$d/overlap" ] || { echo "  SELFTEST FAIL  JOBS=1 ran two suites at once" >&2; return 1; }
+  [ "$POOL_LAUNCHED" = 3 ] || { echo "  SELFTEST FAIL  JOBS=1: $POOL_LAUNCHED of 3 mutants launched" >&2; return 1; }
+  return 0
+}
+
+if ! order_selftest; then
+  echo "the killer map or the launch order does not measure what it claims — refusing to schedule mutants with it" >&2
+  exit 1
+fi
+if (: & wait -n) 2>/dev/null && ! pool_selftest; then
+  echo "the pool does not stop on a failed control or keep to its slots — refusing to schedule mutants with it" >&2
+  exit 1
+fi
+
+# ---------------------------------------------------------------------------
 # Catalogue
 #
 # Mutation idiom: find the line by a UNIQUE anchor and touch only that line. If the anchor
@@ -2024,6 +2172,85 @@ mut_PRE_testcmd_noop_runs_anyway() {
   sed -i '/^cmd_preflight()/,/^}/ s@if test_cmd_looks_noop "\$TEST_CMD"; then@if test_cmd_looks_noop "$TEST_CMD"; then run_check_cmd "$TEST_CMD" "preflight-test" || true;@' "$1"
 }
 
+# The listing predicate stops normalising — issue 118, one mutant per half. Without the whitespace
+# half a TAB before `--list` is certified; without the quote half `"--list"` is. Both reach the
+# suite as a bare `--list` through run_check_cmd's eval. Caught by `a TAB or a quoted --list is
+# refused like a spaced one` in check-preflight.sh (each half answers for its own world) and by
+# `health refuses a TAB or a quoted --list in the kit's TEST_CMD` in check-health.sh.
+mut_PRE_testcmd_list_unnormalised() {
+  sed -i '/^test_cmd_lists_only() {/,/^}/ s@^  tc="\${tc//\[\[:space:\]\]/ }"$@  :@' "$1"
+}
+mut_PRE_testcmd_list_unquoted() {
+  sed -i '/^test_cmd_lists_only() {/,/^}/ s@^  tc="\${tc//\[\\"\\'"'"'\]/}"$@  :@' "$1"
+}
+# The third half, from the PR #167 review: without it `--list; true` is certified, because the
+# operator glues itself to the flag and the padded match never sees ` --list `. Caught by `a
+# --list ended by a shell operator is refused like a spaced one` in check-preflight.sh.
+mut_PRE_testcmd_list_unseparated() {
+  sed -i '/^test_cmd_lists_only() {/,/^}/ s@^  tc="\${tc//\[;&|()<>\]/ }"$@  :@' "$1"
+}
+
+# config_read_key stops telling a config that does not EVALUATE from an absent one — the source's
+# failure falls through, the unset variable reads as rc 1 and install buys the defaults in silence
+# (PR #167 review). Caught by `install says a config that does not evaluate does not load, instead
+# of using defaults in silence` in check-preflight.sh.
+mut_PRE_config_eval_blind() {
+  sed -i '/^config_read_key() {/,/^}/ s@^  if \[ "\$rc" -ne 0 \]; then$@  if false; then@' "$1"
+}
+
+# The greenfield warn stops being narrow — issue 53. With the root check skipped, a failing TEST_CMD
+# whose runner merely CITES its manifest is excused although the manifest is right there — a
+# malformed package.json makes npm name it. Caught by `a manifest the runner cites while it exists
+# (malformed) is still a fail` in check-preflight.sh.
+mut_PRE_greenfield_warn_always() {
+  sed -i '/^test_cmd_missing_manifest() {/,/^}/ s@\[ ! -e "\$REPO_ROOT/\$manifest" \] || return 1@:@' "$1"
+}
+# The other guard of the same excuse: the runner no longer has to SAY its manifest is missing. Then
+# `npm --prefix sub test` with a red suite under sub/, and any red suite of a known runner in a repo
+# whose manifest lives elsewhere, is excused. Caught by `a red suite whose runner never said its
+# manifest is missing still fails` in check-preflight.sh.
+mut_PRE_greenfield_warn_without_evidence() {
+  sed -i '/^test_cmd_missing_manifest() {/,/^}/ s@\[ -n "\$log" \] && grep -qE "\$evidence" "\$log" 2>/dev/null || return 1@:@' "$1"
+}
+
+# The Node TEST_CMD rule has four owners, one mutant each. install goes back to a bare `npm test`
+# whatever the package.json declares — the defect a Codex review of warehouse_explorer_api PR #7
+# surfaced, measured in four of six Node repos.
+mut_PRE_node_install_bare() {
+  sed -i 's@then test_cmd="\$(node_test_cmd)"@then test_cmd="npm test"@' "$1"
+}
+
+# The preflight half goes blind: the helper still runs, it just never names a missing script.
+mut_PRE_node_outside_blind() {
+  sed -i '/^node_scripts_outside_test_cmd()/,/^}/ s@|| printf .%s . "\$s"@|| true@' "$1"
+}
+
+# The composed value goes to sed unescaped, and `&&` turns into the matched text twice.
+mut_PRE_node_sed_unescaped() {
+  sed -i 's@-e "s|<TEST_CMD>|\$test_cmd_sed|g"@-e "s|<TEST_CMD>|$test_cmd|g"@' "$1"
+}
+
+# The whole-word match degrades to a substring, and `build:prod` starts standing in for `build`.
+mut_PRE_node_outside_substring() {
+  sed -i '/^node_scripts_outside_test_cmd()/,/^}/ s@grep -qE "(^|\[^\[:alnum:\]_:-\])\${s}(\[^\[:alnum:\]_:-\]|\\\$)"@grep -qF "$s"@' "$1"
+}
+
+# A package.json the kit could not read goes back to reading as "declares no gate script": install
+# writes a bare `npm test` and preflight stays quiet, in silence, both.
+mut_PRE_node_manifest_unread_blind() {
+  sed -i '/^node_manifest_unread()/,/^}/ s@  jq empty "\$pkg" >/dev/null 2>&1 || printf .package.json does not parse as JSON.@  :@' "$1"
+}
+
+# The jq-absent branch goes: an unread manifest is still said, but blamed on the JSON.
+mut_PRE_node_manifest_jq_missing_blind() {
+  sed -i '/^node_manifest_unread()/,/^}/ s@  if ! command -v jq >/dev/null 2>&1; then printf .jq is not installed.; return 0; fi@  :@' "$1"
+}
+
+# Only TEST_CMD stays escaped: a branch carrying `&` comes out of the starter as the matched text.
+mut_RUN_install_branch_unescaped() {
+  sed -i 's@    branch_sed="\$(sed_replacement "\$branch")"@    branch_sed="$branch"@' "$1"
+}
+
 # Not a gate: the base branch warning goes back to being decoration. The body is emptied while the
 # function keeps existing and keeps returning 0, so every call site stays syntactically valid and
 # nothing else about the runs changes — which is exactly the shape of the defect this closes, a
@@ -2457,15 +2684,26 @@ mut_HEALTH_suite_without_mutation() {
 # the log left behind is a dozen plausible step names. Health is where that gets said, because
 # nothing else in the kit reads TEST_CMD as anything but a command to obey.
 #
-# The pattern is degraded rather than deleted, and the `case` is left with the same arms: a mutant
-# that removed the branch outright would also remove the `ok` line, and half the assertions in
-# check-health.sh would go red for a missing sentence instead of for the blindness.
+# The call to the shared predicate is blinded rather than deleted, and the if/elif keeps its arms:
+# a mutant that removed the branch outright would also remove the `ok` line, and half the
+# assertions in check-health.sh would go red for a missing sentence instead of for the blindness.
+# (Re-anchored in 20260925-o-sensor-le-o-que-a-ancora-diz: the `case` this used to degrade became
+# a call to test_cmd_lists_only, the one definition the preflight shares.)
 #
 # Range-addressed to the body of cmd_health, per the header of the entries above. Caught by
 # `surface: --list prints steps only, and a TEST_CMD carrying it is refused` in check-health.sh —
 # by its (b) half, whose two worlds differ in exactly this flag.
 mut_HEALTH_testcmd_list_blind() {
-  sed -i '/^cmd_health() {/,/^}/ s@\*" --list "\*)@*" --a-flag-no-config-carries "*)@' "$1"
+  sed -i '/^cmd_health() {/,/^}/ s@if test_cmd_lists_only "\$kit_test_cmd"; then@if false; then@' "$1"
+}
+
+# Check 2b goes back to reading a config that does not parse as a missing key — issue 116. The
+# parse verdict is skipped rather than deleted, so the value read below still runs and lands EMPTY,
+# which is exactly the old "declares no TEST_CMD" about a file that declares it. Range-addressed to
+# cmd_health. Caught by `a kit config that does not parse is reported as not parsing, never as a
+# missing TEST_CMD` in check-health.sh.
+mut_HEALTH_config_parse_blind() {
+  sed -i '/^cmd_health() {/,/^}/ s@if \[ "\$kit_cfg_rc" -eq 2 \]; then@if false; then@' "$1"
 }
 
 mut_HEALTH_provenance_find_aborts() {
@@ -4249,6 +4487,19 @@ CATALOG=(
   PRE_agent_presence_only
   PRE_testcmd_noop_blind
   PRE_testcmd_noop_runs_anyway
+  PRE_testcmd_list_unnormalised
+  PRE_testcmd_list_unquoted
+  PRE_testcmd_list_unseparated
+  PRE_config_eval_blind
+  PRE_greenfield_warn_always
+  PRE_greenfield_warn_without_evidence
+  PRE_node_install_bare
+  PRE_node_outside_blind
+  PRE_node_sed_unescaped
+  PRE_node_outside_substring
+  PRE_node_manifest_unread_blind
+  PRE_node_manifest_jq_missing_blind
+  RUN_install_branch_unescaped
   RUN_base_branch_warn_dead
   RUN_approve_writes_auto
   RUN_approve_bails_on_kaizen_born
@@ -4296,6 +4547,7 @@ CATALOG=(
   HEALTH_mutation_survivor_blind
   HEALTH_catalogue_floor_blind
   HEALTH_testcmd_list_blind
+  HEALTH_config_parse_blind
   HEALTH_suite_without_mutation
   HEALTH_provenance_find_aborts
   HEALTH_baseline_read_aborts
@@ -4509,9 +4761,31 @@ run_mutant() {
   sandbox "$box"
   apply_mutant "mut_$slug" "$box" || arc=$?
   if [ "$arc" -ne 0 ]; then echo "$arc" > "$box.rc"; return; fi
-  SDD_MUTANT=1 "$box/tests/run-all.sh" > "$box.log" 2>&1
-  echo $? > "$box.rc"
+  local rc=0 t0=$SECONDS
+  SDD_MUTANT=1 SDD_MUTANT_FIRST="${KILLER[$slug]:-}" "$box/tests/run-all.sh" > "$box.log" 2>&1 || rc=$?
+  echo "$((SECONDS - t0))" > "$box.secs"
+  echo "$rc" > "$box.rc"
+  [ "$rc" -eq 0 ] || killer_of "$box.log" > "$box.killer"
 }
+
+# killer_of <suite log> → the name of the step that killed the mutant: the LAST step header the
+# suite printed (`run()` prints `\033[1m▸ <name>\033[0m` before each step, and under SDD_MUTANT the
+# first red step ends the run). Anchored at the start of the line, ESC included, so a `▸` quoted
+# inside a sensor's own output is never read as a step. Empty when there is none.
+killer_of() {
+  sed -n "s/^"$'\033'"\[1m▸ \(.*\)"$'\033'"\[0m\$/\1/p" "$1" | tail -n 1
+}
+
+# The killer map: <slug> TAB <step name> TAB <seconds>, learned from the last catalogue and handed
+# back to each mutant as SDD_MUTANT_FIRST, so the step that killed it runs first (see the note
+# above PASS in run-all.sh: over 40 mutants of 583b3c3 the suite summed 4796/4828 s before, 1959 s
+# after). It is an ORDER hint and nothing else — a stale or garbled line costs time and changes no
+# step a mutant runs, because run-all.sh still runs every step of a mutant the named one did not kill.
+# That the ORDER moves no verdict either is measured, not asserted (the same note). It lives in
+# .sdd/cache/, gitignored and OUTSIDE the four directories of mutation_stamp_key, so learning it
+# never invalidates a stamp.
+# The seconds are the mutant's own suite time; the pool reads them to launch the longest first.
+KILLERS_FILE="$ROOT/.sdd/cache/mutation-killers.tsv"
 
 # ---------------------------------------------------------------------------
 # --anchors: apply every mutant to a copy of bin/ and stop there — no suite, no control run.
@@ -4523,7 +4797,7 @@ run_mutant() {
 # stopped being parsed: an empty loop reports "0 broken" forever.
 # ---------------------------------------------------------------------------
 if [ "$ANCHORS_ONLY" = 1 ]; then
-  ANCHOR_FLOOR=392
+  ANCHOR_FLOOR=404
   anchor_box() { mkdir -p "$1"; cp -r "$ROOT/bin" "$1/"; }
   anchor_control_noop()       { :; }
   anchor_control_intact()     { printf '# a mutation that lands and stays valid\n' >> "$1"; }
@@ -4581,6 +4855,27 @@ if [ "$ANCHORS_ONLY" = 1 ]; then
          "an emptied or unparsed catalogue would report every anchor intact"
     exit 1
   fi
+  # A mutant DEFINED but never LISTED is dead code that no loop here runs, and the fast suite used
+  # to stay green over it: four `mut_PRE_node_*` sat outside CATALOG for a whole branch, and only
+  # `sdd health` — an hour in — would have said "ran 397 of the 401 defined". The definitions are
+  # read with health's own spelling, so both programs count the same population.
+  catalogue_orphans() { # catalogue_orphans <defined, one per line> <listed, one per line>
+    comm -23 <(sort -u <<< "$1") <(sort -u <<< "$2")
+  }
+  if [ "$(catalogue_orphans $'a\nb' 'a')" != b ] || [ -n "$(catalogue_orphans 'a' $'a\nb')" ]; then
+    fail "SENSOR-BROKEN: catalogue_orphans misread a world whose answer is known" \
+         "expected exactly 'b' orphaned from {a, b} vs {a}, and nothing the other way round"
+    exit 1
+  fi
+  orphans="$(catalogue_orphans \
+    "$(sed -nE 's/^mut_([A-Za-z0-9_]+)\(\) \{.*/\1/p' "$ROOT/tests/check-mutation.sh")" \
+    "$(printf '%s\n' "${CATALOG[@]}")")"
+  if [ -n "$orphans" ]; then
+    fail "CATALOGUE-BROKEN: mutant(s) defined but absent from CATALOG — nothing runs them" \
+         "$(tr '\n' ' ' <<< "$orphans")"
+    exit 1
+  fi
+  pass "every mut_* defined in this file is listed in CATALOG"
   entries=()
   for slug in "${CATALOG[@]}"; do entries+=("$slug=mut_$slug"); done
   # ⚠️ The one line the controls above cannot assert on: `if anchor_verdict` sabotaged into `if true`
@@ -4599,43 +4894,55 @@ fi
 # Without it, a broken copy (a future test reading agents/ or docs/, for instance) would leave
 # EVERY mutant red and the score would read 100% while measuring exactly nothing — the same
 # vacuity the mutation exists to catch, now inside the measuring device itself.
+#
+# It is the pool's FIRST job, and the mutants start beside it: run alone first, it cost ~3.9 min
+# of an otherwise idle pool (2026-09-25). No score is written before its rc is read below, so no
+# verdict can come from a red control; a red or dead control stops further launches (run_pool,
+# control_run). `wait -n` is bash 4.3+; without it the control runs first and the mutants go in
+# barriers of JOBS — a declared degradation, never a silent one.
 # ---------------------------------------------------------------------------
-echo "== control =="
+echo "== control (the first job of the pool) =="
 sandbox "$WORK/control"
-if SDD_MUTANT=1 "$WORK/control/tests/run-all.sh" > "$WORK/control.log" 2>&1; then
-  pass "the kit copy is green with no sabotage"
-else
-  fail "HARNESS-BROKEN: the copy is not green even without sabotage" \
-       "the score would read 100% by vacuity — see $WORK/control.log"
-  tail -20 "$WORK/control.log" >&2
-  exit 1
-fi
+run_control() {
+  local rc=0
+  SDD_MUTANT=1 "$WORK/control/tests/run-all.sh" > "$WORK/control.log" 2>&1 || rc=$?
+  echo "$rc" > "$WORK/control.rc"
+}
+
+load_killer_map "$KILLERS_FILE"
+echo "== killer map: ${#KILLER[@]} mutant(s) run their last killer first, ${#SECS[@]} with a recorded time =="
+mapfile -t ORDER < <(for slug in "${CATALOG[@]}"; do printf '%s\t%s\n' "$slug" "${SECS[$slug]:-}"; done | launch_order)
 
 # ---------------------------------------------------------------------------
 # A pool, not batches: the old `[ i % JOBS -eq 0 ] && wait` was a barrier every JOBS mutants, so
 # each batch cost its slowest member while the finished slots sat idle. `wait -n` frees a slot as
 # soon as ANY mutant exits. Safe because run_mutant shares nothing — each writes its own
-# $WORK/<slug>.rc/.log and the scoring loop below reads the catalogue in order afterwards.
-# `wait -n` is bash 4.3+; without it, fall back to the barrier and SAY so — a declared
-# degradation, never a silent one.
+# $WORK/<slug>.rc/.log/.secs and the scoring loop below reads the catalogue in order afterwards.
+# The launch order is launch_order's: no recorded time first, then the longest first.
 if (: & wait -n) 2>/dev/null; then
-  echo "== mutants (pool of $JOBS) =="
-  running=0
-  for slug in "${CATALOG[@]}"; do
-    run_mutant "$slug" &
-    running=$((running + 1))
-    if [ "$running" -ge "$JOBS" ]; then wait -n; running=$((running - 1)); fi
-  done
+  echo "== mutants (pool of $JOBS, longest first) =="
+  run_pool "$WORK" run_control run_mutant "${ORDER[@]}"
 else
-  echo "== mutants (batches of $JOBS — this bash has no 'wait -n', falling back to barriers) =="
-  i=0
-  for slug in "${CATALOG[@]}"; do
-    run_mutant "$slug" &
-    i=$((i + 1))
-    [ $((i % JOBS)) -eq 0 ] && wait
-  done
+  echo "== mutants (batches of $JOBS — this bash has no 'wait -n': the control runs first) =="
+  control_run "$WORK" run_control
+  if ! control_red "$WORK"; then
+    i=0
+    for slug in "${ORDER[@]}"; do
+      run_mutant "$slug" &
+      i=$((i + 1))
+      [ $((i % JOBS)) -eq 0 ] && wait
+    done
+    wait
+  fi
 fi
-wait
+
+if why="$(control_verdict "$WORK")"; then
+  pass "the kit copy is green with no sabotage"
+else
+  fail "$why" "the score would read 100% by vacuity — see $WORK/control.log"
+  tail -20 "$WORK/control.log" >&2
+  exit 1
+fi
 
 caught=0; gaps=0; errors=0
 for slug in "${CATALOG[@]}"; do
@@ -4666,6 +4973,21 @@ for slug in "${CATALOG[@]}"; do
       fi ;;
   esac
 done
+
+# Rewritten from THIS run only, atomically: a mutant that stopped being caught leaves the map. A
+# map that cannot be written is said and costs the next run its speed, never this run's verdict.
+if mkdir -p "${KILLERS_FILE%/*}" 2>/dev/null \
+   && for slug in "${CATALOG[@]}"; do
+        if [ -s "$WORK/$slug.killer" ]; then
+          printf '%s\t%s\t%s\n' "$slug" "$(cat "$WORK/$slug.killer")" "$(cat "$WORK/$slug.secs" 2>/dev/null || true)"
+        fi
+      done > "$KILLERS_FILE.tmp.$$" \
+   && mv -f "$KILLERS_FILE.tmp.$$" "$KILLERS_FILE"; then
+  echo "== killer map: $(grep -c . "$KILLERS_FILE" || true) mutant(s) recorded in ${KILLERS_FILE#"$ROOT"/} =="
+else
+  rm -f "$KILLERS_FILE.tmp.$$"
+  printf '  warn  the killer map could not be written to %s — the next catalogue runs in the usual order\n' "$KILLERS_FILE" >&2
+fi
 
 echo
 # `cmd_health` in bin/sdd greps this exact line. The two sides are one contract across two files:

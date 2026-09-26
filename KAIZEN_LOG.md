@@ -4,6 +4,147 @@ Registro de melhorias com **antes/depois medido**. Sem número, não entra.
 
 ---
 
+## 2026-09-25 — O sensor para no primeiro FAIL
+
+**Problema (Gemba):** depois do #168 cada mutante roda primeiro o passo que o matou da última vez,
+mas **dentro** desse passo o sensor seguia rodando toda asserção depois do primeiro `fail()`. O
+catálogo só lê o rc da suíte, e um sensor que chamou `fail()` uma vez já o decidiu: o resto é pago
+e ninguém lê. Medido em 24 mutantes de `8f2f2a9`: o 1º FAIL sai, na mediana, na metade do sensor
+assassino. O carimbo levava 37 min 42 s e é a última coisa de todo merge do kit.
+
+**Medição:** amostra fixa de 24 mutantes de `8f2f2a9` (semente `20260925`), cada um numa sandbox
+igual à do `run_mutant`, 12 jobs, três rodadas.
+
+| | Antes (`8f2f2a9`) | Depois |
+|---|---|---|
+| Soma do passo assassino nos 24 mutantes | 1328,7 s | **570,9 / 570,5 / 574,0 s** (−57%) |
+| autonomy · gates · kaizen · preflight (1ª rodada) | 846,4 · 404,4 · 28,2 · 49,7 s | 400,8 · 144,1 · 11,8 · 14,1 s |
+| Controle do catálogo | serial, antes do pool (~3,9 min) | 1º job do pool, **rc 0 ×3** num pool de 12 |
+| Órfãos · linhas FAIL por mutante | — | 0 ×3 · 1 em cada uma das 26 rodadas |
+
+**Catálogo inteiro** (`sdd health`, 406 mutantes, 16 jobs, 406 de 406 e kit healthy nas duas):
+
+| | Antes | Depois |
+|---|---|---|
+| `sdd health` | 37 min 42 s (`cc03abd`, o último carimbo da `main`) | nº 1 **18 min 56 s** (`7bb0762`, ainda na ordem do catálogo) · nº 2 **18 min 14 s** (`f5f6aba`, o mais longo primeiro, carimbou) |
+
+**2,07× mais rápido** que o último carimbo da `main`. O mais longo primeiro rendeu só 42 s sobre o
+nº 1, e o mapa diz por quê: os 406 mutantes somam **12 031 s** (≈ 12,5 min em 16 jobs) e o mais
+longo leva 86 s, então a cauda do pool já era curta. O que sobra é a soma dos mutantes mais os
+~3,5 min da suíte rápida que o `sdd health` roda antes do catálogo: daqui em diante o ganho vem
+de baratear o mutante (P1 e P4 da gaveta), não de reordená-lo.
+
+**Contramedida:** sob `SDD_MUTANT` os nove sensores que rodam dentro de mutantes saem no primeiro
+`fail()` **depois de imprimi-lo** (oito `fail()` em bash e o `check()` do `check-coordination.sh`,
+cujo `finally` solta o helper e o lock), então o log do mutante ainda nomeia o assassino. Um censo
+comportamental no `check-health.sh` lê a população na própria suíte (`SDD_MUTANT=1 run-all.sh
+--list`, com as linhas continuadas juntadas), chama cada primitiva sob a variável definida, ausente
+e vazia, e mede a si mesmo em cinco mundos de resposta conhecida antes do laço; 13 sabotagens o
+deixam vermelho. O controle virou o 1º job do pool, e o mapa de assassinos ganhou a 3ª coluna (os
+segundos de cada mutante), com o mais longo lançado primeiro. Duas probes novas na `pool_selftest`,
+nascidas da revisão dos bots, seguram o controle ocupando uma vaga (`JOBS=1`) e o controle que morre
+sem rc parando o pool.
+
+**Achado durante a execução:** o controle negativo do `check-coordination.sh` chama `check(False)`
+de propósito e precisa que ele volte. Com a cláusula, `SDD_MUTANT=1 run-all.sh` ficou vermelho no
+kit intacto **e mudo**. Regra no `CLAUDE.md`: quem chama a própria primitiva de falha de propósito
+chama fora do mutante.
+
+**Achado consertando a revisão:** um job de fundo que termina antes de um `wait` sem argumento
+deixa o status na tabela, e o `wait -n` seguinte o devolve na hora (1 ms contra 300, bash 5.2).
+Com a vaga esperada antes do lançamento, o controle vermelho da `pool_selftest` sobrava assim no
+mesmo shell do pool real e contaria como vaga livre. `run_pool` começa por `jobs >/dev/null`.
+
+**Limite declarado:** `check-entrypoint.sh` e `check-templates.sh` rodam dentro de mutantes sem
+primitiva única de falha e ficam fora do censo (declarados em `CENSUS_EXEMPT`, ~0,5 s cada). Um
+`fail()` chamado dentro de um subshell pararia só o subshell; hoje não existe nenhum, e o censo não
+enxerga o ponto de chamada. O filho do hook que ignora SIGTERM é solto também no `finally` do
+coordination, provado por reprodução e **sem** probe durável: o mundo pede um mutante e um vermelho
+forçado ao mesmo tempo.
+
+---
+
+## 2026-09-25 — O catálogo roda primeiro o passo que matou o mutante
+
+**Problema (Gemba):** desde o PR #59 cada mutante para no primeiro passo vermelho da suíte, mas os
+passos rodam sempre na mesma ordem. Um mutante que só o preflight mata pagava antes templates,
+gates, dry-run, autonomy, kaizen e health. O carimbo levava 1h21 com 392 mutantes e cresce a cada
+missão (406 hoje).
+
+**Medição:** amostra fixa de 40 mutantes sorteados de `583b3c3` (`shuf` com semente), cada um
+numa sandbox igual à do `run_mutant`, com carimbo de tempo por linha e 16 jobs. Assassinos: gates
+16, autonomy 12, kaizen 7, health 2, preflight, coordination e dry-run 1 cada; nenhum sobrevivente.
+
+| | Antes | Depois |
+|---|---|---|
+| Relógio da amostra, 16 jobs | 389 s (duas medições: 389 e 389) | **171 s** |
+| Soma da suíte nos 40 mutantes | 4 796 s / 4 828 s | **1 959 s** |
+| Mediana por mutante | 146 s / 149 s | **49 s** |
+| Vereditos diferentes (rc mutante a mutante) | — | **0 de 40**, e o mesmo passo assassino em todos |
+
+**Catálogo inteiro** (`sdd health`, 406 mutantes, 16 jobs, todas as rodadas 406 de 406 e kit
+healthy): a 1ª rodada, que aprende o mapa, levou **1h27** (12:45 → 14:12); as duas seguintes,
+já com ele, **40 min 07 s** sobre `0a56d5f` e **37 min 42 s** sobre `cc03abd` (o conserto da
+revisão final). **2,2 a 2,3× mais rápido**, na linha da amostra (389 → 171 s). A de 40 min dividiu
+a máquina com ~10 rodadas do `check-health.sh` num clone (~5 min de um núcleo, de 20).
+
+**Contramedida:** `run-all.sh` percorre a lista de passos duas vezes quando recebe
+`SDD_MUTANT_FIRST` dentro de um mutante: primeiro só o passo nomeado, depois os outros. O
+`check-mutation.sh` lê o assassino do log de cada mutante e regrava o mapa no fim do catálogo.
+Quatro probes `surface:` no `check-health.sh`, e cada uma das três sabotagens manuais (rodar o
+passo duas vezes, rodar tudo na 1ª passada, honrar a variável fora de mutante) deixa um vermelho.
+A guarda `FIRST_RAN` foi escrita e removida sem probe que a deixasse vermelha: não se construiu um
+mundo em que o nome case numa passada e não na outra, o que não prova que ele não exista — o
+comentário do `run-all.sh` diz qual seria (uma condição do `steps()` lendo estado que um passo escreve).
+
+**Limite declarado:** o ganho aparece a partir da 2ª rodada, porque a 1ª aprende o mapa. As probes
+provam que o CONJUNTO de passos de um mutante não muda; que a ORDEM não mude veredito foi medido
+(o kit sem sabotagem, sob `SDD_MUTANT`, cada um dos 13 passos nomeado primeiro: 13 de 13 verde) e
+não tem sensor — um passo vermelho só por rodar primeiro leria sobrevivente como pego, e o item está
+no `TODO.md`. O próximo degrau é o P2(b) da gaveta (parar no primeiro assert dentro do sensor):
+gates e autonomy sozinhos ainda custam 55 a 92 s por mutante.
+
+---
+
+## 2026-09-25 — O sensor lê o que a âncora diz: a âncora do achado passa a ser medida, e o teto de linhas perde o atalho
+
+**Problema (Gemba):** medido em `5cb0101`, das 85 âncoras `arquivo:N` do `TODO.md` do kit, **63**
+apontavam código errado — e a regra "existe e está no intervalo" reprovaria **0**, porque o
+`check-todo.sh` nunca abria o arquivo. O teto de 8 linhas contava linhas físicas: um item de 1794
+caracteres numa linha só passava. O selftest sobrevivia a cinco sabotagens do #70. E o `TEST_CMD`
+era certificado por grafia: config que não parseia virava "declares no TEST_CMD", `--list` depois
+de TAB ou entre aspas passava pelas duas regras, e o greenfield sem `package.json` levava `fail`.
+
+| | Antes | Depois |
+|---|---|---|
+| Âncoras fora do alvo (`--anchors TODO.md`) | 69 de 100 (a auditoria manual: 63 de 85) | **0 de 89**, cobrado no lint; mais 8 que a regra aceitava por uma crase genérica, re-ancorados à mão na revisão final |
+| Item de 1794 caracteres numa linha física | aceito, rc 0 | recusado (`cap is 120`, contando caracteres) |
+| Sabotagens do #70 sobrevivendo ao selftest | 5 (a, c, d, b1, b2) | 0 — b4/b5 declaradas (só mudam a mensagem) |
+| Sensores com o `ok` calibrado pelo `calibrate()` | 8 | 9 (`CALIBRATE_FLOOR` 4 → 9) |
+| `TEST_CMD` com TAB ou aspas antes de `--list` | certificado pelas duas regras | recusado por um predicado só |
+| Config que não parseia, nos 7 sítios de leitura por chave | engolido (`>/dev/null 2>&1`) | dito, com o diagnóstico do `bash -n` |
+| Catálogo de mutação (âncoras) | 392 | 396 |
+
+**Achado durante a execução:** a primeira versão da regra tomava a primeira crase com forma de
+caminho da cabeça **com o título**, e um título citando `` `.sdd/config.sh` `` ou `` `bin/sdd` ``
+virava âncora de arquivo inteiro — seis itens escondiam a âncora real assim. A âncora passou a ser
+buscada depois do título (`9a123fa`), e os seis apareceram fora do alvo.
+
+**Re-verificar o conteúdo pagou mais que re-ancorar:** oito itens descreviam defeito já consertado
+por commits que estavam na `main` havia semanas (apagados), dois viraram registro decidido e um foi
+fundido; a catraca foi de 100 para 89 com os sete `RESOLVED by` desta missão ainda na seção aberta.
+
+**Limite medido na revisão final:** 48 dos 89 itens passam por um símbolo só, e uma crase genérica
+(`` `warn` ``, `` `true` ``, `` `repo` ``) satisfaz a distância perto de quase qualquer linha — foi assim
+que oito âncoras erradas passaram. A regra prova proximidade, não pertinência; a leitura humana do
+alvo continua sendo a outra metade.
+
+**Contramedida:** a regra vive no lint (`check_file`), então uma missão que move código sob uma
+âncora fica vermelha na mesma corrida que fecha o gate da fase — medido no próprio I10, que empurrou a âncora
+do item do #70 e a viu apontada. ADR 0011.
+
+---
+
 ## 2026-09-22 — O motivo da fase: o runner diz por que abriu a sessão, e para quando ela não tem trabalho
 
 **Problema (Gemba):** na `20260921-amep-backend-0-1-0` (`lighthouse_project`, kit em `ea39868`)

@@ -13,7 +13,7 @@
 
 | # | Frente | Estado | Próximo passo | Espera por |
 |---|---|---|---|---|
-| F1 | Custo do catálogo de mutação | PR #59 mergeado (`d0ac22d`); P1–P4 abertos | P3 (varrer probes sensíveis a tempo sob carga) | — |
+| F1 | Custo do catálogo de mutação | PR #59 mergeado (`d0ac22d`); P2(a) feito em 2026-09-25 (assassino primeiro, amostra 389 → 171 s, `sdd health` 1h27 → ~38–40 min); P2(b) **FEITO** no **PR #170** (o sensor para no primeiro FAIL, [spec](2026-09-25-o-sensor-para-no-primeiro-fail-design.md), amostra 1328,7 → 571 s, `sdd health` 37 min 42 s → **18 min 14 s**, carimbo 406/406 em `f5f6aba`), esperando `/codereview` e merge; P1, P3, P4 abertos | `/codereview` e merge do #170 pelo [handoff](../plans/2026-09-25-o-sensor-para-no-primeiro-fail-handoff.md); depois P3 | o merge do #170 |
 | F2 | Faxina pós-#57 | parada | ADR 0010 para `accepted`; apagar 2 itens do `TODO.md` | carona num PR que já carimbe |
 | F3 | T3 e a janela do juiz | parada | decidir as 3 perguntas de desenho | **decisão humana** (inclusive: congelar ou não) |
 | F4 | Portabilidade para outros repos | parcial | registrar as lacunas no `TODO.md`; consertar a 2 | carona num PR que já carimbe |
@@ -68,13 +68,24 @@ trabalho de fato.
   authorization` continuam recusando o impostor, e um probe novo recusa o descendente sem o FD no
   caso `pipeline`. Já está no `TODO.md` ("O 2º Python do worker custa ~30 ms").
 - **P2. Catálogo mais barato por estrutura**, a maior alavanca que resta sem trocar linguagem.
-  - **(a) Mutante → sensor alvo.** Cada mutante roda primeiro o sensor que o comentário dele
+  - **(a) Mutante → sensor alvo. FEITO em 2026-09-25**, derivado dos logs e não dos comentários
+    (274 dos 406 mutantes não nomeiam sensor): o catálogo grava em `.sdd/cache/mutation-killers.tsv`
+    o passo que matou cada mutante, e na rodada seguinte `SDD_MUTANT_FIRST` o roda primeiro. Numa
+    amostra fixa de 40 mutantes de `583b3c3`, com 16 jobs: relógio **389 → 171 s**, soma
+    **4 828 → 1 959 s**, 0 de 40 vereditos diferentes. A 1ª rodada aprende o mapa e custa como antes (1h27); no
+    catálogo inteiro, as duas seguintes levaram 40 min 07 s e 37 min 42 s, 406 de 406. O texto original do plano: cada mutante roda primeiro o sensor que o comentário dele
     nomeia. Se ele morre, a suíte morreria também, então um subconjunto vermelho prova o veredito.
     Se fica verde, cai para a suíte inteira antes de declarar sobrevivente. Nenhum veredito muda.
     O custo é anotar os 392 mutantes; dá para derivar dos logs de uma corrida completa, que mostram
     o primeiro sensor vermelho de cada um.
-  - **(b) Parar no primeiro assert vermelho dentro do sensor** sob `SDD_MUTANT`. Toca os 11
-    sensores comportamentais e os seus selftests.
+  - **(b) Parar no primeiro assert vermelho dentro do sensor** sob `SDD_MUTANT`. **FEITO em
+    2026-09-25** no **PR #170**: `sdd health` 37 min 42 s → **18 min 14 s** (nº 2, o mais longo
+    primeiro, carimbou 406/406 em `f5f6aba`; o nº 1, ainda na ordem do catálogo, 18 min 56 s).
+    [`spec`](2026-09-25-o-sensor-para-no-primeiro-fail-design.md) ·
+    [`handoff`](../plans/2026-09-25-o-sensor-para-no-primeiro-fail-handoff.md). Medido na mesma
+    amostra: soma do passo assassino 1328,7 → 570,9 / 570,5 / 574,0 s (−57%).
+    Amostra de 24 mutantes: o 1º FAIL sai na metade do sensor (1328,7 → 624,4 s, −53%). Vem
+    junto: o controle em paralelo com o pool e o mais longo primeiro. Meta: health ≤ 20 min.
 - **P3. Probes sensíveis a tempo sob carga.** Os 16 jobs expuseram um probe que distinguia o
   mutante contando sinais. Sinais comuns se fundem quando o processo não é escalonado a tempo, e
   o `mut_COORD_hook_relay_signaled` sobreviveu ao primeiro carimbo do #59. Falta varrer os sensores
@@ -185,7 +196,8 @@ São quatro, todas abertas em 2026-09-22 a partir da missão do `lighthouse_proj
 - **#52** — o `sdd approve` sai 0 com "not approved" quando não há TTY. Liga-se ao W3 (F6) e ao
   item do `TODO.md` sobre o `sdd approve`.
 - **#53** — o preflight reprova `TEST_CMD` em missão greenfield cujo I1 cria o manifesto. Liga-se
-  a F4.
+  a F4. **Fechada** pela missão `20260925-o-sensor-le-o-que-a-ancora-diz` (`bc624f9`, `warn` estreito
+  quando o manifesto do runner não existe na raiz); a issue fecha com o merge do PR.
 
 ## F6 — O worker (W1–W7)
 

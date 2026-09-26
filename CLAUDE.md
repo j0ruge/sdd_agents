@@ -73,11 +73,11 @@ graça depois de qualquer morte de sessão e elimina a classe de bug "estado men
 
 **5. Achado fora de escopo → `TODO.md`.** Qualquer coisa relevante que não cabe na missão atual
 vira entrada no `TODO.md` do repo-alvo (ou **deste** repo, se for melhoria do kit). Nunca desviar
-o escopo; nunca perder o achado. Formato:
-
-```md
-- [ ] <o quê> — `arquivo:linha` — <por que importa> — descoberto por `<agente>` na missão `<slug>` (YYYY-MM-DD)
-```
+o escopo; nunca perder o achado. Formato, esqueleto e ciclo de vida: `templates/todo.md` — fonte
+única e semente do `sdd install`, uma variante por `OUTPUT_LANG` (`templates/todo.pt-BR.md` é a
+deste repo). Duas seções, cada uma com seu marcador na linha abaixo do `##`: a dos achados abertos
+(`<!-- sdd:open -->`) e a dos registros **decididos, que não se reabrem** (`<!-- sdd:decided -->`).
+O texto do heading segue o idioma do repo; o marcador é contrato, em inglês, e é o que o sensor lê.
 
 ⚠️ **A rota depende de quem é o repo da missão, e dizer só o DESTINO não bastou.** Missão cujo
 repo é o kit escreve aqui, como sempre. Missão de repo-alvo **nunca escreve, commita ou entra** no
@@ -137,16 +137,12 @@ A projeção (`--dry-run`) **não arma nada** em nenhuma das duas: `sdd run --dr
 a que atribuir mudança, e armar mesmo assim fazia a projeção herdar o aviso de ledger do
 `autonomy_kit_stamp` — medido, 0 avisos antes e 1 depois, com o kit instalado como cópia simples.
 
-O item **cabe em ~6 linhas** (teto duro de 8, medido por `tests/check-todo.sh`): o quê, a âncora
-em `arquivo:linha`, por que importa, a direção, quem descobriu. A análise longa mora no handoff
-da missão citada — duplicá-la aqui foi o que levou este arquivo a 861 linhas.
-
-Fechado **é apagado**, nunca arquivado: o item com `RESOLVIDO por <hash>` fica na seção Aberto só
-até o PR que cita a evidência ser mergeado, e então sai do arquivo. A memória durável já existe
-em três lugares (`git log -S`, `KAIZEN_LOG.md`, handoffs) e o próprio item cita o hash. Apagar
-prova por artefato — `git merge-base --is-ancestor <hash> main` —, nunca pelo rótulo do PR.
-⚠️ `- [x]` não existe neste arquivo: caixa marcada era uma segunda convenção de fechamento,
-invisível para a triagem do kaizen, que procura `RESOLVIDO por` no corpo.
+O item **cabe em ~6 linhas** (teto duro de 8, medido por `tests/check-todo.sh`); a análise longa
+mora no handoff da missão citada — duplicá-la aqui foi o que levou este arquivo a 861 linhas.
+Consertado por commit, o corpo ganha `RESOLVED by <hash>` (token do kit, igual em todo idioma) e o
+item **é apagado** depois do merge, provado por `git merge-base --is-ancestor`, nunca pelo rótulo do
+PR; refutado ou decidido, vira uma linha na seção decidida, porque não há commit que o feche e a
+próxima QA o registraria de novo. A regra inteira mora no template; aqui fica o porquê.
 
 **Nem tudo que é verdade é achado — a régua de admissão (D15).** Um achado entra no `TODO.md`
 quando **o sensor afirma medir o que não mede** (fail-open) ou quando **o defeito tem consumidor
@@ -171,8 +167,8 @@ só que o número passa a se mover num diff com autor, em vez de derivar. Medido
 duas missões, 16 fechados contra 29 nascidos, e nenhum instrumento dizia. A catraca mora no
 `sdd health` e **não** no `TEST_CMD` de propósito: um teto dentro da suíte reprovaria
 `gate_EXEC`/`QA`/`REVIEW` de toda missão em voo, inclusive a que acabou de registrar o achado.
-⚠️ A contagem sai de `tests/check-todo.sh` e nunca de um `grep -c` novo — o `grep` responde um a
-mais, porque conta a linha de exemplo do cabeçalho.
+⚠️ A contagem sai de `tests/check-todo.sh` e nunca de um `grep -c` novo — o `grep` não sabe onde a
+seção aberta termina.
 
 **6. YAGNI.** Sem daemon, sem UI, sem banco, sem servidor. Um script bash, seis markdowns e
 templates. Se a solução pede infraestrutura, provavelmente é a solução errada.
@@ -291,7 +287,13 @@ pelo log — o "meia hora" que esteve escrito aqui nunca foi medido) respondeu `
 nomeou ninguém; os dois eram âncoras quebradas por merges do mesmo dia, achadas em 20 s.
 ⚠️ **Sob `SDD_MUTANT` a suíte para no primeiro sensor vermelho** (`run()` do `tests/run-all.sh`),
 porque o catálogo só lê o rc: amostra de 40 mutantes, mediana 226 s → 133 s, 40 de 40 pegos antes
-e depois. Fora de mutante nada para cedo. O resto do custo é a coordenação por chamada (`TODO.md`). É a única exceção à regra 4 da superfície (`tests/check-health.sh`): o sensor é invocado
+e depois. Desde 2026-09-25 o **sensor** também para no primeiro `fail()` sob `SDD_MUTANT` (nove
+sensores; o censo do `check-health.sh` os segura), e quem chama a própria primitiva de falha de
+propósito — o controle negativo do `check-coordination.sh`, o filho do selftest do `check-hat.sh` —
+faz essa chamada fora do mutante. Fora de mutante nada para cedo. **E o passo que matou o mutante
+na rodada anterior roda primeiro** (`SDD_MUTANT_FIRST`, mapa em `.sdd/cache/mutation-killers.tsv`, fora da chave do
+carimbo): mesma amostra, relógio 389 s → 171 s, 0 de 40 vereditos diferentes. O mapa é dica de
+ordem, nunca de veredito, e a 1ª rodada sem ele custa como antes. O resto do custo é a coordenação por chamada (`TODO.md`). É a única exceção à regra 4 da superfície (`tests/check-health.sh`): o sensor é invocado
 duas vezes, uma como catálogo e outra como `--anchors`, e a regra conta as duas por ocorrência.
 
 ⚠️ **A lacuna que o opt-in abriu está fechada desde `c962e2e`, e não por CI — por artefato.** Ela
@@ -301,7 +303,7 @@ REVIEW e de PR rodaram a suíte rápida, responderam verde, e a `main` carregou
 quando o catálogo volta verde, e o `gate_PR` **exige o carimbo**; o gate nunca roda o catálogo, que
 é exatamente o que `4c86712` desfez. Verbete "Carimbo de mutação" no `CONTEXT.md`, desenho e
 alternativas descartadas em [`docs/adr/0004`](docs/adr/0004-mutation-catalogue-owner-stamp-not-ci.md).
-⚠️ **Consequência operacional que custa 20 a 50 min quando se erra a ordem:** a chave é o conteúdo
+⚠️ **Consequência operacional que custa um `sdd health` a mais (~18 min desde o PR #170; antes, 20 a 50) quando se erra a ordem:** a chave é o conteúdo
 de `bin/ tests/ templates/ config/`, então `./bin/sdd health` roda **depois do último commit de
 código**. `CLAUDE.md`, `CONTEXT.md`, `docs/` e `TODO.md` não invalidam — mas
 `tests/health-baseline.txt` invalida, e é lá que a catraca do backlog mora, então registrar achado
