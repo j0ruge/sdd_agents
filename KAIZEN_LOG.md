@@ -4,6 +4,55 @@ Registro de melhorias com **antes/depois medido**. Sem número, não entra.
 
 ---
 
+## 2026-09-26 — A carona antes do congelamento
+
+**Problema (Gemba):** o último PR antes de congelar o kit para a janela do juiz levava seis frentes
+medidas em `3c44df8`: as issues #50, #51 e #52, as lacunas 2 e 3 de portabilidade (F4) e a faxina
+pós-#57 (F2). Todas falhavam do mesmo jeito caro: um vermelho falso ou um verde falso que compra
+uma volta paga, culpa o dono errado ou corrompe a base de um repo novo por omissão.
+
+**Medição:** cada fato binário da métrica do `00-missao.md`, lido por asserção da suíte nos dois
+lados (vermelho observado antes do código, verde depois), e cada mutante novo provado pela receita
+M numa cópia do kit.
+
+| Fato | Antes (`3c44df8`) | Depois |
+|---|---|---|
+| `**Spec:** <caminho>` e caminho entre crases no ADR | reprova: "points somewhere else" (valor lido `**` ou com as crases) | passa, como `**Spec**:` |
+| Valor de `Spec:` que não é caminho (ou vazio) | "points somewhere else" / "has no 'Spec:' line" | "not a path", com o remédio |
+| Nota `` `A` `` no `gate_REVIEW` | REVIEW, "Security = `A`" | DOCS; `` `B` `` segue reprovando como `Security = B` |
+| Status `` `✅` `` / `**n/a**` no `gate_DOCS` | pendentes | completos; `` `✗` `` segue pendente |
+| `sdd approve` sem nenhum caractere no stdin | rc 0, "not approved" (igual a um N) | **rc 66**, nada escrito; `n` e Enter seguem rc 0 |
+| Commit sem o rótulo da sessão, fora do `writes:` | `hat-crossed` (o chapéu levava a culpa) | **`foreign-commit`**, com sha e assunto no journal; com o rótulo, `hat-crossed`; sem reflog, como antes |
+| `JIRA_ENABLED=false` e `branch:` vazio ou placeholder | EXEC, commitando onde o humano estiver | **PLAN**, com o remédio; com o Jira ligado, TICKET |
+| stdin do `TEST_CMD` | herdado do runner (o probe lia a linha e saía 4) | `/dev/null` nos gates, no `E2E_CMD` e no preflight |
+| ADRs 0010, 0011, 0012 | `proposed` | `accepted` |
+| `todo-findings` | 82 | **83** (−1 pago em `3245bfd`, +2 lacunas 4 e 5) |
+| Catálogo de mutação | 406 | **419** (13 novos, cada um vermelho pela receita M) |
+
+**Contramedida:** poka-yoke primeiro. A grafia idiomática vira regra (`ADR_LINK_POST` com o `**`
+dos dois lados, a crase tirada do valor, da nota e do Status); "ninguém respondeu" vira rc; a
+atribuição do commit vira artefato — `GIT_REFLOG_ACTION=sdd:<passo>:<sid8>` em toda sessão
+(`session_git_label`) e a janela lida do reflog de `HEAD` (`hat_reflog_window`), ADR 0012; a lacuna
+2 vira gate, no dono do campo (`sdd-planner`, com o humano); a lacuna 3 vira uma redireção no único
+ponto por onde os três caminhos passam. A regra da lacuna 2 derrubava 296 asserções num protótipo
+por fixtures sem `branch:` — consertados os fixtures, em seis sensores, nenhuma asserção afrouxada.
+
+**Achados durante a execução:** (1) o mutante do `core.quotePath`, ancorado só no diff do
+`hat_guard_check`, teria sobrevivido, porque o regime do nome não-ASCII passou a andar pela janela
+do reflog — a saída foi uma definição só (`hat_diff_names`) para a janela e o fallback; (2) a
+diferencial do aviso de branch base comparava duas projeções e o rótulo carrega o sid fresco — o
+`no_uuid` normaliza os 8 hex, e o passo continua comparado; (3) a regra do session id no
+`check-dry-run.sh` casava o prompt ("in this session:") e contava zero com o código certo — âncora
+na linha do cabeçalho; (4) o slug desta missão não entra na prosa inglesa, porque `antes` é
+stopword do `check-lang.sh`.
+
+**Limite declarado:** o rótulo é atribuição, não prova — um git que sobrescreve o
+`GIT_REFLOG_ACTION` (`rebase`, `pull`) troca o `kind` e nunca a parada; sujeira **não commitada**
+de um escritor concorrente segue atribuída ao chapéu; a guarda de kit não lê o rótulo (o item do
+`kit-touched` segue no `TODO.md`).
+
+---
+
 ## 2026-09-25 — O sensor para no primeiro FAIL
 
 **Problema (Gemba):** depois do #168 cada mutante roda primeiro o passo que o matou da última vez,

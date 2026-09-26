@@ -241,14 +241,6 @@ Achados sobre **repos-alvo** vão para o `TODO.md` daquele repo. Este arquivo é
   Direção: o `starter.conf` sugerir o `--check` do kit no `TEST_CMD` do alvo.
   — descoberto por `humano` revisando o sensor novo (2026-08-16)
 
-- [ ] **A economia de `current_phase()`/`next_pending_phase()` depende da memoização e ninguém
-  conta** — `bin/sdd:1780` vs `:675` — as duas reavaliam o gate de toda fase a cada
-  chamada, e isso só é barato porque `run_check_cmd` cacheia por `$cmd`. Quem mexer em **quando**
-  `invalidate_checks` roda reintroduz N execuções de `TEST_CMD` por projeção, em silêncio.
-  Direção: `TEST_CMD` que incrementa contador em arquivo, afirmando que o número não cresce com
-  o número de fases pendentes. — descoberto por `sdd-reviewer` na missão
-  `20260815-i13.1-autonomy-log` (2026-08-15)
-
 - [ ] **A asserção `the retry carries its own moved` não falha pela propriedade que promete** —
   `tests/check-autonomy.sh:427` — no fixture, `moved` sai `false` com qualquer baseline: o retry
   só é alcançado quando `before == after`, então a asserção nunca observa um `moved:true` genuíno
@@ -467,6 +459,14 @@ Achados sobre **repos-alvo** vão para o `TODO.md` daquele repo. Este arquivo é
   — descoberto por `sdd-qa` na missão `20260901-o-revisor-so-acha` (2026-09-01); config por
   `claude` na missão `20260924-transacao-honra-o-timeout` (2026-09-24)
 
+- [ ] **Com os chapéus ligados por symlink, o `sdd install --force` de outro kit escreve no kit
+  ligado** — `bin/sdd:4488` (`updated (--force)`) — o `sdd-link-agents` troca as cópias de
+  `.claude/agents/` por symlinks para o kit, e um `cp` sobre symlink escreve no **destino** (medido
+  num scratch). Um `install --force` rodado de outra worktree do kit, ou de uma versão instalada,
+  reescreve os chapéus do kit ligado; o install não é sessão e não passa pela guarda de kit.
+  Direção: `cp --remove-destination`, ou recusar quando o alvo é symlink.
+  — descoberto por `sdd-planner` na missão `20260926-a-carona-antes-do-congelamento` (2026-09-26)
+
 ### Saída humana e cosmética
 
 - [ ] **35% do `docs/pipeline.md` é um subsistema só, e ele cresce toda missão do ledger** —
@@ -497,6 +497,13 @@ Achados sobre **repos-alvo** vão para o `TODO.md` daquele repo. Este arquivo é
   `block` mandaria as 14 de volta para PLAN. Direção: o humano mapeia as sete, `sdd adr new --spec`
   escreve os dois lados, o resto vira `adr: none`, e aí a chave volta para `block`. — descoberto
   por `codereview` na missão `20260917-o-numero-do-adr-nao-e-prosa` (2026-09-17)
+
+- [ ] **A prosa dos chapéus ainda cita o `sales_quote`** — `agents/sdd-docs.md:78`
+  (`packages/x/serializer.ts`) — o exemplo da tabela de drift é um caminho daquele repo, e o
+  `sdd-docs.md` e o `sdd-reviewer.md` mandam ler `KAIZEN_LOG.md`, `CHANGELOG.md` e `CONTEXT.md`,
+  que nenhum gate exige e que um repo novo não tem. É ruído de prompt, não falha: a sessão procura
+  e não acha. Direção: neutralizar o exemplo e condicionar a leitura à existência do arquivo.
+  — descoberto por `sdd-planner` na missão `20260926-a-carona-antes-do-congelamento` (2026-09-26)
 
 ### Comentário e registro
 

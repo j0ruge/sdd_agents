@@ -1,6 +1,6 @@
 # ADR 0012 — A session's git moves carry its label, and a commit without it is not the hat's
 
-- **Status**: proposed (—, 2026-09-26)
+- **Status**: accepted (—, 2026-09-26)
 - **Spec**: docs/handoffs/20260926-a-carona-antes-do-congelamento/00-missao.md
 
 ## Context
