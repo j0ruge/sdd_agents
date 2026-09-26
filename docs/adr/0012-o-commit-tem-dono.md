@@ -1,0 +1,95 @@
+# ADR 0012 — A session's git moves carry its label, and a commit without it is not the hat's
+
+- **Status**: proposed (—, 2026-09-26)
+- **Spec**: docs/handoffs/20260926-a-carona-antes-do-congelamento/00-missao.md
+
+## Context
+
+Since `20260903-a-fronteira-do-chapeu` the runner stops the line when a session writes outside its
+hat's `writes:`. `hat_guard_check` (`bin/sdd`, at `3c44df8`) reads two halves: the paths of
+`git diff --name-only <HEAD before the session> <HEAD after it>`, and the new entries of
+`git status`. Every path either half returns is attributed to the session.
+
+The diff half measures the WINDOW, not the SESSION. Issue #51, measured in `lighthouse_project`: a
+human committed a one-line ADR fix from a separate session, in the same working tree, while the
+TICKET phase ran. The phase had done its work (issue created, branch cut, `10-ticket.md` written),
+and the line stopped with `hat-crossed` and two remedies that were both wrong: restore the path by
+hand, or widen `HAT_WRITES_EXTRA`. The second one would weaken a real guard for good to silence a
+transient race. The ledger row it left is read by the judge as friction of the kit version.
+
+The checkout lock of PR #48 does not cover this. It admits entries of the kit (`coordination_enter`)
+and says so: it coordinates the kit's own commands, not external edits.
+
+Two facts decided the mechanism, both measured on 2026-09-26:
+
+- **The session transcript cannot attribute a commit.** The executor commits with `git commit -q`.
+  In the 8 most recent EXEC streams of `sales_quote` there are 12 `git commit` tool calls, all 12
+  with `-q`, and 0 commit SHAs printed.
+- **The reflog can.** With `GIT_REFLOG_ACTION` in the environment, git 2.43.0 writes that label into
+  the reflog entry of `commit`, `commit --amend`, `checkout` and `reset`:
+  `sdd-session abc123: session commit` for the labelled commit, `commit: human commit` for the one
+  made without it. The reflog of `HEAD` is per worktree, so a concurrent writer in the same checkout
+  lands in the same log, and a writer in another worktree does not.
+
+## Decision
+
+1. **Every session runs with a label.** `run_phase` and `cmd_close` start `claude` with
+   `GIT_REFLOG_ACTION=sdd:<step>:<first 8 characters of the invocation id>`. One definition
+   (`session_git_label`) spells it, and `run_phase` publishes it as `LAST_PHASE_GIT_LABEL`.
+2. **The guard reads the window through the reflog.** `hat_guard_arm` records the newest reflog
+   entry of `HEAD` before the session. `hat_guard_check` takes the entries written after it. An
+   entry that carries the session's exact label is the session's: its paths (`git diff --name-only
+   <old> <new>` of that entry) are checked against `writes:` as today. An entry without the label is
+   **foreign**.
+3. **A foreign commit that touched a path outside `writes:` still stops the line**, with its own
+   ledger `kind`, `foreign-commit`. The reason names the commit (sha and subject), and the remedy is
+   the right one: nothing commits into this checkout while a phase runs, then `sdd run` again. A
+   foreign commit that stayed inside `writes:` is not a stop, exactly as today.
+4. **When the reflog cannot account for the move, nothing changes.** No reflog, the recorded entry
+   no longer found, or HEAD moved with no new entry (`core.logAllRefUpdates=false`): the guard falls
+   back to today's range diff, and every path is the session's.
+5. **The kit guard does not move to the label.** `kit_guard_check` stays as it is, and the finding
+   about the `kit-touched` attribution stays open in `TODO.md`.
+
+## Implementation
+
+Planned shape; I3 and I4 of the mission confirm it or correct this section in the same commit.
+
+- `hat_guard_arm` records the newest entry of `git reflog show --date=unix
+  --format='%gd%x09%H%x09%gs' HEAD` and the number of entries. `hat_guard_check` requires that
+  exactly that line sits right below the new entries; otherwise it falls back.
+- The old sha of each new entry is the new sha of the entry below it; for the oldest new entry it is
+  the recorded one. Paths come from `git diff --name-only <old> <new>` per entry, so a session commit
+  made on top of a foreign one is diffed against the foreign one.
+- `FOREIGN_COMMIT_WHY` is the new marker. It is reset at the entry of its only setter,
+  `hat_guard_check`, and read by `hat_crossed_escalation`, the door the other two markers already
+  use, in its four call sites. `HAT_CROSSED_WHY` wins when both are armed.
+
+## Alternatives discarded
+
+- **Keep the range diff and only improve the message.** It names the commits in the window and adds
+  the concurrent-writer remedy, and it still records the human's commit as `hat-crossed`. The judge
+  would keep reading it as friction of the version.
+- **Attribute by the SHAs the session printed.** 0 of the 12 commits in those 8 streams printed
+  one, because `git commit -q` prints nothing. Anything the session does not print escapes the attribution.
+- **Ask the session to commit with `--trailer`.** That is a sentence in a prompt, and the kit already
+  learned that a prompt sentence is a reminder, not a rule. A session that forgets the trailer would
+  be blamed or cleared by accident, and the human's commits carry no trailer either way.
+- **Warn and do not stop on a foreign commit.** A session that strips its own label would then cross
+  its hat without stopping the line. Stopping keeps that path fail-safe: an evasion changes the
+  `kind`, never the stop.
+
+## Consequences
+
+- A commit made from another session during a phase stops the line as `foreign-commit`, with the
+  commit named and the remedy that fits. The human's commit no longer reaches the judge as the hat's
+  crossing.
+- `foreign-commit` joins the open tail of the ledger `kind` column. The readers group by `kind`
+  dynamically, so the new value is counted without a code change on their side;
+  `docs/pipeline.md` and `config/schema.md` list it.
+- Declared limits, written in the header of `hat_guard_check`:
+  - a git command that overwrites `GIT_REFLOG_ACTION` itself writes an unlabelled entry, and the
+    session's own move reads as foreign. The line still stops; only the `kind` is wrong;
+  - uncommitted edits of a concurrent writer still land in the `git status` half and are still
+    attributed to the session;
+  - `cmd_kaizen` exports the label through `run_phase` and is still not guarded, as before.
