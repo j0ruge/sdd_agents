@@ -54,6 +54,13 @@
 #      stamp. `of 0` satisfies assertion 14's `caught == of` perfectly — an empty loop printing the
 #      greenest line the command has — and it used to reach `kit healthy` and write the stamp that
 #      opens gate_PR.
+#   17. inside a mutant the SUITE stops at its first red step, and the step that killed the mutant
+#      last time runs first (SDD_MUTANT_FIRST); outside one every step runs, in order. Prefixed
+#      `surface:` — the catalogue reads only the suite's rc, so these are about what that rc costs.
+#   18. inside a mutant every SENSOR stops at its first red assertion: a CENSUS over the steps
+#      `SDD_MUTANT=1 run-all.sh --list` prints, calling each failure primitive with SDD_MUTANT set,
+#      unset and empty (floor 9, five known worlds measured first), plus the two sensors that call
+#      their own primitive on purpose asserted to do it outside the mutant. Prefixed `surface:`.
 #
 # Usage: tests/check-health.sh   (exit 0 = cmd_health discriminates)
 #
@@ -100,8 +107,10 @@ trap 'rm -rf "$WORK"' EXIT
 
 fails=0
 pass() { printf '  ok    %s\n' "$1"; }
+# Inside a mutant the first red assertion is the verdict: fail() ends the sensor there, AFTER
+# printing, so the mutant's log still names it. The census in check-health.sh holds all nine.
 fail() { printf '  FAIL  %s\n         expected: %s\n         got:      %s\n' "$1" "$2" "$3" >&2
-         fails=$((fails + 1)); }
+         fails=$((fails + 1)); [ -z "${SDD_MUTANT:-}" ] || exit 1; }
 
 # SENSOR-BROKEN is not an assertion failure. It means the fixture stopped modelling the world, so
 # every verdict below would be a verdict about nothing — counting it as one red assertion among
@@ -1400,6 +1409,183 @@ else
   fail 'surface: outside a mutant SDD_MUTANT_FIRST changes nothing' \
        "rc $FIRST_PLAIN_RC and exactly the order of the plain run without it" \
        "rc $FAILFAST_RC, steps: $(tr '\n' ' ' <<< "$FAILFAST_STEPS")"
+fi
+
+# ---------------------------------------------------------------------------
+# surface: inside a mutant every sensor stops at its FIRST red assertion
+#
+# The catalogue reads the suite's rc and nothing else, and a sensor that called fail() once has
+# already decided that rc: everything it runs after is paid and read by no one. Measured on 24
+# mutants of 8f2f2a9 (2026-09-25): the first FAIL lands, on the median, halfway through the killing
+# sensor — 1328.7 s of sensor against 624.4 s up to the first FAIL. So each sensor that runs inside
+# a mutant ends at its first fail() when SDD_MUTANT is set, AFTER printing it: the mutant's log still
+# names what killed it, and killer_of reads the step off that log.
+#
+# A CENSUS, not a sample. The population is read off the suite itself — every step
+# `SDD_MUTANT=1 run-all.sh --list` prints, joined to the tests/check-*.sh its `run` line executes —
+# and every one of those files that defines a bash `fail() {` or a Python `def check(` is measured.
+# Each definition is sourced (the killer_of guard: one short, closed block, or SENSOR-BROKEN) and
+# called three times: under SDD_MUTANT=1 it must exit 1 with the FAIL already printed; with the
+# variable unset, and set to the empty string, it must return with its counter up by one. A new
+# sensor that runs inside mutants and forgets the clause turns this red, because the census walks
+# the suite instead of a table somebody has to remember to extend.
+# Outside the census, declared in CENSUS_EXEMPT below: check-entrypoint.sh and check-templates.sh run
+# inside mutants with no single failure primitive (1 and 0 kills in the map of 2026-09-25, ~0.5 s
+# each). Not measured here, and said: a fail() called inside a subshell would stop only the subshell — no such call
+# exists today, and one would already lose its `fails` count; the census cannot see call sites.
+# CENSUS_FLOOR is the nine of 2026-09-25 (autonomy, gates, kaizen, preflight, health, adr, hat,
+# dry-run, coordination): the list or the join to tests/ that stops reading the suite fails loudly.
+# ---------------------------------------------------------------------------
+CENSUS_FLOOR=9
+# The two declarations the walk needs, in code and not only in prose: the mutant steps that run no
+# tests/check-*.sh, and the sensors that run inside mutants with no single failure primitive. A
+# step or a sensor in neither list and with no primitive the census knows is SENSOR-BROKEN, never
+# skipped — the promise above is kept by refusing what the walk cannot classify.
+CENSUS_NOT_SENSORS=$'runner syntax (bash -n)\ncoordination helper syntax'
+CENSUS_EXEMPT=$'check-entrypoint.sh\ncheck-templates.sh'
+census_join() { # census_join <run-all.sh> — the file with every `\`-continued line joined onto one
+  sed -e ':a' -e '/\\$/N; s/[[:space:]]*\\\n[[:space:]]*/ /; ta' "$1"
+}
+census_file_of() { # census_file_of <step title> <joined run-all> — the tests/check-*.sh it runs
+  local hits
+  hits="$(grep -F -- "run \"$1\" \"\$ROOT/tests/check-" <<< "$2" \
+          | sed -n 's|.*"\$ROOT/tests/\(check-[a-z-]*\.sh\)".*|\1|p')" || true
+  printf '%s' "${hits%%$'\n'*}"
+}
+census_kind_of() { # census_kind_of <step> <joined run-all> <tests dir> — skip | exempt <f> | bash <f> | py <f> | unknown <why>
+  local f
+  if grep -qxF -- "$1" <<< "$CENSUS_NOT_SENSORS"; then echo skip; return; fi
+  f="$(census_file_of "$1" "$2")"
+  if [ -z "$f" ]; then echo "unknown step '$1' joins to no tests/check-*.sh and is not declared a non-sensor"
+  elif grep -q '^fail() {' "$3/$f"; then echo "bash $f"
+  elif grep -q '^def check(' "$3/$f"; then echo "py $f"
+  elif grep -qxF -- "$f" <<< "$CENSUS_EXEMPT"; then echo "exempt $f"
+  else echo "unknown $f defines neither 'fail() {' nor 'def check(' and is not declared exempt"; fi
+}
+census_src() { # census_src <file> <bash|py> — the definition, printed only when short and closed
+  local src n
+  if [ "$2" = bash ]; then
+    src="$(awk '/^fail\(\) \{/ { p = 1 } p { print; if ($0 ~ /\}[[:space:]]*$/) exit }' "$1")"
+    n="$(grep -c . <<< "$src")"
+    [ -n "$src" ] && [ "$n" -le 8 ] && [ "${src: -1}" = '}' ] || return 1
+    # "Closed" is the parser's word, not the last character's: a line like `local m=${1}` ends
+    # in `}` too, and the awk above would stop there.
+    bash -n <<< "$src" 2>/dev/null || return 1
+  else
+    src="$(awk '/^def check\(/ { p = 1 } p { if ($0 ~ /^[[:space:]]*$/) exit; print }' "$1")"
+    n="$(grep -c . <<< "$src")"
+    [ -n "$src" ] && [ "$n" -le 16 ] || return 1
+  fi
+  printf '%s\n' "$src"
+}
+census_call() { # census_call <bash|py> <definition> <SDD_MUTANT value | UNSET> — "rc=<n> said=<n> back=<n>"
+  local out rc=0 prog
+  if [ "$1" = bash ]; then
+    # PROBES is read by check-adr.sh's fail(), which the eval below defines. THIS file's fail() is
+    # unset first and a failed eval is loud: otherwise the probe calls the outer fail(), which
+    # carries the clause, and certifies a sensor that has none.
+    # shellcheck disable=SC2034
+    out="$( { fails=0; PROBES=0
+               unset -f fail
+               eval "$2" || { printf 'EVAL-BROKEN\n'; exit 97; }
+               if [ "$3" = UNSET ]; then unset SDD_MUTANT; else export SDD_MUTANT="$3"; fi
+               fail 'census probe' x y
+               printf 'back=%s\n' "$fails"; } 2>&1 )" || rc=$?
+  else
+    prog="$(printf 'import os, sys\npassed = failed = 0\n%s\ncheck("census probe", False, "x")\nprint("back=%%d" %% failed)\n' "$2")"
+    if [ "$3" = UNSET ]; then out="$(env -u SDD_MUTANT python3 -c "$prog" 2>&1)" || rc=$?
+    else out="$(SDD_MUTANT="$3" python3 -c "$prog" 2>&1)" || rc=$?; fi
+  fi
+  printf 'rc=%s said=%s back=%s\n' "$rc" "$(grep -c 'FAIL  census probe' <<< "$out" || true)" \
+         "$(grep -c '^back=1$' <<< "$out" || true)"
+}
+# The census measures itself first, on worlds whose answer is known (the negative control of
+# CLAUDE.md). Each probe names the fail-open it closes: found by the final review of this branch,
+# reproduced, and red here before the fix.
+census_box="$WORK/census"
+mkdir -p "$census_box"
+# 1. A clause-less fail() reads as clause-less: census_call measures the definition it was handed.
+census_noclause=$'fail() { printf \'  FAIL  %s\\n\' "$1" >&2\n         fails=$((fails + 1)); }'
+[ "$(census_call bash "$census_noclause" 1)" = 'rc=0 said=1 back=1' ] \
+  || broken "census: a fail() with no clause did not read as one — census_call measures something else"
+# 2. A definition that does not parse never borrows THIS file's fail(), which carries the clause:
+#    the eval failed, the group went on, and the outer fail() certified a sensor with no clause.
+[ "$(census_call bash 'fail() { local m=${1}' 1)" != 'rc=1 said=1 back=0' ] \
+  || broken "census: a definition that does not parse was certified — census_call fell back to this file's own fail()"
+# 3. census_src refuses a fail() cut at an inner `}` (the line `local m=${1}` ends in one) instead
+#    of handing out the first line as if it were the whole, closed definition.
+printf 'fail() { local m=${1}\n  printf "  FAIL  %%s\\n" "$m" >&2\n  fails=$((fails + 1)); }\n' > "$census_box/check-cut.sh"
+if census_src "$census_box/check-cut.sh" bash >/dev/null; then
+  broken "census: census_src handed out a fail() cut at an inner } — it must refuse what does not parse"
+fi
+# 4. A `run` line wrapped with \ is joined to its file: the house style for a long title, and a
+#    tenth sensor written that way was listed by --list and silently dropped by a one-line grep.
+printf 'run "a wrapped step" \\\n  "$ROOT/tests/check-wrapped.sh"\nrun "one line" "$ROOT/tests/check-oneline.sh"\n' \
+  > "$census_box/run-all.sh"
+printf 'fail() { :; }\n' > "$census_box/check-wrapped.sh"
+: > "$census_box/check-oneline.sh"
+census_fixture="$(census_join "$census_box/run-all.sh")"
+[ "$(census_file_of 'a wrapped step' "$census_fixture")" = check-wrapped.sh ] \
+  || broken "census: a run line wrapped with \\ was not joined to its file"
+# 5. The walk is exhaustive: a step it cannot join, and a joined file with no primitive that is
+#    not declared exempt, are unknown — never skipped in silence. A declared non-sensor is skipped.
+case "$(census_kind_of 'a step nobody declared' "$census_fixture" "$census_box")" in
+  unknown\ *) : ;; *) broken "census: a listed step joined to no file was skipped instead of refused" ;; esac
+case "$(census_kind_of 'one line' "$census_fixture" "$census_box")" in
+  unknown\ *) : ;; *) broken "census: a sensor with no failure primitive, not declared exempt, was skipped" ;; esac
+[ "$(census_kind_of 'a wrapped step' "$census_fixture" "$census_box")" = 'bash check-wrapped.sh' ] \
+  || broken "census: a wrapped step with a fail() was not classified as bash"
+[ "$(census_kind_of 'runner syntax (bash -n)' "$census_fixture" "$census_box")" = skip ] \
+  || broken "census: a declared non-sensor step was not skipped"
+
+CENSUS_RUNALL="$(census_join "$ROOT/tests/run-all.sh")"
+CENSUS_STEPS="$(SDD_MUTANT=1 "$ROOT/tests/run-all.sh" --list 2>/dev/null || true)"
+census_n=0
+while IFS= read -r census_step; do
+  [ -n "$census_step" ] || continue
+  census_class="$(census_kind_of "$census_step" "$CENSUS_RUNALL" "$ROOT/tests")"
+  case "$census_class" in
+    skip|exempt\ *) continue ;;
+    unknown\ *) broken "census: ${census_class#unknown }" ;;
+  esac
+  census_kind="${census_class%% *}"; census_f="${census_class#* }"
+  census_def="$(census_src "$ROOT/tests/$census_f" "$census_kind")" \
+    || broken "census: $census_f defines its failure primitive, but not as one short closed block — refusing to source it"
+  census_n=$((census_n + 1))
+  census_in="$(census_call "$census_kind" "$census_def" 1)"
+  census_out="$(census_call "$census_kind" "$census_def" UNSET)"
+  census_empty="$(census_call "$census_kind" "$census_def" '')"
+  if [ "$census_in" = 'rc=1 said=1 back=0' ] && [ "$census_out" = 'rc=0 said=1 back=1' ] \
+     && [ "$census_empty" = 'rc=0 said=1 back=1' ]; then
+    pass "surface: $census_f stops at its first FAIL inside a mutant, and only there"
+  else
+    fail "surface: $census_f stops at its first FAIL inside a mutant, and only there" \
+         "SDD_MUTANT=1: rc=1 said=1 back=0 · unset and empty: rc=0 said=1 back=1" \
+         "SDD_MUTANT=1: $census_in · unset: $census_out · empty: $census_empty"
+  fi
+done <<< "$CENSUS_STEPS"
+[ "$census_n" -ge "$CENSUS_FLOOR" ] \
+  || broken "census: $census_n sensor(s) with a failure primitive among the mutant steps, the floor is $CENSUS_FLOOR — the list or the join to tests/ stopped reading the suite"
+# A sensor that calls its own failure primitive on purpose runs that call outside the mutant.
+# The hat selftest runs its own --check as a child and demands the output NAME the broken rule: that
+# child measures the report a human reads, so it runs outside the mutant, where fail() never stops.
+if grep -qF 'out="$(env -u SDD_MUTANT "$ROOT/tests/check-hat.sh" --check' "$ROOT/tests/check-hat.sh"; then
+  pass 'surface: the hat selftest measures its report outside a mutant'
+else
+  fail 'surface: the hat selftest measures its report outside a mutant' \
+       'the selftest child of tests/check-hat.sh runs under env -u SDD_MUTANT' \
+       'the child inherits SDD_MUTANT, and a probe whose rule is named second would read red'
+fi
+# The same rule, second instance: check-coordination.sh opens with a negative control that calls a
+# red check() on purpose and needs it to RETURN, so it can read the accounting. Inside a mutant that
+# call ends the sensor with its stdout redirected — rc 1 and not one FAIL line. Measured on this
+# branch before the fix: `SDD_MUTANT=1 run-all.sh` red at "one checkout has one execution owner".
+if grep -qF 'mutant = os.environ.pop("SDD_MUTANT", None)' "$ROOT/tests/check-coordination.sh"; then
+  pass 'surface: the coordination negative control runs outside a mutant'
+else
+  fail 'surface: the coordination negative control runs outside a mutant' \
+       'the negative control of tests/check-coordination.sh pops SDD_MUTANT around its red check()' \
+       'the control inherits SDD_MUTANT, and the sensor exits 1 on the intact kit with nothing printed'
 fi
 
 # ---------------------------------------------------------------------------

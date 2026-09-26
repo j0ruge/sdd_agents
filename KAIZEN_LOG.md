@@ -4,6 +4,66 @@ Registro de melhorias com **antes/depois medido**. Sem número, não entra.
 
 ---
 
+## 2026-09-25 — O sensor para no primeiro FAIL
+
+**Problema (Gemba):** depois do #168 cada mutante roda primeiro o passo que o matou da última vez,
+mas **dentro** desse passo o sensor seguia rodando toda asserção depois do primeiro `fail()`. O
+catálogo só lê o rc da suíte, e um sensor que chamou `fail()` uma vez já o decidiu: o resto é pago
+e ninguém lê. Medido em 24 mutantes de `8f2f2a9`: o 1º FAIL sai, na mediana, na metade do sensor
+assassino. O carimbo levava 37 min 42 s e é a última coisa de todo merge do kit.
+
+**Medição:** amostra fixa de 24 mutantes de `8f2f2a9` (semente `20260925`), cada um numa sandbox
+igual à do `run_mutant`, 12 jobs, três rodadas.
+
+| | Antes (`8f2f2a9`) | Depois |
+|---|---|---|
+| Soma do passo assassino nos 24 mutantes | 1328,7 s | **570,9 / 570,5 / 574,0 s** (−57%) |
+| autonomy · gates · kaizen · preflight (1ª rodada) | 846,4 · 404,4 · 28,2 · 49,7 s | 400,8 · 144,1 · 11,8 · 14,1 s |
+| Controle do catálogo | serial, antes do pool (~3,9 min) | 1º job do pool, **rc 0 ×3** num pool de 12 |
+| Órfãos · linhas FAIL por mutante | — | 0 ×3 · 1 em cada uma das 26 rodadas |
+
+**Catálogo inteiro** (`sdd health`, 406 mutantes, 16 jobs, 406 de 406 e kit healthy nas duas):
+
+| | Antes | Depois |
+|---|---|---|
+| `sdd health` | 37 min 42 s (`cc03abd`, o último carimbo da `main`) | nº 1 **18 min 56 s** (`7bb0762`, ainda na ordem do catálogo) · nº 2 **18 min 14 s** (`f5f6aba`, o mais longo primeiro, carimbou) |
+
+**2,07× mais rápido** que o último carimbo da `main`. O mais longo primeiro rendeu só 42 s sobre o
+nº 1, e o mapa diz por quê: os 406 mutantes somam **12 031 s** (≈ 12,5 min em 16 jobs) e o mais
+longo leva 86 s, então a cauda do pool já era curta. O que sobra é a soma dos mutantes mais os
+~3,5 min da suíte rápida que o `sdd health` roda antes do catálogo: daqui em diante o ganho vem
+de baratear o mutante (P1 e P4 da gaveta), não de reordená-lo.
+
+**Contramedida:** sob `SDD_MUTANT` os nove sensores que rodam dentro de mutantes saem no primeiro
+`fail()` **depois de imprimi-lo** (oito `fail()` em bash e o `check()` do `check-coordination.sh`,
+cujo `finally` solta o helper e o lock), então o log do mutante ainda nomeia o assassino. Um censo
+comportamental no `check-health.sh` lê a população na própria suíte (`SDD_MUTANT=1 run-all.sh
+--list`, com as linhas continuadas juntadas), chama cada primitiva sob a variável definida, ausente
+e vazia, e mede a si mesmo em cinco mundos de resposta conhecida antes do laço; 13 sabotagens o
+deixam vermelho. O controle virou o 1º job do pool, e o mapa de assassinos ganhou a 3ª coluna (os
+segundos de cada mutante), com o mais longo lançado primeiro. Duas probes novas na `pool_selftest`,
+nascidas da revisão dos bots, seguram o controle ocupando uma vaga (`JOBS=1`) e o controle que morre
+sem rc parando o pool.
+
+**Achado durante a execução:** o controle negativo do `check-coordination.sh` chama `check(False)`
+de propósito e precisa que ele volte. Com a cláusula, `SDD_MUTANT=1 run-all.sh` ficou vermelho no
+kit intacto **e mudo**. Regra no `CLAUDE.md`: quem chama a própria primitiva de falha de propósito
+chama fora do mutante.
+
+**Achado consertando a revisão:** um job de fundo que termina antes de um `wait` sem argumento
+deixa o status na tabela, e o `wait -n` seguinte o devolve na hora (1 ms contra 300, bash 5.2).
+Com a vaga esperada antes do lançamento, o controle vermelho da `pool_selftest` sobrava assim no
+mesmo shell do pool real e contaria como vaga livre. `run_pool` começa por `jobs >/dev/null`.
+
+**Limite declarado:** `check-entrypoint.sh` e `check-templates.sh` rodam dentro de mutantes sem
+primitiva única de falha e ficam fora do censo (declarados em `CENSUS_EXEMPT`, ~0,5 s cada). Um
+`fail()` chamado dentro de um subshell pararia só o subshell; hoje não existe nenhum, e o censo não
+enxerga o ponto de chamada. O filho do hook que ignora SIGTERM é solto também no `finally` do
+coordination, provado por reprodução e **sem** probe durável: o mundo pede um mutante e um vermelho
+forçado ao mesmo tempo.
+
+---
+
 ## 2026-09-25 — O catálogo roda primeiro o passo que matou o mutante
 
 **Problema (Gemba):** desde o PR #59 cada mutante para no primeiro passo vermelho da suíte, mas os

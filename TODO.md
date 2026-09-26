@@ -41,7 +41,7 @@ Achados sobre **repos-alvo** vão para o `TODO.md` daquele repo. Este arquivo é
   — descoberto por `sdd-reviewer` na missão `20260826-o-laco-da-qa` (2026-08-26)
 
 - [ ] **O `stub-argv.txt` do `check-health.sh` nunca é apagado entre mundos de fixture** —
-  `tests/check-health.sh:222` — todo `health_run` sobrescreve, ninguém remove. Hoje não reproduz
+  `tests/check-health.sh:231` — todo `health_run` sobrescreve, ninguém remove. Hoje não reproduz
   fail-open (medido: sem chamada nenhuma à suíte, o arquivo some e a asserção acusa certo), mas no
   dia em que `cmd_health` ganhar um segundo caminho para a suíte a última escrita vence calada.
   Direção: apagar no `green_world`, como as outras fixtures fazem.
@@ -55,7 +55,7 @@ Achados sobre **repos-alvo** vão para o `TODO.md` daquele repo. Este arquivo é
   — descoberto por `sdd-reviewer` na missão `20260818-lote-facil` (2026-08-19)
 
 - [ ] **Nada impede a próxima invocação de `sdd health` sem `cd`, e ela mede a árvore de quem
-  chamou** — `tests/check-health.sh:291` — desde o F2 o `health_kit_root` deixa o diretório
+  chamou** — `tests/check-health.sh:300` — desde o F2 o `health_kit_root` deixa o diretório
   corrente escolher a árvore medida, então um chamador que não fixa o `cd` mede o que estiver em
   volta. Medido, não temido: o fixture do sensor passou a medir ESTE repo (catálogo real, 20 a 50
   min) e, dentro de uma sandbox do `check-mutation.sh`, recursaria num segundo catálogo por
@@ -64,7 +64,7 @@ Achados sobre **repos-alvo** vão para o `TODO.md` daquele repo. Este arquivo é
   missão `20260819-fecho-...` (2026-08-19)
 
 - [ ] **O carimbo de mutação cobre 4 dos 8 caminhos que a sandbox do catálogo copia** —
-  `bin/sdd:1595` contra `tests/check-mutation.sh:4518` — a chave lê `bin tests templates config`,
+  `bin/sdd:1595` contra `tests/check-mutation.sh:4666` — a chave lê `bin tests templates config`,
   mas `sandbox()` também copia `agents/`, `CLAUDE.md`, `TODO.md` e `docs/adr`. Mudança confinada a
   esses quatro mantém o carimbo válido sobre conteúdo que o catálogo de fato mede — a
   regra 12 do `check-health.sh` lê o `CLAUDE.md`. Estreitamento deliberado (a fase DOCS edita
@@ -73,14 +73,14 @@ Achados sobre **repos-alvo** vão para o `TODO.md` daquele repo. Este arquivo é
   `20260819-fecho-...` (2026-08-19)
 
 - [ ] **A alternativa `|| :` da guarda do `guard:` não tem probe** —
-  `tests/check-health.sh:1621` — a guarda aceita `(true|:)`, e só `|| true` tem mundo no `cap_world`.
+  `tests/check-health.sh:1807` — a guarda aceita `(true|:)`, e só `|| true` tem mundo no `cap_world`.
   Medido em 2026-09-25: tirar o `:` da alternância deixa o `check-health.sh` inteiro verde. Das quatro
   sobreviventes da r2, três fecharam em `a948f68` (piso exato de capturas, probe aritmético, lista
   `RULE_REPORTS`). Direção: um `cap_world` com `|| :` e o censo afirmado, como os vizinhos.
   — descoberto por `sdd-reviewer` na missão `20260818-lote-facil` (2026-08-19)
 
 - [ ] **O `guard:` é cego a helper `health_*()` definido fora da região** —
-  `tests/check-health.sh:1640` — a região vai de `# Sensor of the KIT` até `cmd_status()`, então um
+  `tests/check-health.sh:1826` — a região vai de `# Sensor of the KIT` até `cmd_status()`, então um
   `health_*()` definido depois dela não é censurado. A outra metade do achado (`if x=`, `local x=` e
   here-doc lidos como offender) fechou: as três formas são isentas e declaradas no cabeçalho da regra.
   Direção: censurar todo `health_*()` onde ele estiver.
@@ -102,7 +102,7 @@ Achados sobre **repos-alvo** vão para o `TODO.md` daquele repo. Este arquivo é
   mutação em duas. — descoberto por `sdd-reviewer` na missão `20260818-lote-facil` (2026-08-19)
 
 - [ ] **O piso do shim pré-2.31 prova que o shim é um git falso, não que o runner o consulta** —
-  `tests/check-autonomy.sh:4225` — o piso invoca `git` diretamente sob o `PATH` do shim, e nada
+  `tests/check-autonomy.sh:4227` — o piso invoca `git` diretamente sob o `PATH` do shim, e nada
   ancora no caminho de resolução do runner. Medido: trocar `git` por `/usr/bin/git` no
   `ledger_repo_root` E apagar a guarda deixa `check-autonomy.sh` inteiro verde, porque o shim segue
   um impostor correto que nunca é chamado. Direção: termo provando INTERCEPTAÇÃO — a resposta do
@@ -163,7 +163,7 @@ Achados sobre **repos-alvo** vão para o `TODO.md` daquele repo. Este arquivo é
   — descoberto por `sdd-executor` na missão `20260816-kit-como-alvo` (2026-08-16)
 
 - [ ] **A metade "nenhuma sessão foi gasta" do `assert_jidoka` é vácua** —
-  `tests/check-gates.sh:281` — ela grepa o marcador do stub (`the test invoked the real claude`)
+  `tests/check-gates.sh:283` — ela grepa o marcador do stub (`the test invoked the real claude`)
   na saída do `sdd run`, e `run_phase` manda stdout E stderr da sessão para o arquivo de log: o
   marcador nunca chega ao terminal, então a asserção fica verde tenha havido sessão ou não. É
   justamente o discriminador que o comentário acima dela chama de "o que 'no session spent'
@@ -178,7 +178,7 @@ Achados sobre **repos-alvo** vão para o `TODO.md` daquele repo. Este arquivo é
   de contagem falsa, como o `SDD_EP_FORCE_FAIL` da composição, com um probe por ramo.
   — descoberto por `sdd-reviewer` na missão `20260816-kit-como-alvo` (2026-08-16)
 
-- [ ] **O fixture de `stream-json` não tem checagem de proveniência** — `tests/check-autonomy.sh:127`
+- [ ] **O fixture de `stream-json` não tem checagem de proveniência** — `tests/check-autonomy.sh:129`
   — as três linhas replayadas pelos stubs foram copiadas de sessão real (CLI 2.1.233) e o comentário
   registra o comando, mas `health_provenance` (`bin/sdd:1405`) só confere as 3 fixtures de skill
   contra arquivo instalado. Se o CLI renomear `type`/`total_cost_usd`, o stub segue verde e o
@@ -194,7 +194,7 @@ Achados sobre **repos-alvo** vão para o `TODO.md` daquele repo. Este arquivo é
   ao fim da fase. — descoberto por `sdd-executor` na missão `20260816-runner-sem-dividas` (2026-08-16)
 
 - [ ] **Sensor pulado por `SDD_MUTANT` vira ponto cego sem aviso** — `tests/run-all.sh:224` —
-  sensores são pulados dentro do mutante (hoje o lint e os quatro de `:198-221`). É aposta que vence
+  sensores são pulados dentro do mutante (hoje o lint e os quatro de `:224-248`). É aposta que vence
   sozinha: no I3 o `check-preflight.sh`
   ganhou asserção de comportamento do runner, e a linha que o pulava virou a escondedora da única
   sensora de `RUN_install_no_guard`. O sintoma chega como "mutação não capturada", e o conserto
@@ -226,7 +226,7 @@ Achados sobre **repos-alvo** vão para o `TODO.md` daquele repo. Este arquivo é
   missão `20260816-runner-sem-dividas` (2026-08-16)
 
 - [ ] **A asserção "dry-run não toca no disco" promete mais do que entrega** —
-  `tests/check-dry-run.sh:177` (`does not touch the disk`) — roda sobre fixture parado em EXEC, cujo gate
+  `tests/check-dry-run.sh:179` (`does not touch the disk`) — roda sobre fixture parado em EXEC, cujo gate
   reprova antes de chegar ao `TEST_CMD`. Num fixture que alcance `gate_REVIEW`, o dry-run escreve
   `.sdd/logs/<missão>/gate-*-test-*.log` (reconfirmado no repo real, volta 2 da QA). Não é bug —
   é comportamento aceito e gitignored —, mas o nome garante mais que o teste. Direção: renomear
@@ -250,7 +250,7 @@ Achados sobre **repos-alvo** vão para o `TODO.md` daquele repo. Este arquivo é
   `20260815-i13.1-autonomy-log` (2026-08-15)
 
 - [ ] **A asserção `the retry carries its own moved` não falha pela propriedade que promete** —
-  `tests/check-autonomy.sh:424` — no fixture, `moved` sai `false` com qualquer baseline: o retry
+  `tests/check-autonomy.sh:426` — no fixture, `moved` sai `false` com qualquer baseline: o retry
   só é alcançado quando `before == after`, então a asserção nunca observa um `moved:true` genuíno
   pelo caminho real. Ainda pega campo ausente ou `moved` sempre-`true`; só o nome discrimina mais
   do que ela. — descoberto por `/codereview` na missão `20260815-i13.1-autonomy-log` (2026-08-15)
@@ -302,7 +302,7 @@ Achados sobre **repos-alvo** vão para o `TODO.md` daquele repo. Este arquivo é
   — descoberto por `sdd-qa` na missão `20260819-fecho-que-nao-mente` (2026-08-19)
 
 - [ ] **O piso do catálogo mora só no consumidor; quem imprime o `score:` segue sem nenhum** —
-  `tests/check-mutation.sh:4783` — com `CATALOG=()` o laço roda zero vezes, `errors` fica 0 e o
+  `tests/check-mutation.sh:4947` — com `CATALOG=()` o laço roda zero vezes, `errors` fica 0 e o
   arquivo imprime `score: 0 caught, 0 known gap(s), of 0` saindo 0. O F1 pôs o piso no `cmd_health`,
   hoje o único chamador — mas duas frases do próprio runner (`bin/sdd:5055` e `:5108`) mandam o
   operador rodar `tests/run-all.sh --with-mutation` à mão, e aí o verde volta a mentir.
@@ -349,7 +349,7 @@ Achados sobre **repos-alvo** vão para o `TODO.md` daquele repo. Este arquivo é
   — descoberto por `sdd-reviewer` na missão `20260901-o-revisor-so-acha` (2026-09-02)
 
 - [ ] **Comentário afirma que a segunda asserção é o que torna a primeira não-vácua, e não é** —
-  `tests/check-gates.sh:1163` — medido sob a sabotagem realista (`checkpoint_rows` cego a `R<n>`):
+  `tests/check-gates.sh:1165` — medido sob a sabotagem realista (`checkpoint_rows` cego a `R<n>`):
   só a primeira cai, e a segunda fica verde por um motivo diferente do alegado. É a classe
   *"comentário que afirma paridade não é paridade"* que o `CLAUDE.md` já nomeia. Direção: ou o
   comentário baixa a alegação, ou a asserção ganha o mundo que a distingue.
@@ -565,14 +565,6 @@ Achados sobre **repos-alvo** vão para o `TODO.md` daquele repo. Este arquivo é
   `sdd-executor` e `humano` nas missões `20260815-ledger-sem-ponto-cego` e no kaizen do
   paralelismo (2026-08-16)
 
-- [ ] **Sensor novo na suíte é multiplicador, não parcela: custa uma vez por mutante** —
-  `tests/run-all.sh:262` — `check-health.sh` roda em ~1,5 s sozinho e roda **dentro de cada
-  mutante**, hoje 81. Medido em passadas sequenciais e máquina quieta, `main` (`6d68dfc`) contra o
-  HEAD desta missão: **155,97 s → 210,81 s**, +55 s com 11 mutações a mais no mesmo diff (o +281 s
-  do EXEC não reproduz: era contenção). Direção: rodar por mutante só o sensor que o alcança.
-  RESOLVED by b874141 (o passo que matou o mutante roda primeiro; amostra de 40: 389 → 171 s).
-  — descoberto por `sdd-executor` na missão `20260817-catraca-do-backlog` (2026-08-17)
-
 ### Sem seção — chegaram depois da última classificação
 
 > ⚠️ Esta seção **chamava-se "Adiados por YAGNI"** e não guarda mais nenhum adiamento: os três que
@@ -663,7 +655,7 @@ Achados sobre **repos-alvo** vão para o `TODO.md` daquele repo. Este arquivo é
   branch é o `DEFAULT_BRANCH`, e commitar o diretório da missão inteiro.
   — descoberto por `sessão coordenadora` na missão `20260922-o-motivo-da-fase` (2026-09-22)
 
-- [ ] **`check-coordination.sh` reprova quando herda SIGINT ignorado** — `tests/check-coordination.sh:616`
+- [ ] **`check-coordination.sh` reprova quando herda SIGINT ignorado** — `tests/check-coordination.sh:632`
   — o probe `signal status` (sinal 2) manda SIGINT ao `sdd run` e espera a morte; lançada com `&` de shell
   não interativo (o `setsid nohup … &` que se usa para `sdd run`), a suíte nasce com `SigIgn 0x7`, o
   bash não desfaz sinal ignorado na entrada, e o probe estoura 8 s: vermelho 3 de 3, verde 3 de 3 em

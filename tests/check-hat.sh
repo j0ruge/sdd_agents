@@ -42,7 +42,14 @@ HAT_FLOOR=8
 PLACEHOLDERS='HANDOFF_DIR|MISSION|TODO_FILE|QA_DOCS_PATH|E2E_DIR|ADR_DIR'
 fails=0
 pass() { printf '  ok    %s\n' "$1"; }
-fail() { printf '  FAIL  %s\n' "$1" >&2; fails=$((fails + 1)); }
+# Inside a mutant the first red assertion is the verdict: fail() ends the sensor there, AFTER
+# printing, so the mutant's log still names it. The census in check-health.sh holds all nine.
+fail() { printf '  FAIL  %s\n' "$1" >&2; fails=$((fails + 1)); [ -z "${SDD_MUTANT:-}" ] || exit 1; }
+# That exit can land inside a probe function, before the `rm -rf "$box"` at its tail: measured on
+# the health of 2026-09-25, each of the 14 mutants this sensor kills left its box in /tmp. Every box
+# is registered here as well, and the EXIT trap removes whatever a stopped probe left behind.
+PROBE_BOXES=()
+trap 'rm -rf ${PROBE_BOXES[@]+"${PROBE_BOXES[@]}"}' EXIT
 
 # fm_value <file> <key> — the frontmatter value, quotes stripped; prints the sentinel when absent
 ABSENT='@absent@'
@@ -114,7 +121,8 @@ selftest() {
   probe() {
     local desc="$1" want="$2" body="$3" needle="${4-}" got out
     printf '%s\n' "$body" > "$box/sdd-probe.md"
-    out="$("$ROOT/tests/check-hat.sh" --check "$box/sdd-probe.md" 2>&1)"; got=$?
+    # Outside a mutant on purpose: this child measures the report a human reads, every rule named.
+    out="$(env -u SDD_MUTANT "$ROOT/tests/check-hat.sh" --check "$box/sdd-probe.md" 2>&1)"; got=$?
     PROBES=$((PROBES + 1))
     local named=1
     if [ -n "$needle" ] && ! grep -qF -- "$needle" <<< "$out"; then named=0; fi
@@ -153,6 +161,7 @@ selftest() {
 boot_probes() {
   local box out out2 mdir
   box="$(mktemp -d "${TMPDIR:-/tmp}/sdd-boot-XXXXXX")"
+  PROBE_BOXES+=("$box")
   mdir="$box/docs/handoffs/20260101-n"
   mkdir -p "$mdir" "$box/.sdd"
   ( cd "$box" && git init -q -b main . ) >/dev/null 2>&1
@@ -266,6 +275,7 @@ EOF
 census_probes() {
   local box out
   box="$(mktemp -d "${TMPDIR:-/tmp}/sdd-census-XXXXXX")"
+  PROBE_BOXES+=("$box")
   ( cd "$box" && git init -q . && "$ROOT/bin/sdd" install >/dev/null 2>&1 \
       && printf 'PROJECT_NAME="census"\nDEFAULT_BRANCH="main"\nTEST_CMD="true"\nHANDOFF_DIR="docs/handoffs"\n' > .sdd/config.sh \
       && mkdir -p docs/handoffs/20260101-fixture && : > docs/handoffs/20260101-fixture/00-missao.md )
@@ -348,6 +358,7 @@ rel_red()   { grep -E "line $2 ·" <<< "$1" | grep -vcE "ok[^ ]*[[:space:]]+line
 release_probes() {
   local box ledger out rc
   box="$(mktemp -d "${TMPDIR:-/tmp}/sdd-release-XXXXXX")"
+  PROBE_BOXES+=("$box")
   ledger="$box/state/autonomy-log.jsonl"; mkdir -p "$box/state"
   cp -r "$ROOT/bin" "$ROOT/templates" "$ROOT/config" "$ROOT/agents" "$ROOT/tests" "$box/"
   mkdir -p "$box/.sdd"
