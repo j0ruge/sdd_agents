@@ -761,6 +761,17 @@ mut_DOCS_pending_status() {   # accepts an area with Status '✗' in the drift c
   sed -i 's|.*\[ -n "\$pending_cell" \].*|  if false; then|' "$1"
 }
 
+# Yokoten of #50: the grade as the author wrote it. Back to stripping `*` alone, `` `A` `` fails
+# as "Security = `A`" and the round is paid for a code span.
+mut_REVIEW_backtick_grade_kept() {
+  sed -i '/^gate_REVIEW()/,/^}/ s@gsub(/\[\*`\]/, "", grade)@gsub(/\\*/, "", grade)@' "$1"
+}
+
+# ...and the Status of the drift checklist: `✅` in a code span or **n/a** in bold counts as pending.
+mut_DOCS_backtick_status_kept() {
+  sed -i '/^gate_DOCS()/,/^}/ s@^        gsub(/\[\*`\]/, "", cell)$@        cell = cell@' "$1"
+}
+
 mut_PR_no_artifact() {        # a missing 50-pr.md stops failing — a "complete" mission with no PR
   sed -i 's|GATE_WHY="missing 50-pr.md"; return 1|GATE_WHY="missing 50-pr.md"; return 0|' "$1"
 }
@@ -4140,6 +4151,26 @@ mut_ADR_dir_symlink_escape() {
   sed -i '/^adr_new() {/,/^}/ s@^  adr_dir_contained "$root" "${ADR_DIR%/}" \\$@  true \\@' "$1"
 }
 
+# --- ADR: the value as the author wrote it (issue #50) ----------------------------------------
+# `**Spec:** <path>` closes the bold AFTER the colon. With ADR_LINK_POST reading only the `**` before
+# it, the value comes out as `**` and every such ADR fails the back-link with "points somewhere
+# else" — a paid round for a spelling nobody got wrong.
+mut_ADR_link_bold_colon_blind() {
+  sed -i '/^ADR_LINK_POST=/ s@:(\\\*\\\*)?\[@:[@' "$1"
+}
+
+# A path in a code span is the path it carries. Kept, the backticks travel into the comparison and
+# `` `docs/…/00-missao.md` `` is "somewhere else" than the mission it names.
+mut_ADR_link_backtick_kept() {
+  sed -i '/^adr_link() {/,/^}/ s@^  ADR_LINK_VALUE="${ADR_LINK_VALUE#\\`}"; ADR_LINK_VALUE="${ADR_LINK_VALUE%\\`}"$@  :@' "$1"
+}
+
+# "Not a path" before the comparison. Widened to every value, a bare word or an empty value falls
+# through to "points somewhere else … fix whichever side is wrong", when only one side is a claim.
+mut_ADR_link_not_path_generic() {
+  sed -i '/^adr_check_link() {/,/^}/ s@^    \*/\*) ;;$@    *) ;;@' "$1"
+}
+
 # Each coordination mutant changes executable code, and check-coordination.sh asserts the
 # corresponding refusal/lifetime result before releasing its deterministic child barrier.
 mut_COORD_admission_missing() {
@@ -4362,6 +4393,8 @@ CATALOG=(
   REVIEW_punctuation_only_blind
   REVIEW_punctuated_fillin_blind
   DOCS_pending_status
+  REVIEW_backtick_grade_kept
+  DOCS_backtick_status_kept
   PR_no_artifact
   PR_stamp_blind
   PR_stamp_key_follows_head
@@ -4671,6 +4704,9 @@ CATALOG=(
   ADR_number_mismatch_blind
   ADR_bare_number_blind
   ADR_alloc_no_excl
+  ADR_link_bold_colon_blind
+  ADR_link_backtick_kept
+  ADR_link_not_path_generic
   PLAN_adr_check_ignored
   PLAN_adr_tbd_accepted
   EXEC_adr_drift_blind
@@ -4797,7 +4833,7 @@ KILLERS_FILE="$ROOT/.sdd/cache/mutation-killers.tsv"
 # stopped being parsed: an empty loop reports "0 broken" forever.
 # ---------------------------------------------------------------------------
 if [ "$ANCHORS_ONLY" = 1 ]; then
-  ANCHOR_FLOOR=404
+  ANCHOR_FLOOR=409
   anchor_box() { mkdir -p "$1"; cp -r "$ROOT/bin" "$1/"; }
   anchor_control_noop()       { :; }
   anchor_control_intact()     { printf '# a mutation that lands and stays valid\n' >> "$1"; }

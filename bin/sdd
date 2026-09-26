@@ -1463,7 +1463,9 @@ gate_REVIEW() {
         if (n < 4) next
         crit = f[2]; grade = f[3]; rat = f[4]
         gsub(/\*/, "", crit);  gsub(/^[ \t]+|[ \t]+$/, "", crit)
-        gsub(/\*/, "", grade); gsub(/^[ \t]+|[ \t]+$/, "", grade)
+        # `*` AND the backtick, like the rationale below: a grade in a code span is the grade it
+        # carries, and `` `A` `` failed as "Security = `A`" for a paid round (yokoten of #50).
+        gsub(/[*`]/, "", grade); gsub(/^[ \t]+|[ \t]+$/, "", grade)
         gsub(/[*`]/, "", rat); gsub(/^[ \t]+|[ \t]+$/, "", rat)
         # `:?-+:?` — a formatter-aligned separator (`|:---|:---:|`) is a separator, not a criterion.
         # Read as a row it graded `:` with `---`, and REVIEW looped to REVIEW_MAX_ITER with a reason
@@ -1563,6 +1565,10 @@ gate_DOCS() {
       }
       col && /^[ \t]*\|/ {
         cell = $col; gsub(/^[ \t]+|[ \t]+$/, "", cell)
+        # The value as the author wrote it (yokoten of #50): `✅` in a code span or **n/a** in bold
+        # is that value. ASCII class only — mawk is byte-oriented, and a class holding ✅ would
+        # match its bytes, not the character (CLAUDE.md).
+        gsub(/[*`]/, "", cell)
         # `:?-+:?` — with a formatter-aligned separator (`|:---:|`) the Status column of the
         # separator row read as a pending Status, and gate_DOCS failed a drift checklist with
         # nothing pending in it. Same regex in checkpoint_rows and gate_REVIEW.
@@ -5740,7 +5746,10 @@ cmd_why() {
 # the CLAUDE.md rule about an enum read in more than one point covers a regex just as much: spelled
 # out three times, the day one of them learns a new dialect the other two go blind in silence.
 ADR_LINK_PRE='^(- )?(\*\*)?'
-ADR_LINK_POST='(\*\*)?:[[:space:]]*'
+# `(\*\*)?` on BOTH sides of the colon: `**Spec**:` and `**Spec:**` are the same idiomatic
+# markdown, and with the second read as the value `**` every such ADR failed the back-link with
+# "points somewhere else" when it pointed nowhere else (issue #50).
+ADR_LINK_POST='(\*\*)?:(\*\*)?[[:space:]]*'
 adr_key_re() { printf '%s%s%s' "$ADR_LINK_PRE" "$1" "$ADR_LINK_POST"; }
 
 # The id is read from the FILE NAME and never from the title: the two dialects disagree about the
@@ -5809,6 +5818,9 @@ adr_link() {
   ADR_LINK_VALUE="${ADR_LINK_VALUE%%[[:space:]]*}"
   ADR_LINK_VALUE="${ADR_LINK_VALUE#\(}"; ADR_LINK_VALUE="${ADR_LINK_VALUE%\)}"
   ADR_LINK_VALUE="${ADR_LINK_VALUE%.}"
+  # A path written as code is the path it carries, not a value that happens to open with a
+  # backtick (issue #50) — stripped after the punctuation, so `` `x`. `` reads as x too.
+  ADR_LINK_VALUE="${ADR_LINK_VALUE#\`}"; ADR_LINK_VALUE="${ADR_LINK_VALUE%\`}"
   [ -n "$ADR_LINK_VALUE" ]
 }
 
@@ -5936,11 +5948,22 @@ adr_check_link() {
   # declared an ADR number in prose; the number existed and belonged to another decision. One
   # direction proves nothing — a claim pointing at a real file is satisfied by EVERY real file.
   # What tells the right one apart is that the ADR points BACK.
-  if ! adr_link "$root/$v" Spec; then
+  # adr_link publishes the line BEFORE it extracts the value, so ADR_LINK_NO tells a line that is
+  # there with nothing after the colon from a line that is not there at all.
+  if ! adr_link "$root/$v" Spec && [ "$ADR_LINK_NO" -eq 0 ]; then
     adr_fail "$v" 1 "has no 'Spec:' line, so nothing points back at $rel" \
       "add 'Spec: $rel' under the header"
     return 1
   fi
+  # A value with no `/` — the empty one included — is not a path at all, and saying "points
+  # somewhere else … fix whichever side is wrong" sent the reader to compare two sides when only
+  # one of them was a claim (issue #50). Before the comparison, so the sentence names the defect.
+  case "$ADR_LINK_VALUE" in
+    */*) ;;
+    *) adr_fail "$v" "$ADR_LINK_NO" "the 'Spec:' line carries '${ADR_LINK_VALUE:-<empty>}', which is not a path" \
+         "write it as 'Spec: $rel' — the value is the first word after the colon"
+       return 1 ;;
+  esac
   if [ "$ADR_LINK_VALUE" != "$rel" ]; then
     adr_fail "$v" "$ADR_LINK_NO" "'Spec: $ADR_LINK_VALUE' points somewhere else, not at $rel" \
       "one ADR, one spec: fix whichever side is wrong, or allocate a new number with 'sdd adr new'"

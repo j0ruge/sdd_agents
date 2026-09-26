@@ -17,7 +17,7 @@
 | F2 | Faxina pós-#57 | parada | ADR 0010 para `accepted`; apagar 2 itens do `TODO.md` | carona num PR que já carimbe |
 | F3 | T3 e a janela do juiz | parada | decidir as 3 perguntas de desenho | **decisão humana** (inclusive: congelar ou não) |
 | F4 | Portabilidade para outros repos | parcial | registrar as lacunas no `TODO.md`; consertar a 2 | carona num PR que já carimbe |
-| F5 | Issues avulsas #50–#53 | abertas | triagem | — |
+| F5 | Issues avulsas #50–#53 | #53 fechada; #50 consertada na missão `20260926-a-carona-antes-do-congelamento` (I1); #51 e #52 em curso nela | fechar #51 e #52 na mesma missão; as três fecham com o PR | — |
 | F6 | O worker (W1–W7) | estacionada por decisão | nada, até os fluxos atuais rodarem limpos | **decisão humana** |
 | F7 | Plano Astra, fases 2–7 | não iniciada | nada; vem depois do worker | F6 |
 
@@ -190,7 +190,9 @@ pertence a esta frente.
 
 São quatro, todas abertas em 2026-09-22 a partir da missão do `lighthouse_project`:
 - **#50** — o `adr_link` aceita `**Spec**:` e recusa `**Spec:**`, e a mensagem aponta o lugar
-  errado. Avulsa.
+  errado. Avulsa. **Consertada** no I1 da missão `20260926-a-carona-antes-do-congelamento`: as duas
+  grafias e o caminho entre crases passam, o valor que não é caminho diz "not a path", e o yokoten
+  leva a mesma leitura à nota do `gate_REVIEW` e ao Status do `gate_DOCS`; fecha com o merge do PR.
 - **#51** — o sensor de fronteira de escrita culpa o chapéu por um commit concorrente feito de fora
   da sessão. É da mesma classe do item "a linha `kit-touched` afirma atribuição que ninguém mediu";
   o #48 declara que "coordena entradas do kit, não edição externa".

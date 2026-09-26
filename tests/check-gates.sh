@@ -1151,6 +1151,17 @@ sed -i '/^REVIEW_PROSE_MIN_GRADE=/d' .sdd/config.sh
 review_with A —
 git add -A && git commit -qm "chore: Documentation not analysed"
 assert_phase "a '—' on a tolerated criterion still fails: not analysed is not a grade" "REVIEW"
+# The grade as the author wrote it (yokoten of issue #50): a cell in code spans is the grade it
+# carries. The rationale column already dropped backticks; the grade dropped only `*`, so `` `A` ``
+# failed as "Security = `A`" and bought a paid round. The pair is differential — a normaliser that
+# accepted anything would pass the first line and fail the second.
+review_with '`A`' B
+git add -A && git commit -qm "chore: r1 with a backticked A"
+assert_phase "a backticked grade is read as the grade it carries" "DOCS"
+review_with '`B`' B
+git add -A && git commit -qm "chore: r1 with a backticked B"
+assert_phase "a backticked grade below A still fails" "REVIEW"
+assert_why   "...and the reason reads it as the bare grade" "REVIEW" "Security = B "
 review_with B A
 git add -A && git commit -qm "chore: back to Security at B"
 
@@ -1706,6 +1717,21 @@ printf '# Docs\n\ndrift checklist\n\n| Area | Doc | Status | Evidence |\n|:-----
 git add -A && git commit -qm "chore: docs, formatter-aligned"
 assert_phase "a formatter-aligned drift checklist is still complete" "PR"
 assert_why_absent "gate_DOCS does not read the separator row as a Status" "DOCS" ":---"
+# The Status as the author wrote it (yokoten of issue #50): `✅` in a code span or `**n/a**` in bold
+# is the value it carries, and a pending value keeps being pending however it is dressed.
+printf '# Docs\n\ndrift checklist\n\n| Area | Doc | Status | Evidence |\n|---|---|---|---|\n| runner | README | `✅` | commit abc1234 |\n| libs | — | **n/a** | internal refactor |\n\nFindings recorded in TODO.md for this mission.\n' \
+  > "$MDIR/45-docs.md"
+git add -A && git commit -qm "chore: docs with dressed Status cells"
+assert_phase "a backticked or bold Status in the drift checklist is read as its value" "PR"
+printf '# Docs\n\ndrift checklist\n\n| Area | Doc | Status | Evidence |\n|---|---|---|---|\n| runner | README | `✗` | pending |\n| libs | — | **n/a** | internal refactor |\n\nFindings recorded in TODO.md for this mission.\n' \
+  > "$MDIR/45-docs.md"
+git add -A && git commit -qm "chore: docs with a backticked pending Status"
+assert_phase "a backticked pending Status is still pending" "DOCS"
+assert_why   "...and it is counted as one pending area" "DOCS" "has 1 area\\(s\\) pending"
+# Back to the formatter-aligned table the next block was written against.
+printf '# Docs\n\ndrift checklist\n\n| Area | Doc | Status | Evidence |\n|:------|:----|:------:|:---------|\n| runner | README | ✅ | commit abc1234 |\n| libs | — | n/a | internal refactor |\n\nFindings recorded in TODO.md for this mission.\n' \
+  > "$MDIR/45-docs.md"
+git add -A && git commit -qm "chore: docs, formatter-aligned again"
 
 # --- the mutation catalogue's stamp -----------------------------------------
 #
