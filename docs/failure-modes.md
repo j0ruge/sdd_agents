@@ -800,7 +800,7 @@ likelier failures still speak first. Nothing is pushed, nothing is merged. In a 
 `tests/check-mutation.sh` this requirement does not exist at all.
 
 **What you do:** run `./bin/sdd health` from the checkout the mission is in, and run it **after the
-last commit that touches `bin/ tests/ templates/ config/`**. Twenty to fifty minutes on a laptop; a
+last commit that touches `bin/ tests/ templates/ config/`**. About eighteen minutes on a laptop since PR #170 (twenty to fifty before it); a
 green round ends with `mutation stamp written` and the gate opens. Two things worth knowing before
 you start it:
 

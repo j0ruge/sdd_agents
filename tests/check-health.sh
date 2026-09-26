@@ -54,6 +54,13 @@
 #      stamp. `of 0` satisfies assertion 14's `caught == of` perfectly — an empty loop printing the
 #      greenest line the command has — and it used to reach `kit healthy` and write the stamp that
 #      opens gate_PR.
+#   17. inside a mutant the SUITE stops at its first red step, and the step that killed the mutant
+#      last time runs first (SDD_MUTANT_FIRST); outside one every step runs, in order. Prefixed
+#      `surface:` — the catalogue reads only the suite's rc, so these are about what that rc costs.
+#   18. inside a mutant every SENSOR stops at its first red assertion: a CENSUS over the steps
+#      `SDD_MUTANT=1 run-all.sh --list` prints, calling each failure primitive with SDD_MUTANT set,
+#      unset and empty (floor 9, five known worlds measured first), plus the two sensors that call
+#      their own primitive on purpose asserted to do it outside the mutant. Prefixed `surface:`.
 #
 # Usage: tests/check-health.sh   (exit 0 = cmd_health discriminates)
 #

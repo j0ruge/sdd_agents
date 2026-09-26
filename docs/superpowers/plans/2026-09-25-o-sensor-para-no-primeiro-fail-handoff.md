@@ -6,6 +6,35 @@
 > As Tasks 1–4 e a revisão final do executing-plans estão **feitas**; falta a **Entrega**. Leia
 > este arquivo e a seção "Entrega" do plano; o resto do plano é histórico.
 
+## Atualização, 2026-09-25 22:00 — `/codereview` feito; falta o health nº 3 e o E6
+
+- **`/codereview:codereview`** sobre `main..HEAD` (5 agentes por arquivo + varredura de código morto,
+  sonnet): segredos PASS, código morto limpo. Consertado numa leva (commit `fix(sensors): …` seguinte):
+  1. **MEDIUM, confirmado e medido:** o `check-hat.sh` vazava a caixa `mktemp -d` de `boot_probes`,
+     `census_probes` e `release_probes` quando o `fail()` saía no meio (a cláusula deste branch):
+     **14 diretórios em `/tmp` no health nº 2**, um por mutante que o hat mata. `PROBE_BOXES` + um
+     `trap … EXIT`; reproduzido 1 → 0 com três mutantes, e as duas sabotagens (sem o trap, sem o
+     registro da caixa do boot) trazem o vazamento de volta. **Sem probe durável** (o mundo pede um
+     mutante e um vermelho), como o conserto do filho do hook.
+  2. **MEDIUM:** o cabeçalho do `check-health.sh` numera as asserções (1–16) e não citava o censo nem
+     as probes `surface:` do #59/#168: itens 17 e 18.
+  3. **LOW:** `CLAUDE.md` e `docs/failure-modes.md` diziam "20 a 50 min" de health: agora ~18 min.
+  4. **HIGH do agente, REFUTADO por medição:** "o `sdd run` do hook (`hook_owner`) vaza se um
+     `check` vermelho sair antes do `wait`". Forçado vermelho dentro de mutante, com e sem conserto:
+     0 processos e 0 sobras nos dois. O `wait` extra não entrou; o comentário do `check()`, que
+     prometia "every process family … this file started", passou a dizer o que o `finally` faz.
+  Recusados com razão: a ordem primitiva-antes-de-isento do `census_kind_of` (deliberada); selftest do
+  controle "só com `wait -n`" (as funções não dependem de `wait -n`); `run_control` "ignora `dir`"
+  (premissa errada: o controle não recebe argumento, os stubs também usam variável livre); sentinela
+  `999999`; tempo de sobrevivente não gravado.
+- **Observado, causa não provada (pendência, dono: próxima sessão no kit):** o health nº 2 deixou um
+  `/tmp/sdd-coordination-ms3690m1/repo/.git` com o registro de dono de um `sdd run` do fixture `repo`
+  (um item de `owned`, não o `hook_owner`), processos já mortos: o `rmtree(work)` do `finally` correu
+  contra algo que ainda escrevia. Um em 21 mutantes do coordination; não se sabe se é da cláusula.
+  Os `sdd-ck-*` (~150 por health) são anteriores ao branch (`bin/sdd:440`, 158 no health do #168).
+- **Próximo:** suíte rápida e `SDD_MUTANT=1` pelo lançador → commit → **health nº 3** → `stamp-check`
+  → push → E6.
+
 ## Atualização, 2026-09-25 21:35 — E1 a E5 feitos; falta o `/codereview` e o E6
 
 - **E1 feito:** branch empurrado, **PR #170** aberto contra `main`

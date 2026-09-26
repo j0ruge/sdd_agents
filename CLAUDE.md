@@ -303,7 +303,7 @@ REVIEW e de PR rodaram a suíte rápida, responderam verde, e a `main` carregou
 quando o catálogo volta verde, e o `gate_PR` **exige o carimbo**; o gate nunca roda o catálogo, que
 é exatamente o que `4c86712` desfez. Verbete "Carimbo de mutação" no `CONTEXT.md`, desenho e
 alternativas descartadas em [`docs/adr/0004`](docs/adr/0004-mutation-catalogue-owner-stamp-not-ci.md).
-⚠️ **Consequência operacional que custa 20 a 50 min quando se erra a ordem:** a chave é o conteúdo
+⚠️ **Consequência operacional que custa um `sdd health` a mais (~18 min desde o PR #170; antes, 20 a 50) quando se erra a ordem:** a chave é o conteúdo
 de `bin/ tests/ templates/ config/`, então `./bin/sdd health` roda **depois do último commit de
 código**. `CLAUDE.md`, `CONTEXT.md`, `docs/` e `TODO.md` não invalidam — mas
 `tests/health-baseline.txt` invalida, e é lá que a catraca do backlog mora, então registrar achado

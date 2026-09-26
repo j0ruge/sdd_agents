@@ -77,7 +77,10 @@ def check(name, condition, detail=""):
         failed += 1
         print("  FAIL  " + name + ": " + detail, flush=True)
         # Inside a mutant the first red check is the verdict: stop here, after printing. The
-        # finally at the bottom still releases every process family and lock this file started.
+        # finally at the bottom frees the escaped hook child, releases every family in `owned` and
+        # removes the work tree. The hook's `sdd run` is not in `owned` and is not waited there:
+        # with its child free it reaches the escalation stop on its own (measured on PR #170: the
+        # check before its wait forced red inside a mutant left no process and no tree behind).
         if os.environ.get("SDD_MUTANT"):
             raise SystemExit(1)
 

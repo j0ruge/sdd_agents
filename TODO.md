@@ -41,7 +41,7 @@ Achados sobre **repos-alvo** vão para o `TODO.md` daquele repo. Este arquivo é
   — descoberto por `sdd-reviewer` na missão `20260826-o-laco-da-qa` (2026-08-26)
 
 - [ ] **O `stub-argv.txt` do `check-health.sh` nunca é apagado entre mundos de fixture** —
-  `tests/check-health.sh:224` — todo `health_run` sobrescreve, ninguém remove. Hoje não reproduz
+  `tests/check-health.sh:231` — todo `health_run` sobrescreve, ninguém remove. Hoje não reproduz
   fail-open (medido: sem chamada nenhuma à suíte, o arquivo some e a asserção acusa certo), mas no
   dia em que `cmd_health` ganhar um segundo caminho para a suíte a última escrita vence calada.
   Direção: apagar no `green_world`, como as outras fixtures fazem.
@@ -55,7 +55,7 @@ Achados sobre **repos-alvo** vão para o `TODO.md` daquele repo. Este arquivo é
   — descoberto por `sdd-reviewer` na missão `20260818-lote-facil` (2026-08-19)
 
 - [ ] **Nada impede a próxima invocação de `sdd health` sem `cd`, e ela mede a árvore de quem
-  chamou** — `tests/check-health.sh:293` — desde o F2 o `health_kit_root` deixa o diretório
+  chamou** — `tests/check-health.sh:300` — desde o F2 o `health_kit_root` deixa o diretório
   corrente escolher a árvore medida, então um chamador que não fixa o `cd` mede o que estiver em
   volta. Medido, não temido: o fixture do sensor passou a medir ESTE repo (catálogo real, 20 a 50
   min) e, dentro de uma sandbox do `check-mutation.sh`, recursaria num segundo catálogo por
@@ -73,14 +73,14 @@ Achados sobre **repos-alvo** vão para o `TODO.md` daquele repo. Este arquivo é
   `20260819-fecho-...` (2026-08-19)
 
 - [ ] **A alternativa `|| :` da guarda do `guard:` não tem probe** —
-  `tests/check-health.sh:1800` — a guarda aceita `(true|:)`, e só `|| true` tem mundo no `cap_world`.
+  `tests/check-health.sh:1807` — a guarda aceita `(true|:)`, e só `|| true` tem mundo no `cap_world`.
   Medido em 2026-09-25: tirar o `:` da alternância deixa o `check-health.sh` inteiro verde. Das quatro
   sobreviventes da r2, três fecharam em `a948f68` (piso exato de capturas, probe aritmético, lista
   `RULE_REPORTS`). Direção: um `cap_world` com `|| :` e o censo afirmado, como os vizinhos.
   — descoberto por `sdd-reviewer` na missão `20260818-lote-facil` (2026-08-19)
 
 - [ ] **O `guard:` é cego a helper `health_*()` definido fora da região** —
-  `tests/check-health.sh:1819` — a região vai de `# Sensor of the KIT` até `cmd_status()`, então um
+  `tests/check-health.sh:1826` — a região vai de `# Sensor of the KIT` até `cmd_status()`, então um
   `health_*()` definido depois dela não é censurado. A outra metade do achado (`if x=`, `local x=` e
   here-doc lidos como offender) fechou: as três formas são isentas e declaradas no cabeçalho da regra.
   Direção: censurar todo `health_*()` onde ele estiver.
@@ -655,7 +655,7 @@ Achados sobre **repos-alvo** vão para o `TODO.md` daquele repo. Este arquivo é
   branch é o `DEFAULT_BRANCH`, e commitar o diretório da missão inteiro.
   — descoberto por `sessão coordenadora` na missão `20260922-o-motivo-da-fase` (2026-09-22)
 
-- [ ] **`check-coordination.sh` reprova quando herda SIGINT ignorado** — `tests/check-coordination.sh:629`
+- [ ] **`check-coordination.sh` reprova quando herda SIGINT ignorado** — `tests/check-coordination.sh:632`
   — o probe `signal status` (sinal 2) manda SIGINT ao `sdd run` e espera a morte; lançada com `&` de shell
   não interativo (o `setsid nohup … &` que se usa para `sdd run`), a suíte nasce com `SigIgn 0x7`, o
   bash não desfaz sinal ignorado na entrada, e o probe estoura 8 s: vermelho 3 de 3, verde 3 de 3 em
