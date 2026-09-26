@@ -1,6 +1,6 @@
 ---
 missao: 20260926-a-carona-antes-do-congelamento
-atualizado: 2026-09-26 18:18
+atualizado: 2026-09-26 18:43
 ---
 
 # Checkpoint — a carona antes do congelamento
@@ -39,7 +39,7 @@ atualizado: 2026-09-26 18:18
 |---|---|---|---|---|
 | I1 | #50 e o yokoten da crase: `**Spec:**`, caminho entre crases e "not a path" no adr_link; nota e Status entre crases no gate_REVIEW e no gate_DOCS | `o=$(bash tests/check-adr.sh 2>&1); grep -c '^  ok    the bold-colon Spec dialect is read by the same rule' <<< "$o"; g=$(bash tests/check-gates.sh 2>&1); grep -c '^  ok    a backticked grade is read as the grade it carries' <<< "$g"` → `1` e `1` | done | b6cc2bd |
 | I2 | #52: sdd approve sem nenhuma resposta sai 66 e não escreve nada; n, Enter e y ficam como estão | `o=$(bash tests/check-gates.sh 2>&1); grep -c '^  ok    sdd approve with no answer at all exits 66 and writes nothing' <<< "$o"` → `1` | done | f935ca5 |
-| I3 | #51 parte 1: run_phase e cmd_close exportam GIT_REFLOG_ACTION=sdd:passo:sid8 (session_git_label), a projeção mostra o rótulo | `o=$(bash tests/check-autonomy.sh 2>&1); grep -c '^  ok    every session runs under its own git label, the close session too' <<< "$o"; d=$(bash tests/check-dry-run.sh 2>&1); grep -c '^  ok    every projected phase labels its git moves with the session' <<< "$d"` → `1` e `1` | pending | — |
+| I3 | #51 parte 1: run_phase e cmd_close exportam GIT_REFLOG_ACTION=sdd:passo:sid8 (session_git_label), a projeção mostra o rótulo | `o=$(bash tests/check-autonomy.sh 2>&1); grep -c '^  ok    every session runs under its own git label, the close session too' <<< "$o"; d=$(bash tests/check-dry-run.sh 2>&1); grep -c '^  ok    every projected phase labels its git moves with the session' <<< "$d"` → `1` e `1` | done | 0931547 |
 | I4 | #51 parte 2: hat_guard_check lê a janela pelo reflog; commit sem rótulo fora do writes para a linha como foreign-commit; sem reflog, como hoje; contrato do kind novo | `o=$(bash tests/check-autonomy.sh 2>&1); grep -c '^  ok    a commit without the session label stops the line as foreign-commit, the same commit with it as hat-crossed' <<< "$o"; grep -c '^  ok    without a reflog the guard blames the session as before' <<< "$o"` → `1` e `1` | pending | — |
 | I5 | lacuna 2: sem Jira o gate_PLAN recusa branch vazio ou placeholder; fixtures declaram a branch; planner, kaizen, template, schema e pipeline | `o=$(bash tests/check-gates.sh 2>&1); grep -c '^  ok    JIRA off with no branch stalls PLAN and names the fix' <<< "$o"; grep -c '^  ok    JIRA on leaves an empty branch to the TICKET phase' <<< "$o"` → `1` e `1` | pending | — |
 | I6 | lacuna 3: run_check_cmd roda o comando com stdin em /dev/null (gates, preflight, E2E) | `o=$(bash tests/check-preflight.sh 2>&1); grep -c '^  ok    TEST_CMD runs with stdin closed, whatever stdin the caller holds' <<< "$o"` → `1` | pending | — |

@@ -49,3 +49,4 @@
 
 - 2026-09-26 18:06 · `EXEC` · I1 `done` em `b6cc2bd` (sessão interativa, Opus): #50 + yokoten da crase; 7 asserções, 5 mutantes pela receita M; suíte verde. Desvios: regras R35–R37 no check-adr (R33/R34 já existiam em comentários de probe) e um 4º probe para o valor vazio.
 - 2026-09-26 18:18 · `EXEC` · I2 `done` em `f935ca5`: #52, rc 66 sem nenhuma resposta; asserção com a diferencial do Enter; mutante pela receita M; suíte verde.
+- 2026-09-26 18:43 · `EXEC` · I3 `done` em `0931547`: rótulo `sdd:<passo>:<sid8>` no run_phase e no cmd_close; 2 mutantes pela receita M; suíte verde. Achado no caminho: a diferencial do aviso de branch base (`no_uuid` do check-gates) passou a normalizar os 8 hex do rótulo, e a regra do session id no check-dry-run ancora na linha do cabeçalho porque o prompt diz "in this session:".
