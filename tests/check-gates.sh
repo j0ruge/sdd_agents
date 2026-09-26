@@ -1766,6 +1766,13 @@ printf '# Docs\n\ndrift checklist\n\n| Area | Doc | Status | Evidence |\n|---|--
 git add -A && git commit -qm "chore: docs with a backticked pending Status"
 assert_phase "a backticked pending Status is still pending" "DOCS"
 assert_why   "...and it is counted as one pending area" "DOCS" "has 1 area\\(s\\) pending"
+# ...and a cell that is ONLY markup is not an empty cell: stripped to nothing it used to be skipped,
+# so `**` alone passed the gate as if the row were not there (review r1 of this mission). Pending.
+printf '# Docs\n\ndrift checklist\n\n| Area | Doc | Status | Evidence |\n|---|---|---|---|\n| runner | README | ✅ | commit abc1234 |\n| libs | — | ** | pending |\n\nFindings recorded in TODO.md for this mission.\n' \
+  > "$MDIR/45-docs.md"
+git add -A && git commit -qm "chore: docs with a markup-only Status"
+assert_phase "a Status cell that is only markup is still pending" "DOCS"
+assert_why   "...and it is quoted as written" "DOCS" "Status '\*\*'"
 # Back to the formatter-aligned table the next block was written against.
 printf '# Docs\n\ndrift checklist\n\n| Area | Doc | Status | Evidence |\n|:------|:----|:------:|:---------|\n| runner | README | ✅ | commit abc1234 |\n| libs | — | n/a | internal refactor |\n\nFindings recorded in TODO.md for this mission.\n' \
   > "$MDIR/45-docs.md"

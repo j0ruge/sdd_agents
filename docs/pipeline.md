@@ -702,21 +702,26 @@ and `sdd close`; rc 3, a `hat-crossed` (or `kit-touched`) row, and the pager.
 to read the whole window, so a human committing from another shell into the same checkout while a
 phase ran was charged to the hat. Every session now runs under `GIT_REFLOG_ACTION=sdd:<step>:<sid8>`
 (the 8 hex are the session's log file id), so its commits, amends, checkouts and resets land in the
-reflog of `HEAD` carrying its label. `hat_guard_arm` records the newest reflog entry, and
+reflog of `HEAD` carrying its label (measured on git 2.43: `<label>`, `<label>: …`, and
+`<label> (start|pick|finish): …` for a rebase). `hat_guard_arm` records the newest reflog entry, and
 `hat_guard_check` reads the entries written after it: an entry with the session's **exact** label is
-the session's and is checked against `writes:` as before; an entry without it is **foreign**. A
-foreign commit that changed a path outside `writes:` still **stops the line** — a `FOREIGN-COMMIT`
-line naming each commit (short sha and subject), a `FOREIGN-REMEDY` line, rc 3, a `foreign-commit`
-row and the pager — and the remedy is the one that fits: nothing may commit into this checkout while
-a phase runs; let it end, then `sdd run` again. Widening `writes:` or `HAT_WRITES_EXTRA` would not
-fix it. The attribution picks the kind and the remedy, never whether the line stops, so a session
-that strips its own label changes the kind and not the stop. When the reflog cannot account for the
-move — no reflog, the recorded entry no longer right below the new ones, `HEAD` moved with no new
-entry, no label — the guard falls back to the range diff, and every path is the session's.
-⚠️ Declared limits: a git command that sets `GIT_REFLOG_ACTION` itself (`rebase`, `pull`) writes an
-entry without the label, so the session's own move reads as foreign (the line still stops); the
-status half still charges a concurrent writer's *uncommitted* file to the hat; and the kit guard
-does not read the label.
+the session's; an entry without it is **foreign**. Attribution never widens the **net** diff of the
+phase: only the paths of `<HEAD before>..<HEAD now>` are attributed — a path a round trip touched and
+put back is nobody's — and a net path no foreign entry explains is the session's, so *whether* the
+line stops is exactly what the range diff said, and the reflog only picks the kind. The session's
+paths are checked against `writes:` as before. A foreign move that changed a path outside `writes:`
+still **stops the line** — a `FOREIGN-COMMIT` line naming each move (short sha and subject), a
+`FOREIGN-REMEDY` line, rc 3, a `foreign-commit` row and the pager — and the remedy is the one that
+fits: nothing may commit into this checkout while a phase runs; let it end, then `sdd run` again.
+Widening `writes:` or `HAT_WRITES_EXTRA` would not fix it. A session that strips its own label
+changes the kind and not the stop. When the reflog cannot account for the move — no reflog, the
+recorded entry no longer right below the new ones, `HEAD` moved with no new entry, no label — the
+guard falls back to the range diff, and every path is the session's.
+⚠️ Declared limits: a git that wrote a reflog message of its own instead of the label would make the
+session's move read as foreign (the line still stops, only the kind is wrong — no command measured
+on git 2.43 does); the status half still charges a concurrent writer's *uncommitted* file to the hat;
+a target-repo hook that reads `GIT_REFLOG_ACTION` to detect a rebase would see one in every session
+git call; and the kit guard does not read the label.
 Trailing slashes are stripped off `HANDOFF_DIR` before that comparison, because the allowlist is a
 glob matched against what `git diff --name-only` prints and the key arrives from your
 `.sdd/config.sh` exactly as you typed it — `HANDOFF_DIR="docs/handoffs/"` would otherwise make

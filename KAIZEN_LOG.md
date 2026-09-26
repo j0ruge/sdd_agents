@@ -27,7 +27,7 @@ M numa cópia do kit.
 | stdin do `TEST_CMD` | herdado do runner (o probe lia a linha e saía 4) | `/dev/null` nos gates, no `E2E_CMD` e no preflight |
 | ADRs 0010, 0011, 0012 | `proposed` | `accepted` |
 | `todo-findings` | 82 | **83** (−1 pago em `3245bfd`, +2 lacunas 4 e 5) |
-| Catálogo de mutação | 406 | **419** (13 novos, cada um vermelho pela receita M) |
+| Catálogo de mutação | 406 | **422** (16 novos — 13 do plano e 3 da revisão r1 —, cada um vermelho pela receita M) |
 
 **Contramedida:** poka-yoke primeiro. A grafia idiomática vira regra (`ADR_LINK_POST` com o `**`
 dos dois lados, a crase tirada do valor, da nota e do Status); "ninguém respondeu" vira rc; a
@@ -46,8 +46,16 @@ diferencial do aviso de branch base comparava duas projeções e o rótulo carre
 na linha do cabeçalho; (4) o slug desta missão não entra na prosa inglesa, porque `antes` é
 stopword do `check-lang.sh`.
 
-**Limite declarado:** o rótulo é atribuição, não prova — um git que sobrescreve o
-`GIT_REFLOG_ACTION` (`rebase`, `pull`) troca o `kind` e nunca a parada; sujeira **não commitada**
+**Achados da revisão r1 (revisor fresco, antes do PR):** (5) a primeira versão da janela somava as
+entradas uma a uma, mais larga que o diff líquido — uma ida-e-volta de checkout virava `hat-crossed`
+falso, a acusação que o #51 existe para acabar, causada pelo próprio conserto; hoje a atribuição é
+cortada ao diff `<antes>..<agora>` e o caminho que nenhuma entrada alheia explica fica com a sessão;
+(6) o `rebase` da sessão grava `<rótulo> (start|pick|finish): …` e virava `foreign-commit` — o limite
+que esta entrada declarava ("`rebase` e `pull` sobrescrevem o `GIT_REFLOG_ACTION`") era falso, medido;
+(7) um Status só de markup (`**`) passava o `gate_DOCS` como célula vazia. Três probes, três mutantes.
+
+**Limite declarado:** o rótulo é atribuição, não prova — um git que gravasse mensagem própria no
+lugar do rótulo trocaria o `kind` e nunca a parada (nenhum medido no git 2.43); sujeira **não commitada**
 de um escritor concorrente segue atribuída ao chapéu; a guarda de kit não lê o rótulo (o item do
 `kit-touched` segue no `TODO.md`).
 

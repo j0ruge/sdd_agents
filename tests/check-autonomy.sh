@@ -6071,7 +6071,7 @@ assert_eq "every session runs under its own git label, the close session too" \
 #    blaming the hat and naming two wrong remedies; it stops now as `foreign-commit`, naming the
 #    commit. Both STOP: the attribution picks the kind and the remedy, never whether the line stops —
 #    a session that stripped its own label would otherwise cross its hat for free.
-foreign_stub() {   # foreign_stub <dir> <foreign|labelled|inside>
+foreign_stub() {   # foreign_stub <dir> <foreign|labelled|inside|roundtrip|rebase>
   cat > "$OUTSIDE/stub/claude" <<STUB
 #!/usr/bin/env bash
 cat > "$1/docs/handoffs/$MISSION/40-review-r1.md" <<'MD'
@@ -6094,6 +6094,8 @@ case "$2" in
             git -C "$1" commit -qm "chore: a concurrent writer" ;;
   inside)   printf 'a note\n' > "$1/docs/handoffs/$MISSION/notes.md"; git -C "$1" add "docs/handoffs/$MISSION/notes.md"
             env -u GIT_REFLOG_ACTION git -C "$1" commit -qm "chore: a concurrent writer" ;;
+  roundtrip) git -C "$1" checkout -q elsewhere; git -C "$1" checkout -q main ;;
+  rebase)   git -C "$1" rebase -q elsewhere ;;
 esac
 cat "$STREAM_SAMPLE"
 exit 0
@@ -6143,6 +6145,37 @@ foreign_run "$RSN"
 assert_eq "without a reflog the guard blames the session as before" \
   "logs:0 rc=3 kind=hat-crossed" \
   "logs:$(git -C "$RSN" reflog show HEAD 2>/dev/null | grep -c .) rc=$FR_RC kind=$FR_KIND"
+# The window never widens the net diff (review r1 of this mission). A reviewer that checks another
+# branch out and comes back touches, entry by entry, every path the two branches differ in — and puts
+# all of it back. Summed per entry that read as a crossing of bin/tool.sh, the false accusation with
+# the wrong remedy #51 exists to end, caused by its own fix. `elsewhere` differs from main in
+# bin/tool.sh and is cut BEFORE the session; `trips:2` is the floor that the two labelled checkouts
+# really happened (a labelled checkout writes the bare label).
+foreign_elsewhere() {   # foreign_elsewhere <dir> — a branch that differs from main in bin/tool.sh
+  ( cd "$1" && git checkout -qb elsewhere && printf 'echo elsewhere\n' > bin/tool.sh \
+      && git commit -qam "chore: elsewhere" && git checkout -q main ) >/dev/null 2>&1
+}
+RSR="$OUTSIDE/reviewscope-roundtrip"
+reviewscope_world "$RSR"
+foreign_elsewhere "$RSR"
+foreign_stub "$RSR" roundtrip
+foreign_run "$RSR"
+assert_eq "a round trip through another branch inside the window is not a crossing" \
+  "trips:2 kind: hat:0 foreign:0" \
+  "trips:$(git -C "$RSR" reflog show --format='%gs' HEAD | grep -cxE 'sdd:REVIEW:[0-9a-f]{8}') kind:$FR_KIND hat:$(grep -c 'HAT-CROSSED' <<< "$FR_LOG") foreign:$(grep -c 'FOREIGN-COMMIT' <<< "$FR_LOG")"
+# A rebase the session makes is the session's move. git writes it as `<label> (start|pick|finish): …`
+# — measured on git 2.43 — and read as foreign it printed the session's own label under "without
+# its label", with the concurrent-writer remedy. Rebasing onto `elsewhere` brings bin/tool.sh in, so
+# the stop is the hat's, as the range diff always said. `picked:yes` is the floor that the rebase ran
+# (it replays the round's commit and the runner's `intervention:` note, so the count is not fixed).
+RSB="$OUTSIDE/reviewscope-rebase"
+reviewscope_world "$RSB"
+foreign_elsewhere "$RSB"
+foreign_stub "$RSB" rebase
+foreign_run "$RSB"
+assert_eq "a rebase the session makes is its own move, not a foreign commit" \
+  "picked:yes rc=3 kind=hat-crossed foreign:0" \
+  "picked:$(if grep -qE '^sdd:REVIEW:[0-9a-f]{8} \(pick\): ' <<< "$(git -C "$RSB" reflog show --format='%gs' HEAD)"; then echo yes; else echo no; fi) rc=$FR_RC kind=$FR_KIND foreign:$(grep -c 'FOREIGN-COMMIT' <<< "$FR_LOG")"
 
 # The stub goes back the way it was found, for the reason spelled out one screen up.
 cat > "$OUTSIDE/stub/claude" <<'STUB'

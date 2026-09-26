@@ -73,12 +73,16 @@ Confirmed by I3 (the label) and I4 (the reading) of the mission.
   newest one's sha is `HEAD`; otherwise, or with no label or no recorded top, it returns 1 and
   `hat_guard_check` falls back to the range diff. It is read only when `HEAD` moved, as the diff
   half always was.
-- **The attribution (I4).** Each new entry is diffed against the one below it (the recorded top for
-  the oldest) through `hat_diff_names`, the one definition of `-c core.quotePath=false diff
-  --name-only` that the window and the fallback share. An entry whose subject is the session's
-  exact label, alone or followed by `:`, is the session's: its paths join the status half and are
-  checked against `writes:` as before. Any other entry is foreign; when one of its paths is outside
-  `writes:`, the commit is listed as `<sha7> <subject>`.
+- **The attribution (I4, corrected by review r1).** Each new entry is diffed against the one below
+  it (the recorded top for the oldest) through `hat_diff_names`, the one definition of
+  `-c core.quotePath=false diff --name-only` that the window and the fallback share. An entry whose
+  subject is the session's exact label — alone, followed by `:`, or followed by ` (` as rebase
+  writes it — is the session's; any other entry is foreign. Then everything is cut down to the net
+  diff `<before>..<now>`: a net path is the session's when a session entry touched it or no foreign
+  entry did, and it joins the status half against `writes:` as before; a foreign entry is listed as
+  `<sha7> <subject>` when it touched a net path outside `writes:` that is not the session's. The
+  first draft summed the entries without the net cut, and a round trip through another branch read
+  as a crossing the range diff never saw — review r1 reproduced it.
 - **The marker (I4).** `FOREIGN_COMMIT_WHY` is armed by `hat_guard_check` only when the session's
   own paths armed nothing, with a `FOREIGN-COMMIT` and a `FOREIGN-REMEDY` line in the journal. It
   is reset at the entry of its only setter, beside `HAT_CROSSED_WHY`. `hat_crossed_escalation`
@@ -109,8 +113,17 @@ Confirmed by I3 (the label) and I4 (the reading) of the mission.
   dynamically, so the new value is counted without a code change on their side;
   `docs/pipeline.md` and `config/schema.md` list it.
 - Declared limits, written in the header of `hat_guard_check`:
-  - a git command that overwrites `GIT_REFLOG_ACTION` itself writes an unlabelled entry, and the
-    session's own move reads as foreign. The line still stops; only the `kind` is wrong;
+  - a git that wrote a reflog message of its own instead of the label would make the session's move
+    read as foreign. The line still stops; only the `kind` is wrong. Measured on git 2.43, no command
+    does: commit, `--amend`, checkout, switch, reset, merge, pull, cherry-pick, revert and stash write
+    `<label>` or `<label>: …`, and rebase writes `<label> (start|pick|finish): …` — all read as the
+    session's (the first draft of this list named `rebase` and `pull` as overwriters, and review r1
+    measured otherwise);
+  - a target-repo hook that reads `GIT_REFLOG_ACTION` to tell whether it runs inside a rebase would
+    see one in every git call a session makes;
+  - three of the fallback checks (`k ≥ 1`, the recorded top right below the new entries, the newest
+    entry at `HEAD`) have no probe: attribution never widens the net diff and charges an
+    unexplained net path to the session, so skipping one changes the kind at worst;
   - uncommitted edits of a concurrent writer still land in the `git status` half and are still
     attributed to the session;
   - `cmd_kaizen` exports the label through `run_phase` and is still not guarded, as before.

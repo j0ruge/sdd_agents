@@ -776,7 +776,13 @@ mut_REVIEW_backtick_grade_kept() {
 
 # ...and the Status of the drift checklist: `✅` in a code span or **n/a** in bold counts as pending.
 mut_DOCS_backtick_status_kept() {
-  sed -i '/^gate_DOCS()/,/^}/ s@^        gsub(/\[\*`\]/, "", cell)$@        cell = cell@' "$1"
+  sed -i '/^gate_DOCS()/,/^}/ s@^        raw = cell; gsub(/\[\*`\]/, "", cell)$@        raw = cell@' "$1"
+}
+
+# Review r1, finding 5: a Status cell that is ONLY markup (`**`) strips to nothing and is skipped
+# as an empty cell — the row passes the gate as if it were not there. It used to be pending.
+mut_DOCS_markup_only_status_skipped() {
+  sed -i '/^gate_DOCS()/,/^}/ s@^        if (cell == "" \&\& raw != "") { print raw; next }$@        raw = raw@' "$1"
 }
 
 mut_PR_no_artifact() {        # a missing 50-pr.md stops failing — a "complete" mission with no PR
@@ -1509,7 +1515,23 @@ mut_RUN_hat_close_unchecked() {
 # wrong remedies the #51 operator reached for. The differential of regimes 10-12 in
 # check-autonomy.sh reads `foreign-commit` on one world and `hat-crossed` on the other.
 mut_RUN_foreign_blamed_on_hat() {
-  sed -i '/^hat_reflog_window() {/,/^}/ s@^    if \[ "$subj" = "$label" \] || \[\[ "$subj" == "$label:"\* \]\]; then$@    if true; then@' "$1"
+  sed -i '/^hat_reflog_window() {/,/^}/ s@^    if \[ "$subj" = "$label" \] || \[\[ "$subj" == "$label:"\* \]\] || \[\[ "$subj" == "$label ("\* \]\]; then$@    if true; then@' "$1"
+}
+
+# Review r1 of the same mission, finding 1: the window summed entry by entry is WIDER than the net
+# diff. A reviewer that checks another branch out and comes back touched every path the two
+# branches differ in, and put it all back — summed, a false `hat-crossed` with the wrong remedy, the
+# accusation #51 exists to end. Caught by `a round trip through another branch inside the window is
+# not a crossing`.
+mut_RUN_window_not_netted() {
+  sed -i '/^hat_reflog_window() {/,/^}/ s@^  net="$(hat_diff_names "$before" "$head_now")"$@  net="$own_all$foreign_all"@' "$1"
+}
+
+# Finding 2: a rebase the session makes writes `<label> (start|pick|finish): …` (git 2.43). Without
+# the third arm it reads as foreign — the session's own label printed under "without its label",
+# with the concurrent-writer remedy. Caught by `a rebase the session makes is its own move`.
+mut_RUN_rebase_read_as_foreign() {
+  sed -i '/^hat_reflog_window() {/,/^}/ s@ || \[\[ "$subj" == "$label ("\* \]\]; then$@; then@' "$1"
 }
 
 # ...and the foreign commit that is armed but never stops: the door reads the other two markers
@@ -4457,6 +4479,7 @@ CATALOG=(
   DOCS_pending_status
   REVIEW_backtick_grade_kept
   DOCS_backtick_status_kept
+  DOCS_markup_only_status_skipped
   PR_no_artifact
   PR_stamp_blind
   PR_stamp_key_follows_head
@@ -4542,6 +4565,8 @@ CATALOG=(
   RUN_foreign_blamed_on_hat
   RUN_foreign_not_stopped
   RUN_reflog_fallback_blind
+  RUN_window_not_netted
+  RUN_rebase_read_as_foreign
   RUN_turn_rule_dropped
   RUN_harness_env_inherited
   RUN_git_label_unexported
@@ -4902,7 +4927,7 @@ KILLERS_FILE="$ROOT/.sdd/cache/mutation-killers.tsv"
 # stopped being parsed: an empty loop reports "0 broken" forever.
 # ---------------------------------------------------------------------------
 if [ "$ANCHORS_ONLY" = 1 ]; then
-  ANCHOR_FLOOR=417
+  ANCHOR_FLOOR=420
   anchor_box() { mkdir -p "$1"; cp -r "$ROOT/bin" "$1/"; }
   anchor_control_noop()       { :; }
   anchor_control_intact()     { printf '# a mutation that lands and stays valid\n' >> "$1"; }

@@ -1584,8 +1584,11 @@ gate_DOCS() {
         cell = $col; gsub(/^[ \t]+|[ \t]+$/, "", cell)
         # The value as the author wrote it (yokoten of #50): `✅` in a code span or **n/a** in bold
         # is that value. ASCII class only — mawk is byte-oriented, and a class holding ✅ would
-        # match its bytes, not the character (CLAUDE.md).
-        gsub(/[*`]/, "", cell)
+        # match its bytes, not the character (CLAUDE.md). A cell that was ONLY markup is not an
+        # empty cell: stripped to nothing it would be skipped below as if the row were not there,
+        # so it is pending, quoted as written (review r1 of 20260926).
+        raw = cell; gsub(/[*`]/, "", cell)
+        if (cell == "" && raw != "") { print raw; next }
         # `:?-+:?` — with a formatter-aligned separator (`|:---:|`) the Status column of the
         # separator row read as a pending Status, and gate_DOCS failed a drift checklist with
         # nothing pending in it. Same regex in checkpoint_rows and gate_REVIEW.
@@ -3134,10 +3137,22 @@ kit_guard_check() {
 #  · ONLY TRAILING SLASHES are normalised out of `$HANDOFF_DIR` (hat_expand); a leading `./`, a
 #    `//` in the middle or an absolute `$HANDOFF_DIR` would each miss the same way and none has a
 #    probe.
-#  · THE LABEL IS ATTRIBUTION, NOT PROOF. A git command that sets GIT_REFLOG_ACTION itself (a
-#    `rebase`, a `pull`) writes an entry without the session's label, and the session's own move
-#    reads as foreign: the line still stops, only the kind is wrong. A writer that copies the label
-#    would be read as the session — the stop is the same, `hat-crossed`.
+#  · THE LABEL IS ATTRIBUTION, NOT PROOF. Measured on git 2.43 with the label exported: commit,
+#    `--amend`, checkout, switch, reset, merge, pull, cherry-pick, revert and stash write `<label>`
+#    or `<label>: …`, and rebase (and `pull --rebase`) write `<label> (start|pick|finish): …` — all
+#    three shapes are read as the session's. A git that wrote a message of its own instead would
+#    make the session's move read as foreign: the line still stops, only the kind is wrong. A writer
+#    that copies the label is read as the session — the stop is the same, `hat-crossed`.
+#  · THE WINDOW NEVER WIDENS THE NET DIFF. Entry by entry, a round trip (check another branch out and
+#    come back) touches every path the two branches differ in and puts all of it back; summed, that
+#    read as a crossing the range diff never saw (review r1 of 20260926). Only the paths of
+#    `<HEAD before>..<HEAD now>` are attributed, and a net path no FOREIGN entry explains is the
+#    session's — so whether the line stops is exactly what the range diff said, and the reflog only
+#    picks the kind. That is also why three of the fallback checks in hat_reflog_window (`k ≥ 1`,
+#    the recorded top right below the new entries, the newest entry at HEAD) have NO probe: skipping
+#    one leaves every net path charged somewhere, so it changes the kind at worst. The world that
+#    reaches them — HEAD moved with no entry, an `update-ref` from a detached worktree — was not
+#    built as a probe.
 #  · ONLY COMMITS ARE ATTRIBUTED. The status half still reads uncommitted edits as the session's,
 #    so a concurrent writer's dirty file is still the hat's crossing.
 #  · cmd_kaizen exports the label through run_phase and is still outside these doors (above).
@@ -3182,7 +3197,7 @@ hat_diff_names() {   # hat_diff_names <old sha> <new sha>
   git -C "$REPO_ROOT" -c core.quotePath=false diff --name-only "$1" "$2" 2>/dev/null || true
 }
 
-# hat_reflog_window <HEAD now> <expanded globs> — rc 0 when the reflog accounts for the move, rc 1
+# hat_reflog_window <HEAD before> <HEAD now> <expanded globs> — rc 0 when the reflog accounts for the move, rc 1
 # to fall back to the range diff. PUBLISHES HAT_WINDOW_OWN (the paths of the entries carrying the
 # session's exact label, one per line) and HAT_WINDOW_FOREIGN / HAT_WINDOW_FOREIGN_N (the entries
 # without it that changed a path outside the globs, as `<sha7> <subject>`, `; `-joined, and their
@@ -3190,17 +3205,20 @@ hat_diff_names() {   # hat_diff_names <old sha> <new sha>
 #
 # Each entry is diffed against the entry below it — the recorded top for the oldest — so a session
 # commit made on top of a foreign one is diffed against the foreign one, and neither owns the other's
-# paths. The label is matched EXACTLY (alone, or followed by `:` and the subject git appends), never
-# by the `sdd:` prefix: a label of an earlier lap is somebody else's as far as this window goes.
+# paths. Then everything is cut down to the NET diff (`<before>..<now>`): a path the window touched and
+# put back is nobody's, and a net path no foreign entry explains is the session's (header above). The
+# label is matched EXACTLY — alone, followed by `:` and the subject git appends, or followed by ` (`
+# as rebase writes it — never by the `sdd:` prefix: a label of an earlier lap is somebody else's.
 HAT_WINDOW_OWN=""
 HAT_WINDOW_FOREIGN=""
 HAT_WINDOW_FOREIGN_N=0
 hat_reflog_window() {
-  local head_now="$1" globs="$2" label="$LAST_PHASE_GIT_LABEL" lines count k i entry sha old subj paths p outside
+  local before="$1" head_now="$2" globs="$3" label="$LAST_PHASE_GIT_LABEL" lines count k i entry sha old subj paths p outside
+  local net own_all="" foreign_all=""
   HAT_WINDOW_OWN=""; HAT_WINDOW_FOREIGN=""; HAT_WINDOW_FOREIGN_N=0
   [ -n "$label" ] && [ -n "$HAT_REFLOG_TOP" ] || return 1
   lines="$(hat_reflog_lines)"
-  local -a entries
+  local -a entries fdesc=() fpaths=()
   mapfile -t entries <<< "$lines"
   count=${#entries[@]}
   k=$(( count - HAT_REFLOG_COUNT ))
@@ -3215,20 +3233,33 @@ hat_reflog_window() {
     entry="${entries[$i]#*$'\t'}"
     sha="${entry%%$'\t'*}"; subj="${entry#*$'\t'}"
     paths="$(hat_diff_names "$old" "$sha")"
-    if [ "$subj" = "$label" ] || [[ "$subj" == "$label:"* ]]; then
-      HAT_WINDOW_OWN="${HAT_WINDOW_OWN:+$HAT_WINDOW_OWN$'\n'}$paths"
+    if [ "$subj" = "$label" ] || [[ "$subj" == "$label:"* ]] || [[ "$subj" == "$label ("* ]]; then
+      own_all+="$paths"$'\n'
     else
-      outside=0
-      while IFS= read -r p; do
-        [ -n "$p" ] || continue
-        hat_path_allowed "$p" "$globs" || { outside=1; break; }
-      done <<< "$paths"
-      if [ "$outside" = 1 ]; then
-        HAT_WINDOW_FOREIGN_N=$((HAT_WINDOW_FOREIGN_N + 1))
-        HAT_WINDOW_FOREIGN="${HAT_WINDOW_FOREIGN:+$HAT_WINDOW_FOREIGN; }${sha:0:7} $subj"
-      fi
+      foreign_all+="$paths"$'\n'
+      fdesc+=("${sha:0:7} $subj"); fpaths+=("$paths")
     fi
     old="$sha"
+  done
+  net="$(hat_diff_names "$before" "$head_now")"
+  while IFS= read -r p; do
+    [ -n "$p" ] || continue
+    if grep -qxF -- "$p" <<< "$own_all" || ! grep -qxF -- "$p" <<< "$foreign_all"; then
+      HAT_WINDOW_OWN="${HAT_WINDOW_OWN:+$HAT_WINDOW_OWN$'\n'}$p"
+    fi
+  done <<< "$net"
+  for i in "${!fdesc[@]}"; do
+    outside=0
+    while IFS= read -r p; do
+      [ -n "$p" ] || continue
+      grep -qxF -- "$p" <<< "$net" || continue
+      grep -qxF -- "$p" <<< "$HAT_WINDOW_OWN" && continue
+      hat_path_allowed "$p" "$globs" || { outside=1; break; }
+    done <<< "${fpaths[$i]}"
+    if [ "$outside" = 1 ]; then
+      HAT_WINDOW_FOREIGN_N=$((HAT_WINDOW_FOREIGN_N + 1))
+      HAT_WINDOW_FOREIGN="${HAT_WINDOW_FOREIGN:+$HAT_WINDOW_FOREIGN; }${fdesc[$i]}"
+    fi
   done
   return 0
 }
@@ -3284,7 +3315,7 @@ hat_guard_check() {   # hat_guard_check <phase> <HEAD before the session> — ar
   if [ -n "$before" ] && [ "$before" != "-" ] && [ "$head_now" != "-" ] && [ "$head_now" != "$before" ]; then
     # The session's own commits by the reflog when it can say whose they are; the whole range,
     # attributed to the session as before, when it cannot.
-    if hat_reflog_window "$head_now" "$globs"; then
+    if hat_reflog_window "$before" "$head_now" "$globs"; then
       changed="$HAT_WINDOW_OWN"
     else
       changed="$(hat_diff_names "$before" "$head_now")"
@@ -3305,7 +3336,7 @@ hat_guard_check() {   # hat_guard_check <phase> <HEAD before the session> — ar
     # Not the hat's crossing — but somebody committed into this checkout while the phase ran, and
     # the line stops for that too, with its own kind and the remedy that fits it (ADR 0012).
     [ "$HAT_WINDOW_FOREIGN_N" -gt 0 ] || return 0
-    FOREIGN_COMMIT_WHY="while the $step session ($hat) ran, $HAT_WINDOW_FOREIGN_N commit(s) without its label changed path(s) outside its writes: $HAT_WINDOW_FOREIGN"
+    FOREIGN_COMMIT_WHY="while the $step session ($hat) ran, $HAT_WINDOW_FOREIGN_N git move(s) without its label (a commit, checkout or reset made from outside it) changed path(s) outside its writes: $HAT_WINDOW_FOREIGN"
     warn "$FOREIGN_COMMIT_WHY"
     pipeline_log_line "$(date -Iseconds)  FOREIGN-COMMIT  $phase  $FOREIGN_COMMIT_WHY"
     pipeline_log_line "$(date -Iseconds)  FOREIGN-REMEDY  $phase  nothing may commit into this checkout while a phase runs — let the phase end, then 'sdd run' again; widening writes: or HAT_WRITES_EXTRA would not fix this"

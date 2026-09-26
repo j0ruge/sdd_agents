@@ -175,8 +175,9 @@ chapéu que escreve fora de `writes:` também (`hat-crossed`) — as duas pela m
 `GIT_REFLOG_ACTION=sdd:<passo>:<sid8>` (`session_git_label`, no `run_phase` e no `cmd_close`), e o
 `hat_guard_check` lê a janela pelo reflog de `HEAD` — entrada com o rótulo exato é da sessão, sem ele
 é alheia e para a linha como `foreign-commit`, com o commit nomeado e o remédio certo; sem reflog
-que explique o movimento, o diff do intervalo de antes. Limites: um git que sobrescreve o
-`GIT_REFLOG_ACTION` troca o `kind`, nunca a parada; sujeira **não commitada** de um escritor
+que explique o movimento, o diff do intervalo de antes; a atribuição nunca alarga o diff líquido da
+fase. Limites: um git que gravasse mensagem própria no lugar do rótulo trocaria o `kind`, nunca a
+parada (nenhum comando medido no git 2.43 faz isso; o `rebase` grava `<rótulo> (pick): …`); sujeira **não commitada** de um escritor
 concorrente continua atribuída ao chapéu; a guarda de kit não lê o rótulo. Sem worktree nem container: o ledger
 carimba caminho e um worktree já confundiu a identidade do repo (comentários `WORKTREE` do
 `bin/sdd`). Fechar pede desenho próprio, não um `git worktree add` no laço.
