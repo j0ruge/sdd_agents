@@ -13,11 +13,11 @@
 
 | # | Frente | Estado | Próximo passo | Espera por |
 |---|---|---|---|---|
-| F1 | Custo do catálogo de mutação | PR #59 mergeado (`d0ac22d`); P2(a) feito em 2026-09-25 (assassino primeiro, amostra 389 → 171 s, `sdd health` 1h27 → ~38–40 min); P2(b) **FEITO**, PR #170 mergeado (`31dfd43`; o sensor para no primeiro FAIL, [spec](2026-09-25-o-sensor-para-no-primeiro-fail-design.md), amostra 1328,7 → 571 s, `sdd health` 37 min 42 s → **~18 min**, carimbo 406/406 válido na `main`); P1, P3, P4 abertos | E6 do #170 **feito** em 2026-09-26 (espelho 82 ↔ 82, #144 fechada, PR #171; [handoff](../plans/2026-09-25-depois-do-170-handoff.md)); depois P3, na carona do item 3 da recomendação | a decisão de congelar (item 2) |
-| F2 | Faxina pós-#57 | parada | ADR 0010 para `accepted`; apagar 2 itens do `TODO.md` | carona num PR que já carimbe |
-| F3 | T3 e a janela do juiz | parada | decidir as 3 perguntas de desenho | **decisão humana** (inclusive: congelar ou não) |
-| F4 | Portabilidade para outros repos | parcial | registrar as lacunas no `TODO.md`; consertar a 2 | carona num PR que já carimbe |
-| F5 | Issues avulsas #50–#53 | abertas | triagem | — |
+| F1 | Custo do catálogo de mutação | PR #59 mergeado (`d0ac22d`); P2(a) feito em 2026-09-25 (assassino primeiro, amostra 389 → 171 s, `sdd health` 1h27 → ~38–40 min); P2(b) **FEITO**, PR #170 mergeado (`31dfd43`; o sensor para no primeiro FAIL, [spec](2026-09-25-o-sensor-para-no-primeiro-fail-design.md), amostra 1328,7 → 571 s, `sdd health` 37 min 42 s → **~18 min**, carimbo 406/406 válido na `main`); P1, P3, P4 abertos | E6 do #170 **feito** em 2026-09-26 (espelho 82 ↔ 82, #144 fechada, PR #171; [handoff](../plans/2026-09-25-depois-do-170-handoff.md)). O P3 **ficou fora** da carona (`20260926-a-carona-antes-do-congelamento`, decisão 6 do grill): é pré-requisito do próximo aumento de paralelismo, que não acontece com o kit congelado | o fim do congelamento (F3) |
+| F2 | Faxina pós-#57 | **fechada** pela missão `20260926-a-carona-antes-do-congelamento` (I7; o yokoten da crase no I1) | nada | — |
+| F3 | T3 e a janela do juiz | o congelamento começa no merge do PR da missão `20260926-a-carona-antes-do-congelamento` (decisão 10 do grill), confirmado pelo humano no fechamento | congelado, 3 missões de alvo sobre o mesmo `kit_sha` → `sdd kaizen`; a T3 vem depois do veredito | o merge da carona |
+| F4 | Portabilidade para outros repos | sem pendência de código: lacunas 2 e 3 **consertadas** na missão `20260926-a-carona-antes-do-congelamento` (I5, I6), 4 e 5 no `TODO.md` (I7), 6 declarada no ADR 0007 | a prova num 2º alvo, que conta para a janela do juiz | o congelamento (F3) |
+| F5 | Issues avulsas #50–#53 | #53 fechada; #50, #51 e #52 consertadas na missão `20260926-a-carona-antes-do-congelamento` (I1–I4) | as três fecham com o merge do PR | — |
 | F6 | O worker (W1–W7) | estacionada por decisão | nada, até os fluxos atuais rodarem limpos | **decisão humana** |
 | F7 | Plano Astra, fases 2–7 | não iniciada | nada; vem depois do worker | F6 |
 
@@ -117,6 +117,10 @@ trabalho de fato.
 
 ## F2 — Faxina pós-#57
 
+> **Fechada** pela missão `20260926-a-carona-antes-do-congelamento`: as ADRs 0010 e 0011 estão `accepted` (I7), o item "A economia de
+> `current_phase()`" saiu pago por `3245bfd` (o outro já tinha saído em `f43788f`), e o yokoten da
+> crase foi consertado no I1, com probes e mutantes, em vez de registrado.
+
 Prevista no próprio plano da missão (`docs/handoffs/20260922-o-motivo-da-fase/00-missao.md`, l.161):
 - `docs/adr/0010-o-motivo-da-fase.md` ainda diz `Status: proposed`; deve ir para `accepted`.
 - Os dois itens do `TODO.md` sobre o memo do `run_check_cmd` ("A economia de
@@ -168,17 +172,20 @@ a missão `20260921-amep-backend-0-1-0` sobre o kit `ea39868`: 46 sessões, US$ 
    `ensure_mission_branch` lê `branch:` do `00-missao.md`; vazio ou placeholder ⇒ não cria branch,
    só o `warn` do `warn_if_on_base_branch`. Com `JIRA_ENABLED=false`, que é o default de repo
    novo, a fase TICKET (que escrevia o campo) é pulada. É o único gap que corrompe a `main` de um
-   repo novo por omissão. Direção: o `gate_PLAN` exige `branch:` quando o Jira está desligado, ou
-   o runner deriva o nome do slug.
+   repo novo por omissão. **Consertada** no I5 da missão `20260926-a-carona-antes-do-congelamento`:
+   com o Jira desligado o `gate_PLAN` recusa `branch:` vazio ou placeholder e nomeia o remédio; o
+   planner decide o nome com o humano.
 3. **O `sdd install` adivinha o `TEST_CMD` pelo primeiro manifesto.** `package.json` ⇒ `npm test`,
    que no `erp_api` é Vitest em watch mode e travaria o `gate_EXEC`. Direção: detectar
-   `"test": "vitest"` sem `run` e recusar, ou nomear `test:run`.
+   `"test": "vitest"` sem `run` e recusar, ou nomear `test:run`. **Consertada** no I6 da missão
+   `20260926-a-carona-antes-do-congelamento` pela raiz: o `run_check_cmd` (gates, `E2E_CMD` e
+   preflight) roda o comando com o stdin em `/dev/null`, e o vitest sem TTY não entra em watch.
 4. **O tier PLAN-only não tem sensor dedicado.** O `sdd install --force` faz `cp` sobre o symlink
    de `bin/sdd-link-agents` e escreve no kit através do link. O install não é sessão e não passa
-   pela guarda de kit.
+   pela guarda de kit. **Registrada no `TODO.md`** (I7 da carona).
 5. **A prosa dos chapéus ainda é do `sales_quote`.** `agents/sdd-docs.md` cita `packages/x/...`;
    `sdd-docs.md` e `sdd-reviewer.md` mandam ler `KAIZEN_LOG.md`, `CHANGELOG.md` e `CONTEXT.md`, que
-   nenhum gate exige. É ruído de prompt, não falha.
+   nenhum gate exige. É ruído de prompt, não falha. **Registrada no `TODO.md`** (I7 da carona).
 6. **A dependência do `~/.claude` do humano** (`--setting-sources`, `KIT_THIRD_PARTY_SKILLS`) já é
    limite declarado na linha 2 do ADR 0007.
 
@@ -190,12 +197,18 @@ pertence a esta frente.
 
 São quatro, todas abertas em 2026-09-22 a partir da missão do `lighthouse_project`:
 - **#50** — o `adr_link` aceita `**Spec**:` e recusa `**Spec:**`, e a mensagem aponta o lugar
-  errado. Avulsa.
+  errado. Avulsa. **Consertada** no I1 da missão `20260926-a-carona-antes-do-congelamento`: as duas
+  grafias e o caminho entre crases passam, o valor que não é caminho diz "not a path", e o yokoten
+  leva a mesma leitura à nota do `gate_REVIEW` e ao Status do `gate_DOCS`; fecha com o merge do PR.
 - **#51** — o sensor de fronteira de escrita culpa o chapéu por um commit concorrente feito de fora
   da sessão. É da mesma classe do item "a linha `kit-touched` afirma atribuição que ninguém mediu";
-  o #48 declara que "coordena entradas do kit, não edição externa".
+  o #48 declara que "coordena entradas do kit, não edição externa". **Consertada** no I3 e no I4 da
+  mesma missão (ADR 0012): toda sessão roda com o rótulo `GIT_REFLOG_ACTION=sdd:<passo>:<sid8>`, e um
+  commit sem ele fora do `writes:` para a linha como `foreign-commit`, com o commit nomeado. O item
+  do `kit-touched` continua aberto no `TODO.md`.
 - **#52** — o `sdd approve` sai 0 com "not approved" quando não há TTY. Liga-se ao W3 (F6) e ao
-  item do `TODO.md` sobre o `sdd approve`.
+  item do `TODO.md` sobre o `sdd approve`. **Consertada** no I2 da mesma missão: sem nenhum
+  caractere no stdin o comando sai 66 e não escreve nada; `n` e Enter seguem rc 0.
 - **#53** — o preflight reprova `TEST_CMD` em missão greenfield cujo I1 cria o manifesto. Liga-se
   a F4. **Fechada** pela missão `20260925-o-sensor-le-o-que-a-ancora-diz` (`bc624f9`, `warn` estreito
   quando o manifesto do runner não existe na raiz); a issue fecha com o merge do PR.
@@ -250,10 +263,11 @@ terminal do humano; e qualquer PR do kit segue abrir → todos os revisores → 
 **Recomendação desta sessão, marcada como tal:**
 1. ~~Terminar o #59~~ — mergeado em `d0ac22d`, carimbo 392/392.
 2. **Decidir se o kit congela agora** para a janela do juiz. Tudo o que vem abaixo muda a `main` e
-   encalha a janela; se congelar, os itens 3–5 esperam o veredito.
-3. Um PR de kit "de carona", que carimba uma vez só: F1-P3 (varredura sob carga), F2 (faxina
-   pós-#57), F4 (lacunas registradas no `TODO.md` e a lacuna 2 consertada) e as issues #50/#52/#53
-   que forem pequenas.
+   encalha a janela; se congelar, os itens 3–5 esperam o veredito. Respondido em 2026-09-26: "não
+   ainda — PR de carona" (item 3); a pergunta volta ao humano no fechamento da carona.
+3. ~~Um PR de kit "de carona", que carimba uma vez só~~ — **feito** pela missão `20260926-a-carona-antes-do-congelamento`: F2, F4
+   (lacunas 2 e 3 consertadas, 4 e 5 registradas) e as issues #50, #51 e #52 (a #53 já estava
+   fechada). O F1-P3 ficou fora por decisão do grill.
 4. A T3 com as três decisões humanas, via `/sdd-plan`.
 5. F1-P1 com ADR; depois decidir o F1-P4.
 6. F6 e F7, quando os fluxos rodarem limpos.

@@ -273,6 +273,7 @@ mkdir -p "$MDIR"
 cat > "$MDIR/00-missao.md" <<'EOF'
 ---
 missao: 20260101-fixture
+branch: main
 aprovacao: auto
 ---
 # Mission
@@ -4036,6 +4037,7 @@ CFG
   cat > "docs/handoffs/$MISSION/00-missao.md" <<'MIS'
 ---
 missao: 20260101-fixture
+branch: main
 aprovacao: auto
 ---
 # Mission
@@ -4048,6 +4050,12 @@ MIS
 CPT
   git add -A && git commit -qm "init"
   git worktree add "$WTLINK" -b wtprobe
+  # Each checkout's mission names the branch that checkout stands on — the one value on which
+  # ensure_mission_branch does nothing. `branch: main` in the worktree would ask git to check out a
+  # branch the main checkout already holds.
+  cd "$WTLINK" || exit 1
+  sed -i 's/^branch: main$/branch: wtprobe/' "docs/handoffs/$MISSION/00-missao.md"
+  git commit -qam "the worktree's mission names its own branch"
 ) >/dev/null 2>&1
 
 ( cd "$WTMAIN" && SDD_STATE_DIR="$WTSTATE" "$SDD" run "$MISSION" ) >/dev/null 2>&1
@@ -4540,6 +4548,7 @@ CFG
   cat > "$d/docs/handoffs/$MISSION/00-missao.md" <<'MSN'
 ---
 missao: 20260101-fixture
+branch: main
 aprovacao: auto
 ---
 # Mission
@@ -5233,6 +5242,7 @@ CFG
     cat > "docs/handoffs/$MISSION/00-missao.md" <<'MIS'
 ---
 missao: 20260101-fixture
+branch: main
 aprovacao: auto
 ---
 # Mission
@@ -5701,6 +5711,7 @@ CFG
     cat > "docs/handoffs/$MISSION/00-missao.md" <<'MIS'
 ---
 missao: 20260101-fixture
+branch: main
 aprovacao: auto
 ---
 # Mission
@@ -6012,6 +6023,160 @@ assert_eq "neither journal writer leaks a raw redirection error when its file ca
   "jarmed:1 larmed:1 sessions:1 journal:1 ledger:2 raw:0 rc:3" \
   "jarmed:$RS8_JARMED larmed:$RS8_LARMED sessions:$(reviewscope_sessions) journal:$(grep -c 'the pipeline journal at' <<< "$RS8_ERR") ledger:$(grep -c 'could not write the autonomy ledger at' <<< "$RS8_ERR") raw:$(( RS8_NAMED - RS8_CURATED )) rc:$RS8_RC"
 
+# 9. THE SESSION'S GIT LABEL (issue #51, part 1). Every session runs under
+#    GIT_REFLOG_ACTION=sdd:<step>:<sid8>, so every commit, amend, checkout or reset it makes lands in
+#    the reflog carrying WHO made it — the artifact hat_guard_check reads to tell the session's
+#    commits from a concurrent writer's. The close session opens its own `claude` outside
+#    run_phase, so it is a door of its own and is asserted in the same outcome.
+#    The 8 hex are compared against the NAME of the session's log file: that is the cross-proof
+#    that the label names this invocation, and not some id that merely has the right shape.
+RS9="$OUTSIDE/reviewscope-label"
+RS9_LABELS="$OUTSIDE/git-labels"
+reviewscope_world "$RS9"
+cat > "$OUTSIDE/stub/claude" <<STUB
+#!/usr/bin/env bash
+printf '%s\n' "\$GIT_REFLOG_ACTION" >> "$RS9_LABELS"
+cat "$STREAM_SAMPLE"
+exit 0
+STUB
+chmod +x "$OUTSIDE/stub/claude"
+rm -f "$RS9_LABELS"
+( cd "$RS9" && "$SDD" run "$MISSION" --phase REVIEW --max-phases 1 ) >/dev/null 2>&1
+RS9_RUN="$(head -n 1 "$RS9_LABELS" 2>/dev/null || true)"
+RS9_LOGHEX=""
+for f in "$RS9/.sdd/logs/$MISSION"/REVIEW-*.json; do
+  [ -e "$f" ] || continue
+  RS9_LOGHEX="${f##*-}"; RS9_LOGHEX="${RS9_LOGHEX%.json}"; break
+done
+RS9_CL="$OUTSIDE/label-close"
+kitguard_world "$RS9_CL"
+sed -i 's/^JIRA_ENABLED=false$/JIRA_ENABLED=true/' "$RS9_CL/.sdd/config.sh"
+printf -- '---\nfase: TICKET\nissue: SQ-1\n---\n# TICKET\n' > "$RS9_CL/docs/handoffs/$MISSION/10-ticket.md"
+( cd "$RS9_CL" && git add -A && git commit -qm "chore: ticket" ) >/dev/null
+printf '#!/usr/bin/env bash\nprintf "[]\\n"\n' > "$OUTSIDE/stub/acli"
+chmod +x "$OUTSIDE/stub/acli"
+rm -f "$RS9_LABELS"
+( cd "$RS9_CL" && "$FAKEKIT/bin/sdd" close "$MISSION" ) >/dev/null 2>&1
+RS9_CLOSE="$(head -n 1 "$RS9_LABELS" 2>/dev/null || true)"
+rm -f "$OUTSIDE/stub/acli"
+assert_eq "every session runs under its own git label, the close session too" \
+  "run:1 log:1 close:1" \
+  "run:$(grep -cE '^sdd:REVIEW:[0-9a-f]{8}$' <<< "$RS9_RUN") log:$(if [ -n "$RS9_LOGHEX" ] && [ "$RS9_RUN" = "sdd:REVIEW:$RS9_LOGHEX" ]; then echo 1; else echo 0; fi) close:$(grep -cE '^sdd:CLOSE:[0-9a-f]{8}$' <<< "$RS9_CLOSE")"
+
+# 10-12. THE COMMIT HAS AN OWNER (issue #51, part 2; ADR 0012). The REVIEW session lands its round
+#    WITH its label, and then one more commit touches bin/tool.sh — outside the reviewer's writes: —
+#    in one of three ways: WITHOUT the label (`env -u GIT_REFLOG_ACTION`, which is what a human
+#    committing from another shell into the same checkout looks like in the reflog), WITH it (the
+#    session's own), or without it but INSIDE the writes:. The first used to stop as `hat-crossed`,
+#    blaming the hat and naming two wrong remedies; it stops now as `foreign-commit`, naming the
+#    commit. Both STOP: the attribution picks the kind and the remedy, never whether the line stops —
+#    a session that stripped its own label would otherwise cross its hat for free.
+foreign_stub() {   # foreign_stub <dir> <foreign|labelled|inside|roundtrip|rebase>
+  cat > "$OUTSIDE/stub/claude" <<STUB
+#!/usr/bin/env bash
+cat > "$1/docs/handoffs/$MISSION/40-review-r1.md" <<'MD'
+---
+fase: REVIEW
+gate: r1 landed with one real finding
+---
+### Overall Grade
+
+| Criterion | Grade | Rationale |
+|---|---|---|
+| Correctness | B | One real finding, handed to EXEC as R1. |
+MD
+git -C "$1" add "docs/handoffs/$MISSION/40-review-r1.md"
+git -C "$1" commit -qm "chore: round one landed"
+case "$2" in
+  foreign)  printf 'echo from elsewhere\n' > "$1/bin/tool.sh"; git -C "$1" add bin/tool.sh
+            env -u GIT_REFLOG_ACTION git -C "$1" commit -qm "chore: a concurrent writer" ;;
+  labelled) printf 'echo from elsewhere\n' > "$1/bin/tool.sh"; git -C "$1" add bin/tool.sh
+            git -C "$1" commit -qm "chore: a concurrent writer" ;;
+  inside)   printf 'a note\n' > "$1/docs/handoffs/$MISSION/notes.md"; git -C "$1" add "docs/handoffs/$MISSION/notes.md"
+            env -u GIT_REFLOG_ACTION git -C "$1" commit -qm "chore: a concurrent writer" ;;
+  roundtrip) git -C "$1" checkout -q elsewhere; git -C "$1" checkout -q main ;;
+  rebase)   git -C "$1" rebase -q elsewhere ;;
+esac
+cat "$STREAM_SAMPLE"
+exit 0
+STUB
+  chmod +x "$OUTSIDE/stub/claude"
+}
+# foreign_run <dir> — PUBLISHES FR_RC, FR_LOG and FR_KIND. CALLED, never `$( )`.
+foreign_run() {
+  : > "$LEDGER"
+  FR_RC=0
+  ( cd "$1" && "$SDD" run "$MISSION" --phase REVIEW --max-phases 1 ) >/dev/null 2>&1 || FR_RC=$?
+  FR_LOG="$(cat "$1/.sdd/logs/$MISSION/pipeline.log" 2>/dev/null || true)"
+  FR_KIND="$(hat_rows)"
+}
+RSF="$OUTSIDE/reviewscope-foreign"
+reviewscope_world "$RSF"
+foreign_stub "$RSF" foreign
+foreign_run "$RSF"
+RSF_RC="$FR_RC"; RSF_LOG="$FR_LOG"; RSF_KIND="$FR_KIND"
+RSF_SHA="$(git -C "$RSF" rev-parse HEAD)"; RSF_SHA="${RSF_SHA:0:7}"
+RSF_NAMED="$(grep 'FOREIGN-COMMIT' <<< "$RSF_LOG" | grep -F "$RSF_SHA" | grep -c 'a concurrent writer')"
+RSL="$OUTSIDE/reviewscope-labelled"
+reviewscope_world "$RSL"
+foreign_stub "$RSL" labelled
+foreign_run "$RSL"
+assert_eq "a commit without the session label stops the line as foreign-commit, the same commit with it as hat-crossed" \
+  "rc=3 kind=foreign-commit journal=1 named=1 hat=0 · rc=3 kind=hat-crossed" \
+  "rc=$RSF_RC kind=$RSF_KIND journal=$(grep -c 'FOREIGN-COMMIT' <<< "$RSF_LOG") named=$RSF_NAMED hat=$(grep -c 'HAT-CROSSED' <<< "$RSF_LOG") · rc=$FR_RC kind=$FR_KIND"
+# Inside the writes: a foreign commit is nobody's crossing, exactly as today. `fired:1` is the floor:
+# a stub that stopped committing would satisfy every zero on the right.
+RSI="$OUTSIDE/reviewscope-inside"
+reviewscope_world "$RSI"
+foreign_stub "$RSI" inside
+foreign_run "$RSI"
+assert_eq "a foreign commit inside the hat writes is not a stop" \
+  "fired:1 kind: journal:0 hat:0" \
+  "fired:$(git -C "$RSI" log --oneline | grep -c 'a concurrent writer') kind:$FR_KIND journal:$(grep -c 'FOREIGN-COMMIT' <<< "$FR_LOG") hat:$(grep -c 'HAT-CROSSED' <<< "$FR_LOG")"
+# With no reflog there is nothing to attribute by, and the guard falls back to the range diff of
+# today: every path is the session's. `logs:0` is the floor that the venom is ARMED — a reflog that
+# quietly came back would make this the foreign regime with a different name.
+RSN="$OUTSIDE/reviewscope-noreflog"
+reviewscope_world "$RSN"
+git -C "$RSN" config core.logAllRefUpdates false
+rm -rf "$RSN/.git/logs"
+foreign_stub "$RSN" foreign
+foreign_run "$RSN"
+assert_eq "without a reflog the guard blames the session as before" \
+  "logs:0 rc=3 kind=hat-crossed" \
+  "logs:$(git -C "$RSN" reflog show HEAD 2>/dev/null | grep -c .) rc=$FR_RC kind=$FR_KIND"
+# The window never widens the net diff (review r1 of this mission). A reviewer that checks another
+# branch out and comes back touches, entry by entry, every path the two branches differ in — and puts
+# all of it back. Summed per entry that read as a crossing of bin/tool.sh, the false accusation with
+# the wrong remedy #51 exists to end, caused by its own fix. `elsewhere` differs from main in
+# bin/tool.sh and is cut BEFORE the session; `trips:2` is the floor that the two labelled checkouts
+# really happened (a labelled checkout writes the bare label).
+foreign_elsewhere() {   # foreign_elsewhere <dir> — a branch that differs from main in bin/tool.sh
+  ( cd "$1" && git checkout -qb elsewhere && printf 'echo elsewhere\n' > bin/tool.sh \
+      && git commit -qam "chore: elsewhere" && git checkout -q main ) >/dev/null 2>&1
+}
+RSR="$OUTSIDE/reviewscope-roundtrip"
+reviewscope_world "$RSR"
+foreign_elsewhere "$RSR"
+foreign_stub "$RSR" roundtrip
+foreign_run "$RSR"
+assert_eq "a round trip through another branch inside the window is not a crossing" \
+  "trips:2 kind: hat:0 foreign:0" \
+  "trips:$(git -C "$RSR" reflog show --format='%gs' HEAD | grep -cxE 'sdd:REVIEW:[0-9a-f]{8}') kind:$FR_KIND hat:$(grep -c 'HAT-CROSSED' <<< "$FR_LOG") foreign:$(grep -c 'FOREIGN-COMMIT' <<< "$FR_LOG")"
+# A rebase the session makes is the session's move. git writes it as `<label> (start|pick|finish): …`
+# — measured on git 2.43 — and read as foreign it printed the session's own label under "without
+# its label", with the concurrent-writer remedy. Rebasing onto `elsewhere` brings bin/tool.sh in, so
+# the stop is the hat's, as the range diff always said. `picked:yes` is the floor that the rebase ran
+# (it replays the round's commit and the runner's `intervention:` note, so the count is not fixed).
+RSB="$OUTSIDE/reviewscope-rebase"
+reviewscope_world "$RSB"
+foreign_elsewhere "$RSB"
+foreign_stub "$RSB" rebase
+foreign_run "$RSB"
+assert_eq "a rebase the session makes is its own move, not a foreign commit" \
+  "picked:yes rc=3 kind=hat-crossed foreign:0" \
+  "picked:$(if grep -qE '^sdd:REVIEW:[0-9a-f]{8} \(pick\): ' <<< "$(git -C "$RSB" reflog show --format='%gs' HEAD)"; then echo yes; else echo no; fi) rc=$FR_RC kind=$FR_KIND foreign:$(grep -c 'FOREIGN-COMMIT' <<< "$FR_LOG")"
+
 # The stub goes back the way it was found, for the reason spelled out one screen up.
 cat > "$OUTSIDE/stub/claude" <<'STUB'
 #!/usr/bin/env bash
@@ -6052,6 +6217,7 @@ CFG
     cat > "docs/handoffs/$MISSION/00-missao.md" <<'MIS'
 ---
 missao: 20260101-fixture
+branch: main
 aprovacao: auto
 ---
 # Mission

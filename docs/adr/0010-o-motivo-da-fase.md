@@ -1,6 +1,6 @@
 # ADR 0010 — A moved disk is not progress when the phase comes back for the same reason
 
-- **Status**: proposed (—, 2026-09-22)
+- **Status**: accepted (—, 2026-09-26)
 - **Spec**: docs/handoffs/20260922-o-motivo-da-fase/00-missao.md
 
 ## Context

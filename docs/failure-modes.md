@@ -537,6 +537,34 @@ anywhere and narrowing it would be a regression. Reasoning and what was discarde
 
 ---
 
+## The line stopped with `foreign-commit`
+
+**Symptom:** `BLOCKED in <PHASE> — while the <step> session (<hat>) ran, N git move(s) without its
+label (a commit, checkout or reset made from outside it) changed path(s) outside its writes: <sha7>
+<subject>; …`, a `FOREIGN-COMMIT` line in `.sdd/logs/<mission>/pipeline.log` naming the same moves,
+and a `foreign-commit` row in the ledger.
+
+**What is happening:** something other than the session moved this checkout while the phase ran —
+you, from another shell or editor; another agent with a shell; a hook. Every session runs under
+`GIT_REFLOG_ACTION=sdd:<step>:<sid8>`, so its own commits, checkouts, resets and rebases land in the
+reflog of `HEAD` carrying that label, and the runner reads the entries written during the phase:
+the ones without the session's label are not the session's. It stops the line anyway, because
+nothing in the pipeline made that move and the next gate would judge a tree nobody approved. Issue
+#51, [ADR 0012](adr/0012-o-commit-tem-dono.md).
+
+**What you do:** let the phase end before committing into the checkout it runs in, check that the
+named moves are what you meant, then `sdd run` again. A move that stayed inside the hat's `writes:`,
+or that was undone before the phase ended, never stops the line.
+
+**What you do NOT do:** declare the path in `HAT_WRITES_EXTRA`, or widen the hat's `writes:` in the
+kit. The hat crossed nothing — widening either weakens a real guard for good to silence a race.
+
+**If the reflog is off** (`core.logAllRefUpdates=false`, or `.git/logs` gone) the runner cannot tell
+whose move it was, falls back to the range diff and blames the hat as it always did, `hat-crossed` —
+see [the hat stopped correct work](#the-hat-stopped-correct-work).
+
+---
+
 ## The review does not close at Grade A
 
 **Symptom:** `BLOCKED in REVIEW` with `N review round(s) already on disk, REVIEW_MAX_ITER=M`.
@@ -756,9 +784,10 @@ branch or approved artifacts that differ between branches.
 on from wherever the checkout left the tree is the SQ-97 class the field exists to close
 ([the mission's branch](pipeline.md#the-missions-branch)).
 
-A mission that should not move branches at all leaves `branch:` at the `<…>` placeholder the
-template ships, which is a no-op — that is the right value whenever the name is not yours to
-decide.
+A mission that should not move branches at all names the branch it already runs on — the one
+value on which the runner does nothing. The `<…>` placeholder the template ships is a no-op too,
+but only with `JIRA_ENABLED=true`, where the TICKET phase fills it; with JIRA off `gate_PLAN`
+refuses it, because nothing would ever create the branch.
 
 ---
 

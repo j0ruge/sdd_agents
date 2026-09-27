@@ -125,9 +125,12 @@ mkdir -p "$MDIR" "$FIX/docs/qa/reports" "$FIX/docs/qa/bugs"
 echo "== PLAN phase =="
 assert_phase "mission with no artifact at all" "PLAN"
 
+# `branch: main` — the branch the fixture stands on, the one value on which ensure_mission_branch
+# does nothing. With JIRA off, gate_PLAN refuses a mission that names no branch (probed below).
 cat > "$MDIR/00-missao.md" <<'EOF'
 ---
 missao: 20260101-fixture
+branch: main
 aprovacao:
 ---
 # Mission
@@ -161,6 +164,36 @@ assert_phase "plan approved (auto) with a pending increment" "EXEC"
 # accident — whichever side a regression breaks, the other is standing next to it.
 assert_why_absent "and an approved plan is not told to approve itself again" "PLAN" "sdd approve"
 
+# Gap 2 of portability: with JIRA off nobody fills `branch:`. The TICKET phase that wrote it is
+# skipped, ensure_mission_branch reads empty or `<…>` as a no-op, and every phase commits wherever
+# the human happens to stand — the `main` of a new repo, by omission. gate_PLAN refuses it, the
+# mirror of `versao:` with JIRA on, and names the owner of the field: the planner, with the human.
+# assert_eq over phase AND reason, one outcome, because a refusal that named no remedy would read
+# as an instruction to guess.
+plan_branch_verdict() {   # plan_branch_verdict <regex the reason must match> — prints "<phase> <0|1>"
+  local ph why
+  ph="$( cd "$FIX" && "$SDD" phase "$MISSION" 2>&1 )"
+  why="$( cd "$FIX" && "$SDD" why "$MISSION" PLAN 2>&1 )"
+  printf '%s %s\n' "$ph" "$(grep -cE "$1" <<< "$why")"
+}
+sed -i '/^branch:/d' "$MDIR/00-missao.md"
+assert_eq "JIRA off with no branch stalls PLAN and names the fix" "PLAN 1" \
+  "$(plan_branch_verdict "has no mission branch \('branch: <empty>'\).*write the branch name into 00-missao\.md")"
+sed -i 's/^missao: 20260101-fixture$/missao: 20260101-fixture\nbranch: <nome da branch de trabalho>/' "$MDIR/00-missao.md"
+assert_eq "the branch placeholder is refused like an empty branch" "PLAN 1" \
+  "$(plan_branch_verdict "has no mission branch \('branch: <nome da branch de trabalho>'\)")"
+# With JIRA on the same mission goes on: the TICKET phase is the one that writes the branch, and
+# refusing here would stall every Jira repo at a field that is not yet anybody's to fill.
+sed -i '/^branch:/d' "$MDIR/00-missao.md"
+sed -i 's/^JIRA_ENABLED=false/JIRA_ENABLED=true/' .sdd/config.sh
+sed -i 's/^aprovacao: auto$/aprovacao: auto\nversao: 0.1.0/' "$MDIR/00-missao.md"
+assert_phase "JIRA on leaves an empty branch to the TICKET phase" "TICKET"
+sed -i '/^versao:/d' "$MDIR/00-missao.md"
+sed -i 's/^JIRA_ENABLED=true/JIRA_ENABLED=false/' .sdd/config.sh
+# ...and an explicit branch is a decision, whatever its name — the default branch included.
+sed -i 's/^missao: 20260101-fixture$/missao: 20260101-fixture\nbranch: main/' "$MDIR/00-missao.md"
+assert_phase "an explicit branch opens the PLAN gate" "EXEC"
+
 # JIRA on with no version stalls at PLAN — a version label is a human decision.
 sed -i 's/^JIRA_ENABLED=false/JIRA_ENABLED=true/' .sdd/config.sh
 assert_phase "JIRA_ENABLED=true with no 'versao:' in 00-missao" "PLAN"
@@ -169,6 +202,9 @@ sed -i 's/^JIRA_ENABLED=true/JIRA_ENABLED=false/' .sdd/config.sh
 
 # --- TICKET ----------------------------------------------------------------
 echo "== TICKET phase =="
+# With JIRA on the branch is the TICKET phase's to write, so the fixture's own `branch: main` steps
+# aside for this block and comes back at its end.
+sed -i '/^branch: main$/d' "$MDIR/00-missao.md"
 sed -i 's/^JIRA_ENABLED=false/JIRA_ENABLED=true/' .sdd/config.sh
 sed -i 's/^aprovacao: auto/aprovacao: auto\nversao: 0.1.0/' "$MDIR/00-missao.md"
 printf 'PROJECT=FX\nBOARD=1\n' > .jira-project
@@ -209,16 +245,18 @@ assert_phase "TICKET refuses a 00-missao.md declaring another branch" "TICKET"
 sed -i 's|^branch: feature/OTHER|branch: feature/FX-1|' "$MDIR/00-missao.md"
 assert_phase "the branch written back to 00-missao.md passes" "EXEC"
 
-# back to the no-JIRA state for the rest of the test. The `branch:` line goes too: left behind, the
-# `sdd run` invocations further down would check a branch out inside the fixture.
+# back to the no-JIRA state for the rest of the test. The TICKET's `branch:` line goes too: left
+# behind, the `sdd run` invocations further down would check a branch out inside the fixture. What
+# comes back is the fixture's own `branch: main`, the one value on which ensure_mission_branch does
+# nothing — and which gate_PLAN demands with JIRA off.
 sed -i 's/^JIRA_ENABLED=true/JIRA_ENABLED=false/' .sdd/config.sh
-sed -i '/^branch: feature\/FX-1$/d' "$MDIR/00-missao.md"
+sed -i 's/^branch: feature\/FX-1$/branch: main/' "$MDIR/00-missao.md"
 rm -f .jira-project "$MDIR/10-ticket.md"
-if grep -q '^branch:' "$MDIR/00-missao.md"; then
-  fail "the TICKET block leaves no branch behind" "no branch: line in 00-missao.md" \
-       "$(grep -m1 '^branch:' "$MDIR/00-missao.md")"
+if [ "$(grep '^branch:' "$MDIR/00-missao.md")" != "branch: main" ]; then
+  fail "the TICKET block leaves the fixture on its own branch" "exactly one 'branch: main' in 00-missao.md" \
+       "$(grep '^branch:' "$MDIR/00-missao.md" | tr '\n' ' ')"
 else
-  pass "the TICKET block leaves no branch behind in the fixture"
+  pass "the TICKET block leaves the fixture on its own branch"
 fi
 
 # --- EXEC ------------------------------------------------------------------
@@ -1151,6 +1189,17 @@ sed -i '/^REVIEW_PROSE_MIN_GRADE=/d' .sdd/config.sh
 review_with A —
 git add -A && git commit -qm "chore: Documentation not analysed"
 assert_phase "a '—' on a tolerated criterion still fails: not analysed is not a grade" "REVIEW"
+# The grade as the author wrote it (yokoten of issue #50): a cell in code spans is the grade it
+# carries. The rationale column already dropped backticks; the grade dropped only `*`, so `` `A` ``
+# failed as "Security = `A`" and bought a paid round. The pair is differential — a normaliser that
+# accepted anything would pass the first line and fail the second.
+review_with '`A`' B
+git add -A && git commit -qm "chore: r1 with a backticked A"
+assert_phase "a backticked grade is read as the grade it carries" "DOCS"
+review_with '`B`' B
+git add -A && git commit -qm "chore: r1 with a backticked B"
+assert_phase "a backticked grade below A still fails" "REVIEW"
+assert_why   "...and the reason reads it as the bare grade" "REVIEW" "Security = B "
 review_with B A
 git add -A && git commit -qm "chore: back to Security at B"
 
@@ -1706,6 +1755,28 @@ printf '# Docs\n\ndrift checklist\n\n| Area | Doc | Status | Evidence |\n|:-----
 git add -A && git commit -qm "chore: docs, formatter-aligned"
 assert_phase "a formatter-aligned drift checklist is still complete" "PR"
 assert_why_absent "gate_DOCS does not read the separator row as a Status" "DOCS" ":---"
+# The Status as the author wrote it (yokoten of issue #50): `✅` in a code span or `**n/a**` in bold
+# is the value it carries, and a pending value keeps being pending however it is dressed.
+printf '# Docs\n\ndrift checklist\n\n| Area | Doc | Status | Evidence |\n|---|---|---|---|\n| runner | README | `✅` | commit abc1234 |\n| libs | — | **n/a** | internal refactor |\n\nFindings recorded in TODO.md for this mission.\n' \
+  > "$MDIR/45-docs.md"
+git add -A && git commit -qm "chore: docs with dressed Status cells"
+assert_phase "a backticked or bold Status in the drift checklist is read as its value" "PR"
+printf '# Docs\n\ndrift checklist\n\n| Area | Doc | Status | Evidence |\n|---|---|---|---|\n| runner | README | `✗` | pending |\n| libs | — | **n/a** | internal refactor |\n\nFindings recorded in TODO.md for this mission.\n' \
+  > "$MDIR/45-docs.md"
+git add -A && git commit -qm "chore: docs with a backticked pending Status"
+assert_phase "a backticked pending Status is still pending" "DOCS"
+assert_why   "...and it is counted as one pending area" "DOCS" "has 1 area\\(s\\) pending"
+# ...and a cell that is ONLY markup is not an empty cell: stripped to nothing it used to be skipped,
+# so `**` alone passed the gate as if the row were not there (review r1 of this mission). Pending.
+printf '# Docs\n\ndrift checklist\n\n| Area | Doc | Status | Evidence |\n|---|---|---|---|\n| runner | README | ✅ | commit abc1234 |\n| libs | — | ** | pending |\n\nFindings recorded in TODO.md for this mission.\n' \
+  > "$MDIR/45-docs.md"
+git add -A && git commit -qm "chore: docs with a markup-only Status"
+assert_phase "a Status cell that is only markup is still pending" "DOCS"
+assert_why   "...and it is quoted as written" "DOCS" "Status '\*\*'"
+# Back to the formatter-aligned table the next block was written against.
+printf '# Docs\n\ndrift checklist\n\n| Area | Doc | Status | Evidence |\n|:------|:----|:------:|:---------|\n| runner | README | ✅ | commit abc1234 |\n| libs | — | n/a | internal refactor |\n\nFindings recorded in TODO.md for this mission.\n' \
+  > "$MDIR/45-docs.md"
+git add -A && git commit -qm "chore: docs, formatter-aligned again"
 
 # --- the mutation catalogue's stamp -----------------------------------------
 #
@@ -2080,7 +2151,9 @@ echo "== base branch warning =="
 # `session: <uuid>` per projected phase, so two runs of the same fixture never match literally. The
 # substitution is anchored on the UUID SHAPE and nothing else — widening it to `session:.*` would
 # also erase a phase changing its agent or its model, which is half of what this comparison is for.
-no_uuid() { sed -E 's/[0-9a-f]{8}(-[0-9a-f]{4}){3}-[0-9a-f]{12}/<uuid>/g'; }
+# The session's git label (`GIT_REFLOG_ACTION=sdd:<step>:<sid8>`, issue #51) carries the same fresh
+# id cut to 8 hex, so it is normalised by ITS shape too — the step stays, only the hex goes.
+no_uuid() { sed -E 's/[0-9a-f]{8}(-[0-9a-f]{4}){3}-[0-9a-f]{12}/<uuid>/g; s/(GIT_REFLOG_ACTION=sdd:[A-Za-z:]+:)[0-9a-f]{8}/\1<sid8>/g'; }
 
 # The two streams are captured APART and only then joined, in a fixed order. Not tidiness: it is
 # what lets the assertion below read stderr alone. A `2>&1` capture cannot tell `warn` (stderr,
@@ -2235,6 +2308,33 @@ else
   fail "sdd approve shows title, PLAN-AUTO, increments and open questions — and 'n' changes nothing" \
        "the four sections on screen, rc 0, frontmatter untouched, no commit, still PLAN" \
        "rc $APPROVE_N_RC, phase $APPROVE_N_PHASE, approval line '$(grep -m1 '^aprovacao:' "$AMDIR/00-missao.md")': $(tail -3 <<< "$APPROVE_N_OUT")"
+fi
+
+# --- 1b. no answer at all is not a "no" (issue #52).
+#
+# With stdin closed — a harness with no terminal, an empty pipe — `read` fails before a single
+# character arrives, and the command used to print "not approved" with rc 0, exactly what a human
+# who typed N gets. A caller could not tell "the human said no" from "nobody was asked". rc 66 is
+# EX_NOINPUT, the sysexits family of the 75 the kit already answers for CHECKOUT-BUSY.
+#
+# Differential in the same outcome: the bare Enter (an answer, and a no) keeps rc 0 with "not
+# approved", so the 66 is proven to belong to "no line at all" and not to "an empty answer".
+APPROVE_EOF_OUT="$( cd "$FIX" && "$SDD" approve "$AM" 2>&1 </dev/null )"; APPROVE_EOF_RC=$?
+APPROVE_EOF_PHASE="$( cd "$FIX" && "$SDD" phase "$AM" 2>&1 )"
+APPROVE_ENTER_OUT="$( cd "$FIX" && "$SDD" approve "$AM" 2>&1 <<< "" )"; APPROVE_ENTER_RC=$?
+if [ "$APPROVE_EOF_RC" -eq 66 ] \
+   && grep -q 'no answer reached the prompt' <<< "$APPROVE_EOF_OUT" \
+   && ! grep -q 'not approved' <<< "$APPROVE_EOF_OUT" \
+   && grep -qx 'aprovacao:' "$AMDIR/00-missao.md" \
+   && [ "$(git rev-parse HEAD)" = "$APPROVE_HEAD_0" ] \
+   && [ "$APPROVE_EOF_PHASE" = "PLAN" ] \
+   && [ "$APPROVE_ENTER_RC" -eq 0 ] \
+   && grep -q 'not approved' <<< "$APPROVE_ENTER_OUT"; then
+  pass "sdd approve with no answer at all exits 66 and writes nothing"
+else
+  fail "sdd approve with no answer at all exits 66 and writes nothing" \
+       "rc 66, 'no answer reached the prompt', no 'not approved', nothing written, still PLAN; Enter still rc 0 'not approved'" \
+       "rc $APPROVE_EOF_RC, phase $APPROVE_EOF_PHASE, Enter rc $APPROVE_ENTER_RC: $(tail -3 <<< "$APPROVE_EOF_OUT")"
 fi
 
 # --- 2. `y` writes humano-<today>, never `auto`, and the gate opens.
@@ -2529,9 +2629,12 @@ EOF
 # templates/missao.md: an unquoted heredoc expands `$` and backticks, so the day someone writes a
 # backtick into that placeholder this fixture would EXECUTE it. Quoting the delimiter would kill
 # the expansion and the parameter with it.
+#
+# The optional second argument is one more frontmatter line — case 3 needs `versao:` for its JIRA-on
+# world, and nothing else passes it.
 branch_mission() {
-  printf -- '---\nmissao: %s\naprovacao: auto\nbranch: %s\n---\n# Mission fixture\n' \
-    "$BM" "$1" > "$BMDIR/00-missao.md"
+  printf -- '---\nmissao: %s\naprovacao: auto\nbranch: %s\n%s---\n# Mission fixture\n' \
+    "$BM" "$1" "${2:+$2$'\n'}" > "$BMDIR/00-missao.md"
 }
 
 # The line the runner prints when it really does switch. It is asserted PRESENT here and ABSENT in
@@ -2632,12 +2735,21 @@ case "$BR_PLACEHOLDER" in
   *) fail "SENSOR-BROKEN: the placeholder case reads templates/missao.md" \
           "a <...> placeholder in the template's branch: key" "'$BR_PLACEHOLDER'" ;;
 esac
-branch_mission "$BR_PLACEHOLDER"
+# The placeholder is a legal state in ONE world only: with JIRA on, where the TICKET phase is the
+# one that fills it. With JIRA off gate_PLAN refuses it (gap 2 of portability), so this regime
+# runs with JIRA on, `versao:` filled and a 10-ticket.md in the active sprint that declares no
+# branch of its own — the gates then reach the same `blocked` Jidoka as case 1, and the rc still
+# compares. Back to JIRA off right after, for the same-branch half and everything below.
+sed -i 's/^JIRA_ENABLED=false/JIRA_ENABLED=true/' .sdd/config.sh
+printf -- '---\nfase: TICKET\nstatus: done\nissue: FX-1\nsprint: Sprint 1\n---\n' > "$BMDIR/10-ticket.md"
+branch_mission "$BR_PLACEHOLDER" "versao: 0.1.0"
 BR_PH_BEFORE="$(git branch --show-current)"
 BR_PH_LIST_BEFORE="$(git branch --list)"
 BR_PH_OUT="$( cd "$FIX" && "$SDD" run "$BM" 2>&1 )"; BR_PH_RC=$?
 BR_PH_AFTER="$(git branch --show-current)"
 BR_PH_LIST_AFTER="$(git branch --list)"
+sed -i 's/^JIRA_ENABLED=true/JIRA_ENABLED=false/' .sdd/config.sh
+rm -f "$BMDIR/10-ticket.md"
 # Herestrings, never `git branch --list | grep -c`: this file runs under `pipefail` and the house
 # rule is one form for all of them, so nobody has to work out which pipes are safe.
 BR_PH_N_BEFORE="$(grep -c . <<< "$BR_PH_LIST_BEFORE")"
@@ -2779,14 +2891,15 @@ git checkout -q -- file.txt
 # warning that cries wolf is how people learn to skip reading the true ones.
 #
 # Self-contained differential, both halves on the SAME command, the SAME fixture and the SAME
-# warning text, so no fixture regime can satisfy it by accident: an empty `branch:` leaves the run
-# standing on the base and the warning MUST appear exactly once; a declared branch moves it off and
+# warning text, so no fixture regime can satisfy it by accident: a `branch:` naming the base itself
+# leaves the run standing on it and the warning MUST appear exactly once (an EMPTY one no longer
+# can: with JIRA off gate_PLAN refuses it before the run gets that far); a declared branch moves it off and
 # the warning MUST NOT appear at all. Asserting only the absence would be satisfied by a runner that
 # never warns; asserting only the presence, by one that always does. The branch the run ENDS on is
 # what proves the checkout really happened first, rather than not at all.
 git checkout -q main
 BASE_WARN='you are on the base branch'
-branch_mission ""
+branch_mission "main"
 BR_ORD_BASE_OUT="$( cd "$FIX" && "$SDD" run "$BM" 2>&1 )"; BR_ORD_BASE_RC=$?
 BR_ORD_BASE_AT="$(git branch --show-current)"
 BR_ORD_BASE_N="$(grep -c "$BASE_WARN" <<< "$BR_ORD_BASE_OUT" || true)"
@@ -3270,6 +3383,7 @@ mkdir -p "$KMDIR"
 cat > "$KMDIR/00-missao.md" <<'EOF'
 ---
 missao: 20260106-selfapproved
+branch: main
 aprovacao: auto
 ---
 # Mission fixture
@@ -3289,7 +3403,7 @@ EOF
 KS="20260106-planner-written"
 KSDIR="$FIX/docs/handoffs/$KS"
 mkdir -p "$KSDIR"
-printf -- '---\nmissao: %s\naprovacao: auto\n---\n# Mission fixture\n' "$KS" > "$KSDIR/00-missao.md"
+printf -- '---\nmissao: %s\naprovacao: auto\nbranch: main\n---\n# Mission fixture\n' "$KS" > "$KSDIR/00-missao.md"
 : > "$KSDIR/01-plano.md"
 cp "$KMDIR/checkpoint.md" "$KSDIR/checkpoint.md"
 
@@ -3394,6 +3508,7 @@ mkdir -p "$QMDIR"
 cat > "$QMDIR/00-missao.md" <<'EOF'
 ---
 missao: 20260107-named-remedy
+branch: main
 titulo: fixture — a machine-approved plan with a verdict beside it
 aprovacao: auto
 ---

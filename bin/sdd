@@ -725,7 +725,11 @@ run_check_cmd() {
   # the only property that survives being called from inside a substitution.
   mkdir -p "$(log_dir)"
   logfile="$(mktemp "$(log_dir)/${label}-$(date +%Y%m%d-%H%M%S)-XXXXXX.log")"
-  ( cd "$REPO_ROOT" && eval "$cmd" ) >"$logfile" 2>&1 || rc=$?
+  # stdin is /dev/null, whatever the caller holds (gap 3 of portability): a test runner that reads
+  # a terminal as "interactive" — vitest 3 turns watch mode on when stdin is a TTY — would hang the
+  # gate for good, with no rc, from any `sdd run` typed at a terminal. The gates, the E2E_CMD and
+  # the preflight all run through here, so this one redirection covers the three.
+  ( cd "$REPO_ROOT" && eval "$cmd" ) </dev/null >"$logfile" 2>&1 || rc=$?
   _CHECK_RC[$cmd]="$rc"
   _CHECK_LOG[$cmd]="$logfile"
   LAST_CHECK_LOG="$logfile"
@@ -839,6 +843,19 @@ gate_PLAN() {
     local v; v="$(frontmatter "$m" versao)"
     if [ -z "$v" ] || [[ $v == \<* ]]; then
       GATE_WHY="JIRA_ENABLED=true requires 'versao:' filled in 00-missao.md (a human decision, never headless)"
+      return 1
+    fi
+  fi
+  # The mirror of the `versao:` rule, for the other half of the config. With JIRA off the TICKET
+  # phase that wrote `branch:` is skipped, ensure_mission_branch reads empty or `<…>` as a no-op,
+  # and every phase commits wherever the human happens to stand — the `main` of a new repo, by
+  # omission (gap 2 of portability). The field's owner is `sdd-planner`, with the human in the
+  # room, which is why the refusal lives HERE: no headless phase could satisfy it. Any real name
+  # passes, DEFAULT_BRANCH included — that is a decision written down, not an omission.
+  if [ "$JIRA_ENABLED" != "true" ]; then
+    local b; b="$(frontmatter "$m" branch)"
+    if [ -z "$b" ] || [[ $b == \<* ]]; then
+      GATE_WHY="JIRA_ENABLED is not true and 00-missao.md has no mission branch ('branch: ${b:-<empty>}') — nothing will create one, so every phase would commit wherever you stand: write the branch name into 00-missao.md (the planner decides it with the human)"
       return 1
     fi
   fi
@@ -1463,7 +1480,9 @@ gate_REVIEW() {
         if (n < 4) next
         crit = f[2]; grade = f[3]; rat = f[4]
         gsub(/\*/, "", crit);  gsub(/^[ \t]+|[ \t]+$/, "", crit)
-        gsub(/\*/, "", grade); gsub(/^[ \t]+|[ \t]+$/, "", grade)
+        # `*` AND the backtick, like the rationale below: a grade in a code span is the grade it
+        # carries, and `` `A` `` failed as "Security = `A`" for a paid round (yokoten of #50).
+        gsub(/[*`]/, "", grade); gsub(/^[ \t]+|[ \t]+$/, "", grade)
         gsub(/[*`]/, "", rat); gsub(/^[ \t]+|[ \t]+$/, "", rat)
         # `:?-+:?` — a formatter-aligned separator (`|:---|:---:|`) is a separator, not a criterion.
         # Read as a row it graded `:` with `---`, and REVIEW looped to REVIEW_MAX_ITER with a reason
@@ -1563,6 +1582,13 @@ gate_DOCS() {
       }
       col && /^[ \t]*\|/ {
         cell = $col; gsub(/^[ \t]+|[ \t]+$/, "", cell)
+        # The value as the author wrote it (yokoten of #50): `✅` in a code span or **n/a** in bold
+        # is that value. ASCII class only — mawk is byte-oriented, and a class holding ✅ would
+        # match its bytes, not the character (CLAUDE.md). A cell that was ONLY markup is not an
+        # empty cell: stripped to nothing it would be skipped below as if the row were not there,
+        # so it is pending, quoted as written (review r1 of 20260926).
+        raw = cell; gsub(/[*`]/, "", cell)
+        if (cell == "" && raw != "") { print raw; next }
         # `:?-+:?` — with a formatter-aligned separator (`|:---:|`) the Status column of the
         # separator row read as a pending Status, and gate_DOCS failed a drift checklist with
         # nothing pending in it. Same regex in checkpoint_rows and gate_REVIEW.
@@ -3051,11 +3077,24 @@ kit_guard_check() {
 # may have left a mark, committed OR dirty, and a path outside it arms HAT_CROSSED_WHY. The marker
 # follows the contract every marker in this file follows — reset at the entry of its ONLY setter,
 # read by the doors AFTER the session's ledger row, never surviving the lap — and
-# hat_crossed_escalation is the ONE door for it and for KIT_TOUCHED_WHY alike: two markers, two
-# ledger kinds (`hat-crossed`, `kit-touched`), one definition of "the line stops because a session
-# went where its hat does not reach". Four doors: cmd_run's first pass and its inline retry (after
-# the row, next to the other two escalations), cmd_retry (after its row) and cmd_close (no row
-# there, so right after the kit guard). One probe per door and one mutant per door.
+# hat_crossed_escalation is the ONE door for it, for FOREIGN_COMMIT_WHY and for KIT_TOUCHED_WHY
+# alike: three markers, three ledger kinds (`hat-crossed`, `foreign-commit`, `kit-touched`), one
+# definition of "the line stops because something went where a hat does not reach". Four doors:
+# cmd_run's first pass and its inline retry (after the row, next to the other two escalations),
+# cmd_retry (after its row) and cmd_close (no row there, so right after the kit guard). One probe
+# per door and one mutant per door.
+#
+# WHOSE COMMIT IT IS (issue #51, ADR 0012). Every session runs under GIT_REFLOG_ACTION=<its label>
+# (session_git_label), so its commits, amends, checkouts and resets land in the reflog of HEAD
+# carrying who made them. hat_guard_arm records the newest reflog entry; hat_guard_check reads the
+# entries written after it — the WINDOW of the session — and splits them: an entry with the
+# session's EXACT label is the session's and is checked against writes: as always; an entry
+# without it is FOREIGN, and a foreign commit that changed a path outside writes: arms
+# FOREIGN_COMMIT_WHY. It stops the line all the same: the attribution picks the kind and the
+# remedy, never whether the line stops, so a session that strips its own label changes the kind
+# and not the stop. When the reflog cannot account for the move — no reflog, the recorded entry no
+# longer right below the new ones, HEAD moved with no new entry, no label — the guard falls back to
+# the range diff of before, and every path is the session's.
 #
 # ⚠️ DECLARED LIMITS:
 #  · A `grep -c HAT-CROSSED <pipeline.log>` ANSWERING 0 IS NOT EVIDENCE THAT THE SESSION BEHAVED.
@@ -3098,19 +3137,135 @@ kit_guard_check() {
 #  · ONLY TRAILING SLASHES are normalised out of `$HANDOFF_DIR` (hat_expand); a leading `./`, a
 #    `//` in the middle or an absolute `$HANDOFF_DIR` would each miss the same way and none has a
 #    probe.
+#  · THE LABEL IS ATTRIBUTION, NOT PROOF. Measured on git 2.43 with the label exported: commit,
+#    `--amend`, checkout, switch, reset, merge, pull, cherry-pick, revert and stash write `<label>`
+#    or `<label>: …`, and rebase (and `pull --rebase`) write `<label> (start|pick|finish): …` — all
+#    three shapes are read as the session's. A git that wrote a message of its own instead would
+#    make the session's move read as foreign: the line still stops, only the kind is wrong. A writer
+#    that copies the label is read as the session — the stop is the same, `hat-crossed`.
+#  · THE WINDOW NEVER WIDENS THE NET DIFF. Entry by entry, a round trip (check another branch out and
+#    come back) touches every path the two branches differ in and puts all of it back; summed, that
+#    read as a crossing the range diff never saw (review r1 of 20260926). Only the paths of
+#    `<HEAD before>..<HEAD now>` are attributed, and a net path no FOREIGN entry explains is the
+#    session's — so whether the line stops is exactly what the range diff said, and the reflog only
+#    picks the kind. That is also why three of the fallback checks in hat_reflog_window (`k ≥ 1`,
+#    the recorded top right below the new entries, the newest entry at HEAD) have NO probe: skipping
+#    one leaves every net path charged somewhere, so it changes the kind at worst. The world that
+#    reaches them — HEAD moved with no entry, an `update-ref` from a detached worktree — was not
+#    built as a probe.
+#  · ONLY COMMITS ARE ATTRIBUTED. The status half still reads uncommitted edits as the session's,
+#    so a concurrent writer's dirty file is still the hat's crossing.
+#  · WHEN BOTH ARM, ONLY THE HAT'S CROSSING IS NAMED. A foreign move is written up (FOREIGN-COMMIT)
+#    only when the session's own paths armed nothing; when the session crossed too, the journal
+#    names the session's paths alone, and the foreign move rides into the next lap's base unnamed.
+#    The line stops either way (review r2 of 20260926, declared rather than probed).
+#  · cmd_kaizen exports the label through run_phase and is still outside these doors (above).
 HAT_CROSSED_WHY=""
+FOREIGN_COMMIT_WHY=""
 KIT_TOUCHED_WHY=""
 HAT_STATUS_BEFORE=""
+HAT_REFLOG_TOP=""
+HAT_REFLOG_COUNT=0
 
 # The human's own dirt is not the hat's crossing. Armed next to kit_guard_arm, before the session
 # opens: a file left untracked or modified BEFORE the phase is filtered out of the status half
 # below, so only what the session left behind is read. A file the session COMMITS still lands in
 # the diff half — sweeping the human's file into a round's commit is the hat's doing. Empty under
 # DRY_RUN, like the kit guard's baseline.
+#
+# ...and the newest entry of the reflog of HEAD, with how many there are: the window of the session
+# is what gets written above that entry. Empty when there is no reflog, which is what sends
+# hat_guard_check back to the range diff.
 hat_guard_arm() {
-  HAT_STATUS_BEFORE=""
+  HAT_STATUS_BEFORE=""; HAT_REFLOG_TOP=""; HAT_REFLOG_COUNT=0
   [ "$DRY_RUN" = "1" ] && return 0
   HAT_STATUS_BEFORE="$(hat_status_lines)"
+  local lines; lines="$(hat_reflog_lines)"
+  if [ -n "$lines" ]; then
+    HAT_REFLOG_TOP="${lines%%$'\n'*}"
+    HAT_REFLOG_COUNT="$(grep -c '' <<< "$lines")"
+  fi
+}
+
+# The reflog of HEAD, newest first, one `<selector>\t<sha>\t<subject>` per entry. Two entries of the
+# same second share the selector, so an entry is identified by the WHOLE line. `|| true`: no reflog
+# at all is an answer (empty), not a failure.
+hat_reflog_lines() {
+  git -C "$REPO_ROOT" reflog show --date=unix --format='%gd%x09%H%x09%gs' HEAD 2>/dev/null || true
+}
+
+# The paths between two commits, as the guard reads them — ONE definition for the reflog window and
+# for the range-diff fallback, so the flag below cannot be right in one half and gone in the other.
+# `core.quotePath=false`: see the DECLARED LIMITS above.
+hat_diff_names() {   # hat_diff_names <old sha> <new sha>
+  git -C "$REPO_ROOT" -c core.quotePath=false diff --name-only "$1" "$2" 2>/dev/null || true
+}
+
+# hat_reflog_window <HEAD before> <HEAD now> <expanded globs> — rc 0 when the reflog accounts for the move, rc 1
+# to fall back to the range diff. PUBLISHES HAT_WINDOW_OWN (the paths of the entries carrying the
+# session's exact label, one per line) and HAT_WINDOW_FOREIGN / HAT_WINDOW_FOREIGN_N (the entries
+# without it that changed a path outside the globs, as `<sha7> <subject>`, `; `-joined, and their
+# count). CALLED, never `$( )`: it publishes three globals.
+#
+# Each entry is diffed against the entry below it — the recorded top for the oldest — so a session
+# commit made on top of a foreign one is diffed against the foreign one, and neither owns the other's
+# paths. Then everything is cut down to the NET diff (`<before>..<now>`): a path the window touched and
+# put back is nobody's, and a net path no foreign entry explains is the session's (header above). The
+# label is matched EXACTLY — alone, followed by `:` and the subject git appends, or followed by ` (`
+# as rebase writes it — never by the `sdd:` prefix: a label of an earlier lap is somebody else's.
+HAT_WINDOW_OWN=""
+HAT_WINDOW_FOREIGN=""
+HAT_WINDOW_FOREIGN_N=0
+hat_reflog_window() {
+  local before="$1" head_now="$2" globs="$3" label="$LAST_PHASE_GIT_LABEL" lines count k i entry sha old subj paths p outside
+  local net own_all="" foreign_all=""
+  HAT_WINDOW_OWN=""; HAT_WINDOW_FOREIGN=""; HAT_WINDOW_FOREIGN_N=0
+  [ -n "$label" ] && [ -n "$HAT_REFLOG_TOP" ] || return 1
+  lines="$(hat_reflog_lines)"
+  local -a entries fdesc=() fpaths=()
+  mapfile -t entries <<< "$lines"
+  count=${#entries[@]}
+  k=$(( count - HAT_REFLOG_COUNT ))
+  # New entries, the recorded top right below them, and the newest one where HEAD is now — or the
+  # reflog does not account for the move, and nothing is attributed by it.
+  [ "$k" -ge 1 ] || return 1
+  [ "${entries[$k]}" = "$HAT_REFLOG_TOP" ] || return 1
+  sha="${entries[0]#*$'\t'}"; sha="${sha%%$'\t'*}"
+  [ "$sha" = "$head_now" ] || return 1
+  old="${HAT_REFLOG_TOP#*$'\t'}"; old="${old%%$'\t'*}"
+  for (( i = k - 1; i >= 0; i-- )); do
+    entry="${entries[$i]#*$'\t'}"
+    sha="${entry%%$'\t'*}"; subj="${entry#*$'\t'}"
+    paths="$(hat_diff_names "$old" "$sha")"
+    if [ "$subj" = "$label" ] || [[ "$subj" == "$label:"* ]] || [[ "$subj" == "$label ("* ]]; then
+      own_all+="$paths"$'\n'
+    else
+      foreign_all+="$paths"$'\n'
+      fdesc+=("${sha:0:7} $subj"); fpaths+=("$paths")
+    fi
+    old="$sha"
+  done
+  net="$(hat_diff_names "$before" "$head_now")"
+  while IFS= read -r p; do
+    [ -n "$p" ] || continue
+    if grep -qxF -- "$p" <<< "$own_all" || ! grep -qxF -- "$p" <<< "$foreign_all"; then
+      HAT_WINDOW_OWN="${HAT_WINDOW_OWN:+$HAT_WINDOW_OWN$'\n'}$p"
+    fi
+  done <<< "$net"
+  for i in "${!fdesc[@]}"; do
+    outside=0
+    while IFS= read -r p; do
+      [ -n "$p" ] || continue
+      grep -qxF -- "$p" <<< "$net" || continue
+      grep -qxF -- "$p" <<< "$HAT_WINDOW_OWN" && continue
+      hat_path_allowed "$p" "$globs" || { outside=1; break; }
+    done <<< "${fpaths[$i]}"
+    if [ "$outside" = 1 ]; then
+      HAT_WINDOW_FOREIGN_N=$((HAT_WINDOW_FOREIGN_N + 1))
+      HAT_WINDOW_FOREIGN="${HAT_WINDOW_FOREIGN:+$HAT_WINDOW_FOREIGN; }${fdesc[$i]}"
+    fi
+  done
+  return 0
 }
 
 # `git status --porcelain -z`, one `XY path` line per entry with the NAME LITERAL — the line-mode
@@ -3143,7 +3298,8 @@ hat_path_allowed() {   # hat_path_allowed <path> <expanded globs, comma-separate
 
 hat_guard_check() {   # hat_guard_check <phase> <HEAD before the session> — arms, never stops
   local phase="${1:-}" before="${2:-}" step hat globs head_now changed status f outside="" n=0
-  HAT_CROSSED_WHY=""
+  HAT_CROSSED_WHY=""; FOREIGN_COMMIT_WHY=""
+  HAT_WINDOW_OWN=""; HAT_WINDOW_FOREIGN=""; HAT_WINDOW_FOREIGN_N=0
   [ "$DRY_RUN" = "1" ] && return 0
   step="$LAST_PHASE_STEP"; [ -n "$step" ] || step="$phase"
   hat="$(phase_hat "$step")"; [ -n "$hat" ] || return 0
@@ -3161,7 +3317,13 @@ hat_guard_check() {   # hat_guard_check <phase> <HEAD before the session> — ar
   changed=""
   head_now="$( git -C "$REPO_ROOT" rev-parse HEAD 2>/dev/null || echo "-" )"
   if [ -n "$before" ] && [ "$before" != "-" ] && [ "$head_now" != "-" ] && [ "$head_now" != "$before" ]; then
-    changed="$( git -C "$REPO_ROOT" -c core.quotePath=false diff --name-only "$before" "$head_now" 2>/dev/null || true )"
+    # The session's own commits by the reflog when it can say whose they are; the whole range,
+    # attributed to the session as before, when it cannot.
+    if hat_reflog_window "$before" "$head_now" "$globs"; then
+      changed="$HAT_WINDOW_OWN"
+    else
+      changed="$(hat_diff_names "$before" "$head_now")"
+    fi
   fi
   status="$(hat_status_lines)"
   if [ -n "$HAT_STATUS_BEFORE" ]; then
@@ -3174,7 +3336,16 @@ hat_guard_check() {   # hat_guard_check <phase> <HEAD before the session> — ar
     hat_path_allowed "$f" "$globs" && continue
     n=$((n + 1)); outside="${outside:+$outside }$f"
   done <<< "$changed"$'\n'"$status"
-  [ "$n" -gt 0 ] || return 0
+  if [ "$n" -eq 0 ]; then
+    # Not the hat's crossing — but somebody committed into this checkout while the phase ran, and
+    # the line stops for that too, with its own kind and the remedy that fits it (ADR 0012).
+    [ "$HAT_WINDOW_FOREIGN_N" -gt 0 ] || return 0
+    FOREIGN_COMMIT_WHY="while the $step session ($hat) ran, $HAT_WINDOW_FOREIGN_N git move(s) without its label (a commit, checkout or reset made from outside it) changed path(s) outside its writes: $HAT_WINDOW_FOREIGN"
+    warn "$FOREIGN_COMMIT_WHY"
+    pipeline_log_line "$(date -Iseconds)  FOREIGN-COMMIT  $phase  $FOREIGN_COMMIT_WHY"
+    pipeline_log_line "$(date -Iseconds)  FOREIGN-REMEDY  $phase  nothing may commit into this checkout while a phase runs — let the phase end, then 'sdd run' again; widening writes: or HAT_WRITES_EXTRA would not fix this"
+    return 0
+  fi
   HAT_CROSSED_WHY="the $step session ($hat) touched $n path(s) outside its writes: $outside"
   warn "$HAT_CROSSED_WHY"
   pipeline_log_line "$(date -Iseconds)  HAT-CROSSED  $phase  $HAT_CROSSED_WHY"
@@ -3190,14 +3361,25 @@ hat_guard_check() {   # hat_guard_check <phase> <HEAD before the session> — ar
 
 hat_crossed_escalation() {   # hat_crossed_escalation <phase> — rc 0 = STOP (row written), rc 1 = go on
   local phase="$1" kind why
+  # The session's own crossings first — its hat, then the kit — and the commit that was not the
+  # session's last: when both arm, the one the session is answerable for is the one to name.
   if [ -n "$HAT_CROSSED_WHY" ]; then kind="hat-crossed"; why="$HAT_CROSSED_WHY"
   elif [ -n "$KIT_TOUCHED_WHY" ]; then kind="kit-touched"; why="$KIT_TOUCHED_WHY"
+  elif [ -n "$FOREIGN_COMMIT_WHY" ]; then kind="foreign-commit"; why="$FOREIGN_COMMIT_WHY"
   else return 1; fi
   GATE_WHY="$why"
   info ""
   bad "BLOCKED in $phase — $why"
-  dim "  The hat declares what it may write (agents/<hat>.md, key writes:) and the kit is never a"
-  dim "  target's to edit. Restore or move by hand what belongs elsewhere. Then 'sdd run' again."
+  if [ "$kind" = "foreign-commit" ]; then
+    # The one remedy that fits, and the two that do not, named: the three occurrences of #51 were
+    # repaired by restoring the path by hand and by widening HAT_WRITES_EXTRA, and the second
+    # weakens a real guard for good to silence a race.
+    dim "  Nothing may commit into this checkout while a phase runs — let the phase end, then"
+    dim "  'sdd run' again. Widening writes: or HAT_WRITES_EXTRA would not fix this."
+  else
+    dim "  The hat declares what it may write (agents/<hat>.md, key writes:) and the kit is never a"
+    dim "  target's to edit. Restore or move by hand what belongs elsewhere. Then 'sdd run' again."
+  fi
   if [ "$kind" = "hat-crossed" ]; then
     # Two doors, and naming only the second is what the measured repairs walked through. Widening
     # the hat in the kit widens it for EVERY project the kit is installed in; the key widens it for
@@ -3671,6 +3853,14 @@ HARNESS_ENV_UNSET=(-u CLAUDECODE -u CLAUDE_CODE_CHILD_SESSION -u CLAUDE_CODE_MES
   -u CLAUDE_CODE_MESSAGING_TOKEN -u CLAUDE_PID -u CLAUDE_CODE_SESSION_ID -u CLAUDE_CODE_BRIDGE_SESSION_ID
   -u CLAUDE_CODE_EFFORT_LEVEL -u CLAUDE_EFFORT)
 
+# session_git_label <step> <sid> — THE one spelling of a session's git label, `sdd:<step>:<sid8>`
+# (issue #51, ADR 0012). run_phase and cmd_close hand it to claude as GIT_REFLOG_ACTION, so every
+# commit, amend, checkout or reset the session makes lands in the reflog carrying who made it —
+# measured on git 2.43: `sdd:EXEC:ab12cd34: <subject>` against `commit: <subject>` for a commit made
+# from outside. hat_guard_check reads that to tell the session's commits from a concurrent writer's.
+# The 8 hex are the invocation's own id, the one the session's log file is named after.
+session_git_label() { printf 'sdd:%s:%s\n' "$1" "${2:0:8}"; }
+
 run_phase() {
   local phase="$1" resume_sid="${2:-}"
   # ZEROED ON ENTRY, above every other statement of this function — above the `die`
@@ -3692,6 +3882,9 @@ run_phase() {
   # Same contract, same place, for the sibling marker below: zeroed on entry, set only by this
   # function, so it says whether the session JUST run was cut and nothing older.
   SESSION_BUDGET_CUT=""
+  # Same contract again: the label of the session THIS call opens, or empty when none was opened —
+  # hat_guard_check reads an empty label as "nothing to attribute by" and falls back to the diff.
+  LAST_PHASE_GIT_LABEL=""
   local pstep model effort agent sid prompt logfile streamfile started ended cost turns cache_read
   # QA is three sessions (plan, walk, close); the step comes from the artifacts, not a counter.
   pstep="$(phase_step "$phase")"
@@ -3699,6 +3892,7 @@ run_phase() {
   effort="$(phase_effort "$phase")"
   agent="$(phase_agent "$pstep")"
   sid="$(uuidgen)"
+  LAST_PHASE_GIT_LABEL="$(session_git_label "$pstep" "$sid")"
   prompt="$(boot_prompt "$pstep")"
   # Three preconditions that fail LOUD, outside any capture (a die inside `$( )` ends the subshell
   # and the parent goes on): the hat's source file exists (absent, hat_writes reads "anywhere"),
@@ -3731,7 +3925,9 @@ Fix exactly that. Do not restart the phase: read what is already on disk, comple
 missing and write the artifacts. The gate will be re-evaluated."
   fi
 
-  local -a cmd=(env "${HARNESS_ENV_UNSET[@]}" claude -p "$prompt"
+  # The label rides between the last `-u` and claude: `env` takes assignments only AFTER its
+  # options, and `env NAME=v -u X cmd` would run `-u` as the command.
+  local -a cmd=(env "${HARNESS_ENV_UNSET[@]}" "GIT_REFLOG_ACTION=$LAST_PHASE_GIT_LABEL" claude -p "$prompt"
     --model "$model"
     --permission-mode "$PERMISSION_MODE"
     --output-format stream-json --verbose
@@ -3919,6 +4115,7 @@ LAST_PHASE_STEP=""
 LAST_PHASE_AGENT=""
 LAST_PHASE_MODEL=""
 LAST_PHASE_DIED=""
+LAST_PHASE_GIT_LABEL=""
 SESSION_DIED_WHY=""
 SESSION_BUDGET_CUT=""
 
@@ -5740,7 +5937,10 @@ cmd_why() {
 # the CLAUDE.md rule about an enum read in more than one point covers a regex just as much: spelled
 # out three times, the day one of them learns a new dialect the other two go blind in silence.
 ADR_LINK_PRE='^(- )?(\*\*)?'
-ADR_LINK_POST='(\*\*)?:[[:space:]]*'
+# `(\*\*)?` on BOTH sides of the colon: `**Spec**:` and `**Spec:**` are the same idiomatic
+# markdown, and with the second read as the value `**` every such ADR failed the back-link with
+# "points somewhere else" when it pointed nowhere else (issue #50).
+ADR_LINK_POST='(\*\*)?:(\*\*)?[[:space:]]*'
 adr_key_re() { printf '%s%s%s' "$ADR_LINK_PRE" "$1" "$ADR_LINK_POST"; }
 
 # The id is read from the FILE NAME and never from the title: the two dialects disagree about the
@@ -5809,6 +6009,9 @@ adr_link() {
   ADR_LINK_VALUE="${ADR_LINK_VALUE%%[[:space:]]*}"
   ADR_LINK_VALUE="${ADR_LINK_VALUE#\(}"; ADR_LINK_VALUE="${ADR_LINK_VALUE%\)}"
   ADR_LINK_VALUE="${ADR_LINK_VALUE%.}"
+  # A path written as code is the path it carries, not a value that happens to open with a
+  # backtick (issue #50) — stripped after the punctuation, so `` `x`. `` reads as x too.
+  ADR_LINK_VALUE="${ADR_LINK_VALUE#\`}"; ADR_LINK_VALUE="${ADR_LINK_VALUE%\`}"
   [ -n "$ADR_LINK_VALUE" ]
 }
 
@@ -5936,11 +6139,22 @@ adr_check_link() {
   # declared an ADR number in prose; the number existed and belonged to another decision. One
   # direction proves nothing — a claim pointing at a real file is satisfied by EVERY real file.
   # What tells the right one apart is that the ADR points BACK.
-  if ! adr_link "$root/$v" Spec; then
+  # adr_link publishes the line BEFORE it extracts the value, so ADR_LINK_NO tells a line that is
+  # there with nothing after the colon from a line that is not there at all.
+  if ! adr_link "$root/$v" Spec && [ "$ADR_LINK_NO" -eq 0 ]; then
     adr_fail "$v" 1 "has no 'Spec:' line, so nothing points back at $rel" \
       "add 'Spec: $rel' under the header"
     return 1
   fi
+  # A value with no `/` — the empty one included — is not a path at all, and saying "points
+  # somewhere else … fix whichever side is wrong" sent the reader to compare two sides when only
+  # one of them was a claim (issue #50). Before the comparison, so the sentence names the defect.
+  case "$ADR_LINK_VALUE" in
+    */*) ;;
+    *) adr_fail "$v" "$ADR_LINK_NO" "the 'Spec:' line carries '${ADR_LINK_VALUE:-<empty>}', which is not a path" \
+         "write it as 'Spec: $rel' — the value is the first word after the colon"
+       return 1 ;;
+  esac
   if [ "$ADR_LINK_VALUE" != "$rel" ]; then
     adr_fail "$v" "$ADR_LINK_NO" "'Spec: $ADR_LINK_VALUE' points somewhere else, not at $rel" \
       "one ADR, one spec: fix whichever side is wrong, or allocate a new number with 'sdd adr new'"
@@ -6612,13 +6826,25 @@ cmd_approve() {
   # wolf that teaches people to skip reading them.
   warn_if_on_base_branch
   printf '  approve this plan? [y/N] '
-  # `|| ans=""`: with stdin closed, `read` returns non-zero and `set -e` would abort mid-prompt.
+  # `|| got=$?`: with stdin closed, `read` returns non-zero and `set -e` would abort mid-prompt.
   # Anything that is not an explicit yes is a no — the default of a [y/N] prompt is the safe side.
-  local ans=""
-  read -r ans || ans=""
+  local ans="" got=0
+  read -r ans || got=$?
   # The prompt ends without a newline, and a terminal supplies one when the human hits Enter. A
   # pipe or a closed stdin does not, and the answer would sit glued to the prompt.
   info ""
+  # ...but NO character at all is not a no: nobody was asked (issue #52). rc 0 with "not approved"
+  # is what a human who typed N gets, so a caller could not tell the two apart. 66 is EX_NOINPUT,
+  # the sysexits family of the 75 this kit already answers for CHECKOUT-BUSY. A partial line with
+  # no newline is an answer that arrived, and stays discarded below exactly as before.
+  if [ "$got" -ne 0 ] && [ -z "$ans" ]; then
+    local why="no answer reached the prompt — stdin closed before a single character was read"
+    [ -t 0 ] || why="$why (stdin is not a terminal)"
+    bad "$why"
+    dim "  nothing was written. Run 'sdd approve $MISSION' from an interactive shell."
+    return 66
+  fi
+  [ "$got" -eq 0 ] || ans=""
   case "$ans" in
     y|Y|yes|Yes|YES) : ;;
     *) info "  not approved — nothing was written"; return 0 ;;
@@ -9715,6 +9941,10 @@ To see what it saw:  $acli_bin jira workitem search --jql \"key = $issue AND sta
   step "closing $issue"
   local sid logfile rc=0
   sid="$(uuidgen)"
+  # The close session commits through its own `claude`, outside run_phase, so it carries the label
+  # by hand — the same spelling, its own id — or hat_guard_check below would read its commits as a
+  # concurrent writer's.
+  LAST_PHASE_GIT_LABEL="$(session_git_label CLOSE "$sid")"
   # Same grafia, same fix as run_phase above — and here $sid is the id claude is actually handed
   # via --session-id, so the name and the journal's `session=` field agree exactly. Reached once per
   # mission, so no fixture drives it; it is fixed by FORM, and that is said out loud rather than
@@ -9776,7 +10006,7 @@ blocks the transition, say what it is and stop — but do not stop to request pe
   # nested-session teardown of a long phase, and widening it for this call is a separate decision.
   local -a close_effort=()
   if [ -n "$EFFORT_TICKET" ]; then close_effort=(--effort "$EFFORT_TICKET"); fi
-  ( cd "$REPO_ROOT" && env -u CLAUDE_CODE_EFFORT_LEVEL -u CLAUDE_EFFORT claude -p "$close_prompt" \
+  ( cd "$REPO_ROOT" && env -u CLAUDE_CODE_EFFORT_LEVEL -u CLAUDE_EFFORT "GIT_REFLOG_ACTION=$LAST_PHASE_GIT_LABEL" claude -p "$close_prompt" \
       --model "$MODEL_TICKET" ${close_effort[@]+"${close_effort[@]}"} --permission-mode "$PERMISSION_MODE" \
       --output-format stream-json --verbose \
       --setting-sources "user,project,local" --allowedTools "$ALLOWED_TOOLS" \

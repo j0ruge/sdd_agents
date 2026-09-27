@@ -1,0 +1,58 @@
+# Notas de execução — a carona antes do congelamento
+
+> **Append-only.** Uma linha por evento; nunca reescreva o arquivo, nunca o releia inteiro.
+>
+> Este arquivo nasceu em `20260904-a-dieta-de-contexto`, separado do `checkpoint.md` por medição:
+> as notas eram **69% daquele arquivo** (67 166 B de 97 865 B em `20260901-o-revisor-so-acha`), e
+> aquele arquivo era **44,7% de tudo que a missão releu** — 160 leituras, 1 114 571 B. Enquanto
+> tabela e notas dividiam o arquivo havia um piso mecânico: em sessão headless o `Edit` exige um
+> `Read` prévio, então toda sessão que atualizasse a tabela pagava o arquivo inteiro. Separadas,
+> escrever nota é `>>` e custa **zero leitura**.
+>
+> O prompt de boot **inlina as últimas 10 notas** (`BOOT_NOTES_TAIL` no `bin/sdd`) e manda
+> explicitamente **não abrir este arquivo**. Se você precisa de uma nota mais antiga, ela é
+> história — e história se lê no `git log`, não no boot de toda sessão.
+
+## Notas de execução
+
+> Uma linha por evento relevante: bloqueio, decisão tomada, desvio do plano com justificativa.
+> É o que a próxima sessão lê para não repetir um erro que já custou caro.
+
+- 2026-09-26 17:07 · `PLAN` · plano escrito pelo `sdd-planner` na branch `fix/a-carona-antes-do-congelamento`, cortada de `main` = `3c44df8`; ADR 0012 alocada por `sdd adr new`; `aprovacao:` vazia até o `sdd approve` do humano.
+
+> **Toda vez que um humano precisou entrar na linha** — um `sdd retry`, um conserto à mão, um
+> `BLOCKED` assumido — sai uma linha com o marcador `intervention:`. É a **narrativa** do que o
+> humano fez. O **número** de intervenções o `sdd autonomy --by-mission` lê do ledger, em
+> `launch(es)` (`run_id` distintos — cada `sdd run`/`sdd retry`), e imprime estas notas ao lado
+> como `intervention note(s)`. Medido em 2026-08-28: a missão de três lançamentos tinha zero
+> notas — o contador não pode depender de alguém lembrar de escrever; a narrativa, sim, e é a
+> única fonte que diz o que o humano *fez*.
+>
+> ⚠️ O marcador é **inglês e minúsculo**, como `pending`/`done`/`blocked`: é contrato, não prosa.
+> O texto depois dos dois-pontos vai no idioma do `OUTPUT_LANG`, como o resto deste arquivo.
+> Só conta quando abre a linha — `intervention` no meio de uma frase é prosa e não é contado.
+>
+> Desde 2026-09-03 o **runner escreve a linha sozinho** quando é ele quem recebe a mão do humano —
+> `sdd run --phase X`, `sdd retry`, `--budget-override` — e a commita sozinha, na hora, para a
+> árvore chegar limpa ao gate da fase seguinte. A linha escrita à mão continua valendo para o que
+> o runner não vê: conserto manual, fase feita à mão, `BLOCKED` assumido. `sdd approve` não
+> escreve nenhuma: aprovar o plano é o gate humano desenhado, não uma entrada na linha. A nota
+> diz o que o runner **sabe** ("forçada pela CLI"), nunca quem estava na CLI: outro agente com
+> shell entra pela mesma porta, e o runner não distingue — medido em 2026-09-03.
+>
+> O exemplo abaixo mora **dentro** desta citação de propósito: o `>` quebra o casamento com
+> `^[[:space:]]*-`, e sem ele o exemplo era contado verbatim — todo checkpoint recém-instanciado
+> nascia devendo uma intervenção fantasma ao instrumento que mede autonomia. Copie a forma para
+> fora da citação ao registrar uma intervenção de verdade.
+>
+> - intervention: <o que o humano teve de fazer> — <fase> — <custo, se houver>
+
+- 2026-09-26 18:06 · `EXEC` · I1 `done` em `b6cc2bd` (sessão interativa, Opus): #50 + yokoten da crase; 7 asserções, 5 mutantes pela receita M; suíte verde. Desvios: regras R35–R37 no check-adr (R33/R34 já existiam em comentários de probe) e um 4º probe para o valor vazio.
+- 2026-09-26 18:18 · `EXEC` · I2 `done` em `f935ca5`: #52, rc 66 sem nenhuma resposta; asserção com a diferencial do Enter; mutante pela receita M; suíte verde.
+- 2026-09-26 18:43 · `EXEC` · I3 `done` em `0931547`: rótulo `sdd:<passo>:<sid8>` no run_phase e no cmd_close; 2 mutantes pela receita M; suíte verde. Achado no caminho: a diferencial do aviso de branch base (`no_uuid` do check-gates) passou a normalizar os 8 hex do rótulo, e a regra do session id no check-dry-run ancora na linha do cabeçalho porque o prompt diz "in this session:".
+- 2026-09-26 19:17 · `EXEC` · I4 `done` em `a707b3f`: janela do reflog + `foreign-commit`; 3 asserções e 3 mutantes pela receita M; suíte verde. Desvio: `hat_diff_names` extraída (uma definição do diff para a janela e o fallback) porque o mutante do quotePath ancorado só no fallback teria sobrevivido — o regime 6 passou a andar pela janela. O slug da missão não entra na prosa inglesa: `antes` é stopword do check-lang.
+- 2026-09-26 19:41 · `EXEC` · I5 `done` em `81d50aa`: `branch:` obrigatório sem Jira; fixtures consertados em seis sensores (check-gates 6, check-autonomy 6+worktree, check-dry-run 1, check-adr 3, check-kaizen 1, check-coordination 1), nenhuma asserção afrouxada; mutante pela receita M; suíte verde. Três fixtures pediram mais que `branch: main`: o placeholder do check-gates foi para o mundo com Jira ligado, a diferencial de ordem do aviso usa `branch: main`, e o worktree nomeia `wtprobe`.
+- 2026-09-26 19:50 · `EXEC` · I6 `done` em `1f66743`: stdin em /dev/null no run_check_cmd; o probe alimenta uma linha e o Red apareceu na primeira (nada acima do run_check_cmd comia o stdin); mutante pela receita M; catálogo em 419; suíte verde.
+- 2026-09-26 19:59 · `EXEC` · I7 `done` em `af8d4aa`: ADRs 0010–0012 accepted; TODO 82 → 83 (−`3245bfd`, +lacunas 4 e 5); KAIZEN_LOG; gaveta. Os sete incrementos `done`, suíte verde, catálogo 419 com as âncoras todas aplicando. Próximo: revisão pré-PR.
+- 2026-09-26 20:49 · `REVIEW` · revisão pré-PR r1 por revisor fresco (Opus, contexto novo): 5 achados (2 MEDIUM, 3 LOW); consertados #1, #2 e #5 no R1 (`7ea2c98`), #3 resolvido pela metade da janela no mesmo conserto, #4 declarado no cabeçalho (D15). Catálogo 419 → 422. Suíte verde.
+- 2026-09-26 22:11 · `PR` · PR #172 aberto; Codex sem achados, CodeRabbit 1 minor (exemplo de rótulo na ADR 0012, consertado em `0c3d24c`), Copilot sem cota. `sdd health` único: 422 caught of 422, kit healthy, 21 min 52 s, carimbo válido. Falta: merge pelo humano.

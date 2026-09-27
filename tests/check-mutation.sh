@@ -300,6 +300,13 @@ mut_PLAN_remedy_unnamed() {
   sed -i '/00-missao.md has/ s@: run .sdd approve \$MISSION.@@' "$1"
 }
 
+# Gap 2 of portability: with JIRA off, the plan stops being asked for its branch. The TICKET phase
+# that wrote `branch:` is skipped, ensure_mission_branch reads empty or `<…>` as a no-op, and every
+# phase of a new repo commits into its `main` by omission — which is what this rule exists to end.
+mut_PLAN_branch_unasked() {
+  sed -i '/^gate_PLAN() {/,/^}/ s@^  if \[ "$JIRA_ENABLED" != "true" \]; then$@  if false; then@' "$1"
+}
+
 # The gate stops checking that the branch born in this phase reached the artifact the runner reads.
 # `ensure_mission_branch` looks at `branch:` in 00-missao.md and nowhere else, so a name recorded
 # only in 10-ticket.md leaves every later phase running on whatever branch the human was standing
@@ -759,6 +766,23 @@ mut_REVIEW_punctuated_fillin_blind() {
 
 mut_DOCS_pending_status() {   # accepts an area with Status '✗' in the drift checklist
   sed -i 's|.*\[ -n "\$pending_cell" \].*|  if false; then|' "$1"
+}
+
+# Yokoten of #50: the grade as the author wrote it. Back to stripping `*` alone, `` `A` `` fails
+# as "Security = `A`" and the round is paid for a code span.
+mut_REVIEW_backtick_grade_kept() {
+  sed -i '/^gate_REVIEW()/,/^}/ s@gsub(/\[\*`\]/, "", grade)@gsub(/\\*/, "", grade)@' "$1"
+}
+
+# ...and the Status of the drift checklist: `✅` in a code span or **n/a** in bold counts as pending.
+mut_DOCS_backtick_status_kept() {
+  sed -i '/^gate_DOCS()/,/^}/ s@^        raw = cell; gsub(/\[\*`\]/, "", cell)$@        raw = cell@' "$1"
+}
+
+# Review r1, finding 5: a Status cell that is ONLY markup (`**`) strips to nothing and is skipped
+# as an empty cell — the row passes the gate as if it were not there. It used to be pending.
+mut_DOCS_markup_only_status_skipped() {
+  sed -i '/^gate_DOCS()/,/^}/ s@^        if (cell == "" \&\& raw != "") { print raw; next }$@        raw = raw@' "$1"
 }
 
 mut_PR_no_artifact() {        # a missing 50-pr.md stops failing — a "complete" mission with no PR
@@ -1485,6 +1509,45 @@ mut_RUN_hat_missing_mirror_ignored() {
 mut_RUN_hat_close_unchecked() {
   sed -i '/^cmd_close() {/,/^}/ s|^  hat_guard_check "\$phase" "\$close_before"$|  :|' "$1"
 }
+
+# Issue #51, part 2 (ADR 0012): whose commit it is. Every entry of the window read as the session's,
+# the human's commit from another shell is the hat's crossing again — `hat-crossed`, and the two
+# wrong remedies the #51 operator reached for. The differential of regimes 10-12 in
+# check-autonomy.sh reads `foreign-commit` on one world and `hat-crossed` on the other.
+mut_RUN_foreign_blamed_on_hat() {
+  sed -i '/^hat_reflog_window() {/,/^}/ s@^    if \[ "$subj" = "$label" \] || \[\[ "$subj" == "$label:"\* \]\] || \[\[ "$subj" == "$label ("\* \]\]; then$@    if true; then@' "$1"
+}
+
+# Review r1 of the same mission, finding 1: the window summed entry by entry is WIDER than the net
+# diff. A reviewer that checks another branch out and comes back touched every path the two
+# branches differ in, and put it all back — summed, a false `hat-crossed` with the wrong remedy, the
+# accusation #51 exists to end. Caught by `a round trip through another branch inside the window is
+# not a crossing`.
+mut_RUN_window_not_netted() {
+  sed -i '/^hat_reflog_window() {/,/^}/ s@^  net="$(hat_diff_names "$before" "$head_now")"$@  net="$own_all$foreign_all"@' "$1"
+}
+
+# Finding 2: a rebase the session makes writes `<label> (start|pick|finish): …` (git 2.43). Without
+# the third arm it reads as foreign — the session's own label printed under "without its label",
+# with the concurrent-writer remedy. Caught by `a rebase the session makes is its own move`.
+mut_RUN_rebase_read_as_foreign() {
+  sed -i '/^hat_reflog_window() {/,/^}/ s@ || \[\[ "$subj" == "$label ("\* \]\]; then$@; then@' "$1"
+}
+
+# ...and the foreign commit that is armed but never stops: the door reads the other two markers
+# only, the run goes on over a commit nobody in the pipeline made, and the fail-safe that keeps a
+# session from stripping its own label to cross its hat for free is gone.
+mut_RUN_foreign_not_stopped() {
+  sed -i '/^hat_crossed_escalation() {/,/^}/ s@^  elif \[ -n "$FOREIGN_COMMIT_WHY" \]; then@  elif false; then@' "$1"
+}
+
+# With nothing recorded (no reflog), the window reads "zero entries of the session" instead of
+# falling back to the range diff: every commit in the phase — the session's included — goes
+# unexamined, and a repo without a reflog silently loses the hat guard. Caught by `without a reflog
+# the guard blames the session as before`.
+mut_RUN_reflog_fallback_blind() {
+  sed -i '/^hat_reflog_window() {/,/^}/ s@^  \[ -n "$label" \] && \[ -n "$HAT_REFLOG_TOP" \] || return 1$@  [ -n "$label" ] \&\& [ -n "$HAT_REFLOG_TOP" ] || return 0@' "$1"
+}
 # The kit guard back to a warning: the marker is never armed, so KIT-TOUCHED is a line and not a
 # stop — the 2d28d13 world. KG1's "rc:3 kind:kit-touched" dies.
 # HAT_WRITES_EXTRA — the project's exception. THREE mutants and not one, because the three fail
@@ -1792,7 +1855,22 @@ mut_RUN_turn_rule_dropped() {
 # 2026-08-30, whose sessions the harness killed as children of the interactive one. The dry-run
 # prints the command per phase and tests/check-dry-run.sh counts the prefix: 5 expected, 0 found.
 mut_RUN_harness_env_inherited() {
-  sed -i 's|^  local -a cmd=(env "${HARNESS_ENV_UNSET\[@\]}" claude -p "$prompt"$|  local -a cmd=(claude -p "$prompt"|' "$1"
+  sed -i 's|^  local -a cmd=(env "${HARNESS_ENV_UNSET\[@\]}" "GIT_REFLOG_ACTION=$LAST_PHASE_GIT_LABEL" claude -p "$prompt"$|  local -a cmd=(claude -p "$prompt"|' "$1"
+}
+
+# Issue #51, part 1: the phase session no longer carries its git label. Its commits land in the
+# reflog as `commit: …`, which is exactly what a concurrent writer's look like — so the guard that
+# reads the label (hat_guard_check) would read the session's own work as someone else's. The
+# projection prints no label (check-dry-run.sh) and the stub records an empty one (check-autonomy.sh).
+mut_RUN_git_label_unexported() {
+  sed -i 's|^  local -a cmd=(env "${HARNESS_ENV_UNSET\[@\]}" "GIT_REFLOG_ACTION=$LAST_PHASE_GIT_LABEL" claude -p "$prompt"$|  local -a cmd=(env "${HARNESS_ENV_UNSET[@]}" claude -p "$prompt"|' "$1"
+}
+
+# ...and the close session, which opens its own `claude` outside run_phase and so is a door of its
+# own: without the label there, the close's commits read as foreign in the one session per mission
+# that runs after the merge.
+mut_RUN_close_git_label_unexported() {
+  sed -i '/^cmd_close() {/,/^}/ s@ "GIT_REFLOG_ACTION=$LAST_PHASE_GIT_LABEL" claude -p "$close_prompt"@ claude -p "$close_prompt"@' "$1"
 }
 
 # L4 of the 2026-09-03 audit: the `- intervention:` note is written by the runner at two doors —
@@ -2316,6 +2394,13 @@ mut_RUN_approve_bails_on_kaizen_born() {
 # never answers `missing ` for them.
 mut_RUN_approve_no_plan_blind() {
   sed -i '/^cmd_approve() {/,/^}/ s@; then die "$GATE_WHY"; fi@; then :; fi@' "$1"
+}
+
+# `sdd approve` reads "no character arrived" as a no again (issue #52): rc 0 and "not approved", the
+# answer a human who typed N gets, so a harness with no terminal and a human refusal look the same
+# to every caller. Addressed to cmd_approve; `return 66` is its only one.
+mut_RUN_approve_eof_silent() {
+  sed -i '/^cmd_approve() {/,/^}/ s@^    return 66$@    info "  not approved — nothing was written"; return 0@' "$1"
 }
 
 # The runner stops reading the `branch:` field — the state the kit lived in until this mission, and
@@ -3913,9 +3998,11 @@ mut_RUN_review_scope_handoff_dir_verbatim() {   # since the hat's boundary: hat_
 #
 # Anchored on the FUNCTION range for its sibling's reason: `git -C "$REPO_ROOT" diff` is a shape
 # this runner writes in several places, and a pattern that drifted would sabotage one of those
-# while still looking applied.
+# while still looking applied. Since issue #51 the range is hat_diff_names, the ONE definition both
+# halves of the guard read — the reflog window (which regime 6 now walks) and the range-diff
+# fallback — so sabotaging it sabotages both, and neither can keep the flag while the other loses it.
 mut_RUN_review_scope_quotepath_default() {   # since the hat's boundary: the diff half of hat_guard_check
-  sed -i '/^hat_guard_check() {/,/^}/ s@ -c core\.quotePath=false diff --name-only @ diff --name-only @' "$1"
+  sed -i '/^hat_diff_names() {/,/^}/ s@ -c core\.quotePath=false diff --name-only @ diff --name-only @' "$1"
 }
 
 # The guard above, firing correctly — and taking the runner down with it. `pipeline_log_line` ends
@@ -4140,6 +4227,33 @@ mut_ADR_dir_symlink_escape() {
   sed -i '/^adr_new() {/,/^}/ s@^  adr_dir_contained "$root" "${ADR_DIR%/}" \\$@  true \\@' "$1"
 }
 
+# --- ADR: the value as the author wrote it (issue #50) ----------------------------------------
+# `**Spec:** <path>` closes the bold AFTER the colon. With ADR_LINK_POST reading only the `**` before
+# it, the value comes out as `**` and every such ADR fails the back-link with "points somewhere
+# else" — a paid round for a spelling nobody got wrong.
+mut_ADR_link_bold_colon_blind() {
+  sed -i '/^ADR_LINK_POST=/ s@:(\\\*\\\*)?\[@:[@' "$1"
+}
+
+# A path in a code span is the path it carries. Kept, the backticks travel into the comparison and
+# `` `docs/…/00-missao.md` `` is "somewhere else" than the mission it names.
+mut_ADR_link_backtick_kept() {
+  sed -i '/^adr_link() {/,/^}/ s@^  ADR_LINK_VALUE="${ADR_LINK_VALUE#\\`}"; ADR_LINK_VALUE="${ADR_LINK_VALUE%\\`}"$@  :@' "$1"
+}
+
+# "Not a path" before the comparison. Widened to every value, a bare word or an empty value falls
+# through to "points somewhere else … fix whichever side is wrong", when only one side is a claim.
+mut_ADR_link_not_path_generic() {
+  sed -i '/^adr_check_link() {/,/^}/ s@^    \*/\*) ;;$@    *) ;;@' "$1"
+}
+
+# Gap 3 of portability: the TEST_CMD inherits the runner's stdin again. A bare `vitest` reads a
+# terminal as "interactive" and turns watch mode on, and the gate hangs with no rc from any `sdd run`
+# typed at a terminal. Caught by the preflight probe that FEEDS a line and demands it never arrive.
+mut_RUN_check_cmd_stdin_inherited() {
+  sed -i '/^run_check_cmd() {/,/^}/ s@ ) </dev/null >"$logfile" 2>&1 || rc=$?$@ ) >"$logfile" 2>\&1 || rc=$?@' "$1"
+}
+
 # Each coordination mutant changes executable code, and check-coordination.sh asserts the
 # corresponding refusal/lifetime result before releasing its deterministic child barrier.
 mut_COORD_admission_missing() {
@@ -4304,6 +4418,7 @@ CATALOG=(
   PLAN_empty_approval
   PLAN_kaizen_born_blind
   PLAN_remedy_unnamed
+  PLAN_branch_unasked
   TICKET_no_sprint
   TICKET_branch_writeback_blind
   EXEC_done_without_commit
@@ -4362,6 +4477,9 @@ CATALOG=(
   REVIEW_punctuation_only_blind
   REVIEW_punctuated_fillin_blind
   DOCS_pending_status
+  REVIEW_backtick_grade_kept
+  DOCS_backtick_status_kept
+  DOCS_markup_only_status_skipped
   PR_no_artifact
   PR_stamp_blind
   PR_stamp_key_follows_head
@@ -4444,8 +4562,15 @@ CATALOG=(
   RUN_hat_expand_unquoted
   RUN_hat_missing_mirror_ignored
   RUN_hat_close_unchecked
+  RUN_foreign_blamed_on_hat
+  RUN_foreign_not_stopped
+  RUN_reflog_fallback_blind
+  RUN_window_not_netted
+  RUN_rebase_read_as_foreign
   RUN_turn_rule_dropped
   RUN_harness_env_inherited
+  RUN_git_label_unexported
+  RUN_close_git_label_unexported
   RUN_intervention_unwritten_on_phase
   RUN_intervention_unwritten_on_retry
   RUN_intervention_written_on_dry_run
@@ -4504,6 +4629,7 @@ CATALOG=(
   RUN_approve_writes_auto
   RUN_approve_bails_on_kaizen_born
   RUN_approve_no_plan_blind
+  RUN_approve_eof_silent
   RUN_branch_switch_dead
   RUN_branch_option_name
   RUN_branch_orphan_blind
@@ -4671,6 +4797,10 @@ CATALOG=(
   ADR_number_mismatch_blind
   ADR_bare_number_blind
   ADR_alloc_no_excl
+  ADR_link_bold_colon_blind
+  ADR_link_backtick_kept
+  ADR_link_not_path_generic
+  RUN_check_cmd_stdin_inherited
   PLAN_adr_check_ignored
   PLAN_adr_tbd_accepted
   EXEC_adr_drift_blind
@@ -4797,7 +4927,7 @@ KILLERS_FILE="$ROOT/.sdd/cache/mutation-killers.tsv"
 # stopped being parsed: an empty loop reports "0 broken" forever.
 # ---------------------------------------------------------------------------
 if [ "$ANCHORS_ONLY" = 1 ]; then
-  ANCHOR_FLOOR=404
+  ANCHOR_FLOOR=420
   anchor_box() { mkdir -p "$1"; cp -r "$ROOT/bin" "$1/"; }
   anchor_control_noop()       { :; }
   anchor_control_intact()     { printf '# a mutation that lands and stays valid\n' >> "$1"; }

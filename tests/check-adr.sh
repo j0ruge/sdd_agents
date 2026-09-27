@@ -67,6 +67,11 @@
 #  R29  `--phase` is scoped to `--mission` and is REFUSED without it — only adr_check_mission reads
 #       it, so accepted and discarded it printed a whole-repo report that read as an answer about
 #       a phase
+#  R35  `**Spec:** <path>` — the bold closing AFTER the colon — is the same key as `**Spec**:`
+#  R36  a path in a code span is the path it carries, not a value that opens with a backtick
+#  R37  a value that is not a path (no `/`, or nothing after the colon) says "not a path", and
+#       never "points somewhere else" nor "has no 'Spec:' line" — the sentence names the defect
+#       the reader can act on (issue #50)
 #
 # Declared limits (D15 of CLAUDE.md — debt written is a limit, debt kept quiet is the fail-open):
 #   - The pilot target keeps a LOCAL namespace at `specs/023/adr/001-…`, outside ADR_DIR. This
@@ -120,6 +125,12 @@
 #        firing: red. Both are also catalogue entries (mut_ADR_backlink_blind,
 #        mut_ADR_number_mismatch_blind), which is what proves them from outside this file.
 #  R10 → narrowing ADR_LINK_PRE to the bold dialect alone: red.
+#  R35 → ADR_LINK_POST back to one optional `**` before the colon: red (mut_ADR_link_bold_colon_blind).
+#  R36 → the backtick strip in adr_link replaced by `:`: red (mut_ADR_link_backtick_kept).
+#  R37 → the `*/*` arm widened to `*`: red on BOTH probes, the bare word and the empty value
+#        (mut_ADR_link_not_path_generic). → `&& [ "$ADR_LINK_NO" -eq 0 ]` dropped, so an empty
+#        value reads as a missing line: red, and it is the absence of "has no 'Spec:' line" in the
+#        empty-value probe that catches it, not the rc — both arms return 1.
 #  R11 → the duplicate-id arm replaced by `false`: red. → the name arm replaced by `false`: red.
 #  R12 → the whole mission branch replaced by `:`: red — and it SURVIVED the first sweep, because
 #        no probe drove a mission with a declared path through the repo scope. The probe that
@@ -201,7 +212,7 @@ fails=0
 # fail() are the only writers. Two blocks below used to bump it by hand AND then call pass/fail,
 # so two probes counted twice and the floor was pinned to a number two higher than the assertions
 # it was standing for — an instrument off by exactly the amount nobody could see.
-PROBE_FLOOR=69
+PROBE_FLOOR=73
 
 pass() { PROBES=$((PROBES + 1)); printf '  ok    %s\n' "$1"; }
 # Inside a mutant the first red assertion is the verdict: fail() ends the sensor there, AFTER
@@ -258,6 +269,9 @@ mission() {
     printf -- '---\n'
     printf 'missao: %s\n' "$m"
     printf 'aprovacao: humano-2026-01-01\n'
+    # The branch every fixture stands on (`git init -b main`): with JIRA off gate_PLAN refuses a
+    # mission that names none, and `main` is the one value on which ensure_mission_branch does nothing.
+    printf 'branch: main\n'
     [ "$v" = '@none@' ] || printf 'adr: %s\n' "$v"
     printf -- '---\n\n# %s\n' "$m"
   } > "$d/docs/handoffs/$m/00-missao.md"
@@ -474,6 +488,48 @@ printf '# ADR 0013 — fixture\n\n- **Status**: aceito\n- **Spec**: docs/handoff
   > "$M/docs/adr/0013-dialect.md"
 assert_adr 'the `- **Spec**:` dialect is read by the same rule' "$M" 0 \
   '^  ok    docs/handoffs/20260101-dialect/00-missao\.md: adr: docs/adr/0013-dialect\.md' check --mission 20260101-dialect
+
+# R35..R37 — the value as the author wrote it (issue #50). Both spellings below are idiomatic
+# markdown, and before this rule the first read as the value `**` and the second as the path WITH
+# its backticks: each failed with "points somewhere else … fix whichever side is wrong", when
+# neither side pointed anywhere else.
+mission "$M" 20260101-boldcolon docs/adr/0014-boldcolon.md
+printf '# ADR 0014 — fixture\n\n- **Status**: aceito\n- **Spec:** docs/handoffs/20260101-boldcolon/00-missao.md\n' \
+  > "$M/docs/adr/0014-boldcolon.md"
+assert_adr 'the bold-colon Spec dialect is read by the same rule' "$M" 0 \
+  '^  ok    docs/handoffs/20260101-boldcolon/00-missao\.md: adr: docs/adr/0014-boldcolon\.md — and that ADR points back' \
+  check --mission 20260101-boldcolon
+mission "$M" 20260101-tick docs/adr/0015-tick.md
+printf '# ADR 0015 — fixture\n\n- **Status**: aceito\n- **Spec**: `docs/handoffs/20260101-tick/00-missao.md`\n' \
+  > "$M/docs/adr/0015-tick.md"
+assert_adr 'a backticked Spec path is read as the path it carries' "$M" 0 \
+  '^  ok    docs/handoffs/20260101-tick/00-missao\.md: adr: docs/adr/0015-tick\.md — and that ADR points back' \
+  check --mission 20260101-tick
+# A value that is not a path says THAT, and never "points somewhere else": both arms return rc 1,
+# so the rc distinguishes nothing — the assertion demands the right sentence AND the absence of
+# the other arm's, in one outcome.
+mission "$M" 20260101-notpath docs/adr/0016-notpath.md
+printf '# ADR 0016 — fixture\n\n- **Status**: aceito\n- **Spec**: see-below\n' > "$M/docs/adr/0016-notpath.md"
+run_adr "$M" check --mission 20260101-notpath
+if [ "$ADR_RC" = 1 ] && grep -qE "FAIL +docs/adr/0016-notpath\.md:4 — the 'Spec:' line carries 'see-below', which is not a path" <<< "$ADR_OUT" \
+   && ! grep -q 'points somewhere else' <<< "$ADR_OUT"; then
+  pass 'a Spec line whose value is not a path says so, not that it points elsewhere'
+else
+  fail 'a Spec line whose value is not a path says so, not that it points elsewhere' \
+    "rc 1, 'not a path' on line 4, and no 'points somewhere else'" "rc $ADR_RC — $ADR_OUT"
+fi
+# ...and the line that is THERE with nothing after the colon is the same defect, not a missing
+# line: "has no 'Spec:' line" would send the reader looking for a line they can see.
+mission "$M" 20260101-emptyspec docs/adr/0017-emptyspec.md
+printf '# ADR 0017 — fixture\n\n- **Status**: aceito\n- **Spec**:\n' > "$M/docs/adr/0017-emptyspec.md"
+run_adr "$M" check --mission 20260101-emptyspec
+if [ "$ADR_RC" = 1 ] && grep -qE "FAIL +docs/adr/0017-emptyspec\.md:4 — the 'Spec:' line carries '<empty>', which is not a path" <<< "$ADR_OUT" \
+   && ! grep -q "has no 'Spec:' line" <<< "$ADR_OUT"; then
+  pass 'a Spec line with nothing after the colon is not a path either, and not a missing line'
+else
+  fail 'a Spec line with nothing after the colon is not a path either, and not a missing line' \
+    "rc 1, '<empty>' on line 4, and no 'has no Spec: line'" "rc $ADR_RC — $ADR_OUT"
+fi
 
 # --- R11..R16: the repo scope -----------------------------------------------------------------
 # A fixture of its own, because the repo scope reads EVERYTHING on disk and the mission fixture
@@ -724,7 +780,7 @@ fi
 G="$(fixture gates ADR_CHECK=\"block\")" || { echo "fixture failed" >&2; exit 1; }
 GM=20260101-gate
 mkdir -p "$G/docs/handoffs/$GM"
-{ printf -- '---\nmissao: %s\naprovacao: auto\n---\n\n# Mission\n' "$GM"; } > "$G/docs/handoffs/$GM/00-missao.md"
+{ printf -- '---\nmissao: %s\naprovacao: auto\nbranch: main\n---\n\n# Mission\n' "$GM"; } > "$G/docs/handoffs/$GM/00-missao.md"
 : > "$G/docs/handoffs/$GM/01-plano.md"
 { printf '| ID | Incremento | Check (comando → esperado) | Status | Commit |\n'
   printf -- '|---|---|---|---|---|\n'
@@ -798,7 +854,7 @@ W="$(fixture warnrun ADR_CHECK=\"warn\")" || { echo "fixture failed" >&2; exit 1
 WM=20260101-warn
 WLEDGER="$BOX/warn-state"
 mkdir -p "$WLEDGER" "$W/docs/handoffs/$WM"
-{ printf -- '---\nmissao: %s\naprovacao: auto\nadr: TBD\n---\n\n# Mission\n' "$WM"; } > "$W/docs/handoffs/$WM/00-missao.md"
+{ printf -- '---\nmissao: %s\naprovacao: auto\nbranch: main\nadr: TBD\n---\n\n# Mission\n' "$WM"; } > "$W/docs/handoffs/$WM/00-missao.md"
 : > "$W/docs/handoffs/$WM/01-plano.md"
 ( cd "$W" && git add -A && git commit -qm "mission" ) >/dev/null 2>&1
 WSHA="$( cd "$W" && git rev-parse --short HEAD )"

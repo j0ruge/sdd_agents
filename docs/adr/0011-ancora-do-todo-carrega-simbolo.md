@@ -1,6 +1,6 @@
 # ADR 0011 — A findings anchor carries a symbol, and the sensor finds the line through it
 
-- **Status**: proposed (—, 2026-09-25)
+- **Status**: accepted (—, 2026-09-26)
 - **Spec**: docs/handoffs/20260925-o-sensor-le-o-que-a-ancora-diz/00-missao.md
 
 ## Context
