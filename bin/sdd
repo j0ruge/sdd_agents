@@ -3155,6 +3155,10 @@ kit_guard_check() {
 #    built as a probe.
 #  · ONLY COMMITS ARE ATTRIBUTED. The status half still reads uncommitted edits as the session's,
 #    so a concurrent writer's dirty file is still the hat's crossing.
+#  · WHEN BOTH ARM, ONLY THE HAT'S CROSSING IS NAMED. A foreign move is written up (FOREIGN-COMMIT)
+#    only when the session's own paths armed nothing; when the session crossed too, the journal
+#    names the session's paths alone, and the foreign move rides into the next lap's base unnamed.
+#    The line stops either way (review r2 of 20260926, declared rather than probed).
 #  · cmd_kaizen exports the label through run_phase and is still outside these doors (above).
 HAT_CROSSED_WHY=""
 FOREIGN_COMMIT_WHY=""

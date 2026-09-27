@@ -126,4 +126,7 @@ Confirmed by I3 (the label) and I4 (the reading) of the mission.
     unexplained net path to the session, so skipping one changes the kind at worst;
   - uncommitted edits of a concurrent writer still land in the `git status` half and are still
     attributed to the session;
+  - when the session crosses its hat AND a foreign move leaves it in the same phase, only the
+    session's paths are named (`hat-crossed`); the foreign move is not written up, and it rides into
+    the next lap's base. The line stops either way;
   - `cmd_kaizen` exports the label through `run_phase` and is still not guarded, as before.
