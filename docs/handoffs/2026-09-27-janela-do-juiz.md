@@ -1,0 +1,174 @@
+# Handoff — kit congelado em `4fd0f31`: as 3 missões de alvo da janela do juiz (1 de 3 feita)
+
+> Escrito em 2026-09-27, ao fechar a sessão que executou e mergeou a carona (PR #172), e atualizado
+> no mesmo dia, depois da missão 1. Autocontido: uma sessão nova, lendo só este arquivo, sabe o
+> estado, as regras da janela e o passo a passo.
+> **Não fica na `main` do kit, de propósito:** o kit está congelado, e um arquivo ali viraria commit
+> na `main`. A cópia de transporte vive na branch `handoff/janela-do-juiz`, lida com `git show`, sem
+> checkout (ver "Rodar uma missão da janela em OUTRA máquina").
+
+## Estado (medido em 2026-09-27)
+
+- **Kit `sdd_agents`:** `main` = **`4fd0f31`** (merge do PR #172), árvore limpa, carimbo do
+  `sdd health` **422 caught of 422** válido sobre esse conteúdo. `TODO.md` com 83 achados, espelhado
+  em 83 issues com a label `todo` (a última é a #174).
+- **Decisão humana (2026-09-27): o kit CONGELOU.** Nenhum commit nem merge na `main` do kit até o
+  veredito do juiz — nem chore, nem `RESOLVED by`, nem ajuste de doc. O re-sync do espelho de issues
+  só mexe no GitHub e continua permitido.
+- **Harness:** `claude` **2.1.283** (Claude Code).
+- **Série do juiz hoje** (`./bin/sdd kaizen --series | jq .guard`, rodado do kit): `latest` ainda é
+  `5cb0101`, `window_broken: true`, `floor: 3`. A 1ª missão de alvo sobre `4fd0f31` abre a janela
+  nova.
+
+## Progresso da janela (atualizado em 2026-09-27 15:50)
+
+**Janela: 1 de 3.** A série mostra `latest=4fd0f31`, `missions_with_session: 1`, `sessions: 17` e
+`harness: [2.1.283]`.
+
+**Missão 1, no `lighthouse_project`:** `20260927-idioma-da-spa-pelo-idp` (LH-4), fechada.
+- PR #12 mergeado (`5da3f65`) e `sdd close` com `verified=true`. Custou US$ 35,91.
+- A linha parou 3 vezes, todas destravadas por humano: QA por ambiente, `hat-crossed` no `DESIGN.md`
+  na DOCS, e `.claude/rules/` que a sessão headless não pode escrever.
+- A LH-3 do e-mail foi fechada fora do pipeline (PR #11) e não conta para a janela.
+
+**O que ficou preparado para as próximas missões:**
+- `DISABLE_AUTOUPDATER=1` no `env` do `~/.claude/settings.json`.
+- No lighthouse, o `.claude/agents/index.ts` está no `.git/info/exclude` e o `HAT_WRITES_EXTRA` vale
+  `"sdd-docs: packages/frontend/DESIGN.md"`.
+- O `sdd run` pode ser disparado de dentro do Claude Code com
+  `bash -c 'unset $(compgen -e | grep ^CLAUDE); cd <alvo> && setsid nohup sdd run <missão> > <out> 2>&1 < /dev/null & disown'`.
+  Funcionou 3 vezes.
+- O monitor do log precisa de `LC_ALL=C mawk -W interactive`.
+
+**Achados `kit:` esperando o fim da janela** (detalhe na memória `sdd-agents-janela-juiz-missao-1-lighthouse`):
+1. A célula Commit de um incremento fora do git.
+2. O `gate_TICKET` só lê o frontmatter.
+3. O preflight aceita app de outro produto na `APP_URL`.
+4. O `qa_substep` escolhe `close` com o relatório de outra missão.
+5. A âncora 3 conta bug legado de outra missão.
+
+## As regras da janela (o que faz ela valer ou encalhar)
+
+1. **3 missões de alvo com sessão sobre o MESMO `kit_sha` (`4fd0f31`).** O `kit_sha` sai do `HEAD`
+   do checkout do kit no momento em que a sessão roda. Então o `~/repos/sdd_agents` fica na `main`,
+   em `4fd0f31`, **limpo**, durante as 3 missões: não troque de branch nele e não edite nada ali.
+   Dois alvos (`lighthouse_project` e `warehouse_explorer_api`) usam symlinks para os chapéus do
+   kit, então trocar a branch do kit muda o chapéu que eles vestem.
+2. **Uma única versão do harness na fatia.** Uma fatia com duas versões do `claude` sai
+   `harness_mixed` e o veredito fica `indeterminado`. Confira `claude --version` antes de cada
+   missão e segure a auto-atualização do Claude Code durante a janela (por exemplo com
+   `DISABLE_AUTOUPDATER=1` no ambiente). Se a versão mudar no meio, anote: a janela precisa recomeçar.
+3. **Achado de kit durante as missões vai para o handoff da missão**, marcado `kit:`, e espera o fim
+   da janela. Nunca um commit no kit (o runner para a linha com `kit-touched` se uma sessão tentar).
+
+## Os candidatos a alvo (medido agora, nada foi tocado)
+
+| Alvo | Jira | Chapéus em `.claude/agents/` | Estado do checkout | O que falta antes do `/sdd-plan` |
+|---|---|---|---|---|
+| `sales_quote` | ligado (SQ, board 51) | **cópias**, 5 defasadas (`sdd-docs`, `sdd-executor`, `sdd-kaizen`, `sdd-planner`, `sdd-qa`) | `develop` limpo (`4fdb70bb`) | `sdd install --force` no alvo e um PR só com o espelho, como os #140/#141 |
+| `lighthouse_project` | ligado (`BUDGET_MISSION_USD=230`) | symlinks para o kit (atuais) | branch `LH-3_email-mvp-diretores`, `.claude/agents/` **não versionado** | decidir a branch base (`develop`?) e o que fazer com o `.claude/agents/` não versionado |
+| `warehouse_explorer_api` | **desligado** | symlinks para o kit (atuais) | branch `chore/todo-esqueleto`, 2 arquivos sujos (`jest.config.js`, `package.json`) | resolver a sujeira; o plano **precisa** de `branch:` real (regra nova, ver abaixo) |
+| `erp_api` | — | kit **não instalado** | `develop`, 4 arquivos sujos | `sdd install` + `sdd preflight` (custam zero); o `vitest` puro do `test` agora é seguro |
+
+⚠️ Com os chapéus ligados por symlink, **nunca** rode `sdd install --force` de outro checkout do kit
+(worktree, versão instalada) nesses alvos: um `cp` sobre o symlink escreve no kit (issue #173). O
+`sdd` do `PATH` (`~/.hermes/bin/sdd`) resolve para `~/repos/sdd_agents/bin/sdd`, que é o certo.
+
+## O que o kit `4fd0f31` faz de diferente do que as missões anteriores viram
+
+- **Sem Jira, o plano precisa de `branch:` real.** `gate_PLAN` recusa `branch:` vazio ou o
+  placeholder `<…>` quando `JIRA_ENABLED` não é `true`, e diz o remédio. Com Jira ligado nada muda
+  (a TICKET cria a branch). Vale para o `warehouse_explorer_api`.
+- **`sdd approve` sem resposta sai 66.** Rode o `sdd approve` num terminal de verdade; de dentro do
+  Claude Code (stdin `/dev/null`) ele agora recusa com rc 66 em vez de fingir um "N".
+- **`foreign-commit` é um `kind` novo de parada (rc 3).** Toda sessão grava o rótulo
+  `sdd:<passo>:<sid8>` no reflog, e um commit **sem** esse rótulo feito no checkout enquanto uma fase
+  roda, fora do `writes:` do chapéu, para a linha como `foreign-commit`, com o commit nomeado. Não
+  commite no checkout do alvo enquanto um `sdd run` estiver rodando. O remédio está em
+  `docs/failure-modes.md` → "The line stopped with `foreign-commit`".
+- **O `TEST_CMD` roda com stdin em `/dev/null`**, nos gates, no `E2E_CMD` e no preflight: um test
+  runner em modo watch não pendura mais o gate.
+- **`**Spec:**` e caminho entre crases** passam no `sdd adr check`; nota e Status entre crases são
+  lidos como o valor no `gate_REVIEW` e no `gate_DOCS`.
+
+## Passo a passo da missão de alvo
+
+1. **Nada rodando:** `ps -eo pid,etime,cmd | grep -E 'bin/sdd (run|retry|health)' | grep -v grep`
+   tem de voltar vazio antes de tocar no alvo.
+2. **Conferir a janela:** `git -C ~/repos/sdd_agents log --oneline -1` → `4fd0f31`, árvore limpa;
+   `claude --version` → `2.1.283`.
+3. **Preparar o alvo** (linha da tabela acima). No `sales_quote`: `sdd install` mostra o diff,
+   `sdd install --force` adota, e o espelho vai num PR próprio contra `develop` antes da missão.
+4. **Preflight:** `env -u CLAUDECODE sdd preflight` na raiz do alvo, que tem de terminar em
+   `preflight ok`. O preflight abre uma sessão `claude` real, curta, para conferir o chapéu do
+   executor.
+5. **Planejar com o humano:** `/sdd-plan` no alvo (o `sdd-planner`, interativo). Com Jira ligado o
+   plano leva `versao:`; com Jira desligado, `branch:` real.
+6. **Aprovar:** `sdd approve <missão>` **no terminal do humano**.
+7. **Rodar:** `sdd run <missão>` **no terminal do humano**, nunca como tarefa de fundo do Bash tool
+   de uma sessão do Claude Code: o `claude -p` aninhado herda o socket do harness e morre. Se tiver
+   de sair de dentro do Claude Code, use `setsid nohup` com `env -u CLAUDECODE -u CLAUDE_CODE_*`.
+8. **Acompanhar:** `tail -F .sdd/logs/<missão>/pipeline.log` e `sdd status --no-gates <missão>`
+   (este não reavalia gates nem roda o `TEST_CMD`). Em rc 3, `sdd why <missão>` e o verbete de
+   `docs/failure-modes.md` do kit.
+9. **Fechar:** merge do PR do alvo pelo humano, e depois `sdd close <missão>` (com Jira). O `sdd
+   close` só carimba o fechamento se o ticket já estiver Done.
+10. **Progresso da janela:** do kit, `./bin/sdd kaizen --series | jq '{latest: .latest.kit_sha,
+    guard}'`. A janela está completa quando `latest` é `4fd0f31` e `guard.sufficient` é `true`
+    (`missions_with_session` ≥ 3, um harness só).
+
+## Rodar uma missão da janela em OUTRA máquina
+
+O juiz lê o ledger `${SDD_STATE_DIR:-$HOME/.sdd}/autonomy-log.jsonl`, que é **um arquivo por máquina**
+(`docs/pipeline.md`, "this ledger is one file per machine"). A missão 1 está no ledger da máquina onde
+este handoff nasceu. Uma missão rodada em outra máquina só conta se as linhas dela forem trazidas para
+o ledger onde o `sdd kaizen` vai rodar.
+
+**Antes, na outra máquina:**
+1. Kit em `4fd0f31` e limpo: `git -C <kit> fetch && git -C <kit> checkout main && git -C <kit> pull --ff-only`.
+   `git -C <kit> log --oneline -1` tem de responder `4fd0f31`.
+   ⚠️ **Nunca** faça checkout desta branch de handoff nesse checkout: o `kit_sha` sai do `HEAD`. Para
+   ler este arquivo, use `git -C <kit> show origin/handoff/janela-do-juiz:docs/handoffs/2026-09-27-janela-do-juiz.md`.
+2. O `sdd` do `PATH` resolve para `<kit>/bin/sdd`: confira com `readlink -f "$(command -v sdd)"`.
+3. `claude --version` → **2.1.283**, a mesma versão da missão 1. Com outra versão, a fatia sai
+   `harness_mixed` e o veredito fica `indeterminado`. Segure a atualização com
+   `"env": {"DISABLE_AUTOUPDATER": "1"}` no `~/.claude/settings.json` daquela máquina.
+4. No alvo, siga o passo a passo deste handoff: `sdd install`, `env -u CLAUDECODE sdd preflight`,
+   `/sdd-plan`, `sdd approve` e `sdd run`.
+
+**Depois do `sdd close`, trazer as linhas da missão para o ledger do juiz:**
+```bash
+# na outra máquina
+jq -c 'select(.mission=="<missão>")' ~/.sdd/autonomy-log.jsonl > ledger-<missão>.jsonl
+wc -l ledger-<missão>.jsonl        # sessões + escaladas + close
+
+# na máquina do juiz (backup antes; o arquivo é append-only)
+cp ~/.sdd/autonomy-log.jsonl ~/.sdd/autonomy-log.jsonl.bak-antes-de-<missão>
+cat ledger-<missão>.jsonl >> ~/.sdd/autonomy-log.jsonl
+./bin/sdd kaizen --series | jq '{latest: .latest.kit_sha, guard}'   # missions_with_session sobe 1
+```
+Antes de anexar, confira que todas as linhas têm `kit_sha: "4fd0f31"` e `harness: "2.1.283"`
+(`jq -r '[.kit_sha, .harness] | @tsv' ledger-<missão>.jsonl | sort | uniq -c`). O `repo` delas carrega
+o caminho da outra máquina; o juiz lê todos os repos (ADR 0005), então isso não as exclui.
+
+## Depois das 3 missões
+
+- **Com o veredito escrito, e só então:** tirar o `"DISABLE_AUTOUPDATER": "1"` do `env` do
+  `~/.claude/settings.json`. O backup de antes da janela é `~/.claude/settings.json.bak-2026-09-27`,
+  e o `env` só tem essa chave. Tirar antes quebra a regra de um harness só.
+
+- `sdd kaizen` **no terminal do humano**, numa branch `kaizen/…` do kit (~US$ 5 por veredito, teto
+  US$ 15). Ele escreve o veredito sobre `4fd0f31`. O merge dessa branch descongela o kit.
+- Ficam para depois do veredito: a T3 (três decisões humanas de desenho, via `/sdd-plan` no kit) e
+  dois minors adiados da carona — a janela do reflog faz um `grep` por caminho (~4 ms por caminho,
+  só pesa em diffs de milhares de arquivos) e o item do `--with-mutation` no `TODO.md` cita números
+  de linha vizinhos dos certos.
+
+## Onde está cada coisa
+
+- Missão da carona: `~/repos/sdd_agents/docs/handoffs/20260926-a-carona-antes-do-congelamento/`
+  (`00-missao.md`, `01-plano.md`, `checkpoint.md`, `checkpoint-notas.md`); ADR 0012
+  (`docs/adr/0012-o-commit-tem-dono.md`); `KAIZEN_LOG.md` (entrada de 2026-09-26).
+- Índice das frentes paradas do kit: `docs/superpowers/specs/2026-09-23-a-gaveta-do-kit.md`, onde a F3
+  marca o congelamento a partir do merge da carona.
+- Memória do projeto: `sdd-agents-kit-congelado-4fd0f31.md` e `sdd-agents-pr-de-carona.md`.
