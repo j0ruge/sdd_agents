@@ -27,7 +27,7 @@ Two facts decided the mechanism, both measured on 2026-09-26:
   with `-q`, and 0 commit SHAs printed.
 - **The reflog can.** With `GIT_REFLOG_ACTION` in the environment, git 2.43.0 writes that label into
   the reflog entry of `commit`, `commit --amend`, `checkout` and `reset`:
-  `sdd-session abc123: session commit` for the labelled commit, `commit: human commit` for the one
+  `sdd:EXEC:ab12cd34: session commit` for the labelled commit, `commit: human commit` for the one
   made without it. The reflog of `HEAD` is per worktree, so a concurrent writer in the same checkout
   lands in the same log, and a writer in another worktree does not.
 
