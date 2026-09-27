@@ -28,6 +28,7 @@ M numa cópia do kit.
 | ADRs 0010, 0011, 0012 | `proposed` | `accepted` |
 | `todo-findings` | 82 | **83** (−1 pago em `3245bfd`, +2 lacunas 4 e 5) |
 | Catálogo de mutação | 406 | **422** (16 novos — 13 do plano e 3 da revisão r1 —, cada um vermelho pela receita M) |
+| `sdd health` do PR | carimbo `b4ab72e1…`, 406/406 | **422 caught of 422**, kit healthy, 21 min 52 s (21:49 → 22:11), carimbo válido sobre `0c3d24c` |
 
 **Contramedida:** poka-yoke primeiro. A grafia idiomática vira regra (`ADR_LINK_POST` com o `**`
 dos dois lados, a crase tirada do valor, da nota e do Status); "ninguém respondeu" vira rc; a
