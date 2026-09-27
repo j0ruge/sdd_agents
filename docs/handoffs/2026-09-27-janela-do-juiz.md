@@ -1,4 +1,4 @@
-# Handoff — kit congelado em `4fd0f31`: as 3 missões de alvo da janela do juiz (1 de 3 feita)
+# Handoff — kit congelado em `4fd0f31`: as 3 missões de alvo da janela do juiz (1 feita, a 2ª rodando)
 
 > Escrito em 2026-09-27, ao fechar a sessão que executou e mergeou a carona (PR #172), e atualizado
 > no mesmo dia, depois da missão 1. Autocontido: uma sessão nova, lendo só este arquivo, sabe o
@@ -20,10 +20,46 @@
   `5cb0101`, `window_broken: true`, `floor: 3`. A 1ª missão de alvo sobre `4fd0f31` abre a janela
   nova.
 
-## Progresso da janela (atualizado em 2026-09-27 15:50)
+## Progresso da janela (atualizado em 2026-09-27 17:50)
 
-**Janela: 1 de 3.** A série mostra `latest=4fd0f31`, `missions_with_session: 1`, `sessions: 17` e
-`harness: [2.1.283]`.
+**Janela: 1 de 3 fechada, a 2ª RODANDO.** A série mostra `latest=4fd0f31`,
+`missions_with_session: 1`, `sessions: 17` e `harness: [2.1.283]`.
+
+**Missão 2, no `sales_quote`, nesta máquina: `20260927-breadcrumb-numero-cotacao`, RODANDO desde 17:45.**
+- Disparada destacada: `setsid nohup`, pid **916198**. A saída do terminal está em
+  `/tmp/claude-1001/-home-joruge-repos-sdd-agents/87536c7f-4b4a-49a7-ad72-0b97f810cfee/scratchpad/sdd-run-sq-breadcrumb.out` (em `/tmp`, some no reboot); a fonte é o `pipeline.log`.
+- Plano aprovado (`humano-2026-09-27`), `versao: 0.9.0`. O `branch:` é placeholder: a TICKET cria a
+  branch. O teto da missão é US$ 150.
+- **Antes do disparo:**
+  - O preflight reprovava 5 chapéus defasados (`sdd-docs`, `sdd-executor`, `sdd-kaizen`,
+    `sdd-planner`, `sdd-qa`). Foram sincronizados com `sdd install --force` num PR próprio,
+    **JRC-Brasil/sales_quote#381**, mergeado em `2556b99a` com o CI verde.
+  - A `develop` local, com os 2 commits do plano (`b9eaf732` aprovação, `6ec10e64` artefatos), foi
+    rebaseada para cima do merge e **não foi empurrada**; a missão empurra a branch dela.
+  - O preflight passou (`preflight ok`), com o kit em `4fd0f31` e o `claude` em 2.1.283.
+  - **Troca de app na `:5173`:** o Lighthouse ocupava a porta. O `./dev.sh` do Lighthouse foi
+    encerrado e o do `sales_quote` subiu destacado (log em `/tmp/claude-1001/-home-joruge-repos-sdd-agents/87536c7f-4b4a-49a7-ad72-0b97f810cfee/scratchpad/sales-quote-dev.log`):
+    `:5173` = "JRC Sales Quote", `:3000/health` = 200, `erp_api :9998` = 200. **Não suba o
+    Lighthouse de volta até a QA desta missão terminar.**
+- **Acompanhar sem reavaliar gates:**
+  `tail -F ~/repos/sales_quote/.sdd/logs/20260927-breadcrumb-numero-cotacao/pipeline.log` e
+  `sdd status --no-gates 20260927-breadcrumb-numero-cotacao`. Não rode `sdd status` nem `sdd phase`
+  sem `--no-gates` com a corrida viva: eles rodam o `TEST_CMD` e o `E2E_CMD` em paralelo com ela.
+- **Se parar com rc 3:** `sdd why 20260927-breadcrumb-numero-cotacao`, leia o handoff que o runner
+  nomear (seção "Decisions for a Human") e o verbete de `docs/failure-modes.md` do kit.
+  O que destravou a LH-4 serve de mapa:
+  - **Handoff `status: blocked`:** resolva a causa. Para forçar uma sessão nova da fase, apague o
+    handoff (`git rm`), porque trocar o `status:` à mão pode deixar o gate passar sem sessão.
+  - **`hat-crossed` num arquivo que as regras do repo obrigam:** declare `HAT_WRITES_EXTRA` no
+    `.sdd/config.sh` do alvo.
+  - **Item ⛔ da DOCS em `.claude/`:** aplique o texto proposto à mão e troque para ✅ com o hash.
+  - Nunca commite no alvo com a corrida viva, ou a linha para com `foreign-commit`.
+- **Depois do PR:** esperar todos os revisores, consertar numa leva, mergear e rodar
+  `sdd close 20260927-breadcrumb-numero-cotacao` com o harness limpo (`unset` das `CLAUDE*`).
+  Conferir com `./bin/sdd kaizen --series | jq '{latest: .latest.kit_sha, guard}'`:
+  `missions_with_session` tem de ir a 2.
+- A 3ª missão pode ser o ui24r, na outra máquina (seção "Rodar uma missão da janela em OUTRA
+  máquina").
 
 **Missão 1, no `lighthouse_project`:** `20260927-idioma-da-spa-pelo-idp` (LH-4), fechada.
 - PR #12 mergeado (`5da3f65`) e `sdd close` com `verified=true`. Custou US$ 35,91.
@@ -39,6 +75,11 @@
   `bash -c 'unset $(compgen -e | grep ^CLAUDE); cd <alvo> && setsid nohup sdd run <missão> > <out> 2>&1 < /dev/null & disown'`.
   Funcionou 3 vezes.
 - O monitor do log precisa de `LC_ALL=C mawk -W interactive`.
+- **Antes de cada missão**, confira duas coisas que o preflight não confere direito:
+  - se as cópias de chapéu do alvo batem com o kit (`cmp` contra `<kit>/agents/*.md`); o preflight
+    reprova, mas só se você rodá-lo;
+  - se o `<title>` servido na `APP_URL` é do produto certo. O preflight aceita qualquer app na porta,
+    e `sales_quote` e `lighthouse_project` usam a mesma `:5173`.
 
 **Achados `kit:` esperando o fim da janela** (detalhe na memória `sdd-agents-janela-juiz-missao-1-lighthouse`):
 1. A célula Commit de um incremento fora do git.
