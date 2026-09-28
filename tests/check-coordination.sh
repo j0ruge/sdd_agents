@@ -290,6 +290,11 @@ try:
     missing = run(repo, "preflight", extra=limited_env)
     check("missing dependency refuses before execution", missing.returncode != 0
           and "CHECKOUT-UNAVAILABLE" in missing.stdout, missing.stdout)
+    # ...and says it found no python3 on PATH, with the remedy when /usr/bin/python3 is there.
+    check("missing python3 is named, with the remedy when /usr/bin/python3 exists",
+          "no python3 on PATH" in missing.stdout
+          and ("PATH=/usr/bin" in missing.stdout) == os.access("/usr/bin/python3", os.X_OK),
+          missing.stdout[:300])
     check("help needs no supervisor dependency", run(repo, "help", extra=limited_env).returncode == 0)
     # pidfd support must be usable under this kernel/seccomp policy before project config runs.
     python_stub = stubs / "python3"
@@ -315,6 +320,20 @@ try:
               result.returncode != 0 and "CHECKOUT-UNAVAILABLE" in result.stdout
               and not capability_effect.exists(), result.stdout[:300])
         check("help survives unavailable pidfd: " + denied, run(repo, "help").returncode == 0)
+        if denied == "missing":
+            # The refusal names WHAT failed and IN WHICH interpreter, and the remedy only when there
+            # is one on disk. In the operator's terminal the PATH's python3 was a uv-built CPython with
+            # no os.pidfd_open, /usr/bin/python3 served, and the lone "requirements" list sent a human
+            # to diagnose it by hand (achado 8). The stub's sys.executable is /usr/bin/python3, so the
+            # interpreter the refusal must name is the one the PATH resolved — the stub's own path.
+            # The remedy is measured here with the probe the helper runs, never assumed.
+            real_ok = os.path.exists("/usr/bin/python3") and subprocess.run(
+                ["/usr/bin/python3", "-I", "-S", "-c",
+                 "import os, signal; os.pidfd_open; signal.pidfd_send_signal"],
+                stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL, timeout=5).returncode == 0
+            check("unavailable names the failed requirement, the interpreter and the remedy",
+                  "pidfd_open is missing" in result.stdout and str(python_stub) in result.stdout
+                  and ("PATH=/usr/bin" in result.stdout) == real_ok, result.stdout[:400])
     python_stub.unlink()
     # A signal that lands after the worker already exited, while only a straggler is being reaped,
     # must not rewrite the worker's status: a late Ctrl-C turned a successful run into 130.

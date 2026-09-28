@@ -9892,8 +9892,13 @@ coordination_enter() {
     root="$(git rev-parse --show-toplevel 2>/dev/null)" || die "not inside a git repository"
   fi
   coordination_paths "$root"
-  command -v python3 >/dev/null 2>&1 \
-    || die "CHECKOUT-UNAVAILABLE: coordinated commands require Python 3 and Linux procfs"
+  # The refusal says what fell and gives the remedy when one is on disk (achado 8): the helper does
+  # the same for a python3 that is there but lacks pidfd. The runner never USES /usr/bin/python3.
+  if ! command -v python3 >/dev/null 2>&1; then
+    local remedy=""
+    [ -x /usr/bin/python3 ] && remedy=" — /usr/bin/python3 exists: run PATH=/usr/bin:\$PATH sdd $subcmd …"
+    die "CHECKOUT-UNAVAILABLE: no python3 on PATH; coordinated commands require Python 3.9+ and Linux procfs$remedy"
+  fi
   if [ -n "${SDD_COORDINATION_ID:-}" ] \
       && "${COORDINATION_PYTHON[@]}" "$SDD_HOME/bin/sdd-coordination.py" check "$COORDINATION_ROOT" "$COORDINATION_DIR" "$kind"; then
     COORDINATION_ADMITTED=1

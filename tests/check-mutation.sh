@@ -4422,6 +4422,12 @@ mut_CLOSE_no_fast_forward() {
   sed -i '/^close_return_home() {/,/^}/ s#out="\$( git -C "\$REPO_ROOT" merge --ff-only --quiet "\$DEFAULT_BRANCH@{upstream}" 2>&1 )" || rc=\$?#out=""#' "$1"
 }
 
+# CHECKOUT-UNAVAILABLE names what fell and in which interpreter (achado 8): back to the generic list,
+# and the operator diagnoses the PATH's python3 by hand again.
+mut_COORD_unavailable_generic() {
+  sed -i "s@^        print(unavailable(str(error)), file=sys.stderr)\$@        print('CHECKOUT-UNAVAILABLE: %s are required' % REQUIREMENTS, file=sys.stderr)@" "${1%/*}/sdd-coordination.py"
+}
+
 mut_COORD_reaped_pidfd_kept() {
   sed -i '/^def wait_family(/,/^def / { /^                    worker_fd = None$/d }' "${1%/*}/sdd-coordination.py"
 }
@@ -4443,6 +4449,7 @@ CATALOG=(
   COORD_hook_relay_signaled
   COORD_helper_not_isolated
   COORD_reaped_pidfd_kept
+  COORD_unavailable_generic
   CLOSE_no_fast_forward
   COORD_select_pidfd
   RUN_branch_double_slash

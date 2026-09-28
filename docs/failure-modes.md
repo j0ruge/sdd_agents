@@ -28,7 +28,13 @@ Stale JSON without a live lock is harmless and does not require manual cleanup.
 `flock`/subreaper/pidfd support, with pidfd syscalls allowed by seccomp, and a procfs that
 enumerates task children (`/proc/<pid>/task/<tid>/children`, `CONFIG_PROC_CHILDREN`). Admission probes these
 before running config or a paid session.
-Install the required runtime or use a supported Linux environment. Help and version do not
+The message names the failed requirement (`os.pidfd_open is missing from this Python build`,
+`… was denied`, no task children enumeration, `Python 3.9+`) and the interpreter — the `python3` the
+`PATH` resolved, its `sys.executable` and version — because the usual cause is not the kernel but a
+`python3` earlier on the `PATH` (a uv/pyenv build without `os.pidfd_open`) while `/usr/bin/python3`
+serves. When the refusal finds that `/usr/bin/python3` has pidfd it prints the remedy,
+`PATH=/usr/bin:$PATH sdd <the same command>`; the runner only probes that interpreter, never uses it.
+Otherwise install the required runtime or use a supported Linux environment. Help and version do not
 need the supervisor. This is local coordination, not a filesystem permission boundary against
 external tools or deliberate interference with the supervisor.
 
