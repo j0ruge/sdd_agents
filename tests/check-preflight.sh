@@ -851,6 +851,20 @@ if [ "$app_floor_ok" = "1" ]; then
     out_page_nocurl="$( PATH="$nocurl" "$SDD" preflight 2>&1 )"
     sed -i 's|^APP_EXPECT=.*|APP_EXPECT="Other Product"|' .sdd/config.sh
     out_page_right="$( "$SDD" preflight 2>&1 )"
+    # A redirect or an error page is not a page to judge: the RIGHT product may answer `/` with a
+    # 302 to its login, or a 500 the mission's own code caused, and neither carries the <title>.
+    # Read as `wrong`, that was a false BLOCKED — "not this product, no session can fix that" over
+    # an app a session could fix. So only a 2xx without the literal is `wrong`; anything else
+    # without it is doubt, and doubt never refuses. http.server answers `/sub` with a 301 to
+    # `/sub/` (whose page DOES carry the literal: following it would read `up`, never `wrong`),
+    # and `/missing` with its own 404 page.
+    mkdir -p "$page_dir/sub"
+    printf '<!doctype html><title>Fixture Product</title>\n' > "$page_dir/sub/index.html"
+    sed -i 's|^APP_EXPECT=.*|APP_EXPECT="Fixture Product"|' .sdd/config.sh
+    sed -i "s|^APP_URL=.*|APP_URL=\"http://127.0.0.1:$page_port/sub\"|" .sdd/config.sh
+    out_page_redirect="$( "$SDD" preflight 2>&1 )"
+    sed -i "s|^APP_URL=.*|APP_URL=\"http://127.0.0.1:$page_port/missing\"|" .sdd/config.sh
+    out_page_404="$( "$SDD" preflight 2>&1 )"
     stop_page_server
 
     n_tcp="$(failed_count "$out_page_tcp")"
@@ -867,6 +881,14 @@ if [ "$app_floor_ok" = "1" ]; then
     assert_eq "a page that carries APP_EXPECT reads as listening, with no extra failure" \
       "listening · no extra failure" \
       "$( grep -qF "something is listening at 127.0.0.1:" <<< "$out_page_right" && echo listening || echo quiet ) · $( [ -n "$n_right" ] && [ "$n_right" = "$n_tcp" ] && echo 'no extra failure' || echo "$n_tcp -> $n_right" )"
+    n_redirect="$(failed_count "$out_page_redirect")"
+    n_404="$(failed_count "$out_page_404")"
+    assert_eq "a redirecting APP_URL is never wrong: it reads unknown, with the HTTP code" \
+      "no extra failure · HTTP 301" \
+      "$( [ -n "$n_redirect" ] && [ "$n_redirect" = "$n_tcp" ] && echo 'no extra failure' || echo "$n_tcp -> $n_redirect" ) · $( grep -qF 'HTTP 301' <<< "$out_page_redirect" && echo 'HTTP 301' || echo silent )"
+    assert_eq "an error page without APP_EXPECT reads unknown, never wrong" \
+      "no extra failure · HTTP 404" \
+      "$( [ -n "$n_404" ] && [ "$n_404" = "$n_tcp" ] && echo 'no extra failure' || echo "$n_tcp -> $n_404" ) · $( grep -qF 'HTTP 404' <<< "$out_page_404" && echo 'HTTP 404' || echo silent )"
     assert_eq "without curl, APP_EXPECT reads unknown and never refuses" \
       "no extra failure · not checked" \
       "$( [ -n "$n_nocurl" ] && [ "$n_nocurl" = "$n_tcp" ] && echo 'no extra failure' || echo "$n_tcp -> $n_nocurl" ) · $( grep -qF 'not checked' <<< "$out_page_nocurl" && echo 'not checked' || echo silent )"

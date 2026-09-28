@@ -57,8 +57,8 @@ future session. The two authorities disagreed, with two outcomes:
    new in the working tree (untracked, or staged as added). ONE function answers it, and
    `qa_substep` and Anchor 1 both call it.
 2. **An empty range keeps today's answer.** That covers standing on the default branch, and a
-   mission that is already merged. The criterion only applies where it can be decided. It never
-   turns a merged mission back into QA.
+   mission that is already merged. The criterion only applies where it can be decided. Seen from
+   the default branch or from its own branch, a merged mission never goes back to QA.
 3. **The charter keeps today's meaning**: "the tree exists". It is durable by the skill's own
    contract. Requiring a charter added by the mission would make `QA:plan` unsatisfiable in any cycle
    that reuses charters.
@@ -91,10 +91,14 @@ and 5. It was checked against the code when the ADR was accepted.
 - When the tree has reports but none of them belong to the mission, `gate_QA` refuses with a reason
   that names the newest one and says it predates the mission branch, and `qa_substep` answers `exec`.
 - The `<!-- sdd:proposed -->` marker is structural and in English, like `<!-- sdd:open -->` in
-  `TODO.md`. The heading above it follows `OUTPUT_LANG`. The proposed section is the lines after the
-  marker up to the next `## ` heading or the end of the file. The document of a `⛔` row is the
-  table's second column with its markup stripped, looked up there with `grep -F`. A `⛔` followed by
-  VS16 (U+FE0F) is the same value.
+  `TODO.md`. The heading above it follows `OUTPUT_LANG`. The proposed text is the lines after EVERY
+  marker up to the next `## ` heading outside a code fence (proposed text for a rules file is
+  markdown and carries headings), or the end of the file. The document of a `⛔` row is the table's
+  second column with its markup stripped, looked up there with `grep -F`, and it has to be a name
+  (an alphanumeric in it: `—` matched any em-dash). A `⛔` followed by VS16 (U+FE0F) is the same
+  value.
+- `app_probe` reads the status: only a 2xx page without `APP_EXPECT` is `wrong`. A redirect or an
+  error page without it is `unknown` (the right product may answer either), and with it is `up`.
 - The rows of the table are admitted positively: only a `⛔` row is exempt, and every other value is
   pending, tagged or not. A `✗` beside a proposed `⛔` keeps today's reason, counted without the `⛔`.
 
@@ -124,7 +128,10 @@ and 5. It was checked against the code when the ADR was accepted.
 - The fail-open recorded on 2026-08-27 closes for every mission that runs on its own branch.
   **Declared residue:** a mission whose `branch:` is the default branch itself always has an empty
   range, so it keeps today's answer. So does a repository whose `DEFAULT_BRANCH` does not exist
-  locally.
+  locally. The range is HEAD's, not the mission's, which leaves two more: a merged mission asked
+  about from ANOTHER mission's branch reads QA again (its report is on the base, outside that
+  branch's range), and a branch stacked on an unmerged mission counts that mission's reports as its
+  own. Scoping the range by the mission's `branch:` ref would close the first; neither was measured.
 - A cycle that runs `qa-execution` on a branch whose reports are all from earlier missions now
   walks. That is the intended cost: a QA phase that skipped the skills was a phase that did not run.
 - `.claude/rules/` drift reaches the human as text in the PR, not as a commit. If the human merges

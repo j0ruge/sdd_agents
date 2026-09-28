@@ -639,9 +639,13 @@ app_url_hostport() {
 # <expect> is APP_EXPECT, passed by name like the URL. `wrong` is born ONLY with it declared and
 # the connect `up`: two products that share http://localhost:5173 both "answer", and in LH-4
 # (2026-09-27) the QA session opened against the other one's dev server. The page is read with
-# curl, never `-f` (another product's 404 page identifies it too) and with `--noproxy '*'` (the
-# connect above goes straight to the socket, so the read does as well). No curl, or a read that
-# fails, is `unknown` — the one-sided contract below holds for the new state as for the others.
+# curl, never `-f` and never `-L`, with `--noproxy '*'` (the connect above goes straight to the
+# socket, so the read does as well). ONLY a 2xx page without the literal is `wrong`: the RIGHT
+# product may answer with a redirect to its login (followed, it could land on an identity provider
+# that is not this product either) or with an error page the mission's own code caused, and reading
+# those as `wrong` was a false BLOCKED. Any other status without the literal is `unknown`, with the
+# code; with the literal it is `up` whatever the status. No curl, or a read that fails, is `unknown`
+# — the one-sided contract below holds for the new state as for the others.
 #
 # rc 0 in every case, and no global touched, because this is the one function of the pair that has
 # to survive `$( )`. A function with a side effect on a global loses it to the subshell — the
@@ -666,7 +670,7 @@ app_probe() {
   # The URL is the ARGUMENT and never read off the global here: both callers pass "$APP_URL" by
   # name, and a fallback to it was a default nothing exercised — a signature that says one thing
   # and a body that quietly accepts another.
-  local url="${1:-}" expect="${2:-}" hp host port label err="" rc=0 body crc=0
+  local url="${1:-}" expect="${2:-}" hp host port label err="" rc=0 body crc=0 code
   [ -n "$url" ] || { printf 'unknown|APP_URL is empty\n'; return 0; }
   # Declared first and assigned inside the `if`: `local hp="$(...)"` would swallow the rc, since
   # `local` reports its OWN success and the parser's refusal would read as a parse.
@@ -691,14 +695,21 @@ app_probe() {
       printf 'unknown|%s answers, but APP_EXPECT not checked (curl is not on PATH)\n' "$label"
       return 0
     fi
-    body="$(curl -sS --noproxy '*' --max-time "$APP_PROBE_TIMEOUT" "$url" 2>&1)" || crc=$?
+    body="$(curl -sS --noproxy '*' --max-time "$APP_PROBE_TIMEOUT" -w '\n%{http_code}' "$url" 2>&1)" \
+      || crc=$?
     if [ "$crc" -ne 0 ]; then
       printf 'unknown|%s answers, but APP_EXPECT not checked (curl rc %s: %s)\n' \
         "$label" "$crc" "$(head -1 <<< "$body")"
       return 0
     fi
+    code="${body##*$'\n'}"; body="${body%$'\n'*}"
     if grep -qF -- "$expect" <<< "$body"; then printf 'up|%s\n' "$label"; return 0; fi
-    printf 'wrong|%s\n' "$label"; return 0
+    case "$code" in
+      2??) printf 'wrong|%s\n' "$label" ;;
+      *) printf 'unknown|%s answers HTTP %s, but APP_EXPECT not checked (a redirect or an error page may be this product)\n' \
+           "$label" "$code" ;;
+    esac
+    return 0
   fi
   # ECONNREFUSED, and NOTHING else, is what "the app is down" means here. A name that does not
   # resolve, a route that is missing, a firewall that drops the packet: each of them is a machine
@@ -814,6 +825,12 @@ latest_matching() {
 # into QA and a `sdd run` over it would buy a session. Declared residue, both on the empty range: a
 # mission whose `branch:` IS the base, and a DEFAULT_BRANCH with no local ref (only `origin/<b>`) —
 # there the fail-open this function closes is still open.
+#
+# The range is HEAD's, not the mission's — two more residues, declared rather than claimed away:
+# asked from ANOTHER mission's branch (`sdd status A` standing on B), a merged A reads QA again,
+# because its report is on the base and not in B's range; and a branch stacked on an unmerged
+# mission counts that mission's reports as its own (the fail-open survives there). Scoping the range
+# by the mission's own `branch:` ref would close the first; neither was measured in the window.
 #
 # The charter stays out on purpose (decision 3 of the grill): it is durable doc that crosses cycles
 # and the qa-execution skill writes the one missing, so demanding the mission's would make QA:plan
@@ -1023,8 +1040,8 @@ GATE_EXEC_DIRTY=0
 # can leave a lap with the marker still set has to re-derive that property, not assume it.
 GATE_HANDOFF_BLOCKED=0
 
-# Set by gate_QA when the e2e came back RED and a TCP connect to APP_URL was refused, read by
-# cmd_run to escalate instead of buying a session against a machine no session can fix. A GLOBAL
+# Set by gate_QA when the e2e came back RED and the app at APP_URL is down (the TCP connect was
+# refused) or is not this product (a 2xx page without APP_EXPECT), read by cmd_run to escalate instead of buying a session against a machine no session can fix. A GLOBAL
 # for the third time and for the reason the two above give — the rc is already spent on pass/fail
 # — and a MARKER rather than a grep of GATE_WHY, because GATE_WHY is prose: the sentence the arm
 # writes is one an operator may reword, and an early exit anchored on a substring of it would
@@ -1042,7 +1059,8 @@ GATE_HANDOFF_BLOCKED=0
 #     has to re-derive this, exactly as this comment had to.
 #
 # Armed ONLY in the `down` and `wrong` arms — nothing listening, or something that is not this
-# product (APP_EXPECT absent from the page): either way no session can fix it. `unknown` leaves it at 0 and the runner behaves as it did before
+# product (APP_EXPECT absent from the page): either way no session can fix it. `unknown` leaves it
+# at 0 and the runner behaves as it did before
 # the probe existed, which is the whole compatibility story — see app_probe.
 GATE_APP_DOWN=0
 
@@ -1715,18 +1733,26 @@ gate_DOCS() {
     GATE_WHY="45-docs.md has $pending_n area(s) pending in the drift checklist (the first with Status '$pending_cell') — every row needs ✅ (with a hash) or a justified n/a"
     return 1
   fi
-  # A ⛔ passes only when the proposed-text section NAMES its document: the lines after
-  # `<!-- sdd:proposed -->` up to the next `## ` heading or the end of the file, read with `grep -F`
-  # on the document's literal name. Per row, because "⛔ only with its proposed text" is a promise
+  # A ⛔ passes only when the proposed-text section NAMES its document: the lines after EVERY
+  # `<!-- sdd:proposed -->` up to the next `## ` heading OUTSIDE a code fence (proposed text for a
+  # rules file is markdown and carries headings) or the end of the file, read with `grep -F` on the
+  # document's literal name — and the name has to be one (an alphanumeric in it): `—` matched any
+  # em-dash, and an empty pattern matches every line. Per row, because "⛔ only with its proposed text" is a promise
   # about each row — a bare marker, or a section proposing text for another file, is the promise
   # with nothing behind it. And the pass is LOUD: it names every document waiting for the human.
   # DECLARED LIMIT: this proves each ⛔ has a proposal that names its document, never that the text
   # is right. The human who applies it in the PR is who judges it.
   if [ "${#blocked_docs[@]}" -gt 0 ]; then
     local proposed doc named="" missing="" n_missing=0
-    proposed="$(awk 'on && /^## / { exit } on { print } /<!-- sdd:proposed -->/ { on = 1 }' "$d")"
+    proposed="$(awk '
+        { is_fence = ($0 ~ /^[ \t]*(```|~~~)/) }
+        /<!-- sdd:proposed -->/ { on = 1; next }
+        on && !fence && /^## / { on = 0 }
+        on { print }
+        is_fence { fence = !fence }
+      ' "$d")"
     for doc in "${blocked_docs[@]}"; do
-      if [ -n "$doc" ] && grep -qF -- "$doc" <<< "$proposed"; then
+      if [[ "$doc" =~ [[:alnum:]] ]] && grep -qF -- "$doc" <<< "$proposed"; then
         named+="${named:+, }$doc"
       else
         missing+="${missing:+, }${doc:-(no document)}"; n_missing=$((n_missing + 1))
@@ -9892,7 +9918,7 @@ coordination_enter() {
     root="$(git rev-parse --show-toplevel 2>/dev/null)" || die "not inside a git repository"
   fi
   coordination_paths "$root"
-  # The refusal says what fell and gives the remedy when one is on disk (achado 8): the helper does
+  # The refusal says what fell and gives the remedy when one is on disk (finding 8): the helper does
   # the same for a python3 that is there but lacks pidfd. The runner never USES /usr/bin/python3.
   if ! command -v python3 >/dev/null 2>&1; then
     local remedy=""
@@ -10025,7 +10051,7 @@ close_query() {
 # AND THE MERGE COMES HOME TOO. Checking out the default branch left it where this machine last saw
 # it — BEHIND the PR that was just merged: in SQ-145 the local `develop` stayed behind, in SQ-146 the
 # close session ran `git pull` on its own, and the next mission was cut from a stale base either way
-# (achado 7 of the judge's window). So, on the default branch with a clean tree — including when
+# (finding 7 of the judge's window). So, on the default branch with a clean tree — including when
 # the session was already on it, which used to return early — fetch its upstream and
 # `merge --ff-only`. Same asymmetry as above, warn and never die: no upstream, no network, a local
 # upstream (`.`) or a diverged branch each leave the sha where it was and say so. The fetch is

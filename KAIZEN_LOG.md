@@ -25,7 +25,7 @@ numa cópia do kit e morto pela asserção que o nomeia.
 | `sdd close` com a base local atrás do upstream | fica atrás | fast-forward; divergida, sha intacto e aviso; já na base, também anda (`c320630`) |
 | `python3` do PATH sem `os.pidfd_open` | a lista de requisitos e o erro cru | o requisito, o interpretador do PATH, o `sys.executable` e o remédio `PATH=/usr/bin:$PATH` quando o `/usr/bin/python3` serve (`fbaf9a1`) |
 | `todo-findings` | 83 | **86** (achados 1, 2 e 5 registrados, `48e89b7`) |
-| Catálogo de mutação | 422 | **435** (13 novos, cada um vermelho pela asserção que o nomeia) |
+| Catálogo de mutação | 422 | **440** (18 novos — 13 dos incrementos e 5 da revisão final —, cada um vermelho pela asserção que o nomeia) |
 
 **Contramedida:** poka-yoke onde coube. A pertença do relatório é artefato do git (uma função, dois
 leitores, recuo no range vazio); o contorno da DOCS deixou de ser frase e virou fronteira do chapéu;

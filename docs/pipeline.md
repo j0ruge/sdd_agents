@@ -234,7 +234,7 @@ The phase is **three sessions**, and the current sub-step is **derived from the 
 |---|---|---|---|
 | `QA:plan` | `/qa-report` skill (no kit agent) | there is no charter in `<QA_DOCS_PATH>/charters/` | charters, personas, journeys |
 | `QA:exec` | `/qa-execution` skill (no kit agent) | there is a charter, but no `closed` report **of this mission** | dated report + bug registry |
-| `QA:close` | `sdd-qa` agent | report `closed` — or a project with no interface | e2e specs, fix increments, `30-handoff-qa.md` |
+| `QA:close` | `sdd-qa` agent | report **of this mission** `closed` — or a project with no interface | e2e specs, fix increments, `30-handoff-qa.md` |
 
 The two skills **own** `docs/qa/`; `sdd-qa` does not rewrite what they produced. A project **with
 no interface** (no `E2E_CMD` and no `APP_URL`) goes straight to `QA:close`: bootstrapping browser
@@ -272,7 +272,7 @@ journeys in a project with no browser is the paperwork `skipped` exists to avoid
   matched as a whole lowercase word: `humano`, `humans`, `Human` and `deferredly` all read as
   absent, and block;
 - `TEST_CMD` exits 0 and `E2E_CMD` exits 0 (when set). When the e2e is red the runner asks the app
-  (`app_probe`): nothing listening at `APP_URL`, or a page that does not carry `APP_EXPECT` — another
+  (`app_probe`): nothing listening at `APP_URL`, or a 2xx page that does not carry `APP_EXPECT` — another
   product on the same port — stops the line as `app-down` (see the `kind` column), because no session
   may start or stop an environment. `sdd preflight` asks the same question before a mission starts.
 

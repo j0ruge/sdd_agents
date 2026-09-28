@@ -371,7 +371,16 @@ mut_DOCS_blocked_rows_unnamed() {                 # the pass stops naming the �
   sed -i '/^gate_DOCS() {/,/^}/ s@apply the proposed text in the PR: \$named"@apply the proposed text in the PR"@' "$1"
 }
 mut_DOCS_proposal_runs_past_heading() {           # the proposed section runs to the end of the file
-  sed -i "/^gate_DOCS() {/,/^}/ s@awk 'on \&\& /^## / { exit } on@awk 'on@" "$1"
+  sed -i '/^gate_DOCS() {/,/^}/ s@^        on && !fence && /^## / { on = 0 }$@@' "$1"
+}
+mut_DOCS_proposal_first_section_only() {          # the first heading ends the reading: one section
+  sed -i '/^gate_DOCS() {/,/^}/ s@^        on && !fence && /^## / { on = 0 }$@        on \&\& !fence \&\& /^## / { exit }@' "$1"
+}
+mut_DOCS_proposal_fence_blind() {                 # a `## ` inside a code fence ends the section
+  sed -i '/^gate_DOCS() {/,/^}/ s@^        on && !fence && /^## / { on = 0 }$@        on \&\& /^## / { on = 0 }@' "$1"
+}
+mut_DOCS_doc_needs_no_name() {                    # `—` or an empty cell is a document name again
+  sed -i '/^gate_DOCS() {/,/^}/ s@if \[\[ "\$doc" =~ \[\[:alnum:\]\] \]\] &&@if [ -n "$doc" ] \&\&@' "$1"
 }
 
 # The gate stops telling "the suite is red" from "the suite is red over work nobody committed", so
@@ -634,11 +643,14 @@ mut_QA_app_down_on_unknown() {
   sed -i '/^    case "$state" in$/,/^    esac$/ s@^      \*)$@      *) GATE_APP_DOWN=1;@' "$1"
 }
 
-# APP_EXPECT (20260928-os-achados-da-janela, achado 3): two products on one port both "answer", and
+# APP_EXPECT (20260928-os-achados-da-janela, finding 3): two products on one port both "answer", and
 # in LH-4 the QA session opened against the other one. One mutant per half: the probe that never
 # says `wrong`, and the gate arm that names it without arming the escalation.
 mut_APP_expect_ignored() {       # the page is read and the verdict thrown away — `wrong` never born
   sed -i "/^app_probe() {/,/^}/ s@printf 'wrong|@printf 'up|@" "$1"
+}
+mut_APP_expect_status_ignored() {  # a redirect or an error page without the literal reads `wrong`
+  sed -i "/^app_probe() {/,/^}/ s@^      2??) printf 'wrong@      *) printf 'wrong@" "$1"
 }
 mut_QA_wrong_app_not_armed() {   # the wrong-app arm of gate_QA names it and escalates nothing
   sed -i '/^gate_QA() {/,/^}/ { /^      wrong)$/,/;;/ s@GATE_APP_DOWN=1@: GATE_APP_DOWN left unarmed@ }' "$1"
@@ -4414,20 +4426,23 @@ mut_COORD_helper_not_isolated() {
   sed -i 's@^readonly COORDINATION_PYTHON=(python3 -I -S)$@readonly COORDINATION_PYTHON=(python3)@' "$1"
 }
 
-# The worker's pidfd kept after the worker is reaped: the `finally` closes it a second time — EBADF,
-# or worse, a descriptor reused since — and the supervisor dies. Caught by every coordinated call.
-# The close brings the merge home (achado 7): without the fast-forward the default branch stays
+# The close brings the merge home (finding 7): without the fast-forward the default branch stays
 # behind the PR that was just merged, and the next mission is cut from a stale base.
 mut_CLOSE_no_fast_forward() {
   sed -i '/^close_return_home() {/,/^}/ s#out="\$( git -C "\$REPO_ROOT" merge --ff-only --quiet "\$DEFAULT_BRANCH@{upstream}" 2>&1 )" || rc=\$?#out=""#' "$1"
 }
 
-# CHECKOUT-UNAVAILABLE names what fell and in which interpreter (achado 8): back to the generic list,
+# CHECKOUT-UNAVAILABLE names what fell and in which interpreter (finding 8): back to the generic list,
 # and the operator diagnoses the PATH's python3 by hand again.
+mut_COORD_remedy_for_every_requirement() {   # a kernel refusal is told to switch interpreters
+  sed -i 's@^    if (build and os.access(system, os.X_OK)@    if (os.access(system, os.X_OK)@' "${1%/*}/sdd-coordination.py"
+}
 mut_COORD_unavailable_generic() {
-  sed -i "s@^        print(unavailable(str(error)), file=sys.stderr)\$@        print('CHECKOUT-UNAVAILABLE: %s are required' % REQUIREMENTS, file=sys.stderr)@" "${1%/*}/sdd-coordination.py"
+  sed -i "s@^        print(unavailable(str(error), error.build), file=sys.stderr)\$@        print('CHECKOUT-UNAVAILABLE: %s are required' % REQUIREMENTS, file=sys.stderr)@" "${1%/*}/sdd-coordination.py"
 }
 
+# The worker's pidfd kept after the worker is reaped: the `finally` closes it a second time — EBADF,
+# or worse, a descriptor reused since — and the supervisor dies. Caught by every coordinated call.
 mut_COORD_reaped_pidfd_kept() {
   sed -i '/^def wait_family(/,/^def / { /^                    worker_fd = None$/d }' "${1%/*}/sdd-coordination.py"
 }
@@ -4450,6 +4465,7 @@ CATALOG=(
   COORD_helper_not_isolated
   COORD_reaped_pidfd_kept
   COORD_unavailable_generic
+  COORD_remedy_for_every_requirement
   CLOSE_no_fast_forward
   COORD_select_pidfd
   RUN_branch_double_slash
@@ -4506,6 +4522,9 @@ CATALOG=(
   DOCS_proposal_not_per_row
   DOCS_blocked_rows_unnamed
   DOCS_proposal_runs_past_heading
+  DOCS_proposal_first_section_only
+  DOCS_proposal_fence_blind
+  DOCS_doc_needs_no_name
   QA_status_line_start
   QA_status_enum_loose
   QA_bug_enum_loose
@@ -4528,6 +4547,7 @@ CATALOG=(
   QA_app_down_on_unknown
   APP_expect_ignored
   QA_wrong_app_not_armed
+  APP_expect_status_ignored
   QA_probe_ignores_e2e_rc
   QA_hostport_no_default_port
   QA_hostport_case_blind

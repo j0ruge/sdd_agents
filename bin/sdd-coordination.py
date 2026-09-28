@@ -18,15 +18,22 @@ REQUIREMENTS = ('Linux >=5.3 procfs/pidfd with task children enumeration, Python
 
 
 class Unavailable(Exception):
-    """A named requirement of coordination this interpreter or kernel does not meet."""
+    """A named requirement of coordination this interpreter or kernel does not meet. `build` is
+    True when the requirement belongs to the Python BUILD — the one case another interpreter fixes."""
+
+    def __init__(self, requirement, build=False):
+        super().__init__(requirement)
+        self.build = build
 
 
-def unavailable(requirement):
+def unavailable(requirement, build=False):
     """The CHECKOUT-UNAVAILABLE refusal: WHAT failed, IN WHICH interpreter, and the remedy when one
     is on disk. The terminal of the operator of 2026-09-28 resolved python3 to a uv-built CPython
     3.11 with no os.pidfd_open while /usr/bin/python3 3.12 served, and the refusal listed every
-    requirement and pasted the raw error — a human diagnosed it by hand (achado 8). The runner never
-    USES /usr/bin/python3: it only probes it to write the remedy. Imports are local on purpose:
+    requirement and pasted the raw error — a human diagnosed it by hand (finding 8). The runner never
+    USES /usr/bin/python3: it only probes it to write the remedy, and ONLY for a requirement of the
+    Python build (`build`): a kernel or seccomp refusal is the same under every interpreter, and a
+    remedy there sends the operator to switch Pythons for nothing. Imports are local on purpose:
     this is the refusal path, and every coordinated call pays the helper's startup."""
     import platform
     import shutil
@@ -36,7 +43,7 @@ def unavailable(requirement):
              '  interpreter: %s (sys.executable %s, Python %s)'
              % (resolved, sys.executable, platform.python_version())]
     system = '/usr/bin/python3'
-    if (os.access(system, os.X_OK) and resolved != 'no python3 on PATH'
+    if (build and os.access(system, os.X_OK) and resolved != 'no python3 on PATH'
             and os.path.realpath(resolved) != os.path.realpath(system)):
         try:
             probe = subprocess.run(
@@ -45,14 +52,14 @@ def unavailable(requirement):
                 stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL, timeout=5)
             if probe.returncode == 0:
                 lines.append('  %s has it: run PATH=/usr/bin:$PATH sdd <the same command>' % system)
-        except (OSError, subprocess.SubprocessError):
+        except Exception:  # the refusal path must not trade a message for a traceback
             pass
     lines.append('  coordinated commands need %s' % REQUIREMENTS)
     return '\n'.join(lines)
 
 
 if sys.version_info < (3, 9):
-    sys.exit(unavailable('Python 3.9+ is required'))
+    sys.exit(unavailable('Python 3.9+ is required', build=True))
 
 BUSY = 75
 
@@ -143,18 +150,21 @@ def pidfd_capability():
     # Check syscall availability and policy before any project config or session can run. Each
     # failure is raised as the requirement it breaks, so the refusal can say which one fell.
     if not hasattr(os, 'pidfd_open'):
-        raise Unavailable('os.pidfd_open is missing from this Python build')
+        raise Unavailable('os.pidfd_open is missing from this Python build', build=True)
     try:
         descriptor = os.pidfd_open(os.getpid())
     except OSError as error:
-        raise Unavailable('os.pidfd_open was denied: %s' % error)
+        raise Unavailable('os.pidfd_open failed (denied by policy, or absent from the kernel): %s'
+                          % error)
     try:
         if not hasattr(signal, 'pidfd_send_signal'):
-            raise Unavailable('signal.pidfd_send_signal is missing from this Python build')
+            raise Unavailable('signal.pidfd_send_signal is missing from this Python build',
+                              build=True)
         try:
             signal.pidfd_send_signal(descriptor, 0)
         except OSError as error:
-            raise Unavailable('pidfd_send_signal was denied: %s' % error)
+            raise Unavailable('pidfd_send_signal failed (denied by policy, or absent from the kernel):'
+                              ' %s' % error)
     finally:
         os.close(descriptor)
     # signal_family discovers descendants ONLY through /proc/<pid>/task/<tid>/children, which a
@@ -479,8 +489,8 @@ if __name__ == '__main__':
     try:
         sys.exit(main())
     except Unavailable as error:
-        print(unavailable(str(error)), file=sys.stderr)
+        print(unavailable(str(error), error.build), file=sys.stderr)
         sys.exit(1)
     except (OSError, ValueError, AttributeError) as error:
-        print(unavailable('%s are required: %s' % (REQUIREMENTS, error)), file=sys.stderr)
+        print(unavailable('coordination failed: %s' % error), file=sys.stderr)
         sys.exit(1)

@@ -55,7 +55,7 @@ there is never mistaken for an ok.
 | Key | Required | Default | What it is |
 |---|---|---|---|
 | `APP_URL` | only with `E2E_CMD` | empty | URL `agent-browser` opens in the exploratory sessions — and the address the runner asks whether anything is listening on. |
-| `APP_EXPECT` | no | empty | Literal text the page at `APP_URL` must carry (a `GET` with `curl`, `grep -F`) — e.g. the SPA's `<title>`, when another product may hold the same port. Empty = TCP connect only, as before. Declared and absent from the page, the probe reads `wrong`: `sdd preflight` fails with `E2E_CMD` (warns without it), and `gate_QA` over a red e2e escalates as `app-down`. No `curl`, or a read that fails, is *unknown* and never refuses. |
+| `APP_EXPECT` | no | empty | Literal text the page at `APP_URL` must carry (a `GET` with `curl`, `grep -F`) — e.g. the SPA's `<title>`, when another product may hold the same port. Empty = TCP connect only, as before. Declared and absent from a 2xx page, the probe reads `wrong`: `sdd preflight` fails with `E2E_CMD` (warns without it), and `gate_QA` over a red e2e escalates as `app-down`. A redirect or an error page without it (the right product may answer either; redirects are not followed), no `curl`, or a read that fails, is *unknown* and never refuses. |
 
 The runner does not bring the environment up: it assumes the app is already running. Starting it
 (`docker compose up -d` and friends) is a step for whoever runs `sdd`, or for `E2E_CMD` itself.

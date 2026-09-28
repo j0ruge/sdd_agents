@@ -324,7 +324,7 @@ try:
             # The refusal names WHAT failed and IN WHICH interpreter, and the remedy only when there
             # is one on disk. In the operator's terminal the PATH's python3 was a uv-built CPython with
             # no os.pidfd_open, /usr/bin/python3 served, and the lone "requirements" list sent a human
-            # to diagnose it by hand (achado 8). The stub's sys.executable is /usr/bin/python3, so the
+            # to diagnose it by hand (finding 8). The stub's sys.executable is /usr/bin/python3, so the
             # interpreter the refusal must name is the one the PATH resolved — the stub's own path.
             # The remedy is measured here with the probe the helper runs, never assumed.
             real_ok = os.path.exists("/usr/bin/python3") and subprocess.run(
@@ -334,6 +334,13 @@ try:
             check("unavailable names the failed requirement, the interpreter and the remedy",
                   "pidfd_open is missing" in result.stdout and str(python_stub) in result.stdout
                   and ("PATH=/usr/bin" in result.stdout) == real_ok, result.stdout[:400])
+        else:
+            # A kernel or policy refusal (pidfd denied, no task children enumeration) is not the
+            # interpreter's: switching to /usr/bin/python3 cannot help, so the remedy must not be
+            # offered — "the remedy only when it applies" (decision 4 of the grill).
+            check("a kernel or policy refusal offers no interpreter remedy: " + denied,
+                  "CHECKOUT-UNAVAILABLE" in result.stdout and "PATH=/usr/bin" not in result.stdout,
+                  result.stdout[:400])
     python_stub.unlink()
     # A signal that lands after the worker already exited, while only a straggler is being reaped,
     # must not rewrite the worker's status: a late Ctrl-C turned a successful run into 130.

@@ -1903,6 +1903,25 @@ assert_eq "DOCS gate refuses a ⛔ row whose document is absent from the propose
 printf "$docs_blocked_table"'## Proposed text\n<!-- sdd:proposed -->\n\nNothing yet.\n\n## Findings\n\n`.claude/rules/x.md` came up in review.\n' > "$MDIR/45-docs.md"
 git add -A && git commit -qm "chore: docs naming the document only past the section"
 assert_phase "a document named only after the proposed section ends is not a proposal" "DOCS"
+# EVERY marked section is read, and a `## ` inside a code fence does not end one: proposed text for
+# a rules file is markdown, and it carries headings. Read as the end of the section, the second
+# document looked unproposed, and the refusal told the session to do what it had already done —
+# DOCS spinning on the very ⛔ this gate was opened for.
+docs_two_table='# Docs\n\ndrift checklist\n\n| Area | Doc | Status | Evidence |\n|---|---|---|---|\n| rules | `.claude/rules/x.md` | ⛔ | refused |\n| rules | `.claude/rules/y.md` | ⛔ | refused |\n\n'
+printf "$docs_two_table"'## Proposed text for x\n<!-- sdd:proposed -->\n\n`.claude/rules/x.md`: the line.\n\n## Proposed text for y\n<!-- sdd:proposed -->\n\n`.claude/rules/y.md`: the line.\n' > "$MDIR/45-docs.md"
+git add -A && git commit -qm "chore: docs with two proposed sections"
+assert_why   "DOCS gate reads every section marked as proposed text" "DOCS" \
+             'wait for a human.*\.claude/rules/x\.md, \.claude/rules/y\.md'
+printf "$docs_two_table"'## Proposed text\n<!-- sdd:proposed -->\n\nIn `.claude/rules/x.md`, append:\n\n```md\n## Contracts\nthe rule\n```\n\nIn `.claude/rules/y.md`, append a line.\n' > "$MDIR/45-docs.md"
+git add -A && git commit -qm "chore: docs with a fenced heading inside the proposal"
+assert_why   "a heading inside a code fence does not end the proposed section" "DOCS" \
+             'wait for a human.*\.claude/rules/y\.md'
+# A ⛔ row has to NAME a document: `—` (or an empty cell) matched any em-dash in the proposal, and
+# an empty pattern matches every line — a ⛔ with nothing behind it passed.
+printf '# Docs\n\ndrift checklist\n\n| Area | Doc | Status | Evidence |\n|---|---|---|---|\n| rules | — | ⛔ | refused |\n\n## Proposed text\n<!-- sdd:proposed -->\n\nSomething — anything.\n' > "$MDIR/45-docs.md"
+git add -A && git commit -qm "chore: docs with a ⛔ that names no document"
+assert_eq "a ⛔ row that names no document is never proposed" "DOCS|1" \
+  "$( cd "$FIX" && "$SDD" phase "$MISSION" 2>&1 )|$(grep -c 'no proposed text' <<< "$( cd "$FIX" && "$SDD" why "$MISSION" DOCS 2>&1 )")"
 # ...and a ✗ beside a proposed ⛔ is still today's pending reason, counted without the ⛔.
 printf '# Docs\n\ndrift checklist\n\n| Area | Doc | Status | Evidence |\n|---|---|---|---|\n| runner | README | ✗ | pending |\n| rules | `.claude/rules/x.md` | ⛔ | refused |\n\n## Proposed text\n<!-- sdd:proposed -->\n\n`.claude/rules/x.md`: the line.\n' > "$MDIR/45-docs.md"
 git add -A && git commit -qm "chore: docs with a ✗ and a proposed ⛔"
@@ -4129,7 +4148,7 @@ git -C "$FIX" checkout -q "$CLOSE_HOME"
 # 8f/8g/8h. HOME WITH THE MERGE IN IT. Coming back to the default branch left it where the session
 # found it — BEHIND the PR that was just merged: in SQ-145 the local `develop` stayed behind, in
 # SQ-146 the close session ran `git pull` on its own, and the next mission was cut from a stale base
-# either way (achado 7 of the judge's window). Now the close fetches and fast-forwards, and never
+# either way (finding 7 of the judge's window). Now the close fetches and fast-forwards, and never
 # forces. A LOCAL bare remote and a peer clone that pushes stand in for GitHub; 8c/8d/8e above ran
 # with no remote at all, and they are the control for "no upstream".
 CLOSE_REMOTE_DIR="$(mktemp -d "${TMPDIR:-/tmp}/sdd-close-remote-XXXXXX")"
