@@ -4,6 +4,26 @@ Registro de melhorias com **antes/depois medido**. Sem número, não entra.
 
 ---
 
+## 2026-09-28 — O veredito da janela do juiz: `melhorou` sobre `4fd0f31`
+
+**O que foi julgado:** o lote de seis merges entre `5cb0101` e `4fd0f31` (#167, #168, #170, #166,
+#171, #172), congelado para a janela e medido em 3 missões de alvo reais — `lighthouse_project`
+(LH-4) e duas do `sales_quote` (SQ-145, SQ-146), todas em harness 2.1.283.
+
+**Antes → depois** (`sdd kaizen --series`, `previous` → `latest`): `advance_rate` 0,76 → **0,89**;
+`moved_rate` 0,92 → **1,0**; `idle` 2 → **0**; rótulos 8/1/2 → **15/1/2** (ok/leve/refez); escaladas
+`no-progress` + `no-work` (sessão que não andou) → `handoff-blocked` + `hat-crossed` (fronteiras que
+pararam a linha antes do dano); custo por missão ≈ US$ 26 → ≈ 21,80. Intervenções
+(`sdd autonomy --all-repos --by-mission`, launches − 1): 4 em 2 missões → **2 em 3**, com duas
+missões sem mão humana nenhuma.
+
+**Limites declarados:** misturas diferentes (1 repo × 2), harness diferente entre as fatias
+(2.1.282 × 2.1.283), `window_missions_stranded: 7`. Veredito e análise em
+`docs/handoffs/20260928-os-achados-da-janela/05-verdict.md`; os oito achados `kit:` da janela viram
+a missão nascida na mesma pasta.
+
+---
+
 ## 2026-09-26 — A carona antes do congelamento
 
 **Problema (Gemba):** o último PR antes de congelar o kit para a janela do juiz levava seis frentes
