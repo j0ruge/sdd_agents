@@ -28,7 +28,8 @@ fails=0
 # whose whole point is to model a clean, gate-passing repo.
 SDD_STATE_FIX="$(mktemp -d "${TMPDIR:-/tmp}/sdd-gates-state-XXXXXX")"
 export SDD_STATE_DIR="$SDD_STATE_FIX"
-trap 'stop_page_server 2>/dev/null; rm -rf "$FIX" "$SDD_STATE_FIX"' EXIT
+CLOSE_REMOTE_DIR=""
+trap 'stop_page_server 2>/dev/null; rm -rf "$FIX" "$SDD_STATE_FIX" ${CLOSE_REMOTE_DIR:+"$CLOSE_REMOTE_DIR"}' EXIT
 
 pass() { printf '  ok    %s\n' "$1"; }
 # Inside a mutant the first red assertion is the verdict: fail() ends the sensor there, AFTER
@@ -4124,6 +4125,52 @@ assert_eq "close: with a dirty tree it stays put, warns, and does not destroy th
   "rc:$CLOSE_RC_OUT branch:$(git -C "$FIX" rev-parse --abbrev-ref HEAD) kept:$([ -e "$FIX/human-draft.txt" ] && printf 1 || printf 0) warned:$(has "$CLOSE_OUT" 'uncommitted')"
 rm -f "$FIX/human-draft.txt"
 git -C "$FIX" checkout -q "$CLOSE_HOME"
+
+# 8f/8g/8h. HOME WITH THE MERGE IN IT. Coming back to the default branch left it where the session
+# found it — BEHIND the PR that was just merged: in SQ-145 the local `develop` stayed behind, in
+# SQ-146 the close session ran `git pull` on its own, and the next mission was cut from a stale base
+# either way (achado 7 of the judge's window). Now the close fetches and fast-forwards, and never
+# forces. A LOCAL bare remote and a peer clone that pushes stand in for GitHub; 8c/8d/8e above ran
+# with no remote at all, and they are the control for "no upstream".
+CLOSE_REMOTE_DIR="$(mktemp -d "${TMPDIR:-/tmp}/sdd-close-remote-XXXXXX")"
+git init -q --bare "$CLOSE_REMOTE_DIR/origin.git"
+git -C "$FIX" remote add origin "$CLOSE_REMOTE_DIR/origin.git"
+git -C "$FIX" push -q -u origin "$CLOSE_HOME" 2>/dev/null
+git clone -q -b "$CLOSE_HOME" "$CLOSE_REMOTE_DIR/origin.git" "$CLOSE_REMOTE_DIR/peer" 2>/dev/null
+peer_merges() {  # peer_merges <message> — the remote default branch moves one commit
+  git -C "$CLOSE_REMOTE_DIR/peer" -c user.email=peer@example.com -c user.name=peer \
+    commit -q --allow-empty -m "$1"
+  git -C "$CLOSE_REMOTE_DIR/peer" push -q origin "$CLOSE_HOME" 2>/dev/null
+}
+peer_tip() { git -C "$CLOSE_REMOTE_DIR/peer" rev-parse HEAD; }
+
+git -C "$FIX" checkout -q -b LH-12_ff-branch
+peer_merges "the PR is merged on the remote"
+close_run "done" 0
+assert_eq "close: fast-forwards the default branch to its upstream" \
+  "rc:0 branch:$CLOSE_HOME tip:remote said:1" \
+  "rc:$CLOSE_RC_OUT branch:$(git -C "$FIX" rev-parse --abbrev-ref HEAD) tip:$([ "$(git -C "$FIX" rev-parse "$CLOSE_HOME")" = "$(peer_tip)" ] && echo remote || echo stale) said:$(has "$CLOSE_OUT" 'fast-forwarded')"
+
+# Diverged: a local commit the remote never saw, then the remote moves. Nothing is forced — the
+# local sha stays exactly where it was — and the human is told.
+git -C "$FIX" -c user.email=fix@example.com -c user.name=fixture commit -q --allow-empty -m "local only"
+CLOSE_LOCAL_SHA="$(git -C "$FIX" rev-parse "$CLOSE_HOME")"
+git -C "$FIX" checkout -q -b LH-13_diverged-branch
+peer_merges "the remote moves on"
+close_run "done" 0
+assert_eq "close: a diverged default branch is warned, never forced" \
+  "rc:0 branch:$CLOSE_HOME sha:kept warned:1" \
+  "rc:$CLOSE_RC_OUT branch:$(git -C "$FIX" rev-parse --abbrev-ref HEAD) sha:$([ "$(git -C "$FIX" rev-parse "$CLOSE_HOME")" = "$CLOSE_LOCAL_SHA" ] && echo kept || echo moved) warned:$(has "$CLOSE_OUT" 'diverged')"
+git -C "$FIX" reset -q --hard "origin/$CLOSE_HOME"
+
+# Already on the default branch, behind: the old early return skipped everything, and this is the
+# case where the session had nowhere to come back from and still owes the merge.
+peer_merges "another merge while the session stood on the base"
+close_run "done" 0
+assert_eq "close: already on the default branch it still fast-forwards" \
+  "rc:0 tip:remote said:1" \
+  "rc:$CLOSE_RC_OUT tip:$([ "$(git -C "$FIX" rev-parse "$CLOSE_HOME")" = "$(peer_tip)" ] && echo remote || echo stale) said:$(has "$CLOSE_OUT" 'fast-forwarded')"
+git -C "$FIX" remote remove origin
 
 # 9. Control. With JIRA off the command asks nothing of anyone — and the two `:0` terms are the
 #    half that matters: a guard that ran acli anyway would still print "nothing to close".

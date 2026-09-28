@@ -10016,22 +10016,70 @@ close_query() {
 #
 # The dirty case is announced rather than passed over: a silent non-move reads exactly like a move
 # that worked, and the human finds out two commits later.
+#
+# AND THE MERGE COMES HOME TOO. Checking out the default branch left it where this machine last saw
+# it — BEHIND the PR that was just merged: in SQ-145 the local `develop` stayed behind, in SQ-146 the
+# close session ran `git pull` on its own, and the next mission was cut from a stale base either way
+# (achado 7 of the judge's window). So, on the default branch with a clean tree — including when
+# the session was already on it, which used to return early — fetch its upstream and
+# `merge --ff-only`. Same asymmetry as above, warn and never die: no upstream, no network, a local
+# upstream (`.`) or a diverged branch each leave the sha where it was and say so. The fetch is
+# bounded (`timeout 30`, `GIT_TERMINAL_PROMPT=0`): with no timeout(1) it is SKIPPED, because an
+# unbounded fetch could hang the close, and the fast-forward is still tried against the upstream
+# already on the machine — a local merge does not hang. The `ok` says whether anything moved.
 close_return_home() {
-  local current out rc=0
+  local current out rc=0 where upstream remote merge before after
   [ -n "${DEFAULT_BRANCH:-}" ] || return 0
   current="$( git -C "$REPO_ROOT" rev-parse --abbrev-ref HEAD 2>/dev/null || echo "" )"
   [ -n "$current" ] || return 0
-  [ "$current" != "$DEFAULT_BRANCH" ] || return 0
   if [ -n "$( git -C "$REPO_ROOT" status --porcelain 2>/dev/null )" ]; then
-    warn "staying on '$current': the tree has uncommitted changes, and '$DEFAULT_BRANCH' is one 'git checkout' away once you have dealt with them"
+    if [ "$current" = "$DEFAULT_BRANCH" ]; then
+      warn "on '$DEFAULT_BRANCH' with uncommitted changes — not fast-forwarding it; 'git pull --ff-only' once you have dealt with them"
+    else
+      warn "staying on '$current': the tree has uncommitted changes, and '$DEFAULT_BRANCH' is one 'git checkout' away once you have dealt with them"
+    fi
     return 0
   fi
-  out="$( git -C "$REPO_ROOT" checkout "$DEFAULT_BRANCH" 2>&1 )" || rc=$?
+  where="on '$DEFAULT_BRANCH'"
+  if [ "$current" != "$DEFAULT_BRANCH" ]; then
+    out="$( git -C "$REPO_ROOT" checkout "$DEFAULT_BRANCH" 2>&1 )" || rc=$?
+    if [ "$rc" -ne 0 ]; then
+      warn "could not return to '$DEFAULT_BRANCH' — still on '$current'. git said: $out"
+      return 0
+    fi
+    where="back on '$DEFAULT_BRANCH' — the mission branch is merged and spent"
+  fi
+  upstream="$( git -C "$REPO_ROOT" rev-parse --abbrev-ref "$DEFAULT_BRANCH@{upstream}" 2>/dev/null || true )"
+  if [ -z "$upstream" ]; then ok "$where; no upstream, nothing to fast-forward"; return 0; fi
+  # Remote and branch from the config, never split off the abbreviated name: a remote may carry a
+  # `/` of its own, and a local upstream (`.`) has nothing to fetch.
+  remote="$( git -C "$REPO_ROOT" config --get "branch.$DEFAULT_BRANCH.remote" 2>/dev/null || true )"
+  merge="$( git -C "$REPO_ROOT" config --get "branch.$DEFAULT_BRANCH.merge" 2>/dev/null || true )"
+  if [ -n "$remote" ] && [ "$remote" != "." ] && [ -n "$merge" ]; then
+    if ! command -v timeout >/dev/null 2>&1; then
+      warn "$where; no timeout(1) to bound the fetch of $upstream — run 'git pull --ff-only' by hand"
+    else
+      rc=0
+      out="$( GIT_TERMINAL_PROMPT=0 timeout 30 git -C "$REPO_ROOT" fetch --quiet "$remote" "$merge" 2>&1 )" || rc=$?
+      if [ "$rc" -ne 0 ]; then
+        warn "$where, but could not fetch $upstream — run 'git pull --ff-only' by hand. git said: $(head -1 <<< "$out")"
+        return 0
+      fi
+    fi
+  fi
+  before="$( git -C "$REPO_ROOT" rev-parse HEAD 2>/dev/null || true )"
+  rc=0
+  out="$( git -C "$REPO_ROOT" merge --ff-only --quiet "$DEFAULT_BRANCH@{upstream}" 2>&1 )" || rc=$?
   if [ "$rc" -ne 0 ]; then
-    warn "could not return to '$DEFAULT_BRANCH' — still on '$current'. git said: $out"
+    warn "$where, but '$DEFAULT_BRANCH' could not fast-forward to $upstream — it has diverged, or git refused; nothing was forced, reconcile by hand. git said: $(head -1 <<< "$out")"
     return 0
   fi
-  ok "back on '$DEFAULT_BRANCH' — the mission branch is merged and spent"
+  after="$( git -C "$REPO_ROOT" rev-parse HEAD 2>/dev/null || true )"
+  if [ "$before" = "$after" ]; then
+    ok "$where; already up to date with $upstream"
+  else
+    ok "$where, fast-forwarded to $upstream (${after:0:7})"
+  fi
 }
 
 cmd_close() {

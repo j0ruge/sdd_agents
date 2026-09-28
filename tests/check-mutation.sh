@@ -4416,6 +4416,12 @@ mut_COORD_helper_not_isolated() {
 
 # The worker's pidfd kept after the worker is reaped: the `finally` closes it a second time — EBADF,
 # or worse, a descriptor reused since — and the supervisor dies. Caught by every coordinated call.
+# The close brings the merge home (achado 7): without the fast-forward the default branch stays
+# behind the PR that was just merged, and the next mission is cut from a stale base.
+mut_CLOSE_no_fast_forward() {
+  sed -i '/^close_return_home() {/,/^}/ s#out="\$( git -C "\$REPO_ROOT" merge --ff-only --quiet "\$DEFAULT_BRANCH@{upstream}" 2>&1 )" || rc=\$?#out=""#' "$1"
+}
+
 mut_COORD_reaped_pidfd_kept() {
   sed -i '/^def wait_family(/,/^def / { /^                    worker_fd = None$/d }' "${1%/*}/sdd-coordination.py"
 }
@@ -4437,6 +4443,7 @@ CATALOG=(
   COORD_hook_relay_signaled
   COORD_helper_not_isolated
   COORD_reaped_pidfd_kept
+  CLOSE_no_fast_forward
   COORD_select_pidfd
   RUN_branch_double_slash
   COORD_admission_missing

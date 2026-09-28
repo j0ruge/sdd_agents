@@ -574,6 +574,15 @@ session that exited 0 without closing anything did not. When the tool stops answ
 two questions, the answer is `UNVERIFIED` and not "still open": both fall closed, but they send a
 human to different logs.
 
+After a verified close the command **comes home with the merge**: it checks out `DEFAULT_BRANCH`
+(unless the tree is dirty — then it stays and says so), fetches its upstream (`timeout 30`,
+`GIT_TERMINAL_PROMPT=0`) and `merge --ff-only`, including when the session was already on the base.
+The line says whether the branch moved (`fast-forwarded to origin/main (<sha>)` or
+`already up to date`). No upstream, no network, no `timeout(1)` (the fetch is skipped, never run
+unbounded) or a diverged branch each leave the sha where it was and **warn** — the close already
+succeeded, and nothing is forced. Before this the base stayed behind the PR just merged, and the
+next mission was cut from it (SQ-145, SQ-146).
+
 `sdd close` is the only invocation of `claude` outside `run_phase()` besides the `sdd preflight`
 probe — neither of them runs a phase. It carries the kit guard anyway, for the reason below.
 

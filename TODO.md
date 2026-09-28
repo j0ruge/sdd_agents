@@ -494,7 +494,7 @@ Achados sobre **repos-alvo** vão para o `TODO.md` daquele repo. Este arquivo é
 ### Saída humana e cosmética
 
 - [ ] **35% do `docs/pipeline.md` é um subsistema só, e ele cresce toda missão do ledger** —
-  `docs/pipeline.md:974` — as seções `The autonomy ledger` (323 linhas) e `The kaizen loop` (174)
+  `docs/pipeline.md:983` — as seções `The autonomy ledger` (323 linhas) e `The kaizen loop` (174)
   somam **497 de 1419** (eram 245 de 570 em 2026-08-17) num arquivo que é o índice do pipeline.
   Índice que carrega profundidade é o doc que a próxima sessão não lê inteiro. Direção: `references/` para
   o ledger + juiz, com o índice roteando — **não** executar no meio de outra missão, é refator de
