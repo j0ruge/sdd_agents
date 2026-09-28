@@ -22,7 +22,13 @@
 
 ## Progresso da janela (atualizado em 2026-09-28 09:10)
 
-**Janela: 2 de 3 FECHADAS, a 3ª RODANDO.** A série mostra `latest=4fd0f31`,
+**JANELA COMPLETA (2026-09-28 10:50): 3 de 3, `sufficient: true`, 35 sessões, harness 2.1.283.**
+O próximo passo (veredito, descongelar, achados do kit) está em
+`~/.claude/plans/2026-09-28-handoff-achados-do-kit.md`. A missão 3 (SQ-146) foi mergeada no #383
+(`3d80ed5b`, com status `local/ci` publicado porque o CI do Actions estava barrado por cobrança) e
+fechada pelo `sdd close` (`verified=true`, US$ 13,31 no total).
+
+**Histórico:** A série mostra `latest=4fd0f31`,
 `missions_with_session: 2`, `sessions: 28`, `harness: [2.1.283]` e `sufficient: false` (piso 3).
 O `window_broken: true` não é veto (`agents/sdd-kaizen.md:98`): ele conta as 7 missões gastas sobre
 outras versões do kit desde o último veredito.
@@ -41,6 +47,17 @@ de fora, como item do `TODO.md` do alvo.
 - O disparo foi destacado (pid 136465), com saída em
   `/tmp/claude-1001/-home-joruge-repos-sdd-agents/34fc9e24-482c-4319-bec9-887709a265c1/scratchpad/sdd-run-sq-olho.out`.
 - Até 09:02: TICKET → EXEC I1, I2 → QA (o achado 4 se repetiu) → REVIEW, com US$ 5,78 e zero paradas.
+- **Pipeline COMPLETO às 09:54:** zero paradas, 7 sessões, US$ 12,54. A r1 deu A em tudo, e a DOCS repetiu o
+  achado 6 (python3 pelo Bash em `.claude/rules/`). O publisher abriu o **PR JRC-Brasil/sales_quote#383**.
+- Revisores: o Copilot não revisou (cota), e o Codex deixou 1 P2 real. O teste do alvo de 24px amostrava
+  22px: um link quadrado de 23px passava, provado por sabotagem. O conserto foi interativo, em `7bea914d`,
+  medindo o lado na `boundingBox`. A mesma fraqueza do `sq122` virou item no `TODO.md` do alvo, e a thread
+  foi resolvida.
+- ⚠️ **O CI está BARRADO por cobrança do GitHub Actions** ("recent account payments have failed or your
+  spending limit needs to be increased"), com os 4 jobs sem iniciar, tanto em `eec04271` quanto em
+  `7bea914d`. Quem resolve é o humano, em Billing & plans da organização JRC-Brasil.
+- **Falta:** billing → CI verde → merge pelo humano → `sdd close 20260928-ver-vira-olho-na-lista` → fast-forward
+  da `develop` local (achado 7) → conferir `missions_with_session: 3` e `sufficient: true`.
 
 **Missão 2, parcial às 19:20:** SQ-145, branch `SQ-145_breadcrumb_numero_cotacao`. Custo de
 US$ 12 em 73 min até a REVIEW (US$ 12,04 às 19:00). TICKET → EXEC I1, I2 → QA. O gate de e2e
