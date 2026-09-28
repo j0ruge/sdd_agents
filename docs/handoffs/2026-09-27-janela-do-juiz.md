@@ -20,12 +20,43 @@
   `5cb0101`, `window_broken: true`, `floor: 3`. A 1ª missão de alvo sobre `4fd0f31` abre a janela
   nova.
 
-## Progresso da janela (atualizado em 2026-09-27 17:50)
+## Progresso da janela (atualizado em 2026-09-28 09:10)
 
-**Janela: 1 de 3 fechada, a 2ª RODANDO.** A série mostra `latest=4fd0f31`,
-`missions_with_session: 1`, `sessions: 17` e `harness: [2.1.283]`.
+**Janela: 2 de 3 FECHADAS, a 3ª RODANDO.** A série mostra `latest=4fd0f31`,
+`missions_with_session: 2`, `sessions: 28`, `harness: [2.1.283]` e `sufficient: false` (piso 3).
+O `window_broken: true` não é veto (`agents/sdd-kaizen.md:98`): ele conta as 7 missões gastas sobre
+outras versões do kit desde o último veredito.
 
-**Missão 2, no `sales_quote`, nesta máquina: `20260927-breadcrumb-numero-cotacao`, RODANDO desde 17:45.**
+**Missão 2 FECHADA (22:01):** o PR #382 foi mergeado pelo humano (`3279e722`). O `sdd close` deu
+`verified=true`, e a SQ-145 está Done. O close custou US$ 0,85, e a missão toda US$ 18,66.
+Depois do close, a `develop` local foi avançada à mão (fast-forward) para `3279e722` (ver achado 7).
+
+**Missão 3, RODANDO desde 2026-09-28 08:31:** `20260928-ver-vira-olho-na-lista` (**SQ-146**), no
+`sales_quote`, sobre a branch `SQ-146_ver_vira_olho_na_lista`. Na lista de cotações, o "Ver" em
+texto vira o ícone de olho do Claude Design (`reference_docs/design/scripts/Lista.jsx`), e as três
+ações ganham `title`. Editar e Excluir mantêm os ícones e as condições de exibição. O Duplicar ficou
+de fora, como item do `TODO.md` do alvo.
+- O plano foi feito pelo `sdd-planner` como subagente, com o grill repassado ao humano.
+- A aprovação é `humano-2026-09-28`, e o `sdd approve` exigiu o contorno do achado 8.
+- O disparo foi destacado (pid 136465), com saída em
+  `/tmp/claude-1001/-home-joruge-repos-sdd-agents/34fc9e24-482c-4319-bec9-887709a265c1/scratchpad/sdd-run-sq-olho.out`.
+- Até 09:02: TICKET → EXEC I1, I2 → QA (o achado 4 se repetiu) → REVIEW, com US$ 5,78 e zero paradas.
+
+**Missão 2, parcial às 19:20:** SQ-145, branch `SQ-145_breadcrumb_numero_cotacao`. Custo de
+US$ 12 em 73 min até a REVIEW (US$ 12,04 às 19:00). TICKET → EXEC I1, I2 → QA. O gate de e2e
+reprovou por defeito LEGADO: o `sq133` falha localmente desde a SQ-143, porque o
+`loginAsConsultor` exigia "Consultor" exato e a conta B do e2e agora mostra "Consultor · Diretoria".
+A QA abriu o F1, a EXEC o fechou e a r1 achou o afrouxamento do viewer que veio de carona (R1).
+A r2 deu A em tudo, e às 19:07 a linha entrou na DOCS. Zero paradas até ali.
+
+**Missão 2, pipeline COMPLETO às 19:48:** zero paradas, 11 sessões, US$ 17,81 (DOCS foi a mais
+cara, com US$ 4,38 em 1179 s). O publisher abriu o **PR JRC-Brasil/sales_quote#382** contra
+`develop`, com o CI verde nos 4 jobs. Revisores: o Copilot não revisou (cota), o CodeRabbit não
+atua neste repo, e o Codex deixou 1 achado P2, real: um refetch que falha deixava o SQN velho na
+trilha enquanto a página dizia "não encontrada". O conserto foi feito interativamente em
+`028ef9d7`, com teste vermelho antes do conserto, `TEST_CMD` verde (frontend 2003 → 2004), resposta
+no fio e thread resolvida.
+**Missão 2, no `sales_quote`, nesta máquina: `20260927-breadcrumb-numero-cotacao` (histórico do disparo).**
 - Disparada destacada: `setsid nohup`, pid **916198**. A saída do terminal está em
   `/tmp/claude-1001/-home-joruge-repos-sdd-agents/87536c7f-4b4a-49a7-ad72-0b97f810cfee/scratchpad/sdd-run-sq-breadcrumb.out` (em `/tmp`, some no reboot); a fonte é o `pipeline.log`.
 - Plano aprovado (`humano-2026-09-27`), `versao: 0.9.0`. O `branch:` é placeholder: a TICKET cria a
@@ -87,6 +118,32 @@
 3. O preflight aceita app de outro produto na `APP_URL`.
 4. O `qa_substep` escolhe `close` com o relatório de outra missão.
 5. A âncora 3 conta bug legado de outra missão.
+6. (missão 2, SQ-145) O harness nega `Edit` em `.claude/rules/` na sessão headless, e o `sdd-docs`
+   declara `.claude/rules/**` no `writes:` sem dizer o que fazer com a negativa. A DOCS da SQ-145
+   escreveu o `.claude/rules/techspec.md` com `python3` pelo Bash, contornando a proteção
+   (stream `DOCS-20260927-190735-f56b8aca`). A da LH-4 parou com ⛔ e o humano aplicou à mão.
+   O chapéu precisa de UMA regra: ⛔ com texto proposto ou permissão explícita.
+7. (missão 2) O `sdd close` volta para a `DEFAULT_BRANCH` só com `git checkout`, sem fast-forward
+   (`bin/sdd`, o bloco antes do `ok "back on '$DEFAULT_BRANCH'…"`). A `develop` local fica atrás do
+   merge, e a árvore parece ter desfeito a missão. Se a próxima missão partir dali, a TICKET cria a
+   branch sobre uma base velha. **Antes de cada missão:** `git fetch && git merge --ff-only
+   origin/develop` no alvo.
+8. (missão 3, 2026-09-28) O requisito documentado "Python 3.9+" (README, `docs/pipeline.md`,
+   `docs/failure-modes.md` CHECKOUT-UNAVAILABLE) não basta. O `COORDINATION_PYTHON=(python3 -I -S)`
+   usa o primeiro `python3` do `PATH`, que no terminal do humano é
+   `~/.hermes/hermes-agent/venv/bin/python3`: CPython 3.11.15 do `uv` (python-build-standalone),
+   com `HAVE_PIDFD_OPEN = None` e sem `os.pidfd_open`. Resultado: TODO comando coordenado para
+   naquele terminal, embora o kernel e o `/usr/bin/python3` 3.12 aceitem pidfd.
+   **Contorno:** `PATH="/usr/bin:$PATH" sdd approve …` (o approve não chama `claude` nem `node`).
+   O `sdd run` sai desta sessão, onde `python3` já é `/usr/bin/python3`.
+   **Sugestão do humano, a mensagem dizer a causa explícita:** a saída de hoje
+   (`bin/sdd-coordination.py:433`) lista todos os requisitos genéricos, incluindo "Python 3.9+", e
+   no fim cola o erro cru (`module 'os' has no attribute 'pidfd_open'`). Com um 3.11 na mão, isso
+   leva ao diagnóstico errado. Ela deveria nomear o requisito que falhou, o interpretador
+   (`sys.executable`, a versão e o fato de ter vindo do `PATH`) e o remédio. Exemplo: "o `python3`
+   em `<caminho>` (3.11.15) foi compilado sem `os.pidfd_open`; 3.9+ não basta, precisa de um build
+   com pidfd, como `/usr/bin/python3`". O mesmo vale para o `die` genérico em
+   `bin/sdd:9754`.
 
 ## As regras da janela (o que faz ela valer ou encalhar)
 
@@ -200,6 +257,16 @@ o caminho da outra máquina; o juiz lê todos os repos (ADR 0005), então isso n
 
 - `sdd kaizen` **no terminal do humano**, numa branch `kaizen/…` do kit (~US$ 5 por veredito, teto
   US$ 15). Ele escreve o veredito sobre `4fd0f31`. O merge dessa branch descongela o kit.
+- **Decisão humana de 2026-09-28: os achados `kit:` desta janela (hoje 8) viram itens do `TODO.md`
+  do kit e depois vão para o GitHub com `/todo-to-github-issues`.** Isso só acontece com o kit
+  descongelado, porque um commit na `main` durante a janela mudaria o `kit_sha` das sessões. Ordem:
+  1. Um item por achado, no formato do `templates/todo.pt-BR.md` (até ~6 linhas, âncora, sem
+     duplicar item que já exista no `TODO.md`), conferidos por `bash tests/check-todo.sh`.
+  2. A catraca do backlog se move, então `tests/health-baseline.txt` muda junto, num diff com autor.
+  3. Abrir o PR, esperar os revisores, consertar tudo numa leva, rodar o `sdd health` UMA vez
+     depois do último commit de código e mergear.
+  4. Só depois do merge, rodar o `/todo-to-github-issues` a partir da `main`. O espelho lê o
+     arquivo da `main`: rodado antes, criaria issues sem item no `TODO.md`.
 - Ficam para depois do veredito: a T3 (três decisões humanas de desenho, via `/sdd-plan` no kit) e
   dois minors adiados da carona — a janela do reflog faz um `grep` por caminho (~4 ms por caminho,
   só pesa em diffs de milhares de arquivos) e o item do `--with-mutation` no `TODO.md` cita números
