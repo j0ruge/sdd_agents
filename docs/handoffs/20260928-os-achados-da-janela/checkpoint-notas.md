@@ -49,3 +49,4 @@
 > fora da citação ao registrar uma intervenção de verdade.
 >
 > - intervention: <o que o humano teve de fazer> — <fase> — <custo, se houver>
+- 2026-09-28 18:03 · `EXEC` · I1 executado inline (sessão interativa, `superpowers:executing-plans`): três itens verbatim do plano, catraca 83 → 86, Check `86/11/placed/1`.
