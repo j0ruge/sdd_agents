@@ -147,7 +147,7 @@ load_config() {
   source "$CONFIG_FILE"
 
   : "${PROJECT_NAME:=}"; : "${DEFAULT_BRANCH:=}"; : "${TEST_CMD:=}"
-  : "${E2E_CMD:=}"; : "${E2E_DIR:=e2e}"; : "${APP_URL:=}"
+  : "${E2E_CMD:=}"; : "${E2E_DIR:=e2e}"; : "${APP_URL:=}"; : "${APP_EXPECT:=}"
   : "${HANDOFF_DIR:=docs/handoffs}"; : "${QA_DOCS_PATH:=docs/qa}"; : "${TODO_FILE:=TODO.md}"
   : "${MODEL_EXEC:=opus}"; : "${MODEL_QA:=opus}"; : "${MODEL_REVIEW:=opus}"
   : "${MODEL_DOCS:=opus}"; : "${MODEL_PUBLISH:=sonnet}"; : "${MODEL_TICKET:=sonnet}"
@@ -629,11 +629,19 @@ app_url_hostport() {
   printf '%s %s\n' "$host" "$port"
 }
 
-# app_probe <url> — prints "state|label" and ALWAYS returns 0. State is one of:
+# app_probe <url> [expect] — prints "state|label" and ALWAYS returns 0. State is one of:
 #
 #   down     nothing is listening there; label is the address
-#   up       something answered; label is the address
+#   up       something answered (and, with <expect>, its page carries it); label is the address
+#   wrong    something answered, but its page does NOT carry <expect>; label is the address
 #   unknown  no verdict either way; label is the REASON, in a sentence a human can act on
+#
+# <expect> is APP_EXPECT, passed by name like the URL. `wrong` is born ONLY with it declared and
+# the connect `up`: two products that share http://localhost:5173 both "answer", and in LH-4
+# (2026-09-27) the QA session opened against the other one's dev server. The page is read with
+# curl, never `-f` (another product's 404 page identifies it too) and with `--noproxy '*'` (the
+# connect above goes straight to the socket, so the read does as well). No curl, or a read that
+# fails, is `unknown` — the one-sided contract below holds for the new state as for the others.
 #
 # rc 0 in every case, and no global touched, because this is the one function of the pair that has
 # to survive `$( )`. A function with a side effect on a global loses it to the subshell — the
@@ -658,7 +666,7 @@ app_probe() {
   # The URL is the ARGUMENT and never read off the global here: both callers pass "$APP_URL" by
   # name, and a fallback to it was a default nothing exercised — a signature that says one thing
   # and a body that quietly accepts another.
-  local url="${1:-}" hp host port label err="" rc=0
+  local url="${1:-}" expect="${2:-}" hp host port label err="" rc=0 body crc=0
   [ -n "$url" ] || { printf 'unknown|APP_URL is empty\n'; return 0; }
   # Declared first and assigned inside the `if`: `local hp="$(...)"` would swallow the rc, since
   # `local` reports its OWN success and the parser's refusal would read as a parse.
@@ -677,7 +685,21 @@ app_probe() {
   # LC_ALL=C because the verdict below is read out of a strerror string.
   err="$(LC_ALL=C timeout "$APP_PROBE_TIMEOUT" "${BASH:-bash}" -c \
       'exec 3<>"/dev/tcp/$0/$1"' "$host" "$port" 2>&1)" || rc=$?
-  if [ "$rc" -eq 0 ]; then printf 'up|%s\n' "$label"; return 0; fi
+  if [ "$rc" -eq 0 ]; then
+    [ -n "$expect" ] || { printf 'up|%s\n' "$label"; return 0; }
+    if ! command -v curl >/dev/null 2>&1; then
+      printf 'unknown|%s answers, but APP_EXPECT not checked (curl is not on PATH)\n' "$label"
+      return 0
+    fi
+    body="$(curl -sS --noproxy '*' --max-time "$APP_PROBE_TIMEOUT" "$url" 2>&1)" || crc=$?
+    if [ "$crc" -ne 0 ]; then
+      printf 'unknown|%s answers, but APP_EXPECT not checked (curl rc %s: %s)\n' \
+        "$label" "$crc" "$(head -1 <<< "$body")"
+      return 0
+    fi
+    if grep -qF -- "$expect" <<< "$body"; then printf 'up|%s\n' "$label"; return 0; fi
+    printf 'wrong|%s\n' "$label"; return 0
+  fi
   # ECONNREFUSED, and NOTHING else, is what "the app is down" means here. A name that does not
   # resolve, a route that is missing, a firewall that drops the packet: each of them is a machine
   # this cannot speak for, and each of them lands below, in `unknown`. Herestring and never
@@ -1019,7 +1041,8 @@ GATE_HANDOFF_BLOCKED=0
 #     Whoever adds a third door, a second setter, or a path that can leave a lap with it still set
 #     has to re-derive this, exactly as this comment had to.
 #
-# Armed ONLY in the `down` arm. `unknown` leaves it at 0 and the runner behaves as it did before
+# Armed ONLY in the `down` and `wrong` arms — nothing listening, or something that is not this
+# product (APP_EXPECT absent from the page): either way no session can fix it. `unknown` leaves it at 0 and the runner behaves as it did before
 # the probe existed, which is the whole compatibility story — see app_probe.
 GATE_APP_DOWN=0
 
@@ -1343,11 +1366,11 @@ gate_QA() {
     # Held in a local before the probe runs: LAST_CHECK_LOG is the file this refusal sends the
     # operator to READ, and it is a global that any later run_check_cmd would overwrite.
     local e2e_log="$LAST_CHECK_LOG" probe state label
-    probe="$(app_probe "$APP_URL")"
+    probe="$(app_probe "$APP_URL" "$APP_EXPECT")"
     state="${probe%%|*}"; label="${probe#*|}"
     case "$state" in
       down)
-        # The only arm that arms the marker, and the only one cmd_run acts on.
+        # One of the two arms that arm the marker (with `wrong` below), the ones cmd_run acts on.
         GATE_APP_DOWN=1
         GATE_WHY="E2E_CMD failed ($E2E_CMD) and nothing is listening at $label (APP_URL) — the app is down; no session can start it. See $e2e_log"
         ;;
@@ -1360,9 +1383,16 @@ gate_QA() {
         # sends the reader to the log for the rest.
         GATE_WHY="E2E_CMD failed ($E2E_CMD) with the app answering at $label — APP_URL is not the cause; whatever is (a broken assertion, or something behind the port, like a stopped database) is in the log. See $e2e_log"
         ;;
+      wrong)
+        # Something answers, and it is not this product: the same escalation as a dead app, with no
+        # new door and no new kind — an operator who reads `app-down` has to act on the machine
+        # either way, and the sentence says which of the two it is.
+        GATE_APP_DOWN=1
+        GATE_WHY="E2E_CMD failed ($E2E_CMD) and the app at $label is not this product (APP_EXPECT '$APP_EXPECT' not in the page) — no session can fix that. See $e2e_log"
+        ;;
       *)
         # `*` and not `unknown)`: this is the arm that has to catch a state nobody has invented
-        # yet, since the two above are the only ones that may change what the runner DOES.
+        # yet, since the three above are the only ones that may change what the runner DOES.
         GATE_WHY="E2E_CMD failed ($E2E_CMD) — see $e2e_log (the app was not probed either way: $label)"
         ;;
     esac
@@ -4911,7 +4941,7 @@ cmd_preflight() {
   # does not understand, which is the widest possible reading of the narrowest possible fact.
   if [ -n "$APP_URL" ]; then
     local app_verdict app_state app_label
-    app_verdict="$(app_probe "$APP_URL")"
+    app_verdict="$(app_probe "$APP_URL" "$APP_EXPECT")"
     app_state="${app_verdict%%|*}"; app_label="${app_verdict#*|}"
     case "$app_state" in
       up)   ok "something is listening at $app_label (APP_URL)" ;;
@@ -4924,6 +4954,16 @@ cmd_preflight() {
         else
           warn "nothing is listening at $app_label (APP_URL) — with no E2E_CMD no gate runs
         against it, but the exploratory QA session will need it up"
+        fi
+        ;;
+      wrong)
+        # The dead app's policy, for the same reason: with E2E_CMD a gate is about to run a suite
+        # against a product that is not this one; without it the human walking the journey needs
+        # to know, and that is all.
+        if [ -n "$E2E_CMD" ]; then
+          _fail "something answers at $app_label (APP_URL) but its page does not contain APP_EXPECT '$APP_EXPECT' — another product on this port? Stop it, or fix APP_URL/APP_EXPECT"
+        else
+          warn "something answers at $app_label (APP_URL) but its page does not contain APP_EXPECT '$APP_EXPECT' — another product on this port? Stop it, or fix APP_URL/APP_EXPECT"
         fi
         ;;
       *) warn "APP_URL not probed: $app_label" ;;
@@ -7018,10 +7058,12 @@ app_down_escalation() {
   info ""
   bad "BLOCKED in $phase — $GATE_WHY"
   dim "  The line stopped on purpose: the e2e is red and the address in APP_URL refuses"
-  dim "  connections. No session in this pipeline may bring an environment up."
+  dim "  connections, or answers without APP_EXPECT (another product on the port)."
+  dim "  No session in this pipeline may bring an environment up."
   dim "  Another session would run the same e2e against the same dead address and refuse"
   dim "  the same way."
-  dim "  Start the app and 'sdd run' — or, if the e2e brings its own server up, clear APP_URL."
+  dim "  Start the app (or stop the one on its port) and 'sdd run' — or, if the e2e brings its"
+  dim "  own server up, clear APP_URL."
   pipeline_log_line "$(date -Iseconds)  BLOCKED  $phase  $GATE_WHY"
   autonomy_blocked_row "app-down" "$phase" "$GATE_WHY"
   return 0

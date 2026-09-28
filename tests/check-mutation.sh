@@ -600,7 +600,7 @@ mut_QA_bug_genre_deferred_join() {
 # escalation a run produces (check-autonomy.sh, the app-down pair). Neither alone would say the
 # other still worked.
 mut_QA_e2e_red_never_probed() {
-  sed -i 's@^    probe="$(app_probe "$APP_URL")"$@    probe="unknown|the probe was never called"@' "$1"
+  sed -i 's@^    probe="$(app_probe "$APP_URL" "$APP_EXPECT")"$@    probe="unknown|the probe was never called"@' "$1"
 }
 
 # THE FAIL-OPEN, and the most dangerous edit in this family: `unknown` starts arming the marker.
@@ -616,6 +616,16 @@ mut_QA_e2e_red_never_probed() {
 # half would have scored nothing here.
 mut_QA_app_down_on_unknown() {
   sed -i '/^    case "$state" in$/,/^    esac$/ s@^      \*)$@      *) GATE_APP_DOWN=1;@' "$1"
+}
+
+# APP_EXPECT (20260928-os-achados-da-janela, achado 3): two products on one port both "answer", and
+# in LH-4 the QA session opened against the other one. One mutant per half: the probe that never
+# says `wrong`, and the gate arm that names it without arming the escalation.
+mut_APP_expect_ignored() {       # the page is read and the verdict thrown away — `wrong` never born
+  sed -i "/^app_probe() {/,/^}/ s@printf 'wrong|@printf 'up|@" "$1"
+}
+mut_QA_wrong_app_not_armed() {   # the wrong-app arm of gate_QA names it and escalates nothing
+  sed -i '/^gate_QA() {/,/^}/ { /^      wrong)$/,/;;/ s@GATE_APP_DOWN=1@: GATE_APP_DOWN left unarmed@ }' "$1"
 }
 
 # THE FIX THAT IS WIDER THAN THE DEFECT: the app is probed whatever the e2e answered, so the gate
@@ -4482,6 +4492,8 @@ CATALOG=(
   QA_bug_genre_deferred_join
   QA_e2e_red_never_probed
   QA_app_down_on_unknown
+  APP_expect_ignored
+  QA_wrong_app_not_armed
   QA_probe_ignores_e2e_rc
   QA_hostport_no_default_port
   QA_hostport_case_blind

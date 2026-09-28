@@ -30,7 +30,7 @@ fails=0
 # bin/sdd, and `SDD_STATE_DIR` in config/schema.md). Same choice, same reason, as check-gates.sh
 # and check-dry-run.sh — which is why the two assertions at the end of this file pin it.
 OUTSIDE="$(mktemp -d "${TMPDIR:-/tmp}/sdd-autonomy-outside-XXXXXX")"
-trap 'rm -rf "$FIX" "$OUTSIDE"' EXIT
+trap 'stop_page_server 2>/dev/null; rm -rf "$FIX" "$OUTSIDE"' EXIT
 
 pass() { printf '  ok    %s\n' "$1"; }
 # Inside a mutant the first red assertion is the verdict: fail() ends the sensor there, AFTER
@@ -2292,6 +2292,34 @@ port_is_free() {  # rc 0 = nothing is listening on 127.0.0.1:$1
   LC_ALL=C timeout 3 bash -c 'exec 3<>"/dev/tcp/127.0.0.1/$0"' "$1" 2>/dev/null || rc=$?
   [ "$rc" -ne 0 ]
 }
+
+# start_page_server <dir> — serves <dir> over HTTP on a free loopback port and publishes PAGE_PORT
+# and PAGE_PID. CALLED, never `$( )`: the two globals would die with the subshell. PAGE_PORT stays
+# empty when no server came up, and the caller fails BY NAME rather than certifying nothing. The
+# server has to be OUR process (`kill -0` once the port answers): a neighbour sensor binding the
+# same port between the free check and our bind would otherwise be read as ours. 30000-31999 sits
+# under the ephemeral range, like the dead port above; `timeout 900` bounds an orphan if this shell
+# is killed before its EXIT trap runs, and the trap kills it on every ordinary exit.
+PAGE_PID=""; PAGE_PORT=""
+start_page_server() {
+  local port=$(( 30000 + $$ % 2000 )) tries=0 waited
+  PAGE_PID=""; PAGE_PORT=""
+  while [ "$tries" -lt 10 ]; do
+    tries=$(( tries + 1 )); port=$(( port + 1 ))
+    port_is_free "$port" || continue
+    timeout 900 python3 -m http.server "$port" --bind 127.0.0.1 --directory "$1" >/dev/null 2>&1 &
+    PAGE_PID=$!
+    waited=0
+    while port_is_free "$port" && [ "$waited" -lt 50 ]; do sleep 0.1; waited=$(( waited + 1 )); done
+    if ! port_is_free "$port" && kill -0 "$PAGE_PID" 2>/dev/null; then PAGE_PORT="$port"; return 0; fi
+    kill "$PAGE_PID" 2>/dev/null; wait "$PAGE_PID" 2>/dev/null || true; PAGE_PID=""
+  done
+  return 0
+}
+stop_page_server() {
+  if [ -n "$PAGE_PID" ]; then kill "$PAGE_PID" 2>/dev/null; wait "$PAGE_PID" 2>/dev/null || true; fi
+  PAGE_PID=""; PAGE_PORT=""
+}
 # BELOW the ephemeral range, and that is what makes the floor hold for the whole block. The floor
 # proves the port refuses ONCE; the assertions under it then run several `sdd` invocations over
 # minutes against that one measurement. Drawn from 49152-59171 the port sat INSIDE the kernel's
@@ -2397,6 +2425,45 @@ RPT
   assert_eq "a --max-phases ceiling does not turn a dead app into rc 0, where the same red e2e still ends 0" \
     "3|1|blocked|app-down · 0|1|null|null" \
     "$app_ceiling_down · $app_ceiling_control"
+
+  # --- ...and an app that answers but is NOT this product escalates the same way -------------
+  # LH-4, 2026-09-27: two products on the same port, and the QA session opened against the other
+  # one. With APP_EXPECT declared and absent from the page, gate_QA arms the SAME marker as a dead
+  # app — no new door, no new kind (decision 7 of 20260928-os-achados-da-janela). THE PAIR moves
+  # one config line: the same page carrying APP_EXPECT is `up`, and a red e2e over an app that
+  # answers is today's two-session loop.
+  page_dir="$OUTSIDE/.page"; mkdir -p "$page_dir"
+  printf '<!doctype html><title>Other Product</title><p>not the fixture</p>\n' > "$page_dir/index.html"
+  start_page_server "$page_dir"
+  if [ -z "$PAGE_PORT" ]; then
+    fail "wrong-app floor" "an HTTP server on a loopback port" \
+         "python3 -m http.server did not come up — the wrong-app pair was NOT measured"
+  else
+    page_port="$PAGE_PORT"
+    sed -i "s|^APP_URL=.*|APP_URL=\"http://127.0.0.1:$page_port/\"|" .sdd/config.sh
+    printf 'APP_EXPECT="Fixture Product"\n' >> .sdd/config.sh
+    git add -A && git commit -qm "chore: a red e2e over another product's page"
+    : > "$LEDGER"
+    "$SDD" run "$MISSION" >/dev/null 2>&1; rc=$?
+    app_wrong="$(blocked_shape "$rc")"
+    why_wrong="$(jq -r -s '[.[] | select(.kind == "app-down")][0].gate_why' "$LEDGER")"
+
+    sed -i 's|^APP_EXPECT=.*|APP_EXPECT="Other Product"|' .sdd/config.sh
+    git add -A && git commit -qm "chore: control — the same page, carrying APP_EXPECT"
+    : > "$LEDGER"
+    "$SDD" run "$MISSION" >/dev/null 2>&1; rc=$?
+    app_right="$(blocked_shape "$rc")"
+    stop_page_server
+
+    assert_eq "an app that answers without APP_EXPECT escalates on the first session, where the page that carries it still spends two" \
+      "3|1|blocked|app-down · 3|2|blocked|no-progress" \
+      "$app_wrong · $app_right"
+    assert_eq "and the escalation row says the app is not this product" "names-it" \
+      "$(grep -qF "127.0.0.1:$page_port is not this product" <<< "$why_wrong" && echo names-it || echo "$why_wrong")"
+    sed -i '/^APP_EXPECT=/d' .sdd/config.sh
+    sed -i 's|^APP_URL=.*|APP_URL=""|' .sdd/config.sh
+    git add -A && git commit -qm "chore: the wrong-app pair gives the fixture back"
+  fi
 
   # NOT asserted here: "a projection over a dead app writes no ledger row". It was written, and
   # then removed because no single sabotage could make it red — the house rule for a rule the

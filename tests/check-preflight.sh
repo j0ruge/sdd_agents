@@ -610,7 +610,7 @@ mv .sdd/config.sh.bak .sdd/config.sh
 # still cannot be opened there), absent is a refusal.
 echo "== DEFAULT_BRANCH is verified against the repository =="
 ORIGIN="$(mktemp -d "${TMPDIR:-/tmp}/sdd-preflight-origin-XXXXXX")"
-trap 'rm -rf "$FIX" "$PROBE" "$ORIGIN"' EXIT
+trap 'stop_page_server 2>/dev/null; rm -rf "$FIX" "$PROBE" "$ORIGIN"' EXIT
 git init -q --bare -b main "$ORIGIN"
 git remote add origin "$ORIGIN"
 git push -q origin main
@@ -699,6 +699,34 @@ port_is_free() {  # rc 0 = nothing is listening on 127.0.0.1:$1
   LC_ALL=C timeout 3 bash -c 'exec 3<>"/dev/tcp/127.0.0.1/$0"' "$1" 2>/dev/null || rc=$?
   [ "$rc" -ne 0 ]
 }
+
+# start_page_server <dir> — serves <dir> over HTTP on a free loopback port and publishes PAGE_PORT
+# and PAGE_PID. CALLED, never `$( )`: the two globals would die with the subshell. PAGE_PORT stays
+# empty when no server came up, and the caller fails BY NAME rather than certifying nothing. The
+# server has to be OUR process (`kill -0` once the port answers): a neighbour sensor binding the
+# same port between the free check and our bind would otherwise be read as ours. 30000-31999 sits
+# under the ephemeral range, like the dead port above; `timeout 900` bounds an orphan if this shell
+# is killed before its EXIT trap runs, and the trap kills it on every ordinary exit.
+PAGE_PID=""; PAGE_PORT=""
+start_page_server() {
+  local port=$(( 30000 + $$ % 2000 )) tries=0 waited
+  PAGE_PID=""; PAGE_PORT=""
+  while [ "$tries" -lt 10 ]; do
+    tries=$(( tries + 1 )); port=$(( port + 1 ))
+    port_is_free "$port" || continue
+    timeout 900 python3 -m http.server "$port" --bind 127.0.0.1 --directory "$1" >/dev/null 2>&1 &
+    PAGE_PID=$!
+    waited=0
+    while port_is_free "$port" && [ "$waited" -lt 50 ]; do sleep 0.1; waited=$(( waited + 1 )); done
+    if ! port_is_free "$port" && kill -0 "$PAGE_PID" 2>/dev/null; then PAGE_PORT="$port"; return 0; fi
+    kill "$PAGE_PID" 2>/dev/null; wait "$PAGE_PID" 2>/dev/null || true; PAGE_PID=""
+  done
+  return 0
+}
+stop_page_server() {
+  if [ -n "$PAGE_PID" ]; then kill "$PAGE_PID" 2>/dev/null; wait "$PAGE_PID" 2>/dev/null || true; fi
+  PAGE_PID=""; PAGE_PORT=""
+}
 # BELOW the ephemeral range, and that is what makes the floor hold for the whole block. The floor
 # proves the port refuses ONCE; the assertions under it then run several `sdd` invocations over
 # minutes against that one measurement. Drawn from 49152-59171 the port sat INSIDE the kernel's
@@ -785,6 +813,64 @@ if [ "$app_floor_ok" = "1" ]; then
   out_noapp="$( "$SDD" preflight 2>&1 )"
   assert_lacks "an empty APP_URL claims nothing about listening" "nothing is listening" "$out_noapp"
   assert_lacks "an empty APP_URL is not reported as unprobed either" "not probed" "$out_noapp"
+
+  # --- something answers, but it is NOT this product (APP_EXPECT) ----------------------------
+  # Measured in LH-4 (2026-09-27): lighthouse and sales_quote both declare
+  # APP_URL=http://localhost:5173, this printed "something is listening", and the QA session
+  # opened against the other product's dev server and stopped `blocked`. APP_EXPECT is a literal
+  # the page must carry. The server is REAL, because the probe reads the page: python3's
+  # http.server over a page whose <title> is another product's.
+  #
+  # THE PAIR keeps E2E_CMD and the address constant and moves only APP_EXPECT, so the failed count
+  # can move for one reason. A shadow PATH (every executable minus curl, the no-jq technique
+  # below) is the one-sided half: no curl, no verdict, never a refusal.
+  page_dir="$FIX/.page"; mkdir -p "$page_dir"
+  printf '<!doctype html><title>Other Product</title><p>not the fixture</p>\n' > "$page_dir/index.html"
+  nocurl="$FIX/.nocurl-bin"; mkdir -p "$nocurl"
+  IFS=: read -r -a path_dirs <<< "$PATH"
+  for d in "${path_dirs[@]}"; do
+    [ -d "$d" ] || continue
+    for f in "$d"/*; do
+      n="${f##*/}"
+      [ "$n" = curl ] && continue
+      [ -x "$f" ] && [ ! -e "$nocurl/$n" ] && ln -s "$f" "$nocurl/$n"
+    done
+  done
+  start_page_server "$page_dir"
+  if [ -z "$PAGE_PORT" ]; then
+    fail "wrong-app floor" "an HTTP server on a loopback port" \
+         "python3 -m http.server did not come up — the APP_EXPECT block was NOT measured"
+  else
+    page_port="$PAGE_PORT"
+    sed -i "s|^E2E_CMD=.*|E2E_CMD=\"npm run e2e\"|" .sdd/config.sh
+    sed -i "s|^APP_URL=.*|APP_URL=\"http://127.0.0.1:$page_port/\"|" .sdd/config.sh
+    printf 'APP_EXPECT=""\n' >> .sdd/config.sh
+    out_page_tcp="$( "$SDD" preflight 2>&1 )"
+    sed -i 's|^APP_EXPECT=.*|APP_EXPECT="Fixture Product"|' .sdd/config.sh
+    rc_page_wrong=0; out_page_wrong="$( "$SDD" preflight 2>&1 )" || rc_page_wrong=$?
+    out_page_nocurl="$( PATH="$nocurl" "$SDD" preflight 2>&1 )"
+    sed -i 's|^APP_EXPECT=.*|APP_EXPECT="Other Product"|' .sdd/config.sh
+    out_page_right="$( "$SDD" preflight 2>&1 )"
+    stop_page_server
+
+    n_tcp="$(failed_count "$out_page_tcp")"
+    n_wrong="$(failed_count "$out_page_wrong")"
+    n_right="$(failed_count "$out_page_right")"
+    n_nocurl="$(failed_count "$out_page_nocurl")"
+    assert_eq "a page without APP_EXPECT fails the preflight when E2E_CMD is set" \
+      "one more · rc≠0 · named" \
+      "$( [ -n "$n_wrong" ] && [ "${n_wrong:-0}" -eq $(( ${n_tcp:-0} + 1 )) ] && echo 'one more' || echo "$n_tcp -> $n_wrong" ) · $( [ "$rc_page_wrong" -ne 0 ] && echo 'rc≠0' || echo rc=0 ) · $( grep -qF "APP_EXPECT 'Fixture Product'" <<< "$out_page_wrong" && echo named || echo unnamed )"
+    assert_eq "an empty APP_EXPECT keeps the TCP-only probe" "listening · silent" \
+      "$( grep -qF "something is listening at 127.0.0.1:$page_port" <<< "$out_page_tcp" && echo listening || echo quiet ) · $( grep -qF 'APP_EXPECT' <<< "$out_page_tcp" && echo 'says APP_EXPECT' || echo silent )"
+    # The control of the pair: the SAME page, an APP_EXPECT it carries — curl ran and matched, so a
+    # runner whose `wrong` came from a failed read instead of a missing literal takes this red.
+    assert_eq "a page that carries APP_EXPECT reads as listening, with no extra failure" \
+      "listening · no extra failure" \
+      "$( grep -qF "something is listening at 127.0.0.1:" <<< "$out_page_right" && echo listening || echo quiet ) · $( [ -n "$n_right" ] && [ "$n_right" = "$n_tcp" ] && echo 'no extra failure' || echo "$n_tcp -> $n_right" )"
+    assert_eq "without curl, APP_EXPECT reads unknown and never refuses" \
+      "no extra failure · not checked" \
+      "$( [ -n "$n_nocurl" ] && [ "$n_nocurl" = "$n_tcp" ] && echo 'no extra failure' || echo "$n_tcp -> $n_nocurl" ) · $( grep -qF 'not checked' <<< "$out_page_nocurl" && echo 'not checked' || echo silent )"
+  fi
 
   mv .sdd/config.sh.bak .sdd/config.sh
 fi

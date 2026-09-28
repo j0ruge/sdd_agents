@@ -28,7 +28,7 @@ fails=0
 # whose whole point is to model a clean, gate-passing repo.
 SDD_STATE_FIX="$(mktemp -d "${TMPDIR:-/tmp}/sdd-gates-state-XXXXXX")"
 export SDD_STATE_DIR="$SDD_STATE_FIX"
-trap 'rm -rf "$FIX" "$SDD_STATE_FIX"' EXIT
+trap 'stop_page_server 2>/dev/null; rm -rf "$FIX" "$SDD_STATE_FIX"' EXIT
 
 pass() { printf '  ok    %s\n' "$1"; }
 # Inside a mutant the first red assertion is the verdict: fail() ends the sensor there, AFTER
@@ -1004,6 +1004,34 @@ port_is_free() {  # rc 0 = nothing is listening on 127.0.0.1:$1
   LC_ALL=C timeout 3 bash -c 'exec 3<>"/dev/tcp/127.0.0.1/$0"' "$1" 2>/dev/null || rc=$?
   [ "$rc" -ne 0 ]
 }
+
+# start_page_server <dir> — serves <dir> over HTTP on a free loopback port and publishes PAGE_PORT
+# and PAGE_PID. CALLED, never `$( )`: the two globals would die with the subshell. PAGE_PORT stays
+# empty when no server came up, and the caller fails BY NAME rather than certifying nothing. The
+# server has to be OUR process (`kill -0` once the port answers): a neighbour sensor binding the
+# same port between the free check and our bind would otherwise be read as ours. 30000-31999 sits
+# under the ephemeral range, like the dead port above; `timeout 900` bounds an orphan if this shell
+# is killed before its EXIT trap runs, and the trap kills it on every ordinary exit.
+PAGE_PID=""; PAGE_PORT=""
+start_page_server() {
+  local port=$(( 30000 + $$ % 2000 )) tries=0 waited
+  PAGE_PID=""; PAGE_PORT=""
+  while [ "$tries" -lt 10 ]; do
+    tries=$(( tries + 1 )); port=$(( port + 1 ))
+    port_is_free "$port" || continue
+    timeout 900 python3 -m http.server "$port" --bind 127.0.0.1 --directory "$1" >/dev/null 2>&1 &
+    PAGE_PID=$!
+    waited=0
+    while port_is_free "$port" && [ "$waited" -lt 50 ]; do sleep 0.1; waited=$(( waited + 1 )); done
+    if ! port_is_free "$port" && kill -0 "$PAGE_PID" 2>/dev/null; then PAGE_PORT="$port"; return 0; fi
+    kill "$PAGE_PID" 2>/dev/null; wait "$PAGE_PID" 2>/dev/null || true; PAGE_PID=""
+  done
+  return 0
+}
+stop_page_server() {
+  if [ -n "$PAGE_PID" ]; then kill "$PAGE_PID" 2>/dev/null; wait "$PAGE_PID" 2>/dev/null || true; fi
+  PAGE_PID=""; PAGE_PORT=""
+}
 # BELOW the ephemeral range, and that is what makes the floor hold for the whole block. The floor
 # proves the port refuses ONCE; the assertions under it then run several `sdd` invocations over
 # minutes against that one measurement. Drawn from 49152-59171 the port sat INSIDE the kernel's
@@ -1094,6 +1122,29 @@ if [ "$floor_ok" = "1" ]; then
   sed -i 's|^APP_URL=.*|APP_URL="not a url"|' .sdd/config.sh
   assert_why        "an unparseable APP_URL is not probed" "QA" "not probed"
   assert_why_absent "an unparseable APP_URL never claims a dead app" "QA" "nothing is listening"
+
+  # --- the app answers, but it is NOT this product (APP_EXPECT) --------------------------------
+  # LH-4, 2026-09-27: two products on http://localhost:5173, and a red e2e over the wrong one read
+  # as "the app answering". With APP_EXPECT declared and absent from the page the gate names it and
+  # arms the same marker as a dead app (the escalation itself is asserted in check-autonomy.sh).
+  # DIFFERENTIAL on one config line: the same page with an APP_EXPECT it carries is `up`.
+  page_dir="$FIX/.page"; mkdir -p "$page_dir"
+  printf '<!doctype html><title>Other Product</title><p>not the fixture</p>\n' > "$page_dir/index.html"
+  start_page_server "$page_dir"
+  if [ -z "$PAGE_PORT" ]; then
+    fail "wrong-app floor" "an HTTP server on a loopback port" \
+         "python3 -m http.server did not come up — the wrong-app world was NOT measured"
+  else
+    sed -i "s|^APP_URL=.*|APP_URL=\"http://127.0.0.1:$PAGE_PORT/\"|" .sdd/config.sh
+    printf 'APP_EXPECT="Fixture Product"\n' >> .sdd/config.sh
+    assert_why "QA gate names the wrong app at APP_URL when the e2e is red" "QA" \
+               "app at 127\.0\.0\.1:$PAGE_PORT is not this product"
+    sed -i 's|^APP_EXPECT=.*|APP_EXPECT="Other Product"|' .sdd/config.sh
+    assert_why "the same page carrying APP_EXPECT reads as the app answering" "QA" \
+               "with the app answering at 127\.0\.0\.1:$PAGE_PORT"
+    sed -i '/^APP_EXPECT=/d' .sdd/config.sh
+    stop_page_server
+  fi
 fi
 
 # Restore what the next block's sed expects to find.
