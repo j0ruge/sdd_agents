@@ -4,6 +4,39 @@ Registro de melhorias com **antes/depois medido**. Sem número, não entra.
 
 ---
 
+## 2026-09-28 — Os achados da janela: a QA fecha com o relatório da própria missão, e quatro recusas passam a dizer a verdade
+
+**Problema (Gemba):** a janela do juiz (LH-4, SQ-145, SQ-146 sobre `4fd0f31`) deixou oito achados
+`kit:` medidos. Cinco custaram sessão, humano ou uma fase inteira: a QA fechando com o relatório de
+outra missão (duas das três missões), o preflight aprovando o dev server de outro produto na mesma
+porta, a DOCS contornando pelo Bash a negativa do harness em `.claude/rules/` (e, quando não
+contornava, girando num `⛔` sem saída), o `sdd close` deixando a base atrás do merge e o
+`CHECKOUT-UNAVAILABLE` sem dizer qual Python caiu. Os outros três ficaram registrados.
+
+**Medição:** os seis fatos da métrica do `00-missao.md`, cada um lido por asserção da suíte nos dois
+lados — vermelha antes do código, verde depois, pelo motivo certo — e cada mutante novo aplicado
+numa cópia do kit e morto pela asserção que o nomeia.
+
+| Fato | Antes (`3d350ed`) | Depois |
+|---|---|---|
+| Único relatório `closed` adicionado antes da branch da missão | `qa_substep` → `close`; o `gate_QA` aprova | `exec`; o gate recusa nomeando o relatório e o merge-base (`121a696`) |
+| Página na `APP_URL` sem o `APP_EXPECT` declarado | "something is listening"; e2e vermelho = duas sessões e `no-progress` | preflight reprova com `E2E_CMD`; o `gate_QA` escala `app-down` na primeira sessão (`4423bb0`) |
+| Sessão DOCS que escreve em `.claude/rules/` | passa calada (caminho no `writes:`) | `hat-crossed`; `⛔` com texto proposto que nomeia o documento passa em voz alta, sem proposta reprova (`1ffee16`) |
+| `sdd close` com a base local atrás do upstream | fica atrás | fast-forward; divergida, sha intacto e aviso; já na base, também anda (`c320630`) |
+| `python3` do PATH sem `os.pidfd_open` | a lista de requisitos e o erro cru | o requisito, o interpretador do PATH, o `sys.executable` e o remédio `PATH=/usr/bin:$PATH` quando o `/usr/bin/python3` serve (`fbaf9a1`) |
+| `todo-findings` | 83 | **86** (achados 1, 2 e 5 registrados, `48e89b7`) |
+| Catálogo de mutação | 422 | **435** (13 novos, cada um vermelho pela asserção que o nomeia) |
+
+**Contramedida:** poka-yoke onde coube. A pertença do relatório é artefato do git (uma função, dois
+leitores, recuo no range vazio); o contorno da DOCS deixou de ser frase e virou fronteira do chapéu;
+o app errado reusa o marcador e o `kind` que já existiam, sem porta nova. As duas decisões de
+contrato entre fases estão na ADR 0013.
+
+**Custo:** a missão rodou inline, numa sessão interativa (`superpowers:executing-plans`), e não por
+`sdd run` — o ledger de autonomia não tem linha de sessão dela, e o custo fica fora da série do juiz.
+
+---
+
 ## 2026-09-28 — O veredito da janela do juiz: `melhorou` sobre `4fd0f31`
 
 **O que foi julgado:** o lote de seis merges entre `5cb0101` e `4fd0f31` (#167, #168, #170, #166,

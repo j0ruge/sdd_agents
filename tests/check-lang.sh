@@ -194,9 +194,10 @@ files="$(surface)"
 # Re-counted on 2026-09-17 (20260917-o-numero-do-adr-nao-e-prosa): tests/check-adr.sh makes it 46,
 # and docs/adr/0008 makes it 47 in the same mission — two hops, two commits, on purpose.
 # Checkout coordination adds its sensor, linker and Python helper to the previous 48 paths.
+# ADRs 0010 to 0012 made it 54, and ADR 0013 made it 55 in 20260928-os-achados-da-janela.
 n_surface="$(grep -c . <<< "$files")"
-if [ "$n_surface" -lt 51 ]; then
-  printf '  FAIL  surface shrank to %d path(s), expected at least 51 — did something move?\n' \
+if [ "$n_surface" -lt 55 ]; then
+  printf '  FAIL  surface shrank to %d path(s), expected at least 55 — did something move?\n' \
     "$n_surface" >&2
   exit 93
 fi

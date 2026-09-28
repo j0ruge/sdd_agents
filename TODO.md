@@ -28,7 +28,7 @@ Achados sobre **repos-alvo** vão para o `TODO.md` daquele repo. Este arquivo é
   nada o amarra à missão corrente. Em `20260827-condicoes-pagamento-mesmo-cliente` o gate passou
   lendo o `2026-08-24-sq107-status-material-frete.md`, de duas missões antes. Fail-open: promete
   "a QA desta missão fechou" e mede "existe alguma QA fechada no disco". Direção: casar o
-  relatório com o slug da missão ou com a janela de datas dela.
+  relatório com o slug da missão ou com a janela de datas dela. RESOLVED by 121a696
   — descoberto por `sdd-qa` na missão `20260827-condicoes-pagamento-mesmo-cliente` (2026-08-27)
 
 - [ ] **Citação NÃO-cercada acima do cabeçalho ainda vira o gênero do bug** — `bin/sdd:1244` — o

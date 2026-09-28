@@ -1,6 +1,6 @@
 # ADR 0013 — A QA report belongs to the mission that added it, and a path the harness refuses is proposed, not written
 
-- **Status**: proposed (—, 2026-09-28)
+- **Status**: accepted (—, 2026-09-28)
 - **Spec**: docs/handoffs/20260928-os-achados-da-janela/00-missao.md
 
 ## Context
@@ -77,8 +77,8 @@ future session. The two authorities disagreed, with two outcomes:
 
 ## Implementation
 
-This is the planned shape. I4 and I6 of the mission confirm it, or correct this section in the same
-commit.
+This is the shape the mission shipped: I2 (`121a696`) for decisions 1 to 3, I4 (`1ffee16`) for 4
+and 5. It was checked against the code when the ADR was accepted.
 
 - The function sits next to `latest_matching` and returns an absolute path, or empty. It reads
   `git -c core.quotePath=false log --diff-filter=A --name-only --format= <base>..HEAD -- <reports>`
@@ -86,10 +86,17 @@ commit.
   untracked directory is listed as the directory and not as its files. Among the mission's files it
   picks the newest by the same `sort -V` as `latest_matching`. It computes the base with `|| true`
   guards, because a missing `DEFAULT_BRANCH` must read as an empty range and never as a dead process.
+  A candidate counts only when it is `-ef` the file `<reports>/<name>`: a direct child of `reports/`,
+  as the glob of `latest_matching` reads, whatever spelling `QA_DOCS_PATH` has, and still on disk.
 - When the tree has reports but none of them belong to the mission, `gate_QA` refuses with a reason
   that names the newest one and says it predates the mission branch, and `qa_substep` answers `exec`.
-- The `⛔` marker is structural and in English, like `<!-- sdd:open -->` in `TODO.md`. The heading
-  above it follows `OUTPUT_LANG`.
+- The `<!-- sdd:proposed -->` marker is structural and in English, like `<!-- sdd:open -->` in
+  `TODO.md`. The heading above it follows `OUTPUT_LANG`. The proposed section is the lines after the
+  marker up to the next `## ` heading or the end of the file. The document of a `⛔` row is the
+  table's second column with its markup stripped, looked up there with `grep -F`. A `⛔` followed by
+  VS16 (U+FE0F) is the same value.
+- The rows of the table are admitted positively: only a `⛔` row is exempt, and every other value is
+  pending, tagged or not. A `✗` beside a proposed `⛔` keeps today's reason, counted without the `⛔`.
 
 ## Alternatives discarded
 
