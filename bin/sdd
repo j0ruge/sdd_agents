@@ -775,6 +775,50 @@ latest_matching() {
   ls -1d $pattern 2>/dev/null | sort -V | tail -1 || true
 }
 
+# mission_qa_report — the absolute path of the newest QA report that belongs to THIS mission, or
+# empty. One definition, two readers: qa_substep and Anchor 1 of gate_QA answer about the SAME file.
+# Measured in the judge's window: both used to pick `latest_matching reports/*.md`, and in SQ-146
+# the newest report was SQ-143's — the sub-step answered `close`, the QA skills never ran, and the
+# gate closed on another mission's walk (ADR 0013).
+#
+# A report belongs to the mission when the mission branch ADDED it in merge-base(DEFAULT_BRANCH,
+# HEAD)..HEAD, or it is new in the tree (`??` or `A` — a skill may leave it uncommitted when the gate
+# reads it). `A` and not `M`: a mission that edits another mission's report does not become its
+# owner. `-uall` because without it an untracked directory shows as the directory, not its files.
+# The pick among the candidates is the same `sort -V` latest_matching uses.
+#
+# EMPTY RANGE ⇒ today's answer, byte for byte: HEAD reachable from the base (a mission on the base
+# branch, or one already merged) or no merge-base at all. Otherwise a merged mission would fall back
+# into QA and a `sdd run` over it would buy a session. Declared residue, both on the empty range: a
+# mission whose `branch:` IS the base, and a DEFAULT_BRANCH with no local ref (only `origin/<b>`) —
+# there the fail-open this function closes is still open.
+#
+# The charter stays out on purpose (decision 3 of the grill): it is durable doc that crosses cycles
+# and the qa-execution skill writes the one missing, so demanding the mission's would make QA:plan
+# unsatisfiable in a cycle that reuses charters.
+mission_qa_report() {
+  local dir="$REPO_ROOT/$QA_DOCS_PATH/reports" base head cands p
+  base="$(git -C "$REPO_ROOT" merge-base "$DEFAULT_BRANCH" HEAD 2>/dev/null || true)"
+  head="$(git -C "$REPO_ROOT" rev-parse HEAD 2>/dev/null || true)"
+  if [ -z "$base" ] || [ "$base" = "$head" ]; then
+    latest_matching "$dir/*.md"
+    return 0
+  fi
+  cands="$(
+    git -C "$REPO_ROOT" -c core.quotePath=false log --diff-filter=A --name-only --format= \
+      "$base"..HEAD -- "$QA_DOCS_PATH/reports/" 2>/dev/null || true
+    git -C "$REPO_ROOT" -c core.quotePath=false status --porcelain -uall \
+      -- "$QA_DOCS_PATH/reports/" 2>/dev/null | sed -n 's/^\(??\|A.\) //p' || true
+  )"
+  # `-ef` against "$dir/<name>": a direct child of reports/, as the glob of latest_matching reads,
+  # whatever spelling QA_DOCS_PATH has (a trailing `/`, a `./`) — and a file still on disk.
+  while IFS= read -r p; do
+    case "$p" in *.md) ;; *) continue ;; esac
+    [ "$REPO_ROOT/$p" -ef "$dir/${p##*/}" ] || continue
+    printf '%s\n' "$dir/${p##*/}"
+  done <<< "$cands" | sort -V | tail -1 || true
+}
+
 # plan_approves_itself → 0 when the mission on disk is a kaizen-born plan carrying `aprovacao: auto`
 #
 # ONE definition, because two places read it and they must never disagree: gate_PLAN refuses this
@@ -1156,9 +1200,18 @@ gate_QA() {
       return 1
     fi
   else
-    # Anchor 1: the dated report from the qa-execution skill.
-    report="$(latest_matching "$REPO_ROOT/$QA_DOCS_PATH/reports/*.md")"
-    [ -n "$report" ] || { GATE_WHY="no report in $QA_DOCS_PATH/reports/"; return 1; }
+    # Anchor 1: the dated report from the qa-execution skill — THIS mission's (mission_qa_report,
+    # the same file qa_substep reads). A tree with reports but none of the mission's names the
+    # newest, so the human reads whose walk the gate refused to close on.
+    report="$(mission_qa_report)"
+    if [ -z "$report" ]; then
+      local newest mbase
+      newest="$(latest_matching "$REPO_ROOT/$QA_DOCS_PATH/reports/*.md")"
+      [ -n "$newest" ] || { GATE_WHY="no report in $QA_DOCS_PATH/reports/"; return 1; }
+      mbase="$(git -C "$REPO_ROOT" merge-base "$DEFAULT_BRANCH" HEAD 2>/dev/null || true)"
+      GATE_WHY="no report of this mission in $QA_DOCS_PATH/reports/ — the newest, $(basename "$newest"), was added before the mission branch (merge-base ${mbase:0:7})"
+      return 1
+    fi
     # Anchor on the qa-execution skill's report. The `**Status:**` does NOT start the line: its
     # template is `- **Started:** <ts> · **Status:** in-progress <!-- in-progress | closed -->`.
     # Requiring line start made the gate never match, and the runner re-ran qa-execution forever
@@ -1878,7 +1931,7 @@ qa_substep() {
   # browser journeys in a project with no browser is the paperwork `skipped` exists to avoid.
   if [ -z "$E2E_CMD" ] && [ -z "$APP_URL" ]; then printf 'close\n'; return 0; fi
   [ -n "$(latest_matching "$qa/charters/*.md")" ] || { printf 'plan\n'; return 0; }
-  report="$(latest_matching "$qa/reports/*.md")"
+  report="$(mission_qa_report)"
   if ! report_closed "$report"; then printf 'exec\n'; return 0; fi
   printf 'close\n'
 }

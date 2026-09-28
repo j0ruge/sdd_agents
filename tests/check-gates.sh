@@ -941,6 +941,54 @@ assert_why_absent "the lexicographic pick is not the file the gate read" "QA" "2
 rm -f "$FIX/docs/qa/reports/2026-01-01-fixture-final.md"
 assert_phase "with the later report gone the gate advances again" "REVIEW"
 
+# --- WHOSE report: the mission's, not the newest in the tree ----------------------------------
+# Anchor 1 used to pick `latest_matching reports/*.md`, and nothing tied that file to the mission.
+# Measured in the judge's window: in SQ-146 the newest report was SQ-143's, the sub-step answered
+# `close` and the QA skills never ran; in LH-4 the handoff's own `gate:` says the report it closed
+# on was an older mission's. The rule (ADR 0013): the report belongs to the mission when the
+# mission branch ADDED it (merge-base..HEAD) or it is new in the tree; an empty range (a mission on
+# the base, or already merged) keeps the answer every block above this one measured.
+#
+# Everything above ran ON the base, which is the empty range — the fallback proved by the whole
+# QA block staying green. Here the fixture lands on main and a mission branch is cut from it.
+git add -A && git commit -qm "chore: the QA fixture lands on the base" >/dev/null
+git checkout -q -b missao/qa-report-owner
+# The branch EDITS the base report instead of adding one: a mission that touches another
+# mission's report does not become its owner. That is the half of the rule a `--diff-filter=AM`
+# would lose, and why the commit here is not an arbitrary file.
+printf '<!-- touched on the mission branch -->\n' >> "$FIX/docs/qa/reports/2026-01-01-fixture.md"
+git add -A && git commit -qm "chore: the mission edits the base report" >/dev/null
+qa_owner_why="$( cd "$FIX" && "$SDD" why "$MISSION" QA 2>&1 )"
+qa_owner_phase="$( cd "$FIX" && "$SDD" phase "$MISSION" 2>&1 )"
+assert_eq "QA gate refuses a closed report added before the mission branch" "QA|1" \
+  "$qa_owner_phase|$(grep -c 'added before the mission branch' <<< "$qa_owner_why")"
+# The new reason names the file it refused, so the human reads which report was someone else's.
+assert_why "the refusal names the report that belongs to the base" "QA" "the newest, 2026-01-01-fixture\.md"
+
+# PROVENANCE: ~/.claude/skills/qa-execution/assets/report-template.md:6, as the fixture above.
+# First UNCOMMITTED — the skill may leave the report in the tree when the gate reads it — then
+# committed: the two halves of "the mission wrote it".
+cat > "$FIX/docs/qa/reports/2026-01-02-fixture-mine.md" <<'EOF'
+# QA Run Report — 2026-01-02 — fixture mine
+- **Started:** 2026-01-02T10:00:00Z · **Status:** closed <!-- in-progress | closed -->
+| # | Charter | Status |
+|---|---|---|
+| 1 | CH-one | Pass |
+EOF
+qa_owner_why="$( cd "$FIX" && "$SDD" why "$MISSION" QA 2>&1 )"
+qa_owner_phase="$( cd "$FIX" && "$SDD" phase "$MISSION" 2>&1 )"
+assert_eq "QA gate accepts a closed report the mission wrote and has not committed yet" "REVIEW|0" \
+  "$qa_owner_phase|$(grep -c 'before the mission branch' <<< "$qa_owner_why")"
+git add -A && git commit -qm "chore: the mission's own report" >/dev/null
+qa_owner_why="$( cd "$FIX" && "$SDD" why "$MISSION" QA 2>&1 )"
+qa_owner_phase="$( cd "$FIX" && "$SDD" phase "$MISSION" 2>&1 )"
+assert_eq "QA gate accepts the closed report the mission branch added" "REVIEW|0" \
+  "$qa_owner_phase|$(grep -c 'before the mission branch' <<< "$qa_owner_why")"
+# Back to the world the blocks below assume: on the base, the fixture as it was before this block.
+git checkout -q main
+git branch -q -D missao/qa-report-owner
+assert_phase "back on the base the fallback reads the tree as before" "REVIEW"
+
 echo "== QA phase — the e2e is red, and WHOSE fault it is =="
 # A red e2e says nothing about whose fault it is: a dead app, a stopped database, a missing
 # browser binary and a genuine assertion failure all leave the same non-zero rc. Before this

@@ -491,6 +491,23 @@ sed -i 's/\*\*Status:\*\* closed/**Status:** in-progress/' docs/qa/reports/2026-
 out4="$( "$SDD" run "$MISSION" --dry-run --phase QA 2>&1 )"
 assert_eq "an in-progress report goes back to the exec sub-step" \
   "QA:exec=<none>" "$(printf '%s\n' "$out4" | projected)"
+
+# And a closed report that the MISSION BRANCH did not add orders execution too: it is some other
+# mission's QA (measured in SQ-146, where the sub-step answered `close` on SQ-143's report and the
+# QA skills never ran). Charter and report land on the base, a mission branch is cut with one
+# commit, and the sub-step must not close. The dry-run does not switch branches, so the checkout is
+# done here by hand. Only docs/qa is committed: the modified config (E2E_CMD) is the next block's.
+sed -i 's/\*\*Status:\*\* in-progress/**Status:** closed/' docs/qa/reports/2026-01-01-fixture.md
+git add docs/qa && git commit -qm "chore: a closed report on the base" >/dev/null
+git checkout -q -b missao/dry-run-report-owner
+git commit -q --allow-empty -m "chore: the mission's first commit"
+out5="$( "$SDD" run "$MISSION" --dry-run --phase QA 2>&1 )"
+assert_eq "a report from before the mission branch does not close the QA sub-step" \
+  "QA:exec=<none>" "$(printf '%s\n' "$out5" | projected)"
+git checkout -q main
+git branch -q -D missao/dry-run-report-owner
+# Mixed reset: the index and HEAD go back, the working tree keeps the modified config.
+git reset -q HEAD~1
 rm -rf docs/qa/charters docs/qa/reports
 
 # --- E2E_DIR reaches the session that writes into it -----------------------

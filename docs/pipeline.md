@@ -233,7 +233,7 @@ The phase is **three sessions**, and the current sub-step is **derived from the 
 | Sub-step | Who drives | When | Delivers |
 |---|---|---|---|
 | `QA:plan` | `/qa-report` skill (no kit agent) | there is no charter in `<QA_DOCS_PATH>/charters/` | charters, personas, journeys |
-| `QA:exec` | `/qa-execution` skill (no kit agent) | there is a charter, but no `closed` report | dated report + bug registry |
+| `QA:exec` | `/qa-execution` skill (no kit agent) | there is a charter, but no `closed` report **of this mission** | dated report + bug registry |
 | `QA:close` | `sdd-qa` agent | report `closed` — or a project with no interface | e2e specs, fix increments, `30-handoff-qa.md` |
 
 The two skills **own** `docs/qa/`; `sdd-qa` does not rewrite what they produced. A project **with
@@ -243,9 +243,15 @@ journeys in a project with no browser is the paperwork `skipped` exists to avoid
 **Passes when:** `30-handoff-qa.md` exists and (`status: skipped` **or** all of the conditions):
 
 - **the evidence of the journey walked**, which takes two forms depending on the project:
-  - **with an interface** (`E2E_CMD` or `APP_URL` set) — the most recent report in
-    `<QA_DOCS_PATH>/reports/` is `**Status:** closed` and no row of the session matrix is still
-    `Pending`;
+  - **with an interface** (`E2E_CMD` or `APP_URL` set) — the most recent report **the mission
+    branch added** to `<QA_DOCS_PATH>/reports/` (`--diff-filter=A` in
+    `merge-base(DEFAULT_BRANCH, HEAD)..HEAD`, or new in the tree) is `**Status:** closed` and no
+    row of the session matrix is still `Pending`. A report the branch only edited is not the
+    mission's. With an **empty range** (HEAD reachable from the base: a mission on the base branch,
+    or one already merged) the gate reads the most recent report in the tree, as before. One
+    function (`mission_qa_report`) answers for this anchor and for `qa_substep`, so the sub-step and
+    the gate never disagree about which file is the mission's — the charter stays out, because it is
+    durable doc that crosses cycles ([ADR 0013](adr/0013-o-relatorio-da-missao-e-o-texto-proposto.md));
   - **without an interface** (neither `E2E_CMD` nor `APP_URL`) — the `gate:` field of
     `30-handoff-qa.md` itself is filled in. Here the `qa-report`/`qa-execution` skills did not run
     as part of the phase, so demanding their dated report would require an artifact nobody

@@ -479,6 +479,27 @@ mut_QA_bug_open() {           # ignores a bug with Status: open in the registry
   sed -i 's|.*\[ "\$openbugs" -gt 0 \].*|  if false; then|' "$1"
 }
 
+# WHOSE report (ADR 0013): the QA report the mission branch ADDED, not the newest in the tree. One
+# mutant per reader and one per half of the rule. Measured in SQ-146, where the newest report was
+# SQ-143's and the QA skills never ran.
+mut_QA_report_not_mission_bound() {           # Anchor 1 back on the newest report in the tree
+  sed -i '/^gate_QA() {/,/^}/ s@report="\$(mission_qa_report)"@report="$(latest_matching "$REPO_ROOT/$QA_DOCS_PATH/reports/*.md")"@' "$1"
+}
+mut_QA_substep_report_not_mission_bound() {   # the sub-step back on the newest report in the tree
+  sed -i '/^qa_substep() {/,/^}/ s@report="\$(mission_qa_report)"@report="$(latest_matching "$qa/reports/*.md")"@' "$1"
+}
+mut_QA_report_counts_modified() {             # a report the branch only EDITED becomes the mission's
+  sed -i '/^mission_qa_report() {/,/^}/ s@--diff-filter=A @--diff-filter=AM @' "$1"
+}
+mut_QA_report_ignores_untracked() {           # the report the skill left uncommitted stops counting
+  sed -i '/^mission_qa_report() {/,/^}/ s@status --porcelain -uall@status --porcelain -uno@' "$1"
+}
+# The fallback is what keeps a mission on the base (or already merged) reading the tree as before.
+# Without it a clean base has no candidate at all, and the QA block ON the base turns red.
+mut_QA_report_no_fallback() {
+  sed -i '/^mission_qa_report() {/,/^}/ s@if \[ -z "\$base" \] || \[ "\$base" = "\$head" \]; then@if false; then@' "$1"
+}
+
 # Anchor 3 goes back to counting EVERY open bug, whatever its genre. That is the state the kit was
 # in until 20260826-o-laco-da-qa: a bug whose fix is a product decision blocked the QA phase, and
 # no agent in the pipeline was allowed to write the `Status:` line that would unblock it — 7 of
@@ -4446,6 +4467,11 @@ CATALOG=(
   QA_bug_enum_loose
   QA_matrix_pending
   QA_bug_open
+  QA_report_not_mission_bound
+  QA_substep_report_not_mission_bound
+  QA_report_counts_modified
+  QA_report_ignores_untracked
+  QA_report_no_fallback
   QA_bug_genre_ignored
   QA_bug_genre_prefix
   QA_bug_genre_anywhere
