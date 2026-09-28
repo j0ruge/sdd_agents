@@ -370,6 +370,14 @@ Achados sobre **repos-alvo** vão para o `TODO.md` daquele repo. Este arquivo é
   nunca lê — e diz que conferiu. Fail-open (D15). Direção: ler o `installPath` do registro, `find` só
   como fallback, mutante no catálogo. — descoberto por `claude` na faxina `20260904-faxina-do-backlog` (2026-09-04)
 
+- [ ] **`gate_TICKET` não confere no Jira a issue que o chapéu diz que ele confirma** — `bin/sdd:871`
+  (`gate_TICKET`) — o `agents/sdd-ticket.md:18` promete que o runner confirma a issue por `acli`,
+  mas o gate só lê `issue:` e `sprint:` do frontmatter do `10-ticket.md`. Uma issue duplicada (LH-5
+  no lugar da LH-4) passa verde, e a LH-4 só se defendeu com um Check próprio no I1. Fail-open: o
+  chapéu afirma uma medição que ninguém faz. Direção: o gate chama o `acli` (a issue existe e está
+  no sprint ativo), ou o chapéu deixa de prometer.
+  — descoberto por `sdd-planner` na missão `20260927-idioma-da-spa-pelo-idp` (2026-09-27)
+
 ### Contrato e configuração
 
 - [ ] **Fase interrompida depois do REVIEW faz o pipeline REGREDIR para o REVIEW** —
@@ -466,6 +474,22 @@ Achados sobre **repos-alvo** vão para o `TODO.md` daquele repo. Este arquivo é
   reescreve os chapéus do kit ligado; o install não é sessão e não passa pela guarda de kit.
   Direção: `cp --remove-destination`, ou recusar quando o alvo é symlink.
   — descoberto por `sdd-planner` na missão `20260926-a-carona-antes-do-congelamento` (2026-09-26)
+
+- [ ] **O checkpoint não tem grafia para incremento cujo produto não é commit** — `bin/sdd:1044`
+  (`GATE_EXEC_CELL`) — o `gate_EXEC` exige 7 a 64 dígitos hex na célula Commit, e o
+  `templates/checkpoint.md` não diz o que escrever quando o incremento é e-mail enviado, config no
+  IdP ou issue adotada. Na LH-3 o I5 foi o e-mail aos diretores, e o `sdd status` da missão aponta
+  EXEC para sempre. Direção: uma grafia do kit para evidência fora do git que o gate aceite com o
+  Check verde, ou a regra de que todo incremento deixa um commit de registro.
+  — descoberto por `sessão coordenadora` na missão `20260922-email-mvp-diretores` (2026-09-27)
+
+- [ ] **A Âncora 3 do `gate_QA` bloqueia a missão com bug aberto de OUTRA missão** —
+  `bin/sdd:1265` (`openbugs`) — o laço conta todo bug `Status: open` do registry que não é `human`
+  nem `deferred`, sem perguntar de qual missão ele é. Na LH-4 o `BUG-20260922-area-sem-edicao-de-nome`
+  segurou a âncora: o `sdd-qa` não podia consertá-lo (fora do escopo) nem adiá-lo (`deferred` é
+  decisão humana), e a linha parou até o humano adiar (`b816069` no alvo). Direção: missão própria,
+  com ADR que supere a alternativa (A) da ADR 0006, mantida pela 0009 (contar só o bug da missão).
+  — descoberto por `sdd-qa` na missão `20260927-idioma-da-spa-pelo-idp` (2026-09-27)
 
 ### Saída humana e cosmética
 
