@@ -50,3 +50,4 @@
 >
 > - intervention: <o que o humano teve de fazer> — <fase> — <custo, se houver>
 - 2026-09-28 18:03 · `EXEC` · I1 executado inline (sessão interativa, `superpowers:executing-plans`): três itens verbatim do plano, catraca 83 → 86, Check `86/11/placed/1`.
+- 2026-09-28 18:17 · `EXEC` · I2: desvio registrado — o bloco novo do `check-gates.sh` entrou no FIM do bloco de QA com interface (depois do par `fixture-final`), não na `:604`, porque os testes de gênero seguintes assumem o fixture na base; o commit da branch EDITA o relatório da base (mata o `--diff-filter=AM`), e entrou um 5º mutante (`QA_report_ignores_untracked`) com a asserção do relatório não commitado. Re-ancorados 22 itens do `TODO.md` pelo mapa de linhas do `git diff`.
