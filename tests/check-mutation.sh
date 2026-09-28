@@ -358,6 +358,22 @@ mut_DOCS_alignment_colon_blind() {
   sed -i '/^gate_DOCS()/,/^}/ s@cell ~ /\^:?-+:?\$/@cell ~ /^-+$/@' "$1"
 }
 
+# ⛔ with proposed text (ADR 0013): the one pending value with a way out, and each half of "only
+# with its proposed text" has its own mutant — the requirement, the per-row reading, the section's
+# end, and the loud pass that names what waits for the human.
+mut_DOCS_blocked_rows_pass_without_proposal() {   # a ⛔ passes with no proposal at all
+  sed -i '/^gate_DOCS() {/,/^}/ s@if \[ -n "\$missing" \]; then@if false; then@' "$1"
+}
+mut_DOCS_proposal_not_per_row() {                 # the marker's existence stands in for every row
+  sed -i "/^gate_DOCS() {/,/^}/ s@grep -qF -- \"\$doc\" <<< \"\$proposed\"@grep -qF -- '<!-- sdd:proposed -->' \"\$d\"@" "$1"
+}
+mut_DOCS_blocked_rows_unnamed() {                 # the pass stops naming the ⛔ documents
+  sed -i '/^gate_DOCS() {/,/^}/ s@apply the proposed text in the PR: \$named"@apply the proposed text in the PR"@' "$1"
+}
+mut_DOCS_proposal_runs_past_heading() {           # the proposed section runs to the end of the file
+  sed -i "/^gate_DOCS() {/,/^}/ s@awk 'on \&\& /^## / { exit } on@awk 'on@" "$1"
+}
+
 # The gate stops telling "the suite is red" from "the suite is red over work nobody committed", so
 # cmd_run's second Jidoka never fires and the runner opens another EXEC session against the same
 # uncommitted tree — about US$ 25 a lap, with no end condition, because state_fingerprint does not
@@ -813,7 +829,7 @@ mut_DOCS_backtick_status_kept() {
 # Review r1, finding 5: a Status cell that is ONLY markup (`**`) strips to nothing and is skipped
 # as an empty cell — the row passes the gate as if it were not there. It used to be pending.
 mut_DOCS_markup_only_status_skipped() {
-  sed -i '/^gate_DOCS()/,/^}/ s@^        if (cell == "" \&\& raw != "") { print raw; next }$@        raw = raw@' "$1"
+  sed -i '/^gate_DOCS()/,/^}/ s@^        if (cell == "" \&\& raw != "") { print "P|" raw; next }$@        raw = raw@' "$1"
 }
 
 mut_PR_no_artifact() {        # a missing 50-pr.md stops failing — a "complete" mission with no PR
@@ -4472,6 +4488,10 @@ CATALOG=(
   RUN_no_work_after_budget_cut
   REVIEW_alignment_colon_blind
   DOCS_alignment_colon_blind
+  DOCS_blocked_rows_pass_without_proposal
+  DOCS_proposal_not_per_row
+  DOCS_blocked_rows_unnamed
+  DOCS_proposal_runs_past_heading
   QA_status_line_start
   QA_status_enum_loose
   QA_bug_enum_loose

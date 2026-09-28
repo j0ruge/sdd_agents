@@ -36,6 +36,8 @@
 > Não bloqueiam este PR; são escolhas que exigem julgamento humano.
 
 - [ ] <pendência — contexto — onde decidir>
+- [ ] ⛔ `<documento da linha ⛔ do 45-docs.md>` — aplicar antes do merge o texto proposto pela DOCS:
+  > <o texto da seção `<!-- sdd:proposed -->`, citado>
 
 ## Achados fora de escopo
 

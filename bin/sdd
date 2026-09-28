@@ -1653,8 +1653,15 @@ gate_DOCS() {
   # `TODO.md` — which is exactly what `sdd-docs` is required to do (checking the mission's TODO
   # entries is in its instructions). The gate contradicted the agent. Measured in the SQ-97
   # pilot: 0 `✗` items in the file and a failure all the same.
-  local pending_cell
-  pending_cell="$(awk -F'|' '
+  #
+  # `⛔` is the one pending value with a way out (ADR 0013): a path the harness refuses — headless
+  # `claude -p` denies Edit/Write under `.claude/`, and in SQ-145/SQ-146 the session routed around
+  # it through python in Bash — is a boundary, and the honest answer is the text to apply, left for
+  # the human in the PR. So the awk tags each row it prints: `P|<status>` for a pending cell and
+  # `B|<document>` for a ⛔, the document being the SECOND column of the table as the author wrote
+  # it, markup stripped. VS16 (U+FE0F) after the ⛔ is the same value, as some editors write it.
+  local rows row pending_cell="" blocked_docs=()
+  rows="$(awk -F'|' '
       # find the header and remember which column holds Status
       !col && /^[ \t]*\|/ {
         for (i = 2; i < NF; i++) {
@@ -1671,16 +1678,32 @@ gate_DOCS() {
         # empty cell: stripped to nothing it would be skipped below as if the row were not there,
         # so it is pending, quoted as written (review r1 of 20260926).
         raw = cell; gsub(/[*`]/, "", cell)
-        if (cell == "" && raw != "") { print raw; next }
+        if (cell == "" && raw != "") { print "P|" raw; next }
         # `:?-+:?` — with a formatter-aligned separator (`|:---:|`) the Status column of the
         # separator row read as a pending Status, and gate_DOCS failed a drift checklist with
         # nothing pending in it. Same regex in checkpoint_rows and gate_REVIEW.
         if (cell ~ /^:?-+:?$/ || cell == "") next
         if (cell == "✅" || cell == "n/a" || cell == "N/A") next
-        print cell
+        if (cell == "⛔" || cell == "⛔\357\270\217") {
+          doc = $3; gsub(/^[ \t]+|[ \t]+$/, "", doc); gsub(/[*`]/, "", doc)
+          print "B|" doc; next
+        }
+        print "P|" cell
       }
       col && !/^[ \t]*\|/ { exit }   # the table ended
     ' "$d")"
+  # Admission written POSITIVELY (CLAUDE.md): only a `B|` row is a ⛔; every other line the awk
+  # prints is pending, tagged or not — an untagged line dropped here would pass the gate in silence,
+  # which is how the markup-only branch read the first draft of this loop. No probe of its own: no
+  # branch of the awk prints an untagged line today, and this arm decides which failure one would be.
+  while IFS= read -r row; do
+    case "$row" in
+      "") ;;
+      B\|*) blocked_docs+=("${row#B|}") ;;
+      *) pending_cell+="${row#P|}"$'\n' ;;
+    esac
+  done <<< "$rows"
+  pending_cell="${pending_cell%$'\n'}"
   if [ -n "$pending_cell" ]; then
     # Every pending row is printed and COUNTED, and the count goes into the reason: no-work's form
     # (a) compares reasons word for word, and a session that fixed one of two ✗ rows used to leave
@@ -1691,6 +1714,30 @@ gate_DOCS() {
     pending_cell="${pending_cell%%$'\n'*}"
     GATE_WHY="45-docs.md has $pending_n area(s) pending in the drift checklist (the first with Status '$pending_cell') — every row needs ✅ (with a hash) or a justified n/a"
     return 1
+  fi
+  # A ⛔ passes only when the proposed-text section NAMES its document: the lines after
+  # `<!-- sdd:proposed -->` up to the next `## ` heading or the end of the file, read with `grep -F`
+  # on the document's literal name. Per row, because "⛔ only with its proposed text" is a promise
+  # about each row — a bare marker, or a section proposing text for another file, is the promise
+  # with nothing behind it. And the pass is LOUD: it names every document waiting for the human.
+  # DECLARED LIMIT: this proves each ⛔ has a proposal that names its document, never that the text
+  # is right. The human who applies it in the PR is who judges it.
+  if [ "${#blocked_docs[@]}" -gt 0 ]; then
+    local proposed doc named="" missing="" n_missing=0
+    proposed="$(awk 'on && /^## / { exit } on { print } /<!-- sdd:proposed -->/ { on = 1 }' "$d")"
+    for doc in "${blocked_docs[@]}"; do
+      if [ -n "$doc" ] && grep -qF -- "$doc" <<< "$proposed"; then
+        named+="${named:+, }$doc"
+      else
+        missing+="${missing:+, }${doc:-(no document)}"; n_missing=$((n_missing + 1))
+      fi
+    done
+    if [ -n "$missing" ]; then
+      GATE_WHY="45-docs.md has $n_missing ⛔ row(s) with no proposed text: $missing — a ⛔ needs the text to apply, naming its document, under a section marked <!-- sdd:proposed -->"
+      return 1
+    fi
+    GATE_WHY="drift checklist complete — ${#blocked_docs[@]} ⛔ row(s) wait for a human to apply the proposed text in the PR: $named"
+    return 0
   fi
   GATE_WHY="drift checklist complete"
   return 0

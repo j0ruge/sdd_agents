@@ -5148,6 +5148,16 @@ chmod +x "$OUTSIDE/stub/claude"
 "$SDD" run "$MISSION" --phase REVIEW >/dev/null 2>&1; rc=$?
 assert_eq "hat: …but the session that COMMITS that file crossed — the diff half still sees it" "3 hat-crossed" "$rc $(hat_rows)"
 git -C "$FIX" reset -q --hard HEAD~1; git -C "$FIX" clean -qfd
+# The DOCS hat no longer declares `.claude/rules/**` (20260928-os-achados-da-janela, achado 6):
+# headless `claude -p` refuses Edit/Write there, and in SQ-145 and SQ-146 the session routed around
+# the refusal with python through Bash — which this guard accepted, the path being in writes:. With
+# it out, the same route is a crossing. The catalogue mutates bin/, not agents/: this assertion is
+# what holds the cut in the hat's frontmatter.
+hat_reset
+hat_stub ".claude/rules/zz-probe.md" commit
+"$SDD" run "$MISSION" --phase DOCS >/dev/null 2>&1; rc=$?
+assert_eq "hat: a DOCS session that writes .claude/rules/ stops the line" "3 hat-crossed" "$rc $(hat_rows)"
+git -C "$FIX" reset -q --hard HEAD~1; git -C "$FIX" clean -qfd
 # Door 2 sits BEFORE the gate-pass branch: a retry that crosses its hat AND satisfies the gate
 # still stops (the review of this branch found the door after the `continue`). DOCS is the phase:
 # gate_DOCS reads one artifact, so the stub can satisfy it and cross in the same commit.

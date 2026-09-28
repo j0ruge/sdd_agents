@@ -66,7 +66,9 @@ target repo. Fill it **from what is in the handoffs**, inventing nothing and sof
 - **new sensors** — the tests and specs that start running in CI from this PR onwards;
 - **decisions for a human** — the union of the open questions from every handoff, as a checklist.
   This section is why the pipeline does not stall on human judgement: it arrives together with the
-  code, in the right place to decide;
+  code, in the right place to decide. It also carries every `⛔` row of `45-docs.md`, with its
+  proposed text quoted, as a checklist item the human applies before the merge — a path the
+  harness refused the DOCS session, which only the human may write;
 - **out-of-scope findings** — what went to `TODO_FILE`;
 - **risks and not-dones** — honest. If QA was `skipped`, say so and why. If the review closed as
   `draft` because iterations ran out, state the real grade.

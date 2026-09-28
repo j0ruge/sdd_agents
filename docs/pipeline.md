@@ -410,8 +410,20 @@ lowers its **own** bar instead of stopping, and it records the fact once per run
 
 **Passes when:** `45-docs.md` exists with the drift checklist and **no pending item** in it. The
 gate reads the `Status` COLUMN of the table, locating it by header position: every row must be
-`✅` or `n/a`, and anything else fails, quoted verbatim in the reason. Every area touched by the
-diff gets `✅` with a commit hash or `n/a` with a concrete justification.
+`✅`, `n/a` or a `⛔` with its proposed text, and anything else fails, quoted verbatim in the reason.
+Every area touched by the diff gets `✅` with a commit hash or `n/a` with a concrete justification.
+
+**`⛔` is a path the harness refused** ([ADR 0013](adr/0013-o-relatorio-da-missao-e-o-texto-proposto.md)).
+Headless `claude -p` denies `Edit`/`Write` under `.claude/`, and `.claude/rules/**` is out of the
+`sdd-docs` hat's `writes:` — so a session that routes around the refusal through Bash stops the line
+as `hat-crossed`. The honest answer is the text to apply: the row reads `⛔`, and the section after a
+`<!-- sdd:proposed -->` line (up to the next `## ` heading) **names the row's document** — the second
+column — with the text under it. The gate checks that name row by row (a bare marker, or a proposal
+for another file, fails with `no proposed text: <document>`) and passes out loud:
+`drift checklist complete — N ⛔ row(s) wait for a human to apply the proposed text in the PR:
+<documents>`. It proves each `⛔` has a proposal naming its document, never that the text is right;
+`sdd-publisher` carries it into the PR's decisions-for-a-human checklist, and the human judges and
+applies it there.
 
 Reading the column, and not the whole file, is deliberate: an earlier version grepped the file for
 the word `TODO` and failed every `45-docs.md` that named `TODO.md` — which is exactly what
@@ -774,7 +786,10 @@ to lose everything after the first with rc 0 and no warning. That strictness is 
 would widen a hat the way `ADR_DIR=*` once did when it built the pattern `*/**` (CWE-863, PR #45).
 
 By **path** and not by directory, because the measured occurrences say so: `.claude/rules/**` and
-`.claude/napkin.md` are different decisions. A hat whose own `writes:` is empty already writes
+`.claude/napkin.md` are different decisions. ⚠️ The `sdd-docs` hat no longer declares
+`.claude/rules/**` (the headless harness refuses it, and the DOCS answer is a `⛔` with proposed text —
+see the DOCS gate above); an entry giving it back reopens the Bash route around the refusal, and is
+the project's call. A hat whose own `writes:` is empty already writes
 anywhere (`sdd-executor`); an entry naming it is accepted and **ignored**, and `sdd preflight` says
 so rather than leaving its author believing a declaration is in force. When the guard does stop the
 line, a `HAT-REMEDY` line beside the `HAT-CROSSED` one names this key — the operator of those three

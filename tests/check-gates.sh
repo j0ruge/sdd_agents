@@ -1872,6 +1872,41 @@ printf '# Docs\n\ndrift checklist\n\n| Area | Doc | Status | Evidence |\n|---|--
 git add -A && git commit -qm "chore: docs with a markup-only Status"
 assert_phase "a Status cell that is only markup is still pending" "DOCS"
 assert_why   "...and it is quoted as written" "DOCS" "Status '\*\*'"
+
+# --- ⛔: the path the harness refuses becomes proposed text (ADR 0013) -------------------------
+# The DOCS hat no longer writes `.claude/rules/` — headless `claude -p` refuses Edit/Write there,
+# and in SQ-145/SQ-146 the session routed around it through python in Bash. The honest session of
+# LH-4 left a `⛔` with the text to apply, and this gate failed every Status that was not ✅/n/a, so
+# the phase had no way out. Now a `⛔` passes when the section under `<!-- sdd:proposed -->` NAMES
+# its document — per row: the marker alone is the promise with nothing behind it — and the pass
+# says so out loud, naming what waits for the human in the PR.
+docs_blocked_table='# Docs\n\ndrift checklist\n\n| Area | Doc | Status | Evidence |\n|---|---|---|---|\n| runner | README | ✅ | commit abc1234 |\n| rules | `.claude/rules/x.md` | ⛔ | the harness refused Edit there |\n\n'
+printf "$docs_blocked_table"'## Proposed text\n<!-- sdd:proposed -->\n\nIn `.claude/rules/x.md`, append:\n\n> the rule the mission changed\n' > "$MDIR/45-docs.md"
+git add -A && git commit -qm "chore: docs with a proposed ⛔"
+assert_why   "DOCS gate passes a ⛔ row that carries proposed text, and names it" "DOCS" \
+             'wait for a human.*\.claude/rules/x\.md'
+assert_phase "a ⛔ row with its proposed text lets the phase advance" "PR"
+printf "$docs_blocked_table"'Nothing else to say.\n' > "$MDIR/45-docs.md"
+git add -A && git commit -qm "chore: docs with a bare ⛔"
+docs_why="$( cd "$FIX" && "$SDD" why "$MISSION" DOCS 2>&1 )"
+assert_eq "DOCS gate refuses a ⛔ row without the proposed-text marker" "DOCS|1" \
+  "$( cd "$FIX" && "$SDD" phase "$MISSION" 2>&1 )|$(grep -c 'no proposed text' <<< "$docs_why")"
+# The marker is there and the section proposes text — for ANOTHER document. What this separates is
+# "has a marker" from "has a proposal for this row", which is the whole promise.
+printf "$docs_blocked_table"'## Proposed text\n<!-- sdd:proposed -->\n\nIn `.claude/rules/other.md`, append a line.\n' > "$MDIR/45-docs.md"
+git add -A && git commit -qm "chore: docs proposing text for another document"
+docs_why="$( cd "$FIX" && "$SDD" why "$MISSION" DOCS 2>&1 )"
+assert_eq "DOCS gate refuses a ⛔ row whose document is absent from the proposed section" "DOCS|1" \
+  "$( cd "$FIX" && "$SDD" phase "$MISSION" 2>&1 )|$(grep -c 'no proposed text: \.claude/rules/x\.md' <<< "$docs_why")"
+# The section ENDS at the next `## ` heading: a document named only below it was not proposed.
+printf "$docs_blocked_table"'## Proposed text\n<!-- sdd:proposed -->\n\nNothing yet.\n\n## Findings\n\n`.claude/rules/x.md` came up in review.\n' > "$MDIR/45-docs.md"
+git add -A && git commit -qm "chore: docs naming the document only past the section"
+assert_phase "a document named only after the proposed section ends is not a proposal" "DOCS"
+# ...and a ✗ beside a proposed ⛔ is still today's pending reason, counted without the ⛔.
+printf '# Docs\n\ndrift checklist\n\n| Area | Doc | Status | Evidence |\n|---|---|---|---|\n| runner | README | ✗ | pending |\n| rules | `.claude/rules/x.md` | ⛔ | refused |\n\n## Proposed text\n<!-- sdd:proposed -->\n\n`.claude/rules/x.md`: the line.\n' > "$MDIR/45-docs.md"
+git add -A && git commit -qm "chore: docs with a ✗ and a proposed ⛔"
+assert_why   "a ✗ beside a proposed ⛔ is still pending, and the ⛔ is not counted" "DOCS" \
+             "has 1 area\\(s\\) pending .*Status '✗'"
 # Back to the formatter-aligned table the next block was written against.
 printf '# Docs\n\ndrift checklist\n\n| Area | Doc | Status | Evidence |\n|:------|:----|:------:|:---------|\n| runner | README | ✅ | commit abc1234 |\n| libs | — | n/a | internal refactor |\n\nFindings recorded in TODO.md for this mission.\n' \
   > "$MDIR/45-docs.md"

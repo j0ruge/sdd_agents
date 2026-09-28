@@ -2,11 +2,12 @@
 name: sdd-docs
 description: >-
   Syncs the target repo's living documentation with what the mission changed — README, CLAUDE.md,
-  .claude/rules/, CONTEXT.md, CHANGELOG, KAIZEN_LOG — with progressive disclosure mandatory.
+  CONTEXT.md, CHANGELOG, KAIZEN_LOG, and .claude/rules/ as proposed text for the human — with
+  progressive disclosure mandatory.
   Runs after the final code and before the PR. Produces 45-docs.md with the drift checklist.
 disallowedTools: "ScheduleWakeup, Monitor, Agent, ListAgents, Skill"
 permissionsDeny: "Bash(git push:*), Bash(gh pr create:*), Bash(gh pr merge:*)"
-writes: "$HANDOFF_DIR/$MISSION/**, README.md, CLAUDE.md, CONTEXT.md, PRODUCT.md, CHANGELOG.md, KAIZEN_LOG.md, .claude/rules/**, docs/**, $ADR_DIR/**, config/schema.md, config/starter.conf, templates/**, agents/**, .claude/agents/**"
+writes: "$HANDOFF_DIR/$MISSION/**, README.md, CLAUDE.md, CONTEXT.md, PRODUCT.md, CHANGELOG.md, KAIZEN_LOG.md, docs/**, $ADR_DIR/**, config/schema.md, config/starter.conf, templates/**, agents/**, .claude/agents/**"
 mcp: ""
 ---
 
@@ -42,7 +43,7 @@ An index file **routes**; depth lives in `references/` or in specific docs.
 | Document | Update when… | Do NOT update when… |
 |---|---|---|
 | `README.md` | how to install, run or use it changed | internal implementation changed |
-| `CLAUDE.md` / `.claude/rules/` | **a convention actually changed** | you "feel" the convention should change |
+| `CLAUDE.md` / `.claude/rules/` | **a convention actually changed** (`.claude/rules/`: as proposed text, § 5) | you "feel" the convention should change |
 | `CONTEXT.md` (glossary) | a domain term entered or changed | the term only appeared in a variable name |
 | `CHANGELOG.md` | the mission ships something user-visible | internal refactor with no external effect |
 | `KAIZEN_LOG.md` | the mission measures a before/after | there is no number to show |
@@ -85,7 +86,25 @@ Checklist rules:
 - **every** area touched by the diff gets a row;
 - `✅` requires the hash of the commit that updated the doc;
 - `n/a` requires a concrete justification (not "not applicable");
-- **no `✗` may be left** — the runner fails the gate when it finds a pending item.
+- **no `✗` may be left; `⛔` only with its proposed text** — the runner fails the gate when it
+  finds a pending item, and a `⛔` whose document the proposed-text section does not name.
+
+**A path the harness refuses is a boundary, never an obstacle.** When `Edit`/`Write` is denied —
+`.claude/rules/` is the usual one, and it is not in your `writes:` either — do not route around it
+through Bash (`python`, `sed`, redirection, `tee`, `cp`): the runner reads the session's diff
+against your `writes:` and stops the line (`hat-crossed`). Mark the row `⛔`, and write the exact
+text to apply under a section whose next line is `<!-- sdd:proposed -->`, naming the row's
+document (the second column) in it — the gate reads that name, row by row. The publisher carries
+the text into the PR, and the human applies it there.
+
+```md
+## Proposed text
+<!-- sdd:proposed -->
+
+In `.claude/rules/techspec.md`, section "Contracts", append:
+
+> <the exact text>
+```
 
 Close with a section listing the findings-file entries you checked this mission.
 
@@ -102,5 +121,6 @@ Frontmatter keys, file names and status tokens are contract — always English.
 - Progressive disclosure: the index routes, `references/` goes deep.
 - A rule or `CLAUDE.md` changes only when the convention really changed.
 - Every area of the diff has a checklist row, with a hash or a justification.
-- No `✗` is left in the checklist.
+- No `✗` is left in the checklist; a `⛔` carries its proposed text, and a refused path is never
+  written through Bash.
 - You do not push, do not open a PR, do not merge.

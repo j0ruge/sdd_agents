@@ -103,6 +103,14 @@ grows one name per project, and this key is what replaces it.
 By **path** and not by directory, because the three measured occurrences say so: `.claude/rules/**`
 and `.claude/napkin.md` are different decisions and a project may want one without the other.
 
+⚠️ Since `20260928-os-achados-da-janela` the `sdd-docs` hat does **not** declare `.claude/rules/**`:
+headless `claude -p` refuses `Edit`/`Write` there, and in SQ-145/SQ-146 the session routed around
+the refusal through Bash, which the guard accepted because the path was in `writes:`. The hat now
+leaves a `⛔` row with proposed text and the human applies it in the PR (ADR 0013). Giving the path
+back with `sdd-docs: .claude/rules/**` reopens exactly that route — the harness still refuses the
+tools, so the only way to write there is the one this cut exists to stop. It is the project's
+decision to make, and this is what it costs.
+
 ```sh
 # the two exceptions the pilot target actually needs
 HAT_WRITES_EXTRA="sdd-qa: .github/workflows/e2e-staging.yml; sdd-docs: .claude/napkin.md"
