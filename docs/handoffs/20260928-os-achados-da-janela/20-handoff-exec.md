@@ -4,7 +4,7 @@ fase: EXEC
 status: done
 sessao: 4d26d92f-6c4b-403b-b867-8ff2bc9e2a51
 data: 2026-09-28 19:05
-gate: "bash tests/run-all.sh → suite green (rc 0, 237 s, 0 FAIL) sobre 3ac59ee; check-mutation.sh --anchors → all 435 mutants still apply; check-todo --check → 86 finding(s), every anchor on target; sdd adr check --mission … --phase exec → rc 0; os 7 Checks do checkpoint com o esperado (86/11/placed/1, 111/4, 1111/1, 1111/0/same, 111/1, 11, 1/1/1/1/1/86)"
+gate: "bash tests/run-all.sh → suite green (rc 0, 240 s, 0 FAIL) sobre ec95baf (depois da revisão final); check-mutation.sh --anchors → all 440 mutants still apply; check-todo --check → 86 finding(s), every anchor on target; sdd adr check --mission … --phase exec → rc 0; os 7 Checks do checkpoint com o esperado (86/11/placed/1, 111/4, 1111/1, 1111/0/same, 111/1, 11, 1/1/1/1/1/86)"
 ---
 
 # Handoff — EXEC — os achados da janela do juiz
@@ -16,8 +16,9 @@ consertados: 4, relatório de QA da missão (`121a696`); 3, `APP_EXPECT` (`4423b
 `⛔` e texto proposto (`1ffee16`); 7, o close faz fast-forward (`c320630`); 8, `CHECKOUT-UNAVAILABLE`
 nomeado (`fbaf9a1`). Três foram registrados no `TODO.md` (1, 2 e 5; catraca 83 → 86, `48e89b7`).
 O fechamento (`3ac59ee`) trouxe a ADR 0013 aceita, o KAIZEN_LOG, o `CONTEXT.md`, a anatomia e a
-gaveta. O catálogo foi de 422 para 435 mutantes, e cada um novo morre pela asserção que o nomeia. A
-missão rodou inline, sem `sdd run`. Falta a revisão final, o PR e o `sdd health` uma vez.
+gaveta. A revisão final da branch (revisor de contexto novo) achou 3 Important, consertados em
+`ec95baf`. O catálogo foi de 422 para 440 mutantes, e cada um novo morre pela asserção que o
+nomeia. A missão rodou inline, sem `sdd run`. Falta o PR, os revisores dele e o `sdd health`.
 
 ## Estado do repo
 
@@ -44,6 +45,12 @@ missão rodou inline, sem `sdd run`. Falta a revisão final, o PR e o `sdd healt
   remédio sondado. Um mutante.
 - `3ac59ee`: I7, `RESOLVED by 121a696`, KAIZEN_LOG, ADR 0013 `accepted`, piso do `check-lang` em 55,
   `CONTEXT.md`, anatomia (§ 4 e § 6) e gaveta.
+
+- `ec95baf`: revisão final. `app_probe` só lê `wrong` numa página 2xx (redirecionamento ou página de
+  erro viram `unknown`). O remédio do Python aparece só para requisito de build. O `gate_DOCS` lê
+  todas as seções marcadas, ignora `## ` dentro de bloco de código e exige que o documento seja um
+  nome. Os resíduos do range (é do HEAD, não da missão) estão declarados. Stale e "achado" na
+  superfície inglesa. Cinco mutantes.
 
 ## Artefatos
 
@@ -86,6 +93,11 @@ O que o diff muda para quem usa o kit:
 - **Mais estrito para quem já rodava QA em branch com relatório velho:** a fase passa a exigir o
   relatório da própria missão. É o custo pretendido (ADR 0013, Consequences). Continuam no resíduo
   declarado: a missão cuja `branch:` é a base, e a `DEFAULT_BRANCH` sem ref local.
+- **Minors adiados da revisão final** (decisão do humano): relatório renomeado na branch e nome
+  com espaço no `git status` (falham fechados, com motivo impreciso); a coluna do documento fixa em
+  `$3`; o `sdd-docs` não nomeia o `sdd install --force` para os espelhos; o `start_page_server` não
+  prova que o servidor na porta é o seu; `unavailable()` sob Python < 3.5; o close compara com o
+  ref de rastreio, não com o `FETCH_HEAD`, em refspec fora do padrão.
 - **Sem probe:** a linha sem prefixo no laço do `gate_DOCS` (nenhum ramo do awk a imprime hoje; o
   comentário declara isso) e o mundo "sem `timeout(1)`" do close.
 - **O `sdd health` (catálogo inteiro) não rodou.** Cada mutante novo foi aplicado numa cópia e morto
