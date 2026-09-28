@@ -419,8 +419,14 @@ nunca o mutante apagado.
    - Depois, `./bin/sdd install --force` para o espelho.
 2. **`gate_DOCS`**: o `awk` passa a separar as células `⛔` das pendentes.
    - Se sobrar pendente que não é `⛔`, é o motivo de hoje.
-   - Se houver `⛔` e o arquivo **não** tiver a linha `<!-- sdd:proposed -->`: `GATE_WHY="45-docs.md has N ⛔ row(s) with no proposed text — a ⛔ needs the text to apply under a section marked <!-- sdd:proposed -->"` e reprova.
-   - Com o marcador, passa em voz alta: `GATE_WHY="drift checklist complete — N ⛔ row(s) wait for a human to apply the proposed text in the PR: <docs das linhas, separados por vírgula>"`. A coluna do documento é a segunda da tabela.
+   - A **seção de texto proposto** é o que vem depois da linha `<!-- sdd:proposed -->` até o próximo
+     heading `## ` ou o fim do arquivo. Cada linha `⛔` precisa ter o seu documento (a segunda coluna
+     da tabela) citado nessa seção, pelo nome literal (`grep -F`). O marcador sozinho, ou uma seção
+     vazia, não basta: é a promessa "`⛔` só com o seu texto proposto" medida por linha.
+   - Se houver `⛔` cujo documento a seção não cita, ou não houver marcador: `GATE_WHY="45-docs.md has N ⛔ row(s) with no proposed text: <docs sem proposta> — a ⛔ needs the text to apply, naming its document, under a section marked <!-- sdd:proposed -->"` e reprova.
+   - Com todas as linhas `⛔` citadas, passa em voz alta: `GATE_WHY="drift checklist complete — N ⛔ row(s) wait for a human to apply the proposed text in the PR: <docs das linhas, separados por vírgula>"`. A coluna do documento é a segunda da tabela.
+   - Limite declarado no comentário do gate: ele prova que cada `⛔` tem uma proposta que nomeia o
+     documento, não que o texto está certo. Quem julga o texto é o humano, no PR.
    - Sem `⛔`, `drift checklist complete`, como hoje.
 3. **`agents/sdd-publisher.md` § 4**: em "decisions for a human", acrescentar "every `⛔` row of
    `45-docs.md`, with its proposed text quoted, as a checklist item the human applies before the
@@ -440,15 +446,20 @@ nunca o mutante apagado.
   do `45-docs.md`:
   - `DOCS gate passes a ⛔ row that carries proposed text, and names it`: tabela com uma linha `✅` e uma `⛔` com Doc `.claude/rules/x.md`, mais `## Texto proposto` + `<!-- sdd:proposed -->` + texto. `assert_why … DOCS 'wait for a human.*\.claude/rules/x\.md'`, e a fase passa da DOCS.
   - `DOCS gate refuses a ⛔ row without the proposed-text marker`: a mesma tabela sem a seção; a fase fica em DOCS e o motivo casa `no proposed text`.
-  - Hoje as duas ficam em DOCS com `pending`: a primeira é vermelha antes.
+  - `DOCS gate refuses a ⛔ row whose document is absent from the proposed section`: a mesma tabela,
+    com `## Texto proposto` + `<!-- sdd:proposed -->` mas o texto citando **outro** documento
+    (`.claude/rules/outro.md`); a fase fica em DOCS e o motivo casa `no proposed text: .claude/rules/x\.md`.
+    É a asserção que separa "tem marcador" de "tem proposta para esta linha".
+  - Hoje as três ficam em DOCS com `pending`: a primeira é vermelha antes.
 - **Em `tests/check-autonomy.sh`**, no regime do chapéu (`:5010-5060`):
   - fazer `hat_reset`, `hat_stub ".claude/rules/zz-probe.md" commit` e `"$SDD" run "$MISSION" --phase DOCS`;
   - asserção `hat: a DOCS session that writes .claude/rules/ stops the line`: `assert_eq … "3 hat-crossed" "$rc $(hat_rows)"`. Hoje o caminho está no `writes:`, e o kind **não** é `hat-crossed`;
   - desfazer como os vizinhos (`git -C "$FIX" reset -q --hard HEAD~1; git -C "$FIX" clean -qfd`).
 
 **Check:** ver `checkpoint.md`.
-**Sensor durável:** as três asserções, mais estes mutantes:
+**Sensor durável:** as quatro asserções, mais estes mutantes:
 - `mut_DOCS_blocked_rows_pass_without_proposal`: a exigência do marcador some.
+- `mut_DOCS_proposal_not_per_row`: a checagem por linha vira "o marcador existe".
 - `mut_DOCS_blocked_rows_unnamed`: o motivo deixa de nomear as linhas `⛔`.
 - O corte no `writes:` é segurado pela asserção do `check-autonomy.sh`. O catálogo muta o `bin/`, não o `agents/`.
 **Reversível por:** `git revert` e `./bin/sdd install --force`.
@@ -463,7 +474,10 @@ também fazer o fast-forward:
    fast-forward".
 2. `GIT_TERMINAL_PROMPT=0 timeout 30 git -C "$REPO_ROOT" fetch --quiet <remoto> <branch>`, com
    remoto e branch tirados do upstream.
-   - Se `timeout` não existir, roda sem ele.
+   - Se `timeout` não existir, **não** faz o fetch, porque um fetch sem teto pode pendurar o close:
+     `warn "back on '…'; no timeout(1) to bound the fetch — run 'git pull --ff-only' by hand"`, e
+     segue para o passo 3 contra o upstream que já está na máquina (o `merge --ff-only` local não
+     pendura).
    - Falha ⇒ `warn "back on '…', but could not fetch <upstream> — run 'git pull --ff-only' by hand. git said: …"`.
 3. `git -C "$REPO_ROOT" merge --ff-only --quiet "@{upstream}"`.
    - Falha (divergida) ⇒ `warn "… has diverged from <upstream>; nothing was forced — reconcile by hand"`.

@@ -19,8 +19,9 @@ missões sem mão humana nenhuma.
 
 **Limites declarados:** misturas diferentes (1 repo × 2), harness diferente entre as fatias
 (2.1.282 × 2.1.283), `window_missions_stranded: 7`. Veredito e análise em
-`docs/handoffs/20260928-os-achados-da-janela/05-verdict.md`; os oito achados `kit:` da janela viram
-a missão nascida na mesma pasta.
+`docs/handoffs/20260928-os-achados-da-janela/05-verdict.md`. Os oito achados `kit:` da janela viram
+a missão da mesma pasta, replanejada no grill: ela conserta cinco (3, 4, 6, 7 e 8) e registra três
+(1, 2 e 5) no `TODO.md`.
 
 ---
 

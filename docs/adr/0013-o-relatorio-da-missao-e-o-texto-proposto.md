@@ -67,8 +67,11 @@ future session. The two authorities disagreed, with two outcomes:
    sensor is in force the moment this merges. `.claude/agents/**` stays, because `sdd install --force`
    is the sanctioned route for the mirrors.
 5. **A `⛔` row passes `gate_DOCS` loudly, and only with its proposed text.** The row is accepted
-   when `45-docs.md` carries the proposed-text section under the `<!-- sdd:proposed -->` marker. The
-   passing reason names every `⛔` row, as the `deferred` genre does in `gate_QA` (ADR 0009).
+   when `45-docs.md` carries the proposed-text section under the `<!-- sdd:proposed -->` marker and
+   that section names the document of **every** `⛔` row. The marker alone, or an empty section, does
+   not pass: the promise is measured row by row. The passing reason names every `⛔` row, as the
+   `deferred` genre does in `gate_QA` (ADR 0009). The gate proves that each `⛔` has a proposal for
+   its document, not that the text is right; the human judges the text in the PR.
    `sdd-publisher` carries the text into the PR's decisions for a human, and the human applies it at
    the merge gate, which is already theirs.
 

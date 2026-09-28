@@ -25,7 +25,7 @@ A janela do juiz (3 missões sobre `4fd0f31`: LH-4 no `lighthouse_project`, SQ-1
 `sales_quote`) deixou oito achados `kit:` medidos. O grill escolheu **consertar cinco** — os que
 custaram sessão, humano ou uma fase inteira na janela e cabem sem reverter ADR — e **registrar três**.
 
-Os cinco consertados, verificados nesta sessão (`bin/sdd` em `038a314`, idêntico a `4fd0f31`):
+Os cinco a consertar, verificados nesta sessão (`bin/sdd` em `038a314`, idêntico a `4fd0f31`):
 
 - **Achado 4 — a QA fecha com o relatório de OUTRA missão (fail-open).** `qa_substep`
   (`bin/sdd:1873`) e a Âncora 1 do `gate_QA` (`bin/sdd:1161`) escolhem
@@ -77,7 +77,8 @@ Seis fatos binários, cada um com sensor na suíte:
 4. Com `APP_EXPECT` declarado e ausente da página da `APP_URL`, o preflight reprova (com
    `E2E_CMD`) e o `gate_QA` com e2e vermelho nomeia o app errado. Hoje: "something is listening".
 5. Uma sessão DOCS que escreve em `.claude/rules/` para a linha com `hat-crossed`; uma linha `⛔`
-   com a seção de texto proposto passa no `gate_DOCS` **nomeada** no motivo. Hoje: o contorno passa
+   cujo documento a seção de texto proposto cita passa no `gate_DOCS` **nomeada** no motivo, e o
+   marcador sem proposta para a linha reprova. Hoje: o contorno passa
    calado e o `⛔` honesto não tem saída.
 6. `bash tests/check-todo.sh --count TODO.md` → `86` e `tests/health-baseline.txt` com
    `todo-findings 86` (83 + os três registrados).
@@ -176,7 +177,8 @@ num contrato lido por dois chamadores (`wrong` no `app_probe`) e muda o contrato
    rede, sem upstream ou divergida ⇒ `warn`, nunca `die`; o `ok` diz se houve fast-forward.
 6. **DOCS (achado 6): fronteira + pendência nomeada no PR.** `.claude/rules/**` sai do `writes:` do
    `sdd-docs` (o `.claude/agents/**` e a rota `sdd install --force` ficam); o `hat-crossed` é o
-   sensor do contorno; `⛔` com a seção de texto proposto passa no `gate_DOCS` em voz alta; o
+   sensor do contorno; `⛔` com texto proposto que cita o seu documento passa no `gate_DOCS` em voz
+   alta (o marcador sozinho não basta); o
    `sdd-publisher` leva o texto às pendências do PR; o humano aplica no PR. Descartados: parar a
    linha (toda missão do `sales_quote` pararia), permissão explícita (não verificada e dá a um
    agente headless poder sobre as regras de toda sessão futura), só a frase (sem sensor).
