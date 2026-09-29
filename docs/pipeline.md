@@ -244,13 +244,16 @@ journeys in a project with no browser is the paperwork `skipped` exists to avoid
 
 - **the evidence of the journey walked**, which takes two forms depending on the project:
   - **with an interface** (`E2E_CMD` or `APP_URL` set) — the most recent report **the mission
-    branch added** to `<QA_DOCS_PATH>/reports/` (in `merge-base(DEFAULT_BRANCH, HEAD)..HEAD`, or
-    new in the tree) is `**Status:** closed` and no row of the session matrix is still `Pending`.
-    A report the branch only edited is not the mission's, and ownership follows renames: the
-    branch's commits are replayed oldest first (`-M`, `-z`), an add grants it and a rename carries
-    it only from a report the mission already owned — `git mv` of another mission's report does
-    not make it this one's. With an **empty range** (HEAD reachable from the base: a mission on the base branch,
-    or one already merged) the gate reads the most recent report in the tree, as before. One
+    branch added** to `<QA_DOCS_PATH>/reports/` (in its own commits, `HEAD --not` the local and the
+    remote `DEFAULT_BRANCH`, or new in the tree) is `**Status:** closed` and no row of the session
+    matrix is still `Pending`. Three facts decide ownership: the commits are the mission's only when
+    no copy of the base has them (a base pulled into the branch brings no report along); a path the
+    base tree already has is never new (an edit, a revert, a `git rm --cached` of another mission's
+    report grant nothing); and a rename carries ownership only from a report the mission already
+    owned, replayed parents first. The commits are read with plumbing, which no user git config
+    reaches. With an **empty range** (HEAD has nothing the base lacks: a mission on the base
+    branch, or one already merged, upstream included) the gate reads the most recent report in the
+    tree, as before. One
     function (`mission_qa_report`) answers for this anchor and for `qa_substep`, so the sub-step and
     the gate never disagree about which file is the mission's — the charter stays out, because it is
     durable doc that crosses cycles ([ADR 0013](adr/0013-o-relatorio-da-missao-e-o-texto-proposto.md));

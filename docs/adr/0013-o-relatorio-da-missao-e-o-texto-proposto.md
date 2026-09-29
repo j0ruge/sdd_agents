@@ -53,9 +53,11 @@ future session. The two authorities disagreed, with two outcomes:
 ## Decision
 
 1. **A report belongs to the mission if the mission added it.** The report must have been added
-   (`--diff-filter=A`, never merely modified) in `git merge-base "$DEFAULT_BRANCH" HEAD..HEAD`, or be
-   new in the working tree (untracked, or staged as added). ONE function answers it, and
-   `qa_substep` and Anchor 1 both call it.
+   (never merely modified) in `git merge-base "$DEFAULT_BRANCH" HEAD..HEAD`, or be new in the
+   working tree (untracked, or staged as added). ONE function answers it, and `qa_substep` and
+   Anchor 1 both call it. (Refined after the codereview of 2026-09-28 and its three follow-up
+   rounds, see Implementation: the range is `HEAD --not` the local and remote base, a path the base
+   tree already has is never new, and ownership follows the rename chain.)
 2. **An empty range keeps today's answer.** That covers standing on the default branch, and a
    mission that is already merged. The criterion only applies where it can be decided. Seen from
    the default branch or from its own branch, a merged mission never goes back to QA.
@@ -86,28 +88,37 @@ future session. The two authorities disagreed, with two outcomes:
 This is the shape the mission shipped: I2 (`121a696`) for decisions 1 to 3, I4 (`1ffee16`) for 4
 and 5. It was checked against the code when the ADR was accepted.
 
-- The function sits next to `latest_matching` and returns an absolute path, or empty. It replays
-  `git log --reverse -M --diff-filter=AR --name-status -z --format= <base>..HEAD -- <reports>` and
-  then reads `git status --porcelain -z -uall --find-renames -- <reports>`: an add (or a staged
-  copy) grants ownership, and a rename carries it only from a path the mission already owned, so
-  `git mv` of another mission's report does not make it this one's. `-M` and `--find-renames`
-  override a user's config that switches detection off; `-z` because git quotes a space or a `"`.
-  (The first shape read `--diff-filter=A` without renames; the codereview of 2026-09-28 and its two
-  follow-up rounds brought it here.) `-uall` is load-bearing, because without it an
+- The function sits next to `latest_matching` and returns an absolute path, or empty. The mission's
+  commits are `HEAD --not` every resolving ref of `DEFAULT_BRANCH`, its upstream and
+  `origin/<DEFAULT_BRANCH>` (`mission_base_refs`): the local ref alone goes stale, and a base
+  pulled into the branch brought another mission's report into `merge-base..HEAD`. It replays them
+  with plumbing, parents first — `git rev-list --reverse --topo-order HEAD --not <refs> | git
+  diff-tree --stdin -r -M -z --no-commit-id --name-status --diff-filter=AR -- <reports>` — and then
+  reads `git status --porcelain -z -uall --find-renames -- <reports>`. An add, an untracked file, a
+  staged add, an intent-to-add or a staged copy grants ownership only to a path absent from the tree
+  of every merge-base of HEAD with those refs (`path_in_commits`); a rename carries it only from a
+  path the mission already owned. Plumbing because no user config reaches it (`log.showSignature`
+  broke the porcelain read); `--topo-order` because date order replayed a rename before its add on a
+  skewed clock; `-M` and `--find-renames` because detection is otherwise off or configurable; `-z`
+  because git quotes a space or a `"`. (The first shape read `--diff-filter=A` over
+  `merge-base..HEAD` without renames; the codereview of 2026-09-28 and its three follow-up rounds
+  brought it here.) `-uall` is load-bearing, because without it an
   untracked directory is listed as the directory and not as its files. Among the mission's files it
-  picks the newest by the same `sort -V` as `latest_matching`. It computes the base with `|| true`
-  guards, because a missing `DEFAULT_BRANCH` must read as an empty range and never as a dead process.
+  picks the newest by the same `sort -V` as `latest_matching`. Every git read is guarded with
+  `|| true`, because a missing `DEFAULT_BRANCH` must read as an empty range and never as a dead
+  process.
   A candidate counts only when it is `-ef` the file `<reports>/<name>`: a direct child of `reports/`,
   as the glob of `latest_matching` reads, whatever spelling `QA_DOCS_PATH` has, and still on disk.
 - When the tree has reports but none of them belong to the mission, `gate_QA` refuses with a reason
-  that names the newest one and says it predates the mission branch, and `qa_substep` answers `exec`.
+  that names the newest one and says it "is not one this branch added" — never that it predates the
+  branch, which is false of a report git ignores — and `qa_substep` answers `exec`.
 - The `<!-- sdd:proposed -->` marker is structural and in English, like `<!-- sdd:open -->` in
   `TODO.md`. The heading above it follows `OUTPUT_LANG`. The proposed text is the lines after EVERY
   marker up to the next `## ` heading outside a code fence (proposed text for a rules file is
-  markdown and carries headings), or the end of the file. The document of a `⛔` row is the table's
-  second column with its markup stripped, looked up there with `grep -F`, and it has to be a name
-  (an alphanumeric in it: `—` matched any em-dash). A `⛔` followed by VS16 (U+FE0F) is the same
-  value.
+  markdown and carries headings), or the end of the file. The documents of a `⛔` row are the
+  table's second column with its markup stripped and split on commas (one `⛔` cell naming two
+  documents is two documents), each looked up there with `grep -F`, and each has to be a name (an
+  alphanumeric in it: `—` matched any em-dash). A `⛔` followed by VS16 (U+FE0F) is the same value.
 - `app_probe` reads the status: only a 2xx page without `APP_EXPECT` is `wrong`. A redirect or an
   error page without it is `unknown` (the right product may answer either), and with it is `up`.
 - The rows of the table are admitted positively: only a `⛔` row is exempt, and every other value is

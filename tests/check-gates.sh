@@ -955,8 +955,8 @@ assert_phase "with the later report gone the gate advances again" "REVIEW"
 git add -A && git commit -qm "chore: the QA fixture lands on the base" >/dev/null
 git checkout -q -b missao/qa-report-owner
 # The branch EDITS the base report instead of adding one: a mission that touches another
-# mission's report does not become its owner. That is the half of the rule a `--diff-filter=AM`
-# would lose, and why the commit here is not an arbitrary file.
+# mission's report does not become its owner. Held twice since review r4: the read never lists an
+# edit (`--diff-filter=AR`), and a path the base already has is never new.
 printf '<!-- touched on the mission branch -->\n' >> "$FIX/docs/qa/reports/2026-01-01-fixture.md"
 git add -A && git commit -qm "chore: the mission edits the base report" >/dev/null
 qa_owner_why="$( cd "$FIX" && "$SDD" why "$MISSION" QA 2>&1 )"
@@ -998,6 +998,55 @@ assert_phase "a report git stages as a copy is the mission's, as the log would r
 git reset -q --hard
 git config --unset status.renames
 
+# FOUR MORE ROADS to another mission's report, each reproduced by review r4 of the codereview fixes:
+# the mission has no report of its own here, so every one must still read "not one this branch
+# added". What they share is the state the function now keeps: the mission's commits are HEAD --not
+# the local AND remote base, and a path the base already has is never new.
+qa_refused() { # qa_refused <assertion name>
+  assert_eq "$1" "QA|1" \
+    "$( cd "$FIX" && "$SDD" phase "$MISSION" 2>&1 )|$(grep -c 'is not one this branch added' <<< "$( cd "$FIX" && "$SDD" why "$MISSION" QA 2>&1 )")"
+}
+# (a) The base moved on upstream, the branch PULLED it, and the local base stayed where the ticket
+#     flow left it: merge-base(local, HEAD)..HEAD held every report merged upstream since.
+QA_REMOTE="$(mktemp -d "${TMPDIR:-/tmp}/sdd-qa-remote-XXXXXX")"
+git init -q --bare "$QA_REMOTE/origin.git"
+git remote add origin "$QA_REMOTE/origin.git"
+git push -q origin main 2>/dev/null
+git clone -q -b main "$QA_REMOTE/origin.git" "$QA_REMOTE/peer" 2>/dev/null
+cat > "$QA_REMOTE/peer/docs/qa/reports/2026-01-05-fixture-upstream.md" <<'EOF'
+# QA Run Report — 2026-01-05 — another mission, merged upstream
+- **Started:** 2026-01-05T10:00:00Z · **Status:** closed <!-- in-progress | closed -->
+| # | Charter | Status |
+|---|---|---|
+| 1 | CH-one | Pass |
+EOF
+git -C "$QA_REMOTE/peer" add -A
+git -C "$QA_REMOTE/peer" -c user.email=peer@example.com -c user.name=peer commit -qm "another mission's report"
+git -C "$QA_REMOTE/peer" push -q origin main 2>/dev/null
+git fetch -q origin
+git merge -q --no-edit origin/main >/dev/null
+qa_refused "a report another mission merged upstream, pulled into the branch, is not the mission's"
+git reset -q --hard HEAD~1
+git remote remove origin
+rm -rf "$QA_REMOTE"
+# (b) Deleted and brought back (a revert): the add is of a path the base already has.
+git rm -q "$FIX/docs/qa/reports/2026-01-01-fixture.md"
+git commit -qm "chore: the mission deletes the base report" >/dev/null
+git revert --no-edit HEAD >/dev/null
+qa_refused "a report of the base deleted and restored in commits is not the mission's"
+git reset -q --hard HEAD~2
+# (c) Untracked by `git rm --cached`: `D ` plus `??` for a path the base already has.
+git rm -q --cached "$FIX/docs/qa/reports/2026-01-01-fixture.md"
+qa_refused "a report of the base untracked in the index is not the mission's"
+git reset -q
+# (d) A NEW file with the base report's name, one directory down: owned, but not a direct child of
+#     reports/ — a `-e` in place of `-ef` read it as the base report beside it.
+mkdir -p "$FIX/docs/qa/reports/archive"
+cp "$FIX/docs/qa/reports/2026-01-01-fixture.md" "$FIX/docs/qa/reports/archive/2026-01-01-fixture.md"
+git add -A && git commit -qm "chore: the mission archives a copy one directory down" >/dev/null
+qa_refused "a mission file one directory below reports/ does not stand in for the base report"
+git reset -q --hard HEAD~1
+
 # PROVENANCE: ~/.claude/skills/qa-execution/assets/report-template.md:6, as the fixture above.
 # First UNCOMMITTED — the skill may leave the report in the tree when the gate reads it — then
 # committed: the two halves of "the mission wrote it".
@@ -1012,11 +1061,81 @@ qa_owner_why="$( cd "$FIX" && "$SDD" why "$MISSION" QA 2>&1 )"
 qa_owner_phase="$( cd "$FIX" && "$SDD" phase "$MISSION" 2>&1 )"
 assert_eq "QA gate accepts a closed report the mission wrote and has not committed yet" "REVIEW|0" \
   "$qa_owner_phase|$(grep -c 'is not one this branch added' <<< "$qa_owner_why")"
+# The two index states between untracked and committed (review r4): intent-to-add is ` A`, a
+# staged add is `A `, and each is the mission's.
+git add -N "$FIX/docs/qa/reports/2026-01-02-fixture-mine.md"
+assert_phase "QA gate accepts the mission's report marked intent-to-add" "REVIEW"
+git add "$FIX/docs/qa/reports/2026-01-02-fixture-mine.md"
+assert_phase "QA gate accepts the mission's report staged and not committed" "REVIEW"
 git add -A && git commit -qm "chore: the mission's own report" >/dev/null
 qa_owner_why="$( cd "$FIX" && "$SDD" why "$MISSION" QA 2>&1 )"
 qa_owner_phase="$( cd "$FIX" && "$SDD" phase "$MISSION" 2>&1 )"
 assert_eq "QA gate accepts the closed report the mission branch added" "REVIEW|0" \
   "$qa_owner_phase|$(grep -c 'is not one this branch added' <<< "$qa_owner_why")"
+# Four rules that held with nothing measuring them (review r4). Each world below leaves the
+# mission's closed report as the right answer, so a runner that broke the rule reads another file.
+# (e) Only `.md` is a report: a newer `.txt` of the mission's under reports/ is not the pick.
+printf 'notes\n' > "$FIX/docs/qa/reports/2026-01-09-notes.txt"
+git add -A && git commit -qm "chore: the mission leaves notes under reports/" >/dev/null
+assert_phase "a mission file under reports/ that is not .md is not a report" "REVIEW"
+git reset -q --hard HEAD~1
+# (f) QA_DOCS_PATH spelled `./docs/qa/`: git answers `docs/qa/reports/…`, the reader builds
+#     `./docs/qa//reports/…`, and the two name the same file (`-ef`, not string equality).
+printf 'QA_DOCS_PATH="./docs/qa/"\n' >> .sdd/config.sh
+git add -A && git commit -qm "chore: QA_DOCS_PATH spelled ./docs/qa/" >/dev/null
+assert_phase "QA_DOCS_PATH spelled ./docs/qa/ reads the mission's report the same" "REVIEW"
+git reset -q --hard HEAD~1
+# (g) A skewed clock: the report added at 10:00, renamed on a commit whose clock reads 05:00, and a
+#     side branch from the add dated 20:00 merged back. Date order replays the rename BEFORE the
+#     add, and the mission's own renamed report was lost; parents first (`--topo-order`) it is not.
+#     Still `in-progress`, and newer, so the gate says which file it read.
+qa_skew_base="$(git rev-parse HEAD)"
+cat > "$FIX/docs/qa/reports/2026-01-06-fixture-skew.md" <<'EOF'
+# QA Run Report — 2026-01-06 — fixture skew
+- **Started:** 2026-01-06T10:00:00Z · **Status:** in-progress <!-- in-progress | closed -->
+| # | Charter | Status |
+|---|---|---|
+| 1 | CH-one | Pass |
+EOF
+git add -A
+GIT_AUTHOR_DATE=2026-01-06T10:00:00 GIT_COMMITTER_DATE=2026-01-06T10:00:00 git commit -qm "skew: add" >/dev/null
+git checkout -q -b qa-skew-side
+printf 'side\n' > "$FIX/skew-side.txt"; git add -A
+GIT_AUTHOR_DATE=2026-01-06T20:00:00 GIT_COMMITTER_DATE=2026-01-06T20:00:00 git commit -qm "skew: side" >/dev/null
+git checkout -q missao/qa-report-owner
+git mv "$FIX/docs/qa/reports/2026-01-06-fixture-skew.md" "$FIX/docs/qa/reports/2026-01-07-fixture-skew-renamed.md"
+GIT_AUTHOR_DATE=2026-01-06T05:00:00 GIT_COMMITTER_DATE=2026-01-06T05:00:00 git commit -qm "skew: rename" >/dev/null
+GIT_AUTHOR_DATE=2026-01-06T21:00:00 GIT_COMMITTER_DATE=2026-01-06T21:00:00 git merge -q --no-edit qa-skew-side >/dev/null
+assert_why "QA gate reads the mission's report renamed on a skewed clock" "QA" \
+  "report 2026-01-07-fixture-skew-renamed\.md is not 'closed'"
+git reset -q --hard "$qa_skew_base"
+git branch -q -D qa-skew-side
+# (h) A SIGNED commit with log.showSignature on: porcelain `git log` put the signature text ahead of
+#     the first field and the report vanished; plumbing reads no user config. FLOOR first — the
+#     world is only measured if the signature really reaches stdout here.
+if ! command -v ssh-keygen >/dev/null 2>&1; then
+  fail "signed-commit floor" "ssh-keygen on PATH" "absent — the log.showSignature world was NOT measured"
+else
+  QA_SIGN="$SDD_STATE_FIX/qa-sign"; mkdir -p "$QA_SIGN"
+  ssh-keygen -t ed25519 -N '' -q -f "$QA_SIGN/key"
+  printf '%s %s\n' "$(git config user.email)" "$(cat "$QA_SIGN/key.pub")" > "$QA_SIGN/allowed"
+  git config gpg.format ssh; git config user.signingkey "$QA_SIGN/key.pub"
+  git config gpg.ssh.allowedSignersFile "$QA_SIGN/allowed"; git config log.showSignature true
+  cat > "$FIX/docs/qa/reports/2026-01-08-fixture-signed.md" <<'EOF'
+# QA Run Report — 2026-01-08 — fixture signed
+- **Started:** 2026-01-08T10:00:00Z · **Status:** in-progress <!-- in-progress | closed -->
+| # | Charter | Status |
+|---|---|---|
+| 1 | CH-one | Pass |
+EOF
+  git add -A && git commit -S -qm "chore: the mission's report in a signed commit" >/dev/null
+  assert_eq "the signature reaches porcelain stdout here, so the world below is measured" "1" \
+    "$(git log -1 --format= 2>/dev/null | grep -c 'signature')"
+  assert_why "QA gate reads a report added in a signed commit, with log.showSignature on" "QA" \
+    "report 2026-01-08-fixture-signed\.md is not 'closed'"
+  git reset -q --hard HEAD~1
+  for k in gpg.format user.signingkey gpg.ssh.allowedSignersFile log.showSignature; do git config --unset "$k"; done
+fi
 
 # THREE SPELLINGS git gives the mission's own report, each of which read as "not the mission's"
 # before the codereview of 2026-09-28 (both halves of the first reproduced in a scratch repo there):
@@ -2047,6 +2166,31 @@ for docs_empty_cell in '' '   '; do
   assert_eq "a ⛔ row with an empty document cell ('$docs_empty_cell') is refused as unnamed" "DOCS|1" \
     "$( cd "$FIX" && "$SDD" phase "$MISSION" 2>&1 )|$(grep -c 'no proposed text: (no document)' <<< "$( cd "$FIX" && "$SDD" why "$MISSION" DOCS 2>&1 )")"
 done
+# Shapes of the table that held with nothing measuring them (review r4 of the codereview fixes).
+# ⛔ followed by VS16 (U+FE0F) is the same value, as some editors write it.
+printf '# Docs\n\ndrift checklist\n\n| Area | Doc | Status | Evidence |\n|---|---|---|---|\n| rules | `.claude/rules/x.md` | ⛔\357\270\217 | refused |\n\n## Proposed text\n<!-- sdd:proposed -->\n\nIn `.claude/rules/x.md`, append a line.\n' > "$MDIR/45-docs.md"
+git add -A && git commit -qm "chore: docs with a ⛔ written with VS16" >/dev/null
+assert_why "a ⛔ followed by VS16 is the same ⛔" "DOCS" 'wait for a human.*\.claude/rules/x\.md'
+# A stray trailing comma in the cell is not a second, unnamed document.
+printf '# Docs\n\ndrift checklist\n\n| Area | Doc | Status | Evidence |\n|---|---|---|---|\n| rules | `.claude/rules/x.md`, | ⛔ | refused |\n\n## Proposed text\n<!-- sdd:proposed -->\n\nIn `.claude/rules/x.md`, append a line.\n' > "$MDIR/45-docs.md"
+git add -A && git commit -qm "chore: docs with a trailing comma in the ⛔ cell" >/dev/null
+assert_why "a trailing comma in a ⛔ cell names no extra document" "DOCS" 'wait for a human.*\.claude/rules/x\.md'
+# The header cell is read as written, markup stripped: `**Status**` is the Status column.
+printf '# Docs\n\ndrift checklist\n\n| Area | Doc | **Status** | Evidence |\n|---|---|---|---|\n| runner | README | ✗ | pending |\n' > "$MDIR/45-docs.md"
+git add -A && git commit -qm "chore: docs with a bold Status header" >/dev/null
+assert_eq "a bold Status header is the Status column, and its ✗ is pending" "DOCS|1" \
+  "$( cd "$FIX" && "$SDD" phase "$MISSION" 2>&1 )|$(grep -c 'has 1 area(s) pending' <<< "$( cd "$FIX" && "$SDD" why "$MISSION" DOCS 2>&1 )")"
+# A table the gate cannot read is refused, never read as "nothing pending": a header written
+# `Estado` answered "drift checklist complete" over a ✗.
+printf '# Docs\n\ndrift checklist\n\n| Area | Doc | Estado | Evidence |\n|---|---|---|---|\n| runner | README | ✗ | pending |\n' > "$MDIR/45-docs.md"
+git add -A && git commit -qm "chore: docs whose table has no Status column" >/dev/null
+assert_eq "a drift table with no Status column is refused, not read as complete" "DOCS|1" \
+  "$( cd "$FIX" && "$SDD" phase "$MISSION" 2>&1 )|$(grep -c 'no drift table the gate can read' <<< "$( cd "$FIX" && "$SDD" why "$MISSION" DOCS 2>&1 )")"
+# An EMPTY Status cell is pending: every row needs ✅, a justified n/a or a ⛔.
+printf '# Docs\n\ndrift checklist\n\n| Area | Doc | Status | Evidence |\n|---|---|---|---|\n| runner | README |  | forgot |\n' > "$MDIR/45-docs.md"
+git add -A && git commit -qm "chore: docs with an empty Status cell" >/dev/null
+assert_eq "an empty Status cell is pending" "DOCS|1" \
+  "$( cd "$FIX" && "$SDD" phase "$MISSION" 2>&1 )|$(grep -c "Status '(empty)'" <<< "$( cd "$FIX" && "$SDD" why "$MISSION" DOCS 2>&1 )")"
 # ...and a ✗ beside a proposed ⛔ is still today's pending reason, counted without the ⛔.
 printf '# Docs\n\ndrift checklist\n\n| Area | Doc | Status | Evidence |\n|---|---|---|---|\n| runner | README | ✗ | pending |\n| rules | `.claude/rules/x.md` | ⛔ | refused |\n\n## Proposed text\n<!-- sdd:proposed -->\n\n`.claude/rules/x.md`: the line.\n' > "$MDIR/45-docs.md"
 git add -A && git commit -qm "chore: docs with a ✗ and a proposed ⛔"

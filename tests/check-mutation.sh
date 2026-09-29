@@ -399,6 +399,22 @@ mut_DOCS_blocked_cell_not_split() {               # a ⛔ cell naming two docume
 mut_DOCS_blocked_empty_cell_vanishes() {          # a ⛔ with an empty document cell prints no row
   sed -i '/^docs_checklist_rows() {/,/^}/ s@^          if (!printed) print "B|"$@          printed = printed@' "$1"
 }
+# Shapes of the drift table that held with nothing measuring them (review r4): one mutant each.
+mut_DOCS_vs16_blind() {                           # ⛔ followed by VS16 reads as a pending Status
+  sed -i '/^docs_checklist_rows() {/,/^}/ s@ || cell == "⛔\\357\\270\\217") {@) {@' "$1"
+}
+mut_DOCS_trailing_comma_is_a_name() {             # a stray comma in a ⛔ cell names an empty document
+  sed -i '/^docs_checklist_rows() {/,/^}/ s@if (one != "") { print@if (1) { print@' "$1"
+}
+mut_DOCS_header_markup_blind() {                  # a `**Status**` header is not the Status column
+  sed -i '/^docs_checklist_rows() {/,/^}/ s@"", cell); gsub(/\[\*`\]/, "", cell)$@"", cell)@' "$1"
+}
+mut_DOCS_no_status_column_complete() {            # a table with no Status column reads as complete
+  sed -i '/^docs_checklist_rows() {/,/^}/ s@^      END { if (!col) print "N|" }$@@' "$1"
+}
+mut_DOCS_empty_status_skipped() {                 # an empty Status cell is skipped as done
+  sed -i '/^docs_checklist_rows() {/,/^}/ s@^        if (cell == "") { print "P|(empty)"; next }$@@' "$1"
+}
 mut_DOCS_blocked_claude_refused() {               # a ⛔ on .claude/ inside writes: is refused too
   sed -i '/^gate_DOCS() {/,/^}/ s@ && \[\[ "\$doc" != .claude/\* \]\] && @ \&\& @' "$1"
 }
@@ -533,22 +549,50 @@ mut_QA_report_not_mission_bound() {           # Anchor 1 back on the newest repo
 mut_QA_substep_report_not_mission_bound() {   # the sub-step back on the newest report in the tree
   sed -i '/^qa_substep() {/,/^}/ s@report="\$(mission_qa_report)"@report="$(latest_matching "$qa/reports/*.md")"@' "$1"
 }
-mut_QA_report_counts_modified() {             # a report the branch only EDITED becomes the mission's
-  sed -i -e '/^mission_qa_report() {/,/^}/ s@--diff-filter=AR @--diff-filter=AMR @' \
-         -e '/^mission_qa_report() {/,/^}/ s@^      A)  IFS=@      A|M) IFS=@' "$1"
-}
+# The report is the mission's by three facts (review r4 of the codereview fixes rewrote the reader
+# around them): the mission's COMMITS are HEAD --not the local and remote base; a NEW path is absent
+# from the base tree; OWNERSHIP follows the rename chain. One mutant per rule and per read. The old
+# `--diff-filter=AMR` mutant is gone: an edit of a base report is a path the base already has, so
+# that sabotage changed nothing any world could see — the rule is held by the base-tree check, and
+# the revert and `rm --cached` worlds are what kill its mutants.
 mut_QA_report_ignores_untracked() {           # the report the skill left uncommitted stops counting
   sed -i '/^mission_qa_report() {/,/^}/ s@status --porcelain -z -uall@status --porcelain -z -uno@' "$1"
 }
-# Ownership follows the rename chain (codereview of 2026-09-28, r1 and r2), one mutant per rule and
-# per read: a rename of the mission's report keeps it (commit, index); a rename of ANOTHER mission's
-# report does not give it (commit, index); detection is asked for, never left to the user's config
-# (commit, index); and `-z`, because git quotes a space (status) or a `"` (log).
+mut_QA_report_range_local_only() {            # the branch is measured against the local base alone
+  sed -i '/^mission_base_refs() {/,/^}/ s#for r in "\$DEFAULT_BRANCH" "\$DEFAULT_BRANCH@{upstream}" "origin/\$DEFAULT_BRANCH"; do#for r in "$DEFAULT_BRANCH"; do#' "$1"
+}
+mut_QA_report_log_base_blind() {              # a commit that adds back a base report makes it the mission's
+  sed -i '/^mission_qa_report() {/,/^}/ s#&& ! path_in_commits "\$a" \${bases\[@\]+"\${bases\[@\]}"}; then#; then#' "$1"
+}
+mut_QA_report_tree_base_blind() {             # an untracked or staged base report becomes the mission's
+  sed -i "/^mission_qa_report() {/,/^}/ { /'?? '\\*|A?' '\\*|' A '\\*)/{n; s@if ! path_in_commits@if true || path_in_commits@} }" "$1"
+}
+mut_QA_report_staged_add_ignored() {          # the mission's report staged and not committed stops counting
+  sed -i "/^mission_qa_report() {/,/^}/ s@'?? '\\*|A?' '\\*|' A '\\*)@'?? '*|' A '*)@" "$1"
+}
+mut_QA_report_intent_to_add_ignored() {       # the mission's report marked intent-to-add stops counting
+  sed -i "/^mission_qa_report() {/,/^}/ s@'?? '\\*|A?' '\\*|' A '\\*)@'?? '*|A?' '*)@" "$1"
+}
+mut_QA_report_subdir_same_name() {            # a file one directory down stands in for the base report
+  sed -i '/^mission_qa_report() {/,/^}/ s@\[ "\$REPO_ROOT/\$p" -ef "\$dir/\${p##\*/}" \]@[ -e "$dir/${p##*/}" ]@' "$1"
+}
+mut_QA_report_path_spelled_literally() {      # `./docs/qa/` no longer names the file git answers with
+  sed -i '/^mission_qa_report() {/,/^}/ s@\[ "\$REPO_ROOT/\$p" -ef "\$dir/\${p##\*/}" \]@[ "$REPO_ROOT/$p" = "$dir/${p##*/}" ]@' "$1"
+}
+mut_QA_report_any_extension() {               # a .txt under reports/ becomes a report
+  sed -i '/^mission_qa_report() {/,/^}/ s@^    case "\$p" in \*\.md) ;; \*) continue ;; esac$@    :@' "$1"
+}
+mut_QA_report_date_order() {                  # commits replayed by date: a skewed clock puts a rename first
+  sed -i '/^mission_qa_report() {/,/^}/ s@rev-list --reverse --topo-order HEAD@rev-list --reverse HEAD@' "$1"
+}
+mut_QA_report_porcelain_log() {               # the commits read by porcelain, which honours log.showSignature
+  sed -i '/^mission_qa_report() {/,/^}/ s@diff-tree --stdin -r -M -z --no-commit-id --name-status@log --stdin --no-walk=unsorted -M -z --format= --name-status@' "$1"
+}
 mut_QA_report_log_renames() {                 # the mission's report renamed in a commit stops counting
   sed -i '/^mission_qa_report() {/,/^}/ s@then owned\["\$b"\]=1; fi ;;@then :; fi ;;@' "$1"
 }
 mut_QA_report_status_renames() {              # the mission's report renamed in the index stops counting
-  sed -i '/^mission_qa_report() {/,/^}/ s@then owned\["\${st:3}"\]=1; fi ;;@then :; fi ;;@' "$1"
+  sed -i '/^mission_qa_report() {/,/^}/ s@&& \[ -n "\${owned\[\$b\]+x}" \]; then owned\["\${st:3}"\]=1; fi ;;@\&\& [ -n "${owned[$b]+x}" ]; then :; fi ;;@' "$1"
 }
 mut_QA_report_log_rename_owns_any() {         # a base report renamed in a commit becomes the mission's
   sed -i '/^mission_qa_report() {/,/^}/ s@ && \[ -n "\${owned\[\$a\]+x}" \]; then owned\["\$b"\]@; then owned["$b"]@' "$1"
@@ -556,25 +600,25 @@ mut_QA_report_log_rename_owns_any() {         # a base report renamed in a commi
 mut_QA_report_status_rename_owns_any() {      # a base report renamed in the index becomes the mission's
   sed -i '/^mission_qa_report() {/,/^}/ s@ && \[ -n "\${owned\[\$b\]+x}" \]; then owned\["\${st:3}"\]@; then owned["${st:3}"]@' "$1"
 }
-mut_QA_report_log_renames_configurable() {    # the log leaves rename detection to diff.renames
-  sed -i '/^mission_qa_report() {/,/^}/ s@ log --reverse -M --diff-filter=AR @ log --reverse --diff-filter=AR @' "$1"
+mut_QA_report_log_no_rename_detection() {     # diff-tree without -M: a base report renamed reads as an add
+  sed -i '/^mission_qa_report() {/,/^}/ s@diff-tree --stdin -r -M -z@diff-tree --stdin -r -z@' "$1"
 }
 mut_QA_report_status_renames_configurable() { # the status leaves rename detection to status.renames
   sed -i '/^mission_qa_report() {/,/^}/ s@ -uall --find-renames @ -uall @' "$1"
 }
 mut_QA_report_status_copy_refused() {         # the mission's report staged as a copy stops counting
-  sed -i '/^mission_qa_report() {/,/^}/ s@|| break; owned\["\${st:3}"\]=1 ;;@|| break ;;@' "$1"
+  sed -i "/^mission_qa_report() {/,/^}/ { /C?' '\\*) IFS=/{n; s@then owned\\[\"\\\${st:3}\"\\]=1; fi ;;@then :; fi ;;@} }" "$1"
 }
 mut_QA_report_status_quoted() {               # an uncommitted report with a space stops counting
   sed -i '/^mission_qa_report() {/,/^}/ s@status --porcelain -z -uall@status --porcelain -uall@' "$1"
 }
 mut_QA_report_log_quoted() {                  # a committed report whose name git quotes stops counting
-  sed -i '/^mission_qa_report() {/,/^}/ s@--name-status -z --format=@--name-status --format=@' "$1"
+  sed -i '/^mission_qa_report() {/,/^}/ s@diff-tree --stdin -r -M -z --no-commit-id@diff-tree --stdin -r -M --no-commit-id@' "$1"
 }
 # The fallback is what keeps a mission on the base (or already merged) reading the tree as before.
 # Without it a clean base has no candidate at all, and the QA block ON the base turns red.
 mut_QA_report_no_fallback() {
-  sed -i '/^mission_qa_report() {/,/^}/ s@if \[ -z "\$base" \] || \[ "\$base" = "\$head" \]; then@if false; then@' "$1"
+  sed -i '/^mission_qa_report() {/,/^}/ s@|| \[ -z "\$(git -C "\$REPO_ROOT" rev-list -n 1 HEAD --not@|| [ -z "x$(git -C "$REPO_ROOT" rev-list -n 1 HEAD --not@' "$1"
 }
 
 # Anchor 3 goes back to counting EVERY open bug, whatever its genre. That is the state the kit was
@@ -4615,6 +4659,11 @@ CATALOG=(
   DOCS_blocked_writable_passes
   DOCS_blocked_cell_not_split
   DOCS_blocked_empty_cell_vanishes
+  DOCS_vs16_blind
+  DOCS_trailing_comma_is_a_name
+  DOCS_header_markup_blind
+  DOCS_no_status_column_complete
+  DOCS_empty_status_skipped
   DOCS_blocked_claude_refused
   QA_status_line_start
   QA_status_enum_loose
@@ -4623,13 +4672,22 @@ CATALOG=(
   QA_bug_open
   QA_report_not_mission_bound
   QA_substep_report_not_mission_bound
-  QA_report_counts_modified
   QA_report_ignores_untracked
+  QA_report_range_local_only
+  QA_report_log_base_blind
+  QA_report_tree_base_blind
+  QA_report_staged_add_ignored
+  QA_report_intent_to_add_ignored
+  QA_report_subdir_same_name
+  QA_report_path_spelled_literally
+  QA_report_any_extension
+  QA_report_date_order
+  QA_report_porcelain_log
   QA_report_log_renames
   QA_report_status_renames
   QA_report_log_rename_owns_any
   QA_report_status_rename_owns_any
-  QA_report_log_renames_configurable
+  QA_report_log_no_rename_detection
   QA_report_status_renames_configurable
   QA_report_status_copy_refused
   QA_report_status_quoted

@@ -808,72 +808,113 @@ latest_matching() {
   ls -1d $pattern 2>/dev/null | sort -V | tail -1 || true
 }
 
+# mission_base_refs — the commits the mission branch is measured against, one per line: the local
+# DEFAULT_BRANCH, its upstream and `origin/<DEFAULT_BRANCH>`, whichever resolve, each once. The
+# REMOTE is load-bearing (review r4 of the codereview, reproduced): the local ref alone goes stale —
+# the ticket flow leaves it at the fork point — and after a routine `git pull origin <base>` INTO
+# the mission branch, every report another mission merged upstream sat inside merge-base..HEAD and
+# read as this mission's own: SQ-146 again, through a pull. `HEAD --not <all of them>` is the set
+# of commits the branch has and no copy of the base has, however stale any one of them is.
+mission_base_refs() {
+  local r c seen=" "
+  for r in "$DEFAULT_BRANCH" "$DEFAULT_BRANCH@{upstream}" "origin/$DEFAULT_BRANCH"; do
+    c="$(git -C "$REPO_ROOT" rev-parse --verify --quiet "$r^{commit}" 2>/dev/null || true)"
+    [ -n "$c" ] || continue
+    case "$seen" in *" $c "*) continue ;; esac
+    seen+="$c "
+    printf '%s\n' "$c"
+  done
+}
+
+# path_in_commits <path> [<commit>...] — rc 0 when <path> exists in the tree of any <commit>.
+path_in_commits() {
+  local path="$1" c
+  shift
+  for c in "$@"; do
+    git -C "$REPO_ROOT" cat-file -e "$c:$path" 2>/dev/null && return 0
+  done
+  return 1
+}
+
 # mission_qa_report — the absolute path of the newest QA report that belongs to THIS mission, or
 # empty. One definition, two readers: qa_substep and Anchor 1 of gate_QA answer about the SAME file.
 # Measured in the judge's window: both used to pick `latest_matching reports/*.md`, and in SQ-146
 # the newest report was SQ-143's — the sub-step answered `close`, the QA skills never ran, and the
 # gate closed on another mission's walk (ADR 0013).
 #
-# A report belongs to the mission when the mission branch ADDED it in merge-base(DEFAULT_BRANCH,
-# HEAD)..HEAD, or it is new in the tree (`??` or `A` — a skill may leave it uncommitted when the gate
-# reads it). `A` and not `M`: a mission that edits another mission's report does not become its
-# owner. `-uall` because without it an untracked directory shows as the directory, not its files.
+# Four rounds of review found four ways around the first shape, each through the SAME missing state:
+# which commits are the mission's, and what existed before it. So the answer is three facts:
+#
+# 1. THE MISSION'S COMMITS are `HEAD --not <mission_base_refs>`, local and remote base alike, so a
+#    base merged into the branch brings none of its reports along.
+# 2. A NEW PATH is one absent from the tree of every merge-base of HEAD with those refs. An add, an
+#    untracked file (`??`), a staged add (`A?`), an intent-to-add (` A`) or a staged copy (`C?`)
+#    grants ownership only to a new path — so deleting another mission's report and adding it back
+#    (a revert, a `git checkout <base> -- f`, a `git rm --cached`) never makes it this mission's.
+#    Editing one (`M`) never lists it at all.
+# 3. OWNERSHIP FOLLOWS THE RENAME CHAIN: the commits are replayed parents first (`--topo-order`: date
+#    order put a rename before its add on a skewed clock), and a rename (`R old new`, in a commit or
+#    staged) carries ownership only from a path the mission already owned — `git mv` of another
+#    mission's report does not make it this one's.
+#
+# The commits are read with PLUMBING (`rev-list | diff-tree --stdin`), which no user config reaches:
+# `log.showSignature` put signature text ahead of the first field of a signed commit and the report
+# vanished. `-M` asks for rename detection, which plumbing never does on its own. The status is
+# porcelain, so `--find-renames` overrides a status.renames that switched detection off. `-z` on both,
+# because git quotes a path with a space (status) or a `"` (diff-tree), and a quoted name is no path
+# on disk. `-uall` because without it an untracked directory shows as the directory, not its files.
 # The pick among the candidates is the same `sort -V` latest_matching uses.
 #
-# OWNERSHIP FOLLOWS THE RENAME CHAIN — the state the first fix of the codereview of 2026-09-28 was
-# missing. A renamed report is `R old new` in the log and in the index, neither `A`. Read without
-# rename detection it becomes a delete plus an ADD, and then `git mv` of ANOTHER mission's report
-# made it this mission's own: ADR 0013's fail-open back through a rename (review r2, reproduced).
-# So the branch's commits are replayed oldest first: an add makes the path the mission's, and a
-# rename carries ownership only from a path the mission already owned; a staged rename (`R new`,
-# its source as the next field) asks the same of its source. `-M` and `--find-renames` because the
-# user's diff.renames/status.renames could switch detection off, and off is the fail-open. `-z` on
-# both, because git quotes a path with a space (status) or a `"` (log), and a quoted name is no path
-# on disk. Declared residue: a COPY of another mission's report added as a new file counts (no copy
-# detection); a mission that deletes a report and adds a similar one may be paired as a rename and
-# refused — fail closed, with the refusal naming the file it read.
-#
-# EMPTY RANGE ⇒ today's answer, byte for byte: HEAD reachable from the base (a mission on the base
-# branch, or one already merged) or no merge-base at all. Otherwise a merged mission would fall back
-# into QA and a `sdd run` over it would buy a session. Declared residue, both on the empty range: a
-# mission whose `branch:` IS the base, and a DEFAULT_BRANCH with no local ref (only `origin/<b>`) —
-# there the fail-open this function closes is still open.
+# EMPTY RANGE ⇒ today's answer, byte for byte: no base ref resolves, or HEAD has no commit that the
+# base refs lack (a mission on the base branch, or one already merged — upstream included). Otherwise
+# a merged mission would fall back into QA and a `sdd run` over it would buy a session. Declared
+# residue there: a mission whose `branch:` IS the base.
 #
 # The range is HEAD's, not the mission's — two more residues, declared rather than claimed away:
 # asked from ANOTHER mission's branch (`sdd status A` standing on B), a merged A reads QA again,
 # because its report is on the base and not in B's range; and a branch stacked on an unmerged
-# mission counts that mission's reports as its own (the fail-open survives there). Scoping the range
-# by the mission's own `branch:` ref would close the first; neither was measured in the window.
+# mission counts that mission's reports as its own (the fail-open survives there). A COPY of another
+# mission's report under a new name is a new path and counts. A mission that deletes a report and
+# adds a similar one may be paired as a rename and refused — fail closed, and the refusal names the
+# file it read.
 #
 # The charter stays out on purpose (decision 3 of the grill): it is durable doc that crosses cycles
 # and the qa-execution skill writes the one missing, so demanding the mission's would make QA:plan
 # unsatisfiable in a cycle that reuses charters.
 mission_qa_report() {
-  local dir="$REPO_ROOT/$QA_DOCS_PATH/reports" base head st a b p
+  local dir="$REPO_ROOT/$QA_DOCS_PATH/reports" st a b p c
+  local -a nots=() bases=()
   local -A owned=()
-  base="$(git -C "$REPO_ROOT" merge-base "$DEFAULT_BRANCH" HEAD 2>/dev/null || true)"
-  head="$(git -C "$REPO_ROOT" rev-parse HEAD 2>/dev/null || true)"
-  if [ -z "$base" ] || [ "$base" = "$head" ]; then
+  mapfile -t nots < <(mission_base_refs)
+  if [ "${#nots[@]}" -eq 0 ] \
+      || [ -z "$(git -C "$REPO_ROOT" rev-list -n 1 HEAD --not "${nots[@]}" 2>/dev/null || true)" ]; then
     latest_matching "$dir/*.md"
     return 0
   fi
-  # The branch's commits, oldest first: `A <path>` and `R<score> <old> <new>`, NUL-separated.
+  for c in "${nots[@]}"; do
+    b="$(git -C "$REPO_ROOT" merge-base HEAD "$c" 2>/dev/null || true)"
+    [ -z "$b" ] || bases+=("$b")
+  done
+  # The mission's commits, parents first: `A <path>` and `R<score> <old> <new>`, NUL-separated.
   while IFS= read -r -d '' st; do
     case "$st" in
-      A)  IFS= read -r -d '' a || break; [ -z "$a" ] || owned["$a"]=1 ;;
+      A)  IFS= read -r -d '' a || break
+          if [ -n "$a" ] && ! path_in_commits "$a" ${bases[@]+"${bases[@]}"}; then owned["$a"]=1; fi ;;
       R*) IFS= read -r -d '' a || break; IFS= read -r -d '' b || break
           if [ -n "$a" ] && [ -n "$b" ] && [ -n "${owned[$a]+x}" ]; then owned["$b"]=1; fi ;;
     esac
-  done < <(git -C "$REPO_ROOT" log --reverse -M --diff-filter=AR --name-status -z --format= \
-             "$base"..HEAD -- "$QA_DOCS_PATH/reports/" 2>/dev/null || true)
-  # The tree: `?? <path>` and a staged add `A? <path>` are the mission's. A staged rename (`R? <new>`,
-  # the source as the next field) carries ownership only from its source. A staged COPY (`C? <new>`,
-  # printed only when the user's status.renames says `copies`) is a new path, owned as the log reads
-  # it — `-M` without `-C` shows the same file as an add (review r3: the mission's own report read `C`).
+  done < <(git -C "$REPO_ROOT" rev-list --reverse --topo-order HEAD --not "${nots[@]}" 2>/dev/null \
+             | git -C "$REPO_ROOT" diff-tree --stdin -r -M -z --no-commit-id --name-status --diff-filter=AR \
+                 -- "$QA_DOCS_PATH/reports/" 2>/dev/null || true)
+  # The tree. A staged COPY (`C? <new>`, its source as the next field) shows when the user's
+  # status.renames — or diff.renames, its default — says `copies`; it is a new path, as diff-tree
+  # (no `-C`) would read the same file (review r3). A staged rename asks ownership of its source.
   while IFS= read -r -d '' st; do
     case "$st" in
-      '?? '*|A?' '*) owned["${st:3}"]=1 ;;
-      C?' '*) IFS= read -r -d '' b || break; owned["${st:3}"]=1 ;;
+      '?? '*|A?' '*|' A '*)
+          if ! path_in_commits "${st:3}" ${bases[@]+"${bases[@]}"}; then owned["${st:3}"]=1; fi ;;
+      C?' '*) IFS= read -r -d '' b || break
+          if ! path_in_commits "${st:3}" ${bases[@]+"${bases[@]}"}; then owned["${st:3}"]=1; fi ;;
       R?' '*) IFS= read -r -d '' b || break
           if [ -n "$b" ] && [ -n "${owned[$b]+x}" ]; then owned["${st:3}"]=1; fi ;;
     esac
@@ -1277,13 +1318,12 @@ gate_QA() {
     # newest, so the human reads whose walk the gate refused to close on.
     report="$(mission_qa_report)"
     if [ -z "$report" ]; then
-      local newest mbase
+      local newest
       newest="$(latest_matching "$REPO_ROOT/$QA_DOCS_PATH/reports/*.md")"
       [ -n "$newest" ] || { GATE_WHY="no report in $QA_DOCS_PATH/reports/"; return 1; }
-      mbase="$(git -C "$REPO_ROOT" merge-base "$DEFAULT_BRANCH" HEAD 2>/dev/null || true)"
       # "is not one this branch added", and never "was added before the branch": a report git
       # ignores, or one whose name git quotes, lands here too, and the sentence must be true of both.
-      GATE_WHY="no report of this mission in $QA_DOCS_PATH/reports/ — the newest, $(basename "$newest"), is not one this branch added (merge-base ${mbase:0:7})"
+      GATE_WHY="no report of this mission in $QA_DOCS_PATH/reports/ — the newest, $(basename "$newest"), is not one this branch added (measured as HEAD --not $DEFAULT_BRANCH and its remote)"
       return 1
     fi
     # Anchor on the qa-execution skill's report. The `**Status:**` does NOT start the line: its
@@ -1698,12 +1738,18 @@ gate_REVIEW() {
 # two readers (codereview of 2026-09-28): gate_DOCS decides on both tags, and gate_PR reads the ⛔
 # documents the PR body has to carry. Two spellings of "which rows are ⛔" would let the PR be asked
 # for a proposal the DOCS gate never saw, or let it skip one the DOCS gate passed.
+#
+# A file with no table whose header has a `Status` cell prints `N|` and nothing else: read as "no
+# row pending", a header written `Estado`, or a table without leading pipes, answered "drift
+# checklist complete" over a ✗ (review r4). The header cell is read as written, markup stripped,
+# as the Status cells are. An EMPTY Status cell is pending, `P|(empty)`: every row needs ✅, a
+# justified n/a or a ⛔, and "nothing" is none of them.
 docs_checklist_rows() {
   awk -F'|' '
       # find the header and remember which column holds Status
       !col && /^[ \t]*\|/ {
         for (i = 2; i < NF; i++) {
-          cell = $i; gsub(/^[ \t]+|[ \t]+$/, "", cell)
+          cell = $i; gsub(/^[ \t]+|[ \t]+$/, "", cell); gsub(/[*`]/, "", cell)
           if (cell == "Status") { col = i; next_is_sep = 1 }
         }
         if (col) next
@@ -1717,10 +1763,11 @@ docs_checklist_rows() {
         # so it is pending, quoted as written (review r1 of 20260926).
         raw = cell; gsub(/[*`]/, "", cell)
         if (cell == "" && raw != "") { print "P|" raw; next }
+        if (cell == "") { print "P|(empty)"; next }
         # `:?-+:?` — with a formatter-aligned separator (`|:---:|`) the Status column of the
         # separator row read as a pending Status, and gate_DOCS failed a drift checklist with
         # nothing pending in it. Same regex in checkpoint_rows and gate_REVIEW.
-        if (cell ~ /^:?-+:?$/ || cell == "") next
+        if (cell ~ /^:?-+:?$/) next
         if (cell == "✅" || cell == "n/a" || cell == "N/A") next
         if (cell == "⛔" || cell == "⛔\357\270\217") {
           # One ⛔ row may name several documents (`a.md`, `.claude/rules/b.md`): each is its own
@@ -1743,6 +1790,7 @@ docs_checklist_rows() {
         print "P|" cell
       }
       col && !/^[ \t]*\|/ { exit }   # the table ended
+      END { if (!col) print "N|" }
     ' "$1"
 }
 
@@ -1767,7 +1815,7 @@ gate_DOCS() {
   # cell and `B|<document>` for a ⛔, the document being the SECOND column of the table as the
   # author wrote it, markup stripped. VS16 (U+FE0F) after the ⛔ is the same value, as some editors
   # write it.
-  local rows row pending_cell="" blocked_docs=()
+  local rows row pending_cell="" blocked_docs=() no_status=0
   rows="$(docs_checklist_rows "$d")"
   # Admission written POSITIVELY (CLAUDE.md): only a `B|` row is a ⛔; every other line the awk
   # prints is pending, tagged or not — an untagged line dropped here would pass the gate in silence,
@@ -1776,11 +1824,16 @@ gate_DOCS() {
   while IFS= read -r row; do
     case "$row" in
       "") ;;
+      N\|*) no_status=1 ;;
       B\|*) blocked_docs+=("${row#B|}") ;;
       *) pending_cell+="${row#P|}"$'\n' ;;
     esac
   done <<< "$rows"
   pending_cell="${pending_cell%$'\n'}"
+  if [ "$no_status" = 1 ]; then
+    GATE_WHY="45-docs.md has no drift table the gate can read — a table whose header has a 'Status' cell (the contract token, in English) and whose rows start with '|'"
+    return 1
+  fi
   if [ -n "$pending_cell" ]; then
     # Every pending row is printed and COUNTED, and the count goes into the reason: no-work's form
     # (a) compares reasons word for word, and a session that fixed one of two ✗ rows used to leave
