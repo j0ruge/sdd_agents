@@ -4,7 +4,7 @@ fase: EXEC
 status: done
 sessao: 4d26d92f-6c4b-403b-b867-8ff2bc9e2a51
 data: 2026-09-28 19:05
-gate: "bash tests/run-all.sh → suite green (rc 0, 240 s, 0 FAIL) sobre ec95baf (depois da revisão final); check-mutation.sh --anchors → all 440 mutants still apply; check-todo --check → 86 finding(s), every anchor on target; sdd adr check --mission … --phase exec → rc 0; os 7 Checks do checkpoint com o esperado (86/11/placed/1, 111/4, 1111/1, 1111/0/same, 111/1, 11, 1/1/1/1/1/86)"
+gate: "bash tests/run-all.sh → suite green (rc 0, ~240 s, 0 FAIL) sobre 442cdf7 (depois do /codereview); check-mutation.sh --anchors → all 452 mutants still apply; check-todo --check → 86 finding(s), every anchor on target; sdd adr check --mission … --phase exec → rc 0; os 7 Checks do checkpoint com o esperado (86/11/placed/1, 111/4, 1111/1, 1111/0/same, 111/1, 11, 1/1/1/1/1/86)"
 ---
 
 # Handoff — EXEC — os achados da janela do juiz
@@ -17,16 +17,17 @@ consertados: 4, relatório de QA da missão (`121a696`); 3, `APP_EXPECT` (`4423b
 nomeado (`fbaf9a1`). Três foram registrados no `TODO.md` (1, 2 e 5; catraca 83 → 86, `48e89b7`).
 O fechamento (`3ac59ee`) trouxe a ADR 0013 aceita, o KAIZEN_LOG, o `CONTEXT.md`, a anatomia e a
 gaveta. A revisão final da branch (revisor de contexto novo) achou 3 Important, consertados em
-`ec95baf`. O catálogo foi de 422 para 440 mutantes, e cada um novo morre pela asserção que o
-nomeia. A missão rodou inline, sem `sdd run`. Falta o PR, os revisores dele e o `sdd health`.
+`ec95baf`. O `/codereview` depois dela achou 2 MEDIUM e 4 LOW (nota B), todos consertados até a
+nota A (`a383150`..`442cdf7`), inclusive dois minors que tinham sido adiados. O catálogo foi de 422
+para 452 mutantes, e cada um novo morre pela asserção que o nomeia. A missão rodou inline, sem
+`sdd run`. Falta o PR, os revisores dele e o `sdd health`.
 
 ## Estado do repo
 
 - **Branch:** `fix/os-achados-da-janela`, **não empurrada**, nascida de `main` = `3d350ed`.
-- **Último commit de código:** `3ac59ee` (o de prosa/sensor do I7); os commits `chore(missao)` só
-  tocam o checkpoint e as notas.
+- **Último commit de código:** `e97d23b` (probes do close); `442cdf7` só re-ancora o `TODO.md`.
 - **Working tree:** limpo depois do commit deste handoff.
-- **Suíte:** `bash tests/run-all.sh` → verde, 237 s.
+- **Suíte:** `bash tests/run-all.sh` → verde, ~240 s.
 - **E2E:** não se aplica (o kit não tem `E2E_CMD`).
 
 ## O que foi feito
@@ -51,6 +52,17 @@ nomeia. A missão rodou inline, sem `sdd run`. Falta o PR, os revisores dele e o
   todas as seções marcadas, ignora `## ` dentro de bloco de código e exige que o documento seja um
   nome. Os resíduos do range (é do HEAD, não da missão) estão declarados. Stale e "achado" na
   superfície inglesa. Cinco mutantes.
+
+- `/codereview` (2 MEDIUM, 4 LOW), um commit por achado, cada regra com probe e mutante:
+  - `a383150`: `mission_qa_report` acha o relatório renomeado (commit e índice) e o não commitado
+    com espaço (`--no-renames`, `-z`); a recusa diz "is not one this branch added"; o `unknown`
+    diz "no verdict on", não "not probed" (#3, #4);
+  - `5ea6b2d`: o marcador `<!-- sdd:proposed -->` é linha própria, fora de fence (#1, fail-open);
+  - `b9b97b5`: `⛔` num documento que o chapéu escreve é recusado, `.claude/` excetuado (#5);
+  - `91ae96c`: o `gate_PR` exige no corpo do PR cada documento `⛔`; o awk da tabela vira
+    `docs_checklist_rows`, lido pelos dois gates (#2, fail-open);
+  - `e97d23b`: os quatro avisos do `close_return_home` com probe (#6);
+  - `442cdf7`: 22 âncoras do `TODO.md` re-ancoradas (duas passavam por coincidência).
 
 ## Artefatos
 
@@ -93,15 +105,15 @@ O que o diff muda para quem usa o kit:
 - **Mais estrito para quem já rodava QA em branch com relatório velho:** a fase passa a exigir o
   relatório da própria missão. É o custo pretendido (ADR 0013, Consequences). Continuam no resíduo
   declarado: a missão cuja `branch:` é a base, e a `DEFAULT_BRANCH` sem ref local.
-- **Minors adiados da revisão final** (decisão do humano): relatório renomeado na branch e nome
-  com espaço no `git status` (falham fechados, com motivo impreciso); a coluna do documento fixa em
-  `$3`; o `sdd-docs` não nomeia o `sdd install --force` para os espelhos; o `start_page_server` não
+- **Minors adiados da revisão final** (decisão do humano): a coluna do documento fixa em `$3`; o `sdd-docs` não nomeia o `sdd install --force` para os espelhos; o `start_page_server` não
   prova que o servidor na porta é o seu; `unavailable()` sob Python < 3.5; o close compara com o
-  ref de rastreio, não com o `FETCH_HEAD`, em refspec fora do padrão.
+  ref de rastreio, não com o `FETCH_HEAD`, em refspec fora do padrão. O relatório renomeado e o
+  nome com espaço também estavam aqui, e saíram em `a383150`: o humano pediu os achados do
+  `/codereview` consertados até a nota A.
 - **Sem probe:** a linha sem prefixo no laço do `gate_DOCS` (nenhum ramo do awk a imprime hoje; o
-  comentário declara isso) e o mundo "sem `timeout(1)`" do close.
+  comentário declara isso). O mundo "sem `timeout(1)`" do close ganhou probe em `e97d23b`.
 - **O `sdd health` (catálogo inteiro) não rodou.** Cada mutante novo foi aplicado numa cópia e morto
-  pela asserção certa, mas o carimbo de 435/435 é passo do PR.
+  pela asserção certa, mas o carimbo dos 452 é passo do PR.
 
 ## Achados fora de escopo
 
