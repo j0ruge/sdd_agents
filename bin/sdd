@@ -820,6 +820,14 @@ latest_matching() {
 # owner. `-uall` because without it an untracked directory shows as the directory, not its files.
 # The pick among the candidates is the same `sort -V` latest_matching uses.
 #
+# `--no-renames` on both reads, and `-z` on the status: each is a spelling of the mission's OWN
+# report that read as "not the mission's" (codereview of 2026-09-28, reproduced in a scratch repo).
+# With rename detection a renamed report is `R` — neither `A` in the log nor `A` in the index — and
+# the add it came from names a path that is gone; without it the rename is a delete plus an add.
+# `git status --porcelain` quotes a path with a space (`?? "…/a b.md"`), which then does not end in
+# `.md`; `-z` quotes nothing. The log needs no `-z` for that: it quotes a `"`, a `\` or a control
+# character, never a space — a report named with one of those is refused, and the refusal says so.
+#
 # EMPTY RANGE ⇒ today's answer, byte for byte: HEAD reachable from the base (a mission on the base
 # branch, or one already merged) or no merge-base at all. Otherwise a merged mission would fall back
 # into QA and a `sdd run` over it would buy a session. Declared residue, both on the empty range: a
@@ -844,10 +852,10 @@ mission_qa_report() {
     return 0
   fi
   cands="$(
-    git -C "$REPO_ROOT" -c core.quotePath=false log --diff-filter=A --name-only --format= \
+    git -C "$REPO_ROOT" -c core.quotePath=false log --no-renames --diff-filter=A --name-only --format= \
       "$base"..HEAD -- "$QA_DOCS_PATH/reports/" 2>/dev/null || true
-    git -C "$REPO_ROOT" -c core.quotePath=false status --porcelain -uall \
-      -- "$QA_DOCS_PATH/reports/" 2>/dev/null | sed -n 's/^\(??\|A.\) //p' || true
+    git -C "$REPO_ROOT" status --porcelain -z -uall --no-renames \
+      -- "$QA_DOCS_PATH/reports/" 2>/dev/null | tr '\0' '\n' | sed -n 's/^\(??\|A.\) //p' || true
   )"
   # `-ef` against "$dir/<name>": a direct child of reports/, as the glob of latest_matching reads,
   # whatever spelling QA_DOCS_PATH has (a trailing `/`, a `./`) — and a file still on disk.
@@ -1250,7 +1258,9 @@ gate_QA() {
       newest="$(latest_matching "$REPO_ROOT/$QA_DOCS_PATH/reports/*.md")"
       [ -n "$newest" ] || { GATE_WHY="no report in $QA_DOCS_PATH/reports/"; return 1; }
       mbase="$(git -C "$REPO_ROOT" merge-base "$DEFAULT_BRANCH" HEAD 2>/dev/null || true)"
-      GATE_WHY="no report of this mission in $QA_DOCS_PATH/reports/ — the newest, $(basename "$newest"), was added before the mission branch (merge-base ${mbase:0:7})"
+      # "is not one this branch added", and never "was added before the branch": a report git
+      # ignores, or one whose name git quotes, lands here too, and the sentence must be true of both.
+      GATE_WHY="no report of this mission in $QA_DOCS_PATH/reports/ — the newest, $(basename "$newest"), is not one this branch added (merge-base ${mbase:0:7})"
       return 1
     fi
     # Anchor on the qa-execution skill's report. The `**Status:**` does NOT start the line: its
@@ -1411,7 +1421,9 @@ gate_QA() {
       *)
         # `*` and not `unknown)`: this is the arm that has to catch a state nobody has invented
         # yet, since the three above are the only ones that may change what the runner DOES.
-        GATE_WHY="E2E_CMD failed ($E2E_CMD) — see $e2e_log (the app was not probed either way: $label)"
+        # "No verdict", and not "not probed": with APP_EXPECT declared, `unknown` also means the
+        # app answered and its page could not be checked, and the label says so.
+        GATE_WHY="E2E_CMD failed ($E2E_CMD) — see $e2e_log (no verdict on the app at APP_URL: $label)"
         ;;
     esac
     return 1
@@ -5039,7 +5051,7 @@ cmd_preflight() {
           warn "something answers at $app_label (APP_URL) but its page does not contain APP_EXPECT '$APP_EXPECT' — another product on this port? Stop it, or fix APP_URL/APP_EXPECT"
         fi
         ;;
-      *) warn "APP_URL not probed: $app_label" ;;
+      *) warn "no verdict on APP_URL: $app_label" ;;
     esac
   else
     dim "  ---  APP_URL not set — nothing to probe"

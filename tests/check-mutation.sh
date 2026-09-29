@@ -517,7 +517,19 @@ mut_QA_report_counts_modified() {             # a report the branch only EDITED 
   sed -i '/^mission_qa_report() {/,/^}/ s@--diff-filter=A @--diff-filter=AM @' "$1"
 }
 mut_QA_report_ignores_untracked() {           # the report the skill left uncommitted stops counting
-  sed -i '/^mission_qa_report() {/,/^}/ s@status --porcelain -uall@status --porcelain -uno@' "$1"
+  sed -i '/^mission_qa_report() {/,/^}/ s@status --porcelain -z -uall@status --porcelain -z -uno@' "$1"
+}
+# The three spellings git gives the mission's own report (codereview of 2026-09-28), one mutant
+# each: a rename COMMITTED is `R` in the log, a rename STAGED is `R` in the status, and an
+# uncommitted name with a space comes back quoted from a status read without `-z`.
+mut_QA_report_log_renames() {                 # a report renamed in a commit stops counting
+  sed -i '/^mission_qa_report() {/,/^}/ s@ log --no-renames @ log @' "$1"
+}
+mut_QA_report_status_renames() {              # a report renamed in the index stops counting
+  sed -i '/^mission_qa_report() {/,/^}/ s@ -uall --no-renames @ -uall @' "$1"
+}
+mut_QA_report_status_quoted() {               # an uncommitted report with a space stops counting
+  sed -i '/^mission_qa_report() {/,/^}/ s@status --porcelain -z -uall@status --porcelain -uall@' "$1"
 }
 # The fallback is what keeps a mission on the base (or already merged) reading the tree as before.
 # Without it a clean base has no candidate at all, and the QA block ON the base turns red.
@@ -4534,6 +4546,9 @@ CATALOG=(
   QA_substep_report_not_mission_bound
   QA_report_counts_modified
   QA_report_ignores_untracked
+  QA_report_log_renames
+  QA_report_status_renames
+  QA_report_status_quoted
   QA_report_no_fallback
   QA_bug_genre_ignored
   QA_bug_genre_prefix

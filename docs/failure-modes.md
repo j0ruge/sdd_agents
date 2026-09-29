@@ -450,11 +450,12 @@ sdd preflight            # asks the same question before a session is opened
 pipeline is allowed to bring an environment up — that is declared policy in `config/schema.md`,
 not an oversight — so another session runs the same e2e against the same dead address.
 
-**If the message says `the app was not probed either way` instead**, the runner could not decide
+**If the message says `no verdict on the app at APP_URL` instead**, the runner could not decide
 and deliberately did not escalate: `APP_URL` is empty or unparseable, `timeout(1)` is not on PATH,
 this bash has no `/dev/tcp`, or the connect failed in a way the probe does not read as a refusal (a
-name that does not resolve, a firewall that drops the packet). The reason is printed after the
-colon. Behaviour there is exactly what it was before the probe existed — the sensor is one-sided
+name that does not resolve, a firewall that drops the packet). With `APP_EXPECT` declared it also
+covers an app that answered but whose page was not checked — no `curl`, a read that failed, or a
+redirect or error page without the literal. The reason is printed after the colon. Behaviour there is exactly what it was before the probe existed — the sensor is one-sided
 on purpose, and a false stop costs a person where the loop only costs money.
 
 ---

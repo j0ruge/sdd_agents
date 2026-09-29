@@ -803,7 +803,7 @@ if [ "$app_floor_ok" = "1" ]; then
     "$( [ -n "$n_unknown" ] && [ -n "$n_alone" ] && [ "$n_unknown" -eq "$n_alone" ] \
         && echo "no extra failure" || echo "$n_alone -> $n_unknown" )"
   assert_has "and it says why it could not tell, instead of claiming the app is down" \
-    "not probed" "$out_unknown"
+    "no verdict on" "$out_unknown"
   assert_lacks "an unreadable APP_URL never claims a dead app" \
     "nothing is listening" "$out_unknown"
 
@@ -812,7 +812,7 @@ if [ "$app_floor_ok" = "1" ]; then
   sed -i 's|^APP_URL=.*|APP_URL=""|' .sdd/config.sh
   out_noapp="$( "$SDD" preflight 2>&1 )"
   assert_lacks "an empty APP_URL claims nothing about listening" "nothing is listening" "$out_noapp"
-  assert_lacks "an empty APP_URL is not reported as unprobed either" "not probed" "$out_noapp"
+  assert_lacks "an empty APP_URL is not reported as unprobed either" "no verdict on" "$out_noapp"
 
   # --- something answers, but it is NOT this product (APP_EXPECT) ----------------------------
   # Measured in LH-4 (2026-09-27): lighthouse and sales_quote both declare

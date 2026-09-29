@@ -961,8 +961,10 @@ printf '<!-- touched on the mission branch -->\n' >> "$FIX/docs/qa/reports/2026-
 git add -A && git commit -qm "chore: the mission edits the base report" >/dev/null
 qa_owner_why="$( cd "$FIX" && "$SDD" why "$MISSION" QA 2>&1 )"
 qa_owner_phase="$( cd "$FIX" && "$SDD" phase "$MISSION" 2>&1 )"
+# The refusal says "is not one this branch added", and not "was added before the branch": the
+# second is true of this fixture and false of a report git ignores, which is also refused here.
 assert_eq "QA gate refuses a closed report added before the mission branch" "QA|1" \
-  "$qa_owner_phase|$(grep -c 'added before the mission branch' <<< "$qa_owner_why")"
+  "$qa_owner_phase|$(grep -c 'is not one this branch added' <<< "$qa_owner_why")"
 # The new reason names the file it refused, so the human reads which report was someone else's.
 assert_why "the refusal names the report that belongs to the base" "QA" "the newest, 2026-01-01-fixture\.md"
 
@@ -979,12 +981,39 @@ EOF
 qa_owner_why="$( cd "$FIX" && "$SDD" why "$MISSION" QA 2>&1 )"
 qa_owner_phase="$( cd "$FIX" && "$SDD" phase "$MISSION" 2>&1 )"
 assert_eq "QA gate accepts a closed report the mission wrote and has not committed yet" "REVIEW|0" \
-  "$qa_owner_phase|$(grep -c 'before the mission branch' <<< "$qa_owner_why")"
+  "$qa_owner_phase|$(grep -c 'is not one this branch added' <<< "$qa_owner_why")"
 git add -A && git commit -qm "chore: the mission's own report" >/dev/null
 qa_owner_why="$( cd "$FIX" && "$SDD" why "$MISSION" QA 2>&1 )"
 qa_owner_phase="$( cd "$FIX" && "$SDD" phase "$MISSION" 2>&1 )"
 assert_eq "QA gate accepts the closed report the mission branch added" "REVIEW|0" \
-  "$qa_owner_phase|$(grep -c 'before the mission branch' <<< "$qa_owner_why")"
+  "$qa_owner_phase|$(grep -c 'is not one this branch added' <<< "$qa_owner_why")"
+
+# THREE SPELLINGS git gives the mission's own report, each of which read as "not the mission's"
+# before the codereview of 2026-09-28 (both halves of the first reproduced in a scratch repo there):
+#
+# 1. an UNCOMMITTED report with a space in its name. `git status --porcelain` quotes that path
+#    (`?? "docs/qa/reports/a b.md"`), the quoted name does not end in `.md`, and the report was
+#    skipped. Written NEWER than the committed one and still `in-progress`, so the gate says which
+#    file it read: the right runner refuses on THIS report, and one that cannot see it falls back to
+#    the older, closed one and passes.
+cat > "$FIX/docs/qa/reports/2026-01-03-fixture walk.md" <<'EOF'
+# QA Run Report — 2026-01-03 — fixture walk
+- **Started:** 2026-01-03T10:00:00Z · **Status:** in-progress <!-- in-progress | closed -->
+| # | Charter | Status |
+|---|---|---|
+| 1 | CH-one | Pass |
+EOF
+assert_why "QA gate reads an uncommitted report with a space in its name" "QA" \
+  "report 2026-01-03-fixture walk\.md is not 'closed'"
+rm -f "$FIX/docs/qa/reports/2026-01-03-fixture walk.md"
+# 2. a STAGED rename of the mission's report. `git status` detects the rename and prints `R`, which is
+#    neither `??` nor `A`; the path it came from no longer exists. Nothing counted.
+git mv "$FIX/docs/qa/reports/2026-01-02-fixture-mine.md" "$FIX/docs/qa/reports/2026-01-04-fixture-moved.md"
+assert_phase "QA gate accepts the mission's report renamed in the index" "REVIEW"
+# 3. the same rename COMMITTED. `git log` detects it too, so the commit shows `R` and
+#    `--diff-filter=A` drops it; the add it came from names a path that is gone.
+git commit -qm "chore: the mission renames its report" >/dev/null
+assert_phase "QA gate accepts the mission's report renamed in a commit" "REVIEW"
 # Back to the world the blocks below assume: on the base, the fixture as it was before this block.
 git checkout -q main
 git branch -q -D missao/qa-report-owner
@@ -1070,7 +1099,7 @@ if [ "$floor_ok" = "1" ]; then
   assert_phase "e2e red over a dead app does not advance" "QA"
   assert_why   "the reason names the address nothing is listening on" "QA" \
                "nothing is listening at 127\.0\.0\.1:$dead_port"
-  assert_why_absent "an app that WAS probed is not reported as unprobed" "QA" "not probed"
+  assert_why_absent "an app that WAS probed is not reported as unprobed" "QA" "no verdict on"
 
   # The green half, and it is what protects the `example.invalid` fixture above — that one sits
   # beside a GREEN E2E_CMD, and a runner that probed before the gate would block it for a machine
@@ -1118,10 +1147,10 @@ if [ "$floor_ok" = "1" ]; then
 
   # The one-sided contract: what the probe cannot decide, it never escalates.
   sed -i 's|^APP_URL=.*|APP_URL=""|' .sdd/config.sh
-  assert_why        "an empty APP_URL is not probed" "QA" "not probed"
+  assert_why        "an empty APP_URL is not probed" "QA" "no verdict on"
   assert_why_absent "an empty APP_URL never claims a dead app" "QA" "nothing is listening"
   sed -i 's|^APP_URL=.*|APP_URL="not a url"|' .sdd/config.sh
-  assert_why        "an unparseable APP_URL is not probed" "QA" "not probed"
+  assert_why        "an unparseable APP_URL is not probed" "QA" "no verdict on"
   assert_why_absent "an unparseable APP_URL never claims a dead app" "QA" "nothing is listening"
 
   # --- the app answers, but it is NOT this product (APP_EXPECT) --------------------------------
