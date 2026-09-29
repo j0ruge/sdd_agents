@@ -32,6 +32,8 @@ env = {key: value for key, value in os.environ.items()
 env.update(SDD_STATE_DIR=str(work / "state"), NO_COLOR="1", ON_ESCALATION_CMD="")
 # An enclosing health run may own another checkout. Its environment is not authority here.
 env.pop("SDD_COORDINATION_ID", None)
+# The remedy's seam (which python3 the refusal may point to) is set per probe below, never inherited.
+env.pop("SDD_SYSTEM_PYTHON", None)
 stubs = work / "stubs"
 stubs.mkdir()
 external_commands = ("claude", "gh", "acli", "jira", "curl", "wget", "agent-browser")
@@ -290,11 +292,69 @@ try:
     missing = run(repo, "preflight", extra=limited_env)
     check("missing dependency refuses before execution", missing.returncode != 0
           and "CHECKOUT-UNAVAILABLE" in missing.stdout, missing.stdout)
-    # ...and says it found no python3 on PATH, with the remedy when /usr/bin/python3 is there.
+    # ...and says it found no python3 on PATH, with the remedy only when /usr/bin/python3 would
+    # actually serve. The oracle is this sensor's own, written apart from the helper's `capable`:
+    # it CALLS pidfd, since an attribute read passed a Python whose calls the kernel refused.
+    capable_probe = ("import os, signal, sys\n"
+                     "assert sys.version_info >= (3, 9)\n"
+                     "d = os.pidfd_open(os.getpid()); signal.pidfd_send_signal(d, 0); os.close(d)\n"
+                     "assert os.path.exists('/proc/%d/task/%d/children' % (os.getpid(), os.getpid()))\n")
+
+    def passes_capability(interpreter):
+        return os.access(str(interpreter), os.X_OK) and subprocess.run(
+            [str(interpreter), "-I", "-S", "-c", capable_probe], stdin=subprocess.DEVNULL,
+            stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL, timeout=5).returncode == 0
+
+    def system_python(name, patch=None, counted=False):
+        """A python3 for SDD_SYSTEM_PYTHON, alone in its directory, since the remedy names the
+        directory. No patch: the interpreter running this sensor, which must be capable or no
+        coordinated call here would run. A patch breaks it the way the PATH stub below does, and
+        the wrapper serves both a script and `-c`, so the attribute read the helper used to run
+        meets the same broken module. `counted`: each run appends to $COORD_SYSTEM_MARK and a
+        second run exits at once — the witness that the probe never probes itself again, bounded
+        so that a mutant which does cannot chain forever."""
+        home = work / ("system-" + name)
+        home.mkdir()
+        path = home / "python3"
+        real = os.path.realpath(sys.executable)
+        if patch is None:
+            path.symlink_to(real)
+            return path
+        path.write_text("#!" + real + "\nimport os, runpy, signal, sys\n"
+            + ("_mark = os.environ['COORD_SYSTEM_MARK']\n_again = os.path.exists(_mark)\n"
+               "open(_mark, 'a').write('run\\n')\n"
+               "if _again: sys.exit(97)\n" if counted else "")
+            + "def denied(*args, **kwargs): raise PermissionError('fixture pidfd denied')\n"
+            + patch
+            + "args = sys.argv[1:]\n"
+            + "while args and args[0] in ('-I', '-S'): args.pop(0)\n"
+            + "if args[0] == '-c':\n    sys.argv = ['-c'] + args[2:]\n    exec(args[1])\n"
+            + "    sys.exit(0)\n"
+            + "sys.argv = [sys.argv[0]] + args[1:]\nrunpy.run_path(args[0], run_name='__main__')\n")
+        path.chmod(0o755)
+        return path
+
+    attribute_read = "import os, signal; os.pidfd_open; signal.pidfd_send_signal"
+    system_ok = system_python("ok")
+    system_denied = system_python("denied", "os.pidfd_open = denied\n")
+    system_missing = system_python("missing", "del os.pidfd_open\n", counted=True)
+    # The worlds are armed before anything is concluded from them: the good one passes the oracle,
+    # and the denied one fails it while passing the attribute read — the world where the two differ.
+    check("remedy worlds are armed: a capable python3 and one whose pidfd calls are denied",
+          passes_capability(system_ok) and not passes_capability(system_denied)
+          and subprocess.run([str(system_denied), "-I", "-S", "-c", attribute_read],
+                             stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL,
+                             timeout=5).returncode == 0)
     check("missing python3 is named, with the remedy when /usr/bin/python3 exists",
           "no python3 on PATH" in missing.stdout
-          and ("PATH=/usr/bin" in missing.stdout) == os.access("/usr/bin/python3", os.X_OK),
+          and ("PATH=/usr/bin:" in missing.stdout) == passes_capability("/usr/bin/python3"),
           missing.stdout[:300])
+    for label, system, offered in (("capable", system_ok, True), ("denied", system_denied, False)):
+        told = run(repo, "preflight", extra=dict(limited_env, SDD_SYSTEM_PYTHON=str(system)))
+        check("no python3 on PATH: the remedy is offered only for a system python3 that passes"
+              " the check: " + label,
+              "no python3 on PATH" in told.stdout
+              and ("PATH=%s:" % system.parent in told.stdout) == offered, told.stdout[:300])
     check("help needs no supervisor dependency", run(repo, "help", extra=limited_env).returncode == 0)
     # pidfd support must be usable under this kernel/seccomp policy before project config runs.
     python_stub = stubs / "python3"
@@ -326,14 +386,33 @@ try:
             # no os.pidfd_open, /usr/bin/python3 served, and the lone "requirements" list sent a human
             # to diagnose it by hand (finding 8). The stub's sys.executable is /usr/bin/python3, so the
             # interpreter the refusal must name is the one the PATH resolved — the stub's own path.
-            # The remedy is measured here with the probe the helper runs, never assumed.
-            real_ok = os.path.exists("/usr/bin/python3") and subprocess.run(
-                ["/usr/bin/python3", "-I", "-S", "-c",
-                 "import os, signal; os.pidfd_open; signal.pidfd_send_signal"],
-                stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL, timeout=5).returncode == 0
+            # The remedy is measured here with this sensor's own oracle, never assumed.
             check("unavailable names the failed requirement, the interpreter and the remedy",
                   "pidfd_open is missing" in result.stdout and str(python_stub) in result.stdout
-                  and ("PATH=/usr/bin" in result.stdout) == real_ok, result.stdout[:400])
+                  and ("PATH=/usr/bin:" in result.stdout) == passes_capability("/usr/bin/python3"),
+                  result.stdout[:400])
+            # And the same two worlds as with no python3 at all: the remedy goes to an interpreter
+            # that passes the check, never to one that only carries the attributes.
+            for label, system, offered in (("capable", system_ok, True),
+                                           ("denied", system_denied, False)):
+                told = run(repo, "phase", "20260101-one",
+                           extra={"SDD_SYSTEM_PYTHON": str(system)})
+                check("a build refusal offers the remedy only for a system python3 that passes"
+                      " the check: " + label,
+                      "pidfd_open is missing" in told.stdout
+                      and ("PATH=%s:" % system.parent in told.stdout) == offered,
+                      told.stdout[:400])
+            # A system python3 lacking the same attribute fails the probe as a BUILD refusal, and
+            # its refusal must not probe for a remedy again: it would find this stub on the PATH,
+            # see another interpreter, and probe itself — a chain nothing reaps.
+            system_mark = work / "system-mark"
+            told = run(repo, "phase", "20260101-one",
+                       extra={"SDD_SYSTEM_PYTHON": str(system_missing),
+                              "COORD_SYSTEM_MARK": str(system_mark)})
+            runs = system_mark.read_text().count("run") if system_mark.exists() else 0
+            check("the remedy's probe never probes for a remedy of its own",
+                  runs == 1 and "PATH=%s:" % system_missing.parent not in told.stdout,
+                  "system python3 runs: %d; %s" % (runs, told.stdout[:300]))
         else:
             # A kernel or policy refusal (pidfd denied, no task children enumeration) is not the
             # interpreter's: switching to /usr/bin/python3 cannot help, so the remedy must not be

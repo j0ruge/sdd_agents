@@ -10106,10 +10106,19 @@ coordination_enter() {
   fi
   coordination_paths "$root"
   # The refusal says what fell and gives the remedy when one is on disk (finding 8): the helper does
-  # the same for a python3 that is there but lacks pidfd. The runner never USES /usr/bin/python3.
+  # the same for a python3 that is there but lacks pidfd. The runner never USES /usr/bin/python3: it
+  # only asks it the helper's own `capable` check, with the helper's flags. `-x` alone sent the
+  # operator to a 3.8, or to a Python whose pidfd calls the kernel refuses, for a second
+  # CHECKOUT-UNAVAILABLE (Codex, PR #176). SDD_SYSTEM_PYTHON is the sensor's seam, read by the
+  # helper under the same name. Unbounded on purpose: the probe is a handful of syscalls, and
+  # timeout(1) would be one more dependency on the path that reports a missing one.
   if ! command -v python3 >/dev/null 2>&1; then
-    local remedy=""
-    [ -x /usr/bin/python3 ] && remedy=" — /usr/bin/python3 exists: run PATH=/usr/bin:\$PATH sdd $subcmd …"
+    local remedy="" system="${SDD_SYSTEM_PYTHON:-/usr/bin/python3}"
+    if [ -x "$system" ] \
+        && "$system" "${COORDINATION_PYTHON[@]:1}" "$SDD_HOME/bin/sdd-coordination.py" capable \
+             </dev/null >/dev/null 2>&1; then
+      remedy=" — $system passes the same check: run PATH=${system%/*}:\$PATH sdd $subcmd …"
+    fi
     die "CHECKOUT-UNAVAILABLE: no python3 on PATH; coordinated commands require Python 3.9+ and Linux procfs$remedy"
   fi
   if [ -n "${SDD_COORDINATION_ID:-}" ] \

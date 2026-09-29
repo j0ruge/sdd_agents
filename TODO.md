@@ -64,7 +64,7 @@ Achados sobre **repos-alvo** vão para o `TODO.md` daquele repo. Este arquivo é
   missão `20260819-fecho-...` (2026-08-19)
 
 - [ ] **O carimbo de mutação cobre 4 dos 8 caminhos que a sandbox do catálogo copia** —
-  `bin/sdd:1943` contra `tests/check-mutation.sh:4981` — a chave lê `bin tests templates config`,
+  `bin/sdd:1943` contra `tests/check-mutation.sh:5001` — a chave lê `bin tests templates config`,
   mas `sandbox()` também copia `agents/`, `CLAUDE.md`, `TODO.md` e `docs/adr`. Mudança confinada a
   esses quatro mantém o carimbo válido sobre conteúdo que o catálogo de fato mede — a
   regra 12 do `check-health.sh` lê o `CLAUDE.md`. Estreitamento deliberado (a fase DOCS edita
@@ -249,7 +249,7 @@ Achados sobre **repos-alvo** vão para o `TODO.md` daquele repo. Este arquivo é
 
 - [ ] **O schema da série não tem sensor de drift contra a prosa que o descreve** — `bin/sdd:9006`
   (`kaizen_series`) vs `docs/pipeline.md:525`, `docs/adr/0003:57`, `agents/sdd-kaizen.md:40` e
-  `docs/failure-modes.md:99` — produzido em dois lugares (o `jq` e o literal vazio, `:8394`) e
+  `docs/failure-modes.md:102` — produzido em dois lugares (o `jq` e o literal vazio, `:8394`) e
   descrito em **dez**, QUATRO deles dentro do `bin/sdd`. Cobrado 6×: na DOCS de
   `20260817-eixo-do-juiz`, **oito** dos dez diziam a unidade que o F1 da r3 trocara horas antes
   (sessão → missão) — o ADR que o runner cita, a folha do juiz, e a própria frase que o runner
@@ -294,7 +294,7 @@ Achados sobre **repos-alvo** vão para o `TODO.md` daquele repo. Este arquivo é
   — descoberto por `sdd-qa` na missão `20260819-fecho-que-nao-mente` (2026-08-19)
 
 - [ ] **O piso do catálogo mora só no consumidor; quem imprime o `score:` segue sem nenhum** —
-  `tests/check-mutation.sh:5351` — com `CATALOG=()` o laço roda zero vezes, `errors` fica 0 e o
+  `tests/check-mutation.sh:5371` — com `CATALOG=()` o laço roda zero vezes, `errors` fica 0 e o
   arquivo imprime `score: 0 caught, 0 known gap(s), of 0` saindo 0. O F1 pôs o piso no `cmd_health`,
   hoje o único chamador — mas duas frases do próprio runner (`bin/sdd:5479` e `:5108`) mandam o
   operador rodar `tests/run-all.sh --with-mutation` à mão, e aí o verde volta a mentir.
@@ -695,7 +695,7 @@ Achados sobre **repos-alvo** vão para o `TODO.md` daquele repo. Este arquivo é
   branch é o `DEFAULT_BRANCH`, e commitar o diretório da missão inteiro.
   — descoberto por `sessão coordenadora` na missão `20260922-o-motivo-da-fase` (2026-09-22)
 
-- [ ] **`check-coordination.sh` reprova quando herda SIGINT ignorado** — `tests/check-coordination.sh:651`
+- [ ] **`check-coordination.sh` reprova quando herda SIGINT ignorado** — `tests/check-coordination.sh:730`
   — o probe `signal status` (sinal 2) manda SIGINT ao `sdd run` e espera a morte; lançada com `&` de shell
   não interativo (o `setsid nohup … &` que se usa para `sdd run`), a suíte nasce com `SigIgn 0x7`, o
   bash não desfaz sinal ignorado na entrada, e o probe estoura 8 s: vermelho 3 de 3, verde 3 de 3 em

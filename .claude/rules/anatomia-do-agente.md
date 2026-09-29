@@ -214,7 +214,9 @@ criados por threads; pidfds fixam a identidade após conferir starttime/ancestra
 fallback para PID numérico reutilizável. A varredura seleciona destinatários, nunca libera
 posse: só `ECHILD` prova reap completo. Handlers que ignoram o sinal por escolha não são garantidos.
 O helper sobe com `python3 -I -S` (`COORDINATION_PYTHON`, uma definição para os quatro sítios):
-o `PYTHONPATH` de quem chama não troca os módulos do processo que decide a posse. O supervisor
+o `PYTHONPATH` de quem chama não troca os módulos do processo que decide a posse. As mesmas flags
+servem à sonda do remédio do `CHECKOUT-UNAVAILABLE`: `/usr/bin/python3` (ou `SDD_SYSTEM_PYTHON`) só
+é oferecido depois de passar no próprio `capable` do helper, nunca por ser executável. O supervisor
 acorda pelo pidfd do worker, não pelo tique de 10 ms. O custo que sobra, ~30 ms do 2º Python do
 worker em toda chamada coordenada, está no `TODO.md`.
 

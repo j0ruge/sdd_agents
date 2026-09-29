@@ -34,7 +34,15 @@ def unavailable(requirement, build=False):
     USES /usr/bin/python3: it only probes it to write the remedy, and ONLY for a requirement of the
     Python build (`build`): a kernel or seccomp refusal is the same under every interpreter, and a
     remedy there sends the operator to switch Pythons for nothing. Imports are local on purpose:
-    this is the refusal path, and every coordinated call pays the helper's startup."""
+    this is the refusal path, and every coordinated call pays the helper's startup.
+
+    The remedy is offered only when that interpreter passes THIS helper's own check (`capable`):
+    version, the pidfd CALLS, task children and the subreaper. Reading the two attributes passed a
+    Python whose pidfd calls the kernel then refused, and the remedy failed for the very reason it
+    claimed to fix (CodeRabbit and Codex, PR #176). SDD_SYSTEM_PYTHON replaces /usr/bin/python3 for the
+    sensor, which cannot build an incapable /usr/bin/python3; bin/sdd reads the same name. The
+    probe never asks for a remedy of its own: an interpreter the probe finds lacking would, under
+    a PATH python3 lacking the same, probe itself again and again."""
     import platform
     import shutil
     import subprocess
@@ -42,16 +50,18 @@ def unavailable(requirement, build=False):
     lines = ['CHECKOUT-UNAVAILABLE: %s' % requirement,
              '  interpreter: %s (sys.executable %s, Python %s)'
              % (resolved, sys.executable, platform.python_version())]
-    system = '/usr/bin/python3'
+    system = os.environ.get('SDD_SYSTEM_PYTHON') or '/usr/bin/python3'
     if (build and os.access(system, os.X_OK) and resolved != 'no python3 on PATH'
+            and sys.argv[1:2] != ['capable']
             and os.path.realpath(resolved) != os.path.realpath(system)):
         try:
             probe = subprocess.run(
-                [system, '-I', '-S', '-c',
-                 'import os, signal; os.pidfd_open; signal.pidfd_send_signal'],
-                stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL, timeout=5)
+                [system, '-I', '-S', os.path.abspath(__file__), 'capable'],
+                stdin=subprocess.DEVNULL, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL,
+                timeout=5)
             if probe.returncode == 0:
-                lines.append('  %s has it: run PATH=/usr/bin:$PATH sdd <the same command>' % system)
+                lines.append('  %s passes the same check: run PATH=%s:$PATH sdd <the same command>'
+                             % (system, os.path.dirname(system)))
         except Exception:  # the refusal path must not trade a message for a traceback
             pass
     lines.append('  coordinated commands need %s' % REQUIREMENTS)
@@ -441,11 +451,16 @@ def main():
       check <root> <dir> <kind>                  0 when the caller descends from the lock holder;
                                                  kind `pipeline` further requires the worker itself
       show  <root> <dir> <kind>                  print the current owner, if any; never locks
+      capable                                    0 when THIS interpreter meets every requirement;
+                                                 the probe behind the refusal's remedy
     """
+    if sys.argv[1:2] == ['capable']:
+        subreaper()
+        return 0
     if sys.argv[1:2] == ['hook']:
         return bounded_hook(*sys.argv[2:])
     if len(sys.argv) < 5:
-        print('usage: sdd-coordination.py hook|enter|check|show <root> <dir> <kind> [args...]',
+        print('usage: sdd-coordination.py capable|hook|enter|check|show <root> <dir> <kind> [args...]',
               file=sys.stderr)
         return 2
     mode, root, directory, kind, *args = sys.argv[1:]

@@ -4586,6 +4586,22 @@ mut_COORD_remedy_for_every_requirement() {   # a kernel refusal is told to switc
 mut_COORD_unavailable_generic() {
   sed -i "s@^        print(unavailable(str(error), error.build), file=sys.stderr)\$@        print('CHECKOUT-UNAVAILABLE: %s are required' % REQUIREMENTS, file=sys.stderr)@" "${1%/*}/sdd-coordination.py"
 }
+# The remedy goes only to an interpreter that passes the helper's own `capable` check (Codex and
+# CodeRabbit, PR #176). Each mutant below is caught by the `denied` world of check-coordination.sh —
+# a system python3 that carries the pidfd attributes and whose calls are refused — or, the last one,
+# by the witness that counts how many times that python3 ran.
+mut_COORD_bash_remedy_unprobed() {      # no python3 on PATH: `-x` alone earns the remedy again
+  sed -i '/^coordination_enter() {/,/^}/ s%^        && "\$system" "\${COORDINATION_PYTHON\[@\]:1}" "\$SDD_HOME/bin/sdd-coordination.py" capable \\$%        \&\& true \\%' "$1"
+}
+mut_COORD_remedy_attribute_probe() {    # back to reading two attributes instead of calling them
+  sed -i "s%^                \[system, '-I', '-S', os.path.abspath(__file__), 'capable'\],\$%                [system, '-I', '-S', '-c', 'import os, signal; os.pidfd_open; signal.pidfd_send_signal'],%" "${1%/*}/sdd-coordination.py"
+}
+mut_COORD_capable_unchecked() {         # `capable` answers 0 without checking anything
+  sed -i "/^    if sys.argv\[1:2\] == \['capable'\]:\$/,/^        return 0\$/ { /^        subreaper()\$/d }" "${1%/*}/sdd-coordination.py"
+}
+mut_COORD_remedy_probe_recurses() {     # the probe's own refusal probes for a remedy again
+  sed -i "/^            and sys.argv\[1:2\] != \['capable'\]\$/d" "${1%/*}/sdd-coordination.py"
+}
 
 # The worker's pidfd kept after the worker is reaped: the `finally` closes it a second time — EBADF,
 # or worse, a descriptor reused since — and the supervisor dies. Caught by every coordinated call.
@@ -4612,6 +4628,10 @@ CATALOG=(
   COORD_reaped_pidfd_kept
   COORD_unavailable_generic
   COORD_remedy_for_every_requirement
+  COORD_bash_remedy_unprobed
+  COORD_remedy_attribute_probe
+  COORD_capable_unchecked
+  COORD_remedy_probe_recurses
   CLOSE_no_fast_forward
   CLOSE_dirty_base_moves
   CLOSE_fetch_failure_ignored
