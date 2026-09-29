@@ -89,9 +89,9 @@ Checklist rules:
 - **no `✗` may be left; `⛔` only with its proposed text** — the runner fails the gate when it
   finds a pending item, and a `⛔` whose document the proposed-text section does not name.
 
-**A path the harness refuses is a boundary, never an obstacle.** When `Edit`/`Write` is denied —
+**A path the harness refuses is a boundary, never an obstacle.** When a file edit is denied —
 `.claude/rules/` is the usual one, and it is not in your `writes:` either — do not route around it
-through Bash (`python`, `sed`, redirection, `tee`, `cp`): the runner reads the session's diff
+through the shell (`python`, `sed`, redirection, `tee`, `cp`): the runner reads the session's diff
 against your `writes:` and stops the line (`hat-crossed`). Mark the row `⛔`, and write the exact
 text to apply under a section whose next line is `<!-- sdd:proposed -->`, naming the row's
 document (the second column) in it — the gate reads that name, row by row. The publisher carries
