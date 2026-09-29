@@ -1,6 +1,6 @@
 # ADR 0013 — A QA report belongs to the mission that added it, and a path the harness refuses is proposed, not written
 
-- **Status**: proposed (—, 2026-09-28)
+- **Status**: accepted (—, 2026-09-28)
 - **Spec**: docs/handoffs/20260928-os-achados-da-janela/00-missao.md
 
 ## Context
@@ -53,12 +53,14 @@ future session. The two authorities disagreed, with two outcomes:
 ## Decision
 
 1. **A report belongs to the mission if the mission added it.** The report must have been added
-   (`--diff-filter=A`, never merely modified) in `git merge-base "$DEFAULT_BRANCH" HEAD..HEAD`, or be
-   new in the working tree (untracked, or staged as added). ONE function answers it, and
-   `qa_substep` and Anchor 1 both call it.
+   (never merely modified) in `git merge-base "$DEFAULT_BRANCH" HEAD..HEAD`, or be new in the
+   working tree (untracked, or staged as added). ONE function answers it, and `qa_substep` and
+   Anchor 1 both call it. (Refined after the codereview of 2026-09-28 and its three follow-up
+   rounds, see Implementation: the range is `HEAD --not` the local and remote base, a path the base
+   tree already has is never new, and ownership follows the rename chain.)
 2. **An empty range keeps today's answer.** That covers standing on the default branch, and a
-   mission that is already merged. The criterion only applies where it can be decided. It never
-   turns a merged mission back into QA.
+   mission that is already merged. The criterion only applies where it can be decided. Seen from
+   the default branch or from its own branch, a merged mission never goes back to QA.
 3. **The charter keeps today's meaning**: "the tree exists". It is durable by the skill's own
    contract. Requiring a charter added by the mission would make `QA:plan` unsatisfiable in any cycle
    that reuses charters.
@@ -67,29 +69,65 @@ future session. The two authorities disagreed, with two outcomes:
    sensor is in force the moment this merges. `.claude/agents/**` stays, because `sdd install --force`
    is the sanctioned route for the mirrors.
 5. **A `⛔` row passes `gate_DOCS` loudly, and only with its proposed text.** The row is accepted
-   when `45-docs.md` carries the proposed-text section under the `<!-- sdd:proposed -->` marker and
+   when `45-docs.md` carries the proposed-text section under the `<!-- sdd:proposed -->` marker (a
+   line of its own, outside a code fence; quoted in a table cell it is not the section) and
    that section names the document of **every** `⛔` row. The marker alone, or an empty section, does
    not pass: the promise is measured row by row. The passing reason names every `⛔` row, as the
    `deferred` genre does in `gate_QA` (ADR 0009). The gate proves that each `⛔` has a proposal for
-   its document, not that the text is right; the human judges the text in the PR.
+   its document, not that the text is right; the human judges the text in the PR. A `⛔` on a
+   document the hat writes itself is refused, `.claude/` excepted, because the harness refuses it
+   even inside `writes:` (added after the codereview of 2026-09-28).
    `sdd-publisher` carries the text into the PR's decisions for a human, and the human applies it at
-   the merge gate, which is already theirs.
+   the merge gate, which is already theirs. `gate_PR` reads the PR body back and refuses one that
+   does not name every `⛔` document on a line carrying `⛔` (added after the codereview of
+   2026-09-28: until then only the publisher's prompt carried it, and a body without it merged
+   green). A merged PR is not read again.
 
 ## Implementation
 
-This is the planned shape. I4 and I6 of the mission confirm it, or correct this section in the same
-commit.
+This is the shape the mission shipped: I2 (`121a696`) for decisions 1 to 3, I4 (`1ffee16`) for 4
+and 5. It was checked against the code when the ADR was accepted.
 
-- The function sits next to `latest_matching` and returns an absolute path, or empty. It reads
-  `git -c core.quotePath=false log --diff-filter=A --name-only --format= <base>..HEAD -- <reports>`
-  and `git status --porcelain -uall -- <reports>`. `-uall` is load-bearing, because without it an
+- The function sits next to `latest_matching` and returns an absolute path, or empty. The mission's
+  commits are `HEAD --not` every resolving ref of `DEFAULT_BRANCH`, its upstream and
+  `origin/<DEFAULT_BRANCH>` (`mission_base_refs`): the local ref alone goes stale, and a base
+  pulled into the branch brought another mission's report into `merge-base..HEAD`. It replays them
+  with plumbing, parents first — `git rev-list --reverse --topo-order HEAD --not <refs> | git
+  diff-tree --stdin -r -M -z --no-commit-id --name-status --diff-filter=AR -- <reports>` — and then
+  reads `git status --porcelain -z -uall --find-renames -- <reports>`. An add, an untracked file, a
+  staged add, an intent-to-add or a staged copy grants ownership only to a path absent from the tree
+  of every merge-base of HEAD with those refs (`path_in_commits`); a rename carries it only from a
+  path the mission already owned. With nothing to measure against (no base ref, no merge-base, or an
+  empty range) it keeps the answer from before the rule. Plumbing because the display config does
+  not reach it (`log.showSignature` broke the porcelain read); `--topo-order` because date order
+  replayed a rename before its add on a skewed clock; `-M` and `--find-renames` because detection is
+  otherwise off or configurable; the rename limit pinned to 0 on both reads (`diff.renameLimit`,
+  `status.renameLimit`); `-z` because git quotes a space or a `"`. The check is against the
+  merge-base tree, not the base tip: a report another mission added upstream after the fork and
+  brought in by checkout, squash or cherry-pick counts — declared in `TODO.md`, because checking
+  the tip would refuse a squash-merged mission its own report. (The first shape read `--diff-filter=A` over
+  `merge-base..HEAD` without renames; the codereview of 2026-09-28 and its three follow-up rounds
+  brought it here.) `-uall` is load-bearing, because without it an
   untracked directory is listed as the directory and not as its files. Among the mission's files it
-  picks the newest by the same `sort -V` as `latest_matching`. It computes the base with `|| true`
-  guards, because a missing `DEFAULT_BRANCH` must read as an empty range and never as a dead process.
+  picks the newest by the same `sort -V` as `latest_matching`. Every git read is guarded with
+  `|| true`, because a missing `DEFAULT_BRANCH` must read as an empty range and never as a dead
+  process.
+  A candidate counts only when it is `-ef` the file `<reports>/<name>`: a direct child of `reports/`,
+  as the glob of `latest_matching` reads, whatever spelling `QA_DOCS_PATH` has, and still on disk.
 - When the tree has reports but none of them belong to the mission, `gate_QA` refuses with a reason
-  that names the newest one and says it predates the mission branch, and `qa_substep` answers `exec`.
-- The `⛔` marker is structural and in English, like `<!-- sdd:open -->` in `TODO.md`. The heading
-  above it follows `OUTPUT_LANG`.
+  that names the newest one and says it "is not one this branch added" — never that it predates the
+  branch, which is false of a report git ignores — and `qa_substep` answers `exec`.
+- The `<!-- sdd:proposed -->` marker is structural and in English, like `<!-- sdd:open -->` in
+  `TODO.md`. The heading above it follows `OUTPUT_LANG`. The proposed text is the lines after EVERY
+  marker up to the next `## ` heading outside a code fence (proposed text for a rules file is
+  markdown and carries headings), or the end of the file. The documents of a `⛔` row are the
+  table's second column with its markup stripped and split on commas (one `⛔` cell naming two
+  documents is two documents), each looked up there with `grep -F`, and each has to be a name (an
+  alphanumeric in it: `—` matched any em-dash). A `⛔` followed by VS16 (U+FE0F) is the same value.
+- `app_probe` reads the status: only a 2xx page without `APP_EXPECT` is `wrong`. A redirect or an
+  error page without it is `unknown` (the right product may answer either), and with it is `up`.
+- The rows of the table are admitted positively: only a `⛔` row is exempt, and every other value is
+  pending, tagged or not. A `✗` beside a proposed `⛔` keeps today's reason, counted without the `⛔`.
 
 ## Alternatives discarded
 
@@ -117,7 +155,10 @@ commit.
 - The fail-open recorded on 2026-08-27 closes for every mission that runs on its own branch.
   **Declared residue:** a mission whose `branch:` is the default branch itself always has an empty
   range, so it keeps today's answer. So does a repository whose `DEFAULT_BRANCH` does not exist
-  locally.
+  locally. The range is HEAD's, not the mission's, which leaves two more: a merged mission asked
+  about from ANOTHER mission's branch reads QA again (its report is on the base, outside that
+  branch's range), and a branch stacked on an unmerged mission counts that mission's reports as its
+  own. Scoping the range by the mission's `branch:` ref would close the first; neither was measured.
 - A cycle that runs `qa-execution` on a branch whose reports are all from earlier missions now
   walks. That is the intended cost: a QA phase that skipped the skills was a phase that did not run.
 - `.claude/rules/` drift reaches the human as text in the PR, not as a commit. If the human merges

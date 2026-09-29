@@ -55,6 +55,7 @@ there is never mistaken for an ok.
 | Key | Required | Default | What it is |
 |---|---|---|---|
 | `APP_URL` | only with `E2E_CMD` | empty | URL `agent-browser` opens in the exploratory sessions — and the address the runner asks whether anything is listening on. |
+| `APP_EXPECT` | no | empty | Literal text the page at `APP_URL` must carry (a `GET` with `curl`, `grep -F`) — e.g. the SPA's `<title>`, when another product may hold the same port. Empty = TCP connect only, as before. Declared and absent from a 2xx page, the probe reads `wrong`: `sdd preflight` fails with `E2E_CMD` (warns without it), and `gate_QA` over a red e2e escalates as `app-down`. A redirect or an error page without it (the right product may answer either; redirects are not followed), no `curl`, or a read that fails, is *unknown* and never refuses. |
 
 The runner does not bring the environment up: it assumes the app is already running. Starting it
 (`docker compose up -d` and friends) is a step for whoever runs `sdd`, or for `E2E_CMD` itself.
@@ -101,6 +102,14 @@ grows one name per project, and this key is what replaces it.
 
 By **path** and not by directory, because the three measured occurrences say so: `.claude/rules/**`
 and `.claude/napkin.md` are different decisions and a project may want one without the other.
+
+⚠️ Since `20260928-os-achados-da-janela` the `sdd-docs` hat does **not** declare `.claude/rules/**`:
+headless `claude -p` refuses `Edit`/`Write` there, and in SQ-145/SQ-146 the session routed around
+the refusal through Bash, which the guard accepted because the path was in `writes:`. The hat now
+leaves a `⛔` row with proposed text and the human applies it in the PR (ADR 0013). Giving the path
+back with `sdd-docs: .claude/rules/**` reopens exactly that route — the harness still refuses the
+tools, so the only way to write there is the one this cut exists to stop. It is the project's
+decision to make, and this is what it costs.
 
 ```sh
 # the two exceptions the pilot target actually needs
@@ -259,6 +268,17 @@ It is asked twice, before the session and after it: an answer that is not a JSON
 tool could not be reached (expired auth is the ordinary way), and `sdd close` refuses **before**
 spending a paid session rather than after. An issue already `Done` is reported as such and costs no
 session at all.
+
+### Not a config key: `SDD_SYSTEM_PYTHON`
+
+When coordination refuses with `CHECKOUT-UNAVAILABLE` because of the `python3` on `PATH` — none at
+all, a build without pidfd, or one older than 3.9 — the refusal offers
+`PATH=/usr/bin:$PATH sdd <the same command>`, and only after `/usr/bin/python3` passes the helper's
+own check (`sdd-coordination.py capable`). Both the runner and the helper read
+`${SDD_SYSTEM_PYTHON:-/usr/bin/python3}` as that interpreter, so a sensor can model a system Python
+that fails the check. The path must end in `python3`, because the remedy puts its directory first
+on `PATH`; one that does not gets no remedy. The runner only probes it and never uses it. Like `SDD_ACLI_BIN`, it describes the
+machine, so it is an environment variable and not a config key.
 
 ### Not a config key: `SDD_STATE_DIR`
 

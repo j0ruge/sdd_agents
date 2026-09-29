@@ -27,7 +27,7 @@ Check `.sdd/config.sh` before anything else:
 | Who ran before you | `qa-report` and `qa-execution`, in their own sessions | **nobody** — you are the only session of the phase |
 | The `docs/qa/` tree | exists, and it is **theirs**: you read, you do not rewrite | usually absent — **do not bootstrap it**; if it IS there, a human put it there: read it, never delete it |
 | Who walks the journey | the skills, in persona | **you** |
-| Evidence the gate demands | dated report `**Status:** closed` in `reports/` | the `gate:` field of your own `30-handoff-qa.md` |
+| Evidence the gate demands | dated report `**Status:** closed` in `reports/` that **this mission's branch added** (a report from before the branch is another mission's, and the gate says so) | the `gate:` field of your own `30-handoff-qa.md` |
 
 On the **without interface** path the `gate:` field is **structural load**: leave it empty and the
 gate fails and the phase does not close. It is the only evidence the journey was walked — describe
@@ -43,7 +43,8 @@ terminal.
 2. `docs/handoffs/<mission>/20-handoff-exec.md` — what was implemented, and what of it is
    user-visible.
 3. The mission diff (`git diff <base>...HEAD`).
-4. The `docs/qa/` tree (path in `QA_DOCS_PATH`): the most recent dated report in `reports/`, the
+4. The `docs/qa/` tree (path in `QA_DOCS_PATH`): the most recent dated report **this mission's
+   branch added** to `reports/` (an older one belongs to another mission), the
    open `bugs/`, the `scenarios/` touched. **It only exists on the with-interface path** — on the
    other one, skip this item and walk the journey yourself.
 5. `.sdd/config.sh` — `E2E_DIR`, `E2E_CMD`, `APP_URL`, `TEST_CMD`, `TODO_FILE`, `OUTPUT_LANG`.

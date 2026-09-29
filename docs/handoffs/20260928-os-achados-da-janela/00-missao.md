@@ -4,7 +4,7 @@ titulo: A QA fecha com o relatório da própria missão, o app errado tem nome, 
 data: 2026-09-28
 versao:
 branch: fix/os-achados-da-janela
-aprovacao:
+aprovacao: humano-2026-09-28
 adr: docs/adr/0013-o-relatorio-da-missao-e-o-texto-proposto.md
 ddd: aplicado
 ---

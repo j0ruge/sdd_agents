@@ -28,7 +28,8 @@ fails=0
 # whose whole point is to model a clean, gate-passing repo.
 SDD_STATE_FIX="$(mktemp -d "${TMPDIR:-/tmp}/sdd-gates-state-XXXXXX")"
 export SDD_STATE_DIR="$SDD_STATE_FIX"
-trap 'rm -rf "$FIX" "$SDD_STATE_FIX"' EXIT
+CLOSE_REMOTE_DIR=""
+trap 'stop_page_server 2>/dev/null; rm -rf "$FIX" "$SDD_STATE_FIX" ${CLOSE_REMOTE_DIR:+"$CLOSE_REMOTE_DIR"}' EXIT
 
 pass() { printf '  ok    %s\n' "$1"; }
 # Inside a mutant the first red assertion is the verdict: fail() ends the sensor there, AFTER
@@ -941,6 +942,317 @@ assert_why_absent "the lexicographic pick is not the file the gate read" "QA" "2
 rm -f "$FIX/docs/qa/reports/2026-01-01-fixture-final.md"
 assert_phase "with the later report gone the gate advances again" "REVIEW"
 
+# --- WHOSE report: the mission's, not the newest in the tree ----------------------------------
+# Anchor 1 used to pick `latest_matching reports/*.md`, and nothing tied that file to the mission.
+# Measured in the judge's window: in SQ-146 the newest report was SQ-143's, the sub-step answered
+# `close` and the QA skills never ran; in LH-4 the handoff's own `gate:` says the report it closed
+# on was an older mission's. The rule (ADR 0013): the report belongs to the mission when the
+# mission branch ADDED it (merge-base..HEAD) or it is new in the tree; an empty range (a mission on
+# the base, or already merged) keeps the answer every block above this one measured.
+#
+# Everything above ran ON the base, which is the empty range — the fallback proved by the whole
+# QA block staying green. Here the fixture lands on main and a mission branch is cut from it.
+# A SECOND, older base report lands with it: the rename-limit world below needs two edited renames
+# of base reports in one change, and it is older, so every "newest" above and below is unchanged.
+cp "$FIX/docs/qa/reports/2026-01-01-fixture.md" "$FIX/docs/qa/reports/2026-01-00-fixture-older.md"
+git add -A && git commit -qm "chore: the QA fixture lands on the base" >/dev/null
+git checkout -q -b missao/qa-report-owner
+# The branch EDITS the base report instead of adding one: a mission that touches another
+# mission's report does not become its owner. Held twice since review r4: the read never lists an
+# edit (`--diff-filter=AR`), and a path the base already has is never new.
+printf '<!-- touched on the mission branch -->\n' >> "$FIX/docs/qa/reports/2026-01-01-fixture.md"
+git add -A && git commit -qm "chore: the mission edits the base report" >/dev/null
+qa_owner_why="$( cd "$FIX" && "$SDD" why "$MISSION" QA 2>&1 )"
+qa_owner_phase="$( cd "$FIX" && "$SDD" phase "$MISSION" 2>&1 )"
+# The refusal says "is not one this branch added", and not "was added before the branch": the
+# second is true of this fixture and false of a report git ignores, which is also refused here.
+assert_eq "QA gate refuses a closed report added before the mission branch" "QA|1" \
+  "$qa_owner_phase|$(grep -c 'is not one this branch added' <<< "$qa_owner_why")"
+# The new reason names the file it refused, so the human reads which report was someone else's.
+assert_why "the refusal names the report that belongs to the base" "QA" "the newest, 2026-01-01-fixture\.md"
+# RENAMING another mission's report does not make it this mission's either (review r2 of the
+# codereview fixes, reproduced in a scratch repo): with rename detection off, `git mv` of the base
+# report is a delete plus an ADD, and the add read as the mission's own — ADR 0013's fail-open back
+# through a rename. Ownership follows the rename chain instead: a rename carries it only from a
+# path the mission already owned. The newer name makes the renamed file the pick if it counted.
+# Detection switched OFF in the config for both reads, as a user's may be: the runner asks for it
+# explicitly (`-M`, `--find-renames`), and a runner that left it to the config reads D + A here.
+git config diff.renames false; git config status.renames false
+git mv "$FIX/docs/qa/reports/2026-01-01-fixture.md" "$FIX/docs/qa/reports/2026-01-09-fixture-renamed.md"
+assert_eq "a report of the base renamed in the index is not the mission's" "QA|1" \
+  "$( cd "$FIX" && "$SDD" phase "$MISSION" 2>&1 )|$(grep -c 'is not one this branch added' <<< "$( cd "$FIX" && "$SDD" why "$MISSION" QA 2>&1 )")"
+git commit -qm "chore: the mission renames the base report" >/dev/null
+assert_eq "a report of the base renamed in a commit is not the mission's" "QA|1" \
+  "$( cd "$FIX" && "$SDD" phase "$MISSION" 2>&1 )|$(grep -c 'is not one this branch added' <<< "$( cd "$FIX" && "$SDD" why "$MISSION" QA 2>&1 )")"
+git reset -q --hard HEAD~1
+git config --unset diff.renames; git config --unset status.renames
+# A staged COPY is a new path, as the log reads it (`-M` without `-C` shows it as an add): with
+# status.renames=copies in the user's config, the mission's new report staged beside an edit of the
+# base one reads `C new old`, and it was refused (review r3, reproduced). Owned, like the log.
+git config status.renames copies
+printf '<!-- touched again -->\n' >> "$FIX/docs/qa/reports/2026-01-01-fixture.md"
+cp "$FIX/docs/qa/reports/2026-01-01-fixture.md" "$FIX/docs/qa/reports/2026-01-02-fixture-copied.md"
+git add -A
+# FLOOR: the copy arm is only measured if git really prints `C` for it here.
+copy_status="$(git status --porcelain -z -uall --find-renames -- docs/qa/reports/ | tr '\0' '\n')"
+assert_eq "git stages the mission's new report as a copy here, so the probe below measures that arm" "1" \
+  "$(grep -c '^C.*2026-01-02-fixture-copied\.md$' <<< "$copy_status")"
+assert_phase "a report git stages as a copy is the mission's, as the log would read it" "REVIEW"
+git reset -q --hard
+git config --unset status.renames
+
+# FOUR MORE ROADS to another mission's report, each reproduced by review r4 of the codereview fixes:
+# the mission has no report of its own here, so every one must still read "not one this branch
+# added". What they share is the state the function now keeps: the mission's commits are HEAD --not
+# the local AND remote base, and a path the base already has is never new.
+qa_refused() { # qa_refused <assertion name>
+  assert_eq "$1" "QA|1" \
+    "$( cd "$FIX" && "$SDD" phase "$MISSION" 2>&1 )|$(grep -c 'is not one this branch added' <<< "$( cd "$FIX" && "$SDD" why "$MISSION" QA 2>&1 )")"
+}
+# (a) The base moved on upstream, the branch PULLED it, and the local base stayed where the ticket
+#     flow left it: merge-base(local, HEAD)..HEAD held every report merged upstream since.
+QA_REMOTE="$(mktemp -d "${TMPDIR:-/tmp}/sdd-qa-remote-XXXXXX")"
+git init -q --bare "$QA_REMOTE/origin.git"
+git remote add origin "$QA_REMOTE/origin.git"
+git push -q origin main 2>/dev/null
+git clone -q -b main "$QA_REMOTE/origin.git" "$QA_REMOTE/peer" 2>/dev/null
+cat > "$QA_REMOTE/peer/docs/qa/reports/2026-01-05-fixture-upstream.md" <<'EOF'
+# QA Run Report — 2026-01-05 — another mission, merged upstream
+- **Started:** 2026-01-05T10:00:00Z · **Status:** closed <!-- in-progress | closed -->
+| # | Charter | Status |
+|---|---|---|
+| 1 | CH-one | Pass |
+EOF
+git -C "$QA_REMOTE/peer" add -A
+git -C "$QA_REMOTE/peer" -c user.email=peer@example.com -c user.name=peer commit -qm "another mission's report"
+git -C "$QA_REMOTE/peer" push -q origin main 2>/dev/null
+git fetch -q origin
+git merge -q --no-edit origin/main >/dev/null
+qa_refused "a report another mission merged upstream, pulled into the branch, is not the mission's"
+git reset -q --hard HEAD~1
+git remote remove origin
+rm -rf "$QA_REMOTE"
+# (b) Deleted and brought back (a revert): the add is of a path the base already has.
+git rm -q "$FIX/docs/qa/reports/2026-01-01-fixture.md"
+git commit -qm "chore: the mission deletes the base report" >/dev/null
+git revert --no-edit HEAD >/dev/null
+qa_refused "a report of the base deleted and restored in commits is not the mission's"
+git reset -q --hard HEAD~2
+# (c) Untracked by `git rm --cached`: `D ` plus `??` for a path the base already has.
+git rm -q --cached "$FIX/docs/qa/reports/2026-01-01-fixture.md"
+qa_refused "a report of the base untracked in the index is not the mission's"
+git reset -q
+# (d) A NEW file with the base report's name, one directory down: owned, but not a direct child of
+#     reports/ — a `-e` in place of `-ef` read it as the base report beside it.
+mkdir -p "$FIX/docs/qa/reports/archive"
+cp "$FIX/docs/qa/reports/2026-01-01-fixture.md" "$FIX/docs/qa/reports/archive/2026-01-01-fixture.md"
+git add -A && git commit -qm "chore: the mission archives a copy one directory down" >/dev/null
+qa_refused "a mission file one directory below reports/ does not stand in for the base report"
+git reset -q --hard HEAD~1
+# (e) The base PULLED from a remote the local base TRACKS under another name (`upstream`, no
+#     `origin`): the upstream ref is a base ref too (review r5).
+QA_REMOTE="$(mktemp -d "${TMPDIR:-/tmp}/sdd-qa-remote-XXXXXX")"
+git init -q --bare "$QA_REMOTE/up.git"
+git remote add upstream "$QA_REMOTE/up.git"
+git push -q upstream main 2>/dev/null
+git branch -q --set-upstream-to=upstream/main main
+git clone -q -b main "$QA_REMOTE/up.git" "$QA_REMOTE/peer" 2>/dev/null
+cp "$FIX/docs/qa/reports/2026-01-01-fixture.md" "$QA_REMOTE/peer/docs/qa/reports/2026-01-05-fixture-upstream.md"
+git -C "$QA_REMOTE/peer" add -A
+git -C "$QA_REMOTE/peer" -c user.email=peer@example.com -c user.name=peer commit -qm "another mission's report"
+git -C "$QA_REMOTE/peer" push -q origin main 2>/dev/null
+git fetch -q upstream
+git merge -q --no-edit upstream/main >/dev/null
+qa_refused "a report pulled from the remote the base tracks, under any name, is not the mission's"
+git reset -q --hard HEAD~1
+git branch -q --unset-upstream main
+git remote remove upstream
+rm -rf "$QA_REMOTE"
+# (f) Two base reports renamed WITH edits in one change, past a rename limit of 1 in the user's
+#     config: git skips detection and reads two adds, which counted (review r5). Both reads pin the
+#     limit to 0. FLOOR: an unpinned status really reads adds here, or the world measures nothing.
+git config diff.renameLimit 1; git config status.renameLimit 1
+git mv "$FIX/docs/qa/reports/2026-01-00-fixture-older.md" "$FIX/docs/qa/reports/2026-01-10-fixture-a.md"
+git mv "$FIX/docs/qa/reports/2026-01-01-fixture.md" "$FIX/docs/qa/reports/2026-01-11-fixture-b.md"
+printf '<!-- edited -->\n' >> "$FIX/docs/qa/reports/2026-01-10-fixture-a.md"
+printf '<!-- edited -->\n' >> "$FIX/docs/qa/reports/2026-01-11-fixture-b.md"
+git add -A
+limit_status="$(git status --porcelain -z -uall --find-renames -- docs/qa/reports/ | tr '\0' '\n')"
+assert_eq "an unpinned status reads the two edited renames as adds here, so the world is measured" "2" \
+  "$(grep -c '^A ' <<< "$limit_status")"
+qa_refused "two base reports renamed with edits, past the user's rename limit, in the index"
+git commit -qm "chore: the mission renames two base reports with edits" >/dev/null
+qa_refused "two base reports renamed with edits, past the user's rename limit, in a commit"
+git reset -q --hard HEAD~1
+git config --unset diff.renameLimit; git config --unset status.renameLimit
+# (g) NOTHING TO MEASURE AGAINST ⇒ the answer from before the rule: no base ref resolves, or none
+#     shares history with HEAD (a shallow clone, unrelated histories). Replaying the whole history
+#     instead read every report ever added as the mission's (review r5). The witness is a report
+#     git IGNORES: the old answer (the newest file on disk) reads it, a replay never sees it.
+printf 'docs/qa/reports/2026-01-12-fixture-ignored.md\n' >> "$FIX/.git/info/exclude"
+cat > "$FIX/docs/qa/reports/2026-01-12-fixture-ignored.md" <<'EOF'
+# QA Run Report — 2026-01-12 — fixture ignored
+- **Started:** 2026-01-12T10:00:00Z · **Status:** in-progress <!-- in-progress | closed -->
+| # | Charter | Status |
+|---|---|---|
+| 1 | CH-one | Pass |
+EOF
+cp .sdd/config.sh "$SDD_STATE_FIX/qa-nobase-config.sh"
+sed -i 's/^DEFAULT_BRANCH=.*/DEFAULT_BRANCH="no-such-base"/' .sdd/config.sh
+assert_why "with no base ref that resolves, QA reads the tree as before" "QA" \
+  "report 2026-01-12-fixture-ignored\.md is not 'closed'"
+qa_orphan="$(git commit-tree "$(git mktree < /dev/null)" -m "an unrelated history")"
+git branch -q qa-orphan-base "$qa_orphan"
+sed -i 's/^DEFAULT_BRANCH=.*/DEFAULT_BRANCH="qa-orphan-base"/' .sdd/config.sh
+assert_why "with a base that shares no history with HEAD, QA reads the tree as before" "QA" \
+  "report 2026-01-12-fixture-ignored\.md is not 'closed'"
+cp "$SDD_STATE_FIX/qa-nobase-config.sh" .sdd/config.sh
+git branch -q -D qa-orphan-base
+rm -f "$FIX/docs/qa/reports/2026-01-12-fixture-ignored.md"
+sed -i '/2026-01-12-fixture-ignored/d' "$FIX/.git/info/exclude"
+
+# PROVENANCE: ~/.claude/skills/qa-execution/assets/report-template.md:6, as the fixture above.
+# First UNCOMMITTED — the skill may leave the report in the tree when the gate reads it — then
+# committed: the two halves of "the mission wrote it".
+cat > "$FIX/docs/qa/reports/2026-01-02-fixture-mine.md" <<'EOF'
+# QA Run Report — 2026-01-02 — fixture mine
+- **Started:** 2026-01-02T10:00:00Z · **Status:** closed <!-- in-progress | closed -->
+| # | Charter | Status |
+|---|---|---|
+| 1 | CH-one | Pass |
+EOF
+qa_owner_why="$( cd "$FIX" && "$SDD" why "$MISSION" QA 2>&1 )"
+qa_owner_phase="$( cd "$FIX" && "$SDD" phase "$MISSION" 2>&1 )"
+assert_eq "QA gate accepts a closed report the mission wrote and has not committed yet" "REVIEW|0" \
+  "$qa_owner_phase|$(grep -c 'is not one this branch added' <<< "$qa_owner_why")"
+# The two index states between untracked and committed (review r4): intent-to-add is ` A`, a
+# staged add is `A `, and each is the mission's.
+git add -N "$FIX/docs/qa/reports/2026-01-02-fixture-mine.md"
+assert_phase "QA gate accepts the mission's report marked intent-to-add" "REVIEW"
+git add "$FIX/docs/qa/reports/2026-01-02-fixture-mine.md"
+assert_phase "QA gate accepts the mission's report staged and not committed" "REVIEW"
+git add -A && git commit -qm "chore: the mission's own report" >/dev/null
+qa_owner_why="$( cd "$FIX" && "$SDD" why "$MISSION" QA 2>&1 )"
+qa_owner_phase="$( cd "$FIX" && "$SDD" phase "$MISSION" 2>&1 )"
+assert_eq "QA gate accepts the closed report the mission branch added" "REVIEW|0" \
+  "$qa_owner_phase|$(grep -c 'is not one this branch added' <<< "$qa_owner_why")"
+# A rename in the WORK TREE: a plain `mv` plus `git add -N` is ` R new old` (review r6) — the mission's
+# own report, renamed, and still the mission's.
+mv "$FIX/docs/qa/reports/2026-01-02-fixture-mine.md" "$FIX/docs/qa/reports/2026-01-02-fixture-mine-wt.md"
+git add -N "$FIX/docs/qa/reports/2026-01-02-fixture-mine-wt.md"
+assert_eq "git reads the rename in the work tree as ' R' here, so the probe below measures that arm" "1" \
+  "$(git status --porcelain -z -uall --find-renames -- docs/qa/reports/ | tr '\0' '\n' | grep -c '^ R .*2026-01-02-fixture-mine-wt\.md$')"
+assert_phase "QA gate accepts the mission's report renamed in the work tree" "REVIEW"
+git reset -q --hard
+# Four rules that held with nothing measuring them (review r4). Each world below leaves the
+# mission's closed report as the right answer, so a runner that broke the rule reads another file.
+# (e) Only `.md` is a report: a newer `.txt` of the mission's under reports/ is not the pick.
+printf 'notes\n' > "$FIX/docs/qa/reports/2026-01-09-notes.txt"
+git add -A && git commit -qm "chore: the mission leaves notes under reports/" >/dev/null
+assert_phase "a mission file under reports/ that is not .md is not a report" "REVIEW"
+git reset -q --hard HEAD~1
+# (f) QA_DOCS_PATH spelled `./docs/qa/`: git answers `docs/qa/reports/…`, the reader builds
+#     `./docs/qa//reports/…`, and the two name the same file (`-ef`, not string equality).
+printf 'QA_DOCS_PATH="./docs/qa/"\n' >> .sdd/config.sh
+git add -A && git commit -qm "chore: QA_DOCS_PATH spelled ./docs/qa/" >/dev/null
+assert_phase "QA_DOCS_PATH spelled ./docs/qa/ reads the mission's report the same" "REVIEW"
+git reset -q --hard HEAD~1
+# (g) A skewed clock: the report added at 10:00, renamed on a commit whose clock reads 05:00, and a
+#     side branch from the add dated 20:00 merged back. Date order replays the rename BEFORE the
+#     add, and the mission's own renamed report was lost; parents first (`--topo-order`) it is not.
+#     Still `in-progress`, and newer, so the gate says which file it read.
+qa_skew_base="$(git rev-parse HEAD)"
+cat > "$FIX/docs/qa/reports/2026-01-06-fixture-skew.md" <<'EOF'
+# QA Run Report — 2026-01-06 — fixture skew
+- **Started:** 2026-01-06T10:00:00Z · **Status:** in-progress <!-- in-progress | closed -->
+| # | Charter | Status |
+|---|---|---|
+| 1 | CH-one | Pass |
+EOF
+git add -A
+GIT_AUTHOR_DATE=2026-01-06T10:00:00 GIT_COMMITTER_DATE=2026-01-06T10:00:00 git commit -qm "skew: add" >/dev/null
+git checkout -q -b qa-skew-side
+printf 'side\n' > "$FIX/skew-side.txt"; git add -A
+GIT_AUTHOR_DATE=2026-01-06T20:00:00 GIT_COMMITTER_DATE=2026-01-06T20:00:00 git commit -qm "skew: side" >/dev/null
+git checkout -q missao/qa-report-owner
+git mv "$FIX/docs/qa/reports/2026-01-06-fixture-skew.md" "$FIX/docs/qa/reports/2026-01-07-fixture-skew-renamed.md"
+GIT_AUTHOR_DATE=2026-01-06T05:00:00 GIT_COMMITTER_DATE=2026-01-06T05:00:00 git commit -qm "skew: rename" >/dev/null
+GIT_AUTHOR_DATE=2026-01-06T21:00:00 GIT_COMMITTER_DATE=2026-01-06T21:00:00 git merge -q --no-edit qa-skew-side >/dev/null
+assert_why "QA gate reads the mission's report renamed on a skewed clock" "QA" \
+  "report 2026-01-07-fixture-skew-renamed\.md is not 'closed'"
+git reset -q --hard "$qa_skew_base"
+git branch -q -D qa-skew-side
+# (h) A SIGNED commit with log.showSignature on: porcelain `git log` put the signature text ahead of
+#     the first field and the report vanished; plumbing reads no user config. FLOOR first — the
+#     world is only measured if the signature really reaches stdout here.
+if ! command -v ssh-keygen >/dev/null 2>&1; then
+  fail "signed-commit floor" "ssh-keygen on PATH" "absent — the log.showSignature world was NOT measured"
+else
+  QA_SIGN="$SDD_STATE_FIX/qa-sign"; mkdir -p "$QA_SIGN"
+  ssh-keygen -t ed25519 -N '' -q -f "$QA_SIGN/key"
+  printf '%s %s\n' "$(git config user.email)" "$(cat "$QA_SIGN/key.pub")" > "$QA_SIGN/allowed"
+  git config gpg.format ssh; git config user.signingkey "$QA_SIGN/key.pub"
+  git config gpg.ssh.allowedSignersFile "$QA_SIGN/allowed"; git config log.showSignature true
+  cat > "$FIX/docs/qa/reports/2026-01-08-fixture-signed.md" <<'EOF'
+# QA Run Report — 2026-01-08 — fixture signed
+- **Started:** 2026-01-08T10:00:00Z · **Status:** in-progress <!-- in-progress | closed -->
+| # | Charter | Status |
+|---|---|---|
+| 1 | CH-one | Pass |
+EOF
+  git add -A && git commit -S -qm "chore: the mission's report in a signed commit" >/dev/null
+  assert_eq "the signature reaches porcelain stdout here, so the world below is measured" "1" \
+    "$(git log -1 --format= 2>/dev/null | grep -c 'signature')"
+  assert_why "QA gate reads a report added in a signed commit, with log.showSignature on" "QA" \
+    "report 2026-01-08-fixture-signed\.md is not 'closed'"
+  git reset -q --hard HEAD~1
+  for k in gpg.format user.signingkey gpg.ssh.allowedSignersFile log.showSignature; do git config --unset "$k"; done
+fi
+
+# THREE SPELLINGS git gives the mission's own report, each of which read as "not the mission's"
+# before the codereview of 2026-09-28 (both halves of the first reproduced in a scratch repo there):
+#
+# 1. an UNCOMMITTED report with a space in its name. `git status --porcelain` quotes that path
+#    (`?? "docs/qa/reports/a b.md"`), the quoted name does not end in `.md`, and the report was
+#    skipped. Written NEWER than the committed one and still `in-progress`, so the gate says which
+#    file it read: the right runner refuses on THIS report, and one that cannot see it falls back to
+#    the older, closed one and passes.
+cat > "$FIX/docs/qa/reports/2026-01-03-fixture walk.md" <<'EOF'
+# QA Run Report — 2026-01-03 — fixture walk
+- **Started:** 2026-01-03T10:00:00Z · **Status:** in-progress <!-- in-progress | closed -->
+| # | Charter | Status |
+|---|---|---|
+| 1 | CH-one | Pass |
+EOF
+assert_why "QA gate reads an uncommitted report with a space in its name" "QA" \
+  "report 2026-01-03-fixture walk\.md is not 'closed'"
+rm -f "$FIX/docs/qa/reports/2026-01-03-fixture walk.md"
+# 2. a STAGED rename of the mission's report. `git status` detects the rename and prints `R`, which is
+#    neither `??` nor `A`; the path it came from no longer exists. Nothing counted.
+git mv "$FIX/docs/qa/reports/2026-01-02-fixture-mine.md" "$FIX/docs/qa/reports/2026-01-04-fixture-moved.md"
+assert_phase "QA gate accepts the mission's report renamed in the index" "REVIEW"
+# 3. the same rename COMMITTED. `git log` detects it too, so the commit shows `R` and
+#    `--diff-filter=A` drops it; the add it came from names a path that is gone.
+git commit -qm "chore: the mission renames its report" >/dev/null
+assert_phase "QA gate accepts the mission's report renamed in a commit" "REVIEW"
+# 4. a COMMITTED name git quotes (a `"`): `git log` prints `"…\"…"`, which is no path on disk, and
+#    the branch's own report was refused as "not one this branch added". `-z` quotes nothing. Newer
+#    and still `in-progress`, so the gate says which file it read, as in 1.
+cat > "$FIX/docs/qa/reports/2026-01-05-fixture \"q\".md" <<'EOF'
+# QA Run Report — 2026-01-05 — fixture quoted
+- **Started:** 2026-01-05T10:00:00Z · **Status:** in-progress <!-- in-progress | closed -->
+| # | Charter | Status |
+|---|---|---|
+| 1 | CH-one | Pass |
+EOF
+git add -A && git commit -qm "chore: the mission commits a report with a quote in its name" >/dev/null
+assert_why "QA gate reads a committed report whose name git quotes" "QA" \
+  "report 2026-01-05-fixture \"q\"\.md is not 'closed'"
+# Back to the world the blocks below assume: on the base, the fixture as it was before this block.
+git checkout -q main
+git branch -q -D missao/qa-report-owner
+assert_phase "back on the base the fallback reads the tree as before" "REVIEW"
+
 echo "== QA phase — the e2e is red, and WHOSE fault it is =="
 # A red e2e says nothing about whose fault it is: a dead app, a stopped database, a missing
 # browser binary and a genuine assertion failure all leave the same non-zero rc. Before this
@@ -955,6 +1267,34 @@ port_is_free() {  # rc 0 = nothing is listening on 127.0.0.1:$1
   local rc=0
   LC_ALL=C timeout 3 bash -c 'exec 3<>"/dev/tcp/127.0.0.1/$0"' "$1" 2>/dev/null || rc=$?
   [ "$rc" -ne 0 ]
+}
+
+# start_page_server <dir> — serves <dir> over HTTP on a free loopback port and publishes PAGE_PORT
+# and PAGE_PID. CALLED, never `$( )`: the two globals would die with the subshell. PAGE_PORT stays
+# empty when no server came up, and the caller fails BY NAME rather than certifying nothing. The
+# server has to be OUR process (`kill -0` once the port answers): a neighbour sensor binding the
+# same port between the free check and our bind would otherwise be read as ours. 30000-31999 sits
+# under the ephemeral range, like the dead port above; `timeout 900` bounds an orphan if this shell
+# is killed before its EXIT trap runs, and the trap kills it on every ordinary exit.
+PAGE_PID=""; PAGE_PORT=""
+start_page_server() {
+  local port=$(( 30000 + $$ % 2000 )) tries=0 waited
+  PAGE_PID=""; PAGE_PORT=""
+  while [ "$tries" -lt 10 ]; do
+    tries=$(( tries + 1 )); port=$(( port + 1 ))
+    port_is_free "$port" || continue
+    timeout 900 python3 -m http.server "$port" --bind 127.0.0.1 --directory "$1" >/dev/null 2>&1 &
+    PAGE_PID=$!
+    waited=0
+    while port_is_free "$port" && [ "$waited" -lt 50 ]; do sleep 0.1; waited=$(( waited + 1 )); done
+    if ! port_is_free "$port" && kill -0 "$PAGE_PID" 2>/dev/null; then PAGE_PORT="$port"; return 0; fi
+    kill "$PAGE_PID" 2>/dev/null; wait "$PAGE_PID" 2>/dev/null || true; PAGE_PID=""
+  done
+  return 0
+}
+stop_page_server() {
+  if [ -n "$PAGE_PID" ]; then kill "$PAGE_PID" 2>/dev/null; wait "$PAGE_PID" 2>/dev/null || true; fi
+  PAGE_PID=""; PAGE_PORT=""
 }
 # BELOW the ephemeral range, and that is what makes the floor hold for the whole block. The floor
 # proves the port refuses ONCE; the assertions under it then run several `sdd` invocations over
@@ -993,7 +1333,7 @@ if [ "$floor_ok" = "1" ]; then
   assert_phase "e2e red over a dead app does not advance" "QA"
   assert_why   "the reason names the address nothing is listening on" "QA" \
                "nothing is listening at 127\.0\.0\.1:$dead_port"
-  assert_why_absent "an app that WAS probed is not reported as unprobed" "QA" "not probed"
+  assert_why_absent "an app that WAS probed is not reported as unprobed" "QA" "no verdict on"
 
   # The green half, and it is what protects the `example.invalid` fixture above — that one sits
   # beside a GREEN E2E_CMD, and a runner that probed before the gate would block it for a machine
@@ -1041,11 +1381,34 @@ if [ "$floor_ok" = "1" ]; then
 
   # The one-sided contract: what the probe cannot decide, it never escalates.
   sed -i 's|^APP_URL=.*|APP_URL=""|' .sdd/config.sh
-  assert_why        "an empty APP_URL is not probed" "QA" "not probed"
+  assert_why        "an empty APP_URL is not probed" "QA" "no verdict on"
   assert_why_absent "an empty APP_URL never claims a dead app" "QA" "nothing is listening"
   sed -i 's|^APP_URL=.*|APP_URL="not a url"|' .sdd/config.sh
-  assert_why        "an unparseable APP_URL is not probed" "QA" "not probed"
+  assert_why        "an unparseable APP_URL is not probed" "QA" "no verdict on"
   assert_why_absent "an unparseable APP_URL never claims a dead app" "QA" "nothing is listening"
+
+  # --- the app answers, but it is NOT this product (APP_EXPECT) --------------------------------
+  # LH-4, 2026-09-27: two products on http://localhost:5173, and a red e2e over the wrong one read
+  # as "the app answering". With APP_EXPECT declared and absent from the page the gate names it and
+  # arms the same marker as a dead app (the escalation itself is asserted in check-autonomy.sh).
+  # DIFFERENTIAL on one config line: the same page with an APP_EXPECT it carries is `up`.
+  page_dir="$FIX/.page"; mkdir -p "$page_dir"
+  printf '<!doctype html><title>Other Product</title><p>not the fixture</p>\n' > "$page_dir/index.html"
+  start_page_server "$page_dir"
+  if [ -z "$PAGE_PORT" ]; then
+    fail "wrong-app floor" "an HTTP server on a loopback port" \
+         "python3 -m http.server did not come up — the wrong-app world was NOT measured"
+  else
+    sed -i "s|^APP_URL=.*|APP_URL=\"http://127.0.0.1:$PAGE_PORT/\"|" .sdd/config.sh
+    printf 'APP_EXPECT="Fixture Product"\n' >> .sdd/config.sh
+    assert_why "QA gate names the wrong app at APP_URL when the e2e is red" "QA" \
+               "app at 127\.0\.0\.1:$PAGE_PORT is not this product"
+    sed -i 's|^APP_EXPECT=.*|APP_EXPECT="Other Product"|' .sdd/config.sh
+    assert_why "the same page carrying APP_EXPECT reads as the app answering" "QA" \
+               "with the app answering at 127\.0\.0\.1:$PAGE_PORT"
+    sed -i '/^APP_EXPECT=/d' .sdd/config.sh
+    stop_page_server
+  fi
 fi
 
 # Restore what the next block's sed expects to find.
@@ -1773,6 +2136,157 @@ printf '# Docs\n\ndrift checklist\n\n| Area | Doc | Status | Evidence |\n|---|--
 git add -A && git commit -qm "chore: docs with a markup-only Status"
 assert_phase "a Status cell that is only markup is still pending" "DOCS"
 assert_why   "...and it is quoted as written" "DOCS" "Status '\*\*'"
+
+# --- ⛔: the path the harness refuses becomes proposed text (ADR 0013) -------------------------
+# The DOCS hat no longer writes `.claude/rules/` — headless `claude -p` refuses Edit/Write there,
+# and in SQ-145/SQ-146 the session routed around it through python in Bash. The honest session of
+# LH-4 left a `⛔` with the text to apply, and this gate failed every Status that was not ✅/n/a, so
+# the phase had no way out. Now a `⛔` passes when the section under `<!-- sdd:proposed -->` NAMES
+# its document — per row: the marker alone is the promise with nothing behind it — and the pass
+# says so out loud, naming what waits for the human in the PR.
+docs_blocked_table='# Docs\n\ndrift checklist\n\n| Area | Doc | Status | Evidence |\n|---|---|---|---|\n| runner | README | ✅ | commit abc1234 |\n| rules | `.claude/rules/x.md` | ⛔ | the harness refused Edit there |\n\n'
+printf "$docs_blocked_table"'## Proposed text\n<!-- sdd:proposed -->\n\nIn `.claude/rules/x.md`, append:\n\n> the rule the mission changed\n' > "$MDIR/45-docs.md"
+git add -A && git commit -qm "chore: docs with a proposed ⛔"
+assert_why   "DOCS gate passes a ⛔ row that carries proposed text, and names it" "DOCS" \
+             'wait for a human.*\.claude/rules/x\.md'
+assert_phase "a ⛔ row with its proposed text lets the phase advance" "PR"
+printf "$docs_blocked_table"'Nothing else to say.\n' > "$MDIR/45-docs.md"
+git add -A && git commit -qm "chore: docs with a bare ⛔"
+docs_why="$( cd "$FIX" && "$SDD" why "$MISSION" DOCS 2>&1 )"
+assert_eq "DOCS gate refuses a ⛔ row without the proposed-text marker" "DOCS|1" \
+  "$( cd "$FIX" && "$SDD" phase "$MISSION" 2>&1 )|$(grep -c 'no proposed text' <<< "$docs_why")"
+# The marker is there and the section proposes text — for ANOTHER document. What this separates is
+# "has a marker" from "has a proposal for this row", which is the whole promise.
+printf "$docs_blocked_table"'## Proposed text\n<!-- sdd:proposed -->\n\nIn `.claude/rules/other.md`, append a line.\n' > "$MDIR/45-docs.md"
+git add -A && git commit -qm "chore: docs proposing text for another document"
+docs_why="$( cd "$FIX" && "$SDD" why "$MISSION" DOCS 2>&1 )"
+assert_eq "DOCS gate refuses a ⛔ row whose document is absent from the proposed section" "DOCS|1" \
+  "$( cd "$FIX" && "$SDD" phase "$MISSION" 2>&1 )|$(grep -c 'no proposed text: \.claude/rules/x\.md' <<< "$docs_why")"
+# The section ENDS at the next `## ` heading: a document named only below it was not proposed.
+printf "$docs_blocked_table"'## Proposed text\n<!-- sdd:proposed -->\n\nNothing yet.\n\n## Findings\n\n`.claude/rules/x.md` came up in review.\n' > "$MDIR/45-docs.md"
+git add -A && git commit -qm "chore: docs naming the document only past the section"
+assert_phase "a document named only after the proposed section ends is not a proposal" "DOCS"
+# EVERY marked section is read, and a `## ` inside a code fence does not end one: proposed text for
+# a rules file is markdown, and it carries headings. Read as the end of the section, the second
+# document looked unproposed, and the refusal told the session to do what it had already done —
+# DOCS spinning on the very ⛔ this gate was opened for.
+docs_two_table='# Docs\n\ndrift checklist\n\n| Area | Doc | Status | Evidence |\n|---|---|---|---|\n| rules | `.claude/rules/x.md` | ⛔ | refused |\n| rules | `.claude/rules/y.md` | ⛔ | refused |\n\n'
+printf "$docs_two_table"'## Proposed text for x\n<!-- sdd:proposed -->\n\n`.claude/rules/x.md`: the line.\n\n## Proposed text for y\n<!-- sdd:proposed -->\n\n`.claude/rules/y.md`: the line.\n' > "$MDIR/45-docs.md"
+git add -A && git commit -qm "chore: docs with two proposed sections"
+assert_why   "DOCS gate reads every section marked as proposed text" "DOCS" \
+             'wait for a human.*\.claude/rules/x\.md, \.claude/rules/y\.md'
+printf "$docs_two_table"'## Proposed text\n<!-- sdd:proposed -->\n\nIn `.claude/rules/x.md`, append:\n\n```md\n## Contracts\nthe rule\n```\n\nIn `.claude/rules/y.md`, append a line.\n' > "$MDIR/45-docs.md"
+git add -A && git commit -qm "chore: docs with a fenced heading inside the proposal"
+assert_why   "a heading inside a code fence does not end the proposed section" "DOCS" \
+             'wait for a human.*\.claude/rules/y\.md'
+# The marker is a LINE of its own, outside a code fence (codereview of 2026-09-28, reproduced on the
+# gate's awk). Matched anywhere, the marker QUOTED in the ⛔ row's own Evidence cell — the agent is
+# taught that exact string — opened a "section" that ran to the next heading, and a sentence below
+# the table naming the document read as its proposal: a ⛔ passed with no text behind it.
+printf '# Docs\n\ndrift checklist\n\n| Area | Doc | Status | Evidence |\n|---|---|---|---|\n| rules | `.claude/rules/x.md` | ⛔ | text under `<!-- sdd:proposed -->` below |\n\nThe `.claude/rules/x.md` row waits for the human.\n\n## Findings\n' > "$MDIR/45-docs.md"
+git add -A && git commit -qm "chore: docs quoting the marker in a cell"
+assert_eq "a marker quoted inside a table cell opens no proposed section" "DOCS|1" \
+  "$( cd "$FIX" && "$SDD" phase "$MISSION" 2>&1 )|$(grep -c 'no proposed text: \.claude/rules/x\.md' <<< "$( cd "$FIX" && "$SDD" why "$MISSION" DOCS 2>&1 )")"
+# ...and a marker line INSIDE a code fence is an example of the format, not the section: a session
+# that shows the shape it was taught must not have that example count as its proposal.
+printf '# Docs\n\ndrift checklist\n\n| Area | Doc | Status | Evidence |\n|---|---|---|---|\n| rules | `.claude/rules/x.md` | ⛔ | refused |\n\n## How a proposal looks\n\n```md\n## Proposed text\n<!-- sdd:proposed -->\n\nIn `.claude/rules/x.md`, append a line.\n```\n\n## Findings\n' > "$MDIR/45-docs.md"
+git add -A && git commit -qm "chore: docs with the marker inside a fence"
+assert_eq "a marker inside a code fence opens no proposed section" "DOCS|1" \
+  "$( cd "$FIX" && "$SDD" phase "$MISSION" 2>&1 )|$(grep -c 'no proposed text: \.claude/rules/x\.md' <<< "$( cd "$FIX" && "$SDD" why "$MISSION" DOCS 2>&1 )")"
+# ...and the fence closes only on its OWN delimiter (Codex on PR #176): a line of the same character,
+# at least as long, with nothing after it. Toggling on any fence line let each of the three lines
+# below "close" the example, and the marker example past it read as the section. One world per rule.
+for docs_fence_rule in tilde shorter info; do
+  case "$docs_fence_rule" in
+    tilde)   docs_fence_open='```md\n~~~\n';     docs_fence_close='```' ;;
+    shorter) docs_fence_open='````md\n```\n';    docs_fence_close='````' ;;
+    info)    docs_fence_open='```md\n```bash\n'; docs_fence_close='```' ;;
+  esac
+  printf '# Docs\n\ndrift checklist\n\n| Area | Doc | Status | Evidence |\n|---|---|---|---|\n| rules | `.claude/rules/x.md` | ⛔ | refused |\n\n## How a proposal looks\n\n'"$docs_fence_open"'<!-- sdd:proposed -->\n\nIn `.claude/rules/x.md`, append a line.\n'"$docs_fence_close"'\n\n## Findings\n' > "$MDIR/45-docs.md"
+  git add -A && git commit -qm "chore: docs with a fence only its own delimiter closes ($docs_fence_rule)"
+  assert_eq "a fence is not closed by a line that is not its own delimiter: $docs_fence_rule" "DOCS|1" \
+    "$( cd "$FIX" && "$SDD" phase "$MISSION" 2>&1 )|$(grep -c 'no proposed text: \.claude/rules/x\.md' <<< "$( cd "$FIX" && "$SDD" why "$MISSION" DOCS 2>&1 )")"
+done
+# A ⛔ is a boundary, and a document the DOCS hat writes itself is not one (codereview of
+# 2026-09-28): with its proposal in place, `README.md` passed as "waiting for a human" — the drift
+# the session owed, handed to the PR. Refused, and the reason says it is the hat's to write.
+printf '# Docs\n\ndrift checklist\n\n| Area | Doc | Status | Evidence |\n|---|---|---|---|\n| runner | `README.md` | ⛔ | skipped |\n\n## Proposed text\n<!-- sdd:proposed -->\n\nIn `README.md`, rewrite "Usage".\n' > "$MDIR/45-docs.md"
+git add -A && git commit -qm "chore: docs with a ⛔ on a document the hat writes"
+assert_eq "a ⛔ on a document the DOCS hat writes itself is refused" "DOCS|1" \
+  "$( cd "$FIX" && "$SDD" phase "$MISSION" 2>&1 )|$(grep -c 'the DOCS hat writes itself: README\.md' <<< "$( cd "$FIX" && "$SDD" why "$MISSION" DOCS 2>&1 )")"
+# ...but `.claude/` stays a boundary even when the project puts a path of it back in the hat's
+# `writes:` — HAT_WRITES_EXTRA="sdd-docs: .claude/napkin.md" is config/schema.md's own example. The
+# harness still refuses Edit/Write there, so refusing the ⛔ would push the session to the Bash
+# route this ⛔ exists to replace. The control of the pair above: the same shape, and it passes.
+cp .sdd/config.sh "$SDD_STATE_FIX/docs-writable-base.sh"
+printf 'HAT_WRITES_EXTRA="sdd-docs: .claude/napkin.md"\n' >> .sdd/config.sh
+printf '# Docs\n\ndrift checklist\n\n| Area | Doc | Status | Evidence |\n|---|---|---|---|\n| napkin | `.claude/napkin.md` | ⛔ | refused |\n\n## Proposed text\n<!-- sdd:proposed -->\n\nIn `.claude/napkin.md`, append a line.\n' > "$MDIR/45-docs.md"
+git add -A && git commit -qm "chore: docs with a ⛔ under .claude/ that the project lets the hat write"
+assert_why "a ⛔ under .claude/ passes even inside the hat's writes:" "DOCS" \
+           'wait for a human.*\.claude/napkin\.md'
+cp "$SDD_STATE_FIX/docs-writable-base.sh" .sdd/config.sh
+git add -A && git commit -qm "chore: config without the extra again"
+# ONE ⛔ row may name several documents, and each is judged on its own (review r2 of the codereview
+# fixes — cells like this are in this repo's own 45-docs.md files). Read as one string, the mixed
+# cell matched no glob and handed README.md to the human; and the proposal had to hold the literal
+# pair rather than name each document.
+printf '# Docs\n\ndrift checklist\n\n| Area | Doc | Status | Evidence |\n|---|---|---|---|\n| runner | `README.md`, `.claude/rules/x.md` | ⛔ | refused |\n\n## Proposed text\n<!-- sdd:proposed -->\n\nIn `README.md` and `.claude/rules/x.md`, append a line.\n' > "$MDIR/45-docs.md"
+git add -A && git commit -qm "chore: docs with one ⛔ cell naming a writable and a refused document"
+assert_eq "a ⛔ cell naming a document the hat writes is refused for that document" "DOCS|1" \
+  "$( cd "$FIX" && "$SDD" phase "$MISSION" 2>&1 )|$(grep -c 'the DOCS hat writes itself: README\.md —' <<< "$( cd "$FIX" && "$SDD" why "$MISSION" DOCS 2>&1 )")"
+printf '# Docs\n\ndrift checklist\n\n| Area | Doc | Status | Evidence |\n|---|---|---|---|\n| rules | `.claude/rules/x.md`, `.claude/rules/y.md` | ⛔ | refused |\n\n## Proposed text\n<!-- sdd:proposed -->\n\nIn `.claude/rules/x.md`, append a line.\n' > "$MDIR/45-docs.md"
+git add -A && git commit -qm "chore: docs with one ⛔ cell naming two documents, one proposed"
+assert_eq "a ⛔ cell naming two documents needs a proposal for each" "DOCS|1" \
+  "$( cd "$FIX" && "$SDD" phase "$MISSION" 2>&1 )|$(grep -c 'no proposed text: \.claude/rules/y\.md —' <<< "$( cd "$FIX" && "$SDD" why "$MISSION" DOCS 2>&1 )")"
+# A ⛔ row has to NAME a document: `—` (or an empty cell) matched any em-dash in the proposal, and
+# an empty pattern matches every line — a ⛔ with nothing behind it passed.
+printf '# Docs\n\ndrift checklist\n\n| Area | Doc | Status | Evidence |\n|---|---|---|---|\n| rules | — | ⛔ | refused |\n\n## Proposed text\n<!-- sdd:proposed -->\n\nSomething — anything.\n' > "$MDIR/45-docs.md"
+git add -A && git commit -qm "chore: docs with a ⛔ that names no document"
+assert_eq "a ⛔ row that names no document is never proposed" "DOCS|1" \
+  "$( cd "$FIX" && "$SDD" phase "$MISSION" 2>&1 )|$(grep -c 'no proposed text' <<< "$( cd "$FIX" && "$SDD" why "$MISSION" DOCS 2>&1 )")"
+# ...nor an EMPTY cell, zero-length or blank (review r3 of the codereview fixes): split over "" is 0
+# fields in mawk, the ⛔ row printed no document at all, and gate_DOCS passed over it.
+for docs_empty_cell in '' '   '; do
+  printf '# Docs\n\ndrift checklist\n\n| Area | Doc | Status | Evidence |\n|---|---|---|---|\n| rules |%s| ⛔ | refused |\n\n## Proposed text\n<!-- sdd:proposed -->\n\nSomething.\n' "$docs_empty_cell" > "$MDIR/45-docs.md"
+  git add -A && git commit -qm "chore: docs with a ⛔ whose document cell is empty" >/dev/null
+  assert_eq "a ⛔ row with an empty document cell ('$docs_empty_cell') is refused as unnamed" "DOCS|1" \
+    "$( cd "$FIX" && "$SDD" phase "$MISSION" 2>&1 )|$(grep -c 'no proposed text: (no document)' <<< "$( cd "$FIX" && "$SDD" why "$MISSION" DOCS 2>&1 )")"
+done
+# Shapes of the table that held with nothing measuring them (review r4 of the codereview fixes).
+# ⛔ followed by VS16 (U+FE0F) is the same value, as some editors write it.
+printf '# Docs\n\ndrift checklist\n\n| Area | Doc | Status | Evidence |\n|---|---|---|---|\n| rules | `.claude/rules/x.md` | ⛔\357\270\217 | refused |\n\n## Proposed text\n<!-- sdd:proposed -->\n\nIn `.claude/rules/x.md`, append a line.\n' > "$MDIR/45-docs.md"
+git add -A && git commit -qm "chore: docs with a ⛔ written with VS16" >/dev/null
+assert_why "a ⛔ followed by VS16 is the same ⛔" "DOCS" 'wait for a human.*\.claude/rules/x\.md'
+# A stray trailing comma in the cell is not a second, unnamed document.
+printf '# Docs\n\ndrift checklist\n\n| Area | Doc | Status | Evidence |\n|---|---|---|---|\n| rules | `.claude/rules/x.md`, | ⛔ | refused |\n\n## Proposed text\n<!-- sdd:proposed -->\n\nIn `.claude/rules/x.md`, append a line.\n' > "$MDIR/45-docs.md"
+git add -A && git commit -qm "chore: docs with a trailing comma in the ⛔ cell" >/dev/null
+assert_why "a trailing comma in a ⛔ cell names no extra document" "DOCS" 'wait for a human.*\.claude/rules/x\.md'
+# The header cell is read as written, markup stripped: `**Status**` is the Status column.
+printf '# Docs\n\ndrift checklist\n\n| Area | Doc | **Status** | Evidence |\n|---|---|---|---|\n| runner | README | ✗ | pending |\n' > "$MDIR/45-docs.md"
+git add -A && git commit -qm "chore: docs with a bold Status header" >/dev/null
+assert_eq "a bold Status header is the Status column, and its ✗ is pending" "DOCS|1" \
+  "$( cd "$FIX" && "$SDD" phase "$MISSION" 2>&1 )|$(grep -c 'has 1 area(s) pending' <<< "$( cd "$FIX" && "$SDD" why "$MISSION" DOCS 2>&1 )")"
+# A table the gate cannot read is refused, never read as "nothing pending": a header written
+# `Estado` answered "drift checklist complete" over a ✗.
+printf '# Docs\n\ndrift checklist\n\n| Area | Doc | Estado | Evidence |\n|---|---|---|---|\n| runner | README | ✗ | pending |\n' > "$MDIR/45-docs.md"
+git add -A && git commit -qm "chore: docs whose table has no Status column" >/dev/null
+assert_eq "a drift table with no Status column is refused, not read as complete" "DOCS|1" \
+  "$( cd "$FIX" && "$SDD" phase "$MISSION" 2>&1 )|$(grep -c 'no drift table the gate can read' <<< "$( cd "$FIX" && "$SDD" why "$MISSION" DOCS 2>&1 )")"
+# An EMPTY Status cell is pending: every row needs ✅, a justified n/a or a ⛔.
+printf '# Docs\n\ndrift checklist\n\n| Area | Doc | Status | Evidence |\n|---|---|---|---|\n| runner | README |  | forgot |\n' > "$MDIR/45-docs.md"
+git add -A && git commit -qm "chore: docs with an empty Status cell" >/dev/null
+assert_eq "an empty Status cell is pending" "DOCS|1" \
+  "$( cd "$FIX" && "$SDD" phase "$MISSION" 2>&1 )|$(grep -c "Status '(empty)'" <<< "$( cd "$FIX" && "$SDD" why "$MISSION" DOCS 2>&1 )")"
+# A Status that is the LAST column of a header written without a trailing pipe is still the column.
+printf '# Docs\n\ndrift checklist\n\n| Area | Doc | Status\n|---|---|---\n| runner | README | ✗\n' > "$MDIR/45-docs.md"
+git add -A && git commit -qm "chore: docs whose Status is the last column, no trailing pipe" >/dev/null
+assert_eq "a Status in the last column without a trailing pipe is read, and its ✗ is pending" "DOCS|1" \
+  "$( cd "$FIX" && "$SDD" phase "$MISSION" 2>&1 )|$(grep -c 'has 1 area(s) pending' <<< "$( cd "$FIX" && "$SDD" why "$MISSION" DOCS 2>&1 )")"
+# ...and a ✗ beside a proposed ⛔ is still today's pending reason, counted without the ⛔.
+printf '# Docs\n\ndrift checklist\n\n| Area | Doc | Status | Evidence |\n|---|---|---|---|\n| runner | README | ✗ | pending |\n| rules | `.claude/rules/x.md` | ⛔ | refused |\n\n## Proposed text\n<!-- sdd:proposed -->\n\n`.claude/rules/x.md`: the line.\n' > "$MDIR/45-docs.md"
+git add -A && git commit -qm "chore: docs with a ✗ and a proposed ⛔"
+assert_why   "a ✗ beside a proposed ⛔ is still pending, and the ⛔ is not counted" "DOCS" \
+             "has 1 area\\(s\\) pending .*Status '✗'"
 # Back to the formatter-aligned table the next block was written against.
 printf '# Docs\n\ndrift checklist\n\n| Area | Doc | Status | Evidence |\n|:------|:----|:------:|:---------|\n| runner | README | ✅ | commit abc1234 |\n| libs | — | n/a | internal refactor |\n\nFindings recorded in TODO.md for this mission.\n' \
   > "$MDIR/45-docs.md"
@@ -1909,6 +2423,54 @@ git add -A && git commit -qm "chore: the PR artifact and the gh stub" >/dev/null
 # 1. SCOPE — a repo with no catalogue. The gate is exactly the gate it always was, which is the
 #    world every target repo lives in.
 i4_phase "a repo with no tests/check-mutation.sh closes as it always did" "DONE"
+
+# 1b. ⛔ CARRIED — the ⛔ rows of 45-docs.md reach the human in the PR body or not at all (ADR 0013;
+#     codereview of 2026-09-28). gate_DOCS proves each has a proposal on disk; only the publisher's
+#     prompt carried it into the PR, so a body without it merged with the rule change unapplied and
+#     nothing red. The gh stub now also answers `--json state,body`, from control files under .sdd/logs/
+#     (gitignored: writing it moves no tracked byte). Own assertions, outside the i4 tally: that one
+#     is named for the stamp.
+cp "$MDIR/45-docs.md" "$SDD_STATE_FIX/docs-before-pr.md"
+mkdir -p "$FIX/.sdd/logs"
+cat > "$FIX/.stub/gh" <<STUB
+#!/usr/bin/env bash
+# Answers what gate_PR asks: \`--json url --jq .url\` (is the PR real?) and, when 45-docs.md carries
+# ⛔ rows, \`--json state,body --jq '.state, .body'\` (the state line, then the body).
+[ "\${1:-}" = "pr" ] && [ "\${2:-}" = "view" ] || { echo "unexpected gh call: \$*" >&2; exit 9; }
+case " \$* " in
+  *" --json state,body "*)
+    [ -e "$FIX/.sdd/logs/pr-body-fails" ] && exit 4
+    cat "$FIX/.sdd/logs/pr-state" 2>/dev/null || printf 'OPEN\n'
+    cat "$FIX/.sdd/logs/pr-body" 2>/dev/null || true ;;
+  *) printf '%s\n' "\${3:-}" ;;
+esac
+STUB
+chmod +x "$FIX/.stub/gh"
+printf '# Docs\n\ndrift checklist\n\n| Area | Doc | Status | Evidence |\n|---|---|---|---|\n| rules | `.claude/rules/x.md` | ⛔ | refused |\n\n## Proposed text\n<!-- sdd:proposed -->\n\nIn `.claude/rules/x.md`, append a line.\n' > "$MDIR/45-docs.md"
+git add -A && git commit -qm "chore: a ⛔ reaches the PR phase" >/dev/null
+printf '## Decisions for a human\n\n- [ ] something else entirely\n' > "$FIX/.sdd/logs/pr-body"
+assert_eq "gate_PR refuses a PR whose body does not carry a ⛔ of 45-docs.md" "PR|1" \
+  "$( cd "$FIX" && "$SDD" phase "$MISSION" 2>&1 )|$(grep -c 'does not carry the ⛔ proposal(s) of 45-docs.md: \.claude/rules/x\.md' <<< "$( cd "$FIX" && "$SDD" why "$MISSION" PR 2>&1 )")"
+printf '## Decisions for a human\n\n- [ ] ⛔ `.claude/rules/x.md` — apply before the merge:\n  > append a line\n' > "$FIX/.sdd/logs/pr-body"
+assert_phase "gate_PR passes once the body carries every ⛔" "DONE"
+# ...and a body gh could not READ is said as such: "does not carry" would describe a body nobody saw.
+touch "$FIX/.sdd/logs/pr-body-fails"
+assert_eq "gate_PR says it could not read the body, never that the body lacks the ⛔" "PR|1|0" \
+  "$( cd "$FIX" && "$SDD" phase "$MISSION" 2>&1 )|$(grep -c 'could not read the body of PR' <<< "$( cd "$FIX" && "$SDD" why "$MISSION" PR 2>&1 )")|$(grep -c 'does not carry' <<< "$( cd "$FIX" && "$SDD" why "$MISSION" PR 2>&1 )")"
+rm -f "$FIX/.sdd/logs/pr-body-fails"
+# The name has to sit on a line that carries ⛔ — the template's checklist item. Named only under
+# "what changed", the proposal reaches no item the human ticks (review r2 of the codereview fixes).
+printf '## What changed\n\n- `.claude/rules/x.md` gets a line\n\n## Decisions for a human\n\n- [ ] ⛔ `.claude/rules/other.md` — apply\n' > "$FIX/.sdd/logs/pr-body"
+assert_eq "gate_PR refuses a ⛔ document named only outside a ⛔ line of the body" "PR|1" \
+  "$( cd "$FIX" && "$SDD" phase "$MISSION" 2>&1 )|$(grep -c 'does not carry the ⛔ proposal(s) of 45-docs.md: \.claude/rules/x\.md' <<< "$( cd "$FIX" && "$SDD" why "$MISSION" PR 2>&1 )")"
+# A MERGED PR is not read: a body edited after the merge would derive a finished mission back to PR
+# and buy a publisher session on it.
+printf 'MERGED\n' > "$FIX/.sdd/logs/pr-state"
+assert_phase "gate_PR does not re-read the body of a merged PR" "DONE"
+rm -f "$FIX/.sdd/logs/pr-state"
+cp "$SDD_STATE_FIX/docs-before-pr.md" "$MDIR/45-docs.md"
+rm -f "$FIX/.sdd/logs/pr-body"
+git add -A && git commit -qm "chore: docs without a ⛔ again" >/dev/null
 
 # 2. SCOPE — the catalogue is here and nothing on disk says it ever ran green. Demanding the
 #    ABSENCE of the earlier requirements' markers is what proves the gate reached the stamp
@@ -3990,6 +4552,99 @@ assert_eq "close: with a dirty tree it stays put, warns, and does not destroy th
   "rc:$CLOSE_RC_OUT branch:$(git -C "$FIX" rev-parse --abbrev-ref HEAD) kept:$([ -e "$FIX/human-draft.txt" ] && printf 1 || printf 0) warned:$(has "$CLOSE_OUT" 'uncommitted')"
 rm -f "$FIX/human-draft.txt"
 git -C "$FIX" checkout -q "$CLOSE_HOME"
+
+# 8f/8g/8h. HOME WITH THE MERGE IN IT. Coming back to the default branch left it where the session
+# found it — BEHIND the PR that was just merged: in SQ-145 the local `develop` stayed behind, in
+# SQ-146 the close session ran `git pull` on its own, and the next mission was cut from a stale base
+# either way (finding 7 of the judge's window). Now the close fetches and fast-forwards, and never
+# forces. A LOCAL bare remote and a peer clone that pushes stand in for GitHub; 8c/8d/8e above ran
+# with no remote at all, and they are the control for "no upstream".
+CLOSE_REMOTE_DIR="$(mktemp -d "${TMPDIR:-/tmp}/sdd-close-remote-XXXXXX")"
+git init -q --bare "$CLOSE_REMOTE_DIR/origin.git"
+git -C "$FIX" remote add origin "$CLOSE_REMOTE_DIR/origin.git"
+git -C "$FIX" push -q -u origin "$CLOSE_HOME" 2>/dev/null
+git clone -q -b "$CLOSE_HOME" "$CLOSE_REMOTE_DIR/origin.git" "$CLOSE_REMOTE_DIR/peer" 2>/dev/null
+peer_merges() {  # peer_merges <message> — the remote default branch moves one commit
+  git -C "$CLOSE_REMOTE_DIR/peer" -c user.email=peer@example.com -c user.name=peer \
+    commit -q --allow-empty -m "$1"
+  git -C "$CLOSE_REMOTE_DIR/peer" push -q origin "$CLOSE_HOME" 2>/dev/null
+}
+peer_tip() { git -C "$CLOSE_REMOTE_DIR/peer" rev-parse HEAD; }
+
+git -C "$FIX" checkout -q -b LH-12_ff-branch
+peer_merges "the PR is merged on the remote"
+close_run "done" 0
+assert_eq "close: fast-forwards the default branch to its upstream" \
+  "rc:0 branch:$CLOSE_HOME tip:remote said:1" \
+  "rc:$CLOSE_RC_OUT branch:$(git -C "$FIX" rev-parse --abbrev-ref HEAD) tip:$([ "$(git -C "$FIX" rev-parse "$CLOSE_HOME")" = "$(peer_tip)" ] && echo remote || echo stale) said:$(has "$CLOSE_OUT" 'fast-forwarded')"
+
+# Diverged: a local commit the remote never saw, then the remote moves. Nothing is forced — the
+# local sha stays exactly where it was — and the human is told.
+git -C "$FIX" -c user.email=fix@example.com -c user.name=fixture commit -q --allow-empty -m "local only"
+CLOSE_LOCAL_SHA="$(git -C "$FIX" rev-parse "$CLOSE_HOME")"
+git -C "$FIX" checkout -q -b LH-13_diverged-branch
+peer_merges "the remote moves on"
+close_run "done" 0
+assert_eq "close: a diverged default branch is warned, never forced" \
+  "rc:0 branch:$CLOSE_HOME sha:kept warned:1" \
+  "rc:$CLOSE_RC_OUT branch:$(git -C "$FIX" rev-parse --abbrev-ref HEAD) sha:$([ "$(git -C "$FIX" rev-parse "$CLOSE_HOME")" = "$CLOSE_LOCAL_SHA" ] && echo kept || echo moved) warned:$(has "$CLOSE_OUT" 'diverged')"
+git -C "$FIX" reset -q --hard "origin/$CLOSE_HOME"
+
+# Already on the default branch, behind: the old early return skipped everything, and this is the
+# case where the session had nowhere to come back from and still owes the merge.
+peer_merges "another merge while the session stood on the base"
+close_run "done" 0
+assert_eq "close: already on the default branch it still fast-forwards" \
+  "rc:0 tip:remote said:1" \
+  "rc:$CLOSE_RC_OUT tip:$([ "$(git -C "$FIX" rev-parse "$CLOSE_HOME")" = "$(peer_tip)" ] && echo remote || echo stale) said:$(has "$CLOSE_OUT" 'fast-forwarded')"
+
+# 8i/8j/8k/8l. The four ways home stays where it is, each one SAID (codereview of 2026-09-28: the
+# three regimes above were the only ones measured). Every one starts with the remote a merge ahead,
+# so a runner that forgot the refusal and moved anyway reads `sha:moved`.
+# 8i. Dirty ON the default branch: the early return used to skip it; now it must not fast-forward
+#     under uncommitted work, and says so.
+peer_merges "a merge the dirty base must not take"
+CLOSE_LOCAL_SHA="$(git -C "$FIX" rev-parse "$CLOSE_HOME")"
+printf 'uncommitted work on the base\n' > "$FIX/human-draft.txt"
+close_run "done" 0
+assert_eq "close: dirty on the default branch it does not fast-forward, and says so" \
+  "rc:0 sha:kept kept:1 warned:1" \
+  "rc:$CLOSE_RC_OUT sha:$([ "$(git -C "$FIX" rev-parse "$CLOSE_HOME")" = "$CLOSE_LOCAL_SHA" ] && echo kept || echo moved) kept:$([ -e "$FIX/human-draft.txt" ] && printf 1 || printf 0) warned:$(has "$CLOSE_OUT" 'not fast-forwarding')"
+rm -f "$FIX/human-draft.txt"
+# 8j. The fetch fails (an origin that is not there): warned, and no fast-forward to a stale ref.
+git -C "$FIX" remote set-url origin "$CLOSE_REMOTE_DIR/nowhere.git"
+close_run "done" 0
+assert_eq "close: a fetch that fails is warned, and nothing moves" \
+  "rc:0 sha:kept warned:1" \
+  "rc:$CLOSE_RC_OUT sha:$([ "$(git -C "$FIX" rev-parse "$CLOSE_HOME")" = "$CLOSE_LOCAL_SHA" ] && echo kept || echo moved) warned:$(has "$CLOSE_OUT" 'could not fetch')"
+git -C "$FIX" remote set-url origin "$CLOSE_REMOTE_DIR/origin.git"
+# 8k. No timeout(1) on PATH: an unbounded fetch could hang the close, so it is SKIPPED and said.
+#     PATH is every directory the suite has, as symlinks, minus timeout — the no-curl recipe of
+#     check-preflight.sh. The stubs come first because $FIX/.stub leads PATH.
+close_notimeout="$SDD_STATE_FIX/close-notimeout-bin"; mkdir -p "$close_notimeout"
+IFS=: read -r -a close_path_dirs <<< "$PATH"
+for close_d in "${close_path_dirs[@]}"; do
+  [ -d "$close_d" ] || continue
+  for close_f in "$close_d"/*; do
+    close_n="${close_f##*/}"
+    [ "$close_n" = timeout ] && continue
+    [ -x "$close_f" ] && [ ! -e "$close_notimeout/$close_n" ] && ln -s "$close_f" "$close_notimeout/$close_n"
+  done
+done
+rm -f "$CLOSE_MARK" "$CLOSE_ACLI_LOG" "$CLOSE_JOURNAL"
+printf 'done\n' > "$CLOSE_CTL"; printf '0\n' > "$CLOSE_RCFILE"
+CLOSE_RC_OUT=0
+CLOSE_OUT="$( cd "$FIX" && PATH="$close_notimeout" "$SDD" close "$MISSION" 2>&1 )" || CLOSE_RC_OUT=$?
+assert_eq "close: with no timeout(1) the fetch is skipped and said, never run unbounded" \
+  "rc:0 sha:kept warned:1" \
+  "rc:$CLOSE_RC_OUT sha:$([ "$(git -C "$FIX" rev-parse "$CLOSE_HOME")" = "$CLOSE_LOCAL_SHA" ] && echo kept || echo moved) warned:$(has "$CLOSE_OUT" 'no timeout\(1\) to bound the fetch')"
+git -C "$FIX" remote remove origin
+# 8l. No upstream at all (`git remote remove` takes the branch's tracking config with it): said as
+#     such, and never as a divergence.
+close_run "done" 0
+assert_eq "close: with no upstream it says so, and never calls it a divergence" \
+  "rc:0 said:1 diverged:0" \
+  "rc:$CLOSE_RC_OUT said:$(has "$CLOSE_OUT" 'no upstream, nothing to fast-forward') diverged:$(has "$CLOSE_OUT" 'diverged')"
 
 # 9. Control. With JIRA off the command asks nothing of anyone — and the two `:0` terms are the
 #    half that matters: a guard that ran acli anyway would still print "nothing to close".

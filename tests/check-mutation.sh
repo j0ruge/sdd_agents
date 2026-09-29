@@ -355,7 +355,82 @@ mut_REVIEW_alignment_colon_blind() {
 }
 
 mut_DOCS_alignment_colon_blind() {
-  sed -i '/^gate_DOCS()/,/^}/ s@cell ~ /\^:?-+:?\$/@cell ~ /^-+$/@' "$1"
+  sed -i '/^docs_checklist_rows()/,/^}/ s@cell ~ /\^:?-+:?\$/@cell ~ /^-+$/@' "$1"
+}
+
+# ⛔ with proposed text (ADR 0013): the one pending value with a way out, and each half of "only
+# with its proposed text" has its own mutant — the requirement, the per-row reading, the section's
+# end, and the loud pass that names what waits for the human.
+mut_DOCS_blocked_rows_pass_without_proposal() {   # a ⛔ passes with no proposal at all
+  sed -i '/^gate_DOCS() {/,/^}/ s@if \[ -n "\$missing" \]; then@if false; then@' "$1"
+}
+mut_DOCS_proposal_not_per_row() {                 # the marker's existence stands in for every row
+  sed -i "/^gate_DOCS() {/,/^}/ s@grep -qF -- \"\$doc\" <<< \"\$proposed\"@grep -qF -- '<!-- sdd:proposed -->' \"\$d\"@" "$1"
+}
+mut_DOCS_blocked_rows_unnamed() {                 # the pass stops naming the ⛔ documents
+  sed -i '/^gate_DOCS() {/,/^}/ s@apply the proposed text in the PR: \$named"@apply the proposed text in the PR"@' "$1"
+}
+mut_DOCS_proposal_runs_past_heading() {           # the proposed section runs to the end of the file
+  sed -i '/^gate_DOCS() {/,/^}/ s@^        on && !fence && /^## / { on = 0 }$@@' "$1"
+}
+mut_DOCS_proposal_first_section_only() {          # the first heading ends the reading: one section
+  sed -i '/^gate_DOCS() {/,/^}/ s@^        on && !fence && /^## / { on = 0 }$@        on \&\& !fence \&\& /^## / { exit }@' "$1"
+}
+mut_DOCS_proposal_fence_blind() {                 # a `## ` inside a code fence ends the section
+  sed -i '/^gate_DOCS() {/,/^}/ s@^        on && !fence && /^## / { on = 0 }$@        on \&\& /^## / { on = 0 }@' "$1"
+}
+mut_DOCS_doc_needs_no_name() {                    # `—` or an empty cell is a document name again
+  sed -i '/^gate_DOCS() {/,/^}/ s@if \[\[ "\$doc" =~ \[\[:alnum:\]\] \]\] &&@if [ -n "$doc" ] \&\&@' "$1"
+}
+# The marker is a LINE outside a fence (codereview of 2026-09-28): one mutant per half.
+mut_DOCS_marker_unanchored() {                    # the marker quoted in a table cell opens a section
+  sed -i '/^gate_DOCS() {/,/^}/ s@/^\[\[:space:\]\]\*<!-- sdd:proposed -->\[\[:space:\]\]\*\$/@/<!-- sdd:proposed -->/@' "$1"
+}
+mut_DOCS_marker_in_fence() {                      # an example of the marker inside a fence counts
+  sed -i '/^gate_DOCS() {/,/^}/ s@^        !fence && /^\[\[:space:\]\]\*<!-- sdd:proposed@        /^[[:space:]]*<!-- sdd:proposed@' "$1"
+}
+# The fence closes only on its own delimiter (Codex on PR #176): one mutant per condition, each
+# caught by its world in check-gates.sh ("...not its own delimiter: tilde|shorter|info").
+mut_DOCS_fence_closes_on_other_char() {           # a ~~~ closes a ``` example
+  sed -i '/^gate_DOCS() {/,/^}/ s@else if (ch == fch && len >= flen@else if (len >= flen@' "$1"
+}
+mut_DOCS_fence_closes_on_shorter() {              # a ``` closes a ```` example
+  sed -i '/^gate_DOCS() {/,/^}/ s@else if (ch == fch && len >= flen && @else if (ch == fch \&\& @' "$1"
+}
+mut_DOCS_fence_closes_with_info() {               # a ```bash closes a ``` example
+  sed -i '/^gate_DOCS() {/,/^}/ s@ && \$0 ~ /^\[ \\t\]\*(`+|~+)\[ \\t\]\*\$/) is_fence = 1@) is_fence = 1@' "$1"
+}
+# A ⛔ is a boundary (codereview of 2026-09-28): one mutant for the refusal, one for its exception.
+mut_DOCS_blocked_writable_passes() {              # a ⛔ on README.md waits for a human again
+  sed -i '/^gate_DOCS() {/,/^}/ s@ && hat_path_allowed "\$doc" "\$writes"; then@ \&\& false; then@' "$1"
+}
+mut_DOCS_blocked_cell_not_split() {               # a ⛔ cell naming two documents reads as one name
+  sed -i '/^docs_checklist_rows() {/,/^}/ s@nd = split(doc, docs, ",")@nd = split(doc, docs, "^$")@' "$1"
+}
+mut_DOCS_blocked_empty_cell_vanishes() {          # a ⛔ with an empty document cell prints no row
+  sed -i '/^docs_checklist_rows() {/,/^}/ s@^          if (!printed) print "B|"$@          printed = printed@' "$1"
+}
+# Shapes of the drift table that held with nothing measuring them (review r4): one mutant each.
+mut_DOCS_vs16_blind() {                           # ⛔ followed by VS16 reads as a pending Status
+  sed -i '/^docs_checklist_rows() {/,/^}/ s@ || cell == "⛔\\357\\270\\217") {@) {@' "$1"
+}
+mut_DOCS_trailing_comma_is_a_name() {             # a stray comma in a ⛔ cell names an empty document
+  sed -i '/^docs_checklist_rows() {/,/^}/ s@if (one != "") { print@if (1) { print@' "$1"
+}
+mut_DOCS_header_last_column_blind() {             # a Status in the last column, no trailing pipe, is missed
+  sed -i '/^docs_checklist_rows() {/,/^}/ s@for (i = 2; i <= NF; i++)@for (i = 2; i < NF; i++)@' "$1"
+}
+mut_DOCS_header_markup_blind() {                  # a `**Status**` header is not the Status column
+  sed -i '/^docs_checklist_rows() {/,/^}/ s@"", cell); gsub(/\[\*`\]/, "", cell)$@"", cell)@' "$1"
+}
+mut_DOCS_no_status_column_complete() {            # a table with no Status column reads as complete
+  sed -i '/^docs_checklist_rows() {/,/^}/ s@^      END { if (!col) print "N|" }$@@' "$1"
+}
+mut_DOCS_empty_status_skipped() {                 # an empty Status cell is skipped as done
+  sed -i '/^docs_checklist_rows() {/,/^}/ s@^        if (cell == "") { print "P|(empty)"; next }$@@' "$1"
+}
+mut_DOCS_blocked_claude_refused() {               # a ⛔ on .claude/ inside writes: is refused too
+  sed -i '/^gate_DOCS() {/,/^}/ s@ && \[\[ "\$doc" != .claude/\* \]\] && @ \&\& @' "$1"
 }
 
 # The gate stops telling "the suite is red" from "the suite is red over work nobody committed", so
@@ -479,6 +554,105 @@ mut_QA_bug_open() {           # ignores a bug with Status: open in the registry
   sed -i 's|.*\[ "\$openbugs" -gt 0 \].*|  if false; then|' "$1"
 }
 
+# WHOSE report (ADR 0013): the QA report the mission branch ADDED, not the newest in the tree. One
+# mutant per reader and one per half of the rule. Measured in SQ-146, where the newest report was
+# SQ-143's and the QA skills never ran.
+mut_QA_report_not_mission_bound() {           # Anchor 1 back on the newest report in the tree
+  sed -i '/^gate_QA() {/,/^}/ s@report="\$(mission_qa_report)"@report="$(latest_matching "$REPO_ROOT/$QA_DOCS_PATH/reports/*.md")"@' "$1"
+}
+mut_QA_substep_report_not_mission_bound() {   # the sub-step back on the newest report in the tree
+  sed -i '/^qa_substep() {/,/^}/ s@report="\$(mission_qa_report)"@report="$(latest_matching "$qa/reports/*.md")"@' "$1"
+}
+# The report is the mission's by three facts (review r4 of the codereview fixes rewrote the reader
+# around them): the mission's COMMITS are HEAD --not the local and remote base; a NEW path is absent
+# from the base tree; OWNERSHIP follows the rename chain. One mutant per rule and per read. The old
+# `--diff-filter=AMR` mutant is gone: an edit of a base report is a path the base already has, so
+# that sabotage changed nothing any world could see — the rule is held by the base-tree check, and
+# the revert and `rm --cached` worlds are what kill its mutants.
+mut_QA_report_ignores_untracked() {           # the report the skill left uncommitted stops counting
+  sed -i '/^mission_qa_report() {/,/^}/ s@status --porcelain -z -uall@status --porcelain -z -uno@' "$1"
+}
+mut_QA_report_range_no_origin() {             # a base pulled from origin brings its reports along
+  sed -i '/^mission_base_refs() {/,/^}/ s# "origin/\$DEFAULT_BRANCH"; do#; do#' "$1"
+}
+mut_QA_report_range_no_upstream() {           # a base pulled from the remote it tracks brings its reports
+  sed -i '/^mission_base_refs() {/,/^}/ s# "\$DEFAULT_BRANCH@{upstream}"##' "$1"
+}
+mut_QA_report_no_base_fallback() {            # nothing to measure against: the whole history is the mission's
+  sed -i '/^mission_qa_report() {/,/^}/ s%if \[ "\${#bases\[@\]}" -eq 0 \] \\$%if false \\%' "$1"
+}
+mut_QA_report_log_renamelimit_configurable() {    # diff.renameLimit reaches the replay again
+  sed -i '/^mission_qa_report() {/,/^}/ s@ -c diff.renameLimit=0 diff-tree@ diff-tree@' "$1"
+}
+mut_QA_report_status_renamelimit_configurable() { # status.renameLimit reaches the tree read again
+  sed -i '/^mission_qa_report() {/,/^}/ s@ -c status.renameLimit=0 status@ status@' "$1"
+}
+mut_QA_report_log_base_blind() {              # a commit that adds back a base report makes it the mission's
+  sed -i '/^mission_qa_report() {/,/^}/ s#&& ! path_in_commits "\$a" \${bases\[@\]+"\${bases\[@\]}"}; then#; then#' "$1"
+}
+mut_QA_report_tree_base_blind() {             # an untracked or staged base report becomes the mission's
+  sed -i "/^mission_qa_report() {/,/^}/ { /'?? '\\*|A?' '\\*|' A '\\*)/{n; s@if ! path_in_commits@if true || path_in_commits@} }" "$1"
+}
+mut_QA_report_staged_add_ignored() {          # the mission's report staged and not committed stops counting
+  sed -i "/^mission_qa_report() {/,/^}/ s@'?? '\\*|A?' '\\*|' A '\\*)@'?? '*|' A '*)@" "$1"
+}
+mut_QA_report_intent_to_add_ignored() {       # the mission's report marked intent-to-add stops counting
+  sed -i "/^mission_qa_report() {/,/^}/ s@'?? '\\*|A?' '\\*|' A '\\*)@'?? '*|A?' '*)@" "$1"
+}
+mut_QA_report_subdir_same_name() {            # a file one directory down stands in for the base report
+  sed -i '/^mission_qa_report() {/,/^}/ s@\[ "\$REPO_ROOT/\$p" -ef "\$dir/\${p##\*/}" \]@[ -e "$dir/${p##*/}" ]@' "$1"
+}
+mut_QA_report_path_spelled_literally() {      # `./docs/qa/` no longer names the file git answers with
+  sed -i '/^mission_qa_report() {/,/^}/ s@\[ "\$REPO_ROOT/\$p" -ef "\$dir/\${p##\*/}" \]@[ "$REPO_ROOT/$p" = "$dir/${p##*/}" ]@' "$1"
+}
+mut_QA_report_any_extension() {               # a .txt under reports/ becomes a report
+  sed -i '/^mission_qa_report() {/,/^}/ s@^    case "\$p" in \*\.md) ;; \*) continue ;; esac$@    :@' "$1"
+}
+mut_QA_report_date_order() {                  # commits replayed by date: a skewed clock puts a rename first
+  sed -i '/^mission_qa_report() {/,/^}/ s@rev-list --reverse --topo-order HEAD@rev-list --reverse HEAD@' "$1"
+}
+mut_QA_report_porcelain_log() {               # the commits read by porcelain, which honours log.showSignature
+  sed -i '/^mission_qa_report() {/,/^}/ s@diff-tree --stdin -r -M -z --no-commit-id --name-status@log --stdin --no-walk=unsorted -M -z --format= --name-status@' "$1"
+}
+mut_QA_report_log_renames() {                 # the mission's report renamed in a commit stops counting
+  sed -i '/^mission_qa_report() {/,/^}/ s@then owned\["\$b"\]=1; fi ;;@then :; fi ;;@' "$1"
+}
+mut_QA_report_status_renames() {              # the mission's report renamed in the index stops counting
+  sed -i '/^mission_qa_report() {/,/^}/ s@&& \[ -n "\${owned\[\$b\]+x}" \]; then owned\["\${st:3}"\]=1; fi ;;@\&\& [ -n "${owned[$b]+x}" ]; then :; fi ;;@' "$1"
+}
+mut_QA_report_worktree_rename_ignored() {     # the mission's report renamed in the work tree stops counting
+  sed -i "/^mission_qa_report() {/,/^}/ s@R?' '\\*|' R '\\*)@R?' '*)@" "$1"
+}
+mut_QA_report_log_rename_owns_any() {         # a base report renamed in a commit becomes the mission's
+  sed -i '/^mission_qa_report() {/,/^}/ s@ && \[ -n "\${owned\[\$a\]+x}" \]; then owned\["\$b"\]@; then owned["$b"]@' "$1"
+}
+mut_QA_report_status_rename_owns_any() {      # a base report renamed in the index becomes the mission's
+  sed -i '/^mission_qa_report() {/,/^}/ s@ && \[ -n "\${owned\[\$b\]+x}" \]; then owned\["\${st:3}"\]@; then owned["${st:3}"]@' "$1"
+}
+mut_QA_report_log_no_rename_detection() {     # diff-tree without -M: a base report renamed reads as an add
+  sed -i '/^mission_qa_report() {/,/^}/ s@diff-tree --stdin -r -M -z@diff-tree --stdin -r -z@' "$1"
+}
+mut_QA_report_status_renames_configurable() { # the status leaves rename detection to status.renames
+  sed -i '/^mission_qa_report() {/,/^}/ s@ -uall --find-renames @ -uall @' "$1"
+}
+mut_QA_report_status_copy_refused() {         # the mission's report staged as a copy stops counting
+  sed -i '/^mission_qa_report() {/,/^}/ s@ || break ;&$@ || break ;;@' "$1"
+}
+# The two `-z` mutants below kill the WHOLE NUL parser, not only the quoted names: without `-z` the
+# read yields one token and nothing is owned, so the first probe to die is a generic one (review r5).
+# The quoting probes (the space, the `"`) are what the `-z` exists for; the parser is what dies first.
+mut_QA_report_status_quoted() {               # without -z the tree read collapses (a space was the reason)
+  sed -i '/^mission_qa_report() {/,/^}/ s@status --porcelain -z -uall@status --porcelain -uall@' "$1"
+}
+mut_QA_report_log_quoted() {                  # without -z the commit replay collapses (a `"` was the reason)
+  sed -i '/^mission_qa_report() {/,/^}/ s@diff-tree --stdin -r -M -z --no-commit-id@diff-tree --stdin -r -M --no-commit-id@' "$1"
+}
+# The fallback is what keeps a mission on the base (or already merged) reading the tree as before.
+# Without it a clean base has no candidate at all, and the QA block ON the base turns red.
+mut_QA_report_no_fallback() {
+  sed -i '/^mission_qa_report() {/,/^}/ s@|| \[ -z "\$(git -C "\$REPO_ROOT" rev-list -n 1 HEAD --not@|| [ -z "x$(git -C "$REPO_ROOT" rev-list -n 1 HEAD --not@' "$1"
+}
+
 # Anchor 3 goes back to counting EVERY open bug, whatever its genre. That is the state the kit was
 # in until 20260826-o-laco-da-qa: a bug whose fix is a product decision blocked the QA phase, and
 # no agent in the pipeline was allowed to write the `Status:` line that would unblock it — 7 of
@@ -579,7 +753,7 @@ mut_QA_bug_genre_deferred_join() {
 # escalation a run produces (check-autonomy.sh, the app-down pair). Neither alone would say the
 # other still worked.
 mut_QA_e2e_red_never_probed() {
-  sed -i 's@^    probe="$(app_probe "$APP_URL")"$@    probe="unknown|the probe was never called"@' "$1"
+  sed -i 's@^    probe="$(app_probe "$APP_URL" "$APP_EXPECT")"$@    probe="unknown|the probe was never called"@' "$1"
 }
 
 # THE FAIL-OPEN, and the most dangerous edit in this family: `unknown` starts arming the marker.
@@ -595,6 +769,19 @@ mut_QA_e2e_red_never_probed() {
 # half would have scored nothing here.
 mut_QA_app_down_on_unknown() {
   sed -i '/^    case "$state" in$/,/^    esac$/ s@^      \*)$@      *) GATE_APP_DOWN=1;@' "$1"
+}
+
+# APP_EXPECT (20260928-os-achados-da-janela, finding 3): two products on one port both "answer", and
+# in LH-4 the QA session opened against the other one. One mutant per half: the probe that never
+# says `wrong`, and the gate arm that names it without arming the escalation.
+mut_APP_expect_ignored() {       # the page is read and the verdict thrown away — `wrong` never born
+  sed -i "/^app_probe() {/,/^}/ s@printf 'wrong|@printf 'up|@" "$1"
+}
+mut_APP_expect_status_ignored() {  # a redirect or an error page without the literal reads `wrong`
+  sed -i "/^app_probe() {/,/^}/ s@^      2??) printf 'wrong@      *) printf 'wrong@" "$1"
+}
+mut_QA_wrong_app_not_armed() {   # the wrong-app arm of gate_QA names it and escalates nothing
+  sed -i '/^gate_QA() {/,/^}/ { /^      wrong)$/,/;;/ s@GATE_APP_DOWN=1@: GATE_APP_DOWN left unarmed@ }' "$1"
 }
 
 # THE FIX THAT IS WIDER THAN THE DEFECT: the app is probed whatever the e2e answered, so the gate
@@ -765,7 +952,7 @@ mut_REVIEW_punctuated_fillin_blind() {
 }
 
 mut_DOCS_pending_status() {   # accepts an area with Status '✗' in the drift checklist
-  sed -i 's|.*\[ -n "\$pending_cell" \].*|  if false; then|' "$1"
+  sed -i '/^gate_DOCS() {/,/^}/ s|^  if \[ "\$pending_n" -gt 0 \]; then$|  if false; then|' "$1"
 }
 
 # Yokoten of #50: the grade as the author wrote it. Back to stripping `*` alone, `` `A` `` fails
@@ -776,13 +963,13 @@ mut_REVIEW_backtick_grade_kept() {
 
 # ...and the Status of the drift checklist: `✅` in a code span or **n/a** in bold counts as pending.
 mut_DOCS_backtick_status_kept() {
-  sed -i '/^gate_DOCS()/,/^}/ s@^        raw = cell; gsub(/\[\*`\]/, "", cell)$@        raw = cell@' "$1"
+  sed -i '/^docs_checklist_rows()/,/^}/ s@^        raw = cell; gsub(/\[\*`\]/, "", cell)$@        raw = cell@' "$1"
 }
 
 # Review r1, finding 5: a Status cell that is ONLY markup (`**`) strips to nothing and is skipped
 # as an empty cell — the row passes the gate as if it were not there. It used to be pending.
 mut_DOCS_markup_only_status_skipped() {
-  sed -i '/^gate_DOCS()/,/^}/ s@^        if (cell == "" \&\& raw != "") { print raw; next }$@        raw = raw@' "$1"
+  sed -i '/^docs_checklist_rows()/,/^}/ s@^        if (cell == "" \&\& raw != "") { print "P|" raw; next }$@        raw = raw@' "$1"
 }
 
 mut_PR_no_artifact() {        # a missing 50-pr.md stops failing — a "complete" mission with no PR
@@ -797,6 +984,21 @@ mut_PR_no_artifact() {        # a missing 50-pr.md stops failing — a "complete
 # silence, since the runner tests other files by that shape elsewhere.
 mut_PR_stamp_blind() {
   sed -i '/^gate_PR()/,/^}/ s|if has_mutation_catalogue "\$REPO_ROOT"; then|if false; then|' "$1"
+}
+
+# The PR body stops being read for the ⛔ rows of 45-docs.md (codereview of 2026-09-28): the rule
+# change reaches the human only if the publisher remembered, and a body without it merges green.
+mut_PR_blocked_docs_not_carried() {
+  sed -i '/^gate_PR()/,/^}/ s@grep -qF -- "\$doc" <<< "\$body" || carried_missing@true || carried_missing@' "$1"
+}
+mut_PR_blocked_docs_anywhere() {        # the ⛔ document counts wherever the body names it (review r2)
+  sed -i '/^gate_PR()/,/^}/ s@grep -F .⛔. <<< @grep -F "" <<< @' "$1"
+}
+mut_PR_merged_rechecked() {             # a merged PR's body is read again, and a finished mission reopens
+  sed -i '/^gate_PR()/,/^}/ s@if \[ "\$pr_state" = MERGED \]; then break; fi@:@' "$1"
+}
+mut_PR_body_unread_is_missing() {       # a body gh could not read is reported as one lacking the ⛔
+  sed -i '/^gate_PR()/,/^}/ s@^        if \[ "\$body_rc" -ne 0 \]; then$@        if false; then@' "$1"
 }
 
 # The key stops being a function of the CONTENT alone and starts following HEAD as well. Deliberately
@@ -4367,6 +4569,69 @@ mut_COORD_helper_not_isolated() {
   sed -i 's@^readonly COORDINATION_PYTHON=(python3 -I -S)$@readonly COORDINATION_PYTHON=(python3)@' "$1"
 }
 
+# The close brings the merge home (finding 7): without the fast-forward the default branch stays
+# behind the PR that was just merged, and the next mission is cut from a stale base.
+mut_CLOSE_no_fast_forward() {
+  sed -i '/^close_return_home() {/,/^}/ s#out="\$( git -C "\$REPO_ROOT" merge --ff-only --quiet "\$DEFAULT_BRANCH@{upstream}" 2>&1 )" || rc=\$?#out=""#' "$1"
+}
+# The four ways home stays where it is (codereview of 2026-09-28), one mutant each: every one of
+# them turns the refusal into a move, or the named reason into a wrong one.
+mut_CLOSE_dirty_base_moves() {          # uncommitted work on the base no longer stops the move
+  sed -i '/^close_return_home() {/,/^}/ s@^  if \[ -n "\$( git -C "\$REPO_ROOT" status --porcelain 2>/dev/null )" \]; then$@  if false; then@' "$1"
+}
+mut_CLOSE_fetch_failure_ignored() {     # a failed fetch falls through to a fast-forward to a stale ref
+  sed -i '/^close_return_home() {/,/^}/ s@^      if \[ "\$rc" -ne 0 \]; then$@      if false; then@' "$1"
+}
+mut_CLOSE_fetch_unbounded() {           # with no timeout(1) the fetch is tried anyway
+  sed -i '/^close_return_home() {/,/^}/ s@^    if ! command -v timeout >/dev/null 2>&1; then$@    if false; then@' "$1"
+}
+mut_CLOSE_no_upstream_unsaid() {        # no upstream reads as a divergence
+  sed -i '/^close_return_home() {/,/^}/ s@^  if \[ -z "\$upstream" \]; then ok@  if false; then ok@' "$1"
+}
+
+# CHECKOUT-UNAVAILABLE names what fell and in which interpreter (finding 8): back to the generic list,
+# and the operator diagnoses the PATH's python3 by hand again.
+mut_COORD_remedy_for_every_requirement() {   # a kernel refusal is told to switch interpreters
+  sed -i 's@^    if (build and os.access(system, os.X_OK)@    if (os.access(system, os.X_OK)@' "${1%/*}/sdd-coordination.py"
+}
+mut_COORD_unavailable_generic() {
+  sed -i "s@^        print(unavailable(str(error), error.build), file=sys.stderr)\$@        print('CHECKOUT-UNAVAILABLE: %s are required' % REQUIREMENTS, file=sys.stderr)@" "${1%/*}/sdd-coordination.py"
+}
+# The remedy goes only to an interpreter that passes the helper's own `capable` check (Codex and
+# CodeRabbit, PR #176). Each mutant below is caught by the `denied` world of check-coordination.sh —
+# a system python3 that carries the pidfd attributes and whose calls are refused — or, the last one,
+# by the witness that counts how many times that python3 ran.
+mut_COORD_bash_remedy_unprobed() {      # no python3 on PATH: `-x` alone earns the remedy again
+  sed -i '/^coordination_enter() {/,/^}/ s%^        && "\$system" "\${COORDINATION_PYTHON\[@\]:1}" "\$SDD_HOME/bin/sdd-coordination.py" capable \\$%        \&\& true \\%' "$1"
+}
+mut_COORD_remedy_attribute_probe() {    # back to reading two attributes instead of calling them
+  sed -i "s%^                \[system, '-I', '-S', os.path.abspath(__file__), 'capable'\],\$%                [system, '-I', '-S', '-c', 'import os, signal; os.pidfd_open; signal.pidfd_send_signal'],%" "${1%/*}/sdd-coordination.py"
+}
+mut_COORD_capable_unchecked() {         # `capable` answers 0 without checking anything
+  sed -i "/^    if sys.argv\[1:2\] == \['capable'\]:\$/,/^        return 0\$/ { /^        subreaper()\$/d }" "${1%/*}/sdd-coordination.py"
+}
+mut_COORD_remedy_probe_recurses() {     # the probe's own refusal probes for a remedy again
+  sed -i "/^            and sys.argv\[1:2\] != \['capable'\]\$/d" "${1%/*}/sdd-coordination.py"
+}
+# The probe runs with the helper's flags: without `-I` a leaked PYTHONHOME withholds the remedy from
+# an interpreter the real run would accept. Caught by the PYTHONHOME world of each side. Dropping
+# `-S` alone has no world and survives — declared in check-coordination.sh.
+mut_COORD_bash_remedy_any_name() {      # a capable python3.12 earns a PATH remedy that misses it
+  sed -i '/^coordination_enter() {/,/^}/ s%^    if \[ "\${system##\*/}" = python3 \] && \[ -x "\$system" \] \\$%    if [ -x "$system" ] \\%' "$1"
+}
+mut_COORD_remedy_any_name() {
+  sed -i "/^            and os.path.basename(system) == 'python3'\$/d" "${1%/*}/sdd-coordination.py"
+}
+mut_COORD_capable_skips_flock() {       # a policy that denies flock passes the probe
+  sed -i 's%^            fcntl.flock(probe, fcntl.LOCK_EX | fcntl.LOCK_NB)$%            pass%' "${1%/*}/sdd-coordination.py"
+}
+mut_COORD_bash_remedy_flagless() {
+  sed -i '/^coordination_enter() {/,/^}/ s%^        && "\$system" "\${COORDINATION_PYTHON\[@\]:1}" %        \&\& "$system" %' "$1"
+}
+mut_COORD_remedy_probe_flagless() {
+  sed -i "s%^                \[system, '-I', '-S', os.path.abspath(__file__), 'capable'\],\$%                [system, os.path.abspath(__file__), 'capable'],%" "${1%/*}/sdd-coordination.py"
+}
+
 # The worker's pidfd kept after the worker is reaped: the `finally` closes it a second time — EBADF,
 # or worse, a descriptor reused since — and the supervisor dies. Caught by every coordinated call.
 mut_COORD_reaped_pidfd_kept() {
@@ -4390,6 +4655,22 @@ CATALOG=(
   COORD_hook_relay_signaled
   COORD_helper_not_isolated
   COORD_reaped_pidfd_kept
+  COORD_unavailable_generic
+  COORD_remedy_for_every_requirement
+  COORD_bash_remedy_unprobed
+  COORD_remedy_attribute_probe
+  COORD_capable_unchecked
+  COORD_remedy_probe_recurses
+  COORD_capable_skips_flock
+  COORD_bash_remedy_any_name
+  COORD_remedy_any_name
+  COORD_bash_remedy_flagless
+  COORD_remedy_probe_flagless
+  CLOSE_no_fast_forward
+  CLOSE_dirty_base_moves
+  CLOSE_fetch_failure_ignored
+  CLOSE_fetch_unbounded
+  CLOSE_no_upstream_unsaid
   COORD_select_pidfd
   RUN_branch_double_slash
   COORD_admission_missing
@@ -4441,11 +4722,61 @@ CATALOG=(
   RUN_no_work_after_budget_cut
   REVIEW_alignment_colon_blind
   DOCS_alignment_colon_blind
+  DOCS_blocked_rows_pass_without_proposal
+  DOCS_proposal_not_per_row
+  DOCS_blocked_rows_unnamed
+  DOCS_proposal_runs_past_heading
+  DOCS_proposal_first_section_only
+  DOCS_proposal_fence_blind
+  DOCS_doc_needs_no_name
+  DOCS_marker_unanchored
+  DOCS_marker_in_fence
+  DOCS_fence_closes_on_other_char
+  DOCS_fence_closes_on_shorter
+  DOCS_fence_closes_with_info
+  DOCS_blocked_writable_passes
+  DOCS_blocked_cell_not_split
+  DOCS_blocked_empty_cell_vanishes
+  DOCS_vs16_blind
+  DOCS_trailing_comma_is_a_name
+  DOCS_header_last_column_blind
+  DOCS_header_markup_blind
+  DOCS_no_status_column_complete
+  DOCS_empty_status_skipped
+  DOCS_blocked_claude_refused
   QA_status_line_start
   QA_status_enum_loose
   QA_bug_enum_loose
   QA_matrix_pending
   QA_bug_open
+  QA_report_not_mission_bound
+  QA_substep_report_not_mission_bound
+  QA_report_ignores_untracked
+  QA_report_range_no_origin
+  QA_report_range_no_upstream
+  QA_report_no_base_fallback
+  QA_report_log_renamelimit_configurable
+  QA_report_status_renamelimit_configurable
+  QA_report_log_base_blind
+  QA_report_tree_base_blind
+  QA_report_staged_add_ignored
+  QA_report_intent_to_add_ignored
+  QA_report_subdir_same_name
+  QA_report_path_spelled_literally
+  QA_report_any_extension
+  QA_report_date_order
+  QA_report_porcelain_log
+  QA_report_log_renames
+  QA_report_status_renames
+  QA_report_worktree_rename_ignored
+  QA_report_log_rename_owns_any
+  QA_report_status_rename_owns_any
+  QA_report_log_no_rename_detection
+  QA_report_status_renames_configurable
+  QA_report_status_copy_refused
+  QA_report_status_quoted
+  QA_report_log_quoted
+  QA_report_no_fallback
   QA_bug_genre_ignored
   QA_bug_genre_prefix
   QA_bug_genre_anywhere
@@ -4456,6 +4787,9 @@ CATALOG=(
   QA_bug_genre_deferred_join
   QA_e2e_red_never_probed
   QA_app_down_on_unknown
+  APP_expect_ignored
+  QA_wrong_app_not_armed
+  APP_expect_status_ignored
   QA_probe_ignores_e2e_rc
   QA_hostport_no_default_port
   QA_hostport_case_blind
@@ -4482,6 +4816,10 @@ CATALOG=(
   DOCS_markup_only_status_skipped
   PR_no_artifact
   PR_stamp_blind
+  PR_blocked_docs_not_carried
+  PR_body_unread_is_missing
+  PR_blocked_docs_anywhere
+  PR_merged_rechecked
   PR_stamp_key_follows_head
   HEALTH_stamp_window_blind
   HEALTH_stamp_tree_blind

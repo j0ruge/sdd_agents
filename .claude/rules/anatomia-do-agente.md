@@ -115,8 +115,9 @@ sensor (ADR 0011).
 **Dívida declarada.** A nota de revisão continua sendo rótulo; o que L1 fechou foi que rótulo
 sem sensor comprava rodada — hoje `gate_REVIEW` tolera `REVIEW_PROSE_MIN_GRADE` só nas linhas
 de `REVIEW_PROSE_CRITERIA` (prosa) e exige A em todo o resto, nome desconhecido incluído. As
-Âncoras 1 e 2 do `gate_QA` foram satisfeitas por relatório
-de **outra** missão (achado `kit:` no `50-pr.md` daquela missão; aberto).
+Âncoras 1 e 2 do `gate_QA` satisfeitas por relatório de **outra** missão: fechada em
+`20260928-os-achados-da-janela` (ADR 0013) — o relatório é o que a branch da missão adicionou
+(`mission_qa_report`), com recuo para a resposta de antes quando o range é vazio.
 
 ## 5. Memória — o que persiste entre sessões
 
@@ -161,6 +162,12 @@ fica no `effort=` do `pipeline.log`, na linha da fase e na do `CLOSE`, já que o
 `hat_writes_extra_for`, somado por chapéu em `hat_writes`), validada no `load_config` e **nunca**
 no ponto de uso — lá o `die` cairia num subshell e devolveria a lista vazia, que é a grafia de
 "este chapéu escreve em qualquer lugar".
+Desde `20260928-os-achados-da-janela` (ADR 0013) o `writes:` do `sdd-docs` não declara mais
+`.claude/rules/**`: o `claude -p` headless recusa `Edit`/`Write` ali, e na SQ-145/SQ-146 a sessão
+contornou pelo Bash com o caminho dentro do `writes:`. O contorno agora para a linha como
+`hat-crossed`, e a regra que muda vira linha `⛔` com texto proposto, que o `gate_DOCS` lê por linha
+e o PR leva ao humano — o `gate_PR` confere que o corpo do PR nomeia cada documento `⛔` numa linha
+com `⛔`, pelo mesmo leitor da tabela (`docs_checklist_rows`).
 
 **Dívida declarada.** O `HAT_WRITES_EXTRA` **alarga** permissão e seu valor vira glob de shell no
 `case` do `hat_path_allowed`, então toda frouxidão da guarda falha **aberta** — por isso ela é
@@ -207,7 +214,9 @@ criados por threads; pidfds fixam a identidade após conferir starttime/ancestra
 fallback para PID numérico reutilizável. A varredura seleciona destinatários, nunca libera
 posse: só `ECHILD` prova reap completo. Handlers que ignoram o sinal por escolha não são garantidos.
 O helper sobe com `python3 -I -S` (`COORDINATION_PYTHON`, uma definição para os quatro sítios):
-o `PYTHONPATH` de quem chama não troca os módulos do processo que decide a posse. O supervisor
+o `PYTHONPATH` de quem chama não troca os módulos do processo que decide a posse. As mesmas flags
+servem à sonda do remédio do `CHECKOUT-UNAVAILABLE`: `/usr/bin/python3` (ou `SDD_SYSTEM_PYTHON`) só
+é oferecido depois de passar no próprio `capable` do helper, nunca por ser executável. O supervisor
 acorda pelo pidfd do worker, não pelo tique de 10 ms. O custo que sobra, ~30 ms do 2º Python do
 worker em toda chamada coordenada, está no `TODO.md`.
 

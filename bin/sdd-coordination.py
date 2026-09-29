@@ -13,8 +13,65 @@ import sys
 import time
 import uuid
 
+REQUIREMENTS = ('Linux >=5.3 procfs/pidfd with task children enumeration, Python 3.9+ and '
+                'flock/subreaper support')
+
+
+class Unavailable(Exception):
+    """A named requirement of coordination this interpreter or kernel does not meet. `build` is
+    True when the requirement belongs to the Python BUILD — the one case another interpreter fixes."""
+
+    def __init__(self, requirement, build=False):
+        super().__init__(requirement)
+        self.build = build
+
+
+def unavailable(requirement, build=False):
+    """The CHECKOUT-UNAVAILABLE refusal: WHAT failed, IN WHICH interpreter, and the remedy when one
+    is on disk. The terminal of the operator of 2026-09-28 resolved python3 to a uv-built CPython
+    3.11 with no os.pidfd_open while /usr/bin/python3 3.12 served, and the refusal listed every
+    requirement and pasted the raw error — a human diagnosed it by hand (finding 8). The runner never
+    USES /usr/bin/python3: it only probes it to write the remedy, and ONLY for a requirement of the
+    Python build (`build`): a kernel or seccomp refusal is the same under every interpreter, and a
+    remedy there sends the operator to switch Pythons for nothing. Imports are local on purpose:
+    this is the refusal path, and every coordinated call pays the helper's startup.
+
+    The remedy is offered only when that interpreter passes THIS helper's own check (`capable`):
+    version, the pidfd CALLS, task children, the subreaper and flock. Reading the two attributes
+    passed a Python whose pidfd calls the kernel then refused, and the remedy failed for the very
+    reason it claimed to fix (CodeRabbit and Codex, PR #176). SDD_SYSTEM_PYTHON replaces
+    /usr/bin/python3 for the sensor, which cannot build an incapable /usr/bin/python3; bin/sdd reads
+    the same name. One not named python3 gets no remedy: its directory first on PATH does not make
+    `python3` resolve to it (CodeRabbit, PR #176). The probe never asks for a remedy of its own: an interpreter the probe finds
+    lacking would, under a PATH python3 lacking the same, probe itself again and again."""
+    import platform
+    import shutil
+    import subprocess
+    resolved = shutil.which('python3') or 'no python3 on PATH'
+    lines = ['CHECKOUT-UNAVAILABLE: %s' % requirement,
+             '  interpreter: %s (sys.executable %s, Python %s)'
+             % (resolved, sys.executable, platform.python_version())]
+    system = os.environ.get('SDD_SYSTEM_PYTHON') or '/usr/bin/python3'
+    if (build and os.access(system, os.X_OK) and resolved != 'no python3 on PATH'
+            and os.path.basename(system) == 'python3'
+            and sys.argv[1:2] != ['capable']
+            and os.path.realpath(resolved) != os.path.realpath(system)):
+        try:
+            probe = subprocess.run(
+                [system, '-I', '-S', os.path.abspath(__file__), 'capable'],
+                stdin=subprocess.DEVNULL, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL,
+                timeout=5)
+            if probe.returncode == 0:
+                lines.append('  %s passes the same check: run PATH=%s:$PATH sdd <the same command>'
+                             % (system, os.path.dirname(system)))
+        except Exception:  # the refusal path must not trade a message for a traceback
+            pass
+    lines.append('  coordinated commands need %s' % REQUIREMENTS)
+    return '\n'.join(lines)
+
+
 if sys.version_info < (3, 9):
-    sys.exit('CHECKOUT-UNAVAILABLE: Python 3.9+ is required')
+    sys.exit(unavailable('Python 3.9+ is required', build=True))
 
 BUSY = 75
 
@@ -102,10 +159,24 @@ def authorized(value, root, lock, caller, boot):
 
 
 def pidfd_capability():
-    # Check syscall availability and policy before any project config or session can run.
-    descriptor = os.pidfd_open(os.getpid())
+    # Check syscall availability and policy before any project config or session can run. Each
+    # failure is raised as the requirement it breaks, so the refusal can say which one fell.
+    if not hasattr(os, 'pidfd_open'):
+        raise Unavailable('os.pidfd_open is missing from this Python build', build=True)
     try:
-        signal.pidfd_send_signal(descriptor, 0)
+        descriptor = os.pidfd_open(os.getpid())
+    except OSError as error:
+        raise Unavailable('os.pidfd_open failed (denied by policy, or absent from the kernel): %s'
+                          % error)
+    try:
+        if not hasattr(signal, 'pidfd_send_signal'):
+            raise Unavailable('signal.pidfd_send_signal is missing from this Python build',
+                              build=True)
+        try:
+            signal.pidfd_send_signal(descriptor, 0)
+        except OSError as error:
+            raise Unavailable('pidfd_send_signal failed (denied by policy, or absent from the kernel):'
+                              ' %s' % error)
     finally:
         os.close(descriptor)
     # signal_family discovers descendants ONLY through /proc/<pid>/task/<tid>/children, which a
@@ -113,7 +184,7 @@ def pidfd_capability():
     # signal reaches nobody, and an interrupted run keeps the lock (Codex on PR #48) — so the
     # absence is refused here, before execution, like a missing pidfd.
     if not os.path.exists('/proc/%d/task/%d/children' % (os.getpid(), os.getpid())):
-        raise OSError('procfs has no task children enumeration (CONFIG_PROC_CHILDREN)')
+        raise Unavailable('procfs has no task children enumeration (CONFIG_PROC_CHILDREN)')
 
 
 PR_SET_CHILD_SUBREAPER = 36
@@ -382,11 +453,23 @@ def main():
       check <root> <dir> <kind>                  0 when the caller descends from the lock holder;
                                                  kind `pipeline` further requires the worker itself
       show  <root> <dir> <kind>                  print the current owner, if any; never locks
+      capable                                    0 when THIS interpreter meets every requirement;
+                                                 the probe behind the refusal's remedy
     """
+    if sys.argv[1:2] == ['capable']:
+        subreaper()
+        # flock is the requirement neither pidfd_capability() nor the subreaper reaches: a policy
+        # that denies the syscall would pass the probe and earn a remedy no Python can deliver
+        # (CodeRabbit, PR #176). A temporary file proves the syscall, not the checkout's own
+        # filesystem: `enter` meets that at the lock, before any pidfd call, as a non-build refusal.
+        import tempfile
+        with tempfile.TemporaryFile() as probe:
+            fcntl.flock(probe, fcntl.LOCK_EX | fcntl.LOCK_NB)
+        return 0
     if sys.argv[1:2] == ['hook']:
         return bounded_hook(*sys.argv[2:])
     if len(sys.argv) < 5:
-        print('usage: sdd-coordination.py hook|enter|check|show <root> <dir> <kind> [args...]',
+        print('usage: sdd-coordination.py capable|hook|enter|check|show <root> <dir> <kind> [args...]',
               file=sys.stderr)
         return 2
     mode, root, directory, kind, *args = sys.argv[1:]
@@ -429,8 +512,9 @@ def main():
 if __name__ == '__main__':
     try:
         sys.exit(main())
+    except Unavailable as error:
+        print(unavailable(str(error), error.build), file=sys.stderr)
+        sys.exit(1)
     except (OSError, ValueError, AttributeError) as error:
-        print('CHECKOUT-UNAVAILABLE: Linux >=5.3 procfs/pidfd with task children enumeration, '
-              'Python 3.9+ and flock/subreaper support '
-              'are required: %s' % error, file=sys.stderr)
+        print(unavailable('coordination failed: %s' % error), file=sys.stderr)
         sys.exit(1)

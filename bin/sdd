@@ -147,7 +147,7 @@ load_config() {
   source "$CONFIG_FILE"
 
   : "${PROJECT_NAME:=}"; : "${DEFAULT_BRANCH:=}"; : "${TEST_CMD:=}"
-  : "${E2E_CMD:=}"; : "${E2E_DIR:=e2e}"; : "${APP_URL:=}"
+  : "${E2E_CMD:=}"; : "${E2E_DIR:=e2e}"; : "${APP_URL:=}"; : "${APP_EXPECT:=}"
   : "${HANDOFF_DIR:=docs/handoffs}"; : "${QA_DOCS_PATH:=docs/qa}"; : "${TODO_FILE:=TODO.md}"
   : "${MODEL_EXEC:=opus}"; : "${MODEL_QA:=opus}"; : "${MODEL_REVIEW:=opus}"
   : "${MODEL_DOCS:=opus}"; : "${MODEL_PUBLISH:=sonnet}"; : "${MODEL_TICKET:=sonnet}"
@@ -629,11 +629,23 @@ app_url_hostport() {
   printf '%s %s\n' "$host" "$port"
 }
 
-# app_probe <url> — prints "state|label" and ALWAYS returns 0. State is one of:
+# app_probe <url> [expect] — prints "state|label" and ALWAYS returns 0. State is one of:
 #
 #   down     nothing is listening there; label is the address
-#   up       something answered; label is the address
+#   up       something answered (and, with <expect>, its page carries it); label is the address
+#   wrong    something answered, but its page does NOT carry <expect>; label is the address
 #   unknown  no verdict either way; label is the REASON, in a sentence a human can act on
+#
+# <expect> is APP_EXPECT, passed by name like the URL. `wrong` is born ONLY with it declared and
+# the connect `up`: two products that share http://localhost:5173 both "answer", and in LH-4
+# (2026-09-27) the QA session opened against the other one's dev server. The page is read with
+# curl, never `-f` and never `-L`, with `--noproxy '*'` (the connect above goes straight to the
+# socket, so the read does as well). ONLY a 2xx page without the literal is `wrong`: the RIGHT
+# product may answer with a redirect to its login (followed, it could land on an identity provider
+# that is not this product either) or with an error page the mission's own code caused, and reading
+# those as `wrong` was a false BLOCKED. Any other status without the literal is `unknown`, with the
+# code; with the literal it is `up` whatever the status. No curl, or a read that fails, is `unknown`
+# — the one-sided contract below holds for the new state as for the others.
 #
 # rc 0 in every case, and no global touched, because this is the one function of the pair that has
 # to survive `$( )`. A function with a side effect on a global loses it to the subshell — the
@@ -658,7 +670,7 @@ app_probe() {
   # The URL is the ARGUMENT and never read off the global here: both callers pass "$APP_URL" by
   # name, and a fallback to it was a default nothing exercised — a signature that says one thing
   # and a body that quietly accepts another.
-  local url="${1:-}" hp host port label err="" rc=0
+  local url="${1:-}" expect="${2:-}" hp host port label err="" rc=0 body crc=0 code
   [ -n "$url" ] || { printf 'unknown|APP_URL is empty\n'; return 0; }
   # Declared first and assigned inside the `if`: `local hp="$(...)"` would swallow the rc, since
   # `local` reports its OWN success and the parser's refusal would read as a parse.
@@ -677,7 +689,28 @@ app_probe() {
   # LC_ALL=C because the verdict below is read out of a strerror string.
   err="$(LC_ALL=C timeout "$APP_PROBE_TIMEOUT" "${BASH:-bash}" -c \
       'exec 3<>"/dev/tcp/$0/$1"' "$host" "$port" 2>&1)" || rc=$?
-  if [ "$rc" -eq 0 ]; then printf 'up|%s\n' "$label"; return 0; fi
+  if [ "$rc" -eq 0 ]; then
+    [ -n "$expect" ] || { printf 'up|%s\n' "$label"; return 0; }
+    if ! command -v curl >/dev/null 2>&1; then
+      printf 'unknown|%s answers, but APP_EXPECT not checked (curl is not on PATH)\n' "$label"
+      return 0
+    fi
+    body="$(curl -sS --noproxy '*' --max-time "$APP_PROBE_TIMEOUT" -w '\n%{http_code}' "$url" 2>&1)" \
+      || crc=$?
+    if [ "$crc" -ne 0 ]; then
+      printf 'unknown|%s answers, but APP_EXPECT not checked (curl rc %s: %s)\n' \
+        "$label" "$crc" "$(head -1 <<< "$body")"
+      return 0
+    fi
+    code="${body##*$'\n'}"; body="${body%$'\n'*}"
+    if grep -qF -- "$expect" <<< "$body"; then printf 'up|%s\n' "$label"; return 0; fi
+    case "$code" in
+      2??) printf 'wrong|%s\n' "$label" ;;
+      *) printf 'unknown|%s answers HTTP %s, but APP_EXPECT not checked (a redirect or an error page may be this product)\n' \
+           "$label" "$code" ;;
+    esac
+    return 0
+  fi
   # ECONNREFUSED, and NOTHING else, is what "the app is down" means here. A name that does not
   # resolve, a route that is missing, a firewall that drops the packet: each of them is a machine
   # this cannot speak for, and each of them lands below, in `unknown`. Herestring and never
@@ -773,6 +806,140 @@ latest_matching() {
   # caller's assignment — inside a gate that would read as a silent failure instead of "absent".
   # shellcheck disable=SC2012,SC2086
   ls -1d $pattern 2>/dev/null | sort -V | tail -1 || true
+}
+
+# mission_base_refs — the commits the mission branch is measured against, one per line: the local
+# DEFAULT_BRANCH, its upstream and `origin/<DEFAULT_BRANCH>`, whichever resolve, each once. The
+# REMOTE is load-bearing (review r4 of the codereview, reproduced): the local ref alone goes stale —
+# the ticket flow leaves it at the fork point — and after a routine `git pull origin <base>` INTO
+# the mission branch, every report another mission merged upstream sat inside merge-base..HEAD and
+# read as this mission's own: SQ-146 again, through a pull. `HEAD --not <all of them>` is the set
+# of commits the branch has and no copy of the base has, however stale any one of them is.
+mission_base_refs() {
+  local r c seen=" "
+  for r in "$DEFAULT_BRANCH" "$DEFAULT_BRANCH@{upstream}" "origin/$DEFAULT_BRANCH"; do
+    c="$(git -C "$REPO_ROOT" rev-parse --verify --quiet "$r^{commit}" 2>/dev/null || true)"
+    [ -n "$c" ] || continue
+    case "$seen" in *" $c "*) continue ;; esac
+    seen+="$c "
+    printf '%s\n' "$c"
+  done
+}
+
+# path_in_commits <path> [<commit>...] — rc 0 when <path> exists in the tree of any <commit>.
+path_in_commits() {
+  local path="$1" c
+  shift
+  for c in "$@"; do
+    git -C "$REPO_ROOT" cat-file -e "$c:$path" 2>/dev/null && return 0
+  done
+  return 1
+}
+
+# mission_qa_report — the absolute path of the newest QA report that belongs to THIS mission, or
+# empty. One definition, two readers: qa_substep and Anchor 1 of gate_QA answer about the SAME file.
+# Measured in the judge's window: both used to pick `latest_matching reports/*.md`, and in SQ-146
+# the newest report was SQ-143's — the sub-step answered `close`, the QA skills never ran, and the
+# gate closed on another mission's walk (ADR 0013).
+#
+# Four rounds of review found four ways around the first shape, each through the SAME missing state:
+# which commits are the mission's, and what existed before it. So the answer is three facts:
+#
+# 1. THE MISSION'S COMMITS are `HEAD --not <mission_base_refs>`, local and remote base alike, so a
+#    base merged into the branch brings none of its reports along.
+# 2. A NEW PATH is one absent from the tree of every MERGE-BASE of HEAD with those refs. An add, an
+#    untracked file (`??`), a staged add (`A?`), an intent-to-add (` A`) or a staged copy (`C?`)
+#    grants ownership only to a new path — so deleting another mission's report and adding it back
+#    (a revert, a `git checkout <base> -- f`, a `git rm --cached`) never makes it this mission's.
+#    Editing one (`M`) never lists it at all.
+# 3. OWNERSHIP FOLLOWS THE RENAME CHAIN: the commits are replayed parents first (`--topo-order`: date
+#    order put a rename before its add on a skewed clock), and a rename (`R old new`, in a commit or
+#    staged) carries ownership only from a path the mission already owned — `git mv` of another
+#    mission's report does not make it this one's.
+#
+# The commits are read with PLUMBING (`rev-list | diff-tree --stdin`), which the display config does
+# not reach: `log.showSignature` put signature text ahead of the first field of a signed commit and
+# the report vanished. `-M` asks for rename detection, which plumbing never does on its own. The
+# status is porcelain, so `--find-renames` overrides a status.renames that switched detection off.
+# The rename LIMIT does reach both (diff.renameLimit, status.renameLimit): past it, two edited renames
+# of base reports read as adds and counted (review r5), so both reads pin it to 0, "no limit". `-z` on
+# both, because git quotes a path with a space (status) or a `"` (diff-tree), and a quoted name is no
+# path on disk. `-uall` because without it an untracked directory shows as the directory, not its files.
+# The pick among the candidates is the same `sort -V` latest_matching uses.
+#
+# NOTHING TO MEASURE AGAINST ⇒ today's answer, byte for byte: no base ref resolves, none shares a
+# merge-base with HEAD (a shallow clone, unrelated histories), or HEAD has no commit that the base
+# refs lack (a mission on the base branch, or one already merged — upstream included). Otherwise a
+# merged mission would fall back into QA and a `sdd run` over it would buy a session. Declared
+# residue there: a mission whose `branch:` IS the base; and a merged mission that gets one more
+# commit afterwards, whose report then sits on the base side and reads as not its own.
+#
+# The range is HEAD's, not the mission's — two more residues, declared rather than claimed away:
+# asked from ANOTHER mission's branch (`sdd status A` standing on B), a merged A reads QA again,
+# because its report is on the base and not in B's range; and a branch stacked on an unmerged
+# mission counts that mission's reports as its own (the fail-open survives there). A COPY of another
+# mission's report under a new name is a new path and counts. A mission that deletes a report and
+# adds a similar one may be paired as a rename and refused — fail closed, and the refusal names the
+# file it read. And the check is against the MERGE-BASE tree, not the base's tip: a report another
+# mission added upstream AFTER the fork, brought in by `git checkout origin/<b> -- f`, a squash or a
+# cherry-pick, is new to the merge-base and counts (review r5; TODO.md). Checking the tip too would
+# refuse a squash-merged mission its own report, seen from its branch after a fetch.
+#
+# The charter stays out on purpose (decision 3 of the grill): it is durable doc that crosses cycles
+# and the qa-execution skill writes the one missing, so demanding the mission's would make QA:plan
+# unsatisfiable in a cycle that reuses charters.
+mission_qa_report() {
+  local dir="$REPO_ROOT/$QA_DOCS_PATH/reports" st a b p c
+  local -a nots=() bases=()
+  local -A owned=()
+  mapfile -t nots < <(mission_base_refs)
+  for c in ${nots[@]+"${nots[@]}"}; do
+    b="$(git -C "$REPO_ROOT" merge-base HEAD "$c" 2>/dev/null || true)"
+    [ -z "$b" ] || bases+=("$b")
+  done
+  # NOTHING TO MEASURE AGAINST ⇒ today's answer: no base ref resolves, or none shares history with
+  # HEAD (a shallow clone, unrelated histories — review r5: the replay then read the whole history
+  # as the mission's), or HEAD has no commit the base refs lack (the empty range). `bases` is only
+  # non-empty when `nots` is, so the expansion below never meets an empty array.
+  if [ "${#bases[@]}" -eq 0 ] \
+      || [ -z "$(git -C "$REPO_ROOT" rev-list -n 1 HEAD --not "${nots[@]}" 2>/dev/null || true)" ]; then
+    latest_matching "$dir/*.md"
+    return 0
+  fi
+  # The mission's commits, parents first: `A <path>` and `R<score> <old> <new>`, NUL-separated.
+  while IFS= read -r -d '' st; do
+    case "$st" in
+      A)  IFS= read -r -d '' a || break
+          if [ -n "$a" ] && ! path_in_commits "$a" ${bases[@]+"${bases[@]}"}; then owned["$a"]=1; fi ;;
+      R*) IFS= read -r -d '' a || break; IFS= read -r -d '' b || break
+          if [ -n "$a" ] && [ -n "$b" ] && [ -n "${owned[$a]+x}" ]; then owned["$b"]=1; fi ;;
+    esac
+  done < <(git -C "$REPO_ROOT" rev-list --reverse --topo-order HEAD --not "${nots[@]}" 2>/dev/null \
+             | git -C "$REPO_ROOT" -c diff.renameLimit=0 diff-tree --stdin -r -M -z --no-commit-id --name-status --diff-filter=AR \
+                 -- "$QA_DOCS_PATH/reports/" 2>/dev/null || true)
+  # The tree. A staged COPY (`C? <new>`, its source as the next field) shows when the user's
+  # status.renames — or diff.renames, its default — says `copies`; it is a new path, as diff-tree
+  # (no `-C`) would read the same file (review r3), so after reading its source it FALLS THROUGH to
+  # the one base-tree check every new path meets. A rename, staged (`R?`) or in the work tree (` R`,
+  # a `mv` plus `git add -N` — review r6), asks ownership of its source.
+  while IFS= read -r -d '' st; do
+    case "$st" in
+      C?' '*) IFS= read -r -d '' b || break ;&
+      '?? '*|A?' '*|' A '*)
+          if ! path_in_commits "${st:3}" ${bases[@]+"${bases[@]}"}; then owned["${st:3}"]=1; fi ;;
+      R?' '*|' R '*) IFS= read -r -d '' b || break
+          if [ -n "$b" ] && [ -n "${owned[$b]+x}" ]; then owned["${st:3}"]=1; fi ;;
+    esac
+  done < <(git -C "$REPO_ROOT" -c status.renameLimit=0 status --porcelain -z -uall --find-renames \
+             -- "$QA_DOCS_PATH/reports/" 2>/dev/null || true)
+  # `-ef` against "$dir/<name>": a direct child of reports/, as the glob of latest_matching reads,
+  # whatever spelling QA_DOCS_PATH has (a trailing `/`, a `./`) — and a file still on disk, which
+  # also drops the old name of every rename above.
+  for p in ${owned[@]+"${!owned[@]}"}; do
+    case "$p" in *.md) ;; *) continue ;; esac
+    [ "$REPO_ROOT/$p" -ef "$dir/${p##*/}" ] || continue
+    printf '%s\n' "$dir/${p##*/}"
+  done | sort -V | tail -1 || true
 }
 
 # plan_approves_itself → 0 when the mission on disk is a kaizen-born plan carrying `aprovacao: auto`
@@ -957,8 +1124,8 @@ GATE_EXEC_DIRTY=0
 # can leave a lap with the marker still set has to re-derive that property, not assume it.
 GATE_HANDOFF_BLOCKED=0
 
-# Set by gate_QA when the e2e came back RED and a TCP connect to APP_URL was refused, read by
-# cmd_run to escalate instead of buying a session against a machine no session can fix. A GLOBAL
+# Set by gate_QA when the e2e came back RED and the app at APP_URL is down (the TCP connect was
+# refused) or is not this product (a 2xx page without APP_EXPECT), read by cmd_run to escalate instead of buying a session against a machine no session can fix. A GLOBAL
 # for the third time and for the reason the two above give — the rc is already spent on pass/fail
 # — and a MARKER rather than a grep of GATE_WHY, because GATE_WHY is prose: the sentence the arm
 # writes is one an operator may reword, and an early exit anchored on a substring of it would
@@ -975,7 +1142,9 @@ GATE_HANDOFF_BLOCKED=0
 #     Whoever adds a third door, a second setter, or a path that can leave a lap with it still set
 #     has to re-derive this, exactly as this comment had to.
 #
-# Armed ONLY in the `down` arm. `unknown` leaves it at 0 and the runner behaves as it did before
+# Armed ONLY in the `down` and `wrong` arms — nothing listening, or something that is not this
+# product (APP_EXPECT absent from the page): either way no session can fix it. `unknown` leaves it
+# at 0 and the runner behaves as it did before
 # the probe existed, which is the whole compatibility story — see app_probe.
 GATE_APP_DOWN=0
 
@@ -1156,9 +1325,19 @@ gate_QA() {
       return 1
     fi
   else
-    # Anchor 1: the dated report from the qa-execution skill.
-    report="$(latest_matching "$REPO_ROOT/$QA_DOCS_PATH/reports/*.md")"
-    [ -n "$report" ] || { GATE_WHY="no report in $QA_DOCS_PATH/reports/"; return 1; }
+    # Anchor 1: the dated report from the qa-execution skill — THIS mission's (mission_qa_report,
+    # the same file qa_substep reads). A tree with reports but none of the mission's names the
+    # newest, so the human reads whose walk the gate refused to close on.
+    report="$(mission_qa_report)"
+    if [ -z "$report" ]; then
+      local newest
+      newest="$(latest_matching "$REPO_ROOT/$QA_DOCS_PATH/reports/*.md")"
+      [ -n "$newest" ] || { GATE_WHY="no report in $QA_DOCS_PATH/reports/"; return 1; }
+      # "is not one this branch added", and never "was added before the branch": a report git
+      # ignores, or one whose name git quotes, lands here too, and the sentence must be true of both.
+      GATE_WHY="no report of this mission in $QA_DOCS_PATH/reports/ — the newest, $(basename "$newest"), is not one this branch added (measured as HEAD --not $DEFAULT_BRANCH and its remote)"
+      return 1
+    fi
     # Anchor on the qa-execution skill's report. The `**Status:**` does NOT start the line: its
     # template is `- **Started:** <ts> · **Status:** in-progress <!-- in-progress | closed -->`.
     # Requiring line start made the gate never match, and the runner re-ran qa-execution forever
@@ -1290,11 +1469,11 @@ gate_QA() {
     # Held in a local before the probe runs: LAST_CHECK_LOG is the file this refusal sends the
     # operator to READ, and it is a global that any later run_check_cmd would overwrite.
     local e2e_log="$LAST_CHECK_LOG" probe state label
-    probe="$(app_probe "$APP_URL")"
+    probe="$(app_probe "$APP_URL" "$APP_EXPECT")"
     state="${probe%%|*}"; label="${probe#*|}"
     case "$state" in
       down)
-        # The only arm that arms the marker, and the only one cmd_run acts on.
+        # One of the two arms that arm the marker (with `wrong` below), the ones cmd_run acts on.
         GATE_APP_DOWN=1
         GATE_WHY="E2E_CMD failed ($E2E_CMD) and nothing is listening at $label (APP_URL) — the app is down; no session can start it. See $e2e_log"
         ;;
@@ -1307,10 +1486,19 @@ gate_QA() {
         # sends the reader to the log for the rest.
         GATE_WHY="E2E_CMD failed ($E2E_CMD) with the app answering at $label — APP_URL is not the cause; whatever is (a broken assertion, or something behind the port, like a stopped database) is in the log. See $e2e_log"
         ;;
+      wrong)
+        # Something answers, and it is not this product: the same escalation as a dead app, with no
+        # new door and no new kind — an operator who reads `app-down` has to act on the machine
+        # either way, and the sentence says which of the two it is.
+        GATE_APP_DOWN=1
+        GATE_WHY="E2E_CMD failed ($E2E_CMD) and the app at $label is not this product (APP_EXPECT '$APP_EXPECT' not in the page) — no session can fix that. See $e2e_log"
+        ;;
       *)
         # `*` and not `unknown)`: this is the arm that has to catch a state nobody has invented
-        # yet, since the two above are the only ones that may change what the runner DOES.
-        GATE_WHY="E2E_CMD failed ($E2E_CMD) — see $e2e_log (the app was not probed either way: $label)"
+        # yet, since the three above are the only ones that may change what the runner DOES.
+        # "No verdict", and not "not probed": with APP_EXPECT declared, `unknown` also means the
+        # app answered and its page could not be checked, and the label says so.
+        GATE_WHY="E2E_CMD failed ($E2E_CMD) — see $e2e_log (no verdict on the app at APP_URL: $label)"
         ;;
     esac
     return 1
@@ -1557,6 +1745,69 @@ gate_REVIEW() {
   return 0
 }
 
+# docs_checklist_rows <45-docs.md> — the rows of the drift checklist that are not done, one per line
+# and TAGGED: `P|<status as written>` for a pending cell, `B|<document>` for a ⛔. ONE definition,
+# two readers (codereview of 2026-09-28): gate_DOCS decides on both tags, and gate_PR reads the ⛔
+# documents the PR body has to carry. Two spellings of "which rows are ⛔" would let the PR be asked
+# for a proposal the DOCS gate never saw, or let it skip one the DOCS gate passed.
+#
+# A file with no table whose header has a `Status` cell prints `N|` and nothing else: read as "no
+# row pending", a header written `Estado`, or a table without leading pipes, answered "drift
+# checklist complete" over a ✗ (review r4). The header cell is read as written, markup stripped,
+# as the Status cells are. An EMPTY Status cell is pending, `P|(empty)`: every row needs ✅, a
+# justified n/a or a ⛔, and "nothing" is none of them.
+docs_checklist_rows() {
+  awk -F'|' '
+      # find the header and remember which column holds Status
+      !col && /^[ \t]*\|/ {
+        # `<= NF`: a Status that is the LAST column of a header written without a trailing pipe is
+        # $NF (review r5); with the pipe, $NF is the empty field after it and matches nothing.
+        for (i = 2; i <= NF; i++) {
+          cell = $i; gsub(/^[ \t]+|[ \t]+$/, "", cell); gsub(/[*`]/, "", cell)
+          if (cell == "Status") { col = i; next_is_sep = 1 }
+        }
+        if (col) next
+      }
+      col && /^[ \t]*\|/ {
+        cell = $col; gsub(/^[ \t]+|[ \t]+$/, "", cell)
+        # The value as the author wrote it (yokoten of #50): `✅` in a code span or **n/a** in bold
+        # is that value. ASCII class only — mawk is byte-oriented, and a class holding ✅ would
+        # match its bytes, not the character (CLAUDE.md). A cell that was ONLY markup is not an
+        # empty cell: stripped to nothing it would be skipped below as if the row were not there,
+        # so it is pending, quoted as written (review r1 of 20260926).
+        raw = cell; gsub(/[*`]/, "", cell)
+        if (cell == "" && raw != "") { print "P|" raw; next }
+        if (cell == "") { print "P|(empty)"; next }
+        # `:?-+:?` — with a formatter-aligned separator (`|:---:|`) the Status column of the
+        # separator row read as a pending Status, and gate_DOCS failed a drift checklist with
+        # nothing pending in it. Same regex in checkpoint_rows and gate_REVIEW.
+        if (cell ~ /^:?-+:?$/) next
+        if (cell == "✅" || cell == "n/a" || cell == "N/A") next
+        if (cell == "⛔" || cell == "⛔\357\270\217") {
+          # One ⛔ row may name several documents (`a.md`, `.claude/rules/b.md`): each is its own
+          # B| line, because the hat may write one and not the other, and the proposal and the PR
+          # must name each (review r2 of the codereview fixes). A row that yields no name at all —
+          # a zero-length cell is 0 fields to split in mawk, a blank or comma-only cell only empty
+          # ones — still prints ONE empty name, which gate_DOCS refuses as unnamed: without the
+          # `printed` state the ⛔ vanished and the gate passed (review r3). DECLARED LIMIT: every
+          # comma splits, so a "document, location" cell yields the location as a document too —
+          # sdd-docs is told to keep one document per ⛔ cell and the location in Evidence.
+          doc = $3; gsub(/[*`]/, "", doc)
+          nd = split(doc, docs, ","); printed = 0
+          for (k = 1; k <= nd; k++) {
+            one = docs[k]; gsub(/^[ \t]+|[ \t]+$/, "", one)
+            if (one != "") { print "B|" one; printed = 1 }
+          }
+          if (!printed) print "B|"
+          next
+        }
+        print "P|" cell
+      }
+      col && !/^[ \t]*\|/ { exit }   # the table ended
+      END { if (!col) print "N|" }
+    ' "$1"
+}
+
 gate_DOCS() {
   local d="$MISSION_DIR/45-docs.md"
   [ -f "$d" ] || { GATE_WHY="missing 45-docs.md"; return 1; }
@@ -1570,44 +1821,107 @@ gate_DOCS() {
   # `TODO.md` — which is exactly what `sdd-docs` is required to do (checking the mission's TODO
   # entries is in its instructions). The gate contradicted the agent. Measured in the SQ-97
   # pilot: 0 `✗` items in the file and a failure all the same.
-  local pending_cell
-  pending_cell="$(awk -F'|' '
-      # find the header and remember which column holds Status
-      !col && /^[ \t]*\|/ {
-        for (i = 2; i < NF; i++) {
-          cell = $i; gsub(/^[ \t]+|[ \t]+$/, "", cell)
-          if (cell == "Status") { col = i; next_is_sep = 1 }
-        }
-        if (col) next
-      }
-      col && /^[ \t]*\|/ {
-        cell = $col; gsub(/^[ \t]+|[ \t]+$/, "", cell)
-        # The value as the author wrote it (yokoten of #50): `✅` in a code span or **n/a** in bold
-        # is that value. ASCII class only — mawk is byte-oriented, and a class holding ✅ would
-        # match its bytes, not the character (CLAUDE.md). A cell that was ONLY markup is not an
-        # empty cell: stripped to nothing it would be skipped below as if the row were not there,
-        # so it is pending, quoted as written (review r1 of 20260926).
-        raw = cell; gsub(/[*`]/, "", cell)
-        if (cell == "" && raw != "") { print raw; next }
-        # `:?-+:?` — with a formatter-aligned separator (`|:---:|`) the Status column of the
-        # separator row read as a pending Status, and gate_DOCS failed a drift checklist with
-        # nothing pending in it. Same regex in checkpoint_rows and gate_REVIEW.
-        if (cell ~ /^:?-+:?$/ || cell == "") next
-        if (cell == "✅" || cell == "n/a" || cell == "N/A") next
-        print cell
-      }
-      col && !/^[ \t]*\|/ { exit }   # the table ended
-    ' "$d")"
-  if [ -n "$pending_cell" ]; then
+  #
+  # `⛔` is the one pending value with a way out (ADR 0013): a path the harness refuses — headless
+  # `claude -p` denies Edit/Write under `.claude/`, and in SQ-145/SQ-146 the session routed around
+  # it through python in Bash — is a boundary, and the honest answer is the text to apply, left for
+  # the human in the PR. So docs_checklist_rows tags each row it prints: `P|<status>` for a pending
+  # cell and `B|<document>` for a ⛔, the document being the SECOND column of the table as the
+  # author wrote it, markup stripped. VS16 (U+FE0F) after the ⛔ is the same value, as some editors
+  # write it.
+  local rows row pending_cell="" pending_n=0 blocked_docs=() no_status=0
+  rows="$(docs_checklist_rows "$d")"
+  # Admission written POSITIVELY (CLAUDE.md): only a `B|` row is a ⛔; every other line the awk
+  # prints is pending, tagged or not — an untagged line dropped here would pass the gate in silence,
+  # which is how the markup-only branch read the first draft of this loop. And pending is decided on
+  # the COUNT of rows, never on the joined text: a `P|` whose payload is empty joined to nothing and
+  # passed (review r5). No probe of its own for either: no branch of the awk prints an untagged line
+  # or an empty payload today, and this arm decides which failure one would be.
+  while IFS= read -r row; do
+    case "$row" in
+      "") ;;
+      N\|*) no_status=1 ;;
+      B\|*) blocked_docs+=("${row#B|}") ;;
+      *) pending_n=$((pending_n + 1))
+         if [ "$pending_n" -eq 1 ]; then pending_cell="${row#P|}"; fi ;;
+    esac
+  done <<< "$rows"
+  if [ "$no_status" = 1 ]; then
+    GATE_WHY="45-docs.md has no drift table the gate can read — a table whose header has a 'Status' cell (the contract token, in English) and whose rows start with '|'"
+    return 1
+  fi
+  if [ "$pending_n" -gt 0 ]; then
     # Every pending row is printed and COUNTED, and the count goes into the reason: no-work's form
     # (a) compares reasons word for word, and a session that fixed one of two ✗ rows used to leave
     # the sentence as it was — the next DOCS lap stopped as no-work with the work moving (Codex on
     # PR #57). A reason over a countable set carries the count.
-    local pending_n
-    pending_n="$(wc -l <<< "$pending_cell")"
-    pending_cell="${pending_cell%%$'\n'*}"
     GATE_WHY="45-docs.md has $pending_n area(s) pending in the drift checklist (the first with Status '$pending_cell') — every row needs ✅ (with a hash) or a justified n/a"
     return 1
+  fi
+  # A ⛔ passes only when the proposed-text section NAMES its document: the lines after EVERY
+  # `<!-- sdd:proposed -->` LINE — the marker alone on it, outside a code fence: quoted in a table
+  # cell it opened a section that swallowed the prose below the table, and an example inside a fence
+  # is not the section (codereview of 2026-09-28) — up to the next `## ` heading OUTSIDE a code fence (proposed text for a
+  # rules file is markdown and carries headings) or the end of the file, read with `grep -F` on the
+  # document's literal name — and the name has to be one (an alphanumeric in it): `—` matched any
+  # em-dash, and an empty pattern matches every line. Per row, because "⛔ only with its proposed text" is a promise
+  # about each row — a bare marker, or a section proposing text for another file, is the promise
+  # with nothing behind it. And the pass is LOUD: it names every document waiting for the human.
+  # DECLARED LIMIT: this proves each ⛔ has a proposal that names its document, never that the text
+  # is right. The human who applies it in the PR is who judges it.
+  #
+  # And a ⛔ is a BOUNDARY: a document the DOCS hat writes itself is refused first (codereview of
+  # 2026-09-28) — with its proposal in place, `README.md` passed as "waiting for a human", the drift
+  # the session owed handed to the PR. The owner of the fix is the same session, so the refusal is
+  # satisfiable: write the document, mark the row ✅. `.claude/` stays a boundary INSIDE `writes:`
+  # too: HAT_WRITES_EXTRA may put `.claude/napkin.md` there (config/schema.md's own example) and the
+  # harness still refuses Edit/Write, so refusing that ⛔ would push the session to the Bash route
+  # the ⛔ replaces. DECLARED LIMIT: the name is read as a PATH — a column that says `README
+  # (Usage)` matches no glob and escapes this check, loud as every other ⛔.
+  if [ "${#blocked_docs[@]}" -gt 0 ]; then
+    local proposed doc named="" missing="" n_missing=0 writes writable="" n_writable=0
+    writes="$(hat_writes DOCS)"
+    for doc in "${blocked_docs[@]}"; do
+      if [[ "$doc" =~ [[:alnum:]] ]] && [[ "$doc" != .claude/* ]] && hat_path_allowed "$doc" "$writes"; then
+        writable+="${writable:+, }$doc"; n_writable=$((n_writable + 1))
+      fi
+    done
+    if [ -n "$writable" ]; then
+      GATE_WHY="45-docs.md has $n_writable ⛔ row(s) on a document the DOCS hat writes itself: $writable — a ⛔ is for a path the hat may not write or the harness refuses (.claude/); write the document and mark the row ✅ with the hash"
+      return 1
+    fi
+    # A fence opens on ``` or ~~~ and closes only on a line of the SAME character, at least as long,
+    # with nothing but blanks after it (CommonMark). Toggling on every fence line let a `~~~`, a
+    # shorter run or a ```bash inside an example "close" it, and a marker example past that line
+    # read as the section: a ⛔ passed with no proposal behind it (Codex on PR #176).
+    proposed="$(awk '
+        {
+          is_fence = 0
+          if (match($0, /^[ \t]*(```+|~~~+)/)) {
+            run = substr($0, RSTART, RLENGTH); sub(/^[ \t]+/, "", run)
+            ch = substr(run, 1, 1); len = length(run)
+            if (!fence) is_fence = 1
+            else if (ch == fch && len >= flen && $0 ~ /^[ \t]*(`+|~+)[ \t]*$/) is_fence = 1
+          }
+        }
+        !fence && /^[[:space:]]*<!-- sdd:proposed -->[[:space:]]*$/ { on = 1; next }
+        on && !fence && /^## / { on = 0 }
+        on { print }
+        is_fence { if (fence) fence = 0; else { fence = 1; fch = ch; flen = len } }
+      ' "$d")"
+    for doc in "${blocked_docs[@]}"; do
+      if [[ "$doc" =~ [[:alnum:]] ]] && grep -qF -- "$doc" <<< "$proposed"; then
+        named+="${named:+, }$doc"
+      else
+        missing+="${missing:+, }${doc:-(no document)}"; n_missing=$((n_missing + 1))
+      fi
+    done
+    if [ -n "$missing" ]; then
+      GATE_WHY="45-docs.md has $n_missing ⛔ row(s) with no proposed text: $missing — a ⛔ needs the text to apply, naming its document, under a section marked <!-- sdd:proposed -->"
+      return 1
+    fi
+    GATE_WHY="drift checklist complete — ${#blocked_docs[@]} ⛔ row(s) wait for a human to apply the proposed text in the PR: $named"
+    return 0
   fi
   GATE_WHY="drift checklist complete"
   return 0
@@ -1729,7 +2043,48 @@ gate_PR() {
   live="$( cd "$REPO_ROOT" && gh pr view "$url" --json url --jq .url 2>/dev/null )" || true
   [ -n "$live" ] || { GATE_WHY="gh does not confirm PR $url — 50-pr.md may be lying"; return 1; }
 
-  # The catalogue's stamp, and LAST on purpose: the two requirements above are the ones that fail
+  # The ⛔ rows of 45-docs.md reach the human in the PR body, or not at all (ADR 0013; codereview of
+  # 2026-09-28). gate_DOCS proves each has a proposal on disk; only the publisher's prompt carried it
+  # into the PR, and a body without it merged with the rule change unapplied and nothing red. The
+  # owner is sdd-publisher, who writes the body: a lap refused here EDITS it (`gh pr edit`), never
+  # opens a second PR. The name has to sit on a line that carries `⛔` — the template's checklist
+  # item — and not anywhere in the body: a name in "what changed" is not an item the human applies
+  # (review r2). It proves the item is there, never that the quote under it is whole. The rows come
+  # from docs_checklist_rows, the same reader gate_DOCS decides on, and the body is asked for only
+  # when there is a ⛔ to look for. A MERGED PR is not read: the check is for the window before the
+  # merge, and a body edited afterwards would derive a finished mission back to PR and buy a
+  # publisher session on it — the reason mission_qa_report keeps its empty-range answer.
+  local docs_file="$MISSION_DIR/45-docs.md" rows row doc body="" body_read=0 body_rc=0 carried_missing="" pr_state
+  if [ -f "$docs_file" ]; then
+    rows="$(docs_checklist_rows "$docs_file")"
+    while IFS= read -r row; do
+      case "$row" in B\|*) doc="${row#B|}" ;; *) continue ;; esac
+      # An unnamed ⛔ is gate_DOCS's refusal, and an empty pattern would match any body.
+      [[ "$doc" =~ [[:alnum:]] ]] || continue
+      if [ "$body_read" -eq 0 ]; then
+        body="$( cd "$REPO_ROOT" && gh pr view "$url" --json state,body --jq '.state, .body' 2>/dev/null )" || body_rc=$?
+        body_read=1
+        # A body gh could not READ is its own refusal: "does not carry" would be a sentence about a
+        # body nobody saw, and it would send the publisher to edit a PR that may be fine.
+        if [ "$body_rc" -ne 0 ]; then
+          GATE_WHY="gh could not read the body of PR $live (rc $body_rc) — the ⛔ rows of 45-docs.md are not checked; run 'gh pr view $url --json body'"
+          return 1
+        fi
+        pr_state="${body%%$'\n'*}"
+        if [ "$pr_state" = MERGED ]; then break; fi
+        # The first line is the state; what is left is the body, kept only where it carries a ⛔.
+        case "$body" in *$'\n'*) body="${body#*$'\n'}" ;; *) body="" ;; esac
+        body="$(grep -F '⛔' <<< "$body" || true)"
+      fi
+      grep -qF -- "$doc" <<< "$body" || carried_missing+="${carried_missing:+, }$doc"
+    done <<< "$rows"
+    if [ -n "$carried_missing" ]; then
+      GATE_WHY="PR $live does not carry the ⛔ proposal(s) of 45-docs.md: $carried_missing — the human applies them from the PR's decisions; edit its body ('gh pr edit'), never open a second PR"
+      return 1
+    fi
+  fi
+
+  # The catalogue's stamp, and LAST on purpose: the requirements above are the ones that fail
   # in practice, so the message an operator already knows stays the likely one.
   #
   # Scoped by ARTIFACT — "is there a catalogue here?" — and never by the identity of the
@@ -1878,7 +2233,7 @@ qa_substep() {
   # browser journeys in a project with no browser is the paperwork `skipped` exists to avoid.
   if [ -z "$E2E_CMD" ] && [ -z "$APP_URL" ]; then printf 'close\n'; return 0; fi
   [ -n "$(latest_matching "$qa/charters/*.md")" ] || { printf 'plan\n'; return 0; }
-  report="$(latest_matching "$qa/reports/*.md")"
+  report="$(mission_qa_report)"
   if ! report_closed "$report"; then printf 'exec\n'; return 0; fi
   printf 'close\n'
 }
@@ -4858,7 +5213,7 @@ cmd_preflight() {
   # does not understand, which is the widest possible reading of the narrowest possible fact.
   if [ -n "$APP_URL" ]; then
     local app_verdict app_state app_label
-    app_verdict="$(app_probe "$APP_URL")"
+    app_verdict="$(app_probe "$APP_URL" "$APP_EXPECT")"
     app_state="${app_verdict%%|*}"; app_label="${app_verdict#*|}"
     case "$app_state" in
       up)   ok "something is listening at $app_label (APP_URL)" ;;
@@ -4873,7 +5228,17 @@ cmd_preflight() {
         against it, but the exploratory QA session will need it up"
         fi
         ;;
-      *) warn "APP_URL not probed: $app_label" ;;
+      wrong)
+        # The dead app's policy, for the same reason: with E2E_CMD a gate is about to run a suite
+        # against a product that is not this one; without it the human walking the journey needs
+        # to know, and that is all.
+        if [ -n "$E2E_CMD" ]; then
+          _fail "something answers at $app_label (APP_URL) but its page does not contain APP_EXPECT '$APP_EXPECT' — another product on this port? Stop it, or fix APP_URL/APP_EXPECT"
+        else
+          warn "something answers at $app_label (APP_URL) but its page does not contain APP_EXPECT '$APP_EXPECT' — another product on this port? Stop it, or fix APP_URL/APP_EXPECT"
+        fi
+        ;;
+      *) warn "no verdict on APP_URL: $app_label" ;;
     esac
   else
     dim "  ---  APP_URL not set — nothing to probe"
@@ -6965,10 +7330,12 @@ app_down_escalation() {
   info ""
   bad "BLOCKED in $phase — $GATE_WHY"
   dim "  The line stopped on purpose: the e2e is red and the address in APP_URL refuses"
-  dim "  connections. No session in this pipeline may bring an environment up."
+  dim "  connections, or answers without APP_EXPECT (another product on the port)."
+  dim "  No session in this pipeline may bring an environment up."
   dim "  Another session would run the same e2e against the same dead address and refuse"
   dim "  the same way."
-  dim "  Start the app and 'sdd run' — or, if the e2e brings its own server up, clear APP_URL."
+  dim "  Start the app (or stop the one on its port) and 'sdd run' — or, if the e2e brings its"
+  dim "  own server up, clear APP_URL."
   pipeline_log_line "$(date -Iseconds)  BLOCKED  $phase  $GATE_WHY"
   autonomy_blocked_row "app-down" "$phase" "$GATE_WHY"
   return 0
@@ -9709,10 +10076,12 @@ cmd_link_agents() {
 
 # Admission precedes config sourcing: even a gate or dry-run can execute project commands.
 # How the lock helper is started — ONE definition for the four call sites (enter, check, show and
-# the escalation hook). `-I` isolates it from the caller's Python environment: without it a
-# PYTHONPATH entry shadows the helper's stdlib imports and runs unreviewed code inside the process
-# that decides checkout ownership (probe in tests/check-coordination.sh). `-S` skips site, which the
-# helper never needs. An array and not a function: `enter` runs in the background and its PID is the
+# the escalation hook), whose flags the remedy's probe of /usr/bin/python3 reuses by slice in
+# coordination_enter; the helper's unavailable() spells the same two, since it cannot read this
+# array. `-I` isolates it from the caller's Python environment: without it a PYTHONPATH entry
+# shadows the helper's stdlib imports and runs unreviewed code inside the process that decides
+# checkout ownership (probe in tests/check-coordination.sh). `-S` skips site, which the helper never
+# needs. An array and not a function: `enter` runs in the background and its PID is the
 # owner the helper records, so it has to stay a simple command — a function would put a subshell
 # between the two.
 readonly COORDINATION_PYTHON=(python3 -I -S)
@@ -9750,8 +10119,24 @@ coordination_enter() {
     root="$(git rev-parse --show-toplevel 2>/dev/null)" || die "not inside a git repository"
   fi
   coordination_paths "$root"
-  command -v python3 >/dev/null 2>&1 \
-    || die "CHECKOUT-UNAVAILABLE: coordinated commands require Python 3 and Linux procfs"
+  # The refusal says what fell and gives the remedy when one is on disk (finding 8): the helper does
+  # the same for a python3 that is there but lacks pidfd. The runner never USES /usr/bin/python3: it
+  # only asks it the helper's own `capable` check, with the helper's flags. `-x` alone sent the
+  # operator to a 3.8, or to a Python whose pidfd calls the kernel refuses, for a second
+  # CHECKOUT-UNAVAILABLE (Codex, PR #176). SDD_SYSTEM_PYTHON is the sensor's seam, read by the
+  # helper under the same name; one not named `python3` gets no remedy, since putting its directory
+  # first on PATH does not make `python3` resolve to it (CodeRabbit, PR #176). Unbounded on purpose:
+  # the probe is a handful of syscalls, and timeout(1) would be one more dependency on the path that
+  # reports a missing one.
+  if ! command -v python3 >/dev/null 2>&1; then
+    local remedy="" system="${SDD_SYSTEM_PYTHON:-/usr/bin/python3}"
+    if [ "${system##*/}" = python3 ] && [ -x "$system" ] \
+        && "$system" "${COORDINATION_PYTHON[@]:1}" "$SDD_HOME/bin/sdd-coordination.py" capable \
+             </dev/null >/dev/null 2>&1; then
+      remedy=" — $system passes the same check: run PATH=${system%/*}:\$PATH sdd $subcmd …"
+    fi
+    die "CHECKOUT-UNAVAILABLE: no python3 on PATH; coordinated commands require Python 3.9+ and Linux procfs$remedy"
+  fi
   if [ -n "${SDD_COORDINATION_ID:-}" ] \
       && "${COORDINATION_PYTHON[@]}" "$SDD_HOME/bin/sdd-coordination.py" check "$COORDINATION_ROOT" "$COORDINATION_DIR" "$kind"; then
     COORDINATION_ADMITTED=1
@@ -9874,22 +10259,70 @@ close_query() {
 #
 # The dirty case is announced rather than passed over: a silent non-move reads exactly like a move
 # that worked, and the human finds out two commits later.
+#
+# AND THE MERGE COMES HOME TOO. Checking out the default branch left it where this machine last saw
+# it — BEHIND the PR that was just merged: in SQ-145 the local `develop` stayed behind, in SQ-146 the
+# close session ran `git pull` on its own, and the next mission was cut from a stale base either way
+# (finding 7 of the judge's window). So, on the default branch with a clean tree — including when
+# the session was already on it, which used to return early — fetch its upstream and
+# `merge --ff-only`. Same asymmetry as above, warn and never die: no upstream, no network, a local
+# upstream (`.`) or a diverged branch each leave the sha where it was and say so. The fetch is
+# bounded (`timeout 30`, `GIT_TERMINAL_PROMPT=0`): with no timeout(1) it is SKIPPED, because an
+# unbounded fetch could hang the close, and the fast-forward is still tried against the upstream
+# already on the machine — a local merge does not hang. The `ok` says whether anything moved.
 close_return_home() {
-  local current out rc=0
+  local current out rc=0 where upstream remote merge before after
   [ -n "${DEFAULT_BRANCH:-}" ] || return 0
   current="$( git -C "$REPO_ROOT" rev-parse --abbrev-ref HEAD 2>/dev/null || echo "" )"
   [ -n "$current" ] || return 0
-  [ "$current" != "$DEFAULT_BRANCH" ] || return 0
   if [ -n "$( git -C "$REPO_ROOT" status --porcelain 2>/dev/null )" ]; then
-    warn "staying on '$current': the tree has uncommitted changes, and '$DEFAULT_BRANCH' is one 'git checkout' away once you have dealt with them"
+    if [ "$current" = "$DEFAULT_BRANCH" ]; then
+      warn "on '$DEFAULT_BRANCH' with uncommitted changes — not fast-forwarding it; 'git pull --ff-only' once you have dealt with them"
+    else
+      warn "staying on '$current': the tree has uncommitted changes, and '$DEFAULT_BRANCH' is one 'git checkout' away once you have dealt with them"
+    fi
     return 0
   fi
-  out="$( git -C "$REPO_ROOT" checkout "$DEFAULT_BRANCH" 2>&1 )" || rc=$?
+  where="on '$DEFAULT_BRANCH'"
+  if [ "$current" != "$DEFAULT_BRANCH" ]; then
+    out="$( git -C "$REPO_ROOT" checkout "$DEFAULT_BRANCH" 2>&1 )" || rc=$?
+    if [ "$rc" -ne 0 ]; then
+      warn "could not return to '$DEFAULT_BRANCH' — still on '$current'. git said: $out"
+      return 0
+    fi
+    where="back on '$DEFAULT_BRANCH' — the mission branch is merged and spent"
+  fi
+  upstream="$( git -C "$REPO_ROOT" rev-parse --abbrev-ref "$DEFAULT_BRANCH@{upstream}" 2>/dev/null || true )"
+  if [ -z "$upstream" ]; then ok "$where; no upstream, nothing to fast-forward"; return 0; fi
+  # Remote and branch from the config, never split off the abbreviated name: a remote may carry a
+  # `/` of its own, and a local upstream (`.`) has nothing to fetch.
+  remote="$( git -C "$REPO_ROOT" config --get "branch.$DEFAULT_BRANCH.remote" 2>/dev/null || true )"
+  merge="$( git -C "$REPO_ROOT" config --get "branch.$DEFAULT_BRANCH.merge" 2>/dev/null || true )"
+  if [ -n "$remote" ] && [ "$remote" != "." ] && [ -n "$merge" ]; then
+    if ! command -v timeout >/dev/null 2>&1; then
+      warn "$where; no timeout(1) to bound the fetch of $upstream — run 'git pull --ff-only' by hand"
+    else
+      rc=0
+      out="$( GIT_TERMINAL_PROMPT=0 timeout 30 git -C "$REPO_ROOT" fetch --quiet "$remote" "$merge" 2>&1 )" || rc=$?
+      if [ "$rc" -ne 0 ]; then
+        warn "$where, but could not fetch $upstream — run 'git pull --ff-only' by hand. git said: $(head -1 <<< "$out")"
+        return 0
+      fi
+    fi
+  fi
+  before="$( git -C "$REPO_ROOT" rev-parse HEAD 2>/dev/null || true )"
+  rc=0
+  out="$( git -C "$REPO_ROOT" merge --ff-only --quiet "$DEFAULT_BRANCH@{upstream}" 2>&1 )" || rc=$?
   if [ "$rc" -ne 0 ]; then
-    warn "could not return to '$DEFAULT_BRANCH' — still on '$current'. git said: $out"
+    warn "$where, but '$DEFAULT_BRANCH' could not fast-forward to $upstream — it has diverged, or git refused; nothing was forced, reconcile by hand. git said: $(head -1 <<< "$out")"
     return 0
   fi
-  ok "back on '$DEFAULT_BRANCH' — the mission branch is merged and spent"
+  after="$( git -C "$REPO_ROOT" rev-parse HEAD 2>/dev/null || true )"
+  if [ "$before" = "$after" ]; then
+    ok "$where; already up to date with $upstream"
+  else
+    ok "$where, fast-forwarded to $upstream (${after:0:7})"
+  fi
 }
 
 cmd_close() {

@@ -28,7 +28,16 @@ Stale JSON without a live lock is harmless and does not require manual cleanup.
 `flock`/subreaper/pidfd support, with pidfd syscalls allowed by seccomp, and a procfs that
 enumerates task children (`/proc/<pid>/task/<tid>/children`, `CONFIG_PROC_CHILDREN`). Admission probes these
 before running config or a paid session.
-Install the required runtime or use a supported Linux environment. Help and version do not
+The message names the failed requirement (`os.pidfd_open is missing from this Python build`,
+`… was denied`, no task children enumeration, `Python 3.9+`) and the interpreter — the `python3` the
+`PATH` resolved, its `sys.executable` and version — because the usual cause is not the kernel but a
+`python3` earlier on the `PATH` (a uv/pyenv build without `os.pidfd_open`) while `/usr/bin/python3`
+serves. When `/usr/bin/python3` passes the helper's own check (`sdd-coordination.py capable`:
+version, the pidfd calls, task children, the subreaper, a `flock`) the refusal prints the remedy,
+`PATH=/usr/bin:$PATH sdd <the same command>`; the runner only probes that interpreter, never uses it.
+An interpreter that fails the check gets no remedy — a kernel or seccomp refusal gets none either,
+because switching Pythons cannot fix it.
+Otherwise install the required runtime or use a supported Linux environment. Help and version do not
 need the supervisor. This is local coordination, not a filesystem permission boundary against
 external tools or deliberate interference with the supervisor.
 
@@ -444,11 +453,12 @@ sdd preflight            # asks the same question before a session is opened
 pipeline is allowed to bring an environment up — that is declared policy in `config/schema.md`,
 not an oversight — so another session runs the same e2e against the same dead address.
 
-**If the message says `the app was not probed either way` instead**, the runner could not decide
+**If the message says `no verdict on the app at APP_URL` instead**, the runner could not decide
 and deliberately did not escalate: `APP_URL` is empty or unparseable, `timeout(1)` is not on PATH,
 this bash has no `/dev/tcp`, or the connect failed in a way the probe does not read as a refusal (a
-name that does not resolve, a firewall that drops the packet). The reason is printed after the
-colon. Behaviour there is exactly what it was before the probe existed — the sensor is one-sided
+name that does not resolve, a firewall that drops the packet). With `APP_EXPECT` declared it also
+covers an app that answered but whose page was not checked — no `curl`, a read that failed, or a
+redirect or error page without the literal. The reason is printed after the colon. Behaviour there is exactly what it was before the probe existed — the sensor is one-sided
 on purpose, and a false stop costs a person where the loop only costs money.
 
 ---
