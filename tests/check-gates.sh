@@ -2126,6 +2126,36 @@ git add -A && git commit -qm "chore: the PR artifact and the gh stub" >/dev/null
 #    world every target repo lives in.
 i4_phase "a repo with no tests/check-mutation.sh closes as it always did" "DONE"
 
+# 1b. ⛔ CARRIED — the ⛔ rows of 45-docs.md reach the human in the PR body or not at all (ADR 0013;
+#     codereview of 2026-09-28). gate_DOCS proves each has a proposal on disk; only the publisher's
+#     prompt carried it into the PR, so a body without it merged with the rule change unapplied and
+#     nothing red. The gh stub now also answers `--json body`, from a control file under .sdd/logs/
+#     (gitignored: writing it moves no tracked byte). Own assertions, outside the i4 tally: that one
+#     is named for the stamp.
+cp "$MDIR/45-docs.md" "$SDD_STATE_FIX/docs-before-pr.md"
+mkdir -p "$FIX/.sdd/logs"
+cat > "$FIX/.stub/gh" <<STUB
+#!/usr/bin/env bash
+# Answers what gate_PR asks: \`--json url --jq .url\` (is the PR real?) and, when 45-docs.md carries
+# ⛔ rows, \`--json body --jq .body\` (does the body carry them?).
+[ "\${1:-}" = "pr" ] && [ "\${2:-}" = "view" ] || { echo "unexpected gh call: \$*" >&2; exit 9; }
+case " \$* " in
+  *" --json body "*) cat "$FIX/.sdd/logs/pr-body" 2>/dev/null || true ;;
+  *) printf '%s\n' "\${3:-}" ;;
+esac
+STUB
+chmod +x "$FIX/.stub/gh"
+printf '# Docs\n\ndrift checklist\n\n| Area | Doc | Status | Evidence |\n|---|---|---|---|\n| rules | `.claude/rules/x.md` | ⛔ | refused |\n\n## Proposed text\n<!-- sdd:proposed -->\n\nIn `.claude/rules/x.md`, append a line.\n' > "$MDIR/45-docs.md"
+git add -A && git commit -qm "chore: a ⛔ reaches the PR phase" >/dev/null
+printf '## Decisions for a human\n\n- [ ] something else entirely\n' > "$FIX/.sdd/logs/pr-body"
+assert_eq "gate_PR refuses a PR whose body does not carry a ⛔ of 45-docs.md" "PR|1" \
+  "$( cd "$FIX" && "$SDD" phase "$MISSION" 2>&1 )|$(grep -c 'does not carry the ⛔ proposal(s) of 45-docs.md: \.claude/rules/x\.md' <<< "$( cd "$FIX" && "$SDD" why "$MISSION" PR 2>&1 )")"
+printf '## Decisions for a human\n\n- [ ] ⛔ `.claude/rules/x.md` — apply before the merge:\n  > append a line\n' > "$FIX/.sdd/logs/pr-body"
+assert_phase "gate_PR passes once the body carries every ⛔" "DONE"
+cp "$SDD_STATE_FIX/docs-before-pr.md" "$MDIR/45-docs.md"
+rm -f "$FIX/.sdd/logs/pr-body"
+git add -A && git commit -qm "chore: docs without a ⛔ again" >/dev/null
+
 # 2. SCOPE — the catalogue is here and nothing on disk says it ever ran green. Demanding the
 #    ABSENCE of the earlier requirements' markers is what proves the gate reached the stamp
 #    instead of arriving at the same refusal by the 50-pr.md road.

@@ -68,12 +68,17 @@ target repo. Fill it **from what is in the handoffs**, inventing nothing and sof
   This section is why the pipeline does not stall on human judgement: it arrives together with the
   code, in the right place to decide. It also carries every `⛔` row of `45-docs.md`, with its
   proposed text quoted, as a checklist item the human applies before the merge — a path the
-  harness refused the DOCS session, which only the human may write;
+  harness refused the DOCS session, which only the human may write. The runner reads the body
+  back: a `⛔` document it does not name fails `gate_PR`;
 - **out-of-scope findings** — what went to `TODO_FILE`;
 - **risks and not-dones** — honest. If QA was `skipped`, say so and why. If the review closed as
   `draft` because iterations ran out, state the real grade.
 
 Title: the repo's convention (`<type>(<scope>): <what>`), with the issue key when there is one.
+
+**The PR already exists?** `50-pr.md` names it and the boot prompt says why the phase reopened —
+usually a body that misses a `⛔` item. Never open a second PR: fix the body in place with
+`gh pr edit <url> --body-file <file>`.
 
 ### 5. Record it
 

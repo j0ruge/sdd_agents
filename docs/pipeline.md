@@ -437,6 +437,12 @@ the word `TODO` and failed every `45-docs.md` that named `TODO.md` — which is 
 **Passes when:** `50-pr.md` exists with `pr_url:` **and** `gh pr view <url>` confirms the PR
 exists. A file claiming a PR that does not exist fails — and it is good that it does.
 
+**When `45-docs.md` carries `⛔` rows, the PR body has to name each of their documents** (`gh pr view
+<url> --json body`). `gate_DOCS` proves the proposal exists on disk; this is what proves it reached
+the human, who applies it from the PR's decisions. The owner is `sdd-publisher`: a lap refused here
+edits the body (`gh pr edit`), never opens a second PR. The rows come from `docs_checklist_rows`,
+the same reader `gate_DOCS` decides on, so the two gates cannot disagree about which rows are `⛔`.
+
 **In a repo that owns a mutation catalogue there is a third requirement, and it is checked last:**
 a stamp in `.sdd/logs/mutation-stamp` matching the current content of `bin/ tests/ templates/
 config/`. `sdd health` writes it when the catalogue comes back green; nothing else writes it; a red

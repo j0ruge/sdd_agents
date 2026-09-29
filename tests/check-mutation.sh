@@ -355,7 +355,7 @@ mut_REVIEW_alignment_colon_blind() {
 }
 
 mut_DOCS_alignment_colon_blind() {
-  sed -i '/^gate_DOCS()/,/^}/ s@cell ~ /\^:?-+:?\$/@cell ~ /^-+$/@' "$1"
+  sed -i '/^docs_checklist_rows()/,/^}/ s@cell ~ /\^:?-+:?\$/@cell ~ /^-+$/@' "$1"
 }
 
 # ⛔ with proposed text (ADR 0013): the one pending value with a way out, and each half of "only
@@ -861,13 +861,13 @@ mut_REVIEW_backtick_grade_kept() {
 
 # ...and the Status of the drift checklist: `✅` in a code span or **n/a** in bold counts as pending.
 mut_DOCS_backtick_status_kept() {
-  sed -i '/^gate_DOCS()/,/^}/ s@^        raw = cell; gsub(/\[\*`\]/, "", cell)$@        raw = cell@' "$1"
+  sed -i '/^docs_checklist_rows()/,/^}/ s@^        raw = cell; gsub(/\[\*`\]/, "", cell)$@        raw = cell@' "$1"
 }
 
 # Review r1, finding 5: a Status cell that is ONLY markup (`**`) strips to nothing and is skipped
 # as an empty cell — the row passes the gate as if it were not there. It used to be pending.
 mut_DOCS_markup_only_status_skipped() {
-  sed -i '/^gate_DOCS()/,/^}/ s@^        if (cell == "" \&\& raw != "") { print "P|" raw; next }$@        raw = raw@' "$1"
+  sed -i '/^docs_checklist_rows()/,/^}/ s@^        if (cell == "" \&\& raw != "") { print "P|" raw; next }$@        raw = raw@' "$1"
 }
 
 mut_PR_no_artifact() {        # a missing 50-pr.md stops failing — a "complete" mission with no PR
@@ -882,6 +882,12 @@ mut_PR_no_artifact() {        # a missing 50-pr.md stops failing — a "complete
 # silence, since the runner tests other files by that shape elsewhere.
 mut_PR_stamp_blind() {
   sed -i '/^gate_PR()/,/^}/ s|if has_mutation_catalogue "\$REPO_ROOT"; then|if false; then|' "$1"
+}
+
+# The PR body stops being read for the ⛔ rows of 45-docs.md (codereview of 2026-09-28): the rule
+# change reaches the human only if the publisher remembered, and a body without it merges green.
+mut_PR_blocked_docs_not_carried() {
+  sed -i '/^gate_PR()/,/^}/ s@grep -qF -- "\$doc" <<< "\$body" || carried_missing@true || carried_missing@' "$1"
 }
 
 # The key stops being a function of the CONTENT alone and starts following HEAD as well. Deliberately
@@ -4607,6 +4613,7 @@ CATALOG=(
   DOCS_markup_only_status_skipped
   PR_no_artifact
   PR_stamp_blind
+  PR_blocked_docs_not_carried
   PR_stamp_key_follows_head
   HEALTH_stamp_window_blind
   HEALTH_stamp_tree_blind

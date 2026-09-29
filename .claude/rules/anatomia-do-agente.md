@@ -166,7 +166,8 @@ Desde `20260928-os-achados-da-janela` (ADR 0013) o `writes:` do `sdd-docs` não 
 `.claude/rules/**`: o `claude -p` headless recusa `Edit`/`Write` ali, e na SQ-145/SQ-146 a sessão
 contornou pelo Bash com o caminho dentro do `writes:`. O contorno agora para a linha como
 `hat-crossed`, e a regra que muda vira linha `⛔` com texto proposto, que o `gate_DOCS` lê por linha
-e o PR leva ao humano.
+e o PR leva ao humano — o `gate_PR` confere que o corpo do PR nomeia cada documento `⛔`, pelo mesmo
+leitor da tabela (`docs_checklist_rows`).
 
 **Dívida declarada.** O `HAT_WRITES_EXTRA` **alarga** permissão e seu valor vira glob de shell no
 `case` do `hat_path_allowed`, então toda frouxidão da guarda falha **aberta** — por isso ela é

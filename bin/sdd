@@ -1670,28 +1670,13 @@ gate_REVIEW() {
   return 0
 }
 
-gate_DOCS() {
-  local d="$MISSION_DIR/45-docs.md"
-  [ -f "$d" ] || { GATE_WHY="missing 45-docs.md"; return 1; }
-  if ! grep -qiE 'drift' "$d"; then
-    GATE_WHY="45-docs.md has no drift checklist"; return 1
-  fi
-  # Every area touched must be ✅ or a justified n/a — one pending item fails the gate.
-  #
-  # Reads the `Status` COLUMN of the drift table, locating it by header position. The previous
-  # version grepped the whole file for the word `TODO` and failed every `45-docs.md` that named
-  # `TODO.md` — which is exactly what `sdd-docs` is required to do (checking the mission's TODO
-  # entries is in its instructions). The gate contradicted the agent. Measured in the SQ-97
-  # pilot: 0 `✗` items in the file and a failure all the same.
-  #
-  # `⛔` is the one pending value with a way out (ADR 0013): a path the harness refuses — headless
-  # `claude -p` denies Edit/Write under `.claude/`, and in SQ-145/SQ-146 the session routed around
-  # it through python in Bash — is a boundary, and the honest answer is the text to apply, left for
-  # the human in the PR. So the awk tags each row it prints: `P|<status>` for a pending cell and
-  # `B|<document>` for a ⛔, the document being the SECOND column of the table as the author wrote
-  # it, markup stripped. VS16 (U+FE0F) after the ⛔ is the same value, as some editors write it.
-  local rows row pending_cell="" blocked_docs=()
-  rows="$(awk -F'|' '
+# docs_checklist_rows <45-docs.md> — the rows of the drift checklist that are not done, one per line
+# and TAGGED: `P|<status as written>` for a pending cell, `B|<document>` for a ⛔. ONE definition,
+# two readers (codereview of 2026-09-28): gate_DOCS decides on both tags, and gate_PR reads the ⛔
+# documents the PR body has to carry. Two spellings of "which rows are ⛔" would let the PR be asked
+# for a proposal the DOCS gate never saw, or let it skip one the DOCS gate passed.
+docs_checklist_rows() {
+  awk -F'|' '
       # find the header and remember which column holds Status
       !col && /^[ \t]*\|/ {
         for (i = 2; i < NF; i++) {
@@ -1721,7 +1706,32 @@ gate_DOCS() {
         print "P|" cell
       }
       col && !/^[ \t]*\|/ { exit }   # the table ended
-    ' "$d")"
+    ' "$1"
+}
+
+gate_DOCS() {
+  local d="$MISSION_DIR/45-docs.md"
+  [ -f "$d" ] || { GATE_WHY="missing 45-docs.md"; return 1; }
+  if ! grep -qiE 'drift' "$d"; then
+    GATE_WHY="45-docs.md has no drift checklist"; return 1
+  fi
+  # Every area touched must be ✅ or a justified n/a — one pending item fails the gate.
+  #
+  # Reads the `Status` COLUMN of the drift table, locating it by header position. The previous
+  # version grepped the whole file for the word `TODO` and failed every `45-docs.md` that named
+  # `TODO.md` — which is exactly what `sdd-docs` is required to do (checking the mission's TODO
+  # entries is in its instructions). The gate contradicted the agent. Measured in the SQ-97
+  # pilot: 0 `✗` items in the file and a failure all the same.
+  #
+  # `⛔` is the one pending value with a way out (ADR 0013): a path the harness refuses — headless
+  # `claude -p` denies Edit/Write under `.claude/`, and in SQ-145/SQ-146 the session routed around
+  # it through python in Bash — is a boundary, and the honest answer is the text to apply, left for
+  # the human in the PR. So docs_checklist_rows tags each row it prints: `P|<status>` for a pending
+  # cell and `B|<document>` for a ⛔, the document being the SECOND column of the table as the
+  # author wrote it, markup stripped. VS16 (U+FE0F) after the ⛔ is the same value, as some editors
+  # write it.
+  local rows row pending_cell="" blocked_docs=()
+  rows="$(docs_checklist_rows "$d")"
   # Admission written POSITIVELY (CLAUDE.md): only a `B|` row is a ⛔; every other line the awk
   # prints is pending, tagged or not — an untagged line dropped here would pass the gate in silence,
   # which is how the markup-only branch read the first draft of this loop. No probe of its own: no
@@ -1917,6 +1927,32 @@ gate_PR() {
   local live
   live="$( cd "$REPO_ROOT" && gh pr view "$url" --json url --jq .url 2>/dev/null )" || true
   [ -n "$live" ] || { GATE_WHY="gh does not confirm PR $url — 50-pr.md may be lying"; return 1; }
+
+  # The ⛔ rows of 45-docs.md reach the human in the PR body, or not at all (ADR 0013; codereview of
+  # 2026-09-28). gate_DOCS proves each has a proposal on disk; only the publisher's prompt carried it
+  # into the PR, and a body without it merged with the rule change unapplied and nothing red. The
+  # owner is sdd-publisher, who writes the body: a lap refused here EDITS it (`gh pr edit`), never
+  # opens a second PR. Read by name, as gate_DOCS reads the proposal — the name proves the item is
+  # there, never that the quote is whole. The rows come from docs_checklist_rows, the same reader
+  # gate_DOCS decides on, and the body is asked for only when there is a ⛔ to look for.
+  local docs_file="$MISSION_DIR/45-docs.md" rows row doc body="" body_read=0 carried_missing=""
+  if [ -f "$docs_file" ]; then
+    rows="$(docs_checklist_rows "$docs_file")"
+    while IFS= read -r row; do
+      case "$row" in B\|*) doc="${row#B|}" ;; *) continue ;; esac
+      # An unnamed ⛔ is gate_DOCS's refusal, and an empty pattern would match any body.
+      [[ "$doc" =~ [[:alnum:]] ]] || continue
+      if [ "$body_read" -eq 0 ]; then
+        body="$( cd "$REPO_ROOT" && gh pr view "$url" --json body --jq .body 2>/dev/null )" || body=""
+        body_read=1
+      fi
+      grep -qF -- "$doc" <<< "$body" || carried_missing+="${carried_missing:+, }$doc"
+    done <<< "$rows"
+    if [ -n "$carried_missing" ]; then
+      GATE_WHY="PR $live does not carry the ⛔ proposal(s) of 45-docs.md: $carried_missing — the human applies them from the PR's decisions; edit its body ('gh pr edit'), never open a second PR"
+      return 1
+    fi
+  fi
 
   # The catalogue's stamp, and LAST on purpose: the two requirements above are the ones that fail
   # in practice, so the message an operator already knows stays the likely one.
