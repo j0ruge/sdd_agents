@@ -4,7 +4,7 @@ fase: EXEC
 status: done
 sessao: 4d26d92f-6c4b-403b-b867-8ff2bc9e2a51
 data: 2026-09-28 19:05
-gate: "bash tests/run-all.sh no HEAD da rodada 7 (bots do PR #176) → o resultado é o status local/ci desse sha no PR; check-coordination.sh → 181 passed, 0 failed; check-mutation.sh --anchors → 489 mutants; os 6 novos (COORD_bash_remedy_unprobed, COORD_remedy_attribute_probe, COORD_capable_unchecked, COORD_remedy_probe_recurses, COORD_bash_remedy_flagless, COORD_remedy_probe_flagless) mortos pelo probe que os nomeia; check-todo --check → 87 finding(s), every anchor on target; os 7 Checks do checkpoint com o esperado, I1 e I7 refixados na catraca 87 (87/11/placed/1, 1/1/1/1/1/87)"
+gate: "bash tests/run-all.sh no HEAD da rodada 7 (bots do PR #176) → o resultado é o status local/ci desse sha no PR; check-coordination.sh → 183 passed, 0 failed; check-mutation.sh --anchors → 490 mutants; os 7 novos (COORD_bash_remedy_unprobed, COORD_remedy_attribute_probe, COORD_capable_unchecked, COORD_remedy_probe_recurses, COORD_capable_skips_flock, COORD_bash_remedy_flagless, COORD_remedy_probe_flagless) mortos pelo probe que os nomeia; check-todo --check → 87 finding(s), every anchor on target; os 7 Checks do checkpoint com o esperado, I1 e I7 refixados na catraca 87 (87/11/placed/1, 1/1/1/1/1/87)"
 ---
 
 # Handoff — EXEC — os achados da janela do juiz
@@ -25,7 +25,7 @@ HIGH (range só com a base local) e reescreveu a leitura do relatório em três 
 rodada 5 mediu o que a 4 deixou sem probe (`9318dc7`); a rodada 6 deu nota A, e seus dois LOW
 foram consertados. No PR #176 os bots deixaram 5 comentários (Codex 1, CodeRabbit 4) e um nitpick,
 consertados numa leva na rodada 7 (`ffb5bff`, `4f5358f`); o nitpick foi recusado com motivo. O
-catálogo foi de 422 para 489 mutantes, e cada um novo morre pela asserção que o nomeia. A missão
+catálogo foi de 422 para 490 mutantes, e cada um novo morre pela asserção que o nomeia. A missão
 rodou inline, sem `sdd run`. Falta o `sdd health` (carimbo) e o merge, que é do humano.
 
 ## Estado do repo
@@ -105,6 +105,11 @@ rodou inline, sem `sdd run`. Falta o `sdd health` (carimbo) e o merge, que é do
   holístico sobre a rodada, deu nota A com LOWs, todos consertados na mesma leva: os mundos do
   wrapper provados pelo ramo que as asserções usam, as flags da sonda com probe (PYTHONHOME vazado;
   o `-S` sozinho fica declarado sem mundo) e a prosa. Catálogo 489.
+- Rodada 7, segunda passada do CodeRabbit (sobre `65a0bfa`): o `capable` não sondava `flock`, que o
+  `REQUIREMENTS` lista. Uma política que nega a syscall ganhava o remédio. Agora o modo faz um `flock`
+  num arquivo temporário (a syscall, não o sistema de arquivos do checkout, que o `enter` encontra
+  no lock antes de qualquer chamada pidfd), com mundo e mutante. O handoff deixou de dar o Copilot
+  por atendido. Catálogo 490.
 
 ## Artefatos
 
@@ -122,7 +127,9 @@ estão feitos; o próximo é o 4, o carimbo:
 
 1. ~~`/codereview:codereview` até Grade A~~: seis rodadas, a última com nota A.
 2. ~~Push e PR contra `main`~~: PR #176, com status `local/ci` pela API de Statuses.
-3. ~~Esperar **todos** os revisores e consertar numa leva~~: rodada 7. O Copilot não revisou (sem cota).
+3. Esperar **todos** os revisores e consertar numa leva: o Codex e o CodeRabbit foram atendidos na
+   rodada 7. O Copilot **não revisou** (sem cota) e segue pendente. Esperar pela cota ou mergear sem
+   ele é decisão do humano.
 4. `./bin/sdd health` **uma vez**, depois do último commit de código. O `gate_PR` exige o carimbo.
 
 O que o diff muda para quem usa o kit:
@@ -154,7 +161,7 @@ O que o diff muda para quem usa o kit:
 - **Sem probe:** a linha sem prefixo no laço do `gate_DOCS` (nenhum ramo do awk a imprime hoje; o
   comentário declara isso). O mundo "sem `timeout(1)`" do close ganhou probe em `e97d23b`.
 - **O `sdd health` (catálogo inteiro) não rodou.** Cada mutante novo foi aplicado numa cópia e morto
-  pela asserção certa, mas o carimbo dos 489 é passo do PR.
+  pela asserção certa, mas o carimbo dos 490 é passo do PR.
 
 ## Achados fora de escopo
 
