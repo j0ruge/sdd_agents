@@ -37,12 +37,12 @@ def unavailable(requirement, build=False):
     this is the refusal path, and every coordinated call pays the helper's startup.
 
     The remedy is offered only when that interpreter passes THIS helper's own check (`capable`):
-    version, the pidfd CALLS, task children and the subreaper. Reading the two attributes passed a
-    Python whose pidfd calls the kernel then refused, and the remedy failed for the very reason it
-    claimed to fix (CodeRabbit and Codex, PR #176). SDD_SYSTEM_PYTHON replaces /usr/bin/python3 for the
-    sensor, which cannot build an incapable /usr/bin/python3; bin/sdd reads the same name. The
-    probe never asks for a remedy of its own: an interpreter the probe finds lacking would, under
-    a PATH python3 lacking the same, probe itself again and again."""
+    version, the pidfd CALLS, task children, the subreaper and flock. Reading the two attributes
+    passed a Python whose pidfd calls the kernel then refused, and the remedy failed for the very
+    reason it claimed to fix (CodeRabbit and Codex, PR #176). SDD_SYSTEM_PYTHON replaces
+    /usr/bin/python3 for the sensor, which cannot build an incapable /usr/bin/python3; bin/sdd reads
+    the same name. The probe never asks for a remedy of its own: an interpreter the probe finds
+    lacking would, under a PATH python3 lacking the same, probe itself again and again."""
     import platform
     import shutil
     import subprocess
@@ -456,6 +456,13 @@ def main():
     """
     if sys.argv[1:2] == ['capable']:
         subreaper()
+        # flock is the requirement neither pidfd_capability() nor the subreaper reaches: a policy
+        # that denies the syscall would pass the probe and earn a remedy no Python can deliver
+        # (CodeRabbit, PR #176). A temporary file proves the syscall, not the checkout's own
+        # filesystem: `enter` meets that at the lock, before any pidfd call, as a non-build refusal.
+        import tempfile
+        with tempfile.TemporaryFile() as probe:
+            fcntl.flock(probe, fcntl.LOCK_EX | fcntl.LOCK_NB)
         return 0
     if sys.argv[1:2] == ['hook']:
         return bounded_hook(*sys.argv[2:])

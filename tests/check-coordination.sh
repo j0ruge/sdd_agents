@@ -325,7 +325,7 @@ try:
             + ("_mark = os.environ['COORD_SYSTEM_MARK']\n_again = os.path.exists(_mark)\n"
                "open(_mark, 'a').write('run\\n')\n"
                "if _again: sys.exit(97)\n" if counted else "")
-            + "def denied(*args, **kwargs): raise PermissionError('fixture pidfd denied')\n"
+            + "def denied(*args, **kwargs): raise PermissionError('fixture call denied')\n"
             + patch
             + "args = sys.argv[1:]\n"
             + "while args and args[0] in ('-I', '-S'): args.pop(0)\n"
@@ -339,6 +339,8 @@ try:
     system_ok = system_python("ok")
     system_denied = system_python("denied", "os.pidfd_open = denied\n")
     system_missing = system_python("missing", "del os.pidfd_open\n", counted=True)
+    # flock denied by policy: the pidfd oracle passes it, and only the helper's check refuses it.
+    system_flockless = system_python("flockless", "import fcntl\nfcntl.flock = denied\n")
     # The worlds are armed before anything is concluded from them: the good one passes the oracle,
     # and the denied one fails it while passing the attribute read — the world where the two differ.
     check("remedy worlds are armed: a capable python3 and one whose pidfd calls are denied",
@@ -366,6 +368,10 @@ try:
           and "pidfd_open is missing from this Python build" in armed[2].stdout
           and armed_mark.read_text().count("run") == 1,
           " | ".join(result.stdout[:160] for result in armed))
+    flockless = capable(system_flockless)
+    check("the flock world is armed: the pidfd oracle passes it and the helper's check refuses it",
+          passes_capability(system_flockless) and flockless.returncode == 1
+          and "fixture call denied" in flockless.stdout, flockless.stdout[:300])
     # The probe runs with the helper's flags (COORDINATION_PYTHON). The world where they matter: a
     # PYTHONHOME that leaked into the caller's environment breaks an interpreter started without
     # `-I`, which the real run (`python3 -I -S`) would never see. DECLARED LIMIT: this proves `-I`;
@@ -378,7 +384,8 @@ try:
           "no python3 on PATH" in missing.stdout
           and ("PATH=/usr/bin:" in missing.stdout) == passes_capability("/usr/bin/python3"),
           missing.stdout[:300])
-    for label, system, offered in (("capable", system_ok, True), ("denied", system_denied, False)):
+    for label, system, offered in (("capable", system_ok, True), ("denied", system_denied, False),
+                                   ("flock denied", system_flockless, False)):
         told = run(repo, "preflight", extra=dict(limited_env, SDD_SYSTEM_PYTHON=str(system)))
         check("no python3 on PATH: the remedy is offered only for a system python3 that passes"
               " the check: " + label,

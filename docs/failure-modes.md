@@ -33,7 +33,7 @@ The message names the failed requirement (`os.pidfd_open is missing from this Py
 `PATH` resolved, its `sys.executable` and version — because the usual cause is not the kernel but a
 `python3` earlier on the `PATH` (a uv/pyenv build without `os.pidfd_open`) while `/usr/bin/python3`
 serves. When `/usr/bin/python3` passes the helper's own check (`sdd-coordination.py capable`:
-version, the pidfd calls, task children, the subreaper) the refusal prints the remedy,
+version, the pidfd calls, task children, the subreaper, a `flock`) the refusal prints the remedy,
 `PATH=/usr/bin:$PATH sdd <the same command>`; the runner only probes that interpreter, never uses it.
 An interpreter that fails the check gets no remedy — a kernel or seccomp refusal gets none either,
 because switching Pythons cannot fix it.

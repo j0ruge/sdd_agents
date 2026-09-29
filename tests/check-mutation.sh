@@ -4605,6 +4605,9 @@ mut_COORD_remedy_probe_recurses() {     # the probe's own refusal probes for a r
 # The probe runs with the helper's flags: without `-I` a leaked PYTHONHOME withholds the remedy from
 # an interpreter the real run would accept. Caught by the PYTHONHOME world of each side. Dropping
 # `-S` alone has no world and survives — declared in check-coordination.sh.
+mut_COORD_capable_skips_flock() {       # a policy that denies flock passes the probe
+  sed -i 's%^            fcntl.flock(probe, fcntl.LOCK_EX | fcntl.LOCK_NB)$%            pass%' "${1%/*}/sdd-coordination.py"
+}
 mut_COORD_bash_remedy_flagless() {
   sed -i '/^coordination_enter() {/,/^}/ s%^        && "\$system" "\${COORDINATION_PYTHON\[@\]:1}" %        \&\& "$system" %' "$1"
 }
@@ -4641,6 +4644,7 @@ CATALOG=(
   COORD_remedy_attribute_probe
   COORD_capable_unchecked
   COORD_remedy_probe_recurses
+  COORD_capable_skips_flock
   COORD_bash_remedy_flagless
   COORD_remedy_probe_flagless
   CLOSE_no_fast_forward
