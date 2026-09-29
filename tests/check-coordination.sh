@@ -341,6 +341,11 @@ try:
     system_missing = system_python("missing", "del os.pidfd_open\n", counted=True)
     # flock denied by policy: the pidfd oracle passes it, and only the helper's check refuses it.
     system_flockless = system_python("flockless", "import fcntl\nfcntl.flock = denied\n")
+    # Capable, but not named python3: its directory first on PATH would not make `python3` resolve
+    # to it, so the remedy is withheld on the name alone (CodeRabbit, PR #176).
+    (work / "system-versioned").mkdir()
+    system_versioned = work / "system-versioned" / "python3.99"
+    system_versioned.symlink_to(os.path.realpath(sys.executable))
     # The worlds are armed before anything is concluded from them: the good one passes the oracle,
     # and the denied one fails it while passing the attribute read — the world where the two differ.
     check("remedy worlds are armed: a capable python3 and one whose pidfd calls are denied",
@@ -372,6 +377,8 @@ try:
     check("the flock world is armed: the pidfd oracle passes it and the helper's check refuses it",
           passes_capability(system_flockless) and flockless.returncode == 1
           and "fixture call denied" in flockless.stdout, flockless.stdout[:300])
+    check("the versioned world is armed: a python3.99 that passes the helper's check",
+          passes_capability(system_versioned) and capable(system_versioned).returncode == 0)
     # The probe runs with the helper's flags (COORDINATION_PYTHON). The world where they matter: a
     # PYTHONHOME that leaked into the caller's environment breaks an interpreter started without
     # `-I`, which the real run (`python3 -I -S`) would never see. DECLARED LIMIT: this proves `-I`;
@@ -385,7 +392,8 @@ try:
           and ("PATH=/usr/bin:" in missing.stdout) == passes_capability("/usr/bin/python3"),
           missing.stdout[:300])
     for label, system, offered in (("capable", system_ok, True), ("denied", system_denied, False),
-                                   ("flock denied", system_flockless, False)):
+                                   ("flock denied", system_flockless, False),
+                                   ("not named python3", system_versioned, False)):
         told = run(repo, "preflight", extra=dict(limited_env, SDD_SYSTEM_PYTHON=str(system)))
         check("no python3 on PATH: the remedy is offered only for a system python3 that passes"
               " the check: " + label,
@@ -434,7 +442,8 @@ try:
             # And the same two worlds as with no python3 at all: the remedy goes to an interpreter
             # that passes the check, never to one that only carries the attributes.
             for label, system, offered in (("capable", system_ok, True),
-                                           ("denied", system_denied, False)):
+                                           ("denied", system_denied, False),
+                                           ("not named python3", system_versioned, False)):
                 told = run(repo, "phase", "20260101-one",
                            extra={"SDD_SYSTEM_PYTHON": str(system)})
                 check("a build refusal offers the remedy only for a system python3 that passes"

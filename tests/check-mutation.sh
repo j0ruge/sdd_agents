@@ -389,6 +389,17 @@ mut_DOCS_marker_unanchored() {                    # the marker quoted in a table
 mut_DOCS_marker_in_fence() {                      # an example of the marker inside a fence counts
   sed -i '/^gate_DOCS() {/,/^}/ s@^        !fence && /^\[\[:space:\]\]\*<!-- sdd:proposed@        /^[[:space:]]*<!-- sdd:proposed@' "$1"
 }
+# The fence closes only on its own delimiter (Codex on PR #176): one mutant per condition, each
+# caught by its world in check-gates.sh ("...not its own delimiter: tilde|shorter|info").
+mut_DOCS_fence_closes_on_other_char() {           # a ~~~ closes a ``` example
+  sed -i '/^gate_DOCS() {/,/^}/ s@else if (ch == fch && len >= flen@else if (len >= flen@' "$1"
+}
+mut_DOCS_fence_closes_on_shorter() {              # a ``` closes a ```` example
+  sed -i '/^gate_DOCS() {/,/^}/ s@else if (ch == fch && len >= flen && @else if (ch == fch \&\& @' "$1"
+}
+mut_DOCS_fence_closes_with_info() {               # a ```bash closes a ``` example
+  sed -i '/^gate_DOCS() {/,/^}/ s@ && \$0 ~ /^\[ \\t\]\*(`+|~+)\[ \\t\]\*\$/) is_fence = 1@) is_fence = 1@' "$1"
+}
 # A ⛔ is a boundary (codereview of 2026-09-28): one mutant for the refusal, one for its exception.
 mut_DOCS_blocked_writable_passes() {              # a ⛔ on README.md waits for a human again
   sed -i '/^gate_DOCS() {/,/^}/ s@ && hat_path_allowed "\$doc" "\$writes"; then@ \&\& false; then@' "$1"
@@ -4605,6 +4616,12 @@ mut_COORD_remedy_probe_recurses() {     # the probe's own refusal probes for a r
 # The probe runs with the helper's flags: without `-I` a leaked PYTHONHOME withholds the remedy from
 # an interpreter the real run would accept. Caught by the PYTHONHOME world of each side. Dropping
 # `-S` alone has no world and survives — declared in check-coordination.sh.
+mut_COORD_bash_remedy_any_name() {      # a capable python3.12 earns a PATH remedy that misses it
+  sed -i '/^coordination_enter() {/,/^}/ s%^    if \[ "\${system##\*/}" = python3 \] && \[ -x "\$system" \] \\$%    if [ -x "$system" ] \\%' "$1"
+}
+mut_COORD_remedy_any_name() {
+  sed -i "/^            and os.path.basename(system) == 'python3'\$/d" "${1%/*}/sdd-coordination.py"
+}
 mut_COORD_capable_skips_flock() {       # a policy that denies flock passes the probe
   sed -i 's%^            fcntl.flock(probe, fcntl.LOCK_EX | fcntl.LOCK_NB)$%            pass%' "${1%/*}/sdd-coordination.py"
 }
@@ -4645,6 +4662,8 @@ CATALOG=(
   COORD_capable_unchecked
   COORD_remedy_probe_recurses
   COORD_capable_skips_flock
+  COORD_bash_remedy_any_name
+  COORD_remedy_any_name
   COORD_bash_remedy_flagless
   COORD_remedy_probe_flagless
   CLOSE_no_fast_forward
@@ -4712,6 +4731,9 @@ CATALOG=(
   DOCS_doc_needs_no_name
   DOCS_marker_unanchored
   DOCS_marker_in_fence
+  DOCS_fence_closes_on_other_char
+  DOCS_fence_closes_on_shorter
+  DOCS_fence_closes_with_info
   DOCS_blocked_writable_passes
   DOCS_blocked_cell_not_split
   DOCS_blocked_empty_cell_vanishes

@@ -2193,6 +2193,20 @@ printf '# Docs\n\ndrift checklist\n\n| Area | Doc | Status | Evidence |\n|---|--
 git add -A && git commit -qm "chore: docs with the marker inside a fence"
 assert_eq "a marker inside a code fence opens no proposed section" "DOCS|1" \
   "$( cd "$FIX" && "$SDD" phase "$MISSION" 2>&1 )|$(grep -c 'no proposed text: \.claude/rules/x\.md' <<< "$( cd "$FIX" && "$SDD" why "$MISSION" DOCS 2>&1 )")"
+# ...and the fence closes only on its OWN delimiter (Codex on PR #176): a line of the same character,
+# at least as long, with nothing after it. Toggling on any fence line let each of the three lines
+# below "close" the example, and the marker example past it read as the section. One world per rule.
+for docs_fence_rule in tilde shorter info; do
+  case "$docs_fence_rule" in
+    tilde)   docs_fence_open='```md\n~~~\n';     docs_fence_close='```' ;;
+    shorter) docs_fence_open='````md\n```\n';    docs_fence_close='````' ;;
+    info)    docs_fence_open='```md\n```bash\n'; docs_fence_close='```' ;;
+  esac
+  printf '# Docs\n\ndrift checklist\n\n| Area | Doc | Status | Evidence |\n|---|---|---|---|\n| rules | `.claude/rules/x.md` | ⛔ | refused |\n\n## How a proposal looks\n\n'"$docs_fence_open"'<!-- sdd:proposed -->\n\nIn `.claude/rules/x.md`, append a line.\n'"$docs_fence_close"'\n\n## Findings\n' > "$MDIR/45-docs.md"
+  git add -A && git commit -qm "chore: docs with a fence only its own delimiter closes ($docs_fence_rule)"
+  assert_eq "a fence is not closed by a line that is not its own delimiter: $docs_fence_rule" "DOCS|1" \
+    "$( cd "$FIX" && "$SDD" phase "$MISSION" 2>&1 )|$(grep -c 'no proposed text: \.claude/rules/x\.md' <<< "$( cd "$FIX" && "$SDD" why "$MISSION" DOCS 2>&1 )")"
+done
 # A ⛔ is a boundary, and a document the DOCS hat writes itself is not one (codereview of
 # 2026-09-28): with its proposal in place, `README.md` passed as "waiting for a human" — the drift
 # the session owed, handed to the PR. Refused, and the reason says it is the hat's to write.

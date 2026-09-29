@@ -41,7 +41,8 @@ def unavailable(requirement, build=False):
     passed a Python whose pidfd calls the kernel then refused, and the remedy failed for the very
     reason it claimed to fix (CodeRabbit and Codex, PR #176). SDD_SYSTEM_PYTHON replaces
     /usr/bin/python3 for the sensor, which cannot build an incapable /usr/bin/python3; bin/sdd reads
-    the same name. The probe never asks for a remedy of its own: an interpreter the probe finds
+    the same name. One not named python3 gets no remedy: its directory first on PATH does not make
+    `python3` resolve to it (CodeRabbit, PR #176). The probe never asks for a remedy of its own: an interpreter the probe finds
     lacking would, under a PATH python3 lacking the same, probe itself again and again."""
     import platform
     import shutil
@@ -52,6 +53,7 @@ def unavailable(requirement, build=False):
              % (resolved, sys.executable, platform.python_version())]
     system = os.environ.get('SDD_SYSTEM_PYTHON') or '/usr/bin/python3'
     if (build and os.access(system, os.X_OK) and resolved != 'no python3 on PATH'
+            and os.path.basename(system) == 'python3'
             and sys.argv[1:2] != ['capable']
             and os.path.realpath(resolved) != os.path.realpath(system)):
         try:
