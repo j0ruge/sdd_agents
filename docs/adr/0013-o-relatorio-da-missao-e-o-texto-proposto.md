@@ -86,9 +86,14 @@ future session. The two authorities disagreed, with two outcomes:
 This is the shape the mission shipped: I2 (`121a696`) for decisions 1 to 3, I4 (`1ffee16`) for 4
 and 5. It was checked against the code when the ADR was accepted.
 
-- The function sits next to `latest_matching` and returns an absolute path, or empty. It reads
-  `git -c core.quotePath=false log --diff-filter=A --name-only --format= <base>..HEAD -- <reports>`
-  and `git status --porcelain -uall -- <reports>`. `-uall` is load-bearing, because without it an
+- The function sits next to `latest_matching` and returns an absolute path, or empty. It replays
+  `git log --reverse -M --diff-filter=AR --name-status -z --format= <base>..HEAD -- <reports>` and
+  then reads `git status --porcelain -z -uall --find-renames -- <reports>`: an add (or a staged
+  copy) grants ownership, and a rename carries it only from a path the mission already owned, so
+  `git mv` of another mission's report does not make it this one's. `-M` and `--find-renames`
+  override a user's config that switches detection off; `-z` because git quotes a space or a `"`.
+  (The first shape read `--diff-filter=A` without renames; the codereview of 2026-09-28 and its two
+  follow-up rounds brought it here.) `-uall` is load-bearing, because without it an
   untracked directory is listed as the directory and not as its files. Among the mission's files it
   picks the newest by the same `sort -V` as `latest_matching`. It computes the base with `|| true`
   guards, because a missing `DEFAULT_BRANCH` must read as an empty range and never as a dead process.

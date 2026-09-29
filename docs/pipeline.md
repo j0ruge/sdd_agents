@@ -244,10 +244,12 @@ journeys in a project with no browser is the paperwork `skipped` exists to avoid
 
 - **the evidence of the journey walked**, which takes two forms depending on the project:
   - **with an interface** (`E2E_CMD` or `APP_URL` set) — the most recent report **the mission
-    branch added** to `<QA_DOCS_PATH>/reports/` (`--diff-filter=A` in
-    `merge-base(DEFAULT_BRANCH, HEAD)..HEAD`, or new in the tree) is `**Status:** closed` and no
-    row of the session matrix is still `Pending`. A report the branch only edited is not the
-    mission's. With an **empty range** (HEAD reachable from the base: a mission on the base branch,
+    branch added** to `<QA_DOCS_PATH>/reports/` (in `merge-base(DEFAULT_BRANCH, HEAD)..HEAD`, or
+    new in the tree) is `**Status:** closed` and no row of the session matrix is still `Pending`.
+    A report the branch only edited is not the mission's, and ownership follows renames: the
+    branch's commits are replayed oldest first (`-M`, `-z`), an add grants it and a rename carries
+    it only from a report the mission already owned — `git mv` of another mission's report does
+    not make it this one's. With an **empty range** (HEAD reachable from the base: a mission on the base branch,
     or one already merged) the gate reads the most recent report in the tree, as before. One
     function (`mission_qa_report`) answers for this anchor and for `qa_substep`, so the sub-step and
     the gate never disagree about which file is the mission's — the charter stays out, because it is

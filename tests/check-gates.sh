@@ -983,6 +983,20 @@ assert_eq "a report of the base renamed in a commit is not the mission's" "QA|1"
   "$( cd "$FIX" && "$SDD" phase "$MISSION" 2>&1 )|$(grep -c 'is not one this branch added' <<< "$( cd "$FIX" && "$SDD" why "$MISSION" QA 2>&1 )")"
 git reset -q --hard HEAD~1
 git config --unset diff.renames; git config --unset status.renames
+# A staged COPY is a new path, as the log reads it (`-M` without `-C` shows it as an add): with
+# status.renames=copies in the user's config, the mission's new report staged beside an edit of the
+# base one reads `C new old`, and it was refused (review r3, reproduced). Owned, like the log.
+git config status.renames copies
+printf '<!-- touched again -->\n' >> "$FIX/docs/qa/reports/2026-01-01-fixture.md"
+cp "$FIX/docs/qa/reports/2026-01-01-fixture.md" "$FIX/docs/qa/reports/2026-01-02-fixture-copied.md"
+git add -A
+# FLOOR: the copy arm is only measured if git really prints `C` for it here.
+copy_status="$(git status --porcelain -z -uall --find-renames -- docs/qa/reports/ | tr '\0' '\n')"
+assert_eq "git stages the mission's new report as a copy here, so the probe below measures that arm" "1" \
+  "$(grep -c '^C.*2026-01-02-fixture-copied\.md$' <<< "$copy_status")"
+assert_phase "a report git stages as a copy is the mission's, as the log would read it" "REVIEW"
+git reset -q --hard
+git config --unset status.renames
 
 # PROVENANCE: ~/.claude/skills/qa-execution/assets/report-template.md:6, as the fixture above.
 # First UNCOMMITTED — the skill may leave the report in the tree when the gate reads it — then
@@ -2025,6 +2039,14 @@ printf '# Docs\n\ndrift checklist\n\n| Area | Doc | Status | Evidence |\n|---|--
 git add -A && git commit -qm "chore: docs with a ⛔ that names no document"
 assert_eq "a ⛔ row that names no document is never proposed" "DOCS|1" \
   "$( cd "$FIX" && "$SDD" phase "$MISSION" 2>&1 )|$(grep -c 'no proposed text' <<< "$( cd "$FIX" && "$SDD" why "$MISSION" DOCS 2>&1 )")"
+# ...nor an EMPTY cell, zero-length or blank (review r3 of the codereview fixes): split over "" is 0
+# fields in mawk, the ⛔ row printed no document at all, and gate_DOCS passed over it.
+for docs_empty_cell in '' '   '; do
+  printf '# Docs\n\ndrift checklist\n\n| Area | Doc | Status | Evidence |\n|---|---|---|---|\n| rules |%s| ⛔ | refused |\n\n## Proposed text\n<!-- sdd:proposed -->\n\nSomething.\n' "$docs_empty_cell" > "$MDIR/45-docs.md"
+  git add -A && git commit -qm "chore: docs with a ⛔ whose document cell is empty" >/dev/null
+  assert_eq "a ⛔ row with an empty document cell ('$docs_empty_cell') is refused as unnamed" "DOCS|1" \
+    "$( cd "$FIX" && "$SDD" phase "$MISSION" 2>&1 )|$(grep -c 'no proposed text: (no document)' <<< "$( cd "$FIX" && "$SDD" why "$MISSION" DOCS 2>&1 )")"
+done
 # ...and a ✗ beside a proposed ⛔ is still today's pending reason, counted without the ⛔.
 printf '# Docs\n\ndrift checklist\n\n| Area | Doc | Status | Evidence |\n|---|---|---|---|\n| runner | README | ✗ | pending |\n| rules | `.claude/rules/x.md` | ⛔ | refused |\n\n## Proposed text\n<!-- sdd:proposed -->\n\n`.claude/rules/x.md`: the line.\n' > "$MDIR/45-docs.md"
 git add -A && git commit -qm "chore: docs with a ✗ and a proposed ⛔"
@@ -2170,7 +2192,7 @@ i4_phase "a repo with no tests/check-mutation.sh closes as it always did" "DONE"
 # 1b. ⛔ CARRIED — the ⛔ rows of 45-docs.md reach the human in the PR body or not at all (ADR 0013;
 #     codereview of 2026-09-28). gate_DOCS proves each has a proposal on disk; only the publisher's
 #     prompt carried it into the PR, so a body without it merged with the rule change unapplied and
-#     nothing red. The gh stub now also answers `--json body`, from a control file under .sdd/logs/
+#     nothing red. The gh stub now also answers `--json state,body`, from control files under .sdd/logs/
 #     (gitignored: writing it moves no tracked byte). Own assertions, outside the i4 tally: that one
 #     is named for the stamp.
 cp "$MDIR/45-docs.md" "$SDD_STATE_FIX/docs-before-pr.md"

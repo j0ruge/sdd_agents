@@ -396,6 +396,9 @@ mut_DOCS_blocked_writable_passes() {              # a ⛔ on README.md waits for
 mut_DOCS_blocked_cell_not_split() {               # a ⛔ cell naming two documents reads as one name
   sed -i '/^docs_checklist_rows() {/,/^}/ s@nd = split(doc, docs, ",")@nd = split(doc, docs, "^$")@' "$1"
 }
+mut_DOCS_blocked_empty_cell_vanishes() {          # a ⛔ with an empty document cell prints no row
+  sed -i '/^docs_checklist_rows() {/,/^}/ s@^          if (!printed) print "B|"$@          printed = printed@' "$1"
+}
 mut_DOCS_blocked_claude_refused() {               # a ⛔ on .claude/ inside writes: is refused too
   sed -i '/^gate_DOCS() {/,/^}/ s@ && \[\[ "\$doc" != .claude/\* \]\] && @ \&\& @' "$1"
 }
@@ -558,6 +561,9 @@ mut_QA_report_log_renames_configurable() {    # the log leaves rename detection 
 }
 mut_QA_report_status_renames_configurable() { # the status leaves rename detection to status.renames
   sed -i '/^mission_qa_report() {/,/^}/ s@ -uall --find-renames @ -uall @' "$1"
+}
+mut_QA_report_status_copy_refused() {         # the mission's report staged as a copy stops counting
+  sed -i '/^mission_qa_report() {/,/^}/ s@|| break; owned\["\${st:3}"\]=1 ;;@|| break ;;@' "$1"
 }
 mut_QA_report_status_quoted() {               # an uncommitted report with a space stops counting
   sed -i '/^mission_qa_report() {/,/^}/ s@status --porcelain -z -uall@status --porcelain -uall@' "$1"
@@ -4608,6 +4614,7 @@ CATALOG=(
   DOCS_marker_in_fence
   DOCS_blocked_writable_passes
   DOCS_blocked_cell_not_split
+  DOCS_blocked_empty_cell_vanishes
   DOCS_blocked_claude_refused
   QA_status_line_start
   QA_status_enum_loose
@@ -4624,6 +4631,7 @@ CATALOG=(
   QA_report_status_rename_owns_any
   QA_report_log_renames_configurable
   QA_report_status_renames_configurable
+  QA_report_status_copy_refused
   QA_report_status_quoted
   QA_report_log_quoted
   QA_report_no_fallback

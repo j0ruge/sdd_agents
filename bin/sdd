@@ -866,13 +866,16 @@ mission_qa_report() {
     esac
   done < <(git -C "$REPO_ROOT" log --reverse -M --diff-filter=AR --name-status -z --format= \
              "$base"..HEAD -- "$QA_DOCS_PATH/reports/" 2>/dev/null || true)
-  # The tree: `?? <path>` and a staged add `A? <path>` are the mission's; a staged rename or copy
-  # (`R? <new>` / `C? <new>`, the source as the next field) carries ownership only from its source.
+  # The tree: `?? <path>` and a staged add `A? <path>` are the mission's. A staged rename (`R? <new>`,
+  # the source as the next field) carries ownership only from its source. A staged COPY (`C? <new>`,
+  # printed only when the user's status.renames says `copies`) is a new path, owned as the log reads
+  # it — `-M` without `-C` shows the same file as an add (review r3: the mission's own report read `C`).
   while IFS= read -r -d '' st; do
     case "$st" in
       '?? '*|A?' '*) owned["${st:3}"]=1 ;;
-      R?' '*|C?' '*) IFS= read -r -d '' b || break
-          if [ "${st:0:1}" = R ] && [ -n "$b" ] && [ -n "${owned[$b]+x}" ]; then owned["${st:3}"]=1; fi ;;
+      C?' '*) IFS= read -r -d '' b || break; owned["${st:3}"]=1 ;;
+      R?' '*) IFS= read -r -d '' b || break
+          if [ -n "$b" ] && [ -n "${owned[$b]+x}" ]; then owned["${st:3}"]=1; fi ;;
     esac
   done < <(git -C "$REPO_ROOT" status --porcelain -z -uall --find-renames \
              -- "$QA_DOCS_PATH/reports/" 2>/dev/null || true)
@@ -1722,14 +1725,19 @@ docs_checklist_rows() {
         if (cell == "⛔" || cell == "⛔\357\270\217") {
           # One ⛔ row may name several documents (`a.md`, `.claude/rules/b.md`): each is its own
           # B| line, because the hat may write one and not the other, and the proposal and the PR
-          # must name each (review r2 of the codereview fixes). An empty cell stays ONE empty name,
-          # which gate_DOCS refuses as unnamed. DECLARED LIMIT: a name holding a comma is split too.
+          # must name each (review r2 of the codereview fixes). A row that yields no name at all —
+          # a zero-length cell is 0 fields to split in mawk, a blank or comma-only cell only empty
+          # ones — still prints ONE empty name, which gate_DOCS refuses as unnamed: without the
+          # `printed` state the ⛔ vanished and the gate passed (review r3). DECLARED LIMIT: every
+          # comma splits, so a "document, location" cell yields the location as a document too —
+          # sdd-docs is told to keep one document per ⛔ cell and the location in Evidence.
           doc = $3; gsub(/[*`]/, "", doc)
-          nd = split(doc, docs, ",")
+          nd = split(doc, docs, ","); printed = 0
           for (k = 1; k <= nd; k++) {
             one = docs[k]; gsub(/^[ \t]+|[ \t]+$/, "", one)
-            if (one != "" || nd == 1) print "B|" one
+            if (one != "") { print "B|" one; printed = 1 }
           }
+          if (!printed) print "B|"
           next
         }
         print "P|" cell
