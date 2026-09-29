@@ -4,7 +4,7 @@ fase: EXEC
 status: done
 sessao: 4d26d92f-6c4b-403b-b867-8ff2bc9e2a51
 data: 2026-09-28 19:05
-gate: "bash tests/run-all.sh → suite green (rc 0, ~240 s, 0 FAIL) sobre 68af14b (depois das duas rodadas do /codereview); check-mutation.sh --anchors → all 461 mutants still apply; check-todo --check → 86 finding(s), every anchor on target; sdd adr check --mission … --phase exec → rc 0; os 7 Checks do checkpoint com o esperado (86/11/placed/1, 111/4, 1111/1, 1111/0/same, 111/1, 11, 1/1/1/1/1/86)"
+gate: "bash tests/run-all.sh → suite green (rc 0, ~240 s, 0 FAIL) sobre 24829f0 (rodada 3 do /codereview); check-mutation.sh --anchors → all 463 mutants still apply; check-todo --check → 86 finding(s), every anchor on target; sdd adr check --mission … --phase exec → rc 0; os 7 Checks do checkpoint com o esperado (86/11/placed/1, 111/4, 1111/1, 1111/0/same, 111/1, 11, 1/1/1/1/1/86)"
 ---
 
 # Handoff — EXEC — os achados da janela do juiz
@@ -19,14 +19,14 @@ O fechamento (`3ac59ee`) trouxe a ADR 0013 aceita, o KAIZEN_LOG, o `CONTEXT.md`,
 gaveta. A revisão final da branch (revisor de contexto novo) achou 3 Important, consertados em
 `ec95baf`. O `/codereview` depois dela achou 2 MEDIUM e 4 LOW (nota B), consertados em
 `a383150`..`9f17bfb`; uma segunda rodada, de contexto novo, sobre esses consertos deu B de novo
-(2 MEDIUM, um deles criado pela rodada 1) e foi consertada em `68af14b`. O catálogo foi de 422 para
-461 mutantes, e cada um novo morre pela asserção que o nomeia. A missão rodou inline, sem
+(2 MEDIUM, um deles criado pela rodada 1) e foi consertada em `68af14b`; a rodada 3 achou mais um
+MEDIUM criado pela rodada 2, também consertado. O catálogo foi de 422 para 463 mutantes, e cada um novo morre pela asserção que o nomeia. A missão rodou inline, sem
 `sdd run`. Falta o PR, os revisores dele e o `sdd health`.
 
 ## Estado do repo
 
 - **Branch:** `fix/os-achados-da-janela`, **não empurrada**, nascida de `main` = `3d350ed`.
-- **Último commit de código:** `68af14b` (rodada 2 do `/codereview`).
+- **Último commit de código:** `24829f0` (rodada 3 do `/codereview`).
 - **Working tree:** limpo depois do commit deste handoff.
 - **Suíte:** `bash tests/run-all.sh` → verde, ~240 s.
 - **E2E:** não se aplica (o kit não tem `E2E_CMD`).
@@ -70,6 +70,13 @@ gaveta. A revisão final da branch (revisor de contexto novo) achou 3 Important,
   só renomeado); o `gate_PR` exige o nome numa linha com `⛔` e não relê PR mergeado; a célula `⛔`
   com vários documentos é julgada por documento; contagens velhas na prosa; cinco âncoras do
   `TODO.md` levadas ao assunto.
+- Rodada 3, revisor de contexto novo sobre `9f17bfb..279b485`: o `split` da rodada 2 apagava a
+  linha `⛔` de célula vazia (`split("")` é 0 no `mawk`) e o `gate_DOCS` passava — agora a linha que
+  não rende nome imprime um nome vazio, recusado; a cópia staged (`status.renames=copies`) é da
+  missão, como o log a leria; prosa da leitura antiga acertada; o `sdd-docs` põe um documento por
+  célula `⛔`. As âncoras do `TODO.md` foram auditadas contra o diff desde `d9df321`: 17 que as
+  remapeações por rodada deixaram até 69 linhas longe do conteúdo voltaram a ele; só as 13 levadas
+  de propósito ao assunto divergem.
 
 ## Artefatos
 
@@ -120,7 +127,7 @@ O que o diff muda para quem usa o kit:
 - **Sem probe:** a linha sem prefixo no laço do `gate_DOCS` (nenhum ramo do awk a imprime hoje; o
   comentário declara isso). O mundo "sem `timeout(1)`" do close ganhou probe em `e97d23b`.
 - **O `sdd health` (catálogo inteiro) não rodou.** Cada mutante novo foi aplicado numa cópia e morto
-  pela asserção certa, mas o carimbo dos 461 é passo do PR.
+  pela asserção certa, mas o carimbo dos 463 é passo do PR.
 
 ## Achados fora de escopo
 
