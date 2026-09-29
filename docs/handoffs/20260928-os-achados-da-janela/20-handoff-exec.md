@@ -4,7 +4,7 @@ fase: EXEC
 status: done
 sessao: 4d26d92f-6c4b-403b-b867-8ff2bc9e2a51
 data: 2026-09-28 19:05
-gate: "bash tests/run-all.sh → suite green (rc 0, ~240 s, 0 FAIL) sobre a761cb7 (rodada 6 do /codereview, nota A); check-mutation.sh --anchors → all 483 mutants still apply; check-todo --check → 87 finding(s), every anchor on target; sdd adr check --mission … --phase exec → rc 0; os 7 Checks do checkpoint com o esperado até 9f17bfb (86/11/placed/1, 111/4, 1111/1, 1111/0/same, 111/1, 11, 1/1/1/1/1/86); desde a catraca 86 → 87 da rodada 5, I1 lê 87/10/placed/0 e I7 lê 1/1/1/1/1/87, e os outros cinco seguem como escritos"
+gate: "bash tests/run-all.sh no HEAD da rodada 7 (bots do PR #176) → o resultado é o status local/ci desse sha no PR; check-coordination.sh → 177 passed, 0 failed; check-mutation.sh --anchors → 487 mutants; os 4 novos (COORD_bash_remedy_unprobed, COORD_remedy_attribute_probe, COORD_capable_unchecked, COORD_remedy_probe_recurses) mortos pelo probe que os nomeia; check-todo --check → 87 finding(s), every anchor on target; os 7 Checks do checkpoint com o esperado, I1 e I7 refixados na catraca 87 (87/11/placed/1, 1/1/1/1/1/87)"
 ---
 
 # Handoff — EXEC — os achados da janela do juiz
@@ -23,13 +23,15 @@ gaveta. A revisão final da branch (revisor de contexto novo) achou 3 Important,
 MEDIUM criado pela rodada 2; a rodada 4, holística sobre as duas unidades que quebravam, achou um
 HIGH (range só com a base local) e reescreveu a leitura do relatório em três fatos (`e268a6d`); a
 rodada 5 mediu o que a 4 deixou sem probe (`9318dc7`); a rodada 6 deu nota A, e seus dois LOW
-foram consertados. O catálogo foi de 422 para 483 mutantes, e cada um novo morre pela asserção que o nomeia. A missão rodou inline, sem
-`sdd run`. Falta o PR, os revisores dele e o `sdd health`.
+foram consertados. No PR #176 os bots deixaram 5 comentários (Codex 1, CodeRabbit 4) e um nitpick,
+consertados numa leva na rodada 7 (`ffb5bff`, `4f5358f`); o nitpick foi recusado com motivo. O
+catálogo foi de 422 para 487 mutantes, e cada um novo morre pela asserção que o nomeia. A missão
+rodou inline, sem `sdd run`. Falta o `sdd health` (carimbo) e o merge, que é do humano.
 
 ## Estado do repo
 
-- **Branch:** `fix/os-achados-da-janela`, **não empurrada**, nascida de `main` = `3d350ed`.
-- **Último commit de código:** `a761cb7` (LOW da rodada 6 do `/codereview`).
+- **Branch:** `fix/os-achados-da-janela`, empurrada, **PR #176** contra `main` = `3d350ed`.
+- **Último commit de código:** `ffb5bff` (rodada 7, o remédio sondado do `CHECKOUT-UNAVAILABLE`).
 - **Working tree:** limpo depois do commit deste handoff.
 - **Suíte:** `bash tests/run-all.sh` → verde, ~240 s.
 - **E2E:** não se aplica (o kit não tem `E2E_CMD`).
@@ -93,6 +95,13 @@ foram consertados. O catálogo foi de 422 para 483 mutantes, e cada um novo morr
 - Rodada 6: nota A — nenhum MEDIUM ou acima; os 482 mutantes e os 48 `45-docs.md` reais sem mudança
   de decisão. Dois LOW consertados: o rename na árvore (` R`, `mv` + `add -N`) carrega a posse, e
   este `gate:` diz a saída real dos Checks de I1/I7 depois da catraca.
+- Rodada 7, os bots do PR #176 numa leva: o remédio `PATH=/usr/bin:$PATH` era oferecido sem sonda
+  (bash: só `-x`; helper: só os atributos). Agora os dois lados rodam o modo `capable` do helper, e
+  `SDD_SYSTEM_PYTHON` é o seam que monta o Python de sistema incapaz (`ffb5bff`, 4 mutantes). O
+  `sdd-docs` deixou de nomear ferramentas do harness (`4f5358f`). Os Checks de I1/I7 foram
+  refixados em 87, e a gaveta marca o F3 antigo como histórico. Recusado: extrair `start_page_server`
+  para uma lib de teste (nitpick). Os sensores não compartilham biblioteca, o `port_is_free` já era
+  triplicado, e uma lib nova moveria os quatro pisos de superfície.
 
 ## Artefatos
 
@@ -108,10 +117,9 @@ Esta missão roda **interativa**, nunca por `sdd run` no próprio kit (handoff e
 `~/.claude/plans/2026-09-28-handoff-executar-os-achados-da-janela.md`). O próximo passo é a revisão
 da branch inteira (`git diff 3d350ed..HEAD`). Depois:
 
-1. `/codereview:codereview` até Grade A.
-2. Push e PR contra `main`, com status `local/ci` pela API de Statuses (o repo é público, mas a regra
-   é a verificação local).
-3. Esperar **todos** os revisores e consertar numa leva.
+1. ~~`/codereview:codereview` até Grade A~~: seis rodadas, a última com nota A.
+2. ~~Push e PR contra `main`~~: PR #176, com status `local/ci` pela API de Statuses.
+3. ~~Esperar **todos** os revisores e consertar numa leva~~: rodada 7. O Copilot não revisou (sem cota).
 4. `./bin/sdd health` **uma vez**, depois do último commit de código. O `gate_PR` exige o carimbo.
 
 O que o diff muda para quem usa o kit:
@@ -143,7 +151,7 @@ O que o diff muda para quem usa o kit:
 - **Sem probe:** a linha sem prefixo no laço do `gate_DOCS` (nenhum ramo do awk a imprime hoje; o
   comentário declara isso). O mundo "sem `timeout(1)`" do close ganhou probe em `e97d23b`.
 - **O `sdd health` (catálogo inteiro) não rodou.** Cada mutante novo foi aplicado numa cópia e morto
-  pela asserção certa, mas o carimbo dos 483 é passo do PR.
+  pela asserção certa, mas o carimbo dos 487 é passo do PR.
 
 ## Achados fora de escopo
 

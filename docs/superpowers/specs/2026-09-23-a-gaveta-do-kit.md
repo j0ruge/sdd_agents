@@ -13,10 +13,10 @@
 
 | # | Frente | Estado | Próximo passo | Espera por |
 |---|---|---|---|---|
-| F1 | Custo do catálogo de mutação | PR #59 mergeado (`d0ac22d`); P2(a) feito em 2026-09-25 (assassino primeiro, amostra 389 → 171 s, `sdd health` 1h27 → ~38–40 min); P2(b) **FEITO**, PR #170 mergeado (`31dfd43`; o sensor para no primeiro FAIL, [spec](2026-09-25-o-sensor-para-no-primeiro-fail-design.md), amostra 1328,7 → 571 s, `sdd health` 37 min 42 s → **~18 min**, carimbo 406/406 válido na `main`); P1, P3, P4 abertos | E6 do #170 **feito** em 2026-09-26 (espelho 82 ↔ 82, #144 fechada, PR #171; [handoff](../plans/2026-09-25-depois-do-170-handoff.md)). O P3 **ficou fora** da carona (`20260926-a-carona-antes-do-congelamento`, decisão 6 do grill): é pré-requisito do próximo aumento de paralelismo, que não acontece com o kit congelado | o fim do congelamento (F3) |
+| F1 | Custo do catálogo de mutação | PR #59 mergeado (`d0ac22d`); P2(a) feito em 2026-09-25 (assassino primeiro, amostra 389 → 171 s, `sdd health` 1h27 → ~38–40 min); P2(b) **FEITO**, PR #170 mergeado (`31dfd43`; o sensor para no primeiro FAIL, [spec](2026-09-25-o-sensor-para-no-primeiro-fail-design.md), amostra 1328,7 → 571 s, `sdd health` 37 min 42 s → **~18 min**, carimbo 406/406 válido na `main`); P1, P3, P4 abertos | E6 do #170 **feito** em 2026-09-26 (espelho 82 ↔ 82, #144 fechada, PR #171; [handoff](../plans/2026-09-25-depois-do-170-handoff.md)). O P3 **ficou fora** da carona (`20260926-a-carona-antes-do-congelamento`, decisão 6 do grill): é pré-requisito do próximo aumento de paralelismo, que não acontece com o kit congelado | o fim do congelamento (F3), que veio com o veredito (PR #175) |
 | F2 | Faxina pós-#57 | **fechada** pela missão `20260926-a-carona-antes-do-congelamento` (I7; o yokoten da crase no I1) | nada | — |
 | F3 | T3 e a janela do juiz | janela **fechada**: veredito `melhorou` sobre `4fd0f31` (PR #175, `3d350ed`). Os 8 achados da janela: 5 consertados na missão `20260928-os-achados-da-janela` (3, 4, 6, 7 e 8), 3 no `TODO.md` (1, 2 e 5) | o merge dessa missão; depois a T3 | o merge da `fix/os-achados-da-janela` |
-| F4 | Portabilidade para outros repos | sem pendência de código: lacunas 2 e 3 **consertadas** na missão `20260926-a-carona-antes-do-congelamento` (I5, I6), 4 e 5 no `TODO.md` (I7), 6 declarada no ADR 0007 | a prova num 2º alvo, que conta para a janela do juiz | o congelamento (F3) |
+| F4 | Portabilidade para outros repos | sem pendência de código: lacunas 2 e 3 **consertadas** na missão `20260926-a-carona-antes-do-congelamento` (I5, I6), 4 e 5 no `TODO.md` (I7), 6 declarada no ADR 0007 | a prova num 2º alvo, que conta para a próxima janela do juiz | nada desde o veredito (F3, PR #175) |
 | F5 | Issues avulsas #50–#53 | #53 fechada; #50, #51 e #52 consertadas na missão `20260926-a-carona-antes-do-congelamento` (I1–I4) | as três fecham com o merge do PR | — |
 | F6 | O worker (W1–W7) | estacionada por decisão | nada, até os fluxos atuais rodarem limpos | **decisão humana** |
 | F7 | Plano Astra, fases 2–7 | não iniciada | nada; vem depois do worker | F6 |
@@ -147,14 +147,20 @@ a T2 o #47). Junta três itens, todos abertos no `TODO.md`:
 As fontes listam **três** perguntas de desenho para o humano (a memória falava em duas): o 6º
 `event`, a definição de "reaberta" e a âncora de sabotagem no `gate_REVIEW`.
 
-**A janela do juiz.** Para o `sdd kaizen` emitir veredito são necessárias **3 missões de alvo com
-sessão sobre o mesmo `kit_sha`**, com um único harness na fatia. Toda mudança na `main` do kit
-encalha a janela. Hoje ela está zerada: a única missão de alvo sobre `ea39868` foi a do
+**A janela do juiz** (estado de 2026-09-23, **histórico**; o de hoje está logo abaixo). Para o
+`sdd kaizen` emitir veredito são necessárias **3 missões de alvo com sessão sobre o mesmo
+`kit_sha`**, com um único harness na fatia. Toda mudança na `main` do kit encalha a janela. Em
+2026-09-23 ela estava zerada: a única missão de alvo sobre `ea39868` foi a do
 `lighthouse_project` (46 sessões, ~US$ 196), e a `main` andou depois disso (`147add7`, #57, #48,
 #58, #59). Ordem registrada na memória (2026-09-21): planejar a T3 → congelar o kit → 3 missões de
 alvo → `sdd kaizen`, este do terminal do humano, numa branch `kaizen/…` (~US$ 5 por veredito, teto
 de US$ 15). A memória de 2026-09-20 dizia o contrário ("NÃO planejar a T3 ainda"), e a linha mais
 nova prevalece. ⚠️ **Congelar o kit é decisão humana e trava tudo o que está acima.**
+
+**Hoje (2026-09-29).** A ordem que valeu foi outra: o kit congelou no merge da carona (`4fd0f31`),
+as 3 missões de alvo rodaram sobre ele, e o `sdd kaizen` deu `melhorou` (PR #175, `3d350ed`). A
+janela está **fechada**. Dos 8 achados dela, 5 estão na missão `20260928-os-achados-da-janela` e
+3 no `TODO.md`. A T3 vem **depois** do merge dessa missão, e não antes do congelamento.
 
 ## F4 — Portabilidade para outros repos
 
@@ -256,18 +262,21 @@ fases 2–4 e 6 ficam **depois** do worker; a 5 é o W5–W6.
 ## Ordem sugerida
 
 **O que as fontes já decidem:** o worker só volta com os fluxos limpos (F6); as fases 2–4 e 6 do
-Astra vêm depois do worker (F7); a T3 vem antes do congelamento (F3); o `sdd kaizen` roda do
+Astra vêm depois do worker (F7); a T3 vem depois do veredito da janela (F3 — a ordem de
+2026-09-21, com a T3 antes do congelamento, foi superada pela carona); o `sdd kaizen` roda do
 terminal do humano; e qualquer PR do kit segue abrir → todos os revisores → uma leva de consertos
 → carimbo **uma vez** → merge.
 
 **Recomendação desta sessão, marcada como tal:**
 1. ~~Terminar o #59~~ — mergeado em `d0ac22d`, carimbo 392/392.
-2. **Decidir se o kit congela agora** para a janela do juiz. Tudo o que vem abaixo muda a `main` e
+2. ~~Decidir se o kit congela agora~~ — **feito**: congelou no merge da carona (`4fd0f31`), e a
+   janela fechou com `melhorou` (PR #175). O texto de 2026-09-23 segue como histórico:
+   **Decidir se o kit congela agora** para a janela do juiz. Tudo o que vem abaixo muda a `main` e
    encalha a janela; se congelar, os itens 3–5 esperam o veredito. Respondido em 2026-09-26: "não
    ainda — PR de carona" (item 3); a pergunta volta ao humano no fechamento da carona.
 3. ~~Um PR de kit "de carona", que carimba uma vez só~~ — **feito** pela missão `20260926-a-carona-antes-do-congelamento`: F2, F4
    (lacunas 2 e 3 consertadas, 4 e 5 registradas) e as issues #50, #51 e #52 (a #53 já estava
    fechada). O F1-P3 ficou fora por decisão do grill.
-4. A T3 com as três decisões humanas, via `/sdd-plan`.
+4. A T3 com as três decisões humanas, via `/sdd-plan`, depois do merge de `fix/os-achados-da-janela`.
 5. F1-P1 com ADR; depois decidir o F1-P4.
 6. F6 e F7, quando os fluxos rodarem limpos.
