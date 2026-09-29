@@ -920,13 +920,14 @@ mission_qa_report() {
   # The tree. A staged COPY (`C? <new>`, its source as the next field) shows when the user's
   # status.renames — or diff.renames, its default — says `copies`; it is a new path, as diff-tree
   # (no `-C`) would read the same file (review r3), so after reading its source it FALLS THROUGH to
-  # the one base-tree check every new path meets. A staged rename asks ownership of its source.
+  # the one base-tree check every new path meets. A rename, staged (`R?`) or in the work tree (` R`,
+  # a `mv` plus `git add -N` — review r6), asks ownership of its source.
   while IFS= read -r -d '' st; do
     case "$st" in
       C?' '*) IFS= read -r -d '' b || break ;&
       '?? '*|A?' '*|' A '*)
           if ! path_in_commits "${st:3}" ${bases[@]+"${bases[@]}"}; then owned["${st:3}"]=1; fi ;;
-      R?' '*) IFS= read -r -d '' b || break
+      R?' '*|' R '*) IFS= read -r -d '' b || break
           if [ -n "$b" ] && [ -n "${owned[$b]+x}" ]; then owned["${st:3}"]=1; fi ;;
     esac
   done < <(git -C "$REPO_ROOT" -c status.renameLimit=0 status --porcelain -z -uall --find-renames \

@@ -1136,6 +1136,14 @@ qa_owner_why="$( cd "$FIX" && "$SDD" why "$MISSION" QA 2>&1 )"
 qa_owner_phase="$( cd "$FIX" && "$SDD" phase "$MISSION" 2>&1 )"
 assert_eq "QA gate accepts the closed report the mission branch added" "REVIEW|0" \
   "$qa_owner_phase|$(grep -c 'is not one this branch added' <<< "$qa_owner_why")"
+# A rename in the WORK TREE: a plain `mv` plus `git add -N` is ` R new old` (review r6) — the mission's
+# own report, renamed, and still the mission's.
+mv "$FIX/docs/qa/reports/2026-01-02-fixture-mine.md" "$FIX/docs/qa/reports/2026-01-02-fixture-mine-wt.md"
+git add -N "$FIX/docs/qa/reports/2026-01-02-fixture-mine-wt.md"
+assert_eq "git reads the rename in the work tree as ' R' here, so the probe below measures that arm" "1" \
+  "$(git status --porcelain -z -uall --find-renames -- docs/qa/reports/ | tr '\0' '\n' | grep -c '^ R .*2026-01-02-fixture-mine-wt\.md$')"
+assert_phase "QA gate accepts the mission's report renamed in the work tree" "REVIEW"
+git reset -q --hard
 # Four rules that held with nothing measuring them (review r4). Each world below leaves the
 # mission's closed report as the right answer, so a runner that broke the rule reads another file.
 # (e) Only `.md` is a report: a newer `.txt` of the mission's under reports/ is not the pick.

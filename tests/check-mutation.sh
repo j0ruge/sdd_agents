@@ -609,6 +609,9 @@ mut_QA_report_log_renames() {                 # the mission's report renamed in 
 mut_QA_report_status_renames() {              # the mission's report renamed in the index stops counting
   sed -i '/^mission_qa_report() {/,/^}/ s@&& \[ -n "\${owned\[\$b\]+x}" \]; then owned\["\${st:3}"\]=1; fi ;;@\&\& [ -n "${owned[$b]+x}" ]; then :; fi ;;@' "$1"
 }
+mut_QA_report_worktree_rename_ignored() {     # the mission's report renamed in the work tree stops counting
+  sed -i "/^mission_qa_report() {/,/^}/ s@R?' '\\*|' R '\\*)@R?' '*)@" "$1"
+}
 mut_QA_report_log_rename_owns_any() {         # a base report renamed in a commit becomes the mission's
   sed -i '/^mission_qa_report() {/,/^}/ s@ && \[ -n "\${owned\[\$a\]+x}" \]; then owned\["\$b"\]@; then owned["$b"]@' "$1"
 }
@@ -4708,6 +4711,7 @@ CATALOG=(
   QA_report_porcelain_log
   QA_report_log_renames
   QA_report_status_renames
+  QA_report_worktree_rename_ignored
   QA_report_log_rename_owns_any
   QA_report_status_rename_owns_any
   QA_report_log_no_rename_detection
