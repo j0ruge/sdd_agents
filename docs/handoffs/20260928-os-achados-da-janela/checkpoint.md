@@ -1,6 +1,6 @@
 ---
 missao: 20260928-os-achados-da-janela
-atualizado: 2026-09-28 16:11
+atualizado: 2026-09-29 02:41
 ---
 
 # Checkpoint — os achados da janela do juiz
