@@ -4,7 +4,7 @@ fase: EXEC
 status: done
 sessao: 4d26d92f-6c4b-403b-b867-8ff2bc9e2a51
 data: 2026-09-28 19:05
-gate: "bash tests/run-all.sh → suite green (rc 0, ~240 s, 0 FAIL) sobre 9318dc7 (rodada 5 do /codereview); check-mutation.sh --anchors → all 482 mutants still apply; check-todo --check → 87 finding(s), every anchor on target; sdd adr check --mission … --phase exec → rc 0; os 7 Checks do checkpoint com o esperado (86/11/placed/1, 111/4, 1111/1, 1111/0/same, 111/1, 11, 1/1/1/1/1/86)"
+gate: "bash tests/run-all.sh → suite green (rc 0, ~240 s, 0 FAIL) sobre a761cb7 (rodada 6 do /codereview, nota A); check-mutation.sh --anchors → all 483 mutants still apply; check-todo --check → 87 finding(s), every anchor on target; sdd adr check --mission … --phase exec → rc 0; os 7 Checks do checkpoint com o esperado até 9f17bfb (86/11/placed/1, 111/4, 1111/1, 1111/0/same, 111/1, 11, 1/1/1/1/1/86); desde a catraca 86 → 87 da rodada 5, I1 lê 87/10/placed/0 e I7 lê 1/1/1/1/1/87, e os outros cinco seguem como escritos"
 ---
 
 # Handoff — EXEC — os achados da janela do juiz
@@ -22,13 +22,14 @@ gaveta. A revisão final da branch (revisor de contexto novo) achou 3 Important,
 (2 MEDIUM, um deles criado pela rodada 1) e foi consertada em `68af14b`; a rodada 3 achou mais um
 MEDIUM criado pela rodada 2; a rodada 4, holística sobre as duas unidades que quebravam, achou um
 HIGH (range só com a base local) e reescreveu a leitura do relatório em três fatos (`e268a6d`); a
-rodada 5 mediu o que a 4 deixou sem probe (`9318dc7`). O catálogo foi de 422 para 482 mutantes, e cada um novo morre pela asserção que o nomeia. A missão rodou inline, sem
+rodada 5 mediu o que a 4 deixou sem probe (`9318dc7`); a rodada 6 deu nota A, e seus dois LOW
+foram consertados. O catálogo foi de 422 para 483 mutantes, e cada um novo morre pela asserção que o nomeia. A missão rodou inline, sem
 `sdd run`. Falta o PR, os revisores dele e o `sdd health`.
 
 ## Estado do repo
 
 - **Branch:** `fix/os-achados-da-janela`, **não empurrada**, nascida de `main` = `3d350ed`.
-- **Último commit de código:** `9318dc7` (rodada 5 do `/codereview`).
+- **Último commit de código:** `a761cb7` (LOW da rodada 6 do `/codereview`).
 - **Working tree:** limpo depois do commit deste handoff.
 - **Suíte:** `bash tests/run-all.sh` → verde, ~240 s.
 - **E2E:** não se aplica (o kit não tem `E2E_CMD`).
@@ -89,6 +90,9 @@ rodada 5 mediu o que a 4 deixou sem probe (`9318dc7`). O catálogo foi de 422 pa
   com um mundo cada; sem merge-base (clone raso) volta a resposta de antes; limite de rename fixo em
   0; `Status` na última coluna; pendente por contagem. O resíduo "relatório posto na base depois do
   corte e trazido por checkout/squash/cherry-pick" foi para o `TODO.md` (catraca 86 → 87).
+- Rodada 6: nota A — nenhum MEDIUM ou acima; os 482 mutantes e os 48 `45-docs.md` reais sem mudança
+  de decisão. Dois LOW consertados: o rename na árvore (` R`, `mv` + `add -N`) carrega a posse, e
+  este `gate:` diz a saída real dos Checks de I1/I7 depois da catraca.
 
 ## Artefatos
 
@@ -139,7 +143,7 @@ O que o diff muda para quem usa o kit:
 - **Sem probe:** a linha sem prefixo no laço do `gate_DOCS` (nenhum ramo do awk a imprime hoje; o
   comentário declara isso). O mundo "sem `timeout(1)`" do close ganhou probe em `e97d23b`.
 - **O `sdd health` (catálogo inteiro) não rodou.** Cada mutante novo foi aplicado numa cópia e morto
-  pela asserção certa, mas o carimbo dos 482 é passo do PR.
+  pela asserção certa, mas o carimbo dos 483 é passo do PR.
 
 ## Achados fora de escopo
 
