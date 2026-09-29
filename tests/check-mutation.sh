@@ -889,6 +889,9 @@ mut_PR_stamp_blind() {
 mut_PR_blocked_docs_not_carried() {
   sed -i '/^gate_PR()/,/^}/ s@grep -qF -- "\$doc" <<< "\$body" || carried_missing@true || carried_missing@' "$1"
 }
+mut_PR_body_unread_is_missing() {       # a body gh could not read is reported as one lacking the ⛔
+  sed -i '/^gate_PR()/,/^}/ s@^        if \[ "\$body_rc" -ne 0 \]; then$@        if false; then@' "$1"
+}
 
 # The key stops being a function of the CONTENT alone and starts following HEAD as well. Deliberately
 # ADDITIVE and not a swap: a key that is only HEAD is already refused by the window world, which would
@@ -4632,6 +4635,7 @@ CATALOG=(
   PR_no_artifact
   PR_stamp_blind
   PR_blocked_docs_not_carried
+  PR_body_unread_is_missing
   PR_stamp_key_follows_head
   HEALTH_stamp_window_blind
   HEALTH_stamp_tree_blind

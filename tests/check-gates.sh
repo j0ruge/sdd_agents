@@ -2140,7 +2140,7 @@ cat > "$FIX/.stub/gh" <<STUB
 # ⛔ rows, \`--json body --jq .body\` (does the body carry them?).
 [ "\${1:-}" = "pr" ] && [ "\${2:-}" = "view" ] || { echo "unexpected gh call: \$*" >&2; exit 9; }
 case " \$* " in
-  *" --json body "*) cat "$FIX/.sdd/logs/pr-body" 2>/dev/null || true ;;
+  *" --json body "*) [ -e "$FIX/.sdd/logs/pr-body-fails" ] && exit 4; cat "$FIX/.sdd/logs/pr-body" 2>/dev/null || true ;;
   *) printf '%s\n' "\${3:-}" ;;
 esac
 STUB
@@ -2152,6 +2152,11 @@ assert_eq "gate_PR refuses a PR whose body does not carry a ⛔ of 45-docs.md" "
   "$( cd "$FIX" && "$SDD" phase "$MISSION" 2>&1 )|$(grep -c 'does not carry the ⛔ proposal(s) of 45-docs.md: \.claude/rules/x\.md' <<< "$( cd "$FIX" && "$SDD" why "$MISSION" PR 2>&1 )")"
 printf '## Decisions for a human\n\n- [ ] ⛔ `.claude/rules/x.md` — apply before the merge:\n  > append a line\n' > "$FIX/.sdd/logs/pr-body"
 assert_phase "gate_PR passes once the body carries every ⛔" "DONE"
+# ...and a body gh could not READ is said as such: "does not carry" would describe a body nobody saw.
+touch "$FIX/.sdd/logs/pr-body-fails"
+assert_eq "gate_PR says it could not read the body, never that the body lacks the ⛔" "PR|1|0" \
+  "$( cd "$FIX" && "$SDD" phase "$MISSION" 2>&1 )|$(grep -c 'could not read the body of PR' <<< "$( cd "$FIX" && "$SDD" why "$MISSION" PR 2>&1 )")|$(grep -c 'does not carry' <<< "$( cd "$FIX" && "$SDD" why "$MISSION" PR 2>&1 )")"
+rm -f "$FIX/.sdd/logs/pr-body-fails"
 cp "$SDD_STATE_FIX/docs-before-pr.md" "$MDIR/45-docs.md"
 rm -f "$FIX/.sdd/logs/pr-body"
 git add -A && git commit -qm "chore: docs without a ⛔ again" >/dev/null

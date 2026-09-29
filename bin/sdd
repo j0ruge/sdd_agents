@@ -1935,7 +1935,7 @@ gate_PR() {
   # opens a second PR. Read by name, as gate_DOCS reads the proposal — the name proves the item is
   # there, never that the quote is whole. The rows come from docs_checklist_rows, the same reader
   # gate_DOCS decides on, and the body is asked for only when there is a ⛔ to look for.
-  local docs_file="$MISSION_DIR/45-docs.md" rows row doc body="" body_read=0 carried_missing=""
+  local docs_file="$MISSION_DIR/45-docs.md" rows row doc body="" body_read=0 body_rc=0 carried_missing=""
   if [ -f "$docs_file" ]; then
     rows="$(docs_checklist_rows "$docs_file")"
     while IFS= read -r row; do
@@ -1943,8 +1943,14 @@ gate_PR() {
       # An unnamed ⛔ is gate_DOCS's refusal, and an empty pattern would match any body.
       [[ "$doc" =~ [[:alnum:]] ]] || continue
       if [ "$body_read" -eq 0 ]; then
-        body="$( cd "$REPO_ROOT" && gh pr view "$url" --json body --jq .body 2>/dev/null )" || body=""
+        body="$( cd "$REPO_ROOT" && gh pr view "$url" --json body --jq .body 2>/dev/null )" || body_rc=$?
         body_read=1
+        # A body gh could not READ is its own refusal: "does not carry" would be a sentence about a
+        # body nobody saw, and it would send the publisher to edit a PR that may be fine.
+        if [ "$body_rc" -ne 0 ]; then
+          GATE_WHY="gh could not read the body of PR $live (rc $body_rc) — the ⛔ rows of 45-docs.md are not checked; run 'gh pr view $url --json body'"
+          return 1
+        fi
       fi
       grep -qF -- "$doc" <<< "$body" || carried_missing+="${carried_missing:+, }$doc"
     done <<< "$rows"
