@@ -272,12 +272,13 @@ session at all.
 ### Not a config key: `SDD_SYSTEM_PYTHON`
 
 When coordination refuses with `CHECKOUT-UNAVAILABLE` because of the `python3` on `PATH` — none at
-all, or a build without pidfd — the refusal offers `PATH=/usr/bin:$PATH sdd <the same command>`, and
-only after `/usr/bin/python3` passes the helper's own check (`sdd-coordination.py capable`). Both
-the runner and the helper read `${SDD_SYSTEM_PYTHON:-/usr/bin/python3}` as that interpreter, so a
-sensor can model a system Python that fails the check. The path must end in `python3`, because the
-remedy puts its directory first on `PATH`. The runner only probes it and never uses it. Like
-`SDD_ACLI_BIN`, it describes the machine, so it is an environment variable and not a config key.
+all, a build without pidfd, or one older than 3.9 — the refusal offers
+`PATH=/usr/bin:$PATH sdd <the same command>`, and only after `/usr/bin/python3` passes the helper's
+own check (`sdd-coordination.py capable`). Both the runner and the helper read
+`${SDD_SYSTEM_PYTHON:-/usr/bin/python3}` as that interpreter, so a sensor can model a system Python
+that fails the check. The path must end in `python3`, because the remedy puts its directory first
+on `PATH`. The runner only probes it and never uses it. Like `SDD_ACLI_BIN`, it describes the
+machine, so it is an environment variable and not a config key.
 
 ### Not a config key: `SDD_STATE_DIR`
 

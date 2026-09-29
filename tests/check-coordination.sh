@@ -307,8 +307,9 @@ try:
 
     def system_python(name, patch=None, counted=False):
         """A python3 for SDD_SYSTEM_PYTHON, alone in its directory, since the remedy names the
-        directory. No patch: the interpreter running this sensor, which must be capable or no
-        coordinated call here would run. A patch breaks it the way the PATH stub below does, and
+        directory. No patch: the interpreter running this sensor, which the direct probes of the
+        helper below (the hook, the family wait) already need with pidfd; the armed check proves
+        it. A patch breaks it the way the PATH stub below does, and
         the wrapper serves both a script and `-c`, so the attribute read the helper used to run
         meets the same broken module. `counted`: each run appends to $COORD_SYSTEM_MARK and a
         second run exits at once — the witness that the probe never probes itself again, bounded
@@ -345,7 +346,35 @@ try:
           and subprocess.run([str(system_denied), "-I", "-S", "-c", attribute_read],
                              stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL,
                              timeout=5).returncode == 0)
-    check("missing python3 is named, with the remedy when /usr/bin/python3 exists",
+    # ...and each one reaches the helper's `capable` through the SCRIPT branch of its wrapper, the
+    # branch every assertion below runs, refusing for its OWN reason: "no remedy" is also what a
+    # wrapper that never reaches the helper prints (review of round 7).
+    helper = str(root / "bin/sdd-coordination.py")
+
+    def capable(system, flags=("-I", "-S"), **extra):
+        return subprocess.run([str(system), *flags, helper, "capable"], env=dict(env, **extra),
+                              stdin=subprocess.DEVNULL, text=True, stdout=subprocess.PIPE,
+                              stderr=subprocess.STDOUT, timeout=8)
+
+    armed_mark = work / "system-mark-armed"
+    armed = [capable(system_ok), capable(system_denied),
+             capable(system_missing, COORD_SYSTEM_MARK=str(armed_mark))]
+    check("remedy worlds reach the helper's check, each for its own reason",
+          armed[0].returncode == 0
+          and armed[1].returncode == 1 and "os.pidfd_open failed (denied by policy" in armed[1].stdout
+          and armed[2].returncode == 1
+          and "pidfd_open is missing from this Python build" in armed[2].stdout
+          and armed_mark.read_text().count("run") == 1,
+          " | ".join(result.stdout[:160] for result in armed))
+    # The probe runs with the helper's flags (COORDINATION_PYTHON). The world where they matter: a
+    # PYTHONHOME that leaked into the caller's environment breaks an interpreter started without
+    # `-I`, which the real run (`python3 -I -S`) would never see. DECLARED LIMIT: this proves `-I`;
+    # no world here tells `-S` apart, so dropping `-S` alone survives.
+    leaked_home = {"PYTHONHOME": str(work / "no-python-home")}
+    check("the leaked PYTHONHOME is armed: the check fails without -I and passes with the flags",
+          capable(system_ok, flags=("-S",), **leaked_home).returncode != 0
+          and capable(system_ok, **leaked_home).returncode == 0)
+    check("missing python3 is named, with the remedy only when /usr/bin/python3 passes the check",
           "no python3 on PATH" in missing.stdout
           and ("PATH=/usr/bin:" in missing.stdout) == passes_capability("/usr/bin/python3"),
           missing.stdout[:300])
@@ -355,6 +384,10 @@ try:
               " the check: " + label,
               "no python3 on PATH" in told.stdout
               and ("PATH=%s:" % system.parent in told.stdout) == offered, told.stdout[:300])
+    told = run(repo, "preflight",
+               extra=dict(limited_env, SDD_SYSTEM_PYTHON=str(system_ok), **leaked_home))
+    check("no python3 on PATH: the remedy's probe runs with the helper's flags",
+          "PATH=%s:" % system_ok.parent in told.stdout, told.stdout[:300])
     check("help needs no supervisor dependency", run(repo, "help", extra=limited_env).returncode == 0)
     # pidfd support must be usable under this kernel/seccomp policy before project config runs.
     python_stub = stubs / "python3"
@@ -362,7 +395,7 @@ try:
     # `children`: a procfs without task children enumeration (no CONFIG_PROC_CHILDREN) makes every
     # task read as childless, so an interrupt would reach nobody and keep the lock (Codex, PR #48).
     for denied in ("missing", "open", "send", "children"):
-        python_stub.write_text("#!/usr/bin/python3\nimport os, signal, runpy, sys\n"
+        python_stub.write_text("#!/usr/bin/python3 -I\nimport os, signal, runpy, sys\n"
             "def denied(*args, **kwargs): raise PermissionError('fixture pidfd denied')\n"
             + {"missing": "del os.pidfd_open\n", "open": "os.pidfd_open = denied\n",
                "send": "signal.pidfd_send_signal = denied\n",
@@ -402,6 +435,13 @@ try:
                       "pidfd_open is missing" in told.stdout
                       and ("PATH=%s:" % system.parent in told.stdout) == offered,
                       told.stdout[:400])
+            # With the helper's flags, as on the other side. The stub starts with `-I` (its shebang),
+            # so the leaked PYTHONHOME reaches only the interpreter the helper probes.
+            told = run(repo, "phase", "20260101-one",
+                       extra=dict(leaked_home, SDD_SYSTEM_PYTHON=str(system_ok)))
+            check("a build refusal probes with the helper's flags",
+                  "pidfd_open is missing" in told.stdout
+                  and "PATH=%s:" % system_ok.parent in told.stdout, told.stdout[:400])
             # A system python3 lacking the same attribute fails the probe as a BUILD refusal, and
             # its refusal must not probe for a remedy again: it would find this stub on the PATH,
             # see another interpreter, and probe itself — a chain nothing reaps.

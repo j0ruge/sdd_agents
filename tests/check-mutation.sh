@@ -4602,6 +4602,15 @@ mut_COORD_capable_unchecked() {         # `capable` answers 0 without checking a
 mut_COORD_remedy_probe_recurses() {     # the probe's own refusal probes for a remedy again
   sed -i "/^            and sys.argv\[1:2\] != \['capable'\]\$/d" "${1%/*}/sdd-coordination.py"
 }
+# The probe runs with the helper's flags: without `-I` a leaked PYTHONHOME withholds the remedy from
+# an interpreter the real run would accept. Caught by the PYTHONHOME world of each side. Dropping
+# `-S` alone has no world and survives — declared in check-coordination.sh.
+mut_COORD_bash_remedy_flagless() {
+  sed -i '/^coordination_enter() {/,/^}/ s%^        && "\$system" "\${COORDINATION_PYTHON\[@\]:1}" %        \&\& "$system" %' "$1"
+}
+mut_COORD_remedy_probe_flagless() {
+  sed -i "s%^                \[system, '-I', '-S', os.path.abspath(__file__), 'capable'\],\$%                [system, os.path.abspath(__file__), 'capable'],%" "${1%/*}/sdd-coordination.py"
+}
 
 # The worker's pidfd kept after the worker is reaped: the `finally` closes it a second time — EBADF,
 # or worse, a descriptor reused since — and the supervisor dies. Caught by every coordinated call.
@@ -4632,6 +4641,8 @@ CATALOG=(
   COORD_remedy_attribute_probe
   COORD_capable_unchecked
   COORD_remedy_probe_recurses
+  COORD_bash_remedy_flagless
+  COORD_remedy_probe_flagless
   CLOSE_no_fast_forward
   CLOSE_dirty_base_moves
   CLOSE_fetch_failure_ignored

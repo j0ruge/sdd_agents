@@ -10064,10 +10064,12 @@ cmd_link_agents() {
 
 # Admission precedes config sourcing: even a gate or dry-run can execute project commands.
 # How the lock helper is started — ONE definition for the four call sites (enter, check, show and
-# the escalation hook). `-I` isolates it from the caller's Python environment: without it a
-# PYTHONPATH entry shadows the helper's stdlib imports and runs unreviewed code inside the process
-# that decides checkout ownership (probe in tests/check-coordination.sh). `-S` skips site, which the
-# helper never needs. An array and not a function: `enter` runs in the background and its PID is the
+# the escalation hook), whose flags the remedy's probe of /usr/bin/python3 reuses by slice in
+# coordination_enter; the helper's unavailable() spells the same two, since it cannot read this
+# array. `-I` isolates it from the caller's Python environment: without it a PYTHONPATH entry
+# shadows the helper's stdlib imports and runs unreviewed code inside the process that decides
+# checkout ownership (probe in tests/check-coordination.sh). `-S` skips site, which the helper never
+# needs. An array and not a function: `enter` runs in the background and its PID is the
 # owner the helper records, so it has to stay a simple command — a function would put a subshell
 # between the two.
 readonly COORDINATION_PYTHON=(python3 -I -S)
