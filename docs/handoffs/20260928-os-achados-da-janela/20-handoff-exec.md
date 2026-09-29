@@ -4,7 +4,7 @@ fase: EXEC
 status: done
 sessao: 4d26d92f-6c4b-403b-b867-8ff2bc9e2a51
 data: 2026-09-28 19:05
-gate: "bash tests/run-all.sh no HEAD da rodada 7 (bots do PR #176) → o resultado é o status local/ci desse sha no PR; check-coordination.sh → 183 passed, 0 failed; check-mutation.sh --anchors → 490 mutants; os 7 novos (COORD_bash_remedy_unprobed, COORD_remedy_attribute_probe, COORD_capable_unchecked, COORD_remedy_probe_recurses, COORD_capable_skips_flock, COORD_bash_remedy_flagless, COORD_remedy_probe_flagless) mortos pelo probe que os nomeia; check-todo --check → 87 finding(s), every anchor on target; os 7 Checks do checkpoint com o esperado, I1 e I7 refixados na catraca 87 (87/11/placed/1, 1/1/1/1/1/87)"
+gate: "bash tests/run-all.sh no HEAD da rodada 7 (bots do PR #176) → o resultado é o status local/ci desse sha no PR; check-coordination.sh → 186 passed, 0 failed; check-gates.sh → rc 0 com os 3 mundos da fence; check-mutation.sh --anchors → 495 mutants; os 7 novos (COORD_bash_remedy_unprobed, COORD_remedy_attribute_probe, COORD_capable_unchecked, COORD_remedy_probe_recurses, COORD_capable_skips_flock, COORD_bash_remedy_flagless, COORD_remedy_probe_flagless) mortos pelo probe que os nomeia; check-todo --check → 87 finding(s), every anchor on target; os 7 Checks do checkpoint com o esperado, I1 e I7 refixados na catraca 87 (87/11/placed/1, 1/1/1/1/1/87)"
 ---
 
 # Handoff — EXEC — os achados da janela do juiz
@@ -25,7 +25,7 @@ HIGH (range só com a base local) e reescreveu a leitura do relatório em três 
 rodada 5 mediu o que a 4 deixou sem probe (`9318dc7`); a rodada 6 deu nota A, e seus dois LOW
 foram consertados. No PR #176 os bots deixaram 5 comentários (Codex 1, CodeRabbit 4) e um nitpick,
 consertados numa leva na rodada 7 (`ffb5bff`, `4f5358f`); o nitpick foi recusado com motivo. O
-catálogo foi de 422 para 490 mutantes, e cada um novo morre pela asserção que o nomeia. A missão
+catálogo foi de 422 para 495 mutantes, e cada um novo morre pela asserção que o nomeia. A missão
 rodou inline, sem `sdd run`. Falta o `sdd health` (carimbo) e o merge, que é do humano.
 
 ## Estado do repo
@@ -110,6 +110,14 @@ rodou inline, sem `sdd run`. Falta o `sdd health` (carimbo) e o merge, que é do
   num arquivo temporário (a syscall, não o sistema de arquivos do checkout, que o `enter` encontra
   no lock antes de qualquer chamada pidfd), com mundo e mutante. O handoff deixou de dar o Copilot
   por atendido. Catálogo 490.
+- Rodada 7, revisão pedida de novo às 11:10Z (o CodeRabbit tinha ficado rate limited). O **Codex**
+  achou um fail-open no `gate_DOCS`: a fence do texto proposto alternava em qualquer linha de fence,
+  e um `~~~`, uma sequência mais curta ou um ```` ```bash ```` dentro de um exemplo "fechava" o bloco.
+  Com isso, o marcador de exemplo valia como seção. Agora a fence fecha só no próprio delimitador
+  (mesmo caractere, pelo menos tão longo, nada depois). Há três mundos e três mutantes, e 0 de 34
+  `45-docs.md` reais mudam de decisão. O **CodeRabbit** (Minor): o `SDD_SYSTEM_PYTHON` sem o nome
+  `python3` ganhava um remédio que não o alcança. Os dois lados agora cobram o nome, com mundo e
+  mutante. Catálogo 495.
 
 ## Artefatos
 
@@ -161,7 +169,7 @@ O que o diff muda para quem usa o kit:
 - **Sem probe:** a linha sem prefixo no laço do `gate_DOCS` (nenhum ramo do awk a imprime hoje; o
   comentário declara isso). O mundo "sem `timeout(1)`" do close ganhou probe em `e97d23b`.
 - **O `sdd health` (catálogo inteiro) não rodou.** Cada mutante novo foi aplicado numa cópia e morto
-  pela asserção certa, mas o carimbo dos 490 é passo do PR.
+  pela asserção certa, mas o carimbo dos 495 é passo do PR.
 
 ## Achados fora de escopo
 
