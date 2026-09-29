@@ -382,6 +382,13 @@ mut_DOCS_proposal_fence_blind() {                 # a `## ` inside a code fence 
 mut_DOCS_doc_needs_no_name() {                    # `—` or an empty cell is a document name again
   sed -i '/^gate_DOCS() {/,/^}/ s@if \[\[ "\$doc" =~ \[\[:alnum:\]\] \]\] &&@if [ -n "$doc" ] \&\&@' "$1"
 }
+# The marker is a LINE outside a fence (codereview of 2026-09-28): one mutant per half.
+mut_DOCS_marker_unanchored() {                    # the marker quoted in a table cell opens a section
+  sed -i '/^gate_DOCS() {/,/^}/ s@/^\[\[:space:\]\]\*<!-- sdd:proposed -->\[\[:space:\]\]\*\$/@/<!-- sdd:proposed -->/@' "$1"
+}
+mut_DOCS_marker_in_fence() {                      # an example of the marker inside a fence counts
+  sed -i '/^gate_DOCS() {/,/^}/ s@^        !fence && /^\[\[:space:\]\]\*<!-- sdd:proposed@        /^[[:space:]]*<!-- sdd:proposed@' "$1"
+}
 
 # The gate stops telling "the suite is red" from "the suite is red over work nobody committed", so
 # cmd_run's second Jidoka never fires and the runner opens another EXEC session against the same
@@ -4537,6 +4544,8 @@ CATALOG=(
   DOCS_proposal_first_section_only
   DOCS_proposal_fence_blind
   DOCS_doc_needs_no_name
+  DOCS_marker_unanchored
+  DOCS_marker_in_fence
   QA_status_line_start
   QA_status_enum_loose
   QA_bug_enum_loose

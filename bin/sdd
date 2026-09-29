@@ -1746,7 +1746,9 @@ gate_DOCS() {
     return 1
   fi
   # A ⛔ passes only when the proposed-text section NAMES its document: the lines after EVERY
-  # `<!-- sdd:proposed -->` up to the next `## ` heading OUTSIDE a code fence (proposed text for a
+  # `<!-- sdd:proposed -->` LINE — the marker alone on it, outside a code fence: quoted in a table
+  # cell it opened a section that swallowed the prose below the table, and an example inside a fence
+  # is not the section (codereview of 2026-09-28) — up to the next `## ` heading OUTSIDE a code fence (proposed text for a
   # rules file is markdown and carries headings) or the end of the file, read with `grep -F` on the
   # document's literal name — and the name has to be one (an alphanumeric in it): `—` matched any
   # em-dash, and an empty pattern matches every line. Per row, because "⛔ only with its proposed text" is a promise
@@ -1758,7 +1760,7 @@ gate_DOCS() {
     local proposed doc named="" missing="" n_missing=0
     proposed="$(awk '
         { is_fence = ($0 ~ /^[ \t]*(```|~~~)/) }
-        /<!-- sdd:proposed -->/ { on = 1; next }
+        !fence && /^[[:space:]]*<!-- sdd:proposed -->[[:space:]]*$/ { on = 1; next }
         on && !fence && /^## / { on = 0 }
         on { print }
         is_fence { fence = !fence }

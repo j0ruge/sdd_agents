@@ -417,7 +417,8 @@ Every area touched by the diff gets `✅` with a commit hash or `n/a` with a con
 Headless `claude -p` denies `Edit`/`Write` under `.claude/`, and `.claude/rules/**` is out of the
 `sdd-docs` hat's `writes:` — so a session that routes around the refusal through Bash stops the line
 as `hat-crossed`. The honest answer is the text to apply: the row reads `⛔`, and the section after a
-`<!-- sdd:proposed -->` line (up to the next `## ` heading) **names the row's document** — the second
+line holding only `<!-- sdd:proposed -->`, outside a code fence (up to the next `## ` heading outside
+one), **names the row's document** — the second
 column — with the text under it. The gate checks that name row by row (a bare marker, or a proposal
 for another file, fails with `no proposed text: <document>`) and passes out loud:
 `drift checklist complete — N ⛔ row(s) wait for a human to apply the proposed text in the PR:

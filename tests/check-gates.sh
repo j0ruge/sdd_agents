@@ -1945,6 +1945,20 @@ printf "$docs_two_table"'## Proposed text\n<!-- sdd:proposed -->\n\nIn `.claude/
 git add -A && git commit -qm "chore: docs with a fenced heading inside the proposal"
 assert_why   "a heading inside a code fence does not end the proposed section" "DOCS" \
              'wait for a human.*\.claude/rules/y\.md'
+# The marker is a LINE of its own, outside a code fence (codereview of 2026-09-28, reproduced on the
+# gate's awk). Matched anywhere, the marker QUOTED in the ⛔ row's own Evidence cell — the agent is
+# taught that exact string — opened a "section" that ran to the next heading, and a sentence below
+# the table naming the document read as its proposal: a ⛔ passed with no text behind it.
+printf '# Docs\n\ndrift checklist\n\n| Area | Doc | Status | Evidence |\n|---|---|---|---|\n| rules | `.claude/rules/x.md` | ⛔ | text under `<!-- sdd:proposed -->` below |\n\nThe `.claude/rules/x.md` row waits for the human.\n\n## Findings\n' > "$MDIR/45-docs.md"
+git add -A && git commit -qm "chore: docs quoting the marker in a cell"
+assert_eq "a marker quoted inside a table cell opens no proposed section" "DOCS|1" \
+  "$( cd "$FIX" && "$SDD" phase "$MISSION" 2>&1 )|$(grep -c 'no proposed text: \.claude/rules/x\.md' <<< "$( cd "$FIX" && "$SDD" why "$MISSION" DOCS 2>&1 )")"
+# ...and a marker line INSIDE a code fence is an example of the format, not the section: a session
+# that shows the shape it was taught must not have that example count as its proposal.
+printf '# Docs\n\ndrift checklist\n\n| Area | Doc | Status | Evidence |\n|---|---|---|---|\n| rules | `.claude/rules/x.md` | ⛔ | refused |\n\n## How a proposal looks\n\n```md\n## Proposed text\n<!-- sdd:proposed -->\n\nIn `.claude/rules/x.md`, append a line.\n```\n\n## Findings\n' > "$MDIR/45-docs.md"
+git add -A && git commit -qm "chore: docs with the marker inside a fence"
+assert_eq "a marker inside a code fence opens no proposed section" "DOCS|1" \
+  "$( cd "$FIX" && "$SDD" phase "$MISSION" 2>&1 )|$(grep -c 'no proposed text: \.claude/rules/x\.md' <<< "$( cd "$FIX" && "$SDD" why "$MISSION" DOCS 2>&1 )")"
 # A ⛔ row has to NAME a document: `—` (or an empty cell) matched any em-dash in the proposal, and
 # an empty pattern matches every line — a ⛔ with nothing behind it passed.
 printf '# Docs\n\ndrift checklist\n\n| Area | Doc | Status | Evidence |\n|---|---|---|---|\n| rules | — | ⛔ | refused |\n\n## Proposed text\n<!-- sdd:proposed -->\n\nSomething — anything.\n' > "$MDIR/45-docs.md"
