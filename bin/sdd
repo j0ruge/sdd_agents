@@ -820,13 +820,18 @@ latest_matching() {
 # owner. `-uall` because without it an untracked directory shows as the directory, not its files.
 # The pick among the candidates is the same `sort -V` latest_matching uses.
 #
-# `--no-renames` on both reads, and `-z` on the status: each is a spelling of the mission's OWN
-# report that read as "not the mission's" (codereview of 2026-09-28, reproduced in a scratch repo).
-# With rename detection a renamed report is `R` — neither `A` in the log nor `A` in the index — and
-# the add it came from names a path that is gone; without it the rename is a delete plus an add.
-# `git status --porcelain` quotes a path with a space (`?? "…/a b.md"`), which then does not end in
-# `.md`; `-z` quotes nothing. The log needs no `-z` for that: it quotes a `"`, a `\` or a control
-# character, never a space — a report named with one of those is refused, and the refusal says so.
+# OWNERSHIP FOLLOWS THE RENAME CHAIN — the state the first fix of the codereview of 2026-09-28 was
+# missing. A renamed report is `R old new` in the log and in the index, neither `A`. Read without
+# rename detection it becomes a delete plus an ADD, and then `git mv` of ANOTHER mission's report
+# made it this mission's own: ADR 0013's fail-open back through a rename (review r2, reproduced).
+# So the branch's commits are replayed oldest first: an add makes the path the mission's, and a
+# rename carries ownership only from a path the mission already owned; a staged rename (`R new`,
+# its source as the next field) asks the same of its source. `-M` and `--find-renames` because the
+# user's diff.renames/status.renames could switch detection off, and off is the fail-open. `-z` on
+# both, because git quotes a path with a space (status) or a `"` (log), and a quoted name is no path
+# on disk. Declared residue: a COPY of another mission's report added as a new file counts (no copy
+# detection); a mission that deletes a report and adds a similar one may be paired as a rename and
+# refused — fail closed, with the refusal naming the file it read.
 #
 # EMPTY RANGE ⇒ today's answer, byte for byte: HEAD reachable from the base (a mission on the base
 # branch, or one already merged) or no merge-base at all. Otherwise a merged mission would fall back
@@ -844,26 +849,41 @@ latest_matching() {
 # and the qa-execution skill writes the one missing, so demanding the mission's would make QA:plan
 # unsatisfiable in a cycle that reuses charters.
 mission_qa_report() {
-  local dir="$REPO_ROOT/$QA_DOCS_PATH/reports" base head cands p
+  local dir="$REPO_ROOT/$QA_DOCS_PATH/reports" base head st a b p
+  local -A owned=()
   base="$(git -C "$REPO_ROOT" merge-base "$DEFAULT_BRANCH" HEAD 2>/dev/null || true)"
   head="$(git -C "$REPO_ROOT" rev-parse HEAD 2>/dev/null || true)"
   if [ -z "$base" ] || [ "$base" = "$head" ]; then
     latest_matching "$dir/*.md"
     return 0
   fi
-  cands="$(
-    git -C "$REPO_ROOT" -c core.quotePath=false log --no-renames --diff-filter=A --name-only --format= \
-      "$base"..HEAD -- "$QA_DOCS_PATH/reports/" 2>/dev/null || true
-    git -C "$REPO_ROOT" status --porcelain -z -uall --no-renames \
-      -- "$QA_DOCS_PATH/reports/" 2>/dev/null | tr '\0' '\n' | sed -n 's/^\(??\|A.\) //p' || true
-  )"
+  # The branch's commits, oldest first: `A <path>` and `R<score> <old> <new>`, NUL-separated.
+  while IFS= read -r -d '' st; do
+    case "$st" in
+      A)  IFS= read -r -d '' a || break; [ -z "$a" ] || owned["$a"]=1 ;;
+      R*) IFS= read -r -d '' a || break; IFS= read -r -d '' b || break
+          if [ -n "$a" ] && [ -n "$b" ] && [ -n "${owned[$a]+x}" ]; then owned["$b"]=1; fi ;;
+    esac
+  done < <(git -C "$REPO_ROOT" log --reverse -M --diff-filter=AR --name-status -z --format= \
+             "$base"..HEAD -- "$QA_DOCS_PATH/reports/" 2>/dev/null || true)
+  # The tree: `?? <path>` and a staged add `A? <path>` are the mission's; a staged rename or copy
+  # (`R? <new>` / `C? <new>`, the source as the next field) carries ownership only from its source.
+  while IFS= read -r -d '' st; do
+    case "$st" in
+      '?? '*|A?' '*) owned["${st:3}"]=1 ;;
+      R?' '*|C?' '*) IFS= read -r -d '' b || break
+          if [ "${st:0:1}" = R ] && [ -n "$b" ] && [ -n "${owned[$b]+x}" ]; then owned["${st:3}"]=1; fi ;;
+    esac
+  done < <(git -C "$REPO_ROOT" status --porcelain -z -uall --find-renames \
+             -- "$QA_DOCS_PATH/reports/" 2>/dev/null || true)
   # `-ef` against "$dir/<name>": a direct child of reports/, as the glob of latest_matching reads,
-  # whatever spelling QA_DOCS_PATH has (a trailing `/`, a `./`) — and a file still on disk.
-  while IFS= read -r p; do
+  # whatever spelling QA_DOCS_PATH has (a trailing `/`, a `./`) — and a file still on disk, which
+  # also drops the old name of every rename above.
+  for p in ${owned[@]+"${!owned[@]}"}; do
     case "$p" in *.md) ;; *) continue ;; esac
     [ "$REPO_ROOT/$p" -ef "$dir/${p##*/}" ] || continue
     printf '%s\n' "$dir/${p##*/}"
-  done <<< "$cands" | sort -V | tail -1 || true
+  done | sort -V | tail -1 || true
 }
 
 # plan_approves_itself → 0 when the mission on disk is a kaizen-born plan carrying `aprovacao: auto`
@@ -1700,8 +1720,17 @@ docs_checklist_rows() {
         if (cell ~ /^:?-+:?$/ || cell == "") next
         if (cell == "✅" || cell == "n/a" || cell == "N/A") next
         if (cell == "⛔" || cell == "⛔\357\270\217") {
-          doc = $3; gsub(/^[ \t]+|[ \t]+$/, "", doc); gsub(/[*`]/, "", doc)
-          print "B|" doc; next
+          # One ⛔ row may name several documents (`a.md`, `.claude/rules/b.md`): each is its own
+          # B| line, because the hat may write one and not the other, and the proposal and the PR
+          # must name each (review r2 of the codereview fixes). An empty cell stays ONE empty name,
+          # which gate_DOCS refuses as unnamed. DECLARED LIMIT: a name holding a comma is split too.
+          doc = $3; gsub(/[*`]/, "", doc)
+          nd = split(doc, docs, ",")
+          for (k = 1; k <= nd; k++) {
+            one = docs[k]; gsub(/^[ \t]+|[ \t]+$/, "", one)
+            if (one != "" || nd == 1) print "B|" one
+          }
+          next
         }
         print "P|" cell
       }
@@ -1932,10 +1961,14 @@ gate_PR() {
   # 2026-09-28). gate_DOCS proves each has a proposal on disk; only the publisher's prompt carried it
   # into the PR, and a body without it merged with the rule change unapplied and nothing red. The
   # owner is sdd-publisher, who writes the body: a lap refused here EDITS it (`gh pr edit`), never
-  # opens a second PR. Read by name, as gate_DOCS reads the proposal — the name proves the item is
-  # there, never that the quote is whole. The rows come from docs_checklist_rows, the same reader
-  # gate_DOCS decides on, and the body is asked for only when there is a ⛔ to look for.
-  local docs_file="$MISSION_DIR/45-docs.md" rows row doc body="" body_read=0 body_rc=0 carried_missing=""
+  # opens a second PR. The name has to sit on a line that carries `⛔` — the template's checklist
+  # item — and not anywhere in the body: a name in "what changed" is not an item the human applies
+  # (review r2). It proves the item is there, never that the quote under it is whole. The rows come
+  # from docs_checklist_rows, the same reader gate_DOCS decides on, and the body is asked for only
+  # when there is a ⛔ to look for. A MERGED PR is not read: the check is for the window before the
+  # merge, and a body edited afterwards would derive a finished mission back to PR and buy a
+  # publisher session on it — the reason mission_qa_report keeps its empty-range answer.
+  local docs_file="$MISSION_DIR/45-docs.md" rows row doc body="" body_read=0 body_rc=0 carried_missing="" pr_state
   if [ -f "$docs_file" ]; then
     rows="$(docs_checklist_rows "$docs_file")"
     while IFS= read -r row; do
@@ -1943,7 +1976,7 @@ gate_PR() {
       # An unnamed ⛔ is gate_DOCS's refusal, and an empty pattern would match any body.
       [[ "$doc" =~ [[:alnum:]] ]] || continue
       if [ "$body_read" -eq 0 ]; then
-        body="$( cd "$REPO_ROOT" && gh pr view "$url" --json body --jq .body 2>/dev/null )" || body_rc=$?
+        body="$( cd "$REPO_ROOT" && gh pr view "$url" --json state,body --jq '.state, .body' 2>/dev/null )" || body_rc=$?
         body_read=1
         # A body gh could not READ is its own refusal: "does not carry" would be a sentence about a
         # body nobody saw, and it would send the publisher to edit a PR that may be fine.
@@ -1951,6 +1984,11 @@ gate_PR() {
           GATE_WHY="gh could not read the body of PR $live (rc $body_rc) — the ⛔ rows of 45-docs.md are not checked; run 'gh pr view $url --json body'"
           return 1
         fi
+        pr_state="${body%%$'\n'*}"
+        if [ "$pr_state" = MERGED ]; then break; fi
+        # The first line is the state; what is left is the body, kept only where it carries a ⛔.
+        case "$body" in *$'\n'*) body="${body#*$'\n'}" ;; *) body="" ;; esac
+        body="$(grep -F '⛔' <<< "$body" || true)"
       fi
       grep -qF -- "$doc" <<< "$body" || carried_missing+="${carried_missing:+, }$doc"
     done <<< "$rows"
@@ -1960,7 +1998,7 @@ gate_PR() {
     fi
   fi
 
-  # The catalogue's stamp, and LAST on purpose: the two requirements above are the ones that fail
+  # The catalogue's stamp, and LAST on purpose: the requirements above are the ones that fail
   # in practice, so the message an operator already knows stays the likely one.
   #
   # Scoped by ARTIFACT — "is there a catalogue here?" — and never by the identity of the

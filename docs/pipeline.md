@@ -437,13 +437,17 @@ the word `TODO` and failed every `45-docs.md` that named `TODO.md` — which is 
 **Passes when:** `50-pr.md` exists with `pr_url:` **and** `gh pr view <url>` confirms the PR
 exists. A file claiming a PR that does not exist fails — and it is good that it does.
 
-**When `45-docs.md` carries `⛔` rows, the PR body has to name each of their documents** (`gh pr view
-<url> --json body`). `gate_DOCS` proves the proposal exists on disk; this is what proves it reached
-the human, who applies it from the PR's decisions. The owner is `sdd-publisher`: a lap refused here
-edits the body (`gh pr edit`), never opens a second PR. The rows come from `docs_checklist_rows`,
-the same reader `gate_DOCS` decides on, so the two gates cannot disagree about which rows are `⛔`.
+**When `45-docs.md` carries `⛔` rows, the PR body has to name each of their documents on a line
+that carries `⛔`** — the template's checklist item, read with `gh pr view <url> --json state,body`;
+a name elsewhere in the body (under "what changed") is not an item the human applies. `gate_DOCS`
+proves the proposal exists on disk; this is what proves it reached the human. The owner is
+`sdd-publisher`: a lap refused here edits the body (`gh pr edit`), never opens a second PR. A body
+gh cannot read is its own refusal, and a **merged** PR is not read at all — a body edited after the
+merge would derive a finished mission back to PR. The rows come from `docs_checklist_rows`, the same
+reader `gate_DOCS` decides on (one `⛔` cell naming several documents is one row per document), so
+the two gates cannot disagree about which documents are `⛔`.
 
-**In a repo that owns a mutation catalogue there is a third requirement, and it is checked last:**
+**In a repo that owns a mutation catalogue there is one more requirement, and it is checked last:**
 a stamp in `.sdd/logs/mutation-stamp` matching the current content of `bin/ tests/ templates/
 config/`. `sdd health` writes it when the catalogue comes back green; nothing else writes it; a red
 catalogue, or a tree that moved while it ran, **removes** it. The refusal names its own remedy —
@@ -452,8 +456,8 @@ line without naming the command sends the operator to run the fast suite, watch 
 conclude the runner is lying.
 
 The requirement is scoped by **artifact** (`tests/check-mutation.sh` exists under this root?) and
-never by the identity of the repository, so a target repo is untouched: same gate, same two
-requirements it always had. It is checked last so the likeliest message stays the one it already
+never by the identity of the repository, so a target repo never meets it: the PR, and the `⛔`
+items when there are any. It is checked last so the likeliest message stays the one it already
 was. And the gate never *runs* the catalogue — holding the working tree for twenty minutes inside a
 gate is what made the REVIEW phase unsatisfiable headless, which is why the catalogue is opt-in in
 the first place. It asks for the receipt instead. Why a stamp rather than CI, and what was

@@ -393,6 +393,9 @@ mut_DOCS_marker_in_fence() {                      # an example of the marker ins
 mut_DOCS_blocked_writable_passes() {              # a ⛔ on README.md waits for a human again
   sed -i '/^gate_DOCS() {/,/^}/ s@ && hat_path_allowed "\$doc" "\$writes"; then@ \&\& false; then@' "$1"
 }
+mut_DOCS_blocked_cell_not_split() {               # a ⛔ cell naming two documents reads as one name
+  sed -i '/^docs_checklist_rows() {/,/^}/ s@nd = split(doc, docs, ",")@nd = split(doc, docs, "^$")@' "$1"
+}
 mut_DOCS_blocked_claude_refused() {               # a ⛔ on .claude/ inside writes: is refused too
   sed -i '/^gate_DOCS() {/,/^}/ s@ && \[\[ "\$doc" != .claude/\* \]\] && @ \&\& @' "$1"
 }
@@ -528,22 +531,39 @@ mut_QA_substep_report_not_mission_bound() {   # the sub-step back on the newest 
   sed -i '/^qa_substep() {/,/^}/ s@report="\$(mission_qa_report)"@report="$(latest_matching "$qa/reports/*.md")"@' "$1"
 }
 mut_QA_report_counts_modified() {             # a report the branch only EDITED becomes the mission's
-  sed -i '/^mission_qa_report() {/,/^}/ s@--diff-filter=A @--diff-filter=AM @' "$1"
+  sed -i -e '/^mission_qa_report() {/,/^}/ s@--diff-filter=AR @--diff-filter=AMR @' \
+         -e '/^mission_qa_report() {/,/^}/ s@^      A)  IFS=@      A|M) IFS=@' "$1"
 }
 mut_QA_report_ignores_untracked() {           # the report the skill left uncommitted stops counting
   sed -i '/^mission_qa_report() {/,/^}/ s@status --porcelain -z -uall@status --porcelain -z -uno@' "$1"
 }
-# The three spellings git gives the mission's own report (codereview of 2026-09-28), one mutant
-# each: a rename COMMITTED is `R` in the log, a rename STAGED is `R` in the status, and an
-# uncommitted name with a space comes back quoted from a status read without `-z`.
-mut_QA_report_log_renames() {                 # a report renamed in a commit stops counting
-  sed -i '/^mission_qa_report() {/,/^}/ s@ log --no-renames @ log @' "$1"
+# Ownership follows the rename chain (codereview of 2026-09-28, r1 and r2), one mutant per rule and
+# per read: a rename of the mission's report keeps it (commit, index); a rename of ANOTHER mission's
+# report does not give it (commit, index); detection is asked for, never left to the user's config
+# (commit, index); and `-z`, because git quotes a space (status) or a `"` (log).
+mut_QA_report_log_renames() {                 # the mission's report renamed in a commit stops counting
+  sed -i '/^mission_qa_report() {/,/^}/ s@then owned\["\$b"\]=1; fi ;;@then :; fi ;;@' "$1"
 }
-mut_QA_report_status_renames() {              # a report renamed in the index stops counting
-  sed -i '/^mission_qa_report() {/,/^}/ s@ -uall --no-renames @ -uall @' "$1"
+mut_QA_report_status_renames() {              # the mission's report renamed in the index stops counting
+  sed -i '/^mission_qa_report() {/,/^}/ s@then owned\["\${st:3}"\]=1; fi ;;@then :; fi ;;@' "$1"
+}
+mut_QA_report_log_rename_owns_any() {         # a base report renamed in a commit becomes the mission's
+  sed -i '/^mission_qa_report() {/,/^}/ s@ && \[ -n "\${owned\[\$a\]+x}" \]; then owned\["\$b"\]@; then owned["$b"]@' "$1"
+}
+mut_QA_report_status_rename_owns_any() {      # a base report renamed in the index becomes the mission's
+  sed -i '/^mission_qa_report() {/,/^}/ s@ && \[ -n "\${owned\[\$b\]+x}" \]; then owned\["\${st:3}"\]@; then owned["${st:3}"]@' "$1"
+}
+mut_QA_report_log_renames_configurable() {    # the log leaves rename detection to diff.renames
+  sed -i '/^mission_qa_report() {/,/^}/ s@ log --reverse -M --diff-filter=AR @ log --reverse --diff-filter=AR @' "$1"
+}
+mut_QA_report_status_renames_configurable() { # the status leaves rename detection to status.renames
+  sed -i '/^mission_qa_report() {/,/^}/ s@ -uall --find-renames @ -uall @' "$1"
 }
 mut_QA_report_status_quoted() {               # an uncommitted report with a space stops counting
   sed -i '/^mission_qa_report() {/,/^}/ s@status --porcelain -z -uall@status --porcelain -uall@' "$1"
+}
+mut_QA_report_log_quoted() {                  # a committed report whose name git quotes stops counting
+  sed -i '/^mission_qa_report() {/,/^}/ s@--name-status -z --format=@--name-status --format=@' "$1"
 }
 # The fallback is what keeps a mission on the base (or already merged) reading the tree as before.
 # Without it a clean base has no candidate at all, and the QA block ON the base turns red.
@@ -888,6 +908,12 @@ mut_PR_stamp_blind() {
 # change reaches the human only if the publisher remembered, and a body without it merges green.
 mut_PR_blocked_docs_not_carried() {
   sed -i '/^gate_PR()/,/^}/ s@grep -qF -- "\$doc" <<< "\$body" || carried_missing@true || carried_missing@' "$1"
+}
+mut_PR_blocked_docs_anywhere() {        # the ⛔ document counts wherever the body names it (review r2)
+  sed -i '/^gate_PR()/,/^}/ s@grep -F .⛔. <<< @grep -F "" <<< @' "$1"
+}
+mut_PR_merged_rechecked() {             # a merged PR's body is read again, and a finished mission reopens
+  sed -i '/^gate_PR()/,/^}/ s@if \[ "\$pr_state" = MERGED \]; then break; fi@:@' "$1"
 }
 mut_PR_body_unread_is_missing() {       # a body gh could not read is reported as one lacking the ⛔
   sed -i '/^gate_PR()/,/^}/ s@^        if \[ "\$body_rc" -ne 0 \]; then$@        if false; then@' "$1"
@@ -4581,6 +4607,7 @@ CATALOG=(
   DOCS_marker_unanchored
   DOCS_marker_in_fence
   DOCS_blocked_writable_passes
+  DOCS_blocked_cell_not_split
   DOCS_blocked_claude_refused
   QA_status_line_start
   QA_status_enum_loose
@@ -4593,7 +4620,12 @@ CATALOG=(
   QA_report_ignores_untracked
   QA_report_log_renames
   QA_report_status_renames
+  QA_report_log_rename_owns_any
+  QA_report_status_rename_owns_any
+  QA_report_log_renames_configurable
+  QA_report_status_renames_configurable
   QA_report_status_quoted
+  QA_report_log_quoted
   QA_report_no_fallback
   QA_bug_genre_ignored
   QA_bug_genre_prefix
@@ -4636,6 +4668,8 @@ CATALOG=(
   PR_stamp_blind
   PR_blocked_docs_not_carried
   PR_body_unread_is_missing
+  PR_blocked_docs_anywhere
+  PR_merged_rechecked
   PR_stamp_key_follows_head
   HEALTH_stamp_window_blind
   HEALTH_stamp_tree_blind

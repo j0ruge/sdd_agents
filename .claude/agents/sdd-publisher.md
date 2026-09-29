@@ -68,8 +68,9 @@ target repo. Fill it **from what is in the handoffs**, inventing nothing and sof
   This section is why the pipeline does not stall on human judgement: it arrives together with the
   code, in the right place to decide. It also carries every `⛔` row of `45-docs.md`, with its
   proposed text quoted, as a checklist item the human applies before the merge — a path the
-  harness refused the DOCS session, which only the human may write. The runner reads the body
-  back: a `⛔` document it does not name fails `gate_PR`;
+  harness refused the DOCS session, which only the human may write. One item per document, the
+  `⛔` and the document's name on the same line (`- [ ] ⛔ \`<document>\` — …`): the runner reads
+  the body back, and a `⛔` document not named on a `⛔` line fails `gate_PR`;
 - **out-of-scope findings** — what went to `TODO_FILE`;
 - **risks and not-dones** — honest. If QA was `skipped`, say so and why. If the review closed as
   `draft` because iterations ran out, state the real grade.

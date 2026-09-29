@@ -96,7 +96,8 @@ against your `writes:` and stops the line (`hat-crossed`). Mark the row `⛔`, a
 text to apply under a section whose next line is `<!-- sdd:proposed -->`, naming the row's
 document (the second column) in it — the gate reads that name, row by row. The publisher carries
 the text into the PR, and the human applies it there. A `⛔` on a document your `writes:` covers
-outside `.claude/` (`README.md`, `docs/**`) is refused: that one is yours to write.
+outside `.claude/` (`README.md`, `docs/**`) is refused: that one is yours to write. A cell naming
+several documents (`` `a.md`, `b.md` ``) is judged per document.
 
 ```md
 ## Proposed text

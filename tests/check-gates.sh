@@ -967,6 +967,22 @@ assert_eq "QA gate refuses a closed report added before the mission branch" "QA|
   "$qa_owner_phase|$(grep -c 'is not one this branch added' <<< "$qa_owner_why")"
 # The new reason names the file it refused, so the human reads which report was someone else's.
 assert_why "the refusal names the report that belongs to the base" "QA" "the newest, 2026-01-01-fixture\.md"
+# RENAMING another mission's report does not make it this mission's either (review r2 of the
+# codereview fixes, reproduced in a scratch repo): with rename detection off, `git mv` of the base
+# report is a delete plus an ADD, and the add read as the mission's own — ADR 0013's fail-open back
+# through a rename. Ownership follows the rename chain instead: a rename carries it only from a
+# path the mission already owned. The newer name makes the renamed file the pick if it counted.
+# Detection switched OFF in the config for both reads, as a user's may be: the runner asks for it
+# explicitly (`-M`, `--find-renames`), and a runner that left it to the config reads D + A here.
+git config diff.renames false; git config status.renames false
+git mv "$FIX/docs/qa/reports/2026-01-01-fixture.md" "$FIX/docs/qa/reports/2026-01-09-fixture-renamed.md"
+assert_eq "a report of the base renamed in the index is not the mission's" "QA|1" \
+  "$( cd "$FIX" && "$SDD" phase "$MISSION" 2>&1 )|$(grep -c 'is not one this branch added' <<< "$( cd "$FIX" && "$SDD" why "$MISSION" QA 2>&1 )")"
+git commit -qm "chore: the mission renames the base report" >/dev/null
+assert_eq "a report of the base renamed in a commit is not the mission's" "QA|1" \
+  "$( cd "$FIX" && "$SDD" phase "$MISSION" 2>&1 )|$(grep -c 'is not one this branch added' <<< "$( cd "$FIX" && "$SDD" why "$MISSION" QA 2>&1 )")"
+git reset -q --hard HEAD~1
+git config --unset diff.renames; git config --unset status.renames
 
 # PROVENANCE: ~/.claude/skills/qa-execution/assets/report-template.md:6, as the fixture above.
 # First UNCOMMITTED — the skill may leave the report in the tree when the gate reads it — then
@@ -1014,6 +1030,19 @@ assert_phase "QA gate accepts the mission's report renamed in the index" "REVIEW
 #    `--diff-filter=A` drops it; the add it came from names a path that is gone.
 git commit -qm "chore: the mission renames its report" >/dev/null
 assert_phase "QA gate accepts the mission's report renamed in a commit" "REVIEW"
+# 4. a COMMITTED name git quotes (a `"`): `git log` prints `"…\"…"`, which is no path on disk, and
+#    the branch's own report was refused as "not one this branch added". `-z` quotes nothing. Newer
+#    and still `in-progress`, so the gate says which file it read, as in 1.
+cat > "$FIX/docs/qa/reports/2026-01-05-fixture \"q\".md" <<'EOF'
+# QA Run Report — 2026-01-05 — fixture quoted
+- **Started:** 2026-01-05T10:00:00Z · **Status:** in-progress <!-- in-progress | closed -->
+| # | Charter | Status |
+|---|---|---|
+| 1 | CH-one | Pass |
+EOF
+git add -A && git commit -qm "chore: the mission commits a report with a quote in its name" >/dev/null
+assert_why "QA gate reads a committed report whose name git quotes" "QA" \
+  "report 2026-01-05-fixture \"q\"\.md is not 'closed'"
 # Back to the world the blocks below assume: on the base, the fixture as it was before this block.
 git checkout -q main
 git branch -q -D missao/qa-report-owner
@@ -1978,6 +2007,18 @@ assert_why "a ⛔ under .claude/ passes even inside the hat's writes:" "DOCS" \
            'wait for a human.*\.claude/napkin\.md'
 cp "$SDD_STATE_FIX/docs-writable-base.sh" .sdd/config.sh
 git add -A && git commit -qm "chore: config without the extra again"
+# ONE ⛔ row may name several documents, and each is judged on its own (review r2 of the codereview
+# fixes — cells like this are in this repo's own 45-docs.md files). Read as one string, the mixed
+# cell matched no glob and handed README.md to the human; and the proposal had to hold the literal
+# pair rather than name each document.
+printf '# Docs\n\ndrift checklist\n\n| Area | Doc | Status | Evidence |\n|---|---|---|---|\n| runner | `README.md`, `.claude/rules/x.md` | ⛔ | refused |\n\n## Proposed text\n<!-- sdd:proposed -->\n\nIn `README.md` and `.claude/rules/x.md`, append a line.\n' > "$MDIR/45-docs.md"
+git add -A && git commit -qm "chore: docs with one ⛔ cell naming a writable and a refused document"
+assert_eq "a ⛔ cell naming a document the hat writes is refused for that document" "DOCS|1" \
+  "$( cd "$FIX" && "$SDD" phase "$MISSION" 2>&1 )|$(grep -c 'the DOCS hat writes itself: README\.md —' <<< "$( cd "$FIX" && "$SDD" why "$MISSION" DOCS 2>&1 )")"
+printf '# Docs\n\ndrift checklist\n\n| Area | Doc | Status | Evidence |\n|---|---|---|---|\n| rules | `.claude/rules/x.md`, `.claude/rules/y.md` | ⛔ | refused |\n\n## Proposed text\n<!-- sdd:proposed -->\n\nIn `.claude/rules/x.md`, append a line.\n' > "$MDIR/45-docs.md"
+git add -A && git commit -qm "chore: docs with one ⛔ cell naming two documents, one proposed"
+assert_eq "a ⛔ cell naming two documents needs a proposal for each" "DOCS|1" \
+  "$( cd "$FIX" && "$SDD" phase "$MISSION" 2>&1 )|$(grep -c 'no proposed text: \.claude/rules/y\.md —' <<< "$( cd "$FIX" && "$SDD" why "$MISSION" DOCS 2>&1 )")"
 # A ⛔ row has to NAME a document: `—` (or an empty cell) matched any em-dash in the proposal, and
 # an empty pattern matches every line — a ⛔ with nothing behind it passed.
 printf '# Docs\n\ndrift checklist\n\n| Area | Doc | Status | Evidence |\n|---|---|---|---|\n| rules | — | ⛔ | refused |\n\n## Proposed text\n<!-- sdd:proposed -->\n\nSomething — anything.\n' > "$MDIR/45-docs.md"
@@ -2137,10 +2178,13 @@ mkdir -p "$FIX/.sdd/logs"
 cat > "$FIX/.stub/gh" <<STUB
 #!/usr/bin/env bash
 # Answers what gate_PR asks: \`--json url --jq .url\` (is the PR real?) and, when 45-docs.md carries
-# ⛔ rows, \`--json body --jq .body\` (does the body carry them?).
+# ⛔ rows, \`--json state,body --jq '.state, .body'\` (the state line, then the body).
 [ "\${1:-}" = "pr" ] && [ "\${2:-}" = "view" ] || { echo "unexpected gh call: \$*" >&2; exit 9; }
 case " \$* " in
-  *" --json body "*) [ -e "$FIX/.sdd/logs/pr-body-fails" ] && exit 4; cat "$FIX/.sdd/logs/pr-body" 2>/dev/null || true ;;
+  *" --json state,body "*)
+    [ -e "$FIX/.sdd/logs/pr-body-fails" ] && exit 4
+    cat "$FIX/.sdd/logs/pr-state" 2>/dev/null || printf 'OPEN\n'
+    cat "$FIX/.sdd/logs/pr-body" 2>/dev/null || true ;;
   *) printf '%s\n' "\${3:-}" ;;
 esac
 STUB
@@ -2157,6 +2201,16 @@ touch "$FIX/.sdd/logs/pr-body-fails"
 assert_eq "gate_PR says it could not read the body, never that the body lacks the ⛔" "PR|1|0" \
   "$( cd "$FIX" && "$SDD" phase "$MISSION" 2>&1 )|$(grep -c 'could not read the body of PR' <<< "$( cd "$FIX" && "$SDD" why "$MISSION" PR 2>&1 )")|$(grep -c 'does not carry' <<< "$( cd "$FIX" && "$SDD" why "$MISSION" PR 2>&1 )")"
 rm -f "$FIX/.sdd/logs/pr-body-fails"
+# The name has to sit on a line that carries ⛔ — the template's checklist item. Named only under
+# "what changed", the proposal reaches no item the human ticks (review r2 of the codereview fixes).
+printf '## What changed\n\n- `.claude/rules/x.md` gets a line\n\n## Decisions for a human\n\n- [ ] ⛔ `.claude/rules/other.md` — apply\n' > "$FIX/.sdd/logs/pr-body"
+assert_eq "gate_PR refuses a ⛔ document named only outside a ⛔ line of the body" "PR|1" \
+  "$( cd "$FIX" && "$SDD" phase "$MISSION" 2>&1 )|$(grep -c 'does not carry the ⛔ proposal(s) of 45-docs.md: \.claude/rules/x\.md' <<< "$( cd "$FIX" && "$SDD" why "$MISSION" PR 2>&1 )")"
+# A MERGED PR is not read: a body edited after the merge would derive a finished mission back to PR
+# and buy a publisher session on it.
+printf 'MERGED\n' > "$FIX/.sdd/logs/pr-state"
+assert_phase "gate_PR does not re-read the body of a merged PR" "DONE"
+rm -f "$FIX/.sdd/logs/pr-state"
 cp "$SDD_STATE_FIX/docs-before-pr.md" "$MDIR/45-docs.md"
 rm -f "$FIX/.sdd/logs/pr-body"
 git add -A && git commit -qm "chore: docs without a ⛔ again" >/dev/null

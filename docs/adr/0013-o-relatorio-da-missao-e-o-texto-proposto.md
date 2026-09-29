@@ -77,8 +77,9 @@ future session. The two authorities disagreed, with two outcomes:
    even inside `writes:` (added after the codereview of 2026-09-28).
    `sdd-publisher` carries the text into the PR's decisions for a human, and the human applies it at
    the merge gate, which is already theirs. `gate_PR` reads the PR body back and refuses one that
-   does not name every `⛔` document (added after the codereview of 2026-09-28: until then only the
-   publisher's prompt carried it, and a body without it merged green).
+   does not name every `⛔` document on a line carrying `⛔` (added after the codereview of
+   2026-09-28: until then only the publisher's prompt carried it, and a body without it merged
+   green). A merged PR is not read again.
 
 ## Implementation
 
