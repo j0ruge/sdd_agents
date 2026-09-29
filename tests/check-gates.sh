@@ -1959,6 +1959,25 @@ printf '# Docs\n\ndrift checklist\n\n| Area | Doc | Status | Evidence |\n|---|--
 git add -A && git commit -qm "chore: docs with the marker inside a fence"
 assert_eq "a marker inside a code fence opens no proposed section" "DOCS|1" \
   "$( cd "$FIX" && "$SDD" phase "$MISSION" 2>&1 )|$(grep -c 'no proposed text: \.claude/rules/x\.md' <<< "$( cd "$FIX" && "$SDD" why "$MISSION" DOCS 2>&1 )")"
+# A ⛔ is a boundary, and a document the DOCS hat writes itself is not one (codereview of
+# 2026-09-28): with its proposal in place, `README.md` passed as "waiting for a human" — the drift
+# the session owed, handed to the PR. Refused, and the reason says it is the hat's to write.
+printf '# Docs\n\ndrift checklist\n\n| Area | Doc | Status | Evidence |\n|---|---|---|---|\n| runner | `README.md` | ⛔ | skipped |\n\n## Proposed text\n<!-- sdd:proposed -->\n\nIn `README.md`, rewrite "Usage".\n' > "$MDIR/45-docs.md"
+git add -A && git commit -qm "chore: docs with a ⛔ on a document the hat writes"
+assert_eq "a ⛔ on a document the DOCS hat writes itself is refused" "DOCS|1" \
+  "$( cd "$FIX" && "$SDD" phase "$MISSION" 2>&1 )|$(grep -c 'the DOCS hat writes itself: README\.md' <<< "$( cd "$FIX" && "$SDD" why "$MISSION" DOCS 2>&1 )")"
+# ...but `.claude/` stays a boundary even when the project puts a path of it back in the hat's
+# `writes:` — HAT_WRITES_EXTRA="sdd-docs: .claude/napkin.md" is config/schema.md's own example. The
+# harness still refuses Edit/Write there, so refusing the ⛔ would push the session to the Bash
+# route this ⛔ exists to replace. The control of the pair above: the same shape, and it passes.
+cp .sdd/config.sh "$SDD_STATE_FIX/docs-writable-base.sh"
+printf 'HAT_WRITES_EXTRA="sdd-docs: .claude/napkin.md"\n' >> .sdd/config.sh
+printf '# Docs\n\ndrift checklist\n\n| Area | Doc | Status | Evidence |\n|---|---|---|---|\n| napkin | `.claude/napkin.md` | ⛔ | refused |\n\n## Proposed text\n<!-- sdd:proposed -->\n\nIn `.claude/napkin.md`, append a line.\n' > "$MDIR/45-docs.md"
+git add -A && git commit -qm "chore: docs with a ⛔ under .claude/ that the project lets the hat write"
+assert_why "a ⛔ under .claude/ passes even inside the hat's writes:" "DOCS" \
+           'wait for a human.*\.claude/napkin\.md'
+cp "$SDD_STATE_FIX/docs-writable-base.sh" .sdd/config.sh
+git add -A && git commit -qm "chore: config without the extra again"
 # A ⛔ row has to NAME a document: `—` (or an empty cell) matched any em-dash in the proposal, and
 # an empty pattern matches every line — a ⛔ with nothing behind it passed.
 printf '# Docs\n\ndrift checklist\n\n| Area | Doc | Status | Evidence |\n|---|---|---|---|\n| rules | — | ⛔ | refused |\n\n## Proposed text\n<!-- sdd:proposed -->\n\nSomething — anything.\n' > "$MDIR/45-docs.md"

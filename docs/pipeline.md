@@ -419,7 +419,9 @@ Headless `claude -p` denies `Edit`/`Write` under `.claude/`, and `.claude/rules/
 as `hat-crossed`. The honest answer is the text to apply: the row reads `⛔`, and the section after a
 line holding only `<!-- sdd:proposed -->`, outside a code fence (up to the next `## ` heading outside
 one), **names the row's document** — the second
-column — with the text under it. The gate checks that name row by row (a bare marker, or a proposal
+column — with the text under it. A `⛔` is a boundary, so one on a document the DOCS hat writes itself
+(`README.md`, `docs/**`) is refused first — `.claude/` excepted, since the harness refuses it even
+when `HAT_WRITES_EXTRA` puts a path of it in `writes:`. The gate checks that name row by row (a bare marker, or a proposal
 for another file, fails with `no proposed text: <document>`) and passes out loud:
 `drift checklist complete — N ⛔ row(s) wait for a human to apply the proposed text in the PR:
 <documents>`. It proves each `⛔` has a proposal naming its document, never that the text is right;

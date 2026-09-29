@@ -1756,8 +1756,27 @@ gate_DOCS() {
   # with nothing behind it. And the pass is LOUD: it names every document waiting for the human.
   # DECLARED LIMIT: this proves each ⛔ has a proposal that names its document, never that the text
   # is right. The human who applies it in the PR is who judges it.
+  #
+  # And a ⛔ is a BOUNDARY: a document the DOCS hat writes itself is refused first (codereview of
+  # 2026-09-28) — with its proposal in place, `README.md` passed as "waiting for a human", the drift
+  # the session owed handed to the PR. The owner of the fix is the same session, so the refusal is
+  # satisfiable: write the document, mark the row ✅. `.claude/` stays a boundary INSIDE `writes:`
+  # too: HAT_WRITES_EXTRA may put `.claude/napkin.md` there (config/schema.md's own example) and the
+  # harness still refuses Edit/Write, so refusing that ⛔ would push the session to the Bash route
+  # the ⛔ replaces. DECLARED LIMIT: the name is read as a PATH — a column that says `README
+  # (Usage)` matches no glob and escapes this check, loud as every other ⛔.
   if [ "${#blocked_docs[@]}" -gt 0 ]; then
-    local proposed doc named="" missing="" n_missing=0
+    local proposed doc named="" missing="" n_missing=0 writes writable="" n_writable=0
+    writes="$(hat_writes DOCS)"
+    for doc in "${blocked_docs[@]}"; do
+      if [[ "$doc" =~ [[:alnum:]] ]] && [[ "$doc" != .claude/* ]] && hat_path_allowed "$doc" "$writes"; then
+        writable+="${writable:+, }$doc"; n_writable=$((n_writable + 1))
+      fi
+    done
+    if [ -n "$writable" ]; then
+      GATE_WHY="45-docs.md has $n_writable ⛔ row(s) on a document the DOCS hat writes itself: $writable — a ⛔ is for a path the hat may not write or the harness refuses (.claude/); write the document and mark the row ✅ with the hash"
+      return 1
+    fi
     proposed="$(awk '
         { is_fence = ($0 ~ /^[ \t]*(```|~~~)/) }
         !fence && /^[[:space:]]*<!-- sdd:proposed -->[[:space:]]*$/ { on = 1; next }

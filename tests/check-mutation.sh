@@ -389,6 +389,13 @@ mut_DOCS_marker_unanchored() {                    # the marker quoted in a table
 mut_DOCS_marker_in_fence() {                      # an example of the marker inside a fence counts
   sed -i '/^gate_DOCS() {/,/^}/ s@^        !fence && /^\[\[:space:\]\]\*<!-- sdd:proposed@        /^[[:space:]]*<!-- sdd:proposed@' "$1"
 }
+# A ⛔ is a boundary (codereview of 2026-09-28): one mutant for the refusal, one for its exception.
+mut_DOCS_blocked_writable_passes() {              # a ⛔ on README.md waits for a human again
+  sed -i '/^gate_DOCS() {/,/^}/ s@ && hat_path_allowed "\$doc" "\$writes"; then@ \&\& false; then@' "$1"
+}
+mut_DOCS_blocked_claude_refused() {               # a ⛔ on .claude/ inside writes: is refused too
+  sed -i '/^gate_DOCS() {/,/^}/ s@ && \[\[ "\$doc" != .claude/\* \]\] && @ \&\& @' "$1"
+}
 
 # The gate stops telling "the suite is red" from "the suite is red over work nobody committed", so
 # cmd_run's second Jidoka never fires and the runner opens another EXEC session against the same
@@ -4546,6 +4553,8 @@ CATALOG=(
   DOCS_doc_needs_no_name
   DOCS_marker_unanchored
   DOCS_marker_in_fence
+  DOCS_blocked_writable_passes
+  DOCS_blocked_claude_refused
   QA_status_line_start
   QA_status_enum_loose
   QA_bug_enum_loose

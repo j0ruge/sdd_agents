@@ -72,7 +72,9 @@ future session. The two authorities disagreed, with two outcomes:
    that section names the document of **every** `⛔` row. The marker alone, or an empty section, does
    not pass: the promise is measured row by row. The passing reason names every `⛔` row, as the
    `deferred` genre does in `gate_QA` (ADR 0009). The gate proves that each `⛔` has a proposal for
-   its document, not that the text is right; the human judges the text in the PR.
+   its document, not that the text is right; the human judges the text in the PR. A `⛔` on a
+   document the hat writes itself is refused, `.claude/` excepted, because the harness refuses it
+   even inside `writes:` (added after the codereview of 2026-09-28).
    `sdd-publisher` carries the text into the PR's decisions for a human, and the human applies it at
    the merge gate, which is already theirs.
 

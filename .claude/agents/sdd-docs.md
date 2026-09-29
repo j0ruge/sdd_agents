@@ -95,7 +95,8 @@ through Bash (`python`, `sed`, redirection, `tee`, `cp`): the runner reads the s
 against your `writes:` and stops the line (`hat-crossed`). Mark the row `⛔`, and write the exact
 text to apply under a section whose next line is `<!-- sdd:proposed -->`, naming the row's
 document (the second column) in it — the gate reads that name, row by row. The publisher carries
-the text into the PR, and the human applies it there.
+the text into the PR, and the human applies it there. A `⛔` on a document your `writes:` covers
+outside `.claude/` (`README.md`, `docs/**`) is refused: that one is yours to write.
 
 ```md
 ## Proposed text
