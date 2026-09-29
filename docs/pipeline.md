@@ -248,12 +248,14 @@ journeys in a project with no browser is the paperwork `skipped` exists to avoid
     remote `DEFAULT_BRANCH`, or new in the tree) is `**Status:** closed` and no row of the session
     matrix is still `Pending`. Three facts decide ownership: the commits are the mission's only when
     no copy of the base has them (a base pulled into the branch brings no report along); a path the
-    base tree already has is never new (an edit, a revert, a `git rm --cached` of another mission's
-    report grant nothing); and a rename carries ownership only from a report the mission already
-    owned, replayed parents first. The commits are read with plumbing, which no user git config
-    reaches. With an **empty range** (HEAD has nothing the base lacks: a mission on the base
-    branch, or one already merged, upstream included) the gate reads the most recent report in the
-    tree, as before. One
+    merge-base's tree already has is never new (an edit, a revert, a `git rm --cached` of another
+    mission's report grant nothing); and a rename carries ownership only from a report the mission
+    already owned, replayed parents first. The commits are read with plumbing, which the display
+    config does not reach, and both reads pin the rename limit. With **nothing to measure against**
+    (no base ref, no merge-base, or HEAD has nothing the base lacks: a mission on the base branch, or
+    one already merged, upstream included) the gate reads the most recent report in the tree, as
+    before. Declared residue (`TODO.md`): a report another mission added upstream after the fork,
+    brought in by checkout, squash or cherry-pick, is new to the merge-base and counts. One
     function (`mission_qa_report`) answers for this anchor and for `qa_substep`, so the sub-step and
     the gate never disagree about which file is the mission's — the charter stays out, because it is
     durable doc that crosses cycles ([ADR 0013](adr/0013-o-relatorio-da-missao-e-o-texto-proposto.md));

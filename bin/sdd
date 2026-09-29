@@ -847,7 +847,7 @@ path_in_commits() {
 #
 # 1. THE MISSION'S COMMITS are `HEAD --not <mission_base_refs>`, local and remote base alike, so a
 #    base merged into the branch brings none of its reports along.
-# 2. A NEW PATH is one absent from the tree of every merge-base of HEAD with those refs. An add, an
+# 2. A NEW PATH is one absent from the tree of every MERGE-BASE of HEAD with those refs. An add, an
 #    untracked file (`??`), a staged add (`A?`), an intent-to-add (` A`) or a staged copy (`C?`)
 #    grants ownership only to a new path — so deleting another mission's report and adding it back
 #    (a revert, a `git checkout <base> -- f`, a `git rm --cached`) never makes it this mission's.
@@ -857,18 +857,22 @@ path_in_commits() {
 #    staged) carries ownership only from a path the mission already owned — `git mv` of another
 #    mission's report does not make it this one's.
 #
-# The commits are read with PLUMBING (`rev-list | diff-tree --stdin`), which no user config reaches:
-# `log.showSignature` put signature text ahead of the first field of a signed commit and the report
-# vanished. `-M` asks for rename detection, which plumbing never does on its own. The status is
-# porcelain, so `--find-renames` overrides a status.renames that switched detection off. `-z` on both,
-# because git quotes a path with a space (status) or a `"` (diff-tree), and a quoted name is no path
-# on disk. `-uall` because without it an untracked directory shows as the directory, not its files.
+# The commits are read with PLUMBING (`rev-list | diff-tree --stdin`), which the display config does
+# not reach: `log.showSignature` put signature text ahead of the first field of a signed commit and
+# the report vanished. `-M` asks for rename detection, which plumbing never does on its own. The
+# status is porcelain, so `--find-renames` overrides a status.renames that switched detection off.
+# The rename LIMIT does reach both (diff.renameLimit, status.renameLimit): past it, two edited renames
+# of base reports read as adds and counted (review r5), so both reads pin it to 0, "no limit". `-z` on
+# both, because git quotes a path with a space (status) or a `"` (diff-tree), and a quoted name is no
+# path on disk. `-uall` because without it an untracked directory shows as the directory, not its files.
 # The pick among the candidates is the same `sort -V` latest_matching uses.
 #
-# EMPTY RANGE ⇒ today's answer, byte for byte: no base ref resolves, or HEAD has no commit that the
-# base refs lack (a mission on the base branch, or one already merged — upstream included). Otherwise
-# a merged mission would fall back into QA and a `sdd run` over it would buy a session. Declared
-# residue there: a mission whose `branch:` IS the base.
+# NOTHING TO MEASURE AGAINST ⇒ today's answer, byte for byte: no base ref resolves, none shares a
+# merge-base with HEAD (a shallow clone, unrelated histories), or HEAD has no commit that the base
+# refs lack (a mission on the base branch, or one already merged — upstream included). Otherwise a
+# merged mission would fall back into QA and a `sdd run` over it would buy a session. Declared
+# residue there: a mission whose `branch:` IS the base; and a merged mission that gets one more
+# commit afterwards, whose report then sits on the base side and reads as not its own.
 #
 # The range is HEAD's, not the mission's — two more residues, declared rather than claimed away:
 # asked from ANOTHER mission's branch (`sdd status A` standing on B), a merged A reads QA again,
@@ -876,7 +880,10 @@ path_in_commits() {
 # mission counts that mission's reports as its own (the fail-open survives there). A COPY of another
 # mission's report under a new name is a new path and counts. A mission that deletes a report and
 # adds a similar one may be paired as a rename and refused — fail closed, and the refusal names the
-# file it read.
+# file it read. And the check is against the MERGE-BASE tree, not the base's tip: a report another
+# mission added upstream AFTER the fork, brought in by `git checkout origin/<b> -- f`, a squash or a
+# cherry-pick, is new to the merge-base and counts (review r5; TODO.md). Checking the tip too would
+# refuse a squash-merged mission its own report, seen from its branch after a fetch.
 #
 # The charter stays out on purpose (decision 3 of the grill): it is durable doc that crosses cycles
 # and the qa-execution skill writes the one missing, so demanding the mission's would make QA:plan
@@ -886,15 +893,19 @@ mission_qa_report() {
   local -a nots=() bases=()
   local -A owned=()
   mapfile -t nots < <(mission_base_refs)
-  if [ "${#nots[@]}" -eq 0 ] \
+  for c in ${nots[@]+"${nots[@]}"}; do
+    b="$(git -C "$REPO_ROOT" merge-base HEAD "$c" 2>/dev/null || true)"
+    [ -z "$b" ] || bases+=("$b")
+  done
+  # NOTHING TO MEASURE AGAINST ⇒ today's answer: no base ref resolves, or none shares history with
+  # HEAD (a shallow clone, unrelated histories — review r5: the replay then read the whole history
+  # as the mission's), or HEAD has no commit the base refs lack (the empty range). `bases` is only
+  # non-empty when `nots` is, so the expansion below never meets an empty array.
+  if [ "${#bases[@]}" -eq 0 ] \
       || [ -z "$(git -C "$REPO_ROOT" rev-list -n 1 HEAD --not "${nots[@]}" 2>/dev/null || true)" ]; then
     latest_matching "$dir/*.md"
     return 0
   fi
-  for c in "${nots[@]}"; do
-    b="$(git -C "$REPO_ROOT" merge-base HEAD "$c" 2>/dev/null || true)"
-    [ -z "$b" ] || bases+=("$b")
-  done
   # The mission's commits, parents first: `A <path>` and `R<score> <old> <new>`, NUL-separated.
   while IFS= read -r -d '' st; do
     case "$st" in
@@ -904,21 +915,21 @@ mission_qa_report() {
           if [ -n "$a" ] && [ -n "$b" ] && [ -n "${owned[$a]+x}" ]; then owned["$b"]=1; fi ;;
     esac
   done < <(git -C "$REPO_ROOT" rev-list --reverse --topo-order HEAD --not "${nots[@]}" 2>/dev/null \
-             | git -C "$REPO_ROOT" diff-tree --stdin -r -M -z --no-commit-id --name-status --diff-filter=AR \
+             | git -C "$REPO_ROOT" -c diff.renameLimit=0 diff-tree --stdin -r -M -z --no-commit-id --name-status --diff-filter=AR \
                  -- "$QA_DOCS_PATH/reports/" 2>/dev/null || true)
   # The tree. A staged COPY (`C? <new>`, its source as the next field) shows when the user's
   # status.renames — or diff.renames, its default — says `copies`; it is a new path, as diff-tree
-  # (no `-C`) would read the same file (review r3). A staged rename asks ownership of its source.
+  # (no `-C`) would read the same file (review r3), so after reading its source it FALLS THROUGH to
+  # the one base-tree check every new path meets. A staged rename asks ownership of its source.
   while IFS= read -r -d '' st; do
     case "$st" in
+      C?' '*) IFS= read -r -d '' b || break ;&
       '?? '*|A?' '*|' A '*)
-          if ! path_in_commits "${st:3}" ${bases[@]+"${bases[@]}"}; then owned["${st:3}"]=1; fi ;;
-      C?' '*) IFS= read -r -d '' b || break
           if ! path_in_commits "${st:3}" ${bases[@]+"${bases[@]}"}; then owned["${st:3}"]=1; fi ;;
       R?' '*) IFS= read -r -d '' b || break
           if [ -n "$b" ] && [ -n "${owned[$b]+x}" ]; then owned["${st:3}"]=1; fi ;;
     esac
-  done < <(git -C "$REPO_ROOT" status --porcelain -z -uall --find-renames \
+  done < <(git -C "$REPO_ROOT" -c status.renameLimit=0 status --porcelain -z -uall --find-renames \
              -- "$QA_DOCS_PATH/reports/" 2>/dev/null || true)
   # `-ef` against "$dir/<name>": a direct child of reports/, as the glob of latest_matching reads,
   # whatever spelling QA_DOCS_PATH has (a trailing `/`, a `./`) — and a file still on disk, which
@@ -1748,7 +1759,9 @@ docs_checklist_rows() {
   awk -F'|' '
       # find the header and remember which column holds Status
       !col && /^[ \t]*\|/ {
-        for (i = 2; i < NF; i++) {
+        # `<= NF`: a Status that is the LAST column of a header written without a trailing pipe is
+        # $NF (review r5); with the pipe, $NF is the empty field after it and matches nothing.
+        for (i = 2; i <= NF; i++) {
           cell = $i; gsub(/^[ \t]+|[ \t]+$/, "", cell); gsub(/[*`]/, "", cell)
           if (cell == "Status") { col = i; next_is_sep = 1 }
         }
@@ -1815,33 +1828,32 @@ gate_DOCS() {
   # cell and `B|<document>` for a ⛔, the document being the SECOND column of the table as the
   # author wrote it, markup stripped. VS16 (U+FE0F) after the ⛔ is the same value, as some editors
   # write it.
-  local rows row pending_cell="" blocked_docs=() no_status=0
+  local rows row pending_cell="" pending_n=0 blocked_docs=() no_status=0
   rows="$(docs_checklist_rows "$d")"
   # Admission written POSITIVELY (CLAUDE.md): only a `B|` row is a ⛔; every other line the awk
   # prints is pending, tagged or not — an untagged line dropped here would pass the gate in silence,
-  # which is how the markup-only branch read the first draft of this loop. No probe of its own: no
-  # branch of the awk prints an untagged line today, and this arm decides which failure one would be.
+  # which is how the markup-only branch read the first draft of this loop. And pending is decided on
+  # the COUNT of rows, never on the joined text: a `P|` whose payload is empty joined to nothing and
+  # passed (review r5). No probe of its own for either: no branch of the awk prints an untagged line
+  # or an empty payload today, and this arm decides which failure one would be.
   while IFS= read -r row; do
     case "$row" in
       "") ;;
       N\|*) no_status=1 ;;
       B\|*) blocked_docs+=("${row#B|}") ;;
-      *) pending_cell+="${row#P|}"$'\n' ;;
+      *) pending_n=$((pending_n + 1))
+         if [ "$pending_n" -eq 1 ]; then pending_cell="${row#P|}"; fi ;;
     esac
   done <<< "$rows"
-  pending_cell="${pending_cell%$'\n'}"
   if [ "$no_status" = 1 ]; then
     GATE_WHY="45-docs.md has no drift table the gate can read — a table whose header has a 'Status' cell (the contract token, in English) and whose rows start with '|'"
     return 1
   fi
-  if [ -n "$pending_cell" ]; then
+  if [ "$pending_n" -gt 0 ]; then
     # Every pending row is printed and COUNTED, and the count goes into the reason: no-work's form
     # (a) compares reasons word for word, and a session that fixed one of two ✗ rows used to leave
     # the sentence as it was — the next DOCS lap stopped as no-work with the work moving (Codex on
     # PR #57). A reason over a countable set carries the count.
-    local pending_n
-    pending_n="$(wc -l <<< "$pending_cell")"
-    pending_cell="${pending_cell%%$'\n'*}"
     GATE_WHY="45-docs.md has $pending_n area(s) pending in the drift checklist (the first with Status '$pending_cell') — every row needs ✅ (with a hash) or a justified n/a"
     return 1
   fi

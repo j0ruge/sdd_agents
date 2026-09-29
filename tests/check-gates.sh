@@ -952,6 +952,9 @@ assert_phase "with the later report gone the gate advances again" "REVIEW"
 #
 # Everything above ran ON the base, which is the empty range — the fallback proved by the whole
 # QA block staying green. Here the fixture lands on main and a mission branch is cut from it.
+# A SECOND, older base report lands with it: the rename-limit world below needs two edited renames
+# of base reports in one change, and it is older, so every "newest" above and below is unchanged.
+cp "$FIX/docs/qa/reports/2026-01-01-fixture.md" "$FIX/docs/qa/reports/2026-01-00-fixture-older.md"
 git add -A && git commit -qm "chore: the QA fixture lands on the base" >/dev/null
 git checkout -q -b missao/qa-report-owner
 # The branch EDITS the base report instead of adding one: a mission that touches another
@@ -1046,6 +1049,67 @@ cp "$FIX/docs/qa/reports/2026-01-01-fixture.md" "$FIX/docs/qa/reports/archive/20
 git add -A && git commit -qm "chore: the mission archives a copy one directory down" >/dev/null
 qa_refused "a mission file one directory below reports/ does not stand in for the base report"
 git reset -q --hard HEAD~1
+# (e) The base PULLED from a remote the local base TRACKS under another name (`upstream`, no
+#     `origin`): the upstream ref is a base ref too (review r5).
+QA_REMOTE="$(mktemp -d "${TMPDIR:-/tmp}/sdd-qa-remote-XXXXXX")"
+git init -q --bare "$QA_REMOTE/up.git"
+git remote add upstream "$QA_REMOTE/up.git"
+git push -q upstream main 2>/dev/null
+git branch -q --set-upstream-to=upstream/main main
+git clone -q -b main "$QA_REMOTE/up.git" "$QA_REMOTE/peer" 2>/dev/null
+cp "$FIX/docs/qa/reports/2026-01-01-fixture.md" "$QA_REMOTE/peer/docs/qa/reports/2026-01-05-fixture-upstream.md"
+git -C "$QA_REMOTE/peer" add -A
+git -C "$QA_REMOTE/peer" -c user.email=peer@example.com -c user.name=peer commit -qm "another mission's report"
+git -C "$QA_REMOTE/peer" push -q origin main 2>/dev/null
+git fetch -q upstream
+git merge -q --no-edit upstream/main >/dev/null
+qa_refused "a report pulled from the remote the base tracks, under any name, is not the mission's"
+git reset -q --hard HEAD~1
+git branch -q --unset-upstream main
+git remote remove upstream
+rm -rf "$QA_REMOTE"
+# (f) Two base reports renamed WITH edits in one change, past a rename limit of 1 in the user's
+#     config: git skips detection and reads two adds, which counted (review r5). Both reads pin the
+#     limit to 0. FLOOR: an unpinned status really reads adds here, or the world measures nothing.
+git config diff.renameLimit 1; git config status.renameLimit 1
+git mv "$FIX/docs/qa/reports/2026-01-00-fixture-older.md" "$FIX/docs/qa/reports/2026-01-10-fixture-a.md"
+git mv "$FIX/docs/qa/reports/2026-01-01-fixture.md" "$FIX/docs/qa/reports/2026-01-11-fixture-b.md"
+printf '<!-- edited -->\n' >> "$FIX/docs/qa/reports/2026-01-10-fixture-a.md"
+printf '<!-- edited -->\n' >> "$FIX/docs/qa/reports/2026-01-11-fixture-b.md"
+git add -A
+limit_status="$(git status --porcelain -z -uall --find-renames -- docs/qa/reports/ | tr '\0' '\n')"
+assert_eq "an unpinned status reads the two edited renames as adds here, so the world is measured" "2" \
+  "$(grep -c '^A ' <<< "$limit_status")"
+qa_refused "two base reports renamed with edits, past the user's rename limit, in the index"
+git commit -qm "chore: the mission renames two base reports with edits" >/dev/null
+qa_refused "two base reports renamed with edits, past the user's rename limit, in a commit"
+git reset -q --hard HEAD~1
+git config --unset diff.renameLimit; git config --unset status.renameLimit
+# (g) NOTHING TO MEASURE AGAINST ⇒ the answer from before the rule: no base ref resolves, or none
+#     shares history with HEAD (a shallow clone, unrelated histories). Replaying the whole history
+#     instead read every report ever added as the mission's (review r5). The witness is a report
+#     git IGNORES: the old answer (the newest file on disk) reads it, a replay never sees it.
+printf 'docs/qa/reports/2026-01-12-fixture-ignored.md\n' >> "$FIX/.git/info/exclude"
+cat > "$FIX/docs/qa/reports/2026-01-12-fixture-ignored.md" <<'EOF'
+# QA Run Report — 2026-01-12 — fixture ignored
+- **Started:** 2026-01-12T10:00:00Z · **Status:** in-progress <!-- in-progress | closed -->
+| # | Charter | Status |
+|---|---|---|
+| 1 | CH-one | Pass |
+EOF
+cp .sdd/config.sh "$SDD_STATE_FIX/qa-nobase-config.sh"
+sed -i 's/^DEFAULT_BRANCH=.*/DEFAULT_BRANCH="no-such-base"/' .sdd/config.sh
+assert_why "with no base ref that resolves, QA reads the tree as before" "QA" \
+  "report 2026-01-12-fixture-ignored\.md is not 'closed'"
+qa_orphan="$(git commit-tree "$(git mktree < /dev/null)" -m "an unrelated history")"
+git branch -q qa-orphan-base "$qa_orphan"
+sed -i 's/^DEFAULT_BRANCH=.*/DEFAULT_BRANCH="qa-orphan-base"/' .sdd/config.sh
+assert_why "with a base that shares no history with HEAD, QA reads the tree as before" "QA" \
+  "report 2026-01-12-fixture-ignored\.md is not 'closed'"
+cp "$SDD_STATE_FIX/qa-nobase-config.sh" .sdd/config.sh
+git branch -q -D qa-orphan-base
+rm -f "$FIX/docs/qa/reports/2026-01-12-fixture-ignored.md"
+sed -i '/2026-01-12-fixture-ignored/d' "$FIX/.git/info/exclude"
 
 # PROVENANCE: ~/.claude/skills/qa-execution/assets/report-template.md:6, as the fixture above.
 # First UNCOMMITTED — the skill may leave the report in the tree when the gate reads it — then
@@ -2191,6 +2255,11 @@ printf '# Docs\n\ndrift checklist\n\n| Area | Doc | Status | Evidence |\n|---|--
 git add -A && git commit -qm "chore: docs with an empty Status cell" >/dev/null
 assert_eq "an empty Status cell is pending" "DOCS|1" \
   "$( cd "$FIX" && "$SDD" phase "$MISSION" 2>&1 )|$(grep -c "Status '(empty)'" <<< "$( cd "$FIX" && "$SDD" why "$MISSION" DOCS 2>&1 )")"
+# A Status that is the LAST column of a header written without a trailing pipe is still the column.
+printf '# Docs\n\ndrift checklist\n\n| Area | Doc | Status\n|---|---|---\n| runner | README | ✗\n' > "$MDIR/45-docs.md"
+git add -A && git commit -qm "chore: docs whose Status is the last column, no trailing pipe" >/dev/null
+assert_eq "a Status in the last column without a trailing pipe is read, and its ✗ is pending" "DOCS|1" \
+  "$( cd "$FIX" && "$SDD" phase "$MISSION" 2>&1 )|$(grep -c 'has 1 area(s) pending' <<< "$( cd "$FIX" && "$SDD" why "$MISSION" DOCS 2>&1 )")"
 # ...and a ✗ beside a proposed ⛔ is still today's pending reason, counted without the ⛔.
 printf '# Docs\n\ndrift checklist\n\n| Area | Doc | Status | Evidence |\n|---|---|---|---|\n| runner | README | ✗ | pending |\n| rules | `.claude/rules/x.md` | ⛔ | refused |\n\n## Proposed text\n<!-- sdd:proposed -->\n\n`.claude/rules/x.md`: the line.\n' > "$MDIR/45-docs.md"
 git add -A && git commit -qm "chore: docs with a ✗ and a proposed ⛔"

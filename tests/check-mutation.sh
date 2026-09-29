@@ -406,6 +406,9 @@ mut_DOCS_vs16_blind() {                           # ⛔ followed by VS16 reads a
 mut_DOCS_trailing_comma_is_a_name() {             # a stray comma in a ⛔ cell names an empty document
   sed -i '/^docs_checklist_rows() {/,/^}/ s@if (one != "") { print@if (1) { print@' "$1"
 }
+mut_DOCS_header_last_column_blind() {             # a Status in the last column, no trailing pipe, is missed
+  sed -i '/^docs_checklist_rows() {/,/^}/ s@for (i = 2; i <= NF; i++)@for (i = 2; i < NF; i++)@' "$1"
+}
 mut_DOCS_header_markup_blind() {                  # a `**Status**` header is not the Status column
   sed -i '/^docs_checklist_rows() {/,/^}/ s@"", cell); gsub(/\[\*`\]/, "", cell)$@"", cell)@' "$1"
 }
@@ -558,8 +561,20 @@ mut_QA_substep_report_not_mission_bound() {   # the sub-step back on the newest 
 mut_QA_report_ignores_untracked() {           # the report the skill left uncommitted stops counting
   sed -i '/^mission_qa_report() {/,/^}/ s@status --porcelain -z -uall@status --porcelain -z -uno@' "$1"
 }
-mut_QA_report_range_local_only() {            # the branch is measured against the local base alone
-  sed -i '/^mission_base_refs() {/,/^}/ s#for r in "\$DEFAULT_BRANCH" "\$DEFAULT_BRANCH@{upstream}" "origin/\$DEFAULT_BRANCH"; do#for r in "$DEFAULT_BRANCH"; do#' "$1"
+mut_QA_report_range_no_origin() {             # a base pulled from origin brings its reports along
+  sed -i '/^mission_base_refs() {/,/^}/ s# "origin/\$DEFAULT_BRANCH"; do#; do#' "$1"
+}
+mut_QA_report_range_no_upstream() {           # a base pulled from the remote it tracks brings its reports
+  sed -i '/^mission_base_refs() {/,/^}/ s# "\$DEFAULT_BRANCH@{upstream}"##' "$1"
+}
+mut_QA_report_no_base_fallback() {            # nothing to measure against: the whole history is the mission's
+  sed -i '/^mission_qa_report() {/,/^}/ s%if \[ "\${#bases\[@\]}" -eq 0 \] \\$%if false \\%' "$1"
+}
+mut_QA_report_log_renamelimit_configurable() {    # diff.renameLimit reaches the replay again
+  sed -i '/^mission_qa_report() {/,/^}/ s@ -c diff.renameLimit=0 diff-tree@ diff-tree@' "$1"
+}
+mut_QA_report_status_renamelimit_configurable() { # status.renameLimit reaches the tree read again
+  sed -i '/^mission_qa_report() {/,/^}/ s@ -c status.renameLimit=0 status@ status@' "$1"
 }
 mut_QA_report_log_base_blind() {              # a commit that adds back a base report makes it the mission's
   sed -i '/^mission_qa_report() {/,/^}/ s#&& ! path_in_commits "\$a" \${bases\[@\]+"\${bases\[@\]}"}; then#; then#' "$1"
@@ -607,12 +622,15 @@ mut_QA_report_status_renames_configurable() { # the status leaves rename detecti
   sed -i '/^mission_qa_report() {/,/^}/ s@ -uall --find-renames @ -uall @' "$1"
 }
 mut_QA_report_status_copy_refused() {         # the mission's report staged as a copy stops counting
-  sed -i "/^mission_qa_report() {/,/^}/ { /C?' '\\*) IFS=/{n; s@then owned\\[\"\\\${st:3}\"\\]=1; fi ;;@then :; fi ;;@} }" "$1"
+  sed -i '/^mission_qa_report() {/,/^}/ s@ || break ;&$@ || break ;;@' "$1"
 }
-mut_QA_report_status_quoted() {               # an uncommitted report with a space stops counting
+# The two `-z` mutants below kill the WHOLE NUL parser, not only the quoted names: without `-z` the
+# read yields one token and nothing is owned, so the first probe to die is a generic one (review r5).
+# The quoting probes (the space, the `"`) are what the `-z` exists for; the parser is what dies first.
+mut_QA_report_status_quoted() {               # without -z the tree read collapses (a space was the reason)
   sed -i '/^mission_qa_report() {/,/^}/ s@status --porcelain -z -uall@status --porcelain -uall@' "$1"
 }
-mut_QA_report_log_quoted() {                  # a committed report whose name git quotes stops counting
+mut_QA_report_log_quoted() {                  # without -z the commit replay collapses (a `"` was the reason)
   sed -i '/^mission_qa_report() {/,/^}/ s@diff-tree --stdin -r -M -z --no-commit-id@diff-tree --stdin -r -M --no-commit-id@' "$1"
 }
 # The fallback is what keeps a mission on the base (or already merged) reading the tree as before.
@@ -920,7 +938,7 @@ mut_REVIEW_punctuated_fillin_blind() {
 }
 
 mut_DOCS_pending_status() {   # accepts an area with Status '✗' in the drift checklist
-  sed -i 's|.*\[ -n "\$pending_cell" \].*|  if false; then|' "$1"
+  sed -i '/^gate_DOCS() {/,/^}/ s|^  if \[ "\$pending_n" -gt 0 \]; then$|  if false; then|' "$1"
 }
 
 # Yokoten of #50: the grade as the author wrote it. Back to stripping `*` alone, `` `A` `` fails
@@ -4661,6 +4679,7 @@ CATALOG=(
   DOCS_blocked_empty_cell_vanishes
   DOCS_vs16_blind
   DOCS_trailing_comma_is_a_name
+  DOCS_header_last_column_blind
   DOCS_header_markup_blind
   DOCS_no_status_column_complete
   DOCS_empty_status_skipped
@@ -4673,7 +4692,11 @@ CATALOG=(
   QA_report_not_mission_bound
   QA_substep_report_not_mission_bound
   QA_report_ignores_untracked
-  QA_report_range_local_only
+  QA_report_range_no_origin
+  QA_report_range_no_upstream
+  QA_report_no_base_fallback
+  QA_report_log_renamelimit_configurable
+  QA_report_status_renamelimit_configurable
   QA_report_log_base_blind
   QA_report_tree_base_blind
   QA_report_staged_add_ignored

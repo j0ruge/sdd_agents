@@ -97,10 +97,15 @@ and 5. It was checked against the code when the ADR was accepted.
   reads `git status --porcelain -z -uall --find-renames -- <reports>`. An add, an untracked file, a
   staged add, an intent-to-add or a staged copy grants ownership only to a path absent from the tree
   of every merge-base of HEAD with those refs (`path_in_commits`); a rename carries it only from a
-  path the mission already owned. Plumbing because no user config reaches it (`log.showSignature`
-  broke the porcelain read); `--topo-order` because date order replayed a rename before its add on a
-  skewed clock; `-M` and `--find-renames` because detection is otherwise off or configurable; `-z`
-  because git quotes a space or a `"`. (The first shape read `--diff-filter=A` over
+  path the mission already owned. With nothing to measure against (no base ref, no merge-base, or an
+  empty range) it keeps the answer from before the rule. Plumbing because the display config does
+  not reach it (`log.showSignature` broke the porcelain read); `--topo-order` because date order
+  replayed a rename before its add on a skewed clock; `-M` and `--find-renames` because detection is
+  otherwise off or configurable; the rename limit pinned to 0 on both reads (`diff.renameLimit`,
+  `status.renameLimit`); `-z` because git quotes a space or a `"`. The check is against the
+  merge-base tree, not the base tip: a report another mission added upstream after the fork and
+  brought in by checkout, squash or cherry-pick counts — declared in `TODO.md`, because checking
+  the tip would refuse a squash-merged mission its own report. (The first shape read `--diff-filter=A` over
   `merge-base..HEAD` without renames; the codereview of 2026-09-28 and its three follow-up rounds
   brought it here.) `-uall` is load-bearing, because without it an
   untracked directory is listed as the directory and not as its files. Among the mission's files it
