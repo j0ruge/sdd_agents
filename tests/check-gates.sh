@@ -4281,7 +4281,54 @@ close_run "done" 0
 assert_eq "close: already on the default branch it still fast-forwards" \
   "rc:0 tip:remote said:1" \
   "rc:$CLOSE_RC_OUT tip:$([ "$(git -C "$FIX" rev-parse "$CLOSE_HOME")" = "$(peer_tip)" ] && echo remote || echo stale) said:$(has "$CLOSE_OUT" 'fast-forwarded')"
+
+# 8i/8j/8k/8l. The four ways home stays where it is, each one SAID (codereview of 2026-09-28: the
+# three regimes above were the only ones measured). Every one starts with the remote a merge ahead,
+# so a runner that forgot the refusal and moved anyway reads `sha:moved`.
+# 8i. Dirty ON the default branch: the early return used to skip it; now it must not fast-forward
+#     under uncommitted work, and says so.
+peer_merges "a merge the dirty base must not take"
+CLOSE_LOCAL_SHA="$(git -C "$FIX" rev-parse "$CLOSE_HOME")"
+printf 'uncommitted work on the base\n' > "$FIX/human-draft.txt"
+close_run "done" 0
+assert_eq "close: dirty on the default branch it does not fast-forward, and says so" \
+  "rc:0 sha:kept kept:1 warned:1" \
+  "rc:$CLOSE_RC_OUT sha:$([ "$(git -C "$FIX" rev-parse "$CLOSE_HOME")" = "$CLOSE_LOCAL_SHA" ] && echo kept || echo moved) kept:$([ -e "$FIX/human-draft.txt" ] && printf 1 || printf 0) warned:$(has "$CLOSE_OUT" 'not fast-forwarding')"
+rm -f "$FIX/human-draft.txt"
+# 8j. The fetch fails (an origin that is not there): warned, and no fast-forward to a stale ref.
+git -C "$FIX" remote set-url origin "$CLOSE_REMOTE_DIR/nowhere.git"
+close_run "done" 0
+assert_eq "close: a fetch that fails is warned, and nothing moves" \
+  "rc:0 sha:kept warned:1" \
+  "rc:$CLOSE_RC_OUT sha:$([ "$(git -C "$FIX" rev-parse "$CLOSE_HOME")" = "$CLOSE_LOCAL_SHA" ] && echo kept || echo moved) warned:$(has "$CLOSE_OUT" 'could not fetch')"
+git -C "$FIX" remote set-url origin "$CLOSE_REMOTE_DIR/origin.git"
+# 8k. No timeout(1) on PATH: an unbounded fetch could hang the close, so it is SKIPPED and said.
+#     PATH is every directory the suite has, as symlinks, minus timeout — the no-curl recipe of
+#     check-preflight.sh. The stubs come first because $FIX/.stub leads PATH.
+close_notimeout="$SDD_STATE_FIX/close-notimeout-bin"; mkdir -p "$close_notimeout"
+IFS=: read -r -a close_path_dirs <<< "$PATH"
+for close_d in "${close_path_dirs[@]}"; do
+  [ -d "$close_d" ] || continue
+  for close_f in "$close_d"/*; do
+    close_n="${close_f##*/}"
+    [ "$close_n" = timeout ] && continue
+    [ -x "$close_f" ] && [ ! -e "$close_notimeout/$close_n" ] && ln -s "$close_f" "$close_notimeout/$close_n"
+  done
+done
+rm -f "$CLOSE_MARK" "$CLOSE_ACLI_LOG" "$CLOSE_JOURNAL"
+printf 'done\n' > "$CLOSE_CTL"; printf '0\n' > "$CLOSE_RCFILE"
+CLOSE_RC_OUT=0
+CLOSE_OUT="$( cd "$FIX" && PATH="$close_notimeout" "$SDD" close "$MISSION" 2>&1 )" || CLOSE_RC_OUT=$?
+assert_eq "close: with no timeout(1) the fetch is skipped and said, never run unbounded" \
+  "rc:0 sha:kept warned:1" \
+  "rc:$CLOSE_RC_OUT sha:$([ "$(git -C "$FIX" rev-parse "$CLOSE_HOME")" = "$CLOSE_LOCAL_SHA" ] && echo kept || echo moved) warned:$(has "$CLOSE_OUT" 'no timeout\(1\) to bound the fetch')"
 git -C "$FIX" remote remove origin
+# 8l. No upstream at all (`git remote remove` takes the branch's tracking config with it): said as
+#     such, and never as a divergence.
+close_run "done" 0
+assert_eq "close: with no upstream it says so, and never calls it a divergence" \
+  "rc:0 said:1 diverged:0" \
+  "rc:$CLOSE_RC_OUT said:$(has "$CLOSE_OUT" 'no upstream, nothing to fast-forward') diverged:$(has "$CLOSE_OUT" 'diverged')"
 
 # 9. Control. With JIRA off the command asks nothing of anyone — and the two `:0` terms are the
 #    half that matters: a guard that ran acli anyway would still print "nothing to close".

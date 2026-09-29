@@ -4463,6 +4463,20 @@ mut_COORD_helper_not_isolated() {
 mut_CLOSE_no_fast_forward() {
   sed -i '/^close_return_home() {/,/^}/ s#out="\$( git -C "\$REPO_ROOT" merge --ff-only --quiet "\$DEFAULT_BRANCH@{upstream}" 2>&1 )" || rc=\$?#out=""#' "$1"
 }
+# The four ways home stays where it is (codereview of 2026-09-28), one mutant each: every one of
+# them turns the refusal into a move, or the named reason into a wrong one.
+mut_CLOSE_dirty_base_moves() {          # uncommitted work on the base no longer stops the move
+  sed -i '/^close_return_home() {/,/^}/ s@^  if \[ -n "\$( git -C "\$REPO_ROOT" status --porcelain 2>/dev/null )" \]; then$@  if false; then@' "$1"
+}
+mut_CLOSE_fetch_failure_ignored() {     # a failed fetch falls through to a fast-forward to a stale ref
+  sed -i '/^close_return_home() {/,/^}/ s@^      if \[ "\$rc" -ne 0 \]; then$@      if false; then@' "$1"
+}
+mut_CLOSE_fetch_unbounded() {           # with no timeout(1) the fetch is tried anyway
+  sed -i '/^close_return_home() {/,/^}/ s@^    if ! command -v timeout >/dev/null 2>&1; then$@    if false; then@' "$1"
+}
+mut_CLOSE_no_upstream_unsaid() {        # no upstream reads as a divergence
+  sed -i '/^close_return_home() {/,/^}/ s@^  if \[ -z "\$upstream" \]; then ok@  if false; then ok@' "$1"
+}
 
 # CHECKOUT-UNAVAILABLE names what fell and in which interpreter (finding 8): back to the generic list,
 # and the operator diagnoses the PATH's python3 by hand again.
@@ -4499,6 +4513,10 @@ CATALOG=(
   COORD_unavailable_generic
   COORD_remedy_for_every_requirement
   CLOSE_no_fast_forward
+  CLOSE_dirty_base_moves
+  CLOSE_fetch_failure_ignored
+  CLOSE_fetch_unbounded
+  CLOSE_no_upstream_unsaid
   COORD_select_pidfd
   RUN_branch_double_slash
   COORD_admission_missing
