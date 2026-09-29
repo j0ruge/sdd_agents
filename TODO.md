@@ -23,14 +23,6 @@ Achados sobre **repos-alvo** vão para o `TODO.md` daquele repo. Este arquivo é
 
 ### Sensores que faltam
 
-- [ ] **`gate_QA` aceita relatório de QA de OUTRA missão** — `bin/sdd:1301` — a Âncora 1 pega o
-  relatório mais recente do glob por `latest_matching` e só exige `closed` sem linhas `Pending`;
-  nada o amarra à missão corrente. Em `20260827-condicoes-pagamento-mesmo-cliente` o gate passou
-  lendo o `2026-08-24-sq107-status-material-frete.md`, de duas missões antes. Fail-open: promete
-  "a QA desta missão fechou" e mede "existe alguma QA fechada no disco". Direção: casar o
-  relatório com o slug da missão ou com a janela de datas dela. RESOLVED by 121a696
-  — descoberto por `sdd-qa` na missão `20260827-condicoes-pagamento-mesmo-cliente` (2026-08-27)
-
 - [ ] **Citação NÃO-cercada acima do cabeçalho ainda vira o gênero do bug** — `bin/sdd:1347` — o
   extrator da Âncora 3 pula blocos cercados e pega a primeira linha com forma de campo fora de um,
   então prosa nua abrindo com `- **Closable by:** human` acima do campo real ainda é lida como o
@@ -718,6 +710,12 @@ Achados sobre **repos-alvo** vão para o `TODO.md` daquele repo. Este arquivo é
   sabotagem, cada passo nomeado primeiro), sem sensor que o repita. Direção: o controle do catálogo roda
   também uma vez por assassino distinto do mapa, com ele na frente, e exige verde.
   — descoberto por `revisão final` no PR #168 `perf/catalogo-assassino-primeiro` (2026-09-25)
+
+- [ ] **`sdd close` sem JIRA não volta à base** — `bin/sdd:10333` (`nothing to close`) — com
+  `JIRA_ENABLED=false` o `cmd_close` sai antes do `close_return_home`, e o fetch + `--ff-only` do
+  achado 7 não alcança repo sem JIRA, o próprio kit incluído: no fechamento do PR #176 a volta à
+  `main` foi feita à mão. Direção: chamar o `close_return_home` também nesse ramo, com probe e mutante.
+  — descoberto por `sdd close` (sessão interativa) na missão `20260928-os-achados-da-janela` (2026-09-29)
 
 ## Decidido — não reabrir
 <!-- sdd:decided -->
