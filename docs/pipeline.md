@@ -1396,7 +1396,8 @@ by kind, a per repo×mission×phase `detail` (each entry naming its `repo`), and
   after the gate), and a session that moved the disk and whose sub-step advanced in
   `plan < exec < close` reads `advanced`; a sub-step that repeats or goes back stays `churned`.
   Rows older than the field recover `step_after` from the `step` of the NEXT QA session row of the
-  same `(repo, mission)`, never from `gate_why` (which reads the same with and without the report),
+  same `(repo, mission)` **and the same run** (equal, non-null `run_id` — a row of another launch
+  is not a witness of what this session did), never from `gate_why` (which reads the same with and without the report),
   and `sdd autonomy` counts them on screen (`QA row(s) older than step_after`). A QA close that
   wrote `F<n>` increments (`pending_after > pending_before`, both photographed on the QA row) is
   the QA⇄EXEC loop and reads `advanced` too — on new rows only: the old `gate_why` says the bugs
