@@ -137,10 +137,11 @@ verbete *Churn* atualizado; `KAIZEN_LOG.md` com o antes/depois das três missõe
 `KAIZEN_LOG.md` são pt-BR por `OUTPUT_LANG`.
 **Reversível por:** revert.
 
-### I6 — varredura D15: quatro itens saem do backlog para o cabeçalho
+### I6 — varredura D15: cinco itens saem do backlog
 
 **O quê:** pela régua de admissão, quatro itens abertos do `TODO.md` não são fail-open nem têm
-consumidor fora da suíte; cada um sai para o lugar nomeado abaixo, e a catraca desce 90 → 86 no
+consumidor fora da suíte, e um quinto foi resolvido fora do kit; cada um sai para o lugar nomeado
+abaixo, e a catraca desce 90 → 85 no
 mesmo commit.
 **Onde / Check:** ver a seção seguinte e `checkpoint.md`.
 **Reversível por:** revert.
@@ -152,6 +153,7 @@ mesmo commit.
 | **O `stub-argv.txt` do `check-health.sh` nunca é apagado entre mundos de fixture** | o próprio item mede "hoje não reproduz fail-open"; o consumidor é só a suíte | cabeçalho de `tests/check-health.sh`, limites declarados |
 | **Dois resíduos de sensor que precisam de DUAS edições, e nenhum tem testemunha externa** | o item diz que estão declarados nos cabeçalhos: dívida honesta, não fail-open | já está em `tests/check-todo.sh` e `tests/check-templates.sh` — confira o cabeçalho e apague o item |
 | **`check-autonomy.sh` é vermelho intermitente, causa desconhecida** | causa refutada, 152 runs sem reproduzir; sem consumidor fora da suíte | cabeçalho de `tests/check-autonomy.sh` ("observado uma vez, não reproduzido em 152 runs; medir antes de consertar") |
+| **O laço de melhoria da sessão interativa não enxerga o kit** | resolvido fora do kit, sem commit deste repo que o feche: o `retrofit-watch` 0.2.0 (`j0ruge/skills`, `960e47b`, 2026-10-01) reconhece `/sdd-*`, subagente `sdd-*` e o CLI `sdd`, e manda a lição para este `TODO.md` | uma linha em `<!-- sdd:decided -->` ("resolvido fora do kit: retrofit-watch 0.2.0, `j0ruge/skills@960e47b`"), e o item sai da seção aberta — incluído pelo humano na aprovação |
 | **`sdd adr check` só fala texto + rc; não existe `--json`** | sem consumidor, e o próprio item diz "quando houver consumidor" | `CONTEXT.md`, tabela *Decisões adiadas por YAGNI*, linha Y4 com o evento que reabre |
 
 ## Resolvidos a apagar
@@ -168,7 +170,7 @@ vida), nenhuma na seção aberta.
 | O braço do sub-passo lisonjear: `QA:exec` que avançou mas cujo relatório o gate depois recusa | baixa | o avanço é do **sub-passo** (o relatório fechou); a recusa seguinte é do `close`, lida na linha dele |
 | Números de janelas anteriores mudarem sob o leitor novo | certa | é o objetivo; declarar no `KAIZEN_LOG.md` e no veredito seguinte que a régua mudou em 2026-09-30 |
 | Não verificado nesta sessão: se `cmd_retry` grava QA com `step` correto | média | o I1 cobre o `cmd_retry` com a mesma asserção |
-| O esperado `86` do I6 supõe que nenhum achado novo entre no `TODO.md` durante a missão | média | quem registrar achado move a baseline e corrige o esperado do Check do I6 no mesmo commit, dizendo o porquê na nota |
+| O esperado `85` do I6 supõe que nenhum achado novo entre no `TODO.md` durante a missão | média | quem registrar achado move a baseline e corrige o esperado do Check do I6 no mesmo commit, dizendo o porquê na nota |
 
 ## Verificação end-to-end
 

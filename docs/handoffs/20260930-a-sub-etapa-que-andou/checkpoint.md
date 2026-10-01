@@ -42,7 +42,7 @@ atualizado: 2026-09-30 23:30
 | I3 | o laço QA⇄EXEC em linha nova | `o=$(bash tests/check-autonomy.sh 2>&1); grep -c -e '^  ok    a QA close that wrote fix increments is the designed loop' -e '^  ok    an EXEC row whose pending grew is still churn' <<< "$o"` → `2` | pending | — |
 | I4 | o histórico: `step_after` recuperado pela próxima linha QA | `o=$(./bin/sdd autonomy --all-repos --by-mission 2>/dev/null); grep -c -e '20260929-aviso-diretoria-por-email  21 session(s) · 19 advanced · 2 churned · 0 idle' -e '20260930-e2e-local-diz-por-que-caiu  15 session(s) · 14 advanced · 1 churned · 0 idle' -e '20260930-justificativa-pedido-alcada  20 session(s) · 17 advanced · 3 churned · 0 idle' -e 'QA row(s) older than step_after' <<< "$o"` → `4` | pending | — |
 | I5 | docs e registro (D16 4ª emenda, Churn, KAIZEN_LOG, pipeline) | `grep -l 'step_after' CONTEXT.md KAIZEN_LOG.md docs/pipeline.md agents/sdd-kaizen.md > /tmp/i5.txt; wc -l < /tmp/i5.txt` → `4` | pending | — |
-| I6 | varredura D15: quatro itens saem do backlog | `bash tests/check-todo.sh --count TODO.md` → `86` | pending | — |
+| I6 | varredura D15: cinco itens saem do backlog | `bash tests/check-todo.sh --count TODO.md` → `85` | pending | — |
 
 > **As notas de execução não moram aqui.** Elas ficam em `checkpoint-notas.md`, ao lado deste
 > arquivo, append-only, e o prompt de boot inlina as últimas 10 — a sessão nunca abre aquele

@@ -57,7 +57,8 @@ avançou na ordem `plan < exec < close` é `advanced`. Linhas antigas recuperam 
 `step` da próxima linha QA da mesma `(repo, missão)`, por caminho contado na tela, como o EXEC e o
 REVIEW já fazem. Linhas QA novas também carregam `pending_before`/`pending_after`, e o `close` que
 escreveu incrementos `F<n>` passa a ser lido como o laço QA⇄EXEC desenhado. Quatro itens do
-`TODO.md` que não passam na régua D15 saem para o cabeçalho que lhes cabe.
+`TODO.md` que não passam na régua D15 saem para o cabeçalho que lhes cabe, e um quinto, resolvido
+fora do kit pelo `retrofit-watch` 0.2.0, sai para a seção decidida (incluído pelo humano).
 
 ## Fora de escopo
 
