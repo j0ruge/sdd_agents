@@ -3843,6 +3843,39 @@ mut_KAIZEN_qa_fix_loop_unscoped() {
   sed -i 's@elif (.phase == "QA" and .pending_before != null and .pending_after != null and .pending_after > .pending_before@elif (.pending_before != null and .pending_after != null and .pending_after > .pending_before@' "$1"
 }
 
+# The key of the QA dated path loses its repo half, and two missions of the same slug in two repos
+# start sharing a "next row": this repo's last QA:exec reads the QA:close of ANOTHER repo and turns
+# `advanced`. It is the class the EXEC sibling's key carries without a probe (TODO.md); here it is
+# born with one. Caught by `the next QA row of the same slug in ANOTHER repo is not this row's next
+# row` in check-kaizen.sh.
+mut_KAIZEN_historic_steps_key_slug_only() {
+  sed -i 's@$r.phase == "QA" then (\[($r.repo // ""), ($r.mission // "")\] | tostring)@$r.phase == "QA" then ([($r.mission // "")] | tostring)@' "$1"
+}
+
+# The guard of the QA dated path goes from "the KEY is absent" to "the value is null", and the path
+# starts REPAIRING rows this runner wrote whose photograph went missing — the shape
+# mut_RUN_qa_step_after_missing produces, which this one would launder in every reader. Here the
+# EXEC sibling's `== null` spelling is the wrong one on purpose: the writer puts the key on EVERY
+# row, so absence and pre-schema are the same set. Caught by `a QA row the writer wrote with
+# step_after null is not recovered from the next row`.
+mut_KAIZEN_historic_steps_launders_null() {
+  sed -i 's@(if ($r | has("step_after") | not) and .next\[$k\] != null@(if $r.step_after == null and .next[$k] != null@' "$1"
+}
+
+# The human window stops applying the QA dated path, and every QA:exec of window 2 reads `churned`
+# again on `sdd autonomy` while the judge keeps reading `advanced` — the two readers telling two
+# histories out of one file. Caught by `a QA row older than step_after that advanced reads advanced
+# from the next row` and the parity pair of the same block.
+mut_AUTONOMY_historic_steps_blind() {
+  sed -i 's@^    | historic_steps$@    | .@' "$1"
+}
+
+# The judge's twin of the mutant above. Caught by `the human window and the judge recover the QA
+# sub-step alike` — the differential, which no one-sided fixture satisfies by accident.
+mut_KAIZEN_historic_steps_series_blind() {
+  sed -i 's@| historic_progress | historic_rounds | historic_steps) as $raw@| historic_progress | historic_rounds) as $raw@' "$1"
+}
+
 # The writer keeps filling the three round fields (I1) and the reader stops looking at them: REVIEW
 # goes back to the gate-only yardstick that read the most expensive cell of window 2 — US$ 47.81,
 # `1 advanced · 1 churned` — as churn over a phase that is a LOOP BY DESIGN. Spliced from ONE
@@ -5195,6 +5228,10 @@ CATALOG=(
   RUN_qa_pending_cmd_retry_missing
   KAIZEN_qa_fix_loop_blind
   KAIZEN_qa_fix_loop_unscoped
+  KAIZEN_historic_steps_key_slug_only
+  KAIZEN_historic_steps_launders_null
+  AUTONOMY_historic_steps_blind
+  KAIZEN_historic_steps_series_blind
   LEDGER_outcome_rounds_blind
   LEDGER_outcome_rounds_unguarded
   LEDGER_outcome_rounds_undirected

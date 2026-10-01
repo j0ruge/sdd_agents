@@ -3308,11 +3308,31 @@ ledger_row_is_local() {
 # `1 > null` true. LIMIT, declared by the D15 rule: rows written before this writer carry no pair on
 # QA, and they are NOT recovered — gate_why says the bugs "become fix increments", not that the
 # session wrote them, and inferring it would be the flattery f00c2dc refused. They stay churn.
+#
+# `historic_steps` is the dated path of the fourth arm (same mission, I4), and it exists because
+# the rows the arm is about are all older than its writer: on 2026-10-01 the real ledger held 62 QA
+# rows and ZERO carrying `step_after`, the three `QA:exec` of window 2 among them. It recovers the
+# fact from the `step` of the NEXT QA session row of the same (repo, mission) — the sub-step the
+# runner derived when it opened the following session is the sub-step this one left behind — and
+# NEVER from gate_why, which reads `missing 30-handoff-qa.md` with the report closed and without.
+# It walks the list BACKWARDS (the next row is the memory), and marks `steps_source: "next_row"`;
+# the last QA row of a mission has no next row and stays as it was.
+# The guard is `has("step_after") | not`, and here the EXEC sibling's `== null` is the WRONG
+# spelling on purpose: autonomy_session_row puts the key on every row it writes, so absence and
+# pre-schema are the same set, and a QA row with the key and a null value is a photograph that went
+# missing — repairing it would launder mut_RUN_qa_step_after_missing, the harm the REVIEW sibling's
+# second guard condition exists for. The key carries the repo half with a probe
+# (`mut_KAIZEN_historic_steps_key_slug_only`). Measured on the real ledger: exactly the three
+# by-mission lines of the mission metric moved, nothing else (diff in checkpoint-notas).
+# DECLARED LIMIT: a QA session separated from its next one by a reopening (the QA⇄EXEC loop) still
+# reads that next session's step; a close after a close is no advance, so the error can only land
+# on the conservative side.
 ledger_outcome_defs() {   # printed jq, spliced into cmd_autonomy AND kaizen_series
   printf '%s' 'def step_rank: if . == "QA:plan" then 0 elif . == "QA:exec" then 1 elif . == "QA:close" then 2 else null end;'
   printf '%s' 'def outcome: if .gate == "pass" then "advanced" elif (.pending_before != null and .pending_after != null and .pending_after < .pending_before and .moved != false) then "advanced" elif (.rounds_before != null and .rounds_after > .rounds_before and .moved != false) then "advanced" elif ((.step_after | step_rank) != null and (.step | step_rank) != null and (.step_after | step_rank) > (.step | step_rank) and .moved != false) then "advanced" elif (.phase == "QA" and .pending_before != null and .pending_after != null and .pending_after > .pending_before and .moved != false) then "advanced" elif .moved == true then "churned" else "idle" end;'
   printf '%s' 'def historic_progress: reduce .[] as $r ({seen: {}, out: []}; (if ($r | type) == "object" and $r.event == "session" and $r.phase == "EXEC" then ([($r.repo // ""), ($r.mission // "")] | tostring) else null end) as $k | (if $k != null and $r.pending_before == null and (($r.gate_why // "") | test("^[0-9]+ of [0-9]+ increment")) then (($r.gate_why // "") | capture("^(?<n>[0-9]+) of (?<m>[0-9]+) increment") | {n: (.n | tonumber), m: (.m | tonumber)}) else null end) as $p | (if $p == null then $r else (if (.seen[$k] != null and .seen[$k].m == $p.m) then .seen[$k].p else $p.m end) as $before | $r + {pending_before: $before, pending_after: $p.n, increments_total: $p.m, progress_source: "gate_why"} end) as $row | .out += [$row] | (if $k == null then . elif $r.gate == "pass" then .seen[$k] = null elif $row.pending_after != null then .seen[$k] = {p: $row.pending_after, m: $row.increments_total} else . end)) | .out;'
   printf '%s' 'def historic_rounds: reduce .[] as $r ({seen: {}, out: []}; (if ($r | type) == "object" and $r.event == "session" and $r.phase == "REVIEW" then ([($r.repo // ""), ($r.mission // "")] | tostring) else null end) as $k | (if $k != null and $r.rounds_before == null and $r.rounds_after == null then (($r.gate_why // "") | if test("^40-review-r[0-9]+\\.md") then (capture("^40-review-r(?<n>[0-9]+)\\.md") | .n | tonumber) elif test("^no 40-review-r<N>\\.md") then 0 else null end) else null end) as $n | (if $n == null then $r else $r + {rounds_before: (.seen[$k] // 0), rounds_after: $n, rounds_source: "gate_why"} end) as $row | .out += [$row] | (if $k == null then . elif $row.rounds_after != null then .seen[$k] = $row.rounds_after else . end)) | .out;'
+  printf '%s' 'def historic_steps: . as $rows | reduce range(($rows | length) - 1; -1; -1) as $i ({next: {}, out: $rows}; .out[$i] as $r | (if ($r | type) == "object" and $r.event == "session" and $r.phase == "QA" then ([($r.repo // ""), ($r.mission // "")] | tostring) else null end) as $k | if $k == null then . else (if ($r | has("step_after") | not) and .next[$k] != null then .out[$i] = ($r + {step_after: .next[$k], steps_source: "next_row"}) else . end) | .next[$k] = $r.step end) | .out;'
   printf '%s' 'def outcome_tally: map(outcome) | reduce .[] as $o ({advanced: 0, churned: 0, idle: 0}; .[$o] += 1);'
   printf '%s' 'def phase_index: . as $p | ($phases | split(" ")) | index($p);'
 }
@@ -8791,6 +8811,11 @@ cmd_autonomy() {
     # different prose; both are length-preserving, so $local_total and assert_bucket_sum keep
     # meaning what they meant.
     | historic_rounds
+    # The QA third of the same dated recovery (20260930-a-sub-etapa-que-andou), same point, same
+    # reason, also length-preserving. It reads the NEXT row where its siblings read the previous one,
+    # so it walks the list backwards — and it must run on the whole history, never on a slice, or
+    # the last row of the slice would lose a next row that exists.
+    | historic_steps
     # Bound over `comparable` and NOT over the bare annotation, which is the fix for a measured
     # fail-open: these two sentences are DELETION SIGNALS — they say how much of the window was
     # read through a dated path, and therefore when that path may come out — and a count taken
@@ -8801,6 +8826,7 @@ cmd_autonomy() {
     # non-object rows and `.event` on a number is an error, not a false.
     | (map(select(type == "object" and comparable and .progress_source == "gate_why")) | length) as $historic
     | (map(select(type == "object" and comparable and .rounds_source == "gate_why")) | length) as $historic_rounds
+    | (map(select(type == "object" and comparable and .steps_source == "next_row")) | length) as $historic_steps
     # The header total, re-derived here so the accounting paragraph can NAME it. $foreign and
     # $norepo were computed before the repo filter and were therefore never in it; $meta WAS —
     # a judge row is local — so it is added back, or the sentence "never part of the N counted
@@ -9047,6 +9073,8 @@ cmd_autonomy() {
        # every REVIEW row carries the round ones — and a single number could never say which of
        # them is finally empty.
        , (if $historic_rounds > 0 then "  (\($historic_rounds) REVIEW row(s) older than the round fields read their round from gate_why)" else empty end)
+       # Its QA twin, a third sentence for the same reason: the third path is deleted on its own day.
+       , (if $historic_steps > 0 then "  (\($historic_steps) QA row(s) older than step_after read their sub-step from the next row)" else empty end)
        # It rides INSIDE for the same reason $closes does: the row is local, the header counted it,
        # and it only leaves the axis. `sdd kaizen` observes a version — it is never an observation
        # of one — so it grades nothing, but a term the arithmetic cannot reach is the quiet half of
@@ -9488,7 +9516,7 @@ kaizen_series() {
     # filter, before any classification. One dated recovery, spliced from one definition, so the
     # judge and the human window cannot end up reading two different histories out of one file —
     # check-autonomy.sh compares them over a prose-only ledger for exactly that.
-    | ($file_rows | map(select(ledger_row_is_local)) | historic_progress | historic_rounds) as $raw
+    | ($file_rows | map(select(ledger_row_is_local)) | historic_progress | historic_rounds | historic_steps) as $raw
     # Subtracted out, never lumped in: a row that names no project did not come from another repo,
     # and a bucket that said it did would be a wrong reason printed with the confidence of a right
     # one. The two counts partition what the filter removed, so the arithmetic still closes.
