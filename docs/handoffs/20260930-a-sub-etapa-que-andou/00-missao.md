@@ -4,7 +4,7 @@ titulo: o sub-passo da QA que fechou o relatório deixa de contar como desperdí
 data: 2026-09-30
 versao:
 branch: kaizen/a-sub-etapa-que-andou
-aprovacao:
+aprovacao: humano-2026-09-30
 adr: none
 ddd: n/a
 ---
