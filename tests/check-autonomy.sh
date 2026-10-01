@@ -10,6 +10,12 @@
 # check-preflight), because the mutations that sabotage the writer have to kill the sandbox suite —
 # guarded, they would score a point for nothing.
 #
+# DECLARED LIMIT (D15), moved here from TODO.md: this file was observed red ONCE, intermittently,
+# in a kit mission of 2026-08-16, and the cause recorded then ("log name collision in a
+# repo that versions .sdd/logs/") was refuted — `sdd install` runs before any log exists and
+# ignores .sdd/logs/, and same-second log names are the norm with a clean tree. Not reproduced in
+# 152 runs. Measure again before fixing anything; `%N` in the log name would be a no-op.
+#
 # Usage: tests/check-autonomy.sh   (exit 0 = the ledger tells the truth)
 
 set -uo pipefail
@@ -871,9 +877,18 @@ chmod +x "$OUTSIDE/stub/claude"
 # really did publish, so the nulls one row later are a guard doing its job and not an empty ledger.
 assert_eq "the EXEC row that closed the last increment says so" "EXEC pass 1 0 1" \
   "$(jq -r -s '.[0] | "\(.phase) \(.gate) \(.pending_before) \(.pending_after) \(.increments_total)"' "$LEDGER")"
-assert_eq "a non-EXEC row carries the three as null" "QA true" \
-  "$(jq -r -s '.[1] | "\(.phase) \(.pending_before == null and .pending_after == null
-                                 and .increments_total == null)"' "$LEDGER")"
+# `step_after` is the QA sub-step derived AFTER the session (20260930-a-sub-etapa-que-andou), and
+# it is QA's alone: an EXEC row carrying one would be a field no reader asked for, and the reader's
+# sub-step arm keys on QA ranks. The EXEC row above is the floor — it proves the row exists.
+assert_eq "a non-QA row carries step_after as null" "EXEC true" \
+  "$(jq -r -s '.[0] | "\(.phase) \(has("step_after") and .step_after == null)"' "$LEDGER")"
+# Since 20260930-a-sub-etapa-que-andou (I3) a QA row photographs its OWN checkpoint — the pair the
+# reader's QA⇄EXEC arm reads — so the pair is `0 0`, the tally of a checkpoint with nothing pending,
+# and never null. What still tells the leak apart is `increments_total`: QA never writes it, and
+# EXEC's gate published `1` one lap earlier. That is the half `mut_LEDGER_progress_leaks_across_phases`
+# turns red.
+assert_eq "a non-EXEC row carries none of EXEC's counts" "QA 0 0 true" \
+  "$(jq -r -s '.[1] | "\(.phase) \(.pending_before) \(.pending_after) \(.increments_total == null)"' "$LEDGER")"
 # Row [2] is the same lap's INLINE RETRY of that QA session, and it is a THIRD read site of the
 # globals — a door of its own, guarded by its own `if [ "$phase" = "EXEC" ]`. It was unprobed: with
 # that guard removed the suite stayed green while the row came out carrying `pending_after: 0` and
@@ -881,9 +896,8 @@ assert_eq "a non-EXEC row carries the three as null" "QA true" \
 # QA advanced an increment it never had. The fixture already wrote this row — the door cost a line
 # to probe, not a world to build. One probe per door, the shape CLAUDE.md already spells out for
 # handoff_blocked_escalation and app_down_escalation.
-assert_eq "and so does the inline retry of that same non-EXEC phase" "QA true true" \
-  "$(jq -r -s '.[2] | "\(.phase) \(.auto_retry) \(.pending_before == null and .pending_after == null
-                                 and .increments_total == null)"' "$LEDGER")"
+assert_eq "and so does the inline retry of that same non-EXEC phase" "QA true 0 0 true" \
+  "$(jq -r -s '.[2] | "\(.phase) \(.auto_retry) \(.pending_before) \(.pending_after) \(.increments_total == null)"' "$LEDGER")"
 # The REVIEW half of the same door is NOT asserted here, and the reason is measured rather than
 # assumed: `current_phase` evaluates its gates in a `$(...)` subshell, so no gate_REVIEW ever runs
 # in the parent shell of this fixture and GATE_REVIEW_ROUNDS is still the empty string it was born
@@ -2557,6 +2571,140 @@ rm -rf "$FIX/docs/qa"
 printf -- '---\nfase: QA\nstatus: done\n---\n' > "$MDIR/30-handoff-qa.md"
 git add -A && git commit -qm "chore: restore the fixture the app-down pair borrowed"
 
+# --- a QA row carries the sub-step the session left behind -----------------
+# QA is a loop by design — qa_substep routes plan → exec → close — and gate_QA refuses on its first
+# line (`missing 30-handoff-qa.md`) every session before `close`. So the gate_why of a `QA:exec`
+# that CLOSED the report is the same sentence as one that did not, and the judge read the closer as
+# churn: 7 of the 9 `churned` sessions of the 2nd window's slice (20260930-a-sub-etapa-que-andou).
+# `step_after` is the fact gate_why cannot say. The world: an interface (E2E_CMD set, no APP_URL),
+# a charter, a report still in progress — so the derived step is `QA:exec` — and a stub that
+# closes the report and commits, so the step derived after the session is `QA:close`.
+echo "== a QA row carries the sub-step the session left behind =="
+QA_STEP_CKPT_BEFORE="$OUTSIDE/checkpoint-before-qa-step.md"
+cp "$MDIR/checkpoint.md" "$QA_STEP_CKPT_BEFORE"
+QA_STEP_EXEC_HANDOFF="$OUTSIDE/exec-handoff-before-qa-step.md"
+rm -f "$QA_STEP_EXEC_HANDOFF"
+[ -e "$MDIR/20-handoff-exec.md" ] && cp "$MDIR/20-handoff-exec.md" "$QA_STEP_EXEC_HANDOFF"
+sed -i 's|^E2E_CMD=.*|E2E_CMD="true"|' .sdd/config.sh
+mkdir -p "$FIX/docs/qa/charters" "$FIX/docs/qa/reports"
+printf '# CH-one\n' > "$FIX/docs/qa/charters/CH-one.md"
+# PROVENANCE: ~/.claude/skills/qa-execution/assets/report-template.md:6, the same capture the
+# dead-app pair above carries — here with the status still `in-progress`.
+cat > "$FIX/docs/qa/reports/2026-01-01-fixture.md" <<'RPT'
+# QA Run Report — 2026-01-01 — fixture
+- **Started:** 2026-01-01T10:00:00Z · **Status:** in-progress <!-- in-progress | closed -->
+RPT
+rm -f "$MDIR/30-handoff-qa.md"
+printf -- '---\nfase: EXEC\nstatus: done\n---\n' > "$MDIR/20-handoff-exec.md"
+git add -A && git commit -qm "chore: an interface, a charter and a report still open"
+cat > "$MDIR/checkpoint.md" <<EOF
+| ID | Incremento | Check (comando → esperado) | Status | Commit |
+|---|---|---|---|---|
+| I1 | slice one | \`true\` → 0 | done | $(git rev-parse --short HEAD) |
+EOF
+git add -A && git commit -qm "chore: every increment done, QA is next"
+cat > "$OUTSIDE/stub/claude" <<STUB
+#!/usr/bin/env bash
+sed -i 's/\*\*Status:\*\* in-progress/**Status:** closed/' "$FIX/docs/qa/reports/2026-01-01-fixture.md"
+git -C "$FIX" add -A
+git -C "$FIX" commit -qm "chore: the report closed" >/dev/null 2>&1
+cat "$STREAM_SAMPLE"
+exit 0
+STUB
+chmod +x "$OUTSIDE/stub/claude"
+: > "$LEDGER"
+"$SDD" run "$MISSION" --phase QA --max-phases 1 >/dev/null 2>&1
+# The floor: the row exists, is QA, and the step the runner derived BEFORE was `exec` — without it
+# the assertion below would pass over a fixture that never reached the sub-step it names.
+assert_eq "the QA row of that world opened on the exec sub-step" "QA QA:exec true" \
+  "$(jq -r -s '[.[] | select(.event == "session")][0] | "\(.phase) \(.step) \(.moved)"' "$LEDGER")"
+assert_eq "a QA row carries the step the session left behind" "QA:close" \
+  "$(jq -r -s '[.[] | select(.event == "session")][0].step_after' "$LEDGER")"
+
+# One probe per door: the field is written at three sites (cmd_run's first pass, its inline retry,
+# cmd_retry), each with its own phase guard, and a door without a probe is one whose removal no
+# assertion notices. DOOR 2: the first session changes nothing — the only way to reach the inline
+# retry — and the retry's session closes the report.
+QA_STEP_MARKER="$OUTSIDE/.qa-step-first"
+reopen_qa_report() {
+  sed -i 's/\*\*Status:\*\* closed/**Status:** in-progress/' "$FIX/docs/qa/reports/2026-01-01-fixture.md"
+  git add -A && git commit -qm "chore: the report reopened"
+}
+reopen_qa_report
+rm -f "$QA_STEP_MARKER"
+cat > "$OUTSIDE/stub/claude" <<STUB
+#!/usr/bin/env bash
+if [ ! -e "$QA_STEP_MARKER" ]; then
+  : > "$QA_STEP_MARKER"
+else
+  sed -i 's/\*\*Status:\*\* in-progress/**Status:** closed/' "$FIX/docs/qa/reports/2026-01-01-fixture.md"
+  git -C "$FIX" add -A
+  git -C "$FIX" commit -qm "chore: the report closed" >/dev/null 2>&1
+fi
+cat "$STREAM_SAMPLE"
+exit 0
+STUB
+chmod +x "$OUTSIDE/stub/claude"
+: > "$LEDGER"
+# No `--max-phases` here: the ceiling sits ABOVE the inline retry, so under it the retry is never
+# bought. The run goes on past row [1] and ends however the later laps end; only [0] and [1] count.
+"$SDD" run "$MISSION" --phase QA >/dev/null 2>&1
+assert_eq "the first pass that moved nothing stays on the exec sub-step" "false false QA:exec" \
+  "$(jq -r -s '[.[] | select(.event == "session")][0] | "\(.auto_retry) \(.moved) \(.step_after)"' "$LEDGER")"
+assert_eq "the inline retry carries the sub-step its own session left behind" "true QA:exec QA:close" \
+  "$(jq -r -s '[.[] | select(.event == "session")][1] | "\(.auto_retry) \(.step) \(.step_after)"' "$LEDGER")"
+# The QA pair at door 2 (I3): the retry starts where the first pass left the checkpoint and
+# photographs its own end. Nothing was pending in this world, so `0 0` — the value a missing door
+# would write as `null null`.
+assert_eq "the inline retry of a QA session photographs its checkpoint too" "true 0 0" \
+  "$(jq -r -s '[.[] | select(.event == "session")][1] | "\(.auto_retry) \(.pending_before) \(.pending_after)"' "$LEDGER")"
+
+# DOOR 3: `sdd retry` derives QA over the same world and opens a fresh session that closes it.
+reopen_qa_report
+rm -f "$QA_STEP_MARKER"; : > "$QA_STEP_MARKER"
+: > "$LEDGER"
+"$SDD" retry "$MISSION" >/dev/null 2>&1
+assert_eq "a QA row written by sdd retry carries step_after too" "retry QA:exec QA:close" \
+  "$(jq -r -s '[.[] | select(.event == "session")][0] | "\(.invocation) \(.step) \(.step_after)"' "$LEDGER")"
+assert_eq "a QA row written by sdd retry photographs its checkpoint too" "retry 0 0" \
+  "$(jq -r -s '[.[] | select(.event == "session")][0] | "\(.invocation) \(.pending_before) \(.pending_after)"' "$LEDGER")"
+
+# --- a QA close that wrote fix increments carries the pending it left behind (I3) ---
+# The QA⇄EXEC loop is the other half of QA's design: a close that reproves a sanable bug writes an
+# `F<n>` row, `pending`, and the runner hands the line back to EXEC. The gate_why of that session
+# says the bugs "become fix increments", not that THIS session wrote them, so the fact has to come
+# from the writer: the pending count before the session and after it, the same photograph EXEC
+# takes. DOOR 1 here; doors 2 and 3 are the two `photographs its checkpoint too` lines above.
+echo "== a QA close that wrote fix increments carries the pending it left behind =="
+cat > "$OUTSIDE/stub/claude" <<STUB
+#!/usr/bin/env bash
+printf '| F1 | fix the bug | true → 0 | pending | — |\n' >> "$MDIR/checkpoint.md"
+git -C "$FIX" add -A
+git -C "$FIX" commit -qm "chore: the QA wrote a fix increment" >/dev/null 2>&1
+cat "$STREAM_SAMPLE"
+exit 0
+STUB
+chmod +x "$OUTSIDE/stub/claude"
+: > "$LEDGER"
+"$SDD" run "$MISSION" --phase QA --max-phases 1 >/dev/null 2>&1
+# The floor: the stub really did append the row the tally reads, so a `0 1` below is the writer's.
+assert_eq "the QA session of that world wrote a pending fix increment" "1" \
+  "$(grep -c '^| F1 .*| pending |' "$MDIR/checkpoint.md")"
+assert_eq "a QA row carries the pending count before and after its session" "QA true 0 1 true" \
+  "$(jq -r -s '[.[] | select(.event == "session")][0] | "\(.phase) \(.moved) \(.pending_before) \(.pending_after) \(.increments_total == null)"' "$LEDGER")"
+
+cp "$QA_STEP_CKPT_BEFORE" "$MDIR/checkpoint.md"
+if [ -e "$QA_STEP_EXEC_HANDOFF" ]; then cp "$QA_STEP_EXEC_HANDOFF" "$MDIR/20-handoff-exec.md"; else rm -f "$MDIR/20-handoff-exec.md"; fi
+sed -i 's|^E2E_CMD=.*|E2E_CMD=""|' .sdd/config.sh
+rm -rf "$FIX/docs/qa"
+printf -- '---\nfase: QA\nstatus: done\n---\n' > "$MDIR/30-handoff-qa.md"
+cat > "$OUTSIDE/stub/claude" <<'STUB'
+#!/usr/bin/env bash
+exit 1
+STUB
+chmod +x "$OUTSIDE/stub/claude"
+git add -A && git commit -qm "chore: restore the fixture the QA sub-step block borrowed"
+
 # --- the session died, and the runner says so ------------------------------
 # THE PAIR of this family, and the same shape as the dead-app pair above: one stub, two regimes,
 # and the only thing that differs between the two runs is which distilled `result` the stub
@@ -2917,6 +3065,27 @@ assert_eq "the human window and the judge agree on the increment that advanced" 
   "$(jq -r '.latest.outcomes | "\(.advanced) \(.churned) \(.idle)"' <<< "$series_prog")" "$table_prog"
 assert_eq "that parity is not vacuous — the table printed the three counts" "3 2 1" "$table_prog"
 assert_bucket_sum "the four buckets sum to the header total (increment counts)" "$out_prog"
+
+# --- the QA close that wrote fix increments is the designed loop (20260930-a-sub-etapa-que-andou, I3)
+# A QA close that reproves a sanable bug writes an `F<n>` row, `pending`, and hands the line back
+# to EXEC: the loop QA⇄EXEC the pipeline draws. Its gate fails on purpose (`N bug(s) with Status:
+# open`), so gate-only it read `churned`. The arm reads the pending pair the writer photographs on
+# QA rows and counts it GROWING — and only on QA: on EXEC a pending count that grew is the opposite
+# of progress. DIFFERENTIAL on one fixture: the same row, `phase` apart, one version each, two
+# answers. The QA row ends on the sub-step it started on (`QA:close` → `QA:close`), so the sub-step
+# arm cannot be what grades it.
+echo "== reader: the QA close that wrote fix increments is the designed loop =="
+mkdir -p "$OUTSIDE/fixloop"
+localize > "$OUTSIDE/fixloop/autonomy-log.jsonl" <<'EOF'
+{"v":1,"ts":"2026-09-30T10:00:00-03:00","event":"session","run_id":"f1","invocation":"run","kit_sha":"fff8080","kit_dirty":false,"project":"p1","repo":"/p1","mission":"m80","phase":"QA","step":"QA:close","step_after":"QA:close","agent":"sdd-qa","model":"opus","attempt":1,"auto_retry":false,"session":"f1a","rc":0,"dur_s":10,"cost_usd":1.0,"moved":true,"pending_before":0,"pending_after":1,"increments_total":null,"gate":"fail","gate_why":"2 bug(s) with Status: open"}
+{"v":1,"ts":"2026-09-30T10:00:00-03:00","event":"session","run_id":"f1","invocation":"run","kit_sha":"fff8181","kit_dirty":false,"project":"p1","repo":"/p1","mission":"m81","phase":"EXEC","step":"EXEC","step_after":null,"agent":"sdd-qa","model":"opus","attempt":1,"auto_retry":false,"session":"f1b","rc":0,"dur_s":10,"cost_usd":1.0,"moved":true,"pending_before":0,"pending_after":1,"increments_total":null,"gate":"fail","gate_why":"2 bug(s) with Status: open"}
+EOF
+out_fix="$( SDD_STATE_DIR="$OUTSIDE/fixloop" "$SDD" autonomy 2>&1 )"; rc=$?
+assert_eq "a ledger of fix-loop rows is data (rc 0)" "0" "$rc"
+assert_eq "a QA close that wrote fix increments is the designed loop" "1" \
+  "$(grep -cE '^  fff8080  1 session\(s\) · 1 advanced · 0 churned · 0 idle · ' <<< "$out_fix")"
+assert_eq "an EXEC row whose pending grew is still churn" "1" \
+  "$(grep -cE '^  fff8181  1 session\(s\) · 0 advanced · 1 churned · 0 idle · ' <<< "$out_fix")"
 
 # --- the historical path: a row older than the fields recovers its count from gate_why -----------
 # 49 of the 72 EXEC rows in the real ledger were written before the three pending fields existed,

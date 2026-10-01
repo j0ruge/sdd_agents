@@ -389,6 +389,128 @@ assert_eq "the human window and the judge count the REVIEW round alike" \
 # this fixture, so the parity above is about the numbers this block describes.
 assert_eq "that parity is not vacuous — the table printed the three counts" "6 3 1" "$rounds_table"
 
+# --- the QA sub-step that advanced is not churn (20260930-a-sub-etapa-que-andou) --
+# The third phase that is a LOOP BY DESIGN and the last one the rubric still read gate-only.
+# `qa_substep` routes plan → exec → close, and gate_QA fails on its FIRST line (`missing
+# 30-handoff-qa.md`) for every session before the close — so the `QA:exec` that closed the report,
+# exactly what the design asks of it, read `churned`. Measured on window 2 (`5b98087`): 7 of the 9
+# churned sessions of the slice are QA, and three of them are that `QA:exec`.
+#
+# FIVE missions, one per rule of the arm, each paired with a passing close so the phase closes and
+# the cell is graded on the outcome. Every failing row has `gate: "fail"` on purpose — a row whose
+# gate passed is satisfied by the FIRST arm and measures nothing about this one:
+#   m70  QA:exec → QA:close              the designed advance                       ok
+#   m71  QA:exec → QA:exec               the SAME row with no advance: churn         leve
+#   m72  QA:exec → QA:close, moved:false a session that wrote nothing                leve
+#   m73  QA      → QA:close              a step the rank does not know               leve
+#   m74  QA:close → QA:exec              the sub-step went BACK                      leve
+# m70/m71 are the differential pair: one field apart, two answers. m73 is the flattery the null
+# guard exists for — jq orders `null` below every number, so `2 > null` is TRUE.
+# ⚠️ Every row carries `step_after` explicitly: a row WITHOUT it is the historic shape the
+# next-row recovery (I4) fills in, and this block measures the arm, not the recovery.
+echo "== series: the QA sub-step that advanced is not churn =="
+mkdir -p "$OUTSIDE/substep"
+localize > "$OUTSIDE/substep/autonomy-log.jsonl" <<'EOF'
+{"v":1,"ts":"2026-09-30T10:00:00-03:00","event":"session","run_id":"q0","invocation":"run","kit_sha":"ccc7070","kit_dirty":false,"project":"p1","repo":"/p1","mission":"m70","phase":"QA","step":"QA:exec","step_after":"QA:close","agent":"sdd-qa","model":"opus","attempt":1,"auto_retry":false,"session":"q0a","rc":0,"dur_s":10,"cost_usd":3.0,"moved":true,"pending_before":0,"pending_after":0,"increments_total":3,"gate":"fail","gate_why":"missing 30-handoff-qa.md"}
+{"v":1,"ts":"2026-09-30T10:01:00-03:00","event":"session","run_id":"q0","invocation":"run","kit_sha":"ccc7070","kit_dirty":false,"project":"p1","repo":"/p1","mission":"m70","phase":"QA","step":"QA:close","step_after":"QA:close","agent":"sdd-qa","model":"opus","attempt":2,"auto_retry":false,"session":"q0b","rc":0,"dur_s":10,"cost_usd":3.0,"moved":true,"pending_before":0,"pending_after":0,"increments_total":3,"gate":"pass","gate_why":"30-handoff-qa.md: every journey green"}
+{"v":1,"ts":"2026-09-30T10:02:00-03:00","event":"session","run_id":"q1","invocation":"run","kit_sha":"ccc7070","kit_dirty":false,"project":"p1","repo":"/p1","mission":"m71","phase":"QA","step":"QA:exec","step_after":"QA:exec","agent":"sdd-qa","model":"opus","attempt":1,"auto_retry":false,"session":"q1a","rc":0,"dur_s":10,"cost_usd":3.0,"moved":true,"pending_before":0,"pending_after":0,"increments_total":3,"gate":"fail","gate_why":"missing 30-handoff-qa.md"}
+{"v":1,"ts":"2026-09-30T10:03:00-03:00","event":"session","run_id":"q1","invocation":"run","kit_sha":"ccc7070","kit_dirty":false,"project":"p1","repo":"/p1","mission":"m71","phase":"QA","step":"QA:close","step_after":"QA:close","agent":"sdd-qa","model":"opus","attempt":2,"auto_retry":false,"session":"q1b","rc":0,"dur_s":10,"cost_usd":3.0,"moved":true,"pending_before":0,"pending_after":0,"increments_total":3,"gate":"pass","gate_why":"30-handoff-qa.md: every journey green"}
+{"v":1,"ts":"2026-09-30T10:04:00-03:00","event":"session","run_id":"q2","invocation":"run","kit_sha":"ccc7070","kit_dirty":false,"project":"p1","repo":"/p1","mission":"m72","phase":"QA","step":"QA:exec","step_after":"QA:close","agent":"sdd-qa","model":"opus","attempt":1,"auto_retry":false,"session":"q2a","rc":0,"dur_s":10,"cost_usd":3.0,"moved":false,"pending_before":0,"pending_after":0,"increments_total":3,"gate":"fail","gate_why":"missing 30-handoff-qa.md"}
+{"v":1,"ts":"2026-09-30T10:05:00-03:00","event":"session","run_id":"q2","invocation":"run","kit_sha":"ccc7070","kit_dirty":false,"project":"p1","repo":"/p1","mission":"m72","phase":"QA","step":"QA:close","step_after":"QA:close","agent":"sdd-qa","model":"opus","attempt":2,"auto_retry":false,"session":"q2b","rc":0,"dur_s":10,"cost_usd":3.0,"moved":true,"pending_before":0,"pending_after":0,"increments_total":3,"gate":"pass","gate_why":"30-handoff-qa.md: every journey green"}
+{"v":1,"ts":"2026-09-30T10:06:00-03:00","event":"session","run_id":"q3","invocation":"run","kit_sha":"ccc7070","kit_dirty":false,"project":"p1","repo":"/p1","mission":"m73","phase":"QA","step":"QA","step_after":"QA:close","agent":"sdd-qa","model":"opus","attempt":1,"auto_retry":false,"session":"q3a","rc":0,"dur_s":10,"cost_usd":3.0,"moved":true,"pending_before":0,"pending_after":0,"increments_total":3,"gate":"fail","gate_why":"missing 30-handoff-qa.md"}
+{"v":1,"ts":"2026-09-30T10:07:00-03:00","event":"session","run_id":"q3","invocation":"run","kit_sha":"ccc7070","kit_dirty":false,"project":"p1","repo":"/p1","mission":"m73","phase":"QA","step":"QA:close","step_after":"QA:close","agent":"sdd-qa","model":"opus","attempt":2,"auto_retry":false,"session":"q3b","rc":0,"dur_s":10,"cost_usd":3.0,"moved":true,"pending_before":0,"pending_after":0,"increments_total":3,"gate":"pass","gate_why":"30-handoff-qa.md: every journey green"}
+{"v":1,"ts":"2026-09-30T10:08:00-03:00","event":"session","run_id":"q4","invocation":"run","kit_sha":"ccc7070","kit_dirty":false,"project":"p1","repo":"/p1","mission":"m74","phase":"QA","step":"QA:close","step_after":"QA:exec","agent":"sdd-qa","model":"opus","attempt":1,"auto_retry":false,"session":"q4a","rc":0,"dur_s":10,"cost_usd":3.0,"moved":true,"pending_before":0,"pending_after":0,"increments_total":3,"gate":"fail","gate_why":"missing 30-handoff-qa.md"}
+{"v":1,"ts":"2026-09-30T10:09:00-03:00","event":"session","run_id":"q4","invocation":"run","kit_sha":"ccc7070","kit_dirty":false,"project":"p1","repo":"/p1","mission":"m74","phase":"QA","step":"QA:close","step_after":"QA:close","agent":"sdd-qa","model":"opus","attempt":2,"auto_retry":false,"session":"q4b","rc":0,"dur_s":10,"cost_usd":3.0,"moved":true,"pending_before":0,"pending_after":0,"increments_total":3,"gate":"pass","gate_why":"30-handoff-qa.md: every journey green"}
+EOF
+SUBSTEP_OUT="$( cd "$FIX" && SDD_STATE_DIR="$OUTSIDE/substep" "$SDD" kaizen --series 2>/dev/null )"
+substep_cell() { jq -r --arg m "$1" '.latest.detail[] | select(.mission == $m and .phase == "QA")
+                                     | "\(.label) \(.outcomes | tojson)"' <<< "$SUBSTEP_OUT"; }
+# THE pair of this increment. Under the old rubric m70 reads `leve {"advanced":1,"churned":1,...}`,
+# letter for letter the QA cells of window 2.
+assert_eq "a QA sub-step that advanced reads advanced" \
+  'ok {"advanced":2,"churned":0,"idle":0}' "$(substep_cell m70)"
+assert_eq "the same QA row with no sub-step advance reads churned" \
+  'leve {"advanced":1,"churned":1,"idle":0}' "$(substep_cell m71)"
+assert_eq "a QA session that wrote nothing did not advance the sub-step" \
+  'leve {"advanced":1,"churned":0,"idle":1}' "$(substep_cell m72)"
+assert_eq "a QA step the rank does not know is not a sub-step that advanced" \
+  'leve {"advanced":1,"churned":1,"idle":0}' "$(substep_cell m73)"
+assert_eq "a QA sub-step that went BACK is not a sub-step that advanced" \
+  'leve {"advanced":1,"churned":1,"idle":0}' "$(substep_cell m74)"
+# Parity of the two readers over the same fixture, measured on the outputs (see the REVIEW block).
+substep_win="$( cd "$FIX" && SDD_STATE_DIR="$OUTSIDE/substep" "$SDD" autonomy 2>&1 )"
+substep_table="$(sed -nE 's/^  ccc7070  [0-9]+ session\(s\) · ([0-9]+) advanced · ([0-9]+) churned · ([0-9]+) idle · .*/\1 \2 \3/p' <<< "$substep_win")"
+assert_eq "the human window and the judge count the QA sub-step alike" \
+  "$(jq -r '.latest.outcomes | "\(.advanced) \(.churned) \(.idle)"' <<< "$SUBSTEP_OUT")" "$substep_table"
+assert_eq "that QA parity is not vacuous — the table printed the three counts" "6 3 1" "$substep_table"
+
+# --- the QA rows older than step_after read their sub-step from the next row ------
+# The second half of the same change (I4), and it exists for the same reason as historic_progress
+# and historic_rounds: every QA row written before the writer of I1 carries no `step_after`, and the
+# three `QA:exec` rows of window 2 — the very rows this mission is about — are among them. The
+# fact is recovered from the `step` of the NEXT QA session row of the same (repo, mission), never
+# from gate_why: `missing 30-handoff-qa.md` reads the same with the report closed and without.
+# Every row below has NO `step_after` key — the historic shape — except m83:
+#   m80  QA:exec → QA:close                  the designed advance, recovered          2 adv 0 churn
+#   m81  QA:exec → QA:exec → QA:close        the first did not advance, the second did 2 adv 1 churn
+#   m82  QA:exec in THIS repo, QA:close in /p2  the key has a repo half: no advance    0 adv 1 churn
+#   m83  QA:exec with `step_after: null`     a row the WRITER wrote and whose photo went missing:
+#                                             not pre-schema, never laundered        1 adv 1 churn
+#   m84  QA:exec in run n5, QA:close in run n6  the next row is another RUN: no advance  1 adv 1 churn
+#   m85  QA:exec → QA:close, neither with a `run_id`  two unknown runs are not one run  1 adv 1 churn
+# m82 is the probe the EXEC sibling's key never had: two missions of the same slug in two repos.
+# A slug-only key hands this repo's last QA row the next row of ANOTHER repo and reads `advanced`.
+# m84 is finding #1 of r1 (20260930-a-sub-etapa-que-andou): between two runs a human or an
+# interactive session may close the report, and the next run's `step` carries THAT advance. The
+# writer, deriving the sub-step right after the session, would say `churned` in the same world.
+echo "== autonomy: the QA rows older than step_after read the next row =="
+mkdir -p "$OUTSIDE/nextstep"
+localize > "$OUTSIDE/nextstep/autonomy-log.jsonl" <<'EOF'
+{"v":1,"ts":"2026-09-30T11:00:00-03:00","event":"session","run_id":"n0","invocation":"run","kit_sha":"ddd7070","kit_dirty":false,"project":"p1","repo":"/p1","mission":"m80","phase":"QA","step":"QA:exec","agent":"sdd-qa","model":"opus","attempt":1,"auto_retry":false,"session":"n0a","rc":0,"dur_s":10,"cost_usd":3.0,"moved":true,"gate":"fail","gate_why":"missing 30-handoff-qa.md"}
+{"v":1,"ts":"2026-09-30T11:01:00-03:00","event":"session","run_id":"n0","invocation":"run","kit_sha":"ddd7070","kit_dirty":false,"project":"p1","repo":"/p1","mission":"m80","phase":"QA","step":"QA:close","agent":"sdd-qa","model":"opus","attempt":2,"auto_retry":false,"session":"n0b","rc":0,"dur_s":10,"cost_usd":3.0,"moved":true,"gate":"pass","gate_why":"30-handoff-qa.md: every journey green"}
+{"v":1,"ts":"2026-09-30T11:02:00-03:00","event":"session","run_id":"n1","invocation":"run","kit_sha":"ddd7070","kit_dirty":false,"project":"p1","repo":"/p1","mission":"m81","phase":"QA","step":"QA:exec","agent":"sdd-qa","model":"opus","attempt":1,"auto_retry":false,"session":"n1a","rc":0,"dur_s":10,"cost_usd":3.0,"moved":true,"gate":"fail","gate_why":"missing 30-handoff-qa.md"}
+{"v":1,"ts":"2026-09-30T11:03:00-03:00","event":"session","run_id":"n1","invocation":"run","kit_sha":"ddd7070","kit_dirty":false,"project":"p1","repo":"/p1","mission":"m81","phase":"QA","step":"QA:exec","agent":"sdd-qa","model":"opus","attempt":2,"auto_retry":false,"session":"n1b","rc":0,"dur_s":10,"cost_usd":3.0,"moved":true,"gate":"fail","gate_why":"missing 30-handoff-qa.md"}
+{"v":1,"ts":"2026-09-30T11:04:00-03:00","event":"session","run_id":"n1","invocation":"run","kit_sha":"ddd7070","kit_dirty":false,"project":"p1","repo":"/p1","mission":"m81","phase":"QA","step":"QA:close","agent":"sdd-qa","model":"opus","attempt":3,"auto_retry":false,"session":"n1c","rc":0,"dur_s":10,"cost_usd":3.0,"moved":true,"gate":"pass","gate_why":"30-handoff-qa.md: every journey green"}
+{"v":1,"ts":"2026-09-30T11:05:00-03:00","event":"session","run_id":"n2","invocation":"run","kit_sha":"ddd7070","kit_dirty":false,"project":"p1","repo":"/p1","mission":"m82","phase":"QA","step":"QA:exec","agent":"sdd-qa","model":"opus","attempt":1,"auto_retry":false,"session":"n2a","rc":0,"dur_s":10,"cost_usd":3.0,"moved":true,"gate":"fail","gate_why":"missing 30-handoff-qa.md"}
+{"v":1,"ts":"2026-09-30T11:06:00-03:00","event":"session","run_id":"n2","invocation":"run","kit_sha":"ddd7070","kit_dirty":false,"project":"p2","repo":"/p2","mission":"m82","phase":"QA","step":"QA:close","agent":"sdd-qa","model":"opus","attempt":1,"auto_retry":false,"session":"n3a","rc":0,"dur_s":10,"cost_usd":3.0,"moved":true,"gate":"pass","gate_why":"30-handoff-qa.md: every journey green"}
+{"v":1,"ts":"2026-09-30T11:07:00-03:00","event":"session","run_id":"n4","invocation":"run","kit_sha":"ddd7070","kit_dirty":false,"project":"p1","repo":"/p1","mission":"m83","phase":"QA","step":"QA:exec","step_after":null,"agent":"sdd-qa","model":"opus","attempt":1,"auto_retry":false,"session":"n4a","rc":0,"dur_s":10,"cost_usd":3.0,"moved":true,"gate":"fail","gate_why":"missing 30-handoff-qa.md"}
+{"v":1,"ts":"2026-09-30T11:08:00-03:00","event":"session","run_id":"n4","invocation":"run","kit_sha":"ddd7070","kit_dirty":false,"project":"p1","repo":"/p1","mission":"m83","phase":"QA","step":"QA:close","step_after":"QA:close","agent":"sdd-qa","model":"opus","attempt":2,"auto_retry":false,"session":"n4b","rc":0,"dur_s":10,"cost_usd":3.0,"moved":true,"gate":"pass","gate_why":"30-handoff-qa.md: every journey green"}
+{"v":1,"ts":"2026-09-30T11:09:00-03:00","event":"session","run_id":"n5","invocation":"run","kit_sha":"ddd7070","kit_dirty":false,"project":"p1","repo":"/p1","mission":"m84","phase":"QA","step":"QA:exec","agent":"sdd-qa","model":"opus","attempt":1,"auto_retry":false,"session":"n5a","rc":0,"dur_s":10,"cost_usd":3.0,"moved":true,"gate":"fail","gate_why":"missing 30-handoff-qa.md"}
+{"v":1,"ts":"2026-10-01T09:00:00-03:00","event":"session","run_id":"n6","invocation":"run","kit_sha":"ddd7070","kit_dirty":false,"project":"p1","repo":"/p1","mission":"m84","phase":"QA","step":"QA:close","agent":"sdd-qa","model":"opus","attempt":1,"auto_retry":false,"session":"n6a","rc":0,"dur_s":10,"cost_usd":3.0,"moved":true,"gate":"pass","gate_why":"30-handoff-qa.md: every journey green"}
+{"v":1,"ts":"2026-10-01T09:01:00-03:00","event":"session","invocation":"run","kit_sha":"ddd7070","kit_dirty":false,"project":"p1","repo":"/p1","mission":"m85","phase":"QA","step":"QA:exec","agent":"sdd-qa","model":"opus","attempt":1,"auto_retry":false,"session":"n7a","rc":0,"dur_s":10,"cost_usd":3.0,"moved":true,"gate":"fail","gate_why":"missing 30-handoff-qa.md"}
+{"v":1,"ts":"2026-10-01T09:02:00-03:00","event":"session","invocation":"run","kit_sha":"ddd7070","kit_dirty":false,"project":"p1","repo":"/p1","mission":"m85","phase":"QA","step":"QA:close","agent":"sdd-qa","model":"opus","attempt":2,"auto_retry":false,"session":"n7b","rc":0,"dur_s":10,"cost_usd":3.0,"moved":true,"gate":"pass","gate_why":"30-handoff-qa.md: every journey green"}
+EOF
+NEXTSTEP_OUT="$( cd "$FIX" && SDD_STATE_DIR="$OUTSIDE/nextstep" "$SDD" autonomy --all-repos --by-mission 2>&1 )"
+# nextstep_cell <repo-basename>/<mission> — "<advanced> <churned> <idle>" of that by-mission line.
+nextstep_cell() { sed -nE "s|^  $1  [0-9]+ session\\(s\\) · ([0-9]+) advanced · ([0-9]+) churned · ([0-9]+) idle · .*|\\1 \\2 \\3|p" <<< "$NEXTSTEP_OUT"; }
+FIXBASE="$(basename "$FIXROOT")"
+assert_eq "a QA row older than step_after that advanced reads advanced from the next row" \
+  "2 0 0" "$(nextstep_cell "$FIXBASE/m80")"
+assert_eq "a QA row older than step_after whose next row repeats the sub-step reads churned" \
+  "2 1 0" "$(nextstep_cell "$FIXBASE/m81")"
+assert_eq "the next QA row of the same slug in ANOTHER repo is not this row's next row" \
+  "0 1 0" "$(nextstep_cell "$FIXBASE/m82")"
+assert_eq "a QA row the writer wrote with step_after null is not recovered from the next row" \
+  "1 1 0" "$(nextstep_cell "$FIXBASE/m83")"
+assert_eq "a QA row older than step_after is not recovered from the next row of another run" \
+  "1 1 0" "$(nextstep_cell "$FIXBASE/m84")"
+assert_eq "a QA row with no run_id is not recovered from a next row with no run_id either" \
+  "1 1 0" "$(nextstep_cell "$FIXBASE/m85")"
+# The disclosure, and the DELETION SIGNAL of the dated path: m80's first, m81's first two. Never
+# m82's (no next row in its repo), never m83's (not pre-schema), never m84's (the next row is
+# another run), never m85's (no run to share), never a row that passed last.
+assert_eq "the screen counts the QA rows that read their sub-step from the next row" "1" \
+  "$(grep -c '^  (3 QA row(s) older than step_after read their sub-step from the next row)$' <<< "$NEXTSTEP_OUT")"
+# Parity of the two readers over a dated history: the judge applies the same recovery at the same
+# point of its own program. The judge reads every repo (ADR 0005), so the window it is compared to
+# is `--all-repos` — and m82's /p2 half is one of the advances on both sides.
+NEXTSTEP_SERIES="$( cd "$FIX" && SDD_STATE_DIR="$OUTSIDE/nextstep" "$SDD" kaizen --series 2>/dev/null )"
+nextstep_win="$( cd "$FIX" && SDD_STATE_DIR="$OUTSIDE/nextstep" "$SDD" autonomy --all-repos 2>&1 )"
+nextstep_table="$(sed -nE 's/^  ddd7070  [0-9]+ session\(s\) · ([0-9]+) advanced · ([0-9]+) churned · ([0-9]+) idle · .*/\1 \2 \3/p' <<< "$nextstep_win")"
+assert_eq "the human window and the judge recover the QA sub-step alike" \
+  "$(jq -r '.latest.outcomes | "\(.advanced) \(.churned) \(.idle)"' <<< "$NEXTSTEP_SERIES")" "$nextstep_table"
+assert_eq "that recovered parity is not vacuous — the table printed the three counts" "8 5 0" "$nextstep_table"
+
 # --- the phase that closed WITHOUT buying a session --------------------------
 # The third clause of `phase_label` asks "did the last SESSION pass its gate?" while meaning "did
 # the PHASE close?", and the two are the same question only while every gate that ever passes

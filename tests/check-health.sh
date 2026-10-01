@@ -37,6 +37,11 @@
 #      effect. Both mutants are caught, so nothing fails open; what is short by one is this
 #      header, and this header is what a reader uses to map mutant onto assertion. Re-derive
 #      before trusting either number: `grep -c '^mut_HEALTH_' tests/check-mutation.sh`.
+#      ⚠️ DECLARED LIMIT (D15), moved here from TODO.md: the stub suite's `stub-argv.txt` is
+#      overwritten by every health_run and never removed between fixture worlds. Measured not to
+#      fail open today — with no call to the suite the file is absent and the `surface:` assertion
+#      accuses correctly. The day cmd_health grows a SECOND path to the suite, the last write
+#      wins in silence; delete the file in green_world then, as the other fixtures do.
 #   12. the ratchet policy is written where the next mission meets it — CLAUDE.md and TODO.md. The
 #      one rule here that no mut_HEALTH_* can reach, since none of them can make a document say
 #      less, so it carries probes of its own over all three of its layers.

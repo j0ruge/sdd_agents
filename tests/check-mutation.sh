@@ -3546,7 +3546,7 @@ mut_EXEC_tally_counts_done() {
 # in a subshell that dies at once — the run→REVIEW fixture cannot reach the leak at all, and a
 # sabotage pass against it came back green. The only sequence that reaches it is an EXEC gate
 # passing in the PARENT shell followed by another lap, which is the block `the EXEC counts do not
-# follow the run into the next phase` builds. Caught by `a non-EXEC row carries the three as null`
+# follow the run into the next phase` builds. Caught by `a non-EXEC row carries none of EXEC's counts`
 # there, and by nothing else.
 mut_LEDGER_progress_leaks_across_phases() {
   sed -i 's@^    if \[ "\$phase" = "EXEC" \]; then exec_after="\$GATE_EXEC_PENDING"; exec_total="\$GATE_EXEC_TOTAL"; fi$@    exec_after="$GATE_EXEC_PENDING"; exec_total="$GATE_EXEC_TOTAL"@' "$1"
@@ -3743,6 +3743,153 @@ mut_RUN_review_rounds_photo_missing() {
 # carries the three round fields as null` there, and by nothing else.
 mut_LEDGER_rounds_leak_across_phases() {
   sed -i 's@^    if \[ "\$phase" = "REVIEW" \]; then review_after="\$GATE_REVIEW_ROUNDS"; review_max="\$GATE_REVIEW_MAX"; fi$@    review_after="$GATE_REVIEW_ROUNDS"; review_max="$GATE_REVIEW_MAX"@' "$1"
+}
+
+# `step_after` (20260930-a-sub-etapa-que-andou) is written at THREE doors, each with its own phase
+# guard, and one mutant per door: a door without a mutant is one whose removal no assertion notices.
+# DOOR 1, cmd_run's first pass: the derivation after the session goes and the QA row is born with
+# `step_after: null` — the gate_why-only reading that called the report-closing `QA:exec` churn.
+# Caught by `a QA row carries the step the session left behind` in check-autonomy.sh.
+mut_RUN_qa_step_after_missing() {
+  sed -i 's@^    if \[ "\$phase" = "QA" \]; then step_after="\$(phase_step QA)"; fi$@    :@' "$1"
+}
+
+# DOOR 2, the inline retry. Caught by `the inline retry carries the sub-step its own session left
+# behind` in check-autonomy.sh, which reads `true QA:exec null`.
+mut_RUN_qa_step_after_retry_missing() {
+  sed -i 's@^    if \[ "\$phase" = "QA" \]; then step_after2="\$(phase_step QA)"; fi$@    :@' "$1"
+}
+
+# DOOR 3, cmd_retry. Caught by `a QA row written by sdd retry carries step_after too`.
+mut_RUN_qa_step_after_cmd_retry_missing() {
+  sed -i 's@^  if \[ "\$phase" = "QA" \]; then step_after="\$(phase_step QA)"; fi$@  :@' "$1"
+}
+
+# The phase guard of door 1 goes and every row gets a sub-step: an EXEC row would carry `QA:close`,
+# a field no reader asked for and one the sub-step arm keys on. Caught by `a non-QA row carries
+# step_after as null` in check-autonomy.sh.
+mut_LEDGER_step_after_unguarded() {
+  sed -i 's@^    if \[ "\$phase" = "QA" \]; then step_after="\$(phase_step QA)"; fi$@    step_after="$(phase_step QA)"@' "$1"
+}
+
+# The QA sub-step arm (20260930-a-sub-etapa-que-andou) goes whole: the writer keeps filling
+# `step_after` and the reader stops looking, so the `QA:exec` that closed the report reads churn
+# again — 7 of the 9 churned sessions of window 2. Caught by `a QA sub-step that advanced reads
+# advanced` in check-kaizen.sh, which reads `leve {"advanced":1,"churned":1,"idle":0}`.
+mut_KAIZEN_qa_step_arm_blind() {
+  sed -i 's@ elif ((.step_after | step_rank) != null and (.step | step_rank) != null and (.step_after | step_rank) > (.step | step_rank) and .moved != false) then "advanced"@@' "$1"
+}
+
+# The direction of the sub-step arm becomes "did not go back": a QA session that ended on the
+# SAME sub-step it started reads as progress, and the arm turns into "QA is always advanced".
+# Caught by `the same QA row with no sub-step advance reads churned` — the differential twin of
+# the assertion above, one field apart.
+mut_KAIZEN_qa_step_rank_inverted() {
+  sed -i 's@(.step_after | step_rank) > (.step | step_rank)@(.step_after | step_rank) >= (.step | step_rank)@' "$1"
+}
+
+# The rank guard on `step` goes, and jq's ordering flatters: `2 > null` is TRUE, so a row whose
+# starting step the rank does not know reads as an advance. Caught by `a QA step the rank does not
+# know is not a sub-step that advanced`.
+mut_KAIZEN_qa_step_unguarded() {
+  sed -i 's@ and (.step | step_rank) != null and (.step_after | step_rank) >@ and (.step_after | step_rank) >@' "$1"
+}
+
+# The `.moved != false` half of the sub-step arm goes: a session that wrote nothing is credited
+# with the sub-step an earlier one reached. Caught by `a QA session that wrote nothing did not
+# advance the sub-step`.
+mut_KAIZEN_qa_step_moved_blind() {
+  sed -i 's@(.step_after | step_rank) > (.step | step_rank) and .moved != false)@(.step_after | step_rank) > (.step | step_rank))@' "$1"
+}
+
+# The QA pending pair (20260930-a-sub-etapa-que-andou, I3) is photographed at THREE doors, one
+# mutant per door and one per end of door 1. DOOR 1, the photograph BEFORE the session goes: the
+# QA row is born with `pending_before: null` and the QA⇄EXEC arm's null guard refuses it — the
+# close that wrote `F1` reads churn again. Caught first by `a non-EXEC row carries none of EXEC's
+# counts` (`QA null 0 true`), and by `a QA row carries the pending count before and after its
+# session` (`QA true null 1 true`) in check-autonomy.sh — measured, both red.
+mut_RUN_qa_pending_photo_missing() {
+  sed -i 's@^    if \[ "\$phase" = "QA" \]; then exec_before="\$(checkpoint_tally | cut -f1)"; fi$@    :@' "$1"
+}
+
+# DOOR 1, the END of the photograph goes. Caught by the same two assertions (`QA true 0 null true`).
+mut_RUN_qa_pending_after_missing() {
+  sed -i 's@^    if \[ "\$phase" = "QA" \]; then exec_after="\$(checkpoint_tally | cut -f1)"; fi$@    :@' "$1"
+}
+
+# DOOR 2, the inline retry's end. Caught first by `and so does the inline retry of that same
+# non-EXEC phase`, and by `the inline retry of a QA session photographs its checkpoint too`.
+mut_RUN_qa_pending_retry_missing() {
+  sed -i 's@^    if \[ "\$phase" = "QA" \]; then exec_after2="\$(checkpoint_tally | cut -f1)"; fi$@    :@' "$1"
+}
+
+# DOOR 3, cmd_retry's photograph. Caught by `a QA row written by sdd retry photographs its
+# checkpoint too`, which reads `retry null 0`.
+mut_RUN_qa_pending_cmd_retry_missing() {
+  sed -i 's@^  if \[ "\$phase" = "QA" \]; then exec_before="\$(checkpoint_tally | cut -f1)"; fi$@  :@' "$1"
+}
+
+# The QA⇄EXEC arm goes whole: the writer keeps photographing and the reader stops looking, so the
+# close that wrote fix increments reads churn. Caught by `a QA close that wrote fix increments is
+# the designed loop` in check-autonomy.sh.
+mut_KAIZEN_qa_fix_loop_blind() {
+  sed -i 's@ elif (.phase == "QA" and .pending_before != null and .pending_after != null and .pending_after > .pending_before and .moved != false) then "advanced"@@' "$1"
+}
+
+# The phase scope of the same arm goes: on EXEC a pending count that GREW — the opposite of
+# progress — reads advanced. Caught by `an EXEC row whose pending grew is still churn`, the
+# differential twin of the assertion above, one field apart.
+mut_KAIZEN_qa_fix_loop_unscoped() {
+  sed -i 's@elif (.phase == "QA" and .pending_before != null and .pending_after != null and .pending_after > .pending_before@elif (.pending_before != null and .pending_after != null and .pending_after > .pending_before@' "$1"
+}
+
+# The key of the QA dated path loses its repo half, and two missions of the same slug in two repos
+# start sharing a "next row": this repo's last QA:exec reads the QA:close of ANOTHER repo and turns
+# `advanced`. It is the class the EXEC sibling's key carries without a probe (TODO.md); here it is
+# born with one. Caught by `the next QA row of the same slug in ANOTHER repo is not this row's next
+# row` in check-kaizen.sh.
+mut_KAIZEN_historic_steps_key_slug_only() {
+  sed -i 's@$r.phase == "QA" then (\[($r.repo // ""), ($r.mission // "")\] | tostring)@$r.phase == "QA" then ([($r.mission // "")] | tostring)@' "$1"
+}
+
+# The guard of the QA dated path goes from "the KEY is absent" to "the value is null", and the path
+# starts REPAIRING rows this runner wrote whose photograph went missing — the shape
+# mut_RUN_qa_step_after_missing produces, which this one would launder in every reader. Here the
+# EXEC sibling's `== null` spelling is the wrong one on purpose: the writer puts the key on EVERY
+# row, so absence and pre-schema are the same set. Caught by `a QA row the writer wrote with
+# step_after null is not recovered from the next row`.
+mut_KAIZEN_historic_steps_launders_null() {
+  sed -i 's@(if ($r | has("step_after") | not) and .next\[$k\] != null@(if $r.step_after == null and .next[$k] != null@' "$1"
+}
+
+# The QA dated path stops asking whether the next row is of the SAME run, and the QA:exec that a
+# human (or an interactive session) closed between two runs reads `advanced` — the advance credited
+# to a session that left the report open. Finding #1 of r1 of 20260930-a-sub-etapa-que-andou,
+# reproduced there on a two-row ledger. Caught by `a QA row older than step_after is not recovered
+# from the next row of another run` in check-kaizen.sh.
+mut_KAIZEN_historic_steps_crosses_runs() {
+  sed -i 's@ and $r.run_id != null and .next\[$k\].run_id == $r.run_id then@ then@' "$1"
+}
+
+# The same guard loses its non-null half, and two rows that carry no `run_id` at all count as one
+# run: an unknown run is never a witness. Caught by `a QA row with no run_id is not recovered from a
+# next row with no run_id either` in check-kaizen.sh.
+mut_KAIZEN_historic_steps_null_run_is_a_run() {
+  sed -i 's@ and $r.run_id != null and .next\[$k\].run_id == $r.run_id then@ and .next[$k].run_id == $r.run_id then@' "$1"
+}
+
+# The human window stops applying the QA dated path, and every QA:exec of window 2 reads `churned`
+# again on `sdd autonomy` while the judge keeps reading `advanced` — the two readers telling two
+# histories out of one file. Caught by `a QA row older than step_after that advanced reads advanced
+# from the next row` and the parity pair of the same block.
+mut_AUTONOMY_historic_steps_blind() {
+  sed -i 's@^    | historic_steps$@    | .@' "$1"
+}
+
+# The judge's twin of the mutant above. Caught by `the human window and the judge recover the QA
+# sub-step alike` — the differential, which no one-sided fixture satisfies by accident.
+mut_KAIZEN_historic_steps_series_blind() {
+  sed -i 's@| historic_progress | historic_rounds | historic_steps) as $raw@| historic_progress | historic_rounds) as $raw@' "$1"
 }
 
 # The writer keeps filling the three round fields (I1) and the reader stops looking at them: REVIEW
@@ -5083,6 +5230,26 @@ CATALOG=(
   KAIZEN_missions_count_ungraded_rows
   RUN_review_rounds_photo_missing
   LEDGER_rounds_leak_across_phases
+  RUN_qa_step_after_missing
+  RUN_qa_step_after_retry_missing
+  RUN_qa_step_after_cmd_retry_missing
+  LEDGER_step_after_unguarded
+  KAIZEN_qa_step_arm_blind
+  KAIZEN_qa_step_rank_inverted
+  KAIZEN_qa_step_unguarded
+  KAIZEN_qa_step_moved_blind
+  RUN_qa_pending_photo_missing
+  RUN_qa_pending_after_missing
+  RUN_qa_pending_retry_missing
+  RUN_qa_pending_cmd_retry_missing
+  KAIZEN_qa_fix_loop_blind
+  KAIZEN_qa_fix_loop_unscoped
+  KAIZEN_historic_steps_key_slug_only
+  KAIZEN_historic_steps_launders_null
+  KAIZEN_historic_steps_crosses_runs
+  KAIZEN_historic_steps_null_run_is_a_run
+  AUTONOMY_historic_steps_blind
+  KAIZEN_historic_steps_series_blind
   LEDGER_outcome_rounds_blind
   LEDGER_outcome_rounds_unguarded
   LEDGER_outcome_rounds_undirected
