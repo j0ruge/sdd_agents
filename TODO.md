@@ -509,6 +509,13 @@ Achados sobre **repos-alvo** vão para o `TODO.md` daquele repo. Este arquivo é
 
 ### Comentário e registro
 
+- [ ] **Duas descrições da recuperação de `step_after` não dizem "da mesma corrida"** —
+  `docs/pipeline.md:1398` — o `R1` de `20260930-a-sub-etapa-que-andou` (`8a1b3a5`) passou a
+  recuperar só com `run_id` igual e não nulo; o `bin/sdd`, o `KAIZEN_LOG.md` e a D16 do
+  `CONTEXT.md` dizem isso, mas o `docs/pipeline.md` e o verbete Churn do `CONTEXT.md` ainda dizem
+  só "próxima linha QA da mesma `(repo, missão)`". Direção: acrescentar a corrida nas duas frases.
+  — descoberto por `sdd-reviewer` na missão `20260930-a-sub-etapa-que-andou` (2026-10-01)
+
 - [ ] **Drift de comentário em código não tem dono: nem a DOCS nem a EXEC** — `agents/sdd-docs.md:9`
   — comentário de código É documentação viva, mas o `writes:` da DOCS não lista `bin/sdd` e o
   `hat_guard_check` para a linha quando ela o conserta. `HAT_WRITES_EXTRA` não é a saída: declarar
