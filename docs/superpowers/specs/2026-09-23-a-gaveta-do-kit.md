@@ -13,9 +13,9 @@
 
 | # | Frente | Estado | Próximo passo | Espera por |
 |---|---|---|---|---|
-| F1 | Custo do catálogo de mutação | PR #59 mergeado (`d0ac22d`); P2(a) feito em 2026-09-25 (assassino primeiro, amostra 389 → 171 s, `sdd health` 1h27 → ~38–40 min); P2(b) **FEITO**, PR #170 mergeado (`31dfd43`; o sensor para no primeiro FAIL, [spec](2026-09-25-o-sensor-para-no-primeiro-fail-design.md), amostra 1328,7 → 571 s, `sdd health` 37 min 42 s → **~18 min**, carimbo 406/406 válido na `main`); P1, P3, P4 abertos | E6 do #170 **feito** em 2026-09-26 (espelho 82 ↔ 82, #144 fechada, PR #171; [handoff](../plans/2026-09-25-depois-do-170-handoff.md)). O P3 **ficou fora** da carona (`20260926-a-carona-antes-do-congelamento`, decisão 6 do grill): é pré-requisito do próximo aumento de paralelismo, que não acontece com o kit congelado | o fim da janela 2 (F3) |
+| F1 | Custo do catálogo de mutação | PR #59 mergeado (`d0ac22d`); P2(a) feito em 2026-09-25 (assassino primeiro, amostra 389 → 171 s, `sdd health` 1h27 → ~38–40 min); P2(b) **FEITO**, PR #170 mergeado (`31dfd43`; o sensor para no primeiro FAIL, [spec](2026-09-25-o-sensor-para-no-primeiro-fail-design.md), amostra 1328,7 → 571 s, `sdd health` 37 min 42 s → **~18 min**, carimbo 406/406 válido na `main`); P1, P3, P4 abertos | E6 do #170 **feito** em 2026-09-26 (espelho 82 ↔ 82, #144 fechada, PR #171; [handoff](../plans/2026-09-25-depois-do-170-handoff.md)). O P3 **ficou fora** da carona (`20260926-a-carona-antes-do-congelamento`, decisão 6 do grill): é pré-requisito do próximo aumento de paralelismo, que não acontece com o kit congelado | o fim da janela 3 (F3) |
 | F2 | Faxina pós-#57 | **fechada** pela missão `20260926-a-carona-antes-do-congelamento` (I7; o yokoten da crase no I1) | nada | — |
-| F3 | T3 e a janela do juiz | janela 1 **fechada**: veredito `melhorou` sobre `4fd0f31` (PR #175, `3d350ed`). Dos 8 achados, 5 foram consertados na missão `20260928-os-achados-da-janela` (3, 4, 6, 7 e 8; PR #176) e 3 foram para o `TODO.md` (1, 2 e 5). **Janela 2 aberta em 2026-09-29**, decisão do humano: o kit congela no merge do PR que registra esta linha, com o harness 2.1.283 fixo (`DISABLE_AUTOUPDATER=1`) | 3 missões de alvo com sessão sobre esse `kit_sha` → `sdd kaizen`; a T3 vem depois do veredito | as 3 missões de alvo |
+| F3 | T3 e a janela do juiz | janela 1 **fechada**: veredito `melhorou` sobre `4fd0f31` (PR #175, `3d350ed`). Dos 8 achados, 5 foram consertados na missão `20260928-os-achados-da-janela` (3, 4, 6, 7 e 8; PR #176) e 3 foram para o `TODO.md` (1, 2 e 5). Janela 2 **fechada sem veredito** em 2026-09-30: `indeterminado` sobre `6323c6f`, porque o PR #184 (só `TODO.md` + catraca) cunhou um `kit_sha` novo e deixou as 3 missões de `5b98087` em `previous` (`window_missions_stranded: 3`); o achado está no `TODO.md`. **Janela 3 aberta em 2026-10-01**, decisão do humano: o kit congela no merge do PR #185 (missão `20260930-a-sub-etapa-que-andou`, que muda a régua de `outcome`), com o harness 2.1.283 fixo (`DISABLE_AUTOUPDATER=1`). Enquanto ela durar, **nenhum commit na `main`**, nem só de `TODO.md`: achado de alvo espera no handoff ou na memória | 3 missões de alvo com sessão sobre esse `kit_sha` → `sdd kaizen`; a T3 vem depois do veredito | as 3 missões de alvo |
 | F4 | Portabilidade para outros repos | sem pendência de código: lacunas 2 e 3 **consertadas** na missão `20260926-a-carona-antes-do-congelamento` (I5, I6), 4 e 5 no `TODO.md` (I7), 6 declarada no ADR 0007 | a prova num 2º alvo, que conta para a próxima janela do juiz | nada desde o veredito (F3, PR #175) |
 | F5 | Issues avulsas #50–#53 | #53 fechada; #50, #51 e #52 consertadas na missão `20260926-a-carona-antes-do-congelamento` (I1–I4) | as três fecham com o merge do PR | — |
 | F6 | O worker (W1–W7) | estacionada por decisão | nada, até os fluxos atuais rodarem limpos | **decisão humana** |
@@ -161,7 +161,9 @@ nova prevalece. ⚠️ **Congelar o kit é decisão humana e trava tudo o que es
 as 3 missões de alvo rodaram sobre ele, e o `sdd kaizen` deu `melhorou` (PR #175, `3d350ed`). A
 janela está **fechada**. Dos 8 achados dela, 5 estão na missão `20260928-os-achados-da-janela` e
 3 no `TODO.md`. A missão foi mergeada (PR #176), e a **janela 2** abriu com o kit congelado de
-novo (linha F3). A T3 vem **depois** do veredito dela, e não antes do congelamento.
+novo (linha F3). A janela 2 fechou sem veredito: um PR só de `TODO.md` partiu a fatia. A
+**janela 3** abre no merge do PR #185, que já traz a régua nova da QA; a T3 vem **depois** do
+veredito dela, e não antes do congelamento.
 
 ## F4 — Portabilidade para outros repos
 
@@ -278,6 +280,6 @@ terminal do humano; e qualquer PR do kit segue abrir → todos os revisores → 
 3. ~~Um PR de kit "de carona", que carimba uma vez só~~ — **feito** pela missão `20260926-a-carona-antes-do-congelamento`: F2, F4
    (lacunas 2 e 3 consertadas, 4 e 5 registradas) e as issues #50, #51 e #52 (a #53 já estava
    fechada). O F1-P3 ficou fora por decisão do grill.
-4. A T3 com as três decisões humanas, via `/sdd-plan`, depois do veredito da janela 2 (F3).
+4. A T3 com as três decisões humanas, via `/sdd-plan`, depois do veredito da janela 3 (F3).
 5. F1-P1 com ADR; depois decidir o F1-P4.
 6. F6 e F7, quando os fluxos rodarem limpos.
