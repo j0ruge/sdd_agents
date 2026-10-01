@@ -2018,8 +2018,10 @@ assert_eq "the pipeline journal records it too" "1" \
 # EXEC session) or the no-.git copy check-mutation.sh sandboxes into make every row here
 # non-comparable, and the block would pass in CI and fail on the developer's machine, or the other
 # way round. The rows stay exactly as the RUNNER wrote them in every other respect — that they
-# carry a stamp at all is asserted above, against the untouched ledger.
-jq -c '.kit_sha = "deadbee" | .kit_dirty = false' "$LEDGER" > "$LEDGER.norm" && mv "$LEDGER.norm" "$LEDGER"
+# carry a stamp at all is asserted above, against the untouched ledger. The behaviour pair goes too
+# (ADR 0014): the readers group by kit_rev when the row carries it, so normalising only the raw pair
+# left every row here off the axis whenever bin/ was dirty — the EXEC session that adds a reader.
+jq -c '.kit_sha = "deadbee" | .kit_dirty = false | .kit_rev = "deadbee" | .kit_rev_dirty = false' "$LEDGER" > "$LEDGER.norm" && mv "$LEDGER.norm" "$LEDGER"
 out="$( "$SDD" autonomy 2>&1 )"
 assert_eq "the human reader does not call it unrecognized" "0" "$(grep -c 'unrecognized' <<< "$out")"
 assert_eq "it is counted as an escalation, by its kind" "1" \
@@ -5214,7 +5216,8 @@ assert_eq "init: nothing crossed" "0" "$(jq -r -s '[.[] | select(.kind == "hat-c
 # (`claude_code_version` of INIT_SAMPLE), so a reader that invented a default could not match it.
 assert_eq "init: the harness version is read off the init line into the row" "2.1.260" \
   "$(jq -r -s '.[0].harness' "$LEDGER")"
-jq -c '.kit_sha = "deadbee" | .kit_dirty = false' "$LEDGER" > "$LEDGER.norm" && mv "$LEDGER.norm" "$LEDGER"
+# Both stamp pairs, for the reason written at the degradation block above.
+jq -c '.kit_sha = "deadbee" | .kit_dirty = false | .kit_rev = "deadbee" | .kit_rev_dirty = false' "$LEDGER" > "$LEDGER.norm" && mv "$LEDGER.norm" "$LEDGER"
 assert_eq "series: the slice lists the harness versions its sessions ran on" "2.1.260" \
   "$(jq -r '.latest.harness | join(",")' <<< "$( "$SDD" kaizen --series 2>/dev/null )")"
 : > "$LEDGER"

@@ -3342,6 +3342,19 @@ ledger_outcome_defs() {   # printed jq, spliced into cmd_autonomy AND kaizen_ser
   printf '%s' 'def phase_index: . as $p | ($phases | split(" ")) | index($p);'
 }
 
+# The judge's axis is the BEHAVIOUR version (ADR 0014): a row that carries `kit_rev` is read as if
+# `kit_sha` were `kit_rev` and `kit_dirty` were `kit_rev_dirty`, and the raw sha survives as
+# `kit_sha_raw` so each slice can say which raw shas it covers (`kit_shas_raw` in group_summary).
+# Printed jq like ledger_outcome_defs and spliced into cmd_autonomy AND kaizen_series at the SAME
+# point — right after historic_steps, before any comparable/on_axis/grouping — so the judge and the
+# human window cannot group one file two ways, and no site downstream that reads `.kit_sha` has to
+# change. Rows without `kit_rev` (every row written before ADR 0014) pass through untouched.
+# `kit_rev` present with `kit_rev_dirty` null becomes `kit_dirty: null`, which is off the axis: the
+# fail-safe direction, on purpose. The kit guard never reads this — it keeps the raw pair.
+ledger_kit_version_defs() {   # printed jq, spliced into cmd_autonomy AND kaizen_series
+  printf '%s' 'def kit_version_rows: map(if type == "object" and .kit_rev != null then . + {kit_sha_raw: .kit_sha, kit_sha: .kit_rev, kit_dirty: .kit_rev_dirty} else . end);'
+}
+
 # The paths whose content a target-repo phase executes. tests/ is not here (no target phase runs the
 # kit's suite), nor docs/, commands/, TODO.md. When in doubt a path goes IN: one path too many can
 # only split a window, one too few would fuse two behaviours into one version.
@@ -8566,7 +8579,7 @@ cmd_autonomy() {
   # would turn that sum into an accusation against the buckets instead of a measurement.
   local repo; repo="$(ledger_repo_root)"
   local def; def="$(ledger_row_is_local)"
-  local odefs; odefs="$(ledger_outcome_defs)"
+  local odefs; odefs="$(ledger_outcome_defs)$(ledger_kit_version_defs)"
   local total lines norepo
   lines="$(jq -s 'length' "$file")"
   norepo="$(jq -s --arg repo "$repo" "$def"' map(select(ledger_row_no_repo)) | length' "$file")"
@@ -8855,6 +8868,10 @@ cmd_autonomy() {
     # so it walks the list backwards — and it must run on the whole history, never on a slice, or
     # the last row of the slice would lose a next row that exists.
     | historic_steps
+    # The behaviour version as the axis (ADR 0014), at the SAME point kaizen_series applies it:
+    # after the dated recoveries, which key on repo and mission and never on the sha, and before
+    # any comparable or grouping, so every downstream `.kit_sha` reads the behaviour version.
+    | kit_version_rows
     # Bound over `comparable` and NOT over the bare annotation, which is the fix for a measured
     # fail-open: these two sentences are DELETION SIGNALS — they say how much of the window was
     # read through a dated path, and therefore when that path may come out — and a count taken
@@ -9209,7 +9226,7 @@ kaizen_series() {
     printf '{"v":1,"latest":null,"previous":null,"guard":{"missions_after_change":0,"missions_with_session":0,"sessions":0,"floor":%s,"sufficient":false,"why":["floor"],"harness":[],"window_missions_stranded":0,"window_broken":false,"degenerate_axis":false},"excluded":{"non_comparable":0,"unrecognized":0,"meta":0,"other_repo":0,"no_repo":0}}\n' "$KAIZEN_GUARD_FLOOR"
     return 0
   fi
-  jq -n --arg repo "$repo" --argjson floor "$KAIZEN_GUARD_FLOOR" --arg phases "$PHASES" "$(ledger_row_is_local)""$(ledger_outcome_defs)"'
+  jq -n --arg repo "$repo" --argjson floor "$KAIZEN_GUARD_FLOOR" --arg phases "$PHASES" "$(ledger_row_is_local)""$(ledger_outcome_defs)""$(ledger_kit_version_defs)"'
     # ONE definition of "escalation" for the whole program, exactly as cmd_autonomy has one. The
     # two events state different facts (`blocked` stopped the line, `degraded` lowered the bar and
     # went on) but they answer this rubric the same way, and writing the pair out three times is
@@ -9482,6 +9499,10 @@ kaizen_series() {
                       outcomes: (map(select(.event == "session")) | outcome_tally),
                       cost_usd: (map(.cost_usd // 0) | add)})) as $detail
       | {kit_sha: $rows[0].kit_sha,
+         # The raw HEAD shas this behaviour version covers, unique, in file order (ADR 0014). It is
+         # what the judge reads to see that two commits were one behaviour; a row without kit_rev
+         # contributes its own kit_sha, so a pre-ADR slice lists exactly the one sha it is.
+         kit_shas_raw: ($rows | map(.kit_sha_raw // .kit_sha) | reduce .[] as $s ([]; if index($s) then . else . + [$s] end)),
          missions: ($graded | map(mission_key) | unique | length),
          # The floor of the guard, and NOT the same number as `missions` above: that one counts
          # every mission on the axis, escalations included, which is right for the display and
@@ -9555,7 +9576,7 @@ kaizen_series() {
     # filter, before any classification. One dated recovery, spliced from one definition, so the
     # judge and the human window cannot end up reading two different histories out of one file —
     # check-autonomy.sh compares them over a prose-only ledger for exactly that.
-    | ($file_rows | map(select(ledger_row_is_local)) | historic_progress | historic_rounds | historic_steps) as $raw
+    | ($file_rows | map(select(ledger_row_is_local)) | historic_progress | historic_rounds | historic_steps | kit_version_rows) as $raw
     # Subtracted out, never lumped in: a row that names no project did not come from another repo,
     # and a bucket that said it did would be a wrong reason printed with the confidence of a right
     # one. The two counts partition what the filter removed, so the arithmetic still closes.

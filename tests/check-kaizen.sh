@@ -2223,6 +2223,70 @@ hseq=0
 assert_eq "guard: a mission straddling the kit change is stranded — a subtraction of unique counts cancels it to zero" \
   "true  true 1" "$(guard_read "$OUTSIDE/winstraddle")"
 
+echo "== kit-version: a commit outside the behaviour paths does not split the slice =="
+# ADR 0014. Window 2 died of a commit that touched only TODO.md and the backlog ratchet: it minted
+# a new raw `kit_sha`, and three missions on the same behaviour went to `previous`, stranded. Since
+# the writer stamps `kit_rev` (the last first-parent commit over bin agents templates config) the
+# readers group by it when it is present, through ONE printed definition spliced into both programs
+# (`ledger_kit_version_defs`). Ledger B below is ledger A with the two new fields deleted: the same
+# rows answer the rupture, and that pair is the differential — no fixture regime satisfies both by
+# accident, and it fails whichever side moved.
+#
+# vrow <mission> <kit_sha> <kit_rev|-> <kit_dirty> <kit_rev_dirty> — one session of THIS repo; `-`
+# writes a row from before the writer knew kit_rev (both new keys absent, never null).
+vrow() {
+  local rev=""
+  [ "$3" = "-" ] || rev="$(printf ',"kit_rev":"%s","kit_rev_dirty":%s' "$3" "$5")"
+  printf '{"v":1,"ts":"2026-10-01T1%s:00:00-03:00","event":"session","run_id":"v%s","invocation":"run","kit_sha":"%s","kit_dirty":%s%s,"project":"p1","repo":"/p1","mission":"%s","phase":"EXEC","step":"EXEC","agent":"sdd-executor","model":"opus","attempt":1,"auto_retry":false,"session":"v%ss","rc":0,"dur_s":10,"cost_usd":1.0,"moved":true,"gate":"pass","gate_why":"x","harness":"2.1.283"}\n' \
+    "$((vseq % 10))" "$vseq" "$2" "$4" "$rev" "$1" "$vseq"
+  vseq=$((vseq + 1))
+}
+mkdir -p "$OUTSIDE/kvA" "$OUTSIDE/kvB" "$OUTSIDE/kvC" "$OUTSIDE/kvCdirty"
+# A — a verdict, then three missions; v2 straddles a commit that moved HEAD (aaa0001 → aaa0002)
+# and no behaviour path (both rows carry rrr0001).
+vseq=0
+{ hmeta ccccccc; vrow v1 aaa0001 rrr0001 false false; vrow v2 aaa0001 rrr0001 false false
+  vrow v2 aaa0002 rrr0001 false false; vrow v3 aaa0002 rrr0001 false false; } \
+  | localize > "$OUTSIDE/kvA/autonomy-log.jsonl"
+# B — the same rows, written before kit_rev existed: window 2 reproduced.
+vseq=0
+{ hmeta ccccccc; vrow v1 aaa0001 - false false; vrow v2 aaa0001 - false false
+  vrow v2 aaa0002 - false false; vrow v3 aaa0002 - false false; } \
+  | localize > "$OUTSIDE/kvB/autonomy-log.jsonl"
+# C — three missions on one behaviour version, ONE row per mission, and c2's row was written with
+# TODO.md dirty (kit_dirty true) and the behaviour paths clean. Its twin dirties a behaviour path
+# on that same row, the only one of its mission, so the mission leaves the axis with it.
+vseq=0
+{ vrow c1 aaa0003 rrr0001 false false; vrow c2 aaa0003 rrr0001 true false
+  vrow c3 aaa0003 rrr0001 false false; } | localize > "$OUTSIDE/kvC/autonomy-log.jsonl"
+vseq=0
+{ vrow c1 aaa0003 rrr0001 false false; vrow c2 aaa0003 rrr0001 true true
+  vrow c3 aaa0003 rrr0001 false false; } | localize > "$OUTSIDE/kvCdirty/autonomy-log.jsonl"
+
+KVA_SERIES="$( cd "$FIX" && SDD_STATE_DIR="$OUTSIDE/kvA" "$KSDD" kaizen --series 2>/dev/null )"
+KVB_SERIES="$( cd "$FIX" && SDD_STATE_DIR="$OUTSIDE/kvB" "$KSDD" kaizen --series 2>/dev/null )"
+assert_eq "kit-version: three missions straddling a commit outside the behaviour paths are one slice — sufficient, nothing stranded" \
+  "true  false 0 rrr0001" \
+  "$(guard_read "$OUTSIDE/kvA") $(jq -r '.latest.kit_sha' <<< "$KVA_SERIES")"
+# The differential: both ledgers read side by side in ONE assertion. B strands v1 (only on the
+# older sha) and v2 (straddling), so the count is exact, and its latest is the second raw sha.
+assert_eq "kit-version: ...and its twin without kit_rev is the window 2 rupture — stranded, latest on the second sha" \
+  "A:rrr0001,false,0 B:aaa0002,true,2" \
+  "$(jq -r '"A:\(.latest.kit_sha),\(.guard.window_broken),\(.guard.window_missions_stranded)"' <<< "$KVA_SERIES") $(jq -r '"B:\(.latest.kit_sha),\(.guard.window_broken),\(.guard.window_missions_stranded)"' <<< "$KVB_SERIES")"
+assert_eq "kit-version: the slice names the raw shas it covers" \
+  "aaa0001,aaa0002" "$(jq -r '.latest.kit_shas_raw // ["MISSING"] | join(",")' <<< "$KVA_SERIES")"
+KVC_SERIES="$( cd "$FIX" && SDD_STATE_DIR="$OUTSIDE/kvC" "$KSDD" kaizen --series 2>/dev/null )"
+KVCD_SERIES="$( cd "$FIX" && SDD_STATE_DIR="$OUTSIDE/kvCdirty" "$KSDD" kaizen --series 2>/dev/null )"
+assert_eq "kit-version: dirt outside the behaviour paths keeps a row comparable, dirt inside excludes it" \
+  "0 3 1 2" \
+  "$(jq -r '"\(.excluded.non_comparable) \(.guard.missions_with_session)"' <<< "$KVC_SERIES") $(jq -r '"\(.excluded.non_comparable) \(.guard.missions_with_session)"' <<< "$KVCD_SERIES")"
+# The human window splices the same definition: its per-version table must name the behaviour
+# version and never the raw sha it rewrote. Anti-vacuity: the rrr0001 line has to EXIST.
+KVA_TABLE="$( cd "$FIX" && SDD_STATE_DIR="$OUTSIDE/kvA" "$KSDD" autonomy 2>&1 )"
+assert_eq "kit-version: the human table reads the same versions as the judge" \
+  "1 0" \
+  "$(grep -c '^  rrr0001  ' <<< "$KVA_TABLE") $(grep -c 'aaa0002' <<< "$KVA_TABLE")"
+
 # --- the close row, in the judge's program -----------------------------------
 # r1 finding #8 of the 2026-09-11 judge mission. `sdd close` writes `event:"close"`, and this file
 # had no fixture carrying one: the judge's admission list (`session or escalation or gate_pass or

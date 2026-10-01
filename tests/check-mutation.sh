@@ -3357,6 +3357,27 @@ mut_RUN_kit_guard_reads_rev() {
     -e '/^kit_guard_check() {/,/^}/ s|"$AUTONOMY_KIT_STAMP"|"$AUTONOMY_KIT_REV"|' "$1"
 }
 
+# The judge stops applying the behaviour version and groups by the raw HEAD again: a commit that
+# only registers a finding splits the window, as it did to window 2 (6323c6f). Caught by
+# `kit-version: three missions straddling a commit outside the behaviour paths are one slice` and
+# `kit-version: the slice names the raw shas it covers` in check-kaizen.sh.
+mut_KAIZEN_kit_version_ignored() {
+  sed -i '/^kaizen_series() {/,/^}/ s@| historic_steps | kit_version_rows) as $raw@| historic_steps) as $raw@' "$1"
+}
+
+# The human window stops applying it while the judge keeps it: the two readers group one file two
+# ways. Caught by `kit-version: the human table reads the same versions as the judge`.
+mut_AUTONOMY_kit_version_ignored() {
+  sed -i '/^cmd_autonomy() {/,/^}/ s@^    | kit_version_rows$@    | .@' "$1"
+}
+
+# The shared definition keeps the raw kit_dirty: an unregistered TODO.md line pushes a row off the
+# axis although no behaviour path was dirty. Caught by `kit-version: dirt outside the behaviour paths
+# keeps a row comparable, dirt inside excludes it`.
+mut_KAIZEN_kit_rev_dirty_ignored() {
+  sed -i '/^ledger_kit_version_defs() {/,/^}/ s@, kit_dirty: .kit_rev_dirty}@}@' "$1"
+}
+
 # ---------------------------------------------------------------------------
 # 20260828-instrumento-honesto — what a session DID, one definition in two readers.
 # ---------------------------------------------------------------------------
@@ -3915,8 +3936,10 @@ mut_AUTONOMY_historic_steps_blind() {
 
 # The judge's twin of the mutant above. Caught by `the human window and the judge recover the QA
 # sub-step alike` — the differential, which no one-sided fixture satisfies by accident.
+# ⚠️ RE-ANCHORED on 2026-10-01 (ADR 0014, increment I2): `kit_version_rows` now
+# follows historic_steps in the same chain, and the old spelling stopped applying (rc 90).
 mut_KAIZEN_historic_steps_series_blind() {
-  sed -i 's@| historic_progress | historic_rounds | historic_steps) as $raw@| historic_progress | historic_rounds) as $raw@' "$1"
+  sed -i 's@| historic_progress | historic_rounds | historic_steps | kit_version_rows) as $raw@| historic_progress | historic_rounds | kit_version_rows) as $raw@' "$1"
 }
 
 # The writer keeps filling the three round fields (I1) and the reader stops looking at them: REVIEW
@@ -5222,6 +5245,9 @@ CATALOG=(
   RUN_kit_rev_is_head
   RUN_kit_rev_dirty_whole_tree
   RUN_kit_guard_reads_rev
+  KAIZEN_kit_version_ignored
+  AUTONOMY_kit_version_ignored
+  KAIZEN_kit_rev_dirty_ignored
   AUTONOMY_outcome_reads_moved_only
   KAIZEN_outcome_inlined_old
   AUTONOMY_waste_idle_only
