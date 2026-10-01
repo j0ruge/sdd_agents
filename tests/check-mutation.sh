@@ -3546,7 +3546,7 @@ mut_EXEC_tally_counts_done() {
 # in a subshell that dies at once — the run→REVIEW fixture cannot reach the leak at all, and a
 # sabotage pass against it came back green. The only sequence that reaches it is an EXEC gate
 # passing in the PARENT shell followed by another lap, which is the block `the EXEC counts do not
-# follow the run into the next phase` builds. Caught by `a non-EXEC row carries the three as null`
+# follow the run into the next phase` builds. Caught by `a non-EXEC row carries none of EXEC's counts`
 # there, and by nothing else.
 mut_LEDGER_progress_leaks_across_phases() {
   sed -i 's@^    if \[ "\$phase" = "EXEC" \]; then exec_after="\$GATE_EXEC_PENDING"; exec_total="\$GATE_EXEC_TOTAL"; fi$@    exec_after="$GATE_EXEC_PENDING"; exec_total="$GATE_EXEC_TOTAL"@' "$1"
@@ -3800,6 +3800,47 @@ mut_KAIZEN_qa_step_unguarded() {
 # advance the sub-step`.
 mut_KAIZEN_qa_step_moved_blind() {
   sed -i 's@(.step_after | step_rank) > (.step | step_rank) and .moved != false)@(.step_after | step_rank) > (.step | step_rank))@' "$1"
+}
+
+# The QA pending pair (20260930-a-sub-etapa-que-andou, I3) is photographed at THREE doors, one
+# mutant per door and one per end of door 1. DOOR 1, the photograph BEFORE the session goes: the
+# QA row is born with `pending_before: null` and the QA⇄EXEC arm's null guard refuses it — the
+# close that wrote `F1` reads churn again. Caught first by `a non-EXEC row carries none of EXEC's
+# counts` (`QA null 0 true`), and by `a QA row carries the pending count before and after its
+# session` (`QA true null 1 true`) in check-autonomy.sh — measured, both red.
+mut_RUN_qa_pending_photo_missing() {
+  sed -i 's@^    if \[ "\$phase" = "QA" \]; then exec_before="\$(checkpoint_tally | cut -f1)"; fi$@    :@' "$1"
+}
+
+# DOOR 1, the END of the photograph goes. Caught by the same two assertions (`QA true 0 null true`).
+mut_RUN_qa_pending_after_missing() {
+  sed -i 's@^    if \[ "\$phase" = "QA" \]; then exec_after="\$(checkpoint_tally | cut -f1)"; fi$@    :@' "$1"
+}
+
+# DOOR 2, the inline retry's end. Caught first by `and so does the inline retry of that same
+# non-EXEC phase`, and by `the inline retry of a QA session photographs its checkpoint too`.
+mut_RUN_qa_pending_retry_missing() {
+  sed -i 's@^    if \[ "\$phase" = "QA" \]; then exec_after2="\$(checkpoint_tally | cut -f1)"; fi$@    :@' "$1"
+}
+
+# DOOR 3, cmd_retry's photograph. Caught by `a QA row written by sdd retry photographs its
+# checkpoint too`, which reads `retry null 0`.
+mut_RUN_qa_pending_cmd_retry_missing() {
+  sed -i 's@^  if \[ "\$phase" = "QA" \]; then exec_before="\$(checkpoint_tally | cut -f1)"; fi$@  :@' "$1"
+}
+
+# The QA⇄EXEC arm goes whole: the writer keeps photographing and the reader stops looking, so the
+# close that wrote fix increments reads churn. Caught by `a QA close that wrote fix increments is
+# the designed loop` in check-autonomy.sh.
+mut_KAIZEN_qa_fix_loop_blind() {
+  sed -i 's@ elif (.phase == "QA" and .pending_before != null and .pending_after != null and .pending_after > .pending_before and .moved != false) then "advanced"@@' "$1"
+}
+
+# The phase scope of the same arm goes: on EXEC a pending count that GREW — the opposite of
+# progress — reads advanced. Caught by `an EXEC row whose pending grew is still churn`, the
+# differential twin of the assertion above, one field apart.
+mut_KAIZEN_qa_fix_loop_unscoped() {
+  sed -i 's@elif (.phase == "QA" and .pending_before != null and .pending_after != null and .pending_after > .pending_before@elif (.pending_before != null and .pending_after != null and .pending_after > .pending_before@' "$1"
 }
 
 # The writer keeps filling the three round fields (I1) and the reader stops looking at them: REVIEW
@@ -5148,6 +5189,12 @@ CATALOG=(
   KAIZEN_qa_step_rank_inverted
   KAIZEN_qa_step_unguarded
   KAIZEN_qa_step_moved_blind
+  RUN_qa_pending_photo_missing
+  RUN_qa_pending_after_missing
+  RUN_qa_pending_retry_missing
+  RUN_qa_pending_cmd_retry_missing
+  KAIZEN_qa_fix_loop_blind
+  KAIZEN_qa_fix_loop_unscoped
   LEDGER_outcome_rounds_blind
   LEDGER_outcome_rounds_unguarded
   LEDGER_outcome_rounds_undirected
