@@ -4,6 +4,45 @@ Registro de melhorias com **antes/depois medido**. Sem número, não entra.
 
 ---
 
+## 2026-10-01 — A janela não se parte: a identidade do kit passa a ser o que ele executa
+
+**Problema (Gemba):** registrar um achado (princípio 5) colidia com duas identidades largas demais.
+O eixo do juiz era o `HEAD` cru (`kit_sha`): o PR #184 (`6323c6f`) mudou só `TODO.md` e uma linha de
+`tests/health-baseline.txt`, cunhou versão nova e mandou a janela 2 inteira para `previous` — **3
+missões e US$ 110,18** encalhados, veredito `indeterminado`. No ledger real, **10 das 17** versões de
+alvo eram commit de chore/docs. E a chave do carimbo de mutação lia a catraca: todo achado
+registrado custava outro `sdd health` (~18 min) antes do `gate_PR` (#117).
+
+**Medição:** o par `5b98087` → `6323c6f` (o commit que partiu a janela), cada lado num worktree
+limpo, as duas regras aplicadas ao mesmo conteúdo:
+
+| Fato | Antes (regra de `c19e987`) | Depois (ADR 0014) |
+|---|---|---|
+| Eixo do juiz nos dois lados | `5b98087` ≠ `6323c6f` (duas fatias) | `kit_rev` `8dd5080` = `8dd5080` (uma fatia) |
+| Chave do carimbo nos dois lados (`find` × `git ls-files -c` menos a catraca) | `27c54e9d` ≠ `e6d16990` (carimbo morto) | `57ba9896` = `57ba9896` (carimbo de pé) |
+| Fixture de 3 missões atravessando um commit sem comportamento | — | `sufficient: true`, `window_missions_stranded: 0`; o gêmeo sem `kit_rev` responde `window_broken: true` (asserções `kit-version:`) |
+| `tests/debug.log` ignorado dentro de `tests/` | movia a chave | não move (asserção `stamp-key:`) |
+| Raiz sem um dos quatro caminhos | carimbava listagem parcial em silêncio (#107) | nunca carimba, e diz qual falta |
+| Catálogo de mutação (âncoras) | 515 | **532** |
+| Suíte (`tests/run-all.sh`) | 259 s | 284 s |
+
+**Contramedida:** poka-yoke no escritor, não regra escrita — toda linha do ledger grava `kit_rev`
+(último commit de primeiro pai em `bin agents templates config`) e `kit_rev_dirty`, e os dois
+leitores agrupam por eles com uma definição jq só, mostrando os shas crus em `kit_shas_raw`. A guarda
+do kit fica no par cru (regime 1 + mutante provam que não estreitou). A chave do carimbo passa a
+`git ls-files -c` dos quatro caminhos menos a catraca, cada caminho obrigatório, motivo nomeado para
+toda chave vazia, e kit sem git só leva `warn`. Não é retroativo: o `indeterminado` da janela 2
+fica.
+
+**Ainda não medido:** o dólar poupado em janela real — a próxima janela do juiz abre no primeiro
+carimbo de alvo depois do merge, e é ela que dirá se algum achado registrado no meio dela deixou de
+partir a fatia.
+
+Missão `20261001-a-janela-nao-se-parte`, commits `85039c7`, `eedc6d3`, `162e923`, `89d8e62`,
+`f8c2a86`; [ADR 0014](docs/adr/0014-a-identidade-do-kit-e-o-que-ele-executa.md).
+
+---
+
 ## 2026-10-01 — O sub-passo da QA que andou deixa de contar como desperdício
 
 **Problema (Gemba):** a rubrica de `outcome` do ledger tinha braços de progresso para o laço do EXEC

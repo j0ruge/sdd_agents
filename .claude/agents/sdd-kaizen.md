@@ -42,13 +42,13 @@ construction — and the reading is what finally points the judge at that eviden
 accepted and decides nothing here; do not add it, and do not read its absence as a narrower slice.
 
 The JSON gives you, per kit version (`kit_sha`, file order, latest and previous):
-missions, sessions, `outcomes` (`{advanced, churned, idle}` — what the sessions did; cite it
-before anything else), `advance_rate` (the `advanced` share of those same sessions — one
-yardstick read twice, so it can never contradict the tally beside it), `moved_rate` (the share
-that wrote to the disk), the label tally (`ok` / `leve` / `refez` per repo×mission×phase),
-escalations by kind, cost, and the guard (`missions_after_change`, `missions_with_session`,
-`sessions`, `floor`, `sufficient`, `why`, `harness`, `window_missions_stranded`, `window_broken`,
-`degenerate_axis`).
+the raw shas it covers (`kit_shas_raw`, see §2), missions, sessions, `outcomes` (`{advanced,
+churned, idle}` — what the sessions did; cite it before anything else), `advance_rate` (the
+`advanced` share of those same sessions — one yardstick read twice, so it can never contradict
+the tally beside it), `moved_rate` (the share that wrote to the disk), the label tally (`ok` /
+`leve` / `refez` per repo×mission×phase), escalations by kind, cost, and the guard
+(`missions_after_change`, `missions_with_session`, `sessions`, `floor`, `sufficient`, `why`,
+`harness`, `window_missions_stranded`, `window_broken`, `degenerate_axis`).
 
 ⚠️ **`advanced` means "the gate passed OR the increment moved", and the second half is younger
 than most of the ledger** (`20260829-o-incremento-que-andou`). `gate_EXEC` refuses by construction
@@ -141,20 +141,28 @@ the repos it exists to expose.
 Every number in your verdict comes from this output. Cite them as they are.
 
 **The intervention count (D12) is NOT in the series**, and you do not invent it. The series groups
-by `kit_sha`, and a mission that spans two kit versions would count its launches twice. Read it from
-`"$SDD_HOME/bin/sdd" autonomy --all-repos --by-mission` — the `launch(es)` cell is distinct `run_id`
-per mission, and the reading is *interventions = launches − 1* (D16, amended 2026-08-28). Cite the
-command you read it from, beside the number. The `intervention note(s)` cell, when present, is the
+by kit version, and a mission that spans two kit versions would count its launches twice. Read it
+from `"$SDD_HOME/bin/sdd" autonomy --all-repos --by-mission` — the `launch(es)` cell is distinct
+`run_id` per mission, and the reading is *interventions = launches − 1* (D16, amended 2026-08-28).
+Cite the command you read it from, beside the number. The `intervention note(s)` cell, when present, is the
 narrative of what the human did; it is not the count.
 
 ## 2. Interpret with git, not with memory
 
-The series' axis is the raw `kit_sha`. What a sha MEANS is your half:
+The series' axis is the kit's **behaviour version** (ADR 0014): a row that carries `kit_rev` is
+grouped by it — the last first-parent commit that changed `bin agents templates config` — and only
+rows written before that ADR are grouped by their raw `kit_sha`. The output key stays `kit_sha`
+(it holds the behaviour version), so `kit_sha_judged` is still `latest.kit_sha` verbatim. Each of
+`latest` and `previous` carries `kit_shas_raw`: the raw HEAD shas the slice covers, in file order.
+Two of them in one slice means a commit that changed no behaviour path (a `TODO.md` finding, the
+ratchet) landed inside the window — that is not a rupture and you do not treat it as one.
+What a version MEANS is your half:
 
-- `git log --oneline -20` in the kit repo — which shas form ONE logical change (a merge and its
-  fixups, an increment and its follow-up), and what the judged change claimed to do (commit
-  bodies, `KAIZEN_LOG.md`).
-- When N shas are one logical change, say so in the verdict and judge the change, not the sha.
+- `git log --oneline -20` in the kit repo — what the judged change claimed to do (commit bodies,
+  `KAIZEN_LOG.md`), and which behaviour versions still form ONE logical change the axis cannot
+  join (a merge and its fixups in `bin/`, an increment and its follow-up).
+- When N versions are one logical change, say so in the verdict and judge the change, not the
+  sha.
 
 ## 3. Write the verdict — exact format
 

@@ -306,19 +306,20 @@ quando o catálogo volta verde, e o `gate_PR` **exige o carimbo**; o gate nunca 
 é exatamente o que `4c86712` desfez. Verbete "Carimbo de mutação" no `CONTEXT.md`, desenho e
 alternativas descartadas em [`docs/adr/0004`](docs/adr/0004-mutation-catalogue-owner-stamp-not-ci.md).
 ⚠️ **Consequência operacional que custa um `sdd health` a mais (~18 min desde o PR #170; antes, 20 a 50) quando se erra a ordem:** a chave é o conteúdo
-de `bin/ tests/ templates/ config/`, então `./bin/sdd health` roda **depois do último commit de
-código**. `CLAUDE.md`, `CONTEXT.md`, `docs/` e `TODO.md` não invalidam — mas
-`tests/health-baseline.txt` invalida, e é lá que a catraca do backlog mora, então registrar achado
-(princípio 5) mata o carimbo. A colisão está no `TODO.md`; o sintoma e a saída, em
-[`docs/failure-modes.md`](docs/failure-modes.md).
+**rastreado** de `bin/ tests/ templates/ config/` menos a catraca `tests/health-baseline.txt`
+(ADR 0014), então `./bin/sdd health` roda **depois do último commit de código**. `CLAUDE.md`,
+`CONTEXT.md`, `docs/`, `TODO.md` e a catraca não invalidam — registrar achado (princípio 5) não
+custa mais carimbo —, e arquivo ignorado também não. Arquivo novo fica fora da chave até ser
+rastreado (`git add`). Sintoma e saída em [`docs/failure-modes.md`](docs/failure-modes.md).
 ⚠️ **"Depois do último commit de código" inclui os consertos que a REVISÃO ainda vai pedir.** Os
 bots de PR (Codex, CodeRabbit, Copilot) só rodam **depois** que o PR existe, então abrir o PR é o
 que os começa, não o que termina o trabalho — e carimbar com revisão em voo é carimbar um rascunho.
 Medido no PR #45 deste kit: **três corridas de ~22 min** onde uma bastava, porque cada rodada de
 achados mexeu em `bin/`. A ordem que economiza a hora é a mesma que mantém conteúdo não medido fora
 da `main`: abrir o PR, esperar **todos** os revisores, consertar numa leva, carimbar **uma vez**,
-mergear. Rodada que só mexe em prosa não custa carimbo — confira com o `md5sum` dos quatro
-diretórios antes de rodar o comando, em vez de re-rodar por desconfiança. Fluxo completo no verbete
+mergear. Rodada que só mexe em prosa não custa carimbo — confira com o `md5sum` da listagem
+rastreada (o one-liner está no verbete abaixo) antes de rodar o comando, em vez de re-rodar por
+desconfiança. Fluxo completo no verbete
 "`sdd health` ran three times for one branch" de [`docs/failure-modes.md`](docs/failure-modes.md).
 
 `sdd preflight`, `bash -n bin/sdd` e os dry-runs completam, mas não substituem. O passo de lint do

@@ -1011,6 +1011,70 @@ mut_PR_stamp_key_follows_head() {
   sed -i '/^mutation_stamp_key() {/,/^}/ s@md5sum <<< "$listing"@md5sum <<< "$listing$(git -C "$1" rev-parse HEAD 2>/dev/null)"@' "$1"
 }
 
+# The per-path guard of the key becomes a no-op: a root missing one of the four measured paths is
+# hashed over the three that remain, `sdd health` stamps that partial listing and gate_PR accepts it.
+# Only the all-four-absent case stays refused (by the empty-listing guard below it), which is
+# exactly the guard the key had before ADR 0014, increment I3. World 9 of check-gates.sh catches it.
+mut_PR_stamp_key_partial_listing() {
+  sed -i '/^mutation_stamp_key() {/,/^}/ s@\[ -z "\$MUTATION_STAMP_MISSING" \] || return 1@:@' "$1"
+}
+
+# gate_PR goes back to the generic sentence for an unkeyable root: "run 'sdd health'", a remedy that
+# cannot work there because health refuses to stamp that root. World 9 of check-gates.sh reads it.
+mut_PR_partial_root_blind_remedy() {
+  sed -i '/^gate_PR() {/,/^}/ s@if \[ -n "\$MUTATION_STAMP_WHY" \]; then@if false; then@' "$1"
+}
+
+# cmd_health refuses the unkeyable root in silence again — the stamp is removed and nothing is said,
+# so the remedy gate_PR names answers nothing. World 9 of check-gates.sh reads the health output.
+mut_HEALTH_unstampable_silent() {
+  sed -i '/^cmd_health() {/,/^}/ s@health_bad "nothing was stamped: \$MUTATION_STAMP_WHY@: "nothing was stamped: $MUTATION_STAMP_WHY@' "$1"
+}
+
+# The ratchet's exclusion vanishes from the pathspec: tests/health-baseline.txt is hashed again, and
+# every finding registered under principle 5 throws the stamp away (#117; ADR 0014, increment I4).
+# World 10 of check-gates.sh catches it. Addressed by the pathspec's own block, which is top level.
+mut_PR_stamp_key_keeps_baseline() {
+  sed -i '/^MUTATION_STAMP_PATHSPEC=(/,/^readonly MUTATION_STAMP_PATHSPEC$/ s@^  MUTATION_STAMP_PATHSPEC+=(":(exclude)\$_stamp_exclude")$@  :@' "$1"
+}
+
+# The listing reads untracked files too, ignored ones included (`--others` with no
+# `--exclude-standard`): a `tests/debug.log` moves the key again (#119). World 11 of check-gates.sh.
+mut_PR_stamp_key_reads_ignored() {
+  sed -i '/^mutation_stamp_key() {/,/^}/ s@git ls-files -z -c --@git ls-files -z -c --others --@' "$1"
+}
+
+# A failed `md5sum` (a tracked file deleted from the working tree) keeps the PARTIAL listing instead
+# of emptying it: `sdd health` stamps the digest of the files that remain. World 12 of check-gates.sh.
+mut_PR_stamp_key_partial_on_deleted() {
+  sed -i '/^mutation_stamp_key() {/,/^}/ s@md5sum 2>/dev/null )" || listing=""@md5sum 2>/dev/null )" || true@' "$1"
+}
+
+# The reason stops naming a tracked file deleted from the working tree: the gate falls back to the
+# generic sentence and health to "hold no file", and neither names the file to restore. World 12.
+mut_PR_stamp_why_deleted_blind() {
+  sed -i '/^mutation_stamp_why() {/,/^}/ s@^    if \[ -n "\$deleted" \]; then$@    if false; then@' "$1"
+}
+
+# cmd_health counts a plain-copy kit install as a FAILURE again: the not-git reason falls through to
+# health_bad, a red line no gate needs and no remedy removes. check-health.sh's `stamp:` assertion and
+# the plain-copy tree world of check-gates.sh read it.
+mut_HEALTH_not_git_counts_failure() {
+  sed -i '/^cmd_health() {/,/^}/ s@if \[ "\$MUTATION_STAMP_WHY_KIND" = not-git \]; then@if false; then@' "$1"
+}
+
+# The catch-all reason goes silent: a tracked entry that cannot be hashed (a broken symlink, a
+# submodule) sends the gate back to the generic sentence and health to "hold no file". World 13.
+mut_PR_stamp_why_unreadable_blind() {
+  sed -i '/^mutation_stamp_why() {/,/^}/ s@^      MUTATION_STAMP_WHY="a tracked file under@      : "a tracked file under@' "$1"
+}
+
+# The reason stops saying the root is not a git checkout: health tells the operator to commit files
+# in a directory git cannot commit to. check-health.sh's `stamp:` assertion reads it.
+mut_PR_stamp_why_not_git_blind() {
+  sed -i '/^mutation_stamp_why() {/,/^}/ s@^  elif ! git -C "\$1" rev-parse --is-inside-work-tree >/dev/null 2>&1; then$@  elif false; then@' "$1"
+}
+
 # The WRITER goes back to answering about the tree its own file sits in, whatever tree the operator
 # is standing in and whatever tree the gate is about to ask for. With `sdd` on the PATH — the
 # install README.md documents — over a worktree or a second clone of the kit, the stamp lands in
@@ -3331,6 +3395,61 @@ mut_RUN_kit_guard_arms_projection() {
 }
 
 # ---------------------------------------------------------------------------
+# ADR 0014 — the behaviour version the ledger row carries.
+# ---------------------------------------------------------------------------
+# kit_rev goes back to being the raw HEAD: the log loses its pathspec, so a commit of TODO.md alone
+# moves the judge's axis again — the exact shape that split window 2 (6323c6f). Caught by
+# `kit_rev: a kit commit outside the behaviour paths moves kit_sha and leaves kit_rev …` in
+# check-autonomy.sh; the "inside" world stays green, which is why there are two.
+mut_RUN_kit_rev_is_head() {
+  sed -i '/^autonomy_kit_stamp() {/,/^}/ s|--format=%H HEAD -- "${KIT_BEHAVIOR_PATHS\[@\]}"|--format=%H HEAD|' "$1"
+}
+
+# kit_rev_dirty goes back to reading the whole tree: an unregistered finding in TODO.md would push
+# every row of a mission off the judge's axis. Caught by `kit_rev: dirt outside the behaviour paths
+# dirties kit_dirty and not kit_rev_dirty`.
+mut_RUN_kit_rev_dirty_whole_tree() {
+  sed -i '/^autonomy_kit_stamp() {/,/^}/ s|status --porcelain -- "${KIT_BEHAVIOR_PATHS\[@\]}"|status --porcelain|' "$1"
+}
+
+# The kit guard starts comparing the behaviour version instead of the raw pair — the narrowing the
+# grill refused (decision 5): the incident the guard exists for (2d28d13) was a commit of TODO.md,
+# which does not move kit_rev. Caught by regime 1 of the kit-guard block in check-autonomy.sh, which
+# goes silent.
+mut_RUN_kit_guard_reads_rev() {
+  sed -i -e '/^kit_guard_arm() {/,/^}/ s|"$AUTONOMY_KIT_STAMP"|"$AUTONOMY_KIT_REV"|' \
+    -e '/^kit_guard_check() {/,/^}/ s|"$AUTONOMY_KIT_STAMP"|"$AUTONOMY_KIT_REV"|' "$1"
+}
+
+# The judge stops applying the behaviour version and groups by the raw HEAD again: a commit that
+# only registers a finding splits the window, as it did to window 2 (6323c6f). Caught by
+# `kit-version: three missions straddling a commit outside the behaviour paths are one slice` and
+# `kit-version: the slice names the raw shas it covers` in check-kaizen.sh.
+mut_KAIZEN_kit_version_ignored() {
+  sed -i '/^kaizen_series() {/,/^}/ s@| historic_steps | kit_version_rows) as $raw@| historic_steps) as $raw@' "$1"
+}
+
+# The human window stops applying it while the judge keeps it: the two readers group one file two
+# ways. Caught by `kit-version: the human table reads the same versions as the judge`.
+mut_AUTONOMY_kit_version_ignored() {
+  sed -i '/^cmd_autonomy() {/,/^}/ s@^    | kit_version_rows$@    | .@' "$1"
+}
+
+# The shared definition keeps the raw kit_dirty: an unregistered TODO.md line pushes a row off the
+# axis although no behaviour path was dirty. Caught by `kit-version: dirt outside the behaviour paths
+# keeps a row comparable, dirt inside excludes it`.
+mut_KAIZEN_kit_rev_dirty_ignored() {
+  sed -i '/^ledger_kit_version_defs() {/,/^}/ s@, kit_dirty: .kit_rev_dirty}@}@' "$1"
+}
+
+
+# The fail-safe flips to fail-open: a row with kit_rev but kit_rev_dirty null is read as CLEAN and
+# stays on the axis. Caught by `kit-rev-dirty: a row with kit_rev but no kit_rev_dirty falls off the
+# axis` in check-kaizen.sh.
+mut_KAIZEN_kit_rev_dirty_failopen() {
+  sed -i '/^ledger_kit_version_defs() {/,/^}/ s@kit_dirty: .kit_rev_dirty}@kit_dirty: (.kit_rev_dirty // false)}@' "$1"
+}
+# ---------------------------------------------------------------------------
 # 20260828-instrumento-honesto — what a session DID, one definition in two readers.
 # ---------------------------------------------------------------------------
 # The shared definition falls back to the OLD yardstick under the new names: `moved` alone decides,
@@ -3888,8 +4007,10 @@ mut_AUTONOMY_historic_steps_blind() {
 
 # The judge's twin of the mutant above. Caught by `the human window and the judge recover the QA
 # sub-step alike` — the differential, which no one-sided fixture satisfies by accident.
+# ⚠️ RE-ANCHORED on 2026-10-01 (ADR 0014, increment I2): `kit_version_rows` now
+# follows historic_steps in the same chain, and the old spelling stopped applying (rc 90).
 mut_KAIZEN_historic_steps_series_blind() {
-  sed -i 's@| historic_progress | historic_rounds | historic_steps) as $raw@| historic_progress | historic_rounds) as $raw@' "$1"
+  sed -i 's@| historic_progress | historic_rounds | historic_steps | kit_version_rows) as $raw@| historic_progress | historic_rounds | kit_version_rows) as $raw@' "$1"
 }
 
 # The writer keeps filling the three round fields (I1) and the reader stops looking at them: REVIEW
@@ -4968,6 +5089,16 @@ CATALOG=(
   PR_blocked_docs_anywhere
   PR_merged_rechecked
   PR_stamp_key_follows_head
+  PR_stamp_key_partial_listing
+  PR_partial_root_blind_remedy
+  HEALTH_unstampable_silent
+  PR_stamp_key_keeps_baseline
+  PR_stamp_key_reads_ignored
+  PR_stamp_key_partial_on_deleted
+  PR_stamp_why_deleted_blind
+  PR_stamp_why_not_git_blind
+  HEALTH_not_git_counts_failure
+  PR_stamp_why_unreadable_blind
   HEALTH_stamp_window_blind
   HEALTH_stamp_tree_blind
   RUN_inverted_journal
@@ -5192,6 +5323,13 @@ CATALOG=(
   RUN_kit_touched_blind
   RUN_kit_guard_cries_wolf
   RUN_kit_guard_arms_projection
+  RUN_kit_rev_is_head
+  RUN_kit_rev_dirty_whole_tree
+  RUN_kit_guard_reads_rev
+  KAIZEN_kit_version_ignored
+  AUTONOMY_kit_version_ignored
+  KAIZEN_kit_rev_dirty_ignored
+  KAIZEN_kit_rev_dirty_failopen
   AUTONOMY_outcome_reads_moved_only
   KAIZEN_outcome_inlined_old
   AUTONOMY_waste_idle_only

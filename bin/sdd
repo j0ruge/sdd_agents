@@ -1952,7 +1952,27 @@ gate_DOCS() {
 # for documents no mutant edits. What the mutants DO edit is bin/sdd, and what decides their fate
 # is the assertions in tests/ plus the templates/ and config/ those assertions read. The residual
 # gap is in TODO.md with its direction, not hidden in a sentence here.
+#
+# Only what git TRACKS under them, and minus MUTATION_STAMP_EXCLUDE (ADR 0014, increment I4). The
+# key used to hash every file `find` saw, which charged a stamp for two things no mutant reads:
+# junk git ignores (a `tests/debug.log` left by a run, #119), and the backlog ratchet — principle 5
+# moves tests/health-baseline.txt in the same commit as every finding it registers, and each one
+# threw the stamp away and bought another `sdd health` before gate_PR (#117). Inside the suite only
+# check-lang.sh reads the ratchet, independently of any mutant; health_ratchet runs in cmd_health,
+# outside the suite. A NEW file is outside the key until it is tracked — `git ls-files -c` reads the
+# index, so `git add` is enough, no commit needed; once tracked it enters the key and gate_PR refuses
+# until `sdd health` runs again — the safe direction.
 readonly MUTATION_STAMP_PATHS=(bin tests templates config)
+readonly MUTATION_STAMP_EXCLUDE=(tests/health-baseline.txt)
+# The git pathspec both readers of the listing hand to `git ls-files` — the key and the reason it
+# could not be computed — built ONCE from the two arrays above, so they cannot disagree about which
+# files the stamp describes.
+MUTATION_STAMP_PATHSPEC=("${MUTATION_STAMP_PATHS[@]}")
+for _stamp_exclude in "${MUTATION_STAMP_EXCLUDE[@]}"; do
+  MUTATION_STAMP_PATHSPEC+=(":(exclude)$_stamp_exclude")
+done
+unset _stamp_exclude
+readonly MUTATION_STAMP_PATHSPEC
 
 # Under .sdd/logs/ and not .sdd/: `sdd install` guarantees .sdd/logs/ is gitignored in every repo
 # the kit touches, while .sdd/config.sh right above it is TRACKED. A stamp one directory up would
@@ -2008,26 +2028,93 @@ readonly MUTATION_CATALOGUE_FLOOR=8
 
 # The content key of the paths above: prints it, or prints NOTHING and returns 1.
 #
-# The difference is the whole guard. `md5sum` of no input at all is a perfectly valid-looking
-# constant, so a root whose four directories are all absent would otherwise be handed a stable key
-# that every other empty root matches — a stamp certifying nothing, indistinguishable from a stamp
-# certifying everything. Emptiness is refused here, once, instead of at each call site.
+# The key is the md5 of `md5sum <relative path>` over every file `git ls-files` lists under
+# MUTATION_STAMP_PATHSPEC, read from the WORKING TREE (so an uncommitted edit moves it, which is
+# what the window check in cmd_health needs), sorted. The relative paths ride inside the digest, so
+# a file that merely MOVED changes the key.
 #
-# ⚠️ `xargs -r`, and it is what makes the sentence above TRUE rather than merely intended: without
-# it, `xargs` with nothing on its input runs `md5sum` once with no operands, `md5sum` reads the
-# already-drained pipe, and the function hands back the digest of the empty string — the exact
-# constant the guard exists to refuse, with the `[ -n "$listing" ]` below satisfied by it. Today no
-# caller reaches that state (both ends only ask about a root whose tests/ holds a catalogue, so
-# `find` always has at least that file to print), and that is declared, not sold as measured: this
-# is a one-token hardening of a guard whose comment was ahead of its code.
+# Empty is the whole guard, and it refuses these roots once, instead of at each call site:
+#   - a root where ANY ONE of the four paths is absent (ADR 0014, increment I3). The listing would
+#     otherwise be taken over whichever paths remain, `sdd health` would stamp that partial
+#     listing, and gate_PR would accept it. Checked per path (mutation_stamp_missing), before
+#     anything is listed.
+#   - a root that is not a git checkout (increment I4): `git ls-files` fails, and there is no
+#     tracked content to describe. A kit installed as a plain copy is never stamped.
+#   - a root with a tracked file deleted from the working tree: its `md5sum` fails, and the key is
+#     then EMPTY, never the digest of the files that remain — the same partial listing as the
+#     first case, reached by another road. `|| listing=""` and not `|| true` is that rule: under
+#     `pipefail` the substitution fails with `xargs`, and `|| true` would keep the partial output.
+#   - a root whose listing is empty. `md5sum` of no input is a valid-looking constant every other
+#     empty root matches — a stamp certifying nothing. `xargs -r` keeps that constant from being
+#     computed at all.
+# Every one of these is reachable from both callers, so both name the reason — read off
+# mutation_stamp_why, never re-derived — instead of a remedy that cannot work.
+#
+# DECLARED LIMITS (D15), none reachable in today's flow: a kit vendored inside another repo but
+# untracked or ignored there is told "commit them", which is wrong when it is ignored; an exported
+# GIT_DIR / GIT_WORK_TREE redirects the listing to another repository; and GIT_LITERAL_PATHSPECS=1
+# turns ':(exclude)…' into a literal path, which puts the ratchet back in the key.
+#
+# Which of MUTATION_STAMP_PATHS are absent at <root>, PUBLISHED in MUTATION_STAMP_MISSING as a
+# space-separated list spelled `bin/ config/` (empty ⇒ all four are there). The ONE definition of
+# "which paths are missing": the key's guard below reads it, and so does mutation_stamp_why. Called,
+# never `$( )`-captured: the result is a global, and a capture would run it in a subshell and lose it.
+mutation_stamp_missing() { # mutation_stamp_missing <root>
+  local p
+  MUTATION_STAMP_MISSING=""
+  for p in "${MUTATION_STAMP_PATHS[@]}"; do
+    [ -e "$1/$p" ] || MUTATION_STAMP_MISSING="${MUTATION_STAMP_MISSING:+$MUTATION_STAMP_MISSING }$p/"
+  done
+}
+
+# WHY <root> has no stamp key, PUBLISHED in MUTATION_STAMP_WHY as a clause that ends in its remedy,
+# and in MUTATION_STAMP_WHY_KIND as one of `missing`, `not-git`, `deleted`, `untracked` or
+# `unreadable` (both empty ⇒ nothing here explains it). The ONE definition of the reason, read by the
+# two refusals that have to SAY it — gate_PR's sentence and cmd_health's — so the gate never sends
+# the operator to `sdd health` for a root `sdd health` will refuse in other words, or in none. The
+# KIND is what a caller branches on (cmd_health treats `not-git` as a warning, not a failure), so no
+# caller ever re-derives the decision by matching the message. Called only after mutation_stamp_key
+# came back empty, and called, never `$( )`-captured, for the reason above.
+mutation_stamp_why() { # mutation_stamp_why <root>
+  local deleted
+  MUTATION_STAMP_WHY=""
+  MUTATION_STAMP_WHY_KIND=""
+  mutation_stamp_missing "$1"
+  if [ -n "$MUTATION_STAMP_MISSING" ]; then
+    MUTATION_STAMP_WHY_KIND=missing
+    MUTATION_STAMP_WHY="$MUTATION_STAMP_MISSING missing at $1, and the stamp keys on ${MUTATION_STAMP_PATHS[*]} together — restore it"
+  elif ! git -C "$1" rev-parse --is-inside-work-tree >/dev/null 2>&1; then
+    MUTATION_STAMP_WHY_KIND=not-git
+    MUTATION_STAMP_WHY="$1 is not a git checkout, and the stamp keys on the TRACKED content of ${MUTATION_STAMP_PATHS[*]} — measure a git checkout of the kit (run sdd health inside one)"
+  else
+    deleted="$(git -C "$1" ls-files -z -d -- "${MUTATION_STAMP_PATHSPEC[@]}" 2>/dev/null | tr '\0' ' ')" || deleted=""
+    deleted="${deleted% }"
+    if [ -n "$deleted" ]; then
+      MUTATION_STAMP_WHY_KIND=deleted
+      MUTATION_STAMP_WHY="tracked file(s) deleted from the working tree: $deleted — commit the deletion or restore them"
+    elif [ -z "$(git -C "$1" ls-files -c -- "${MUTATION_STAMP_PATHSPEC[@]}" 2>/dev/null || true)" ]; then
+      MUTATION_STAMP_WHY_KIND=untracked
+      MUTATION_STAMP_WHY="no file under ${MUTATION_STAMP_PATHS[*]} is tracked at $1 — commit them"
+    else
+      # The catch-all: files are tracked and none is deleted, yet the listing could not be hashed —
+      # a submodule (gitlink), a sparse or skip-worktree entry, a tracked symlink whose target is
+      # gone. Named rather than left to the generic sentence, whose remedy cannot work here.
+      MUTATION_STAMP_WHY_KIND=unreadable
+      MUTATION_STAMP_WHY="a tracked file under ${MUTATION_STAMP_PATHS[*]} could not be read in the working tree of $1 (a submodule, a sparse or skip-worktree entry, a broken symlink) — make every tracked file there a readable file, or untrack it"
+    fi
+  fi
+}
+
 mutation_stamp_key() { # mutation_stamp_key <root>
   local listing
+  mutation_stamp_missing "$1"
+  [ -z "$MUTATION_STAMP_MISSING" ] || return 1
   # `md5sum` and not `sha256sum`: it is the digest `sdd preflight` already probes the userland for,
-  # so this adds no assumption the kit was not already making. The relative paths ride INSIDE the
-  # digest, which is what makes a file that merely MOVED change the key.
+  # so this adds no assumption the kit was not already making. `sort -zu`: during a merge conflict
+  # `ls-files` lists an unmerged path once per stage.
   listing="$( CDPATH='' cd "$1" 2>/dev/null \
-              && find "${MUTATION_STAMP_PATHS[@]}" -type f -print0 2>/dev/null \
-                 | LC_ALL=C sort -z | xargs -0 -r md5sum 2>/dev/null )" || true
+              && git ls-files -z -c -- "${MUTATION_STAMP_PATHSPEC[@]}" 2>/dev/null \
+                 | LC_ALL=C sort -zu | xargs -0 -r md5sum 2>/dev/null )" || listing=""
   [ -n "$listing" ] || return 1
   # Herestring, never `printf … |`: under `pipefail` that form returns 141 when the reader exits
   # first, which is a failure whose likelihood grows with the size of the tree being hashed.
@@ -2095,17 +2182,29 @@ gate_PR() {
     local key stamp
     key="$(mutation_stamp_key "$REPO_ROOT" || true)"
     stamp="$(cat "$REPO_ROOT/$MUTATION_STAMP_REL" 2>/dev/null || true)"
-    # ONE refusal and one sentence, with `-z` folded into it rather than given a message of its
-    # own. The disjunct is load-bearing and not decoration: an absent stamp file reads as the empty
-    # string, so an empty KEY would compare EQUAL to it and open the gate — the two ways of knowing
-    # nothing agreeing that everything is fine. It is also, today, unreachable, and that is
-    # declared rather than dressed up: the scope condition above is a file INSIDE tests/, so
-    # reaching this line at all proves tests/ is non-empty. A second GATE_WHY here would be a
-    # sentence no world can print, which is the dead code this repo keeps finding in its own gates.
+    # The `-z "$key"` disjunct is load-bearing and not decoration: an absent stamp file reads as
+    # the empty string, so an empty KEY would compare EQUAL to it and open the gate — the two ways
+    # of knowing nothing agreeing that everything is fine.
     #
-    # The remedy is IN the sentence, the same rule cmd_health's red-suite line obeys and for the
+    # An empty key is REACHABLE: the scope condition above proves tests/ holds a file, and says
+    # nothing about bin/, templates/ or config/ (ADR 0014, increment I3), nor about whether every
+    # tracked file is still in the working tree (increment I4). For such a root `sdd health` alone
+    # is no remedy — it refuses to stamp it, and says so — so the sentence carries the reason and
+    # its remedy, read off the same mutation_stamp_why cmd_health reads. That helper classifies
+    # every empty key today, so for an empty key the generic sentence below is defensive only —
+    # unreachable unless a future refusal of the key is added without a mutation_stamp_why branch
+    # (D15: no probe can reach it). The sentence is reached for a key that differs from the stamp.
+    #
+    # The remedy is IN each sentence, the same rule cmd_health's red-suite line obeys and for the
     # same measured reason: without the command named, the operator runs the fast suite, sees
     # green, and concludes the gate is lying — which is the one thing it may never be.
+    if [ -z "$key" ]; then
+      mutation_stamp_why "$REPO_ROOT"
+      if [ -n "$MUTATION_STAMP_WHY" ]; then
+        GATE_WHY="no mutation stamp is possible for this tree: $MUTATION_STAMP_WHY, then run 'sdd health'"
+        return 1
+      fi
+    fi
     if [ -z "$key" ] || [ "$stamp" != "$key" ]; then
       GATE_WHY="no green mutation catalogue for this content — run 'sdd health' (since 4c86712 TEST_CMD does not run the catalogue, so no gate before this one measures it)"
       return 1
@@ -3342,9 +3441,38 @@ ledger_outcome_defs() {   # printed jq, spliced into cmd_autonomy AND kaizen_ser
   printf '%s' 'def phase_index: . as $p | ($phases | split(" ")) | index($p);'
 }
 
-# Publishes AUTONOMY_KIT_STAMP as "<sha>|<true|false>", or "|" when SDD_HOME is not a git checkout.
-# This is the judge's before/after axis: without it, a change in the numbers gets attributed to the
-# calendar instead of to the kit change that caused it.
+# The judge's axis is the BEHAVIOUR version (ADR 0014): a row that carries `kit_rev` is read as if
+# `kit_sha` were `kit_rev` and `kit_dirty` were `kit_rev_dirty`, and the raw sha survives as
+# `kit_sha_raw` so each slice can say which raw shas it covers (`kit_shas_raw` in group_summary).
+# Printed jq like ledger_outcome_defs and spliced into cmd_autonomy AND kaizen_series at the SAME
+# point — right after historic_steps, before any comparable/on_axis/grouping — so the judge and the
+# human window cannot group one file two ways, and no site downstream that reads `.kit_sha` has to
+# change. Rows without `kit_rev` (every row written before ADR 0014) pass through untouched.
+# `kit_rev` present with `kit_rev_dirty` null becomes `kit_dirty: null`, which is off the axis: the
+# fail-safe direction, on purpose. No writer emits that row today (a hand-edited or truncated ledger
+# can); its probe is `kit-rev-dirty: a row with kit_rev but no kit_rev_dirty falls off the axis` in
+# tests/check-kaizen.sh, held by mut_KAIZEN_kit_rev_dirty_failopen. The kit guard never reads this —
+# it keeps the raw pair.
+ledger_kit_version_defs() {   # printed jq, spliced into cmd_autonomy AND kaizen_series
+  printf '%s' 'def kit_version_rows: map(if type == "object" and .kit_rev != null then . + {kit_sha_raw: .kit_sha, kit_sha: .kit_rev, kit_dirty: .kit_rev_dirty} else . end);'
+}
+
+# The paths whose content a target-repo phase executes. tests/ is not here (no target phase runs the
+# kit's suite), nor docs/, commands/, TODO.md. When in doubt a path goes IN: one path too many can
+# only split a window, one too few would fuse two behaviours into one version.
+readonly KIT_BEHAVIOR_PATHS=(bin agents templates config)
+
+# Publishes TWO globals, and they answer different questions (ADR 0014):
+#   AUTONOMY_KIT_STAMP = "<sha>|<true|false>" — the raw HEAD and whether ANY path of the kit tree is
+#     dirty. This is the fact "where was the kit", and it is what kit_guard_* compare: the guard asks
+#     "did the kit move at all", and the incident it exists for (2d28d13) was a commit of TODO.md.
+#   AUTONOMY_KIT_REV   = "<rev>|<true|false>" — the last first-parent commit that changed
+#     KIT_BEHAVIOR_PATHS, and whether any of THOSE paths is dirty. This is the judge's axis: a commit
+#     that only registers a finding (TODO.md + the ratchet) runs nothing a target phase executes, and
+#     used to mint a new "kit version" that split the measurement window (window 2, 6323c6f).
+# Both are "|" when SDD_HOME is not a git checkout. The rev rides in its OWN global rather than a
+# third field of the stamp because every writer cuts the stamp with "${stamp#*|}", which stops at
+# the FIRST "|": a field appended there would silently corrupt kit_dirty.
 #
 # An out-param global and NOT a printed value, for the same reason run_phase publishes LAST_PHASE_*:
 # read through `stamp="$(autonomy_kit_stamp)"`, the whole body would run in a SUBSHELL, and the
@@ -3352,8 +3480,9 @@ ledger_outcome_defs() {   # printed jq, spliced into cmd_autonomy AND kaizen_ser
 # the one-shot warning would fire once per ledger row, which is the opposite of what it says. A
 # guard that cannot hold is worse than no guard: it reads as measured and is not.
 AUTONOMY_KIT_STAMP=""
+AUTONOMY_KIT_REV=""
 autonomy_kit_stamp() {
-  local sha
+  local sha rev_full rev=""
   sha="$( git -C "$SDD_HOME" rev-parse --short HEAD 2>/dev/null || true )"
   if [ -z "$sha" ]; then
     # Someone installed the kit as a plain copy, not a git checkout: every row born from here
@@ -3363,11 +3492,19 @@ autonomy_kit_stamp() {
     [ "$AUTONOMY_SHA_WARNED" = "1" ] \
       || warn "$SDD_HOME is not a git checkout — autonomy rows get kit_sha:null and stay non-comparable forever"
     AUTONOMY_SHA_WARNED=1
-    AUTONOMY_KIT_STAMP="|"; return 0
+    AUTONOMY_KIT_STAMP="|"; AUTONOMY_KIT_REV="|"; return 0
   fi
   if [ -n "$( git -C "$SDD_HOME" status --porcelain 2>/dev/null )" ]
   then AUTONOMY_KIT_STAMP="$sha|true"
   else AUTONOMY_KIT_STAMP="$sha|false"; fi
+  # %H and then rev-parse --short, so the rev is spelled with the same length rule as kit_sha (a
+  # bare %h may abbreviate differently). No commit on the paths -> empty -> kit_rev: null, and the
+  # readers keep such a row on the raw axis.
+  rev_full="$( git -C "$SDD_HOME" log -1 --first-parent --format=%H HEAD -- "${KIT_BEHAVIOR_PATHS[@]}" 2>/dev/null || true )"
+  [ -n "$rev_full" ] && rev="$( git -C "$SDD_HOME" rev-parse --short "$rev_full" 2>/dev/null || true )"
+  if [ -n "$( git -C "$SDD_HOME" status --porcelain -- "${KIT_BEHAVIOR_PATHS[@]}" 2>/dev/null )" ]
+  then AUTONOMY_KIT_REV="$rev|true"
+  else AUTONOMY_KIT_REV="$rev|false"; fi
 }
 
 # ---------------------------------------------------------------------------
@@ -3910,7 +4047,7 @@ autonomy_have_jq() {
 autonomy_escalation_row() {   # autonomy_escalation_row <event> <kind> <phase> <gate_why>
   autonomy_have_jq || return 0
   # Called, never substituted: `$(autonomy_kit_stamp)` would reset its one-shot warning flag.
-  autonomy_kit_stamp; local stamp="$AUTONOMY_KIT_STAMP"
+  autonomy_kit_stamp; local stamp="$AUTONOMY_KIT_STAMP" krev="$AUTONOMY_KIT_REV"
   # "${4:0:200}" caps gate_why, and WHAT it counts is the locale's call — this comment used to
   # claim it counted characters unconditionally, true in only one of the two regimes.
   # Measured here (bash + glibc): under pt_BR.UTF-8 it yields 200 characters (400 bytes) and
@@ -3934,11 +4071,14 @@ autonomy_escalation_row() {   # autonomy_escalation_row <event> <kind> <phase> <
     --arg why "${4:0:200}" \
     --arg run_id "$AUTONOMY_RUN_ID" --arg invocation "$AUTONOMY_INVOCATION" \
     --arg sha "${stamp%%|*}" --arg dirty "${stamp#*|}" \
+    --arg rev "${krev%%|*}" --arg rdirty "${krev#*|}" \
     --arg project "$PROJECT_NAME" --arg repo "$repo" --arg mission "$MISSION" \
     '{v: 1, ts: $ts, event: $event, kind: $kind,
       run_id: $run_id, invocation: $invocation,
       kit_sha: (if $sha == "" then null else $sha end),
       kit_dirty: (if $dirty == "" then null else ($dirty == "true") end),
+      kit_rev: (if $rev == "" then null else $rev end),
+      kit_rev_dirty: (if $rdirty == "" then null else ($rdirty == "true") end),
       project: $project, repo: $repo, mission: $mission, phase: $phase,
       gate_why: $why}' )"
 }
@@ -3995,7 +4135,7 @@ autonomy_degraded_row() { autonomy_escalation_row "degraded" "$1" "$2" "$3"; }
 autonomy_gate_pass_row() {   # autonomy_gate_pass_row <phase>
   autonomy_have_jq || return 0
   # Called, never substituted: `$(autonomy_kit_stamp)` would reset its one-shot warning flag.
-  autonomy_kit_stamp; local stamp="$AUTONOMY_KIT_STAMP"
+  autonomy_kit_stamp; local stamp="$AUTONOMY_KIT_STAMP" krev="$AUTONOMY_KIT_REV"
   # Substituted and not called, exactly as the escalation row does it: ledger_repo_root only
   # prints, so there is no global for the subshell to eat. No `#` inside the `\`-continued block
   # below — a comment there breaks the command in silence and `bash -n` says nothing.
@@ -4004,11 +4144,14 @@ autonomy_gate_pass_row() {   # autonomy_gate_pass_row <phase>
     --arg ts "$(date -Iseconds)" --arg phase "$1" \
     --arg run_id "$AUTONOMY_RUN_ID" --arg invocation "$AUTONOMY_INVOCATION" \
     --arg sha "${stamp%%|*}" --arg dirty "${stamp#*|}" \
+    --arg rev "${krev%%|*}" --arg rdirty "${krev#*|}" \
     --arg project "$PROJECT_NAME" --arg repo "$repo" --arg mission "$MISSION" \
     '{v: 1, ts: $ts, event: "gate_pass",
       run_id: $run_id, invocation: $invocation,
       kit_sha: (if $sha == "" then null else $sha end),
       kit_dirty: (if $dirty == "" then null else ($dirty == "true") end),
+      kit_rev: (if $rev == "" then null else $rev end),
+      kit_rev_dirty: (if $rdirty == "" then null else ($rdirty == "true") end),
       project: $project, repo: $repo, mission: $mission, phase: $phase}' )"
 }
 
@@ -4043,7 +4186,7 @@ autonomy_gate_pass_row() {   # autonomy_gate_pass_row <phase>
 autonomy_close_row() {   # autonomy_close_row <issue> <session id> <rc> <verified> <dur_s> <cost> <turns> <cache_read>
   autonomy_have_jq || return 0
   # Called, never substituted: `$(autonomy_kit_stamp)` would reset its one-shot warning flag.
-  autonomy_kit_stamp; local stamp="$AUTONOMY_KIT_STAMP"
+  autonomy_kit_stamp; local stamp="$AUTONOMY_KIT_STAMP" krev="$AUTONOMY_KIT_REV"
   # Substituted and not called, exactly as the two constructors above do it: ledger_repo_root only
   # prints, so there is no global for the subshell to eat. No `#` inside the `\`-continued block
   # below — a comment there breaks the command in silence and `bash -n` says nothing.
@@ -4055,11 +4198,14 @@ autonomy_close_row() {   # autonomy_close_row <issue> <session id> <rc> <verifie
     --arg harness "$LAST_PHASE_HARNESS" \
     --arg run_id "$AUTONOMY_RUN_ID" --arg invocation "$AUTONOMY_INVOCATION" \
     --arg sha "${stamp%%|*}" --arg dirty "${stamp#*|}" \
+    --arg rev "${krev%%|*}" --arg rdirty "${krev#*|}" \
     --arg project "$PROJECT_NAME" --arg repo "$repo" --arg mission "$MISSION" \
     '{v: 1, ts: $ts, event: "close",
       run_id: $run_id, invocation: $invocation,
       kit_sha: (if $sha == "" then null else $sha end),
       kit_dirty: (if $dirty == "" then null else ($dirty == "true") end),
+      kit_rev: (if $rev == "" then null else $rev end),
+      kit_rev_dirty: (if $rdirty == "" then null else ($rdirty == "true") end),
       project: $project, repo: $repo, mission: $mission,
       issue: $issue, session: $session,
       dur_s: ($dur | tonumber? // null), cost_usd: ($cost | tonumber? // null),
@@ -4091,7 +4237,7 @@ autonomy_close_row() {   # autonomy_close_row <issue> <session id> <rc> <verifie
 autonomy_session_row() {  # <phase> <attempt> <auto_retry> <moved> <gate> <gate_why> [<pending_before> <pending_after> <increments_total> <rounds_before> <rounds_after> <rounds_max> <step_after>]
   autonomy_have_jq || return 0
   # Called, never substituted: `$(autonomy_kit_stamp)` would reset its one-shot warning flag.
-  autonomy_kit_stamp; local stamp="$AUTONOMY_KIT_STAMP"
+  autonomy_kit_stamp; local stamp="$AUTONOMY_KIT_STAMP" krev="$AUTONOMY_KIT_REV"
   # "${6:0:200}" caps gate_why under the same locale caveat as autonomy_escalation_row's
   # "${4:0:200}" above — characters when the locale is multibyte, bytes under C/POSIX.
   # Same identity as the escalation row above, for the same reason: one repo per row, resolved by
@@ -4103,6 +4249,7 @@ autonomy_session_row() {  # <phase> <attempt> <auto_retry> <moved> <gate> <gate_
     --arg why "${6:0:200}" \
     --arg run_id "$AUTONOMY_RUN_ID" --arg invocation "$AUTONOMY_INVOCATION" \
     --arg sha "${stamp%%|*}" --arg dirty "${stamp#*|}" \
+    --arg rev "${krev%%|*}" --arg rdirty "${krev#*|}" \
     --arg project "$PROJECT_NAME" --arg repo "$repo" --arg mission "$MISSION" \
     --arg step "$LAST_PHASE_STEP" --arg agent "$LAST_PHASE_AGENT" \
     --arg model "$LAST_PHASE_MODEL" --arg session "$LAST_PHASE_SID" \
@@ -4118,6 +4265,8 @@ autonomy_session_row() {  # <phase> <attempt> <auto_retry> <moved> <gate> <gate_
       run_id: $run_id, invocation: $invocation,
       kit_sha: (if $sha == "" then null else $sha end),
       kit_dirty: (if $dirty == "" then null else ($dirty == "true") end),
+      kit_rev: (if $rev == "" then null else $rev end),
+      kit_rev_dirty: (if $rdirty == "" then null else ($rdirty == "true") end),
       project: $project, repo: $repo, mission: $mission,
       phase: $phase, step: $step,
       step_after: (if $step_after == "" then null else $step_after end),
@@ -5895,10 +6044,32 @@ cmd_health() {
   # lands on disk is "this exact tree was measured green" and never "the command was here".
   local stamp_path="$kit/$MUTATION_STAMP_REL" stamp_key
   stamp_key="$(mutation_stamp_key "$kit" || true)"
-  if [ "$catalogue_green" != 1 ] || [ -z "$stamp_key" ]; then
+  if [ "$catalogue_green" != 1 ]; then
     # REMOVED, not merely left behind. A stamp that outlives the green it certifies is the exact
     # label this block exists to replace: it would go on telling gate_PR that a catalogue which
     # just came back red, over this very content, had been measured and was clean.
+    rm -f "$stamp_path"
+  elif [ -z "$stamp_key" ]; then
+    # A green catalogue over a root the key refuses — a measured path absent, not a git checkout,
+    # a tracked file deleted (ADR 0014, increments I3 and I4). Said out loud, never a silent
+    # `rm -f`: gate_PR names the same reason and tells the operator to run this command
+    # afterwards, and a health that went quiet here would be a refusal with no reachable remedy.
+    # Same helper as the gate, so the two agree.
+    mutation_stamp_why "$kit"
+    if [ "$MUTATION_STAMP_WHY_KIND" = not-git ]; then
+      # A kit installed as a plain copy — the fallback of every target repo. No gate can ever
+      # demand a stamp here (gate_PR reads it at $REPO_ROOT, always a git toplevel), so a failure
+      # would be a red line with no remedy that removes it. Never stamped, as ADR 0014 point 4
+      # says; said, and not counted.
+      warn "$kit is not a git checkout — no gate can demand a mutation stamp here; none written"
+    elif [ -n "$MUTATION_STAMP_WHY" ]; then
+      health_bad "nothing was stamped: $MUTATION_STAMP_WHY, then re-run sdd health"
+    else
+      # Defensive — unreachable today: mutation_stamp_why classifies every empty key (a KIND and a
+      # sentence for each), so this generic line only speaks if a future refusal of the key is
+      # added without teaching mutation_stamp_why its name. No probe can reach it (D15).
+      health_bad "nothing was stamped: ${MUTATION_STAMP_PATHS[*]} hold no file at $kit, so there is no content for a stamp to describe"
+    fi
     rm -f "$stamp_path"
   elif [ "$stamp_key" != "$stamp_key_before" ]; then
     # The window, closed. Saying it out loud matters as much as refusing: an operator who watched
@@ -8532,7 +8703,7 @@ cmd_autonomy() {
   # would turn that sum into an accusation against the buckets instead of a measurement.
   local repo; repo="$(ledger_repo_root)"
   local def; def="$(ledger_row_is_local)"
-  local odefs; odefs="$(ledger_outcome_defs)"
+  local odefs; odefs="$(ledger_outcome_defs)$(ledger_kit_version_defs)"
   local total lines norepo
   lines="$(jq -s 'length' "$file")"
   norepo="$(jq -s --arg repo "$repo" "$def"' map(select(ledger_row_no_repo)) | length' "$file")"
@@ -8821,6 +8992,10 @@ cmd_autonomy() {
     # so it walks the list backwards — and it must run on the whole history, never on a slice, or
     # the last row of the slice would lose a next row that exists.
     | historic_steps
+    # The behaviour version as the axis (ADR 0014), at the SAME point kaizen_series applies it:
+    # after the dated recoveries, which key on repo and mission and never on the sha, and before
+    # any comparable or grouping, so every downstream `.kit_sha` reads the behaviour version.
+    | kit_version_rows
     # Bound over `comparable` and NOT over the bare annotation, which is the fix for a measured
     # fail-open: these two sentences are DELETION SIGNALS — they say how much of the window was
     # read through a dated path, and therefore when that path may come out — and a count taken
@@ -9175,7 +9350,7 @@ kaizen_series() {
     printf '{"v":1,"latest":null,"previous":null,"guard":{"missions_after_change":0,"missions_with_session":0,"sessions":0,"floor":%s,"sufficient":false,"why":["floor"],"harness":[],"window_missions_stranded":0,"window_broken":false,"degenerate_axis":false},"excluded":{"non_comparable":0,"unrecognized":0,"meta":0,"other_repo":0,"no_repo":0}}\n' "$KAIZEN_GUARD_FLOOR"
     return 0
   fi
-  jq -n --arg repo "$repo" --argjson floor "$KAIZEN_GUARD_FLOOR" --arg phases "$PHASES" "$(ledger_row_is_local)""$(ledger_outcome_defs)"'
+  jq -n --arg repo "$repo" --argjson floor "$KAIZEN_GUARD_FLOOR" --arg phases "$PHASES" "$(ledger_row_is_local)""$(ledger_outcome_defs)""$(ledger_kit_version_defs)"'
     # ONE definition of "escalation" for the whole program, exactly as cmd_autonomy has one. The
     # two events state different facts (`blocked` stopped the line, `degraded` lowered the bar and
     # went on) but they answer this rubric the same way, and writing the pair out three times is
@@ -9448,6 +9623,10 @@ kaizen_series() {
                       outcomes: (map(select(.event == "session")) | outcome_tally),
                       cost_usd: (map(.cost_usd // 0) | add)})) as $detail
       | {kit_sha: $rows[0].kit_sha,
+         # The raw HEAD shas this behaviour version covers, unique, in file order (ADR 0014). It is
+         # what the judge reads to see that two commits were one behaviour; a row without kit_rev
+         # contributes its own kit_sha, so a pre-ADR slice lists exactly the one sha it is.
+         kit_shas_raw: ($rows | map(.kit_sha_raw // .kit_sha) | reduce .[] as $s ([]; if index($s) then . else . + [$s] end)),
          missions: ($graded | map(mission_key) | unique | length),
          # The floor of the guard, and NOT the same number as `missions` above: that one counts
          # every mission on the axis, escalations included, which is right for the display and
@@ -9521,7 +9700,7 @@ kaizen_series() {
     # filter, before any classification. One dated recovery, spliced from one definition, so the
     # judge and the human window cannot end up reading two different histories out of one file —
     # check-autonomy.sh compares them over a prose-only ledger for exactly that.
-    | ($file_rows | map(select(ledger_row_is_local)) | historic_progress | historic_rounds | historic_steps) as $raw
+    | ($file_rows | map(select(ledger_row_is_local)) | historic_progress | historic_rounds | historic_steps | kit_version_rows) as $raw
     # Subtracted out, never lumped in: a row that names no project did not come from another repo,
     # and a bucket that said it did would be a wrong reason printed with the confidence of a right
     # one. The two counts partition what the filter removed, so the arithmetic still closes.
