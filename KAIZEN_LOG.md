@@ -22,14 +22,14 @@ antes (`74996fa^`) e o desta missão, e `diff` das duas saídas:
 | `sales_quote/20260930-justificativa-pedido-alcada` | `16 advanced · 4 churned` | `17 advanced · 3 churned` |
 | Fatia `5b98087` (janela 2) | `44 advanced · 9 churned · 16% waste` | `47 advanced · 6 churned · 11% waste` |
 | Outras linhas do `--by-mission` que mudaram | — | **0** (só as três que tinham `QA:exec`) |
-| Linhas QA lidas pelo caminho histórico | — | 28, contadas na tela |
-| Catálogo de mutação | 495 | **513** |
+| Linhas QA lidas pelo caminho histórico | — | 28, contadas na tela; **22** depois do `R1` (só a mesma corrida é testemunha, nenhum balde muda) |
+| Catálogo de mutação | 495 | **513**; **515** depois do `R1` |
 
 **Contramedida:** um campo novo (`step_after`) na linha QA, escrito nas três portas; o braço do
 sub-passo escrito positivamente (sub-passo desconhecido não conta); o laço QA⇄EXEC (`F<n>` escrito
 no `close`) lido pela foto de `pending` só em linha nova — o `gate_why` antigo não prova que a
 sessão os escreveu, e inferir seria lisonja. Linha antiga recupera o sub-passo pelo `step` da
-próxima linha QA da mesma `(repo, missão)`, por caminho contado na tela.
+próxima linha QA da mesma `(repo, missão)` **e da mesma corrida** (`run_id`), por caminho contado na tela.
 
 **Ressalva:** a régua de `outcome` mudou; número lido antes de 2026-09-30 não se compara com um lido
 depois sem dizer isso (pendência humana: refazer a janela 2 ou abrir a próxima depois desta missão).

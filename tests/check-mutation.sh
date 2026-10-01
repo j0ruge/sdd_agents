@@ -3862,6 +3862,22 @@ mut_KAIZEN_historic_steps_launders_null() {
   sed -i 's@(if ($r | has("step_after") | not) and .next\[$k\] != null@(if $r.step_after == null and .next[$k] != null@' "$1"
 }
 
+# The QA dated path stops asking whether the next row is of the SAME run, and the QA:exec that a
+# human (or an interactive session) closed between two runs reads `advanced` — the advance credited
+# to a session that left the report open. Finding #1 of r1 of 20260930-a-sub-etapa-que-andou,
+# reproduced there on a two-row ledger. Caught by `a QA row older than step_after is not recovered
+# from the next row of another run` in check-kaizen.sh.
+mut_KAIZEN_historic_steps_crosses_runs() {
+  sed -i 's@ and $r.run_id != null and .next\[$k\].run_id == $r.run_id then@ then@' "$1"
+}
+
+# The same guard loses its non-null half, and two rows that carry no `run_id` at all count as one
+# run: an unknown run is never a witness. Caught by `a QA row with no run_id is not recovered from a
+# next row with no run_id either` in check-kaizen.sh.
+mut_KAIZEN_historic_steps_null_run_is_a_run() {
+  sed -i 's@ and $r.run_id != null and .next\[$k\].run_id == $r.run_id then@ and .next[$k].run_id == $r.run_id then@' "$1"
+}
+
 # The human window stops applying the QA dated path, and every QA:exec of window 2 reads `churned`
 # again on `sdd autonomy` while the judge keeps reading `advanced` — the two readers telling two
 # histories out of one file. Caught by `a QA row older than step_after that advanced reads advanced
@@ -5230,6 +5246,8 @@ CATALOG=(
   KAIZEN_qa_fix_loop_unscoped
   KAIZEN_historic_steps_key_slug_only
   KAIZEN_historic_steps_launders_null
+  KAIZEN_historic_steps_crosses_runs
+  KAIZEN_historic_steps_null_run_is_a_run
   AUTONOMY_historic_steps_blind
   KAIZEN_historic_steps_series_blind
   LEDGER_outcome_rounds_blind
