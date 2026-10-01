@@ -455,8 +455,16 @@ reader `gate_DOCS` decides on (one `⛔` cell naming several documents is one ro
 the two gates cannot disagree about which documents are `⛔`.
 
 **In a repo that owns a mutation catalogue there is one more requirement, and it is checked last:**
-a stamp in `.sdd/logs/mutation-stamp` matching the current content of `bin/ tests/ templates/
-config/`. `sdd health` writes it when the catalogue comes back green; nothing else writes it; a red
+a stamp in `.sdd/logs/mutation-stamp` matching the current **tracked** content of `bin/ tests/
+templates/ config/` minus the backlog ratchet `tests/health-baseline.txt` (ADR 0014: `git ls-files
+-c` over those four paths, hashed from the working tree). Each of the four paths has to exist and the
+root has to be a git checkout, or there is no key at all: the gate then says why
+(`no mutation stamp is possible for this tree: <reason>, then run 'sdd health'`, the reason being a
+missing path, a root that is not a git checkout, a tracked file deleted from the tree, nothing
+tracked, or a tracked entry that cannot be read), and `sdd health` names the same reason instead
+of stamping — as a failure, except on a kit that is not a git checkout (a plain-copy install, where
+no gate can ever demand a stamp), which gets a `warn`. Registering a finding (`TODO.md` + the
+ratchet) no longer invalidates the stamp; a file git ignores no longer moves it. `sdd health` writes it when the catalogue comes back green; nothing else writes it; a red
 catalogue, or a tree that moved while it ran, **removes** it. The refusal names its own remedy —
 `no green mutation catalogue for this content — run 'sdd health'` — because a gate that stops the
 line without naming the command sends the operator to run the fast suite, watch it go green, and
@@ -1255,7 +1263,12 @@ still counted in the fifth bucket, and `excluded.unrecognized` stays `0`.
 
 `sdd autonomy` prints the human view. The judge reads the JSONL with `jq` — never that table.
 Both readers group escalations on the **same axis**, `kit_sha`, and both drop a row with a dirty
-kit or no sha into a counted-and-excluded bucket. Two instruments over one file that report
+kit or no sha into a counted-and-excluded bucket. Since ADR 0014 that axis is the **behaviour
+version**: one printed jq definition (`ledger_kit_version_defs`, spliced into both readers right
+after `historic_steps`) rewrites a row that carries `kit_rev` so that `kit_sha` holds `kit_rev`,
+`kit_dirty` holds `kit_rev_dirty`, and the raw sha survives as `kit_sha_raw`; rows written before
+the ADR pass through unchanged. Every `kit_sha` slice below is read on that axis, and each slice of
+the series lists the raw shas it covers as `kit_shas_raw`. Two instruments over one file that report
 different counts for the same period corrode the trust the whole loop runs on, and kit version is
 the axis the ledger exists to measure — so a change to one reader's grouping belongs in the same
 commit as the other's.
@@ -1361,7 +1374,7 @@ event has to opt in instead of minting one by omission. ⚠️ The parity is **n
 gap is registered rather than claimed away: `comparable_row`, which partitions `$ok`, still admits
 the closure, so a closure as the first row of a sha can still make the two readers name a different
 `latest`. Today's writer cannot reach that state; the finding is open in `TODO.md` against
-`bin/sdd:4929`), each with missions, `missions_with_session` (the subset that bought an observation — the
+`comparable_row` in `bin/sdd`), each with missions, `missions_with_session` (the subset that bought an observation — the
 guard below counts these, not the raw mission tally), sessions, `outcomes` (`{advanced, churned, idle}` — what the sessions did, the headline since
 2026-08-28; the same three buckets appear in every `detail[]` entry), `advance_rate` (the
 `advanced` share of those same sessions — one yardstick read twice, so it can never contradict the

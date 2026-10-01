@@ -826,8 +826,9 @@ answers `suite green`, which makes the refusal look like a lie. It is not.
 
 **Cause:** the catalogue is opt-in — `TEST_CMD` does not run it — so no gate before this one has
 measured whether the suite's assertions still bite. The `PR` gate therefore demands the **artifact**
-`sdd health` leaves behind: a stamp keyed on the content of `bin/ tests/ templates/ config/`. Three
-states produce this message and only the first is common:
+`sdd health` leaves behind: a stamp keyed on the **tracked** content of `bin/ tests/ templates/
+config/`, minus the backlog ratchet `tests/health-baseline.txt` (ADR 0014). Three states produce
+this message and only the first is common:
 
 - **nothing was ever stamped** on this tree, or the last stamp was for other content — the ordinary
   case, and usually it means a commit landed after the last `sdd health`;
@@ -837,20 +838,30 @@ states produce this message and only the first is common:
   (`the measured tree moved WHILE the catalogue was running`) and stamps nothing, because the green
   it just reported is about content that is no longer there.
 
+A fourth state has a message of its own: `no mutation stamp is possible for this tree: <reason>,
+then run 'sdd health'`. The key cannot be computed at all — one of the four paths is missing, the
+root is not a git checkout, a tracked file was deleted from the working tree, nothing under the four
+paths is tracked, or a tracked entry cannot be read (a submodule, a sparse entry, a broken symlink).
+The reason names its own fix; `sdd health` refuses to stamp with the same sentence, and on a kit
+installed as a plain copy (not a git checkout) it only warns, because no gate can demand a stamp
+there.
+
 **How the kit reacts:** it stops, and it stops **last** — after `50-pr.md` and `gh pr view`, so the
 likelier failures still speak first. Nothing is pushed, nothing is merged. In a repo without
 `tests/check-mutation.sh` this requirement does not exist at all.
 
 **What you do:** run `./bin/sdd health` from the checkout the mission is in, and run it **after the
-last commit that touches `bin/ tests/ templates/ config/`**. About eighteen minutes on a laptop since PR #170 (twenty to fifty before it); a
+last commit that touches a tracked file under `bin/ tests/ templates/ config/`**. About eighteen minutes on a laptop since PR #170 (twenty to fifty before it); a
 green round ends with `mutation stamp written` and the gate opens. Two things worth knowing before
 you start it:
 
 - editing `CLAUDE.md`, `CONTEXT.md`, `docs/` or `TODO.md` does **not** invalidate the stamp, so the
-  DOCS phase can work freely — but `tests/health-baseline.txt` **does**, and that is where the
-  backlog ratchet lives. Recording an out-of-scope finding therefore costs the stamp. The collision
-  is a known item in `TODO.md`, with its direction — and the **route around it** is the one
-  `20260901-o-revisor-so-acha` walked six times: EXEC, QA and each REVIEW round write the finding
+  DOCS phase can work freely — and since ADR 0014 neither does `tests/health-baseline.txt`, where
+  the backlog ratchet lives, nor a file git ignores (a `tests/debug.log`). Recording an
+  out-of-scope finding used to cost the stamp (#117); it no longer does. A **new** file under the
+  four paths stays outside the key until it is tracked (`git add` is enough), and from then on the
+  gate refuses until `sdd health` runs again. The route the kit used while the collision stood is
+  still the right way to carry findings — the one `20260901-o-revisor-so-acha` walked six times: EXEC, QA and each REVIEW round write the finding
   into their own handoff, under `## Achados fora de escopo`, and the DOCS phase transports the lot
   into `TODO.md` with the ratchet line moving in the **same commit**, before running `health`. Two
   things make that route work rather than lose findings. The line has to be **complete** where it
@@ -876,7 +887,7 @@ review fixes; Codex then posted four findings, all valid, and the fixes killed t
 then posted ten, eight valid, and two of those touched `bin/sdd` and killed it again. One round
 would have covered all three, for the same final content.
 
-**Cause:** the stamp is keyed on the **content** of `bin/ tests/ templates/ config/`, so it is worth
+**Cause:** the stamp is keyed on the **tracked content** of `bin/ tests/ templates/ config/`, so it is worth
 exactly as much as the promise that the code will not change again. Stamping while review is still
 in flight is stamping a draft. And the reviewers cannot be consulted earlier — the PR bots (Codex,
 CodeRabbit, Copilot) only run **after** the pull request exists, so opening the PR is what starts
@@ -899,9 +910,12 @@ Two things that keep the rule from becoming folklore:
   reach for the command, rather than re-running it on suspicion:
 
   ```bash
-  find bin tests templates config -type f -print0 | LC_ALL=C sort -z \
-    | xargs -0 -r md5sum | md5sum | cut -d' ' -f1      # compare with .sdd/logs/mutation-stamp
+  git ls-files -z -c -- bin tests templates config ':(exclude)tests/health-baseline.txt' \
+    | LC_ALL=C sort -zu | xargs -0 -r md5sum | md5sum | cut -d' ' -f1   # compare with .sdd/logs/mutation-stamp
   ```
+
+  It is the same listing `mutation_stamp_key` hashes (ADR 0014). The `find` one-liner that stood
+  here before measured untracked and ignored files and the ratchet, and answers differently now.
 
 - **An open PR carrying a stale stamp is only safe while nobody merges it.** `gate_PR` reads the
   stamp when the gate runs, which for a hand-opened PR is at merge time — so the protection is
@@ -909,9 +923,9 @@ Two things that keep the rule from becoming folklore:
   ready only once the final round is green. The same ordering that saves the wall-clock is what
   keeps unmeasured content off `main`, which is the whole subject of the section above.
 
-⚠️ Recording the out-of-scope findings this ordering produces runs straight into the collision
-named above: `tests/health-baseline.txt` is inside the stamp key, so the `TODO.md` entry has to
-land **before** the single round, never after it.
+Recording the out-of-scope findings this ordering produces no longer costs a round: since ADR
+0014 `tests/health-baseline.txt` is outside the stamp key, so the `TODO.md` entry and its ratchet
+line may land before or after the single round.
 
 ---
 
