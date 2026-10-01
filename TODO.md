@@ -685,6 +685,7 @@ Achados sobre **repos-alvo** vão para o `TODO.md` daquele repo. Este arquivo é
   `checkpoint.md` e o ADR citado fora do git, ou seja, uma missão aprovada sem plano no histórico.
   Em repo-alvo, alguém que dê `push` na `main` publica isso. Direção: recusar ou avisar quando a
   branch é o `DEFAULT_BRANCH`, e commitar o diretório da missão inteiro.
+  Reincidiu no `sales_quote` em 2026-09-30: o gate REVIEW recusou `working tree dirty` até comitar o plano à mão.
   — descoberto por `sessão coordenadora` na missão `20260922-o-motivo-da-fase` (2026-09-22)
 
 - [ ] **`check-coordination.sh` reprova quando herda SIGINT ignorado** — `tests/check-coordination.sh:786`
@@ -716,6 +717,23 @@ Achados sobre **repos-alvo** vão para o `TODO.md` daquele repo. Este arquivo é
   achado 7 não alcança repo sem JIRA, o próprio kit incluído: no fechamento do PR #176 a volta à
   `main` foi feita à mão. Direção: chamar o `close_return_home` também nesse ramo, com probe e mutante.
   — descoberto por `sdd close` (sessão interativa) na missão `20260928-os-achados-da-janela` (2026-09-29)
+
+- [ ] **`sdd status` travou mais de 2 min segurando a trava do checkout** — `bin/sdd:6159`
+  (`cmd_status`) — no `sales_quote`, em 2026-10-01 às 00:30Z, um `sdd status` sem nenhum `sdd run`
+  vivo ficou parado dentro do `sdd-coordination.py enter … auxiliary`, e o próprio processo
+  aparecia como dono no `CHECKOUT-BUSY`. Um segundo `sdd status` enfileirou atrás dele. Só um
+  `kill` liberou. Causa não diagnosticada. Comando de leitura não deveria prender o checkout sem
+  prazo. Direção: medir onde ele para e dar prazo à espera do auxiliar, que deve dizer quem segura.
+  — descoberto por `sessão coordenadora` na missão `20260930-e2e-local-diz-por-que-caiu` (2026-10-01)
+
+- [ ] **O laço de melhoria da sessão interativa não enxerga o kit** — `commands/sdd-plan.md:1` — o
+  `retrofit-watch` (plugin `chewiesoft-marketplace`) só reconhece o tool `Skill`, a linha "Base
+  directory for this skill" e comando `plugin:x`. O `/sdd-plan` é comando sem `:`, e os `sdd-*`
+  chegam como `Agent` com `subagent_type`, então os dois passam sem registro. As fases do `sdd run`
+  são `claude -p`, e o `attended()` as pula por desenho. Medido: `"skills": {}` na sessão `fe745640` com o `sdd-planner`
+  depois de uma PLAN inteira. Direção: o hook aceita `sdd-*` (comando e `subagent_type`) como peça
+  do kit, alvo `j0ruge/sdd_agents` em modo lean, ao lado do `sdd kaizen`, que é o laço por dados.
+  — descoberto por `sessão coordenadora` na missão `20260930-e2e-local-diz-por-que-caiu` (2026-10-01)
 
 ## Decidido — não reabrir
 <!-- sdd:decided -->
