@@ -4,7 +4,7 @@ titulo: registrar um achado deixa de partir a janela do juiz e de invalidar o ca
 data: 2026-10-01
 versao: n/a (JIRA_ENABLED=false)
 branch: feat/a-janela-nao-se-parte
-aprovacao:
+aprovacao: humano-2026-10-01
 adr: docs/adr/0014-a-identidade-do-kit-e-o-que-ele-executa.md
 ddd: aplicado
 ---
