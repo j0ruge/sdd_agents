@@ -38,7 +38,7 @@ atualizado: 2026-10-01 11:20
 | ID | Incremento | Check (comando → esperado) | Status | Commit |
 |---|---|---|---|---|
 | I1 | o escritor grava kit_rev e kit_rev_dirty (guarda do kit segue no par cru) | `o=$(bash tests/check-autonomy.sh 2>&1); grep -c -e '^  ok    kit_rev: ' -e '^  ok    kit-guard: a session that edits the kit during' <<< "$o"` → `5` | done | 85039c7 |
-| I2 | os leitores agrupam pela versão de comportamento (kit_version_rows + kit_shas_raw + sdd-kaizen.md) | `o=$(bash tests/check-kaizen.sh 2>&1); grep -c '^  ok    kit-version: ' <<< "$o"` → `5` | pending | — |
+| I2 | os leitores agrupam pela versão de comportamento (kit_version_rows + kit_shas_raw + sdd-kaizen.md) | `o=$(bash tests/check-kaizen.sh 2>&1); grep -c '^  ok    kit-version: ' <<< "$o"` → `5` | done | eedc6d3 |
 | I3 | a chave do carimbo exige os quatro caminhos (#107) | `o=$(bash tests/check-gates.sh 2>&1); grep -c -e '^  ok    stamp-key: ' -e '^  ok    gate_PR: the mutation stamp is demanded only where the catalogue lives' <<< "$o"` → `2` | pending | — |
 | I4 | a chave do carimbo lê só o rastreado e exclui a catraca (#119, #117) | `o=$(bash tests/check-gates.sh 2>&1; bash tests/check-health.sh 2>&1); grep -c -e '^  ok    stamp-key: ' -e '^  ok    gate_PR: the mutation stamp is demanded only where the catalogue lives' -e '^  ok    mutation: a catalogue too small to have measured anything is refused' <<< "$o"` → `5` | pending | — |
 | I5 | TODO.md: RESOLVED by nos quatro itens e a linha decidida do aviso de merge | `o=''; awk '/RESOLVED by [0-9a-f][0-9a-f][0-9a-f][0-9a-f][0-9a-f][0-9a-f][0-9a-f]/ {n++} END {exit (n != 5)}' TODO.md && o=$(bash tests/check-todo.sh 2>&1); grep -c '^  ok    87 finding(s)' <<< "$o"` → `1` | pending | — |
