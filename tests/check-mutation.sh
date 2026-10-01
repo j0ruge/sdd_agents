@@ -3772,6 +3772,36 @@ mut_LEDGER_step_after_unguarded() {
   sed -i 's@^    if \[ "\$phase" = "QA" \]; then step_after="\$(phase_step QA)"; fi$@    step_after="$(phase_step QA)"@' "$1"
 }
 
+# The QA sub-step arm (20260930-a-sub-etapa-que-andou) goes whole: the writer keeps filling
+# `step_after` and the reader stops looking, so the `QA:exec` that closed the report reads churn
+# again — 7 of the 9 churned sessions of window 2. Caught by `a QA sub-step that advanced reads
+# advanced` in check-kaizen.sh, which reads `leve {"advanced":1,"churned":1,"idle":0}`.
+mut_KAIZEN_qa_step_arm_blind() {
+  sed -i 's@ elif ((.step_after | step_rank) != null and (.step | step_rank) != null and (.step_after | step_rank) > (.step | step_rank) and .moved != false) then "advanced"@@' "$1"
+}
+
+# The direction of the sub-step arm becomes "did not go back": a QA session that ended on the
+# SAME sub-step it started reads as progress, and the arm turns into "QA is always advanced".
+# Caught by `the same QA row with no sub-step advance reads churned` — the differential twin of
+# the assertion above, one field apart.
+mut_KAIZEN_qa_step_rank_inverted() {
+  sed -i 's@(.step_after | step_rank) > (.step | step_rank)@(.step_after | step_rank) >= (.step | step_rank)@' "$1"
+}
+
+# The rank guard on `step` goes, and jq's ordering flatters: `2 > null` is TRUE, so a row whose
+# starting step the rank does not know reads as an advance. Caught by `a QA step the rank does not
+# know is not a sub-step that advanced`.
+mut_KAIZEN_qa_step_unguarded() {
+  sed -i 's@ and (.step | step_rank) != null and (.step_after | step_rank) >@ and (.step_after | step_rank) >@' "$1"
+}
+
+# The `.moved != false` half of the sub-step arm goes: a session that wrote nothing is credited
+# with the sub-step an earlier one reached. Caught by `a QA session that wrote nothing did not
+# advance the sub-step`.
+mut_KAIZEN_qa_step_moved_blind() {
+  sed -i 's@(.step_after | step_rank) > (.step | step_rank) and .moved != false)@(.step_after | step_rank) > (.step | step_rank))@' "$1"
+}
+
 # The writer keeps filling the three round fields (I1) and the reader stops looking at them: REVIEW
 # goes back to the gate-only yardstick that read the most expensive cell of window 2 — US$ 47.81,
 # `1 advanced · 1 churned` — as churn over a phase that is a LOOP BY DESIGN. Spliced from ONE
@@ -5114,6 +5144,10 @@ CATALOG=(
   RUN_qa_step_after_retry_missing
   RUN_qa_step_after_cmd_retry_missing
   LEDGER_step_after_unguarded
+  KAIZEN_qa_step_arm_blind
+  KAIZEN_qa_step_rank_inverted
+  KAIZEN_qa_step_unguarded
+  KAIZEN_qa_step_moved_blind
   LEDGER_outcome_rounds_blind
   LEDGER_outcome_rounds_unguarded
   LEDGER_outcome_rounds_undirected

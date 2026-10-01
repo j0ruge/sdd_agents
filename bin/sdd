@@ -3287,8 +3287,20 @@ ledger_row_is_local() {
 # `gate_pass` was born on 2026-08-31 — no writer can put a dated-path row AFTER a closure. Kept as
 # a limit here, by the D15 rule, instead of a backlog line pointing at a world nothing can build.
 # The fix if a future writer ever makes it reachable: reset the memory on `is_gate_pass` too.
+#
+# THE FOURTH ARM, the QA sub-step (20260930-a-sub-etapa-que-andou). QA is the third loop by design:
+# `qa_substep` routes plan → exec → close and gate_QA fails on its first line (`missing
+# 30-handoff-qa.md`) for every session before the close, so the `QA:exec` that closed the report —
+# what the design asks of it — read `churned`. Measured on window 2 (`5b98087`): 7 of the 9 churned
+# sessions of the slice were QA, three of them that `QA:exec`. The writer puts `step_after` (the
+# sub-step derived AFTER the session) on QA rows only; the arm counts an ADVANCE in the order
+# `plan < exec < close` and nothing else. Written POSITIVELY, like the others: `step_rank` knows the
+# three spellings and answers null for any other, and both ranks must be non-null — `2 > null` is
+# true in jq, the flattery the round arm's guard exists for. A sub-step that repeats or goes back
+# stays churn, the conservative direction; `.moved != false` for the same reason as its neighbours.
 ledger_outcome_defs() {   # printed jq, spliced into cmd_autonomy AND kaizen_series
-  printf '%s' 'def outcome: if .gate == "pass" then "advanced" elif (.pending_before != null and .pending_after != null and .pending_after < .pending_before and .moved != false) then "advanced" elif (.rounds_before != null and .rounds_after > .rounds_before and .moved != false) then "advanced" elif .moved == true then "churned" else "idle" end;'
+  printf '%s' 'def step_rank: if . == "QA:plan" then 0 elif . == "QA:exec" then 1 elif . == "QA:close" then 2 else null end;'
+  printf '%s' 'def outcome: if .gate == "pass" then "advanced" elif (.pending_before != null and .pending_after != null and .pending_after < .pending_before and .moved != false) then "advanced" elif (.rounds_before != null and .rounds_after > .rounds_before and .moved != false) then "advanced" elif ((.step_after | step_rank) != null and (.step | step_rank) != null and (.step_after | step_rank) > (.step | step_rank) and .moved != false) then "advanced" elif .moved == true then "churned" else "idle" end;'
   printf '%s' 'def historic_progress: reduce .[] as $r ({seen: {}, out: []}; (if ($r | type) == "object" and $r.event == "session" and $r.phase == "EXEC" then ([($r.repo // ""), ($r.mission // "")] | tostring) else null end) as $k | (if $k != null and $r.pending_before == null and (($r.gate_why // "") | test("^[0-9]+ of [0-9]+ increment")) then (($r.gate_why // "") | capture("^(?<n>[0-9]+) of (?<m>[0-9]+) increment") | {n: (.n | tonumber), m: (.m | tonumber)}) else null end) as $p | (if $p == null then $r else (if (.seen[$k] != null and .seen[$k].m == $p.m) then .seen[$k].p else $p.m end) as $before | $r + {pending_before: $before, pending_after: $p.n, increments_total: $p.m, progress_source: "gate_why"} end) as $row | .out += [$row] | (if $k == null then . elif $r.gate == "pass" then .seen[$k] = null elif $row.pending_after != null then .seen[$k] = {p: $row.pending_after, m: $row.increments_total} else . end)) | .out;'
   printf '%s' 'def historic_rounds: reduce .[] as $r ({seen: {}, out: []}; (if ($r | type) == "object" and $r.event == "session" and $r.phase == "REVIEW" then ([($r.repo // ""), ($r.mission // "")] | tostring) else null end) as $k | (if $k != null and $r.rounds_before == null and $r.rounds_after == null then (($r.gate_why // "") | if test("^40-review-r[0-9]+\\.md") then (capture("^40-review-r(?<n>[0-9]+)\\.md") | .n | tonumber) elif test("^no 40-review-r<N>\\.md") then 0 else null end) else null end) as $n | (if $n == null then $r else $r + {rounds_before: (.seen[$k] // 0), rounds_after: $n, rounds_source: "gate_why"} end) as $row | .out += [$row] | (if $k == null then . elif $row.rounds_after != null then .seen[$k] = $row.rounds_after else . end)) | .out;'
   printf '%s' 'def outcome_tally: map(outcome) | reduce .[] as $o ({advanced: 0, churned: 0, idle: 0}; .[$o] += 1);'

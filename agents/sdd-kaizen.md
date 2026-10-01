@@ -65,6 +65,14 @@ shrug. The three fields the rule reads (`pending_before`, `pending_after`, `incr
 on every EXEC row written since; older rows recover the same fact from `gate_why`, and
 `sdd autonomy` says how many rows it read that way.
 
+The same yardstick has grown two more arms since, one per loop the pipeline runs by design: a
+REVIEW round that landed (`rounds_after > rounds_before`, `20260831-a-rodada-que-andou`) and a QA
+sub-step that advanced (`step_after` later than `step` in `plan < exec < close`,
+`20260930-a-sub-etapa-que-andou`). Before the QA arm, the `QA:exec` session that closed the report
+— exactly what `qa_substep` asks of it — read `churned` because `gate_QA` refuses until the close:
+7 of the 9 churned sessions of window 2 were QA. A number read before 2026-09-30 is on the older
+yardstick; say so before comparing it with one read after.
+
 Back to the guard. The floor is `missions_with_session`, not
 `missions_after_change`: a mission that stopped the line without spending a session left you
 nothing to read. A mission is identified by `(repo, mission)` and never by the slug alone — slugs
