@@ -44,6 +44,7 @@ atualizado: 2026-10-01 02:40
 | I5 | docs e registro (D16 4ª emenda, Churn, KAIZEN_LOG, pipeline) | `grep -l 'step_after' CONTEXT.md KAIZEN_LOG.md docs/pipeline.md agents/sdd-kaizen.md > /tmp/i5.txt; wc -l < /tmp/i5.txt` → `4` | done | 4c0e079 |
 | I6 | varredura D15: cinco itens saem do backlog | `bash tests/check-todo.sh --count TODO.md` → `85` | done | 7ee1c3e |
 | R1 | achado #1 da r1: `historic_steps` recupera `step_after` da próxima linha QA de OUTRA corrida (`run_id` diferente) e credita à sessão o que aconteceu entre as corridas | `o=$(bash tests/check-kaizen.sh 2>&1); grep -c '^  ok    a QA row older than step_after is not recovered from the next row of another run' <<< "$o"` → `1` | done | 8a1b3a5 |
+| R2 | achado do publisher: o fixture `m82` tinha `run_id` diferente nas duas linhas e, depois da guarda de `run_id` do R1, deixou de isolar a metade `repo` da chave — `mut_KAIZEN_historic_steps_key_slug_only` sobrevivia (514 de 515) | `o=$(bash tests/check-kaizen.sh 2>&1); grep -c '^  ok    the next QA row of the same slug in ANOTHER repo is not this row' <<< "$o"` → `1` | done | bd15ee2 |
 
 > **As notas de execução não moram aqui.** Elas ficam em `checkpoint-notas.md`, ao lado deste
 > arquivo, append-only, e o prompt de boot inlina as últimas 10 — a sessão nunca abre aquele
