@@ -456,16 +456,10 @@ the two gates cannot disagree about which documents are `⛔`.
 
 **In a repo that owns a mutation catalogue there is one more requirement, and it is checked last:**
 a stamp in `.sdd/logs/mutation-stamp` matching the current **tracked** content of `bin/ tests/
-templates/ config/` minus the backlog ratchet `tests/health-baseline.txt` (ADR 0014: `git ls-files
--c` over those four paths, hashed from the working tree). Each of the four paths has to exist and the
-root has to be a git checkout, or there is no key at all: the gate then says why
-(`no mutation stamp is possible for this tree: <reason>, then run 'sdd health'`, the reason being a
-missing path, a root that is not a git checkout, a tracked file deleted from the tree, nothing
-tracked, or a tracked entry that cannot be read), and `sdd health` names the same reason instead
-of stamping — as a failure, except on a kit that is not a git checkout (a plain-copy install, where
-no gate can ever demand a stamp), which gets a `warn`. Registering a finding (`TODO.md` + the
-ratchet) no longer invalidates the stamp; a file git ignores no longer moves it. `sdd health` writes it when the catalogue comes back green; nothing else writes it; a red
-catalogue, or a tree that moved while it ran, **removes** it. The refusal names its own remedy —
+templates/ config/` minus the ratchet `tests/health-baseline.txt` (ADR 0014), so registering a
+finding no longer invalidates it; a root missing one of the four paths, or not a git checkout, has
+no key (`no mutation stamp is possible for this tree: <reason>`). `sdd health` writes it when the
+catalogue comes back green; nothing else writes it; a red catalogue, or a tree that moved while it ran, **removes** it. The refusal names its own remedy —
 `no green mutation catalogue for this content — run 'sdd health'` — because a gate that stops the
 line without naming the command sends the operator to run the fast suite, watch it go green, and
 conclude the runner is lying.
