@@ -178,7 +178,12 @@ reset_home() {
 }
 
 build_fixture() {
-  mkdir -p "$FIX/bin" "$FIX/tests" "$FIX/config"
+  # templates/ too, holding a file: the mutation stamp's key refuses a root missing any of its four
+  # measured paths (ADR 0014, increment I3), so without it no world here could ever be stamped and
+  # the stamp assertions would be measuring that refusal. A file and not an empty directory, because
+  # git does not track an empty directory.
+  mkdir -p "$FIX/bin" "$FIX/tests" "$FIX/config" "$FIX/templates"
+  printf 'fixture template\n' > "$FIX/templates/fixture.md"
   reset_home
 
   # LIVE copy — see the header. This is the file mut_HEALTH_* sabotages.

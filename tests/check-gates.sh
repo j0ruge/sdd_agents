@@ -2318,6 +2318,8 @@ git add -A && git commit -qm "chore: docs, formatter-aligned again"
 #   WINDOW  (8) the green has to be about the content that is still here. The real catalogue runs
 #           for twenty to fifty minutes and the phase that starts it is a phase that commits, so a
 #           key read only after the run would stamp whatever the tree happens to be at the end.
+# A ninth world, PARTIAL ROOT, follows the tally with an assertion of its own (`stamp-key:`): it is
+# about the key, not about where the demand applies.
 #
 # The key is NEVER computed here. A second spelling of that algorithm would agree with the first by
 # construction and measure nothing, so world 3 drives the real WRITER instead: a LIVE copy of the
@@ -2506,6 +2508,13 @@ mkdir -p "$FIX/bin" "$FIX/.sdd/logs"
 cp "$ROOT/bin/sdd" "$FIX/bin/sdd"
 cp "$ROOT/bin/sdd-coordination.py" "$FIX/bin/sdd-coordination.py"
 i4_write_suite
+# All FOUR measured paths, each holding a file: mutation_stamp_key refuses a root missing any one of
+# them (ADR 0014, increment I3), so a fixture with only bin/ and tests/ would never be stamped and
+# every world below would be measuring that refusal instead of what it names. A file in each, and
+# not an empty directory, because git does not track an empty directory.
+mkdir -p "$FIX/templates" "$FIX/config"
+printf 'fixture template\n' > "$FIX/templates/fixture.md"
+printf 'fixture config\n' > "$FIX/config/fixture.conf"
 printf 'tests/scratch.ignored\n' >> "$FIX/.gitignore"
 git add -A && git commit -qm "chore: a kit inside the fixture, so the writer can run" >/dev/null
 i4_verdict 0 "$I4_SCORE_GREEN"; i4_health
@@ -2567,6 +2576,24 @@ else
        "the $i4_worlds worlds above agreeing" "$i4_bad disagreement(s), listed above"
 fi
 
+# 9. PARTIAL ROOT — one of the four measured paths is gone and the other three are all there. Own
+#    assertion, outside the i4 tally: the tally is named for the scope of the demand, and this is a
+#    property of the KEY. The guard used to refuse only a root where all four were absent, so a root
+#    missing config/ was hashed over the three that remained, `sdd health` stamped that partial
+#    listing, and gate_PR — reading the same partial listing — answered DONE: a stamp certifying a
+#    tree the catalogue was never run against as a whole. The stamp is taken away first, so its
+#    absence afterwards is the answer of THIS run and never a leftover of world 8.
+rm -rf "${FIX:?}/config"
+git add -A && git commit -qm "chore: the kit loses one of its measured paths" >/dev/null
+rm -f "$FIX/.sdd/logs/mutation-stamp"
+i4_verdict 0 "$I4_SCORE_GREEN"; i4_health
+partial_stamp=absent; [ -f "$FIX/.sdd/logs/mutation-stamp" ] && partial_stamp=written
+assert_eq "stamp-key: a root missing one of the four measured paths is never stamped" "PR|absent" \
+  "$( cd "$FIX" && "$SDD" phase "$MISSION" 2>&1 )|$partial_stamp"
+mkdir -p "$FIX/config"
+printf 'fixture config\n' > "$FIX/config/fixture.conf"
+git add -A && git commit -qm "chore: the measured path comes back" >/dev/null
+
 # --- the two ends of the stamp, and the tree they have to agree on ----------
 #
 # The block above proves WHAT the stamp means. This one proves WHERE it lives, which is a separate
@@ -2603,9 +2630,12 @@ tree_stamped() { [ -f "$1/$TREE_STAMP" ]; }
 # tree can still reach a verdict without the twenty-minute run — otherwise worlds 2 and 3 would be
 # measuring an absent suite instead of the fallback.
 TREE_KIT="$SDD_STATE_FIX/kit-install"
-mkdir -p "$TREE_KIT/bin" "$TREE_KIT/tests" "$TREE_KIT/.sdd/logs"
+mkdir -p "$TREE_KIT/bin" "$TREE_KIT/tests" "$TREE_KIT/templates" "$TREE_KIT/config" "$TREE_KIT/.sdd/logs"
 cp "$ROOT/bin/sdd" "$TREE_KIT/bin/sdd"
 cp "$ROOT/bin/sdd-coordination.py" "$TREE_KIT/bin/sdd-coordination.py"
+# The four measured paths, each with a file — a kit missing one is never stamped (world 9 above).
+printf 'installed template\n' > "$TREE_KIT/templates/fixture.md"
+printf 'installed config\n' > "$TREE_KIT/config/fixture.conf"
 cat > "$TREE_KIT/tests/run-all.sh" <<EOF
 #!/usr/bin/env bash
 # Stub for the installed kit's own catalogue: always green, always this score.
@@ -2689,7 +2719,7 @@ fi
 # `${FIX:?}` and not `$FIX`: with the fixture variable empty this line is `rm -rf /bin /tests` on
 # the machine of whoever ran the suite. The same family check-health.sh records in its own header,
 # where an unguarded `rm -rf` reached `/kit` for real.
-rm -rf "${FIX:?}/bin" "${FIX:?}/tests" "${FIX:?}/.stub/gh" "${MDIR:?}/50-pr.md" "${FIX:?}/.sdd/logs/mutation-stamp"
+rm -rf "${FIX:?}/bin" "${FIX:?}/tests" "${FIX:?}/templates" "${FIX:?}/config" "${FIX:?}/.stub/gh" "${MDIR:?}/50-pr.md" "${FIX:?}/.sdd/logs/mutation-stamp"
 git add -A && git commit -qm "chore: drop the stamp fixture" >/dev/null
 assert_phase "with the stamp fixture gone the mission is back at PR" "PR"
 assert_why   "and back to the reason it had before" "PR" "50-pr.md"

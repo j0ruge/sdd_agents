@@ -2008,10 +2008,16 @@ readonly MUTATION_CATALOGUE_FLOOR=8
 
 # The content key of the paths above: prints it, or prints NOTHING and returns 1.
 #
-# The difference is the whole guard. `md5sum` of no input at all is a perfectly valid-looking
-# constant, so a root whose four directories are all absent would otherwise be handed a stable key
-# that every other empty root matches — a stamp certifying nothing, indistinguishable from a stamp
-# certifying everything. Emptiness is refused here, once, instead of at each call site.
+# The difference is the whole guard, and it refuses TWO roots, once, instead of at each call site:
+#   - a root where ANY ONE of the four paths is absent. The listing below would otherwise be taken
+#     over whichever paths remain, `sdd health` would stamp that partial listing, and gate_PR —
+#     reading the same partial listing — would accept it: a stamp certifying a tree the catalogue
+#     was never run against as a whole. The guard used to refuse only a root where ALL FOUR were
+#     absent, and said so here; one missing path went through without a signal (ADR 0014,
+#     increment I3). Checked per path, before anything is listed.
+#   - a root whose listing is empty. `md5sum` of no input at all is a perfectly valid-looking
+#     constant, so such a root would be handed a stable key every other empty root matches — a
+#     stamp certifying nothing, indistinguishable from a stamp certifying everything.
 #
 # ⚠️ `xargs -r`, and it is what makes the sentence above TRUE rather than merely intended: without
 # it, `xargs` with nothing on its input runs `md5sum` once with no operands, `md5sum` reads the
@@ -2021,7 +2027,10 @@ readonly MUTATION_CATALOGUE_FLOOR=8
 # `find` always has at least that file to print), and that is declared, not sold as measured: this
 # is a one-token hardening of a guard whose comment was ahead of its code.
 mutation_stamp_key() { # mutation_stamp_key <root>
-  local listing
+  local listing p
+  for p in "${MUTATION_STAMP_PATHS[@]}"; do
+    [ -e "$1/$p" ] || return 1
+  done
   # `md5sum` and not `sha256sum`: it is the digest `sdd preflight` already probes the userland for,
   # so this adds no assumption the kit was not already making. The relative paths ride INSIDE the
   # digest, which is what makes a file that merely MOVED change the key.

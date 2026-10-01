@@ -1011,6 +1011,14 @@ mut_PR_stamp_key_follows_head() {
   sed -i '/^mutation_stamp_key() {/,/^}/ s@md5sum <<< "$listing"@md5sum <<< "$listing$(git -C "$1" rev-parse HEAD 2>/dev/null)"@' "$1"
 }
 
+# The per-path guard of the key becomes a no-op: a root missing one of the four measured paths is
+# hashed over the three that remain, `sdd health` stamps that partial listing and gate_PR accepts it.
+# Only the all-four-absent case stays refused (by the empty-listing guard below it), which is
+# exactly the guard the key had before ADR 0014, increment I3. World 9 of check-gates.sh catches it.
+mut_PR_stamp_key_partial_listing() {
+  sed -i '/^mutation_stamp_key() {/,/^}/ s@\[ -e "\$1/\$p" \] || return 1@:@' "$1"
+}
+
 # The WRITER goes back to answering about the tree its own file sits in, whatever tree the operator
 # is standing in and whatever tree the gate is about to ask for. With `sdd` on the PATH — the
 # install README.md documents — over a worktree or a second clone of the kit, the stamp lands in
@@ -5018,6 +5026,7 @@ CATALOG=(
   PR_blocked_docs_anywhere
   PR_merged_rechecked
   PR_stamp_key_follows_head
+  PR_stamp_key_partial_listing
   HEALTH_stamp_window_blind
   HEALTH_stamp_tree_blind
   RUN_inverted_journal
