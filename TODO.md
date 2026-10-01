@@ -735,6 +735,13 @@ Achados sobre **repos-alvo** vão para o `TODO.md` daquele repo. Este arquivo é
   do kit, alvo `j0ruge/sdd_agents` em modo lean, ao lado do `sdd kaizen`, que é o laço por dados.
   — descoberto por `sessão coordenadora` na missão `20260930-e2e-local-diz-por-que-caiu` (2026-10-01)
 
+- [ ] **Registrar achado durante a janela do juiz parte a janela** — `tests/health-baseline.txt`
+  (`todo-findings`) — princípio 5 manda o item, a catraca manda mover a baseline, e o merge cunha um
+  `kit_sha` novo sem mudar `bin/`: em `6323c6f` (só `TODO.md` + baseline) 3 missões e US$ 110,18 de
+  `5b98087` viraram `previous`, `window_missions_stranded: 3`, sem veredito. Nada avisa quem mergeia.
+  Direção: achado de janela espera no handoff até o veredito, ou o eixo ignora commit sem código (ADR).
+  — descoberto por `sdd-kaizen` no veredito `20260930-a-sub-etapa-que-andou` (2026-09-30)
+
 ## Decidido — não reabrir
 <!-- sdd:decided -->
 - **O `sdd preflight` não provaria que a sessão headless executa comando** — refutado: `bin/sdd:4960` manda rodar `bash -c 'echo sdd-preflight-ok'` sob as flags do `run_phase` desde `2083680`, e sob o chapéu do executor desde 2026-09-06 (2026-09-25)
