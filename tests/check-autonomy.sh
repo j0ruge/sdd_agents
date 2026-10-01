@@ -5710,6 +5710,68 @@ exit 97
 STUB
 chmod +x "$OUTSIDE/stub/claude"
 
+echo "== kit_rev: the behaviour version the row carries =="
+# The judge's axis used to be the raw HEAD (kit_sha), so a commit that touched only TODO.md and the
+# ratchet minted a "new kit version" and split the measurement window in two (window 2, 6323c6f,
+# ADR 0014). Every row now ALSO carries kit_rev — the last first-parent commit that changed
+# KIT_BEHAVIOR_PATHS — and kit_rev_dirty, scoped to the same paths. kit_sha/kit_dirty stay the raw
+# fact, and the kit guard keeps reading the raw pair (regime 1 above is the proof it did not narrow).
+#
+# Here, after regime 7 and not inside the guard block, so the FAKEKIT the regimes share is left as
+# they expect it; it is restored to KR_START at the end. The ORDER 1 -> 2 is what gives world 2 a
+# known expected value (KR_BIN) without re-computing the runner's algorithm inside the sensor.
+# A fresh target per world: re-running one target at the same step would be a different regime.
+KR_START="$(git -C "$FAKEKIT" rev-parse HEAD)"
+kr_run() {   # kr_run <target dir> — one benign run of the fake kit; prints the first session row's stamp
+  kitguard_reset
+  kitguard_world "$1"
+  kitguard_stub ""
+  ( cd "$1" && "$FAKEKIT/bin/sdd" run "$MISSION" >/dev/null 2>&1 )
+  jq -r -s '[.[] | select(.event == "session")][0] | "\(.kit_sha) \(.kit_rev) \(.kit_dirty) \(.kit_rev_dirty)"' "$LEDGER" 2>/dev/null
+}
+kr_touched() { rows 'select(.kind == "kit-touched") | 1' | grep -c . || true; }
+
+# 1. A commit INSIDE the behaviour paths: the raw sha and the behaviour version are the same commit.
+printf '# kit_rev probe\n' >> "$FAKEKIT/bin/sdd-link-agents"
+git -C "$FAKEKIT" add bin/sdd-link-agents && git -C "$FAKEKIT" commit -qm "chore: a behaviour commit" >/dev/null
+KR_BIN="$(git -C "$FAKEKIT" rev-parse --short HEAD)"
+read -r KR1_SHA KR1_REV _ _ <<< "$(kr_run "$OUTSIDE/kitrev-1")"
+assert_eq "kit_rev: a kit commit inside the behaviour paths moves both" \
+  "sha:$KR_BIN rev:$KR_BIN" "sha:$KR1_SHA rev:$KR1_REV"
+
+# 2. A commit OUTSIDE them (only TODO.md, the shape of 6323c6f): kit_sha moves, kit_rev stays put.
+printf 'a finding\n' >> "$FAKEKIT/TODO.md"
+git -C "$FAKEKIT" add TODO.md && git -C "$FAKEKIT" commit -qm "chore: a finding, no behaviour" >/dev/null
+KR_TODO="$(git -C "$FAKEKIT" rev-parse --short HEAD)"
+read -r KR2_SHA KR2_REV _ _ <<< "$(kr_run "$OUTSIDE/kitrev-2")"
+assert_eq "kit_rev: a kit commit outside the behaviour paths moves kit_sha and leaves kit_rev on the last behaviour commit" \
+  "sha:$KR_TODO rev:$KR_BIN differ:1" \
+  "sha:$KR2_SHA rev:$KR2_REV differ:$([ "$KR_TODO" != "$KR_BIN" ] && echo 1 || echo 0)"
+
+# 3. Uncommitted dirt OUTSIDE the paths. Dirt that already exists before the session does not
+#    change between the guard's two samples, so the guard stays silent — demanded, not assumed.
+printf 'uncommitted\n' >> "$FAKEKIT/TODO.md"
+read -r _ _ KR3_DIRTY KR3_RDIRTY <<< "$(kr_run "$OUTSIDE/kitrev-3")"
+assert_eq "kit_rev: dirt outside the behaviour paths dirties kit_dirty and not kit_rev_dirty" \
+  "dirty:true rdirty:false touched:0" "dirty:$KR3_DIRTY rdirty:$KR3_RDIRTY touched:$(kr_touched)"
+git -C "$FAKEKIT" checkout -q -- TODO.md
+
+# 4. An untracked file INSIDE the paths. Not a `.md`: agents/sdd-*.md is what install mirrors.
+printf 'probe\n' > "$FAKEKIT/agents/kr-probe.txt"
+read -r _ _ KR4_DIRTY KR4_RDIRTY <<< "$(kr_run "$OUTSIDE/kitrev-4")"
+assert_eq "kit_rev: dirt inside the behaviour paths dirties both" \
+  "dirty:true rdirty:true touched:0" "dirty:$KR4_DIRTY rdirty:$KR4_RDIRTY touched:$(kr_touched)"
+
+git -C "$FAKEKIT" reset -q --hard "$KR_START"
+git -C "$FAKEKIT" clean -qfd
+kitguard_reset
+cat > "$OUTSIDE/stub/claude" <<'STUB'
+#!/usr/bin/env bash
+echo "ERROR: the test invoked the real claude" >&2
+exit 97
+STUB
+chmod +x "$OUTSIDE/stub/claude"
+
 # =============================================================================
 # I4 — `sdd close` SPENDS a session, so it writes a row
 # =============================================================================

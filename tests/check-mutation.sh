@@ -3331,6 +3331,33 @@ mut_RUN_kit_guard_arms_projection() {
 }
 
 # ---------------------------------------------------------------------------
+# ADR 0014 — the behaviour version the ledger row carries.
+# ---------------------------------------------------------------------------
+# kit_rev goes back to being the raw HEAD: the log loses its pathspec, so a commit of TODO.md alone
+# moves the judge's axis again — the exact shape that split window 2 (6323c6f). Caught by
+# `kit_rev: a kit commit outside the behaviour paths moves kit_sha and leaves kit_rev …` in
+# check-autonomy.sh; the "inside" world stays green, which is why there are two.
+mut_RUN_kit_rev_is_head() {
+  sed -i '/^autonomy_kit_stamp() {/,/^}/ s|--format=%H HEAD -- "${KIT_BEHAVIOR_PATHS\[@\]}"|--format=%H HEAD|' "$1"
+}
+
+# kit_rev_dirty goes back to reading the whole tree: an unregistered finding in TODO.md would push
+# every row of a mission off the judge's axis. Caught by `kit_rev: dirt outside the behaviour paths
+# dirties kit_dirty and not kit_rev_dirty`.
+mut_RUN_kit_rev_dirty_whole_tree() {
+  sed -i '/^autonomy_kit_stamp() {/,/^}/ s|status --porcelain -- "${KIT_BEHAVIOR_PATHS\[@\]}"|status --porcelain|' "$1"
+}
+
+# The kit guard starts comparing the behaviour version instead of the raw pair — the narrowing the
+# grill refused (decision 5): the incident the guard exists for (2d28d13) was a commit of TODO.md,
+# which does not move kit_rev. Caught by regime 1 of the kit-guard block in check-autonomy.sh, which
+# goes silent.
+mut_RUN_kit_guard_reads_rev() {
+  sed -i -e '/^kit_guard_arm() {/,/^}/ s|"$AUTONOMY_KIT_STAMP"|"$AUTONOMY_KIT_REV"|' \
+    -e '/^kit_guard_check() {/,/^}/ s|"$AUTONOMY_KIT_STAMP"|"$AUTONOMY_KIT_REV"|' "$1"
+}
+
+# ---------------------------------------------------------------------------
 # 20260828-instrumento-honesto — what a session DID, one definition in two readers.
 # ---------------------------------------------------------------------------
 # The shared definition falls back to the OLD yardstick under the new names: `moved` alone decides,
@@ -5192,6 +5219,9 @@ CATALOG=(
   RUN_kit_touched_blind
   RUN_kit_guard_cries_wolf
   RUN_kit_guard_arms_projection
+  RUN_kit_rev_is_head
+  RUN_kit_rev_dirty_whole_tree
+  RUN_kit_guard_reads_rev
   AUTONOMY_outcome_reads_moved_only
   KAIZEN_outcome_inlined_old
   AUTONOMY_waste_idle_only

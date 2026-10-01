@@ -3342,18 +3342,31 @@ ledger_outcome_defs() {   # printed jq, spliced into cmd_autonomy AND kaizen_ser
   printf '%s' 'def phase_index: . as $p | ($phases | split(" ")) | index($p);'
 }
 
-# Publishes AUTONOMY_KIT_STAMP as "<sha>|<true|false>", or "|" when SDD_HOME is not a git checkout.
-# This is the judge's before/after axis: without it, a change in the numbers gets attributed to the
-# calendar instead of to the kit change that caused it.
+# Publishes TWO globals, and they answer different questions (ADR 0014):
+#   AUTONOMY_KIT_STAMP = "<sha>|<true|false>" — the raw HEAD and whether ANY path of the kit tree is
+#     dirty. This is the fact "where was the kit", and it is what kit_guard_* compare: the guard asks
+#     "did the kit move at all", and the incident it exists for (2d28d13) was a commit of TODO.md.
+#   AUTONOMY_KIT_REV   = "<rev>|<true|false>" — the last first-parent commit that changed
+#     KIT_BEHAVIOR_PATHS, and whether any of THOSE paths is dirty. This is the judge's axis: a commit
+#     that only registers a finding (TODO.md + the ratchet) runs nothing a target phase executes, and
+#     used to mint a new "kit version" that split the measurement window (window 2, 6323c6f).
+# Both are "|" when SDD_HOME is not a git checkout. The rev rides in its OWN global rather than a
+# third field of the stamp because every writer cuts the stamp with "${stamp#*|}", which stops at
+# the FIRST "|": a field appended there would silently corrupt kit_dirty.
 #
 # An out-param global and NOT a printed value, for the same reason run_phase publishes LAST_PHASE_*:
 # read through `stamp="$(autonomy_kit_stamp)"`, the whole body would run in a SUBSHELL, and the
 # `AUTONOMY_SHA_WARNED=1` below would die with it — the flag would be back to 0 on the next row and
 # the one-shot warning would fire once per ledger row, which is the opposite of what it says. A
 # guard that cannot hold is worse than no guard: it reads as measured and is not.
+# The paths whose content a target-repo phase executes. tests/ is not here (no target phase runs the
+# kit's suite), nor docs/, commands/, TODO.md. When in doubt a path goes IN: one path too many can
+# only split a window, one too few would fuse two behaviours into one version.
+readonly KIT_BEHAVIOR_PATHS=(bin agents templates config)
 AUTONOMY_KIT_STAMP=""
+AUTONOMY_KIT_REV=""
 autonomy_kit_stamp() {
-  local sha
+  local sha rev_full rev=""
   sha="$( git -C "$SDD_HOME" rev-parse --short HEAD 2>/dev/null || true )"
   if [ -z "$sha" ]; then
     # Someone installed the kit as a plain copy, not a git checkout: every row born from here
@@ -3363,11 +3376,19 @@ autonomy_kit_stamp() {
     [ "$AUTONOMY_SHA_WARNED" = "1" ] \
       || warn "$SDD_HOME is not a git checkout — autonomy rows get kit_sha:null and stay non-comparable forever"
     AUTONOMY_SHA_WARNED=1
-    AUTONOMY_KIT_STAMP="|"; return 0
+    AUTONOMY_KIT_STAMP="|"; AUTONOMY_KIT_REV="|"; return 0
   fi
   if [ -n "$( git -C "$SDD_HOME" status --porcelain 2>/dev/null )" ]
   then AUTONOMY_KIT_STAMP="$sha|true"
   else AUTONOMY_KIT_STAMP="$sha|false"; fi
+  # %H and then rev-parse --short, so the rev is spelled with the same length rule as kit_sha (a
+  # bare %h may abbreviate differently). No commit on the paths -> empty -> kit_rev: null, and the
+  # readers keep such a row on the raw axis.
+  rev_full="$( git -C "$SDD_HOME" log -1 --first-parent --format=%H HEAD -- "${KIT_BEHAVIOR_PATHS[@]}" 2>/dev/null || true )"
+  [ -n "$rev_full" ] && rev="$( git -C "$SDD_HOME" rev-parse --short "$rev_full" 2>/dev/null || true )"
+  if [ -n "$( git -C "$SDD_HOME" status --porcelain -- "${KIT_BEHAVIOR_PATHS[@]}" 2>/dev/null )" ]
+  then AUTONOMY_KIT_REV="$rev|true"
+  else AUTONOMY_KIT_REV="$rev|false"; fi
 }
 
 # ---------------------------------------------------------------------------
@@ -3910,7 +3931,7 @@ autonomy_have_jq() {
 autonomy_escalation_row() {   # autonomy_escalation_row <event> <kind> <phase> <gate_why>
   autonomy_have_jq || return 0
   # Called, never substituted: `$(autonomy_kit_stamp)` would reset its one-shot warning flag.
-  autonomy_kit_stamp; local stamp="$AUTONOMY_KIT_STAMP"
+  autonomy_kit_stamp; local stamp="$AUTONOMY_KIT_STAMP" krev="$AUTONOMY_KIT_REV"
   # "${4:0:200}" caps gate_why, and WHAT it counts is the locale's call — this comment used to
   # claim it counted characters unconditionally, true in only one of the two regimes.
   # Measured here (bash + glibc): under pt_BR.UTF-8 it yields 200 characters (400 bytes) and
@@ -3934,11 +3955,14 @@ autonomy_escalation_row() {   # autonomy_escalation_row <event> <kind> <phase> <
     --arg why "${4:0:200}" \
     --arg run_id "$AUTONOMY_RUN_ID" --arg invocation "$AUTONOMY_INVOCATION" \
     --arg sha "${stamp%%|*}" --arg dirty "${stamp#*|}" \
+    --arg rev "${krev%%|*}" --arg rdirty "${krev#*|}" \
     --arg project "$PROJECT_NAME" --arg repo "$repo" --arg mission "$MISSION" \
     '{v: 1, ts: $ts, event: $event, kind: $kind,
       run_id: $run_id, invocation: $invocation,
       kit_sha: (if $sha == "" then null else $sha end),
       kit_dirty: (if $dirty == "" then null else ($dirty == "true") end),
+      kit_rev: (if $rev == "" then null else $rev end),
+      kit_rev_dirty: (if $rdirty == "" then null else ($rdirty == "true") end),
       project: $project, repo: $repo, mission: $mission, phase: $phase,
       gate_why: $why}' )"
 }
@@ -3995,7 +4019,7 @@ autonomy_degraded_row() { autonomy_escalation_row "degraded" "$1" "$2" "$3"; }
 autonomy_gate_pass_row() {   # autonomy_gate_pass_row <phase>
   autonomy_have_jq || return 0
   # Called, never substituted: `$(autonomy_kit_stamp)` would reset its one-shot warning flag.
-  autonomy_kit_stamp; local stamp="$AUTONOMY_KIT_STAMP"
+  autonomy_kit_stamp; local stamp="$AUTONOMY_KIT_STAMP" krev="$AUTONOMY_KIT_REV"
   # Substituted and not called, exactly as the escalation row does it: ledger_repo_root only
   # prints, so there is no global for the subshell to eat. No `#` inside the `\`-continued block
   # below — a comment there breaks the command in silence and `bash -n` says nothing.
@@ -4004,11 +4028,14 @@ autonomy_gate_pass_row() {   # autonomy_gate_pass_row <phase>
     --arg ts "$(date -Iseconds)" --arg phase "$1" \
     --arg run_id "$AUTONOMY_RUN_ID" --arg invocation "$AUTONOMY_INVOCATION" \
     --arg sha "${stamp%%|*}" --arg dirty "${stamp#*|}" \
+    --arg rev "${krev%%|*}" --arg rdirty "${krev#*|}" \
     --arg project "$PROJECT_NAME" --arg repo "$repo" --arg mission "$MISSION" \
     '{v: 1, ts: $ts, event: "gate_pass",
       run_id: $run_id, invocation: $invocation,
       kit_sha: (if $sha == "" then null else $sha end),
       kit_dirty: (if $dirty == "" then null else ($dirty == "true") end),
+      kit_rev: (if $rev == "" then null else $rev end),
+      kit_rev_dirty: (if $rdirty == "" then null else ($rdirty == "true") end),
       project: $project, repo: $repo, mission: $mission, phase: $phase}' )"
 }
 
@@ -4043,7 +4070,7 @@ autonomy_gate_pass_row() {   # autonomy_gate_pass_row <phase>
 autonomy_close_row() {   # autonomy_close_row <issue> <session id> <rc> <verified> <dur_s> <cost> <turns> <cache_read>
   autonomy_have_jq || return 0
   # Called, never substituted: `$(autonomy_kit_stamp)` would reset its one-shot warning flag.
-  autonomy_kit_stamp; local stamp="$AUTONOMY_KIT_STAMP"
+  autonomy_kit_stamp; local stamp="$AUTONOMY_KIT_STAMP" krev="$AUTONOMY_KIT_REV"
   # Substituted and not called, exactly as the two constructors above do it: ledger_repo_root only
   # prints, so there is no global for the subshell to eat. No `#` inside the `\`-continued block
   # below — a comment there breaks the command in silence and `bash -n` says nothing.
@@ -4055,11 +4082,14 @@ autonomy_close_row() {   # autonomy_close_row <issue> <session id> <rc> <verifie
     --arg harness "$LAST_PHASE_HARNESS" \
     --arg run_id "$AUTONOMY_RUN_ID" --arg invocation "$AUTONOMY_INVOCATION" \
     --arg sha "${stamp%%|*}" --arg dirty "${stamp#*|}" \
+    --arg rev "${krev%%|*}" --arg rdirty "${krev#*|}" \
     --arg project "$PROJECT_NAME" --arg repo "$repo" --arg mission "$MISSION" \
     '{v: 1, ts: $ts, event: "close",
       run_id: $run_id, invocation: $invocation,
       kit_sha: (if $sha == "" then null else $sha end),
       kit_dirty: (if $dirty == "" then null else ($dirty == "true") end),
+      kit_rev: (if $rev == "" then null else $rev end),
+      kit_rev_dirty: (if $rdirty == "" then null else ($rdirty == "true") end),
       project: $project, repo: $repo, mission: $mission,
       issue: $issue, session: $session,
       dur_s: ($dur | tonumber? // null), cost_usd: ($cost | tonumber? // null),
@@ -4091,7 +4121,7 @@ autonomy_close_row() {   # autonomy_close_row <issue> <session id> <rc> <verifie
 autonomy_session_row() {  # <phase> <attempt> <auto_retry> <moved> <gate> <gate_why> [<pending_before> <pending_after> <increments_total> <rounds_before> <rounds_after> <rounds_max> <step_after>]
   autonomy_have_jq || return 0
   # Called, never substituted: `$(autonomy_kit_stamp)` would reset its one-shot warning flag.
-  autonomy_kit_stamp; local stamp="$AUTONOMY_KIT_STAMP"
+  autonomy_kit_stamp; local stamp="$AUTONOMY_KIT_STAMP" krev="$AUTONOMY_KIT_REV"
   # "${6:0:200}" caps gate_why under the same locale caveat as autonomy_escalation_row's
   # "${4:0:200}" above — characters when the locale is multibyte, bytes under C/POSIX.
   # Same identity as the escalation row above, for the same reason: one repo per row, resolved by
@@ -4103,6 +4133,7 @@ autonomy_session_row() {  # <phase> <attempt> <auto_retry> <moved> <gate> <gate_
     --arg why "${6:0:200}" \
     --arg run_id "$AUTONOMY_RUN_ID" --arg invocation "$AUTONOMY_INVOCATION" \
     --arg sha "${stamp%%|*}" --arg dirty "${stamp#*|}" \
+    --arg rev "${krev%%|*}" --arg rdirty "${krev#*|}" \
     --arg project "$PROJECT_NAME" --arg repo "$repo" --arg mission "$MISSION" \
     --arg step "$LAST_PHASE_STEP" --arg agent "$LAST_PHASE_AGENT" \
     --arg model "$LAST_PHASE_MODEL" --arg session "$LAST_PHASE_SID" \
@@ -4118,6 +4149,8 @@ autonomy_session_row() {  # <phase> <attempt> <auto_retry> <moved> <gate> <gate_
       run_id: $run_id, invocation: $invocation,
       kit_sha: (if $sha == "" then null else $sha end),
       kit_dirty: (if $dirty == "" then null else ($dirty == "true") end),
+      kit_rev: (if $rev == "" then null else $rev end),
+      kit_rev_dirty: (if $rdirty == "" then null else ($rdirty == "true") end),
       project: $project, repo: $repo, mission: $mission,
       phase: $phase, step: $step,
       step_after: (if $step_after == "" then null else $step_after end),
