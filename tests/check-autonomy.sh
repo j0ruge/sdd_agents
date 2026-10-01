@@ -10,6 +10,12 @@
 # check-preflight), because the mutations that sabotage the writer have to kill the sandbox suite —
 # guarded, they would score a point for nothing.
 #
+# DECLARED LIMIT (D15), moved here from TODO.md: this file was observed red ONCE, intermittently,
+# in a kit mission of 2026-08-16, and the cause recorded then ("log name collision in a
+# repo that versions .sdd/logs/") was refuted — `sdd install` runs before any log exists and
+# ignores .sdd/logs/, and same-second log names are the norm with a clean tree. Not reproduced in
+# 152 runs. Measure again before fixing anything; `%N` in the log name would be a no-op.
+#
 # Usage: tests/check-autonomy.sh   (exit 0 = the ledger tells the truth)
 
 set -uo pipefail

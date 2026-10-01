@@ -88,6 +88,7 @@
 | Y1 | **Espelho global de vereditos legível por máquina** — JSONL em `~/.sdd/`, para responder "vereditos ao longo do tempo" sem varrer `docs/handoffs/*/05-verdict.md`. | O **I13.4 pedir** — a graduação é o primeiro consumidor de uma série de vereditos. Criar junto com ela, nunca antes. | D3 desta tabela; registrado na execução do `i13.3-sdd-kaizen` (2026-08-15) |
 | Y2 | **Multi-missão concorrente por `git worktree`** — hoje é uma missão por branch por vez, e o runner não tem nada que impeça duas. | Aparecer **demanda real** de duas missões em voo. ⚠️ Não é só `git worktree add` no laço: o ledger carimba caminho e um worktree já confundiu a identidade do repo (comentários `WORKTREE` do `bin/sdd`), então reabrir pede desenho próprio. | YAGNI declarado no plano original (`humano`, 2026-08-14) |
 | Y3 | **`sdd digest`** — destilar handoffs e `KAIZEN_LOG.md` para o vault Obsidian continua manual. | Alguém destilar **à mão pela terceira vez** e a forma do rascunho já estar estável. | YAGNI declarado no plano original (`humano`, 2026-08-14) |
+| Y4 | **`sdd adr check --format json`** — hoje o comando fala texto + rc, e quem quisesse mais que "passou/não passou" parsearia a saída humana, que não é contrato. | Aparecer o **primeiro consumidor real** — um job que anota o PR, um painel de migração contando o que falta num repo em `warn`. Sem ele é superprodução. | decisão 8 do grill de `20260917-o-numero-do-adr-nao-e-prosa`; saiu do `TODO.md` pela régua D15 em `20260930-a-sub-etapa-que-andou` (2026-10-01) |
 
 ## 🚩 Perguntas abertas
 

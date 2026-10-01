@@ -32,22 +32,8 @@ Achados sobre **repos-alvo** vão para o `TODO.md` daquele repo. Este arquivo é
   Direção: ancorar o gênero no MESMO bloco contíguo de `- **…:**` que traz a linha `Status:`.
   — descoberto por `sdd-reviewer` na missão `20260826-o-laco-da-qa` (2026-08-26)
 
-- [ ] **O `stub-argv.txt` do `check-health.sh` nunca é apagado entre mundos de fixture** —
-  `tests/check-health.sh:231` — todo `health_run` sobrescreve, ninguém remove. Hoje não reproduz
-  fail-open (medido: sem chamada nenhuma à suíte, o arquivo some e a asserção acusa certo), mas no
-  dia em que `cmd_health` ganhar um segundo caminho para a suíte a última escrita vence calada.
-  Direção: apagar no `green_world`, como as outras fixtures fazem.
-  — descoberto por `sdd-reviewer` na missão `20260818-lote-facil` (2026-08-19)
-
-- [ ] **Dois resíduos de sensor que precisam de DUAS edições, e nenhum tem testemunha externa** —
-  `tests/check-todo.sh:107` — neutralizar um helper E descartar o `cfail` do controle; apagar o
-  `selftest ||` E o acoplamento do `check_file`. Estão declarados nos cabeçalhos, o que é dívida
-  honesta e não fail-open — mas `check-todo.sh` e `check-templates.sh` seguem fora do catálogo, que
-  só sabota `bin/sdd`. Direção: catálogo que também sabote `tests/`, ou a última linha fica sem juiz.
-  — descoberto por `sdd-reviewer` na missão `20260818-lote-facil` (2026-08-19)
-
 - [ ] **Nada impede a próxima invocação de `sdd health` sem `cd`, e ela mede a árvore de quem
-  chamou** — `tests/check-health.sh:300` — desde o F2 o `health_kit_root` deixa o diretório
+  chamou** — `tests/check-health.sh:305` — desde o F2 o `health_kit_root` deixa o diretório
   corrente escolher a árvore medida, então um chamador que não fixa o `cd` mede o que estiver em
   volta. Medido, não temido: o fixture do sensor passou a medir ESTE repo (catálogo real, 20 a 50
   min) e, dentro de uma sandbox do `check-mutation.sh`, recursaria num segundo catálogo por
@@ -65,14 +51,14 @@ Achados sobre **repos-alvo** vão para o `TODO.md` daquele repo. Este arquivo é
   `20260819-fecho-...` (2026-08-19)
 
 - [ ] **A alternativa `|| :` da guarda do `guard:` não tem probe** —
-  `tests/check-health.sh:1807` — a guarda aceita `(true|:)`, e só `|| true` tem mundo no `cap_world`.
+  `tests/check-health.sh:1812` — a guarda aceita `(true|:)`, e só `|| true` tem mundo no `cap_world`.
   Medido em 2026-09-25: tirar o `:` da alternância deixa o `check-health.sh` inteiro verde. Das quatro
   sobreviventes da r2, três fecharam em `a948f68` (piso exato de capturas, probe aritmético, lista
   `RULE_REPORTS`). Direção: um `cap_world` com `|| :` e o censo afirmado, como os vizinhos.
   — descoberto por `sdd-reviewer` na missão `20260818-lote-facil` (2026-08-19)
 
 - [ ] **O `guard:` é cego a helper `health_*()` definido fora da região** —
-  `tests/check-health.sh:1826` — a região vai de `# Sensor of the KIT` até `cmd_status()`, então um
+  `tests/check-health.sh:1831` — a região vai de `# Sensor of the KIT` até `cmd_status()`, então um
   `health_*()` definido depois dela não é censurado. A outra metade do achado (`if x=`, `local x=` e
   here-doc lidos como offender) fechou: as três formas são isentas e declaradas no cabeçalho da regra.
   Direção: censurar todo `health_*()` onde ele estiver.
@@ -94,7 +80,7 @@ Achados sobre **repos-alvo** vão para o `TODO.md` daquele repo. Este arquivo é
   mutação em duas. — descoberto por `sdd-reviewer` na missão `20260818-lote-facil` (2026-08-19)
 
 - [ ] **O piso do shim pré-2.31 prova que o shim é um git falso, não que o runner o consulta** —
-  `tests/check-autonomy.sh:4435` — o piso invoca `git` diretamente sob o `PATH` do shim, e nada
+  `tests/check-autonomy.sh:4441` — o piso invoca `git` diretamente sob o `PATH` do shim, e nada
   ancora no caminho de resolução do runner. Medido: trocar `git` por `/usr/bin/git` no
   `ledger_repo_root` E apagar a guarda deixa `check-autonomy.sh` inteiro verde, porque o shim segue
   um impostor correto que nunca é chamado. Direção: termo provando INTERCEPTAÇÃO — a resposta do
@@ -170,7 +156,7 @@ Achados sobre **repos-alvo** vão para o `TODO.md` daquele repo. Este arquivo é
   de contagem falsa, como o `SDD_EP_FORCE_FAIL` da composição, com um probe por ramo.
   — descoberto por `sdd-reviewer` na missão `20260816-kit-como-alvo` (2026-08-16)
 
-- [ ] **O fixture de `stream-json` não tem checagem de proveniência** — `tests/check-autonomy.sh:129`
+- [ ] **O fixture de `stream-json` não tem checagem de proveniência** — `tests/check-autonomy.sh:135`
   — as três linhas replayadas pelos stubs foram copiadas de sessão real (CLI 2.1.233) e o comentário
   registra o comando, mas `health_provenance` (`bin/sdd:1524`) só confere as 3 fixtures de skill
   contra arquivo instalado. Se o CLI renomear `type`/`total_cost_usd`, o stub segue verde e o
@@ -192,15 +178,6 @@ Achados sobre **repos-alvo** vão para o `TODO.md` daquele repo. Este arquivo é
   sensora de `RUN_install_no_guard`. O sintoma chega como "mutação não capturada", e o conserto
   tentador é `KNOWN_GAPS`. Direção: reprovar guarda de `SDD_MUTANT` em arquivo que invoca `bin/sdd`.
   — descoberto por `sdd-executor` na missão `20260816-runner-sem-dividas` (2026-08-16)
-
-- [ ] **`check-autonomy.sh` é vermelho intermitente, causa desconhecida** — `bin/sdd:4983` —
-  ⚠️ **A causa registrada foi REFUTADA; o sintoma segue aberto.** Era "colisão de nome de log em
-  repo que versiona `.sdd/logs/`", e não se sustenta: `check-autonomy.sh:140` chama
-  `sdd install` ANTES de existir log, e o `sdd install` já põe `.sdd/logs/` no `.gitignore` —
-  `git ls-files` no fixture lista só `.sdd/config.sh`. Colisão é a norma (8 sessões EXEC no mesmo
-  segundo num run) e a árvore fecha limpa. Não reproduziu em **152 runs**. Direção: `%N` é no-op;
-  medir de novo antes de consertar. — refutado por `sdd-reviewer` (r2), descoberto por
-  `sdd-executor` na missão `20260816-runner-sem-dividas` (2026-08-16)
 
 - [ ] **O gate PLAN-AUTO aceita Check que já nasce verde** — `templates/missao.md:45` — o critério
   `d` cobra `Check executável (comando → esperado)`, não "Check que
@@ -234,7 +211,7 @@ Achados sobre **repos-alvo** vão para o `TODO.md` daquele repo. Este arquivo é
   — descoberto por `humano` revisando o sensor novo (2026-08-16)
 
 - [ ] **A asserção `the retry carries its own moved` não falha pela propriedade que promete** —
-  `tests/check-autonomy.sh:427` — no fixture, `moved` sai `false` com qualquer baseline: o retry
+  `tests/check-autonomy.sh:433` — no fixture, `moved` sai `false` com qualquer baseline: o retry
   só é alcançado quando `before == after`, então a asserção nunca observa um `moved:true` genuíno
   pelo caminho real. Ainda pega campo ausente ou `moved` sempre-`true`; só o nome discrimina mais
   do que ela. — descoberto por `/codereview` na missão `20260815-i13.1-autonomy-log` (2026-08-15)
@@ -506,13 +483,6 @@ Achados sobre **repos-alvo** vão para o `TODO.md` daquele repo. Este arquivo é
   instrumento cru, ou pendurá-lo na célula do `review loop` do `--by-mission`.
   — descoberto por `sdd-reviewer` na missão `20260901-o-revisor-so-acha` (2026-09-02)
 
-- [ ] **`sdd adr check` só fala texto + rc; não existe `--json`** — `bin/sdd:7114` (`check)`) — quem quiser
-  mais que "passou/não passou" (um job de CI que anota o PR, um painel de migração contando o que
-  falta num repo em `warn`) hoje parseia a saída humana, que não é contrato. Direção: acrescentar
-  `--format json` **quando houver consumidor** — sem um, é superprodução, e a decisão 8 do grill
-  recusou construí-lo agora. — descoberto por `sdd-planner` na missão
-  `20260917-o-numero-do-adr-nao-e-prosa` (2026-09-17)
-
 - [ ] **As ADRs 0001–0007 não têm `Spec:`, e por isso 14 missões deste repo não podem declarar
   `adr:`** — `docs/adr/0001-judge-split-deterministic-series-model-verdict.md:1` — nenhuma das sete
   liga-se a uma missão por artefato (`git log --diff-filter=A` de cada uma não toca
@@ -726,15 +696,6 @@ Achados sobre **repos-alvo** vão para o `TODO.md` daquele repo. Este arquivo é
   prazo. Direção: medir onde ele para e dar prazo à espera do auxiliar, que deve dizer quem segura.
   — descoberto por `sessão coordenadora` na missão `20260930-e2e-local-diz-por-que-caiu` (2026-10-01)
 
-- [ ] **O laço de melhoria da sessão interativa não enxerga o kit** — `commands/sdd-plan.md:1` — o
-  `retrofit-watch` (plugin `chewiesoft-marketplace`) só reconhece o tool `Skill`, a linha "Base
-  directory for this skill" e comando `plugin:x`. O `/sdd-plan` é comando sem `:`, e os `sdd-*`
-  chegam como `Agent` com `subagent_type`, então os dois passam sem registro. As fases do `sdd run`
-  são `claude -p`, e o `attended()` as pula por desenho. Medido: `"skills": {}` na sessão `fe745640` com o `sdd-planner`
-  depois de uma PLAN inteira. Direção: o hook aceita `sdd-*` (comando e `subagent_type`) como peça
-  do kit, alvo `j0ruge/sdd_agents` em modo lean, ao lado do `sdd kaizen`, que é o laço por dados.
-  — descoberto por `sessão coordenadora` na missão `20260930-e2e-local-diz-por-que-caiu` (2026-10-01)
-
 - [ ] **Registrar achado durante a janela do juiz parte a janela** — `tests/health-baseline.txt`
   (`todo-findings`) — princípio 5 manda o item, a catraca manda mover a baseline, e o merge cunha um
   `kit_sha` novo sem mudar `bin/`: em `6323c6f` (só `TODO.md` + baseline) 3 missões e US$ 110,18 de
@@ -744,6 +705,7 @@ Achados sobre **repos-alvo** vão para o `TODO.md` daquele repo. Este arquivo é
 
 ## Decidido — não reabrir
 <!-- sdd:decided -->
+- **O laço de melhoria da sessão interativa não enxergaria o kit** — resolvido fora do kit, sem commit deste repo: `retrofit-watch` 0.2.0 (`j0ruge/skills@960e47b`) reconhece `/sdd-*`, subagente `sdd-*` e o CLI `sdd` (2026-10-01)
 - **O `sdd preflight` não provaria que a sessão headless executa comando** — refutado: `bin/sdd:4980` manda rodar `bash -c 'echo sdd-preflight-ok'` sob as flags do `run_phase` desde `2083680`, e sob o chapéu do executor desde 2026-09-06 (2026-09-25)
 - **O `RESOLVED by` não deixa a catraca descer na missão que conserta** — decidido: o item fica até o merge e sai no chore pós-merge, `templates/todo.pt-BR.md` § Ciclo de vida (2026-09-25)
 - **O stub do `sdd adr new` manda escrever em `OUTPUT_LANG`, e o `check-lang.sh` lê `docs/adr/` como inglês** — limite declarado pela D15, não achado: `bin/sdd:6808` (2026-09-25)
