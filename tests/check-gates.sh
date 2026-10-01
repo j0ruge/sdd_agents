@@ -2586,10 +2586,21 @@ fi
 rm -rf "${FIX:?}/config"
 git add -A && git commit -qm "chore: the kit loses one of its measured paths" >/dev/null
 rm -f "$FIX/.sdd/logs/mutation-stamp"
-i4_verdict 0 "$I4_SCORE_GREEN"; i4_health
+i4_verdict 0 "$I4_SCORE_GREEN"
+# i4_health discards the output; here the output is half of what is measured, so the same call is
+# made with it captured (same HOME redirection, rc ignored for the same reason).
+partial_health="$( cd "$FIX" && HOME="$i4_home" NO_COLOR=1 "$FIX/bin/sdd" health 2>&1 )" || true
 partial_stamp=absent; [ -f "$FIX/.sdd/logs/mutation-stamp" ] && partial_stamp=written
 assert_eq "stamp-key: a root missing one of the four measured paths is never stamped" "PR|absent" \
   "$( cd "$FIX" && "$SDD" phase "$MISSION" 2>&1 )|$partial_stamp"
+# And neither end refuses in silence. gate_PR used to send the operator to `sdd health` blindly,
+# and `sdd health` over this root removed the stamp without a word: a refusal whose named remedy
+# answers nothing. Both now name the missing path, and the gate no longer prints the generic
+# "no green mutation catalogue" sentence, whose remedy cannot work here. Counts, so a red names the
+# term: gate names config/ · gate keeps the generic sentence · health names config/.
+partial_why="$( cd "$FIX" && "$SDD" why "$MISSION" PR 2>&1 )"
+assert_eq "gate_PR and sdd health both name the measured path a partial root is missing" "1|0|1" \
+  "$(grep -c 'no mutation stamp is possible for this tree: config/ missing at the root' <<< "$partial_why")|$(grep -c 'no green mutation catalogue' <<< "$partial_why")|$(grep -c 'nothing was stamped: config/ missing at' <<< "$partial_health")"
 mkdir -p "$FIX/config"
 printf 'fixture config\n' > "$FIX/config/fixture.conf"
 git add -A && git commit -qm "chore: the measured path comes back" >/dev/null

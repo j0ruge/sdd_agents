@@ -1016,7 +1016,19 @@ mut_PR_stamp_key_follows_head() {
 # Only the all-four-absent case stays refused (by the empty-listing guard below it), which is
 # exactly the guard the key had before ADR 0014, increment I3. World 9 of check-gates.sh catches it.
 mut_PR_stamp_key_partial_listing() {
-  sed -i '/^mutation_stamp_key() {/,/^}/ s@\[ -e "\$1/\$p" \] || return 1@:@' "$1"
+  sed -i '/^mutation_stamp_key() {/,/^}/ s@\[ -z "\$MUTATION_STAMP_MISSING" \] || return 1@:@' "$1"
+}
+
+# gate_PR goes back to the generic sentence for a partial root: "run 'sdd health'", a remedy that
+# cannot work there because health refuses to stamp that root. World 9 of check-gates.sh reads it.
+mut_PR_partial_root_blind_remedy() {
+  sed -i '/^gate_PR() {/,/^}/ s@if \[ -n "\$MUTATION_STAMP_MISSING" \]; then@if false; then@' "$1"
+}
+
+# cmd_health refuses the partial root in silence again — the stamp is removed and nothing is said,
+# so the remedy gate_PR names answers nothing. World 9 of check-gates.sh reads the health output.
+mut_HEALTH_unstampable_silent() {
+  sed -i '/^cmd_health() {/,/^}/ s@health_bad "nothing was stamped: \$MUTATION_STAMP_MISSING@: "nothing was stamped: $MUTATION_STAMP_MISSING@' "$1"
 }
 
 # The WRITER goes back to answering about the tree its own file sits in, whatever tree the operator
@@ -5027,6 +5039,8 @@ CATALOG=(
   PR_merged_rechecked
   PR_stamp_key_follows_head
   PR_stamp_key_partial_listing
+  PR_partial_root_blind_remedy
+  HEALTH_unstampable_silent
   HEALTH_stamp_window_blind
   HEALTH_stamp_tree_blind
   RUN_inverted_journal

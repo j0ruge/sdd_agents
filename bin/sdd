@@ -2014,7 +2014,9 @@ readonly MUTATION_CATALOGUE_FLOOR=8
 #     reading the same partial listing — would accept it: a stamp certifying a tree the catalogue
 #     was never run against as a whole. The guard used to refuse only a root where ALL FOUR were
 #     absent, and said so here; one missing path went through without a signal (ADR 0014,
-#     increment I3). Checked per path, before anything is listed.
+#     increment I3). Checked per path (mutation_stamp_missing), before anything is listed. This
+#     root is REACHABLE — tests/ holding the catalogue says nothing about config/ — so both callers
+#     that refuse on an empty key name the missing path instead of a remedy that cannot work.
 #   - a root whose listing is empty. `md5sum` of no input at all is a perfectly valid-looking
 #     constant, so such a root would be handed a stable key every other empty root matches — a
 #     stamp certifying nothing, indistinguishable from a stamp certifying everything.
@@ -2026,11 +2028,24 @@ readonly MUTATION_CATALOGUE_FLOOR=8
 # caller reaches that state (both ends only ask about a root whose tests/ holds a catalogue, so
 # `find` always has at least that file to print), and that is declared, not sold as measured: this
 # is a one-token hardening of a guard whose comment was ahead of its code.
-mutation_stamp_key() { # mutation_stamp_key <root>
-  local listing p
+# Which of MUTATION_STAMP_PATHS are absent at <root>, PUBLISHED in MUTATION_STAMP_MISSING as a
+# space-separated list spelled `bin/ config/` (empty ⇒ all four are there). The ONE definition of
+# "which paths are missing": the key's guard below reads it, and so do the two refusals that have
+# to NAME the path — gate_PR's sentence and cmd_health's — so the three can never disagree about
+# which root is stampable. Called, never `$( )`-captured: the result is a global, and a capture
+# would run it in a subshell and lose it.
+mutation_stamp_missing() { # mutation_stamp_missing <root>
+  local p
+  MUTATION_STAMP_MISSING=""
   for p in "${MUTATION_STAMP_PATHS[@]}"; do
-    [ -e "$1/$p" ] || return 1
+    [ -e "$1/$p" ] || MUTATION_STAMP_MISSING="${MUTATION_STAMP_MISSING:+$MUTATION_STAMP_MISSING }$p/"
   done
+}
+
+mutation_stamp_key() { # mutation_stamp_key <root>
+  local listing
+  mutation_stamp_missing "$1"
+  [ -z "$MUTATION_STAMP_MISSING" ] || return 1
   # `md5sum` and not `sha256sum`: it is the digest `sdd preflight` already probes the userland for,
   # so this adds no assumption the kit was not already making. The relative paths ride INSIDE the
   # digest, which is what makes a file that merely MOVED change the key.
@@ -2104,17 +2119,27 @@ gate_PR() {
     local key stamp
     key="$(mutation_stamp_key "$REPO_ROOT" || true)"
     stamp="$(cat "$REPO_ROOT/$MUTATION_STAMP_REL" 2>/dev/null || true)"
-    # ONE refusal and one sentence, with `-z` folded into it rather than given a message of its
-    # own. The disjunct is load-bearing and not decoration: an absent stamp file reads as the empty
-    # string, so an empty KEY would compare EQUAL to it and open the gate — the two ways of knowing
-    # nothing agreeing that everything is fine. It is also, today, unreachable, and that is
-    # declared rather than dressed up: the scope condition above is a file INSIDE tests/, so
-    # reaching this line at all proves tests/ is non-empty. A second GATE_WHY here would be a
-    # sentence no world can print, which is the dead code this repo keeps finding in its own gates.
+    # The `-z "$key"` disjunct is load-bearing and not decoration: an absent stamp file reads as
+    # the empty string, so an empty KEY would compare EQUAL to it and open the gate — the two ways
+    # of knowing nothing agreeing that everything is fine.
     #
-    # The remedy is IN the sentence, the same rule cmd_health's red-suite line obeys and for the
+    # An empty key is REACHABLE: the scope condition above proves tests/ holds a file, and says
+    # nothing about bin/, templates/ or config/ (ADR 0014, increment I3). For that root `sdd health`
+    # is no remedy — it refuses to stamp a partial root, and says so — so the sentence names the
+    # missing path, read off the same mutation_stamp_missing the key's guard reads. Every other
+    # refusal keeps the one sentence below; an empty key with all four paths present (an empty
+    # listing) is still unreachable here, because tests/ is non-empty, and falls into it.
+    #
+    # The remedy is IN each sentence, the same rule cmd_health's red-suite line obeys and for the
     # same measured reason: without the command named, the operator runs the fast suite, sees
     # green, and concludes the gate is lying — which is the one thing it may never be.
+    if [ -z "$key" ]; then
+      mutation_stamp_missing "$REPO_ROOT"
+      if [ -n "$MUTATION_STAMP_MISSING" ]; then
+        GATE_WHY="no mutation stamp is possible for this tree: $MUTATION_STAMP_MISSING missing at the root, and the stamp keys on ${MUTATION_STAMP_PATHS[*]} together — restore it, then run 'sdd health'"
+        return 1
+      fi
+    fi
     if [ -z "$key" ] || [ "$stamp" != "$key" ]; then
       GATE_WHY="no green mutation catalogue for this content — run 'sdd health' (since 4c86712 TEST_CMD does not run the catalogue, so no gate before this one measures it)"
       return 1
@@ -5951,10 +5976,22 @@ cmd_health() {
   # lands on disk is "this exact tree was measured green" and never "the command was here".
   local stamp_path="$kit/$MUTATION_STAMP_REL" stamp_key
   stamp_key="$(mutation_stamp_key "$kit" || true)"
-  if [ "$catalogue_green" != 1 ] || [ -z "$stamp_key" ]; then
+  if [ "$catalogue_green" != 1 ]; then
     # REMOVED, not merely left behind. A stamp that outlives the green it certifies is the exact
     # label this block exists to replace: it would go on telling gate_PR that a catalogue which
     # just came back red, over this very content, had been measured and was clean.
+    rm -f "$stamp_path"
+  elif [ -z "$stamp_key" ]; then
+    # A green catalogue over a root the key refuses — one of the four measured paths is absent
+    # (ADR 0014, increment I3). Said out loud, never a silent `rm -f`: gate_PR names the same path
+    # and tells the operator to run this command afterwards, and a health that went quiet here
+    # would be a refusal with no reachable remedy. Same helper as the gate, so the two agree.
+    mutation_stamp_missing "$kit"
+    if [ -n "$MUTATION_STAMP_MISSING" ]; then
+      health_bad "nothing was stamped: $MUTATION_STAMP_MISSING missing at $kit, and the stamp keys on ${MUTATION_STAMP_PATHS[*]} together — restore it, then re-run sdd health"
+    else
+      health_bad "nothing was stamped: ${MUTATION_STAMP_PATHS[*]} hold no file at $kit, so there is no content for a stamp to describe"
+    fi
     rm -f "$stamp_path"
   elif [ "$stamp_key" != "$stamp_key_before" ]; then
     # The window, closed. Saying it out loud matters as much as refusing: an operator who watched
