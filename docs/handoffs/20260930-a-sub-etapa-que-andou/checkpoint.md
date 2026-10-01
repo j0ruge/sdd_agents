@@ -1,6 +1,6 @@
 ---
 missao: 20260930-a-sub-etapa-que-andou
-atualizado: 2026-09-30 23:30
+atualizado: 2026-10-01 00:22
 ---
 
 # Checkpoint — o sub-passo da QA que andou
@@ -37,7 +37,7 @@ atualizado: 2026-09-30 23:30
 
 | ID | Incremento | Check (comando → esperado) | Status | Commit |
 |---|---|---|---|---|
-| I1 | o escritor: a linha QA carrega `step_after` (e `pending_*`) | `o=$(bash tests/check-autonomy.sh 2>&1); grep -c -e '^  ok    a QA row carries the step the session left behind' -e '^  ok    a non-QA row carries step_after as null' <<< "$o"` → `2` | pending | — |
+| I1 | o escritor: a linha QA carrega `step_after` (e `pending_*`) | `o=$(bash tests/check-autonomy.sh 2>&1); grep -c -e '^  ok    a QA row carries the step the session left behind' -e '^  ok    a non-QA row carries step_after as null' <<< "$o"` → `2` | done | 74996fa |
 | I2 | o leitor: o braço do sub-passo na rubrica | `o=$(bash tests/check-kaizen.sh 2>&1); grep -c -e '^  ok    a QA sub-step that advanced reads advanced' -e '^  ok    the same QA row with no sub-step advance reads churned' <<< "$o"` → `2` | pending | — |
 | I3 | o laço QA⇄EXEC em linha nova | `o=$(bash tests/check-autonomy.sh 2>&1); grep -c -e '^  ok    a QA close that wrote fix increments is the designed loop' -e '^  ok    an EXEC row whose pending grew is still churn' <<< "$o"` → `2` | pending | — |
 | I4 | o histórico: `step_after` recuperado pela próxima linha QA | `o=$(./bin/sdd autonomy --all-repos --by-mission 2>/dev/null); grep -c -e '20260929-aviso-diretoria-por-email  21 session(s) · 19 advanced · 2 churned · 0 idle' -e '20260930-e2e-local-diz-por-que-caiu  15 session(s) · 14 advanced · 1 churned · 0 idle' -e '20260930-justificativa-pedido-alcada  20 session(s) · 17 advanced · 3 churned · 0 idle' -e 'QA row(s) older than step_after' <<< "$o"` → `4` | pending | — |
