@@ -41,7 +41,7 @@ atualizado: 2026-10-01 11:20
 | I2 | os leitores agrupam pela versão de comportamento (kit_version_rows + kit_shas_raw + sdd-kaizen.md) | `o=$(bash tests/check-kaizen.sh 2>&1); grep -c '^  ok    kit-version: ' <<< "$o"` → `5` | done | eedc6d3 |
 | I3 | a chave do carimbo exige os quatro caminhos (#107) | `o=$(bash tests/check-gates.sh 2>&1); grep -c -e '^  ok    stamp-key: ' -e '^  ok    gate_PR: the mutation stamp is demanded only where the catalogue lives' <<< "$o"` → `2` | done | 162e923 |
 | I4 | a chave do carimbo lê só o rastreado e exclui a catraca (#119, #117) | `o=$(bash tests/check-gates.sh 2>&1; bash tests/check-health.sh 2>&1); grep -c -e '^  ok    stamp-key: ' -e '^  ok    gate_PR: the mutation stamp is demanded only where the catalogue lives' -e '^  ok    mutation: a catalogue too small to have measured anything is refused' <<< "$o"` → `5` | done | 89d8e62 |
-| I5 | TODO.md: RESOLVED by nos quatro itens e a linha decidida do aviso de merge | `o=''; awk '/RESOLVED by [0-9a-f][0-9a-f][0-9a-f][0-9a-f][0-9a-f][0-9a-f][0-9a-f]/ {n++} END {exit (n != 5)}' TODO.md && o=$(bash tests/check-todo.sh 2>&1); grep -c '^  ok    87 finding(s)' <<< "$o"` → `1` | pending | — |
+| I5 | TODO.md: RESOLVED by nos quatro itens e a linha decidida do aviso de merge | `o=''; awk '/RESOLVED by [0-9a-f][0-9a-f][0-9a-f][0-9a-f][0-9a-f][0-9a-f][0-9a-f]/ {n++} END {exit (n != 5)}' TODO.md && o=$(bash tests/check-todo.sh 2>&1); grep -c '^  ok    87 finding(s)' <<< "$o"` → `1` | done | c9820de |
 
 > **As notas de execução não moram aqui.** Elas ficam em `checkpoint-notas.md`, ao lado deste
 > arquivo, append-only, e o prompt de boot inlina as últimas 10 — a sessão nunca abre aquele
