@@ -2568,9 +2568,23 @@ i4_phase "a score with a live survivor takes the stamp away too" "PR"
 #    so this is the widest window in the kit for a tree to shift under a measurement. A key read
 #    only AFTER the run would describe exactly what is on disk when the command ends, so the stamp
 #    would fit, the gate would open, and the green would belong to content that was never measured.
-#    The world distinguishes on its own, whatever the stamp state before it: unfixed, the stamp is
-#    written and the phase is DONE.
-i4_verdict 0 "$I4_SCORE_GREEN" move-the-tree; i4_health
+#    ⚠️ The PHASE alone no longer distinguishes, and that is measured: the scratch file is tracked
+#    and restored before the gate (ADR 0014, increment I4), so a stamp written over the MOVED key
+#    stops matching the moment the restore puts the key back, and the gate answers PR whether the
+#    refusal ran or not — mut_HEALTH_stamp_window_blind survived the catalogue (531 of 532). So the
+#    property is read where it lives, BEFORE the restore: no stamp file on disk, and health saying
+#    why. The stamp is taken away first, so its absence is this run's answer and never world 7's.
+rm -f "$FIX/.sdd/logs/mutation-stamp"
+i4_verdict 0 "$I4_SCORE_GREEN" move-the-tree
+window_health="$( cd "$FIX" && HOME="$i4_home" NO_COLOR=1 "$FIX/bin/sdd" health 2>&1 )" || true
+window_stamp=absent; [ -f "$FIX/.sdd/logs/mutation-stamp" ] && window_stamp=written
+window_said="$(grep -c 'the measured tree moved WHILE the catalogue was running' <<< "$window_health" || true)"
+i4_worlds=$((i4_worlds + 1))
+if [ "$window_stamp|$window_said" != "absent|1" ]; then
+  printf '         world "a tree that moved DURING the run is refused by health itself": expected absent|1 (stamp|refusal named), got %s|%s\n' \
+    "$window_stamp" "$window_said" >&2
+  i4_bad=$((i4_bad + 1))
+fi
 git -C "$FIX" checkout -- tests/scratch.tracked
 i4_phase "a tree that moved DURING the run is not stamped by the green it did not take part in" "PR"
 
