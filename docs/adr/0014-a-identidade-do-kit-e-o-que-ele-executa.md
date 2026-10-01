@@ -1,6 +1,6 @@
 # ADR 0014 — The kit's identity is what it executes: the judge groups by the last behaviour commit, and the stamp keys on tracked content minus the ratchet
 
-- **Status**: proposed (—, 2026-10-01)
+- **Status**: accepted (—, 2026-10-01)
 - **Spec**: docs/handoffs/20261001-a-janela-nao-se-parte/00-missao.md
 
 ## Context
