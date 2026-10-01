@@ -3342,6 +3342,11 @@ ledger_outcome_defs() {   # printed jq, spliced into cmd_autonomy AND kaizen_ser
   printf '%s' 'def phase_index: . as $p | ($phases | split(" ")) | index($p);'
 }
 
+# The paths whose content a target-repo phase executes. tests/ is not here (no target phase runs the
+# kit's suite), nor docs/, commands/, TODO.md. When in doubt a path goes IN: one path too many can
+# only split a window, one too few would fuse two behaviours into one version.
+readonly KIT_BEHAVIOR_PATHS=(bin agents templates config)
+
 # Publishes TWO globals, and they answer different questions (ADR 0014):
 #   AUTONOMY_KIT_STAMP = "<sha>|<true|false>" — the raw HEAD and whether ANY path of the kit tree is
 #     dirty. This is the fact "where was the kit", and it is what kit_guard_* compare: the guard asks
@@ -3359,10 +3364,6 @@ ledger_outcome_defs() {   # printed jq, spliced into cmd_autonomy AND kaizen_ser
 # `AUTONOMY_SHA_WARNED=1` below would die with it — the flag would be back to 0 on the next row and
 # the one-shot warning would fire once per ledger row, which is the opposite of what it says. A
 # guard that cannot hold is worse than no guard: it reads as measured and is not.
-# The paths whose content a target-repo phase executes. tests/ is not here (no target phase runs the
-# kit's suite), nor docs/, commands/, TODO.md. When in doubt a path goes IN: one path too many can
-# only split a window, one too few would fuse two behaviours into one version.
-readonly KIT_BEHAVIOR_PATHS=(bin agents templates config)
 AUTONOMY_KIT_STAMP=""
 AUTONOMY_KIT_REV=""
 autonomy_kit_stamp() {
