@@ -47,3 +47,4 @@
 >
 > - intervention: <o que o humano teve de fazer> — <fase> — <custo, se houver>
 
+- I1 (85039c7): RED observado pelo motivo certo (4 asserções kit_rev: com kit_rev/kit_rev_dirty = null, campos crus corretos). Mutantes provados isolados pela receita contra check-autonomy.sh: RUN_kit_rev_is_head rc=1 (pego por 'outside the behaviour paths'), RUN_kit_rev_dirty_whole_tree rc=1 (pego por 'dirt outside'), RUN_kit_guard_reads_rev rc=1 (regime 1 + regimes 4, 5, 7 da guarda). Check do I1 → 5. tests/run-all.sh → suite green, rc 0, anchors 518 mutants. 22 âncoras do TODO.md remapeadas pelo diff (contagem 87 inalterada). Mundo 4 usa agents/kr-probe.txt (não .md) para não tocar o espelho de agentes do install.
