@@ -2318,9 +2318,9 @@ git add -A && git commit -qm "chore: docs, formatter-aligned again"
 #   WINDOW  (8) the green has to be about the content that is still here. The real catalogue runs
 #           for twenty to fifty minutes and the phase that starts it is a phase that commits, so a
 #           key read only after the run would stamp whatever the tree happens to be at the end.
-# Four more worlds follow the tally, each with an assertion of its own, because they are about the
-# KEY and not about where the demand applies: PARTIAL ROOT (9), RATCHET (10), IGNORED (11) and
-# DELETED (12) — the key is the tracked content of the four paths minus the backlog ratchet (ADR
+# Five more worlds follow the tally, each with an assertion of its own, because they are about the
+# KEY and not about where the demand applies: PARTIAL ROOT (9), RATCHET (10), IGNORED (11), DELETED
+# (12) and UNREADABLE (13) — the key is the tracked content of the four paths minus the backlog ratchet (ADR
 # 0014, increments I3 and I4).
 #
 # The key is NEVER computed here. A second spelling of that algorithm would agree with the first by
@@ -2657,6 +2657,23 @@ assert_eq "gate_PR and sdd health both name a tracked file deleted from the work
   "$deleted_stamp|$(grep -c 'no mutation stamp is possible for this tree: .*deleted from the working tree: tests/scratch\.tracked' <<< "$deleted_why")|$(grep -c 'nothing was stamped: .*deleted from the working tree: tests/scratch\.tracked' <<< "$deleted_health")"
 git -C "$FIX" checkout -- tests/scratch.tracked
 
+# 13. UNREADABLE — a tracked entry that is there and cannot be hashed: here a symlink whose target
+#     is gone (a submodule or a skip-worktree entry is the same case). `ls-files -d` does not list
+#     it, so without a reason of its own the gate fell back to the generic sentence and health to
+#     "hold no file" — two remedies that cannot work. Own assertion. Counts: stamp · gate names it ·
+#     health names it.
+ln -s no-such-target "$FIX/tests/broken-link"
+git add -A && git commit -qm "chore: a tracked symlink whose target is gone" >/dev/null
+rm -f "$FIX/.sdd/logs/mutation-stamp"
+i4_verdict 0 "$I4_SCORE_GREEN"
+unreadable_health="$( cd "$FIX" && HOME="$i4_home" NO_COLOR=1 "$FIX/bin/sdd" health 2>&1 )" || true
+unreadable_stamp=absent; [ -f "$FIX/.sdd/logs/mutation-stamp" ] && unreadable_stamp=written
+unreadable_why="$( cd "$FIX" && "$SDD" why "$MISSION" PR 2>&1 )"
+assert_eq "gate_PR and sdd health both name a tracked file that cannot be read, and nothing is stamped" \
+  "absent|1|1" \
+  "$unreadable_stamp|$(grep -c 'no mutation stamp is possible for this tree: a tracked file under .* could not be read' <<< "$unreadable_why")|$(grep -c 'nothing was stamped: a tracked file under .* could not be read' <<< "$unreadable_health")"
+git rm -q "$FIX/tests/broken-link" && git commit -qm "chore: the broken symlink goes" >/dev/null
+
 # --- the two ends of the stamp, and the tree they have to agree on ----------
 #
 # The block above proves WHAT the stamp means. This one proves WHERE it lives, which is a separate
@@ -2779,6 +2796,22 @@ tree_health "$TREE_NOWHERE"
 tree_stamped "$TREE_KIT" \
   || tree_note "sdd invoked from outside any git repository" \
                "the installed kit was not stamped, so health has no tree to measure at all"
+
+# 4. A kit installed as a PLAIN COPY — no .git — used from a target repo: the $SDD_HOME fallback of
+#    world 2, minus the checkout. The stamp keys on tracked content, so nothing may be stamped; and
+#    no gate can demand a stamp there, so health only WARNS (ADR 0014, increment I4). Own assertion,
+#    outside the tree tally: the tally is about which tree is stamped, this is about a tree that
+#    never can be. The fixture kit fails other health checks of its own (no schema, no baseline), so
+#    the "not counted as a failure" half reads the output — no 'nothing was stamped' line — and the
+#    rc half is check-health.sh's `stamp:` assertion, over a fixture that is otherwise healthy.
+TREE_COPY="$SDD_STATE_FIX/kit-copy"
+cp -r "$TREE_KIT" "$TREE_COPY"
+rm -rf "${TREE_COPY:?}/.git" "${TREE_COPY:?}/.sdd/logs/mutation-stamp"
+copy_out="$( cd "$TREE_PLAIN" && HOME="$i4_home" NO_COLOR=1 "$TREE_COPY/bin/sdd" health 2>&1 )" || true
+copy_stamp=absent; [ -f "$TREE_COPY/$TREE_STAMP" ] && copy_stamp=written
+assert_eq "sdd health over a plain-copy kit install warns, stamps nothing, and counts no failure for it" \
+  "absent|1|0" \
+  "$copy_stamp|$(grep -c 'is not a git checkout — no gate can demand a mutation stamp here; none written' <<< "$copy_out")|$(grep -c 'nothing was stamped' <<< "$copy_out")"
 
 if [ "$tree_bad" -eq 0 ]; then
   pass "gate_PR: the stamp is read from the tree whose content the gate measures"

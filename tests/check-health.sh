@@ -66,8 +66,9 @@
 #      `SDD_MUTANT=1 run-all.sh --list` prints, calling each failure primitive with SDD_MUTANT set,
 #      unset and empty (floor 9, five known worlds measured first), plus the two sensors that call
 #      their own primitive on purpose asserted to do it outside the mutant. Prefixed `surface:`.
-#   19. a kit that is not a git checkout is refused out loud and never stamped: the stamp keys on
-#      tracked content (ADR 0014, increment I4). Prefixed `stamp:`.
+#   19. a kit that is not a git checkout is warned about and never stamped, and health stays green:
+#      the stamp keys on tracked content and no gate can demand one there (ADR 0014, increment I4).
+#      Prefixed `stamp:`.
 #
 # Usage: tests/check-health.sh   (exit 0 = cmd_health discriminates)
 #
@@ -860,27 +861,30 @@ else
        "empty: rc $RC_CAT_EMPTY · $(digest "$OUT_CAT_EMPTY") // narrowed: rc $RC_CAT_NARROW · $(digest "$OUT_CAT_NARROW") // gone: rc $RC_CAT_GONE · $(digest "$OUT_CAT_GONE") // real: rc $RC_CAT_REAL · $(digest "$OUT_CAT_REAL")"
 fi
 
-# A kit that is not a git checkout — an install made by plain copy. The stamp keys on TRACKED
-# content (ADR 0014, increment I4), so there is nothing to key on and nothing may be stamped; and
-# the refusal is said with its reason and remedy, never a silent `rm -f`, because gate_PR sends the
-# operator to this very command. `.git` is moved aside and back, so the world after this one is the
-# checkout it always was. Differential floor: OUT_CAT_REAL above, the same fixture WITH its .git,
-# was stamped.
-NOGIT_DESC='stamp: a kit that is not a git checkout is refused out loud and never stamped'
+# A kit that is not a git checkout — an install made by plain copy, which is the $SDD_HOME every
+# target repo falls back to. The stamp keys on TRACKED content (ADR 0014, increment I4), so there is
+# nothing to key on and nothing may be stamped; and no gate can ever demand a stamp there (gate_PR
+# reads it at $REPO_ROOT, always a git toplevel), so the refusal is a WARNING and not a failure — a
+# failure would be a red line no remedy removes. `.git` is moved aside and back, so the world after
+# this one is the checkout it always was. Differential floor: OUT_CAT_REAL above, the same fixture
+# WITH its .git, was stamped.
+NOGIT_DESC='stamp: a kit that is not a git checkout is warned about, never stamped, and health stays green'
 green_world
 mv "$FIX/.git" "$FIX/.git.aside"
 health_run
-OUT_NOGIT="$HEALTH_OUT"
+OUT_NOGIT="$HEALTH_OUT"; RC_NOGIT="$HEALTH_RC"
 mv "$FIX/.git.aside" "$FIX/.git"
-if grep -qF 'nothing was stamped:' <<< "$OUT_NOGIT" \
-   && grep -qF 'is not a git checkout' <<< "$OUT_NOGIT" \
+if [ "$RC_NOGIT" -eq 0 ] \
+   && grep -qF 'kit healthy' <<< "$OUT_NOGIT" \
+   && grep -qF 'is not a git checkout — no gate can demand a mutation stamp here; none written' <<< "$OUT_NOGIT" \
+   && ! grep -qF 'nothing was stamped:' <<< "$OUT_NOGIT" \
    && ! grep -qF "$STAMPED" <<< "$OUT_NOGIT" \
    && grep -qF "$STAMPED" <<< "$OUT_CAT_REAL"; then
   pass "$NOGIT_DESC"
 else
   fail "$NOGIT_DESC" \
-       "'nothing was stamped:' naming 'is not a git checkout', no '$STAMPED', and the same fixture with its .git stamped" \
-       "$(digest "$OUT_NOGIT")"
+       "rc 0, 'kit healthy', the 'not a git checkout' warning, no 'nothing was stamped:', no '$STAMPED', and the same fixture with its .git stamped" \
+       "rc $RC_NOGIT · $(digest "$OUT_NOGIT")"
 fi
 
 # The third site says nothing on its own — a machine with no plugins cache is not a defect, it is

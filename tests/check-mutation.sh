@@ -1056,6 +1056,19 @@ mut_PR_stamp_why_deleted_blind() {
   sed -i '/^mutation_stamp_why() {/,/^}/ s@^    if \[ -n "\$deleted" \]; then$@    if false; then@' "$1"
 }
 
+# cmd_health counts a plain-copy kit install as a FAILURE again: the not-git reason falls through to
+# health_bad, a red line no gate needs and no remedy removes. check-health.sh's `stamp:` assertion and
+# the plain-copy tree world of check-gates.sh read it.
+mut_HEALTH_not_git_counts_failure() {
+  sed -i '/^cmd_health() {/,/^}/ s@if \[ "\$MUTATION_STAMP_WHY_KIND" = not-git \]; then@if false; then@' "$1"
+}
+
+# The catch-all reason goes silent: a tracked entry that cannot be hashed (a broken symlink, a
+# submodule) sends the gate back to the generic sentence and health to "hold no file". World 13.
+mut_PR_stamp_why_unreadable_blind() {
+  sed -i '/^mutation_stamp_why() {/,/^}/ s@^      MUTATION_STAMP_WHY="a tracked file under@      : "a tracked file under@' "$1"
+}
+
 # The reason stops saying the root is not a git checkout: health tells the operator to commit files
 # in a directory git cannot commit to. check-health.sh's `stamp:` assertion reads it.
 mut_PR_stamp_why_not_git_blind() {
@@ -5077,6 +5090,8 @@ CATALOG=(
   PR_stamp_key_partial_on_deleted
   PR_stamp_why_deleted_blind
   PR_stamp_why_not_git_blind
+  HEALTH_not_git_counts_failure
+  PR_stamp_why_unreadable_blind
   HEALTH_stamp_window_blind
   HEALTH_stamp_tree_blind
   RUN_inverted_journal

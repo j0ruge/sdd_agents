@@ -2049,6 +2049,11 @@ readonly MUTATION_CATALOGUE_FLOOR=8
 # Every one of these is reachable from both callers, so both name the reason — read off
 # mutation_stamp_why, never re-derived — instead of a remedy that cannot work.
 #
+# DECLARED LIMITS (D15), none reachable in today's flow: a kit vendored inside another repo but
+# untracked or ignored there is told "commit them", which is wrong when it is ignored; an exported
+# GIT_DIR / GIT_WORK_TREE redirects the listing to another repository; and GIT_LITERAL_PATHSPECS=1
+# turns ':(exclude)…' into a literal path, which puts the ratchet back in the key.
+#
 # Which of MUTATION_STAMP_PATHS are absent at <root>, PUBLISHED in MUTATION_STAMP_MISSING as a
 # space-separated list spelled `bin/ config/` (empty ⇒ all four are there). The ONE definition of
 # "which paths are missing": the key's guard below reads it, and so does mutation_stamp_why. Called,
@@ -2061,26 +2066,40 @@ mutation_stamp_missing() { # mutation_stamp_missing <root>
   done
 }
 
-# WHY <root> has no stamp key, PUBLISHED in MUTATION_STAMP_WHY as a clause that ends in its remedy
-# (empty ⇒ nothing here explains it). The ONE definition of the reason, read by the two refusals
-# that have to SAY it — gate_PR's sentence and cmd_health's — so the gate never sends the operator
-# to `sdd health` for a root `sdd health` will refuse in other words, or in none. Called only after
-# mutation_stamp_key came back empty, and called, never `$( )`-captured, for the reason above.
+# WHY <root> has no stamp key, PUBLISHED in MUTATION_STAMP_WHY as a clause that ends in its remedy,
+# and in MUTATION_STAMP_WHY_KIND as one of `missing`, `not-git`, `deleted`, `untracked` or
+# `unreadable` (both empty ⇒ nothing here explains it). The ONE definition of the reason, read by the
+# two refusals that have to SAY it — gate_PR's sentence and cmd_health's — so the gate never sends
+# the operator to `sdd health` for a root `sdd health` will refuse in other words, or in none. The
+# KIND is what a caller branches on (cmd_health treats `not-git` as a warning, not a failure), so no
+# caller ever re-derives the decision by matching the message. Called only after mutation_stamp_key
+# came back empty, and called, never `$( )`-captured, for the reason above.
 mutation_stamp_why() { # mutation_stamp_why <root>
   local deleted
   MUTATION_STAMP_WHY=""
+  MUTATION_STAMP_WHY_KIND=""
   mutation_stamp_missing "$1"
   if [ -n "$MUTATION_STAMP_MISSING" ]; then
+    MUTATION_STAMP_WHY_KIND=missing
     MUTATION_STAMP_WHY="$MUTATION_STAMP_MISSING missing at $1, and the stamp keys on ${MUTATION_STAMP_PATHS[*]} together — restore it"
   elif ! git -C "$1" rev-parse --is-inside-work-tree >/dev/null 2>&1; then
+    MUTATION_STAMP_WHY_KIND=not-git
     MUTATION_STAMP_WHY="$1 is not a git checkout, and the stamp keys on the TRACKED content of ${MUTATION_STAMP_PATHS[*]} — measure a git checkout of the kit (run sdd health inside one)"
   else
     deleted="$(git -C "$1" ls-files -z -d -- "${MUTATION_STAMP_PATHSPEC[@]}" 2>/dev/null | tr '\0' ' ')" || deleted=""
     deleted="${deleted% }"
     if [ -n "$deleted" ]; then
+      MUTATION_STAMP_WHY_KIND=deleted
       MUTATION_STAMP_WHY="tracked file(s) deleted from the working tree: $deleted — commit the deletion or restore them"
     elif [ -z "$(git -C "$1" ls-files -c -- "${MUTATION_STAMP_PATHSPEC[@]}" 2>/dev/null || true)" ]; then
+      MUTATION_STAMP_WHY_KIND=untracked
       MUTATION_STAMP_WHY="no file under ${MUTATION_STAMP_PATHS[*]} is tracked at $1 — commit them"
+    else
+      # The catch-all: files are tracked and none is deleted, yet the listing could not be hashed —
+      # a submodule (gitlink), a sparse or skip-worktree entry, a tracked symlink whose target is
+      # gone. Named rather than left to the generic sentence, whose remedy cannot work here.
+      MUTATION_STAMP_WHY_KIND=unreadable
+      MUTATION_STAMP_WHY="a tracked file under ${MUTATION_STAMP_PATHS[*]} could not be read in the working tree of $1 (a submodule, a sparse or skip-worktree entry, a broken symlink) — make every tracked file there a readable file, or untrack it"
     fi
   fi
 }
@@ -6031,7 +6050,13 @@ cmd_health() {
     # afterwards, and a health that went quiet here would be a refusal with no reachable remedy.
     # Same helper as the gate, so the two agree.
     mutation_stamp_why "$kit"
-    if [ -n "$MUTATION_STAMP_WHY" ]; then
+    if [ "$MUTATION_STAMP_WHY_KIND" = not-git ]; then
+      # A kit installed as a plain copy — the fallback of every target repo. No gate can ever
+      # demand a stamp here (gate_PR reads it at $REPO_ROOT, always a git toplevel), so a failure
+      # would be a red line with no remedy that removes it. Never stamped, as ADR 0014 point 4
+      # says; said, and not counted.
+      warn "$kit is not a git checkout — no gate can demand a mutation stamp here; none written"
+    elif [ -n "$MUTATION_STAMP_WHY" ]; then
       health_bad "nothing was stamped: $MUTATION_STAMP_WHY, then re-run sdd health"
     else
       health_bad "nothing was stamped: ${MUTATION_STAMP_PATHS[*]} hold no file at $kit, so there is no content for a stamp to describe"
