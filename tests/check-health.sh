@@ -66,6 +66,8 @@
 #      `SDD_MUTANT=1 run-all.sh --list` prints, calling each failure primitive with SDD_MUTANT set,
 #      unset and empty (floor 9, five known worlds measured first), plus the two sensors that call
 #      their own primitive on purpose asserted to do it outside the mutant. Prefixed `surface:`.
+#   19. a kit that is not a git checkout is refused out loud and never stamped: the stamp keys on
+#      tracked content (ADR 0014, increment I4). Prefixed `stamp:`.
 #
 # Usage: tests/check-health.sh   (exit 0 = cmd_health discriminates)
 #
@@ -211,6 +213,17 @@ build_fixture() {
   set_test_cmd "$STUB_TEST_CMD"
 
   write_stub_suite with-count
+
+  # A git checkout, committed HERE and before any health run: the stamp keys on the TRACKED content
+  # of the four measured paths and refuses a root that is not a git checkout (ADR 0014, increment
+  # I4), so a plain directory would never be stamped. What the stub suite writes DURING a run
+  # (tests/stub-argv.txt) and the baseline set_baseline writes are left untracked — the first is
+  # outside the key because it is untracked, the second because the key excludes the ratchet — so
+  # neither moves the key while the catalogue runs. home/ is the redirected HOME, not the kit.
+  printf 'home/\n' > "$FIX/.gitignore"
+  ( cd "$FIX" && git init -q -b main && git config user.email "fixture@example.com" \
+      && git config user.name "Fixture" && git add -A && git commit -qm "chore: the fixture kit" ) >/dev/null \
+    || broken "the fixture kit could not be made a git checkout — no world here could be stamped"
 }
 
 # The stub suite. Three switches, all defaulting to the healthy world: assertion 7 needs a suite
@@ -320,8 +333,9 @@ HEALTH_RC=0
 # from this repo it would measure THIS repo and spend twenty to fifty minutes on the real
 # catalogue; run from inside a check-mutation.sh sandbox — which is a copy of the kit, catalogue
 # included — it would recurse into a second catalogue for every mutant. Measured, not feared: both
-# happened on the first run after the resolution changed. $FIX is not a git checkout, so the
-# runner falls back to its own $SDD_HOME, which IS the fixture. A sensor whose answer depends on
+# happened on the first run after the resolution changed. $FIX is a git checkout carrying a
+# catalogue, so the runner measures it — and when a world removes the catalogue, the fallback is
+# its own $SDD_HOME, which IS the fixture too. A sensor whose answer depends on
 # the caller's cwd is not a sensor, the same reason HOME is redirected on the line below.
 health_run() {
   HEALTH_OUT="$( cd "$FIX" && HOME="$FIX/home" NO_COLOR=1 "$FIX/bin/sdd" health 2>&1 )"
@@ -844,6 +858,29 @@ else
   fail "$CATALOG_FLOOR_DESC" \
        "'of 0' and 'of 3' both fail naming the size the catalogue defines ($CATALOG_DEFINED), a catalogue that is GONE fails on the floor at 0 of 0, none of the three writes the stamp, and '$LATER' and '$VERDICT' are still printed; the real size reaches 'kit healthy', stamps, and never says the sentence" \
        "empty: rc $RC_CAT_EMPTY · $(digest "$OUT_CAT_EMPTY") // narrowed: rc $RC_CAT_NARROW · $(digest "$OUT_CAT_NARROW") // gone: rc $RC_CAT_GONE · $(digest "$OUT_CAT_GONE") // real: rc $RC_CAT_REAL · $(digest "$OUT_CAT_REAL")"
+fi
+
+# A kit that is not a git checkout — an install made by plain copy. The stamp keys on TRACKED
+# content (ADR 0014, increment I4), so there is nothing to key on and nothing may be stamped; and
+# the refusal is said with its reason and remedy, never a silent `rm -f`, because gate_PR sends the
+# operator to this very command. `.git` is moved aside and back, so the world after this one is the
+# checkout it always was. Differential floor: OUT_CAT_REAL above, the same fixture WITH its .git,
+# was stamped.
+NOGIT_DESC='stamp: a kit that is not a git checkout is refused out loud and never stamped'
+green_world
+mv "$FIX/.git" "$FIX/.git.aside"
+health_run
+OUT_NOGIT="$HEALTH_OUT"
+mv "$FIX/.git.aside" "$FIX/.git"
+if grep -qF 'nothing was stamped:' <<< "$OUT_NOGIT" \
+   && grep -qF 'is not a git checkout' <<< "$OUT_NOGIT" \
+   && ! grep -qF "$STAMPED" <<< "$OUT_NOGIT" \
+   && grep -qF "$STAMPED" <<< "$OUT_CAT_REAL"; then
+  pass "$NOGIT_DESC"
+else
+  fail "$NOGIT_DESC" \
+       "'nothing was stamped:' naming 'is not a git checkout', no '$STAMPED', and the same fixture with its .git stamped" \
+       "$(digest "$OUT_NOGIT")"
 fi
 
 # The third site says nothing on its own — a machine with no plugins cache is not a defect, it is

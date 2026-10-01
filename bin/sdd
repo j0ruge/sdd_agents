@@ -1952,7 +1952,26 @@ gate_DOCS() {
 # for documents no mutant edits. What the mutants DO edit is bin/sdd, and what decides their fate
 # is the assertions in tests/ plus the templates/ and config/ those assertions read. The residual
 # gap is in TODO.md with its direction, not hidden in a sentence here.
+#
+# Only what git TRACKS under them, and minus MUTATION_STAMP_EXCLUDE (ADR 0014, increment I4). The
+# key used to hash every file `find` saw, which charged a stamp for two things no mutant reads:
+# junk git ignores (a `tests/debug.log` left by a run, #119), and the backlog ratchet — principle 5
+# moves tests/health-baseline.txt in the same commit as every finding it registers, and each one
+# threw the stamp away and bought another `sdd health` before gate_PR (#117). Inside the suite only
+# check-lang.sh reads the ratchet, independently of any mutant; health_ratchet runs in cmd_health,
+# outside the suite. A NEW file is outside the key until it is committed; once committed it enters
+# the key and gate_PR refuses until `sdd health` runs again — the safe direction.
 readonly MUTATION_STAMP_PATHS=(bin tests templates config)
+readonly MUTATION_STAMP_EXCLUDE=(tests/health-baseline.txt)
+# The git pathspec both readers of the listing hand to `git ls-files` — the key and the reason it
+# could not be computed — built ONCE from the two arrays above, so they cannot disagree about which
+# files the stamp describes.
+MUTATION_STAMP_PATHSPEC=("${MUTATION_STAMP_PATHS[@]}")
+for _stamp_exclude in "${MUTATION_STAMP_EXCLUDE[@]}"; do
+  MUTATION_STAMP_PATHSPEC+=(":(exclude)$_stamp_exclude")
+done
+unset _stamp_exclude
+readonly MUTATION_STAMP_PATHSPEC
 
 # Under .sdd/logs/ and not .sdd/: `sdd install` guarantees .sdd/logs/ is gitignored in every repo
 # the kit touches, while .sdd/config.sh right above it is TRACKED. A stamp one directory up would
@@ -2008,32 +2027,32 @@ readonly MUTATION_CATALOGUE_FLOOR=8
 
 # The content key of the paths above: prints it, or prints NOTHING and returns 1.
 #
-# The difference is the whole guard, and it refuses TWO roots, once, instead of at each call site:
-#   - a root where ANY ONE of the four paths is absent. The listing below would otherwise be taken
-#     over whichever paths remain, `sdd health` would stamp that partial listing, and gate_PR —
-#     reading the same partial listing — would accept it: a stamp certifying a tree the catalogue
-#     was never run against as a whole. The guard used to refuse only a root where ALL FOUR were
-#     absent, and said so here; one missing path went through without a signal (ADR 0014,
-#     increment I3). Checked per path (mutation_stamp_missing), before anything is listed. This
-#     root is REACHABLE — tests/ holding the catalogue says nothing about config/ — so both callers
-#     that refuse on an empty key name the missing path instead of a remedy that cannot work.
-#   - a root whose listing is empty. `md5sum` of no input at all is a perfectly valid-looking
-#     constant, so such a root would be handed a stable key every other empty root matches — a
-#     stamp certifying nothing, indistinguishable from a stamp certifying everything.
+# The key is the md5 of `md5sum <relative path>` over every file `git ls-files` lists under
+# MUTATION_STAMP_PATHSPEC, read from the WORKING TREE (so an uncommitted edit moves it, which is
+# what the window check in cmd_health needs), sorted. The relative paths ride inside the digest, so
+# a file that merely MOVED changes the key.
 #
-# ⚠️ `xargs -r`, and it is what makes the sentence above TRUE rather than merely intended: without
-# it, `xargs` with nothing on its input runs `md5sum` once with no operands, `md5sum` reads the
-# already-drained pipe, and the function hands back the digest of the empty string — the exact
-# constant the guard exists to refuse, with the `[ -n "$listing" ]` below satisfied by it. Today no
-# caller reaches that state (both ends only ask about a root whose tests/ holds a catalogue, so
-# `find` always has at least that file to print), and that is declared, not sold as measured: this
-# is a one-token hardening of a guard whose comment was ahead of its code.
+# Empty is the whole guard, and it refuses these roots once, instead of at each call site:
+#   - a root where ANY ONE of the four paths is absent (ADR 0014, increment I3). The listing would
+#     otherwise be taken over whichever paths remain, `sdd health` would stamp that partial
+#     listing, and gate_PR would accept it. Checked per path (mutation_stamp_missing), before
+#     anything is listed.
+#   - a root that is not a git checkout (increment I4): `git ls-files` fails, and there is no
+#     tracked content to describe. A kit installed as a plain copy is never stamped.
+#   - a root with a tracked file deleted from the working tree: its `md5sum` fails, and the key is
+#     then EMPTY, never the digest of the files that remain — the same partial listing as the
+#     first case, reached by another road. `|| listing=""` and not `|| true` is that rule: under
+#     `pipefail` the substitution fails with `xargs`, and `|| true` would keep the partial output.
+#   - a root whose listing is empty. `md5sum` of no input is a valid-looking constant every other
+#     empty root matches — a stamp certifying nothing. `xargs -r` keeps that constant from being
+#     computed at all.
+# Every one of these is reachable from both callers, so both name the reason — read off
+# mutation_stamp_why, never re-derived — instead of a remedy that cannot work.
+#
 # Which of MUTATION_STAMP_PATHS are absent at <root>, PUBLISHED in MUTATION_STAMP_MISSING as a
 # space-separated list spelled `bin/ config/` (empty ⇒ all four are there). The ONE definition of
-# "which paths are missing": the key's guard below reads it, and so do the two refusals that have
-# to NAME the path — gate_PR's sentence and cmd_health's — so the three can never disagree about
-# which root is stampable. Called, never `$( )`-captured: the result is a global, and a capture
-# would run it in a subshell and lose it.
+# "which paths are missing": the key's guard below reads it, and so does mutation_stamp_why. Called,
+# never `$( )`-captured: the result is a global, and a capture would run it in a subshell and lose it.
 mutation_stamp_missing() { # mutation_stamp_missing <root>
   local p
   MUTATION_STAMP_MISSING=""
@@ -2042,16 +2061,40 @@ mutation_stamp_missing() { # mutation_stamp_missing <root>
   done
 }
 
+# WHY <root> has no stamp key, PUBLISHED in MUTATION_STAMP_WHY as a clause that ends in its remedy
+# (empty ⇒ nothing here explains it). The ONE definition of the reason, read by the two refusals
+# that have to SAY it — gate_PR's sentence and cmd_health's — so the gate never sends the operator
+# to `sdd health` for a root `sdd health` will refuse in other words, or in none. Called only after
+# mutation_stamp_key came back empty, and called, never `$( )`-captured, for the reason above.
+mutation_stamp_why() { # mutation_stamp_why <root>
+  local deleted
+  MUTATION_STAMP_WHY=""
+  mutation_stamp_missing "$1"
+  if [ -n "$MUTATION_STAMP_MISSING" ]; then
+    MUTATION_STAMP_WHY="$MUTATION_STAMP_MISSING missing at $1, and the stamp keys on ${MUTATION_STAMP_PATHS[*]} together — restore it"
+  elif ! git -C "$1" rev-parse --is-inside-work-tree >/dev/null 2>&1; then
+    MUTATION_STAMP_WHY="$1 is not a git checkout, and the stamp keys on the TRACKED content of ${MUTATION_STAMP_PATHS[*]} — measure a git checkout of the kit (run sdd health inside one)"
+  else
+    deleted="$(git -C "$1" ls-files -z -d -- "${MUTATION_STAMP_PATHSPEC[@]}" 2>/dev/null | tr '\0' ' ')" || deleted=""
+    deleted="${deleted% }"
+    if [ -n "$deleted" ]; then
+      MUTATION_STAMP_WHY="tracked file(s) deleted from the working tree: $deleted — commit the deletion or restore them"
+    elif [ -z "$(git -C "$1" ls-files -c -- "${MUTATION_STAMP_PATHSPEC[@]}" 2>/dev/null || true)" ]; then
+      MUTATION_STAMP_WHY="no file under ${MUTATION_STAMP_PATHS[*]} is tracked at $1 — commit them"
+    fi
+  fi
+}
+
 mutation_stamp_key() { # mutation_stamp_key <root>
   local listing
   mutation_stamp_missing "$1"
   [ -z "$MUTATION_STAMP_MISSING" ] || return 1
   # `md5sum` and not `sha256sum`: it is the digest `sdd preflight` already probes the userland for,
-  # so this adds no assumption the kit was not already making. The relative paths ride INSIDE the
-  # digest, which is what makes a file that merely MOVED change the key.
+  # so this adds no assumption the kit was not already making. `sort -zu`: during a merge conflict
+  # `ls-files` lists an unmerged path once per stage.
   listing="$( CDPATH='' cd "$1" 2>/dev/null \
-              && find "${MUTATION_STAMP_PATHS[@]}" -type f -print0 2>/dev/null \
-                 | LC_ALL=C sort -z | xargs -0 -r md5sum 2>/dev/null )" || true
+              && git ls-files -z -c -- "${MUTATION_STAMP_PATHSPEC[@]}" 2>/dev/null \
+                 | LC_ALL=C sort -zu | xargs -0 -r md5sum 2>/dev/null )" || listing=""
   [ -n "$listing" ] || return 1
   # Herestring, never `printf … |`: under `pipefail` that form returns 141 when the reader exits
   # first, which is a failure whose likelihood grows with the size of the tree being hashed.
@@ -2124,19 +2167,19 @@ gate_PR() {
     # of knowing nothing agreeing that everything is fine.
     #
     # An empty key is REACHABLE: the scope condition above proves tests/ holds a file, and says
-    # nothing about bin/, templates/ or config/ (ADR 0014, increment I3). For that root `sdd health`
-    # is no remedy — it refuses to stamp a partial root, and says so — so the sentence names the
-    # missing path, read off the same mutation_stamp_missing the key's guard reads. Every other
-    # refusal keeps the one sentence below; an empty key with all four paths present (an empty
-    # listing) is still unreachable here, because tests/ is non-empty, and falls into it.
+    # nothing about bin/, templates/ or config/ (ADR 0014, increment I3), nor about whether every
+    # tracked file is still in the working tree (increment I4). For such a root `sdd health` alone
+    # is no remedy — it refuses to stamp it, and says so — so the sentence carries the reason and
+    # its remedy, read off the same mutation_stamp_why cmd_health reads. An empty key nothing there
+    # explains falls into the one sentence below.
     #
     # The remedy is IN each sentence, the same rule cmd_health's red-suite line obeys and for the
     # same measured reason: without the command named, the operator runs the fast suite, sees
     # green, and concludes the gate is lying — which is the one thing it may never be.
     if [ -z "$key" ]; then
-      mutation_stamp_missing "$REPO_ROOT"
-      if [ -n "$MUTATION_STAMP_MISSING" ]; then
-        GATE_WHY="no mutation stamp is possible for this tree: $MUTATION_STAMP_MISSING missing at the root, and the stamp keys on ${MUTATION_STAMP_PATHS[*]} together — restore it, then run 'sdd health'"
+      mutation_stamp_why "$REPO_ROOT"
+      if [ -n "$MUTATION_STAMP_WHY" ]; then
+        GATE_WHY="no mutation stamp is possible for this tree: $MUTATION_STAMP_WHY, then run 'sdd health'"
         return 1
       fi
     fi
@@ -5982,13 +6025,14 @@ cmd_health() {
     # just came back red, over this very content, had been measured and was clean.
     rm -f "$stamp_path"
   elif [ -z "$stamp_key" ]; then
-    # A green catalogue over a root the key refuses — one of the four measured paths is absent
-    # (ADR 0014, increment I3). Said out loud, never a silent `rm -f`: gate_PR names the same path
-    # and tells the operator to run this command afterwards, and a health that went quiet here
-    # would be a refusal with no reachable remedy. Same helper as the gate, so the two agree.
-    mutation_stamp_missing "$kit"
-    if [ -n "$MUTATION_STAMP_MISSING" ]; then
-      health_bad "nothing was stamped: $MUTATION_STAMP_MISSING missing at $kit, and the stamp keys on ${MUTATION_STAMP_PATHS[*]} together — restore it, then re-run sdd health"
+    # A green catalogue over a root the key refuses — a measured path absent, not a git checkout,
+    # a tracked file deleted (ADR 0014, increments I3 and I4). Said out loud, never a silent
+    # `rm -f`: gate_PR names the same reason and tells the operator to run this command
+    # afterwards, and a health that went quiet here would be a refusal with no reachable remedy.
+    # Same helper as the gate, so the two agree.
+    mutation_stamp_why "$kit"
+    if [ -n "$MUTATION_STAMP_WHY" ]; then
+      health_bad "nothing was stamped: $MUTATION_STAMP_WHY, then re-run sdd health"
     else
       health_bad "nothing was stamped: ${MUTATION_STAMP_PATHS[*]} hold no file at $kit, so there is no content for a stamp to describe"
     fi

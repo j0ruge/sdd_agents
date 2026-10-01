@@ -1019,16 +1019,47 @@ mut_PR_stamp_key_partial_listing() {
   sed -i '/^mutation_stamp_key() {/,/^}/ s@\[ -z "\$MUTATION_STAMP_MISSING" \] || return 1@:@' "$1"
 }
 
-# gate_PR goes back to the generic sentence for a partial root: "run 'sdd health'", a remedy that
+# gate_PR goes back to the generic sentence for an unkeyable root: "run 'sdd health'", a remedy that
 # cannot work there because health refuses to stamp that root. World 9 of check-gates.sh reads it.
 mut_PR_partial_root_blind_remedy() {
-  sed -i '/^gate_PR() {/,/^}/ s@if \[ -n "\$MUTATION_STAMP_MISSING" \]; then@if false; then@' "$1"
+  sed -i '/^gate_PR() {/,/^}/ s@if \[ -n "\$MUTATION_STAMP_WHY" \]; then@if false; then@' "$1"
 }
 
-# cmd_health refuses the partial root in silence again — the stamp is removed and nothing is said,
+# cmd_health refuses the unkeyable root in silence again — the stamp is removed and nothing is said,
 # so the remedy gate_PR names answers nothing. World 9 of check-gates.sh reads the health output.
 mut_HEALTH_unstampable_silent() {
-  sed -i '/^cmd_health() {/,/^}/ s@health_bad "nothing was stamped: \$MUTATION_STAMP_MISSING@: "nothing was stamped: $MUTATION_STAMP_MISSING@' "$1"
+  sed -i '/^cmd_health() {/,/^}/ s@health_bad "nothing was stamped: \$MUTATION_STAMP_WHY@: "nothing was stamped: $MUTATION_STAMP_WHY@' "$1"
+}
+
+# The ratchet's exclusion vanishes from the pathspec: tests/health-baseline.txt is hashed again, and
+# every finding registered under principle 5 throws the stamp away (#117; ADR 0014, increment I4).
+# World 10 of check-gates.sh catches it. Addressed by the pathspec's own block, which is top level.
+mut_PR_stamp_key_keeps_baseline() {
+  sed -i '/^MUTATION_STAMP_PATHSPEC=(/,/^readonly MUTATION_STAMP_PATHSPEC$/ s@^  MUTATION_STAMP_PATHSPEC+=(":(exclude)\$_stamp_exclude")$@  :@' "$1"
+}
+
+# The listing reads untracked files too, ignored ones included (`--others` with no
+# `--exclude-standard`): a `tests/debug.log` moves the key again (#119). World 11 of check-gates.sh.
+mut_PR_stamp_key_reads_ignored() {
+  sed -i '/^mutation_stamp_key() {/,/^}/ s@git ls-files -z -c --@git ls-files -z -c --others --@' "$1"
+}
+
+# A failed `md5sum` (a tracked file deleted from the working tree) keeps the PARTIAL listing instead
+# of emptying it: `sdd health` stamps the digest of the files that remain. World 12 of check-gates.sh.
+mut_PR_stamp_key_partial_on_deleted() {
+  sed -i '/^mutation_stamp_key() {/,/^}/ s@md5sum 2>/dev/null )" || listing=""@md5sum 2>/dev/null )" || true@' "$1"
+}
+
+# The reason stops naming a tracked file deleted from the working tree: the gate falls back to the
+# generic sentence and health to "hold no file", and neither names the file to restore. World 12.
+mut_PR_stamp_why_deleted_blind() {
+  sed -i '/^mutation_stamp_why() {/,/^}/ s@^    if \[ -n "\$deleted" \]; then$@    if false; then@' "$1"
+}
+
+# The reason stops saying the root is not a git checkout: health tells the operator to commit files
+# in a directory git cannot commit to. check-health.sh's `stamp:` assertion reads it.
+mut_PR_stamp_why_not_git_blind() {
+  sed -i '/^mutation_stamp_why() {/,/^}/ s@^  elif ! git -C "\$1" rev-parse --is-inside-work-tree >/dev/null 2>&1; then$@  elif false; then@' "$1"
 }
 
 # The WRITER goes back to answering about the tree its own file sits in, whatever tree the operator
@@ -5041,6 +5072,11 @@ CATALOG=(
   PR_stamp_key_partial_listing
   PR_partial_root_blind_remedy
   HEALTH_unstampable_silent
+  PR_stamp_key_keeps_baseline
+  PR_stamp_key_reads_ignored
+  PR_stamp_key_partial_on_deleted
+  PR_stamp_why_deleted_blind
+  PR_stamp_why_not_git_blind
   HEALTH_stamp_window_blind
   HEALTH_stamp_tree_blind
   RUN_inverted_journal
