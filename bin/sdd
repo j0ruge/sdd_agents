@@ -1959,8 +1959,9 @@ gate_DOCS() {
 # moves tests/health-baseline.txt in the same commit as every finding it registers, and each one
 # threw the stamp away and bought another `sdd health` before gate_PR (#117). Inside the suite only
 # check-lang.sh reads the ratchet, independently of any mutant; health_ratchet runs in cmd_health,
-# outside the suite. A NEW file is outside the key until it is committed; once committed it enters
-# the key and gate_PR refuses until `sdd health` runs again — the safe direction.
+# outside the suite. A NEW file is outside the key until it is tracked — `git ls-files -c` reads the
+# index, so `git add` is enough, no commit needed; once tracked it enters the key and gate_PR refuses
+# until `sdd health` runs again — the safe direction.
 readonly MUTATION_STAMP_PATHS=(bin tests templates config)
 readonly MUTATION_STAMP_EXCLUDE=(tests/health-baseline.txt)
 # The git pathspec both readers of the listing hand to `git ls-files` — the key and the reason it
@@ -2189,8 +2190,10 @@ gate_PR() {
     # nothing about bin/, templates/ or config/ (ADR 0014, increment I3), nor about whether every
     # tracked file is still in the working tree (increment I4). For such a root `sdd health` alone
     # is no remedy — it refuses to stamp it, and says so — so the sentence carries the reason and
-    # its remedy, read off the same mutation_stamp_why cmd_health reads. An empty key nothing there
-    # explains falls into the one sentence below.
+    # its remedy, read off the same mutation_stamp_why cmd_health reads. That helper classifies
+    # every empty key today, so for an empty key the generic sentence below is defensive only —
+    # unreachable unless a future refusal of the key is added without a mutation_stamp_why branch
+    # (D15: no probe can reach it). The sentence is reached for a key that differs from the stamp.
     #
     # The remedy is IN each sentence, the same rule cmd_health's red-suite line obeys and for the
     # same measured reason: without the command named, the operator runs the fast suite, sees
@@ -3446,7 +3449,10 @@ ledger_outcome_defs() {   # printed jq, spliced into cmd_autonomy AND kaizen_ser
 # human window cannot group one file two ways, and no site downstream that reads `.kit_sha` has to
 # change. Rows without `kit_rev` (every row written before ADR 0014) pass through untouched.
 # `kit_rev` present with `kit_rev_dirty` null becomes `kit_dirty: null`, which is off the axis: the
-# fail-safe direction, on purpose. The kit guard never reads this — it keeps the raw pair.
+# fail-safe direction, on purpose. No writer emits that row today (a hand-edited or truncated ledger
+# can); its probe is `kit-rev-dirty: a row with kit_rev but no kit_rev_dirty falls off the axis` in
+# tests/check-kaizen.sh, held by mut_KAIZEN_kit_rev_dirty_failopen. The kit guard never reads this —
+# it keeps the raw pair.
 ledger_kit_version_defs() {   # printed jq, spliced into cmd_autonomy AND kaizen_series
   printf '%s' 'def kit_version_rows: map(if type == "object" and .kit_rev != null then . + {kit_sha_raw: .kit_sha, kit_sha: .kit_rev, kit_dirty: .kit_rev_dirty} else . end);'
 }
@@ -6059,6 +6065,9 @@ cmd_health() {
     elif [ -n "$MUTATION_STAMP_WHY" ]; then
       health_bad "nothing was stamped: $MUTATION_STAMP_WHY, then re-run sdd health"
     else
+      # Defensive — unreachable today: mutation_stamp_why classifies every empty key (a KIND and a
+      # sentence for each), so this generic line only speaks if a future refusal of the key is
+      # added without teaching mutation_stamp_why its name. No probe can reach it (D15).
       health_bad "nothing was stamped: ${MUTATION_STAMP_PATHS[*]} hold no file at $kit, so there is no content for a stamp to describe"
     fi
     rm -f "$stamp_path"

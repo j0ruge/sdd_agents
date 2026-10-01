@@ -63,8 +63,8 @@ runs in `cmd_health`, outside the suite.
    `git ls-files` over `bin tests templates config`, excluding `tests/health-baseline.txt`, hashed
    from the working tree. Each of the four paths must exist, and a root that is not a git checkout
    gets no key, so it is never stamped. A file that is new and not yet tracked is outside the key;
-   once committed it enters the key, and the gate refuses until `sdd health` runs again. That is
-   the safe direction.
+   once tracked — staged with `git add` is enough, since `git ls-files -c` reads the index — it
+   enters the key, and the gate refuses until `sdd health` runs again. That is the safe direction.
 
 **Who owns these artifacts** (CLAUDE.md, principle 1). The runner writes `kit_rev` on every row it
 already writes, and `cmd_health` writes the stamp. No agent and no human writes either one, so no

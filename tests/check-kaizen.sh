@@ -2280,6 +2280,15 @@ KVCD_SERIES="$( cd "$FIX" && SDD_STATE_DIR="$OUTSIDE/kvCdirty" "$KSDD" kaizen --
 assert_eq "kit-version: dirt outside the behaviour paths keeps a row comparable, dirt inside excludes it" \
   "0 3 1 2" \
   "$(jq -r '"\(.excluded.non_comparable) \(.guard.missions_with_session)"' <<< "$KVC_SERIES") $(jq -r '"\(.excluded.non_comparable) \(.guard.missions_with_session)"' <<< "$KVCD_SERIES")"
+# The fail-safe of ledger_kit_version_defs: a row with `kit_rev` but `kit_rev_dirty` null (no writer
+# emits it today; a hand-edited or truncated ledger can) becomes `kit_dirty: null`, off the axis —
+# never read as clean. Deliberately NOT under the `kit-version: ` prefix, which the I2 Check counts.
+mkdir -p "$OUTSIDE/kvCnull"
+vseq=0
+{ vrow c1 aaa0003 rrr0001 false false; vrow c2 aaa0003 rrr0001 false null
+  vrow c3 aaa0003 rrr0001 false false; } | localize > "$OUTSIDE/kvCnull/autonomy-log.jsonl"
+assert_eq "kit-rev-dirty: a row with kit_rev but no kit_rev_dirty falls off the axis" \
+  "1" "$( cd "$FIX" && SDD_STATE_DIR="$OUTSIDE/kvCnull" "$KSDD" kaizen --series 2>/dev/null | jq -r '.excluded.non_comparable' )"
 # The human window splices the same definition: its per-version table must name the behaviour
 # version and never the raw sha it rewrote. Anti-vacuity: the rrr0001 line has to EXIST.
 KVA_TABLE="$( cd "$FIX" && SDD_STATE_DIR="$OUTSIDE/kvA" "$KSDD" autonomy 2>&1 )"

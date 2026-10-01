@@ -3442,6 +3442,13 @@ mut_KAIZEN_kit_rev_dirty_ignored() {
   sed -i '/^ledger_kit_version_defs() {/,/^}/ s@, kit_dirty: .kit_rev_dirty}@}@' "$1"
 }
 
+
+# The fail-safe flips to fail-open: a row with kit_rev but kit_rev_dirty null is read as CLEAN and
+# stays on the axis. Caught by `kit-rev-dirty: a row with kit_rev but no kit_rev_dirty falls off the
+# axis` in check-kaizen.sh.
+mut_KAIZEN_kit_rev_dirty_failopen() {
+  sed -i '/^ledger_kit_version_defs() {/,/^}/ s@kit_dirty: .kit_rev_dirty}@kit_dirty: (.kit_rev_dirty // false)}@' "$1"
+}
 # ---------------------------------------------------------------------------
 # 20260828-instrumento-honesto — what a session DID, one definition in two readers.
 # ---------------------------------------------------------------------------
@@ -5322,6 +5329,7 @@ CATALOG=(
   KAIZEN_kit_version_ignored
   AUTONOMY_kit_version_ignored
   KAIZEN_kit_rev_dirty_ignored
+  KAIZEN_kit_rev_dirty_failopen
   AUTONOMY_outcome_reads_moved_only
   KAIZEN_outcome_inlined_old
   AUTONOMY_waste_idle_only

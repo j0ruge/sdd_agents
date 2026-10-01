@@ -2,6 +2,8 @@
 
 Date: 2026-08-17 · Status: accepted
 
+Amended by: 0014 (part 1 superseded: the axis groups by the last behaviour commit, `kit_rev`)
+
 ## Context
 
 `sdd kaizen` judges the previous kit change by grouping the autonomy ledger on `kit_sha` — the
