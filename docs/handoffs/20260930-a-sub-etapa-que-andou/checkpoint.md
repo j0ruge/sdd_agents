@@ -1,6 +1,6 @@
 ---
 missao: 20260930-a-sub-etapa-que-andou
-atualizado: 2026-10-01 01:49
+atualizado: 2026-10-01 02:20
 ---
 
 # Checkpoint — o sub-passo da QA que andou
@@ -43,6 +43,7 @@ atualizado: 2026-10-01 01:49
 | I4 | o histórico: `step_after` recuperado pela próxima linha QA | `o=$(./bin/sdd autonomy --all-repos --by-mission 2>/dev/null); grep -c -e '20260929-aviso-diretoria-por-email  21 session(s) · 19 advanced · 2 churned · 0 idle' -e '20260930-e2e-local-diz-por-que-caiu  15 session(s) · 14 advanced · 1 churned · 0 idle' -e '20260930-justificativa-pedido-alcada  20 session(s) · 17 advanced · 3 churned · 0 idle' -e 'QA row(s) older than step_after' <<< "$o"` → `4` | done | 163cd94 |
 | I5 | docs e registro (D16 4ª emenda, Churn, KAIZEN_LOG, pipeline) | `grep -l 'step_after' CONTEXT.md KAIZEN_LOG.md docs/pipeline.md agents/sdd-kaizen.md > /tmp/i5.txt; wc -l < /tmp/i5.txt` → `4` | done | 4c0e079 |
 | I6 | varredura D15: cinco itens saem do backlog | `bash tests/check-todo.sh --count TODO.md` → `85` | done | 7ee1c3e |
+| R1 | achado #1 da r1: `historic_steps` recupera `step_after` da próxima linha QA de OUTRA corrida (`run_id` diferente) e credita à sessão o que aconteceu entre as corridas | `o=$(bash tests/check-kaizen.sh 2>&1); grep -c '^  ok    a QA row older than step_after is not recovered from the next row of another run' <<< "$o"` → `1` | pending | — |
 
 > **As notas de execução não moram aqui.** Elas ficam em `checkpoint-notas.md`, ao lado deste
 > arquivo, append-only, e o prompt de boot inlina as últimas 10 — a sessão nunca abre aquele

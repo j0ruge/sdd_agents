@@ -23,6 +23,14 @@ Achados sobre **repos-alvo** vão para o `TODO.md` daquele repo. Este arquivo é
 
 ### Sensores que faltam
 
+- [ ] **A ida e volta de branch do `check-autonomy.sh` herda o rótulo da sessão REVIEW** —
+  `tests/check-autonomy.sh:6409` (`foreign_elsewhere`) — os `git checkout` do fixture herdam o
+  `GIT_REFLOG_ACTION` de quem chama; dentro de sessão REVIEW o `trips:2` lê `trips:4` e a suíte
+  reprova (rc 1), na `main` também. O gate passa: o runner não carrega o rótulo, só o `claude -p`.
+  Direção: `env -u GIT_REFLOG_ACTION` no `foreign_run`/fixtures, ou o sensor inteiro sem o rótulo.
+  Fonte: `docs/handoffs/20260930-a-sub-etapa-que-andou/40-review-r1.md` — achado por `sdd-reviewer`
+  na missão `20260930-a-sub-etapa-que-andou` (2026-10-01)
+
 - [ ] **Citação NÃO-cercada acima do cabeçalho ainda vira o gênero do bug** — `bin/sdd:1347` — o
   extrator da Âncora 3 pula blocos cercados e pega a primeira linha com forma de campo fora de um,
   então prosa nua abrindo com `- **Closable by:** human` acima do campo real ainda é lida como o
