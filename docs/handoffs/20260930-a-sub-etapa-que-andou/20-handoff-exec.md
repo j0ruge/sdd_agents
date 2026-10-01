@@ -3,8 +3,8 @@ missao: 20260930-a-sub-etapa-que-andou
 fase: EXEC
 status: done
 sessao: abf197ce-fc03-4ab8-a609-a64f5bd09c0c
-data: 2026-10-01 01:49
-gate: "tests/run-all.sh → suite green (19 passos, 1652 linhas `ok`, 0 FAIL; anchors: all 513 mutants still apply); checkpoint I1–I6 done com hash; `sdd autonomy --all-repos --by-mission` → as 3 linhas da métrica + a linha `QA row(s) older than step_after` (grep -c → 4); `check-todo.sh --count TODO.md` → 85"
+data: 2026-10-01 02:40
+gate: "tests/run-all.sh → suite green (19 passos, 1654 linhas `ok`, 0 FAIL; anchors: all 515 mutants still apply); checkpoint I1–I6 e R1 done com hash; `check-kaizen.sh` → `ok    a QA row older than step_after is not recovered from the next row of another run`; `sdd autonomy --all-repos --by-mission` → as 3 linhas da métrica intactas + `(22 QA row(s) older than step_after …)` (grep -c → 4)"
 ---
 
 # Handoff — EXEC — o sub-passo da QA que andou
@@ -19,6 +19,8 @@ Os seis incrementos estão `done`. A linha QA do ledger agora carrega `step_afte
 e o laço QA⇄EXEC (QA que escreveu fix = laço projetado, não churn). O histórico recupera o
 `step_after` pela próxima linha QA. As três missões da métrica leem 19·2, 14·1 e 17·3. A varredura D15
 tirou cinco itens do backlog (90 → 85). Suíte verde. A próxima fase (QA) mede a CLI `sdd autonomy`.
+**r1 do REVIEW:** o `R1` (`8a1b3a5`) restringiu a recuperação histórica à mesma corrida (`run_id`);
+métrica intacta, rodapé 28 → 22 linhas recuperadas. Próxima fase: REVIEW r2.
 
 ## Estado do repo
 
@@ -45,13 +47,35 @@ tirou cinco itens do backlog (90 → 85). Suíte verde. A próxima fase (QA) med
   decidida (resolvido fora do kit: `retrofit-watch` 0.2.0) e um para a Y4 do `CONTEXT.md`. A catraca
   desceu 90 → 85 no mesmo commit.
 
+## Rodada r1 do REVIEW — incrementos de conserto
+
+- `8a1b3a5` — `R1` (achado #1 da r1, MEDIUM). O `historic_steps` recuperava o `step_after` de uma
+  linha QA antiga a partir da próxima linha QA de **qualquer** corrida, creditando à sessão o avanço
+  feito entre corridas (por exemplo, um humano que fechou o relatório). A memória guarda agora
+  `{step, run_id}` e só recupera com `run_id` igual e não nulo; o limite que o comentário declarava
+  ("só erra para o lado conservador") foi reescrito, e a régua D15 trocou a declaração por conserto.
+  - Sensores: em `tests/check-kaizen.sh`, as missões de fixture `m84` (próxima linha de outra
+    corrida → `1 advanced · 1 churned`) e `m85` (duas linhas sem `run_id` → idem); a paridade dos
+    leitores subiu de `6 3 0` para `8 5 0`.
+  - Mutantes `mut_KAIZEN_historic_steps_crosses_runs` e `mut_KAIZEN_historic_steps_null_run_is_a_run`,
+    um por metade da guarda, medidos mortos numa cópia (catálogo 513 → 515).
+  - Ledger real: diff do `--by-mission` antes × depois muda **uma** linha, o rodapé 28 → 22. As três
+    linhas da métrica ficam intactas, como a r1 previu.
+  - `CONTEXT.md` (D16) e `KAIZEN_LOG.md` atualizados; 22 âncoras do `TODO.md` remapeadas pelo diff.
+
+**Boot do REVIEW r2:** o diff da rodada é `8a1b3a5` inteiro. O que olhar: a guarda nova em
+`def historic_steps` (`bin/sdd`, em `ledger_outcome_defs`), o bloco `m80`–`m85` do `check-kaizen.sh`
+e os dois mutantes novos. O achado #2 da r1 (fixture que herda `GIT_REFLOG_ACTION`) continua aberto
+no `TODO.md`: dentro de uma sessão o `check-autonomy.sh` fica vermelho, e por isso esta sessão rodou
+a suíte com `env -u GIT_REFLOG_ACTION`, que é o ambiente em que o gate a roda.
+
 ## Artefatos
 
 | Arquivo | O que contém |
 |---|---|
 | `bin/sdd` | escritor (`step_after`, `pending_*` na linha QA) e leitor (`step_rank`, `historic_steps`, braços novos em `ledger_outcome_defs`) |
 | `tests/check-autonomy.sh`, `tests/check-kaizen.sh` | os probes do escritor e da rubrica |
-| `tests/check-mutation.sh` | catálogo 495 → 513 mutantes |
+| `tests/check-mutation.sh` | catálogo 495 → 513 mutantes (515 depois do `R1`) |
 | `CONTEXT.md`, `KAIZEN_LOG.md`, `docs/pipeline.md`, `agents/sdd-kaizen.md` | a régua nova documentada |
 | `TODO.md`, `tests/health-baseline.txt` | backlog 90 → 85 |
 
