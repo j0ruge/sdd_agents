@@ -292,6 +292,7 @@ Achados sobre **repos-alvo** vão para o `TODO.md` daquele repo. Este arquivo é
   faltou diretório. Hoje inalcançável (as duas pontas só perguntam por raiz cujo `tests/` tem
   catálogo), e o comentário da função declara só o caso "todos ausentes".
   Direção: exigir que cada caminho de `MUTATION_STAMP_PATHS` exista, ou carimbar a lista na chave.
+  RESOLVED by 162e923.
   — descoberto por `sdd-reviewer` na missão `20260819-fecho-que-nao-mente` (2026-08-19)
 
 - [ ] **Piso anti-vacuidade que fica para trás continua PASSANDO, e nada avisa** —
@@ -379,6 +380,7 @@ Achados sobre **repos-alvo** vão para o `TODO.md` daquele repo. Este arquivo é
   invalida o carimbo e cobra outra rodada de 20 a 50 min antes do `gate_PR`. Medido nesta sessão:
   o carimbo `0575d68…` foi ganho e perdido pelo commit que registra estes achados. Direção: tirar
   o baseline da chave, ou aceitar o custo declarando-o no boot da fase PR.
+  RESOLVED by 89d8e62.
   — descoberto por `sdd-qa` na missão `20260819-fecho-que-nao-mente` (2026-08-19)
 
 - [ ] **Lixo ignorado pelo git dentro dos quatro diretórios move a chave do carimbo** —
@@ -387,6 +389,7 @@ Achados sobre **repos-alvo** vão para o `TODO.md` daquele repo. Este arquivo é
   editor que nasce e morre durante a rodada dispara a guarda de janela, jogando fora um verde
   legitimamente ganho. O mundo 8 do `check-gates.sh` depende desse mecanismo de propósito.
   Direção: basear a chave nos arquivos rastreados, ou podar dotfiles.
+  RESOLVED by 89d8e62.
   — descoberto por `sdd-qa` na missão `20260819-fecho-que-nao-mente` (2026-08-19)
 
 - [ ] **`sdd kaizen` recusa rodar de um worktree do próprio kit** — `bin/sdd:10033` — a porta
@@ -717,6 +720,7 @@ Achados sobre **repos-alvo** vão para o `TODO.md` daquele repo. Este arquivo é
   `kit_sha` novo sem mudar `bin/`: em `6323c6f` (só `TODO.md` + baseline) 3 missões e US$ 110,18 de
   `5b98087` viraram `previous`, `window_missions_stranded: 3`, sem veredito. Nada avisa quem mergeia.
   Direção: achado de janela espera no handoff até o veredito, ou o eixo ignora commit sem código (ADR).
+  RESOLVED by eedc6d3.
   — descoberto por `sdd-kaizen` no veredito `20260930-a-sub-etapa-que-andou` (2026-09-30)
 
 ## Decidido — não reabrir
@@ -725,3 +729,4 @@ Achados sobre **repos-alvo** vão para o `TODO.md` daquele repo. Este arquivo é
 - **O `sdd preflight` não provaria que a sessão headless executa comando** — refutado: `bin/sdd:5128` manda rodar `bash -c 'echo sdd-preflight-ok'` sob as flags do `run_phase` desde `2083680`, e sob o chapéu do executor desde 2026-09-06 (2026-09-25)
 - **O `RESOLVED by` não deixa a catraca descer na missão que conserta** — decidido: o item fica até o merge e sai no chore pós-merge, `templates/todo.pt-BR.md` § Ciclo de vida (2026-09-25)
 - **O stub do `sdd adr new` manda escrever em `OUTPUT_LANG`, e o `check-lang.sh` lê `docs/adr/` como inglês** — limite declarado pela D15, não achado: `bin/sdd:6975` (2026-09-25)
+- **Aviso de merge durante a janela do juiz** — decidido fora: depois do conserto do eixo (I2) só mudança real do kit rompe a janela, e essa é ruptura legítima — `docs/adr/0014`, missão `20261001-a-janela-nao-se-parte` (2026-10-01)
