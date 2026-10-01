@@ -1389,6 +1389,20 @@ by kind, a per repo×mission×phase `detail` (each entry naming its `repo`), and
   `20260830-a-tela-que-mente-o-pagamento`, US$ 47.81, `1 advanced · 1 churned`, stamped `leve` for
   running the two rounds `REVIEW_MAX_ITER` exists to allow — in the phase that consumes 41% of the
   slice's spend. It reads `ok` today because both of its rounds landed.
+  ⚠️ `20260930-a-sub-etapa-que-andou` carried it to `QA`, which is a designed loop too:
+  `qa_substep` routes `plan → exec → close` and `gate_QA` refuses with `missing 30-handoff-qa.md`
+  until the close, so the `QA:exec` session that closed the report — exactly what it is asked to
+  do — read `churned`. A QA row now carries `step_after` (the sub-step `phase_step QA` derives
+  after the gate), and a session that moved the disk and whose sub-step advanced in
+  `plan < exec < close` reads `advanced`; a sub-step that repeats or goes back stays `churned`.
+  Rows older than the field recover `step_after` from the `step` of the NEXT QA session row of the
+  same `(repo, mission)`, never from `gate_why` (which reads the same with and without the report),
+  and `sdd autonomy` counts them on screen (`QA row(s) older than step_after`). A QA close that
+  wrote `F<n>` increments (`pending_after > pending_before`, both photographed on the QA row) is
+  the QA⇄EXEC loop and reads `advanced` too — on new rows only: the old `gate_why` says the bugs
+  *become* increments, not that the session wrote them. Measured on the real ledger, same rows,
+  before × after: slice `5b98087` (window 2) `44 advanced · 9 churned` → `47 advanced · 6 churned`,
+  and no other line of `--by-mission` moves besides the three missions that had a `QA:exec`.
   ⚠️ The `.auto_retry == true` arm looks subsumed by the outcome arm and is **not**: in the repo
   that builds the kit every session commits, so a failed first pass and its inline retry land on
   different `kit_sha` and are graded in different groups — a surviving retry alone in its group

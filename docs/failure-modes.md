@@ -173,7 +173,7 @@ a judged regression that disappears from the record will be re-attempted.
 number quoted for the same missions in a `KAIZEN_LOG` entry, a handoff or a PR body, and no session
 behaved any differently in between.
 
-**Cause:** the yardstick moved, and it has now moved **three times in four days**. Until 2026-08-28
+**Cause:** the yardstick moved, and it has now moved **four times** (three of them in four days). Until 2026-08-28
 a session was `stalled` when it wrote nothing to disk; `20260828-instrumento-honesto` replaced that
 with `advanced`/`churned`/`idle`; `20260829-o-incremento-que-andou` made a session `advanced` when
 the **increment** moved (`pending_after < pending_before`) and not only when its gate passed; and
@@ -182,9 +182,12 @@ the **increment** moved (`pending_after < pending_before`) and not only when its
 took 46 of the 72 EXEC rows in the real ledger out of `churned`; the 2026-08-31 one moved four
 `kit_sha` slices from `0 advanced · 1 churned · 100% waste` to `1 advanced · 0 churned · 0% waste`
 (`churned` across the whole ledger 23 → 19, versions at `100% waste` 14 → 10) — measured by running
-both binaries over the same 195 rows. The reason is the same one twice: a gate that refuses **by
-design** until the phase is done (`gate_EXEC` until the last increment, `gate_REVIEW` until Grade A
-within `REVIEW_MAX_ITER`) had the pipeline's own designed loop counted as waste. Every reading is
+both binaries over the same 195 rows. A fourth move came with `20260930-a-sub-etapa-que-andou`: a
+QA session reads `advanced` when its **sub-step** advanced (`step_after` later than `step` in
+`plan < exec < close`) or when its close wrote `F<n>` increments — slice `5b98087` went from
+`44 advanced · 9 churned` to `47 advanced · 6 churned` over the same rows. The reason is the same
+one each time: a gate that refuses **by design** until the phase is done (`gate_EXEC` until the
+last increment, `gate_REVIEW` until Grade A within `REVIEW_MAX_ITER`, `gate_QA` until the close) had the pipeline's own designed loop counted as waste. Every reading is
 computed by TODAY's binary over the whole ledger, so any single `sdd autonomy` run is internally
 consistent — what is not comparable is a number on your screen against a number frozen in prose.
 
