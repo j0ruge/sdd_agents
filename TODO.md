@@ -94,7 +94,7 @@ Achados sobre **repos-alvo** vão para o `TODO.md` daquele repo. Este arquivo é
   mutação em duas. — descoberto por `sdd-reviewer` na missão `20260818-lote-facil` (2026-08-19)
 
 - [ ] **O piso do shim pré-2.31 prova que o shim é um git falso, não que o runner o consulta** —
-  `tests/check-autonomy.sh:4326` — o piso invoca `git` diretamente sob o `PATH` do shim, e nada
+  `tests/check-autonomy.sh:4435` — o piso invoca `git` diretamente sob o `PATH` do shim, e nada
   ancora no caminho de resolução do runner. Medido: trocar `git` por `/usr/bin/git` no
   `ledger_repo_root` E apagar a guarda deixa `check-autonomy.sh` inteiro verde, porque o shim segue
   um impostor correto que nunca é chamado. Direção: termo provando INTERCEPTAÇÃO — a resposta do
@@ -239,7 +239,7 @@ Achados sobre **repos-alvo** vão para o `TODO.md` daquele repo. Este arquivo é
   pelo caminho real. Ainda pega campo ausente ou `moved` sempre-`true`; só o nome discrimina mais
   do que ela. — descoberto por `/codereview` na missão `20260815-i13.1-autonomy-log` (2026-08-15)
 
-- [ ] **O schema da série não tem sensor de drift contra a prosa que o descreve** — `bin/sdd:9018`
+- [ ] **O schema da série não tem sensor de drift contra a prosa que o descreve** — `bin/sdd:9037`
   (`kaizen_series`) vs `docs/pipeline.md:525`, `docs/adr/0003:57`, `agents/sdd-kaizen.md:40` e
   `docs/failure-modes.md:102` — produzido em dois lugares (o `jq` e o literal vazio, `:8394`) e
   descrito em **dez**, QUATRO deles dentro do `bin/sdd`. Cobrado 6×: na DOCS de
@@ -286,7 +286,7 @@ Achados sobre **repos-alvo** vão para o `TODO.md` daquele repo. Este arquivo é
   — descoberto por `sdd-qa` na missão `20260819-fecho-que-nao-mente` (2026-08-19)
 
 - [ ] **O piso do catálogo mora só no consumidor; quem imprime o `score:` segue sem nenhum** —
-  `tests/check-mutation.sh:5408` — com `CATALOG=()` o laço roda zero vezes, `errors` fica 0 e o
+  `tests/check-mutation.sh:5440` — com `CATALOG=()` o laço roda zero vezes, `errors` fica 0 e o
   arquivo imprime `score: 0 caught, 0 known gap(s), of 0` saindo 0. O F1 pôs o piso no `cmd_health`,
   hoje o único chamador — mas duas frases do próprio runner (`bin/sdd:5491` e `:5108`) mandam o
   operador rodar `tests/run-all.sh --with-mutation` à mão, e aí o verde volta a mentir.
@@ -325,7 +325,7 @@ Achados sobre **repos-alvo** vão para o `TODO.md` daquele repo. Este arquivo é
   Direção: um `refute()` sobre a superfície de docs, ou ligar a tabela de agentes ao frontmatter.
   — descoberto por `sdd-executor` na missão `20260901-o-revisor-so-acha` (2026-09-01)
 
-- [ ] **O braço `else ""` da célula do laço de revisão não tem fixture** — `bin/sdd:8883` — a
+- [ ] **O braço `else ""` da célula do laço de revisão não tem fixture** — `bin/sdd:8902` — a
   guarda contra a divisão por zero do `jq` (`$whole > 0`) está correta e **não é medida**: uma
   frouxidão futura (`$whole >= 0`) abortaria o `--by-mission` inteiro sobre um ledger real com
   missão de custo nulo, e nada nesta suíte avisaria. Direção: fixture diferencial de missão de
@@ -404,7 +404,7 @@ Achados sobre **repos-alvo** vão para o `TODO.md` daquele repo. Este arquivo é
   Direção: basear a chave nos arquivos rastreados, ou podar dotfiles.
   — descoberto por `sdd-qa` na missão `20260819-fecho-que-nao-mente` (2026-08-19)
 
-- [ ] **`sdd kaizen` recusa rodar de um worktree do próprio kit** — `bin/sdd:9779` — a porta
+- [ ] **`sdd kaizen` recusa rodar de um worktree do próprio kit** — `bin/sdd:9798` — a porta
   "estou no repo do kit?" compara `kit_root` (`--show-toplevel` de `$SDD_HOME`) com `$REPO_ROOT`,
   e o toplevel é por worktree: com o `sdd` do checkout principal e o cwd num worktree os dois
   divergem e o `die` da `:9126` mata. ⚠️ **`--series` NÃO passa por ela** — sai na `:9113`, medido
@@ -681,7 +681,7 @@ Achados sobre **repos-alvo** vão para o `TODO.md` daquele repo. Este arquivo é
   — descoberto por `sessão coordenadora` na missão `20260916-destino-frete-cif` (2026-09-16)
 
 - [ ] **`sdd approve` commita na branch corrente, mesmo a padrão, e só o `00-missao.md`** —
-  `bin/sdd:7088` — medido aqui: o commit da aprovação caiu na `main` local, com o `01-plano.md`, o
+  `bin/sdd:7096` — medido aqui: o commit da aprovação caiu na `main` local, com o `01-plano.md`, o
   `checkpoint.md` e o ADR citado fora do git, ou seja, uma missão aprovada sem plano no histórico.
   Em repo-alvo, alguém que dê `push` na `main` publica isso. Direção: recusar ou avisar quando a
   branch é o `DEFAULT_BRANCH`, e commitar o diretório da missão inteiro.

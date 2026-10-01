@@ -3745,6 +3745,33 @@ mut_LEDGER_rounds_leak_across_phases() {
   sed -i 's@^    if \[ "\$phase" = "REVIEW" \]; then review_after="\$GATE_REVIEW_ROUNDS"; review_max="\$GATE_REVIEW_MAX"; fi$@    review_after="$GATE_REVIEW_ROUNDS"; review_max="$GATE_REVIEW_MAX"@' "$1"
 }
 
+# `step_after` (20260930-a-sub-etapa-que-andou) is written at THREE doors, each with its own phase
+# guard, and one mutant per door: a door without a mutant is one whose removal no assertion notices.
+# DOOR 1, cmd_run's first pass: the derivation after the session goes and the QA row is born with
+# `step_after: null` — the gate_why-only reading that called the report-closing `QA:exec` churn.
+# Caught by `a QA row carries the step the session left behind` in check-autonomy.sh.
+mut_RUN_qa_step_after_missing() {
+  sed -i 's@^    if \[ "\$phase" = "QA" \]; then step_after="\$(phase_step QA)"; fi$@    :@' "$1"
+}
+
+# DOOR 2, the inline retry. Caught by `the inline retry carries the sub-step its own session left
+# behind` in check-autonomy.sh, which reads `true QA:exec null`.
+mut_RUN_qa_step_after_retry_missing() {
+  sed -i 's@^    if \[ "\$phase" = "QA" \]; then step_after2="\$(phase_step QA)"; fi$@    :@' "$1"
+}
+
+# DOOR 3, cmd_retry. Caught by `a QA row written by sdd retry carries step_after too`.
+mut_RUN_qa_step_after_cmd_retry_missing() {
+  sed -i 's@^  if \[ "\$phase" = "QA" \]; then step_after="\$(phase_step QA)"; fi$@  :@' "$1"
+}
+
+# The phase guard of door 1 goes and every row gets a sub-step: an EXEC row would carry `QA:close`,
+# a field no reader asked for and one the sub-step arm keys on. Caught by `a non-QA row carries
+# step_after as null` in check-autonomy.sh.
+mut_LEDGER_step_after_unguarded() {
+  sed -i 's@^    if \[ "\$phase" = "QA" \]; then step_after="\$(phase_step QA)"; fi$@    step_after="$(phase_step QA)"@' "$1"
+}
+
 # The writer keeps filling the three round fields (I1) and the reader stops looking at them: REVIEW
 # goes back to the gate-only yardstick that read the most expensive cell of window 2 — US$ 47.81,
 # `1 advanced · 1 churned` — as churn over a phase that is a LOOP BY DESIGN. Spliced from ONE
@@ -5083,6 +5110,10 @@ CATALOG=(
   KAIZEN_missions_count_ungraded_rows
   RUN_review_rounds_photo_missing
   LEDGER_rounds_leak_across_phases
+  RUN_qa_step_after_missing
+  RUN_qa_step_after_retry_missing
+  RUN_qa_step_after_cmd_retry_missing
+  LEDGER_step_after_unguarded
   LEDGER_outcome_rounds_blind
   LEDGER_outcome_rounds_unguarded
   LEDGER_outcome_rounds_undirected

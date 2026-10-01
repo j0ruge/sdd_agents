@@ -871,6 +871,11 @@ chmod +x "$OUTSIDE/stub/claude"
 # really did publish, so the nulls one row later are a guard doing its job and not an empty ledger.
 assert_eq "the EXEC row that closed the last increment says so" "EXEC pass 1 0 1" \
   "$(jq -r -s '.[0] | "\(.phase) \(.gate) \(.pending_before) \(.pending_after) \(.increments_total)"' "$LEDGER")"
+# `step_after` is the QA sub-step derived AFTER the session (20260930-a-sub-etapa-que-andou), and
+# it is QA's alone: an EXEC row carrying one would be a field no reader asked for, and the reader's
+# sub-step arm keys on QA ranks. The EXEC row above is the floor — it proves the row exists.
+assert_eq "a non-QA row carries step_after as null" "EXEC true" \
+  "$(jq -r -s '.[0] | "\(.phase) \(has("step_after") and .step_after == null)"' "$LEDGER")"
 assert_eq "a non-EXEC row carries the three as null" "QA true" \
   "$(jq -r -s '.[1] | "\(.phase) \(.pending_before == null and .pending_after == null
                                  and .increments_total == null)"' "$LEDGER")"
@@ -2556,6 +2561,109 @@ sed -i 's|^E2E_CMD=.*|E2E_CMD=""|; s|^APP_URL=.*||' .sdd/config.sh
 rm -rf "$FIX/docs/qa"
 printf -- '---\nfase: QA\nstatus: done\n---\n' > "$MDIR/30-handoff-qa.md"
 git add -A && git commit -qm "chore: restore the fixture the app-down pair borrowed"
+
+# --- a QA row carries the sub-step the session left behind -----------------
+# QA is a loop by design — qa_substep routes plan → exec → close — and gate_QA refuses on its first
+# line (`missing 30-handoff-qa.md`) every session before `close`. So the gate_why of a `QA:exec`
+# that CLOSED the report is the same sentence as one that did not, and the judge read the closer as
+# churn: 7 of the 9 `churned` sessions of the 2nd window's slice (20260930-a-sub-etapa-que-andou).
+# `step_after` is the fact gate_why cannot say. The world: an interface (E2E_CMD set, no APP_URL),
+# a charter, a report still in progress — so the derived step is `QA:exec` — and a stub that
+# closes the report and commits, so the step derived after the session is `QA:close`.
+echo "== a QA row carries the sub-step the session left behind =="
+QA_STEP_CKPT_BEFORE="$OUTSIDE/checkpoint-before-qa-step.md"
+cp "$MDIR/checkpoint.md" "$QA_STEP_CKPT_BEFORE"
+QA_STEP_EXEC_HANDOFF="$OUTSIDE/exec-handoff-before-qa-step.md"
+rm -f "$QA_STEP_EXEC_HANDOFF"
+[ -e "$MDIR/20-handoff-exec.md" ] && cp "$MDIR/20-handoff-exec.md" "$QA_STEP_EXEC_HANDOFF"
+sed -i 's|^E2E_CMD=.*|E2E_CMD="true"|' .sdd/config.sh
+mkdir -p "$FIX/docs/qa/charters" "$FIX/docs/qa/reports"
+printf '# CH-one\n' > "$FIX/docs/qa/charters/CH-one.md"
+# PROVENANCE: ~/.claude/skills/qa-execution/assets/report-template.md:6, the same capture the
+# dead-app pair above carries — here with the status still `in-progress`.
+cat > "$FIX/docs/qa/reports/2026-01-01-fixture.md" <<'RPT'
+# QA Run Report — 2026-01-01 — fixture
+- **Started:** 2026-01-01T10:00:00Z · **Status:** in-progress <!-- in-progress | closed -->
+RPT
+rm -f "$MDIR/30-handoff-qa.md"
+printf -- '---\nfase: EXEC\nstatus: done\n---\n' > "$MDIR/20-handoff-exec.md"
+git add -A && git commit -qm "chore: an interface, a charter and a report still open"
+cat > "$MDIR/checkpoint.md" <<EOF
+| ID | Incremento | Check (comando → esperado) | Status | Commit |
+|---|---|---|---|---|
+| I1 | slice one | \`true\` → 0 | done | $(git rev-parse --short HEAD) |
+EOF
+git add -A && git commit -qm "chore: every increment done, QA is next"
+cat > "$OUTSIDE/stub/claude" <<STUB
+#!/usr/bin/env bash
+sed -i 's/\*\*Status:\*\* in-progress/**Status:** closed/' "$FIX/docs/qa/reports/2026-01-01-fixture.md"
+git -C "$FIX" add -A
+git -C "$FIX" commit -qm "chore: the report closed" >/dev/null 2>&1
+cat "$STREAM_SAMPLE"
+exit 0
+STUB
+chmod +x "$OUTSIDE/stub/claude"
+: > "$LEDGER"
+"$SDD" run "$MISSION" --phase QA --max-phases 1 >/dev/null 2>&1
+# The floor: the row exists, is QA, and the step the runner derived BEFORE was `exec` — without it
+# the assertion below would pass over a fixture that never reached the sub-step it names.
+assert_eq "the QA row of that world opened on the exec sub-step" "QA QA:exec true" \
+  "$(jq -r -s '[.[] | select(.event == "session")][0] | "\(.phase) \(.step) \(.moved)"' "$LEDGER")"
+assert_eq "a QA row carries the step the session left behind" "QA:close" \
+  "$(jq -r -s '[.[] | select(.event == "session")][0].step_after' "$LEDGER")"
+
+# One probe per door: the field is written at three sites (cmd_run's first pass, its inline retry,
+# cmd_retry), each with its own phase guard, and a door without a probe is one whose removal no
+# assertion notices. DOOR 2: the first session changes nothing — the only way to reach the inline
+# retry — and the retry's session closes the report.
+QA_STEP_MARKER="$OUTSIDE/.qa-step-first"
+reopen_qa_report() {
+  sed -i 's/\*\*Status:\*\* closed/**Status:** in-progress/' "$FIX/docs/qa/reports/2026-01-01-fixture.md"
+  git add -A && git commit -qm "chore: the report reopened"
+}
+reopen_qa_report
+rm -f "$QA_STEP_MARKER"
+cat > "$OUTSIDE/stub/claude" <<STUB
+#!/usr/bin/env bash
+if [ ! -e "$QA_STEP_MARKER" ]; then
+  : > "$QA_STEP_MARKER"
+else
+  sed -i 's/\*\*Status:\*\* in-progress/**Status:** closed/' "$FIX/docs/qa/reports/2026-01-01-fixture.md"
+  git -C "$FIX" add -A
+  git -C "$FIX" commit -qm "chore: the report closed" >/dev/null 2>&1
+fi
+cat "$STREAM_SAMPLE"
+exit 0
+STUB
+chmod +x "$OUTSIDE/stub/claude"
+: > "$LEDGER"
+# No `--max-phases` here: the ceiling sits ABOVE the inline retry, so under it the retry is never
+# bought. The run goes on past row [1] and ends however the later laps end; only [0] and [1] count.
+"$SDD" run "$MISSION" --phase QA >/dev/null 2>&1
+assert_eq "the first pass that moved nothing stays on the exec sub-step" "false false QA:exec" \
+  "$(jq -r -s '[.[] | select(.event == "session")][0] | "\(.auto_retry) \(.moved) \(.step_after)"' "$LEDGER")"
+assert_eq "the inline retry carries the sub-step its own session left behind" "true QA:exec QA:close" \
+  "$(jq -r -s '[.[] | select(.event == "session")][1] | "\(.auto_retry) \(.step) \(.step_after)"' "$LEDGER")"
+
+# DOOR 3: `sdd retry` derives QA over the same world and opens a fresh session that closes it.
+reopen_qa_report
+rm -f "$QA_STEP_MARKER"; : > "$QA_STEP_MARKER"
+: > "$LEDGER"
+"$SDD" retry "$MISSION" >/dev/null 2>&1
+assert_eq "a QA row written by sdd retry carries step_after too" "retry QA:exec QA:close" \
+  "$(jq -r -s '[.[] | select(.event == "session")][0] | "\(.invocation) \(.step) \(.step_after)"' "$LEDGER")"
+
+cp "$QA_STEP_CKPT_BEFORE" "$MDIR/checkpoint.md"
+if [ -e "$QA_STEP_EXEC_HANDOFF" ]; then cp "$QA_STEP_EXEC_HANDOFF" "$MDIR/20-handoff-exec.md"; else rm -f "$MDIR/20-handoff-exec.md"; fi
+sed -i 's|^E2E_CMD=.*|E2E_CMD=""|' .sdd/config.sh
+rm -rf "$FIX/docs/qa"
+printf -- '---\nfase: QA\nstatus: done\n---\n' > "$MDIR/30-handoff-qa.md"
+cat > "$OUTSIDE/stub/claude" <<'STUB'
+#!/usr/bin/env bash
+exit 1
+STUB
+chmod +x "$OUTSIDE/stub/claude"
+git add -A && git commit -qm "chore: restore the fixture the QA sub-step block borrowed"
 
 # --- the session died, and the runner says so ------------------------------
 # THE PAIR of this family, and the same shape as the dead-app pair above: one stub, two regimes,

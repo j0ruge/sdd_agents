@@ -4036,7 +4036,12 @@ autonomy_close_row() {   # autonomy_close_row <issue> <session id> <rc> <verifie
 # are. The escalation and gate_pass constructors do not carry them, for the same reason arguments
 # 7–9 are null outside EXEC — a row that spent no session spent no turns and burned no cache, and
 # a 0 there would be counted as one that ran and said nothing.
-autonomy_session_row() {  # <phase> <attempt> <auto_retry> <moved> <gate> <gate_why> [<pending_before> <pending_after> <increments_total> <rounds_before> <rounds_after> <rounds_max>]
+# Argument 13 is QA's: `step_after`, the sub-step `phase_step QA` derives AFTER the gate. QA is a
+# loop by design (plan → exec → close) and gate_QA refuses on its first line every session before
+# `close`, so a `QA:exec` that closed the report and one that did not leave the same gate_why — the
+# 2nd judge window read 7 of its 9 `churned` sessions off exactly that sentence
+# (20260930-a-sub-etapa-que-andou). Empty outside QA, written as null, like the pairs above.
+autonomy_session_row() {  # <phase> <attempt> <auto_retry> <moved> <gate> <gate_why> [<pending_before> <pending_after> <increments_total> <rounds_before> <rounds_after> <rounds_max> <step_after>]
   autonomy_have_jq || return 0
   # Called, never substituted: `$(autonomy_kit_stamp)` would reset its one-shot warning flag.
   autonomy_kit_stamp; local stamp="$AUTONOMY_KIT_STAMP"
@@ -4061,12 +4066,15 @@ autonomy_session_row() {  # <phase> <attempt> <auto_retry> <moved> <gate> <gate_
     --arg died "${LAST_PHASE_DIED:0:200}" \
     --arg pbefore "${7:-}" --arg pafter "${8:-}" --arg itotal "${9:-}" \
     --arg rbefore "${10:-}" --arg rafter "${11:-}" --arg rmax "${12:-}" \
+    --arg step_after "${13:-}" \
     '{v: 1, ts: $ts, event: "session",
       run_id: $run_id, invocation: $invocation,
       kit_sha: (if $sha == "" then null else $sha end),
       kit_dirty: (if $dirty == "" then null else ($dirty == "true") end),
       project: $project, repo: $repo, mission: $mission,
-      phase: $phase, step: $step, agent: $agent, model: $model,
+      phase: $phase, step: $step,
+      step_after: (if $step_after == "" then null else $step_after end),
+      agent: $agent, model: $model,
       attempt: ($attempt | tonumber? // null), auto_retry: ($auto_retry == "true"),
       session: $session,
       rc: ($rc | tonumber? // null),
@@ -7836,10 +7844,14 @@ cmd_run() {
     # would be born carrying a round count it never had.
     local review_after="" review_max=""
     if [ "$phase" = "REVIEW" ]; then review_after="$GATE_REVIEW_ROUNDS"; review_max="$GATE_REVIEW_MAX"; fi
+    # The QA sub-step derived AFTER the session, guarded on the phase like the two pairs above.
+    # `$( )` is safe here: qa_substep sets no global, so the substitution throws nothing away.
+    local step_after=""
+    if [ "$phase" = "QA" ]; then step_after="$(phase_step QA)"; fi
     autonomy_session_row "$phase" "${attempts[$phase]}" "false" "$moved" \
       "$( [ "$gate_rc" -eq 0 ] && echo pass || echo fail )" "$GATE_WHY" \
       "$exec_before" "$exec_after" "$exec_total" \
-      "$review_before" "$review_after" "$review_max"
+      "$review_before" "$review_after" "$review_max" "$step_after"
     sessions["$phase"]="$(( ${sessions[$phase]:-0} + 1 ))"
     # Beside the counter and never anywhere else, the discipline `sessions` itself is held to: the
     # gate verdict the ledger row carries and the one gate_pass_rows reads are the same quantity,
@@ -7967,10 +7979,14 @@ cmd_run() {
     # paid for end to end.
     local review_after2="" review_max2=""
     if [ "$phase" = "REVIEW" ]; then review_after2="$GATE_REVIEW_ROUNDS"; review_max2="$GATE_REVIEW_MAX"; fi
+    # The retry's own sub-step after its own session — never the first pass's, which is where the
+    # retry STARTED (its `step`), not where it ended.
+    local step_after2=""
+    if [ "$phase" = "QA" ]; then step_after2="$(phase_step QA)"; fi
     autonomy_session_row "$phase" "${attempts[$phase]}" "true" "$moved2" \
       "$( [ "$gate_rc2" -eq 0 ] && echo pass || echo fail )" "$GATE_WHY" \
       "${exec_after:-$exec_before}" "$exec_after2" "$exec_total2" \
-      "${review_after:-$review_before}" "$review_after2" "$review_max2"
+      "${review_after:-$review_before}" "$review_after2" "$review_max2" "$step_after2"
     sessions["$phase"]="$(( ${sessions[$phase]:-0} + 1 ))"
     # The retry is a session site of its own, so it is a `gate_failed` site of its own — one probe
     # per door, the shape CLAUDE.md spells out. Its verdict is the later one and overwrites the
@@ -8172,10 +8188,13 @@ cmd_retry() {
   # tests/check-autonomy.sh. d4deb35 / 7cbc8e2 are why the guard was kept while it looked inert.
   if [ "$phase" = "EXEC" ]; then exec_after="$GATE_EXEC_PENDING"; exec_total="$GATE_EXEC_TOTAL"; fi
   if [ "$phase" = "REVIEW" ]; then review_after="$GATE_REVIEW_ROUNDS"; review_max="$GATE_REVIEW_MAX"; fi
+  # Door 3 of `step_after`, same guard as cmd_run's two.
+  local step_after=""
+  if [ "$phase" = "QA" ]; then step_after="$(phase_step QA)"; fi
   autonomy_session_row "$phase" "1" "false" "$moved" \
     "$( [ "$gate_rc" -eq 0 ] && echo pass || echo fail )" "$GATE_WHY" \
     "$exec_before" "$exec_after" "$exec_total" \
-    "$review_before" "$review_after" "$review_max"
+    "$review_before" "$review_after" "$review_max" "$step_after"
   if hat_crossed_escalation "$phase"; then return 3; fi
   if [ "$gate_rc" -eq 0 ]; then ok "gate $phase: $GATE_WHY"; return 0; fi
   # AN rc 3 IS AN ESCALATION, and this door used to be the only one that returned 3 in silence: no
