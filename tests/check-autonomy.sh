@@ -6462,10 +6462,24 @@ assert_eq "without a reflog the guard blames the session as before" \
 # the wrong remedy #51 exists to end, caused by its own fix. `elsewhere` differs from main in
 # bin/tool.sh and is cut BEFORE the session; `trips:2` is the floor that the two labelled checkouts
 # really happened (a labelled checkout writes the bare label).
+# The fixture's own checkouts run with the label scrubbed: they happen BEFORE the session, so a label
+# inherited from whoever runs the suite (a REVIEW session, #186) must not count as the session's trips.
 foreign_elsewhere() {   # foreign_elsewhere <dir> — a branch that differs from main in bin/tool.sh
-  ( cd "$1" && git checkout -qb elsewhere && printf 'echo elsewhere\n' > bin/tool.sh \
+  ( cd "$1" && unset GIT_REFLOG_ACTION && git checkout -qb elsewhere && printf 'echo elsewhere\n' > bin/tool.sh \
       && git commit -qam "chore: elsewhere" && git checkout -q main ) >/dev/null 2>&1
 }
+# The world runs under a REVIEW session label the sensor arms ITSELF (#186): a REVIEW session that
+# ran the suite inherited its own label into the fixture's checkouts and read trips:4. Armed here on
+# every run, a fixture that stops scrubbing the label is red everywhere, not only inside a REVIEW.
+# The floor proves the venom is armed: the value is in the environment, and a bare checkout in a
+# throwaway repo writes it to the reflog.
+export GIT_REFLOG_ACTION=sdd:REVIEW:0badc0de
+RSV="$OUTSIDE/reviewscope-venom"
+( git init -q -b main "$RSV" && git -C "$RSV" commit -q --allow-empty -m seed \
+    && git -C "$RSV" checkout -qb venom ) >/dev/null 2>&1
+assert_eq "the round-trip world runs under an armed session label" \
+  "env:sdd:REVIEW:0badc0de reflog:1" \
+  "env:${GIT_REFLOG_ACTION:-} reflog:$(git -C "$RSV" reflog show --format='%gs' HEAD 2>/dev/null | grep -cxF 'sdd:REVIEW:0badc0de')"
 RSR="$OUTSIDE/reviewscope-roundtrip"
 reviewscope_world "$RSR"
 foreign_elsewhere "$RSR"
@@ -6474,6 +6488,7 @@ foreign_run "$RSR"
 assert_eq "a round trip through another branch inside the window is not a crossing" \
   "trips:2 kind: hat:0 foreign:0" \
   "trips:$(git -C "$RSR" reflog show --format='%gs' HEAD | grep -cxE 'sdd:REVIEW:[0-9a-f]{8}') kind:$FR_KIND hat:$(grep -c 'HAT-CROSSED' <<< "$FR_LOG") foreign:$(grep -c 'FOREIGN-COMMIT' <<< "$FR_LOG")"
+unset GIT_REFLOG_ACTION
 # A rebase the session makes is the session's move. git writes it as `<label> (start|pick|finish): …`
 # — measured on git 2.43 — and read as foreign it printed the session's own label under "without
 # its label", with the concurrent-writer remedy. Rebasing onto `elsewhere` brings bin/tool.sh in, so
