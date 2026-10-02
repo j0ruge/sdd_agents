@@ -2711,8 +2711,14 @@ mut_RUN_approve_eof_silent() {
 # The dry-run guard would have been the obvious anchor and is the wrong one: pipeline_log_line
 # carries a byte-identical line, so a `sed` on it sabotages two functions at once and the score
 # would credit this entry for whatever the other one broke.
+#
+# Since #156 the read lives in mission_branch_declared, the one definition ensure_mission_branch
+# and cmd_approve both call, so the range is that function's and blanking it also takes the
+# approve's switch: the approve pair (`lands on the declared branch`, `refuses a declared branch`)
+# dies alongside the run's. Which door still calls the function is what the per-door entries say
+# (mut_RETRY_branch_switch_dead, mut_APPROVE_skips_mission_branch).
 mut_RUN_branch_switch_dead() {
-  sed -i 's@^  want="\$(frontmatter "\$MISSION_DIR/00-missao.md" branch)"$@  want=""@' "$1"
+  sed -i '/^mission_branch_declared() {/,/^}/ s@^  want="\$(frontmatter "\$MISSION_DIR/00-missao.md" branch)"$@  want=""@' "$1"
 }
 
 # Lets a declared branch name that git reads as an OPTION through to the checkout. The case arm
@@ -2790,8 +2796,35 @@ mut_RETRY_base_branch_warn_dead() {
 # times, and an unaddressed substitution would gut all five while wearing this entry's name. The
 # range ends at the first column-zero `}`, which is cmd_approve's own — every line of the body is
 # indented, including the awk program and the two `-m` arguments of the commit.
+#
+# Since #156 the call sits in the `else` arm (empty or placeholder `branch:`), four spaces deep; the
+# fixture that kills it (`QW`, `branch:` empty) still walks that arm. A blank line would leave the
+# `else` empty, which bash refuses, so the call becomes `:`.
 mut_APPROVE_base_branch_warn_dead() {
-  sed -i '/^cmd_approve() {/,/^}/ s@^  warn_if_on_base_branch$@@' "$1"
+  sed -i '/^cmd_approve() {/,/^}/ s@^    warn_if_on_base_branch$@    :@' "$1"
+}
+
+# The approve stops entering the declared branch (#156) — the call stays in the source as a no-op,
+# so the rest of the command, the directory commit included, runs exactly as written and lands
+# wherever the human stands. Per door, like mut_RETRY_branch_switch_dead: the field read is
+# mut_RUN_branch_switch_dead's, and it cannot say which door still calls the function. Addressed
+# to cmd_approve, the line is byte-identical in cmd_run and cmd_retry.
+mut_APPROVE_skips_mission_branch() {
+  sed -i '/^cmd_approve() {/,/^}/ s@^  ensure_mission_branch$@  :@' "$1"
+}
+
+# The approve commit shrinks back to 00-missao.md alone (#156): the plan and the checkpoint are left
+# as `??` for the next gate_REVIEW to refuse as a dirty tree. The commit then carries one path (two
+# with the ADR), never the four the approve probe demands.
+mut_APPROVE_commits_only_missao() {
+  sed -i '/^cmd_approve() {/,/^}/ s@^  local -a paths=( "\$mission_rel" )$@  local -a paths=( "$rel" )@' "$1"
+}
+
+# The file `adr:` names leaves the approval commit: the decision the plan rests on stays untracked
+# on the branch the plan now lives on. Only visible because the approve fixture leaves its ADR
+# UNTRACKED — committed and intact, leaving it out would change nothing in the diff.
+mut_APPROVE_adr_file_left_out() {
+  sed -i '/^cmd_approve() {/,/^}/ s@^         paths+=( "\$adr_value" )$@         :@' "$1"
 }
 
 # The ORDER of the two guards in cmd_run, not their presence. Both calls stay — the warning simply
@@ -3115,9 +3148,9 @@ mut_HEALTH_ratchet_eats_verdict() {
 }
 
 # `sdd retry` loses the checkout and goes back to committing wherever the human happens to stand.
-# ONE definition, two call sites: `mut_RUN_branch_switch_dead` above sabotages the FIELD READ inside
-# ensure_mission_branch, so it kills the function for both doors at once and can never say which of
-# the two still calls it. This one leaves the function whole and removes the CALL — the shape a
+# ONE definition, three call sites: `mut_RUN_branch_switch_dead` above sabotages the FIELD READ
+# (mission_branch_declared), so it kills the function for every door at once and can never say which
+# of them still calls it. This one leaves the function whole and removes the CALL — the shape a
 # refactor arrives at honestly — so the score stops crediting cmd_run's coverage to cmd_retry.
 #
 # Range-addressed to cmd_retry: the line is byte-identical in cmd_run, and an unaddressed `d` would
@@ -5293,6 +5326,9 @@ CATALOG=(
   RUN_branch_postcheck_blind
   RETRY_base_branch_warn_dead
   APPROVE_base_branch_warn_dead
+  APPROVE_skips_mission_branch
+  APPROVE_commits_only_missao
+  APPROVE_adr_file_left_out
   RUN_branch_order_swap
   FRONTMATTER_write_unscoped
   KAIZEN_adr_0003_orphan
