@@ -133,6 +133,14 @@ run() { # run <name> <command...>
        && [ $((SECONDS - started)) -ge "$limit" ]; then
       printf '\033[31m  ✗ %s timed out after %s s\033[0m\n' "$name" "$limit" >&2
       fails=$((fails + 1))
+      # Inside a mutant a deadline is not a kill: the catalogue scores every rc it does not know as
+      # caught, so it gets 124, its own number, read by rc_verdict (check-mutation.sh) as
+      # INCONCLUSIVE — a slow machine never buys a point the sabotage did not earn. Asserted by
+      # check-health.sh (`surface: inside a mutant a timeout is not a kill`).
+      if [ -n "${SDD_MUTANT:-}" ]; then
+        printf '\033[31m\033[1mstopped: a step timed out inside the mutant — inconclusive (rc 124)\033[0m\n' >&2
+        exit 124
+      fi
     elif [ "$rc" != 0 ]; then
       printf '\033[31m  ✗ failed\033[0m\n' >&2; fails=$((fails + 1))
     fi

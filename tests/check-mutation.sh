@@ -5616,7 +5616,19 @@ run_mutant() {
   SDD_MUTANT=1 SDD_MUTANT_FIRST="${KILLER[$slug]:-}" "$box/tests/run-all.sh" > "$box.log" 2>&1 || rc=$?
   echo "$((SECONDS - t0))" > "$box.secs"
   echo "$rc" > "$box.rc"
-  [ "$rc" -eq 0 ] || killer_of "$box.log" > "$box.killer"
+  # A timed-out mutant names no killer: the step that ran out of time did not kill it.
+  [ "$rc" -eq 0 ] || [ "$rc" -eq 124 ] || killer_of "$box.log" > "$box.killer"
+}
+
+# rc_verdict <suite rc> → how the catalogue reads a mutant's rc: broken (90/91, the mutant never
+# applied), survived (0), missing (99, no rc written), timed-out (124, a step outlived its deadline
+# inside the mutant — run-all.sh's own number, issue #112) or caught. Its own function so that
+# check-health.sh can SOURCE it, as it does killer_of: 124 read as caught would let a slow machine
+# raise the score.
+rc_verdict() {
+  case "$1" in
+    90|91) echo broken ;; 0) echo survived ;; 99) echo missing ;; 124) echo timed-out ;; *) echo caught ;;
+  esac
 }
 
 # killer_of <suite log> → the name of the step that killed the mutant: the LAST step header the
@@ -5798,10 +5810,14 @@ fi
 caught=0; gaps=0; errors=0
 for slug in "${CATALOG[@]}"; do
   rc="$(cat "$WORK/$slug.rc" 2>/dev/null || echo 99)"
-  case "$rc" in
-    90|91)
+  case "$(rc_verdict "$rc")" in
+    broken)
       fail "CATALOGUE-BROKEN: $slug" "$(cat "$WORK/$slug.log")"; errors=$((errors + 1)) ;;
-    0)
+    timed-out)
+      fail "TIMED-OUT: $slug — a step outlived its timeout inside the mutant; inconclusive, never caught" \
+           "$(tail -5 "$WORK/$slug.log")"
+      errors=$((errors + 1)) ;;
+    survived)
       # The suite stayed GREEN with the runner sabotaged: nobody measures this sabotage.
       if in_gap_list "$slug"; then
         printf '  warn  %s — known gap, the suite does not catch it (yet)\n' "$slug"
@@ -5810,10 +5826,10 @@ for slug in "${CATALOG[@]}"; do
         fail "$slug is NOT caught" "the suite stayed green with the runner sabotaged — an assertion is missing"
         errors=$((errors + 1))
       fi ;;
-    99)
+    missing)
       fail "$slug produced no result" "the mutant died before writing its rc"
       errors=$((errors + 1)) ;;
-    *)
+    caught)
       if in_gap_list "$slug"; then
         fail "$slug is in KNOWN_GAPS but is ALREADY caught" \
              "gap closed — drop it from the list, or it becomes a permanent excuse"

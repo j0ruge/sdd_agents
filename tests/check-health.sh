@@ -1560,6 +1560,52 @@ else
        "ended: $INTR_ENDED, rc $INTR_RC, steps: $(tr '\n' ' ' < "$WORK/intr.log")"
 fi
 
+# Inside a mutant a deadline is NOT a kill. The catalogue scores every rc it does not know as
+# "caught", so a step that merely ran out of time — a loaded machine, a lock held by someone else —
+# would be a point the sabotage never earned: the score would rise by the machine's slowness. So
+# under SDD_MUTANT run() stops at the timed-out step with rc 124, its own number, and the catalogue
+# reads 124 as INCONCLUSIVE (rc_verdict below). DIFFERENTIAL — the same SLOW world twice in mutant
+# mode: the slow step alone answers 124 and stops there; a sensor that exits 124 on its own, well
+# inside its deadline (EARLY_124_FILE keeps its real one, so no second boundary can fake the clock),
+# is a red step like any other and answers 1. Reading the rc alone gives 124
+# to both.
+timeout_mutant_run() { # timeout_mutant_run <slow sensor or empty> <sensor exiting 124 at once or empty> — PUBLISHES TIMEOUT_RC / TIMEOUT_STEPS / TIMEOUT_OUT
+  local log="$WORK/slow-mutant.log"
+  : > "$log"; TIMEOUT_RC=0; TIMEOUT_OUT="$log.out"
+  env -u SDD_TPL_SELFTEST_CHILD -u SDD_MUTANT_FIRST SDD_MUTANT=1 FAILFAST_LOG="$log" FAILFAST_RED= FAILFAST_SLOW="$1" FAILFAST_124="$2" \
+    "$WORK/slow/tests/run-all.sh" > "$TIMEOUT_OUT" 2>&1 || TIMEOUT_RC=$?
+  TIMEOUT_STEPS="$(cat "$log")"
+}
+timeout_mutant_run "$TIMEOUT_STEP_FILE" ""
+MUT_SLOW_RC="$TIMEOUT_RC"; MUT_SLOW_STEPS="$TIMEOUT_STEPS"; MUT_SLOW_OUT="$(cat "$TIMEOUT_OUT")"
+timeout_mutant_run "" "$EARLY_124_FILE"
+if [ "$MUT_SLOW_RC" = 124 ] && grep -qF "  ✗ $TIMEOUT_STEP_NAME timed out after 1 s" <<< "$MUT_SLOW_OUT" \
+   && [ "$(tail -n 1 <<< "$MUT_SLOW_STEPS")" = "$TIMEOUT_STEP_FILE" ] \
+   && [ "$TIMEOUT_RC" = 1 ] && ! grep -qF 'timed out after' "$TIMEOUT_OUT" \
+   && [ "$(tail -n 1 <<< "$TIMEOUT_STEPS")" = "$EARLY_124_FILE" ]; then
+  pass 'surface: inside a mutant a timeout is not a kill'
+else
+  fail 'surface: inside a mutant a timeout is not a kill' \
+       "slow step: rc 124, its timeout line, and the suite stopped there; a sensor's own 124: rc 1, no timeout line" \
+       "slow: rc $MUT_SLOW_RC, steps: $(tr '\n' ' ' <<< "$MUT_SLOW_STEPS"); own 124: rc $TIMEOUT_RC, steps: $(tr '\n' ' ' <<< "$TIMEOUT_STEPS")"
+fi
+
+# The other half lives in the catalogue: rc_verdict classifies a mutant's suite rc, and it is
+# SOURCED from check-mutation.sh, never copied — the same guard as killer_of above, since an
+# unterminated range would source the rest of the catalogue. DIFFERENTIAL over the rcs that matter:
+# 124 inconclusive, 1 caught, 0 survived. A verdict that read 124 as caught passes the last two.
+RC_VERDICT_SRC="$(sed -n '/^rc_verdict() {/,/^}$/p' "$ROOT/tests/check-mutation.sh")"
+{ [ "$(tail -n 1 <<< "$RC_VERDICT_SRC")" = '}' ] && [ "$(grep -c . <<< "$RC_VERDICT_SRC")" -le 8 ]; } \
+  || broken "verdict probe: tests/check-mutation.sh has no short rc_verdict() { … } to classify a mutant's rc"
+eval "$RC_VERDICT_SRC"
+RCV="$(rc_verdict 124) $(rc_verdict 1) $(rc_verdict 0)"
+if [ "$RCV" = 'timed-out caught survived' ]; then
+  pass "surface: the catalogue reads a timed-out mutant as inconclusive, never caught"
+else
+  fail "surface: the catalogue reads a timed-out mutant as inconclusive, never caught" \
+       "rc_verdict 124 / 1 / 0 → 'timed-out caught survived'" "'$RCV'"
+fi
+
 # ---------------------------------------------------------------------------
 # surface: inside a mutant every sensor stops at its FIRST red assertion
 #
