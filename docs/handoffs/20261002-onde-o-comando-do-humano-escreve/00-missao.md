@@ -225,10 +225,9 @@ idêntico.
 - **Lançar a missão:** `./bin/sdd run 20261002-onde-o-comando-do-humano-escreve` do terminal
   interativo. Nunca com `&` de shell não interativo enquanto o I2 não estiver `done` (é a #157), e
   nunca como tarefa de fundo do Claude Code.
-- **PR #195** (o 86º item e a catraca 85 → 86) está aberto e **não** está nesta branch. Se ele for
-  mergeado antes desta missão, rebaseie esta branch sobre a `main`. O conflito esperado está em
-  `tests/health-baseline.txt`, na linha `todo-findings`: o valor certo é o da `main` + 1 (o achado do
-  I10). O Check do I10 já compara a catraca com a contagem real, e não com um número escrito.
+- **PR #195** (o 86º item e a catraca 85 → 86): **mergeado** em `a3d002f` (2026-10-02) e já
+  incorporado por rebase antes do primeiro `sdd run`. A catraca parte de `todo-findings 86` e o I10
+  a leva a 87 (o achado do `adr_declare`). O Check do I10 compara a catraca com a contagem real.
 - **Rodar `./bin/sdd health` uma vez,** depois do último commit de código **e** da última rodada dos
   revisores do PR, antes do `gate_PR` (o carimbo; ~18 min com a máquina livre).
 - O merge do PR é humano. Depois dele, o chore pós-merge apaga os oito itens com `RESOLVED by` e

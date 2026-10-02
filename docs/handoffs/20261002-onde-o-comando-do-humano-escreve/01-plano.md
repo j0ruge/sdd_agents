@@ -101,12 +101,11 @@ nome da função e use a linha só como ponto de partida.
   um símbolo que o item cita, e que o item cabe em 8 linhas. **Editar `bin/sdd` desloca linhas.** Se
   o `check-todo.sh` reclamar de âncora fora do alvo, atualize o número no `TODO.md` no **mesmo
   commit**; isso não move a catraca, porque a contagem de abertos não muda. Hoje:
-  `85 finding(s), all within 8 lines, carrying anchor + date, every anchor on target`.
+  `86 finding(s), all within 8 lines, carrying anchor + date, every anchor on target`.
 - **PR #195** (o 86º item, "O Red do `R<n>` prova o achado…", e a catraca 85 → 86 em
-  `tests/health-baseline.txt`) está **aberto** e **não** está nesta branch. Se ele for mergeado
-  antes, rebaseie sobre a `main`. Em `tests/health-baseline.txt`, linha `todo-findings`, o valor
-  certo é o da `main` + 1, pelo achado novo do I10. O Check do I10 compara a catraca com a contagem
-  real, e não com um número escrito.
+  `tests/health-baseline.txt`) foi **mergeado** em `a3d002f` (2026-10-02), e esta branch já foi
+  rebaseada sobre ele. A catraca na `main` está em `todo-findings 86`; o I10 a leva a **87** pelo
+  achado novo. O Check do I10 compara a catraca com a contagem real, e não com um número escrito.
 
 **Gemba de cada issue (reproduzido; detalhe no § Problema do `00-missao.md`)**
 - `checkpoint_note_intervention` (`bin/sdd:442`): `tmp="$(mktemp "${TMPDIR:-/tmp}/sdd-ck-XXXXXX")"`
