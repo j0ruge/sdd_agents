@@ -734,7 +734,7 @@ Achados sobre **repos-alvo** vão para o `TODO.md` daquele repo. Este arquivo é
   (`prurl`) — sem `pr_url:` a conferência do merge é pulada, e o `close_return_home` imprime `the
   mission branch is merged and spent` sem nada que o prove. Desde o I4 isso alcança também o ramo sem
   JIRA, que antes não fazia nada. Medido num rascunho: `feat/x` sem PR, `sdd close` → rc 0 e HEAD na
-  `main`. Direção: o humano decide se o close sem PR recusa ou só deixa de afirmar o merge.
+  `main`. Direção: o humano escolheu deixar de afirmar o merge. RESOLVED by c8778b7.
   Fonte: `docs/handoffs/20261002-onde-o-comando-do-humano-escreve/30-handoff-qa.md`.
   — descoberto por `sdd-qa` na missão `20261002-onde-o-comando-do-humano-escreve` (2026-10-02)
 
