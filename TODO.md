@@ -23,6 +23,13 @@ Achados sobre **repos-alvo** vão para o `TODO.md` daquele repo. Este arquivo é
 
 ### Sensores que faltam
 
+- [ ] **O Red do `R<n>` prova o achado, não o conserto: nenhum passo sabota a linha nova** —
+  `agents/sdd-executor.md:76` (`Watch it fail`) — o conserto tira o sintoma e pode abrir um fail-open
+  ao lado com o probe verde. Medido só no laço interativo (PR #45, #46; `coderabbit-pr` 2.4.0 já
+  sabota); no headless, nunca. Direção: contar nos `40-review-r*.md` quantos achados da rodada N+1
+  nasceram de um commit `R<n>` da N; se houver, o executor sabota o conserto antes do commit.
+  — descoberto pela sessão interativa ao avaliar o `/insights`, sem missão (2026-10-01)
+
 - [ ] **A regra da âncora aceita qualquer símbolo citado que reapareça perto, e uma âncora podre passa** —
   `tests/check-todo.sh:1965` (`ANCHOR_REACH`) — um span de 4+ letras citado no item a até 10 linhas
   basta; identificador que se repete no arquivo inteiro casa em qualquer lugar. Medido em `b3b6b98`:
