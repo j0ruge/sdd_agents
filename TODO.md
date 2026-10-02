@@ -721,6 +721,14 @@ Achados sobre **repos-alvo** vão para o `TODO.md` daquele repo. Este arquivo é
   Direção: `warn` quando o `chmod` falha, como o I5 fez, com probe por shim de `chmod`.
   — descoberto por `sdd-planner` na missão `20261002-onde-o-comando-do-humano-escreve` (2026-10-02)
 
+- [ ] **`sdd close` sem `50-pr.md` sai da branch da missão e diz que ela foi mergeada** — `bin/sdd:10681`
+  (`prurl`) — sem `pr_url:` a conferência do merge é pulada, e o `close_return_home` imprime `the
+  mission branch is merged and spent` sem nada que o prove. Desde o I4 isso alcança também o ramo sem
+  JIRA, que antes não fazia nada. Medido num rascunho: `feat/x` sem PR, `sdd close` → rc 0 e HEAD na
+  `main`. Direção: o humano decide se o close sem PR recusa ou só deixa de afirmar o merge.
+  Fonte: `docs/handoffs/20261002-onde-o-comando-do-humano-escreve/30-handoff-qa.md`.
+  — descoberto por `sdd-qa` na missão `20261002-onde-o-comando-do-humano-escreve` (2026-10-02)
+
 ## Decidido — não reabrir
 <!-- sdd:decided -->
 - **O laço de melhoria da sessão interativa não enxergaria o kit** — resolvido fora do kit, sem commit deste repo: `retrofit-watch` 0.2.0 (`j0ruge/skills@960e47b`) reconhece `/sdd-*`, subagente `sdd-*` e o CLI `sdd` (2026-10-01)
