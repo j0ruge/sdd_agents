@@ -26,8 +26,9 @@ Achados sobre **repos-alvo** vão para o `TODO.md` daquele repo. Este arquivo é
 - [ ] **O Red do `R<n>` prova o achado, não o conserto: nenhum passo sabota a linha nova** —
   `agents/sdd-executor.md:76` (`Watch it fail`) — o conserto tira o sintoma e pode abrir um fail-open
   ao lado com o probe verde. Medido só no laço interativo (PR #45, #46; `coderabbit-pr` 2.4.0 já
-  sabota); no headless, nunca. Direção: contar nos `40-review-r*.md` quantos achados da rodada N+1
-  nasceram de um commit `R<n>` da N; se houver, o executor sabota o conserto antes do commit.
+  sabota); no headless, nunca. Direção: medir antes. O `40-review-r*.md` não grava o commit que
+  gerou o achado, então um achado da rodada N+1 só conta se o `git blame` da âncora dele cair num
+  commit `R<n>` da N; se houver caso, o executor sabota o conserto antes do commit.
   — descoberto pela sessão interativa ao avaliar o `/insights`, sem missão (2026-10-01)
 
 - [ ] **A regra da âncora aceita qualquer símbolo citado que reapareça perto, e uma âncora podre passa** —
