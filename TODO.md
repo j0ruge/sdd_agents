@@ -52,6 +52,7 @@ Achados sobre **repos-alvo** vão para o `TODO.md` daquele repo. Este arquivo é
   `GIT_REFLOG_ACTION` de quem chama; dentro de sessão REVIEW o `trips:2` lê `trips:4` e a suíte
   reprova (rc 1), na `main` também. O gate passa: o runner não carrega o rótulo, só o `claude -p`.
   Direção: `env -u GIT_REFLOG_ACTION` no `foreign_run`/fixtures, ou o sensor inteiro sem o rótulo.
+  RESOLVED by 4815fe0.
   Fonte: `docs/handoffs/20260930-a-sub-etapa-que-andou/40-review-r1.md` — achado por `sdd-reviewer`
   na missão `20260930-a-sub-etapa-que-andou` (2026-10-01)
 
@@ -162,7 +163,7 @@ Achados sobre **repos-alvo** vão para o `TODO.md` daquele repo. Este arquivo é
   GNU; o `mv` troca um `00-missao.md` que seja SYMLINK por arquivo comum (o alvo real fica com o
   valor velho, e o commit leva a troca de tipo); e `awk -v v="$valor"` interpreta escape de barra
   invertida — inócuo no único chamador de hoje, armadilha para o segundo. Direção: `warn` no chmod,
-  `readlink -f` (ou `die`) no alvo, e valor por `ENVIRON` no awk.
+  `readlink -f` (ou `die`) no alvo, e valor por `ENVIRON` no awk. RESOLVED by ce1d2ed.
   — descoberto por `sdd-reviewer` na missão `20260816-portas-do-humano` (2026-08-16)
 
 - [ ] **A linha `N kit agent(s) checked` não é observável por nenhum fixture** — `bin/sdd:5594` —
@@ -344,7 +345,7 @@ Achados sobre **repos-alvo** vão para o `TODO.md` daquele repo. Este arquivo é
   recursa sai como **travamento sem mensagem**, e não como vermelho; medido em `rc=124` sob
   `timeout 20` na r2 desta missão. É a classe que já custou três sessões de REVIEW deste repo
   (`4c86712`), e o probe de ponta a ponta do `check-templates.sh` está a uma edição dela.
-  Direção: barato, mas o número tem de ser escolhido a dedo por passo.
+  Direção: barato, mas o número tem de ser escolhido a dedo por passo. RESOLVED by 8449ab8.
   — descoberto por `sdd-reviewer` na missão `20260901-o-revisor-so-acha` (2026-09-02)
 
 - [ ] **A âncora `^  ok    ` do Check não alcança 82 das 866 asserções da suíte** —
@@ -457,7 +458,7 @@ Achados sobre **repos-alvo** vão para o `TODO.md` daquele repo. Este arquivo é
   `.claude/agents/` por symlinks para o kit, e um `cp` sobre symlink escreve no **destino** (medido
   num scratch). Um `install --force` rodado de outra worktree do kit, ou de uma versão instalada,
   reescreve os chapéus do kit ligado; o install não é sessão e não passa pela guarda de kit.
-  Direção: `cp --remove-destination`, ou recusar quando o alvo é symlink.
+  Direção: `cp --remove-destination`, ou recusar quando o alvo é symlink. RESOLVED by e303e4f.
   — descoberto por `sdd-planner` na missão `20260926-a-carona-antes-do-congelamento` (2026-09-26)
 
 - [ ] **O checkpoint não tem grafia para incremento cujo produto não é commit** — `bin/sdd:1144`
@@ -589,7 +590,7 @@ Achados sobre **repos-alvo** vão para o `TODO.md` daquele repo. Este arquivo é
   `checkpoint-notas.md` (o de toda missão nova) nunca o usa nem o apaga. Medido em 2026-10-01: 13 340
   arquivos `/tmp/sdd-ck-*` vazios desde 2026-09-08, 926 só nesse dia (a suíte força fase muitas
   vezes); em repo-alvo, um por `--phase`/`retry`/`--budget-override`. Direção: criar o `tmp` só no
-  ramo do `awk`, com probe que conta `sdd-ck-*` antes e depois de uma nota.
+  ramo do `awk`, com probe que conta `sdd-ck-*` antes e depois de uma nota. RESOLVED by 813f808.
   — descoberto por `sessão coordenadora` na missão `20261001-a-janela-nao-se-parte` (2026-10-01)
 
 - [ ] **`gate_EXEC` valida por uma leitura e conta por outra, e uma célula vazia as separa** —
@@ -670,7 +671,7 @@ Achados sobre **repos-alvo** vão para o `TODO.md` daquele repo. Este arquivo é
   `bin/sdd:7358` — medido aqui: o commit da aprovação caiu na `main` local, com o `01-plano.md`, o
   `checkpoint.md` e o ADR citado fora do git, ou seja, uma missão aprovada sem plano no histórico.
   Em repo-alvo, alguém que dê `push` na `main` publica isso. Direção: recusar ou avisar quando a
-  branch é o `DEFAULT_BRANCH`, e commitar o diretório da missão inteiro.
+  branch é o `DEFAULT_BRANCH`, e commitar o diretório da missão inteiro. RESOLVED by a64a69c.
   Reincidiu no `sales_quote` em 2026-09-30: o gate REVIEW recusou `working tree dirty` até comitar o plano à mão.
   — descoberto por `sessão coordenadora` na missão `20260922-o-motivo-da-fase` (2026-09-22)
 
@@ -679,7 +680,7 @@ Achados sobre **repos-alvo** vão para o `TODO.md` daquele repo. Este arquivo é
   não interativo (o `setsid nohup … &` que se usa para `sdd run`), a suíte nasce com `SigIgn 0x7`, o
   bash não desfaz sinal ignorado na entrada, e o probe estoura 8 s: vermelho 3 de 3, verde 3 de 3 em
   primeiro plano. O `TEST_CMD` de um gate num `sdd run` destacado herdaria a máscara (não medido).
-  Direção: SIG_DFL no filho do probe, ou declarar a pré-condição no cabeçalho.
+  Direção: SIG_DFL no filho do probe, ou declarar a pré-condição no cabeçalho. RESOLVED by d0a6aa4.
   — descoberto por `sessão coordenadora` no PR #58 `fix/ancoras-do-catalogo` (2026-09-23)
 
 - [ ] **O 2º Python do worker custa ~30 ms em toda chamada coordenada** — `bin/sdd:10275` — o
@@ -702,6 +703,7 @@ Achados sobre **repos-alvo** vão para o `TODO.md` daquele repo. Este arquivo é
   `JIRA_ENABLED=false` o `cmd_close` sai antes do `close_return_home`, e o fetch + `--ff-only` do
   achado 7 não alcança repo sem JIRA, o próprio kit incluído: no fechamento do PR #176 a volta à
   `main` foi feita à mão. Direção: chamar o `close_return_home` também nesse ramo, com probe e mutante.
+  RESOLVED by 46919f6.
   — descoberto por `sdd close` (sessão interativa) na missão `20260928-os-achados-da-janela` (2026-09-29)
 
 - [ ] **`sdd status` travou mais de 2 min segurando a trava do checkout** — `bin/sdd:6395`
@@ -711,6 +713,13 @@ Achados sobre **repos-alvo** vão para o `TODO.md` daquele repo. Este arquivo é
   `kill` liberou. Causa não diagnosticada. Comando de leitura não deveria prender o checkout sem
   prazo. Direção: medir onde ele para e dar prazo à espera do auxiliar, que deve dizer quem segura.
   — descoberto por `sessão coordenadora` na missão `20260930-e2e-local-diz-por-que-caiu` (2026-10-01)
+
+- [ ] **O `adr_declare` engole a falha do `chmod --reference`, como o `frontmatter_write` engolia** —
+  `bin/sdd:7003` (`ADR_DECLARE_WHY`) — os dois ramos (`:7003` e `:7022`) fazem `chmod … || true`, e
+  num userland sem `--reference` o spec ou o `00-missao.md` reescrito fica 0600 sem aviso. É o yokoten
+  da #81 fora do `frontmatter_write`; o symlink não o alcança, porque o caminho chega por `readlink -f`.
+  Direção: `warn` quando o `chmod` falha, como o I5 fez, com probe por shim de `chmod`.
+  — descoberto por `sdd-planner` na missão `20261002-onde-o-comando-do-humano-escreve` (2026-10-02)
 
 ## Decidido — não reabrir
 <!-- sdd:decided -->
