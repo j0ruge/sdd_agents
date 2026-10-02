@@ -467,7 +467,13 @@ assert_eq "an escalation row carries no cache_read" "blocked false" \
 echo "== retry invocation =="
 : > "$LEDGER"
 RETRY_LOG_BEFORE="$(grep -c 'BLOCKED' "$FIX/.sdd/logs/$MISSION/pipeline.log" 2>/dev/null || true)"
-"$SDD" retry "$MISSION" >/dev/null 2>&1; RETRY_RC=$?
+# #193: the intervention note used to `mktemp` in TMPDIR BEFORE choosing its branch, and the append
+# branch neither used nor removed it — one empty `sdd-ck-*` leaked per note. Both retries of the
+# note's two worlds (this one is the checkpoint.md world, the next block the sibling world) run
+# with a TMPDIR private to the sensor, and the leftovers are counted after both.
+CK_TMP="$OUTSIDE/ck-tmp"; mkdir -p "$CK_TMP"
+ck_leftovers() { find "$CK_TMP" -maxdepth 1 -name 'sdd-ck-*' | grep -c . || true; }
+TMPDIR="$CK_TMP" "$SDD" retry "$MISSION" >/dev/null 2>&1; RETRY_RC=$?
 RETRY_LOG_AFTER="$(grep -c 'BLOCKED' "$FIX/.sdd/logs/$MISSION/pipeline.log" 2>/dev/null || true)"
 assert_eq "sdd retry writes one session row" "1" "$(rows 'select(.event == "session") | 1' | grep -c .)"
 assert_eq "and marks itself as a retry invocation" "retry" "$(rows 'select(.event == "session") | .invocation')"
@@ -513,13 +519,22 @@ ck_before="$(notes)"
 : > "$MDIR/checkpoint-notas.md"
 ( cd "$FIX" && git add -A && git commit -qm "chore: split the notes out" ) >/dev/null 2>&1
 : > "$LEDGER"
-"$SDD" retry "$MISSION" >/dev/null 2>&1 || true
+TMPDIR="$CK_TMP" "$SDD" retry "$MISSION" >/dev/null 2>&1 || true
 assert_eq "the intervention note lands in the sibling file, and the checkpoint does not grow" \
   "1 $ck_before" "$(nnotes) $(notes)"
 # Committed alone, on the same terms as the checkpoint path: the gate of the next phase reads a
 # clean tree, and a note left uncommitted would knock it down.
 assert_eq "and it is committed alone, like the checkpoint one" "clean" \
   "$( [ -z "$(git -C "$FIX" status --porcelain -- "docs/handoffs/$MISSION/checkpoint-notas.md")" ] && echo clean || echo dirty )"
+# Both worlds have now written one note each under TMPDIR=$CK_TMP. The floor is that both notes
+# really landed (the two assertions above), so a zero here is not a zero of nothing having run.
+assert_eq "the intervention note leaves no temporary file behind" "0" "$(ck_leftovers)"
+# And the append path does not need TMPDIR at all: pointed at a path that does not exist (not a
+# chmod, which does not stop root), the note still lands and is committed alone. Read the note and
+# the tree, never the retry's rc — the stub session that follows may fail for its own reasons.
+TMPDIR="$OUTSIDE/no-such-tmpdir" "$SDD" retry "$MISSION" >/dev/null 2>&1 || true
+assert_eq "the notes-file path writes the note with an unwritable TMPDIR" "2 clean" \
+  "$(nnotes) $( [ -z "$(git -C "$FIX" status --porcelain -- "docs/handoffs/$MISSION/checkpoint-notas.md")" ] && echo clean || echo dirty )"
 rm -f "$MDIR/checkpoint-notas.md"
 ( cd "$FIX" && git add -A && git commit -qm "chore: back to one file for the rest of the block" ) >/dev/null 2>&1
 

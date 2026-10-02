@@ -2027,6 +2027,14 @@ mut_RUN_intervention_ignores_notes_file() {
   sed -i '/^checkpoint_note_intervention() {/,/^}/ s@^  target="$ck"; \[ -f "$nf" \] && target="$nf"$@  target="$ck"@' "$1"
 }
 
+# #193 back: the intervention note creates its temporary BEFORE choosing the branch, so the append
+# branch (the sibling notes file) leaks one empty `sdd-ck-*` per note and dies on a TMPDIR that is
+# not there. Caught by "the intervention note leaves no temporary file behind" and "the notes-file
+# path writes the note with an unwritable TMPDIR" in check-autonomy.sh.
+mut_RUN_intervention_tmp_before_branch() {
+  sed -i '/^checkpoint_note_intervention() {/,/^}/ s@^  if \[ "$target" = "$nf" \]; then$@  tmp="$(mktemp "${TMPDIR:-/tmp}/sdd-ck-XXXXXX")"; if [ "$target" = "$nf" ]; then@' "$1"
+}
+
 # The reader goes back to one world: `sdd autonomy --by-mission` counts interventions only in
 # checkpoint.md, so every mission written after the split reports ZERO no matter how many times a
 # human had to step in — and zero is the answer this report reserves for "a human never did".
@@ -5354,6 +5362,7 @@ CATALOG=(
   AUTONOMY_cache_read_dropped
   AUTONOMY_intervention_one_world
   RUN_intervention_ignores_notes_file
+  RUN_intervention_tmp_before_branch
   AUTONOMY_progress_null_blind
   AUTONOMY_historic_progress_dropped
   AUTONOMY_historic_total_change_blind

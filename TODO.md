@@ -112,7 +112,7 @@ Achados sobre **repos-alvo** vão para o `TODO.md` daquele repo. Este arquivo é
   mutação em duas. — descoberto por `sdd-reviewer` na missão `20260818-lote-facil` (2026-08-19)
 
 - [ ] **O piso do shim pré-2.31 prova que o shim é um git falso, não que o runner o consulta** —
-  `tests/check-autonomy.sh:4443` — o piso invoca `git` diretamente sob o `PATH` do shim, e nada
+  `tests/check-autonomy.sh:4458` — o piso invoca `git` diretamente sob o `PATH` do shim, e nada
   ancora no caminho de resolução do runner. Medido: trocar `git` por `/usr/bin/git` no
   `ledger_repo_root` E apagar a guarda deixa `check-autonomy.sh` inteiro verde, porque o shim segue
   um impostor correto que nunca é chamado. Direção: termo provando INTERCEPTAÇÃO — a resposta do
@@ -585,7 +585,7 @@ Achados sobre **repos-alvo** vão para o `TODO.md` daquele repo. Este arquivo é
 > quem mexer num deles o move para a seção a que ele pertence.
 
 - [ ] **`checkpoint_note_intervention` vaza um arquivo vazio em `/tmp` a cada nota** —
-  `bin/sdd:455` (`mktemp`) — o `tmp` nasce antes do `if`, e o caminho de append no
+  `bin/sdd:467` (`mktemp`) — o `tmp` nasce antes do `if`, e o caminho de append no
   `checkpoint-notas.md` (o de toda missão nova) nunca o usa nem o apaga. Medido em 2026-10-01: 13 340
   arquivos `/tmp/sdd-ck-*` vazios desde 2026-09-08, 926 só nesse dia (a suíte força fase muitas
   vezes); em repo-alvo, um por `--phase`/`retry`/`--budget-override`. Direção: criar o `tmp` só no
@@ -619,7 +619,7 @@ Achados sobre **repos-alvo** vão para o `TODO.md` daquele repo. Este arquivo é
   `mut_EXEC_tally_doing_is_done`.
   — descoberto por `sdd-reviewer` na missão `20260829-o-incremento-que-andou` (2026-08-30)
 
-- [ ] **A metade `repo` da chave de memória do caminho histórico não tem probe** — `bin/sdd:3283` —
+- [ ] **A metade `repo` da chave de memória do caminho histórico não tem probe** — `bin/sdd:3286` —
   trocar `([$r.repo, $r.mission] | tostring)` por `($r.mission // "")` deixa a suíte verde, e sob
   `--all-repos` duas missões de mesmo slug em repos diferentes colapsam numa identidade só:
   `2 advanced · 0% waste` vira `1 advanced · 1 churned · 50% waste`. É a mesma classe do
@@ -704,7 +704,7 @@ Achados sobre **repos-alvo** vão para o `TODO.md` daquele repo. Este arquivo é
   `main` foi feita à mão. Direção: chamar o `close_return_home` também nesse ramo, com probe e mutante.
   — descoberto por `sdd close` (sessão interativa) na missão `20260928-os-achados-da-janela` (2026-09-29)
 
-- [ ] **`sdd status` travou mais de 2 min segurando a trava do checkout** — `bin/sdd:6355`
+- [ ] **`sdd status` travou mais de 2 min segurando a trava do checkout** — `bin/sdd:6358`
   (`cmd_status`) — no `sales_quote`, em 2026-10-01 às 00:30Z, um `sdd status` sem nenhum `sdd run`
   vivo ficou parado dentro do `sdd-coordination.py enter … auxiliary`, e o próprio processo
   aparecia como dono no `CHECKOUT-BUSY`. Um segundo `sdd status` enfileirou atrás dele. Só um

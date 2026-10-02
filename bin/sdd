@@ -452,7 +452,6 @@ checkpoint_note_intervention() {   # checkpoint_note_intervention <what the huma
   rel="${target#"$REPO_ROOT/"}"
   line="- intervention: $what — $phase — $(date '+%Y-%m-%d %H:%M') · written by the runner"
   dirty_before="$(cd "$REPO_ROOT" && git status --porcelain -- "$rel" 2>/dev/null)" || dirty_before=""
-  tmp="$(mktemp "${TMPDIR:-/tmp}/sdd-ck-XXXXXX")"
   # Blank lines inside the notes section are buffered, so the note lands after the last note and
   # the blank line that separated the section from the next heading is printed after it, intact.
   # `mawk` is byte-oriented: the heading is matched on its ASCII prefix, never on the accented word.
@@ -462,6 +461,10 @@ checkpoint_note_intervention() {   # checkpoint_note_intervention <what the huma
   if [ "$target" = "$nf" ]; then
     printf '%s\n' "$line" >> "$nf"
   else
+  # The temporary is born HERE, in the only branch that uses it (#193): created before the `if`,
+  # the append branch leaked one empty file per note and failed outright on a TMPDIR that is not
+  # there. A failed awk removes it too.
+  tmp="$(mktemp "${TMPDIR:-/tmp}/sdd-ck-XXXXXX")"
   awk -v line="$line" '
     BEGIN { nb = 0; in_notes = 0; done = 0 }
     !done && !in_notes && /^## Notas de execu/ { in_notes = 1; print; next }
@@ -472,7 +475,7 @@ checkpoint_note_intervention() {   # checkpoint_note_intervention <what the huma
     END {
       if (in_notes) { print line; for (i = 0; i < nb; i++) print buf[i]; done = 1 }
       if (!done) { print ""; print line }
-    }' "$ck" > "$tmp" && mv "$tmp" "$ck"
+    }' "$ck" > "$tmp" && mv "$tmp" "$ck" || rm -f "$tmp"
   fi
   if [ -n "$dirty_before" ]; then
     warn "intervention noted in $rel but NOT committed — the file was already dirty; commit it with the work it carries"
