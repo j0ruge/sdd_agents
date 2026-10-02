@@ -4864,6 +4864,14 @@ mut_CLOSE_fetch_unbounded() {           # with no timeout(1) the fetch is tried 
 mut_CLOSE_no_upstream_unsaid() {        # no upstream reads as a divergence
   sed -i '/^close_return_home() {/,/^}/ s@^  if \[ -z "\$upstream" \]; then ok@  if false; then ok@' "$1"
 }
+# #182: the JIRA-less arm of the close is a close too. Caught by "close: with JIRA off the tree goes
+# back to the default branch" and "close: with JIRA off an unmerged PR is still refused", one each.
+mut_CLOSE_no_jira_stays_put() {         # the JIRA-off arm returns before close_return_home
+  sed -i '/^cmd_close() {/,/^}/ s@^    info "JIRA_ENABLED=false — nothing to close in JIRA"$@&\n    return 0@' "$1"
+}
+mut_CLOSE_no_jira_skips_merge_check() { # the JIRA-off arm leaves before the merge check, as it used to
+  sed -i '/^cmd_close() {/,/^}/ s@^  local prurl; prurl="\$(frontmatter "\$MISSION_DIR/50-pr.md" pr_url)"$@  [ "$JIRA_ENABLED" = "true" ] || { info "JIRA_ENABLED=false — nothing to close"; close_return_home; return 0; }\n&@' "$1"
+}
 
 # CHECKOUT-UNAVAILABLE names what fell and in which interpreter (finding 8): back to the generic list,
 # and the operator diagnoses the PATH's python3 by hand again.
@@ -4947,6 +4955,8 @@ CATALOG=(
   CLOSE_fetch_failure_ignored
   CLOSE_fetch_unbounded
   CLOSE_no_upstream_unsaid
+  CLOSE_no_jira_stays_put
+  CLOSE_no_jira_skips_merge_check
   COORD_select_pidfd
   RUN_branch_double_slash
   COORD_admission_missing

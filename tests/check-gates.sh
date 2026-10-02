@@ -4806,6 +4806,37 @@ assert_eq "close: with JIRA off nothing is asked of anyone — no session, no ac
   "rc:0 nothing:1 session-spent:0 acli-calls:0" \
   "rc:$C9_RC nothing:$(has "$C9_OUT" 'nothing to close') session-spent:$(spent) acli-calls:$(acli_calls)"
 
+# 9b. WITH JIRA OFF THE CLOSE STILL COMES HOME (#182). The early return sat ABOVE
+#     close_return_home, so a JIRA-less repo answered "nothing to close", rc 0, and stayed on the
+#     spent mission branch — the return only the JIRA arm reached. Same tree recipe as 8c: committed
+#     first, so the clean-tree arm is the one measured. The `:0` terms keep "no acli, no session".
+git -C "$FIX" add -A >/dev/null 2>&1
+git -C "$FIX" -c user.email=fix@example.com -c user.name=fixture commit -q -m "fixture: clean before the JIRA-off close" >/dev/null 2>&1 || true
+git -C "$FIX" checkout -q -b LH-14_nojira-branch
+rm -f "$CLOSE_MARK" "$CLOSE_ACLI_LOG"
+C9B_RC=0
+C9B_OUT="$( cd "$FIX" && "$SDD" close "$MISSION" 2>&1 )" || C9B_RC=$?
+assert_eq "close: with JIRA off the tree goes back to the default branch" \
+  "rc:0 branch:$CLOSE_HOME nothing:1 session-spent:0 acli-calls:0" \
+  "rc:$C9B_RC branch:$(git -C "$FIX" rev-parse --abbrev-ref HEAD) nothing:$(has "$C9B_OUT" 'nothing to close') session-spent:$(spent) acli-calls:$(acli_calls)"
+
+# 9c. ...and the trip home is post-merge there too: a PR that is not MERGED is refused with the
+#     JIRA arm's own sentence, and the branch does not move. `gh` answers OPEN for this one regime.
+cat > "$FIX/.stub/gh" <<'STUB'
+#!/usr/bin/env bash
+[ "${1:-}" = "pr" ] && [ "${2:-}" = "view" ] || { echo "unexpected gh call: $*" >&2; exit 9; }
+printf 'OPEN\n'
+STUB
+chmod +x "$FIX/.stub/gh"
+git -C "$FIX" checkout -q -b LH-15_nojira-open-pr
+rm -f "$CLOSE_MARK" "$CLOSE_ACLI_LOG"
+C9C_RC=0
+C9C_OUT="$( cd "$FIX" && "$SDD" close "$MISSION" 2>&1 )" || C9C_RC=$?
+assert_eq "close: with JIRA off an unmerged PR is still refused" \
+  "rc:1 refused:1 branch:LH-15_nojira-open-pr session-spent:0 acli-calls:0" \
+  "rc:$C9C_RC refused:$(has "$C9C_OUT" "is 'OPEN', not MERGED") branch:$(git -C "$FIX" rev-parse --abbrev-ref HEAD) session-spent:$(spent) acli-calls:$(acli_calls)"
+git -C "$FIX" checkout -q "$CLOSE_HOME"
+
 # The fixture goes back the way it was found. "This block runs last" was the previous version's
 # only defence, and it is not one a sensor can hold: a future author appending below would inherit
 # a `gh` that answers MERGED to everything and a `claude` that returns success without doing

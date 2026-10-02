@@ -10599,10 +10599,9 @@ cmd_close() {
   resolve_mission "${1:-}"
   PIPELINE_LOG="$(log_dir)/pipeline.log"
 
-  [ "$JIRA_ENABLED" = "true" ] || { info "JIRA_ENABLED=false — nothing to close"; return 0; }
-  local issue; issue="$(frontmatter "$MISSION_DIR/10-ticket.md" issue)"
-  [ -n "$issue" ] || die "no 'issue:' found in 10-ticket.md — did the TICKET phase run?"
-
+  # The merge check sits ABOVE the JIRA fork, once, because both arms end in close_return_home and
+  # "post-merge" is what makes leaving the mission branch safe (#182: the JIRA-less arm returned
+  # early, before both the check and the trip home, and left the human on a spent branch).
   local prurl; prurl="$(frontmatter "$MISSION_DIR/50-pr.md" pr_url)"
   if [ -n "$prurl" ]; then
     local merged
@@ -10611,6 +10610,14 @@ cmd_close() {
       die "PR $prurl is '$merged', not MERGED — 'sdd close' is post-merge"
     fi
   fi
+
+  if [ "$JIRA_ENABLED" != "true" ]; then
+    info "JIRA_ENABLED=false — nothing to close in JIRA"
+    close_return_home
+    return 0
+  fi
+  local issue; issue="$(frontmatter "$MISSION_DIR/10-ticket.md" issue)"
+  [ -n "$issue" ] || die "no 'issue:' found in 10-ticket.md — did the TICKET phase run?"
 
   local acli_bin="${SDD_ACLI_BIN:-acli}"
   command -v "$acli_bin" >/dev/null 2>&1 || die "cannot reach '$acli_bin' — 'sdd close' verifies the close against JIRA itself and will not report a close it did not see.
