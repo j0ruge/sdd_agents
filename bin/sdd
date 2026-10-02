@@ -480,8 +480,11 @@ checkpoint_note_intervention() {   # checkpoint_note_intervention <what the huma
   # The temporary is born HERE, in the only branch that uses it (#193): created before the `if`,
   # the append branch leaked one empty file per note and failed outright on a TMPDIR that is not
   # there. A failed awk removes it too.
-  tmp="$(mktemp "${TMPDIR:-/tmp}/sdd-ck-XXXXXX")"
-  awk -v line="$line" '
+  # And a failure here is SAID, never swallowed (R1 of the r1): the chain used to end in
+  # `|| rm -f "$tmp"`, so a refused `mv` fell through to the commit, which found nothing, and the
+  # warning claimed "intervention noted" over a note that does not exist — the one line
+  # `sdd autonomy --by-mission` counts.
+  if tmp="$(mktemp "${TMPDIR:-/tmp}/sdd-ck-XXXXXX")" && awk -v line="$line" '
     BEGIN { nb = 0; in_notes = 0; done = 0 }
     !done && !in_notes && /^## Notas de execu/ { in_notes = 1; print; next }
     in_notes && /^[[:space:]]*$/ { buf[nb++] = $0; next }
@@ -491,7 +494,13 @@ checkpoint_note_intervention() {   # checkpoint_note_intervention <what the huma
     END {
       if (in_notes) { print line; for (i = 0; i < nb; i++) print buf[i]; done = 1 }
       if (!done) { print ""; print line }
-    }' "$ck" > "$tmp" && mv "$tmp" "$ck" || rm -f "$tmp"
+    }' "$ck" > "$tmp" && mv "$tmp" "$ck"; then
+    :
+  else
+    [ -n "${tmp:-}" ] && rm -f "$tmp"
+    warn "intervention NOT written in $rel — the checkpoint could not be rewritten; add it by hand: $line"
+    return 0
+  fi
   fi
   if [ -n "$dirty_before" ]; then
     warn "intervention noted in $rel but NOT committed — the file was already dirty; commit it with the work it carries"

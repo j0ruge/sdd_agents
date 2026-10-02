@@ -2035,6 +2035,14 @@ mut_RUN_intervention_tmp_before_branch() {
   sed -i '/^checkpoint_note_intervention() {/,/^}/ s@^  if \[ "$target" = "$nf" \]; then$@  tmp="$(mktemp "${TMPDIR:-/tmp}/sdd-ck-XXXXXX")"; if [ "$target" = "$nf" ]; then@' "$1"
 }
 
+# R1 of the r1 back: the rewrite chain ends in `|| rm -f "$tmp"` again, so a refused `mv` is
+# swallowed, the branch reads as a success and the warning claims "intervention noted" over a note
+# that was never written. Caught by "the intervention note never claims a note it could not write"
+# in check-autonomy.sh.
+mut_RUN_intervention_claims_unwritten_note() {
+  sed -i '/^checkpoint_note_intervention() {/,/^}/ s@ > "$tmp" \&\& mv "$tmp" "$ck"; then$@ > "$tmp" \&\& mv "$tmp" "$ck" || rm -f "$tmp"; then@' "$1"
+}
+
 # The symlink guard of frontmatter_write goes no-op: `mv -f` replaces the link with a regular
 # file again, the real target keeps an empty `aprovacao:` and the approve commits the type change
 # (#81). Caught by "sdd approve refuses a symlinked 00-missao.md and writes nothing" in
@@ -5430,6 +5438,7 @@ CATALOG=(
   AUTONOMY_intervention_one_world
   RUN_intervention_ignores_notes_file
   RUN_intervention_tmp_before_branch
+  RUN_intervention_claims_unwritten_note
   FRONTMATTER_writes_over_link
   FRONTMATTER_chmod_silent
   AUTONOMY_progress_null_blind

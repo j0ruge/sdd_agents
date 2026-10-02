@@ -538,6 +538,33 @@ assert_eq "the notes-file path writes the note with an unwritable TMPDIR" "2 cle
 rm -f "$MDIR/checkpoint-notas.md"
 ( cd "$FIX" && git add -A && git commit -qm "chore: back to one file for the rest of the block" ) >/dev/null 2>&1
 
+# --- a note the runner could not write is never claimed (R1 of the r1, #193 follow-up) ---
+# In the checkpoint.md world the note is a rewrite: awk into a temporary, then `mv` over the file.
+# The #193 fix ended that chain with `|| rm -f "$tmp"`, so a failed `mv` was swallowed, the commit
+# found nothing to commit, and the warning said "intervention noted … but the commit failed" — rc 0
+# and a note that does not exist, the one line `sdd autonomy --by-mission` counts. The world is a
+# `mv` shim that refuses the checkpoint as destination (a chmod would not stop root), and its own
+# marker is the floor: without `fired` the assertion would be about a world where nothing failed.
+# Read as a group: no claim, a warning that NAMES the note as not written, the checkpoint unchanged,
+# and no temporary left behind in the sensor's private TMPDIR.
+echo "== a note it could not write is never claimed =="
+MV_SHIM="$OUTSIDE/mv-shim"; mkdir -p "$MV_SHIM"; rm -f "$MV_SHIM/fired"
+cat > "$MV_SHIM/mv" <<'EOF'
+#!/usr/bin/env bash
+case "${!#}" in
+  */checkpoint.md) : > "$MV_SHIM_DIR/fired"; echo "mv: cannot move to '${!#}': Permission denied" >&2; exit 1 ;;
+esac
+exec "$MV_SHIM_REAL" "$@"
+EOF
+chmod +x "$MV_SHIM/mv"
+nb_before="$(notes)"
+mv_out="$(PATH="$MV_SHIM:$PATH" MV_SHIM_DIR="$MV_SHIM" MV_SHIM_REAL="$(command -v mv)" TMPDIR="$CK_TMP" \
+  "$SDD" retry "$MISSION" 2>&1)" || true
+assert_eq "the intervention note never claims a note it could not write" \
+  "fired claimed:0 named:1 notes:$nb_before leftovers:0" \
+  "$( [ -f "$MV_SHIM/fired" ] && echo fired || echo not-fired ) claimed:$(grep -c 'intervention noted' <<< "$mv_out" || true) named:$(grep -c 'intervention NOT written' <<< "$mv_out" || true) notes:$(notes) leftovers:$(ck_leftovers)"
+( cd "$FIX" && git add -A && git commit -qm "chore: whatever the stub session left" ) >/dev/null 2>&1 || true
+
 echo "== --phase is the human's hand too, and the projection writes none =="
 : > "$LEDGER"
 "$SDD" run "$MISSION" --phase EXEC --max-phases 1 >/dev/null 2>&1 || true
