@@ -49,3 +49,4 @@
 > - intervention: <o que o humano teve de fazer> — <fase> — <custo, se houver>
 
 - 2026-10-02 14:07 · `I1` · Red medido trips:4 sob o veneno armado; a limpeza ficou dentro de `foreign_elsewhere` (subshell com `unset GIT_REFLOG_ACTION`), o que protege também o mundo `RSB`; piso usa repo descartável `reviewscope-venom` sob `$OUTSIDE`; suíte verde, anchors 532
+- 2026-10-02 14:25 · `I2` · Red medido: traceback depois de `signal recovers: 15` com o veneno armado e sem o reset; conserto por `preexec_fn=default_signals` em `start()` (SIGINT e SIGQUIT), veneno só no laço de sinais com o handler restaurado; Check 3 lançado com `&` e em primeiro plano; âncora do TODO.md 786 → 816; suíte verde, anchors 532
