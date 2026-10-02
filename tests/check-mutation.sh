@@ -4933,6 +4933,14 @@ mut_CLOSE_no_jira_stays_put() {         # the JIRA-off arm returns before close_
 mut_CLOSE_no_jira_skips_merge_check() { # the JIRA-off arm leaves before the merge check, as it used to
   sed -i '/^cmd_close() {/,/^}/ s@^  local prurl; prurl="\$(frontmatter "\$MISSION_DIR/50-pr.md" pr_url)"$@  [ "$JIRA_ENABLED" = "true" ] || { info "JIRA_ENABLED=false — nothing to close"; close_return_home; return 0; }\n&@' "$1"
 }
+# CodeRabbit on PR #196: the trip home claims the merge only when cmd_close's check saw it. One
+# mutant per half of "close: without a pr_url the trip home claims no merge it did not check".
+mut_CLOSE_claims_unverified_merge() {   # the sentence claims the merge whatever the check saw
+  sed -i '/^close_return_home() {/,/^}/ s@^    if \[ "\$seen" = verified \]; then$@    if true; then@' "$1"
+}
+mut_CLOSE_never_records_the_merge() {  # a MERGED PR is checked and the verdict is never passed on
+  sed -i '/^cmd_close() {/,/^}/ s@^    merge_seen=verified$@    :@' "$1"
+}
 
 # CHECKOUT-UNAVAILABLE names what fell and in which interpreter (finding 8): back to the generic list,
 # and the operator diagnoses the PATH's python3 by hand again.
@@ -5018,6 +5026,8 @@ CATALOG=(
   CLOSE_no_upstream_unsaid
   CLOSE_no_jira_stays_put
   CLOSE_no_jira_skips_merge_check
+  CLOSE_claims_unverified_merge
+  CLOSE_never_records_the_merge
   COORD_select_pidfd
   RUN_branch_double_slash
   COORD_admission_missing

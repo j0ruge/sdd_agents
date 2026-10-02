@@ -161,7 +161,9 @@ leaves `aprovacao` empty, and the runner stops asking for explicit approval.
 
 **And that explicit approval is a command, not a hand edit.** `sdd approve <mission>` prints what is
 being approved — the title, the PLAN-AUTO evidence, the increments, the open questions — asks
-`[y/N]`, and only on an explicit yes writes `aprovacao: humano-<date>` and commits **that one file**.
+`[y/N]`, and only on an explicit yes switches to the branch `00-missao.md` declares, writes
+`aprovacao: humano-<date>` and commits **the mission directory** — plus the file `adr:` names, when
+it is a path.
 It never opens a session: approving is the one decision in the pipeline that has to come from
 outside it. `N` and a bare Enter are answers and exit 0; when not a single character reaches the
 prompt (stdin closed, an empty pipe, a harness with no terminal) it exits **66** (`EX_NOINPUT`) and
@@ -605,7 +607,9 @@ command **comes home with the merge** (`close_return_home`, one definition for b
 (unless the tree is dirty — then it stays and says so), fetches its upstream (`timeout 30`,
 `GIT_TERMINAL_PROMPT=0`) and `merge --ff-only`, including when the session was already on the base.
 The line says whether the branch moved (`fast-forwarded to origin/main (<sha>)` or
-`already up to date`). No upstream, no network, no `timeout(1)` (the fetch is skipped, never run
+`already up to date`), and it calls the mission branch "merged and spent" only when the merge check
+above saw the PR `MERGED`: with no `pr_url` in `50-pr.md` nothing was asked, so it says the merge
+was not verified instead. No upstream, no network, no `timeout(1)` (the fetch is skipped, never run
 unbounded) or a diverged branch each leave the sha where it was and **warn** — the close already
 succeeded, and nothing is forced. Before this the base stayed behind the PR just merged, and the
 next mission was cut from it (SQ-145, SQ-146).

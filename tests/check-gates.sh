@@ -5072,6 +5072,25 @@ assert_eq "close: with JIRA off an unmerged PR is still refused" \
   "rc:$C9C_RC refused:$(has "$C9C_OUT" "is 'OPEN', not MERGED") branch:$(git -C "$FIX" rev-parse --abbrev-ref HEAD) session-spent:$(spent) acli-calls:$(acli_calls)"
 git -C "$FIX" checkout -q "$CLOSE_HOME"
 
+# 9d. WITHOUT A pr_url NOTHING WAS CHECKED, SO NOTHING IS CLAIMED (CodeRabbit on PR #196). The merge
+#     check above the JIRA fork runs only when 50-pr.md names a PR; with no pr_url it is skipped, and
+#     the trip home said "the mission branch is merged and spent" all the same — a merge nobody
+#     verified, handed to the human as a fact. The trip still happens (a mission that never reached
+#     a PR has a spent branch too); only the sentence changes. DIFFERENTIAL on purpose: 9b's verified
+#     close must still carry the claim, or deleting the sentence everywhere would pass. `gh` still
+#     answers OPEN from 9c, so rc 0 here also proves it was never asked.
+printf -- '---\nfase: PR\n---\n# PR\n' > "$MDIR/50-pr.md"
+git -C "$FIX" add -A >/dev/null 2>&1
+git -C "$FIX" -c user.email=fix@example.com -c user.name=fixture commit -q -m "fixture: a 50-pr.md with no pr_url" >/dev/null 2>&1 || true
+git -C "$FIX" checkout -q -b LH-16_nojira-no-pr-url
+rm -f "$CLOSE_MARK" "$CLOSE_ACLI_LOG"
+C9D_RC=0
+C9D_OUT="$( cd "$FIX" && "$SDD" close "$MISSION" 2>&1 )" || C9D_RC=$?
+assert_eq "close: without a pr_url the trip home claims no merge it did not check" \
+  "rc:0 branch:$CLOSE_HOME verified-claims:1 unverified-claims:0 unverified-says:1" \
+  "rc:$C9D_RC branch:$(git -C "$FIX" rev-parse --abbrev-ref HEAD) verified-claims:$(has "$C9B_OUT" 'merged and spent') unverified-claims:$(has "$C9D_OUT" 'merged and spent') unverified-says:$(has "$C9D_OUT" 'merge was not verified')"
+git -C "$FIX" checkout -q "$CLOSE_HOME"
+
 # The fixture goes back the way it was found. "This block runs last" was the previous version's
 # only defence, and it is not one a sensor can hold: a future author appending below would inherit
 # a `gh` that answers MERGED to everything and a `claude` that returns success without doing

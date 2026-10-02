@@ -10623,8 +10623,8 @@ close_query() {
 # bounded (`timeout 30`, `GIT_TERMINAL_PROMPT=0`): with no timeout(1) it is SKIPPED, because an
 # unbounded fetch could hang the close, and the fast-forward is still tried against the upstream
 # already on the machine — a local merge does not hang. The `ok` says whether anything moved.
-close_return_home() {
-  local current out rc=0 where upstream remote merge before after
+close_return_home() { # close_return_home <verified|unverified> — what cmd_close's merge check saw
+  local seen="${1:-unverified}" current out rc=0 where upstream remote merge before after
   [ -n "${DEFAULT_BRANCH:-}" ] || return 0
   current="$( git -C "$REPO_ROOT" rev-parse --abbrev-ref HEAD 2>/dev/null || echo "" )"
   [ -n "$current" ] || return 0
@@ -10643,7 +10643,14 @@ close_return_home() {
       warn "could not return to '$DEFAULT_BRANCH' — still on '$current'. git said: $out"
       return 0
     fi
-    where="back on '$DEFAULT_BRANCH' — the mission branch is merged and spent"
+    # The claim is earned by the merge check and by nothing else, so the predicate names the one
+    # value that earns it: with no pr_url in 50-pr.md cmd_close asked nobody, and an argument
+    # forgotten at a call site falls to the sentence that claims less (CodeRabbit on PR #196).
+    if [ "$seen" = verified ]; then
+      where="back on '$DEFAULT_BRANCH' — the mission branch is merged and spent"
+    else
+      where="back on '$DEFAULT_BRANCH' — 50-pr.md names no pr_url, so the merge was not verified"
+    fi
   fi
   upstream="$( git -C "$REPO_ROOT" rev-parse --abbrev-ref "$DEFAULT_BRANCH@{upstream}" 2>/dev/null || true )"
   if [ -z "$upstream" ]; then ok "$where; no upstream, nothing to fast-forward"; return 0; fi
@@ -10687,17 +10694,19 @@ cmd_close() {
   # "post-merge" is what makes leaving the mission branch safe (#182: the JIRA-less arm returned
   # early, before both the check and the trip home, and left the human on a spent branch).
   local prurl; prurl="$(frontmatter "$MISSION_DIR/50-pr.md" pr_url)"
+  local merge_seen=unverified
   if [ -n "$prurl" ]; then
     local merged
     merged="$( cd "$REPO_ROOT" && gh pr view "$prurl" --json state --jq .state 2>/dev/null || true )"
     if [ "$merged" != "MERGED" ]; then
       die "PR $prurl is '$merged', not MERGED — 'sdd close' is post-merge"
     fi
+    merge_seen=verified
   fi
 
   if [ "$JIRA_ENABLED" != "true" ]; then
     info "JIRA_ENABLED=false — nothing to close in JIRA"
-    close_return_home
+    close_return_home "$merge_seen"
     return 0
   fi
   local issue; issue="$(frontmatter "$MISSION_DIR/10-ticket.md" issue)"
@@ -10727,7 +10736,7 @@ To see what it saw:  $acli_bin jira workitem search --jql \"key = $issue AND sta
     # nobody spent would be the same class of lie as the rc this whole function stopped believing.
     pipeline_log_line "$(date -Iseconds)  CLOSE  issue=$issue  session=none  rc=0  verified=true  log=none"
     ok "$issue is already Done — JIRA confirms it, and no session was spent"
-    close_return_home
+    close_return_home "$merge_seen"
     return 0
   fi
 
@@ -10851,7 +10860,7 @@ blocks the transition, say what it is and stop — but do not stop to request pe
     # second label ANDed onto the first. A session that fell over after closing the issue closed it.
     if [ "$rc" -ne 0 ]; then dim "  (the close session exited $rc — see $close_logs — but the issue is Done, so the artifact decides)"; fi
     ok "$issue closed — JIRA confirms it is Done"
-    close_return_home
+    close_return_home "$merge_seen"
     return 0
   fi
   # THREE outcomes, not two, and the third is why this branch exists: "I asked and JIRA said no" and

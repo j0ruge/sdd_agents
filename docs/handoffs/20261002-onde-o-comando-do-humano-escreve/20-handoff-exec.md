@@ -25,7 +25,7 @@ O `TODO.md` marca os 8 itens com `RESOLVED by`, e a catraca foi de 86 para 87. R
 - **Branch:** `feat/onde-o-comando-do-humano-escreve`, só local (nunca empurrada; o push é da fase PR)
 - **Último commit:** o commit deste handoff, sobre `41d8837` `chore(todo): RESOLVED by nos oito itens…`
 - **Working tree:** limpo depois do commit deste handoff
-- **Suíte:** `tests/run-all.sh` → verde (rc 0, ~300 s; 1690 asserções `ok`, 541 mutantes com âncora válida)
+- **Suíte:** `tests/run-all.sh` → verde (rc 0, ~300 s; 1691 asserções `ok`, 542 mutantes com âncora válida)
 - **E2E:** não se aplica (o kit não tem `E2E_CMD`)
 
 ## O que foi feito
