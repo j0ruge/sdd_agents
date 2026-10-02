@@ -4,7 +4,7 @@ fase: EXEC
 status: done
 sessao: dea94cc3-2442-49ae-abd9-9b8234a3a57e
 data: 2026-10-02 16:55
-gate: "tests/run-all.sh → rc 0, 'suite green' (1690 linhas '  ok ', 0 FAIL; coordination: 187 passed, 0 failed; anchors: all 541 mutants still apply and leave valid code); checkpoint I1–I10 done, cada Commit um sha no git log; check-todo: '87 finding(s), all within 8 lines, carrying anchor + date, every anchor on target'"
+gate: "tests/run-all.sh → rc 0, 'suite green' (1691 linhas '  ok ', 0 FAIL; coordination: 187 passed, 0 failed; anchors: all 542 mutants still apply and leave valid code); checkpoint I1–I10 e R1 done, cada Commit um sha no git log; check-todo: '88 finding(s), all within 8 lines, carrying anchor + date, every anchor on target'"
 ---
 
 # Handoff — EXEC — Onde o comando do humano escreve
@@ -18,7 +18,7 @@ Os 10 incrementos estão `done`, cada um com Red medido e a suíte verde. O appr
 declarada e commita o diretório da missão. O close sem JIRA confere o PR e volta à base. Nenhum
 escritor atravessa symlink, a nota de intervenção não deixa temporário, e a suíte tem prazo por passo
 (dentro de mutante o estouro dá rc 124 = inconclusivo). Os dois sensores de ambiente armam o próprio veneno.
-O `TODO.md` marca os 8 itens com `RESOLVED by`, e a catraca foi de 86 para 87. Próximo: QA (ou REVIEW, conforme o runner), depois a DOCS com a lista de drift do plano.
+O `TODO.md` marca os 8 itens com `RESOLVED by`, e a catraca foi de 86 para 87. Rodada r1 da REVIEW: o `R1` (`fcb5f4e`) fez a nota de intervenção do layout antigo avisar `intervention NOT written` em vez de afirmar `noted` quando o `mv` falha. Próximo: REVIEW r2.
 
 ## Estado do repo
 
@@ -40,6 +40,10 @@ O `TODO.md` marca os 8 itens com `RESOLVED by`, e a catraca foi de 86 para 87. P
 - `a3d3996` — I8 (#112, parte 1): o `run()` do `run-all.sh` recusa passo sem prazo; o estouro é vermelho nomeado e a suíte segue; o Ctrl-C continua parando
 - `8449ab8` — I9 (#112, parte 2): sob `SDD_MUTANT` o estouro sai com 124, e o catálogo (`rc_verdict`) o lê como inconclusivo, nunca como pego
 - `41d8837` — I10: `RESOLVED by` nos 8 itens do `TODO.md`, o achado novo do `adr_declare` e a catraca de 86 para 87
+
+### Rodada r1 da REVIEW (`40-review-r1.md`)
+
+- `fcb5f4e` — R1 (achado #1): em `checkpoint_note_intervention`, `mktemp`, awk e `mv` viraram a condição de um `if`; a falha remove o temporário, avisa `intervention NOT written in <rel>` com a linha a escrever à mão e retorna antes do commit. Probe `the intervention note never claims a note it could not write` (shim de `mv` que recusa o checkpoint, com marcador como piso); mutante `RUN_intervention_claims_unwritten_note` pego por ele; 44 âncoras do `TODO.md` remapeadas
 
 ## Artefatos
 
