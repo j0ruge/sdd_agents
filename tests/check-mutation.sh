@@ -2299,6 +2299,12 @@ mut_RUN_install_no_guard() {
   sed -i 's@-f "$SDD_HOME/config/starter.conf"@-n "always-there"@' "$1"
 }
 
+# Not a gate: the install guard against a linked agent copy (#173) turns into a no-op, and `cp`
+# goes back to following the link — through it under --force, into GNU cp's refusal on a dangling one.
+mut_RUN_install_writes_through_link() {
+  sed -i '/^cmd_install()/,/^}/ s@if \[ -L "$target" \]; then@if false; then@' "$1"
+}
+
 # Not a gate: the ledger readers go back to asking "can this row be attributed to a kit version?"
 # in two spellings — `.kit_dirty == false` for sessions, `.kit_dirty != true` for escalations and
 # for the judge. This is the EXACT pre-fix text, and it is why the mutant needs two edits: reverting
@@ -5239,6 +5245,7 @@ CATALOG=(
   RUN_degraded_label_blind
   RUN_sort_lexi
   RUN_install_no_guard
+  RUN_install_writes_through_link
   RUN_on_axis_forked
   KAIZEN_gate_blind
   KAIZEN_jidoka_dead

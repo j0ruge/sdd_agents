@@ -5093,7 +5093,16 @@ cmd_install() {
     [ -e "$a" ] || continue
     name="$(basename "$a")"
     target="$REPO_ROOT/.claude/agents/$name"
-    if [ ! -f "$target" ]; then
+    # A linked copy is the human's explicit choice (`sdd-link-agents`), and `cp` follows the link:
+    # `--force` overwrote the file at the other end, and a dangling link either died in GNU cp or
+    # created the file where it pointed (#173). Tested BEFORE the three arms, never written.
+    if [ -L "$target" ]; then
+      if [ "$(readlink -f "$target" 2>/dev/null || true)" = "$(readlink -f "$a")" ]; then
+        ok "agent $name linked to this kit"
+      else
+        warn "agent $name is a link to $(readlink "$target") — not touched; replace the link by hand to adopt this kit's version"
+      fi
+    elif [ ! -f "$target" ]; then
       cp "$a" "$target"; ok "agent $name copied"
     elif cmp -s "$a" "$target"; then
       ok "agent $name identical"

@@ -1003,6 +1003,52 @@ else
        "npm test" "$multi_test_cmd"
 fi
 
+# --- install never writes through a linked agent ----------------------------
+# `.claude/agents/<hat>.md` can be a symlink — `sdd-link-agents` makes exactly that, by the human's
+# explicit choice. `install --force` then ran `cp` over the LINK, which follows it: the link stayed
+# a link and the file at the other end was overwritten with this kit's bytes (measured, #173). A
+# DANGLING link fell into the `[ ! -f ]` arm instead, and `cp` created the file where it pointed.
+# Both worlds are built in a repo of their own, so nothing later in this file reads them.
+echo "== install never writes through a linked agent =="
+LINKED="$FIX/linked"
+mkdir -p "$LINKED"
+( cd "$LINKED" && git init -q -b main \
+  && git config user.email "fixture@example.com" && git config user.name "Fixture" \
+  && echo content > file.txt && git add -A && git commit -qm "init" ) >/dev/null 2>&1
+( cd "$LINKED" && "$SDD" install >/dev/null 2>&1 )
+ELSEWHERE="$FIX/elsewhere-sdd-qa.md"
+printf 'bytes that belong to somebody else\n' > "$ELSEWHERE"
+rm -f "$LINKED/.claude/agents/sdd-qa.md"
+ln -s "$ELSEWHERE" "$LINKED/.claude/agents/sdd-qa.md"
+before_link="$(md5sum < "$ELSEWHERE")"
+link_out="$( cd "$LINKED" && "$SDD" install --force 2>&1 )"
+if [ -L "$LINKED/.claude/agents/sdd-qa.md" ] && [ "$before_link" = "$(md5sum < "$ELSEWHERE")" ] \
+   && grep -q 'sdd-qa.md.*link' <<< "$link_out"; then
+  pass "install --force never writes through a linked agent"
+else
+  fail "install --force never writes through a linked agent" \
+       "the link kept, its target's md5 unchanged and a warning naming the link" \
+       "link: $([ -L "$LINKED/.claude/agents/sdd-qa.md" ] && echo kept || echo replaced); md5 $(md5sum < "$ELSEWHERE"); out: $(grep 'sdd-qa' <<< "$link_out" || true)"
+fi
+
+DANGLING="$FIX/nowhere/sdd-qa.md"
+rm -f "$LINKED/.claude/agents/sdd-qa.md"
+mkdir -p "$FIX/nowhere"
+ln -s "$DANGLING" "$LINKED/.claude/agents/sdd-qa.md"
+# GNU cp 9.4 refuses to write through a dangling link ("not writing through dangling symlink") and
+# the install died there under `set -e`, rc 1, with every later step unrun; a cp under
+# POSIXLY_CORRECT creates the file instead. Both are wrong, so the probe demands all three: no
+# file at the other end, rc 0, and the same warning that names the link.
+rc=0; dangling_out="$( cd "$LINKED" && "$SDD" install 2>&1 )" || rc=$?
+if [ ! -e "$DANGLING" ] && [ -L "$LINKED/.claude/agents/sdd-qa.md" ] && [ "$rc" -eq 0 ] \
+   && grep -q 'sdd-qa.md.*link' <<< "$dangling_out"; then
+  pass "install never creates a file through a dangling link"
+else
+  fail "install never creates a file through a dangling link" \
+       "no file at $DANGLING, the link kept, rc 0 and a warning naming the link" \
+       "rc $rc; $(ls -l "$DANGLING" 2>&1 || true); out: $(grep 'sdd-qa' <<< "$dangling_out" || true)"
+fi
+
 # --- the bug template is seeded with `Closable by:` -------------------------
 # Anchor 3 of gate_QA reads that field and an ABSENT genre BLOCKS — fail-safe, because every bug
 # written before the field existed lacks it. But nothing on disk ever puts the field there:
