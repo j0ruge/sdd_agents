@@ -23,6 +23,22 @@ Achados sobre **repos-alvo** vão para o `TODO.md` daquele repo. Este arquivo é
 
 ### Sensores que faltam
 
+- [ ] **A regra da âncora aceita qualquer símbolo citado que reapareça perto, e uma âncora podre passa** —
+  `tests/check-todo.sh:1965` (`ANCHOR_REACH`) — um span de 4+ letras citado no item a até 10 linhas
+  basta; identificador que se repete no arquivo inteiro casa em qualquer lugar. Medido em `b3b6b98`:
+  `tests/check-autonomy.sh:6409` apontava para `exit 0` e passou verde porque `GIT_REFLOG_ACTION`
+  está em 6400 — o sensor disse `every anchor on target`. Direção: exigir o símbolo na própria linha
+  (ou no bloco da função), ou contar ocorrências e recusar símbolo que aparece em todo canto.
+  — descoberto por `revisor de tarefa` na missão `20261001-a-janela-nao-se-parte` (2026-10-01)
+
+- [ ] **Mundo de sensor reescrito pode perder o mutante que matava, e só o catálogo de 30 min vê** —
+  `tests/check-mutation.sh:5561` (`KILLERS_FILE`) — o I4 de `20261001-a-janela-nao-se-parte` fez o
+  mundo 8 restaurar o arquivo antes do gate; o `--anchors` ficou verde e duas revisões aprovaram, e
+  só o `sdd health` (531 de 532) achou `HEALTH_stamp_window_blind` vivo. O mapa de assassinos já sabe
+  qual sensor matou cada mutante. Direção: um modo barato que roda, isolados, os mutantes cujo
+  assassino é um sensor tocado pelo diff, para o EXEC rodar antes do commit.
+  — descoberto por `sdd health` na missão `20261001-a-janela-nao-se-parte` (2026-10-01)
+
 - [ ] **A ida e volta de branch do `check-autonomy.sh` herda o rótulo da sessão REVIEW** —
   `tests/check-autonomy.sh:6474` (`foreign_elsewhere`) — os `git checkout` do fixture herdam o
   `GIT_REFLOG_ACTION` de quem chama; dentro de sessão REVIEW o `trips:2` lê `trips:4` e a suíte
@@ -286,15 +302,6 @@ Achados sobre **repos-alvo** vão para o `TODO.md` daquele repo. Este arquivo é
   Direção: um mundo para cada, ou tirá-las da lista.
   — descoberto por `sdd-executor` na missão `20260819-fecho-que-nao-mente` (2026-08-19)
 
-- [ ] **A guarda de vazio do `mutation_stamp_key` só cobre a ausência TOTAL dos quatro caminhos** —
-  `bin/sdd:2111` — com `tests/` presente e `bin/` ausente, o `find` imprime o que achou, sai não-zero,
-  o `2>/dev/null` engole o aviso e a chave sai de uma listagem PARCIAL, sem sinal nenhum de que
-  faltou diretório. Hoje inalcançável (as duas pontas só perguntam por raiz cujo `tests/` tem
-  catálogo), e o comentário da função declara só o caso "todos ausentes".
-  Direção: exigir que cada caminho de `MUTATION_STAMP_PATHS` exista, ou carimbar a lista na chave.
-  RESOLVED by 162e923.
-  — descoberto por `sdd-reviewer` na missão `20260819-fecho-que-nao-mente` (2026-08-19)
-
 - [ ] **Piso anti-vacuidade que fica para trás continua PASSANDO, e nada avisa** —
   `tests/check-lang.sh:178` — o piso dizia 37 caminhos contra 40 reais: as ADRs 0004–0006 entraram
   pelo glob `docs/adr/*.md` sem tocar o número, e piso menor que a superfície certifica menos do
@@ -373,24 +380,6 @@ Achados sobre **repos-alvo** vão para o `TODO.md` daquele repo. Este arquivo é
   da fase mais cara do kit — US$ 37,30 medidos nesta missão. Morte de sessão é o caso normal que
   o princípio 4 promete resolver de graça. Direção: escopar a checagem ao que o REVIEW pode sujar.
   — descoberto por `operador` na missão `20260827-condicoes-pagamento-mesmo-cliente` (2026-08-27)
-
-- [ ] **A catraca do backlog e o carimbo de mutação colidem em toda missão** —
-  `tests/health-baseline.txt` (`todo-findings`) — o arquivo mora DENTRO dos quatro diretórios da chave do carimbo,
-  então cumprir o princípio 5 (achado fora de escopo vira item) obriga a bumpar a catraca, o que
-  invalida o carimbo e cobra outra rodada de 20 a 50 min antes do `gate_PR`. Medido nesta sessão:
-  o carimbo `0575d68…` foi ganho e perdido pelo commit que registra estes achados. Direção: tirar
-  o baseline da chave, ou aceitar o custo declarando-o no boot da fase PR.
-  RESOLVED by 89d8e62.
-  — descoberto por `sdd-qa` na missão `20260819-fecho-que-nao-mente` (2026-08-19)
-
-- [ ] **Lixo ignorado pelo git dentro dos quatro diretórios move a chave do carimbo** —
-  `bin/sdd:2108` (`mutation_stamp_key`) — a chave é `find -type f` sobre a árvore, não sobre o que o git rastreia: um
-  `tests/debug.log` (ignorado por `*.log`, invisível no `git status`) muda a chave, e um swap de
-  editor que nasce e morre durante a rodada dispara a guarda de janela, jogando fora um verde
-  legitimamente ganho. O mundo 8 do `check-gates.sh` depende desse mecanismo de propósito.
-  Direção: basear a chave nos arquivos rastreados, ou podar dotfiles.
-  RESOLVED by 89d8e62.
-  — descoberto por `sdd-qa` na missão `20260819-fecho-que-nao-mente` (2026-08-19)
 
 - [ ] **`sdd kaizen` recusa rodar de um worktree do próprio kit** — `bin/sdd:10042` — a porta
   "estou no repo do kit?" compara `kit_root` (`--show-toplevel` de `$SDD_HOME`) com `$REPO_ROOT`,
@@ -512,14 +501,6 @@ Achados sobre **repos-alvo** vão para o `TODO.md` daquele repo. Este arquivo é
 
 ### Comentário e registro
 
-- [ ] **Duas descrições da recuperação de `step_after` não dizem "da mesma corrida"** —
-  `docs/pipeline.md:1403` — o `R1` de `20260930-a-sub-etapa-que-andou` (`8a1b3a5`) passou a
-  recuperar só com `run_id` igual e não nulo; o `bin/sdd`, o `KAIZEN_LOG.md` e a D16 do
-  `CONTEXT.md` dizem isso, mas o `docs/pipeline.md` e o verbete Churn do `CONTEXT.md` ainda dizem
-  só "próxima linha QA da mesma `(repo, missão)`". Direção: acrescentar a corrida nas duas frases.
-  RESOLVED by 88ed6ea (missão `20260930-a-sub-etapa-que-andou`).
-  — descoberto por `sdd-reviewer` na missão `20260930-a-sub-etapa-que-andou` (2026-10-01)
-
 - [ ] **Drift de comentário em código não tem dono: nem a DOCS nem a EXEC** — `agents/sdd-docs.md:9`
   — comentário de código É documentação viva, mas o `writes:` da DOCS não lista `bin/sdd` e o
   `hat_guard_check` para a linha quando ela o conserta. `HAT_WRITES_EXTRA` não é a saída: declarar
@@ -594,6 +575,14 @@ Achados sobre **repos-alvo** vão para o `TODO.md` daquele repo. Este arquivo é
 > evento que o reabre — pela régua D15, ausência de consumidor é decisão adiada, não achado. Os
 > itens abaixo são achados de verdade que foram apendados ao fim do arquivo e nunca classificados;
 > quem mexer num deles o move para a seção a que ele pertence.
+
+- [ ] **`checkpoint_note_intervention` vaza um arquivo vazio em `/tmp` a cada nota** —
+  `bin/sdd:455` (`mktemp`) — o `tmp` nasce antes do `if`, e o caminho de append no
+  `checkpoint-notas.md` (o de toda missão nova) nunca o usa nem o apaga. Medido em 2026-10-01: 13 340
+  arquivos `/tmp/sdd-ck-*` vazios desde 2026-09-08, 926 só nesse dia (a suíte força fase muitas
+  vezes); em repo-alvo, um por `--phase`/`retry`/`--budget-override`. Direção: criar o `tmp` só no
+  ramo do `awk`, com probe que conta `sdd-ck-*` antes e depois de uma nota.
+  — descoberto por `sessão coordenadora` na missão `20261001-a-janela-nao-se-parte` (2026-10-01)
 
 - [ ] **`gate_EXEC` valida por uma leitura e conta por outra, e uma célula vazia as separa** —
   `bin/sdd:1109` — o laço lê com `IFS=$'\t' read`, que COLAPSA tabs por serem whitespace de IFS; o
@@ -714,14 +703,6 @@ Achados sobre **repos-alvo** vão para o `TODO.md` daquele repo. Este arquivo é
   `kill` liberou. Causa não diagnosticada. Comando de leitura não deveria prender o checkout sem
   prazo. Direção: medir onde ele para e dar prazo à espera do auxiliar, que deve dizer quem segura.
   — descoberto por `sessão coordenadora` na missão `20260930-e2e-local-diz-por-que-caiu` (2026-10-01)
-
-- [ ] **Registrar achado durante a janela do juiz parte a janela** — `tests/health-baseline.txt`
-  (`todo-findings`) — princípio 5 manda o item, a catraca manda mover a baseline, e o merge cunha um
-  `kit_sha` novo sem mudar `bin/`: em `6323c6f` (só `TODO.md` + baseline) 3 missões e US$ 110,18 de
-  `5b98087` viraram `previous`, `window_missions_stranded: 3`, sem veredito. Nada avisa quem mergeia.
-  Direção: achado de janela espera no handoff até o veredito, ou o eixo ignora commit sem código (ADR).
-  RESOLVED by eedc6d3.
-  — descoberto por `sdd-kaizen` no veredito `20260930-a-sub-etapa-que-andou` (2026-09-30)
 
 ## Decidido — não reabrir
 <!-- sdd:decided -->
