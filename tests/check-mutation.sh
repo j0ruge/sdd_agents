@@ -2035,6 +2035,20 @@ mut_RUN_intervention_tmp_before_branch() {
   sed -i '/^checkpoint_note_intervention() {/,/^}/ s@^  if \[ "$target" = "$nf" \]; then$@  tmp="$(mktemp "${TMPDIR:-/tmp}/sdd-ck-XXXXXX")"; if [ "$target" = "$nf" ]; then@' "$1"
 }
 
+# The symlink guard of frontmatter_write goes no-op: `mv -f` replaces the link with a regular
+# file again, the real target keeps an empty `aprovacao:` and the approve commits the type change
+# (#81). Caught by "sdd approve refuses a symlinked 00-missao.md and writes nothing" in
+# check-gates.sh.
+mut_FRONTMATTER_writes_over_link() {
+  sed -i '/^frontmatter_write() {/,/^}/ s@^  if \[ -L "$file" \]; then$@  if false; then@' "$1"
+}
+
+# The chmod warning goes back to silence: an artifact left 0600 by the mktemp says nothing again
+# (#81). Caught by "frontmatter_write warns when it cannot keep the mode" in check-gates.sh.
+mut_FRONTMATTER_chmod_silent() {
+  sed -i '/^frontmatter_write() {/,/^}/ s@^    || warn "frontmatter_write: could not keep the mode of .*$@    || true@' "$1"
+}
+
 # The reader goes back to one world: `sdd autonomy --by-mission` counts interventions only in
 # checkpoint.md, so every mission written after the split reports ZERO no matter how many times a
 # human had to step in — and zero is the answer this report reserves for "a human never did".
@@ -5373,6 +5387,8 @@ CATALOG=(
   AUTONOMY_intervention_one_world
   RUN_intervention_ignores_notes_file
   RUN_intervention_tmp_before_branch
+  FRONTMATTER_writes_over_link
+  FRONTMATTER_chmod_silent
   AUTONOMY_progress_null_blind
   AUTONOMY_historic_progress_dropped
   AUTONOMY_historic_total_change_blind

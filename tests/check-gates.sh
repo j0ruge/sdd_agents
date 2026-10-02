@@ -4374,6 +4374,96 @@ else
        "on main: $QW_WARN_N warning(s), at line ${QW_WARN_AT:-<none>}, question at line ${QW_ASK_AT:-<none>}, $(tail -2 <<< "$QW_ON_BASE") | off base: $QW_WARN_OFF_N warning(s), $(tail -2 <<< "$QW_OFF_BASE") | no rows: $QW_NOROWS_N warning(s), $(tail -1 <<< "$QW_NOROWS")"
 fi
 
+# --- frontmatter_write: what it must not trust (#81) -----------------------
+echo "== frontmatter_write =="
+# Two worlds of their own, each with `branch: <placeholder>`, so that a change in which branch the
+# approve lands on never moves these probes: they measure the writer, not the door.
+#
+# 1. A symlinked 00-missao.md. Writing THROUGH the link would put the approval outside the commit
+# (the target lives outside the mission directory); REPLACING it — what `mv -f` over the link did,
+# measured — turns the link into a regular file, leaves the real target with an empty `aprovacao:`
+# and commits the type change. Both are wrong, so the writer refuses: the link stays a link, the
+# target stays unapproved, and HEAD does not move.
+FL="20260109-linked-mission"
+FLDIR="$FIX/docs/handoffs/$FL"
+mkdir -p "$FLDIR" "$FIX/elsewhere"
+cat > "$FIX/elsewhere/real-missao.md" <<'EOF'
+---
+missao: 20260109-linked-mission
+titulo: fixture — a mission file that is a link
+aprovacao:
+branch: <placeholder>
+---
+# Mission
+EOF
+ln -s ../../../elsewhere/real-missao.md "$FLDIR/00-missao.md"
+: > "$FLDIR/01-plano.md"
+cat > "$FLDIR/checkpoint.md" <<'EOF'
+| ID | Incremento | Check (comando → esperado) | Status | Commit |
+|---|---|---|---|---|
+| I1 | fatia de fixture | `true` → `0` | pending | — |
+EOF
+( cd "$FIX" && git add -A && git commit -qm "fixture: a linked mission file" ) >/dev/null
+FL_HEAD_0="$( cd "$FIX" && git rev-parse HEAD )"
+FL_OUT="$( cd "$FIX" && "$SDD" approve "$FL" 2>&1 <<< "y" )"; FL_RC=$?
+FL_TARGET_LINE="$(grep -m1 '^aprovacao:' "$FIX/elsewhere/real-missao.md")"
+FL_HEAD_1="$( cd "$FIX" && git rev-parse HEAD )"
+# The fixture is asserted to BE a link before anything is concluded from it: a probe whose world
+# did not get built would read "refused" off an unrelated failure.
+if [ "$FL_RC" -ne 0 ] \
+   && grep -q 'symbolic link' <<< "$FL_OUT" \
+   && grep -q "00-missao.md" <<< "$FL_OUT" \
+   && [ -L "$FLDIR/00-missao.md" ] \
+   && [ "$FL_TARGET_LINE" = "aprovacao:" ] \
+   && [ "$FL_HEAD_1" = "$FL_HEAD_0" ] \
+   && [ -z "$( cd "$FIX" && git status --porcelain -- "docs/handoffs/$FL" elsewhere )" ]; then
+  pass "sdd approve refuses a symlinked 00-missao.md and writes nothing"
+else
+  fail "sdd approve refuses a symlinked 00-missao.md and writes nothing" \
+       "rc != 0 naming the symbolic link, the link still a link, the target still 'aprovacao:', HEAD unmoved" \
+       "rc $FL_RC, link: $([ -L "$FLDIR/00-missao.md" ] && echo yes || echo no), target '$FL_TARGET_LINE', HEAD moved: $([ "$FL_HEAD_1" = "$FL_HEAD_0" ] && echo no || echo yes), out: $(tail -2 <<< "$FL_OUT")"
+fi
+
+# 2. A chmod that fails. `chmod --reference` is GNU; a userland without it (or a filesystem that
+# refuses the mode) left the approved artifact 0600 from the mktemp, and `2>/dev/null || true` said
+# nothing. The approval is still written — losing the mode is not worth losing the human's `y` —
+# but the output has to say so, naming the file. The shim is first on PATH for THIS call only (the
+# mould is the `$FIX/.bsd` of check-preflight.sh), and the floor proves the shim is armed.
+FC="20260110-chmod-fails"
+FCDIR="$FIX/docs/handoffs/$FC"
+mkdir -p "$FCDIR" "$FIX/.nochmod"
+cat > "$FCDIR/00-missao.md" <<'EOF'
+---
+missao: 20260110-chmod-fails
+titulo: fixture — a chmod that refuses
+aprovacao:
+branch: <placeholder>
+---
+# Mission
+EOF
+: > "$FCDIR/01-plano.md"
+cat > "$FCDIR/checkpoint.md" <<'EOF'
+| ID | Incremento | Check (comando → esperado) | Status | Commit |
+|---|---|---|---|---|
+| I1 | fatia de fixture | `true` → `0` | pending | — |
+EOF
+printf '#!/bin/sh\nexit 1\n' > "$FIX/.nochmod/chmod"
+/bin/chmod +x "$FIX/.nochmod/chmod"
+( cd "$FIX" && printf '.nochmod/\n' >> .git/info/exclude && git add -A && git commit -qm "fixture: a plan whose chmod fails" ) >/dev/null
+FC_ARMED=no; PATH="$FIX/.nochmod:$PATH" chmod +x "$FCDIR/01-plano.md" 2>/dev/null || FC_ARMED=yes
+FC_OUT="$( cd "$FIX" && PATH="$FIX/.nochmod:$PATH" "$SDD" approve "$FC" 2>&1 <<< "y" )"; FC_RC=$?
+FC_LINE="$(grep -m1 '^aprovacao:' "$FCDIR/00-missao.md")"
+if [ "$FC_ARMED" = yes ] \
+   && [ "$FC_RC" -eq 0 ] \
+   && [[ "$FC_LINE" == "aprovacao: humano-"* ]] \
+   && grep -q 'warn.*could not keep the mode of .*00-missao.md' <<< "$FC_OUT"; then
+  pass "frontmatter_write warns when it cannot keep the mode"
+else
+  fail "frontmatter_write warns when it cannot keep the mode" \
+       "the shim armed, rc 0, 'aprovacao: humano-…' written, and a warning naming 00-missao.md" \
+       "armed $FC_ARMED, rc $FC_RC, line '$FC_LINE', out: $(tail -3 <<< "$FC_OUT")"
+fi
+
 # --- sdd close: the artifact decides, never the exit code ------------------
 # `cmd_close` printed `ok <issue> closed` off `[ "$rc" -eq 0 ]` — the exit code of the session it
 # had just asked to close the issue. That rc is SHARED between two branches: the session that

@@ -376,11 +376,23 @@ frontmatter_has() {
 frontmatter_write() {
   local file="$1" key="$2" value="$3" tmp
   [ -f "$file" ] || die "frontmatter_write: $file does not exist"
+  # A symlink is refused, never followed and never replaced (#81). Writing THROUGH it lands the
+  # value in a file the caller's `git add -- <path>` does not carry; `mv -f` over it — what this
+  # function used to do — turns the link into a regular file, leaves the real target untouched and
+  # commits the type change. A link here is a choice someone made; neither write honours it.
+  if [ -L "$file" ]; then
+    die "frontmatter_write: $file is a symbolic link — writing through it would land outside the commit, and replacing it would undo the link; point the mission at a regular file"
+  fi
   # `|| die`: a mission directory the human cannot write to (a root-owned checkout, a 555 dir) makes
   # mktemp fail, and under `set -e` the script would exit through mktemp's own message — no `error:`
   # prefix, no mention of sdd or the artifact. Same family as the cmd_health item in TODO.md.
   tmp="$(mktemp "${file}.XXXXXX")" || die "frontmatter_write: could not create a temporary beside $file"
-  awk -v k="$key" -v v="$value" '
+  # Through ENVIRON and never `awk -v`: `-v` runs the value through escape processing, so a `\`
+  # in it would be rewritten on the way in — the same rule gate_REVIEW states. Limit declared: no
+  # probe builds that world, because no caller produces a backslash today (the approve writes
+  # `humano-<date>`, adr_declare writes a path it resolved) — the world not built is a value with `\`.
+  SDD_FM_KEY="$key" SDD_FM_VALUE="$value" awk '
+    BEGIN { k = ENVIRON["SDD_FM_KEY"]; v = ENVIRON["SDD_FM_VALUE"] }
     NR==1 && $0=="---" { inside=1; print; next }
     inside && $0=="---" { inside=0; print; next }
     inside && !written {
@@ -396,7 +408,11 @@ frontmatter_write() {
   # mktemp creates 0600; without this the artifact would come out of an approval readable only by
   # whoever approved it. Git would not show the change (it tracks the exec bit only), which is what
   # makes it worth a line here instead of a bug report later.
-  chmod --reference="$file" "$tmp" 2>/dev/null || true
+  # A warning and never a `die` (#81): `--reference` is GNU, and a userland without it used to
+  # leave the artifact 0600 in silence. Losing the mode is not worth losing the write the human
+  # asked for, but it is worth a line that names the file.
+  chmod --reference="$file" "$tmp" 2>/dev/null \
+    || warn "frontmatter_write: could not keep the mode of $file — it now carries the temporary's (0600); restore it with chmod"
   # `-f`: GNU mv ASKS before replacing a destination the user cannot write to, and only when stdin
   # is a terminal — which is exactly this command's situation. Without it a second, untranslated,
   # git-plumbing-flavoured question appears right after the [y/N] prompt and eats a line of the
