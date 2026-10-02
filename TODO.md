@@ -40,7 +40,7 @@ Achados sobre **repos-alvo** vão para o `TODO.md` daquele repo. Este arquivo é
   — descoberto por `revisor de tarefa` na missão `20261001-a-janela-nao-se-parte` (2026-10-01)
 
 - [ ] **Mundo de sensor reescrito pode perder o mutante que matava, e só o catálogo de 30 min vê** —
-  `tests/check-mutation.sh:5652` (`KILLERS_FILE`) — o I4 de `20261001-a-janela-nao-se-parte` fez o
+  `tests/check-mutation.sh:5662` (`KILLERS_FILE`) — o I4 de `20261001-a-janela-nao-se-parte` fez o
   mundo 8 restaurar o arquivo antes do gate; o `--anchors` ficou verde e duas revisões aprovaram, e
   só o `sdd health` (531 de 532) achou `HEALTH_stamp_window_blind` vivo. O mapa de assassinos já sabe
   qual sensor matou cada mutante. Direção: um modo barato que roda, isolados, os mutantes cujo
@@ -75,7 +75,7 @@ Achados sobre **repos-alvo** vão para o `TODO.md` daquele repo. Este arquivo é
   missão `20260819-fecho-...` (2026-08-19)
 
 - [ ] **O carimbo de mutação cobre 4 dos 8 caminhos que a sandbox do catálogo copia** —
-  `bin/sdd:1990` contra `tests/check-mutation.sh:5530` — a chave lê `bin tests templates config`,
+  `bin/sdd:1990` contra `tests/check-mutation.sh:5540` — a chave lê `bin tests templates config`,
   mas `sandbox()` também copia `agents/`, `CLAUDE.md`, `TODO.md` e `docs/adr`. Mudança confinada a
   esses quatro mantém o carimbo válido sobre conteúdo que o catálogo de fato mede — a
   regra 12 do `check-health.sh` lê o `CLAUDE.md`. Estreitamento deliberado (a fase DOCS edita
@@ -250,7 +250,7 @@ Achados sobre **repos-alvo** vão para o `TODO.md` daquele repo. Este arquivo é
   do que ela. — descoberto por `/codereview` na missão `20260815-i13.1-autonomy-log` (2026-08-15)
 
 - [ ] **O schema da série não tem sensor de drift contra a prosa que o descreve** — `bin/sdd:9362`
-  (`kaizen_series`) vs `docs/pipeline.md:529`, `docs/adr/0003:59`, `agents/sdd-kaizen.md:40` e
+  (`kaizen_series`) vs `docs/pipeline.md:531`, `docs/adr/0003:59`, `agents/sdd-kaizen.md:40` e
   `docs/failure-modes.md:102` — produzido em dois lugares (o `jq` e o literal vazio, `:9350`) e
   descrito em **dez**, QUATRO deles dentro do `bin/sdd`. Cobrado 6×: na DOCS de
   `20260817-eixo-do-juiz`, **oito** dos dez diziam a unidade que o F1 da r3 trocara horas antes
@@ -296,7 +296,7 @@ Achados sobre **repos-alvo** vão para o `TODO.md` daquele repo. Este arquivo é
   — descoberto por `sdd-qa` na missão `20260819-fecho-que-nao-mente` (2026-08-19)
 
 - [ ] **O piso do catálogo mora só no consumidor; quem imprime o `score:` segue sem nenhum** —
-  `tests/check-mutation.sh:5811` — com `CATALOG=()` o laço roda zero vezes, `errors` fica 0 e o
+  `tests/check-mutation.sh:5821` — com `CATALOG=()` o laço roda zero vezes, `errors` fica 0 e o
   arquivo imprime `score: 0 caught, 0 known gap(s), of 0` saindo 0. O F1 pôs o piso no `cmd_health`,
   hoje o único chamador — mas duas frases do próprio runner (`bin/sdd:5945` e `:5972`) mandam o
   operador rodar `tests/run-all.sh --with-mutation` à mão, e aí o verde volta a mentir.
@@ -319,7 +319,7 @@ Achados sobre **repos-alvo** vão para o `TODO.md` daquele repo. Este arquivo é
   mesmo piso paga. Direção: derivar o piso, ou um sensor que compare piso × superfície real.
   — descoberto por `sdd-executor` na missão `20260901-o-revisor-so-acha` (2026-09-01)
 
-- [ ] **Nenhum instrumento mede prosa de CONTRATO fora de `templates/`** — `README.md:157` — o
+- [ ] **Nenhum instrumento mede prosa de CONTRATO fora de `templates/`** — `README.md:158` — o
   `refute()` do `tests/check-templates.sh` só lê `templates/`, e `README.md`/`docs/*.md` entram na
   `surface()` do `check-lang.sh`, que mede **idioma** e nada mais. Medido nesta missão: o I2 mudou
   o contrato do revisor em cinco lugares, o sexto sobreviveu à suíte verde e caiu numa jornada de
@@ -480,7 +480,7 @@ Achados sobre **repos-alvo** vão para o `TODO.md` daquele repo. Este arquivo é
 ### Saída humana e cosmética
 
 - [ ] **35% do `docs/pipeline.md` é um subsistema só, e ele cresce toda missão do ledger** —
-  `docs/pipeline.md:1008` — as seções `The autonomy ledger` (323 linhas) e `The kaizen loop` (174)
+  `docs/pipeline.md:1012` — as seções `The autonomy ledger` (323 linhas) e `The kaizen loop` (174)
   somam **497 de 1419** (eram 245 de 570 em 2026-08-17) num arquivo que é o índice do pipeline.
   Índice que carrega profundidade é o doc que a próxima sessão não lê inteiro. Direção: `references/` para
   o ledger + juiz, com o índice roteando — **não** executar no meio de outra missão, é refator de
@@ -567,6 +567,14 @@ Achados sobre **repos-alvo** vão para o `TODO.md` daquele repo. Este arquivo é
   É a classe do *"waiting for the suite"* de `4c86712`, agora na fase PR. Direção: o **runner** roda
   `sdd health` antes de abrir a sessão de PR quando o carimbo está inválido — é comando, não
   julgamento. — descoberto por `humano` na missão `20260829-o-incremento-que-andou` (2026-08-30)
+
+- [ ] **O carimbo da fase PR é medido antes da revisão dos bots, e o primeiro achado de código o descarta** —
+  `agents/sdd-publisher.md:42` (`./bin/sdd health`) — o `CLAUDE.md` manda esperar os revisores,
+  consertar numa leva e carimbar uma vez; a fase PR carimba logo depois de abrir o PR. Medido no #196:
+  health às 18:13, CodeRabbit às 18:27 com um achado em `bin/sdd`, run interrompido com 123 de 542
+  mutantes. A direção do item acima (o runner carimbar antes da sessão de PR) agrava isto. Direção, à
+  luz do ADR 0004: abrir o PR, esperar a rodada dos bots e só então carimbar.
+  — descoberto pela sessão interativa que monitorava `20261002-onde-o-comando-do-humano-escreve` (2026-10-02)
 
 - [ ] **A suíte segue acima do alvo "<30 s" da D7, mesmo depois do paralelismo** —
   `tests/run-all.sh:101` (`run()`) — a saída "subir o default" foi tomada e executada (pool + `min(núcleos, 8)`,
@@ -722,7 +730,7 @@ Achados sobre **repos-alvo** vão para o `TODO.md` daquele repo. Este arquivo é
   Fonte: `docs/handoffs/20261002-onde-o-comando-do-humano-escreve/00-missao.md` (§ Fora de escopo).
   — descoberto por `sdd-planner` na missão `20261002-onde-o-comando-do-humano-escreve` (2026-10-02)
 
-- [ ] **`sdd close` sem `50-pr.md` sai da branch da missão e diz que ela foi mergeada** — `bin/sdd:10690`
+- [ ] **`sdd close` sem `50-pr.md` sai da branch da missão e diz que ela foi mergeada** — `bin/sdd:10698`
   (`prurl`) — sem `pr_url:` a conferência do merge é pulada, e o `close_return_home` imprime `the
   mission branch is merged and spent` sem nada que o prove. Desde o I4 isso alcança também o ramo sem
   JIRA, que antes não fazia nada. Medido num rascunho: `feat/x` sem PR, `sdd close` → rc 0 e HEAD na
