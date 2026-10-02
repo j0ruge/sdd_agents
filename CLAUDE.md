@@ -274,6 +274,10 @@ novo entra lá. Os dezesseis de hoje: `check-templates.sh`, `check-gates.sh`, `c
 `check-health.sh`, `check-hat.sh`, `check-adr.sh` e `check-coordination.sh`.
 ⚠️ O número sai do comando e nunca desta linha — `ls tests/check-*.sh | wc -l` —, pela mesma
 régua do `44 caught of 44`: a lista envelheceu três vezes seguidas aqui, uma por sensor.
+⚠️ **Todo passo da suíte tem prazo** (`step_timeout` do `run-all.sh`, 8× o tempo ocioso, piso 60 s;
+desde #112): passo novo sem linha na tabela é recusado, estouro é vermelho nomeado, e dentro de
+mutante é rc 124, que o catálogo lê como `TIMED-OUT` (inconclusivo), nunca como pego. Sintoma e
+saída em [`docs/failure-modes.md`](docs/failure-modes.md).
 
 ⚠️ **Quinze dos dezesseis rodam no `TEST_CMD`; o `check-mutation.sh` é opt-in desde `4c86712`.** Ele
 verifica CADA mutante rodando a suíte inteira numa sandbox, e isso segurava a árvore por mais de

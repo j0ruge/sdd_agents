@@ -250,7 +250,7 @@ Achados sobre **repos-alvo** vão para o `TODO.md` daquele repo. Este arquivo é
   do que ela. — descoberto por `/codereview` na missão `20260815-i13.1-autonomy-log` (2026-08-15)
 
 - [ ] **O schema da série não tem sensor de drift contra a prosa que o descreve** — `bin/sdd:9362`
-  (`kaizen_series`) vs `docs/pipeline.md:525`, `docs/adr/0003:59`, `agents/sdd-kaizen.md:40` e
+  (`kaizen_series`) vs `docs/pipeline.md:529`, `docs/adr/0003:59`, `agents/sdd-kaizen.md:40` e
   `docs/failure-modes.md:102` — produzido em dois lugares (o `jq` e o literal vazio, `:9350`) e
   descrito em **dez**, QUATRO deles dentro do `bin/sdd`. Cobrado 6×: na DOCS de
   `20260817-eixo-do-juiz`, **oito** dos dez diziam a unidade que o F1 da r3 trocara horas antes
@@ -319,7 +319,7 @@ Achados sobre **repos-alvo** vão para o `TODO.md` daquele repo. Este arquivo é
   mesmo piso paga. Direção: derivar o piso, ou um sensor que compare piso × superfície real.
   — descoberto por `sdd-executor` na missão `20260901-o-revisor-so-acha` (2026-09-01)
 
-- [ ] **Nenhum instrumento mede prosa de CONTRATO fora de `templates/`** — `README.md:154` — o
+- [ ] **Nenhum instrumento mede prosa de CONTRATO fora de `templates/`** — `README.md:157` — o
   `refute()` do `tests/check-templates.sh` só lê `templates/`, e `README.md`/`docs/*.md` entram na
   `surface()` do `check-lang.sh`, que mede **idioma** e nada mais. Medido nesta missão: o I2 mudou
   o contrato do revisor em cinco lugares, o sexto sobreviveu à suíte verde e caiu numa jornada de
@@ -480,7 +480,7 @@ Achados sobre **repos-alvo** vão para o `TODO.md` daquele repo. Este arquivo é
 ### Saída humana e cosmética
 
 - [ ] **35% do `docs/pipeline.md` é um subsistema só, e ele cresce toda missão do ledger** —
-  `docs/pipeline.md:1003` — as seções `The autonomy ledger` (323 linhas) e `The kaizen loop` (174)
+  `docs/pipeline.md:1008` — as seções `The autonomy ledger` (323 linhas) e `The kaizen loop` (174)
   somam **497 de 1419** (eram 245 de 570 em 2026-08-17) num arquivo que é o índice do pipeline.
   Índice que carrega profundidade é o doc que a próxima sessão não lê inteiro. Direção: `references/` para
   o ledger + juiz, com o índice roteando — **não** executar no meio de outra missão, é refator de
@@ -719,6 +719,7 @@ Achados sobre **repos-alvo** vão para o `TODO.md` daquele repo. Este arquivo é
   num userland sem `--reference` o spec ou o `00-missao.md` reescrito fica 0600 sem aviso. É o yokoten
   da #81 fora do `frontmatter_write`; o symlink não o alcança, porque o caminho chega por `readlink -f`.
   Direção: `warn` quando o `chmod` falha, como o I5 fez, com probe por shim de `chmod`.
+  Fonte: `docs/handoffs/20261002-onde-o-comando-do-humano-escreve/00-missao.md` (§ Fora de escopo).
   — descoberto por `sdd-planner` na missão `20261002-onde-o-comando-do-humano-escreve` (2026-10-02)
 
 - [ ] **`sdd close` sem `50-pr.md` sai da branch da missão e diz que ela foi mergeada** — `bin/sdd:10690`

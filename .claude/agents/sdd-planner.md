@@ -173,7 +173,9 @@ consequence of the diff.
 **The runner reads this field and acts on it.** It was decorative until `ensure_mission_branch`,
 so a plan that fills it in carelessly is no longer a typo — before the first gate of every
 `sdd run` and every `sdd retry`, the runner checks that branch out, and **creates it from
-whatever branch the human is standing on** when it does not exist yet. Three values, three
+whatever branch the human is standing on** when it does not exist yet. `sdd approve` does the same
+right after the human's `y`, and commits the whole mission directory on that branch — so the plan
+you leave on the base is carried to the mission branch by the approval itself. Three values, three
 behaviours:
 
 - **the `<...>` placeholder the template ships** (or an empty value) → no-op, the runner stays
